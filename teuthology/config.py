@@ -150,6 +150,7 @@ class TeuthologyConfig(YamlConfig):
         'koji_task_url': 'https://kojipkgs.fedoraproject.org/work/',
         'baseurl_template': 'http://{host}/{proj}-{pkg_type}-{dist}-{arch}-{flavor}/{uri}',
         'teuthology_path': None,
+        'suite_verify_ceph_hash': True,
         'openstack': {
             'clone': 'git clone http://github.com/ceph/teuthology',
             'user-data': 'teuthology/openstack/openstack-{os_type}-{os_version}-user-data.txt',

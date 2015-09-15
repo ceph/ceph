@@ -200,20 +200,27 @@ def create_initial_config(suite, suite_branch, ceph_branch, teuthology_branch,
         kernel_dict = dict()
 
     # Get the ceph hash
-    ceph_hash = get_hash('ceph', ceph_branch, kernel_flavor, machine_type,
-                         distro)
+    if config.suite_verify_ceph_hash:
+        ceph_hash = get_hash('ceph', ceph_branch, kernel_flavor, machine_type,
+                             distro)
+    else:
+        ceph_hash = git_ls_remote('ceph', ceph_branch)
+
     if not ceph_hash:
         exc = BranchNotFoundError(ceph_branch, 'ceph.git')
         schedule_fail(message=str(exc), name=name)
     log.info("ceph sha1: {hash}".format(hash=ceph_hash))
 
-    # Get the ceph package version
-    ceph_version = package_version_for_hash(ceph_hash, kernel_flavor,
-                                            distro, machine_type)
-    if not ceph_version:
-        schedule_fail("Packages for ceph hash '{ver}' not found".format(
-            ver=ceph_hash), name)
-    log.info("ceph version: {ver}".format(ver=ceph_version))
+    if config.suite_verify_ceph_hash:
+        # Get the ceph package version
+        ceph_version = package_version_for_hash(ceph_hash, kernel_flavor,
+                                                distro, machine_type)
+        if not ceph_version:
+            schedule_fail("Packages for ceph hash '{ver}' not found".format(
+                ver=ceph_hash), name)
+        log.info("ceph version: {ver}".format(ver=ceph_version))
+    else:
+        log.info('skipping ceph package verification')
 
     if teuthology_branch and teuthology_branch != 'master':
         if not git_branch_exists('teuthology', teuthology_branch):

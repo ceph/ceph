@@ -119,6 +119,13 @@ Here is a sample configuration with many of the options set and documented::
     #           etc.
     baseurl_template: http://{host}/{proj}-{pkg_type}-{dist}-{arch}-{flavor}/{uri}
 
+    # If True, teuthology-suite verifies that a package matching the
+    # desired ceph branch exists in the gitbuilder. If False, no
+    # verification is done and teuthology-suite assumes the packages
+    # are either not necessary to run the task or they are created on
+    # demand.
+    suite_verify_ceph_hash: True
+
     # The OpenStack backend configuration, a dictionary interpreted as follows
     #
     openstack:

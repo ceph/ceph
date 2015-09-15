@@ -782,9 +782,34 @@ class TestSuiteMain(object):
                 fetch_repos=DEFAULT,
                 teuthology_schedule=DEFAULT,
                 sleep=DEFAULT,
+                get_arch=lambda x: 'x86_64',
+                git_ls_remote=lambda *args: '1234',
+                get_hash=DEFAULT,
+                package_version_for_hash=lambda *args: 'fake-9.5',
                 ) as m:
+            config.suite_verify_ceph_hash = False
             main(['--suite', suite_name,
                   '--suite-dir', 'teuthology/test',
                   '--throttle', throttle,
                   '--machine-type', machine_type])
             m['sleep'].assert_called_with(int(throttle))
+            m['get_hash'].assert_not_called()
+
+        with patch.multiple(
+                suite,
+                fetch_repos=DEFAULT,
+                teuthology_schedule=DEFAULT,
+                sleep=DEFAULT,
+                get_arch=lambda x: 'x86_64',
+                git_ls_remote=lambda *args: '1234',
+                get_hash=DEFAULT,
+                package_version_for_hash=lambda *args: 'fake-9.5',
+                ) as m:
+            config.suite_verify_ceph_hash = True
+            m['get_hash'].return_value = '12345'
+            main(['--suite', suite_name,
+                  '--suite-dir', 'teuthology/test',
+                  '--throttle', throttle,
+                  '--machine-type', machine_type])
+            m['sleep'].assert_called_with(int(throttle))
+            m['get_hash'].assert_called()
