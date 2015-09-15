@@ -3975,22 +3975,24 @@ void OSD::tick()
     heartbeat_lock.Unlock();
 
     // mon report?
+    bool reset = false;
+    bool report = false;
     utime_t now = ceph_clock_now(cct);
+    pg_stat_queue_lock.Lock();
     if (outstanding_pg_stats &&
 	(now - stats_ack_timeout) > last_pg_stats_ack) {
       dout(1) << __func__ << " mon hasn't acked PGStats in "
 	      << now - last_pg_stats_ack
 	      << " seconds, reconnecting elsewhere" << dendl;
-      monc->reopen_session();
+      reset = true;
       last_pg_stats_ack = ceph_clock_now(cct);  // reset clock
       last_pg_stats_sent = utime_t();
       stats_ack_timeout = MAX(g_conf->osd_mon_ack_timeout,
 			      stats_ack_timeout * 2.0);
-      outstanding_pg_stats = 0;
     }
     if (now - last_pg_stats_sent > cct->_conf->osd_mon_report_interval_max) {
       osd_stat_updated = true;
-      do_mon_report();
+      report = true;
     } else {
       double backoff = stats_ack_timeout / g_conf->osd_mon_ack_timeout;
       double adjusted_min = cct->_conf->osd_mon_report_interval_min * backoff;
@@ -3998,9 +4000,15 @@ void OSD::tick()
 	dout(20) << __func__ << " stats backoff " << backoff
 		 << " adjusted_min " << adjusted_min << " - sending report"
 		 << dendl;
-	do_mon_report();
+	report = true;
       }
     }
+    pg_stat_queue_lock.Unlock();
+
+    if (reset)
+      monc->reopen_session();
+    else if (report)
+      do_mon_report();
 
     map_lock.put_read();
   }
@@ -4357,6 +4365,12 @@ void OSD::ms_handle_connect(Connection *con)
     if (is_stopping())
       return;
     dout(10) << "ms_handle_connect on mon" << dendl;
+
+    // reset pg stats state
+    pg_stat_queue_lock.Lock();
+    outstanding_pg_stats = 0;
+    pg_stat_queue_lock.Unlock();
+
     if (is_booting()) {
       start_boot();
     } else {
@@ -4733,14 +4747,14 @@ void OSD::handle_pg_stats_ack(MPGStatsAck *ack)
     return;
   }
 
+  pg_stat_queue_lock.Lock();
+
   last_pg_stats_ack = ceph_clock_now(cct);
 
   // decay timeout slowly (analogous to TCP)
   stats_ack_timeout = MAX(g_conf->osd_mon_ack_timeout,
 			  stats_ack_timeout * .9);
   dout(20) << __func__ << "  timeout now " << stats_ack_timeout << dendl;
-
-  pg_stat_queue_lock.Lock();
 
   if (ack->get_tid() > pg_stat_tid_flushed) {
     pg_stat_tid_flushed = ack->get_tid();
