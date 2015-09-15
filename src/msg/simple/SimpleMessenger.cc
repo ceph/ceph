@@ -534,9 +534,10 @@ void SimpleMessenger::wait()
   }
   lock.Unlock();
 
-  if(dispatch_queue.is_started()) {
+  if (dispatch_queue.is_started()) {
     ldout(cct,10) << "wait: waiting for dispatch queue" << dendl;
     dispatch_queue.wait();
+    dispatch_queue.discard_local();
     ldout(cct,10) << "wait: dispatch queue is stopped" << dendl;
   }
 
