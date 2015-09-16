@@ -25,8 +25,7 @@ restorecon -R /etc/rc\.d/init\.d/ceph > /dev/null 2>&1; \
 restorecon -R /etc/rc\.d/init\.d/radosgw > /dev/null 2>&1; \
 restorecon -R /var/run/ceph > /dev/null 2>&1; \
 restorecon -R /var/lib/ceph > /dev/null 2>&1; \
-restorecon -R /var/log/ceph > /dev/null 2>&1; \
-restorecon -R /var/log/radosgw > /dev/null 2>&1;
+restorecon -R /var/log/ceph > /dev/null 2>&1;
 %endif
 
 %{!?_udevrulesdir: %global _udevrulesdir /lib/udev/rules.d}
@@ -611,7 +610,6 @@ install -m 0644 -D etc/sysconfig/ceph $RPM_BUILD_ROOT%{_sysconfdir}/sysconfig/ce
 %endif
 mkdir -p $RPM_BUILD_ROOT%{_sbindir}
 install -m 0644 -D src/logrotate.conf $RPM_BUILD_ROOT%{_sysconfdir}/logrotate.d/ceph
-install -m 0644 -D src/rgw/logrotate.conf $RPM_BUILD_ROOT%{_sysconfdir}/logrotate.d/radosgw
 chmod 0644 $RPM_BUILD_ROOT%{_docdir}/ceph/sample.ceph.conf
 chmod 0644 $RPM_BUILD_ROOT%{_docdir}/ceph/sample.fetch_config
 
@@ -651,7 +649,6 @@ mkdir -p $RPM_BUILD_ROOT%{_localstatedir}/lib/ceph/radosgw
 mkdir -p $RPM_BUILD_ROOT%{_localstatedir}/lib/ceph/bootstrap-osd
 mkdir -p $RPM_BUILD_ROOT%{_localstatedir}/lib/ceph/bootstrap-mds
 mkdir -p $RPM_BUILD_ROOT%{_localstatedir}/lib/ceph/bootstrap-rgw
-mkdir -p $RPM_BUILD_ROOT%{_localstatedir}/log/radosgw
 
 %if 0%{?suse_version}
 # Fedora seems to have some problems with this macro, use it only on SUSE
@@ -910,9 +907,7 @@ fi
 %{_bindir}/radosgw-object-expirer
 %{_mandir}/man8/radosgw.8*
 %{_mandir}/man8/radosgw-admin.8*
-%config(noreplace) %{_sysconfdir}/logrotate.d/radosgw
 %config %{_sysconfdir}/bash_completion.d/radosgw-admin
-%dir %{_localstatedir}/log/radosgw/
 %dir %{_localstatedir}/lib/ceph/radosgw
 %if 0%{?_with_systemd}
 %else
@@ -951,10 +946,6 @@ fi
     done
   fi
 %endif
-# Package removal cleanup
-if [ "$1" -eq "0" ] ; then
-    rm -rf /var/log/radosgw
-fi
 
 #################################################################################
 %if %{with ocf}
