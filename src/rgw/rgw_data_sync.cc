@@ -12,6 +12,7 @@
 #include "rgw_cr_rest.h"
 #include "rgw_http_client.h"
 #include "rgw_bucket.h"
+#include "rgw_metadata.h"
 
 #include "cls/lock/cls_lock_client.h"
 
@@ -24,6 +25,7 @@
 static string datalog_sync_status_oid = "datalog.sync-status";
 static string datalog_sync_status_shard_prefix = "datalog.sync-status.shard";
 static string datalog_sync_full_sync_index_prefix = "data.full-sync.index";
+static string bucket_status_oid_prefix = "bucket.sync-status";
 
 void rgw_datalog_info::decode_json(JSONObj *obj) {
   JSONDecoder::decode_json("num_objects", num_shards, obj);
@@ -523,4 +525,287 @@ string RGWDataSyncStatusManager::shard_obj_name(const string& source_zone, int s
   return string(buf);
 }
 
+int RGWRemoteBucketLog::init(const string& _source_zone, RGWRESTConn *_conn, const string& _bucket_name,
+                             const string& _bucket_id, int _shard_id)
+{
+  conn = _conn;
+  source_zone = _source_zone;
+  bucket_name = _bucket_name;
+  bucket_id = _bucket_id;
+  shard_id = _shard_id;
+
+  return 0;
+}
+
+struct bucket_instance_meta_info {
+  string key;
+  obj_version ver;
+  time_t mtime;
+  RGWBucketInstanceMetadataObject data;
+
+  bucket_instance_meta_info() : mtime(0) {}
+
+  void decode_json(JSONObj *obj) {
+    JSONDecoder::decode_json("key", key, obj);
+    JSONDecoder::decode_json("ver", ver, obj);
+    JSONDecoder::decode_json("mtime", mtime, obj);
+    JSONDecoder::decode_json("data", data, obj);
+  }
+};
+
+struct bucket_index_marker_info {
+  string bucket_ver;
+  string master_ver;
+  string max_marker;
+
+  void decode_json(JSONObj *obj) {
+    JSONDecoder::decode_json("bucket_ver", bucket_ver, obj);
+    JSONDecoder::decode_json("master_ver", master_ver, obj);
+    JSONDecoder::decode_json("max_marker", max_marker, obj);
+  }
+};
+
+class RGWReadRemoteBucketIndexLogInfoCR : public RGWCoroutine {
+  RGWRados *store;
+  RGWHTTPManager *http_manager;
+  RGWAsyncRadosProcessor *async_rados;
+
+  RGWRESTConn *conn;
+
+  string bucket_name;
+  string bucket_id;
+  int shard_id;
+
+  string instance_key;
+
+  bucket_index_marker_info *info;
+
+public:
+  RGWReadRemoteBucketIndexLogInfoCR(RGWRados *_store, RGWHTTPManager *_mgr, RGWAsyncRadosProcessor *_async_rados,
+                                  RGWRESTConn *_conn,
+                                  const string& _bucket_name, const string& _bucket_id, int _shard_id,
+                                  bucket_index_marker_info *_info) : RGWCoroutine(_store->ctx()), store(_store),
+                                                      http_manager(_mgr),
+						      async_rados(_async_rados),
+                                                      conn(_conn),
+                                                      bucket_name(_bucket_name), bucket_id(_bucket_id), shard_id(_shard_id),
+                                                      info(_info) {
+    instance_key = bucket_id;
+    if (shard_id > 0) {
+      char buf[16];
+      snprintf(buf, sizeof(buf), ":%d", shard_id);
+      instance_key.append(buf);
+    }
+  }
+
+  int operate() {
+    int ret;
+    reenter(this) {
+      yield {
+        rgw_http_param_pair pairs[] = { { "type" , "bucket-index" },
+	                                { "bucket", bucket_name.c_str() },
+	                                { "bucket-instance", instance_key.c_str() },
+					{ "info" , NULL },
+	                                { NULL, NULL } };
+
+        string p = "/admin/log/";
+        ret = call(new RGWReadRESTResourceCR<bucket_index_marker_info>(store->ctx(), conn, http_manager, p, pairs, info));
+        if (ret < 0) {
+          return set_state(RGWCoroutine_Error, ret);
+        }
+      }
+      if (retcode < 0) {
+        return set_state(RGWCoroutine_Error, ret);
+      }
+      return set_state(RGWCoroutine_Done, 0);
+    }
+    return 0;
+  }
+};
+
+
+class RGWInitBucketShardSyncStatusCoroutine : public RGWCoroutine {
+  RGWAsyncRadosProcessor *async_rados;
+  RGWRados *store;
+  RGWHTTPManager *http_manager;
+  RGWObjectCtx& obj_ctx;
+  string source_zone;
+  RGWRESTConn *conn;
+  string bucket_name;
+  string bucket_id;
+  int shard_id;
+
+  string sync_status_oid;
+
+  string lock_name;
+  string cookie;
+  rgw_bucket_shard_sync_info status;
+
+  bucket_index_marker_info info;
+public:
+  RGWInitBucketShardSyncStatusCoroutine(RGWAsyncRadosProcessor *_async_rados, RGWRados *_store, RGWHTTPManager *_http_mgr,
+		      RGWObjectCtx& _obj_ctx, const string& _source_zone, RGWRESTConn *_conn,
+                      const string& _bucket_name, const string& _bucket_id, int _shard_id) : RGWCoroutine(_store->ctx()), async_rados(_async_rados), store(_store),
+                                                                                             http_manager(_http_mgr),
+                                                                                             obj_ctx(_obj_ctx), source_zone(_source_zone), conn(_conn),
+                                                                                             bucket_name(_bucket_name), bucket_id(_bucket_id), shard_id(_shard_id) {
+    lock_name = "sync_lock";
+
+#define COOKIE_LEN 16
+    char buf[COOKIE_LEN + 1];
+
+    gen_rand_alphanumeric(cct, buf, sizeof(buf) - 1);
+    string cookie = buf;
+
+    sync_status_oid = RGWBucketSyncStatusManager::status_oid(source_zone, bucket_name, bucket_id, shard_id);
+  }
+
+  int operate() {
+    int ret;
+    reenter(this) {
+      yield {
+	uint32_t lock_duration = 30;
+	call(new RGWSimpleRadosLockCR(async_rados, store, store->get_zone_params().log_pool, sync_status_oid,
+			             lock_name, cookie, lock_duration));
+	if (retcode < 0) {
+	  ldout(cct, 0) << "ERROR: failed to take a lock on " << sync_status_oid << dendl;
+	  return set_state(RGWCoroutine_Error, retcode);
+	}
+      }
+      yield {
+        call(new RGWSimpleRadosWriteCR<rgw_bucket_shard_sync_info>(async_rados, store, store->get_zone_params().log_pool,
+				 sync_status_oid, status));
+      }
+      yield { /* take lock again, we just recreated the object */
+	uint32_t lock_duration = 30;
+	call(new RGWSimpleRadosLockCR(async_rados, store, store->get_zone_params().log_pool, sync_status_oid,
+			             lock_name, cookie, lock_duration));
+	if (retcode < 0) {
+	  ldout(cct, 0) << "ERROR: failed to take a lock on " << sync_status_oid << dendl;
+	  return set_state(RGWCoroutine_Error, retcode);
+	}
+      }
+      /* fetch current position in logs */
+      yield {
+        ret = call(new RGWReadRemoteBucketIndexLogInfoCR(store, http_manager, async_rados, conn, bucket_name, bucket_id, shard_id, &info));
+        if (ret < 0) {
+	  ldout(cct, 0) << "ERROR: failed to fetch bucket index status" << dendl;
+          return set_state(RGWCoroutine_Error, ret);
+        }
+      }
+      if (retcode < 0 && retcode != -ENOENT) {
+        ldout(cct, 0) << "ERROR: failed to fetch bucket index status" << dendl;
+        return set_state(RGWCoroutine_Error, retcode);
+      }
+      yield {
+	status.state = rgw_bucket_shard_sync_info::StateFullSync;
+        status.marker.next_step_marker = info.max_marker;
+        call(new RGWSimpleRadosWriteCR<rgw_bucket_shard_sync_info>(async_rados, store, store->get_zone_params().log_pool,
+				 sync_status_oid, status));
+      }
+      yield { /* unlock */
+	call(new RGWSimpleRadosUnlockCR(async_rados, store, store->get_zone_params().log_pool, sync_status_oid,
+			             lock_name, cookie));
+      }
+      return set_state(RGWCoroutine_Done);
+    }
+    return 0;
+  }
+};
+
+RGWCoroutine *RGWRemoteBucketLog::init_sync_status(RGWObjectCtx& obj_ctx)
+{
+  return new RGWInitBucketShardSyncStatusCoroutine(async_rados, store, http_manager, obj_ctx, source_zone,
+                                                   conn, bucket_name, bucket_id, shard_id);
+}
+
+RGWBucketSyncStatusManager::~RGWBucketSyncStatusManager() {
+  for (map<int, RGWRemoteBucketLog *>::iterator iter = source_logs.begin(); iter != source_logs.end(); ++iter) {
+    delete iter->second;
+  }
+}
+
+int RGWBucketSyncStatusManager::init()
+{
+  map<string, RGWRESTConn *>::iterator iter = store->zone_conn_map.find(source_zone);
+  if (iter == store->zone_conn_map.end()) {
+    lderr(store->ctx()) << "no REST connection to master zone" << dendl;
+    return -EIO;
+  }
+
+  conn = iter->second;
+
+  async_rados = new RGWAsyncRadosProcessor(store, store->ctx()->_conf->rgw_num_async_rados_threads);
+  async_rados->start();
+
+  int ret = http_manager.set_threaded();
+  if (ret < 0) {
+    ldout(store->ctx(), 0) << "failed in http_manager.set_threaded() ret=" << ret << dendl;
+    return ret;
+  }
+
+
+  string key = bucket_name + ":" + bucket_id;
+
+  rgw_http_param_pair pairs[] = { { "key", key.c_str() },
+                                  { NULL, NULL } };
+
+  string path = string("/admin/metadata/bucket.instance");
+
+  bucket_instance_meta_info result;
+  ret = cr_mgr.run(new RGWReadRESTResourceCR<bucket_instance_meta_info>(store->ctx(), conn, &http_manager, path, pairs, &result));
+  if (ret < 0) {
+    ldout(store->ctx(), 0) << "ERROR: failed to fetch bucket metadata info from zone=" << source_zone << " path=" << path << " key=" << key << " ret=" << ret << dendl;
+    return ret;
+  }
+
+  RGWBucketInfo& bi = result.data.get_bucket_info();
+  num_shards = bi.num_shards;
+
+
+  int effective_num_shards = (num_shards ? num_shards : 1);
+
+  for (int i = 0; i < effective_num_shards; i++) {
+    RGWRemoteBucketLog *l = new RGWRemoteBucketLog(store, this, async_rados, &http_manager);
+    ret = l->init(source_zone, conn, bucket_name, bucket_id, (num_shards ? i : -1));
+    if (ret < 0) {
+      ldout(store->ctx(), 0) << "ERROR: failed to initialize RGWRemoteBucketLog object" << dendl;
+      return ret;
+    }
+    source_logs[i] = l;
+  }
+
+  return 0;
+}
+
+int RGWBucketSyncStatusManager::init_sync_status()
+{
+  RGWObjectCtx obj_ctx(store);
+
+  list<RGWCoroutinesStack *> stacks;
+
+  for (map<int, RGWRemoteBucketLog *>::iterator iter = source_logs.begin(); iter != source_logs.end(); ++iter) {
+    RGWCoroutinesStack *stack = new RGWCoroutinesStack(store->ctx(), &cr_mgr);
+    RGWRemoteBucketLog *l = iter->second;
+    int r = stack->call(l->init_sync_status(obj_ctx));
+    if (r < 0) {
+      ldout(store->ctx(), 0) << "ERROR: failed to init sync status for " << bucket_name << ":" << bucket_id << ":" << iter->first << dendl;
+    }
+
+    stacks.push_back(stack);
+  }
+
+  return cr_mgr.run(stacks);
+}
+
+string RGWBucketSyncStatusManager::status_oid(const string& source_zone, const string& bucket_name, const string& bucket_id, int shard_id)
+{
+  string oid = bucket_status_oid_prefix + "." + source_zone + ":" + bucket_name + ":" + bucket_id;
+  if (shard_id > 0) {
+    char buf[16];
+    snprintf(buf, sizeof(buf), ":%d", shard_id);
+    oid.append(buf);
+  }
+  return oid;
+}
 
