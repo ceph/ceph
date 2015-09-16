@@ -2,8 +2,8 @@ roles:
     - [mon.0, client.0]
 tasks:
     - buildpackages:
-    - install:
         machine:
           disk: 40 # GB
           ram: 15000 # MB
           cpus: 16
+    - install:
