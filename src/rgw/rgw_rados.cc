@@ -7630,7 +7630,10 @@ int RGWRados::get_bucket_info(RGWObjectCtx& obj_ctx,
   rgw_cache_entry_info entry_cache_info;
   int ret = get_bucket_entrypoint_info(obj_ctx, tenant, bucket_name, entry_point, &ot, &ep_mtime, pattrs, &entry_cache_info);
   if (ret < 0) {
-    info.bucket.name = bucket_name; /* only init this field */
+    /* Only init these fields. */
+    info.bucket.tenant = tenant;
+    info.bucket.name = bucket_name;
+    ldout(cct, 20) << "get_bucket_entrypoint_info() returned ret=" << ret << dendl;
     return ret;
   }
 
@@ -7666,9 +7669,8 @@ int RGWRados::get_bucket_info(RGWObjectCtx& obj_ctx,
   e.info.ep_objv = ot.read_version;
   info = e.info;
   if (ret < 0) {
-    // XXX not tenant like above?
+    info.bucket.tenant = tenant;
     info.bucket.name = bucket_name;
-    // XXX and why return anything in case of an error anyway?
     return ret;
   }
 
