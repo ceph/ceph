@@ -1,5 +1,10 @@
 """
 Build ceph packages
+
+Integration tests:
+
+teuthology-openstack --verbose --key-name myself --key-filename ~/Downloads/myself --ceph hammer --suite teuthology/buildpackages
+
 """
 import logging
 import os
@@ -82,17 +87,24 @@ def task(ctx, config):
         else:
             ref = ''
         subprocess.check_call(
+            "flock /tmp/buildpackages " +
             "make -C " + d + " " + os.environ['HOME'] + "/.ssh_agent",
             shell=True)
         target = os.path.dirname(urlparse.urlparse(url).path.strip('/'))
         target = os.path.dirname(target) + '-' + sha1
         openstack = OpenStack()
         select = '^(vps|eg)-'
-        flavor = openstack.flavor(config['machine'], select)
-        cmd = (". " + os.environ['HOME'] + "/.ssh_agent ; make -C " + d +
+        build_flavor = openstack.flavor(config['machine'], select)
+        http_flavor = openstack.flavor({
+            'disk': 10, # GB
+            'ram': 1024, # MB
+            'cpus': 1,
+        }, select)
+        cmd = (". " + os.environ['HOME'] + "/.ssh_agent ; flock /tmp/buildpackages make -C " + d +
                " CEPH_GIT_BASE_URL=" + teuth_config.ceph_git_base_url + 
-               " CEPH_OS_TYPE=" + gitbuilder.os_type +
-               " CEPH_OS_VERSION=" + gitbuilder.os_version +
+               " CEPH_PKG_TYPE=" + gitbuilder.pkg_type +
+               " CEPH_OS_TYPE=" + ctx.config['os_type'] +
+               " CEPH_OS_VERSION=" + ctx.config['os_version'] +
                " CEPH_DIST=" + gitbuilder.distro +
                " CEPH_ARCH=" + gitbuilder.arch +
                " CEPH_SHA1=" + (sha1 or '')  +
@@ -100,7 +112,8 @@ def task(ctx, config):
                " CEPH_BRANCH=" + (branch or '') +
                " CEPH_REF=" + ref +
                " GITBUILDER_URL=" + url +
-               " FLAVOR=" + flavor +
+               " BUILD_FLAVOR=" + build_flavor +
+               " HTTP_FLAVOR=" + http_flavor +
                " " + target +
                " ")
         log.info("buildpackages: " + cmd)

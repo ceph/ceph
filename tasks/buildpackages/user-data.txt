@@ -1,0 +1,4 @@
+#cloud-config
+system_info:
+  default_user:
+    name: ubuntu
