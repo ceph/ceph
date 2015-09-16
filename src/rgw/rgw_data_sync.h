@@ -313,8 +313,8 @@ public:
 #if 0
   int read_log_info(rgw_datalog_info *log_info);
   int get_sync_info();
-  int read_sync_status(rgw_data_sync_status *sync_status);
 #endif
+  RGWCoroutine *read_sync_status(RGWObjectCtx& obj_ctx, rgw_bucket_shard_sync_info *sync_status);
   RGWCoroutine *init_sync_status(RGWObjectCtx& obj_ctx);
 #if 0
   int set_sync_info(const rgw_data_sync_info& sync_info);
@@ -345,7 +345,7 @@ class RGWBucketSyncStatusManager {
   string source_shard_status_oid_prefix;
   rgw_obj source_status_obj;
 
-  rgw_data_sync_status sync_status;
+  map<int, rgw_bucket_shard_sync_info> sync_status;
   rgw_obj status_obj;
 
   int num_shards;
@@ -364,14 +364,13 @@ public:
 
   int init();
 
-  rgw_data_sync_status& get_sync_status() { return sync_status; }
+  map<int, rgw_bucket_shard_sync_info>& get_sync_status() { return sync_status; }
   int init_sync_status();
 
   static string status_oid(const string& source_zone, const string& bucket_name, const string& bucket_id, int shard_id);
-#if 0
 
-  int read_sync_status() { return source_log.read_sync_status(&sync_status); }
-  int init_sync_status() { return source_log.init_sync_status(num_shards); }
+  int read_sync_status();
+#if 0
 
   int run() { return source_log.run_sync(num_shards, sync_status); }
 
