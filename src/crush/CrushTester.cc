@@ -565,7 +565,6 @@ int CrushTester::test()
 
       // create a structure to hold data for post-processing
       tester_data_set tester_data;
-      vector<int> vector_data_buffer;
       vector<float> vector_data_buffer_f;
 
       // create a map to hold batch-level placement information
