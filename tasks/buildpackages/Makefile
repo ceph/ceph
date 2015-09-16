@@ -14,24 +14,21 @@ ${HOME}/.ssh_agent:
 	grep -q ssh_agent ~/.bashrc_teuthology || echo 'source ${HOME}/.ssh_agent' >> ~/.bashrc_teuthology
 
 packages-repository:
-	openstack server create --image 'teuthology-ubuntu-14.04' --flavor 'vps-ssd-1' --key-name teuthology --security-group teuthology --property ownedby=${MY_IP} --wait $@ ; sleep 30
+	openstack server create --image 'teuthology-ubuntu-14.04' --flavor ${HTTP_FLAVOR} --key-name teuthology --security-group teuthology --property ownedby=${MY_IP} --wait $@ ; sleep 30
 	ip=$(call get_ip,$@) ; \
 	ssh $$ip sudo apt-get install -y nginx ; \
 	ssh $$ip sudo chown -R ubuntu /usr/share/nginx/html ; \
 	perl -pi -e "s/^gitbuilder_host:.*/gitbuilder_host: $$ip/" ~/.teuthology.yaml
 	mkdir -p ${D}/${@D} ; touch ${D}/$@
 
-FLAVOR=vps-ssd-1
-
-ceph-deb-${CEPH_DIST}-${CEPH_ARCH}-basic-${CEPH_SHA1}: packages-repository
-	openstack server create --image 'teuthology-${CEPH_OS_TYPE}-${CEPH_OS_VERSION}' --flavor ${FLAVOR} --key-name teuthology --security-group teuthology --property ownedby=${MY_IP} --wait $@ ; sleep 30
+ceph-${CEPH_PKG_TYPE}-${CEPH_DIST}-${CEPH_ARCH}-basic-${CEPH_SHA1}: packages-repository
+	openstack server create --image 'teuthology-${CEPH_OS_TYPE}-${CEPH_OS_VERSION}' --flavor ${BUILD_FLAVOR} --key-name teuthology --security-group teuthology --property ownedby=${MY_IP} --user-data user-data.txt --wait $@ ; sleep 30
 	set -ex ; \
+	trap "openstack server delete $@" EXIT ; \
 	ip=$(call get_ip,$@) ; \
-	echo 'sudo apt-get update ; sudo apt-get install -y git ; test -d ceph || git clone ${CEPH_GIT_BASE_URL}/ceph ; cd ceph ; git checkout ${CEPH_SHA1}' | ssh $$ip bash ; \
-	scp make-debs.sh $$ip: ; \
+	scp make-${CEPH_PKG_TYPE}.sh common.sh ubuntu@$$ip: ; \
 	packages_repository=$(call get_ip,${<F}) ; \
-	echo 'cd ceph ; sudo chown $${USER} /opt ; sudo apt-get install -y reprepro ; git checkout origin/master install-deps.sh ; ./install-deps.sh ; ../make-debs.sh /opt/release '$$packages_repository | ssh -A $$ip bash
-	openstack server delete $@
+	ssh -tt -A ubuntu@$$ip bash ./make-${CEPH_PKG_TYPE}.sh $$packages_repository ${CEPH_DIST} ${CEPH_GIT_BASE_URL} ${CEPH_SHA1}
 	mkdir -p ${D}/${@D} ; touch ${D}/$@
 
 clobber:
