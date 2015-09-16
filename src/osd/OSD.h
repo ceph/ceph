@@ -1971,7 +1971,7 @@ protected:
    */
   utime_t last_pg_stats_ack;
   float stats_ack_timeout;
-  int outstanding_pg_stats; // how many stat updates haven't been acked yet
+  set<uint64_t> outstanding_pg_stats; // how many stat updates haven't been acked yet
 
   // -- boot --
   void start_boot();
