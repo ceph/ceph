@@ -420,6 +420,7 @@ void RGWUserInfo::dump(Formatter *f) const
   encode_json("bucket_quota", bucket_quota, f);
   encode_json("user_quota", user_quota, f);
   encode_json("temp_url_keys", temp_url_keys, f);
+  encode_json("buckets_namespace", user_id.get_bns().get_id(), f);
 }
 
 
@@ -477,6 +478,12 @@ void RGWUserInfo::decode_json(JSONObj *obj)
   JSONDecoder::decode_json("bucket_quota", bucket_quota, obj);
   JSONDecoder::decode_json("user_quota", user_quota, obj);
   JSONDecoder::decode_json("temp_url_keys", temp_url_keys, obj);
+
+  string bns;
+  JSONDecoder::decode_json("buckets_namespace", bns, obj);
+  if (bns.compare(user_id.id) == 0) {
+    user_id.has_own_bns = true;
+  }
 }
 
 void RGWQuotaInfo::dump(Formatter *f) const
@@ -495,6 +502,7 @@ void RGWQuotaInfo::decode_json(JSONObj *obj)
 
 void rgw_bucket::dump(Formatter *f) const
 {
+  encode_json("namespace", tenant, f);
   encode_json("name", name, f);
   encode_json("pool", data_pool, f);
   encode_json("data_extra_pool", data_extra_pool, f);
@@ -504,6 +512,7 @@ void rgw_bucket::dump(Formatter *f) const
 }
 
 void rgw_bucket::decode_json(JSONObj *obj) {
+  JSONDecoder::decode_json("namespace", tenant, obj);
   JSONDecoder::decode_json("name", name, obj);
   JSONDecoder::decode_json("pool", data_pool, obj);
   JSONDecoder::decode_json("data_extra_pool", data_extra_pool, obj);
@@ -546,7 +555,7 @@ void RGWBucketInfo::dump(Formatter *f) const
 {
   encode_json("bucket", bucket, f);
   encode_json("creation_time", creation_time, f);
-  encode_json("owner", owner.to_str(), f);
+  encode_json("owner", owner, f);
   encode_json("flags", flags, f);
   encode_json("region", region, f);
   encode_json("placement_rule", placement_rule, f);

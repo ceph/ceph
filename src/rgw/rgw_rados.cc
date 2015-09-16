@@ -2929,15 +2929,19 @@ int RGWRados::select_new_bucket_location(RGWUserInfo& user_info, const string& r
   return set_bucket_location_by_rule(rule, tenant_name, bucket_name, bucket);
 }
 
-int RGWRados::set_bucket_location_by_rule(const string& location_rule, const string& tenant_name, const string& bucket_name, rgw_bucket& bucket)
+int RGWRados::set_bucket_location_by_rule(const string& location_rule,
+                                          const string& bucket_namespace,
+                                          const string& bucket_name,
+                                          rgw_bucket& bucket)
 {
+  bucket.tenant = bucket_namespace;
   bucket.name = bucket_name;
 
   if (location_rule.empty()) {
     /* we can only reach here if we're trying to set a bucket location from a bucket
      * created on a different zone, using a legacy / default pool configuration
      */
-    return select_legacy_bucket_placement(tenant_name, bucket_name, bucket);
+    return select_legacy_bucket_placement(bucket_namespace, bucket_name, bucket);
   }
 
   /*
@@ -2964,10 +2968,6 @@ int RGWRados::set_bucket_location_by_rule(const string& location_rule, const str
   bucket.data_extra_pool = placement_info.data_extra_pool;
   bucket.index_pool = placement_info.index_pool;
 
-  // XXX The select_legacy_bucket_placement() does this, but here we don't?
-  // bucket.tenant = tenant_name;
-  // bucket.name = bucket_name;
-
   return 0;
 }
 
@@ -2986,7 +2986,9 @@ int RGWRados::select_bucket_placement(RGWUserInfo& user_info, const string& regi
   return select_legacy_bucket_placement(tenant_name, bucket_name, bucket);
 }
 
-int RGWRados::select_legacy_bucket_placement(const string& tenant_name, const string& bucket_name, rgw_bucket& bucket)
+int RGWRados::select_legacy_bucket_placement(const string& bucket_namespace,
+                                             const string& bucket_name,
+                                             rgw_bucket& bucket)
 {
   bufferlist map_bl;
   map<string, bufferlist> m;
@@ -3057,13 +3059,13 @@ read_omap:
     miter = m.begin();
     pool_name = miter->first;
   }
+
+  bucket.tenant = bucket_namespace;
+  bucket.name = bucket_name;
   bucket.data_pool = pool_name;
   bucket.index_pool = pool_name;
-  bucket.tenant = tenant_name;
-  bucket.name = bucket_name;
 
   return 0;
-
 }
 
 int RGWRados::update_placement_map()
@@ -7452,6 +7454,28 @@ int RGWRados::get_user_stats_async(const rgw_user& user, RGWGetUserStats_CB *ctx
   return 0;
 }
 
+int RGWRados::parse_bucket_instance_entry(const string& entry,
+                                          string& bucket_namespace,
+                                          string& bucket_name)
+{
+  const size_t bns_and_name_pos = entry.rfind(':');
+  if (string::npos == bns_and_name_pos) {
+    return -EINVAL;
+  }
+
+  const string bns_and_name = entry.substr(0, bns_and_name_pos);
+  const size_t bns_pos = bns_and_name.find(':');
+  if (string::npos == bns_pos) {
+    /* No BNS specified. */
+    bucket_name = bns_and_name;
+  } else {
+    bucket_namespace = bns_and_name.substr(0, bns_pos);
+    bucket_name = bns_and_name.substr(bns_pos + 1);
+  }
+
+  return 0;
+}
+
 void RGWRados::get_bucket_instance_entry(rgw_bucket& bucket, string& entry)
 {
   if (bucket.tenant.empty()) {
@@ -7595,13 +7619,15 @@ int RGWRados::convert_old_bucket_info(RGWObjectCtx& obj_ctx,
 }
 
 /*
- * Note that this is not a reversal of parse_bucket(). That one deals
- * with the syntax we need in metadata and such. This one deals with
- * the representation in RADOS pools. We chose '/' because it's not
- * acceptable in bucket names and thus qualified buckets cannot conflict
- * with the legacy or S3 buckets.
+ * Note that this is not a reversal of parse_bucket_instance_entry().
+ * That methods deals with the syntax we need in metadata and such.
+ * This one deals with the representation in RADOS pools. We chose '/'
+ * because it's not acceptable in bucket names and thus qualified buckets
+ * cannot conflict with the legacy or S3 buckets.
  */
-void RGWRados::make_bucket_entry_name(const string& tenant_name, const string& bucket_name, string& bucket_entry) {
+void RGWRados::make_bucket_entry_name(const string& tenant_name,
+                                      const string& bucket_name,
+                                      string& bucket_entry) {
   if (tenant_name.empty()) {
     bucket_entry = bucket_name;
   } else {

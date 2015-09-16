@@ -1419,10 +1419,15 @@ public:
   virtual int init_bucket_index(rgw_bucket& bucket, int num_shards);
   int select_bucket_placement(RGWUserInfo& user_info, const string& region_name, const string& rule,
                               const string& tenant_name, const string& bucket_name, rgw_bucket& bucket, string *pselected_rule);
-  int select_legacy_bucket_placement(const string& tenant_name, const string& bucket_name, rgw_bucket& bucket);
+  int select_legacy_bucket_placement(const string& bucket_namespace,
+                                     const string& bucket_name,
+                                     rgw_bucket& bucket);
   int select_new_bucket_location(RGWUserInfo& user_info, const string& region_name, const string& rule,
                                  const string& tenant_name, const string& bucket_name, rgw_bucket& bucket, string *pselected_rule);
-  int set_bucket_location_by_rule(const string& location_rule, const string& tenant_name, const string& bucket_name, rgw_bucket& bucket);
+  int set_bucket_location_by_rule(const string& location_rule,
+                                  const string& bucket_namespace,
+                                  const string& bucket_name,
+                                  rgw_bucket& bucket);
   virtual int create_bucket(RGWUserInfo& owner, rgw_bucket& bucket,
                             const string& region_name,
                             const string& placement_rule,
@@ -2052,6 +2057,9 @@ public:
   int get_user_stats(const rgw_user& user, RGWStorageStats& stats);
   int get_user_stats_async(const rgw_user& user, RGWGetUserStats_CB *cb);
   void get_bucket_instance_obj(rgw_bucket& bucket, rgw_obj& obj);
+  int parse_bucket_instance_entry(const string& entry,
+                                  string& bucket_namespace,
+                                  string& bucket_name);
   void get_bucket_instance_entry(rgw_bucket& bucket, string& entry);
   void get_bucket_meta_oid(rgw_bucket& bucket, string& oid);
 

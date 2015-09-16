@@ -1719,29 +1719,41 @@ public:
     return 0;
   }
 
-  int put(RGWRados *store, string& oid, RGWObjVersionTracker& objv_tracker,
-          time_t mtime, JSONObj *obj, sync_type_t sync_type) {
+  int put(RGWRados * const store,
+          string& entry,
+          RGWObjVersionTracker& objv_tracker,
+          time_t mtime,
+          JSONObj * const obj,
+          sync_type_t sync_type) {
     RGWBucketCompleteInfo bci, old_bci;
     decode_json_obj(bci, obj);
 
     time_t orig_mtime;
     RGWObjectCtx obj_ctx(store);
 
-    int ret = store->get_bucket_instance_info(obj_ctx, oid, old_bci.info, &orig_mtime, &old_bci.attrs);
-    bool exists = (ret != -ENOENT);
-    if (ret < 0 && exists)
+    int ret = store->get_bucket_instance_info(obj_ctx, entry, old_bci.info,
+            &orig_mtime, &old_bci.attrs);
+    const bool exists = (ret != -ENOENT);
+    if (ret < 0 && exists) {
       return ret;
-
+    }
 
     if (!exists || old_bci.info.bucket.bucket_id != bci.info.bucket.bucket_id) {
       /* a new bucket, we need to select a new bucket placement for it */
-      rgw_bucket bucket;
-      // XXX woops, conflict with the model of set_bucket_location_by_rule:
-      // the bucket name is not oid now.
-      string empty_tenant = "";
-      ret = store->set_bucket_location_by_rule(bci.info.placement_rule, empty_tenant, oid, bucket);
+      string bucket_nspace;
+      string bucket_name;
+      ret = store->parse_bucket_instance_entry(entry, bucket_nspace, bucket_name);
       if (ret < 0) {
-        ldout(store->ctx(), 0) << "ERROR: select_bucket_placement() returned " << ret << dendl;
+        ldout(store->ctx(), 0) << "ERROR: parse_bucket_instance_entry() returned " \
+            << ret << dendl;
+      }
+
+      rgw_bucket bucket;
+      ret = store->set_bucket_location_by_rule(bci.info.placement_rule,
+             bucket_nspace, bucket_name, bucket);
+      if (ret < 0) {
+        ldout(store->ctx(), 0) << "ERROR: select_bucket_placement() returned " \
+            << ret << dendl;
         return ret;
       }
       bci.info.bucket.data_pool = bucket.data_pool;
