@@ -3844,6 +3844,26 @@ next:
     }
   }
 
+  if (opt_cmd == OPT_DATA_SYNC_RUN) {
+    if (source_zone.empty()) {
+      cerr << "ERROR: source zone not specified" << std::endl;
+      return EINVAL;
+    }
+    RGWDataSyncStatusManager sync(store, source_zone);
+
+    int ret = sync.init();
+    if (ret < 0) {
+      cerr << "ERROR: sync.init() returned ret=" << ret << std::endl;
+      return -ret;
+    }
+
+    ret = sync.run();
+    if (ret < 0) {
+      cerr << "ERROR: sync.run() returned ret=" << ret << std::endl;
+      return -ret;
+    }
+  }
+
   if (opt_cmd == OPT_BILOG_LIST) {
     if (bucket_name.empty()) {
       cerr << "ERROR: bucket not specified" << std::endl;

@@ -406,4 +406,36 @@ public:
   }
 };
 
+class RGWShardedOmapCRManager {
+  RGWAsyncRadosProcessor *async_rados;
+  RGWRados *store;
+  RGWCoroutine *op;
+
+  int num_shards;
+
+  vector<RGWOmapAppend *> shards;
+public:
+  RGWShardedOmapCRManager(RGWAsyncRadosProcessor *_async_rados, RGWRados *_store, RGWCoroutine *_op, int _num_shards, rgw_bucket& pool, const string& oid_prefix)
+                      : async_rados(_async_rados),
+		        store(_store), op(_op), num_shards(_num_shards) {
+    shards.reserve(num_shards);
+    for (int i = 0; i < num_shards; ++i) {
+      char buf[oid_prefix.size() + 16];
+      snprintf(buf, sizeof(buf), "%s.%d", oid_prefix.c_str(), i);
+      RGWOmapAppend *shard = new RGWOmapAppend(async_rados, store, pool, buf);
+      shards.push_back(shard);
+      op->spawn(shard, false);
+    }
+  }
+  void append(const string& entry) {
+    int shard_id = store->key_to_shard_id(entry, shards.size());
+    shards[shard_id]->append(entry);
+  }
+  void finish() {
+    for (vector<RGWOmapAppend *>::iterator iter = shards.begin(); iter != shards.end(); ++iter) {
+      (*iter)->finish();
+    }
+  }
+};
+
 #endif
