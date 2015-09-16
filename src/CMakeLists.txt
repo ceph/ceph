@@ -971,6 +971,7 @@ if(${WITH_RADOSGW})
     rgw/rgw_civetweb_log.cc
     civetweb/src/civetweb.c
     rgw/rgw_main.cc
+    rgw/rgw_realm_watcher.cc
     rgw/rgw_sync.cc
     rgw/rgw_data_sync.cc)
 

@@ -38,6 +38,7 @@
 #include "rgw_acl.h"
 #include "rgw_user.h"
 #include "rgw_op.h"
+#include "rgw_realm_watcher.h"
 #include "rgw_rest.h"
 #include "rgw_rest_s3.h"
 #include "rgw_rest_swift.h"
@@ -1052,6 +1053,23 @@ public:
   }
 };
 
+// FrontendPauser implementation for RGWRealmWatcher
+class RGWFrontendPauser : public RGWRealmWatcher::FrontendPauser {
+  std::list<RGWFrontend*> &frontends;
+ public:
+  RGWFrontendPauser(std::list<RGWFrontend*> &frontends)
+    : frontends(frontends) {}
+
+  void pause() override {
+    for (auto frontend : frontends)
+      frontend->pause_for_new_config();
+  }
+  void resume(RGWRados *store) {
+    for (auto frontend : frontends)
+      frontend->unpause_with_new_config(store);
+  }
+};
+
 /*
  * start up the RADOS connection and then handle HTTP messages as they come in
  */
@@ -1261,6 +1279,10 @@ int main(int argc, const char **argv)
 
     fes.push_back(fe);
   }
+
+  // add a watcher to respond to realm configuration changes
+  RGWFrontendPauser pauser(fes);
+  RGWRealmWatcher realm_watcher(g_ceph_context, store, &pauser);
 
   wait_shutdown();
 
