@@ -199,9 +199,11 @@ Depends: librbd1 (= ${binary:Version}), ${misc:Depends}, ${shlibs:Depends},
 Conflicts: ceph-client-tools
 Replaces: ceph-client-tools,
 	  ceph (<< 9.0.0-943),
+	  ceph-test (<< 9.0.3-1646),
 	  python-ceph (<< 0.92-1223),
 	  librbd1 (<< 0.92-1238)
 Breaks: ceph (<< 9.0.0-943),
+	ceph-test (<< 9.0.3-1646),
 	python-ceph (<< 0.92-1223),
 	librbd1 (<< 0.92-1238)
 Suggests: ceph, ceph-mds

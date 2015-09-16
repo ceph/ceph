@@ -832,6 +832,11 @@ mkdir -p %{_localstatedir}/run/ceph/
 %{_bindir}/ceph-crush-location
 %{_bindir}/rados
 %{_bindir}/rbd
+%{_bindir}/rbd-replay
+%{_bindir}/rbd-replay-many
+%if 0%{?fedora} || 0%{?rhel} == 6 || 0%{?suse_version} >= 1310
+%{_bindir}/rbd-replay-prep
+%endif
 %{_bindir}/ceph-post-file
 %{_bindir}/ceph-brag
 %{_mandir}/man8/ceph-authtool.8*
@@ -843,6 +848,9 @@ mkdir -p %{_localstatedir}/run/ceph/
 %{_mandir}/man8/ceph.8*
 %{_mandir}/man8/rados.8*
 %{_mandir}/man8/rbd.8*
+%{_mandir}/man8/rbd-replay.8*
+%{_mandir}/man8/rbd-replay-many.8*
+%{_mandir}/man8/rbd-replay-prep.8*
 %{_datadir}/ceph/known_hosts_drop.ceph.com
 %{_datadir}/ceph/id_dsa_drop.ceph.com
 %{_datadir}/ceph/id_dsa_drop.ceph.com.pub
@@ -1087,14 +1095,6 @@ ln -sf %{_libdir}/librbd.so.1 /usr/lib64/qemu/librbd.so.1
 %{_bindir}/ceph-monstore-tool
 %{_bindir}/ceph-osdomap-tool
 %{_bindir}/ceph-kvstore-tool
-%{_mandir}/man8/rbd-replay.8*
-%{_mandir}/man8/rbd-replay-many.8*
-%{_mandir}/man8/rbd-replay-prep.8*
-%{_bindir}/rbd-replay
-%{_bindir}/rbd-replay-many
-%if 0%{?fedora} || 0%{?rhel} == 6 || 0%{?suse_version} >= 1310
-%{_bindir}/rbd-replay-prep
-%endif
 %dir %{_libdir}/ceph
 %{_libdir}/ceph/ceph-monstore-update-crush.sh
 
