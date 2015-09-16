@@ -319,7 +319,7 @@ void Monitor::do_admin_command(string command, cmdmap_t& cmdmap, string format,
       goto abort;
     }
     sync_force(f.get(), ss);
-  } else if (command.find("add_bootstrap_peer_hint") == 0) {
+  } else if (command.compare(0, 23, "add_bootstrap_peer_hint") == 0) {
     if (!_add_bootstrap_peer_hint(command, cmdmap, ss))
       goto abort;
   } else if (command == "quorum enter") {
@@ -1676,7 +1676,7 @@ void Monitor::handle_probe_reply(MonOpRequestRef op)
 
   // rename peer?
   string peer_name = monmap->get_name(m->get_source_addr());
-  if (monmap->get_epoch() == 0 && peer_name.find("noname-") == 0) {
+  if (monmap->get_epoch() == 0 && peer_name.compare(0, 7, "noname-") == 0) {
     dout(10) << " renaming peer " << m->get_source_addr() << " "
 	     << peer_name << " -> " << m->name << " in my monmap"
 	     << dendl;
