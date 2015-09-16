@@ -208,7 +208,23 @@ RGWRESTReadResource::RGWRESTReadResource(RGWRESTConn *_conn,
     params.push_back(make_pair(k, v));
     ++pp;
   }
+  init_common(extra_headers);
+}
 
+RGWRESTReadResource::RGWRESTReadResource(RGWRESTConn *_conn,
+                                         const string& _resource,
+		                         list<pair<string, string> >& _params,
+                                         list<pair<string, string> > *extra_headers,
+                                         RGWHTTPManager *_mgr) : cct(_conn->get_ctx()), conn(_conn), resource(_resource), cb(bl),
+                                                                 mgr(_mgr), req(cct, conn->get_url(), &cb, NULL, NULL) {
+  for (list<pair<string, string> >::iterator iter = _params.begin(); iter != _params.end(); ++iter) {
+    params.push_back(*iter);
+  }
+  init_common(extra_headers);
+}
+
+void RGWRESTReadResource::init_common(list<pair<string, string> > *extra_headers)
+{
   params.push_back(pair<string, string>(RGW_SYS_PARAM_PREFIX "zonegroup", conn->get_zonegroup()));
 
   if (extra_headers) {

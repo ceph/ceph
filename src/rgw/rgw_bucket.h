@@ -41,6 +41,47 @@ extern int rgw_bucket_delete_bucket_obj(RGWRados *store, string& bucket_name, RG
 extern int rgw_bucket_sync_user_stats(RGWRados *store, const string& user_id, rgw_bucket& bucket);
 extern int rgw_bucket_sync_user_stats(RGWRados *store, const string& bucket_name);
 
+struct RGWBucketCompleteInfo {
+  RGWBucketInfo info;
+  map<string, bufferlist> attrs;
+
+  void dump(Formatter *f) const;
+  void decode_json(JSONObj *obj);
+};
+
+class RGWBucketEntryMetadataObject : public RGWMetadataObject {
+  RGWBucketEntryPoint ep;
+public:
+  RGWBucketEntryMetadataObject(RGWBucketEntryPoint& _ep, obj_version& v, time_t m) : ep(_ep) {
+    objv = v;
+    mtime = m;
+  }
+
+  void dump(Formatter *f) const {
+    ep.dump(f);
+  }
+};
+
+class RGWBucketInstanceMetadataObject : public RGWMetadataObject {
+  RGWBucketCompleteInfo info;
+public:
+  RGWBucketInstanceMetadataObject() {}
+  RGWBucketInstanceMetadataObject(RGWBucketCompleteInfo& i, obj_version& v, time_t m) : info(i) {
+    objv = v;
+    mtime = m;
+  }
+
+  void dump(Formatter *f) const {
+    info.dump(f);
+  }
+
+  void decode_json(JSONObj *obj) {
+    info.decode_json(obj);
+  }
+
+  RGWBucketInfo& get_bucket_info() { return info.info; }
+};
+
 /**
  * Store a list of the user's buckets, with associated functinos.
  */

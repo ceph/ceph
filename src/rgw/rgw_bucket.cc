@@ -1482,46 +1482,15 @@ void RGWDataChangesLog::ChangesRenewThread::stop()
   cond.Signal();
 }
 
-struct RGWBucketCompleteInfo {
-  RGWBucketInfo info;
-  map<string, bufferlist> attrs;
+void RGWBucketCompleteInfo::dump(Formatter *f) const {
+  encode_json("bucket_info", info, f);
+  encode_json("attrs", attrs, f);
+}
 
- void dump(Formatter *f) const {
-    encode_json("bucket_info", info, f);
-    encode_json("attrs", attrs, f);
-  }
-
-  void decode_json(JSONObj *obj) {
-    JSONDecoder::decode_json("bucket_info", info, obj);
-    JSONDecoder::decode_json("attrs", attrs, obj);
-  }
-};
-
-class RGWBucketEntryMetadataObject : public RGWMetadataObject {
-  RGWBucketEntryPoint ep;
-public:
-  RGWBucketEntryMetadataObject(RGWBucketEntryPoint& _ep, obj_version& v, time_t m) : ep(_ep) {
-    objv = v;
-    mtime = m;
-  }
-
-  void dump(Formatter *f) const {
-    ep.dump(f);
-  }
-};
-
-class RGWBucketInstanceMetadataObject : public RGWMetadataObject {
-  RGWBucketCompleteInfo info;
-public:
-  RGWBucketInstanceMetadataObject(RGWBucketCompleteInfo& i, obj_version& v, time_t m) : info(i) {
-    objv = v;
-    mtime = m;
-  }
-
-  void dump(Formatter *f) const {
-    info.dump(f);
-  }
-};
+void RGWBucketCompleteInfo::decode_json(JSONObj *obj) {
+  JSONDecoder::decode_json("bucket_info", info, obj);
+  JSONDecoder::decode_json("attrs", attrs, obj);
+}
 
 class RGWBucketMetadataHandler : public RGWMetadataHandler {
 

@@ -139,10 +139,18 @@ class RGWRESTReadResource : public RefCountedObject {
   RGWHTTPManager *mgr;
   RGWRESTStreamReadRequest req;
 
+  void init_common(list<pair<string, string> > *extra_headers);
+
 public:
   RGWRESTReadResource(RGWRESTConn *_conn,
 		      const string& _resource,
 		      const rgw_http_param_pair *pp,
+		      list<pair<string, string> > *extra_headers,
+		      RGWHTTPManager *_mgr);
+
+  RGWRESTReadResource(RGWRESTConn *_conn,
+		      const string& _resource,
+		      list<pair<string, string> >& _params,
 		      list<pair<string, string> > *extra_headers,
 		      RGWHTTPManager *_mgr);
 

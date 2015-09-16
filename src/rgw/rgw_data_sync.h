@@ -199,4 +199,188 @@ public:
   }
 };
 
+class RGWBucketSyncStatusManager;
+class RGWBucketSyncCR;
+
+struct rgw_bucket_shard_sync_marker {
+  enum SyncState {
+    FullSync = 0,
+    IncrementalSync = 1,
+  };
+  uint16_t state;
+  string marker;
+  string next_step_marker;
+
+  rgw_bucket_shard_sync_marker() : state(FullSync) {}
+
+  void encode(bufferlist& bl) const {
+    ENCODE_START(1, 1, bl);
+    ::encode(state, bl);
+    ::encode(marker, bl);
+    ::encode(next_step_marker, bl);
+    ENCODE_FINISH(bl);
+  }
+
+  void decode(bufferlist::iterator& bl) {
+     DECODE_START(1, bl);
+    ::decode(state, bl);
+    ::decode(marker, bl);
+    ::decode(next_step_marker, bl);
+     DECODE_FINISH(bl);
+  }
+
+  void dump(Formatter *f) const {
+    encode_json("state", (int)state, f);
+    encode_json("marker", marker, f);
+    encode_json("next_step_marker", next_step_marker, f);
+  }
+};
+WRITE_CLASS_ENCODER(rgw_bucket_shard_sync_marker)
+
+struct rgw_bucket_shard_sync_info {
+  enum SyncState {
+    StateInit = 0,
+    StateFullSync = 1,
+    StateIncrementalSync = 2,
+  };
+
+  uint16_t state;
+  rgw_bucket_shard_sync_marker marker;
+
+  void encode(bufferlist& bl) const {
+    ENCODE_START(1, 1, bl);
+    ::encode(state, bl);
+    ::encode(marker, bl);
+    ENCODE_FINISH(bl);
+  }
+
+  void decode(bufferlist::iterator& bl) {
+     DECODE_START(1, bl);
+     ::decode(state, bl);
+     ::decode(marker, bl);
+     DECODE_FINISH(bl);
+  }
+
+  void dump(Formatter *f) const {
+    string s;
+    switch ((SyncState)state) {
+      case StateInit:
+	s = "init";
+	break;
+      case StateFullSync:
+	s = "full-sync";
+	break;
+      case StateIncrementalSync:
+	s = "incremental-sync";
+	break;
+      default:
+	s = "unknown";
+	break;
+    }
+    encode_json("status", s, f);
+    encode_json("marker", marker, f);
+  }
+
+  rgw_bucket_shard_sync_info() : state((int)StateInit) {}
+};
+WRITE_CLASS_ENCODER(rgw_bucket_shard_sync_info)
+
+
+class RGWRemoteBucketLog : public RGWCoroutinesManager {
+  RGWRados *store;
+  RGWRESTConn *conn;
+  string source_zone;
+  string bucket_name;
+  string bucket_id;
+  int shard_id;
+
+  RGWBucketSyncStatusManager *status_manager;
+  RGWAsyncRadosProcessor *async_rados;
+  RGWHTTPManager *http_manager;
+
+  RGWBucketSyncCR *sync_cr;
+
+public:
+  RGWRemoteBucketLog(RGWRados *_store, RGWBucketSyncStatusManager *_sm,
+                     RGWAsyncRadosProcessor *_async_rados, RGWHTTPManager *_http_manager) : RGWCoroutinesManager(_store->ctx()), store(_store),
+                                       conn(NULL), shard_id(0),
+                                       status_manager(_sm), async_rados(_async_rados), http_manager(_http_manager),
+                                       sync_cr(NULL) {}
+
+  int init(const string& _source_zone, RGWRESTConn *_conn, const string& _bucket_name, const string& _bucket_id, int _shard_id);
+  void finish();
+
+#if 0
+  int read_log_info(rgw_datalog_info *log_info);
+  int get_sync_info();
+  int read_sync_status(rgw_data_sync_status *sync_status);
+#endif
+  RGWCoroutine *init_sync_status(RGWObjectCtx& obj_ctx);
+#if 0
+  int set_sync_info(const rgw_data_sync_info& sync_info);
+  int run_sync(int num_shards, rgw_data_sync_status& sync_status);
+#endif
+
+  void wakeup();
+};
+
+class RGWBucketSyncStatusManager {
+  RGWRados *store;
+  librados::IoCtx ioctx;
+
+  RGWCoroutinesManager cr_mgr;
+
+  RGWAsyncRadosProcessor *async_rados;
+  RGWHTTPManager http_manager;
+
+  string source_zone;
+  RGWRESTConn *conn;
+
+  string bucket_name;
+  string bucket_id;
+
+  map<int, RGWRemoteBucketLog *> source_logs;
+
+  string source_status_oid;
+  string source_shard_status_oid_prefix;
+  rgw_obj source_status_obj;
+
+  rgw_data_sync_status sync_status;
+  rgw_obj status_obj;
+
+  int num_shards;
+
+public:
+  RGWBucketSyncStatusManager(RGWRados *_store, const string& _source_zone,
+                             const string& _bucket_name, const string& _bucket_id) : store(_store),
+                                                                                     cr_mgr(_store->ctx()),
+                                                                                     async_rados(NULL),
+                                                                                     http_manager(store->ctx(), cr_mgr.get_completion_mgr()),
+                                                                                     source_zone(_source_zone),
+                                                                                     conn(NULL),
+                                                                                     bucket_name(_bucket_name), bucket_id(_bucket_id),
+                                                                                     num_shards(0) {}
+  ~RGWBucketSyncStatusManager();
+
+  int init();
+
+  rgw_data_sync_status& get_sync_status() { return sync_status; }
+  int init_sync_status();
+
+  static string status_oid(const string& source_zone, const string& bucket_name, const string& bucket_id, int shard_id);
+#if 0
+
+  int read_sync_status() { return source_log.read_sync_status(&sync_status); }
+  int init_sync_status() { return source_log.init_sync_status(num_shards); }
+
+  int run() { return source_log.run_sync(num_shards, sync_status); }
+
+  void wakeup() { return source_log.wakeup(); }
+  void stop() {
+    source_log.finish();
+  }
+#endif
+};
+
+
 #endif

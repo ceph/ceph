@@ -249,6 +249,9 @@ enum {
   OPT_BUCKET_UNLINK,
   OPT_BUCKET_STATS,
   OPT_BUCKET_CHECK,
+  OPT_BUCKET_SYNC_STATUS,
+  OPT_BUCKET_SYNC_INIT,
+  OPT_BUCKET_SYNC_RUN,
   OPT_BUCKET_RM,
   OPT_BUCKET_REWRITE,
   OPT_POLICY,
@@ -434,6 +437,18 @@ static int get_cmd(const char *cmd, const char *prev_cmd, const char *prev_prev_
       return OPT_BUCKET_REWRITE;
     if (strcmp(cmd, "check") == 0)
       return OPT_BUCKET_CHECK;
+    if (strcmp(cmd, "sync") == 0) {
+      *need_more = true;
+      return 0;
+    }
+  } else if ((prev_prev_cmd && strcmp(prev_prev_cmd, "bucket") == 0) &&
+	     (strcmp(prev_cmd, "sync") == 0)) {
+    if (strcmp(cmd, "status") == 0)
+      return OPT_BUCKET_SYNC_STATUS;
+    if (strcmp(cmd, "init") == 0)
+      return OPT_BUCKET_SYNC_INIT;
+    if (strcmp(cmd, "run") == 0)
+      return OPT_BUCKET_SYNC_RUN;
   } else if (strcmp(prev_cmd, "log") == 0) {
     if (strcmp(cmd, "list") == 0)
       return OPT_LOG_LIST;
@@ -3834,6 +3849,33 @@ next:
     ret = sync.run();
     if (ret < 0) {
       cerr << "ERROR: sync.run() returned ret=" << ret << std::endl;
+      return -ret;
+    }
+  }
+
+  if (opt_cmd == OPT_BUCKET_SYNC_INIT) {
+    if (source_zone.empty()) {
+      cerr << "ERROR: source zone not specified" << std::endl;
+      return EINVAL;
+    }
+    if (bucket_name.empty()) {
+      cerr << "ERROR: bucket not specified" << std::endl;
+      return EINVAL;
+    }
+    if (bucket_id.empty()) {
+      cerr << "ERROR: bucket id specified" << std::endl;
+      return EINVAL;
+    }
+    RGWBucketSyncStatusManager sync(store, source_zone, bucket_name, bucket_id);
+
+    int ret = sync.init();
+    if (ret < 0) {
+      cerr << "ERROR: sync.init() returned ret=" << ret << std::endl;
+      return -ret;
+    }
+    ret = sync.init_sync_status();
+    if (ret < 0) {
+      cerr << "ERROR: sync.get_sync_status() returned ret=" << ret << std::endl;
       return -ret;
     }
   }
