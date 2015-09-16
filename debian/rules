@@ -54,7 +54,6 @@ build-stamp: configure-stamp
 	cp src/init-ceph debian/ceph.init
 	cp src/init-radosgw debian/radosgw.init
 	cp src/logrotate.conf debian/ceph.logrotate
-	cp src/rgw/logrotate.conf debian/radosgw.logrotate
 
 	touch $@
 

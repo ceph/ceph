@@ -124,7 +124,6 @@ bin_DEBUGPROGRAMS += ceph_rgw_jsonparser
 
 
 noinst_HEADERS += \
-	rgw/logrotate.conf \
 	rgw/rgw_acl.h \
 	rgw/rgw_acl_s3.h \
 	rgw/rgw_acl_swift.h \
