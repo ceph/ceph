@@ -77,6 +77,36 @@ class CephDisk:
             self.helper("install linux-image-extra-3.13.0-61-generic")
             self.sh(modprobe)
 
+    def ensure_lv(self):
+        '''
+        Create the lvm logical volume necessary to test ceph-disk
+        '''
+        LOG.debug(self.sh("lvdisplay -c"))
+        LOG.debug(self.unused_disks())
+        try:
+            self.sh("lvdisplay -c vg/lv")
+            return "/dev/vg/lv"
+        except:
+            pass
+        disk = self.unused_disks()[0]
+        self.lvm_disk = disk
+        self.sh("sgdisk -Z " + disk)
+        self.sh("pvcreate " + disk)
+        self.sh("vgcreate vg " + disk)
+        self.sh("lvcreate -n lv -l 100%FREE vg " + disk)
+        return "/dev/vg/lv"
+
+    def remove_lv(self):
+        '''
+        Remove the lvm configuration after testing
+        '''
+        try:
+            self.sh("lvremove -f vg/lv")
+            self.sh("vgremove -f vg")
+            self.sh("pvremove -f " + self.lvm_disk)
+        except:
+            raise Exception("Unable to remove LVM configuration.")
+
     def unload_scsi_debug(self):
         self.sh("rmmod scsi_debug || true")
 
@@ -396,6 +426,44 @@ class TestCephDisk(object):
         c.sh("udevadm settle")
         c.sh("multipath -F")
         c.unload_scsi_debug()
+
+    def test_activate_lvm(self):
+        '''
+        Test ceph-disk osd creation with lvm logical volumes
+        '''
+        c = CephDisk()
+        if int(c.sh("udevadm --version")) < 211:
+            pytest.skip("partitioned lvm devices not supported in udev prior to 211")
+
+        lv = c.ensure_lv()
+        #
+        # Prepare the lvm logical volume
+        #
+        osd_uuid = str(uuid.uuid1())
+        c.sh("ceph-disk zap " + lv)
+        c.sh("ceph-disk prepare --osd-uuid " + osd_uuid +
+             " " + lv)
+        c.wait_for_osd_up(osd_uuid)
+        device = json.loads(c.helper("ceph-disk list --format json " + lv))[0]
+        assert len(device['partitions']) == 2
+        data_partition = c.get_osd_partition(osd_uuid)
+        assert data_partition['type'] == 'data'
+        #
+        # Activate it although it should auto activate
+        #
+#        if True: # remove this block when http://tracker.ceph.com/issues/12786 is fixed
+#            c.sh("ceph-disk activate " + data_partition['path'])
+#            device = json.loads(c.helper("ceph-disk list --format json " + multipath))[0]
+#            assert len(device['partitions']) == 2
+#            data_partition = c.get_osd_partition(osd_uuid)
+        assert data_partition['state'] == 'active'
+        journal_partition = c.get_journal_partition(osd_uuid)
+        assert journal_partition
+        c.helper("pool_read_write")
+        c.destroy_osd(osd_uuid)
+        c.sh("ceph-disk zap " + lv)
+        c.sh("udevadm settle")
+        c.remove_pv()
 
 class CephDiskTest(CephDisk):
 
