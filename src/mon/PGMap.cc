@@ -373,7 +373,7 @@ void PGMap::calc_stats()
 
   redo_full_sets();
 
-  calc_min_last_epoch_clean();
+  min_last_epoch_clean = calc_min_last_epoch_clean();
 }
 
 void PGMap::update_pg(pg_t pgid, bufferlist& bl)
