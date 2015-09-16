@@ -47,7 +47,7 @@ function build_package() {
     # remove all files not under git so they are not
     # included in the distribution.
     #
-    git clean -dxf
+    git clean -qdxff
     #
     # creating the distribution tarbal requires some configure
     # options (otherwise parts of the source tree will be left out).
