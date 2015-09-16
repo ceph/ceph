@@ -420,18 +420,9 @@ For Debian/Ubuntu, execute::
 
 	sudo apt-get install gitk git-gui
 
-For Fedora, execute::
+For Fedora/CentOS/RHEL, execute::
 
 	sudo yum install gitk git-gui
-
-In CentOS/RHEL7, ``gitk`` and ``git-gui`` are not available in default or
-``epel`` repository. So, use http://rpmfind.net/ to find them. Then, download
-them from a mirror and install them. For example::
-
-	wget ftp://rpmfind.net/linux/centos/7.0.1406/os/x86_64/Packages/gitk-1.8.3.1-4.el7.noarch.rpm
-	sudo yum install gitk-1.8.3.1-4.el7.noarch.rpm
-	wget ftp://rpmfind.net/linux/centos/7.0.1406/os/x86_64/Packages/git-gui-1.8.3.1-4.el7.noarch.rpm
-	sudo yum install git-gui-1.8.3.1-4.el7.noarch.rpm
 
 Then, execute::
 
