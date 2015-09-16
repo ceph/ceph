@@ -364,6 +364,115 @@ int RGWRemoteDataLog::init_sync_status(int num_shards)
   return run(new RGWInitDataSyncStatusCoroutine(async_rados, store, &http_manager, obj_ctx, source_zone, num_shards));
 }
 
+int RGWRemoteDataLog::set_sync_info(const rgw_data_sync_info& sync_info)
+{
+  return run(new RGWSimpleRadosWriteCR<rgw_data_sync_info>(async_rados, store, store->get_zone_params().log_pool,
+				 datalog_sync_status_oid, sync_info));
+}
+
+class RGWListBucketIndexesCR : public RGWCoroutine {
+  RGWRados *store;
+  RGWHTTPManager *http_manager;
+  RGWAsyncRadosProcessor *async_rados;
+
+  RGWRESTConn *conn;
+  string source_zone;
+  int num_shards;
+
+  int req_ret;
+
+  list<string> result;
+
+  RGWShardedOmapCRManager *entries_index;
+
+  string oid_prefix;
+
+public:
+  RGWListBucketIndexesCR(RGWRados *_store, RGWHTTPManager *_mgr, RGWAsyncRadosProcessor *_async_rados,
+                         RGWRESTConn *_conn,
+                         const string& _source_zone, int _num_shards) : RGWCoroutine(_store->ctx()), store(_store),
+                                                      http_manager(_mgr),
+						      async_rados(_async_rados),
+						      conn(_conn), source_zone(_source_zone), num_shards(_num_shards),
+						      req_ret(0), entries_index(NULL) {
+    oid_prefix = datalog_sync_full_sync_index_prefix + "." + source_zone; 
+  }
+  ~RGWListBucketIndexesCR() {
+    delete entries_index;
+  }
+
+  int operate() {
+    reenter(this) {
+      entries_index = new RGWShardedOmapCRManager(async_rados, store, this, num_shards,
+						  store->get_zone_params().log_pool,
+                                                  oid_prefix);
+      yield {
+        string entrypoint = string("/admin/metadata/bucket.instance");
+#warning need a better scaling solution here, requires streaming output
+        call(new RGWReadRESTResourceCR<list<string> >(store->ctx(), conn, http_manager,
+                                                      entrypoint, NULL, &result));
+      }
+      yield {
+        if (get_ret_status() < 0) {
+          ldout(store->ctx(), 0) << "ERROR: failed to fetch metadata for section bucket.index" << dendl;
+          return set_state(RGWCoroutine_Error);
+        }
+        for (list<string>::iterator iter = result.begin(); iter != result.end(); ++iter) {
+          ldout(store->ctx(), 20) << "list metadata: section=bucket.index key=" << *iter << dendl;
+          entries_index->append(*iter);
+#warning error handling of shards
+        }
+      }
+      yield entries_index->finish();
+      int ret;
+      while (collect(&ret)) {
+	if (ret < 0) {
+	  return set_state(RGWCoroutine_Error);
+	}
+        yield;
+      }
+      yield return set_state(RGWCoroutine_Done);
+    }
+    return 0;
+  }
+};
+
+int RGWRemoteDataLog::run_sync(int num_shards, rgw_data_sync_status& sync_status)
+{
+  RGWObjectCtx obj_ctx(store, NULL);
+
+  int r = run(new RGWReadDataSyncStatusCoroutine(async_rados, store, obj_ctx, source_zone, &sync_status));
+  if (r < 0) {
+    ldout(store->ctx(), 0) << "ERROR: failed to fetch sync status" << dendl;
+    return r;
+  }
+
+  switch ((rgw_data_sync_info::SyncState)sync_status.sync_info.state) {
+    case rgw_data_sync_info::StateInit:
+      ldout(store->ctx(), 20) << __func__ << "(): init" << dendl;
+      r = run(new RGWInitDataSyncStatusCoroutine(async_rados, store, &http_manager, obj_ctx, source_zone, num_shards));
+      /* fall through */
+    case rgw_data_sync_info::StateBuildingFullSyncMaps:
+      ldout(store->ctx(), 20) << __func__ << "(): building full sync maps" << dendl;
+      r = run(new RGWListBucketIndexesCR(store, &http_manager, async_rados, conn, source_zone, num_shards));
+      sync_status.sync_info.state = rgw_data_sync_info::StateSync;
+      r = set_sync_info(sync_status.sync_info);
+      if (r < 0) {
+        ldout(store->ctx(), 0) << "ERROR: failed to update sync status" << dendl;
+        return r;
+      }
+      /* fall through */
+    case rgw_data_sync_info::StateSync:
+#warning FIXME
+      break;
+    default:
+      ldout(store->ctx(), 0) << "ERROR: bad sync state!" << dendl;
+      return -EIO;
+  }
+
+  return 0;
+}
+
 int RGWDataSyncStatusManager::init()
 {
   map<string, RGWRESTConn *>::iterator iter = store->zone_conn_map.find(source_zone);
