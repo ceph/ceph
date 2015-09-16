@@ -59,9 +59,9 @@ For example::
 To create a pool, execute:: 
 
 	ceph osd pool create {pool-name} {pg-num} [{pgp-num}] [replicated] \
-             [crush-ruleset-name]
+             [crush-ruleset-name] [expected-num-objects]
 	ceph osd pool create {pool-name} {pg-num}  {pgp-num}   erasure \
-             [erasure-code-profile] [crush-ruleset-name]
+             [erasure-code-profile] [crush-ruleset-name] [expected_num_objects]
 
 Where: 
 
@@ -144,6 +144,16 @@ placement groups for your pool.
 
 .. _Placement Groups: ../placement-groups
 
+``[expected-num-objects]``
+
+:Description: The expected number of objects for this pool. By setting this value (
+              together with a negative **filestore merge threshold**), the PG folder
+              splitting would happen at the pool creation time, to avoid the latency
+              impact to do a runtime folder splitting.
+
+:Type: Integer
+:Required: No.
+:Default: 0, no splitting at the pool creation time. 
 
 Set Pool Quotas
 ===============
@@ -422,7 +432,18 @@ You may set values for the following keys:
 :Type: Integer
 :Example: ``1800`` 30min
 
+``fast_read``
 
+:Description: On Erasure Coding pool, if this flag is turned on, the read request
+              would issue sub reads to all shards, and wait until it receives enough
+              shards to decode to serve the client. In the case of jerasure and isa
+              erasure plugins, once the first K replies return, client's request is
+              serverd immediately using the data decoded from these replies. This
+              helps to tradeoff some resources for betterperformance. Currently this
+              flag is only supported for Erasure Coding pool.
+
+:Type: Boolean
+:Defaults: ``0``
 
 Get Pool Values
 ===============
@@ -564,6 +585,18 @@ You may get values for the following keys:
               
 :Type: Integer
 
+
+``fast_read``
+
+:Description: On Erasure Coding pool, if this flag is turned on, the read request
+              would issue sub reads to all shards, and wait until it receives enough
+              shards to decode to serve the client. In the case of jerasure and isa
+              erasure plugins, once the first K replies return, client's request is
+              serverd immediately using the data decoded from these replies. This
+              helps to tradeoff some resources for betterperformance. Currently this
+              flag is only supported for Erasure Coding pool.
+
+:Type: Boolean
 
 Set the Number of Object Replicas
 =================================
