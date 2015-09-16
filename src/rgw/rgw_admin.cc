@@ -3906,6 +3906,38 @@ next:
     }
   }
 
+  if (opt_cmd == OPT_BUCKET_SYNC_STATUS) {
+    if (source_zone.empty()) {
+      cerr << "ERROR: source zone not specified" << std::endl;
+      return EINVAL;
+    }
+    if (bucket_name.empty()) {
+      cerr << "ERROR: bucket not specified" << std::endl;
+      return EINVAL;
+    }
+    if (bucket_id.empty()) {
+      cerr << "ERROR: bucket id specified" << std::endl;
+      return EINVAL;
+    }
+    RGWBucketSyncStatusManager sync(store, source_zone, bucket_name, bucket_id);
+
+    int ret = sync.init();
+    if (ret < 0) {
+      cerr << "ERROR: sync.init() returned ret=" << ret << std::endl;
+      return -ret;
+    }
+    ret = sync.read_sync_status();
+    if (ret < 0) {
+      cerr << "ERROR: sync.read_sync_status() returned ret=" << ret << std::endl;
+      return -ret;
+    }
+
+    map<int, rgw_bucket_shard_sync_info>& sync_status = sync.get_sync_status();
+
+    encode_json("sync_status", sync_status, formatter);
+    formatter->flush(cout);
+  }
+
   if (opt_cmd == OPT_BILOG_LIST) {
     if (bucket_name.empty()) {
       cerr << "ERROR: bucket not specified" << std::endl;
