@@ -4508,7 +4508,7 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	    src_obc,
 	    name,
 	    &xattr);
-	if (result < 0 && result != -EEXIST && result != -ENODATA)
+	if (result < 0 && result != -ENODATA)
 	  break;
 	
 	ctx->delta_stats.num_rd++;
