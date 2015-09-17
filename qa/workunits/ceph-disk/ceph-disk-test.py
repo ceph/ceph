@@ -73,11 +73,8 @@ class CephDisk:
         '''
         LOG.debug(self.sh("lvdisplay -c"))
         LOG.debug(self.unused_disks())
-        try:
-            self.sh("lvdisplay -c vg/lv")
+        if self.sh("lvdisplay -c vg/lv"):
             return "/dev/vg/lv"
-        except:
-            pass
         disk = self.unused_disks()[0]
         self.lvm_disk = disk
         try:
