@@ -569,7 +569,7 @@ public:
     utime_t now = ceph_clock_now(g_ceph_context);
     now -= start_time;
     uint64_t ns = now.nsec();
-    float total = ns / 1000000000;
+    float total = (float) ns / 1000000000.0;
     total += now.sec();
     return total;
   }
