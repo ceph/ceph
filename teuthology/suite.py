@@ -319,6 +319,7 @@ def prepare_and_schedule(job_config, suite_repo_path, base_yaml_paths, limit,
             arg.extend(['--timeout', timeout])
         if dry_run:
             log.info('dry-run: %s' % ' '.join(arg))
+        else:
             teuthology_schedule(
                 args=arg,
                 dry_run=dry_run,
