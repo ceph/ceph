@@ -223,7 +223,6 @@ noinst_HEADERS += \
 	common/strtol.h \
 	common/static_assert.h \
 	common/AsyncReserver.h \
-	common/sync_filesystem.h \
 	common/cmdparse.h \
 	common/hobject.h \
 	common/linux_version.h \

@@ -65,7 +65,6 @@
 #include "common/run_cmd.h"
 #include "common/safe_io.h"
 #include "common/perf_counters.h"
-#include "common/sync_filesystem.h"
 #include "common/fd.h"
 #include "HashIndex.h"
 #include "DBObjectMap.h"
@@ -2090,7 +2089,7 @@ void FileStore::_set_global_replay_guard(coll_t cid,
     derr << __func__ << " : omap sync error " << cpp_strerror(ret) << dendl;
     assert(0 == "_set_global_replay_guard failed");
   }
-  ret = sync_filesystem(basedir_fd);
+  ret = backend->syncfs();
   if (ret < 0) {
     derr << __func__ << " :sync_filesytem error " << cpp_strerror(ret) << dendl;
     assert(0 == "_set_global_replay_guard failed");

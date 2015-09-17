@@ -38,7 +38,6 @@
 
 #include "common/errno.h"
 #include "common/config.h"
-#include "common/sync_filesystem.h"
 
 #include "common/SloppyCRCMap.h"
 #include "os/chain_xattr.h"
@@ -61,7 +60,7 @@ GenericFileStoreBackend::GenericFileStoreBackend(FileStore *fs):
   m_filestore_fiemap(g_conf->filestore_fiemap),
   m_filestore_seek_data_hole(g_conf->filestore_seek_data_hole),
   m_filestore_fsync_flushes_journal_data(g_conf->filestore_fsync_flushes_journal_data),
-  m_filestore_splice(false) {}
+  m_filestore_splice(false), m_filestore_syncfs(false) {}
 
 int GenericFileStoreBackend::detect_features()
 {
@@ -187,30 +186,29 @@ int GenericFileStoreBackend::detect_features()
   VOID_TEMP_FAILURE_RETRY(::close(fd));
 
 
-  bool have_syncfs = false;
 #ifdef HAVE_SYS_SYNCFS
   if (::syncfs(get_basedir_fd()) == 0) {
     dout(0) << "detect_features: syncfs(2) syscall fully supported (by glibc and kernel)" << dendl;
-    have_syncfs = true;
+    m_filestore_syncfs = true;
   } else {
     dout(0) << "detect_features: syncfs(2) syscall supported by glibc BUT NOT the kernel" << dendl;
   }
 #elif defined(SYS_syncfs)
   if (syscall(SYS_syncfs, get_basedir_fd()) == 0) {
     dout(0) << "detect_features: syscall(SYS_syncfs, fd) fully supported" << dendl;
-    have_syncfs = true;
+    m_filestore_syncfs = true;
   } else {
     dout(0) << "detect_features: syscall(SYS_syncfs, fd) supported by libc BUT NOT the kernel" << dendl;
   }
 #elif defined(__NR_syncfs)
   if (syscall(__NR_syncfs, get_basedir_fd()) == 0) {
     dout(0) << "detect_features: syscall(__NR_syncfs, fd) fully supported" << dendl;
-    have_syncfs = true;
+    m_filestore_syncfs = true;
   } else {
     dout(0) << "detect_features: syscall(__NR_syncfs, fd) supported by libc BUT NOT the kernel" << dendl;
   }
 #endif
-  if (!have_syncfs) {
+  if (!m_filestore_syncfs) {
     dout(0) << "detect_features: syncfs(2) syscall not supported" << dendl;
     if (m_filestore_fsync_flushes_journal_data) {
       dout(0) << "detect_features: no syncfs(2), but 'filestore fsync flushes journal data = true', so fsync will suffice." << dendl;
@@ -253,10 +251,28 @@ int GenericFileStoreBackend::syncfs()
     ret = ::fsync(get_op_fd());
     if (ret < 0)
       ret = -errno;
-  } else {
+  } else if (m_filestore_syncfs) {
     dout(15) << "syncfs: doing a full sync (syncfs(2) if possible)" << dendl;
-    ret = sync_filesystem(get_current_fd());
+    /* On Linux, newer versions of glibc have a function called syncfs that
+     * performs a sync on only one filesystem. If we don't have this call or
+     * filesystem don't implement this, we have to fall back on sync(),
+     * which synchronizes every filesystem on the computer. */
+#ifdef HAVE_SYS_SYNCFS
+    if (::syncfs(get_current_fd()) == 0)
+      return 0;
+#elif defined(SYS_syncfs)
+    if (::syscall(SYS_syncfs, get_current_fd()) == 0)
+      return 0;
+#elif defined(__NR_syncfs)
+    if (::syscall(__NR_syncfs, get_current_fd()) == 0)
+      return 0;
+#endif
+    ret = -errno;
+  } else {
+    sync();
+    ret = 0;
   }
+
   return ret;
 }
 
