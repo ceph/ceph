@@ -3938,6 +3938,34 @@ next:
     formatter->flush(cout);
   }
 
+ if (opt_cmd == OPT_BUCKET_SYNC_RUN) {
+    if (source_zone.empty()) {
+      cerr << "ERROR: source zone not specified" << std::endl;
+      return EINVAL;
+    }
+    if (bucket_name.empty()) {
+      cerr << "ERROR: bucket not specified" << std::endl;
+      return EINVAL;
+    }
+    if (bucket_id.empty()) {
+      cerr << "ERROR: bucket id specified" << std::endl;
+      return EINVAL;
+    }
+    RGWBucketSyncStatusManager sync(store, source_zone, bucket_name, bucket_id);
+
+    int ret = sync.init();
+    if (ret < 0) {
+      cerr << "ERROR: sync.init() returned ret=" << ret << std::endl;
+      return -ret;
+    }
+
+    ret = sync.run();
+    if (ret < 0) {
+      cerr << "ERROR: sync.run() returned ret=" << ret << std::endl;
+      return -ret;
+    }
+  }
+
   if (opt_cmd == OPT_BILOG_LIST) {
     if (bucket_name.empty()) {
       cerr << "ERROR: bucket not specified" << std::endl;

@@ -314,8 +314,9 @@ public:
   int read_log_info(rgw_datalog_info *log_info);
   int get_sync_info();
 #endif
-  RGWCoroutine *read_sync_status(RGWObjectCtx& obj_ctx, rgw_bucket_shard_sync_info *sync_status);
-  RGWCoroutine *init_sync_status(RGWObjectCtx& obj_ctx);
+  RGWCoroutine *read_sync_status_cr(RGWObjectCtx& obj_ctx, rgw_bucket_shard_sync_info *sync_status);
+  RGWCoroutine *init_sync_status_cr(RGWObjectCtx& obj_ctx);
+  RGWCoroutine *run_sync_cr(RGWObjectCtx& obj_ctx);
 #if 0
   int set_sync_info(const rgw_data_sync_info& sync_info);
   int run_sync(int num_shards, rgw_data_sync_status& sync_status);
@@ -370,10 +371,9 @@ public:
   static string status_oid(const string& source_zone, const string& bucket_name, const string& bucket_id, int shard_id);
 
   int read_sync_status();
+  int run();
+
 #if 0
-
-  int run() { return source_log.run_sync(num_shards, sync_status); }
-
   void wakeup() { return source_log.wakeup(); }
   void stop() {
     source_log.finish();
