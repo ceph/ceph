@@ -296,14 +296,14 @@ int FileJournal::_open_file(int64_t oldsize, blksize_t blksize,
     }
     memset(static_cast<void*>(buf), 0, write_size);
     uint64_t i = 0;
-    for (; (i + write_size) <= (unsigned)max_size; i += write_size) {
+    for (; (i + write_size) <= max_size; i += write_size) {
       ret = ::pwrite(fd, static_cast<void*>(buf), write_size, i);
       if (ret < 0) {
 	free(buf);
 	return -errno;
       }
     }
-    if (i < (unsigned)max_size) {
+    if (i < max_size) {
       ret = ::pwrite(fd, static_cast<void*>(buf), max_size - i, i);
       if (ret < 0) {
 	free(buf);
