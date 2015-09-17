@@ -411,6 +411,7 @@ class TestCephDisk(object):
         '''
         Test ceph-disk osd creation with lvm logical volumes
         '''
+        c = CephDisk()
         if int(c.sh("udevadm --version")) < 211:
             pytest.skip("partitioned lvm devices not supported in udev prior to 211")
 
