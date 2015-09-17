@@ -578,7 +578,6 @@ int RGWHTTPArgs::parse()
 {
   int pos = 0;
   bool end = false;
-  bool admin_subresource_added = false; 
   if (str[pos] == '?') pos++;
 
   while (!end) {
@@ -596,54 +595,59 @@ int RGWHTTPArgs::parse()
       string& name = nv.get_name();
       string& val = nv.get_val();
 
-      if (name.compare(0, sizeof(RGW_SYS_PARAM_PREFIX) - 1, RGW_SYS_PARAM_PREFIX) == 0) {
-        sys_val_map[name] = val;
-      } else {
-        val_map[name] = val;
-      }
-
-      if ((name.compare("acl") == 0) ||
-          (name.compare("cors") == 0) ||
-          (name.compare("location") == 0) ||
-          (name.compare("logging") == 0) ||
-          (name.compare("delete") == 0) ||
-          (name.compare("uploads") == 0) ||
-          (name.compare("partNumber") == 0) ||
-          (name.compare("uploadId") == 0) ||
-          (name.compare("versionId") == 0) ||
-          (name.compare("versions") == 0) ||
-          (name.compare("versioning") == 0) ||
-          (name.compare("torrent") == 0)) {
-        sub_resources[name] = val;
-      } else if (name[0] == 'r') { // root of all evil
-        if ((name.compare("response-content-type") == 0) ||
-           (name.compare("response-content-language") == 0) ||
-           (name.compare("response-expires") == 0) ||
-           (name.compare("response-cache-control") == 0) ||
-           (name.compare("response-content-disposition") == 0) ||
-           (name.compare("response-content-encoding") == 0)) {
-          sub_resources[name] = val;
-          has_resp_modifier = true;
-        }
-      } else if  ((name.compare("subuser") == 0) ||
-          (name.compare("key") == 0) ||
-          (name.compare("caps") == 0) ||
-          (name.compare("index") == 0) ||
-          (name.compare("policy") == 0) ||
-          (name.compare("quota") == 0) ||
-          (name.compare("object") == 0)) {
-
-        if (!admin_subresource_added) {
-          sub_resources[name] = "";
-          admin_subresource_added = true;
-        }
-      }
+      append(name, val);
     }
 
     pos = fpos + 1;  
   }
 
   return 0;
+}
+
+void RGWHTTPArgs::append(const string& name, const string& val)
+{
+  if (name.compare(0, sizeof(RGW_SYS_PARAM_PREFIX) - 1, RGW_SYS_PARAM_PREFIX) == 0) {
+    sys_val_map[name] = val;
+  } else {
+    val_map[name] = val;
+  }
+
+  if ((name.compare("acl") == 0) ||
+      (name.compare("cors") == 0) ||
+      (name.compare("location") == 0) ||
+      (name.compare("logging") == 0) ||
+      (name.compare("delete") == 0) ||
+      (name.compare("uploads") == 0) ||
+      (name.compare("partNumber") == 0) ||
+      (name.compare("uploadId") == 0) ||
+      (name.compare("versionId") == 0) ||
+      (name.compare("versions") == 0) ||
+      (name.compare("versioning") == 0) ||
+      (name.compare("torrent") == 0)) {
+    sub_resources[name] = val;
+  } else if (name[0] == 'r') { // root of all evil
+    if ((name.compare("response-content-type") == 0) ||
+        (name.compare("response-content-language") == 0) ||
+        (name.compare("response-expires") == 0) ||
+        (name.compare("response-cache-control") == 0) ||
+        (name.compare("response-content-disposition") == 0) ||
+        (name.compare("response-content-encoding") == 0)) {
+      sub_resources[name] = val;
+      has_resp_modifier = true;
+    }
+  } else if  ((name.compare("subuser") == 0) ||
+              (name.compare("key") == 0) ||
+              (name.compare("caps") == 0) ||
+              (name.compare("index") == 0) ||
+              (name.compare("policy") == 0) ||
+              (name.compare("quota") == 0) ||
+              (name.compare("object") == 0)) {
+
+    if (!admin_subresource_added) {
+      sub_resources[name] = "";
+      admin_subresource_added = true;
+    }
+  }
 }
 
 string& RGWHTTPArgs::get(const string& name, bool *exists)
