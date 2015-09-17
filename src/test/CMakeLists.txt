@@ -1482,6 +1482,7 @@ if(${WITH_RADOSGW})
     cls_rgw_client
     cls_user_client
     cls_lock_client
+    cls_timeindex_client
     boost_regex
     ${BLKID_LIBRARIES}
     ${CMAKE_DL_LIBS} ${TCMALLOC_LIBS} ${UNITTEST_LIBS} ${CRYPTO_LIBS})
@@ -1509,6 +1510,7 @@ if(${WITH_RADOSGW})
     cls_rgw_client
     cls_user_client
     cls_lock_client
+    cls_timeindex_client
     boost_regex
     ${BLKID_LIBRARIES}
     ${CMAKE_DL_LIBS}
