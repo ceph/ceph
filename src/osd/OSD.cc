@@ -3978,6 +3978,9 @@ void OSD::tick()
     bool report = false;
     utime_t now = ceph_clock_now(cct);
     pg_stat_queue_lock.Lock();
+    double backoff = stats_ack_timeout / g_conf->osd_mon_ack_timeout;
+    double adjusted_min = cct->_conf->osd_mon_report_interval_min * backoff;
+    double adjusted_max = cct->_conf->osd_mon_report_interval_max * backoff;
     if (!outstanding_pg_stats.empty() &&
 	(now - stats_ack_timeout) > last_pg_stats_ack) {
       dout(1) << __func__ << " mon hasn't acked PGStats in "
@@ -3990,7 +3993,7 @@ void OSD::tick()
 			      stats_ack_timeout * 2.0);
       outstanding_pg_stats.clear();
     }
-    if (now - last_pg_stats_sent > cct->_conf->osd_mon_report_interval_max) {
+    if (now - last_pg_stats_sent > adjusted_max) {
       osd_stat_updated = true;
       report = true;
     } else if ((int)outstanding_pg_stats.size() >=
@@ -3998,8 +4001,6 @@ void OSD::tick()
       dout(20) << __func__ << " have max " << outstanding_pg_stats
 	       << " stats updates in flight" << dendl;
     } else {
-      double backoff = stats_ack_timeout / g_conf->osd_mon_ack_timeout;
-      double adjusted_min = cct->_conf->osd_mon_report_interval_min * backoff;
       if (now - last_mon_report > adjusted_min) {
 	dout(20) << __func__ << " stats backoff " << backoff
 		 << " adjusted_min " << adjusted_min << " - sending report"
