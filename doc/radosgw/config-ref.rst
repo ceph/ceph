@@ -231,14 +231,15 @@ Ceph configuration file, the default value will be set automatically.
 
 ``rgw extended http attrs``
 
-:Description: Add new set of attributes that could be set on an object. These 
-              extra attributes can be set through HTTP header fields when 
-              putting the objects. If set, these attributes will return as HTTP 
-              fields when doing GET/HEAD on the object.
+:Description: Add new set of attributes that could be set on an entity
+              (user, bucket or object). These extra attributes can be set
+              through HTTP header fields when putting the entity or modifying
+              it using POST method. If set, these attributes will return as
+              HTTP  fields when doing GET/HEAD on the entity.
 
 :Type: String
 :Default: None
-:Example: "content_foo, content_bar"
+:Example: "content_foo, content_bar, x-foo-bar"
 
 
 ``rgw exit timeout secs``
