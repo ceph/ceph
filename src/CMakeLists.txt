@@ -486,9 +486,6 @@ if(${WITH_RADOSGW})
     rgw/rgw_env.cc
     rgw/rgw_json_enc.cc
   )
-endif(${WITH_RADOSGW})
-add_executable(ceph-dencoder ${dencoder_srcs} $<TARGET_OBJECTS:heap_profiler_objs>)
-if(${WITH_RADOSGW})
   set(DENCODER_EXTRALIBS
     rgw_a
     cls_rgw_client
@@ -503,6 +500,8 @@ if(${WITH_RBD})
       ${DENCODER_EXTRALIBS}
       librbd_replay_types)
 endif(${WITH_RBD})
+
+add_executable(ceph-dencoder ${dencoder_srcs} $<TARGET_OBJECTS:heap_profiler_objs>)
 target_link_libraries(ceph-dencoder
   librados
   librbd
@@ -521,6 +520,7 @@ target_link_libraries(ceph-dencoder
   cls_kvs
   cls_user_client
   cls_journal_client
+  cls_timeindex_client
   ${DENCODER_EXTRALIBS}
   blkid
   udev
