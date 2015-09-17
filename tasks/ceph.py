@@ -292,9 +292,6 @@ def cephfs_setup(ctx, config):
             'ceph',
             'mds', 'set_max_mds', str(num_active)])
 
-        # make sure the FS is accessible before proceeding
-        ceph_fs.wait_for_daemons(timeout=300)
-
     yield
 
 
