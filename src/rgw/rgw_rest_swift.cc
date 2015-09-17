@@ -84,15 +84,18 @@ static void dump_account_metadata(struct req_state * const s,
     }
   }
 
-  /* Dump user-defined metadata items */
+  /* Dump user-defined metadata items and generic attrs. */
   const size_t PREFIX_LEN = sizeof(RGW_ATTR_META_PREFIX) - 1;
   map<string, bufferlist>::iterator iter;
-  for (iter = attrs.lower_bound(RGW_ATTR_META_PREFIX); iter != attrs.end(); ++iter) {
+  for (iter = attrs.lower_bound(RGW_ATTR_PREFIX); iter != attrs.end(); ++iter) {
     const char *name = iter->first.c_str();
-    if (strncmp(name, RGW_ATTR_META_PREFIX, PREFIX_LEN) == 0) {
+    map<string, string>::const_iterator geniter = rgw_to_http_attrs.find(name);
+
+    if (geniter != rgw_to_http_attrs.end() &&
+        geniter->first.compare(RGW_ATTR_CONTENT_TYPE) != 0) {
+      s->cio->print("%s: %s\r\n", geniter->second.c_str(), iter->second.c_str());
+    } else if (strncmp(name, RGW_ATTR_META_PREFIX, PREFIX_LEN) == 0) {
       s->cio->print("X-Account-Meta-%s: %s\r\n", name + PREFIX_LEN, iter->second.c_str());
-    } else {
-      break;
     }
   }
 }
