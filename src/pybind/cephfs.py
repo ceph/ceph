@@ -194,13 +194,18 @@ class LibCephFS(object):
         raise LibCephFSStateError("You cannot perform that operation on a "
                                   "CephFS object in state %s." % (self.state))
 
-    def __init__(self, conf=None, conffile=None):
+    def __init__(self, conf=None, conffile=None, auth_id=None):
         self.libcephfs = load_libcephfs()
         self.cluster = c_void_p()
 
         if conffile is not None and not isinstance(conffile, basestring):
             raise TypeError('conffile must be a string or None')
-        ret = self.libcephfs.ceph_create(byref(self.cluster), c_char_p(0))
+
+        if auth_id is not None and not isinstance(auth_id, basestring):
+            raise TypeError('auth_id must be a string or None')
+
+        ret = self.libcephfs.ceph_create(byref(self.cluster),
+                c_char_p(auth_id) if auth_id else c_char_p(0))
         if ret != 0:
             raise Error("libcephfs_initialize failed with error code: %d" % ret)
         self.state = "configuring"
