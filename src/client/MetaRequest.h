@@ -167,7 +167,7 @@ public:
   bool is_write() {
     return
       (head.op & CEPH_MDS_OP_WRITE) || 
-      (head.op == CEPH_MDS_OP_OPEN && !(head.args.open.flags & (O_CREAT|O_TRUNC)));
+      (head.op == CEPH_MDS_OP_OPEN && (head.args.open.flags & (O_CREAT|O_TRUNC)));
   }
   bool can_forward() {
     if (is_write() ||
