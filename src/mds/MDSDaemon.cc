@@ -473,12 +473,13 @@ int MDSDaemon::init(MDSMap::DaemonState wanted_state)
       suicide();
     }
     standby_type = wanted_state;
+    wanted_state = MDSMap::STATE_BOOT;
   }
 
   standby_for_rank = mds_rank_t(g_conf->mds_standby_for_rank);
   standby_for_name.assign(g_conf->mds_standby_for_name);
 
-  if (wanted_state == MDSMap::STATE_STANDBY_REPLAY &&
+  if (standby_type == MDSMap::STATE_STANDBY_REPLAY &&
       standby_for_rank == -1) {
     if (standby_for_name.empty())
       standby_for_rank = MDSMap::MDS_STANDBY_ANY;
