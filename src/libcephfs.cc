@@ -108,9 +108,11 @@ public:
     if (mounted)
       return -EISCONN;
 
-    ret = init();
-    if (ret != 0) {
-      return ret;
+    if (!inited) {
+      ret = init();
+      if (ret != 0) {
+        return ret;
+      }
     }
 
     ret = client->mount(mount_root);
