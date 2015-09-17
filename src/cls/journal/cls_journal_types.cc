@@ -33,9 +33,7 @@ void EntryPosition::generate_test_instances(std::list<EntryPosition *> &o) {
 }
 
 bool ObjectSetPosition::operator<(const ObjectSetPosition& rhs) const {
-  if (object_number < rhs.object_number) {
-    return true;
-  } else if (entry_positions.size() < rhs.entry_positions.size()) {
+  if (entry_positions.size() < rhs.entry_positions.size()) {
     return true;
   } else if (entry_positions.size() > rhs.entry_positions.size()) {
     return false;
