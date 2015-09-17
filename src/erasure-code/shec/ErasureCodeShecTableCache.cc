@@ -289,7 +289,7 @@ ErasureCodeShecTableCache::putDecodingTableToCache(int* decoding_matrix,
 
     // allocate a new buffer
     lru_list_t::iterator it_end = decode_tbls_lru->end();
-    it_end--;
+    --it_end;
 
     lru_entry_t &map_value =
       (*decode_tbls_map)[signature] =
