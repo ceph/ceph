@@ -1643,18 +1643,23 @@ int RGWUser::init(RGWUserAdminOpState& op_state)
     }
   }
 
-  if (!uid.empty() && (uid.compare(RGW_USER_ANON_ID) != 0))
+  if (!uid.empty() && (uid.compare(RGW_USER_ANON_ID) != 0)) {
     found = (rgw_get_user_info_by_uid(store, uid, user_info, &op_state.objv) >= 0);
-
-  if (!user_email.empty() && !found)
+    op_state.found_by_uid = found;
+  }
+  if (!user_email.empty() && !found) {
     found = (rgw_get_user_info_by_email(store, user_email, user_info, &op_state.objv) >= 0);
-
-  if (!swift_user.empty() && !found)
+    op_state.found_by_email = found;
+  }
+  if (!swift_user.empty() && !found) {
     found = (rgw_get_user_info_by_swift(store, swift_user, user_info, &op_state.objv) >= 0);
-
-  if (!access_key.empty() && !found)
+    op_state.found_by_key = found;
+  }
+  if (!access_key.empty() && !found) {
     found = (rgw_get_user_info_by_access_key(store, access_key, user_info, &op_state.objv) >= 0);
-
+    op_state.found_by_key = found;
+  }
+  
   op_state.set_existing_user(found);
   if (found) {
     op_state.set_user_info(user_info);
@@ -1779,8 +1784,13 @@ int RGWUser::execute_add(RGWUserAdminOpState& op_state, std::string *err_msg)
       return execute_modify(op_state, err_msg);
     }
 
-    set_err_msg(err_msg, "user: " + op_state.user_id + " exists");
-
+    if (op_state.found_by_email) {
+      set_err_msg(err_msg, "email: " + user_email + " exists");
+    } else if (op_state.found_by_key) {
+      set_err_msg(err_msg, "duplicate key provided");
+    } else {
+      set_err_msg(err_msg, "user: " + op_state.user_id + " exists");
+    }
     return -EEXIST;
   }
 
@@ -1796,12 +1806,7 @@ int RGWUser::execute_add(RGWUserAdminOpState& op_state, std::string *err_msg)
     return -EINVAL;
   }
 
-  // fail if the user email is a duplicate
-  if (op_state.has_existing_email()) {
-    set_err_msg(err_msg, "duplicate email provided");
-    return -EEXIST;
-  }
-
+		
   // set the user info
   user_id = uid;
   user_info.user_id = user_id;
