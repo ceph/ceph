@@ -275,10 +275,10 @@ class RGWHTTPArgs
   map<string, string> val_map;
   map<string, string> sys_val_map;
   map<string, string> sub_resources;
-
   bool has_resp_modifier;
+  bool admin_subresource_added;
  public:
-  RGWHTTPArgs() : has_resp_modifier(false) {}
+  RGWHTTPArgs() : has_resp_modifier(false), admin_subresource_added(false) {}
 
   /** Set the arguments; as received */
   void set(string s) {
@@ -289,6 +289,7 @@ class RGWHTTPArgs
   }
   /** parse the received arguments */
   int parse();
+  void append(const string& name, const string& val);
   /** Get the value for a specific argument parameter */
   string& get(const string& name, bool *exists = NULL);
   string& get(const char *name, bool *exists = NULL);

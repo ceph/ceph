@@ -565,6 +565,11 @@ int RGWRESTStreamRWRequest::get_resource(RGWAccessKey& key, map<string, string>&
   map<string, string>& args = new_info.args.get_params();
   get_params_str(args, params_str);
 
+  /* merge params with extra args so that we can sign correctly */
+  for (list<pair<string, string> >::iterator iter = params.begin(); iter != params.end(); ++iter) {
+    new_info.args.append(iter->first, iter->second);
+  }
+
   string new_resource;
   if (resource[0] == '/') {
     new_resource = resource.substr(1);
