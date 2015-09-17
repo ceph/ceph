@@ -1087,13 +1087,12 @@ bool PGMonitor::register_new_pgs()
     }
   }
 
+  // we don't want to redo this work if we can avoid it.
+  pending_inc.pg_scan = epoch;
+
   dout(10) << "register_new_pgs registered " << created << " new pgs, removed "
 	   << removed << " uncreated pgs" << dendl;
-  if (created || removed) {
-    pending_inc.pg_scan = epoch;
-    return true;
-  }
-  return false;
+  return (created || removed);
 }
 
 void PGMonitor::map_pg_creates()
