@@ -284,7 +284,7 @@ void ObjectStore::Transaction::_build_actions_from_tbl()
 	assert(ocid2 == ocid);
 	assert(oid2 == oid);
 
-	collection_move(ncid, ocid, oid);
+	collection_move_rename(ocid, oid, ncid, oid);
       }
       break;
 

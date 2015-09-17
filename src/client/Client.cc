@@ -4560,12 +4560,6 @@ void Client::handle_cap_grant(MetaSession *session, Inode *in, Cap *cap, MClient
 
 int Client::check_permissions(Inode *in, int flags, int uid, int gid)
 {
-  // initial number of group entries, defaults to posix standard of 16
-  // PAM implementations may provide more than 16 groups....
-#if HAVE_GETGROUPLIST
-  int initial_group_count = 16;
-#endif
-
   gid_t *sgids = NULL;
   int sgid_count = 0;
   if (getgroups_cb) {
@@ -4578,7 +4572,9 @@ int Client::check_permissions(Inode *in, int flags, int uid, int gid)
 #if HAVE_GETGROUPLIST
   else {
     //use PAM to get the group list
-    sgid_count = initial_group_count;
+    // initial number of group entries, defaults to posix standard of 16
+    // PAM implementations may provide more than 16 groups....
+    sgid_count = 16;
     sgids = (gid_t*)malloc(sgid_count * sizeof(gid_t));
     if (sgids == NULL) {
       ldout(cct, 3) << "allocating group memory failed" << dendl;
@@ -4588,6 +4584,7 @@ int Client::check_permissions(Inode *in, int flags, int uid, int gid)
     pw = getpwuid(uid);
     if (pw == NULL) {
       ldout(cct, 3) << "getting user entry failed" << dendl;
+      free(sgids); 
       return -EACCES;
     }
     while (1) {
@@ -4597,11 +4594,13 @@ int Client::check_permissions(Inode *in, int flags, int uid, int gid)
       if (getgrouplist(pw->pw_name, gid, sgids, &sgid_count) == -1) {
 #endif
         // we need to resize the group list and try again
-        sgids = (gid_t*)realloc(sgids, sgid_count * sizeof(gid_t));
-        if (sgids == NULL) {
+	void *_realloc = NULL;
+        if ((_realloc = realloc(sgids, sgid_count * sizeof(gid_t))) == NULL) {
           ldout(cct, 3) << "allocating group memory failed" << dendl;
+	  free(sgids);
           return -EACCES;
         }
+	sgids = (gid_t*)_realloc;
         continue;
       }
       // list was successfully retrieved

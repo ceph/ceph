@@ -25,6 +25,7 @@ Makefile
 /ceph-mon
 /ceph-osd
 /ceph-syn
+/ceph.tmpe
 /ceph.conf
 /ceph_bench_log
 /ceph-objectstore-tool

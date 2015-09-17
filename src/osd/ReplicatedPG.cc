@@ -12368,7 +12368,7 @@ void ReplicatedPG::setattrs_maybe_cache(
 {
   if (pool.info.require_rollback()) {
     for (map<string, bufferlist>::iterator it = attrs.begin();
-      it != attrs.end(); it++ ) {
+      it != attrs.end(); ++it) {
       op->pending_attrs[obc][it->first] = it->second;
     }
   }
