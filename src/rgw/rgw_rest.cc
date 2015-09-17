@@ -147,14 +147,16 @@ string camelcase_dash_http_attr(const string& orig)
   for (size_t i = 0; i < orig.size(); ++i, ++s) {
     switch (*s) {
       case '_':
+      case '-':
         buf[i] = '-';
         last_sep = true;
         break;
       default:
-        if (last_sep)
+        if (last_sep) {
           buf[i] = toupper(*s);
-        else
+        } else {
           buf[i] = tolower(*s);
+        }
         last_sep = false;
     }
   }
