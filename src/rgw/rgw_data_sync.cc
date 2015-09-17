@@ -712,7 +712,7 @@ public:
   }
 };
 
-RGWCoroutine *RGWRemoteBucketLog::init_sync_status(RGWObjectCtx& obj_ctx)
+RGWCoroutine *RGWRemoteBucketLog::init_sync_status_cr(RGWObjectCtx& obj_ctx)
 {
   return new RGWInitBucketShardSyncStatusCoroutine(async_rados, store, http_manager, obj_ctx, source_zone,
                                                    conn, bucket_name, bucket_id, shard_id);
@@ -730,7 +730,7 @@ public:
                                                                             status) {}
 };
 
-RGWCoroutine *RGWRemoteBucketLog::read_sync_status(RGWObjectCtx& obj_ctx, rgw_bucket_shard_sync_info *sync_status)
+RGWCoroutine *RGWRemoteBucketLog::read_sync_status_cr(RGWObjectCtx& obj_ctx, rgw_bucket_shard_sync_info *sync_status)
 {
   return new RGWReadBucketSyncStatusCoroutine(async_rados, store, obj_ctx, source_zone,
                                               bucket_name, bucket_id, shard_id, sync_status);
@@ -740,6 +740,184 @@ RGWBucketSyncStatusManager::~RGWBucketSyncStatusManager() {
   for (map<int, RGWRemoteBucketLog *>::iterator iter = source_logs.begin(); iter != source_logs.end(); ++iter) {
     delete iter->second;
   }
+}
+
+
+struct bucket_entry_owner {
+  string id;
+  string display_name;
+
+  void decode_json(JSONObj *obj) {
+    JSONDecoder::decode_json("ID", id, obj);
+    JSONDecoder::decode_json("DisplayName", display_name, obj);
+  }
+};
+
+struct bucket_list_entry {
+  bool delete_marker;
+  string key;
+  string version_id;
+  bool is_latest;
+  utime_t mtime;
+  string etag;
+  uint64_t size;
+  string storage_class;
+  bucket_entry_owner owner;
+
+  bucket_list_entry() : delete_marker(false), is_latest(false), size(0) {}
+
+  void decode_json(JSONObj *obj) {
+    JSONDecoder::decode_json("IsDeleteMarker", delete_marker, obj);
+    JSONDecoder::decode_json("Key", key, obj);
+    JSONDecoder::decode_json("VersionId", version_id, obj);
+    JSONDecoder::decode_json("IsLatest", is_latest, obj);
+    JSONDecoder::decode_json("LastModified", mtime, obj);
+    JSONDecoder::decode_json("ETag", etag, obj);
+    JSONDecoder::decode_json("Size", size, obj);
+    JSONDecoder::decode_json("StorageClass", storage_class, obj);
+    JSONDecoder::decode_json("Owner", owner, obj);
+  }
+};
+
+struct bucket_list_result {
+  string name;
+  string prefix;
+  string key_marker;
+  string version_id_marker;
+  int max_keys;
+  bool is_truncated;
+  list<bucket_list_entry> contents;
+
+  bucket_list_result() : max_keys(0), is_truncated(false) {}
+
+  void decode_json(JSONObj *obj) {
+    JSONDecoder::decode_json("Name", name, obj);
+    JSONDecoder::decode_json("Prefix", prefix, obj);
+    JSONDecoder::decode_json("KeyMarker", key_marker, obj);
+    JSONDecoder::decode_json("VersionIdMarker", version_id_marker, obj);
+    JSONDecoder::decode_json("MaxKeys", max_keys, obj);
+    JSONDecoder::decode_json("IsTruncated", max_keys, obj);
+  }
+};
+
+class RGWListBucketShardCR: public RGWCoroutine {
+  RGWRados *store;
+  RGWHTTPManager *http_manager;
+  RGWAsyncRadosProcessor *async_rados;
+
+  RGWRESTConn *conn;
+
+  string bucket_name;
+  string bucket_id;
+  int shard_id;
+
+  string instance_key;
+
+  bucket_list_result *result;
+
+public:
+  RGWListBucketShardCR(RGWRados *_store, RGWHTTPManager *_mgr, RGWAsyncRadosProcessor *_async_rados,
+                                  RGWRESTConn *_conn,
+                                  const string& _bucket_name, const string& _bucket_id, int _shard_id,
+                                  bucket_list_result *_result) : RGWCoroutine(_store->ctx()), store(_store),
+                                                      http_manager(_mgr),
+						      async_rados(_async_rados),
+                                                      conn(_conn),
+                                                      bucket_name(_bucket_name), bucket_id(_bucket_id), shard_id(_shard_id),
+                                                      result(_result) {
+    instance_key = bucket_name + ":" + bucket_id;
+    if (shard_id > 0) {
+      char buf[16];
+      snprintf(buf, sizeof(buf), ":%d", shard_id);
+      instance_key.append(buf);
+    }
+  }
+
+  int operate() {
+    int ret;
+    reenter(this) {
+      yield {
+        rgw_http_param_pair pairs[] = { { "bucket-instance", instance_key.c_str() },
+					{ "versions" , NULL },
+					{ "format" , "json" },
+	                                { NULL, NULL } };
+
+        string p = string("/") + bucket_name;
+        ret = call(new RGWReadRESTResourceCR<bucket_list_result>(store->ctx(), conn, http_manager, p, pairs, result));
+        if (ret < 0) {
+          return set_state(RGWCoroutine_Error, ret);
+        }
+      }
+      if (retcode < 0) {
+        return set_state(RGWCoroutine_Error, retcode);
+      }
+      return set_state(RGWCoroutine_Done, 0);
+    }
+    return 0;
+  }
+};
+
+class RGWRunBucketSyncCoroutine : public RGWCoroutine {
+  RGWHTTPManager *http_manager;
+  RGWAsyncRadosProcessor *async_rados;
+  RGWRESTConn *conn;
+  RGWRados *store;
+  RGWObjectCtx& obj_ctx;
+  string source_zone;
+  string bucket_name;
+  string bucket_id;
+  int shard_id;
+  bucket_list_result list_result;
+  rgw_bucket_shard_sync_info sync_status;
+
+public:
+  RGWRunBucketSyncCoroutine(RGWHTTPManager *_mgr, RGWAsyncRadosProcessor *_async_rados,
+                            RGWRESTConn *_conn, RGWRados *_store,
+                            RGWObjectCtx& _obj_ctx, const string& _source_zone,
+                            const string& _bucket_name, const string _bucket_id, int _shard_id) : RGWCoroutine(_store->ctx()),
+                                                                            http_manager(_mgr), async_rados(_async_rados), conn(_conn),
+                                                                            store(_store),
+									    obj_ctx(_obj_ctx), source_zone(_source_zone),
+                                                                            bucket_name(_bucket_name),
+									    bucket_id(_bucket_id), shard_id(_shard_id) {}
+  int operate();
+};
+
+
+int RGWRunBucketSyncCoroutine::operate()
+{
+  reenter(this) {
+    yield {
+      int r = call(new RGWReadBucketSyncStatusCoroutine(async_rados, store, obj_ctx, source_zone, bucket_name, bucket_id, shard_id, &sync_status));
+      if (r < 0) {
+        ldout(store->ctx(), 0) << "ERROR: failed to fetch sync status" << dendl;
+        return r;
+      }
+    }
+
+    if (retcode < 0 && retcode != -ENOENT) {
+      ldout(store->ctx(), 0) << "ERROR: failed to read sync status for bucket=" << bucket_name << " bucket_id=" << bucket_id << " shard_id=" << shard_id << dendl;
+      return set_state(RGWCoroutine_Error, retcode);
+    }
+
+    yield {
+      if ((rgw_bucket_shard_sync_info::SyncState)sync_status.state == rgw_bucket_shard_sync_info::StateFullSync) {
+        ldout(store->ctx(), 20) << __func__ << "(): building full sync maps" << dendl;
+        int r = call(new RGWListBucketShardCR(store, http_manager, async_rados, conn, bucket_name, bucket_id, shard_id, &list_result));
+        if (r < 0) {
+          ldout(store->ctx(), 0) << "ERROR: failed to call new CR (RGWListBucketShardCR)" << dendl;
+          return r;
+        }
+      }
+    }
+  }
+
+  return 0;
+}
+
+RGWCoroutine *RGWRemoteBucketLog::run_sync_cr(RGWObjectCtx& obj_ctx)
+{
+  return new RGWRunBucketSyncCoroutine(http_manager, async_rados, conn, store, obj_ctx, source_zone, bucket_name, bucket_id, shard_id);
 }
 
 int RGWBucketSyncStatusManager::init()
@@ -804,7 +982,7 @@ int RGWBucketSyncStatusManager::init_sync_status()
   for (map<int, RGWRemoteBucketLog *>::iterator iter = source_logs.begin(); iter != source_logs.end(); ++iter) {
     RGWCoroutinesStack *stack = new RGWCoroutinesStack(store->ctx(), &cr_mgr);
     RGWRemoteBucketLog *l = iter->second;
-    int r = stack->call(l->init_sync_status(obj_ctx));
+    int r = stack->call(l->init_sync_status_cr(obj_ctx));
     if (r < 0) {
       ldout(store->ctx(), 0) << "ERROR: failed to init sync status for " << bucket_name << ":" << bucket_id << ":" << iter->first << dendl;
     }
@@ -824,7 +1002,33 @@ int RGWBucketSyncStatusManager::read_sync_status()
   for (map<int, RGWRemoteBucketLog *>::iterator iter = source_logs.begin(); iter != source_logs.end(); ++iter) {
     RGWCoroutinesStack *stack = new RGWCoroutinesStack(store->ctx(), &cr_mgr);
     RGWRemoteBucketLog *l = iter->second;
-    int r = stack->call(l->read_sync_status(obj_ctx, &sync_status[iter->first]));
+    int r = stack->call(l->read_sync_status_cr(obj_ctx, &sync_status[iter->first]));
+    if (r < 0) {
+      ldout(store->ctx(), 0) << "ERROR: failed to read sync status for " << bucket_name << ":" << bucket_id << ":" << iter->first << dendl;
+    }
+
+    stacks.push_back(stack);
+  }
+
+  int ret = cr_mgr.run(stacks);
+  if (ret < 0) {
+    ldout(store->ctx(), 0) << "ERROR: failed to read sync status for " << bucket_name << ":" << bucket_id << dendl;
+    return ret;
+  }
+
+  return 0;
+}
+
+int RGWBucketSyncStatusManager::run()
+{
+  RGWObjectCtx obj_ctx(store);
+
+  list<RGWCoroutinesStack *> stacks;
+
+  for (map<int, RGWRemoteBucketLog *>::iterator iter = source_logs.begin(); iter != source_logs.end(); ++iter) {
+    RGWCoroutinesStack *stack = new RGWCoroutinesStack(store->ctx(), &cr_mgr);
+    RGWRemoteBucketLog *l = iter->second;
+    int r = stack->call(l->run_sync_cr(obj_ctx));
     if (r < 0) {
       ldout(store->ctx(), 0) << "ERROR: failed to read sync status for " << bucket_name << ":" << bucket_id << ":" << iter->first << dendl;
     }
