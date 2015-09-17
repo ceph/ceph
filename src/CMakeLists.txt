@@ -788,6 +788,10 @@ if(WITH_LIBCEPHFS)
   target_link_libraries(client osdc mds ${LIBEDIT_LIBS})
   set(libcephfs_srcs libcephfs.cc)
   add_library(cephfs SHARED ${libcephfs_srcs})
+if(${ENABLE_SHARED})
+  set_target_properties(cephfs PROPERTIES OUTPUT_NAME cephfs VERSION 1.0.0
+    SOVERSION 1)
+endif(${ENABLE_SHARED})
   target_link_libraries(cephfs client global)
   install(TARGETS cephfs DESTINATION lib)
   install(DIRECTORY
