@@ -43,6 +43,7 @@
 #include "messages/MMonCommand.h"
 #include "messages/MRemoveSnaps.h"
 #include "messages/MOSDScrub.h"
+#include "messages/MRoute.h"
 
 #include "common/TextTable.h"
 #include "common/Timer.h"
@@ -2400,7 +2401,20 @@ void OSDMonitor::send_incremental(MonOpRequestRef op, epoch_t first)
 
   MonSession *s = op->get_session();
   assert(s);
-  send_incremental(first, s, false, op);
+
+  if (s->proxy_con &&
+      s->proxy_con->has_feature(CEPH_FEATURE_MON_ROUTE_OSDMAP)) {
+    // oh, we can tell the other mon to do it
+    dout(10) << __func__ << " asking proxying mon to send_incremental from "
+	     << first << dendl;
+    MRoute *r = new MRoute(s->proxy_tid, NULL);
+    r->send_osdmap_first = first;
+    s->proxy_con->send_message(r);
+    op->mark_event("reply: send routed send_osdmap_first reply");
+  } else {
+    // do it ourselves
+    send_incremental(first, s, false, op);
+  }
 }
 
 void OSDMonitor::send_incremental(epoch_t first,
