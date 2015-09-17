@@ -4015,7 +4015,6 @@ void OSD::tick()
       last_mon_report = now;
 
       // do any pending reports
-      service.send_pg_temp();
       send_failures();
       send_pg_stats(now);
     }
