@@ -53,8 +53,7 @@ struct ObjectSetPosition {
     return (*this == rhs || *this < rhs);
   }
   inline bool operator==(const ObjectSetPosition &rhs) const {
-    return (object_number == rhs.object_number &&
-            entry_positions == rhs.entry_positions);
+    return (entry_positions == rhs.entry_positions);
   }
 
   void encode(bufferlist& bl) const;
