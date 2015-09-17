@@ -279,6 +279,7 @@ int RGWListBucket_ObjStore_S3::get_params()
   delimiter = s->info.args.get("delimiter");
   encoding_type = s->info.args.get("encoding-type");
   if (s->system_request) {
+    s->info.args.get_bool("objs-container", &objs_container, false);
     const char *shard_id_str = s->info.env->get("HTTP_RGWX_SHARD_ID");
     if (shard_id_str) {
       string err;
@@ -314,11 +315,18 @@ void RGWListBucket_ObjStore_S3::send_versioned_response()
     encode_key = true;
 
   if (op_ret >= 0) {
+    if (objs_container) {
+      s->formatter->open_array_section("Entries");
+    }
+
     vector<RGWObjEnt>::iterator iter;
     for (iter = objs.begin(); iter != objs.end(); ++iter) {
       time_t mtime = iter->mtime.sec();
       const char *section_name = (iter->is_delete_marker() ? "DeleteMarker" : "Version");
-      s->formatter->open_array_section(section_name);
+      s->formatter->open_object_section(section_name);
+      if (objs_container) {
+        s->formatter->dump_bool("IsDeleteMarker", iter->is_delete_marker());
+      }
       if (encode_key) {
         string key_name;
         url_encode(iter->key.name, key_name);
@@ -347,6 +355,10 @@ void RGWListBucket_ObjStore_S3::send_versioned_response()
       dump_owner(s, iter->owner, iter->owner_display_name);
       s->formatter->close_section();
     }
+    if (objs_container) {
+      s->formatter->close_section();
+    }
+
     if (!common_prefixes.empty()) {
       map<string, bool>::iterator pref_iter;
       for (pref_iter = common_prefixes.begin(); pref_iter != common_prefixes.end(); ++pref_iter) {
@@ -2868,7 +2880,7 @@ int RGWHandler_Auth_S3::init(RGWRados *store, struct req_state *state, RGWClient
 RGWHandler *RGWRESTMgr_S3::get_handler(struct req_state *s)
 {
   bool is_s3website = enable_s3website && (s->prot_flags & RGW_REST_WEBSITE);
-  int ret = RGWHandler_ObjStore_S3::init_from_header(s, is_s3website ? RGW_FORMAT_HTML : RGW_FORMAT_XML, false);
+  int ret = RGWHandler_ObjStore_S3::init_from_header(s, is_s3website ? RGW_FORMAT_HTML : RGW_FORMAT_XML, true);
   if (ret < 0)
     return NULL;
 

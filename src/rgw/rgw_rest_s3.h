@@ -41,8 +41,9 @@ public:
 };
 
 class RGWListBucket_ObjStore_S3 : public RGWListBucket_ObjStore {
+  bool objs_container;
 public:
-  RGWListBucket_ObjStore_S3() {
+  RGWListBucket_ObjStore_S3() : objs_container(false) {
     default_max = 1000;
   }
   ~RGWListBucket_ObjStore_S3() {}
