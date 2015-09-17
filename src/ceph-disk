@@ -242,6 +242,15 @@ def is_systemd():
                 return True
     return False
 
+def is_upstart():
+    """
+    Detect whether upstart is running
+    """
+    (out, _) = command(['init', '--version'])
+    if 'upstart' in out:
+        return True
+    return False
+
 def maybe_mkdir(*a, **kw):
     """
     Creates a new directory if it doesn't exist, removes
@@ -1042,6 +1051,8 @@ def dmcrypt_map(
         else:
             # Plain mode has no format function, nor any validation that the key is correct.
             command_check_call(create_args)
+        # set proper ownership of mapped device
+        command_check_call(['chown', 'ceph:ceph', dev])
         return dev
 
     except subprocess.CalledProcessError as e:
@@ -2651,23 +2662,6 @@ def get_dev_fs(dev):
     else:
         return None
 
-def get_dev_udev_properties(dev):
-    out, _ = command(
-        [
-            '/sbin/blkid',
-            '-o',
-            'udev',
-            '-p',
-            dev,
-        ]
-    )
-    p = {}
-    for line in out.split('\n'):
-        if line:
-            (key, value) = line.split('=')
-            p[key] = value
-    return p
-
 def split_dev_base_partnum(dev):
     if is_mpath(dev):
         partnum = partnum_mpath(dev)
@@ -2679,10 +2673,31 @@ def split_dev_base_partnum(dev):
     return (base, partnum)
 
 def get_partition_type(part):
-    return get_sgdisk_partition_info(part, 'Partition GUID code: (\S+)')
+    return get_blkid_partition_info(part, 'ID_PART_ENTRY_TYPE')
+    #return get_sgdisk_partition_info(part, 'Partition GUID code: (\S+)')
 
 def get_partition_uuid(part):
-    return get_sgdisk_partition_info(part, 'Partition unique GUID: (\S+)')
+    return get_blkid_partition_info(part, 'ID_PART_ENTRY_UUID')
+    #return get_sgdisk_partition_info(part, 'Partition unique GUID: (\S+)')
+
+def get_blkid_partition_info(dev, what=None):
+    out, _ = command(
+        [
+            '/sbin/blkid',
+            '-o',
+            'udev',
+            '-p',
+            dev,
+        ]
+    )
+    p = {}
+    for line in out.splitlines():
+        (key, value) = line.split('=')
+        p[key] = value
+    if what:
+        return p.get(what)
+    else:
+        return p
 
 def get_sgdisk_partition_info(dev, regexp):
     (base, partnum) = split_dev_base_partnum(dev)
@@ -3019,16 +3034,21 @@ def main_trigger(args):
             ]
         )
         return
+    if is_upstart() and not args.sync:
+        LOG.info('upstart detected, triggering ceph-disk task')
+        command(
+            [
+                'initctl',
+                'emit',
+                'ceph-disk',
+                'dev={dev}'.format(dev=args.dev),
+                'pid={pid}'.format(pid=os.getpid()),
+            ]
+        )
+        return
 
-    p = get_dev_udev_properties(args.dev)
-
-    if 'ID_PART_ENTRY_TYPE' not in p:
-        raise Error('no ID_PART_ENTRY_TYPE for %s' % args.dev)
-    parttype = p['ID_PART_ENTRY_TYPE']
-
-    if 'ID_PART_ENTRY_UUID' not in p:
-        raise Error('no ID_PART_ENTRY_UUID for %s' % args.dev)
-    partid = p['ID_PART_ENTRY_UUID']
+    parttype = get_partition_type(args.dev)
+    partid = get_partition_uuid(args.dev)
 
     LOG.info('trigger {dev} parttype {parttype} uuid {partid}'.format(
         dev=args.dev,

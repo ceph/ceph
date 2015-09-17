@@ -2515,7 +2515,7 @@ void OSD::clear_temp_objects()
 	dout(20) << "  removing " << *p << " object " << *q << dendl;
 	t.remove(*p, *q);
       }
-      store->apply_transaction(t);
+      store->apply_transaction(service.meta_osr.get(), t);
     }
   }
 }
@@ -2858,7 +2858,13 @@ void OSD::load_pgs()
 
     dout(10) << "pgid " << pgid << " coll " << coll_t(pgid) << dendl;
     bufferlist bl;
-    epoch_t map_epoch = PG::peek_map_epoch(store, pgid, &bl);
+    epoch_t map_epoch = 0;
+    int r = PG::peek_map_epoch(store, pgid, &map_epoch, &bl);
+    if (r < 0) {
+      derr << __func__ << " unable to peek at " << pgid << " metadata, skipping"
+	   << dendl;
+      continue;
+    }
 
     PG *pg = NULL;
     if (map_epoch > 0) {
@@ -4441,6 +4447,10 @@ void OSD::_maybe_boot(epoch_t oldest, epoch_t newest)
   } else if (!osdmap->test_flag(CEPH_OSDMAP_SORTBITWISE) &&
 	     !store->can_sort_nibblewise()) {
     dout(1) << "osdmap SORTBITWISE flag is NOT set but our backend does not support nibblewise sort" << dendl;
+  } else if (osdmap->get_num_up_osds() &&
+	     (osdmap->get_up_osd_features() & CEPH_FEATURE_HAMMER_0_94_4) == 0) {
+    dout(1) << "osdmap indicates one or more pre-v0.94.4 hammer OSDs is running"
+	    << dendl;
   } else if (is_waiting_for_healthy() || !_is_healthy()) {
     // if we are not healthy, do not mark ourselves up (yet)
     dout(1) << "not healthy; waiting to boot" << dendl;
@@ -6436,7 +6446,7 @@ void OSD::handle_osd_map(MOSDMap *m)
   // superblock and commit
   write_superblock(t);
   store->queue_transaction(
-    0,
+    service.meta_osr.get(),
     _t,
     new C_OnMapApply(&service, _t, pinned_maps, osdmap->get_epoch()),
     0, 0);
@@ -6527,7 +6537,7 @@ void OSD::check_osdmap_features(ObjectStore *fs)
       superblock.compat_features.incompat.insert(CEPH_OSD_FEATURE_INCOMPAT_SHARDS);
       ObjectStore::Transaction *t = new ObjectStore::Transaction;
       write_superblock(*t);
-      int err = store->queue_transaction_and_cleanup(NULL, t);
+      int err = store->queue_transaction_and_cleanup(service.meta_osr.get(), t);
       assert(err == 0);
       fs->set_allow_sharded_objects();
     }
@@ -8095,7 +8105,7 @@ void OSD::handle_op(OpRequestRef& op, OSDMapRef& osdmap)
 
     // too big?
     if (cct->_conf->osd_max_write_size &&
-	m->get_data_len() > cct->_conf->osd_max_write_size << 20) {
+	m->get_data_len() > ((int64_t)g_conf->osd_max_write_size) << 20) {
       // journal can't hold commit!
       derr << "handle_op msg data len " << m->get_data_len()
 	   << " > osd_max_write_size " << (cct->_conf->osd_max_write_size << 20)
@@ -8650,6 +8660,40 @@ int OSD::init_op_flags(OpRequestRef& op)
     if (ceph_osd_op_mode_cache(iter->op.op))
       op->set_cache();
 
+    // check for ec base pool
+    int64_t poolid = m->get_pg().pool();
+    const pg_pool_t *pool = osdmap->get_pg_pool(poolid);
+    if (pool && pool->is_tier()) {
+      const pg_pool_t *base_pool = osdmap->get_pg_pool(pool->tier_of);
+      if (base_pool && base_pool->require_rollback()) {
+        if ((iter->op.op != CEPH_OSD_OP_READ) &&
+            (iter->op.op != CEPH_OSD_OP_STAT) &&
+            (iter->op.op != CEPH_OSD_OP_ISDIRTY) &&
+            (iter->op.op != CEPH_OSD_OP_UNDIRTY) &&
+            (iter->op.op != CEPH_OSD_OP_GETXATTR) &&
+            (iter->op.op != CEPH_OSD_OP_GETXATTRS) &&
+            (iter->op.op != CEPH_OSD_OP_CMPXATTR) &&
+            (iter->op.op != CEPH_OSD_OP_SRC_CMPXATTR) &&
+            (iter->op.op != CEPH_OSD_OP_ASSERT_VER) &&
+            (iter->op.op != CEPH_OSD_OP_LIST_WATCHERS) &&
+            (iter->op.op != CEPH_OSD_OP_LIST_SNAPS) &&
+            (iter->op.op != CEPH_OSD_OP_ASSERT_SRC_VERSION) &&
+            (iter->op.op != CEPH_OSD_OP_SETALLOCHINT) &&
+            (iter->op.op != CEPH_OSD_OP_WRITEFULL) &&
+            (iter->op.op != CEPH_OSD_OP_ROLLBACK) &&
+            (iter->op.op != CEPH_OSD_OP_CREATE) &&
+            (iter->op.op != CEPH_OSD_OP_DELETE) &&
+            (iter->op.op != CEPH_OSD_OP_SETXATTR) &&
+            (iter->op.op != CEPH_OSD_OP_RMXATTR) &&
+            (iter->op.op != CEPH_OSD_OP_STARTSYNC) &&
+            (iter->op.op != CEPH_OSD_OP_COPY_GET_CLASSIC) &&
+            (iter->op.op != CEPH_OSD_OP_COPY_GET) &&
+            (iter->op.op != CEPH_OSD_OP_COPY_FROM)) {
+          op->set_promote();
+        }
+      }
+    }
+
     switch (iter->op.op) {
     case CEPH_OSD_OP_CALL:
       {
@@ -8722,23 +8766,6 @@ int OSD::init_op_flags(OpRequestRef& op)
       // If try_flush/flush/evict is the only op, can skip handle cache.
       if (m->ops.size() == 1) {
 	op->set_skip_handle_cache();
-      }
-      break;
-
-    case CEPH_OSD_OP_WRITE:
-    case CEPH_OSD_OP_ZERO:
-    case CEPH_OSD_OP_TRUNCATE:
-      // always force promotion for object overwrites on a ec base pool
-      {
-        int64_t poolid = m->get_pg().pool();
-        const pg_pool_t *pool = osdmap->get_pg_pool(poolid);
-        if (pool->is_tier()) {
-          const pg_pool_t *base_pool = osdmap->get_pg_pool(pool->tier_of);
-          assert(base_pool);
-          if (base_pool->is_erasure()) {
-            op->set_promote();
-          }
-        }
       }
       break;
 

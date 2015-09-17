@@ -20,10 +20,13 @@
 restorecon -R /usr/bin/ceph-mon > /dev/null 2>&1; \
 restorecon -R /usr/bin/ceph-osd > /dev/null 2>&1; \
 restorecon -R /usr/bin/ceph-mds > /dev/null 2>&1; \
+restorecon -R /usr/bin/radosgw > /dev/null 2>&1; \
 restorecon -R /etc/rc\.d/init\.d/ceph > /dev/null 2>&1; \
+restorecon -R /etc/rc\.d/init\.d/radosgw > /dev/null 2>&1; \
 restorecon -R /var/run/ceph > /dev/null 2>&1; \
 restorecon -R /var/lib/ceph > /dev/null 2>&1; \
-restorecon -R /var/log/ceph > /dev/null 2>&1;
+restorecon -R /var/log/ceph > /dev/null 2>&1; \
+restorecon -R /var/log/radosgw > /dev/null 2>&1;
 %endif
 
 %{!?_udevrulesdir: %global _udevrulesdir /lib/udev/rules.d}
@@ -222,6 +225,9 @@ FUSE based client to map Ceph rbd images to files
 Summary:	Rados REST gateway
 Group:		Development/Libraries
 Requires:	ceph-common = %{epoch}:%{version}-%{release}
+%if 0%{with selinux}
+Requires:	ceph-selinux = %{epoch}:%{version}-%{release}
+%endif
 Requires:	librados2 = %{epoch}:%{version}-%{release}
 %if 0%{?suse_version}
 BuildRequires:	libexpat-devel
@@ -518,7 +524,7 @@ done
 %endif
 
 ./autogen.sh
-MY_CONF_OPT=""
+MY_CONF_OPT="$CEPH_EXTRA_CONFIGURE_ARGS"
 
 MY_CONF_OPT="$MY_CONF_OPT --with-radosgw"
 
@@ -586,10 +592,9 @@ find $RPM_BUILD_ROOT -type f -name "*.la" -exec rm -f {} ';'
 find $RPM_BUILD_ROOT -type f -name "*.a" -exec rm -f {} ';'
 install -D src/rbdmap $RPM_BUILD_ROOT%{_sysconfdir}/ceph/rbdmap
 install -D src/init-rbdmap $RPM_BUILD_ROOT%{_initrddir}/rbdmap
-install -D etc/ceph.limits.d $RPM_BUILD_ROOT%{_sysconfdir}/security/limits.d/ceph.conf
+install -m 0644 -D etc/sysconfig/ceph $RPM_BUILD_ROOT%{_sysconfdir}/sysconfig/ceph
 %if 0%{?_with_systemd}
   install -m 0644 -D systemd/ceph.tmpfiles.d $RPM_BUILD_ROOT%{_tmpfilesdir}/%{name}.conf
-  install -m 0644 -D systemd/ceph-rgw.tmpfiles.d $RPM_BUILD_ROOT%{_tmpfilesdir}/%{name}-rgw.conf
   install -m 0644 -D systemd/ceph-osd@.service $RPM_BUILD_ROOT%{_unitdir}/ceph-osd@.service
   install -m 0644 -D systemd/ceph-mon@.service $RPM_BUILD_ROOT%{_unitdir}/ceph-mon@.service
   install -m 0644 -D systemd/ceph-create-keys@.service $RPM_BUILD_ROOT%{_unitdir}/ceph-create-keys@.service
@@ -783,9 +788,9 @@ mkdir -p %{_localstatedir}/run/ceph/
 %{_libdir}/ceph/erasure-code/libec_*.so*
 %{_udevrulesdir}/60-ceph-partuuid-workaround.rules
 %{_udevrulesdir}/95-ceph-osd.rules
-%config %{_sysconfdir}/security/limits.d/ceph.conf
 %config %{_sysconfdir}/bash_completion.d/ceph
 %config(noreplace) %{_sysconfdir}/logrotate.d/ceph
+%config(noreplace) %{_sysconfdir}/sysconfig/ceph
 %if 0%{?suse_version}
 %config %{_sysconfdir}/sysconfig/SuSEfirewall2.d/services/ceph-mon
 %config %{_sysconfdir}/sysconfig/SuSEfirewall2.d/services/ceph-osd-mds
@@ -809,15 +814,14 @@ mkdir -p %{_localstatedir}/run/ceph/
 %{_mandir}/man8/ceph-clsinfo.8*
 %{_mandir}/man8/librados-config.8*
 #set up placeholder directories
-%attr(770,ceph,ceph) %dir %{_localstatedir}/lib/ceph/
-%attr(770,ceph,ceph) %dir %{_localstatedir}/lib/ceph/tmp
-%attr(770,ceph,ceph) %dir %{_localstatedir}/lib/ceph/mon
-%attr(770,ceph,ceph) %dir %{_localstatedir}/lib/ceph/osd
-%attr(770,ceph,ceph) %dir %{_localstatedir}/lib/ceph/mds
-%attr(770,ceph,ceph) %dir %{_localstatedir}/lib/ceph/bootstrap-osd
-%attr(770,ceph,ceph) %dir %{_localstatedir}/lib/ceph/bootstrap-mds
-%attr(770,ceph,ceph) %dir %{_localstatedir}/lib/ceph/bootstrap-rgw
-%attr(770,ceph,ceph) %dir %{_localstatedir}/run/ceph/
+%attr(750,ceph,ceph) %dir %{_localstatedir}/lib/ceph/tmp
+%attr(750,ceph,ceph) %dir %{_localstatedir}/lib/ceph/mon
+%attr(750,ceph,ceph) %dir %{_localstatedir}/lib/ceph/osd
+%attr(750,ceph,ceph) %dir %{_localstatedir}/lib/ceph/mds
+%attr(750,ceph,ceph) %dir %{_localstatedir}/lib/ceph/bootstrap-osd
+%attr(750,ceph,ceph) %dir %{_localstatedir}/lib/ceph/bootstrap-mds
+%attr(750,ceph,ceph) %dir %{_localstatedir}/lib/ceph/bootstrap-rgw
+%attr(770,ceph,ceph) %dir %{_localstatedir}/run/ceph
 
 #################################################################################
 %files -n ceph-common
@@ -846,7 +850,6 @@ mkdir -p %{_localstatedir}/run/ceph/
 %{_datadir}/ceph/id_dsa_drop.ceph.com
 %{_datadir}/ceph/id_dsa_drop.ceph.com.pub
 %dir %{_sysconfdir}/ceph/
-%dir %{_localstatedir}/log/ceph/
 %dir %{_datarootdir}/ceph/
 %dir %{_libexecdir}/ceph/
 %config %{_sysconfdir}/bash_completion.d/rados
@@ -856,7 +859,8 @@ mkdir -p %{_localstatedir}/run/ceph/
 %{python_sitelib}/ceph_argparse.py*
 %{python_sitelib}/ceph_daemon.py*
 %{_udevrulesdir}/50-rbd.rules
-%attr(2750,ceph,ceph) %dir %{_localstatedir}/log/ceph/
+%attr(3770,ceph,ceph) %dir %{_localstatedir}/log/ceph/
+%attr(750,ceph,ceph) %dir %{_localstatedir}/lib/ceph/
 
 %pre -n ceph-common
 CEPH_GROUP_ID=""
@@ -911,7 +915,6 @@ fi
 %dir %{_localstatedir}/log/radosgw/
 %dir %{_localstatedir}/lib/ceph/radosgw
 %if 0%{?_with_systemd}
-%{_tmpfilesdir}/%{name}-rgw.conf
 %else
 %{_initrddir}/ceph-radosgw
 %{_sbindir}/rcceph-radosgw
@@ -920,8 +923,6 @@ fi
 %post radosgw
 /sbin/ldconfig
 %if 0%{?suse_version}
-  # TODO: find out what exactly this systemd-tmpfiles inovcation is for
-  systemd-tmpfiles --create /%{_tmpfilesdir}/ceph-rgw.conf
   # explicit systemctl daemon-reload (that's the only relevant bit of
   # service_add_post; the rest is all sysvinit --> systemd migration which
   # isn't applicable in this context (see above comment).
