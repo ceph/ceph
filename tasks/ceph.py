@@ -1051,6 +1051,11 @@ def healthy(ctx, config):
         remote=mon0_remote,
         )
 
+    if ctx.cluster.only(teuthology.is_type('mds')).remotes:
+        # Some MDSs exist, wait for them to be healthy
+        ceph_fs = Filesystem(ctx)
+        ceph_fs.wait_for_daemons(timeout=300)
+
 def wait_for_osds_up(ctx, config):
     """
     Wait for all osd's to come up.
