@@ -1601,6 +1601,8 @@ if(${WITH_RADOSGW})
     cls_rgw_client
     cls_user_client
     cls_lock_client
+    cls_timeindex_client
+    boost_regex
     ${Boost_REGEX_LIBRARY}
     ${BLKID_LIBRARIES}
     ${CMAKE_DL_LIBS} ${ALLOC_LIBS} ${UNITTEST_LIBS} ${CRYPTO_LIBS})
@@ -1628,7 +1630,12 @@ if(${WITH_RADOSGW})
     cls_rgw_client
     cls_user_client
     cls_lock_client
+<<<<<<< HEAD
     ${Boost_REGEX_LIBRARY}
+=======
+    cls_timeindex_client
+    boost_regex
+>>>>>>> cmake: add cls_timeindex to rgw targets
     ${BLKID_LIBRARIES}
     ${CMAKE_DL_LIBS}
     ${ALLOC_LIBS}
