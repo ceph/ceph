@@ -227,11 +227,12 @@ private:
   MOSDMap *build_incremental(epoch_t first, epoch_t last);
   void send_full(MonOpRequestRef op);
   void send_incremental(MonOpRequestRef op, epoch_t first);
+public:
   // @param req an optional op request, if the osdmaps are replies to it. so
   //            @c Monitor::send_reply() can mark_event with it.
   void send_incremental(epoch_t first, MonSession *session, bool onetime,
 			MonOpRequestRef req = MonOpRequestRef());
-
+private:
   int reweight_by_utilization(int oload, std::string& out_str, bool by_pg,
 			      const set<int64_t> *pools);
 
