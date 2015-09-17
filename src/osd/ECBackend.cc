@@ -861,7 +861,8 @@ void ECBackend::handle_sub_write(
     !(op.t.empty()),
     &localt);
 
-  if (!(dynamic_cast<ReplicatedPG *>(get_parent())->is_undersized()) &&
+  ReplicatedPG *_rPG = dynamic_cast<ReplicatedPG *>(get_parent());
+  if (_rPG && !_rPG->is_undersized() &&
       (unsigned)get_parent()->whoami_shard().shard >= ec_impl->get_data_chunk_count())
     op.t.set_fadvise_flag(CEPH_OSD_OP_FLAG_FADVISE_DONTNEED);
 
