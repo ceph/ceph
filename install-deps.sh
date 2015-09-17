@@ -131,7 +131,7 @@ find . -name tox.ini | while read ini ; do
         cd $(dirname $ini)
         require=$(ls *requirements.txt 2>/dev/null | sed -e 's/^/-r /')
         if test "$require" && ! test -d wheelhouse ; then
-            for interpreter in python2.7 python3 ; do
+            for interpreter in python2.7 ; do # python3
                 type $interpreter > /dev/null 2>&1 || continue
                 activate_virtualenv $top_srcdir $interpreter || exit 1
                 populate_wheelhouse "wheel -w $wip_wheelhouse" $require || exit 1
@@ -141,7 +141,7 @@ find . -name tox.ini | while read ini ; do
     )
 done
 
-for interpreter in python2.7 python3 ; do
+for interpreter in python2.7 ; do # python3
     rm -rf $top_srcdir/install-deps-$interpreter
 done
 rm -rf $XDG_CACHE_HOME
