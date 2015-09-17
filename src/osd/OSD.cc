@@ -4350,6 +4350,10 @@ void OSD::ms_handle_connect(Connection *con)
     if (is_booting()) {
       start_boot();
     } else {
+      utime_t now = ceph_clock_now(NULL);
+      last_mon_report = now;
+
+      // resend everything, it's a new session
       send_alive();
       service.send_pg_temp();
       send_failures();
