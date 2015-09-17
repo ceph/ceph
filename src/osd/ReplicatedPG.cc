@@ -8418,13 +8418,16 @@ int ReplicatedPG::find_object_context(const hobject_t& oid,
   // want the snapdir?
   if (oid.snap == CEPH_SNAPDIR) {
     // return head or snapdir, whichever exists.
-    ObjectContextRef obc = get_object_context(head, can_create);
+    ObjectContextRef headobc = get_object_context(head, can_create);
+    ObjectContextRef obc = headobc;
     if (!obc || !obc->obs.exists)
       obc = get_object_context(oid, can_create);
     if (!obc || !obc->obs.exists) {
       // if we have neither, we would want to promote the head.
       if (pmissing)
 	*pmissing = head;
+      if (pobc)
+	*pobc = headobc; // may be null
       return -ENOENT;
     }
     dout(10) << "find_object_context " << oid
