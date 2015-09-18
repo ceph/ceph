@@ -1,0 +1,4 @@
+tasks:
+- exec:
+    all:
+      - echo America/New_York | sudo tee /etc/timezone
