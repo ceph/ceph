@@ -543,7 +543,7 @@ int RGWRESTStreamRWRequest::get_obj(RGWAccessKey& key, map<string, string>& extr
 {
   string urlsafe_bucket, urlsafe_object;
   url_encode(obj.bucket.name, urlsafe_bucket);
-  url_encode(obj.get_object(), urlsafe_object);
+  url_encode(obj.get_orig_obj(), urlsafe_object);
   string resource = urlsafe_bucket + "/" + urlsafe_object;
 
   return get_resource(key, extra_headers, resource);
