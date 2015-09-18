@@ -46,49 +46,12 @@ RPM Packages
 
 To install QEMU, execute the following:
 
-#. Install ``yum-plugin-priorities``. ::
-
-	sudo yum install yum-plugin-priorities
-
-#. Ensure ``/etc/yum/pluginconf.d/priorities.conf`` exists.
-
-#. Ensure ``priorities.conf`` enables the plugin. :: 
-
-	[main]
-	enabled = 1
-
-#. Create a ``/etc/yum.repos.d/ceph-extras.repo`` file with the following 
-   contents, and replace ``{distro}`` with your Linux distribution. Follow
-   the ``baseurl`` path below to see which distributions Ceph supports:: 
-
-	[ceph-extras]
-	name=Ceph Extras
-	baseurl=http://ceph.com/packages/ceph-extras/rpm/{distro}/$basearch
-	enabled=1
-	priority=2
-	gpgcheck=1
-	type=rpm-md
-	gpgkey=https://ceph.com/git/?p=ceph.git;a=blob_plain;f=keys/release.asc
-		
-	[ceph-qemu-source]
-	name=Ceph Extras Sources
-	baseurl=http://ceph.com/packages/ceph-extras/rpm/{distro}/SRPMS
-	enabled=1
-	priority=2
-	gpgcheck=1
-	type=rpm-md
-	gpgkey=https://ceph.com/git/?p=ceph.git;a=blob_plain;f=keys/release.asc
 
 #. Update your repositories. :: 
 
 	sudo yum update
 
-#. Ensure that non-priority versions are removed. ::
-
-	sudo yum remove qemu-kvm qemu-kvm-tools qemu-img
-	sudo yum clean all
-
-#. Install QEMU for Ceph. :: 
+#. Install QEMU :: 
 
 	sudo yum install qemu-kvm qemu-kvm-tools qemu-img
 	
