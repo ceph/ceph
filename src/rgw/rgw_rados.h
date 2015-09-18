@@ -1117,6 +1117,15 @@ struct RGWZoneGroupMap {
   RGWQuotaInfo bucket_quota;
   RGWQuotaInfo user_quota;
 
+  RGWZoneGroupMap& operator=(const RGWZoneGroupMap& zg) {
+    zonegroups = zg.zonegroups;
+    zonegroups_by_api = zg.zonegroups_by_api;
+    master_zonegroup = zg.master_zonegroup;
+    bucket_quota = zg.bucket_quota;
+    user_quota = zg.user_quota;
+    return *this;
+  }
+
   RGWZoneGroupMap() : lock("RGWZoneGroupMap") {}
 
   void encode(bufferlist& bl) const;
@@ -1234,8 +1243,7 @@ class RGWPeriod
   epoch_t epoch;
   string predecessor_uuid;
   map<int, version_t> versions;
-  string master_zonegroup;
-  map <string, RGWZoneGroup> zonegroups;
+  RGWZoneGroupMap zonegroup_map;
   string master_zone;
 
   CephContext *cct;
@@ -1260,16 +1268,17 @@ public:
 
   RGWPeriod(CephContext *_cct, RGWRados *_store,
 	    const string& _master_zonegroup, const string& _master_zone)
-    : epoch(0), master_zonegroup(_master_zonegroup), master_zone(_master_zone),
-      cct(_cct), store(_store) {}
+    : epoch(0), master_zone(_master_zone),
+      cct(_cct), store(_store) {
+    zonegroup_map.master_zonegroup = _master_zonegroup;
+  }
 
   const string& get_id() { return id;}
   epoch_t get_epoch() { return epoch;}
   const string& get_predecessor() { return predecessor_uuid;}
-  const string& get_master_zonegroup() { return master_zonegroup;}
   const string& get_master_zone() { return master_zone;}
   const string& get_realm() { return realm_id;}
-
+  const RGWZoneGroupMap& get_zonegroup_map() { return zonegroup_map;}
   const string& get_pool_name(CephContext *cct);
   const string& get_latest_epoch_oid();
   const string& get_info_oid_prefix();
@@ -1298,8 +1307,7 @@ public:
     ::encode(epoch, bl);
     ::encode(predecessor_uuid, bl);
     ::encode(versions, bl);
-    ::encode(master_zonegroup, bl);
-    ::encode(zonegroups, bl);
+    ::encode(zonegroup_map, bl);
     ::encode(master_zone, bl);
     ENCODE_FINISH(bl);
   }
@@ -1310,8 +1318,7 @@ public:
     ::decode(epoch, bl);
     ::decode(predecessor_uuid, bl);
     ::decode(versions, bl);
-    ::decode(master_zonegroup, bl);
-    ::decode(zonegroups, bl);
+    ::decode(zonegroup_map, bl);
     ::decode(master_zone, bl);
     DECODE_FINISH(bl);
   }
