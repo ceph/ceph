@@ -187,7 +187,7 @@ class MonitorDBStore
       return (size() == 0);
     }
 
-    bool size() {
+    size_t size() const {
       return ops.size();
     }
     uint64_t get_keys() const {
