@@ -711,27 +711,36 @@ bool verify_bucket_permission(struct req_state *s, int perm)
   if ((perm & (int)s->perm_mask) != perm)
     return false;
 
-  return s->bucket_acl->verify_permission(s->user.user_id, perm, perm);
+  return s->bucket_acl->verify_permission(s->auth_user, perm, perm);
 }
 
-static inline bool check_deferred_bucket_acl(struct req_state *s, uint8_t deferred_check, int perm)
+static inline bool check_deferred_bucket_acl(struct req_state * const s,
+                                             const uint8_t deferred_check,
+                                             const int perm)
 {
-  return (s->defer_to_bucket_acls == deferred_check && verify_bucket_permission(s, perm));
+  return (s->defer_to_bucket_acls == deferred_check &&
+          verify_bucket_permission(s, perm));
 }
 
-bool verify_object_permission(struct req_state *s, RGWAccessControlPolicy *bucket_acl, RGWAccessControlPolicy *object_acl, int perm)
+bool verify_object_permission(struct req_state * const s,
+                              RGWAccessControlPolicy * const bucket_acl,
+                              RGWAccessControlPolicy * const object_acl,
+                              const int perm)
 {
   if (check_deferred_bucket_acl(s, RGW_DEFER_TO_BUCKET_ACLS_RECURSE, perm) ||
-      check_deferred_bucket_acl(s, RGW_DEFER_TO_BUCKET_ACLS_FULL_CONTROL, RGW_PERM_FULL_CONTROL)) {
+      check_deferred_bucket_acl(s, RGW_DEFER_TO_BUCKET_ACLS_FULL_CONTROL,
+          RGW_PERM_FULL_CONTROL)) {
     return true;
   }
 
-  if (!object_acl)
+  if (!object_acl) {
     return false;
+  }
 
-  bool ret = object_acl->verify_permission(s->user.user_id, s->perm_mask, perm);
-  if (ret)
+  bool ret = object_acl->verify_permission(s->auth_user, s->perm_mask, perm);
+  if (ret) {
     return true;
+  }
 
   if (!s->cct->_conf->rgw_enforce_swift_acls)
     return ret;
@@ -749,7 +758,7 @@ bool verify_object_permission(struct req_state *s, RGWAccessControlPolicy *bucke
     return false;
   /* we already verified the user mask above, so we pass swift_perm as the mask here,
      otherwise the mask might not cover the swift permissions bits */
-  return bucket_acl->verify_permission(s->user.user_id, swift_perm, swift_perm);
+  return bucket_acl->verify_permission(s->auth_user, swift_perm, swift_perm);
 }
 
 bool verify_object_permission(struct req_state *s, int perm)

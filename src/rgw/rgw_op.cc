@@ -318,15 +318,18 @@ static int read_policy(RGWRados *store, struct req_state *s,
     string no_object;
     rgw_obj no_obj(bucket, no_object);
     ret = get_policy_from_attr(s->cct, store, s->obj_ctx, bucket_info, bucket_attrs, &bucket_policy, no_obj);
-    if (ret < 0)
+    if (ret < 0) {
       return ret;
-    rgw_user& owner = bucket_policy.get_owner().get_id();
-    if (!s->system_request && owner.compare(s->user.user_id) != 0 &&
-        !bucket_policy.verify_permission(s->user.user_id, s->perm_mask, RGW_PERM_READ))
-      ret = -EACCES;
-    else
-      ret = -ENOENT;
+    }
 
+    rgw_user& owner = bucket_policy.get_owner().get_id();
+    if (!s->system_request && owner.compare(s->auth_user) != 0 &&
+        !bucket_policy.verify_permission(s->auth_user, s->perm_mask,
+            RGW_PERM_READ)) {
+      ret = -EACCES;
+    } else {
+      ret = -ENOENT;
+    }
   } else if (ret == -ENOENT) {
       ret = -ERR_NO_SUCH_BUCKET;
   }
@@ -459,11 +462,13 @@ int RGWGetObj::verify_permission()
 {
   obj = rgw_obj(s->bucket, s->object);
   store->set_atomic(s->obj_ctx, obj);
-  if (get_data)
+  if (get_data) {
     store->set_prefetch_data(s->obj_ctx, obj);
+  }
 
-  if (!verify_object_permission(s, RGW_PERM_READ))
+  if (!verify_object_permission(s, RGW_PERM_READ)) {
     return -EACCES;
+  }
 
   return 0;
 }
@@ -1169,8 +1174,9 @@ void RGWStatAccount::execute()
 
 int RGWGetBucketVersioning::verify_permission()
 {
-  if (s->user.user_id.compare(s->bucket_owner.get_id()) != 0)
+  if (s->auth_user.compare(s->bucket_owner.get_id()) != 0) {
     return -EACCES;
+  }
 
   return 0;
 }
@@ -1188,8 +1194,9 @@ void RGWGetBucketVersioning::execute()
 
 int RGWSetBucketVersioning::verify_permission()
 {
-  if (s->user.user_id.compare(s->bucket_owner.get_id()) != 0)
+  if (s->auth_user.compare(s->bucket_owner.get_id()) != 0) {
     return -EACCES;
+  }
 
   return 0;
 }
@@ -1222,8 +1229,9 @@ void RGWSetBucketVersioning::execute()
 
 int RGWStatBucket::verify_permission()
 {
-  if (!verify_bucket_permission(s, RGW_PERM_READ))
+  if (!verify_bucket_permission(s, RGW_PERM_READ)) {
     return -EACCES;
+  }
 
   return 0;
 }
@@ -1255,8 +1263,9 @@ void RGWStatBucket::execute()
 
 int RGWListBucket::verify_permission()
 {
-  if (!verify_bucket_permission(s, RGW_PERM_READ))
+  if (!verify_bucket_permission(s, RGW_PERM_READ)) {
     return -EACCES;
+  }
 
   return 0;
 }
@@ -1318,24 +1327,32 @@ void RGWListBucket::execute()
 
 int RGWGetBucketLogging::verify_permission()
 {
-  if (s->user.user_id.compare(s->bucket_owner.get_id()) != 0)
+  if (s->auth_user.compare(s->bucket_owner.get_id()) != 0) {
     return -EACCES;
+  }
 
   return 0;
 }
 
 int RGWGetBucketLocation::verify_permission()
 {
-  if (s->user.user_id.compare(s->bucket_owner.get_id()) != 0)
+  if (s->auth_user.compare(s->bucket_owner.get_id()) != 0) {
     return -EACCES;
+  }
 
   return 0;
 }
 
 int RGWCreateBucket::verify_permission()
 {
-  if (!rgw_user_is_authenticated(s->user))
+  if (!rgw_user_is_authenticated(s->user)) {
     return -EACCES;
+  }
+
+  /* FIXME, XXX: maybe we need to check ACLs here! */
+  if ((s->perm_mask & RGW_PERM_WRITE) == 0) {
+    return -EACCES;
+  }
 
   if (s->user.max_buckets) {
     RGWUserBuckets buckets;
@@ -1521,8 +1538,9 @@ void RGWCreateBucket::execute()
 
 int RGWDeleteBucket::verify_permission()
 {
-  if (!verify_bucket_permission(s, RGW_PERM_WRITE))
+  if (!verify_bucket_permission(s, RGW_PERM_WRITE)) {
     return -EACCES;
+  }
 
   return 0;
 }
@@ -1589,8 +1607,9 @@ void RGWDeleteBucket::execute()
 
 int RGWPutObj::verify_permission()
 {
-  if (!verify_bucket_permission(s, RGW_PERM_WRITE))
+  if (!verify_bucket_permission(s, RGW_PERM_WRITE)) {
     return -EACCES;
+  }
 
   return 0;
 }
@@ -2245,6 +2264,11 @@ int RGWPutMetadataAccount::verify_permission()
   if (!rgw_user_is_authenticated(s->user)) {
     return -EACCES;
   }
+
+  if ((s->perm_mask & RGW_PERM_WRITE) == 0) {
+    return -EACCES;
+  }
+
   return 0;
 }
 
@@ -2421,8 +2445,9 @@ void RGWPutMetadataObject::execute()
 
 int RGWDeleteObj::verify_permission()
 {
-  if (!verify_bucket_permission(s, RGW_PERM_WRITE))
+  if (!verify_bucket_permission(s, RGW_PERM_WRITE)) {
     return -EACCES;
+  }
 
   return 0;
 }
@@ -2521,9 +2546,12 @@ int RGWCopyObj::verify_permission()
 
   RGWObjectCtx& obj_ctx = *static_cast<RGWObjectCtx *>(s->obj_ctx);
 
-  ret = store->get_bucket_info(obj_ctx, s->user.user_id.get_bns().get_id(), src_bucket_name, src_bucket_info, NULL, &src_attrs);
-  if (ret < 0)
+  ret = store->get_bucket_info(obj_ctx, s->user.user_id.get_bns().get_id(),
+          src_bucket_name, src_bucket_info, NULL, &src_attrs);
+  if (ret < 0) {
     return ret;
+  }
+
 
   src_bucket = src_bucket_info.bucket;
 
@@ -2535,12 +2563,14 @@ int RGWCopyObj::verify_permission()
 
     /* check source object permissions */
     ret = read_policy(store, s, src_bucket_info, src_attrs, &src_policy, src_bucket, src_object);
-    if (ret < 0)
+    if (ret < 0) {
       return ret;
+    }
 
     if (!s->system_request && /* system request overrides permission checks */
-        !src_policy.verify_permission(s->user.user_id, s->perm_mask, RGW_PERM_READ))
+        !src_policy.verify_permission(s->auth_user, s->perm_mask, RGW_PERM_READ)) {
       return -EACCES;
+    }
   }
 
   RGWAccessControlPolicy dest_bucket_policy(s->cct);
