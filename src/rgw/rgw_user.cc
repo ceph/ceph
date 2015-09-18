@@ -2200,8 +2200,11 @@ int RGWUserAdminOp_User::create(RGWRados *store, RGWUserAdminOpState& op_state,
   Formatter *formatter = flusher.get_formatter();
 
   ret = user.add(op_state, NULL);
-  if (ret < 0)
+  if (ret < 0) {
+    if (ret == -EEXIST)
+      ret = -ERR_USER_EXIST;
     return ret;
+  }
 
   ret = user.info(info, NULL);
   if (ret < 0)
