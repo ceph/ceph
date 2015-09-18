@@ -1612,7 +1612,7 @@ def prepare_dev(
             raise Error(e)
 
         try:
-            rawdev = get_partition_dev(osd_uuid)
+            rawdev = get_partition_dev_by_partuuid(osd_uuid)
         except Error:
             rawdev = get_partition_dev(data, 1)
 
