@@ -15,6 +15,15 @@ namespace rename {
 namespace at = argument_types;
 namespace po = boost::program_options;
 
+static int do_rename(librbd::RBD &rbd, librados::IoCtx& io_ctx,
+                     const char *imgname, const char *destname)
+{
+  int r = rbd.rename(io_ctx, imgname, destname);
+  if (r < 0)
+    return r;
+  return 0;
+}
+
 void get_arguments(po::options_description *positional,
                    po::options_description *options) {
   at::add_image_spec_options(positional, options, at::ARGUMENT_MODIFIER_SOURCE);
@@ -57,6 +66,12 @@ int execute(const po::variables_map &vm) {
     return r;
   }
 
+  librbd::RBD rbd;
+  r = do_rename(rbd, io_ctx, image_name.c_str(), dst_image_name.c_str());
+  if (r < 0) {
+    std::cerr << "rbd: rename error: " << cpp_strerror(r) << std::endl;
+    return r;
+  }
   return 0;
 }
 
