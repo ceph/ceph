@@ -144,9 +144,49 @@ int Journal::remove(librados::IoCtx &io_ctx, const std::string &image_id) {
     return r;
   }
 
-  r = journaler.remove();
+  r = journaler.remove(false);
   if (r < 0) {
     lderr(cct) << "failed to remove journal: " << cpp_strerror(r) << dendl;
+    return r;
+  }
+  return 0;
+}
+
+int Journal::reset(librados::IoCtx &io_ctx, const std::string &image_id) {
+  CephContext *cct = reinterpret_cast<CephContext *>(io_ctx.cct());
+  ldout(cct, 5) << __func__ << ": image=" << image_id << dendl;
+
+  ::journal::Journaler journaler(io_ctx, image_id, "",
+				 cct->_conf->rbd_journal_commit_age);
+
+  C_SaferCond cond;
+  journaler.init(&cond);
+
+  int r = cond.wait();
+  if (r == -ENOENT) {
+    return 0;
+  } else if (r < 0) {
+    lderr(cct) << "failed to initialize journal: " << cpp_strerror(r) << dendl;
+    return r;
+  }
+
+  uint8_t order, splay_width;
+  int64_t pool_id;
+  journaler.get_metadata(order, splay_width, pool_id);
+
+  r = journaler.remove(true);
+  if (r < 0) {
+    lderr(cct) << "failed to reset journal: " << cpp_strerror(r) << dendl;
+    return r;
+  }
+  r = journaler.create(order, splay_width, pool_id);
+  if (r < 0) {
+    lderr(cct) << "failed to create journal: " << cpp_strerror(r) << dendl;
+    return r;
+  }
+  r = journaler.register_client(CLIENT_DESCRIPTION);
+  if (r < 0) {
+    lderr(cct) << "failed to register client: " << cpp_strerror(r) << dendl;
     return r;
   }
   return 0;

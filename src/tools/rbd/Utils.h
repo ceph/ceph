@@ -52,6 +52,12 @@ int get_pool_image_snapshot_names(
     std::string *pool_name, std::string *image_name, std::string *snap_name,
     SnapshotPresence snapshot_presence, bool image_required = true);
 
+int get_pool_journal_names(
+    const boost::program_options::variables_map &vm,
+    argument_types::ArgumentModifier mod, size_t *spec_arg_index,
+    std::string *pool_name, std::string *journal_name,
+    bool journal_required  = true);
+
 int validate_snapshot_name(argument_types::ArgumentModifier mod,
                            const std::string &snap_name,
                            SnapshotPresence snapshot_presence);
@@ -87,6 +93,8 @@ int init_and_open_image(const std::string &pool_name,
                         librbd::Image *image);
 
 int snap_set(librbd::Image &image, const std::string snap_name);
+
+std::string image_id(librbd::Image& image);
 
 } // namespace utils
 } // namespace rbd

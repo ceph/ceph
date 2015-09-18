@@ -178,6 +178,98 @@ int get_pool_image_snapshot_names(const po::variables_map &vm,
   return 0;
 }
 
+int get_pool_journal_names(const po::variables_map &vm,
+			   at::ArgumentModifier mod,
+			   size_t *spec_arg_index,
+			   std::string *pool_name,
+			   std::string *journal_name,
+			   bool journal_required) {
+  std::string pool_key = (mod == at::ARGUMENT_MODIFIER_DEST ?
+    at::DEST_POOL_NAME : at::POOL_NAME);
+  std::string image_key = (mod == at::ARGUMENT_MODIFIER_DEST ?
+    at::DEST_IMAGE_NAME : at::IMAGE_NAME);
+  std::string journal_key = (mod == at::ARGUMENT_MODIFIER_DEST ?
+    at::DEST_JOURNAL_NAME : at::JOURNAL_NAME);
+
+  if (vm.count(pool_key) && pool_name != nullptr) {
+    *pool_name = vm[pool_key].as<std::string>();
+  }
+  if (vm.count(journal_key) && journal_name != nullptr) {
+    *journal_name = vm[journal_key].as<std::string>();
+  }
+
+  std::string image_name;
+  if (vm.count(image_key)) {
+    image_name = vm[image_key].as<std::string>();
+  }
+
+  if (journal_name != nullptr && !journal_name->empty()) {
+    // despite the separate pool option,
+    // we can also specify them via the journal option
+    std::string journal_name_copy(*journal_name);
+    extract_spec(journal_name_copy, pool_name, journal_name, nullptr);
+  }
+
+  if (!image_name.empty()) {
+    // despite the separate pool option,
+    // we can also specify them via the image option
+    std::string image_name_copy(image_name);
+    extract_spec(image_name_copy, pool_name, &image_name, nullptr);
+  }
+
+  int r;
+  if (journal_name != nullptr && spec_arg_index != nullptr &&
+      journal_name->empty()) {
+    std::string spec = get_positional_argument(vm, (*spec_arg_index)++);
+    if (!spec.empty()) {
+      r = extract_spec(spec, pool_name, journal_name, nullptr);
+      if (r < 0) {
+        return r;
+      }
+    }
+  }
+
+  if (pool_name->empty()) {
+    *pool_name = at::DEFAULT_POOL_NAME;
+  }
+
+  if (journal_name != nullptr && journal_name->empty() && !image_name.empty()) {
+    // Try to get journal name from image info.
+    librados::Rados rados;
+    librados::IoCtx io_ctx;
+    librbd::Image image;
+    int r = init_and_open_image(*pool_name, image_name, "", true,
+				  &rados, &io_ctx, &image);
+    if (r < 0) {
+      std::cerr << "rbd: failed to open image " << image_name
+		<< " to get journal name: " << cpp_strerror(r) << std::endl;
+      return r;
+    }
+
+    uint64_t features;
+    r = image.features(&features);
+    if (r < 0) {
+      return r;
+    }
+    if ((features & RBD_FEATURE_JOURNALING) == 0) {
+      std::cerr << "rbd: journaling is not enabled for image " << image_name
+		<< std::endl;
+      return -EINVAL;
+    }
+    *journal_name = image_id(image);
+  }
+
+  if (journal_name != nullptr && journal_required && journal_name->empty()) {
+    std::string prefix = at::get_description_prefix(mod);
+    std::cerr << "rbd: "
+              << (mod == at::ARGUMENT_MODIFIER_DEST ? prefix : std::string())
+              << "journal was not specified" << std::endl;
+    return -EINVAL;
+  }
+
+  return 0;
+}
+
 int validate_snapshot_name(at::ArgumentModifier mod,
                            const std::string &snap_name,
                            SnapshotPresence snapshot_presence) {
@@ -424,6 +516,20 @@ int snap_set(librbd::Image &image, const std::string snap_name) {
     return r;
   }
   return 0;
+}
+
+std::string image_id(librbd::Image& image) {
+  librbd::image_info_t info;
+  int r = image.stat(info, sizeof(info));
+  if (r < 0) {
+    return string();
+  }
+
+  char prefix[RBD_MAX_BLOCK_NAME_SIZE + 1];
+  strncpy(prefix, info.block_name_prefix, RBD_MAX_BLOCK_NAME_SIZE);
+  prefix[RBD_MAX_BLOCK_NAME_SIZE] = '\0';
+
+  return string(prefix + strlen(RBD_DATA_PREFIX));
 }
 
 } // namespace utils
