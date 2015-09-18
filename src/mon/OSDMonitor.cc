@@ -4601,7 +4601,7 @@ bool OSDMonitor::prepare_command_impl(MMonCommand *m,
 	ss << "(note: crushtool tests not run because they took too long) ";
       } else {
 	derr << "error on crush map: " << ess.str() << dendl;
-	ss << "Failed to parse crushmap: " << ess.str();
+	ss << "Failed crushmap test: " << ess.str();
 	err = r;
 	goto reply;
       }
