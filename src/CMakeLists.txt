@@ -857,6 +857,9 @@ if(${WITH_RBD})
   install(TARGETS librados librbd DESTINATION lib)
   set(rbd_srcs
     tools/rbd/rbd.cc
+    tools/rbd/IndentStream.cc
+    tools/rbd/OptionPrinter.cc
+    tools/rbd/Shell.cc
     common/TextTable.cc)
   add_executable(rbd ${rbd_srcs} $<TARGET_OBJECTS:common_util_obj>
     $<TARGET_OBJECTS:parse_secret_objs>
