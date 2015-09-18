@@ -996,17 +996,19 @@ struct RGWRegionMap {
 WRITE_CLASS_ENCODER(RGWRegionMap)
 
 struct objexp_hint_entry {
+  string bucket_namespace;
   string bucket_name;
   string bucket_id;
   rgw_obj_key obj_key;
   utime_t exp_time;
 
   void encode(bufferlist& bl) const {
-    ENCODE_START(1, 1, bl);
+    ENCODE_START(2, 1, bl);
     ::encode(bucket_name, bl);
     ::encode(bucket_id, bl);
     ::encode(obj_key, bl);
     ::encode(exp_time, bl);
+    ::encode(bucket_namespace, bl);
     ENCODE_FINISH(bl);
   }
 
@@ -1016,6 +1018,9 @@ struct objexp_hint_entry {
     ::decode(bucket_id, bl);
     ::decode(obj_key, bl);
     ::decode(exp_time, bl);
+    if (struct_v >= 2) {
+      ::decode(bucket_namespace, bl);
+    }
     DECODE_FINISH(bl);
   }
 };
@@ -2060,6 +2065,10 @@ public:
   int parse_bucket_instance_entry(const string& entry,
                                   string& bucket_namespace,
                                   string& bucket_name);
+  void get_bucket_instance_entry(const string& bucket_namespace,
+                                 const string& bucket_name,
+                                 const string& bucket_id,
+                                 string& entry);
   void get_bucket_instance_entry(rgw_bucket& bucket, string& entry);
   void get_bucket_meta_oid(rgw_bucket& bucket, string& oid);
 
@@ -2131,6 +2140,7 @@ public:
   void objexp_get_shard(int shard_num,
                         string& shard);                       /* out */
   int objexp_hint_add(const utime_t& delete_at,
+                      const string& bucket_namespace,
                       const string& bucket_name,
                       const string& bucket_id,
                       const rgw_obj_key& obj_key);

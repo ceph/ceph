@@ -2374,25 +2374,30 @@ int RGWRados::objexp_key_shard(const rgw_obj_key& key)
   return sid % num_shards;
 }
 
-static string objexp_hint_get_keyext(const string& bucket_name,
+static string objexp_hint_get_keyext(const string& bucket_namespace,
+                                     const string& bucket_name,
                                      const string& bucket_id,
                                      const rgw_obj_key& obj_key)
 {
-  return bucket_name + ":" + bucket_id + ":" + obj_key.name + ":" + obj_key.instance;
+  return bucket_namespace + ":" + bucket_name + ":" + bucket_id \
+      + ":" + obj_key.name + ":" + obj_key.instance;
 }
 
 int RGWRados::objexp_hint_add(const utime_t& delete_at,
+                              const string& bucket_namespace,
                               const string& bucket_name,
                               const string& bucket_id,
                               const rgw_obj_key& obj_key)
 {
-  const string keyext = objexp_hint_get_keyext(bucket_name,
+  const string keyext = objexp_hint_get_keyext(bucket_namespace, bucket_name,
           bucket_id, obj_key);
   objexp_hint_entry he = {
+      .bucket_namespace = bucket_namespace,
       .bucket_name = bucket_name,
       .bucket_id = bucket_id,
       .obj_key = obj_key,
-      .exp_time = delete_at };
+      .exp_time = delete_at
+  };
   bufferlist hebl;
   ::encode(he, hebl);
   ObjectWriteOperation op;
@@ -3624,9 +3629,11 @@ int RGWRados::Object::Write::write_meta(uint64_t size,
     rgw_obj_key obj_key;
     obj.get_index_key(&obj_key);
 
-    r = store->objexp_hint_add(utime_t(meta.delete_at, 0), bucket.name, bucket.bucket_id, obj_key);
+    r = store->objexp_hint_add(utime_t(meta.delete_at, 0), bucket.tenant,
+            bucket.name, bucket.bucket_id, obj_key);
     if (r < 0) {
-      ldout(store->ctx(), 0) << "ERROR: objexp_hint_add() returned r=" << r << ", object will not get removed" << dendl;
+      ldout(store->ctx(), 0) << "ERROR: objexp_hint_add() returned r=" << r \
+          << ", object will not get removed" << dendl;
       /* ignoring error, nothing we can do at this point */
     }
   }
@@ -5539,7 +5546,7 @@ int RGWRados::set_attrs(void *ctx, rgw_obj& obj,
         rgw_obj_key obj_key;
         obj.get_index_key(&obj_key);
 
-        objexp_hint_add(ts, bucket.name, bucket.bucket_id, obj_key);
+        objexp_hint_add(ts, bucket.tenant, bucket.name, bucket.bucket_id, obj_key);
       } catch (buffer::error& err) {
 	ldout(cct, 0) << "ERROR: failed to decode " RGW_ATTR_DELETE_AT << " attr" << dendl;
       }
@@ -7476,13 +7483,22 @@ int RGWRados::parse_bucket_instance_entry(const string& entry,
   return 0;
 }
 
+void RGWRados::get_bucket_instance_entry(const string& bucket_namespace,
+                                         const string& bucket_name,
+                                         const string& bucket_id,
+                                         string& entry)
+{
+  if (bucket_namespace.empty()) {
+    entry = bucket_name + ":" + bucket_id;
+  } else {
+    entry = bucket_namespace + ":" + bucket_name + ":" + bucket_id;
+  }
+}
+
 void RGWRados::get_bucket_instance_entry(rgw_bucket& bucket, string& entry)
 {
-  if (bucket.tenant.empty()) {
-    entry = bucket.name + ":" + bucket.bucket_id;
-  } else {
-    entry = bucket.tenant + ":" + bucket.name + ":" + bucket.bucket_id;
-  }
+  return get_bucket_instance_entry(bucket.tenant, bucket.name,
+          bucket.bucket_id, entry);
 }
 
 void RGWRados::get_bucket_meta_oid(rgw_bucket& bucket, string& oid)
