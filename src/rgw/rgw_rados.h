@@ -1285,11 +1285,13 @@ public:
   int get_latest_epoch(epoch_t& epoch);
   int init(const string &period_realm_id = "", const string &realm_name = "", bool setup_obj = true);
   int init(const string& period_id, epoch_t epoch = 0, bool setup_obj = true);
+  int use_next_epoch();
+  
   int create();
   int delete_obj();
   int store_info(bool exclusive);
   int activate() { return -ENOTSUP;}
-  
+
   void encode(bufferlist& bl) const {
     ENCODE_START(1, 1, bl);    
     ::encode(id, bl);
