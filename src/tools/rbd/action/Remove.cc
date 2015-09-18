@@ -15,6 +15,19 @@ namespace remove {
 namespace at = argument_types;
 namespace po = boost::program_options;
 
+static int do_delete(librbd::RBD &rbd, librados::IoCtx& io_ctx,
+                     const char *imgname, bool no_progress)
+{
+  utils::ProgressContext pc("Removing image", no_progress);
+  int r = rbd.remove_with_progress(io_ctx, imgname, pc);
+  if (r < 0) {
+    pc.fail();
+    return r;
+  }
+  pc.finish();
+  return 0;
+}
+
 void get_arguments(po::options_description *positional,
                    po::options_description *options) {
   at::add_image_spec_options(positional, options, at::ARGUMENT_MODIFIER_NONE);
@@ -40,6 +53,26 @@ int execute(const po::variables_map &vm) {
     return r;
   }
 
+  librbd::RBD rbd;
+  r = do_delete(rbd, io_ctx, image_name.c_str(),
+                vm[at::NO_PROGRESS].as<bool>());
+  if (r < 0) {
+    if (r == -ENOTEMPTY) {
+      std::cerr << "rbd: image has snapshots - these must be deleted"
+                << " with 'rbd snap purge' before the image can be removed."
+                << std::endl;
+    } else if (r == -EBUSY) {
+      std::cerr << "rbd: error: image still has watchers"
+                << std::endl
+                << "This means the image is still open or the client using "
+                << "it crashed. Try again after closing/unmapping it or "
+                << "waiting 30s for the crashed client to timeout."
+                << std::endl;
+    } else {
+      std::cerr << "rbd: delete error: " << cpp_strerror(r) << std::endl;
+    }
+    return r ;
+  }
   return 0;
 }
 
