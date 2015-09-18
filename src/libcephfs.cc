@@ -19,7 +19,7 @@
 
 #include "auth/Crypto.h"
 #include "client/Client.h"
-#include "include/cephfs/libcephfs.h"
+#include "librados/RadosClient.h"
 #include "common/Mutex.h"
 #include "common/ceph_argparse.h"
 #include "common/common_init.h"
@@ -30,6 +30,9 @@
 #include "messages/MMonMap.h"
 #include "msg/Messenger.h"
 #include "include/assert.h"
+
+#include "include/cephfs/libcephfs.h"
+
 
 struct ceph_mount_info
 {
@@ -290,6 +293,15 @@ extern "C" int ceph_create_with_context(struct ceph_mount_info **cmount, CephCon
 {
   *cmount = new struct ceph_mount_info(cct);
   return 0;
+}
+
+extern "C" int ceph_create_from_rados(struct ceph_mount_info **cmount,
+    rados_t cluster)
+{
+  auto rados = (librados::RadosClient *) cluster;
+  auto cct = rados->cct;
+  cct->get();
+  return ceph_create_with_context(cmount, cct);
 }
 
 extern "C" int ceph_create(struct ceph_mount_info **cmount, const char * const id)
