@@ -510,7 +510,7 @@ def get_partition_dev_by_partuuid(uuid):
     """
     if uuid in os.listdir('/dev/disk/by-partuuid'):
         return os.path.join('/dev/disk/by-partuuid', uuid)
-    else
+    else:
         raise Error('partition {} does not appear to exist'.format(uuid))
 
 
