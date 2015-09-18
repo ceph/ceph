@@ -698,7 +698,7 @@ public:
       }
       yield {
 	status.state = rgw_bucket_shard_sync_info::StateFullSync;
-        status.marker.next_step_marker = info.max_marker;
+        status.marker.incremental = info.max_marker;
         call(new RGWSimpleRadosWriteCR<rgw_bucket_shard_sync_info>(async_rados, store, store->get_zone_params().log_pool,
 				 sync_status_oid, status));
       }
@@ -763,19 +763,31 @@ struct bucket_list_entry {
   uint64_t size;
   string storage_class;
   bucket_entry_owner owner;
+  uint64_t versioned_epoch;
+  string rgw_tag;
 
-  bucket_list_entry() : delete_marker(false), is_latest(false), size(0) {}
+  bucket_list_entry() : delete_marker(false), is_latest(false), size(0), versioned_epoch(0) {}
 
   void decode_json(JSONObj *obj) {
     JSONDecoder::decode_json("IsDeleteMarker", delete_marker, obj);
     JSONDecoder::decode_json("Key", key, obj);
     JSONDecoder::decode_json("VersionId", version_id, obj);
     JSONDecoder::decode_json("IsLatest", is_latest, obj);
-    JSONDecoder::decode_json("LastModified", mtime, obj);
+    string mtime_str;
+    JSONDecoder::decode_json("LastModified", mtime_str, obj);
+
+    struct tm t;
+    if (parse_iso8601(mtime_str.c_str(), &t)) {
+      time_t sec = timegm(&t);
+#warning more high def clock?
+      mtime = utime_t(sec, 0);
+    }
     JSONDecoder::decode_json("ETag", etag, obj);
     JSONDecoder::decode_json("Size", size, obj);
     JSONDecoder::decode_json("StorageClass", storage_class, obj);
     JSONDecoder::decode_json("Owner", owner, obj);
+    JSONDecoder::decode_json("VersionedEpoch", versioned_epoch, obj);
+    JSONDecoder::decode_json("RgwxTag", rgw_tag, obj);
   }
 };
 
@@ -786,7 +798,7 @@ struct bucket_list_result {
   string version_id_marker;
   int max_keys;
   bool is_truncated;
-  list<bucket_list_entry> contents;
+  list<bucket_list_entry> entries;
 
   bucket_list_result() : max_keys(0), is_truncated(false) {}
 
@@ -796,7 +808,8 @@ struct bucket_list_result {
     JSONDecoder::decode_json("KeyMarker", key_marker, obj);
     JSONDecoder::decode_json("VersionIdMarker", version_id_marker, obj);
     JSONDecoder::decode_json("MaxKeys", max_keys, obj);
-    JSONDecoder::decode_json("IsTruncated", max_keys, obj);
+    JSONDecoder::decode_json("IsTruncated", is_truncated, obj);
+    JSONDecoder::decode_json("Entries", entries, obj);
   }
 };
 
@@ -812,6 +825,7 @@ class RGWListBucketShardCR: public RGWCoroutine {
   int shard_id;
 
   string instance_key;
+  rgw_bucket_shard_sync_marker marker;
 
   bucket_list_result *result;
 
@@ -819,11 +833,13 @@ public:
   RGWListBucketShardCR(RGWRados *_store, RGWHTTPManager *_mgr, RGWAsyncRadosProcessor *_async_rados,
                                   RGWRESTConn *_conn,
                                   const string& _bucket_name, const string& _bucket_id, int _shard_id,
+                                  rgw_bucket_shard_sync_marker& _marker,
                                   bucket_list_result *_result) : RGWCoroutine(_store->ctx()), store(_store),
                                                       http_manager(_mgr),
 						      async_rados(_async_rados),
                                                       conn(_conn),
                                                       bucket_name(_bucket_name), bucket_id(_bucket_id), shard_id(_shard_id),
+                                                      marker(_marker),
                                                       result(_result) {
     instance_key = bucket_name + ":" + bucket_id;
     if (shard_id > 0) {
@@ -837,9 +853,12 @@ public:
     int ret;
     reenter(this) {
       yield {
-        rgw_http_param_pair pairs[] = { { "bucket-instance", instance_key.c_str() },
+        rgw_http_param_pair pairs[] = { { "rgwx-bucket-instance", instance_key.c_str() },
 					{ "versions" , NULL },
 					{ "format" , "json" },
+					{ "objs-container" , "true" },
+					{ "key-marker" , marker.key.c_str() },
+					{ "version-id-marker" , marker.ver.c_str() },
 	                                { NULL, NULL } };
 
         string p = string("/") + bucket_name;
@@ -900,15 +919,21 @@ int RGWRunBucketSyncCoroutine::operate()
       return set_state(RGWCoroutine_Error, retcode);
     }
 
-    yield {
-      if ((rgw_bucket_shard_sync_info::SyncState)sync_status.state == rgw_bucket_shard_sync_info::StateFullSync) {
-        ldout(store->ctx(), 20) << __func__ << "(): building full sync maps" << dendl;
-        int r = call(new RGWListBucketShardCR(store, http_manager, async_rados, conn, bucket_name, bucket_id, shard_id, &list_result));
-        if (r < 0) {
-          ldout(store->ctx(), 0) << "ERROR: failed to call new CR (RGWListBucketShardCR)" << dendl;
-          return r;
+    if ((rgw_bucket_shard_sync_info::SyncState)sync_status.state == rgw_bucket_shard_sync_info::StateFullSync) {
+      do {
+        yield {
+          ldout(store->ctx(), 20) << __func__ << "(): building full sync maps" << dendl;
+          int r = call(new RGWListBucketShardCR(store, http_manager, async_rados, conn, bucket_name, bucket_id, shard_id,
+                                                sync_status.marker, &list_result));
+          if (r < 0) {
+            ldout(store->ctx(), 0) << "ERROR: failed to call new CR (RGWListBucketShardCR)" << dendl;
+            return r;
+          }
         }
-      }
+        if (retcode < 0 && retcode != -ENOENT) {
+          return set_state(RGWCoroutine_Error, retcode);
+        }
+      } while (list_result.is_truncated);
     }
   }
 
