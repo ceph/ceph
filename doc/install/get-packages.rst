@@ -34,15 +34,6 @@ also add keys and recommended packages.
   releases (common) and one for development (programmers and QA only). Choose
   the key that suits your needs. See `Add Keys`_ for details.
 
-- **Ceph Extras: (Required)** The Ceph Extras repository provides newer
-  Ceph-enabled versions of packages which are already provided in your Linux
-  distribution, but where newer versions are required to support Ceph. Examples
-  of newer versions of available packages include QEMU for CentOS/RHEL
-  distribution and iSCSI among others. If you intend to use any of the
-  foregoing packages, you must add the Ceph Extras repository or download the
-  packages manually. This repository also contains Ceph dependencies for those
-  who intend to install Ceph manually.  See `Add Ceph Extras`_ for details.
-
 - **Ceph: (Required)** All Ceph deployments require Ceph release packages,
   except for deployments that use development packages (development, QA, and
   bleeding edge deployments only). See `Add Ceph`_ for details.
