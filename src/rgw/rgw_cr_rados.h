@@ -438,4 +438,128 @@ public:
   }
 };
 
+class RGWAsyncGetBucketInstanceInfo : public RGWAsyncRadosRequest {
+  RGWRados *store;
+  string bucket_name;
+  string bucket_id;
+  RGWBucketInfo *bucket_info;
+
+protected:
+  int _send_request();
+public:
+  RGWAsyncGetBucketInstanceInfo(RGWAioCompletionNotifier *cn, RGWRados *_store,
+		        const string& _bucket_name, const string& _bucket_id,
+                        RGWBucketInfo *_bucket_info) : RGWAsyncRadosRequest(cn), store(_store),
+                                                       bucket_name(_bucket_name), bucket_id(_bucket_id),
+                                                       bucket_info(_bucket_info) {}
+};
+
+class RGWGetBucketInstanceInfoCR : public RGWSimpleCoroutine {
+  RGWAsyncRadosProcessor *async_rados;
+  RGWRados *store;
+  string bucket_name;
+  string bucket_id;
+  RGWBucketInfo *bucket_info;
+
+  RGWAsyncGetBucketInstanceInfo *req;
+  
+public:
+  RGWGetBucketInstanceInfoCR(RGWAsyncRadosProcessor *_async_rados, RGWRados *_store,
+		        const string& _bucket_name, const string& _bucket_id,
+                        RGWBucketInfo *_bucket_info) : RGWSimpleCoroutine(_store->ctx()), async_rados(_async_rados), store(_store),
+                                                       bucket_name(_bucket_name), bucket_id(_bucket_id),
+                                                       bucket_info(_bucket_info), req(NULL) {}
+  ~RGWGetBucketInstanceInfoCR() {
+    delete req;
+  }
+
+  int send_request() {
+    req = new RGWAsyncGetBucketInstanceInfo(stack->create_completion_notifier(), store, bucket_name, bucket_id, bucket_info);
+    async_rados->queue(req);
+    return 0;
+  }
+  int request_complete() {
+    return req->get_ret_status();
+  }
+};
+
+class RGWAsyncFetchRemoteObj : public RGWAsyncRadosRequest {
+  RGWRados *store;
+  string source_zone;
+
+  RGWBucketInfo bucket_info;
+
+  string obj_name;
+  string obj_version_id;
+  uint64_t versioned_epoch;
+
+  time_t src_mtime;
+
+  bool copy_if_newer;
+
+protected:
+  int _send_request();
+public:
+  RGWAsyncFetchRemoteObj(RGWAioCompletionNotifier *cn, RGWRados *_store,
+                         const string& _source_zone,
+                         RGWBucketInfo& _bucket_info,
+                         const string& _obj_name, const string& _version_id,
+                         uint64_t _versioned_epoch,
+                         bool _if_newer) : RGWAsyncRadosRequest(cn), store(_store),
+                                                      source_zone(_source_zone),
+                                                      bucket_info(_bucket_info),
+                                                      obj_name(_obj_name), obj_version_id(_version_id),
+                                                      versioned_epoch(_versioned_epoch),
+                                                      copy_if_newer(_if_newer) {}
+};
+
+class RGWFetchRemoteObjCR : public RGWSimpleCoroutine {
+  CephContext *cct;
+  RGWAsyncRadosProcessor *async_rados;
+  RGWRados *store;
+  string source_zone;
+
+  RGWBucketInfo bucket_info;
+
+  string obj_name;
+  string obj_version_id;
+  uint64_t versioned_epoch;
+
+  time_t src_mtime;
+
+  bool copy_if_newer;
+
+  RGWAsyncFetchRemoteObj *req;
+
+public:
+  RGWFetchRemoteObjCR(RGWAsyncRadosProcessor *_async_rados, RGWRados *_store,
+                      const string& _source_zone,
+                      RGWBucketInfo& _bucket_info,
+                      const string& _obj_name, const string& _version_id,
+                      uint64_t _versioned_epoch,
+                      bool _if_newer) : RGWSimpleCoroutine(_store->ctx()), cct(_store->ctx()),
+                                       async_rados(_async_rados), store(_store),
+                                       source_zone(_source_zone),
+                                       bucket_info(_bucket_info),
+                                       obj_name(_obj_name), obj_version_id(_version_id),
+                                       versioned_epoch(_versioned_epoch),
+                                       copy_if_newer(_if_newer), req(NULL) {}
+
+
+  ~RGWFetchRemoteObjCR() {
+    delete req;
+  }
+
+  int send_request() {
+    req = new RGWAsyncFetchRemoteObj(stack->create_completion_notifier(), store, source_zone, bucket_info,
+                                     obj_name, obj_version_id, versioned_epoch, copy_if_newer);
+    async_rados->queue(req);
+    return 0;
+  }
+
+  int request_complete() {
+    return req->get_ret_status();
+  }
+};
+
 #endif

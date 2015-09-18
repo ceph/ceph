@@ -885,8 +885,10 @@ class RGWRunBucketSyncCoroutine : public RGWCoroutine {
   string source_zone;
   string bucket_name;
   string bucket_id;
+  RGWBucketInfo bucket_info;
   int shard_id;
   bucket_list_result list_result;
+  list<bucket_list_entry>::iterator entries_iter;
   rgw_bucket_shard_sync_info sync_status;
 
 public:
@@ -899,6 +901,7 @@ public:
 									    obj_ctx(_obj_ctx), source_zone(_source_zone),
                                                                             bucket_name(_bucket_name),
 									    bucket_id(_bucket_id), shard_id(_shard_id) {}
+
   int operate();
 };
 
@@ -919,6 +922,19 @@ int RGWRunBucketSyncCoroutine::operate()
       return set_state(RGWCoroutine_Error, retcode);
     }
 
+    yield {
+      int r = call(new RGWGetBucketInstanceInfoCR(async_rados, store, bucket_name, bucket_id, &bucket_info));
+      if (r < 0) {
+        ldout(store->ctx(), 0) << "ERROR: failed to fetch sync status" << dendl;
+        return r;
+      }
+    }
+
+    if (retcode < 0) {
+      ldout(store->ctx(), 0) << "ERROR: failed to retrieve bucket info for bucket=" << bucket_name << " bucket_id=" << bucket_id << dendl;
+      return set_state(RGWCoroutine_Error, retcode);
+    }
+
     if ((rgw_bucket_shard_sync_info::SyncState)sync_status.state == rgw_bucket_shard_sync_info::StateFullSync) {
       do {
         yield {
@@ -932,6 +948,24 @@ int RGWRunBucketSyncCoroutine::operate()
         }
         if (retcode < 0 && retcode != -ENOENT) {
           return set_state(RGWCoroutine_Error, retcode);
+        }
+        entries_iter = list_result.entries.begin();
+        for (; entries_iter != list_result.entries.end(); ++entries_iter) {
+          ldout(store->ctx(), 20) << "[full sync] syncing object: " << bucket_name << ":" << bucket_id << ":" << shard_id << "/" << entries_iter->key << " [" << entries_iter->version_id << "]" << dendl;
+          yield {
+            bucket_list_entry& entry = *entries_iter;
+            int r = call(new RGWFetchRemoteObjCR(async_rados, store, source_zone, bucket_info,
+                                                 entry.key, entry.version_id, entry.versioned_epoch,
+                                                 true));
+            if (r < 0) {
+              ldout(store->ctx(), 0) << "ERROR: failed to call RGWFetchRemoteObjCR()" << dendl;
+              return r;
+            }
+          }
+          if (retcode < 0 && retcode != -ENOENT) {
+            ldout(store->ctx(), 0) << "ERROR: failed to sync object: " << bucket_name << ":" << bucket_id << ":" << shard_id << "/" << entries_iter->key << " [" << entries_iter->version_id << "]" << dendl;
+            return set_state(RGWCoroutine_Error, retcode);
+          }
         }
       } while (list_result.is_truncated);
     }
