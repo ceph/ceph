@@ -15,6 +15,18 @@ namespace flatten {
 namespace at = argument_types;
 namespace po = boost::program_options;
 
+static int do_flatten(librbd::Image& image, bool no_progress)
+{
+  utils::ProgressContext pc("Image flatten", no_progress);
+  int r = image.flatten_with_progress(pc);
+  if (r < 0) {
+    pc.fail();
+    return r;
+  }
+  pc.finish();
+  return 0;
+}
+
 void get_arguments(po::options_description *positional,
                    po::options_description *options) {
   at::add_image_spec_options(positional, options, at::ARGUMENT_MODIFIER_NONE);
@@ -42,6 +54,11 @@ int execute(const po::variables_map &vm) {
     return r;
   }
 
+  r = do_flatten(image, vm[at::NO_PROGRESS].as<bool>());
+  if (r < 0) {
+    std::cerr << "rbd: flatten error: " << cpp_strerror(r) << std::endl;
+    return r;
+  }
   return 0;
 }
 

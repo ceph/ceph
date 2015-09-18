@@ -15,6 +15,18 @@ namespace resize {
 namespace at = argument_types;
 namespace po = boost::program_options;
 
+static int do_resize(librbd::Image& image, uint64_t size, bool no_progress)
+{
+  utils::ProgressContext pc("Resizing image", no_progress);
+  int r = image.resize_with_progress(size, pc);
+  if (r < 0) {
+    pc.fail();
+    return r;
+  }
+  pc.finish();
+  return 0;
+}
+
 void get_arguments(po::options_description *positional,
                    po::options_description *options) {
   at::add_image_spec_options(positional, options, at::ARGUMENT_MODIFIER_NONE);
@@ -64,6 +76,11 @@ int execute(const po::variables_map &vm) {
     return -EINVAL;
   }
 
+  r = do_resize(image, size, vm[at::NO_PROGRESS].as<bool>());
+  if (r < 0) {
+    std::cerr << "rbd: resize error: " << cpp_strerror(r) << std::endl;
+    return r;
+  }
   return 0;
 }
 

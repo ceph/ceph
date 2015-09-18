@@ -4,8 +4,11 @@
 #include "tools/rbd/ArgumentTypes.h"
 #include "tools/rbd/Shell.h"
 #include "tools/rbd/Utils.h"
+#include "include/types.h"
+#include "include/stringify.h"
 #include "common/errno.h"
 #include "common/Formatter.h"
+#include "common/TextTable.h"
 #include <iostream>
 #include <boost/program_options.hpp>
 
@@ -15,6 +18,135 @@ namespace snap {
 
 namespace at = argument_types;
 namespace po = boost::program_options;
+
+int do_list_snaps(librbd::Image& image, Formatter *f)
+{
+  std::vector<librbd::snap_info_t> snaps;
+  TextTable t;
+  int r;
+
+  r = image.snap_list(snaps);
+  if (r < 0)
+    return r;
+
+  if (f) {
+    f->open_array_section("snapshots");
+  } else {
+    t.define_column("SNAPID", TextTable::RIGHT, TextTable::RIGHT);
+    t.define_column("NAME", TextTable::LEFT, TextTable::LEFT);
+    t.define_column("SIZE", TextTable::RIGHT, TextTable::RIGHT);
+  }
+
+  for (std::vector<librbd::snap_info_t>::iterator s = snaps.begin();
+       s != snaps.end(); ++s) {
+    if (f) {
+      f->open_object_section("snapshot");
+      f->dump_unsigned("id", s->id);
+      f->dump_string("name", s->name);
+      f->dump_unsigned("size", s->size);
+      f->close_section();
+    } else {
+      t << s->id << s->name << stringify(prettybyte_t(s->size))
+        << TextTable::endrow;
+    }
+  }
+
+  if (f) {
+    f->close_section();
+    f->flush(std::cout);
+  } else if (snaps.size()) {
+    std::cout << t;
+  }
+
+  return 0;
+}
+
+int do_add_snap(librbd::Image& image, const char *snapname)
+{
+  int r = image.snap_create(snapname);
+  if (r < 0)
+    return r;
+
+  return 0;
+}
+
+int do_remove_snap(librbd::Image& image, const char *snapname)
+{
+  int r = image.snap_remove(snapname);
+  if (r < 0)
+    return r;
+
+  return 0;
+}
+
+int do_rollback_snap(librbd::Image& image, const char *snapname,
+                     bool no_progress)
+{
+  utils::ProgressContext pc("Rolling back to snapshot", no_progress);
+  int r = image.snap_rollback_with_progress(snapname, pc);
+  if (r < 0) {
+    pc.fail();
+    return r;
+  }
+  pc.finish();
+  return 0;
+}
+
+int do_purge_snaps(librbd::Image& image, bool no_progress)
+{
+  utils::ProgressContext pc("Removing all snapshots", no_progress);
+  std::vector<librbd::snap_info_t> snaps;
+  bool is_protected = false;
+  int r = image.snap_list(snaps);
+  if (r < 0) {
+    pc.fail();
+    return r;
+  } else if (0 == snaps.size()) {
+    return 0;
+  } else {
+    for (size_t i = 0; i < snaps.size(); ++i) {
+      r = image.snap_is_protected(snaps[i].name.c_str(), &is_protected);
+      if (r < 0) {
+        pc.fail();
+        return r;
+      } else if (is_protected == true) {
+        pc.fail();
+        std::cerr << "\r" << "rbd: snapshot '" << snaps[i].name.c_str()
+                  << "' is protected from removal." << std::endl;
+        return -EBUSY;
+      }
+    }
+    for (size_t i = 0; i < snaps.size(); ++i) {
+      r = image.snap_remove(snaps[i].name.c_str());
+      if (r < 0) {
+        pc.fail();
+        return r;
+      }
+      pc.update_progress(i + 1, snaps.size());
+    }
+
+    pc.finish();
+    return 0;
+  }
+}
+
+int do_protect_snap(librbd::Image& image, const char *snapname)
+{
+  int r = image.snap_protect(snapname);
+  if (r < 0)
+    return r;
+
+  return 0;
+}
+
+int do_unprotect_snap(librbd::Image& image, const char *snapname)
+{
+  int r = image.snap_unprotect(snapname);
+  if (r < 0)
+    return r;
+
+  return 0;
+}
 
 void get_list_arguments(po::options_description *positional,
                         po::options_description *options) {
@@ -49,6 +181,12 @@ int execute_list(const po::variables_map &vm) {
     return r;
   }
 
+  r = do_list_snaps(image, formatter.get());
+  if (r < 0) {
+    cerr << "rbd: failed to list snapshots: " << cpp_strerror(r)
+         << std::endl;
+    return r;
+  }
   return 0;
 }
 
@@ -78,6 +216,12 @@ int execute_create(const po::variables_map &vm) {
     return r;
   }
 
+  r = do_add_snap(image, snap_name.c_str());
+  if (r < 0) {
+    cerr << "rbd: failed to create snapshot: " << cpp_strerror(r)
+         << std::endl;
+    return r;
+  }
   return 0;
 }
 
@@ -107,6 +251,17 @@ int execute_remove(const po::variables_map &vm) {
     return r;
   }
 
+  r = do_remove_snap(image, snap_name.c_str());
+  if (r < 0) {
+    if (r == -EBUSY) {
+      std::cerr << "rbd: snapshot '" << snap_name << "' "
+                << "is protected from removal." << std::endl;
+    } else {
+      std::cerr << "rbd: failed to remove snapshot: " << cpp_strerror(r)
+                << std::endl;
+    }
+    return r;
+  }
   return 0;
 }
 
@@ -137,6 +292,14 @@ int execute_purge(const po::variables_map &vm) {
     return r;
   }
 
+  r = do_purge_snaps(image, vm[at::NO_PROGRESS].as<bool>());
+  if (r < 0) {
+    if (r != -EBUSY) {
+      std::cerr << "rbd: removing snaps failed: " << cpp_strerror(r)
+                << std::endl;
+    }
+    return r;
+  }
   return 0;
 }
 
@@ -167,6 +330,12 @@ int execute_rollback(const po::variables_map &vm) {
     return r;
   }
 
+  r = do_rollback_snap(image, snap_name.c_str(),
+                       vm[at::NO_PROGRESS].as<bool>());
+  if (r < 0) {
+    std::cerr << "rbd: rollback failed: " << cpp_strerror(r) << std::endl;
+    return r;
+  }
   return 0;
 }
 
@@ -196,6 +365,12 @@ int execute_protect(const po::variables_map &vm) {
     return r;
   }
 
+  r = do_protect_snap(image, snap_name.c_str());
+  if (r < 0) {
+    std::cerr << "rbd: protecting snap failed: " << cpp_strerror(r)
+              << std::endl;
+    return r;
+  }
   return 0;
 }
 
@@ -225,6 +400,12 @@ int execute_unprotect(const po::variables_map &vm) {
     return r;
   }
 
+  r = do_unprotect_snap(image, snap_name.c_str());
+  if (r < 0) {
+    std::cerr << "rbd: unprotecting snap failed: " << cpp_strerror(r)
+              << std::endl;
+    return r;
+  }
   return 0;
 }
 

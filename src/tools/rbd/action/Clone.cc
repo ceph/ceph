@@ -15,6 +15,19 @@ namespace clone {
 namespace at = argument_types;
 namespace po = boost::program_options;
 
+int do_clone(librbd::RBD &rbd, librados::IoCtx &p_ioctx,
+             const char *p_name, const char *p_snapname,
+             librados::IoCtx &c_ioctx, const char *c_name,
+             uint64_t features, int *c_order,
+             uint64_t stripe_unit, uint64_t stripe_count) {
+  if ((features & RBD_FEATURE_LAYERING) != RBD_FEATURE_LAYERING) {
+    return -EINVAL;
+  }
+
+  return rbd.clone2(p_ioctx, p_name, p_snapname, c_ioctx, c_name, features,
+                    c_order, stripe_unit, stripe_count);
+}
+
 void get_arguments(po::options_description *positional,
                    po::options_description *options) {
   at::add_snap_spec_options(positional, options, at::ARGUMENT_MODIFIER_SOURCE);
@@ -67,6 +80,14 @@ int execute(const po::variables_map &vm) {
     return r;
   }
 
+  librbd::RBD rbd;
+  r = do_clone(rbd, io_ctx, image_name.c_str(), snap_name.c_str(), dst_io_ctx,
+               dst_image_name.c_str(), features, &order, stripe_unit,
+               stripe_count);
+  if (r < 0) {
+    std::cerr << "rbd: clone error: " << cpp_strerror(r) << std::endl;
+    return r;
+  }
   return 0;
 }
 
