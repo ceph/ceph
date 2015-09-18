@@ -803,11 +803,11 @@ public:
   // -- pg_temp --
   Mutex pg_temp_lock;
   map<pg_t, vector<int> > pg_temp_wanted;
+  map<pg_t, vector<int> > pg_temp_pending;
   void queue_want_pg_temp(pg_t pgid, vector<int>& want);
-  void remove_want_pg_temp(pg_t pgid) {
-    Mutex::Locker l(pg_temp_lock);
-    pg_temp_wanted.erase(pgid);
-  }
+  void remove_want_pg_temp(pg_t pgid);
+  void _sent_pg_temp();
+  void requeue_pg_temp();
   void send_pg_temp();
 
   void queue_for_peering(PG *pg);

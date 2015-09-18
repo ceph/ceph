@@ -742,7 +742,40 @@ pair<ConnectionRef,ConnectionRef> OSDService::get_con_osd_hb(int peer, epoch_t f
 void OSDService::queue_want_pg_temp(pg_t pgid, vector<int>& want)
 {
   Mutex::Locker l(pg_temp_lock);
-  pg_temp_wanted[pgid] = want;
+  map<pg_t,vector<int> >::iterator p = pg_temp_pending.find(pgid);
+  if (p == pg_temp_pending.end() ||
+      p->second != want) {
+    pg_temp_wanted[pgid] = want;
+  }
+}
+
+void OSDService::remove_want_pg_temp(pg_t pgid)
+{
+  Mutex::Locker l(pg_temp_lock);
+  pg_temp_wanted.erase(pgid);
+  pg_temp_pending.erase(pgid);
+}
+
+void OSDService::_sent_pg_temp()
+{
+  for (map<pg_t,vector<int> >::iterator p = pg_temp_wanted.begin();
+       p != pg_temp_wanted.end();
+       ++p)
+    pg_temp_pending[p->first] = p->second;
+  pg_temp_wanted.clear();
+}
+
+void OSDService::requeue_pg_temp()
+{
+  Mutex::Locker l(pg_temp_lock);
+  // wanted overrides pending.  note that remove_want_pg_temp
+  // clears the item out of both.
+  unsigned old_wanted = pg_temp_wanted.size();
+  unsigned old_pending = pg_temp_pending.size();
+  _sent_pg_temp();
+  pg_temp_wanted.swap(pg_temp_pending);
+  dout(10) << __func__ << " " << old_wanted << " + " << old_pending << " -> "
+	   << pg_temp_wanted.size() << dendl;
 }
 
 void OSDService::send_pg_temp()
@@ -754,6 +787,7 @@ void OSDService::send_pg_temp()
   MOSDPGTemp *m = new MOSDPGTemp(osdmap->get_epoch());
   m->pg_temp = pg_temp_wanted;
   monc->send_mon_message(m);
+  _sent_pg_temp();  
 }
 
 
@@ -4370,6 +4404,7 @@ void OSD::ms_handle_connect(Connection *con)
 
       // resend everything, it's a new session
       send_alive();
+      service.requeue_pg_temp();
       service.send_pg_temp();
       requeue_failures();
       send_failures();
