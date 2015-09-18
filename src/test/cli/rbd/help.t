@@ -30,6 +30,12 @@
       import-diff                 Import an incremental diff.
       info                        Show information about image size, striping,
                                   etc.
+      journal export              Export image journal.
+      journal import              Import image journal.
+      journal info                Show information about image journal.
+      journal inspect             Inspect image journal for structural errors.
+      journal reset               Reset image journal.
+      journal status              Show status of image journal.
       list (ls)                   List rbd images.
       lock add                    Take a lock on an image.
       lock list (lock ls)         Show locks held on an image.
@@ -469,6 +475,119 @@
     --snap arg            snapshot name
     --format arg          output format [plain, json, or xml]
     --pretty-format       pretty formatting (json and xml)
+  
+  rbd help journal export
+  usage: rbd journal export [--pool <pool>] [--image <image>] 
+                            [--journal <journal>] [--path <path>] [--verbose] 
+                            [--no-error] 
+                            <source-journal-spec> <path-name> 
+  
+  Export image journal.
+  
+  Positional arguments
+    <source-journal-spec>  source journal specification
+                           (example: [<pool-name>/]<journal-name>)
+    <path-name>            export file (or '-' for stdout)
+  
+  Optional arguments
+    -p [ --pool ] arg      source pool name
+    --image arg            source image name
+    --journal arg          source journal name
+    --path arg             export file (or '-' for stdout)
+    --verbose              be verbose
+    --no-error             continue after error
+  
+  rbd help journal import
+  usage: rbd journal import [--path <path>] [--dest-pool <dest-pool>] 
+                            [--dest <dest>] [--dest-journal <dest-journal>] 
+                            [--verbose] [--no-error] 
+                            <path-name> <dest-journal-spec> 
+  
+  Import image journal.
+  
+  Positional arguments
+    <path-name>          import file (or '-' for stdin)
+    <dest-journal-spec>  destination journal specification
+                         (example: [<pool-name>/]<journal-name>)
+  
+  Optional arguments
+    --path arg           import file (or '-' for stdin)
+    --dest-pool arg      destination pool name
+    --dest arg           destination image name
+    --dest-journal arg   destination journal name
+    --verbose            be verbose
+    --no-error           continue after error
+  
+  rbd help journal info
+  usage: rbd journal info [--pool <pool>] [--image <image>] 
+                          [--journal <journal>] [--format <format>] 
+                          [--pretty-format] 
+                          <journal-spec> 
+  
+  Show information about image journal.
+  
+  Positional arguments
+    <journal-spec>       journal specification
+                         (example: [<pool-name>/]<journal-name>)
+  
+  Optional arguments
+    -p [ --pool ] arg    pool name
+    --image arg          image name
+    --journal arg        journal name
+    --format arg         output format [plain, json, or xml]
+    --pretty-format      pretty formatting (json and xml)
+  
+  rbd help journal inspect
+  usage: rbd journal inspect [--pool <pool>] [--image <image>] 
+                             [--journal <journal>] [--verbose] 
+                             <journal-spec> 
+  
+  Inspect image journal for structural errors.
+  
+  Positional arguments
+    <journal-spec>       journal specification
+                         (example: [<pool-name>/]<journal-name>)
+  
+  Optional arguments
+    -p [ --pool ] arg    pool name
+    --image arg          image name
+    --journal arg        journal name
+    --verbose            be verbose
+  
+  rbd help journal reset
+  usage: rbd journal reset [--pool <pool>] [--image <image>] 
+                           [--journal <journal>] 
+                           <journal-spec> 
+  
+  Reset image journal.
+  
+  Positional arguments
+    <journal-spec>       journal specification
+                         (example: [<pool-name>/]<journal-name>)
+  
+  Optional arguments
+    -p [ --pool ] arg    pool name
+    --image arg          image name
+    --journal arg        journal name
+  
+  rbd help journal status
+  usage: rbd journal status [--pool <pool>] [--image <image>] 
+                            [--journal <journal>] [--format <format>] 
+                            [--pretty-format] 
+                            <journal-spec> 
+  
+  Show status of image journal.
+  
+  Positional arguments
+    <journal-spec>       journal specification
+                         (example: [<pool-name>/]<journal-name>)
+  
+  Optional arguments
+    -p [ --pool ] arg    pool name
+    --image arg          image name
+    --journal arg        journal name
+    --format arg         output format [plain, json, or xml]
+    --pretty-format      pretty formatting (json and xml)
   
   rbd help list
   usage: rbd list [--long] [--pool <pool>] [--format <format>] [--pretty-format] 
