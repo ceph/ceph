@@ -637,7 +637,7 @@ mv $RPM_BUILD_ROOT/sbin/mount.fuse.ceph $RPM_BUILD_ROOT/usr/sbin/mount.fuse.ceph
 
 #set up placeholder directories
 mkdir -p $RPM_BUILD_ROOT%{_sysconfdir}/ceph
-%if  (! 0%{?suse_version}) || ( 0%{?suse_version} && (! 0%{?_with_systemd}) )
+%if ! 0%{?_with_systemd}
 mkdir -p $RPM_BUILD_ROOT%{_localstatedir}/run/ceph
 %endif
 mkdir -p $RPM_BUILD_ROOT%{_localstatedir}/log/ceph
@@ -673,13 +673,13 @@ rm -rf $RPM_BUILD_ROOT
 %post
 /sbin/ldconfig
 %if 0%{?_with_systemd}
+  systemd-tmpfiles --create
   %if 0%{?suse_version}
     %service_add_post ceph.target
   %endif
 %else
   /sbin/chkconfig --add ceph
 %endif
-mkdir -p %{_localstatedir}/run/ceph/
 
 %preun
 %if 0%{?_with_systemd}
@@ -818,7 +818,9 @@ mkdir -p %{_localstatedir}/run/ceph/
 %attr(750,ceph,ceph) %dir %{_localstatedir}/lib/ceph/bootstrap-osd
 %attr(750,ceph,ceph) %dir %{_localstatedir}/lib/ceph/bootstrap-mds
 %attr(750,ceph,ceph) %dir %{_localstatedir}/lib/ceph/bootstrap-rgw
+%if ! 0%{?_with_systemd}
 %attr(770,ceph,ceph) %dir %{_localstatedir}/run/ceph
+%endif
 
 #################################################################################
 %files -n ceph-common
