@@ -203,36 +203,32 @@ class RGWBucketSyncStatusManager;
 class RGWBucketSyncCR;
 
 struct rgw_bucket_shard_sync_marker {
-  enum SyncState {
-    FullSync = 0,
-    IncrementalSync = 1,
-  };
-  uint16_t state;
-  string marker;
-  string next_step_marker;
+  string key;
+  string ver;
+  string incremental;
 
-  rgw_bucket_shard_sync_marker() : state(FullSync) {}
+  rgw_bucket_shard_sync_marker() {}
 
   void encode(bufferlist& bl) const {
     ENCODE_START(1, 1, bl);
-    ::encode(state, bl);
-    ::encode(marker, bl);
-    ::encode(next_step_marker, bl);
+    ::encode(key, bl);
+    ::encode(ver, bl);
+    ::encode(incremental, bl);
     ENCODE_FINISH(bl);
   }
 
   void decode(bufferlist::iterator& bl) {
      DECODE_START(1, bl);
-    ::decode(state, bl);
-    ::decode(marker, bl);
-    ::decode(next_step_marker, bl);
+    ::decode(key, bl);
+    ::decode(ver, bl);
+    ::decode(incremental, bl);
      DECODE_FINISH(bl);
   }
 
   void dump(Formatter *f) const {
-    encode_json("state", (int)state, f);
-    encode_json("marker", marker, f);
-    encode_json("next_step_marker", next_step_marker, f);
+    encode_json("key", key, f);
+    encode_json("ver", ver, f);
+    encode_json("incremental", incremental, f);
   }
 };
 WRITE_CLASS_ENCODER(rgw_bucket_shard_sync_marker)
