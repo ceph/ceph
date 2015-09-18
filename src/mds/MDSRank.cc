@@ -1632,12 +1632,14 @@ bool MDSRankDispatcher::handle_asok_command(
 {
   if (command == "dump_ops_in_flight" ||
              command == "ops") {
+    RWLock::RLocker l(op_tracker.lock);
     if (!op_tracker.tracking_enabled) {
       ss << "op_tracker tracking is not enabled";
     } else {
       op_tracker.dump_ops_in_flight(f);
     }
   } else if (command == "dump_historic_ops") {
+    RWLock::RLocker l(op_tracker.lock);
     if (!op_tracker.tracking_enabled) {
       ss << "op_tracker tracking is not enabled";
     } else {
