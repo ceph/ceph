@@ -24,8 +24,17 @@ bin_PROGRAMS += rados
 if WITH_RBD
 
 rbd_SOURCES = \
-	tools/rbd/rbd.cc
-rbd_LDADD = $(LIBKRBD) $(LIBRBD) $(LIBRADOS) $(CEPH_GLOBAL)
+	tools/rbd/rbd.cc \
+	tools/rbd/IndentStream.cc \
+	tools/rbd/OptionPrinter.cc \
+	tools/rbd/Shell.cc
+noinst_HEADERS += \
+	tools/rbd/IndentStream.h \
+	tools/rbd/OptionPrinter.h \
+	tools/rbd/Shell.h
+rbd_LDADD = \
+	$(LIBKRBD) $(LIBRBD) $(LIBRADOS) $(CEPH_GLOBAL) \
+	$(BOOST_PROGRAM_OPTIONS_LIBS)
 if LINUX
 bin_PROGRAMS += rbd
 endif # LINUX
