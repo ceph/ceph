@@ -4040,7 +4040,8 @@ int OSDMonitor::prepare_new_pool(string& name, uint64_t auid,
   CrushTester tester(newcrush, ss);
   r = tester.test_with_crushtool(g_conf->crushtool.c_str(),
 				 osdmap.get_max_osd(),
-				 g_conf->mon_lease);
+				 g_conf->mon_lease,
+				 crush_ruleset);
   if (r)
     return r;
   unsigned size, min_size;
