@@ -4899,7 +4899,9 @@ public:
                                                                        progress_cb(_progress_cb),
                                                                        progress_data(_progress_data) {}
   int handle_data(bufferlist& bl, off_t ofs, off_t len) {
-    progress_cb(ofs, progress_data);
+    if (progress_cb) {
+      progress_cb(ofs, progress_data);
+    }
 
     bool again;
 
@@ -5051,7 +5053,7 @@ int RGWRados::fetch_remote_obj(RGWObjectCtx& obj_ctx,
   append_rand_alpha(cct, tag, tag, 32);
 
   RGWPutObjProcessor_Atomic processor(obj_ctx,
-                                      dest_bucket_info, dest_obj.bucket, dest_obj.get_object(),
+                                      dest_bucket_info, dest_obj.bucket, dest_obj.get_orig_obj(),
                                       cct->_conf->rgw_obj_stripe_size, tag, dest_bucket_info.versioning_enabled());
   int ret = processor.prepare(this, NULL);
   if (ret < 0) {

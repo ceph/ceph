@@ -2513,6 +2513,10 @@ public:
   int check_quota(const string& bucket_owner, rgw_bucket& bucket,
                   RGWQuotaInfo& user_quota, RGWQuotaInfo& bucket_quota, uint64_t obj_size);
 
+  uint64_t instance_id();
+  const string& zone_id() {
+    return zone.get_id();
+  }
   string unique_id(uint64_t unique_num) {
     char buf[32];
     snprintf(buf, sizeof(buf), ".%llu.%llu", (unsigned long long)instance_id(), (unsigned long long)unique_num);
@@ -2629,7 +2633,6 @@ public:
   int pool_iterate(RGWPoolIterCtx& ctx, uint32_t num, vector<RGWObjEnt>& objs,
                    bool *is_truncated, RGWAccessListFilter *filter);
 
-  uint64_t instance_id();
   uint64_t next_bucket_id();
 };
 

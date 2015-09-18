@@ -346,4 +346,67 @@ void RGWOmapAppend::finish() {
   set_sleeping(false);
 }
 
+int RGWAsyncGetBucketInstanceInfo::_send_request()
+{
+  string id = bucket_name + ":" + bucket_id;
+  RGWObjectCtx obj_ctx(store);
+
+  int r = store->get_bucket_instance_info(obj_ctx, id, *bucket_info, NULL, NULL);
+  if (r < 0) {
+    ldout(store->ctx(), 0) << "ERROR: failed to get bucket instance info for bucket id=" << id << dendl;
+    return r;
+  }
+
+  return 0;
+}
+
+int RGWAsyncFetchRemoteObj::_send_request()
+{
+  RGWObjectCtx obj_ctx(store);
+
+  string user_id;
+  char buf[16];
+  snprintf(buf, sizeof(buf), ".%lld", (long long)store->instance_id());
+  string client_id = store->zone_id() + buf;
+  string op_id = store->unique_id(store->get_new_req_id());
+  map<string, bufferlist> attrs;
+
+  rgw_obj src_obj(bucket_info.bucket, obj_name);
+  src_obj.set_instance(obj_version_id);
+
+  rgw_obj dest_obj(src_obj);
+
+  int r = store->fetch_remote_obj(obj_ctx,
+                       user_id,
+                       client_id,
+                       op_id,
+                       NULL, /* req_info */
+                       source_zone,
+                       dest_obj,
+                       src_obj,
+                       bucket_info, /* dest */
+                       bucket_info, /* source */
+                       NULL, /* time_t *src_mtime, */
+                       NULL, /* time_t *mtime, */
+                       NULL, /* const time_t *mod_ptr, */
+                       NULL, /* const time_t *unmod_ptr, */
+                       NULL, /* const char *if_match, */
+                       NULL, /* const char *if_nomatch, */
+                       RGWRados::ATTRSMOD_NONE,
+                       copy_if_newer,
+                       attrs,
+                       RGW_OBJ_CATEGORY_MAIN,
+                       versioned_epoch,
+                       NULL, /* string *version_id, */
+                       NULL, /* string *ptag, */
+                       NULL, /* string *petag, */
+                       NULL, /* struct rgw_err *err, */
+                       NULL, /* void (*progress_cb)(off_t, void *), */
+                       NULL); /* void *progress_data*); */
+
+  if (r < 0) {
+    ldout(store->ctx(), 0) << "store->fetch_remote_obj() returned r=" << r << dendl;
+  }
+  return r;
+}
 

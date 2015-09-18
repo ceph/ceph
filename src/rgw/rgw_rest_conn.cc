@@ -115,7 +115,9 @@ int RGWRESTConn::get_obj(const string& uid, req_info *info /* optional */, rgw_o
     return ret;
 
   list<pair<string, string> > params;
-  params.push_back(pair<string, string>(RGW_SYS_PARAM_PREFIX "uid", uid));
+  if (!uid.empty()) {
+    params.push_back(pair<string, string>(RGW_SYS_PARAM_PREFIX "uid", uid));
+  }
   params.push_back(pair<string, string>(RGW_SYS_PARAM_PREFIX "region", zone_group));
   if (prepend_metadata) {
     params.push_back(pair<string, string>(RGW_SYS_PARAM_PREFIX "prepend-metadata", zone_group));
