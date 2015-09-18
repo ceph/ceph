@@ -6,7 +6,7 @@
 
 You can configure Ceph OSD Daemons in the Ceph configuration file, but Ceph OSD
 Daemons can use the default values and a very minimal configuration. A minimal
-Ceph OSD Daemon configuration sets ``osd journal size`` and ``osd host``,  and
+Ceph OSD Daemon configuration sets ``osd journal size`` and ``host``,  and
 uses default values for nearly everything else.
 
 Ceph OSD Daemons are numerically identified in incremental fashion, beginning
@@ -19,7 +19,7 @@ with ``0`` using the following convention. ::
 In a configuration file, you may specify settings for all Ceph OSD Daemons in
 the cluster by adding configuration settings to the ``[osd]`` section of your
 configuration file. To add settings directly to a specific Ceph OSD Daemon
-(e.g., ``osd host``), enter  it in an OSD-specific section of your configuration
+(e.g., ``host``), enter  it in an OSD-specific section of your configuration
 file. For example:
 
 .. code-block:: ini
@@ -28,10 +28,10 @@ file. For example:
 		osd journal size = 1024
 	
 	[osd.0]
-		osd host = osd-host-a
+		host = osd-host-a
 		
 	[osd.1]
-		osd host = osd-host-b
+		host = osd-host-b
 
 
 .. index:: OSD; config settings

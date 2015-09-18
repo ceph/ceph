@@ -6479,8 +6479,10 @@ void OSD::handle_osd_map(MOSDMap *m)
   else if (do_restart)
     start_boot();
 
+  osd_lock.Unlock();
   if (do_shutdown)
     shutdown();
+  osd_lock.Lock();
 
   m->put();
 }
@@ -8824,7 +8826,7 @@ void OSD::set_pool_last_map_marked_full(OSDMap *o, epoch_t &e)
 {
   map<int64_t, epoch_t> &pool_last_map_marked_full = superblock.pool_last_map_marked_full;
   for (map<int64_t, pg_pool_t>::const_iterator it = o->get_pools().begin();
-       it != o->get_pools().end(); it++) {
+       it != o->get_pools().end(); ++it) {
     bool exist = pool_last_map_marked_full.count(it->first);
     if (it->second.has_flag(pg_pool_t::FLAG_FULL) && !exist)
       pool_last_map_marked_full[it->first] = e;

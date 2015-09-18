@@ -396,7 +396,7 @@ TEST_F(TestInternal, MetadatConfig) {
   map<string, bufferlist> pairs;
   r = librbd::metadata_list(ictx, "", 0, &pairs);
   ASSERT_EQ(0, r);
-  ASSERT_EQ(5, pairs.size());
+  ASSERT_EQ(5u, pairs.size());
   r = librbd::metadata_remove(ictx, "abcd");
   ASSERT_EQ(0, r);
   r = librbd::metadata_remove(ictx, "xyz");
@@ -404,7 +404,7 @@ TEST_F(TestInternal, MetadatConfig) {
   pairs.clear();
   r = librbd::metadata_list(ictx, "", 0, &pairs);
   ASSERT_EQ(0, r);
-  ASSERT_EQ(3, pairs.size());
+  ASSERT_EQ(3u, pairs.size());
   string val;
   r = librbd::metadata_get(ictx, it->first, &val);
   ASSERT_EQ(0, r);
