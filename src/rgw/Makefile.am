@@ -9,6 +9,7 @@ DENCODER_DEPS += -lcurl -lexpat \
 	libcls_log_client.a \
 	libcls_refcount_client.la \
 	libcls_user_client.a \
+	libcls_timeindex_client.a \
 	libcls_statelog_client.a
 
 if WITH_RADOS
