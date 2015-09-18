@@ -4010,8 +4010,15 @@ void OSD::tick()
 
     if (reset)
       monc->reopen_session();
-    else if (report)
-      do_mon_report();
+    else if (report) {
+      last_mon_report = now;
+
+      // do any pending reports
+      send_alive();
+      service.send_pg_temp();
+      send_failures();
+      send_pg_stats(now);
+    }
 
     map_lock.put_read();
   }
@@ -4346,20 +4353,6 @@ void OSD::RemoveWQ::_process(
   item.second->finish_deleting();
 }
 // =========================================
-
-void OSD::do_mon_report()
-{
-  dout(7) << "do_mon_report" << dendl;
-
-  utime_t now(ceph_clock_now(cct));
-  last_mon_report = now;
-
-  // do any pending reports
-  send_alive();
-  service.send_pg_temp();
-  send_failures();
-  send_pg_stats(now);
-}
 
 void OSD::ms_handle_connect(Connection *con)
 {

@@ -1973,8 +1973,6 @@ protected:
   float stats_ack_timeout;
   int outstanding_pg_stats; // how many stat updates haven't been acked yet
 
-  void do_mon_report();
-
   // -- boot --
   void start_boot();
   void _maybe_boot(epoch_t oldest, epoch_t newest);
