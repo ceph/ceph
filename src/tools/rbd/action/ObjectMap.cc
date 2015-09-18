@@ -15,6 +15,18 @@ namespace object_map {
 namespace at = argument_types;
 namespace po = boost::program_options;
 
+static int do_object_map_rebuild(librbd::Image &image, bool no_progress)
+{
+  utils::ProgressContext pc("Object Map Rebuild", no_progress);
+  int r = image.rebuild_object_map(pc);
+  if (r < 0) {
+    pc.fail();
+    return r;
+  }
+  pc.finish();
+  return 0;
+}
+
 void get_arguments(po::options_description *positional,
                    po::options_description *options) {
   at::add_image_or_snap_spec_options(positional, options,
@@ -43,6 +55,12 @@ int execute(const po::variables_map &vm) {
     return r;
   }
 
+  r = do_object_map_rebuild(image, vm[at::NO_PROGRESS].as<bool>());
+  if (r < 0) {
+    std::cerr << "rbd: rebuilding object map failed: " << cpp_strerror(r)
+              << std::endl;
+    return r;
+  }
   return 0;
 }
 
