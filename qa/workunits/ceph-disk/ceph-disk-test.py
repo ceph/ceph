@@ -134,10 +134,8 @@ class CephDisk:
         except:
             pass
         self.sh("""
-        ceph osd down {id}
-        ceph osd rm {id}
-        ceph auth del osd.{id}
-        ceph osd crush rm osd.{id}
+        ceph-disk deactivate --deactivate-by-id {id}
+        ceph-disk destroy --destroy-by-id {id}
         """.format(id=id))
 
     @staticmethod
