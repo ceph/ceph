@@ -2,6 +2,7 @@
 // vim: ts=8 sw=2 smarttab
 
 #include "tools/rbd/Shell.h"
+#include "tools/rbd/ArgumentTypes.h"
 #include "tools/rbd/IndentStream.h"
 #include "tools/rbd/OptionPrinter.h"
 #include "common/config.h"
@@ -13,6 +14,7 @@
 
 namespace rbd {
 
+namespace at = argument_types;
 namespace po = boost::program_options;
 
 namespace {
@@ -92,16 +94,16 @@ int Shell::execute(int arg_count, const char **arg_values) {
     // its associated positional arguments
     po::options_description arguments;
     arguments.add_options()
-      ("positional-command-spec",
+      (at::POSITIONAL_COMMAND_SPEC.c_str(),
        po::value<std::vector<std::string> >()->required(), "")
-      ("positional-arguments",
+      (at::POSITIONAL_ARGUMENTS.c_str(),
        po::value<std::vector<std::string> >(), "");
 
     po::positional_options_description positional_options;
-    positional_options.add("positional-command-spec",
+    positional_options.add(at::POSITIONAL_COMMAND_SPEC.c_str(),
                            matching_spec->size());
     if (command_spec.size() > matching_spec->size()) {
-      positional_options.add("positional-arguments", -1);
+      positional_options.add(at::POSITIONAL_ARGUMENTS.c_str(), -1);
     }
 
     po::options_description global;
@@ -118,15 +120,17 @@ int Shell::execute(int arg_count, const char **arg_values) {
       .allow_unregistered()
       .run(), vm);
 
-    if (vm["positional-command-spec"].as<std::vector<std::string> >() !=
+    if (vm[at::POSITIONAL_COMMAND_SPEC].as<std::vector<std::string> >() !=
           *matching_spec) {
       std::cerr << "rbd: failed to parse command" << std::endl;
       return EXIT_FAILURE;
     }
 
-    po::notify(vm);
-
     int r = (*action->execute)(vm);
+    if (r == -EINVAL) {
+      std::cout << std::endl;
+      print_action_help(app_name, action);
+    }
     if (r != 0) {
       return std::abs(r);
     }
@@ -157,6 +161,7 @@ void Shell::get_command_spec(int arg_count, const char **arg_values,
           (arg[1] == '-' || s_switch_arguments.count(arg.substr(1, 1)) == 0) &&
           (arg[1] != '-' ||
              s_switch_arguments.count(arg.substr(2, std::string::npos)) == 0) &&
+          at::SWITCH_ARGUMENTS.count(arg.substr(2, std::string::npos)) == 0 &&
           arg.find('=') == std::string::npos) {
         ++i;
       }
@@ -279,6 +284,10 @@ void Shell::print_action_help(const std::string &app_name, Action *action) {
 
   std::cout << std::endl;
   option_printer.print_detailed(std::cout);
+
+  if (!action->help.empty()) {
+    std::cout << action->help << std::endl;
+  }
 }
 
 void Shell::print_unknown_action(const std::string &app_name,

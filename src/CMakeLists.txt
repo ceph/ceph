@@ -857,15 +857,44 @@ if(${WITH_RBD})
   install(TARGETS librados librbd DESTINATION lib)
   set(rbd_srcs
     tools/rbd/rbd.cc
+    tools/rbd/ArgumentTypes.cc
     tools/rbd/IndentStream.cc
     tools/rbd/OptionPrinter.cc
     tools/rbd/Shell.cc
+    tools/rbd/Utils.cc
+    tools/rbd/action/BenchWrite.cc
+    tools/rbd/action/Children.cc
+    tools/rbd/action/Clone.cc
+    tools/rbd/action/Copy.cc
+    tools/rbd/action/Create.cc
+    tools/rbd/action/Diff.cc
+    tools/rbd/action/DiskUsage.cc
+    tools/rbd/action/Export.cc
+    tools/rbd/action/ExportDiff.cc
+    tools/rbd/action/Feature.cc
+    tools/rbd/action/Flatten.cc
+    tools/rbd/action/ImageMeta.cc
+    tools/rbd/action/Import.cc
+    tools/rbd/action/ImportDiff.cc
+    tools/rbd/action/Info.cc
+    tools/rbd/action/Kernel.cc
+    tools/rbd/action/List.cc
+    tools/rbd/action/Lock.cc
+    tools/rbd/action/MergeDiff.cc
+    tools/rbd/action/ObjectMap.cc
+    tools/rbd/action/Remove.cc
+    tools/rbd/action/Rename.cc
+    tools/rbd/action/Resize.cc
+    tools/rbd/action/Snap.cc
+    tools/rbd/action/Status.cc
+    tools/rbd/action/Watch.cc
     common/TextTable.cc)
   add_executable(rbd ${rbd_srcs} $<TARGET_OBJECTS:common_util_obj>
     $<TARGET_OBJECTS:parse_secret_objs>
     $<TARGET_OBJECTS:heap_profiler_objs>)
   set_target_properties(rbd PROPERTIES OUTPUT_NAME rbd)
   target_link_libraries(rbd librbd librados global common keyutils udev
+    boost_regex boost_program_options
     ${BLKID_LIBRARIES} ${CMAKE_DL_LIBS} ${TCMALLOC_LIBS})
   install(TARGETS rbd DESTINATION bin)
   install(PROGRAMS ${CMAKE_SOURCE_DIR}/src/ceph-rbdnamer DESTINATION bin)
