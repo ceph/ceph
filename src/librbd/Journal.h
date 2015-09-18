@@ -46,6 +46,7 @@ public:
 		    double commit_age, uint8_t order, uint8_t splay_width,
 		    const std::string &object_pool);
   static int remove(librados::IoCtx &io_ctx, const std::string &image_id);
+  static int reset(librados::IoCtx &io_ctx, const std::string &image_id);
 
   bool is_journal_ready() const;
   bool is_journal_replaying() const;

@@ -19,6 +19,8 @@ run_cli_tests() {
     $CEPH_SRC/../qa/workunits/rbd/import_export.sh
     recreate_pool rbd
     $CEPH_SRC/../qa/workunits/rbd/copy.sh
+    recreate_pool rbd
+    $CEPH_SRC/../qa/workunits/rbd/journal.sh
 }
 
 run_api_tests() {
