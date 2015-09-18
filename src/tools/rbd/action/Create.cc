@@ -15,6 +15,23 @@ namespace create {
 namespace at = argument_types;
 namespace po = boost::program_options;
 
+static int do_create(librbd::RBD &rbd, librados::IoCtx& io_ctx,
+                     const char *imgname, uint64_t size, int *order,
+                     int format, uint64_t features,
+                     uint64_t stripe_unit, uint64_t stripe_count) {
+  int r;
+  if (format == 1) {
+    r = rbd.create(io_ctx, imgname, size, order);
+  } else {
+    r = rbd.create3(io_ctx, imgname, size, features, order,
+                    stripe_unit, stripe_count);
+  }
+  if (r < 0) {
+    return r;
+  }
+  return 0;
+}
+
 void get_arguments(po::options_description *positional,
                    po::options_description *options) {
   at::add_image_spec_options(positional, options, at::ARGUMENT_MODIFIER_NONE);
@@ -58,6 +75,13 @@ int execute(const po::variables_map &vm) {
     return r;
   }
 
+  librbd::RBD rbd;
+  r = do_create(rbd, io_ctx, image_name.c_str(), size, &order, format, features,
+                stripe_unit, stripe_count);
+  if (r < 0) {
+    std::cerr << "rbd: create error: " << cpp_strerror(r) << std::endl;
+    return r;
+  }
   return 0;
 }
 

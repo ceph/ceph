@@ -6,6 +6,7 @@
 #include "tools/rbd/Utils.h"
 #include "common/errno.h"
 #include "common/Formatter.h"
+#include "common/TextTable.h"
 #include <iostream>
 #include <boost/program_options.hpp>
 
@@ -15,6 +16,64 @@ namespace diff {
 
 namespace at = argument_types;
 namespace po = boost::program_options;
+
+struct output_method {
+  output_method() : f(NULL), t(NULL), empty(true) {}
+  Formatter *f;
+  TextTable *t;
+  bool empty;
+};
+
+static int diff_cb(uint64_t ofs, size_t len, int exists, void *arg)
+{
+  output_method *om = static_cast<output_method *>(arg);
+  om->empty = false;
+  if (om->f) {
+    om->f->open_object_section("extent");
+    om->f->dump_unsigned("offset", ofs);
+    om->f->dump_unsigned("length", len);
+    om->f->dump_string("exists", exists ? "true" : "false");
+    om->f->close_section();
+  } else {
+    assert(om->t);
+    *(om->t) << ofs << len << (exists ? "data" : "zero") << TextTable::endrow;
+  }
+  return 0;
+}
+
+static int do_diff(librbd::Image& image, const char *fromsnapname,
+                   bool whole_object, Formatter *f)
+{
+  int r;
+  librbd::image_info_t info;
+
+  r = image.stat(info, sizeof(info));
+  if (r < 0)
+    return r;
+
+  output_method om;
+  if (f) {
+    om.f = f;
+    f->open_array_section("extents");
+  } else {
+    om.t = new TextTable();
+    om.t->define_column("Offset", TextTable::LEFT, TextTable::LEFT);
+    om.t->define_column("Length", TextTable::LEFT, TextTable::LEFT);
+    om.t->define_column("Type", TextTable::LEFT, TextTable::LEFT);
+  }
+
+  r = image.diff_iterate2(fromsnapname, 0, info.size, true, whole_object,
+                          diff_cb, &om);
+  if (f) {
+    f->close_section();
+    f->flush(std::cout);
+  } else {
+    if (!om.empty)
+      std::cout << *om.t;
+    delete om.t;
+  }
+  return r;
+}
 
 void get_arguments(po::options_description *positional,
                    po::options_description *options) {
@@ -61,6 +120,12 @@ int execute(const po::variables_map &vm) {
     return r;
   }
 
+  r = do_diff(image, from_snap_name.empty() ? nullptr : from_snap_name.c_str(),
+              diff_whole_object, formatter.get());
+  if (r < 0) {
+    std::cerr << "rbd: diff error: " << cpp_strerror(r) << std::endl;
+    return -r;
+  }
   return 0;
 }
 

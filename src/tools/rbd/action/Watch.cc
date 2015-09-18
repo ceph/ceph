@@ -4,6 +4,7 @@
 #include "tools/rbd/ArgumentTypes.h"
 #include "tools/rbd/Shell.h"
 #include "tools/rbd/Utils.h"
+#include "include/rbd_types.h"
 #include "common/errno.h"
 #include <iostream>
 #include <boost/program_options.hpp>
@@ -46,6 +47,54 @@ private:
   std::string m_header_oid;
 };
 
+static int do_watch(librados::IoCtx& pp, librbd::Image &image,
+                    const char *imgname)
+{
+  uint8_t old_format;
+  int r = image.old_format(&old_format);
+  if (r < 0) {
+    std::cerr << "failed to query format" << std::endl;
+    return r;
+  }
+
+  std::string header_oid;
+  if (old_format != 0) {
+    header_oid = std::string(imgname) + RBD_SUFFIX;
+  } else {
+    librbd::image_info_t info;
+    r = image.stat(info, sizeof(info));
+    if (r < 0) {
+      std::cerr << "failed to stat image" << std::endl;
+      return r;
+    }
+
+    char prefix[RBD_MAX_BLOCK_NAME_SIZE + 1];
+    strncpy(prefix, info.block_name_prefix, RBD_MAX_BLOCK_NAME_SIZE);
+    prefix[RBD_MAX_BLOCK_NAME_SIZE] = '\0';
+
+    std::string image_id(prefix + strlen(RBD_DATA_PREFIX));
+    header_oid = RBD_HEADER_PREFIX + image_id;
+  }
+
+  uint64_t cookie;
+  RbdWatchCtx ctx(pp, imgname, header_oid);
+  r = pp.watch2(header_oid, &cookie, &ctx);
+  if (r < 0) {
+    std::cerr << "rbd: watch failed" << std::endl;
+    return r;
+  }
+
+  std::cout << "press enter to exit..." << std::endl;
+  getchar();
+
+  r = pp.unwatch2(cookie);
+  if (r < 0) {
+    std::cerr << "rbd: unwatch failed" << std::endl;
+    return r;
+  }
+  return 0;
+}
+
 void get_arguments(po::options_description *positional,
                    po::options_description *options) {
   at::add_image_spec_options(positional, options, at::ARGUMENT_MODIFIER_NONE);
@@ -72,6 +121,11 @@ int execute(const po::variables_map &vm) {
     return r;
   }
 
+  r = do_watch(io_ctx, image, image_name.c_str());
+  if (r < 0) {
+    std::cerr << "rbd: watch failed: " << cpp_strerror(r) << std::endl;
+    return r;
+  }
   return 0;
 }
 

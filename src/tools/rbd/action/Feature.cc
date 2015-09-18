@@ -57,6 +57,12 @@ int execute(const po::variables_map &vm, bool enabled) {
     return r;
   }
 
+  r = image.update_features(boost::any_cast<uint64_t>(features_any), enabled);
+  if (r < 0) {
+    std::cerr << "rbd: failed to update image features: " << cpp_strerror(r)
+              << std::endl;
+    return r;
+  }
   return 0;
 }
 

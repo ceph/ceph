@@ -16,6 +16,37 @@ namespace children {
 namespace at = argument_types;
 namespace po = boost::program_options;
 
+int do_list_children(librbd::Image &image, Formatter *f)
+{
+  std::set<std::pair<std::string, std::string> > children;
+  int r;
+
+  r = image.list_children(&children);
+  if (r < 0)
+    return r;
+
+  if (f)
+    f->open_array_section("children");
+
+  for (auto &child_it : children) {
+    if (f) {
+      f->open_object_section("child");
+      f->dump_string("pool", child_it.first);
+      f->dump_string("image", child_it.second);
+      f->close_section();
+    } else {
+      std::cout << child_it.first << "/" << child_it.second << std::endl;
+    }
+  }
+
+  if (f) {
+    f->close_section();
+    f->flush(std::cout);
+  }
+
+  return 0;
+}
+
 void get_arguments(po::options_description *positional,
                    po::options_description *options) {
   at::add_snap_spec_options(positional, options, at::ARGUMENT_MODIFIER_NONE);
@@ -49,6 +80,12 @@ int execute(const po::variables_map &vm) {
     return r;
   }
 
+  r = do_list_children(image, formatter.get());
+  if (r < 0) {
+    std::cerr << "rbd: listing children failed: " << cpp_strerror(r)
+              << std::endl;
+    return r;
+  }
   return 0;
 }
 

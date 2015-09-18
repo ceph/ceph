@@ -6,6 +6,7 @@
 #include "tools/rbd/Utils.h"
 #include "common/errno.h"
 #include "common/Formatter.h"
+#include "common/TextTable.h"
 #include <iostream>
 #include <boost/program_options.hpp>
 
@@ -33,6 +34,88 @@ int get_key(const po::variables_map &vm, std::string *key) {
 }
 
 } // anonymous namespace
+
+static int do_metadata_list(librbd::Image& image, Formatter *f)
+{
+  std::map<std::string, bufferlist> pairs;
+  int r;
+  TextTable tbl;
+
+  r = image.metadata_list("", 0, &pairs);
+  if (r < 0) {
+    std::cerr << "failed to list metadata of image : " << cpp_strerror(r)
+              << std::endl;
+    return r;
+  }
+
+  if (f) {
+    f->open_object_section("metadatas");
+  } else {
+    tbl.define_column("Key", TextTable::LEFT, TextTable::LEFT);
+    tbl.define_column("Value", TextTable::LEFT, TextTable::LEFT);
+  }
+
+  if (!pairs.empty()) {
+    bool one = (pairs.size() == 1);
+
+    if (!f) {
+      std::cout << "There " << (one ? "is " : "are ") << pairs.size()
+           << " metadata" << (one ? "" : "s") << " on this image.\n";
+    }
+
+    for (std::map<std::string, bufferlist>::iterator it = pairs.begin();
+         it != pairs.end(); ++it) {
+      std::string val(it->second.c_str(), it->second.length());
+      if (f) {
+        f->dump_string(it->first.c_str(), val.c_str());
+      } else {
+        tbl << it->first << val.c_str() << TextTable::endrow;
+      }
+    }
+    if (!f)
+      std::cout << tbl;
+  }
+
+  if (f) {
+    f->close_section();
+    f->flush(std::cout);
+  }
+  return 0;
+}
+
+static int do_metadata_set(librbd::Image& image, const char *key,
+                          const char *value)
+{
+  int r = image.metadata_set(key, value);
+  if (r < 0) {
+    std::cerr << "failed to set metadata " << key << " of image : "
+              << cpp_strerror(r) << std::endl;
+  }
+  return r;
+}
+
+static int do_metadata_remove(librbd::Image& image, const char *key)
+{
+  int r = image.metadata_remove(key);
+  if (r < 0) {
+    std::cerr << "failed to remove metadata " << key << " of image : "
+              << cpp_strerror(r) << std::endl;
+  }
+  return r;
+}
+
+static int do_metadata_get(librbd::Image& image, const char *key)
+{
+  std::string s;
+  int r = image.metadata_get(key, &s);
+  if (r < 0) {
+    std::cerr << "failed to get metadata " << key << " of image : "
+              << cpp_strerror(r) << std::endl;
+    return r;
+  }
+  std::cout << s << std::endl;
+  return r;
+}
 
 void get_list_arguments(po::options_description *positional,
                         po::options_description *options) {
@@ -67,6 +150,12 @@ int execute_list(const po::variables_map &vm) {
     return r;
   }
 
+  r = do_metadata_list(image, formatter.get());
+  if (r < 0) {
+    std::cerr << "rbd: listing metadata failed: " << cpp_strerror(r)
+              << std::endl;
+    return r;
+  }
   return 0;
 }
 
@@ -103,6 +192,12 @@ int execute_get(const po::variables_map &vm) {
     return r;
   }
 
+  r = do_metadata_get(image, key.c_str());
+  if (r < 0) {
+    std::cerr << "rbd: getting metadata failed: " << cpp_strerror(r)
+              << std::endl;
+    return r;
+  }
   return 0;
 }
 
@@ -147,6 +242,12 @@ int execute_set(const po::variables_map &vm) {
     return r;
   }
 
+  r = do_metadata_set(image, key.c_str(), value.c_str());
+  if (r < 0) {
+    std::cerr << "rbd: setting metadata failed: " << cpp_strerror(r)
+              << std::endl;
+    return r;
+  }
   return 0;
 }
 
@@ -183,6 +284,12 @@ int execute_remove(const po::variables_map &vm) {
     return r;
   }
 
+  r = do_metadata_remove(image, key.c_str());
+  if (r < 0) {
+    std::cerr << "rbd: removing metadata failed: " << cpp_strerror(r)
+              << std::endl;
+    return r;
+  }
   return 0;
 }
 
