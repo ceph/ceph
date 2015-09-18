@@ -433,6 +433,12 @@ int main(int argc, const char **argv)
 	exit(EXIT_FAILURE);
       }
       tester.set_rule(x);
+    } else if (ceph_argparse_withint(args, i, &x, &err, "--ruleset", (char*)NULL)) {
+      if (!err.str().empty()) {
+	cerr << err.str() << std::endl;
+	exit(EXIT_FAILURE);
+      }
+      tester.set_ruleset(x);
     } else if (ceph_argparse_withint(args, i, &x, &err, "--batches", (char*)NULL)) {
       if (!err.str().empty()) {
 	cerr << err.str() << std::endl;
