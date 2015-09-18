@@ -3765,7 +3765,7 @@ void OSD::handle_osd_ping(MOSDPing *m)
 	}
 	if (failure_pending.count(from)) {
 	  dout(10) << "handle_osd_ping canceling in-flight failure report for osd." << from<< dendl;
-	  send_still_alive(curmap->get_epoch(), failure_pending[from]);
+	  send_still_alive(curmap->get_epoch(), failure_pending[from].second);
 	  failure_pending.erase(from);
 	}
       }
@@ -4371,6 +4371,7 @@ void OSD::ms_handle_connect(Connection *con)
       // resend everything, it's a new session
       send_alive();
       service.send_pg_temp();
+      requeue_failures();
       send_failures();
       send_pg_stats(now);
 
@@ -4640,6 +4641,22 @@ void OSD::send_alive()
   }
 }
 
+void OSD::requeue_failures()
+{
+  assert(osd_lock.is_locked());
+  Mutex::Locker l(heartbeat_lock);
+  unsigned old_queue = failure_queue.size();
+  unsigned old_pending = failure_pending.size();
+  for (map<int,pair<utime_t,entity_inst_t> >::iterator p =
+	 failure_pending.begin();
+       p != failure_pending.end();
+       ++p) {
+    failure_queue[p->first] = p->second.first;
+  }
+  dout(10) << __func__ << " " << old_queue << " + " << old_pending << " -> "
+	   << failure_queue.size() << dendl;
+}
+
 void OSD::send_failures()
 {
   assert(osd_lock.is_locked());
@@ -4651,7 +4668,7 @@ void OSD::send_failures()
     entity_inst_t i = osdmap->get_inst(osd);
     monc->send_mon_message(new MOSDFailure(monc->get_fsid(), i, failed_for,
 					   osdmap->get_epoch()));
-    failure_pending[osd] = i;
+    failure_pending[osd] = make_pair(failure_queue.begin()->second, i);
     failure_queue.erase(osd);
   }
 }

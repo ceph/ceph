@@ -1995,9 +1995,9 @@ protected:
 
   // -- failures --
   map<int,utime_t> failure_queue;
-  map<int,entity_inst_t> failure_pending;
+  map<int,pair<utime_t,entity_inst_t> > failure_pending;
 
-
+  void requeue_failures();
   void send_failures();
   void send_still_alive(epoch_t epoch, const entity_inst_t &i);
 
