@@ -1,4 +1,7 @@
 from mock import patch, DEFAULT, Mock
+import os
+import subprocess
+import unittest
 import argparse
 import pytest
 import ceph_disk
@@ -642,3 +645,514 @@ class TestCephDisk(object):
                        'ptype': 'unknown',
                        'type': 'other'}]
             assert expect == ceph_disk.list_devices(args)
+
+class TestCephDiskDeactivateAndDestroy(unittest.TestCase):
+
+    def setup_class(self):
+        ceph_disk.setup_logging(verbose=True, log_stdout=False)
+
+    def test_main_deactivate_by_id(self):
+        args = ceph_disk.parse_args(['deactivate', \
+                                     '--cluster', 'ceph', \
+                                     '--deactivate-by-id', '5566'])
+        mount_path = '/tmp'
+        with patch.multiple(
+                ceph_disk,
+                _check_osd_status=lambda ceph, osd_id: 3,
+                stop_daemon=lambda ceph, osd_id: True,
+                convert_osd_id=lambda ceph, osd_id: ['dev', mount_path],
+                _remove_osd_directory_files=lambda mount_path, ceph: True,
+                unmount=lambda path: True,
+                ):
+            ceph_disk.main_deactivate(args)
+            # clear the created file by unit test
+            os.remove(os.path.join(mount_path, 'deactive'))
+
+    def test_main_deactivate_osd_directory_non_exists_by_id(self):
+        args = ceph_disk.parse_args(['deactivate', \
+                                     '--cluster', 'ceph', \
+                                     '--deactivate-by-id', '5566'])
+        mount_path = '/tmp'
+        with patch.multiple(
+                ceph_disk,
+                _check_osd_status=lambda ceph, osd_id: 3,
+                stop_daemon=lambda ceph, osd_id: True,
+                convert_osd_id=lambda ceph, osd_id: ['dev', '/somewhere'],
+                _remove_osd_directory_files=lambda mount_path, ceph: True,
+                unmount=lambda path: True,
+                ):
+            self.assertRaises(IOError, ceph_disk.main_deactivate, args)
+            # clear the created file by unit test
+
+    def test_main_deactivate_non_exists_by_dev(self):
+        args = ceph_disk.parse_args(['deactivate', \
+                                     '--cluster', 'ceph', \
+                                     '/dev/Xda1'])
+        self.assertRaises(Exception, ceph_disk.main_deactivate, args)
+
+    def test_main_deactivate_non_mounted_by_dev(self):
+        args = ceph_disk.parse_args(['deactivate', \
+                                     '--cluster', 'ceph', \
+                                     '/dev/Xda1'])
+        patcher = patch('os.path.exists')
+        patch_path = patcher.start()
+        patch_path.side_effect = path_exists
+        with patch.multiple(
+                ceph_disk,
+                patch_path,
+                is_mounted=lambda dev:None,
+                ):
+            self.assertRaises(Exception, ceph_disk.main_deactivate, args)
+
+    def test_main_deactivate_osd_in_and_down_by_dev(self):
+        args = ceph_disk.parse_args(['deactivate', \
+                                     '--cluster', 'ceph', \
+                                     '/dev/Xda1'])
+        patcher = patch('os.path.exists')
+        patch_path = patcher.start()
+        patch_path.side_effect = path_exists
+        mount_path = '/mnt'
+        with patch.multiple(
+                ceph_disk,
+                patch_path,
+                is_mounted=lambda dev: mount_path,
+                get_oneliner=lambda mount_path, filen: 5566,
+                _check_osd_status=lambda ceph, status: 2,
+                ):
+            ceph_disk.main_deactivate(args)
+
+    def test_main_deactivate_osd_out_and_down_by_dev(self):
+        args = ceph_disk.parse_args(['deactivate', \
+                                     '--cluster', 'ceph', \
+                                     '/dev/Xda1'])
+        patcher = patch('os.path.exists')
+        patch_path = patcher.start()
+        patch_path.side_effect = path_exists
+        mount_path = '/mnt'
+        with patch.multiple(
+                ceph_disk,
+                patch_path,
+                is_mounted=lambda dev: mount_path,
+                get_oneliner=lambda mount_path, filen: 5566,
+                _check_osd_status=lambda ceph, osd_id: 0,
+                ):
+            ceph_disk.main_deactivate(args)
+
+    def test_main_deactivate_osd_out_and_up_by_dev(self):
+        args = ceph_disk.parse_args(['deactivate', \
+                                     '--cluster', 'ceph', \
+                                     '/dev/Xda1'])
+        patcher = patch('os.path.exists')
+        patch_path = patcher.start()
+        patch_path.side_effect = path_exists
+        ceph = 'ceph'
+        mount_path = '/tmp'
+        with patch.multiple(
+                ceph_disk,
+                patch_path,
+                is_mounted=lambda dev: mount_path,
+                get_oneliner=lambda mount_path, filen: 5566,
+                _check_osd_status=lambda ceph, osd_id: 1,
+                stop_daemon=lambda ceph, osd_id: True,
+                _remove_osd_directory_files=lambda mount_path, ceph: True,
+                unmount=lambda path: True,
+                ):
+            ceph_disk.main_deactivate(args)
+            # clear the created file by unit test
+            os.remove(os.path.join(mount_path, 'deactive'))
+
+    def test_main_deactivate_osd_in_and_up_by_dev(self):
+        args = ceph_disk.parse_args(['deactivate', \
+                                     '--cluster', 'ceph', \
+                                     '/dev/Xda1'])
+        patcher = patch('os.path.exists')
+        patch_path = patcher.start()
+        patch_path.side_effect = path_exists
+        ceph = 'ceph'
+        mount_path = '/tmp'
+        with patch.multiple(
+                ceph_disk,
+                patch_path,
+                is_mounted=lambda dev: mount_path,
+                get_oneliner=lambda mount_path, filen: 5566,
+                _check_osd_status=lambda ceph, osd_id: 3,
+                stop_daemon=lambda ceph, osd_id: True,
+                _remove_osd_directory_files=lambda mount_path, ceph: True,
+                unmount=lambda path: True,
+                ):
+            ceph_disk.main_deactivate(args)
+            # clear the created file by unit test
+            os.remove(os.path.join(mount_path, 'deactive'))
+
+    def test_mark_out_out(self):
+        dev = {
+            'cluster': 'ceph',
+            'osd_id': '5566',
+        }
+
+        def mark_osd_out_fail(osd_id):
+            raise ceph_disk.Error('Could not find osd.%s, is a vaild/exist osd id?' % osd_id)
+
+        with patch.multiple(
+                ceph_disk,
+                command=mark_osd_out_fail,
+                ):
+            self.assertRaises(Exception, ceph_disk._mark_osd_out, 'ceph', '5566')
+
+    def test_stop_daemon_fail(self):
+        dev = {
+            'cluster': 'ceph',
+            'osd_id': '5566',
+        }
+
+        def stop_daemon_fail():
+            raise Error('ceph osd stop failed')
+
+        with patch.multiple(
+                ceph_disk,
+                command_check_call=stop_daemon_fail,
+                ):
+            self.assertRaises(Exception, ceph_disk.stop_daemon, 'ceph', '5566')
+
+    def test_convert_osd_id_fail(self):
+        dev = {
+            'cluster': 'ceph',
+            'osd_id': '5566',
+            'mount_info': '[]',
+        }
+        self.assertRaises(Exception, ceph_disk.convert_osd_id, dev)
+
+    def test_remove_osd_directory_files(self):
+        cluster = 'ceph'
+        init_file = 'init'
+        with patch.multiple(
+                ceph_disk,
+                get_conf=lambda cluster, **kwargs: init_file,
+                ):
+            ceph_disk._remove_osd_directory_files('/somewhere', cluster)
+
+    def test_path_set_context(self):
+        path = '/somewhere'
+        with patch.multiple(
+                ceph_disk,
+                get_ceph_user=lambda **kwargs: 'ceph',
+                ):
+            ceph_disk.path_set_context(path)
+
+    def test_mount_dev_none(self):
+        dev = None
+        fs_type = 'ext4'
+        option = ''
+        self.assertRaises(Exception, ceph_disk.mount, dev, fs_type, option)
+
+    def test_mount_fstype_none(self):
+        dev = '/dev/Xda1'
+        fs_type = None
+        option = ''
+        self.assertRaises(Exception, ceph_disk.mount, dev, fs_type, option)
+
+    def test_mount_fail(self):
+        dev = '/dev/Xda1'
+        fstype = 'ext4'
+        options = ''
+        with patch('tempfile.mkdtemp', return_value='/mnt'):
+            self.assertRaises(Exception, ceph_disk.mount, dev, fstype, options)
+
+    def test_mount(self):
+        def create_temp_directory(*args, **kwargs):
+            return '/mnt'
+
+        dev = '/dev/Xda1'
+        fstype = 'ext4'
+        options = ''
+        patcher = patch('tempfile.mkdtemp')
+        create_tmpdir = patcher.start()
+        create_tmpdir.side_effect = create_temp_directory
+        with patch.multiple(
+                ceph_disk,
+                create_tmpdir,
+                command_check_call=lambda cmd: True,
+                ):
+            ceph_disk.mount(dev, fstype, options)
+
+    def test_unmount_fail(self):
+        path = '/somewhere'
+        self.assertRaises(Exception, ceph_disk.unmount, path)
+
+    def test_unmount(self):
+        def remove_directory_successfully(path):
+            return True
+
+        path = '/somewhere'
+        patcher = patch('os.rmdir')
+        rm_directory = patcher.start()
+        rm_directory.side_effect = remove_directory_successfully
+        with patch.multiple(
+                ceph_disk,
+                rm_directory,
+                command_check_call=lambda cmd: True,
+                ):
+            ceph_disk.unmount(path)
+
+    def test_main_destroy_without_zap_by_id(self):
+        args = ceph_disk.parse_args(['destroy', \
+                                     '--cluster', 'ceph', \
+                                     '--destroy-by-id', '5566'])
+        cluster = 'ceph'
+        osd_id = '5566'
+        with patch.multiple(
+                ceph_disk,
+                _check_osd_status=lambda cluster, osd_id: 0,
+                _remove_from_crush_map=lambda cluster, osd_id: True,
+                _delete_osd_auth_key=lambda cluster, osd_id: True,
+                _deallocate_osd_id=lambda cluster, osd_id: True,
+                ):
+            ceph_disk.main_destroy(args)
+
+    def test_main_destroy_without_zap_by_id(self):
+        args = ceph_disk.parse_args(['destroy', \
+                                     '--cluster', 'ceph', \
+                                     '--destroy-by-id', '5566'])
+        cluster = 'ceph'
+        osd_id = '5566'
+        with patch.multiple(
+                ceph_disk,
+                _check_osd_status=lambda cluster, osd_id: 0,
+                _remove_from_crush_map=lambda cluster, osd_id: True,
+                _delete_osd_auth_key=lambda cluster, osd_id: True,
+                _deallocate_osd_id=lambda cluster, osd_id: True,
+                ):
+            ceph_disk.main_destroy(args)
+
+    def test_main_destroy_with_zap_find_part_fail_by_id(self):
+        args = ceph_disk.parse_args(['destroy', \
+                                     '--cluster', 'ceph', \
+                                     '--zap', \
+                                     '--destroy-by-id', '5566'])
+        cluster = 'ceph'
+        osd_id = '5566'
+        disk = "Xda"
+        partition = "Xda1"
+        with patch.multiple(
+                ceph_disk,
+                _check_osd_status=lambda cluster, osd_id: 0,
+                _remove_from_crush_map=lambda cluster, osd_id: True,
+                _delete_osd_auth_key=lambda cluster, osd_id: True,
+                _deallocate_osd_id=lambda cluster, osd_id: True,
+                list_all_partitions=lambda names: { disk: [partition] },
+                split_dev_base_partnum=lambda names: (disk, 1)
+                ):
+            self.assertRaises(Exception, ceph_disk.main_destroy, args)
+
+    def test_main_destroy_with_zap_by_id(self):
+        args = ceph_disk.parse_args(['destroy', \
+                                     '--cluster', 'ceph', \
+                                     '--zap', \
+                                     '--destroy-by-id', '5566'])
+        cluster = 'ceph'
+        osd_id = '5566'
+        disk = 'Xda'
+        partition = 'Xda1'
+        fstype = 'ext4'
+        with patch.multiple(
+                ceph_disk,
+                _check_osd_status=lambda cluster, osd_id: 0,
+                _remove_from_crush_map=lambda cluster, osd_id: True,
+                _delete_osd_auth_key=lambda cluster, osd_id: True,
+                _deallocate_osd_id=lambda cluster, osd_id: True,
+                list_all_partitions=lambda names: { disk: [partition] },
+                split_dev_base_partnum=lambda names: (disk, 1),
+                get_dev_fs=lambda dev:fstype,
+                mount=lambda dev, fstype, options: '/somewhere',
+                unmount=lambda path: True,
+                get_oneliner=lambda tpath, whoami: osd_id,
+                zap=lambda dev: True
+                ):
+            ceph_disk.main_destroy(args)
+
+    def test_main_destroy_fs_type_error_by_dev(self):
+        args = ceph_disk.parse_args(['destroy', \
+                                     '--cluster', 'ceph', \
+                                     '/dev/Xda1'])
+        patcher = patch('os.path.exists')
+        patch_path = patcher.start()
+        patch_path.side_effect = path_exists
+        with patch.multiple(
+                ceph_disk,
+                patch_path,
+                get_dev_fs=lambda dev:None,
+                ):
+            self.assertRaises(Exception, ceph_disk.main_destroy, args)
+
+    def test_main_destroy_mount_error_by_dev(self):
+        args = ceph_disk.parse_args(['destroy', \
+                                     '--cluster', 'ceph', \
+                                     '/dev/Xda1'])
+        fstype = 'ext4'
+        patcher = patch('os.path.exists')
+        patch_path = patcher.start()
+        patch_path.side_effect = path_exists
+        with patch.multiple(
+                ceph_disk,
+                patch_path,
+                get_dev_fs=lambda dev:fstype,
+                ):
+            self.assertRaises(Exception, ceph_disk.main_destroy, args)
+
+    def test_main_destroy_with_zap_failure_by_dev(self):
+        args = ceph_disk.parse_args(['destroy', \
+                                     '--cluster', 'ceph', \
+                                     '--zap', \
+                                     '/dev/Xda1'])
+        dev = '/dev/Xda1'
+        base_dev = '/dev/Xda'
+        cluster = 'ceph'
+        fstype = 'ext4'
+        tpath = 'mnt'
+        osd_id = '5566'
+        patcher = patch('os.path.exists')
+        patch_path = patcher.start()
+        patch_path.side_effect = path_exists
+        with patch.multiple(
+                ceph_disk,
+                patch_path,
+                get_dev_fs=lambda dev:fstype,
+                mount=lambda dev, fstype, options:tpath,
+                get_oneliner=lambda mount_path, filen: osd_id,
+                unmount=lambda path:True,
+                _check_osd_status=lambda cluster, osd_id: 0,
+                _remove_from_crush_map=lambda cluster, osd_id: True,
+                _delete_osd_auth_key=lambda cluster, osd_id: True,
+                _deallocate_osd_id=lambda cluster, osd_id: True,
+                get_partition_base=lambda dev: base_dev,
+                ):
+            self.assertRaises(Exception, ceph_disk.main_destroy, args)
+
+    def test_main_destroy_with_zap_by_dev(self):
+        args = ceph_disk.parse_args(['destroy', \
+                                     '--cluster', 'ceph', \
+                                     '--zap', \
+                                     '/dev/Xda1'])
+        dev = '/dev/Xda1'
+        base_dev = '/dev/Xda'
+        cluster = 'ceph'
+        fstype = 'ext4'
+        tpath = 'mnt'
+        osd_id = '5566'
+        patcher = patch('os.path.exists')
+        patch_path = patcher.start()
+        patch_path.side_effect = path_exists
+        with patch.multiple(
+                ceph_disk,
+                patch_path,
+                get_dev_fs=lambda dev:fstype,
+                mount=lambda dev, fstype, options:tpath,
+                get_oneliner=lambda mount_path, filen: osd_id,
+                unmount=lambda path:True,
+                _check_osd_status=lambda cluster, osd_id: 0,
+                _remove_from_crush_map=lambda cluster, osd_id: True,
+                _delete_osd_auth_key=lambda cluster, osd_id: True,
+                _deallocate_osd_id=lambda cluster, osd_id: True,
+                get_partition_base=lambda dev: base_dev,
+                zap=lambda base_dev: True
+                ):
+            ceph_disk.main_destroy(args)
+
+    def test_main_destroy_without_zap_by_dev(self):
+        args = ceph_disk.parse_args(['destroy', \
+                                     '--cluster', 'ceph', \
+                                     '/dev/Xda1'])
+        cluster = 'ceph'
+        fstype = 'ext4'
+        tpath = 'mnt'
+        osd_id = '5566'
+        patcher = patch('os.path.exists')
+        patch_path = patcher.start()
+        patch_path.side_effect = path_exists
+        with patch.multiple(
+                ceph_disk,
+                patch_path,
+                get_dev_fs=lambda dev:fstype,
+                mount=lambda dev, fstype, options:tpath,
+                get_oneliner=lambda mount_path, filen: osd_id,
+                unmount=lambda path:True,
+                _check_osd_status=lambda cluster, osd_id: 0,
+                _remove_from_crush_map=lambda cluster, osd_id: True,
+                _delete_osd_auth_key=lambda cluster, osd_id: True,
+                _deallocate_osd_id=lambda cluster, osd_id: True,
+                ):
+            ceph_disk.main_destroy(args)
+
+    def test_main_destroy_status_incorrect_by_dev(self):
+        args = ceph_disk.parse_args(['destroy', \
+                                     '--cluster', 'ceph', \
+                                     '/dev/Xda1'])
+        cluster = 'ceph'
+        fstype = 'ext4'
+        tpath = 'mnt'
+        osd_id = '5566'
+        patcher = patch('os.path.exists')
+        patch_path = patcher.start()
+        patch_path.side_effect = path_exists
+        with patch.multiple(
+                ceph_disk,
+                patch_path,
+                get_dev_fs=lambda dev:fstype,
+                mount=lambda dev, fstype, options:tpath,
+                get_oneliner=lambda mount_path, filen: osd_id,
+                unmount=lambda path:True,
+                _check_osd_status=lambda cluster, osd_id: 3,
+                ):
+            self.assertRaises(Exception, ceph_disk.main_destroy, args)
+
+    def test_main_destroy_non_exist_by_dev(self):
+        args = ceph_disk.parse_args(['destroy', \
+                                     '--cluster', 'ceph', \
+                                     '/dev/Xda1'])
+        self.assertRaises(Exception, ceph_disk.main_destroy, args)
+
+    def test_remove_from_crush_map_fail(self):
+        cluster = 'ceph'
+        osd_id = '5566'
+        with patch.multiple(
+                ceph_disk,
+                command=raise_command_error
+                ):
+            self.assertRaises(Exception, ceph_disk._remove_from_crush_map, cluster, osd_id)
+
+    def test_delete_osd_auth_key_fail(self):
+        cluster = 'ceph'
+        osd_id = '5566'
+        with patch.multiple(
+                ceph_disk,
+                command=raise_command_error
+                ):
+            self.assertRaises(Exception, ceph_disk._delete_osd_auth_key, cluster, osd_id)
+
+    def test_deallocate_osd_id_fail(self):
+        cluster = 'ceph'
+        osd_id = '5566'
+        with patch.multiple(
+                ceph_disk,
+                command=raise_command_error
+                ):
+            self.assertRaises(Exception, ceph_disk._deallocate_osd_id, cluster, osd_id)
+
+
+##### Help function #####
+
+def raise_command_error(*args):
+    e = subprocess.CalledProcessError('aaa', 'bbb', 'ccc')
+    raise e
+
+def path_exists(target_paths=None):
+    """
+    A quick helper that enforces a check for the existence of a path. Since we
+    are dealing with fakes, we allow to pass in a list of paths that are OK to
+    return True, otherwise return False.
+    """
+    target_paths = target_paths or []
+
+    def exists(path):
+        return path in target_paths
+    return exists
