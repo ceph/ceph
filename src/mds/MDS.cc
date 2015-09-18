@@ -656,6 +656,7 @@ const char** MDS::get_tracked_conf_keys() const
   static const char* KEYS[] = {
     "mds_op_complaint_time", "mds_op_log_threshold",
     "mds_op_history_size", "mds_op_history_duration",
+    "mds_enable_op_tracker",
     // clog & admin clog
     "clog_to_monitors",
     "clog_to_syslog",
@@ -678,6 +679,9 @@ void MDS::handle_conf_change(const struct md_config_t *conf,
       changed.count("mds_op_history_duration")) {
     op_tracker.set_history_size_and_duration(conf->mds_op_history_size,
                                              conf->mds_op_history_duration);
+  }
+  if (changed.count("mds_enable_op_tracker")) {
+      op_tracker.set_tracking(conf->mds_enable_op_tracker);
   }
   if (changed.count("clog_to_monitors") ||
       changed.count("clog_to_syslog") ||
