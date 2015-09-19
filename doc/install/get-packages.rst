@@ -124,17 +124,13 @@ The major releases of Ceph include:
   and point releases are made as necessary.
 
 - **Emperor:** Emperor is the fifth major release of Ceph. These packages
-  are are old and no longer supported, so we recommend that users upgrade to
+  are are old and no longer maintained, so we recommend that users upgrade to
   Firefly immediately.
 
-- **Dumpling:** Dumpling is the fourth major release of Ceph. These packages
-  are older and not recommended for new users, but critical bug fixes are
-  still backported as necessary. We encourage all Dumpling users to update to
-  Firefly as soon as they are able to do so.
-
-- **Argonaut, Bobtail, Cuttlefish:** These are the first three releases of
-  Ceph. These packages are old and no longer supported, so we recommend that
-  users upgrade to a supported version.
+- **Argonaut, Bobtail, Cuttlefish, Dumpling:** These are the first four
+  releases of Ceph. These packages are old and no longer maintained (Dumpling
+  was retired in May 2015), so we recommend that users upgrade to a more
+  recent version.
 
 .. tip:: For European users, there is also a mirror in the Netherlands at:
    http://eu.ceph.com/
