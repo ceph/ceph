@@ -1,0 +1,2 @@
+/usr/bin/radosgw                                          root:www         0750
+ +capabilities cap_net_bind_service=ep

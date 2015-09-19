@@ -218,6 +218,7 @@ BuildRequires:	libexpat-devel
 BuildRequires:	FastCGI-devel
 BuildRequires:  openssl-devel
 Requires:       libopenssl1_0_0
+PreReq:         permissions
 %endif
 %if 0%{?rhel} || 0%{?fedora}
 BuildRequires:	expat-devel
@@ -595,6 +596,12 @@ install -m 0644 -D src/rgw/logrotate.conf $RPM_BUILD_ROOT%{_sysconfdir}/logrotat
 chmod 0644 $RPM_BUILD_ROOT%{_docdir}/ceph/sample.ceph.conf
 chmod 0644 $RPM_BUILD_ROOT%{_docdir}/ceph/sample.fetch_config
 
+# /etc/permissions.d/radosgw.*
+%if 0%{?suse_version}
+install -m 0644 -D etc/permissions.d/radosgw.easy %{buildroot}%{_sysconfdir}/permissions.d/radosgw.easy
+install -m 0644 -D etc/permissions.d/radosgw.secure %{buildroot}%{_sysconfdir}/permissions.d/radosgw.secure
+%endif
+
 # firewall templates
 %if 0%{?suse_version}
 install -m 0644 -D etc/sysconfig/SuSEfirewall2.d/services/ceph-mon %{buildroot}%{_sysconfdir}/sysconfig/SuSEfirewall2.d/services/ceph-mon
@@ -888,12 +895,14 @@ fi
 #################################################################################
 %files radosgw
 %defattr(-,root,root,-)
-%{_bindir}/radosgw
+%verify(not mode caps) %attr(0750,root,www) %{_bindir}/radosgw
 %{_bindir}/radosgw-admin
 %{_mandir}/man8/radosgw.8*
 %{_mandir}/man8/radosgw-admin.8*
 %config(noreplace) %{_sysconfdir}/logrotate.d/radosgw
 %config %{_sysconfdir}/bash_completion.d/radosgw-admin
+%config %{_sysconfdir}/permissions.d/radosgw.easy
+%config %{_sysconfdir}/permissions.d/radosgw.secure
 %dir %{_localstatedir}/log/radosgw/
 %dir %{_localstatedir}/lib/ceph/radosgw
 %if 0%{?_with_systemd}
@@ -907,16 +916,21 @@ fi
   %{_sbindir}/rcceph-radosgw
 %endif
 
-
 %post radosgw
 /sbin/ldconfig
 %if 0%{?suse_version}
+  %set_permissions %{_bindir}/radosgw
   # TODO: find out what exactly this systemd-tmpfiles inovcation is for
   systemd-tmpfiles --create %{_tmpfilesdir}/ceph-radosgw.conf
   # explicit systemctl daemon-reload (that's the only relevant bit of
   # service_add_post; the rest is all sysvinit --> systemd migration which
   # isn't applicable in this context (see above comment).
   /usr/bin/systemctl daemon-reload >/dev/null 2>&1 || :
+%endif
+
+%if 0%{?suse_version}
+%verifyscript radosgw
+%verify_permissions -e %{_bindir}/radosgw
 %endif
 
 %preun radosgw
