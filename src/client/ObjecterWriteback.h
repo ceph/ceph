@@ -39,6 +39,23 @@ class ObjecterWriteback : public WritebackHandler {
 						    m_finisher));
   }
 
+  virtual bool can_scattered_write() { return true; }
+  virtual ceph_tid_t write(const object_t& oid, const object_locator_t& oloc,
+                           vector<pair<uint64_t, bufferlist> >& io_vec,
+			   const SnapContext& snapc, utime_t mtime,
+			   uint64_t trunc_size, __u32 trunc_seq,
+			   Context *oncommit) {
+    ObjectOperation op;
+    for (vector<pair<uint64_t, bufferlist> >::iterator p = io_vec.begin();
+	 p != io_vec.end();
+	 ++p)
+      op.write(p->first, p->second, trunc_size, trunc_seq);
+
+    return m_objecter->mutate(oid, oloc, op, snapc, mtime, 0, NULL,
+			      new C_OnFinisher(new C_Lock(m_lock, oncommit),
+					       m_finisher));
+  }
+
  private:
   Objecter *m_objecter;
   Finisher *m_finisher;
