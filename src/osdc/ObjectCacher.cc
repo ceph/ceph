@@ -1825,7 +1825,7 @@ bool ObjectCacher::flush_set(ObjectSet *oset, Context *onfinish)
   C_GatherBuilder gather(cct);
   set<Object*> waitfor_commit;
 
-  set<BufferHead*>::iterator next, it;
+  set<BufferHead*, BufferHead::ptr_lt>::iterator next, it;
   next = it = dirty_or_tx_bh.begin();
   while (it != dirty_or_tx_bh.end()) {
     ++next;
