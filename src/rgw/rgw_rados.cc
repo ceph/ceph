@@ -898,7 +898,7 @@ int RGWPutObjProcessor::complete(string& etag, time_t *mtime, time_t set_mtime,
   if (r < 0)
     return r;
 
-  is_complete = canceled;
+  is_complete = !canceled;
   return 0;
 }
 
