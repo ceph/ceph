@@ -178,6 +178,16 @@ class ObjectCacher {
     bool get_nocache() {
       return nocache;
     }
+
+    struct ptr_lt {
+      bool operator()(const BufferHead* l, const BufferHead* r) const {
+	if (l->ob != r->ob)
+	  return l->ob < r->ob;
+	if (l->start() != r->start())
+	  return l->start() < r->start();
+	return l < r;
+      }
+    };
   };
 
   // ******* Object *********
@@ -368,7 +378,7 @@ class ObjectCacher {
 
   ceph_tid_t last_read_tid;
 
-  set<BufferHead*>    dirty_or_tx_bh;
+  set<BufferHead*, BufferHead::ptr_lt> dirty_or_tx_bh;
   LRU   bh_lru_dirty, bh_lru_rest;
   LRU   ob_lru;
 
