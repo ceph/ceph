@@ -1,4 +1,4 @@
-libmds_la_SOURCES = \
+LIBMDS_SOURCES = \
 	mds/Anchor.cc \
 	mds/Capability.cc \
 	mds/Dumper.cc \
@@ -28,7 +28,14 @@ libmds_la_SOURCES = \
 	mds/SessionMap.cc \
 	mds/MDLog.cc \
 	mds/MDSUtility.cc
-libmds_la_LIBADD = $(LIBOSDC)
+LIBMDS_DEPS = $(LIBOSDC)
+
+# There are no libmds_types so use the full mds library for dencoder for now
+DENCODER_SOURCES += $(LIBMDS_SOURCES)
+DENCODER_DEPS += $(LIBMDS_DEPS)
+
+libmds_la_SOURCES = $(LIBMDS_SOURCES)
+libmds_la_LIBADD = $(LIBMDS_DEPS)
 noinst_LTLIBRARIES += libmds.la
 
 noinst_HEADERS += \
