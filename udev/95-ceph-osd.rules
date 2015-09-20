@@ -18,7 +18,7 @@ ACTION=="change", SUBSYSTEM=="block", \
   ENV{ID_PART_ENTRY_TYPE}=="45b0969e-9b03-4f30-b4c6-b4b80ceff106", \
   OWNER="ceph", GROUP="ceph", MODE="660"
 
-# MPATH_JOURNAL_UUID
+# MPATH_OSD_UUID
 ACTION=="add", SUBSYSTEM=="block", \
   ENV{ID_PART_ENTRY_TYPE}=="4fbd7e29-8ae0-4982-bf9d-5a8d867af560", \
   OWNER:="ceph", GROUP:="ceph", MODE:="660", \
@@ -27,7 +27,7 @@ ACTION=="change", SUBSYSTEM=="block", \
   ENV{ID_PART_ENTRY_TYPE}=="4fbd7e29-8ae0-4982-bf9d-5a8d867af560", \
   OWNER="ceph", GROUP="ceph", MODE="660"
 
-# MATH_OSD_UUID
+# MPATH_JOURNAL_UUID
 ACTION=="add", SUBSYSTEM=="block", \
   ENV{ID_PART_ENTRY_TYPE}=="45b0969e-8ae0-4982-bf9d-5a8d867af560", \
   OWNER:="ceph", GROUP:="ceph", MODE:="660", \
