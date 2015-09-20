@@ -368,14 +368,6 @@ class TestCephDisk(object):
         assert len(device['partitions']) == 2
         data_partition = c.get_osd_partition(osd_uuid)
         assert data_partition['type'] == 'data'
-        #
-        # Activate it although it should auto activate
-        #
-        if True: # remove this block when http://tracker.ceph.com/issues/12786 is fixed
-            c.sh("ceph-disk activate " + data_partition['path'])
-            device = json.loads(c.helper("ceph-disk list --format json " + multipath))[0]
-            assert len(device['partitions']) == 2
-            data_partition = c.get_osd_partition(osd_uuid)
         assert data_partition['state'] == 'active'
         journal_partition = c.get_journal_partition(osd_uuid)
         assert journal_partition
