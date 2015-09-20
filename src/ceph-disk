@@ -1207,14 +1207,21 @@ def get_free_partition_index(dev):
 
 
 def update_partition(dev, description):
-     LOG.debug('Calling partprobe on %s device %s', description, dev)
-     command(
-         [
-             'partprobe',
-             dev,
-         ],
-     )
-
+    """
+    Must be called after modifying a partition table so the kernel
+    know about the change and fire udev events accordingly. A side
+    effect of partprobe is to remove partitions and add them again.
+    The first udevadm settle waits for ongoing udev events to
+    complete, just in case one of them rely on an existing partition
+    on dev.  The second udevadm settle guarantees to the caller that
+    all udev events related to the partition table change have been
+    processed, i.e. the 95-ceph-osd.rules actions and mode changes,
+    group changes etc. are complete.
+    """
+    LOG.debug('Calling partprobe on %s device %s', description, dev)
+    command_check_call(['udevadm', 'settle'])
+    command_check_call(['partprobe', dev])
+    command_check_call(['udevadm', 'settle'])
 
 def zap(dev):
     """
@@ -1373,14 +1380,6 @@ def prepare_journal_dev(
             )
 
         update_partition(journal, 'prepared')
-
-        # wait for udev event queue to clear
-        command(
-            [
-                'udevadm',
-                'settle',
-                ],
-            )
 
         LOG.debug('Journal is GPT partition %s', journal_symlink)
 
@@ -1593,13 +1592,6 @@ def prepare_dev(
                 ],
             )
             update_partition(data, 'created')
-            command(
-                [
-                    # wait for udev event queue to clear
-                    'udevadm',
-                    'settle',
-                    ],
-                )
         except subprocess.CalledProcessError as e:
             raise Error(e)
 
