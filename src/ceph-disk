@@ -3022,8 +3022,11 @@ def main_zap(args):
 ###########################
 
 def main_trigger(args):
+    LOG.debug("main_trigger: " + str(args))
     if is_systemd() and not args.sync:
-        service='ceph-disk@{dev}.service'.format(dev=args.dev)
+        # http://www.freedesktop.org/software/systemd/man/systemd-escape.html
+        escaped_dev = args.dev.replace('-', '\\x2d')
+        service='ceph-disk@{dev}.service'.format(dev=escaped_dev)
         LOG.info('systemd detected, triggering %s' % service)
         command(
             [
