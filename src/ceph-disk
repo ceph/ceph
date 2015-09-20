@@ -1667,6 +1667,10 @@ def prepare_dev(
         except subprocess.CalledProcessError as e:
             raise Error(e)
         update_partition(data, 'prepared')
+        command_check_call(['udevadm', 'trigger',
+                            '--action=add',
+                            '--sysname-match',
+                            os.path.basename(rawdev)])
 
 def check_journal_reqs(args):
     _, allows_journal = command([
