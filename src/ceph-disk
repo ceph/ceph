@@ -1918,7 +1918,7 @@ def main_prepare(args):
                 if e2.errno != errno.ENOENT: # errno.ENOENT = no such file or directory
                     raise # re-raise exception if a different error occured
         prepare_lock.release()  # noqa
-        raise e
+        raise
 
 
 ###########################
