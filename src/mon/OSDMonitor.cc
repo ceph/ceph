@@ -1624,7 +1624,9 @@ void OSDMonitor::check_failures(utime_t now)
   for (map<int,failure_info_t>::iterator p = failure_info.begin();
        p != failure_info.end();
        ++p) {
-    check_failure(now, p->first, p->second);
+    if (can_mark_down(p->first)) {
+      check_failure(now, p->first, p->second);
+    }
   }
 }
 
