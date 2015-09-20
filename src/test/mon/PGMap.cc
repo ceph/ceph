@@ -81,7 +81,40 @@ TEST(pgmap, min_last_epoch_clean)
 
 }
 
+TEST(pgmap, calc_stats)
+{
+  bufferlist bl;
+  {
+    PGMap pg_map;
+    PGMap::Incremental inc;
+    osd_stat_t os;
+    pg_stat_t ps;
 
+    ps.last_epoch_clean = 999;
+    inc.pg_stat_updates[pg_t(9,9)] = ps;
+    inc.version = 1;
+    inc.update_stat(0, 123, os);
+    pg_map.apply_incremental(g_ceph_context, inc);
+    ASSERT_EQ(123u, pg_map.get_min_last_epoch_clean());
+    pg_map.encode(bl);
+  }
+  {
+    PGMap pg_map;
+    PGMap::Incremental inc;
+    osd_stat_t os;
+    pg_stat_t ps;
+
+    ps.last_epoch_clean = 999;
+    inc.pg_stat_updates[pg_t(9,9)] = ps;
+    inc.version = 1;
+    inc.update_stat(0, 321, os);
+    pg_map.apply_incremental(g_ceph_context, inc);
+    ASSERT_EQ(321u, pg_map.get_min_last_epoch_clean());
+    bufferlist::iterator p = bl.begin();
+    ::decode(pg_map, p);
+    ASSERT_EQ(123u, pg_map.get_min_last_epoch_clean());
+  }
+}
 
 int main(int argc, char **argv) {
   vector<const char*> args;
