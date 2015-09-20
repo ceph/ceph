@@ -185,7 +185,8 @@ class TestCephDisk(object):
         logging.basicConfig(level=logging.DEBUG)
         c = CephDisk()
         c.helper("install augeas-tools augeas")
-        c.helper("install multipath-tools device-mapper-multipath")
+        if c.sh("lsb_release -si") == 'CentOS':
+            c.helper("install multipath-tools device-mapper-multipath")
         c.augtool("set /files/etc/ceph/ceph.conf/global/osd_journal_size 100")
 
     def test_destroy_osd(self):
