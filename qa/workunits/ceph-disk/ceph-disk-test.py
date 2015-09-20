@@ -13,11 +13,20 @@
 # MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 # GNU Library Public License for more details.
 #
-# When debugging these tests, here are a few useful commands:
+# When debugging these tests (must be root), here are a few useful commands:
 #
 #  export PATH=..:$PATH
+#  ln -sf /home/ubuntu/ceph/src/ceph-disk /usr/sbin/ceph-disk
+#  ln -sf /home/ubuntu/ceph/udev/95-ceph-osd.rules /lib/udev/rules.d/95-ceph-osd.rules
+#  ln -sf /home/ubuntu/ceph/systemd/ceph-disk@.service /usr/lib/systemd/system/ceph-disk@.service
+#  ceph-disk.conf will be silently ignored if it is a symbolic link or a hard link /var/log/upstart for logs
+#  cp /home/ubuntu/ceph/src/upstart/ceph-disk.conf /etc/init/ceph-disk.conf
 #  python ceph-disk-test.py --verbose --destroy-osd 0
 #  py.test -s -v -k test_activate_dmcrypt_luks ceph-disk-test.py
+#  udevadm monitor --property & tail -f /var/log/messages # on CentOS 7
+#  udevadm monitor --property & tail -f /var/log/syslog /var/log/upstart/*  # on Ubuntu 14.04
+#  udevadm test --action=add /block/vdb/vdb1 # verify the udev rule is run as expected
+#  udevadm control --reload # when changing the udev rules
 #
 import argparse
 import json
