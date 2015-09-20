@@ -164,8 +164,6 @@ class TestCephDisk(object):
 
     def test_destroy_osd(self):
         c = CephDisk()
-        if c.sh("lsb_release -si") != 'Ubuntu':
-            pytest.skip("see issue http://tracker.ceph.com/issues/12787")
         disk = c.unused_disks()[0]
         osd_uuid = str(uuid.uuid1())
         c.run_osd(osd_uuid, disk)
@@ -188,8 +186,6 @@ class TestCephDisk(object):
 
     def activate_dmcrypt(self, type):
         c = CephDisk()
-        if c.sh("lsb_release -si") != 'Ubuntu':
-            pytest.skip("see issue http://tracker.ceph.com/issues/12787")
         disk = c.unused_disks()[0]
         osd_uuid = str(uuid.uuid1())
         journal_uuid = str(uuid.uuid1())
@@ -211,8 +207,6 @@ class TestCephDisk(object):
 
     def test_activate_no_journal(self):
         c = CephDisk()
-        if c.sh("lsb_release -si") != 'Ubuntu':
-            pytest.skip("see issue http://tracker.ceph.com/issues/12787")
         disk = c.unused_disks()[0]
         osd_uuid = str(uuid.uuid1())
         c.sh("ceph-disk zap " + disk)
@@ -232,8 +226,6 @@ class TestCephDisk(object):
 
     def test_activate_with_journal(self):
         c = CephDisk()
-        if c.sh("lsb_release -si") != 'Ubuntu':
-            pytest.skip("see issue http://tracker.ceph.com/issues/12787")
         disk = c.unused_disks()[0]
         osd_uuid = str(uuid.uuid1())
         c.sh("ceph-disk zap " + disk)
@@ -252,8 +244,6 @@ class TestCephDisk(object):
 
     def test_activate_separated_journal(self):
         c = CephDisk()
-        if c.sh("lsb_release -si") != 'Ubuntu':
-            pytest.skip("see issue http://tracker.ceph.com/issues/12787")
         disks = c.unused_disks()
         data_disk = disks[0]
         journal_disk = disks[1]
@@ -264,8 +254,6 @@ class TestCephDisk(object):
 
     def activate_separated_journal(self, data_disk, journal_disk):
         c = CephDisk()
-        if c.sh("lsb_release -si") != 'Ubuntu':
-            pytest.skip("see issue http://tracker.ceph.com/issues/12787")
         osd_uuid = str(uuid.uuid1())
         c.sh("ceph-disk prepare --osd-uuid " + osd_uuid +
              " " + data_disk + " " + journal_disk)
@@ -287,8 +275,6 @@ class TestCephDisk(object):
     #
     def test_activate_two_separated_journal(self):
         c = CephDisk()
-        if c.sh("lsb_release -si") != 'Ubuntu':
-            pytest.skip("see issue http://tracker.ceph.com/issues/12787")
         disks = c.unused_disks()
         data_disk = disks[0]
         other_data_disk = disks[1]
@@ -309,8 +295,6 @@ class TestCephDisk(object):
     #
     def test_activate_reuse_journal(self):
         c = CephDisk()
-        if c.sh("lsb_release -si") != 'Ubuntu':
-            pytest.skip("see issue http://tracker.ceph.com/issues/12787")
         disks = c.unused_disks()
         data_disk = disks[0]
         journal_disk = disks[1]
