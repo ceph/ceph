@@ -1666,6 +1666,7 @@ def prepare_dev(
             )
         except subprocess.CalledProcessError as e:
             raise Error(e)
+        update_partition(data, 'prepared')
 
 def check_journal_reqs(args):
     _, allows_journal = command([
@@ -1892,9 +1893,6 @@ def main_prepare(args):
         else:
             raise Error('not a dir or block device', args.data)
         prepare_lock.release()  # noqa
-
-        if stat.S_ISBLK(dmode):
-            update_partition(args.data, 'prepared')
 
     except Error as e:
         if journal_dm_keypath:
