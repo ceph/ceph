@@ -167,17 +167,6 @@ class CephDisk:
             time.sleep(delay)
         raise Exception('timeout waiting for osd ' + uuid + ' to be ' + info)
 
-    def run_osd(self, uuid, data, journal=None):
-        prepare = ("ceph-disk prepare --osd-uuid " + uuid +
-                   " " + data)
-        if journal:
-            prepare += " " + journal
-        self.sh(prepare)
-        self.sh("ceph osd create " + uuid)
-        partition = self.get_osd_partition(uuid)
-        assert partition['type'] == 'data'
-        assert partition['state'] == 'active'
-
     @staticmethod
     def augtool(command):
         return CephDisk.sh("""
@@ -203,7 +192,11 @@ class TestCephDisk(object):
         c = CephDisk()
         disk = c.unused_disks()[0]
         osd_uuid = str(uuid.uuid1())
-        c.run_osd(osd_uuid, disk)
+        c.sh("ceph-disk prepare --osd-uuid " + osd_uuid + " " + disk)
+        c.wait_for_osd_up(osd_uuid)
+        partition = c.get_osd_partition(osd_uuid)
+        assert partition['type'] == 'data'
+        assert partition['state'] == 'active'
         c.destroy_osd(osd_uuid)
         c.sh("ceph-disk zap " + disk)
 
