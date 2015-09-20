@@ -288,10 +288,8 @@ def which(executable):
 
     for location in locations:
         executable_path = os.path.join(location, executable)
-        LOG.debug('does ' + executable_path + ' exists ?')
         if (os.path.isfile(executable_path) and
             os.access(executable_path, os.X_OK)):
-            LOG.debug('yes, ' + executable_path + ' exists')
             return executable_path
 
 
