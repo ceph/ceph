@@ -4493,7 +4493,8 @@ int OSDMonitor::prepare_new_pool(string& name, uint64_t auid,
   CrushTester tester(newcrush, *ss);
   r = tester.test_with_crushtool(g_conf->crushtool.c_str(),
 				 osdmap.get_max_osd(),
-				 g_conf->mon_lease);
+				 g_conf->mon_lease,
+				 crush_ruleset);
   if (r) {
     dout(10) << " tester.test_with_crushtool returns " << r << dendl;
     return r;
@@ -5124,7 +5125,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
 				       g_conf->mon_lease);
     if (r < 0) {
       derr << "error on crush map: " << ess.str() << dendl;
-      ss << "Failed to parse crushmap: " << ess.str();
+      ss << "Failed crushmap test: " << ess.str();
       err = r;
       goto reply;
     }
