@@ -1631,7 +1631,7 @@ function test_mon_crushmap_validation()
        exit 1" > "${crushtool_path}"
 
   expect_false ceph osd setcrushmap -i $map 2> $TMPFILE
-  check_response "Error EINVAL: Failed to parse crushmap: TEST FAIL"
+  check_response "Error EINVAL: Failed crushmap test: TEST FAIL"
 
   local mon_lease=`ceph-conf --show-config-value mon_lease`
 
@@ -1650,7 +1650,7 @@ function test_mon_crushmap_validation()
        sleep $((mon_lease + 1))" > "${crushtool_path}"
 
   expect_false ceph osd setcrushmap -i $map 2> $TMPFILE
-  check_response "Error EINVAL: Failed to parse crushmap: ${crushtool_path}: timed out (${mon_lease} sec)"
+  check_response "Error EINVAL: Failed crushmap test: ${crushtool_path}: timed out (${mon_lease} sec)"
 
   ceph tell mon.\* injectargs --crushtool "${crushtool_path_old}"
 
