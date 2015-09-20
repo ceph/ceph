@@ -2675,31 +2675,10 @@ def split_dev_base_partnum(dev):
     return (base, partnum)
 
 def get_partition_type(part):
-    return get_blkid_partition_info(part, 'ID_PART_ENTRY_TYPE')
-    #return get_sgdisk_partition_info(part, 'Partition GUID code: (\S+)')
+    return get_sgdisk_partition_info(part, 'Partition GUID code: (\S+)')
 
 def get_partition_uuid(part):
-    return get_blkid_partition_info(part, 'ID_PART_ENTRY_UUID')
-    #return get_sgdisk_partition_info(part, 'Partition unique GUID: (\S+)')
-
-def get_blkid_partition_info(dev, what=None):
-    out, _ = command(
-        [
-            '/sbin/blkid',
-            '-o',
-            'udev',
-            '-p',
-            dev,
-        ]
-    )
-    p = {}
-    for line in out.splitlines():
-        (key, value) = line.split('=')
-        p[key] = value
-    if what:
-        return p.get(what)
-    else:
-        return p
+    return get_sgdisk_partition_info(part, 'Partition unique GUID: (\S+)')
 
 def get_sgdisk_partition_info(dev, regexp):
     (base, partnum) = split_dev_base_partnum(dev)
