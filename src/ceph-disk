@@ -534,7 +534,9 @@ def list_all_partitions(names):
     """
     Return a list of devices and partitions
     """
-    if not names:
+    if names:
+        names = map(lambda x: re.sub('^/dev/', '', x), names)
+    else:
         names = os.listdir('/sys/block')
     dev_part_list = {}
     for name in names:
