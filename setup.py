@@ -55,7 +55,6 @@ setup(
                       'pyopenssl>=0.13',
                       'ndg-httpsclient',
                       'pyasn1',
-                      'os-client-config == 1.6.3', # https://bugs.launchpad.net/os-client-config/+bug/1496624
                       'python-openstackclient',
                       ],
 
