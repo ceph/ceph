@@ -58,7 +58,7 @@ class CephDisk:
         names = filter(lambda x: re.match(pattern, x), os.listdir("/sys/block"))
         if not names:
             return []
-        disks = json.loads(self.helper("ceph-disk list --format json " + " ".join(names)))
+        disks = json.loads(self.sh("ceph-disk list --format json " + " ".join(names)))
         unused = []
         for disk in disks:
             if 'partitions' not in disk:
@@ -80,7 +80,7 @@ class CephDisk:
         self.sh("rmmod scsi_debug || true")
 
     def get_osd_partition(self, uuid):
-        disks = json.loads(self.helper("ceph-disk list --format json"))
+        disks = json.loads(self.sh("ceph-disk list --format json"))
         for disk in disks:
             if 'partitions' in disk:
                 for partition in disk['partitions']:
@@ -91,7 +91,7 @@ class CephDisk:
     def get_journal_partition(self, uuid):
         data_partition = self.get_osd_partition(uuid)
         journal_dev = data_partition['journal_dev']
-        disks = json.loads(self.helper("ceph-disk list --format json"))
+        disks = json.loads(self.sh("ceph-disk list --format json"))
         for disk in disks:
             if 'partitions' in disk:
                 for partition in disk['partitions']:
