@@ -2775,7 +2775,7 @@ def list_format_dev_plain(dev, devices=[], prefix=''):
             desc = ['ceph data (dmcrypt %s)' % dmcrypt['type'], 'holders: ' + ','.join(dmcrypt['holders'])]
     elif dev['ptype'] == JOURNAL_UUID:
         desc.append('ceph journal')
-        if dev['journal_for']:
+        if dev.get('journal_for'):
             desc.append('for %s' % dev['journal_for'])
     elif dev['ptype'] in (DMCRYPT_JOURNAL_UUID,
                           DMCRYPT_LUKS_JOURNAL_UUID):
