@@ -734,58 +734,25 @@ public:
 
 #define META_SYNC_UPDATE_MARKER_WINDOW 10
 
-class RGWMetaSyncShardMarkerTrack {
+class RGWMetaSyncShardMarkerTrack : public RGWSyncShardMarkerTrack<string> {
   RGWRados *store;
-  RGWHTTPManager *http_manager;
   RGWAsyncRadosProcessor *async_rados;
-  RGWCoroutine *cr;
-
-  map<string, bool> pending;
-
-  string high_marker;
 
   string marker_oid;
   rgw_meta_sync_marker sync_marker;
 
-  int updates_since_flush;
 
 public:
   RGWMetaSyncShardMarkerTrack(RGWRados *_store, RGWHTTPManager *_mgr, RGWAsyncRadosProcessor *_async_rados,
-                         RGWCoroutine *_cr,
                          const string& _marker_oid,
-                         const rgw_meta_sync_marker& _marker) : store(_store), http_manager(_mgr),
-                                                                async_rados(_async_rados), cr(_cr),
+                         const rgw_meta_sync_marker& _marker) : RGWSyncShardMarkerTrack(META_SYNC_UPDATE_MARKER_WINDOW),
+                                                                store(_store),
+                                                                async_rados(_async_rados),
                                                                 marker_oid(_marker_oid),
-                                                                sync_marker(_marker), updates_since_flush(0) {}
+                                                                sync_marker(_marker) {}
 
-  void start(const string& pos) {
-    pending[pos] = true;
-  }
-
-  RGWCoroutine *finish(const string& pos) {
-    assert(!pending.empty());
-
-    map<string, bool>::iterator iter = pending.begin();
-    const string& first_pos = iter->first;
-
-    if (pos > high_marker) {
-      high_marker = pos;
-    }
-
-    pending.erase(pos);
-
-    updates_since_flush++;
-
-    if (pos == first_pos && (updates_since_flush >= META_SYNC_UPDATE_MARKER_WINDOW || pending.empty())) {
-      return update_marker(high_marker);
-    }
-    return NULL;
-  }
-
-  RGWCoroutine *update_marker(const string& new_marker) {
+  RGWCoroutine *store_marker(const string& new_marker) {
     sync_marker.marker = new_marker;
-
-    updates_since_flush = 0;
 
     ldout(store->ctx(), 20) << __func__ << "(): updating marker marker_oid=" << marker_oid << " marker=" << new_marker << dendl;
     return new RGWSimpleRadosWriteCR<rgw_meta_sync_marker>(async_rados, store, store->get_zone_params().log_pool,
@@ -827,7 +794,7 @@ public:
         pos = raw_key.find(':');
         section = raw_key.substr(0, pos);
         key = raw_key.substr(pos + 1);
-        call(new RGWReadRemoteMetadataCR(store, http_manager, async_rados, section, key, &md_bl));
+        sync_status = call(new RGWReadRemoteMetadataCR(store, http_manager, async_rados, section, key, &md_bl));
       }
 
       if (sync_status < 0) {
@@ -978,7 +945,7 @@ public:
     int max_entries = OMAP_GET_MAX_ENTRIES;
     reenter(&full_cr) {
       oid = full_sync_index_shard_oid(shard_id);
-      set_marker_tracker(new RGWMetaSyncShardMarkerTrack(store, http_manager, async_rados, this,
+      set_marker_tracker(new RGWMetaSyncShardMarkerTrack(store, http_manager, async_rados,
                                                          RGWMetaSyncStatusManager::shard_obj_name(shard_id),
                                                          sync_marker));
       do {
@@ -1030,7 +997,7 @@ public:
   int incremental_sync() {
     reenter(&incremental_cr) {
       mdlog_marker = sync_marker.marker;
-      set_marker_tracker(new RGWMetaSyncShardMarkerTrack(store, http_manager, async_rados, this,
+      set_marker_tracker(new RGWMetaSyncShardMarkerTrack(store, http_manager, async_rados,
                                                          RGWMetaSyncStatusManager::shard_obj_name(shard_id),
                                                          sync_marker));
       do {

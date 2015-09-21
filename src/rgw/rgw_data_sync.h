@@ -203,32 +203,28 @@ class RGWBucketSyncStatusManager;
 class RGWBucketSyncCR;
 
 struct rgw_bucket_shard_sync_marker {
-  string key;
-  string ver;
-  string incremental;
+  rgw_obj_key full_marker;
+  string incremental_marker;
 
   rgw_bucket_shard_sync_marker() {}
 
   void encode(bufferlist& bl) const {
     ENCODE_START(1, 1, bl);
-    ::encode(key, bl);
-    ::encode(ver, bl);
-    ::encode(incremental, bl);
+    ::encode(full_marker, bl);
+    ::encode(incremental_marker, bl);
     ENCODE_FINISH(bl);
   }
 
   void decode(bufferlist::iterator& bl) {
      DECODE_START(1, bl);
-    ::decode(key, bl);
-    ::decode(ver, bl);
-    ::decode(incremental, bl);
+    ::decode(full_marker, bl);
+    ::decode(incremental_marker, bl);
      DECODE_FINISH(bl);
   }
 
   void dump(Formatter *f) const {
-    encode_json("key", key, f);
-    encode_json("ver", ver, f);
-    encode_json("incremental", incremental, f);
+    encode_json("full_marker", full_marker, f);
+    encode_json("incremental_marker", incremental_marker, f);
   }
 };
 WRITE_CLASS_ENCODER(rgw_bucket_shard_sync_marker)
