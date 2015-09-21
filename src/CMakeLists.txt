@@ -812,7 +812,7 @@ endif(${ENABLE_SHARED})
   install(TARGETS ceph-syn DESTINATION bin)
   install(TARGETS mount.ceph DESTINATION sbin)
 
-  if(WITH_FUSE)
+  if(HAVE_FUSE)
     set(ceph_fuse_srcs
       ceph_fuse.cc
       client/fuse_ll.cc)
@@ -820,7 +820,7 @@ endif(${ENABLE_SHARED})
     target_link_libraries(ceph-fuse fuse client global)
     set_target_properties(ceph-fuse PROPERTIES COMPILE_FLAGS "-I${FUSE_INCLUDE_DIRS}")
     install(TARGETS ceph-fuse DESTINATION bin)
-  endif(WITH_FUSE)
+  endif(HAVE_FUSE)
 endif(WITH_LIBCEPHFS)
 
 if(${WITH_RBD})
