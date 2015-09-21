@@ -19,6 +19,7 @@
 #include "msg/Message.h"
 #include "osd/osd_types.h"
 #include "include/ceph_features.h"
+#include <sstream>
 
 /*
  * OSD op
@@ -55,6 +56,8 @@ private:
   vector<snapid_t> snaps;
 
   uint64_t features;
+  
+  string dump_ops;
 
   osd_reqid_t reqid; // reqid explicitly set by sender
 
@@ -371,6 +374,9 @@ struct ceph_osd_request_head {
   }
 
   void clear_buffers() {
+    std::ostringstream os;
+    os << ops;
+    dump_ops = os.str();
     ops.clear();
   }
 
@@ -395,7 +401,10 @@ struct ceph_osd_request_head {
     if (oloc.key.size())
       out << " " << oloc;
 
-    out << " " << ops;
+    if (dump_ops.empty())
+      out << " " << ops;
+    else
+      out << " " << dump_ops;
     out << " " << pgid;
     if (is_retry_attempt())
       out << " RETRY=" << get_retry_attempt();
