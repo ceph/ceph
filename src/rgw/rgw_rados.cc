@@ -985,24 +985,17 @@ int RGWZoneParams::init(CephContext *cct, RGWRados *store, RGWZoneGroup& zonegro
   return ret;
 }
 
-void RGWZoneGroupMap::encode(bufferlist& bl) const {
-  ENCODE_START(3, 1, bl);
+void RGWPeriodMap::encode(bufferlist& bl) const {
+  ENCODE_START(1, 1, bl);
   ::encode(zonegroups, bl);
   ::encode(master_zonegroup, bl);
-  ::encode(bucket_quota, bl);
-  ::encode(user_quota, bl);
   ENCODE_FINISH(bl);
 }
 
-void RGWZoneGroupMap::decode(bufferlist::iterator& bl) {
-  DECODE_START(3, bl);
+void RGWPeriodMap::decode(bufferlist::iterator& bl) {
+  DECODE_START(1, bl);
   ::decode(zonegroups, bl);
   ::decode(master_zonegroup, bl);
-
-  if (struct_v >= 2)
-    ::decode(bucket_quota, bl);
-  if (struct_v >= 3)
-    ::decode(user_quota, bl);
   DECODE_FINISH(bl);
 
   zonegroups_by_api.clear();
@@ -1016,63 +1009,9 @@ void RGWZoneGroupMap::decode(bufferlist::iterator& bl) {
   }
 }
 
-void RGWZoneGroupMap::get_params(CephContext *cct, string& pool_name, string& oid)
+
+int RGWPeriodMap::update(RGWZoneGroup& zonegroup)
 {
-  pool_name = cct->_conf->rgw_zone_root_pool;
-  if (pool_name.empty()) {
-    pool_name = RGW_DEFAULT_ZONE_ROOT_POOL;
-  }
-  oid = region_map_oid;
-}
-
-int RGWZoneGroupMap::read(CephContext *cct, RGWRados *store)
-{
-  string pool_name, oid;
-
-  get_params(cct, pool_name, oid);
-
-  rgw_bucket pool(pool_name.c_str());
-
-  bufferlist bl;
-  RGWObjectCtx obj_ctx(store);
-  int ret = rgw_get_system_obj(store, obj_ctx, pool, oid, bl, NULL, NULL);
-  if (ret < 0)
-    return ret;
-
-
-  Mutex::Locker l(lock);
-  try {
-    bufferlist::iterator iter = bl.begin();
-    ::decode(*this, iter);
-  } catch (buffer::error& err) {
-    ldout(cct, 0) << "ERROR: failed to decode zone group map info from " << pool << ":" << oid << dendl;
-    return -EIO;
-  }
-
-  return 0;
-}
-
-int RGWZoneGroupMap::store(CephContext *cct, RGWRados *store)
-{
-  string pool_name, oid;
-
-  get_params(cct, pool_name, oid);
-
-  rgw_bucket pool(pool_name.c_str());
-
-  Mutex::Locker l(lock);
-
-  bufferlist bl;
-  ::encode(*this, bl);
-  int ret = rgw_put_system_obj(store, pool, oid, bl.c_str(), bl.length(), false, NULL, 0, NULL);
-
-  return ret;
-}
-
-int RGWZoneGroupMap::update(RGWZoneGroup& zonegroup)
-{
-  Mutex::Locker l(lock);
-
   if (zonegroup.is_master && !zonegroup.equals(master_zonegroup)) {
     derr << "cannot update zonegroup map, master_zonegroup conflict" << dendl;
     return -EINVAL;
@@ -1093,6 +1032,90 @@ int RGWZoneGroupMap::update(RGWZoneGroup& zonegroup)
   if (zonegroup.is_master) {
     master_zonegroup = zonegroup.get_id();
   }
+  return 0;
+}
+
+void RGWZoneGroupMap::encode(bufferlist& bl) const {
+  ENCODE_START(4, 1, bl);
+  ::encode(period_map, bl);
+  ::encode(bucket_quota, bl);
+  ::encode(user_quota, bl);
+  ENCODE_FINISH(bl);
+}
+
+void RGWZoneGroupMap::decode(bufferlist::iterator& bl) {
+  DECODE_START(4, bl);
+  ::decode(period_map, bl);
+  ::decode(bucket_quota, bl);
+  ::decode(user_quota, bl);
+  DECODE_FINISH(bl);
+}
+
+void RGWZoneGroupMap::get_params(CephContext *cct, string& pool_name, string& oid)
+{
+  pool_name = cct->_conf->rgw_zone_root_pool;
+  if (pool_name.empty()) {
+    pool_name = RGW_DEFAULT_ZONE_ROOT_POOL;
+  }
+  oid = region_map_oid;
+}
+
+int RGWZoneGroupMap::read(CephContext *cct, RGWRados *store)
+{
+  Mutex::Locker l(lock);
+
+    string pool_name, oid;
+
+  get_params(cct, pool_name, oid);
+
+  rgw_bucket pool(pool_name.c_str());
+
+  bufferlist bl;
+  RGWObjectCtx obj_ctx(store);
+  int ret = rgw_get_system_obj(store, obj_ctx, pool, oid, bl, NULL, NULL);
+  if (ret < 0)
+    return ret;
+
+
+  try {
+    bufferlist::iterator iter = bl.begin();
+    ::decode(*this, iter);
+  } catch (buffer::error& err) {
+    ldout(cct, 0) << "ERROR: failed to decode zone group map info from " << pool << ":" << oid << dendl;
+    return -EIO;
+  }
+
+  return 0;
+}
+
+int RGWZoneGroupMap::store(CephContext *cct, RGWRados *store)
+{
+  string pool_name, oid;
+
+  get_params(cct, pool_name, oid);
+
+  rgw_bucket pool(pool_name.c_str());
+
+  bufferlist bl;
+  ::encode(*this, bl);
+  int ret = rgw_put_system_obj(store, pool, oid, bl.c_str(), bl.length(), false, NULL, 0, NULL);
+
+  return ret;
+}
+
+int RGWZoneGroupMap::update(RGWZoneGroup& zonegroup)
+{
+  Mutex::Locker l(lock);
+
+  for (map<string, RGWPeriodMap>::iterator iter = periods.begin(); iter != periods.end(); iter++)
+  {
+    int ret =  iter->second.update(zonegroup);
+    if (ret < 0) {
+      derr  << "ERROR: failed update period " << iter->first << ":" << cpp_strerror(-ret) << dendl;
+      return ret;
+    }
+  }
+
   return 0;
 }
 
@@ -2688,20 +2711,20 @@ int RGWRados::init_complete()
       return -EIO;
     }
   } else {
-    string master_zonegroup = zonegroup_map.master_zonegroup;
+    string master_zonegroup = zonegroup_map.period_map.master_zonegroup;
     if (master_zonegroup.empty()) {
       lderr(cct) << "ERROR: zonegroup map does not specify master zonegroup" << dendl;
       return -EINVAL;
     }
-    map<string, RGWZoneGroup>::iterator iter = zonegroup_map.zonegroups.find(master_zonegroup);
-    if (iter == zonegroup_map.zonegroups.end()) {
+    map<string, RGWZoneGroup>::iterator iter = zonegroup_map.period_map.zonegroups.find(master_zonegroup);
+    if (iter == zonegroup_map.period_map.zonegroups.end()) {
       lderr(cct) << "ERROR: bad zonegroup map: inconsistent master zonegroup" << dendl;
       return -EINVAL;
     }
     RGWZoneGroup& zonegroup = iter->second;
     rest_master_conn = new RGWRESTConn(cct, this, zonegroup.endpoints);
 
-    for (iter = zonegroup_map.zonegroups.begin(); iter != zonegroup_map.zonegroups.end(); ++iter) {
+    for (iter = zonegroup_map.period_map.zonegroups.begin(); iter != zonegroup_map.period_map.zonegroups.end(); ++iter) {
       RGWZoneGroup& zonegroup = iter->second;
       add_new_connection_to_map(zonegroup_conn_map, zonegroup, new RGWRESTConn(cct, this, zonegroup.endpoints));
     }
@@ -4113,8 +4136,8 @@ int RGWRados::select_new_bucket_location(RGWUserInfo& user_info, const string& z
                                          const string& bucket_name, rgw_bucket& bucket, string *pselected_rule)
 {
   /* first check that rule exists within the specific zonegroup */
-  map<string, RGWZoneGroup>::iterator riter = zonegroup_map.zonegroups.find(zonegroup_name);
-  if (riter == zonegroup_map.zonegroups.end()) {
+  map<string, RGWZoneGroup>::iterator riter = zonegroup_map.period_map.zonegroups.find(zonegroup_name);
+  if (riter == zonegroup_map.period_map.zonegroups.end()) {
     ldout(cct, 0) << "could not find zonegroup " << zonegroup_name << " in zonegroup map" << dendl;
     return -EINVAL;
   }
@@ -5806,7 +5829,7 @@ bool RGWRados::is_syncing_bucket_meta(rgw_bucket& bucket)
   }
 
   /* single zonegroup and a single zone */
-  if (zonegroup_map.zonegroups.size() == 1 && zonegroup.zones.size() == 1) {
+  if (zonegroup_map.period_map.zonegroups.size() == 1 && zonegroup.zones.size() == 1) {
     return false;
   }
 

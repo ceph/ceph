@@ -1107,22 +1107,34 @@ struct RGWZoneGroup : public RGWSystemMetaObj {
 };
 WRITE_CLASS_ENCODER(RGWZoneGroup)
 
-struct RGWZoneGroupMap {
-  Mutex lock;
+struct RGWPeriodMap
+{
   map<string, RGWZoneGroup> zonegroups;
   map<string, RGWZoneGroup> zonegroups_by_api;
 
   string master_zonegroup;
 
+  void encode(bufferlist& bl) const;
+  void decode(bufferlist::iterator& bl);
+
+  int update(RGWZoneGroup& zonegroup);
+
+  void dump(Formatter *f) const;
+  void decode_json(JSONObj *obj);
+};
+WRITE_CLASS_ENCODER(RGWPeriodMap)
+
+struct RGWZoneGroupMap {
+  Mutex lock;
+  RGWPeriodMap period_map;
+
   RGWQuotaInfo bucket_quota;
   RGWQuotaInfo user_quota;
 
-  RGWZoneGroupMap& operator=(const RGWZoneGroupMap& zg) {
-    zonegroups = zg.zonegroups;
-    zonegroups_by_api = zg.zonegroups_by_api;
-    master_zonegroup = zg.master_zonegroup;
-    bucket_quota = zg.bucket_quota;
-    user_quota = zg.user_quota;
+  RGWZoneGroupMap& operator=(const RGWZoneGroupMap& map) {
+    period_map = map.period_map;
+    bucket_quota = map.bucket_quota;
+    user_quota = map.user_quota;
     return *this;
   }
 
@@ -1242,7 +1254,7 @@ class RGWPeriod
   epoch_t epoch;
   string predecessor_uuid;
   map<int, version_t> versions;
-  RGWZoneGroupMap zonegroup_map;
+
   string master_zone;
 
   string realm_id;
@@ -1266,17 +1278,11 @@ public:
   RGWPeriod(const string& period_id, epoch_t _epoch = 0)
     : id(period_id), epoch(_epoch) {}
 
-  RGWPeriod(const string& _master_zonegroup, const string& _master_zone)
-    : epoch(0), master_zone(_master_zone) {
-    zonegroup_map.master_zonegroup = _master_zonegroup;
-  }
-
   const string& get_id() { return id;}
   epoch_t get_epoch() { return epoch;}
   const string& get_predecessor() { return predecessor_uuid;}
   const string& get_master_zone() { return master_zone;}
   const string& get_realm() { return realm_id;}
-  const RGWZoneGroupMap& get_zonegroup_map() { return zonegroup_map;}
   const string& get_pool_name(CephContext *cct);
   const string& get_latest_epoch_oid();
   const string& get_info_oid_prefix();
@@ -1306,7 +1312,6 @@ public:
     ::encode(epoch, bl);
     ::encode(predecessor_uuid, bl);
     ::encode(versions, bl);
-    ::encode(zonegroup_map, bl);
     ::encode(master_zone, bl);
     ENCODE_FINISH(bl);
   }
@@ -1317,7 +1322,6 @@ public:
     ::decode(epoch, bl);
     ::decode(predecessor_uuid, bl);
     ::decode(versions, bl);
-    ::decode(zonegroup_map, bl);
     ::decode(master_zone, bl);
     DECODE_FINISH(bl);
   }

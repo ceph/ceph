@@ -661,7 +661,6 @@ void RGWPeriod::dump(Formatter *f) const
   encode_json("epoch", epoch , f);
   encode_json("predecessor_uuid", predecessor_uuid, f);
   encode_json("versions", versions, f);
-  encode_json("zonegroup_map", zonegroup_map, f);
   encode_json("master_zone", master_zone, f);
 }
 
@@ -671,7 +670,6 @@ void RGWPeriod::decode_json(JSONObj *obj)
   JSONDecoder::decode_json("epoch", epoch, obj);
   JSONDecoder::decode_json("predecessor_uuid", predecessor_uuid, obj);
   JSONDecoder::decode_json("versions", versions, obj);
-  JSONDecoder::decode_json("zonegroup_map", zonegroup_map, obj);
   JSONDecoder::decode_json("master_zone", master_zone, obj);
 }
 
@@ -807,15 +805,13 @@ void RGWZoneGroup::decode_json(JSONObj *obj)
 }
 
 
-void RGWZoneGroupMap::dump(Formatter *f) const
+void RGWPeriodMap::dump(Formatter *f) const
 {
   encode_json("zonegroups", zonegroups, f);
   encode_json("master_zonegroup", master_zonegroup, f);
-  encode_json("bucket_quota", bucket_quota, f);
-  encode_json("user_quota", user_quota, f);
 }
 
-void RGWZoneGroupMap::decode_json(JSONObj *obj)
+void RGWPeriodMap::decode_json(JSONObj *obj)
 {
   JSONDecoder::decode_json("zonegroups", zonegroups, obj);
   /* backward compatability with region */
@@ -827,6 +823,19 @@ void RGWZoneGroupMap::decode_json(JSONObj *obj)
   if (master_zonegroup.empty()) {
     JSONDecoder::decode_json("master_region", master_zonegroup, obj);
   }
+}
+
+
+void RGWZoneGroupMap::dump(Formatter *f) const
+{
+  encode_json("period_map", period_map, f);
+  encode_json("bucket_quota", bucket_quota, f);
+  encode_json("user_quota", user_quota, f);
+}
+
+void RGWZoneGroupMap::decode_json(JSONObj *obj)
+{
+  JSONDecoder::decode_json("period_map", period_map, obj);
   JSONDecoder::decode_json("bucket_quota", bucket_quota, obj);
   JSONDecoder::decode_json("user_quota", user_quota, obj);
 }

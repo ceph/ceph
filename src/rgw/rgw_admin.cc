@@ -1762,7 +1762,7 @@ int main(int argc, char **argv)
 	  cerr << "could not init realm " << ": " << cpp_strerror(-ret) << std::endl;
 	  return ret;
 	}
-	RGWPeriod period(master_zonegroup, master_zone);
+	RGWPeriod period;
 	ret = period.init(g_ceph_context, store, realm.get_id(), realm.get_name(), false);
 	if (ret < 0) {
 	  cerr << "failed to init period " << ": " << cpp_strerror(-ret) << std::endl;

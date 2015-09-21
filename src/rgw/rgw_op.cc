@@ -408,8 +408,9 @@ static int rgw_build_policies(RGWRados *store, struct req_state *s, bool only_bu
     s->bucket_owner = s->bucket_acl->get_owner();
 
     string& zonegroup = s->bucket_info.zonegroup;
-    map<string, RGWZoneGroup>::iterator dest_zonegroup = store->zonegroup_map.zonegroups.find(zonegroup);
-    if (dest_zonegroup != store->zonegroup_map.zonegroups.end() && !dest_zonegroup->second.endpoints.empty()) {
+    map<string, RGWZoneGroup>::iterator dest_zonegroup = store->zonegroup_map.period_map.zonegroups.find(zonegroup);
+    if (dest_zonegroup != store->zonegroup_map.period_map.zonegroups.end()
+	&& !dest_zonegroup->second.endpoints.empty()) {
       s->zonegroup_endpoint = dest_zonegroup->second.endpoints.front();
     }
     if (s->bucket_exists && !store->zonegroup.equals(zonegroup)) {
