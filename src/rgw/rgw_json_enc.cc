@@ -827,6 +827,7 @@ void RGWPeriodMap::decode_json(JSONObj *obj)
 
 void RGWZoneGroupMap::dump(Formatter *f) const
 {
+  encode_json("realms", realms, f);
   encode_json("periods", periods, f);
   encode_json("bucket_quota", bucket_quota, f);
   encode_json("user_quota", user_quota, f);
@@ -834,6 +835,7 @@ void RGWZoneGroupMap::dump(Formatter *f) const
 
 void RGWZoneGroupMap::decode_json(JSONObj *obj)
 {
+  JSONDecoder::decode_json("realms", realms, obj);
   JSONDecoder::decode_json("periods", periods, obj);
   JSONDecoder::decode_json("bucket_quota", bucket_quota, obj);
   JSONDecoder::decode_json("user_quota", user_quota, obj);

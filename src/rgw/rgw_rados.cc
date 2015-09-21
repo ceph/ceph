@@ -1037,6 +1037,7 @@ int RGWPeriodMap::update(RGWZoneGroup& zonegroup)
 
 void RGWZoneGroupMap::encode(bufferlist& bl) const {
   ENCODE_START(4, 1, bl);
+  ::encode(realms, bl);
   ::encode(periods, bl);
   ::encode(bucket_quota, bl);
   ::encode(user_quota, bl);
@@ -1045,6 +1046,7 @@ void RGWZoneGroupMap::encode(bufferlist& bl) const {
 
 void RGWZoneGroupMap::decode(bufferlist::iterator& bl) {
   DECODE_START(4, bl);
+  ::decode(realms, bl);
   ::decode(periods, bl);
   ::decode(bucket_quota, bl);
   ::decode(user_quota, bl);
