@@ -1126,7 +1126,6 @@ struct RGWPeriodMap
 WRITE_CLASS_ENCODER(RGWPeriodMap)
 
 class RGWRealm;
-
 struct RGWZoneGroupMap {
 
   Mutex lock;
@@ -1152,7 +1151,8 @@ struct RGWZoneGroupMap {
   int store(CephContext *cct, RGWRados *store);
 
   int update(RGWZoneGroup& zonegroup);
-
+  int update(RGWRealm& realm);
+  
   int get_master_zonegroup(const string& current_period,
 			   RGWZoneGroup& master_zonegroup);
 
@@ -1205,7 +1205,7 @@ class RGWRealm : public RGWSystemMetaObj
 
 public:
   RGWRealm() {}
-  RGWRealm(const string& _id, const string& _name) : RGWSystemMetaObj(_id, _name) {}  
+  RGWRealm(const string& _id, const string& _name = "") : RGWSystemMetaObj(_id, _name) {}  
   RGWRealm(CephContext *_cct, RGWRados *_store): RGWSystemMetaObj(_cct, _store) {}
   RGWRealm(const string& _name, CephContext *_cct, RGWRados *_store): RGWSystemMetaObj(_name, _cct, _store){}
 

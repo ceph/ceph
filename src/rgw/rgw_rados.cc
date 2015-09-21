@@ -1121,6 +1121,13 @@ int RGWZoneGroupMap::update(RGWZoneGroup& zonegroup)
   return 0;
 }
 
+int RGWZoneGroupMap::update(RGWRealm& realm)
+{
+  Mutex::Locker l(lock);
+  realms[realm.get_id()] = realm;
+  return 0;
+}
+
 int RGWZoneGroupMap::get_master_zonegroup(const string& current_period,
 					  RGWZoneGroup& zonegroup)
 {
