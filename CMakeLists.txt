@@ -176,6 +176,8 @@ find_package(tcmalloc REQUIRED)
 set(HAVE_LIBTCMALLOC ${Tcmalloc_FOUND})
 endif(${WITH_TCMALLOC})
 
+find_package(keyutils REQUIRED)
+
 option(USE_CRYPTOPP "Cryptopp is ON" ON)
 find_package(cryptopp)
 if(CRYPTOPP_FOUND)
