@@ -10972,7 +10972,6 @@ void ReplicatedPG::hit_set_persist()
   updated_hit_set_hist.history.push_back(updated_hit_set_hist.current_info);
   hit_set_create();
   updated_hit_set_hist.current_info = pg_hit_set_info_t(pool.info.use_gmt_hitset);
-  updated_hit_set_hist.current_last_stamp = utime_t();
 
   // fabricate an object_info_t and SnapSet
   obc->obs.oi.version = ctx->at_version;
