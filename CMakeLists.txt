@@ -176,6 +176,8 @@ endif(${WITH_TCMALLOC})
 
 find_package(keyutils REQUIRED)
 
+find_package(libuuid REQUIRED)
+
 option(USE_CRYPTOPP "Cryptopp is ON" ON)
 find_package(cryptopp)
 if(CRYPTOPP_FOUND)
