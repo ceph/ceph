@@ -67,7 +67,6 @@ CHECK_INCLUDE_FILES("utime.h" HAVE_UTIME_H)
 CHECK_INCLUDE_FILES("${CMAKE_SOURCE_DIR}/src/include/fiemap.h" HAVE_FIEMAP_H)
 CHECK_INCLUDE_FILES("fuse/fuse_lowlevel.h" HAVE_FUSE_LOWLEVEL_H)
 CHECK_INCLUDE_FILES("fuse/fuse.h" HAVE_FUSE_H)
-CHECK_INCLUDE_FILES("libedit/vis.h" HAVE_LIBEDIT_VIS_H)
 CHECK_INCLUDE_FILES("fcgi_config.h"  HAVE_FASTCGI_CONFIG_H)
 CHECK_INCLUDE_FILES("fastcgi.h" HAVE_FASTCGI_H)
 CHECK_INCLUDE_FILES("fcgiapp.h" FASTCGI_FASTCGI_APP_DIR)
@@ -175,6 +174,8 @@ find_package(keyutils REQUIRED)
 find_package(libuuid REQUIRED)
 
 find_package(libcurl REQUIRED)
+
+find_package(libedit REQUIRED)
 
 option(USE_CRYPTOPP "Cryptopp is ON" ON)
 find_package(cryptopp)
