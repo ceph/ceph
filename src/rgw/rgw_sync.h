@@ -217,4 +217,51 @@ public:
   }
 };
 
+template <class T>
+class RGWSyncShardMarkerTrack {
+  typename std::map<T, bool> pending;
+
+  T high_marker;
+
+  int window_size;
+  int updates_since_flush;
+
+
+protected:
+  virtual RGWCoroutine *store_marker(const T& new_marker) = 0;
+
+public:
+  RGWSyncShardMarkerTrack(int _window_size) : window_size(_window_size), updates_since_flush(0) {}
+  virtual ~RGWSyncShardMarkerTrack() {}
+
+  void start(const T& pos) {
+    pending[pos] = true;
+  }
+
+  RGWCoroutine *finish(const T& pos) {
+    assert(!pending.empty());
+
+    typename std::map<T, bool>::iterator iter = pending.begin();
+    const T& first_pos = iter->first;
+
+    if (!(pos <= high_marker)) {
+      high_marker = pos;
+    }
+
+    pending.erase(pos);
+
+    updates_since_flush++;
+
+    if (pos == first_pos && (updates_since_flush >= window_size || pending.empty())) {
+      return update_marker(high_marker);
+    }
+    return NULL;
+  }
+
+  RGWCoroutine *update_marker(const T& new_marker) {
+    updates_since_flush = 0;
+    return store_marker(new_marker);
+  }
+};
+
 #endif

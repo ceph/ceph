@@ -574,6 +574,12 @@ void RGWBucketInfo::decode_json(JSONObj *obj) {
   JSONDecoder::decode_json("requester_pays", requester_pays, obj);
 }
 
+void rgw_obj_key::dump(Formatter *f) const
+{
+  encode_json("name", name, f);
+  encode_json("instance", instance, f);
+}
+
 void RGWObjEnt::dump(Formatter *f) const
 {
   encode_json("name", key.name, f);

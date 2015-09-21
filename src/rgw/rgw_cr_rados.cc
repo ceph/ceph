@@ -371,8 +371,8 @@ int RGWAsyncFetchRemoteObj::_send_request()
   string op_id = store->unique_id(store->get_new_req_id());
   map<string, bufferlist> attrs;
 
-  rgw_obj src_obj(bucket_info.bucket, obj_name);
-  src_obj.set_instance(obj_version_id);
+  rgw_obj src_obj(bucket_info.bucket, key.name);
+  src_obj.set_instance(key.instance);
 
   rgw_obj dest_obj(src_obj);
 
