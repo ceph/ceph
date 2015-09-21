@@ -8447,7 +8447,7 @@ int ReplicatedPG::find_object_context(const hobject_t& oid,
   }
 
   SnapSetContext *ssc = get_snapset_context(oid, can_create);
-  if (!ssc || !(ssc->exists)) {
+  if (!ssc || !(ssc->exists || can_create)) {
     dout(20) << __func__ << " " << oid << " no snapset" << dendl;
     if (pmissing)
       *pmissing = head;  // start by getting the head
@@ -8695,7 +8695,6 @@ SnapSetContext *ReplicatedPG::get_snapset_context(
   if (p != snapset_contexts.end()) {
     if (can_create || p->second->exists) {
       ssc = p->second;
-      ssc->exists = true;
     } else {
       return NULL;
     }
@@ -8718,6 +8717,9 @@ SnapSetContext *ReplicatedPG::get_snapset_context(
     if (bv.length()) {
       bufferlist::iterator bvp = bv.begin();
       ssc->snapset.decode(bvp);
+      ssc->exists = true;
+    } else {
+      ssc->exists = false;
     }
   }
   assert(ssc);
