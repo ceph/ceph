@@ -46,6 +46,8 @@ tasks:
    - upgrade-sequence_x
 - print: "**** done parallel -x branch"
 # Run test.sh on the -x upgraded cluster
+- install.upgrade:
+    client.1:
 - workunit:
     clients:
       client.1:
