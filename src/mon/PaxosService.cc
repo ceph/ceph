@@ -34,7 +34,9 @@ static ostream& _prefix(std::ostream *_dout, Monitor *mon, Paxos *paxos, string 
 
 bool PaxosService::dispatch(PaxosServiceMessage *m)
 {
-  dout(10) << "dispatch " << *m << " from " << m->get_orig_source_inst() << dendl;
+  dout(10) << "dispatch " << m << " " << *m
+	   << " from " << m->get_orig_source_inst()
+	   << " con " << m->get_connection() << dendl;
 
   if (mon->is_shutdown()) {
     m->put();
