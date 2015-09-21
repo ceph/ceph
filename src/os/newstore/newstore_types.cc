@@ -153,6 +153,7 @@ void onode_t::encode(bufferlist& bl) const
   ::encode(omap_head, bl);
   ::encode(expected_object_size, bl);
   ::encode(expected_write_size, bl);
+  ::encode(frag_size, bl);
   ENCODE_FINISH(bl);
 }
 
@@ -169,6 +170,7 @@ void onode_t::decode(bufferlist::iterator& p)
   ::decode(omap_head, p);
   ::decode(expected_object_size, p);
   ::decode(expected_write_size, p);
+  ::decode(frag_size, p);
   DECODE_FINISH(p);
 }
 
@@ -210,6 +212,7 @@ void onode_t::dump(Formatter *f) const
   f->close_section();
   f->dump_unsigned("last_overlay_key", last_overlay_key);
   f->dump_unsigned("omap_head", omap_head);
+  f->dump_unsigned("frag_size", frag_size);
   f->dump_unsigned("expected_object_size", expected_object_size);
   f->dump_unsigned("expected_write_size", expected_write_size);
 }
