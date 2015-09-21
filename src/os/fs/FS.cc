@@ -30,7 +30,7 @@
 #include "XFS.h"
 #endif
 
-#ifdef DARWIN
+#if defined(DARWIN) || defined(__FreeBSD__)
 #include <sys/mount.h>
 #else
 #include <sys/vfs.h>

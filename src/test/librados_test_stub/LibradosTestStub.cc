@@ -21,6 +21,7 @@
 #include <list>
 #include <vector>
 #include "include/assert.h"
+#include "include/compat.h"
 
 #define dout_subsys ceph_subsys_rados
 

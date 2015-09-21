@@ -23,6 +23,7 @@
 #endif
 
 #include "common/xattr.h"
+#include "include/compat.h"
 
 /*
  * chaining xattrs

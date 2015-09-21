@@ -17,6 +17,7 @@
 #ifndef CEPH_MSG_EVENTKQUEUE_H
 #define CEPH_MSG_EVENTKQUEUE_H
 
+#include <sys/types.h>
 #include <sys/event.h>
 #include <unistd.h>
 

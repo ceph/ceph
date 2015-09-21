@@ -20,12 +20,13 @@
  */
 
 #include "objclass/objclass.h"
-#include <asm-generic/errno.h>
+#include <errno.h>
 #include <iostream>
 #include <map>
 #include <string>
 #include <sstream>
 #include <cstdio>
+#include <include/compat.h>
 
 #define DECIMAL_PRECISION 10
 

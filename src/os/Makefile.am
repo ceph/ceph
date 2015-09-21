@@ -1,5 +1,4 @@
 libos_types_la_SOURCES = \
-	os/newstore/newstore_types.cc \
 	os/Transaction.cc
 libos_types_la_CXXFLAGS = ${AM_CXXFLAGS}
 noinst_LTLIBRARIES += libos_types.la
@@ -9,7 +8,6 @@ if ENABLE_SERVER
 libos_la_SOURCES = \
 	os/chain_xattr.cc \
 	os/fs/FS.cc \
-	os/newstore/NewStore.cc \
 	os/DBObjectMap.cc \
 	os/GenericObjectMap.cc \
 	os/FileJournal.cc \
@@ -29,6 +27,11 @@ libos_la_SOURCES = \
 
 if LINUX
 libos_la_SOURCES += os/BtrfsFileStoreBackend.cc
+endif
+
+if WITH_LIBAIO
+libos_types_la_SOURCES += os/newstore/newstore_types.cc
+libos_la_SOURCES += os/newstore/NewStore.cc
 endif
 
 if WITH_LIBXFS

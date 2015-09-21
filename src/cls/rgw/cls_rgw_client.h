@@ -7,6 +7,7 @@
 #include "cls_rgw_types.h"
 #include "cls_rgw_ops.h"
 #include "common/RefCountedObj.h"
+#include "include/compat.h"
 
 // Forward declaration
 class BucketIndexAioManager;

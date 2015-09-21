@@ -19,6 +19,10 @@
 #include <getopt.h>
 #include <assert.h>
 
+#if defined(__FreeBSD__)
+#include <sys/param.h>
+#endif
+
 #include "include/compat.h"
 #include "include/rbd/librbd.h"
 

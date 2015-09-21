@@ -98,7 +98,7 @@ class PageSet {
   typedef typename page_set::iterator iterator;
 
   page_set pages;
-  size_t page_size;
+  uint64_t page_size;
 
   typedef Spinlock lock_type;
   lock_type mutex;

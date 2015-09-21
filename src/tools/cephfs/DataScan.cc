@@ -21,6 +21,7 @@
 #include "cls/cephfs/cls_cephfs_client.h"
 
 #include "DataScan.h"
+#include "include/compat.h"
 
 #define dout_subsys ceph_subsys_mds
 #undef dout_prefix
