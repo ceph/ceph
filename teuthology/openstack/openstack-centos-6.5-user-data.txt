@@ -21,7 +21,4 @@ packages:
 runcmd:
  - mkinitrd --force /boot/initramfs-2.6.32-504.1.3.el6.x86_64.img 2.6.32-504.1.3.el6.x86_64
  - reboot
-#runcmd:
-# # if /mnt is on ephemeral, that moves /home/{username} on the ephemeral, otherwise it does nothing
-# - rsync -a --numeric-ids /home/{username}/ /mnt/ && rm -fr /home/{username} && ln -s /mnt /home/{username}
 final_message: "{up}, after $UPTIME seconds"

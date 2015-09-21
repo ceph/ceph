@@ -16,7 +16,4 @@ packages:
  - wget
  - git
  - ntp
-runcmd:
- # if /mnt is on ephemeral, that moves /home/{username} on the ephemeral, otherwise it does nothing
- - rsync -a --numeric-ids /home/{username}/ /mnt/ && rm -fr /home/{username} && ln -s /mnt /home/{username}
 final_message: "{up}, after $UPTIME seconds"
