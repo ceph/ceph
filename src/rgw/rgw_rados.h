@@ -1151,8 +1151,8 @@ class RGWRealm;
 struct RGWZoneGroupMap {
 
   Mutex lock;
+  map<string, RGWRealm> realms;
   map<string, RGWPeriodMap> periods;
-
   RGWQuotaInfo bucket_quota;
   RGWQuotaInfo user_quota;
 
