@@ -1595,6 +1595,25 @@ void MDSRankDispatcher::handle_mds_map(
     set_osd_epoch_barrier(osd_epoch);
   }
 
+  if (is_active()) {
+    bool found = false;
+    MDSMap::mds_info_t info = mdsmap->get_info(whoami);
+
+    for (map<mds_gid_t,MDSMap::mds_info_t>::const_iterator p = mdsmap->get_mds_info().begin();
+       p != mdsmap->get_mds_info().end();
+       ++p) {
+      if (p->second.state == MDSMap::STATE_STANDBY_REPLAY &&
+	  (p->second.standby_for_rank == whoami ||(info.name.length() && p->second.standby_for_name == info.name))) {
+	found = true;
+	break;
+      }
+      if (found)
+	mdlog->set_write_iohint(0);
+      else
+	mdlog->set_write_iohint(CEPH_OSD_OP_FLAG_FADVISE_DONTNEED);
+    }
+  }
+
   mdcache->notify_mdsmap_changed();
 }
 
