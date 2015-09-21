@@ -10742,15 +10742,19 @@ void ReplicatedPG::hit_set_clear()
 void ReplicatedPG::hit_set_setup()
 {
   if (!is_active() ||
-      !is_primary() ||
-      !pool.info.hit_set_count ||
-      !pool.info.hit_set_period ||
-      pool.info.hit_set_params.get_type() == HitSet::TYPE_NONE) {
+      !is_primary()) {
     hit_set_clear();
+    return;
+  }
+
+  if (is_active() && is_primary() &&
+      (!pool.info.hit_set_count ||
+       !pool.info.hit_set_period ||
+       pool.info.hit_set_params.get_type() == HitSet::TYPE_NONE)) {
+    hit_set_clear();
+
     // only primary is allowed to remove all the hit set objects
-    if (is_primary() && is_peered()) {
-      hit_set_remove_all();
-    }
+    hit_set_remove_all();
     return;
   }
 
