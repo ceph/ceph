@@ -547,6 +547,11 @@ target_link_libraries(ceph-mon mon boost_thread common os global ${EXTRALIBS}
 install(TARGETS ceph-mon DESTINATION bin)
 
 # OSD
+if(${HAVE_XFS})
+  set(libos_xfs_srcs
+    os/XfsFileStoreBackend.cc
+    os/fs/XFS.cc)
+endif(${HAVE_XFS})
 set(libos_srcs
   os/FileJournal.cc
   os/FileStore.cc
@@ -562,7 +567,6 @@ set(libos_srcs
   os/GenericFileStoreBackend.cc
   os/BtrfsFileStoreBackend.cc
   os/ZFSFileStoreBackend.cc
-  os/XfsFileStoreBackend.cc
   os/KeyValueStore.cc
   os/KeyValueDB.cc
   os/MemStore.cc
@@ -571,7 +575,8 @@ set(libos_srcs
   os/newstore/NewStore.cc
   os/newstore/newstore_types.cc
   os/fs/FS.cc
-  os/fs/XFS.cc)
+  ${libos_xfs_srcs})
+
 set(os_mon_files
   os/LevelDBStore.cc)
 add_library(os_mon_objs OBJECT ${os_mon_files})

@@ -111,6 +111,12 @@ set(HAVE_LIBFUSE ${FUSE_FOUND})
 CHECK_FUNCTION_EXISTS(fuse_getgroups HAVE_FUSE_GETGROUPS)
 endif(${WITH_FUSE})
 
+option(WITH_XFS "XFS is here" ON)
+if(${WITH_XFS})
+find_package(xfs)
+set(HAVE_XFS ${XFS_FOUND})
+endif(${WITH_XFS})
+
 find_package(blkid REQUIRED)
 set(HAVE_LIBBLKID ${BLKID_FOUND})
 
