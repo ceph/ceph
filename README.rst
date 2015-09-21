@@ -52,7 +52,7 @@ See :ref:`installation_and_setup`.
 Infrastructure
 ==============
 
-These examples in this document are based on the lab machine configuration used
+The examples in this document are based on the lab machine configuration used
 by the Red Hat Ceph development and quality assurance teams (see
 :ref:`lab_setup`). Other instances of a Ceph Lab being used in a
 development or testing environment may differ from these examples.
@@ -68,11 +68,11 @@ An integration test run takes three items of configuration:
   "username@hostname.example.com: ssh-rsa long_hostkey_here"
   It is possible to configure your installation so that if the targets line
   and host keys are omitted and teuthology is run with the --lock option,
-  then teuthology will grab available machines from a pool of available
+  then teuthology will grab machines from a pool of available
   test machines.
 - ``roles``: how to use the hosts; this is a list of lists, where each
-  entry lists all the roles to be run on a single host; for example, a
-  single entry might say ``[mon.1, osd.1]``
+  entry lists all the roles to be run on a single host. For example, a
+  single entry might say ``[mon.1, osd.1]``.
 - ``tasks``: how to set up the cluster and what tests to run on it;
   see below for examples
 
@@ -113,13 +113,13 @@ passwordless `sudo` access. Note that the ssh keys at the end of the
 ``targets`` entries are the public ssh keys for the hosts.  These are
 located in /etc/ssh/ssh_host_rsa_key.pub
 
-If you had save the above file as ``example.yaml``, you could run
-teuthology on it by saying::
+If you saved the above file as ``example.yaml``, you could run
+teuthology on it like this::
 
     ./virtualenv/bin/teuthology example.yaml
 
-You can also pass the ``-v`` option, for more verbose execution. See
-``teuthology --help`` for more.
+You could also pass the ``-v`` option for more verbose execution. See
+``teuthology --help`` for more options.
 
 
 Multiple config files
@@ -150,7 +150,7 @@ lock command was run.
 You can override this with the ``--owner`` option when running
 teuthology or teuthology-lock.
 
-With teuthology-lock, you can also add a description, so you can
+With teuthology-lock you can also add a description, so you can
 remember which tests you were running. This can be done when
 locking or unlocking machines, or as a separate action with the
 ``--update`` option. To lock 3 machines and set a description, run::
@@ -194,8 +194,8 @@ callable named ``task``. It gets the following arguments:
   ``["client.0"]``.
 
 Tasks can be simple functions, called once in the order they are
-listed in ``tasks``. But sometimes, it makes sense for a task to be
-able to clean up after itself; for example, unmounting the filesystem
+listed in ``tasks``. But sometimes it makes sense for a task to be
+able to clean up after itself: for example, unmounting the filesystem
 after a test run. A task callable that returns a Python `context
 manager
 <http://docs.python.org/library/stdtypes.html#typecontextmanager>`__
@@ -222,7 +222,7 @@ Some of the more important / commonly used tasks include:
   the test configuration to cause it to install any branch, SHA, archive or
   URL. The following are valid parameters.
 
-- ``branch``: specify a branch (bobtail, cuttlefish...)
+- ``branch``: specify a branch (firefly, giant...)
 - ``flavor``: specify a flavor (next, unstable...). Flavors can be thought of
   as subsets of branches.  Sometimes (unstable, for example) they may have a
   predefined meaning.
@@ -238,7 +238,7 @@ Some of the more important / commonly used tasks include:
   behaving like one.
   Sub-tasks can nest further information.  For example, overrides
   of install tasks are project specific, so the following section of a yaml
-  file would cause all ceph installation to default into using the cuttlefish
+  file would cause all ceph installations to default to using the cuttlefish
   branch::
 
     overrides:
@@ -249,18 +249,18 @@ Some of the more important / commonly used tasks include:
 * ``workunit``: workunits are a way of grouping tasks and behavior on targets.
 * ``sequential``: group the sub-tasks into a unit where the sub-tasks run
   sequentially as listed.
-* ``parallel``: group the sub-tasks into a unit where the sub-task all run in
+* ``parallel``: group the sub-tasks into a unit where the sub-tasks all run in
   parallel.
 
-Sequential and parallel tasks can be nested.  Tasks run sequentially if not
-specified.
+Sequential and parallel tasks can be nested.  Tasks run sequentially unless
+specified otherwise.
 
 The above list is a very incomplete description of the tasks available on
-teuthology. The teuthology/task subdirectory contains the teuthology
-specific python files that implement tasks.
+teuthology. The teuthology/task subdirectory contains the teuthology-specific 
+python files that implement tasks.
 
 Extra tasks used by teuthology can be found in ceph-qa-suite/tasks.  These
-tasks are not needed for teuthology to run but do test specific independent
+tasks are not needed for teuthology to run, but do test specific independent
 features.  A user who wants to define a test for a new feature can implement
 new tasks in this directory.
 
@@ -301,7 +301,7 @@ This is also useful to pause the execution of the test between two tasks,
 either to perform ad hoc operations, or to examine the state of the cluster.
 Hit ``control-D`` to continue when done.
 
-You need to nest ``interactive`` underneath of ``tasks`` in your config. You
+You need to nest ``interactive`` underneath ``tasks`` in your config. You
 can have has many ``interactive`` tasks as needed in your task list.
 
 An example::
