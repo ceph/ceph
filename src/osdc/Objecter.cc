@@ -1020,7 +1020,7 @@ void Objecter::handle_osd_map(MOSDMap *m)
   map<int64_t, bool> pool_full_map;
   for (map<int64_t, pg_pool_t>::const_iterator it = osdmap->get_pools().begin();
        it != osdmap->get_pools().end(); ++it)
-    pool_full_map[it->first] = it->second.has_flag(pg_pool_t::FLAG_FULL);
+    pool_full_map[it->first] = _osdmap_pool_full(it->second);
 
   
   list<LingerOp*> need_resend_linger;
@@ -2379,7 +2379,9 @@ bool Objecter::target_should_be_paused(op_target_t *t)
 {
   const pg_pool_t *pi = osdmap->get_pg_pool(t->base_oloc.pool);
   bool pauserd = osdmap->test_flag(CEPH_OSDMAP_PAUSERD);
-  bool pausewr = osdmap->test_flag(CEPH_OSDMAP_PAUSEWR) || _osdmap_full_flag() || pi->has_flag(pg_pool_t::FLAG_FULL);
+  bool pausewr = osdmap->test_flag(CEPH_OSDMAP_PAUSEWR) ||
+                 _osdmap_full_flag() ||
+                 _osdmap_pool_full(*pi);
 
   return (t->flags & CEPH_OSD_FLAG_READ && pauserd) ||
          (t->flags & CEPH_OSD_FLAG_WRITE && pausewr) ||
@@ -2415,17 +2417,22 @@ bool Objecter::_osdmap_pool_full(const int64_t pool_id) const
     return false;
   }
 
-  return pool->has_flag(pg_pool_t::FLAG_FULL);
+  return _osdmap_pool_full(*pool);
 }
 
 bool Objecter::_osdmap_has_pool_full() const
 {
   for (map<int64_t, pg_pool_t>::const_iterator it = osdmap->get_pools().begin();
        it != osdmap->get_pools().end(); ++it) {
-    if (it->second.has_flag(pg_pool_t::FLAG_FULL))
+    if (_osdmap_pool_full(it->second))
       return true;
   }
   return false;
+}
+
+bool Objecter::_osdmap_pool_full(const pg_pool_t &p) const
+{
+  return p.has_flag(pg_pool_t::FLAG_FULL) && honor_osdmap_full;
 }
 
 /**
@@ -2442,9 +2449,9 @@ void Objecter::update_pool_full_map(map<int64_t, bool>& pool_full_map)
   for (map<int64_t, pg_pool_t>::const_iterator it = osdmap->get_pools().begin();
        it != osdmap->get_pools().end(); ++it) {
     if (pool_full_map.find(it->first) == pool_full_map.end()) {
-      pool_full_map[it->first] = it->second.has_flag(pg_pool_t::FLAG_FULL);
+      pool_full_map[it->first] = _osdmap_pool_full(it->second);
     } else {
-      pool_full_map[it->first] = it->second.has_flag(pg_pool_t::FLAG_FULL) || pool_full_map[it->first];
+      pool_full_map[it->first] = _osdmap_pool_full(it->second) || pool_full_map[it->first];
     }
   }
 }
