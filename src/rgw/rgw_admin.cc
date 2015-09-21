@@ -2144,6 +2144,23 @@ int main(int argc, char **argv)
 	  return -ret;
 	}
 
+	list<string> realms;
+	ret = store->list_realms(realms);
+	if (ret < 0) {
+	  cerr << "failed to list realms: " << cpp_strerror(-ret) << std::endl;
+	  return -ret;
+	}
+	for (list<string>::iterator iter = realms.begin(); iter != realms.end(); ++iter)
+	{	 
+	  RGWRealm realm(*iter);
+	  ret = realm.init(g_ceph_context, store);
+	  if (ret < 0) {
+	    cerr << "failed to init realm: " << cpp_strerror(-ret) << std::endl;
+	    return -ret;
+	  }
+	  zonegroupmap.update(realm);
+	}
+
 	list<string> zonegroups;
 	ret = store->list_zonegroups(zonegroups);
 	if (ret < 0) {
