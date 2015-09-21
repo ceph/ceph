@@ -371,6 +371,8 @@ private:
 
   C_OnFinisher *wrap_finisher(Context *c);
 
+  uint32_t write_iohint; //the fadvise flags for write op, see CEPH_OSD_OP_FADIVSE_*
+
 public:
   Journaler(inodeno_t ino_, int64_t pool, const char *mag, Objecter *obj, PerfCounters *l, int lkey, SafeTimer *tim, Finisher *f) : 
     last_committed(mag),
@@ -388,7 +390,7 @@ public:
     fetch_len(0), temp_fetch_len(0),
     on_readable(0), on_write_error(NULL), called_write_error(false),
     expire_pos(0), trimming_pos(0), trimmed_pos(0), readable(false),
-    stopping(false)
+    write_iohint(0), stopping(false)
   {
     memset(&layout, 0, sizeof(layout));
   }
@@ -469,6 +471,9 @@ public:
 
   void set_write_error_handler(Context *c);
 
+  void set_write_iohint(uint32_t iohint_flags) {
+    write_iohint = iohint_flags;
+  }
   /**
    * Cause any ongoing waits to error out with -EAGAIN, set error
    * to -EAGAIN.
