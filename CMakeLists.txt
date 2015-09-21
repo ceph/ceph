@@ -141,11 +141,7 @@ find_package(expat REQUIRED)
 set(HAVE_EXPAT ${EXPAT_FOUND})
 endif(${WITH_EXPAT})
 
-option(WITH_FCGI "FCGI is here" ON)
-if(${WITH_FCGI})
 find_package(fcgi REQUIRED)
-set(HAVE_FCGI ${FCGI_FOUND})
-endif(${WITH_FCGI})
 
 find_package(atomic_ops REQUIRED)
 set(HAVE_ATOMIC_OPS ${ATOMIC_OPS_FOUND})
