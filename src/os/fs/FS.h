@@ -51,7 +51,7 @@ public:
   virtual int zero(int fd, uint64_t offset, uint64_t length);
 
   // -- aio --
-
+#if defined(HAVE_LIBAIO)
   struct aio_t {
     struct iocb iocb;  // must be first element; see shenanigans in aio_queue_t
     void *priv;
@@ -125,7 +125,7 @@ public:
       return r;
     }
   };
-
+#endif
 };
 
 #endif

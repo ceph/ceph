@@ -36,6 +36,7 @@
 #include "json_spirit/json_spirit_reader.h"
 
 #include "ceph_objectstore_tool.h"
+#include "include/compat.h"
 
 namespace po = boost::program_options;
 using namespace std;
