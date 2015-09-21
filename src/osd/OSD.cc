@@ -8082,7 +8082,7 @@ void OSD::handle_op(OpRequestRef& op, OSDMapRef& osdmap)
     if ((service.check_failsafe_full() ||
 	 osdmap->test_flag(CEPH_OSDMAP_FULL) ||
 	 m->get_map_epoch() < superblock.last_map_marked_full) &&
-	!m->get_source().is_mds()) {  // FIXME: we'll exclude mds writes for now.
+	!m->get_source().is_mds() && !op->need_skip_full_check()) {  // FIXME: we'll exclude mds writes for now.
       // Drop the request, since the client will retry when the full
       // flag is unset.
       return;
@@ -8095,7 +8095,8 @@ void OSD::handle_op(OpRequestRef& op, OSDMapRef& osdmap)
     // pool is full ?
     map<int64_t, epoch_t> &pool_last_map_marked_full = superblock.pool_last_map_marked_full;
     if ((pi->has_flag(pg_pool_t::FLAG_FULL) ||
-       (pool_last_map_marked_full.count(pool) && (m->get_map_epoch() < pool_last_map_marked_full[pool]))) && !m->get_source().is_mds()) {
+       (pool_last_map_marked_full.count(pool) && (m->get_map_epoch() < pool_last_map_marked_full[pool]))) &&
+       !m->get_source().is_mds() && !op->need_skip_full_check()) {
       return;
     }
     
@@ -8759,6 +8760,10 @@ int OSD::init_op_flags(OpRequestRef& op)
       // skip promotion when proxying a delete op
       if (m->ops.size() == 1) {
 	op->set_skip_promote();
+      }
+      //check need force delete
+      if (g_conf->osd_op_force_delete == true) {
+        op->set_skip_full_check();
       }
       break;
 

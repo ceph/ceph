@@ -2179,7 +2179,8 @@ ceph_tid_t Objecter::_op_submit(Op *op, RWLock::Context& lc)
     op->target.paused = true;
     _maybe_request_map();
   } else if ((op->target.flags & CEPH_OSD_FLAG_WRITE) &&
-             (_osdmap_full_flag() || _osdmap_pool_full(op->target.base_oloc.pool))) {
+             (_osdmap_full_flag() || _osdmap_pool_full(op->target.base_oloc.pool)) &&
+             !(op->target.flags & CEPH_OSD_FLAG_FORCE_DELETE)) {
     ldout(cct, 0) << " FULL, paused modify " << op << " tid " << last_tid.read() << dendl;
     op->target.paused = true;
     _maybe_request_map();
@@ -2384,7 +2385,7 @@ bool Objecter::target_should_be_paused(op_target_t *t)
                  _osdmap_pool_full(*pi);
 
   return (t->flags & CEPH_OSD_FLAG_READ && pauserd) ||
-         (t->flags & CEPH_OSD_FLAG_WRITE && pausewr) ||
+         ((t->flags & CEPH_OSD_FLAG_WRITE) && !(t->flags & CEPH_OSD_FLAG_FORCE_DELETE) && pausewr) ||
          (osdmap->get_epoch() < epoch_barrier);
 }
 

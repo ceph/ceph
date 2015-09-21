@@ -397,7 +397,8 @@ enum {
 	CEPH_OSD_FLAG_ENFORCE_SNAPC    =0x100000,  /* use snapc provided even if
 						      pool uses pool snaps */
 	CEPH_OSD_FLAG_REDIRECTED   = 0x200000,  /* op has been redirected */
-	CEPH_OSD_FLAG_KNOWN_REDIR = 0x400000,  /* redirect bit is authoritative */
+	CEPH_OSD_FLAG_KNOWN_REDIR  = 0x400000,  /* redirect bit is authoritative */
+	CEPH_OSD_FLAG_FORCE_DELETE = 0x800000,  /* op force delete, need skip full check*/
 };
 
 enum {

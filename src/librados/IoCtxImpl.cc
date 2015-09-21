@@ -831,7 +831,12 @@ int librados::IoCtxImpl::remove(const object_t& oid)
   ::ObjectOperation op;
   prepare_assert_ops(&op);
   op.remove();
-  return operate(oid, &op, NULL);
+
+  if (client->cct->_conf->osd_op_force_delete == true) {
+    return operate(oid, &op, NULL, CEPH_OSD_FLAG_FORCE_DELETE);
+  } else {
+    return operate(oid, &op, NULL);
+  };
 }
 
 int librados::IoCtxImpl::trunc(const object_t& oid, uint64_t size)
