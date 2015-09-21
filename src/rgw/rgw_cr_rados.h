@@ -489,8 +489,7 @@ class RGWAsyncFetchRemoteObj : public RGWAsyncRadosRequest {
 
   RGWBucketInfo bucket_info;
 
-  string obj_name;
-  string obj_version_id;
+  rgw_obj_key key;
   uint64_t versioned_epoch;
 
   time_t src_mtime;
@@ -503,12 +502,12 @@ public:
   RGWAsyncFetchRemoteObj(RGWAioCompletionNotifier *cn, RGWRados *_store,
                          const string& _source_zone,
                          RGWBucketInfo& _bucket_info,
-                         const string& _obj_name, const string& _version_id,
+                         const rgw_obj_key& _key,
                          uint64_t _versioned_epoch,
                          bool _if_newer) : RGWAsyncRadosRequest(cn), store(_store),
                                                       source_zone(_source_zone),
                                                       bucket_info(_bucket_info),
-                                                      obj_name(_obj_name), obj_version_id(_version_id),
+                                                      key(_key),
                                                       versioned_epoch(_versioned_epoch),
                                                       copy_if_newer(_if_newer) {}
 };
@@ -521,8 +520,7 @@ class RGWFetchRemoteObjCR : public RGWSimpleCoroutine {
 
   RGWBucketInfo bucket_info;
 
-  string obj_name;
-  string obj_version_id;
+  rgw_obj_key key;
   uint64_t versioned_epoch;
 
   time_t src_mtime;
@@ -535,13 +533,13 @@ public:
   RGWFetchRemoteObjCR(RGWAsyncRadosProcessor *_async_rados, RGWRados *_store,
                       const string& _source_zone,
                       RGWBucketInfo& _bucket_info,
-                      const string& _obj_name, const string& _version_id,
+                      const rgw_obj_key& _key,
                       uint64_t _versioned_epoch,
                       bool _if_newer) : RGWSimpleCoroutine(_store->ctx()), cct(_store->ctx()),
                                        async_rados(_async_rados), store(_store),
                                        source_zone(_source_zone),
                                        bucket_info(_bucket_info),
-                                       obj_name(_obj_name), obj_version_id(_version_id),
+                                       key(_key),
                                        versioned_epoch(_versioned_epoch),
                                        copy_if_newer(_if_newer), req(NULL) {}
 
@@ -552,7 +550,7 @@ public:
 
   int send_request() {
     req = new RGWAsyncFetchRemoteObj(stack->create_completion_notifier(), store, source_zone, bucket_info,
-                                     obj_name, obj_version_id, versioned_epoch, copy_if_newer);
+                                     key, versioned_epoch, copy_if_newer);
     async_rados->queue(req);
     return 0;
   }

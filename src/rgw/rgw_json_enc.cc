@@ -572,6 +572,12 @@ void RGWBucketInfo::decode_json(JSONObj *obj) {
   bucket_index_shard_hash_type = (uint8_t)hash_type;
 }
 
+void rgw_obj_key::dump(Formatter *f) const
+{
+  encode_json("name", name, f);
+  encode_json("instance", instance, f);
+}
+
 void RGWObjEnt::dump(Formatter *f) const
 {
   encode_json("name", key.name, f);
