@@ -1174,6 +1174,8 @@ struct RGWZoneGroupMap {
 
   int update(RGWZoneGroup& zonegroup);
   int update(RGWRealm& realm);
+  int update(CephContext *cct, RGWRados *store,
+	     const string& period_id);
   
   int get_master_zonegroup(const string& current_period,
 			   RGWZoneGroup& master_zonegroup);
@@ -1301,7 +1303,7 @@ class RGWPeriod
   epoch_t epoch;
   string predecessor_uuid;
   map<int, version_t> versions;
-
+  RGWPeriodMap period_map;
   string master_zone;
 
   string realm_id;
@@ -1330,6 +1332,7 @@ public:
   const string& get_predecessor() { return predecessor_uuid;}
   const string& get_master_zone() { return master_zone;}
   const string& get_realm() { return realm_id;}
+  const RGWPeriodMap& get_map() { return period_map;}
   const string& get_pool_name(CephContext *cct);
   const string& get_latest_epoch_oid();
   const string& get_info_oid_prefix();
