@@ -4004,7 +4004,10 @@ void pg_hit_set_history_t::encode(bufferlist& bl) const
     utime_t dummy_stamp;
     ::encode(dummy_stamp, bl);
   }
-  ::encode(current_info, bl);
+  {
+    pg_hit_set_info_t dummy_info;
+    ::encode(dummy_info, bl);
+  }
   ::encode(history, bl);
   ENCODE_FINISH(bl);
 }
@@ -4017,7 +4020,10 @@ void pg_hit_set_history_t::decode(bufferlist::iterator& p)
     utime_t dummy_stamp;
     ::decode(dummy_stamp, p);
   }
-  ::decode(current_info, p);
+  {
+    pg_hit_set_info_t dummy_info;
+    ::decode(dummy_info, p);
+  }
   ::decode(history, p);
   DECODE_FINISH(p);
 }
@@ -4025,9 +4031,6 @@ void pg_hit_set_history_t::decode(bufferlist::iterator& p)
 void pg_hit_set_history_t::dump(Formatter *f) const
 {
   f->dump_stream("current_last_update") << current_last_update;
-  f->open_object_section("current_info");
-  current_info.dump(f);
-  f->close_section();
   f->open_array_section("history");
   for (list<pg_hit_set_info_t>::const_iterator p = history.begin();
        p != history.end(); ++p) {
@@ -4043,9 +4046,6 @@ void pg_hit_set_history_t::generate_test_instances(list<pg_hit_set_history_t*>& 
   ls.push_back(new pg_hit_set_history_t);
   ls.push_back(new pg_hit_set_history_t);
   ls.back()->current_last_update = eversion_t(1, 2);
-  ls.back()->current_info.begin = utime_t(2, 4);
-  ls.back()->current_info.end = utime_t(62, 24);
-  ls.back()->history.push_back(ls.back()->current_info);
   ls.back()->history.push_back(pg_hit_set_info_t());
 }
 
