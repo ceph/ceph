@@ -4766,8 +4766,8 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
           if (result >= 0) {
 	    if (maybe_create_new_object(ctx)) {
               ctx->mod_desc.create();
+	      t->touch(soid);
 	    }
-            t->touch(soid);
           }
 	}
       }
