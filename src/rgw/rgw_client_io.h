@@ -20,6 +20,7 @@ class RGWClientIO {
 
 protected:
   RGWEnv env;
+  SHA256 *sha256_hash;
 
   virtual void init_env(CephContext *cct) = 0;
 
@@ -28,13 +29,17 @@ protected:
 
 public:
   virtual ~RGWClientIO() {}
-  RGWClientIO() : account(false), bytes_sent(0), bytes_received(0) {}
+  RGWClientIO() : account(false), bytes_sent(0), bytes_received(0) {
+    sha256_hash = calc_hash_sha256_open_stream();
+  }
 
   void init(CephContext *cct);
   int print(const char *format, ...);
   int write(const char *buf, int len);
   virtual void flush() = 0;
-  int read(char *buf, int max, int *actual);
+  int read(char *buf, int max, int *actual, bool hash = false);
+
+  string grab_aws4_sha256_hash();
 
   virtual int send_status(int status, const char *status_name) = 0;
   virtual int send_100_continue() = 0;

@@ -25,6 +25,7 @@
 #include "rgw_multi_del.h"
 #include "rgw_cors.h"
 #include "rgw_cors_s3.h"
+#include "rgw_rest_s3.h"
 
 #include "rgw_client_io.h"
 
@@ -2323,11 +2324,35 @@ void RGWPutObj::execute()
 
   perfcounter->inc(l_rgw_put_b, s->obj_size);
 
+  if (s->aws4_auth_complete) {
+
+    /* complete aws4 auth */
+
+    op_ret = RGW_Auth_S3::authorize_aws4_auth_complete(store, s);
+    if (op_ret) {
+      goto done;
+    }
+
+    s->aws4_auth_complete = false;
+
+    /* verify signature */
+
+    if (s->aws4_auth_signature != s->aws4_auth_new_signature) {
+      op_ret = -ERR_SIGNATURE_NO_MATCH;
+      ldout(s->cct, 20) << "delayed aws4 auth failed" << dendl;
+      goto done;
+    }
+
+    /* authorization ok */
+
+    dout(10) << "v4 auth ok" << dendl;
+
+  }
+
   op_ret = store->check_quota(s->bucket_owner.get_id(), s->bucket,
-			      user_quota, bucket_quota, s->obj_size);
+                              user_quota, bucket_quota, s->obj_size);
   if (op_ret < 0) {
-    ldout(s->cct, 20) << "second check_quota() returned ret=" << op_ret
-		      << dendl;
+    ldout(s->cct, 20) << "second check_quota() returned op_ret=" << op_ret << dendl;
     goto done;
   }
 
