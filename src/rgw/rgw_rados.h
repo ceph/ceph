@@ -1238,13 +1238,15 @@ WRITE_CLASS_ENCODER(RGWPeriodLatestEpochInfo)
 
 class RGWPeriod
 {
-  string realm_id;
   string id;
   epoch_t epoch;
   string predecessor_uuid;
   map<int, version_t> versions;
   RGWZoneGroupMap zonegroup_map;
   string master_zone;
+
+  string realm_id;
+  string realm_name;
 
   CephContext *cct;
   RGWRados *store;
@@ -1259,17 +1261,13 @@ class RGWPeriod
   const string get_period_oid_prefix();
 
 public:
-  RGWPeriod(CephContext *_cct, RGWRados *_store)
-    : epoch(0), cct(_cct), store(_store) {}
+  RGWPeriod() {};
+  
+  RGWPeriod(const string& period_id, epoch_t _epoch = 0)
+    : id(period_id), epoch(_epoch) {}
 
-  RGWPeriod(CephContext *_cct, RGWRados *_store,
-	    const string& period_id, epoch_t _epoch = 0)
-    : id(period_id), epoch(_epoch), cct(_cct), store(_store) {}
-
-  RGWPeriod(CephContext *_cct, RGWRados *_store,
-	    const string& _master_zonegroup, const string& _master_zone)
-    : epoch(0), master_zone(_master_zone),
-      cct(_cct), store(_store) {
+  RGWPeriod(const string& _master_zonegroup, const string& _master_zone)
+    : epoch(0), master_zone(_master_zone) {
     zonegroup_map.master_zonegroup = _master_zonegroup;
   }
 
@@ -1292,8 +1290,9 @@ public:
     realm_id = _realm_id;
   }
   int get_latest_epoch(epoch_t& epoch);
-  int init(const string &period_realm_id = "", const string &realm_name = "", bool setup_obj = true);
-  int init(const string& period_id, epoch_t epoch = 0, bool setup_obj = true);
+  int init(CephContext *_cct, RGWRados *_store, const string &period_realm_id, const string &period_realm_name = "",
+	   bool setup_obj = true);
+  int init(CephContext *_cct, RGWRados *_store, bool setup_obj = true);  
   int use_next_epoch();
   
   int create();

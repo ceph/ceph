@@ -48,8 +48,8 @@ void RGWOp_Period_Get::execute() {
   epoch_t epoch = 0;
   RESTArgs::get_uint32(s, "epoch", 0, &epoch);
 
-  period = new RGWPeriod(g_ceph_context, store);
-  http_ret = period->init(period_id, epoch);
+  period = new RGWPeriod(period_id, epoch);
+  http_ret = period->init(g_ceph_context, store);
   if (http_ret < 0) {
     dout(5) << "failed to read period" << dendl;
   }
@@ -73,8 +73,8 @@ void RGWOp_Period_Post::execute() {
   epoch_t epoch = 0;
   RESTArgs::get_uint32(s, "epoch", 0, &epoch);
 
-  RGWPeriod period(g_ceph_context, store);
-  http_ret = period.init(period_id, epoch);
+  RGWPeriod period(period_id, epoch);
+  http_ret = period.init(g_ceph_context, store);
   if (http_ret < 0) {
     dout(5) << "failed to read period" << dendl;
     return;
