@@ -120,6 +120,8 @@ struct onode_t {
   uint32_t last_overlay_key;           ///< key for next overlay
   uint64_t omap_head;                  ///< id for omap root node
 
+  uint32_t frag_size;                  ///< fixed fragment size
+
   uint32_t expected_object_size;
   uint32_t expected_write_size;
 
@@ -128,8 +130,22 @@ struct onode_t {
       size(0),
       last_overlay_key(0),
       omap_head(0),
+      frag_size(0),
       expected_object_size(0),
       expected_write_size(0) {}
+
+  map<uint64_t,fragment_t>::iterator find_fragment(uint64_t offset) {
+    map<uint64_t, fragment_t>::iterator fp = data_map.lower_bound(offset);
+    fp = data_map.lower_bound(offset);
+    if (fp != data_map.begin()) {
+      --fp;
+    }
+    if (fp != data_map.end() &&
+	fp->first + fp->second.length <= offset) {
+      ++fp;
+    }
+    return fp;
+  }
 
   void encode(bufferlist& bl) const;
   void decode(bufferlist::iterator& p);

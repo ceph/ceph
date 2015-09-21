@@ -468,6 +468,113 @@ TEST_P(StoreTest, ManySmallWrite) {
   }
 }
 
+TEST_P(StoreTest, ManyBigWrite) {
+  ObjectStore::Sequencer osr("test");
+  int r;
+  coll_t cid;
+  ghobject_t a(hobject_t(sobject_t("Object 1", CEPH_NOSNAP)));
+  ghobject_t b(hobject_t(sobject_t("Object 2", CEPH_NOSNAP)));
+  {
+    ObjectStore::Transaction t;
+    t.create_collection(cid, 0);
+    cerr << "Creating collection " << cid << std::endl;
+    r = store->apply_transaction(&osr, t);
+    ASSERT_EQ(r, 0);
+  }
+  bufferlist bl;
+  bufferptr bp(4 * 1048576);
+  bp.zero();
+  bl.append(bp);
+  for (int i=0; i<10; ++i) {
+    ObjectStore::Transaction t;
+    t.write(cid, a, i*4*1048586, 4*1048576, bl, 0);
+    r = store->apply_transaction(&osr, t);
+    ASSERT_EQ(r, 0);
+  }
+  // aligned
+  for (int i=0; i<10; ++i) {
+    ObjectStore::Transaction t;
+    t.write(cid, b, (rand() % 256)*4*1048576, 4*1048576, bl, 0);
+    r = store->apply_transaction(&osr, t);
+    ASSERT_EQ(r, 0);
+  }
+  // unaligned
+  for (int i=0; i<10; ++i) {
+    ObjectStore::Transaction t;
+    t.write(cid, b, (rand() % (256*4096))*1024, 4*1048576, bl, 0);
+    r = store->apply_transaction(&osr, t);
+    ASSERT_EQ(r, 0);
+  }
+  // do some zeros
+  for (int i=0; i<10; ++i) {
+    ObjectStore::Transaction t;
+    t.zero(cid, b, (rand() % (256*4096))*1024, 16*1048576);
+    r = store->apply_transaction(&osr, t);
+    ASSERT_EQ(r, 0);
+  }
+  {
+    ObjectStore::Transaction t;
+    t.remove(cid, a);
+    t.remove(cid, b);
+    t.remove_collection(cid);
+    cerr << "Cleaning" << std::endl;
+    r = store->apply_transaction(&osr, t);
+    ASSERT_EQ(r, 0);
+  }
+}
+
+TEST_P(StoreTest, MiscFragmentTests) {
+  ObjectStore::Sequencer osr("test");
+  int r;
+  coll_t cid;
+  ghobject_t a(hobject_t(sobject_t("Object 1", CEPH_NOSNAP)));
+  {
+    ObjectStore::Transaction t;
+    t.create_collection(cid, 0);
+    cerr << "Creating collection " << cid << std::endl;
+    r = store->apply_transaction(&osr, t);
+    ASSERT_EQ(r, 0);
+  }
+  bufferlist bl;
+  bufferptr bp(524288);
+  bp.zero();
+  bl.append(bp);
+  {
+    ObjectStore::Transaction t;
+    t.write(cid, a, 0, 524288, bl, 0);
+    r = store->apply_transaction(&osr, t);
+    ASSERT_EQ(r, 0);
+  }
+  {
+    ObjectStore::Transaction t;
+    t.write(cid, a, 1048576, 524288, bl, 0);
+    r = store->apply_transaction(&osr, t);
+    ASSERT_EQ(r, 0);
+  }
+  {
+    bufferlist inbl;
+    int r = store->read(cid, a, 524288 + 131072, 1024, inbl);
+    ASSERT_EQ(r, 1024);
+    ASSERT_EQ(inbl.length(), 1024u);
+    ASSERT_TRUE(inbl.is_zero());
+  }
+  {
+    ObjectStore::Transaction t;
+    t.write(cid, a, 1048576 - 4096, 524288, bl, 0);
+    r = store->apply_transaction(&osr, t);
+    ASSERT_EQ(r, 0);
+  }
+  {
+    ObjectStore::Transaction t;
+    t.remove(cid, a);
+    t.remove_collection(cid);
+    cerr << "Cleaning" << std::endl;
+    r = store->apply_transaction(&osr, t);
+    ASSERT_EQ(r, 0);
+  }
+
+}
+
 TEST_P(StoreTest, SimpleAttrTest) {
   ObjectStore::Sequencer osr("test");
   int r;
