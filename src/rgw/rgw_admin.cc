@@ -1787,8 +1787,8 @@ int main(int argc, char **argv)
 	  cerr << "could not init realm " << ": " << cpp_strerror(-ret) << std::endl;
 	  return ret;
 	}
-	RGWPeriod period(g_ceph_context, store, master_zonegroup, master_zone);
-	ret = period.init(realm.get_id(), realm.get_name(), false);
+	RGWPeriod period(master_zonegroup, master_zone);
+	ret = period.init(g_ceph_context, store, realm.get_id(), realm.get_name(), false);
 	if (ret < 0) {
 	  cerr << "failed to init period " << ": " << cpp_strerror(-ret) << std::endl;
 	  return ret;
@@ -1808,8 +1808,8 @@ int main(int argc, char **argv)
 	  cerr << "missing realm name or id" << std::endl;
 	  return -EINVAL;
 	}
-	RGWPeriod period(g_ceph_context, store, period_id);
-	int ret = period.init();
+	RGWPeriod period(period_id);
+	int ret = period.init(g_ceph_context, store);
 	if (ret < 0) {
 	  cerr << "period.init failed: " << cpp_strerror(-ret) << std::endl;
 	  return -ret;
@@ -1832,8 +1832,8 @@ int main(int argc, char **argv)
 	if (!period_epoch.empty()) {
 	  epoch = atoi(period_epoch.c_str());
 	}
-	RGWPeriod period(g_ceph_context, store, period_id, epoch);
-	int ret = period.init();
+	RGWPeriod period(period_id, epoch);
+	int ret = period.init(g_ceph_context, store);
 	if (ret < 0) {
 	  cerr << "period init failed: " << cpp_strerror(-ret) << std::endl;
 	  return -ret;
@@ -2701,8 +2701,8 @@ int main(int argc, char **argv)
         params["epoch"] = period_epoch;
 
       // load the period
-      RGWPeriod period(g_ceph_context, store, period_id);
-      int ret = period.init();
+      RGWPeriod period(period_id);
+      int ret = period.init(g_ceph_context, store);
       if (ret < 0) {
         cerr << "period init failed: " << cpp_strerror(-ret) << std::endl;
         return ret;
@@ -2754,7 +2754,12 @@ int main(int argc, char **argv)
         cerr << "request failed: " << cpp_strerror(-ret) << std::endl;
         return ret;
       }
-      RGWPeriod period(g_ceph_context, store);
+      RGWPeriod period;
+      ret = period.init(g_ceph_context, store, false);
+      if (ret < 0) {
+	cerr << "faile to init period " << cpp_strerror(-ret) << std::endl;
+	return ret;
+      }
       try {
         decode_json_obj(period, &p);
       } catch (JSONDecoder::err& e) {
