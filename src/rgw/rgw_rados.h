@@ -1124,21 +1124,24 @@ struct RGWPeriodMap
 };
 WRITE_CLASS_ENCODER(RGWPeriodMap)
 
+class RGWRealm;
+
 struct RGWZoneGroupMap {
+
   Mutex lock;
-  RGWPeriodMap period_map;
+  map<string, RGWPeriodMap> periods;
 
   RGWQuotaInfo bucket_quota;
   RGWQuotaInfo user_quota;
 
   RGWZoneGroupMap& operator=(const RGWZoneGroupMap& map) {
-    period_map = map.period_map;
+    periods = map.periods;
     bucket_quota = map.bucket_quota;
     user_quota = map.user_quota;
     return *this;
   }
 
-  RGWZoneGroupMap() : lock("RGWZoneGroupMap") {}
+  RGWZoneGroupMap() : lock("RGWZoneGroupMap"){}
 
   void encode(bufferlist& bl) const;
   void decode(bufferlist::iterator& bl);
@@ -1149,6 +1152,19 @@ struct RGWZoneGroupMap {
 
   int update(RGWZoneGroup& zonegroup);
 
+  int get_master_zonegroup(const string& current_period,
+			   RGWZoneGroup& master_zonegroup);
+
+  int get_zonegroups(const string& current_period,
+		     map<string, RGWZoneGroup>& zonegroups);
+
+  int get_zonegroup(CephContext *cct, RGWRados *store,
+		    RGWZoneGroup& zonegroup,
+		    const string& zonegroup_id,
+		    const string& current_period = "");
+
+  bool is_single_zonegroup(CephContext *cct, RGWRados *store);
+  void clear_zonegroups();
   void dump(Formatter *f) const;
   void decode_json(JSONObj *obj);
 };
