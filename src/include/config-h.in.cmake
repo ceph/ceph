@@ -72,9 +72,6 @@
 /* Define if you have fuse */
 #cmakedefine HAVE_LIBFUSE
 
-/* Define to 1 if you have the `leveldb' library (-lleveldb). */
-#cmakedefine HAVE_LIBLEVELDB 1
-
 /* Define to 1 if you have the `profiler' library (-lprofiler). */
 #cmakedefine HAVE_LIBPROFILER 1
 
