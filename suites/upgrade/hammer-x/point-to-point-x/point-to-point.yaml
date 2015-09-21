@@ -41,6 +41,9 @@ tasks:
    - workload_hammer
    - upgrade-sequence_hammer
 - print: "**** done parallel hammer branch"
+- install.upgrade:
+   client.1:
+     branch: hammer
 - parallel:
    - workload_x
    - upgrade-sequence_x
@@ -183,6 +186,7 @@ upgrade-sequence_hammer:
 workload_x:
    sequential:
    - workunit:
+       branch: hammer
        clients:
          client.1:
          - rados/test-upgrade-v9.0.1.sh
