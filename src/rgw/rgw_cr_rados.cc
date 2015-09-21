@@ -397,6 +397,7 @@ int RGWAsyncFetchRemoteObj::_send_request()
                        attrs,
                        RGW_OBJ_CATEGORY_MAIN,
                        versioned_epoch,
+                       0, /* delete_at */
                        NULL, /* string *version_id, */
                        NULL, /* string *ptag, */
                        NULL, /* string *petag, */
