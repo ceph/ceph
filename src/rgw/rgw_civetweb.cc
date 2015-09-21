@@ -11,13 +11,18 @@ int RGWMongoose::write_data(const char *buf, int len)
 {
   if (!header_done) {
     header_data.append(buf, len);
-    return 0;
+    return len;
   }
   if (!sent_header) {
     data.append(buf, len);
-    return 0;
+    return len;
   }
-  return mg_write(conn, buf, len);
+  int r = mg_write(conn, buf, len);
+  if (r == 0) {
+    /* didn't send anything, error out */
+    return -EIO;
+  }
+  return r;
 }
 
 RGWMongoose::RGWMongoose(mg_connection *_conn, int _port) : conn(_conn), port(_port), header_done(false), sent_header(false), has_content_length(false),
