@@ -424,7 +424,7 @@ void calc_hmac_sha1(const char *key, int key_len,
  * calculate the sha256 value of a given msg and key
  */
 void calc_hmac_sha256(const char *key, int key_len,
-					  const char *msg, int msg_len, char *dest)
+                      const char *msg, int msg_len, char *dest)
 {
   char hash_sha256[CEPH_CRYPTO_HMACSHA256_DIGESTSIZE];
 
@@ -438,18 +438,44 @@ void calc_hmac_sha256(const char *key, int key_len,
 /*
  * calculate the sha256 hash value of a given msg
  */
-void calc_hash_sha256(const string& msg, string& dest)
+void calc_hash_sha256(const char *msg, int len, string& dest)
 {
   char hash_sha256[CEPH_CRYPTO_HMACSHA256_DIGESTSIZE];
 
   SHA256 hash;
-  hash.Update((const unsigned char *)msg.c_str(), msg.size());
+  hash.Update((const unsigned char *)msg, len);
   hash.Final((unsigned char *)hash_sha256);
 
   char hex_str[(CEPH_CRYPTO_SHA256_DIGESTSIZE * 2) + 1];
   buf_to_hex((unsigned char *)hash_sha256, CEPH_CRYPTO_SHA256_DIGESTSIZE, hex_str);
 
   dest = std::string(hex_str);
+}
+
+using ceph::crypto::SHA256;
+
+SHA256* calc_hash_sha256_open_stream()
+{
+  return new SHA256;
+}
+
+void calc_hash_sha256_update_stream(SHA256 *hash, const char *msg, int len)
+{
+  hash->Update((const unsigned char *)msg, len);
+}
+
+string calc_hash_sha256_close_stream(SHA256* hash)
+{
+  char hash_sha256[CEPH_CRYPTO_HMACSHA256_DIGESTSIZE];
+
+  hash->Final((unsigned char *)hash_sha256);
+
+  char hex_str[(CEPH_CRYPTO_SHA256_DIGESTSIZE * 2) + 1];
+  buf_to_hex((unsigned char *)hash_sha256, CEPH_CRYPTO_SHA256_DIGESTSIZE, hex_str);
+
+  delete hash;
+
+  return std::string(hex_str);
 }
 
 int gen_rand_base64(CephContext *cct, char *dest, int size) /* size should be the required string size + 1 */

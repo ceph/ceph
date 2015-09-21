@@ -4,6 +4,7 @@
 #include "common/armor.h"
 #include "common/utf8.h"
 #include "rgw_common.h"
+#include "rgw_client_io.h"
 
 #define dout_subsys ceph_subsys_rgw
 
@@ -145,9 +146,9 @@ int rgw_get_s3_header_digest(const string& auth_hdr, const string& key, string& 
   return 0;
 }
 
-void rgw_hash_s3_string_sha256(const string& str, string& dest)
+void rgw_hash_s3_string_sha256(const char *data, int len, string& dest)
 {
-  calc_hash_sha256(str, dest);
+  calc_hash_sha256(data, len, dest);
 }
 
 static inline bool is_base64_for_content_md5(unsigned char c) {
@@ -266,8 +267,14 @@ void rgw_create_s3_v4_canonical_request(struct req_state *s, const string& canon
   if (unsigned_payload) {
     request_payload_hash = "UNSIGNED-PAYLOAD";
   } else {
-    rgw_hash_s3_string_sha256(request_payload.c_str(), request_payload.size(), request_payload_hash);
+    if (s->aws4_auth_complete) {
+      request_payload_hash = s->cio->grab_aws4_sha256_hash();
+    } else {
+      rgw_hash_s3_string_sha256(request_payload.c_str(), request_payload.size(), request_payload_hash);
+    }
   }
+
+  s->aws4_auth_payload_hash = request_payload_hash;
 
   dout(10) << "payload request hash = " << request_payload_hash << dendl;
 
@@ -275,7 +282,7 @@ void rgw_create_s3_v4_canonical_request(struct req_state *s, const string& canon
       canonical_qs.c_str(), canonical_hdrs.c_str(), signed_hdrs.c_str(),
       request_payload_hash.c_str(), canonical_req);
 
-  rgw_hash_s3_string_sha256(canonical_req, canonical_req_hash);
+  rgw_hash_s3_string_sha256(canonical_req.c_str(), canonical_req.size(), canonical_req_hash);
 
   dout(10) << "canonical request = " << canonical_req << dendl;
   dout(10) << "canonical request hash = " << canonical_req_hash << dendl;
