@@ -34,8 +34,11 @@ Runtime
 If you would like to see the configuration settings at runtime, you must log
 in to a host with a running daemon and execute the following:: 
 
-	ceph --admin-daemon {/path/to/admin/socket} config show | less	
-	ceph --admin-daemon /var/run/ceph/ceph-osd.0.asok config show | less
+	ceph daemon {daemon-name} config show | less
+
+For example,::
+
+  ceph daemon osd.0 config show | less
 
 To activate Ceph's debugging output (*i.e.*, ``dout()``) at runtime,  use the
 ``ceph tell`` command to inject arguments into the runtime configuration:: 
@@ -51,10 +54,10 @@ debug logging for a ``ceph-osd`` daemon named ``osd.0``, execute the following::
 
 The ``ceph tell`` command goes through the monitors. If you cannot bind to the
 monitor, you can still make the change by logging into the host of the daemon
-whose configuration you'd like to change using ``ceph --admin-daemon``.
+whose configuration you'd like to change using ``ceph daemon``.
 For example:: 
 
-	sudo ceph --admin-daemon /var/run/ceph/ceph-osd.0.asok config set debug_osd 0/5
+	sudo ceph daemon osd.0 config set debug_osd 0/5
 
 See `Subsystem, Log and Debug Settings`_ for details on available settings.
 

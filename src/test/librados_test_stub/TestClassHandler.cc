@@ -2,10 +2,12 @@
 // vim: ts=8 sw=2 smarttab
 
 #include "test/librados_test_stub/TestClassHandler.h"
+#include "test/librados_test_stub/TestIoCtxImpl.h"
 #include <boost/algorithm/string/predicate.hpp>
 #include <dlfcn.h>
 #include <errno.h>
 #include "common/debug.h"
+#include "include/assert.h"
 
 #define dout_subsys ceph_subsys_rados
 
@@ -106,10 +108,16 @@ TestClassHandler::SharedMethodContext TestClassHandler::get_method_context(
     TestIoCtxImpl *io_ctx_impl, const std::string &oid,
     const SnapContext &snapc) {
   SharedMethodContext ctx(new MethodContext());
-  ctx->io_ctx_impl = io_ctx_impl;
+
+  // clone to ioctx to provide a firewall for gmock expectations
+  ctx->io_ctx_impl = io_ctx_impl->clone();
   ctx->oid = oid;
   ctx->snapc = snapc;
   return ctx;
+}
+
+TestClassHandler::MethodContext::~MethodContext() {
+  io_ctx_impl->put();
 }
 
 } // namespace librados

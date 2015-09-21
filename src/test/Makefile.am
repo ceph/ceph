@@ -74,8 +74,10 @@ check_SCRIPTS += \
 	test/mon/osd-pool-create.sh \
 	test/mon/misc.sh \
 	test/mon/osd-crush.sh \
+	test/mon/mon-ping.sh \
 	test/mon/osd-erasure-code-profile.sh \
 	test/mon/mkfs.sh \
+	test/mon/mon-scrub.sh \
 	test/osd/osd-scrub-repair.sh \
 	test/osd/osd-config.sh \
 	test/osd/osd-bench.sh \
@@ -84,11 +86,7 @@ check_SCRIPTS += \
 	test/libradosstriper/rados-striper.sh \
 	test/test_objectstore_memstore.sh
 
-if ENABLE_ROOT_MAKE_CHECK
-check_SCRIPTS += test/ceph-disk-root.sh
-else
 check_SCRIPTS += test/ceph-disk.sh
-endif
 
 EXTRA_DIST += \
 	$(srcdir)/test/python/ceph-disk/setup.py \
@@ -121,14 +119,6 @@ EXTRA_DIST += \
         $(srcdir)/test/coverage.sh \
 	$(patsubst %,$(srcdir)/%,$(check_SCRIPTS))
 
-docker-check:
-	$(srcdir)/test/container-make-check-ubuntu-14.04.sh
-	$(srcdir)/test/container-make-check-centos-centos7.sh
-
-EXTRA_DIST += \
-	$(srcdir)/test/container-make-check-ubuntu-14.04.sh
-	$(srcdir)/test/container-make-check-centos-centos7.sh
-
 # target to build but not run the unit tests
 unittests:: $(check_PROGRAMS)
 
@@ -152,7 +142,9 @@ check_TESTPROGRAMS += unittest_addrs
 unittest_blkdev_SOURCES = test/common/test_blkdev.cc
 unittest_blkdev_CXXFLAGS = $(UNITTEST_CXXFLAGS)
 unittest_blkdev_LDADD = $(UNITTEST_LDADD) $(CEPH_GLOBAL)
+if LINUX
 check_TESTPROGRAMS += unittest_blkdev
+endif
 
 unittest_bloom_filter_SOURCES = test/common/test_bloom_filter.cc
 unittest_bloom_filter_CXXFLAGS = $(UNITTEST_CXXFLAGS)
@@ -459,8 +451,6 @@ noinst_HEADERS += \
 	test/librados/test.h \
 	test/librados/TestCase.h \
 	test/libradosstriper/TestCase.h \
-	test/librbd/test_fixture.h \
-	test/librbd/test_support.h \
 	test/ObjectMap/KeyValueDBMemory.h \
 	test/omap_bench.h \
 	test/osdc/FakeWriteback.h \

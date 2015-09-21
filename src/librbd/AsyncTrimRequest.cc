@@ -24,9 +24,9 @@
 namespace librbd
 {
 
-class C_CopyupObject : public C_AsyncObjectThrottle {
+class C_CopyupObject : public C_AsyncObjectThrottle<> {
 public:
-  C_CopyupObject(AsyncObjectThrottle &throttle, ImageCtx *image_ctx,
+  C_CopyupObject(AsyncObjectThrottle<> &throttle, ImageCtx *image_ctx,
                  ::SnapContext snapc, uint64_t object_no)
     : C_AsyncObjectThrottle(throttle, *image_ctx), m_snapc(snapc),
       m_object_no(object_no)
@@ -51,9 +51,9 @@ private:
   uint64_t m_object_no;
 };
 
-class C_RemoveObject : public C_AsyncObjectThrottle {
+class C_RemoveObject : public C_AsyncObjectThrottle<> {
 public:
-  C_RemoveObject(AsyncObjectThrottle &throttle, ImageCtx *image_ctx,
+  C_RemoveObject(AsyncObjectThrottle<> &throttle, ImageCtx *image_ctx,
                  uint64_t object_no)
     : C_AsyncObjectThrottle(throttle, *image_ctx), m_object_no(object_no)
   {
@@ -203,10 +203,10 @@ void AsyncTrimRequest::send_copyup_objects() {
   m_state = STATE_COPYUP_OBJECTS;
 
   Context *ctx = create_callback_context();
-  AsyncObjectThrottle::ContextFactory context_factory(
+  AsyncObjectThrottle<>::ContextFactory context_factory(
     boost::lambda::bind(boost::lambda::new_ptr<C_CopyupObject>(),
       boost::lambda::_1, &m_image_ctx, snapc, boost::lambda::_2));
-  AsyncObjectThrottle *throttle = new AsyncObjectThrottle(
+  AsyncObjectThrottle<> *throttle = new AsyncObjectThrottle<>(
     this, m_image_ctx, context_factory, ctx, &m_prog_ctx, copyup_start,
     copyup_end);
   throttle->start_ops(m_image_ctx.concurrent_management_ops);
@@ -221,10 +221,10 @@ void AsyncTrimRequest::send_remove_objects() {
   m_state = STATE_REMOVE_OBJECTS;
 
   Context *ctx = create_callback_context();
-  AsyncObjectThrottle::ContextFactory context_factory(
+  AsyncObjectThrottle<>::ContextFactory context_factory(
     boost::lambda::bind(boost::lambda::new_ptr<C_RemoveObject>(),
       boost::lambda::_1, &m_image_ctx, boost::lambda::_2));
-  AsyncObjectThrottle *throttle = new AsyncObjectThrottle(
+  AsyncObjectThrottle<> *throttle = new AsyncObjectThrottle<>(
     this, m_image_ctx, context_factory, ctx, &m_prog_ctx, m_delete_start,
     m_num_objects);
   throttle->start_ops(m_image_ctx.concurrent_management_ops);

@@ -286,10 +286,9 @@ public:
   // pg state
   pg_info_t        info;
   __u8 info_struct_v;
+  // v8 was pgmeta, first appeared in hammer.
   static const __u8 cur_struct_v = 8;
-  // v7 was SnapMapper addition in 86658392516d5175b2756659ef7ffaaf95b0f8ad
-  // (first appeared in cuttlefish).
-  static const __u8 compat_struct_v = 7;
+  static const __u8 compat_struct_v = 8;
   bool must_upgrade() {
     return info_struct_v < cur_struct_v;
   }
@@ -1032,8 +1031,7 @@ public:
    * @returns true if any useful work was accomplished; false otherwise
    */
   virtual bool start_recovery_ops(
-    int max, RecoveryCtx *prctx,
-    ThreadPool::TPHandle &handle,
+    int max, ThreadPool::TPHandle &handle,
     int *ops_begun) = 0;
 
   void purge_strays();
@@ -2189,7 +2187,8 @@ public:
     __u8 &);
   void read_state(ObjectStore *store, bufferlist &bl);
   static bool _has_removal_flag(ObjectStore *store, spg_t pgid);
-  static epoch_t peek_map_epoch(ObjectStore *store, spg_t pgid, bufferlist *bl);
+  static int peek_map_epoch(ObjectStore *store, spg_t pgid,
+			    epoch_t *pepoch, bufferlist *bl);
   void update_snap_map(
     const vector<pg_log_entry_t> &log_entries,
     ObjectStore::Transaction& t);

@@ -142,49 +142,36 @@ def vstart(new, opt=""):
     print "DONE"
 
 
-def test_failure_tty(cmd, errmsg):
-    try:
-        ttyfd = open("/dev/tty", "rw")
-    except Exception, e:
-        logging.info(str(e))
-        logging.info("SKIP " + cmd)
-        return 0
+def test_failure(cmd, errmsg, tty=False):
+    if tty:
+        try:
+            ttyfd = open("/dev/tty", "rw")
+        except Exception, e:
+            logging.info(str(e))
+            logging.info("SKIP " + cmd)
+            return 0
     TMPFILE = r"/tmp/tmp.{pid}".format(pid=os.getpid())
     tmpfd = open(TMPFILE, "w")
 
     logging.debug(cmd)
-    ret = call(cmd, shell=True, stdin=ttyfd, stdout=ttyfd, stderr=tmpfd)
-    ttyfd.close()
+    if tty:
+        ret = call(cmd, shell=True, stdin=ttyfd, stdout=ttyfd, stderr=tmpfd)
+        ttyfd.close()
+    else:
+        ret = call(cmd, shell=True, stderr=tmpfd)
     tmpfd.close()
     if ret == 0:
         logging.error(cmd)
         logging.error("Should have failed, but got exit 0")
         return 1
     lines = get_lines(TMPFILE)
-    line = lines[0]
-    if line == errmsg:
-        logging.info("Correctly failed with message \"" + line + "\"")
+    matched = [ l for l in lines if errmsg in l ]
+    if any(matched):
+        logging.info("Correctly failed with message \"" + matched[0] + "\"")
         return 0
     else:
-        logging.error("Bad message to stderr \"" + line + "\"")
+        logging.error("Bad messages to stderr \"" + str(lines) + "\"")
         return 1
-
-
-def test_failure(cmd, errmsg):
-    logging.debug(cmd)
-    try:
-        check_output(cmd, stderr=subprocess.STDOUT, shell=True)
-        logging.error(cmd)
-        logging.error("Should have failed, but got exit 0")
-        return 1
-    except subprocess.CalledProcessError, e:
-        if errmsg in e.output:
-            logging.info("Correctly failed with message \"" + errmsg + "\"")
-            return 0
-        else:
-            errmsg = e.output.split('\n')[0]
-            logging.error("Bad message to stderr \"" + errmsg + "\"")
-            return 1
 
 
 def get_nspace(num):
@@ -730,11 +717,11 @@ def main(argv):
     print "Test invalid parameters"
     # On export can't use stdout to a terminal
     cmd = (CFSD_PREFIX + "--op export --pgid {pg}").format(osd=ONEOSD, pg=ONEPG)
-    ERRORS += test_failure_tty(cmd, "stdout is a tty and no --file filename specified")
+    ERRORS += test_failure(cmd, "stdout is a tty and no --file filename specified", tty=True)
 
     # On export can't use stdout to a terminal
     cmd = (CFSD_PREFIX + "--op export --pgid {pg} --file -").format(osd=ONEOSD, pg=ONEPG)
-    ERRORS += test_failure_tty(cmd, "stdout is a tty and no --file filename specified")
+    ERRORS += test_failure(cmd, "stdout is a tty and no --file filename specified", tty=True)
 
     # Prep a valid ec export file for import failure tests
     ONEECPG = ALLECPGS[0]
@@ -777,11 +764,11 @@ def main(argv):
 
     # On import can't use stdin from a terminal
     cmd = (CFSD_PREFIX + "--op import --pgid {pg}").format(osd=ONEOSD, pg=ONEPG)
-    ERRORS += test_failure_tty(cmd, "stdin is a tty and no --file filename specified")
+    ERRORS += test_failure(cmd, "stdin is a tty and no --file filename specified", tty=True)
 
     # On import can't use stdin from a terminal
     cmd = (CFSD_PREFIX + "--op import --pgid {pg} --file -").format(osd=ONEOSD, pg=ONEPG)
-    ERRORS += test_failure_tty(cmd, "stdin is a tty and no --file filename specified")
+    ERRORS += test_failure(cmd, "stdin is a tty and no --file filename specified", tty=True)
 
     # Specify a bad --type
     cmd = (CFSD_PREFIX + "--type foobar --op list --pgid {pg}").format(osd=ONEOSD, pg=ONEPG)
@@ -804,7 +791,7 @@ def main(argv):
 
     # Specify a bad --op command
     cmd = (CFSD_PREFIX + "--op oops").format(osd=ONEOSD)
-    ERRORS += test_failure(cmd, "Must provide --op (info, log, remove, export, import, list, fix-lost, list-pgs, rm-past-intervals, set-allow-sharded-objects, dump-journal, dump-super, meta-list, get-osdmap, set-osdmap, get-inc-osdmap, set-inc-osdmap)")
+    ERRORS += test_failure(cmd, "Must provide --op (info, log, remove, export, import, list, fix-lost, list-pgs, rm-past-intervals, set-allow-sharded-objects, dump-journal, dump-super, meta-list, get-osdmap, set-osdmap, get-inc-osdmap, set-inc-osdmap, mark-complete)")
 
     # Provide just the object param not a command
     cmd = (CFSD_PREFIX + "object").format(osd=ONEOSD)

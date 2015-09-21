@@ -232,7 +232,4 @@
 /* Defined if XIO */
 #cmakedefine HAVE_XIO
 
-/* Defined if CDS */
-#cmakedefine HAVE_CDS
-
 #endif /* CONFIG_H */

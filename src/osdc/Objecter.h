@@ -633,6 +633,8 @@ struct ObjectOperation {
     uint32_t *out_data_digest;
     uint32_t *out_omap_digest;
     vector<pair<osd_reqid_t, version_t> > *out_reqids;
+    uint64_t *out_truncate_seq;
+    uint64_t *out_truncate_size;
     int *prval;
     C_ObjectOperation_copyget(object_copy_cursor_t *c,
 			      uint64_t *s,
@@ -646,13 +648,18 @@ struct ObjectOperation {
 			      uint32_t *dd,
 			      uint32_t *od,
 			      vector<pair<osd_reqid_t, version_t> > *oreqids,
+			      uint64_t *otseq,
+			      uint64_t *otsize,
 			      int *r)
       : cursor(c),
 	out_size(s), out_mtime(m),
 	out_attrs(a), out_data(d), out_omap_header(oh),
 	out_omap_data(o), out_snaps(osnaps), out_snap_seq(osnap_seq),
 	out_flags(flags), out_data_digest(dd), out_omap_digest(od),
-        out_reqids(oreqids), prval(r) {}
+        out_reqids(oreqids),
+        out_truncate_seq(otseq),
+        out_truncate_size(otsize),
+        prval(r) {}
     void finish(int r) {
       // reqids are copied on ENOENT
       if (r < 0 && r != -ENOENT)
@@ -690,6 +697,10 @@ struct ObjectOperation {
 	  *out_omap_digest = copy_reply.omap_digest;
 	if (out_reqids)
 	  *out_reqids = copy_reply.reqids;
+	if (out_truncate_seq)
+	  *out_truncate_seq = copy_reply.truncate_seq;
+	if (out_truncate_size)
+	  *out_truncate_size = copy_reply.truncate_size;
 	*cursor = copy_reply.cursor;
       } catch (buffer::error& e) {
 	if (prval)
@@ -713,6 +724,8 @@ struct ObjectOperation {
 		uint32_t *out_data_digest,
 		uint32_t *out_omap_digest,
 		vector<pair<osd_reqid_t, version_t> > *out_reqids,
+		uint64_t *truncate_seq,
+		uint64_t *truncate_size,
 		int *prval) {
     OSDOp& osd_op = add_op(CEPH_OSD_OP_COPY_GET);
     osd_op.op.copy_get.max = max;
@@ -726,7 +739,8 @@ struct ObjectOperation {
                                     out_attrs, out_data, out_omap_header,
 				    out_omap_data, out_snaps, out_snap_seq,
 				    out_flags, out_data_digest, out_omap_digest,
-				    out_reqids, prval);
+				    out_reqids, truncate_seq, truncate_size,
+				    prval);
     out_bl[p] = &h->bl;
     out_handler[p] = h;
   }
@@ -1719,6 +1733,8 @@ public:
    *         the global full flag is set, else false
    */
   bool osdmap_pool_full(const int64_t pool_id) const;
+  bool _osdmap_pool_full(const int64_t pool_id) const;
+  void update_pool_full_map(map<int64_t, bool>& pool_full_map);
 
  private:
   map<uint64_t, LingerOp*>  linger_ops;
@@ -1765,6 +1781,7 @@ public:
     RECALC_OP_TARGET_OSD_DOWN,
   };
   bool _osdmap_full_flag() const;
+  bool _osdmap_has_pool_full() const;
 
   bool target_should_be_paused(op_target_t *op);
   int _calc_target(op_target_t *t, epoch_t *last_force_resend=0, bool any_change=false);
@@ -1928,7 +1945,8 @@ private:
 
   void _scan_requests(OSDSession *s,
                      bool force_resend,
-		     bool force_resend_writes,
+		     bool cluster_full,
+                     map<int64_t, bool> *pool_full_map,
 		     map<ceph_tid_t, Op*>& need_resend,
 		     list<LingerOp*>& need_resend_linger,
 		     map<ceph_tid_t, CommandOp*>& need_resend_command);
@@ -1974,6 +1992,7 @@ private:
 public:
   ceph_tid_t op_submit(Op *op, int *ctx_budget = NULL);
   bool is_active() {
+    RWLock::RLocker l(rwlock);
     return !((!inflight_ops.read()) && linger_ops.empty() && poolstat_ops.empty() && statfs_ops.empty());
   }
 

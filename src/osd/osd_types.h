@@ -533,7 +533,7 @@ public:
   }
 
   explicit coll_t(spg_t pgid)
-    : type(TYPE_PG), pgid(pgid)
+    : type(TYPE_PG), pgid(pgid), removal_seq(0)
   {
     calc_str();
   }
@@ -1111,6 +1111,7 @@ public:
   HitSet::Params hit_set_params; ///< The HitSet params to use on this pool
   uint32_t hit_set_period;      ///< periodicity of HitSet segments (seconds)
   uint32_t hit_set_count;       ///< number of periods to retain
+  bool use_gmt_hitset;	        ///< use gmt to name the hitset archive object
   uint32_t min_read_recency_for_promote;   ///< minimum number of HitSet to check before promote on read
   uint32_t min_write_recency_for_promote;  ///< minimum number of HitSet to check before promote on write
 
@@ -1118,6 +1119,7 @@ public:
 
   uint64_t expected_num_objects; ///< expected number of objects on this pool, a value of 0 indicates
                                  ///< user does not specify any expected value
+  bool fast_read;            ///< whether turn on fast read on the pool or not
 
   pg_pool_t()
     : flags(0), type(0), size(0), min_size(0),
@@ -1141,10 +1143,12 @@ public:
       hit_set_params(),
       hit_set_period(0),
       hit_set_count(0),
+      use_gmt_hitset(true),
       min_read_recency_for_promote(0),
       min_write_recency_for_promote(0),
       stripe_width(0),
-      expected_num_objects(0)
+      expected_num_objects(0),
+      fast_read(false)
   { }
 
   void dump(Formatter *f) const;
@@ -1717,10 +1721,9 @@ WRITE_CLASS_ENCODER_FEATURES(pool_stat_t)
 struct pg_hit_set_info_t {
   utime_t begin, end;   ///< time interval
   eversion_t version;   ///< version this HitSet object was written
-
-  pg_hit_set_info_t() {}
-  pg_hit_set_info_t(utime_t b)
-    : begin(b) {}
+  bool using_gmt;	///< use gmt for creating the hit_set archive object name
+  pg_hit_set_info_t(bool using_gmt = true)
+    : using_gmt(using_gmt) {}
 
   void encode(bufferlist &bl) const;
   void decode(bufferlist::iterator &bl);
@@ -2736,9 +2739,15 @@ struct object_copy_data_t {
   ///< recent reqids on this object
   vector<pair<osd_reqid_t, version_t> > reqids;
 
+  uint64_t truncate_seq;
+  uint64_t truncate_size;
+
 public:
-  object_copy_data_t() : size((uint64_t)-1), data_digest(-1),
-			 omap_digest(-1), flags(0) {}
+  object_copy_data_t() :
+    size((uint64_t)-1), data_digest(-1),
+    omap_digest(-1), flags(0),
+    truncate_seq(0),
+    truncate_size(0) {}
 
   static void generate_test_instances(list<object_copy_data_t*>& o);
   void encode_classic(bufferlist& bl) const;
@@ -2835,6 +2844,7 @@ public:
   epoch_t mounted;     // last epoch i mounted
   epoch_t clean_thru;  // epoch i was active and clean thru
   epoch_t last_map_marked_full; // last epoch osdmap was marked full
+  map<int64_t, epoch_t> pool_last_map_marked_full; // last epoch pool was marked full
 
   OSDSuperblock() : 
     whoami(-1), 

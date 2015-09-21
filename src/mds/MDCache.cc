@@ -8167,7 +8167,7 @@ void MDCache::_open_ino_parent_opened(inodeno_t ino, int ret)
     _open_ino_traverse_dir(ino, info, 0);
   } else {
     if (ret >= 0) {
-      mds_rank_t checked_rank;
+      mds_rank_t checked_rank = mds_rank_t(ret);
       info.check_peers = true;
       info.auth_hint = checked_rank;
       info.checked.erase(checked_rank);
