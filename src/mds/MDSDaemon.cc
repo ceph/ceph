@@ -911,7 +911,7 @@ void MDSDaemon::handle_mds_map(MMDSMap *m)
 
     // Did I previously not hold a rank?  Initialize!
     if (mds_rank == NULL) {
-      mds_rank = new MDSRankDispatcher(whoami, incarnation, mds_lock, clog,
+      mds_rank = new MDSRankDispatcher(whoami, mds_lock, clog,
           timer, beacon, mdsmap, messenger, monc, objecter,
           new C_VoidFn(this, &MDSDaemon::respawn),
           new C_VoidFn(this, &MDSDaemon::suicide));
