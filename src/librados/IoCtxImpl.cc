@@ -399,6 +399,29 @@ int librados::IoCtxImpl::list(Objecter::ListContext *context, int max_entries)
   return r;
 }
 
+int librados::IoCtxImpl::list_mrc(Objecter::MRCListContext *context)
+{
+  Cond cond;
+  bool done;
+  int r = 0;
+  object_t oid;
+  Mutex mylock("IoCtxImpl::list::mylock");
+
+  if (context->at_end())
+    return 0;
+
+  context->nspace = oloc.nspace;
+
+  objecter->list_mrc(context, new C_SafeCond(&mylock, &cond, &done, &r));
+
+  mylock.Lock();
+  while(!done)
+    cond.Wait(mylock);
+  mylock.Unlock();
+
+  return r;
+}
+
 uint32_t librados::IoCtxImpl::list_seek(Objecter::ListContext *context,
 					uint32_t pos)
 {

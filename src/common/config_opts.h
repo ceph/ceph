@@ -590,6 +590,12 @@ OPTION(osd_tier_default_cache_hit_set_type, OPT_STR, "bloom")
 OPTION(osd_tier_default_cache_min_read_recency_for_promote, OPT_INT, 1) // number of recent HitSets the object must appear in to be promoted (on read)
 OPTION(osd_tier_default_cache_min_write_recency_for_promote, OPT_INT, 1) // number of recent HitSets the object must appear in to be promoted (on write)
 
+OPTION(osd_pool_default_reuse_dist_clear_period, OPT_INT, 1200)// default value for reuse distance parameters
+OPTION(osd_pool_default_reuse_dist_size, OPT_INT, 100)
+OPTION(osd_pool_default_reuse_dist_step, OPT_INT, 100)
+OPTION(osd_pool_default_reuse_dist_threshold, OPT_INT, 1000)
+OPTION(osd_pool_default_reuse_dist_max_threshold, OPT_INT, 1000)
+
 OPTION(osd_map_dedup, OPT_BOOL, true)
 OPTION(osd_map_max_advance, OPT_INT, 150) // make this < cache_size!
 OPTION(osd_map_cache_size, OPT_INT, 200)

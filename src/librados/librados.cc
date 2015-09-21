@@ -505,6 +505,20 @@ librados::WatchCtx2::
 {
 }
 
+struct librados::MRCListCtx {
+  librados::IoCtxImpl *ctx;
+  librados::IoCtxImpl dupctx;
+  Objecter::MRCListContext *lc;
+
+  MRCListCtx(librados::IoCtxImpl *c, Objecter::MRCListContext *l) : lc(l) {
+    ctx = &dupctx;
+    dupctx.dup(*c);
+  }
+  ~MRCListCtx() {
+    ctx = NULL;
+    delete lc;
+  }
+};
 
 struct librados::ObjListCtx {
   bool new_request;
@@ -767,6 +781,189 @@ uint32_t librados::NObjectIterator::get_pg_hash_position() const
 }
 
 const librados::NObjectIterator librados::NObjectIterator::__EndObjectIterator(NULL);
+
+///////////////////////////// MRCIteratorImpl /////////////////////////////
+librados::MRCIteratorImpl::MRCIteratorImpl(MRCListCtx *ctx_)
+  : ctx(ctx_)
+{
+}
+
+librados::MRCIteratorImpl::~MRCIteratorImpl()
+{
+  ctx.reset();
+}
+
+librados::MRCIteratorImpl::MRCIteratorImpl(const MRCIteratorImpl &rhs)
+{
+  *this = rhs;
+}
+
+librados::MRCIteratorImpl& librados::MRCIteratorImpl::operator=(const librados::MRCIteratorImpl &rhs)
+{
+  if (&rhs == this)
+    return *this;
+  if (rhs.ctx.get() == NULL) {
+    ctx.reset();
+    return *this;
+  }
+  Objecter::MRCListContext *list_ctx = new Objecter::MRCListContext(*rhs.ctx->lc);
+  ctx.reset(new MRCListCtx(rhs.ctx->ctx, list_ctx));
+  cur_obj = rhs.cur_obj;
+  return *this;
+}
+
+bool librados::MRCIteratorImpl::operator==(const librados::MRCIteratorImpl& rhs) const {
+
+  if (ctx.get() == NULL) {
+    if (rhs.ctx.get() == NULL)
+      return true;
+    return rhs.ctx->lc->at_end();
+  }
+  if (rhs.ctx.get() == NULL) {
+    // Redundant but same as ObjectIterator version
+    if (ctx.get() == NULL)
+      return true;
+    return ctx->lc->at_end();
+  }
+  return ctx.get() == rhs.ctx.get();
+}
+
+bool librados::MRCIteratorImpl::operator!=(const librados::MRCIteratorImpl& rhs) const {
+  return !(*this == rhs);
+}
+
+const librados::MRCObject& librados::MRCIteratorImpl::operator*() const {
+  return cur_obj;
+}
+
+const librados::MRCObject* librados::MRCIteratorImpl::operator->() const {
+  return &cur_obj;
+}
+
+librados::MRCIteratorImpl& librados::MRCIteratorImpl::operator++()
+{
+  get_next();
+  return *this;
+}
+
+librados::MRCIteratorImpl librados::MRCIteratorImpl::operator++(int)
+{
+  librados::MRCIteratorImpl ret(*this);
+  get_next();
+  return ret;
+}
+
+uint32_t librados::MRCIteratorImpl::seek(uint32_t pos)
+{
+  //TODO
+  return -1;
+}
+
+void librados::MRCIteratorImpl::get_next()
+{
+  const char *nspace;
+  const int *histogram;
+  int pgid, size;
+  if (ctx->lc->at_end())
+    return;
+  int ret = rados_mrc_list_next(ctx.get(), &pgid, &size, &histogram, &nspace);
+  if (ret == -ENOENT) {
+    return;
+  }
+  else if (ret) {
+    ostringstream oss;
+    oss << "rados returned " << cpp_strerror(ret);
+    throw std::runtime_error(oss.str());
+  }
+
+  if (cur_obj.impl == NULL)
+    cur_obj.impl = new MRCObjectImpl();
+  cur_obj.impl->nspace = nspace;
+  cur_obj.impl->pgid = pgid;
+  cur_obj.impl->mrc.clear();
+  for (int i = 0; i < size; i++) {
+	  cur_obj.impl->mrc.push_back(histogram[i]);
+  }
+}
+
+
+///////////////////////////// MRCIterator /////////////////////////////
+librados::MRCIterator::MRCIterator(MRCListCtx *ctx_)
+{
+  impl = new MRCIteratorImpl(ctx_);
+}
+
+librados::MRCIterator::~MRCIterator()
+{
+  delete impl;
+}
+
+librados::MRCIterator::MRCIterator(const MRCIterator &rhs)
+{
+  if (rhs.impl == NULL) {
+    impl = NULL;
+    return;
+  }
+  impl = new MRCIteratorImpl();
+  *impl = *(rhs.impl);
+}
+
+librados::MRCIterator& librados::MRCIterator::operator=(const librados::MRCIterator &rhs)
+{
+  if (rhs.impl == NULL) {
+    delete impl;
+    impl = NULL;
+    return *this;
+  }
+  if (impl == NULL)
+    impl = new MRCIteratorImpl();
+  *impl = *(rhs.impl);
+  return *this;
+}
+
+bool librados::MRCIterator::operator==(const librados::MRCIterator& rhs) const
+{
+  return *impl == *(rhs.impl);
+}
+
+bool librados::MRCIterator::operator!=(const librados::MRCIterator& rhs) const {
+  return !(*impl == *(rhs.impl));
+}
+
+const librados::MRCObject& librados::MRCIterator::operator*() const {
+  return *(impl->get_MRCObjectp());
+}
+
+const librados::MRCObject* librados::MRCIterator::operator->() const {
+  return impl->get_MRCObjectp();
+}
+
+librados::MRCIterator& librados::MRCIterator::operator++()
+{
+  impl->get_next();
+  return *this;
+}
+
+librados::MRCIterator librados::MRCIterator::operator++(int)
+{
+  librados::MRCIterator ret(*this);
+  impl->get_next();
+  return ret;
+}
+
+uint32_t librados::MRCIterator::seek(uint32_t pos)
+{
+  //TODO
+  return -1;
+}
+
+void librados::MRCIterator::get_next()
+{
+  impl->get_next();
+}
+
+
+const librados::MRCIterator librados::MRCIterator::__EndMRCIterator(NULL);
 
 // DEPRECATED; Use NObjectIterator instead
 ///////////////////////////// ObjectIterator /////////////////////////////
@@ -1615,6 +1812,21 @@ librados::ObjectIterator librados::IoCtx::objects_begin(uint32_t pos)
 const librados::ObjectIterator& librados::IoCtx::objects_end() const
 {
   return ObjectIterator::__EndObjectIterator;
+}
+
+
+librados::MRCIterator librados::IoCtx::mrc_begin()
+{
+  rados_list_ctx_t listh;
+  rados_mrc_list_open(io_ctx_impl, &listh);
+  MRCIterator iter((MRCListCtx*)listh);
+  iter.get_next();
+  return iter;
+}
+
+const librados::MRCIterator& librados::IoCtx::mrc_end() const
+{
+  return MRCIterator::__EndMRCIterator;
 }
 
 int librados::IoCtx::hit_set_list(uint32_t hash, AioCompletion *c,
@@ -3660,7 +3872,62 @@ extern "C" int rados_objects_list_next(rados_list_ctx_t listctx, const char **en
   return 0;
 }
 
+//list MRC
+extern "C" int rados_mrc_list_open(rados_ioctx_t io, rados_list_ctx_t *listh)
+{
+  tracepoint(librados, rados_mrc_list_open_enter, io);
+  librados::IoCtxImpl *ctx = (librados::IoCtxImpl *)io;
+  if (ctx->oloc.nspace == librados::all_nspaces)
+    return -EINVAL;
+  Objecter::MRCListContext *h = new Objecter::MRCListContext;
+  h->pool_id = ctx->poolid;
+  h->pool_snap_seq = ctx->snap_seq;
+  h->nspace = ctx->oloc.nspace;
+  *listh = (void *)new librados::MRCListCtx(ctx, h);
+  tracepoint(librados, rados_mrc_list_open_exit, 0, *listh);
+  return 0;
+}
 
+extern "C" void rados_mrc_list_close(rados_list_ctx_t h)
+{
+  tracepoint(librados, rados_mrc_list_close_enter, h);
+  librados::MRCListCtx *lh = (librados::MRCListCtx *)h;
+  delete lh;
+  tracepoint(librados, rados_mrc_list_close_exit);
+}
+
+
+extern "C" int rados_mrc_list_next(rados_list_ctx_t listctx, int *pgid, int *size, const int **histogram, const char** nspace)
+{
+  tracepoint(librados, rados_mrc_list_next_enter, listctx);
+  librados::MRCListCtx *lh = (librados::MRCListCtx *)listctx;
+  Objecter::MRCListContext *h = lh->lc;
+
+  // if the list is non-empty, this method has been called before
+  if (!h->list.empty())
+    // so let's kill the previously-returned object
+    h->list.pop_front();
+
+  if (h->list.empty()) {
+    int ret = lh->ctx->list_mrc(lh->lc);
+    if (ret < 0) {
+      tracepoint(librados, rados_mrc_list_next_exit, ret, NULL, NULL);
+      return ret;
+    }
+    if (h->list.empty()) {
+      tracepoint(librados, rados_mrc_list_next_exit, -ENOENT, NULL, NULL);
+      return -ENOENT;
+    }
+  }
+
+  *pgid = h->current_pg;
+  if (histogram)
+    *histogram = h->list.front().data();
+  *size = h->list.front().size();
+  *nspace = h->nspace.c_str();
+  tracepoint(librados, rados_mrc_list_next_exit, 0, *entry, key);
+  return 0;
+}
 
 // -------------------------
 // aio
@@ -4819,6 +5086,67 @@ const std::string& librados::ListObject::get_locator() const
 }
 
 std::ostream& librados::operator<<(std::ostream& out, const librados::ListObject& lop)
+{
+  out << *(lop.impl);
+  return out;
+}
+
+
+///////////////////////////// MRCObject //////////////////////////////
+librados::MRCObject::MRCObject() : impl(NULL)
+{
+}
+
+librados::MRCObject::MRCObject(librados::MRCObjectImpl *i): impl(i)
+{
+}
+
+librados::MRCObject::MRCObject(const MRCObject& rhs)
+{
+  if (rhs.impl == NULL) {
+    impl = NULL;
+    return;
+  }
+  impl = new MRCObjectImpl();
+  *impl = *(rhs.impl);
+}
+
+librados::MRCObject& librados::MRCObject::operator=(const MRCObject& rhs)
+{
+  if (rhs.impl == NULL) {
+    delete impl;
+    impl = NULL;
+    return *this;
+  }
+  if (impl == NULL)
+    impl = new MRCObjectImpl();
+  *impl = *(rhs.impl);
+  return *this;
+}
+
+librados::MRCObject::~MRCObject()
+{
+  if (impl)
+    delete impl;
+  impl = NULL;
+}
+
+const std::string& librados::MRCObject::get_nspace() const
+{
+  return impl->get_nspace();
+}
+
+const int& librados::MRCObject::get_pgid() const
+{
+  return impl->get_pgid();
+}
+
+const std::vector<int>& librados::MRCObject::get_mrc() const
+{
+  return impl->get_mrc();
+}
+
+std::ostream& librados::operator<<(std::ostream& out, const librados::MRCObject& lop)
 {
   out << *(lop.impl);
   return out;

@@ -289,7 +289,9 @@ extern const char *ceph_osd_state_name(int s);
 	f(PG_HITSET_LS,	__CEPH_OSD_OP(RD, PG, 3),	"pg-hitset-ls")	    \
 	f(PG_HITSET_GET, __CEPH_OSD_OP(RD, PG, 4),	"pg-hitset-get")    \
 	f(PGNLS,	__CEPH_OSD_OP(RD, PG, 5),	"pgnls")	    \
-	f(PGNLS_FILTER,	__CEPH_OSD_OP(RD, PG, 6),	"pgnls-filter")
+	f(PGNLS_FILTER,	__CEPH_OSD_OP(RD, PG, 6),	"pgnls-filter") \
+	/* get mrc*/						\
+	f(GET_MRC,	__CEPH_OSD_OP(RD, PG, 7),	"get_mrc")
 
 enum {
 #define GENERATE_ENUM_ENTRY(op, opcode, str)	CEPH_OSD_OP_##op = (opcode),
@@ -343,6 +345,7 @@ static inline int ceph_osd_op_uses_extent(int op)
 	case CEPH_OSD_OP_MASKTRUNC:
 	case CEPH_OSD_OP_SPARSE_READ:
 	case CEPH_OSD_OP_SYNC_READ:
+	case CEPH_OSD_OP_GET_MRC:
 	case CEPH_OSD_OP_WRITE:
 	case CEPH_OSD_OP_WRITEFULL:
 	case CEPH_OSD_OP_TRUNCATE:

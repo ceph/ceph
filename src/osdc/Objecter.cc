@@ -3404,6 +3404,60 @@ void Objecter::list_objects(ListContext *list_context, Context *onfinish)
 	  &list_context->bl, 0, onack, &onack->epoch, &list_context->ctx_budget);
 }
 
+
+void Objecter::list_mrc(MRCListContext *list_context, Context *onfinish)
+{
+  ldout(cct, 10) << "list_mrc" << dendl;
+  ldout(cct, 20) << " pool_id " << list_context->pool_id
+	   << " list_context " << list_context
+	   << " onfinish " << onfinish
+	   << " list_context->current_pg " << list_context->current_pg
+	   << dendl;
+
+  rwlock.get_read();
+  const pg_pool_t *pool = osdmap->get_pg_pool(list_context->pool_id);
+  int pg_num = pool->get_pg_num();
+  rwlock.unlock();
+
+  if (list_context->starting_pg_num == 0) {     // there can't be zero pgs!
+    list_context->starting_pg_num = pg_num;
+    ldout(cct, 20) << pg_num << " placement groups" << dendl;
+  }
+  if (list_context->starting_pg_num != pg_num) {
+    // start reading from the beginning; the pgs have changed
+    ldout(cct, 10) << " pg_num changed; restarting with " << pg_num << dendl;
+    list_context->current_pg = 0;
+    list_context->current_pg_epoch = 0;
+    list_context->starting_pg_num = pg_num;
+  }
+  assert(list_context->current_pg <= pg_num);
+
+  if (list_context->current_pg >= list_context->starting_pg_num) {
+    list_context->at_end_of_pool = true;
+    ldout(cct, 20) << " no more pgs; reached end of pool" << dendl;
+  } else {
+    ldout(cct, 20) << " move to next pg " << list_context->current_pg << dendl;
+  }
+  if (list_context->at_end_of_pool) {
+    // release the listing context's budget once all
+    // OPs (in the session) are finished
+    put_mrc_list_context_budget(list_context);
+
+    onfinish->complete(0);
+    return;
+  }
+
+  ObjectOperation op;
+  op.add_mrc(list_context->current_pg_epoch);
+  list_context->bl.clear();
+  C_MRC_List *onack = new C_MRC_List(list_context, onfinish, this);
+  object_locator_t oloc(list_context->pool_id, list_context->nspace);
+
+  pg_read(list_context->current_pg, oloc, op,
+	  &list_context->bl, 0, onack, &onack->epoch, &list_context->ctx_budget);
+  ++list_context->current_pg;
+}
+
 void Objecter::_list_reply(ListContext *list_context, int r,
 			   Context *final_finish, epoch_t reply_epoch)
 {
@@ -3458,6 +3512,35 @@ void Objecter::_list_reply(ListContext *list_context, int r,
   list_objects(list_context, final_finish);
 }
 
+void Objecter::_mrc_list_reply(MRCListContext *list_context, int r,
+			       Context *final_finish, epoch_t reply_epoch)
+{
+  ldout(cct, 10) << "_mrc_list_reply" << dendl;
+
+  bufferlist::iterator iter = list_context->bl.begin();
+  pg_mrc_response_t response;
+  ::decode(response, iter);
+
+  int response_size = response.histogram.size();
+  ldout(cct, 20) << " response.entries.size " << response_size <<dendl;
+  list_context->list.push_back(response.histogram);
+  ldout(cct, 20) << " list size " << list_context->list.size() <<dendl;
+
+  // if the osd returns 1 (newer code), or no entries, it means we
+  // hit the end of the pg.
+  if (!list_context->list.empty()) {
+    ldout(cct, 20) << " returning results so far" << dendl;
+    // release the listing context's budget once all
+    // OPs (in the session) are finished
+    put_mrc_list_context_budget(list_context);
+    final_finish->complete(0);
+    return;
+  }
+
+  // continue!
+  list_mrc(list_context, final_finish);
+}
+
 void Objecter::put_list_context_budget(ListContext *list_context) {
     if (list_context->ctx_budget >= 0) {
       ldout(cct, 10) << " release listing context's budget " << list_context->ctx_budget << dendl;
@@ -3466,6 +3549,13 @@ void Objecter::put_list_context_budget(ListContext *list_context) {
     }
   }
 
+void Objecter::put_mrc_list_context_budget(MRCListContext *list_context) {
+  if (list_context->ctx_budget >= 0) {
+    ldout(cct, 10) << " release mrc listing context's budget " << list_context->ctx_budget << dendl;
+    put_op_budget_bytes(list_context->ctx_budget);
+    list_context->ctx_budget = -1;
+  }
+}
 
 //snapshots
 

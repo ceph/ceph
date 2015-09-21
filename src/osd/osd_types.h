@@ -1108,6 +1108,12 @@ public:
   uint32_t cache_min_flush_age;  ///< minimum age (seconds) before we can flush
   uint32_t cache_min_evict_age;  ///< minimum age (seconds) before we can evict
 
+  uint32_t reuse_dist_clear_period; ///< periodicity to clear reuse distance histogram
+  uint32_t reuse_dist_size; ///< the number of histogram intervals
+  uint32_t reuse_dist_step; ///< the size of histogram intervals
+  uint32_t reuse_dist_threshold; ///< parameter T in SHARDS
+  uint32_t reuse_dist_max_threshold; ///< parameter P in SHARDS, rate of T/P accesses are recorded
+
   HitSet::Params hit_set_params; ///< The HitSet params to use on this pool
   uint32_t hit_set_period;      ///< periodicity of HitSet segments (seconds)
   uint32_t hit_set_count;       ///< number of periods to retain
@@ -1140,6 +1146,11 @@ public:
       cache_target_full_ratio_micro(0),
       cache_min_flush_age(0),
       cache_min_evict_age(0),
+      reuse_dist_clear_period(0),
+      reuse_dist_size(0),
+      reuse_dist_step(0),
+      reuse_dist_threshold(0),
+      reuse_dist_max_threshold(0),
       hit_set_params(),
       hit_set_period(0),
       hit_set_count(0),
@@ -2671,6 +2682,30 @@ struct pg_ls_response_t {
 
 WRITE_CLASS_ENCODER(pg_ls_response_t)
 
+struct pg_mrc_response_t{
+  vector<int> histogram;
+  void encode(bufferlist& bl) const {
+    ::encode(histogram, bl);
+  }
+  void decode(bufferlist::iterator& bl) {
+    ::decode(histogram, bl);
+  }
+  void dump(Formatter *f) const {
+    f->open_array_section("histogram");
+    for (unsigned int i = 0; i < histogram.size(); i++) {
+      f->dump_int("h", histogram[i]);
+    }
+    f->close_section();
+  }
+  static void generate_test_instances(list<pg_mrc_response_t*>& o) {
+    o.push_back(new pg_mrc_response_t);
+    o.push_back(new pg_mrc_response_t);
+    o.back()->histogram.push_back(1);
+    o.back()->histogram.push_back(2);
+  }
+};
+
+WRITE_CLASS_ENCODER(pg_mrc_response_t)
 /**
  * object_copy_cursor_t
  */

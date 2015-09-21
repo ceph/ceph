@@ -943,6 +943,11 @@ void pg_pool_t::dump(Formatter *f) const
   f->dump_unsigned("hit_set_period", hit_set_period);
   f->dump_unsigned("hit_set_count", hit_set_count);
   f->dump_bool("use_gmt_hitset", use_gmt_hitset);
+  f->dump_unsigned("reuse_dist_clear_period", reuse_dist_clear_period);
+  f->dump_unsigned("reuse_dist_size", reuse_dist_size);
+  f->dump_unsigned("reuse_dist_step", reuse_dist_step);
+  f->dump_unsigned("reuse_dist_threshold", reuse_dist_threshold);
+  f->dump_unsigned("reuse_dist_max_threshold", reuse_dist_max_threshold);
   f->dump_unsigned("min_read_recency_for_promote", min_read_recency_for_promote);
   f->dump_unsigned("min_write_recency_for_promote", min_write_recency_for_promote);
   f->dump_unsigned("stripe_width", get_stripe_width());
@@ -1242,6 +1247,11 @@ void pg_pool_t::encode(bufferlist& bl, uint64_t features) const
     ::encode(read_tier, bl);
     ::encode(write_tier, bl);
     ::encode(properties, bl);
+    ::encode(reuse_dist_clear_period, bl);
+    ::encode(reuse_dist_size, bl);
+    ::encode(reuse_dist_step, bl);
+    ::encode(reuse_dist_threshold, bl);
+    ::encode(reuse_dist_max_threshold, bl);
     ::encode(hit_set_params, bl);
     ::encode(hit_set_period, bl);
     ::encode(hit_set_count, bl);
@@ -1285,6 +1295,11 @@ void pg_pool_t::encode(bufferlist& bl, uint64_t features) const
   ::encode(read_tier, bl);
   ::encode(write_tier, bl);
   ::encode(properties, bl);
+  ::encode(reuse_dist_clear_period, bl);
+  ::encode(reuse_dist_size, bl);
+  ::encode(reuse_dist_step, bl);
+  ::encode(reuse_dist_threshold, bl);
+  ::encode(reuse_dist_max_threshold, bl);
   ::encode(hit_set_params, bl);
   ::encode(hit_set_period, bl);
   ::encode(hit_set_count, bl);
@@ -1374,11 +1389,21 @@ void pg_pool_t::decode(bufferlist::iterator& bl)
     ::decode(properties, bl);
   }
   if (struct_v >= 11) {
+    ::decode(reuse_dist_clear_period, bl);
+    ::decode(reuse_dist_size, bl);
+    ::decode(reuse_dist_step, bl);
+    ::decode(reuse_dist_threshold, bl);
+    ::decode(reuse_dist_max_threshold, bl);
     ::decode(hit_set_params, bl);
     ::decode(hit_set_period, bl);
     ::decode(hit_set_count, bl);
   } else {
     pg_pool_t def;
+    reuse_dist_clear_period = def.reuse_dist_clear_period;
+    reuse_dist_size = def.reuse_dist_size;
+    reuse_dist_step = def.reuse_dist_step;
+    reuse_dist_threshold = def.reuse_dist_threshold;
+    reuse_dist_max_threshold = def.reuse_dist_max_threshold;
     hit_set_period = def.hit_set_period;
     hit_set_count = def.hit_set_count;
   }

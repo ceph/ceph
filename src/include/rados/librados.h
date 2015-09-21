@@ -965,7 +965,16 @@ CEPH_RADOS_API int rados_objects_list_next(rados_list_ctx_t ctx,
 CEPH_RADOS_API void rados_objects_list_close(rados_list_ctx_t ctx);
 
 /** @} Listing Objects */
+CEPH_RADOS_API int rados_mrc_list_open(rados_ioctx_t io,
+				       rados_list_ctx_t *ctx);
 
+CEPH_RADOS_API int rados_mrc_list_next(rados_list_ctx_t ctx,
+				       int *pgid,
+				       int *size,
+				       const int **histogram,
+				       const char** nspace);
+
+CEPH_RADOS_API void rados_mrc_list_close(rados_list_ctx_t h);
 /**
  * @name Snapshots
  *
@@ -1268,6 +1277,7 @@ CEPH_RADOS_API int rados_append(rados_ioctx_t io, const char *oid,
 CEPH_RADOS_API int rados_read(rados_ioctx_t io, const char *oid, char *buf,
                               size_t len, uint64_t off);
 
+//CEPH_RADOS_API int rados_get_mrc(rados_ioctx_t io, int* size, int* step, int *buf, const unsigned int  pool, const unsigned int ps);
 /**
  * Delete an object
  *

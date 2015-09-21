@@ -40,7 +40,28 @@ inline std::ostream& operator<<(std::ostream& out, const struct ListObjectImpl& 
   return out;
 }
 
+struct MRCObjectImpl {
+  std::string nspace;
+  int pgid;
+  std::vector<int> mrc;
+
+  MRCObjectImpl():pgid(-1) {}
+  MRCObjectImpl(std::string n, int p, std::vector<int> m):
+      nspace(n), pgid(p), mrc(m) {}
+
+  const std::string& get_nspace() const { return nspace; }
+  const int& get_pgid() const { return pgid; }
+  const std::vector<int>& get_mrc() const { return mrc; }
+};
+WRITE_EQ_OPERATORS_3(MRCObjectImpl, nspace, pgid, mrc)
+WRITE_CMP_OPERATORS_3(MRCObjectImpl, nspace, pgid, mrc)
+inline std::ostream& operator<<(std::ostream& out, const struct MRCObjectImpl& lop) {
+  out << (lop.nspace.size() ? lop.nspace + "/" : "") << lop.pgid;
+  return out;
+}
+
 struct ObjListCtx;
+struct MRCListCtx;
 
 class NObjectIteratorImpl {
   public:
@@ -74,6 +95,36 @@ class NObjectIteratorImpl {
     void get_next();
     ceph::shared_ptr < ObjListCtx > ctx;
     ListObject cur_obj;
+};
+
+class MRCIteratorImpl {
+  public:
+    MRCIteratorImpl() {}
+    ~MRCIteratorImpl();
+    MRCIteratorImpl(const MRCIteratorImpl &rhs);
+    MRCIteratorImpl& operator=(const MRCIteratorImpl& rhs);
+
+    bool operator==(const MRCIteratorImpl& rhs) const;
+    bool operator!=(const MRCIteratorImpl& rhs) const;
+    const MRCObject& operator*() const;
+    const MRCObject* operator->() const;
+    MRCIteratorImpl &operator++(); // Preincrement
+    MRCIteratorImpl operator++(int); // Postincrement
+    const MRCObject *get_MRCObjectp() { return &cur_obj; }
+    friend class IoCtx;
+    friend struct MRCObjectImpl;
+    //friend class ListObject;
+    friend class MRCIterator;
+
+
+    /// move the iterator to a given hash position.  this may (will!) be rounded to the nearest pg.
+    uint32_t seek(uint32_t pos);
+
+  private:
+    MRCIteratorImpl(MRCListCtx *ctx_);
+    void get_next();
+    ceph::shared_ptr < MRCListCtx > ctx;
+    MRCObject cur_obj;
 };
 
 }

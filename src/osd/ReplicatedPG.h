@@ -39,6 +39,7 @@
 #include "PGBackend.h"
 #include "ReplicatedBackend.h"
 #include "ECBackend.h"
+#include "ReuseDist.h"
 
 class MOSDSubOpReply;
 
@@ -899,7 +900,9 @@ protected:
 
   RepGather *simple_repop_create(ObjectContextRef obc);
   void simple_repop_submit(RepGather *repop);
-
+  // reuse distance tracking
+  ReuseDist *reuse_dist;
+  utime_t reuse_dist_start_stamp;
   // hot/cold tracking
   HitSetRef hit_set;        ///< currently accumulating HitSet
   utime_t hit_set_start_stamp;    ///< time the current HitSet started recording
@@ -908,6 +911,7 @@ protected:
 
   void hit_set_clear();     ///< discard any HitSet state
   void hit_set_setup();     ///< initialize HitSet state
+  void reuse_dist_setup();
   void hit_set_create();    ///< create a new HitSet
   void hit_set_persist();   ///< persist hit info
   bool hit_set_apply_log(); ///< apply log entries to update in-memory HitSet

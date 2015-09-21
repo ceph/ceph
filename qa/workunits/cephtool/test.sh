@@ -1690,6 +1690,21 @@ function test_mon_deprecated_commands()
   ceph tell mon.a injectargs '--no-mon-debug-deprecated-as-obsolete'
 }
 
+function test_osd_mrc()
+{
+  ceph osd pool set-mrc rbd
+  ceph osd pool set rbd reuse_dist_size 10
+  ceph osd pool set rbd reuse_dist_step 10
+  ceph osd pool set rbd reuse_dist_threshold 100
+  ceph osd pool set rbd reuse_dist_max_threshold 200
+  ceph osd pool set rbd reuse_dist_clear_period 300
+  rados bench 10 -p rbd write
+  rados get-mrc all -p rbd
+  ceph osd pool get rbd reuse_dist_clear_period
+}
+
+
+
 #
 # New tests should be added to the TESTS array below
 #
@@ -1730,6 +1745,7 @@ MON_TESTS+=" mon_deprecated_commands"
 
 OSD_TESTS+=" osd_bench"
 OSD_TESTS+=" tiering_agent"
+OSD_TESTS+=" osd_mrc"
 
 MDS_TESTS+=" mds_tell"
 MDS_TESTS+=" mon_mds"

@@ -114,6 +114,7 @@ struct librados::IoCtxImpl {
   int nlist(Objecter::NListContext *context, int max_entries);
   uint32_t nlist_seek(Objecter::NListContext *context, uint32_t pos);
   int list(Objecter::ListContext *context, int max_entries);
+  int list_mrc(Objecter::MRCListContext *context);
   uint32_t list_seek(Objecter::ListContext *context, uint32_t pos);
   int create(const object_t& oid, bool exclusive);
   int write(const object_t& oid, bufferlist& bl, size_t len, uint64_t off);
@@ -122,6 +123,7 @@ struct librados::IoCtxImpl {
   int clone_range(const object_t& dst_oid, uint64_t dst_offset,
                   const object_t& src_oid, uint64_t src_offset, uint64_t len);
   int read(const object_t& oid, bufferlist& bl, size_t len, uint64_t off);
+  int get_mrc(const pg_t& pgid, bufferlist& bl);
   int mapext(const object_t& oid, uint64_t off, size_t len,
 	     std::map<uint64_t,uint64_t>& m);
   int sparse_read(const object_t& oid, std::map<uint64_t,uint64_t>& m,
@@ -144,6 +146,7 @@ struct librados::IoCtxImpl {
 
   int operate(const object_t& oid, ::ObjectOperation *o, time_t *pmtime, int flags=0);
   int operate_read(const object_t& oid, ::ObjectOperation *o, bufferlist *pbl, int flags=0);
+  int operate_get_mrc(const pg_t& oid, ::ObjectOperation *o, bufferlist *pbl, int flags=0);
   int aio_operate(const object_t& oid, ::ObjectOperation *o,
 		  AioCompletionImpl *c, const SnapContext& snap_context,
 		  int flags);

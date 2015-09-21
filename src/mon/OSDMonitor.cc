@@ -2876,6 +2876,8 @@ namespace {
     SIZE, MIN_SIZE, CRASH_REPLAY_INTERVAL,
     PG_NUM, PGP_NUM, CRUSH_RULESET, HIT_SET_TYPE,
     HIT_SET_PERIOD, HIT_SET_COUNT, HIT_SET_FPP, USE_GMT_HITSET,
+    REUSE_DIST_SIZE, REUSE_DIST_STEP, REUSE_DIST_THRESHOLD,
+    REUSE_DIST_MAX_THRESHOLD, REUSE_DIST_CLEAR_PERIOD,
     AUID, TARGET_MAX_OBJECTS, TARGET_MAX_BYTES,
     CACHE_TARGET_DIRTY_RATIO, CACHE_TARGET_DIRTY_HIGH_RATIO,
     CACHE_TARGET_FULL_RATIO,
@@ -3353,7 +3355,12 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
       ("min_read_recency_for_promote", MIN_READ_RECENCY_FOR_PROMOTE)
       ("write_fadvise_dontneed", WRITE_FADVISE_DONTNEED)
       ("min_write_recency_for_promote", MIN_WRITE_RECENCY_FOR_PROMOTE)
-      ("fast_read", FAST_READ);
+      ("fast_read", FAST_READ)
+      ("reuse_dist_clear_period", REUSE_DIST_CLEAR_PERIOD)
+      ("reuse_dist_size", REUSE_DIST_SIZE)
+      ("reuse_dist_step", REUSE_DIST_STEP)
+      ("reuse_dist_threshold", REUSE_DIST_THRESHOLD)
+      ("reuse_dist_max_threshold", REUSE_DIST_MAX_THRESHOLD);
 
     typedef std::set<osd_pool_get_choices> choices_set_t;
 
@@ -3434,6 +3441,21 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
 	    break;
 	  case CRUSH_RULESET:
 	    f->dump_int("crush_ruleset", p->get_crush_ruleset());
+	    break;
+	  case REUSE_DIST_CLEAR_PERIOD:
+	    f->dump_int("reuse_dist_clear_period", p->reuse_dist_clear_period);
+	    break;
+	  case REUSE_DIST_SIZE:
+	    f->dump_int("reuse_dist_size", p->reuse_dist_size);
+	    break;
+	  case REUSE_DIST_STEP:
+	    f->dump_int("reuse_dist_step", p->reuse_dist_step);
+	    break;
+	  case REUSE_DIST_THRESHOLD:
+	    f->dump_int("reuse_dist_threshold", p->reuse_dist_threshold);
+	    break;
+	  case REUSE_DIST_MAX_THRESHOLD:
+	    f->dump_int("reuse_dist_max_threshold", p->reuse_dist_max_threshold);
 	    break;
 	  case HIT_SET_PERIOD:
 	    f->dump_int("hit_set_period", p->hit_set_period);
@@ -3542,6 +3564,21 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
 	    break;
 	  case CRUSH_RULESET:
 	    ss << "crush_ruleset: " << p->get_crush_ruleset() << "\n";
+	    break;
+	  case REUSE_DIST_CLEAR_PERIOD:
+	    ss << "reuse_dist_clear_period: " << p->reuse_dist_clear_period << "\n";
+	    break;
+	  case REUSE_DIST_SIZE:
+	    ss << "reuse_dist_size: " << p->reuse_dist_size << "\n";
+	    break;
+	  case REUSE_DIST_STEP:
+	    ss << "reuse_dist_step: " << p->reuse_dist_step << "\n";
+	    break;
+	  case REUSE_DIST_THRESHOLD:
+	    ss << "reuse_dist_threshold: " << p->reuse_dist_threshold<< "\n";
+	    break;
+	  case REUSE_DIST_MAX_THRESHOLD:
+	    ss << "reuse_dist_max_threshold: " << p->reuse_dist_max_threshold << "\n";
 	    break;
 	  case HIT_SET_PERIOD:
 	    ss << "hit_set_period: " << p->hit_set_period << "\n";
@@ -4860,6 +4897,36 @@ int OSDMonitor::prepare_command_pool_set(map<string,cmd_vartype> &cmdmap,
       ss << "expecting value 'true', 'false', '0', or '1'";
       return -EINVAL;
     }
+  } else if (var == "reuse_dist_clear_period") {
+    if (interr.length()) {
+      ss << "error parsing integer value '" << val << "': " << interr;
+      return -EINVAL;
+    }
+    p.reuse_dist_clear_period = n;
+  } else if (var == "reuse_dist_size") {
+    if (interr.length()) {
+      ss << "error parsing integer value '" << val << "': " << interr;
+      return -EINVAL;
+    }
+    p.reuse_dist_size= n;
+  } else if (var == "reuse_dist_step") {
+    if (interr.length()) {
+      ss << "error parsing integer value '" << val << "': " << interr;
+      return -EINVAL;
+    }
+    p.reuse_dist_step = n;
+  } else if (var == "reuse_dist_threshold") {
+    if (interr.length()) {
+      ss << "error parsing integer value '" << val << "': " << interr;
+      return -EINVAL;
+    }
+    p.reuse_dist_threshold= n;
+  } else if (var == "reuse_dist_max_threshold") {
+    if (interr.length()) {
+      ss << "error parsing integer value '" << val << "': " << interr;
+      return -EINVAL;
+    }
+    p.reuse_dist_max_threshold = n;
   } else if (var == "hit_set_type") {
     if (val == "none")
       p.hit_set_params = HitSet::Params();
@@ -7054,6 +7121,27 @@ done:
 	  base_pool->write_tier == pool_id)
 	ss <<" (WARNING: pool is still configured as read or write tier)";
     }
+    wait_for_finished_proposal(op, new Monitor::C_Command(mon, op, 0, ss.str(),
+					      get_last_committed() + 1));
+    return true;
+  } else if (prefix == "osd pool set-mrc"){
+    string poolstr;
+    cmd_getval(g_ceph_context, cmdmap, "pool", poolstr);
+    int64_t pool_id = osdmap.lookup_pg_pool_name(poolstr);
+    if (pool_id < 0) {
+      ss << "unrecognized pool '" << poolstr << "'";
+      err = -ENOENT;
+      goto reply;
+    }
+    const pg_pool_t *p = osdmap.get_pg_pool(pool_id);
+    assert(p);
+    pg_pool_t *np = pending_inc.get_new_pool(pool_id, p);
+    np->reuse_dist_clear_period = g_conf->osd_pool_default_reuse_dist_clear_period;
+    np->reuse_dist_size = g_conf->osd_pool_default_reuse_dist_size;
+    np->reuse_dist_step = g_conf->osd_pool_default_reuse_dist_step;
+    np->reuse_dist_threshold = g_conf->osd_pool_default_reuse_dist_threshold;
+    np->reuse_dist_max_threshold = g_conf->osd_pool_default_reuse_dist_max_threshold;
+    ss << "pool '" << poolstr << "' is now recording MRC";
     wait_for_finished_proposal(op, new Monitor::C_Command(mon, op, 0, ss.str(),
 					      get_last_committed() + 1));
     return true;
