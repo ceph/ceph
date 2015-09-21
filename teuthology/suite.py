@@ -317,15 +317,12 @@ def prepare_and_schedule(job_config, suite_repo_path, base_yaml_paths, limit,
         arg.extend(['--email', job_config.email])
         if timeout:
             arg.extend(['--timeout', timeout])
-        if dry_run:
-            log.info('dry-run: %s' % ' '.join(arg))
-        else:
-            teuthology_schedule(
-                args=arg,
-                dry_run=dry_run,
-                verbose=verbose,
-                log_prefix="Results email: ",
-            )
+        teuthology_schedule(
+            args=arg,
+            dry_run=dry_run,
+            verbose=verbose,
+            log_prefix="Results email: ",
+        )
         results_url = get_results_url(job_config.name)
         if results_url:
             log.info("Test results viewable at %s", results_url)
