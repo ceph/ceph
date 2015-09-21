@@ -2253,7 +2253,7 @@ int main(int argc, char **argv)
 	}
 
         if (reset_regions) {
-          zonegroupmap.zonegroups.clear();
+          zonegroupmap.clear_zonegroups();
         }
 
 	list<string> zonegroups;
