@@ -1128,6 +1128,23 @@ int RGWZoneGroupMap::update(RGWRealm& realm)
   return 0;
 }
 
+int RGWZoneGroupMap::update(CephContext *cct, RGWRados *store,
+			    const string& period_id)
+{
+  Mutex::Locker l(lock);
+  RGWPeriod period(period_id);
+
+  int ret = period.init(cct, store);
+  if (ret < 0) {
+    cerr << "failed to init period: " << cpp_strerror(-ret) << std::endl;
+    return ret;
+  }
+
+  periods[period.get_id()] = period.get_map();
+
+  return 0;
+}
+
 int RGWZoneGroupMap::get_master_zonegroup(const string& current_period,
 					  RGWZoneGroup& zonegroup)
 {
