@@ -159,6 +159,21 @@ public:
                            uint64_t nonce);
 
   /**
+   * create a new messenger
+   *
+   * Create a new messenger instance.
+   * Same as the above, but a slightly simpler interface for clients:
+   * - Generate a random nonce
+   * - use the default feature bits
+   * - get the messenger type from cct
+   * - use the client entity_type
+   *
+   * @param cct context
+   * @param lname logical name of the messenger in this process (e.g., "client")
+   */
+  static Messenger *create_client_messenger(CephContext *cct, string lname);
+
+  /**
    * @defgroup Accessors
    * @{
    */
