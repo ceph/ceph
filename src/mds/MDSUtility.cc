@@ -25,7 +25,7 @@ MDSUtility::MDSUtility() :
   waiting_for_mds_map(NULL)
 {
   monc = new MonClient(g_ceph_context);
-  messenger = Messenger::create(g_ceph_context, entity_name_t::CLIENT(), "mds", getpid());
+  messenger = Messenger::create_client_messenger(g_ceph_context, "mds");
   mdsmap = new MDSMap();
   osdmap = new OSDMap();
   objecter = new Objecter(g_ceph_context, messenger, monc, osdmap, lock, timer, 0, 0);

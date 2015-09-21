@@ -247,8 +247,7 @@ class ClientStub : public TestStub
       return err;
     }
 
-    messenger.reset(Messenger::create(cct, entity_name_t::CLIENT(-1),
-				      "stubclient", getpid()));
+    messenger.reset(Messenger::create_client_messenger(cct, "stubclient"));
     assert(messenger.get() != NULL);
 
     messenger->set_default_policy(
