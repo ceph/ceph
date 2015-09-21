@@ -179,14 +179,14 @@ std::string OutputDataSocket::bind_and_listen(const std::string &sock_path, int 
   address.sun_family = AF_UNIX;
   snprintf(address.sun_path, sizeof(address.sun_path),
 	   "%s", sock_path.c_str());
-  if (bind(sock_fd, (struct sockaddr*)&address,
+  if (::bind(sock_fd, (struct sockaddr*)&address,
 	   sizeof(struct sockaddr_un)) != 0) {
     int err = errno;
     if (err == EADDRINUSE) {
       // The old UNIX domain socket must still be there.
       // Let's unlink it and try again.
       VOID_TEMP_FAILURE_RETRY(unlink(sock_path.c_str()));
-      if (bind(sock_fd, (struct sockaddr*)&address,
+      if (::bind(sock_fd, (struct sockaddr*)&address,
 	       sizeof(struct sockaddr_un)) == 0) {
 	err = 0;
       }

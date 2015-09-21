@@ -23,6 +23,10 @@
 #include <fcntl.h>
 #include <sys/utsname.h>
 #include <sys/uio.h>
+#include <sys/xattr.h>
+
+#include <boost/lexical_cast.hpp>
+#include <boost/fusion/include/std_pair.hpp>
 
 #if defined(__linux__)
 #include <linux/falloc.h>
@@ -94,6 +98,7 @@ using namespace std;
 #if HAVE_GETGROUPLIST
 #include <grp.h>
 #include <pwd.h>
+#include <unistd.h>
 #endif
 
 #undef dout_prefix
@@ -1913,6 +1918,11 @@ void Client::send_request(MetaRequest *request, MetaSession *session,
       r->releases.swap(request->cap_releases);
   }
   r->set_mdsmap_epoch(mdsmap->get_epoch());
+  if (r->head.op == CEPH_MDS_OP_SETXATTR) {
+    const OSDMap *osdmap = objecter->get_osdmap_read();
+    r->set_osdmap_epoch(osdmap->get_epoch());
+    objecter->put_osdmap_read();
+  }
 
   if (request->mds == -1) {
     request->sent_stamp = ceph_clock_now(cct);
@@ -4550,12 +4560,6 @@ void Client::handle_cap_grant(MetaSession *session, Inode *in, Cap *cap, MClient
 
 int Client::check_permissions(Inode *in, int flags, int uid, int gid)
 {
-  // initial number of group entries, defaults to posix standard of 16
-  // PAM implementations may provide more than 16 groups....
-#if HAVE_GETGROUPLIST
-  int initial_group_count = 16;
-#endif
-
   gid_t *sgids = NULL;
   int sgid_count = 0;
   if (getgroups_cb) {
@@ -4568,7 +4572,9 @@ int Client::check_permissions(Inode *in, int flags, int uid, int gid)
 #if HAVE_GETGROUPLIST
   else {
     //use PAM to get the group list
-    sgid_count = initial_group_count;
+    // initial number of group entries, defaults to posix standard of 16
+    // PAM implementations may provide more than 16 groups....
+    sgid_count = 16;
     sgids = (gid_t*)malloc(sgid_count * sizeof(gid_t));
     if (sgids == NULL) {
       ldout(cct, 3) << "allocating group memory failed" << dendl;
@@ -4578,16 +4584,23 @@ int Client::check_permissions(Inode *in, int flags, int uid, int gid)
     pw = getpwuid(uid);
     if (pw == NULL) {
       ldout(cct, 3) << "getting user entry failed" << dendl;
+      free(sgids); 
       return -EACCES;
     }
     while (1) {
+#if defined(__APPLE__)
+      if (getgrouplist(pw->pw_name, gid, (int *)sgids, &sgid_count) == -1) {
+#else
       if (getgrouplist(pw->pw_name, gid, sgids, &sgid_count) == -1) {
+#endif
         // we need to resize the group list and try again
-        sgids = (gid_t*)realloc(sgids, sgid_count * sizeof(gid_t));
-        if (sgids == NULL) {
+	void *_realloc = NULL;
+        if ((_realloc = realloc(sgids, sgid_count * sizeof(gid_t))) == NULL) {
           ldout(cct, 3) << "allocating group memory failed" << dendl;
+	  free(sgids);
           return -EACCES;
         }
+	sgids = (gid_t*)_realloc;
         continue;
       }
       // list was successfully retrieved
@@ -7142,7 +7155,7 @@ int Client::preadv(int fd, const struct iovec *iov, int iovcnt, loff_t offset)
 {
   if (iovcnt < 0)
     return EINVAL;
-     return _preadv_pwritev(fd, iov, iovcnt, offset, false);
+  return _preadv_pwritev(fd, iov, iovcnt, offset, false);
 }
 
 int Client::_read(Fh *f, int64_t offset, uint64_t size, bufferlist *bl)
@@ -7475,7 +7488,7 @@ int Client::pwritev(int fd, const struct iovec *iov, int iovcnt, int64_t offset)
 {
   if (iovcnt < 0)
     return EINVAL;
-    return _preadv_pwritev(fd, iov, iovcnt, offset, true); 
+  return _preadv_pwritev(fd, iov, iovcnt, offset, true);
 }
 
 int Client::_preadv_pwritev(int fd, const struct iovec *iov, unsigned iovcnt, int64_t offset, bool write)
@@ -8962,8 +8975,13 @@ int Client::_setxattr(Inode *in, const char *name, const void *value,
   if (vxattr && vxattr->readonly)
     return -EOPNOTSUPP;
 
+  int xattr_flags = 0;
   if (!value)
-    flags |= CEPH_XATTR_REMOVE;
+    xattr_flags |= CEPH_XATTR_REMOVE;
+  if (flags & XATTR_CREATE)
+    xattr_flags |= CEPH_XATTR_CREATE;
+  if (flags & XATTR_REPLACE)
+    xattr_flags |= CEPH_XATTR_REPLACE;
 
   MetaRequest *req = new MetaRequest(CEPH_MDS_OP_SETXATTR);
   filepath path;
@@ -8971,7 +8989,7 @@ int Client::_setxattr(Inode *in, const char *name, const void *value,
   req->set_filepath(path);
   req->set_string2(name);
   req->set_inode(in);
-  req->head.args.setxattr.flags = flags;
+  req->head.args.setxattr.flags = xattr_flags;
 
   bufferlist bl;
   bl.append((const char*)value, size);
@@ -8985,9 +9003,67 @@ int Client::_setxattr(Inode *in, const char *name, const void *value,
   return res;
 }
 
+int Client::check_data_pool_exist(string name, string value, const OSDMap *osdmap)
+{
+  string tmp;
+  if (name == "layout") {
+    string::iterator begin = value.begin();
+    string::iterator end = value.end();
+    keys_and_values<string::iterator> p;    // create instance of parser
+    std::map<string, string> m;             // map to receive results
+    if (!qi::parse(begin, end, p, m)) {     // returns true if successful
+      return -EINVAL;
+    }
+    if (begin != end)
+      return -EINVAL;
+    for (map<string,string>::iterator q = m.begin(); q != m.end(); ++q) {
+      if (q->first == "pool") {
+	tmp = q->second;
+	break;
+      }
+    }
+  } else if (name == "layout.pool") {
+    tmp = value;
+  }
+
+  if (tmp.length()) {
+    int64_t pool;
+    try {
+      pool = boost::lexical_cast<unsigned>(tmp);
+      if (!osdmap->have_pg_pool(pool))
+	return -ENOENT;
+    } catch (boost::bad_lexical_cast const&) {
+      pool = osdmap->lookup_pg_pool_name(tmp);
+      if (pool < 0) {
+	return -ENOENT;
+      }
+    }
+  }
+
+  return 0;
+}
+
 int Client::ll_setxattr(Inode *in, const char *name, const void *value,
 			size_t size, int flags, int uid, int gid)
 {
+  // For setting pool of layout, MetaRequest need osdmap epoch.
+  // There is a race which create a new data pool but client and mds both don't have.
+  // Make client got the latest osdmap which make mds quickly judge whether get newer osdmap.
+  if (strcmp(name, "ceph.file.layout.pool") == 0 ||  strcmp(name, "ceph.dir.layout.pool") == 0 ||
+      strcmp(name, "ceph.file.layout") == 0 || strcmp(name, "ceph.dir.layout") == 0) {
+    string rest(strstr(name, "layout"));
+    string v((const char*)value);
+    const OSDMap *osdmap = objecter->get_osdmap_read();
+    int r = check_data_pool_exist(rest, v, osdmap);
+    objecter->put_osdmap_read();
+
+    if (r == -ENOENT) {
+      C_SaferCond ctx;
+      objecter->wait_for_latest_osdmap(&ctx);
+      ctx.wait();
+    }
+  }
+
   Mutex::Locker lock(client_lock);
 
   vinodeno_t vino = _get_vino(in);

@@ -38,11 +38,7 @@ To list your cluster's pools, execute::
 
 	ceph osd lspools
 
-The default pools include:
-
-- ``data``
-- ``metadata``
-- ``rbd``
+On a freshly installed cluster, only the ``rbd`` pool exists.
 
 
 .. _createpool:

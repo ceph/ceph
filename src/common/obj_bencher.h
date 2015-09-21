@@ -18,6 +18,7 @@
 #include "common/config.h"
 #include "common/Cond.h"
 #include "common/ceph_context.h"
+#include "common/Formatter.h"
 #include <cfloat>
 
 struct bench_interval_data {
@@ -59,6 +60,8 @@ typedef std::pair<std::string, std::string> Object;
 
 class ObjBencher {
   bool show_time;
+  Formatter *formatter = NULL;
+  ostream *outstream = NULL;
 public:
   CephContext *cct;
 protected:
@@ -109,6 +112,12 @@ public:
 
   void set_show_time(bool dt) {
     show_time = dt;
+  }
+  void set_formatter(Formatter *f) {
+    formatter = f;
+  }
+  void set_outstream(ostream& os) {
+    outstream = &os;
   }
   int clean_up_slow(const std::string& prefix, int concurrentios);
 };

@@ -1,6 +1,7 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
+#include "test/librados_test_stub/LibradosTestStub.h"
 #include "include/rados/librados.hpp"
 #include "common/ceph_argparse.h"
 #include "common/common_init.h"
@@ -25,15 +26,7 @@
 
 namespace {
 
-static void DeallocateRadosClient(librados::TestRadosClient* client)
-{
-  client->put();
-}
-
-} // anonymous namespace
-
-
-static librados::TestClassHandler *get_class_handler() {
+librados::TestClassHandler *get_class_handler() {
   static boost::shared_ptr<librados::TestClassHandler> s_class_handler;
   if (!s_class_handler) {
     s_class_handler.reset(new librados::TestClassHandler());
@@ -42,49 +35,67 @@ static librados::TestClassHandler *get_class_handler() {
   return s_class_handler.get();
 }
 
-static librados::TestRadosClient *get_rados_client() {
+void do_out_buffer(bufferlist& outbl, char **outbuf, size_t *outbuflen) {
+  if (outbuf) {
+    if (outbl.length() > 0) {
+      *outbuf = (char *)malloc(outbl.length());
+      memcpy(*outbuf, outbl.c_str(), outbl.length());
+    } else {
+      *outbuf = NULL;
+    }
+  }
+  if (outbuflen) {
+    *outbuflen = outbl.length();
+  }
+}
+
+void do_out_buffer(string& outbl, char **outbuf, size_t *outbuflen) {
+  if (outbuf) {
+    if (outbl.length() > 0) {
+      *outbuf = (char *)malloc(outbl.length());
+      memcpy(*outbuf, outbl.c_str(), outbl.length());
+    } else {
+      *outbuf = NULL;
+    }
+  }
+  if (outbuflen) {
+    *outbuflen = outbl.length();
+  }
+}
+
+} // anonymous namespace
+
+namespace librados_test_stub {
+
+TestRadosClientPtr *rados_client() {
+  // force proper destruction order by delaying construction
+  static TestRadosClientPtr s_rados_client;
+  return &s_rados_client;
+}
+
+void set_rados_client(
+    const boost::shared_ptr<librados::TestRadosClient> &new_client) {
+  assert(new_client.get() != nullptr);
+  *rados_client() = new_client;
+}
+
+TestRadosClientPtr get_rados_client() {
   // TODO: use factory to allow tests to swap out impl
-  static boost::shared_ptr<librados::TestRadosClient> s_rados_client;
-  if (!s_rados_client) {
+  TestRadosClientPtr *client = rados_client();
+  if (client->get() == nullptr) {
     CephInitParameters iparams(CEPH_ENTITY_TYPE_CLIENT);
     CephContext *cct = common_preinit(iparams, CODE_ENVIRONMENT_LIBRARY, 0);
     cct->_conf->parse_env();
     cct->_conf->apply_changes(NULL);
-    s_rados_client.reset(new librados::TestMemRadosClient(cct),
-                         &DeallocateRadosClient);
+    client->reset(new librados::TestMemRadosClient(cct),
+                  &librados::TestRadosClient::Deallocate);
     cct->put();
   }
-  s_rados_client->get();
-  return s_rados_client.get();
+  (*client)->get();
+  return *client;
 }
 
-static void do_out_buffer(bufferlist& outbl, char **outbuf, size_t *outbuflen) {
-  if (outbuf) {
-    if (outbl.length() > 0) {
-      *outbuf = (char *)malloc(outbl.length());
-      memcpy(*outbuf, outbl.c_str(), outbl.length());
-    } else {
-      *outbuf = NULL;
-    }
-  }
-  if (outbuflen) {
-    *outbuflen = outbl.length();
-  }
-}
-
-static void do_out_buffer(string& outbl, char **outbuf, size_t *outbuflen) {
-  if (outbuf) {
-    if (outbl.length() > 0) {
-      *outbuf = (char *)malloc(outbl.length());
-      memcpy(*outbuf, outbl.c_str(), outbl.length());
-    } else {
-      *outbuf = NULL;
-    }
-  }
-  if (outbuflen) {
-    *outbuflen = outbl.length();
-  }
-}
+} // namespace librados_test_stub
 
 extern "C" int rados_aio_create_completion(void *cb_arg,
                                            rados_callback_t cb_complete,
@@ -158,7 +169,7 @@ extern "C" int rados_connect(rados_t cluster) {
 }
 
 extern "C" int rados_create(rados_t *cluster, const char * const id) {
-  *cluster = get_rados_client();
+  *cluster = librados_test_stub::get_rados_client().get();
   return 0;
 }
 
@@ -409,7 +420,7 @@ void IoCtx::dup(const IoCtx& rhs) {
 int IoCtx::exec(const std::string& oid, const char *cls, const char *method,
                 bufferlist& inbl, bufferlist& outbl) {
   TestIoCtxImpl *ctx = reinterpret_cast<TestIoCtxImpl*>(io_ctx_impl);
-  return ctx->exec(oid, *get_class_handler(), cls, method, inbl, &outbl,
+  return ctx->exec(oid, get_class_handler(), cls, method, inbl, &outbl,
                    ctx->get_snap_context());
 }
 
@@ -601,8 +612,7 @@ void ObjectOperation::exec(const char *cls, const char *method,
                            bufferlist& inbl) {
   TestObjectOperationImpl *o = reinterpret_cast<TestObjectOperationImpl*>(impl);
   o->ops.push_back(boost::bind(&TestIoCtxImpl::exec, _1, _2,
-			       boost::ref(*get_class_handler()),
-			       cls, method, inbl, _3, _4));
+			       get_class_handler(), cls, method, inbl, _3, _4));
 }
 
 void ObjectOperation::set_op_flags2(int flags) {

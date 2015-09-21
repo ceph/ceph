@@ -11,7 +11,7 @@ namespace librbd {
 class ImageCtx;
 class ProgressContext;
 
-class RebuildObjectMapRequest : public AsyncRequest {
+class RebuildObjectMapRequest : public AsyncRequest<> {
 public:
 
   RebuildObjectMapRequest(ImageCtx &image_ctx, Context *on_finish,

@@ -4,5 +4,5 @@ Description=Ceph disk activation: %f
 [Service]
 Type=oneshot
 RemainAfterExit=yes
-ExecStart=/usr/sbin/ceph-disk --verbose --log-stdout activate --mark-init systemd %f
+ExecStart=/usr/sbin/ceph-disk --verbose --log-stdout trigger --sync %f
 TimeoutSec=0

@@ -150,6 +150,11 @@ void MDSRankDispatcher::tick()
 {
   heartbeat_reset();
 
+  if (beacon.is_laggy()) {
+    dout(5) << "tick bailing out since we seem laggy" << dendl;
+    return;
+  }
+
   check_ops_in_flight();
 
   // Wake up thread in case we use to be laggy and have waiting_for_nolaggy
@@ -194,6 +199,9 @@ void MDSRankDispatcher::tick()
     if (snapserver)
       snapserver->check_osd_map(false);
   }
+
+  // Expose ourselves to Beacon to update health indicators
+  beacon.notify_health(this);
 }
 
 void MDSRankDispatcher::shutdown()
@@ -206,13 +214,6 @@ void MDSRankDispatcher::shutdown()
 
   dout(1) << __func__ << ": shutting down rank " << whoami << dendl;
 
-  if (!mdsmap->is_dne_gid(mds_gid_t(monc->get_global_id()))) {
-    // Notify the MDSMonitor that we're dying, so that it doesn't have to
-    // wait for us to go laggy.  Only do this if we're actually in the
-    // MDSMap, because otherwise the MDSMonitor will drop our message.
-    beacon.send_and_wait(1);
-  }
-
   timer.shutdown();
 
   // MDLog has to shut down before the finisher, because some of its
@@ -220,9 +221,6 @@ void MDSRankDispatcher::shutdown()
   mdlog->shutdown();
 
   finisher->stop(); // no flushing
-
-  // stop timers
-  beacon.shutdown();
 
   // shut down cache
   mdcache->shutdown();

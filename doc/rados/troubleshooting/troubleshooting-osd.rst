@@ -42,10 +42,15 @@ the sockets for your Ceph processes::
 
 	ls /var/run/ceph
 
-Then, execute the following, replacing ``{socket-name}`` with an actual
-socket name to show the list of available options::
+Then, execute the following, replacing ``{daemon-name}`` with an actual
+daemon (e.g., ``osd.0``)::
 
-	ceph --admin-daemon /var/run/ceph/{socket-name} help
+  ceph daemon osd.0 help
+
+Alternatively, you can specify a ``{socket-file}`` (e.g., something in ``/var/run/ceph``)::
+
+  ceph daemon {socket-file} help
+
 
 The admin socket, among other things, allows you to:
 

@@ -14,8 +14,6 @@
 
 #define FUSE_USE_VERSION 30
 
-#include <fuse/fuse.h>
-#include <fuse/fuse_lowlevel.h>
 #include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -34,6 +32,8 @@
 #include "common/config.h"
 #include "include/assert.h"
 
+#include <fuse.h>
+#include <fuse_lowlevel.h>
 #include "fuse_ll.h"
 
 #define FINO_INO(x) ((x) & ((1ull<<48)-1ull))
@@ -172,7 +172,12 @@ static void fuse_ll_setattr(fuse_req_t req, fuse_ino_t ino, struct stat *attr,
 // XATTRS
 
 static void fuse_ll_setxattr(fuse_req_t req, fuse_ino_t ino, const char *name,
-			     const char *value, size_t size, int flags)
+			     const char *value, size_t size, 
+			     int flags
+#if defined(DARWIN)
+			     ,uint32_t pos
+#endif
+  )
 {
   CephFuse::Handle *cfuse = (CephFuse::Handle *)fuse_req_userdata(req);
   const struct fuse_ctx *ctx = fuse_req_ctx(req);
@@ -204,7 +209,11 @@ static void fuse_ll_listxattr(fuse_req_t req, fuse_ino_t ino, size_t size)
 }
 
 static void fuse_ll_getxattr(fuse_req_t req, fuse_ino_t ino, const char *name,
-			     size_t size)
+			     size_t size
+#if defined(DARWIN)
+			     ,uint32_t position
+#endif
+  )
 {
   CephFuse::Handle *cfuse = (CephFuse::Handle *)fuse_req_userdata(req);
   const struct fuse_ctx *ctx = fuse_req_ctx(req);
@@ -908,6 +917,7 @@ int CephFuse::Handle::init(int argc, const char *argv[])
     newargv[newargc++] = "-o";
     newargv[newargc++] = "default_permissions";
   }
+#if defined(__linux__)
   if (client->cct->_conf->fuse_big_writes) {
     newargv[newargc++] = "-o";
     newargv[newargc++] = "big_writes";
@@ -916,7 +926,7 @@ int CephFuse::Handle::init(int argc, const char *argv[])
     newargv[newargc++] = "-o";
     newargv[newargc++] = "atomic_o_trunc";
   }
-
+#endif
   if (client->cct->_conf->fuse_debug)
     newargv[newargc++] = "-d";
 
@@ -968,7 +978,9 @@ int CephFuse::Handle::start()
     ino_cb: client->cct->_conf->fuse_use_invalidate_cb ? ino_invalidate_cb : NULL,
     dentry_cb: dentry_invalidate_cb,
     switch_intr_cb: switch_interrupt_cb,
+#if defined(__linux__)
     remount_cb: remount_cb,
+#endif
     /*
      * this is broken:
      *

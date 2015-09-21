@@ -224,7 +224,7 @@ else(${ENABLE_SHARED})
 endif(${ENABLE_SHARED})
 
 set(Boost_USE_MULTITHREADED ON)
-find_package(Boost COMPONENTS thread system regex REQUIRED)
+find_package(Boost COMPONENTS thread system regex random REQUIRED)
 include_directories(${Boost_INCLUDE_DIRS})
 
 find_package(Threads REQUIRED)
@@ -240,6 +240,11 @@ endif(${CMAKE_SYSTEM_NAME} MATCHES "Linux")
 if(${CMAKE_SYSTEM_NAME} MATCHES "Darwin")
 set(OperatingSystem "Mac OS X")  
 endif(${CMAKE_SYSTEM_NAME} MATCHES "Darwin")
+
+# enables testing and creates Make check command
+enable_testing()
+set(CMAKE_CTEST_COMMAND ctest -V)
+add_custom_target(check COMMAND ${CMAKE_CTEST_COMMAND})
 
 add_subdirectory(src)
 

@@ -1810,7 +1810,13 @@ int RGWUser::execute_add(RGWUserAdminOpState& op_state, std::string *err_msg)
   if (!user_email.empty())
     user_info.user_email = user_email;
 
-  user_info.max_buckets = op_state.get_max_buckets();
+  CephContext *cct = store->ctx();
+  if (op_state.max_buckets_specified) {
+    user_info.max_buckets = op_state.get_max_buckets();
+  } else {
+    user_info.max_buckets = cct->_conf->rgw_user_max_buckets;
+  }
+
   user_info.suspended = op_state.get_suspension_status();
   user_info.system = op_state.system;
 
@@ -2016,13 +2022,8 @@ int RGWUser::execute_modify(RGWUserAdminOpState& op_state, std::string *err_msg)
   if (!display_name.empty())
     user_info.display_name = display_name;
 
-  // will be set to RGW_DEFAULT_MAX_BUCKETS by default
-  uint32_t max_buckets = op_state.get_max_buckets();
-
-  ldout(store->ctx(), 0) << "max_buckets=" << max_buckets << " specified=" << op_state.max_buckets_specified << dendl;
-
   if (op_state.max_buckets_specified)
-    user_info.max_buckets = max_buckets;
+    user_info.max_buckets = op_state.get_max_buckets();
 
   if (op_state.system_specified)
     user_info.system = op_state.system;

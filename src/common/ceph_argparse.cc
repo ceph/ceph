@@ -521,6 +521,8 @@ static void generic_usage(bool is_server)
   --id/-i ID        set ID portion of my name\n\
   --name/-n TYPE.ID set name\n\
   --cluster NAME    set cluster name (default: ceph)\n\
+  --setuser USER    set uid to user or uid (and gid to user's gid)\n\
+  --setgroup GROUP  set gid to group or gid\n\
   --version         show version and quit\n\
 " << std::endl;
 

@@ -25,6 +25,11 @@
 #include <sys/vfs.h>
 #endif
 
+#if defined(DARWIN)
+#include <sys/param.h>
+#include <sys/mount.h>
+#endif
+
 // test if an entire buf is zero in 8-byte chunks
 bool buf_is_zero(const char *buf, size_t len)
 {

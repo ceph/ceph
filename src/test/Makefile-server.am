@@ -55,6 +55,11 @@ ceph_test_objectstore_LDADD = $(LIBOS) $(UNITTEST_LDADD) $(CEPH_GLOBAL)
 ceph_test_objectstore_CXXFLAGS = $(UNITTEST_CXXFLAGS)
 bin_DEBUGPROGRAMS += ceph_test_objectstore
 
+ceph_test_keyvaluedb_SOURCES = test/objectstore/test_kv.cc
+ceph_test_keyvaluedb_LDADD = $(LIBOS) $(UNITTEST_LDADD) $(CEPH_GLOBAL)
+ceph_test_keyvaluedb_CXXFLAGS = $(UNITTEST_CXXFLAGS)
+bin_DEBUGPROGRAMS += ceph_test_keyvaluedb
+
 ceph_test_filestore_SOURCES = test/filestore/TestFileStore.cc
 ceph_test_filestore_LDADD = $(LIBOS) $(UNITTEST_LDADD) $(CEPH_GLOBAL)
 ceph_test_filestore_CXXFLAGS = $(UNITTEST_CXXFLAGS)
@@ -199,6 +204,11 @@ ceph_test_snap_mapper_SOURCES = test/test_snap_mapper.cc
 ceph_test_snap_mapper_LDADD = $(LIBOSD) $(UNITTEST_LDADD) $(CEPH_GLOBAL)
 ceph_test_snap_mapper_CXXFLAGS = $(UNITTEST_CXXFLAGS)
 bin_DEBUGPROGRAMS += ceph_test_snap_mapper
+
+unittest_pageset_SOURCES = test/test_pageset.cc
+unittest_pageset_LDADD = $(UNITTEST_LDADD)
+unittest_pageset_CXXFLAGS = $(UNITTEST_CXXFLAGS)
+check_TESTPROGRAMS += unittest_pageset
 
 endif # WITH_OSD
 

@@ -12,11 +12,15 @@
  *
  */
 
+#include "acconfig.h"
 #include "Ser.hpp"
 #include <arpa/inet.h>
 #include <cstdlib>
+#if defined(DARWIN)
+#include <machine/endian.h>
+#else
 #include <endian.h>
-
+#endif
 
 rbd_replay::Ser::Ser(std::ostream &out)
   : m_out(out) {

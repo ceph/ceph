@@ -23,10 +23,10 @@
 
 #include "inode_backtrace.h"
 
+#include <boost/spirit/include/qi.hpp>
 #include <boost/pool/pool.hpp>
 #include "include/assert.h"
 #include <boost/serialization/strong_typedef.hpp>
-
 
 #define CEPH_FS_ONDISK_MAGIC "ceph fs volume v011"
 
@@ -1604,6 +1604,24 @@ public:
   void dump(Formatter *f) const;
 };
 
+// parse a map of keys/values.
+namespace qi = boost::spirit::qi;
 
+template <typename Iterator>
+struct keys_and_values
+  : qi::grammar<Iterator, std::map<string, string>()>
+{
+    keys_and_values()
+      : keys_and_values::base_type(query)
+    {
+      query =  pair >> *(qi::lit(' ') >> pair);
+      pair  =  key >> '=' >> value;
+      key   =  qi::char_("a-zA-Z_") >> *qi::char_("a-zA-Z_0-9");
+      value = +qi::char_("a-zA-Z_0-9");
+    }
+    qi::rule<Iterator, std::map<string, string>()> query;
+    qi::rule<Iterator, std::pair<string, string>()> pair;
+    qi::rule<Iterator, string()> key, value;
+};
 
 #endif

@@ -23,6 +23,8 @@ calculated automatically. Here are a few values commonly used:
 - If you have more than 50 OSDs, you need to understand the tradeoffs
   and how to calculate the ``pg_num`` value by yourself
 
+- For calculating ``pg_num`` value by yourself please take help of `pgcalc`_ tool 
+
 As the number of OSDs increases, chosing the right value for pg_num
 becomes more important because it has a significant influence on the
 behavior of the cluster as well as the durability of the data when
@@ -431,3 +433,4 @@ entirely. To mark the "unfound" objects as "lost", execute the following::
 
 .. _Create a Pool: ../pools#createpool
 .. _Mapping PGs to OSDs: ../../../architecture#mapping-pgs-to-osds
+.. _pgcalc: http://ceph.com/pgcalc/

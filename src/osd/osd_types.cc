@@ -942,10 +942,12 @@ void pg_pool_t::dump(Formatter *f) const
   f->close_section(); // hit_set_params
   f->dump_unsigned("hit_set_period", hit_set_period);
   f->dump_unsigned("hit_set_count", hit_set_count);
+  f->dump_bool("use_gmt_hitset", use_gmt_hitset);
   f->dump_unsigned("min_read_recency_for_promote", min_read_recency_for_promote);
   f->dump_unsigned("min_write_recency_for_promote", min_write_recency_for_promote);
   f->dump_unsigned("stripe_width", get_stripe_width());
   f->dump_unsigned("expected_num_objects", expected_num_objects);
+  f->dump_bool("fast_read", fast_read);
 }
 
 void pg_pool_t::convert_to_pg_shards(const vector<int> &from, set<pg_shard_t>* to) const {
@@ -1085,17 +1087,17 @@ SnapContext pg_pool_t::get_snap_context() const
   return SnapContext(get_snap_seq(), s);
 }
 
-static string make_hash_str(const string &inkey, const string &nspace)
-{
-  if (nspace.empty())
-    return inkey;
-  return nspace + '\037' + inkey;
-}
-
 uint32_t pg_pool_t::hash_key(const string& key, const string& ns) const
 {
-  string n = make_hash_str(key, ns);
-  return ceph_str_hash(object_hash, n.c_str(), n.length());
+ if (ns.empty()) 
+    return ceph_str_hash(object_hash, key.data(), key.length());
+  int nsl = ns.length();
+  int len = key.length() + nsl + 1;
+  char buf[len];
+  memcpy(&buf[0], ns.data(), nsl);
+  buf[nsl] = '\037';
+  memcpy(&buf[nsl+1], key.data(), key.length());
+  return ceph_str_hash(object_hash, &buf[0], len);
 }
 
 uint32_t pg_pool_t::raw_hash_to_pg(uint32_t v) const
@@ -1255,7 +1257,7 @@ void pg_pool_t::encode(bufferlist& bl, uint64_t features) const
     return;
   }
 
-  ENCODE_START(20, 5, bl);
+  ENCODE_START(22, 5, bl);
   ::encode(type, bl);
   ::encode(size, bl);
   ::encode(crush_ruleset, bl);
@@ -1299,12 +1301,14 @@ void pg_pool_t::encode(bufferlist& bl, uint64_t features) const
   ::encode(expected_num_objects, bl);
   ::encode(cache_target_dirty_high_ratio_micro, bl);
   ::encode(min_write_recency_for_promote, bl);
+  ::encode(use_gmt_hitset, bl);
+  ::encode(fast_read, bl);
   ENCODE_FINISH(bl);
 }
 
 void pg_pool_t::decode(bufferlist::iterator& bl)
 {
-  DECODE_START_LEGACY_COMPAT_LEN(20, 5, 5, bl);
+  DECODE_START_LEGACY_COMPAT_LEN(22, 5, 5, bl);
   ::decode(type, bl);
   ::decode(size, bl);
   ::decode(crush_ruleset, bl);
@@ -1426,6 +1430,16 @@ void pg_pool_t::decode(bufferlist::iterator& bl)
   } else {
     min_write_recency_for_promote = 1;
   }
+  if (struct_v >= 21) {
+    ::decode(use_gmt_hitset, bl);
+  } else {
+    use_gmt_hitset = false;
+  }
+  if (struct_v >= 22) {
+    ::decode(fast_read, bl);
+  } else {
+    fast_read = false;
+  }
   DECODE_FINISH(bl);
   calc_pg_masks();
 }
@@ -1483,6 +1497,7 @@ void pg_pool_t::generate_test_instances(list<pg_pool_t*>& o)
   a.cache_min_evict_age = 2321;
   a.erasure_code_profile = "profile in osdmap";
   a.expected_num_objects = 123456;
+  a.fast_read = false;
   o.push_back(new pg_pool_t(a));
 }
 
@@ -1534,6 +1549,8 @@ ostream& operator<<(ostream& out, const pg_pool_t& p)
   out << " stripe_width " << p.get_stripe_width();
   if (p.expected_num_objects)
     out << " expected_num_objects " << p.expected_num_objects;
+  if (p.fast_read)
+    out << " fast_read " << p.fast_read;
   return out;
 }
 
@@ -2773,6 +2790,7 @@ bool pg_interval_t::check_new_interval(
     pg_interval_t& i = (*past_intervals)[same_interval_since];
     i.first = same_interval_since;
     i.last = osdmap->get_epoch() - 1;
+    assert(i.first <= i.last);
     i.acting = old_acting;
     i.up = old_up;
     i.primary = old_acting_primary;
@@ -3753,7 +3771,7 @@ void object_copy_data_t::encode(bufferlist& bl, uint64_t features) const
     return;
   }
 
-  ENCODE_START(6, 5, bl);
+  ENCODE_START(7, 5, bl);
   ::encode(size, bl);
   ::encode(mtime, bl);
   ::encode(attrs, bl);
@@ -3767,12 +3785,14 @@ void object_copy_data_t::encode(bufferlist& bl, uint64_t features) const
   ::encode(data_digest, bl);
   ::encode(omap_digest, bl);
   ::encode(reqids, bl);
+  ::encode(truncate_seq, bl);
+  ::encode(truncate_size, bl);
   ENCODE_FINISH(bl);
 }
 
 void object_copy_data_t::decode(bufferlist::iterator& bl)
 {
-  DECODE_START(6, bl);
+  DECODE_START(7, bl);
   if (struct_v < 5) {
     // old
     ::decode(size, bl);
@@ -3823,6 +3843,10 @@ void object_copy_data_t::decode(bufferlist::iterator& bl)
     }
     if (struct_v >= 6) {
       ::decode(reqids, bl);
+    }
+    if (struct_v >= 7) {
+      ::decode(truncate_seq, bl);
+      ::decode(truncate_size, bl);
     }
   }
   DECODE_FINISH(bl);
@@ -3931,19 +3955,25 @@ void pg_create_t::generate_test_instances(list<pg_create_t*>& o)
 
 void pg_hit_set_info_t::encode(bufferlist& bl) const
 {
-  ENCODE_START(1, 1, bl);
+  ENCODE_START(2, 1, bl);
   ::encode(begin, bl);
   ::encode(end, bl);
   ::encode(version, bl);
+  ::encode(using_gmt, bl);
   ENCODE_FINISH(bl);
 }
 
 void pg_hit_set_info_t::decode(bufferlist::iterator& p)
 {
-  DECODE_START(1, p);
+  DECODE_START(2, p);
   ::decode(begin, p);
   ::decode(end, p);
   ::decode(version, p);
+  if (struct_v >= 2) {
+    ::decode(using_gmt, p);
+  } else {
+    using_gmt = false;
+  }
   DECODE_FINISH(p);
 }
 
@@ -3952,6 +3982,7 @@ void pg_hit_set_info_t::dump(Formatter *f) const
   f->dump_stream("begin") << begin;
   f->dump_stream("end") << end;
   f->dump_stream("version") << version;
+  f->dump_stream("using_gmt") << using_gmt;
 }
 
 void pg_hit_set_info_t::generate_test_instances(list<pg_hit_set_info_t*>& ls)
@@ -4052,7 +4083,7 @@ ostream& operator<<(ostream& out, const osd_peer_stat_t &stat)
 
 void OSDSuperblock::encode(bufferlist &bl) const
 {
-  ENCODE_START(6, 5, bl);
+  ENCODE_START(7, 5, bl);
   ::encode(cluster_fsid, bl);
   ::encode(whoami, bl);
   ::encode(current_epoch, bl);
@@ -4064,6 +4095,7 @@ void OSDSuperblock::encode(bufferlist &bl) const
   ::encode(mounted, bl);
   ::encode(osd_fsid, bl);
   ::encode(last_map_marked_full, bl);
+  ::encode(pool_last_map_marked_full, bl);
   ENCODE_FINISH(bl);
 }
 
@@ -4091,6 +4123,8 @@ void OSDSuperblock::decode(bufferlist::iterator &bl)
     ::decode(osd_fsid, bl);
   if (struct_v >= 6)
     ::decode(last_map_marked_full, bl);
+  if (struct_v >= 7)
+    ::decode(pool_last_map_marked_full, bl);
   DECODE_FINISH(bl);
 }
 

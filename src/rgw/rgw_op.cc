@@ -916,6 +916,25 @@ void RGWGetObj::pre_exec()
   rgw_bucket_object_pre_exec(s);
 }
 
+static bool object_is_expired(map<string, bufferlist>& attrs) {
+  map<string, bufferlist>::iterator iter = attrs.find(RGW_ATTR_DELETE_AT);
+  if (iter != attrs.end()) {
+    utime_t delete_at;
+    try {
+      ::decode(delete_at, iter->second);
+    } catch (buffer::error& err) {
+      dout(0) << "ERROR: " << __func__ << ": failed to decode " RGW_ATTR_DELETE_AT " attr" << dendl;
+      return false;
+    }
+
+    if (delete_at <= ceph_clock_now(g_ceph_context)) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
 void RGWGetObj::execute()
 {
   utime_t start_time = s->time;
@@ -965,6 +984,13 @@ void RGWGetObj::execute()
       ldout(s->cct, 0) << "ERROR: failed to handle user manifest ret=" << ret << dendl;
     }
     return;
+  }
+
+  /* Check whether the object has expired. Swift API documentation
+   * stands that we should return 404 Not Found in such case. */
+  if (need_object_expiration() && object_is_expired(attrs)) {
+    ret = -ENOENT;
+    goto done_err;
   }
 
   ofs = new_ofs;
@@ -1560,7 +1586,7 @@ class RGWPutObjProcessor_Multipart : public RGWPutObjProcessor_Atomic
 protected:
   int prepare(RGWRados *store, string *oid_rand);
   int do_complete(string& etag, time_t *mtime, time_t set_mtime,
-                  map<string, bufferlist>& attrs,
+                  map<string, bufferlist>& attrs, time_t delete_at,
                   const char *if_match = NULL, const char *if_nomatch = NULL);
 
 public:
@@ -1634,7 +1660,7 @@ static bool is_v2_upload_id(const string& upload_id)
 }
 
 int RGWPutObjProcessor_Multipart::do_complete(string& etag, time_t *mtime, time_t set_mtime,
-                                              map<string, bufferlist>& attrs,
+                                              map<string, bufferlist>& attrs, time_t delete_at,
                                               const char *if_match, const char *if_nomatch)
 {
   complete_writing_data();
@@ -1645,6 +1671,7 @@ int RGWPutObjProcessor_Multipart::do_complete(string& etag, time_t *mtime, time_
   head_obj_op.meta.set_mtime = set_mtime;
   head_obj_op.meta.mtime = mtime;
   head_obj_op.meta.owner = s->owner.get_id();
+  head_obj_op.meta.delete_at = delete_at;
 
   int r = head_obj_op.write_meta(s->obj_size, attrs);
   if (r < 0)
@@ -1767,6 +1794,17 @@ static int get_system_versioning_params(req_state *s, uint64_t *olh_epoch, strin
   return 0;
 }
 
+static void encode_delete_at_attr(time_t delete_at, map<string, bufferlist>& attrs)
+{
+  if (delete_at == 0) {
+    return;
+  }
+
+  bufferlist delatbl;
+  ::encode(utime_t(delete_at, 0), delatbl);
+  attrs[RGW_ATTR_DELETE_AT] = delatbl;
+}
+
 void RGWPutObj::execute()
 {
   RGWPutObjProcessor *processor = NULL;
@@ -1791,11 +1829,15 @@ void RGWPutObj::execute()
   }
 
   ret = get_params();
-  if (ret < 0)
+  if (ret < 0) {
+    ldout(s->cct, 20) << "get_params() returned ret=" << ret << dendl;
     goto done;
+  }
 
   ret = get_system_versioning_params(s, &olh_epoch, &version_id);
   if (ret < 0) {
+    ldout(s->cct, 20) << "get_system_versioning_params() returned ret=" \
+        << ret << dendl;
     goto done;
   }
 
@@ -1820,6 +1862,7 @@ void RGWPutObj::execute()
     ret = store->check_quota(s->bucket_owner.get_id(), s->bucket,
                              user_quota, bucket_quota, s->content_length);
     if (ret < 0) {
+      ldout(s->cct, 20) << "check_quota() returned ret=" << ret << dendl;
       goto done;
     }
   }
@@ -1832,8 +1875,10 @@ void RGWPutObj::execute()
   processor = select_processor(*static_cast<RGWObjectCtx *>(s->obj_ctx), &multipart);
 
   ret = processor->prepare(store, NULL);
-  if (ret < 0)
+  if (ret < 0) {
+    ldout(s->cct, 20) << "processor->prepare() returned ret=" << ret << dendl;
     goto done;
+  }
 
   do {
     bufferlist data;
@@ -1903,6 +1948,7 @@ void RGWPutObj::execute()
   ret = store->check_quota(s->bucket_owner.get_id(), s->bucket,
                            user_quota, bucket_quota, s->obj_size);
   if (ret < 0) {
+    ldout(s->cct, 20) << "second check_quota() returned ret=" << ret << dendl;
     goto done;
   }
 
@@ -1964,8 +2010,10 @@ void RGWPutObj::execute()
   }
 
   rgw_get_request_metadata(s->cct, s->info, attrs);
+  encode_delete_at_attr(delete_at, attrs);
 
-  ret = processor->complete(etag, &mtime, 0, attrs, if_match, if_nomatch);
+  ret = processor->complete(etag, &mtime, 0, attrs, delete_at, if_match, if_nomatch);
+
 done:
   dispose_processor(processor);
   perfcounter->tinc(l_rgw_put_lat,
@@ -2084,7 +2132,7 @@ void RGWPostObj::execute()
     attrs[RGW_ATTR_CONTENT_TYPE] = ct_bl;
   }
 
-  ret = processor->complete(etag, NULL, 0, attrs);
+  ret = processor->complete(etag, NULL, 0, attrs, delete_at);
 
 done:
   dispose_processor(processor);
@@ -2186,17 +2234,17 @@ void RGWPutMetadataAccount::filter_out_temp_url(map<string, bufferlist>& add_att
                                                 map<int, string>& temp_url_keys)
 {
   map<string, bufferlist>::iterator iter;
-  for (iter = add_attrs.begin(); iter != add_attrs.end(); ++iter) {
-    const string name = iter->first;
 
-    if (name.compare(RGW_ATTR_TEMPURL_KEY1) == 0) {
-      temp_url_keys[0] = iter->second.c_str();
-      add_attrs.erase(name);
-    }
-    if (name.compare(RGW_ATTR_TEMPURL_KEY2) == 0) {
-      temp_url_keys[1] = iter->second.c_str();
-      add_attrs.erase(name);
-    }
+  iter = add_attrs.find(RGW_ATTR_TEMPURL_KEY1);
+  if (iter != add_attrs.end()) {
+    temp_url_keys[0] = iter->second.c_str();
+    add_attrs.erase(iter);
+  }
+
+  iter = add_attrs.find(RGW_ATTR_TEMPURL_KEY2);
+  if (iter != add_attrs.end()) {
+    temp_url_keys[1] = iter->second.c_str();
+    add_attrs.erase(iter);
   }
 
   set<string>::const_iterator riter;
@@ -2341,9 +2389,18 @@ void RGWPutMetadataObject::execute()
     return;
   }
 
+  /* Check whether the object has expired. Swift API documentation
+   * stands that we should return 404 Not Found in such case. */
+  if (need_object_expiration() && object_is_expired(orig_attrs)) {
+    ret = -ENOENT;
+    return;
+  }
+
   /* Filter currently existing attributes. */
   prepare_add_del_attrs(orig_attrs, attrs, rmattrs);
   populate_with_generic_attrs(s, attrs);
+  encode_delete_at_attr(delete_at, attrs);
+
   ret = store->set_attrs(s->obj_ctx, obj, attrs, &rmattrs, NULL);
 }
 
@@ -2577,6 +2634,8 @@ void RGWCopyObj::execute()
   obj_ctx.set_atomic(src_obj);
   obj_ctx.set_atomic(dst_obj);
 
+  encode_delete_at_attr(delete_at, attrs);
+
   ret = store->copy_obj(obj_ctx,
                         s->user.user_id,
                         client_id,
@@ -2596,6 +2655,7 @@ void RGWCopyObj::execute()
                         attrs_mod,
                         attrs, RGW_OBJ_CATEGORY_MAIN,
                         olh_epoch,
+			delete_at,
                         (version_id.empty() ? NULL : &version_id),
                         &s->req_id, /* use req_id as tag */
                         &etag,

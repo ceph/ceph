@@ -339,13 +339,19 @@ void dump_content_length(struct req_state *s, uint64_t len)
   }
 }
 
-void dump_etag(struct req_state *s, const char *etag)
+void dump_etag(struct req_state * const s, const char * const etag)
 {
+  if ('\0' == *etag) {
+    return;
+  }
+
   int r;
-  if (s->prot_flags & RGW_REST_SWIFT)
+  if (s->prot_flags & RGW_REST_SWIFT) {
     r = s->cio->print("etag: %s\r\n", etag);
-  else
+  } else {
     r = s->cio->print("ETag: \"%s\"\r\n", etag);
+  }
+
   if (r < 0) {
     ldout(s->cct, 0) << "ERROR: s->cio->print() returned err=" << r << dendl;
   }
@@ -547,6 +553,8 @@ void end_header(struct req_state *s, RGWOp *op, const char *content_type, const 
       s->formatter->dump_string("Code", s->err.s3_code);
     if (!s->err.message.empty())
       s->formatter->dump_string("Message", s->err.message);
+    if (!s->trans_id.empty())
+      s->formatter->dump_string("RequestId", s->trans_id);
     s->formatter->close_section();
     dump_content_length(s, s->formatter->get_len());
   } else {
@@ -557,7 +565,7 @@ void end_header(struct req_state *s, RGWOp *op, const char *content_type, const 
 
   int r;
   if (content_type) {
-      r = s->cio->print("Content-type: %s\r\n", content_type);
+      r = s->cio->print("Content-Type: %s\r\n", content_type);
       if (r < 0) {
 	ldout(s->cct, 0) << "ERROR: s->cio->print() returned err=" << r << dendl;
       }

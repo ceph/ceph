@@ -68,6 +68,10 @@ ceph_omapbench_SOURCES = test/omap_bench.cc
 ceph_omapbench_LDADD = $(LIBRADOS) $(CEPH_GLOBAL)
 bin_DEBUGPROGRAMS += ceph_omapbench
 
+ceph_objectstore_bench_SOURCES = test/objectstore_bench.cc
+ceph_objectstore_bench_LDADD = $(LIBOS) $(CEPH_GLOBAL)
+bin_DEBUGPROGRAMS += ceph_objectstore_bench
+
 if LINUX
 ceph_kvstorebench_SOURCES = \
 	test/kv_store_bench.cc \
@@ -173,6 +177,13 @@ ceph_test_cls_hello_LDADD = \
 ceph_test_cls_hello_CXXFLAGS = $(UNITTEST_CXXFLAGS)
 bin_DEBUGPROGRAMS += ceph_test_cls_hello
 
+ceph_test_cls_numops_SOURCES = test/cls_numops/test_cls_numops.cc
+ceph_test_cls_numops_LDADD = \
+    $(LIBRADOS) libcls_numops_client.la \
+    $(UNITTEST_LDADD) $(CEPH_GLOBAL) $(RADOS_TEST_LDADD)
+ceph_test_cls_numops_CXXFLAGS = $(UNITTEST_CXXFLAGS)
+bin_DEBUGPROGRAMS += ceph_test_cls_numops
+
 ceph_test_rados_api_cmd_SOURCES = test/librados/cmd.cc
 ceph_test_rados_api_cmd_LDADD = \
 	$(LIBCOMMON) $(LIBRADOS) $(CRYPTO_LIBS) \
@@ -271,6 +282,7 @@ librados_test_stub_la_SOURCES = \
 	test/librados_test_stub/TestRadosClient.cc \
 	test/librados_test_stub/TestWatchNotify.cc
 noinst_HEADERS += \
+	test/librados_test_stub/LibradosTestStub.h \
 	test/librados_test_stub/TestClassHandler.h \
 	test/librados_test_stub/TestRadosClient.h \
 	test/librados_test_stub/TestMemRadosClient.h \
@@ -310,7 +322,8 @@ librbd_test_la_CXXFLAGS = $(UNITTEST_CXXFLAGS)
 noinst_LTLIBRARIES += librbd_test.la
 
 unittest_librbd_SOURCES = \
-        test/librbd/test_main.cc
+        test/librbd/test_main.cc \
+	test/librbd/test_mock_fixture.cc
 unittest_librbd_CXXFLAGS = $(UNITTEST_CXXFLAGS) -DTEST_LIBRBD_INTERNALS
 unittest_librbd_LDADD = \
 	librbd_test.la librbd_api.la librbd_internal.la $(LIBRBD_TYPES) \
@@ -339,6 +352,15 @@ ceph_test_librbd_api_CXXFLAGS = $(UNITTEST_CXXFLAGS)
 ceph_test_librbd_api_LDADD = \
 	$(LIBRBD) $(LIBRADOS) $(LIBCOMMON) $(UNITTEST_LDADD) $(RADOS_TEST_LDADD)
 bin_DEBUGPROGRAMS += ceph_test_librbd_api
+
+noinst_HEADERS += \
+	test/librbd/test_fixture.h \
+	test/librbd/test_mock_fixture.h \
+	test/librbd/test_support.h \
+	test/librbd/mock/MockContextWQ.h \
+	test/librbd/mock/MockImageCtx.h \
+	test/librbd/mock/MockImageWatcher.h \
+	test/librbd/mock/MockObjectMap.h
 
 if WITH_LTTNG
 unittest_librbd_LDADD += $(LIBRBD_TP)
@@ -428,8 +450,11 @@ ceph_test_libcephfs_SOURCES = \
 	test/libcephfs/test.cc \
 	test/libcephfs/readdir_r_cb.cc \
 	test/libcephfs/caps.cc \
-	test/libcephfs/multiclient.cc \
-	test/libcephfs/flock.cc
+	test/libcephfs/multiclient.cc
+if LINUX
+ceph_test_libcephfs_SOURCES += test/libcephfs/flock.cc
+endif # LINUX
+
 ceph_test_libcephfs_LDADD = $(LIBCEPHFS) $(UNITTEST_LDADD)
 ceph_test_libcephfs_CXXFLAGS = $(UNITTEST_CXXFLAGS)
 bin_DEBUGPROGRAMS += ceph_test_libcephfs
@@ -439,7 +464,6 @@ unittest_encoding_SOURCES = test/encoding.cc
 ceph_test_c_headers_SOURCES = test/test_c_headers.c
 ceph_test_c_headers_LDADD = $(LIBRADOS) $(LIBCEPHFS)
 ceph_test_c_headers_CFLAGS = $(AM_CFLAGS) \
-	-Werror \
 	-Wstrict-prototypes \
 	-Wredundant-decls \
 	-Wall \
@@ -454,9 +478,11 @@ ceph_test_c_headers_CFLAGS = $(AM_CFLAGS) \
 	-Wformat-y2k \
 	-Winit-self \
 	-Wignored-qualifiers \
-	-Wold-style-declaration \
 	-Wold-style-definition \
 	-Wtype-limits
+if !CLANG
+ceph_test_c_headers_CFLAGS += -Werror -Wold-style-declaration
+endif # !CLANG
 bin_DEBUGPROGRAMS += ceph_test_c_headers
 
 endif # WITH_CEPHFS
@@ -534,7 +560,7 @@ ceph_test_cls_rgw_opstate_LDADD = \
 	$(LIBRADOS) $(LIBRGW) $(CEPH_GLOBAL) \
 	$(UNITTEST_LDADD) $(CRYPTO_LIBS) \
 	-lcurl -lexpat \
-	libcls_version_client.a libcls_log_client.a \
+	libcls_version_client.a libcls_log_client.a  libcls_timeindex_client.a \
 	libcls_statelog_client.a libcls_refcount_client.la \
 	libcls_rgw_client.la libcls_user_client.a libcls_lock_client.la \
 	$(LIBRADOS)

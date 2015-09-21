@@ -23,6 +23,8 @@ public:
   ~TestClassHandler();
 
   struct MethodContext {
+    ~MethodContext();
+
     TestIoCtxImpl *io_ctx_impl;
     std::string oid;
     SnapContext snapc;

@@ -140,6 +140,16 @@ int Accepter::bind(const entity_addr_t &bind_addr, const set<int>& avoid_ports)
     return rc;
   }
   
+  if (msgr->cct->_conf->ms_tcp_rcvbuf) {
+    int size = msgr->cct->_conf->ms_tcp_rcvbuf;
+    rc = ::setsockopt(listen_sd, SOL_SOCKET, SO_RCVBUF, (void*)&size, sizeof(size));
+    if (rc < 0)  {
+      rc = -errno;
+      lderr(msgr->cct) << "accepter.bind failed to set SO_RCVBUF to " << size << ": " << cpp_strerror(r) << dendl;
+      return rc;
+    }
+  }
+
   ldout(msgr->cct,10) << "accepter.bind bound to " << listen_addr << dendl;
 
   // listen!

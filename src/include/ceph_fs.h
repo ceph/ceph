@@ -409,6 +409,7 @@ union ceph_mds_request_args {
 	} __attribute__ ((packed)) open;
 	struct {
 		__le32 flags;
+		__le32 osdmap_epoch; 	    /* use for set file/dir layout */
 	} __attribute__ ((packed)) setxattr;
 	struct {
 		struct ceph_file_layout layout;

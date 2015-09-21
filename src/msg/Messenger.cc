@@ -15,6 +15,7 @@ Messenger *Messenger::create(CephContext *cct, const string &type,
 			     uint64_t nonce, uint64_t features)
 {
   int r = -1;
+  srand(time(NULL));
   if (type == "random")
     r = rand() % 2; // random does not include xio
   if (r == 0 || type == "simple")

@@ -1,8 +1,0 @@
-[Unit]
-Description=Ceph disk journal activation: %f
-
-[Service]
-Type=oneshot
-RemainAfterExit=yes
-ExecStart=/usr/sbin/ceph-disk --verbose --log-stdout activate-journal --mark-init systemd %f
-TimeoutSec=0

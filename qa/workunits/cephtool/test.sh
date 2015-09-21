@@ -221,6 +221,49 @@ function test_mon_injectargs_SI()
   $SUDO ceph daemon mon.a config set mon_pg_warn_min_objects $initial_value
 }
 
+function test_tiering_agent()
+{
+  local slow=slow_eviction
+  local fast=fast_eviction
+  ceph osd pool create $slow  1 1
+  ceph osd pool create $fast  1 1
+  ceph osd tier add $slow $fast
+  ceph osd tier cache-mode $fast writeback
+  ceph osd tier set-overlay $slow $fast
+  ceph osd pool set $fast hit_set_type bloom
+  rados -p $slow put obj1 /etc/group
+  ceph osd pool set $fast target_max_objects  1
+  ceph osd pool set $fast hit_set_count 1
+  ceph osd pool set $fast hit_set_period 5
+  # wait for the object to be evicted from the cache
+  local evicted
+  evicted=false
+  for i in 1 2 4 8 16 32 64 128 256 ; do
+      if ! rados -p $fast ls | grep obj1 ; then
+          evicted=true
+          break
+      fi
+      sleep $i
+  done
+  $evicted # assert
+  # the object is proxy read and promoted to the cache
+  rados -p $slow get obj1 /tmp/obj1
+  # wait for the promoted object to be evicted again
+  evicted=false
+  for i in 1 2 4 8 16 32 64 128 256 ; do
+      if ! rados -p $fast ls | grep obj1 ; then
+          evicted=true
+          break
+      fi
+      sleep $i
+  done
+  $evicted # assert
+  ceph osd tier remove-overlay $slow
+  ceph osd tier remove $slow $fast
+  ceph osd pool delete $fast $fast --yes-i-really-really-mean-it
+  ceph osd pool delete $slow $slow --yes-i-really-really-mean-it
+}
+
 function test_tiering()
 {
   # tiering
@@ -705,8 +748,15 @@ function test_mon_mds()
   mdsmapfile=$TMPDIR/mdsmap.$$
   current_epoch=$(ceph mds getmap -o $mdsmapfile --no-log-to-stderr 2>&1 | grep epoch | sed 's/.*epoch //')
   [ -s $mdsmapfile ]
+  # make several attempts in case we race with another mdsmap update
   ((epoch = current_epoch + 1))
-  ceph mds setmap -i $mdsmapfile $epoch
+  ((epoch2 = current_epoch + 2))
+  ((epoch3 = current_epoch + 3))
+  ((epoch4 = current_epoch + 4))
+  ceph mds setmap -i $mdsmapfile $epoch || \
+      ceph mds setmap -i $mdsmapfile $epoch2 || \
+      ceph mds setmap -i $mdsmapfile $epoch3 || \
+      ceph mds setmap -i $mdsmapfile $epoch4
   rm $mdsmapfile
 
   ceph osd pool create data2 10
@@ -1581,7 +1631,7 @@ function test_mon_crushmap_validation()
        exit 1" > "${crushtool_path}"
 
   expect_false ceph osd setcrushmap -i $map 2> $TMPFILE
-  check_response "Error EINVAL: Failed to parse crushmap: TEST FAIL"
+  check_response "Error EINVAL: Failed crushmap test: TEST FAIL"
 
   local mon_lease=`ceph-conf --show-config-value mon_lease`
 
@@ -1600,7 +1650,7 @@ function test_mon_crushmap_validation()
        sleep $((mon_lease + 1))" > "${crushtool_path}"
 
   expect_false ceph osd setcrushmap -i $map 2> $TMPFILE
-  check_response "Error EINVAL: Failed to parse crushmap: ${crushtool_path}: timed out (${mon_lease} sec)"
+  check_response "Error EINVAL: Failed crushmap test: ${crushtool_path}: timed out (${mon_lease} sec)"
 
   ceph tell mon.\* injectargs --crushtool "${crushtool_path_old}"
 
@@ -1679,6 +1729,7 @@ MON_TESTS+=" mon_ping"
 MON_TESTS+=" mon_deprecated_commands"
 
 OSD_TESTS+=" osd_bench"
+OSD_TESTS+=" tiering_agent"
 
 MDS_TESTS+=" mds_tell"
 MDS_TESTS+=" mon_mds"

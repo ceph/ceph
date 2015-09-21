@@ -19,10 +19,10 @@
 #include <dirent.h>
 #include <stdlib.h>
 #include "include/int_types.h"
+#include "include/uuid.h"
 
 #ifdef __linux__
 #include <linux/fs.h>
-#include "include/uuid.h"
 #include <blkid/blkid.h>
 
 #define UUID_LEN 36

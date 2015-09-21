@@ -13,7 +13,7 @@ ACTION=="remove", GOTO="persistent_storage_end_two"
 SUBSYSTEM!="block", GOTO="persistent_storage_end_two"
 
 # skip rules for inappropriate block devices
-KERNEL=="fd*|mtd*|nbd*|gnbd*|btibm*|dm-*|md*", GOTO="persistent_storage_end_two"
+KERNEL=="fd*|mtd*|nbd*|gnbd*|btibm*|md*", GOTO="persistent_storage_end_two"
 
 # ignore partitions that span the entire disk
 TEST=="whole_disk", GOTO="persistent_storage_end_two"
