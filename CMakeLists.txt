@@ -104,8 +104,8 @@ endif(${WITH_AIO})
 
 option(WITH_FUSE "Fuse is here" ON)
 if(${WITH_FUSE})
-find_package(fuse REQUIRED)
-set(HAVE_LIBFUSE ${FUSE_FOUND})
+find_package(fuse)
+set(HAVE_FUSE ${FUSE_FOUND})
 CHECK_FUNCTION_EXISTS(fuse_getgroups HAVE_FUSE_GETGROUPS)
 endif(${WITH_FUSE})
 
