@@ -430,6 +430,10 @@ public:
     return exists(osd) && (osd_state[osd] & CEPH_OSD_UP);
   }
 
+  bool has_been_up_since(int osd, epoch_t epoch) const {
+    return is_up(osd) && get_up_from(osd) <= epoch;
+  }
+
   bool is_down(int osd) const {
     return !is_up(osd);
   }
