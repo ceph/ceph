@@ -799,6 +799,8 @@ OPTION(memstore_page_set, OPT_BOOL, true)
 OPTION(memstore_page_size, OPT_U64, 64 << 10)
 
 OPTION(newstore_max_dir_size, OPT_U32, 1000000)
+OPTION(newstore_min_frag_size, OPT_U32, 1048576)   // smallest allowed frag size
+OPTION(newstore_max_frag_size, OPT_U32, 1048576*16) // largest allowed fag size
 OPTION(newstore_onode_map_size, OPT_U32, 1024)   // onodes per collection
 OPTION(newstore_backend, OPT_STR, "rocksdb")
 OPTION(newstore_rocksdb_options, OPT_STR, "max_write_buffer_number=16,min_write_buffer_number_to_merge=6")
