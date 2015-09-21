@@ -418,12 +418,6 @@ AC_ARG_ENABLE(gitversion,
 
 AM_CONDITIONAL(NO_GIT_VERSION, [test "x$enable_gitversion" = "xno"])
 
-AC_ARG_ENABLE([root-make-check],
-            [AS_HELP_STRING([--enable-root-make-check], [enable make check tests that require root privileges])],
-            [],
-            [enable_root_make_check=no])
-AM_CONDITIONAL(ENABLE_ROOT_MAKE_CHECK, test "x$enable_root_make_check" != xno)
-
 # profiler?
 AC_ARG_WITH([profiler],
             [AS_HELP_STRING([--with-profiler], [build extra profiler binaries])],
@@ -508,20 +502,11 @@ AC_ARG_WITH([fuse],
             [],
             [with_fuse=yes])
 LIBFUSE=
-AS_IF([test "x$with_fuse" != xno],
-	    [AC_CHECK_LIB([fuse], [fuse_main],
-             [AC_SUBST([LIBFUSE], ["-lfuse"])
-               AC_DEFINE([HAVE_LIBFUSE], [1],
-                         [Define if you have fuse])
-               HAVE_LIBFUSE=1
-	       # look for fuse_getgroups and define FUSE_GETGROUPS if found
-           LIBS_saved="$LIBS"
-           LIBS="$LIBS -lfuse"
-	       AC_CHECK_FUNCS([fuse_getgroups])
-           LIBS="$LIBS_saved"
-              ],
-             [AC_MSG_FAILURE(
-                   [no FUSE found (use --without-fuse to disable)])])])
+AS_IF([test "x$with_fuse" != xno], [
+  PKG_CHECK_MODULES([LIBFUSE], [fuse],
+    [HAVE_LIBFUSE=1],
+    [AC_MSG_FAILURE([no FUSE found (use --without-fuse to disable)])])
+])
 AM_CONDITIONAL(WITH_FUSE, [test "$HAVE_LIBFUSE" = "1"])
 
 # jemalloc?
@@ -919,7 +904,7 @@ AC_SUBST(BOOST_THREAD_LIBS)
 BOOST_RANDOM_LIBS=""
 saved_LIBS="${LIBS}"
 LIBS=""
-AC_CHECK_LIB(boost_random, main, [],
+AC_CHECK_LIB(boost_random-mt, main, [],
     [AC_CHECK_LIB(boost_random, main, [],
         AC_MSG_FAILURE(["Boost random library not found."]))])
 BOOST_RANDOM_LIBS="${LIBS}"
@@ -1357,7 +1342,5 @@ AC_CONFIG_FILES([Makefile
 	man/Makefile
 	doc/Makefile
 	selinux/Makefile
-	systemd/ceph-osd@.service
-	systemd/ceph-rgw.tmpfiles.d
 	ceph.spec])
 AC_OUTPUT

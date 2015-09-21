@@ -9,6 +9,7 @@ usr/bin/ceph-syn
 usr/bin/ceph-crush-location
 usr/bin/rados
 usr/bin/rbd
+usr/bin/rbd-replay*
 usr/bin/ceph-post-file
 usr/bin/ceph-brag
 usr/share/man/man8/ceph-authtool.8
@@ -20,6 +21,7 @@ usr/share/man/man8/ceph-post-file.8
 usr/share/man/man8/ceph.8
 usr/share/man/man8/rados.8
 usr/share/man/man8/rbd.8
+usr/share/man/man8/rbd-replay*.8
 usr/share/ceph/known_hosts_drop.ceph.com
 usr/share/ceph/id_dsa_drop.ceph.com
 usr/share/ceph/id_dsa_drop.ceph.com.pub

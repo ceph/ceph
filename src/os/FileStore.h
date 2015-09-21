@@ -329,7 +329,6 @@ private:
   FDCache fdcache;
   WBThrottle wbthrottle;
 
-  Sequencer default_osr;
   deque<OpSequencer*> op_queue;
   Throttle throttle_ops, throttle_bytes;
   Finisher op_finisher;
@@ -607,13 +606,6 @@ public:
   int _rmattrs(coll_t cid, const ghobject_t& oid,
 	       const SequencerPosition &spos);
 
-  int collection_getattr(coll_t c, const char *name, void *value, size_t size);
-  int collection_getattr(coll_t c, const char *name, bufferlist& bl);
-  int collection_getattrs(coll_t cid, map<string,bufferptr> &aset);
-
-  int _collection_setattr(coll_t c, const char *name, const void *value, size_t size);
-  int _collection_rmattr(coll_t c, const char *name);
-  int _collection_setattrs(coll_t cid, map<string,bufferptr> &aset);
   int _collection_remove_recursive(const coll_t &cid,
 				   const SequencerPosition &spos);
 

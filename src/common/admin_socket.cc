@@ -209,7 +209,7 @@ std::string AdminSocket::bind_and_listen(const std::string &sock_path, int *fd)
   address.sun_family = AF_UNIX;
   snprintf(address.sun_path, sizeof(address.sun_path),
 	   "%s", sock_path.c_str());
-  if (bind(sock_fd, (struct sockaddr*)&address,
+  if (::bind(sock_fd, (struct sockaddr*)&address,
 	   sizeof(struct sockaddr_un)) != 0) {
     int err = errno;
     if (err == EADDRINUSE) {
@@ -222,7 +222,7 @@ std::string AdminSocket::bind_and_listen(const std::string &sock_path, int *fd)
       } else {
 	ldout(m_cct, 20) << "unlink stale file " << sock_path << dendl;
 	VOID_TEMP_FAILURE_RETRY(unlink(sock_path.c_str()));
-	if (bind(sock_fd, (struct sockaddr*)&address,
+	if (::bind(sock_fd, (struct sockaddr*)&address,
 		 sizeof(struct sockaddr_un)) == 0) {
 	  err = 0;
 	} else {

@@ -633,6 +633,25 @@ TEST(BufferPtr, copy_out) {
   }
 }
 
+TEST(BufferPtr, copy_out_bench) {
+  for (int s=1; s<=8; s*=2) {
+    utime_t start = ceph_clock_now(NULL);
+    int buflen = 1048576;
+    int count = 1000;
+    uint64_t v;
+    for (int i=0; i<count; ++i) {
+      bufferptr bp(buflen);
+      for (int64_t j=0; j<buflen; j += s) {
+	bp.copy_out(j, s, (char *)&v);
+      }
+    }
+    utime_t end = ceph_clock_now(NULL);
+    cout << count << " fills of buffer len " << buflen
+	 << " with " << s << " byte copy_in in "
+	 << (end - start) << std::endl;
+  }
+}
+
 TEST(BufferPtr, copy_in) {
   {
     bufferptr ptr;
@@ -646,6 +665,24 @@ TEST(BufferPtr, copy_in) {
     ptr.copy_in((unsigned)0, (unsigned)2, in);
     EXPECT_EQ(in[0], ptr[0]);
     EXPECT_EQ(in[1], ptr[1]);
+  }
+}
+
+TEST(BufferPtr, copy_in_bench) {
+  for (int s=1; s<=8; s*=2) {
+    utime_t start = ceph_clock_now(NULL);
+    int buflen = 1048576;
+    int count = 1000;
+    for (int i=0; i<count; ++i) {
+      bufferptr bp(buflen);
+      for (int64_t j=0; j<buflen; j += s) {
+	bp.copy_in(j, s, (char *)&j, false);
+      }
+    }
+    utime_t end = ceph_clock_now(NULL);
+    cout << count << " fills of buffer len " << buflen
+	 << " with " << s << " byte copy_in in "
+	 << (end - start) << std::endl;
   }
 }
 
@@ -666,6 +703,25 @@ TEST(BufferPtr, append) {
     ptr.append("B", (unsigned)1);
     EXPECT_EQ((unsigned)2, ptr.length());
     EXPECT_EQ('B', ptr[1]);
+  }
+}
+
+TEST(BufferPtr, append_bench) {
+  for (int s=1; s<=8; s*=2) {
+    utime_t start = ceph_clock_now(NULL);
+    int buflen = 1048576;
+    int count = 1000;
+    for (int i=0; i<count; ++i) {
+      bufferptr bp(buflen);
+      bp.set_length(0);
+      for (int64_t j=0; j<buflen; j += s) {
+	bp.append((char *)&j, s);
+      }
+    }
+    utime_t end = ceph_clock_now(NULL);
+    cout << count << " fills of buffer len " << buflen
+	 << " with " << s << " byte appends in "
+	 << (end - start) << std::endl;
   }
 }
 
@@ -1028,6 +1084,23 @@ TEST(BufferListIterator, copy_in) {
   }
 }
 
+// iterator& buffer::list::const_iterator::operator++()
+TEST(BufferListConstIterator, operator_plus_plus) {
+  bufferlist bl;
+  {
+    bufferlist::const_iterator i(&bl);
+    EXPECT_THROW(++i, buffer::end_of_buffer);
+  }
+  bl.append("ABC", 3);
+  {
+    const bufferlist const_bl(bl);
+    bufferlist::const_iterator i(const_bl.begin());
+    ++i;
+    EXPECT_EQ('B', *i);
+  }
+
+}
+
 TEST(BufferList, constructors) {
   //
   // list()
@@ -1053,6 +1126,17 @@ TEST(BufferList, constructors) {
     bl.append('A');
     ASSERT_EQ('A', bl[0]);
     bufferlist copy(bl);
+    ASSERT_EQ('A', copy[0]);
+  }
+  //
+  // list(list&& other)
+  //
+  {
+    bufferlist bl(1);
+    bl.append('A');
+    bufferlist copy = std::move(bl);
+    ASSERT_EQ(0U, bl.length());
+    ASSERT_EQ(1U, copy.length());
     ASSERT_EQ('A', copy[0]);
   }
 }
@@ -1433,12 +1517,15 @@ TEST(BufferList, rebuild) {
   {
     bufferlist bl;
     bufferptr ptr(buffer::create_page_aligned(2));
+    ptr[0] = 'X';
+    ptr[1] = 'Y';
     ptr.set_offset(1);
     ptr.set_length(1);
     bl.append(ptr);
     EXPECT_FALSE(bl.is_page_aligned());
     bl.rebuild();
-    EXPECT_FALSE(bl.is_page_aligned());
+    EXPECT_EQ(1U, bl.length());
+    EXPECT_EQ('Y', *bl.begin());
   }
   {
     bufferlist bl;
@@ -1450,6 +1537,19 @@ TEST(BufferList, rebuild) {
     bl.rebuild();
     EXPECT_TRUE(bl.is_page_aligned());
     EXPECT_EQ((unsigned)1, bl.buffers().size());
+  }
+  {
+    bufferlist bl;
+    char t1[] = "X";
+    bufferlist a2;
+    a2.append(t1, 1);
+    bl.rebuild();
+    bl.append(a2);
+    EXPECT_EQ((unsigned)1, bl.length());
+    bufferlist::iterator p = bl.begin();
+    char dst[1];
+    p.copy(1, dst);
+    EXPECT_EQ(0, memcmp(dst, "X", 1));
   }
 }
 

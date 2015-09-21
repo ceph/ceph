@@ -42,8 +42,8 @@ fi
 [ -z "$PYBIND" ] && PYBIND=./pybind
 
 export PYTHONPATH=$PYBIND
-export LD_LIBRARY_PATH=$CEPH_LIB
-export DYLD_LIBRARY_PATH=$LD_LIBRARY_PATH
+export LD_LIBRARY_PATH=$CEPH_LIB:$LD_LIBRARY_PATH
+export DYLD_LIBRARY_PATH=$CEPH_LIB:$DYLD_LIBRARY_PATH
 
 [ -z "$CEPH_NUM_MON" ] && CEPH_NUM_MON="$MON"
 [ -z "$CEPH_NUM_OSD" ] && CEPH_NUM_OSD="$OSD"
@@ -78,6 +78,7 @@ overwrite_conf=1
 cephx=1 #turn cephx on by default
 cache=""
 memstore=0
+newstore=0
 journal=1
 
 MON_ADDR=""
@@ -106,7 +107,10 @@ usage=$usage"\t--hitset <pool> <hit_set_type>: enable hitset tracking\n"
 usage=$usage"\t-e : create an erasure pool\n";
 usage=$usage"\t-o config\t\t add extra config parameters to all sections\n"
 usage=$usage"\t-J no journal\t\tdisable filestore journal\n"
-
+usage=$usage"\t--mon_num specify ceph monitor count\n"
+usage=$usage"\t--osd_num specify ceph osd count\n"
+usage=$usage"\t--mds_num specify ceph mds count\n"
+usage=$usage"\t--rgw_port specify ceph rgw http listen port\n"
 
 usage_exit() {
 	printf "$usage"
@@ -164,6 +168,23 @@ case $1 in
     --smallmds )
 	    smallmds=1
 	    ;;
+    --mon_num )
+            echo "mon_num:$2"
+            CEPH_NUM_MON="$2"
+            shift
+            ;;
+    --osd_num )
+            CEPH_NUM_OSD=$2
+            shift
+            ;;
+    --mds_num )
+            CEPH_NUM_MDS=$2
+            shift
+            ;;
+    --rgw_port )
+            CEPH_RGW_PORT=$2
+            shift
+            ;;
     mon )
 	    start_mon=1
 	    start_all=0
@@ -195,6 +216,9 @@ case $1 in
 	    ;;
     --memstore )
 	    memstore=1
+	    ;;
+    --newstore )
+	    newstore=1
 	    ;;
     --hitset )
 	    hitset="$hitset $2 $3"
@@ -271,6 +295,7 @@ else
         debug monc = 20
         debug journal = 20
         debug filestore = 20
+        debug newstore = 30
         debug rgw = 20
         debug objclass = 20'
     CMDSDEBUG='
@@ -292,6 +317,10 @@ fi
 if [ "$memstore" -eq 1 ]; then
     COSDMEMSTORE='
 	osd objectstore = memstore'
+fi
+if [ "$newstore" -eq 1 ]; then
+    COSDMEMSTORE='
+	osd objectstore = newstore'
 fi
 
 # lockdep everywhere?
@@ -326,11 +355,10 @@ if [ -n "$ip" ]; then
     IP="$ip"
 else
     echo hostname $HOSTNAME
-    RAW_IP=`hostname -I`
     # filter out IPv6 and localhost addresses
-    IP="$(echo "$RAW_IP"|tr ' ' '\012'|grep -v :|grep -v '^127\.'|head -n1)"
-    # if that left nothing, then try to use the raw thing, it might work
-    if [ -z "$IP" ]; then IP="$RAW_IP"; fi
+    IP="$(ifconfig | sed -En 's/127.0.0.1//;s/.*inet (addr:)?(([0-9]*\.){3}[0-9]*).*/\2/p' | head -n1)"
+    # if nothing left, try using localhost address, it might work
+    if [ -z "$IP" ]; then IP="127.0.0.1"; fi
     echo ip $IP
 fi
 echo "ip $IP"
@@ -390,7 +418,7 @@ if [ "$start_mon" -eq 1 ]; then
         rgw dns name = localhost
         filestore fd cache size = 32
         run dir = $CEPH_OUT_DIR
-        enable experimental unrecoverable data corrupting features = newstore rocksdb
+        enable experimental unrecoverable data corrupting features = *
 EOF
 if [ "$cephx" -eq 1 ] ; then
 cat <<EOF >> $conf_fn
@@ -670,7 +698,7 @@ do_rgw()
 
     RGWSUDO=
     [ $CEPH_RGW_PORT -lt 1024 ] && RGWSUDO=sudo
-    $RGWSUDO $CEPH_BIN/radosgw --log-file=${CEPH_OUT_DIR}/rgw.log ${RGWDEBUG} --debug-ms=1
+    $RGWSUDO $CEPH_BIN/radosgw -c $conf_fn --log-file=${CEPH_OUT_DIR}/rgw.log ${RGWDEBUG} --debug-ms=1
 
     # Create S3 user
     local akey='0555b35654ad1656d804'
@@ -696,7 +724,7 @@ do_rgw()
 
     # Create Swift user
     echo "setting up user tester"
-    $CEPH_BIN/radosgw-admin user create --subuser=test:tester --display-name=Tester-Subuser --key-type=swift --secret=testing > /dev/null
+    $CEPH_BIN/radosgw-admin user create -c $conf_fn --subuser=test:tester --display-name=Tester-Subuser --key-type=swift --secret=testing > /dev/null
 
     echo ""
     echo "S3 User Info:"

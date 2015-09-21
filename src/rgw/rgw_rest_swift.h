@@ -14,6 +14,7 @@ public:
   ~RGWGetObj_ObjStore_SWIFT() {}
 
   int send_response_data(bufferlist& bl, off_t ofs, off_t len);
+  bool need_object_expiration() { return true; }
 };
 
 class RGWListBuckets_ObjStore_SWIFT : public RGWListBuckets_ObjStore {
@@ -114,6 +115,7 @@ public:
 
   int get_params();
   void send_response();
+  bool need_object_expiration() { return true; }
 };
 
 class RGWDeleteObj_ObjStore_SWIFT : public RGWDeleteObj_ObjStore {
