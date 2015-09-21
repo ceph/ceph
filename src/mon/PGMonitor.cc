@@ -2122,7 +2122,7 @@ void PGMonitor::get_health(list<pair<health_status_t,string> >& summary,
     uint64_t ratio = p->second.cache_target_full_ratio_micro +
       ((1000000 - p->second.cache_target_full_ratio_micro) *
        g_conf->mon_cache_target_full_warn_ratio);
-    if (p->second.target_max_objects && (uint64_t)st.stats.sum.num_objects >
+    if (p->second.target_max_objects && (uint64_t)(st.stats.sum.num_objects - st.stats.sum.num_objects_hit_set_archive) >
 	p->second.target_max_objects * (ratio / 1000000.0)) {
       nearfull = true;
       if (detail) {
@@ -2134,7 +2134,7 @@ void PGMonitor::get_health(list<pair<health_status_t,string> >& summary,
 	detail->push_back(make_pair(HEALTH_WARN, ss.str()));
       }
     }
-    if (p->second.target_max_bytes && (uint64_t)st.stats.sum.num_bytes >
+    if (p->second.target_max_bytes && (uint64_t)(st.stats.sum.num_bytes - st.stats.sum.num_bytes_hit_set_archive) >
 	p->second.target_max_bytes * (ratio / 1000000.0)) {
       nearfull = true;
       if (detail) {
