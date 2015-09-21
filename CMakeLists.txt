@@ -93,7 +93,6 @@ endif(${ENABLE_SHARED})
 
 find_package(udev REQUIRED)
 set(HAVE_UDEV ${UDEV_FOUND})
-message(STATUS "${UDEV_LIBS}")
 
 option(WITH_AIO "AIO is here ON" ON)
 if(${WITH_AIO})
