@@ -589,6 +589,13 @@ int RGWPutObj_ObjStore_SWIFT::get_params()
       return -EINVAL;
     }
 
+    uint64_t total_size = 0;
+    for (vector<rgw_slo_entry>::iterator iter = slo_info->entries.begin(); iter != slo_info->entries.end(); ++iter) {
+      total_size += iter->size_bytes;
+      ldout(s->cct, 20) << "slo_part: " << iter->path << " size=" << iter->size_bytes << dendl;
+    }
+    slo_info->total_size = total_size;
+
     ofs = slo_info->raw_data_len;
   }
 
@@ -913,6 +920,9 @@ int RGWGetObj_ObjStore_SWIFT::send_response_data(bufferlist& bl, off_t bl_ofs, o
   dump_content_length(s, total_len);
   dump_last_modified(s, lastmod);
   s->cio->print("X-Timestamp: %lld.00000\r\n", (long long)lastmod);
+  if (is_slo) {
+    s->cio->print("X-Static-Large-Object: True\r\n");
+  }
 
   if (!ret) {
     map<string, bufferlist>::iterator iter = attrs.find(RGW_ATTR_ETAG);
