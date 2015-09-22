@@ -530,7 +530,7 @@ void OSDService::agent_entry()
     int max = g_conf->osd_agent_max_ops - agent_ops;
     agent_lock.Unlock();
     if (!pg->agent_work(max)) {
-      dout(10) << __func__ << " " << *pg
+      dout(10) << __func__ << " " << pg->get_pgid()
 	<< " no agent_work, delay for " << g_conf->osd_agent_delay_time
 	<< " seconds" << dendl;
 
