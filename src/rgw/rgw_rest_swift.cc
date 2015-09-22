@@ -91,8 +91,7 @@ static void dump_account_metadata(struct req_state * const s,
     const char *name = iter->first.c_str();
     map<string, string>::const_iterator geniter = rgw_to_http_attrs.find(name);
 
-    if (geniter != rgw_to_http_attrs.end() &&
-        geniter->first.compare(RGW_ATTR_CONTENT_TYPE) != 0) {
+    if (geniter != rgw_to_http_attrs.end()) {
       s->cio->print("%s: %s\r\n", geniter->second.c_str(), iter->second.c_str());
     } else if (strncmp(name, RGW_ATTR_META_PREFIX, PREFIX_LEN) == 0) {
       s->cio->print("X-Account-Meta-%s: %s\r\n", name + PREFIX_LEN, iter->second.c_str());
@@ -351,8 +350,7 @@ static void dump_container_metadata(struct req_state *s, RGWBucketEnt& bucket)
       const char *name = iter->first.c_str();
       map<string, string>::const_iterator geniter = rgw_to_http_attrs.find(name);
 
-      if (geniter != rgw_to_http_attrs.end() &&
-          geniter->first.compare(RGW_ATTR_CONTENT_TYPE) != 0) {
+      if (geniter != rgw_to_http_attrs.end()) {
         s->cio->print("%s: %s\r\n", geniter->second.c_str(), iter->second.c_str());
       } else if (strncmp(name, RGW_ATTR_META_PREFIX, PREFIX_LEN) == 0) {
         s->cio->print("X-Container-Meta-%s: %s\r\n", name + PREFIX_LEN, iter->second.c_str());
@@ -730,9 +728,7 @@ static void dump_object_metadata(struct req_state * const s,
     const char *name = iter->first.c_str();
     map<string, string>::const_iterator aiter = rgw_to_http_attrs.find(name);
 
-    if (aiter != rgw_to_http_attrs.end() &&
-        aiter->first.compare(RGW_ATTR_CONTENT_TYPE) != 0) {
-      /* Filter out Content-Type. It must be treated separately. */
+    if (aiter != rgw_to_http_attrs.end()) {
       response_attrs[aiter->second] = iter->second.c_str();
     } else if (strncmp(name, RGW_ATTR_META_PREFIX, sizeof(RGW_ATTR_META_PREFIX)-1) == 0) {
       name += sizeof(RGW_ATTR_META_PREFIX) - 1;
