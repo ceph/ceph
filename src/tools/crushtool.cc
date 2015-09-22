@@ -506,7 +506,7 @@ int main(int argc, const char **argv)
       float f = atof(*i);
       i = args.erase(i);
       tester.set_device_weight(dev, f);
-    } else if (ceph_argparse_withint(args, i, &x, &err, "--pool-id", (char*)NULL)) {
+    } else if (ceph_argparse_witharg(args, i, &x, err, "--pool-id", (char*)NULL)) {
       if (!err.str().empty()) {
        cerr << err.str() << std::endl;
        exit(EXIT_FAILURE);
