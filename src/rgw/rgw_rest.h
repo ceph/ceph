@@ -59,6 +59,35 @@ int rgw_rest_get_json_input(CephContext *cct, req_state *s, T& out, int max_len,
   return 0;
 }
 
+template <class T>
+int rgw_rest_get_json_input_keep_data(CephContext *cct, req_state *s, T& out, int max_len, char **pdata, int *len)
+{
+  int rv, data_len;
+  char *data;
+
+  if ((rv = rgw_rest_read_all_input(s, &data, &data_len, max_len)) < 0) {
+    return rv;
+  }
+
+  if (!data_len) {
+    return -EINVAL;
+  }
+
+  *len = data_len;
+
+  JSONParser parser;
+
+  if (!parser.parse(data, data_len)) {
+    free(data);
+    return -EINVAL;
+  }
+
+  decode_json_obj(out, &parser);
+
+  *pdata = data;
+  return 0;
+}
+
 
 class RESTArgs {
 public:

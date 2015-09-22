@@ -1873,6 +1873,17 @@ static int encode_dlo_manifest_attr(const char * const dlo_manifest,
   return 0;
 }
 
+static void complete_etag(MD5& hash, string *etag)
+{
+  char etag_buf[CEPH_CRYPTO_MD5_DIGESTSIZE];
+  char etag_buf_str[CEPH_CRYPTO_MD5_DIGESTSIZE * 2 + 16];
+
+  hash.Final((byte *)etag_buf);
+  buf_to_hex((const unsigned char *)etag_buf, CEPH_CRYPTO_MD5_DIGESTSIZE, etag_buf_str);
+
+  *etag = etag_buf_str;
+}
+
 void RGWPutObj::execute()
 {
   RGWPutObjProcessor *processor = NULL;
@@ -1887,7 +1898,7 @@ void RGWPutObj::execute()
   map<string, string>::iterator iter;
   bool multipart;
 
-  bool need_calc_md5 = (dlo_manifest == NULL);
+  bool need_calc_md5 = (dlo_manifest == NULL) && (slo_info == NULL);
 
 
   perfcounter->inc(l_rgw_put);
@@ -2011,6 +2022,7 @@ void RGWPutObj::execute()
     goto done;
   }
   s->obj_size = ofs;
+
   perfcounter->inc(l_rgw_put_b, s->obj_size);
 
   ret = store->check_quota(s->bucket_owner.get_id(), s->bucket,
@@ -2043,6 +2055,18 @@ void RGWPutObj::execute()
       ldout(s->cct, 0) << "bad user manifest: " << dlo_manifest << dendl;
       goto done;
     }
+    complete_etag(hash, &etag);
+    ldout(s->cct, 10) << __func__ << ": calculated md5 for user manifest: " << etag << dendl;
+  }
+
+  if (slo_info) {
+    bufferlist manifest_bl;
+    ::encode(*slo_info, manifest_bl);
+    attrs[RGW_ATTR_SLO_MANIFEST] = manifest_bl;
+
+    hash.Update((byte *)slo_info->raw_data, slo_info->raw_data_len);
+    complete_etag(hash, &etag);
+    ldout(s->cct, 10) << __func__ << ": calculated md5 for user manifest: " << etag << dendl;
   }
 
   if (supplied_etag && etag.compare(supplied_etag) != 0) {
