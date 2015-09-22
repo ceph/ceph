@@ -4487,7 +4487,7 @@ void OSD::start_boot()
 void OSD::_maybe_boot(epoch_t oldest, epoch_t newest)
 {
   Mutex::Locker l(osd_lock);
-  if (is_stopping())
+  if (!is_booting())
     return;
   dout(10) << "_maybe_boot mon has osdmaps " << oldest << ".." << newest << dendl;
 
