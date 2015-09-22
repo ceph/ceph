@@ -1164,8 +1164,8 @@ reprotect_and_return_err:
     if (!*order)
       *order = RBD_DEFAULT_OBJ_ORDER;
 
-    if (*order > 64 || *order < 12) {
-      lderr(cct) << "order must be in the range [12, 64]" << dendl;
+    if (*order > 25 || *order < 12) {
+      lderr(cct) << "order must be in the range [12, 25]" << dendl;
       return -EDOM;
     }
 

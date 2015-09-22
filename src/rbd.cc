@@ -3177,10 +3177,6 @@ int main(int argc, const char **argv)
 	cerr << "rbd: " << err.str() << std::endl;
 	return EXIT_FAILURE;
       }
-      if ((order <= 0) || (order < 12) || (order > 25)) {
-	cerr << "rbd: order must be between 12 (4 KB) and 25 (32 MB)" << std::endl;
-	return EXIT_FAILURE;
-      }
     } else if (ceph_argparse_witharg(args, i, &val, err, "--io-size", (char*)NULL)) {
       if (!err.str().empty()) {
 	cerr << "rbd: " << err.str() << std::endl;
