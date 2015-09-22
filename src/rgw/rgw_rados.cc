@@ -220,8 +220,7 @@ const string& RGWZoneGroup::get_predefined_id() {
   return cct->_conf->rgw_zonegroup;
 }
 
-
-int RGWZoneGroup::equals(const string& other_zonegroup)
+int RGWZoneGroup::equals(const string& other_zonegroup) const
 {
   if (is_master && other_zonegroup.empty())
     return true;
@@ -872,6 +871,17 @@ int RGWPeriod::use_next_epoch()
   return 0;
 }
 
+int RGWPeriod::add_zonegroup(const RGWZoneGroup& zonegroup)
+{
+  int ret = period_map.update(zonegroup);
+  if (ret < 0) {
+    ldout(cct, 0) << "ERROR: updating period map: " << cpp_strerror(-ret) << dendl;
+    return ret;
+  }
+
+  return store_info(false);
+}
+
 int RGWZoneParams::create_default(bool old_format)
 {
   name = default_zone_name;
@@ -1011,7 +1021,7 @@ void RGWPeriodMap::decode(bufferlist::iterator& bl) {
 }
 
 
-int RGWPeriodMap::update(RGWZoneGroup& zonegroup)
+int RGWPeriodMap::update(const RGWZoneGroup& zonegroup)
 {
   if (zonegroup.is_master && !zonegroup.equals(master_zonegroup)) {
     derr << "cannot update zonegroup map, master_zonegroup conflict" << dendl;
@@ -1106,19 +1116,34 @@ int RGWZoneGroupMap::store(CephContext *cct, RGWRados *store)
   return ret;
 }
 
-int RGWZoneGroupMap::update(RGWZoneGroup& zonegroup)
+int RGWZoneGroupMap::update(CephContext *cct, RGWRados *store,
+			    const RGWRealm& realm, const RGWZoneGroup& zonegroup)
 {
   Mutex::Locker l(lock);
 
-  for (map<string, RGWPeriodMap>::iterator iter = periods.begin(); iter != periods.end(); iter++)
-  {
-    int ret =  iter->second.update(zonegroup);
-    if (ret < 0) {
-      derr  << "ERROR: failed update period " << iter->first << ":" << cpp_strerror(-ret) << dendl;
-      return ret;
-    }
+  map<string, RGWPeriodMap>::iterator iter = periods.find(realm.get_current_period());
+  if (iter == periods.end()) {
+    derr  << "ERROR: cannot find period " << realm.get_current_period() << dendl;
+    return -EINVAL;
   }
 
+  int ret =  iter->second.update(zonegroup);
+  if (ret < 0) {
+    derr  << "ERROR: failed update period " << iter->first << ":" << cpp_strerror(-ret) << dendl;
+    return ret;
+  }
+
+  RGWPeriod period(realm.get_current_period());
+  ret = period.init(cct, store, realm.get_id());
+  if (ret < 0) {
+    derr << " failed to init period:" << cpp_strerror(-ret) << dendl;
+    return ret;
+  }
+  ret = period.add_zonegroup(zonegroup);
+  if (ret < 0) {
+    derr << " failed to add zonegroup to period :" << cpp_strerror(-ret) << dendl;
+    return ret;
+  }
   return 0;
 }
 
@@ -2842,7 +2867,7 @@ int RGWRados::init_complete()
     if (ret != -ENOENT) {
       ldout(cct, 0) << "WARNING: cannot read zonegroup map" << dendl;
     }
-    ret = zonegroup_map.update(zonegroup);
+    ret = zonegroup_map.update(cct, this, realm, zonegroup);
     if (ret < 0) {
       ldout(cct, 0) << "ERROR: failed to update zonegroupmap with local zonegroup info" << dendl;
       return -EIO;
@@ -2850,6 +2875,10 @@ int RGWRados::init_complete()
   } else {
     RGWZoneGroup master_zonegroup;
     ret = zonegroup_map.get_master_zonegroup(realm.get_current_period(), master_zonegroup);
+    if (ret < 0 && ret != -ENOENT) {
+      ldout(cct, 0) << "ERROR: failed to read master zonegroup" << dendl;
+     return ret;
+    }
     rest_master_conn = new RGWRESTConn(cct, this, master_zonegroup.endpoints);
 
     map<string, RGWZoneGroup> zonegroups;

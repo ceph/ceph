@@ -2089,10 +2089,26 @@ int main(int argc, char **argv)
 	  cerr << " Missing zonegroup name" << std::endl;
 	  return -EINVAL;
 	}
+	RGWRealm realm(realm_id, realm_name);
+	int ret = realm.init(g_ceph_context, store);
+	if (ret < 0) {
+	  cerr << "failed to init realm: " << cpp_strerror(-ret) << std::endl;
+	  return -ret;
+	}
 	RGWZoneGroup zonegroup(zonegroup_name, is_master, g_ceph_context, store);
-	int ret = zonegroup.create();
+	ret = zonegroup.create();
 	if (ret < 0) {
 	  cerr << "failed to create zonegroup" << zonegroup_name << ": " << cpp_strerror(-ret) << std::endl;
+	  return -ret;
+	}
+	ret = store->zonegroup_map.update(g_ceph_context, store, realm, zonegroup);
+	if (ret < 0) {
+	  cerr << "failed to create zonegroup_map: " << cpp_strerror(-ret) << std::endl;
+	  return -ret;
+	}
+	ret = store->zonegroup_map.store(g_ceph_context, store);
+	if (ret < 0) {
+	  cerr << "failed to update zonegroup_map: " << cpp_strerror(-ret) << std::endl;
 	  return -ret;
 	}
 
@@ -2293,23 +2309,6 @@ int main(int argc, char **argv)
 	  }
 	  zonegroupmap.update(realm);
 	  zonegroupmap.update(g_ceph_context, store, realm.get_current_period(), realm.get_id());
-	}
-
-	list<string> zonegroups;
-	ret = store->list_zonegroups(zonegroups);
-	if (ret < 0) {
-	  cerr << "failed to list zonegroups: " << cpp_strerror(-ret) << std::endl;
-	  return -ret;
-	}
-
-	for (list<string>::iterator iter = zonegroups.begin(); iter != zonegroups.end(); ++iter) {
-	  RGWZoneGroup zonegroup(*iter);
-	  ret = zonegroup.init(g_ceph_context, store);
-	  if (ret < 0) {
-	    cerr << "failed to init zonegroup: " << cpp_strerror(-ret) << std::endl;
-	    return -ret;
-	  }
-	  zonegroupmap.update(zonegroup);
 	}
 
 	ret = zonegroupmap.store(g_ceph_context, store);
