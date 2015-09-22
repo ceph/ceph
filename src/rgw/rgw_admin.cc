@@ -2103,12 +2103,12 @@ int main(int argc, char **argv)
 	}
 	ret = store->zonegroup_map.update(g_ceph_context, store, realm, zonegroup);
 	if (ret < 0) {
-	  cerr << "failed to create zonegroup_map: " << cpp_strerror(-ret) << std::endl;
+	  cerr << "failed to update zonegroup_map: " << cpp_strerror(-ret) << std::endl;
 	  return -ret;
 	}
 	ret = store->zonegroup_map.store(g_ceph_context, store);
 	if (ret < 0) {
-	  cerr << "failed to update zonegroup_map: " << cpp_strerror(-ret) << std::endl;
+	  cerr << "failed to store zonegroup_map: " << cpp_strerror(-ret) << std::endl;
 	  return -ret;
 	}
 
