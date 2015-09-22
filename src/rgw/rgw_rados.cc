@@ -813,6 +813,8 @@ int RGWPeriod::create()
   id = uuid_str;
 
   epoch = FIRST_EPOCH;
+
+  period_map.id = id;
   
   ret = store_info(true);
   if (ret < 0) {
@@ -998,6 +1000,7 @@ int RGWZoneParams::init(CephContext *cct, RGWRados *store, RGWZoneGroup& zonegro
 
 void RGWPeriodMap::encode(bufferlist& bl) const {
   ENCODE_START(1, 1, bl);
+  ::encode(id, bl);
   ::encode(zonegroups, bl);
   ::encode(master_zonegroup, bl);
   ENCODE_FINISH(bl);
@@ -1005,6 +1008,7 @@ void RGWPeriodMap::encode(bufferlist& bl) const {
 
 void RGWPeriodMap::decode(bufferlist::iterator& bl) {
   DECODE_START(1, bl);
+  ::decode(id, bl);
   ::decode(zonegroups, bl);
   ::decode(master_zonegroup, bl);
   DECODE_FINISH(bl);
@@ -1161,14 +1165,13 @@ int RGWZoneGroupMap::update(CephContext *cct, RGWRados *store,
   Mutex::Locker l(lock);
   RGWPeriod period(period_id);
 
-  derr << "update period " << period_id << " realm " << realm_id << dendl;
   int ret = period.init(cct, store, realm_id);
   if (ret < 0) {
     derr << "failed to init period: " << cpp_strerror(-ret) << dendl;
     return ret;
   }
 
-  periods[period.get_id()] = period.get_map();
+  periods[period_id] = period.get_map();
 
   return 0;
 }
