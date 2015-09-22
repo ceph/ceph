@@ -10,6 +10,7 @@
 #include "rgw_bucket.h"
 #include "rgw_keystone.h"
 #include "rgw_basic_types.h"
+#include "rgw_op.h"
 
 #include "common/ceph_json.h"
 #include "common/Formatter.h"
@@ -849,3 +850,10 @@ void KeystoneToken::decode_json(JSONObj *access_obj)
   JSONDecoder::decode_json("user", user, access_obj, true);
   JSONDecoder::decode_json("serviceCatalog", service_catalog, access_obj);
 }
+
+void rgw_slo_entry::decode_json(JSONObj *obj)
+{
+  JSONDecoder::decode_json("path", path, obj);
+  JSONDecoder::decode_json("etag", etag, obj);
+  JSONDecoder::decode_json("size_bytes", size_bytes, obj);
+};
