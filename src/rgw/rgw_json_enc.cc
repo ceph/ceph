@@ -774,6 +774,7 @@ void RGWZoneGroup::dump(Formatter *f) const
   encode_json_map("zones", zones, f); /* more friendly representation */
   encode_json_map("placement_targets", placement_targets, f); /* more friendly representation */
   encode_json("default_placement", default_placement, f);
+  encode_json("realm_id", realm_id, f);
 }
 
 static void decode_zones(map<string, RGWZone>& zones, JSONObj *o)
@@ -802,6 +803,7 @@ void RGWZoneGroup::decode_json(JSONObj *obj)
   JSONDecoder::decode_json("zones", zones, decode_zones, obj);
   JSONDecoder::decode_json("placement_targets", placement_targets, decode_placement_targets, obj);
   JSONDecoder::decode_json("default_placement", default_placement, obj);
+  JSONDecoder::decode_json("realm_id", realm_id, obj);
 }
 
 
