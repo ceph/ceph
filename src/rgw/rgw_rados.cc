@@ -2867,10 +2867,12 @@ int RGWRados::init_complete()
     if (ret != -ENOENT) {
       ldout(cct, 0) << "WARNING: cannot read zonegroup map" << dendl;
     }
-    ret = zonegroup_map.update(cct, this, realm, zonegroup);
-    if (ret < 0) {
-      ldout(cct, 0) << "ERROR: failed to update zonegroupmap with local zonegroup info" << dendl;
-      return -EIO;
+    if (!realm.get_id().empty()) {
+      ret = zonegroup_map.update(cct, this, realm, zonegroup);
+      if (ret < 0) {
+	ldout(cct, 0) << "ERROR: failed to update zonegroupmap with local zonegroup info" << dendl;
+	return -EIO;
+      }
     }
   } else {
     RGWZoneGroup master_zonegroup;
