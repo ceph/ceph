@@ -425,6 +425,18 @@ public:
   virtual uint32_t op_mask() { return RGW_OP_TYPE_DELETE; }
 };
 
+struct rgw_slo_entry {
+  string path;
+  string etag;
+  uint64_t size_bytes;
+
+  void decode_json(JSONObj *obj);
+};
+
+struct RGWSLOInfo {
+  vector<rgw_slo_entry> entries;
+};
+
 class RGWPutObj : public RGWOp {
 
   friend class RGWPutObjProcessor;
@@ -440,6 +452,8 @@ protected:
   bool chunked_upload;
   RGWAccessControlPolicy policy;
   const char *dlo_manifest;
+  RGWSLOInfo *slo_info;
+
   time_t mtime;
 
   uint64_t olh_epoch;
@@ -448,18 +462,20 @@ protected:
   time_t delete_at;
 
 public:
-  RGWPutObj() {
-    ret = 0;
-    ofs = 0;
-    supplied_md5_b64 = NULL;
-    supplied_etag = NULL;
-    if_match = NULL;
-    if_nomatch = NULL;
-    chunked_upload = false;
-    dlo_manifest = NULL;
-    mtime = 0;
-    olh_epoch = 0;
-    delete_at = 0;
+  RGWPutObj() : ret(0), ofs(0),
+                supplied_md5_b64(NULL),
+                supplied_etag(NULL),
+                if_match(NULL),
+                if_nomatch(NULL),
+                chunked_upload(0),
+                dlo_manifest(NULL),
+                slo_info(NULL),
+                mtime(0),
+                olh_epoch(0),
+                delete_at(0) {}
+
+  ~RGWPutObj() {
+    delete slo_info;
   }
 
   virtual void init(RGWRados *store, struct req_state *s, RGWHandler *h) {

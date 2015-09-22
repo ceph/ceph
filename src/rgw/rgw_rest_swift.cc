@@ -558,12 +558,35 @@ int RGWPutObj_ObjStore_SWIFT::get_params()
 
   policy.create_default(s->user.user_id, s->user.display_name);
 
-  dlo_manifest = s->info.env->get("HTTP_X_OBJECT_MANIFEST");
-
   int r = get_delete_at_param(s, &delete_at);
   if (r < 0) {
     ldout(s->cct, 5) << "ERROR: failed to get Delete-At param" << dendl;
     return r;
+  }
+
+  dlo_manifest = s->info.env->get("HTTP_X_OBJECT_MANIFEST");
+  bool exists;
+  string multipart_manifest = s->info.args.get("multipart-manifest", &exists);
+  if (exists) {
+    if (multipart_manifest != "put") {
+      ldout(s->cct, 5) << "invalid multipart-manifest http param: " << multipart_manifest << dendl;
+      return -EINVAL;
+    }
+
+#define MAX_SLO_ENTRY_SIZE (1024 + 128) // 1024 - max obj name, 128 - enough extra for other info
+    uint64_t max_len = s->cct->_conf->rgw_max_slo_entries * MAX_SLO_ENTRY_SIZE;
+    
+    slo_info = new RGWSLOInfo;
+    int r = rgw_rest_get_json_input(s->cct, s, slo_info->entries, max_len, NULL);
+    if (r < 0) {
+      ldout(s->cct, 5) << "failed to read input for slo r=" << r << dendl;
+      return r;
+    }
+
+    if (slo_info->entries.size() > s->cct->_conf->rgw_max_slo_entries) {
+      ldout(s->cct, 5) << "too many entries in slo request: " << slo_info->entries.size() << dendl;
+      return -EINVAL;
+    }
   }
 
   return RGWPutObj_ObjStore::get_params();
