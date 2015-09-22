@@ -6551,8 +6551,7 @@ void OSD::handle_osd_map(MOSDMap *m)
   if (m->newest_map && m->newest_map > last) {
     dout(10) << " msg say newest map is " << m->newest_map << ", requesting more" << dendl;
     osdmap_subscribe(osdmap->get_epoch()+1, false);
-  }
-  else if (is_preboot()) {
+  } else if (is_preboot()) {
     if (m->get_source().is_mon())
       _preboot(m->oldest_map, m->newest_map);
     else
