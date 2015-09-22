@@ -1066,11 +1066,14 @@ struct RGWZoneGroup : public RGWSystemMetaObj {
   map<string, list<string> > api_hostname_map;
   map<string, list<string> > api_endpoints_map;
 
+  string realm_id;
+
   RGWZoneGroup(): is_master(false){}
   RGWZoneGroup(const std::string &id, const std::string &name):RGWSystemMetaObj(id, name) {}
   RGWZoneGroup(const std::string &_name):RGWSystemMetaObj(_name) {}
-  RGWZoneGroup(const std::string &_name, bool _is_master, CephContext *cct, RGWRados* store)
-    : RGWSystemMetaObj(_name, cct , store),is_master(_is_master) {}
+  RGWZoneGroup(const std::string &_name, bool _is_master, CephContext *cct, RGWRados* store,
+	       const string& _realm_id)
+    : RGWSystemMetaObj(_name, cct , store),is_master(_is_master), realm_id(_realm_id) {}
 
   void encode(bufferlist& bl) const {
     ENCODE_START(4, 1, bl);
@@ -1085,6 +1088,7 @@ struct RGWZoneGroup : public RGWSystemMetaObj {
     ::encode(hostnames, bl);
     ::encode(hostnames_s3website, bl);
     RGWSystemMetaObj::encode(bl);
+    ::encode(realm_id, bl);
     ENCODE_FINISH(bl);
   }
 
@@ -1106,6 +1110,7 @@ struct RGWZoneGroup : public RGWSystemMetaObj {
     }
     if (struct_v >= 4) {
       RGWSystemMetaObj::decode(bl);
+      ::decode(realm_id, bl);
     } else {
       id = name;
     }
