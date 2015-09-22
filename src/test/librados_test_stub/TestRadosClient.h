@@ -82,6 +82,8 @@ public:
   void flush_aio_operations();
   void flush_aio_operations(AioCompletionImpl *c);
 
+  void finish_aio_completion(AioCompletionImpl *c, int r);
+
 protected:
   virtual ~TestRadosClient();
 

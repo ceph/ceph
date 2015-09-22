@@ -206,6 +206,9 @@ struct librados::IoCtxImpl {
 	     bufferlist *preplybl, char **preply_buf, size_t *preply_buf_len);
   int notify_ack(const object_t& oid, uint64_t notify_id, uint64_t cookie,
 		 bufferlist& bl);
+  int aio_notify(const object_t& oid, AioCompletionImpl *c, bufferlist& bl,
+                 uint64_t timeout_ms, bufferlist *preplybl, char **preply_buf,
+                 size_t *preply_buf_len);
 
   int set_alloc_hint(const object_t& oid,
                      uint64_t expected_object_size,
