@@ -1091,7 +1091,7 @@ struct RGWZoneGroup : public RGWSystemMetaObj {
   }
 
   int create_default(bool old_format = false);
-  int equals(const string& other_zonegroup);
+  int equals(const string& other_zonegroup) const;
   int add_zone(const RGWZoneParams& zone_params);
   int remove_zone(const RGWZoneParams& zone_params);
 
@@ -1118,7 +1118,7 @@ struct RGWPeriodMap
   void encode(bufferlist& bl) const;
   void decode(bufferlist::iterator& bl);
 
-  int update(RGWZoneGroup& zonegroup);
+  int update(const RGWZoneGroup& zonegroup);
 
   void dump(Formatter *f) const;
   void decode_json(JSONObj *obj);
@@ -1150,7 +1150,8 @@ struct RGWZoneGroupMap {
   int read(CephContext *cct, RGWRados *store);
   int store(CephContext *cct, RGWRados *store);
 
-  int update(RGWZoneGroup& zonegroup);
+  int update(CephContext *cct, RGWRados *store,
+	     const RGWRealm& realm, const RGWZoneGroup& zonegroup);
   int update(RGWRealm& realm);
   int update(CephContext *cct, RGWRados *store,
 	     const string& period_id,
@@ -1241,7 +1242,7 @@ public:
   void dump(Formatter *f) const;
   void decode_json(JSONObj *obj);
 
-  const string& get_current_period() {
+  const string& get_current_period() const {
     return current_period;
   }
   int set_current_period(const string& period_id);  
@@ -1325,7 +1326,7 @@ public:
   int create();
   int delete_obj();
   int store_info(bool exclusive);
-  int activate() { return -ENOTSUP;}
+  int add_zonegroup(const RGWZoneGroup& zonegroup);
 
   void encode(bufferlist& bl) const {
     ENCODE_START(1, 1, bl);    
