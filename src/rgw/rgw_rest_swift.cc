@@ -577,16 +577,19 @@ int RGWPutObj_ObjStore_SWIFT::get_params()
     uint64_t max_len = s->cct->_conf->rgw_max_slo_entries * MAX_SLO_ENTRY_SIZE;
     
     slo_info = new RGWSLOInfo;
-    int r = rgw_rest_get_json_input(s->cct, s, slo_info->entries, max_len, NULL);
+    
+    int r = rgw_rest_get_json_input_keep_data(s->cct, s, slo_info->entries, max_len, &slo_info->raw_data, &slo_info->raw_data_len);
     if (r < 0) {
       ldout(s->cct, 5) << "failed to read input for slo r=" << r << dendl;
       return r;
     }
 
-    if (slo_info->entries.size() > s->cct->_conf->rgw_max_slo_entries) {
+    if ((int64_t)slo_info->entries.size() > s->cct->_conf->rgw_max_slo_entries) {
       ldout(s->cct, 5) << "too many entries in slo request: " << slo_info->entries.size() << dendl;
       return -EINVAL;
     }
+
+    ofs = slo_info->raw_data_len;
   }
 
   return RGWPutObj_ObjStore::get_params();
