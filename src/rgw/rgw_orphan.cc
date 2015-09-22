@@ -277,9 +277,28 @@ int RGWOrphanSearch::build_all_oids_index()
     string oid = i->get_oid();
     string locator = i->get_locator();
 
-    string name = oid;
-    if (locator.size())
-      name += " (@" + locator + ")";  
+    ssize_t pos = oid.find('_');
+    if (pos < 0) {
+      cout << "unidentified oid: " << oid << ", skipping" << std::endl;
+      /* what is this object, oids should be in the format of <bucket marker>_<obj>,
+       * skip this entry
+       */
+      continue;
+    }
+    string stripped_oid = oid.substr(pos + 1);
+    string name, instance, ns;
+    if (!rgw_obj::parse_raw_oid(stripped_oid, &name, &instance, &ns)) {
+      cout << "cannot parse oid: " << oid << ", skipping" << std::endl;
+      continue;
+    }
+
+    if (ns.empty()) {
+      /* skipping head objects, we don't want to remove these as they are mutable and
+       * cleaning them up is racy (can race with object removal and a later recreation)
+       */
+      cout << "skipping head object: oid=" << oid << std::endl;
+      continue;
+    }
 
     string oid_fp = obj_fingerprint(oid);
 
