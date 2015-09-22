@@ -1332,6 +1332,7 @@ public:
     ::encode(epoch, bl);
     ::encode(predecessor_uuid, bl);
     ::encode(versions, bl);
+    ::encode(period_map, bl);
     ::encode(master_zone, bl);
     ENCODE_FINISH(bl);
   }
@@ -1342,6 +1343,7 @@ public:
     ::decode(epoch, bl);
     ::decode(predecessor_uuid, bl);
     ::decode(versions, bl);
+    ::decode(period_map, bl);
     ::decode(master_zone, bl);
     DECODE_FINISH(bl);
   }
