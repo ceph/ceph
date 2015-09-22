@@ -2,7 +2,9 @@
 
 set(EC_LIBS_PATH_FLAG "-DEC_LIBS_PATH=${CMAKE_BINARY_DIR}/src/test/erasure-code")
 
-add_library(ec_example SHARED ErasureCodePluginExample.cc)
+add_library(ec_example SHARED 
+  ErasureCodePluginExample.cc
+  $<TARGET_OBJECTS:erasure_code_objs>)
 add_dependencies(ec_example ${CMAKE_SOURCE_DIR}/src/ceph_ver.h)
 target_link_libraries(ec_example pthread ${EXTRA_LIBS})
 
@@ -38,7 +40,7 @@ add_dependencies(unittest_erasure_code_plugin
   ec_hangs
   ec_fail_to_initialize
   ec_fail_to_register)
-add_test(unittest_erasure_code_plugin unittest_erasure_code_plugin)
+add_test(NAME unittest_erasure_code_plugin COMMAND unittest_erasure_code_plugin WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/src)
 add_dependencies(check unittest_erasure_code_plugin)
 target_link_libraries(unittest_erasure_code_plugin
   global
@@ -97,7 +99,7 @@ add_dependencies(unittest_erasure_code_plugin_jerasure
   ec_test_jerasure_sse4
   ec_test_jerasure_sse3
   ec_test_jerasure_generic)
-add_test(unittest_erasure_code_plugin_jerasure unittest_erasure_code_jerasure_plugin)
+add_test(NAME unittest_erasure_code_plugin_jerasure COMMAND unittest_erasure_code_plugin_jerasure WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/src)
 add_dependencies(check unittest_erasure_code_plugin_jerasure)
 target_link_libraries(unittest_erasure_code_plugin_jerasure
   global
@@ -137,7 +139,7 @@ add_executable(unittest_erasure_code_plugin_isa EXCLUDE_FROM_ALL
   ${CMAKE_SOURCE_DIR}/src/erasure-code/ErasureCode.cc
   TestErasureCodePluginIsa.cc
 )
-add_test(unittest_erasure_code_plugin_isa unittest_erasure_code_plugin_isa)
+add_test(NAME unittest_erasure_code_plugin_isa COMMAND unittest_erasure_code_plugin_isa WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/src)
 add_dependencies(check unittest_erasure_code_plugin_isa)
 target_link_libraries(unittest_erasure_code_plugin_isa
   global
@@ -160,7 +162,7 @@ add_executable(unittest_erasure_code_lrc EXCLUDE_FROM_ALL
   ${lrc_srcs}
   )
 add_dependencies(unittest_erasure_code_lrc ec_jerasure)
-add_test(unittest_erasure_code_lrc unittest_erasure_code_lrc)
+add_test(NAME unittest_erasure_code_lrc COMMAND unittest_erasure_code_lrc WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/src)
 add_dependencies(check unittest_erasure_code_lrc)
 target_link_libraries(unittest_erasure_code_lrc
   global
@@ -178,7 +180,7 @@ set_target_properties(unittest_erasure_code_lrc PROPERTIES COMPILE_FLAGS
 add_executable(unittest_erasure_code_plugin_lrc EXCLUDE_FROM_ALL
   TestErasureCodePluginLrc.cc
   )
-add_test(unittest_erasure_code_plugin_lrc unittest_erasure_code_plugin_lrc)
+add_test(NAME unittest_erasure_code_plugin_lrc COMMAND unittest_erasure_code_plugin_lrc WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/src)
 add_dependencies(check unittest_erasure_code_plugin_lrc)
 add_dependencies(unittest_erasure_code_plugin_lrc 
   ec_lrc
@@ -219,7 +221,7 @@ target_link_libraries(ec_test_shec_generic pthread ${EXTRA_LIBS})
 add_executable(unittest_erasure_code_plugin_shec EXCLUDE_FROM_ALL
   TestErasureCodePluginShec.cc
   )
-add_test(unittest_erasure_code_plugin_shec unittest_erasure_code_plugin_shec)
+add_test(NAME unittest_erasure_code_plugin_shec COMMAND unittest_erasure_code_plugin_shec WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/src)
 add_dependencies(check unittest_erasure_code_plugin_shec)
 add_dependencies(unittest_erasure_code_plugin_shec 
   ec_shec
@@ -358,16 +360,30 @@ set_target_properties(unittest_erasure_code_shec_arguments PROPERTIES COMPILE_FL
   ${UNITTEST_CXX_FLAGS})
 
 add_custom_target(ec_symlinks  COMMAND
-  ln -sf ${CMAKE_BINARY_DIR}/src/erasure-code/shec/libec_shec_generic.so ${CMAKE_BINARY_DIR}/src/test/erasure-code/ &&
-  ln -sf ${CMAKE_BINARY_DIR}/src/erasure-code/shec/libec_shec.so ${CMAKE_BINARY_DIR}/src/test/erasure-code/ &&
-  ln -sf ${CMAKE_BINARY_DIR}/src/erasure-code/shec/libec_shec_sse3.so ${CMAKE_BINARY_DIR}/src/test/erasure-code/ &&
-  ln -sf ${CMAKE_BINARY_DIR}/src/erasure-code/shec/libec_shec_sse4.so ${CMAKE_BINARY_DIR}/src/test/erasure-code/ &&
-  ln -sf ${CMAKE_BINARY_DIR}/src/erasure-code/lrc/libec_lrc.so ${CMAKE_BINARY_DIR}/src/test/erasure-code/
-  ln -sf ${CMAKE_BINARY_DIR}/src/erasure-code/jerasure/libec_jerasure.so ${CMAKE_BINARY_DIR}/src/test/erasure-code/
-  ln -sf ${CMAKE_BINARY_DIR}/src/erasure-code/jerasure/libec_jerasure_sse4.so ${CMAKE_BINARY_DIR}/src/test/erasure-code/
-  ln -sf ${CMAKE_BINARY_DIR}/src/erasure-code/jerasure/libec_jerasure_sse3.so ${CMAKE_BINARY_DIR}/src/test/erasure-code/
-  ln -sf ${CMAKE_BINARY_DIR}/src/erasure-code/jerasure/libec_jerasure_generic.so ${CMAKE_BINARY_DIR}/src/test/erasure-code/
-  ln -sf ${CMAKE_BINARY_DIR}/src/erasure-code/isa/libec_isa.so ${CMAKE_BINARY_DIR}/src/test/erasure-code/
+  ln -sf ${CMAKE_BINARY_DIR}/src/erasure-code/shec/libec_shec.so ${CMAKE_SOURCE_DIR}/src/.libs &&
+  ln -sf ${CMAKE_BINARY_DIR}/src/erasure-code/shec/libec_shec_generic.so ${CMAKE_SOURCE_DIR}/src/.libs &&
+  ln -sf ${CMAKE_BINARY_DIR}/src/erasure-code/shec/libec_shec_sse3.so ${CMAKE_SOURCE_DIR}/src/.libs &&
+  ln -sf ${CMAKE_BINARY_DIR}/src/erasure-code/shec/libec_shec_sse4.so ${CMAKE_SOURCE_DIR}/src/.libs &&
+  ln -sf ${CMAKE_BINARY_DIR}/src/erasure-code/lrc/libec_lrc.so ${CMAKE_SOURCE_DIR}/src/.libs &&
+  ln -sf ${CMAKE_BINARY_DIR}/src/erasure-code/jerasure/libec_jerasure.so ${CMAKE_SOURCE_DIR}/src/.libs &&
+  ln -sf ${CMAKE_BINARY_DIR}/src/erasure-code/jerasure/libec_jerasure_sse4.so ${CMAKE_SOURCE_DIR}/src/.libs &&
+  ln -sf ${CMAKE_BINARY_DIR}/src/erasure-code/jerasure/libec_jerasure_sse3.so ${CMAKE_SOURCE_DIR}/src/.libs &&
+  ln -sf ${CMAKE_BINARY_DIR}/src/erasure-code/jerasure/libec_jerasure_generic.so ${CMAKE_SOURCE_DIR}/src/.libs &&
+  ln -sf ${CMAKE_BINARY_DIR}/src/erasure-code/isa/libec_isa.so ${CMAKE_SOURCE_DIR}/src/.libs &&
+  ln -sf ${CMAKE_BINARY_DIR}/src/test/erasure-code/libec_example.so ${CMAKE_SOURCE_DIR}/src/.libs &&
+  ln -sf ${CMAKE_BINARY_DIR}/src/test/erasure-code/libec_missing_entry_point.so ${CMAKE_SOURCE_DIR}/src/.libs &&
+  ln -sf ${CMAKE_BINARY_DIR}/src/test/erasure-code/libec_missing_version.so ${CMAKE_SOURCE_DIR}/src/.libs &&
+  ln -sf ${CMAKE_BINARY_DIR}/src/test/erasure-code/libec_hangs.so ${CMAKE_SOURCE_DIR}/src/.libs &&
+  ln -sf ${CMAKE_BINARY_DIR}/src/test/erasure-code/libec_fail_to_initialize.so ${CMAKE_SOURCE_DIR}/src/.libs &&
+  ln -sf ${CMAKE_BINARY_DIR}/src/test/erasure-code/libec_fail_to_register.so ${CMAKE_SOURCE_DIR}/src/.libs &&
+  ln -sf ${CMAKE_BINARY_DIR}/src/test/erasure-code/libec_test_jerasure_neon.so ${CMAKE_SOURCE_DIR}/src/.libs &&
+  ln -sf ${CMAKE_BINARY_DIR}/src/test/erasure-code/libec_test_jerasure_sse4.so ${CMAKE_SOURCE_DIR}/src/.libs &&
+  ln -sf ${CMAKE_BINARY_DIR}/src/test/erasure-code/libec_test_jerasure_sse3.so ${CMAKE_SOURCE_DIR}/src/.libs &&
+  ln -sf ${CMAKE_BINARY_DIR}/src/test/erasure-code/libec_test_jerasure_generic.so ${CMAKE_SOURCE_DIR}/src/.libs &&
+  ln -sf ${CMAKE_BINARY_DIR}/src/test/erasure-code/libec_test_shec_neon.so ${CMAKE_SOURCE_DIR}/src/.libs &&
+  ln -sf ${CMAKE_BINARY_DIR}/src/test/erasure-code/libec_test_shec_sse4.so ${CMAKE_SOURCE_DIR}/src/.libs &&
+  ln -sf ${CMAKE_BINARY_DIR}/src/test/erasure-code/libec_test_shec_sse3.so ${CMAKE_SOURCE_DIR}/src/.libs &&
+  ln -sf ${CMAKE_BINARY_DIR}/src/test/erasure-code/libec_test_shec_generic.so ${CMAKE_SOURCE_DIR}/src/.libs
 COMMENT "Symlinks for Erasure Code libraries have been created")
 add_dependencies(check ec_symlinks)
 
