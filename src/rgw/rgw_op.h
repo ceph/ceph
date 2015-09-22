@@ -439,7 +439,7 @@ protected:
   string etag;
   bool chunked_upload;
   RGWAccessControlPolicy policy;
-  const char *obj_manifest;
+  const char *dlo_manifest;
   time_t mtime;
 
   uint64_t olh_epoch;
@@ -456,7 +456,7 @@ public:
     if_match = NULL;
     if_nomatch = NULL;
     chunked_upload = false;
-    obj_manifest = NULL;
+    dlo_manifest = NULL;
     mtime = 0;
     olh_epoch = 0;
     delete_at = 0;
@@ -592,13 +592,13 @@ protected:
   RGWAccessControlPolicy policy;
   string placement_rule;
   time_t delete_at;
-  const char *obj_manifest;
+  const char *dlo_manifest;
 
 public:
   RGWPutMetadataObject()
     : ret(0),
       delete_at(0),
-      obj_manifest(NULL)
+      dlo_manifest(NULL)
   {}
 
   virtual void init(RGWRados *store, struct req_state *s, RGWHandler *h) {
