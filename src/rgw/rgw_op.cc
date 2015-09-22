@@ -814,6 +814,78 @@ static int iterate_user_manifest_parts(CephContext * const cct,
   return 0;
 }
 
+struct rgw_slo_part {
+  RGWAccessControlPolicy *bucket_policy;
+  rgw_bucket bucket;
+  string obj_name;
+  uint64_t size;
+
+  rgw_slo_part() : bucket_policy(NULL), size(0) {}
+};
+
+static int iterate_slo_parts(CephContext *cct, RGWRados *store, off_t ofs, off_t end,
+                                       map<uint64_t, rgw_slo_part>& slo_parts,
+                                       int (*cb)(rgw_bucket& bucket, RGWObjEnt& ent, RGWAccessControlPolicy *bucket_policy,
+                                                 off_t start_ofs, off_t end_ofs, void *param), void *cb_param)
+{
+  uint64_t obj_ofs = 0, len_count = 0;
+  bool found_start = false, found_end = false;
+  string delim;
+  vector<RGWObjEnt> objs;
+
+  if (slo_parts.empty()) {
+    return 0;
+  }
+
+
+  utime_t start_time = ceph_clock_now(cct);
+
+  map<uint64_t, rgw_slo_part>::iterator iter = slo_parts.upper_bound(ofs);
+  if (iter != slo_parts.begin()) {
+    --iter;
+  }
+
+  for (; iter != slo_parts.end() && !found_end; ++iter) {
+    rgw_slo_part& part = iter->second;
+    RGWObjEnt ent;
+
+    ent.key.name = part.obj_name;
+    ent.size = part.size;
+
+    uint64_t cur_total_len = obj_ofs;
+    uint64_t start_ofs = 0, end_ofs = ent.size;
+
+    if (!found_start && cur_total_len + ent.size > (uint64_t)ofs) {
+      start_ofs = ofs - obj_ofs;
+      found_start = true;
+    }
+
+    obj_ofs += ent.size;
+
+    if (!found_end && obj_ofs > (uint64_t)end) {
+      end_ofs = end - cur_total_len + 1;
+      found_end = true;
+    }
+
+    perfcounter->tinc(l_rgw_get_lat,
+                      (ceph_clock_now(cct) - start_time));
+
+    if (found_start) {
+      len_count += end_ofs - start_ofs;
+
+      if (cb) {
+        int r = cb(part.bucket, ent, part.bucket_policy, start_ofs, end_ofs, cb_param);
+        if (r < 0)
+          return r;
+      }
+    }
+
+    start_time = ceph_clock_now(cct);
+  }
+
+  return 0;
+}
+
 static int get_obj_user_manifest_iterate_cb(rgw_bucket& bucket,
                                             const RGWObjEnt& ent,
                                             RGWAccessControlPolicy * const bucket_policy,
@@ -890,6 +962,93 @@ int RGWGetObj::handle_user_manifest(const char *prefix)
   if (r < 0) {
     return r;
   }
+
+  return 0;
+}
+
+int RGWGetObj::handle_slo_manifest(bufferlist& bl)
+{
+  RGWSLOInfo slo_info;
+  bufferlist::iterator bliter = bl.begin();
+  try {
+    ::decode(slo_info, bliter);
+  } catch (buffer::error& err) {
+    ldout(s->cct, 0) << "ERROR: failed to decode slo manifest" << dendl;
+    return -EIO;
+  }
+  ldout(s->cct, 2) << "RGWGetObj::handle_slo_manifest()" << dendl;
+
+  list<RGWAccessControlPolicy> allocated_policies;
+  map<string, RGWAccessControlPolicy *> policies;
+  map<string, rgw_bucket> buckets;
+
+  uint64_t ofs = 0, start_ofs = 0;
+  map<uint64_t, rgw_slo_part> slo_parts;
+
+  total_len = 0;
+
+  for (vector<rgw_slo_entry>::iterator iter = slo_info.entries.begin(); iter != slo_info.entries.end(); ++iter) {
+    string& path = iter->path;
+    int pos = path.find('/', 1); /* skip first / */
+    if (pos < 0)
+      return -EINVAL;
+
+    string bucket_name = path.substr(1, pos - 1);
+    string obj_name = path.substr(pos + 1);
+
+    rgw_bucket bucket;
+    RGWAccessControlPolicy *bucket_policy;
+
+    if (bucket_name.compare(s->bucket.name) != 0) {
+      map<string, RGWAccessControlPolicy *>::iterator piter = policies.find(bucket_name);
+      if (piter != policies.end()) {
+        bucket_policy = piter->second;
+        bucket = buckets[bucket_name];
+      } else {
+        allocated_policies.push_back(RGWAccessControlPolicy(s->cct));
+        RGWAccessControlPolicy& _bucket_policy = allocated_policies.back();
+
+        RGWBucketInfo bucket_info;
+        map<string, bufferlist> bucket_attrs;
+        RGWObjectCtx obj_ctx(store);
+        int r = store->get_bucket_info(obj_ctx, bucket_name, bucket_info, NULL, &bucket_attrs);
+        if (r < 0) {
+          ldout(s->cct, 0) << "could not get bucket info for bucket=" << bucket_name << dendl;
+          return r;
+        }
+        bucket = bucket_info.bucket;
+        rgw_obj_key no_obj;
+        bucket_policy = &_bucket_policy;
+        r = read_policy(store, s, bucket_info, bucket_attrs, bucket_policy, bucket, no_obj);
+        if (r < 0) {
+          ldout(s->cct, 0) << "failed to read bucket policy for bucket " << bucket << dendl;
+          return r;
+        }
+        buckets[bucket_name] = bucket;
+        policies[bucket_name] = bucket_policy;
+      }
+    } else {
+      bucket = s->bucket;
+      bucket_policy = s->bucket_acl;
+    }
+
+    rgw_slo_part part;
+    part.bucket_policy = bucket_policy;
+    part.bucket = bucket;
+    part.obj_name = obj_name;
+    part.size = iter->size_bytes;
+    ldout(s->cct, 20) << "slo_part: ofs=" << ofs << " bucket=" << part.bucket << " obj=" << part.obj_name << " size=" << iter->size_bytes << dendl;
+
+    slo_parts[total_len] = part;
+    total_len += part.size;
+  }
+
+  s->obj_size = slo_info.total_size;
+  ldout(s->cct, 20) << "s->obj_size=" << s->obj_size << dendl;
+
+  int r = iterate_slo_parts(s->cct, store, start_ofs, end, slo_parts, get_obj_user_manifest_iterate_cb, (void *)this);
+  if (r < 0)
+    return r;
 
   return 0;
 }
@@ -1019,6 +1178,15 @@ void RGWGetObj::execute()
     ret = handle_user_manifest(attr_iter->second.c_str());
     if (ret < 0) {
       ldout(s->cct, 0) << "ERROR: failed to handle user manifest ret=" << ret << dendl;
+    }
+    return;
+  }
+  attr_iter = attrs.find(RGW_ATTR_SLO_MANIFEST);
+  if (attr_iter != attrs.end()) {
+    is_slo = true;
+    ret = handle_slo_manifest(attr_iter->second);
+    if (ret < 0) {
+      ldout(s->cct, 0) << "ERROR: failed to handle slo manifest ret=" << ret << dendl;
     }
     return;
   }
