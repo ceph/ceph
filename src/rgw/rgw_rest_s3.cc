@@ -138,22 +138,22 @@ int RGWGetObj_ObjStore_S3::send_response_data(bufferlist& bl, off_t bl_ofs, off_
 
     for (iter = attrs.begin(); iter != attrs.end(); ++iter) {
       const char *name = iter->first.c_str();
+
       map<string, string>::iterator aiter = rgw_to_http_attrs.find(name);
       if (aiter != rgw_to_http_attrs.end()) {
-	if (response_attrs.count(aiter->second) > 0) // was already overridden by a response param
-	  continue;
-
-	if (aiter->first.compare(RGW_ATTR_CONTENT_TYPE) == 0) { // special handling for content_type
-	  if (!content_type)
-	    content_type = iter->second.c_str();
-	  continue;
+        if (response_attrs.count(aiter->second) == 0) {
+          /* Was not already overridden by a response param. */
+          response_attrs[aiter->second] = iter->second.c_str();
         }
-	response_attrs[aiter->second] = iter->second.c_str();
-      } else {
-        if (strncmp(name, RGW_ATTR_META_PREFIX, sizeof(RGW_ATTR_META_PREFIX)-1) == 0) {
-          name += sizeof(RGW_ATTR_PREFIX) - 1;
-          s->cio->print("%s: %s\r\n", name, iter->second.c_str());
+      } else if (iter->first.compare(RGW_ATTR_CONTENT_TYPE) == 0) {
+        /* Special handling for content_type. */
+        if (!content_type) {
+          content_type = iter->second.c_str();
         }
+      } else if (strncmp(name, RGW_ATTR_META_PREFIX, sizeof(RGW_ATTR_META_PREFIX)-1) == 0) {
+        /* User custom metadata. */
+        name += sizeof(RGW_ATTR_PREFIX) - 1;
+        s->cio->print("%s: %s\r\n", name, iter->second.c_str());
       }
     }
   }
