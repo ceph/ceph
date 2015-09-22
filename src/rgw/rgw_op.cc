@@ -1857,17 +1857,17 @@ static void encode_delete_at_attr(time_t delete_at, map<string, bufferlist>& att
   attrs[RGW_ATTR_DELETE_AT] = delatbl;
 }
 
-static int encode_obj_manifest_attr(const char * const obj_manifest,
+static int encode_dlo_manifest_attr(const char * const dlo_manifest,
                                     map<string, bufferlist>& attrs)
 {
-  string om = obj_manifest;
+  string dm = dlo_manifest;
 
-  if (om.find('/') == string::npos) {
+  if (dm.find('/') == string::npos) {
     return -EINVAL;
   }
 
   bufferlist manifest_bl;
-  manifest_bl.append(obj_manifest, strlen(obj_manifest) + 1);
+  manifest_bl.append(dlo_manifest, strlen(dlo_manifest) + 1);
   attrs[RGW_ATTR_USER_MANIFEST] = manifest_bl;
 
   return 0;
@@ -1887,7 +1887,7 @@ void RGWPutObj::execute()
   map<string, string>::iterator iter;
   bool multipart;
 
-  bool need_calc_md5 = (obj_manifest == NULL);
+  bool need_calc_md5 = (dlo_manifest == NULL);
 
 
   perfcounter->inc(l_rgw_put);
@@ -2037,10 +2037,10 @@ void RGWPutObj::execute()
 
   attrs[RGW_ATTR_ACL] = aclbl;
 
-  if (obj_manifest) {
-    ret = encode_obj_manifest_attr(obj_manifest, attrs);
+  if (dlo_manifest) {
+    ret = encode_dlo_manifest_attr(dlo_manifest, attrs);
     if (ret < 0) {
-      ldout(s->cct, 0) << "bad user manifest: " << obj_manifest << dendl;
+      ldout(s->cct, 0) << "bad user manifest: " << dlo_manifest << dendl;
       goto done;
     }
   }
@@ -2448,10 +2448,10 @@ void RGWPutMetadataObject::execute()
   populate_with_generic_attrs(s, attrs);
   encode_delete_at_attr(delete_at, attrs);
 
-  if (obj_manifest) {
-    ret = encode_obj_manifest_attr(obj_manifest, attrs);
+  if (dlo_manifest) {
+    ret = encode_dlo_manifest_attr(dlo_manifest, attrs);
     if (ret < 0) {
-      ldout(s->cct, 0) << "bad user manifest: " << obj_manifest << dendl;
+      ldout(s->cct, 0) << "bad user manifest: " << dlo_manifest << dendl;
       return;
     }
   }
