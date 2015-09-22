@@ -326,7 +326,7 @@ class FuseMount(CephFSMount):
         )
 
     def _asok_path(self):
-        return "/var/run/ceph/ceph-{0}.*.asok".format(self.client_id)
+        return "/var/run/ceph/ceph-client.{0}.*.asok".format(self.client_id)
 
     @property
     def _prefix(self):
