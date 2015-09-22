@@ -298,6 +298,27 @@ You may set values for the following keys:
 :Version: Version ``FIXME``
 
 
+``write_fadvise_dontneed``
+
+:Description: Set/Unset WRITE_FADVISE_DONTNEED flag on a given pool.
+:Type: Integer
+:Valid Range: 1 sets flag, 0 unsets flag
+
+
+``noscrub``
+
+:Description: Set/Unset NOSCRUB flag on a given pool.
+:Type: Integer
+:Valid Range: 1 sets flag, 0 unsets flag
+
+
+``nodeep-scrub``
+
+:Description: Set/Unset NODEEP_SCRUB flag on a given pool.
+:Type: Integer
+:Valid Range: 1 sets flag, 0 unsets flag
+
+
 ``hit_set_type``
 
 :Description: Enables hit set tracking for cache pools.
@@ -401,6 +422,33 @@ You may set values for the following keys:
 :Type: Integer
 :Example: ``1800`` 30min
 
+
+``scrub_min_interval``
+
+:Description: The maximum interval in seconds for pool scrubbing when
+              load is low. If it is 0, the value osd_scrub_min_interval
+              from config is used.
+
+:Type: Double
+:Default: ``0``
+
+``scrub_max_interval``
+
+:Description: The maximum interval in seconds for pool scrubbing
+              irrespective of cluster load. If it is 0, the value
+              osd_scrub_max_interval from config is used.
+
+:Type: Double
+:Default: ``0``
+
+
+``deep_scrub_interval``
+
+:Description: The interval in seconds for pool “deep” scrubbing. If it
+              is 0, the value osd_deep_scrub_interval from config is used.
+
+:Type: Double
+:Default: ``0``
 
 
 Get Pool Values
