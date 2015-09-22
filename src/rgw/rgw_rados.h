@@ -1109,6 +1109,7 @@ WRITE_CLASS_ENCODER(RGWZoneGroup)
 
 struct RGWPeriodMap
 {
+  string id;
   map<string, RGWZoneGroup> zonegroups;
   map<string, RGWZoneGroup> zonegroups_by_api;
 

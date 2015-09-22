@@ -825,18 +825,32 @@ void RGWPeriodMap::decode_json(JSONObj *obj)
   }
 }
 
+static void decode_realms(map<string, RGWRealm>& realms, JSONObj *o)
+{
+  RGWRealm r;
+  r.decode_json(o);
+  realms[r.get_id()] = r;
+}
+
+static void decode_periods(map<string, RGWPeriodMap>& periods, JSONObj *o)
+{
+  RGWPeriodMap p;
+  p.decode_json(o);
+  periods[p.id] = p;
+}
+
 void RGWZoneGroupMap::dump(Formatter *f) const
 {
-  encode_json("realms", realms, f);
-  encode_json("periods", periods, f);
+  encode_json_map("realms", realms, f);
+  encode_json_map("periods", periods, f);
   encode_json("bucket_quota", bucket_quota, f);
   encode_json("user_quota", user_quota, f);
 }
 
 void RGWZoneGroupMap::decode_json(JSONObj *obj)
 {
-  JSONDecoder::decode_json("realms", realms, obj);
-  JSONDecoder::decode_json("periods", periods, obj);
+  JSONDecoder::decode_json("realms", realms, decode_realms, obj);
+  JSONDecoder::decode_json("periods", periods, decode_periods, obj);
   JSONDecoder::decode_json("bucket_quota", bucket_quota, obj);
   JSONDecoder::decode_json("user_quota", user_quota, obj);
 }
