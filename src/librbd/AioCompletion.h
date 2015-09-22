@@ -93,8 +93,12 @@ namespace librbd {
         ictx = i;
         aio_type = t;
         start_time = ceph_clock_now(ictx->cct);
-
-	async_op.start_op(*ictx);
+      }
+    }
+    void start_op(ImageCtx *i, aio_type_t t) {
+      init_time(i, t);
+      if (!async_op.started()) {
+        async_op.start_op(*ictx);
       }
     }
 
