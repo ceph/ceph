@@ -2357,6 +2357,30 @@ int main(int argc, char **argv)
 	       << cpp_strerror(-ret) << std::endl;
 	  return ret;
 	}
+
+	RGWRealm realm(realm_id, realm_name);
+	ret = realm.init(g_ceph_context, store);
+	if (ret < 0) {
+	  cerr << "ERROR: couldn't init realm:" << cpp_strerror(-ret) << std::endl;
+	  return ret;
+	}
+	
+	RGWZoneGroupMap zonegroup_map;
+	ret = zonegroup_map.read(g_ceph_context, store);
+	if (ret < 0 && ret != -ENOENT) {
+	  cerr << "ERROR: couldn't read zonegroup_map: " << cpp_strerror(-ret) << std::endl;
+	  return ret;
+	}
+	ret = zonegroup_map.update(g_ceph_context, store, realm, zonegroup);
+	if (ret < 0) {
+	  cerr << "failed to update zonegroup_map: " << cpp_strerror(-ret) << std::endl;
+	  return -ret;
+	}
+	ret = zonegroup_map.store(g_ceph_context, store);
+	if (ret < 0) {
+	  cerr << "failed to store zonegroup_map: " << cpp_strerror(-ret) << std::endl;
+	  return -ret;
+	}
       }
       break;
     case OPT_ZONE_CREATE:
@@ -2389,6 +2413,7 @@ int main(int argc, char **argv)
 	    return ret;
 	  }
 	}
+
 	encode_json("zone", zone, formatter);
 	formatter->flush(cout);
 	cout << std::endl;
