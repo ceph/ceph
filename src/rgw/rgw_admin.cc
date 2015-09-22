@@ -2358,6 +2358,14 @@ int main(int argc, char **argv)
 	  return ret;
 	}
 
+	if (realm_id.empty() && realm_name.empty()) {
+	  if (zonegroup.realm_id.empty()) {
+	    cerr << "no realm info provided" << std::endl;
+	    return -EINVAL;
+	  }
+	  realm_id = zonegroup.realm_id;
+	}
+	  
 	RGWRealm realm(realm_id, realm_name);
 	ret = realm.init(g_ceph_context, store);
 	if (ret < 0) {
