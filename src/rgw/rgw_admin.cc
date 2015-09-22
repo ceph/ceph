@@ -2108,12 +2108,20 @@ int main(int argc, char **argv)
 	  cerr << "failed to create zonegroup" << zonegroup_name << ": " << cpp_strerror(-ret) << std::endl;
 	  return -ret;
 	}
-	ret = store->zonegroup_map.update(g_ceph_context, store, realm, zonegroup);
+
+	RGWZoneGroupMap zonegroup_map;
+	ret = zonegroup_map.read(g_ceph_context, store);
+	if (ret < 0 && ret != -ENOENT) {
+	  cerr << "ERROR: couldn't read zonegroup_map: " << cpp_strerror(-ret) << std::endl;
+	  return ret;
+	}
+
+	ret = zonegroup_map.update(g_ceph_context, store, realm, zonegroup);
 	if (ret < 0) {
 	  cerr << "failed to update zonegroup_map: " << cpp_strerror(-ret) << std::endl;
 	  return -ret;
 	}
-	ret = store->zonegroup_map.store(g_ceph_context, store);
+	ret = zonegroup_map.store(g_ceph_context, store);
 	if (ret < 0) {
 	  cerr << "failed to store zonegroup_map: " << cpp_strerror(-ret) << std::endl;
 	  return -ret;
