@@ -7239,8 +7239,8 @@ void ReplicatedPG::finish_promote(int r, CopyResults *results,
 
   osd->logger->inc(l_osd_tier_promote);
 
-  assert(agent_state);
-  if (agent_state->is_idle())
+  if (agent_state &&
+      agent_state->is_idle())
     agent_choose_mode();
 }
 
