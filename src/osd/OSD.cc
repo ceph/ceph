@@ -4007,6 +4007,49 @@ void OSD::tick()
     heartbeat_check();
     heartbeat_lock.Unlock();
 
+    map_lock.put_read();
+  }
+
+  if (is_waiting_for_healthy()) {
+    if (_is_healthy()) {
+      dout(1) << "healthy again, booting" << dendl;
+      set_state(STATE_BOOTING);
+      start_boot();
+    }
+  }
+
+  if (is_active()) {
+    // periodically kick recovery work queue
+    recovery_tp.wake();
+
+    check_replay_queue();
+  }
+
+  // only do waiters if dispatch() isn't currently running.  (if it is,
+  // it'll do the waiters, and doing them here may screw up ordering
+  // of op_queue vs handle_osd_map.)
+  if (!dispatch_running) {
+    dispatch_running = true;
+    do_waiters();
+    dispatch_running = false;
+    dispatch_cond.Signal();
+  }
+
+  check_ops_in_flight();
+
+  tick_timer.add_event_after(OSD_TICK_INTERVAL, new C_Tick(this));
+}
+
+void OSD::tick_without_osd_lock()
+{
+  assert(tick_timer_lock.is_locked());
+  dout(5) << "tick_without_osd_lock" << dendl;
+
+  // osd_lock is not being held, which means the OSD state
+  // might change when doing the monitor report
+  if (is_active() || is_waiting_for_healthy()) {
+    map_lock.get_read();
+
     // mon report?
     bool reset = false;
     bool report = false;
@@ -4053,45 +4096,8 @@ void OSD::tick()
       send_failures();
       send_pg_stats(now);
     }
-
     map_lock.put_read();
   }
-
-  if (is_waiting_for_healthy()) {
-    if (_is_healthy()) {
-      dout(1) << "healthy again, booting" << dendl;
-      set_state(STATE_BOOTING);
-      start_boot();
-    }
-  }
-
-  if (is_active()) {
-    // periodically kick recovery work queue
-    recovery_tp.wake();
-
-    check_replay_queue();
-  }
-
-  // only do waiters if dispatch() isn't currently running.  (if it is,
-  // it'll do the waiters, and doing them here may screw up ordering
-  // of op_queue vs handle_osd_map.)
-  if (!dispatch_running) {
-    dispatch_running = true;
-    do_waiters();
-    dispatch_running = false;
-    dispatch_cond.Signal();
-  }
-
-  check_ops_in_flight();
-
-  tick_timer.add_event_after(OSD_TICK_INTERVAL, new C_Tick(this));
-}
-
-void OSD::tick_without_osd_lock()
-{
-  assert(tick_timer_lock.is_locked());
-  dout(5) << "tick_without_osd_lock" << dendl;
-
   if (!scrub_random_backoff()) {
     sched_scrub();
   }
@@ -4391,29 +4397,32 @@ void OSD::RemoveWQ::_process(
 void OSD::ms_handle_connect(Connection *con)
 {
   if (con->get_peer_type() == CEPH_ENTITY_TYPE_MON) {
-    Mutex::Locker l(osd_lock);
-    if (is_stopping())
-      return;
+    {
+      Mutex::Locker l(osd_lock);
+      if (is_booting() || is_stopping()) {
+        if (is_booting())
+          start_boot();
+        return;
+      }
+    }
     dout(10) << "ms_handle_connect on mon" << dendl;
 
-    if (is_booting()) {
-      start_boot();
-    } else {
-      utime_t now = ceph_clock_now(NULL);
-      last_mon_report = now;
+    utime_t now = ceph_clock_now(NULL);
+    last_mon_report = now;
 
-      // resend everything, it's a new session
-      send_alive();
-      service.requeue_pg_temp();
-      service.send_pg_temp();
-      requeue_failures();
-      send_failures();
-      send_pg_stats(now);
+    // resend everything, it's a new session
+    map_lock.get_read();
+    send_alive();
+    service.requeue_pg_temp();
+    service.send_pg_temp();
+    requeue_failures();
+    send_failures();
+    send_pg_stats(now);
+    map_lock.put_read();
 
-      monc->sub_want("osd_pg_creates", 0, CEPH_SUBSCRIBE_ONETIME);
-      monc->sub_want("osdmap", osdmap->get_epoch(), CEPH_SUBSCRIBE_ONETIME);
-      monc->renew_subs();
-    }
+    monc->sub_want("osd_pg_creates", 0, CEPH_SUBSCRIBE_ONETIME);
+    monc->sub_want("osdmap", osdmap->get_epoch(), CEPH_SUBSCRIBE_ONETIME);
+    monc->renew_subs();
   }
 }
 
@@ -4678,7 +4687,6 @@ void OSD::send_alive()
 
 void OSD::requeue_failures()
 {
-  assert(osd_lock.is_locked());
   Mutex::Locker l(heartbeat_lock);
   unsigned old_queue = failure_queue.size();
   unsigned old_pending = failure_pending.size();
@@ -4694,7 +4702,7 @@ void OSD::requeue_failures()
 
 void OSD::send_failures()
 {
-  assert(osd_lock.is_locked());
+  assert(map_lock.is_locked());
   Mutex::Locker l(heartbeat_lock);
   utime_t now = ceph_clock_now(cct);
   while (!failure_queue.empty()) {
@@ -4719,8 +4727,7 @@ void OSD::send_still_alive(epoch_t epoch, const entity_inst_t &i)
 
 void OSD::send_pg_stats(const utime_t &now)
 {
-  assert(osd_lock.is_locked());
-
+  assert(map_lock.is_locked());
   dout(20) << "send_pg_stats" << dendl;
 
   osd_stat_t cur_stat = service.get_osd_stat();
@@ -4840,10 +4847,12 @@ void OSD::handle_pg_stats_ack(MPGStatsAck *ack)
 void OSD::flush_pg_stats()
 {
   dout(10) << "flush_pg_stats" << dendl;
-  utime_t now = ceph_clock_now(cct);
-  send_pg_stats(now);
-
   osd_lock.Unlock();
+  utime_t now = ceph_clock_now(cct);
+  map_lock.get_read();
+  send_pg_stats(now);
+  map_lock.put_read();
+
 
   pg_stat_queue_lock.Lock();
   uint64_t tid = pg_stat_tid;
