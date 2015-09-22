@@ -241,6 +241,7 @@ void global_init(std::vector < const char * > *alt_def_args,
     derr << "deliberately leaking some memory" << dendl;
     char *s = new char[1234567];
     (void)s;
+    // cppcheck-suppress memleak
   }
 
   if (code_env == CODE_ENVIRONMENT_DAEMON && !(flags & CINIT_FLAG_NO_DAEMON_ACTIONS))
