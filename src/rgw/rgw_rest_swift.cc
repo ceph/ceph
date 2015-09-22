@@ -558,7 +558,7 @@ int RGWPutObj_ObjStore_SWIFT::get_params()
 
   policy.create_default(s->user.user_id, s->user.display_name);
 
-  obj_manifest = s->info.env->get("HTTP_X_OBJECT_MANIFEST");
+  dlo_manifest = s->info.env->get("HTTP_X_OBJECT_MANIFEST");
 
   int r = get_delete_at_param(s, &delete_at);
   if (r < 0) {
@@ -679,7 +679,7 @@ int RGWPutMetadataObject_ObjStore_SWIFT::get_params()
   }
 
   placement_rule = s->info.env->get("HTTP_X_STORAGE_POLICY", "");
-  obj_manifest = s->info.env->get("HTTP_X_OBJECT_MANIFEST");
+  dlo_manifest = s->info.env->get("HTTP_X_OBJECT_MANIFEST");
 
   return 0;
 }
