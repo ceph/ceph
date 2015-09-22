@@ -4027,6 +4027,8 @@ if (!set_conf_param(v, p1, p2, p3)) { \
 	} else {
 	  cerr << "rbd: lock is already held by someone else" << std::endl;
 	}
+      } else if (r == -ENOSYS) {
+        cerr << "rbd: lock is not supported by the image features" << std::endl;
       } else {
 	cerr << "rbd: taking lock failed: " << cpp_strerror(r) << std::endl;
       }
