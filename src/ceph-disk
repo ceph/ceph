@@ -3,6 +3,7 @@
 # Copyright (C) 2014 Inktank <info@inktank.com>
 # Copyright (C) 2014 Cloudwatt <libre.licensing@cloudwatt.com>
 # Copyright (C) 2014 Catalyst.net Ltd
+# Copyright (C) 2015 SanDisk Corp.
 #
 # Author: Loic Dachary <loic@dachary.org>
 #
@@ -35,6 +36,9 @@ import time
 import shlex
 import pwd
 import grp
+import pyudev
+import struct
+import abc
 
 """
 Prepare:
@@ -495,6 +499,525 @@ def get_dev_size(dev, size='megabytes'):
     finally:
         os.close(fd)
 
+"""
+Get the hardware sector size of the block device
+"""
+def get_sys_hw_sector_size(sys_node):
+    sys_queue_node = os.path.join(sys_node, 'queue')
+    sect_size = read_one_line(sys_queue_node, 'hw_sector_size')
+    if sect_size:
+        return long(sect_size)
+
+    return None
+
+"""
+Base class for all types of block devices
+"""
+class BlockDevBase:
+    __metaclass__ = abc.ABCMeta
+
+    @abc.abstractmethod
+    def __init__(self, udevCtx, device):
+        return
+    """
+    Get Device node name
+    """
+    @abc.abstractmethod
+    def get_dev_node(self):
+        return
+
+    """
+    Get Device property
+    """
+    @abc.abstractmethod
+    def get_dev_property(self, prop):
+        return
+
+    """
+    Get partition Number
+    """
+    @abc.abstractmethod
+    def get_partition_num(self):
+        return
+
+    """
+    Check if the block device is a partition
+    """
+    @abc.abstractmethod
+    def is_partition(self):
+        return
+
+    """
+    Return the device path to the partition device corresponding to the
+    device partition number
+    """
+    @abc.abstractmethod
+    def get_partition_dev(self, SearchPartNum):
+        return
+
+    """
+    Get the underlying base device for a partition
+    """
+    @abc.abstractmethod
+    def get_partition_base(self):
+        return
+
+    """
+    Get list of device holders
+    """
+    @abc.abstractmethod
+    def is_held(self):
+        return
+
+    """
+    Get list of partitions
+    """
+    @abc.abstractmethod
+    def list_partitions(self):
+        return
+
+    """
+    Get Partition TYPE and GUID
+    """
+    @abc.abstractmethod
+    def get_partition_guids(self):
+        return
+
+    """
+    Get partition uuid
+    """
+    @abc.abstractmethod
+    def get_partition_uuid(self):
+        return
+
+    """
+    Get partition type
+    """
+    @abc.abstractmethod
+    def get_partition_type(self):
+        return
+
+    """
+    Classify this device
+    """
+    @abc.abstractmethod
+    def get_device_class(self):
+        return
+
+    """
+    Do resync to update OS structures
+    """
+    @abc.abstractmethod
+    def resync_dev_node(self):
+        return
+
+    """
+    Get Hardware sector size for the device
+    """
+    @abc.abstractmethod
+    def get_hw_sector_size(self):
+        return
+
+    """
+    Generate/Create Journal symlink to be used
+    """
+    @abc.abstractmethod
+    def get_journal_symlink(self, journal_uuid):
+        return
+
+#from abc_base import BlockDevBase
+"""
+----------------------------------------------------------------------------
+
+Block Device Class. Implements APIs for accesing properties of
+generic raw block devices
+
+----------------------------------------------------------------------------
+"""
+class GenericBlockDev(BlockDevBase):
+
+    def __init__(self, udevCtx, device):
+        self.udevCtx = udevCtx
+        self.device  = device
+
+    """
+    Get Device node name
+    """
+    def get_dev_node(self):
+        return self.device.get('DEVNAME')
+
+    """
+    Get Device property
+    """
+    def get_dev_property(self, prop):
+        return self.device.get(prop)
+
+    """
+    Get partition Number
+    """
+    def get_partition_num(self):
+        partNum = self.device.get('ID_PART_ENTRY_NUMBER')
+        if partNum:
+            return int(partNum)
+        else:
+            return None
+
+    """
+    Check if the block device is a partition
+    """
+    def is_partition(self):
+        devType = self.device.get('DEVTYPE')
+        if devType == 'partition':
+            return True
+        else:
+            return False
+
+    """
+    Return the device path to the partition device corresponding to the
+    device partition number
+    """
+    def get_partition_dev(self, SearchPartNum):
+        for childDev in self.device.children:
+            partNum = int(childDev.get('ID_PART_ENTRY_NUMBER'))
+            if partNum is SearchPartNum:
+                return childDev.device_node
+        return None
+
+    """
+    Get the underlying base device for a partition
+    """
+    def get_partition_base(self):
+        if self.is_partition():
+            return self.device.find_parent('block').device_node
+        else:
+            return None
+
+    """
+    Get list of device holders
+    """
+    def is_held(self):
+        name = os.path.basename(self.device.device_node)
+        if self.is_partition():
+            base = os.path.basename(self.get_partition_base())
+
+            return os.listdir(os.path.join('/sys/block', base, name, 'holders'))
+        else:
+            return os.listdir(os.path.join('/sys/block', name, 'holders'))
+
+    """
+    Get list of partitions
+    """
+    def list_partitions(self):
+        partitions = []
+        for childDev in self.device.children:
+            partitions.append(get_dev_name(childDev.device_node))
+
+        return partitions
+
+    """
+    Get Partition TYPE and GUID
+    """
+    def get_partition_guids(self):
+        part_num = self.get_partition_num()
+        if not part_num:
+            LOG.debug('Read Part GUID on non partiton dev: %s', self.get_dev_node())
+            return None, None
+        base = self.get_partition_base()
+        part = self.get_dev_node()
+        return get_partition_guids(self, base, part, part_num)
+
+    """
+    Get partition uuid
+    """
+    def get_partition_uuid(self):
+        ptype, pguid = self.get_partition_guids()
+        return pguid
+
+    """
+    Get partition type
+    """
+    def get_partition_type(self):
+        ptype, pguid = self.get_partition_guids()
+        return ptype
+
+    """
+    Classify this device
+    """
+    def get_device_class(self):
+        return 'generic-block-dev'
+
+    """
+    Do resync to update OS structures
+    """
+    def resync_dev_node(self):
+        return
+
+    """
+    Get Hardware sector size for the device
+    """
+    def get_hw_sector_size(self):
+        if self.is_partition():
+            base_dev = self.get_partition_base()
+            baseCtx  = get_block_device_ctx(base_dev)
+            return baseCtx.get_hw_sector_size()
+        else:
+            sys_node = '/sys' + self.device.get('DEVPATH')
+            return get_sys_hw_sector_size(sys_node)
+    """
+    Generate/Create Journal symlink to be used
+    """
+    def get_journal_symlink(self, journal_uuid):
+        journal_symlink = '/dev/disk/by-partuuid/{journal_uuid}'.format(
+            journal_uuid=journal_uuid,
+            )
+        return journal_symlink
+
+"""
+----------------------------------------------------------------------------
+DM Device Class. Implements APIs for accessing properties of
+Device mapper devices
+----------------------------------------------------------------------------
+"""
+class DMBlockDev(BlockDevBase):
+
+    def __init__(self, udevCtx, device):
+        self.udevCtx = udevCtx
+        self.device  = device
+
+
+    """
+    Get Device node name
+    """
+    def get_dev_node(self):
+        return self.device.get('DEVNAME')
+
+    """
+    Get Device property
+    """
+    def get_dev_property(self, prop):
+        return self.device.get(prop)
+
+    """
+    Get partition Number
+    """
+    def get_partition_num(self):
+        partNum = self.device.get('DM_PART')
+        if partNum:
+            return int(partNum)
+        else:
+            return None
+
+    """
+    Check if the block device is a partition
+    """
+    def is_partition(self):
+        if self.get_partition_num():
+            return True
+        else:
+            return False
+
+    """
+    Return the device path to the partition device corresponding to the
+    device partition number.
+    Scan the list of holders and check if any of the device are partitions
+    If a partition device is found, check if the DM_PART number matches with
+    the required partition number and return device path for the matched device
+    """
+    def get_partition_dev(self, pnum):
+        name = os.path.basename(self.device.device_node)
+        for f in os.listdir(os.path.join('/sys/block', name, 'holders')):
+            part = os.path.realpath(os.path.join('/sys/block', name, 'holders', f))
+            partDev = pyudev.Device.from_path(self.udevCtx, part)
+            partDevNum = None
+            if partDev:
+                partDevProp = partDev.get('DM_PART')
+                if partDevProp:
+                    partDevNum = int(partDevProp)
+
+            if partDevNum is pnum:
+                return partDev.device_node
+        return None
+
+
+    """
+    Get the underlying base device for a partition
+    Scan slave devices, if the slave device has this device as a parition
+    with a parition number match, then the salve device is the base device
+    """
+    def get_partition_base(self):
+        if self.is_partition():
+            name = os.path.basename(self.device.device_node)
+            myPartNum = self.get_partition_num()
+            for f in os.listdir(os.path.join('/sys/block', name, 'slaves')):
+                base = os.path.realpath(os.path.join('/sys/block', name, 'slaves', f))
+                baseDev = pyudev.Device.from_path(self.udevCtx, base)
+                baseDevCtx = get_block_device_ctx(baseDev.device_node)
+                if baseDevCtx:
+                    partName = baseDevCtx.get_partition_dev(myPartNum)
+                    if partName == self.device.device_node:
+                        return baseDev.device_node
+
+        return None
+
+
+    """
+    Get list of device holders
+    Skip any parition devices, need to see if there are holders other than
+    partitions
+    """
+    def is_held(self):
+        name = os.path.basename(self.device.device_node)
+        holders = []
+        for f in os.listdir(os.path.join('/sys/block', name, 'holders')):
+            holder = os.path.realpath(os.path.join('/sys/block', name, 'holders', f))
+            holderDev = pyudev.Device.from_path(self.udevCtx, holder)
+            devCtx = get_block_device_ctx(holderDev.device_node)
+            if devCtx:
+                if not devCtx.is_partition():
+                    holders.append(f)
+        return holders
+
+    """
+    Get list of partitions
+    Sacan list of holders and report devices that are partitions
+    """
+    def list_partitions(self):
+        name = os.path.basename(self.device.device_node)
+        partitions = []
+        for f in os.listdir(os.path.join('/sys/block', name, 'holders')):
+            part = os.path.realpath(os.path.join('/sys/block', name, 'holders', f))
+            partDev = pyudev.Device.from_path(self.udevCtx, part)
+            devCtx = get_block_device_ctx(partDev.device_node)
+            if devCtx:
+                if devCtx.is_partition():
+                    partitions.append(get_dev_name(partDev.device_node))
+        return partitions
+
+    """
+    Get Partition TYPE and GUIDs
+    """
+    def get_partition_guids(self):
+        part_num = self.get_partition_num()
+        if not part_num:
+            LOG.debug('Read Part GUID on non partiton dev: %s', self.get_dev_node())
+            return None, None
+        base = self.get_partition_base()
+        part = self.get_dev_node()
+        return get_partition_guids(self, base, part, part_num)
+
+    """
+    Get partition guid
+    """
+    def get_partition_uuid(self):
+        ptype, pguid = self.get_partition_guids()
+        return pguid
+
+    """
+    Get partition type
+    """
+    def get_partition_type(self):
+        ptype, pguid = self.get_partition_guids()
+        return ptype
+
+    """
+    Classify this device
+    """
+    def get_device_class(self):
+        uuid =  self.device.get('DM_UUID')
+        if 'mpath-' in uuid:
+            return 'dm-multipath'
+
+        crypt = re.match('^CRYPT-', uuid)
+        if crypt:
+            return 'dm-crypt'
+
+        return 'dm-unknown'
+
+    """
+    Resync device
+    """
+    def resync_dev_node(self):
+        dev_class = self.get_device_class()
+        # Workaround to clear any stale partition nodes
+        LOG.debug('Device Node Resync on %s', dev_class)
+        if dev_class == 'dm-multipath':
+            dm_name = self.device.get('DM_NAME')
+            LOG.debug('Device Resync on Multipath Node: %s', dm_name)
+            out, _ = command(['multipath', '-f', dm_name])
+            udev_settle()
+            out, _ = command(['multipath', dm_name])
+            udev_settle()
+
+    """
+    Get the hardware sector size
+    """
+    def get_hw_sector_size(self):
+        if self.is_partition():
+            base_dev = self.get_partition_base()
+            baseCtx  = get_block_device_ctx(base_dev)
+            return baseCtx.get_hw_sector_size()
+        else:
+            sys_node = '/sys' + self.device.get('DEVPATH')
+            return get_sys_hw_sector_size(sys_node)
+
+    """
+    Get the journal symlink to be used
+    use the '/dev/mapper/<uuid>' symlink, the partuuid are not reliable for DM devices
+    """
+    def get_journal_symlink(self, journal_uuid):
+
+        journal_symlink = None
+        for link in self.device.device_links:
+            if '/dev/mapper' in link:
+                return link
+
+        # fallback, should never come here
+        journal_symlink = '/dev/disk/by-partuuid/{journal_uuid}'.format(
+            journal_uuid=journal_uuid,
+            )
+        return journal_symlink
+
+
+
+"""
+Create a block device context based on the device type
+"""
+def create_block_device_ctx(device):
+    BdevCtx = None
+    udevCtx = pyudev.Context()
+    if device.get('SUBSYSTEM') == 'block':
+        devType = device.get('DEVTYPE')
+        if devType == 'disk':
+            if device.get('DM_UUID'):
+                BdevCtx = DMBlockDev(udevCtx, device)
+            else:
+                BdevCtx = GenericBlockDev(udevCtx, device)
+        elif devType == 'partition':
+            BdevCtx = GenericBlockDev(udevCtx, device)
+
+    return BdevCtx
+
+
+"""
+Create a block device context from the device path
+"""
+def get_block_device_ctx(path):
+
+    if os.path.exists(path):
+        devPath = os.path.realpath(path)
+    else:
+        return None
+
+    BdevCtx = None
+    udevCtx = pyudev.Context()
+    device  = pyudev.Device.from_device_file(udevCtx, devPath)
+    if device:
+        BdevCtx = create_block_device_ctx(device)
+
+    return BdevCtx
+
+'''
+UNUSED
 
 def get_partition_mpath(dev, pnum):
     part_re = "part{pnum}-mpath-".format(pnum=pnum)
@@ -528,7 +1051,7 @@ def get_partition_dev(dev, pnum):
         return get_dev_path(partname)
     else:
         raise Error('partition %d for %s does not appear to exist' % (pnum, dev))
-
+'''
 
 def list_all_partitions(names):
     """
@@ -542,9 +1065,13 @@ def list_all_partitions(names):
         # /dev/fd0 may hang http://tracker.ceph.com/issues/6827
         if re.match(r'^fd\d$', name):
             continue
-        dev_part_list[name] = list_partitions(os.path.join('/dev', name))
+        dev = os.path.join('/dev', name)
+        devCtx = get_block_device_ctx(dev)
+        dev_part_list[name] = devCtx.list_partitions()
     return dev_part_list
 
+'''
+UNUSED
 def list_partitions(dev):
     dev = os.path.realpath(dev)
     if is_mpath(dev):
@@ -563,7 +1090,6 @@ def list_partitions_mpath(dev, part_re="part\d+-mpath-"):
         if re.match(part_re, uuid):
             partitions.append(holder)
     return partitions
-
 
 def list_partitions_device(dev):
     """
@@ -633,7 +1159,7 @@ def is_partition(dev):
         return True
 
     raise Error('not a disk or partition', dev)
-
+'''
 
 def is_mounted(dev):
     """
@@ -653,7 +1179,8 @@ def is_mounted(dev):
                     return path
     return None
 
-
+'''
+UNUSED
 def is_held(dev):
     """
     Check if a device is held by another device (e.g., a dm-crypt mapping)
@@ -678,7 +1205,7 @@ def is_held(dev):
             return os.listdir(directory)
         base = base[:-1]
     return []
-
+'''
 
 def verify_not_in_use(dev, check_partitions=False):
     """
@@ -690,16 +1217,20 @@ def verify_not_in_use(dev, check_partitions=False):
     assert os.path.exists(dev)
     if is_mounted(dev):
         raise Error('Device is mounted', dev)
-    holders = is_held(dev)
+
+    devCtx = get_block_device_ctx(dev)
+    holders = devCtx.is_held()
     if holders:
         raise Error('Device %s is in use by a device-mapper mapping (dm-crypt?)' % dev, ','.join(holders))
 
-    if check_partitions and not is_partition(dev):
-        for partname in list_partitions(dev):
+    if check_partitions and not devCtx.is_partition():
+        for partname in devCtx.list_partitions():
             partition = get_dev_path(partname)
             if is_mounted(partition):
                 raise Error('Device is mounted', partition)
-            holders = is_held(partition)
+
+            partDevCtx = get_block_device_ctx(partition)
+            holders = partDevCtx.is_held()
             if holders:
                 raise Error('Device %s is in use by a device-mapper mapping (dm-crypt?)' % partition, ','.join(holders))
 
@@ -1166,6 +1697,55 @@ def extract_parted_partition_numbers(partitions):
     numbers_as_strings = re.findall('^\d+', partitions, re.MULTILINE)
     return map(int, numbers_as_strings)
 
+
+# wait for udev event queue to clear
+def udev_settle():
+    time.sleep(1)
+    command(
+        [
+            'udevadm',
+            'settle',
+            ],
+        )
+
+
+"""
+Get the largest partition size in MB that can be created.
+Partition size needs to be provided for some devices to
+maintain alignment with physical/logical block sizes.
+Issues are seen with using sgdisk --largest-new flag
+and DM devices when the partition size is not a multiple
+of the hardware block size.
+SizeMB is returned assuming hw sectors size aligns 1MB
+"""
+def get_largest_free_part_size(dev, sect_size):
+
+    out, ret = command(['sgdisk', '--first-aligned-in-largest', dev])
+    if ret:
+        return None
+    start = out.split('\n', 1)[0]
+    out, ret = command(['sgdisk', '--end-of-largest', dev])
+    if ret:
+        return None
+
+    end = out.split('\n', 1)[0]
+    size = long(end) - long(start)
+    sizeMB = (size * sect_size)/(1024 * 1024)
+
+    return sizeMB
+
+    udevCtx = pyudev.Context()
+    device  = pyudev.Device.from_device_file(udevCtx, dev)
+    sysNode = device.get('DEVPATH')
+    if sysNode:
+        sectSizePath = os.path.join(sysNode, 'queue')
+        sectSizePath = '/sys' + sectSizePath
+        sectSizeStr = read_one_line(sectSizePath, 'hw_sector_size')
+        if sectSizeStr:
+            return sizeMB
+
+    return None
+
 def get_free_partition_index(dev):
     """
     Get the next free partition index on a given device.
@@ -1218,8 +1798,9 @@ def zap(dev):
     """
     Destroy the partition table and content of a given disk.
     """
+    devCtx = get_block_device_ctx(dev)
     dmode = os.stat(dev).st_mode
-    if not stat.S_ISBLK(dmode) or is_partition(dev):
+    if not stat.S_ISBLK(dmode) or devCtx.is_partition():
         raise Error('not full block device; cannot zap', dev)
     try:
         LOG.debug('Zapping partition table on %s', dev)
@@ -1252,6 +1833,9 @@ def zap(dev):
 
         update_partition(dev, 'zapped')
 
+        LOG.debug('Attempting dev node resync on %s', dev)
+        devCtx.resync_dev_node()
+
     except subprocess.CalledProcessError as e:
         raise Error(e)
 
@@ -1266,30 +1850,32 @@ def prepare_journal_dev(
     luks
    ):
 
+    jrnlDevCtx = get_block_device_ctx(journal)
+    if not jrnlDevCtx:
+        raise Error(journal + ' Device is not Block dev?')
+
     reusing_partition = False
 
-    if is_partition(journal):
+    if jrnlDevCtx.is_partition():
         if journal_dm_keypath:
             raise Error(journal + ' partition already exists'
                         ' and --dmcrypt specified')
         LOG.debug('Journal %s is a partition', journal)
         LOG.warning('OSD will not be hot-swappable if journal is not the same device as the osd data')
-        if get_partition_type(journal) in (JOURNAL_UUID, MPATH_JOURNAL_UUID):
+        part_type, journal_uuid = jrnlDevCtx.get_partition_guids()
+        if part_type in (JOURNAL_UUID, MPATH_JOURNAL_UUID):
             LOG.debug('Journal %s was previously prepared with ceph-disk. Reusing it.', journal)
             reusing_partition = True
             # Read and reuse the partition uuid from this journal's previous life.
             # We reuse the uuid instead of changing it because udev does not reliably
             # notice changes to an existing partition's GUID.
             # See http://tracker.ceph.com/issues/10146
-            journal_uuid = get_partition_uuid(journal)
             LOG.debug('Reusing journal with uuid %s', journal_uuid)
         else:
             LOG.warning('Journal %s was not prepared with ceph-disk. Symlinking directly.', journal)
             return (journal, None, None)
 
-    journal_symlink = '/dev/disk/by-partuuid/{journal_uuid}'.format(
-        journal_uuid=journal_uuid,
-        )
+    journal_symlink = jrnlDevCtx.get_journal_symlink(journal_uuid)
 
     journal_dmcrypt = None
     if journal_dm_keypath:
@@ -1306,7 +1892,7 @@ def prepare_journal_dev(
 
     ptype = JOURNAL_UUID
     ptype_tobe = JOURNAL_UUID
-    if is_mpath(journal):
+    if jrnlDevCtx.get_device_class() == 'dm-multipath':
         ptype = MPATH_JOURNAL_UUID
         ptype_tobe = MPATH_JOURNAL_UUID
     if journal_dm_keypath:
@@ -1322,10 +1908,6 @@ def prepare_journal_dev(
         # we're sharing the disk between osd data and journal;
         # make journal be partition number 2, so it's pretty
         num = 2
-        journal_part = '{num}:0:{size}M'.format(
-            num=num,
-            size=journal_size,
-            )
     else:
         # sgdisk has no way for me to say "whatever is the next
         # free index number" when setting type guids etc, so we
@@ -1334,12 +1916,16 @@ def prepare_journal_dev(
         # then again nothing guards the partition table from races
         # anyway
         num = get_free_partition_index(dev=journal)
-        journal_part = '{num}:0:+{size}M'.format(
-            num=num,
-            size=journal_size,
-            )
         LOG.warning('OSD will not be hot-swappable if journal is not the same device as the osd data')
 
+    #
+    # +{size}M format is advisable, else partitions length may not get
+    # aligned to hardware sector size on devices (Eg. SSDs with 4K/8k/16K blocks)
+    #
+    journal_part = '{num}:0:+{size}M'.format(
+        num=num,
+        size=journal_size,
+        )
     dev_size = get_dev_size(journal)
 
     if journal_size > dev_size:
@@ -1351,6 +1937,8 @@ def prepare_journal_dev(
 
     try:
         LOG.debug('Creating journal partition num %d size %d on %s', num, journal_size, journal)
+        journal_dev = jrnlDevCtx.get_dev_node()
+        LOG.debug('Journal Device Node is: %s', journal_dev)
         command_check_call(
             [
                 'sgdisk',
@@ -1366,21 +1954,26 @@ def prepare_journal_dev(
                     ),
                 '--mbrtogpt',
                 '--',
-                journal,
+                journal_dev,
                 ]
             )
 
         update_partition(journal, 'prepared')
 
         # wait for udev event queue to clear
-        command(
-            [
-                'udevadm',
-                'settle',
-                ],
-            )
+        udev_settle()
 
         LOG.debug('Journal is GPT partition %s', journal_symlink)
+		#
+		# Check if the kernel/udev detected the change, if not then we need to probe
+		#
+        partdev = wait_partition(jrnlDevCtx, num, 8)
+        if not partdev:
+            LOG.info('Journal Partition device not auto-updated, probing now')
+            update_partition(journal, 'prepared')
+            # wait for udev event queue to clear
+            udev_settle()
+            partdev = jrnlDevCtx.get_partition_dev(num)
 
         if journal_dm_keypath:
             if luks:
@@ -1533,6 +2126,19 @@ def prepare_dir(
     write_one_line(path, 'magic', CEPH_OSD_ONDISK_MAGIC)
 
 
+def wait_partition(devctx, part_num, retry_count):
+    attempt = 0
+    rawdev = None
+    while attempt < retry_count:
+        LOG.debug('Waiting for partition dev Appempt: %i of %i', attempt, retry_count)
+        rawdev = devctx.get_partition_dev(part_num)
+        if rawdev:
+            LOG.debug('Got Partition %i  Device: %s', part_num, rawdev)
+            break
+        attempt = attempt + 1
+        time.sleep(1)
+    return rawdev
+
 def prepare_dev(
     data,
     journal,
@@ -1557,12 +2163,19 @@ def prepare_dev(
     it.
     """
 
+    devCtx = get_block_device_ctx(data)
+    if not devCtx:
+        raise Error(data + ' Device is not Block dev?')
+
     ptype_tobe = TOBE_UUID
     ptype_osd = OSD_UUID
-    if is_mpath(data):
+    if devCtx.get_device_class() == 'dm-multipath':
         ptype_tobe = MPATH_TOBE_UUID
         ptype_osd = MPATH_OSD_UUID
 
+    #
+    # TODO: Handle dm-crypt layering on dm-multipath
+    #
     if osd_dm_keypath:
         ptype_tobe = DMCRYPT_TOBE_UUID
         if luks:
@@ -1571,23 +2184,30 @@ def prepare_dev(
             ptype_osd = DMCRYPT_OSD_UUID
 
     rawdev = None
-    if is_partition(data):
+    if devCtx.is_partition():
         LOG.debug('OSD data device %s is a partition', data)
         rawdev = data
     else:
         LOG.debug('Creating osd partition on %s', data)
+        sect_sz = devCtx.get_hw_sector_size()
+        sizeMb = get_largest_free_part_size(data, sect_sz)
+        data_part = '1:0:+{size}M'.format( size=sizeMb)
+        # Need to use real device node, Udev/multipath issues seen
+        # when partition command is run on device node links
+        data_dev = devCtx.get_dev_node()
+        LOG.debug('Actual Device node is: %s', data_dev)
         try:
             command_check_call(
                 [
                     'sgdisk',
-                    '--largest-new=1',
+                    '--new={part}'.format(part=data_part),
                     '--change-name=1:ceph data',
                     '--partition-guid=1:{osd_uuid}'.format(
                         osd_uuid=osd_uuid,
                         ),
                     '--typecode=1:%s' % ptype_tobe,
                     '--',
-                    data,
+                    data_dev,
                 ],
             )
             update_partition(data, 'created')
@@ -1601,7 +2221,28 @@ def prepare_dev(
         except subprocess.CalledProcessError as e:
             raise Error(e)
 
-        rawdev = get_partition_dev(data, 1)
+        # wait for udev event queue to clear
+        udev_settle()
+        #
+        # Check if the kernel/udev detected the change, if not then we need to probe
+        #
+        num = 1
+        rawdev = wait_partition(devCtx, num, 8)
+        if not rawdev:
+            LOG.info('Data partition device not auto-updated, probing now')
+            update_partition(data, 'created')
+            # wait for udev event queue to clear
+            udev_settle()
+            rawdev = devCtx.get_partition_dev(num)
+
+        if rawdev:
+            LOG.info('Data Partition No=%d on %s is %s', num, data, rawdev)
+        else:
+            LOG.warning('Data Partition device not created?')
+
+
+    if not rawdev:
+        raise Error('Unable to get data part device !!!!!')
 
     dev = None
     if osd_dm_keypath:
@@ -1660,7 +2301,7 @@ def prepare_dev(
         if rawdev != dev:
             dmcrypt_unmap(osd_uuid)
 
-    if not is_partition(data):
+    if not devCtx.is_partition():
         try:
             command_check_call(
                 [
@@ -1672,6 +2313,8 @@ def prepare_dev(
             )
         except subprocess.CalledProcessError as e:
             raise Error(e)
+        # wait for udev event queue to clear
+        udev_settle();
 
 def check_journal_reqs(args):
     _, allows_journal = command([
@@ -1697,7 +2340,10 @@ def main_prepare(args):
 
     try:
         # first learn what the osd allows/wants/needs
-        (allows_journal, wants_journal, needs_journal) = check_journal_reqs(args)
+        #(allows_journal, wants_journal, needs_journal) = check_journal_reqs(args)
+        #TEMP
+        allows_journal = True
+        wants_journal = True
 
         prepare_lock.acquire()  # noqa
         if not os.path.exists(args.data):
@@ -1834,7 +2480,8 @@ def main_prepare(args):
             raise Error('invalid osd_dmcrypt_type parameter (must be luks or plain): ', dmcrypt_type)
 
         # colocate journal with data?
-        if wants_journal and stat.S_ISBLK(dmode) and not is_partition(args.data) and args.journal is None and args.journal_file is None:
+        devCtx = get_block_device_ctx(args.data)
+        if wants_journal and stat.S_ISBLK(dmode) and not devCtx.is_partition() and args.journal is None and args.journal_file is None:
             LOG.info('Will colocate journal with data on %s', args.data)
             args.journal = args.data
 
@@ -2144,7 +2791,8 @@ def mount_activate(
             # dev corresponds to a dmcrypt cyphertext device - map it before
             # proceeding.
             rawdev = dev
-            ptype = get_partition_type(rawdev)
+            devCtx = get_block_device_ctx(rawdev)
+            ptype = devCtx.get_partition_type()
             if ptype in [DMCRYPT_OSD_UUID]:
                 luks = False
                 cryptsetup_parameters = ['--key-size', '256']
@@ -2153,7 +2801,7 @@ def mount_activate(
                 cryptsetup_parameters = []
             else:
                 raise Error('activate --dmcrypt called for invalid dev %s' % (dev))
-            part_uuid = get_partition_uuid(rawdev)
+            part_uuid = devCtx.get_partition_uuid(rawdev)
             dmcrypt_key_path = get_dmcrypt_key_path(part_uuid, dmcrypt_key_dir, luks)
             dev = dmcrypt_map(
                     rawdev=rawdev,
@@ -2417,9 +3065,10 @@ def main_activate(args):
     try:
         mode = os.stat(args.path).st_mode
         if stat.S_ISBLK(mode):
-            if (is_partition(args.path) and
-                get_partition_type(args.path) == MPATH_OSD_UUID and
-                not is_mpath(args.path)):
+            devCtx = get_block_device_ctx(args.path)
+            if (devCtx.is_partition() and
+                devCtx.get_partition_type() == MPATH_OSD_UUID and
+                devCtx.get_device_class() != 'dm-multipath'):
                 raise Error('%s is not a multipath block device' %
                             args.path)
             (cluster, osd_id) = mount_activate(
@@ -2475,9 +3124,10 @@ def get_journal_osd_uuid(path):
     if not stat.S_ISBLK(mode):
         raise Error('%s is not a block device' % path)
 
-    if (is_partition(path) and
-        get_partition_type(path) == MPATH_JOURNAL_UUID and
-        not is_mpath(path)):
+    devCtx = get_block_device_ctx(args.path)
+    if (devCtx.is_partition() and
+        devCtx.get_partition_type() == MPATH_OSD_UUID and
+        devCtx.get_device_class() != 'dm-multipath'):
         raise Error('%s is not a multipath block device' %
                     path)
 
@@ -2516,7 +3166,8 @@ def main_activate_journal(args):
             # journal dev corresponds to a dmcrypt cyphertext device - map
             # it before proceeding.
             rawdev = args.dev
-            ptype = get_partition_type(rawdev)
+            devCtx = get_block_device_ctx(rawdev)
+            ptype, part_uuid = devCtx.get_partition_guids()
             if ptype in [DMCRYPT_JOURNAL_UUID]:
                 luks = False
                 cryptsetup_parameters = ['--key-size', '256']
@@ -2525,7 +3176,6 @@ def main_activate_journal(args):
                 cryptsetup_parameters = []
             else:
                 raise Error('activate-journal --dmcrypt called for invalid dev %s' % (rawdev))
-            part_uuid = get_partition_uuid(rawdev)
             dmcrypt_key_path = get_dmcrypt_key_path(part_uuid, args.dmcrypt_key_dir, luks)
             dev = dmcrypt_map(
                     rawdev=rawdev,
@@ -2661,7 +3311,8 @@ def get_dev_fs(dev):
         return fstype
     else:
         return None
-
+'''
+UNUSED
 def split_dev_base_partnum(dev):
     if is_mpath(dev):
         partnum = partnum_mpath(dev)
@@ -2671,14 +3322,17 @@ def split_dev_base_partnum(dev):
         partnum = open(os.path.join(b, 'partition')).read().strip()
         base = get_partition_base(dev)
     return (base, partnum)
+'''
 
-def get_partition_type(part):
-    return get_blkid_partition_info(part, 'ID_PART_ENTRY_TYPE')
-    #return get_sgdisk_partition_info(part, 'Partition GUID code: (\S+)')
 
-def get_partition_uuid(part):
-    return get_blkid_partition_info(part, 'ID_PART_ENTRY_UUID')
-    #return get_sgdisk_partition_info(part, 'Partition unique GUID: (\S+)')
+
+def get_blkdev_partition_type(basedev, partdev, partnum):
+    return get_blkid_partition_info(partdev, 'ID_PART_ENTRY_TYPE')
+    #return get_sgdisk_partition_info(basedev, partnum, 'Partition GUID code: (\S+)')
+
+def get_blkdev_partition_uuid(basedev, partdev, partnum):
+    return get_blkid_partition_info(partdev, 'ID_PART_ENTRY_UUID')
+    #return get_sgdisk_partition_info(basedev, partnum, 'Partition unique GUID: (\S+)')
 
 def get_blkid_partition_info(dev, what=None):
     out, _ = command(
@@ -2699,14 +3353,161 @@ def get_blkid_partition_info(dev, what=None):
     else:
         return p
 
-def get_sgdisk_partition_info(dev, regexp):
-    (base, partnum) = split_dev_base_partnum(dev)
-    out, _ = command(['sgdisk', '-i', partnum, base])
+def get_sgdisk_partition_info(basedev, partnum, regexp):
+    out, _ = command(['sgdisk', '-i', partnum, basedev])
     for line in out.splitlines():
         m = re.match(regexp, line)
         if m:
             return m.group(1).lower()
     return None
+
+
+def get_udev_partition_ids(devCtx):
+
+    ptype = devCtx.get_dev_property('ID_PART_ENTRY_TYPE')
+    puuid = devCtx.get_dev_property('ID_PART_ENTRY_UUID')
+
+    return ptype, puuid
+
+"""
+Read partition type and guid
+TODO: cksum check
+"""
+def rawread_partition_guids(base_dev, part_num, hw_sector_sz):
+
+
+    LOG.debug('RawRead GPT: Device=%s Partition=%i HW-Sector=%i', base_dev,
+                part_num, hw_sector_sz)
+    # Location of the GTP Header on the disk
+    gpt_hdr_sector = long(1)
+    # standard 'EFI part' gpt signature
+    gpt_hdr_efi_signature = 0x5452415020494645
+
+    """
+    GPT Header Format, Header encompasses the full sector
+    however, we want only the first 92 bytes
+    Also, the GPT header is written in little-endian format!
+    See: http://en.wikipedia.org/wiki/GUID_Partition_Table#Partition_entries
+    """
+
+    struct_gpt_hdr_format = '<QIIIIQQQQ16sQIII'
+    #
+    # Partition entry format (128 Bytes)
+    #
+    struct_gpt_part_entry_format  = '<16s16sQQQ'
+
+    gpt_hdr_offset = hw_sector_sz * gpt_hdr_sector
+    fd = os.open(base_dev, os.O_RDONLY)
+    try:
+        os.lseek(fd, gpt_hdr_offset, os.SEEK_SET)
+    except Exception as error:
+        os.close(fd)
+        return None, None
+
+    read_sz = hw_sector_sz
+    try:
+        gpt_hdr_raw = os.read(fd, read_sz)
+    except Exception as error:
+        os.close(fd)
+        return None, None
+
+    gpt_hdr = struct.unpack_from(struct_gpt_hdr_format, gpt_hdr_raw)
+
+    gpt_signature = gpt_hdr[0]
+    LOG.debug('GPT-Signature %lx', gpt_signature)
+
+    if gpt_signature != gpt_hdr_efi_signature:
+        LOG.debug('Not a GPT partition!')
+        os.close(fd)
+        return None, None
+
+
+    offset_part_ent_table = gpt_hdr[10]
+    nr_part_ent = gpt_hdr[11]
+    sz_part_ent = gpt_hdr[12]
+
+    if nr_part_ent == 0 or sz_part_ent == 0:
+        LOG.debug('BAD GPT Entries: Num PartEnt: %i Size PartEnt=%i', nr_part_ent, sz_part_ent)
+        os.close(fd)
+        return None, None
+
+    LOG.debug('offset_part_ent_table=%unr_part_ent= %u sz_part_ent=%u',
+        offset_part_ent_table, nr_part_ent, sz_part_ent)
+
+    part_index = part_num - 1
+    if part_index >= nr_part_ent:
+        os.close(fd)
+        return None, None
+
+    # get to the partition sector
+    nr_parts_per_sector = hw_sector_sz / sz_part_ent
+    offset_lba_part_ent = part_index / nr_parts_per_sector
+    offset_part_ent = (offset_part_ent_table + offset_lba_part_ent) * hw_sector_sz
+
+    LOG.debug('nr_parts_per_sector=%u offset_lba_part_ent=%u offset_part_ent=%u',
+            nr_parts_per_sector, offset_lba_part_ent, offset_part_ent)
+
+    try:
+        os.lseek(fd, offset_part_ent, os.SEEK_SET)
+    except Exception as error:
+        os.close(fd)
+        return None, None
+
+    read_sz = hw_sector_sz
+    try:
+        gpt_part_ents = os.read(fd, read_sz)
+    except Exception as error:
+        os.close(fd)
+        return None, None
+
+    offset_part_ent_num = part_index % nr_parts_per_sector
+    offset_byte_part_ent_num = offset_part_ent_num * sz_part_ent
+
+    LOG.debug('offset_part_ent_num=%u, offset_byte_part_ent_num =%u',
+            offset_part_ent_num, offset_byte_part_ent_num)
+
+    part_ent = struct.unpack_from(struct_gpt_part_entry_format,
+        gpt_part_ents, offset_byte_part_ent_num)
+
+    ptype_guid = str(uuid.UUID(bytes_le = part_ent[0]))
+    part_guid  = str(uuid.UUID(bytes_le = part_ent[1]))
+    LOG.debug('PTYPE GUID: %s', ptype_guid)
+    LOG.debug('PART GUID: %s' , part_guid)
+
+    os.close(fd)
+    return ptype_guid, part_guid
+
+def get_partition_guids(devCtx, basedev, partdev, partnum):
+
+    """
+    1. Read the uuids from the udev db
+    """
+
+    LOG.debug('Part Get-ID udev');
+    ptype, puuid = get_udev_partition_ids(devCtx)
+    if ptype and puuid:
+        return ptype, puuid
+
+    """
+    2. Use blkid/sgdisk
+    """
+    LOG.debug('Part Get-ID blkid/sgdisk');
+    ptype = get_blkdev_partition_type(basedev, partdev, partnum)
+    puuid = get_blkdev_partition_uuid(basedev, partdev, partnum)
+    if ptype and puuid:
+        return ptype, puuid
+
+    """
+    3. Attempt a rawread
+
+    """
+    LOG.debug('Part Get-ID raw-read');
+    hw_sector_sz = devCtx.get_hw_sector_size()
+    if hw_sector_sz:
+        ptype, puuid = rawread_partition_guids(basedev, partnum, hw_sector_sz)
+        return ptype, puuid
+
+    return None, None
 
 def more_osd_info(path, uuid_map, desc):
     desc['ceph_fsid'] = get_oneliner(path, 'ceph_fsid')
@@ -2817,10 +3618,12 @@ def list_dev(dev, uuid_map, journal_map):
         'dmcrypt': {},
     }
 
-    info['is_partition'] = is_partition(dev)
+    devCtx = get_block_device_ctx(dev)
+
+    info['is_partition'] = devCtx.is_partition()
     if info['is_partition']:
-        ptype = get_partition_type(dev)
-        info['uuid'] = get_partition_uuid(dev)
+        ptype, uuid = devCtx.get_partition_guids()
+        info['uuid'] = uuid
     else:
         ptype = 'unknown'
     info['ptype'] = ptype
@@ -2831,14 +3634,14 @@ def list_dev(dev, uuid_map, journal_map):
             info['multipath'] = True
         list_dev_osd(dev, uuid_map, info)
     elif ptype == DMCRYPT_OSD_UUID:
-        holders = is_held(dev)
+        holders = devCtx.is_held()
         info['type'] = 'data'
         info['dmcrypt']['holders'] = holders
         info['dmcrypt']['type'] = 'plain'
         if len(holders) == 1:
             list_dev_osd('/dev/' + holders[0], uuid_map, info)
     elif ptype == DMCRYPT_LUKS_OSD_UUID:
-        holders = is_held(dev)
+        holders = devCtx.is_held()
         info['type'] = 'data'
         info['dmcrypt']['holders'] = holders
         info['dmcrypt']['type'] = 'LUKS'
@@ -2851,14 +3654,14 @@ def list_dev(dev, uuid_map, journal_map):
         if info.get('uuid') in journal_map:
             info['journal_for'] = journal_map[info['uuid']]
     elif ptype == DMCRYPT_JOURNAL_UUID:
-        holders = is_held(dev)
+        holders = devCtx.is_held()
         info['type'] = 'journal'
         info['dmcrypt']['type'] = 'plain'
         info['dmcrypt']['holders'] = holders
         if info.get('uuid') in journal_map:
             info['journal_for'] = journal_map[info['uuid']]
     elif ptype == DMCRYPT_LUKS_JOURNAL_UUID:
-        holders = is_held(dev)
+        holders = devCtx.is_held()
         info['type'] = 'journal'
         info['dmcrypt']['type'] = 'LUKS'
         info['dmcrypt']['holders'] = holders
@@ -2886,10 +3689,10 @@ def list_devices(args):
     for base, parts in sorted(partmap.iteritems()):
         for p in parts:
             dev = get_dev_path(p)
-            part_uuid = get_partition_uuid(dev)
+            devCtx = get_block_device_ctx(dev)
+            ptype, part_uuid = devCtx.get_partition_guids()
             if part_uuid:
                 uuid_map[part_uuid] = dev
-            ptype = get_partition_type(dev)
             LOG.debug("main_list: " + dev +
                       " ptype = " + str(ptype) +
                       " uuid = " + str(part_uuid))
@@ -3047,8 +3850,8 @@ def main_trigger(args):
         )
         return
 
-    parttype = get_partition_type(args.dev)
-    partid = get_partition_uuid(args.dev)
+    devCtx = get_block_device_ctx(args.dev)
+    parttype, partid = devCtx.get_partition_guids()
 
     LOG.info('trigger {dev} parttype {parttype} uuid {partid}'.format(
         dev=args.dev,
