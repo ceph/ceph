@@ -807,12 +807,14 @@ void RGWZoneGroup::decode_json(JSONObj *obj)
 
 void RGWPeriodMap::dump(Formatter *f) const
 {
+  encode_json("id", id, f);
   encode_json("zonegroups", zonegroups, f);
   encode_json("master_zonegroup", master_zonegroup, f);
 }
 
 void RGWPeriodMap::decode_json(JSONObj *obj)
 {
+  JSONDecoder::decode_json("id", id, obj);
   JSONDecoder::decode_json("zonegroups", zonegroups, obj);
   /* backward compatability with region */
   if (zonegroups.empty()) {
