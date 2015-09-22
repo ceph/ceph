@@ -7910,10 +7910,13 @@ int RGWRados::list_raw_objects(rgw_bucket& pool, const string& prefix_filter,
 
   vector<RGWObjEnt> objs;
   int r = pool_iterate(ctx.iter_ctx, max, objs, is_truncated, &filter);
-  if (r < 0) {
+  if (r < 0 && r != -ENOENT) {
     lderr(cct) << "failed to list objects pool_iterate returned r=" << r << dendl;
     return r;
   }
+  if(r == -ENOENT){
+    return r;
+  }	
 
   vector<RGWObjEnt>::iterator iter;
   for (iter = objs.begin(); iter != objs.end(); ++iter) {
