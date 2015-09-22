@@ -5390,7 +5390,7 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	ctx->delta_stats.num_wr++;
       }
       obs.oi.set_flag(object_info_t::FLAG_OMAP);
-      obs.oi.set_omap_digest(-1);
+      obs.oi.clear_omap_digest();
       break;
 
     case CEPH_OSD_OP_OMAPRMKEYS:
