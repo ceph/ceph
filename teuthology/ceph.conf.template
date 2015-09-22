@@ -23,6 +23,8 @@
 
         osd pool default erasure code profile = "plugin=jerasure technique=reed_sol_van k=2 m=1 ruleset-failure-domain=osd"
 
+	osd default data pool replay window = 5
+
 [osd]
         osd journal size = 100
 
