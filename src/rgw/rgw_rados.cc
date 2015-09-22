@@ -643,6 +643,7 @@ int RGWPeriod::init(CephContext *_cct, RGWRados *_store, bool setup_obj)
     RGWRealm realm(realm_id, realm_name);
     int ret = realm.init(cct, store);
     if (ret < 0) {
+      derr << "RGWPeriod::init failed to init realm " << realm_id << " for period " << id << dendl;
       ldout(cct, 0) << "failed to init realm " << realm_name  << " id " << realm_id << " : " <<
 	cpp_strerror(-ret) << dendl;
       return ret;
@@ -1129,14 +1130,16 @@ int RGWZoneGroupMap::update(RGWRealm& realm)
 }
 
 int RGWZoneGroupMap::update(CephContext *cct, RGWRados *store,
-			    const string& period_id)
+			    const string& period_id,
+			    const string& realm_id)
 {
   Mutex::Locker l(lock);
   RGWPeriod period(period_id);
 
-  int ret = period.init(cct, store);
+  derr << "update period " << period_id << " realm " << realm_id << dendl;
+  int ret = period.init(cct, store, realm_id);
   if (ret < 0) {
-    cerr << "failed to init period: " << cpp_strerror(-ret) << std::endl;
+    derr << "failed to init period: " << cpp_strerror(-ret) << dendl;
     return ret;
   }
 
