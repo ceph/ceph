@@ -1934,6 +1934,26 @@ int main(int argc, char **argv)
 	  cerr << "ERROR: couldn't create realm " << realm_name << ": " << cpp_strerror(-ret) << std::endl;
 	  return ret;
 	}
+
+	ret = store->zonegroup_map.update(realm);
+	if (ret < 0) {
+	  cerr << "ERROR: couldn't update realm " << realm_name << ": " << cpp_strerror(-ret) << std::endl;
+	  return ret;
+	}
+
+	ret = store->zonegroup_map.update(g_ceph_context, store, realm.get_current_period(), realm.get_id());
+	if (ret < 0) {
+	  cerr << "ERROR: couldn't update " << realm_name << " current period: " << cpp_strerror(-ret)
+	       << std::endl;
+	  return ret;
+	}
+
+	ret = store->zonegroup_map.store(g_ceph_context, store);
+	if (ret < 0) {
+	  cerr << "ERROR: couldn't store zonegroup map info: " << cpp_strerror(-ret) << std::endl;
+	  return 1;
+	}
+
 	encode_json("realm", realm, formatter);
 	formatter->flush(cout);
 	cout << std::endl;
@@ -2320,7 +2340,7 @@ int main(int argc, char **argv)
 	    return -ret;
 	  }
 	  zonegroupmap.update(realm);
-	  zonegroupmap.update(g_ceph_context, store, realm.get_current_period());
+	  zonegroupmap.update(g_ceph_context, store, realm.get_current_period(), realm.get_id());
 	}
 
 	list<string> zonegroups;

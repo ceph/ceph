@@ -1175,7 +1175,8 @@ struct RGWZoneGroupMap {
   int update(RGWZoneGroup& zonegroup);
   int update(RGWRealm& realm);
   int update(CephContext *cct, RGWRados *store,
-	     const string& period_id);
+	     const string& period_id,
+	     const string& realm_id);
   
   int get_master_zonegroup(const string& current_period,
 			   RGWZoneGroup& master_zonegroup);
