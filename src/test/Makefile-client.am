@@ -533,6 +533,15 @@ ceph_test_rgw_manifest_LDADD = \
 ceph_test_rgw_manifest_CXXFLAGS = $(UNITTEST_CXXFLAGS)
 bin_DEBUGPROGRAMS += ceph_test_rgw_manifest
 
+ceph_test_rgw_obj_SOURCES = test/rgw/test_rgw_obj.cc
+ceph_test_rgw_obj_LDADD = \
+	$(LIBRADOS) $(LIBRGW) $(LIBRGW_DEPS) $(CEPH_GLOBAL) \
+	$(UNITTEST_LDADD) $(CRYPTO_LIBS) \
+	-lcurl -luuid -lexpat
+
+ceph_test_rgw_obj_CXXFLAGS = $(UNITTEST_CXXFLAGS)
+bin_DEBUGPROGRAMS += ceph_test_rgw_obj
+
 ceph_test_cls_rgw_meta_SOURCES = test/test_rgw_admin_meta.cc
 ceph_test_cls_rgw_meta_LDADD = \
 	$(LIBRADOS) $(LIBRGW) $(CEPH_GLOBAL) \

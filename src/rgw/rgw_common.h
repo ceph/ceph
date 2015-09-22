@@ -940,6 +940,10 @@ struct rgw_obj_key {
     set(n, i);
   }
 
+  rgw_obj_key(const cls_rgw_obj_key& k) {
+    set(k);
+  }
+
   void set(const cls_rgw_obj_key& k) {
     name = k.name;
     instance = k.instance;
@@ -1191,8 +1195,7 @@ public:
     init(b, o);
   }
   rgw_obj(rgw_bucket& b, const rgw_obj_key& k) : in_extra_data(false) {
-    init(b, k.name);
-    set_instance(k.instance);
+    from_index_key(b, k);
   }
   void init(rgw_bucket& b, const std::string& o) {
     bucket = b;
@@ -1301,6 +1304,29 @@ public:
     return string(buf) + orig_obj;
   };
 
+  void from_index_key(rgw_bucket& b, const rgw_obj_key& key) {
+    if (key.name[0] != '_') {
+      init(b, key.name);
+      set_instance(key.instance);
+      return;
+    }
+    if (key.name[1] == '_') {
+      init(b, key.name.substr(1));
+      set_instance(key.instance);
+      return;
+    }
+    ssize_t pos = key.name.find('_', 1);
+    if (pos < 0) {
+      /* shouldn't happen, just use key */
+      init(b, key.name);
+      set_instance(key.instance);
+      return;
+    }
+
+    init_ns(b, key.name.substr(pos + 1), key.name.substr(1, pos -1));
+    set_instance(key.instance);
+  }
+
   void get_index_key(rgw_obj_key *key) const {
     key->name = get_index_key_name();
     key->instance = instance;
@@ -1391,6 +1417,11 @@ public:
       return false;
     }
 
+    if (obj[1] == '_') {
+      obj = obj.substr(1);
+      return true;
+    }
+
     size_t period_pos = obj.find('.');
     if (period_pos < pos) {
       return false;
@@ -1435,7 +1466,11 @@ public:
     if (struct_v >= 4)
       ::decode(instance, bl);
     if (ns.empty() && instance.empty()) {
-      orig_obj = object;
+      if (object[0] != '_') {
+        orig_obj = object;
+      } else {
+	orig_obj = object.substr(1);
+      }
     } else {
       if (struct_v >= 5) {
         ::decode(orig_obj, bl);
