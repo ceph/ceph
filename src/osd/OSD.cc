@@ -2005,10 +2005,6 @@ int OSD::init()
   peering_wq.drain();
 
   dout(0) << "done with init, starting boot process" << dendl;
-  set_state(STATE_BOOTING);
-
-  // we don't need to ask for an osdmap here; objecter will
-
   start_boot();
 
   return 0;
@@ -4072,7 +4068,6 @@ void OSD::tick()
   if (is_waiting_for_healthy()) {
     if (_is_healthy()) {
       dout(1) << "healthy again, booting" << dendl;
-      set_state(STATE_BOOTING);
       start_boot();
     }
   }
@@ -4406,7 +4401,7 @@ void OSD::ms_handle_connect(Connection *con)
       return;
     dout(10) << "ms_handle_connect on mon" << dendl;
 
-    if (is_booting()) {
+    if (is_preboot() || is_booting()) {
       start_boot();
     } else {
       utime_t now = ceph_clock_now(NULL);
@@ -4491,34 +4486,32 @@ struct C_OSD_GetVersion : public Context {
   C_OSD_GetVersion(OSD *o) : osd(o), oldest(0), newest(0) {}
   void finish(int r) {
     if (r >= 0)
-      osd->maybe_boot(oldest, newest);
+      osd->_got_mon_epochs(oldest, newest);
   }
 };
 
 void OSD::start_boot()
 {
+  set_state(STATE_PREBOOT);
   dout(10) << "start_boot - have maps " << superblock.oldest_map
 	   << ".." << superblock.newest_map << dendl;
   C_OSD_GetVersion *c = new C_OSD_GetVersion(this);
   monc->get_version("osdmap", &c->newest, &c->oldest, c);
 }
 
-void OSD::maybe_boot(epoch_t oldest, epoch_t newest)
+void OSD::_got_mon_epochs(epoch_t oldest, epoch_t newest)
 {
-  Mutex::Locker l(osd_lock);
-  _maybe_boot(oldest, newest);
+  if (is_preboot()) {
+    Mutex::Locker l(osd_lock);
+    _preboot(oldest, newest);
+  }
 }
 
-void OSD::_maybe_boot(epoch_t oldest, epoch_t newest)
+void OSD::_preboot(epoch_t oldest, epoch_t newest)
 {
-  if (!is_booting())
-    return;
-  dout(10) << "_maybe_boot mon has osdmaps " << oldest << ".." << newest << dendl;
-
-  if (is_initializing()) {
-    dout(10) << "still initializing" << dendl;
-    return;
-  }
+  assert(is_preboot());
+  dout(10) << __func__ << " _preboot mon has osdmaps "
+	   << oldest << ".." << newest << dendl;
 
   // if our map within recent history, try to add ourselves to the osdmap.
   if (osdmap->test_flag(CEPH_OSDMAP_NOUP)) {
@@ -4647,6 +4640,7 @@ void OSD::_send_boot()
 	   << dendl;
   _collect_metadata(&mboot->metadata);
   monc->send_mon_message(mboot);
+  set_state(STATE_BOOTING);
 }
 
 void OSD::_collect_metadata(map<string,string> *pm)
@@ -6624,9 +6618,9 @@ void OSD::handle_osd_map(MOSDMap *m)
     dout(10) << " msg say newest map is " << m->newest_map << ", requesting more" << dendl;
     osdmap_subscribe(osdmap->get_epoch()+1, true);
   }
-  else if (is_booting()) {
+  else if (is_preboot()) {
     if (m->get_source().is_mon())
-      _maybe_boot(m->oldest_map, m->newest_map);
+      _preboot(m->oldest_map, m->newest_map);
     else
       start_boot();
   }
