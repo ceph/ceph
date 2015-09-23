@@ -655,6 +655,11 @@ int RGWRealm::create(bool exclusive)
     ldout(cct, 0) << "ERROR creating new realm object " << name << ": " << cpp_strerror(-ret) << dendl;
     return ret;
   }
+  // create the control object for watch/notify
+  ret = create_control();
+  if (ret < 0) {
+    return ret;
+  }
   /* create new period for the realm */
   RGWPeriod period;
   ret = period.init(cct, store, id, name, false);
@@ -679,6 +684,32 @@ int RGWRealm::create(bool exclusive)
   }
 
   return 0;
+}
+
+int RGWRealm::delete_obj()
+{
+  int ret = RGWSystemMetaObj::delete_obj();
+  if (ret < 0) {
+    return ret;
+  }
+  return delete_control();
+}
+
+int RGWRealm::create_control()
+{
+  auto pool_name = get_pool_name(cct);
+  auto pool = rgw_bucket{pool_name.c_str()};
+  auto oid = get_control_oid();
+  return rgw_put_system_obj(store, pool, oid, nullptr, 0, true,
+                            nullptr, 0, nullptr);
+}
+
+int RGWRealm::delete_control()
+{
+  auto pool_name = get_pool_name(cct);
+  auto pool = rgw_bucket{pool_name.c_str()};
+  auto obj = rgw_obj{pool, get_control_oid()};
+  return store->delete_system_obj(obj);
 }
 
 const string& RGWRealm::get_pool_name(CephContext *cct)
@@ -727,6 +758,32 @@ int RGWRealm::set_current_period(const string& period_id, const rgw_meta_sync_st
   current_period = period_id;
   return update();
 }
+
+string RGWRealm::get_control_oid()
+{
+  return get_info_oid_prefix() + id + ".control";
+}
+
+int RGWRealm::notify_zone()
+{
+  // open a context on the realm's pool
+  auto pool = get_pool_name(cct);
+  librados::IoCtx ctx;
+  int r = store->get_rados_handle()->ioctx_create(pool.c_str(), ctx);
+  if (r < 0) {
+    lderr(cct) << "Failed to open pool " << pool << dendl;
+    return r;
+  }
+  // send a notify on the realm object
+  bufferlist bl;
+  r = ctx.notify2(get_control_oid(), bl, 0, nullptr);
+  if (r < 0) {
+    lderr(cct) << "Realm notify failed with " << r << dendl;
+    return r;
+  }
+  return 0;
+}
+
 
 int RGWPeriod::init(CephContext *_cct, RGWRados *_store, const string& period_realm_id,
 		    const string& period_realm_name, bool setup_obj)
