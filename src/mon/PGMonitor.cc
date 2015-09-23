@@ -1604,8 +1604,7 @@ bool PGMonitor::preprocess_command(MonOpRequestRef op)
     prefix = "pg ls";
     string poolstr;
     cmd_getval(g_ceph_context, cmdmap, "poolstr", poolstr);
-    int64_t pool = -2;
-    pool = mon->osdmon()->osdmap.lookup_pg_pool_name(poolstr.c_str());
+    int64_t pool = mon->osdmon()->osdmap.lookup_pg_pool_name(poolstr.c_str());
     if (pool < 0) {
       r = -ENOENT;
       ss << "pool " << poolstr << " does not exist";
