@@ -786,7 +786,6 @@ static void decode_zones(map<string, RGWZone>& zones, JSONObj *o)
 {
   RGWZone z;
   z.decode_json(o);
-  derr << "decode zone " << z.id << " name " << z.name << dendl;
   zones[z.id] = z;
 }
 
