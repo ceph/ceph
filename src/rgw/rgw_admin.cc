@@ -2299,6 +2299,9 @@ int main(int argc, char **argv)
 	  }
 	}
 
+	encode_json("zonegroup", zonegroup, formatter);
+	formatter->flush(cout);
+
 	RGWZoneGroupMap zonegroup_map;
 	ret = zonegroup_map.read(g_ceph_context, store);
 	if (ret < 0 && ret != -ENOENT) {
@@ -2585,70 +2588,37 @@ int main(int argc, char **argv)
       break;
     case OPT_ZONE_SET:
       {      
-	if (zone_name.empty() && zone_id.empty()) {
-	  cerr << "Missing zone name or id " << std::endl;
-	  return -EINVAL;
-	}
-
-	RGWRealm realm(realm_id, realm_name);
-	int ret = realm.init(g_ceph_context, store);
-	if (ret < 0) {
-	  cerr << "failed to init realm: " << cpp_strerror(-ret) << std::endl;
-	  return -ret;
-	}
-
-	RGWZoneGroup zonegroup(zonegroup_id,zonegroup_name);
-	ret = zonegroup.init(g_ceph_context, store);
-	if (ret < 0) {
-	  cerr << "WARNING: failed to initialize zonegroup" << std::endl;
-	}
-
 	RGWZoneParams zone(zone_name);
-	ret = zone.init(g_ceph_context, store, zonegroup, false);
+	int ret = zone.init(g_ceph_context, store, false);
 	if (ret < 0) {
 	  return -ret;
 	}
-	ret = zone.create();
-	if (ret < 0 && ret != -EEXIST) {
-	  cerr << "ERROR: couldn't create zone: " << cpp_strerror(-ret) << std::endl;
-	  return 1;
-	}
-	zone_id = zone.get_id();
+
 	ret = read_decode_json(infile, zone);
 	if (ret < 0) {
 	  return 1;
 	}
-	/* old version may overide the name and id */
-	zone.set_name(zone_name);
-	zone.set_id(zone_id);
+	
+	if (zone.get_id().empty() && zone.get_name().empty()) {
+	  cerr << "no zone name id or name in the json provided , assuming old format" << std::endl;
+	  if (zone_name.empty()) {
+	    cerr << "missing zone name"  << std::endl;
+	    return -EINVAL;
+	  }
+	  zone.set_name(zone_name);
+	  zone.set_id(zone_name);
+	}
 
-	ret = zone.update();
-	if (ret < 0) {
-	  cerr << "ERROR: couldn't update zone: " << cpp_strerror(-ret) << std::endl;
+	ret = zone.create();
+	if (ret < 0 && ret != -EEXIST) {
+	  cerr << "ERROR: couldn't create zone: " << cpp_strerror(-ret) << std::endl;
 	  return 1;
-	}
-	ret = zonegroup.add_zone(zone);
-	if (ret < 0) {
-	  cerr << "ERROR: couldn't add zone: " << cpp_strerror(-ret) << std::endl;
-	  return 1;
-	}
-
-	RGWZoneGroupMap zonegroup_map;
-	ret = zonegroup_map.read(g_ceph_context, store);
-	if (ret < 0 && ret != -ENOENT) {
-	  cerr << "ERROR: couldn't read zonegroup_map: " << cpp_strerror(-ret) << std::endl;
-	  return ret;
-	}
-
-	ret = zonegroup_map.update(g_ceph_context, store, realm, zonegroup);
-	if (ret < 0) {
-	  cerr << "failed to update zonegroup_map: " << cpp_strerror(-ret) << std::endl;
-	  return -ret;
-	}
-	ret = zonegroup_map.store(g_ceph_context, store);
-	if (ret < 0) {
-	  cerr << "failed to store zonegroup_map: " << cpp_strerror(-ret) << std::endl;
-	  return -ret;
+	} if (ret == -EEXIST) {
+	  ret = zone.update();
+	  if (ret < 0) {
+	    cerr << "ERROR: couldn't update zone: " << cpp_strerror(-ret) << std::endl;
+	    return 1;
+	  }
 	}
 
 	encode_json("zone", zone, formatter);
