@@ -20,9 +20,12 @@ If you built out of tree with CMake, then switch to your build directory before 
 
 from StringIO import StringIO
 from collections import defaultdict
+import getpass
 import signal
+import tempfile
 import threading
 import datetime
+import shutil
 import re
 import os
 import time
@@ -31,6 +34,7 @@ import sys
 import errno
 from unittest import suite
 import unittest
+from teuthology.orchestra.run import Raw, quote
 
 import logging
 
@@ -101,7 +105,7 @@ class LocalRemoteProcess(object):
             sys.stderr.write(err)
 
         if self.check_status and self.exitstatus != 0:
-            raise CommandFailedError(" ".join(self.args), self.exitstatus)
+            raise CommandFailedError(self.args, self.exitstatus)
 
     @property
     def finished(self):
@@ -149,23 +153,61 @@ class LocalRemote(object):
     def __init__(self):
         self.name = "local"
         self.hostname = "localhost"
+        self.user = getpass.getuser()
 
-    def run(self, args, check_status=True, wait=True, stdout=None, stderr=None, cwd=None, stdin=None):
+    def get_file(self, path, sudo, dest_dir):
+        tmpfile = tempfile.NamedTemporaryFile(delete=False).name
+        shutil.copy(path, tmpfile)
+        return tmpfile
+
+    def run(self, args, check_status=True, wait=True,
+            stdout=None, stderr=None, cwd=None, stdin=None,
+            logger=None, label=None):
+        log.info("run args={0}".format(args))
+
         # We don't need no stinkin' sudo
         args = [a for a in args if a != "sudo"]
 
-        for arg in args:
-            if not isinstance(arg, basestring):
-                raise RuntimeError("Oops, can't handle arg {0} type {1}".format(
-                    arg, arg.__class__
-                ))
+        # We have to use shell=True if any run.Raw was present, e.g. &&
+        shell = any([a for a in args if isinstance(a, Raw)])
 
-        log.info("Running {0}".format(args))
-        subproc = subprocess.Popen(args,
-                                   stdout=subprocess.PIPE,
-                                   stderr=subprocess.PIPE,
-                                   stdin=subprocess.PIPE,
-                                   cwd=cwd)
+        if shell:
+            filtered = []
+            i = 0
+            while i < len(args):
+                if args[i] == 'adjust-ulimits':
+                    i += 1
+                elif args[i] == 'ceph-coverage':
+                    i += 2
+                elif args[i] == 'timeout':
+                    i += 2
+                else:
+                    filtered.append(args[i])
+                    i += 1
+
+            args = quote(filtered)
+            log.info("Running {0}".format(args))
+
+            subproc = subprocess.Popen(args,
+                                       stdout=subprocess.PIPE,
+                                       stderr=subprocess.PIPE,
+                                       stdin=subprocess.PIPE,
+                                       cwd=cwd,
+                                       shell=True)
+        else:
+            log.info("Running {0}".format(args))
+
+            for arg in args:
+                if not isinstance(arg, basestring):
+                    raise RuntimeError("Oops, can't handle arg {0} type {1}".format(
+                        arg, arg.__class__
+                    ))
+
+            subproc = subprocess.Popen(args,
+                                       stdout=subprocess.PIPE,
+                                       stderr=subprocess.PIPE,
+                                       stdin=subprocess.PIPE,
+                                       cwd=cwd)
 
         if stdin:
             if not isinstance(stdin, basestring):
@@ -498,8 +540,9 @@ class LocalCephManager(CephManager):
 
 
 class LocalFilesystem(Filesystem):
-    def __init__(self):
+    def __init__(self, ctx):
         # Deliberately skip calling parent constructor
+        self._ctx = ctx
 
         self.admin_remote = LocalRemote()
 
@@ -522,8 +565,6 @@ class LocalFilesystem(Filesystem):
         self.mds_daemons = dict([(id_, LocalDaemon("mds", id_)) for id_ in self.mds_ids])
 
         self.client_remote = LocalRemote()
-
-        self._ctx = None
 
         self._conf = defaultdict(dict)
 
@@ -620,6 +661,8 @@ def exec_test():
         log.error("Some ceph binaries missing, please build them: {0}".format(" ".join(missing_binaries)))
         sys.exit(-1)
 
+    test_dir = tempfile.mkdtemp()
+
     # Run with two clients because some tests require the second one
     clients = ["0", "1"]
 
@@ -637,6 +680,28 @@ def exec_test():
             log.warn("Killing stray process {0}".format(line))
             os.kill(pid, signal.SIGKILL)
 
+    class LocalCluster(object):
+        def __init__(self, rolename="placeholder"):
+            self.remotes = {
+                remote: [rolename]
+            }
+
+        def only(self, requested):
+            return self.__class__(rolename=requested)
+
+    class LocalContext(object):
+        def __init__(self):
+            self.config = {}
+            self.teuthology_config = {
+                'test_path': test_dir
+            }
+            self.cluster = LocalCluster()
+
+        def __del__(self):
+            shutil.rmtree(self.teuthology_config['test_path'])
+
+    ctx = LocalContext()
+
     mounts = []
     for client_id in clients:
         # Populate client keyring (it sucks to use client.admin for test clients
@@ -651,7 +716,7 @@ def exec_test():
 
             open("./keyring", "a").write(p.stdout.getvalue())
 
-        mount_point = "/tmp/mnt.{0}".format(client_id)
+        mount_point = os.path.join(test_dir, "mnt.{0}".format(client_id))
         mount = LocalFuseMount(client_id, mount_point)
         mounts.append(mount)
         if mount.is_mounted():
@@ -660,7 +725,7 @@ def exec_test():
         else:
             if os.path.exists(mount_point):
                 os.rmdir(mount_point)
-    filesystem = LocalFilesystem()
+    filesystem = LocalFilesystem(ctx)
 
     from tasks.cephfs_test_runner import DecoratingLoader
 
@@ -682,7 +747,7 @@ def exec_test():
             pass
 
     decorating_loader = DecoratingLoader({
-        "ctx": None,
+        "ctx": ctx,
         "mounts": mounts,
         "fs": filesystem
     })
