@@ -2474,14 +2474,25 @@ int main(int argc, char **argv)
     case OPT_ZONE_CREATE:
       {
 	int ret;
+	RGWRealm realm(realm_id, realm_name);
 	RGWZoneGroup zonegroup(zonegroup_id, zonegroup_name);
-	if (!zonegroup_id.empty() || !zonegroup_name.empty()) {
+	/* if the user didn't provide zonegroup info , create stand alone zone */
+	if (!zonegroup_id.empty() || !zonegroup_id.empty()) {
 	  ret = zonegroup.init(g_ceph_context, store);
 	  if (ret < 0) {
 	    cerr << "unable to initialize zonegroup " << zonegroup_name << ": " << cpp_strerror(-ret) << std::endl;
 	    return ret;
 	  }
+	  if (realm_id.empty() && realm_name.empty()) {
+	    realm_id = zonegroup.realm_id;
+	  }
+	  ret = realm.init(g_ceph_context, store);
+	  if (ret < 0) {
+	    cerr << "ERROR: couldn't init realm:" << cpp_strerror(-ret) << std::endl;
+	    return ret;
+	  }
 	}
+
 	RGWZoneParams zone(zone_name, is_master);
 	ret = zone.init(g_ceph_context, store, false);
 	if (ret < 0) {
@@ -2493,12 +2504,30 @@ int main(int argc, char **argv)
 	  cerr << "failed to create zone " << zone_name << ": " << cpp_strerror(-ret) << std::endl;
 	  return ret;
 	}
-	if (!zonegroup_id.empty() || !zonegroup_name.empty()) {
+
+	if (!zonegroup_id.empty() || !zonegroup_id.empty()) {
 	  ret = zonegroup.add_zone(zone);
 	  if (ret < 0) {
 	    cerr << "failed to add zone " << zone_name << " to zonegroup " << zonegroup.get_name() << ": "
 		 << cpp_strerror(-ret) << std::endl;
 	    return ret;
+	  }
+	
+	  RGWZoneGroupMap zonegroup_map;
+	  ret = zonegroup_map.read(g_ceph_context, store);
+	  if (ret < 0 && ret != -ENOENT) {
+	    cerr << "ERROR: couldn't read zonegroup_map: " << cpp_strerror(-ret) << std::endl;
+	    return ret;
+	  }
+	  ret = zonegroup_map.update(g_ceph_context, store, realm, zonegroup);
+	  if (ret < 0) {
+	    cerr << "failed to update zonegroup_map: " << cpp_strerror(-ret) << std::endl;
+	    return -ret;
+	  }
+	  ret = zonegroup_map.store(g_ceph_context, store);
+	  if (ret < 0) {
+	    cerr << "failed to store zonegroup_map: " << cpp_strerror(-ret) << std::endl;
+	    return -ret;
 	  }
 	}
 
