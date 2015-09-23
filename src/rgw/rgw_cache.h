@@ -241,6 +241,7 @@ public:
   int get_system_obj(RGWObjectCtx& obj_ctx, RGWRados::SystemObject::Read::GetObjState& read_state,
                      RGWObjVersionTracker *objv_tracker, rgw_obj& obj,
                      bufferlist& bl, off_t ofs, off_t end,
+                     map<string, bufferlist> *attrs,
                      rgw_cache_entry_info *cache_info);
 
   int raw_obj_stat(rgw_obj& obj, uint64_t *psize, time_t *pmtime, uint64_t *epoch, map<string, bufferlist> *attrs,
@@ -285,13 +286,14 @@ template <class T>
 int RGWCache<T>::get_system_obj(RGWObjectCtx& obj_ctx, RGWRados::SystemObject::Read::GetObjState& read_state,
                      RGWObjVersionTracker *objv_tracker, rgw_obj& obj,
                      bufferlist& obl, off_t ofs, off_t end,
+                     map<string, bufferlist> *attrs,
                      rgw_cache_entry_info *cache_info)
 {
   rgw_bucket bucket;
   string oid;
   normalize_bucket_and_obj(obj.bucket, obj.get_object(), bucket, oid);
   if (ofs != 0)
-    return T::get_system_obj(obj_ctx, read_state, objv_tracker, obj, obl, ofs, end, cache_info);
+    return T::get_system_obj(obj_ctx, read_state, objv_tracker, obj, obl, ofs, end, attrs, cache_info);
 
   string name = normal_name(obj.bucket, oid);
 
@@ -300,6 +302,8 @@ int RGWCache<T>::get_system_obj(RGWObjectCtx& obj_ctx, RGWRados::SystemObject::R
   uint32_t flags = CACHE_FLAG_DATA;
   if (objv_tracker)
     flags |= CACHE_FLAG_OBJV;
+  if (attrs)
+    flags |= CACHE_FLAG_XATTRS;
   
   if (cache.get(name, info, flags, cache_info) == 0) {
     if (info.status < 0)
@@ -314,9 +318,11 @@ int RGWCache<T>::get_system_obj(RGWObjectCtx& obj_ctx, RGWRados::SystemObject::R
     i.copy_all(obl);
     if (objv_tracker)
       objv_tracker->read_version = info.version;
+    if (attrs)
+      *attrs = info.xattrs;
     return bl.length();
   }
-  int r = T::get_system_obj(obj_ctx, read_state, objv_tracker, obj, obl, ofs, end, cache_info);
+  int r = T::get_system_obj(obj_ctx, read_state, objv_tracker, obj, obl, ofs, end, attrs, cache_info);
   if (r < 0) {
     if (r == -ENOENT) { // only update ENOENT, we'd rather retry other errors
       info.status = r;
@@ -339,6 +345,9 @@ int RGWCache<T>::get_system_obj(RGWObjectCtx& obj_ctx, RGWRados::SystemObject::R
   info.flags = flags;
   if (objv_tracker) {
     info.version = objv_tracker->read_version;
+  }
+  if (attrs) {
+    info.xattrs = *attrs;
   }
   cache.put(name, info, cache_info);
   return r;
