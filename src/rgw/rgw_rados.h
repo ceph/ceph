@@ -873,6 +873,9 @@ struct RGWZoneParams : RGWSystemMetaObj {
   void init_id(CephContext *cct, RGWZoneGroup& zonegroup);
   int create_default(bool old_format = false);
 
+  void set_name(const string& _name) { name = _name;}
+  void set_id(const string& _id) { id = _id;}
+
   void encode(bufferlist& bl) const {
     ENCODE_START(6, 1, bl);
     ::encode(domain_root, bl);

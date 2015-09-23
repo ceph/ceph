@@ -2500,34 +2500,37 @@ int main(int argc, char **argv)
       break;
     case OPT_ZONE_SET:
       {
+	if (zone_name.empty() && zone_id.empty()) {
+	  cerr << "Missing zone name or id " << std::endl;
+	  return -EINVAL;
+	}
 	RGWZoneGroup zonegroup(zonegroup_id,zonegroup_name);
 	int ret = zonegroup.init(g_ceph_context, store);
 	if (ret < 0) {
 	  cerr << "WARNING: failed to initialize zonegroup" << std::endl;
 	}
-	RGWZoneParams zone;
+	RGWZoneParams zone(zone_name);
 	ret = zone.init(g_ceph_context, store, zonegroup, false);
 	if (ret < 0) {
-	  return 1;
-	}
-	ret = read_decode_json(infile, zone);
-	if (ret < 0) {
-	  return 1;
-	}
-	if (zone.get_name().empty() && zone.get_id().empty()) {
-	  cerr << "ERROR: missing zone name " << cpp_strerror(-ret) << std::endl;
-	  return 1;
+	  return -ret;
 	}
 	ret = zone.create();
 	if (ret < 0 && ret != -EEXIST) {
 	  cerr << "ERROR: couldn't create zone: " << cpp_strerror(-ret) << std::endl;
 	  return 1;
-	} else if (ret == -EEXIST) {
-	  ret = zone.update();
-	  if (ret < 0) {
-	    cerr << "ERROR: couldn't update zone: " << cpp_strerror(-ret) << std::endl;
-	    return 1;
-	  }
+	}
+	zone_id = zone.get_id();
+	ret = read_decode_json(infile, zone);
+	if (ret < 0) {
+	  return 1;
+	}
+	/* old version may overide the name and id */
+	zone.set_name(zone_name);
+	zone.set_id(zone_id);
+	ret = zone.update();
+	if (ret < 0) {
+	  cerr << "ERROR: couldn't update zone: " << cpp_strerror(-ret) << std::endl;
+	  return 1;
 	}
 	ret = zonegroup.add_zone(zone);
 	if (ret < 0) {
