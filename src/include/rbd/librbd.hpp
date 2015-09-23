@@ -1,4 +1,4 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 /*
  * Ceph - scalable distributed file system
@@ -165,6 +165,7 @@ public:
   int snap_unprotect(const char *snap_name);
   int snap_is_protected(const char *snap_name, bool *is_protected);
   int snap_set(const char *snap_name);
+  std::string snap_get();
 
   /* I/O */
   ssize_t read(uint64_t ofs, size_t len, ceph::bufferlist& bl);

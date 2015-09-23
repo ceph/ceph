@@ -757,6 +757,11 @@ namespace librbd {
     return r;
   }
 
+  string Image::snap_get()
+  {
+    return ((ImageCtx *)ctx)->snap_name;
+  }
+
   ssize_t Image::read(uint64_t ofs, size_t len, bufferlist& bl)
   {
     ImageCtx *ictx = (ImageCtx *)ctx;
