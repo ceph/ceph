@@ -2359,9 +2359,66 @@ int main(int argc, char **argv)
     case OPT_ZONEGROUPMAP_SET:
       {
 	RGWZoneGroupMap zonegroupmap;
-	int ret = read_decode_json(infile, zonegroupmap);
+	bufferlist bl;
+	int ret = read_input(infile, bl);
 	if (ret < 0) {
-	  return 1;
+	  cerr << "ERROR: failed to read input: " << cpp_strerror(-ret) << std::endl;
+	  return ret;
+	}
+	JSONParser p;
+	ret = p.parse(bl.c_str(), bl.length());
+	if (ret < 0) {
+	  cout << "failed to parse JSON" << std::endl;
+	  return ret;
+	}
+	try {
+	  decode_json_obj(zonegroupmap, &p);
+	} catch (JSONDecoder::err& e) {
+	  cout << "failed to decode: " << e.message << std::endl;	  
+	  RGWRegionMap region_map;
+	  try {
+	    decode_json_obj(region_map, &p);
+	    RGWRealm realm(realm_id, realm_name);
+	    ret = realm.init(g_ceph_context, store);
+	    if (ret < 0) {
+	      cerr << "failed to init realm: " << cpp_strerror(-ret) << std::endl;
+	      return -ret;
+	    }	    
+
+	    ret = zonegroupmap.update(realm);
+	    if (ret < 0) {
+	      cerr << "failed to update zonegroup_map: " << cpp_strerror(-ret) << std::endl;
+	    }  
+
+	    ret = zonegroupmap.update(g_ceph_context, store, realm.get_current_period(), realm.get_id());
+	    if (ret < 0) {
+	      cerr << "ERROR: couldn't update current period: " << cpp_strerror(-ret)
+		   << std::endl;
+	      return ret;
+	    }
+
+	    for(map<string, RGWZoneGroup>::iterator iter = region_map.regions.begin();
+		iter != region_map.regions.end(); iter++) {
+	      iter->second.set_id(iter->second.get_name());
+	      ret = zonegroupmap.update(g_ceph_context, store, realm, iter->second);
+	      if (ret < 0) {
+		cerr << "failed to update zonegroup_map: " << cpp_strerror(-ret) << std::endl;
+		return -ret;
+	      }
+	    }
+	    ret = zonegroupmap.update_master_zonegroup(realm.get_current_period(),
+						       region_map.master_region);
+	    if (ret < 0) {
+	      cerr << "ERROR: couldn't update master_zonegroup " << region_map.master_region << ": "
+		   << cpp_strerror(-ret) << std::endl;
+	      return ret;
+	    }
+	    zonegroupmap.bucket_quota = region_map.bucket_quota;
+	    zonegroupmap.user_quota = region_map.user_quota;
+	  } catch (JSONDecoder::err& e) {
+	    cout << "failed to decode: " << e.message << std::endl;
+	    return -EINVAL;
+	  }
 	}
 
 	ret = zonegroupmap.store(g_ceph_context, store);

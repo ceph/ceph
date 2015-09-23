@@ -800,6 +800,11 @@ static void decode_placement_targets(map<string, RGWZoneGroupPlacementTarget>& t
 void RGWZoneGroup::decode_json(JSONObj *obj)
 {
   RGWSystemMetaObj::decode_json(obj);
+  if (!id.empty()) {
+    derr << "old format " << dendl;
+    JSONDecoder::decode_json("name", name, obj);
+    id = name;
+  }    
   JSONDecoder::decode_json("api_name", api_name, obj);
   JSONDecoder::decode_json("is_master", is_master, obj);
   JSONDecoder::decode_json("endpoints", endpoints, obj);
@@ -819,10 +824,17 @@ void RGWPeriodMap::dump(Formatter *f) const
   encode_json("master_zonegroup", master_zonegroup, f);
 }
 
+static void decode_zonegroups(map<string, RGWZoneGroup>& zonegroups, JSONObj *o)
+{
+  RGWZoneGroup zg;
+  zg.decode_json(o);
+  zonegroups[zg.get_id()] = zg;
+}
+
 void RGWPeriodMap::decode_json(JSONObj *obj)
 {
   JSONDecoder::decode_json("id", id, obj);
-  JSONDecoder::decode_json("zonegroups", zonegroups, obj);
+  JSONDecoder::decode_json("zonegroups", zonegroups, decode_zonegroups, obj);
   /* backward compatability with region */
   if (zonegroups.empty()) {
     JSONDecoder::decode_json("regions", zonegroups, obj);
@@ -858,8 +870,11 @@ void RGWZoneGroupMap::dump(Formatter *f) const
 
 void RGWZoneGroupMap::decode_json(JSONObj *obj)
 {
-  JSONDecoder::decode_json("realms", realms, decode_realms, obj);
-  JSONDecoder::decode_json("periods", periods, decode_periods, obj);
+  /* check for old format */
+  if (!JSONDecoder::decode_json("realms", realms, decode_realms, obj) ) {
+    throw JSONDecoder::err("Old regionmap format");
+  }
+  JSONDecoder::decode_json("periods", periods, decode_periods, obj);  
   JSONDecoder::decode_json("bucket_quota", bucket_quota, obj);
   JSONDecoder::decode_json("user_quota", user_quota, obj);
 }
@@ -912,12 +927,6 @@ void RGWRealm::dump(Formatter *f) const
   encode_json("current_period", current_period, f);
 }
 
-static void decode_zonegroups(map<string, RGWZoneGroup>& zonegroups, JSONObj *o)
-{
-  RGWZoneGroup zg;
-  zg.decode_json(o);
-  zonegroups[zg.get_id()] = zg;
-}
 
 void RGWRealm::decode_json(JSONObj *obj)
 {
