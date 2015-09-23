@@ -178,9 +178,8 @@ bool MDSDaemon::asok_command(string command, cmdmap_t& cmdmap, string format,
       dout(1) << "Can't run that command on an inactive MDS!" << dendl;
       f->dump_string("error", "mds_not_active");
     } else {
-      handled =  mds_rank->handle_asok_command(command, cmdmap, f, ss);
+      handled = mds_rank->handle_asok_command(command, cmdmap, f, ss);
     }
-
   }
   f->flush(ss);
   delete f;
