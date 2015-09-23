@@ -2107,7 +2107,4 @@ void ECBackend::be_deep_scrub(
     o.digest = hinfo->get_chunk_hash(0);
     o.digest_present = true;
   }
-
-  o.omap_digest = seed;
-  o.omap_digest_present = true;
 }
