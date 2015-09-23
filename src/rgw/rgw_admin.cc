@@ -179,6 +179,7 @@ void _usage()
   cerr << "   --realm-id=<realm id>     realm id\n";
   cerr << "   --realm-new-name=<realm new name> realm new name\n";
   cerr << "   --zonegroup=<zonegroup>   zonegroup name\n";
+  cerr << "   --rgw-zonegroup=<zonegroup>   zonegroup name\n";
   cerr << "   --zone=<zone>             zone name\n";
   cerr << "   --rgw-zone=<zone>         zone in which radosgw is running\n";
   cerr << "   --fix                     besides checking bucket index, will also fix it\n";
@@ -1636,6 +1637,8 @@ int main(int argc, char **argv)
     } else if (ceph_argparse_witharg(args, i, &val, "--zonegroup-id", (char*)NULL)) {
       zonegroup_id = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--zonegroup", (char*)NULL)) {
+      zonegroup_name = val;
+    } else if (ceph_argparse_witharg(args, i, &val, "--rgw-zonegroup", (char*)NULL)) {
       zonegroup_name = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--zonegroup-new-name", (char*)NULL)) {
       zonegroup_new_name = val;
