@@ -19,6 +19,7 @@
 
 #include <pthread.h>
 #include "lockdep.h"
+#include "include/assert.h"
 #include "include/atomic.h"
 
 class RWLock
@@ -26,7 +27,7 @@ class RWLock
   mutable pthread_rwlock_t L;
   const char *name;
   mutable int id;
-  mutable atomic_t nrlock, nwlock;
+  mutable ceph::atomic_t nrlock, nwlock;
 
 public:
   RWLock(const RWLock& other);
