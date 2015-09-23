@@ -735,6 +735,7 @@ void RGWZoneParams::decode_json(JSONObj *obj)
 
 void RGWZone::dump(Formatter *f) const
 {
+  encode_json("id", name, f);
   encode_json("name", name, f);
   encode_json("endpoints", endpoints, f);
   encode_json("log_meta", log_meta, f);
@@ -744,6 +745,7 @@ void RGWZone::dump(Formatter *f) const
 
 void RGWZone::decode_json(JSONObj *obj)
 {
+  JSONDecoder::decode_json("id", id, obj);
   JSONDecoder::decode_json("name", name, obj);
   JSONDecoder::decode_json("endpoints", endpoints, obj);
   JSONDecoder::decode_json("log_meta", log_meta, obj);
