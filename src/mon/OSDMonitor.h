@@ -386,7 +386,6 @@ private:
   bool preprocess_remove_snaps(MonOpRequestRef op);
   bool prepare_remove_snaps(MonOpRequestRef op);
 
-  CephContext *cct;
   OpTracker op_tracker;
 
   int load_metadata(int osd, map<string, string>& m, ostream *err);
