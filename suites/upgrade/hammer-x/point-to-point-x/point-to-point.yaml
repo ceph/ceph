@@ -41,11 +41,16 @@ tasks:
    - workload_hammer
    - upgrade-sequence_hammer
 - print: "**** done parallel hammer branch"
+- install.upgrade:
+   client.1:
+     branch: hammer
 - parallel:
    - workload_x
    - upgrade-sequence_x
 - print: "**** done parallel -x branch"
 # Run test.sh on the -x upgraded cluster
+- install.upgrade:
+    client.1:
 - workunit:
     clients:
       client.1:
@@ -181,9 +186,10 @@ upgrade-sequence_hammer:
 workload_x:
    sequential:
    - workunit:
+       branch: hammer
        clients:
          client.1:
-         - rados/test.sh
+         - rados/test-upgrade-v9.0.1.sh
          - cls
    - print: "**** done rados/test.sh &  cls workload_x NOT upgraded  client"
    - workunit:

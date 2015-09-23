@@ -9,3 +9,5 @@ tasks:
     - workload
     - upgrade-sequence
 - print: "**** done parallel"
+- install.upgrade:
+    client.0:
