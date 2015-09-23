@@ -1234,6 +1234,8 @@ class RGWRealm : public RGWSystemMetaObj
   map<string, RGWZoneGroup> zonegroups;
   string current_period;
 
+  int create_control();
+  int delete_control();
 public:
   RGWRealm() {}
   RGWRealm(const string& _id, const string& _name = "") : RGWSystemMetaObj(_id, _name) {}
@@ -1259,6 +1261,7 @@ public:
   }
 
   int create(bool exclusive = true);
+  int delete_obj();
   const string& get_pool_name(CephContext *cct);
   const string& get_default_oid(bool old_format = false);
   const string& get_names_oid_prefix();
@@ -1272,6 +1275,9 @@ public:
     return current_period;
   }
   int set_current_period(const string& period_id, const rgw_meta_sync_status* sync_status = NULL);
+
+  string get_control_oid();
+  int notify_zone();
 };
 WRITE_CLASS_ENCODER(RGWRealm)
 
