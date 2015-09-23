@@ -139,8 +139,12 @@ MDSDaemon::MDSDaemon(const std::string &n, Messenger *m, MonClient *mc) :
 MDSDaemon::~MDSDaemon() {
   Mutex::Locker lock(mds_lock);
 
-  if (mds_rank) {delete mds_rank ; mds_rank = NULL; }
-  if (objecter) {delete objecter ; objecter = NULL; }
+  delete mds_rank; 
+  mds_rank = NULL; 
+  delete objecter; 
+  objecter = NULL;
+  delete mdsmap;
+  mdsmap = NULL;
 
   delete authorize_handler_service_registry;
   delete authorize_handler_cluster_registry;
@@ -469,12 +473,13 @@ int MDSDaemon::init(MDSMap::DaemonState wanted_state)
       suicide();
     }
     standby_type = wanted_state;
+    wanted_state = MDSMap::STATE_BOOT;
   }
 
   standby_for_rank = mds_rank_t(g_conf->mds_standby_for_rank);
   standby_for_name.assign(g_conf->mds_standby_for_name);
 
-  if (wanted_state == MDSMap::STATE_STANDBY_REPLAY &&
+  if (standby_type == MDSMap::STATE_STANDBY_REPLAY &&
       standby_for_rank == -1) {
     if (standby_for_name.empty())
       standby_for_rank = MDSMap::MDS_STANDBY_ANY;
@@ -517,18 +522,10 @@ void MDSDaemon::tick()
   // reschedule
   reset_tick();
 
-  if (beacon.is_laggy()) {
-    dout(5) << "tick bailing out since we seem laggy" << dendl;
-    return;
-  }
-
   // Call through to subsystems' tick functions
   if (mds_rank) {
     mds_rank->tick();
   }
-
-  // Expose ourselves to Beacon to update health indicators
-  beacon.notify_health(mds_rank);
 }
 
 /* This function DOES put the passed message before returning*/
@@ -915,7 +912,7 @@ void MDSDaemon::handle_mds_map(MMDSMap *m)
 
     // Did I previously not hold a rank?  Initialize!
     if (mds_rank == NULL) {
-      mds_rank = new MDSRankDispatcher(whoami, incarnation, mds_lock, clog,
+      mds_rank = new MDSRankDispatcher(whoami, mds_lock, clog,
           timer, beacon, mdsmap, messenger, monc, objecter,
           new C_VoidFn(this, &MDSDaemon::respawn),
           new C_VoidFn(this, &MDSDaemon::suicide));

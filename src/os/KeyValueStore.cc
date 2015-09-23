@@ -534,7 +534,6 @@ KeyValueStore::KeyValueStore(const std::string &base,
   ondisk_finisher(g_ceph_context),
   collections_lock("KeyValueStore::collections_lock"),
   lock("KeyValueStore::lock"),
-  default_osr("default"),
   throttle_ops(g_ceph_context, "keyvaluestore_ops", g_conf->keyvaluestore_queue_max_ops),
   throttle_bytes(g_ceph_context, "keyvaluestore_bytes", g_conf->keyvaluestore_queue_max_bytes),
   op_finisher(g_ceph_context),
@@ -1049,17 +1048,16 @@ int KeyValueStore::queue_transactions(Sequencer *posr, list<Transaction*> &tls,
 
   // set up the sequencer
   OpSequencer *osr;
-  if (!posr)
-    posr = &default_osr;
+  assert(posr);
   if (posr->p) {
     osr = static_cast<OpSequencer *>(posr->p.get());
-    dout(5) << "queue_transactions existing " << *osr << "/" << osr->parent
+    dout(5) << "queue_transactions existing " << osr << " " << *osr << "/" << osr->parent
             << dendl; //<< " w/ q " << osr->q << dendl;
   } else {
     osr = new OpSequencer;
     osr->parent = posr;
     posr->p = osr;
-    dout(5) << "queue_transactions new " << *osr << "/" << osr->parent << dendl;
+    dout(5) << "queue_transactions new " << osr << " " << *osr << "/" << osr->parent << dendl;
   }
 
   Op *o = build_op(tls, ondisk, onreadable, onreadable_sync, osd_op);
@@ -2026,7 +2024,7 @@ int KeyValueStore::_zero(coll_t cid, const ghobject_t& oid, uint64_t offset,
   r = check_get_rc(header->cid, header->oid, r, lookup_keys.size() == values.size());
   if (r < 0)
     return r;
-  for(set<string>::iterator it = lookup_keys.begin(); it != lookup_keys.end(); it++)
+  for(set<string>::iterator it = lookup_keys.begin(); it != lookup_keys.end(); ++it)
   {
     pair<uint64_t, uint64_t> p = off_len[*it];
     values[*it].zero(p.first, p.second);

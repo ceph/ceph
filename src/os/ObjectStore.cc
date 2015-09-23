@@ -19,8 +19,11 @@
 #include "FileStore.h"
 #include "MemStore.h"
 #include "KeyValueStore.h"
-#include "newstore/NewStore.h"
 #include "common/safe_io.h"
+
+#if defined(HAVE_LIBAIO)
+#include "newstore/NewStore.h"
+#endif
 
 ObjectStore *ObjectStore::create(CephContext *cct,
 				 const string& type,
@@ -38,10 +41,12 @@ ObjectStore *ObjectStore::create(CephContext *cct,
       cct->check_experimental_feature_enabled("keyvaluestore")) {
     return new KeyValueStore(data);
   }
+#if defined(HAVE_LIBAIO)
   if (type == "newstore" &&
       cct->check_experimental_feature_enabled("newstore")) {
     return new NewStore(cct, data);
   }
+#endif
   return NULL;
 }
 

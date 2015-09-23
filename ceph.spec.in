@@ -25,8 +25,7 @@ restorecon -R /etc/rc\.d/init\.d/ceph > /dev/null 2>&1; \
 restorecon -R /etc/rc\.d/init\.d/radosgw > /dev/null 2>&1; \
 restorecon -R /var/run/ceph > /dev/null 2>&1; \
 restorecon -R /var/lib/ceph > /dev/null 2>&1; \
-restorecon -R /var/log/ceph > /dev/null 2>&1; \
-restorecon -R /var/log/radosgw > /dev/null 2>&1;
+restorecon -R /var/log/ceph > /dev/null 2>&1;
 %endif
 
 %{!?_udevrulesdir: %global _udevrulesdir /lib/udev/rules.d}
@@ -611,7 +610,6 @@ install -m 0644 -D etc/sysconfig/ceph $RPM_BUILD_ROOT%{_sysconfdir}/sysconfig/ce
 %endif
 mkdir -p $RPM_BUILD_ROOT%{_sbindir}
 install -m 0644 -D src/logrotate.conf $RPM_BUILD_ROOT%{_sysconfdir}/logrotate.d/ceph
-install -m 0644 -D src/rgw/logrotate.conf $RPM_BUILD_ROOT%{_sysconfdir}/logrotate.d/radosgw
 chmod 0644 $RPM_BUILD_ROOT%{_docdir}/ceph/sample.ceph.conf
 chmod 0644 $RPM_BUILD_ROOT%{_docdir}/ceph/sample.fetch_config
 
@@ -639,7 +637,7 @@ mv $RPM_BUILD_ROOT/sbin/mount.fuse.ceph $RPM_BUILD_ROOT/usr/sbin/mount.fuse.ceph
 
 #set up placeholder directories
 mkdir -p $RPM_BUILD_ROOT%{_sysconfdir}/ceph
-%if  (! 0%{?suse_version}) || ( 0%{?suse_version} && (! 0%{?_with_systemd}) )
+%if ! 0%{?_with_systemd}
 mkdir -p $RPM_BUILD_ROOT%{_localstatedir}/run/ceph
 %endif
 mkdir -p $RPM_BUILD_ROOT%{_localstatedir}/log/ceph
@@ -651,7 +649,6 @@ mkdir -p $RPM_BUILD_ROOT%{_localstatedir}/lib/ceph/radosgw
 mkdir -p $RPM_BUILD_ROOT%{_localstatedir}/lib/ceph/bootstrap-osd
 mkdir -p $RPM_BUILD_ROOT%{_localstatedir}/lib/ceph/bootstrap-mds
 mkdir -p $RPM_BUILD_ROOT%{_localstatedir}/lib/ceph/bootstrap-rgw
-mkdir -p $RPM_BUILD_ROOT%{_localstatedir}/log/radosgw
 
 %if 0%{?suse_version}
 # Fedora seems to have some problems with this macro, use it only on SUSE
@@ -676,13 +673,13 @@ rm -rf $RPM_BUILD_ROOT
 %post
 /sbin/ldconfig
 %if 0%{?_with_systemd}
+  systemd-tmpfiles --create
   %if 0%{?suse_version}
     %service_add_post ceph.target
   %endif
 %else
   /sbin/chkconfig --add ceph
 %endif
-mkdir -p %{_localstatedir}/run/ceph/
 
 %preun
 %if 0%{?_with_systemd}
@@ -821,7 +818,9 @@ mkdir -p %{_localstatedir}/run/ceph/
 %attr(750,ceph,ceph) %dir %{_localstatedir}/lib/ceph/bootstrap-osd
 %attr(750,ceph,ceph) %dir %{_localstatedir}/lib/ceph/bootstrap-mds
 %attr(750,ceph,ceph) %dir %{_localstatedir}/lib/ceph/bootstrap-rgw
+%if ! 0%{?_with_systemd}
 %attr(770,ceph,ceph) %dir %{_localstatedir}/run/ceph
+%endif
 
 #################################################################################
 %files -n ceph-common
@@ -835,6 +834,11 @@ mkdir -p %{_localstatedir}/run/ceph/
 %{_bindir}/ceph-crush-location
 %{_bindir}/rados
 %{_bindir}/rbd
+%{_bindir}/rbd-replay
+%{_bindir}/rbd-replay-many
+%if 0%{?fedora} || 0%{?rhel} == 6 || 0%{?suse_version} >= 1310
+%{_bindir}/rbd-replay-prep
+%endif
 %{_bindir}/ceph-post-file
 %{_bindir}/ceph-brag
 %{_mandir}/man8/ceph-authtool.8*
@@ -846,6 +850,9 @@ mkdir -p %{_localstatedir}/run/ceph/
 %{_mandir}/man8/ceph.8*
 %{_mandir}/man8/rados.8*
 %{_mandir}/man8/rbd.8*
+%{_mandir}/man8/rbd-replay.8*
+%{_mandir}/man8/rbd-replay-many.8*
+%{_mandir}/man8/rbd-replay-prep.8*
 %{_datadir}/ceph/known_hosts_drop.ceph.com
 %{_datadir}/ceph/id_dsa_drop.ceph.com
 %{_datadir}/ceph/id_dsa_drop.ceph.com.pub
@@ -910,9 +917,7 @@ fi
 %{_bindir}/radosgw-object-expirer
 %{_mandir}/man8/radosgw.8*
 %{_mandir}/man8/radosgw-admin.8*
-%config(noreplace) %{_sysconfdir}/logrotate.d/radosgw
 %config %{_sysconfdir}/bash_completion.d/radosgw-admin
-%dir %{_localstatedir}/log/radosgw/
 %dir %{_localstatedir}/lib/ceph/radosgw
 %if 0%{?_with_systemd}
 %else
@@ -951,10 +956,6 @@ fi
     done
   fi
 %endif
-# Package removal cleanup
-if [ "$1" -eq "0" ] ; then
-    rm -rf /var/log/radosgw
-fi
 
 #################################################################################
 %if %{with ocf}
@@ -1096,14 +1097,6 @@ ln -sf %{_libdir}/librbd.so.1 /usr/lib64/qemu/librbd.so.1
 %{_bindir}/ceph-monstore-tool
 %{_bindir}/ceph-osdomap-tool
 %{_bindir}/ceph-kvstore-tool
-%{_mandir}/man8/rbd-replay.8*
-%{_mandir}/man8/rbd-replay-many.8*
-%{_mandir}/man8/rbd-replay-prep.8*
-%{_bindir}/rbd-replay
-%{_bindir}/rbd-replay-many
-%if 0%{?fedora} || 0%{?rhel} == 6 || 0%{?suse_version} >= 1310
-%{_bindir}/rbd-replay-prep
-%endif
 %dir %{_libdir}/ceph
 %{_libdir}/ceph/ceph-monstore-update-crush.sh
 

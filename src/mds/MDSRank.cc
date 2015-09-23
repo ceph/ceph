@@ -40,7 +40,6 @@
 
 MDSRank::MDSRank(
     mds_rank_t whoami_,
-    int incarnation_,
     Mutex &mds_lock_,
     LogChannelRef &clog_,
     SafeTimer &timer_,
@@ -52,8 +51,7 @@ MDSRank::MDSRank(
     Context *respawn_hook_,
     Context *suicide_hook_)
   :
-    whoami(whoami_),
-    incarnation(incarnation_),
+    whoami(whoami_), incarnation(0),
     mds_lock(mds_lock_), clog(clog_), timer(timer_),
     mdsmap(mdsmap_),
     objecter(objecter_),
@@ -150,6 +148,11 @@ void MDSRankDispatcher::tick()
 {
   heartbeat_reset();
 
+  if (beacon.is_laggy()) {
+    dout(5) << "tick bailing out since we seem laggy" << dendl;
+    return;
+  }
+
   check_ops_in_flight();
 
   // Wake up thread in case we use to be laggy and have waiting_for_nolaggy
@@ -194,6 +197,9 @@ void MDSRankDispatcher::tick()
     if (snapserver)
       snapserver->check_osd_map(false);
   }
+
+  // Expose ourselves to Beacon to update health indicators
+  beacon.notify_health(this);
 }
 
 void MDSRankDispatcher::shutdown()
@@ -1361,10 +1367,11 @@ void MDSRankDispatcher::handle_mds_map(
   assert(whoami != MDS_RANK_NONE);
 
   MDSMap::DaemonState oldstate = state;
-  state = mdsmap->get_state_gid(mds_gid_t(
-        monc->get_global_id()));
+  mds_gid_t mds_gid = mds_gid_t(monc->get_global_id());
+  state = mdsmap->get_state_gid(mds_gid);
   if (state != oldstate) {
     last_state = oldstate;
+    incarnation = mdsmap->get_inc_gid(mds_gid);
   }
 
   version_t epoch = m->get_epoch();
@@ -1409,9 +1416,9 @@ void MDSRankDispatcher::handle_mds_map(
   if (oldstate != state) {
     // update messenger.
     if (state == MDSMap::STATE_STANDBY_REPLAY || state == MDSMap::STATE_ONESHOT_REPLAY) {
-      dout(1) << "handle_mds_map i am now mds." << monc->get_global_id() << "." << incarnation
-	      << "replaying mds." << whoami << "." << incarnation << dendl;
-      messenger->set_myname(entity_name_t::MDS(monc->get_global_id()));
+      dout(1) << "handle_mds_map i am now mds." << mds_gid << "." << incarnation
+	      << " replaying mds." << whoami << "." << incarnation << dendl;
+      messenger->set_myname(entity_name_t::MDS(mds_gid));
     } else {
       dout(1) << "handle_mds_map i am now mds." << whoami << "." << incarnation << dendl;
       messenger->set_myname(entity_name_t::MDS(whoami));
@@ -1586,6 +1593,25 @@ void MDSRankDispatcher::handle_mds_map(
     const epoch_t osd_epoch = osdmap->get_epoch();
     objecter->put_osdmap_read();
     set_osd_epoch_barrier(osd_epoch);
+  }
+
+  if (is_active()) {
+    bool found = false;
+    MDSMap::mds_info_t info = mdsmap->get_info(whoami);
+
+    for (map<mds_gid_t,MDSMap::mds_info_t>::const_iterator p = mdsmap->get_mds_info().begin();
+       p != mdsmap->get_mds_info().end();
+       ++p) {
+      if (p->second.state == MDSMap::STATE_STANDBY_REPLAY &&
+	  (p->second.standby_for_rank == whoami ||(info.name.length() && p->second.standby_for_name == info.name))) {
+	found = true;
+	break;
+      }
+      if (found)
+	mdlog->set_write_iohint(0);
+      else
+	mdlog->set_write_iohint(CEPH_OSD_OP_FLAG_FADVISE_DONTNEED);
+    }
   }
 
   mdcache->notify_mdsmap_changed();
@@ -2362,7 +2388,6 @@ bool MDSRankDispatcher::handle_command_legacy(std::vector<std::string> args)
 
 MDSRankDispatcher::MDSRankDispatcher(
     mds_rank_t whoami_,
-    int incarnation_,
     Mutex &mds_lock_,
     LogChannelRef &clog_,
     SafeTimer &timer_,
@@ -2373,7 +2398,7 @@ MDSRankDispatcher::MDSRankDispatcher(
     Objecter *objecter_,
     Context *respawn_hook_,
     Context *suicide_hook_)
-  : MDSRank(whoami_, incarnation_, mds_lock_, clog_, timer_, beacon_, mdsmap_,
+  : MDSRank(whoami_, mds_lock_, clog_, timer_, beacon_, mdsmap_,
       msgr, monc_, objecter_, respawn_hook_, suicide_hook_)
 {}
 

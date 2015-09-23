@@ -2011,15 +2011,10 @@ bool ReplicatedPG::maybe_handle_cache(OpRequestRef op,
       }
 
       // Promote too?
-      bool promoting = false;
       if (!op->need_skip_promote()) {
-        promoting = maybe_promote(obc, missing_oid, oloc, in_hit_set,
-                                  pool.info.min_write_recency_for_promote,
-                                  OpRequestRef());
-      }
-      // purge the object in the cache if not promoting
-      if (!promoting) {
-	object_contexts.purge(obc->obs.oi.soid);
+        maybe_promote(obc, missing_oid, oloc, in_hit_set,
+	              pool.info.min_write_recency_for_promote,
+		      OpRequestRef());
       }
     } else {
       if (can_proxy_read)
@@ -3099,8 +3094,7 @@ ReplicatedPG::RepGather *ReplicatedPG::trim_object(const hobject_t &coid)
       if (*p == last)
 	break;
     assert(p != snapset.clones.end());
-    object_stat_sum_t delta;
-    delta.num_bytes -= snapset.get_clone_bytes(last);
+    ctx->delta_stats.num_bytes -= snapset.get_clone_bytes(last);
 
     if (p != snapset.clones.begin()) {
       // not the oldest... merge overlap into next older clone
@@ -3110,25 +3104,24 @@ ReplicatedPG::RepGather *ReplicatedPG::trim_object(const hobject_t &coid)
       bool adjust_prev_bytes = is_present_clone(prev_coid);
 
       if (adjust_prev_bytes)
-	delta.num_bytes -= snapset.get_clone_bytes(*n);
+	ctx->delta_stats.num_bytes -= snapset.get_clone_bytes(*n);
 
       snapset.clone_overlap[*n].intersection_of(
 	snapset.clone_overlap[*p]);
 
       if (adjust_prev_bytes)
-	delta.num_bytes += snapset.get_clone_bytes(*n);
+	ctx->delta_stats.num_bytes += snapset.get_clone_bytes(*n);
     }
-    delta.num_objects--;
+    ctx->delta_stats.num_objects--;
     if (coi.is_dirty())
-      delta.num_objects_dirty--;
+      ctx->delta_stats.num_objects_dirty--;
     if (coi.is_omap())
-      delta.num_objects_omap--;
+      ctx->delta_stats.num_objects_omap--;
     if (coi.is_whiteout()) {
       dout(20) << __func__ << " trimming whiteout on " << coid << dendl;
-      delta.num_whiteouts--;
+      ctx->delta_stats.num_whiteouts--;
     }
-    delta.num_object_clones--;
-    info.stats.stats.add(delta);
+    ctx->delta_stats.num_object_clones--;
     obc->obs.exists = false;
 
     snapset.clones.erase(p);
@@ -6322,8 +6315,14 @@ void ReplicatedPG::finish_ctx(OpContext *ctx, int log_op_type, bool maintain_ssc
     ctx->obc->ssc->snapset = ctx->new_snapset;
   }
 
+  apply_ctx_stats(ctx, scrub_ok);
+}
+
+void ReplicatedPG::apply_ctx_stats(OpContext *ctx, bool scrub_ok)
+{
   info.stats.stats.add(ctx->delta_stats);
 
+  const hobject_t& soid = ctx->obs->oi.soid;
   for (set<pg_shard_t>::iterator i = backfill_targets.begin();
        i != backfill_targets.end();
        ++i) {
@@ -7240,8 +7239,8 @@ void ReplicatedPG::finish_promote(int r, CopyResults *results,
 
   osd->logger->inc(l_osd_tier_promote);
 
-  assert(agent_state);
-  if (agent_state->is_idle())
+  if (agent_state &&
+      agent_state->is_idle())
     agent_choose_mode();
 }
 
@@ -8239,6 +8238,8 @@ void ReplicatedPG::handle_watch_timeout(WatchRef watch)
     ctx->log.back().mod_desc.mark_unrollbackable();
   }
 
+  // no ctx->delta_stats
+
   // obc ref swallowed by repop!
   simple_repop_submit(repop);
 
@@ -8412,13 +8413,16 @@ int ReplicatedPG::find_object_context(const hobject_t& oid,
   // want the snapdir?
   if (oid.snap == CEPH_SNAPDIR) {
     // return head or snapdir, whichever exists.
-    ObjectContextRef obc = get_object_context(head, can_create);
+    ObjectContextRef headobc = get_object_context(head, can_create);
+    ObjectContextRef obc = headobc;
     if (!obc || !obc->obs.exists)
       obc = get_object_context(oid, can_create);
     if (!obc || !obc->obs.exists) {
       // if we have neither, we would want to promote the head.
       if (pmissing)
 	*pmissing = head;
+      if (pobc)
+	*pobc = headobc; // may be null
       return -ENOENT;
     }
     dout(10) << "find_object_context " << oid
@@ -8441,7 +8445,7 @@ int ReplicatedPG::find_object_context(const hobject_t& oid,
   }
 
   SnapSetContext *ssc = get_snapset_context(oid, can_create);
-  if (!ssc || !(ssc->exists)) {
+  if (!ssc || !(ssc->exists || can_create)) {
     dout(20) << __func__ << " " << oid << " no snapset" << dendl;
     if (pmissing)
       *pmissing = head;  // start by getting the head
@@ -8689,7 +8693,6 @@ SnapSetContext *ReplicatedPG::get_snapset_context(
   if (p != snapset_contexts.end()) {
     if (can_create || p->second->exists) {
       ssc = p->second;
-      ssc->exists = true;
     } else {
       return NULL;
     }
@@ -8712,6 +8715,9 @@ SnapSetContext *ReplicatedPG::get_snapset_context(
     if (bv.length()) {
       bufferlist::iterator bvp = bv.begin();
       ssc->snapset.decode(bvp);
+      ssc->exists = true;
+    } else {
+      ssc->exists = false;
     }
   }
   assert(ssc);
@@ -10786,7 +10792,7 @@ void ReplicatedPG::hit_set_remove_all()
     utime_t now = ceph_clock_now(cct);
     ctx->mtime = now;
     hit_set_trim(repop, 0);
-    info.stats.stats.add(ctx->delta_stats);
+    apply_ctx_stats(ctx);
     simple_repop_submit(repop);
   }
 
@@ -11013,12 +11019,7 @@ void ReplicatedPG::hit_set_persist()
 
   hit_set_trim(repop, max);
 
-  info.stats.stats.add(ctx->delta_stats);
-  if (scrubber.active) {
-    if (cmp(oid, scrubber.start, get_sort_bitwise()) < 0)
-      scrub_cstat.add(ctx->delta_stats);
-  }
-
+  apply_ctx_stats(ctx);
   simple_repop_submit(repop);
 }
 
@@ -12261,11 +12262,14 @@ boost::statechart::result ReplicatedPG::TrimmingObjects::react(const SnapTrim&)
     assert(repop);
     repop->queue_snap_trimmer = true;
 
+    pg->apply_ctx_stats(repop->ctx);
+
     repops.insert(repop->get());
     pg->simple_repop_submit(repop);
   }
   return discard_event();
 }
+
 /* WaitingOnReplicasObjects */
 ReplicatedPG::WaitingOnReplicas::WaitingOnReplicas(my_context ctx)
   : my_base(ctx),
@@ -12364,7 +12368,7 @@ void ReplicatedPG::setattrs_maybe_cache(
 {
   if (pool.info.require_rollback()) {
     for (map<string, bufferlist>::iterator it = attrs.begin();
-      it != attrs.end(); it++ ) {
+      it != attrs.end(); ++it) {
       op->pending_attrs[obc][it->first] = it->second;
     }
   }

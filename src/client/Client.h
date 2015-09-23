@@ -96,6 +96,8 @@ struct CommandOp
   std::string  *outs;
 };
 
+/* error code for ceph_fuse */
+#define CEPH_FUSE_NO_MDS_UP    -(1<<2) /* no mds up deteced in ceph_fuse */
 
 // ============================================
 // types for my local metadata cache
@@ -765,7 +767,7 @@ private:
   void _release_filelocks(Fh *fh);
   void _update_lock_state(struct flock *fl, uint64_t owner, ceph_lock_state_t *lock_state);
 public:
-  int mount(const std::string &mount_root);
+  int mount(const std::string &mount_root, bool require_mds=false);
   void unmount();
 
   int mds_command(

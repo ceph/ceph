@@ -2515,7 +2515,7 @@ void OSD::clear_temp_objects()
 	dout(20) << "  removing " << *p << " object " << *q << dendl;
 	t.remove(*p, *q);
       }
-      store->apply_transaction(t);
+      store->apply_transaction(service.meta_osr.get(), t);
     }
   }
 }
@@ -5930,19 +5930,23 @@ bool OSD::scrub_random_backoff()
   return false;
 }
 
-OSDService::ScrubJob::ScrubJob(const spg_t& pg, const utime_t& timestamp, bool must)
+OSDService::ScrubJob::ScrubJob(const spg_t& pg, const utime_t& timestamp,
+			       double pool_scrub_min_interval,
+			       double pool_scrub_max_interval, bool must)
   : pgid(pg),
     sched_time(timestamp),
     deadline(timestamp)
 {
   // if not explicitly requested, postpone the scrub with a random delay
   if (!must) {
-    sched_time += g_conf->osd_scrub_min_interval;
+    sched_time += pool_scrub_min_interval > 0 ? pool_scrub_min_interval :
+      g_conf->osd_scrub_min_interval;
     if (g_conf->osd_scrub_interval_randomize_ratio > 0) {
       sched_time += rand() % (int)(g_conf->osd_scrub_min_interval *
 				   g_conf->osd_scrub_interval_randomize_ratio);
     }
-    deadline += g_conf->osd_scrub_max_interval;
+    deadline += pool_scrub_max_interval > 0 ? pool_scrub_max_interval :
+      g_conf->osd_scrub_max_interval;
   }
 }
 
@@ -6446,7 +6450,7 @@ void OSD::handle_osd_map(MOSDMap *m)
   // superblock and commit
   write_superblock(t);
   store->queue_transaction(
-    0,
+    service.meta_osr.get(),
     _t,
     new C_OnMapApply(&service, _t, pinned_maps, osdmap->get_epoch()),
     0, 0);
@@ -6479,8 +6483,10 @@ void OSD::handle_osd_map(MOSDMap *m)
   else if (do_restart)
     start_boot();
 
+  osd_lock.Unlock();
   if (do_shutdown)
     shutdown();
+  osd_lock.Lock();
 
   m->put();
 }
@@ -6537,7 +6543,7 @@ void OSD::check_osdmap_features(ObjectStore *fs)
       superblock.compat_features.incompat.insert(CEPH_OSD_FEATURE_INCOMPAT_SHARDS);
       ObjectStore::Transaction *t = new ObjectStore::Transaction;
       write_superblock(*t);
-      int err = store->queue_transaction_and_cleanup(NULL, t);
+      int err = store->queue_transaction_and_cleanup(service.meta_osr.get(), t);
       assert(err == 0);
       fs->set_allow_sharded_objects();
     }
@@ -8092,8 +8098,8 @@ void OSD::handle_op(OpRequestRef& op, OSDMapRef& osdmap)
     }
     // pool is full ?
     map<int64_t, epoch_t> &pool_last_map_marked_full = superblock.pool_last_map_marked_full;
-    if (pi->has_flag(pg_pool_t::FLAG_FULL) || 
-       (pool_last_map_marked_full.count(pool) && (m->get_map_epoch() < pool_last_map_marked_full[pool]))) {
+    if ((pi->has_flag(pg_pool_t::FLAG_FULL) ||
+       (pool_last_map_marked_full.count(pool) && (m->get_map_epoch() < pool_last_map_marked_full[pool]))) && !m->get_source().is_mds()) {
       return;
     }
     
@@ -8105,7 +8111,7 @@ void OSD::handle_op(OpRequestRef& op, OSDMapRef& osdmap)
 
     // too big?
     if (cct->_conf->osd_max_write_size &&
-	m->get_data_len() > cct->_conf->osd_max_write_size << 20) {
+	m->get_data_len() > ((int64_t)g_conf->osd_max_write_size) << 20) {
       // journal can't hold commit!
       derr << "handle_op msg data len " << m->get_data_len()
 	   << " > osd_max_write_size " << (cct->_conf->osd_max_write_size << 20)
@@ -8824,7 +8830,7 @@ void OSD::set_pool_last_map_marked_full(OSDMap *o, epoch_t &e)
 {
   map<int64_t, epoch_t> &pool_last_map_marked_full = superblock.pool_last_map_marked_full;
   for (map<int64_t, pg_pool_t>::const_iterator it = o->get_pools().begin();
-       it != o->get_pools().end(); it++) {
+       it != o->get_pools().end(); ++it) {
     bool exist = pool_last_map_marked_full.count(it->first);
     if (it->second.has_flag(pg_pool_t::FLAG_FULL) && !exist)
       pool_last_map_marked_full[it->first] = e;

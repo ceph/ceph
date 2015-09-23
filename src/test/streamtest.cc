@@ -143,9 +143,10 @@ int main(int argc, const char **argv)
     return -1;
   }
 
+  ObjectStore::Sequencer osr(__func__);
   ObjectStore::Transaction ft;
   ft.create_collection(coll_t(), 0);
-  fs->apply_transaction(ft);
+  fs->apply_transaction(&osr, ft);
 
   utime_t now = ceph_clock_now(g_ceph_context);
   utime_t start = now;

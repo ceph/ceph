@@ -40,7 +40,9 @@ bool PaxosService::dispatch(MonOpRequestRef op)
   PaxosServiceMessage *m = static_cast<PaxosServiceMessage*>(op->get_req());
   op->mark_event("psvc:dispatch");
 
-  dout(10) << "dispatch " << *m << " from " << m->get_orig_source_inst() << dendl;
+  dout(10) << "dispatch " << m << " " << *m
+	   << " from " << m->get_orig_source_inst()
+	   << " con " << m->get_connection() << dendl;
 
   if (mon->is_shutdown()) {
     return true;

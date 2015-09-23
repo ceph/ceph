@@ -369,7 +369,7 @@ TEST_F(TestInternal, MultipleResize) {
   ASSERT_EQ(0U, size);
 }
 
-TEST_F(TestInternal, MetadatConfig) {
+TEST_F(TestInternal, Metadata) {
   REQUIRE_FEATURE(RBD_FEATURE_LAYERING);
 
   map<string, bool> test_confs = boost::assign::map_list_of(
@@ -396,7 +396,7 @@ TEST_F(TestInternal, MetadatConfig) {
   map<string, bufferlist> pairs;
   r = librbd::metadata_list(ictx, "", 0, &pairs);
   ASSERT_EQ(0, r);
-  ASSERT_EQ(5, pairs.size());
+  ASSERT_EQ(5u, pairs.size());
   r = librbd::metadata_remove(ictx, "abcd");
   ASSERT_EQ(0, r);
   r = librbd::metadata_remove(ictx, "xyz");
@@ -404,11 +404,56 @@ TEST_F(TestInternal, MetadatConfig) {
   pairs.clear();
   r = librbd::metadata_list(ictx, "", 0, &pairs);
   ASSERT_EQ(0, r);
-  ASSERT_EQ(3, pairs.size());
+  ASSERT_EQ(3u, pairs.size());
   string val;
   r = librbd::metadata_get(ictx, it->first, &val);
   ASSERT_EQ(0, r);
   ASSERT_STREQ(val.c_str(), "value3");
+}
+
+TEST_F(TestInternal, MetadataFilter) {
+  REQUIRE_FEATURE(RBD_FEATURE_LAYERING);
+
+  map<string, bool> test_confs = boost::assign::map_list_of(
+    "aaaaaaa", false)(
+    "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", false)(
+    "cccccccccccccc", false);
+  map<string, bool>::iterator it = test_confs.begin();
+  const string prefix = "test_config_";
+  bool is_continue;
+  librbd::ImageCtx *ictx;
+  ASSERT_EQ(0, open_image(m_image_name, &ictx));
+
+  librbd::Image image1;
+  map<string, bufferlist> pairs, res;
+  pairs["abc"].append("value");
+  pairs["abcabc"].append("value");
+  pairs[prefix+it->first].append("value1");
+  ++it;
+  pairs[prefix+it->first].append("value2");
+  ++it;
+  pairs[prefix+it->first].append("value3");
+  pairs[prefix+"asdfsdaf"].append("value6");
+  pairs[prefix+"zxvzxcv123"].append("value5");
+
+  is_continue = ictx->_filter_metadata_confs(prefix, test_confs, pairs, &res);
+  ASSERT_TRUE(is_continue);
+  ASSERT_TRUE(res.size() == 3U);
+  it = test_confs.begin();
+  ASSERT_TRUE(res.count(it->first));
+  ASSERT_TRUE(it->second);
+  ++it;
+  ASSERT_TRUE(res.count(it->first));
+  ASSERT_TRUE(it->second);
+  ++it;
+  ASSERT_TRUE(res.count(it->first));
+  ASSERT_TRUE(it->second);
+  res.clear();
+
+  pairs["zzzzzzzz"].append("value7");
+  is_continue = ictx->_filter_metadata_confs(prefix, test_confs, pairs, &res);
+  ASSERT_FALSE(is_continue);
+  ASSERT_TRUE(res.size() == 3U);
 }
 
 TEST_F(TestInternal, SnapshotCopyup)

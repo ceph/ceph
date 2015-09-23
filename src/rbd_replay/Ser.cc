@@ -16,7 +16,7 @@
 #include "Ser.hpp"
 #include <arpa/inet.h>
 #include <cstdlib>
-#if defined(DARWIN)
+#if defined(DARWIN) || defined(__FreeBSD__)
 #include <machine/endian.h>
 #else
 #include <endian.h>
