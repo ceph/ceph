@@ -8118,13 +8118,8 @@ void OSD::handle_op(OpRequestRef& op, OSDMapRef& osdmap)
   }
 
   if (op->may_write()) {
-    // full?
-    if ((service.check_failsafe_full() ||
-	 osdmap->test_flag(CEPH_OSDMAP_FULL) ||
-	 m->get_map_epoch() < superblock.last_map_marked_full) &&
-	!m->get_source().is_mds()) {  // FIXME: we'll exclude mds writes for now.
-      // Drop the request, since the client will retry when the full
-      // flag is unset.
+    const pg_pool_t *pi = osdmap->get_pg_pool(pool);
+    if (!pi) {
       return;
     }
 
