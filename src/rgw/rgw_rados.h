@@ -766,6 +766,9 @@ public:
   const string& get_name() const { return name; }
   const string& get_id() const { return id; }
 
+  void set_name(const string& _name) { name = _name;}
+  void set_id(const string& _id) { id = _id;}
+
   virtual ~RGWSystemMetaObj() {}
 
   virtual void encode(bufferlist& bl) const {
@@ -872,9 +875,6 @@ struct RGWZoneParams : RGWSystemMetaObj {
   using RGWSystemMetaObj::init;
   void init_id(CephContext *cct, RGWZoneGroup& zonegroup);
   int create_default(bool old_format = false);
-
-  void set_name(const string& _name) { name = _name;}
-  void set_id(const string& _id) { id = _id;}
 
   void encode(bufferlist& bl) const {
     ENCODE_START(6, 1, bl);
@@ -1180,8 +1180,10 @@ struct RGWZoneGroupMap {
   int update(RGWRealm& realm);
   int update(CephContext *cct, RGWRados *store,
 	     const string& period_id,
-	     const string& realm_id);
-  
+	     const string& realm_id);  
+  int update_master_zonegroup(const string& period_id,
+			      const string& master_zonegroup);
+
   int get_master_zonegroup(const string& current_period,
 			   RGWZoneGroup& master_zonegroup);
 
