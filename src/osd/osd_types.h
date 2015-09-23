@@ -2865,13 +2865,11 @@ public:
   // last interval over which i mounted and was then active
   epoch_t mounted;     // last epoch i mounted
   epoch_t clean_thru;  // epoch i was active and clean thru
-  epoch_t last_map_marked_full; // last epoch osdmap was marked full
-  map<int64_t, epoch_t> pool_last_map_marked_full; // last epoch pool was marked full
 
   OSDSuperblock() : 
     whoami(-1), 
     current_epoch(0), oldest_map(0), newest_map(0), weight(0),
-    mounted(0), clean_thru(0), last_map_marked_full(0) {
+    mounted(0), clean_thru(0) {
   }
 
   void encode(bufferlist &bl) const;
