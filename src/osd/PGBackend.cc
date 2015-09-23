@@ -654,11 +654,12 @@ void PGBackend::be_compare_scrubmaps(
 	  update = FORCE;
       }
 
-      if (auth_object.digest_present && auth_object.omap_digest_present &&
-	  (!auth_oi.is_data_digest() || !auth_oi.is_omap_digest())) {
+      if ((auth_object.digest_present && !auth_oi.is_data_digest()) ||
+	  (auth_object.omap_digest_present && !auth_oi.is_omap_digest())) {
 	dout(20) << __func__ << " missing digest on " << *k << dendl;
 	update = MAYBE;
       }
+
       if (g_conf->osd_debug_scrub_chance_rewrite_digest &&
 	  (((unsigned)rand() % 100) >
 	   g_conf->osd_debug_scrub_chance_rewrite_digest)) {
