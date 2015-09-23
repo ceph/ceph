@@ -234,6 +234,12 @@ def check_packages(ctx, config):
 
     If there are missing packages, fail the job.
     """
+    for task in ctx.config['tasks']:
+        if task.keys()[0] == 'buildpackages':
+            log.info("Checking packages skipped because "
+                     "the task buildpackages was found.")
+            return
+
     log.info("Checking packages...")
     os_type = ctx.config.get("os_type")
     sha1 = ctx.config.get("sha1")
@@ -341,6 +347,51 @@ def push_inventory(ctx, config):
         push()
     except Exception:
         log.exception("Error pushing inventory")
+
+BUILDPACKAGES_SWAPPED = 0
+BUILDPACKAGES_OK = 1
+BUILDPACKAGES_REMOVED = 2
+BUILDPACKAGES_NOTHING = 3
+
+def buildpackages_prep(ctx, config):
+    """
+    Make sure the 'buildpackages' task happens before
+    the 'install' task.
+
+    Return:
+
+    BUILDPACKAGES_NOTHING if there is no buildpackages task
+    BUILDPACKAGES_REMOVED if there is a buildpackages task but no install task
+    BUILDPACKAGES_SWAPPED if a buildpackages task was moved before an install task
+    BUILDPACKAGES_OK if a buildpackages task already is before the install task
+    """
+    index = 0
+    install_index = None
+    buildpackages_index = None
+    for task in ctx.config['tasks']:
+        if task.keys()[0] == 'install':
+            install_index = index
+        if task.keys()[0] == 'buildpackages':
+            buildpackages_index = index
+        index += 1
+    if buildpackages_index is not None and install_index is not None:
+        if buildpackages_index > install_index:
+            log.info('buildpackages moved before the install task')
+            buildpackages = ctx.config['tasks'].pop(buildpackages_index)
+            ctx.config['tasks'].insert(install_index, buildpackages)
+            return BUILDPACKAGES_SWAPPED
+        else:
+            log.info('buildpackages is before the install task')
+            return BUILDPACKAGES_OK
+    elif buildpackages_index is not None and install_index is None:
+        ctx.config['tasks'].pop(buildpackages_index)
+        all_tasks = [x.keys()[0] for x in ctx.config['tasks']]
+        log.info('buildpackages removed because no install task found in ' +
+                 str(all_tasks))
+        return BUILDPACKAGES_REMOVED
+    elif buildpackages_index is None:
+        log.info('no buildpackages task found')
+        return BUILDPACKAGES_NOTHING
 
 
 def serialize_remote_roles(ctx, config):
