@@ -18,6 +18,7 @@
 #include "rgw_swift_auth.h"
 #include "rgw_cors_s3.h"
 #include "rgw_http_errors.h"
+#include "rgw_lib.h"
 
 #include "rgw_client_io.h"
 #include "rgw_resolve.h"
@@ -1524,11 +1525,11 @@ static int64_t parse_content_length(const char *content_length)
   return len;
 }
 
-int RGWREST::preprocess(struct req_state *s, RGWClientIO cio)
+int RGWREST::preprocess(struct req_state *s, RGWClientIO* cio)
 {
   req_info& info = s->info;
 
-  s->cio = sio;
+  s->cio = cio;
   if (info.host.size()) {
     ldout(s->cct, 10) << "host=" << info.host << dendl;
     string domain;
