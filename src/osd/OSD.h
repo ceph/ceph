@@ -1975,6 +1975,7 @@ protected:
 
   // -- boot --
   void start_boot();
+  void maybe_boot(epoch_t oldest, epoch_t newest);
   void _maybe_boot(epoch_t oldest, epoch_t newest);
   void _send_boot();
   void _collect_metadata(map<string,string> *pmeta);
