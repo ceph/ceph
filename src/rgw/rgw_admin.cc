@@ -2340,7 +2340,7 @@ int main(int argc, char **argv)
 
 	for (list<string>::iterator iter = realms.begin(); iter != realms.end(); ++iter)
 	{
-	  RGWRealm realm(*iter);
+	  RGWRealm realm("", *iter);
 	  ret = realm.init(g_ceph_context, store);
 	  if (ret < 0) {
 	    cerr << "failed to init realm: " << cpp_strerror(-ret) << std::endl;
