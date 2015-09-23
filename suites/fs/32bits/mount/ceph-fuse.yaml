@@ -1,0 +1,9 @@
+overrides:
+  ceph:
+    conf:
+      client:
+        client use faked inos: true
+tasks:
+- install:
+- ceph:
+- ceph-fuse:
