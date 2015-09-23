@@ -258,6 +258,7 @@ private:
       q.push_back(o);
     }
     Op *peek_queue() {
+      Mutex::Locker l(qlock);
       assert(apply_lock.is_locked());
       return q.front();
     }
