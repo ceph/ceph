@@ -2188,7 +2188,7 @@ int main(int argc, char **argv)
       break;
     case OPT_ZONEGROUP_DEFAULT:
       {
-	RGWZoneGroup zonegroup;
+	RGWZoneGroup zonegroup(zonegroup_id, zonegroup_name);
 	int ret = zonegroup.init(g_ceph_context, store);
 	if (ret < 0) {
 	  cerr << "failed to init zonegroup: " << cpp_strerror(-ret) << std::endl;
