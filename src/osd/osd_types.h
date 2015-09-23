@@ -1436,6 +1436,7 @@ struct object_stat_sum_t {
   int64_t num_object_clones;
   int64_t num_object_copies;  // num_objects * num_replicas
   int64_t num_objects_missing_on_primary;
+  int64_t num_objects_missing;
   int64_t num_objects_degraded;
   int64_t num_objects_misplaced;
   int64_t num_objects_unfound;
@@ -1468,7 +1469,8 @@ struct object_stat_sum_t {
   object_stat_sum_t()
     : num_bytes(0),
       num_objects(0), num_object_clones(0), num_object_copies(0),
-      num_objects_missing_on_primary(0), num_objects_degraded(0),
+      num_objects_missing_on_primary(0), num_objects_missing(0),
+      num_objects_degraded(0),
       num_objects_misplaced(0),
       num_objects_unfound(0),
       num_rd(0), num_rd_kb(0), num_wr(0), num_wr_kb(0),
@@ -1499,6 +1501,7 @@ struct object_stat_sum_t {
     FLOOR(num_object_clones);
     FLOOR(num_object_copies);
     FLOOR(num_objects_missing_on_primary);
+    FLOOR(num_objects_missing);
     FLOOR(num_objects_degraded);
     FLOOR(num_objects_misplaced);
     FLOOR(num_objects_unfound);
@@ -1544,6 +1547,7 @@ struct object_stat_sum_t {
     SPLIT(num_object_clones);
     SPLIT(num_object_copies);
     SPLIT(num_objects_missing_on_primary);
+    SPLIT(num_objects_missing);
     SPLIT(num_objects_degraded);
     SPLIT(num_objects_misplaced);
     SPLIT(num_objects_unfound);
