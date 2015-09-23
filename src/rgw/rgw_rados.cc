@@ -7244,6 +7244,7 @@ int RGWRados::SystemObject::Read::GetObjState::get_ioctx(RGWRados *store, rgw_ob
 int RGWRados::get_system_obj(RGWObjectCtx& obj_ctx, RGWRados::SystemObject::Read::GetObjState& read_state,
                              RGWObjVersionTracker *objv_tracker, rgw_obj& obj,
                              bufferlist& bl, off_t ofs, off_t end,
+                             map<string, bufferlist> *attrs,
                              rgw_cache_entry_info *cache_info)
 {
   rgw_bucket bucket;
@@ -7270,6 +7271,10 @@ int RGWRados::get_system_obj(RGWObjectCtx& obj_ctx, RGWRados::SystemObject::Read
 
   ldout(cct, 20) << "rados->read ofs=" << ofs << " len=" << len << dendl;
   op.read(ofs, len, &bl, NULL);
+
+  if (attrs) {
+    op.getxattrs(attrs, NULL);
+  }
 
   librados::IoCtx *io_ctx;
   r = read_state.get_ioctx(this, obj, &io_ctx);
@@ -7302,7 +7307,7 @@ int RGWRados::SystemObject::Read::read(int64_t ofs, int64_t end, bufferlist& bl,
   RGWRados *store = source->get_store();
   rgw_obj& obj = source->get_obj();
 
-  return store->get_system_obj(source->get_ctx(), state, objv_tracker, obj, bl, ofs, end, read_params.cache_info);
+  return store->get_system_obj(source->get_ctx(), state, objv_tracker, obj, bl, ofs, end, read_params.attrs, read_params.cache_info);
 }
 
 int RGWRados::SystemObject::Read::get_attr(const char *name, bufferlist& dest)

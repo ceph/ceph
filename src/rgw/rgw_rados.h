@@ -1785,6 +1785,9 @@ public:
 
       struct ReadParams {
         rgw_cache_entry_info *cache_info;
+        map<string, bufferlist> *attrs;
+
+        ReadParams() : attrs(NULL) {}
       } read_params;
 
       Read(RGWRados::SystemObject *_source) : source(_source) {}
@@ -2281,6 +2284,7 @@ public:
   virtual int get_system_obj(RGWObjectCtx& obj_ctx, RGWRados::SystemObject::Read::GetObjState& read_state,
                              RGWObjVersionTracker *objv_tracker, rgw_obj& obj,
                              bufferlist& bl, off_t ofs, off_t end,
+                             map<string, bufferlist> *attrs,
                              rgw_cache_entry_info *cache_info);
 
   virtual void register_chained_cache(RGWChainedCache *cache) {}
