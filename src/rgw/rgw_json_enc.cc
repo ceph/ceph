@@ -745,8 +745,11 @@ void RGWZone::dump(Formatter *f) const
 
 void RGWZone::decode_json(JSONObj *obj)
 {
-  JSONDecoder::decode_json("id", id, obj);
+  JSONDecoder::decode_json("id", id, obj);  
   JSONDecoder::decode_json("name", name, obj);
+  if (id.empty()) {
+    id = name;
+  }
   JSONDecoder::decode_json("endpoints", endpoints, obj);
   JSONDecoder::decode_json("log_meta", log_meta, obj);
   JSONDecoder::decode_json("log_data", log_data, obj);
@@ -783,6 +786,7 @@ static void decode_zones(map<string, RGWZone>& zones, JSONObj *o)
 {
   RGWZone z;
   z.decode_json(o);
+  derr << "decode zone " << z.id << " name " << z.name << dendl;
   zones[z.id] = z;
 }
 
