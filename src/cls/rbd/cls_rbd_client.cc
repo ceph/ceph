@@ -956,5 +956,121 @@ struct C_ObjectMapLoad : public Context {
       return 0;
     }
 
+    int mirror_is_enabled(librados::IoCtx *ioctx, bool *enabled) {
+      bufferlist in_bl;
+      bufferlist out_bl;
+      int r = ioctx->exec(RBD_POOL_SETTINGS, "rbd", "mirror_is_enabled", in_bl,
+                          out_bl);
+      if (r == -ENOENT) {
+        *enabled = false;
+        return 0;
+      } else if (r < 0) {
+        return r;
+      }
+
+      try {
+        bufferlist::iterator bl_it = out_bl.begin();
+        ::decode(*enabled, bl_it);
+      } catch (const buffer::error &err) {
+        return -EBADMSG;
+      }
+      return 0;
+    }
+
+    int mirror_set_enabled(librados::IoCtx *ioctx, bool enabled) {
+      bufferlist in_bl;
+      ::encode(enabled, in_bl);
+
+      bufferlist out_bl;
+      int r = ioctx->exec(RBD_POOL_SETTINGS, "rbd", "mirror_set_enabled", in_bl,
+                          out_bl);
+      if (r < 0) {
+        return r;
+      }
+      return 0;
+    }
+
+    int mirror_peer_list(librados::IoCtx *ioctx,
+                         std::vector<cls::rbd::MirrorPeer> *peers) {
+      bufferlist in_bl;
+      bufferlist out_bl;
+      int r = ioctx->exec(RBD_POOL_SETTINGS, "rbd", "mirror_peer_list", in_bl,
+                          out_bl);
+      if (r < 0) {
+        return r;
+      }
+
+      peers->clear();
+      try {
+        bufferlist::iterator bl_it = out_bl.begin();
+        ::decode(*peers, bl_it);
+      } catch (const buffer::error &err) {
+        return -EBADMSG;
+      }
+      return 0;
+    }
+
+    int mirror_peer_add(librados::IoCtx *ioctx, const std::string &cluster_uuid,
+                        const std::string &cluster_name,
+                        const std::string &client_name) {
+      cls::rbd::MirrorPeer peer(cluster_uuid, cluster_name, client_name);
+      bufferlist in_bl;
+      ::encode(peer, in_bl);
+
+      bufferlist out_bl;
+      int r = ioctx->exec(RBD_POOL_SETTINGS, "rbd", "mirror_peer_add", in_bl,
+                          out_bl);
+      if (r < 0) {
+        return r;
+      }
+      return 0;
+    }
+
+    int mirror_peer_remove(librados::IoCtx *ioctx,
+                           const std::string &cluster_uuid) {
+      bufferlist in_bl;
+      ::encode(cluster_uuid, in_bl);
+
+      bufferlist out_bl;
+      int r = ioctx->exec(RBD_POOL_SETTINGS, "rbd", "mirror_peer_remove", in_bl,
+                          out_bl);
+      if (r < 0) {
+        return r;
+      }
+      return 0;
+    }
+
+    int mirror_peer_set_client(librados::IoCtx *ioctx,
+                               const std::string &cluster_uuid,
+                               const std::string &client_name) {
+      bufferlist in_bl;
+      ::encode(cluster_uuid, in_bl);
+      ::encode(client_name, in_bl);
+
+      bufferlist out_bl;
+      int r = ioctx->exec(RBD_POOL_SETTINGS, "rbd", "mirror_peer_set_client",
+                          in_bl, out_bl);
+      if (r < 0) {
+        return r;
+      }
+      return 0;
+    }
+
+    int mirror_peer_set_cluster(librados::IoCtx *ioctx,
+                                const std::string &cluster_uuid,
+                                const std::string &cluster_name) {
+      bufferlist in_bl;
+      ::encode(cluster_uuid, in_bl);
+      ::encode(cluster_name, in_bl);
+
+      bufferlist out_bl;
+      int r = ioctx->exec(RBD_POOL_SETTINGS, "rbd", "mirror_peer_set_cluster",
+                          in_bl, out_bl);
+      if (r < 0) {
+        return r;
+      }
+      return 0;
+    }
+
   } // namespace cls_client
 } // namespace librbd
