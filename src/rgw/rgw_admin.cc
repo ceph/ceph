@@ -2299,9 +2299,6 @@ int main(int argc, char **argv)
 	  }
 	}
 
-	encode_json("zonegroup", zonegroup, formatter);
-	formatter->flush(cout);
-
 	RGWZoneGroupMap zonegroup_map;
 	ret = zonegroup_map.read(g_ceph_context, store);
 	if (ret < 0 && ret != -ENOENT) {
