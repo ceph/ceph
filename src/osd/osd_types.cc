@@ -1752,6 +1752,7 @@ void object_stat_sum_t::dump(Formatter *f) const
   f->dump_int("num_object_clones", num_object_clones);
   f->dump_int("num_object_copies", num_object_copies);
   f->dump_int("num_objects_missing_on_primary", num_objects_missing_on_primary);
+  f->dump_int("num_objects_missing", num_objects_missing);
   f->dump_int("num_objects_degraded", num_objects_degraded);
   f->dump_int("num_objects_misplaced", num_objects_misplaced);
   f->dump_int("num_objects_unfound", num_objects_unfound);
@@ -1784,7 +1785,7 @@ void object_stat_sum_t::dump(Formatter *f) const
 
 void object_stat_sum_t::encode(bufferlist& bl) const
 {
-  ENCODE_START(14, 3, bl);
+  ENCODE_START(15, 3, bl);
   ::encode(num_bytes, bl);
   ::encode(num_objects, bl);
   ::encode(num_object_clones, bl);
@@ -1818,6 +1819,7 @@ void object_stat_sum_t::encode(bufferlist& bl) const
   ::encode(num_evict_mode_some, bl);
   ::encode(num_evict_mode_full, bl);
   ::encode(num_objects_pinned, bl);
+  ::encode(num_objects_missing, bl);
   ENCODE_FINISH(bl);
 }
 
@@ -1916,6 +1918,11 @@ void object_stat_sum_t::decode(bufferlist::iterator& bl)
   } else {
     num_objects_pinned = 0;
   }
+  if (struct_v >= 15) {
+    ::decode(num_objects_missing, bl);
+  } else {
+    num_objects_missing = 0;
+  }
   DECODE_FINISH(bl);
 }
 
@@ -1928,6 +1935,7 @@ void object_stat_sum_t::generate_test_instances(list<object_stat_sum_t*>& o)
   a.num_object_clones = 4;
   a.num_object_copies = 5;
   a.num_objects_missing_on_primary = 6;
+  a.num_objects_missing = 123;
   a.num_objects_degraded = 7;
   a.num_objects_unfound = 8;
   a.num_rd = 9; a.num_rd_kb = 10;
@@ -1963,6 +1971,7 @@ void object_stat_sum_t::add(const object_stat_sum_t& o)
   num_object_clones += o.num_object_clones;
   num_object_copies += o.num_object_copies;
   num_objects_missing_on_primary += o.num_objects_missing_on_primary;
+  num_objects_missing += o.num_objects_missing;
   num_objects_degraded += o.num_objects_degraded;
   num_objects_misplaced += o.num_objects_misplaced;
   num_rd += o.num_rd;
@@ -2000,6 +2009,7 @@ void object_stat_sum_t::sub(const object_stat_sum_t& o)
   num_object_clones -= o.num_object_clones;
   num_object_copies -= o.num_object_copies;
   num_objects_missing_on_primary -= o.num_objects_missing_on_primary;
+  num_objects_missing -= o.num_objects_missing;
   num_objects_degraded -= o.num_objects_degraded;
   num_objects_misplaced -= o.num_objects_misplaced;
   num_rd -= o.num_rd;
@@ -2038,6 +2048,7 @@ bool operator==(const object_stat_sum_t& l, const object_stat_sum_t& r)
     l.num_object_clones == r.num_object_clones &&
     l.num_object_copies == r.num_object_copies &&
     l.num_objects_missing_on_primary == r.num_objects_missing_on_primary &&
+    l.num_objects_missing == r.num_objects_missing &&
     l.num_objects_degraded == r.num_objects_degraded &&
     l.num_objects_misplaced == r.num_objects_misplaced &&
     l.num_objects_unfound == r.num_objects_unfound &&
