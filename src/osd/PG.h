@@ -2228,6 +2228,8 @@ public:
 		    pair<pg_shard_t, pg_info_t> &notify_info);
   void fulfill_log(pg_shard_t from, const pg_query_t &query, epoch_t query_epoch);
 
+  void check_full_transition(OSDMapRef lastmap, OSDMapRef osdmap);
+
   bool should_restart_peering(
     int newupprimary,
     int newactingprimary,
