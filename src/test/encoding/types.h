@@ -335,6 +335,9 @@ TYPE(rgw_log_entry)
 TYPE(cls_rbd_parent)
 TYPE(cls_rbd_snap)
 
+#include "cls/rbd/cls_rbd_types.h"
+TYPE(cls::rbd::MirrorPeer)
+
 #endif
 
 #include "cls/lock/cls_lock_types.h"
