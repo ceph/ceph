@@ -78,17 +78,35 @@ void RGWAsyncRadosProcessor::queue(RGWAsyncRadosRequest *req) {
 
 int RGWAsyncGetSystemObj::_send_request()
 {
-  return store->get_system_obj(*obj_ctx, read_state, objv_tracker, obj, *pbl, ofs, end, NULL, NULL);
+  return store->get_system_obj(*obj_ctx, read_state, objv_tracker, obj, *pbl, ofs, end, pattrs, NULL);
 }
 
 RGWAsyncGetSystemObj::RGWAsyncGetSystemObj(RGWAioCompletionNotifier *cn, RGWRados *_store, RGWObjectCtx *_obj_ctx,
                        RGWObjVersionTracker *_objv_tracker, rgw_obj& _obj,
                        bufferlist *_pbl, off_t _ofs, off_t _end) : RGWAsyncRadosRequest(cn), store(_store), obj_ctx(_obj_ctx),
-                                                                   objv_tracker(_objv_tracker), obj(_obj), pbl(_pbl),
+                                                                   objv_tracker(_objv_tracker), obj(_obj), pbl(_pbl), pattrs(NULL),
                                                                   ofs(_ofs), end(_end)
 {
 }
 
+int RGWSimpleRadosReadAttrsCR::send_request()
+{
+  rgw_obj obj = rgw_obj(pool, oid);
+  req = new RGWAsyncGetSystemObj(stack->create_completion_notifier(),
+			         store, &obj_ctx, NULL,
+				 obj,
+				 &bl, 0, -1);
+  if (pattrs) {
+    req->set_read_attrs(pattrs);
+  }
+  async_rados->queue(req);
+  return 0;
+}
+
+int RGWSimpleRadosReadAttrsCR::request_complete()
+{
+  return req->get_ret_status();
+}
 
 int RGWAsyncPutSystemObj::_send_request()
 {
@@ -101,6 +119,19 @@ RGWAsyncPutSystemObj::RGWAsyncPutSystemObj(RGWAioCompletionNotifier *cn, RGWRado
                      bufferlist& _bl, time_t _mtime) : RGWAsyncRadosRequest(cn), store(_store),
                                                        objv_tracker(_objv_tracker), obj(_obj), exclusive(_exclusive),
                                                        bl(_bl), mtime(_mtime)
+{
+}
+
+int RGWAsyncPutSystemObjAttrs::_send_request()
+{
+  return store->system_obj_set_attrs(NULL, obj, *attrs, NULL, objv_tracker);
+}
+
+RGWAsyncPutSystemObjAttrs::RGWAsyncPutSystemObjAttrs(RGWAioCompletionNotifier *cn, RGWRados *_store,
+                     RGWObjVersionTracker *_objv_tracker, rgw_obj& _obj,
+                     map<string, bufferlist> *_attrs) : RGWAsyncRadosRequest(cn), store(_store),
+                                                       objv_tracker(_objv_tracker), obj(_obj),
+                                                       attrs(_attrs)
 {
 }
 

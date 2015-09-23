@@ -202,32 +202,55 @@ public:
 class RGWBucketSyncStatusManager;
 class RGWBucketSyncCR;
 
-struct rgw_bucket_shard_sync_marker {
-  rgw_obj_key full_marker;
-  string incremental_marker;
+struct rgw_bucket_shard_full_sync_marker {
+  rgw_obj_key position;
 
-  rgw_bucket_shard_sync_marker() {}
+  rgw_bucket_shard_full_sync_marker() {}
+
+  void encode_attr(map<string, bufferlist>& attrs);
 
   void encode(bufferlist& bl) const {
     ENCODE_START(1, 1, bl);
-    ::encode(full_marker, bl);
-    ::encode(incremental_marker, bl);
+    ::encode(position, bl);
     ENCODE_FINISH(bl);
   }
 
   void decode(bufferlist::iterator& bl) {
      DECODE_START(1, bl);
-    ::decode(full_marker, bl);
-    ::decode(incremental_marker, bl);
+    ::decode(position, bl);
      DECODE_FINISH(bl);
   }
 
   void dump(Formatter *f) const {
-    encode_json("full_marker", full_marker, f);
-    encode_json("incremental_marker", incremental_marker, f);
+    encode_json("position", position, f);
   }
 };
-WRITE_CLASS_ENCODER(rgw_bucket_shard_sync_marker)
+WRITE_CLASS_ENCODER(rgw_bucket_shard_full_sync_marker)
+
+struct rgw_bucket_shard_inc_sync_marker {
+  string position;
+
+  rgw_bucket_shard_inc_sync_marker() {}
+
+  void encode_attr(map<string, bufferlist>& attrs);
+
+  void encode(bufferlist& bl) const {
+    ENCODE_START(1, 1, bl);
+    ::encode(position, bl);
+    ENCODE_FINISH(bl);
+  }
+
+  void decode(bufferlist::iterator& bl) {
+     DECODE_START(1, bl);
+    ::decode(position, bl);
+     DECODE_FINISH(bl);
+  }
+
+  void dump(Formatter *f) const {
+    encode_json("position", position, f);
+  }
+};
+WRITE_CLASS_ENCODER(rgw_bucket_shard_inc_sync_marker)
 
 struct rgw_bucket_shard_sync_info {
   enum SyncState {
@@ -237,19 +260,26 @@ struct rgw_bucket_shard_sync_info {
   };
 
   uint16_t state;
-  rgw_bucket_shard_sync_marker marker;
+  rgw_bucket_shard_full_sync_marker full_marker;
+  rgw_bucket_shard_inc_sync_marker inc_marker;
+
+  void decode_from_attrs(CephContext *cct, map<string, bufferlist>& attrs);
+  void encode_all_attrs(map<string, bufferlist>& attrs);
+  void encode_state_attr(map<string, bufferlist>& attrs);
 
   void encode(bufferlist& bl) const {
     ENCODE_START(1, 1, bl);
     ::encode(state, bl);
-    ::encode(marker, bl);
+    ::encode(full_marker, bl);
+    ::encode(inc_marker, bl);
     ENCODE_FINISH(bl);
   }
 
   void decode(bufferlist::iterator& bl) {
      DECODE_START(1, bl);
      ::decode(state, bl);
-     ::decode(marker, bl);
+     ::decode(full_marker, bl);
+     ::decode(inc_marker, bl);
      DECODE_FINISH(bl);
   }
 
@@ -270,10 +300,12 @@ struct rgw_bucket_shard_sync_info {
 	break;
     }
     encode_json("status", s, f);
-    encode_json("marker", marker, f);
+    encode_json("full_marker", full_marker, f);
+    encode_json("inc_marker", inc_marker, f);
   }
 
   rgw_bucket_shard_sync_info() : state((int)StateInit) {}
+
 };
 WRITE_CLASS_ENCODER(rgw_bucket_shard_sync_info)
 
@@ -302,17 +334,9 @@ public:
   int init(const string& _source_zone, RGWRESTConn *_conn, const string& _bucket_name, const string& _bucket_id, int _shard_id);
   void finish();
 
-#if 0
-  int read_log_info(rgw_datalog_info *log_info);
-  int get_sync_info();
-#endif
   RGWCoroutine *read_sync_status_cr(RGWObjectCtx& obj_ctx, rgw_bucket_shard_sync_info *sync_status);
   RGWCoroutine *init_sync_status_cr(RGWObjectCtx& obj_ctx);
   RGWCoroutine *run_sync_cr(RGWObjectCtx& obj_ctx);
-#if 0
-  int set_sync_info(const rgw_data_sync_info& sync_info);
-  int run_sync(int num_shards, rgw_data_sync_status& sync_status);
-#endif
 
   void wakeup();
 };
