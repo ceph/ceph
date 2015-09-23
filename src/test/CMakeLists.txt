@@ -2164,7 +2164,7 @@ target_link_libraries(test_keyvaluedb_iterators
   ${CMAKE_DL_LIBS}
   )
 
-if(${WITH_FUSE})
+if(${HAVE_FUSE})
   add_executable(test_cfuse_cache_invalidate
     test_cfuse_cache_invalidate.cc
     )
@@ -2175,7 +2175,7 @@ if(${WITH_FUSE})
     ${TCMALLOC_LIBS}
     ${CMAKE_DL_LIBS}
     )
-endif(${WITH_FUSE})
+endif(${HAVE_FUSE})
 
 if(${WITH_CEPHFS})
   add_executable(test_c_headers

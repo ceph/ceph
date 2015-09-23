@@ -43,3 +43,8 @@ if (AIO_INCLUDE AND AIO_LIBS)
      message(STATUS "${AIO_DIR_MESSAGE}")
    endif ()
  endif ()
+
+# handle the QUIETLY and REQUIRED arguments and set UUID_FOUND to TRUE if
+# all listed variables are TRUE
+include(FindPackageHandleStandardArgs)
+find_package_handle_standard_args(aio DEFAULT_MSG AIO_LIBS AIO_INCLUDE)
