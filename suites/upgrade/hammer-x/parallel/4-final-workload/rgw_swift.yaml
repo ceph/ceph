@@ -1,3 +1,6 @@
+overrides:
+  rgw:
+    frontend: civetweb
 tasks:
   - rgw: [client.1]
   - print: "**** done rgw 4-final-workload"
