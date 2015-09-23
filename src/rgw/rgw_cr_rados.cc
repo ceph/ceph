@@ -78,7 +78,7 @@ void RGWAsyncRadosProcessor::queue(RGWAsyncRadosRequest *req) {
 
 int RGWAsyncGetSystemObj::_send_request()
 {
-  return store->get_system_obj(*obj_ctx, read_state, objv_tracker, obj, *pbl, ofs, end, NULL);
+  return store->get_system_obj(*obj_ctx, read_state, objv_tracker, obj, *pbl, ofs, end, NULL, NULL);
 }
 
 RGWAsyncGetSystemObj::RGWAsyncGetSystemObj(RGWAioCompletionNotifier *cn, RGWRados *_store, RGWObjectCtx *_obj_ctx,
