@@ -6198,7 +6198,6 @@ void OSD::handle_osd_map(MOSDMap *m)
   ObjectStore::Transaction &t = *_t;
 
   // store new maps: queue for disk and put in the osdmap cache
-  epoch_t last_marked_full = 0;
   epoch_t start = MAX(osdmap->get_epoch() + 1, first);
   for (epoch_t e = start; e <= last; e++) {
     map<epoch_t,bufferlist>::iterator p;
@@ -6209,9 +6208,6 @@ void OSD::handle_osd_map(MOSDMap *m)
       bufferlist& bl = p->second;
       
       o->decode(bl);
-      if (o->test_flag(CEPH_OSDMAP_FULL))
-	last_marked_full = e;
-      set_pool_last_map_marked_full(o, e);
 
       ghobject_t fulloid = get_osdmap_pobject_name(e);
       t.write(coll_t::meta(), fulloid, 0, bl.length(), bl);
@@ -6242,10 +6238,6 @@ void OSD::handle_osd_map(MOSDMap *m)
 	derr << "ERROR: bad fsid?  i have " << osdmap->get_fsid() << " and inc has " << inc.fsid << dendl;
 	assert(0 == "bad fsid");
       }
-
-      if (o->test_flag(CEPH_OSDMAP_FULL))
-	last_marked_full = e;
-      set_pool_last_map_marked_full(o, e);
 
       bufferlist fbl;
       o->encode(fbl, inc.encode_features | CEPH_FEATURE_RESERVED);
@@ -6315,9 +6307,6 @@ void OSD::handle_osd_map(MOSDMap *m)
     superblock.oldest_map = first;
   superblock.newest_map = last;
 
-  if (last_marked_full > superblock.last_map_marked_full)
-    superblock.last_map_marked_full = last_marked_full;
- 
   map_lock.get_write();
 
   // advance through the new maps
@@ -8808,18 +8797,4 @@ void OSD::PeeringWQ::_dequeue(list<PG*> *out) {
         }
   }
   in_use.insert(got.begin(), got.end());
-}
-
-void OSD::set_pool_last_map_marked_full(OSDMap *o, epoch_t &e)
-{
-  map<int64_t, epoch_t> &pool_last_map_marked_full = superblock.pool_last_map_marked_full;
-  for (map<int64_t, pg_pool_t>::const_iterator it = o->get_pools().begin();
-       it != o->get_pools().end(); ++it) {
-    bool exist = pool_last_map_marked_full.count(it->first);
-    if (it->second.has_flag(pg_pool_t::FLAG_FULL) && !exist)
-      pool_last_map_marked_full[it->first] = e;
-    if (it->second.has_flag(pg_pool_t::FLAG_FULL) &&
-      (exist && pool_last_map_marked_full.count(it->first) < e))
-       pool_last_map_marked_full[it->first] = e;
-    }
 }
