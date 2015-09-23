@@ -45,6 +45,7 @@ libcls_rbd_client_la_SOURCES = \
 	cls/rbd/cls_rbd_client.cc \
 	cls/rbd/cls_rbd_types.cc
 noinst_LTLIBRARIES += libcls_rbd_client.la
+DENCODER_DEPS += libcls_rbd_client.la
 
 libcls_user_client_a_SOURCES = cls/user/cls_user_client.cc \
 	cls/user/cls_user_types.cc \
