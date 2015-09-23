@@ -2093,6 +2093,33 @@ int main(int argc, char **argv)
 	  cerr << "ERROR: couldn't store realm info: " << cpp_strerror(-ret) << std::endl;
 	  return 1;
 	}
+
+		RGWZoneGroupMap zonegroup_map;
+	ret = zonegroup_map.read(g_ceph_context, store);
+	if (ret < 0 && ret != -ENOENT) {
+	  cerr << "ERROR: couldn't read zonegroup_map: " << cpp_strerror(-ret) << std::endl;
+	  return ret;
+	}
+
+	ret = zonegroup_map.update(realm);
+	if (ret < 0) {
+	  cerr << "ERROR: couldn't update realm " << realm_name << ": " << cpp_strerror(-ret) << std::endl;
+	  return ret;
+	}
+
+	ret = zonegroup_map.update(g_ceph_context, store, realm.get_current_period(), realm.get_id());
+	if (ret < 0) {
+	  cerr << "ERROR: couldn't update " << realm_name << " current period: " << cpp_strerror(-ret)
+	       << std::endl;
+	  return ret;
+	}
+
+	ret = zonegroup_map.store(g_ceph_context, store);
+	if (ret < 0) {
+	  cerr << "ERROR: couldn't store zonegroup map info: " << cpp_strerror(-ret) << std::endl;
+	  return 1;
+	}
+
 	encode_json("realm", realm, formatter);
 	formatter->flush(cout);
       }
