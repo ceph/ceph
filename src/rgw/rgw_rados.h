@@ -1241,9 +1241,8 @@ public:
   const string& get_default_oid(bool old_format = false);
   const string& get_names_oid_prefix();
   const string& get_info_oid_prefix(bool old_format = false);
-  const string& get_predefined_id() {
-    return id;
-  }
+  const string& get_predefined_id();
+
   void dump(Formatter *f) const;
   void decode_json(JSONObj *obj);
 
