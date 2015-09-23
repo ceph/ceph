@@ -512,7 +512,7 @@ int process_request(RGWRados *store, RGWREST *rest, RGWRequest *req,
 {
   int ret = 0;
 
-  io->init(g_ceph_context);
+  io->init(g_ceph_context); // XXX fix me
 
   req->log_init();
 
@@ -558,8 +558,10 @@ int process_request(RGWRados *store, RGWREST *rest, RGWRequest *req,
   }
   req->op = op;
 
+  // just checks the HTTP header, and that the user can access the gateway
+  // may be able to skip this after MOUNT (revalidate the user info)
   req->log(s, "authorizing");
-  ret = handler->authorize();
+  ret = handler->authorize(); // validates s->user
   if (ret < 0) {
     dout(10) << "failed to authorize request" << dendl;
     abort_early(s, op, ret);
