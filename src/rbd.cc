@@ -3506,7 +3506,7 @@ if (!set_conf_param(v, p1, p2, p3)) { \
 		      (char **)&imgname, (char **)&snapname);
   if ((imgname) && (imgname[0] == '\0')) {
     cerr << "rbd: image name was not specified" << std::endl;
-    return EXIT_FAILRE;
+    return EXIT_FAILURE;
   }
 
   if (snapname && opt_cmd != OPT_SNAP_CREATE && opt_cmd != OPT_SNAP_ROLLBACK &&
