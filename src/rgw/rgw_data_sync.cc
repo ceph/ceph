@@ -623,6 +623,19 @@ public:
   }
 };
 
+class RGWReadBucketShardSyncStatusCR : public RGWSimpleRadosReadCR<rgw_bucket_shard_sync_info> {
+  map<string, bufferlist> attrs;
+public:
+  RGWReadBucketShardSyncStatusCR(RGWAsyncRadosProcessor *async_rados, RGWRados *store,
+		      RGWObjectCtx& obj_ctx, const string& source_zone,
+                      const string& bucket_name, const string bucket_id, int shard_id,
+		      rgw_bucket_shard_sync_info *status) : RGWSimpleRadosReadCR(async_rados, store, obj_ctx,
+									    store->get_zone_params().log_pool,
+									    RGWBucketSyncStatusManager::status_oid(source_zone, bucket_name, bucket_id, shard_id),
+                                                                            status) {}
+
+};
+
 
 class RGWInitBucketShardSyncStatusCoroutine : public RGWCoroutine {
   RGWAsyncRadosProcessor *async_rados;
@@ -699,9 +712,11 @@ public:
       }
       yield {
 	status.state = rgw_bucket_shard_sync_info::StateFullSync;
-        status.marker.incremental_marker = info.max_marker;
-        call(new RGWSimpleRadosWriteCR<rgw_bucket_shard_sync_info>(async_rados, store, store->get_zone_params().log_pool,
-				 sync_status_oid, status));
+        status.inc_marker.position = info.max_marker;
+        map<string, bufferlist> attrs;
+        status.encode_all_attrs(attrs);
+        call(new RGWSimpleRadosWriteAttrsCR(async_rados, store, store->get_zone_params().log_pool,
+                                            sync_status_oid, attrs));
       }
       yield { /* unlock */
 	call(new RGWSimpleRadosUnlockCR(async_rados, store, store->get_zone_params().log_pool, sync_status_oid,
@@ -719,34 +734,104 @@ RGWCoroutine *RGWRemoteBucketLog::init_sync_status_cr(RGWObjectCtx& obj_ctx)
                                                    conn, bucket_name, bucket_id, shard_id);
 }
 
-class RGWReadBucketSyncStatusCoroutine : public RGWSimpleRadosReadCR<rgw_bucket_shard_sync_info> {
+template <class T>
+static void decode_attr(CephContext *cct, map<string, bufferlist>& attrs, const string& attr_name, T *val)
+{
+  map<string, bufferlist>::iterator iter = attrs.find(attr_name);
+  if (iter == attrs.end()) {
+    *val = T();
+    return;
+  }
 
+  bufferlist::iterator biter = iter->second.begin();
+  try {
+    ::decode(*val, biter);
+  } catch (buffer::error& err) {
+    ldout(cct, 0) << "ERROR: failed to decode attribute: " << attr_name << dendl;
+  }
+}
+
+void rgw_bucket_shard_sync_info::decode_from_attrs(CephContext *cct, map<string, bufferlist>& attrs)
+{
+  decode_attr(cct, attrs, "state", &state);
+  decode_attr(cct, attrs, "full_marker", &full_marker);
+  decode_attr(cct, attrs, "inc_marker", &inc_marker);
+}
+
+void rgw_bucket_shard_sync_info::encode_all_attrs(map<string, bufferlist>& attrs)
+{
+  encode_state_attr(attrs);
+  full_marker.encode_attr(attrs);
+  inc_marker.encode_attr(attrs);
+}
+
+void rgw_bucket_shard_sync_info::encode_state_attr(map<string, bufferlist>& attrs)
+{
+  ::encode(state, attrs["state"]);
+}
+
+void rgw_bucket_shard_full_sync_marker::encode_attr(map<string, bufferlist>& attrs)
+{
+  ::encode(*this, attrs["full_marker"]);
+}
+
+void rgw_bucket_shard_inc_sync_marker::encode_attr(map<string, bufferlist>& attrs)
+{
+  ::encode(*this, attrs["inc_marker"]);
+}
+
+class RGWReadBucketSyncStatusCoroutine : public RGWCoroutine {
+  RGWAsyncRadosProcessor *async_rados;
+  RGWRados *store;
+  RGWObjectCtx& obj_ctx;
+  string oid;
+  rgw_bucket_shard_sync_info *status;
+
+  map<string, bufferlist> attrs;
 public:
-  RGWReadBucketSyncStatusCoroutine(RGWAsyncRadosProcessor *async_rados, RGWRados *store,
-		      RGWObjectCtx& obj_ctx, const string& source_zone,
-                      const string& bucket_name, const string bucket_id, int shard_id,
-		      rgw_bucket_shard_sync_info *status) : RGWSimpleRadosReadCR(async_rados, store, obj_ctx,
-									    store->get_zone_params().log_pool,
-									    RGWBucketSyncStatusManager::status_oid(source_zone, bucket_name, bucket_id, shard_id),
-                                                                            status) {}
+  RGWReadBucketSyncStatusCoroutine(RGWAsyncRadosProcessor *_async_rados, RGWRados *_store,
+		      RGWObjectCtx& _obj_ctx, const string& _source_zone,
+                      const string& _bucket_name, const string _bucket_id, int _shard_id,
+		      rgw_bucket_shard_sync_info *_status) : RGWCoroutine(_store->ctx()),
+                                                            async_rados(_async_rados),
+                                                            store(_store),
+                                                            obj_ctx(_obj_ctx),
+                                                            oid(RGWBucketSyncStatusManager::status_oid(_source_zone, _bucket_name, _bucket_id, _shard_id)),
+                                                            status(_status) {}
+  int operate();
 };
 
+int RGWReadBucketSyncStatusCoroutine::operate()
+{
+  reenter(this) {
+    yield {
+      int ret = call(new RGWSimpleRadosReadAttrsCR(async_rados, store, obj_ctx,
+                                                   store->get_zone_params().log_pool,
+                                                   oid,
+                                                   &attrs));
+      if (ret < 0) {
+        ldout(store->ctx(), 0) << "ERROR: failed to call new RGWSimpleRadosReadAttrsCR() ret=" << ret << dendl;
+        return set_state(RGWCoroutine_Error, ret);
+      }
+    }
+    if (retcode == -ENOENT) {
+      *status = rgw_bucket_shard_sync_info();
+      return set_state(RGWCoroutine_Done, 0);
+    }
+    if (retcode < 0) {
+      ldout(store->ctx(), 0) << "ERROR: failed to call fetch bucket shard info oid=" << oid << " ret=" << retcode << dendl;
+      return set_state(RGWCoroutine_Error, retcode);
+    }
+    status->decode_from_attrs(store->ctx(), attrs);
+    return set_state(RGWCoroutine_Done, 0);
+  }
+  return 0;
+}
 RGWCoroutine *RGWRemoteBucketLog::read_sync_status_cr(RGWObjectCtx& obj_ctx, rgw_bucket_shard_sync_info *sync_status)
 {
   return new RGWReadBucketSyncStatusCoroutine(async_rados, store, obj_ctx, source_zone,
                                               bucket_name, bucket_id, shard_id, sync_status);
 }
-
-class RGWWriteBucketSyncStatusCoroutine : public RGWSimpleRadosWriteCR<rgw_bucket_shard_sync_info> {
-
-public:
-  RGWWriteBucketSyncStatusCoroutine(RGWAsyncRadosProcessor *async_rados, RGWRados *store,
-		      const string& source_zone, const string& bucket_name, const string bucket_id, int shard_id,
-		      rgw_bucket_shard_sync_info& status) : RGWSimpleRadosWriteCR(async_rados, store,
-									    store->get_zone_params().log_pool,
-									    RGWBucketSyncStatusManager::status_oid(source_zone, bucket_name, bucket_id, shard_id),
-                                                                            status) {}
-};
 
 RGWBucketSyncStatusManager::~RGWBucketSyncStatusManager() {
   for (map<int, RGWRemoteBucketLog *>::iterator iter = source_logs.begin(); iter != source_logs.end(); ++iter) {
@@ -836,7 +921,7 @@ class RGWListBucketShardCR: public RGWCoroutine {
   int shard_id;
 
   string instance_key;
-  rgw_bucket_shard_sync_marker marker;
+  rgw_bucket_shard_full_sync_marker marker;
 
   bucket_list_result *result;
 
@@ -844,7 +929,7 @@ public:
   RGWListBucketShardCR(RGWRados *_store, RGWHTTPManager *_mgr, RGWAsyncRadosProcessor *_async_rados,
                                   RGWRESTConn *_conn,
                                   const string& _bucket_name, const string& _bucket_id, int _shard_id,
-                                  rgw_bucket_shard_sync_marker& _marker,
+                                  rgw_bucket_shard_full_sync_marker& _marker,
                                   bucket_list_result *_result) : RGWCoroutine(_store->ctx()), store(_store),
                                                       http_manager(_mgr),
 						      async_rados(_async_rados),
@@ -868,8 +953,8 @@ public:
 					{ "versions" , NULL },
 					{ "format" , "json" },
 					{ "objs-container" , "true" },
-					{ "key-marker" , marker.full_marker.name.c_str() },
-					{ "version-id-marker" , marker.full_marker.instance.c_str() },
+					{ "key-marker" , marker.position.name.c_str() },
+					{ "version-id-marker" , marker.position.instance.c_str() },
 	                                { NULL, NULL } };
 
         string p = string("/") + bucket_name;
@@ -894,24 +979,27 @@ class RGWBucketFullSyncShardMarkerTrack : public RGWSyncShardMarkerTrack<rgw_obj
   RGWAsyncRadosProcessor *async_rados;
 
   string marker_oid;
-  rgw_bucket_shard_sync_marker sync_marker;
+  rgw_bucket_shard_full_sync_marker sync_marker;
 
 
 public:
   RGWBucketFullSyncShardMarkerTrack(RGWRados *_store, RGWAsyncRadosProcessor *_async_rados,
                          const string& _marker_oid,
-                         const rgw_bucket_shard_sync_marker& _marker) : RGWSyncShardMarkerTrack(BUCKET_SYNC_UPDATE_MARKER_WINDOW),
+                         const rgw_bucket_shard_full_sync_marker& _marker) : RGWSyncShardMarkerTrack(BUCKET_SYNC_UPDATE_MARKER_WINDOW),
                                                                 store(_store),
                                                                 async_rados(_async_rados),
                                                                 marker_oid(_marker_oid),
                                                                 sync_marker(_marker) {}
 
   RGWCoroutine *store_marker(const rgw_obj_key& new_marker) {
-    sync_marker.full_marker = new_marker;
+    sync_marker.position = new_marker;
+
+    map<string, bufferlist> attrs;
+    sync_marker.encode_attr(attrs);
 
     ldout(store->ctx(), 20) << __func__ << "(): updating marker marker_oid=" << marker_oid << " marker=" << new_marker << dendl;
-    return new RGWSimpleRadosWriteCR<rgw_bucket_shard_sync_marker>(async_rados, store, store->get_zone_params().log_pool,
-				 marker_oid, sync_marker);
+    return new RGWSimpleRadosWriteAttrsCR(async_rados, store, store->get_zone_params().log_pool,
+				 marker_oid, attrs);
   }
 };
 
@@ -1057,7 +1145,7 @@ int RGWRunBucketSyncCoroutine::operate()
         yield {
           ldout(store->ctx(), 20) << __func__ << "(): building full sync maps" << dendl;
           int r = call(new RGWListBucketShardCR(store, http_manager, async_rados, conn, bucket_name, bucket_id, shard_id,
-                                                sync_status.marker, &list_result));
+                                                sync_status.full_marker, &list_result));
           if (r < 0) {
             ldout(store->ctx(), 0) << "ERROR: failed to call new CR (RGWListBucketShardCR)" << dendl;
             return r;
@@ -1068,7 +1156,7 @@ int RGWRunBucketSyncCoroutine::operate()
         }
         marker_tracker = new RGWBucketFullSyncShardMarkerTrack(store, async_rados, 
                                                                RGWBucketSyncStatusManager::status_oid(source_zone, bucket_name, bucket_id, shard_id),
-                                                               sync_status.marker);
+                                                               sync_status.full_marker);
         entries_iter = list_result.entries.begin();
         for (; entries_iter != list_result.entries.end(); ++entries_iter) {
           ldout(store->ctx(), 20) << "[full sync] syncing object: " << bucket_name << ":" << bucket_id << ":" << shard_id << "/" << entries_iter->key << dendl;
