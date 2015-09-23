@@ -4472,7 +4472,7 @@ struct C_OSD_GetVersion : public Context {
   C_OSD_GetVersion(OSD *o) : osd(o), oldest(0), newest(0) {}
   void finish(int r) {
     if (r >= 0)
-      osd->_maybe_boot(oldest, newest);
+      osd->maybe_boot(oldest, newest);
   }
 };
 
@@ -4484,9 +4484,14 @@ void OSD::start_boot()
   monc->get_version("osdmap", &c->newest, &c->oldest, c);
 }
 
-void OSD::_maybe_boot(epoch_t oldest, epoch_t newest)
+void OSD::maybe_boot(epoch_t oldest, epoch_t newest)
 {
   Mutex::Locker l(osd_lock);
+  _maybe_boot(oldest, newest);
+}
+
+void OSD::_maybe_boot(epoch_t oldest, epoch_t newest)
+{
   if (!is_booting())
     return;
   dout(10) << "_maybe_boot mon has osdmaps " << oldest << ".." << newest << dendl;
