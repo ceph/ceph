@@ -51,7 +51,7 @@ int ceph_arch_arm_probe(void)
 # ifdef HWCAP_CRC32
 	ceph_arch_aarch64_crc32 = (get_hwcap() & HWCAP_CRC32) == HWCAP_CRC32;
 # else
-	ceph_arch_aarch64_crc32 = false;  // sorry!
+	ceph_arch_aarch64_crc32 = 0;  // sorry!
 # endif
 #else
 	if (0)
