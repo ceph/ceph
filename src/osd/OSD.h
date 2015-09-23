@@ -1185,15 +1185,19 @@ private:
 
   // -- state --
 public:
-  static const int STATE_INITIALIZING = 1;
-  static const int STATE_BOOTING = 2;
-  static const int STATE_ACTIVE = 3;
-  static const int STATE_STOPPING = 4;
-  static const int STATE_WAITING_FOR_HEALTHY = 5;
+  typedef enum {
+    STATE_INITIALIZING = 1,
+    STATE_PREBOOT,
+    STATE_BOOTING,
+    STATE_ACTIVE,
+    STATE_STOPPING,
+    STATE_WAITING_FOR_HEALTHY
+  } osd_state_t;
 
   static const char *get_state_name(int s) {
     switch (s) {
     case STATE_INITIALIZING: return "initializing";
+    case STATE_PREBOOT: return "preboot";
     case STATE_BOOTING: return "booting";
     case STATE_ACTIVE: return "active";
     case STATE_STOPPING: return "stopping";
@@ -1214,6 +1218,9 @@ public:
   }
   bool is_initializing() {
     return get_state() == STATE_INITIALIZING;
+  }
+  bool is_preboot() {
+    return get_state() == STATE_PREBOOT;
   }
   bool is_booting() {
     return get_state() == STATE_BOOTING;
@@ -1975,8 +1982,8 @@ protected:
 
   // -- boot --
   void start_boot();
-  void maybe_boot(epoch_t oldest, epoch_t newest);
-  void _maybe_boot(epoch_t oldest, epoch_t newest);
+  void _got_mon_epochs(epoch_t oldest, epoch_t newest);
+  void _preboot(epoch_t oldest, epoch_t newest);
   void _send_boot();
   void _collect_metadata(map<string,string> *pmeta);
   bool _lsb_release_set(char *buf, const char *str, map<string,string> *pm, const char *key);
