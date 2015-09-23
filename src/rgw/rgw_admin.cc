@@ -1631,6 +1631,8 @@ int main(int argc, char **argv)
       realm_id = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--realm-new-name", (char*)NULL)) {
       realm_new_name = val;
+    } else if (ceph_argparse_witharg(args, i, &val, "--rgw-zone", (char*)NULL)) {
+      zone_name = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--zonegroup-id", (char*)NULL)) {
       zonegroup_id = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--zonegroup", (char*)NULL)) {
