@@ -6556,7 +6556,10 @@ void OSD::handle_osd_map(MOSDMap *m)
     osdmap_subscribe(osdmap->get_epoch()+1, true);
   }
   else if (is_booting()) {
-    start_boot();  // retry
+    if (m->get_source().is_mon())
+      _maybe_boot(m->oldest_map, m->newest_map);
+    else
+      start_boot();
   }
   else if (do_restart)
     start_boot();
