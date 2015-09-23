@@ -2439,6 +2439,19 @@ void PG::_update_calc_stats()
       pg_log.get_missing().num_missing();
     degraded += pg_log.get_missing().num_missing();
 
+    // num_objects_missing on each peer
+    for (map<pg_shard_t, pg_info_t>::iterator pi =
+        peer_info.begin();
+        pi != peer_info.end();
+        ++pi) {
+      map<pg_shard_t, pg_missing_t>::const_iterator pm =
+        peer_missing.find(pi->first);
+      if (pm != peer_missing.end()) {
+        pi->second.stats.stats.sum.num_objects_missing =
+          pm->second.num_missing();
+      }
+    }
+
     assert(!acting.empty());
     for (set<pg_shard_t>::iterator i = actingset.begin();
 	 i != actingset.end();
