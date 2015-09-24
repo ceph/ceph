@@ -187,6 +187,7 @@ private:
   struct RecoveryOp {
     hobject_t hoid;
     eversion_t v;
+    uint64_t recovered_length;
     set<pg_shard_t> missing_on;
     set<shard_id_t> missing_on_shards;
 

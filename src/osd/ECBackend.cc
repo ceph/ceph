@@ -551,6 +551,7 @@ void ECBackend::continue_recovery_op(
 	if (op.recovery_progress.first) {
 	  pop.attrset = op.xattrs;
 	}
+	op.recovered_length += pop.data.length();
 	pop.recovery_info = op.recovery_info;
 	pop.before_progress = op.recovery_progress;
 	pop.after_progress = after_progress;
@@ -575,11 +576,14 @@ void ECBackend::continue_recovery_op(
 	    if (*i != get_parent()->primary_shard()) {
 	      dout(10) << __func__ << ": on_peer_recover on " << *i
 		       << ", obj " << op.hoid << dendl;
+	      object_stat_sum_t stats;
+	      stats.num_objects_recovered = 1;
+	      stats.num_bytes_recovered = op.recovered_length;
 	      get_parent()->on_peer_recover(
 		*i,
 		op.hoid,
 		op.recovery_info,
-		object_stat_sum_t());
+		stats);
 	    }
 	  }
 	  get_parent()->on_global_recover(op.hoid);
