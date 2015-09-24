@@ -3507,6 +3507,130 @@ int invoke_async_request(ImageCtx *ictx, const std::string& request_type,
     return cls_client::metadata_list(&ictx->md_ctx, ictx->header_oid, start, max, pairs);
   }
 
+  int mirror_is_enabled(IoCtx& io_ctx, bool *enabled) {
+    CephContext *cct = reinterpret_cast<CephContext *>(io_ctx.cct());
+    ldout(cct, 20) << __func__ << dendl;
+
+    int r = cls_client::mirror_is_enabled(&io_ctx, enabled);
+    if (r < 0) {
+      lderr(cct) << "Failed to retrieve mirror flag: " << cpp_strerror(r)
+                 << dendl;
+      return r;
+    }
+    return 0;
+  }
+
+  int mirror_set_enabled(IoCtx& io_ctx, bool enabled) {
+    CephContext *cct = reinterpret_cast<CephContext *>(io_ctx.cct());
+    ldout(cct, 20) << __func__ << ": enabled=" << enabled << dendl;
+
+    int r = cls_client::mirror_set_enabled(&io_ctx, enabled);
+    if (r < 0 && r != -ENOENT) {
+      lderr(cct) << "Failed to set mirror flag: " << cpp_strerror(r) << dendl;
+      return r;
+    }
+    return 0;
+  }
+
+  int mirror_peer_add(IoCtx& io_ctx, const std::string &cluster_uuid,
+                      const std::string &cluster_name,
+                      const std::string &client_name) {
+    CephContext *cct = reinterpret_cast<CephContext *>(io_ctx.cct());
+    ldout(cct, 20) << __func__ << ": uuid=" << cluster_uuid << ", "
+                   << "name=" << cluster_name << ", "
+                   << "client=" << client_name << dendl;
+
+    std::string local_cluster_uuid;
+    librados::Rados rados(io_ctx);
+    int r = rados.cluster_fsid(&local_cluster_uuid);
+    if (r < 0) {
+      lderr(cct) << "Failed to retreive cluster uuid" << dendl;
+      return r;
+    }
+
+    if (local_cluster_uuid == cluster_uuid) {
+      lderr(cct) << "Cannot add self as remote peer" << dendl;
+      return -EINVAL;
+    }
+
+    r = cls_client::mirror_peer_add(&io_ctx, cluster_uuid, cluster_name,
+                                    client_name);
+    if (r < 0) {
+      lderr(cct) << "Failed to add mirror peer '" << cluster_uuid << "': "
+                 << cpp_strerror(r) << dendl;
+      return r;
+    }
+    return 0;
+  }
+
+  int mirror_peer_remove(IoCtx& io_ctx, const std::string &cluster_uuid) {
+    CephContext *cct = reinterpret_cast<CephContext *>(io_ctx.cct());
+    ldout(cct, 20) << __func__ << ": uuid=" << cluster_uuid << dendl;
+
+    int r = cls_client::mirror_peer_remove(&io_ctx, cluster_uuid);
+    if (r < 0 && r != -ENOENT) {
+      lderr(cct) << "Failed to remove peer '" << cluster_uuid << "': "
+                 << cpp_strerror(r) << dendl;
+      return r;
+    }
+    return 0;
+  }
+
+  int mirror_peer_list(IoCtx& io_ctx, std::vector<mirror_peer_t> *peers) {
+    CephContext *cct = reinterpret_cast<CephContext *>(io_ctx.cct());
+    ldout(cct, 20) << __func__ << dendl;
+
+    std::vector<cls::rbd::MirrorPeer> mirror_peers;
+    int r = cls_client::mirror_peer_list(&io_ctx, &mirror_peers);
+    if (r < 0 && r != -ENOENT) {
+      lderr(cct) << "Failed to list peers: " << cpp_strerror(r) << dendl;
+      return r;
+    }
+
+    peers->clear();
+    peers->reserve(mirror_peers.size());
+    for (auto &mirror_peer : mirror_peers) {
+      mirror_peer_t peer;
+      peer.cluster_uuid = mirror_peer.cluster_uuid;
+      peer.cluster_name = mirror_peer.cluster_name;
+      peer.client_name = mirror_peer.client_name;
+      peers->push_back(peer);
+    }
+    return 0;
+  }
+
+  int mirror_peer_set_client(IoCtx& io_ctx, const std::string &cluster_uuid,
+                             const std::string &client_name) {
+    CephContext *cct = reinterpret_cast<CephContext *>(io_ctx.cct());
+    ldout(cct, 20) << __func__ << ": uuid=" << cluster_uuid << ", "
+                   << "client=" << client_name << dendl;
+
+    int r = cls_client::mirror_peer_set_client(&io_ctx, cluster_uuid,
+                                               client_name);
+    if (r < 0) {
+      lderr(cct) << "Failed to update client '" << cluster_uuid << "': "
+                 << cpp_strerror(r) << dendl;
+      return r;
+    }
+    return 0;
+  }
+
+  int mirror_peer_set_cluster(IoCtx& io_ctx, const std::string &cluster_uuid,
+                              const std::string &cluster_name) {
+    CephContext *cct = reinterpret_cast<CephContext *>(io_ctx.cct());
+    ldout(cct, 20) << __func__ << ": uuid=" << cluster_uuid << ", "
+                   << "cluster=" << cluster_name << dendl;
+
+    int r = cls_client::mirror_peer_set_cluster(&io_ctx, cluster_uuid,
+                                                cluster_name);
+    if (r < 0) {
+      lderr(cct) << "Failed to update cluster '" << cluster_uuid << "': "
+                 << cpp_strerror(r) << dendl;
+      return r;
+    }
+    return 0;
+  }
+
   void rbd_req_cb(completion_t cb, void *arg)
   {
     AioObjectRequest *req = reinterpret_cast<AioObjectRequest *>(arg);

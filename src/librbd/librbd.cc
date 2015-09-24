@@ -277,6 +277,41 @@ namespace librbd {
     return r;
   }
 
+  int RBD::mirror_is_enabled(IoCtx& io_ctx, bool *enabled) {
+    return librbd::mirror_is_enabled(io_ctx, enabled);
+  }
+
+  int RBD::mirror_set_enabled(IoCtx& io_ctx, bool enabled) {
+    return librbd::mirror_set_enabled(io_ctx, enabled);
+  }
+
+  int RBD::mirror_peer_add(IoCtx& io_ctx, const std::string &cluster_uuid,
+                           const std::string &cluster_name,
+                           const std::string &client_name) {
+    return librbd::mirror_peer_add(io_ctx, cluster_uuid, cluster_name,
+                                   client_name);
+  }
+
+  int RBD::mirror_peer_remove(IoCtx& io_ctx, const std::string &cluster_uuid) {
+    return librbd::mirror_peer_remove(io_ctx, cluster_uuid);
+  }
+
+  int RBD::mirror_peer_list(IoCtx& io_ctx, std::vector<mirror_peer_t> *peers) {
+    return librbd::mirror_peer_list(io_ctx, peers);
+  }
+
+  int RBD::mirror_peer_set_client(IoCtx& io_ctx,
+                                  const std::string &cluster_uuid,
+                                  const std::string &client_name) {
+    return librbd::mirror_peer_set_client(io_ctx, cluster_uuid, client_name);
+  }
+
+  int RBD::mirror_peer_set_cluster(IoCtx& io_ctx,
+                                   const std::string &cluster_uuid,
+                                   const std::string &cluster_name) {
+    return librbd::mirror_peer_set_cluster(io_ctx, cluster_uuid, cluster_name);
+  }
+
   RBD::AioCompletion::AioCompletion(void *cb_arg, callback_t complete_cb)
   {
     librbd::AioCompletion *c = librbd::aio_create_completion(cb_arg,
@@ -1129,6 +1164,91 @@ extern "C" void rbd_image_options_clear(rbd_image_options_t opts)
 extern "C" int rbd_image_options_is_empty(rbd_image_options_t opts)
 {
   return librbd::image_options_is_empty(opts);
+}
+
+/* pool mirroring */
+extern "C" int rbd_mirror_is_enabled(rados_ioctx_t p, bool *enabled) {
+  librados::IoCtx io_ctx;
+  librados::IoCtx::from_rados_ioctx_t(p, io_ctx);
+  int r = librbd::mirror_is_enabled(io_ctx, enabled);
+  if (r < 0) {
+    return r;
+  }
+  return 0;
+}
+
+extern "C" int rbd_mirror_set_enabled(rados_ioctx_t p, bool enabled) {
+  librados::IoCtx io_ctx;
+  librados::IoCtx::from_rados_ioctx_t(p, io_ctx);
+  return librbd::mirror_set_enabled(io_ctx, enabled);
+}
+
+extern "C" int rbd_mirror_peer_add(rados_ioctx_t p,
+                                   const char *cluster_uuid,
+                                   const char *cluster_name,
+                                   const char *client_name) {
+  librados::IoCtx io_ctx;
+  librados::IoCtx::from_rados_ioctx_t(p, io_ctx);
+  return librbd::mirror_peer_add(io_ctx, cluster_uuid, cluster_name,
+                                 client_name);
+}
+
+extern "C" int rbd_mirror_peer_remove(rados_ioctx_t p,
+                                      const char *cluster_name) {
+  librados::IoCtx io_ctx;
+  librados::IoCtx::from_rados_ioctx_t(p, io_ctx);
+  int r = librbd::mirror_peer_remove(io_ctx, cluster_name);
+  return r;
+}
+
+extern "C" int rbd_mirror_peer_list(rados_ioctx_t p,
+                                    rbd_mirror_peer_t *peers, int *max_peers) {
+  librados::IoCtx io_ctx;
+  librados::IoCtx::from_rados_ioctx_t(p, io_ctx);
+
+  std::vector<librbd::mirror_peer_t> peer_vector;
+  int r = librbd::mirror_peer_list(io_ctx, &peer_vector);
+  if (r < 0) {
+    return r;
+  }
+
+  if (*max_peers < static_cast<int>(peer_vector.size())) {
+    *max_peers = static_cast<int>(peer_vector.size());
+    return -ERANGE;
+  }
+
+  for (int i = 0; i < static_cast<int>(peer_vector.size()); ++i) {
+    peers[i].cluster_uuid = strdup(peer_vector[i].cluster_uuid.c_str());
+    peers[i].cluster_name = strdup(peer_vector[i].cluster_name.c_str());
+    peers[i].client_name = strdup(peer_vector[i].client_name.c_str());
+  }
+  *max_peers = static_cast<int>(peer_vector.size());
+  return 0;
+}
+
+extern "C" void rbd_mirror_peer_list_cleanup(rbd_mirror_peer_t *peers,
+                                             int max_peers) {
+  for (int i = 0; i < max_peers; ++i) {
+    free(peers[i].cluster_uuid);
+    free(peers[i].cluster_name);
+    free(peers[i].client_name);
+  }
+}
+
+extern "C" int rbd_mirror_peer_set_client(rados_ioctx_t p,
+                                          const char *cluster_uuid,
+                                          const char *client_name) {
+  librados::IoCtx io_ctx;
+  librados::IoCtx::from_rados_ioctx_t(p, io_ctx);
+  return librbd::mirror_peer_set_client(io_ctx, cluster_uuid, client_name);
+}
+
+extern "C" int rbd_mirror_peer_set_cluster(rados_ioctx_t p,
+                                           const char *cluster_uuid,
+                                           const char *cluster_name) {
+  librados::IoCtx io_ctx;
+  librados::IoCtx::from_rados_ioctx_t(p, io_ctx);
+  return librbd::mirror_peer_set_cluster(io_ctx, cluster_uuid, cluster_name);
 }
 
 /* images */

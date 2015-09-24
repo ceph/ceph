@@ -84,6 +84,12 @@ typedef struct {
   char parent_name[RBD_MAX_IMAGE_NAME_SIZE];  /* deprecated */
 } rbd_image_info_t;
 
+typedef struct {
+  char *cluster_uuid;
+  char *cluster_name;
+  char *client_name;
+} rbd_mirror_peer_t;
+
 CEPH_RBD_API void rbd_version(int *major, int *minor, int *extra);
 
 /* image options */
@@ -154,6 +160,26 @@ CEPH_RBD_API int rbd_remove_with_progress(rados_ioctx_t io, const char *name,
                                           void *cbdata);
 CEPH_RBD_API int rbd_rename(rados_ioctx_t src_io_ctx, const char *srcname,
                             const char *destname);
+
+/* pool mirroring */
+CEPH_RBD_API int rbd_mirror_is_enabled(rados_ioctx_t io_ctx, bool *enabled);
+CEPH_RBD_API int rbd_mirror_set_enabled(rados_ioctx_t io_ctx, bool enabled);
+CEPH_RBD_API int rbd_mirror_peer_add(rados_ioctx_t io_ctx,
+                                     const char *cluster_uuid,
+                                     const char *cluster_name,
+                                     const char *client_name);
+CEPH_RBD_API int rbd_mirror_peer_remove(rados_ioctx_t io_ctx,
+                                        const char *cluster_name);
+CEPH_RBD_API int rbd_mirror_peer_list(rados_ioctx_t io_ctx,
+                                      rbd_mirror_peer_t *peers, int *max_peers);
+CEPH_RBD_API void rbd_mirror_peer_list_cleanup(rbd_mirror_peer_t *peers,
+                                               int max_peers);
+CEPH_RBD_API int rbd_mirror_peer_set_client(rados_ioctx_t io_ctx,
+                                            const char *cluster_uuid,
+                                            const char *client_name);
+CEPH_RBD_API int rbd_mirror_peer_set_cluster(rados_ioctx_t io_ctx,
+                                             const char *cluster_uuid,
+                                             const char *cluster_name);
 
 CEPH_RBD_API int rbd_open(rados_ioctx_t io, const char *name,
                           rbd_image_t *image, const char *snap_name);
