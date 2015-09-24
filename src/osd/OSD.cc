@@ -742,7 +742,40 @@ pair<ConnectionRef,ConnectionRef> OSDService::get_con_osd_hb(int peer, epoch_t f
 void OSDService::queue_want_pg_temp(pg_t pgid, vector<int>& want)
 {
   Mutex::Locker l(pg_temp_lock);
-  pg_temp_wanted[pgid] = want;
+  map<pg_t,vector<int> >::iterator p = pg_temp_pending.find(pgid);
+  if (p == pg_temp_pending.end() ||
+      p->second != want) {
+    pg_temp_wanted[pgid] = want;
+  }
+}
+
+void OSDService::remove_want_pg_temp(pg_t pgid)
+{
+  Mutex::Locker l(pg_temp_lock);
+  pg_temp_wanted.erase(pgid);
+  pg_temp_pending.erase(pgid);
+}
+
+void OSDService::_sent_pg_temp()
+{
+  for (map<pg_t,vector<int> >::iterator p = pg_temp_wanted.begin();
+       p != pg_temp_wanted.end();
+       ++p)
+    pg_temp_pending[p->first] = p->second;
+  pg_temp_wanted.clear();
+}
+
+void OSDService::requeue_pg_temp()
+{
+  Mutex::Locker l(pg_temp_lock);
+  // wanted overrides pending.  note that remove_want_pg_temp
+  // clears the item out of both.
+  unsigned old_wanted = pg_temp_wanted.size();
+  unsigned old_pending = pg_temp_pending.size();
+  _sent_pg_temp();
+  pg_temp_wanted.swap(pg_temp_pending);
+  dout(10) << __func__ << " " << old_wanted << " + " << old_pending << " -> "
+	   << pg_temp_wanted.size() << dendl;
 }
 
 void OSDService::send_pg_temp()
@@ -754,6 +787,7 @@ void OSDService::send_pg_temp()
   MOSDPGTemp *m = new MOSDPGTemp(osdmap->get_epoch());
   m->pg_temp = pg_temp_wanted;
   monc->send_mon_message(m);
+  _sent_pg_temp();  
 }
 
 
@@ -1554,8 +1588,7 @@ OSD::OSD(CephContext *cct_, ObjectStore *store_,
   debug_drop_pg_create_probability(cct->_conf->osd_debug_drop_pg_create_probability),
   debug_drop_pg_create_duration(cct->_conf->osd_debug_drop_pg_create_duration),
   debug_drop_pg_create_left(-1),
-  outstanding_pg_stats(false),
-  timeout_mon_on_pg_stats(true),
+  stats_ack_timeout(cct->_conf->osd_mon_ack_timeout),
   up_thru_wanted(0), up_thru_pending(0),
   pg_stat_queue_lock("OSD::pg_stat_queue_lock"),
   osd_stat_updated(false),
@@ -3766,7 +3799,7 @@ void OSD::handle_osd_ping(MOSDPing *m)
 	}
 	if (failure_pending.count(from)) {
 	  dout(10) << "handle_osd_ping canceling in-flight failure report for osd." << from<< dendl;
-	  send_still_alive(curmap->get_epoch(), failure_pending[from]);
+	  send_still_alive(curmap->get_epoch(), failure_pending[from].second);
 	  failure_pending.erase(from);
 	}
       }
@@ -3974,24 +4007,6 @@ void OSD::tick()
     heartbeat_check();
     heartbeat_lock.Unlock();
 
-    // mon report?
-    utime_t now = ceph_clock_now(cct);
-    if (outstanding_pg_stats && timeout_mon_on_pg_stats &&
-	(now - cct->_conf->osd_mon_ack_timeout) > last_pg_stats_ack) {
-      dout(1) << "mon hasn't acked PGStats in " << now - last_pg_stats_ack
-	      << " seconds, reconnecting elsewhere" << dendl;
-      monc->reopen_session(new C_MonStatsAckTimer(this));
-      timeout_mon_on_pg_stats = false;
-      last_pg_stats_ack = ceph_clock_now(cct);  // reset clock
-      last_pg_stats_sent = utime_t();
-    }
-    if (now - last_pg_stats_sent > cct->_conf->osd_mon_report_interval_max) {
-      osd_stat_updated = true;
-      do_mon_report();
-    } else if (now - last_mon_report > cct->_conf->osd_mon_report_interval_min) {
-      do_mon_report();
-    }
-
     map_lock.put_read();
   }
 
@@ -4030,6 +4045,59 @@ void OSD::tick_without_osd_lock()
   assert(tick_timer_lock.is_locked());
   dout(5) << "tick_without_osd_lock" << dendl;
 
+  // osd_lock is not being held, which means the OSD state
+  // might change when doing the monitor report
+  if (is_active() || is_waiting_for_healthy()) {
+    map_lock.get_read();
+
+    // mon report?
+    bool reset = false;
+    bool report = false;
+    utime_t now = ceph_clock_now(cct);
+    pg_stat_queue_lock.Lock();
+    double backoff = stats_ack_timeout / g_conf->osd_mon_ack_timeout;
+    double adjusted_min = cct->_conf->osd_mon_report_interval_min * backoff;
+    double adjusted_max = cct->_conf->osd_mon_report_interval_max * backoff;
+    if (!outstanding_pg_stats.empty() &&
+	(now - stats_ack_timeout) > last_pg_stats_ack) {
+      dout(1) << __func__ << " mon hasn't acked PGStats in "
+	      << now - last_pg_stats_ack
+	      << " seconds, reconnecting elsewhere" << dendl;
+      reset = true;
+      last_pg_stats_ack = ceph_clock_now(cct);  // reset clock
+      last_pg_stats_sent = utime_t();
+      stats_ack_timeout = MAX(g_conf->osd_mon_ack_timeout,
+			      stats_ack_timeout * 2.0);
+      outstanding_pg_stats.clear();
+    }
+    if (now - last_pg_stats_sent > adjusted_max) {
+      osd_stat_updated = true;
+      report = true;
+    } else if ((int)outstanding_pg_stats.size() >=
+	       cct->_conf->osd_mon_report_max_in_flight) {
+      dout(20) << __func__ << " have max " << outstanding_pg_stats
+	       << " stats updates in flight" << dendl;
+    } else {
+      if (now - last_mon_report > adjusted_min) {
+	dout(20) << __func__ << " stats backoff " << backoff
+		 << " adjusted_min " << adjusted_min << " - sending report"
+		 << dendl;
+	report = true;
+      }
+    }
+    pg_stat_queue_lock.Unlock();
+
+    if (reset) {
+      monc->reopen_session();
+    } else if (report) {
+      last_mon_report = now;
+
+      // do any pending reports
+      send_failures();
+      send_pg_stats(now);
+    }
+    map_lock.put_read();
+  }
   if (!scrub_random_backoff()) {
     sched_scrub();
   }
@@ -4326,39 +4394,35 @@ void OSD::RemoveWQ::_process(
 }
 // =========================================
 
-void OSD::do_mon_report()
-{
-  dout(7) << "do_mon_report" << dendl;
-
-  utime_t now(ceph_clock_now(cct));
-  last_mon_report = now;
-
-  // do any pending reports
-  send_alive();
-  service.send_pg_temp();
-  send_failures();
-  send_pg_stats(now);
-}
-
 void OSD::ms_handle_connect(Connection *con)
 {
   if (con->get_peer_type() == CEPH_ENTITY_TYPE_MON) {
-    Mutex::Locker l(osd_lock);
-    if (is_stopping())
-      return;
-    dout(10) << "ms_handle_connect on mon" << dendl;
-    if (is_booting()) {
-      start_boot();
-    } else {
-      send_alive();
-      service.send_pg_temp();
-      send_failures();
-      send_pg_stats(ceph_clock_now(cct));
-
-      monc->sub_want("osd_pg_creates", 0, CEPH_SUBSCRIBE_ONETIME);
-      monc->sub_want("osdmap", osdmap->get_epoch(), CEPH_SUBSCRIBE_ONETIME);
-      monc->renew_subs();
+    {
+      Mutex::Locker l(osd_lock);
+      if (is_booting() || is_stopping()) {
+        if (is_booting())
+          start_boot();
+        return;
+      }
     }
+    dout(10) << "ms_handle_connect on mon" << dendl;
+
+    utime_t now = ceph_clock_now(NULL);
+    last_mon_report = now;
+
+    // resend everything, it's a new session
+    map_lock.get_read();
+    send_alive();
+    service.requeue_pg_temp();
+    service.send_pg_temp();
+    requeue_failures();
+    send_failures();
+    send_pg_stats(now);
+    map_lock.put_read();
+
+    monc->sub_want("osd_pg_creates", 0, CEPH_SUBSCRIBE_ONETIME);
+    monc->sub_want("osdmap", osdmap->get_epoch(), CEPH_SUBSCRIBE_ONETIME);
+    monc->renew_subs();
   }
 }
 
@@ -4432,7 +4496,7 @@ void OSD::start_boot()
 void OSD::_maybe_boot(epoch_t oldest, epoch_t newest)
 {
   Mutex::Locker l(osd_lock);
-  if (is_stopping())
+  if (!is_booting())
     return;
   dout(10) << "_maybe_boot mon has osdmaps " << oldest << ".." << newest << dendl;
 
@@ -4599,9 +4663,6 @@ void OSD::queue_want_up_thru(epoch_t want)
 	     << ", currently " << cur
 	     << dendl;
     up_thru_wanted = want;
-
-    // expedite, a bit.  WARNING this will somewhat delay other mon queries.
-    last_mon_report = ceph_clock_now(cct);
     send_alive();
   } else {
     dout(10) << "queue_want_up_thru want " << want << " <= queued " << up_thru_wanted 
@@ -4624,24 +4685,37 @@ void OSD::send_alive()
   }
 }
 
+void OSD::requeue_failures()
+{
+  Mutex::Locker l(heartbeat_lock);
+  unsigned old_queue = failure_queue.size();
+  unsigned old_pending = failure_pending.size();
+  for (map<int,pair<utime_t,entity_inst_t> >::iterator p =
+	 failure_pending.begin();
+       p != failure_pending.end();
+       ++p) {
+    failure_queue[p->first] = p->second.first;
+  }
+  dout(10) << __func__ << " " << old_queue << " + " << old_pending << " -> "
+	   << failure_queue.size() << dendl;
+}
+
 void OSD::send_failures()
 {
-  assert(osd_lock.is_locked());
-  bool locked = false;
-  if (!failure_queue.empty()) {
-    heartbeat_lock.Lock();
-    locked = true;
-  }
+  assert(map_lock.is_locked());
+  Mutex::Locker l(heartbeat_lock);
   utime_t now = ceph_clock_now(cct);
   while (!failure_queue.empty()) {
     int osd = failure_queue.begin()->first;
-    int failed_for = (int)(double)(now - failure_queue.begin()->second);
     entity_inst_t i = osdmap->get_inst(osd);
-    monc->send_mon_message(new MOSDFailure(monc->get_fsid(), i, failed_for, osdmap->get_epoch()));
-    failure_pending[osd] = i;
+    if (!failure_pending.count(osd)) {
+      int failed_for = (int)(double)(now - failure_queue.begin()->second);
+      monc->send_mon_message(new MOSDFailure(monc->get_fsid(), i, failed_for,
+					     osdmap->get_epoch()));
+    }
+    failure_pending[osd] = make_pair(failure_queue.begin()->second, i);
     failure_queue.erase(osd);
   }
-  if (locked) heartbeat_lock.Unlock();
 }
 
 void OSD::send_still_alive(epoch_t epoch, const entity_inst_t &i)
@@ -4653,8 +4727,7 @@ void OSD::send_still_alive(epoch_t epoch, const entity_inst_t &i)
 
 void OSD::send_pg_stats(const utime_t &now)
 {
-  assert(osd_lock.is_locked());
-
+  assert(map_lock.is_locked());
   dout(20) << "send_pg_stats" << dendl;
 
   osd_stat_t cur_stat = service.get_osd_stat();
@@ -4673,8 +4746,10 @@ void OSD::send_pg_stats(const utime_t &now)
     had_for -= had_map_since;
 
     MPGStats *m = new MPGStats(monc->get_fsid(), osdmap->get_epoch(), had_for);
-    m->set_tid(++pg_stat_tid);
+    uint64_t tid = ++pg_stat_tid;
+    m->set_tid(tid);
     m->osd_stat = cur_stat;
+    outstanding_pg_stats.insert(tid);
 
     xlist<PG*>::iterator p = pg_stat_queue.begin();
     while (!p.end()) {
@@ -4697,10 +4772,11 @@ void OSD::send_pg_stats(const utime_t &now)
       pg->pg_stats_publish_lock.Unlock();
     }
 
-    if (!outstanding_pg_stats) {
-      outstanding_pg_stats = true;
+    if (!outstanding_pg_stats.empty()) {
       last_pg_stats_ack = ceph_clock_now(cct);
     }
+    dout(20) << __func__ << "  updates pending: " << outstanding_pg_stats << dendl;
+
     monc->send_mon_message(m);
   }
 
@@ -4716,9 +4792,18 @@ void OSD::handle_pg_stats_ack(MPGStatsAck *ack)
     return;
   }
 
-  last_pg_stats_ack = ceph_clock_now(cct);
+  // NOTE: we may get replies from a previous mon even while
+  // outstanding_pg_stats is empty if reconnecting races with replies
+  // in flight.
 
   pg_stat_queue_lock.Lock();
+
+  last_pg_stats_ack = ceph_clock_now(cct);
+
+  // decay timeout slowly (analogous to TCP)
+  stats_ack_timeout = MAX(g_conf->osd_mon_ack_timeout,
+			  stats_ack_timeout * .9);
+  dout(20) << __func__ << "  timeout now " << stats_ack_timeout << dendl;
 
   if (ack->get_tid() > pg_stat_tid_flushed) {
     pg_stat_tid_flushed = ack->get_tid();
@@ -4750,10 +4835,9 @@ void OSD::handle_pg_stats_ack(MPGStatsAck *ack)
 	       << ":" << pg->pg_stats_publish.reported_seq << dendl;
     }
   }
-  
-  if (!pg_stat_queue.size()) {
-    outstanding_pg_stats = false;
-  }
+
+  outstanding_pg_stats.erase(ack->get_tid());
+  dout(20) << __func__ << "  still pending: " << outstanding_pg_stats << dendl;
 
   pg_stat_queue_lock.Unlock();
 
@@ -4763,10 +4847,12 @@ void OSD::handle_pg_stats_ack(MPGStatsAck *ack)
 void OSD::flush_pg_stats()
 {
   dout(10) << "flush_pg_stats" << dendl;
-  utime_t now = ceph_clock_now(cct);
-  send_pg_stats(now);
-
   osd_lock.Unlock();
+  utime_t now = ceph_clock_now(cct);
+  map_lock.get_read();
+  send_pg_stats(now);
+  map_lock.put_read();
+
 
   pg_stat_queue_lock.Lock();
   uint64_t tid = pg_stat_tid;
@@ -6476,9 +6562,6 @@ void OSD::handle_osd_map(MOSDMap *m)
   if (m->newest_map && m->newest_map > last) {
     dout(10) << " msg say newest map is " << m->newest_map << ", requesting more" << dendl;
     osdmap_subscribe(osdmap->get_epoch()+1, true);
-  }
-  else if (is_booting()) {
-    start_boot();  // retry
   }
   else if (do_restart)
     start_boot();

@@ -216,12 +216,13 @@ OPTION(mon_osd_prime_pg_temp_max_time, OPT_FLOAT, .5)  // max time to spend prim
 OPTION(mon_osd_pool_ec_fast_read, OPT_BOOL, false) // whether turn on fast read on the pool or not
 OPTION(mon_stat_smooth_intervals, OPT_INT, 2)  // smooth stats over last N PGMap maps
 OPTION(mon_lease, OPT_FLOAT, 5)       // lease interval
-OPTION(mon_lease_renew_interval, OPT_FLOAT, 3) // on leader, to renew the lease
-OPTION(mon_lease_ack_timeout, OPT_FLOAT, 10.0) // on leader, if lease isn't acked by all peons
+OPTION(mon_lease_renew_interval_factor, OPT_FLOAT, .6) // on leader, to renew the lease
+OPTION(mon_lease_ack_timeout_factor, OPT_FLOAT, 2.0) // on leader, if lease isn't acked by all peons
+OPTION(mon_accept_timeout_factor, OPT_FLOAT, 2.0)    // on leader, if paxos update isn't accepted
+
 OPTION(mon_clock_drift_allowed, OPT_FLOAT, .050) // allowed clock drift between monitors
 OPTION(mon_clock_drift_warn_backoff, OPT_FLOAT, 5) // exponential backoff for clock drift warnings
 OPTION(mon_timecheck_interval, OPT_FLOAT, 300.0) // on leader, timecheck (clock drift check) interval (seconds)
-OPTION(mon_accept_timeout, OPT_FLOAT, 10.0)    // on leader, if paxos update isn't accepted
 OPTION(mon_pg_create_interval, OPT_FLOAT, 30.0) // no more than every 30s
 OPTION(mon_pg_stuck_threshold, OPT_INT, 300) // number of seconds after which pgs can be considered inactive, unclean, or stale (see doc/control.rst under dump_stuck for more info)
 OPTION(mon_pg_warn_min_per_osd, OPT_INT, 30)  // min # pgs per (in) osd before we warn the admin
@@ -643,6 +644,7 @@ OPTION(osd_heartbeat_min_healthy_ratio, OPT_FLOAT, .33)
 OPTION(osd_mon_heartbeat_interval, OPT_INT, 30)  // (seconds) how often to ping monitor if no peers
 OPTION(osd_mon_report_interval_max, OPT_INT, 120)
 OPTION(osd_mon_report_interval_min, OPT_INT, 5)  // pg stats, failures, up_thru, boot.
+OPTION(osd_mon_report_max_in_flight, OPT_INT, 2)  // max updates in flight
 OPTION(osd_pg_stat_report_interval_max, OPT_INT, 500)  // report pg stats for any given pg at least this often
 OPTION(osd_mon_ack_timeout, OPT_INT, 30) // time out a mon if it doesn't ack stats
 OPTION(osd_default_data_pool_replay_window, OPT_INT, 45)

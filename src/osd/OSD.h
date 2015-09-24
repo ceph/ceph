@@ -807,11 +807,11 @@ public:
   // -- pg_temp --
   Mutex pg_temp_lock;
   map<pg_t, vector<int> > pg_temp_wanted;
+  map<pg_t, vector<int> > pg_temp_pending;
   void queue_want_pg_temp(pg_t pgid, vector<int>& want);
-  void remove_want_pg_temp(pg_t pgid) {
-    Mutex::Locker l(pg_temp_lock);
-    pg_temp_wanted.erase(pgid);
-  }
+  void remove_want_pg_temp(pg_t pgid);
+  void _sent_pg_temp();
+  void requeue_pg_temp();
   void send_pg_temp();
 
   void queue_for_peering(PG *pg);
@@ -1974,25 +1974,8 @@ protected:
    *  elsewhere.
    */
   utime_t last_pg_stats_ack;
-  bool outstanding_pg_stats; // some stat updates haven't been acked yet
-  bool timeout_mon_on_pg_stats;
-  void restart_stats_timer() {
-    Mutex::Locker l(osd_lock);
-    last_pg_stats_ack = ceph_clock_now(cct);
-    timeout_mon_on_pg_stats = true;
-  }
-
-  class C_MonStatsAckTimer : public Context {
-    OSD *osd;
-  public:
-    C_MonStatsAckTimer(OSD *o) : osd(o) {}
-    void finish(int r) {
-      osd->restart_stats_timer();
-    }
-  };
-  friend class C_MonStatsAckTimer;
-
-  void do_mon_report();
+  float stats_ack_timeout;
+  set<uint64_t> outstanding_pg_stats; // how many stat updates haven't been acked yet
 
   // -- boot --
   void start_boot();
@@ -2016,9 +1999,9 @@ protected:
 
   // -- failures --
   map<int,utime_t> failure_queue;
-  map<int,entity_inst_t> failure_pending;
+  map<int,pair<utime_t,entity_inst_t> > failure_pending;
 
-
+  void requeue_failures();
   void send_failures();
   void send_still_alive(epoch_t epoch, const entity_inst_t &i);
 

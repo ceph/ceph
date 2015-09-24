@@ -128,7 +128,8 @@ void PGMonitor::tick()
   if (mon->is_leader()) {
     bool propose = false;
     
-    if (need_check_down_pgs && check_down_pgs())
+    if ((need_check_down_pgs || !need_check_down_pg_osds.empty()) &&
+	check_down_pgs())
       propose = true;
     
     if (propose) {
@@ -421,20 +422,34 @@ void PGMonitor::apply_pgmap_delta(bufferlist& bl)
   version_t v = pg_map.version + 1;
 
   utime_t inc_stamp;
-  bufferlist dirty_pgs, dirty_osds;
+  bufferlist dirty_pgs, dirty_osds, deleted_pgs;
   {
     bufferlist::iterator p = bl.begin();
     ::decode(inc_stamp, p);
     ::decode(dirty_pgs, p);
     ::decode(dirty_osds, p);
+    if (!p.end())
+      ::decode(deleted_pgs, p);
   }
 
   pool_stat_t pg_sum_old = pg_map.pg_sum;
   ceph::unordered_map<uint64_t, pool_stat_t> pg_pool_sum_old;
 
-  // pgs
   set<int64_t> deleted_pools;
-  bufferlist::iterator p = dirty_pgs.begin();
+
+  // pgs
+  bufferlist::iterator p = deleted_pgs.begin();
+  while (!p.end()) {
+    pg_t pgid;
+    ::decode(pgid, p);
+    if (pg_pool_sum_old.count(pgid.pool()) == 0)
+      pg_pool_sum_old[pgid.pool()] = pg_map.pg_pool_sum[pgid.pool()];
+    pg_map.remove_pg(pgid);
+    if (pgid.ps() == 0)
+      deleted_pools.insert(pgid.pool());
+  }
+
+  p = dirty_pgs.begin();
   while (!p.end()) {
     pg_t pgid;
     ::decode(pgid, p);
@@ -521,6 +536,7 @@ void PGMonitor::encode_pending(MonitorDBStore::TransactionRef t)
 
   bufferlist incbl;
   ::encode(pending_inc.stamp, incbl);
+  bufferlist deleted_pgs;
   {
     bufferlist dirty;
     string prefix = pgmap_pg_prefix;
@@ -533,7 +549,8 @@ void PGMonitor::encode_pending(MonitorDBStore::TransactionRef t)
       t->put(prefix, stringify(p->first), bl);
     }
     for (set<pg_t>::const_iterator p = pending_inc.pg_remove.begin(); p != pending_inc.pg_remove.end(); ++p) {
-      ::encode(*p, dirty);
+#warning fixme compat we need a feature bit conditional here
+      ::encode(*p, deleted_pgs);
       t->erase(prefix, stringify(*p));
     }
     ::encode(dirty, incbl);
@@ -560,6 +577,7 @@ void PGMonitor::encode_pending(MonitorDBStore::TransactionRef t)
     }
     ::encode(dirty, incbl);
   }
+  ::encode(deleted_pgs, incbl);
 
   put_version(t, version, incbl);
 
@@ -914,7 +932,7 @@ void PGMonitor::check_osd_map(epoch_t epoch)
 	 p != inc.new_state.end();
 	 ++p) {
       if (p->second & CEPH_OSD_UP) {   // true if marked up OR down, but we're too lazy to check which
-	need_check_down_pgs = true;
+	need_check_down_pg_osds.insert(p->first);
 
 	// clear out the last_osd_report for this OSD
         map<int, utime_t>::iterator report = last_osd_report.find(p->first);
@@ -951,7 +969,8 @@ void PGMonitor::check_osd_map(epoch_t epoch)
   if (register_new_pgs())
     propose = true;
 
-  if (need_check_down_pgs && check_down_pgs())
+  if ((need_check_down_pgs || !need_check_down_pg_osds.empty()) &&
+      check_down_pgs())
     propose = true;
   
   if (propose)
@@ -1087,13 +1106,12 @@ bool PGMonitor::register_new_pgs()
     }
   }
 
+  // we don't want to redo this work if we can avoid it.
+  pending_inc.pg_scan = epoch;
+
   dout(10) << "register_new_pgs registered " << created << " new pgs, removed "
 	   << removed << " uncreated pgs" << dendl;
-  if (created || removed) {
-    pending_inc.pg_scan = epoch;
-    return true;
-  }
-  return false;
+  return (created || removed);
 }
 
 void PGMonitor::map_pg_creates()
@@ -1214,6 +1232,21 @@ void PGMonitor::send_pg_creates(int osd, Connection *con)
   last_sent_pg_create[osd] = ceph_clock_now(g_ceph_context);
 }
 
+void PGMonitor::_mark_pg_stale(pg_t pgid, const pg_stat_t& cur_stat)
+{
+  dout(10) << " marking pg " << pgid << " stale" << dendl;
+  map<pg_t,pg_stat_t>::iterator q = pending_inc.pg_stat_updates.find(pgid);
+  pg_stat_t *stat;
+  if (q == pending_inc.pg_stat_updates.end()) {
+    stat = &pending_inc.pg_stat_updates[pgid];
+    *stat = cur_stat;
+  } else {
+    stat = &q->second;
+  }
+  stat->state |= PG_STATE_STALE;
+  stat->last_unstale = ceph_clock_now(g_ceph_context);
+}
+
 bool PGMonitor::check_down_pgs()
 {
   dout(10) << "check_down_pgs" << dendl;
@@ -1221,28 +1254,36 @@ bool PGMonitor::check_down_pgs()
   OSDMap *osdmap = &mon->osdmon()->osdmap;
   bool ret = false;
 
-  for (ceph::unordered_map<pg_t,pg_stat_t>::iterator p = pg_map.pg_stat.begin();
-       p != pg_map.pg_stat.end();
-       ++p) {
-    if ((p->second.state & PG_STATE_STALE) == 0 &&
-	p->second.acting_primary != -1 &&
-	osdmap->is_down(p->second.acting_primary)) {
-      dout(10) << " marking pg " << p->first << " stale with acting " << p->second.acting << dendl;
+  // if a large number of osds changed state, just iterate over the whole
+  // pg map.
+  if (need_check_down_pg_osds.size() > (unsigned)osdmap->get_max_osd() / 20)
+    need_check_down_pgs = true;
 
-      map<pg_t,pg_stat_t>::iterator q = pending_inc.pg_stat_updates.find(p->first);
-      pg_stat_t *stat;
-      if (q == pending_inc.pg_stat_updates.end()) {
-	stat = &pending_inc.pg_stat_updates[p->first];
-	*stat = p->second;
-      } else {
-	stat = &q->second;
+  if (need_check_down_pgs) {
+    for (auto p : pg_map.pg_stat) {
+      if ((p.second.state & PG_STATE_STALE) == 0 &&
+	  p.second.acting_primary != -1 &&
+	  osdmap->is_down(p.second.acting_primary)) {
+	_mark_pg_stale(p.first, p.second);
+	ret = true;
       }
-      stat->state |= PG_STATE_STALE;
-      stat->last_unstale = ceph_clock_now(g_ceph_context);
-      ret = true;
+    }
+  } else {
+    for (auto osd : need_check_down_pg_osds) {
+      if (osdmap->is_down(osd)) {
+	for (auto pgid : pg_map.pg_by_osd[osd]) {
+	  const pg_stat_t &stat = pg_map.pg_stat[pgid];
+	  if ((stat.state & PG_STATE_STALE) == 0 &&
+	      stat.acting_primary != -1) {
+	    _mark_pg_stale(pgid, stat);
+	    ret = true;
+	  }
+	}
+      }
     }
   }
   need_check_down_pgs = false;
+  need_check_down_pg_osds.clear();
 
   return ret;
 }

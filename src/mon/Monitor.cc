@@ -451,8 +451,9 @@ const char** Monitor::get_tracked_conf_keys() const
   static const char* KEYS[] = {
     "crushtool", // helpful for testing
     "mon_lease",
-    "mon_lease_renew_interval",
-    "mon_lease_ack_timeout",
+    "mon_lease_renew_interval_factor",
+    "mon_lease_ack_timeout_factor",
+    "mon_accept_timeout_factor",
     // clog & admin clog
     "clog_to_monitors",
     "clog_to_syslog",
@@ -517,11 +518,10 @@ int Monitor::sanitize_options()
 
   // mon_lease must be greater than mon_lease_renewal; otherwise we
   // may incur in leases expiring before they are renewed.
-  if (g_conf->mon_lease <= g_conf->mon_lease_renew_interval) {
-    clog->error() << "mon_lease (" << g_conf->mon_lease
-                 << ") must be greater "
-                 << "than mon_lease_renew_interval ("
-                 << g_conf->mon_lease_renew_interval << ")";
+  if (g_conf->mon_lease_renew_interval_factor >= 1.0) {
+    clog->error() << "mon_lease_renew_interval_factor ("
+		  << g_conf->mon_lease_renew_interval_factor
+		  << ") must be less than 1.0";
     r = -EINVAL;
   }
 
@@ -530,13 +530,13 @@ int Monitor::sanitize_options()
   // with the same value, for a given small vale, could mean timing out if
   // the monitors happened to be overloaded -- or even under normal load for
   // a small enough value.
-  if (g_conf->mon_lease_ack_timeout <= g_conf->mon_lease) {
-    clog->error() << "mon_lease_ack_timeout ("
-                 << g_conf->mon_lease_ack_timeout
-                 << ") must be greater than mon_lease ("
-                 << g_conf->mon_lease << ")";
+  if (g_conf->mon_lease_ack_timeout_factor <= 1.0) {
+    clog->error() << "mon_lease_ack_timeout_factor ("
+		  << g_conf->mon_lease_ack_timeout_factor
+		  << ") must be greater than 1.0";
     r = -EINVAL;
   }
+
   return r;
 }
 
@@ -3285,6 +3285,11 @@ void Monitor::handle_route(MonOpRequestRef op)
 	m->msg->clear_payload();
 	rr->con->send_message(m->msg);
 	m->msg = NULL;
+      }
+      if (m->send_osdmap_first) {
+	dout(10) << " sending osdmaps from " << m->send_osdmap_first << dendl;
+	osdmon()->send_incremental(m->send_osdmap_first, session,
+				   true, MonOpRequestRef());
       }
       routed_requests.erase(m->session_mon_tid);
       rr->session->routed_request_tids.insert(rr->tid);
