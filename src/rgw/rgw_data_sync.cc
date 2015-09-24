@@ -592,7 +592,7 @@ public:
                                                       bucket_name(_bucket_name), bucket_id(_bucket_id), shard_id(_shard_id),
                                                       info(_info) {
     instance_key = bucket_name + ":" + bucket_id;
-    if (shard_id > 0) {
+    if (shard_id >= 0) {
       char buf[16];
       snprintf(buf, sizeof(buf), ":%d", shard_id);
       instance_key.append(buf);
@@ -938,7 +938,7 @@ public:
                                                       marker_position(_marker_position),
                                                       result(_result) {
     instance_key = bucket_name + ":" + bucket_id;
-    if (shard_id > 0) {
+    if (shard_id >= 0) {
       char buf[16];
       snprintf(buf, sizeof(buf), ":%d", shard_id);
       instance_key.append(buf);
@@ -1396,7 +1396,7 @@ int RGWBucketSyncStatusManager::run()
 string RGWBucketSyncStatusManager::status_oid(const string& source_zone, const string& bucket_name, const string& bucket_id, int shard_id)
 {
   string oid = bucket_status_oid_prefix + "." + source_zone + ":" + bucket_name + ":" + bucket_id;
-  if (shard_id > 0) {
+  if (shard_id >= 0) {
     char buf[16];
     snprintf(buf, sizeof(buf), ":%d", shard_id);
     oid.append(buf);
