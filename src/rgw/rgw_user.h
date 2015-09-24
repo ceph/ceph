@@ -190,6 +190,7 @@ struct RGWUserAdminOpState {
   bool id_specified;
   bool key_specified;
   bool type_specified;
+  bool key_type_setbycontext;   // key type set by user or subuser context
   bool purge_data;
   bool purge_keys;
   bool display_name_specified;
@@ -460,6 +461,7 @@ struct RGWUserAdminOpState {
     id_specified = false;
     key_specified = false;
     type_specified = false;
+    key_type_setbycontext = false;
     purge_data = false;
     display_name_specified = false;
     user_email_specified = false;
