@@ -1133,6 +1133,23 @@ struct RGWPeriodMap
 };
 WRITE_CLASS_ENCODER(RGWPeriodMap)
 
+struct RGWRegionMap {
+  map<string, RGWZoneGroup> regions;
+  map<string, RGWZoneGroup> regions_by_api;
+
+  string master_region;
+
+  RGWQuotaInfo bucket_quota;
+  RGWQuotaInfo user_quota;
+
+  void encode(bufferlist& bl) const;
+  void decode(bufferlist::iterator& bl);
+
+  void dump(Formatter *f) const;
+  void decode_json(JSONObj *obj);
+};
+WRITE_CLASS_ENCODER(RGWRegionMap)
+
 class RGWRealm;
 struct RGWZoneGroupMap {
 
