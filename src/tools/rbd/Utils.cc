@@ -114,6 +114,24 @@ std::string get_positional_argument(const po::variables_map &vm, size_t index) {
   return "";
 }
 
+std::string get_pool_name(const po::variables_map &vm,
+                          size_t *arg_index) {
+  std::string pool_name;
+  if (vm.count(at::POOL_NAME)) {
+    pool_name = vm[at::POOL_NAME].as<std::string>();
+  } else {
+    pool_name = get_positional_argument(vm, *arg_index);
+    if (!pool_name.empty()) {
+       ++(*arg_index);
+    }
+  }
+
+  if (pool_name.empty()) {
+    pool_name = at::DEFAULT_POOL_NAME;
+  }
+  return pool_name;
+}
+
 int get_pool_image_snapshot_names(const po::variables_map &vm,
                                   at::ArgumentModifier mod,
                                   size_t *spec_arg_index,
