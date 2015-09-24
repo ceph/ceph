@@ -813,9 +813,14 @@ int RGWAccessKeyPool::check_op(RGWUserAdminOpState& op_state,
 
   int32_t key_type = op_state.get_key_type();
 
-  // if a key type wasn't specified set it to s3
-  if (key_type < 0)
-    key_type = KEY_TYPE_S3;
+  // if a key type wasn't specified
+  if (key_type < 0) {
+      if (op_state.has_subuser()) {
+        key_type = KEY_TYPE_SWIFT;
+      } else {
+        key_type = KEY_TYPE_S3;
+      }
+  }
 
   op_state.set_key_type(key_type);
 
@@ -878,12 +883,23 @@ int RGWAccessKeyPool::generate_key(RGWUserAdminOpState& op_state, std::string *e
     }
   }
 
-  if (op_state.has_subuser())
-    new_key.subuser = op_state.get_subuser();
+  //key's subuser
+  if (op_state.has_subuser()) {
+    //create user and subuser at the same time, user's s3 key should not be set this
+    if (!op_state.key_type_setbycontext || (key_type == KEY_TYPE_SWIFT)) {
+      new_key.subuser = op_state.get_subuser();
+    }
+  }
 
+  //Secret key
   if (!gen_secret) {
+    if (op_state.get_secret_key().empty()) {
+      set_err_msg(err_msg, "empty secret key");
+      return -EINVAL; 
+    }
+  
     key = op_state.get_secret_key();
-  } else if (gen_secret) {
+  } else {
     char secret_key_buf[SECRET_KEY_LEN + 1];
 
     ret = gen_rand_alphanumeric_plain(g_ceph_context, secret_key_buf, sizeof(secret_key_buf));
@@ -1238,6 +1254,12 @@ int RGWSubUserPool::check_op(RGWUserAdminOpState& op_state,
     return -EINVAL;
   }
 
+  //set key type when it not set or set by context
+  if ((op_state.get_key_type() < 0) || op_state.key_type_setbycontext) {
+    op_state.set_key_type(KEY_TYPE_SWIFT);
+    op_state.key_type_setbycontext = true;
+  }
+
   // check if the subuser exists
   if (!subuser.empty())
     existing = exists(subuser);
@@ -1305,7 +1327,7 @@ int RGWSubUserPool::add(RGWUserAdminOpState& op_state, std::string *err_msg, boo
   }
 
   if (op_state.get_secret_key().empty()) {
-    op_state.set_gen_access();
+    op_state.set_gen_secret();
   }
 
   ret = execute_add(op_state, &subprocess_msg, defer_user_update);
@@ -1754,6 +1776,12 @@ int RGWUser::check_op(RGWUserAdminOpState& op_state, std::string *err_msg)
             + " does not match: " + user_id);
 
     return -EINVAL;
+  }
+
+  //set key type when it not set or set by context
+  if ((op_state.get_key_type() < 0) || op_state.key_type_setbycontext) {
+    op_state.set_key_type(KEY_TYPE_S3);
+    op_state.key_type_setbycontext = true;
   }
 
   return 0;
