@@ -308,6 +308,47 @@ void rgw_bucket_olh_log_entry::decode_json(JSONObj *obj)
   JSONDecoder::decode_json("key", key, obj);
   JSONDecoder::decode_json("delete_marker", delete_marker, obj);
 }
+void rgw_bi_log_entry::decode_json(JSONObj *obj)
+{
+  JSONDecoder::decode_json("op_id", id, obj);
+  JSONDecoder::decode_json("op_tag", tag, obj);
+  string op_str;
+  JSONDecoder::decode_json("op", op_str, obj);
+  if (op_str == "write") {
+    op = CLS_RGW_OP_ADD;
+  } else if (op_str == "del") {
+    op = CLS_RGW_OP_DEL;
+  } else if (op_str == "cancel") {
+    op = CLS_RGW_OP_CANCEL;
+  } else if (op_str == "unknown") {
+    op = CLS_RGW_OP_UNKNOWN;
+  } else if (op_str == "link_olh") {
+    op = CLS_RGW_OP_LINK_OLH;
+  } else if (op_str == "link_olh_del") {
+    op = CLS_RGW_OP_LINK_OLH_DM;
+  } else if (op_str == "unlink_instance") {
+    op = CLS_RGW_OP_UNLINK_INSTANCE;
+  } else {
+    op = CLS_RGW_OP_UNKNOWN;
+  }
+  JSONDecoder::decode_json("object", object, obj);
+  JSONDecoder::decode_json("instance", instance, obj);
+  string state_str;
+  JSONDecoder::decode_json("state", state_str, obj);
+  if (state_str == "pending") {
+    state = CLS_RGW_STATE_PENDING_MODIFY;
+  } else if (state_str == "complete") {
+    state = CLS_RGW_STATE_COMPLETE;
+  } else {
+    state = CLS_RGW_STATE_UNKNOWN;
+  }
+  JSONDecoder::decode_json("index_ver", index_ver, obj);
+  JSONDecoder::decode_json("timestamp", timestamp, obj);
+  uint32_t f;
+  JSONDecoder::decode_json("bilog_flags", f, obj);
+  bilog_flags = (uint16_t)f;
+}
+
 void rgw_bi_log_entry::dump(Formatter *f) const
 {
   f->dump_string("op_id", id);
@@ -359,6 +400,7 @@ void rgw_bi_log_entry::dump(Formatter *f) const
   f->open_object_section("ver");
   ver.dump(f);
   f->close_section();
+  f->dump_int("bilog_flags", bilog_flags);
   f->dump_bool("versioned", (bilog_flags & RGW_BILOG_FLAG_VERSIONED_OP) != 0);
 }
 
