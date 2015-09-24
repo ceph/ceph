@@ -200,6 +200,10 @@ class MonMap {
    *
    * @param cct context (and associated config)
    * @param errout ostream to send error messages too
+   *
+   * @retval -EINVAL        unable to read/decode monmap
+   * @retval -EHOSTUNREACH  unable to find monitors / not specified
+   * @retval 0              success
    */
   int build_initial(CephContext *cct, ostream& errout);
 
