@@ -19,6 +19,7 @@ from tasks.scrub import Scrubber
 from util.rados import cmd_erasure_code_profile
 from teuthology.orchestra.remote import Remote
 from teuthology.orchestra import run
+from teuthology.exceptions import CommandFailedError
 
 
 DEFAULT_CONF_PATH = '/etc/ceph/ceph.conf'
@@ -793,7 +794,11 @@ class CephManager:
         pools = self.list_pools()
         self.pools = {}
         for pool in pools:
-            self.pools[pool] = self.get_pool_property(pool, 'pg_num')
+            # we may race with a pool deletion; ignore failures here
+            try:
+                self.pools[pool] = self.get_pool_property(pool, 'pg_num')
+            except CommandFailedError:
+                self.log.info('Failed to get pg_num rom pool %d, ignoring' % pool)
 
     def raw_cluster_cmd(self, *args):
         """
