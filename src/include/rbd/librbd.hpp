@@ -46,6 +46,12 @@ namespace librbd {
     std::string address;
   } locker_t;
 
+  typedef struct {
+    std::string cluster_uuid;
+    std::string cluster_name;
+    std::string client_name;
+  } mirror_peer_t;
+
   typedef rbd_image_info_t image_info_t;
 
   class CEPH_RBD_API ProgressContext
@@ -101,6 +107,19 @@ public:
   int remove(IoCtx& io_ctx, const char *name);
   int remove_with_progress(IoCtx& io_ctx, const char *name, ProgressContext& pctx);
   int rename(IoCtx& src_io_ctx, const char *srcname, const char *destname);
+
+  // RBD pool mirroring support functions
+  int mirror_is_enabled(IoCtx& io_ctx, bool *enabled);
+  int mirror_set_enabled(IoCtx& io_ctx, bool enabled);
+  int mirror_peer_add(IoCtx& io_ctx, const std::string &cluster_uuid,
+                      const std::string &cluster_name,
+                      const std::string &client_name);
+  int mirror_peer_remove(IoCtx& io_ctx, const std::string &cluster_uuid);
+  int mirror_peer_list(IoCtx& io_ctx, std::vector<mirror_peer_t> *peers);
+  int mirror_peer_set_client(IoCtx& io_ctx, const std::string &cluster_uuid,
+                             const std::string &client_name);
+  int mirror_peer_set_cluster(IoCtx& io_ctx, const std::string &cluster_uuid,
+                              const std::string &cluster_name);
 
 private:
   /* We don't allow assignment or copying */
