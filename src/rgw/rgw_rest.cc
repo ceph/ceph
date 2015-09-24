@@ -230,8 +230,8 @@ static bool rgw_find_host_in_domains(const string& host, string *domain, string 
     if (!str_ends_with(host, *iter, &pos))
       continue;
 
-    *domain = host.substr(pos);
     if (pos == 0) {
+      *domain = host;
       subdomain->clear();
     } else {
       if (host[pos - 1] != '.') {
