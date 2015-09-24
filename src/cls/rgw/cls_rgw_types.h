@@ -20,6 +20,7 @@ namespace ceph {
 enum RGWPendingState {
   CLS_RGW_STATE_PENDING_MODIFY = 0,
   CLS_RGW_STATE_COMPLETE       = 1,
+  CLS_RGW_STATE_UNKNOWN        = 2,
 };
 
 enum RGWModifyOp {
@@ -517,6 +518,7 @@ struct rgw_bi_log_entry {
     DECODE_FINISH(bl);
   }
   void dump(Formatter *f) const;
+  void decode_json(JSONObj *obj);
   static void generate_test_instances(list<rgw_bi_log_entry*>& o);
 };
 WRITE_CLASS_ENCODER(rgw_bi_log_entry)
