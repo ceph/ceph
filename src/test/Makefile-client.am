@@ -266,6 +266,10 @@ ceph_test_rados_api_lock_LDADD = $(LIBRADOS) $(UNITTEST_LDADD) $(RADOS_TEST_LDAD
 ceph_test_rados_api_lock_CXXFLAGS = $(UNITTEST_CXXFLAGS)
 bin_DEBUGPROGRAMS += ceph_test_rados_api_lock
 
+ceph_test_rados_api_set_priority_SOURCES = test/librados/set_priority.cc
+ceph_test_rados_api_set_priority_LDADD = $(LIBRADOS) $(UNITTEST_LDADD) $(RADOS_TEST_LDADD)
+ceph_test_rados_api_set_priority_CXXFLAGS = $(UNITTEST_CXXFLAGS)
+bin_DEBUGPROGRAMS += ceph_test_rados_api_set_priority
 
 ceph_test_stress_watch_SOURCES = test/test_stress_watch.cc
 ceph_test_stress_watch_LDADD = \

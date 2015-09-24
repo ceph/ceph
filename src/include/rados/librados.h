@@ -425,6 +425,14 @@ CEPH_RADOS_API void rados_shutdown(rados_t cluster);
  */
 
 /**
+ * set the client default priority
+ *
+ * @param priority the client priority, inheritance to op
+ * @return
+ */
+CEPH_RADOS_API int rados_set_client_priority(rados_t cluster, int priority);
+
+/**
  * Configure the cluster handle using a Ceph config file
  *
  * If path is NULL, the default locations are searched, and the first
