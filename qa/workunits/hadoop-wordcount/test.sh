@@ -7,7 +7,7 @@ echo "starting hadoop-wordcount test"
 
 command0="export JAVA_HOME=/usr/lib/jvm/default-java"
 command1="mkdir -p $TESTDIR/hadoop_input"
-command2="wget http://ceph.com/qa/hadoop_input_files.tar -O $TESTDIR/hadoop_input/files.tar"
+command2="wget http://download.ceph.com/qa/hadoop_input_files.tar -O $TESTDIR/hadoop_input/files.tar"
 command3="cd $TESTDIR/hadoop_input"
 command4="tar -xf $TESTDIR/hadoop_input/files.tar"
 command5="$TESTDIR/apache_hadoop/bin/hadoop fs -mkdir wordcount_input"
