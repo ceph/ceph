@@ -359,8 +359,11 @@ void dump_bucket_from_state(struct req_state *s)
 {
   int expose_bucket = g_conf->rgw_expose_bucket;
   if (expose_bucket) {
-    if (!s->bucket_name_str.empty())
-      s->cio->print("Bucket: %s\r\n", s->bucket_name_str.c_str());
+    if (!s->bucket_name_str.empty()) {
+      string b;
+      url_encode(s->bucket_name_str, b);
+      s->cio->print("Bucket: %s\r\n", b.c_str());
+    }
   }
 }
 
