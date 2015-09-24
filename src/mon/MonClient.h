@@ -198,6 +198,14 @@ public:
   int _check_auth_rotating();
   int wait_auth_rotating(double timeout);
 
+  /**
+   * authenticate to the monitors
+   *
+   * Blocks waiting for authentication to finish
+   *
+   * @retval -ETIMEDOUT authentication timed out
+   * @retval 0          success
+   */
   int authenticate(double timeout=0.0);
 
   /**
@@ -280,6 +288,12 @@ public:
   MonClient(CephContext *cct_);
   ~MonClient();
 
+  /**
+   * initializes the mon client
+   *
+   * @retval -ENOENT keyring is missing
+   * @retval 0       success
+   */
   int init();
   void shutdown();
 
