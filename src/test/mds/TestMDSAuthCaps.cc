@@ -184,6 +184,27 @@ TEST(MDSAuthCaps, AllowPath) {
   ASSERT_FALSE(cap.is_capable("foo", 0, 0, 0777, 0, 0, MAY_READ | MAY_WRITE, 0, 0));
 }
 
+TEST(MDSAuthCaps, AllowPathChars) {
+  MDSAuthCaps unquo_cap;
+  ASSERT_TRUE(unquo_cap.parse(g_ceph_context, "allow * path=/sandbox-._foo", NULL));
+  ASSERT_FALSE(unquo_cap.allow_all());
+  ASSERT_TRUE(unquo_cap.is_capable("sandbox-._foo/foo", 0, 0, 0777, 0, 0, MAY_READ | MAY_WRITE, 0, 0));
+  ASSERT_FALSE(unquo_cap.is_capable("sandbox", 0, 0, 0777, 0, 0, MAY_READ | MAY_WRITE, 0, 0));
+  ASSERT_FALSE(unquo_cap.is_capable("sandbox-._food", 0, 0, 0777, 0, 0, MAY_READ | MAY_WRITE, 0, 0));
+  ASSERT_FALSE(unquo_cap.is_capable("foo", 0, 0, 0777, 0, 0, MAY_READ | MAY_WRITE, 0, 0));
+}
+
+
+TEST(MDSAuthCaps, AllowPathCharsQuoted) {
+  MDSAuthCaps quo_cap;
+  ASSERT_TRUE(quo_cap.parse(g_ceph_context, "allow * path=\"/sandbox-._foo\"", NULL));
+  ASSERT_FALSE(quo_cap.allow_all());
+  ASSERT_TRUE(quo_cap.is_capable("sandbox-._foo/foo", 0, 0, 0777, 0, 0, MAY_READ | MAY_WRITE, 0, 0));
+  ASSERT_FALSE(quo_cap.is_capable("sandbox", 0, 0, 0777, 0, 0, MAY_READ | MAY_WRITE, 0, 0));
+  ASSERT_FALSE(quo_cap.is_capable("sandbox-._food", 0, 0, 0777, 0, 0, MAY_READ | MAY_WRITE, 0, 0));
+  ASSERT_FALSE(quo_cap.is_capable("foo", 0, 0, 0777, 0, 0, MAY_READ | MAY_WRITE, 0, 0));
+}
+
 TEST(MDSAuthCaps, OutputParsed) {
   struct CapsTest {
     const char *input;
