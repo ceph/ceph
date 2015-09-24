@@ -921,7 +921,7 @@ class RGWListBucketShardCR: public RGWCoroutine {
   int shard_id;
 
   string instance_key;
-  rgw_bucket_shard_full_sync_marker marker;
+  rgw_obj_key marker_position;
 
   bucket_list_result *result;
 
@@ -929,13 +929,13 @@ public:
   RGWListBucketShardCR(RGWRados *_store, RGWHTTPManager *_mgr, RGWAsyncRadosProcessor *_async_rados,
                                   RGWRESTConn *_conn,
                                   const string& _bucket_name, const string& _bucket_id, int _shard_id,
-                                  rgw_bucket_shard_full_sync_marker& _marker,
+                                  rgw_obj_key& _marker_position,
                                   bucket_list_result *_result) : RGWCoroutine(_store->ctx()), store(_store),
                                                       http_manager(_mgr),
 						      async_rados(_async_rados),
                                                       conn(_conn),
                                                       bucket_name(_bucket_name), bucket_id(_bucket_id), shard_id(_shard_id),
-                                                      marker(_marker),
+                                                      marker_position(_marker_position),
                                                       result(_result) {
     instance_key = bucket_name + ":" + bucket_id;
     if (shard_id > 0) {
@@ -953,8 +953,8 @@ public:
 					{ "versions" , NULL },
 					{ "format" , "json" },
 					{ "objs-container" , "true" },
-					{ "key-marker" , marker.position.name.c_str() },
-					{ "version-id-marker" , marker.position.instance.c_str() },
+					{ "key-marker" , marker_position.name.c_str() },
+					{ "version-id-marker" , marker_position.instance.c_str() },
 	                                { NULL, NULL } };
 
         string p = string("/") + bucket_name;
@@ -1089,6 +1089,7 @@ class RGWRunBucketSyncCoroutine : public RGWCoroutine {
   RGWBucketFullSyncShardMarkerTrack *marker_tracker;
   int spawn_window;
   int pending;
+  rgw_obj_key list_marker;
 
 public:
   RGWRunBucketSyncCoroutine(RGWHTTPManager *_mgr, RGWAsyncRadosProcessor *_async_rados,
@@ -1141,11 +1142,15 @@ int RGWRunBucketSyncCoroutine::operate()
     }
 
     if ((rgw_bucket_shard_sync_info::SyncState)sync_status.state == rgw_bucket_shard_sync_info::StateFullSync) {
+      list_marker = sync_status.full_marker.position;
+      marker_tracker = new RGWBucketFullSyncShardMarkerTrack(store, async_rados, 
+                                                             RGWBucketSyncStatusManager::status_oid(source_zone, bucket_name, bucket_id, shard_id),
+                                                             sync_status.full_marker);
       do {
         yield {
           ldout(store->ctx(), 20) << __func__ << "(): building full sync maps" << dendl;
           int r = call(new RGWListBucketShardCR(store, http_manager, async_rados, conn, bucket_name, bucket_id, shard_id,
-                                                sync_status.full_marker, &list_result));
+                                                list_marker, &list_result));
           if (r < 0) {
             ldout(store->ctx(), 0) << "ERROR: failed to call new CR (RGWListBucketShardCR)" << dendl;
             return r;
@@ -1154,9 +1159,6 @@ int RGWRunBucketSyncCoroutine::operate()
         if (retcode < 0 && retcode != -ENOENT) {
           return set_state(RGWCoroutine_Error, retcode);
         }
-        marker_tracker = new RGWBucketFullSyncShardMarkerTrack(store, async_rados, 
-                                                               RGWBucketSyncStatusManager::status_oid(source_zone, bucket_name, bucket_id, shard_id),
-                                                               sync_status.full_marker);
         entries_iter = list_result.entries.begin();
         for (; entries_iter != list_result.entries.end(); ++entries_iter) {
           ldout(store->ctx(), 20) << "[full sync] syncing object: " << bucket_name << ":" << bucket_id << ":" << shard_id << "/" << entries_iter->key << dendl;
@@ -1164,6 +1166,7 @@ int RGWRunBucketSyncCoroutine::operate()
             bucket_list_entry& entry = *entries_iter;
             ++pending;
             marker_tracker->start(entry.key);
+            list_marker = entry.key;
             spawn(new RGWBucketSyncSingleEntryCR(store, async_rados, source_zone, &bucket_info, shard_id,
                                                  entry.key, entry.versioned_epoch, entry.key, marker_tracker), false);
           }
