@@ -4432,7 +4432,7 @@ void OSD::start_boot()
 void OSD::_maybe_boot(epoch_t oldest, epoch_t newest)
 {
   Mutex::Locker l(osd_lock);
-  if (is_stopping())
+  if (!is_booting())
     return;
   dout(10) << "_maybe_boot mon has osdmaps " << oldest << ".." << newest << dendl;
 
@@ -6476,9 +6476,6 @@ void OSD::handle_osd_map(MOSDMap *m)
   if (m->newest_map && m->newest_map > last) {
     dout(10) << " msg say newest map is " << m->newest_map << ", requesting more" << dendl;
     osdmap_subscribe(osdmap->get_epoch()+1, true);
-  }
-  else if (is_booting()) {
-    start_boot();  // retry
   }
   else if (do_restart)
     start_boot();
