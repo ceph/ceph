@@ -46,6 +46,9 @@ int extract_spec(const std::string &spec, std::string *pool_name,
 std::string get_positional_argument(
     const boost::program_options::variables_map &vm, size_t index);
 
+std::string get_pool_name(const boost::program_options::variables_map &vm,
+                          size_t *arg_index);
+
 int get_pool_image_snapshot_names(
     const boost::program_options::variables_map &vm,
     argument_types::ArgumentModifier mod, size_t *spec_arg_index,
