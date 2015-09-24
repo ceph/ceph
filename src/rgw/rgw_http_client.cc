@@ -550,7 +550,7 @@ void *RGWHTTPManager::reqs_thread_entry()
   int still_running;
   int mstatus;
 
-  ldout(cct, 0) << __func__ << ": start" << dendl;
+  ldout(cct, 20) << __func__ << ": start" << dendl;
 
   while (!going_down.read()) {
     int ret = do_curl_wait(cct, (CURLM *)multi_handle, thread_pipe[0]);
