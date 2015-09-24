@@ -325,6 +325,7 @@ RGWHTTPManager::RGWHTTPManager(CephContext *_cct, RGWCompletionManager *_cm) : c
 }
 
 RGWHTTPManager::~RGWHTTPManager() {
+  stop();
   if (multi_handle)
     curl_multi_cleanup((CURLM *)multi_handle);
 }
