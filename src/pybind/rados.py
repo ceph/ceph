@@ -101,6 +101,9 @@ class TimedOut(Error):
     """ `TimedOut` class, derived from `Error` """
     pass
 
+class HostUnreachable(Error):
+    """ `HostUnreachable` class, derived from `Error` """
+    pass
 
 class OperationNotSupported(Error):
     """ `OperationNotSupported` class, derived from `Error` """
@@ -131,6 +134,7 @@ def make_ex(ret, msg):
         errno.ENODATA   : NoData,
         errno.EINTR     : InterruptedOrTimeoutError,
         errno.ETIMEDOUT : TimedOut,
+        errno.EHOSTUNREACH : HostUnreachable,
         errno.ENOTSUP   : OperationNotSupported,
         errno.EINVAL    : InvalidError
         }
@@ -497,6 +501,8 @@ Rados object in state %s." % self.state)
             # by librados::RadosClient::connect()
             if ret == -errno.ENOENT: # from MonClient
                 err_str = 'unable to find keyring'
+            elif ret == -errno.EHOSTUNREACH: # from MonMap
+                err_str = 'unable to find monitor to connect to'
             elif ret == -errno.ETIMEDOUT: # from MonClient
                 err_str = 'unable to authenticate with the monitors'
             elif ret == -errno.EINVAL: # from MonClient
