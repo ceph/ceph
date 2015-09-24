@@ -796,6 +796,11 @@ config_t Rados::cct() {
   return reinterpret_cast<config_t>(impl->cct());
 }
 
+int Rados::cluster_fsid(std::string* fsid) {
+  *fsid = "00000000-1111-2222-3333-444444444444";
+  return 0;
+}
+
 int Rados::conf_set(const char *option, const char *value) {
   return rados_conf_set(reinterpret_cast<rados_t>(client), option, value);
 }
