@@ -464,7 +464,7 @@ int MonClient::authenticate(double timeout)
     if (timeout > 0.0) {
       int r = auth_cond.WaitUntil(monc_lock, until);
       if (r == ETIMEDOUT) {
-	ldout(cct, 0) << "authenticate timed out after " << timeout << dendl;
+	lderr(cct) << "authenticate timed out after " << timeout << dendl;
 	authenticate_err = -r;
       }
     } else {
@@ -494,7 +494,7 @@ void MonClient::handle_auth(MAuthReply *m)
       if (!auth) {
 	ldout(cct, 10) << "no handler for protocol " << m->protocol << dendl;
 	if (m->result == -ENOTSUP) {
-	  ldout(cct, 10) << "none of our auth protocols are supported by the server"
+	  lderr(cct) << "none of our auth protocols are supported by the server"
 			 << dendl;
 	  authenticate_err = m->result;
 	  auth_cond.SignalAll();
