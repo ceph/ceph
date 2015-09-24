@@ -3647,8 +3647,14 @@ void PG::replica_scrub(
     return;
   }
 
+  // compensate for hobject_t's with wrong pool from sloppy hammer OSDs
+  hobject_t start = msg->start;
+  hobject_t end = msg->end;
+  start.pool = info.pgid.pool();
+  end.pool = info.pgid.pool();
+
   build_scrub_map_chunk(
-    map, msg->start, msg->end, msg->deep, msg->seed,
+    map, start, end, msg->deep, msg->seed,
     handle);
 
   vector<OSDOp> scrub(1);
