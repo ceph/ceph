@@ -1191,6 +1191,24 @@ int RGWRunBucketSyncCoroutine::operate()
         }
         yield;
       }
+      /* update sync state to incremental */
+      yield {
+        sync_status.state = rgw_bucket_shard_sync_info::StateIncrementalSync;
+        map<string, bufferlist> attrs;
+        sync_status.encode_state_attr(attrs);
+        string oid = RGWBucketSyncStatusManager::status_oid(source_zone, bucket_name, bucket_id, shard_id);
+        int ret = call(new RGWSimpleRadosWriteAttrsCR(async_rados, store, store->get_zone_params().log_pool,
+                                                      oid, attrs));
+        if (ret < 0) {
+          ldout(store->ctx(), 0) << "ERROR: failed to call RGWSimpleRadosWriteAttrsCR() oid=" << oid << dendl;
+          return set_state(RGWCoroutine_Error, ret);
+        }
+      }
+      if (retcode < 0) {
+          ldout(store->ctx(), 0) << "ERROR: failed to set sync state on bucket " << bucket_name << ":" << bucket_id << ":" << shard_id
+                                 << " retcode=" << retcode << dendl;
+          return set_state(RGWCoroutine_Error, retcode);
+      }
     }
   }
 
