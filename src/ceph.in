@@ -712,7 +712,7 @@ def main():
         return 1
     except Exception as e:
         print >> sys.stderr, 'Error connecting to cluster: {0}'.\
-            format(e.__class__.__name__)
+             format(e.message)
         return 1
 
     if parsed_args.help:
