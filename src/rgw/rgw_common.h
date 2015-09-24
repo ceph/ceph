@@ -1105,6 +1105,7 @@ struct req_state {
 
    string zonegroup_endpoint;
    string bucket_instance_id;
+   int bucket_instance_shard_id;
 
    string redirect;
 
