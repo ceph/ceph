@@ -1557,6 +1557,8 @@ OSD::OSD(CephContext *cct_, ObjectStore *store_,
   outstanding_pg_stats(false),
   timeout_mon_on_pg_stats(true),
   up_thru_wanted(0), up_thru_pending(0),
+  requested_full_first(0),
+  requested_full_last(0),
   pg_stat_queue_lock("OSD::pg_stat_queue_lock"),
   osd_stat_updated(false),
   pg_stat_tid(0), pg_stat_tid_flushed(0),
@@ -4359,6 +4361,15 @@ void OSD::ms_handle_connect(Connection *con)
       monc->sub_want("osdmap", osdmap->get_epoch(), CEPH_SUBSCRIBE_ONETIME);
       monc->renew_subs();
     }
+
+    // full map requests may happen while active or pre-boot
+    if (requested_full_first) {
+      epoch_t first = requested_full_first;
+      epoch_t last = requested_full_last;
+      requested_full_first = 0;
+      requested_full_last = 0;
+      request_full_map(first, last);
+    }
   }
 }
 
@@ -4621,6 +4632,65 @@ void OSD::send_alive()
     up_thru_pending = up_thru_wanted;
     dout(10) << "send_alive want " << up_thru_wanted << dendl;
     monc->send_mon_message(new MOSDAlive(osdmap->get_epoch(), up_thru_wanted));
+  }
+}
+
+void OSD::request_full_map(epoch_t first, epoch_t last)
+{
+  dout(10) << __func__ << " " << first << ".." << last
+	   << ", previously requested "
+	   << requested_full_first << ".." << requested_full_last << dendl;
+  assert(osd_lock.is_locked());
+  assert(first > 0 && last > 0);
+  assert(first <= last);
+  assert(first >= requested_full_first);  // we shouldn't ever ask for older maps
+  if (requested_full_first == 0) {
+    // first request
+    requested_full_first = first;
+    requested_full_last = last;
+  } else if (last <= requested_full_last) {
+    // dup
+    return;
+  } else {
+    // additional request
+    first = requested_full_last + 1;
+    requested_full_last = last;
+  }
+  MMonGetOSDMap *req = new MMonGetOSDMap;
+  req->request_full(first, last);
+  monc->send_mon_message(req);
+}
+
+void OSD::got_full_map(epoch_t e)
+{
+  assert(requested_full_first <= requested_full_last);
+  assert(osd_lock.is_locked());
+  if (requested_full_first == 0) {
+    dout(20) << __func__ << " " << e << ", nothing requested" << dendl;
+    return;
+  }
+  if (e < requested_full_first) {
+    dout(10) << __func__ << " " << e << ", requested " << requested_full_first
+	     << ".." << requested_full_last
+	     << ", ignoring" << dendl;
+    return;
+  }
+  if (e > requested_full_first) {
+    dout(10) << __func__ << " " << e << ", requested " << requested_full_first
+	     << ".." << requested_full_last << ", resetting" << dendl;
+    requested_full_first = requested_full_last = 0;
+    return;
+  }
+  if (requested_full_first == requested_full_last) {
+    dout(10) << __func__ << " " << e << ", requested " << requested_full_first
+	     << ".." << requested_full_last
+	     << ", now done" << dendl;
+    requested_full_first = requested_full_last = 0;
+  } else {
+    dout(10) << __func__ << " " << e << ", requested " << requested_full_first
+	     << ".." << requested_full_last
+	     << ", still need more" << dendl;
+    ++requested_full_first;
   }
 }
 
@@ -6217,6 +6287,8 @@ void OSD::handle_osd_map(MOSDMap *m)
       t.write(coll_t::meta(), fulloid, 0, bl.length(), bl);
       pin_map_bl(e, bl);
       pinned_maps.push_back(add_map(o));
+
+      got_full_map(e);
       continue;
     }
 
@@ -6266,13 +6338,11 @@ void OSD::handle_osd_map(MOSDMap *m)
 	fbl.hexdump(*_dout);
 	*_dout << dendl;
 	delete o;
-	MMonGetOSDMap *req = new MMonGetOSDMap;
-	req->request_full(e, last);
-	monc->send_mon_message(req);
+	request_full_map(e, last);
 	last = e - 1;
 	break;
       }
-
+      got_full_map(e);
 
       ghobject_t fulloid = get_osdmap_pobject_name(e);
       t.write(coll_t::meta(), fulloid, 0, fbl.length(), fbl);
