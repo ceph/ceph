@@ -254,6 +254,8 @@ int RGWListBucket_ObjStore_S3::get_params()
         ldout(s->cct, 5) << "bad shard id specified: " << shard_id_str << dendl;
         return -EINVAL;
       }
+    } else {
+      shard_id = s->bucket_instance_shard_id;
     }
   }
   return 0;
