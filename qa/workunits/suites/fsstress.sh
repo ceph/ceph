@@ -5,7 +5,7 @@ then
     path=`pwd`
     mkdir -p /tmp/fsstress
     cd /tmp/fsstress
-    wget -q -O /tmp/fsstress/ltp-full.tgz http://ceph.com/qa/ltp-full-20091231.tgz
+    wget -q -O /tmp/fsstress/ltp-full.tgz http://download.ceph.com/qa/ltp-full-20091231.tgz
     tar xzf /tmp/fsstress/ltp-full.tgz
     rm /tmp/fsstress/ltp-full.tgz
     cd /tmp/fsstress/ltp-full-20091231/testcases/kernel/fs/fsstress

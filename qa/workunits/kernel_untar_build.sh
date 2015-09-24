@@ -2,7 +2,7 @@
 
 set -e
 
-wget -q http://ceph.com/qa/linux-4.0.5.tar.xz
+wget -q http://download.ceph.com/qa/linux-4.0.5.tar.xz
 
 mkdir t
 cd t
