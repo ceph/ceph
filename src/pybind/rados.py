@@ -102,6 +102,14 @@ class TimedOut(Error):
     pass
 
 
+class OperationNotSupported(Error):
+    """ `OperationNotSupported` class, derived from `Error` """
+    pass
+
+class InvalidError(Error):
+    """ `InvalidError` class, derived from `Error` """
+    pass
+
 def make_ex(ret, msg):
     """
     Translate a librados return code into an exception.
@@ -122,7 +130,9 @@ def make_ex(ret, msg):
         errno.EBUSY     : ObjectBusy,
         errno.ENODATA   : NoData,
         errno.EINTR     : InterruptedOrTimeoutError,
-        errno.ETIMEDOUT : TimedOut
+        errno.ETIMEDOUT : TimedOut,
+        errno.ENOTSUP   : OperationNotSupported,
+        errno.EINVAL    : InvalidError
         }
     ret = abs(ret)
     if ret in errors:
@@ -481,8 +491,30 @@ Rados object in state %s." % self.state)
         self.require_state("configuring")
         ret = run_in_thread(self.librados.rados_connect, (self.cluster,),
                             timeout)
-        if (ret != 0):
-            raise make_ex(ret, "error connecting to the cluster")
+
+        if ret < 0:
+            # these return codes come from many places, and are propagated
+            # by librados::RadosClient::connect()
+            if ret == -errno.ENOENT: # from MonClient
+                err_str = 'unable to find keyring'
+            elif ret == -errno.ETIMEDOUT: # from MonClient
+                err_str = 'unable to authenticate with the monitors'
+            elif ret == -errno.EINVAL: # from MonClient
+                err_str = 'unable to read/decode monmap'
+            elif ret == -errno.EINPROGRESS: # from RadosClient::connect()
+                err_str = 'connection already in progress'
+            elif ret == -errno.EISCONN: # from RadosClient::connect()
+                err_str = 'already connected'
+            elif ret == -errno.ENOMEM: # from RadosClient::connect()
+                err_str = 'not enough memory'
+            elif ret == -errno.ENOTSUP:
+                err_str = 'operation not supported'
+            elif ret == -errno.EPERM:
+                err_str = 'permission denied'
+            else: # something we weren't prepared for happened
+                err_str = 'unknown error connecting to cluster'
+            raise make_ex(ret, err_str)
+
         self.state = "connected"
 
     def get_cluster_stats(self):
