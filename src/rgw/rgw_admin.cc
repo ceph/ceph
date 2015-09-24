@@ -1295,6 +1295,29 @@ int send_to_url(const string& url, RGWAccessKey& key, req_info& info,
   return 0;
 }
 
+static int init_bucket_for_sync(const string& bucket_name, string& bucket_id)
+{
+  RGWBucketInfo bucket_info;
+  rgw_bucket bucket;
+
+  int ret = init_bucket(bucket_name, bucket_id, bucket_info, bucket);
+  if (ret == -ENOENT) {
+    if (bucket_id.empty()) {
+      cerr << "ERROR: bucket id specified" << std::endl;
+      return EINVAL;
+    }
+  } else {
+    bucket_id = bucket.bucket_id;
+  }
+  if (ret < 0) {
+    cerr << "ERROR: could not init bucket: " << cpp_strerror(-ret) << std::endl;
+    return -ret;
+  }
+
+  return 0;
+}
+
+
 int main(int argc, char **argv) 
 {
   vector<const char*> args;
@@ -3888,13 +3911,13 @@ next:
       cerr << "ERROR: bucket not specified" << std::endl;
       return EINVAL;
     }
-    if (bucket_id.empty()) {
-      cerr << "ERROR: bucket id specified" << std::endl;
-      return EINVAL;
+    int ret = init_bucket_for_sync(bucket_name, bucket_id);
+    if (ret < 0) {
+      return -ret;
     }
     RGWBucketSyncStatusManager sync(store, source_zone, bucket_name, bucket_id);
 
-    int ret = sync.init();
+    ret = sync.init();
     if (ret < 0) {
       cerr << "ERROR: sync.init() returned ret=" << ret << std::endl;
       return -ret;
@@ -3915,13 +3938,13 @@ next:
       cerr << "ERROR: bucket not specified" << std::endl;
       return EINVAL;
     }
-    if (bucket_id.empty()) {
-      cerr << "ERROR: bucket id specified" << std::endl;
-      return EINVAL;
+    int ret = init_bucket_for_sync(bucket_name, bucket_id);
+    if (ret < 0) {
+      return -ret;
     }
     RGWBucketSyncStatusManager sync(store, source_zone, bucket_name, bucket_id);
 
-    int ret = sync.init();
+    ret = sync.init();
     if (ret < 0) {
       cerr << "ERROR: sync.init() returned ret=" << ret << std::endl;
       return -ret;
@@ -3947,13 +3970,13 @@ next:
       cerr << "ERROR: bucket not specified" << std::endl;
       return EINVAL;
     }
-    if (bucket_id.empty()) {
-      cerr << "ERROR: bucket id specified" << std::endl;
-      return EINVAL;
+    int ret = init_bucket_for_sync(bucket_name, bucket_id);
+    if (ret < 0) {
+      return -ret;
     }
     RGWBucketSyncStatusManager sync(store, source_zone, bucket_name, bucket_id);
 
-    int ret = sync.init();
+    ret = sync.init();
     if (ret < 0) {
       cerr << "ERROR: sync.init() returned ret=" << ret << std::endl;
       return -ret;
