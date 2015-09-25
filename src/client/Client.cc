@@ -11034,63 +11034,62 @@ Inode *Client::get_quota_root(Inode *in)
   return ancestor->in();
 }
 
-bool Client::is_quota_files_exceeded(Inode *in)
+/**
+ * Traverse quota ancestors of the Inode, return true
+ * if any of them passes the passed function
+ */
+bool Client::check_quota_condition(
+    Inode *in, std::function<bool (const Inode &in)> test)
 {
   if (!cct->_conf->client_quota)
     return false;
 
   while (in != root_ancestor) {
-    quota_info_t *quota = &in->quota;
-    nest_info_t *rstat = &in->rstat;
-
-    if (quota->max_files && rstat->rsize() >= quota->max_files)
+    assert(in != NULL);
+    if (test(*in)) {
       return true;
-
-    in = get_quota_root(in);
-  }
-  return false;
-}
-
-bool Client::is_quota_bytes_exceeded(Inode *in, int64_t new_bytes)
-{
-  if (!cct->_conf->client_quota)
-    return false;
-
-  while (in != root_ancestor) {
-    quota_info_t *quota = &in->quota;
-    nest_info_t *rstat = &in->rstat;
-
-    if (quota->max_bytes && (rstat->rbytes + new_bytes) > quota->max_bytes)
-      return true;
-
-    in = get_quota_root(in);
-  }
-  return false;
-}
-
-bool Client::is_quota_bytes_approaching(Inode *in)
-{
-  if (!cct->_conf->client_quota)
-    return false;
-
-  while (in != root_ancestor) {
-    quota_info_t *quota = &in->quota;
-    nest_info_t *rstat = &in->rstat;
-
-    if (quota->max_bytes) {
-      if (rstat->rbytes >= quota->max_bytes)
-        return true;
-
-      assert(in->size >= in->reported_size);
-      uint64_t space = quota->max_bytes - rstat->rbytes;
-      uint64_t size = in->size - in->reported_size;
-      if ((space >> 4) < size)
-        return true;
     }
 
     in = get_quota_root(in);
   }
+
   return false;
+}
+
+bool Client::is_quota_files_exceeded(Inode *in)
+{
+  return check_quota_condition(in, 
+      [](const Inode &in) {
+        return in.quota.max_files && in.rstat.rsize() >= in.quota.max_files;
+      });
+}
+
+bool Client::is_quota_bytes_exceeded(Inode *in, int64_t new_bytes)
+{
+  return check_quota_condition(in, 
+      [&new_bytes](const Inode &in) {
+        return in.quota.max_bytes && (in.rstat.rbytes + new_bytes)
+               > in.quota.max_bytes;
+      });
+}
+
+bool Client::is_quota_bytes_approaching(Inode *in)
+{
+  return check_quota_condition(in, 
+      [](const Inode &in) {
+        if (in.quota.max_bytes) {
+          if (in.rstat.rbytes >= in.quota.max_bytes) {
+            return true;
+          }
+
+          assert(in.size >= in.reported_size);
+          const uint64_t space = in.quota.max_bytes - in.rstat.rbytes;
+          const uint64_t size = in.size - in.reported_size;
+          return (space >> 4) < size;
+        } else {
+          return false;
+        }
+      });
 }
 
 enum {
