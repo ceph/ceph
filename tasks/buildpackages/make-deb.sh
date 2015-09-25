@@ -24,7 +24,7 @@ set -xe
 base=/tmp/release
 gitbuilder_host=$1
 codename=$2
-git_base_url=$3
+git_ceph_url=$3
 sha1=$4
 
 sudo apt-get update
@@ -32,7 +32,7 @@ sudo apt-get install -y git
 
 source $(dirname $0)/common.sh
 
-get_ceph $git_base_url $sha1
+get_ceph $git_ceph_url $sha1
 install_deps
 
 #codename=$(lsb_release -sc)
