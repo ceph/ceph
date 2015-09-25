@@ -1304,7 +1304,7 @@ void Objecter::_check_op_pool_dne(Op *op, bool session_locked)
       if (!session_locked) {
         s->lock.get_write();
       }
-      _finish_op(op);
+      _finish_op(op, 0);
       if (!session_locked) {
         s->lock.unlock();
       }
@@ -2209,7 +2209,7 @@ int Objecter::op_cancel(OSDSession *s, ceph_tid_t tid, int r)
     op->oncommit_sync = NULL;
   }
   _op_cancel_map_check(op);
-  _finish_op(op);
+  _finish_op(op, r);
   s->lock.unlock();
 
   return 0;
@@ -2693,10 +2693,10 @@ void Objecter::_cancel_linger_op(Op *op)
     num_uncommitted.dec();
   }
 
-  _finish_op(op);
+  _finish_op(op, 0);
 }
 
-void Objecter::_finish_op(Op *op)
+void Objecter::_finish_op(Op *op, int r)
 {
   ldout(cct, 15) << "finish_op " << op->tid << dendl;
 
@@ -2705,7 +2705,7 @@ void Objecter::_finish_op(Op *op)
   if (!op->ctx_budgeted && op->budgeted)
     put_op_budget(op);
 
-  if (op->ontimeout) {
+  if (op->ontimeout && r != -ETIMEDOUT) {
     Mutex::Locker l(timer_lock);
     timer.cancel_event(op->ontimeout);
   }
@@ -2734,7 +2734,7 @@ void Objecter::finish_op(OSDSession *session, ceph_tid_t tid)
 
   Op *op = iter->second;
 
-  _finish_op(op);
+  _finish_op(op, 0);
 }
 
 MOSDOp *Objecter::_prepare_osd_op(Op *op)
@@ -3056,7 +3056,7 @@ void Objecter::handle_osd_op_reply(MOSDOpReply *m)
   // done with this tid?
   if (!op->onack && !op->oncommit && !op->oncommit_sync) {
     ldout(cct, 15) << "handle_osd_op_reply completed tid " << tid << dendl;
-    _finish_op(op);
+    _finish_op(op, 0);
   }
 
   ldout(cct, 5) << num_unacked.read() << " unacked, " << num_uncommitted.read() << " uncommitted" << dendl;
@@ -3641,7 +3641,7 @@ void Objecter::handle_pool_op_reply(MPoolOpReply *m)
     }
     iter = pool_ops.find(tid);
     if (iter != pool_ops.end()) {
-      _finish_pool_op(op);
+      _finish_pool_op(op, 0);
     }
   } else {
     ldout(cct, 10) << "unknown request " << tid << dendl;
@@ -3670,17 +3670,17 @@ int Objecter::pool_op_cancel(ceph_tid_t tid, int r)
   if (op->onfinish)
     op->onfinish->complete(r);
 
-  _finish_pool_op(op);
+  _finish_pool_op(op, r);
   return 0;
 }
 
-void Objecter::_finish_pool_op(PoolOp *op)
+void Objecter::_finish_pool_op(PoolOp *op, int r)
 {
   assert(rwlock.is_wlocked());
   pool_ops.erase(op->tid);
   logger->set(l_osdc_poolop_active, pool_ops.size());
 
-  if (op->ontimeout) {
+  if (op->ontimeout && r != -ETIMEDOUT) {
     Mutex::Locker l(timer_lock);
     timer.cancel_event(op->ontimeout);
   }
@@ -3758,7 +3758,7 @@ void Objecter::handle_get_pool_stats_reply(MGetPoolStatsReply *m)
       last_seen_pgmap_version = m->version;
     }
     op->onfinish->complete(0);
-    _finish_pool_stat_op(op);
+    _finish_pool_stat_op(op, 0);
   } else {
     ldout(cct, 10) << "unknown request " << tid << dendl;
   } 
@@ -3783,18 +3783,18 @@ int Objecter::pool_stat_op_cancel(ceph_tid_t tid, int r)
   PoolStatOp *op = it->second;
   if (op->onfinish)
     op->onfinish->complete(r);
-  _finish_pool_stat_op(op);
+  _finish_pool_stat_op(op, r);
   return 0;
 }
 
-void Objecter::_finish_pool_stat_op(PoolStatOp *op)
+void Objecter::_finish_pool_stat_op(PoolStatOp *op, int r)
 {
   assert(rwlock.is_wlocked());
 
   poolstat_ops.erase(op->tid);
   logger->set(l_osdc_poolstat_active, poolstat_ops.size());
 
-  if (op->ontimeout) {
+  if (op->ontimeout && r != -ETIMEDOUT) {
     Mutex::Locker l(timer_lock);
     timer.cancel_event(op->ontimeout);
   }
@@ -3865,7 +3865,7 @@ void Objecter::handle_fs_stats_reply(MStatfsReply *m)
     if (m->h.version > last_seen_pgmap_version)
       last_seen_pgmap_version = m->h.version;
     op->onfinish->complete(0);
-    _finish_statfs_op(op);
+    _finish_statfs_op(op, 0);
   } else {
     ldout(cct, 10) << "unknown request " << tid << dendl;
   }
@@ -3890,18 +3890,18 @@ int Objecter::statfs_op_cancel(ceph_tid_t tid, int r)
   StatfsOp *op = it->second;
   if (op->onfinish)
     op->onfinish->complete(r);
-  _finish_statfs_op(op);
+  _finish_statfs_op(op, r);
   return 0;
 }
 
-void Objecter::_finish_statfs_op(StatfsOp *op)
+void Objecter::_finish_statfs_op(StatfsOp *op, int r)
 {
   assert(rwlock.is_wlocked());
 
   statfs_ops.erase(op->tid);
   logger->set(l_osdc_statfs_active, statfs_ops.size());
 
-  if (op->ontimeout) {
+  if (op->ontimeout && r != -ETIMEDOUT) {
     Mutex::Locker l(timer_lock);
     timer.cancel_event(op->ontimeout);
   }
@@ -4467,7 +4467,7 @@ int Objecter::command_op_cancel(OSDSession *s, ceph_tid_t tid, int r)
 
   CommandOp *op = it->second;
   _command_cancel_map_check(op);
-  _finish_command(op, -ETIMEDOUT, "");
+  _finish_command(op, r, "");
   return 0;
 }
 
@@ -4481,7 +4481,7 @@ void Objecter::_finish_command(CommandOp *c, int r, string rs)
   if (c->onfinish)
     c->onfinish->complete(r);
 
-  if (c->ontimeout) {
+  if (c->ontimeout && r != -ETIMEDOUT) {
     Mutex::Locker l(timer_lock);
     timer.cancel_event(c->ontimeout);
   }
