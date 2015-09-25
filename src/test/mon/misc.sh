@@ -62,16 +62,6 @@ function TEST_osd_pool_get_set() {
 	./ceph osd pool set $TEST_POOL $flag 0 || return 1
     done
 
-    ./ceph osd pool set $TEST_POOL scrub_min_interval 123456 || return 1
-    ./ceph osd dump | grep 'pool ' | grep 'scrub_min_interval 123456' || return 1
-    ./ceph osd pool set $TEST_POOL scrub_min_interval 0 || return 1
-    ./ceph osd pool set $TEST_POOL scrub_max_interval 123456 || return 1
-    ./ceph osd dump | grep 'pool ' | grep 'scrub_max_interval 123456' || return 1
-    ./ceph osd pool set $TEST_POOL scrub_max_interval 0 || return 1
-    ./ceph osd pool set $TEST_POOL deep_scrub_interval 123456 || return 1
-    ./ceph osd dump | grep 'pool ' | grep 'deep_scrub_interval 123456' || return 1
-    ./ceph osd pool set $TEST_POOL deep_scrub_interval 0 || return 1
-
     local size=$(./ceph osd pool get $TEST_POOL size|awk '{print $2}')
     local min_size=$(./ceph osd pool get $TEST_POOL min_size|awk '{print $2}')
     #replicated pool size restrict in 1 and 10
