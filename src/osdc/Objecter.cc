@@ -1998,12 +1998,9 @@ class C_CancelOp : public Context
   ceph_tid_t tid;
   Objecter *objecter;
 public:
-  C_CancelOp(Objecter *objecter) : objecter(objecter) {}
+  C_CancelOp(ceph_tid_t tid, Objecter *objecter) : tid(tid), objecter(objecter) {}
   void finish(int r) {
     objecter->op_cancel(tid, -ETIMEDOUT);
-  }
-  void set_tid(ceph_tid_t _tid) {
-    tid = _tid;
   }
 };
 
@@ -2033,21 +2030,15 @@ ceph_tid_t Objecter::_op_submit_with_budget(Op *op, RWLock::Context& lc, int *ct
     }
   }
 
-  C_CancelOp *cb = NULL;
   if (osd_timeout > 0) {
-    cb = new C_CancelOp(this);
-    op->ontimeout = cb;
-  }
-
-  ceph_tid_t tid = _op_submit(op, lc);
-
-  if (cb) {
-    cb->set_tid(tid);
+    if (op->tid == 0)
+      op->tid = last_tid.inc();
+    op->ontimeout = new C_CancelOp(op->tid, this);
     Mutex::Locker l(timer_lock);
     timer.add_event_after(osd_timeout, op->ontimeout);
   }
 
-  return tid;
+  return _op_submit(op, lc);
 }
 
 void Objecter::_send_op_account(Op *op)
