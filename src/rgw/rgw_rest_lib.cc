@@ -10,3 +10,4 @@ RGWHandler* RGWRESTMgr_Lib::get_handler(struct req_state* s)
 {
   return get_handler(s);
 }
+
