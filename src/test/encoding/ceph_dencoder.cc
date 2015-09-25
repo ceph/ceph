@@ -349,7 +349,6 @@ int main(int argc, const char **argv)
 	exit(1);
       }
       features = atoi(*i);
-
     } else if (*i == string("encode")) {
       if (!den) {
 	cerr << "must first select type with 'type <name>'" << std::endl;
@@ -449,6 +448,11 @@ int main(int argc, const char **argv)
       int n = atoi(*i);
       err = den->select_generated(n);
     } else if (*i == string("is_deterministic")) {
+      if (!den) {
+	cerr << "must first select type with 'type <name>'" << std::endl;
+	usage(cerr);
+	exit(1);
+      }
       if (den->is_deterministic())
 	exit(0);
       else
