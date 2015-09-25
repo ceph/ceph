@@ -1129,10 +1129,6 @@ public:
                                  ///< user does not specify any expected value
   bool fast_read;            ///< whether turn on fast read on the pool or not
 
-  double scrub_min_interval;  //< scrub min interval
-  double scrub_max_interval;  //< scrub max interval
-  double deep_scrub_interval; //< deep-scrub interval
-
   pg_pool_t()
     : flags(0), type(0), size(0), min_size(0),
       crush_ruleset(0), object_hash(0),
@@ -1160,10 +1156,7 @@ public:
       min_write_recency_for_promote(0),
       stripe_width(0),
       expected_num_objects(0),
-      fast_read(false),
-      scrub_min_interval(0),
-      scrub_max_interval(0),
-      deep_scrub_interval(0)
+      fast_read(false)
   { }
 
   void dump(Formatter *f) const;

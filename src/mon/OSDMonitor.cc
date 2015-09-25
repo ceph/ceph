@@ -2885,8 +2885,7 @@ namespace {
     CACHE_TARGET_FULL_RATIO,
     CACHE_MIN_FLUSH_AGE, CACHE_MIN_EVICT_AGE,
     ERASURE_CODE_PROFILE, MIN_READ_RECENCY_FOR_PROMOTE,
-    MIN_WRITE_RECENCY_FOR_PROMOTE, FAST_READ,
-    SCRUB_MIN_INTERVAL, SCRUB_MAX_INTERVAL, DEEP_SCRUB_INTERVAL};
+    MIN_WRITE_RECENCY_FOR_PROMOTE, FAST_READ};
 
   std::set<osd_pool_get_choices>
     subtract_second_from_first(const std::set<osd_pool_get_choices>& first,
@@ -3360,9 +3359,7 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
       ("erasure_code_profile", ERASURE_CODE_PROFILE)
       ("min_read_recency_for_promote", MIN_READ_RECENCY_FOR_PROMOTE)
       ("min_write_recency_for_promote", MIN_WRITE_RECENCY_FOR_PROMOTE)
-      ("fast_read", FAST_READ)("scrub_min_interval", SCRUB_MIN_INTERVAL)
-      ("scrub_max_interval", SCRUB_MAX_INTERVAL)
-      ("deep_scrub_interval", DEEP_SCRUB_INTERVAL);
+      ("fast_read", FAST_READ);
 
     typedef std::set<osd_pool_get_choices> choices_set_t;
 
@@ -3533,15 +3530,6 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
           case FAST_READ:
             f->dump_int("fast_read", p->fast_read);
             break;
-	  case SCRUB_MIN_INTERVAL:
-            f->dump_int("scrub_min_interval", p->scrub_min_interval);
-            break;
-	  case SCRUB_MAX_INTERVAL:
-            f->dump_int("scrub_max_interval", p->scrub_max_interval);
-            break;
-	  case DEEP_SCRUB_INTERVAL:
-            f->dump_int("deep_scrub_interval", p->deep_scrub_interval);
-            break;
 	}
 	f->close_section();
 	f->flush(rdata);
@@ -3654,15 +3642,6 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
 	    break;
           case FAST_READ:
             ss << "fast_read: " << p->fast_read << "\n";
-            break;
-	  case SCRUB_MIN_INTERVAL:
-            ss << "scrub_min_interval: " << p->scrub_min_interval << "\n";
-            break;
-	  case SCRUB_MAX_INTERVAL:
-            ss << "scrub_max_interval: " << p->scrub_max_interval << "\n";
-            break;
-	  case DEEP_SCRUB_INTERVAL:
-            ss << "deep_scrub_interval: " << p->deep_scrub_interval << "\n";
             break;
 	}
 	rdata.append(ss.str());
@@ -5047,24 +5026,6 @@ int OSDMonitor::prepare_command_pool_set(map<string,cmd_vartype> &cmdmap,
     } else if (val == "false" || (interr.empty() && n == 0)) {
       p.fast_read = false;
     }
-  } else if (var == "scrub_min_interval") {
-    if (floaterr.length()) {
-      ss << "error parsing floating point value '" << val << "': " << floaterr;
-      return -EINVAL;
-    }
-    p.scrub_min_interval = f;
-  } else if (var == "scrub_max_interval") {
-    if (floaterr.length()) {
-      ss << "error parsing floating point value '" << val << "': " << floaterr;
-      return -EINVAL;
-    }
-    p.scrub_max_interval = f;
-  } else if (var == "deep_scrub_interval") {
-    if (floaterr.length()) {
-      ss << "error parsing floating point value '" << val << "': " << floaterr;
-      return -EINVAL;
-    }
-    p.deep_scrub_interval = f;
   } else {
     ss << "unrecognized variable '" << var << "'";
     return -EINVAL;
