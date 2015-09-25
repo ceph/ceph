@@ -419,13 +419,22 @@ ssh access           : ssh {identity}{username}@{ip} # logs in /usr/share/nginx/
                                     '--archive-upload',
                                     '--key-name',
                                     '--key-filename',
-                                    '--simultaneous-jobs'):
+                                    '--simultaneous-jobs',
+                                    '--ceph-git-url',
+                                    '--ceph-qa-suite-git-url'):
                 del original_argv[0:2]
             elif original_argv[0] in ('--teardown',
                                       '--upload'):
                 del original_argv[0]
             else:
                 argv.append(original_argv.pop(0))
+        for arg in ('ceph_git_url', 'ceph_qa_suite_git_url'):
+            if getattr(self.args, arg):
+                command = (
+                    "perl -pi -e 's|.*{arg}.*|{arg}: {value}|'"
+                    " ~/.teuthology.yaml"
+                ).format(arg=arg, value=getattr(self.args, arg))
+                self.ssh(command)
         argv.append('/home/' + self.username +
                     '/teuthology/teuthology/openstack/test/openstack.yaml')
         command = (
@@ -433,7 +442,7 @@ ssh access           : ssh {identity}{username}@{ip} # logs in /usr/share/nginx/
             " --machine-type openstack " +
             " ".join(map(lambda x: "'" + x + "'", argv))
         )
-        print self.ssh(command)
+        self.ssh(command)
 
     def setup(self):
         """
