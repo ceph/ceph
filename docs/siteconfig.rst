@@ -54,6 +54,12 @@ Here is a sample configuration with many of the options set and documented::
     # Where all git repos are considered to reside.
     ceph_git_base_url: https://github.com/ceph/
 
+    # Where the ceph git repo is considered to reside.
+    ceph_git_url: https://github.com/ceph/ceph.git
+
+    # Where the ceph-qa-suite git repo is considered to reside.
+    ceph_qa_suite_git_url: https://github.com/ceph/ceph-qa-suite.git
+
     # Where teuthology and ceph-qa-suite repos should be stored locally
     src_base_path: /home/foo/src
 
