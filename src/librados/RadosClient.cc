@@ -52,8 +52,6 @@
 #undef dout_prefix
 #define dout_prefix *_dout << "librados: "
 
-static atomic_t rados_instance;
-
 bool librados::RadosClient::ms_get_authorizer(int dest_type,
 					      AuthAuthorizer **authorizer,
 					      bool force_new) {
@@ -191,7 +189,6 @@ int librados::RadosClient::connect()
   common_init_finish(cct);
 
   int err;
-  uint64_t nonce;
 
   // already connected?
   if (state == CONNECTING)
@@ -206,9 +203,7 @@ int librados::RadosClient::connect()
     goto out;
 
   err = -ENOMEM;
-  nonce = getpid() + (1000000 * (uint64_t)rados_instance.inc());
-  messenger = Messenger::create(cct, cct->_conf->ms_type, entity_name_t::CLIENT(-1),
-				"radosclient", nonce);
+  messenger = Messenger::create_client_messenger(cct, "radosclient");
   if (!messenger)
     goto out;
 
