@@ -289,13 +289,16 @@ int main(int argc, const char *argv[])
 
     if (argc >= 7) {
       string subcmd(argv[6]);
-      string out(argv[7]);
-
       if (subcmd != "out") {
         std::cerr << "unrecognized subcmd '" << subcmd << "'"
                   << std::endl;
         return 1;
       }
+      if (argc < 8) {
+        std::cerr << "output path not specified" << std::endl;
+        return 1;
+      }
+      string out(argv[7]);
 
       if (out.empty()) {
         std::cerr << "unspecified out file" << std::endl;
