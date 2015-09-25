@@ -1555,9 +1555,8 @@ void ReplicatedPG::do_op(OpRequestRef& op)
   }
 
   // missing snapdir?
-  hobject_t snapdir(m->get_oid(), m->get_object_locator().key,
-		    CEPH_SNAPDIR, m->get_pg().ps(), info.pgid.pool(),
-		    m->get_object_locator().nspace);
+  hobject_t snapdir = head.get_snapdir();
+
   if (is_unreadable_object(snapdir)) {
     wait_for_unreadable_object(snapdir, op);
     return;
@@ -3891,9 +3890,7 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 		   << " bytes from obj " << soid << dendl;
 
 	  // whole object?  can we verify the checksum?
-	  if (result >= 0 &&
-	      op.extent.offset == 0 && op.extent.length == oi.size &&
-	      oi.is_data_digest()) {
+	  if (op.extent.length == oi.size && oi.is_data_digest()) {
 	    uint32_t crc = osd_op.outdata.crc32c(-1);
 	    if (oi.data_digest != crc) {
 	      osd->clog->error() << info.pgid << std::hex
@@ -3965,7 +3962,7 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
       } else {
 	// read into a buffer
 	bufferlist bl;
-        int total_read = 0;
+        uint32_t total_read = 0;
 	int r = osd->store->fiemap(coll, ghobject_t(soid, ghobject_t::NO_GEN,
 						    info.pgid.shard),
 				   op.extent.offset, op.extent.length, bl);
@@ -4023,6 +4020,22 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
           result = r;
           break;
         }
+
+	// Why SPARSE_READ need checksum? In fact, librbd always use sparse-read. 
+	// Maybe at first, there is no much whole objects. With continued use, more and more whole object exist.
+	// So from this point, for spare-read add checksum make sense.
+	if (total_read == oi.size && oi.is_data_digest()) {
+	  uint32_t crc = data_bl.crc32c(-1);
+	  if (oi.data_digest != crc) {
+	    osd->clog->error() << info.pgid << std::hex
+	      << " full-object read crc 0x" << crc
+	      << " != expected 0x" << oi.data_digest
+	      << std::dec << " on " << soid;
+	    // FIXME fall back to replica or something?
+	    result = -EIO;
+	    break;
+	  }
+	}
 
         op.extent.length = total_read;
 
@@ -4761,8 +4774,8 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
           if (result >= 0) {
 	    if (maybe_create_new_object(ctx)) {
               ctx->mod_desc.create();
+	      t->touch(soid);
 	    }
-            t->touch(soid);
           }
 	}
       }
@@ -5362,8 +5375,6 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
       {
 	if (maybe_create_new_object(ctx)) {
 	  t->touch(soid);
-	} else {
-	  obs.oi.clear_omap_digest();
 	}
 	t->omap_setheader(soid, osd_op.indata);
 	ctx->delta_stats.num_wr++;
@@ -8303,8 +8314,7 @@ ObjectContextRef ReplicatedPG::get_object_context(const hobject_t& soid,
 	// new object.
 	object_info_t oi(soid);
 	SnapSetContext *ssc = get_snapset_context(
-	  soid, true,
-	  soid.has_snapset() ? attrs : 0);
+	  soid, true, 0);
 	obc = create_object_context(oi, ssc);
 	dout(10) << __func__ << ": " << obc << " " << soid
 		 << " " << obc->rwstate
@@ -8408,8 +8418,8 @@ int ReplicatedPG::find_object_context(const hobject_t& oid,
     return 0;
   }
 
-  hobject_t head(oid.oid, oid.get_key(), CEPH_NOSNAP, oid.get_hash(),
-		 info.pgid.pool(), oid.get_namespace());
+  hobject_t head = oid.get_head();
+
   // want the snapdir?
   if (oid.snap == CEPH_SNAPDIR) {
     // return head or snapdir, whichever exists.
