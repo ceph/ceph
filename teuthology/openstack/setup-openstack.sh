@@ -54,6 +54,7 @@ archive_upload_key: teuthology/openstack/archive-key
 lock_server: http://localhost:8080/
 results_server: http://localhost:8080/
 gitbuilder_host: gitbuilder.ceph.com
+check_package_signatures: false
 queue_port: 11300
 queue_host: localhost
 lab_domain: $labdomain
