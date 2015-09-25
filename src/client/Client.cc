@@ -11044,13 +11044,19 @@ bool Client::check_quota_condition(
   if (!cct->_conf->client_quota)
     return false;
 
-  while (in != root_ancestor) {
+  while (true) {
     assert(in != NULL);
     if (test(*in)) {
       return true;
     }
 
-    in = get_quota_root(in);
+    if (in == root_ancestor) {
+      // We're done traversing, drop out
+      return false;
+    } else {
+      // Continue up the tree
+      in = get_quota_root(in);
+    }
   }
 
   return false;
