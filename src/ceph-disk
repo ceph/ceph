@@ -823,14 +823,16 @@ def convert_osd_id(cluster, osd_id):
 
     # mount_info's first fields means `device`, Second means `mount point`
     mount_info = []
-    with file('/proc/mounts', 'rb') as proc_mounts:
-        for line in proc_mounts:
-            if mountsp_name in line:
-                fields = line.split()
-                mount_info.append(fields[0])
-                mount_info.append(fields[1])
-            else:
-                continue
+    try:
+        proc_mounts = open('/proc/mounts', 'rb')
+        if proc_mounts:
+            for line in proc_mounts:
+                if mountsp_name in line:
+                    fields = line.split()
+                    mount_info.append(fields[0])
+                    mount_info.append(fields[1])
+    except:
+        raise Error('Open/Read file Error.')
     if not mount_info:
         raise Error('Can not find mount point by osd-id')
     return mount_info
@@ -2207,9 +2209,9 @@ def stop_daemon(
                 )
         else:
             raise Error('{cluster} osd.{osd_id} is not tagged with an init '\
-                        ' system'.format(cluster=cluster,osd_id=osd_id,))
-    except:
-        raise Error('ceph osd stop failed')
+                        ' system'.format(cluster=cluster,osd_id=osd_id))
+    except subprocess.CalledProcessError as e:
+        raise Error('ceph osd stop failed', e)
 
 
 def detect_fstype(
@@ -2649,7 +2651,7 @@ def _check_osd_status(cluster, osd_id):
         raise Error(e)
     out_json = json.loads(out)
     for item in out_json[u'osds']:
-        if item.get(u'osd') is int(osd_id):
+        if item.get(u'osd') == int(osd_id):
             found = True
             if item.get(u'in') is 1:
                 status_code += 2
@@ -2701,9 +2703,6 @@ def _remove_osd_directory_files(mounted_path, cluster):
 
 def main_deactivate(args):
     mount_info = []
-    if args.cluster is None:
-        args.cluster = 'ceph'
-
     if args.deactivate_by_id:
         osd_id = args.deactivate_by_id
     else:
@@ -2799,9 +2798,6 @@ def _deallocate_osd_id(cluster, osd_id):
 
 def main_destroy(args):
     mount_info = []
-    if args.cluster is None:
-        args.cluster = 'ceph'
-
     if args.destroy_by_id:
         osd_id = args.destroy_by_id
     else:
@@ -2818,8 +2814,8 @@ def main_destroy(args):
                             osd_id = get_oneliner(tpath, 'whoami')
                         finally:
                             unmount(tpath)
-           except MountError:
-               pass
+           except:
+               raise MountError
            mount_info.append(args.path)
 
 
@@ -2877,8 +2873,8 @@ def main_destroy(args):
                     if whoami is osd_id:
                         found = True
                         (base_dev, part_num) = split_dev_base_partnum(item)
-                except MountError:
-                     pass
+                except:
+                    raise MountError
             if not found:
                 raise Error('Could not find the partition of osd.%s!' % osd_id)
 
