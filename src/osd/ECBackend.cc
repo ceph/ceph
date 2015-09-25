@@ -383,7 +383,12 @@ void ECBackend::handle_recovery_read_complete(
            ++it) {
         it->second.rebuild();
       }
-      op.obc = get_parent()->get_obc(hoid, op.xattrs);
+      // Need to remove ECUtil::get_hinfo_key() since it should not leak out
+      // of the backend (see bug #12983)
+      map<string, bufferlist> sanitized_attrs(op.xattrs);
+      sanitized_attrs.erase(ECUtil::get_hinfo_key());
+      op.obc = get_parent()->get_obc(hoid, sanitized_attrs);
+      assert(op.obc);
       op.recovery_info.size = op.obc->obs.oi.size;
       op.recovery_info.oi = op.obc->obs.oi;
     }
