@@ -20,10 +20,10 @@ function install_deps() {
 }
 
 function get_ceph() {
-    local git_base_url=$1
+    local git_ceph_url=$1
     local sha1=$2
 
-    test -d ceph || git clone ${git_base_url}/ceph
+    test -d ceph || git clone ${git_ceph_url}
     cd ceph
     git checkout ${sha1}
 }
