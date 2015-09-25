@@ -697,7 +697,7 @@ static void fuse_ll_setlk(fuse_req_t req, fuse_ino_t ino,
     return;
   }
 
-  int r = cfuse->client->ll_setlk(fh, lock, fi->lock_owner, sleep, req);
+  int r = cfuse->client->ll_setlk(fh, lock, fi->lock_owner, sleep);
   fuse_reply_err(req, -r);
 }
 
@@ -707,12 +707,15 @@ static void fuse_ll_interrupt(fuse_req_t req, void* data)
   cfuse->client->ll_interrupt(data);
 }
 
-static void switch_interrupt_cb(void *req, void* data)
+static void switch_interrupt_cb(void *handle, void* data)
 {
+  CephFuse::Handle *cfuse = (CephFuse::Handle *)handle;
+  fuse_req_t req = cfuse->get_fuse_req();
+
   if (data)
-    fuse_req_interrupt_func((fuse_req_t)req, fuse_ll_interrupt, data);
+    fuse_req_interrupt_func(req, fuse_ll_interrupt, data);
   else
-    fuse_req_interrupt_func((fuse_req_t)req, NULL, NULL);
+    fuse_req_interrupt_func(req, NULL, NULL);
 }
 
 #if FUSE_VERSION >= FUSE_MAKE_VERSION(2, 9)
@@ -729,7 +732,7 @@ static void fuse_ll_flock(fuse_req_t req, fuse_ino_t ino,
     return;
   }
 
-  int r = cfuse->client->ll_flock(fh, cmd, fi->lock_owner, req);
+  int r = cfuse->client->ll_flock(fh, cmd, fi->lock_owner);
   fuse_reply_err(req, -r);
 }
 #endif
