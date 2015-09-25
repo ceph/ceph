@@ -28,7 +28,7 @@ ceph-${CEPH_PKG_TYPE}-${CEPH_DIST}-${CEPH_ARCH}-basic-${CEPH_SHA1}: packages-rep
 	ip=$(call get_ip,$@) ; \
 	scp make-${CEPH_PKG_TYPE}.sh common.sh ubuntu@$$ip: ; \
 	packages_repository=$(call get_ip,${<F}) ; \
-	ssh -tt -A ubuntu@$$ip bash ./make-${CEPH_PKG_TYPE}.sh $$packages_repository ${CEPH_DIST} ${CEPH_GIT_BASE_URL} ${CEPH_SHA1}
+	ssh -tt -A ubuntu@$$ip bash ./make-${CEPH_PKG_TYPE}.sh $$packages_repository ${CEPH_DIST} ${CEPH_GIT_URL} ${CEPH_SHA1}
 	mkdir -p ${D}/${@D} ; touch ${D}/$@
 
 clobber:
