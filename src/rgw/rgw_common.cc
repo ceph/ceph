@@ -99,7 +99,7 @@ is_err() const
 
 
 req_info::req_info(CephContext *cct, class RGWEnv *e) : env(e) {
-  method = env->get("REQUEST_METHOD");
+  method = env->get("REQUEST_METHOD", "");
   script_uri = env->get("SCRIPT_URI", cct->_conf->rgw_script_uri.c_str());
   request_uri = env->get("REQUEST_URI", cct->_conf->rgw_request_uri.c_str());
   int pos = request_uri.find('?');
@@ -109,7 +109,7 @@ req_info::req_info(CephContext *cct, class RGWEnv *e) : env(e) {
   } else {
     request_params = env->get("QUERY_STRING", "");
   }
-  host = env->get("HTTP_HOST");
+  host = env->get("HTTP_HOST", "");
 
   // strip off any trailing :port from host (added by CrossFTP and maybe others)
   size_t colon_offset = host.find_last_of(':');
