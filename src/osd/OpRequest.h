@@ -68,6 +68,7 @@ struct OpRequest : public TrackedOp {
   bool need_promote();
   bool need_skip_handle_cache();
   bool need_skip_promote();
+  bool need_skip_full_check();
   void set_read();
   void set_write();
   void set_cache();
@@ -77,6 +78,7 @@ struct OpRequest : public TrackedOp {
   void set_promote();
   void set_skip_handle_cache();
   void set_skip_promote();
+  void set_skip_full_check();
 
   void _dump(utime_t now, Formatter *f) const;
 
