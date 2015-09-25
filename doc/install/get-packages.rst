@@ -65,6 +65,28 @@ key. For development testing packages, use the ``autobuild.asc`` key (developers
 and QA).
 
 
+.. _mirrors:
+
+Mirrors
+=======
+
+For improved user experience multiple mirrors for Ceph are available around the
+world.
+
+These mirrors are available on the following locations:
+
+- **EU**: http://eu.ceph.com/
+- **AU**: http://au.ceph.com/
+
+You can replace all ceph.com URLs with any of the mirrors, for example:
+
+  http://download.ceph.com/debian-hammer
+
+Change this to:
+
+  http://eu.ceph.com/debian-hammer
+
+
 APT
 ---
 
@@ -132,9 +154,7 @@ The major releases of Ceph include:
   was retired in May 2015), so we recommend that users upgrade to a more
   recent version.
 
-.. tip:: For European users, there is also a mirror in the Netherlands at:
-   http://eu.ceph.com/
-
+.. tip:: For international users, there are various mirrors globally. See :ref:`mirrors`.
 
 Debian Packages
 ---------------
@@ -174,6 +194,8 @@ of Debian and Ubuntu releases supported. ::
 
 	echo deb http://download.ceph.com/debian-testing/ $(lsb_release -sc) main | sudo tee /etc/apt/sources.list.d/ceph.list
 
+.. tip:: For international users, there are various mirrors globally. See the
+   information at the start of this page.
 
 RPM Packages
 ------------
@@ -262,7 +284,7 @@ You can download the RPMs directly from::
 
      http://download.ceph.com/rpm-testing
 
-
+.. tip:: For international users, there are various mirrors globally. See :ref:`mirrors`.
 Add Ceph Development
 ====================
 
