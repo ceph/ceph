@@ -1859,7 +1859,7 @@ int FileJournal::make_writeable()
   else
     write_pos = get_top();
   read_pos = 0;
-
+  header.start = write_pos;
   must_write_header = true;
   start_writer();
   return 0;
