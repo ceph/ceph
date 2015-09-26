@@ -87,7 +87,7 @@ def task(ctx, config):
         else:
             ref = ''
         subprocess.check_call(
-            "flock /tmp/buildpackages " +
+            "flock --close /tmp/buildpackages " +
             "make -C " + d + " " + os.environ['HOME'] + "/.ssh_agent",
             shell=True)
         target = os.path.dirname(urlparse.urlparse(url).path.strip('/'))
@@ -100,7 +100,7 @@ def task(ctx, config):
             'ram': 1024, # MB
             'cpus': 1,
         }, select)
-        cmd = (". " + os.environ['HOME'] + "/.ssh_agent ; flock /tmp/buildpackages make -C " + d +
+        cmd = (". " + os.environ['HOME'] + "/.ssh_agent ; flock --close /tmp/buildpackages make -C " + d +
                " CEPH_GIT_URL=" + teuth_config.get_ceph_git_url() +
                " CEPH_PKG_TYPE=" + gitbuilder.pkg_type +
                " CEPH_OS_TYPE=" + ctx.config['os_type'] +
