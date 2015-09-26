@@ -237,8 +237,14 @@ int FileStore::lfn_open(coll_t cid,
   bool need_lock = true;
   int flags = O_RDWR;
 
-  if (create)
-    flags |= O_CREAT;
+  if (create) {
+    if (g_conf->filestore_odsync_write) {
+      flags |= O_CREAT|O_DSYNC ;
+    } else {
+      flags |= O_CREAT ;
+    }
+  }
+
 
   Index index2;
   if (!index) {
@@ -558,9 +564,9 @@ FileStore::FileStore(const std::string &base, const std::string &jdev, osflagbit
   m_filestore_sloppy_crc(g_conf->filestore_sloppy_crc),
   m_filestore_sloppy_crc_block_size(g_conf->filestore_sloppy_crc_block_size),
   m_filestore_max_alloc_hint_size(g_conf->filestore_max_alloc_hint_size),
-  m_fs_type(0),
   m_filestore_max_inline_xattr_size(0),
-  m_filestore_max_inline_xattrs(0)
+  m_filestore_max_inline_xattrs(0),
+  applied_seq_lock("FileStore::applied_seq_lock")
 {
   m_filestore_kill_at.set(g_conf->filestore_kill_at);
 
@@ -1465,10 +1471,12 @@ int FileStore::mount()
   }
 
   dout(5) << "mount op_seq is " << initial_op_seq << dendl;
-  if (initial_op_seq == 0) {
-    derr << "mount initial op seq is 0; something is wrong" << dendl;
-    ret = -EINVAL;
-    goto close_current_fd;
+  if (!((g_conf->filestore_do_fast_sync) && (m_fs_type == XFS_SUPER_MAGIC))) {
+    if (initial_op_seq == 0) {
+      derr << "mount initial op seq is 0; something is wrong" << dendl;
+      ret = -EINVAL;
+      goto close_current_fd;
+    }
   }
 
   if (!backend->can_checkpoint()) {
@@ -1704,8 +1712,10 @@ int FileStore::umount()
   dout(5) << "umount " << basedir << dendl;
   
   flush();
-  sync();
-  do_force_sync();
+  if (!((g_conf->filestore_do_fast_sync) && (m_fs_type == XFS_SUPER_MAGIC))) {
+    sync();
+    do_force_sync();
+  }
 
   lock.Lock();
   stop = true;
@@ -1850,7 +1860,10 @@ void FileStore::op_queue_release_throttle(Op *o)
 
 void FileStore::_do_op(OpSequencer *osr, ThreadPool::TPHandle &handle)
 {
-  wbthrottle.throttle();
+  if (!((g_conf->filestore_do_fast_sync) && (m_fs_type == XFS_SUPER_MAGIC))) {
+    wbthrottle.throttle();
+  }
+
   // inject a stall?
   if (g_conf->filestore_inject_stall) {
     int orig = g_conf->filestore_inject_stall;
@@ -1863,12 +1876,26 @@ void FileStore::_do_op(OpSequencer *osr, ThreadPool::TPHandle &handle)
 
   osr->apply_lock.Lock();
   Op *o = osr->peek_queue();
-  apply_manager.op_apply_start(o->op);
+  if (!((g_conf->filestore_do_fast_sync) && (m_fs_type == XFS_SUPER_MAGIC))) {
+    apply_manager.op_apply_start(o->op);
+  }
+
   dout(5) << "_do_op " << o << " seq " << o->op << " " << *osr << "/" << osr->parent << " start" << dendl;
   int r = _do_transactions(o->tls, o->op, &handle);
-  apply_manager.op_apply_finish(o->op);
+  if (!((g_conf->filestore_do_fast_sync) && (m_fs_type == XFS_SUPER_MAGIC))) {
+    apply_manager.op_apply_finish(o->op);
+  }
+
   dout(10) << "_do_op " << o << " seq " << o->op << " r = " << r
 	   << ", finisher " << o->onreadable << " " << o->onreadable_sync << dendl;
+
+  if ((g_conf->filestore_do_fast_sync) && (m_fs_type == XFS_SUPER_MAGIC)) {
+    applied_seq_lock.Lock();
+    applied_seq_map[o->op] = true;
+    applied_seq_cond.Signal();
+    applied_seq_lock.Unlock();
+  }
+
 }
 
 void FileStore::_finish_op(OpSequencer *osr)
@@ -1968,7 +1995,13 @@ int FileStore::queue_transactions(Sequencer *posr, list<Transaction*> &tls,
 
     if (m_filestore_journal_parallel) {
       dout(5) << "queue_transactions (parallel) " << o->op << " " << o->tls << dendl;
-      
+
+      if ((g_conf->filestore_do_fast_sync) && (m_fs_type == XFS_SUPER_MAGIC)) {
+        applied_seq_lock.Lock();
+        applied_seq_map.insert(make_pair(o->op,false));
+        applied_seq_lock.Unlock();
+      }
+
       _op_journal_transactions(tbl, data_align, o->op, ondisk, osd_op);
       
       // queue inside submit_manager op submission lock
@@ -3195,11 +3228,16 @@ int FileStore::_write(coll_t cid, const ghobject_t& oid,
     assert(rc >= 0);
   }
 
-  // flush?
-  if (!replaying &&
-      g_conf->filestore_wbthrottle_enable)
-    wbthrottle.queue_wb(fd, oid, offset, len,
+  if (g_conf->filestore_odsync_write) {
+    posix_fadvise(**fd, 0, 0, POSIX_FADV_DONTNEED);
+  } else {
+    // flush?
+    if (!replaying &&
+        g_conf->filestore_wbthrottle_enable)
+      wbthrottle.queue_wb(fd, oid, offset, len,
 			  fadvise_flags & CEPH_OSD_OP_FLAG_FADVISE_DONTNEED);
+  }
+
   lfn_close(fd);
 
  out:
@@ -3571,169 +3609,227 @@ private:
 
 void FileStore::sync_entry()
 {
-  lock.Lock();
-  while (!stop) {
-    utime_t max_interval;
-    max_interval.set_from_double(m_filestore_max_sync_interval);
-    utime_t min_interval;
-    min_interval.set_from_double(m_filestore_min_sync_interval);
-
-    utime_t startwait = ceph_clock_now(g_ceph_context);
-    if (!force_sync) {
-      dout(20) << "sync_entry waiting for max_interval " << max_interval << dendl;
-      sync_cond.WaitInterval(g_ceph_context, lock, max_interval);
-    } else {
-      dout(20) << "sync_entry not waiting, force_sync set" << dendl;
-    }
-
-    if (force_sync) {
-      dout(20) << "sync_entry force_sync set" << dendl;
-      force_sync = false;
-    } else {
-      // wait for at least the min interval
-      utime_t woke = ceph_clock_now(g_ceph_context);
-      woke -= startwait;
-      dout(20) << "sync_entry woke after " << woke << dendl;
-      if (woke < min_interval) {
-	utime_t t = min_interval;
-	t -= woke;
-	dout(20) << "sync_entry waiting for another " << t 
-		 << " to reach min interval " << min_interval << dendl;
-	sync_cond.WaitInterval(g_ceph_context, lock, t);
-      }
-    }
-
-    list<Context*> fin;
-  again:
-    fin.swap(sync_waiters);
-    lock.Unlock();
-    
-    op_tp.pause();
-    if (apply_manager.commit_start()) {
-      utime_t start = ceph_clock_now(g_ceph_context);
-      uint64_t cp = apply_manager.get_committing_seq();
-
-      sync_entry_timeo_lock.Lock();
-      SyncEntryTimeout *sync_entry_timeo =
-	new SyncEntryTimeout(m_filestore_commit_timeout);
-      timer.add_event_after(m_filestore_commit_timeout, sync_entry_timeo);
-      sync_entry_timeo_lock.Unlock();
-
-      logger->set(l_os_committing, 1);
-
-      dout(15) << "sync_entry committing " << cp << dendl;
-      stringstream errstream;
-      if (g_conf->filestore_debug_omap_check && !object_map->check(errstream)) {
-	derr << errstream.str() << dendl;
-	assert(0);
-      }
-
-      if (backend->can_checkpoint()) {
-	int err = write_op_seq(op_fd, cp);
-	if (err < 0) {
-	  derr << "Error during write_op_seq: " << cpp_strerror(err) << dendl;
-	  assert(0 == "error during write_op_seq");
-	}
-
-	char s[NAME_MAX];
-	snprintf(s, sizeof(s), COMMIT_SNAP_ITEM, (long long unsigned)cp);
-	uint64_t cid = 0;
-	err = backend->create_checkpoint(s, &cid);
-	if (err < 0) {
-	    int err = errno;
-	    derr << "snap create '" << s << "' got error " << err << dendl;
-	    assert(err == 0);
-	}
-
-	snaps.push_back(cp);
-	apply_manager.commit_started();
-	op_tp.unpause();
-
-	if (cid > 0) {
-	  dout(20) << " waiting for checkpoint " << cid << " to complete" << dendl;
-	  err = backend->sync_checkpoint(cid);
-	  if (err < 0) {
-	    derr << "ioctl WAIT_SYNC got " << cpp_strerror(err) << dendl;
-	    assert(0 == "wait_sync got error");
-	  }
-	  dout(20) << " done waiting for checkpoint" << cid << " to complete" << dendl;
-	}
-      } else
-      {
-	apply_manager.commit_started();
-	op_tp.unpause();
-
-	object_map->sync();
-	int err = backend->syncfs();
-	if (err < 0) {
-	  derr << "syncfs got " << cpp_strerror(err) << dendl;
-	  assert(0 == "syncfs returned error");
-	}
-
-	err = write_op_seq(op_fd, cp);
-	if (err < 0) {
-	  derr << "Error during write_op_seq: " << cpp_strerror(err) << dendl;
-	  assert(0 == "error during write_op_seq");
-	}
-	err = ::fsync(op_fd);
-	if (err < 0) {
-	  derr << "Error during fsync of op_seq: " << cpp_strerror(err) << dendl;
-	  assert(0 == "error during fsync of op_seq");
-	}
-      }
-      
-      utime_t done = ceph_clock_now(g_ceph_context);
-      utime_t lat = done - start;
-      utime_t dur = done - startwait;
-      dout(10) << "sync_entry commit took " << lat << ", interval was " << dur << dendl;
-
-      logger->inc(l_os_commit);
-      logger->tinc(l_os_commit_lat, lat);
-      logger->tinc(l_os_commit_len, dur);
-
-      apply_manager.commit_finish();
-      wbthrottle.clear();
-
-      logger->set(l_os_committing, 0);
-
-      // remove old snaps?
-      if (backend->can_checkpoint()) {
-	char s[NAME_MAX];
-	while (snaps.size() > 2) {
-	  snprintf(s, sizeof(s), COMMIT_SNAP_ITEM, (long long unsigned)snaps.front());
-	  snaps.pop_front();
-	  dout(10) << "removing snap '" << s << "'" << dendl;
-	  int r = backend->destroy_checkpoint(s);
-	  if (r) {
-	    int err = errno;
-	    derr << "unable to destroy snap '" << s << "' got " << cpp_strerror(err) << dendl;
-	  }
-	}
-      }
-
-      dout(15) << "sync_entry committed to op_seq " << cp << dendl;
-
-      sync_entry_timeo_lock.Lock();
-      timer.cancel_event(sync_entry_timeo);
-      sync_entry_timeo_lock.Unlock();
-    } else {
-      op_tp.unpause();
-    }
-    
+  if ((g_conf->filestore_do_fast_sync) && (m_fs_type == XFS_SUPER_MAGIC)) {
     lock.Lock();
-    finish_contexts(g_ceph_context, fin, 0);
-    fin.clear();
-    if (!sync_waiters.empty()) {
-      dout(10) << "sync_entry more waiters, committing again" << dendl;
-      goto again;
+    bool do_commit = false;
+    utime_t start_commit = ceph_clock_now(g_ceph_context);
+    while (!stop) {
+      lock.Unlock();
+      uint64_t seq_to_commit = 0;
+      if (do_commit) {
+        start_commit = ceph_clock_now(g_ceph_context);
+        do_commit = false;
+      }
+      applied_seq_lock.Lock();
+      if (applied_seq_map.empty()) {
+        applied_seq_cond.WaitInterval(g_ceph_context, applied_seq_lock, utime_t(0.001, 0));
+      }
+      map <uint64_t, bool >::iterator it ;
+      for (it=applied_seq_map.begin(); it!=applied_seq_map.end(); ++it) {
+        bool completed = applied_seq_map[last_journal_commit_seq + 1];
+        if (completed) {
+          do_commit = true;
+          last_journal_commit_seq++;
+        } else {
+          break;
+        }
+      }
+      if (do_commit) {
+        applied_seq_map.erase(applied_seq_map.begin(), it);
+        seq_to_commit = last_journal_commit_seq;
+      }
+      applied_seq_lock.Unlock();
+
+      if (do_commit) {
+        utime_t start_syncfs = ceph_clock_now(g_ceph_context);
+        int err = backend->syncfs();
+        if (err < 0) {
+          derr << "syncfs got " << cpp_strerror(err) << dendl;
+          assert(0 == "syncfs returned error");
+        }
+        utime_t done_syncfs = ceph_clock_now(g_ceph_context);
+
+        if (journal) {
+          journal->committed_thru(seq_to_commit);
+        }
+        utime_t done_commit = ceph_clock_now(g_ceph_context);
+
+        dout(1) << "Committing till seq = " << seq_to_commit << ", Total commit time = " << done_commit - start_commit << ", syncfs took " << done_syncfs - start_syncfs << dendl;
+      } else {
+        //dout(0) << " Nothing to commit, but doing syncfs, time took = " << done_syncfs - start_syncfs <<dendl;
+        //dout(1) << " Nothing to commit, *not* doing syncfs.." <<dendl;
+      }
+
+      lock.Lock();
     }
-    if (!stop && journal && journal->should_commit_now()) {
-      dout(10) << "sync_entry journal says we should commit again (probably is/was full)" << dendl;
-      goto again;
+    stop = false;
+    lock.Unlock();
+  } else {
+
+    lock.Lock();
+    while (!stop) {
+      utime_t max_interval;
+      max_interval.set_from_double(m_filestore_max_sync_interval);
+      utime_t min_interval;
+      min_interval.set_from_double(m_filestore_min_sync_interval);
+
+      utime_t startwait = ceph_clock_now(g_ceph_context);
+      if (!force_sync) {
+        dout(20) << "sync_entry waiting for max_interval " << max_interval << dendl;
+        sync_cond.WaitInterval(g_ceph_context, lock, max_interval);
+      } else {
+        dout(20) << "sync_entry not waiting, force_sync set" << dendl;
+      }
+
+      if (force_sync) {
+        dout(20) << "sync_entry force_sync set" << dendl;
+        force_sync = false;
+      } else {
+        // wait for at least the min interval
+        utime_t woke = ceph_clock_now(g_ceph_context);
+        woke -= startwait;
+        dout(20) << "sync_entry woke after " << woke << dendl;
+        if (woke < min_interval) {
+	  utime_t t = min_interval;
+	  t -= woke;
+	  dout(20) << "sync_entry waiting for another " << t 
+		 << " to reach min interval " << min_interval << dendl;
+	  sync_cond.WaitInterval(g_ceph_context, lock, t);
+        }
+      }
+
+      list<Context*> fin;
+    again:
+      fin.swap(sync_waiters);
+      lock.Unlock();
+    
+      op_tp.pause();
+      if (apply_manager.commit_start()) {
+        utime_t start = ceph_clock_now(g_ceph_context);
+        uint64_t cp = apply_manager.get_committing_seq();
+
+        sync_entry_timeo_lock.Lock();
+        SyncEntryTimeout *sync_entry_timeo =
+	  new SyncEntryTimeout(m_filestore_commit_timeout);
+        timer.add_event_after(m_filestore_commit_timeout, sync_entry_timeo);
+        sync_entry_timeo_lock.Unlock();
+
+        logger->set(l_os_committing, 1);
+
+        dout(15) << "sync_entry committing " << cp << dendl;
+        stringstream errstream;
+        if (g_conf->filestore_debug_omap_check && !object_map->check(errstream)) {
+	  derr << errstream.str() << dendl;
+	  assert(0);
+        }
+
+        if (backend->can_checkpoint()) {
+	  int err = write_op_seq(op_fd, cp);
+	  if (err < 0) {
+	    derr << "Error during write_op_seq: " << cpp_strerror(err) << dendl;
+	    assert(0 == "error during write_op_seq");
+	  }
+
+	  char s[NAME_MAX];
+	  snprintf(s, sizeof(s), COMMIT_SNAP_ITEM, (long long unsigned)cp);
+	  uint64_t cid = 0;
+	  err = backend->create_checkpoint(s, &cid);
+	  if (err < 0) {
+	      int err = errno;
+	      derr << "snap create '" << s << "' got error " << err << dendl;
+	      assert(err == 0);
+	  }
+
+	  snaps.push_back(cp);
+	  apply_manager.commit_started();
+	  op_tp.unpause();
+
+	  if (cid > 0) {
+	    dout(20) << " waiting for checkpoint " << cid << " to complete" << dendl;
+	    err = backend->sync_checkpoint(cid);
+	    if (err < 0) {
+	      derr << "ioctl WAIT_SYNC got " << cpp_strerror(err) << dendl;
+	      assert(0 == "wait_sync got error");
+	    }
+	    dout(20) << " done waiting for checkpoint" << cid << " to complete" << dendl;
+	  }
+        } else
+        {
+	  apply_manager.commit_started();
+	  op_tp.unpause();
+
+	  object_map->sync();
+	  int err = backend->syncfs();
+	  if (err < 0) {
+	    derr << "syncfs got " << cpp_strerror(err) << dendl;
+	    assert(0 == "syncfs returned error");
+	  }
+
+	  err = write_op_seq(op_fd, cp);
+	  if (err < 0) {
+	    derr << "Error during write_op_seq: " << cpp_strerror(err) << dendl;
+	    assert(0 == "error during write_op_seq");
+	  }
+	  err = ::fsync(op_fd);
+	  if (err < 0) {
+	    derr << "Error during fsync of op_seq: " << cpp_strerror(err) << dendl;
+	    assert(0 == "error during fsync of op_seq");
+	  }
+        }
+      
+        utime_t done = ceph_clock_now(g_ceph_context);
+        utime_t lat = done - start;
+        utime_t dur = done - startwait;
+        dout(10) << "sync_entry commit took " << lat << ", interval was " << dur << dendl;
+
+        logger->inc(l_os_commit);
+        logger->tinc(l_os_commit_lat, lat);
+        logger->tinc(l_os_commit_len, dur);
+
+        apply_manager.commit_finish();
+        wbthrottle.clear();
+
+        logger->set(l_os_committing, 0);
+
+        // remove old snaps?
+        if (backend->can_checkpoint()) {
+	  char s[NAME_MAX];
+	  while (snaps.size() > 2) {
+	    snprintf(s, sizeof(s), COMMIT_SNAP_ITEM, (long long unsigned)snaps.front());
+	    snaps.pop_front();
+	    dout(10) << "removing snap '" << s << "'" << dendl;
+	    int r = backend->destroy_checkpoint(s);
+	    if (r) {
+	      int err = errno;
+	      derr << "unable to destroy snap '" << s << "' got " << cpp_strerror(err) << dendl;
+	    }
+	  }
+        }
+
+        dout(15) << "sync_entry committed to op_seq " << cp << dendl;
+
+        sync_entry_timeo_lock.Lock();
+        timer.cancel_event(sync_entry_timeo);
+        sync_entry_timeo_lock.Unlock();
+      } else {
+        op_tp.unpause();
+      }
+    
+      lock.Lock();
+      finish_contexts(g_ceph_context, fin, 0);
+      fin.clear();
+      if (!sync_waiters.empty()) {
+        dout(10) << "sync_entry more waiters, committing again" << dendl;
+        goto again;
+      }
+      if (!stop && journal && journal->should_commit_now()) {
+        dout(10) << "sync_entry journal says we should commit again (probably is/was full)" << dendl;
+        goto again;
+      }
     }
+    stop = false;
+    lock.Unlock();
   }
-  stop = false;
-  lock.Unlock();
 }
 
 void FileStore::_start_sync()
@@ -3831,7 +3927,9 @@ void FileStore::sync_and_flush()
   } else {
     // includes m_filestore_journal_parallel
     _flush_op_queue();
-    sync();
+    if (!((g_conf->filestore_do_fast_sync) && (m_fs_type == XFS_SUPER_MAGIC))) {
+      sync();
+    }
   }
   dout(10) << "sync_and_flush done" << dendl;
 }
@@ -3840,7 +3938,9 @@ int FileStore::flush_journal()
 {
   dout(10) << __func__ << dendl;
   sync_and_flush();
-  sync();
+  if (!((g_conf->filestore_do_fast_sync) && (m_fs_type == XFS_SUPER_MAGIC))) {
+    sync();
+  }
   return 0;
 }
 

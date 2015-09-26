@@ -413,7 +413,7 @@ private:
 
   int check();
   int create();
-  int open(uint64_t fs_op_seq);
+  int open(uint64_t fs_op_seq, bool fast_sync = false, uint64_t* last_committed_j_seq = NULL);
   void close();
   int peek_fsid(uuid_d& fsid);
 

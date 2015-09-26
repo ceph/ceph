@@ -453,10 +453,10 @@ out:
   return r;
 }
 
-int FileJournal::open(uint64_t fs_op_seq)
+int FileJournal::open(uint64_t fs_op_seq, bool fast_sync, uint64_t* last_committed_j_seq)
 {
   dout(2) << "open " << fn << " fsid " << fsid << " fs_op_seq " << fs_op_seq << dendl;
-
+  do_fast_sync = fast_sync;
   uint64_t next_seq = fs_op_seq + 1;
 
   int err = _open(false);
@@ -521,10 +521,15 @@ int FileJournal::open(uint64_t fs_op_seq)
   // last_committed_seq is 1 before the start of the journal or
   // 0 if the start is 0
   last_committed_seq = seq > 0 ? seq - 1 : seq;
-  if (last_committed_seq < fs_op_seq) {
-    dout(2) << "open advancing committed_seq " << last_committed_seq
-	    << " to fs op_seq " << fs_op_seq << dendl;
-    last_committed_seq = fs_op_seq;
+  if (!fast_sync) {
+    if (last_committed_seq < fs_op_seq) {
+      dout(2) << "open advancing committed_seq " << last_committed_seq
+	      << " to fs op_seq " << fs_op_seq << dendl;
+      last_committed_seq = fs_op_seq;
+    }
+  } else {
+    *last_committed_j_seq = last_committed_seq;
+    next_seq = *last_committed_j_seq + 1;
   }
 
   while (1) {
