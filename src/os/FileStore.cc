@@ -1883,7 +1883,9 @@ void FileStore::_finish_op(OpSequencer *osr)
   osr->apply_lock.Unlock();  // locked in _do_op
 
   // called with tp lock held
-  op_queue_release_throttle(o);
+  if (!g_conf->filestore_fast_commit) {
+    op_queue_release_throttle(o);
+  }
 
   logger->tinc(l_os_apply_lat, lat);
 
@@ -1951,8 +1953,10 @@ int FileStore::queue_transactions(Sequencer *posr, list<Transaction*> &tls,
 
   if (journal && journal->is_writeable() && !m_filestore_journal_trailing) {
     Op *o = build_op(tls, onreadable, onreadable_sync, osd_op);
-    op_queue_reserve_throttle(o, handle);
-    journal->throttle();
+    if (!g_conf->filestore_fast_commit) {
+      op_queue_reserve_throttle(o, handle);
+      journal->throttle();
+    }
     //prepare and encode transactions data out of lock
     bufferlist tbl;
     int data_align = _op_journal_transactions_prepare(o->tls, tbl);

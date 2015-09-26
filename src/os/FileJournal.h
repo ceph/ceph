@@ -356,6 +356,8 @@ private:
   off64_t get_top() const {
     return ROUND_UP_TO(sizeof(header), block_size);
   }
+  bool do_fast_sync;
+  uint32_t percentage_empty;
 
  public:
   FileJournal(uuid_d fsid, Finisher *fin, Cond *sync_cond, const char *f, bool dio=false, bool ai=true, bool faio=false) :
@@ -389,7 +391,9 @@ private:
     write_stop(true),
     aio_stop(true),
     write_thread(this),
-    write_finish_thread(this) {
+    write_finish_thread(this),
+    do_fast_sync (false),
+    percentage_empty(100) {
 
       if (aio && !directio) {
         derr << "FileJournal::_open_any: aio not supported without directio; disabling aio" << dendl;

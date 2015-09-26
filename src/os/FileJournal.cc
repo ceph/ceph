@@ -837,17 +837,21 @@ int FileJournal::check_for_full(uint64_t seq, off64_t pos, off64_t size)
     room = header.start - pos - 1;
   dout(10) << "room " << room << " max_size " << max_size << " pos " << pos << " header.start " << header.start
 	   << " top " << get_top() << dendl;
-
-  if (do_sync_cond) {
-    if (room >= (header.max_size >> 1) &&
-        room - size < (header.max_size >> 1)) {
-      dout(10) << " passing half full mark, triggering commit" << dendl;
-      do_sync_cond->SloppySignal();  // initiate a real commit so we can trim
+  if (!do_fast_sync) {
+    if (do_sync_cond) {
+      if (room >= (header.max_size >> 1) &&
+          room - size < (header.max_size >> 1)) {
+        dout(10) << " passing half full mark, triggering commit" << dendl;
+        do_sync_cond->SloppySignal();  // initiate a real commit so we can trim
+      }
     }
   }
 
   if (room >= size) {
-    dout(10) << "check_for_full at " << pos << " : " << size << " < " << room << dendl;
+    percentage_empty = (100 * (room - size))/(header.max_size - get_top());
+    dout(10) << "check_for_full at " << pos << " : " << size << " < " << room 
+        << " seq = " << seq << " percentage_empty = " << percentage_empty << dendl;
+
     if (pos + size > header.max_size)
       must_write_header = true;
     return 0;
@@ -857,6 +861,7 @@ int FileJournal::check_for_full(uint64_t seq, off64_t pos, off64_t size)
   dout(1) << "check_for_full at " << pos << " : JOURNAL FULL "
 	  << pos << " >= " << room
 	  << " (max_size " << header.max_size << " start " << header.start << ")"
+          << " seq = " << seq
 	  << dendl;
 
   off64_t max = header.max_size - get_top();
@@ -894,7 +899,9 @@ int FileJournal::prepare_multi_write(bufferlist& bl, uint64_t& orig_ops, uint64_
 	// throw out what we have so far
 	full_state = FULL_FULL;
 	while (!writeq_empty()) {
-	  put_throttle(1, peek_write().bl.length());
+          if (!g_conf->filestore_fast_commit) {
+	    put_throttle(1, peek_write().bl.length());
+          }
 	  pop_write();
 	}  
 	print_header(header);
@@ -1244,6 +1251,13 @@ void FileJournal::flush()
 void FileJournal::write_thread_entry()
 {
   dout(10) << "write_thread_entry start" << dendl;
+  utime_t dur;
+  dur.set_from_double(g_conf->journal_induce_delay);
+  uint32_t next_threshold = 95;
+  uint32_t last_percentage_empty = percentage_empty;
+  double delay_time = g_conf->journal_induce_delay;
+  uint64_t delay_readjusted = 0;
+
   while (1) {
     {
       Mutex::Locker locker(writeq_lock);
@@ -1258,7 +1272,7 @@ void FileJournal::write_thread_entry()
     }
     
 #ifdef HAVE_LIBAIO
-    if (aio) {
+    if ((aio) && (!g_conf->filestore_fast_commit)) {
       Mutex::Locker locker(aio_lock);
       // should we back off to limit aios in flight?  try to do this
       // adaptively so that we submit larger aios once we have lots of
@@ -1293,6 +1307,54 @@ void FileJournal::write_thread_entry()
     uint64_t orig_ops = 0;
     uint64_t orig_bytes = 0;
 
+    if (g_conf->filestore_fast_commit) {
+
+      if ((last_percentage_empty < percentage_empty)) {
+        next_threshold = (percentage_empty - (percentage_empty%5));
+        delay_time = g_conf->journal_induce_delay;
+        double readjust_delay = (double)(100 - percentage_empty)/10000000 ;
+        delay_time += readjust_delay;
+        dur.set_from_double(delay_time);
+        delay_readjusted++;
+        dout(10)<< "next_threshold adjusted to "<<next_threshold <<" percentage_empty = " 
+               << percentage_empty <<" delay_time = "<< delay_time <<" delay_readjusted "
+               <<delay_readjusted<< dendl;
+      }
+
+      if ((percentage_empty < next_threshold)&&(last_percentage_empty > percentage_empty)) {
+        uint32_t count = 0;
+        if (0 != next_threshold) {
+          count = (100 - next_threshold)/5;
+          next_threshold -= 5;
+        } else {
+          count = 20;
+        }
+        double readjust_delay = 0;
+        //Readjust delay between 1-10 micro sec
+        readjust_delay = (double)(100 - percentage_empty)/10000000 ; 
+        delay_time += readjust_delay;
+        dur.set_from_double(delay_time);
+
+        if (( percentage_empty < g_conf->journal_percentage_empty_threshold_for_throttle ) 
+             && (delay_readjusted < 5)) {
+
+          readjust_delay = readjust_delay * 10 * count;
+          delay_time += readjust_delay;
+          dur.set_from_double(delay_time);
+          dout(10) <<"Waiting for " << delay_time <<" readjust_delay = " << readjust_delay 
+                   <<" percentage_empty = " << percentage_empty << " last_percentage_empty = " 
+                   << last_percentage_empty <<" next_threshold " << next_threshold 
+                   << " delay_readjusted = " << delay_readjusted <<dendl;
+
+        }  
+        delay_readjusted = 0;
+        commit_cond.WaitInterval(g_ceph_context, write_lock, dur);
+      } else {
+        commit_cond.WaitInterval(g_ceph_context, write_lock, dur);
+      }
+      last_percentage_empty = percentage_empty;
+    }
+
     bufferlist bl;
     int r = prepare_multi_write(bl, orig_ops, orig_bytes);
     // Don't care about journal full if stoppping, so drop queue and
@@ -1301,7 +1363,9 @@ void FileJournal::write_thread_entry()
       if (write_stop) {
 	dout(20) << "write_thread_entry full and stopping, throw out queue and finish up" << dendl;
 	while (!writeq_empty()) {
-	  put_throttle(1, peek_write().bl.length());
+          if (!g_conf->filestore_fast_commit) {
+	    put_throttle(1, peek_write().bl.length());
+          }
 	  pop_write();
 	}  
 	print_header(header);
@@ -1310,6 +1374,12 @@ void FileJournal::write_thread_entry()
 	dout(20) << "write_thread_entry full, going to sleep (waiting for commit)" << dendl;
 	commit_cond.Wait(write_lock);
 	dout(20) << "write_thread_entry woke up" << dendl;
+        if (g_conf->filestore_fast_commit) {
+          //Already waited for a commit, next iteration wait minimal
+          last_percentage_empty = percentage_empty;
+          delay_time = g_conf->journal_induce_delay;
+          dur.set_from_double(delay_time);
+        }
 	continue;
       }
     }
@@ -1328,7 +1398,9 @@ void FileJournal::write_thread_entry()
 #else
     do_write(bl);
 #endif
-    put_throttle(orig_ops, orig_bytes);
+    if (!g_conf->filestore_fast_commit) {
+      put_throttle(orig_ops, orig_bytes);
+    }
   }
 
   dout(10) << "write_thread_entry finish" << dendl;
@@ -1585,9 +1657,10 @@ void FileJournal::submit_entry(uint64_t seq, bufferlist& e, int alignment,
 	  << " len " << e.length()
 	  << " (" << oncommit << ")" << dendl;
   assert(e.length() > 0);
-
-  throttle_ops.take(1);
-  throttle_bytes.take(e.length());
+  if (!g_conf->filestore_fast_commit) {
+    throttle_ops.take(1);
+    throttle_bytes.take(e.length());
+  }
   if (osd_op)
     osd_op->mark_event("commit_queued_for_journal_write");
   if (logger) {
@@ -1738,7 +1811,9 @@ void FileJournal::committed_thru(uint64_t seq)
     dout(15) << " dropping committed but unwritten seq " << peek_write().seq 
 	     << " len " << peek_write().bl.length()
 	     << dendl;
-    put_throttle(1, peek_write().bl.length());
+    if (!g_conf->filestore_fast_commit) {
+      put_throttle(1, peek_write().bl.length());
+    }
     pop_write();
   }
   
