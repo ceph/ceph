@@ -20,6 +20,7 @@
 #include "FileJournal.h"
 #include "common/RWLock.h"
 
+
 class JournalingObjectStore : public ObjectStore {
 protected:
   Journal *journal;
@@ -55,7 +56,7 @@ protected:
     Cond blocked_cond;
     int open_ops;
     uint64_t max_applied_seq;
-
+    map <uint64_t, bool > applied_seq_map;
     Mutex com_lock;
     map<version_t, vector<Context*> > commit_waiters;
     uint64_t committing_seq, committed_seq;
@@ -79,9 +80,18 @@ protected:
     void add_waiter(uint64_t, Context*);
     uint64_t op_apply_start(uint64_t op);
     void op_apply_finish(uint64_t op);
-    bool commit_start();
-    void commit_started();
-    void commit_finish();
+    bool commit_start(bool fast_sync = false);
+    void commit_started(bool fast_sync = false);
+    void commit_finish(bool fast_sync = false);
+    void init_op_status(uint64_t op) {
+      Mutex::Locker l(com_lock);
+      applied_seq_map.insert(make_pair(op,false));
+    }
+    void complete_op_status(uint64_t op) {
+      Mutex::Locker l(com_lock);
+      applied_seq_map[op] = true;
+    }
+
     bool is_committing() {
       Mutex::Locker l(com_lock);
       return committing_seq != committed_seq;
@@ -90,6 +100,12 @@ protected:
       Mutex::Locker l(com_lock);
       return committed_seq;
     }
+    void set_committed_seq(uint64_t last_committed_seq) {
+      Mutex::Locker l(com_lock);
+      committed_seq = last_committed_seq;
+      committing_seq = last_committed_seq;
+    }
+
     uint64_t get_committing_seq() {
       Mutex::Locker l(com_lock);
       return committing_seq;
@@ -108,12 +124,11 @@ protected:
   } apply_manager;
 
   bool replaying;
-
 protected:
   void journal_start();
   void journal_stop();
   void journal_write_close();
-  int journal_replay(uint64_t fs_op_seq);
+  int journal_replay(uint64_t fs_op_seq, bool fast_sync = false);
 
   void _op_journal_transactions(bufferlist& tls, uint32_t orig_len, uint64_t op,
 				Context *onjournal, TrackedOpRef osd_op);

@@ -293,7 +293,7 @@ private:
   bool aio_stop;
 
   Cond commit_cond;
-
+  bool do_fast_sync;
   int _open(bool wr, bool create=false);
   int _open_block_device();
   void _close(int fd) const;
@@ -388,6 +388,7 @@ private:
     write_lock("FileJournal::write_lock", false, true, false, g_ceph_context),
     write_stop(true),
     aio_stop(true),
+    do_fast_sync(false),
     write_thread(this),
     write_finish_thread(this) {
 
@@ -409,7 +410,7 @@ private:
 
   int check();
   int create();
-  int open(uint64_t fs_op_seq);
+  int open(uint64_t fs_op_seq, bool fast_sync = false, uint64_t* last_committed_j_seq = NULL);
   void close();
   int peek_fsid(uuid_d& fsid);
 

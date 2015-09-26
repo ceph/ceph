@@ -907,6 +907,8 @@ OPTION(filestore_fadvise, OPT_BOOL, true)
 // implicity disable this if it cannot confirm the kernel is newer
 // than that.
 OPTION(filestore_xfs_extsize, OPT_BOOL, true)
+OPTION(filestore_do_fast_sync, OPT_BOOL, false)
+OPTION(filestore_do_force_sync, OPT_BOOL, false)
 
 OPTION(filestore_journal_parallel, OPT_BOOL, false)
 OPTION(filestore_journal_writeahead, OPT_BOOL, false)

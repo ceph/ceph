@@ -34,32 +34,44 @@ void JournalingObjectStore::journal_write_close()
   apply_manager.reset();
 }
 
-int JournalingObjectStore::journal_replay(uint64_t fs_op_seq)
+int JournalingObjectStore::journal_replay(uint64_t fs_op_seq, bool fast_sync)
 {
   dout(10) << "journal_replay fs op_seq " << fs_op_seq << dendl;
-
   if (g_conf->journal_replay_from) {
     dout(0) << "journal_replay forcing replay from " << g_conf->journal_replay_from
 	    << " instead of " << fs_op_seq << dendl;
     // the previous op is the last one committed
     fs_op_seq = g_conf->journal_replay_from - 1;
   }
-
   uint64_t op_seq = fs_op_seq;
-  apply_manager.init_seq(fs_op_seq);
+  uint64_t last_committed_op_seq = 0;
 
   if (!journal) {
     submit_manager.set_op_seq(op_seq);
     return 0;
   }
 
-  int err = journal->open(op_seq);
+  int err = journal->open(op_seq, fast_sync, &last_committed_op_seq);
   if (err < 0) {
     dout(3) << "journal_replay open failed with " 
 	    << cpp_strerror(err) << dendl;
     delete journal;
     journal = 0;
     return err;
+  }
+
+  if (!fast_sync) {
+    op_seq = fs_op_seq;
+    apply_manager.init_seq(fs_op_seq);
+  } else {
+
+    if (g_conf->journal_replay_from) {
+      op_seq = fs_op_seq;
+      apply_manager.init_seq(fs_op_seq);
+    } else {
+      op_seq = last_committed_op_seq;
+      apply_manager.init_seq(last_committed_op_seq);
+    }
   }
 
   replaying = true;
@@ -104,6 +116,9 @@ int JournalingObjectStore::journal_replay(uint64_t fs_op_seq)
   replaying = false;
 
   submit_manager.set_op_seq(op_seq);
+  if (fast_sync) {
+    apply_manager.set_committed_seq(op_seq);
+  }
 
   // done reading, make writeable.
   err = journal->make_writeable();
@@ -183,70 +198,103 @@ void JournalingObjectStore::ApplyManager::add_waiter(uint64_t op, Context *c)
   commit_waiters[op].push_back(c);
 }
 
-bool JournalingObjectStore::ApplyManager::commit_start()
+bool JournalingObjectStore::ApplyManager::commit_start(bool fast_sync)
 {
   bool ret = false;
 
-  uint64_t _committing_seq = 0;
-  {
-    Mutex::Locker l(apply_lock);
-    dout(10) << "commit_start max_applied_seq " << max_applied_seq
-	     << ", open_ops " << open_ops
-	     << dendl;
-    blocked = true;
-    while (open_ops > 0) {
-      dout(10) << "commit_start waiting for " << open_ops << " open ops to drain" << dendl;
-      blocked_cond.Wait(apply_lock);
-    }
-    assert(open_ops == 0);
-    dout(10) << "commit_start blocked, all open_ops have completed" << dendl;
-    {
-      Mutex::Locker l(com_lock);
-      if (max_applied_seq == committed_seq) {
-	dout(10) << "commit_start nothing to do" << dendl;
-	blocked = false;
-	assert(commit_waiters.empty());
-	goto out;
+  if (fast_sync) {
+    Mutex::Locker l(com_lock);
+    map <uint64_t, bool >::iterator it ;
+    for (it=applied_seq_map.begin(); it!=applied_seq_map.end(); ++it) {
+      if (committing_seq + 1 == it->first) {
+        if (it->second) {
+          ret = true;
+          committing_seq++;
+        } else {
+          break;
+        }
+      } else {
+        break;
       }
-
-      _committing_seq = committing_seq = max_applied_seq;
-
-      dout(10) << "commit_start committing " << committing_seq
-	       << ", still blocked" << dendl;
     }
-  }
-  ret = true;
+    if (ret) {
+      applied_seq_map.erase(applied_seq_map.begin(), it);
+      dout(10) << "commit_start:fast_sync committing_seq = " << committing_seq << dendl;
+    }
 
- out:
-  if (journal)
-    journal->commit_start(_committing_seq);  // tell the journal too
+  } else {
+
+    uint64_t _committing_seq = 0;
+    {
+      Mutex::Locker l(apply_lock);
+      dout(10) << "commit_start max_applied_seq " << max_applied_seq
+    	     << ", open_ops " << open_ops
+	     << dendl;
+      blocked = true;
+      while (open_ops > 0) {
+        dout(10) << "commit_start waiting for " << open_ops << " open ops to drain" << dendl;
+        blocked_cond.Wait(apply_lock);
+      }
+      assert(open_ops == 0);
+      dout(10) << "commit_start blocked, all open_ops have completed" << dendl;
+      {
+        Mutex::Locker l(com_lock);
+        if (max_applied_seq == committed_seq) {
+	  dout(10) << "commit_start nothing to do" << dendl;
+	  blocked = false;
+	  assert(commit_waiters.empty());
+	  goto out;
+        }
+
+        _committing_seq = committing_seq = max_applied_seq;
+
+        dout(10) << "commit_start committing " << committing_seq
+	       << ", still blocked" << dendl;
+      }
+    }
+    ret = true;
+
+   out:
+    if (journal)
+      journal->commit_start(_committing_seq);  // tell the journal too
+  }
   return ret;
 }
 
-void JournalingObjectStore::ApplyManager::commit_started()
+void JournalingObjectStore::ApplyManager::commit_started(bool fast_sync)
 {
-  Mutex::Locker l(apply_lock);
-  // allow new ops. (underlying fs should now be committing all prior ops)
-  dout(10) << "commit_started committing " << committing_seq << ", unblocking" << dendl;
-  blocked = false;
-  blocked_cond.Signal();
+  if (!fast_sync) {
+    Mutex::Locker l(apply_lock);
+    // allow new ops. (underlying fs should now be committing all prior ops)
+    dout(10) << "commit_started committing " << committing_seq << ", unblocking" << dendl;
+    blocked = false;
+    blocked_cond.Signal();
+  }
 }
 
-void JournalingObjectStore::ApplyManager::commit_finish()
+void JournalingObjectStore::ApplyManager::commit_finish(bool fast_sync)
 {
-  Mutex::Locker l(com_lock);
-  dout(10) << "commit_finish thru " << committing_seq << dendl;
-  
-  if (journal)
-    journal->committed_thru(committing_seq);
+  if (fast_sync) {
+    if (journal)
+      journal->committed_thru(committing_seq);
 
-  committed_seq = committing_seq;
+    committed_seq = committing_seq;
+    
+  } else {
+    Mutex::Locker l(com_lock);
+    dout(10) << "commit_finish thru " << committing_seq << dendl;
   
-  map<version_t, vector<Context*> >::iterator p = commit_waiters.begin();
-  while (p != commit_waiters.end() &&
-    p->first <= committing_seq) {
-    finisher.queue(p->second);
-    commit_waiters.erase(p++);
+    if (journal)
+      journal->committed_thru(committing_seq);
+
+    committed_seq = committing_seq;
+  
+    map<version_t, vector<Context*> >::iterator p = commit_waiters.begin();
+    while (p != commit_waiters.end() &&
+      p->first <= committing_seq) {
+      finisher.queue(p->second);
+      commit_waiters.erase(p++);
+    }
   }
 }
 
