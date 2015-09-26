@@ -19,6 +19,6 @@ packages:
  - ntp
  - dracut-modules-growroot
 runcmd:
- - mkinitrd --force /boot/initramfs-2.6.32-504.1.3.el6.x86_64.img 2.6.32-504.1.3.el6.x86_64
+ - mkinitrd --force /boot/initramfs-2.6.32-573.3.1.el6.x86_64.img 2.6.32-573.3.1.el6.x86_64
  - reboot
 final_message: "{up}, after $UPTIME seconds"
