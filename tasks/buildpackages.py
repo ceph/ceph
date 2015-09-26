@@ -101,7 +101,7 @@ def task(ctx, config):
             'cpus': 1,
         }, select)
         cmd = (". " + os.environ['HOME'] + "/.ssh_agent ; flock /tmp/buildpackages make -C " + d +
-               " CEPH_GIT_BASE_URL=" + teuth_config.ceph_git_base_url + 
+               " CEPH_GIT_URL=" + teuth_config.get_ceph_git_url() +
                " CEPH_PKG_TYPE=" + gitbuilder.pkg_type +
                " CEPH_OS_TYPE=" + ctx.config['os_type'] +
                " CEPH_OS_VERSION=" + ctx.config['os_version'] +
