@@ -37,29 +37,45 @@ void JournalingObjectStore::journal_write_close()
 int JournalingObjectStore::journal_replay(uint64_t fs_op_seq)
 {
   dout(10) << "journal_replay fs op_seq " << fs_op_seq << dendl;
-
+  bool fast_sync = false;
+  if ((g_conf->filestore_do_fast_sync) && (m_fs_type == XFS_SUPER_MAGIC)) {
+    fast_sync = true;
+  }
   if (g_conf->journal_replay_from) {
     dout(0) << "journal_replay forcing replay from " << g_conf->journal_replay_from
 	    << " instead of " << fs_op_seq << dendl;
     // the previous op is the last one committed
     fs_op_seq = g_conf->journal_replay_from - 1;
   }
-
   uint64_t op_seq = fs_op_seq;
-  apply_manager.init_seq(fs_op_seq);
+  uint64_t last_committed_op_seq = 0;
 
   if (!journal) {
     submit_manager.set_op_seq(op_seq);
     return 0;
   }
 
-  int err = journal->open(op_seq);
+  int err = journal->open(op_seq, fast_sync, &last_committed_op_seq);
   if (err < 0) {
     dout(3) << "journal_replay open failed with " 
 	    << cpp_strerror(err) << dendl;
     delete journal;
     journal = 0;
     return err;
+  }
+
+  if (!fast_sync) {
+    op_seq = fs_op_seq;
+    apply_manager.init_seq(fs_op_seq);
+  } else {
+
+    if (g_conf->journal_replay_from) {
+      op_seq = fs_op_seq;
+      apply_manager.init_seq(fs_op_seq);
+    } else {
+      op_seq = last_committed_op_seq;
+      apply_manager.init_seq(last_committed_op_seq);
+    }
   }
 
   replaying = true;
@@ -104,6 +120,7 @@ int JournalingObjectStore::journal_replay(uint64_t fs_op_seq)
   replaying = false;
 
   submit_manager.set_op_seq(op_seq);
+  last_journal_commit_seq = op_seq;
 
   // done reading, make writeable.
   err = journal->make_writeable();

@@ -50,18 +50,6 @@ using namespace std;
 # define FALLOC_FL_PUNCH_HOLE 0x2
 #endif
 
-#if defined(__linux__)
-# ifndef BTRFS_SUPER_MAGIC
-static const __SWORD_TYPE BTRFS_SUPER_MAGIC(0x9123683E);
-# endif
-# ifndef XFS_SUPER_MAGIC
-static const __SWORD_TYPE XFS_SUPER_MAGIC(0x58465342);
-# endif
-#ifndef ZFS_SUPER_MAGIC
-static const __SWORD_TYPE ZFS_SUPER_MAGIC(0x2fc12fc1);
-#endif
-#endif
-
 
 class FileStoreBackend;
 
@@ -713,12 +701,15 @@ private:
   bool m_filestore_sloppy_crc;
   int m_filestore_sloppy_crc_block_size;
   uint64_t m_filestore_max_alloc_hint_size;
-  long m_fs_type;
 
   //Determined xattr handling based on fs type
   void set_xattr_limits_via_conf();
   uint32_t m_filestore_max_inline_xattr_size;
   uint32_t m_filestore_max_inline_xattrs;
+  Mutex applied_seq_lock;
+  Cond applied_seq_cond;
+  map <uint64_t, bool > applied_seq_map;
+
 
   FSSuperblock superblock;
 
