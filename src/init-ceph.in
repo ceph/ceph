@@ -133,11 +133,9 @@ fi
 
 eval set -- "$OPTS"
 
-version=0
 dovalgrind=
 docrun=
 allhosts=0
-debug=0
 monaddr=
 dofsmount=1
 dofsumount=0
