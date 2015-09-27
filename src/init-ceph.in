@@ -109,6 +109,14 @@ stop_daemon() {
 ## command line options
 options=
 
+OPTS=$(getopt -n 'init-ceph' -o 'hvam:c:' -l 'help,verbose,valgrind,novalgrind,allhosts,restart,norestart,btrfs,nobtrfs,fsmount,nofsmount,btrfsumount,fsumount,conf:,cluster:,hostname:' -- "$@")
+if [ $? != 0 ]
+then
+    exit 1
+fi
+
+eval set -- "$OPTS"
+
 version=0
 dovalgrind=
 docrun=
@@ -141,6 +149,9 @@ case $1 in
     --norestart)
 	    docrun=0
 	    ;;
+    -h | --help)
+            usage_exit
+            ;;
     -m )
 	    [ -z "$2" ] && usage_exit
 	    options="$options $1"
@@ -175,6 +186,10 @@ case $1 in
 	    shift
 	    hostname=$1
             ;;
+    -- )
+            shift
+            break
+            ;;
     *)
 	    echo unrecognized option \'$1\'
 	    usage_exit
@@ -183,7 +198,6 @@ esac
 options="$options $1"
 shift
 done
-
 
 # if `--cluster` was not passed in, fallback to looking at the config name
 if [ -z "$cluster" ]; then
