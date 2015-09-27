@@ -2,3 +2,4 @@
 system_info:
   default_user:
     name: ubuntu
+final_message: "READYTORUN"
