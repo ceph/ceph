@@ -1120,7 +1120,8 @@ public:
                                                       bucket_info(_bucket_info), shard_id(_shard_id),
                                                       key(_key),
                                                       entry_marker(_entry_marker),
-                                                      marker_tracker(_marker_tracker) {
+                                                      marker_tracker(_marker_tracker),
+                                                      sync_status(0) {
 
   }
 
@@ -1333,6 +1334,15 @@ int RGWBucketShardIncrementalSyncCR::operate()
         }
       }
       if (retcode < 0 && retcode != -ENOENT) {
+        /* wait for all operations to complete */
+        while (collect(&ret)) {
+          if (ret < 0) {
+            ldout(store->ctx(), 0) << "ERROR: a sync operation returned error" << dendl;
+            /* we should have reported this error */
+#warning deal with error
+          }
+          yield;
+        }
         return set_state(RGWCoroutine_Error, retcode);
       }
       entries_iter = list_result.begin();
@@ -1363,6 +1373,7 @@ int RGWBucketShardIncrementalSyncCR::operate()
         }
       }
     } while (!list_result.empty());
+
     /* wait for all operations to complete */
     while (collect(&ret)) {
       if (ret < 0) {
