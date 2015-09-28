@@ -87,7 +87,8 @@ Requires(post):	binutils
 Requires: systemd
 %endif
 %if 0%{with cephfs_java}
-BuildRequires: sharutils
+BuildRequires:	java-devel
+BuildRequires:	sharutils
 %endif
 %if 0%{with selinux}
 BuildRequires:	checkpolicy
@@ -99,6 +100,7 @@ BuildRequires:	boost-devel
 BuildRequires:  boost-random
 BuildRequires:  cmake
 BuildRequires:	cryptsetup
+BuildRequires:	fuse-devel
 BuildRequires:	gdbm
 BuildRequires:	hdparm
 BuildRequires:	leveldb-devel > 1.2
@@ -163,6 +165,10 @@ Requires(preun):	initscripts
 BuildRequires:	gperftools-devel
 Requires:	python-flask
 %endif
+# python-argparse for distros with Python 2.6 or lower
+%if (0%{?rhel} && 0%{?rhel} <= 6) || (0%{?suse_version} && 0%{?suse_version} <= 1110)
+BuildRequires:	python-argparse
+%endif
 # lttng and babeltrace for rbd-replay-prep
 %if 0%{?fedora} || 0%{?rhel} == 6
 BuildRequires:	lttng-ust-devel
@@ -171,6 +177,15 @@ BuildRequires:	libbabeltrace-devel
 %if 0%{?suse_version} >= 1310
 BuildRequires:	lttng-ust-devel
 BuildRequires:  babeltrace-devel
+%endif
+# expat and fastcgi for RGW
+%if 0%{?suse_version}
+BuildRequires:	libexpat-devel
+BuildRequires:	FastCGI-devel
+%endif
+%if 0%{?rhel} || 0%{?fedora}
+BuildRequires:	expat-devel
+BuildRequires:	fcgi-devel
 %endif
 
 %description
@@ -197,7 +212,6 @@ Requires:	redhat-lsb-core
 # python-argparse is only needed in distros with Python 2.6 or lower
 %if (0%{?rhel} && 0%{?rhel} <= 6) || (0%{?suse_version} && 0%{?suse_version} <= 1110)
 Requires:	python-argparse
-BuildRequires:	python-argparse
 %endif
 %description -n ceph-common
 Common utilities to mount and interact with a ceph storage cluster.
@@ -206,7 +220,6 @@ Common utilities to mount and interact with a ceph storage cluster.
 Summary:	Ceph fuse-based client
 Group:		System Environment/Base
 Requires:	%{name}
-BuildRequires:	fuse-devel
 %description fuse
 FUSE based client for Ceph distributed network file system
 
@@ -216,7 +229,6 @@ Group:		System Environment/Base
 Requires:	%{name}
 Requires:	librados2 = %{epoch}:%{version}-%{release}
 Requires:	librbd1 = %{epoch}:%{version}-%{release}
-BuildRequires:	fuse-devel
 %description -n rbd-fuse
 FUSE based client to map Ceph rbd images to files
 
@@ -228,13 +240,7 @@ Requires:	ceph-common = %{epoch}:%{version}-%{release}
 Requires:	ceph-selinux = %{epoch}:%{version}-%{release}
 %endif
 Requires:	librados2 = %{epoch}:%{version}-%{release}
-%if 0%{?suse_version}
-BuildRequires:	libexpat-devel
-BuildRequires:	FastCGI-devel
-%endif
 %if 0%{?rhel} || 0%{?fedora}
-BuildRequires:	expat-devel
-BuildRequires:	fcgi-devel
 Requires:	mailcap
 %endif
 %description radosgw
@@ -398,7 +404,6 @@ Group:		System Environment/Libraries
 License:	LGPL-2.0
 Requires:	java
 Requires:	libcephfs1 = %{epoch}:%{version}-%{release}
-BuildRequires:	java-devel
 %description -n libcephfs_jni1
 This package contains the Java Native Interface library for CephFS Java
 bindings.
@@ -420,7 +425,6 @@ Group:		System Environment/Libraries
 License:	LGPL-2.0
 Requires:	java
 Requires:	libcephfs_jni1 = %{epoch}:%{version}-%{release}
-BuildRequires:	java-devel
 %if 0%{?el6}
 Requires:	junit4
 BuildRequires:	junit4
