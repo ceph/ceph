@@ -1123,7 +1123,7 @@ check_buffers(char *good_buf, char *temp_buf, unsigned offset, unsigned size)
 					unsigned bad = short_at(&temp_buf[i]);
 				        prt("0x%5x\t0x%04x\t0x%04x", offset,
 				            short_at(&good_buf[offset]), bad);
-					unsigned op = temp_buf[offset & 1 ? i+1 : i];
+					unsigned op = temp_buf[(offset & 1) ? i+1 : i];
 				        prt("\t0x%5x\n", n);
 					if (op)
 						prt("operation# (mod 256) for "
