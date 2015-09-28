@@ -152,11 +152,15 @@ void RGWRESTSimpleRequest::append_param(string& dest, const string& name, const 
   } else {
     dest.append("&");
   }
-  dest.append(name);
+  string url_name;
+  url_encode(name, url_name);
+  dest.append(url_name);
 
   if (!val.empty()) {
+    string url_val;
+    url_encode(val, url_val);
     dest.append("=");
-    dest.append(val);
+    dest.append(url_val);
   }
 }
 
