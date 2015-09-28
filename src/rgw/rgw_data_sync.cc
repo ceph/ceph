@@ -1178,7 +1178,6 @@ class RGWBucketShardFullSyncCR : public RGWCoroutine {
   rgw_bucket_shard_full_sync_marker full_marker;
   RGWBucketFullSyncShardMarkerTrack *marker_tracker;
   int spawn_window;
-  int pending;
   rgw_obj_key list_marker;
 
 public:
@@ -1194,7 +1193,7 @@ public:
 									    bucket_id(_bucket_id), shard_id(_shard_id),
                                                                             bucket_info(_bucket_info),
                                                                             full_marker(_full_marker), marker_tracker(NULL),
-                                                                            spawn_window(BUCKET_SYNC_SPAWN_WINDOW), pending(0) {}
+                                                                            spawn_window(BUCKET_SYNC_SPAWN_WINDOW) {}
 
   ~RGWBucketShardFullSyncCR() {
     delete marker_tracker;
@@ -1228,15 +1227,13 @@ int RGWBucketShardFullSyncCR::operate()
         ldout(store->ctx(), 20) << "[full sync] syncing object: " << bucket_name << ":" << bucket_id << ":" << shard_id << "/" << entries_iter->key << dendl;
         yield {
           bucket_list_entry& entry = *entries_iter;
-          ++pending;
           marker_tracker->start(entry.key);
           list_marker = entry.key;
           spawn(new RGWBucketSyncSingleEntryCR<rgw_obj_key>(store, async_rados, source_zone, bucket_info, shard_id,
                                                entry.key, entry.versioned_epoch, entry.key, marker_tracker), false);
         }
-        while (pending > spawn_window &&
+        while ((int)num_spawned() > spawn_window &&
                collect(&ret)) {
-          --pending;
           if (ret < 0) {
             ldout(store->ctx(), 0) << "ERROR: a sync operation returned error" << dendl;
             /* we should have reported this error */
@@ -1293,7 +1290,6 @@ class RGWBucketShardIncrementalSyncCR : public RGWCoroutine {
   rgw_bucket_shard_inc_sync_marker inc_marker;
   RGWBucketIncSyncShardMarkerTrack *marker_tracker;
   int spawn_window;
-  int pending;
 
 public:
   RGWBucketShardIncrementalSyncCR(RGWHTTPManager *_mgr, RGWAsyncRadosProcessor *_async_rados,
@@ -1308,7 +1304,7 @@ public:
 									    bucket_id(_bucket_id), shard_id(_shard_id),
                                                                             bucket_info(_bucket_info),
                                                                             inc_marker(_inc_marker), marker_tracker(NULL),
-                                                                            spawn_window(BUCKET_SYNC_SPAWN_WINDOW), pending(0) {}
+                                                                            spawn_window(BUCKET_SYNC_SPAWN_WINDOW) {}
 
   ~RGWBucketShardIncrementalSyncCR() {
     delete marker_tracker;
@@ -1351,7 +1347,6 @@ int RGWBucketShardIncrementalSyncCR::operate()
           rgw_obj_key key(entries_iter->object, entries_iter->instance);
           ldout(store->ctx(), 20) << "[inc sync] syncing object: " << bucket_name << ":" << bucket_id << ":" << shard_id << "/" << key << dendl;
           rgw_bi_log_entry& entry = *entries_iter;
-          ++pending;
           marker_tracker->start(entry.id);
           inc_marker.position = entry.id;
           uint64_t versioned_epoch = 0;
@@ -1361,9 +1356,8 @@ int RGWBucketShardIncrementalSyncCR::operate()
           spawn(new RGWBucketSyncSingleEntryCR<string>(store, async_rados, source_zone, bucket_info, shard_id,
                                                key, versioned_epoch, entry.id, marker_tracker), false);
         }
-        while (pending > spawn_window &&
+        while ((int)num_spawned() > spawn_window &&
                collect(&ret)) {
-          --pending;
           if (ret < 0) {
             ldout(store->ctx(), 0) << "ERROR: a sync operation returned error" << dendl;
             /* we should have reported this error */
