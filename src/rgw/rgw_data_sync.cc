@@ -1330,13 +1330,14 @@ int RGWBucketShardIncrementalSyncCR::operate()
       }
       if (retcode < 0 && retcode != -ENOENT) {
         /* wait for all operations to complete */
+        yield wait_for_child();
         while (collect(&ret)) {
           if (ret < 0) {
             ldout(store->ctx(), 0) << "ERROR: a sync operation returned error" << dendl;
             /* we should have reported this error */
 #warning deal with error
           }
-          yield;
+          yield wait_for_child();
         }
         return set_state(RGWCoroutine_Error, retcode);
       }
@@ -1355,25 +1356,29 @@ int RGWBucketShardIncrementalSyncCR::operate()
           spawn(new RGWBucketSyncSingleEntryCR<string>(store, async_rados, source_zone, bucket_info, shard_id,
                                                key, versioned_epoch, entry.id, marker_tracker), false);
         }
-        while ((int)num_spawned() > spawn_window &&
-               collect(&ret)) {
-          if (ret < 0) {
-            ldout(store->ctx(), 0) << "ERROR: a sync operation returned error" << dendl;
-            /* we should have reported this error */
+        while ((int)num_spawned() > spawn_window) {
+          yield wait_for_child();
+          while (collect(&ret)) {
+            if (ret < 0) {
+              ldout(store->ctx(), 0) << "ERROR: a sync operation returned error" << dendl;
+              /* we should have reported this error */
 #warning deal with error
+            }
+            yield wait_for_child();
           }
         }
       }
     } while (!list_result.empty());
 
     /* wait for all operations to complete */
+    yield wait_for_child();
     while (collect(&ret)) {
       if (ret < 0) {
         ldout(store->ctx(), 0) << "ERROR: a sync operation returned error" << dendl;
         /* we should have reported this error */
 #warning deal with error
       }
-      yield;
+      yield wait_for_child();
     }
   }
   return 0;
