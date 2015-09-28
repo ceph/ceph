@@ -3933,7 +3933,7 @@ void OSD::heartbeat()
     if (now - last_mon_heartbeat > cct->_conf->osd_mon_heartbeat_interval && is_active()) {
       last_mon_heartbeat = now;
       dout(10) << "i have no heartbeat peers; checking mon for new map" << dendl;
-      osdmap_subscribe(osdmap->get_epoch() + 1, true);
+      osdmap_subscribe(osdmap->get_epoch() + 1, false);
     }
   }
 
@@ -4522,7 +4522,7 @@ void OSD::_preboot(epoch_t oldest, epoch_t newest)
   
   // get all the latest maps
   if (osdmap->get_epoch() + 1 >= oldest)
-    osdmap_subscribe(osdmap->get_epoch() + 1, true);
+    osdmap_subscribe(osdmap->get_epoch() + 1, false);
   else
     osdmap_subscribe(oldest - 1, true);
 }
@@ -6134,7 +6134,7 @@ void OSD::wait_for_new_map(OpRequestRef op)
 {
   // ask?
   if (waiting_for_osdmap.empty()) {
-    osdmap_subscribe(osdmap->get_epoch() + 1, true);
+    osdmap_subscribe(osdmap->get_epoch() + 1, false);
   }
   
   logger->inc(l_osd_waiting_for_map);
@@ -6253,7 +6253,7 @@ void OSD::handle_osd_map(MOSDMap *m)
     dout(10) << "handle_osd_map message skips epochs " << osdmap->get_epoch() + 1
 	     << ".." << (first-1) << dendl;
     if (m->oldest_map <= osdmap->get_epoch() + 1) {
-      osdmap_subscribe(osdmap->get_epoch()+1, true);
+      osdmap_subscribe(osdmap->get_epoch()+1, false);
       m->put();
       return;
     }
@@ -6550,7 +6550,7 @@ void OSD::handle_osd_map(MOSDMap *m)
 
   if (m->newest_map && m->newest_map > last) {
     dout(10) << " msg say newest map is " << m->newest_map << ", requesting more" << dendl;
-    osdmap_subscribe(osdmap->get_epoch()+1, true);
+    osdmap_subscribe(osdmap->get_epoch()+1, false);
   }
   else if (is_preboot()) {
     if (m->get_source().is_mon())
@@ -6851,7 +6851,7 @@ void OSD::activate_map()
 
   if (osdmap->test_flag(CEPH_OSDMAP_FULL)) {
     dout(10) << " osdmap flagged full, doing onetime osdmap subscribe" << dendl;
-    osdmap_subscribe(osdmap->get_epoch() + 1, true);
+    osdmap_subscribe(osdmap->get_epoch() + 1, false);
   }
 
   // norecover?
