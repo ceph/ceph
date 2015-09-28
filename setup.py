@@ -79,6 +79,7 @@ setup(
             'teuthology-report = scripts.report:main',
             'teuthology-kill = scripts.kill:main',
             'teuthology-queue = scripts.queue:main',
+            'teuthology-prune-logs = scripts.prune_logs:main',
             ],
         },
 
