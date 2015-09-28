@@ -110,6 +110,8 @@ enum RGWCoroutineState {
 struct rgw_spawned_stacks {
   vector<RGWCoroutinesStack *> entries;
 
+  rgw_spawned_stacks() {}
+
   void add_pending(RGWCoroutinesStack *s) {
     entries.push_back(s);
   }
@@ -177,6 +179,8 @@ public:
   size_t num_spawned() {
     return spawned.entries.size();
   }
+
+  void wait_for_child();
 };
 
 template <class T>
@@ -211,6 +215,7 @@ public:
 
 class RGWCoroutinesStack : public RefCountedObject {
   friend class RGWCoroutine;
+  friend class RGWCoroutinesManager;
 
   CephContext *cct;
 
@@ -231,10 +236,13 @@ class RGWCoroutinesStack : public RefCountedObject {
 
   bool is_scheduled;
 
+  bool is_waiting_for_child;
+
   int retcode;
 
 protected:
   RGWCoroutinesEnv *env;
+  RGWCoroutinesStack *parent;
 
   void spawn(RGWCoroutine *source_op, RGWCoroutine *next_op, bool wait);
   bool collect(RGWCoroutine *op, int *ret); /* returns true if needs to be called again */
@@ -272,6 +280,11 @@ public:
     is_scheduled = flag;
   }
 
+  bool is_blocked() {
+    return is_blocked_by_stack() || is_sleeping() ||
+          is_io_blocked() || waiting_for_child() ;
+  }
+
   void schedule(list<RGWCoroutinesStack *> *stacks = NULL) {
     if (!stacks) {
       stacks = env->stacks;
@@ -303,6 +316,14 @@ public:
   void set_blocked_by(RGWCoroutinesStack *s) {
     blocked_by_stack.insert(s);
     s->blocking_stacks.insert(this);
+  }
+
+  void set_wait_for_child(bool flag) {
+    is_waiting_for_child = flag;
+  }
+
+  bool waiting_for_child() {
+    return is_waiting_for_child;
   }
 
   bool unblock_stack(RGWCoroutinesStack **s);
