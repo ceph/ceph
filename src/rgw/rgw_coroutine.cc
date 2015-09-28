@@ -105,9 +105,9 @@ int RGWCoroutine::io_block(int ret) {
 
 RGWCoroutinesStack::RGWCoroutinesStack(CephContext *_cct, RGWCoroutinesManager *_ops_mgr, RGWCoroutine *start) : cct(_cct), ops_mgr(_ops_mgr),
                                                                                                          done_flag(false), error_flag(false), blocked_flag(false),
-                                                                                                         sleep_flag(false), is_scheduled(false),
+                                                                                                         sleep_flag(false), is_scheduled(false), is_waiting_for_child(false),
 													 retcode(0),
-													 env(NULL)
+													 env(NULL), parent(NULL)
 {
   if (start) {
     ops.push_back(start);
@@ -176,6 +176,7 @@ void RGWCoroutinesStack::spawn(RGWCoroutine *source_op, RGWCoroutine *op, bool w
 
   RGWCoroutinesStack *stack = env->manager->allocate_stack();
   s->add_pending(stack);
+  stack->parent = this;
 
   stack->get(); /* we'll need to collect the stack */
   int r = stack->call(op, 0);
@@ -329,15 +330,15 @@ int RGWCoroutinesManager::run(list<RGWCoroutinesStack *>& stacks)
       report_error(stack);
     }
 
-    if (stack->is_blocked_by_stack() || stack->is_sleeping()) {
+    if (stack->is_io_blocked()) {
+      ldout(cct, 20) << __func__ << ":" << " stack=" << (void *)stack << " is io blocked" << dendl;
+      blocked_count++;
+    } else if (stack->is_blocked()) {
       /* do nothing, we'll re-add the stack when the blocking stack is done,
        * or when we're awaken
        */
       ldout(cct, 20) << __func__ << ":" << " stack=" << (void *)stack << " is_blocked_by_stack()=" << stack->is_blocked_by_stack()
-	             << " is_sleeping=" << stack->is_sleeping() << dendl;
-    } else if (stack->is_io_blocked()) {
-      ldout(cct, 20) << __func__ << ":" << " stack=" << (void *)stack << " is io blocked" << dendl;
-      blocked_count++;
+	             << " is_sleeping=" << stack->is_sleeping() << " waiting_for_child()=" << stack->waiting_for_child() << dendl;
     } else if (stack->is_done()) {
       ldout(cct, 20) << __func__ << ":" << " stack=" << (void *)stack << " is done" << dendl;
       RGWCoroutinesStack *s;
@@ -349,6 +350,10 @@ int RGWCoroutinesManager::run(list<RGWCoroutinesStack *>& stacks)
 	    s->schedule();
 	  }
 	}
+      }
+      if (stack->parent && stack->parent->waiting_for_child()) {
+        stack->parent->set_wait_for_child(false);
+        stack->parent->schedule();
       }
       stack->put();
     } else {
@@ -436,6 +441,16 @@ bool RGWCoroutine::collect(int *ret) /* returns true if needs to be called again
 int RGWCoroutine::wait(const utime_t& interval)
 {
   return stack->wait(interval);
+}
+
+void RGWCoroutine::wait_for_child()
+{
+  /* should only wait for child if there is a child that is not done yet */
+  for (vector<RGWCoroutinesStack *>::iterator iter = spawned.entries.begin(); iter != spawned.entries.end(); ++iter) {
+    if (!(*iter)->is_done()) {
+      stack->set_wait_for_child(true);
+    }
+  }
 }
 
 void RGWCoroutine::wakeup()
