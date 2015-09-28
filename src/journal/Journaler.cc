@@ -117,6 +117,8 @@ int Journaler::create(uint8_t order, uint8_t splay_width, int64_t pool_id) {
 }
 
 int Journaler::remove() {
+  m_metadata->shutdown();
+
   int r = m_trimmer->remove_objects();
   if (r < 0) {
     lderr(m_cct) << "failed to remove journal objects: " << cpp_strerror(r)
