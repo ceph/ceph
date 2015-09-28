@@ -1239,7 +1239,6 @@ int RGWBucketShardFullSyncCR::operate()
             /* we should have reported this error */
 #warning deal with error
           }
-          yield;
         }
       }
     } while (list_result.is_truncated);
@@ -1363,7 +1362,6 @@ int RGWBucketShardIncrementalSyncCR::operate()
             /* we should have reported this error */
 #warning deal with error
           }
-          yield;
         }
       }
     } while (!list_result.empty());
