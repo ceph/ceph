@@ -950,9 +950,6 @@ void pg_pool_t::dump(Formatter *f) const
   f->dump_unsigned("stripe_width", get_stripe_width());
   f->dump_unsigned("expected_num_objects", expected_num_objects);
   f->dump_bool("fast_read", fast_read);
-  f->dump_float("scrub_min_interval", scrub_min_interval);
-  f->dump_float("scrub_max_interval", scrub_max_interval);
-  f->dump_float("deep_scrub_interval", deep_scrub_interval);
 }
 
 void pg_pool_t::convert_to_pg_shards(const vector<int> &from, set<pg_shard_t>* to) const {
@@ -1262,7 +1259,7 @@ void pg_pool_t::encode(bufferlist& bl, uint64_t features) const
     return;
   }
 
-  ENCODE_START(23, 5, bl);
+  ENCODE_START(22, 5, bl);
   ::encode(type, bl);
   ::encode(size, bl);
   ::encode(crush_ruleset, bl);
@@ -1308,9 +1305,6 @@ void pg_pool_t::encode(bufferlist& bl, uint64_t features) const
   ::encode(min_write_recency_for_promote, bl);
   ::encode(use_gmt_hitset, bl);
   ::encode(fast_read, bl);
-  ::encode(scrub_min_interval, bl);
-  ::encode(scrub_max_interval, bl);
-  ::encode(deep_scrub_interval, bl);
   ENCODE_FINISH(bl);
 }
 
@@ -1448,15 +1442,6 @@ void pg_pool_t::decode(bufferlist::iterator& bl)
   } else {
     fast_read = false;
   }
-  if (struct_v >= 23) {
-    ::decode(scrub_min_interval, bl);
-    ::decode(scrub_max_interval, bl);
-    ::decode(deep_scrub_interval, bl);
-  } else {
-    scrub_min_interval = 0;
-    scrub_max_interval = 0;
-    deep_scrub_interval = 0;
-  }
   DECODE_FINISH(bl);
   calc_pg_masks();
 }
@@ -1568,12 +1553,6 @@ ostream& operator<<(ostream& out, const pg_pool_t& p)
     out << " expected_num_objects " << p.expected_num_objects;
   if (p.fast_read)
     out << " fast_read " << p.fast_read;
-  if (p.scrub_min_interval > 0)
-    out << " scrub_min_interval " << p.scrub_min_interval;
-  if (p.scrub_max_interval > 0)
-    out << " scrub_max_interval " << p.scrub_max_interval;
-  if (p.deep_scrub_interval > 0)
-    out << " deep_scrub_interval " << p.deep_scrub_interval;
   return out;
 }
 
