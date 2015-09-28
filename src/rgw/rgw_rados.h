@@ -629,8 +629,7 @@ struct RGWObjState {
   RGWObjState() : is_atomic(false), has_attrs(0), exists(false),
                   size(0), mtime(0), epoch(0), fake_tag(false), has_manifest(false),
                   has_data(false), prefetch_data(false), keep_tail(false), is_olh(false) {}
-  RGWObjState(const RGWObjState& rhs) {
-    obj = rhs.obj;
+  RGWObjState(const RGWObjState& rhs) : obj (rhs.obj) {
     is_atomic = rhs.is_atomic;
     has_attrs = rhs.has_attrs;
     exists = rhs.exists;
