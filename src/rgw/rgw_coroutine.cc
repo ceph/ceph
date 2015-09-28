@@ -175,7 +175,7 @@ void RGWCoroutinesStack::spawn(RGWCoroutine *source_op, RGWCoroutine *op, bool w
   rgw_spawned_stacks *s = (source_op ? &source_op->spawned : &spawned);
 
   RGWCoroutinesStack *stack = env->manager->allocate_stack();
-  s->entries.push_back(stack);
+  s->add_pending(stack);
 
   stack->get(); /* we'll need to collect the stack */
   int r = stack->call(op, 0);
@@ -230,9 +230,9 @@ bool RGWCoroutinesStack::collect(RGWCoroutine *op, int *ret) /* returns true if 
 {
   rgw_spawned_stacks *s = (op ? &op->spawned : &spawned);
   *ret = 0;
-  list<RGWCoroutinesStack *> new_list;
+  vector<RGWCoroutinesStack *> new_list;
 
-  for (list<RGWCoroutinesStack *>::iterator iter = s->entries.begin(); iter != s->entries.end(); ++iter) {
+  for (vector<RGWCoroutinesStack *>::iterator iter = s->entries.begin(); iter != s->entries.end(); ++iter) {
     RGWCoroutinesStack *stack = *iter;
     if (!stack->is_done()) {
       new_list.push_back(stack);

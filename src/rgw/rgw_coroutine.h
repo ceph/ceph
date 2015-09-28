@@ -108,10 +108,18 @@ enum RGWCoroutineState {
 };
 
 struct rgw_spawned_stacks {
-  list<RGWCoroutinesStack *> entries;
+  vector<RGWCoroutinesStack *> entries;
+
+  void add_pending(RGWCoroutinesStack *s) {
+    entries.push_back(s);
+  }
 
   void inherit(rgw_spawned_stacks *source) {
-    entries.splice(entries.end(), source->entries);
+    for (vector<RGWCoroutinesStack *>::iterator iter = source->entries.begin();
+         iter != source->entries.end(); ++iter) {
+      add_pending(*iter);
+    }
+    source->entries.clear();
   }
 };
 
@@ -165,6 +173,10 @@ public:
 
   int wait(const utime_t& interval);
   void wakeup();
+
+  size_t num_spawned() {
+    return spawned.entries.size();
+  }
 };
 
 template <class T>
