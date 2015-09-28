@@ -1380,6 +1380,7 @@ int RGWBucketShardIncrementalSyncCR::operate()
       }
       yield wait_for_child();
     }
+    return set_state(RGWCoroutine_Done, 0);
   }
   return 0;
 }
@@ -1441,13 +1442,15 @@ int RGWRunBucketSyncCoroutine::operate()
       return set_state(RGWCoroutine_Error, retcode);
     }
 
-    if ((rgw_bucket_shard_sync_info::SyncState)sync_status.state == rgw_bucket_shard_sync_info::StateFullSync) {
-      int r = call(new RGWBucketShardFullSyncCR(http_manager, async_rados, conn, store,
-                                                source_zone, bucket_name, bucket_id, shard_id,
-                                                &bucket_info, sync_status.full_marker));
-      if (r < 0) {
-        ldout(store->ctx(), 0) << "ERROR: failed to fetch sync status" << dendl;
-        return r;
+    yield {
+      if ((rgw_bucket_shard_sync_info::SyncState)sync_status.state == rgw_bucket_shard_sync_info::StateFullSync) {
+        int r = call(new RGWBucketShardFullSyncCR(http_manager, async_rados, conn, store,
+                                                  source_zone, bucket_name, bucket_id, shard_id,
+                                                  &bucket_info, sync_status.full_marker));
+        if (r < 0) {
+          ldout(store->ctx(), 0) << "ERROR: failed to fetch sync status" << dendl;
+          return r;
+        }
       }
     }
 
@@ -1456,16 +1459,24 @@ int RGWRunBucketSyncCoroutine::operate()
       return set_state(RGWCoroutine_Error, retcode);
     }
 
-    if ((rgw_bucket_shard_sync_info::SyncState)sync_status.state == rgw_bucket_shard_sync_info::StateIncrementalSync) {
-      int r = call(new RGWBucketShardIncrementalSyncCR(http_manager, async_rados, conn, store,
-                                                source_zone, bucket_name, bucket_id, shard_id,
-                                                &bucket_info, sync_status.inc_marker));
-      if (r < 0) {
-        ldout(store->ctx(), 0) << "ERROR: failed to fetch sync status" << dendl;
-        return r;
+    yield {
+      if ((rgw_bucket_shard_sync_info::SyncState)sync_status.state == rgw_bucket_shard_sync_info::StateIncrementalSync) {
+        int r = call(new RGWBucketShardIncrementalSyncCR(http_manager, async_rados, conn, store,
+                                                         source_zone, bucket_name, bucket_id, shard_id,
+                                                         &bucket_info, sync_status.inc_marker));
+        if (r < 0) {
+          ldout(store->ctx(), 0) << "ERROR: failed to fetch sync status" << dendl;
+          return r;
+        }
       }
     }
 
+    if (retcode < 0) {
+      ldout(store->ctx(), 0) << "ERROR: incremental sync on " << bucket_name << " bucket_id=" << bucket_id << " shard_id=" << shard_id << " failed, retcode=" << retcode << dendl;
+      return set_state(RGWCoroutine_Error, retcode);
+    }
+
+    return set_state(RGWCoroutine_Done, 0);
   }
 
   return 0;
