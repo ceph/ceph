@@ -697,8 +697,9 @@ do_rgw()
     fi
 
     RGWSUDO=
-    [ $CEPH_RGW_PORT -lt 1024 ] && RGWSUDO=sudo
-    $RGWSUDO $CEPH_BIN/radosgw -c $conf_fn --log-file=${CEPH_OUT_DIR}/rgw.log ${RGWDEBUG} --debug-ms=1
+    [ ${CEPH_RGW_PORT} -lt 1024 ] && RGWSUDO=sudo
+    ${RGWSUDO} ${CEPH_BIN}/radosgw -c ${conf_fn} --log-file=${CEPH_OUT_DIR}/rgw.log \
+	    --pid-file=${CEPH_OUT_DIR}/rgw.pid ${RGWDEBUG} ${RGW_PARAMS}
 
     # Create S3 user
     local akey='0555b35654ad1656d804'
