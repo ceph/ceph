@@ -1,0 +1,10 @@
+tasks:
+- exec:
+    client.0:
+      - ceph osd pool create cache-pool 4
+      - ceph osd tier add base-pool cache-pool
+      - ceph osd tier cache-mode cache-pool writeback
+      - ceph osd tier set-overlay base-pool cache-pool
+      - ceph osd pool set cache-pool hit_set_type bloom
+      - ceph osd pool set cache-pool hit_set_count 8
+      - ceph osd pool set cache-pool hit_set_period 5
