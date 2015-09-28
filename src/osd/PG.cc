@@ -3484,6 +3484,10 @@ void PG::_scan_snaps(ScrubMap &smap)
     if (hoid.snap < CEPH_MAXSNAP) {
       // fake nlinks for old primaries
       bufferlist bl;
+      if (o.attrs.find(OI_ATTR) == o.attrs.end()) {
+        o.nlinks = 1;
+	continue;
+      }
       bl.push_back(o.attrs[OI_ATTR]);
       object_info_t oi(bl);
       if (oi.snaps.empty()) {
