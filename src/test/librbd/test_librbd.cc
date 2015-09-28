@@ -2276,6 +2276,46 @@ TEST_F(TestLibRBD, DiffIterateRegression6926)
   ASSERT_EQ(static_cast<size_t>(0), extents.size());
 }
 
+TEST_F(TestLibRBD, DiffIterateParentDiscard)
+{
+  REQUIRE_FEATURE(RBD_FEATURE_LAYERING);
+
+  librados::IoCtx ioctx;
+  ASSERT_EQ(0, this->_rados.ioctx_create(this->m_pool_name.c_str(), ioctx));
+
+  librbd::RBD rbd;
+  librbd::Image image;
+  std::string name = this->get_temp_image_name();
+  uint64_t size = 20 << 20;
+  int order = 0;
+
+  ASSERT_EQ(0, create_image_pp(rbd, ioctx, name.c_str(), size, &order));
+  ASSERT_EQ(0, rbd.open(ioctx, image, name.c_str(), NULL));
+
+  interval_set<uint64_t> exists;
+  interval_set<uint64_t> one;
+  scribble(image, 10, 102400, &exists, &one);
+  ASSERT_EQ(0, image.snap_create("one"));
+
+  ASSERT_EQ(1 << order, image.discard(0, 1 << order));
+  ASSERT_EQ(0, image.snap_create("two"));
+  ASSERT_EQ(0, image.snap_protect("two"));
+  exists.clear();
+  one.clear();
+
+  std::string clone_name = this->get_temp_image_name();
+  ASSERT_EQ(0, rbd.clone(ioctx, name.c_str(), "two", ioctx,
+                         clone_name.c_str(), RBD_FEATURE_LAYERING, &order));
+  ASSERT_EQ(0, rbd.open(ioctx, image, clone_name.c_str(), NULL));
+
+  interval_set<uint64_t> two;
+  scribble(image, 10, 102400, &exists, &two);
+
+  interval_set<uint64_t> diff;
+  ASSERT_EQ(0, image.diff_iterate(NULL, 0, size, iterate_cb, (void *)&diff));
+  ASSERT_TRUE(two.subset_of(diff));
+}
+
 TEST_F(TestLibRBD, ZeroLengthWrite)
 {
   rados_ioctx_t ioctx;
