@@ -3416,12 +3416,7 @@ void Monitor::_ms_dispatch(Message *m)
   }
 
   MonOpRequestRef op = op_tracker.create_request<MonOpRequest>(m);
-  dispatch(op);
-}
-
-void Monitor::dispatch(MonOpRequestRef op)
-{
-  op->mark_event("mon:dispatch");
+  op->mark_event("mon:ms_dispatch");
   ConnectionRef connection = op->get_connection();
   MonSession *s = NULL;
   MonCap caps;
@@ -3440,7 +3435,6 @@ void Monitor::dispatch(MonOpRequestRef op)
     reuse_caps = true;
     s = NULL;
   }
-  Message *m = op->get_req();
   if (!s) {
     // if the sender is not a monitor, make sure their first message for a
     // session is an MAuth.  If it is not, assume it's a stray message,
