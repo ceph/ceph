@@ -817,7 +817,10 @@ int NewStore::_open_db()
     db = NULL;
     return -EIO;
   }
-  db->init(g_conf->newstore_backend_options);
+  string options;
+  if (g_conf->newstore_backend == "rocksdb")
+    options = g_conf->newstore_rocksdb_options;
+  db->init(options);
   stringstream err;
   if (db->create_and_open(err)) {
     derr << __func__ << " erroring opening db: " << err.str() << dendl;
@@ -826,8 +829,7 @@ int NewStore::_open_db()
     return -EIO;
   }
   dout(1) << __func__ << " opened " << g_conf->newstore_backend
-	  << " path " << path
-	  << " options " << g_conf->newstore_backend_options << dendl;
+	  << " path " << path << " options " << options << dendl;
   return 0;
 }
 
