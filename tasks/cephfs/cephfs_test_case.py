@@ -106,9 +106,11 @@ class CephFSTestCase(unittest.TestCase):
 
         # In case some test messed with auth caps, reset them
         for mount in self.mounts:
-            self.fs.mon_manager.raw_cluster_cmd_result('auth', 'caps', "client.{0}".format(mount.client_id),
-                                                       'mon', 'allow r', 'osd',
-                                                       'allow rw pool={0}'.format(self.fs.get_data_pool_name()))
+            self.fs.mon_manager.raw_cluster_cmd_result(
+                'auth', 'caps', "client.{0}".format(mount.client_id),
+                'mds', 'allow',
+                'mon', 'allow r',
+                'osd', 'allow rw pool={0}'.format(self.fs.get_data_pool_name()))
 
         self.fs.mds_restart()
         self.fs.wait_for_daemons()
