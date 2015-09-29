@@ -755,6 +755,7 @@ private:
   };
 
   int inode_permissions(Inode *in, uid_t uid, UserGroups& groups, unsigned want);
+  int xattr_permission(Inode *in, const char *name, unsigned want, int uid=-1, int gid=-1);
   int inode_change_ok(Inode *in, struct stat *st, int mask, int uid=-1, int gid=-1);
   int may_open(Inode *in, int flags, int uid=-1, int gid=-1);
   int may_lookup(Inode *dir, int uid=-1, int gid=-1);

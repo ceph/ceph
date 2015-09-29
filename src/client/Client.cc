@@ -4835,6 +4835,30 @@ int Client::inode_permissions(Inode *in, uid_t uid, UserGroups& groups, unsigned
   return 0;
 }
 
+int Client::xattr_permission(Inode *in, const char *name, unsigned want, int uid, int gid)
+{
+  if (uid < 0)
+    uid = get_uid();
+  if (gid < 0)
+    gid = get_gid();
+
+  int r = _getattr(in, CEPH_STAT_CAP_MODE, uid, gid);
+  if (r < 0)
+    goto out;
+
+  r = 0;
+  if (strncmp(name, "system.", 7) == 0) {
+    if ((want & MAY_WRITE) && (uid != 0 && (uid_t)uid != in->uid))
+      r = -EPERM;
+  } else {
+    Client_UserGroups groups(this, uid, gid);
+    r = inode_permissions(in, uid, groups, want);
+  }
+out:
+  ldout(cct, 3) << __func__ << " " << in << " = " << r <<  dendl;
+  return r;
+}
+
 int Client::inode_change_ok(Inode *in, struct stat *st, int mask,
 			    int uid, int gid)
 {
@@ -9377,6 +9401,12 @@ int Client::ll_getxattr(Inode *in, const char *name, void *value,
   tout(cct) << vino.ino.val << std::endl;
   tout(cct) << name << std::endl;
 
+  if (!cct->_conf->fuse_default_permissions) {
+    int r = xattr_permission(in, name, MAY_READ, uid, gid);
+    if (r < 0)
+      return r;
+  }
+
   return _getxattr(in, name, value, size, uid, gid);
 }
 
@@ -9596,6 +9626,12 @@ int Client::ll_setxattr(Inode *in, const char *name, const void *value,
   tout(cct) << vino.ino.val << std::endl;
   tout(cct) << name << std::endl;
 
+  if (!cct->_conf->fuse_default_permissions) {
+    int r = xattr_permission(in, name, MAY_WRITE, uid, gid);
+    if (r < 0)
+      return r;
+  }
+
   return _setxattr(in, name, value, size, flags, uid, gid);
 }
 
@@ -9642,6 +9678,12 @@ int Client::ll_removexattr(Inode *in, const char *name, int uid, int gid)
   tout(cct) << "ll_removexattr" << std::endl;
   tout(cct) << vino.ino.val << std::endl;
   tout(cct) << name << std::endl;
+
+  if (!cct->_conf->fuse_default_permissions) {
+    int r = xattr_permission(in, name, MAY_WRITE, uid, gid);
+    if (r < 0)
+      return r;
+  }
 
   return _removexattr(in, name, uid, gid);
 }
