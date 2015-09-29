@@ -233,13 +233,11 @@ struct Inode {
   map<mds_rank_t, Cap*> caps;            // mds -> Cap
   Cap *auth_cap;
   unsigned dirty_caps, flushing_caps;
-  uint64_t flushing_cap_seq;
-  __u16 flushing_cap_tid[CEPH_CAP_BITS];
+  std::map<ceph_tid_t, int> flushing_cap_tids;
   int shared_gen, cache_gen;
   int snap_caps, snap_cap_refs;
   utime_t hold_caps_until;
   xlist<Inode*>::item cap_item, flushing_cap_item;
-  ceph_tid_t last_flush_tid;
 
   SnapRealm *snaprealm;
   xlist<Inode*>::item snaprealm_item;
@@ -304,9 +302,9 @@ struct Inode {
       flags(0),
       qtree(NULL),
       dir_hashed(false), dir_replicated(false), auth_cap(NULL),
-      dirty_caps(0), flushing_caps(0), flushing_cap_seq(0), shared_gen(0), cache_gen(0),
+      dirty_caps(0), flushing_caps(0), shared_gen(0), cache_gen(0),
       snap_caps(0), snap_cap_refs(0),
-      cap_item(this), flushing_cap_item(this), last_flush_tid(0),
+      cap_item(this), flushing_cap_item(this),
       snaprealm(0), snaprealm_item(this),
       oset((void *)this, newlayout->fl_pg_pool, ino),
       reported_size(0), wanted_max_size(0), requested_max_size(0),
@@ -316,7 +314,6 @@ struct Inode {
   {
     memset(&dir_layout, 0, sizeof(dir_layout));
     memset(&layout, 0, sizeof(layout));
-    memset(&flushing_cap_tid, 0, sizeof(__u16)*CEPH_CAP_BITS);
     memset(&quota, 0, sizeof(quota));
   }
   ~Inode() { }

@@ -486,6 +486,7 @@ OPTION(mds_snap_max_uid, OPT_U32, 65536) // The maximum UID allowed to create a 
 OPTION(mds_snap_rstat, OPT_BOOL, false) // enable/disbale nested stat for snapshot
 OPTION(mds_verify_backtrace, OPT_U32, 1)
 // detect clients which aren't trimming completed requests
+OPTION(mds_max_completed_flushes, OPT_U32, 100000)
 OPTION(mds_max_completed_requests, OPT_U32, 100000)
 
 OPTION(mds_action_on_write_error, OPT_U32, 1) // 0: ignore; 1: force readonly; 2: crash
