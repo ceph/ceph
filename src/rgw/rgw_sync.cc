@@ -445,12 +445,9 @@ public:
           spawn(new RGWReadRemoteMDLogShardInfoCR(store, http_manager, async_rados, i, &shards_info[i]), false);
 	}
       }
-      while (collect(&ret)) {
-	if (ret < 0) {
-	  return set_state(RGWCoroutine_Error);
-	}
-        yield;
-      }
+
+      drain_all();
+
       yield {
         for (int i = 0; i < (int)status.num_shards; i++) {
 	  rgw_meta_sync_marker marker;
@@ -967,15 +964,7 @@ public:
         }
       } while ((int)entries.size() == max_entries);
 
-      /* wait for all operations to complete */
-      while (collect(&ret)) {
-        if (ret < 0) {
-          ldout(store->ctx(), 0) << "ERROR: a sync operation returned error" << dendl;
-          /* we should have reported this error */
-#warning deal with error
-        }
-        yield;
-      }
+      drain_all();
 
       yield {
         /* update marker to reflect we're done with full sync */
