@@ -248,7 +248,7 @@ bool RGWCoroutinesStack::collect(RGWCoroutine *op, int *ret) /* returns true if 
   }
 
   s->entries.swap(new_list);
-  return (!new_list.empty());
+  return false;
 }
 
 bool RGWCoroutinesStack::collect(int *ret) /* returns true if needs to be called again */
@@ -368,6 +368,7 @@ int RGWCoroutinesManager::run(list<RGWCoroutinesStack *>& stacks)
     ++iter;
     stacks.pop_front();
 
+
     while (stacks.empty() && blocked_count > 0) {
       int ret = completion_mgr.get_next((void **)&blocked_stack);
       if (ret < 0) {
@@ -445,31 +446,36 @@ int RGWCoroutine::wait(const utime_t& interval)
 
 void RGWCoroutine::wait_for_child()
 {
-  /* should only wait for child if there is a child that is not done yet */
+  /* should only wait for child if there is a child that is not done yet, and no complete children */
+  if (spawned.entries.empty()) {
+    return;
+  }
   for (vector<RGWCoroutinesStack *>::iterator iter = spawned.entries.begin(); iter != spawned.entries.end(); ++iter) {
-    if (!(*iter)->is_done()) {
-      stack->set_wait_for_child(true);
+    if ((*iter)->is_done()) {
+      return;
     }
   }
+  stack->set_wait_for_child(true);
 }
 
 bool RGWCoroutine::drain_children()
 {
   bool done = false;
-  reenter(drain_cr) {
-    yield wait_for_child();
-    int ret;
-    while (collect(&ret)) {
-      if (ret < 0) {
-        ldout(cct, 0) << "ERROR: a sync operation returned error" << dendl;
-        /* we should have reported this error */
-#warning deal with error
-      }
+  reenter(&drain_cr) {
+    while (num_spawned() > 0) {
       yield wait_for_child();
+      int ret;
+      while (collect(&ret)) {
+        if (ret < 0) {
+          ldout(cct, 0) << "ERROR: collect() returned error" << dendl;
+          /* we should have reported this error */
+#warning deal with error
+        }
+      }
     }
     done = true;
   }
-  return !done;
+  return done;
 }
 
 void RGWCoroutine::wakeup()
@@ -485,9 +491,7 @@ int RGWSimpleCoroutine::operate()
     yield return state_send_request();
     yield return state_request_complete();
     yield return state_all_complete();
-    while (stack->collect(&ret)) {
-      yield;
-    }
+    drain_all();
     return set_state(RGWCoroutine_Done, ret);
   }
   return 0;

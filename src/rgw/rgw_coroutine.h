@@ -280,7 +280,7 @@ public:
     blocked_flag = flag;
   }
   bool is_io_blocked() {
-    return blocked_flag || is_blocked_by_stack();
+    return blocked_flag;
   }
   void set_sleeping(bool flag) {
     bool wakeup = sleep_flag & !flag;
