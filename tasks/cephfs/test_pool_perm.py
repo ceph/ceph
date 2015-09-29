@@ -29,8 +29,9 @@ class TestPoolPerm(CephFSTestCase):
         client_name = "client.{0}".format(self.mount_a.client_id)
 
         # set data pool read only
-        self.fs.mon_manager.raw_cluster_cmd_result('auth', 'caps', client_name, 'mon', 'allow r', 'osd',
-                                                   'allow r pool={0}'.format(self.fs.get_data_pool_name()))
+        self.fs.mon_manager.raw_cluster_cmd_result(
+            'auth', 'caps', client_name, 'mds', 'allow', 'mon', 'allow r', 'osd',
+            'allow r pool={0}'.format(self.fs.get_data_pool_name()))
 
         self.mount_a.umount_wait()
         self.mount_a.mount()
@@ -40,8 +41,9 @@ class TestPoolPerm(CephFSTestCase):
         self.mount_a.run_python(remote_script.format(path=file_path, check_read=str(False)))
 
         # set data pool write only
-        self.fs.mon_manager.raw_cluster_cmd_result('auth', 'caps', client_name, 'mon', 'allow r', 'osd',
-                                                   'allow w pool={0}'.format(self.fs.get_data_pool_name()))
+        self.fs.mon_manager.raw_cluster_cmd_result(
+            'auth', 'caps', client_name, 'mds', 'allow', 'mon', 'allow r', 'osd',
+            'allow w pool={0}'.format(self.fs.get_data_pool_name()))
 
         self.mount_a.umount_wait()
         self.mount_a.mount()
@@ -51,8 +53,9 @@ class TestPoolPerm(CephFSTestCase):
         self.mount_a.run_python(remote_script.format(path=file_path, check_read=str(True)))
 
     def tearDown(self):
-        self.fs.mon_manager.raw_cluster_cmd_result('auth', 'caps', "client.{0}".format(self.mount_a.client_id),
-                                                   'mon', 'allow r', 'osd',
-                                                   'allow rw pool={0}'.format(self.fs.get_data_pool_name()))
+        self.fs.mon_manager.raw_cluster_cmd_result(
+            'auth', 'caps', "client.{0}".format(self.mount_a.client_id),
+            'mds', 'allow', 'mon', 'allow r', 'osd',
+            'allow rw pool={0}'.format(self.fs.get_data_pool_name()))
 
         super(TestPoolPerm, self).tearDown()
