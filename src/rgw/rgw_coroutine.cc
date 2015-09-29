@@ -449,6 +449,25 @@ void RGWCoroutine::wait_for_child()
   }
 }
 
+bool RGWCoroutine::drain_children()
+{
+  bool done = false;
+  reenter(drain_cr) {
+    yield wait_for_child();
+    int ret;
+    while (collect(&ret)) {
+      if (ret < 0) {
+        ldout(cct, 0) << "ERROR: a sync operation returned error" << dendl;
+        /* we should have reported this error */
+#warning deal with error
+      }
+      yield wait_for_child();
+    }
+    done = true;
+  }
+  return !done;
+}
+
 void RGWCoroutine::wakeup()
 {
   stack->wakeup();
