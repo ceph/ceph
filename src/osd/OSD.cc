@@ -4495,8 +4495,8 @@ void OSD::start_boot()
 
 void OSD::_got_mon_epochs(epoch_t oldest, epoch_t newest)
 {
+  Mutex::Locker l(osd_lock);
   if (is_preboot()) {
-    Mutex::Locker l(osd_lock);
     _preboot(oldest, newest);
   }
 }
