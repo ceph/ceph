@@ -2965,6 +2965,10 @@ reprotect_and_return_err:
      * checks that we think we will succeed. But for now, let's not
      * duplicate that code.
      */
+    RWLock::RLocker l(ictx->owner_lock);
+    if (!ictx->image_watcher->is_lock_supported()) {
+      return -ENOSYS;
+    }
     RWLock::RLocker locker(ictx->md_lock);
     r = rados::cls::lock::lock(&ictx->md_ctx, ictx->header_oid, RBD_LOCK_NAME,
 			       exclusive ? LOCK_EXCLUSIVE : LOCK_SHARED,
