@@ -5927,7 +5927,7 @@ void Server::handle_client_rename(MDRequestRef& mdr)
 
   // dest a child of src?
   // e.g. mv /usr /usr/foo
-  CDentry *pdn = destdir->inode->parent;
+  CDentry *pdn = destdir->inode->get_projected_parent_dn();
   while (pdn) {
     if (pdn == srcdn) {
       dout(7) << "cannot rename item to be a child of itself" << dendl;
