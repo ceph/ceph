@@ -4,6 +4,8 @@
 # with Swift API (a.k.a OpenStack Object Storage API v1).
 set -ex
 
+ROOTDIR=$(dirname $(readlink -f ${BASH_SOURCE[0]}))
+
 KEYSTONE_HOME_DIR=/tmp/keystone
 KEYSTONE_REPO_URL=https://git.openstack.org/openstack/keystone.git
 KEYSTONE_RELEASE=stable/kilo
@@ -12,6 +14,11 @@ KEYSTONE_PORT=5010
 KEYSTONE_PORT_ADMIN=35367
 
 RADOSGW_URL=http://127.0.0.1:8000/swift/v1
+
+TEMPEST_HOME_DIR=/tmp/tempest
+TEMPEST_REPO_URL=https://github.com/openstack/tempest.git
+TEMPEST_RELEASE=rgw_testing
+TEMPEST_RELEASE=master
 
 keystone_download()
 {
@@ -173,5 +180,50 @@ deploy_keystone()
   keystone_put_authinfo
 }
 
+tempest_download()
+{
+  rm -rf ${TEMPEST_HOME_DIR}
+  mkdir -p ${TEMPEST_HOME_DIR}
+
+  git clone --quiet -- ${TEMPEST_REPO_URL} ${TEMPEST_HOME_DIR}
+  cd ${TEMPEST_HOME_DIR} \
+      && git checkout ${TEMPEST_RELEASE}
+}
+
+tempest_make_venv()
+{
+  cd ${TEMPEST_HOME_DIR}
+
+  python tools/install_venv.py > /dev/null
+}
+
+tempest_configure()
+{
+  cp -f ${ROOTDIR}/tempest/etc/tempest.conf ${TEMPEST_HOME_DIR}/etc/
+  cp -f ${ROOTDIR}/tempest/etc/accounts.yaml ${TEMPEST_HOME_DIR}/etc/
+
+  sed -e "s/<KEYSTONE_IP>/${KEYSTONE_IP}/g" \
+      -i ${TEMPEST_HOME_DIR}/etc/tempest.conf
+  sed -e "s/<KEYSTONE_PORT>/${KEYSTONE_PORT}/g" \
+      -i ${TEMPEST_HOME_DIR}/etc/tempest.conf
+}
+
+tempest_start()
+{
+  cd ${TEMPEST_HOME_DIR}
+
+  ./run_tempest.sh  -V tempest.api.object_storage \
+      -C ${TEMPEST_HOME_DIR}/etc/tempest.conf
+}
+
+deploy_tempest()
+{
+  tempest_download
+  tempest_make_venv
+  tempest_configure
+}
 
 deploy_keystone
+deploy_tempest
+
+tempest_start
