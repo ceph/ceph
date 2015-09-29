@@ -20,7 +20,7 @@
 
 
 class MClientCaps : public Message {
-  static const int HEAD_VERSION = 5;
+  static const int HEAD_VERSION = 6;
   static const int COMPAT_VERSION = 1;
 
  public:
@@ -34,6 +34,7 @@ class MClientCaps : public Message {
 
   // Receivers may not use their new caps until they have this OSD map
   epoch_t osd_epoch_barrier;
+  ceph_tid_t oldest_flush_tid;
 
   int      get_caps() { return head.caps; }
   int      get_wanted() { return head.wanted; }
@@ -86,9 +87,12 @@ class MClientCaps : public Message {
     peer.flags = flags;
   }
 
+  void set_oldest_flush_tid(ceph_tid_t tid) { oldest_flush_tid = tid; }
+  ceph_tid_t get_oldest_flush_tid() { return oldest_flush_tid; }
+
   MClientCaps()
     : Message(CEPH_MSG_CLIENT_CAPS, HEAD_VERSION, COMPAT_VERSION),
-      osd_epoch_barrier(0) {
+      osd_epoch_barrier(0), oldest_flush_tid(0) {
     inline_version = 0;
   }
   MClientCaps(int op,
@@ -102,7 +106,7 @@ class MClientCaps : public Message {
 	      int mseq,
               epoch_t oeb)
     : Message(CEPH_MSG_CLIENT_CAPS, HEAD_VERSION, COMPAT_VERSION),
-      osd_epoch_barrier(oeb) {
+      osd_epoch_barrier(oeb), oldest_flush_tid(0) {
     memset(&head, 0, sizeof(head));
     head.op = op;
     head.ino = ino;
@@ -192,6 +196,9 @@ public:
     if (header.version >= 5) {
       ::decode(osd_epoch_barrier, p);
     }
+    if (header.version >= 6) {
+      ::decode(oldest_flush_tid, p);
+    }
   }
   void encode_payload(uint64_t features) {
     header.version = HEAD_VERSION;
@@ -232,6 +239,7 @@ public:
     }
 
     ::encode(osd_epoch_barrier, payload);
+    ::encode(oldest_flush_tid, payload);
   }
 };
 

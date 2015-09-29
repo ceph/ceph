@@ -295,8 +295,10 @@ public:
   // mds requests
   ceph_tid_t last_tid;
   ceph_tid_t oldest_tid; // oldest incomplete mds request, excluding setfilelock requests
-  ceph_tid_t last_flush_seq;
   map<ceph_tid_t, MetaRequest*> mds_requests;
+
+  // cap flushing
+  ceph_tid_t last_flush_tid;
 
   void dump_mds_requests(Formatter *f);
   void dump_mds_sessions(Formatter *f);
@@ -541,10 +543,12 @@ protected:
   void remove_all_caps(Inode *in);
   void remove_session_caps(MetaSession *session);
   void mark_caps_dirty(Inode *in, int caps);
-  int mark_caps_flushing(Inode *in);
+  int mark_caps_flushing(Inode *in, ceph_tid_t *ptid);
+  void adjust_session_flushing_caps(Inode *in, MetaSession *old_s, MetaSession *new_s);
   void flush_caps();
   void flush_caps(Inode *in, MetaSession *session);
   void kick_flushing_caps(MetaSession *session);
+  void early_kick_flushing_caps(MetaSession *session);
   void kick_maxsize_requests(MetaSession *session);
   int get_caps(Inode *in, int need, int want, int *have, loff_t endoff);
   int get_caps_used(Inode *in);
@@ -563,13 +567,14 @@ protected:
   void handle_cap_grant(MetaSession *session, Inode *in, Cap *cap, class MClientCaps *m);
   void cap_delay_requeue(Inode *in);
   void send_cap(Inode *in, MetaSession *session, Cap *cap,
-		int used, int want, int retain, int flush);
+		int used, int want, int retain, int flush,
+		ceph_tid_t flush_tid);
   void check_caps(Inode *in, bool is_delayed);
   void get_cap_ref(Inode *in, int cap);
   void put_cap_ref(Inode *in, int cap);
   void flush_snaps(Inode *in, bool all_again=false, CapSnap *again=0);
-  void wait_sync_caps(Inode *in, uint16_t flush_tid[]);
-  void wait_sync_caps(uint64_t want);
+  void wait_sync_caps(Inode *in, ceph_tid_t want);
+  void wait_sync_caps(ceph_tid_t want);
   void queue_cap_snap(Inode *in, SnapContext &old_snapc);
   void finish_cap_snap(Inode *in, CapSnap *capsnap, int used);
   void _flushed_cap_snap(Inode *in, snapid_t seq);

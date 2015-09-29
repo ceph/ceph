@@ -394,13 +394,12 @@ void Inode::dump(Formatter *f) const
   f->dump_stream("dirty_caps") << ccap_string(dirty_caps);
   if (flushing_caps) {
     f->dump_stream("flushings_caps") << ccap_string(flushing_caps);
-    f->dump_unsigned("flushing_cap_seq", flushing_cap_seq);
     f->open_object_section("flushing_cap_tid");
-    for (unsigned bit = 0; bit < CEPH_CAP_BITS; bit++) {
-      if (flushing_caps & (1 << bit)) {
-	string n(ccap_string(1 << bit));
-	f->dump_unsigned(n.c_str(), flushing_cap_tid[bit]);
-      }
+    for (map<ceph_tid_t, int>::const_iterator p = flushing_cap_tids.begin();
+	 p != flushing_cap_tids.end();
+	 ++p) {
+      string n(ccap_string(p->second));
+      f->dump_unsigned(n.c_str(), p->first);
     }
     f->close_section();
   }
@@ -412,7 +411,6 @@ void Inode::dump(Formatter *f) const
   }
 
   f->dump_stream("hold_caps_until") << hold_caps_until;
-  f->dump_unsigned("last_flush_tid", last_flush_tid);
 
   if (snaprealm) {
     f->open_object_section("snaprealm");

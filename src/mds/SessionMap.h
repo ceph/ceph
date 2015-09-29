@@ -232,6 +232,7 @@ private:
   // wrote this session out?
   bool completed_requests_dirty;
 
+  unsigned num_trim_flushes_warnings;
   unsigned num_trim_requests_warnings;
 public:
   void add_completed_request(ceph_tid_t t, inodeno_t created) {
@@ -261,6 +262,30 @@ public:
     return true;
   }
 
+  void add_completed_flush(ceph_tid_t tid) {
+    info.completed_flushes.insert(tid);
+  }
+  bool trim_completed_flushes(ceph_tid_t mintid) {
+    bool erased_any = false;
+    while (!info.completed_flushes.empty() &&
+	(mintid == 0 || *info.completed_flushes.begin() < mintid)) {
+      info.completed_flushes.erase(info.completed_flushes.begin());
+      erased_any = true;
+    }
+    if (erased_any) {
+      completed_requests_dirty = true;
+    }
+    return erased_any;
+  }
+  bool have_completed_flush(ceph_tid_t tid) const {
+    return info.completed_flushes.count(tid);
+  }
+
+  unsigned get_num_completed_flushes() const { return info.completed_flushes.size(); }
+  unsigned get_num_trim_flushes_warnings() { return num_trim_flushes_warnings; }
+  void inc_num_trim_flushes_warnings() { ++num_trim_flushes_warnings; }
+  void reset_num_trim_flushes_warnings() { num_trim_flushes_warnings = 0; }
+
   unsigned get_num_completed_requests() const { return info.completed_requests.size(); }
   unsigned get_num_trim_requests_warnings() { return num_trim_requests_warnings; }
   void inc_num_trim_requests_warnings() { ++num_trim_requests_warnings; }
@@ -285,6 +310,7 @@ public:
     cap_push_seq(0),
     lease_seq(0),
     completed_requests_dirty(false),
+    num_trim_flushes_warnings(0),
     num_trim_requests_warnings(0) { }
   ~Session() {
     assert(!item_session_list.is_on_list());
