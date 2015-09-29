@@ -71,6 +71,7 @@ class MClientCapRelease;
 struct DirStat;
 struct LeaseStat;
 struct InodeStat;
+class UserGroups;
 
 class Filer;
 class Objecter;
@@ -455,6 +456,7 @@ protected:
   friend class C_Client_SyncCommit; // Asserts on client_lock
   friend class C_Client_RequestInterrupt;
   friend class C_Client_Remount;
+  friend class Client_UserGroups;
   friend void intrusive_ptr_release(Inode *in);
 
   //int get_cache_size() { return lru.lru_get_size(); }
@@ -753,6 +755,7 @@ private:
   };
 
   int check_permissions(Inode *in, int flags, int uid, int gid);
+  int _getgrouplist(gid_t **sgids, int uid=-1, int gid=-1);
 
   int check_data_pool_exist(string name, string value, const OSDMap *osdmap);
 
@@ -816,8 +819,7 @@ private:
 
   int _posix_acl_create(Inode *dir, mode_t *mode, bufferlist& xattrs_bl, int uid, int gid);
   int _posix_acl_chmod(Inode *in, mode_t mode, int uid, int gid);
-  int _posix_acl_permission(Inode *in, int uid, int gid,
-			    gid_t *sgids, int sgid_count, unsigned want);
+  int _posix_acl_permission(Inode *in, uid_t uid, UserGroups& groups, unsigned want);
 public:
   int mount(const std::string &mount_root, bool require_mds=false);
   void unmount();

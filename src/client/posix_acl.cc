@@ -1,6 +1,7 @@
 #include "include/types.h"
 #include <sys/stat.h>
 #include "posix_acl.h"
+#include "UserGroups.h"
 
 int posix_acl_valid(const void *xattr, size_t size)
 {
@@ -215,18 +216,8 @@ int posix_acl_chmod_masq(bufferptr& acl, mode_t mode)
   return 0;
 }
 
-static int in_grouplist(gid_t gid, gid_t *sgids, int sgid_count)
-{
-  for (int i = 0; i < sgid_count; i++) {
-    if (sgids[i] == gid)
-      return 1;
-  }
-  return 0;
-}
-
 int posix_acl_permission(const bufferptr& acl, uid_t i_uid, gid_t i_gid,
-			 uid_t uid, gid_t gid, gid_t *sgids, int sgid_count,
-			 unsigned want)
+			 uid_t uid, UserGroups& groups, unsigned want)
 {
   if (!posix_acl_valid(acl.c_str(), acl.length()))
     return -EIO;
@@ -253,7 +244,7 @@ int posix_acl_permission(const bufferptr& acl, uid_t i_uid, gid_t i_gid,
 	  goto mask;
 	break;
       case ACL_GROUP_OBJ:
-	if (i_gid == gid || in_grouplist(i_gid, sgids, sgid_count)) {
+	if (groups.is_in(i_gid)) {
 	  found = 1;
 	  if ((perm & want) == want)
 	    goto mask;
@@ -261,7 +252,7 @@ int posix_acl_permission(const bufferptr& acl, uid_t i_uid, gid_t i_gid,
 	break;
       case ACL_GROUP:
 	id = entry->e_id;
-	if (id == gid || in_grouplist(id, sgids, sgid_count)) {
+	if (groups.is_in(id)) {
 	  found = 1;
 	  if ((perm & want) == want)
 	    goto mask;
