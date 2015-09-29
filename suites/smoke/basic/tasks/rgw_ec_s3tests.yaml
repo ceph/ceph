@@ -1,0 +1,13 @@
+overrides:
+   rgw:
+    ec-data-pool: true
+    cache-pools: true
+    frontend: civetweb
+tasks:
+- install:
+- ceph:
+    fs: btrfs
+- rgw: [client.0]
+- s3tests:
+    client.0:
+      rgw_server: client.0
