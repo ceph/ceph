@@ -4879,6 +4879,58 @@ out:
   return r;
 }
 
+int Client::may_create(Inode *dir, int uid, int gid)
+{
+  if (uid < 0)
+    uid = get_uid();
+  if (gid < 0)
+    gid = get_gid();
+
+  int r = _getattr(dir, CEPH_STAT_CAP_MODE, uid, gid);
+  if (r < 0)
+    goto out;
+
+  {
+    Client_UserGroups groups(this, uid, gid);
+    r = inode_permissions(dir, uid, groups, MAY_EXEC | MAY_WRITE);
+  }
+out:
+  ldout(cct, 3) << __func__ << " " << dir << " = " << r <<  dendl;
+  return r;
+}
+
+int Client::may_delete(Inode *dir, const char *name, int uid, int gid)
+{
+  if (uid < 0)
+    uid = get_uid();
+  if (gid < 0)
+    gid = get_gid();
+
+  int r = _getattr(dir, CEPH_STAT_CAP_MODE, uid, gid);
+  if (r < 0)
+    goto out;
+
+  {
+    Client_UserGroups groups(this, uid, gid);
+    r = inode_permissions(dir, uid, groups, MAY_EXEC | MAY_WRITE);
+    if (r < 0)
+      goto out;
+  }
+
+  if (uid != 0 && (dir->mode & S_ISVTX)) {
+    InodeRef otherin;
+    r = _lookup(dir, name, &otherin, uid, gid);
+    if (r < 0)
+      goto out;
+    if (dir->uid != (uid_t)uid && otherin->uid != (uid_t)uid)
+      r = -EPERM;
+  }
+
+out:
+  ldout(cct, 3) << __func__ << " " << dir << " = " << r <<  dendl;
+  return r;
+}
+
 vinodeno_t Client::_get_vino(Inode *in)
 {
   /* The caller must hold the client lock */
@@ -5791,11 +5843,11 @@ int Client::mknod(const char *relpath, mode_t mode, dev_t rdev)
   filepath path(relpath);
   string name = path.last_dentry();
   path.pop_dentry();
-  InodeRef in;
-  int r = path_walk(path, &in);
+  InodeRef dir;
+  int r = path_walk(path, &dir);
   if (r < 0)
     return r;
-  return _mknod(in.get(), name.c_str(), mode, rdev);
+  return _mknod(dir.get(), name.c_str(), mode, rdev);
 }
 
 // symlinks
@@ -7036,7 +7088,7 @@ int Client::open(const char *relpath, int flags, mode_t mode, int stripe_unit,
     InodeRef dir;
     r = path_walk(dirpath, &dir);
     if (r < 0)
-      return r;
+      goto out;
     r = _create(dir.get(), dname.c_str(), flags, mode, &in, &fh, stripe_unit,
                 stripe_count, object_size, data_pool, &created);
   }
@@ -9812,6 +9864,12 @@ int Client::ll_mknod(Inode *parent, const char *name, mode_t mode,
   tout(cct) << mode << std::endl;
   tout(cct) << rdev << std::endl;
 
+  if (!cct->_conf->fuse_default_permissions) {
+    int r = may_create(parent, uid, gid);
+    if (r < 0)
+      return r;
+  }
+
   InodeRef in;
   int r = _mknod(parent, name, mode, rdev, uid, gid, &in);
   if (r == 0) {
@@ -9984,6 +10042,12 @@ int Client::ll_mkdir(Inode *parent, const char *name, mode_t mode,
   tout(cct) << name << std::endl;
   tout(cct) << mode << std::endl;
 
+  if (!cct->_conf->fuse_default_permissions) {
+    int r = may_create(parent, uid, gid);
+    if (r < 0)
+      return r;
+  }
+
   InodeRef in;
   int r = _mkdir(parent, name, mode, uid, gid, &in);
   if (r == 0) {
@@ -10056,6 +10120,12 @@ int Client::ll_symlink(Inode *parent, const char *name, const char *value,
   tout(cct) << name << std::endl;
   tout(cct) << value << std::endl;
 
+  if (!cct->_conf->fuse_default_permissions) {
+    int r = may_create(parent, uid, gid);
+    if (r < 0)
+      return r;
+  }
+
   InodeRef in;
   int r = _symlink(parent, name, value, uid, gid, &in);
   if (r == 0) {
@@ -10124,6 +10194,11 @@ int Client::ll_unlink(Inode *in, const char *name, int uid, int gid)
   tout(cct) << vino.ino.val << std::endl;
   tout(cct) << name << std::endl;
 
+  if (!cct->_conf->fuse_default_permissions) {
+    int r = may_delete(in, name, uid, gid);
+    if (r < 0)
+      return r;
+  }
   return _unlink(in, name, uid, gid);
 }
 
@@ -10184,6 +10259,12 @@ int Client::ll_rmdir(Inode *in, const char *name, int uid, int gid)
   tout(cct) << "ll_rmdir" << std::endl;
   tout(cct) << vino.ino.val << std::endl;
   tout(cct) << name << std::endl;
+
+  if (!cct->_conf->fuse_default_permissions) {
+    int r = may_delete(in, name, uid, gid);
+    if (r < 0)
+      return r;
+  }
 
   return _rmdir(in, name, uid, gid);
 }
@@ -10294,6 +10375,15 @@ int Client::ll_rename(Inode *parent, const char *name, Inode *newparent,
   tout(cct) << vnewparent.ino.val << std::endl;
   tout(cct) << newname << std::endl;
 
+  if (!cct->_conf->fuse_default_permissions) {
+    int r = may_delete(parent, name, uid, gid);
+    if (r < 0)
+      return r;
+    r = may_delete(newparent, newname, uid, gid);
+    if (r < 0 && r != -ENOENT)
+      return r;
+  }
+
   return _rename(parent, name, newparent, newname, uid, gid);
 }
 
@@ -10341,28 +10431,41 @@ int Client::_link(Inode *in, Inode *dir, const char *newname, int uid, int gid, 
   return res;
 }
 
-int Client::ll_link(Inode *parent, Inode *newparent, const char *newname,
+int Client::ll_link(Inode *in, Inode *newparent, const char *newname,
 		    struct stat *attr, int uid, int gid)
 {
   Mutex::Locker lock(client_lock);
 
-  vinodeno_t vparent = _get_vino(parent);
+  vinodeno_t vino = _get_vino(in);
   vinodeno_t vnewparent = _get_vino(newparent);
 
-  ldout(cct, 3) << "ll_link " << parent << " to " << vnewparent << " " <<
+  ldout(cct, 3) << "ll_link " << in << " to " << vnewparent << " " <<
     newname << dendl;
   tout(cct) << "ll_link" << std::endl;
-  tout(cct) << vparent.ino.val << std::endl;
+  tout(cct) << vino.ino.val << std::endl;
   tout(cct) << vnewparent << std::endl;
   tout(cct) << newname << std::endl;
 
+  int r = 0;
   InodeRef target;
-  int r = _link(parent, newparent, newname, uid, gid, &target);
+
+  if (!cct->_conf->fuse_default_permissions) {
+    if (S_ISDIR(in->mode)) {
+      r = -EPERM;
+      goto out;
+    }
+    r = may_create(newparent, uid, gid);
+    if (r < 0)
+      goto out;
+  }
+
+  r = _link(in, newparent, newname, uid, gid, &target);
   if (r == 0) {
     assert(target);
     fill_stat(target, attr);
     _ll_get(target.get());
   }
+out:
   return r;
 }
 
@@ -10571,8 +10674,13 @@ int Client::ll_create(Inode *parent, const char *name, mode_t mode,
   if (r == 0 && (flags & O_CREAT) && (flags & O_EXCL))
     return -EEXIST;
 
-   if (r == -ENOENT && (flags & O_CREAT)) {
-     r = _create(parent, name, flags, mode, &in, fhp /* may be NULL */,
+  if (r == -ENOENT && (flags & O_CREAT)) {
+    if (!cct->_conf->fuse_default_permissions) {
+      r = may_create(parent, uid, gid);
+      if (r < 0)
+	goto out;
+    }
+    r = _create(parent, name, flags, mode, &in, fhp /* may be NULL */,
 	        0, 0, 0, NULL, &created, uid, gid);
     if (r < 0)
       goto out;
