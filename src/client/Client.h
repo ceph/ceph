@@ -19,6 +19,7 @@
 #include "include/types.h"
 
 // stl
+#include <functional>
 #include <string>
 #include <memory>
 #include <set>
@@ -484,6 +485,10 @@ protected:
   void put_qtree(Inode *in);
   void invalidate_quota_tree(Inode *in);
   Inode* get_quota_root(Inode *in);
+
+  bool check_quota_condition(
+      Inode *in,
+      std::function<bool (const Inode &)> test);
   bool is_quota_files_exceeded(Inode *in);
   bool is_quota_bytes_exceeded(Inode *in, int64_t new_bytes);
   bool is_quota_bytes_approaching(Inode *in);
