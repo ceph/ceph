@@ -1,6 +1,7 @@
 #include "include/types.h"
 #include <sys/stat.h>
 #include "posix_acl.h"
+#include "UserGroups.h"
 
 int posix_acl_check(const void *xattr, size_t size)
 {
@@ -211,18 +212,8 @@ int posix_acl_access_chmod(bufferptr& acl, mode_t mode)
   return 0;
 }
 
-static int in_grouplist(gid_t gid, gid_t *sgids, int sgid_count)
-{
-  for (int i = 0; i < sgid_count; i++) {
-    if (sgids[i] == gid)
-      return 1;
-  }
-  return 0;
-}
-
 int posix_acl_permits(const bufferptr& acl, uid_t i_uid, gid_t i_gid,
-		      uid_t uid, gid_t gid, gid_t *sgids, int sgid_count,
-		      unsigned want)
+			 uid_t uid, UserGroups& groups, unsigned want)
 {
   if (!posix_acl_check(acl.c_str(), acl.length()))
     return -EIO;
@@ -252,7 +243,7 @@ int posix_acl_permits(const bufferptr& acl, uid_t i_uid, gid_t i_gid,
 	/* fall through */
       case ACL_GROUP:
 	id = (tag == ACL_GROUP_OBJ) ? i_gid : entry->e_id;
-	if (id == gid || in_grouplist(id, sgids, sgid_count)) {
+	if (groups.is_in(id)) {
 	  group_found = 1;
 	  if ((perm & want) == want)
 	    goto check_mask;

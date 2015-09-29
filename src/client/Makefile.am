@@ -25,7 +25,8 @@ noinst_HEADERS += \
 	client/Trace.h \
 	client/ioctl.h \
 	client/ObjecterWriteback.h \
-	client/posix_acl.h
+	client/posix_acl.h \
+	client/UserGroups.h
 
 if WITH_FUSE
 libclient_fuse_la_SOURCES = client/fuse_ll.cc

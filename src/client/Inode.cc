@@ -7,6 +7,7 @@
 #include "Dir.h"
 #include "MetaSession.h"
 #include "ClientSnapRealm.h"
+#include "UserGroups.h"
 
 ostream& operator<<(ostream &out, Inode &in)
 {
@@ -279,22 +280,14 @@ Dir *Inode::open_dir()
   return dir;
 }
 
-bool Inode::check_mode(uid_t ruid, gid_t rgid, gid_t *sgids, int sgids_count, unsigned want)
+bool Inode::check_mode(uid_t ruid, UserGroups& groups, unsigned want)
 {
-  // if uid is owner, owner entry determines access
   if (uid == ruid) {
+    // if uid is owner, owner entry determines access
     want = want << 6;
-  } else if (gid == rgid) {
+  } else if (groups.is_in(gid)) {
     // if a gid or sgid matches the owning group, group entry determines access
     want = want << 3;
-  } else {
-    int i = 0;
-    for (; i < sgids_count; ++i) {
-      if (sgids[i] == gid) {
-	want = want << 3;
-	break;
-      }
-    }
   }
 
   return (mode & want) == want;
