@@ -344,11 +344,7 @@ int RGWCoroutinesManager::run(list<RGWCoroutinesStack *>& stacks)
       RGWCoroutinesStack *s;
       while (stack->unblock_stack(&s)) {
 	if (!s->is_blocked_by_stack() && !s->is_done()) {
-	  if (s->is_io_blocked()) {
-	    blocked_count++;
-	  } else {
-	    s->schedule();
-	  }
+          s->schedule();
 	}
       }
       if (stack->parent && stack->parent->waiting_for_child()) {
