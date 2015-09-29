@@ -767,6 +767,14 @@ static int getgroups_cb(void *handle, gid_t **sgids)
 #endif
 }
 
+static mode_t umask_cb(void *handle)
+{
+  CephFuse::Handle *cfuse = (CephFuse::Handle *)handle;
+  fuse_req_t req = cfuse->get_fuse_req();
+  const struct fuse_ctx *ctx = fuse_req_ctx(req);
+  return ctx->umask;
+}
+
 static void ino_invalidate_cb(void *handle, vinodeno_t vino, int64_t off,
 			      int64_t len)
 {
@@ -807,9 +815,18 @@ static int remount_cb(void *handle)
   return r;
 }
 
-static void do_init(void *data, fuse_conn_info *bar)
+static void do_init(void *data, fuse_conn_info *conn)
 {
   CephFuse::Handle *cfuse = (CephFuse::Handle *)data;
+  Client *client = cfuse->client;
+
+  if (!client->cct->_conf->fuse_default_permissions &&
+      client->cct->_conf->client_posix_acl) {
+    // apply umask in userspace if posix acl is enabled
+    if(conn->capable & FUSE_CAP_DONT_MASK)
+      conn->want |= FUSE_CAP_DONT_MASK;
+  }
+
   if (cfuse->fd_on_success) {
     //cout << "fuse init signaling on fd " << fd_on_success << std::endl;
     uint32_t r = 0;
@@ -1007,6 +1024,7 @@ int CephFuse::Handle::start()
     remount_cb: remount_cb,
 #endif
     getgroups_cb: getgroups_cb,
+    umask_cb: umask_cb,
   };
   client->ll_register_callbacks(&args);
 

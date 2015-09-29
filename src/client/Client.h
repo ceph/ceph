@@ -142,6 +142,7 @@ typedef int (*client_remount_callback_t)(void *handle);
 
 typedef int (*client_getgroups_callback_t)(void *handle, gid_t **sgids);
 typedef void(*client_switch_interrupt_callback_t)(void *handle, void *data);
+typedef mode_t (*client_umask_callback_t)(void *handle);
 
 struct client_callback_args {
   void *handle;
@@ -150,6 +151,7 @@ struct client_callback_args {
   client_switch_interrupt_callback_t switch_intr_cb;
   client_remount_callback_t remount_cb;
   client_getgroups_callback_t getgroups_cb;
+  client_umask_callback_t umask_cb;
 };
 
 // ========================================================
@@ -246,6 +248,7 @@ class Client : public Dispatcher, public md_config_obs_t {
   client_ino_callback_t ino_invalidate_cb;
   client_dentry_callback_t dentry_invalidate_cb;
   client_getgroups_callback_t getgroups_cb;
+  client_umask_callback_t umask_cb;
   bool can_invalidate_dentries;
   bool require_remount;
 

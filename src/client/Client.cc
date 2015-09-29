@@ -240,6 +240,7 @@ Client::Client(Messenger *m, MonClient *mc)
     ino_invalidate_cb(NULL),
     dentry_invalidate_cb(NULL),
     getgroups_cb(NULL),
+    umask_cb(NULL),
     can_invalidate_dentries(false),
     require_remount(false),
     async_ino_invalidator(m->cct),
@@ -8850,6 +8851,7 @@ void Client::ll_register_callbacks(struct client_callback_args *args)
     remount_finisher.start();
   }
   getgroups_cb = args->getgroups_cb;
+  umask_cb = args->umask_cb;
 }
 
 int Client::test_dentry_handling(bool can_invalidate)
@@ -11940,6 +11942,8 @@ int Client::_posix_acl_create(Inode *dir, mode_t *mode, bufferlist& xattrs_bl,
     if (r > 0)
       ::encode(xattrs, xattrs_bl);
   } else {
+    if (umask_cb)
+      *mode &= ~umask_cb(callback_handle);
     r = 0;
   }
 out:
