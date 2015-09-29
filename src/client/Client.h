@@ -351,6 +351,17 @@ protected:
 
   // cache
   ceph::unordered_map<vinodeno_t, Inode*> inode_map;
+
+  // fake inode number for 32-bits ino_t
+  ceph::unordered_map<ino_t, vinodeno_t> faked_ino_map;
+  interval_set<ino_t> free_faked_inos;
+  ino_t last_used_faked_ino;
+  void _assign_faked_ino(Inode *in);
+  void _release_faked_ino(Inode *in);
+  bool _use_faked_inos;
+  void _reset_faked_inos();
+  vinodeno_t _map_faked_ino(ino_t ino);
+
   Inode*                 root;
   map<Inode*, InodeRef>  root_parents;
   Inode*                 root_ancestor;
@@ -627,6 +638,8 @@ protected:
 			      Dentry *old_dentry = NULL);
   void update_dentry_lease(Dentry *dn, LeaseStat *dlease, utime_t from, MetaSession *session);
 
+  bool use_faked_inos() { return _use_faked_inos; }
+  vinodeno_t map_faked_ino(ino_t ino);
 
   // ----------------------
   // fs ops.
@@ -937,6 +950,8 @@ public:
     Mutex::Locker lock(client_lock);
     return _get_vino(in);
   }
+  // get inode from faked ino
+  Inode *ll_get_inode(ino_t ino);
   Inode *ll_get_inode(vinodeno_t vino);
   int ll_lookup(Inode *parent, const char *name, struct stat *attr,
 		Inode **out, int uid = -1, int gid = -1);
