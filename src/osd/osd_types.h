@@ -899,6 +899,9 @@ inline ostream& operator<<(ostream& out, const pool_snap_info_t& si) {
 class pool_opts_t {
 public:
   enum key_t {
+    SCRUB_MIN_INTERVAL,
+    SCRUB_MAX_INTERVAL,
+    DEEP_SCRUB_INTERVAL,
   };
 
   enum type_t {
