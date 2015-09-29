@@ -4391,14 +4391,13 @@ int Client::check_permissions(Inode *in, int flags, int uid, int gid)
   gid_t *sgids = NULL;
   int sgid_count = 0;
   if (getgroups_cb) {
-    sgid_count = getgroups_cb(callback_handle, uid, &sgids);
-    if (sgid_count < 0) {
+    sgid_count = getgroups_cb(callback_handle, &sgids);
+    if (sgid_count > 0) {
       ldout(cct, 3) << "getgroups failed!" << dendl;
-      return sgid_count;
     }
   }
 #if HAVE_GETGROUPLIST
-  else {
+  if (sgid_count <= 0) {
     // use PAM to get the group list
     // initial number of group entries, defaults to posix standard of 16
     // PAM implementations may provide more than 16 groups....

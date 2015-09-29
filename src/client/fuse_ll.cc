@@ -715,12 +715,14 @@ static void fuse_ll_flock(fuse_req_t req, fuse_ino_t ino,
 }
 #endif
 
-#if 0
-static int getgroups_cb(void *handle, uid_t uid, gid_t **sgids)
+static int getgroups_cb(void *handle, gid_t **sgids)
 {
-#ifdef HAVE_FUSE_GETGROUPS
+#if FUSE_VERSION >= FUSE_MAKE_VERSION(2, 8)
+  CephFuse::Handle *cfuse = (CephFuse::Handle *)handle;
+  fuse_req_t req = cfuse->get_fuse_req();
+
   assert(sgids);
-  int c = fuse_getgroups(0, NULL);
+  int c = fuse_req_getgroups(req, 0, NULL);
   if (c < 0) {
     return c;
   }
@@ -732,16 +734,16 @@ static int getgroups_cb(void *handle, uid_t uid, gid_t **sgids)
   if (!*sgids) {
     return -ENOMEM;
   }
-  c = fuse_getgroups(c, *sgids);
+  c = fuse_req_getgroups(req, c, *sgids);
   if (c < 0) {
     free(*sgids);
     return c;
   }
   return c;
+#else
+  return -ENOSYS;
 #endif
-  return 0;
 }
-#endif
 
 static void ino_invalidate_cb(void *handle, vinodeno_t vino, int64_t off,
 			      int64_t len)
@@ -979,17 +981,7 @@ int CephFuse::Handle::start()
     dentry_cb: dentry_invalidate_cb,
     switch_intr_cb: switch_interrupt_cb,
     remount_cb: remount_cb,
-    /*
-     * this is broken:
-     *
-     * - the cb needs the request handle to be useful; we should get the
-     *   gids in the method here in fuse_ll.c and pass the gid list in,
-     *   not use a callback.
-     * - the callback mallocs the list but it is not free()'d
-     *
-     * so disable it for now...
-     getgroups_cb: getgroups_cb,
-     */
+    getgroups_cb: getgroups_cb,
   };
   client->ll_register_callbacks(&args);
 
