@@ -125,10 +125,14 @@ struct rgw_spawned_stacks {
   }
 };
 
+
 class RGWCoroutine : public RefCountedObject, public boost::asio::coroutine {
   friend class RGWCoroutinesStack;
 
 protected:
+  bool _yield_ret;
+  boost::asio::coroutine drain_cr;
+
   CephContext *cct;
 
   RGWCoroutinesStack *stack;
@@ -148,7 +152,7 @@ protected:
   int io_block(int ret);
 
 public:
-  RGWCoroutine(CephContext *_cct) : cct(_cct), stack(NULL), retcode(0), state(RGWCoroutine_Run) {}
+  RGWCoroutine(CephContext *_cct) : _yield_ret(false), cct(_cct), stack(NULL), retcode(0), state(RGWCoroutine_Run) {}
   virtual ~RGWCoroutine() {}
 
   virtual int operate() = 0;
@@ -174,6 +178,7 @@ public:
   bool collect(int *ret); /* returns true if needs to be called again */
 
   int wait(const utime_t& interval);
+  bool drain_children(); /* returns true if needed to be called again */
   void wakeup();
 
   size_t num_spawned() {
@@ -182,6 +187,17 @@ public:
 
   void wait_for_child();
 };
+
+#define yield_until_true(x)     \
+do {                            \
+  do {                          \
+    yield _yield_ret = x;       \
+  } while (!_yield_ret);        \
+  _yield_ret = false;           \
+} while (0)
+
+#define drain_all() \
+  yield_until_true(drain_children())
 
 template <class T>
 class RGWConsumerCR : public RGWCoroutine {

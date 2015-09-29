@@ -1330,15 +1330,7 @@ int RGWBucketShardIncrementalSyncCR::operate()
       }
       if (retcode < 0 && retcode != -ENOENT) {
         /* wait for all operations to complete */
-        yield wait_for_child();
-        while (collect(&ret)) {
-          if (ret < 0) {
-            ldout(store->ctx(), 0) << "ERROR: a sync operation returned error" << dendl;
-            /* we should have reported this error */
-#warning deal with error
-          }
-          yield wait_for_child();
-        }
+        drain_all();
         return set_state(RGWCoroutine_Error, retcode);
       }
       entries_iter = list_result.begin();
@@ -1364,22 +1356,14 @@ int RGWBucketShardIncrementalSyncCR::operate()
               /* we should have reported this error */
 #warning deal with error
             }
-            yield wait_for_child();
+            /* not waiting for child here */
           }
         }
       }
     } while (!list_result.empty());
 
     /* wait for all operations to complete */
-    yield wait_for_child();
-    while (collect(&ret)) {
-      if (ret < 0) {
-        ldout(store->ctx(), 0) << "ERROR: a sync operation returned error" << dendl;
-        /* we should have reported this error */
-#warning deal with error
-      }
-      yield wait_for_child();
-    }
+    drain_all();
     return set_state(RGWCoroutine_Done, 0);
   }
   return 0;
