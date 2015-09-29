@@ -46,11 +46,13 @@ run() {
 DNAME="`dirname $0`"
 DNAME="`readlink -f $DNAME`"
 RADOS_TOOL="`readlink -f \"$DNAME/../rados\"`"
+CEPH_TOOL="`readlink -f \"$DNAME/../ceph\"`"
 KEEP_TEMP_FILES=0
 POOL=trs_pool
 POOL_CP_TARGET=trs_pool.2
 
 [ -x "$RADOS_TOOL" ] || die "couldn't find $RADOS_TOOL binary to test"
+[ -x "$CEPH_TOOL" ] || die "couldn't find $CEPH_TOOL binary to test"
 
 while getopts  "c:hkp:" flag; do
     case $flag in
@@ -225,6 +227,14 @@ run_expect_succ "$RADOS_TOOL" --pool "$POOL" bench 5 write --format json --no-cl
 run_expect_succ "$RADOS_TOOL" --pool "$POOL" bench 1 rand --format json
 run_expect_succ "$RADOS_TOOL" --pool "$POOL" bench 1 seq --format json
 
+# test the option 'could_wait_secs'
+run_expect_succ "$CEPH_TOOL" osd pool set "$POOL" min_size 3
+run_expect_succ "$CEPH_TOOL" osd set noup
+run_expect_succ "$CEPH_TOOL" osd down 0
+sleep 2
+# without the 'could_wait_secs' option, the following would stuck forever
+run_expect_fail "$RADOS_TOOL" -p "$POOL" put foo /etc/fstab --could_wait_secs 10
+run_expect_succ "$CEPH_TOOL" osd unset noup
 
 echo "SUCCESS!"
 exit 0

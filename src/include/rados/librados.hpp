@@ -1038,6 +1038,13 @@ namespace librados
 
     config_t cct();
 
+    /**
+     * Set number of seconds the client could wait (upon unavailable)  for
+     * the following operations on this IoCtx.  A value of 0 (by default) means
+     * client want to wait infinitely.
+     */
+    void set_could_wait_secs(uint32_t t);
+
   private:
     /* You can only get IoCtx instances from Rados */
     IoCtx(IoCtxImpl *io_ctx_impl_);

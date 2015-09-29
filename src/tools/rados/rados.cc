@@ -182,6 +182,10 @@ void usage(ostream& out)
 "        Use radostriper interface rather than pure rados\n"
 "        Available for stat, get, put, truncate, rm, ls and \n"
 "        all xattr related operations\n"
+"   --could_wait_secs\n"
+"        Specify the number of seconds client would like to wait\n"
+"        if the request couldn't be handled right away (e.g. the underlying\n"
+"        PG is stuck at inactive)\n"
 "\n"
 "BENCH OPTIONS:\n"
 "   -t N\n"
@@ -1187,6 +1191,7 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
   bool use_striper = false;
   const char *snapname = NULL;
   snap_t snapid = CEPH_NOSNAP;
+  uint32_t could_wait_secs = 0;
   std::map<std::string, std::string>::const_iterator i;
 
   uint64_t min_obj_len = 0;
@@ -1266,6 +1271,12 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
   i = opts.find("snapid");
   if (i != opts.end()) {
     if (rados_sistrtoll(i, &snapid)) {
+      return -EINVAL;
+    }
+  }
+  i = opts.find("could_wait_secs");
+  if (i != opts.end()) {
+    if (rados_sistrtoll(i, &could_wait_secs)) {
       return -EINVAL;
     }
   }
@@ -1457,6 +1468,9 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
     io_ctx.snap_set_read(snapid);
     cout << "selected snap " << snapid << " '" << name << "'" << std::endl;
   }
+
+  if (could_wait_secs)
+    io_ctx.set_could_wait_secs(could_wait_secs);
 
   assert(!nargs.empty());
 
@@ -2036,6 +2050,8 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
     if (target_nspace.size()) {
       target_ctx.set_namespace(target_nspace);
     }
+    if (could_wait_secs)
+      target_ctx.set_could_wait_secs(could_wait_secs);
 
     ret = do_copy(io_ctx, nargs[1], target_ctx, target_obj);
     if (ret < 0) {
@@ -2083,6 +2099,8 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
     }
     if (nspace.size())
       target_ctx.set_namespace(nspace);
+    if (could_wait_secs)
+      target_ctx.set_could_wait_secs(could_wait_secs);
 
     ret = do_clone_data(io_ctx, nargs[1], target_ctx, target_obj);
     if (ret < 0) {
@@ -2898,6 +2916,8 @@ int main(int argc, const char **argv)
       opts["target_nspace"] = val;
     } else if (ceph_argparse_flag(args, i, "--striper" , (char *)NULL)) {
       opts["striper"] = "true";
+    } else if (ceph_argparse_witharg(args, i, &val, "--could_wait_secs" , (char *)NULL)) {
+      opts["could_wait_secs"] = val;
     } else if (ceph_argparse_witharg(args, i, &val, "-t", "--concurrent-ios", (char*)NULL)) {
       opts["concurrent-ios"] = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--block-size", (char*)NULL)) {

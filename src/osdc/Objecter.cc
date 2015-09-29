@@ -2119,6 +2119,14 @@ void Objecter::_send_op_account(Op *op)
   }
 }
 
+void Objecter::_op_resubmit(Op *op)
+{
+  RWLock::RLocker l(rwlock);
+  RWLock::Context lc(rwlock, RWLock::Context::TakenForRead);
+  assert(initialized.read());
+  _op_submit(op, lc);
+}
+
 ceph_tid_t Objecter::_op_submit(Op *op, RWLock::Context& lc)
 {
   assert(rwlock.is_locked());
@@ -2847,6 +2855,13 @@ MOSDOp *Objecter::_prepare_osd_op(Op *op)
 			 osdmap->get_epoch(),
 			 flags, op->features);
 
+  // if the wait interval is given, we hint to OSD that we don't
+  // want to wait if the OP couldn't be processed at the moment,
+  // and we can decide the retry at client side
+  if (op->could_wait_secs) {
+    m->set_op_want_wait(false);
+  }
+
   m->set_snapid(op->snapid);
   m->set_snap_seq(op->snapc.seq);
   m->set_snaps(op->snapc.snaps);
@@ -3053,6 +3068,24 @@ void Objecter::handle_osd_op_reply(MOSDOpReply *m)
     return;
   }
 
+  if (rc == -EHOSTDOWN) {
+    ldout(cct, 7) << " got -EHOSTDOWN " << dendl;
+
+    utime_t now = ceph_clock_now(cct);
+    uint32_t to_wait = op->attempts * 2; // expotential backoff for wait
+    if ((now - op->mtime).sec() + to_wait  < op->could_wait_secs) {
+      ldout(cct, 7) << " wait " << to_wait << " seconds and will resubmit" << dendl;
+
+      _session_op_remove(s, op);
+      Mutex::Locker l(timer_lock);
+      timer.add_event_after(to_wait, new ResubmitOpContext(op, this));
+
+      s->lock.unlock();
+      put_session(s);
+      m->put();
+      return;
+    }
+  }
   if (rc == -EAGAIN) {
     ldout(cct, 7) << " got -EAGAIN, resubmitting" << dendl;
 

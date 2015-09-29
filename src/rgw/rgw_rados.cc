@@ -1874,6 +1874,7 @@ int RGWRados::open_bucket_pool_ctx(const string& bucket_name, const string& pool
     return r;
 
   r = rad->ioctx_create(pool.c_str(), io_ctx);
+  io_ctx.set_could_wait_secs(cct->_conf->rgw_osd_op_could_wait_secs);
 
   return r;
 }
@@ -2795,6 +2796,7 @@ int RGWRados::create_bucket(RGWUserInfo& owner, rgw_bucket& bucket,
     librados::IoCtx id_io_ctx;
     librados::Rados *rad = get_rados_handle();
     int r = rad->ioctx_create(pool_str, id_io_ctx);
+    id_io_ctx.set_could_wait_secs(cct->_conf->rgw_osd_op_could_wait_secs);
     if (r < 0)
       return r;
 
@@ -3202,6 +3204,7 @@ int RGWRados::get_obj_ref(const rgw_obj& obj, rgw_rados_ref *ref, rgw_bucket *bu
     return r;
 
   ref->ioctx.locator_set_key(ref->key);
+  ref->ioctx.set_could_wait_secs(cct->_conf->rgw_osd_op_could_wait_secs);
 
   return 0;
 }
