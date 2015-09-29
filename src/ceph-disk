@@ -1798,9 +1798,12 @@ def zap(dev):
     """
     Destroy the partition table and content of a given disk.
     """
-    devCtx = get_block_device_ctx(dev)
     dmode = os.stat(dev).st_mode
-    if not stat.S_ISBLK(dmode) or devCtx.is_partition():
+    if stat.S_ISBLK(dmode):
+        devCtx = get_block_device_ctx(dev)
+        if devCtx.is_partition():
+            raise Error('not full block device; cannot zap', dev)
+    else:
         raise Error('not full block device; cannot zap', dev)
     try:
         LOG.debug('Zapping partition table on %s', dev)
@@ -2480,10 +2483,11 @@ def main_prepare(args):
             raise Error('invalid osd_dmcrypt_type parameter (must be luks or plain): ', dmcrypt_type)
 
         # colocate journal with data?
-        devCtx = get_block_device_ctx(args.data)
-        if wants_journal and stat.S_ISBLK(dmode) and not devCtx.is_partition() and args.journal is None and args.journal_file is None:
-            LOG.info('Will colocate journal with data on %s', args.data)
-            args.journal = args.data
+        if wants_journal and stat.S_ISBLK(dmode) and args.journal is None and args.journal_file is None:
+            devCtx = get_block_device_ctx(args.data)
+            if (devCtx.is_partition()):
+                LOG.info('Will colocate journal with data on %s', args.data)
+                args.journal = args.data
 
         if args.journal and args.journal_uuid is None:
             args.journal_uuid = str(uuid.uuid4())
