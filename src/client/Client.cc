@@ -4773,56 +4773,64 @@ void Client::handle_cap_grant(MetaSession *session, Inode *in, Cap *cap, MClient
   m->put();
 }
 
-int Client::check_permissions(Inode *in, int flags, int uid, int gid)
+int Client::_getgrouplist(gid_t** sgids, int uid, int gid)
 {
-  gid_t *sgids = NULL;
-  int sgid_count = 0;
+  int sgid_count;
+  gid_t *sgid_buf;
+
   if (getgroups_cb) {
-    sgid_count = getgroups_cb(callback_handle, uid, &sgids);
-    if (sgid_count < 0) {
-      ldout(cct, 3) << "getgroups failed!" << dendl;
+    sgid_count = getgroups_cb(callback_handle, uid, &sgid_buf);
+    if (sgid_count > 0) {
+      *sgids = sgid_buf;
       return sgid_count;
     }
   }
+
 #if HAVE_GETGROUPLIST
-  else {
-    //use PAM to get the group list
-    // initial number of group entries, defaults to posix standard of 16
-    // PAM implementations may provide more than 16 groups....
-    sgid_count = 16;
-    sgids = (gid_t*)malloc(sgid_count * sizeof(gid_t));
-    if (sgids == NULL) {
-      ldout(cct, 3) << "allocating group memory failed" << dendl;
-      return -EACCES;
-    }
-    struct passwd *pw;
-    pw = getpwuid(uid);
-    if (pw == NULL) {
-      ldout(cct, 3) << "getting user entry failed" << dendl;
-      free(sgids); 
-      return -EACCES;
-    }
-    while (1) {
-#if defined(__APPLE__)
-      if (getgrouplist(pw->pw_name, gid, (int *)sgids, &sgid_count) == -1) {
-#else
-      if (getgrouplist(pw->pw_name, gid, sgids, &sgid_count) == -1) {
-#endif
-        // we need to resize the group list and try again
-	void *_realloc = NULL;
-        if ((_realloc = realloc(sgids, sgid_count * sizeof(gid_t))) == NULL) {
-          ldout(cct, 3) << "allocating group memory failed" << dendl;
-	  free(sgids);
-          return -EACCES;
-        }
-	sgids = (gid_t*)_realloc;
-        continue;
-      }
-      // list was successfully retrieved
-      break;
-    }    
+  struct passwd *pw;
+  pw = getpwuid(uid);
+  if (pw == NULL) {
+    ldout(cct, 3) << "getting user entry failed" << dendl;
+    return -errno;
   }
+  //use PAM to get the group list
+  // initial number of group entries, defaults to posix standard of 16
+  // PAM implementations may provide more than 16 groups....
+  sgid_count = 16;
+  sgid_buf = (gid_t*)malloc(sgid_count * sizeof(gid_t));
+  if (sgid_buf == NULL) {
+    ldout(cct, 3) << "allocating group memory failed" << dendl;
+    return -ENOMEM;
+  }
+
+  while (1) {
+#if defined(__APPLE__)
+    if (getgrouplist(pw->pw_name, gid, (int*)sgid_buf, &sgid_count) == -1) {
+#else
+    if (getgrouplist(pw->pw_name, gid, sgid_buf, &sgid_count) == -1) {
 #endif
+      // we need to resize the group list and try again
+      void *_realloc = NULL;
+      if ((_realloc = realloc(sgid_buf, sgid_count * sizeof(gid_t))) == NULL) {
+	ldout(cct, 3) << "allocating group memory failed" << dendl;
+	free(sgid_buf);
+	return -ENOMEM;
+      }
+      sgid_buf = (gid_t*)_realloc;
+      continue;
+    }
+    // list was successfully retrieved
+    break;
+  }
+  *sgids = sgid_buf;
+  return sgid_count;
+#else
+  return 0;
+#endif
+}
+
+int Client::check_permissions(Inode *in, int flags, int uid, int gid)
+{
   unsigned want = 0;
   if ((flags & O_ACCMODE) == O_WRONLY)
     want = MAY_WRITE;
@@ -4831,18 +4839,18 @@ int Client::check_permissions(Inode *in, int flags, int uid, int gid)
   else if ((flags & O_ACCMODE) == O_RDONLY)
     want = MAY_READ;
 
-  int ret = _posix_acl_permission(in, uid, gid, sgids, sgid_count, want);
+  RequestUserGroups groups(this, uid, gid);
+
+  int ret = _posix_acl_permission(in, uid, groups, want);
   if (ret != -EAGAIN)
     return ret;
 
   // check permissions before doing anything else
-  if (uid == 0 || in->check_mode(uid, gid, sgids, sgid_count, want))
+  if (uid == 0 || in->check_mode(uid, groups, want))
     ret = 0;
   else
     ret = -EACCES;
 
-  if (sgids)
-    free(sgids);
   return ret;
 }
 
@@ -11577,12 +11585,11 @@ int Client::check_pool_perm(Inode *in, int need)
   return 0;
 }
 
-int Client::_posix_acl_permission(Inode *in, int uid, int gid,
-				  gid_t *sgids, int sgid_count, unsigned want)
+int Client::_posix_acl_permission(Inode *in, uid_t uid, UserGroups& groups, unsigned want)
 {
   if (acl_type == POSIX_ACL) {
     int r = _getattr(in, CEPH_STAT_CAP_XATTR | CEPH_STAT_CAP_MODE,
-		     uid, gid, in->xattr_version == 0);
+		     uid, groups.get_gid(), in->xattr_version == 0);
     if (r < 0)
       return r;
 
@@ -11590,7 +11597,7 @@ int Client::_posix_acl_permission(Inode *in, int uid, int gid,
       const bufferptr& access_acl = in->xattrs[ACL_EA_ACCESS];
       if (in->mode & S_IRWXG)
 	return posix_acl_permits(access_acl, in->uid, in->gid,
-				 uid, gid, sgids, sgid_count, want);
+				 uid, groups, want);
     }
   }
   return -EAGAIN;
@@ -11719,6 +11726,32 @@ void Client::handle_conf_change(const struct md_config_t *conf,
     acl_type = NO_ACL;
     if (cct->_conf->client_acl_type == "posix_acl")
       acl_type = POSIX_ACL;
+  }
+}
+
+bool Client::RequestUserGroups::is_in(gid_t id)
+{
+  if (id == gid)
+    return true;
+  if (sgid_count < 0)
+    init();
+  for (int i = 0; i < sgid_count; ++i) {
+    if (id == sgids[i])
+      return true;
+  }
+  return false;
+}
+
+int Client::RequestUserGroups::get_gids(const gid_t **out)
+{
+  if (sgid_count < 0)
+    init();
+  if (sgid_count > 0) {
+    *out = sgids;
+    return sgid_count;
+  } else {
+    *out = &gid;
+    return 1;
   }
 }
 
