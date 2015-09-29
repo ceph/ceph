@@ -783,6 +783,7 @@ private:
   };
 
   int inode_permission(Inode *in, uid_t uid, UserGroups& groups, unsigned want);
+  int may_setattr(Inode *in, struct stat *st, int mask, int uid=-1, int gid=-1);
   int may_open(Inode *in, int flags, int uid=-1, int gid=-1);
   int may_create(Inode *dir, int uid=-1, int gid=-1);
   int may_delete(Inode *dir, const char *name, int uid=-1, int gid=-1);
