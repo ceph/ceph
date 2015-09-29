@@ -81,6 +81,7 @@ Requires:	hdparm
 Requires:	cryptsetup
 Requires:	findutils
 Requires:	which
+Requires:	python-pyudev
 Requires(post):	binutils
 # We require this to be present for %%{_tmpfilesdir}
 %if 0%{?_with_systemd}
@@ -116,6 +117,7 @@ BuildRequires:	pkgconfig
 BuildRequires:	python
 BuildRequires:	python-nose
 BuildRequires:	python-requests
+BuildRequires:	python-pyudev
 %if 0%{?rhel} > 0 && 0%{?rhel} < 7
 BuildRequires:	python-sphinx10
 %endif
