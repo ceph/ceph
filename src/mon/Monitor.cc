@@ -3401,15 +3401,11 @@ void Monitor::_ms_dispatch(Message *m)
   }
 
   MonOpRequestRef op = op_tracker.create_request<MonOpRequest>(m);
-  MonCap caps;
   bool src_is_mon = op->is_src_mon();
-  bool reuse_caps = false;
   op->mark_event("mon:_ms_dispatch");
   MonSession *s = op->get_session();
   if (s && s->closed) {
-    caps = s->caps;
-    reuse_caps = true;
-    s = NULL;
+    return;
   }
   if (!s) {
     // if the sender is not a monitor, make sure their first message for a
@@ -3444,14 +3440,11 @@ void Monitor::_ms_dispatch(Message *m)
       s->until = ceph_clock_now(g_ceph_context);
       s->until += g_conf->mon_subscribe_interval;
     } else {
-      reuse_caps = false;
       // give it monitor caps; the peer type has been authenticated
       dout(5) << __func__ << " setting monitor caps on this connection" << dendl;
       if (!s->caps.is_allow_all()) // but no need to repeatedly copy
         s->caps = *mon_caps;
     }
-    if (reuse_caps)
-      s->caps = caps;
     s->put();
   } else {
     dout(20) << __func__ << " existing session " << s << " for " << s->inst
