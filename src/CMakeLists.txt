@@ -319,13 +319,13 @@ set(common_mountcephfs_files
 add_library(common_mountcephfs_objs OBJECT
   ${common_mountcephfs_files})
 
-if(${WITH_GPERFTOOLS})
+if(${HAVE_GPERFTOOLS})
   list(APPEND libcommon_files
     perfglue/cpu_profiler.cc)
 else()
   list(APPEND libcommon_files
     perfglue/disabled_stubs.cc)
-endif(${WITH_GPERFTOOLS})
+endif(${HAVE_GPERFTOOLS})
 
 if(${ENABLE_SHARED})
   list(APPEND libcommon_files
@@ -341,9 +341,9 @@ set_source_files_properties(${CMAKE_SOURCE_DIR}/src/ceph_ver.c
   ${CMAKE_SOURCE_DIR}/src/test/encoding/ceph_dencoder.cc
   APPEND PROPERTY OBJECT_DEPENDS ${CMAKE_BINARY_DIR}/src/include/ceph_ver.h)
 
-if(${WITH_GPERFTOOLS})
+if(${HAVE_GPERFTOOLS})
   target_link_libraries(common profiler)
-endif(${WITH_GPERFTOOLS})
+endif(${HAVE_GPERFTOOLS})
 
 add_library(common_utf8 STATIC common/utf8.c)
 
