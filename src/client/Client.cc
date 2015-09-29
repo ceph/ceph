@@ -4767,7 +4767,7 @@ int Client::_getgrouplist(gid_t** sgids, int uid, int gid)
   gid_t *sgid_buf;
 
   if (getgroups_cb) {
-    sgid_count = getgroups_cb(callback_handle, uid, &sgid_buf);
+    sgid_count = getgroups_cb(callback_handle, &sgid_buf);
     if (sgid_count >= 0) {
       *sgids = sgid_buf;
       return sgid_count;
