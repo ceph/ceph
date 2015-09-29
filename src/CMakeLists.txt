@@ -13,24 +13,25 @@ add_definitions("-DCEPH_PKGLIBDIR=\"${libdir}\"")
 add_definitions("-DHAVE_CONFIG_H -D__CEPH__ -D_FILE_OFFSET_BITS=64 -D_REENTRANT -D_THREAD_SAFE -D__STDC_FORMAT_MACROS -D_GNU_SOURCE")
 
 set(CMAKE_ASM_COMPILER  ${PROJECT_SOURCE_DIR}/src/yasm-wrapper)
-message(status " ams compiler ${CMAKE_ASM_COMPILER}")
 set(CMAKE_ASM_FLAGS "-f elf64")
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -rdynamic -Wall -Wtype-limits -Wignored-qualifiers -Winit-self -Wpointer-arith -Werror=format-security -fno-strict-aliasing -fsigned-char -fPIC")
 
 execute_process(
-  COMMAND "yasm -f elf64 ${CMAKE_SOURCE_DIR}/src/common/crc32c_intel_fast_asm.S -o /dev/null"
-  RETURN_VALUE no_yasm
+  COMMAND yasm -f elf64 ${CMAKE_SOURCE_DIR}/src/common/crc32c_intel_fast_asm.S -o /dev/null
+  RESULT_VARIABLE no_yasm
   OUTPUT_QUIET)
 if(no_yasm)
-  message("we do not have a modern/working yasm")
+  message(STATUS " we do not have a modern/working yasm")
 else(no_yasm)
-  message("we have a modern and working yasm")
+  message(STATUS " we have a modern and working yasm")
   execute_process(
     COMMAND "arch"
     OUTPUT_VARIABLE arch
     OUTPUT_STRIP_TRAILING_WHITESPACE)
   if(arch STREQUAL "x86_64")
-    message("we are x84_64")
+    message(STATUS " we are x84_64")
+    set(save_quiet ${CMAKE_REQUIRED_QUIET})
+    set(CMAKE_REQUIRED_QUIET true)
     include(CheckCXXSourceCompiles)
     check_cxx_source_compiles("
       #if defined(__x86_64__) && defined(__ILP32__)
@@ -38,24 +39,30 @@ else(no_yasm)
       #endif
       int main() {}
       " not_arch_x32)
+    set(CMAKE_REQUIRED_QUIET ${save_quiet})
     if(not_arch_x32)
-      message("we are not x32")
+      message(STATUS " we are not x32")
+      set(HAVE_GOOD_YASM_ELF64 1)
       add_definitions("-DHAVE_GOOD_YASM_ELF64")
+      execute_process(COMMAND yasm -f elf64 -i
+        ${CMAKE_SOURCE_DIR}/src/erasure-code/isa/isa-l/include/
+        ${CMAKE_SOURCE_DIR}/src/erasure-code/isa/isa-l/erasure_code/gf_vect_dot_prod_avx2.asm.s
+        -o /dev/null
+        RESULT_VARIABLE rc
+        OUTPUT_QUIET)
+      if(NOT rc)
+        set(HAVE_BETTER_YASM_ELF64 1)
+        add_definitions("-DHAVE_BETTER_YASM_ELF64")
+        message(STATUS " yasm can also build the isa-l stuff")
+      endif(NOT rc)
     else(not_arch_x32)
-      message("we are x32; no yasm for you")
+      message(STATUS " we are x32; no yasm for you")
     endif(not_arch_x32)
   else(arch STREQUAL "x86_64")
-    message("we are not x86_64 && !x32")
+    message(STATUS " we are not x86_64 && !x32")
   endif(arch STREQUAL "x86_64")
 endif(no_yasm)
 
-execute_process(COMMAND yasm -f elf64 -i ${CMAKE_SOURCE_DIR}/src/erasure-code/isa/isa-l/include/ ${CMAKE_SOURCE_DIR}/src/erasure-code/isa/isa-l/erasure_code/gf_vect_dot_prod_avx2.asm.s -o /dev/null
-  RESULT_VARIABLE rc
-  OUTPUT_QUIET)
-if(NOT rc)
-  set(HAVE_BETTER_YASM_ELF64 1)
-endif(NOT rc)
-MESSAGE("HAVE_BETTER_YASM_ELF64=" ${HAVE_BETTER_YASM_ELF64})
 
 set(CMAKE_CXX_FLAGS "${CMAKE_C_FLAGS} -ftemplate-depth-1024 -Wno-invalid-offsetof -Wnon-virtual-dtor -Wno-invalid-offsetof -Wstrict-null-sentinel -Woverloaded-virtual")
 
@@ -184,6 +191,12 @@ if(HAVE_XIO)
     msg/xio/QueueStrategy.cc)
 endif(HAVE_XIO)
 
+if(HAVE_GOOD_YASM_ELF64)
+  set(yasm_srcs
+    common/crc32c_intel_fast_asm.S
+    common/crc32c_intel_fast_zero_asm.S)
+endif(HAVE_GOOD_YASM_ELF64)
+
 set(libcommon_files
   ${CMAKE_BINARY_DIR}/src/include/ceph_ver.h
   ceph_ver.c
@@ -212,8 +225,7 @@ set(libcommon_files
   common/crc32c.cc
   common/crc32c_intel_baseline.c
   common/crc32c_intel_fast.c
-  common/crc32c_intel_fast_asm.S
-  common/crc32c_intel_fast_zero_asm.S
+  ${yasm_srcs}
   common/assert.cc
   common/run_cmd.cc
   common/WorkQueue.cc
