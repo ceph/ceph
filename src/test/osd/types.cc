@@ -1393,6 +1393,60 @@ TEST(pool_opts_t, invalid_opt) {
   EXPECT_THROW(pool_opts_t::get_opt_desc("INVALID_OPT"), FailedAssertion);
 }
 
+TEST(pool_opts_t, scrub_min_interval) {
+  EXPECT_TRUE(pool_opts_t::is_opt_name("scrub_min_interval"));
+  EXPECT_EQ(pool_opts_t::get_opt_desc("scrub_min_interval"),
+            pool_opts_t::opt_desc_t(pool_opts_t::SCRUB_MIN_INTERVAL,
+                                    pool_opts_t::DOUBLE));
+
+  pool_opts_t opts;
+  EXPECT_FALSE(opts.is_set(pool_opts_t::SCRUB_MIN_INTERVAL));
+  EXPECT_THROW(opts.get(pool_opts_t::SCRUB_MIN_INTERVAL), FailedAssertion);
+  double val;
+  EXPECT_FALSE(opts.get(pool_opts_t::SCRUB_MIN_INTERVAL, &val));
+  opts.set(pool_opts_t::SCRUB_MIN_INTERVAL, static_cast<double>(2015));
+  EXPECT_TRUE(opts.get(pool_opts_t::SCRUB_MIN_INTERVAL, &val));
+  EXPECT_EQ(val, 2015);
+  opts.unset(pool_opts_t::SCRUB_MIN_INTERVAL);
+  EXPECT_FALSE(opts.is_set(pool_opts_t::SCRUB_MIN_INTERVAL));
+}
+
+TEST(pool_opts_t, scrub_max_interval) {
+  EXPECT_TRUE(pool_opts_t::is_opt_name("scrub_max_interval"));
+  EXPECT_EQ(pool_opts_t::get_opt_desc("scrub_max_interval"),
+            pool_opts_t::opt_desc_t(pool_opts_t::SCRUB_MAX_INTERVAL,
+                                    pool_opts_t::DOUBLE));
+
+  pool_opts_t opts;
+  EXPECT_FALSE(opts.is_set(pool_opts_t::SCRUB_MAX_INTERVAL));
+  EXPECT_THROW(opts.get(pool_opts_t::SCRUB_MAX_INTERVAL), FailedAssertion);
+  double val;
+  EXPECT_FALSE(opts.get(pool_opts_t::SCRUB_MAX_INTERVAL, &val));
+  opts.set(pool_opts_t::SCRUB_MAX_INTERVAL, static_cast<double>(2015));
+  EXPECT_TRUE(opts.get(pool_opts_t::SCRUB_MAX_INTERVAL, &val));
+  EXPECT_EQ(val, 2015);
+  opts.unset(pool_opts_t::SCRUB_MAX_INTERVAL);
+  EXPECT_FALSE(opts.is_set(pool_opts_t::SCRUB_MAX_INTERVAL));
+}
+
+TEST(pool_opts_t, deep_scrub_interval) {
+  EXPECT_TRUE(pool_opts_t::is_opt_name("deep_scrub_interval"));
+  EXPECT_EQ(pool_opts_t::get_opt_desc("deep_scrub_interval"),
+            pool_opts_t::opt_desc_t(pool_opts_t::DEEP_SCRUB_INTERVAL,
+                                    pool_opts_t::DOUBLE));
+
+  pool_opts_t opts;
+  EXPECT_FALSE(opts.is_set(pool_opts_t::DEEP_SCRUB_INTERVAL));
+  EXPECT_THROW(opts.get(pool_opts_t::DEEP_SCRUB_INTERVAL), FailedAssertion);
+  double val;
+  EXPECT_FALSE(opts.get(pool_opts_t::DEEP_SCRUB_INTERVAL, &val));
+  opts.set(pool_opts_t::DEEP_SCRUB_INTERVAL, static_cast<double>(2015));
+  EXPECT_TRUE(opts.get(pool_opts_t::DEEP_SCRUB_INTERVAL, &val));
+  EXPECT_EQ(val, 2015);
+  opts.unset(pool_opts_t::DEEP_SCRUB_INTERVAL);
+  EXPECT_FALSE(opts.is_set(pool_opts_t::DEEP_SCRUB_INTERVAL));
+}
+
 /*
  * Local Variables:
  * compile-command: "cd ../.. ;

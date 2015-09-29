@@ -894,7 +894,13 @@ void pool_snap_info_t::generate_test_instances(list<pool_snap_info_t*>& o)
 // -- pool_opts_t --
 
 typedef std::map<std::string, pool_opts_t::opt_desc_t> opt_mapping_t;
-static opt_mapping_t opt_mapping;
+static opt_mapping_t opt_mapping = boost::assign::map_list_of
+	   ("scrub_min_interval", pool_opts_t::opt_desc_t(
+	     pool_opts_t::SCRUB_MIN_INTERVAL, pool_opts_t::DOUBLE))
+	   ("scrub_max_interval", pool_opts_t::opt_desc_t(
+	     pool_opts_t::SCRUB_MAX_INTERVAL, pool_opts_t::DOUBLE))
+	   ("deep_scrub_interval", pool_opts_t::opt_desc_t(
+	     pool_opts_t::DEEP_SCRUB_INTERVAL, pool_opts_t::DOUBLE));
 
 bool pool_opts_t::is_opt_name(const std::string& name) {
     return opt_mapping.find(name) != opt_mapping.end();
