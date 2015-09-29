@@ -915,6 +915,16 @@ public:
   Monitor(CephContext *cct_, string nm, MonitorDBStore *s,
 	  Messenger *m, MonMap *map);
   ~Monitor();
+  //since every monitor node have only one 
+  //instance, so we can use this way to supply
+  //monitor access.
+  static void set_instance(Monitor *mon) {
+    _mon = mon;
+  }
+  static Monitor * get_instance(){
+    assert(_mon == NULL);
+    return _mon;
+  }
 
   static int check_features(MonitorDBStore *store);
 
@@ -958,7 +968,7 @@ private:
   // don't allow copying
   Monitor(const Monitor& rhs);
   Monitor& operator=(const Monitor &rhs);
-
+  static Monitor * _mon;
 public:
   static void format_command_descriptions(const MonCommand *commands,
 					  unsigned commands_size,

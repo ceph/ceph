@@ -21,7 +21,7 @@
 #include "include/memory.h"
 #include "mon/Session.h"
 #include "msg/Message.h"
-
+ 
 struct MonOpRequest : public TrackedOp {
   friend class OpTracker;
 
@@ -130,12 +130,7 @@ protected:
   }
 
 public:
-  ~MonOpRequest() {
-    request->put();
-    // certain ops may not have a session (e.g., AUTH or PING)
-    if (session)
-      session->put();
-  }
+  ~MonOpRequest();
 
   MonSession *get_session() const {
     if (!session)

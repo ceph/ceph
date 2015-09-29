@@ -18,7 +18,8 @@ libmon_la_SOURCES = \
 	mon/Elector.cc \
 	mon/HealthMonitor.cc \
 	mon/DataHealthService.cc \
-	mon/ConfigKeyService.cc
+	mon/ConfigKeyService.cc  \
+	mon/MonOpRequest.cc
 libmon_la_LIBADD = $(LIBAUTH) $(LIBCOMMON) $(LIBOS) $(LIBMON_TYPES)
 noinst_LTLIBRARIES += libmon.la
 
