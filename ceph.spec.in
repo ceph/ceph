@@ -115,7 +115,7 @@ Requires:	python-flask
 BuildRequires:	lttng-ust-devel
 BuildRequires:	libbabeltrace-devel
 %endif
-%if 0%{?suse_version} >= 1310
+%if 0%{?suse_version} == 1315
 BuildRequires:	lttng-ust-devel
 BuildRequires:  babeltrace-devel
 %endif
