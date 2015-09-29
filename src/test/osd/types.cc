@@ -1388,6 +1388,11 @@ TEST(ghobject_t, cmp) {
   ASSERT_TRUE(cmp_bitwise(o, sep) > 0);
 }
 
+TEST(pool_opts_t, invalid_opt) {
+  EXPECT_FALSE(pool_opts_t::is_opt_name("INVALID_OPT"));
+  EXPECT_THROW(pool_opts_t::get_opt_desc("INVALID_OPT"), FailedAssertion);
+}
+
 /*
  * Local Variables:
  * compile-command: "cd ../.. ;
