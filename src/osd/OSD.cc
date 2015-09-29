@@ -6059,19 +6059,26 @@ bool OSD::scrub_random_backoff()
   return false;
 }
 
-OSDService::ScrubJob::ScrubJob(const spg_t& pg, const utime_t& timestamp, bool must)
+OSDService::ScrubJob::ScrubJob(const spg_t& pg, const utime_t& timestamp,
+			       double pool_scrub_min_interval,
+			       double pool_scrub_max_interval, bool must)
   : pgid(pg),
     sched_time(timestamp),
     deadline(timestamp)
 {
   // if not explicitly requested, postpone the scrub with a random delay
   if (!must) {
-    sched_time += g_conf->osd_scrub_min_interval;
+    double scrub_min_interval = pool_scrub_min_interval > 0 ?
+      pool_scrub_min_interval : g_conf->osd_scrub_min_interval;
+    double scrub_max_interval = pool_scrub_max_interval > 0 ?
+      pool_scrub_max_interval : g_conf->osd_scrub_max_interval;
+
+    sched_time += scrub_min_interval;
     if (g_conf->osd_scrub_interval_randomize_ratio > 0) {
-      sched_time += rand() % (int)(g_conf->osd_scrub_min_interval *
+      sched_time += rand() % (int)(scrub_min_interval *
 				   g_conf->osd_scrub_interval_randomize_ratio);
     }
-    deadline += g_conf->osd_scrub_max_interval;
+    deadline += scrub_max_interval;
   }
 }
 
