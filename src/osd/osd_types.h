@@ -23,6 +23,7 @@
 #include <memory>
 #include <boost/scoped_ptr.hpp>
 #include <boost/optional/optional_io.hpp>
+#include <boost/variant.hpp>
 
 #include "include/rados/rados_types.hpp"
 
@@ -890,6 +891,77 @@ inline ostream& operator<<(ostream& out, const pool_snap_info_t& si) {
 
 
 /*
+ * pool_opts_t
+ *
+ * pool options.
+ */
+
+class pool_opts_t {
+public:
+  enum key_t {
+  };
+
+  enum type_t {
+    STR,
+    INT,
+    DOUBLE,
+  };
+
+  struct opt_desc_t {
+    key_t key;
+    type_t type;
+
+    opt_desc_t(key_t k, type_t t) : key(k), type(t) {}
+
+    bool operator==(const opt_desc_t& rhs) const {
+      return key == rhs.key && type == rhs.type;
+    }
+  };
+
+  typedef boost::variant<std::string,int,double> value_t;
+
+  static bool is_opt_name(const std::string& name);
+  static opt_desc_t get_opt_desc(const std::string& name);
+
+  pool_opts_t() : opts() {}
+
+  bool is_set(key_t key) const;
+
+  template<typename T>
+  void set(key_t key, const T &val) {
+    value_t value = val;
+    opts[key] = value;
+  }
+
+  template<typename T>
+  bool get(key_t key, T *val) const {
+    opts_t::const_iterator i = opts.find(key);
+    if (i == opts.end()) {
+      return false;
+    }
+    *val = boost::get<T>(i->second);
+    return true;
+  }
+
+  const value_t& get(key_t key) const;
+
+  bool unset(key_t key);
+
+  void dump(const std::string& name, Formatter *f) const;
+
+  void dump(Formatter *f) const;
+  void encode(bufferlist &bl) const;
+  void decode(bufferlist::iterator &bl);
+
+private:
+  typedef std::map<key_t, value_t> opts_t;
+  opts_t opts;
+
+  friend ostream& operator<<(ostream& out, const pool_opts_t& opts);
+};
+WRITE_CLASS_ENCODER(pool_opts_t)
+
+/*
  * pg_pool
  */
 struct pg_pool_t {
@@ -1136,6 +1208,8 @@ public:
                                  ///< user does not specify any expected value
   bool fast_read;            ///< whether turn on fast read on the pool or not
 
+  pool_opts_t opts; ///< options
+
 private:
   vector<uint32_t> grade_table;
 
@@ -1183,7 +1257,8 @@ public:
       hit_set_search_last_n(0),
       stripe_width(0),
       expected_num_objects(0),
-      fast_read(false)
+      fast_read(false),
+      opts()
   { }
 
   void dump(Formatter *f) const;
