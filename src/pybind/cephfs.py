@@ -156,13 +156,13 @@ class DirEntry(namedtuple('DirEntry',
     DT_REG = 0xA
     DT_LNK = 0xC
     def is_dir(self):
-        return self.d_type == DT_DIR
+        return self.d_type == self.DT_DIR
 
     def is_symbol_file(self):
-        return self.d_type == DT_LNK
+        return self.d_type == self.DT_LNK
 
     def is_file(self):
-        return self.d_type == DT_REG
+        return self.d_type == self.DT_REG
 
 StatResult = namedtuple('StatResult',
                         ["st_dev", "st_ino", "st_mode", "st_nlink", "st_uid",
