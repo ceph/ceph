@@ -3401,20 +3401,11 @@ void Monitor::_ms_dispatch(Message *m)
   }
 
   MonOpRequestRef op = op_tracker.create_request<MonOpRequest>(m);
-  op->mark_event("mon:ms_dispatch");
-  ConnectionRef connection = op->get_connection();
-  MonSession *s = NULL;
   MonCap caps;
   bool src_is_mon = op->is_src_mon();
-
-  // regardless of who we are or who the sender is, the message must
-  // have a connection associated.  If it doesn't then something fishy
-  // is going on.
-  assert(connection);
-
   bool reuse_caps = false;
-  dout(20) << "have connection" << dendl;
-  s = op->get_session();
+  op->mark_event("mon:_ms_dispatch");
+  MonSession *s = op->get_session();
   if (s && s->closed) {
     caps = s->caps;
     reuse_caps = true;
@@ -3437,34 +3428,34 @@ void Monitor::_ms_dispatch(Message *m)
       return;
     }
 
-    dout(10) << "do not have session, making new one" << dendl;
     s = session_map.new_session(m->get_source_inst(), m->get_connection().get());
     assert(s);
     m->get_connection()->set_priv(s->get());
-    dout(10) << "ms_dispatch new session " << s << " " << *s << dendl;
+    dout(10) << __func__ << " new session " << s << " " << *s << dendl;
     op->set_session(s);
 
     logger->set(l_mon_num_sessions, session_map.get_size());
     logger->inc(l_mon_session_add);
 
     if (!src_is_mon) {
-      dout(10) << "setting timeout on session" << dendl;
-      // set an initial timeout here, so we will trim this session even if they don't
-      // do anything.
+      dout(30) << __func__ << "  setting timeout on session" << dendl;
+      // set an initial timeout here, so we will trim this session
+      // even if they don't do anything.
       s->until = ceph_clock_now(g_ceph_context);
       s->until += g_conf->mon_subscribe_interval;
     } else {
-      //give it monitor caps; the peer type has been authenticated
       reuse_caps = false;
-      dout(5) << "setting monitor caps on this connection" << dendl;
-      if (!s->caps.is_allow_all()) //but no need to repeatedly copy
+      // give it monitor caps; the peer type has been authenticated
+      dout(5) << __func__ << " setting monitor caps on this connection" << dendl;
+      if (!s->caps.is_allow_all()) // but no need to repeatedly copy
         s->caps = *mon_caps;
     }
     if (reuse_caps)
       s->caps = caps;
     s->put();
   } else {
-    dout(20) << "ms_dispatch existing session " << s << " for " << s->inst << dendl;
+    dout(20) << __func__ << " existing session " << s << " for " << s->inst
+	     << dendl;
   }
 
   assert(s);
