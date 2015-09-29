@@ -4835,6 +4835,58 @@ int Client::inode_permissions(Inode *in, uid_t uid, UserGroups& groups, unsigned
   return 0;
 }
 
+int Client::inode_change_ok(Inode *in, struct stat *st, int mask,
+			    int uid, int gid)
+{
+  if (uid < 0)
+    uid = get_uid();
+  if (gid < 0)
+    gid = get_gid();
+
+  int r = _getattr(in, CEPH_STAT_CAP_MODE, uid, gid);
+  if (r < 0)
+    goto out;
+
+  {
+    Client_UserGroups groups(this, uid, gid);
+
+    if (mask & CEPH_SETATTR_SIZE) {
+      r = inode_permissions(in, uid, groups, MAY_WRITE);
+      if (r < 0)
+	goto out;
+    }
+
+    r = -EPERM;
+    if (mask & CEPH_SETATTR_UID) {
+      if (uid != 0 && ((uid_t)uid != in->uid || st->st_uid != in->uid))
+	goto out;
+    }
+    if (mask & CEPH_SETATTR_GID) {
+      if (uid != 0 && ((uid_t)uid != in->uid ||
+		       (!groups.is_in(st->st_gid) && st->st_gid != in->gid)))
+	goto out;
+    }
+
+    if (mask & CEPH_SETATTR_MODE) {
+      if (uid != 0 && (uid_t)uid != in->uid)
+	goto out;
+
+      gid_t i_gid = (mask & CEPH_SETATTR_GID) ? st->st_gid : in->gid;
+      if (uid != 0 && !groups.is_in(i_gid))
+	st->st_mode &= ~S_ISGID;
+    }
+
+    if (mask & (CEPH_SETATTR_CTIME | CEPH_SETATTR_MTIME | CEPH_SETATTR_ATIME)) {
+      if (uid != 0 && (uid_t)uid != in->uid)
+	goto out;
+    }
+  }
+  r = 0;
+out:
+  ldout(cct, 3) << __func__ << " " << in << " = " << r <<  dendl;
+  return r;
+}
+
 int Client::may_open(Inode *in, int flags, int uid, int gid)
 {
   unsigned want = 0;
@@ -9101,6 +9153,12 @@ int Client::ll_setattr(Inode *in, struct stat *attr, int mask, int uid,
   tout(cct) << attr->st_mtime << std::endl;
   tout(cct) << attr->st_atime << std::endl;
   tout(cct) << mask << std::endl;
+
+  if (!cct->_conf->fuse_default_permissions) {
+    int res = inode_change_ok(in, attr, mask, uid, gid);
+    if (res < 0)
+      return res;
+  }
 
   InodeRef target(in);
   int res = _setattr(in, attr, mask, uid, gid, &target);
