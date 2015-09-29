@@ -265,7 +265,7 @@ static void fuse_ll_opendir(fuse_req_t req, fuse_ino_t ino,
   Inode *in = cfuse->iget(ino);
   void *dirp;
 
-  int r = cfuse->client->ll_opendir(in, (dir_result_t **)&dirp,
+  int r = cfuse->client->ll_opendir(in, fi->flags, (dir_result_t **)&dirp,
 				    ctx->uid, ctx->gid);
   if (r >= 0) {
     fi->fh = (long)dirp;

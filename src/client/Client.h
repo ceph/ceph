@@ -754,7 +754,8 @@ private:
     MAY_READ = 4,
   };
 
-  int check_permissions(Inode *in, int flags, int uid, int gid);
+  int inode_permissions(Inode *in, uid_t uid, UserGroups& groups, unsigned want);
+  int may_open(Inode *in, int flags, int uid=-1, int gid=-1);
   int _getgrouplist(gid_t **sgids, int uid=-1, int gid=-1);
 
   int check_data_pool_exist(string name, string value, const OSDMap *osdmap);
@@ -997,7 +998,7 @@ public:
 		  int flags, int uid=-1, int gid=-1);
   int ll_removexattr(Inode *in, const char *name, int uid=-1, int gid=-1);
   int ll_listxattr(Inode *in, char *list, size_t size, int uid=-1, int gid=-1);
-  int ll_opendir(Inode *in, dir_result_t **dirpp, int uid = -1, int gid = -1);
+  int ll_opendir(Inode *in, int flags, dir_result_t **dirpp, int uid = -1, int gid = -1);
   int ll_releasedir(dir_result_t* dirp);
   int ll_fsyncdir(dir_result_t* dirp);
   int ll_readlink(Inode *in, char *buf, size_t bufsize, int uid = -1, int gid = -1);
