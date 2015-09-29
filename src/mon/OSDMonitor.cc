@@ -5087,6 +5087,41 @@ int OSDMonitor::prepare_command_pool_set(map<string,cmd_vartype> &cmdmap,
     } else if (val == "false" || (interr.empty() && n == 0)) {
       p.fast_read = false;
     }
+  } else if (pool_opts_t::is_opt_name(var)) {
+    pool_opts_t::opt_desc_t desc = pool_opts_t::get_opt_desc(var);
+    switch (desc.type) {
+    case pool_opts_t::STR:
+      if (val.empty()) {
+	p.opts.unset(desc.key);
+      } else {
+	p.opts.set(desc.key, static_cast<std::string>(val));
+      }
+      break;
+    case pool_opts_t::INT:
+      if (interr.length()) {
+	ss << "error parsing integer value '" << val << "': " << interr;
+	return -EINVAL;
+      }
+      if (n == 0) {
+	p.opts.unset(desc.key);
+      } else {
+	p.opts.set(desc.key, static_cast<int>(n));
+      }
+      break;
+    case pool_opts_t::DOUBLE:
+      if (floaterr.length()) {
+	ss << "error parsing floating point value '" << val << "': " << floaterr;
+	return -EINVAL;
+      }
+      if (f == 0) {
+	p.opts.unset(desc.key);
+      } else {
+	p.opts.set(desc.key, static_cast<double>(f));
+      }
+      break;
+    default:
+      assert(!"unknown type");
+    }
   } else {
     ss << "unrecognized variable '" << var << "'";
     return -EINVAL;
