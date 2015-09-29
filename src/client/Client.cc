@@ -4829,29 +4829,64 @@ int Client::_getgrouplist(gid_t** sgids, int uid, int gid)
 #endif
 }
 
-int Client::check_permissions(Inode *in, int flags, int uid, int gid)
+int Client::inode_permission(Inode *in, uid_t uid, UserGroups& groups, unsigned want)
+{
+  if (uid == 0)
+    return 0;
+
+  int ret;
+  if (uid != in->uid && (in->mode & S_IRWXG)) {
+    ret = _posix_acl_permission(in, uid, groups, want);
+    if (ret != -EAGAIN)
+      return ret;
+  }
+
+  // check permissions before doing anything else
+  if (!in->check_mode(uid, groups, want))
+    return -EACCES;
+  return 0;
+}
+
+int Client::may_open(Inode *in, int flags, int uid, int gid)
 {
   unsigned want = 0;
+
   if ((flags & O_ACCMODE) == O_WRONLY)
     want = MAY_WRITE;
   else if ((flags & O_ACCMODE) == O_RDWR)
     want = MAY_READ | MAY_WRITE;
   else if ((flags & O_ACCMODE) == O_RDONLY)
     want = MAY_READ;
+  if (flags & O_TRUNC)
+    want |= MAY_WRITE;
 
+  if (uid < 0)
+    uid = get_uid();
+  if (gid < 0)
+    gid = get_gid();
   RequestUserGroups groups(this, uid, gid);
 
-  int ret = _posix_acl_permission(in, uid, groups, want);
-  if (ret != -EAGAIN)
-    return ret;
+  int r = 0;
+  switch (in->mode & S_IFMT) {
+    case S_IFLNK:
+      r = -ELOOP;
+      goto out;
+    case S_IFDIR:
+      if (want & MAY_WRITE) {
+	r = -EISDIR;
+	goto out;
+      }
+      break;
+  }
 
-  // check permissions before doing anything else
-  if (uid == 0 || in->check_mode(uid, groups, want))
-    ret = 0;
-  else
-    ret = -EACCES;
+  r = _getattr(in, CEPH_STAT_CAP_MODE, uid, gid);
+  if (r < 0)
+    goto out;
 
-  return ret;
+  r = inode_permission(in, uid, groups, want);
+out:
+  ldout(cct, 3) << __func__ << " " << in << " = " << r <<  dendl;
+  return r;
 }
 
 vinodeno_t Client::_get_vino(Inode *in)
@@ -7027,9 +7062,7 @@ int Client::open(const char *relpath, int flags, mode_t mode, int stripe_unit,
 
   if (!created) {
     // posix says we can only check permissions of existing files
-    uid_t uid = get_uid();
-    gid_t gid = get_gid();
-    r = check_permissions(in.get(), flags, uid, gid);
+    r = may_open(in.get(), flags);
     if (r < 0)
       goto out;
   }
@@ -10457,7 +10490,8 @@ uint64_t Client::ll_get_internal_offset(Inode *in, uint64_t blockno)
   return (blockno % stripes_per_object) * su;
 }
 
-int Client::ll_opendir(Inode *in, dir_result_t** dirpp, int uid, int gid)
+int Client::ll_opendir(Inode *in, int flags, dir_result_t** dirpp,
+		       int uid, int gid)
 {
   Mutex::Locker lock(client_lock);
 
@@ -10466,6 +10500,12 @@ int Client::ll_opendir(Inode *in, dir_result_t** dirpp, int uid, int gid)
   ldout(cct, 3) << "ll_opendir " << vino << dendl;
   tout(cct) << "ll_opendir" << std::endl;
   tout(cct) << vino.ino.val << std::endl;
+
+  if (!cct->_conf->fuse_default_permissions) {
+    int r = may_open(in, flags, uid, gid);
+    if (r < 0)
+      return r;
+  }
 
   int r = 0;
   if (vino.snapid == CEPH_SNAPDIR) {
@@ -10520,7 +10560,7 @@ int Client::ll_open(Inode *in, int flags, Fh **fhp, int uid, int gid)
     gid = get_gid();
   }
   if (!cct->_conf->fuse_default_permissions) {
-    r = check_permissions(in, flags, uid, gid);
+    r = may_open(in, flags, uid, gid);
     if (r < 0)
       goto out;
   }
@@ -10574,7 +10614,7 @@ int Client::ll_create(Inode *parent, const char *name, mode_t mode,
   ldout(cct, 20) << "ll_create created = " << created << dendl;
   if (!created) {
     if (!cct->_conf->fuse_default_permissions) {
-      r = check_permissions(in.get(), flags, uid, gid);
+      r = may_open(in.get(), flags, uid, gid);
       if (r < 0) {
 	if (fhp && *fhp) {
 	  int release_r = _release_fh(*fhp);
@@ -11595,9 +11635,7 @@ int Client::_posix_acl_permission(Inode *in, uid_t uid, UserGroups& groups, unsi
 
     if (in->xattrs.count(ACL_EA_ACCESS)) {
       const bufferptr& access_acl = in->xattrs[ACL_EA_ACCESS];
-      if (in->mode & S_IRWXG)
-	return posix_acl_permits(access_acl, in->uid, in->gid,
-				 uid, groups, want);
+      return posix_acl_permits(access_acl, in->uid, in->gid, uid, groups, want);
     }
   }
   return -EAGAIN;
