@@ -3503,6 +3503,13 @@ void Monitor::_ms_dispatch(Message *m)
 void Monitor::dispatch_op(MonOpRequestRef op)
 {
   op->mark_event("mon:dispatch_op");
+  MonSession *s = op->get_session();
+  assert(s);
+  if (s->closed) {
+    dout(10) << " session closed, dropping " << op->get_req() << dendl;
+    return;
+  }
+
   /* we will consider the default type as being 'monitor' until proven wrong */
   op->set_type_monitor();
   /* deal with all messages that do not necessarily need caps */
