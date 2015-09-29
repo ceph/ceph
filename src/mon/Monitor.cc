@@ -2567,11 +2567,7 @@ void Monitor::handle_command(MonOpRequestRef op)
   }
 
   MonSession *session = m->get_session();
-  if (!session) {
-    string rs = "Access denied";
-    reply_command(op, -EACCES, rs, 0);
-    return;
-  }
+  assert(session);
 
   if (m->cmd.empty()) {
     string rs = "No command supplied";
@@ -3050,9 +3046,9 @@ void Monitor::forward_request_leader(MonOpRequestRef op)
   
   if (req->get_source().is_mon() && req->get_source_addr() != messenger->get_myaddr()) {
     dout(10) << "forward_request won't forward (non-local) mon request " << *req << dendl;
-  } else if (session && session->proxy_con) {
+  } else if (session->proxy_con) {
     dout(10) << "forward_request won't double fwd request " << *req << dendl;
-  } else if (session && !session->closed) {
+  } else if (!session->closed) {
     RoutedRequest *rr = new RoutedRequest;
     rr->tid = ++routed_request_tid;
     rr->client_inst = req->get_source_inst();
@@ -3186,6 +3182,7 @@ void Monitor::send_reply(MonOpRequestRef op, Message *reply)
   op->mark_event(__func__);
 
   MonSession *session = op->get_session();
+  assert(session);
   Message *req = op->get_req();
   ConnectionRef con = op->get_connection();
 
@@ -3197,14 +3194,6 @@ void Monitor::send_reply(MonOpRequestRef op, Message *reply)
 	    << " to " << req << " " << *req << dendl;
     reply->put();
     op->mark_event("reply: no connection");
-    return;
-  }
-
-  if (!session) {
-    dout(2) << "send_reply no session, dropping reply " << *reply
-	    << " to " << req << " " << *req << dendl;
-    reply->put();
-    op->mark_event("reply: no session");
     return;
   }
 
@@ -3233,12 +3222,6 @@ void Monitor::no_reply(MonOpRequestRef op)
   MonSession *session = op->get_session();
   Message *req = op->get_req();
 
-  if (!session) {
-    dout(2) << "no_reply no session, dropping non-reply to "
-            << *req << dendl;
-    op->mark_event("no_reply: no session");
-    return;
-  }
   if (session->proxy_con) {
     if (get_quorum_features() & CEPH_FEATURE_MON_NULLROUTE) {
       dout(10) << "no_reply to " << req->get_source_inst()
@@ -3265,7 +3248,7 @@ void Monitor::handle_route(MonOpRequestRef op)
   MRoute *m = static_cast<MRoute*>(op->get_req());
   MonSession *session = op->get_session();
   //check privileges
-  if (session && !session->is_capable("mon", MON_CAP_X)) {
+  if (!session->is_capable("mon", MON_CAP_X)) {
     dout(0) << "MRoute received from entity without appropriate perms! "
 	    << dendl;
     return;
@@ -3709,8 +3692,7 @@ void Monitor::dispatch_op(MonOpRequestRef op)
     case MSG_MON_ELECTION:
       op->set_type_election();
       //check privileges here for simplicity
-      if (op->get_session() &&
-          !op->get_session()->is_capable("mon", MON_CAP_X)) {
+      if (!op->get_session()->is_capable("mon", MON_CAP_X)) {
         dout(0) << "MMonElection received from entity without enough caps!"
           << op->get_session()->caps << dendl;
         break;
@@ -4154,10 +4136,7 @@ void Monitor::handle_subscribe(MonOpRequestRef op)
   bool reply = false;
 
   MonSession *s = op->get_session();
-  if (!s) {
-    dout(10) << " no session, dropping" << dendl;
-    return;
-  }
+  assert(s);
 
   s->until = ceph_clock_now(g_ceph_context);
   s->until += g_conf->mon_subscribe_interval;
@@ -4209,10 +4188,7 @@ void Monitor::handle_get_version(MonOpRequestRef op)
   PaxosService *svc = NULL;
 
   MonSession *s = op->get_session();
-  if (!s) {
-    dout(10) << " no session, dropping" << dendl;
-    return;
-  }
+  assert(s);
 
   if (!is_leader() && !is_peon()) {
     dout(10) << " waiting for quorum" << dendl;
