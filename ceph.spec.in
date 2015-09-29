@@ -137,7 +137,6 @@ BuildRequires:	gperftools-devel
 Requires:	scsirastools
 BuildRequires:	google-perftools-devel
 %endif
-BuildRequires:	%insserv_prereq
 BuildRequires:	mozilla-nss-devel
 BuildRequires:	keyutils-devel
 BuildRequires:	libatomic-ops-devel
