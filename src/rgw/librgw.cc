@@ -396,6 +396,7 @@ int process_request(RGWRados* store, RGWREST* rest, RGWRequest* base_req,
 
   RGWEnv& rgw_env = io->get_env();
 
+  // XXXX fix me--we have a local cct
   struct req_state rstate(g_ceph_context, &rgw_env);
   struct req_state *s = &rstate;
 
@@ -484,12 +485,8 @@ done:
 
   req->log_format(s, "http status=%d", http_ret);
 
-#warning XXX what did this do (return handler?  stash op?)
-#if 0  
-  if (handler)
-    handler->put_op(op);
-  rest->put_handler(handler);
-#endif
+  /* XXX what RGWHandler::put_op() does */
+  delete op;
 
   dout(1) << "====== " << __func__
 	  << " req done req=" << hex << req << dec << " http_status="
