@@ -48,6 +48,7 @@ do_map() {
 		RET_OP=0
 		OIFS=$IFS
 		IFS=','
+		CMDPARAMS=""
 		for PARAM in ${PARAMS[@]}; do
 			CMDPARAMS="$CMDPARAMS --$(echo $PARAM | tr '=' ' ')"
 		done
