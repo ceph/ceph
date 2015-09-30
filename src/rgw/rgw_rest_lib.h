@@ -4,25 +4,46 @@
 #ifndef CEPH_RGW_REST_LIB_H
 #define CEPH_RGW_REST_LIB_H
 
+#include <functional>
+#include "rgw_rest.h"
+#include "rgw_common.h"
+#include "rgw_lib.h"
 
+
+/* XXX do we even need an RGWRESTMgr? */
 class RGWRESTMgr_Lib : public RGWRESTMgr {
 public:
   RGWRESTMgr_Lib() {}
   virtual ~RGWRESTMgr_Lib() {}
-  virtual RGWHandler* get_handler(struct req_state* s);
+  virtual RGWHandler* get_handler(struct req_state* s) { return nullptr; }
 }; /* RGWRESTMgr_Lib */
 
-class RGWHandler_ObjStore_Lib : public RGWHandler_User {
+/* rgw_lib RGWHandler */
+class RGWHandler_ObjStore_Lib : public RGWHandler_ObjStore {
   friend class RGWRESTMgr_Lib;
 public:
+
+  virtual int authorize() {
+    return RGW_Auth_S3::authorize(store, s);
+  }
+
   RGWHandler_ObjStore_Lib() {}
   virtual ~RGWHandler_ObjStore_Lib() {}
+  static int init_from_header(struct req_state *s);
 }; /* RGWHandler_ObjStore_Lib */
+
+
+/* RGWOps */
 
 class RGWListBuckets_ObjStore_Lib : public RGWListBuckets_ObjStore {
 public:
+
   RGWListBuckets_ObjStore_Lib() {}
   ~RGWListBuckets_ObjStore_Lib() {}
+
+  virtual void send_response_begin(bool has_buckets);
+  virtual void send_response_data(RGWUserBuckets& buckets);
+  virtual void send_response_end();
 
   int get_params() {
     limit = -1; /* no limit */
@@ -35,13 +56,24 @@ public:
   RGWListBucket_ObjStore_Lib() {
     default_max = 1000;
   }
+
   ~RGWListBucket_ObjStore_Lib() {}
+
+  int get_params();
+  virtual void send_response();
+
+  virtual void send_versioned_response() {
+    send_response();
+  }
 }; /* RGWListBucket_ObjStore_Lib */
 
-class RGWGetBucketLogging_ObjStore_Lib : public RGWGetBucketLogging {
+class RGWStatBucket_ObjStore_Lib : public RGWStatBucket_ObjStore {
 public:
-  RGWGetBucketLogging_ObjStore_Lib() {}
-  ~RGWGetBucketLogging_ObjStore_Lib() {}
-}; /* RGWGetBucketLogging_ObjStore_Lib */
+  RGWStatBucket_ObjStore_Lib() {}
+  ~RGWStatBucket_ObjStore_Lib() {}
+
+  virtual void send_response();
+
+}; /* RGWListBucket_ObjStore_Lib */
 
 #endif /* CEPH_RGW_REST_LIB_H */
