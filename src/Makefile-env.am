@@ -5,6 +5,7 @@ DIST_SUBDIRS =
 BUILT_SOURCES =
 EXTRA_DIST =
 CLEANFILES =
+dist_noinst_DATA =
 
 noinst_HEADERS =
 bin_PROGRAMS =
@@ -161,10 +162,6 @@ LIBRBD_TYPES = librbd_types.la
 LIBKRBD = libkrbd.la
 LIBCEPHFS = libcephfs.la
 LIBERASURE_CODE = liberasure_code.la
-LIBOSD_TP = tracing/libosd_tp.la
-LIBRADOS_TP = tracing/librados_tp.la
-LIBRBD_TP = tracing/librbd_tp.la
-LIBOS_TP = tracing/libos_tp.la
 
 if WITH_LIBAIO
 LIBOS += -laio
