@@ -1643,9 +1643,6 @@ int FileStore::mount()
     }
   }
 
-  // all okay.
-  return 0;
-
 close_current_fd:
   VOID_TEMP_FAILURE_RETRY(::close(current_fd));
   current_fd = -1;
