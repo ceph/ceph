@@ -801,7 +801,7 @@ class CephManager:
             try:
                 self.pools[pool] = self.get_pool_property(pool, 'pg_num')
             except CommandFailedError:
-                self.log.info('Failed to get pg_num rom pool %d, ignoring' % pool)
+                self.log('Failed to get pg_num from pool %d, ignoring' % pool)
 
     def raw_cluster_cmd(self, *args):
         """
