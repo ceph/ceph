@@ -48,12 +48,6 @@ upgrade-first-half:
       wait-for-healthy: true
   - sleep:
       duration: 60
-
-upgrade-second-half:
-  sequential:
-  - install.upgrade:
-      mon.b:
-  - print: "**** done install.upgrade osd.{2,3}"
   - ceph.restart:
       daemons: [mon.b]
       wait-for-healthy: true
@@ -64,6 +58,12 @@ upgrade-second-half:
       wait-for-healthy: true
   - sleep:
       duration: 60
+
+upgrade-second-half:
+  sequential:
+  - install.upgrade:
+      osd.2:
+  - print: "**** done install.upgrade osd.{2,3}"
   - ceph.restart:
       daemons: [osd.2]
       wait-for-healthy: true
