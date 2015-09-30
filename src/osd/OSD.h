@@ -1967,6 +1967,7 @@ protected:
     PG::RecoveryCtx *rctx);
 
   // == monitor interaction ==
+  Mutex mon_report_lock;
   utime_t last_mon_report;
   utime_t last_pg_stats_sent;
 
