@@ -543,7 +543,7 @@ void OSDService::agent_entry()
     dout(10) << "high_count " << flush_mode_high_count << " agent_ops " << agent_ops << " flush_quota " << agent_flush_quota << dendl;
     agent_lock.Unlock();
     if (!pg->agent_work(max, agent_flush_quota)) {
-      dout(10) << __func__ << " " << *pg
+      dout(10) << __func__ << " " << pg->get_pgid()
 	<< " no agent_work, delay for " << g_conf->osd_agent_delay_time
 	<< " seconds" << dendl;
 
