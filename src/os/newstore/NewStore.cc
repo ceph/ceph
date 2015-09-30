@@ -463,7 +463,7 @@ int NewStore::OnodeHashLRU::trim(int max)
   int num = onode_map.size() - max;
   lru_list_t::iterator p = lru.end();
   if (num)
-    p--;
+    --p;
   while (num > 0) {
     Onode *o = &*p;
     int refs = o->nref.read();
@@ -608,7 +608,6 @@ NewStore::NewStore(CephContext *cct, const string& path)
     kv_lock("NewStore::kv_lock"),
     kv_stop(false),
     logger(NULL),
-    default_osr("default"),
     reap_lock("NewStore::reap_lock")
 {
   _init_logger();
@@ -2487,7 +2486,7 @@ void NewStore::_kv_sync_thread()
       if (!g_conf->newstore_sync_submit_transaction) {
 	for (std::deque<TransContext *>::iterator it = kv_committing.begin();
 	     it != kv_committing.end();
-	     it++) {
+	     ++it) {
 	  db->submit_transaction((*it)->t);
 	}
       }
@@ -2497,7 +2496,7 @@ void NewStore::_kv_sync_thread()
       KeyValueDB::Transaction txc_cleanup_sync = db->get_transaction();
       for (std::deque<TransContext *>::iterator it = wal_cleaning.begin();
 	    it != wal_cleaning.end();
-	    it++) {
+	    ++it) {
 	wal_transaction_t& wt =*(*it)->wal_txn;
 	// cleanup the data in overlays
 	for (list<wal_op_t>::iterator p = wt.ops.begin(); p != wt.ops.end(); ++p) {
@@ -2759,16 +2758,15 @@ int NewStore::queue_transactions(
 
   // set up the sequencer
   OpSequencer *osr;
-  if (!posr)
-    posr = &default_osr;
+  assert(posr);
   if (posr->p) {
     osr = static_cast<OpSequencer *>(posr->p.get());
-    dout(5) << __func__ << " existing " << *osr << "/" << osr->parent << dendl; //<< " w/ q " << osr->q << dendl;
+    dout(5) << __func__ << " existing " << osr << " " << *osr << dendl;
   } else {
     osr = new OpSequencer;
     osr->parent = posr;
     posr->p = osr;
-    dout(5) << __func__ << " new " << *osr << "/" << osr->parent << dendl;
+    dout(5) << __func__ << " new " << osr << " " << *osr << dendl;
   }
 
   // prepare

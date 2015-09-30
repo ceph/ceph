@@ -242,6 +242,15 @@ def is_systemd():
                 return True
     return False
 
+def is_upstart():
+    """
+    Detect whether upstart is running
+    """
+    (out, _) = command(['init', '--version'])
+    if 'upstart' in out:
+        return True
+    return False
+
 def maybe_mkdir(*a, **kw):
     """
     Creates a new directory if it doesn't exist, removes
@@ -279,10 +288,8 @@ def which(executable):
 
     for location in locations:
         executable_path = os.path.join(location, executable)
-        LOG.debug('does ' + executable_path + ' exists ?')
         if (os.path.isfile(executable_path) and
             os.access(executable_path, os.X_OK)):
-            LOG.debug('yes, ' + executable_path + ' exists')
             return executable_path
 
 
@@ -525,7 +532,9 @@ def list_all_partitions(names):
     """
     Return a list of devices and partitions
     """
-    if not names:
+    if names:
+        names = map(lambda x: re.sub('^/dev/', '', x), names)
+    else:
         names = os.listdir('/sys/block')
     dev_part_list = {}
     for name in names:
@@ -1042,6 +1051,8 @@ def dmcrypt_map(
         else:
             # Plain mode has no format function, nor any validation that the key is correct.
             command_check_call(create_args)
+        # set proper ownership of mapped device
+        command_check_call(['chown', 'ceph:ceph', dev])
         return dev
 
     except subprocess.CalledProcessError as e:
@@ -1194,14 +1205,21 @@ def get_free_partition_index(dev):
 
 
 def update_partition(dev, description):
-     LOG.debug('Calling partprobe on %s device %s', description, dev)
-     command(
-         [
-             'partprobe',
-             dev,
-         ],
-     )
-
+    """
+    Must be called after modifying a partition table so the kernel
+    know about the change and fire udev events accordingly. A side
+    effect of partprobe is to remove partitions and add them again.
+    The first udevadm settle waits for ongoing udev events to
+    complete, just in case one of them rely on an existing partition
+    on dev.  The second udevadm settle guarantees to the caller that
+    all udev events related to the partition table change have been
+    processed, i.e. the 95-ceph-osd.rules actions and mode changes,
+    group changes etc. are complete.
+    """
+    LOG.debug('Calling partprobe on %s device %s', description, dev)
+    command_check_call(['udevadm', 'settle'])
+    command_check_call(['partprobe', dev])
+    command_check_call(['udevadm', 'settle'])
 
 def zap(dev):
     """
@@ -1360,14 +1378,6 @@ def prepare_journal_dev(
             )
 
         update_partition(journal, 'prepared')
-
-        # wait for udev event queue to clear
-        command(
-            [
-                'udevadm',
-                'settle',
-                ],
-            )
 
         LOG.debug('Journal is GPT partition %s', journal_symlink)
 
@@ -1580,13 +1590,6 @@ def prepare_dev(
                 ],
             )
             update_partition(data, 'created')
-            command(
-                [
-                    # wait for udev event queue to clear
-                    'udevadm',
-                    'settle',
-                    ],
-                )
         except subprocess.CalledProcessError as e:
             raise Error(e)
 
@@ -1661,6 +1664,11 @@ def prepare_dev(
             )
         except subprocess.CalledProcessError as e:
             raise Error(e)
+        update_partition(data, 'prepared')
+        command_check_call(['udevadm', 'trigger',
+                            '--action=add',
+                            '--sysname-match',
+                            os.path.basename(rawdev)])
 
 def check_journal_reqs(args):
     _, allows_journal = command([
@@ -1888,9 +1896,6 @@ def main_prepare(args):
             raise Error('not a dir or block device', args.data)
         prepare_lock.release()  # noqa
 
-        if stat.S_ISBLK(dmode):
-            update_partition(args.data, 'prepared')
-
     except Error as e:
         if journal_dm_keypath:
             try:
@@ -1905,7 +1910,7 @@ def main_prepare(args):
                 if e2.errno != errno.ENOENT: # errno.ENOENT = no such file or directory
                     raise # re-raise exception if a different error occured
         prepare_lock.release()  # noqa
-        raise e
+        raise
 
 
 ###########################
@@ -2651,23 +2656,6 @@ def get_dev_fs(dev):
     else:
         return None
 
-def get_dev_udev_properties(dev):
-    out, _ = command(
-        [
-            '/sbin/blkid',
-            '-o',
-            'udev',
-            '-p',
-            dev,
-        ]
-    )
-    p = {}
-    for line in out.split('\n'):
-        if line:
-            (key, value) = line.split('=')
-            p[key] = value
-    return p
-
 def split_dev_base_partnum(dev):
     if is_mpath(dev):
         partnum = partnum_mpath(dev)
@@ -2760,7 +2748,7 @@ def list_format_dev_plain(dev, devices=[], prefix=''):
             desc = ['ceph data (dmcrypt %s)' % dmcrypt['type'], 'holders: ' + ','.join(dmcrypt['holders'])]
     elif dev['ptype'] == JOURNAL_UUID:
         desc.append('ceph journal')
-        if dev['journal_for']:
+        if dev.get('journal_for'):
             desc.append('for %s' % dev['journal_for'])
     elif dev['ptype'] in (DMCRYPT_JOURNAL_UUID,
                           DMCRYPT_LUKS_JOURNAL_UUID):
@@ -3007,8 +2995,11 @@ def main_zap(args):
 ###########################
 
 def main_trigger(args):
+    LOG.debug("main_trigger: " + str(args))
     if is_systemd() and not args.sync:
-        service='ceph-disk@{dev}.service'.format(dev=args.dev)
+        # http://www.freedesktop.org/software/systemd/man/systemd-escape.html
+        escaped_dev = args.dev.replace('-', '\\x2d')
+        service='ceph-disk@{dev}.service'.format(dev=escaped_dev)
         LOG.info('systemd detected, triggering %s' % service)
         command(
             [
@@ -3019,16 +3010,21 @@ def main_trigger(args):
             ]
         )
         return
+    if is_upstart() and not args.sync:
+        LOG.info('upstart detected, triggering ceph-disk task')
+        command(
+            [
+                'initctl',
+                'emit',
+                'ceph-disk',
+                'dev={dev}'.format(dev=args.dev),
+                'pid={pid}'.format(pid=os.getpid()),
+            ]
+        )
+        return
 
-    p = get_dev_udev_properties(args.dev)
-
-    if 'ID_PART_ENTRY_TYPE' not in p:
-        raise Error('no ID_PART_ENTRY_TYPE for %s' % args.dev)
-    parttype = p['ID_PART_ENTRY_TYPE']
-
-    if 'ID_PART_ENTRY_UUID' not in p:
-        raise Error('no ID_PART_ENTRY_UUID for %s' % args.dev)
-    partid = p['ID_PART_ENTRY_UUID']
+    parttype = get_partition_type(args.dev)
+    partid = get_partition_uuid(args.dev)
 
     LOG.info('trigger {dev} parttype {parttype} uuid {partid}'.format(
         dev=args.dev,
@@ -3543,7 +3539,10 @@ def setup_logging(verbose, log_stdout):
     if log_stdout:
         ch = logging.StreamHandler(stream=sys.stdout)
         ch.setLevel(loglevel)
+        formatter = logging.Formatter('%(filename): %(message)s')
+        ch.setFormatter(formatter)
         LOG.addHandler(ch)
+        LOG.setLevel(loglevel)
     else:
         logging.basicConfig(
             level=loglevel,

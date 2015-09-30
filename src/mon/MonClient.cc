@@ -116,9 +116,7 @@ int MonClient::get_monmap_privately()
   bool temp_msgr = false;
   Messenger* smessenger = NULL;
   if (!messenger) {
-    messenger = smessenger = Messenger::create(cct, cct->_conf->ms_type,
-					       entity_name_t::CLIENT(-1),
-					       "temp_mon_client", getpid());
+    messenger = smessenger = Messenger::create_client_messenger(cct, "temp_mon_client");
     messenger->add_dispatcher_head(this);
     smessenger->start();
     temp_msgr = true;
@@ -207,25 +205,30 @@ int MonClient::ping_monitor(const string &mon_id, string *result_reply)
 {
   ldout(cct, 10) << __func__ << dendl;
 
-  if (mon_id.empty()) {
+  string new_mon_id;
+  if (monmap.contains("noname-"+mon_id)) {
+    new_mon_id = "noname-"+mon_id;
+  } else {
+    new_mon_id = mon_id;
+  }
+
+  if (new_mon_id.empty()) {
     ldout(cct, 10) << __func__ << " specified mon id is empty!" << dendl;
     return -EINVAL;
-  } else if (!monmap.contains(mon_id)) {
-    ldout(cct, 10) << __func__ << " no such monitor 'mon." << mon_id << "'"
+  } else if (!monmap.contains(new_mon_id)) {
+    ldout(cct, 10) << __func__ << " no such monitor 'mon." << new_mon_id << "'"
                    << dendl;
     return -ENOENT;
   }
 
   MonClientPinger *pinger = new MonClientPinger(cct, result_reply);
 
-  Messenger *smsgr = Messenger::create(cct, cct->_conf->ms_type,
-				       entity_name_t::CLIENT(-1),
-				       "temp_ping_client", getpid());
+  Messenger *smsgr = Messenger::create_client_messenger(cct, "temp_ping_client");
   smsgr->add_dispatcher_head(pinger);
   smsgr->start();
 
-  ConnectionRef con = smsgr->get_connection(monmap.get_inst(mon_id));
-  ldout(cct, 10) << __func__ << " ping mon." << mon_id
+  ConnectionRef con = smsgr->get_connection(monmap.get_inst(new_mon_id));
+  ldout(cct, 10) << __func__ << " ping mon." << new_mon_id
                  << " " << con->get_peer_addr() << dendl;
   con->send_message(new MPing);
 

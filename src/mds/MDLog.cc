@@ -80,6 +80,11 @@ void MDLog::create_logger()
   g_ceph_context->get_perfcounters_collection()->add(logger);
 }
 
+void MDLog::set_write_iohint(unsigned iohint_flags)
+{
+  journaler->set_write_iohint(iohint_flags);
+}
+
 class C_MDL_WriteError : public MDSIOContextBase {
   protected:
   MDLog *mdlog;
@@ -1095,9 +1100,11 @@ void MDLog::_reformat_journal(JournalPointer const &jp_in, Journaler *old_journa
 
       // Zero-out expire_pos in subtreemap because offsets have changed
       // (expire_pos is just an optimization so it's safe to eliminate it)
-      if (le->get_type() == EVENT_SUBTREEMAP) {
-        dout(20) << __func__ << " zeroing expire_pos in subtreemap event at " << le_pos << dendl;
+      if (le->get_type() == EVENT_SUBTREEMAP
+          || le->get_type() == EVENT_SUBTREEMAP_TEST) {
         ESubtreeMap *sle = dynamic_cast<ESubtreeMap*>(le);
+        dout(20) << __func__ << " zeroing expire_pos in subtreemap event at "
+          << le_pos << " seq=" << sle->event_seq << dendl;
         assert(sle != NULL);
         sle->expire_pos = 0;
         modified = true;

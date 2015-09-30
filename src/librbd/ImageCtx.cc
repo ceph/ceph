@@ -815,8 +815,11 @@ public:
 
     string start = prefix;
     for (map<string, bufferlist>::iterator it = pairs.begin(); it != pairs.end(); ++it) {
-      if (it->first.size() <= conf_prefix_len || it->first.compare(0, conf_prefix_len, prefix))
+      if (it->first.compare(0, MIN(conf_prefix_len, it->first.size()), prefix) > 0)
         return false;
+
+      if (it->first.size() <= conf_prefix_len)
+        continue;
 
       string key = it->first.substr(conf_prefix_len, it->first.size() - conf_prefix_len);
       map<string, bool>::iterator cit = configs.find(key);

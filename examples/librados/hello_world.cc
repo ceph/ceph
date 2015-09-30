@@ -172,8 +172,10 @@ int main(int argc, const char **argv)
       goto out;
     } else {
       std::cout << "we read our object " << object_name
-	  << ", and got back " << ret << " bytes with contents\n"
-	  << read_buf.c_str() << std::endl;
+	  << ", and got back " << ret << " bytes with contents\n";
+      std::string read_string;
+      read_buf.copy(0, ret, read_string);
+      std::cout << read_string << std::endl;
     }
   }
 

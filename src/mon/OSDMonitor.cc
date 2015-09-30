@@ -1623,7 +1623,9 @@ void OSDMonitor::check_failures(utime_t now)
   for (map<int,failure_info_t>::iterator p = failure_info.begin();
        p != failure_info.end();
        ++p) {
-    check_failure(now, p->first, p->second);
+    if (can_mark_down(p->first)) {
+      check_failure(now, p->first, p->second);
+    }
   }
 }
 
@@ -1871,19 +1873,19 @@ bool OSDMonitor::preprocess_boot(MonOpRequestRef op)
   }
 
   // make sure upgrades stop at hammer
-  //  * OSD_PROXY_FEATURES is the last pre-hammer feature
+  //  * HAMMER_0_94_4 is the required hammer feature
   //  * MON_METADATA is the first post-hammer feature
   if (osdmap.get_num_up_osds() > 0) {
     if ((m->osd_features & CEPH_FEATURE_MON_METADATA) &&
-	!(osdmap.get_up_osd_features() & CEPH_FEATURE_OSD_PROXY_FEATURES)) {
+	!(osdmap.get_up_osd_features() & CEPH_FEATURE_HAMMER_0_94_4)) {
       mon->clog->info() << "disallowing boot of post-hammer OSD "
 			<< m->get_orig_source_inst()
-			<< " because one or more up OSDs is pre-hammer\n";
+			<< " because one or more up OSDs is pre-hammer v0.94.4\n";
       goto ignore;
     }
-    if (!(m->osd_features & CEPH_FEATURE_OSD_PROXY_FEATURES) &&
+    if (!(m->osd_features & CEPH_FEATURE_HAMMER_0_94_4) &&
 	(osdmap.get_up_osd_features() & CEPH_FEATURE_MON_METADATA)) {
-      mon->clog->info() << "disallowing boot of pre-hammer OSD "
+      mon->clog->info() << "disallowing boot of pre-hammer v0.94.4 OSD "
 			<< m->get_orig_source_inst()
 			<< " because all up OSDs are post-hammer\n";
       goto ignore;
@@ -2874,15 +2876,16 @@ void OSDMonitor::dump_info(Formatter *f)
 namespace {
   enum osd_pool_get_choices {
     SIZE, MIN_SIZE, CRASH_REPLAY_INTERVAL,
-    PG_NUM, PGP_NUM, CRUSH_RULESET, HIT_SET_TYPE,
-    HIT_SET_PERIOD, HIT_SET_COUNT, HIT_SET_FPP, USE_GMT_HITSET,
-    AUID, TARGET_MAX_OBJECTS, TARGET_MAX_BYTES,
+    PG_NUM, PGP_NUM, CRUSH_RULESET, HASHPSPOOL,
+    NODELETE, NOPGCHANGE, NOSIZECHANGE,
+    WRITE_FADVISE_DONTNEED, NOSCRUB, NODEEP_SCRUB,
+    HIT_SET_TYPE, HIT_SET_PERIOD, HIT_SET_COUNT, HIT_SET_FPP,
+    USE_GMT_HITSET, AUID, TARGET_MAX_OBJECTS, TARGET_MAX_BYTES,
     CACHE_TARGET_DIRTY_RATIO, CACHE_TARGET_DIRTY_HIGH_RATIO,
     CACHE_TARGET_FULL_RATIO,
     CACHE_MIN_FLUSH_AGE, CACHE_MIN_EVICT_AGE,
     ERASURE_CODE_PROFILE, MIN_READ_RECENCY_FOR_PROMOTE,
-    WRITE_FADVISE_DONTNEED, MIN_WRITE_RECENCY_FOR_PROMOTE,
-    FAST_READ};
+    MIN_WRITE_RECENCY_FOR_PROMOTE, FAST_READ};
 
   std::set<osd_pool_get_choices>
     subtract_second_from_first(const std::set<osd_pool_get_choices>& first,
@@ -3339,6 +3342,10 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
       ("min_size", MIN_SIZE)
       ("crash_replay_interval", CRASH_REPLAY_INTERVAL)
       ("pg_num", PG_NUM)("pgp_num", PGP_NUM)("crush_ruleset", CRUSH_RULESET)
+      ("hashpspool", HASHPSPOOL)("nodelete", NODELETE)
+      ("nopgchange", NOPGCHANGE)("nosizechange", NOSIZECHANGE)
+      ("noscrub", NOSCRUB)("nodeep-scrub", NODEEP_SCRUB)
+      ("write_fadvise_dontneed", WRITE_FADVISE_DONTNEED)
       ("hit_set_type", HIT_SET_TYPE)("hit_set_period", HIT_SET_PERIOD)
       ("hit_set_count", HIT_SET_COUNT)("hit_set_fpp", HIT_SET_FPP)
       ("use_gmt_hitset", USE_GMT_HITSET)
@@ -3351,7 +3358,6 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
       ("cache_min_evict_age", CACHE_MIN_EVICT_AGE)
       ("erasure_code_profile", ERASURE_CODE_PROFILE)
       ("min_read_recency_for_promote", MIN_READ_RECENCY_FOR_PROMOTE)
-      ("write_fadvise_dontneed", WRITE_FADVISE_DONTNEED)
       ("min_write_recency_for_promote", MIN_WRITE_RECENCY_FOR_PROMOTE)
       ("fast_read", FAST_READ);
 
@@ -3409,6 +3415,7 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
     if (f) {
       for(choices_set_t::const_iterator it = selected_choices.begin();
 	  it != selected_choices.end(); ++it) {
+	choices_map_t::const_iterator i;
 	f->open_object_section("pool");
 	f->dump_string("pool", poolstr);
 	f->dump_int("pool_id", pool);
@@ -3434,6 +3441,22 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
 	    break;
 	  case CRUSH_RULESET:
 	    f->dump_int("crush_ruleset", p->get_crush_ruleset());
+	    break;
+	  case HASHPSPOOL:
+	  case NODELETE:
+	  case NOPGCHANGE:
+	  case NOSIZECHANGE:
+	  case WRITE_FADVISE_DONTNEED:
+	  case NOSCRUB:
+	  case NODEEP_SCRUB:
+	    for (i = ALL_CHOICES.begin(); i != ALL_CHOICES.end(); ++i) {
+	      if (i->second == *it)
+		break;
+	    }
+	    assert(i != ALL_CHOICES.end());
+	    f->dump_string(i->first.c_str(),
+			   p->has_flag(pg_pool_t::get_flag_by_name(i->first)) ?
+			   "true" : "false");
 	    break;
 	  case HIT_SET_PERIOD:
 	    f->dump_int("hit_set_period", p->hit_set_period);
@@ -3500,11 +3523,6 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
 	    f->dump_int("min_read_recency_for_promote",
 			p->min_read_recency_for_promote);
 	    break;
-	  case WRITE_FADVISE_DONTNEED:
-	    f->dump_string("write_fadvise_dontneed",
-			   p->has_flag(pg_pool_t::FLAG_WRITE_FADVISE_DONTNEED) ?
-			   "true" : "false");
-	    break;
 	  case MIN_WRITE_RECENCY_FOR_PROMOTE:
 	    f->dump_int("min_write_recency_for_promote",
 			p->min_write_recency_for_promote);
@@ -3520,6 +3538,7 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
     } else /* !f */ {
       for(choices_set_t::const_iterator it = selected_choices.begin();
 	  it != selected_choices.end(); ++it) {
+	choices_map_t::const_iterator i;
 	switch(*it) {
 	  case PG_NUM:
 	    ss << "pg_num: " << p->get_pg_num() << "\n";
@@ -3601,9 +3620,20 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
 	    ss << "min_read_recency_for_promote: " <<
 	      p->min_read_recency_for_promote << "\n";
 	    break;
+	  case HASHPSPOOL:
+	  case NODELETE:
+	  case NOPGCHANGE:
+	  case NOSIZECHANGE:
 	  case WRITE_FADVISE_DONTNEED:
-	    ss << "write_fadvise_dontneed: " <<
-	      (p->has_flag(pg_pool_t::FLAG_WRITE_FADVISE_DONTNEED) ?
+	  case NOSCRUB:
+	  case NODEEP_SCRUB:
+	    for (i = ALL_CHOICES.begin(); i != ALL_CHOICES.end(); ++i) {
+	      if (i->second == *it)
+		break;
+	    }
+	    assert(i != ALL_CHOICES.end());
+	    ss << i->first << ": " <<
+	      (p->has_flag(pg_pool_t::get_flag_by_name(i->first)) ?
 	       "true" : "false") << "\n";
 	    break;
 	  case MIN_WRITE_RECENCY_FOR_PROMOTE:
@@ -4493,7 +4523,8 @@ int OSDMonitor::prepare_new_pool(string& name, uint64_t auid,
   CrushTester tester(newcrush, *ss);
   r = tester.test_with_crushtool(g_conf->crushtool.c_str(),
 				 osdmap.get_max_osd(),
-				 g_conf->mon_lease);
+				 g_conf->mon_lease,
+				 crush_ruleset);
   if (r) {
     dout(10) << " tester.test_with_crushtool returns " << r << dendl;
     return r;
@@ -4848,7 +4879,8 @@ int OSDMonitor::prepare_command_pool_set(map<string,cmd_vartype> &cmdmap,
     }
     p.crush_ruleset = n;
   } else if (var == "hashpspool" || var == "nodelete" || var == "nopgchange" ||
-	     var == "nosizechange") {
+	     var == "nosizechange" || var == "write_fadvise_dontneed" ||
+	     var == "noscrub" || var == "nodeep-scrub") {
     uint64_t flag = pg_pool_t::get_flag_by_name(var);
     // make sure we only compare against 'n' if we didn't receive a string
     if (val == "true" || (interr.empty() && n == 1)) {
@@ -4978,15 +5010,6 @@ int OSDMonitor::prepare_command_pool_set(map<string,cmd_vartype> &cmdmap,
       return -EINVAL;
     }
     p.min_read_recency_for_promote = n;
-  } else if (var == "write_fadvise_dontneed") {
-    if (val == "true" || (interr.empty() && n == 1)) {
-      p.flags |= pg_pool_t::FLAG_WRITE_FADVISE_DONTNEED;
-    } else if (val == "false" || (interr.empty() && n == 0)) {
-      p.flags &= ~pg_pool_t::FLAG_WRITE_FADVISE_DONTNEED;
-    } else {
-      ss << "expecting value 'true', 'false', '0', or '1'";
-      return -EINVAL;
-    }
   } else if (var == "min_write_recency_for_promote") {
     if (interr.length()) {
       ss << "error parsing integer value '" << val << "': " << interr;
@@ -5124,7 +5147,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
 				       g_conf->mon_lease);
     if (r < 0) {
       derr << "error on crush map: " << ess.str() << dendl;
-      ss << "Failed to parse crushmap: " << ess.str();
+      ss << "Failed crushmap test: " << ess.str();
       err = r;
       goto reply;
     }

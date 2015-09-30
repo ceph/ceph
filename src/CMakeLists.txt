@@ -69,7 +69,7 @@ else()
 endif()
 
 
-set(EXTRALIBS uuid rt dl ${Boost_LIBS})
+set(EXTRALIBS uuid rt dl ${Boost_LIBS} ${ATOMIC_OPS_LIBRARIES})
 
 if(${WITH_PROFILER})
   list(APPEND EXTRALIBS profiler)
@@ -82,12 +82,6 @@ if(USE_NSS)
     endif(NSPR_FOUND)
   endif(NSS_FOUND)
 endif(USE_NSS)
-
-if(${HAVE_ATOMIC_OPS})
-  set(EXTRALIBS
-	atomic_ops
-	${EXTRALIBS})
-endif(${HAVE_ATOMIC_OPS})
 
 set(GCOV_PREFIX_STRIP 4)
 
@@ -120,13 +114,13 @@ if(HAVE_XIO)
   list(APPEND EXTRALIBS ${Xio_LIBRARY} ibverbs rdmacm pthread rt)
 endif(HAVE_XIO)
 
-if(${WITH_TCMALLOC})
+if(${WITH_TCMALLOC} AND ${HAVE_GPERFTOOLS})
   set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fno-builtin-malloc -fno-builtin-calloc -fno-builtin-realloc -fno-builtin-free")
   set(TCMALLOC_LIBS tcmalloc)
   set(TCMALLOC_srcs perfglue/heap_profiler.cc)
-else()
+else(${WITH_TCMALLOC} AND ${HAVE_GPERFTOOLS})
   set(TCMALLOC_srcs perfglue/disabled_heap_profiler.cc)
-endif(${WITH_TCMALLOC})
+endif(${WITH_TCMALLOC} AND ${HAVE_GPERFTOOLS})
 
 # tcmalloc heap profiler
 set(heap_profiler_files ${TCMALLOC_srcs})
@@ -313,13 +307,13 @@ set(common_mountcephfs_files
 add_library(common_mountcephfs_objs OBJECT
   ${common_mountcephfs_files})
 
-if(${WITH_PROFILER})
+if(${WITH_GPERFTOOLS})
   list(APPEND libcommon_files
     perfglue/cpu_profiler.cc)
 else()
   list(APPEND libcommon_files
     perfglue/disabled_stubs.cc)
-endif(${WITH_PROFILER})
+endif(${WITH_GPERFTOOLS})
 
 if(${ENABLE_SHARED})
   list(APPEND libcommon_files
@@ -335,9 +329,9 @@ set_source_files_properties(${CMAKE_SOURCE_DIR}/src/ceph_ver.c
   ${CMAKE_SOURCE_DIR}/src/test/encoding/ceph_dencoder.cc
   APPEND PROPERTY OBJECT_DEPENDS ${CMAKE_BINARY_DIR}/src/include/ceph_ver.h)
 
-if(${WITH_PROFILER})
+if(${WITH_GPERFTOOLS})
   target_link_libraries(common profiler)
-endif(${WITH_PROFILER})
+endif(${WITH_GPERFTOOLS})
 
 add_library(common_utf8 STATIC common/utf8.c)
 
@@ -553,6 +547,11 @@ target_link_libraries(ceph-mon mon boost_thread common os global ${EXTRALIBS}
 install(TARGETS ceph-mon DESTINATION bin)
 
 # OSD
+if(${HAVE_XFS})
+  set(libos_xfs_srcs
+    os/XfsFileStoreBackend.cc
+    os/fs/XFS.cc)
+endif(${HAVE_XFS})
 set(libos_srcs
   os/FileJournal.cc
   os/FileStore.cc
@@ -568,7 +567,6 @@ set(libos_srcs
   os/GenericFileStoreBackend.cc
   os/BtrfsFileStoreBackend.cc
   os/ZFSFileStoreBackend.cc
-  os/XfsFileStoreBackend.cc
   os/KeyValueStore.cc
   os/KeyValueDB.cc
   os/MemStore.cc
@@ -577,7 +575,8 @@ set(libos_srcs
   os/newstore/NewStore.cc
   os/newstore/newstore_types.cc
   os/fs/FS.cc
-  os/fs/XFS.cc)
+  ${libos_xfs_srcs})
+
 set(os_mon_files
   os/LevelDBStore.cc)
 add_library(os_mon_objs OBJECT ${os_mon_files})
@@ -788,6 +787,10 @@ if(WITH_LIBCEPHFS)
   target_link_libraries(client osdc mds ${LIBEDIT_LIBS})
   set(libcephfs_srcs libcephfs.cc)
   add_library(cephfs SHARED ${libcephfs_srcs})
+if(${ENABLE_SHARED})
+  set_target_properties(cephfs PROPERTIES OUTPUT_NAME cephfs VERSION 1.0.0
+    SOVERSION 1)
+endif(${ENABLE_SHARED})
   target_link_libraries(cephfs client global)
   install(TARGETS cephfs DESTINATION lib)
   install(DIRECTORY
@@ -809,7 +812,7 @@ if(WITH_LIBCEPHFS)
   install(TARGETS ceph-syn DESTINATION bin)
   install(TARGETS mount.ceph DESTINATION sbin)
 
-  if(WITH_FUSE)
+  if(HAVE_FUSE)
     set(ceph_fuse_srcs
       ceph_fuse.cc
       client/fuse_ll.cc)
@@ -817,7 +820,7 @@ if(WITH_LIBCEPHFS)
     target_link_libraries(ceph-fuse fuse client global)
     set_target_properties(ceph-fuse PROPERTIES COMPILE_FLAGS "-I${FUSE_INCLUDE_DIRS}")
     install(TARGETS ceph-fuse DESTINATION bin)
-  endif(WITH_FUSE)
+  endif(HAVE_FUSE)
 endif(WITH_LIBCEPHFS)
 
 if(${WITH_RBD})

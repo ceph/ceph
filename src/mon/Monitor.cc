@@ -451,8 +451,9 @@ const char** Monitor::get_tracked_conf_keys() const
   static const char* KEYS[] = {
     "crushtool", // helpful for testing
     "mon_lease",
-    "mon_lease_renew_interval",
-    "mon_lease_ack_timeout",
+    "mon_lease_renew_interval_factor",
+    "mon_lease_ack_timeout_factor",
+    "mon_accept_timeout_factor",
     // clog & admin clog
     "clog_to_monitors",
     "clog_to_syslog",
@@ -517,11 +518,10 @@ int Monitor::sanitize_options()
 
   // mon_lease must be greater than mon_lease_renewal; otherwise we
   // may incur in leases expiring before they are renewed.
-  if (g_conf->mon_lease <= g_conf->mon_lease_renew_interval) {
-    clog->error() << "mon_lease (" << g_conf->mon_lease
-                 << ") must be greater "
-                 << "than mon_lease_renew_interval ("
-                 << g_conf->mon_lease_renew_interval << ")";
+  if (g_conf->mon_lease_renew_interval_factor >= 1.0) {
+    clog->error() << "mon_lease_renew_interval_factor ("
+		  << g_conf->mon_lease_renew_interval_factor
+		  << ") must be less than 1.0";
     r = -EINVAL;
   }
 
@@ -530,13 +530,13 @@ int Monitor::sanitize_options()
   // with the same value, for a given small vale, could mean timing out if
   // the monitors happened to be overloaded -- or even under normal load for
   // a small enough value.
-  if (g_conf->mon_lease_ack_timeout <= g_conf->mon_lease) {
-    clog->error() << "mon_lease_ack_timeout ("
-                 << g_conf->mon_lease_ack_timeout
-                 << ") must be greater than mon_lease ("
-                 << g_conf->mon_lease << ")";
+  if (g_conf->mon_lease_ack_timeout_factor <= 1.0) {
+    clog->error() << "mon_lease_ack_timeout_factor ("
+		  << g_conf->mon_lease_ack_timeout_factor
+		  << ") must be greater than 1.0";
     r = -EINVAL;
   }
+
   return r;
 }
 
@@ -3083,8 +3083,6 @@ void Monitor::forward_request_leader(MonOpRequestRef op)
   } else {
     dout(10) << "forward_request no session for request " << *req << dendl;
   }
-  if (session)
-    session->put();
 }
 
 // fake connection attached to forwarded messages
@@ -3166,7 +3164,6 @@ void Monitor::handle_forward(MonOpRequestRef op)
     _ms_dispatch(req);
     s->put();
   }
-  session->put();
 }
 
 void Monitor::try_send_message(Message *m, const entity_inst_t& to)
@@ -3192,7 +3189,8 @@ void Monitor::send_reply(MonOpRequestRef op, Message *reply)
   Message *req = op->get_req();
   ConnectionRef con = op->get_connection();
 
-  dout(2) << __func__ << " " << op << " " << *reply << dendl;
+  reply->set_cct(g_ceph_context);
+  dout(2) << __func__ << " " << op << " " << reply << " " << *reply << dendl;
 
   if (!con) {
     dout(2) << "send_reply no connection, dropping reply " << *reply
@@ -3228,7 +3226,6 @@ void Monitor::send_reply(MonOpRequestRef op, Message *reply)
     session->con->send_message(reply);
     op->mark_event("reply: send");
   }
-  session->put();
 }
 
 void Monitor::no_reply(MonOpRequestRef op)
@@ -3261,7 +3258,6 @@ void Monitor::no_reply(MonOpRequestRef op)
              << " " << *req << dendl;
     op->mark_event("no_reply");
   }
-  session->put();
 }
 
 void Monitor::handle_route(MonOpRequestRef op)
@@ -3272,7 +3268,6 @@ void Monitor::handle_route(MonOpRequestRef op)
   if (session && !session->is_capable("mon", MON_CAP_X)) {
     dout(0) << "MRoute received from entity without appropriate perms! "
 	    << dendl;
-    session->put();
     return;
   }
   if (m->msg)
@@ -3304,8 +3299,6 @@ void Monitor::handle_route(MonOpRequestRef op)
       m->msg = NULL;
     }
   }
-  if (session)
-    session->put();
 }
 
 void Monitor::resend_routed_requests()
@@ -3418,6 +3411,7 @@ void Monitor::waitlist_or_zap_client(MonOpRequestRef op)
 void Monitor::_ms_dispatch(Message *m)
 {
   if (is_shutdown()) {
+    m->put();
     return;
   }
 
@@ -3444,7 +3438,6 @@ void Monitor::dispatch(MonOpRequestRef op)
   if (s && s->closed) {
     caps = s->caps;
     reuse_caps = true;
-    s->put();
     s = NULL;
   }
   Message *m = op->get_req();
@@ -3474,7 +3467,7 @@ void Monitor::dispatch(MonOpRequestRef op)
     s = session_map.new_session(m->get_source_inst(), m->get_connection().get());
     assert(s);
     m->get_connection()->set_priv(s->get());
-    dout(10) << "ms_dispatch new session " << s << " for " << s->inst << dendl;
+    dout(10) << "ms_dispatch new session " << s << " " << *s << dendl;
     op->set_session(s);
 
     logger->set(l_mon_num_sessions, session_map.get_size());
@@ -3495,6 +3488,7 @@ void Monitor::dispatch(MonOpRequestRef op)
     }
     if (reuse_caps)
       s->caps = caps;
+    s->put();
   } else {
     dout(20) << "ms_dispatch existing session " << s << " for " << s->inst << dendl;
   }
@@ -3507,11 +3501,9 @@ void Monitor::dispatch(MonOpRequestRef op)
 
   if (is_synchronizing() && !src_is_mon) {
     waitlist_or_zap_client(op);
-    return;
+  } else {
+    dispatch_op(op);
   }
-
-  dispatch_op(op);
-  s->put();
   return;
 }
 
@@ -4208,7 +4200,6 @@ void Monitor::handle_subscribe(MonOpRequestRef op)
   if (reply)
     m->get_connection()->send_message(new MMonSubscribeAck(monmap->get_fsid(), (int)g_conf->mon_subscribe_interval));
 
-  s->put();
 }
 
 void Monitor::handle_get_version(MonOpRequestRef op)
@@ -4253,10 +4244,8 @@ void Monitor::handle_get_version(MonOpRequestRef op)
 
     m->get_connection()->send_message(reply);
   }
-
-
  out:
-  s->put();
+  return;
 }
 
 bool Monitor::ms_handle_reset(Connection *con)

@@ -54,7 +54,6 @@ build-stamp: configure-stamp
 	cp src/init-ceph debian/ceph.init
 	cp src/init-radosgw debian/radosgw.init
 	cp src/logrotate.conf debian/ceph.logrotate
-	cp src/rgw/logrotate.conf debian/radosgw.logrotate
 
 	touch $@
 
@@ -85,7 +84,6 @@ install: build
 	install -D -m 644 udev/95-ceph-osd.rules $(DESTDIR)/lib/udev/rules.d/95-ceph-osd.rules
 	install -D -m 644 src/rbdmap $(DESTDIR)/etc/ceph/rbdmap
 	install -D -m 755 src/init-rbdmap $(DESTDIR)/etc/init.d/rbdmap
-	install -D -m 644 etc/ceph.limits.d $(DESTDIR)/etc/security/limits.d/ceph
 
 # Add here commands to install the package into debian/testpack.
 # Build architecture-independent files here.
@@ -129,6 +127,32 @@ binary-arch: build install
 	mv debian/ceph/etc/init/ceph-mds* debian/ceph-mds/etc/init
 	install -d -m0755 debian/radosgw/etc/init
 	install -m0644 src/upstart/radosgw*.conf debian/radosgw/etc/init
+	# install the systemd stuff manually since we have funny service names
+	install -d -m0755 debian/ceph-common/lib/systemd/system
+	install -m0644 systemd/ceph.target debian/ceph-common/lib/systemd/system
+	install -d -m0755 debian/ceph-common/etc/default/ceph
+	install -m0644 etc/default/ceph debian/ceph-common/etc/default/ceph
+	install -d -m0755 debian/ceph-common/usr/lib/tmpfiles.d
+	install -m 0644 -D systemd/ceph.tmpfiles.d debian/ceph-common/usr/lib/tmpfiles.d/ceph.conf
+
+	install -d -m0755 debian/ceph/lib/systemd/system
+	install -m0644 systemd/ceph-mon@.service debian/ceph/lib/systemd/system
+	install -m0644 systemd/ceph-create-keys@.service debian/ceph/lib/systemd/system
+	install -m0644 systemd/ceph-osd@.service debian/ceph/lib/systemd/system
+	install -m0644 systemd/ceph-disk@.service debian/ceph/lib/systemd/system
+	sed -i s./etc/sysconfig/./etc/default/.g debian/ceph/lib/systemd/system/ceph-mon@.service
+	sed -i s./etc/sysconfig/./etc/default/.g debian/ceph/lib/systemd/system/ceph-create-keys@.service
+	sed -i s./etc/sysconfig/./etc/default/.g debian/ceph/lib/systemd/system/ceph-osd@.service
+	sed -i s./etc/sysconfig/./etc/default/.g debian/ceph/lib/systemd/system/ceph-disk@.service
+
+	install -d -m0755 debian/ceph-mds/lib/systemd/system
+	install -m0644 systemd/ceph-mds@.service debian/ceph-mds/lib/systemd/system
+	sed -i s./etc/sysconfig/./etc/default/.g debian/ceph-mds/lib/systemd/system/ceph-mds@.service
+
+	install -d -m0755 debian/radosgw/lib/systemd/system
+	install -m0644 systemd/ceph-radosgw@.service debian/radosgw/lib/systemd/system
+	sed -i s./etc/sysconfig/./etc/default/.g debian/radosgw/lib/systemd/system/ceph-radosgw@.service
+
 	dh_installman -a
 	dh_lintian -a
 	dh_link -a

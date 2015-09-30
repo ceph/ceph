@@ -358,6 +358,9 @@ add_dependencies(check osd_crush)
 add_test(NAME mon_scrub COMMAND bash ${CMAKE_SOURCE_DIR}/src/test/mon/mon-scrub.sh)
 add_dependencies(check mon_scrub)
 
+add_test(NAME mon_ping COMMAND bash ${CMAKE_SOURCE_DIR}/src/test/mon/mon-ping.sh)
+add_dependencies(check mon_ping)
+
 add_test(NAME test_ceph_daemon COMMAND python ${CMAKE_SOURCE_DIR}/src/test/pybind/test_ceph_daemon.py)
 add_dependencies(check test_ceph_daemon)
 
@@ -1460,6 +1463,36 @@ if(${WITH_RADOSGW})
   set_target_properties(test_rgw_manifest PROPERTIES COMPILE_FLAGS
     ${UNITTEST_CXX_FLAGS})
 
+  # test_rgw_obj
+  set(test_rgw_obj_srcs rgw/test_rgw_obj.cc)
+  add_executable(test_rgw_obj
+    ${test_rgw_obj_srcs}
+    $<TARGET_OBJECTS:heap_profiler_objs>
+    )
+  target_link_libraries(test_rgw_obj
+    rgw_a
+    cls_rgw_client
+    cls_lock_client
+    cls_refcount_client
+    cls_log_client
+    cls_statelog_client
+    cls_version_client
+    cls_replica_log_client
+    cls_kvs
+    cls_user_client
+    librados
+    global
+    curl
+    uuid
+    expat
+    ${CMAKE_DL_LIBS}
+    ${TCMALLOC_LIBS}
+    ${UNITTEST_LIBS}
+    ${CRYPTO_LIBS}
+    )
+  set_target_properties(test_rgw_obj PROPERTIES COMPILE_FLAGS
+    ${UNITTEST_CXX_FLAGS})
+
   # test_cls_rgw_meta
   set(test_cls_rgw_meta_srcs test_rgw_admin_meta.cc)
   add_executable(test_cls_rgw_meta
@@ -2131,7 +2164,7 @@ target_link_libraries(test_keyvaluedb_iterators
   ${CMAKE_DL_LIBS}
   )
 
-if(${WITH_FUSE})
+if(${HAVE_FUSE})
   add_executable(test_cfuse_cache_invalidate
     test_cfuse_cache_invalidate.cc
     )
@@ -2142,7 +2175,7 @@ if(${WITH_FUSE})
     ${TCMALLOC_LIBS}
     ${CMAKE_DL_LIBS}
     )
-endif(${WITH_FUSE})
+endif(${HAVE_FUSE})
 
 if(${WITH_CEPHFS})
   add_executable(test_c_headers

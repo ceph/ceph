@@ -80,11 +80,6 @@ void VarLenGenerator::get_ranges_map(
     }
     pos += segment_length;
   }
-  // make sure we write up to the limit
-  if (limit > 0 && (
-	out.empty() ||
-	(out.rbegin()->first + out.rbegin()->second < limit)))
-    out[limit-1] = 1;
 }
 
 ObjectDesc::iterator &ObjectDesc::iterator::advance(bool init) {

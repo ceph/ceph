@@ -116,6 +116,7 @@ int Accepter::bind(const entity_addr_t &bind_addr, const set<int>& avoid_ports)
                              << ": " << cpp_strerror(errno)
                              << dendl;
             r = -errno;
+            listen_addr.set_port(0); //Clear port before retry, otherwise we shall fail again.
             continue;
         }
         ldout(msgr->cct,10) << "accepter.bind bound on random port " << listen_addr << dendl;

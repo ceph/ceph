@@ -2321,6 +2321,7 @@ static int do_metadata_remove(librbd::Image& image, const char *key)
   if (r < 0) {
     cerr << "failed to remove metadata " << key << " of image : " << cpp_strerror(r) << std::endl;
   }
+  return r;
 }
 
 static int do_metadata_get(librbd::Image& image, const char *key)
@@ -3174,10 +3175,6 @@ int main(int argc, const char **argv)
     } else if (ceph_argparse_witharg(args, i, &order, err, "--order", (char*)NULL)) {
       if (!err.str().empty()) {
 	cerr << "rbd: " << err.str() << std::endl;
-	return EXIT_FAILURE;
-      }
-      if ((order <= 0) || (order < 12) || (order > 25)) {
-	cerr << "rbd: order must be between 12 (4 KB) and 25 (32 MB)" << std::endl;
 	return EXIT_FAILURE;
       }
     } else if (ceph_argparse_witharg(args, i, &val, err, "--io-size", (char*)NULL)) {
