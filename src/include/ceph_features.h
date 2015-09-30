@@ -69,6 +69,7 @@
 #define CEPH_FEATURE_ERASURE_CODE_PLUGINS_V3 (1ULL<<53)
 #define CEPH_FEATURE_OSD_HITSET_GMT (1ULL<<54)
 #define CEPH_FEATURE_HAMMER_0_94_4 (1ULL<<55)
+#define CEPH_FEATURE_NEW_OSDOP_ENCODING   (1ULL<<56) /* New, v7 encoding */
 
 #define CEPH_FEATURE_RESERVED2 (1ULL<<61)  /* slow down, we are almost out... */
 #define CEPH_FEATURE_RESERVED  (1ULL<<62)  /* DO NOT USE THIS ... last bit! */
@@ -131,6 +132,7 @@ static inline unsigned long long ceph_sanitize_features(unsigned long long f) {
 	 CEPH_FEATURE_OSD_HBMSGS |		\
 	 CEPH_FEATURE_MDSENC |			\
 	 CEPH_FEATURE_OSDHASHPSPOOL |       \
+	 CEPH_FEATURE_NEW_OSDOP_ENCODING |        \
 	 CEPH_FEATURE_MON_SINGLE_PAXOS |    \
 	 CEPH_FEATURE_OSD_SNAPMAPPER |	    \
 	 CEPH_FEATURE_MON_SCRUB	|	    \
