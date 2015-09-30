@@ -1,0 +1,11 @@
+tasks:
+- rbd_fio:
+    client.0:
+      fio-version: 2.2.9
+      fio-io-size: 80%
+      formats: [2]
+      features: [1,13]
+      io-engine: rbd
+      test-clone-io: 1
+      rw: randrw
+      runtime: 900
