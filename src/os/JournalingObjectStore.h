@@ -19,6 +19,18 @@
 #include "Journal.h"
 #include "common/RWLock.h"
 
+#if defined(__linux__)
+# ifndef BTRFS_SUPER_MAGIC
+static const __SWORD_TYPE BTRFS_SUPER_MAGIC(0x9123683E);
+# endif
+# ifndef XFS_SUPER_MAGIC
+static const __SWORD_TYPE XFS_SUPER_MAGIC(0x58465342);
+# endif
+#ifndef ZFS_SUPER_MAGIC
+static const __SWORD_TYPE ZFS_SUPER_MAGIC(0x2fc12fc1);
+#endif
+#endif
+
 class JournalingObjectStore : public ObjectStore {
 protected:
   Journal *journal;
@@ -107,7 +119,8 @@ protected:
   } apply_manager;
 
   bool replaying;
-
+  long m_fs_type;
+  uint64_t last_journal_commit_seq;
 protected:
   void journal_start();
   void journal_stop();
@@ -135,7 +148,8 @@ public:
       journal(NULL),
       finisher(g_ceph_context),
       apply_manager(journal, finisher),
-      replaying(false) {}
+      replaying(false),
+      m_fs_type(0), last_journal_commit_seq(0) {}
   
 };
 
