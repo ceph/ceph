@@ -450,7 +450,7 @@ int rgw_remove_bucket(RGWRados *store, const string& bucket_owner, rgw_bucket& b
     return ret;
   }
 
-  ret = rgw_unlink_bucket(store, info.owner, bucket.name);
+  ret = rgw_unlink_bucket(store, info.owner, bucket.name,false);
   if (ret < 0) {
     lderr(store->ctx()) << "ERROR: unable to remove user bucket information" << dendl;
   }
