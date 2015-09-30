@@ -11,8 +11,8 @@
  * Foundation.  See file COPYING.
  *
  */
-#ifndef RGW_FILE_H
-#define RGW_FILE_H
+#ifndef RADOS_RGW_FILE_H
+#define RADOS_RGW_FILE_H
 
 #include <sys/types.h>
 #include <stdint.h>
@@ -215,4 +215,4 @@ int rgw_perm2acl();
 }
 #endif
 
-#endif
+#endif /* RADOS_RGW_FILE_H */
