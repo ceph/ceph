@@ -57,6 +57,7 @@ enum RGWOpType {
   RGW_OP_DELETE_CORS,
   RGW_OP_OPTIONS_CORS,
   RGW_OP_GET_REQUEST_PAYMENT,
+  RGW_OP_SET_REQUEST_PAYMENT,
   RGW_OP_INIT_MULTIPART,
   RGW_OP_COMPLETE_MULTIPART,
   RGW_OP_ABORT_MULTIPART,
@@ -848,6 +849,25 @@ public:
   virtual const string name() { return "get_request_payment"; }
   virtual RGWOpType get_type() { return RGW_OP_GET_REQUEST_PAYMENT; }
   virtual uint32_t op_mask() { return RGW_OP_TYPE_READ; }
+};
+
+class RGWSetRequestPayment : public RGWOp {
+protected:
+  bool requester_pays;
+  int ret;
+public:
+ RGWSetRequestPayment() : requester_pays(false), ret(0) {}
+
+  int verify_permission();
+  void pre_exec();
+  void execute();
+
+  virtual int get_params() { return 0; }
+
+  virtual void send_response() = 0;
+  virtual const string name() { return "set_request_payment"; }
+  virtual RGWOpType get_type() { return RGW_OP_SET_REQUEST_PAYMENT; }
+  virtual uint32_t op_mask() { return RGW_OP_TYPE_WRITE; }
 };
 
 class RGWInitMultipart : public RGWOp {

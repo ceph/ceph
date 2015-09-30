@@ -243,6 +243,15 @@ public:
   void send_response();
 };
 
+class RGWSetRequestPayment_ObjStore_S3 : public RGWSetRequestPayment {
+public:
+  RGWSetRequestPayment_ObjStore_S3() {}
+  ~RGWSetRequestPayment_ObjStore_S3() {}
+
+  int get_params();
+  void send_response();
+};
+
 class RGWInitMultipart_ObjStore_S3 : public RGWInitMultipart_ObjStore {
 public:
   RGWInitMultipart_ObjStore_S3() {}

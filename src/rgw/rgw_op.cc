@@ -2986,6 +2986,34 @@ void RGWGetRequestPayment::execute()
   requester_pays = s->bucket_info.requester_pays;
 }
 
+int RGWSetRequestPayment::verify_permission()
+{
+  if (s->user.user_id.compare(s->bucket_owner.get_id()) != 0)
+    return -EACCES;
+
+  return 0;
+}
+
+void RGWSetRequestPayment::pre_exec()
+{
+  rgw_bucket_object_pre_exec(s);
+}
+
+void RGWSetRequestPayment::execute()
+{
+  ret = get_params();
+
+  if (ret < 0)
+    return;
+
+  s->bucket_info.requester_pays = requester_pays;
+  ret = store->put_bucket_instance_info(s->bucket_info, false, 0, &s->bucket_attrs);
+  if (ret < 0) {
+    ldout(s->cct, 0) << "NOTICE: put_bucket_info on bucket=" << s->bucket.name << " returned err=" << ret << dendl;
+    return;
+  }
+}
+
 int RGWInitMultipart::verify_permission()
 {
   if (!verify_bucket_permission(s, RGW_PERM_WRITE))
