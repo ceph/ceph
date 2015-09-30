@@ -234,6 +234,14 @@ public:
   void send_response();
 };
 
+class RGWGetRequestPayment_ObjStore_S3 : public RGWGetRequestPayment {
+public:
+  RGWGetRequestPayment_ObjStore_S3() {}
+  ~RGWGetRequestPayment_ObjStore_S3() {}
+
+  void send_response();
+};
+
 class RGWInitMultipart_ObjStore_S3 : public RGWInitMultipart_ObjStore {
 public:
   RGWInitMultipart_ObjStore_S3() {}
@@ -399,6 +407,9 @@ protected:
   }
   bool is_obj_update_op() {
     return is_acl_op() || is_cors_op();
+  }
+  bool is_request_payment_op() {
+    return s->info.args.exists("requestPayment");
   }
   RGWOp *get_obj_op(bool get_data);
 

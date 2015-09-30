@@ -1692,6 +1692,20 @@ void RGWOptionsCORS_ObjStore_S3::send_response()
   end_header(s, NULL);
 }
 
+void RGWGetRequestPayment_ObjStore_S3::send_response()
+{
+  dump_errno(s);
+  end_header(s, this, "application/xml");
+  dump_start(s);
+
+  s->formatter->open_object_section_in_ns("RequestPaymentConfiguration",
+					  "http://s3.amazonaws.com/doc/2006-03-01/");
+  const char *payer = requester_pays ? "Requester" :  "BucketOwner";
+  s->formatter->dump_string("Payer", payer);
+  s->formatter->close_section();
+  rgw_flush_formatter_and_reset(s, s->formatter);
+}
+
 int RGWInitMultipart_ObjStore_S3::get_params()
 {
   RGWAccessControlPolicy_S3 s3policy(s->cct);
@@ -1968,6 +1982,8 @@ RGWOp *RGWHandler_ObjStore_Bucket_S3::op_get()
     return new RGWGetACLs_ObjStore_S3;
   } else if (is_cors_op()) {
     return new RGWGetCORS_ObjStore_S3;
+  } else if (is_request_payment_op()) {
+    return new RGWGetRequestPayment_ObjStore_S3;
   } else if (s->info.args.exists("uploads")) {
     return new RGWListBucketMultiparts_ObjStore_S3;
   }

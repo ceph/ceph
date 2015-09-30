@@ -549,6 +549,7 @@ void RGWBucketInfo::dump(Formatter *f) const
   encode_json("quota", quota, f);
   encode_json("num_shards", num_shards, f);
   encode_json("bi_shard_hash_type", (uint32_t)bucket_index_shard_hash_type, f);
+  encode_json("requester_pays", requester_pays, f);
 }
 
 void RGWBucketInfo::decode_json(JSONObj *obj) {
@@ -564,6 +565,7 @@ void RGWBucketInfo::decode_json(JSONObj *obj) {
   uint32_t hash_type;
   JSONDecoder::decode_json("bi_shard_hash_type", hash_type, obj);
   bucket_index_shard_hash_type = (uint8_t)hash_type;
+  JSONDecoder::decode_json("requester_pays", requester_pays, obj);
 }
 
 void RGWObjEnt::dump(Formatter *f) const
