@@ -8,6 +8,10 @@
 #include <sys/wait.h>
 #include <errno.h>
 #include <unistd.h>
+#include <sstream>
+#include <string>
+
+#include "include/assert.h"
 #include "common/safe_io.h"
 #include "common/errno.h"
 
