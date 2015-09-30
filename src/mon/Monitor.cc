@@ -138,6 +138,8 @@ long parse_pos_long(const char *s, ostream *pss)
   return r;
 }
 
+Monitor * Monitor::_mon = NULL;
+
 Monitor::Monitor(CephContext* cct_, string nm, MonitorDBStore *s,
 		 Messenger *m, MonMap *map) :
   Dispatcher(cct_),

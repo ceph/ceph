@@ -730,7 +730,7 @@ int main(int argc, const char **argv)
   // start monitor
   mon = new Monitor(g_ceph_context, g_conf->name.get_id(), store,
 		    msgr, &monmap);
-
+  Monitor::set_instance(mon);
   if (force_sync) {
     derr << "flagging a forced sync ..." << dendl;
     mon->sync_force(NULL, cerr);
