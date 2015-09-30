@@ -393,11 +393,11 @@ void dump_log(Formatter *formatter, ostream &out, pg_log_t &log,
 }
 
 //Based on RemoveWQ::_process()
-void remove_coll(ObjectStore *store, const coll_t &coll)
+void remove_coll(ObjectStore *store, const coll_t &coll,
+		 ObjectStore::Sequencer &osr)
 {
   spg_t pg;
   coll.is_pg_prefix(&pg);
-  ObjectStore::Sequencer osr(__func__);
   OSDriver driver(
     store,
     coll_t(),
@@ -496,7 +496,8 @@ int mark_pg_for_removal(ObjectStore *fs, spg_t pgid, ObjectStore::Transaction *t
   return 0;
 }
 
-int initiate_new_remove_pg(ObjectStore *store, spg_t r_pgid)
+int initiate_new_remove_pg(ObjectStore *store, spg_t r_pgid,
+			   ObjectStore::Sequencer &osr)
 {
   if (!dry_run)
     finish_remove_pgs(store);
@@ -507,7 +508,6 @@ int initiate_new_remove_pg(ObjectStore *store, spg_t r_pgid)
   if (dry_run)
     return 0;
   ObjectStore::Transaction *rmt = new ObjectStore::Transaction;
-  ObjectStore::Sequencer osr(__func__);
   int r = mark_pg_for_removal(store, r_pgid, rmt);
   if (r < 0) {
     delete rmt;
@@ -703,7 +703,8 @@ int ObjectStoreTool::export_files(ObjectStore *store, coll_t coll)
   return 0;
 }
 
-int set_inc_osdmap(ObjectStore *store, epoch_t e, bufferlist& bl, bool force) {
+int set_inc_osdmap(ObjectStore *store, epoch_t e, bufferlist& bl, bool force,
+		   ObjectStore::Sequencer &osr) {
   OSDMap::Incremental inc;
   bufferlist::iterator it = bl.begin();
   inc.decode(it);
@@ -727,7 +728,6 @@ int set_inc_osdmap(ObjectStore *store, epoch_t e, bufferlist& bl, bool force) {
     cout << "Creating a new epoch." << std::endl;
   }
   ObjectStore::Transaction t;
-  ObjectStore::Sequencer osr(__func__);
   t.write(coll_t::meta(), inc_oid, 0, bl.length(), bl);
   t.truncate(coll_t::meta(), inc_oid, bl.length());
   int ret = store->apply_transaction(&osr, t);
@@ -749,7 +749,8 @@ int get_inc_osdmap(ObjectStore *store, epoch_t e, bufferlist& bl)
   return 0;
 }
 
-int set_osdmap(ObjectStore *store, epoch_t e, bufferlist& bl, bool force) {
+int set_osdmap(ObjectStore *store, epoch_t e, bufferlist& bl, bool force,
+	       ObjectStore::Sequencer &osr) {
   OSDMap osdmap;
   osdmap.decode(bl);
   if (e == 0) {
@@ -771,7 +772,6 @@ int set_osdmap(ObjectStore *store, epoch_t e, bufferlist& bl, bool force) {
     }
     cout << "Creating a new epoch." << std::endl;
   }
-  ObjectStore::Sequencer osr(__func__);
   ObjectStore::Transaction t;
   t.write(coll_t::meta(), full_oid, 0, bl.length(), bl);
   t.truncate(coll_t::meta(), full_oid, bl.length());
@@ -931,9 +931,10 @@ int get_omap(ObjectStore *store, coll_t coll, ghobject_t hoid,
 }
 
 int ObjectStoreTool::get_object(ObjectStore *store, coll_t coll,
-    bufferlist &bl, OSDMap &curmap, bool *skipped_objects)
+				bufferlist &bl, OSDMap &curmap,
+				bool *skipped_objects,
+				ObjectStore::Sequencer &osr)
 {
-  ObjectStore::Sequencer osr(__func__);
   ObjectStore::Transaction tran;
   ObjectStore::Transaction *t = &tran;
   bufferlist::iterator ebliter = bl.begin();
@@ -1200,7 +1201,8 @@ void filter_divergent_priors(spg_t import_pgid, const OSDMap &curmap,
 }
 
 int ObjectStoreTool::do_import(ObjectStore *store, OSDSuperblock& sb,
-    bool force, std::string pgidstr)
+			       bool force, std::string pgidstr,
+			       ObjectStore::Sequencer &osr)
 {
   bufferlist ebl;
   pg_info_t info;
@@ -1329,7 +1331,6 @@ int ObjectStoreTool::do_import(ObjectStore *store, OSDSuperblock& sb,
   }
 
   if (!dry_run) {
-    ObjectStore::Sequencer osr(__func__);
     ObjectStore::Transaction *t = new ObjectStore::Transaction;
     PG::_create(*t, pgid,
 		pgid.get_split_bits(curmap.get_pg_pool(pgid.pool())->get_pg_num()));
@@ -1365,7 +1366,7 @@ int ObjectStoreTool::do_import(ObjectStore *store, OSDSuperblock& sb,
     }
     switch(type) {
     case TYPE_OBJECT_BEGIN:
-      ret = get_object(store, coll, ebl, curmap, &skipped_objects);
+      ret = get_object(store, coll, ebl, curmap, &skipped_objects, osr);
       if (ret) return ret;
       break;
     case TYPE_PG_METADATA:
@@ -1387,7 +1388,6 @@ int ObjectStoreTool::do_import(ObjectStore *store, OSDSuperblock& sb,
     return -EFAULT;
   }
 
-  ObjectStore::Sequencer osr(__func__);
   ObjectStore::Transaction t;
   if (!dry_run) {
     pg_log_t newlog, reject;
@@ -1472,11 +1472,12 @@ int do_meta(ObjectStore *store, string object, Formatter *formatter, bool debug,
   return 0;
 }
 
-int do_remove_object(ObjectStore *store, coll_t coll, ghobject_t &ghobj)
+int do_remove_object(ObjectStore *store, coll_t coll,
+		     ghobject_t &ghobj,
+		     ObjectStore::Sequencer &osr)
 {
   spg_t pg;
   coll.is_pg_prefix(&pg);
-  ObjectStore::Sequencer osr(__func__);
   OSDriver driver(
     store,
     coll_t(),
@@ -1593,9 +1594,10 @@ int do_get_bytes(ObjectStore *store, coll_t coll, ghobject_t &ghobj, int fd)
   return 0;
 }
 
-int do_set_bytes(ObjectStore *store, coll_t coll, ghobject_t &ghobj, int fd)
+int do_set_bytes(ObjectStore *store, coll_t coll,
+		 ghobject_t &ghobj, int fd,
+		 ObjectStore::Sequencer &osr)
 {
-  ObjectStore::Sequencer osr(__func__);
   ObjectStore::Transaction tran;
   ObjectStore::Transaction *t = &tran;
 
@@ -1654,9 +1656,10 @@ int do_get_attr(ObjectStore *store, coll_t coll, ghobject_t &ghobj, string key)
   return 0;
 }
 
-int do_set_attr(ObjectStore *store, coll_t coll, ghobject_t &ghobj, string key, int fd)
+int do_set_attr(ObjectStore *store, coll_t coll,
+		ghobject_t &ghobj, string key, int fd,
+		ObjectStore::Sequencer &osr)
 {
-  ObjectStore::Sequencer osr(__func__);
   ObjectStore::Transaction tran;
   ObjectStore::Transaction *t = &tran;
   bufferlist bl;
@@ -1676,9 +1679,10 @@ int do_set_attr(ObjectStore *store, coll_t coll, ghobject_t &ghobj, string key, 
   return 0;
 }
 
-int do_rm_attr(ObjectStore *store, coll_t coll, ghobject_t &ghobj, string key)
+int do_rm_attr(ObjectStore *store, coll_t coll,
+	       ghobject_t &ghobj, string key,
+	       ObjectStore::Sequencer &osr)
 {
-  ObjectStore::Sequencer osr(__func__);
   ObjectStore::Transaction tran;
   ObjectStore::Transaction *t = &tran;
 
@@ -1722,9 +1726,10 @@ int do_get_omap(ObjectStore *store, coll_t coll, ghobject_t &ghobj, string key)
   return 0;
 }
 
-int do_set_omap(ObjectStore *store, coll_t coll, ghobject_t &ghobj, string key, int fd)
+int do_set_omap(ObjectStore *store, coll_t coll,
+		ghobject_t &ghobj, string key, int fd,
+		ObjectStore::Sequencer &osr)
 {
-  ObjectStore::Sequencer osr(__func__);
   ObjectStore::Transaction tran;
   ObjectStore::Transaction *t = &tran;
   map<string, bufferlist> attrset;
@@ -1747,9 +1752,10 @@ int do_set_omap(ObjectStore *store, coll_t coll, ghobject_t &ghobj, string key, 
   return 0;
 }
 
-int do_rm_omap(ObjectStore *store, coll_t coll, ghobject_t &ghobj, string key)
+int do_rm_omap(ObjectStore *store, coll_t coll,
+	       ghobject_t &ghobj, string key,
+	       ObjectStore::Sequencer &osr)
 {
-  ObjectStore::Sequencer osr(__func__);
   ObjectStore::Transaction tran;
   ObjectStore::Transaction *t = &tran;
   set<string> keys;
@@ -1785,9 +1791,10 @@ int do_get_omaphdr(ObjectStore *store, coll_t coll, ghobject_t &ghobj)
   return 0;
 }
 
-int do_set_omaphdr(ObjectStore *store, coll_t coll, ghobject_t &ghobj, int fd)
+int do_set_omaphdr(ObjectStore *store, coll_t coll,
+		   ghobject_t &ghobj, int fd,
+		   ObjectStore::Sequencer &osr)
 {
-  ObjectStore::Sequencer osr(__func__);
   ObjectStore::Transaction tran;
   ObjectStore::Transaction *t = &tran;
   bufferlist hdrbl;
@@ -1808,7 +1815,12 @@ int do_set_omaphdr(ObjectStore *store, coll_t coll, ghobject_t &ghobj, int fd)
 }
 
 struct do_fix_lost : public action_on_object_t {
-  virtual int call(ObjectStore *store, coll_t coll, ghobject_t &ghobj, object_info_t &oi) {
+  ObjectStore::Sequencer *osr;
+
+  do_fix_lost(ObjectStore::Sequencer *_osr) : osr(_osr) {}
+
+  virtual int call(ObjectStore *store, coll_t coll,
+		   ghobject_t &ghobj, object_info_t &oi) {
     if (oi.is_lost()) {
       cout << coll << "/" << ghobj << " is lost";
       if (!dry_run)
@@ -1819,10 +1831,9 @@ struct do_fix_lost : public action_on_object_t {
       oi.clear_flag(object_info_t::FLAG_LOST);
       bufferlist bl;
       ::encode(oi, bl);
-      ObjectStore::Sequencer osr("do_fix_lost");
       ObjectStore::Transaction t;
       t.setattr(coll, ghobj, OI_ATTR, bl);
-      int r = store->apply_transaction(&osr, t);
+      int r = store->apply_transaction(osr, t);
       if (r < 0) {
 	cerr << "Error getting fixing attr on : " << make_pair(coll, ghobj)
 	     << ", "
@@ -2153,6 +2164,7 @@ int main(int argc, char **argv)
     myexit(1);
   }
 
+  ObjectStore::Sequencer *osr = new ObjectStore::Sequencer(__func__);
   int ret = fs->mount();
   if (ret < 0) {
     if (ret == -EBUSY) {
@@ -2164,8 +2176,6 @@ int main(int argc, char **argv)
   }
 
   bool fs_sharded_objects = fs->get_allow_sharded_objects();
-
-  ObjectStore::Sequencer osr(__func__);
 
   vector<coll_t> ls;
   vector<coll_t>::iterator it;
@@ -2374,7 +2384,7 @@ int main(int argc, char **argv)
       bl.clear();
       ::encode(superblock, bl);
       t.write(coll_t::meta(), OSD_SUPERBLOCK_POBJECT, 0, bl.length(), bl);
-      ret = fs->apply_transaction(&osr, t);
+      ret = fs->apply_transaction(osr, t);
       if (ret < 0) {
         cerr << "Error writing OSD superblock: " << cpp_strerror(ret) << std::endl;
         goto out;
@@ -2407,7 +2417,7 @@ int main(int argc, char **argv)
   if (op == "import") {
 
     try {
-      ret = tool.do_import(fs, superblock, force, pgidstr);
+      ret = tool.do_import(fs, superblock, force, pgidstr, *osr);
     }
     catch (const buffer::error &e) {
       cerr << "do_import threw exception error " << e.what() << std::endl;
@@ -2457,7 +2467,7 @@ int main(int argc, char **argv)
     if (ret < 0) {
       cerr << "Failed to read osdmap " << cpp_strerror(ret) << std::endl;
     } else {
-      ret = set_osdmap(fs, epoch, bl, force);
+      ret = set_osdmap(fs, epoch, bl, force, *osr);
     }
     goto out;
   } else if (op == "get-inc-osdmap") {
@@ -2485,7 +2495,7 @@ int main(int argc, char **argv)
       cerr << "Failed to read incremental osdmap  " << cpp_strerror(ret) << std::endl;
       goto out;
     } else {
-      ret = set_inc_osdmap(fs, epoch, bl, force);
+      ret = set_inc_osdmap(fs, epoch, bl, force, *osr);
     }
     goto out;
   }
@@ -2494,7 +2504,7 @@ int main(int argc, char **argv)
   biginfo_oid = OSD::make_pg_biginfo_oid(pgid);
 
   if (op == "remove") {
-    ret = initiate_new_remove_pg(fs, pgid);
+    ret = initiate_new_remove_pg(fs, pgid, *osr);
     if (ret < 0) {
       cerr << "PG '" << pgid << "' not found" << std::endl;
       goto out;
@@ -2505,7 +2515,7 @@ int main(int argc, char **argv)
 
   if (op == "fix-lost") {
     boost::scoped_ptr<action_on_object_t> action;
-    action.reset(new do_fix_lost());
+    action.reset(new do_fix_lost(osr));
     if (pgidstr.length())
       ret = action_on_all_objects_in_exact_pg(fs, coll_t(pgid), *action, debug);
     else
@@ -2602,7 +2612,7 @@ int main(int argc, char **argv)
     if (vm.count("objcmd")) {
       ret = 0;
       if (objcmd == "remove") {
-        ret = do_remove_object(fs, coll, ghobj);
+        ret = do_remove_object(fs, coll, ghobj, *osr);
         goto out;
       } else if (objcmd == "list-attrs") {
         ret = do_list_attrs(fs, coll, ghobj);
@@ -2644,7 +2654,7 @@ int main(int argc, char **argv)
               goto out;
             }
           }
-          ret = do_set_bytes(fs, coll, ghobj, fd);
+          ret = do_set_bytes(fs, coll, ghobj, fd, *osr);
           if (fd != STDIN_FILENO)
             close(fd);
         }
@@ -2680,7 +2690,7 @@ int main(int argc, char **argv)
 	    goto out;
 	  }
 	}
-	ret = do_set_attr(fs, coll, ghobj, arg1, fd);
+	ret = do_set_attr(fs, coll, ghobj, arg1, fd, *osr);
 	if (fd != STDIN_FILENO)
 	  close(fd);
         goto out;
@@ -2690,7 +2700,7 @@ int main(int argc, char **argv)
           ret = 1;
           goto out;
         }
-	ret = do_rm_attr(fs, coll, ghobj, arg1);
+	ret = do_rm_attr(fs, coll, ghobj, arg1, *osr);
         goto out;
       } else if (objcmd == "get-omap") {
 	if (vm.count("arg1") == 0) {
@@ -2723,7 +2733,7 @@ int main(int argc, char **argv)
 	    goto out;
 	  }
 	}
-	ret = do_set_omap(fs, coll, ghobj, arg1, fd);
+	ret = do_set_omap(fs, coll, ghobj, arg1, fd, *osr);
 	if (fd != STDIN_FILENO)
 	  close(fd);
         goto out;
@@ -2733,7 +2743,7 @@ int main(int argc, char **argv)
           ret = 1;
           goto out;
         }
-	ret = do_rm_omap(fs, coll, ghobj, arg1);
+	ret = do_rm_omap(fs, coll, ghobj, arg1, *osr);
         goto out;
       } else if (objcmd == "get-omaphdr") {
 	if (vm.count("arg1")) {
@@ -2767,7 +2777,7 @@ int main(int argc, char **argv)
 	    goto out;
 	  }
 	}
-	ret = do_set_omaphdr(fs, coll, ghobj, fd);
+	ret = do_set_omaphdr(fs, coll, ghobj, fd, *osr);
 	if (fd != STDIN_FILENO)
 	  close(fd);
         goto out;
@@ -2844,7 +2854,7 @@ int main(int argc, char **argv)
       ret = write_info(*t, map_epoch, info, past_intervals);
 
       if (ret == 0) {
-        fs->apply_transaction(&osr, *t);
+        fs->apply_transaction(osr, *t);
         cout << "Removal succeeded" << std::endl;
       }
     } else if (op == "mark-complete") {
@@ -2870,7 +2880,7 @@ int main(int argc, char **argv)
 
       ret = write_info(*t, map_epoch, info, past_intervals);
       if (ret == 0) {
-	fs->apply_transaction(&osr, *t);
+	fs->apply_transaction(osr, *t);
 	cout << "Marking complete succeeded" << std::endl;
       }
     } else {
@@ -2883,6 +2893,7 @@ int main(int argc, char **argv)
 
 out:
   int r = fs->umount();
+  delete osr;
   if (r < 0) {
     cerr << "umount failed: " << cpp_strerror(r) << std::endl;
     // If no previous error, then use umount() error
