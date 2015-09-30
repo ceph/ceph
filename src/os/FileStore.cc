@@ -1642,7 +1642,13 @@ int FileStore::mount()
       return err;
     }
   }
-
+  VOID_TEMP_FAILURE_RETRY(::close(current_fd));
+  current_fd = -1;
+  VOID_TEMP_FAILURE_RETRY(::close(basedir_fd));
+  basedir_fd = -1;
+  VOID_TEMP_FAILURE_RETRY(::close(fsid_fd));
+  fsid_fd = -1;
+  
   // all okay.
   return 0;
 
