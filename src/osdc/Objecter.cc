@@ -314,6 +314,8 @@ void Objecter::shutdown()
 
   initialized.set(0);
 
+  cct->_conf->remove_observer(this);
+
   map<int,OSDSession*>::iterator p;
   while (!osd_sessions.empty()) {
     p = osd_sessions.begin();
