@@ -348,7 +348,7 @@ class Thrasher:
         self.dead_osds.append(osd)
         self.ceph_manager.blackhole_kill_osd(osd)
 
-    def revive_osd(self, osd=None):
+    def revive_osd(self, osd=None, skip_admin_check=False):
         """
         Revive the osd.
         :param osd: Osd to be revived.
@@ -356,7 +356,10 @@ class Thrasher:
         if osd is None:
             osd = random.choice(self.dead_osds)
         self.log("Reviving osd %s" % (str(osd),))
-        self.ceph_manager.revive_osd(osd, self.revive_timeout)
+        self.ceph_manager.revive_osd(
+            osd,
+            self.revive_timeout,
+            skip_admin_check=skip_admin_check)
         self.dead_osds.remove(osd)
         self.live_osds.append(osd)
 
@@ -1737,7 +1740,7 @@ class CephManager:
         time.sleep(2)
         self.ctx.daemons.get_daemon('osd', osd).stop()
 
-    def revive_osd(self, osd, timeout=150):
+    def revive_osd(self, osd, timeout=150, skip_admin_check=False):
         """
         Revive osds by either power cycling (if indicated by the config)
         or by restarting.
@@ -1760,13 +1763,15 @@ class CephManager:
             make_admin_daemon_dir(self.ctx, remote)
             self.ctx.daemons.get_daemon('osd', osd).reset()
         self.ctx.daemons.get_daemon('osd', osd).restart()
-        # wait for dump_ops_in_flight; this command doesn't appear
-        # until after the signal handler is installed and it is safe
-        # to stop the osd again without making valgrind leak checks
-        # unhappy.  see #5924.
-        self.wait_run_admin_socket('osd', osd,
-                                   args=['dump_ops_in_flight'],
-                                   timeout=timeout)
+
+        if not skip_admin_check:
+            # wait for dump_ops_in_flight; this command doesn't appear
+            # until after the signal handler is installed and it is safe
+            # to stop the osd again without making valgrind leak checks
+            # unhappy.  see #5924.
+            self.wait_run_admin_socket('osd', osd,
+                                       args=['dump_ops_in_flight'],
+                                       timeout=timeout)
 
     def mark_down_osd(self, osd):
         """
@@ -1979,7 +1984,9 @@ def utility_task(name):
     return task
 
 revive_osd = utility_task("revive_osd")
+revive_mon = utility_task("revive_mon")
 kill_osd = utility_task("kill_osd")
+kill_mon = utility_task("kill_mon")
 create_pool = utility_task("create_pool")
 remove_pool = utility_task("remove_pool")
 wait_for_clean = utility_task("wait_for_clean")
