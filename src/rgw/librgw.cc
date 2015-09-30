@@ -363,6 +363,20 @@ void RGWLibIO::init_env(CephContext* cct)
   env.set("SERVER_PORT", port_buf);
 }
 
+int RGWLibRequest::read_permissions(RGWOp *op) {
+  int ret =
+    rgw_build_bucket_policies(librgw.get_store(), s);
+  if (ret < 0) {
+    ldout(s->cct, 10) << "read_permissions on "
+		      << s->bucket << ":" << s->object << " ret=" << ret
+		      << dendl;
+    if (ret == -ENODATA)
+      ret = -EACCES;
+  }
+
+  return ret;
+}
+
 int process_request(RGWRados* store, RGWREST* rest, RGWRequest* base_req,
 		    RGWLibIO* io, OpsLogSocket* olog)
 {
@@ -393,8 +407,7 @@ int process_request(RGWRados* store, RGWREST* rest, RGWRequest* base_req,
 
   req->log_format(s, "initializing for trans_id = %s", s->trans_id.c_str());
 
-  /* XXX the following works, but we shouldn't need to pay for a
-   * dynamic cast */
+  /* XXX programmer is enforcing (for now)  */
   RGWOp *op = reinterpret_cast<RGWOp*>(req); // req->op is already correct
 
   bool should_log = true;
@@ -402,15 +415,12 @@ int process_request(RGWRados* store, RGWREST* rest, RGWRequest* base_req,
   // just checks the HTTP header, and that the user can access the gateway
   // may be able to skip this after MOUNT (revalidate the user info)
   req->log(s, "authorizing");
-#warning need new authorize() mechanism
-#if 0
-  ret = handler->authorize(); // validates s->user
+  ret = RGW_Auth_S3::authorize(store, s); // validates s->user
   if (ret < 0) {
     dout(10) << "failed to authorize request" << dendl;
-    abort_early(s, op, ret, handler);
+    abort_early(s, op, ret, nullptr);
     goto done;
   }
-#endif
 
   if (s->user.suspended) {
     dout(10) << "user is suspended, uid=" << s->user.user_id << dendl;
@@ -418,14 +428,11 @@ int process_request(RGWRados* store, RGWREST* rest, RGWRequest* base_req,
     goto done;
   }
   req->log(s, "reading permissions");
-#warning need a new read_permissions(op) mechanism
-#if 0
-  ret = handler->read_permissions(op);
+  ret = req->read_permissions(op);
   if (ret < 0) {
     abort_early(s, op, ret, nullptr);
     goto done;
   }
-#endif
 
   req->log(s, "init op");
   ret = op->init_processing();
