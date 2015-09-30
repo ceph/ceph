@@ -1,0 +1,12 @@
+tasks:
+- install:
+- ceph: null
+- rbd_fio:
+    client.0:
+       fio-version: 2.2.9
+       fio-io-size: 90%
+       formats: [2]
+       features: [1, 2]
+       io-engine: sync
+       rw: randrw
+       runtime: 900
