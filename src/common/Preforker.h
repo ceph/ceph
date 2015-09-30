@@ -10,9 +10,6 @@
 #include <errno.h>
 #include <stdlib.h>
 #include <unistd.h>
-#ifdef WITH_LTTNG
-#include <lttng/ust.h>
-#endif
 #include <sstream>
 #include <string>
 
@@ -33,9 +30,6 @@ class Preforker {
   pid_t childpid;
   bool forked;
   int fd[2];  // parent's, child's
-#ifdef WITH_LTTNG
-    sigset_t sigset;
-#endif
 
 public:
   Preforker()
@@ -53,10 +47,6 @@ public:
       return r;
     }
 
-#ifdef WITH_LTTNG
-    ust_before_fork(&sigset);
-#endif
-
     forked = true;
 
     childpid = fork();
@@ -67,9 +57,9 @@ public:
       return r;
     }
     if (childpid == 0) {
-      child_after_fork();
+      ::close(fd[0]);
     } else {
-      parent_after_fork();
+      ::close(fd[1]);
     }
     return 0;
   }
@@ -138,20 +128,6 @@ public:
     r += r2;  // make the compiler shut up about the unused return code from ::write(2).
   }
   
-private:
-  void child_after_fork() {
-#ifdef WITH_LTTNG
-    ust_after_fork_child(&sigset);
-#endif
-    ::close(fd[0]);
-  }
-
-  void parent_after_fork() {
-#ifdef WITH_LTTNG
-    ust_after_fork_parent(&sigset);
-#endif
-    ::close(fd[1]);
-  }
 };
 
 #endif
