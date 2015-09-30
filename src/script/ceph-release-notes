@@ -6,7 +6,7 @@
 
   virtualenv v
   source v/bin/activate
-  pip install githubpy GitPython
+  pip install githubpy GitPython requests
 
 Generate a github access token; this is needed as the anonymous access
 to Github's API will easily hit the limit even with a single invocation.
@@ -29,6 +29,7 @@ import github
 import os
 import re
 import sys
+import requests
 
 from git import Repo
 
@@ -37,9 +38,9 @@ merge_re = re.compile("Merge pull request #(\d+).*")
 fixes_re = re.compile(r"Fixes\:? #(\d+)")
 tracker_re = re.compile("http://tracker.ceph.com/issues/(\d+)")
 signed_off_re = re.compile("Signed-off-by: (.+) <")
+tracker_uri = "http://tracker.ceph.com/issues/{0}.json"
 
-
-def make_release_notes(gh, repo, ref, plaintext):
+def make_release_notes(gh, repo, ref, plaintext,original_issue):
 
     issue2prs = {}
 
@@ -61,6 +62,24 @@ def make_release_notes(gh, repo, ref, plaintext):
             if not issue:
                 print ("ERROR: http://github.com/ceph/ceph/pull/" + str(number) + " has no associated issue")
                 continue    
+
+            if original_issue:
+                r = requests.get(tracker_uri.format(issue),params={"include":"relations"})
+
+                # Verify that we are indeed looking at a backports issue
+                if r.json()["issue"]["tracker"]["name"] != "Backport":
+                    continue
+
+                # Now we can get an original issue only if the
+                # relations field is populated, otherwise we fallback
+                # to the tracker number
+                try:
+                    relations = r.json()["issue"]["relations"]
+                except KeyError:
+                    continue
+                related_issues = [str(i['issue_id']) for i in relations if i["relation_type"] == "copied_to"]
+                if related_issues:
+                    issue = ','.join(related_issues)
 
             title = pr['title']
 
@@ -96,9 +115,14 @@ if __name__ == "__main__":
                         help="path to ceph git repo")
     parser.add_argument("--token", default=os.getenv("GITHUB_ACCESS_TOKEN"),
                         help="Github Access Token ($GITHUB_ACCESS_TOKEN otherwise)")
+    parser.add_argument("--original_issue", dest='original_issue', action='store_true',
+                        help="When the issue id is a backport, use original upstream issue id instead (default)")
+    parser.add_argument("--no_original_issue", dest='original_issue', action='store_false',
+                        help="When the issue id is a backport, don't use original upstream issue id instead")
+    parser.set_defaults(original_issue=True)
 
     args = parser.parse_args()
     gh = github.GitHub(
         access_token=args.token)
 
-    make_release_notes(gh, Repo(args.repo), args.rev, args.text)
+    make_release_notes(gh, Repo(args.repo), args.rev, args.text, args.original_issue)
