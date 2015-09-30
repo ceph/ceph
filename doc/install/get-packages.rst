@@ -65,28 +65,6 @@ key. For development testing packages, use the ``autobuild.asc`` key (developers
 and QA).
 
 
-.. _mirrors:
-
-Mirrors
-=======
-
-For improved user experience multiple mirrors for Ceph are available around the
-world.
-
-These mirrors are available on the following locations:
-
-- **EU**: http://eu.ceph.com/
-- **AU**: http://au.ceph.com/
-
-You can replace all ceph.com URLs with any of the mirrors, for example:
-
-  http://download.ceph.com/debian-hammer
-
-Change this to:
-
-  http://eu.ceph.com/debian-hammer
-
-
 APT
 ---
 
@@ -112,6 +90,28 @@ To install the ``autobuild.asc`` key, execute the following
 (QA and developers only)::
 
 	sudo rpm --import 'https://git.ceph.com/git/?p=ceph.git;a=blob_plain;f=keys/autobuild.asc'
+
+
+.. _mirrors:
+
+Mirrors
+=======
+
+For improved user experience multiple mirrors for Ceph are available around the
+world.
+
+These mirrors are available on the following locations:
+
+- **EU**: http://eu.ceph.com/
+- **AU**: http://au.ceph.com/
+
+You can replace all ceph.com URLs with any of the mirrors, for example:
+
+  http://download.ceph.com/debian-hammer
+
+Change this to:
+
+  http://eu.ceph.com/debian-hammer
 
 
 Add Ceph
