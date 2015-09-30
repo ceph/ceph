@@ -704,12 +704,33 @@ void RGWHTTPArgs::get_bool(const char *name, bool *val, bool def_val)
   }
 }
 
+bool verify_requester_payer_permission(struct req_state *s)
+{
+  if (!s->bucket_info.requester_pays)
+    return true;
+
+  if (s->bucket_info.owner == s->user.user_id)
+    return true;
+
+  const char *request_payer = s->info.env->get("HTTP_X_AMZ_REQUEST_PAYER");
+  if (!request_payer)
+    return false;
+
+  if (strcasecmp(request_payer, "requester") == 0)
+    return true;
+
+  return false;
+}
+
 bool verify_bucket_permission(struct req_state *s, int perm)
 {
   if (!s->bucket_acl)
     return false;
 
   if ((perm & (int)s->perm_mask) != perm)
+    return false;
+
+  if (!verify_requester_payer_permission(s))
     return false;
 
   return s->bucket_acl->verify_permission(s->user.user_id, perm, perm);
@@ -722,6 +743,9 @@ static inline bool check_deferred_bucket_acl(struct req_state *s, uint8_t deferr
 
 bool verify_object_permission(struct req_state *s, RGWAccessControlPolicy *bucket_acl, RGWAccessControlPolicy *object_acl, int perm)
 {
+  if (!verify_requester_payer_permission(s))
+    return false;
+
   if (check_deferred_bucket_acl(s, RGW_DEFER_TO_BUCKET_ACLS_RECURSE, perm) ||
       check_deferred_bucket_acl(s, RGW_DEFER_TO_BUCKET_ACLS_FULL_CONTROL, RGW_PERM_FULL_CONTROL)) {
     return true;
