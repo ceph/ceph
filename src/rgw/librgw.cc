@@ -378,7 +378,7 @@ int process_request(RGWRados* store, RGWREST* rest, RGWRequest* base_req,
 
   RGWLibRequest *req = static_cast<RGWLibRequest*>(base_req);
 
-  io->init(g_ceph_context); // XXXX fix me--we have a local cct
+  io->init(req->cct);
 
   req->log_init();
 
@@ -390,9 +390,10 @@ int process_request(RGWRados* store, RGWREST* rest, RGWRequest* base_req,
 
   RGWEnv& rgw_env = io->get_env();
 
-  // XXXX fix me--we have a local cct
-  struct req_state rstate(g_ceph_context, &rgw_env);
+  struct req_state rstate(req->cct, &rgw_env);
   struct req_state *s = &rstate;
+
+  req->init_state(s);
 
   RGWObjectCtx rados_ctx(store, s);
   s->obj_ctx = &rados_ctx;

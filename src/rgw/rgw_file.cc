@@ -20,8 +20,7 @@
 #include "rgw_user.h"
 #include "rgw_bucket.h"
 
-#include "rgw_lib.h"
-
+#include "rgw_file.h"
 
 #define dout_subsys ceph_subsys_rgw
 
@@ -285,30 +284,6 @@ int rgw_close(struct rgw_fs *rgw_fs,
   return 0;
 }
 
-/*
-  read directory content
-*/
-class RGWListBucketsRequest : public RGWLibRequest,
-			      public RGWListBuckets_ObjStore_Lib /* RGWOp */
-{
-public:
-  uint64_t offset;
-  void* cb_arg;
-  rgw_readdir_cb rcb;
-
-  RGWListBucketsRequest(uint64_t _req_id,
-			rgw_readdir_cb _rcb, void* _cb_arg, uint64_t _offset)
-    : RGWLibRequest(_req_id), offset(_offset), cb_arg(_cb_arg), rcb(_rcb) {
-    // req->op = op
-    op = this;
-  }
-
-  void operator()(const std::string& name, const std::string& marker) {
-    (void) rcb(name.c_str(), cb_arg, offset++);
-  }
-
-}; /* RGWListBucketsRequest */
-
 int rgw_readdir(struct rgw_fs *rgw_fs,
 		const struct rgw_file_handle *parent_handle, uint64_t *offset,
 		rgw_readdir_cb rcb, void *cb_arg, bool *eof)
@@ -322,11 +297,12 @@ int rgw_readdir(struct rgw_fs *rgw_fs,
   }
 
   CephContext* cct = static_cast<CephContext*>(rgw_fs->rgw);
-  RGWRados* store = librgw.get_store();
 
 #if 1
-  /* TODO: get required req_id &c, and put a RGWListBucketsRequest -or-
-   * RGWListBucketRequest on the stack */
+  /* TODO:
+   * take actual, um, arguments
+   */
+  RGWListBucketsRequest req(cct, rcb, cb_arg, offset);
 
 #else
   /* XXX current open-coded logic should move into librgw (need

@@ -121,17 +121,12 @@ public:
 }; /* RGWLibIO */
 
 class RGWLibRequest : public RGWRequest {
-private:
-  struct req_state* s;
-
 public:
-  RGWLibRequest(uint64_t req_id)
-    :  RGWRequest(req_id), s(nullptr)
-    {}
+  CephContext* cct;
 
-  void set_state(req_state* _s) {
-    s = _s;
-  }
+  RGWLibRequest(CephContext* _cct)
+    :  RGWRequest(0), cct(_cct)
+    {}
 
   virtual bool only_bucket() = 0;
 
