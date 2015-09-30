@@ -2831,6 +2831,7 @@ int RGWRados::create_bucket(RGWUserInfo& owner, rgw_bucket& bucket,
     info.placement_rule = selected_placement_rule;
     info.num_shards = bucket_index_max_shards;
     info.bucket_index_shard_hash_type = RGWBucketInfo::MOD;
+    info.requester_pays = false;
     if (!creation_time)
       time(&info.creation_time);
     else
