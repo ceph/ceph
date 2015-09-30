@@ -1098,8 +1098,9 @@ def get_valgrind_args(testdir, name, preamble, v):
     val_path = '/var/log/ceph/valgrind'.format(tdir=testdir)
     if '--tool=memcheck' in v or '--tool=helgrind' in v:
         extra_args = [
-
             'valgrind',
+            '--trace-children=no',
+            '--child-silent-after-fork=yes',
             '--num-callers=50',
             '--suppressions={tdir}/valgrind.supp'.format(tdir=testdir),
             '--xml=yes',
@@ -1109,6 +1110,8 @@ def get_valgrind_args(testdir, name, preamble, v):
     else:
         extra_args = [
             'valgrind',
+            '--trace-children=no',
+            '--child-silent-after-fork=yes',
             '--suppressions={tdir}/valgrind.supp'.format(tdir=testdir),
             '--log-file={vdir}/{n}.log'.format(vdir=val_path, n=name),
             '--time-stamp=yes',
