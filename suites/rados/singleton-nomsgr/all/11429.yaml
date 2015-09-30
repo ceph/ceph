@@ -56,6 +56,9 @@ tasks:
   - exec:
       client.0:
         - rados -p rbd ls -
+  - exec:
+      osd.0:
+        - ceph daemon osd.0 config set filestore_blackhole true
   - ceph.restart:
       daemons:
         - osd.0
