@@ -1706,6 +1706,79 @@ void RGWGetRequestPayment_ObjStore_S3::send_response()
   rgw_flush_formatter_and_reset(s, s->formatter);
 }
 
+class RGWSetRequestPaymentParser : public RGWXMLParser
+{
+  XMLObj *alloc_obj(const char *el) {
+    return new XMLObj;
+  }
+
+public:
+  RGWSetRequestPaymentParser() {}
+  ~RGWSetRequestPaymentParser() {}
+
+  int get_request_payment_payer(bool *requester_pays) {
+    XMLObj *config = find_first("RequestPaymentConfiguration");
+    if (!config)
+      return -EINVAL;
+
+    *requester_pays = false;
+
+    XMLObj *field = config->find_first("Payer");
+    if (!field)
+      return 0;
+
+    string& s = field->get_data();
+
+    if (stringcasecmp(s, "Requester") == 0) {
+      *requester_pays = true;
+    } else if (stringcasecmp(s, "BucketOwner") != 0) {
+      return -EINVAL;
+    }
+
+    return 0;
+  }
+};
+
+int RGWSetRequestPayment_ObjStore_S3::get_params()
+{
+#define GET_REQUEST_PAYMENT_BUF_MAX (128 * 1024)
+  char *data;
+  int len = 0;
+  int r = rgw_rest_read_all_input(s, &data, &len, GET_REQUEST_PAYMENT_BUF_MAX);
+  if (r < 0) {
+    return r;
+  }
+
+  RGWSetRequestPaymentParser parser;
+
+  if (!parser.init()) {
+    ldout(s->cct, 0) << "ERROR: failed to initialize parser" << dendl;
+    r = -EIO;
+    goto done;
+  }
+
+  if (!parser.parse(data, len, 1)) {
+    ldout(s->cct, 10) << "failed to parse data: " << data << dendl;
+    r = -EINVAL;
+    goto done;
+  }
+
+  r = parser.get_request_payment_payer(&requester_pays);
+
+done:
+  free(data);
+
+  return r;
+}
+
+void RGWSetRequestPayment_ObjStore_S3::send_response()
+{
+  if (ret)
+    set_req_state_err(s, ret);
+  dump_errno(s);
+  end_header(s);
+}
+
 int RGWInitMultipart_ObjStore_S3::get_params()
 {
   RGWAccessControlPolicy_S3 s3policy(s->cct);
@@ -2010,7 +2083,9 @@ RGWOp *RGWHandler_ObjStore_Bucket_S3::op_put()
     return new RGWPutACLs_ObjStore_S3;
   } else if (is_cors_op()) {
     return new RGWPutCORS_ObjStore_S3;
-  } 
+  } else if (is_request_payment_op()) {
+    return new RGWSetRequestPayment_ObjStore_S3;
+  }
   return new RGWCreateBucket_ObjStore_S3;
 }
 
