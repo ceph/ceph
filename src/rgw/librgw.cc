@@ -113,6 +113,15 @@ public:
     RGWProcess(cct, pe, num_threads, _conf) {}
   void run();
   void checkpoint();
+
+  void enqueue_req(RGWLibRequest* req) {
+    dout(10) << __func__ << " enqueue request req=" << hex << req << dec
+	     << dendl;
+
+    req_throttle.get(1);
+    req_wq.queue(req);
+  } /* enqueue_req */
+
   void handle_request(RGWRequest* req);
   void set_access_key(RGWAccessKey& key) { access_key = key; }
 }; /* RGWLibProcess */
@@ -126,21 +135,6 @@ void RGWLibProcess::run()
 {
   /* XXX */
 }
-
-#warning fixme no more gen_request
-#if 0
-void RGWLibProcess::gen_request(const string& method, const string& resource,
-				int content_length, bool user_command,
-				atomic_t* fail_flag)
-{
-  RGWLibRequest* req = new RGWLibRequest(store->get_new_req_id(), method,
-					 resource, content_length,
-					 user_command, fail_flag);
-  dout(10) << "allocated request req=" << hex << req << dec << dendl;
-  req_throttle.get(1);
-  req_wq.queue(req);
-}
-#endif
 
 void RGWLibProcess::handle_request(RGWRequest* r)
 {
