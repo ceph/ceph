@@ -241,6 +241,17 @@ void SnapCreatePayload::dump(Formatter *f) const {
   f->dump_string("snap_name", snap_name);
 }
 
+void RollbackCompletePayload::encode(bufferlist &bl) const {
+  ::encode(static_cast<uint32_t>(NOTIFY_OP_ROLLBACK_COMPLETE), bl);
+}
+
+void RollbackCompletePayload::decode(__u8 version, bufferlist::iterator &iter) {
+}
+
+void RollbackCompletePayload::dump(Formatter *f) const {
+  f->dump_string("notify_op", stringify(NOTIFY_OP_ROLLBACK_COMPLETE));
+}
+
 void SnapRemovePayload::encode(bufferlist &bl) const {
   ::encode(static_cast<uint32_t>(NOTIFY_OP_SNAP_REMOVE), bl);
   ::encode(snap_name, bl);
@@ -322,6 +333,9 @@ void NotifyMessage::decode(bufferlist::iterator& iter) {
   case NOTIFY_OP_SNAP_CREATE:
     payload = SnapCreatePayload();
     break;
+  case NOTIFY_OP_ROLLBACK_COMPLETE:
+    payload = RollbackCompletePayload();
+    break;
   case NOTIFY_OP_SNAP_REMOVE:
     payload = SnapRemovePayload();
     break;
@@ -351,6 +365,7 @@ void NotifyMessage::generate_test_instances(std::list<NotifyMessage *> &o) {
   o.push_back(new NotifyMessage(FlattenPayload(AsyncRequestId(ClientId(0, 1), 2))));
   o.push_back(new NotifyMessage(ResizePayload(123, AsyncRequestId(ClientId(0, 1), 2))));
   o.push_back(new NotifyMessage(SnapCreatePayload("foo")));
+  o.push_back(new NotifyMessage(RollbackCompletePayload()));
   o.push_back(new NotifyMessage(SnapRemovePayload("foo")));
   o.push_back(new NotifyMessage(RebuildObjectMapPayload(AsyncRequestId(ClientId(0, 1), 2))));
 }
@@ -410,6 +425,9 @@ std::ostream &operator<<(std::ostream &out,
   case NOTIFY_OP_SNAP_CREATE:
     out << "SnapCreate";
     break;
+  case NOTIFY_OP_ROLLBACK_COMPLETE:
+    out << "SnapRollback";
+	break;
   case NOTIFY_OP_SNAP_REMOVE:
     out << "SnapRemove";
     break;
