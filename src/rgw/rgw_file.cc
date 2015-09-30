@@ -303,7 +303,7 @@ public:
     op = this;
   }
 
-  int operator()(const std::string& name, const std::string& marker) {
+  void operator()(const std::string& name, const std::string& marker) {
     (void) rcb(name.c_str(), cb_arg, offset++);
   }
 
