@@ -120,36 +120,25 @@ public:
 
 }; /* RGWLibIO */
 
-#if 0
-struct RGWLibRequest : public RGWRequest {
-  string method;
-  string resource;
-  int content_length;
-  atomic_t* fail_flag;
-
-  RGWLibRequest(uint64_t req_id, const string& _m, const  string& _r, int _cl,
-		bool user_command, atomic_t* _ff)
-    :  RGWRequest(req_id), method(_m), resource(_r), content_length(_cl),
-       fail_flag(_ff)
-    {
-      s->librgw_user_command =  user_command;
-    }
-
-  virtual RGWHandler* get_handler() = 0; // XXX need req_state arg?
-
-}; /* RGWLibRequest */
-#else
 class RGWLibRequest : public RGWRequest {
-public:
+private:
+  struct req_state* s;
 
+public:
   RGWLibRequest(uint64_t req_id)
-    :  RGWRequest(req_id)
+    :  RGWRequest(req_id), s(nullptr)
     {}
 
+  void set_state(req_state* _s) {
+    s = _s;
+  }
+
+  virtual bool only_bucket() = 0;
+
   virtual RGWHandler* get_handler() /* = 0; */ { return nullptr; }
-  // virtual const char* get_method() = 0;
+
+  int read_permissions(RGWOp *op);
 
 }; /* RGWLibRequest */
-#endif /* 0 */
 
 #endif /* RGW_LIB_H */

@@ -1297,7 +1297,6 @@ public:
   virtual uint32_t op_mask() { return RGW_OP_TYPE_DELETE; }
 };
 
-
 class RGWHandler {
 protected:
   RGWRados *store;
@@ -1333,4 +1332,6 @@ public:
   virtual int error_handler(int err_no, string *error_content);
 };
 
-#endif
+extern int rgw_build_bucket_policies(RGWRados* store, struct req_state* s);
+
+#endif /* CEPH_RGW_OP_H */
