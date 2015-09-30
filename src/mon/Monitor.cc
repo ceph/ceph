@@ -853,6 +853,8 @@ void Monitor::shutdown()
 
   state = STATE_SHUTDOWN;
 
+  g_conf->remove_observer(this);
+
   if (admin_hook) {
     AdminSocket* admin_socket = cct->get_admin_socket();
     admin_socket->unregister_command("mon_status");
