@@ -2961,6 +2961,21 @@ void RGWOptionsCORS::execute()
   return;
 }
 
+int RGWGetRequestPayment::verify_permission()
+{
+  return 0;
+}
+
+void RGWGetRequestPayment::pre_exec()
+{
+  rgw_bucket_object_pre_exec(s);
+}
+
+void RGWGetRequestPayment::execute()
+{
+  requester_pays = s->bucket_info.requester_pays;
+}
+
 int RGWInitMultipart::verify_permission()
 {
   if (!verify_bucket_permission(s, RGW_PERM_WRITE))
