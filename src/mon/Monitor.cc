@@ -3414,11 +3414,8 @@ void Monitor::_ms_dispatch(Message *m)
     // assume that the sender hasn't authenticated yet, so we have no way
     // of assessing whether we should handle it or not.
     if (!src_is_mon && (m->get_type() != CEPH_MSG_AUTH &&
-			m->get_type() != CEPH_MSG_MON_GET_MAP)) {
-      if (m->get_type() == CEPH_MSG_PING) {
-        // let it go through and be dispatched immediately!
-        return dispatch_op(op);
-      }
+			m->get_type() != CEPH_MSG_MON_GET_MAP &&
+			m->get_type() != CEPH_MSG_PING)) {
       dout(1) << __func__ << " dropping stray message " << *m
 	      << " from " << m->get_source_inst() << dendl;
       return;
@@ -3459,7 +3456,8 @@ void Monitor::_ms_dispatch(Message *m)
 
   if ((is_synchronizing() ||
        (s->global_id == 0 && !exited_quorum.is_zero())) &&
-      !src_is_mon) {
+      !src_is_mon &&
+      m->get_type() != CEPH_MSG_PING) {
     waitlist_or_zap_client(op);
   } else {
     dispatch_op(op);
