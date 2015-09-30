@@ -1600,6 +1600,7 @@ OSD::OSD(CephContext *cct_, ObjectStore *store_,
   debug_drop_pg_create_probability(cct->_conf->osd_debug_drop_pg_create_probability),
   debug_drop_pg_create_duration(cct->_conf->osd_debug_drop_pg_create_duration),
   debug_drop_pg_create_left(-1),
+  mon_report_lock("OSD::mon_report_lock"),
   stats_ack_timeout(cct->_conf->osd_mon_ack_timeout),
   up_thru_wanted(0), up_thru_pending(0),
   requested_full_first(0),
@@ -4055,6 +4056,7 @@ void OSD::tick_without_osd_lock()
   // might change when doing the monitor report
   if (is_active() || is_waiting_for_healthy()) {
     map_lock.get_read();
+    Mutex::Locker l(mon_report_lock);
 
     // mon report?
     bool reset = false;
@@ -4413,17 +4415,20 @@ void OSD::ms_handle_connect(Connection *con)
     } else if (is_booting()) {
       _send_boot();       // resend boot message
     } else {
+      map_lock.get_read();
+      Mutex::Locker l2(mon_report_lock);
+
       utime_t now = ceph_clock_now(NULL);
       last_mon_report = now;
 
       // resend everything, it's a new session
-      map_lock.get_read();
       send_alive();
       service.requeue_pg_temp();
       service.send_pg_temp();
       requeue_failures();
       send_failures();
       send_pg_stats(now);
+
       map_lock.put_read();
 
       monc->sub_want("osd_pg_creates", 0, CEPH_SUBSCRIBE_ONETIME);
@@ -4679,6 +4684,7 @@ void OSD::queue_want_up_thru(epoch_t want)
 {
   map_lock.get_read();
   epoch_t cur = osdmap->get_up_thru(whoami);
+  Mutex::Locker l(mon_report_lock);
   if (want > up_thru_wanted) {
     dout(10) << "queue_want_up_thru now " << want << " (was " << up_thru_wanted << ")" 
 	     << ", currently " << cur
@@ -4695,6 +4701,7 @@ void OSD::queue_want_up_thru(epoch_t want)
 
 void OSD::send_alive()
 {
+  assert(mon_report_lock.is_locked());
   if (!osdmap->exists(whoami))
     return;
   epoch_t up_thru = osdmap->get_up_thru(whoami);
@@ -4783,6 +4790,7 @@ void OSD::requeue_failures()
 void OSD::send_failures()
 {
   assert(map_lock.is_locked());
+  assert(mon_report_lock.is_locked());
   Mutex::Locker l(heartbeat_lock);
   utime_t now = ceph_clock_now(cct);
   while (!failure_queue.empty()) {
@@ -4931,7 +4939,9 @@ void OSD::flush_pg_stats()
   osd_lock.Unlock();
   utime_t now = ceph_clock_now(cct);
   map_lock.get_read();
+  mon_report_lock.Lock();
   send_pg_stats(now);
+  mon_report_lock.Unlock();
   map_lock.put_read();
 
 
