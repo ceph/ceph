@@ -299,7 +299,8 @@ public:
   RGWListBucketsRequest(uint64_t _req_id,
 			rgw_readdir_cb _rcb, void* _cb_arg, uint64_t _offset)
     : RGWLibRequest(_req_id), offset(_offset), cb_arg(_cb_arg), rcb(_rcb) {
-    // nothing
+    // req->op = op
+    op = this;
   }
 
   int operator()(const std::string& name, const std::string& marker) {
