@@ -393,8 +393,9 @@ int process_request(RGWRados* store, RGWREST* rest, RGWRequest* base_req,
 
   req->log_format(s, "initializing for trans_id = %s", s->trans_id.c_str());
 
-  RGWOp *op = dynamic_cast<RGWOp*>(req);
-  req->op = op; // XXX but we can do this in the ctor!
+  /* XXX the following works, but we shouldn't need to pay for a
+   * dynamic cast */
+  RGWOp *op = reinterpret_cast<RGWOp*>(req); // req->op is already correct
 
   bool should_log = true;
 
