@@ -1744,39 +1744,3 @@ RGWHandler *RGWREST::get_handler(RGWRados *store, struct req_state *s,
 
   return handler;
 } /* get stream handler */
-
-RGWHandler *RGWREST::get_handler(RGWRados *store, struct req_state *s,
-				 RGWLibIO *io, RGWRESTMgr **pmgr,
-				 int *init_error)
-{
-  RGWHandler *handler = nullptr;
-
-  *init_error = preprocess(s, io);
-  if (*init_error < 0)
-    return NULL;
-
-#if 0 /* XXXX */
-  RGWRESTMgr *m = mgr.get_resource_mgr(s, s->decoded_uri, &s->relative_uri);
-  if (!m) {
-    *init_error = -ERR_METHOD_NOT_ALLOWED;
-    return NULL;
-  }
-
-  if (pmgr)
-    *pmgr = m;
-
-  handler = m->get_handler(s);
-  if (!handler) {
-    *init_error = -ERR_METHOD_NOT_ALLOWED;
-    return NULL;
-  }
-  *init_error = handler->init(store, s, io);
-  if (*init_error < 0) {
-    m->put_handler(handler);
-    return NULL;
-  }
-#endif
-  return handler;
-} /* get direct handler */
-
-
