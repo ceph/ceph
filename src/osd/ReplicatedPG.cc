@@ -1208,9 +1208,7 @@ void ReplicatedPG::do_pg_op(OpRequestRef op)
 	     p != info.hit_set.history.end();
 	     ++p)
 	  ls.push_back(make_pair(p->begin, p->end));
-	if (info.hit_set.current_info.begin)
-	  ls.push_back(make_pair(info.hit_set.current_info.begin, utime_t()));
-	else if (hit_set)
+	if (hit_set)
 	  ls.push_back(make_pair(hit_set_start_stamp, utime_t()));
 	::encode(ls, osd_op.outdata);
       }
@@ -1219,9 +1217,7 @@ void ReplicatedPG::do_pg_op(OpRequestRef op)
     case CEPH_OSD_OP_PG_HITSET_GET:
       {
 	utime_t stamp(osd_op.op.hit_set_get.stamp);
-	if ((info.hit_set.current_info.begin &&
-	     stamp >= info.hit_set.current_info.begin) ||
-	    stamp >= hit_set_start_stamp) {
+	if (hit_set_start_stamp && stamp >= hit_set_start_stamp) {
 	  // read the current in-memory HitSet, not the version we've
 	  // checkpointed.
 	  if (!hit_set) {
@@ -10834,15 +10830,19 @@ void ReplicatedPG::hit_set_clear()
 void ReplicatedPG::hit_set_setup()
 {
   if (!is_active() ||
-      !is_primary() ||
-      !pool.info.hit_set_count ||
-      !pool.info.hit_set_period ||
-      pool.info.hit_set_params.get_type() == HitSet::TYPE_NONE) {
+      !is_primary()) {
     hit_set_clear();
+    return;
+  }
+
+  if (is_active() && is_primary() &&
+      (!pool.info.hit_set_count ||
+       !pool.info.hit_set_period ||
+       pool.info.hit_set_params.get_type() == HitSet::TYPE_NONE)) {
+    hit_set_clear();
+
     // only primary is allowed to remove all the hit set objects
-    if (is_primary() && is_peered()) {
-      hit_set_remove_all();
-    }
+    hit_set_remove_all();
     return;
   }
 
@@ -10999,14 +10999,6 @@ void ReplicatedPG::hit_set_persist()
       return;
   }
 
-  utime_t start = info.hit_set.current_info.begin;
-  if (!start)
-     start = hit_set_start_stamp;
-  oid = get_hit_set_archive_object(start, now, pool.info.use_gmt_hitset);
-  // If the current object is degraded we skip this persist request
-  if (scrubber.write_blocked_by_scrub(oid, get_sort_bitwise()))
-    return;
-
   // If backfill is in progress and we could possibly overlap with the
   // hit_set_* objects, back off.  Since these all have
   // hobject_t::hash set to pgid.ps(), and those sort first, we can
@@ -11027,16 +11019,25 @@ void ReplicatedPG::hit_set_persist()
     }
   }
 
-  if (!info.hit_set.current_info.begin)
-    info.hit_set.current_info.begin = hit_set_start_stamp;
+
+  pg_hit_set_info_t new_hset = pg_hit_set_info_t(pool.info.use_gmt_hitset);
+  new_hset.begin = hit_set_start_stamp;
+  new_hset.end = now;
+  oid = get_hit_set_archive_object(
+    new_hset.begin,
+    new_hset.end,
+    new_hset.using_gmt);
+
+  // If the current object is degraded we skip this persist request
+  if (scrubber.write_blocked_by_scrub(oid, get_sort_bitwise()))
+    return;
 
   hit_set->seal();
   ::encode(*hit_set, bl);
-  info.hit_set.current_info.end = now;
   dout(20) << __func__ << " archive " << oid << dendl;
 
   if (agent_state) {
-    agent_state->add_hit_set(info.hit_set.current_info.begin, hit_set);
+    agent_state->add_hit_set(new_hset.begin, hit_set);
     uint32_t size = agent_state->hit_set_map.size();
     if (size >= pool.info.hit_set_count) {
       size = pool.info.hit_set_count > 0 ? pool.info.hit_set_count - 1: 0;
@@ -11045,8 +11046,8 @@ void ReplicatedPG::hit_set_persist()
   }
 
   // hold a ref until it is flushed to disk
-  hit_set_flushing[info.hit_set.current_info.begin] = hit_set;
-  flush_time = info.hit_set.current_info.begin;
+  hit_set_flushing[new_hset.begin] = hit_set;
+  flush_time = new_hset.begin;
 
   ObjectContextRef obc = get_object_context(oid, true);
   repop = simple_repop_create(obc);
@@ -11057,14 +11058,11 @@ void ReplicatedPG::hit_set_persist()
   ctx->updated_hset_history = info.hit_set;
   pg_hit_set_history_t &updated_hit_set_hist = *(ctx->updated_hset_history);
 
-
   updated_hit_set_hist.current_last_update = info.last_update;
-  updated_hit_set_hist.current_info.version = ctx->at_version;
+  new_hset.version = ctx->at_version;
 
-  updated_hit_set_hist.history.push_back(updated_hit_set_hist.current_info);
+  updated_hit_set_hist.history.push_back(new_hset);
   hit_set_create();
-  updated_hit_set_hist.current_info = pg_hit_set_info_t(pool.info.use_gmt_hitset);
-  updated_hit_set_hist.current_last_stamp = utime_t();
 
   // fabricate an object_info_t and SnapSet
   obc->obs.oi.version = ctx->at_version;
