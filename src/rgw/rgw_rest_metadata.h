@@ -11,8 +11,9 @@
  * Foundation. See file COPYING.
  *
  */
-#ifndef CEPH_RGW_REST_METADATA_H
-#define CEPH_RGW_REST_METADATA_H
+
+#ifndef RGW_REST_METADATA_H
+#define RGW_REST_METADATA_H
 
 class RGWOp_Metadata_List : public RGWRESTOp {
 public:
@@ -114,10 +115,9 @@ public:
   RGWRESTMgr_Metadata() {}
   virtual ~RGWRESTMgr_Metadata() {}
 
-  virtual RGWHandler *get_handler(struct req_state *s){
+  virtual RGWHandler_REST* get_handler(struct req_state *s){
     return new RGWHandler_Metadata;
   }
 };
 
-
-#endif
+#endif /* RGW_REST_METADATA_H */

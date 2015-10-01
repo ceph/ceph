@@ -37,7 +37,6 @@ static int parse_to_utime(string& in, utime_t& out) {
   return 0;
 }
 
-
 void RGWOp_OBJLog_SetBounds::execute() {
   string id_str = s->info.args.get("id"),
          marker = s->info.args.get("marker"),

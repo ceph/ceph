@@ -21,7 +21,7 @@ public:
   virtual const string name() { return "swift_auth_get"; }
 };
 
-class RGWHandler_SWIFT_Auth : public RGWHandler {
+class RGWHandler_SWIFT_Auth : public RGWHandler_REST {
 public:
   RGWHandler_SWIFT_Auth() {}
   ~RGWHandler_SWIFT_Auth() {}
@@ -44,7 +44,7 @@ public:
   virtual RGWRESTMgr *get_resource_mgr(struct req_state *s, const string& uri, string *out_uri) {
     return this;
   }
-  virtual RGWHandler *get_handler(struct req_state *s) {
+  virtual RGWHandler_REST* get_handler(struct req_state *s) {
     return new RGWHandler_SWIFT_Auth;
   }
 };
