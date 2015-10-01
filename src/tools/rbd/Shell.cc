@@ -57,8 +57,12 @@ std::set<std::string> Shell::s_switch_arguments;
 
 int Shell::execute(int arg_count, const char **arg_values) {
   std::string app_name(base_name(arg_values[0]));
+
+  std::vector<std::string> arguments;
+  prune_command_line_arguments(arg_count, arg_values, &arguments);
+
   std::vector<std::string> command_spec;
-  get_command_spec(arg_count, arg_values, &command_spec);
+  get_command_spec(arguments, &command_spec);
 
   if (command_spec.empty() || command_spec == CommandSpec({"help"})) {
     // list all available actions
@@ -86,14 +90,14 @@ int Shell::execute(int arg_count, const char **arg_values) {
 
   po::variables_map vm;
   try {
-    po::options_description positional;
-    po::options_description options;
-    (*action->get_arguments)(&positional, &options);
+    po::options_description positional_opts;
+    po::options_description command_opts;
+    (*action->get_arguments)(&positional_opts, &command_opts);
 
     // dynamically allocate options for our command (e.g. snap list) and
     // its associated positional arguments
-    po::options_description arguments;
-    arguments.add_options()
+    po::options_description argument_opts;
+    argument_opts.add_options()
       (at::POSITIONAL_COMMAND_SPEC.c_str(),
        po::value<std::vector<std::string> >()->required(), "")
       (at::POSITIONAL_ARGUMENTS.c_str(),
@@ -106,18 +110,19 @@ int Shell::execute(int arg_count, const char **arg_values) {
       positional_options.add(at::POSITIONAL_ARGUMENTS.c_str(), -1);
     }
 
-    po::options_description global;
-    get_global_options(&global);
+    po::options_description global_opts;
+    get_global_options(&global_opts);
 
-    po::options_description group;
-    group.add(options).add(arguments).add(global);
+    po::options_description group_opts;
+    group_opts.add(command_opts)
+              .add(argument_opts)
+              .add(global_opts);
 
-    po::store(po::command_line_parser(arg_count, arg_values)
+    po::store(po::command_line_parser(arguments)
       .style(po::command_line_style::default_style &
         ~po::command_line_style::allow_guessing)
-      .options(group)
+      .options(group_opts)
       .positional(positional_options)
-      .allow_unregistered()
       .run(), vm);
 
     if (vm[at::POSITIONAL_COMMAND_SPEC].as<std::vector<std::string> >() !=
@@ -148,12 +153,20 @@ int Shell::execute(int arg_count, const char **arg_values) {
   return 0;
 }
 
-void Shell::get_command_spec(int arg_count, const char **arg_values,
+void Shell::get_command_spec(const std::vector<std::string> &arguments,
                              std::vector<std::string> *command_spec) {
-  for (int i = 1; i < arg_count; ++i) {
-    std::string arg(arg_values[i]);
+  for (size_t i = 0; i < arguments.size(); ++i) {
+    std::string arg(arguments[i]);
     if (arg == "-h" || arg == "--help") {
       *command_spec = {"help"};
+      return;
+    } else if (arg == "--") {
+      // all arguments after a double-dash are positional
+      if (i + 1 < arguments.size()) {
+        command_spec->insert(command_spec->end(),
+                             arguments.data() + i + 1,
+                             arguments.data() + arguments.size());
+      }
       return;
     } else if (arg[0] == '-') {
       // if the option is not a switch, skip its value
@@ -205,13 +218,39 @@ Shell::Action *Shell::find_action(const CommandSpec &command_spec,
 
 void Shell::get_global_options(po::options_description *opts) {
   opts->add_options()
-    ("conf,c", "path to cluster configuration")
-    ("cluster", "cluster name")
-    ("id,i", "client id (without 'client.' prefix)")
-    ("name,n", "client name")
+    ("conf,c", po::value<std::string>(), "path to cluster configuration")
+    ("cluster", po::value<std::string>(), "cluster name")
+    ("id,i", po::value<std::string>(), "client id (without 'client.' prefix)")
+    ("name,n", po::value<std::string>(), "client name")
     ("secret", po::value<Secret>(), "path to secret key (deprecated)")
-    ("keyfile", "path to secret key")
-    ("keyring", "path to keyring");
+    ("keyfile", po::value<std::string>(), "path to secret key")
+    ("keyring", po::value<std::string>(), "path to keyring");
+}
+
+void Shell::prune_command_line_arguments(int arg_count, const char **arg_values,
+                                         std::vector<std::string> *args) {
+
+  std::vector<std::string> config_keys;
+  g_conf->get_all_keys(&config_keys);
+  std::set<std::string> config_key_set(config_keys.begin(), config_keys.end());
+
+  args->reserve(arg_count);
+  for (int i = 1; i < arg_count; ++i) {
+    std::string arg(arg_values[i]);
+    if (arg.size() > 2 && arg.substr(0, 2) == "--") {
+      std::string option_name(arg.substr(2));
+      std::string alt_option_name(option_name);
+      std::replace(alt_option_name.begin(), alt_option_name.end(), '-', '_');
+      if (config_key_set.count(option_name) ||
+          config_key_set.count(alt_option_name)) {
+        // Ceph config override -- skip since it's handled by CephContext
+        ++i;
+        continue;
+      }
+    }
+
+    args->push_back(arg);
+  }
 }
 
 void Shell::print_help(const std::string &app_name) {
