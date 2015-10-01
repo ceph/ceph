@@ -148,12 +148,12 @@ def get_dev_for_osd(ctx, config):
                 jd_index = dindex + 1
                 dev_short = devs[dindex].split('/')[-1]
                 jdev_short = devs[jd_index].split('/')[-1]
-                osd_devs.append('{host}:{dev}:{jdev}'.format(host=shortname, dev=dev_short, jdev=jdev_short))
+                osd_devs.append((shortname, dev_short, jdev_short))
         else:
             assert num_osds <= len(devs), 'fewer disks than osds ' + shortname
             for dev in devs[:num_osds]:
                 dev_short = dev.split('/')[-1]
-                osd_devs.append('{host}:{dev}:{jdev}'.format(host=shortname, dev=dev_short, jdev=dev_short))
+                osd_devs.append((shortname, dev_short))
     return osd_devs
 
 def get_all_nodes(ctx, config):
@@ -271,28 +271,23 @@ def build_ceph_cluster(ctx, config):
                     raise RuntimeError("ceph-deploy: Failed to delete monitor")
 
         node_dev_list = get_dev_for_osd(ctx, config)
-        osd_create_cmd = './ceph-deploy osd create --zap-disk '
         for d in node_dev_list:
+            node = d[0]
+            for disk in d[1:]:
+                zap = './ceph-deploy disk zap ' + node + ':' + disk
+                estatus = execute_ceph_deploy(zap)
+                if estatus != 0:
+                    raise RuntimeError("ceph-deploy: Failed to zap osds")
+            osd_create_cmd = './ceph-deploy osd create '
             if config.get('dmcrypt') is not None:
-                osd_create_cmd_d = osd_create_cmd+'--dmcrypt'+" "+d
-            else:
-                osd_create_cmd_d = osd_create_cmd+d
-            estatus_osd = execute_ceph_deploy(osd_create_cmd_d)
+                osd_create_cmd += '--dmcrypt '
+            osd_create_cmd += ":".join(d)
+            estatus_osd = execute_ceph_deploy(osd_create_cmd)
             if estatus_osd == 0:
                 log.info('successfully created osd')
                 no_of_osds += 1
             else:
-                disks = d.split(':')
-                dev_disk = disks[0]+":"+disks[1]
-                j_disk = disks[0]+":"+disks[2]
-                zap_disk = './ceph-deploy disk zap '+dev_disk+" "+j_disk
-                execute_ceph_deploy(zap_disk)
-                estatus_osd = execute_ceph_deploy(osd_create_cmd_d)
-                if estatus_osd == 0:
-                    log.info('successfully created osd')
-                    no_of_osds += 1
-                else:
-                    raise RuntimeError("ceph-deploy: Failed to create osds")
+                raise RuntimeError("ceph-deploy: Failed to create osds")
 
         if config.get('wait-for-healthy', True) and no_of_osds >= 2:
             is_healthy(ctx=ctx, config=None)
