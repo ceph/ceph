@@ -72,9 +72,6 @@
 /* Define if you have fuse */
 #cmakedefine HAVE_LIBFUSE
 
-/* Define to 1 if you have the `leveldb' library (-lleveldb). */
-#cmakedefine HAVE_LIBLEVELDB 1
-
 /* Define to 1 if you have the `profiler' library (-lprofiler). */
 #cmakedefine HAVE_LIBPROFILER 1
 
@@ -231,5 +228,10 @@
 
 /* Defined if XIO */
 #cmakedefine HAVE_XIO
+
+/* Defined if new gperftools */
+#cmakedefine HAVE_GPERFTOOLS_HEAP_PROFILER_H
+#cmakedefine HAVE_GPERFTOOLS_MALLOC_EXTENSION_H
+#cmakedefine HAVE_GPERFTOOLS_PROFILER_H
 
 #endif /* CONFIG_H */

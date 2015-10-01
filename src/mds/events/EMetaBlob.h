@@ -314,6 +314,7 @@ private:
 
   // idempotent op(s)
   list<pair<metareqid_t,uint64_t> > client_reqs;
+  list<pair<metareqid_t,uint64_t> > client_flushes;
 
  public:
   void encode(bufferlist& bl) const;
@@ -345,6 +346,9 @@ private:
 
   void add_client_req(metareqid_t r, uint64_t tid=0) {
     client_reqs.push_back(pair<metareqid_t,uint64_t>(r, tid));
+  }
+  void add_client_flush(metareqid_t r, uint64_t tid=0) {
+    client_flushes.push_back(pair<metareqid_t,uint64_t>(r, tid));
   }
 
   void add_table_transaction(int table, version_t tid) {

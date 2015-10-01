@@ -19,6 +19,7 @@
 #include "include/types.h"
 
 // stl
+#include <functional>
 #include <string>
 #include <memory>
 #include <set>
@@ -294,8 +295,10 @@ public:
   // mds requests
   ceph_tid_t last_tid;
   ceph_tid_t oldest_tid; // oldest incomplete mds request, excluding setfilelock requests
-  ceph_tid_t last_flush_seq;
   map<ceph_tid_t, MetaRequest*> mds_requests;
+
+  // cap flushing
+  ceph_tid_t last_flush_tid;
 
   void dump_mds_requests(Formatter *f);
   void dump_mds_sessions(Formatter *f);
@@ -348,6 +351,17 @@ protected:
 
   // cache
   ceph::unordered_map<vinodeno_t, Inode*> inode_map;
+
+  // fake inode number for 32-bits ino_t
+  ceph::unordered_map<ino_t, vinodeno_t> faked_ino_map;
+  interval_set<ino_t> free_faked_inos;
+  ino_t last_used_faked_ino;
+  void _assign_faked_ino(Inode *in);
+  void _release_faked_ino(Inode *in);
+  bool _use_faked_inos;
+  void _reset_faked_inos();
+  vinodeno_t _map_faked_ino(ino_t ino);
+
   Inode*                 root;
   map<Inode*, InodeRef>  root_parents;
   Inode*                 root_ancestor;
@@ -484,6 +498,10 @@ protected:
   void put_qtree(Inode *in);
   void invalidate_quota_tree(Inode *in);
   Inode* get_quota_root(Inode *in);
+
+  bool check_quota_condition(
+      Inode *in,
+      std::function<bool (const Inode &)> test);
   bool is_quota_files_exceeded(Inode *in);
   bool is_quota_bytes_exceeded(Inode *in, int64_t new_bytes);
   bool is_quota_bytes_approaching(Inode *in);
@@ -536,10 +554,12 @@ protected:
   void remove_all_caps(Inode *in);
   void remove_session_caps(MetaSession *session);
   void mark_caps_dirty(Inode *in, int caps);
-  int mark_caps_flushing(Inode *in);
+  int mark_caps_flushing(Inode *in, ceph_tid_t *ptid);
+  void adjust_session_flushing_caps(Inode *in, MetaSession *old_s, MetaSession *new_s);
   void flush_caps();
   void flush_caps(Inode *in, MetaSession *session);
   void kick_flushing_caps(MetaSession *session);
+  void early_kick_flushing_caps(MetaSession *session);
   void kick_maxsize_requests(MetaSession *session);
   int get_caps(Inode *in, int need, int want, int *have, loff_t endoff);
   int get_caps_used(Inode *in);
@@ -558,13 +578,14 @@ protected:
   void handle_cap_grant(MetaSession *session, Inode *in, Cap *cap, class MClientCaps *m);
   void cap_delay_requeue(Inode *in);
   void send_cap(Inode *in, MetaSession *session, Cap *cap,
-		int used, int want, int retain, int flush);
+		int used, int want, int retain, int flush,
+		ceph_tid_t flush_tid);
   void check_caps(Inode *in, bool is_delayed);
   void get_cap_ref(Inode *in, int cap);
   void put_cap_ref(Inode *in, int cap);
   void flush_snaps(Inode *in, bool all_again=false, CapSnap *again=0);
-  void wait_sync_caps(Inode *in, uint16_t flush_tid[]);
-  void wait_sync_caps(uint64_t want);
+  void wait_sync_caps(Inode *in, ceph_tid_t want);
+  void wait_sync_caps(ceph_tid_t want);
   void queue_cap_snap(Inode *in, SnapContext &old_snapc);
   void finish_cap_snap(Inode *in, CapSnap *capsnap, int used);
   void _flushed_cap_snap(Inode *in, snapid_t seq);
@@ -617,6 +638,8 @@ protected:
 			      Dentry *old_dentry = NULL);
   void update_dentry_lease(Dentry *dn, LeaseStat *dlease, utime_t from, MetaSession *session);
 
+  bool use_faked_inos() { return _use_faked_inos; }
+  vinodeno_t map_faked_ino(ino_t ino);
 
   // ----------------------
   // fs ops.
@@ -927,6 +950,8 @@ public:
     Mutex::Locker lock(client_lock);
     return _get_vino(in);
   }
+  // get inode from faked ino
+  Inode *ll_get_inode(ino_t ino);
   Inode *ll_get_inode(vinodeno_t vino);
   int ll_lookup(Inode *parent, const char *name, struct stat *attr,
 		Inode **out, int uid = -1, int gid = -1);

@@ -46,13 +46,12 @@ AC_CANONICAL_TARGET
 m4_ifdef([AM_PROG_AR], [AM_PROG_AR])
 
 # Automake
-AM_INIT_AUTOMAKE
 AM_PROG_CC_C_O
 AM_PROG_LIBTOOL
 AM_PROG_AS
 
 
-AM_INIT_AUTOMAKE([foreign parallel-tests])
+AM_INIT_AUTOMAKE([foreign parallel-tests tar-ustar])
 # enable make V=0 (if automake >1.11)
 m4_ifdef([AM_SILENT_RULES], [AM_SILENT_RULES([yes])])
 

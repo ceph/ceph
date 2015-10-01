@@ -292,10 +292,8 @@ def which(executable):
 
     for location in locations:
         executable_path = os.path.join(location, executable)
-        LOG.debug('does ' + executable_path + ' exists ?')
         if (os.path.isfile(executable_path) and
             os.access(executable_path, os.X_OK)):
-            LOG.debug('yes, ' + executable_path + ' exists')
             return executable_path
 
 
@@ -1057,7 +1055,9 @@ def list_all_partitions(names):
     """
     Return a list of devices and partitions
     """
-    if not names:
+    if names:
+        names = map(lambda x: re.sub('^/dev/', '', x), names)
+    else:
         names = os.listdir('/sys/block')
     dev_part_list = {}
     for name in names:
@@ -1785,14 +1785,21 @@ def get_free_partition_index(dev):
 
 
 def update_partition(dev, description):
-     LOG.debug('Calling partprobe on %s device %s', description, dev)
-     command(
-         [
-             'partprobe',
-             dev,
-         ],
-     )
-
+    """
+    Must be called after modifying a partition table so the kernel
+    know about the change and fire udev events accordingly. A side
+    effect of partprobe is to remove partitions and add them again.
+    The first udevadm settle waits for ongoing udev events to
+    complete, just in case one of them rely on an existing partition
+    on dev.  The second udevadm settle guarantees to the caller that
+    all udev events related to the partition table change have been
+    processed, i.e. the 95-ceph-osd.rules actions and mode changes,
+    group changes etc. are complete.
+    """
+    LOG.debug('Calling partprobe on %s device %s', description, dev)
+    command_check_call(['udevadm', 'settle'])
+    command_check_call(['partprobe', dev])
+    command_check_call(['udevadm', 'settle'])
 
 def zap(dev):
     """
@@ -2316,8 +2323,11 @@ def prepare_dev(
             )
         except subprocess.CalledProcessError as e:
             raise Error(e)
-        # wait for udev event queue to clear
-        udev_settle();
+        update_partition(data, 'prepared')
+        command_check_call(['udevadm', 'trigger',
+                            '--action=add',
+                            '--sysname-match',
+                            os.path.basename(rawdev)])
 
 def check_journal_reqs(args):
     _, allows_journal = command([
@@ -2547,9 +2557,6 @@ def main_prepare(args):
             raise Error('not a dir or block device', args.data)
         prepare_lock.release()  # noqa
 
-        if stat.S_ISBLK(dmode):
-            update_partition(args.data, 'prepared')
-
     except Error as e:
         if journal_dm_keypath:
             try:
@@ -2564,7 +2571,7 @@ def main_prepare(args):
                 if e2.errno != errno.ENOENT: # errno.ENOENT = no such file or directory
                     raise # re-raise exception if a different error occured
         prepare_lock.release()  # noqa
-        raise e
+        raise
 
 
 ###########################
@@ -3577,7 +3584,7 @@ def list_format_dev_plain(dev, devices=[], prefix=''):
             desc = ['ceph data (dmcrypt %s)' % dmcrypt['type'], 'holders: ' + ','.join(dmcrypt['holders'])]
     elif dev['ptype'] == JOURNAL_UUID:
         desc.append('ceph journal')
-        if dev['journal_for']:
+        if dev.get('journal_for'):
             desc.append('for %s' % dev['journal_for'])
     elif dev['ptype'] in (DMCRYPT_JOURNAL_UUID,
                           DMCRYPT_LUKS_JOURNAL_UUID):
@@ -3826,8 +3833,11 @@ def main_zap(args):
 ###########################
 
 def main_trigger(args):
+    LOG.debug("main_trigger: " + str(args))
     if is_systemd() and not args.sync:
-        service='ceph-disk@{dev}.service'.format(dev=args.dev)
+        # http://www.freedesktop.org/software/systemd/man/systemd-escape.html
+        escaped_dev = args.dev.replace('-', '\\x2d')
+        service='ceph-disk@{dev}.service'.format(dev=escaped_dev)
         LOG.info('systemd detected, triggering %s' % service)
         command(
             [
@@ -4367,7 +4377,10 @@ def setup_logging(verbose, log_stdout):
     if log_stdout:
         ch = logging.StreamHandler(stream=sys.stdout)
         ch.setLevel(loglevel)
+        formatter = logging.Formatter('%(filename): %(message)s')
+        ch.setFormatter(formatter)
         LOG.addHandler(ch)
+        LOG.setLevel(loglevel)
     else:
         logging.basicConfig(
             level=loglevel,
