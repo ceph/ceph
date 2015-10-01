@@ -1400,7 +1400,7 @@ static int commit_period(RGWRealm& realm, RGWPeriod& period,
     cerr << "Error updating period epoch: " << cpp_strerror(ret) << std::endl;
     return ret;
   }
-  // TODO: notify the zone for reconfiguration
+  realm.notify_zone();
   return ret;
 }
 
