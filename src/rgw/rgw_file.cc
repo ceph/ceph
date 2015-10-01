@@ -301,9 +301,19 @@ int rgw_readdir(struct rgw_fs *rgw_fs,
 #if 1
   /* TODO:
    * take actual, um, arguments
+   * deal with markers (continuation)
+   * deal with sync vs async
+   * consider non-default tenancy/user and bucket layouts
    */
-  RGWListBucketsRequest req(cct, rcb, cb_arg, offset);
-
+  if (is_root(uri)) {
+    /* for now, root always contains one user's bucket namespace */
+    RGWListBucketsRequest req(cct, rgw_fs->user_id, rcb, cb_arg, offset);
+  } else {
+    /*
+      RGWListBucketRequest req(cct, rgw_fs->user_id, uri, rcb, cb_arg, offset);
+      ...
+    */
+  }
 #else
   /* XXX current open-coded logic should move into librgw (need
    * functor mechanism wrapping callback */
