@@ -171,6 +171,8 @@ struct dir_result_t {
 
 
   InodeRef inode;
+  int owner_uid;
+  int owner_gid;
 
   int64_t offset;        // high bits: frag_t, low bits: an offset
 
@@ -260,10 +262,23 @@ class Client : public Dispatcher, public md_config_obs_t {
 public:
   void tick();
 
- protected:
+protected:
   MonClient *monclient;
   Messenger *messenger;  
   client_t whoami;
+
+  int user_id, group_id;
+
+  int get_uid() {
+    if (user_id >= 0)
+      return user_id;
+    return ::geteuid();
+  }
+  int get_gid() {
+    if (group_id >= 0)
+      return group_id;
+    return ::getegid();
+  }
 
   void set_cap_epoch_barrier(epoch_t e);
   epoch_t cap_epoch_barrier;
@@ -455,7 +470,8 @@ protected:
 
   // path traversal for high-level interface
   InodeRef cwd;
-  int path_walk(const filepath& fp, InodeRef *end, bool followsym=true);
+  int path_walk(const filepath& fp, InodeRef *end, bool followsym=true,
+		int uid=-1, int gid=-1);
   int fill_stat(Inode *in, struct stat *st, frag_info_t *dirstat=0, nest_info_t *rstat=0);
   int fill_stat(InodeRef& in, struct stat *st, frag_info_t *dirstat=0, nest_info_t *rstat=0) {
     return fill_stat(in.get(), st, dirstat, rstat);
@@ -683,8 +699,8 @@ private:
 
   // internal interface
   //   call these with client_lock held!
-  int _do_lookup(Inode *dir, const string& name, InodeRef *target);
-  int _lookup(Inode *dir, const string& dname, InodeRef *target);
+  int _do_lookup(Inode *dir, const string& name, InodeRef *target, int uid, int gid);
+  int _lookup(Inode *dir, const string& dname, InodeRef *target, int uid, int gid);
 
   int _link(Inode *in, Inode *dir, const char *name, int uid=-1, int gid=-1, InodeRef *inp = 0);
   int _unlink(Inode *dir, const char *name, int uid=-1, int gid=-1);
@@ -849,7 +865,7 @@ public:
 
   // dirs
   int mkdir(const char *path, mode_t mode);
-  int mkdirs(const char *path, mode_t mode);
+  int mkdirs(const char *path, mode_t mode, int uid=-1, int gid=-1);
   int rmdir(const char *path);
 
   // symlinks
