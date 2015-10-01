@@ -1161,7 +1161,7 @@ int RGWPeriod::commit(RGWRealm& realm, const RGWPeriod& current_period)
     }
     ldout(cct, 4) << "Promoted to master zone and committed new period "
         << id << dendl;
-    // TODO: notify zone for dynamic reconfiguration
+    realm.notify_zone();
     return 0;
   }
   // period must be based on predecessor's current epoch
@@ -1188,7 +1188,7 @@ int RGWPeriod::commit(RGWRealm& realm, const RGWPeriod& current_period)
   }
   ldout(cct, 4) << "Committed new epoch " << epoch
       << " for period " << id << dendl;
-  // TODO: notify zone for dynamic reconfiguration
+  realm.notify_zone();
   return 0;
 }
 

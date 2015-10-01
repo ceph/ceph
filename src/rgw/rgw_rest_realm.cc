@@ -148,7 +148,7 @@ void RGWOp_Period_Post::execute()
     ldout(cct, 4) << "current period " << current_period.get_id()
         << " is period " << period.get_id() << "'s predecessor, "
         "updating current period and notifying zone" << dendl;
-    // TODO: notify zone for dynamic reconfiguration
+    realm.notify_zone();
     return;
   }
 
@@ -175,7 +175,7 @@ void RGWOp_Period_Post::execute()
   ldout(cct, 4) << "period epoch " << period.get_epoch()
       << " is newer than current epoch " << current_period.get_epoch()
       << ", updating latest epoch and notifying zone" << dendl;
-  // TODO: notify zone for dynamic reconfiguration
+  realm.notify_zone();
 }
 
 class RGWHandler_Period : public RGWHandler_Auth_S3 {
