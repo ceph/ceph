@@ -35,38 +35,14 @@ public:
   int init(vector<const char *>& args);
   int stop();
 
-  /* generate dynamic handle currently unique per librgw object
-   */
+  /* generate dynamic handle currently unique per librgw object */
   uint64_t get_handle(const string& url);
 
+  /* look for a matching handle (by number) */
   int check_handle(uint64_t handle);
 
+  /* return the saved uri corresponding to handle */
   int get_uri(const uint64_t handle, string &uri);
-
-#if 0 /* XXXX delete if possible */
-  /* User interface */
-  int get_userinfo_by_uid(const string& uid, RGWUserInfo& info);
-  int get_user_acl();
-  int set_user_permissions();
-  int set_user_quota();
-  int get_user_quota();
-
-  /* buckets */
-  int get_user_buckets_list();
-  int get_bucket_objects_list();
-  int create_bucket();
-  int delete_bucket();
-  int get_bucket_attributes();
-  int set_bucket_attributes();
-
-  /* objects */
-  int create_object ();
-  int delete_object();
-  int write();
-  int read();
-  int get_object_attributes();
-  int set_object_attributes();
-#endif /* 0 */
 };
 
 /* request interface */
