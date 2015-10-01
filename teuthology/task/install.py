@@ -759,7 +759,7 @@ def rh_install_pkgs(ctx, remote, installed_version):
     :param remote: the teuthology.orchestra.remote.Remote object
     """
     pkgs = ['ceph-deploy']
-    rh_version_check = {'0.94.1': '1.3.0', '0.94.2': '1.3.1'}
+    rh_version_check = {'0.94.1': '1.3.0', '0.94.3': '1.3.1'}
     for pkg in pkgs:
         log.info("Check if ceph-deploy is already installed on node %s", remote.shortname)
         remote.run(args=['sudo', 'yum', 'clean', 'metadata'])
