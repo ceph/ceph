@@ -10,7 +10,7 @@
 /* XXX going away ! */
 
 /* static */
-int RGWHandler_REST_Lib::init_from_header(struct req_state *s)
+int RGWHandler_Lib::init_from_header(struct req_state *s)
 {
   string req;
   string first;
