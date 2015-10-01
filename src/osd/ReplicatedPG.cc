@@ -1702,8 +1702,13 @@ void ReplicatedPG::do_op(OpRequestRef& op)
       return;
   }
 
-  if (!(m->has_flag(CEPH_OSD_FLAG_IGNORE_CACHE)) &&
-      maybe_handle_cache(op, write_ordered, obc, r, missing_oid, false, in_hit_set))
+  if (maybe_handle_cache(op,
+			 write_ordered,
+			 obc,
+			 r,
+			 missing_oid,
+			 false,
+			 in_hit_set))
     return;
 
   if (r && (r != -ENOENT || !obc)) {
@@ -1939,6 +1944,14 @@ bool ReplicatedPG::maybe_handle_cache(OpRequestRef op,
 				      bool must_promote,
 				      bool in_hit_set)
 {
+  if (op &&
+      op->get_req() &&
+      op->get_req()->get_type() == CEPH_MSG_OSD_OP &&
+      (static_cast<MOSDOp *>(op->get_req())->get_flags() &
+       CEPH_OSD_FLAG_IGNORE_CACHE)) {
+    dout(20) << __func__ << ": ignoring cache due to flag" << dendl;
+    return false;
+  }
   // return quickly if caching is not enabled
   if (pool.info.cache_mode == pg_pool_t::CACHEMODE_NONE)
     return false;
