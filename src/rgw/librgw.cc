@@ -359,12 +359,14 @@ void RGWLibIO::init_env(CephContext* cct)
 
 int RGWLibRequest::read_permissions(RGWOp *op) {
   int ret =
-    rgw_build_policies(librgw.get_store(), s, only_bucket(),
+    rgw_build_policies(librgw.get_store(), get_state(), only_bucket(),
 		      op->prefetch_data());
   if (ret < 0) {
-    ldout(s->cct, 10) << "read_permissions on " << s->bucket << ":"
-		      << s->object << " only_bucket=" << only_bucket()
-		      << " ret=" << ret << dendl;
+    ldout(get_state()->cct, 10) << "read_permissions on "
+				<< get_state()->bucket << ":"
+				<< get_state()->object
+				<< " only_bucket=" << only_bucket()
+				<< " ret=" << ret << dendl;
     if (ret == -ENODATA)
       ret = -EACCES;
   }

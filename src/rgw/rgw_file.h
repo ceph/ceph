@@ -25,8 +25,8 @@ public:
 			rgw_readdir_cb _rcb, void* _cb_arg, uint64_t* _offset)
     : RGWLibRequest(_cct), user_id(_user_id), offset(_offset), cb_arg(_cb_arg),
       rcb(_rcb) {
-    // req->op = op
-    op = this;
+    dialect_handler = this; // op->dialect_handler = handler
+    op = this; // req->op = op
   }
 
   virtual bool only_bucket() { return false; }

@@ -10,28 +10,6 @@
 #include "rgw_lib.h"
 
 
-/* XXX */
-class RGWRESTMgr_Lib : public RGWRESTMgr {
-public:
-  RGWRESTMgr_Lib() {}
-  virtual ~RGWRESTMgr_Lib() {}
-}; /* RGWRESTMgr_Lib */
-
-/* XXX */
-class RGWHandler_Lib : public RGWHandler {
-  friend class RGWRESTMgr_Lib;
-public:
-
-  virtual int authorize() {
-    return RGW_Auth_S3::authorize(store, s);
-  }
-
-  RGWHandler_Lib() {}
-  virtual ~RGWHandler_Lib() {}
-  static int init_from_header(struct req_state *s);
-}; /* RGWHandler_Lib */
-
-
 /* RGWOps */
 
 class RGWListBuckets_ObjStore_Lib : public RGWListBuckets_ObjStore {
