@@ -3745,6 +3745,7 @@ bool ReplicatedPG::maybe_create_new_object(OpContext *ctx)
     dout(10) << __func__ << " clearing whiteout on " << obs.oi.soid << dendl;
     ctx->new_obs.oi.clear_flag(object_info_t::FLAG_WHITEOUT);
     --ctx->delta_stats.num_whiteouts;
+    return true;
   }
   return false;
 }
