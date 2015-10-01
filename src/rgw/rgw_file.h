@@ -11,17 +11,20 @@
 /*
   read directory content
 */
+
 class RGWListBucketsRequest : public RGWLibRequest,
 			      public RGWListBuckets_ObjStore_Lib /* RGWOp */
 {
 public:
+  std::string user_id;
   uint64_t* offset;
   void* cb_arg;
   rgw_readdir_cb rcb;
 
-  RGWListBucketsRequest(CephContext* _cct, rgw_readdir_cb _rcb, void* _cb_arg,
-			uint64_t* _offset)
-    : RGWLibRequest(_cct), offset(_offset), cb_arg(_cb_arg), rcb(_rcb) {
+  RGWListBucketsRequest(CephContext* _cct, char *_user_id,
+			rgw_readdir_cb _rcb, void* _cb_arg, uint64_t* _offset)
+    : RGWLibRequest(_cct), user_id(_user_id), offset(_offset), cb_arg(_cb_arg),
+      rcb(_rcb) {
     // req->op = op
     op = this;
   }
