@@ -19,4 +19,4 @@ tasks:
       - ceph osd pool set-quota ec-ca max_bytes 20480000
       - ceph osd pool set-quota ec max_bytes 20480000
       - ceph osd pool set ec-ca target_max_bytes 20480000
-      - rados -p ec-ca bench 30 write || true
+      - timeout 30 rados -p ec-ca bench 30 write || true
