@@ -1177,8 +1177,10 @@ if(${WITH_RADOSGW})
     rgw/rgw_xml_enc.cc)
 
   add_library(rgw_a STATIC ${rgw_a_srcs})
-
-  include_directories("${CMAKE_SOURCE_DIR}/src/civetweb/include")
+  target_include_directories(rgw_a PUBLIC "${CMAKE_SOURCE_DIR}/src/civetweb/include")
+  target_link_libraries(rgw_a librados cls_rgw_client cls_refcount_client
+    cls_log_client cls_statelog_client cls_timeindex_client cls_version_client
+    cls_replica_log_client cls_user_client curl global expat)
 
   set(radosgw_srcs
     rgw/rgw_resolve.cc
