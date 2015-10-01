@@ -383,7 +383,12 @@ void ECBackend::handle_recovery_read_complete(
            ++it) {
         it->second.rebuild();
       }
-      op.obc = get_parent()->get_obc(hoid, op.xattrs);
+      // Need to remove ECUtil::get_hinfo_key() since it should not leak out
+      // of the backend (see bug #12983)
+      map<string, bufferlist> sanitized_attrs(op.xattrs);
+      sanitized_attrs.erase(ECUtil::get_hinfo_key());
+      op.obc = get_parent()->get_obc(hoid, sanitized_attrs);
+      assert(op.obc);
       op.recovery_info.size = op.obc->obs.oi.size;
       op.recovery_info.oi = op.obc->obs.oi;
     }
@@ -900,12 +905,18 @@ void ECBackend::handle_sub_read(
         op.to_read.begin();
       i != op.to_read.end();
       ++i) {
-    bufferhash h(-1);
-    uint64_t total_read = 0;
-    list<boost::tuple<uint64_t, uint64_t, uint32_t> >::iterator j;
-    for (j = i->second.begin(); j != i->second.end(); ++j) {
+    int r = 0;
+    ECUtil::HashInfoRef hinfo = get_hash_info(i->first);
+    if (!hinfo) {
+      r = -EIO;
+      get_parent()->clog_error() << __func__ << ": No hinfo for " << i->first << "\n";
+      dout(5) << __func__ << ": No hinfo for " << i->first << dendl;
+      goto error;
+    }
+    for (list<boost::tuple<uint64_t, uint64_t, uint32_t> >::iterator j =
+	   i->second.begin(); j != i->second.end(); ++j) {
       bufferlist bl;
-      int r = store->read(
+      r = store->read(
 	coll,
 	ghobject_t(i->first, ghobject_t::NO_GEN, shard),
 	j->get<0>(),
@@ -913,43 +924,47 @@ void ECBackend::handle_sub_read(
 	bl, j->get<2>(),
 	true); // Allow EIO return
       if (r < 0) {
-	reply->buffers_read.erase(i->first);
-	reply->errors[i->first] = r;
-	break;
+	get_parent()->clog_error() << __func__
+				   << ": Error " << r
+				   << " reading "
+				   << i->first;
+	dout(5) << __func__ << ": Error " << r
+		<< " reading " << i->first << dendl;
+	goto error;
       } else {
         dout(20) << __func__ << " read request=" << j->get<1>() << " r=" << r << " len=" << bl.length() << dendl;
-	total_read += r;
-        h << bl;
 	reply->buffers_read[i->first].push_back(
 	  make_pair(
 	    j->get<0>(),
 	    bl)
 	  );
       }
-    }
-    // If all reads happened then lets check digest
-    if (j == i->second.end()) {
-      dout(20) << __func__ << ": Checking hash of " << i->first << dendl;
-      ECUtil::HashInfoRef hinfo = get_hash_info(i->first);
+
       // This shows that we still need deep scrub because large enough files
       // are read in sections, so the digest check here won't be done here.
-      if (!hinfo || (total_read == hinfo->get_total_chunk_size() &&
-	  h.digest() != hinfo->get_chunk_hash(shard))) {
-        if (!hinfo) {
-	  get_parent()->clog_error() << __func__ << ": No hinfo for " << i->first << "\n";
-	  dout(5) << __func__ << ": No hinfo for " << i->first << dendl;
-	} else {
+      // Do NOT check osd_read_eio_on_bad_digest here.  We need to report
+      // the state of our chunk in case other chunks could substitute.
+      if ((bl.length() == hinfo->get_total_chunk_size()) &&
+	  (j->get<0>() == 0)) {
+	dout(20) << __func__ << ": Checking hash of " << i->first << dendl;
+	bufferhash h(-1);
+	h << bl;
+	if (h.digest() != hinfo->get_chunk_hash(shard)) {
 	  get_parent()->clog_error() << __func__ << ": Bad hash for " << i->first << " digest 0x"
 	          << hex << h.digest() << " expected 0x" << hinfo->get_chunk_hash(shard) << dec << "\n";
 	  dout(5) << __func__ << ": Bad hash for " << i->first << " digest 0x"
 	          << hex << h.digest() << " expected 0x" << hinfo->get_chunk_hash(shard) << dec << dendl;
+	  r = -EIO;
+	  goto error;
 	}
-	// Do NOT check osd_read_eio_on_bad_digest here.  We need to report
-	// the state of our chunk in case other chunks could substitute.
-	reply->buffers_read.erase(i->first);
-	reply->errors[i->first] = -EIO;
       }
     }
+    continue;
+error:
+    // Do NOT check osd_read_eio_on_bad_digest here.  We need to report
+    // the state of our chunk in case other chunks could substitute.
+    reply->buffers_read.erase(i->first);
+    reply->errors[i->first] = r;
   }
   for (set<hobject_t, hobject_t::BitwiseComparator>::iterator i = op.attrs_to_read.begin();
        i != op.attrs_to_read.end();
