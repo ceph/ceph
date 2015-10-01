@@ -53,12 +53,14 @@ private:
   static std::vector<Action *> s_actions;
   static std::set<std::string> s_switch_arguments;
 
-  void get_command_spec(int arg_count, const char **arg_values,
+  void get_command_spec(const std::vector<std::string> &arguments,
                         std::vector<std::string> *command_spec);
   Action *find_action(const CommandSpec &command_spec,
                       CommandSpec **matching_spec);
 
   void get_global_options(boost::program_options::options_description *opts);
+  void prune_command_line_arguments(int arg_count, const char **arg_values,
+                                    std::vector<std::string> *args);
 
   void print_help(const std::string &app_name);
   void print_action_help(const std::string &app_name, Action *action);
