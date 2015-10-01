@@ -129,6 +129,27 @@ INIT_SYSTEMS = [
     'none',
     ]
 
+
+BLKID_UDEV = set([
+    'ID_PART_TABLE_UUID',
+    'ID_PART_TABLE_TYPE',
+    'ID_FS_UUID',
+    'ID_FS_UUID_ENC',
+    'ID_FS_VERSION',
+    'ID_FS_TYPE',
+    'ID_FS_USAGE',
+    'ID_PART_ENTRY_SCHEME',
+    'ID_PART_ENTRY_UUID',
+    'ID_PART_ENTRY_TYPE',
+    'ID_PART_ENTRY_NUMBER',
+    'ID_PART_ENTRY_OFFSET',
+    'ID_PART_ENTRY_SIZE',
+    'ID_PART_ENTRY_DISK',
+    'ID_PART_ENTRY_FLAGS'
+    ])
+
+
+
 STATEDIR = '/var/lib/ceph'
 
 SYSCONFDIR = '/etc/ceph'
@@ -526,6 +547,70 @@ def get_partition_dev(dev, pnum):
         return get_dev_path(partname)
     else:
         raise Error('partition %d for %s does not appear to exist' % (pnum, dev))
+
+def get_blkid_udev(dev,output_set=BLKID_UDEV):
+    """
+    Present a consistent list of blkid_udev what ever the device.
+    Paramaeters output_set is the keys in the dictionary of
+    posible outputs.
+
+    defaults to a complete list of output.
+
+    Since  "blkid -p -o udev", returns output the is depenet on type
+    We need some code to make this command always succeed.
+    the output_set defines the list of paramters.
+    """
+    def mdl_blkid_udev_init(local_model):
+        mdl_keys = set(local_model.keys())
+        missing = output_set.difference(mdl_keys)
+        for item in missing:
+            local_model[item] = None
+
+    def blkid_udev_read(local_mode,blkid_udev_output):
+        for line in blkid_udev_output.splitlines():
+            (key, value) = line.split('=')
+            if key in output_set:
+                local_mode[key] = value
+
+    model = {}
+    mdl_blkid_udev_init(model)
+    blkid, _ = command(
+        [
+            'blkid',
+            '-p',
+            '-o', 'udev',
+            dev,
+        ]
+    )
+    blkid_udev_read(model, blkid)
+    return model
+
+
+def view_blkid_udev_is_partioned(blkid_udev):
+    """
+    Utility function for parsing output of Takes data from get_blkid_udev.
+    returns True if the device is partitioned.
+    returns False otherwise.
+
+    Note this is not a inner function as nosetests cant test inner functions.
+    """
+    partition_attribs = set([
+        "ID_PART_TABLE_TYPE",
+        "ID_PART_TABLE_UUID"
+        ])
+    for item in partition_attribs:
+        if blkid_udev[item] == None:
+            return False
+    return True
+
+
+def partition_table_exists(device):
+    if is_partition(device):
+        return True
+    status = get_blkid_udev(device)
+    if view_blkid_udev_is_partioned(status):
+        return True
+    return False
 
 
 def list_all_partitions(names):
@@ -1719,6 +1804,9 @@ def main_prepare(args):
 
         if args.zap_disk is not None:
             zap(args.data)
+            if args.journal and os.path.exists(args.journal):
+                if not partition_table_exists(args.journal):
+                    zap(args.journal)
 
         if args.cluster_uuid is None:
             args.cluster_uuid = get_fsid(cluster=args.cluster)
