@@ -20,7 +20,7 @@
 
 
 class MClientCaps : public Message {
-  static const int HEAD_VERSION = 6;
+  static const int HEAD_VERSION = 7;
   static const int COMPAT_VERSION = 1;
 
  public:
@@ -35,6 +35,8 @@ class MClientCaps : public Message {
   // Receivers may not use their new caps until they have this OSD map
   epoch_t osd_epoch_barrier;
   ceph_tid_t oldest_flush_tid;
+  uint32_t caller_uid;
+  uint32_t caller_gid;
 
   int      get_caps() { return head.caps; }
   int      get_wanted() { return head.wanted; }
@@ -92,7 +94,9 @@ class MClientCaps : public Message {
 
   MClientCaps()
     : Message(CEPH_MSG_CLIENT_CAPS, HEAD_VERSION, COMPAT_VERSION),
-      osd_epoch_barrier(0), oldest_flush_tid(0) {
+      osd_epoch_barrier(0),
+      oldest_flush_tid(0),
+      caller_uid(0), caller_gid(0) {
     inline_version = 0;
   }
   MClientCaps(int op,
@@ -106,7 +110,9 @@ class MClientCaps : public Message {
 	      int mseq,
               epoch_t oeb)
     : Message(CEPH_MSG_CLIENT_CAPS, HEAD_VERSION, COMPAT_VERSION),
-      osd_epoch_barrier(oeb), oldest_flush_tid(0) {
+      osd_epoch_barrier(oeb),
+      oldest_flush_tid(0),
+      caller_uid(0), caller_gid(0) {
     memset(&head, 0, sizeof(head));
     head.op = op;
     head.ino = ino;
@@ -124,7 +130,9 @@ class MClientCaps : public Message {
 	      inodeno_t ino, inodeno_t realm,
 	      uint64_t id, int mseq, epoch_t oeb)
     : Message(CEPH_MSG_CLIENT_CAPS, HEAD_VERSION, COMPAT_VERSION),
-      osd_epoch_barrier(oeb) {
+      osd_epoch_barrier(oeb),
+      oldest_flush_tid(0),
+      caller_uid(0), caller_gid(0) {
     memset(&head, 0, sizeof(head));
     head.op = op;
     head.ino = ino;
@@ -199,6 +207,10 @@ public:
     if (header.version >= 6) {
       ::decode(oldest_flush_tid, p);
     }
+    if (header.version >= 7) {
+      ::decode(caller_uid, p);
+      ::decode(caller_gid, p);
+    }
   }
   void encode_payload(uint64_t features) {
     header.version = HEAD_VERSION;
@@ -240,6 +252,8 @@ public:
 
     ::encode(osd_epoch_barrier, payload);
     ::encode(oldest_flush_tid, payload);
+    ::encode(caller_uid, payload);
+    ::encode(caller_gid, payload);
   }
 };
 
