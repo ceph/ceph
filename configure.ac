@@ -879,6 +879,8 @@ AC_CHECK_HEADER([boost/random/discrete_distribution.hpp],
 
 AC_CHECK_HEADER([boost/statechart/state.hpp], [],
     AC_MSG_FAILURE(["Can't find boost statechart headers; need 1.34 or later"]))
+AC_CHECK_HEADER([boost/regex.hpp], [],
+    AC_MSG_FAILURE(["Can't find boost regex headers"]))
 AC_CHECK_HEADER([boost/program_options/option.hpp], [],
     AC_MSG_FAILURE(["Can't find boost program_options headers"]))
 
@@ -909,6 +911,17 @@ AC_CHECK_LIB(boost_random-mt, main, [],
 BOOST_RANDOM_LIBS="${LIBS}"
 LIBS="${saved_LIBS}"
 AC_SUBST(BOOST_RANDOM_LIBS)
+
+# boost-regex
+BOOST_REGEX_LIBS=""
+saved_LIBS="${LIBS}"
+LIBS=""
+AC_CHECK_LIB(boost_regex-mt, main, [],
+    [AC_CHECK_LIB(boost_regex, main, [],
+        AC_MSG_FAILURE(["Boost regex library not found."]))])
+BOOST_REGEX_LIBS="${LIBS}"
+LIBS="${saved_LIBS}"
+AC_SUBST(BOOST_REGEX_LIBS)
 
 #
 # Check for boost_program_options library (defines BOOST_PROGRAM_OPTIONS_LIBS).
