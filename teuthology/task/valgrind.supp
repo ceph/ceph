@@ -28,6 +28,13 @@
    ...
 }
 {
+   osd: ignore ec plugin factory (FIXME SOMEDAY)
+   Memcheck:Leak
+   ...
+   fun:*ErasureCodePluginRegistry*factory*
+   ...
+}
+{
    tcmalloc: msync heap allocation points to uninit bytes (centos 6.5)
    Memcheck:Param
    msync(start)
