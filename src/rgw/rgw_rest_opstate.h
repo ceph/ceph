@@ -11,8 +11,9 @@
  * Foundation. See file COPYING.
  *
  */
-#ifndef CEPH_RGW_REST_OPSTATE_H
-#define CEPH_RGW_REST_OPSTATE_H
+
+#ifndef RGW_REST_OPSTATE_H
+#define RGW_REST_OPSTATE_H
 
 class RGWOp_Opstate_List : public RGWRESTOp {
   bool sent_header;
@@ -100,10 +101,9 @@ public:
   RGWRESTMgr_Opstate() {}
   virtual ~RGWRESTMgr_Opstate() {}
 
-  virtual RGWHandler *get_handler(struct req_state *s){
+  virtual RGWHandler_REST* get_handler(struct req_state *s){
     return new RGWHandler_Opstate;
   }
 };
 
-#endif /*!CEPH_RGW_REST_OPSTATE_H*/
-
+#endif /*!RGW_REST_OPSTATE_H*/

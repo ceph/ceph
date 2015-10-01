@@ -2136,17 +2136,17 @@ void RGWDeleteMultiObj_ObjStore_S3::end_response()
   rgw_flush_formatter_and_reset(s, s->formatter);
 }
 
-RGWOp *RGWHandler_ObjStore_Service_S3::op_get()
+RGWOp *RGWHandler_REST_Service_S3::op_get()
 {
   return new RGWListBuckets_ObjStore_S3;
 }
 
-RGWOp *RGWHandler_ObjStore_Service_S3::op_head()
+RGWOp *RGWHandler_REST_Service_S3::op_head()
 {
   return new RGWListBuckets_ObjStore_S3;
 }
 
-RGWOp *RGWHandler_ObjStore_Bucket_S3::get_obj_op(bool get_data)
+RGWOp *RGWHandler_REST_Bucket_S3::get_obj_op(bool get_data)
 {
   if (get_data)
     return new RGWListBucket_ObjStore_S3;
@@ -2154,7 +2154,7 @@ RGWOp *RGWHandler_ObjStore_Bucket_S3::get_obj_op(bool get_data)
     return new RGWStatBucket_ObjStore_S3;
 }
 
-RGWOp *RGWHandler_ObjStore_Bucket_S3::op_get()
+RGWOp *RGWHandler_REST_Bucket_S3::op_get()
 {
   if (s->info.args.sub_resource_exists("logging"))
     return new RGWGetBucketLogging_ObjStore_S3;
@@ -2177,7 +2177,7 @@ RGWOp *RGWHandler_ObjStore_Bucket_S3::op_get()
   return get_obj_op(true);
 }
 
-RGWOp *RGWHandler_ObjStore_Bucket_S3::op_head()
+RGWOp *RGWHandler_REST_Bucket_S3::op_head()
 {
   if (is_acl_op()) {
     return new RGWGetACLs_ObjStore_S3;
@@ -2187,7 +2187,7 @@ RGWOp *RGWHandler_ObjStore_Bucket_S3::op_head()
   return get_obj_op(false);
 }
 
-RGWOp *RGWHandler_ObjStore_Bucket_S3::op_put()
+RGWOp *RGWHandler_REST_Bucket_S3::op_put()
 {
   if (s->info.args.sub_resource_exists("logging"))
     return NULL;
@@ -2203,7 +2203,7 @@ RGWOp *RGWHandler_ObjStore_Bucket_S3::op_put()
   return new RGWCreateBucket_ObjStore_S3;
 }
 
-RGWOp *RGWHandler_ObjStore_Bucket_S3::op_delete()
+RGWOp *RGWHandler_REST_Bucket_S3::op_delete()
 {
   if (is_cors_op()) {
     return new RGWDeleteCORS_ObjStore_S3;
@@ -2211,7 +2211,7 @@ RGWOp *RGWHandler_ObjStore_Bucket_S3::op_delete()
   return new RGWDeleteBucket_ObjStore_S3;
 }
 
-RGWOp *RGWHandler_ObjStore_Bucket_S3::op_post()
+RGWOp *RGWHandler_REST_Bucket_S3::op_post()
 {
   if ( s->info.request_params == "delete" ) {
     return new RGWDeleteMultiObj_ObjStore_S3;
@@ -2220,12 +2220,12 @@ RGWOp *RGWHandler_ObjStore_Bucket_S3::op_post()
   return new RGWPostObj_ObjStore_S3;
 }
 
-RGWOp *RGWHandler_ObjStore_Bucket_S3::op_options()
+RGWOp *RGWHandler_REST_Bucket_S3::op_options()
 {
   return new RGWOptionsCORS_ObjStore_S3;
 }
 
-RGWOp *RGWHandler_ObjStore_Obj_S3::get_obj_op(bool get_data)
+RGWOp *RGWHandler_REST_Obj_S3::get_obj_op(bool get_data)
 {
   if (is_acl_op()) {
     return new RGWGetACLs_ObjStore_S3;
@@ -2235,7 +2235,7 @@ RGWOp *RGWHandler_ObjStore_Obj_S3::get_obj_op(bool get_data)
   return get_obj_op;
 }
 
-RGWOp *RGWHandler_ObjStore_Obj_S3::op_get()
+RGWOp *RGWHandler_REST_Obj_S3::op_get()
 {
   if (is_acl_op()) {
     return new RGWGetACLs_ObjStore_S3;
@@ -2245,7 +2245,7 @@ RGWOp *RGWHandler_ObjStore_Obj_S3::op_get()
   return get_obj_op(true);
 }
 
-RGWOp *RGWHandler_ObjStore_Obj_S3::op_head()
+RGWOp *RGWHandler_REST_Obj_S3::op_head()
 {
   if (is_acl_op()) {
     return new RGWGetACLs_ObjStore_S3;
@@ -2255,7 +2255,7 @@ RGWOp *RGWHandler_ObjStore_Obj_S3::op_head()
   return get_obj_op(false);
 }
 
-RGWOp *RGWHandler_ObjStore_Obj_S3::op_put()
+RGWOp *RGWHandler_REST_Obj_S3::op_put()
 {
   if (is_acl_op()) {
     return new RGWPutACLs_ObjStore_S3;
@@ -2266,7 +2266,7 @@ RGWOp *RGWHandler_ObjStore_Obj_S3::op_put()
     return new RGWCopyObj_ObjStore_S3;
 }
 
-RGWOp *RGWHandler_ObjStore_Obj_S3::op_delete()
+RGWOp *RGWHandler_REST_Obj_S3::op_delete()
 {
   string upload_id = s->info.args.get("uploadId");
 
@@ -2276,7 +2276,7 @@ RGWOp *RGWHandler_ObjStore_Obj_S3::op_delete()
     return new RGWAbortMultipart_ObjStore_S3;
 }
 
-RGWOp *RGWHandler_ObjStore_Obj_S3::op_post()
+RGWOp *RGWHandler_REST_Obj_S3::op_post()
 {
   if (s->info.args.exists("uploadId"))
     return new RGWCompleteMultipart_ObjStore_S3;
@@ -2287,12 +2287,12 @@ RGWOp *RGWHandler_ObjStore_Obj_S3::op_post()
   return NULL;
 }
 
-RGWOp *RGWHandler_ObjStore_Obj_S3::op_options()
+RGWOp *RGWHandler_REST_Obj_S3::op_options()
 {
   return new RGWOptionsCORS_ObjStore_S3;
 }
 
-int RGWHandler_ObjStore_S3::init_from_header(struct req_state *s,
+int RGWHandler_REST_S3::init_from_header(struct req_state *s,
 					     int default_formatter,
 					     bool configurable_format)
 {
@@ -2382,10 +2382,10 @@ static bool looks_like_ip_address(const char *bucket)
   return (num_periods == 3);
 }
 
-int RGWHandler_ObjStore_S3::validate_bucket_name(const string& bucket,
+int RGWHandler_REST_S3::validate_bucket_name(const string& bucket,
 						 bool relaxed_names)
 {
-  int ret = RGWHandler_ObjStore::validate_bucket_name(bucket);
+  int ret = RGWHandler_REST::validate_bucket_name(bucket);
   if (ret < 0)
     return ret;
 
@@ -2418,7 +2418,7 @@ int RGWHandler_ObjStore_S3::validate_bucket_name(const string& bucket,
   return 0;
 }
 
-int RGWHandler_ObjStore_S3::init(RGWRados *store, struct req_state *s,
+int RGWHandler_REST_S3::init(RGWRados *store, struct req_state *s,
 				 RGWClientIO *cio)
 {
   dout(10) << "s->object="
@@ -2462,7 +2462,7 @@ int RGWHandler_ObjStore_S3::init(RGWRados *store, struct req_state *s,
 
   s->dialect = "s3";
 
-  return RGWHandler_ObjStore::init(store, s, cio);
+  return RGWHandler_REST::init(store, s, cio);
 }
 
 
@@ -2756,25 +2756,25 @@ int RGW_Auth_S3::authorize(RGWRados *store, struct req_state *s)
 int RGWHandler_Auth_S3::init(RGWRados *store, struct req_state *state,
 			     RGWClientIO *cio)
 {
-  int ret = RGWHandler_ObjStore_S3::init_from_header(state, RGW_FORMAT_JSON,
+  int ret = RGWHandler_REST_S3::init_from_header(state, RGW_FORMAT_JSON,
 						     true);
   if (ret < 0)
     return ret;
 
-  return RGWHandler_ObjStore::init(store, state, cio);
+  return RGWHandler_REST::init(store, state, cio);
 }
 
-RGWHandler *RGWRESTMgr_S3::get_handler(struct req_state *s)
+RGWHandler_REST* RGWRESTMgr_S3::get_handler(struct req_state *s)
 {
-  int ret = RGWHandler_ObjStore_S3::init_from_header(s, RGW_FORMAT_XML, false);
+  int ret = RGWHandler_REST_S3::init_from_header(s, RGW_FORMAT_XML, false);
   if (ret < 0)
     return NULL;
 
   if (s->bucket_name.empty())
-    return new RGWHandler_ObjStore_Service_S3;
+    return new RGWHandler_REST_Service_S3;
 
   if (s->object.empty())
-    return new RGWHandler_ObjStore_Bucket_S3;
+    return new RGWHandler_REST_Bucket_S3;
 
-  return new RGWHandler_ObjStore_Obj_S3;
+  return new RGWHandler_REST_Obj_S3;
 }

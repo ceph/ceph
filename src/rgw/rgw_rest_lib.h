@@ -15,11 +15,14 @@ class RGWRESTMgr_Lib : public RGWRESTMgr {
 public:
   RGWRESTMgr_Lib() {}
   virtual ~RGWRESTMgr_Lib() {}
+ #warning remove this
+#if 0
   virtual RGWHandler* get_handler(struct req_state* s) { return nullptr; }
+#endif
 }; /* RGWRESTMgr_Lib */
 
 /* rgw_lib RGWHandler */
-class RGWHandler_ObjStore_Lib : public RGWHandler_ObjStore {
+class RGWHandler_REST_Lib : public RGWHandler_REST {
   friend class RGWRESTMgr_Lib;
 public:
 
@@ -27,10 +30,10 @@ public:
     return RGW_Auth_S3::authorize(store, s);
   }
 
-  RGWHandler_ObjStore_Lib() {}
-  virtual ~RGWHandler_ObjStore_Lib() {}
+  RGWHandler_REST_Lib() {}
+  virtual ~RGWHandler_REST_Lib() {}
   static int init_from_header(struct req_state *s);
-}; /* RGWHandler_ObjStore_Lib */
+}; /* RGWHandler_REST_Lib */
 
 
 /* RGWOps */

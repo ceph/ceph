@@ -1246,20 +1246,11 @@ protected:
 
   int do_read_permissions(RGWOp *op, bool only_bucket);
 
-  virtual RGWOp *op_get() { return NULL; }
-  virtual RGWOp *op_put() { return NULL; }
-  virtual RGWOp *op_delete() { return NULL; }
-  virtual RGWOp *op_head() { return NULL; }
-  virtual RGWOp *op_post() { return NULL; }
-  virtual RGWOp *op_copy() { return NULL; }
-  virtual RGWOp *op_options() { return NULL; }
 public:
   RGWHandler() : store(NULL), s(NULL) {}
   virtual ~RGWHandler();
-  virtual int init(RGWRados *store, struct req_state *_s, RGWClientIO *cio);
 
-  virtual RGWOp *get_op(RGWRados *store);
-  virtual void put_op(RGWOp *op);
+  virtual int init(RGWRados *store, struct req_state *_s, RGWClientIO *cio);
   virtual int read_permissions(RGWOp *op) = 0;
   virtual int authorize() = 0;
 };

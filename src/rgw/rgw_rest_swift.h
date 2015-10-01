@@ -178,7 +178,7 @@ public:
   void send_response();
 };
 
-class RGWHandler_ObjStore_SWIFT : public RGWHandler_ObjStore {
+class RGWHandler_REST_SWIFT : public RGWHandler_REST {
   friend class RGWRESTMgr_SWIFT;
 protected:
   virtual bool is_acl_op() {
@@ -187,8 +187,8 @@ protected:
 
   static int init_from_header(struct req_state *s);
 public:
-  RGWHandler_ObjStore_SWIFT() {}
-  virtual ~RGWHandler_ObjStore_SWIFT() {}
+  RGWHandler_REST_SWIFT() {}
+  virtual ~RGWHandler_REST_SWIFT() {}
 
   int validate_bucket_name(const string& bucket);
 
@@ -199,18 +199,18 @@ public:
   void free_policy(RGWAccessControlPolicy *policy) { delete policy; }
 };
 
-class RGWHandler_ObjStore_Service_SWIFT : public RGWHandler_ObjStore_SWIFT {
+class RGWHandler_REST_Service_SWIFT : public RGWHandler_REST_SWIFT {
 protected:
   RGWOp *op_get();
   RGWOp *op_head();
   RGWOp *op_post();
   RGWOp *op_delete();
 public:
-  RGWHandler_ObjStore_Service_SWIFT() {}
-  virtual ~RGWHandler_ObjStore_Service_SWIFT() {}
+  RGWHandler_REST_Service_SWIFT() {}
+  virtual ~RGWHandler_REST_Service_SWIFT() {}
 };
 
-class RGWHandler_ObjStore_Bucket_SWIFT : public RGWHandler_ObjStore_SWIFT {
+class RGWHandler_REST_Bucket_SWIFT : public RGWHandler_REST_SWIFT {
 protected:
   bool is_obj_update_op() {
     return s->op == OP_POST;
@@ -224,11 +224,11 @@ protected:
   RGWOp *op_post();
   RGWOp *op_options();
 public:
-  RGWHandler_ObjStore_Bucket_SWIFT() {}
-  virtual ~RGWHandler_ObjStore_Bucket_SWIFT() {}
+  RGWHandler_REST_Bucket_SWIFT() {}
+  virtual ~RGWHandler_REST_Bucket_SWIFT() {}
 };
 
-class RGWHandler_ObjStore_Obj_SWIFT : public RGWHandler_ObjStore_SWIFT {
+class RGWHandler_REST_Obj_SWIFT : public RGWHandler_REST_SWIFT {
 protected:
   bool is_obj_update_op() {
     return s->op == OP_POST;
@@ -242,9 +242,10 @@ protected:
   RGWOp *op_post();
   RGWOp *op_copy();
   RGWOp *op_options();
+
 public:
-  RGWHandler_ObjStore_Obj_SWIFT() {}
-  virtual ~RGWHandler_ObjStore_Obj_SWIFT() {}
+  RGWHandler_REST_Obj_SWIFT() {}
+  virtual ~RGWHandler_REST_Obj_SWIFT() {}
 };
 
 class RGWRESTMgr_SWIFT : public RGWRESTMgr {
@@ -252,7 +253,7 @@ public:
   RGWRESTMgr_SWIFT() {}
   virtual ~RGWRESTMgr_SWIFT() {}
 
-  virtual RGWHandler *get_handler(struct req_state *s);
+  virtual RGWHandler_REST *get_handler(struct req_state *s);
 };
 
 #endif

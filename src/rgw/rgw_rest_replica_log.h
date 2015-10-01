@@ -11,8 +11,9 @@
  * Foundation. See file COPYING.
  *
  */
-#ifndef CEPH_RGW_REST_REPLICA_LOG_H
-#define CEPH_RGW_REST_REPLICA_LOG_H
+
+#ifndef RGW_REST_REPLICA_LOG_H
+#define RGW_REST_REPLICA_LOG_H
 
 class RGWOp_OBJLog_GetBounds : public RGWRESTOp {
   string prefix;
@@ -146,9 +147,9 @@ public:
   RGWRESTMgr_ReplicaLog() {}
   virtual ~RGWRESTMgr_ReplicaLog() {}
 
-  virtual RGWHandler *get_handler(struct req_state *s){
+  virtual RGWHandler_REST* get_handler(struct req_state *s){
     return new RGWHandler_ReplicaLog;
   }
 };
 
-#endif /*!CEPH_RGW_REST_REPLICA_LOG_H*/
+#endif /*!RGW_REST_REPLICA_LOG_H*/
