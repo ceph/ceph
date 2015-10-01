@@ -2251,17 +2251,17 @@ void RGWDeleteMultiObj_ObjStore_S3::end_response()
   rgw_flush_formatter_and_reset(s, s->formatter);
 }
 
-RGWOp *RGWHandler_ObjStore_Service_S3::op_get()
+RGWOp *RGWHandler_REST_Service_S3::op_get()
 {
   return new RGWListBuckets_ObjStore_S3;
 }
 
-RGWOp *RGWHandler_ObjStore_Service_S3::op_head()
+RGWOp *RGWHandler_REST_Service_S3::op_head()
 {
   return new RGWListBuckets_ObjStore_S3;
 }
 
-RGWOp *RGWHandler_ObjStore_Bucket_S3::get_obj_op(bool get_data)
+RGWOp *RGWHandler_REST_Bucket_S3::get_obj_op(bool get_data)
 {
   // Non-website mode
   if (get_data)
@@ -2270,7 +2270,7 @@ RGWOp *RGWHandler_ObjStore_Bucket_S3::get_obj_op(bool get_data)
     return new RGWStatBucket_ObjStore_S3;
 }
 
-RGWOp *RGWHandler_ObjStore_Bucket_S3::op_get()
+RGWOp *RGWHandler_REST_Bucket_S3::op_get()
 {
   if (s->info.args.sub_resource_exists("logging"))
     return new RGWGetBucketLogging_ObjStore_S3;
@@ -2300,7 +2300,7 @@ RGWOp *RGWHandler_ObjStore_Bucket_S3::op_get()
   return get_obj_op(true);
 }
 
-RGWOp *RGWHandler_ObjStore_Bucket_S3::op_head()
+RGWOp *RGWHandler_REST_Bucket_S3::op_head()
 {
   if (is_acl_op()) {
     return new RGWGetACLs_ObjStore_S3;
@@ -2310,7 +2310,7 @@ RGWOp *RGWHandler_ObjStore_Bucket_S3::op_head()
   return get_obj_op(false);
 }
 
-RGWOp *RGWHandler_ObjStore_Bucket_S3::op_put()
+RGWOp *RGWHandler_REST_Bucket_S3::op_put()
 {
   if (s->info.args.sub_resource_exists("logging"))
     return NULL;
@@ -2332,7 +2332,7 @@ RGWOp *RGWHandler_ObjStore_Bucket_S3::op_put()
   return new RGWCreateBucket_ObjStore_S3;
 }
 
-RGWOp *RGWHandler_ObjStore_Bucket_S3::op_delete()
+RGWOp *RGWHandler_REST_Bucket_S3::op_delete()
 {
   if (is_cors_op()) {
     return new RGWDeleteCORS_ObjStore_S3;
@@ -2348,7 +2348,7 @@ RGWOp *RGWHandler_ObjStore_Bucket_S3::op_delete()
   return new RGWDeleteBucket_ObjStore_S3;
 }
 
-RGWOp *RGWHandler_ObjStore_Bucket_S3::op_post()
+RGWOp *RGWHandler_REST_Bucket_S3::op_post()
 {
   if ( s->info.request_params == "delete" ) {
     return new RGWDeleteMultiObj_ObjStore_S3;
@@ -2357,12 +2357,12 @@ RGWOp *RGWHandler_ObjStore_Bucket_S3::op_post()
   return new RGWPostObj_ObjStore_S3;
 }
 
-RGWOp *RGWHandler_ObjStore_Bucket_S3::op_options()
+RGWOp *RGWHandler_REST_Bucket_S3::op_options()
 {
   return new RGWOptionsCORS_ObjStore_S3;
 }
 
-RGWOp *RGWHandler_ObjStore_Obj_S3::get_obj_op(bool get_data)
+RGWOp *RGWHandler_REST_Obj_S3::get_obj_op(bool get_data)
 {
   if (is_acl_op()) {
     return new RGWGetACLs_ObjStore_S3;
@@ -2372,7 +2372,7 @@ RGWOp *RGWHandler_ObjStore_Obj_S3::get_obj_op(bool get_data)
   return get_obj_op;
 }
 
-RGWOp *RGWHandler_ObjStore_Obj_S3::op_get()
+RGWOp *RGWHandler_REST_Obj_S3::op_get()
 {
   if (is_acl_op()) {
     return new RGWGetACLs_ObjStore_S3;
@@ -2382,7 +2382,7 @@ RGWOp *RGWHandler_ObjStore_Obj_S3::op_get()
   return get_obj_op(true);
 }
 
-RGWOp *RGWHandler_ObjStore_Obj_S3::op_head()
+RGWOp *RGWHandler_REST_Obj_S3::op_head()
 {
   if (is_acl_op()) {
     return new RGWGetACLs_ObjStore_S3;
@@ -2392,7 +2392,7 @@ RGWOp *RGWHandler_ObjStore_Obj_S3::op_head()
   return get_obj_op(false);
 }
 
-RGWOp *RGWHandler_ObjStore_Obj_S3::op_put()
+RGWOp *RGWHandler_REST_Obj_S3::op_put()
 {
   if (is_acl_op()) {
     return new RGWPutACLs_ObjStore_S3;
@@ -2403,7 +2403,7 @@ RGWOp *RGWHandler_ObjStore_Obj_S3::op_put()
     return new RGWCopyObj_ObjStore_S3;
 }
 
-RGWOp *RGWHandler_ObjStore_Obj_S3::op_delete()
+RGWOp *RGWHandler_REST_Obj_S3::op_delete()
 {
   string upload_id = s->info.args.get("uploadId");
 
@@ -2413,7 +2413,7 @@ RGWOp *RGWHandler_ObjStore_Obj_S3::op_delete()
     return new RGWAbortMultipart_ObjStore_S3;
 }
 
-RGWOp *RGWHandler_ObjStore_Obj_S3::op_post()
+RGWOp *RGWHandler_REST_Obj_S3::op_post()
 {
   if (s->info.args.exists("uploadId"))
     return new RGWCompleteMultipart_ObjStore_S3;
@@ -2424,14 +2424,14 @@ RGWOp *RGWHandler_ObjStore_Obj_S3::op_post()
   return NULL;
 }
 
-RGWOp *RGWHandler_ObjStore_Obj_S3::op_options()
+RGWOp *RGWHandler_REST_Obj_S3::op_options()
 {
   return new RGWOptionsCORS_ObjStore_S3;
 }
 
-int RGWHandler_ObjStore_S3::init_from_header(struct req_state *s,
-					     int default_formatter,
-					     bool configurable_format)
+int RGWHandler_REST_S3::init_from_header(struct req_state* s,
+					int default_formatter,
+					bool configurable_format)
 {
   string req;
   string first;
@@ -2493,7 +2493,7 @@ int RGWHandler_ObjStore_S3::init_from_header(struct req_state *s,
   return 0;
 }
 
-int RGWHandler_ObjStore_S3::postauth_init()
+int RGWHandler_REST_S3::postauth_init()
 {
   struct req_init_state *t = &s->init_state;
   bool relaxed_names = s->cct->_conf->rgw_relaxed_s3_bucket_names;
@@ -2549,10 +2549,10 @@ static bool looks_like_ip_address(const char *bucket)
   return (num_periods == 3);
 }
 
-int RGWHandler_ObjStore_S3::validate_bucket_name(const string& bucket,
+int RGWHandler_REST_S3::validate_bucket_name(const string& bucket,
 						 bool relaxed_names)
 {
-  int ret = RGWHandler_ObjStore::validate_bucket_name(bucket);
+  int ret = RGWHandler_REST::validate_bucket_name(bucket);
   if (ret < 0)
     return ret;
 
@@ -2585,7 +2585,7 @@ int RGWHandler_ObjStore_S3::validate_bucket_name(const string& bucket,
   return 0;
 }
 
-int RGWHandler_ObjStore_S3::init(RGWRados *store, struct req_state *s,
+int RGWHandler_REST_S3::init(RGWRados *store, struct req_state *s,
 				 RGWClientIO *cio)
 {
   int ret;
@@ -2609,7 +2609,7 @@ int RGWHandler_ObjStore_S3::init(RGWRados *store, struct req_state *s,
     }
   }
 
-  return RGWHandler_ObjStore::init(store, s, cio);
+  return RGWHandler_REST::init(store, s, cio);
 }
 
 /*
@@ -2901,46 +2901,50 @@ int RGW_Auth_S3::authorize(RGWRados *store, struct req_state *s)
 int RGWHandler_Auth_S3::init(RGWRados *store, struct req_state *state,
 			     RGWClientIO *cio)
 {
-  int ret = RGWHandler_ObjStore_S3::init_from_header(state, RGW_FORMAT_JSON,
+  int ret = RGWHandler_REST_S3::init_from_header(state, RGW_FORMAT_JSON,
 						     true);
   if (ret < 0)
     return ret;
 
-  return RGWHandler_ObjStore::init(store, state, cio);
+  return RGWHandler_REST::init(store, state, cio);
 }
 
-RGWHandler *RGWRESTMgr_S3::get_handler(struct req_state *s)
+RGWHandler_REST* RGWRESTMgr_S3::get_handler(struct req_state *s)
 {
   bool is_s3website = enable_s3website && (s->prot_flags & RGW_REST_WEBSITE);
-  int ret = RGWHandler_ObjStore_S3::init_from_header(s, is_s3website ? RGW_FORMAT_HTML : RGW_FORMAT_XML, false);
+  int ret =
+    RGWHandler_REST_S3::init_from_header(s,
+					is_s3website ? RGW_FORMAT_HTML :
+					RGW_FORMAT_XML, false);
   if (ret < 0)
     return NULL;
 
-  RGWHandler* handler;
+  RGWHandler_REST* handler;
   // TODO: Make this more readable
   if (is_s3website) {
     if (s->init_state.url_bucket.empty()) {
-      handler = new RGWHandler_ObjStore_Service_S3Website;
+      handler = new RGWHandler_REST_Service_S3Website;
     } else if (s->object.empty()) {
-      handler = new RGWHandler_ObjStore_Bucket_S3Website;
+      handler = new RGWHandler_REST_Bucket_S3Website;
     } else {
-      handler = new RGWHandler_ObjStore_Obj_S3Website;
+      handler = new RGWHandler_REST_Obj_S3Website;
     }
   } else {
     if (s->init_state.url_bucket.empty()) {
-      handler = new RGWHandler_ObjStore_Service_S3;
+      handler = new RGWHandler_REST_Service_S3;
     } else if (s->object.empty()) {
-      handler = new RGWHandler_ObjStore_Bucket_S3;
+      handler = new RGWHandler_REST_Bucket_S3;
     } else {
-      handler = new RGWHandler_ObjStore_Obj_S3;
+      handler = new RGWHandler_REST_Obj_S3;
     }
   }
 
-  ldout(s->cct, 20) << __func__ << " handler=" << typeid(*handler).name() << dendl;
+  ldout(s->cct, 20) << __func__ << " handler=" << typeid(*handler).name()
+		    << dendl;
   return handler;
 }
 
-int RGWHandler_ObjStore_S3Website::retarget(RGWOp *op, RGWOp **new_op) {
+int RGWHandler_REST_S3Website::retarget(RGWOp* op, RGWOp** new_op) {
   *new_op = op;
   ldout(s->cct, 10) << __func__ << "Starting retarget" << dendl;
 
@@ -2948,7 +2952,9 @@ int RGWHandler_ObjStore_S3Website::retarget(RGWOp *op, RGWOp **new_op) {
     return 0;
 
   RGWObjectCtx& obj_ctx = *static_cast<RGWObjectCtx *>(s->obj_ctx);
-  int ret = store->get_bucket_info(obj_ctx, s->bucket_tenant, s->bucket_name, s->bucket_info, NULL, &s->bucket_attrs);
+  int ret = store->get_bucket_info(obj_ctx, s->bucket_tenant,
+				  s->bucket_name, s->bucket_info, NULL,
+				  &s->bucket_attrs);
   if (ret < 0) {
       // TODO-FUTURE: if the bucket does not exist, maybe expose it here?
       return -ERR_NO_SUCH_BUCKET;
@@ -2960,26 +2966,32 @@ int RGWHandler_ObjStore_S3Website::retarget(RGWOp *op, RGWOp **new_op) {
 
   rgw_obj_key new_obj;
   s->bucket_info.website_conf.get_effective_key(s->object.name, &new_obj.name);
-  ldout(s->cct, 10) << "retarget get_effective_key " << s->object << " -> " << new_obj << dendl;
+  ldout(s->cct, 10) << "retarget get_effective_key " << s->object << " -> "
+		    << new_obj << dendl;
 
   RGWBWRoutingRule rrule;
-  bool should_redirect = s->bucket_info.website_conf.should_redirect(new_obj.name, 0, &rrule);
+  bool should_redirect =
+    s->bucket_info.website_conf.should_redirect(new_obj.name, 0, &rrule);
 
   if (should_redirect) {
     const string& hostname = s->info.env->get("HTTP_HOST", "");
-    const string& protocol = (s->info.env->get("SERVER_PORT_SECURE") ? "https" : "http");
+    const string& protocol =
+      (s->info.env->get("SERVER_PORT_SECURE") ? "https" : "http");
     int redirect_code = 0;
-    rrule.apply_rule(protocol, hostname, s->object.name, &s->redirect, &redirect_code);
+    rrule.apply_rule(protocol, hostname, s->object.name, &s->redirect,
+		    &redirect_code);
     // APply a custom HTTP response code
     if (redirect_code > 0)
       s->err.http_ret = redirect_code; // Apply a custom HTTP response code
-    ldout(s->cct, 10) << "retarget redirect code=" << redirect_code << " proto+host:" << protocol << "://" << hostname << " -> " << s->redirect << dendl;
+    ldout(s->cct, 10) << "retarget redirect code=" << redirect_code
+		      << " proto+host:" << protocol << "://" << hostname
+		      << " -> " << s->redirect << dendl;
     return -ERR_WEBSITE_REDIRECT;
   }
 
   /*
-   * FIXME: if s->object != new_obj, drop op and create a new op to handle operation. Or
-   * remove this comment if it's not applicable anymore
+   * FIXME: if s->object != new_obj, drop op and create a new op to handle
+   * operation. Or remove this comment if it's not applicable anymore
    */
 
   s->object = new_obj;
@@ -2987,26 +2999,30 @@ int RGWHandler_ObjStore_S3Website::retarget(RGWOp *op, RGWOp **new_op) {
   return 0;
 }
 
-RGWOp *RGWHandler_ObjStore_S3Website::op_get()
+RGWOp* RGWHandler_REST_S3Website::op_get()
 {
   return get_obj_op(true);
 }
 
-RGWOp *RGWHandler_ObjStore_S3Website::op_head()
+RGWOp* RGWHandler_REST_S3Website::op_head()
 {
   return get_obj_op(false);
 }
 
-int RGWHandler_ObjStore_S3Website::get_errordoc(const string errordoc_key, string *error_content) {
-    ldout(s->cct, 20) << "TODO Serve Custom error page here if bucket has <Error>" << dendl;
+int RGWHandler_REST_S3Website::get_errordoc(const string errordoc_key,
+					    string* error_content) {
+    ldout(s->cct, 20) << "TODO Serve Custom error page here if bucket has "
+      "<Error>" << dendl;
     *error_content = errordoc_key;
     // 1. Check if errordoc exists
     // 2. Check if errordoc is public
     // 3. Fetch errordoc content
     /*
-     * FIXME maybe:  need to make sure all of the fields for conditional requests are cleared
+     * FIXME maybe:  need to make sure all of the fields for conditional
+     * requests are cleared
      */
-    RGWGetObj_ObjStore_S3Website *getop = new RGWGetObj_ObjStore_S3Website(true);
+    RGWGetObj_ObjStore_S3Website* getop =
+      new RGWGetObj_ObjStore_S3Website(true);
     getop->set_get_data(true);
     getop->init(store, s, this);
 
@@ -3031,8 +3047,9 @@ done:
     return ret;
 }
   
-int RGWHandler_ObjStore_S3Website::error_handler(int err_no, string *error_content) {
-  const struct rgw_http_errors *r;
+int RGWHandler_REST_S3Website::error_handler(int err_no,
+					    string* error_content) {
+  const struct rgw_http_errors* r;
   int http_error_code = -1;
   r = search_err(err_no, RGW_HTTP_ERRORS, ARRAY_LEN(RGW_HTTP_ERRORS));
   if (r) {
@@ -3040,20 +3057,27 @@ int RGWHandler_ObjStore_S3Website::error_handler(int err_no, string *error_conte
   }
 
   RGWBWRoutingRule rrule;
-  bool should_redirect = s->bucket_info.website_conf.should_redirect(s->object.name, http_error_code, &rrule);
+  bool should_redirect =
+    s->bucket_info.website_conf.should_redirect(s->object.name, http_error_code,
+						&rrule);
 
   if (should_redirect) {
     const string& hostname = s->info.env->get("HTTP_HOST", "");
-    const string& protocol = (s->info.env->get("SERVER_PORT_SECURE") ? "https" : "http");
+    const string& protocol =
+      (s->info.env->get("SERVER_PORT_SECURE") ? "https" : "http");
     int redirect_code = 0;
-    rrule.apply_rule(protocol, hostname, s->object.name, &s->redirect, &redirect_code);
-    // APply a custom HTTP response code
+    rrule.apply_rule(protocol, hostname, s->object.name, &s->redirect,
+		    &redirect_code);
+    // Apply a custom HTTP response code
     if (redirect_code > 0)
       s->err.http_ret = redirect_code; // Apply a custom HTTP response code
-    ldout(s->cct, 10) << "error handler redirect code=" << redirect_code << " proto+host:" << protocol << "://" << hostname << " -> " << s->redirect << dendl;
+    ldout(s->cct, 10) << "error handler redirect code=" << redirect_code
+		      << " proto+host:" << protocol << "://" << hostname
+		      << " -> " << s->redirect << dendl;
     return -ERR_WEBSITE_REDIRECT;
   } else if (!s->bucket_info.website_conf.error_doc.empty()) {
-    RGWHandler_ObjStore_S3Website::get_errordoc(s->bucket_info.website_conf.error_doc, error_content);
+    RGWHandler_REST_S3Website::get_errordoc(
+      s->bucket_info.website_conf.error_doc, error_content);
   } else {
     ldout(s->cct, 20) << "No special error handling today!" << dendl;
   }
@@ -3061,35 +3085,35 @@ int RGWHandler_ObjStore_S3Website::error_handler(int err_no, string *error_conte
   return err_no;
 }
 
-RGWOp *RGWHandler_ObjStore_Obj_S3Website::get_obj_op(bool get_data)
+RGWOp* RGWHandler_REST_Obj_S3Website::get_obj_op(bool get_data)
 {
   /** If we are in website mode, then it is explicitly impossible to run GET or
    * HEAD on the actual directory. We must convert the request to run on the
    * suffix object instead!
    */
-  RGWGetObj_ObjStore_S3Website *op = new RGWGetObj_ObjStore_S3Website;
+  RGWGetObj_ObjStore_S3Website* op = new RGWGetObj_ObjStore_S3Website;
   op->set_get_data(get_data);
   return op;
 }
 
-RGWOp *RGWHandler_ObjStore_Bucket_S3Website::get_obj_op(bool get_data)
+RGWOp* RGWHandler_REST_Bucket_S3Website::get_obj_op(bool get_data)
 {
   /** If we are in website mode, then it is explicitly impossible to run GET or
    * HEAD on the actual directory. We must convert the request to run on the
    * suffix object instead!
    */
-  RGWGetObj_ObjStore_S3Website *op = new RGWGetObj_ObjStore_S3Website;
+  RGWGetObj_ObjStore_S3Website* op = new RGWGetObj_ObjStore_S3Website;
   op->set_get_data(get_data);
   return op;
 }
 
-RGWOp *RGWHandler_ObjStore_Service_S3Website::get_obj_op(bool get_data)
+RGWOp* RGWHandler_REST_Service_S3Website::get_obj_op(bool get_data)
 {
   /** If we are in website mode, then it is explicitly impossible to run GET or
    * HEAD on the actual directory. We must convert the request to run on the
    * suffix object instead!
    */
-  RGWGetObj_ObjStore_S3Website *op = new RGWGetObj_ObjStore_S3Website;
+  RGWGetObj_ObjStore_S3Website* op = new RGWGetObj_ObjStore_S3Website;
   op->set_get_data(get_data);
   return op;
 }

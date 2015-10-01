@@ -62,10 +62,9 @@ int process_request(RGWRados* store, RGWREST* rest, RGWRequest* req,
   RGWOp* op = NULL;
   int init_error = 0;
   bool should_log = false;
-
-  RGWRESTMgr* mgr;
-  RGWHandler* handler = rest->get_handler(store, s, client_io, &mgr,
-					  &init_error);
+  RGWRESTMgr *mgr;
+  RGWHandler_REST *handler = rest->get_handler(store, s, client_io, &mgr,
+					      &init_error);
   if (init_error != 0) {
     abort_early(s, NULL, init_error, NULL);
     goto done;

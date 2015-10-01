@@ -1251,9 +1251,49 @@ int RGWRESTOp::verify_permission()
   return check_caps(s->user.caps);
 }
 
-int RGWHandler_ObjStore::allocate_formatter(struct req_state *s,
-					    int default_type,
-					    bool configurable)
+RGWOp* RGWHandler_REST::get_op(RGWRados* store)
+{
+  RGWOp *op;
+  switch (s->op) {
+   case OP_GET:
+     op = op_get();
+     break;
+   case OP_PUT:
+     op = op_put();
+     break;
+   case OP_DELETE:
+     op = op_delete();
+     break;
+   case OP_HEAD:
+     op = op_head();
+     break;
+   case OP_POST:
+     op = op_post();
+     break;
+   case OP_COPY:
+     op = op_copy();
+     break;
+   case OP_OPTIONS:
+     op = op_options();
+     break;
+   default:
+     return NULL;
+  }
+
+  if (op) {
+    op->init(store, s, this);
+  }
+  return op;
+} /* get_op */
+
+void RGWHandler_REST::put_op(RGWOp* op)
+{
+  delete op;
+} /* put_op */
+
+int RGWHandler_REST::allocate_formatter(struct req_state *s,
+					int default_type,
+					bool configurable)
 {
   s->format = default_type;
   if (configurable) {
@@ -1315,20 +1355,21 @@ int RGWHandler_ObjStore::allocate_formatter(struct req_state *s,
   return 0;
 }
 
-int RGWHandler_ObjStore::validate_tenant_name(string const& t)
+int RGWHandler_REST::validate_tenant_name(string const& t)
 {
-  const char *p = t.c_str();
-  for (unsigned int i = 0; i < t.size(); i++) {
-    char ch = p[i];
-    if (!(isalnum(ch) || ch == '_'))
-      return -ERR_INVALID_TENANT_NAME;
-  }
-  return 0;
+  struct tench {
+    static bool is_good(char ch) {
+      return isalnum(ch) || ch == '_';
+    }
+  };
+  std::string::const_iterator it =
+    std::find_if_not(t.begin(), t.end(), tench::is_good);
+  return (it == t.end())? 0: -ERR_INVALID_TENANT_NAME;
 }
 
 // This function enforces Amazon's spec for bucket names.
 // (The requirements, not the recommendations.)
-int RGWHandler_ObjStore::validate_bucket_name(const string& bucket)
+int RGWHandler_REST::validate_bucket_name(const string& bucket)
 {
   int len = bucket.size();
   if (len < 3) {
@@ -1351,7 +1392,7 @@ int RGWHandler_ObjStore::validate_bucket_name(const string& bucket)
 // is at most 1024 bytes long."
 // However, we can still have control characters and other nasties in there.
 // Just as long as they're utf-8 nasties.
-int RGWHandler_ObjStore::validate_object_name(const string& object)
+int RGWHandler_REST::validate_object_name(const string& object)
 {
   int len = object.size();
   if (len > 1024) {
@@ -1388,7 +1429,7 @@ static http_op op_from_method(const char *method)
   return OP_UNKNOWN;
 }
 
-int RGWHandler_ObjStore::init_permissions(RGWOp *op)
+int RGWHandler_REST::init_permissions(RGWOp* op)
 {
   if (op->get_type() == RGW_OP_CREATE_BUCKET)
     return 0;
@@ -1396,7 +1437,7 @@ int RGWHandler_ObjStore::init_permissions(RGWOp *op)
   return do_init_permissions();
 }
 
-int RGWHandler_ObjStore::read_permissions(RGWOp *op_obj)
+int RGWHandler_REST::read_permissions(RGWOp* op_obj)
 {
   bool only_bucket;
 
@@ -1712,11 +1753,11 @@ int RGWREST::preprocess(struct req_state *s, RGWClientIO* cio)
   return 0;
 }
 
-RGWHandler *RGWREST::get_handler(RGWRados *store, struct req_state *s,
-				 RGWStreamIO *sio, RGWRESTMgr **pmgr,
-				 int *init_error)
+RGWHandler_REST* RGWREST::get_handler(RGWRados *store, struct req_state *s,
+				      RGWStreamIO *sio, RGWRESTMgr **pmgr,
+				      int *init_error)
 {
-  RGWHandler *handler;
+  RGWHandler_REST* handler;
 
   *init_error = preprocess(s, sio);
   if (*init_error < 0)

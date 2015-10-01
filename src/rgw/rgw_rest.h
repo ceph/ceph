@@ -359,7 +359,7 @@ public:
   virtual int verify_permission();
 };
 
-class RGWHandler_ObjStore : public RGWHandler {
+class RGWHandler_REST : public RGWHandler {
 protected:
   virtual bool is_obj_update_op() { return false; }
   virtual RGWOp *op_get() { return NULL; }
@@ -377,11 +377,16 @@ protected:
   static int allocate_formatter(struct req_state *s, int default_formatter,
 				bool configurable);
 public:
-  RGWHandler_ObjStore() {}
-  virtual ~RGWHandler_ObjStore() {}
-  int init_permissions(RGWOp *op);
-  int read_permissions(RGWOp *op);
-  virtual int retarget(RGWOp *op, RGWOp **new_op) {
+  RGWHandler_REST() {}
+  virtual ~RGWHandler_REST() {}
+
+  int init_permissions(RGWOp* op);
+  int read_permissions(RGWOp* op);
+
+  virtual RGWOp* get_op(RGWRados* store);
+  virtual void put_op(RGWOp* op);
+
+  virtual int retarget(RGWOp* op, RGWOp** new_op) {
     *new_op = op;
     return 0;
   }
@@ -390,9 +395,9 @@ public:
   // virtual int postauth_init(struct req_init_state *t) = 0;
 };
 
-class RGWHandler_ObjStore_SWIFT;
+class RGWHandler_REST_SWIFT;
 class RGWHandler_SWIFT_Auth;
-class RGWHandler_ObjStore_S3;
+class RGWHandler_REST_S3;
 
 
 class RGWRESTMgr {
@@ -411,8 +416,8 @@ public:
 
   virtual RGWRESTMgr *get_resource_mgr(struct req_state *s, const string& uri,
 				       string *out_uri);
-  virtual RGWHandler *get_handler(struct req_state *s) { return NULL; }
-  virtual void put_handler(RGWHandler *handler) { delete handler; }
+  virtual RGWHandler_REST *get_handler(struct req_state *s) { return NULL; }
+  virtual void put_handler(RGWHandler_REST *handler) { delete handler; }
 
   void set_logging(bool _should_log) { should_log = _should_log; }
   bool get_logging() { return should_log; }
@@ -426,13 +431,15 @@ class RGWREST {
   static int preprocess(struct req_state *s, RGWClientIO *sio);
 public:
   RGWREST() {}
-  RGWHandler *get_handler(RGWRados *store, struct req_state *s,
-			  RGWStreamIO *sio,
-			  RGWRESTMgr **pmgr, int *init_error);
+  RGWHandler_REST *get_handler(RGWRados *store, struct req_state *s,
+			      RGWStreamIO *sio,
+			      RGWRESTMgr **pmgr, int *init_error);
+#if 0
   RGWHandler *get_handler(RGWRados *store, struct req_state *s,
 			  RGWLibIO *io, RGWRESTMgr **pmgr,
 			  int *init_error);
-  void put_handler(RGWHandler *handler) {
+#endif
+  void put_handler(RGWHandler_REST *handler) {
     mgr.put_handler(handler);
   }
 

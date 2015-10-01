@@ -388,10 +388,10 @@ public:
   static int authorize(RGWRados *store, struct req_state *s);
 };
 
-class RGWHandler_Auth_S3 : public RGWHandler_ObjStore {
+class RGWHandler_Auth_S3 : public RGWHandler_REST {
   friend class RGWRESTMgr_S3;
 public:
-  RGWHandler_Auth_S3() : RGWHandler_ObjStore() {}
+  RGWHandler_Auth_S3() : RGWHandler_REST() {}
   virtual ~RGWHandler_Auth_S3() {}
 
   virtual int validate_bucket_name(const string& bucket) {
@@ -407,16 +407,16 @@ public:
   int postauth_init() { return 0; }
 };
 
-class RGWHandler_ObjStore_S3 : public RGWHandler_ObjStore {
+class RGWHandler_REST_S3 : public RGWHandler_REST {
   friend class RGWRESTMgr_S3;
 public:
   static int init_from_header(struct req_state *s, int default_formatter, bool configurable_format);
 
-  RGWHandler_ObjStore_S3() : RGWHandler_ObjStore() {}
-  virtual ~RGWHandler_ObjStore_S3() {}
+  RGWHandler_REST_S3() : RGWHandler_REST() {}
+  virtual ~RGWHandler_REST_S3() {}
 
   int validate_bucket_name(const string& bucket, bool relaxed_names);
-  using RGWHandler_ObjStore::validate_bucket_name;
+  using RGWHandler_REST::validate_bucket_name;
   
   virtual int init(RGWRados *store, struct req_state *s, RGWClientIO *cio);
   virtual int authorize() {
@@ -429,16 +429,16 @@ public:
   }
 };
 
-class RGWHandler_ObjStore_Service_S3 : public RGWHandler_ObjStore_S3 {
+class RGWHandler_REST_Service_S3 : public RGWHandler_REST_S3 {
 protected:
   RGWOp *op_get();
   RGWOp *op_head();
 public:
-  RGWHandler_ObjStore_Service_S3() {}
-  virtual ~RGWHandler_ObjStore_Service_S3() {}
+  RGWHandler_REST_Service_S3() {}
+  virtual ~RGWHandler_REST_Service_S3() {}
 };
 
-class RGWHandler_ObjStore_Bucket_S3 : public RGWHandler_ObjStore_S3 {
+class RGWHandler_REST_Bucket_S3 : public RGWHandler_REST_S3 {
 protected:
   bool is_acl_op() {
     return s->info.args.exists("acl");
@@ -461,11 +461,11 @@ protected:
   RGWOp *op_post();
   RGWOp *op_options();
 public:
-  RGWHandler_ObjStore_Bucket_S3() {}
-  virtual ~RGWHandler_ObjStore_Bucket_S3() {}
+  RGWHandler_REST_Bucket_S3() {}
+  virtual ~RGWHandler_REST_Bucket_S3() {}
 };
 
-class RGWHandler_ObjStore_Obj_S3 : public RGWHandler_ObjStore_S3 {
+class RGWHandler_REST_Obj_S3 : public RGWHandler_REST_S3 {
 protected:
   bool is_acl_op() {
     return s->info.args.exists("acl");
@@ -485,8 +485,8 @@ protected:
   RGWOp *op_post();
   RGWOp *op_options();
 public:
-  RGWHandler_ObjStore_Obj_S3() {}
-  virtual ~RGWHandler_ObjStore_Obj_S3() {}
+  RGWHandler_REST_Obj_S3() {}
+  virtual ~RGWHandler_REST_Obj_S3() {}
 };
 
 class RGWRESTMgr_S3 : public RGWRESTMgr {
@@ -499,9 +499,9 @@ public:
 
   virtual ~RGWRESTMgr_S3() {}
 
-  virtual RGWHandler *get_handler(struct req_state *s);
+  virtual RGWHandler_REST *get_handler(struct req_state *s);
 };
 
-class RGWHandler_ObjStore_Obj_S3Website;
+class RGWHandler_REST_Obj_S3Website;
 
 #endif
