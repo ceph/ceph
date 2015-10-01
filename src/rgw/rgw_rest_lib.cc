@@ -5,6 +5,7 @@
 #include "rgw_rest_s3.h"
 #include "rgw_rest_user.h"
 #include "rgw_rest_lib.h"
+#include "rgw_file.h"
 
 /* XXX going away ! */
 
@@ -67,11 +68,15 @@ void RGWListBuckets_ObjStore_Lib::send_response_data(RGWUserBuckets& buckets)
   if (!sent_data)
     return;
 
+  RGWListBucketsRequest* req
+    = reinterpret_cast<RGWListBucketsRequest*>(this);
+
   map<string, RGWBucketEnt>& m = buckets.get_buckets();
   for (const auto& iter : m) {
-    const RGWBucketEnt& ent = iter.second;
     const std::string& marker = iter.first; // XXX may need later
-    // XXXX (void) cb(ent.bucket.name, marker); // XXX attributes
+    const RGWBucketEnt& ent = iter.second;
+    /* call me maybe */
+    req->operator()(ent.bucket.name, marker); // XXX attributes
   }
 } /* send_response_data */
 
