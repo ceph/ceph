@@ -35,7 +35,7 @@ restorecon -R /var/log/ceph > /dev/null 2>&1;
 # the _with_systemd variable only implies that we'll install
 # /etc/tmpfiles.d/ceph.conf in order to set up the socket directory in
 # /var/run/ceph.
-%if 0%{?fedora} || 0%{?rhel} >= 7 || 0%{?suse_version} > 1300
+%if 0%{?fedora} || 0%{?rhel} >= 7 || 0%{?suse_version} >= 1210
 %global _with_systemd 1
 %endif
 
@@ -82,10 +82,6 @@ Requires:	cryptsetup
 Requires:	findutils
 Requires:	which
 Requires(post):	binutils
-# We require this to be present for %%{_tmpfilesdir}
-%if 0%{?_with_systemd}
-Requires: systemd
-%endif
 %if 0%{with cephfs_java}
 BuildRequires: sharutils
 %endif
@@ -135,6 +131,10 @@ BuildRequires:	yasm
 # distro-conditional dependencies
 #################################################################################
 %if 0%{?suse_version}
+%if 0%{?_with_systemd}
+BuildRequires:	systemd-rpm-macros
+%{?systemd_requires}
+%endif
 Requires:	python-Flask
 BuildRequires:	net-tools
 BuildRequires:	libbz2-devel
@@ -152,6 +152,9 @@ BuildRequires:	mozilla-nss-devel
 BuildRequires:	keyutils-devel
 BuildRequires:	libatomic-ops-devel
 %else
+%if 0%{?_with_systemd}
+Requires:	systemd
+%endif
 BuildRequires:  bzip2-devel
 BuildRequires:	nss-devel
 BuildRequires:	keyutils-libs-devel
