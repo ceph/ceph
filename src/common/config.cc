@@ -811,6 +811,17 @@ int md_config_t::_get_val(const char *key, char **buf, int len) const
   return -ENOENT;
 }
 
+void md_config_t::get_all_keys(std::vector<std::string> *keys) const {
+  keys->clear();
+  keys->reserve(NUM_CONFIG_OPTIONS);
+  for (size_t i = 0; i < NUM_CONFIG_OPTIONS; ++i) {
+    keys->push_back(config_optionsp[i].name);
+  }
+  for (int i = 0; i < subsys.get_num(); ++i) {
+    keys->push_back("debug_" + subsys.get_name(i));
+  }
+}
+
 /* The order of the sections here is important.  The first section in the
  * vector is the "highest priority" section; if we find it there, we'll stop
  * looking. The lowest priority section is the one we look in only if all
