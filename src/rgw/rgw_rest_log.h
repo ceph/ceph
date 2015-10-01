@@ -11,8 +11,9 @@
  * Foundation. See file COPYING.
  *
  */
-#ifndef CEPH_RGW_REST_LOG_H
-#define CEPH_RGW_REST_LOG_H
+
+#ifndef RGW_REST_LOG_H
+#define RGW_REST_LOG_H
 
 #include "rgw_metadata.h"
 
@@ -293,10 +294,9 @@ public:
   RGWRESTMgr_Log() {}
   virtual ~RGWRESTMgr_Log() {}
 
-  virtual RGWHandler *get_handler(struct req_state *s){
+  virtual RGWHandler_REST* get_handler(struct req_state *s){
     return new RGWHandler_Log;
   }
 };
 
-#endif
-
+#endif /* RGW_REST_LOG_H */
