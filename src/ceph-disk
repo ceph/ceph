@@ -2343,10 +2343,7 @@ def main_prepare(args):
 
     try:
         # first learn what the osd allows/wants/needs
-        #(allows_journal, wants_journal, needs_journal) = check_journal_reqs(args)
-        #TEMP
-        allows_journal = True
-        wants_journal = True
+        (allows_journal, wants_journal, needs_journal) = check_journal_reqs(args)
 
         prepare_lock.acquire()  # noqa
         if not os.path.exists(args.data):
