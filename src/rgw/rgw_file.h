@@ -4,6 +4,8 @@
 #ifndef RGW_FILE_H
 #define RGW_FILE_H
 
+#include "include/rados/rgw_file.h"
+
 /* internal header */
 
 /*
