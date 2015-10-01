@@ -943,8 +943,10 @@ if(${WITH_RADOSGW})
     rgw/rgw_object_expirer_core.cc)
 
   add_library(rgw_a STATIC ${rgw_a_srcs})
-
-  include_directories("${CMAKE_SOURCE_DIR}/src/civetweb/include")
+  target_include_directories(rgw_a PUBLIC "${CMAKE_SOURCE_DIR}/src/civetweb/include")
+  target_link_libraries(rgw_a librados cls_rgw_client cls_refcount_client
+    cls_log_client cls_statelog_client cls_timeindex_client cls_version_client
+    cls_replica_log_client cls_user_client curl global expat)
 
   set(radosgw_srcs
     rgw/rgw_resolve.cc
@@ -982,26 +984,14 @@ if(${WITH_RADOSGW})
     rgw/rgw_object_expirer.cc)
 
   add_executable(radosgw ${radosgw_srcs} $<TARGET_OBJECTS:heap_profiler_objs>)
-  target_link_libraries(radosgw rgw_a librados
-    cls_rgw_client cls_lock_client cls_refcount_client
-    cls_log_client cls_statelog_client cls_timeindex_client
-    cls_version_client cls_replica_log_client cls_user_client
-    curl expat global fcgi resolv ${BLKID_LIBRARIES} ${TCMALLOC_LIBS})
+  target_link_libraries(radosgw rgw_a fcgi resolv ${TCMALLOC_LIBS})
   install(TARGETS radosgw DESTINATION bin)
 
   add_executable(radosgw-admin ${radosgw_admin_srcs} $<TARGET_OBJECTS:heap_profiler_objs>)
-  target_link_libraries(radosgw-admin rgw_a librados
-    cls_rgw_client cls_lock_client cls_refcount_client
-    cls_log_client cls_statelog_client cls_timeindex_client
-    cls_version_client cls_replica_log_client cls_user_client
-    curl expat global fcgi resolv ${BLKID_LIBRARIES} ${TCMALLOC_LIBS})
+  target_link_libraries(radosgw-admin rgw_a ${TCMALLOC_LIBS})
   install(TARGETS radosgw-admin DESTINATION bin)
 
   add_executable(radosgw-object-expirer ${radosgw_object_expirer_srcs} $<TARGET_OBJECTS:heap_profiler_objs>)
-  target_link_libraries(radosgw-object-expirer rgw_a librados
-    cls_rgw_client cls_lock_client cls_refcount_client
-    cls_log_client cls_statelog_client cls_timeindex_client
-    cls_version_client cls_replica_log_client cls_user_client
-    curl expat global fcgi resolv ${TCMALLOC_LIBS})
+  target_link_libraries(radosgw-object-expirer rgw_a ${TCMALLOC_LIBS})
   install(TARGETS radosgw-object-expirer DESTINATION bin)
 endif(${WITH_RADOSGW})

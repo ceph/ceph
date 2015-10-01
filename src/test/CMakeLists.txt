@@ -1421,13 +1421,7 @@ if(${WITH_RADOSGW})
     ${test_cors_srcs}
     $<TARGET_OBJECTS:heap_profiler_objs>
     )
-  target_link_libraries(test_cors
-    librados
-    rgw_a
-    global
-    curl
-    expat
-    ${BLKID_LIBRARIES}
+  target_link_libraries(test_cors rgw_a
     ${CMAKE_DL_LIBS} ${TCMALLOC_LIBS} ${UNITTEST_LIBS})
   set_target_properties(test_cors PROPERTIES COMPILE_FLAGS
     ${UNITTEST_CXX_FLAGS})
@@ -1440,21 +1434,6 @@ if(${WITH_RADOSGW})
     )
   target_link_libraries(test_rgw_manifest
     rgw_a
-    cls_rgw_client
-    cls_lock_client
-    cls_refcount_client
-    cls_log_client
-    cls_statelog_client
-    cls_timeindex_client
-    cls_version_client
-    cls_replica_log_client
-    cls_kvs
-    cls_user_client
-    librados
-    global
-    curl
-    expat
-    ${BLKID_LIBRARIES}
     ${CMAKE_DL_LIBS}
     ${TCMALLOC_LIBS}
     ${UNITTEST_LIBS}
@@ -1470,19 +1449,7 @@ if(${WITH_RADOSGW})
     $<TARGET_OBJECTS:heap_profiler_objs>
     )
   target_link_libraries(test_cls_rgw_meta
-    librados
     rgw_a
-    global
-    curl
-    expat
-    cls_version_client
-    cls_log_client
-    cls_statelog_client
-    cls_refcount_client
-    cls_rgw_client
-    cls_user_client
-    cls_lock_client
-    cls_timeindex_client
     boost_regex
     ${BLKID_LIBRARIES}
     ${CMAKE_DL_LIBS} ${TCMALLOC_LIBS} ${UNITTEST_LIBS} ${CRYPTO_LIBS})
@@ -1498,21 +1465,8 @@ if(${WITH_RADOSGW})
     $<TARGET_OBJECTS:heap_profiler_objs>
     )
   target_link_libraries(test_cls_rgw_log
-    librados
     rgw_a
-    global
-    curl
-    expat
-    cls_version_client
-    cls_log_client
-    cls_statelog_client
-    cls_refcount_client
-    cls_rgw_client
-    cls_user_client
-    cls_lock_client
-    cls_timeindex_client
     boost_regex
-    ${BLKID_LIBRARIES}
     ${CMAKE_DL_LIBS}
     ${TCMALLOC_LIBS}
     ${UNITTEST_LIBS}
@@ -1530,18 +1484,6 @@ if(${WITH_RADOSGW})
     )
   target_link_libraries(test_cls_rgw_opstate
     rgw_a
-    librados
-    cls_version_client
-    cls_log_client
-    cls_statelog_client
-    cls_timeindex_client
-    cls_refcount_client
-    cls_rgw_client
-    cls_user_client
-    cls_lock_client
-    global
-    curl
-    expat
     ${BLKID_LIBRARIES}
     ${CMAKE_DL_LIBS}
     ${TCMALLOC_LIBS}
