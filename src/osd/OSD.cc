@@ -2840,7 +2840,7 @@ void OSD::load_pgs()
 	  derr << __func__ << ": could not find map for epoch " << map_epoch
 	       << " on pg " << pgid << ", but the pool is not present in the "
 	       << "current map, so this is probably a result of bug 10617.  "
-	       << "Skipping the pg for now, you can use ceph_objectstore_tool "
+	       << "Skipping the pg for now, you can use ceph-objectstore-tool "
 	       << "to clean it up later." << dendl;
 	  continue;
 	} else {
