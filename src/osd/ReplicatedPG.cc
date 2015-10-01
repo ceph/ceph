@@ -4527,9 +4527,13 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 
 	notify_info_t n;
 	n.timeout = timeout;
+	n.notify_id = osd->get_next_id(get_osdmap()->get_epoch());
 	n.cookie = op.watch.cookie;
         n.bl = bl;
 	ctx->notifies.push_back(n);
+
+	// return our unique notify id to the client
+	::encode(n.notify_id, osd_op.outdata);
       }
       break;
 
@@ -6058,7 +6062,7 @@ void ReplicatedPG::do_osd_op_effects(OpContext *ctx, const ConnectionRef& conn)
 	p->bl,
 	p->timeout,
 	p->cookie,
-	osd->get_next_id(get_osdmap()->get_epoch()),
+	p->notify_id,
 	ctx->obc->obs.oi.user_version,
 	osd));
     for (map<pair<uint64_t, entity_name_t>, WatchRef>::iterator i =
