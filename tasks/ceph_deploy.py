@@ -29,10 +29,7 @@ def download_ceph_deploy(ctx, config):
     log.info('Downloading ceph-deploy...')
     testdir = teuthology.get_testdir(ctx)
     ceph_admin = ctx.cluster.only(teuthology.get_first_mon(ctx, config))
-    default_cd_branch = {'ceph-deploy-branch': 'master'}
-    ceph_deploy_branch = config.get(
-        'ceph-deploy',
-        default_cd_branch).get('ceph-deploy-branch')
+    ceph_deploy_branch = config.get('ceph-deploy-branch', 'master')
 
     ceph_admin.run(
         args=[
@@ -488,6 +485,8 @@ def task(ctx, config):
 
     if config.get('branch') is not None:
         assert isinstance(config['branch'], dict), 'branch must be a dictionary'
+
+    log.info('task ceph-deploy with config ' + str(config))
 
     with contextutil.nested(
          lambda: install_fn.ship_utilities(ctx=ctx, config=None),
