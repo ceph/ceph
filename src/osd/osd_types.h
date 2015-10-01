@@ -1748,8 +1748,6 @@ WRITE_CLASS_ENCODER(pg_hit_set_info_t)
  */
 struct pg_hit_set_history_t {
   eversion_t current_last_update;  ///< last version inserted into current set
-  utime_t current_last_stamp;      ///< timestamp of last insert
-  pg_hit_set_info_t current_info;  ///< metadata about the current set
   list<pg_hit_set_info_t> history; ///< archived sets, sorted oldest -> newest
 
   void encode(bufferlist &bl) const;
