@@ -9,6 +9,7 @@
 #include "rgw_rest.h"
 #include "rgw_request.h"
 #include "rgw_process.h"
+#include "rgw_rest_s3.h" // RGW_Auth_S3
 
 
 class RGWLibFrontendConfig;
@@ -96,9 +97,34 @@ public:
 
 }; /* RGWLibIO */
 
-class RGWLibRequest : public RGWRequest {
+/* XXX */
+class RGWRESTMgr_Lib : public RGWRESTMgr {
+public:
+  RGWRESTMgr_Lib() {}
+  virtual ~RGWRESTMgr_Lib() {}
+}; /* RGWRESTMgr_Lib */
+
+/* XXX */
+class RGWHandler_Lib : public RGWHandler {
+  friend class RGWRESTMgr_Lib;
+public:
+
+  virtual int authorize() {
+    return RGW_Auth_S3::authorize(store, s);
+  }
+
+  RGWHandler_Lib() {}
+  virtual ~RGWHandler_Lib() {}
+  static int init_from_header(struct req_state *s);
+}; /* RGWHandler_Lib */
+
+class RGWLibRequest : public RGWRequest,
+		      public RGWHandler_Lib {
 public:
   CephContext* cct;
+
+  /* unambiguiously return req_state */
+  struct req_state* get_state() { return this->RGWRequest::s; }
 
   RGWLibRequest(CephContext* _cct)
     :  RGWRequest(0), cct(_cct)
@@ -106,9 +132,9 @@ public:
 
   virtual bool only_bucket() = 0;
 
-  virtual RGWHandler* get_handler() /* = 0; */ { return nullptr; }
+  virtual int read_permissions(RGWOp *op);
 
-  int read_permissions(RGWOp *op);
+  virtual int postauth_init() { return 0; }
 
 }; /* RGWLibRequest */
 
