@@ -10,19 +10,15 @@
 #include "rgw_lib.h"
 
 
-/* XXX do we even need an RGWRESTMgr? */
+/* XXX */
 class RGWRESTMgr_Lib : public RGWRESTMgr {
 public:
   RGWRESTMgr_Lib() {}
   virtual ~RGWRESTMgr_Lib() {}
- #warning remove this
-#if 0
-  virtual RGWHandler* get_handler(struct req_state* s) { return nullptr; }
-#endif
 }; /* RGWRESTMgr_Lib */
 
-/* rgw_lib RGWHandler */
-class RGWHandler_REST_Lib : public RGWHandler_REST {
+/* XXX */
+class RGWHandler_Lib : public RGWHandler {
   friend class RGWRESTMgr_Lib;
 public:
 
@@ -30,10 +26,10 @@ public:
     return RGW_Auth_S3::authorize(store, s);
   }
 
-  RGWHandler_REST_Lib() {}
-  virtual ~RGWHandler_REST_Lib() {}
+  RGWHandler_Lib() {}
+  virtual ~RGWHandler_Lib() {}
   static int init_from_header(struct req_state *s);
-}; /* RGWHandler_REST_Lib */
+}; /* RGWHandler_Lib */
 
 
 /* RGWOps */
