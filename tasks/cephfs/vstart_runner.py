@@ -65,7 +65,7 @@ import subprocess
 
 if os.path.exists("./CMakeCache.txt"):
     # Running in build dir of a cmake build
-    BIN_PREFIX = "./src"
+    BIN_PREFIX = "./src/"
 else:
     # Running in src/ of an autotools build
     BIN_PREFIX = "./"
@@ -369,7 +369,9 @@ class LocalFuseMount(FuseMount):
 
     @property
     def _prefix(self):
-        return BIN_PREFIX
+        # FuseMount only uses the prefix for running ceph, which in cmake or autotools is in
+        # the present path
+        return "./"
 
     def _asok_path(self):
         # In teuthology, the asok is named after the PID of the ceph-fuse process, because it's
