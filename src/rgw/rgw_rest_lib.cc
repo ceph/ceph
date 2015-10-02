@@ -9,6 +9,7 @@
 
 /* XXX going away ! */
 
+#warning kill me
 /* static */
 int RGWHandler_Lib::init_from_header(struct req_state *s)
 {
@@ -18,6 +19,8 @@ int RGWHandler_Lib::init_from_header(struct req_state *s)
   const char *req_name = s->relative_uri.c_str();
   const char *p;
 
+  /* skip request_params parsing, rgw_file should not be
+   * seeing any */
   if (*req_name == '?') {
     p = req_name;
   } else {

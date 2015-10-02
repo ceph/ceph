@@ -377,12 +377,12 @@ int process_request(RGWRados* store, RGWREST* rest, RGWRequest* base_req,
 		    RGWLibIO* io, OpsLogSocket* olog)
 {
   int ret = 0;
+  bool should_log = true; // XXX
 
   RGWLibRequest *req = static_cast<RGWLibRequest*>(base_req);
+  RGWOp *op = reinterpret_cast<RGWOp*>(req); // req->op is already correct
 
   io->init(req->cct);
-
-  req->log_init();
 
   dout(1) << "====== " << __func__
 	  << " starting new request req=" << hex << req << dec
@@ -392,23 +392,27 @@ int process_request(RGWRados* store, RGWREST* rest, RGWRequest* base_req,
 
   RGWEnv& rgw_env = io->get_env();
 
-  struct req_state rstate(req->cct, &rgw_env);
+  struct req_state rstate(req->cct, &rgw_env); // XXX many machines on ix
   struct req_state *s = &rstate;
 
-  req->init_state(s);
+  RGWObjectCtx rados_ctx(store, s); // XXX holds std::map
 
-  RGWObjectCtx rados_ctx(store, s);
-  s->obj_ctx = &rados_ctx;
+  /* initialize req--runs process_request boilerplate, then the local
+   * equivalent of *REST*::init_from_header(...) */
+  ret = req->init(rgw_env, &rados_ctx, io, s);
+  if (ret < 0) {
+    dout(10) << "failed to initialize request" << dendl;
+    abort_early(s, op, ret, nullptr);
+    goto done;
+  }
 
-  s->req_id = store->unique_id(req->id);
-  s->trans_id = store->unique_trans_id(req->id);
-
-  req->log_format(s, "initializing for trans_id = %s", s->trans_id.c_str());
-
-  /* XXX programmer is enforcing (for now)  */
-  RGWOp *op = reinterpret_cast<RGWOp*>(req); // req->op is already correct
-
-  bool should_log = true;
+  /* req is-a RGWOp, currently initialized separately */
+  ret = req->op_init();
+    if (ret < 0) {
+    dout(10) << "failed to initialize RGWOp" << dendl;
+    abort_early(s, op, ret, nullptr);
+    goto done;
+  }
 
   // just checks the HTTP header, and that the user can access the gateway
   // may be able to skip this after MOUNT (revalidate the user info)
@@ -425,6 +429,7 @@ int process_request(RGWRados* store, RGWREST* rest, RGWRequest* base_req,
     abort_early(s, op, -ERR_USER_SUSPENDED, nullptr);
     goto done;
   }
+
   req->log(s, "reading permissions");
   ret = req->read_permissions(op);
   if (ret < 0) {
