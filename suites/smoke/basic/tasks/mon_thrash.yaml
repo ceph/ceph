@@ -1,5 +1,7 @@
 overrides:
   ceph:
+    log-whitelist:
+      - reached quota
     conf:
       global:
         ms inject delay max: 1

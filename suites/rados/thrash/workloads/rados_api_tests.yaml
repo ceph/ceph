@@ -1,5 +1,7 @@
 overrides:
   ceph:
+    log-whitelist:
+      - reached quota
     crush_tunables: hammer
     conf:
       client:
