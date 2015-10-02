@@ -3323,6 +3323,7 @@ void Monitor::resend_routed_requests()
       dout(10) << " resend to mon." << mon << " tid " << rr->tid << " " << *req << dendl;
       MForward *forward = new MForward(rr->tid, req, rr->con_features,
 				       rr->session->caps);
+      req->put();  // forward takes its own ref; drop ours.
       forward->client = rr->client_inst;
       forward->set_priority(req->get_priority());
       messenger->send_message(forward, monmap->get_inst(mon));
