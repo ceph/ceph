@@ -539,14 +539,6 @@ export RPM_OPT_FLAGS=`echo $RPM_OPT_FLAGS | sed -e 's/i386/i486/'`
 %endif
 		CFLAGS="$RPM_OPT_FLAGS" CXXFLAGS="$RPM_OPT_FLAGS"
 
-# fix bug in specific version of libedit-devel
-%if 0%{?suse_version}
-sed -i -e "s/-lcurses/-lncurses/g" Makefile
-sed -i -e "s/-lcurses/-lncurses/g" src/Makefile
-sed -i -e "s/-lcurses/-lncurses/g" man/Makefile
-sed -i -e "s/-lcurses/-lncurses/g" src/ocf/Makefile
-sed -i -e "s/-lcurses/-lncurses/g" src/java/Makefile
-%endif
 
 # Set default jobs
 MAKE_JOBS=$(getconf _NPROCESSORS_ONLN)
