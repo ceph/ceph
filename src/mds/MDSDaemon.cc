@@ -600,6 +600,9 @@ COMMAND("session kill " \
 COMMAND("cpu_profiler " \
 	"name=arg,type=CephChoices,strings=status|flush",
 	"run cpu profiling on daemon", "mds", "rw", "cli,rest")
+COMMAND("session ls " \
+	"name=filters,type=CephString,n=N,req=false",
+	"List client sessions", "mds", "r", "cli,rest")
 COMMAND("heap " \
 	"name=heapcmd,type=CephChoices,strings=dump|start_profiler|stop_profiler|release|stats", \
 	"show heap usage info (available only if compiled with tcmalloc)", \
@@ -737,6 +740,15 @@ int MDSDaemon::_handle_command(
     get_str_vec(arg, argvec);
     cpu_profiler_handle_command(argvec, ds);
   } else {
+    // Give MDSRank a shot at the command
+    if (mds_rank) {
+      bool handled = mds_rank->handle_command(cmdmap, inbl, &r, &ds, &ss);
+      if (handled) {
+        goto out;
+      }
+    }
+
+    // Neither MDSDaemon nor MDSRank know this command
     std::ostringstream ss;
     ss << "unrecognized command! " << prefix;
     r = -EINVAL;
