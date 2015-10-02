@@ -273,10 +273,6 @@ RGWMetadataHandler *RGWMetadataManager::get_handler(const char *type)
 void RGWMetadataManager::parse_metadata_key(const string& metadata_key, string& type, string& entry)
 {
   int pos = metadata_key.find(':');
-  if (pos < 0) {
-    type = metadata_key;
-  }
-
   type = metadata_key.substr(0, pos);
   entry = metadata_key.substr(pos + 1);
 }
@@ -611,8 +607,10 @@ int RGWMetadataManager::remove_entry(RGWMetadataHandler *handler, string& key, R
   return 0;
 }
 
-int RGWMetadataManager::set_attrs(RGWMetadataHandler *handler, string& key,
-                                  rgw_obj& obj, map<string, bufferlist>& attrs,
+int RGWMetadataManager::set_attrs(RGWMetadataHandler *handler,
+                                  const string& key,
+                                  rgw_obj& obj,
+                                  map<string, bufferlist>& attrs,
                                   map<string, bufferlist>* rmattrs,
                                   RGWObjVersionTracker *objv_tracker)
 {

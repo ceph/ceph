@@ -31,26 +31,33 @@ using namespace std;
  */
 struct RGWUID
 {
-  string user_id;
+  rgw_user user_id;
   void encode(bufferlist& bl) const {
-    ::encode(user_id, bl);
+    string s;
+    user_id.to_str(s);
+    ::encode(s, bl);
   }
   void decode(bufferlist::iterator& bl) {
-    ::decode(user_id, bl);
+    string s;
+    ::decode(s, bl);
+    user_id.from_str(s);
   }
 };
 WRITE_CLASS_ENCODER(RGWUID)
 
-extern int rgw_user_sync_all_stats(RGWRados *store, const string& user_id);
+extern int rgw_user_sync_all_stats(RGWRados *store, const rgw_user& user_id);
 /**
  * Get the anonymous (ie, unauthenticated) user info.
  */
-extern void rgw_get_anon_user(RGWUserInfo& info);
+extern void rgw_get_anon_user(RGWUserInfo& info,
+                              rgw_user& auth_user,
+                              RGWRados * store = NULL,
+                              const std::string& account_name = std::string());
 
 /**
  * verify that user is an actual user, and not the anonymous user
  */
-extern bool rgw_user_is_authenticated(RGWUserInfo& info);
+extern bool rgw_user_is_authenticated(const rgw_user& auth_user);
 /**
  * Save the given user information to storage.
  * Returns: 0 on success, -ERR# on failure.
@@ -68,7 +75,7 @@ extern int rgw_store_user_info(RGWRados *store,
  * Returns: 0 on success, -ERR# on failure.
  */
 extern int rgw_store_user_attrs(RGWRados *store,
-                                string& user_id,
+                                const string& user_id,
                                 map<string, bufferlist>& attrs,
                                 map<string, bufferlist>* rmattrs,
                                 RGWObjVersionTracker *objv_tracker);
@@ -78,7 +85,7 @@ extern int rgw_store_user_attrs(RGWRados *store,
  * returns: 0 on success, -ERR# on failure (including nonexistence)
  */
 extern int rgw_get_user_info_by_uid(RGWRados *store,
-                                    string& user_id,
+                                    const rgw_user& user_id,
                                     RGWUserInfo& info,
                                     RGWObjVersionTracker *objv_tracker = NULL,
                                     time_t *pmtime                     = NULL,
@@ -123,7 +130,7 @@ extern int rgw_delete_user(RGWRados *store, RGWUserInfo& user, RGWObjVersionTrac
  * remove the different indexes
  */
 extern int rgw_remove_key_index(RGWRados *store, RGWAccessKey& access_key);
-extern int rgw_remove_uid_index(RGWRados *store, string& uid);
+extern int rgw_remove_uid_index(RGWRados *store, rgw_user& uid);
 extern int rgw_remove_email_index(RGWRados *store, string& email);
 extern int rgw_remove_swift_name_index(RGWRados *store, string& swift_name);
 
@@ -156,7 +163,7 @@ enum RGWUserId {
 struct RGWUserAdminOpState {
   // user attributes
   RGWUserInfo info;
-  std::string user_id;
+  rgw_user user_id;
   std::string user_email;
   std::string display_name;
   uint32_t max_buckets;
@@ -235,7 +242,7 @@ struct RGWUserAdminOpState {
     gen_secret = false;
     key_op = true;
   }
-  void set_user_id(std::string& id) {
+  void set_user_id(rgw_user& id) {
     if (id.empty())
       return;
 
@@ -262,7 +269,7 @@ struct RGWUserAdminOpState {
     size_t pos = _subuser.find(":");
 
     if (pos != string::npos) {
-      user_id = _subuser.substr(0, pos);
+      user_id.id = _subuser.substr(0, pos);
       subuser = _subuser.substr(pos+1);
     } else {
       subuser = _subuser;
@@ -386,7 +393,7 @@ struct RGWUserAdminOpState {
   RGWQuotaInfo& get_bucket_quota() { return bucket_quota; }
   RGWQuotaInfo& get_user_quota() { return user_quota; }
 
-  std::string get_user_id() { return user_id; }
+  rgw_user& get_user_id() { return user_id; }
   std::string get_subuser() { return subuser; }
   std::string get_access_key() { return id; }
   std::string get_secret_key() { return key; }
@@ -404,10 +411,10 @@ struct RGWUserAdminOpState {
   RGWUserCaps *get_caps_obj() { return &info.caps; }
 
   std::string build_default_swift_kid() {
-    if (user_id.empty() || subuser.empty())
+    if (user_id.id.empty() || subuser.empty())
       return "";
 
-    std::string kid = user_id;
+    string kid = user_id.id;
     kid.append(":");
     kid.append(subuser);
 
@@ -415,10 +422,11 @@ struct RGWUserAdminOpState {
   }
 
   std::string generate_subuser() {
-    if (user_id.empty())
+    if (user_id.id.empty())
       return "";
 
-    std::string generated_subuser = user_id;
+    std::string generated_subuser;
+    user_id.to_str(generated_subuser); // P3: may blow up with nonempty tenant
     std::string rand_suffix;
 
     int sub_buf_size = RAND_SUBUSER_LEN + 1;
@@ -437,7 +445,7 @@ struct RGWUserAdminOpState {
     return generated_subuser;
   }
 
-  RGWUserAdminOpState() : user_id(RGW_USER_ANON_ID), user_email(""), display_name(""), id(""), key ("")
+  RGWUserAdminOpState() : user_id(RGW_USER_ANON_ID)
   {
     max_buckets = RGW_DEFAULT_MAX_BUCKETS;
     key_type = -1;
@@ -489,7 +497,7 @@ class RGWAccessKeyPool
   RGWUser *user;
 
   std::map<std::string, int, ltstr_nocase> key_type_map;
-  std::string user_id;
+  rgw_user user_id;
   RGWRados *store;
 
   map<std::string, RGWAccessKey> *swift_keys;
@@ -531,7 +539,7 @@ class RGWSubUserPool
 {
   RGWUser *user;
 
-  string user_id;
+  rgw_user user_id;
   RGWRados *store;
   bool subusers_allowed;
 
@@ -593,7 +601,7 @@ private:
   RGWUserInfo old_info;
   RGWRados *store;
 
-  string user_id;
+  rgw_user user_id;
   bool info_stored;
 
   void set_populated() { info_stored = true; }

@@ -193,8 +193,10 @@ public:
   int remove_entry(RGWMetadataHandler *handler, string& key, RGWObjVersionTracker *objv_tracker);
   int set_attr(RGWMetadataHandler *handler, string& key, rgw_obj& obj, string& attr, bufferlist& bl,
                RGWObjVersionTracker *objv_tracker);
-  int set_attrs(RGWMetadataHandler *handler, string& key,
-                rgw_obj& obj, map<string, bufferlist>& attrs,
+  int set_attrs(RGWMetadataHandler *handler,
+                const string& key,
+                rgw_obj& obj,
+                map<string, bufferlist>& attrs,
                 map<string, bufferlist>* rmattrs,
                 RGWObjVersionTracker *objv_tracker);
   int get(string& metadata_key, Formatter *f);

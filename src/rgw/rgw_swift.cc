@@ -21,6 +21,7 @@
 #define dout_subsys ceph_subsys_rgw
 
 static list<string> roles_list;
+static list<string> admin_roles_list;
 
 class RGWValidateSwiftToken : public RGWHTTPClient {
   struct rgw_swift_auth_info *info;
@@ -371,25 +372,45 @@ int RGWSwift::check_revoked()
   return 0;
 }
 
-static void rgw_set_keystone_token_auth_info(KeystoneToken& token, struct rgw_swift_auth_info *info)
+static void rgw_set_keystone_token_auth_info(const KeystoneToken& token,
+                                             struct rgw_swift_auth_info * const info)
 {
-  info->user = token.token.tenant.id;
+  /* If the requested account currently doesn't exist, it may be created with
+   * its own namespace for buckets depending on the configuration option. */
+  info->user = rgw_user(token.token.tenant.id,
+          g_conf->rgw_swift_create_account_with_bns);
   info->display_name = token.token.tenant.name;
   info->status = 200;
+
+  /* Check whether the user has an admin status. */
+  bool is_admin = false;
+  for (const auto admin_role : admin_roles_list) {
+    if (token.user.has_role(admin_role)) {
+      is_admin = true;
+      break;
+    }
+  }
+  info->is_admin = is_admin;
 }
 
-int RGWSwift::parse_keystone_token_response(const string& token, bufferlist& bl, struct rgw_swift_auth_info *info, KeystoneToken& t)
+int RGWSwift::parse_keystone_token_response(const string& token,
+                                            bufferlist& bl,
+                                            struct rgw_swift_auth_info * const info,
+                                            KeystoneToken& t)
 {
   int ret = t.parse(cct, bl);
-  if (ret < 0)
+  if (ret < 0) {
     return ret;
+  }
 
   bool found = false;
   list<string>::iterator iter;
   for (iter = roles_list.begin(); iter != roles_list.end(); ++iter) {
     const string& role = *iter;
-    if ((found=t.user.has_role(role))==true)
+    if (t.user.has_role(role) == true) {
+      found = true;
       break;
+    }
   }
 
   if (!found) {
@@ -404,10 +425,21 @@ int RGWSwift::parse_keystone_token_response(const string& token, bufferlist& bl,
   return 0;
 }
 
-int RGWSwift::update_user_info(RGWRados *store, struct rgw_swift_auth_info *info, RGWUserInfo& user_info)
+int RGWSwift::update_user_info(RGWRados *const store,
+                               const string& account_name,
+                               const struct rgw_swift_auth_info * const info,
+                               RGWUserInfo& user_info)
 {
-  if (rgw_get_user_info_by_uid(store, info->user, user_info) < 0) {
+  const rgw_user ui_owner = !account_name.empty() ? account_name : info->user;
+
+  if (rgw_get_user_info_by_uid(store, ui_owner, user_info) < 0) {
     ldout(cct, 0) << "NOTICE: couldn't map swift user" << dendl;
+
+    if (ui_owner != info->user) {
+      ldout(cct, 0) << "ERROR: only owner may create the account" << dendl;
+      return -EPERM;
+    }
+
     user_info.user_id = info->user;
     user_info.display_name = info->display_name;
 
@@ -460,8 +492,11 @@ static bool decode_pki_token(CephContext *cct, const string& token, bufferlist& 
   return true;
 }
 
-int RGWSwift::validate_keystone_token(RGWRados *store, const string& token, struct rgw_swift_auth_info *info,
-				      RGWUserInfo& rgw_user)
+int RGWSwift::validate_keystone_token(RGWRados * const store,
+                                      const string& account_name,
+                                      const string& token,
+                                      struct rgw_swift_auth_info *info,
+                                      RGWUserInfo& rgw_user)
 {
   KeystoneToken t;
 
@@ -476,7 +511,7 @@ int RGWSwift::validate_keystone_token(RGWRados *store, const string& token, stru
 
     ldout(cct, 20) << "cached token.tenant.id=" << t.token.tenant.id << dendl;
 
-    int ret = update_user_info(store, info, rgw_user);
+    int ret = update_user_info(store, account_name, info, rgw_user);
     if (ret < 0)
       return ret;
 
@@ -532,7 +567,7 @@ int RGWSwift::validate_keystone_token(RGWRados *store, const string& token, stru
 
   keystone_token_cache->add(token_id, t);
 
-  ret = update_user_info(store, info, rgw_user);
+  ret = update_user_info(store, account_name, info, rgw_user);
   if (ret < 0)
     return ret;
 
@@ -556,12 +591,28 @@ int authenticate_temp_url(RGWRados *store, req_state *s)
   if (temp_url_expires.empty())
     return -EPERM;
 
-  /* need to get user info of bucket owner */
-  RGWBucketInfo bucket_info;
+  /* TempURL case is completely different than the Keystone auth - you may
+   * get account name only through extraction from URL. In turn, knowledge
+   * about account is neccessary to obtain its bucket namespace (BNS).
+   * Without that, the access will be limited to accounts with empty BNS. */
+  rgw_bucket_namespace bns;
+  if (g_conf->rgw_swift_account_in_url) {
+    RGWUserInfo ui_bns;
 
-  int ret = store->get_bucket_info(*static_cast<RGWObjectCtx *>(s->obj_ctx), s->bucket_name_str, bucket_info, NULL);
-  if (ret < 0)
+    if (rgw_get_user_info_by_uid(store, s->account_name, ui_bns) < 0) {
+      return -EPERM;
+    }
+
+    bns = ui_bns.user_id.get_bns();
+  }
+
+  /* Need to get user info of bucket owner. */
+  RGWBucketInfo bucket_info;
+  int ret = store->get_bucket_info(*static_cast<RGWObjectCtx *>(s->obj_ctx),
+          bns.get_id(), s->bucket_name_str, bucket_info, NULL);
+  if (ret < 0) {
     return -EPERM;
+  }
 
   dout(20) << "temp url user (bucket owner): " << bucket_info.owner << dendl;
   if (rgw_get_user_info_by_uid(store, bucket_info.owner, s->user) < 0) {
@@ -573,8 +624,9 @@ int authenticate_temp_url(RGWRados *store, req_state *s)
     return -EPERM;
   }
 
-  if (!s->info.method)
+  if (!s->info.method) {
     return -EPERM;
+  }
 
   utime_t now = ceph_clock_now(g_ceph_context);
 
@@ -671,8 +723,22 @@ bool RGWSwift::do_verify_swift_token(RGWRados *store, req_state *s)
   int ret;
 
   if (supports_keystone()) {
-    ret = validate_keystone_token(store, s->os_auth_token, &info, s->user);
-    return (ret >= 0);
+    ret = validate_keystone_token(store, s->account_name, s->os_auth_token,
+            &info, s->user);
+    if (ret < 0) {
+      /* Authentication failed. */
+      return false;
+    }
+
+    if (!s->account_name.empty() && info.user.to_str() != s->account_name
+        && !info.is_admin) {
+      /* Authentication succeeded but completely different account (tenant
+       * in Keystone terminology) has been requested and the user is not
+       * a reseller admin. */
+      return false;
+    }
+
+    return true;
   }
 
   ret = validate_token(s->os_auth_token, &info);
@@ -684,7 +750,7 @@ bool RGWSwift::do_verify_swift_token(RGWRados *store, req_state *s)
     return false;
   }
 
-  s->swift_user = info.user;
+  s->swift_user = info.user.to_str();
   s->swift_groups = info.auth_groups;
 
   string swift_user = s->swift_user;
@@ -704,8 +770,14 @@ bool RGWSwift::do_verify_swift_token(RGWRados *store, req_state *s)
 void RGWSwift::init()
 {
   get_str_list(cct->_conf->rgw_keystone_accepted_roles, roles_list);
-  if (supports_keystone())
-      init_keystone();
+  get_str_list(cct->_conf->rgw_keystone_accepted_admin_roles, admin_roles_list);
+
+  roles_list.insert(roles_list.end(), admin_roles_list.begin(),
+          admin_roles_list.end());
+
+  if (supports_keystone()) {
+    init_keystone();
+  }
 }
 
 

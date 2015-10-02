@@ -23,14 +23,14 @@ public:
   int get_url(string& endpoint);
 
   /* sync request */
-  int forward(const string& uid, req_info& info, obj_version *objv, size_t max_response, bufferlist *inbl, bufferlist *outbl);
+  int forward(const rgw_user& uid, req_info& info, obj_version *objv, size_t max_response, bufferlist *inbl, bufferlist *outbl);
 
   /* async request */
-  int put_obj_init(const string& uid, rgw_obj& obj, uint64_t obj_size,
+  int put_obj_init(const rgw_user& uid, rgw_obj& obj, uint64_t obj_size,
                    map<string, bufferlist>& attrs, RGWRESTStreamWriteRequest **req);
   int complete_request(RGWRESTStreamWriteRequest *req, string& etag, time_t *mtime);
 
-  int get_obj(const string& uid, req_info *info /* optional */, rgw_obj& obj, bool prepend_metadata, RGWGetDataCB *cb, RGWRESTStreamReadRequest **req);
+  int get_obj(const rgw_user& uid, req_info *info /* optional */, rgw_obj& obj, bool prepend_metadata, RGWGetDataCB *cb, RGWRESTStreamReadRequest **req);
   int complete_request(RGWRESTStreamReadRequest *req, string& etag, time_t *mtime, map<string, string>& attrs);
 };
 

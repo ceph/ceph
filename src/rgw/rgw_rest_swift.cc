@@ -356,7 +356,7 @@ void RGWStatAccount_ObjStore_SWIFT::execute()
 {
   RGWStatAccount_ObjStore::execute();
 
-  ret = rgw_get_user_attrs_by_uid(store, s->user.user_id, attrs);
+  ret = rgw_get_user_attrs_by_uid(store, s->user.user_id.to_str(), attrs);
 }
 
 void RGWStatAccount_ObjStore_SWIFT::send_response()
@@ -814,7 +814,7 @@ void RGWCopyObj_ObjStore_SWIFT::dump_copy_info()
 
   /* Dump X-Copied-From-Account */
   string account_name;
-  url_encode(s->user.user_id, account_name);
+  url_encode(s->user.user_id.to_str(), account_name);
   s->cio->print("X-Copied-From-Account: %s\r\n", account_name.c_str());
 
   /* Dump X-Copied-From-Last-Modified. */
@@ -1043,14 +1043,19 @@ int RGWHandler_ObjStore_SWIFT::authorize()
   if ((!s->os_auth_token && s->info.args.get("temp_url_sig").empty()) ||
       (s->op == OP_OPTIONS)) {
     /* anonymous access */
-    rgw_get_anon_user(s->user);
+    rgw_get_anon_user(s->user, s->auth_user, store, s->account_name);
     s->perm_mask = RGW_PERM_FULL_CONTROL;
     return 0;
   }
 
-  bool authorized = rgw_swift->verify_swift_token(store, s);
-  if (!authorized)
+  const bool authorized = rgw_swift->verify_swift_token(store, s);
+  if (!authorized) {
     return -EPERM;
+  }
+
+  if (s->auth_user.empty()) {
+    s->auth_user = s->user.user_id;
+  }
 
   return 0;
 }
@@ -1166,9 +1171,28 @@ int RGWHandler_ObjStore_SWIFT::init_from_header(struct req_state *s)
 
   next_tok(req, ver, '/');
 
-  string tenant;
-  if (!tenant_path.empty()) {
-    next_tok(req, tenant, '/');
+  if (!tenant_path.empty() || g_conf->rgw_swift_account_in_url) {
+    string account_name;
+    next_tok(req, account_name, '/');
+
+    /* Erase all pre-defined prefixes like "AUTH_" or "KEY_". */
+    list<string> skipped_prefixes;
+    get_str_list("AUTH_,KEY_", skipped_prefixes);
+
+    for (const auto pfx : skipped_prefixes) {
+      const size_t comp_len = min(account_name.length(), pfx.length());
+      if (account_name.compare(0, comp_len, pfx) == 0) {
+        /* Prefix is present. Drop it. */
+        account_name = account_name.substr(comp_len);
+        break;
+      }
+    }
+
+    if (account_name.empty()) {
+      return -ERR_PRECONDITION_FAILED;
+    } else {
+      s->account_name = account_name;
+    }
   }
 
   s->os_auth_token = s->info.env->get("HTTP_X_AUTH_TOKEN");

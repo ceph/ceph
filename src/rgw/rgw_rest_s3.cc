@@ -1181,8 +1181,9 @@ int RGWPostObj_ObjStore_S3::get_policy()
       user_info.user_id = keystone_validator.response.token.tenant.id;
       user_info.display_name = keystone_validator.response.token.tenant.name;
 
+      rgw_user uid(keystone_validator.response.token.tenant.id);
       /* try to store user if it not already exists */
-      if (rgw_get_user_info_by_uid(store, keystone_validator.response.token.tenant.id, user_info) < 0) {
+      if (rgw_get_user_info_by_uid(store, uid, user_info) < 0) {
         int ret = rgw_store_user_info(store, user_info, NULL, NULL, 0, true);
         if (ret < 0) {
           dout(10) << "NOTICE: failed to store new user's info: ret=" << ret << dendl;
@@ -1258,6 +1259,7 @@ int RGWPostObj_ObjStore_S3::get_policy()
     }
 
     s->user = user_info;
+    s->auth_user = s->user.user_id;
     s->owner.set_id(user_info.user_id);
     s->owner.set_name(user_info.display_name);
   } else {
@@ -2297,7 +2299,7 @@ int RGW_Auth_S3_Keystone_ValidateToken::validate_s3token(const string& auth_id, 
 
 static void init_anon_user(struct req_state *s)
 {
-  rgw_get_anon_user(s->user);
+  rgw_get_anon_user(s->user, s->auth_user);
   s->perm_mask = RGW_PERM_FULL_CONTROL;
 }
 
@@ -2379,11 +2381,13 @@ int RGW_Auth_S3::authorize(RGWRados *store, struct req_state *s)
 	}
 
 
+	s->auth_user = keystone_validator.response.token.tenant.id;
 	s->user.user_id = keystone_validator.response.token.tenant.id;
         s->user.display_name = keystone_validator.response.token.tenant.name; // wow.
 
+        rgw_user uid(keystone_validator.response.token.tenant.id);
         /* try to store user if it not already exists */
-        if (rgw_get_user_info_by_uid(store, keystone_validator.response.token.tenant.id, s->user) < 0) {
+        if (rgw_get_user_info_by_uid(store, uid, s->user) < 0) {
           int ret = rgw_store_user_info(store, s->user, NULL, NULL, 0, true);
           if (ret < 0)
             dout(10) << "NOTICE: failed to store new user's info: ret=" << ret << dendl;
@@ -2463,7 +2467,8 @@ int RGW_Auth_S3::authorize(RGWRados *store, struct req_state *s)
       string effective_uid = s->info.args.get(RGW_SYS_PARAM_PREFIX "uid");
       RGWUserInfo effective_user;
       if (!effective_uid.empty()) {
-        ret = rgw_get_user_info_by_uid(store, effective_uid, effective_user);
+        rgw_user euid(effective_uid);
+        ret = rgw_get_user_info_by_uid(store, euid, effective_user);
         if (ret < 0) {
           ldout(s->cct, 0) << "User lookup failed!" << dendl;
           return -ENOENT;
@@ -2474,7 +2479,10 @@ int RGW_Auth_S3::authorize(RGWRados *store, struct req_state *s)
 
   } /* if keystone_result < 0 */
 
-  // populate the owner info
+  /* populate the owner info */
+  if (s->auth_user.empty()) {
+    s->auth_user = s->user.user_id;
+  }
   s->owner.set_id(s->user.user_id);
   s->owner.set_name(s->user.display_name);
 

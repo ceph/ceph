@@ -14,9 +14,9 @@
 
 #define dout_subsys ceph_subsys_rgw
 
-bool KeystoneToken::User::has_role(const string& r) {
-  list<Role>::iterator iter;
-  for (iter = roles.begin(); iter != roles.end(); ++iter) {
+bool KeystoneToken::User::has_role(const string& r) const {
+  list<Role>::const_iterator iter;
+  for (iter = roles.cbegin(); iter != roles.cend(); ++iter) {
       if (fnmatch(r.c_str(), ((*iter).name.c_str()), 0) == 0) {
         return true;
       }

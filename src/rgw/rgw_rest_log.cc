@@ -269,7 +269,8 @@ void RGWOp_MDLog_Unlock::execute() {
 }
 
 void RGWOp_BILog_List::execute() {
-  string bucket_name = s->info.args.get("bucket"),
+  string tenant_name = s->info.args.get("tenant"),
+         bucket_name = s->info.args.get("bucket"),
          marker = s->info.args.get("marker"),
          max_entries_str = s->info.args.get("max-entries"),
          bucket_instance = s->info.args.get("bucket-instance");
@@ -297,7 +298,7 @@ void RGWOp_BILog_List::execute() {
       return;
     }
   } else { /* !bucket_name.empty() */
-    http_ret = store->get_bucket_info(obj_ctx, bucket_name, bucket_info, NULL, NULL);
+    http_ret = store->get_bucket_info(obj_ctx, tenant_name, bucket_name, bucket_info, NULL, NULL);
     if (http_ret < 0) {
       dout(5) << "could not get bucket info for bucket=" << bucket_name << dendl;
       return;
@@ -364,7 +365,8 @@ void RGWOp_BILog_List::send_response_end() {
 }
       
 void RGWOp_BILog_Info::execute() {
-  string bucket_name = s->info.args.get("bucket"),
+  string tenant_name = s->info.args.get("tenant"),
+         bucket_name = s->info.args.get("bucket"),
          bucket_instance = s->info.args.get("bucket-instance");
   RGWBucketInfo bucket_info;
 
@@ -383,7 +385,7 @@ void RGWOp_BILog_Info::execute() {
       return;
     }
   } else { /* !bucket_name.empty() */
-    http_ret = store->get_bucket_info(obj_ctx, bucket_name, bucket_info, NULL, NULL);
+    http_ret = store->get_bucket_info(obj_ctx, tenant_name, bucket_name, bucket_info, NULL, NULL);
     if (http_ret < 0) {
       dout(5) << "could not get bucket info for bucket=" << bucket_name << dendl;
       return;
@@ -415,7 +417,8 @@ void RGWOp_BILog_Info::send_response() {
 }
 
 void RGWOp_BILog_Delete::execute() {
-  string bucket_name = s->info.args.get("bucket"),
+  string tenant_name = s->info.args.get("tenant"),
+         bucket_name = s->info.args.get("bucket"),
          start_marker = s->info.args.get("start-marker"),
          end_marker = s->info.args.get("end-marker"),
          bucket_instance = s->info.args.get("bucket-instance");
@@ -445,7 +448,7 @@ void RGWOp_BILog_Delete::execute() {
       return;
     }
   } else { /* !bucket_name.empty() */
-    http_ret = store->get_bucket_info(obj_ctx, bucket_name, bucket_info, NULL, NULL);
+    http_ret = store->get_bucket_info(obj_ctx, tenant_name, bucket_name, bucket_info, NULL, NULL);
     if (http_ret < 0) {
       dout(5) << "could not get bucket info for bucket=" << bucket_name << dendl;
       return;

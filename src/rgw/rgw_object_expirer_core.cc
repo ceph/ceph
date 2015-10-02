@@ -39,13 +39,16 @@ using namespace std;
 
 static string objexp_lock_name = "gc_process";
 
-int RGWObjectExpirer::init_bucket_info(const string& bucket_name,
-                                    const string& bucket_id,
-                                    RGWBucketInfo& bucket_info)
+int RGWObjectExpirer::init_bucket_info(const string& bucket_namespace,
+                                       const string& bucket_name,
+                                       const string& bucket_id,
+                                       RGWBucketInfo& bucket_info)
 {
   RGWObjectCtx obj_ctx(store);
-  const string bucket_instance_id = bucket_name + ":" + bucket_id;
+  string bucket_instance_id;
 
+  store->get_bucket_instance_entry(bucket_namespace, bucket_name, bucket_id,
+          bucket_instance_id);
   int ret = store->get_bucket_instance_info(obj_ctx, bucket_instance_id,
           bucket_info, NULL, NULL);
 
@@ -56,9 +59,11 @@ int RGWObjectExpirer::garbage_single_object(objexp_hint_entry& hint)
 {
   RGWBucketInfo bucket_info;
 
-  int ret = init_bucket_info(hint.bucket_name, hint.bucket_id, bucket_info);
+  int ret = init_bucket_info(hint.bucket_namespace, hint.bucket_name,
+          hint.bucket_id, bucket_info);
   if (ret < 0) {
-    ldout(store->ctx(), 1) << "ERROR: could not init bucket: " << cpp_strerror(-ret) << dendl;
+    ldout(store->ctx(), 1) << "ERROR: could not init bucket: " << \
+        cpp_strerror(-ret) << dendl;
     return ret;
   }
 
@@ -153,10 +158,11 @@ void RGWObjectExpirer::process_single_shard(const string& shard,
   do {
     list<cls_timeindex_entry> entries;
     ret = store->objexp_hint_list(shard, last_run, round_start,
-                                      num_entries, marker, entries,
-                                      &out_marker, &truncated);
+                                  num_entries, marker, entries,
+                                  &out_marker, &truncated);
     if (ret < 0) {
-      ldout(cct, 10) << "cannot get removal hints from shard: " << shard << dendl;
+      ldout(cct, 10) << "cannot get removal hints from shard: " << shard \
+          << ", ret = " << ret << dendl;
       continue;
     }
 

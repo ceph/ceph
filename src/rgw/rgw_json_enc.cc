@@ -9,6 +9,7 @@
 #include "rgw_cache.h"
 #include "rgw_bucket.h"
 #include "rgw_keystone.h"
+#include "rgw_basic_types.h"
 
 #include "common/ceph_json.h"
 #include "common/Formatter.h"
@@ -84,8 +85,8 @@ void RGWObjManifest::dump(Formatter *f) const
 
 void rgw_log_entry::dump(Formatter *f) const
 {
-  f->dump_string("object_owner", object_owner);
-  f->dump_string("bucket_owner", bucket_owner);
+  f->dump_string("object_owner", object_owner.to_str());
+  f->dump_string("bucket_owner", bucket_owner.to_str());
   f->dump_string("bucket", bucket);
   f->dump_stream("time") << time;
   f->dump_string("remote_addr", remote_addr);
@@ -122,7 +123,7 @@ void ACLGrant::dump(Formatter *f) const
   type.dump(f);
   f->close_section();
 
-  f->dump_string("id", id);
+  f->dump_string("id", id.to_str());
   f->dump_string("email", email);
 
   f->open_object_section("permission");
@@ -170,7 +171,7 @@ void RGWAccessControlList::dump(Formatter *f) const
 
 void ACLOwner::dump(Formatter *f) const
 {
-  encode_json("id", id, f);
+  encode_json("id", id.to_str(), f);
   encode_json("display_name", display_name, f);
 }
 
@@ -375,25 +376,25 @@ void RGWSubUser::decode_json(JSONObj *obj)
 static void user_info_dump_subuser(const char *name, const RGWSubUser& subuser, Formatter *f, void *parent)
 {
   RGWUserInfo *info = static_cast<RGWUserInfo *>(parent);
-  subuser.dump(f, info->user_id);
+  subuser.dump(f, info->user_id.to_str());
 }
 
 static void user_info_dump_key(const char *name, const RGWAccessKey& key, Formatter *f, void *parent)
 {
   RGWUserInfo *info = static_cast<RGWUserInfo *>(parent);
-  key.dump(f, info->user_id, false);
+  key.dump(f, info->user_id.to_str(), false);
 }
 
 static void user_info_dump_swift_key(const char *name, const RGWAccessKey& key, Formatter *f, void *parent)
 {
   RGWUserInfo *info = static_cast<RGWUserInfo *>(parent);
-  key.dump(f, info->user_id, true);
+  key.dump(f, info->user_id.to_str(), true);
 }
 
 void RGWUserInfo::dump(Formatter *f) const
 {
 
-  encode_json("user_id", user_id, f);
+  encode_json("user_id", user_id.to_str(), f);
   encode_json("display_name", display_name, f);
   encode_json("email", user_email, f);
   encode_json("suspended", (int)suspended, f);
@@ -419,6 +420,7 @@ void RGWUserInfo::dump(Formatter *f) const
   encode_json("bucket_quota", bucket_quota, f);
   encode_json("user_quota", user_quota, f);
   encode_json("temp_url_keys", temp_url_keys, f);
+  encode_json("buckets_namespace", user_id.get_bns().get_id(), f);
 }
 
 
@@ -445,7 +447,11 @@ static void decode_subusers(map<string, RGWSubUser>& m, JSONObj *o)
 
 void RGWUserInfo::decode_json(JSONObj *obj)
 {
-  JSONDecoder::decode_json("user_id", user_id, obj, true);
+  string uid;
+
+  JSONDecoder::decode_json("user_id", uid, obj, true);
+  user_id.from_str(uid);
+
   JSONDecoder::decode_json("display_name", display_name, obj);
   JSONDecoder::decode_json("email", user_email, obj);
   bool susp = false;
@@ -472,6 +478,12 @@ void RGWUserInfo::decode_json(JSONObj *obj)
   JSONDecoder::decode_json("bucket_quota", bucket_quota, obj);
   JSONDecoder::decode_json("user_quota", user_quota, obj);
   JSONDecoder::decode_json("temp_url_keys", temp_url_keys, obj);
+
+  string bns;
+  JSONDecoder::decode_json("buckets_namespace", bns, obj);
+  if (bns.compare(user_id.id) == 0) {
+    user_id.has_own_bns = true;
+  }
 }
 
 void RGWQuotaInfo::dump(Formatter *f) const
@@ -490,6 +502,7 @@ void RGWQuotaInfo::decode_json(JSONObj *obj)
 
 void rgw_bucket::dump(Formatter *f) const
 {
+  encode_json("namespace", tenant, f);
   encode_json("name", name, f);
   encode_json("pool", data_pool, f);
   encode_json("data_extra_pool", data_extra_pool, f);
@@ -499,6 +512,7 @@ void rgw_bucket::dump(Formatter *f) const
 }
 
 void rgw_bucket::decode_json(JSONObj *obj) {
+  JSONDecoder::decode_json("namespace", tenant, obj);
   JSONDecoder::decode_json("name", name, obj);
   JSONDecoder::decode_json("pool", data_pool, obj);
   JSONDecoder::decode_json("data_extra_pool", data_extra_pool, obj);
@@ -571,7 +585,7 @@ void RGWObjEnt::dump(Formatter *f) const
   encode_json("name", key.name, f);
   encode_json("instance", key.instance, f);
   encode_json("namespace", ns, f);
-  encode_json("owner", owner, f);
+  encode_json("owner", owner.to_str(), f);
   encode_json("owner_display_name", owner_display_name, f);
   encode_json("size", size, f);
   encode_json("mtime", mtime, f);
