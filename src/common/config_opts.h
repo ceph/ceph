@@ -764,7 +764,7 @@ OPTION(keyvaluestore_rocksdb_options, OPT_STR, "")
 // rocksdb options that will be used for omap(if omap_backend is rocksdb)
 OPTION(filestore_rocksdb_options, OPT_STR, "")
 // rocksdb options that will be used in monstore
-OPTION(mon_rocksdb_options, OPT_STR, "")
+OPTION(mon_rocksdb_options, OPT_STR, "compression=kNoCompression")
 
 /**
  * osd_*_priority adjust the relative priority of client io, recovery io,
