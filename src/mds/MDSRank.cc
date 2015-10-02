@@ -183,8 +183,8 @@ void MDSRankDispatcher::tick()
 
   // ...
   if (is_clientreplay() || is_active() || is_stopping()) {
-    locker->tick();
     server->find_idle_sessions();
+    locker->tick();
   }
   
   if (is_reconnect())
