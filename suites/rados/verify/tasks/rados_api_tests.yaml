@@ -1,5 +1,7 @@
 overrides:
   ceph:
+    log-whitelist:
+      - reached quota
     conf:
       client:
         debug ms: 1
