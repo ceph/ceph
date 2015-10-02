@@ -67,7 +67,7 @@ class TestJournalMigration(CephFSTestCase):
             ))
 
         self.fs.journal_tool(["event", "get", "json", "--path", "/tmp/journal.json"])
-        p = self.mount_a.client_remote.run(
+        p = self.fs.tool_remote.run(
             args=[
                 "python",
                 "-c",
