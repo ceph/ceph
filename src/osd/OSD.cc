@@ -7932,7 +7932,7 @@ void OSD::do_recovery(PG *pg, ThreadPool::TPHandle &handle)
     dout(20) << "  active was " << recovery_oids[pg->info.pgid] << dendl;
 #endif
     
-    int started;
+    int started = 0;
     bool more = pg->start_recovery_ops(max, handle, &started);
     dout(10) << "do_recovery started " << started << "/" << max << " on " << *pg << dendl;
     // If no recovery op is started, don't bother to manipulate the RecoveryCtx
