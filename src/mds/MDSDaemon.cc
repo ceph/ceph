@@ -603,6 +603,9 @@ COMMAND("cpu_profiler " \
 COMMAND("session ls " \
 	"name=filters,type=CephString,n=N,req=false",
 	"List client sessions", "mds", "r", "cli,rest")
+COMMAND("session evict " \
+	"name=filters,type=CephString,n=N,req=false",
+	"Evict client session(s)", "mds", "rw", "cli,rest")
 COMMAND("heap " \
 	"name=heapcmd,type=CephChoices,strings=dump|start_profiler|stop_profiler|release|stats", \
 	"show heap usage info (available only if compiled with tcmalloc)", \
