@@ -18,7 +18,8 @@ endif
 
 if WITH_OSD
 
-ceph_objectstore_tool_SOURCES = tools/ceph_objectstore_tool.cc
+ceph_objectstore_tool_SOURCES = tools/RadosDump.cc \
+                                tools/ceph_objectstore_tool.cc
 ceph_objectstore_tool_LDADD = $(LIBOSD) $(LIBOS) $(CEPH_GLOBAL) $(BOOST_PROGRAM_OPTIONS_LIBS) $(LIBRADOS) $(LIBFILESTORE) $(LIBKVSTORE)
 if LINUX
 ceph_objectstore_tool_LDADD += -ldl
