@@ -582,13 +582,13 @@ export RPM_OPT_FLAGS=`echo $RPM_OPT_FLAGS | sed -e 's/i386/i486/'`
 		CFLAGS="$RPM_OPT_FLAGS" CXXFLAGS="$RPM_OPT_FLAGS"
 
 
-make -j$(getconf _NPROCESSORS_ONLN)
+make %{?_smp_mflags}
 
 
 %if 0%{with tests}
 %check
 # run in-tree unittests
-make -j$(getconf _NPROCESSORS_ONLN) check-local
+make %{?_smp_mflags} check-local
 
 %endif
 
