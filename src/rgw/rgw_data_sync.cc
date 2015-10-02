@@ -601,7 +601,7 @@ public:
             return set_state(RGWCoroutine_Error, -EIO);
           }
 
-          bucket_instance = bucket_instance.substr(0, pos - 1);
+          bucket_instance = bucket_instance.substr(0, pos);
         }
         int ret = call(new RGWRunBucketSyncCoroutine(http_manager, async_rados, conn, store, obj_ctx, source_zone, bucket_name, bucket_instance, shard_id));
         if (ret < 0) {
@@ -880,16 +880,17 @@ public:
           }
         }
       }
-      if  ((rgw_data_sync_info::SyncState)sync_status.sync_info.state == rgw_data_sync_info::StateSync) {
-#if 0
-        case rgw_data_sync_info::StateSync:
-          for (int i = 0; i < num_shards; i++) {
-            RGWCoroutine *cr = new RGWDataSyncShardCR(store, &http_manager, async_rados,
-                                                      conn, store->get_zone_params().log_pool, source_zone,
-                                                      i, rgw_data_sync_marker& _marker)
-          }
-#endif
-#warning FIXME
+      yield {
+        if  ((rgw_data_sync_info::SyncState)sync_status.sync_info.state == rgw_data_sync_info::StateSync) {
+          case rgw_data_sync_info::StateSync:
+            for (map<uint32_t, rgw_data_sync_marker>::iterator iter = sync_status.sync_markers.begin();
+                 iter != sync_status.sync_markers.end(); ++iter) {
+              RGWCoroutine *cr = new RGWDataSyncShardCR(store, http_manager, async_rados,
+                                                        conn, store->get_zone_params().log_pool, source_zone,
+                                                        iter->first, iter->second);
+              spawn(cr, true);
+            }
+        }
       }
 
       return set_state(RGWCoroutine_Done, 0);
