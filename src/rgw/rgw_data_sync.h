@@ -107,14 +107,14 @@ struct rgw_data_sync_status {
   void encode(bufferlist& bl) const {
     ENCODE_START(1, 1, bl);
     ::encode(sync_info, bl);
-    ::encode(sync_markers, bl);
+    /* sync markers are encoded separately */
     ENCODE_FINISH(bl);
   }
 
   void decode(bufferlist::iterator& bl) {
      DECODE_START(1, bl);
     ::decode(sync_info, bl);
-    ::decode(sync_markers, bl);
+    /* sync markers are decoded separately */
      DECODE_FINISH(bl);
   }
 
@@ -155,7 +155,6 @@ public:
   int get_shard_info(int shard_id);
   int read_sync_status(rgw_data_sync_status *sync_status);
   int init_sync_status(int num_shards);
-  int set_sync_info(const rgw_data_sync_info& sync_info);
   int run_sync(int num_shards, rgw_data_sync_status& sync_status);
 
   void wakeup(int shard_id);
@@ -187,6 +186,7 @@ public:
   rgw_data_sync_status& get_sync_status() { return sync_status; }
 
   static string shard_obj_name(const string& source_zone, int shard_id);
+  static string sync_status_oid(const string& source_zone);
 
   int read_sync_status() { return source_log.read_sync_status(&sync_status); }
   int init_sync_status() { return source_log.init_sync_status(num_shards); }
