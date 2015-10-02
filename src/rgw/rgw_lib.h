@@ -124,11 +124,39 @@ public:
   CephContext* cct;
 
   /* unambiguiously return req_state */
-  struct req_state* get_state() { return this->RGWRequest::s; }
+  inline struct req_state* get_state() { return this->RGWRequest::s; }
 
   RGWLibRequest(CephContext* _cct)
     :  RGWRequest(0), cct(_cct)
     {}
+
+  /* descendant equivalent of *REST*::init_from_header(...):
+   * prepare request for execute()--should mean, fixup URI-alikes
+   * and any other expected stat vars in local req_state, for
+   * now */
+  virtual int header_init() = 0;
+
+  /* descendant initializer responsible to call RGWOp::init()--which
+   * descendants are required to inherit */
+  virtual int op_init() = 0;
+
+  int init(const RGWEnv& rgw_env, RGWObjectCtx* rados_ctx,
+	  RGWLibIO* io, struct req_state* _s) {
+
+    RGWRequest::init_state(_s);
+    RGWHandler::init(rados_ctx->store, _s, io);
+
+    log_init();
+
+    get_state()->obj_ctx = rados_ctx;
+    get_state()->req_id = store->unique_id(id);
+    get_state()->trans_id = store->unique_trans_id(id);
+
+    log_format(_s, "initializing for trans_id = %s",
+	      get_state()->trans_id.c_str());
+
+    return header_init();
+  }
 
   virtual bool only_bucket() = 0;
 
