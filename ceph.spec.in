@@ -1129,6 +1129,25 @@ ln -sf %{_libdir}/librbd.so.1 /usr/lib64/qemu/librbd.so.1
 %{_mandir}/man8/ceph_selinux.8.*
 
 %post selinux
+# Install the policy
+OLD_POLVER=$(%{_sbindir}/semodule -l | grep -P '^ceph[\t ]' | awk '{print $2}')
+%{_sbindir}/semodule -n -i %{_datadir}/selinux/packages/ceph.pp
+NEW_POLVER=$(%{_sbindir}/semodule -l | grep -P '^ceph[\t ]' | awk '{print $2}')
+
+# Load the policy if SELinux is enabled
+if %{_sbindir}/selinuxenabled; then
+    %{_sbindir}/load_policy
+else
+    # Do not relabel if selinux is not enabled
+    exit 0
+fi
+
+if test "$OLD_POLVER" == "$NEW_POLVER"; then
+   # Do not relabel if policy version did not change
+   exit 0
+fi
+
+# Check whether the daemons are running
 %if 0%{?_with_systemd}
     /usr/bin/systemctl status ceph.target > /dev/null 2>&1
 %else
@@ -1136,6 +1155,7 @@ ln -sf %{_libdir}/librbd.so.1 /usr/lib64/qemu/librbd.so.1
 %endif
 STATUS=$?
 
+# Stop the daemons if they were running
 if test $STATUS -eq 0; then
 %if 0%{?_with_systemd}
     /usr/bin/systemctl stop ceph.target > /dev/null 2>&1
@@ -1144,17 +1164,10 @@ if test $STATUS -eq 0; then
 %endif
 fi
 
-OLD_POLVER=$(%{_sbindir}/semodule -l | grep -P '^ceph[\t ]' | awk '{print $2}')
-%{_sbindir}/semodule -n -i %{_datadir}/selinux/packages/ceph.pp
-NEW_POLVER=$(%{_sbindir}/semodule -l | grep -P '^ceph[\t ]' | awk '{print $2}')
-if %{_sbindir}/selinuxenabled; then
-    %{_sbindir}/load_policy
-    if test "$OLD_POLVER" != "$NEW_POLVER"; then
-        %relabel_files
-   fi
-fi
+# Now, relabel the files
+%relabel_files
 
-# Start iff it was started before
+# Start the daemons iff they were running before
 if test $STATUS -eq 0; then
 %if 0%{?_with_systemd}
     /usr/bin/systemctl start ceph.target > /dev/null 2>&1 || :
