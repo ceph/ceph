@@ -173,6 +173,7 @@ LIBOS = libceph_os.la
 LIBKVSTORE = libceph_keyvaluestore.la
 LIBMEMSTORE = libceph_memstore.la
 LIBFILESTORE = libceph_filestore.la
+LIBNEWSTORE = libceph_newstore.la
 LIBOSD = libosd.la
 LIBOSD_TYPES = libosd_types.la
 LIBOSDC = libosdc.la
@@ -238,12 +239,13 @@ LIBMDS += $(LIBPERFGLUE)
 LIBKVSTORE += -lleveldb -lsnappy
 
 # Use this for binaries requiring libglobal
-CEPH_GLOBAL = $(LIBGLOBAL) $(LIBCOMMON) $(PTHREAD_LIBS) -lm $(CRYPTO_LIBS) $(EXTRALIBS)
+CEPH_GLOBAL = $(LIBGLOBAL) $(PTHREAD_LIBS) -lm $(CRYPTO_LIBS) $(EXTRALIBS) $(LIBCOMMON)
 
 # This is set by [lib]/Makefile.am and used for build tests
 LIBCOMMON_DEPS =
 LIBRADOS_DEPS =
 LIBRGW_DEPS =
+LIBFILESTORE_DEPS =
 
 # This is used by the dencoder test
 DENCODER_SOURCES =

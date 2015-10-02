@@ -1,6 +1,7 @@
 include os/filestore/Makefile.am
 include os/keyvaluestore/Makefile.am
 include os/memstore/Makefile.am
+include os/newstore/Makefile.am
 
 if ENABLE_SERVER
 
@@ -13,7 +14,7 @@ libceph_os_la_SOURCES = \
 	common/TrackedOp.cc
 
 libceph_os_la_CXXFLAGS = ${AM_CXXFLAGS}
-libceph_os_la_LIBADD = $(PTHREAD_LIBS) $(EXTRALIBS) $(LIBKVSTORE)
+libceph_os_la_LIBADD = $(PTHREAD_LIBS) $(EXTRALIBS)
 
 libceph_os_la_LDFLAGS = ${AM_LDFLAGS} -version-info 1:0:0
 

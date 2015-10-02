@@ -875,7 +875,7 @@ private:
 #pragma GCC diagnostic ignored "-Wpragmas"
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wdeprecated-declarations"
-    void _build_actions_from_tbl()
+void _build_actions_from_tbl()
 {
   //used only for tbl encode
   assert(use_tbl);
@@ -1105,7 +1105,7 @@ private:
 
 	::decode(cid, p);
 
-	create_collection(cid);
+	create_collection(cid, 0);
       }
       break;
 
@@ -1191,41 +1191,9 @@ private:
       break;
 
     case Transaction::OP_COLL_SETATTR:
-      {
-	coll_t cid;
-	string name;
-	bufferlist bl;
-
-	::decode(cid, p);
-	::decode(name, p);
-	::decode(bl, p);
-
-	collection_setattr(cid, name, bl);
-      }
-      break;
-
     case Transaction::OP_COLL_SETATTRS:
-      {
-	coll_t cid;
-	map<string,bufferptr> aset;
-
-	::decode(cid, p);
-	::decode(aset, p);
-
-	collection_setattrs(cid, aset);
-      }
-      break;
-
     case Transaction::OP_COLL_RMATTR:
-      {
-	coll_t cid;
-	string name;
-
-	::decode(cid, p);
-	::decode(name, p);
-
-	collection_rmattr(cid, name);
-      }
+      assert(0 == "collection attrs no longer supported");
       break;
 
     case Transaction::OP_STARTSYNC:
@@ -2085,7 +2053,7 @@ public:
     }
 
     static void generate_test_instances(list<Transaction*>& o);
-    void dump(ceph::Formatter *f)
+void dump(ceph::Formatter *f)
 {
   f->open_array_section("ops");
   iterator i = begin();

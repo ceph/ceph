@@ -137,18 +137,14 @@ LIBCOMMON_DEPS += \
 	$(BOOST_RANDOM_LIBS)
 
 if LINUX
-LIBCOMMON_DEPS += -lrt -lblkid -luuid
+LIBCOMMON_DEPS += -lrt -lblkid -lnss3 -lsmime3 -luuid
 endif # LINUX
-LIBCOMMON_DEPS += -lrt -luuid -lcrypto++ -llttng-ust
+#LIBCOMMON_DEPS += -lrt -luuid -lcrypto++ -lssl -llttng-ust -lnss3
 
 libcommon_la_SOURCES = common/buffer.cc
 libcommon_la_LIBADD = $(LIBCOMMON_DEPS)
 
 libcommon_la_LDFLAGS = ${AM_LDFLAGS} -version-info 1:0:0
-#if LINUX
-#libcommon_la_CXXFLAGS = -fvisibility=hidden -fvisibility-inlines-hidden
-#libcommon_la_LDFLAGS += -Xcompiler -Xlinker -Xcompiler '--exclude-libs=ALL'
-#endif
 
 lib_LTLIBRARIES += libcommon.la
 
