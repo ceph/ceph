@@ -702,9 +702,6 @@ class Filesystem(object):
         return ""
 
     def _run_tool(self, tool, args, rank=None, quiet=False):
-        mds_id = self.mds_ids[0]
-        remote = self.mds_daemons[mds_id].remote
-
         # Tests frequently have [client] configuration that jacks up
         # the objecter log level (unlikely to be interesting here)
         # and does not set the mds log level (very interesting here)
@@ -717,7 +714,7 @@ class Filesystem(object):
             base_args.extend(["--rank", "%d" % rank])
 
         t1 = datetime.datetime.now()
-        r = remote.run(
+        r = self.tool_remote.run(
             args=base_args + args,
             stdout=StringIO()).stdout.getvalue().strip()
         duration = datetime.datetime.now() - t1
@@ -725,6 +722,16 @@ class Filesystem(object):
             base_args + args, duration, r
         ))
         return r
+
+    @property
+    def tool_remote(self):
+        """
+        An arbitrary remote to use when invoking recovery tools.  Use an MDS host because
+        it'll definitely have keys with perms to access cephfs metadata pool.  This is public
+        so that tests can use this remote to go get locally written output files from the tools.
+        """
+        mds_id = self.mds_ids[0]
+        return self.mds_daemons[mds_id].remote
 
     def journal_tool(self, args, rank=None, quiet=False):
         """
