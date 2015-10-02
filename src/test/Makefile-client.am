@@ -520,8 +520,8 @@ endif # WITH_BUILD_TESTS
 ceph_test_cors_SOURCES = test/test_cors.cc
 ceph_test_cors_LDADD = \
 	$(LIBRADOS) $(LIBRGW) $(CEPH_GLOBAL) \
-	$(UNITTEST_LDADD) \
-	-lcurl -lexpat
+	$(UNITTEST_LDADD) $(LIBCOMMON)\
+	-lcurl -lexpat -lnss3
 ceph_test_cors_CXXFLAGS = $(UNITTEST_CXXFLAGS)
 bin_DEBUGPROGRAMS += ceph_test_cors
 
