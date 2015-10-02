@@ -1180,6 +1180,18 @@ exit 0
 
 %postun selinux
 if [ $1 -eq 0 ]; then
+    # Remove the module
+    %{_sbindir}/semodule -n -r ceph
+
+    # Reload the policy if SELinux is enabled
+    if %{_sbindir}/selinuxenabled ; then
+        %{_sbindir}/load_policy
+    else
+        # Do not relabel if SELinux is not enabled
+        exit 0
+    fi
+
+    # Check whether the daemons are running
     %if 0%{?_with_systemd}
         /usr/bin/systemctl status ceph.target > /dev/null 2>&1
     %else
@@ -1187,6 +1199,7 @@ if [ $1 -eq 0 ]; then
     %endif
     STATUS=$?
 
+    # Stop the daemons if they were running
     if test $STATUS -eq 0; then
     %if 0%{?_with_systemd}
         /usr/bin/systemctl stop ceph.target > /dev/null 2>&1
@@ -1195,12 +1208,10 @@ if [ $1 -eq 0 ]; then
     %endif
     fi
 
-    %{_sbindir}/semodule -n -r ceph
-    if %{_sbindir}/selinuxenabled ; then
-       %{_sbindir}/load_policy
-       %relabel_files
-    fi;
+    # Now, relabel the files
+    %relabel_files
 
+    # Start the daemons if they were running before
     if test $STATUS -eq 0; then
     %if 0%{?_with_systemd}
 	/usr/bin/systemctl start ceph.target > /dev/null 2>&1 || :
