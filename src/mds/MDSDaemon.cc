@@ -1255,6 +1255,7 @@ bool MDSDaemon::ms_verify_authorizer(Connection *con, int peer_type,
     // request to open a session (initial state of Session is `closed`)
     if (!s) {
       s = new Session;
+      s->info.auth_name = name;
       s->info.inst.addr = con->get_peer_addr();
       s->info.inst.name = n;
       dout(10) << " new session " << s << " for " << s->info.inst << " con " << con << dendl;
