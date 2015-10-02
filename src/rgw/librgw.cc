@@ -101,34 +101,6 @@ int RGWLibRequestEnv::sign(RGWAccessKey& access_key)
 }
 #endif /* 0 */
 
-class RGWLibFrontend : public RGWProcessFrontend {
-public:
-  RGWLibFrontend(RGWProcessEnv& pe, RGWFrontendConfig *_conf)
-    : RGWProcessFrontend(pe, _conf) {}
-  int init();
-}; /* RGWLibFrontend */
-
-class RGWLibProcess : public RGWProcess {
-    RGWAccessKey access_key;
-public:
-  RGWLibProcess(CephContext* cct, RGWProcessEnv* pe, int num_threads,
-		RGWFrontendConfig* _conf) :
-    RGWProcess(cct, pe, num_threads, _conf) {}
-  void run();
-  void checkpoint();
-
-  void enqueue_req(RGWLibRequest* req) {
-    dout(10) << __func__ << " enqueue request req=" << hex << req << dec
-	     << dendl;
-
-    req_throttle.get(1);
-    req_wq.queue(req);
-  } /* enqueue_req */
-
-  void handle_request(RGWRequest* req);
-  void set_access_key(RGWAccessKey& key) { access_key = key; }
-}; /* RGWLibProcess */
-
 void RGWLibProcess::checkpoint()
 {
     m_tp.drain(&req_wq);
