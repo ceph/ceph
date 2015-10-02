@@ -8,6 +8,7 @@
 #include "rgw_client_io.h"
 #include "rgw_rest.h"
 #include "rgw_request.h"
+#include "rgw_frontend.h"
 #include "rgw_process.h"
 #include "rgw_rest_s3.h" // RGW_Auth_S3
 
@@ -31,6 +32,8 @@ public:
   ~RGWLib() {}
 
   RGWRados* get_store() { return store; }
+
+  RGWLibFrontend* get_fe() { return fe; }
 
   int init();
   int init(vector<const char *>& args);
@@ -145,5 +148,45 @@ public:
   virtual int postauth_init() { return 0; }
 
 }; /* RGWLibRequest */
+
+class RGWLibProcess : public RGWProcess {
+    RGWAccessKey access_key;
+public:
+  RGWLibProcess(CephContext* cct, RGWProcessEnv* pe, int num_threads,
+		RGWFrontendConfig* _conf) :
+    RGWProcess(cct, pe, num_threads, _conf) {}
+
+  void run();
+  void checkpoint();
+
+  void enqueue_req(RGWLibRequest* req) {
+
+    lsubdout(g_ceph_context, rgw, 10)
+      << __func__ << " enqueue request req=" << hex << req << dec << dendl;
+
+    req_throttle.get(1);
+    req_wq.queue(req);
+  } /* enqueue_req */
+
+  void handle_request(RGWRequest* req);
+  void set_access_key(RGWAccessKey& key) { access_key = key; }
+}; /* RGWLibProcess */
+
+class RGWLibFrontend : public RGWProcessFrontend {
+public:
+  RGWLibFrontend(RGWProcessEnv& pe, RGWFrontendConfig *_conf)
+    : RGWProcessFrontend(pe, _conf) {}
+
+  int init();
+
+  inline void enqueue_req(RGWLibRequest* req) {
+    static_cast<RGWLibProcess*>(pprocess)->enqueue_req(req); // async
+  }
+
+  inline void execute_req(RGWLibRequest* req) {
+    static_cast<RGWLibProcess*>(pprocess)->handle_request(req); // !async
+  }
+
+}; /* RGWLibFrontend */
 
 #endif /* RGW_LIB_H */
