@@ -280,6 +280,17 @@ void Server::handle_client_session(MClientSession *m)
       dout(20) << "  " << i->first << ": " << i->second << dendl;
     }
 
+    // Special case for the 'root' metadata path; validate that the claimed
+    // root is actually within the caps of the session
+    if (session->info.client_metadata.count("root")) {
+      const auto claimed_root = session->info.client_metadata.at("root");
+      if (!session->auth_caps.path_capable(claimed_root)) {
+        derr << __func__ << " forbidden path claimed as mount root: "
+             << claimed_root << " by " << m->get_source() << dendl;
+        session->info.client_metadata.erase("root");
+      }
+    }
+
     if (session->is_closed())
       mds->sessionmap.add_session(session);
 
