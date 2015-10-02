@@ -656,7 +656,7 @@ OPTION(osd_pg_max_concurrent_snap_trims, OPT_U64, 2)
 OPTION(osd_heartbeat_min_healthy_ratio, OPT_FLOAT, .33)
 
 OPTION(osd_mon_heartbeat_interval, OPT_INT, 30)  // (seconds) how often to ping monitor if no peers
-OPTION(osd_mon_report_interval_max, OPT_INT, 120)
+OPTION(osd_mon_report_interval_max, OPT_INT, 600)
 OPTION(osd_mon_report_interval_min, OPT_INT, 5)  // pg stats, failures, up_thru, boot.
 OPTION(osd_mon_report_max_in_flight, OPT_INT, 2)  // max updates in flight
 OPTION(osd_pg_stat_report_interval_max, OPT_INT, 500)  // report pg stats for any given pg at least this often

@@ -4066,7 +4066,10 @@ void OSD::tick_without_osd_lock()
     pg_stat_queue_lock.Lock();
     double backoff = stats_ack_timeout / g_conf->osd_mon_ack_timeout;
     double adjusted_min = cct->_conf->osd_mon_report_interval_min * backoff;
-    double adjusted_max = cct->_conf->osd_mon_report_interval_max * backoff;
+    // note: we shouldn't adjust max because it must remain < the
+    // mon's mon_osd_report_timeout (which defaults to 1.5x our
+    // value).
+    double max = cct->_conf->osd_mon_report_interval_max;
     if (!outstanding_pg_stats.empty() &&
 	(now - stats_ack_timeout) > last_pg_stats_ack) {
       dout(1) << __func__ << " mon hasn't acked PGStats in "
@@ -4080,7 +4083,7 @@ void OSD::tick_without_osd_lock()
 	    stats_ack_timeout * g_conf->osd_stats_ack_timeout_factor);
       outstanding_pg_stats.clear();
     }
-    if (now - last_pg_stats_sent > adjusted_max) {
+    if (now - last_pg_stats_sent > max) {
       osd_stat_updated = true;
       report = true;
     } else if ((int)outstanding_pg_stats.size() >=
