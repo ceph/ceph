@@ -414,7 +414,7 @@ int _action_on_all_objects_in_pg(ObjectStore *store, coll_t coll, action_on_obje
       if (r < 0) {
 	cerr << "Error getting attr on : " << make_pair(coll, *obj) << ", "
 	     << cpp_strerror(r) << std::endl;
-	return r;
+	continue;
       }
       object_info_t oi;
       bufferlist::iterator bp = attr.begin();
@@ -424,7 +424,7 @@ int _action_on_all_objects_in_pg(ObjectStore *store, coll_t coll, action_on_obje
 	r = -EINVAL;
 	cerr << "Error getting attr on : " << make_pair(coll, *obj) << ", "
 	     << cpp_strerror(r) << std::endl;
-	return r;
+	continue;
       }
       r = action.call(store, coll, *obj, oi);
       if (r < 0)
