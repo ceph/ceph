@@ -199,12 +199,12 @@ workload_x:
          - rados/test.sh
          - cls
    - print: "**** done rados/test.sh &  cls workload_x upgraded client"
-   - rgw: [client.0]
+   - rgw: [client.1]
    - print: "**** done rgw workload_x"
    - s3tests:
-       client.0:
+       client.1:
          force-branch: hammer
-         rgw_server: client.0
+         rgw_server: client.1
    - print: "**** done s3tests workload_x"
 upgrade-sequence_x:
    sequential:
