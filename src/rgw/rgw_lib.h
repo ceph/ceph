@@ -48,35 +48,15 @@ public:
 
 /* request interface */
 
-struct RGWLibRequestEnv {
-  /* XXXX do we need ANY of this??? Matt */
-  int port;
-  uint64_t content_length;
-  string content_type;
-  string request_method;
-  string uri;
-  string query_string;
-  string date_str;
-
-  map<string, string> headers;
-
-  RGWLibRequestEnv() : port(0), content_length(0) {}
-
-  void set_date(utime_t& tm);
-  int sign(RGWAccessKey& access_key);
-};
-
 class RGWLibIO : public RGWClientIO
 {
-  uint64_t left_to_read;
-  RGWLibRequestEnv* re;
   RGWUserInfo user_info;
 public:
-  RGWLibIO(RGWLibRequestEnv *_re): re(_re) {}
-  RGWLibIO(RGWLibRequestEnv *_re, const RGWUserInfo &_user_info)
-    : re(_re), user_info(_user_info) {}
+  RGWLibIO() {}
+  RGWLibIO(const RGWUserInfo &_user_info)
+    : user_info(_user_info) {}
 
-  void init_env(CephContext *cct);
+  virtual void init_env(CephContext *cct) {}
 
   const RGWUserInfo& get_user() {
     return user_info;
