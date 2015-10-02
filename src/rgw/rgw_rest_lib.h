@@ -9,6 +9,8 @@
 #include "rgw_common.h"
 #include "rgw_lib.h"
 
+#warning move to rgw_file...I think...there is no REST here
+
 
 /* RGWOps */
 
