@@ -196,6 +196,9 @@ Requires:	python-rados = %{epoch}:%{version}-%{release}
 Requires:	python-rbd = %{epoch}:%{version}-%{release}
 Requires:	python-cephfs = %{epoch}:%{version}-%{release}
 Requires:	python-requests
+%if 0%{?_with_systemd}
+%{?systemd_requires}
+%endif
 %if 0%{?rhel} || 0%{?fedora}
 Requires:	redhat-lsb-core
 %endif
@@ -590,7 +593,7 @@ install -D src/rbdmap $RPM_BUILD_ROOT%{_sysconfdir}/ceph/rbdmap
 install -D src/init-rbdmap $RPM_BUILD_ROOT%{_initrddir}/rbdmap
 install -m 0644 -D etc/sysconfig/ceph $RPM_BUILD_ROOT%{_sysconfdir}/sysconfig/ceph
 %if 0%{?_with_systemd}
-  install -m 0644 -D systemd/ceph.tmpfiles.d $RPM_BUILD_ROOT%{_tmpfilesdir}/%{name}.conf
+  install -m 0644 -D systemd/ceph.tmpfiles.d $RPM_BUILD_ROOT%{_tmpfilesdir}/ceph-common.conf
   install -m 0644 -D systemd/ceph-osd@.service $RPM_BUILD_ROOT%{_unitdir}/ceph-osd@.service
   install -m 0644 -D systemd/ceph-mon@.service $RPM_BUILD_ROOT%{_unitdir}/ceph-mon@.service
   install -m 0644 -D systemd/ceph-create-keys@.service $RPM_BUILD_ROOT%{_unitdir}/ceph-create-keys@.service
@@ -664,7 +667,6 @@ rm -rf $RPM_BUILD_ROOT
 %post
 /sbin/ldconfig
 %if 0%{?_with_systemd}
-  systemd-tmpfiles --create
   %if 0%{?suse_version}
     %service_add_post ceph.target
   %endif
@@ -733,7 +735,6 @@ rm -rf $RPM_BUILD_ROOT
 %{_bindir}/ceph-debugpack
 %{_bindir}/ceph-coverage
 %if 0%{?_with_systemd}
-%{_tmpfilesdir}/%{name}.conf
 %{_unitdir}/ceph-mds@.service
 %{_unitdir}/ceph-mon@.service
 %{_unitdir}/ceph-create-keys@.service
@@ -831,6 +832,9 @@ rm -rf $RPM_BUILD_ROOT
 %endif
 %{_bindir}/ceph-post-file
 %{_bindir}/ceph-brag
+%if 0%{?_with_systemd}
+%{_tmpfilesdir}/ceph-common.conf
+%endif
 %{_mandir}/man8/ceph-authtool.8*
 %{_mandir}/man8/ceph-conf.8*
 %{_mandir}/man8/ceph-dencoder.8*
@@ -874,6 +878,11 @@ CEPH_USER_ID="-u 167"
 
 %{_sbindir}/groupadd ceph $CEPH_GROUP_ID -o -r 2>/dev/null || :
 %{_sbindir}/useradd ceph $CEPH_USER_ID -o -r -g ceph -s /sbin/nologin -c "Ceph daemons" -d %{_localstatedir}/lib/ceph 2> /dev/null || :
+
+%post -n ceph-common
+%if 0%{?_with_systemd}
+systemd-tmpfiles --create
+%endif
 
 %postun -n ceph-common
 # Package removal cleanup
