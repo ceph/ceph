@@ -137,7 +137,7 @@ LIBCOMMON_DEPS += \
 	$(BOOST_RANDOM_LIBS)
 
 if LINUX
-LIBCOMMON_DEPS += -lrt -lblkid -lnss3 -lsmime3 -luuid
+LIBCOMMON_DEPS += -lrt -lblkid -lnss3 -lsmime3 -luuid -lcrypto++
 endif # LINUX
 #LIBCOMMON_DEPS += -lrt -luuid -lcrypto++ -lssl -llttng-ust -lnss3
 

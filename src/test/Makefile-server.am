@@ -227,12 +227,12 @@ check_TESTPROGRAMS += unittest_rocksdb_option
 endif
 
 unittest_chain_xattr_SOURCES = test/objectstore/chain_xattr.cc
-unittest_chain_xattr_LDADD = $(LIBOS) $(UNITTEST_LDADD) $(CEPH_GLOBAL)
+unittest_chain_xattr_LDADD = $(LIBOS) $(LIBFILESTORE) $(UNITTEST_LDADD) $(CEPH_GLOBAL)
 unittest_chain_xattr_CXXFLAGS = $(UNITTEST_CXXFLAGS)
 check_TESTPROGRAMS += unittest_chain_xattr
 
 unittest_lfnindex_SOURCES = test/os/TestLFNIndex.cc
-unittest_lfnindex_LDADD = $(LIBOS) $(UNITTEST_LDADD) $(CEPH_GLOBAL)
+unittest_lfnindex_LDADD = $(LIBOS) $(LIBFILESTORE) $(UNITTEST_LDADD) $(CEPH_GLOBAL)
 unittest_lfnindex_CXXFLAGS = $(UNITTEST_CXXFLAGS)
 check_TESTPROGRAMS += unittest_lfnindex
 
