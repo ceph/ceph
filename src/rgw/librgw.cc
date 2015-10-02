@@ -67,6 +67,8 @@ public:
   }
 };
 
+#warning deleteme
+#if 0
 void RGWLibRequestEnv::set_date(utime_t& tm)
 {
   stringstream s;
@@ -96,7 +98,8 @@ int RGWLibRequestEnv::sign(RGWAccessKey& access_key)
     return ret;
   }
   return 0;
-};
+}
+#endif /* 0 */
 
 class RGWLibFrontend : public RGWProcessFrontend {
 public:
@@ -140,24 +143,15 @@ void RGWLibProcess::handle_request(RGWRequest* r)
 {
   RGWLibRequest* req = static_cast<RGWLibRequest*>(r);
 
-  RGWLibRequestEnv env;
-
+  /* XXX we almost certainly want to track timestamps and...sign stuff?
+   * ...somewhere */
+#if 0 /* XXX */
   utime_t tm = ceph_clock_now(NULL);
-
-  env.port = 80;
-#warning fixme we don't do all these ahem
-#if 0
-  env.content_length = req->content_length;
-  env.content_type = "binary/octet-stream"; /* TBD */
-  env.request_method = req->method;
-  env.uri = req->resource;
 #endif
-  env.set_date(tm);
-  env.sign(access_key);
 
-  RGWLibIO client_io(&env);
+  RGWLibIO io_ctx;
 
-  int ret = process_request(store, rest, req, &client_io, olog);
+  int ret = process_request(store, rest, req, &io_ctx, olog);
   if (ret < 0) {
     /* we don't really care about return code */
     dout(20) << "process_request() returned " << ret << dendl;
@@ -327,34 +321,6 @@ int RGWLibIO::set_uid(RGWRados *store, const rgw_user& uid)
 	 << ret << dendl;
   }
   return ret;
-}
-
-void RGWLibIO::init_env(CephContext* cct)
-{
-  env.init(cct);
-
-  left_to_read = re->content_length;
-
-  char buf[32];
-  snprintf(buf, sizeof(buf), "%lld", (long long)re->content_length);
-  env.set("CONTENT_LENGTH", buf);
-
-  env.set("CONTENT_TYPE", re->content_type.c_str());
-  env.set("HTTP_DATE", re->date_str.c_str());
-
-  for (map<string, string>::iterator iter = re->headers.begin();
-       iter != re->headers.end(); ++iter) {
-    env.set(iter->first.c_str(), iter->second.c_str());
-  }
-
-  env.set("REQUEST_METHOD", re->request_method.c_str());
-  env.set("REQUEST_URI", re->uri.c_str());
-  env.set("QUERY_STRING", re->query_string.c_str());
-  env.set("SCRIPT_URI", re->uri.c_str());
-
-  char port_buf[16];
-  snprintf(port_buf, sizeof(port_buf), "%d", re->port);
-  env.set("SERVER_PORT", port_buf);
 }
 
 int RGWLibRequest::read_permissions(RGWOp *op) {
