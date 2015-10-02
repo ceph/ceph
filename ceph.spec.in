@@ -202,6 +202,9 @@ Requires:	python-requests
 %if 0%{?rhel} || 0%{?fedora}
 Requires:	redhat-lsb-core
 %endif
+%if 0%{?suse_version}
+Requires(pre):	pwdutils
+%endif
 # python-argparse is only needed in distros with Python 2.6 or lower
 %if (0%{?rhel} && 0%{?rhel} <= 6) || (0%{?suse_version} && 0%{?suse_version} <= 1110)
 Requires:	python-argparse
@@ -875,9 +878,15 @@ CEPH_USER_ID="-u 167"
 # CEPH_GROUP_ID="-g "
 # CEPH_USER_ID="-u "
 # %endif
-
+%if 0%{?rhel} || 0%{?fedora}
 %{_sbindir}/groupadd ceph $CEPH_GROUP_ID -o -r 2>/dev/null || :
 %{_sbindir}/useradd ceph $CEPH_USER_ID -o -r -g ceph -s /sbin/nologin -c "Ceph daemons" -d %{_localstatedir}/lib/ceph 2> /dev/null || :
+%endif
+%if 0%{?suse_version}
+getent group ceph >/dev/null || groupadd -r ceph
+getent passwd ceph >/dev/null || useradd -r -g ceph -d %{_localstatedir}/lib/ceph -s /sbin/nologin -c "Ceph daemons" ceph
+%endif
+exit 0
 
 %post -n ceph-common
 %if 0%{?_with_systemd}
