@@ -184,10 +184,15 @@ def verify(DATADIR, POOL, NAME_PREFIX):
     TMPFILE = r"/tmp/tmp.{pid}".format(pid=os.getpid())
     nullfd = open(os.devnull, "w")
     ERRORS = 0
-    for nsfile in [f for f in os.listdir(DATADIR) if f.split('-')[1].find(NAME_PREFIX) == 0]:
+    for rawnsfile in [f for f in os.listdir(DATADIR) if f.split('-')[1].find(NAME_PREFIX) == 0]:
+        nsfile = rawnsfile.split("__")[0]
+        clone = rawnsfile.split("__")[1]
         nspace = nsfile.split("-")[0]
         file = nsfile.split("-")[1]
-        path = os.path.join(DATADIR, nsfile)
+        # Skip clones
+        if clone != "head":
+            continue
+        path = os.path.join(DATADIR, rawnsfile)
         try:
             os.unlink(TMPFILE)
         except:
@@ -324,10 +329,15 @@ def kill_daemons():
 def check_data(DATADIR, TMPFILE, OSDDIR, SPLIT_NAME):
     repcount = 0
     ERRORS = 0
-    for nsfile in [f for f in os.listdir(DATADIR) if f.split('-')[1].find(SPLIT_NAME) == 0]:
+    for rawnsfile in [f for f in os.listdir(DATADIR) if f.split('-')[1].find(SPLIT_NAME) == 0]:
+        nsfile = rawnsfile.split("__")[0]
+        clone = rawnsfile.split("__")[1]
         nspace = nsfile.split("-")[0]
-        file = nsfile.split("-")[1]
-        path = os.path.join(DATADIR, nsfile)
+        file = nsfile.split("-")[1] + "__" + clone
+        # Skip clones
+        if clone != "head":
+            continue
+        path = os.path.join(DATADIR, rawnsfile)
         tmpfd = open(TMPFILE, "w")
         cmd = "find {dir} -name '{file}_*_{nspace}_*'".format(dir=OSDDIR, file=file, nspace=nspace)
         logging.debug(cmd)
@@ -568,6 +578,7 @@ def main(argv):
             NAME = REP_NAME + "{num}".format(num=i)
             LNAME = nspace + "-" + NAME
             DDNAME = os.path.join(DATADIR, LNAME)
+            DDNAME += "__head"
 
             cmd = "rm -f " + DDNAME
             logging.debug(cmd)
@@ -634,6 +645,45 @@ def main(argv):
                     logging.critical("setomapval failed with {ret}".format(ret=ret))
                 db[nspace][NAME]["omap"][mykey] = myval
 
+    # Create some clones
+    cmd = "./rados -p {pool} mksnap snap1".format(pool=REP_POOL)
+    logging.debug(cmd)
+    call(cmd, shell=True)
+
+    objects = range(1, NUM_REP_OBJECTS + 1)
+    nspaces = range(NUM_NSPACES)
+    for n in nspaces:
+        nspace = get_nspace(n)
+
+        for i in objects:
+            NAME = REP_NAME + "{num}".format(num=i)
+            LNAME = nspace + "-" + NAME
+            DDNAME = os.path.join(DATADIR, LNAME)
+            # First clone
+            CLONENAME = DDNAME + "__1"
+            DDNAME += "__head"
+
+            cmd = "mv -f " + DDNAME + " " + CLONENAME
+            logging.debug(cmd)
+            call(cmd, shell=True)
+
+            if i == 1:
+                dataline = range(DATALINECOUNT)
+            else:
+                dataline = range(1)
+            fd = open(DDNAME, "w")
+            data = "This is the replicated data after a snapshot for " + LNAME + "\n"
+            for _ in dataline:
+                fd.write(data)
+            fd.close()
+
+            cmd = "./rados -p {pool} -N '{nspace}' put {name} {ddname}".format(pool=REP_POOL, name=NAME, ddname=DDNAME, nspace=nspace)
+            logging.debug(cmd)
+            ret = call(cmd, shell=True, stderr=nullfd)
+            if ret != 0:
+                logging.critical("Rados put command failed with {ret}".format(ret=ret))
+                return 1
+
     print "Creating {objs} objects in erasure coded pool".format(objs=(NUM_EC_OBJECTS*NUM_NSPACES))
 
     objects = range(1, NUM_EC_OBJECTS + 1)
@@ -645,6 +695,7 @@ def main(argv):
             NAME = EC_NAME + "{num}".format(num=i)
             LNAME = nspace + "-" + NAME
             DDNAME = os.path.join(DATADIR, LNAME)
+            DDNAME += "__head"
 
             cmd = "rm -f " + DDNAME
             logging.debug(cmd)
@@ -889,6 +940,9 @@ def main(argv):
     JSONOBJ = sorted(set(lines))
     for JSON in JSONOBJ:
         (pgid, jsondict) = json.loads(JSON)
+        # Skip clones for now
+        if jsondict['snapid'] != -2:
+            continue
         db[jsondict['namespace']][jsondict['oid']]['json'] = json.dumps((pgid, jsondict))
         # print db[jsondict['namespace']][jsondict['oid']]['json']
         if string.find(jsondict['oid'], EC_NAME) == 0 and 'shard_id' not in jsondict:
@@ -899,7 +953,7 @@ def main(argv):
     print "Test get-bytes and set-bytes"
     for nspace in db.keys():
         for basename in db[nspace].keys():
-            file = os.path.join(DATADIR, nspace + "-" + basename)
+            file = os.path.join(DATADIR, nspace + "-" + basename + "__head")
             JSON = db[nspace][basename]['json']
             GETNAME = "/tmp/getbytes.{pid}".format(pid=pid)
             TESTNAME = "/tmp/testbytes.{pid}".format(pid=pid)
@@ -1257,6 +1311,7 @@ def main(argv):
             NAME = SPLIT_NAME + "{num}".format(num=i)
             LNAME = nspace + "-" + NAME
             DDNAME = os.path.join(DATADIR, LNAME)
+            DDNAME += "__head"
 
             cmd = "rm -f " + DDNAME
             logging.debug(cmd)
