@@ -78,12 +78,6 @@ Requires:	util-linux
 Requires:	hdparm
 Requires:	cryptsetup
 Requires(post):	binutils
-# We require this to be present for %%{_tmpfilesdir}
-# systemd package must be installed in build environment for systemd-tmpfiles to work
-%if 0%{?_with_systemd}
-Requires: systemd
-BuildRequires: systemd
-%endif
 %if 0%{with cephfs_java}
 BuildRequires: sharutils
 %endif
@@ -180,6 +174,9 @@ Requires:	python-rados = %{version}-%{release}
 Requires:	python-rbd = %{version}-%{release}
 Requires:	python-cephfs = %{version}-%{release}
 Requires:	python-requests
+%if 0%{?_with_systemd}
+%{?systemd_requires}
+%endif
 %if 0%{?rhel} || 0%{?fedora}
 Requires:  redhat-lsb-core
 %endif
@@ -214,6 +211,9 @@ Summary:	Rados REST gateway
 Group:		Development/Libraries
 Requires:	ceph-common = %{version}-%{release}
 Requires:	librados2 = %{version}-%{release}
+%if 0%{?_with_systemd}
+%{?systemd_requires}
+%endif
 %if 0%{?suse_version}
 BuildRequires:	libexpat-devel
 BuildRequires:	FastCGI-devel
@@ -573,7 +573,7 @@ install -D src/rbdmap $RPM_BUILD_ROOT%{_sysconfdir}/ceph/rbdmap
   mkdir -p $RPM_BUILD_ROOT/usr/lib/ceph-radosgw/
   install -m 0755 -D src/ceph-radosgw-prestart.sh $RPM_BUILD_ROOT/usr/lib/ceph-radosgw/
   install -m 0755 -D systemd/ceph %{buildroot}/%{_sbindir}/rcceph
-  install -m 0644 -D systemd/ceph.tmpfiles.d $RPM_BUILD_ROOT%{_tmpfilesdir}/%{name}.conf
+  install -m 0644 -D systemd/ceph.tmpfiles.d $RPM_BUILD_ROOT%{_tmpfilesdir}/ceph-common.conf
   install -m 0644 -D systemd/tmpfiles.d_ceph-rgw.conf $RPM_BUILD_ROOT%{_tmpfilesdir}/ceph-radosgw.conf
   install -m 0644 -D systemd/ceph-disk-activate-journal@.service $RPM_BUILD_ROOT%{_unitdir}/ceph-disk-activate-journal@.service
   install -m 0644 -D systemd/ceph-disk-activate@.service $RPM_BUILD_ROOT%{_unitdir}/ceph-disk-activate@.service
@@ -650,7 +650,6 @@ rm -rf $RPM_BUILD_ROOT
 %post
 /sbin/ldconfig
 %if 0%{?_with_systemd}
-  systemd-tmpfiles --create %{_tmpfilesdir}/%{name}.conf
   %if 0%{?suse_version}
     %service_add_post ceph.target
   %endif
@@ -726,7 +725,6 @@ rm -rf $RPM_BUILD_ROOT
 %{_unitdir}/ceph-disk-activate@.service
 %{_unitdir}/ceph-disk-dmcrypt-activate@.service
 %{_unitdir}/ceph.target
-%{_tmpfilesdir}/%{name}.conf
 %else
 %{_initrddir}/ceph
 %endif
@@ -808,6 +806,9 @@ rm -rf $RPM_BUILD_ROOT
 %{_bindir}/rbd
 %{_bindir}/ceph-post-file
 %{_bindir}/ceph-brag
+%if 0%{?_with_systemd}
+%{_tmpfilesdir}/ceph-common.conf
+%endif
 %{_mandir}/man8/ceph-authtool.8*
 %{_mandir}/man8/ceph-conf.8*
 %{_mandir}/man8/ceph-dencoder.8*
@@ -832,6 +833,11 @@ rm -rf $RPM_BUILD_ROOT
 %endif
 %{python_sitelib}/ceph_argparse.py*
 %{_udevrulesdir}/50-rbd.rules
+
+%post -n ceph-common
+%if 0%{?_with_systemd}
+systemd-tmpfiles --create
+%endif
 
 %postun -n ceph-common
 # Package removal cleanup
