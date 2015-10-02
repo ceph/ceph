@@ -35,7 +35,7 @@ restorecon -R /var/log/ceph > /dev/null 2>&1;
 # the _with_systemd variable only implies that we'll install
 # /etc/tmpfiles.d/ceph.conf in order to set up the socket directory in
 # /var/run/ceph.
-%if 0%{?fedora} || 0%{?rhel} >= 7 || 0%{?suse_version} > 1300
+%if 0%{?fedora} || 0%{?rhel} >= 7 || 0%{?suse_version} >= 1210
 %global _with_systemd 1
 %endif
 
@@ -82,10 +82,6 @@ Requires:	cryptsetup
 Requires:	findutils
 Requires:	which
 Requires(post):	binutils
-# We require this to be present for %%{_tmpfilesdir}
-%if 0%{?_with_systemd}
-Requires: systemd
-%endif
 %if 0%{with cephfs_java}
 BuildRequires: sharutils
 %endif
@@ -135,6 +131,10 @@ BuildRequires:	yasm
 # distro-conditional dependencies
 #################################################################################
 %if 0%{?suse_version}
+%if 0%{?_with_systemd}
+BuildRequires:	systemd-rpm-macros
+%{?systemd_requires}
+%endif
 Requires:	python-Flask
 BuildRequires:	net-tools
 BuildRequires:	libbz2-devel
@@ -152,6 +152,9 @@ BuildRequires:	mozilla-nss-devel
 BuildRequires:	keyutils-devel
 BuildRequires:	libatomic-ops-devel
 %else
+%if 0%{?_with_systemd}
+Requires:	systemd
+%endif
 BuildRequires:  bzip2-devel
 BuildRequires:	nss-devel
 BuildRequires:	keyutils-libs-devel
@@ -1126,6 +1129,25 @@ ln -sf %{_libdir}/librbd.so.1 /usr/lib64/qemu/librbd.so.1
 %{_mandir}/man8/ceph_selinux.8.*
 
 %post selinux
+# Install the policy
+OLD_POLVER=$(%{_sbindir}/semodule -l | grep -P '^ceph[\t ]' | awk '{print $2}')
+%{_sbindir}/semodule -n -i %{_datadir}/selinux/packages/ceph.pp
+NEW_POLVER=$(%{_sbindir}/semodule -l | grep -P '^ceph[\t ]' | awk '{print $2}')
+
+# Load the policy if SELinux is enabled
+if %{_sbindir}/selinuxenabled; then
+    %{_sbindir}/load_policy
+else
+    # Do not relabel if selinux is not enabled
+    exit 0
+fi
+
+if test "$OLD_POLVER" == "$NEW_POLVER"; then
+   # Do not relabel if policy version did not change
+   exit 0
+fi
+
+# Check whether the daemons are running
 %if 0%{?_with_systemd}
     /usr/bin/systemctl status ceph.target > /dev/null 2>&1
 %else
@@ -1133,6 +1155,7 @@ ln -sf %{_libdir}/librbd.so.1 /usr/lib64/qemu/librbd.so.1
 %endif
 STATUS=$?
 
+# Stop the daemons if they were running
 if test $STATUS -eq 0; then
 %if 0%{?_with_systemd}
     /usr/bin/systemctl stop ceph.target > /dev/null 2>&1
@@ -1141,17 +1164,10 @@ if test $STATUS -eq 0; then
 %endif
 fi
 
-OLD_POLVER=$(%{_sbindir}/semodule -l | grep -P '^ceph[\t ]' | awk '{print $2}')
-%{_sbindir}/semodule -n -i %{_datadir}/selinux/packages/ceph.pp
-NEW_POLVER=$(%{_sbindir}/semodule -l | grep -P '^ceph[\t ]' | awk '{print $2}')
-if %{_sbindir}/selinuxenabled; then
-    %{_sbindir}/load_policy
-    if test "$OLD_POLVER" != "$NEW_POLVER"; then
-        %relabel_files
-   fi
-fi
+# Now, relabel the files
+%relabel_files
 
-# Start iff it was started before
+# Start the daemons iff they were running before
 if test $STATUS -eq 0; then
 %if 0%{?_with_systemd}
     /usr/bin/systemctl start ceph.target > /dev/null 2>&1 || :
@@ -1164,6 +1180,18 @@ exit 0
 
 %postun selinux
 if [ $1 -eq 0 ]; then
+    # Remove the module
+    %{_sbindir}/semodule -n -r ceph
+
+    # Reload the policy if SELinux is enabled
+    if %{_sbindir}/selinuxenabled ; then
+        %{_sbindir}/load_policy
+    else
+        # Do not relabel if SELinux is not enabled
+        exit 0
+    fi
+
+    # Check whether the daemons are running
     %if 0%{?_with_systemd}
         /usr/bin/systemctl status ceph.target > /dev/null 2>&1
     %else
@@ -1171,6 +1199,7 @@ if [ $1 -eq 0 ]; then
     %endif
     STATUS=$?
 
+    # Stop the daemons if they were running
     if test $STATUS -eq 0; then
     %if 0%{?_with_systemd}
         /usr/bin/systemctl stop ceph.target > /dev/null 2>&1
@@ -1179,12 +1208,10 @@ if [ $1 -eq 0 ]; then
     %endif
     fi
 
-    %{_sbindir}/semodule -n -r ceph
-    if %{_sbindir}/selinuxenabled ; then
-       %{_sbindir}/load_policy
-       %relabel_files
-    fi;
+    # Now, relabel the files
+    %relabel_files
 
+    # Start the daemons if they were running before
     if test $STATUS -eq 0; then
     %if 0%{?_with_systemd}
 	/usr/bin/systemctl start ceph.target > /dev/null 2>&1 || :
