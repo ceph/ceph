@@ -113,24 +113,189 @@ void RGWLibProcess::run()
 
 void RGWLibProcess::handle_request(RGWRequest* r)
 {
+  /*
+   * invariant: valid requests are derived from RGWLibRequst
+   */
   RGWLibRequest* req = static_cast<RGWLibRequest*>(r);
 
-  /* XXX we almost certainly want to track timestamps and...sign stuff?
-   * ...somewhere */
+  // XXX move RGWLibIO and timing setup into process_request
+
 #if 0 /* XXX */
   utime_t tm = ceph_clock_now(NULL);
 #endif
 
   RGWLibIO io_ctx;
 
-  int ret = process_request(store, rest, req, &io_ctx, olog);
+  int ret = process_request(req, &io_ctx);
   if (ret < 0) {
     /* we don't really care about return code */
     dout(20) << "process_request() returned " << ret << dendl;
 
   }
   delete req;
-}
+} /* handle_request */
+
+int RGWLibProcess::process_request(RGWLibRequest* req)
+{
+  // XXX move RGWLibIO and timing setup into process_request
+
+#if 0 /* XXX */
+  utime_t tm = ceph_clock_now(NULL);
+#endif
+
+  RGWLibIO io_ctx;
+
+  int ret = process_request(req, &io_ctx);
+  if (ret < 0) {
+    /* we don't really care about return code */
+    dout(20) << "process_request() returned " << ret << dendl;
+  }
+} /* process_request */
+
+static inline void abort_req(struct req_state *s, RGWOp *op, int err_no)
+{
+  if (!s)
+    return;
+
+  /* XXX the dump_errno and dump_bucket_from_state behaviors in
+   * the abort_early (rgw_rest.cc) might be valuable, but aren't
+   * safe to call presently as they return HTTP data */
+
+  perfcounter->inc(l_rgw_failed_req);
+} /* abort_req */
+
+int RGWLibProcess::process_request(RGWLibRequest* req, RGWLibIO* io)
+{
+  int ret = 0;
+  bool should_log = true; // XXX
+
+  dout(1) << "====== " << __func__
+	  << " starting new request req=" << hex << req << dec
+	  << " ======" << dendl;
+
+  /*
+   * invariant: valid requests are derived from RGWOp--well-formed
+   * requests should have assigned RGWRequest::op in their descendant
+   * constructor--if not, the compiler can find it, at the cost of
+   * a runtime check
+   */
+  RGWOp *op = (req->op) ? req->op : dynamic_cast<RGWOp*>(req);
+  if (! op) {
+    dout(1) << "failed to derive cognate RGWOp (invalid op?)" << dendl;
+    return -EINVAL;
+  }
+
+  io->init(req->cct);
+
+  perfcounter->inc(l_rgw_req);
+
+  RGWEnv& rgw_env = io->get_env();
+
+  struct req_state rstate(req->cct, &rgw_env); // XXX many machines on ix
+  struct req_state *s = &rstate;
+
+  RGWObjectCtx rados_ctx(store, s); // XXX holds std::map
+
+  /* initialize req--runs process_request boilerplate, then the local
+   * equivalent of *REST*::init_from_header(...) */
+  ret = req->init(rgw_env, &rados_ctx, io, s);
+  if (ret < 0) {
+    dout(10) << "failed to initialize request" << dendl;
+    abort_req(s, op, ret);
+    goto done;
+  }
+
+  /* req is-a RGWOp, currently initialized separately */
+  ret = req->op_init();
+    if (ret < 0) {
+    dout(10) << "failed to initialize RGWOp" << dendl;
+    abort_req(s, op, ret);
+    goto done;
+  }
+
+  // just checks the HTTP header, and that the user can access the gateway
+  // may be able to skip this after MOUNT (revalidate the user info)
+  req->log(s, "authorizing");
+  ret = RGW_Auth_S3::authorize(store, s); // validates s->user
+  if (ret < 0) {
+    dout(10) << "failed to authorize request" << dendl;
+    abort_req(s, op, ret);
+    goto done;
+  }
+
+  if (s->user.suspended) {
+    dout(10) << "user is suspended, uid=" << s->user.user_id << dendl;
+    abort_req(s, op, -ERR_USER_SUSPENDED);
+    goto done;
+  }
+
+  req->log(s, "reading permissions");
+  ret = req->read_permissions(op);
+  if (ret < 0) {
+    abort_req(s, op, ret);
+    goto done;
+  }
+
+  req->log(s, "init op");
+  ret = op->init_processing();
+  if (ret < 0) {
+    abort_req(s, op, ret);
+    goto done;
+  }
+
+  req->log(s, "verifying op mask");
+  ret = op->verify_op_mask();
+  if (ret < 0) {
+    abort_req(s, op, ret);
+    goto done;
+  }
+
+  req->log(s, "verifying op permissions");
+  ret = op->verify_permission();
+  if (ret < 0) {
+    if (s->system_request) {
+      dout(2) << "overriding permissions due to system operation" << dendl;
+    } else {
+      abort_req(s, op, ret);
+      goto done;
+    }
+  }
+
+  req->log(s, "verifying op params");
+  ret = op->verify_params();
+  if (ret < 0) {
+    abort_req(s, op, ret);
+    goto done;
+  }
+
+  req->log(s, "executing");
+  op->pre_exec();
+  op->execute();
+  op->complete();
+
+done:
+  int r = io->complete_request();
+  if (r < 0) {
+    dout(0) << "ERROR: io->complete_request() returned " << r << dendl;
+  }
+  if (should_log) {
+    rgw_log_op(store, s, (op ? op->name() : "unknown"), olog);
+  }
+
+  int http_ret = s->err.http_ret;
+
+  req->log_format(s, "http status=%d", http_ret);
+
+  /* XXX what RGWHandler::put_op() does */
+  delete op;
+
+  dout(1) << "====== " << __func__
+	  << " req done req=" << hex << req << dec << " http_status="
+	  << http_ret
+	  << " ======" << dendl;
+
+  return (ret < 0 ? ret : s->err.ret);
+} /* process_request */
 
 int RGWLibFrontend::init()
 {
@@ -310,132 +475,6 @@ int RGWLibRequest::read_permissions(RGWOp *op) {
 
   return ret;
 }
-
-int process_request(RGWRados* store, RGWREST* rest, RGWRequest* base_req,
-		    RGWLibIO* io, OpsLogSocket* olog)
-{
-  int ret = 0;
-  bool should_log = true; // XXX
-
-  RGWLibRequest *req = static_cast<RGWLibRequest*>(base_req);
-  RGWOp *op = reinterpret_cast<RGWOp*>(req); // req->op is already correct
-
-  io->init(req->cct);
-
-  dout(1) << "====== " << __func__
-	  << " starting new request req=" << hex << req << dec
-	  << " ======" << dendl;
-
-  perfcounter->inc(l_rgw_req);
-
-  RGWEnv& rgw_env = io->get_env();
-
-  struct req_state rstate(req->cct, &rgw_env); // XXX many machines on ix
-  struct req_state *s = &rstate;
-
-  RGWObjectCtx rados_ctx(store, s); // XXX holds std::map
-
-  /* initialize req--runs process_request boilerplate, then the local
-   * equivalent of *REST*::init_from_header(...) */
-  ret = req->init(rgw_env, &rados_ctx, io, s);
-  if (ret < 0) {
-    dout(10) << "failed to initialize request" << dendl;
-    abort_early(s, op, ret, nullptr);
-    goto done;
-  }
-
-  /* req is-a RGWOp, currently initialized separately */
-  ret = req->op_init();
-    if (ret < 0) {
-    dout(10) << "failed to initialize RGWOp" << dendl;
-    abort_early(s, op, ret, nullptr);
-    goto done;
-  }
-
-  // just checks the HTTP header, and that the user can access the gateway
-  // may be able to skip this after MOUNT (revalidate the user info)
-  req->log(s, "authorizing");
-  ret = RGW_Auth_S3::authorize(store, s); // validates s->user
-  if (ret < 0) {
-    dout(10) << "failed to authorize request" << dendl;
-    abort_early(s, op, ret, nullptr);
-    goto done;
-  }
-
-  if (s->user.suspended) {
-    dout(10) << "user is suspended, uid=" << s->user.user_id << dendl;
-    abort_early(s, op, -ERR_USER_SUSPENDED, nullptr);
-    goto done;
-  }
-
-  req->log(s, "reading permissions");
-  ret = req->read_permissions(op);
-  if (ret < 0) {
-    abort_early(s, op, ret, nullptr);
-    goto done;
-  }
-
-  req->log(s, "init op");
-  ret = op->init_processing();
-  if (ret < 0) {
-    abort_early(s, op, ret, nullptr);
-    goto done;
-  }
-
-  req->log(s, "verifying op mask");
-  ret = op->verify_op_mask();
-  if (ret < 0) {
-    abort_early(s, op, ret, nullptr);
-    goto done;
-  }
-
-  req->log(s, "verifying op permissions");
-  ret = op->verify_permission();
-  if (ret < 0) {
-    if (s->system_request) {
-      dout(2) << "overriding permissions due to system operation" << dendl;
-    } else {
-      abort_early(s, op, ret, nullptr);
-      goto done;
-    }
-  }
-
-  req->log(s, "verifying op params");
-  ret = op->verify_params();
-  if (ret < 0) {
-    abort_early(s, op, ret, nullptr);
-    goto done;
-  }
-
-  req->log(s, "executing");
-  op->pre_exec();
-  op->execute();
-  op->complete();
-
-done:
-  int r = io->complete_request();
-  if (r < 0) {
-    dout(0) << "ERROR: io->complete_request() returned " << r << dendl;
-  }
-  if (should_log) {
-    rgw_log_op(store, s, (op ? op->name() : "unknown"), olog);
-  }
-
-  int http_ret = s->err.http_ret;
-
-  req->log_format(s, "http status=%d", http_ret);
-
-  /* XXX what RGWHandler::put_op() does */
-  delete op;
-
-  dout(1) << "====== " << __func__
-	  << " req done req=" << hex << req << dec << " http_status="
-	  << http_ret
-	  << " ======" << dendl;
-
-  return (ret < 0 ? ret : s->err.ret);
-} /* process_request */
-
 
 /* global RGW library object */
 static RGWLib rgwlib;
