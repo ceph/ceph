@@ -85,7 +85,7 @@ int extract_spec(const std::string &spec, std::string *pool_name,
   boost::smatch match;
   if (!boost::regex_match(spec, match, pattern)) {
     std::cerr << "rbd: invalid spec '" << spec << "'" << std::endl;
-    return -EINVAL;
+    return EINVAL;
   }
 
   if (pool_name != nullptr && match[1].matched) {
@@ -166,7 +166,7 @@ int get_pool_image_snapshot_names(const po::variables_map &vm,
     std::cerr << "rbd: "
               << (mod == at::ARGUMENT_MODIFIER_DEST ? prefix : std::string())
               << "image name was not specified" << std::endl;
-    return -EINVAL;
+    return EINVAL;
   }
 
   if (snap_name != nullptr) {
@@ -191,7 +191,7 @@ int validate_snapshot_name(at::ArgumentModifier mod,
                 << (mod == at::ARGUMENT_MODIFIER_DEST ? prefix : std::string())
                 << "snapname specified for a command that doesn't use it"
                 << std::endl;
-      return -EINVAL;
+      return EINVAL;
     }
     break;
   case SNAPSHOT_PRESENCE_REQUIRED:
@@ -199,7 +199,7 @@ int validate_snapshot_name(at::ArgumentModifier mod,
       std::cerr << "rbd: "
                 << (mod == at::ARGUMENT_MODIFIER_DEST ? prefix : std::string())
                 << "snap name was not specified" << std::endl;
-      return -EINVAL;
+      return EINVAL;
     }
     break;
   }
@@ -239,7 +239,7 @@ int get_image_options(const boost::program_options::variables_map &vm,
       (*stripe_unit == 0 && *stripe_count != 0)) {
     std::cerr << "must specify both (or neither) of stripe-unit and stripe-count"
               << std::endl;
-    return -EINVAL;
+    return EINVAL;
   } else if ((*stripe_unit || *stripe_count) &&
              (*stripe_unit != (1ll << *order) && *stripe_count != 1)) {
     *features |= RBD_FEATURE_STRIPINGV2;
@@ -267,7 +267,7 @@ int get_image_options(const boost::program_options::variables_map &vm,
       if (format_specified && *format == 1) {
         std::cerr << "rbd: features not allowed with format 1; "
                   << "use --image-format 2" << std::endl;
-        return -EINVAL;
+        return EINVAL;
       } else {
         *format = 2;
         format_specified = true;
@@ -279,7 +279,7 @@ int get_image_options(const boost::program_options::variables_map &vm,
       if (format_specified && *format == 1) {
         std::cerr << "rbd: non-default striping not allowed with format 1; "
                   << "use --image-format 2" << std::endl;
-        return -EINVAL;
+        return EINVAL;
       } else {
         *format = 2;
         format_specified = 2;
@@ -299,7 +299,7 @@ int get_image_size(const boost::program_options::variables_map &vm,
                    uint64_t *size) {
   if (vm.count(at::IMAGE_SIZE) == 0) {
     std::cerr << "rbd: must specify --size <M/G/T>" << std::endl;
-    return -EINVAL;
+    return EINVAL;
   }
 
   *size = vm[at::IMAGE_SIZE].as<uint64_t>();
@@ -316,7 +316,7 @@ int get_path(const boost::program_options::variables_map &vm,
 
   if (path->empty()) {
     std::cerr << "rbd: path was not specified" << std::endl;
-    return -EINVAL;
+    return EINVAL;
   }
   return 0;
 }
@@ -329,7 +329,7 @@ int get_formatter(const po::variables_map &vm,
     if (*formatter == nullptr && pretty) {
       std::cerr << "rbd: --pretty-format only works when --format "
                 << "is json or xml" << std::endl;
-      return -EINVAL;
+      return EINVAL;
     }
   }
   return 0;

@@ -138,7 +138,7 @@ static int do_import(librbd::RBD &rbd, librados::IoCtx& io_ctx,
         (stripe_unit != (1ull << *order) && stripe_count != 1)) {
       std::cerr << "non-default striping not allowed with format 1; "
                 << "use --image-format 2" << std::endl;
-      return -EINVAL;
+      return EINVAL;
     }
     r = rbd.create(io_ctx, imgname, size, order);
   } else {

@@ -56,7 +56,7 @@ int execute(const po::variables_map &vm) {
     std::cerr << "rbd: mv/rename across pools not supported" << std::endl
               << "source pool: " << pool_name<< " dest pool: " << dst_pool_name
               << std::endl;
-    return -EINVAL;
+    return EINVAL;
   }
 
   librados::Rados rados;

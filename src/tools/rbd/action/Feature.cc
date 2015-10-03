@@ -41,7 +41,7 @@ int execute(const po::variables_map &vm, bool enabled) {
   if (feature_names.empty()) {
     std::cerr << "rbd: at least one feature name must be specified"
               << std::endl;
-    return -EINVAL;
+    return EINVAL;
   }
 
   boost::any features_any(static_cast<uint64_t>(0));

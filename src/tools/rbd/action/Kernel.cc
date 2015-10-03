@@ -72,14 +72,14 @@ static int put_map_option_value(const std::string opt, const char *value_char,
 {
   if (!value_char || *value_char == '\0') {
     std::cerr << "rbd: " << opt << " option requires a value" << std::endl;
-    return -EINVAL;
+    return EINVAL;
   }
 
   std::string value = parse_cb(value_char);
   if (value.empty()) {
     std::cerr << "rbd: invalid " << opt << " value '" << value_char << "'"
               << std::endl;
-    return -EINVAL;
+    return EINVAL;
   }
 
   put_map_option(opt, opt + "=" + value);
@@ -98,10 +98,10 @@ static int parse_map_options(char *options)
 
     if (!strcmp(this_char, "fsid")) {
       if (put_map_option_value("fsid", value_char, map_option_uuid_cb))
-        return -EINVAL;
+        return EINVAL;
     } else if (!strcmp(this_char, "ip")) {
       if (put_map_option_value("ip", value_char, map_option_ip_cb))
-        return -EINVAL;
+        return EINVAL;
     } else if (!strcmp(this_char, "share") || !strcmp(this_char, "noshare")) {
       put_map_option("share", this_char);
     } else if (!strcmp(this_char, "crc") || !strcmp(this_char, "nocrc")) {
@@ -114,21 +114,21 @@ static int parse_map_options(char *options)
       put_map_option("tcp_nodelay", this_char);
     } else if (!strcmp(this_char, "mount_timeout")) {
       if (put_map_option_value("mount_timeout", value_char, map_option_int_cb))
-        return -EINVAL;
+        return EINVAL;
     } else if (!strcmp(this_char, "osdkeepalive")) {
       if (put_map_option_value("osdkeepalive", value_char, map_option_int_cb))
-        return -EINVAL;
+        return EINVAL;
     } else if (!strcmp(this_char, "osd_idle_ttl")) {
       if (put_map_option_value("osd_idle_ttl", value_char, map_option_int_cb))
-        return -EINVAL;
+        return EINVAL;
     } else if (!strcmp(this_char, "rw") || !strcmp(this_char, "ro")) {
       put_map_option("rw", this_char);
     } else if (!strcmp(this_char, "queue_depth")) {
       if (put_map_option_value("queue_depth", value_char, map_option_int_cb))
-        return -EINVAL;
+        return EINVAL;
     } else {
       std::cerr << "rbd: unknown map option '" << this_char << "'" << std::endl;
-      return -EINVAL;
+      return EINVAL;
     }
   }
 
@@ -263,7 +263,7 @@ int execute_map(const po::variables_map &vm) {
 
   if (parse_map_options(default_map_options)) {
     std::cerr << "rbd: couldn't parse default map options" << std::endl;
-    return -EINVAL;
+    return EINVAL;
   }
 
   if (vm.count("options")) {
@@ -274,7 +274,7 @@ int execute_map(const po::variables_map &vm) {
 
     if (parse_map_options(cli_map_options)) {
       std::cerr << "rbd: couldn't parse map options" << std::endl;
-      return -EINVAL;
+      return EINVAL;
     }
   }
 
@@ -324,7 +324,7 @@ int execute_unmap(const po::variables_map &vm) {
   if (device_name.empty() && image_name.empty()) {
     std::cerr << "rbd: unmap requires either image name or device path"
               << std::endl;
-    return -EINVAL;
+    return EINVAL;
   }
 
   utils::init_context();

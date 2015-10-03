@@ -28,7 +28,7 @@ int get_id(const po::variables_map &vm, std::string *id) {
   *id = utils::get_positional_argument(vm, 1);
   if (id->empty()) {
     std::cerr << "rbd: lock id was not specified" << std::endl;
-    return -EINVAL;
+    return EINVAL;
   }
   return 0;
 }
@@ -231,7 +231,7 @@ int execute_remove(const po::variables_map &vm) {
   std::string lock_client = utils::get_positional_argument(vm, 2);
   if (lock_client.empty()) {
     std::cerr << "rbd: locker was not specified" << std::endl;
-    return -EINVAL;
+    return EINVAL;
   }
 
   librados::Rados rados;

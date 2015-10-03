@@ -132,7 +132,7 @@ int Shell::execute(int arg_count, const char **arg_values) {
     }
 
     int r = (*action->execute)(vm);
-    if (r == -EINVAL) {
+    if (r == EINVAL) {
       std::cout << std::endl;
       print_action_help(app_name, action);
     }

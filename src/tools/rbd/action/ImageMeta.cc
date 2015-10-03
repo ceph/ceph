@@ -28,7 +28,7 @@ int get_key(const po::variables_map &vm, std::string *key) {
   *key = utils::get_positional_argument(vm, 1);
   if (key->empty()) {
     std::cerr << "rbd: metadata key was not specified" << std::endl;
-    return -EINVAL;
+    return EINVAL;
   }
   return 0;
 }
@@ -230,7 +230,7 @@ int execute_set(const po::variables_map &vm) {
   std::string value = utils::get_positional_argument(vm, 2);
   if (value.empty()) {
     std::cerr << "rbd: metadata value was not specified" << std::endl;
-    return -EINVAL;
+    return EINVAL;
   }
 
   librados::Rados rados;

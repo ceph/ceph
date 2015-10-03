@@ -401,13 +401,13 @@ int execute(const po::variables_map &vm) {
   std::string first_diff = utils::get_positional_argument(vm, 0);
   if (first_diff.empty()) {
     std::cerr << "rbd: first diff was not specified" << std::endl;
-    return -EINVAL;
+    return EINVAL;
   }
 
   std::string second_diff = utils::get_positional_argument(vm, 1);
   if (second_diff.empty()) {
     std::cerr << "rbd: second diff was not specified" << std::endl;
-    return -EINVAL;
+    return EINVAL;
   }
 
   std::string path;
