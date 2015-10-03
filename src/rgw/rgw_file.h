@@ -24,7 +24,10 @@ public:
   RGWListBucketsRequest(CephContext* _cct, char *_user_id,
 			rgw_readdir_cb _rcb, void* _cb_arg, uint64_t* _offset)
     : RGWLibRequest(_cct), user_id(_user_id), offset(_offset), cb_arg(_cb_arg),
-      rcb(_rcb) {}
+      rcb(_rcb) {
+    magic = 71;
+    op = this;
+  }
 
   virtual bool only_bucket() { return false; }
 

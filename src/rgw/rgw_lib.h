@@ -168,7 +168,9 @@ public:
     req_wq.queue(req);
   } /* enqueue_req */
 
-  void handle_request(RGWRequest* req);
+  void handle_request(RGWRequest* req); // async handler, deletes req
+  int process_request(RGWLibRequest* req);
+  int process_request(RGWLibRequest* req, RGWLibIO* io);
   void set_access_key(RGWAccessKey& key) { access_key = key; }
 }; /* RGWLibProcess */
 
@@ -184,7 +186,7 @@ public:
   }
 
   inline void execute_req(RGWLibRequest* req) {
-    static_cast<RGWLibProcess*>(pprocess)->handle_request(req); // !async
+    static_cast<RGWLibProcess*>(pprocess)->process_request(req); // !async
   }
 
 }; /* RGWLibFrontend */

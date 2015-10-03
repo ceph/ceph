@@ -163,10 +163,6 @@ public:
 int process_request(RGWRados* store, RGWREST* rest, RGWRequest* req,
 		    RGWStreamIO* client_io, OpsLogSocket* olog);
 
-/* process direct request */
-int process_request(RGWRados* store, RGWREST* rest, RGWRequest* req,
-		    RGWLibIO* client_io, OpsLogSocket* olog);
-
 #if defined(def_dout_subsys)
 #undef def_dout_subsys
 #undef dout_subsys

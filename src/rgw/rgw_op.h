@@ -83,11 +83,13 @@ protected:
   RGWQuotaInfo bucket_quota;
   RGWQuotaInfo user_quota;
   int op_ret;
+  uint32_t magic;
 
   virtual int init_quota();
 public:
-RGWOp() : s(NULL), dialect_handler(NULL), store(NULL), cors_exist(false),
-    op_ret(0) {}
+RGWOp() : s(nullptr), dialect_handler(nullptr), store(nullptr),
+    cors_exist(false), op_ret(0), magic(0) {}
+
   virtual ~RGWOp() {}
 
   int get_ret() const { return op_ret; }
