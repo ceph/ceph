@@ -336,7 +336,8 @@ ssh access   : ssh {identity}{username}@{ip} # logs in /usr/share/nginx/html
         and return its IP address.
         """
         if not self.cluster_exists():
-            self.create_security_group()
+            if self.provider != 'rackspace':
+                self.create_security_group()
             self.create_cluster()
         instance_id = self.get_instance_id(self.args.name)
         return self.get_floating_ip_or_ip(instance_id)
@@ -392,7 +393,8 @@ ssh access   : ssh {identity}{username}@{ip} # logs in /usr/share/nginx/html
         if 'OS_AUTH_URL' not in os.environ:
             raise Exception('no OS_AUTH_URL environment variable')
         providers = (('cloud.ovh.net', 'ovh'),
-                     ('entercloudsuite.com', 'entercloudsuite'))
+                     ('entercloudsuite.com', 'entercloudsuite'),
+                     ('rackspacecloud.com', 'rackspace'))
         self.provider = None
         for (pattern, provider) in providers:
             if pattern in os.environ['OS_AUTH_URL']:
@@ -582,6 +584,10 @@ openstack security group rule create --proto udp --dst-port 53 teuthology # dns
         and wait for it to come up.
         """
         user_data = self.get_user_data()
+        if self.provider == 'rackspace':
+            security_group = ''
+        else:
+            security_group = " --security-group teuthology"
         instance = misc.sh(
             "openstack server create " +
             " --image '" + self.image('ubuntu', '14.04') + "' " +
@@ -589,7 +595,7 @@ openstack security group rule create --proto udp --dst-port 53 teuthology # dns
             " " + self.net() +
             " --key-name " + self.args.key_name +
             " --user-data " + user_data +
-            " --security-group teuthology" +
+            security_group + 
             " --wait " + self.args.name +
             " -f json")
         instance_id = self.get_value(json.loads(instance), 'id')
