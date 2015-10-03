@@ -1,6 +1,13 @@
 v9.1.0
 ======
 
+* When a pool quota is reached, librados operations now block indefinitely,
+  the same way they do when the cluster fills up.  (Previously they would return
+  -ENOSPC).  By default, a full cluster or pool will now block.  If your
+  librados application can handle ENOSPC or EDQUOT errors gracefully, you can
+  get error returns instead by using the new librados OPERATION_FULL_TRY flag.
+
+
 v9.0.4
 ======
 
