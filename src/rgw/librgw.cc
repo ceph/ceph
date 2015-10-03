@@ -191,13 +191,25 @@ int RGWLibProcess::process_request(RGWLibRequest* req, RGWLibIO* io)
 
   RGWEnv& rgw_env = io->get_env();
 
-  struct req_state rstate(req->cct, &rgw_env); // XXX many machines on ix
+  /* XXX derp derp derp
+   *
+   * until major refactoring of req_state and req_info, we need
+   * to build their RGWEnv boilerplate from the RGWLibRequest,
+   * pre-staging any strings (HTTP_HOST) that provoke a crash when
+   * not found
+   */
+  rgw_env.set("HTTP_HOST", "10.1.1.220" /* XXXX: fix me */);
+
+  /* XXX and -then- bloat up req_state with string copies from it */
+  struct req_state rstate(req->cct, &rgw_env);
   struct req_state *s = &rstate;
+
+  // XXX fix this
+  s->cio = io;
 
   RGWObjectCtx rados_ctx(store, s); // XXX holds std::map
 
-  /* initialize req--runs process_request boilerplate, then the local
-   * equivalent of *REST*::init_from_header(...) */
+  /* XXX and -then- stash req_state pointers everywhere they are needed */
   ret = req->init(rgw_env, &rados_ctx, io, s);
   if (ret < 0) {
     dout(10) << "failed to initialize request" << dendl;
@@ -285,9 +297,6 @@ done:
   int http_ret = s->err.http_ret;
 
   req->log_format(s, "http status=%d", http_ret);
-
-  /* XXX what RGWHandler::put_op() does */
-  delete op;
 
   dout(1) << "====== " << __func__
 	  << " req done req=" << hex << req << dec << " http_status="

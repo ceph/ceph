@@ -52,9 +52,7 @@ public:
     s->info.request_uri = "/"; // XXX
     s->info.effective_uri = "/";
     s->info.request_params = "";
-#warning fix host and domain request params (used nfsv4 client?)
-    s->info.host = "10.1.1.220";
-    s->info.domain = ""; /* XXX fixme */
+    s->info.domain = ""; /* XXX ? */
 
     return 0;
   }
