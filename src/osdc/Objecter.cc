@@ -433,6 +433,7 @@ void Objecter::_send_linger(LingerOp *info)
   vector<OSDOp> opv;
   Context *oncommit = NULL;
   info->watch_lock.get_read(); // just to read registered status
+  bufferlist *poutbl = NULL;
   if (info->registered && info->is_watch) {
     ldout(cct, 15) << "send_linger " << info->linger_id << " reconnect" << dendl;
     opv.push_back(OSDOp());
@@ -444,7 +445,12 @@ void Objecter::_send_linger(LingerOp *info)
   } else {
     ldout(cct, 15) << "send_linger " << info->linger_id << " register" << dendl;
     opv = info->ops;
-    oncommit = new C_Linger_Commit(this, info);
+    C_Linger_Commit *c = new C_Linger_Commit(this, info);
+    if (!info->is_watch) {
+      info->notify_id = 0;
+      poutbl = &c->outbl;
+    }
+    oncommit = c;
   }
   info->watch_lock.put_read();
   Op *o = new Op(info->target.base_oid, info->target.base_oloc,
@@ -452,6 +458,7 @@ void Objecter::_send_linger(LingerOp *info)
 		 NULL, NULL,
 		 info->pobjver);
   o->oncommit_sync = oncommit;
+  o->outbl = poutbl;
   o->snapid = info->snap;
   o->snapc = info->snapc;
   o->mtime = info->mtime;
@@ -481,7 +488,7 @@ void Objecter::_send_linger(LingerOp *info)
   logger->inc(l_osdc_linger_send);
 }
 
-void Objecter::_linger_commit(LingerOp *info, int r) 
+void Objecter::_linger_commit(LingerOp *info, int r, bufferlist& outbl)
 {
   RWLock::WLocker wl(info->watch_lock);
   ldout(cct, 10) << "_linger_commit " << info->linger_id << dendl;
@@ -493,6 +500,17 @@ void Objecter::_linger_commit(LingerOp *info, int r)
   // only tell the user the first time we do this
   info->registered = true;
   info->pobjver = NULL;
+
+  if (!info->is_watch) {
+    // make note of the notify_id
+    bufferlist::iterator p = outbl.begin();
+    try {
+      ::decode(info->notify_id, p);
+      ldout(cct, 10) << "_linger_commit  notify_id=" << info->notify_id << dendl;
+    }
+    catch (buffer::error& e) {
+    }
+  }
 }
 
 struct C_DoWatchError : public Context {
@@ -793,9 +811,15 @@ void Objecter::handle_watch_notify(MWatchNotify *m)
   } else if (!info->is_watch) {
     // we have CEPH_WATCH_EVENT_NOTIFY_COMPLETE; we can do this inline since
     // we know the only user (librados) is safe to call in fast-dispatch context
-    assert(info->on_notify_finish);
-    info->notify_result_bl->claim(m->get_data());
-    info->on_notify_finish->complete(m->return_code);
+    if (info->notify_id &&
+	info->notify_id != m->notify_id) {
+      ldout(cct, 10) << __func__ << " reply notify " << m->notify_id
+		     << " != " << info->notify_id << ", ignoring" << dendl;
+    } else {
+      assert(info->on_notify_finish);
+      info->notify_result_bl->claim(m->get_data());
+      info->on_notify_finish->complete(m->return_code);
+    }
   } else {
     finisher->queue(new C_DoWatchNotify(this, info, m));
     _linger_callback_queue();

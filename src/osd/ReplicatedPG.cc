@@ -1529,7 +1529,7 @@ void ReplicatedPG::do_op(OpRequestRef& op)
 	     << *m << dendl;
     return;
   }
-  if (osd->check_failsafe_full()) {
+  if (!m->get_source().is_mds() && osd->check_failsafe_full()) {
     dout(10) << __func__ << " fail-safe full check failed, dropping request"
 	     << dendl;
     return;
@@ -2279,6 +2279,16 @@ void ReplicatedPG::do_proxy_read(OpRequestRef op)
 		 m->get_object_locator().get_pool(),
 		 m->get_object_locator().nspace);
   unsigned flags = CEPH_OSD_FLAG_IGNORE_CACHE | CEPH_OSD_FLAG_IGNORE_OVERLAY;
+
+  // pass through some original flags that make sense.
+  //  - leave out redirection and balancing flags since we are
+  //    already proxying through the primary
+  //  - leave off read/write/exec flags that are derived from the op
+  flags |= m->get_flags() & (CEPH_OSD_FLAG_RWORDERED |
+			     CEPH_OSD_FLAG_ORDERSNAP |
+			     CEPH_OSD_FLAG_ENFORCE_SNAPC |
+			     CEPH_OSD_FLAG_MAP_SNAP_CLONE);
+
   dout(10) << __func__ << " Start proxy read for " << *m << dendl;
 
   ProxyReadOpRef prdop(new ProxyReadOp(op, soid, m->ops));
@@ -3794,6 +3804,7 @@ bool ReplicatedPG::maybe_create_new_object(OpContext *ctx)
     dout(10) << __func__ << " clearing whiteout on " << obs.oi.soid << dendl;
     ctx->new_obs.oi.clear_flag(object_info_t::FLAG_WHITEOUT);
     --ctx->delta_stats.num_whiteouts;
+    return true;
   }
   return false;
 }
@@ -4576,9 +4587,13 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 
 	notify_info_t n;
 	n.timeout = timeout;
+	n.notify_id = osd->get_next_id(get_osdmap()->get_epoch());
 	n.cookie = op.watch.cookie;
         n.bl = bl;
 	ctx->notifies.push_back(n);
+
+	// return our unique notify id to the client
+	::encode(n.notify_id, osd_op.outdata);
       }
       break;
 
@@ -6107,7 +6122,7 @@ void ReplicatedPG::do_osd_op_effects(OpContext *ctx, const ConnectionRef& conn)
 	p->bl,
 	p->timeout,
 	p->cookie,
-	osd->get_next_id(get_osdmap()->get_epoch()),
+	p->notify_id,
 	ctx->obc->obs.oi.user_version,
 	osd));
     for (map<pair<uint64_t, entity_name_t>, WatchRef>::iterator i =
@@ -6198,7 +6213,7 @@ int ReplicatedPG::prepare_transaction(OpContext *ctx)
     } else if (m->has_flag(CEPH_OSD_FLAG_FULL_TRY)) {
       // they tried, they failed.
       dout(20) << __func__ << " full, replying to FULL_TRY op" << dendl;
-      return -ENOSPC;
+      return pool.info.has_flag(pg_pool_t::FLAG_FULL) ? -EDQUOT : -ENOSPC;
     } else {
       // drop request
       dout(20) << __func__ << " full, dropping request (bad client)" << dendl;
