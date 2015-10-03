@@ -1505,7 +1505,7 @@ void ReplicatedPG::do_op(OpRequestRef& op)
 	     << *m << dendl;
     return;
   }
-  if (osd->check_failsafe_full()) {
+  if (!m->get_source().is_mds() && osd->check_failsafe_full()) {
     dout(10) << __func__ << " fail-safe full check failed, dropping request"
 	     << dendl;
     return;
@@ -6164,7 +6164,7 @@ int ReplicatedPG::prepare_transaction(OpContext *ctx)
     } else if (m->has_flag(CEPH_OSD_FLAG_FULL_TRY)) {
       // they tried, they failed.
       dout(20) << __func__ << " full, replying to FULL_TRY op" << dendl;
-      return -ENOSPC;
+      return pool.info.has_flag(pg_pool_t::FLAG_FULL) ? -EDQUOT : -ENOSPC;
     } else {
       // drop request
       dout(20) << __func__ << " full, dropping request (bad client)" << dendl;
