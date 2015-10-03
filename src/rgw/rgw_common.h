@@ -1075,7 +1075,7 @@ class RGWRequest;
 struct req_state {
   CephContext *cct;
   RGWClientIO *cio;
-  RGWRequest *req;
+  RGWRequest *req; /// XXX: re-remove??
   http_op op;
   bool content_started;
   int format;
