@@ -2,6 +2,7 @@
 #include "include/rados/librados.h"
 #include "test/librados/test.h"
 #include "include/types.h"
+#include "include/stringify.h"
 
 #include "gtest/gtest.h"
 #include <errno.h>
@@ -188,6 +189,58 @@ TEST(LibRadosAio, TooBigPP) {
   ASSERT_EQ(-E2BIG, test_data.m_ioctx.aio_append("foo", aio_completion, bl, UINT_MAX));
   // ioctx.aio_write_full no way to overflow bl.length()
   delete aio_completion;
+}
+
+TEST(LibRadosAio, PoolQuotaPP) {
+  AioTestDataPP test_data;
+  ASSERT_EQ("", test_data.init());
+  string p = get_temp_pool_name();
+  ASSERT_EQ(0, test_data.m_cluster.pool_create(p.c_str()));
+  IoCtx ioctx;
+  ASSERT_EQ(0, test_data.m_cluster.ioctx_create(p.c_str(), ioctx));
+
+  bufferlist inbl;
+  ASSERT_EQ(0, test_data.m_cluster.mon_command(
+      "{\"prefix\": \"osd pool set-quota\", \"pool\": \"" + p +
+      "\", \"field\": \"max_bytes\", \"val\": \"4096\"}",
+      inbl, NULL, NULL));
+
+  bufferlist bl;
+  bufferptr z(4096);
+  bl.append(z);
+  int n;
+  for (n = 0; n < 1024; ++n) {
+    ObjectWriteOperation op;
+    op.write_full(bl);
+    librados::AioCompletion *completion =
+      test_data.m_cluster.aio_create_completion();
+    ASSERT_EQ(0, ioctx.aio_operate(
+	"foo" + stringify(n), completion, &op,
+	librados::OPERATION_FULL_TRY));
+    completion->wait_for_safe();
+    int r = completion->get_return_value();
+    completion->release();
+    if (r == -EDQUOT)
+      break;
+    ASSERT_EQ(0, r);
+    sleep(1);
+  }
+  ASSERT_LT(n, 1024);
+
+  // make sure we block without FULL_TRY
+  {
+    ObjectWriteOperation op;
+    op.write_full(bl);
+    librados::AioCompletion *completion =
+      test_data.m_cluster.aio_create_completion();
+    ASSERT_EQ(0, ioctx.aio_operate("bar", completion, &op, 0));
+    sleep(5);
+    ASSERT_FALSE(completion->is_safe());
+    completion->release();
+  }
+
+  ioctx.close();
+  ASSERT_EQ(0, test_data.m_cluster.pool_delete(p.c_str()));
 }
 
 TEST(LibRadosAio, SimpleWrite) {

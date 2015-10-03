@@ -120,6 +120,10 @@ enum {
   LIBRADOS_OPERATION_IGNORE_CACHE       = 8,
   LIBRADOS_OPERATION_SKIPRWLOCKS        = 16,
   LIBRADOS_OPERATION_IGNORE_OVERLAY     = 32,
+  /* send requests to cluster despite the cluster or pool being marked
+     full; ops will either succeed (e.g., delete) or return EDQUOT or
+     ENOSPC. */
+  LIBRADOS_OPERATION_FULL_TRY           = 64,
 };
 /** @} */
 
