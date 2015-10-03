@@ -444,37 +444,29 @@ struct ceph_osd_request_head {
 
   const char *get_type_name() const { return "osd_op"; }
   void print(ostream& out) const {
-    if (!partial_decode_needed)
-      out << "osd_op(" << get_reqid();
-    out << " ";
-    if (!oloc.nspace.empty())
-      out << oloc.nspace << "/";
-    out << oid;
-
-#if 0
-    out << " ";
-    if (may_read())
-      out << "r";
-    if (may_write())
-      out << "w";
-#endif
-    if (snapid != CEPH_NOSNAP)
-      out << "@" << snapid;
-
-    if (oloc.key.size())
-      out << " " << oloc;
-
-    out << " " << ops;
-    out << " " << pgid;
-    if (is_retry_attempt())
-      out << " RETRY=" << get_retry_attempt();
-    if (reassert_version != eversion_t())
-      out << " reassert_version=" << reassert_version;
-    if (!final_decode_needed)
-      out << " snapc " << get_snap_seq() << "=" << snaps;
-    if (!partial_decode_needed)
+    out << "osd_op(";
+    if (!partial_decode_needed) {
+      out << get_reqid() << ' ';
+      out << pgid;
+      if (!final_decode_needed) {
+	out << ' ';
+	if (!oloc.nspace.empty())
+	  out << oloc.nspace << "/";
+	out << oid
+	    << " " << ops
+	    << " snapc " << get_snap_seq() << "=" << snaps;
+	if (oloc.key.size())
+	  out << " " << oloc;
+	if (is_retry_attempt())
+	  out << " RETRY=" << get_retry_attempt();
+      } else {
+	out << " (undecoded)";
+      }
       out << " " << ceph_osd_flag_string(get_flags());
-    out << " e" << osdmap_epoch;
+      if (reassert_version != eversion_t())
+	out << " reassert_version=" << reassert_version;
+      out << " e" << osdmap_epoch;
+    }
     out << ")";
   }
 };
