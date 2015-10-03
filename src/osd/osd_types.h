@@ -2981,12 +2981,15 @@ static inline ostream& operator<<(ostream& out, const watch_info_t& w) {
 
 struct notify_info_t {
   uint64_t cookie;
+  uint64_t notify_id;
   uint32_t timeout;
   bufferlist bl;
 };
 
 static inline ostream& operator<<(ostream& out, const notify_info_t& n) {
-  return out << "notify(cookie " << n.cookie << " " << n.timeout << "s)";
+  return out << "notify(cookie " << n.cookie
+	     << " notify" << n.notify_id
+	     << " " << n.timeout << "s)";
 }
 
 
