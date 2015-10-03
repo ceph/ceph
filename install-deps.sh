@@ -77,7 +77,7 @@ CentOS|Fedora|RedHatEnterpriseServer)
         ! grep -q -i error: $DIR/yum-builddep.out || exit 1
         ;;
 *SUSE*)
-        sed -e 's/@//g ; s/bcond_without selinux/bcond_with selinux/' < ceph.spec.in > $DIR/ceph.spec
+        sed -e 's/@//g' < ceph.spec.in > $DIR/ceph.spec
         $SUDO zypper --non-interactive install $(rpmspec -q --buildrequires $DIR/ceph.spec) || exit 1
         ;;
 *)
