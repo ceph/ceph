@@ -77,10 +77,22 @@ public:
   }
 
   // Fields decoded in partial decoding
-  const pg_t&     get_pg() const { assert(!partial_decode_needed); return pgid; }
-  epoch_t  get_map_epoch() { assert(!partial_decode_needed); return osdmap_epoch; }
-  int get_flags() const { assert(!partial_decode_needed); return flags; }
-  const eversion_t& get_version() { assert(!partial_decode_needed); return reassert_version; }
+  const pg_t& get_pg() const {
+    assert(!partial_decode_needed);
+    return pgid;
+  }
+  epoch_t get_map_epoch() const {
+    assert(!partial_decode_needed);
+    return osdmap_epoch;
+  }
+  int get_flags() const {
+    assert(!partial_decode_needed);
+    return flags;
+  }
+  const eversion_t& get_version() const {
+    assert(!partial_decode_needed);
+    return reassert_version;
+  }
   osd_reqid_t get_reqid() const {
     assert(!partial_decode_needed);
     if (reqid != osd_reqid_t())
@@ -92,13 +104,35 @@ public:
   }
 
   // Fields decoded in final decoding
-  int get_client_inc() { assert(!final_decode_needed); return client_inc; }
-  utime_t get_mtime() { assert(!final_decode_needed); return mtime; }
-  const object_locator_t& get_object_locator() const { assert(!final_decode_needed); return oloc; }
-  object_t& get_oid() { assert(!final_decode_needed); return oid; }
-  const snapid_t& get_snapid() { assert(!final_decode_needed); return snapid; }
-  const snapid_t& get_snap_seq() const { assert(!final_decode_needed); return snap_seq; }
-  const vector<snapid_t> &get_snaps() const { assert(!final_decode_needed); return snaps; }
+  int get_client_inc() const {
+    assert(!final_decode_needed);
+    return client_inc;
+  }
+  utime_t get_mtime() const {
+    assert(!final_decode_needed);
+    return mtime;
+  }
+  const object_locator_t& get_object_locator() const {
+    assert(!final_decode_needed);
+    return oloc;
+  }
+  object_t& get_oid() {
+    assert(!final_decode_needed);
+    return oid;
+  }
+  const snapid_t& get_snapid() {
+    assert(!final_decode_needed);
+    return snapid;
+  }
+  const snapid_t& get_snap_seq() const {
+    assert(!final_decode_needed);
+    return snap_seq;
+  }
+  const vector<snapid_t> &get_snaps() const {
+    assert(!final_decode_needed);
+    return snaps;
+  }
+
   /**
    * get retry attempt
    *
@@ -116,9 +150,12 @@ public:
   }
 
   MOSDOp()
-    : Message(CEPH_MSG_OSD_OP, HEAD_VERSION, COMPAT_VERSION), partial_decode_needed(true), final_decode_needed(true) { }
+    : Message(CEPH_MSG_OSD_OP, HEAD_VERSION, COMPAT_VERSION),
+      partial_decode_needed(true),
+      final_decode_needed(true) { }
   MOSDOp(int inc, long tid,
-         object_t& _oid, object_locator_t& _oloc, pg_t& _pgid, epoch_t _osdmap_epoch,
+         object_t& _oid, object_locator_t& _oloc, pg_t& _pgid,
+	 epoch_t _osdmap_epoch,
 	 int _flags, uint64_t feat)
     : Message(CEPH_MSG_OSD_OP, HEAD_VERSION, COMPAT_VERSION),
       client_inc(inc),
