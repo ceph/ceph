@@ -134,6 +134,7 @@ BuildRequires:	yasm
 BuildRequires:	systemd-rpm-macros
 %{?systemd_requires}
 %endif
+PreReq:		%fillup_prereq
 Requires:	python-Flask
 BuildRequires:	net-tools
 BuildRequires:	libbz2-devel
@@ -594,7 +595,12 @@ find $RPM_BUILD_ROOT -type f -name "*.la" -exec rm -f {} ';'
 find $RPM_BUILD_ROOT -type f -name "*.a" -exec rm -f {} ';'
 install -D src/rbdmap $RPM_BUILD_ROOT%{_sysconfdir}/ceph/rbdmap
 install -D src/init-rbdmap $RPM_BUILD_ROOT%{_initrddir}/rbdmap
+%if 0%{?fedora} || 0%{?rhel}
 install -m 0644 -D etc/sysconfig/ceph $RPM_BUILD_ROOT%{_sysconfdir}/sysconfig/ceph
+%endif
+%if 0%{?suse_version}
+install -m 0644 -D etc/sysconfig/ceph $RPM_BUILD_ROOT%{_localstatedir}/adm/fillup-templates/sysconfig.%{name}
+%endif
 %if 0%{?_with_systemd}
   install -m 0644 -D systemd/ceph.tmpfiles.d $RPM_BUILD_ROOT%{_tmpfilesdir}/ceph-common.conf
   install -m 0644 -D systemd/ceph-osd@.service $RPM_BUILD_ROOT%{_unitdir}/ceph-osd@.service
@@ -671,6 +677,7 @@ rm -rf $RPM_BUILD_ROOT
 /sbin/ldconfig
 %if 0%{?_with_systemd}
   %if 0%{?suse_version}
+    %fillup_only
     %service_add_post ceph.target
   %endif
 %else
@@ -781,8 +788,11 @@ rm -rf $RPM_BUILD_ROOT
 %{_udevrulesdir}/95-ceph-osd.rules
 %config %{_sysconfdir}/bash_completion.d/ceph
 %config(noreplace) %{_sysconfdir}/logrotate.d/ceph
+%if 0%{?fedora} || 0%{?rhel}
 %config(noreplace) %{_sysconfdir}/sysconfig/ceph
+%endif
 %if 0%{?suse_version}
+%{_localstatedir}/adm/fillup-templates/sysconfig.*
 %config %{_sysconfdir}/sysconfig/SuSEfirewall2.d/services/ceph-mon
 %config %{_sysconfdir}/sysconfig/SuSEfirewall2.d/services/ceph-osd-mds
 %endif
