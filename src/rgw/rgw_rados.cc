@@ -3087,6 +3087,15 @@ int RGWRados::add_bucket_placement(std::string& new_pool)
 
   rgw_obj obj(zone.domain_root, avail_pools);
   bufferlist empty_bl;
+  map<string, bufferlist> m;
+  ret = omap_get_all(obj, empty_bl, m);
+  if (ret < 0)
+    return ret;
+
+  map<string, bufferlist>::iterator miter = m.find(new_pool) ;
+  if (miter != m.end()) 
+    return -EEXIST;
+  
   ret = omap_set(obj, new_pool, empty_bl);
 
   // don't care about return value
@@ -3098,8 +3107,17 @@ int RGWRados::add_bucket_placement(std::string& new_pool)
 int RGWRados::remove_bucket_placement(std::string& old_pool)
 {
   rgw_obj obj(zone.domain_root, avail_pools);
-  int ret = omap_del(obj, old_pool);
+  bufferlist header;
+  map<string, bufferlist> m;
+  int ret = omap_get_all(obj, header, m);
+  if (ret < 0)
+    return ret;
 
+  map<string, bufferlist>::iterator miter = m.find(old_pool) ;
+  if (miter == m.end())
+    return -ENOENT;
+
+  ret = omap_del(obj, old_pool);
   // don't care about return value
   update_placement_map();
 
