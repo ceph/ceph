@@ -740,8 +740,9 @@ function test_mon_mds()
   fail_all_mds
 
   # Check for default crash_replay_interval set automatically in 'fs new'
-  ceph osd dump | grep fs_data > $TMPFILE
-  check_response "crash_replay_interval 45 "
+  #This may vary based on ceph.conf (e.g., it's 5 in teuthology runs)
+  #ceph osd dump | grep fs_data > $TMPFILE
+  #check_response "crash_replay_interval 45 "
 
   ceph mds compat show
   expect_false ceph mds deactivate 2
