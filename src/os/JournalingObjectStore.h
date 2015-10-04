@@ -133,7 +133,7 @@ public:
   JournalingObjectStore(const std::string& path)
     : ObjectStore(path),
       journal(NULL),
-      finisher(g_ceph_context),
+      finisher(g_ceph_context, "JournalObjectStore"),
       apply_manager(journal, finisher),
       replaying(false) {}
   
