@@ -298,11 +298,9 @@ int rgw_readdir(struct rgw_fs *rgw_fs,
 
   CephContext* cct = static_cast<CephContext*>(rgw_fs->rgw);
 
-#if 1
   /* TODO:
-   * take actual, um, arguments
    * deal with markers (continuation)
-   * deal with sync vs async
+   * deal with authorization
    * consider non-default tenancy/user and bucket layouts
    */
   if (is_root(uri)) {
@@ -315,45 +313,8 @@ int rgw_readdir(struct rgw_fs *rgw_fs,
       ...
     */
   }
-#else
-  /* XXX current open-coded logic should move into librgw (need
-   * functor mechanism wrapping callback */
 
-  if (is_root(uri)) {
-    /* get the bucket list */
-    string start; // XXX need to match offset
-    string end; // XXX need to match offset
-    uint64_t nread, bucket_count, bucket_objcount;
-    RGWUserBuckets buckets;
-    uint64_t max_buckets = cct->_conf->rgw_list_buckets_max_chunk;
-
-    /* XXX check offsets */
-    uint64_t ix = 3;
-    rgw_user uid(rgw_fs->user_id);
-    rc = rgw_read_user_buckets(store, uid, buckets, start, end, max_buckets,
-			       true);
-    if (rc < 0) {
-      ldout(cct, 10) << "WARNING: failed on rgw_get_user_buckets uid="
-		     << rgw_fs->user_id << dendl;
-      return rc;
-    } else {
-      bucket_count = 0;
-      bucket_objcount = 0;
-      map<string, RGWBucketEnt>& m = buckets.get_buckets();
-      for (auto& ib : m) {
-	RGWBucketEnt& bent = ib.second;
-	bucket_objcount += bent.count;
-	start = ib.first;
-	(void) rcb(bent.bucket.name.c_str(), cb_arg, ix++);
-      }
-      bucket_count += m.size();
-    }
-  } else {
-    /* !root uri */
-    
-  }
-#endif
-  *eof = true;
+  *eof = true; // XXX move into RGGWListBucket(s)Request
 
   return 0;
 }

@@ -225,6 +225,8 @@ int RGWLibProcess::process_request(RGWLibRequest* req, RGWLibIO* io)
     goto done;
   }
 
+#warning authorize step disabled
+#if 0
   // just checks the HTTP header, and that the user can access the gateway
   // may be able to skip this after MOUNT (revalidate the user info)
   req->log(s, "authorizing");
@@ -234,6 +236,7 @@ int RGWLibProcess::process_request(RGWLibRequest* req, RGWLibIO* io)
     abort_req(s, op, ret);
     goto done;
   }
+#endif
 
   if (s->user.suspended) {
     dout(10) << "user is suspended, uid=" << s->user.user_id << dendl;
