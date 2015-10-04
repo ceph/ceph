@@ -71,8 +71,9 @@ void RGWListBuckets_ObjStore_Lib::send_response_data(RGWUserBuckets& buckets)
   if (!sent_data)
     return;
 
+  // XXX we can improve this
   RGWListBucketsRequest* req
-    = reinterpret_cast<RGWListBucketsRequest*>(this);
+    = dynamic_cast<RGWListBucketsRequest*>(this);
 
   map<string, RGWBucketEnt>& m = buckets.get_buckets();
   for (const auto& iter : m) {

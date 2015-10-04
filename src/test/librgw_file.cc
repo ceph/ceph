@@ -61,7 +61,8 @@ TEST(LibRGW, LIST_BUCKETS) {
   using std::get;
 
   bool eof = false;
-  int ret = rgw_readdir(fs, &fs->root_fh, 0 /* offset */, r1_cb, &fids1, &eof);
+  uint64_t offset = 0;
+  int ret = rgw_readdir(fs, &fs->root_fh, &offset, r1_cb, &fids1, &eof);
   for (auto& fid : fids1) {
     std::cout << "fname: " << get<0>(fid) << " fid: " << get<1>(fid)
 	      << std::endl;

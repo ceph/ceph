@@ -54,6 +54,10 @@ public:
     s->info.request_params = "";
     s->info.domain = ""; /* XXX ? */
 
+    /* XXX fake user_id (will fix) */
+    s->user.user_id = user_id;
+    s->user.display_name = user_id;
+
     return 0;
   }
 
