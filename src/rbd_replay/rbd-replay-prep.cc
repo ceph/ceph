@@ -28,6 +28,11 @@
 using namespace std;
 using namespace rbd_replay;
 
+#define ASSERT_EXIT(check, str)    \
+  if (!(check)) {                  \
+    std::cerr << str << std::endl; \
+    exit(1);                       \
+  }
 
 class Thread {
 public:
@@ -186,10 +191,11 @@ public:
 					    NULL, // packet_seek
 					    NULL, // stream_list
 					    NULL); // metadata
-    assertf(trace_handle >= 0, "trace_handle = %d", trace_handle);
+    ASSERT_EXIT(trace_handle >= 0, "Error loading trace file");
 
     uint64_t start_time_ns = bt_trace_handle_get_timestamp_begin(ctx, trace_handle, BT_CLOCK_REAL);
-    assert(start_time_ns != -1ULL);
+    ASSERT_EXIT(start_time_ns != -1ULL,
+                "Error extracting creation time from trace");
 
     struct bt_ctf_iter *itr = bt_ctf_iter_create(ctx,
 						 NULL, // begin_pos
@@ -206,7 +212,7 @@ public:
 	break;
       }
       uint64_t ts = bt_ctf_get_timestamp(evt);
-      assert(ts != -1ULL);
+      ASSERT_EXIT(ts != -1ULL, "Error extracting event timestamp");
 
       if (first) {
 	trace_start = ts;
@@ -218,7 +224,7 @@ public:
       process_event(ts, evt);
 
       int r = bt_iter_next(bt_itr);
-      assert(!r);
+      ASSERT_EXIT(r == 0, "Error advancing event iterator");
     }
 
     bt_ctf_iter_destroy(itr);
@@ -296,13 +302,15 @@ private:
     const char *event_name = bt_ctf_event_name(evt);
     const struct bt_definition *scope_context = bt_ctf_get_top_level_scope(evt,
 									   BT_STREAM_EVENT_CONTEXT);
-    assert(scope_context);
+    ASSERT_EXIT(scope_context != NULL, "Error retrieving event context");
+
     const struct bt_definition *scope_fields = bt_ctf_get_top_level_scope(evt,
 									  BT_EVENT_FIELDS);
-    assert(scope_fields);
+    ASSERT_EXIT(scope_fields != NULL, "Error retrieving event fields");
 
     const struct bt_definition *pthread_id_field = bt_ctf_get_field(evt, scope_context, "pthread_id");
-    assert(pthread_id_field);
+    ASSERT_EXIT(pthread_id_field != NULL, "Error retrieving thread id");
+
     thread_id_t threadID = bt_ctf_get_uint64(pthread_id_field);
     Thread::ptr &thread(m_threads[threadID]);
     if (!thread) {
@@ -322,28 +330,34 @@ private:
 
       const char* string(const char* name) {
 	const struct bt_definition *field = bt_ctf_get_field(m_evt, m_scope, name);
-	assertf(field, "field name = '%s'", name);
+        ASSERT_EXIT(field != NULL, "Error retrieving field '" << name << "'");
+
 	const char* c = bt_ctf_get_string(field);
 	int err = bt_ctf_field_get_error();
-	assertf(c && err == 0, "field name = '%s', err = %d", name, err);
+        ASSERT_EXIT(c && err == 0, "Error retrieving field value '" << name <<
+                                   "': error=" << err);
 	return c;
       }
 
       int64_t int64(const char* name) {
 	const struct bt_definition *field = bt_ctf_get_field(m_evt, m_scope, name);
-	assertf(field, "field name = '%s'", name);
+        ASSERT_EXIT(field != NULL, "Error retrieving field '" << name << "'");
+
 	int64_t val = bt_ctf_get_int64(field);
 	int err = bt_ctf_field_get_error();
-	assertf(err == 0, "field name = '%s', err = %d", name, err);
+        ASSERT_EXIT(err == 0, "Error retrieving field value '" << name <<
+                              "': error=" << err);
 	return val;
       }
 
       uint64_t uint64(const char* name) {
 	const struct bt_definition *field = bt_ctf_get_field(m_evt, m_scope, name);
-	assertf(field, "field name = '%s'", name);
+        ASSERT_EXIT(field != NULL, "Error retrieving field '" << name << "'");
+
 	uint64_t val = bt_ctf_get_uint64(field);
 	int err = bt_ctf_field_get_error();
-	assertf(err == 0, "field name = '%s', err = %d", name, err);
+        ASSERT_EXIT(err == 0, "Error retrieving field value '" << name <<
+                              "': error=" << err);
 	return val;
       }
 
