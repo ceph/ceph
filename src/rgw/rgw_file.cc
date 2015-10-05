@@ -309,9 +309,10 @@ int rgw_readdir(struct rgw_fs *rgw_fs,
     (void) librgw.get_fe()->execute_req(&req);
   } else {
     /*
-      RGWListBucketRequest req(cct, rgw_fs->user_id, uri, rcb, cb_arg, offset);
-      ...
-    */
+     * bucket?
+     */
+    uri += "/";
+
     RGWListBucketRequest req(cct, rgw_fs->user_id, uri, rcb, cb_arg, offset);
     (void) librgw.get_fe()->execute_req(&req);
 
