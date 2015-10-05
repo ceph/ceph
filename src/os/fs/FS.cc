@@ -140,7 +140,7 @@ int FS::zero(int fd, uint64_t offset, uint64_t length)
     bufferptr bp(length);
     bp.zero();
     bl.append(bp);
-    int r = ::lseek64(fd, offset, SEEK_SET);
+    r = ::lseek64(fd, offset, SEEK_SET);
     if (r < 0) {
       r = -errno;
       goto out;
