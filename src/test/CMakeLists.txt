@@ -1283,6 +1283,19 @@ target_link_libraries(unittest_mds_authcap mds global ${CMAKE_DL_LIBS}
 set_target_properties(unittest_mds_authcap PROPERTIES COMPILE_FLAGS
   ${UNITTEST_CXX_FLAGS})
 
+# unittest_mds_sessionfilter
+add_executable(unittest_mds_sessionfilter EXCLUDE_FROM_ALL
+    mds/TestSessionFilter.cc
+  $<TARGET_OBJECTS:heap_profiler_objs>
+  $<TARGET_OBJECTS:common_util_obj>
+  )
+add_test(unittest_mds_sessionfilter unittest_mds_sessionfilter)
+add_dependencies(check unittest_mds_sessionfilter)
+target_link_libraries(unittest_mds_sessionfilter mds osdc common global
+  ${CMAKE_DL_LIBS} ${BLKID_LIBRARIES} ${TCMALLOC_LIBS} ${UNITTEST_LIBS})
+set_target_properties(unittest_mds_sessionfilter PROPERTIES COMPILE_FLAGS
+  ${UNITTEST_CXX_FLAGS})
+
 # unittest_ipaddr
 add_executable(unittest_ipaddr EXCLUDE_FROM_ALL
   test_ipaddr.cc)  
