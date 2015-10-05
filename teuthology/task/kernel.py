@@ -267,6 +267,13 @@ def install_firmware(ctx, config):
                 'remote', 'add', 'origin', uri,
                 ],
             )
+        # In case the remote already existed, set its url
+        role_remote.run(
+                args=[
+                    'sudo', 'git', '--git-dir=%s/.git' % fw_dir, 'remote',
+                    'set-url', 'origin', uri, run.Raw('>/dev/null')
+                    ]
+                )
         role_remote.run(
             args=[
                 'cd', fw_dir,
