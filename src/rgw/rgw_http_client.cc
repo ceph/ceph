@@ -584,12 +584,16 @@ void *RGWHTTPManager::reqs_thread_entry()
 	curl_easy_getinfo(e, CURLINFO_RESPONSE_CODE, (void **)&http_status);
 
 	int status = rgw_http_error_to_errno(http_status);
+        if (result != CURLE_OK && status == 0) {
+          status = -EAGAIN;
+        }
+        int id = req_data->id;
 	finish_request(req_data, status);
         switch (result) {
           case CURLE_OK:
             break;
           default:
-            dout(20) << "ERROR: msg->data.result=" << result << dendl;
+            dout(20) << "ERROR: msg->data.result=" << result << " req_data->id=" << id << " http_status=" << http_status << dendl;
 	    break;
         }
       }

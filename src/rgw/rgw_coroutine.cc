@@ -365,6 +365,14 @@ int RGWCoroutinesManager::run(list<RGWCoroutinesStack *>& stacks)
       handle_unblocked_stack(stacks, blocked_stack, &blocked_count);
     }
 
+    while (blocked_count >= ops_window) {
+      int ret = completion_mgr.get_next((void **)&blocked_stack);
+      if (ret < 0) {
+       ldout(cct, 0) << "ERROR: failed to clone shard, completion_mgr.get_next() returned ret=" << ret << dendl;
+      }
+      handle_unblocked_stack(stacks, blocked_stack, &blocked_count);
+    }
+
     ++iter;
     stacks.pop_front();
 
