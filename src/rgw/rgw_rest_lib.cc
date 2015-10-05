@@ -71,7 +71,7 @@ void RGWListBuckets_ObjStore_Lib::send_response_data(RGWUserBuckets& buckets)
   if (!sent_data)
     return;
 
-  // XXX we can improve this
+  // XXX if necessary, we can remove the need for dynamic_cast
   RGWListBucketsRequest* req
     = dynamic_cast<RGWListBucketsRequest*>(this);
 
@@ -114,7 +114,12 @@ int RGWListBucket_ObjStore_Lib::get_params()
 
 void RGWListBucket_ObjStore_Lib::send_response()
 {
+  // XXX if necessary, we can remove the need for dynamic_cast
+  RGWListBucketRequest* req
+    = dynamic_cast<RGWListBucketRequest*>(this);
+
   for (const auto& iter : objs) {
-    // XXXX cb(iter.key.name, iter.key.name); // XXX marker, attributes
+    /* call me maybe */
+    req->operator()(iter.key.name, iter.key.name); // XXX attributes
   }
 }
