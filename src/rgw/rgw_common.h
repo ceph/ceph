@@ -1118,7 +1118,8 @@ struct req_state {
 
   bool has_bad_meta;
 
-  RGWUserInfo user; 
+  RGWUserInfo *user;
+
   RGWAccessControlPolicy *bucket_acl;
   RGWAccessControlPolicy *object_acl;
 
@@ -1144,7 +1145,7 @@ struct req_state {
   string req_id;
   string trans_id;
 
-  req_state(CephContext *_cct, class RGWEnv* e);
+  req_state(CephContext* _cct, RGWEnv* e, RGWUserInfo* u);
   ~req_state();
 };
 

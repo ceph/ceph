@@ -586,7 +586,7 @@ void end_header(struct req_state* s, RGWOp* op, const char *content_type,
   dump_trans_id(s);
 
   if ((!s->err.is_err()) &&
-      (s->bucket_info.owner != s->user.user_id) &&
+      (s->bucket_info.owner != s->user->user_id) &&
       (s->bucket_info.requester_pays)) {
     STREAM_IO(s)->print("x-amz-request-charged: requester\r\n");
   }
@@ -1248,7 +1248,7 @@ void RGWRESTOp::send_response()
 
 int RGWRESTOp::verify_permission()
 {
-  return check_caps(s->user.caps);
+  return check_caps(s->user->caps);
 }
 
 RGWOp* RGWHandler_REST::get_op(RGWRados* store)

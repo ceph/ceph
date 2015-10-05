@@ -47,9 +47,10 @@ int process_request(RGWRados* store, RGWREST* rest, RGWRequest* req,
 
   RGWEnv& rgw_env = client_io->get_env();
 
-  struct req_state rstate(g_ceph_context, &rgw_env);
+  RGWUserInfo userinfo;
 
-  struct req_state* s = &rstate;
+  struct req_state rstate(g_ceph_context, &rgw_env, &userinfo);
+  struct req_state *s = &rstate;
 
   RGWObjectCtx rados_ctx(store, s);
   s->obj_ctx = &rados_ctx;
@@ -98,8 +99,8 @@ int process_request(RGWRados* store, RGWREST* rest, RGWRequest* req,
     goto done;
   }
 
-  if (s->user.suspended) {
-    dout(10) << "user is suspended, uid=" << s->user.user_id << dendl;
+  if (s->user->suspended) {
+    dout(10) << "user is suspended, uid=" << s->user->user_id << dendl;
     abort_early(s, op, -ERR_USER_SUSPENDED, handler);
     goto done;
   }
