@@ -222,9 +222,10 @@ void Shell::get_global_options(po::options_description *opts) {
     ("cluster", po::value<std::string>(), "cluster name")
     ("id,i", po::value<std::string>(), "client id (without 'client.' prefix)")
     ("name,n", po::value<std::string>(), "client name")
+    ("mon_host,m", po::value<std::string>(), "monitor host")
     ("secret", po::value<Secret>(), "path to secret key (deprecated)")
-    ("keyfile", po::value<std::string>(), "path to secret key")
-    ("keyring", po::value<std::string>(), "path to keyring");
+    ("keyfile,K", po::value<std::string>(), "path to secret key")
+    ("keyring,k", po::value<std::string>(), "path to keyring");
 }
 
 void Shell::prune_command_line_arguments(int arg_count, const char **arg_values,
