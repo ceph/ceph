@@ -27,7 +27,7 @@ public:
     return caps.check_cap("bilog", RGW_CAP_READ);
   }
   int verify_permission() {
-    return check_caps(s->user.caps);
+    return check_caps(s->user->caps);
   }
   virtual void send_response();
   virtual void send_response(list<rgw_bi_log_entry>& entries, string& marker);
@@ -50,7 +50,7 @@ public:
     return caps.check_cap("bilog", RGW_CAP_READ);
   }
   int verify_permission() {
-    return check_caps(s->user.caps);
+    return check_caps(s->user->caps);
   }
   virtual void send_response();
   void execute();
@@ -85,7 +85,7 @@ public:
     return caps.check_cap("mdlog", RGW_CAP_READ);
   }
   int verify_permission() {
-    return check_caps(s->user.caps);
+    return check_caps(s->user->caps);
   }
   void execute();
   virtual void send_response();
@@ -104,7 +104,7 @@ public:
     return caps.check_cap("mdlog", RGW_CAP_READ);
   }
   int verify_permission() {
-    return check_caps(s->user.caps);
+    return check_caps(s->user->caps);
   }
   void execute();
   virtual void send_response();
@@ -123,7 +123,7 @@ public:
     return caps.check_cap("mdlog", RGW_CAP_READ);
   }
   int verify_permission() {
-    return check_caps(s->user.caps);
+    return check_caps(s->user->caps);
   }
   void execute();
   virtual void send_response();
@@ -186,7 +186,7 @@ public:
     return caps.check_cap("datalog", RGW_CAP_READ);
   }
   int verify_permission() {
-    return check_caps(s->user.caps);
+    return check_caps(s->user->caps);
   }
   void execute();
   virtual void send_response();
@@ -205,7 +205,7 @@ public:
     return caps.check_cap("datalog", RGW_CAP_READ);
   }
   int verify_permission() {
-    return check_caps(s->user.caps);
+    return check_caps(s->user->caps);
   }
   void execute();
   virtual void send_response();
@@ -224,7 +224,7 @@ public:
     return caps.check_cap("datalog", RGW_CAP_READ);
   }
   int verify_permission() {
-    return check_caps(s->user.caps);
+    return check_caps(s->user->caps);
   }
   void execute();
   virtual void send_response();

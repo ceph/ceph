@@ -80,8 +80,8 @@ public:
     s->info.domain = ""; /* XXX ? */
 
     /* XXX fake user_id (will fix) */
-    s->user.user_id = user_id;
-    s->user.display_name = user_id;
+    s->user->user_id = user_id;
+    s->user->display_name = user_id;
 
     return 0;
   }
@@ -142,8 +142,8 @@ public:
     s->info.domain = ""; /* XXX ? */
 
     /* XXX fake user_id and perms (will fix) */
-    s->user.user_id = user_id;
-    s->user.display_name = user_id;
+    s->user->user_id = user_id;
+    s->user->display_name = user_id;
     s->perm_mask = RGW_PERM_READ;
 
     return 0;
