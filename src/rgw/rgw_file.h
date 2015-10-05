@@ -8,6 +8,31 @@
 
 /* internal header */
 
+class RGWFileHandle
+{
+  struct rgw_file_handle fh;
+public:
+  RGWFileHandle() {
+    fh.fh_private = this;
+  }
+
+  struct rgw_file_handle* get_fh() { return &fh; }
+}; /* RGWFileHandle */
+
+class RGWLibFS
+{
+  struct rgw_fs fs;
+  // XXX auth caching
+
+public:
+  RGWLibFS() {
+    fs.fs_private = this;
+  }
+
+  struct rgw_fs* get_fs() { return &fs; }
+
+}; /* RGWLibFS */
+
 /*
   read directory content (buckets)
 */
