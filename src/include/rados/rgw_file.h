@@ -24,20 +24,35 @@
 extern "C" {
 #endif
 
+
+/*
+ * object types
+ */
+enum rgw_fh_type {
+  RGW_FS_TYPE_FILE = 0,
+  RGW_FS_TYPE_DIRECTORY,
+};
+
 /*
  * dynamic allocated handle to support nfs handle
- * Currently we support only one instance of librgw.
- * In order to support several instance we will need to include an
- * instance id (16bit)
  */
 struct rgw_file_handle
 {
-  uint64_t handle;
+  uint64_t handle; // XXX deprecating
+  void *fh_private; /* librgw private data */
+  /* opaque content-addressable name */
+  struct {
+    void *data;
+    uint16_t len;
+  } fh_name;
+  /* object type */
+  enum rgw_fh_type fh_type;
 };
 
 struct rgw_fs
 {
   librgw_t rgw;
+  void *fs_private;
   struct rgw_file_handle root_fh;
   char *user_id;
   char *access_key_id;
