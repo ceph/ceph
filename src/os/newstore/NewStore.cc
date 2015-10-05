@@ -802,7 +802,7 @@ bool NewStore::test_mount_in_use()
   return ret;
 }
 
-int NewStore::_open_db()
+int NewStore::_open_db(bool create)
 {
   assert(!db);
   char fn[PATH_MAX];
@@ -821,7 +821,12 @@ int NewStore::_open_db()
     options = g_conf->newstore_rocksdb_options;
   db->init(options);
   stringstream err;
-  if (db->create_and_open(err)) {
+  int r;
+  if (create)
+    r = db->create_and_open(err);
+  else
+    r = db->open(err);
+  if (r) {
     derr << __func__ << " erroring opening db: " << err.str() << dendl;
     delete db;
     db = NULL;
@@ -928,7 +933,7 @@ int NewStore::mkfs()
   if (r < 0)
     goto out_close_fsid;
 
-  r = _open_db();
+  r = _open_db(true);
   if (r < 0)
     goto out_close_frag;
 
@@ -972,7 +977,7 @@ int NewStore::mount()
 
   // FIXME: superblock, features
 
-  r = _open_db();
+  r = _open_db(false);
   if (r < 0)
     goto out_frag;
 

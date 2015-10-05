@@ -524,7 +524,7 @@ private:
   int _open_frag();
   int _create_frag();
   void _close_frag();
-  int _open_db();
+  int _open_db(bool create);
   void _close_db();
   int _open_collections();
   void _close_collections();
