@@ -98,7 +98,8 @@ TEST(LibRGW, LIST_OBJECTS) {
   for (auto& fid : fids1) {
     std::cout << "readdir in bucket " << get<0>(fid) << std::endl;
     bool eof = false;
-    int ret = rgw_readdir(fs, get<2>(fid), 0 /* offset */, r2_cb, &fids2,
+    uint64_t offset = 0;
+    int ret = rgw_readdir(fs, get<2>(fid), &offset, r2_cb, &fids2,
 			  &eof);
     for (auto& fid2 : fids2) {
       std::cout << "fname: " << get<0>(fid2) << " fid: " << get<1>(fid2)
