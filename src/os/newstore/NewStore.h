@@ -461,7 +461,6 @@ private:
   KeyValueDB *db;
   FS *fs;
   uuid_d fsid;
-  string db_path;
   int path_fd;  ///< open handle to $path
   int fsid_fd;  ///< open handle (locked) to $path/fsid
   int frag_fd;  ///< open handle to $path/fragments
