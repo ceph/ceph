@@ -2231,6 +2231,8 @@ public:
 
   uint64_t instance_id();
   uint64_t next_bucket_id();
+
+  librados::Rados* get_rados_handle();
 };
 
 class RGWStoreManager {
