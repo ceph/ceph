@@ -25,7 +25,7 @@ public:
     return caps.check_cap("opstate", RGW_CAP_READ);
   }
   int verify_permission() {
-    return check_caps(s->user.caps);
+    return check_caps(s->user->caps);
   }
   void execute();
   virtual void send_response();

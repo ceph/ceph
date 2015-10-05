@@ -74,14 +74,14 @@ static void dump_account_metadata(struct req_state * const s,
   /* Dump TempURL-related stuff */
   if (s->perm_mask == RGW_PERM_FULL_CONTROL) {
     map<int, string>::iterator iter;
-    iter = s->user.temp_url_keys.find(0);
-    if (iter != s->user.temp_url_keys.end() && !iter->second.empty()) {
+    iter = s->user->temp_url_keys.find(0);
+    if (iter != s->user->temp_url_keys.end() && !iter->second.empty()) {
       STREAM_IO(s)->print("X-Account-Meta-Temp-Url-Key: %s\r\n",
 			  iter->second.c_str());
     }
 
-    iter = s->user.temp_url_keys.find(1);
-    if (iter != s->user.temp_url_keys.end() && !iter->second.empty()) {
+    iter = s->user->temp_url_keys.find(1);
+    if (iter != s->user->temp_url_keys.end() && !iter->second.empty()) {
       STREAM_IO(s)->print("X-Account-Meta-Temp-Url-Key-2: %s\r\n",
 			  iter->second.c_str());
     }
@@ -128,7 +128,7 @@ void RGWListBuckets_ObjStore_SWIFT::send_response_begin(bool has_buckets)
   if (! op_ret) {
     dump_start(s);
     s->formatter->open_array_section_with_attrs("account",
-            FormatterAttrs("name", s->user.display_name.c_str(), NULL));
+            FormatterAttrs("name", s->user->display_name.c_str(), NULL));
 
     sent_data = true;
   }
@@ -372,15 +372,15 @@ static void dump_container_metadata(struct req_state *s, RGWBucketEnt& bucket)
 void RGWStatAccount_ObjStore_SWIFT::execute()
 {
   RGWStatAccount_ObjStore::execute();
-
-  op_ret = rgw_get_user_attrs_by_uid(store, s->user.user_id, attrs);
+  op_ret = rgw_get_user_attrs_by_uid(store, s->user->user_id, attrs);
 }
 
 void RGWStatAccount_ObjStore_SWIFT::send_response()
 {
   if (op_ret >= 0) {
     op_ret = STATUS_NO_CONTENT;
-    dump_account_metadata(s, buckets_count, buckets_objcount, buckets_size, buckets_size_rounded, attrs);
+    dump_account_metadata(s, buckets_count, buckets_objcount, buckets_size,
+			  buckets_size_rounded, attrs);
   }
 
   set_req_state_err(s, op_ret);
@@ -423,7 +423,7 @@ static int get_swift_container_settings(req_state *s, RGWRados *store, RGWAccess
 
   if (read_attr || write_attr) {
     RGWAccessControlPolicy_SWIFT swift_policy(s->cct);
-    int r = swift_policy.create(store, s->user.user_id, s->user.display_name, read_list, write_list);
+    int r = swift_policy.create(store, s->user->user_id, s->user->display_name, read_list, write_list);
     if (r < 0)
       return r;
 
@@ -465,7 +465,7 @@ int RGWCreateBucket_ObjStore_SWIFT::get_params()
   }
 
   if (!has_policy) {
-    policy.create_default(s->user.user_id, s->user.display_name);
+    policy.create_default(s->user->user_id, s->user->display_name);
   }
 
   location_constraint = store->region.api_name;
@@ -566,7 +566,7 @@ int RGWPutObj_ObjStore_SWIFT::get_params()
     }
   }
 
-  policy.create_default(s->user.user_id, s->user.display_name);
+  policy.create_default(s->user->user_id, s->user->display_name);
 
   int r = get_delete_at_param(s, &delete_at);
   if (r < 0) {
@@ -898,7 +898,7 @@ static void dump_object_metadata(struct req_state * const s,
 
 int RGWCopyObj_ObjStore_SWIFT::init_dest_policy()
 {
-  dest_policy.create_default(s->user.user_id, s->user.display_name);
+  dest_policy.create_default(s->user->user_id, s->user->display_name);
 
   return 0;
 }
@@ -967,7 +967,7 @@ void RGWCopyObj_ObjStore_SWIFT::dump_copy_info()
 
   /* Dump X-Copied-From-Account */
   string account_name;
-  url_encode(s->user.user_id.id, account_name); // XXX tenant
+  url_encode(s->user->user_id.id, account_name); // XXX tenant
   STREAM_IO(s)->print("X-Copied-From-Account: %s\r\n", account_name.c_str());
 
   /* Dump X-Copied-From-Last-Modified. */
@@ -1286,7 +1286,7 @@ int RGWHandler_REST_SWIFT::authorize()
   if ((!s->os_auth_token && s->info.args.get("temp_url_sig").empty()) ||
       (s->op == OP_OPTIONS)) {
     /* anonymous access */
-    rgw_get_anon_user(s->user);
+    rgw_get_anon_user(*(s->user));
     s->perm_mask = RGW_PERM_FULL_CONTROL;
     return 0;
   }
@@ -1424,7 +1424,7 @@ int RGWHandler_REST_SWIFT::init_from_header(struct req_state *s)
   s->info.effective_uri = "/" + first;
 
   /* XXX Temporarily not parsing URL until Auth puts something in there. */
-  s->bucket_tenant = s->user.user_id.tenant;
+  s->bucket_tenant = s->user->user_id.tenant;
   s->bucket_name = first;
 
   if (req.size()) {
@@ -1462,7 +1462,7 @@ int RGWHandler_REST_SWIFT::init(RGWRados *store, struct req_state *s,
 				      s->src_object);
     if (!result)
        return -ERR_BAD_URL;
-    s->src_tenant_name = s->user.user_id.tenant;
+    s->src_tenant_name = s->user->user_id.tenant;
   }
 
   s->dialect = "swift";
@@ -1479,7 +1479,7 @@ int RGWHandler_REST_SWIFT::init(RGWRados *store, struct req_state *s,
 				      dest_obj_key);
     if (!result)
        return -ERR_BAD_URL;
-    dest_tenant_name = s->user.user_id.tenant;
+    dest_tenant_name = s->user->user_id.tenant;
 
     string dest_object = dest_obj_key.name;
     if (dest_bucket_name != s->bucket_name) {

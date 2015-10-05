@@ -200,8 +200,10 @@ int RGWLibProcess::process_request(RGWLibRequest* req, RGWLibIO* io)
    */
   rgw_env.set("HTTP_HOST", "10.1.1.220" /* XXXX: fix me */);
 
+  RGWUserInfo userinfo;
+
   /* XXX and -then- bloat up req_state with string copies from it */
-  struct req_state rstate(req->cct, &rgw_env);
+  struct req_state rstate(req->cct, &rgw_env, &userinfo);
   struct req_state *s = &rstate;
 
   // XXX fix this
@@ -238,8 +240,8 @@ int RGWLibProcess::process_request(RGWLibRequest* req, RGWLibIO* io)
   }
 #endif
 
-  if (s->user.suspended) {
-    dout(10) << "user is suspended, uid=" << s->user.user_id << dendl;
+  if (s->user->suspended) {
+    dout(10) << "user is suspended, uid=" << s->user->user_id << dendl;
     abort_req(s, op, -ERR_USER_SUSPENDED);
     goto done;
   }

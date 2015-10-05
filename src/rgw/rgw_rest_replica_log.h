@@ -29,7 +29,7 @@ public:
     return caps.check_cap(obj_type.c_str(), RGW_CAP_READ);
   }
   int verify_permission() {
-    return check_caps(s->user.caps);
+    return check_caps(s->user->caps);
   }
   void execute();
   virtual void send_response();
@@ -91,7 +91,7 @@ public:
     return caps.check_cap("bilog", RGW_CAP_READ);
   }
   int verify_permission() {
-    return check_caps(s->user.caps);
+    return check_caps(s->user->caps);
   }
   void execute();
   virtual void send_response();
