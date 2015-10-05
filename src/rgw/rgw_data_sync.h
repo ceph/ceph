@@ -334,9 +334,9 @@ public:
   int init(const string& _source_zone, RGWRESTConn *_conn, const string& _bucket_name, const string& _bucket_id, int _shard_id);
   void finish();
 
-  RGWCoroutine *read_sync_status_cr(RGWObjectCtx& obj_ctx, rgw_bucket_shard_sync_info *sync_status);
-  RGWCoroutine *init_sync_status_cr(RGWObjectCtx& obj_ctx);
-  RGWCoroutine *run_sync_cr(RGWObjectCtx& obj_ctx);
+  RGWCoroutine *read_sync_status_cr(rgw_bucket_shard_sync_info *sync_status);
+  RGWCoroutine *init_sync_status_cr();
+  RGWCoroutine *run_sync_cr();
 
   void wakeup();
 };
