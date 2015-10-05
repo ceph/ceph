@@ -6,6 +6,8 @@
 
 #include "include/rados/librados.hpp"
 #include "common/config.h"
+#include "common/Cond.h"
+#include "common/Mutex.h"
 #include "include/atomic.h"
 #include "include/buffer.h"
 #include "test/librados_test_stub/TestWatchNotify.h"
@@ -13,6 +15,7 @@
 #include <boost/functional/hash.hpp>
 #include <list>
 #include <map>
+#include <set>
 #include <string>
 #include <vector>
 
@@ -36,6 +39,20 @@ public:
     std::string oid;
     std::string locator;
     std::string nspace;
+  };
+
+  class Transaction {
+  public:
+    Transaction(TestRadosClient *rados_client, const std::string &oid)
+      : rados_client(rados_client), oid(oid) {
+      rados_client->transaction_start(oid);
+    }
+    ~Transaction() {
+      rados_client->transaction_finish(oid);
+    }
+  private:
+    TestRadosClient *rados_client;
+    std::string oid;
   };
 
   TestRadosClient(CephContext *cct);
@@ -97,6 +114,13 @@ private:
   boost::hash<std::string> m_hash;
 
   TestWatchNotify m_watch_notify;
+
+  Mutex m_transaction_lock;
+  Cond m_transaction_cond;
+  std::set<std::string> m_transactions;
+
+  void transaction_start(const std::string &oid);
+  void transaction_finish(const std::string &oid);
 
 };
 

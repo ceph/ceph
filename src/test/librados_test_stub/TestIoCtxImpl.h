@@ -34,6 +34,8 @@ private:
 
 class TestIoCtxImpl {
 public:
+  typedef boost::function<int(TestIoCtxImpl *, const std::string &)> Operation;
+
 
   TestIoCtxImpl();
   explicit TestIoCtxImpl(TestRadosClient *client, int64_t m_pool_id,
@@ -135,6 +137,9 @@ public:
   virtual int xattr_set(const std::string& oid, const std::string &name,
                         bufferlist& bl) = 0;
   virtual int zero(const std::string& oid, uint64_t off, uint64_t len) = 0;
+
+  int execute_operation(const std::string& oid,
+                        const Operation &operation);
 
 protected:
   TestIoCtxImpl(const TestIoCtxImpl& rhs);

@@ -84,7 +84,8 @@ private:
 
 TestRadosClient::TestRadosClient(CephContext *cct)
   : m_cct(cct->get()),
-    m_watch_notify(m_cct)
+    m_watch_notify(m_cct),
+    m_transaction_lock("TestRadosClient::m_transaction_lock")
 {
   get();
 
@@ -223,6 +224,23 @@ void TestRadosClient::flush_aio_operations(AioCompletionImpl *c) {
 Finisher *TestRadosClient::get_finisher(const std::string &oid) {
   std::size_t h = m_hash(oid);
   return m_finishers[h % m_finishers.size()];
+}
+
+void TestRadosClient::transaction_start(const std::string &oid) {
+  Mutex::Locker locker(m_transaction_lock);
+  while (m_transactions.count(oid)) {
+    m_transaction_cond.Wait(m_transaction_lock);
+  }
+  std::pair<std::set<std::string>::iterator, bool> result =
+    m_transactions.insert(oid);
+  assert(result.second);
+}
+
+void TestRadosClient::transaction_finish(const std::string &oid) {
+  Mutex::Locker locker(m_transaction_lock);
+  size_t count = m_transactions.erase(oid);
+  assert(count == 1);
+  m_transaction_cond.Signal();
 }
 
 } // namespace librados
