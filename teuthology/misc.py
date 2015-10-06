@@ -910,7 +910,7 @@ def wait_until_osds_up(ctx, cluster, remote):
         )
         out = r.stdout.getvalue()
         j = json.loads('\n'.join(out.split('\n')[1:]))
-        up = len(j['osds'])
+        up = len(filter(lambda o: 'up' in o['state'], j['osds']))
         log.debug('%d of %d OSDs are up' % (up, num_osds))
         if up == num_osds:
             break

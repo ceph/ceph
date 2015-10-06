@@ -12,6 +12,27 @@ class FakeRemote(object):
     pass
 
 
+def test_wait_until_osds_up():
+    ctx = argparse.Namespace()
+    remote = FakeRemote()
+    class r():
+        class o:
+            def getvalue(self):
+                return 'IGNORED\n{"osds":[{"state":["up"]}]}'
+        stdout = o()
+
+    remote.run = lambda **kwargs: r()
+    ctx.cluster = cluster.Cluster(
+        remotes=[
+            (remote, ['osd.0', 'client.1'])
+        ],
+    )
+    with patch.multiple(
+            misc,
+            get_testdir=lambda ctx: "TESTDIR",
+    ):
+        misc.wait_until_osds_up(ctx, ctx.cluster, remote)
+
 def test_get_clients_simple():
     ctx = argparse.Namespace()
     remote = FakeRemote()
