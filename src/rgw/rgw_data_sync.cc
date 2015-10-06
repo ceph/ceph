@@ -576,7 +576,7 @@ public:
   }
 };
 
-#define DATA_SYNC_UPDATE_MARKER_WINDOW 10
+#define DATA_SYNC_UPDATE_MARKER_WINDOW 1
 
 class RGWDataSyncShardMarkerTrack : public RGWSyncShardMarkerTrack<string> {
   RGWRados *store;
