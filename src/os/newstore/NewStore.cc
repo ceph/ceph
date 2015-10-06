@@ -2077,7 +2077,8 @@ int NewStore::_open_fid(fid_t fid, unsigned flags)
   return fd;
 }
 
-int NewStore::_create_fid(TransContext *txc, fid_t *fid, unsigned flags)
+int NewStore::_create_fid(TransContext *txc, OnodeRef o,
+			  fid_t *fid, unsigned flags)
 {
   {
     Mutex::Locker l(fid_lock);
@@ -2088,7 +2089,8 @@ int NewStore::_create_fid(TransContext *txc, fid_t *fid, unsigned flags)
       ++fid_last.fno;
       if (fid_last.fno >= fid_max.fno) {
 	// raise fid_max, same fset, capping to max_dir_size
-	fid_max.fno = min(fid_max.fno + g_conf->newstore_fid_prealloc, g_conf->newstore_max_dir_size);
+	fid_max.fno = min(fid_max.fno + g_conf->newstore_fid_prealloc,
+			  g_conf->newstore_max_dir_size);
 	assert(fid_max.fno >= fid_last.fno);
 	bufferlist bl;
 	::encode(fid_max, bl);
@@ -2137,6 +2139,13 @@ int NewStore::_create_fid(TransContext *txc, fid_t *fid, unsigned flags)
     derr << __func__ << " cannot create " << path << "/fragments/"
 	 << *fid << ": " << cpp_strerror(r) << dendl;
     return r;
+  }
+
+  if (o->onode.expected_object_size) {
+    unsigned hint = MIN(o->onode.expected_object_size,
+			o->onode.frag_size);
+    dout(20) << __func__ << " set alloc hint to " << hint << dendl;
+    fs->set_alloc_hint(fd, hint);
   }
 
   if (g_conf->newstore_open_by_handle) {
@@ -3349,7 +3358,7 @@ int NewStore::_do_write_all_overlays(TransContext *txc,
 	f->offset = 0;
 	f->length = p->first + p->second.length - frag_first;
 	assert(f->length <= o->onode.frag_size);
-	int fd = _create_fid(txc, &f->fid, O_RDWR);
+	int fd = _create_fid(txc, o, &f->fid, O_RDWR);
 	if (fd < 0) {
 	  return fd;
 	}
@@ -3591,7 +3600,7 @@ int NewStore::_do_write(TransContext *txc,
       f.offset = 0;
       f.length = MIN(frag_size, o->onode.size - frag_first);
       assert(f.length <= frag_size);
-      fd = _create_fid(txc, &f.fid, flags);
+      fd = _create_fid(txc, o, &f.fid, flags);
       if (fd < 0) {
 	r = fd;
 	goto out;
@@ -3635,7 +3644,7 @@ int NewStore::_do_write(TransContext *txc,
       op->fid = fp->second.fid;
 
       f.length = length;
-      fd = _create_fid(txc, &f.fid, O_RDWR);
+      fd = _create_fid(txc, o, &f.fid, O_RDWR);
       if (fd < 0) {
 	r = fd;
 	goto out;
