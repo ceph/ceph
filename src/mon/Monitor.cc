@@ -3437,13 +3437,7 @@ void Monitor::_ms_dispatch(Message *m)
     logger->set(l_mon_num_sessions, session_map.get_size());
     logger->inc(l_mon_session_add);
 
-    if (!src_is_mon) {
-      dout(30) << __func__ << "  setting timeout on session" << dendl;
-      // set an initial timeout here, so we will trim this session
-      // even if they don't do anything.
-      s->until = ceph_clock_now(g_ceph_context);
-      s->until += g_conf->mon_subscribe_interval;
-    } else {
+    if (src_is_mon) {
       // give it monitor caps; the peer type has been authenticated
       dout(5) << __func__ << " setting monitor caps on this connection" << dendl;
       if (!s->caps.is_allow_all()) // but no need to repeatedly copy
@@ -4131,8 +4125,6 @@ void Monitor::handle_subscribe(MonOpRequestRef op)
   MonSession *s = op->get_session();
   assert(s);
 
-  s->until = ceph_clock_now(g_ceph_context);
-  s->until += g_conf->mon_subscribe_interval;
   for (map<string,ceph_mon_subscribe_item>::iterator p = m->what.begin();
        p != m->what.end();
        ++p) {
