@@ -60,14 +60,13 @@ class RGWListBucketsRequest : public RGWLibRequest,
 			      public RGWListBuckets_ObjStore_Lib /* RGWOp */
 {
 public:
-  RGWUserInfo* user;
   uint64_t* offset;
   void* cb_arg;
   rgw_readdir_cb rcb;
 
   RGWListBucketsRequest(CephContext* _cct, RGWUserInfo *_user,
 			rgw_readdir_cb _rcb, void* _cb_arg, uint64_t* _offset)
-    : RGWLibRequest(_cct), user(_user), offset(_offset), cb_arg(_cb_arg),
+    : RGWLibRequest(_cct, _user), offset(_offset), cb_arg(_cb_arg),
       rcb(_rcb) {
     magic = 71;
     op = this;
@@ -119,7 +118,6 @@ class RGWListBucketRequest : public RGWLibRequest,
 			     public RGWListBucket_ObjStore_Lib /* RGWOp */
 {
 public:
-  RGWUserInfo* user;
   std::string& uri;
   uint64_t* offset;
   void* cb_arg;
@@ -127,7 +125,7 @@ public:
 
   RGWListBucketRequest(CephContext* _cct, RGWUserInfo *_user, std::string& _uri,
 		      rgw_readdir_cb _rcb, void* _cb_arg, uint64_t* _offset)
-    : RGWLibRequest(_cct), user(_user), uri(_uri), offset(_offset),
+    : RGWLibRequest(_cct, _user), uri(_uri), offset(_offset),
       cb_arg(_cb_arg),
       rcb(_rcb) {
     magic = 72;

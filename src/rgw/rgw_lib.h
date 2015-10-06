@@ -110,9 +110,11 @@ public:
   /* unambiguiously return req_state */
   inline struct req_state* get_state() { return this->RGWRequest::s; }
 
-  RGWLibRequest(CephContext* _cct)
-    :  RGWRequest(0), cct(_cct), user(nullptr)
+  RGWLibRequest(CephContext* _cct, RGWUserInfo* _user)
+    :  RGWRequest(0), cct(_cct), user(_user)
     {}
+
+  RGWUserInfo* get_user() { return user; }
 
   /* descendant equivalent of *REST*::init_from_header(...):
    * prepare request for execute()--should mean, fixup URI-alikes
