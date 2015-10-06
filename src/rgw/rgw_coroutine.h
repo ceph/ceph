@@ -249,6 +249,7 @@ class RGWCoroutinesStack : public RefCountedObject {
   bool error_flag;
   bool blocked_flag;
   bool sleep_flag;
+  bool interval_wait_flag;
 
   bool is_scheduled;
 
@@ -281,6 +282,12 @@ public:
   }
   bool is_io_blocked() {
     return blocked_flag;
+  }
+  void set_interval_wait(bool flag) {
+    interval_wait_flag = flag;
+  }
+  bool is_interval_waiting() {
+    return interval_wait_flag;
   }
   void set_sleeping(bool flag) {
     bool wakeup = sleep_flag & !flag;

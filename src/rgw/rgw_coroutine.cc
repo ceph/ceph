@@ -105,7 +105,7 @@ int RGWCoroutine::io_block(int ret) {
 
 RGWCoroutinesStack::RGWCoroutinesStack(CephContext *_cct, RGWCoroutinesManager *_ops_mgr, RGWCoroutine *start) : cct(_cct), ops_mgr(_ops_mgr),
                                                                                                          done_flag(false), error_flag(false), blocked_flag(false),
-                                                                                                         sleep_flag(false), is_scheduled(false), is_waiting_for_child(false),
+                                                                                                         sleep_flag(false), interval_wait_flag(false), is_scheduled(false), is_waiting_for_child(false),
 													 retcode(0),
 													 env(NULL), parent(NULL)
 {
@@ -199,6 +199,7 @@ int RGWCoroutinesStack::wait(const utime_t& interval)
   RGWCompletionManager *completion_mgr = env->manager->get_completion_mgr();
   completion_mgr->wait_interval((void *)this, interval, (void *)this);
   set_io_blocked(true);
+  set_interval_wait(true);
   return 0;
 }
 
@@ -301,6 +302,7 @@ void RGWCoroutinesManager::handle_unblocked_stack(list<RGWCoroutinesStack *>& st
 {
   --(*blocked_count);
   stack->set_io_blocked(false);
+  stack->set_interval_wait(false);
   if (!stack->is_done()) {
     stacks.push_back(stack);
   } else {
@@ -311,6 +313,7 @@ void RGWCoroutinesManager::handle_unblocked_stack(list<RGWCoroutinesStack *>& st
 int RGWCoroutinesManager::run(list<RGWCoroutinesStack *>& stacks)
 {
   int blocked_count = 0;
+  int interval_wait_count = 0;
   RGWCoroutinesEnv env;
 
   env.manager = this;
@@ -332,6 +335,9 @@ int RGWCoroutinesManager::run(list<RGWCoroutinesStack *>& stacks)
 
     if (stack->is_io_blocked()) {
       ldout(cct, 20) << __func__ << ":" << " stack=" << (void *)stack << " is io blocked" << dendl;
+      if (stack->is_interval_waiting()) {
+        interval_wait_count++;
+      }
       blocked_count++;
     } else if (stack->is_blocked()) {
       /* do nothing, we'll re-add the stack when the blocking stack is done,
@@ -345,6 +351,9 @@ int RGWCoroutinesManager::run(list<RGWCoroutinesStack *>& stacks)
       while (stack->unblock_stack(&s)) {
 	if (!s->is_blocked_by_stack() && !s->is_done()) {
 	  if (s->is_io_blocked()) {
+            if (stack->is_interval_waiting()) {
+              interval_wait_count++;
+            }
 	    blocked_count++;
 	  } else {
 	    s->schedule();
@@ -365,7 +374,12 @@ int RGWCoroutinesManager::run(list<RGWCoroutinesStack *>& stacks)
       handle_unblocked_stack(stacks, blocked_stack, &blocked_count);
     }
 
-    while (blocked_count >= ops_window) {
+    /*
+     * only account blocked operations that are not in interval_wait, these are stacks that
+     * were put on a wait without any real IO operations. While we mark these as io_blocked,
+     * these aren't really waiting for IOs
+     */
+    while (blocked_count - interval_wait_count >= ops_window) {
       int ret = completion_mgr.get_next((void **)&blocked_stack);
       if (ret < 0) {
        ldout(cct, 0) << "ERROR: failed to clone shard, completion_mgr.get_next() returned ret=" << ret << dendl;
