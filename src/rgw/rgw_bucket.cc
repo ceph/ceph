@@ -1134,6 +1134,30 @@ void rgw_data_change::dump(Formatter *f) const
   encode_json("timestamp", timestamp, f);
 }
 
+void rgw_data_change::decode_json(JSONObj *obj) {
+  string s;
+  JSONDecoder::decode_json("entity_type", s, obj);
+  if (s == "bucket") {
+    entity_type = ENTITY_TYPE_BUCKET;
+  } else {
+    entity_type = ENTITY_TYPE_UNKNOWN;
+  }
+  JSONDecoder::decode_json("key", key, obj);
+  JSONDecoder::decode_json("timestamp", timestamp, obj);
+}
+
+void rgw_data_change_log_entry::dump(Formatter *f) const
+{
+  encode_json("log_id", log_id, f);
+  encode_json("log_timestamp", log_timestamp, f);
+  encode_json("entry", entry, f);
+}
+
+void rgw_data_change_log_entry::decode_json(JSONObj *obj) {
+  JSONDecoder::decode_json("log_id", log_id, obj);
+  JSONDecoder::decode_json("log_timestamp", log_timestamp, obj);
+  JSONDecoder::decode_json("entry", entry, obj);
+}
 
 int RGWDataChangesLog::choose_oid(const rgw_bucket_shard& bs) {
     const string& name = bs.bucket.name;
@@ -1338,7 +1362,7 @@ int RGWDataChangesLog::add_entry(rgw_bucket& bucket, int shard_id) {
 }
 
 int RGWDataChangesLog::list_entries(int shard, utime_t& start_time, utime_t& end_time, int max_entries,
-				    list<rgw_data_change>& entries,
+				    list<rgw_data_change_log_entry>& entries,
 				    const string& marker,
 				    string *out_marker,
 				    bool *truncated) {
@@ -1353,22 +1377,24 @@ int RGWDataChangesLog::list_entries(int shard, utime_t& start_time, utime_t& end
 
   list<cls_log_entry>::iterator iter;
   for (iter = log_entries.begin(); iter != log_entries.end(); ++iter) {
-    rgw_data_change entry;
+    rgw_data_change_log_entry log_entry;
+    log_entry.log_id = iter->id;
+    log_entry.log_timestamp = iter->timestamp;
     bufferlist::iterator liter = iter->data.begin();
     try {
-      ::decode(entry, liter);
+      ::decode(log_entry.entry, liter);
     } catch (buffer::error& err) {
       lderr(cct) << "ERROR: failed to decode data changes log entry" << dendl;
       return -EIO;
     }
-    entries.push_back(entry);
+    entries.push_back(log_entry);
   }
 
   return 0;
 }
 
 int RGWDataChangesLog::list_entries(utime_t& start_time, utime_t& end_time, int max_entries,
-             list<rgw_data_change>& entries, LogMarker& marker, bool *ptruncated) {
+             list<rgw_data_change_log_entry>& entries, LogMarker& marker, bool *ptruncated) {
   bool truncated;
   entries.clear();
 
