@@ -1401,6 +1401,8 @@ int main(int argc, char **argv)
   int sync_stats = false;
   int reset_regions = false;
 
+  int extra_info = false;
+
   uint64_t min_rewrite_size = 4 * 1024 * 1024;
   uint64_t max_rewrite_size = ULLONG_MAX;
   uint64_t min_rewrite_stripe_size = 0;
@@ -1600,6 +1602,9 @@ int main(int argc, char **argv)
      // do nothing
     } else if (ceph_argparse_binary_flag(args, i, &reset_regions, NULL, "--reset-regions", (char*)NULL)) {
      // do nothing
+    } else if (ceph_argparse_binary_flag(args, i, &extra_info, NULL, "--extra-info", (char*)NULL)) {
+     // do nothing
+    } else if (ceph_argparse_binary_flag(args, i, &reset_regions, NULL, "--reset-regions", (char*)NULL)) {
     } else if (ceph_argparse_witharg(args, i, &val, "--caps", (char*)NULL)) {
       caps = val;
     } else if (ceph_argparse_witharg(args, i, &val, "-i", "--infile", (char*)NULL)) {
@@ -4068,7 +4073,7 @@ next:
     RGWDataChangesLog::LogMarker marker;
 
     do {
-      list<rgw_data_change> entries;
+      list<rgw_data_change_log_entry> entries;
       ret = log->list_entries(start_time, end_time, max_entries - count, entries, marker, &truncated);
       if (ret < 0) {
         cerr << "ERROR: list_bi_log_entries(): " << cpp_strerror(-ret) << std::endl;
@@ -4077,9 +4082,13 @@ next:
 
       count += entries.size();
 
-      for (list<rgw_data_change>::iterator iter = entries.begin(); iter != entries.end(); ++iter) {
-        rgw_data_change& entry = *iter;
-        encode_json("entry", entry, formatter);
+      for (list<rgw_data_change_log_entry>::iterator iter = entries.begin(); iter != entries.end(); ++iter) {
+        rgw_data_change_log_entry& entry = *iter;
+        if (!extra_info) {
+          encode_json("entry", entry.entry, formatter);
+        } else {
+          encode_json("entry", entry, formatter);
+        }
       }
       formatter->flush(cout);
     } while (truncated && count < max_entries);

@@ -511,6 +511,8 @@ void RGWOp_DATALog_List::execute() {
            ut_et;
   unsigned shard_id, max_entries = LOG_CLASS_LIST_MAX_ENTRIES;
 
+  s->info.args.get_bool("extra-info", &extra_info, false);
+
   shard_id = (unsigned)strict_strtol(shard.c_str(), 10, &err);
   if (!err.empty()) {
     dout(5) << "Error parsing shard_id " << shard << dendl;
@@ -564,10 +566,14 @@ void RGWOp_DATALog_List::send_response() {
   s->formatter->dump_bool("truncated", truncated);
   {
     s->formatter->open_array_section("entries");
-    for (list<rgw_data_change>::iterator iter = entries.begin();
+    for (list<rgw_data_change_log_entry>::iterator iter = entries.begin();
 	 iter != entries.end(); ++iter) {
-      rgw_data_change& entry = *iter;
-      encode_json("entry", entry, s->formatter);
+      rgw_data_change_log_entry& entry = *iter;
+      if (!extra_info) {
+        encode_json("entry", entry.entry, s->formatter);
+      } else {
+        encode_json("entry", entry, s->formatter);
+      }
       flusher.flush();
     }
     s->formatter->close_section();
