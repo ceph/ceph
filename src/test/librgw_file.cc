@@ -27,8 +27,8 @@
 namespace {
   librgw_t rgw = nullptr;
   string uid("testuser");
-  string access_key("C4B4D3E4H355VTDTQXRF");
-  string secret_key("NRBkhM2rUZNUbydD86HpNJ110VpQjVroumCOHJXw");
+  string access_key("");
+  string secret_key("");
   struct rgw_fs *fs = nullptr;
   typedef std::tuple<string,uint64_t, struct rgw_file_handle*> fid_type; //in c++2014 can alias...
   std::vector<fid_type> fids1;
@@ -60,6 +60,9 @@ TEST(LibRGW, LIST_BUCKETS) {
   /* list buckets via readdir in fs root */
   using std::get;
 
+  if (! fs)
+    return;
+
   bool eof = false;
   uint64_t offset = 0;
   int ret = rgw_readdir(fs, &fs->root_fh, &offset, r1_cb, &fids1, &eof);
@@ -81,6 +84,9 @@ extern "C" {
 TEST(LibRGW, LOOKUP_BUCKETS) {
   using std::get;
 
+  if (! fs)
+    return;
+
   int ret = 0;
   for (auto& fid : fids1) {
     struct rgw_file_handle *rgw_fh = new rgw_file_handle();
@@ -94,6 +100,9 @@ TEST(LibRGW, LOOKUP_BUCKETS) {
 TEST(LibRGW, LIST_OBJECTS) {
   /* list objects via readdir, bucketwise */
   using std::get;
+
+  if (! fs)
+    return;
 
   for (auto& fid : fids1) {
     std::cout << "readdir in bucket " << get<0>(fid) << std::endl;
@@ -119,6 +128,9 @@ TEST(LibRGW, CLEANUP) {
 }
 
 TEST(LibRGW, UMOUNT) {
+  if (! fs)
+    return;
+
   int ret = rgw_umount(fs);
   ASSERT_EQ(ret, 0);
 }
@@ -129,11 +141,22 @@ TEST(LibRGW, SHUTDOWN) {
 
 int main(int argc, char *argv[])
 {
+  char *v{nullptr};
   string val;
   vector<const char*> args;
 
   argv_to_vec(argc, const_cast<const char**>(argv), args);
   env_to_vec(args);
+
+  v = getenv("AWS_ACCESS_KEY_ID");
+  if (v) {
+    access_key = v;
+  }
+
+  v = getenv("AWS_SECRET_ACCESS_KEY");
+  if (v) {
+    secret_key = v;
+  }
 
   for (auto arg_iter = args.begin(); arg_iter != args.end();) {
     if (ceph_argparse_witharg(args, arg_iter, &val, "--access",

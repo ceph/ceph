@@ -61,46 +61,34 @@ extern "C" {
 /*
  attach rgw namespace
 */
-int rgw_mount(librgw_t rgw, const char* uid, const char* key,
-	      const char* _secret, struct rgw_fs **rgw_fs)
+  int rgw_mount(librgw_t rgw, const char *uid, const char *acc_key,
+		const char *sec_key, struct rgw_fs **rgw_fs)
 {
-  int rc;
-  string uri(uid);
-  uri += "\\";
-  string secret(_secret);
-  string auth_hdr;
-  map<string, string> meta_map;
-  map<string, string> sub_resources;
-
-  rgw_create_s3_canonical_header("GET",
-				 NULL, /* const char *content_md5 */
-				 "text/html",
-				 "",
-				 meta_map,
-				 uri.c_str(),
-				 sub_resources,
-				 auth_hdr);
-
-  /* check key */
-  rc = rgw_get_s3_header_digest(auth_hdr, key, secret);
-  if (rc < 0 ) {
-    return rc;
-  }
+  int rc = 0;
 
   /* stash access data for "mount" */
-  struct rgw_fs *new_fs =
-    static_cast<struct rgw_fs*>(operator new (sizeof(struct rgw_fs)));
-  new_fs->rgw = rgw;
-  new_fs->user_id = strdup(uid);
-  new_fs->access_key_id = strdup(key);
-  new_fs->secret_access_key = strdup(_secret);
+  RGWLibFS* new_fs = new RGWLibFS(uid, acc_key, sec_key);
+  assert(new_fs);
+
+  rc = new_fs->authorize(librgw.get_store());
+  if (rc != 0) {
+    delete new_fs;
+    return -EINVAL;
+  }
+
+  struct rgw_fs *fs = new_fs->get_fs();;
+  fs->rgw = rgw;
 
   /* stash the root */
-  rc = rgw_get_handle("", &new_fs->root_fh);
+  rc = rgw_get_handle("", &fs->root_fh);
+  if (rc != 0) {
+    delete new_fs;
+    return -EINVAL;
+  }
 
-  *rgw_fs = new_fs;
+  *rgw_fs = fs;
 
-  return rc;
+  return 0;
 }
 
 /*
@@ -108,11 +96,8 @@ int rgw_mount(librgw_t rgw, const char* uid, const char* key,
 */
 int rgw_umount(struct rgw_fs *rgw_fs)
 {
-  free(rgw_fs->user_id);
-  free(rgw_fs->access_key_id);
-  free(rgw_fs->secret_access_key);
-  operator delete (rgw_fs);
-
+  RGWLibFS *fs = static_cast<RGWLibFS*>(rgw_fs->fs_private);
+  delete fs;
   return 0;
 }
 
@@ -296,6 +281,7 @@ int rgw_readdir(struct rgw_fs *rgw_fs,
     return rc;
   }
 
+  RGWLibFS *fs = static_cast<RGWLibFS*>(rgw_fs->fs_private);
   CephContext* cct = static_cast<CephContext*>(rgw_fs->rgw);
 
   /* TODO:
@@ -305,7 +291,7 @@ int rgw_readdir(struct rgw_fs *rgw_fs,
    */
   if (is_root(uri)) {
     /* for now, root always contains one user's bucket namespace */
-    RGWListBucketsRequest req(cct, rgw_fs->user_id, rcb, cb_arg, offset);
+    RGWListBucketsRequest req(cct, fs->get_user(), rcb, cb_arg, offset);
     (void) librgw.get_fe()->execute_req(&req);
   } else {
     /*
@@ -313,7 +299,7 @@ int rgw_readdir(struct rgw_fs *rgw_fs,
      */
     uri += "/";
 
-    RGWListBucketRequest req(cct, rgw_fs->user_id, uri, rcb, cb_arg, offset);
+    RGWListBucketRequest req(cct, fs->get_user(), uri, rcb, cb_arg, offset);
     (void) librgw.get_fe()->execute_req(&req);
 
   }

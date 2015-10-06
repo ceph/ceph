@@ -54,9 +54,6 @@ struct rgw_fs
   librgw_t rgw;
   void *fs_private;
   struct rgw_file_handle root_fh;
-  char *user_id;
-  char *access_key_id;
-  char *secret_access_key;
 };
 
 

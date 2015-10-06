@@ -240,12 +240,6 @@ int RGWLibProcess::process_request(RGWLibRequest* req, RGWLibIO* io)
   }
 #endif
 
-  if (s->user->suspended) {
-    dout(10) << "user is suspended, uid=" << s->user->user_id << dendl;
-    abort_req(s, op, -ERR_USER_SUSPENDED);
-    goto done;
-  }
-
   req->log(s, "reading permissions");
   ret = req->read_permissions(op);
   if (ret < 0) {

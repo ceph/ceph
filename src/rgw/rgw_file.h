@@ -22,14 +22,33 @@ public:
 class RGWLibFS
 {
   struct rgw_fs fs;
-  // XXX auth caching
+
+  std::string uid; // should match user.user_id, iiuc
+
+  RGWUserInfo user;
+  RGWAccessKey key;
 
 public:
-  RGWLibFS() {
+  RGWLibFS(const char *_uid, const char *_user_id, const char* _key)
+    : uid(_uid), key(_user_id, _key) {
     fs.fs_private = this;
   }
 
+  int authorize(RGWRados* store) {
+    int ret = rgw_get_user_info_by_access_key(store, key.id, user);
+    if (ret == 0) {
+      RGWAccessKey* key0 = user.get_key0();
+      if (!key0 ||
+	  (key0->key != key.key))
+	return -EINVAL;
+      if (user.suspended)
+	return -ERR_USER_SUSPENDED;
+    }
+    return 0;
+  }
+
   struct rgw_fs* get_fs() { return &fs; }
+  RGWUserInfo* get_user() { return &user; }
 
 }; /* RGWLibFS */
 
@@ -41,14 +60,14 @@ class RGWListBucketsRequest : public RGWLibRequest,
 			      public RGWListBuckets_ObjStore_Lib /* RGWOp */
 {
 public:
-  std::string user_id;
+  RGWUserInfo* user;
   uint64_t* offset;
   void* cb_arg;
   rgw_readdir_cb rcb;
 
-  RGWListBucketsRequest(CephContext* _cct, char *_user_id,
+  RGWListBucketsRequest(CephContext* _cct, RGWUserInfo *_user,
 			rgw_readdir_cb _rcb, void* _cb_arg, uint64_t* _offset)
-    : RGWLibRequest(_cct), user_id(_user_id), offset(_offset), cb_arg(_cb_arg),
+    : RGWLibRequest(_cct), user(_user), offset(_offset), cb_arg(_cb_arg),
       rcb(_rcb) {
     magic = 71;
     op = this;
@@ -79,9 +98,8 @@ public:
     s->info.request_params = "";
     s->info.domain = ""; /* XXX ? */
 
-    /* XXX fake user_id (will fix) */
-    s->user->user_id = user_id;
-    s->user->display_name = user_id;
+    // woo
+    s->user = user;
 
     return 0;
   }
@@ -101,15 +119,15 @@ class RGWListBucketRequest : public RGWLibRequest,
 			     public RGWListBucket_ObjStore_Lib /* RGWOp */
 {
 public:
-  std::string user_id;
+  RGWUserInfo* user;
   std::string& uri;
   uint64_t* offset;
   void* cb_arg;
   rgw_readdir_cb rcb;
 
-  RGWListBucketRequest(CephContext* _cct, char *_user_id, std::string& _uri,
+  RGWListBucketRequest(CephContext* _cct, RGWUserInfo *_user, std::string& _uri,
 		      rgw_readdir_cb _rcb, void* _cb_arg, uint64_t* _offset)
-    : RGWLibRequest(_cct), user_id(_user_id), uri(_uri), offset(_offset),
+    : RGWLibRequest(_cct), user(_user), uri(_uri), offset(_offset),
       cb_arg(_cb_arg),
       rcb(_rcb) {
     magic = 72;
@@ -141,10 +159,8 @@ public:
     s->info.request_params = "";
     s->info.domain = ""; /* XXX ? */
 
-    /* XXX fake user_id and perms (will fix) */
-    s->user->user_id = user_id;
-    s->user->display_name = user_id;
-    s->perm_mask = RGW_PERM_READ;
+    // woo
+    s->user = user;
 
     return 0;
   }
