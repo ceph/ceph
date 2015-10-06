@@ -155,6 +155,89 @@ public:
   }
 };
 
+struct read_remote_data_log_response {
+  string marker;
+  bool truncated;
+  list<rgw_data_change_log_entry> entries;
+
+  read_remote_data_log_response() : truncated(false) {}
+
+  void decode_json(JSONObj *obj) {
+    JSONDecoder::decode_json("marker", marker, obj);
+    JSONDecoder::decode_json("truncated", truncated, obj);
+    JSONDecoder::decode_json("entries", entries, obj);
+  };
+};
+
+class RGWReadRemoteDataLogShardCR : public RGWCoroutine {
+  RGWRados *store;
+  RGWHTTPManager *http_manager;
+  RGWAsyncRadosProcessor *async_rados;
+
+  RGWRESTReadResource *http_op;
+
+  int shard_id;
+  string marker;
+  list<rgw_data_change_log_entry> *entries;
+  bool *truncated;
+
+  read_remote_data_log_response response;
+
+public:
+  RGWReadRemoteDataLogShardCR(RGWRados *_store, RGWHTTPManager *_mgr, RGWAsyncRadosProcessor *_async_rados,
+                              int _shard_id, const string& _marker, list<rgw_data_change_log_entry> *_entries, bool *_truncated) : RGWCoroutine(_store->ctx()), store(_store),
+                                                      http_manager(_mgr),
+						      async_rados(_async_rados),
+                                                      http_op(NULL),
+                                                      shard_id(_shard_id),
+                                                      marker(_marker),
+                                                      entries(_entries),
+                                                      truncated(_truncated) {
+  }
+
+  int operate() {
+    RGWRESTConn *conn = store->rest_master_conn;
+    reenter(this) {
+      yield {
+	char buf[16];
+	snprintf(buf, sizeof(buf), "%d", shard_id);
+        rgw_http_param_pair pairs[] = { { "type" , "data" },
+	                                { "id", buf },
+	                                { "marker", marker.c_str() },
+	                                { "extra-info", "true" },
+	                                { NULL, NULL } };
+
+        string p = "/admin/log/";
+
+        http_op = new RGWRESTReadResource(conn, p, pairs, NULL, http_manager);
+
+        http_op->set_user_info((void *)stack);
+
+        int ret = http_op->aio_read();
+        if (ret < 0) {
+          ldout(store->ctx(), 0) << "ERROR: failed to read from " << p << dendl;
+          log_error() << "failed to send http operation: " << http_op->to_str() << " ret=" << ret << std::endl;
+          http_op->put();
+          return set_state(RGWCoroutine_Error, ret);
+        }
+
+        return io_block(0);
+      }
+      yield {
+        int ret = http_op->wait(&response);
+        if (ret < 0) {
+          return set_state(RGWCoroutine_Error, ret);
+        }
+        entries->clear();
+        entries->swap(response.entries);
+        *truncated = response.truncated;
+        return set_state(RGWCoroutine_Done, 0);
+      }
+    }
+    return 0;
+  }
+};
+
 class RGWInitDataSyncStatusCoroutine : public RGWCoroutine {
   RGWAsyncRadosProcessor *async_rados;
   RGWRados *store;
@@ -546,6 +629,26 @@ public:
   int operate();
 };
 
+static int parse_bucket_shard(CephContext *cct, const string& raw_key, string *bucket_name, string *bucket_instance, int *shard_id)
+{
+  ssize_t pos = raw_key.find(':');
+  *bucket_name = raw_key.substr(0, pos);
+  *bucket_instance = raw_key.substr(pos + 1);
+  pos = bucket_instance->find(':');
+  *shard_id = -1;
+  if (pos >= 0) {
+    string err;
+    string s = bucket_instance->substr(pos + 1);
+    *shard_id = strict_strtol(s.c_str(), 10, &err);
+    if (!err.empty()) {
+      ldout(cct, 0) << "ERROR: failed to parse bucket instance key: " << *bucket_instance << dendl;
+      return -EINVAL;
+    }
+
+    *bucket_instance = bucket_instance->substr(0, pos);
+  }
+  return 0;
+}
 
 class RGWDataSyncSingleEntryCR : public RGWCoroutine {
   RGWRados *store;
@@ -558,7 +661,6 @@ class RGWDataSyncSingleEntryCR : public RGWCoroutine {
   string raw_key;
   string entry_marker;
 
-  ssize_t pos;
   string bucket_name;
   string bucket_instance;
 
@@ -576,30 +678,19 @@ public:
 						      async_rados(_async_rados),
                                                       conn(_conn), source_zone(_source_zone),
 						      raw_key(_raw_key), entry_marker(_entry_marker),
-                                                      pos(0), sync_status(0),
+                                                      sync_status(0),
                                                       marker_tracker(_marker_tracker) {
   }
 
   int operate() {
     reenter(this) {
       yield {
-        pos = raw_key.find(':');
-        bucket_name = raw_key.substr(0, pos);
-        bucket_instance = raw_key.substr(pos + 1);
-        pos = bucket_instance.find(':');
-        int shard_id = -1;
-        if (pos >= 0) {
-          string err;
-          string s = bucket_instance.substr(pos + 1);
-          shard_id = strict_strtol(s.c_str(), 10, &err);
-          if (!err.empty()) {
-            ldout(store->ctx(), 0) << "ERROR: failed to parse bucket instance key: " << bucket_instance << dendl;
-            return set_state(RGWCoroutine_Error, -EIO);
-          }
-
-          bucket_instance = bucket_instance.substr(0, pos);
+        int shard_id;
+        int ret = parse_bucket_shard(store->ctx(), raw_key, &bucket_name, &bucket_instance, &shard_id);
+        if (ret < 0) {
+          return set_state(RGWCoroutine_Error, -EIO);
         }
-        int ret = call(new RGWRunBucketSyncCoroutine(http_manager, async_rados, conn, store, source_zone, bucket_name, bucket_instance, shard_id));
+        ret = call(new RGWRunBucketSyncCoroutine(http_manager, async_rados, conn, store, source_zone, bucket_name, bucket_instance, shard_id));
         if (ret < 0) {
 #warning failed syncing bucket, need to log
           return set_state(RGWCoroutine_Error, sync_status);
@@ -647,12 +738,12 @@ class RGWDataSyncShardCR : public RGWCoroutine {
 
   RGWDataSyncShardMarkerTrack *marker_tracker;
 
-  list<cls_log_entry> log_entries;
-  list<cls_log_entry>::iterator log_iter;
+  list<rgw_data_change_log_entry> log_entries;
+  list<rgw_data_change_log_entry>::iterator log_iter;
   bool truncated;
 
-  string mdlog_marker;
-  string raw_key;
+  RGWDataChangesLogInfo shard_info;
+  string datalog_marker;
 
   Mutex inc_lock;
   Cond inc_cond;
@@ -746,43 +837,43 @@ public:
     
 
   int incremental_sync() {
-#if 0
     reenter(&incremental_cr) {
-      mdlog_marker = sync_marker.marker;
       set_marker_tracker(new RGWDataSyncShardMarkerTrack(store, http_manager, async_rados,
-                                                         RGWDataSyncStatusManager::shard_obj_name(shard_id),
+                                                         RGWDataSyncStatusManager::shard_obj_name(source_zone, shard_id),
                                                          sync_marker));
       do {
+        yield {
+          int ret = call(new RGWReadRemoteDataLogShardInfoCR(store, http_manager, async_rados, shard_id, &shard_info));
+          if (ret < 0) {
+            ldout(store->ctx(), 0) << "ERROR: failed to call RGWReadRemoteDataLogShardInfoCR() ret=" << ret << dendl;
+            return set_state(RGWCoroutine_Error, ret);
+          }
+        }
+        if (retcode < 0) {
+          ldout(store->ctx(), 0) << "ERROR: failed to fetch remote data log info: ret=" << retcode << dendl;
+          return set_state(RGWCoroutine_Error, retcode);
+        }
+        datalog_marker = shard_info.marker;
 #define INCREMENTAL_MAX_ENTRIES 100
-	ldout(store->ctx(), 20) << __func__ << ":" << __LINE__ << ": shard_id=" << shard_id << " mdlog_marker=" << mdlog_marker << " sync_marker.marker=" << sync_marker.marker << dendl;
-	if (mdlog_marker <= sync_marker.marker) {
-	  /* we're at the tip, try to bring more entries */
-          ldout(store->ctx(), 20) << __func__ << ":" << __LINE__ << ": shard_id=" << shard_id << " syncing mdlog for shard_id=" << shard_id << dendl;
-	  yield call(new RGWCloneMetaLogCoroutine(store, http_manager, shard_id, mdlog_marker, &mdlog_marker));
-	}
-	ldout(store->ctx(), 20) << __func__ << ":" << __LINE__ << ": shard_id=" << shard_id << " mdlog_marker=" << mdlog_marker << " sync_marker.marker=" << sync_marker.marker << dendl;
-	if (mdlog_marker > sync_marker.marker) {
-          yield call(new RGWReadMDLogEntriesCR(async_rados, store, shard_id, &sync_marker.marker, INCREMENTAL_MAX_ENTRIES, &log_entries, &truncated));
+	ldout(store->ctx(), 20) << __func__ << ":" << __LINE__ << ": shard_id=" << shard_id << " datalog_marker=" << datalog_marker << " sync_marker.marker=" << sync_marker.marker << dendl;
+	if (datalog_marker > sync_marker.marker) {
+          yield call(new RGWReadRemoteDataLogShardCR(store, http_manager, async_rados, shard_id, sync_marker.marker, &log_entries, &truncated));
           for (log_iter = log_entries.begin(); log_iter != log_entries.end(); ++log_iter) {
-            ldout(store->ctx(), 20) << __func__ << ":" << __LINE__ << ": shard_id=" << shard_id << " log_entry: " << log_iter->id << ":" << log_iter->section << ":" << log_iter->name << ":" << log_iter->timestamp << dendl;
-            marker_tracker->start(log_iter->id);
-            raw_key = log_iter->section + ":" + log_iter->name;
-            yield spawn(new RGWMetaSyncSingleEntryCR(store, http_manager, async_rados, raw_key, log_iter->id, marker_tracker), false);
+            ldout(store->ctx(), 20) << __func__ << ":" << __LINE__ << ": shard_id=" << shard_id << " log_entry: " << log_iter->log_id << ":" << log_iter->log_timestamp << ":" << log_iter->entry.key << dendl;
+            marker_tracker->start(log_iter->log_id);
+            yield spawn(new RGWDataSyncSingleEntryCR(store, http_manager, async_rados, conn, source_zone, log_iter->entry.key, log_iter->log_id, marker_tracker), false);
             if (retcode < 0) {
               return set_state(RGWCoroutine_Error, retcode);
-          }
+            }
 	  }
 	}
-	ldout(store->ctx(), 20) << __func__ << ":" << __LINE__ << ": shard_id=" << shard_id << " mdlog_marker=" << mdlog_marker << " sync_marker.marker=" << sync_marker.marker << dendl;
-	if (mdlog_marker == sync_marker.marker) {
+	ldout(store->ctx(), 20) << __func__ << ":" << __LINE__ << ": shard_id=" << shard_id << " datalog_marker=" << datalog_marker << " sync_marker.marker=" << sync_marker.marker << dendl;
+	if (datalog_marker == sync_marker.marker) {
 #define INCREMENTAL_INTERVAL 20
 	  yield wait(utime_t(INCREMENTAL_INTERVAL, 0));
 	}
       } while (true);
     }
-    /* TODO */
-    return 0;
-#endif
     return 0;
   }
 };
