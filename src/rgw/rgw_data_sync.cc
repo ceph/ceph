@@ -213,7 +213,7 @@ public:
       /* fetch current position in logs */
       yield {
         for (int i = 0; i < (int)status.num_shards; i++) {
-          spawn(new RGWReadRemoteDataLogShardInfoCR(store, http_manager, async_rados, i, &shards_info[i]), false);
+          spawn(new RGWReadRemoteDataLogShardInfoCR(store, http_manager, async_rados, i, &shards_info[i]), true);
 	}
       }
       while (collect(&ret)) {
@@ -1635,14 +1635,12 @@ int RGWBucketShardFullSyncCR::operate()
   int ret;
   reenter(this) {
     list_marker = full_marker.position;
-ldout(store->ctx(), 0) << __FILE__ << ":" << __LINE__ << dendl;
     marker_tracker = new RGWBucketFullSyncShardMarkerTrack(store, async_rados, 
                                                            RGWBucketSyncStatusManager::status_oid(source_zone, bucket_name, bucket_id, shard_id),
                                                            full_marker);
     do {
       yield {
         ldout(store->ctx(), 20) << __func__ << "(): listing bucket for full sync" << dendl;
-ldout(store->ctx(), 0) << __FILE__ << ":" << __LINE__ << " list_marker=" << list_marker << dendl;
         int r = call(new RGWListBucketShardCR(store, http_manager, async_rados, conn, bucket_name, bucket_id, shard_id,
                                               list_marker, &list_result));
         if (r < 0) {
@@ -1653,7 +1651,6 @@ ldout(store->ctx(), 0) << __FILE__ << ":" << __LINE__ << " list_marker=" << list
       if (retcode < 0 && retcode != -ENOENT) {
         return set_state(RGWCoroutine_Error, retcode);
       }
-ldout(store->ctx(), 0) << __FILE__ << ":" << __LINE__ << " list_result.size()=" << list_result.entries.size() << dendl;
       entries_iter = list_result.entries.begin();
       for (; entries_iter != list_result.entries.end(); ++entries_iter) {
         ldout(store->ctx(), 20) << "[full sync] syncing object: " << bucket_name << ":" << bucket_id << ":" << shard_id << "/" << entries_iter->key << dendl;
@@ -1748,7 +1745,6 @@ int RGWBucketShardIncrementalSyncCR::operate()
                                                           inc_marker);
     do {
       yield {
-ldout(store->ctx(), 0) << __FILE__ << ":" << __LINE__ << " inc_marker.position=" << inc_marker.position << dendl;
         ldout(store->ctx(), 20) << __func__ << "(): listing bilog for incremental sync" << dendl;
         int r = call(new RGWListBucketIndexLogCR(store, http_manager, async_rados, conn, bucket_name, bucket_id, shard_id,
                                               inc_marker.position, &list_result));
@@ -1809,7 +1805,6 @@ int RGWRunBucketSyncCoroutine::operate()
       }
     }
 
-ldout(store->ctx(), 0) << __FILE__ << ":" << __LINE__ << " shard_id=" << shard_id << " sync_status.inc_marker=" << sync_status.inc_marker.position << dendl;
     if (retcode < 0 && retcode != -ENOENT) {
       ldout(store->ctx(), 0) << "ERROR: failed to read sync status for bucket=" << bucket_name << " bucket_id=" << bucket_id << " shard_id=" << shard_id << dendl;
       return set_state(RGWCoroutine_Error, retcode);
@@ -1864,7 +1859,6 @@ ldout(store->ctx(), 0) << __FILE__ << ":" << __LINE__ << " shard_id=" << shard_i
     }
 
     yield {
-ldout(store->ctx(), 0) << __FILE__ << ":" << __LINE__ << " sync_status.inc_marker=" << sync_status.inc_marker.position << dendl;
       if ((rgw_bucket_shard_sync_info::SyncState)sync_status.state == rgw_bucket_shard_sync_info::StateIncrementalSync) {
         int r = call(new RGWBucketShardIncrementalSyncCR(http_manager, async_rados, conn, store,
                                                          source_zone, bucket_name, bucket_id, shard_id,
