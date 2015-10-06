@@ -272,6 +272,22 @@ void wal_op_t::dump(Formatter *f) const
   }
 }
 
+void wal_op_t::generate_test_instances(list<wal_op_t*>& o)
+{
+  o.push_back(new wal_op_t);
+  o.push_back(new wal_op_t);
+  o.back()->op = OP_WRITE;
+  o.back()->offset = 1;
+  o.back()->length = 2;
+  o.back()->data.append("my data");
+  o.back()->nid = 3;
+  o.back()->overlays.push_back(overlay_t());
+  o.back()->overlays.push_back(overlay_t());
+  o.back()->overlays.back().key = 4;
+  o.back()->overlays.back().value_offset = 5;
+  o.back()->overlays.back().length = 6;
+}
+
 void wal_transaction_t::encode(bufferlist& bl) const
 {
   ENCODE_START(1, 1, bl);
@@ -304,4 +320,18 @@ void wal_transaction_t::dump(Formatter *f) const
     f->dump_string("shared_overlay_key", *p);
   }
   f->close_section();
+}
+
+void wal_transaction_t::generate_test_instances(list<wal_transaction_t*>& o)
+{
+  o.push_back(new wal_transaction_t());
+  o.push_back(new wal_transaction_t());
+  o.back()->seq = 123;
+  o.back()->ops.push_back(wal_op_t());
+  o.back()->ops.push_back(wal_op_t());
+  o.back()->ops.back().op = wal_op_t::OP_WRITE;
+  o.back()->ops.back().offset = 2;
+  o.back()->ops.back().length = 3;
+  o.back()->ops.back().data.append("foodata");
+  o.back()->ops.back().nid = 4;
 }
