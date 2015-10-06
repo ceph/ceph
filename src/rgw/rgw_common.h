@@ -380,6 +380,9 @@ struct RGWAccessKey {
   string subuser;
 
   RGWAccessKey() {}
+  RGWAccessKey(std::string _id, std::string _key)
+    : id(std::move(_id)), key(std::move(_key)) {}
+
   void encode(bufferlist& bl) const {
     ENCODE_START(2, 2, bl);
     ::encode(id, bl);
@@ -488,6 +491,13 @@ struct RGWUserInfo
   RGWQuotaInfo user_quota;
 
   RGWUserInfo() : auid(0), suspended(0), max_buckets(RGW_DEFAULT_MAX_BUCKETS), op_mask(RGW_OP_TYPE_ALL), system(0) {}
+
+  RGWAccessKey* get_key0() {
+    if (access_keys.empty())
+      return nullptr;
+    else
+      return &(access_keys.begin()->second);
+  }
 
   void encode(bufferlist& bl) const {
      ENCODE_START(17, 9, bl);
