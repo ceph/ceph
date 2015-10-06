@@ -58,6 +58,49 @@ void fid_t::generate_test_instances(list<fid_t*>& o)
   o.push_back(new fid_t(123, 3278));
 }
 
+// fid_backpointer_t
+
+void fid_backpointer_t::encode(bufferlist& bl) const
+{
+  ENCODE_START(1, 1, bl);
+  ::encode(oid, bl);
+  ::encode(nid, bl);
+  ::encode(offset, bl);
+  ENCODE_FINISH(bl);
+}
+
+void fid_backpointer_t::decode(bufferlist::iterator& p)
+{
+  DECODE_START(1, p);
+  ::decode(oid, p);
+  ::decode(nid, p);
+  ::decode(offset, p);
+  DECODE_FINISH(p);
+}
+
+void fid_backpointer_t::dump(Formatter *f) const
+{
+  f->dump_object("oid", oid);
+  f->dump_unsigned("nid", nid);
+  f->dump_unsigned("offset", offset);
+}
+
+void fid_backpointer_t::generate_test_instances(list<fid_backpointer_t*>& o)
+{
+  o.push_back(new fid_backpointer_t);
+  o.push_back(new fid_backpointer_t);
+  o.back()->oid.hobj.oid.name = "foo";
+  o.back()->nid = 12;
+  o.back()->offset = 123;
+}
+
+ostream& operator<<(ostream& out, const fid_backpointer_t& bp)
+{
+  return out << "fidbp(" << bp.oid
+	     << " nid " << bp.nid
+	     << " offset " << bp.offset << ")";
+}
+
 // fragment_t
 
 void fragment_t::encode(bufferlist& bl) const
