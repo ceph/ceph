@@ -177,7 +177,7 @@ class RGWReadRemoteDataLogShardCR : public RGWCoroutine {
   RGWRESTReadResource *http_op;
 
   int shard_id;
-  string marker;
+  string *pmarker;
   list<rgw_data_change_log_entry> *entries;
   bool *truncated;
 
@@ -185,12 +185,12 @@ class RGWReadRemoteDataLogShardCR : public RGWCoroutine {
 
 public:
   RGWReadRemoteDataLogShardCR(RGWRados *_store, RGWHTTPManager *_mgr, RGWAsyncRadosProcessor *_async_rados,
-                              int _shard_id, const string& _marker, list<rgw_data_change_log_entry> *_entries, bool *_truncated) : RGWCoroutine(_store->ctx()), store(_store),
+                              int _shard_id, string *_pmarker, list<rgw_data_change_log_entry> *_entries, bool *_truncated) : RGWCoroutine(_store->ctx()), store(_store),
                                                       http_manager(_mgr),
 						      async_rados(_async_rados),
                                                       http_op(NULL),
                                                       shard_id(_shard_id),
-                                                      marker(_marker),
+                                                      pmarker(_pmarker),
                                                       entries(_entries),
                                                       truncated(_truncated) {
   }
@@ -203,7 +203,7 @@ public:
 	snprintf(buf, sizeof(buf), "%d", shard_id);
         rgw_http_param_pair pairs[] = { { "type" , "data" },
 	                                { "id", buf },
-	                                { "marker", marker.c_str() },
+	                                { "marker", pmarker->c_str() },
 	                                { "extra-info", "true" },
 	                                { NULL, NULL } };
 
@@ -230,6 +230,7 @@ public:
         }
         entries->clear();
         entries->swap(response.entries);
+        *pmarker = response.marker;
         *truncated = response.truncated;
         return set_state(RGWCoroutine_Done, 0);
       }
@@ -584,6 +585,19 @@ class RGWDataSyncShardMarkerTrack : public RGWSyncShardMarkerTrack<string> {
   string marker_oid;
   rgw_data_sync_marker sync_marker;
 
+  map<string, string> key_to_marker;
+  map<string, string> marker_to_key;
+  set<string> need_retry_set;
+
+  void handle_finish(const string& marker) {
+    map<string, string>::iterator iter = marker_to_key.find(marker);
+    if (iter == marker_to_key.end()) {
+      return;
+    }
+    key_to_marker.erase(iter->second);
+    marker_to_key.erase(iter);
+    need_retry_set.erase(marker);
+  }
 
 public:
   RGWDataSyncShardMarkerTrack(RGWRados *_store, RGWHTTPManager *_mgr, RGWAsyncRadosProcessor *_async_rados,
@@ -600,6 +614,38 @@ public:
     ldout(store->ctx(), 20) << __func__ << "(): updating marker marker_oid=" << marker_oid << " marker=" << new_marker << dendl;
     return new RGWSimpleRadosWriteCR<rgw_data_sync_marker>(async_rados, store, store->get_zone_params().log_pool,
 				 marker_oid, sync_marker);
+  }
+
+  /*
+   * create index from key -> marker, and from marker -> key
+   * this is useful so that we can insure that we only have one
+   * entry for any key that is used. This is needed when doing
+   * incremenatl sync of data, and we don't want to run multiple
+   * concurrent sync operations for the same bucket shard 
+   */
+  bool index_key_to_marker(const string& key, const string& marker) {
+    if (key_to_marker.find(key) != key_to_marker.end()) {
+      need_retry_set.insert(key);
+      return false;
+    }
+    key_to_marker[key] = marker;
+    marker_to_key[marker] = key;
+    return true;
+  }
+
+  /*
+   * a key needs retry if it was processing when another marker that points
+   * to the same bucket shards arrives. Instead of processing it, we mark
+   * it as need_retry so that when we finish processing the original, we
+   * retry the processing on the same bucket shard, in case there are more
+   * entries to process. This closes a race that can happen.
+   */
+  bool need_retry(const string& key) {
+    return (need_retry_set.find(key) != need_retry_set.end());
+  }
+
+  void reset_need_retry(const string& key) {
+    need_retry_set.erase(key);
   }
 };
 
@@ -684,18 +730,21 @@ public:
 
   int operate() {
     reenter(this) {
-      yield {
-        int shard_id;
-        int ret = parse_bucket_shard(store->ctx(), raw_key, &bucket_name, &bucket_instance, &shard_id);
-        if (ret < 0) {
-          return set_state(RGWCoroutine_Error, -EIO);
-        }
-        ret = call(new RGWRunBucketSyncCoroutine(http_manager, async_rados, conn, store, source_zone, bucket_name, bucket_instance, shard_id));
-        if (ret < 0) {
+      do {
+        yield {
+          int shard_id;
+          int ret = parse_bucket_shard(store->ctx(), raw_key, &bucket_name, &bucket_instance, &shard_id);
+          if (ret < 0) {
+            return set_state(RGWCoroutine_Error, -EIO);
+          }
+          marker_tracker->reset_need_retry(raw_key);
+          ret = call(new RGWRunBucketSyncCoroutine(http_manager, async_rados, conn, store, source_zone, bucket_name, bucket_instance, shard_id));
+          if (ret < 0) {
 #warning failed syncing bucket, need to log
-          return set_state(RGWCoroutine_Error, sync_status);
+            return set_state(RGWCoroutine_Error, sync_status);
+          }
         }
-      }
+      } while (marker_tracker->need_retry(raw_key));
 
       sync_status = retcode;
 #warning what do do in case of error
@@ -857,9 +906,13 @@ public:
 #define INCREMENTAL_MAX_ENTRIES 100
 	ldout(store->ctx(), 20) << __func__ << ":" << __LINE__ << ": shard_id=" << shard_id << " datalog_marker=" << datalog_marker << " sync_marker.marker=" << sync_marker.marker << dendl;
 	if (datalog_marker > sync_marker.marker) {
-          yield call(new RGWReadRemoteDataLogShardCR(store, http_manager, async_rados, shard_id, sync_marker.marker, &log_entries, &truncated));
+          yield call(new RGWReadRemoteDataLogShardCR(store, http_manager, async_rados, shard_id, &sync_marker.marker, &log_entries, &truncated));
           for (log_iter = log_entries.begin(); log_iter != log_entries.end(); ++log_iter) {
             ldout(store->ctx(), 20) << __func__ << ":" << __LINE__ << ": shard_id=" << shard_id << " log_entry: " << log_iter->log_id << ":" << log_iter->log_timestamp << ":" << log_iter->entry.key << dendl;
+            if (!marker_tracker->index_key_to_marker(log_iter->log_id, log_iter->entry.key)) {
+              ldout(store->ctx(), 20) << __func__ << ": skipping sync of entry: " << log_iter->log_id << ":" << log_iter->entry.key << " sync already in progress for bucket shard" << dendl;
+              continue;
+            }
             marker_tracker->start(log_iter->log_id);
             yield spawn(new RGWDataSyncSingleEntryCR(store, http_manager, async_rados, conn, source_zone, log_iter->entry.key, log_iter->log_id, marker_tracker), false);
             if (retcode < 0) {
