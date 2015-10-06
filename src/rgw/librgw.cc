@@ -226,20 +226,7 @@ int RGWLibProcess::process_request(RGWLibRequest* req, RGWLibIO* io)
     goto done;
   }
 
-#warning authorize step disabled
-#if 0
-  // just checks the HTTP header, and that the user can access the gateway
-  // may be able to skip this after MOUNT (revalidate the user info)
-  req->log(s, "authorizing");
-  ret = RGW_Auth_S3::authorize(store, s); // validates s->user
-  if (ret < 0) {
-    dout(10) << "failed to authorize request" << dendl;
-    abort_req(s, op, ret);
-    goto done;
-  }
-#endif
-
-  req->log(s, "reading permissions");
+  req->log(s, "reading op permissions");
   ret = req->read_permissions(op);
   if (ret < 0) {
     abort_req(s, op, ret);
@@ -260,8 +247,7 @@ int RGWLibProcess::process_request(RGWLibRequest* req, RGWLibIO* io)
     goto done;
   }
 
-#warning authorize step disabled (no cached perms)
-#if 0
+  /* XXXX 1s stall if this is skipped? */
   req->log(s, "verifying op permissions");
   ret = op->verify_permission();
   if (ret < 0) {
@@ -272,7 +258,6 @@ int RGWLibProcess::process_request(RGWLibRequest* req, RGWLibIO* io)
       goto done;
     }
   }
-#endif
 
   req->log(s, "verifying op params");
   ret = op->verify_params();
