@@ -76,6 +76,7 @@ void ceph::crypto::init(CephContext *cct)
 void ceph::crypto::shutdown()
 {
   pthread_mutex_lock(&crypto_init_mutex);
+  assert(crypto_refs > 0);
   if (--crypto_refs == 0) {
     NSS_ShutdownContext(crypto_context);
     crypto_context = NULL;

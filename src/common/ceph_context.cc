@@ -399,6 +399,7 @@ CephContext::CephContext(uint32_t module_type_)
     _conf(new md_config_t()),
     _log(NULL),
     _module_type(module_type_),
+    _crypto_inited(false),
     _service_thread(NULL),
     _log_obs(NULL),
     _admin_socket(NULL),
@@ -507,7 +508,14 @@ CephContext::~CephContext()
 
   delete _crypto_none;
   delete _crypto_aes;
-  ceph::crypto::shutdown();
+  if (_crypto_inited)
+    ceph::crypto::shutdown();
+}
+
+void CephContext::init_crypto()
+{
+  ceph::crypto::init(this);
+  _crypto_inited = true;
 }
 
 void CephContext::start_service_thread()
