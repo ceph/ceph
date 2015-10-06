@@ -181,7 +181,7 @@ public:
 
  public:
 
-  set<pg_t> creating_pgs;   // lru: front = new additions, back = recently pinged
+  set<pg_t> creating_pgs;
   map<int,set<pg_t> > creating_pgs_by_osd;
 
   // Bits that use to be enum StuckPG

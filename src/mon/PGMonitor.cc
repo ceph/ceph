@@ -994,6 +994,7 @@ void PGMonitor::register_pg(pg_pool_t& pool, pg_t pgid, epoch_t epoch, bool new_
   stats.created = epoch;
   stats.parent = parent;
   stats.parent_split_bits = split_bits;
+  stats.mapping_epoch = epoch;
 
   if (parent_found) {
     stats.last_scrub_stamp = pg_map.pg_stat[parent].last_scrub_stamp;
@@ -1101,11 +1102,13 @@ void PGMonitor::map_pg_creates()
 {
   OSDMap *osdmap = &mon->osdmon()->osdmap;
   if (osdmap->get_epoch() == last_map_pg_create_osd_epoch) {
-    dout(10) << "map_pg_creates to " << pg_map.creating_pgs.size() << " pgs -- no change" << dendl;
+    dout(10) << "map_pg_creates to " << pg_map.creating_pgs.size()
+	     << " pgs -- no change" << dendl;
     return;
   }
 
-  dout(10) << "map_pg_creates to " << pg_map.creating_pgs.size() << " pgs osdmap epoch " << osdmap->get_epoch() << dendl;
+  dout(10) << "map_pg_creates to " << pg_map.creating_pgs.size()
+	   << " pgs osdmap epoch " << osdmap->get_epoch() << dendl;
   last_map_pg_create_osd_epoch = osdmap->get_epoch();
 
   for (set<pg_t>::iterator p = pg_map.creating_pgs.begin();
@@ -1134,15 +1137,23 @@ void PGMonitor::map_pg_creates()
       &acting,
       &acting_primary);
 
-    if (s->acting_primary != -1) {
-      pg_map.creating_pgs_by_osd[s->acting_primary].erase(pgid);
-      if (pg_map.creating_pgs_by_osd[s->acting_primary].size() == 0)
-        pg_map.creating_pgs_by_osd.erase(s->acting_primary);
+    bool changed = false;
+    if (up != s->up ||
+	up_primary != s->up_primary ||
+	acting !=  s->acting ||
+	acting_primary != s->acting_primary) {
+      changed = true;
+      if (s->acting_primary != -1) {
+	pg_map.creating_pgs_by_osd[s->acting_primary].erase(pgid);
+	if (pg_map.creating_pgs_by_osd[s->acting_primary].size() == 0)
+	  pg_map.creating_pgs_by_osd.erase(s->acting_primary);
+      }
+      s->up = up;
+      s->up_primary = up_primary;
+      s->acting = acting;
+      s->acting_primary = acting_primary;
+      s->mapping_epoch = pg_map.last_pg_scan;
     }
-    s->up = up;
-    s->up_primary = up_primary;
-    s->acting = acting;
-    s->acting_primary = acting_primary;
     pg_map.stat_pg_add(pgid, *s, true);
 
     // don't send creates for localized pgs
@@ -1154,7 +1165,8 @@ void PGMonitor::map_pg_creates()
       continue;
 
     if (acting_primary != -1) {
-      pg_map.creating_pgs_by_osd[acting_primary].insert(pgid);
+      if (changed)
+	pg_map.creating_pgs_by_osd[acting_primary].insert(pgid);
     } else {
       dout(20) << "map_pg_creates  " << pgid << " -> no osds in epoch "
 	       << mon->osdmon()->osdmap.get_epoch() << ", skipping" << dendl;
