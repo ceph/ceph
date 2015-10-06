@@ -2752,7 +2752,6 @@ int RGW_Auth_S3::authorize(RGWRados *store, struct req_state *s)
   s->owner.set_id(s->user->user_id);
   s->owner.set_name(s->user->display_name);
 
-
   return  0;
 }
 
