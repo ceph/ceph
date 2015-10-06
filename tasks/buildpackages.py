@@ -103,11 +103,11 @@ def task(ctx, config):
         cmd = (". " + os.environ['HOME'] + "/.ssh_agent ; flock --close /tmp/buildpackages make -C " + d +
                " CEPH_GIT_URL=" + teuth_config.get_ceph_git_url() +
                " CEPH_PKG_TYPE=" + gitbuilder.pkg_type +
-               " CEPH_OS_TYPE=" + ctx.config['os_type'] +
-               " CEPH_OS_VERSION=" + ctx.config['os_version'] +
+               " CEPH_OS_TYPE=" + gitbuilder.os_type +
+               " CEPH_OS_VERSION=" + gitbuilder.os_version +
                " CEPH_DIST=" + gitbuilder.distro +
                " CEPH_ARCH=" + gitbuilder.arch +
-               " CEPH_SHA1=" + (sha1 or '')  +
+               " CEPH_SHA1=" + sha1 +
                " CEPH_TAG=" + (tag or '') +
                " CEPH_BRANCH=" + (branch or '') +
                " CEPH_REF=" + ref +
