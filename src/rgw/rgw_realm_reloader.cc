@@ -44,7 +44,8 @@ class RGWRealmReloader::C_Reload : public Context {
   void finish(int r) { reloader->reload(); }
 };
 
-void RGWRealmReloader::handle_notify(bufferlist::iterator& p)
+void RGWRealmReloader::handle_notify(RGWRealmNotify type,
+                                     bufferlist::iterator& p)
 {
   CephContext *const cct = store->ctx();
 

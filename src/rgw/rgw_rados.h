@@ -1297,7 +1297,7 @@ public:
 
   string get_control_oid();
   /// send a notify on the realm control object
-  int notify_zone();
+  int notify_zone(bufferlist& bl);
   /// notify the zone of a new period
   int notify_new_period(const RGWPeriod& period);
 };

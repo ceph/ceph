@@ -5,11 +5,17 @@
 #define RGW_REALM_WATCHER_H
 
 #include "include/rados/librados.hpp"
+#include "include/assert.h"
 #include "common/Timer.h"
 #include "common/Cond.h"
 
 class RGWRados;
 class RGWRealm;
+
+enum class RGWRealmNotify {
+  Reload,
+};
+WRITE_RAW_ENCODER(RGWRealmNotify);
 
 /**
  * RGWRealmWatcher establishes a watch on the current RGWRealm's control object,
@@ -26,14 +32,15 @@ class RGWRealmWatcher : public librados::WatchCtx2 {
    public:
     virtual ~Watcher() = default;
 
-    virtual void handle_notify(bufferlist::iterator& p) = 0;
+    virtual void handle_notify(RGWRealmNotify type,
+                               bufferlist::iterator& p) = 0;
   };
 
   RGWRealmWatcher(CephContext* cct, RGWRealm& realm);
   ~RGWRealmWatcher();
 
-  /// register a watcher to be notified
-  void set_watcher(Watcher* watcher);
+  /// register a watcher for the given notification type
+  void add_watcher(RGWRealmNotify type, Watcher& watcher);
 
   /// respond to realm notifications by calling the appropriate watcher
   void handle_notify(uint64_t notify_id, uint64_t cookie,
@@ -56,7 +63,7 @@ class RGWRealmWatcher : public librados::WatchCtx2 {
   int watch_restart();
   void watch_stop();
 
-  Watcher* watcher;
+  std::map<RGWRealmNotify, Watcher&> watchers;
 };
 
 #endif // RGW_REALM_WATCHER_H

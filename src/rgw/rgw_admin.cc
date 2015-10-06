@@ -33,6 +33,7 @@
 #include "rgw_sync.h"
 #include "rgw_data_sync.h"
 #include "rgw_rest_conn.h"
+#include "rgw_realm_watcher.h"
 
 using namespace std;
 
