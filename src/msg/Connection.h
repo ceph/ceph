@@ -39,7 +39,7 @@ class Message;
 class Messenger;
 
 struct Connection : public RefCountedObject {
-  Mutex lock;
+  mutable Mutex lock;
   Messenger *msgr;
   RefCountedObject *priv;
   int peer_type;
@@ -179,15 +179,19 @@ public:
   }
 
   utime_t get_last_keepalive() const {
+    Mutex::Locker l(lock);
     return last_keepalive;
   }
   void set_last_keepalive(utime_t t) {
+    Mutex::Locker l(lock);
     last_keepalive = t;
   }
   utime_t get_last_keepalive_ack() const {
+    Mutex::Locker l(lock);
     return last_keepalive_ack;
   }
   void set_last_keepalive_ack(utime_t t) {
+    Mutex::Locker l(lock);
     last_keepalive_ack = t;
   }
 
