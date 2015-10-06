@@ -100,7 +100,9 @@ def task(ctx, config):
             'ram': 1024, # MB
             'cpus': 1,
         }, select)
-        cmd = (". " + os.environ['HOME'] + "/.ssh_agent ; flock --close /tmp/buildpackages make -C " + d +
+        cmd = (". " + os.environ['HOME'] + "/.ssh_agent ; " +
+               " flock --close /tmp/buildpackages-" + sha1 +
+               " make -C " + d +
                " CEPH_GIT_URL=" + teuth_config.get_ceph_git_url() +
                " CEPH_PKG_TYPE=" + gitbuilder.pkg_type +
                " CEPH_OS_TYPE=" + gitbuilder.os_type +
