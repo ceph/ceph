@@ -3455,6 +3455,10 @@ void Monitor::_ms_dispatch(Message *m)
   }
 
   assert(s);
+
+  s->session_timeout = ceph_clock_now(NULL);
+  s->session_timeout += g_conf->mon_session_timeout;
+
   if (s->auth_handler) {
     s->entity_name = s->auth_handler->get_entity_name();
   }
@@ -4698,11 +4702,17 @@ void Monitor::tick()
     
     // don't trim monitors
     if (s->inst.name.is_mon())
-      continue; 
+      continue;
 
-    if (!s->until.is_zero() && s->until < now) {
+    if (s->session_timeout < now && s->con) {
+      // check keepalive, too
+      s->session_timeout = s->con->get_last_keepalive();
+      s->session_timeout += g_conf->mon_session_timeout;
+    }
+    if (s->session_timeout < now) {
       dout(10) << " trimming session " << s->con << " " << s->inst
-	       << " (until " << s->until << " < now " << now << ")" << dendl;
+	       << " (timeout " << s->session_timeout
+	       << " < now " << now << ")" << dendl;
     } else if (out_for_too_long) {
       // boot the client Session because we've taken too long getting back in
       dout(10) << " trimming session " << s->con << " " << s->inst
