@@ -229,6 +229,7 @@ class RGWSyncShardMarkerTrack {
 
 protected:
   virtual RGWCoroutine *store_marker(const T& new_marker) = 0;
+  virtual void handle_finish(const T& marker) { }
 
 public:
   RGWSyncShardMarkerTrack(int _window_size) : window_size(_window_size), updates_since_flush(0) {}
@@ -249,6 +250,8 @@ public:
     }
 
     pending.erase(pos);
+
+    handle_finish(pos);
 
     updates_since_flush++;
 
