@@ -13,6 +13,7 @@
  */
 
 #include "Replayer.hpp"
+#include "common/errno.h"
 #include <boost/foreach.hpp>
 #include <boost/thread/thread.hpp>
 #include <fstream>
@@ -156,19 +157,20 @@ void Replayer::run(const std::string& replay_file) {
     rados.init(NULL);
     int r = rados.init_with_context(g_ceph_context);
     if (r) {
-      cerr << "Unable to read conf file: " << r << std::endl;
+      cerr << "Failed to initialize RADOS: " << cpp_strerror(r) << std::endl;
       goto out;
     }
     r = rados.connect();
     if (r) {
-      cerr << "Unable to connect to Rados: " << r << std::endl;
+      cerr << "Failed to connect to cluster: " << cpp_strerror(r) << std::endl;
       goto out;
     }
     m_ioctx = new librados::IoCtx();
     {
       r = rados.ioctx_create(m_pool_name.c_str(), *m_ioctx);
       if (r) {
-	cerr << "Unable to create IoCtx: " << r << std::endl;
+        cerr << "Failed to open pool " << m_pool_name << ": "
+             << cpp_strerror(r) << std::endl;
 	goto out2;
       }
       m_rbd = new librbd::RBD();
@@ -176,7 +178,7 @@ void Replayer::run(const std::string& replay_file) {
 
       ifstream input(replay_file.c_str(), ios::in | ios::binary);
       if (!input.is_open()) {
-	cerr << "Unable to open " << replay_file << std::endl;
+	cerr << "Failed to open " << replay_file << std::endl;
 	exit(1);
       }
 
