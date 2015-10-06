@@ -903,15 +903,10 @@ rm -rf $RPM_BUILD_ROOT
 %pre -n ceph-common
 CEPH_GROUP_ID=""
 CEPH_USER_ID=""
-# disabled for now until we have the numbers
 %if 0%{?rhel} || 0%{?fedora}
 CEPH_GROUP_ID="-g 167"
 CEPH_USER_ID="-u 167"
 %endif
-# %if 0%{?suse_version}
-# CEPH_GROUP_ID="-g "
-# CEPH_USER_ID="-u "
-# %endif
 %if 0%{?rhel} || 0%{?fedora}
 %{_sbindir}/groupadd ceph $CEPH_GROUP_ID -o -r 2>/dev/null || :
 %{_sbindir}/useradd ceph $CEPH_USER_ID -o -r -g ceph -s /sbin/nologin -c "Ceph daemons" -d %{_localstatedir}/lib/ceph 2> /dev/null || :
