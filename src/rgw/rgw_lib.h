@@ -105,12 +105,13 @@ class RGWLibRequest : public RGWRequest,
 		      public RGWHandler_Lib {
 public:
   CephContext* cct;
+  RGWUserInfo* user;
 
   /* unambiguiously return req_state */
   inline struct req_state* get_state() { return this->RGWRequest::s; }
 
   RGWLibRequest(CephContext* _cct)
-    :  RGWRequest(0), cct(_cct)
+    :  RGWRequest(0), cct(_cct), user(nullptr)
     {}
 
   /* descendant equivalent of *REST*::init_from_header(...):
