@@ -1515,7 +1515,7 @@ void Pipe::reader()
     }
 
     if (tag == CEPH_MSGR_TAG_KEEPALIVE) {
-      ldout(msgr->cct,20) << "reader got KEEPALIVE" << dendl;
+      ldout(msgr->cct,2) << "reader got KEEPALIVE" << dendl;
       pipe_lock.Lock();
       connection_state->set_last_keepalive(ceph_clock_now(NULL));
       continue;
@@ -1532,15 +1532,15 @@ void Pipe::reader()
       } else {
 	send_keepalive_ack = true;
 	keepalive_ack_stamp = utime_t(t);
-	ldout(msgr->cct,20) << "reader got KEEPALIVE2 " << keepalive_ack_stamp
-			    << dendl;
+	ldout(msgr->cct,2) << "reader got KEEPALIVE2 " << keepalive_ack_stamp
+			   << dendl;
 	connection_state->set_last_keepalive(ceph_clock_now(NULL));
 	cond.Signal();
       }
       continue;
     }
     if (tag == CEPH_MSGR_TAG_KEEPALIVE2_ACK) {
-      ldout(msgr->cct,20) << "reader got KEEPALIVE_ACK" << dendl;
+      ldout(msgr->cct,2) << "reader got KEEPALIVE_ACK" << dendl;
       struct ceph_timespec t;
       int rc = tcp_read((char*)&t, sizeof(t));
       pipe_lock.Lock();
