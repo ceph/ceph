@@ -541,6 +541,8 @@ private:
   int _recover_next_nid();
   void _assign_nid(TransContext *txc, OnodeRef o);
 
+  void _dump_onode(OnodeRef o);
+
   int _clean_fid_tail_fd(const fragment_t& f, int fd);
   int _clean_fid_tail(TransContext *txc, const fragment_t& f);
 
