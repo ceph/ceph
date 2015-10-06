@@ -33,10 +33,15 @@ namespace {
   typedef std::tuple<string,uint64_t, struct rgw_file_handle*> fid_type; //in c++2014 can alias...
   std::vector<fid_type> fids1;
   std::vector<fid_type> fids2;
+
+  struct {
+    int argc;
+    char **argv;
+  } saved_args;
 }
 
 TEST(LibRGW, INIT) {
-  int ret = librgw_create(&rgw, nullptr, 0, nullptr);
+  int ret = librgw_create(&rgw, nullptr, saved_args.argc, saved_args.argv);
   ASSERT_EQ(ret, 0);
   ASSERT_NE(rgw, nullptr);
 }
@@ -173,6 +178,9 @@ int main(int argc, char *argv[])
       ++arg_iter;
     }
   }
+
+  saved_args.argc = argc;
+  saved_args.argv = argv;
 
   ::testing::InitGoogleTest(&argc, argv);
   return RUN_ALL_TESTS();
