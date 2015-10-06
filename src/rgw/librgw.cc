@@ -150,6 +150,7 @@ int RGWLibProcess::process_request(RGWLibRequest* req)
     /* we don't really care about return code */
     dout(20) << "process_request() returned " << ret << dendl;
   }
+  return ret;
 } /* process_request */
 
 static inline void abort_req(struct req_state *s, RGWOp *op, int err_no)
@@ -200,10 +201,8 @@ int RGWLibProcess::process_request(RGWLibRequest* req, RGWLibIO* io)
    */
   rgw_env.set("HTTP_HOST", "10.1.1.220" /* XXXX: fix me */);
 
-  RGWUserInfo userinfo;
-
   /* XXX and -then- bloat up req_state with string copies from it */
-  struct req_state rstate(req->cct, &rgw_env, &userinfo);
+  struct req_state rstate(req->cct, &rgw_env, req->get_user());
   struct req_state *s = &rstate;
 
   // XXX fix this
