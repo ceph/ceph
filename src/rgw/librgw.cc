@@ -67,40 +67,6 @@ public:
   }
 };
 
-#warning deleteme
-#if 0
-void RGWLibRequestEnv::set_date(utime_t& tm)
-{
-  stringstream s;
-  tm.asctime(s);
-  date_str = s.str();
-}
-
-int RGWLibRequestEnv::sign(RGWAccessKey& access_key)
-{
-  map<string, string> meta_map;
-  map<string, string> sub_resources;
-
-  string canonical_header;
-  string digest;
-
-  rgw_create_s3_canonical_header(request_method.c_str(),
-				 NULL, /* const char* content_md5 */
-				 content_type.c_str(),
-				 date_str.c_str(),
-				 meta_map,
-				 uri.c_str(),
-				 sub_resources,
-				 canonical_header);
-
-  int ret = rgw_get_s3_header_digest(canonical_header, access_key.key, digest);
-  if (ret < 0) {
-    return ret;
-  }
-  return 0;
-}
-#endif /* 0 */
-
 void RGWLibProcess::checkpoint()
 {
     m_tp.drain(&req_wq);
@@ -220,8 +186,18 @@ int RGWLibProcess::process_request(RGWLibRequest* req, RGWLibIO* io)
 
   /* req is-a RGWOp, currently initialized separately */
   ret = req->op_init();
-    if (ret < 0) {
+  if (ret < 0) {
     dout(10) << "failed to initialize RGWOp" << dendl;
+    abort_req(s, op, ret);
+    goto done;
+  }
+
+  /* XXX authorize does less here then in the REST path, e.g.,
+   * the user's info is cached, but still incomplete */
+  req->log(s, "authorizing");
+  ret = req->authorize();
+  if (ret < 0) {
+    dout(10) << "failed to authorize request" << dendl;
     abort_req(s, op, ret);
     goto done;
   }
@@ -247,7 +223,8 @@ int RGWLibProcess::process_request(RGWLibRequest* req, RGWLibIO* io)
     goto done;
   }
 
-  /* XXXX 1s stall if this is skipped? */
+  /* XXXX almost correct, I think */
+  #if 0
   req->log(s, "verifying op permissions");
   ret = op->verify_permission();
   if (ret < 0) {
@@ -258,6 +235,8 @@ int RGWLibProcess::process_request(RGWLibRequest* req, RGWLibIO* io)
       goto done;
     }
   }
+  #endif
+  req->log(s, "here 3");
 
   req->log(s, "verifying op params");
   ret = op->verify_params();
@@ -469,7 +448,27 @@ int RGWLibRequest::read_permissions(RGWOp *op) {
   }
 
   return ret;
-}
+} /* RGWLibRequest::read_permissions */
+
+int RGWHandler_Lib::authorize()
+{
+  /* TODO: handle
+   *  1. subusers
+   *  2. anonymous access
+   *  3. system access
+   *  4. ?
+   *
+   *  Much or all of this depends on handling the cached authorization
+   *  correctly (e.g., dealing with keystone) at mount time.
+   */
+  s->perm_mask = RGW_PERM_FULL_CONTROL;
+
+  // populate the owner info
+  s->owner.set_id(s->user->user_id);
+  s->owner.set_name(s->user->display_name);
+
+  return 0;
+} /* RGWHandler_Lib::authorize */
 
 /* global RGW library object */
 static RGWLib rgwlib;

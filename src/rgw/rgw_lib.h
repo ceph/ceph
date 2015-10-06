@@ -92,9 +92,7 @@ class RGWHandler_Lib : public RGWHandler {
   friend class RGWRESTMgr_Lib;
 public:
 
-  virtual int authorize() {
-    return RGW_Auth_S3::authorize(store, s);
-  }
+  virtual int authorize();
 
   RGWHandler_Lib() {}
   virtual ~RGWHandler_Lib() {}
@@ -131,6 +129,9 @@ public:
 
     RGWRequest::init_state(_s);
     RGWHandler::init(rados_ctx->store, _s, io);
+
+    /* fixup _s->req */
+    _s->req = this;
 
     log_init();
 

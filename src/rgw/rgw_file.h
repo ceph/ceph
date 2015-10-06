@@ -89,6 +89,7 @@ public:
 
     struct req_state* s = get_state();
     s->info.method = "GET";
+    s->op = OP_GET;
 
     /* XXX derp derp derp */
     s->relative_uri = "/";
@@ -149,6 +150,7 @@ public:
 
     struct req_state* s = get_state();
     s->info.method = "GET";
+    s->op = OP_GET;
 
     /* XXX derp derp derp */
     s->relative_uri = uri;
