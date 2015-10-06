@@ -709,12 +709,14 @@ void MonClient::tick()
   } else if (!cur_mon.empty()) {
     // just renew as needed
     utime_t now = ceph_clock_now(cct);
-    ldout(cct, 10) << "renew subs? (now: " << now 
-		   << "; renew after: " << sub_renew_after << ") -- " 
-		   << (now > sub_renew_after ? "yes" : "no") 
-		   << dendl;
-    if (now > sub_renew_after)
-      _renew_subs();
+    if (!cur_con->has_feature(CEPH_FEATURE_MON_STATEFUL_SUB)) {
+      ldout(cct, 10) << "renew subs? (now: " << now
+		     << "; renew after: " << sub_renew_after << ") -- "
+		     << (now > sub_renew_after ? "yes" : "no")
+		     << dendl;
+      if (now > sub_renew_after)
+	_renew_subs();
+    }
 
     cur_con->send_keepalive();
 
@@ -722,7 +724,7 @@ void MonClient::tick()
       if (cct->_conf->mon_client_ping_timeout > 0 &&
 	  cur_con->has_feature(CEPH_FEATURE_MSGR_KEEPALIVE2)) {
 	utime_t lk = cur_con->get_last_keepalive_ack();
-	utime_t interval = ceph_clock_now(cct) - lk;
+	utime_t interval = now - lk;
 	if (interval > cct->_conf->mon_client_ping_timeout) {
 	  ldout(cct, 1) << "no keepalive since " << lk << " (" << interval
 			<< " seconds), reconnecting" << dendl;
@@ -772,6 +774,8 @@ void MonClient::_renew_subs()
 void MonClient::handle_subscribe_ack(MMonSubscribeAck *m)
 {
   if (sub_renew_sent != utime_t()) {
+    // NOTE: this is only needed for legacy (infernalis or older)
+    // mons; see tick().
     sub_renew_after = sub_renew_sent;
     sub_renew_after += m->interval / 2.0;
     ldout(cct, 10) << "handle_subscribe_ack sent " << sub_renew_sent << " renew after " << sub_renew_after << dendl;
