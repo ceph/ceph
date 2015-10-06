@@ -195,7 +195,7 @@ OPTION(mon_osd_cache_size, OPT_INT, 10)  // the size of osdmaps cache, not to re
 
 OPTION(mon_tick_interval, OPT_INT, 5)
 OPTION(mon_session_timeout, OPT_INT, 300)    // must send keepalive or subscribe
-OPTION(mon_subscribe_interval, OPT_DOUBLE, 300)
+OPTION(mon_subscribe_interval, OPT_DOUBLE, 24*3600)  // for legacy clients only
 OPTION(mon_delta_reset_interval, OPT_DOUBLE, 10)   // seconds of inactivity before we reset the pg delta to 0
 OPTION(mon_osd_laggy_halflife, OPT_INT, 60*60)        // (seconds) how quickly our laggy estimations decay
 OPTION(mon_osd_laggy_weight, OPT_DOUBLE, .3)          // weight for new 'samples's in laggy estimations
