@@ -3431,6 +3431,39 @@ void NewStore::_do_read_all_overlays(wal_transaction_t& wt)
   return;
 }
 
+void NewStore::_dump_onode(OnodeRef o)
+{
+  dout(30) << __func__ << " " << o
+	   << " nid " << o->onode.nid
+	   << " size " << o->onode.size
+	   << " frag_size " << o->onode.frag_size
+	   << " expected_object_size " << o->onode.expected_object_size
+	   << " expected_write_size " << o->onode.expected_write_size
+	   << dendl;
+  for (map<string,bufferptr>::iterator p = o->onode.attrs.begin();
+       p != o->onode.attrs.end();
+       ++p) {
+    dout(30) << __func__ << "  attr " << p->first
+	     << " len " << p->second.length() << dendl;
+  }
+  for (map<uint64_t,fragment_t>::iterator p = o->onode.data_map.begin();
+       p != o->onode.data_map.end();
+       ++p) {
+    dout(30) << __func__ << "  fragment " << p->first << " " << p->second
+	     << dendl;
+  }
+  for (map<uint64_t,overlay_t>::iterator p = o->onode.overlay_map.begin();
+       p != o->onode.overlay_map.end();
+       ++p) {
+    dout(30) << __func__ << "  overlay " << p->first << " " << p->second
+	     << dendl;
+  }
+  if (!o->onode.shared_overlays.empty()) {
+    dout(30) << __func__ << "  shared_overlays " << o->onode.shared_overlays
+	     << dendl;
+  }
+}
+
 int NewStore::_do_write(TransContext *txc,
 			OnodeRef o,
 			uint64_t orig_offset, uint64_t orig_length,
@@ -3446,7 +3479,7 @@ int NewStore::_do_write(TransContext *txc,
 	   << " - have " << o->onode.size
 	   << " bytes in " << o->onode.data_map.size()
 	   << " fragments" << dendl;
-
+  _dump_onode(o);
   o->exists = true;
 
   if (!o->onode.frag_size && o->onode.data_map.empty()) {
