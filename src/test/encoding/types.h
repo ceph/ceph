@@ -111,6 +111,15 @@ TYPE(ObjectStore::Transaction)
 #include "os/SequencerPosition.h"
 TYPE(SequencerPosition)
 
+#include "os/newstore/newstore_types.h"
+TYPE(cnode_t)
+TYPE(fid_t)
+TYPE(fragment_t)
+TYPE(overlay_t)
+TYPE(onode_t)
+TYPE(wal_op_t)
+TYPE(wal_transaction_t)
+
 #include "common/hobject.h"
 TYPE(hobject_t)
 TYPE(ghobject_t)
