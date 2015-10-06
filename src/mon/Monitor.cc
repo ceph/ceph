@@ -3427,9 +3427,10 @@ void Monitor::_ms_dispatch(Message *m)
       return;
     }
 
-    s = session_map.new_session(m->get_source_inst(), m->get_connection().get());
+    ConnectionRef con = m->get_connection();
+    s = session_map.new_session(m->get_source_inst(), con.get());
     assert(s);
-    m->get_connection()->set_priv(s->get());
+    con->set_priv(s->get());
     dout(10) << __func__ << " new session " << s << " " << *s << dendl;
     op->set_session(s);
 
