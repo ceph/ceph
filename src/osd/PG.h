@@ -1217,7 +1217,10 @@ public:
   void scrub(epoch_t queued, ThreadPool::TPHandle &handle);
   void chunky_scrub(ThreadPool::TPHandle &handle);
   void scrub_compare_maps();
-  void scrub_process_inconsistent();
+  /**
+   * return true if any inconsistency/missing is repaired, false otherwise
+   */
+  bool scrub_process_inconsistent();
   void scrub_finish();
   void scrub_clear_state();
   void _scan_snaps(ScrubMap &map);
