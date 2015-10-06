@@ -749,10 +749,8 @@ void PG::generate_past_intervals()
     }
   }
 
-  // Verify same_interval_since is correct
-  if (info.history.same_interval_since) {
-    assert(info.history.same_interval_since == same_interval_since);
-  } else {
+  // PG import needs recalculated same_interval_since
+  if (info.history.same_interval_since == 0) {
     assert(same_interval_since);
     dout(10) << __func__ << " fix same_interval_since " << same_interval_since << " pg " << *this << dendl;
     dout(10) << __func__ << " past_intervals " << past_intervals << dendl;
