@@ -351,13 +351,22 @@ otherwise need to be created via the neutron API.
 Setup OpenStack at OVH
 ----------------------
 
-It is cheaper than EnterCloudSuite but does not provide volumes (as
-of August 2015) and is therefore unfit to run teuthology tests that
-require disks attached to the instance. Each instance has a public IP
-by default.
+Each instance has a public IP by default.
 
 * `create an account <https://www.ovh.com/fr/support/new_nic.xml>`_
 * get $HOME/openrc.sh from `the horizon dashboard <https://horizon.cloud.ovh.net/project/access_and_security/?tab=access_security_tabs__api_access_tab>`_
+
+Setup OpenStack at Rackspace
+----------------------------
+
+There is no support for security groups. To workaround that
+limitation, the setup instructions must be run from an instance that
+is within the Rackspace OpenStack cluster already so it has permission
+to communicate with the instances it creates.
+
+* `create an account <https://www.rackspace.com/cloud/servers>`_
+* make sure your environment contains the requires OS_* variables for
+  ``openstack server list`` to run.
 
 Setup
 -----
