@@ -1478,10 +1478,11 @@ public:
 struct RGWObjectCtx {
   RGWRados *store;
   map<rgw_obj, RGWObjState> objs_state;
+  RWLock lock;
   void *user_ctx;
 
-  RGWObjectCtx(RGWRados *_store) : store(_store), user_ctx(NULL) { }
-  RGWObjectCtx(RGWRados *_store, void *_user_ctx) : store(_store), user_ctx(_user_ctx) { }
+  RGWObjectCtx(RGWRados *_store) : store(_store), lock("RGWObjectCtx"), user_ctx(NULL) { }
+  RGWObjectCtx(RGWRados *_store, void *_user_ctx) : store(_store), lock("RGWObjectCtx"), user_ctx(_user_ctx) { }
 
   RGWObjState *get_state(rgw_obj& obj);
   void set_atomic(rgw_obj& obj);
