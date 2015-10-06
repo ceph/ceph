@@ -1919,20 +1919,45 @@ public:
 };
 
 RGWObjState *RGWObjectCtx::get_state(rgw_obj& obj) {
+  RGWObjState *result;
+  map<rgw_obj, RGWObjState>::iterator iter;
+  lock.get_read();
   if (!obj.get_object().empty()) {
-    return &objs_state[obj];
+    iter = objs_state.find(obj);
+    if (iter != objs_state.end()) {
+      result = &iter->second;
+      lock.unlock();
+    } else {
+      lock.unlock();
+      lock.get_write();
+      result = &objs_state[obj];
+      lock.unlock();
+    }
+    return result;
   } else {
     rgw_obj new_obj(store->zone.domain_root, obj.bucket.name);
-    return &objs_state[new_obj];
+    iter = objs_state.find(new_obj);
+    if (iter != objs_state.end()) {
+      result = &iter->second;
+      lock.unlock();
+    } else {
+      lock.unlock();
+      lock.get_write();
+      result = &objs_state[new_obj];
+      lock.unlock();
+    }
+    return result;
   }
 }
 
 void RGWObjectCtx::invalidate(rgw_obj& obj)
 {
+  RWLock::WLocker wl(lock);
   objs_state.erase(obj);
 }
 
 void RGWObjectCtx::set_atomic(rgw_obj& obj) {
+  RWLock::WLocker wl(lock);
   if (!obj.get_object().empty()) {
     objs_state[obj].is_atomic = true;
   } else {
@@ -1942,6 +1967,7 @@ void RGWObjectCtx::set_atomic(rgw_obj& obj) {
 }
 
 void RGWObjectCtx::set_prefetch_data(rgw_obj& obj) {
+  RWLock::WLocker wl(lock);
   if (!obj.get_object().empty()) {
     objs_state[obj].prefetch_data = true;
   } else {
