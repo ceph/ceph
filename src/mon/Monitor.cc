@@ -4159,10 +4159,14 @@ void Monitor::handle_subscribe(MonOpRequestRef op)
     }
   }
 
-  // ???
-
-  if (reply)
-    m->get_connection()->send_message(new MMonSubscribeAck(monmap->get_fsid(), (int)g_conf->mon_subscribe_interval));
+  if (reply) {
+    // we only need to reply if the client is old enough to think it
+    // has to send renewals.
+    ConnectionRef con = m->get_connection();
+    if (!con->has_feature(CEPH_FEATURE_MON_STATEFUL_SUB))
+      m->get_connection()->send_message(new MMonSubscribeAck(
+	monmap->get_fsid(), (int)g_conf->mon_subscribe_interval));
+  }
 
 }
 
