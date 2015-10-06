@@ -719,8 +719,6 @@ void MonClient::tick()
     cur_con->send_keepalive();
 
     if (state == MC_STATE_HAVE_SESSION) {
-      send_log();
-
       if (cct->_conf->mon_client_ping_timeout > 0 &&
 	  cur_con->has_feature(CEPH_FEATURE_MSGR_KEEPALIVE2)) {
 	utime_t lk = cur_con->get_last_keepalive_ack();
@@ -731,6 +729,8 @@ void MonClient::tick()
 	  _reopen_session();
 	}
       }
+
+      send_log();
     }
   }
 
