@@ -366,7 +366,8 @@ private:
       const struct bt_definition *m_scope;
     } fields(evt, scope_fields);
 
-    if (strcmp(event_name, "librbd:read_enter") == 0) {
+    if (strcmp(event_name, "librbd:read_enter") == 0 ||
+        strcmp(event_name, "librbd:read2_enter") == 0) {
       string name(fields.string("name"));
       string snap_name(fields.string("snap_name"));
       bool readonly = fields.int64("read_only");
@@ -414,7 +415,8 @@ private:
       IO::ptr completionIO(thread->pending_io()->create_completion(ts, threadID));
       m_ios.push_back(completionIO);
       completed(completionIO);
-    } else if (strcmp(event_name, "librbd:write_enter") == 0) {
+    } else if (strcmp(event_name, "librbd:write_enter") == 0 ||
+               strcmp(event_name, "librbd:write2_enter") == 0) {
       string name(fields.string("name"));
       string snap_name(fields.string("snap_name"));
       bool readonly = fields.int64("read_only");
@@ -431,7 +433,8 @@ private:
       IO::ptr completionIO(thread->pending_io()->create_completion(ts, threadID));
       m_ios.push_back(completionIO);
       completed(completionIO);
-    } else if (strcmp(event_name, "librbd:aio_read_enter") == 0) {
+    } else if (strcmp(event_name, "librbd:aio_read_enter") == 0 ||
+               strcmp(event_name, "librbd:aio_read2_enter") == 0) {
       string name(fields.string("name"));
       string snap_name(fields.string("snap_name"));
       bool readonly = fields.int64("read_only");
@@ -446,7 +449,8 @@ private:
       m_ios.push_back(io);
       thread->issued_io(io, m_threads);
       m_pending_ios[completion] = io;
-    } else if (strcmp(event_name, "librbd:aio_write_enter") == 0) {
+    } else if (strcmp(event_name, "librbd:aio_write_enter") == 0 ||
+               strcmp(event_name, "librbd:aio_write2_enter") == 0) {
       string name(fields.string("name"));
       string snap_name(fields.string("snap_name"));
       bool readonly = fields.int64("read_only");
