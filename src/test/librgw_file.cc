@@ -24,6 +24,8 @@
 #include "common/debug.h"
 #include "global/global_init.h"
 
+#define dout_subsys ceph_subsys_rgw
+
 namespace {
   librgw_t rgw = nullptr;
   string uid("testuser");
@@ -110,7 +112,8 @@ TEST(LibRGW, LIST_OBJECTS) {
     return;
 
   for (auto& fid : fids1) {
-    std::cout << "readdir in bucket " << get<0>(fid) << std::endl;
+    ldout(g_ceph_context, 0) << __func__ << " readdir on bucket " << get<0>(fid)
+		     << dendl;
     bool eof = false;
     uint64_t offset = 0;
     int ret = rgw_readdir(fs, get<2>(fid), &offset, r2_cb, &fids2,

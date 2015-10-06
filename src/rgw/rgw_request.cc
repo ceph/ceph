@@ -4,7 +4,7 @@
 #include "rgw_op.h"
 #include "rgw_request.h"
 
-#define dout_subsys ceph_subsys_auth
+#define dout_subsys ceph_subsys_rgw
 
 /* XXX */
 void RGWRequest::log_format(struct req_state *s, const char *fmt, ...)
