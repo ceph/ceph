@@ -3890,8 +3890,8 @@ Adjusting CRUSH maps
      wc -l /tmp/a                          # num total mappings
      diff -u /tmp/a /tmp/b | grep -c ^+    # num changed mappings
 
-   Divide the total number of lines in /tmp/a with the number of lines
-   changed.  We've found that most clusters are under 10%.
+   Divide the number of changed lines by the total number of lines in
+   /tmp/a.  We've found that most clusters are under 10%.
 
    You can force all of this rebalancing to happen at once with::
 
