@@ -306,6 +306,7 @@ public:
 
 
 enum DataLogEntityType {
+  ENTITY_TYPE_UNKNOWN = 0,
   ENTITY_TYPE_BUCKET = 1,
 };
 
@@ -334,8 +335,35 @@ struct rgw_data_change {
   }
 
   void dump(Formatter *f) const;
+  void decode_json(JSONObj *obj);
 };
 WRITE_CLASS_ENCODER(rgw_data_change)
+
+struct rgw_data_change_log_entry {
+  string log_id;
+  utime_t log_timestamp;
+  rgw_data_change entry;
+
+  void encode(bufferlist& bl) const {
+    ENCODE_START(1, 1, bl);
+    ::encode(log_id, bl);
+    ::encode(log_timestamp, bl);
+    ::encode(entry, bl);
+    ENCODE_FINISH(bl);
+  }
+
+  void decode(bufferlist::iterator& bl) {
+     DECODE_START(1, bl);
+     ::decode(log_id, bl);
+     ::decode(log_timestamp, bl);
+     ::decode(entry, bl);
+     DECODE_FINISH(bl);
+  }
+
+  void dump(Formatter *f) const;
+  void decode_json(JSONObj *obj);
+};
+WRITE_CLASS_ENCODER(rgw_data_change_log_entry)
 
 struct RGWDataChangesLogInfo {
   string marker;
@@ -426,7 +454,7 @@ public:
   int add_entry(rgw_bucket& bucket, int shard_id);
   int renew_entries();
   int list_entries(int shard, utime_t& start_time, utime_t& end_time, int max_entries,
-		   list<rgw_data_change>& entries,
+		   list<rgw_data_change_log_entry>& entries,
 		   const string& marker,
 		   string *out_marker,
 		   bool *truncated);
@@ -448,7 +476,7 @@ public:
     LogMarker() : shard(0) {}
   };
   int list_entries(utime_t& start_time, utime_t& end_time, int max_entries,
-               list<rgw_data_change>& entries, LogMarker& marker, bool *ptruncated);
+               list<rgw_data_change_log_entry>& entries, LogMarker& marker, bool *ptruncated);
 
   bool going_down();
 };

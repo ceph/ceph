@@ -188,11 +188,12 @@ public:
 };
 
 class RGWOp_DATALog_List : public RGWRESTOp {
-  list<rgw_data_change> entries;
+  list<rgw_data_change_log_entry> entries;
   string last_marker;
   bool truncated;
+  bool extra_info;
 public:
-  RGWOp_DATALog_List() : truncated(false) {}
+  RGWOp_DATALog_List() : truncated(false), extra_info(false) {}
   ~RGWOp_DATALog_List() {}
 
   int check_caps(RGWUserCaps& caps) {
