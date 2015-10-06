@@ -57,6 +57,7 @@ using namespace librados;
 #include "rgw_object_expirer_core.h"
 #include "rgw_sync.h"
 #include "rgw_data_sync.h"
+#include "rgw_realm_watcher.h"
 
 #define dout_subsys ceph_subsys_rgw
 
@@ -772,7 +773,7 @@ string RGWRealm::get_control_oid()
   return get_info_oid_prefix() + id + ".control";
 }
 
-int RGWRealm::notify_zone()
+int RGWRealm::notify_zone(bufferlist& bl)
 {
   // open a context on the realm's pool
   auto pool = get_pool_name(cct);
@@ -783,7 +784,6 @@ int RGWRealm::notify_zone()
     return r;
   }
   // send a notify on the realm object
-  bufferlist bl;
   r = ctx.notify2(get_control_oid(), bl, 0, nullptr);
   if (r < 0) {
     lderr(cct) << "Realm notify failed with " << r << dendl;
@@ -794,7 +794,11 @@ int RGWRealm::notify_zone()
 
 int RGWRealm::notify_new_period(const RGWPeriod& period)
 {
-  return notify_zone();
+  bufferlist bl;
+  // reload the gateway with the new period
+  ::encode(RGWRealmNotify::Reload, bl);
+
+  return notify_zone(bl);
 }
 
 int RGWPeriod::init(CephContext *_cct, RGWRados *_store, const string& period_realm_id,
