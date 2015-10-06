@@ -1285,7 +1285,7 @@ int main(int argc, const char **argv)
   RGWRealmReloader reloader(store, &pauser);
 
   RGWRealmWatcher realm_watcher(g_ceph_context, store->realm);
-  realm_watcher.set_watcher(&reloader);
+  realm_watcher.add_watcher(RGWRealmNotify::Reload, reloader);
 
   wait_shutdown();
 

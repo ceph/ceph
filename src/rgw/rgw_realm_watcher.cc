@@ -13,7 +13,7 @@
 
 
 RGWRealmWatcher::RGWRealmWatcher(CephContext* cct, RGWRealm& realm)
-  : cct(cct), watcher(nullptr)
+  : cct(cct)
 {
   // no default realm, nothing to watch
   if (realm.get_id().empty()) {
@@ -35,9 +35,9 @@ RGWRealmWatcher::~RGWRealmWatcher()
   watch_stop();
 }
 
-void RGWRealmWatcher::set_watcher(Watcher* watcher)
+void RGWRealmWatcher::add_watcher(RGWRealmNotify type, Watcher& watcher)
 {
-  this->watcher = watcher;
+  watchers.emplace(type, watcher);
 }
 
 void RGWRealmWatcher::handle_notify(uint64_t notify_id, uint64_t cookie,
@@ -46,12 +46,26 @@ void RGWRealmWatcher::handle_notify(uint64_t notify_id, uint64_t cookie,
   if (cookie != watch_handle)
     return;
 
-  auto p = bl.begin();
-  watcher->handle_notify(p);
-
   // send an empty notify ack
   bufferlist reply;
   pool_ctx.notify_ack(watch_oid, notify_id, cookie, reply);
+
+  try {
+    auto p = bl.begin();
+    while (!p.end()) {
+      RGWRealmNotify notify;
+      ::decode(notify, p);
+      auto watcher = watchers.find(notify);
+      if (watcher == watchers.end()) {
+        lderr(cct) << "Failed to find a watcher for notify type "
+            << static_cast<int>(notify) << dendl;
+        break;
+      }
+      watcher->second.handle_notify(notify, p);
+    }
+  } catch (const buffer::error &e) {
+    lderr(cct) << "Failed to decode realm notifications." << dendl;
+  }
 }
 
 void RGWRealmWatcher::handle_error(uint64_t cookie, int err)
