@@ -17,6 +17,7 @@
 
 #include <ostream>
 #include "include/types.h"
+#include "common/hobject.h"
 
 namespace ceph {
   class Formatter;
@@ -70,6 +71,24 @@ static inline bool operator==(const fid_t& a, const fid_t& b) {
 static inline bool operator!=(const fid_t& a, const fid_t& b) {
   return !(a == b);
 }
+
+struct fid_backpointer_t {
+  ghobject_t oid;
+  uint64_t nid;
+  uint64_t offset;
+
+  fid_backpointer_t() : nid(0), offset(0) {}
+  fid_backpointer_t(const ghobject_t& o, uint64_t n, uint64_t off)
+    : oid(o), nid(n), offset(off) {}
+
+  void encode(bufferlist& bl) const;
+  void decode(bufferlist::iterator& p);
+  void dump(Formatter *f) const;
+  static void generate_test_instances(list<fid_backpointer_t*>& o);
+};
+WRITE_CLASS_ENCODER(fid_backpointer_t)
+
+ostream& operator<<(ostream& out, const fid_backpointer_t& bp);
 
 /// fragment: a byte extent backed by a file
 struct fragment_t {
@@ -169,6 +188,8 @@ struct wal_op_t {
   bufferlist data;
   uint64_t nid;
   vector<overlay_t> overlays;
+
+  wal_op_t() : offset(0), length(0), nid(0) {}
 
   void encode(bufferlist& bl) const;
   void decode(bufferlist::iterator& p);
