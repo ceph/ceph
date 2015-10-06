@@ -28,6 +28,7 @@
 #include "include/types.h"
 #include "include/utime.h"
 #include "rgw_acl.h"
+#include "rgw_basic_types.h"
 #include "rgw_cors.h"
 #include "rgw_quota.h"
 #include "rgw_string.h"
@@ -505,7 +506,7 @@ struct RGWUserInfo
      ::encode(bucket_quota, bl);
      ::encode(temp_url_keys, bl);
      ::encode(user_quota, bl);
-     ::encode(user_id, bl);
+     ::encode(user_id.tenant, bl);
      ENCODE_FINISH(bl);
   }
   void decode(bufferlist::iterator& bl) {
@@ -574,7 +575,9 @@ struct RGWUserInfo
       ::decode(user_quota, bl);
     }
     if (struct_v >= 17) {
-      ::decode(user_id, bl);
+      ::decode(user_id.tenant, bl);
+    } else {
+      user_id.tenant.clear();
     }
     DECODE_FINISH(bl);
   }
@@ -612,8 +615,8 @@ struct rgw_bucket {
     data_pool = index_pool = n;
     marker = "";
   }
-  rgw_bucket(const char *n, const char *dp, const char *ip, const char *m, const char *id, const char *h) :
-    name(n), data_pool(dp), index_pool(ip), marker(m), bucket_id(id) {}
+  rgw_bucket(const char *t, const char *n, const char *dp, const char *ip, const char *m, const char *id, const char *h) :
+    tenant(t), name(n), data_pool(dp), index_pool(ip), marker(m), bucket_id(id) {}
 
   void convert(cls_user_bucket *b) {
     b->name = name;

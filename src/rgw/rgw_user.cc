@@ -148,6 +148,8 @@ int rgw_store_user_info(RGWRados *store,
 
   RGWUID ui;
   ui.user_id = info.user_id;
+  // P3
+  ldout(store->ctx(), 0) << "DEBUG: rgw_store_user_info: user_id " << ui.user_id << dendl;
 
   bufferlist link_bl;
   ::encode(ui, link_bl);
@@ -158,7 +160,7 @@ int rgw_store_user_info(RGWRados *store,
 
   string key;
   info.user_id.to_str(key);
-  
+
   ret = store->meta_mgr->put_entry(user_meta_handler, key, data_bl, exclusive, &ot, mtime, pattrs);
   if (ret < 0)
     return ret;
@@ -344,12 +346,12 @@ extern int rgw_get_user_info_by_access_key(RGWRados *store, string& access_key, 
 }
 
 int rgw_get_user_attrs_by_uid(RGWRados *store,
-                              const string& user_id,
+                              const rgw_user& user_id,
                               map<string, bufferlist>& attrs,
                               RGWObjVersionTracker *objv_tracker)
 {
   RGWObjectCtx obj_ctx(store);
-  rgw_obj obj(store->zone.user_uid_pool, user_id);
+  rgw_obj obj(store->zone.user_uid_pool, user_id.to_str());
   RGWRados::SystemObject src(store, obj_ctx, obj);
   RGWRados::SystemObject::Read rop(&src);
 

@@ -39,7 +39,9 @@ extern int rgw_bucket_instance_remove_entry(RGWRados *store, string& entry, RGWO
 extern int rgw_bucket_delete_bucket_obj(RGWRados *store, string& bucket_name, RGWObjVersionTracker& objv_tracker);
 
 extern int rgw_bucket_sync_user_stats(RGWRados *store, const rgw_user& user_id, rgw_bucket& bucket);
-extern int rgw_bucket_sync_user_stats(RGWRados *store, const string& bucket_name);
+extern int rgw_bucket_sync_user_stats(RGWRados *store, const string& tenant_name, const string& bucket_name);
+
+extern void rgw_make_bucket_entry_name(const string& tenant_name, const string& bucket_name, string& bucket_entry);
 
 /**
  * Store a list of the user's buckets, with associated functinos.
@@ -113,7 +115,8 @@ extern int rgw_read_user_buckets(RGWRados *store,
                                  uint64_t default_amount = 1000);
 
 extern int rgw_link_bucket(RGWRados *store, const rgw_user& user_id, rgw_bucket& bucket, time_t creation_time, bool update_entrypoint = true);
-extern int rgw_unlink_bucket(RGWRados *store, const rgw_user& user_id, const string& bucket_name, bool update_entrypoint = true);
+extern int rgw_unlink_bucket(RGWRados *store, const rgw_user& user_id,
+                             const string& tenant_name, const string& bucket_name, bool update_entrypoint = true);
 
 extern int rgw_remove_object(RGWRados *store, RGWBucketInfo& bucket_info, rgw_bucket& bucket, rgw_obj_key& key);
 extern int rgw_remove_bucket(RGWRados *store, rgw_bucket& bucket, bool delete_children);
@@ -127,7 +130,6 @@ extern void check_bad_user_bucket_mapping(RGWRados *store, const rgw_user& user_
 
 struct RGWBucketAdminOpState {
   rgw_user uid;
-  std::string tenant;
   std::string display_name;
   std::string bucket_name;
   std::string bucket_id;

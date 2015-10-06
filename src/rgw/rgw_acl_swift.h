@@ -4,10 +4,10 @@
 #ifndef CEPH_RGW_ACL_SWIFT_H
 #define CEPH_RGW_ACL_SWIFT_H
 
+#include <list>
 #include <map>
 #include <string>
 #include <iostream>
-#include <list>
 #include <include/types.h>
 
 #include "rgw_acl.h"

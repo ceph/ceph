@@ -133,11 +133,7 @@ void RGWObjManifest::generate_test_instances(std::list<RGWObjManifest*>& o)
   RGWObjManifest *m = new RGWObjManifest;
   for (int i = 0; i<10; i++) {
     RGWObjManifestPart p;
-<<<<<<< HEAD
     rgw_bucket b("tenant", "bucket", ".pool", ".index_pool", "marker_", "12", "region");
-=======
-    rgw_bucket b("tenant", "bucket", ".pool", "marker_", "12");
->>>>>>> fe585ab... rgw: buckets within tenant namespace
     p.loc = rgw_obj(b, "object");
     p.loc_ofs = 0;
     p.size = 512 * 1024;

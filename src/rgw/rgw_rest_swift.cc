@@ -814,7 +814,7 @@ void RGWCopyObj_ObjStore_SWIFT::dump_copy_info()
 
   /* Dump X-Copied-From-Account */
   string account_name;
-  url_encode(s->user.user_id, account_name);
+  url_encode(s->user.user_id.id, account_name); // XXX tenant
   s->cio->print("X-Copied-From-Account: %s\r\n", account_name.c_str());
 
   /* Dump X-Copied-From-Last-Modified. */
@@ -1202,7 +1202,7 @@ int RGWHandler_ObjStore_SWIFT::init(RGWRados *store, struct req_state *s, RGWCli
 {
   dout(10) << "s->object=" << (!s->object.empty() ? s->object : rgw_obj_key("<NULL>")) << " s->bucket=" << (!s->bucket_name_str.empty() ? s->bucket_name_str : "<NULL>") << dendl;
 
-  int ret = validate_bucket_name(s->bucket_name_str.c_str());
+  int ret = validate_bucket_name(s->bucket_name_str.c_str()); // XXX why c_str()
   if (ret)
     return ret;
   ret = validate_object_name(s->object.name);
