@@ -474,45 +474,6 @@ int RGWLibRequest::read_permissions(RGWOp *op) {
 /* global RGW library object */
 static RGWLib rgwlib;
 
-#warning while handler is going, save logic till verified (e.g., preprocess)
-#if 0
-RGWHandler *RGWREST::get_handler(RGWRados* store, struct req_state* s,
-				 RGWLibIO* io, RGWRESTMgr** pmgr,
-				 int* init_error)
-{
-  RGWHandler *handler = nullptr;
-
-  *init_error = preprocess(s, io);
-  if (*init_error < 0)
-    return NULL;
-
-  /* TODO: this just needs to return an already-initialized pair of
-   * RGWRESTMgr_Lib and RGWHandler_ObjStore_Lib */
-
-  RGWRESTMgr *m = librgw.get_manager();
-  if (!m) {
-    *init_error = -ERR_METHOD_NOT_ALLOWED;
-    return NULL;
-  }
-
-  if (pmgr)
-    *pmgr = m;
-
-  handler = m->get_handler(s);
-  if (!handler) {
-    *init_error = -ERR_METHOD_NOT_ALLOWED;
-    return NULL;
-  }
-  *init_error = handler->init(store, s, io);
-  if (*init_error < 0) {
-    m->put_handler(handler);
-    return NULL;
-  }
-
-  return handler;
-} /* get direct handler */
-#endif /* 0 */
-
 extern "C" {
 
 int librgw_init()
