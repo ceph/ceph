@@ -198,6 +198,8 @@ class RGWMetaSyncStatusManager {
 public:
   RGWMetaSyncStatusManager(RGWRados *_store, const string& source) : store(_store), master_log(store, this), num_shards(0),
                                                ts_to_shard_lock("ts_to_shard_lock") {}
+  RGWMetaSyncStatusManager(RGWRados *_store) : store(_store), master_log(store, this), num_shards(0),
+                                               ts_to_shard_lock("ts_to_shard_lock") {}
   int init();
 
   rgw_meta_sync_status& get_sync_status() { return sync_status; }

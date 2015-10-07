@@ -298,7 +298,7 @@ void RGWOp_MDLog_Notify::execute() {
     }
   }
 
-  store->wakeup_sync_shards(updated_shards);
+  store->wakeup_meta_sync_shards(updated_shards);
 
   http_ret = 0;
 }
@@ -693,6 +693,7 @@ void RGWOp_DATALog_Unlock::execute() {
 }
 
 void RGWOp_DATALog_Notify::execute() {
+  string  source_zone = s->info.args.get("source-zone");
   char *data;
   int len = 0;
 #define LARGE_ENOUGH_BUF (128 * 1024)
@@ -713,16 +714,20 @@ void RGWOp_DATALog_Notify::execute() {
     return;
   }
 
-  set<int> updated_shards;
+  map<int, set<string> > updated_shards;
   decode_json_obj(updated_shards, &p);
 
   if (store->ctx()->_conf->subsys.should_gather(ceph_subsys_rgw, 20)) {
-    for (set<int>::iterator iter = updated_shards.begin(); iter != updated_shards.end(); ++iter) {
-      ldout(s->cct, 20) << __func__ << "(): updated shard=" << *iter << dendl;
+    for (map<int, set<string> >::iterator iter = updated_shards.begin(); iter != updated_shards.end(); ++iter) {
+      ldout(s->cct, 20) << __func__ << "(): updated shard=" << iter->first << dendl;
+      set<string>& keys = iter->second;
+      for (set<string>::iterator kiter = keys.begin(); kiter != keys.end(); ++kiter) {
+      ldout(s->cct, 20) << __func__ << "(): modified key=" << *kiter << dendl;
+      }
     }
   }
 
-  store->wakeup_data_sync_shards(updated_shards);
+  store->wakeup_data_sync_shards(source_zone, updated_shards);
 
   http_ret = 0;
 }
