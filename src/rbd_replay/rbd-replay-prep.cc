@@ -115,7 +115,10 @@ private:
 };
 
 static void usage(string prog) {
-  cout << "Usage: " << prog << " [ --window <seconds> ] [ --anonymize ] <trace-input> <replay-output>" << endl;
+  std::stringstream str;
+  str << "Usage: " << prog << " ";
+  std::cout << str.str() << "[ --window <seconds> ] [ --anonymize ] [ --verbose ]" << std::endl
+            << std::string(str.str().size(), ' ') << "<trace-input> <replay-output>" << endl;
 }
 
 __attribute__((noreturn)) static void usage_exit(string prog, string msg) {
@@ -129,7 +132,8 @@ public:
   Processor()
     : m_window(1000000000ULL), // 1 billion nanoseconds, i.e., one second
       m_io_count(0),
-      m_anonymize(false) {
+      m_anonymize(false),
+      m_verbose(false) {
   }
 
   void run(vector<string> args) {
@@ -148,6 +152,8 @@ public:
 	m_window = (uint64_t)(1e9 * atof(arg.c_str() + sizeof("--window=")));
       } else if (arg == "--anonymize") {
 	m_anonymize = true;
+      } else if (arg == "--verbose") {
+        m_verbose = true;
       } else if (arg == "-h" || arg == "--help") {
 	usage(args[0]);
 	exit(0);
@@ -228,7 +234,13 @@ public:
 private:
   void serialize_events(Ser &ser, const IO::ptrs &ptrs) {
     for (IO::ptrs::const_iterator it = ptrs.begin(); it != ptrs.end(); ++it) {
-      (*it)->write_to(ser);
+      IO::ptr io(*it);
+      io->write_to(ser);
+
+      if (m_verbose) {
+        io->write_debug(std::cout);
+        std::cout << std::endl;
+      }
     }
   }
 
@@ -415,8 +427,6 @@ private:
         completed(completedIO);
       }
     }
-
-    //        cout << ts << "\t" << event_name << "\tthreadID = " << threadID << endl;
   }
 
   action_id_t next_id() {
@@ -487,6 +497,8 @@ private:
 
   bool m_anonymize;
   map<string, AnonymizedImage> m_anonymized_images;
+
+  bool m_verbose;
 };
 
 int main(int argc, char** argv) {
