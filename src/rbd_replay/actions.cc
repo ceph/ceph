@@ -25,13 +25,9 @@ using namespace std;
 
 Action::Action(action_id_t id,
                thread_id_t thread_id,
-               int num_successors,
-               int num_completion_successors,
                std::vector<dependency_d> &predecessors)
   : m_id(id),
     m_thread_id(thread_id),
-    m_num_successors(num_successors),
-    m_num_completion_successors(num_completion_successors),
     m_predecessors(predecessors) {
     }
 
@@ -45,8 +41,8 @@ Action::ptr Action::read_from(Deser &d) {
   }
   uint32_t ionum = d.read_uint32_t();
   uint64_t thread_id = d.read_uint64_t();
-  uint32_t num_successors = d.read_uint32_t();
-  uint32_t num_completion_successors = d.read_uint32_t();
+  d.read_uint32_t(); // unused
+  d.read_uint32_t(); // unused
   uint32_t num_dependencies = d.read_uint32_t();
   vector<dependency_d> deps;
   for (unsigned int i = 0; i < num_dependencies; i++) {
@@ -54,7 +50,7 @@ Action::ptr Action::read_from(Deser &d) {
     uint64_t time_delta = d.read_uint64_t();
     deps.push_back(dependency_d(dep_id, time_delta));
   }
-  DummyAction dummy(ionum, thread_id, num_successors, num_completion_successors, deps);
+  DummyAction dummy(ionum, thread_id, deps);
   switch (type) {
   case IO_START_THREAD:
     return StartThreadAction::read_from(dummy, d);

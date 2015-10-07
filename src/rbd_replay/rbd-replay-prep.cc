@@ -22,6 +22,7 @@
 #include <string>
 #include <assert.h>
 #include <fstream>
+#include <set>
 #include <boost/thread/thread.hpp>
 #include "ios.hpp"
 
@@ -42,7 +43,6 @@ public:
 	 uint64_t window)
     : m_id(id),
       m_window(window),
-      m_pending_io(IO::ptr()),
       m_latest_io(IO::ptr()),
       m_max_ts(0) {
   }
@@ -57,35 +57,26 @@ public:
     return m_max_ts;
   }
 
-  void issued_io(IO::ptr io, const map<thread_id_t, ptr>& threads) {
+  void issued_io(IO::ptr io, std::set<IO::ptr> *latest_ios) {
     assert(io);
-    io_set_t latest_ios;
-    for (map<thread_id_t, ptr>::const_iterator itr = threads.begin(), end = threads.end(); itr != end; ++itr) {
-      assertf(itr->second, "id = %ld", itr->first);
-      ptr thread(itr->second);
-      if (thread->m_latest_io) {
-	if (thread->m_latest_io->start_time() + m_window > io->start_time()) {
-	  latest_ios.insert(thread->m_latest_io);
-	}
-      }
+    if (m_latest_io.get() != NULL) {
+      latest_ios->erase(m_latest_io);
     }
-    io->add_dependencies(latest_ios);
     m_latest_io = io;
-    m_pending_io = io;
+    latest_ios->insert(io);
   }
 
   thread_id_t id() const {
     return m_id;
   }
 
-  IO::ptr pending_io() {
-    return m_pending_io;
+  IO::ptr latest_io() {
+    return m_latest_io;
   }
 
 private:
   thread_id_t m_id;
   uint64_t m_window;
-  IO::ptr m_pending_io;
   IO::ptr m_latest_io;
   uint64_t m_max_ts;
 };
@@ -137,14 +128,8 @@ class Processor {
 public:
   Processor()
     : m_window(1000000000ULL), // 1 billion nanoseconds, i.e., one second
-      m_threads(),
       m_io_count(0),
-      m_recent_completions(io_set_t()),
-      m_open_images(set<imagectx_id_t>()),
-      m_ios(vector<IO::ptr>()),
-      m_pending_ios(map<uint64_t, IO::ptr>()),
-      m_anonymize(false),
-      m_anonymized_images(map<string, AnonymizedImage>()) {
+      m_anonymize(false) {
   }
 
   void run(vector<string> args) {
@@ -160,8 +145,6 @@ public:
 	}
 	m_window = (uint64_t)(1e9 * atof(args[++i].c_str()));
       } else if (arg.find("--window=") == 0) {
-	// TODO: test
-	printf("Arg: '%s'\n", arg.c_str() + sizeof("--window="));
 	m_window = (uint64_t)(1e9 * atof(arg.c_str() + sizeof("--window=")));
       } else if (arg == "--anonymize") {
 	m_anonymize = true;
@@ -231,25 +214,6 @@ public:
 
     insert_thread_stops();
 
-    for (vector<IO::ptr>::const_iterator itr = m_ios.begin(); itr != m_ios.end(); ++itr) {
-      IO::ptr io(*itr);
-      IO::ptr prev(io->prev());
-      if (prev) {
-	// TODO: explain when prev is and isn't a dep
-	io_set_t::iterator depitr = io->dependencies().find(prev);
-	if (depitr != io->dependencies().end()) {
-	  io->dependencies().erase(depitr);
-	}
-      }
-      if (io->is_completion()) {
-	io->dependencies().clear();
-      }
-      for (io_set_t::const_iterator depitr = io->dependencies().begin(); depitr != io->dependencies().end(); ++depitr) {
-	IO::ptr dep(*depitr);
-	dep->set_num_successors(dep->num_successors() + 1);
-      }
-    }
-
     ofstream myfile;
     myfile.open(output_file_name.c_str(), ios::out | ios::binary);
     Ser ser(myfile);
@@ -274,16 +238,10 @@ private:
 	}
 	if (io->start_time() > thread->max_ts()) {
 	  ionum = io->ionum();
-	  if (ionum & 1) {
-	    ionum++;
-	  }
 	  break;
 	}
       }
       if (ionum == none) {
-	if (maxIONum & 1) {
-	  maxIONum--;
-	}
 	ionum = maxIONum + 2;
       }
       for (vector<IO::ptr>::const_iterator itr2 = m_ios.begin(); itr2 != m_ios.end(); ++itr2) {
@@ -292,7 +250,9 @@ private:
 	  io->set_ionum(io->ionum() + 2);
 	}
       }
-      IO::ptr stop_thread_io(new StopThreadIO(ionum, thread->max_ts(), thread->id()));
+      IO::ptr stop_thread_io(new StopThreadIO(ionum, thread->max_ts(),
+                                              thread->id(),
+                                              m_recent_completions));
       vector<IO::ptr>::iterator insertion_point = lower_bound(m_ios.begin(), m_ios.end(), stop_thread_io, compare_io_ptrs_by_start_time);
       m_ios.insert(insertion_point, stop_thread_io);
     }
@@ -366,8 +326,37 @@ private:
       const struct bt_definition *m_scope;
     } fields(evt, scope_fields);
 
-    if (strcmp(event_name, "librbd:read_enter") == 0 ||
-        strcmp(event_name, "librbd:read2_enter") == 0) {
+    if (strcmp(event_name, "librbd:open_image_enter") == 0) {
+      string name(fields.string("name"));
+      string snap_name(fields.string("snap_name"));
+      bool readonly = fields.uint64("read_only");
+      imagectx_id_t imagectx = fields.uint64("imagectx");
+      action_id_t ionum = next_id();
+      pair<string, string> aname(map_image_snap(name, snap_name));
+      IO::ptr io(new OpenImageIO(ionum, ts, threadID, m_recent_completions,
+                                 imagectx, aname.first, aname.second,
+                                 readonly));
+      thread->issued_io(io, &m_latest_ios);
+      m_ios.push_back(io);
+    } else if (strcmp(event_name, "librbd:open_image_exit") == 0) {
+      completed(thread->latest_io());
+      boost::shared_ptr<OpenImageIO> io(boost::dynamic_pointer_cast<OpenImageIO>(thread->latest_io()));
+      assert(io);
+      m_open_images.insert(io->imagectx());
+    } else if (strcmp(event_name, "librbd:close_image_enter") == 0) {
+      imagectx_id_t imagectx = fields.uint64("imagectx");
+      action_id_t ionum = next_id();
+      IO::ptr io(new CloseImageIO(ionum, ts, threadID, m_recent_completions,
+                                  imagectx));
+      thread->issued_io(io, &m_latest_ios);
+      m_ios.push_back(thread->latest_io());
+    } else if (strcmp(event_name, "librbd:close_image_exit") == 0) {
+      completed(thread->latest_io());
+      boost::shared_ptr<CloseImageIO> io(boost::dynamic_pointer_cast<CloseImageIO>(thread->latest_io()));
+      assert(io);
+      m_open_images.erase(io->imagectx());
+    } else if (strcmp(event_name, "librbd:read_enter") == 0 ||
+               strcmp(event_name, "librbd:read2_enter") == 0) {
       string name(fields.string("name"));
       string snap_name(fields.string("snap_name"));
       bool readonly = fields.int64("read_only");
@@ -376,45 +365,12 @@ private:
       uint64_t length = fields.uint64("length");
       require_image(ts, thread, imagectx, name, snap_name, readonly);
       action_id_t ionum = next_id();
-      IO::ptr io(new ReadIO(ionum, ts, threadID, thread->pending_io(), imagectx, offset, length));
-      io->add_dependencies(m_recent_completions);
-      thread->issued_io(io, m_threads);
+      IO::ptr io(new ReadIO(ionum, ts, threadID, m_recent_completions, imagectx,
+                            offset, length));
+      thread->issued_io(io, &m_latest_ios);
       m_ios.push_back(io);
-    } else if (strcmp(event_name, "librbd:open_image_enter") == 0) {
-      string name(fields.string("name"));
-      string snap_name(fields.string("snap_name"));
-      bool readonly = fields.int64("read_only");
-      imagectx_id_t imagectx = fields.uint64("imagectx");
-      action_id_t ionum = next_id();
-      pair<string, string> aname(map_image_snap(name, snap_name));
-      IO::ptr io(new OpenImageIO(ionum, ts, threadID, thread->pending_io(), imagectx, aname.first, aname.second, readonly));
-      io->add_dependencies(m_recent_completions);
-      thread->issued_io(io, m_threads);
-      m_ios.push_back(io);
-    } else if (strcmp(event_name, "librbd:open_image_exit") == 0) {
-      IO::ptr completionIO(thread->pending_io()->create_completion(ts, threadID));
-      m_ios.push_back(completionIO);
-      boost::shared_ptr<OpenImageIO> io(boost::dynamic_pointer_cast<OpenImageIO>(thread->pending_io()));
-      assert(io);
-      m_open_images.insert(io->imagectx());
-    } else if (strcmp(event_name, "librbd:close_image_enter") == 0) {
-      imagectx_id_t imagectx = fields.uint64("imagectx");
-      action_id_t ionum = next_id();
-      IO::ptr io(new CloseImageIO(ionum, ts, threadID, thread->pending_io(), imagectx));
-      io->add_dependencies(m_recent_completions);
-      thread->issued_io(io, m_threads);
-      m_ios.push_back(thread->pending_io());
-    } else if (strcmp(event_name, "librbd:close_image_exit") == 0) {
-      IO::ptr completionIO(thread->pending_io()->create_completion(ts, threadID));
-      m_ios.push_back(completionIO);
-      completed(completionIO);
-      boost::shared_ptr<CloseImageIO> io(boost::dynamic_pointer_cast<CloseImageIO>(thread->pending_io()));
-      assert(io);
-      m_open_images.erase(io->imagectx());
     } else if (strcmp(event_name, "librbd:read_exit") == 0) {
-      IO::ptr completionIO(thread->pending_io()->create_completion(ts, threadID));
-      m_ios.push_back(completionIO);
-      completed(completionIO);
+      completed(thread->latest_io());
     } else if (strcmp(event_name, "librbd:write_enter") == 0 ||
                strcmp(event_name, "librbd:write2_enter") == 0) {
       string name(fields.string("name"));
@@ -425,14 +381,12 @@ private:
       imagectx_id_t imagectx = fields.uint64("imagectx");
       require_image(ts, thread, imagectx, name, snap_name, readonly);
       action_id_t ionum = next_id();
-      IO::ptr io(new WriteIO(ionum, ts, threadID, thread->pending_io(), imagectx, offset, length));
-      io->add_dependencies(m_recent_completions);
-      thread->issued_io(io, m_threads);
+      IO::ptr io(new WriteIO(ionum, ts, threadID, m_recent_completions,
+                             imagectx, offset, length));
+      thread->issued_io(io, &m_latest_ios);
       m_ios.push_back(io);
     } else if (strcmp(event_name, "librbd:write_exit") == 0) {
-      IO::ptr completionIO(thread->pending_io()->create_completion(ts, threadID));
-      m_ios.push_back(completionIO);
-      completed(completionIO);
+      completed(thread->latest_io());
     } else if (strcmp(event_name, "librbd:aio_read_enter") == 0 ||
                strcmp(event_name, "librbd:aio_read2_enter") == 0) {
       string name(fields.string("name"));
@@ -444,10 +398,10 @@ private:
       uint64_t length = fields.uint64("length");
       require_image(ts, thread, imagectx, name, snap_name, readonly);
       action_id_t ionum = next_id();
-      IO::ptr io(new AioReadIO(ionum, ts, threadID, thread->pending_io(), imagectx, offset, length));
-      io->add_dependencies(m_recent_completions);
+      IO::ptr io(new AioReadIO(ionum, ts, threadID, m_recent_completions,
+                               imagectx, offset, length));
       m_ios.push_back(io);
-      thread->issued_io(io, m_threads);
+      thread->issued_io(io, &m_latest_ios);
       m_pending_ios[completion] = io;
     } else if (strcmp(event_name, "librbd:aio_write_enter") == 0 ||
                strcmp(event_name, "librbd:aio_write2_enter") == 0) {
@@ -460,9 +414,9 @@ private:
       imagectx_id_t imagectx = fields.uint64("imagectx");
       require_image(ts, thread, imagectx, name, snap_name, readonly);
       action_id_t ionum = next_id();
-      IO::ptr io(new AioWriteIO(ionum, ts, threadID, thread->pending_io(), imagectx, offset, length));
-      io->add_dependencies(m_recent_completions);
-      thread->issued_io(io, m_threads);
+      IO::ptr io(new AioWriteIO(ionum, ts, threadID, m_recent_completions,
+                                imagectx, offset, length));
+      thread->issued_io(io, &m_latest_ios);
       m_ios.push_back(io);
       m_pending_ios[completion] = io;
     } else if (strcmp(event_name, "librbd:aio_complete_enter") == 0) {
@@ -471,9 +425,7 @@ private:
       if (itr != m_pending_ios.end()) {
 	IO::ptr completedIO(itr->second);
 	m_pending_ios.erase(itr);
-	IO::ptr completionIO(completedIO->create_completion(ts, threadID));
-	m_ios.push_back(completionIO);
-	completed(completionIO);
+        completed(completedIO);
       }
     }
 
@@ -487,9 +439,14 @@ private:
   }
 
   void completed(IO::ptr io) {
-    uint64_t limit = io->start_time() < m_window ? 0 : io->start_time() - m_window;
-    for (io_set_t::iterator itr = m_recent_completions.begin(); itr != m_recent_completions.end(); ) {
-      if ((*itr)->start_time() < limit) {
+    uint64_t limit = (io->start_time() < m_window ?
+      0 : io->start_time() - m_window);
+    for (io_set_t::iterator itr = m_recent_completions.begin();
+         itr != m_recent_completions.end(); ) {
+      IO::ptr recent_comp(*itr);
+      if ((recent_comp->start_time() < limit ||
+           io->dependencies().count(recent_comp) != 0) &&
+          m_latest_ios.count(recent_comp) == 0) {
 	m_recent_completions.erase(itr++);
       } else {
 	++itr;
@@ -521,13 +478,12 @@ private:
     }
     action_id_t ionum = next_id();
     pair<string, string> aname(map_image_snap(name, snap_name));
-    IO::ptr io(new OpenImageIO(ionum, ts - 2, thread->id(), thread->pending_io(), imagectx, aname.first, aname.second, readonly));
-    io->add_dependencies(m_recent_completions);
-    thread->issued_io(io, m_threads);
+    IO::ptr io(new OpenImageIO(ionum, ts - 2, thread->id(),
+                               m_recent_completions, imagectx, aname.first,
+                               aname.second, readonly));
+    thread->issued_io(io, &m_latest_ios);
     m_ios.push_back(io);
-    IO::ptr completionIO(io->create_completion(ts - 1, thread->id()));
-    m_ios.push_back(completionIO);
-    completed(completionIO);
+    completed(io);
     m_open_images.insert(imagectx);
   }
 
@@ -540,6 +496,7 @@ private:
 
   // keyed by completion
   map<uint64_t, IO::ptr> m_pending_ios;
+  std::set<IO::ptr> m_latest_ios;
 
   bool m_anonymize;
   map<string, AnonymizedImage> m_anonymized_images;
