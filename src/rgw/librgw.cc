@@ -40,7 +40,7 @@
 #include "rgw_process.h"
 #include "rgw_rest_user.h"
 #include "rgw_rest_s3.h"
-#include "rgw_rest_lib.h"
+#include "rgw_os_lib.h"
 #include "rgw_auth_s3.h"
 #include "rgw_lib.h"
 
