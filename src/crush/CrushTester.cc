@@ -359,7 +359,8 @@ void CrushTester::write_integer_indexed_scalar_data_string(vector<string> &dst, 
 
 int CrushTester::test_with_crushtool(const string& crushtool,
                                      int max_id,
-                                     int timeout)
+                                     int timeout,
+				     int ruleset)
 {
   string timeout_string = stringify(timeout);
   string opt_max_id = stringify(max_id);
@@ -372,6 +373,14 @@ int CrushTester::test_with_crushtool(const string& crushtool,
   cmd_args.push_back("--test");
   cmd_args.push_back("--check");
   cmd_args.push_back(opt_max_id.c_str());
+  cmd_args.push_back("--min-x");
+  cmd_args.push_back("1");
+  cmd_args.push_back("--max-x");
+  cmd_args.push_back("50");
+  if (ruleset >= 0) {
+    cmd_args.push_back("--ruleset");
+    cmd_args.push_back(stringify(ruleset).c_str());
+  }
   cmd_args.push_back(NULL);
 
   int pipefds[2];
@@ -537,6 +546,10 @@ int CrushTester::test()
     if (!crush.rule_exists(r)) {
       if (output_statistics)
         err << "rule " << r << " dne" << std::endl;
+      continue;
+    }
+    if (ruleset >= 0 &&
+	crush.get_rule_mask_ruleset(r) != ruleset) {
       continue;
     }
     int minr = min_rep, maxr = max_rep;

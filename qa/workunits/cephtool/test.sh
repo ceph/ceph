@@ -1483,6 +1483,7 @@ function test_mon_crushmap_validation()
 {
   local map=$TMPDIR/map
   ceph osd getcrushmap -o $map
+
   # crushtool validation timesout and is ignored
   cat > $TMPDIR/crushtool <<EOF
 #!/bin/sh
@@ -1492,7 +1493,19 @@ EOF
   chmod +x $TMPDIR/crushtool
   ceph tell mon.* injectargs --crushtool $TMPDIR/crushtool
   ceph osd setcrushmap -i $map 2>&1 | grep 'took too long'
+
+  # crushtool validation fails and is ignored
+  cat > $TMPDIR/crushtool <<EOF
+#!/bin/sh
+echo 'TEST FAIL' >&2
+exit 1 # failure
+EOF
+  chmod +x $TMPDIR/crushtool
+  ceph tell mon.* injectargs --crushtool $TMPDIR/crushtool
+  ceph osd setcrushmap -i $map 2>&1 | grep 'Failed crushmap test'
+
   ceph tell mon.* injectargs --crushtool crushtool
+
   # crushtool validation succeeds
   ceph osd setcrushmap -i $map
 }
