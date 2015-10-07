@@ -275,6 +275,20 @@ public:
   }
 };
 
+class RGWOp_DATALog_Notify : public RGWRESTOp {
+public:
+  RGWOp_DATALog_Notify() {}
+  ~RGWOp_DATALog_Notify() {}
+
+  int check_caps(RGWUserCaps& caps) {
+    return caps.check_cap("datalog", RGW_CAP_WRITE);
+  }
+  void execute();
+  virtual const string name() {
+    return "datalog_notify";
+  }
+};
+
 class RGWOp_DATALog_Delete : public RGWRESTOp {
 public:
   RGWOp_DATALog_Delete() {}
