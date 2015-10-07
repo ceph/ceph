@@ -290,7 +290,13 @@ void RGWOp_MDLog_Notify::execute() {
   }
 
   set<int> updated_shards;
-  decode_json_obj(updated_shards, &p);
+  try {
+    decode_json_obj(updated_shards, &p);
+  } catch (JSONDecoder::err& err) {
+    ldout(s->cct, 0) << "ERROR: failed to decode JSON" << dendl;
+    http_ret = -EINVAL;
+    return;
+  }
 
   if (store->ctx()->_conf->subsys.should_gather(ceph_subsys_rgw, 20)) {
     for (set<int>::iterator iter = updated_shards.begin(); iter != updated_shards.end(); ++iter) {
@@ -715,7 +721,13 @@ void RGWOp_DATALog_Notify::execute() {
   }
 
   map<int, set<string> > updated_shards;
-  decode_json_obj(updated_shards, &p);
+  try {
+    decode_json_obj(updated_shards, &p);
+  } catch (JSONDecoder::err& err) {
+    ldout(s->cct, 0) << "ERROR: failed to decode JSON" << dendl;
+    http_ret = -EINVAL;
+    return;
+  }
 
   if (store->ctx()->_conf->subsys.should_gather(ceph_subsys_rgw, 20)) {
     for (map<int, set<string> >::iterator iter = updated_shards.begin(); iter != updated_shards.end(); ++iter) {
