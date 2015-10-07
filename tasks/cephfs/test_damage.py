@@ -5,7 +5,7 @@ import re
 from teuthology.contextutil import MaxWhileTries
 
 from teuthology.orchestra.run import wait
-from tasks.cephfs.cephfs_test_case import CephFSTestCase
+from tasks.cephfs.cephfs_test_case import CephFSTestCase, long_running
 
 DAMAGED_ON_START = "damaged_on_start"
 DAMAGED_ON_LS = "damaged_on_ls"
@@ -28,6 +28,7 @@ class TestDamage(CephFSTestCase):
         mds_map = self.fs.get_mds_map()
         return rank in mds_map['damaged']
 
+    @long_running #459s
     def test_object_deletion(self):
         """
         That the MDS has a clean 'damaged' response to loss of any single metadata object
@@ -190,7 +191,7 @@ class TestDamage(CephFSTestCase):
             self.mount_a.umount_wait(force=True)
             self.fs.mds_stop()
             self.fs.mds_fail()
-            self.fs.admin_remote.run(args=['sudo', 'ceph', 'mds', 'repaired', '0'])
+            self.fs.mon_manager.raw_cluster_cmd('mds', 'repaired', '0')
 
             # Reset RADOS pool state
             self.fs.rados(['import', '/tmp/metadata.bin'])

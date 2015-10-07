@@ -317,7 +317,7 @@ class TestDataScan(CephFSTestCase):
 
         # Reset the MDS map in case multiple ranks were in play: recovery procedure
         # only understands how to rebuild metadata under rank 0
-        self.fs.admin_remote.run(args=['sudo', 'ceph', 'fs', 'reset', 'default', '--yes-i-really-mean-it'])
+        self.fs.mon_manager.raw_cluster_cmd('fs', 'reset', 'default', '--yes-i-really-mean-it')
 
         # Attempt to start an MDS, see that it goes into damaged state
         self.fs.mds_restart()
@@ -340,7 +340,7 @@ class TestDataScan(CephFSTestCase):
         self.fs.data_scan(["scan_inodes", self.fs.get_data_pool_name()])
 
         # Mark the MDS repaired
-        self.fs.admin_remote.run(args=['sudo', 'ceph', 'mds', 'repaired', '0'])
+        self.fs.mon_manager.raw_cluster_cmd('mds', 'repaired', '0')
 
         # Start the MDS
         self.fs.mds_restart()

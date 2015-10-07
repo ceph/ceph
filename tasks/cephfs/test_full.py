@@ -6,7 +6,6 @@ import os
 from textwrap import dedent
 import time
 from teuthology.orchestra.run import CommandFailedError
-from unittest import case
 from tasks.cephfs.cephfs_test_case import CephFSTestCase
 
 
@@ -374,6 +373,7 @@ class TestClusterFull(FullnessTestCase):
     Test cluster-wide fullness, which indicates that an OSD has become too full
     """
     pool_capacity = None
+    REQUIRE_MEMSTORE = True
 
     def setUp(self):
         super(TestClusterFull, self).setUp()
@@ -385,12 +385,6 @@ class TestClusterFull(FullnessTestCase):
             TestClusterFull.pool_capacity = self.fs.get_pool_df(self._data_pool_name())['max_avail']
             mon_osd_full_ratio = float(self.fs.get_config("mon_osd_full_ratio"))
             TestClusterFull.fill_mb = int(1.05 * mon_osd_full_ratio * (self.pool_capacity / (1024.0 * 1024.0)))
-
-        objectstore = self.fs.get_config("osd_objectstore", "osd")
-        if objectstore != "memstore":
-            # You certainly *could* run this on a real OSD, but you don't want to sit
-            # here for hours waiting for the test to fill up a 1TB drive!
-            raise case.SkipTest("Require `memstore` OSD backend to simulate full drives")
 
     def is_full(self):
         return self.fs.is_full()

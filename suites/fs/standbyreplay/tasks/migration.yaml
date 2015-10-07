@@ -1,7 +1,5 @@
 
 tasks:
-    - mds_journal_migration:
-    - workunit:
-        clients:
-            all: [fs/misc/trivial_sync.sh]
-
+- cephfs_test_runner:
+    modules:
+      - tasks.cephfs.test_journal_migration

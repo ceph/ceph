@@ -107,15 +107,18 @@ class FuseMount(CephFSMount):
             time.sleep(mount_wait)            
         timeout = int(self.client_config.get('mount_timeout', 30))
         waited = 0
-        while list_connections() == pre_mount_conns:
+
+        post_mount_conns = list_connections()
+        while len(post_mount_conns) <= len(pre_mount_conns):
             time.sleep(1)
             waited += 1
             if waited > timeout:
                 raise RuntimeError("Fuse mount failed to populate /sys/ after {0} seconds".format(
                     waited
                 ))
+            else:
+                post_mount_conns = list_connections()
 
-        post_mount_conns = list_connections()
         log.info("Post-mount connections: {0}".format(post_mount_conns))
 
         # Record our fuse connection number so that we can use it when
@@ -129,21 +132,29 @@ class FuseMount(CephFSMount):
             self._fuse_conn = new_conns[0]
 
     def is_mounted(self):
+        proc = self.client_remote.run(
+            args=[
+                'stat',
+                '--file-system',
+                '--printf=%T\n',
+                '--',
+                self.mountpoint,
+            ],
+            stdout=StringIO(),
+            stderr=StringIO(),
+            wait=False
+        )
         try:
-            proc = self.client_remote.run(
-                args=[
-                    'stat',
-                    '--file-system',
-                    '--printf=%T\n',
-                    '--',
-                    self.mountpoint,
-                ],
-                stdout=StringIO(),
-            )
+            proc.wait()
         except CommandFailedError:
-            # This happens if the mount directory doesn't exist
-            log.info('mount point does not exist: %s', self.mountpoint)
-            return False
+            if "endpoint is not connected" in proc.stderr.getvalue():
+                # This happens is fuse is killed without unmount
+                log.warn("Found stale moutn point at {0}".format(self.mountpoint))
+                return True
+            else:
+                # This happens if the mount directory doesn't exist
+                log.info('mount point does not exist: %s', self.mountpoint)
+                return False
 
         fstype = proc.stdout.getvalue().rstrip('\n')
         if fstype == 'fuseblk':
@@ -298,7 +309,7 @@ class FuseMount(CephFSMount):
 
         self.umount()
 
-        if not self.fuse_daemon.finished:
+        if self.fuse_daemon and not self.fuse_daemon.finished:
             self.fuse_daemon.stdin.close()
             try:
                 self.fuse_daemon.wait()
@@ -314,6 +325,13 @@ class FuseMount(CephFSMount):
             ],
         )
 
+    def _asok_path(self):
+        return "/var/run/ceph/ceph-client.{0}.*.asok".format(self.client_id)
+
+    @property
+    def _prefix(self):
+        return ""
+
     def _admin_socket(self, args):
         pyscript = """
 import glob
@@ -322,7 +340,14 @@ import os
 import subprocess
 
 def find_socket(client_name):
-        files = glob.glob("/var/run/ceph/ceph-{{client_name}}.*.asok".format(client_name=client_name))
+        asok_path = "{asok_path}"
+        files = glob.glob(asok_path)
+
+        # Given a non-glob path, it better be there
+        if "*" not in asok_path:
+            assert(len(files) == 1)
+            return files[0]
+
         for f in files:
                 pid = re.match(".*\.(\d+)\.asok$", f).group(1)
                 if os.path.exists("/proc/{{0}}".format(pid)):
@@ -330,7 +355,9 @@ def find_socket(client_name):
         raise RuntimeError("Client socket {{0}} not found".format(client_name))
 
 print find_socket("{client_name}")
-""".format(client_name="client.{0}".format(self.client_id))
+""".format(
+            asok_path=self._asok_path(),
+            client_name="client.{0}".format(self.client_id))
 
         # Find the admin socket
         p = self.client_remote.run(args=[
@@ -341,7 +368,7 @@ print find_socket("{client_name}")
 
         # Query client ID from admin socket
         p = self.client_remote.run(
-            args=['sudo', 'ceph', '--admin-daemon', asok_path] + args,
+            args=['sudo', self._prefix + 'ceph', '--admin-daemon', asok_path] + args,
             stdout=StringIO())
         return json.loads(p.stdout.getvalue())
 
