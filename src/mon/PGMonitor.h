@@ -126,7 +126,7 @@ private:
 
   void map_pg_creates();
   void send_pg_creates();
-  void send_pg_creates(int osd, Connection *con);
+  epoch_t send_pg_creates(int osd, Connection *con, epoch_t next);
 
   /**
    * check pgs for down primary osds
@@ -208,6 +208,7 @@ public:
 			     list<pair<health_status_t,string> > *detail,
 			     const set<int>& s, const char *desc, health_status_t sev) const;
 
+  void check_subs();
   void check_sub(Subscription *sub);
 
 private:
