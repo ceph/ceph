@@ -71,7 +71,7 @@ class RGWRealmWatcher : public librados::WatchCtx2 {
   SafeTimer timer;
   Mutex mutex; //< protects access to timer and reconfigure_scheduled
   Cond cond; //< to signal reconfigure() after an invalid realm config
-  bool reconfigure_scheduled; //< true if reconfigure() is scheduled in timer
+  Context *reconfigure_scheduled; //< reconfigure() context if scheduled
 
   /// pause frontends and replace the RGWRados
   void reconfigure();
