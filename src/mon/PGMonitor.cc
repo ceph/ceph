@@ -1185,7 +1185,20 @@ void PGMonitor::map_pg_creates()
 
 void PGMonitor::send_pg_creates()
 {
-  dout(10) << "send_pg_creates to " << pg_map.creating_pgs.size() << " pgs" << dendl;
+  // We only need to do this old, spammy way of broadcasting create messages
+  // to every osd (even those that aren't connected) if there are old OSDs in
+  // the cluster. As soon as everybody has upgraded we can flipt to the new
+  // behavior instead
+  OSDMap& osdmap = mon->osdmon()->osdmap;
+  if (osdmap.get_num_up_osds() == 0)
+    return;
+  if (osdmap.get_up_osd_features() & CEPH_FEATURE_MON_STATEFUL_SUB) {
+    check_subs();
+    return;
+  }
+
+  dout(10) << "send_pg_creates to " << pg_map.creating_pgs.size()
+	   << " pgs" << dendl;
 
   utime_t now = ceph_clock_now(g_ceph_context);
   for (map<int, set<pg_t> >::iterator p = pg_map.creating_pgs_by_osd.begin();
@@ -1198,27 +1211,43 @@ void PGMonitor::send_pg_creates()
 	now - g_conf->mon_pg_create_interval < last_sent_pg_create[osd]) 
       continue;
       
-    if (mon->osdmon()->osdmap.is_up(osd))
-      send_pg_creates(osd, NULL);
+    if (osdmap.is_up(osd))
+      send_pg_creates(osd, NULL, 0);
   }
 }
 
-void PGMonitor::send_pg_creates(int osd, Connection *con)
+epoch_t PGMonitor::send_pg_creates(int osd, Connection *con, epoch_t next)
 {
-  map<int, set<pg_t> >::iterator p = pg_map.creating_pgs_by_osd.find(osd);
-  if (p == pg_map.creating_pgs_by_osd.end())
-    return;
+  map<int, map<epoch_t, set<pg_t> > >::iterator p =
+    pg_map.creating_pgs_by_osd_epoch.find(osd);
+  if (p == pg_map.creating_pgs_by_osd_epoch.end())
+    return next;
   assert(p->second.size() > 0);
 
-  dout(20) << "send_pg_creates osd." << osd << " pgs " << p->second << dendl;
-  MOSDPGCreate *m = new MOSDPGCreate(mon->osdmon()->osdmap.get_epoch());
-  for (set<pg_t>::iterator q = p->second.begin(); q != p->second.end(); ++q) {
-    m->mkpg[*q] = pg_create_t(pg_map.pg_stat[*q].created,
-			      pg_map.pg_stat[*q].parent,
-			      pg_map.pg_stat[*q].parent_split_bits);
-    // Need the create time from the monitor using its clock to set last_scrub_stamp
-    // upon pg creation.
-    m->ctimes[*q] = pg_map.pg_stat[*q].last_scrub_stamp;
+  MOSDPGCreate *m = NULL;
+  epoch_t last = 0;
+  for (map<epoch_t, set<pg_t> >::iterator q = p->second.lower_bound(next);
+       q != p->second.end();
+       ++q) {
+    dout(20) << __func__ << " osd." << osd << " from " << next
+	     << " : epoch " << q->first << " " << q->second.size() << " pgs"
+	     << dendl;
+    last = q->first;
+    for (set<pg_t>::iterator r = q->second.begin(); r != q->second.end(); ++r) {
+      if (!m)
+	m = new MOSDPGCreate(last_map_pg_create_osd_epoch);
+      m->mkpg[*r] = pg_create_t(pg_map.pg_stat[*r].created,
+				pg_map.pg_stat[*r].parent,
+				pg_map.pg_stat[*r].parent_split_bits);
+      // Need the create time from the monitor using its clock to set
+      // last_scrub_stamp upon pg creation.
+      m->ctimes[*r] = pg_map.pg_stat[*r].last_scrub_stamp;
+    }
+  }
+  if (!m) {
+    dout(20) << "send_pg_creates osd." << osd << " from " << next
+	     << " has nothing to send" << dendl;
+    return next;
   }
 
   if (con) {
@@ -1228,6 +1257,9 @@ void PGMonitor::send_pg_creates(int osd, Connection *con)
     mon->messenger->send_message(m, mon->osdmon()->osdmap.get_inst(osd));
   }
   last_sent_pg_create[osd] = ceph_clock_now(g_ceph_context);
+
+  // sub is current through last + 1
+  return last + 1;
 }
 
 void PGMonitor::_mark_pg_stale(pg_t pgid, const pg_stat_t& cur_stat)
@@ -2317,10 +2349,25 @@ int PGMonitor::dump_stuck_pg_stats(stringstream &ds,
   return 0;
 }
 
+void PGMonitor::check_subs()
+{
+  dout(10) << __func__ << dendl;
+  string type = "osd_pg_creates";
+  if (mon->session_map.subs.count(type) == 0)
+    return;
+  xlist<Subscription*>::iterator p = mon->session_map.subs[type]->begin();
+  while (!p.end()) {
+    Subscription *sub = *p;
+    ++p;
+    check_sub(sub);
+  }
+}
+
 void PGMonitor::check_sub(Subscription *sub)
 {
   if (sub->type == "osd_pg_creates") {
-    send_pg_creates(sub->session->inst.name.num(),
-		    sub->session->con.get());
+    sub->next = send_pg_creates(sub->session->inst.name.num(),
+				sub->session->con.get(),
+				sub->next);
   }
 }
