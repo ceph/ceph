@@ -49,6 +49,20 @@ public:
 
   virtual void send_response();
 
-}; /* RGWListBucket_OS_Lib */
+}; /* RGWStatBucket_OS_Lib */
+
+class RGWCreateBucket_OS_Lib : public RGWCreateBucket {
+public:
+  RGWCreateBucket_OS_Lib() {}
+  ~RGWCreateBucket_OS_Lib() {}
+  virtual int get_params();
+  virtual void send_response();
+}; /* RGWCreateBucket_OS_Lib */
+
+class RGWDeleteBucket_OS_Lib : public RGWDeleteBucket {
+public:
+  RGWDeleteBucket_OS_Lib() {}
+  ~RGWDeleteBucket_OS_Lib() {}
+}; /* RGWCreateBucket_OS_Lib */
 
 #endif /* RGW_OS_LIB_H */
