@@ -133,8 +133,6 @@ public:
 
   Action(action_id_t id,
 	 thread_id_t thread_id,
-	 int num_successors,
-	 int num_completion_successors,
 	 std::vector<dependency_d> &predecessors);
 
   virtual ~Action();
@@ -176,8 +174,6 @@ private:
 
   const action_id_t m_id;
   const thread_id_t m_thread_id;
-  const int m_num_successors;
-  const int m_num_completion_successors;
   const std::vector<dependency_d> m_predecessors;
 };
 
@@ -194,10 +190,8 @@ class DummyAction : public Action {
 public:
   DummyAction(action_id_t id,
 	      thread_id_t thread_id,
-	      int num_successors,
-	      int num_completion_successors,
 	      std::vector<dependency_d> &predecessors)
-    : Action(id, thread_id, num_successors, num_completion_successors, predecessors) {
+    : Action(id, thread_id, predecessors) {
   }
 
   void perform(ActionCtx &ctx) {
