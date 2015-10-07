@@ -142,7 +142,11 @@ public:
     log_format(_s, "initializing for trans_id = %s",
 	      get_state()->trans_id.c_str());
 
-    return header_init();
+    int ret = header_init();
+    if (ret == 0) {
+      ret = init_from_header(_s);
+    }
+    return ret;
   }
 
   virtual bool only_bucket() = 0;
