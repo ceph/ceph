@@ -52,6 +52,8 @@ librgw_la_SOURCES =  \
 	rgw/rgw_keystone.cc \
 	rgw/rgw_quota.cc \
 	rgw/rgw_dencoder.cc \
+	rgw/rgw_realm_reloader.cc \
+	rgw/rgw_realm_watcher.cc \
 	rgw/rgw_object_expirer_core.cc \
 	rgw/rgw_sync.cc \
 	rgw/rgw_data_sync.cc
@@ -106,7 +108,6 @@ radosgw_SOURCES = \
 	rgw/rgw_swift.cc \
 	rgw/rgw_swift_auth.cc \
 	rgw/rgw_loadgen.cc \
-	rgw/rgw_realm_watcher.cc \
 	rgw/rgw_main.cc
 radosgw_CFLAGS = -I$(srcdir)/civetweb/include
 radosgw_LDADD = $(LIBRGW) $(LIBCIVETWEB) $(LIBRGW_DEPS) $(RESOLV_LIBS) $(CEPH_GLOBAL)
@@ -192,6 +193,7 @@ noinst_HEADERS += \
 	rgw/rgw_user.h \
 	rgw/rgw_bucket.h \
 	rgw/rgw_keystone.h \
+	rgw/rgw_realm_reloader.h \
 	rgw/rgw_realm_watcher.h \
 	rgw/rgw_civetweb.h \
 	rgw/rgw_boost_asio_coroutine.h \

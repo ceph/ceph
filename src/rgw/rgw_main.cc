@@ -38,7 +38,7 @@
 #include "rgw_acl.h"
 #include "rgw_user.h"
 #include "rgw_op.h"
-#include "rgw_realm_watcher.h"
+#include "rgw_realm_reloader.h"
 #include "rgw_rest.h"
 #include "rgw_rest_s3.h"
 #include "rgw_rest_swift.h"
@@ -1053,8 +1053,8 @@ public:
   }
 };
 
-// FrontendPauser implementation for RGWRealmWatcher
-class RGWFrontendPauser : public RGWRealmWatcher::FrontendPauser {
+// FrontendPauser implementation for RGWRealmReloader
+class RGWFrontendPauser : public RGWRealmReloader::FrontendPauser {
   std::list<RGWFrontend*> &frontends;
  public:
   RGWFrontendPauser(std::list<RGWFrontend*> &frontends)
@@ -1282,7 +1282,10 @@ int main(int argc, const char **argv)
 
   // add a watcher to respond to realm configuration changes
   RGWFrontendPauser pauser(fes);
-  RGWRealmWatcher realm_watcher(g_ceph_context, store, &pauser);
+  RGWRealmReloader reloader(store, &pauser);
+
+  RGWRealmWatcher realm_watcher(g_ceph_context, store->realm);
+  realm_watcher.set_watcher(&reloader);
 
   wait_shutdown();
 

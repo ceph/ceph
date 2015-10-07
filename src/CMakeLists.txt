@@ -938,6 +938,8 @@ if(${WITH_RADOSGW})
     rgw/rgw_sync.cc
     rgw/rgw_data_sync.cc
     rgw/rgw_dencoder.cc
+    rgw/rgw_realm_reloader.cc
+    rgw/rgw_realm_watcher.cc
     rgw/rgw_coroutine.cc
     rgw/rgw_cr_rados.cc
     rgw/rgw_object_expirer_core.cc)
@@ -975,7 +977,6 @@ if(${WITH_RADOSGW})
     rgw/rgw_civetweb_log.cc
     civetweb/src/civetweb.c
     rgw/rgw_main.cc
-    rgw/rgw_realm_watcher.cc
     rgw/rgw_sync.cc
     rgw/rgw_data_sync.cc)
 
