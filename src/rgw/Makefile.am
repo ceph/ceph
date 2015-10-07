@@ -54,6 +54,7 @@ librgw_la_SOURCES =  \
 	rgw/rgw_frontend.cc \
 	rgw/rgw_object_expirer_core.cc \
 	rgw/rgw_website.cc
+	rgw/rgw_os_lib.cc
 
 librgw_la_CXXFLAGS = -Woverloaded-virtual ${AM_CXXFLAGS}
 noinst_LTLIBRARIES += librgw.la
@@ -105,7 +106,7 @@ radosgw_SOURCES = \
 	rgw/rgw_swift.cc \
 	rgw/rgw_swift_auth.cc \
 	rgw/rgw_loadgen.cc \
-	rgw/rgw_rest_lib.cc \
+	rgw/rgw_os_lib.cc \
 	rgw/rgw_main.cc
 radosgw_CFLAGS = -I$(srcdir)/civetweb/include
 radosgw_LDADD = $(LIBRGW) $(LIBCIVETWEB) $(LIBRGW_DEPS) $(RESOLV_LIBS) $(CEPH_GLOBAL)

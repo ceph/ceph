@@ -1,16 +1,12 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
-#ifndef CEPH_RGW_REST_LIB_H
-#define CEPH_RGW_REST_LIB_H
+#ifndef CEPH_RGW_OS_LIB_H
+#define CEPH_RGW_OS_LIB_H
 
 #include <functional>
-#include "rgw_rest.h"
 #include "rgw_common.h"
 #include "rgw_lib.h"
-
-#warning move to rgw_file...I think...there is no REST here
-
 
 /* RGWOps */
 
@@ -55,4 +51,4 @@ public:
 
 }; /* RGWListBucket_ObjStore_Lib */
 
-#endif /* CEPH_RGW_REST_LIB_H */
+#endif /* CEPH_RGW_OS_LIB_H */
