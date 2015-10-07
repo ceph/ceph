@@ -1,8 +1,12 @@
 overrides:
   ceph:
-    client:
-      debug ms: 1
-      debug client: 20
+    conf:
+      client:
+        debug ms: 1
+        debug client: 20
+      mds:
+        debug ms: 1
+        debug mds: 20
 tasks:
 - install:
 - ceph:
