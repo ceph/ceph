@@ -182,7 +182,6 @@ public:
  public:
 
   set<pg_t> creating_pgs;
-  map<int,set<pg_t> > creating_pgs_by_osd;
   map<int,map<epoch_t,set<pg_t> > > creating_pgs_by_osd_epoch;
 
   // Bits that use to be enum StuckPG
