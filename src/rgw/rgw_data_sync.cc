@@ -952,6 +952,7 @@ class RGWDataSyncCR : public RGWCoroutine {
 
   RGWDataSyncShardMarkerTrack *marker_tracker;
 
+  Mutex shard_crs_lock;
   map<int, RGWDataSyncShardCR *> shard_crs;
 
 public:
@@ -962,7 +963,8 @@ public:
                                                       conn(_conn),
                                                       source_zone(_source_zone),
                                                       obj_ctx(store),
-                                                      marker_tracker(NULL) {
+                                                      marker_tracker(NULL),
+                                                      shard_crs_lock("RGWDataSyncCR::shard_crs_lock") {
   }
 
   int operate() {
@@ -1037,7 +1039,9 @@ public:
               RGWDataSyncShardCR *cr = new RGWDataSyncShardCR(store, http_manager, async_rados,
                                                         conn, store->get_zone_params().log_pool, source_zone,
                                                         iter->first, iter->second);
+              shard_crs_lock.Lock();
               shard_crs[iter->first] = cr;
+              shard_crs_lock.Unlock();
               spawn(cr, true);
             }
         }
@@ -1055,6 +1059,7 @@ public:
   }
 
   void wakeup(int shard_id, set<string>& keys) {
+    Mutex::Locker l(shard_crs_lock);
     map<int, RGWDataSyncShardCR *>::iterator iter = shard_crs.find(shard_id);
     if (iter == shard_crs.end()) {
       return;
@@ -1065,6 +1070,10 @@ public:
 };
 
 void RGWRemoteDataLog::wakeup(int shard_id, set<string>& keys) {
+  RWLock::RLocker rl(lock);
+  if (!data_sync_cr) {
+    return;
+  }
   data_sync_cr->wakeup(shard_id, keys);
 }
 
@@ -1072,11 +1081,20 @@ int RGWRemoteDataLog::run_sync(int num_shards, rgw_data_sync_status& sync_status
 {
   RGWObjectCtx obj_ctx(store, NULL);
 
-  int r = run(new RGWDataSyncCR(store, &http_manager, async_rados, conn, store->get_zone_params().log_pool, source_zone));
+  lock.get_write();
+  data_sync_cr = new RGWDataSyncCR(store, &http_manager, async_rados, conn, store->get_zone_params().log_pool, source_zone);
+  data_sync_cr->get();
+  lock.unlock();
+  int r = run(data_sync_cr);
   if (r < 0) {
     ldout(store->ctx(), 0) << "ERROR: failed to run sync" << dendl;
     return r;
   }
+
+  lock.get_write();
+  data_sync_cr->put();
+  data_sync_cr = NULL;
+  lock.unlock();
 
   return 0;
 }
