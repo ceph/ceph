@@ -7641,29 +7641,58 @@ void Server::handle_client_lssnap(MDRequestRef& mdr)
   map<snapid_t,SnapInfo*> infomap;
   realm->get_snap_info(infomap, diri->get_oldest_snap());
 
-  __u32 num = 0;
-  bufferlist dnbl;
-  for (map<snapid_t,SnapInfo*>::iterator p = infomap.begin();
-       p != infomap.end();
-       ++p) {
-    dout(10) << p->first << " -> " << *p->second << dendl;
+  unsigned max_entries = req->head.args.readdir.max_entries;
+  if (!max_entries)
+    max_entries = infomap.size();
+  int max_bytes = req->head.args.readdir.max_bytes;
+  if (!max_bytes)
+    max_bytes = 512 << 10;
 
-    // actual
-    if (p->second->ino == diri->ino())
-      ::encode(p->second->name, dnbl);
-    else
-      ::encode(p->second->get_long_name(), dnbl);
-    encode_infinite_lease(dnbl);
-    diri->encode_inodestat(dnbl, mdr->session, realm, p->first);
-    num++;
-  }
+  __u64 last_snapid = 0;
+  string offset_str = req->get_path2();
+  if (!offset_str.empty())
+    last_snapid = realm->resolve_snapname(offset_str, diri->ino());
 
   bufferlist dirbl;
   encode_empty_dirstat(dirbl);
+
+  max_bytes -= dirbl.length() - sizeof(__u32) + sizeof(__u8) * 2;
+
+  __u32 num = 0;
+  bufferlist dnbl;
+  map<snapid_t,SnapInfo*>::iterator p = infomap.upper_bound(last_snapid);
+  for (; p != infomap.end() && num < max_entries; ++p) {
+    dout(10) << p->first << " -> " << *p->second << dendl;
+
+    // actual
+    string snap_name;
+    if (p->second->ino == diri->ino())
+      snap_name = p->second->name;
+    else
+      snap_name = p->second->get_long_name();
+
+    unsigned start_len = dnbl.length();
+    if (int(start_len + snap_name.length() + sizeof(__u32) + sizeof(LeaseStat)) > max_bytes)
+      break;
+
+    ::encode(snap_name, dnbl);
+    encode_infinite_lease(dnbl);
+
+    int r = diri->encode_inodestat(dnbl, mdr->session, realm, p->first, max_bytes - (int)dnbl.length());
+    if (r < 0) {
+      bufferlist keep;
+      keep.substr_of(dnbl, 0, start_len);
+      dnbl.swap(keep);
+      break;
+    }
+    ++num;
+  }
+
   ::encode(num, dirbl);
-  __u8 t = 1;
-  ::encode(t, dirbl);  // end
-  ::encode(t, dirbl);  // complete
+  __u8 end = (p == infomap.end());
+  ::encode(end, dirbl);  // end
+  __u8 complete = end && last_snapid == 0;
+  ::encode(complete, dirbl);  // complete
   dirbl.claim_append(dnbl);
   
   mdr->reply_extra_bl = dirbl;
