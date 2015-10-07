@@ -15,6 +15,23 @@ from teuthology.orchestra.run import CommandFailedError
 log = logging.getLogger(__name__)
 
 
+def long_running(f):
+    """
+    Decorator that adds an "is_long_running" attribute to the wrapped function
+    """
+    f.is_long_running = True
+    return f
+
+
+def needs_trimming(f):
+    """
+    Mark fn as requiring a client capable of trimming its cache (i.e. for ceph-fuse
+    this means it needs to be able to run as root, currently)
+    """
+    f.needs_trimming = True
+    return f
+
+
 class CephFSTestCase(unittest.TestCase):
     """
     Test case for Ceph FS, requires caller to populate Filesystem and Mounts,
@@ -37,6 +54,7 @@ class CephFSTestCase(unittest.TestCase):
     MDSS_REQUIRED = 1
     REQUIRE_KCLIENT_REMOTE = False
     REQUIRE_ONE_CLIENT_REMOTE = False
+    REQUIRE_MEMSTORE = False
 
     LOAD_SETTINGS = []
 
@@ -61,6 +79,13 @@ class CephFSTestCase(unittest.TestCase):
         if self.REQUIRE_ONE_CLIENT_REMOTE:
             if self.mounts[0].client_remote.hostname in self.fs.get_mds_hostnames():
                 raise case.SkipTest("Require first client to be on separate server from MDSs")
+
+        if self.REQUIRE_MEMSTORE:
+            objectstore = self.fs.get_config("osd_objectstore", "osd")
+            if objectstore != "memstore":
+                # You certainly *could* run this on a real OSD, but you don't want to sit
+                # here for hours waiting for the test to fill up a 1TB drive!
+                raise case.SkipTest("Require `memstore` OSD backend to simulate full drives")
 
         # Unmount all surplus clients
         for i in range(self.CLIENTS_REQUIRED, len(self.mounts)):
@@ -87,8 +112,10 @@ class CephFSTestCase(unittest.TestCase):
         # To avoid any issues with e.g. unlink bugs, we destroy and recreate
         # the filesystem rather than just doing a rm -rf of files
         self.fs.mds_stop()
-        self.fs.mds_fail()
-        self.fs.delete()
+        if self.fs.exists():
+            self.fs.mon_manager.raw_cluster_cmd('mds', 'cluster_down')
+            self.fs.mds_fail()
+        self.fs.delete_all()
         self.fs.create()
 
         # In case the previous filesystem had filled up the RADOS cluster, wait for that

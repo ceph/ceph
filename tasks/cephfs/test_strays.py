@@ -1,9 +1,9 @@
-
+import json
 import logging
 from textwrap import dedent
 import time
 import gevent
-from tasks.cephfs.cephfs_test_case import CephFSTestCase
+from tasks.cephfs.cephfs_test_case import CephFSTestCase, long_running
 
 log = logging.getLogger(__name__)
 
@@ -17,9 +17,11 @@ class TestStrays(CephFSTestCase):
     # Range of different file sizes used in throttle test's workload
     throttle_workload_size_range = 16
 
+    @long_running
     def test_ops_throttle(self):
         self._test_throttling(self.OPS_THROTTLE)
 
+    @long_running
     def test_files_throttle(self):
         self._test_throttling(self.FILES_THROTTLE)
 
@@ -399,6 +401,26 @@ class TestStrays(CephFSTestCase):
 
         result = self.fs.mds_asok(["export", "dir", "/ALPHA", "1"], rank_0_id)
         self.assertEqual(result["return_code"], 0)
+
+        # Pool the MDS cache dump to watch for the export completing
+        migrated = False
+        migrate_timeout = 60
+        migrate_elapsed = 0
+        while not migrated:
+            data = self.fs.mds_asok(["dump", "cache"], rank_1_id)
+            for inode_data in data:
+                if inode_data['ino'] == ino:
+                    log.debug("Found ino in cache: {0}".format(json.dumps(inode_data, indent=2)))
+                    if inode_data['is_auth'] is True:
+                        migrated = True
+                    break
+
+            if not migrated:
+                if migrate_elapsed > migrate_timeout:
+                    raise RuntimeError("Migration hasn't happened after {0}s!".format(migrate_elapsed))
+                else:
+                    migrate_elapsed += 1
+                    time.sleep(1)
 
         # Delete the file on rank 1
         self.mount_a.run_shell(["rm", "-f", "ALPHA/alpha_file"])

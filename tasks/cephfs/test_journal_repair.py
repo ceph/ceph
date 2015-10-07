@@ -10,8 +10,7 @@ import time
 
 from teuthology.orchestra.run import CommandFailedError
 from tasks.cephfs.filesystem import ObjectNotFound, ROOT_INO
-from tasks.cephfs.cephfs_test_case import CephFSTestCase
-
+from tasks.cephfs.cephfs_test_case import CephFSTestCase, long_running
 
 log = logging.getLogger(__name__)
 
@@ -135,6 +134,7 @@ class TestJournalRepair(CephFSTestCase):
         new_ino = self.mount_a.path_to_ino("afterwards")
         self.assertNotIn(new_ino, [rootfile_ino, subdir_ino, subdirfile_ino])
 
+    @long_running # 308s
     def test_reset(self):
         """
         That after forcibly modifying the backing store, we can get back into
@@ -244,7 +244,7 @@ class TestJournalRepair(CephFSTestCase):
         self.fs.table_tool(["0", "reset", "session"])
         self.fs.journal_tool(["journal", "reset"], rank=0)
         self.fs.erase_mds_objects(1)
-        self.fs.admin_remote.run(args=['sudo', 'ceph', 'fs', 'reset', 'default', '--yes-i-really-mean-it'])
+        self.fs.mon_manager.raw_cluster_cmd('fs', 'reset', 'default', '--yes-i-really-mean-it')
 
         # Bring an MDS back online, mount a client, and see that we can walk the full
         # filesystem tree again

@@ -2,12 +2,12 @@
 from StringIO import StringIO
 import json
 import logging
+import os
 import time
 import datetime
 import re
 
 from teuthology.exceptions import CommandFailedError
-from teuthology.orchestra import run
 from teuthology import misc
 from teuthology.nuke import clear_firewall
 from teuthology.parallel import parallel
@@ -73,16 +73,31 @@ class Filesystem(object):
     def create(self):
         pgs_per_fs_pool = self.get_pgs_per_fs_pool()
 
-        self.admin_remote.run(args=['sudo', 'ceph', 'osd', 'pool', 'create', 'metadata', pgs_per_fs_pool.__str__()])
-        self.admin_remote.run(args=['sudo', 'ceph', 'osd', 'pool', 'create', 'data', pgs_per_fs_pool.__str__()])
-        self.admin_remote.run(args=['sudo', 'ceph', 'fs', 'new', 'default', 'metadata', 'data'])
+        self.mon_manager.raw_cluster_cmd('osd', 'pool', 'create', 'metadata', pgs_per_fs_pool.__str__())
+        self.mon_manager.raw_cluster_cmd('osd', 'pool', 'create', 'data', pgs_per_fs_pool.__str__())
+        self.mon_manager.raw_cluster_cmd('fs', 'new', 'default', 'metadata', 'data')
 
-    def delete(self):
-        self.admin_remote.run(args=['sudo', 'ceph', 'fs', 'rm', 'default', '--yes-i-really-mean-it'])
-        self.admin_remote.run(args=['sudo', 'ceph', 'osd', 'pool', 'delete',
-                                  'metadata', 'metadata', '--yes-i-really-really-mean-it'])
-        self.admin_remote.run(args=['sudo', 'ceph', 'osd', 'pool', 'delete',
-                                  'data', 'data', '--yes-i-really-really-mean-it'])
+    def exists(self):
+        """
+        Whether a filesystem is enabled at all
+        """
+        fs_list = json.loads(self.mon_manager.raw_cluster_cmd('fs', 'ls', '--format=json-pretty'))
+        return len(fs_list) > 0
+
+    def delete_all(self):
+        """
+        Remove all filesystems that exist, and any pools in use by them.
+        """
+        fs_list = json.loads(self.mon_manager.raw_cluster_cmd('fs', 'ls', '--format=json-pretty'))
+        for fs_data in fs_list:
+            self.mon_manager.raw_cluster_cmd('fs', 'rm', fs_data['name'], '--yes-i-really-mean-it')
+            self.mon_manager.raw_cluster_cmd('osd', 'pool', 'delete',
+                                             fs_data['metadata_pool'], fs_data['metadata_pool'],
+                                             '--yes-i-really-really-mean-it')
+            for data_pool in fs_data['data_pools']:
+                self.mon_manager.raw_cluster_cmd('osd', 'pool', 'delete',
+                                                 data_pool, data_pool,
+                                                 '--yes-i-really-really-mean-it')
 
     def legacy_configured(self):
         """
@@ -90,9 +105,8 @@ class Filesystem(object):
         the case, the caller should avoid using Filesystem.create
         """
         try:
-            proc = self.admin_remote.run(args=['sudo', 'ceph', '--format=json-pretty', 'osd', 'lspools'],
-                                       stdout=StringIO())
-            pools = json.loads(proc.stdout.getvalue())
+            out_text = self.mon_manager.raw_cluster_cmd('--format=json-pretty', 'osd', 'lspools')
+            pools = json.loads(out_text)
             metadata_pool_exists = 'metadata' in [p['poolname'] for p in pools]
         except CommandFailedError as e:
             # For use in upgrade tests, Ceph cuttlefish and earlier don't support
@@ -221,7 +235,6 @@ class Filesystem(object):
 
         return result
 
-
     def wait_for_daemons(self, timeout=None):
         """
         Wait until all daemons are healthy
@@ -316,8 +329,9 @@ class Filesystem(object):
         log.info("Creating new filesystem")
 
         self.mon_manager.raw_cluster_cmd_result('mds', 'set', "max_mds", "0")
+        self.mon_manager.raw_cluster_cmd('mds', 'cluster_down')
         for mds_id in self.mds_ids:
-            assert not self._ctx.daemons.get_daemon('mds', mds_id).running()
+            assert not self.mds_daemons[mds_id].running()
             self.mon_manager.raw_cluster_cmd_result('mds', 'fail', mds_id)
         self.mon_manager.raw_cluster_cmd_result('fs', 'rm', "default", "--yes-i-really-mean-it")
         self.mon_manager.raw_cluster_cmd_result('fs', 'new', "default", "metadata", "data")
@@ -331,12 +345,12 @@ class Filesystem(object):
 
         # FIXME get the metadata pool name from mdsmap instead of hardcoding
         self.client_remote.run(args=[
-            'sudo', 'rados', '-p', 'metadata', 'get', object_id, temp_bin_path
+            'sudo', os.path.join(self._prefix, 'rados'), '-p', 'metadata', 'get', object_id, temp_bin_path
         ])
 
         stdout = StringIO()
         self.client_remote.run(args=[
-            'sudo', 'ceph-dencoder', 'type', object_type, 'import', temp_bin_path, 'decode', 'dump_json'
+            'sudo', os.path.join(self._prefix, 'ceph-dencoder'), 'type', object_type, 'import', temp_bin_path, 'decode', 'dump_json'
         ], stdout=stdout)
         dump_json = stdout.getvalue().strip()
         try:
@@ -496,23 +510,23 @@ class Filesystem(object):
 
         obj_name = "{0:x}.00000000".format(ino_no)
 
-        temp_file = "/tmp/{0}_{1}".format(obj_name, datetime.datetime.now().isoformat())
-
         args = [
-            "rados", "-p", pool, "getxattr", obj_name, xattr_name,
-            run.Raw(">"), temp_file
+            os.path.join(self._prefix, "rados"), "-p", pool, "getxattr", obj_name, xattr_name
         ]
         try:
-            remote.run(
+            proc = remote.run(
                 args=args,
                 stdout=StringIO())
         except CommandFailedError as e:
             log.error(e.__str__())
             raise ObjectNotFound(obj_name)
 
+        data = proc.stdout.getvalue()
+
         p = remote.run(
-            args=["ceph-dencoder", "type", type, "import", temp_file, "decode", "dump_json"],
-            stdout=StringIO()
+            args=[os.path.join(self._prefix, "ceph-dencoder"), "type", type, "import", "-", "decode", "dump_json"],
+            stdout=StringIO(),
+            stdin=data
         )
 
         return json.loads(p.stdout.getvalue().strip())
@@ -614,9 +628,6 @@ class Filesystem(object):
         if pool is None:
             pool = self.get_metadata_pool_name()
 
-        if stdin_data is None:
-            stdin_data = StringIO()
-
         # Doesn't matter which MDS we use to run rados commands, they all
         # have access to the pools
         mds_id = self.mds_ids[0]
@@ -624,7 +635,7 @@ class Filesystem(object):
 
         # NB we could alternatively use librados pybindings for this, but it's a one-liner
         # using the `rados` CLI
-        args = ["rados", "-p", pool] + args
+        args = [os.path.join(self._prefix, "rados"), "-p", pool] + args
         p = remote.run(
             args=args,
             stdin=stdin_data,
@@ -683,23 +694,27 @@ class Filesystem(object):
         # MDSTables & SessionMap
         self.erase_metadata_objects("mds{rank:d}_".format(rank=rank))
 
-    def _run_tool(self, tool, args, rank=None, quiet=False):
-        mds_id = self.mds_ids[0]
-        remote = self.mds_daemons[mds_id].remote
+    @property
+    def _prefix(self):
+        """
+        Override this to set a different
+        """
+        return ""
 
+    def _run_tool(self, tool, args, rank=None, quiet=False):
         # Tests frequently have [client] configuration that jacks up
         # the objecter log level (unlikely to be interesting here)
         # and does not set the mds log level (very interesting here)
         if quiet:
-            base_args = [tool, '--debug-mds=1', '--debug-objecter=1']
+            base_args = [os.path.join(self._prefix, tool), '--debug-mds=1', '--debug-objecter=1']
         else:
-            base_args = [tool, '--debug-mds=4', '--debug-objecter=1']
+            base_args = [os.path.join(self._prefix, tool), '--debug-mds=4', '--debug-objecter=1']
 
         if rank is not None:
             base_args.extend(["--rank", "%d" % rank])
 
         t1 = datetime.datetime.now()
-        r = remote.run(
+        r = self.tool_remote.run(
             args=base_args + args,
             stdout=StringIO()).stdout.getvalue().strip()
         duration = datetime.datetime.now() - t1
@@ -707,6 +722,16 @@ class Filesystem(object):
             base_args + args, duration, r
         ))
         return r
+
+    @property
+    def tool_remote(self):
+        """
+        An arbitrary remote to use when invoking recovery tools.  Use an MDS host because
+        it'll definitely have keys with perms to access cephfs metadata pool.  This is public
+        so that tests can use this remote to go get locally written output files from the tools.
+        """
+        mds_id = self.mds_ids[0]
+        return self.mds_daemons[mds_id].remote
 
     def journal_tool(self, args, rank=None, quiet=False):
         """
