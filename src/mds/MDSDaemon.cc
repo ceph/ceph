@@ -988,6 +988,11 @@ void MDSDaemon::suicide()
     tick_event = 0;
   }
 
+  //because add_observer is called after set_up_admin_socket
+  //so we can use asok_hook to avoid assert in the remove_observer
+  if (asok_hook != NULL) 
+    g_conf->remove_observer(this);
+
   clean_up_admin_socket();
 
   // Inform MDS we are going away, then shut down beacon
