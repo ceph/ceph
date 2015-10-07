@@ -1134,26 +1134,28 @@ void PGMonitor::map_pg_creates()
       &acting,
       &acting_primary);
 
-    bool changed = false;
+    bool changed_primary = false;
     if (up != s->up ||
 	up_primary != s->up_primary ||
 	acting !=  s->acting ||
 	acting_primary != s->acting_primary) {
-      changed = true;
-      if (s->acting_primary != -1) {
-	map<epoch_t,set<pg_t> >& r =
-	  pg_map.creating_pgs_by_osd_epoch[s->acting_primary];
-	r[s->mapping_epoch].erase(pgid);
-	if (r[s->mapping_epoch].empty())
-	  r.erase(s->mapping_epoch);
-	if (r.empty())
-	  pg_map.creating_pgs_by_osd_epoch.erase(s->acting_primary);
+      if (acting_primary != s->acting_primary) {
+	changed_primary = true;
+	s->mapping_epoch = pg_map.last_pg_scan;
+	if (s->acting_primary != -1) {
+	  map<epoch_t,set<pg_t> >& r =
+	    pg_map.creating_pgs_by_osd_epoch[s->acting_primary];
+	  r[s->mapping_epoch].erase(pgid);
+	  if (r[s->mapping_epoch].empty())
+	    r.erase(s->mapping_epoch);
+	  if (r.empty())
+	    pg_map.creating_pgs_by_osd_epoch.erase(s->acting_primary);
+	}
       }
       s->up = up;
       s->up_primary = up_primary;
       s->acting = acting;
       s->acting_primary = acting_primary;
-      s->mapping_epoch = pg_map.last_pg_scan;
     }
     pg_map.stat_pg_add(pgid, *s, true);
 
@@ -1166,7 +1168,7 @@ void PGMonitor::map_pg_creates()
       continue;
 
     if (acting_primary != -1) {
-      if (changed) {
+      if (changed_primary) {
 	pg_map.creating_pgs_by_osd_epoch[acting_primary][s->mapping_epoch].insert(
           pgid);
       }
