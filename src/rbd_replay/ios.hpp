@@ -23,6 +23,7 @@
 #include <iostream>
 #include <map>
 #include <set>
+#include <vector>
 #include "actions.hpp"
 #include "Ser.hpp"
 
@@ -43,8 +44,7 @@ typedef std::map<action_id_t, boost::shared_ptr<IO> > io_map_t;
 class IO : public boost::enable_shared_from_this<IO> {
 public:
   typedef boost::shared_ptr<IO> ptr;
-
-  typedef boost::weak_ptr<IO> weak_ptr;
+  typedef std::vector<ptr> ptrs;
 
   /**
      @param ionum ID of this %IO
