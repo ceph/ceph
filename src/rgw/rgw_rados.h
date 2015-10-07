@@ -23,7 +23,8 @@ class ACLOwner;
 class RGWGC;
 class RGWMetaNotifier;
 class RGWObjectExpirer;
-class RGWSyncProcessorThread;
+class RGWMetaSyncProcessorThread;
+class RGWDataSyncProcessorThread;
 class RGWRESTConn;
 
 /* flags for put_obj_meta() */
@@ -1497,7 +1498,8 @@ class RGWRados
   friend class RGWGC;
   friend class RGWMetaNotifier;
   friend class RGWObjectExpirer;
-  friend class RGWSyncProcessorThread;
+  friend class RGWMetaSyncProcessorThread;
+  friend class RGWDataSyncProcessorThread;
   friend class RGWStateLog;
   friend class RGWReplicaLogger;
 
@@ -1547,8 +1549,8 @@ class RGWRados
   bool run_sync_thread;
 
   RGWMetaNotifier *meta_notifier;
-  RGWSyncProcessorThread *meta_sync_processor_thread;
-  map<string, RGWSyncProcessorThread *> data_sync_processor_threads;
+  RGWMetaSyncProcessorThread *meta_sync_processor_thread;
+  map<string, RGWDataSyncProcessorThread *> data_sync_processor_threads;
 
   Mutex meta_sync_thread_lock;
   Mutex data_sync_thread_lock;
@@ -2221,7 +2223,7 @@ public:
    */
   bool is_syncing_bucket_meta(rgw_bucket& bucket);
   void wakeup_meta_sync_shards(set<int>& shard_ids);
-  void wakeup_data_sync_shards(const string& source_zone, set<int>& shard_ids);
+  void wakeup_data_sync_shards(const string& source_zone, map<int, set<string> >& shard_ids);
 
   int set_bucket_owner(rgw_bucket& bucket, ACLOwner& owner);
   int set_buckets_enabled(std::vector<rgw_bucket>& buckets, bool enabled);

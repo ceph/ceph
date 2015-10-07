@@ -1272,6 +1272,9 @@ int RGWDataChangesLog::add_entry(rgw_bucket& bucket, int shard_id) {
 
   rgw_bucket_shard bs(bucket, shard_id);
 
+  int index = choose_oid(bs);
+  mark_modified(index, bs);
+
   lock.Lock();
 
   ChangeStatusPtr status;
@@ -1314,7 +1317,7 @@ int RGWDataChangesLog::add_entry(rgw_bucket& bucket, int shard_id) {
   status->cond = new RefCountedCond;
   status->pending = true;
 
-  string& oid = oids[choose_oid(bs)];
+  string& oid = oids[index];
   utime_t expiration;
 
   int ret;
@@ -1509,6 +1512,34 @@ void RGWDataChangesLog::ChangesRenewThread::stop()
 {
   Mutex::Locker l(lock);
   cond.Signal();
+}
+
+void RGWDataChangesLog::mark_modified(int shard_id, rgw_bucket_shard& bs)
+{
+  string key = bs.bucket.name + ":" + bs.bucket.bucket_id;
+  char buf[16];
+  snprintf(buf, sizeof(buf), ":%d", bs.shard_id);
+  key.append(buf);
+  modified_lock.get_read();
+  map<int, set<string> >::iterator iter = modified_shards.find(shard_id);
+  if (iter != modified_shards.end()) {
+    set<string>& keys = iter->second;
+    if (keys.find(key) != keys.end()) {
+      modified_lock.unlock();
+      return;
+    }
+  }
+  modified_lock.unlock();
+
+  RWLock::WLocker wl(modified_lock);
+  modified_shards[shard_id].insert(key);
+}
+
+void RGWDataChangesLog::read_clear_modified(map<int, set<string> > *modified)
+{
+  RWLock::WLocker wl(modified_lock);
+  modified->swap(modified_shards);
+  modified_shards.clear();
 }
 
 void RGWBucketCompleteInfo::dump(Formatter *f) const {
