@@ -55,6 +55,7 @@ using namespace librados;
 #include "rgw_gc.h"
 #include "rgw_object_expirer_core.h"
 #include "rgw_sync.h"
+#include "rgw_data_sync.h"
 
 #define dout_subsys ceph_subsys_rgw
 
@@ -2192,19 +2193,24 @@ int RGWMetaNotifier::process()
     ldout(cct, 20) << __func__ << "(): notifying mdlog change, shard_id=" << *iter << dendl;
   }
 
-  for (map<string, RGWRESTConn *>::iterator iter = store->zone_conn_map.begin();
-       iter != store->zone_conn_map.end(); ++iter) {
-    RGWRESTConn *conn = iter->second;
-  }
-
   notify_mgr.notify_all(store->zone_conn_map, shards);
 
   return 0;
 }
 
 class RGWSyncProcessorThread : public RGWRadosThread {
+public:
+  RGWSyncProcessorThread(RGWRados *_store) : RGWRadosThread(_store) {}
+  virtual ~RGWSyncProcessorThread() {}
+  virtual int init() = 0 ;
+  virtual int process() = 0;
+  virtual void wakeup_sync_shards(set<int>& shard_ids) = 0;
+};
+
+template <class T>
+class RGWSyncProcessorThreadImpl : public RGWSyncProcessorThread {
   CephContext *cct;
-  RGWMetaSyncStatusManager sync;
+  T sync;
 
   uint64_t interval_msec() {
     return 0; /* no interval associated, it'll run once until stopped */
@@ -2213,7 +2219,7 @@ class RGWSyncProcessorThread : public RGWRadosThread {
     sync.stop();
   }
 public:
-  RGWSyncProcessorThread(RGWRados *_store) : RGWRadosThread(_store), cct(_store->ctx()), sync(_store) {}
+  RGWSyncProcessorThreadImpl<T>(RGWRados *_store, const string& source_entity) : RGWSyncProcessorThread(_store), cct(_store->ctx()), sync(_store, source_entity) {}
 
   int init();
   int process();
@@ -2225,7 +2231,8 @@ public:
   }
 };
 
-int RGWSyncProcessorThread::init()
+template <class T>
+int RGWSyncProcessorThreadImpl<T>::init()
 {
   int ret = sync.init();
   if (ret < 0) {
@@ -2236,18 +2243,32 @@ int RGWSyncProcessorThread::init()
   return 0;
 }
 
-int RGWSyncProcessorThread::process()
+template <class T>
+int RGWSyncProcessorThreadImpl<T>::process()
 {
   sync.run();
   return 0;
 }
 
-void RGWRados::wakeup_sync_shards(set<int>& shard_ids)
+void RGWRados::wakeup_meta_sync_shards(set<int>& shard_ids)
 {
-  Mutex::Locker l(sync_thread_lock);
-  if (sync_processor_thread) {
-    sync_processor_thread->wakeup_sync_shards(shard_ids);
+  Mutex::Locker l(meta_sync_thread_lock);
+  if (meta_sync_processor_thread) {
+    meta_sync_processor_thread->wakeup_sync_shards(shard_ids);
   }
+}
+
+void RGWRados::wakeup_data_sync_shards(const string& source_zone, set<int>& shard_ids)
+{
+  Mutex::Locker l(data_sync_thread_lock);
+  map<string, RGWSyncProcessorThread *>::iterator iter = data_sync_processor_threads.find(source_zone);
+  if (iter == data_sync_processor_threads.end()) {
+    return;
+  }
+
+  RGWSyncProcessorThread *thread = iter->second;
+  assert(thread);
+  thread->wakeup_sync_shards(shard_ids);
 }
 
 int RGWRados::get_required_alignment(rgw_bucket& bucket, uint64_t *alignment)
@@ -2291,10 +2312,19 @@ int RGWRados::get_max_chunk_size(rgw_bucket& bucket, uint64_t *max_chunk_size)
 void RGWRados::finalize()
 {
   if (run_sync_thread) {
-    Mutex::Locker l(sync_thread_lock);
-    sync_processor_thread->stop();
-    delete sync_processor_thread;
-    sync_processor_thread = NULL;
+    Mutex::Locker l(meta_sync_thread_lock);
+    meta_sync_processor_thread->stop();
+    delete meta_sync_processor_thread;
+    meta_sync_processor_thread = NULL;
+
+    Mutex::Locker dl(data_sync_thread_lock);
+    map<string, RGWSyncProcessorThread *>::iterator iter = data_sync_processor_threads.begin();
+    for (; iter != data_sync_processor_threads.end(); ++iter) {
+      RGWSyncProcessorThread *thread = iter->second;
+      thread->stop();
+      delete thread;
+    }
+    data_sync_processor_threads.clear();
   }
   if (finisher) {
     finisher->stop();
@@ -2618,14 +2648,26 @@ int RGWRados::init_complete()
   }
 
   if (run_sync_thread) {
-    Mutex::Locker l(sync_thread_lock);
-    sync_processor_thread = new RGWSyncProcessorThread(this);
-    ret = sync_processor_thread->init();
+    Mutex::Locker l(meta_sync_thread_lock);
+    meta_sync_processor_thread = new RGWSyncProcessorThreadImpl<RGWMetaSyncStatusManager>(this, zonegroup_map.master_zonegroup);
+    ret = meta_sync_processor_thread->init();
     if (ret < 0) {
       ldout(cct, 0) << "ERROR: failed to initialize" << dendl;
       return ret;
     }
-    sync_processor_thread->start();
+    meta_sync_processor_thread->start();
+
+    Mutex::Locker dl(data_sync_thread_lock);
+    for (map<string, RGWRESTConn *>::iterator iter = zone_conn_map.begin(); iter != zone_conn_map.end(); ++iter) {
+      RGWSyncProcessorThread *thread = new RGWSyncProcessorThreadImpl<RGWDataSyncStatusManager>(this, iter->first);
+      ret = thread->init();
+      if (ret < 0) {
+        ldout(cct, 0) << "ERROR: failed to initialize" << dendl;
+        return ret;
+      }
+      thread->start();
+      data_sync_processor_threads[iter->first] = thread;
+    }
   }
 
   quota_handler = RGWQuotaHandler::generate_handler(this, quota_threads);
