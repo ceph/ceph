@@ -692,6 +692,41 @@ void RGWOp_DATALog_Unlock::execute() {
   http_ret = store->data_log->unlock(shard_id, zone_id, locker_id);
 }
 
+void RGWOp_DATALog_Notify::execute() {
+  char *data;
+  int len = 0;
+#define LARGE_ENOUGH_BUF (128 * 1024)
+  int r = rgw_rest_read_all_input(s, &data, &len, LARGE_ENOUGH_BUF);
+  if (r < 0) {
+    http_ret = r;
+    return;
+  }
+
+  ldout(s->cct, 20) << __func__ << "(): read data: " << string(data, len) << dendl;
+
+  JSONParser p;
+  r = p.parse(data, len);
+  free(data);
+  if (r < 0) {
+    ldout(s->cct, 0) << "ERROR: failed to parse JSON" << dendl;
+    http_ret = r;
+    return;
+  }
+
+  set<int> updated_shards;
+  decode_json_obj(updated_shards, &p);
+
+  if (store->ctx()->_conf->subsys.should_gather(ceph_subsys_rgw, 20)) {
+    for (set<int>::iterator iter = updated_shards.begin(); iter != updated_shards.end(); ++iter) {
+      ldout(s->cct, 20) << __func__ << "(): updated shard=" << *iter << dendl;
+    }
+  }
+
+  store->wakeup_data_sync_shards(updated_shards);
+
+  http_ret = 0;
+}
+
 void RGWOp_DATALog_Delete::execute() {
   string   st = s->info.args.get("start-time"),
            et = s->info.args.get("end-time"),
@@ -804,6 +839,8 @@ RGWOp *RGWHandler_Log::op_post() {
       return new RGWOp_DATALog_Lock;
     else if (s->info.args.exists("unlock"))
       return new RGWOp_DATALog_Unlock;
+    else if (s->info.args.exists("notify"))
+      return new RGWOp_DATALog_Notify;	    
   }
   return NULL;
 }
