@@ -4,7 +4,7 @@
 #include "rgw_rest.h"
 #include "rgw_rest_s3.h"
 #include "rgw_rest_user.h"
-#include "rgw_rest_lib.h"
+#include "rgw_os_lib.h"
 #include "rgw_file.h"
 
 
