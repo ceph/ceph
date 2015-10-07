@@ -223,8 +223,6 @@ int RGWLibProcess::process_request(RGWLibRequest* req, RGWLibIO* io)
     goto done;
   }
 
-  /* XXXX almost correct, I think */
-  #if 0
   req->log(s, "verifying op permissions");
   ret = op->verify_permission();
   if (ret < 0) {
@@ -235,8 +233,6 @@ int RGWLibProcess::process_request(RGWLibRequest* req, RGWLibIO* io)
       goto done;
     }
   }
-  #endif
-  req->log(s, "here 3");
 
   req->log(s, "verifying op params");
   ret = op->verify_params();
@@ -273,9 +269,8 @@ done:
 
 int RGWLibFrontend::init()
 {
-  /* XXX */
   pprocess = new RGWLibProcess(g_ceph_context, &env,
-			       g_conf->rgw_thread_pool_size, conf);
+			      g_conf->rgw_thread_pool_size, conf);
   return 0;
 }
 
