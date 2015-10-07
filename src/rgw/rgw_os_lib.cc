@@ -59,12 +59,12 @@ int RGWHandler_Lib::init_from_header(struct req_state *s)
 
 /* RGWOps */
 
-void RGWListBuckets_ObjStore_Lib::send_response_begin(bool has_buckets)
+void RGWListBuckets_OS_Lib::send_response_begin(bool has_buckets)
 {
   sent_data = true;
 }
 
-void RGWListBuckets_ObjStore_Lib::send_response_data(RGWUserBuckets& buckets)
+void RGWListBuckets_OS_Lib::send_response_data(RGWUserBuckets& buckets)
 {
   if (!sent_data)
     return;
@@ -82,12 +82,12 @@ void RGWListBuckets_ObjStore_Lib::send_response_data(RGWUserBuckets& buckets)
   }
 } /* send_response_data */
 
-void RGWListBuckets_ObjStore_Lib::send_response_end()
+void RGWListBuckets_OS_Lib::send_response_end()
 {
   // do nothing
 }
 
-int RGWListBucket_ObjStore_Lib::get_params()
+int RGWListBucket_OS_Lib::get_params()
 {
   // XXX S3
   list_versions = s->info.args.exists("versions");
@@ -110,7 +110,7 @@ int RGWListBucket_ObjStore_Lib::get_params()
   return 0;
 }
 
-void RGWListBucket_ObjStore_Lib::send_response()
+void RGWListBucket_OS_Lib::send_response()
 {
   // XXX if necessary, we can remove the need for dynamic_cast
   RGWListBucketRequest* req
