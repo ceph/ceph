@@ -2039,7 +2039,7 @@ bool PG::queue_scrub()
     state_set(PG_STATE_DEEP_SCRUB);
     scrubber.must_deep_scrub = false;
   }
-  if (scrubber.must_repair) {
+  if (scrubber.must_repair || scrubber.auto_repair) {
     state_set(PG_STATE_REPAIR);
     scrubber.must_repair = false;
   }
@@ -3180,6 +3180,21 @@ bool PG::sched_scrub()
       return false;
   }
 
+  if (cct->_conf->osd_scrub_auto_repair
+      && get_pgbackend()->auto_repair_supported()
+      && time_for_deep
+      // respect the command from user, and not do auto-repair
+      && !scrubber.must_repair
+      && !scrubber.must_scrub
+      && !scrubber.must_deep_scrub) {
+    dout(20) << __func__ << ": auto repair with deep scrubbing" << dendl;
+    scrubber.auto_repair = true;
+  } else {
+    // this happens when user issue the scrub/repair command during
+    // the scheduling of the scrub/repair (e.g. request reservation)
+    scrubber.auto_repair = false;
+  }
+
   bool ret = true;
   if (!scrubber.reserved) {
     assert(scrubber.reserved_peers.empty());
@@ -4205,6 +4220,13 @@ bool PG::scrub_process_inconsistent()
 void PG::scrub_finish() 
 {
   bool repair = state_test(PG_STATE_REPAIR);
+  // if the repair request comes from auto-repair and large number of errors,
+  // we would like to cancel auto-repair
+  if (repair && scrubber.auto_repair
+      && scrubber.authoritative.size() > cct->_conf->osd_scrub_auto_repair_num_errors) {
+    state_clear(PG_STATE_REPAIR);
+    repair = false;
+  }
   bool deep_scrub = state_test(PG_STATE_DEEP_SCRUB);
   const char *mode = (repair ? "repair": (deep_scrub ? "deep-scrub" : "scrub"));
 
@@ -4940,6 +4962,8 @@ ostream& operator<<(ostream& out, const PG& pg)
 
   if (pg.scrubber.must_repair)
     out << " MUST_REPAIR";
+  if (pg.scrubber.auto_repair)
+    out << " AUTO_REPAIR";
   if (pg.scrubber.must_deep_scrub)
     out << " MUST_DEEP_SCRUB";
   if (pg.scrubber.must_scrub)
