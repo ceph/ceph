@@ -1135,10 +1135,6 @@ void PGMonitor::map_pg_creates()
 	acting_primary != s->acting_primary) {
       changed = true;
       if (s->acting_primary != -1) {
-	pg_map.creating_pgs_by_osd[s->acting_primary].erase(pgid);
-	if (pg_map.creating_pgs_by_osd[s->acting_primary].size() == 0)
-	  pg_map.creating_pgs_by_osd.erase(s->acting_primary);
-
 	map<epoch_t,set<pg_t> >& r =
 	  pg_map.creating_pgs_by_osd_epoch[s->acting_primary];
 	r[s->mapping_epoch].erase(pgid);
@@ -1167,19 +1163,12 @@ void PGMonitor::map_pg_creates()
       if (changed) {
 	pg_map.creating_pgs_by_osd_epoch[acting_primary][s->mapping_epoch].insert(
           pgid);
-	pg_map.creating_pgs_by_osd[acting_primary].insert(pgid);
       }
     } else {
       dout(20) << "map_pg_creates  " << pgid << " -> no osds in epoch "
 	       << mon->osdmon()->osdmap.get_epoch() << ", skipping" << dendl;
       continue;  // blarney!
     }
-  }
-  for (map<int, set<pg_t> >::iterator p = pg_map.creating_pgs_by_osd.begin();
-       p != pg_map.creating_pgs_by_osd.end();
-       ++p) {
-    dout(10) << "map_pg_creates osd." << p->first
-	     << " has " << p->second.size() << " pgs" << dendl;
   }
 }
 
@@ -1201,8 +1190,9 @@ void PGMonitor::send_pg_creates()
 	   << " pgs" << dendl;
 
   utime_t now = ceph_clock_now(g_ceph_context);
-  for (map<int, set<pg_t> >::iterator p = pg_map.creating_pgs_by_osd.begin();
-       p != pg_map.creating_pgs_by_osd.end();
+  for (map<int, map<epoch_t, set<pg_t>> >::iterator p =
+	 pg_map.creating_pgs_by_osd_epoch.begin();
+       p != pg_map.creating_pgs_by_osd_epoch.end();
        ++p) {
     int osd = p->first;
 
