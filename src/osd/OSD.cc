@@ -1597,6 +1597,7 @@ OSD::OSD(CephContext *cct_, ObjectStore *store_,
     &osd_tp),
   map_lock("OSD::map_lock"),
   pg_map_lock("OSD::pg_map_lock"),
+  last_pg_create_epoch(0),
   debug_drop_pg_create_probability(cct->_conf->osd_debug_drop_pg_create_probability),
   debug_drop_pg_create_duration(cct->_conf->osd_debug_drop_pg_create_duration),
   debug_drop_pg_create_left(-1),
@@ -4433,7 +4434,7 @@ void OSD::ms_handle_connect(Connection *con)
 
       map_lock.put_read();
 
-      monc->sub_want("osd_pg_creates", 0, CEPH_SUBSCRIBE_ONETIME);
+      monc->sub_want("osd_pg_creates", last_pg_create_epoch, 0);
       monc->sub_want("osdmap", osdmap->get_epoch(), CEPH_SUBSCRIBE_ONETIME);
       monc->renew_subs();
     }
@@ -7307,6 +7308,8 @@ void OSD::handle_pg_create(OpRequestRef op)
     }
     dispatch_context(rctx, pg, osdmap);
   }
+
+  last_pg_create_epoch = m->epoch;
 
   maybe_update_heartbeat_peers();
 }
