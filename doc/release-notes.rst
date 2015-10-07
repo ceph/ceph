@@ -647,11 +647,13 @@ Notable Changes
 * common: ceph-object-corpus: add 0.94.2-207-g88e7ee7 hammer objects (`issue#13070 <http://tracker.ceph.com/issues/13070>`_, `pr#5551 <http://github.com/ceph/ceph/pull/5551>`_, Sage Weil)
 * common: do not insert emtpy ptr when rebuild emtpy bufferlist (`issue#12775 <http://tracker.ceph.com/issues/12775>`_, `pr#5764 <http://github.com/ceph/ceph/pull/5764>`_, Xinze Chi)
 * common: [  FAILED  ] TestLibRBD.BlockingAIO (`issue#12479 <http://tracker.ceph.com/issues/12479>`_, `pr#5768 <http://github.com/ceph/ceph/pull/5768>`_, Jason Dillaman)
+* common: LibCephFS.GetPoolId failure (`issue#12598 <http://tracker.ceph.com/issues/12598>`_, `pr#5887 <http://github.com/ceph/ceph/pull/5887>`_, Yan, Zheng)
 * common: Memory leak in Mutex.cc, pthread_mutexattr_init without pthread_mutexattr_destroy (`issue#11762 <http://tracker.ceph.com/issues/11762>`_, `pr#5378 <http://github.com/ceph/ceph/pull/5378>`_, Ketor Meng)
 * common: object_map_update fails with -EINVAL return code (`issue#12611 <http://tracker.ceph.com/issues/12611>`_, `pr#5559 <http://github.com/ceph/ceph/pull/5559>`_, Jason Dillaman)
 * common: Pipe: Drop connect_seq increase line (`issue#13093 <http://tracker.ceph.com/issues/13093>`_, `pr#5908 <http://github.com/ceph/ceph/pull/5908>`_, Haomai Wang)
 * common: recursive lock of md_config_t (0) (`issue#12614 <http://tracker.ceph.com/issues/12614>`_, `pr#5759 <http://github.com/ceph/ceph/pull/5759>`_, Josh Durgin)
 * crush: ceph osd crush reweight-subtree does not reweight parent node (`issue#11855 <http://tracker.ceph.com/issues/11855>`_, `pr#5374 <http://github.com/ceph/ceph/pull/5374>`_, Sage Weil)
+* doc: update docs to point to download.ceph.com (`issue#13162 <http://tracker.ceph.com/issues/13162>`_, `pr#6156 <http://github.com/ceph/ceph/pull/6156>`_, Alfredo Deza)
 * fs: ceph-fuse 0.94.2-1trusty segfaults / aborts (`issue#12297 <http://tracker.ceph.com/issues/12297>`_, `pr#5381 <http://github.com/ceph/ceph/pull/5381>`_, Greg Farnum)
 * fs: segfault launching ceph-fuse with bad --name (`issue#12417 <http://tracker.ceph.com/issues/12417>`_, `pr#5382 <http://github.com/ceph/ceph/pull/5382>`_, John Spray)
 * librados: Change radosgw pools default crush ruleset (`issue#11640 <http://tracker.ceph.com/issues/11640>`_, `pr#5754 <http://github.com/ceph/ceph/pull/5754>`_, Yuan Zhou)
@@ -660,6 +662,7 @@ Notable Changes
 * librbd: deadlock during cooperative exclusive lock transition (`issue#11537 <http://tracker.ceph.com/issues/11537>`_, `pr#5319 <http://github.com/ceph/ceph/pull/5319>`_, Jason Dillaman)
 * librbd: Possible crash while concurrently writing and shrinking an image (`issue#11743 <http://tracker.ceph.com/issues/11743>`_, `pr#5318 <http://github.com/ceph/ceph/pull/5318>`_, Jason Dillaman)
 * mon: add a cache layer over MonitorDBStore (`issue#12638 <http://tracker.ceph.com/issues/12638>`_, `pr#5697 <http://github.com/ceph/ceph/pull/5697>`_, Kefu Chai)
+* mon: fix crush testing for new pools (`issue#13400 <http://tracker.ceph.com/issues/13400>`_, `pr#6192 <http://github.com/ceph/ceph/pull/6192>`_, Sage Weil)
 * mon: get pools health'info have error (`issue#12402 <http://tracker.ceph.com/issues/12402>`_, `pr#5369 <http://github.com/ceph/ceph/pull/5369>`_, renhwztetecs)
 * mon: implicit erasure code crush ruleset is not validated (`issue#11814 <http://tracker.ceph.com/issues/11814>`_, `pr#5276 <http://github.com/ceph/ceph/pull/5276>`_, Loic Dachary)
 * mon: PaxosService: call post_refresh() instead of post_paxos_update() (`issue#11470 <http://tracker.ceph.com/issues/11470>`_, `pr#5359 <http://github.com/ceph/ceph/pull/5359>`_, Joao Eduardo Luis)
@@ -692,6 +695,7 @@ Notable Changes
 * rgw: segmentation fault when rgw_gc_max_objs > HASH_PRIME (`issue#12630 <http://tracker.ceph.com/issues/12630>`_, `pr#5719 <http://github.com/ceph/ceph/pull/5719>`_, Ruifeng Yang)
 * rgw: Swift API: X-Trans-Id header is wrongly formatted (`issue#12108 <http://tracker.ceph.com/issues/12108>`_, `pr#5721 <http://github.com/ceph/ceph/pull/5721>`_, Radoslaw Zarzynski)
 * rgw: the arguments 'domain' should not be assigned when return false (`issue#12629 <http://tracker.ceph.com/issues/12629>`_, `pr#5720 <http://github.com/ceph/ceph/pull/5720>`_, Ruifeng Yang)
+* tests: qa/workunits/cephtool/test.sh: don't assume crash_replay_interval=45 (`issue#13406 <http://tracker.ceph.com/issues/13406>`_, `pr#6172 <http://github.com/ceph/ceph/pull/6172>`_, Sage Weil)
 * tools: ceph-disk zap should ensure block device (`issue#11272 <http://tracker.ceph.com/issues/11272>`_, `pr#5755 <http://github.com/ceph/ceph/pull/5755>`_, Loic Dachary)
 
 Here is the same as above, in plain text:
@@ -714,11 +718,13 @@ Here is the same as above, in plain text:
 * common: ceph-object-corpus: add 0.94.2-207-g88e7ee7 hammer objects (#13070, Sage Weil)
 * common: do not insert emtpy ptr when rebuild emtpy bufferlist (#12775, Xinze Chi)
 * common: [  FAILED  ] TestLibRBD.BlockingAIO (#12479, Jason Dillaman)
+* common: LibCephFS.GetPoolId failure (#12598, Yan, Zheng)
 * common: Memory leak in Mutex.cc, pthread_mutexattr_init without pthread_mutexattr_destroy (#11762, Ketor Meng)
 * common: object_map_update fails with -EINVAL return code (#12611, Jason Dillaman)
 * common: Pipe: Drop connect_seq increase line (#13093, Haomai Wang)
 * common: recursive lock of md_config_t (0) (#12614, Josh Durgin)
 * crush: ceph osd crush reweight-subtree does not reweight parent node (#11855, Sage Weil)
+* doc: update docs to point to download.ceph.com (#13162, Alfredo Deza)
 * fs: ceph-fuse 0.94.2-1trusty segfaults / aborts (#12297, Greg Farnum)
 * fs: segfault launching ceph-fuse with bad --name (#12417, John Spray)
 * librados: Change radosgw pools default crush ruleset (#11640, Yuan Zhou)
@@ -727,6 +733,7 @@ Here is the same as above, in plain text:
 * librbd: deadlock during cooperative exclusive lock transition (#11537, Jason Dillaman)
 * librbd: Possible crash while concurrently writing and shrinking an image (#11743, Jason Dillaman)
 * mon: add a cache layer over MonitorDBStore (#12638, Kefu Chai)
+* mon: fix crush testing for new pools (#13400, Sage Weil)
 * mon: get pools health'info have error (#12402, renhwztetecs)
 * mon: implicit erasure code crush ruleset is not validated (#11814, Loic Dachary)
 * mon: PaxosService: call post_refresh() instead of post_paxos_update() (#11470, Joao Eduardo Luis)
@@ -759,9 +766,8 @@ Here is the same as above, in plain text:
 * rgw: segmentation fault when rgw_gc_max_objs > HASH_PRIME (#12630, Ruifeng Yang)
 * rgw: Swift API: X-Trans-Id header is wrongly formatted (#12108, Radoslaw Zarzynski)
 * rgw: the arguments 'domain' should not be assigned when return false (#12629, Ruifeng Yang)
+* tests: qa/workunits/cephtool/test.sh: don't assume crash_replay_interval=45 (#13406, Sage Weil)
 * tools: ceph-disk zap should ensure block device (#11272, Loic Dachary)
-
-
 
 v0.94.3 Hammer
 ==============
