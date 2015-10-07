@@ -363,10 +363,18 @@ void RGWHTTPManager::_complete_request(rgw_http_req_data *req_data)
 
 void RGWHTTPManager::remove_request(uint64_t id)
 {
-  RWLock::WLocker rl(reqs_lock);
+  bool need_unlock = false;
+  if (!reqs_lock.is_wlocked()) {
+    assert(!reqs_lock.is_locked()); /* shouldn't happen */
+    reqs_lock.get_write();
+    need_unlock = true;
+  }
   map<uint64_t, rgw_http_req_data *>::iterator iter = reqs.find(id);
   if (iter != reqs.end()) {
     reqs.erase(iter);
+  }
+  if (need_unlock) {
+    reqs_lock.unlock();
   }
 }
 

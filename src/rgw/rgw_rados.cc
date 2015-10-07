@@ -2074,7 +2074,7 @@ public:
   }
 
   int notify_all(map<string, RGWRESTConn *>& conn_map, map<int, set<string> >& shards) {
-    rgw_http_param_pair pairs[] = { { "type", "metadata" },
+    rgw_http_param_pair pairs[] = { { "type", "data" },
                                     { "notify", NULL },
                                     { "source-zone", store->zone.get_name().c_str() },
                                     { NULL, NULL } };
@@ -2443,6 +2443,11 @@ void RGWRados::finalize()
 
   if (meta_notifier) {
     meta_notifier->stop();
+    delete meta_notifier;
+  }
+  if (data_notifier) {
+    data_notifier->stop();
+    delete data_notifier;
   }
   delete rest_master_conn;
 
@@ -2763,6 +2768,8 @@ int RGWRados::init_complete()
       data_sync_processor_threads[iter->first] = thread;
     }
   }
+  data_notifier = new RGWDataNotifier(this);
+  data_notifier->start();
 
   quota_handler = RGWQuotaHandler::generate_handler(this, quota_threads);
 
