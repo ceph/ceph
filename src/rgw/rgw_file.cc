@@ -152,12 +152,18 @@ int rgw_mkdir(struct rgw_fs *rgw_fs,
     return rc;
   }
 
+  RGWLibFS *fs = static_cast<RGWLibFS*>(rgw_fs->fs_private);
+  CephContext* cct = static_cast<CephContext*>(rgw_fs->rgw);
+
   /* cannot create a bucket in a bucket */
   if (! is_root(uri)) {
     return EINVAL;
   }
 
-  /* TODO: implement */
+  RGWCreateBucketRequest req(cct, fs->get_user(), uri);
+  (void) librgw.get_fe()->execute_req(&req);
+
+  /* TODO: result */
 
   return 0;
 }
@@ -303,6 +309,8 @@ int rgw_readdir(struct rgw_fs *rgw_fs,
     (void) librgw.get_fe()->execute_req(&req);
 
   }
+
+  /* TODO: result */
 
   *eof = true; // XXX move into RGGWListBucket(s)Request
 

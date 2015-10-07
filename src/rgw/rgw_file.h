@@ -172,4 +172,104 @@ public:
 
 }; /* RGWListBucketRequest */
 
+/*
+  create bucket
+*/
+
+class RGWCreateBucketRequest : public RGWLibRequest,
+			       public RGWCreateBucket_OS_Lib /* RGWOp */
+{
+public:
+  std::string& uri;
+
+  RGWCreateBucketRequest(CephContext* _cct, RGWUserInfo *_user,
+			std::string& _uri)
+    : RGWLibRequest(_cct, _user), uri(_uri) {
+    magic = 73;
+    op = this;
+  }
+
+  virtual bool only_bucket() { return false; }
+
+  virtual int op_init() {
+    // assign store, s, and dialect_handler
+    RGWObjectCtx* rados_ctx
+      = static_cast<RGWObjectCtx*>(get_state()->obj_ctx);
+    // framework promises to call op_init after parent init
+    assert(rados_ctx);
+    RGWOp::init(rados_ctx->store, get_state(), this);
+    op = this; // assign self as op: REQUIRED
+    return 0;
+  }
+
+  virtual int header_init() {
+
+    struct req_state* s = get_state();
+    s->info.method = "PUT";
+    s->op = OP_PUT;
+
+    /* XXX derp derp derp */
+    s->relative_uri = uri;
+    s->info.request_uri = uri; // XXX
+    s->info.effective_uri = uri;
+    s->info.request_params = "";
+    s->info.domain = ""; /* XXX ? */
+
+    // woo
+    s->user = user;
+
+    return 0;
+  }
+}; /* RGWCreateBucketRequest */
+
+/*
+  delete bucket
+*/
+
+class RGWDeleteBucketRequest : public RGWLibRequest,
+			       public RGWDeleteBucket_OS_Lib /* RGWOp */
+{
+public:
+  std::string& uri;
+
+  RGWDeleteBucketRequest(CephContext* _cct, RGWUserInfo *_user,
+			std::string& _uri)
+    : RGWLibRequest(_cct, _user), uri(_uri) {
+    magic = 74;
+    op = this;
+  }
+
+  virtual bool only_bucket() { return true; }
+
+  virtual int op_init() {
+    // assign store, s, and dialect_handler
+    RGWObjectCtx* rados_ctx
+      = static_cast<RGWObjectCtx*>(get_state()->obj_ctx);
+    // framework promises to call op_init after parent init
+    assert(rados_ctx);
+    RGWOp::init(rados_ctx->store, get_state(), this);
+    op = this; // assign self as op: REQUIRED
+    return 0;
+  }
+
+  virtual int header_init() {
+
+    struct req_state* s = get_state();
+    s->info.method = "DELETE";
+    s->op = OP_DELETE;
+
+    /* XXX derp derp derp */
+    s->relative_uri = uri;
+    s->info.request_uri = uri; // XXX
+    s->info.effective_uri = uri;
+    s->info.request_params = "";
+    s->info.domain = ""; /* XXX ? */
+
+    // woo
+    s->user = user;
+
+    return 0;
+  }
+}; /* RGWDeleteBucketRequest */
+
 #endif /* RGW_FILE_H */
