@@ -7,9 +7,7 @@
 #include "rgw_rest_lib.h"
 #include "rgw_file.h"
 
-/* XXX going away ! */
 
-#warning kill me
 /* static */
 int RGWHandler_Lib::init_from_header(struct req_state *s)
 {
