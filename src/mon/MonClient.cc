@@ -659,7 +659,13 @@ void MonClient::_reopen_session(int rank, string name)
   ::encode(global_id, m->auth_payload);
   _send_mon_message(m, true);
 
-  if (!sub_have.empty())
+  for (map<string,ceph_mon_subscribe_item>::iterator p = sub_sent.begin();
+       p != sub_sent.end();
+       ++p) {
+    if (sub_new.count(p->first) == 0)
+      sub_new[p->first] = p->second;
+  }
+  if (!sub_new.empty())
     _renew_subs();
 }
 
@@ -753,7 +759,7 @@ void MonClient::schedule_tick()
 void MonClient::_renew_subs()
 {
   assert(monc_lock.is_locked());
-  if (sub_have.empty()) {
+  if (sub_new.empty()) {
     ldout(cct, 10) << "renew_subs - empty" << dendl;
     return;
   }
@@ -766,8 +772,11 @@ void MonClient::_renew_subs()
       sub_renew_sent = ceph_clock_now(cct);
 
     MMonSubscribe *m = new MMonSubscribe;
-    m->what = sub_have;
+    m->what = sub_new;
     _send_mon_message(m);
+
+    sub_sent.insert(sub_new.begin(), sub_new.end());
+    sub_new.clear();
   }
 }
 
