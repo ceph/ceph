@@ -2,6 +2,114 @@
  Release Notes
 ===============
 
+v9.1.0
+======
+
+This is the first Infernalis release candidate.  There have been some
+major changes since hammer, and the upgrade process is non-trivial.
+Please read carefully.
+
+Distro compatibility
+--------------------
+
+We have decided to drop support for many older distributions so that we can
+move to a newer compiler toolchain (e.g., C++11).  Although it is still possible
+to build Ceph on older distributions by installing backported development tools,
+we are not building and publishing release packages for ceph.com.
+
+In particular,
+
+* CentOS 7 or later; we have dropped support for CentOS 6 (and other
+  RHEL 6 derivatives, like Scientific Linux 6).
+* Debian Jessie 8.x or later; Debian Wheezy 7.x's g++ has incomplete
+  support for C++11 (and no systemd).
+* Ubuntu Trusty 14.04 or later; Ubuntu Precise 12.04 is no longer
+  supported.
+* Fedora 22 or later.
+
+Upgrading from Firefly
+----------------------
+
+Upgrading directly from Firefly v0.80.z is not possible.  All clusters
+must first upgrade to Hammer v0.94.4 or a later v0.94.z release; only
+then is it possible to upgrade to Infernalis 9.2.z.
+
+Upgrading from Hammer
+---------------------
+
+* For all distributions that support systemd (CentOS 7, Fedora, Debian
+  Jessie 8.x, OpenSUSE), ceph daemons are now managed using native systemd
+  files instead of the legacy sysvinit scripts.  For example,::
+
+    systemctl start ceph.target       # start all daemons
+    systemctl status ceph-osd@12      # check status of osd.12
+
+  The main notable distro that is *not* yet using systemd is Ubuntu trusty
+  14.04.  (The next Ubuntu LTS, 16.04, will use systemd instead of upstart.)
+    
+* Ceph daemons now run as user and group ``ceph`` by default.  The
+  ceph user has a static UID assigned by Fedora and Debian (also used
+  by derivative distributions like RHEL/CentOS and Ubuntu).  On SUSE
+  the ceph user will currently get a dynamically assigned UID when the
+  user is created.
+
+  If your systems already have a ceph user, upgrading the package will cause
+  problems.  We suggest you first remove or rename the existing 'ceph' user
+  before upgrading.
+
+  When upgrading, administrators have two options:
+
+   #. Add the following line to ``ceph.conf`` on all hosts::
+
+        setuser match path = /var/lib/ceph/$type/$cluster-$id
+
+      This will make the Ceph daemons run as root (i.e., not drop
+      privileges and switch to user ceph) if the daemon's data
+      directory is still owned by root.  Newly deployed daemons will
+      be created with data owned by user ceph and will run with
+      reduced privileges, but upgraded daemons will continue to run as
+      root.
+
+   #. Fix the data ownership during the upgrade.  This is the preferred option,
+      but is more work.  The process for each host would be to:
+
+      #. Upgrade the ceph package.  This creates the ceph user and group.  For
+	 example::
+
+	   ceph-deploy install --stable infernalis HOST
+
+      #. Stop the daemon(s).::
+
+	   service ceph stop           # fedora, centos, rhel, debian
+	   stop ceph-all               # ubuntu
+	   
+      #. Fix the ownership::
+
+	   chown -R ceph:ceph /var/lib/ceph
+
+      #. Restart the daemon(s).::
+
+	   start ceph-all                # ubuntu
+	   systemctl start ceph.target   # debian, centos, fedora, rhel
+
+* The on-disk format for the experimental KeyValueStore OSD backend has
+  changed.  You will need to remove any OSDs using that backend before you
+  upgrade any test clusters that use it.
+
+Upgrade notes
+-------------
+
+* When a pool quota is reached, librados operations now block indefinitely,
+  the same way they do when the cluster fills up.  (Previously they would return
+  -ENOSPC).  By default, a full cluster or pool will now block.  If your
+  librados application can handle ENOSPC or EDQUOT errors gracefully, you can
+  get error returns instead by using the new librados OPERATION_FULL_TRY flag.
+
+Notable changes
+---------------
+
+(write me)
+
 v9.0.3
 ======
 
