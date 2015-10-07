@@ -381,6 +381,8 @@ class RGWDataChangesLog {
   string *oids;
 
   Mutex lock;
+  RWLock modified_lock;
+  map<int, set<string> > modified_shards;
 
   atomic_t down_flag;
 
@@ -417,7 +419,7 @@ class RGWDataChangesLog {
     Cond cond;
 
   public:
-    ChangesRenewThread(CephContext *_cct, RGWDataChangesLog *_log) : cct(_cct), log(_log), lock("ChangesRenewThread") {}
+    ChangesRenewThread(CephContext *_cct, RGWDataChangesLog *_log) : cct(_cct), log(_log), lock("ChangesRenewThread::lock") {}
     void *entry();
     void stop();
   };
@@ -426,7 +428,8 @@ class RGWDataChangesLog {
 
 public:
 
-  RGWDataChangesLog(CephContext *_cct, RGWRados *_store) : cct(_cct), store(_store), lock("RGWDataChangesLog"),
+  RGWDataChangesLog(CephContext *_cct, RGWRados *_store) : cct(_cct), store(_store),
+                                                           lock("RGWDataChangesLog::lock"), modified_lock("RGWDataChangesLog::modified_lock"),
                                                            changes(cct->_conf->rgw_data_log_changes_size) {
     num_shards = cct->_conf->rgw_data_log_num_shards;
 
@@ -477,6 +480,9 @@ public:
   };
   int list_entries(utime_t& start_time, utime_t& end_time, int max_entries,
                list<rgw_data_change_log_entry>& entries, LogMarker& marker, bool *ptruncated);
+
+  void mark_modified(int shard_id, rgw_bucket_shard& bs);
+  void read_clear_modified(map<int, set<string> > *modified);
 
   bool going_down();
 };

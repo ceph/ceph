@@ -801,6 +801,9 @@ class RGWDataSyncShardCR : public RGWCoroutine {
   boost::asio::coroutine full_cr;
 
 
+  set<string> modified_shards;
+
+
 public:
   RGWDataSyncShardCR(RGWRados *_store, RGWHTTPManager *_mgr, RGWAsyncRadosProcessor *_async_rados,
                      RGWRESTConn *_conn, rgw_bucket& _pool, const string& _source_zone,
@@ -817,6 +820,11 @@ public:
 
   ~RGWDataSyncShardCR() {
     delete marker_tracker;
+  }
+
+  void append_modified_shards(set<string>& keys) {
+    Mutex::Locker l(inc_lock);
+    modified_shards.insert(keys.begin(), keys.end());
   }
 
   void set_marker_tracker(RGWDataSyncShardMarkerTrack *mt) {
@@ -944,6 +952,7 @@ class RGWDataSyncCR : public RGWCoroutine {
 
   RGWDataSyncShardMarkerTrack *marker_tracker;
 
+  map<int, RGWDataSyncShardCR *> shard_crs;
 
 public:
   RGWDataSyncCR(RGWRados *_store, RGWHTTPManager *_mgr, RGWAsyncRadosProcessor *_async_rados,
@@ -1025,9 +1034,10 @@ public:
           case rgw_data_sync_info::StateSync:
             for (map<uint32_t, rgw_data_sync_marker>::iterator iter = sync_status.sync_markers.begin();
                  iter != sync_status.sync_markers.end(); ++iter) {
-              RGWCoroutine *cr = new RGWDataSyncShardCR(store, http_manager, async_rados,
+              RGWDataSyncShardCR *cr = new RGWDataSyncShardCR(store, http_manager, async_rados,
                                                         conn, store->get_zone_params().log_pool, source_zone,
                                                         iter->first, iter->second);
+              shard_crs[iter->first] = cr;
               spawn(cr, true);
             }
         }
@@ -1043,7 +1053,20 @@ public:
                                                          RGWDataSyncStatusManager::sync_status_oid(source_zone),
                                                          sync_status.sync_info);
   }
+
+  void wakeup(int shard_id, set<string>& keys) {
+    map<int, RGWDataSyncShardCR *>::iterator iter = shard_crs.find(shard_id);
+    if (iter == shard_crs.end()) {
+      return;
+    }
+    iter->second->append_modified_shards(keys);
+    iter->second->wakeup();
+  }
 };
+
+void RGWRemoteDataLog::wakeup(int shard_id, set<string>& keys) {
+  data_sync_cr->wakeup(shard_id, keys);
+}
 
 int RGWRemoteDataLog::run_sync(int num_shards, rgw_data_sync_status& sync_status)
 {

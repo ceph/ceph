@@ -157,7 +157,7 @@ public:
   int init_sync_status(int num_shards);
   int run_sync(int num_shards, rgw_data_sync_status& sync_status);
 
-  void wakeup(int shard_id);
+  void wakeup(int shard_id, set<string>& keys);
 };
 
 class RGWDataSyncStatusManager {
@@ -193,7 +193,7 @@ public:
 
   int run() { return source_log.run_sync(num_shards, sync_status); }
 
-  void wakeup(int shard_id) { return source_log.wakeup(shard_id); }
+  void wakeup(int shard_id, set<string>& keys) { return source_log.wakeup(shard_id, keys); }
   void stop() {
     source_log.finish();
   }
@@ -388,13 +388,6 @@ public:
 
   int read_sync_status();
   int run();
-
-#if 0
-  void wakeup() { return source_log.wakeup(); }
-  void stop() {
-    source_log.finish();
-  }
-#endif
 };
 
 
