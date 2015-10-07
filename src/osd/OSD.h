@@ -1952,6 +1952,7 @@ protected:
     pg_t parent;
   };
   ceph::unordered_map<spg_t, create_pg_info> creating_pgs;
+  epoch_t last_pg_create_epoch;
   double debug_drop_pg_create_probability;
   int debug_drop_pg_create_duration;
   int debug_drop_pg_create_left;  // 0 if we just dropped the last one, -1 if we can drop more
