@@ -3321,6 +3321,7 @@ void Monitor::resend_routed_requests()
 void Monitor::remove_session(MonSession *s)
 {
   dout(10) << "remove_session " << s << " " << s->inst << dendl;
+  assert(s->con);
   assert(!s->closed);
   for (set<uint64_t>::iterator p = s->routed_request_tids.begin();
        p != s->routed_request_tids.end();
@@ -3387,7 +3388,10 @@ void Monitor::waitlist_or_zap_client(MonOpRequestRef op)
   } else {
     dout(5) << "discarding message " << *m << " and sending client elsewhere" << dendl;
     con->mark_down();
-    remove_session(s);
+    // proxied sessions aren't registered and don't have a con; don't remove
+    // those.
+    if (!s->proxy_con)
+      remove_session(s);
     op->mark_zap();
   }
 }
