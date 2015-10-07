@@ -57,7 +57,7 @@ public:
 */
 
 class RGWListBucketsRequest : public RGWLibRequest,
-			      public RGWListBuckets_ObjStore_Lib /* RGWOp */
+			      public RGWListBuckets_OS_Lib /* RGWOp */
 {
 public:
   uint64_t* offset;
@@ -116,7 +116,7 @@ public:
 */
 
 class RGWListBucketRequest : public RGWLibRequest,
-			     public RGWListBucket_ObjStore_Lib /* RGWOp */
+			     public RGWListBucket_OS_Lib /* RGWOp */
 {
 public:
   std::string& uri;
