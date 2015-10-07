@@ -32,7 +32,7 @@ RGWRealmWatcher::RGWRealmWatcher(CephContext *cct, RGWRados *&store,
     frontends(frontends),
     timer(cct, mutex, USE_SAFE_TIMER_CALLBACKS),
     mutex("RGWRealmWatcher"),
-    reconfigure_scheduled(false)
+    reconfigure_scheduled(nullptr)
 {
   // no default realm, nothing to watch
   if (store->realm.get_id().empty()) {
@@ -74,7 +74,7 @@ void RGWRealmWatcher::reconfigure()
     // allow a new notify to reschedule us. it's important that we do this
     // before we start loading the new realm, or we could miss some updates
     Mutex::Locker lock(mutex);
-    reconfigure_scheduled = false;
+    reconfigure_scheduled = nullptr;
   }
 
   while (!store) {
@@ -106,8 +106,8 @@ void RGWRealmWatcher::reconfigure()
 
       if (reconfigure_scheduled) {
         // cancel the event; we'll handle it now
-        reconfigure_scheduled = false;
-        timer.cancel_all_events();
+        timer.cancel_event(reconfigure_scheduled);
+        reconfigure_scheduled = nullptr;
 
         // if we successfully created a store, clean it up outside of the lock,
         // then continue to loop and recreate another
@@ -159,12 +159,12 @@ void RGWRealmWatcher::handle_notify(uint64_t notify_id, uint64_t cookie,
     return;
   }
 
-  reconfigure_scheduled = true;
+  reconfigure_scheduled = new C_Reconfigure(this);
   cond.SignalOne(); // wake reconfigure() if it blocked on a bad configuration
 
   // schedule reconfigure() with a delay so we can batch up changes
   auto delay = cct->_conf->rgw_realm_reconfigure_delay;
-  timer.add_event_after(delay, new C_Reconfigure(this));
+  timer.add_event_after(delay, reconfigure_scheduled);
 
   ldout(cct, 4) << "Notification on " << watch_oid << ", reconfiguration "
       "scheduled in " << delay << 's' << dendl;
