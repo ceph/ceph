@@ -160,6 +160,9 @@ int rgw_mkdir(struct rgw_fs *rgw_fs,
     return EINVAL;
   }
 
+  // fix this
+  uri += "/";
+  uri += name;
   RGWCreateBucketRequest req(cct, fs->get_user(), uri);
   (void) librgw.get_fe()->execute_req(&req);
 
