@@ -1169,6 +1169,7 @@ private:
 
 public:
   map<string,string> properties;  ///< OBSOLETE
+  string compression_type;
   string erasure_code_profile; ///< name of the erasure code profile in OSDMap
   epoch_t last_change;      ///< most recent epoch changed, exclusing snapshot changes
   epoch_t last_force_op_resend; ///< last epoch that forced clients to resend
