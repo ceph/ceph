@@ -122,6 +122,10 @@ int RGWRESTConn::get_obj(const string& uid, req_info *info /* optional */, rgw_o
   if (prepend_metadata) {
     params.push_back(pair<string, string>(RGW_SYS_PARAM_PREFIX "prepend-metadata", zone_group));
   }
+  if (!obj.get_instance().empty()) {
+    const string& instance = obj.get_instance();
+    params.push_back(pair<string, string>("versionId", instance));
+  }
   *req = new RGWRESTStreamReadRequest(cct, url, cb, NULL, &params);
   map<string, string> extra_headers;
   if (info) {
