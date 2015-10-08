@@ -191,6 +191,11 @@ public:
 
   virtual bool only_bucket() { return false; }
 
+  virtual int read_permissions(RGWOp* op_obj) {
+    /* we ARE a 'create bucket' request (cf. rgw_rest.cc, ll. 1305-6) */
+    return 0;
+  }
+
   virtual int op_init() {
     // assign store, s, and dialect_handler
     RGWObjectCtx* rados_ctx

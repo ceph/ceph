@@ -4355,7 +4355,9 @@ int RGWHandler::do_read_permissions(RGWOp *op, bool only_bucket)
   int ret = rgw_build_policies(store, s, only_bucket, op->prefetch_data());
 
   if (ret < 0) {
-    ldout(s->cct, 10) << "read_permissions on " << s->bucket << ":" <<s->object << " only_bucket=" << only_bucket << " ret=" << ret << dendl;
+    ldout(s->cct, 10) << "read_permissions on " << s->bucket << ":"
+		      << s->object << " only_bucket=" << only_bucket
+		      << " ret=" << ret << dendl;
     if (ret == -ENODATA)
       ret = -EACCES;
   }
