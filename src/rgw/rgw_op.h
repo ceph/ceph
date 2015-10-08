@@ -135,6 +135,7 @@ protected:
   bool get_data;
   bool partial_content;
   bool range_parsed;
+  bool skip_manifest;
   rgw_obj obj;
   utime_t gc_invalidate_time;
 
@@ -158,6 +159,7 @@ public:
     get_data = false;
     partial_content = false;
     range_parsed = false;
+    skip_manifest = false;
     ret = 0;
  }
 
