@@ -15,15 +15,20 @@
 // This code assumes that IO IDs and timestamps are related monotonically.
 // In other words, (a.id < b.id) == (a.timestamp < b.timestamp) for all IOs a and b.
 
+#include "common/errno.h"
+#include "rbd_replay/ActionTypes.h"
 #include <babeltrace/babeltrace.h>
 #include <babeltrace/ctf/events.h>
 #include <babeltrace/ctf/iterator.h>
+#include <sys/types.h>
+#include <fcntl.h>
 #include <cstdlib>
 #include <string>
 #include <assert.h>
 #include <fstream>
 #include <set>
 #include <boost/thread/thread.hpp>
+#include <boost/scope_exit.hpp>
 #include "ios.hpp"
 
 using namespace std;
@@ -193,12 +198,14 @@ public:
 
     struct bt_iter *bt_itr = bt_ctf_get_iter(itr);
 
-    ofstream myfile;
-    myfile.open(output_file_name.c_str(), ios::out | ios::binary | ios::trunc);
-    ASSERT_EXIT(!myfile.fail(), "Error opening output file " <<
-                                output_file_name);
+    int fd = open(output_file_name.c_str(), O_WRONLY | O_CREAT | O_EXCL, 0644);
+    ASSERT_EXIT(fd >= 0, "Error opening output file " << output_file_name <<
+                         ": " << cpp_strerror(errno));
+    BOOST_SCOPE_EXIT( (fd) ) {
+      close(fd);
+    } BOOST_SCOPE_EXIT_END;
 
-    Ser ser(myfile);
+    write_banner(fd);
 
     uint64_t trace_start = 0;
     bool first = true;
@@ -219,7 +226,7 @@ public:
 
       IO::ptrs ptrs;
       process_event(ts, evt, &ptrs);
-      serialize_events(ser, ptrs);
+      serialize_events(fd, ptrs);
 
       int r = bt_iter_next(bt_itr);
       ASSERT_EXIT(r == 0, "Error advancing event iterator");
@@ -227,15 +234,26 @@ public:
 
     bt_ctf_iter_destroy(itr);
 
-    insert_thread_stops(ser);
-    myfile.close();
+    insert_thread_stops(fd);
   }
 
 private:
-  void serialize_events(Ser &ser, const IO::ptrs &ptrs) {
+  void write_banner(int fd) {
+    bufferlist bl;
+    bl.append(rbd_replay::action::BANNER);
+    int r = bl.write_fd(fd);
+    ASSERT_EXIT(r >= 0, "Error writing to output file: " << cpp_strerror(r));
+  }
+
+  void serialize_events(int fd, const IO::ptrs &ptrs) {
     for (IO::ptrs::const_iterator it = ptrs.begin(); it != ptrs.end(); ++it) {
       IO::ptr io(*it);
-      io->write_to(ser);
+
+      bufferlist bl;
+      io->encode(bl);
+
+      int r = bl.write_fd(fd);
+      ASSERT_EXIT(r >= 0, "Error writing to output file: " << cpp_strerror(r));
 
       if (m_verbose) {
         io->write_debug(std::cout);
@@ -244,7 +262,7 @@ private:
     }
   }
 
-  void insert_thread_stops(Ser &ser) {
+  void insert_thread_stops(int fd) {
     IO::ptrs ios;
     for (map<thread_id_t, Thread::ptr>::const_iterator itr = m_threads.begin(),
          end = m_threads.end(); itr != end; ++itr) {
@@ -253,7 +271,7 @@ private:
                                              thread->id(),
                                              m_recent_completions)));
     }
-    serialize_events(ser, ios);
+    serialize_events(fd, ios);
   }
 
   void process_event(uint64_t ts, struct bt_ctf_event *evt,

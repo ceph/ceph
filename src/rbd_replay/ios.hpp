@@ -18,6 +18,7 @@
 // This code assumes that IO IDs and timestamps are related monotonically.
 // In other words, (a.id < b.id) == (a.timestamp < b.timestamp) for all IOs a and b.
 
+#include "include/buffer.h"
 #include <boost/enable_shared_from_this.hpp>
 #include <boost/shared_ptr.hpp>
 #include <iostream>
@@ -25,7 +26,6 @@
 #include <set>
 #include <vector>
 #include "actions.hpp"
-#include "Ser.hpp"
 
 
 namespace rbd_replay {
@@ -77,7 +77,7 @@ public:
     return m_dependencies;
   }
 
-  virtual void write_to(Ser& out) const = 0;
+  virtual void encode(bufferlist &bl) const = 0;
 
   void set_ionum(action_id_t ionum) {
     m_ionum = ionum;
@@ -87,11 +87,13 @@ public:
     return m_ionum;
   }
 
+  thread_id_t thread_id() const {
+    return m_thread_id;
+  }
+
   virtual void write_debug(std::ostream& out) const = 0;
 
 protected:
-  void write_to(Ser& out, io_type iotype) const;
-
   void write_debug_base(std::ostream& out, std::string iotype) const;
 
 private:
@@ -115,7 +117,7 @@ public:
     : IO(ionum, start_time, thread_id, io_set_t()) {
   }
 
-  void write_to(Ser& out) const;
+  virtual void encode(bufferlist &bl) const;
 
   void write_debug(std::ostream& out) const;
 };
@@ -129,7 +131,7 @@ public:
     : IO(ionum, start_time, thread_id, deps) {
   }
 
-  void write_to(Ser& out) const;
+  virtual void encode(bufferlist &bl) const;
 
   void write_debug(std::ostream& out) const;
 };
@@ -149,7 +151,7 @@ public:
       m_length(length) {
   }
 
-  void write_to(Ser& out) const;
+  virtual void encode(bufferlist &bl) const;
 
   void write_debug(std::ostream& out) const;
 
@@ -174,7 +176,7 @@ public:
       m_length(length) {
   }
 
-  void write_to(Ser& out) const;
+  virtual void encode(bufferlist &bl) const;
 
   void write_debug(std::ostream& out) const;
 
@@ -199,7 +201,7 @@ public:
       m_length(length) {
   }
 
-  void write_to(Ser& out) const;
+  virtual void encode(bufferlist &bl) const;
 
   void write_debug(std::ostream& out) const;
 
@@ -224,7 +226,7 @@ public:
       m_length(length) {
   }
 
-  void write_to(Ser& out) const;
+  virtual void encode(bufferlist &bl) const;
 
   void write_debug(std::ostream& out) const;
 
@@ -251,7 +253,7 @@ public:
       m_readonly(readonly) {
   }
 
-  void write_to(Ser& out) const;
+  virtual void encode(bufferlist &bl) const;
 
   imagectx_id_t imagectx() const {
     return m_imagectx;
@@ -277,7 +279,7 @@ public:
       m_imagectx(imagectx) {
   }
 
-  void write_to(Ser& out) const;
+  virtual void encode(bufferlist &bl) const;
 
   imagectx_id_t imagectx() const {
     return m_imagectx;
@@ -288,9 +290,6 @@ public:
 private:
   imagectx_id_t m_imagectx;
 };
-
-/// @related IO
-bool compare_io_ptrs_by_start_time(IO::ptr p1, IO::ptr p2);
 
 }
 
