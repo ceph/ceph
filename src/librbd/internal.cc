@@ -2824,12 +2824,12 @@ reprotect_and_return_err:
 
   int simple_diff_cb(uint64_t off, size_t len, int exists, void *arg)
   {
-    // This reads the existing extents in a parent from the beginning
-    // of time.  Since images are thin-provisioned, the extents will
-    // always represent data, not holes.
-    assert(exists);
-    interval_set<uint64_t> *diff = static_cast<interval_set<uint64_t> *>(arg);
-    diff->insert(off, len);
+    // it's possible for a discard to create a hole in the parent image --
+    // ignore
+    if (exists) {
+      interval_set<uint64_t> *diff = static_cast<interval_set<uint64_t> *>(arg);
+      diff->insert(off, len);
+    }
     return 0;
   }
 
