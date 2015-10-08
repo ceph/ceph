@@ -46,6 +46,7 @@ def task(ctx, config):
 
     testdir = teuthology.get_testdir(ctx)
 
+    create_pool = config.get('create_pool', True)
     for role in config.get('clients', ['client.0']):
         assert isinstance(role, basestring)
         PREFIX = 'client.'
@@ -63,12 +64,11 @@ def task(ctx, config):
         cleanup = []
         if not config.get('cleanup', True):
             cleanup = ['--no-cleanup']
-        pool = 'data'
-        if config.get('create_pool', True):
-            if config.get('pool'):
-                pool = config.get('pool')
-                if pool != 'data':
-                    ctx.manager.create_pool(pool, erasure_code_profile_name=profile_name)
+
+        pool = config.get('pool', 'data')
+        if create_pool:
+            if pool != 'data':
+                ctx.manager.create_pool(pool, erasure_code_profile_name=profile_name)
             else:
                 pool = ctx.manager.create_pool_with_unique_name(erasure_code_profile_name=profile_name)
 
@@ -99,5 +99,5 @@ def task(ctx, config):
         log.info('joining radosbench (timing out after %ss)', timeout)
         run.wait(radosbench.itervalues(), timeout=timeout)
 
-        if pool is not 'data':
+        if pool is not 'data' and create_pool:
             ctx.manager.remove_pool(pool)
