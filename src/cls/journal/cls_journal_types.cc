@@ -22,7 +22,7 @@ void EntryPosition::decode(bufferlist::iterator& iter) {
   DECODE_FINISH(iter);
 }
 
-void EntryPosition::dump(Formatter *f) {
+void EntryPosition::dump(Formatter *f) const {
   f->dump_string("tag", tag);
   f->dump_unsigned("tid", tid);
 }
@@ -69,10 +69,10 @@ void ObjectSetPosition::decode(bufferlist::iterator& iter) {
   DECODE_FINISH(iter);
 }
 
-void ObjectSetPosition::dump(Formatter *f) {
+void ObjectSetPosition::dump(Formatter *f) const {
   f->dump_unsigned("object_number", object_number);
   f->open_array_section("entry_positions");
-  for (EntryPositions::iterator it = entry_positions.begin();
+  for (EntryPositions::const_iterator it = entry_positions.begin();
        it != entry_positions.end(); ++it) {
     f->open_object_section("entry_position");
     it->dump(f);
@@ -107,7 +107,7 @@ void Client::decode(bufferlist::iterator& iter) {
   DECODE_FINISH(iter);
 }
 
-void Client::dump(Formatter *f) {
+void Client::dump(Formatter *f) const {
   f->dump_string("id", id);
   f->dump_string("description", description);
   f->open_object_section("commit_position");
