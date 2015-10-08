@@ -2021,6 +2021,60 @@ int set_size(ObjectStore *store, coll_t coll, ghobject_t &ghobj, uint64_t setsiz
   return 0;
 }
 
+int clear_snapset(ObjectStore *store, coll_t coll, ghobject_t &ghobj,
+                  string arg, ObjectStore::Sequencer &osr)
+{
+  SnapSet ss;
+  int ret = get_snapset(store, coll, ghobj, ss);
+  if (ret < 0)
+    return ret;
+
+  // Use "head" to set head_exists incorrectly
+  if (arg == "corrupt" || arg == "head")
+    ss.head_exists = !ghobj.hobj.is_head();
+  else if (ss.head_exists != ghobj.hobj.is_head()) {
+    cerr << "Correcting head_exists, set to "
+         << (ghobj.hobj.is_head() ? "true" : "false") << std::endl;
+    ss.head_exists = ghobj.hobj.is_head();
+  }
+  // Use "corrupt" to clear entire SnapSet
+  // Use "seq" to just corrupt SnapSet.seq
+  if (arg == "corrupt" || arg == "seq")
+    ss.seq = 0;
+  // Use "snaps" to just clear SnapSet.snaps
+  if (arg == "corrupt" || arg == "snaps")
+    ss.snaps.clear();
+  // By default just clear clone, clone_overlap and clone_size
+  if (arg == "corrupt")
+    arg = "";
+  if (arg == "" || arg == "clones")
+    ss.clones.clear();
+  if (arg == "" || arg == "clone_overlap")
+    ss.clone_overlap.clear();
+  if (arg == "" || arg == "clone_size")
+    ss.clone_size.clear();
+  // Break all clone sizes by adding 1
+  if (arg == "size") {
+    for (map<snapid_t, uint64_t>::iterator i = ss.clone_size.begin();
+         i != ss.clone_size.end(); ++i)
+      ++(i->second);
+  }
+
+  if (!dry_run) {
+    bufferlist bl;
+    ::encode(ss, bl);
+    ObjectStore::Transaction t;
+    t.setattr(coll, ghobj, SS_ATTR, bl);
+    int r = store->apply_transaction(&osr, t);
+    if (r < 0) {
+      cerr << "Error setting snapset on : " << make_pair(coll, ghobj) << ", "
+	   << cpp_strerror(r) << std::endl;
+      return r;
+    }
+  }
+  return 0;
+}
+
 void usage(po::options_description &desc)
 {
     cerr << std::endl;
@@ -2966,6 +3020,16 @@ int main(int argc, char **argv)
 	uint64_t size = atoll(arg1.c_str());
 	ret = set_size(fs, coll, ghobj, size, formatter, *osr);
 	goto out;
+      } else if (objcmd == "clear-snapset") {
+        // UNDOCUMENTED: For testing zap SnapSet
+        // IGNORE extra args since not in usage anyway
+	if (!ghobj.hobj.has_snapset()) {
+	  cerr << "'" << objcmd << "' requires a head or snapdir object" << std::endl;
+	  ret = 1;
+	  goto out;
+	}
+        ret = clear_snapset(fs, coll, ghobj, arg1, *osr);
+        goto out;
       }
       cerr << "Unknown object command '" << objcmd << "'" << std::endl;
       usage(desc);
