@@ -2583,6 +2583,30 @@ TRACEPOINT_EVENT(librados, rados_set_alloc_hint_exit,
     )
 )
 
+TRACEPOINT_EVENT(librados, rados_set_alloc_hint2_enter,
+    TP_ARGS(
+        rados_ioctx_t, ioctx,
+        const char*, oid,
+        uint64_t, expected_object_size,
+        uint64_t, expected_write_size,
+	uint32_t, flags),
+    TP_FIELDS(
+        ctf_integer_hex(rados_ioctx_t, ioctx, ioctx)
+        ctf_string(oid, oid)
+        ctf_integer(uint64_t, expected_object_size, expected_object_size)
+        ctf_integer(uint64_t, expected_write_size, expected_write_size)
+        ctf_integer(uint32_t, flags, flags)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_set_alloc_hint2_exit,
+    TP_ARGS(
+        int, retval),
+    TP_FIELDS(
+        ctf_integer(int, retval, retval)
+    )
+)
+
 TRACEPOINT_EVENT(librados, rados_lock_exclusive_enter,
     TP_ARGS(
         rados_ioctx_t, ioctx,
@@ -3110,6 +3134,25 @@ TRACEPOINT_EVENT(librados, rados_write_op_set_alloc_hint_enter,
 )
 
 TRACEPOINT_EVENT(librados, rados_write_op_set_alloc_hint_exit,
+    TP_ARGS(),
+    TP_FIELDS()
+)
+
+TRACEPOINT_EVENT(librados, rados_write_op_set_alloc_hint2_enter,
+    TP_ARGS(
+        rados_write_op_t, op,
+        uint64_t, expected_object_size,
+        uint64_t, expected_write_size,
+        uint32_t, flags),
+    TP_FIELDS(
+        ctf_integer_hex(rados_write_op_t, op, op)
+        ctf_integer(uint64_t, expected_object_size, expected_object_size)
+        ctf_integer(uint64_t, expected_write_size, expected_write_size)
+        ctf_integer(uint32_t, flags, flags)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_write_op_set_alloc_hint2_exit,
     TP_ARGS(),
     TP_FIELDS()
 )

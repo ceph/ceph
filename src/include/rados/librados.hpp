@@ -281,6 +281,20 @@ namespace librados
   };
 
   /*
+   * Alloc hint flags for the alloc_hint operation.
+   */
+  enum AllocHintFlags {
+    ALLOC_HINT_SEQUENTIAL_WRITE = 1,
+    ALLOC_HINT_RANDOM_WRITE = 2,
+    ALLOC_HINT_FLAG_SEQUENTIAL_READ = 4,
+    ALLOC_HINT_FLAG_RANDOM_READ = 8,
+    ALLOC_HINT_FLAG_APPEND_ONLY = 16,
+    ALLOC_HINT_FLAG_IMMUTABLE = 32,
+    ALLOC_HINT_FLAG_SHORTLIVED = 64,
+    ALLOC_HINT_FLAG_LONGLIVED = 128,
+  };
+
+  /*
    * ObjectOperation : compound object operation
    * Batch multiple object operations into a single request, to be applied
    * atomically.
@@ -448,9 +462,13 @@ namespace librados
      *
      * @param expected_object_size expected size of the object, in bytes
      * @param expected_write_size expected size of writes to the object, in bytes
+     * @param flags flags ()
      */
     void set_alloc_hint(uint64_t expected_object_size,
                         uint64_t expected_write_size);
+    void set_alloc_hint2(uint64_t expected_object_size,
+			 uint64_t expected_write_size,
+			 uint32_t flags);
 
     /**
      * Pin/unpin an object in cache tier
@@ -1082,6 +1100,10 @@ namespace librados
     int set_alloc_hint(const std::string& o,
                        uint64_t expected_object_size,
                        uint64_t expected_write_size);
+    int set_alloc_hint2(const std::string& o,
+			uint64_t expected_object_size,
+			uint64_t expected_write_size,
+			uint32_t flags);
 
     // assert version for next sync operations
     void set_assert_version(uint64_t ver);

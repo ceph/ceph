@@ -127,6 +127,24 @@ enum {
 };
 /** @} */
 
+/**
+ * @name Alloc hint flags
+ * Flags for rados_write_op_alloc_hint2() and rados_set_alloc_hint2()
+ * indicating future IO patterns.
+ * @{
+ */
+enum {
+  LIBRADOS_ALLOC_HINT_SEQUENTIAL_WRITE = 1,
+  LIBRADOS_ALLOC_HINT_RANDOM_WRITE = 2,
+  LIBRADOS_ALLOC_HINT_FLAG_SEQUENTIAL_READ = 4,
+  LIBRADOS_ALLOC_HINT_FLAG_RANDOM_READ = 8,
+  LIBRADOS_ALLOC_HINT_FLAG_APPEND_ONLY = 16,
+  LIBRADOS_ALLOC_HINT_FLAG_IMMUTABLE = 32,
+  LIBRADOS_ALLOC_HINT_FLAG_SHORTLIVED = 64,
+  LIBRADOS_ALLOC_HINT_FLAG_LONGLIVED = 128,
+};
+/** @} */
+
 /*
  * snap id contants
  */
@@ -2399,6 +2417,25 @@ CEPH_RADOS_API int rados_set_alloc_hint(rados_ioctx_t io, const char *o,
                                         uint64_t expected_object_size,
                                         uint64_t expected_write_size);
 
+/**
+ * Set allocation hint for an object
+ *
+ * This is an advisory operation, it will always succeed (as if it was
+ * submitted with a LIBRADOS_OP_FLAG_FAILOK flag set) and is not
+ * guaranteed to do anything on the backend.
+ *
+ * @param io the pool the object is in
+ * @param o the name of the object
+ * @param expected_object_size expected size of the object, in bytes
+ * @param expected_write_size expected size of writes to the object, in bytes
+ * @param flags hints about future IO patterns
+ * @returns 0 on success, negative error code on failure
+ */
+CEPH_RADOS_API int rados_set_alloc_hint2(rados_ioctx_t io, const char *o,
+					 uint64_t expected_object_size,
+					 uint64_t expected_write_size,
+					 uint32_t flags);
+
 /** @} Hints */
 
 /**
@@ -2659,6 +2696,19 @@ CEPH_RADOS_API void rados_write_op_omap_clear(rados_write_op_t write_op);
 CEPH_RADOS_API void rados_write_op_set_alloc_hint(rados_write_op_t write_op,
                                                   uint64_t expected_object_size,
                                                   uint64_t expected_write_size);
+
+/**
+ * Set allocation hint for an object
+ *
+ * @param write_op operation to add this action to
+ * @param expected_object_size expected size of the object, in bytes
+ * @param expected_write_size expected size of writes to the object, in bytes
+ * @param flags hints about future IO patterns
+ */
+CEPH_RADOS_API void rados_write_op_set_alloc_hint2(rados_write_op_t write_op,
+						   uint64_t expected_object_size,
+						   uint64_t expected_write_size,
+						   uint32_t flags);
 
 /**
  * Perform a write operation synchronously
