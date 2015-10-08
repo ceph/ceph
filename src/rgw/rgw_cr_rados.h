@@ -652,4 +652,84 @@ public:
   }
 };
 
+class RGWAsyncRemoveObj : public RGWAsyncRadosRequest {
+  RGWRados *store;
+  string source_zone;
+
+  RGWBucketInfo bucket_info;
+
+  rgw_obj_key key;
+  uint64_t versioned_epoch;
+
+  bool del_if_older;
+  utime_t timestamp;
+
+protected:
+  int _send_request();
+public:
+  RGWAsyncRemoveObj(RGWAioCompletionNotifier *cn, RGWRados *_store,
+                         const string& _source_zone,
+                         RGWBucketInfo& _bucket_info,
+                         const rgw_obj_key& _key,
+                         uint64_t _versioned_epoch,
+                         bool _if_older,
+                         utime_t& _timestamp) : RGWAsyncRadosRequest(cn), store(_store),
+                                                      source_zone(_source_zone),
+                                                      bucket_info(_bucket_info),
+                                                      key(_key),
+                                                      versioned_epoch(_versioned_epoch),
+                                                      del_if_older(_if_older),
+                                                      timestamp(_timestamp) {}
+};
+
+class RGWRemoveObjCR : public RGWSimpleCoroutine {
+  CephContext *cct;
+  RGWAsyncRadosProcessor *async_rados;
+  RGWRados *store;
+  string source_zone;
+
+  RGWBucketInfo bucket_info;
+
+  rgw_obj_key key;
+  uint64_t versioned_epoch;
+
+  bool del_if_older;
+  utime_t timestamp;
+
+  RGWAsyncRemoveObj *req;
+
+public:
+  RGWRemoveObjCR(RGWAsyncRadosProcessor *_async_rados, RGWRados *_store,
+                      const string& _source_zone,
+                      RGWBucketInfo& _bucket_info,
+                      const rgw_obj_key& _key,
+                      uint64_t _versioned_epoch,
+                      utime_t *_timestamp) : RGWSimpleCoroutine(_store->ctx()), cct(_store->ctx()),
+                                       async_rados(_async_rados), store(_store),
+                                       source_zone(_source_zone),
+                                       bucket_info(_bucket_info),
+                                       key(_key),
+                                       versioned_epoch(_versioned_epoch) {
+    del_if_older = (_timestamp != NULL);
+    if (_timestamp) {
+      timestamp = *_timestamp;
+    }
+  }
+
+  ~RGWRemoveObjCR() {
+    delete req;
+  }
+
+  int send_request() {
+    req = new RGWAsyncRemoveObj(stack->create_completion_notifier(), store, source_zone, bucket_info,
+                                key, versioned_epoch, del_if_older, timestamp);
+    async_rados->queue(req);
+    return 0;
+  }
+
+  int request_complete() {
+    return req->get_ret_status();
+  }
+};
+
 #endif

@@ -442,3 +442,58 @@ int RGWAsyncFetchRemoteObj::_send_request()
   return r;
 }
 
+
+int RGWAsyncRemoveObj::_send_request()
+{
+  RGWObjectCtx obj_ctx(store);
+
+  rgw_obj obj(bucket_info.bucket, key.name);
+  obj.set_instance(key.instance);
+
+  ldout(store->ctx(), 0) << __func__ << "(): deleting obj=" << obj << dendl;
+
+  obj_ctx.set_atomic(obj);
+
+  RGWObjState *state;
+
+  int ret = store->get_obj_state(&obj_ctx, obj, &state);
+  if (ret < 0) {
+    ldout(store->ctx(), 20) << __func__ << "(): get_obj_state() obj=" << obj << " returned ret=" << ret << dendl;
+    return ret;
+  }
+
+  /* has there been any racing object write? */
+  if (del_if_older && (state->mtime > timestamp)) {
+    ldout(store->ctx(), 20) << __func__ << "(): skipping object removal obj=" << obj << " (obj mtime=" << state->mtime << ", request timestamp=" << timestamp << ")" << dendl;
+    return 0;
+  }
+
+  RGWAccessControlPolicy policy;
+
+  /* decode policy */
+  map<string, bufferlist>::iterator iter = state->attrset.find(RGW_ATTR_ACL);
+  if (iter != state->attrset.end()) {
+    bufferlist::iterator bliter = iter->second.begin();
+    try {
+      policy.decode(bliter);
+    } catch (buffer::error& err) {
+      ldout(store->ctx(), 0) << "ERROR: could not decode policy, caught buffer::error" << dendl;
+      return -EIO;
+    }
+  }
+
+  RGWRados::Object del_target(store, bucket_info, obj_ctx, obj);
+  RGWRados::Object::Delete del_op(&del_target);
+
+  del_op.params.bucket_owner = bucket_info.owner;
+  del_op.params.obj_owner = policy.get_owner();
+  if (del_if_older) {
+    del_op.params.unmod_since = timestamp;
+  }
+
+  ret = del_op.delete_obj();
+  if (ret < 0) {
+    ldout(store->ctx(), 20) << __func__ << "(): delete_obj() obj=" << obj << " returned ret=" << ret << dendl;
+  }
+  return ret;
+}
