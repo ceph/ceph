@@ -1735,6 +1735,8 @@ class RGWBucketSyncSingleEntryCR : public RGWCoroutine {
 
   rgw_obj_key key;
   uint64_t versioned_epoch;
+  utime_t timestamp;
+  RGWModifyOp op;
 
   T entry_marker;
   RGWSyncShardMarkerTrack<T> *marker_tracker;
@@ -1746,11 +1748,14 @@ public:
   RGWBucketSyncSingleEntryCR(RGWRados *_store, RGWAsyncRadosProcessor *_async_rados,
                              const string& _source_zone, RGWBucketInfo *_bucket_info, int _shard_id,
                              const rgw_obj_key& _key, uint64_t _versioned_epoch,
+                             utime_t& _timestamp,
+                             RGWModifyOp _op,
 		             const T& _entry_marker, RGWSyncShardMarkerTrack<T> *_marker_tracker) : RGWCoroutine(_store->ctx()), store(_store),
 						      async_rados(_async_rados),
 						      source_zone(_source_zone),
                                                       bucket_info(_bucket_info), shard_id(_shard_id),
-                                                      key(_key),
+                                                      key(_key), versioned_epoch(_versioned_epoch),
+                                                      timestamp(_timestamp), op(_op),
                                                       entry_marker(_entry_marker),
                                                       marker_tracker(_marker_tracker),
                                                       sync_status(0) {
@@ -1760,12 +1765,21 @@ public:
   int operate() {
     reenter(this) {
       yield {
-        int r = call(new RGWFetchRemoteObjCR(async_rados, store, source_zone, *bucket_info,
-                                             key, versioned_epoch,
-                                             true));
-        if (r < 0) {
-          ldout(store->ctx(), 0) << "ERROR: failed to call RGWFetchRemoteObjCR()" << dendl;
-          return r;
+        int r;
+        if (op == CLS_RGW_OP_ADD) {
+          r = call(new RGWFetchRemoteObjCR(async_rados, store, source_zone, *bucket_info,
+                                           key, versioned_epoch,
+                                           true));
+          if (r < 0) {
+            ldout(store->ctx(), 0) << "ERROR: failed to call RGWFetchRemoteObjCR()" << dendl;
+            return r;
+          }
+        } else if (op == CLS_RGW_OP_DEL) {
+          r = call(new RGWRemoveObjCR(async_rados, store, source_zone, *bucket_info, key, versioned_epoch, &timestamp));
+          if (r < 0) {
+            ldout(store->ctx(), 0) << "ERROR: failed to call RGWRemoveObjCR()" << dendl;
+            return r;
+          }
         }
       }
       if (retcode < 0 && retcode != -ENOENT) {
@@ -1862,7 +1876,7 @@ int RGWBucketShardFullSyncCR::operate()
           marker_tracker->start(entry.key);
           list_marker = entry.key;
           spawn(new RGWBucketSyncSingleEntryCR<rgw_obj_key>(store, async_rados, source_zone, bucket_info, shard_id,
-                                               entry.key, entry.versioned_epoch, entry.key, marker_tracker), false);
+                                               entry.key, entry.versioned_epoch, entry.mtime, CLS_RGW_OP_ADD, entry.key, marker_tracker), false);
         }
         while ((int)num_spawned() > spawn_window) {
           yield wait_for_child();
@@ -1974,7 +1988,7 @@ int RGWBucketShardIncrementalSyncCR::operate()
             versioned_epoch = entry.ver.epoch;
           }
           spawn(new RGWBucketSyncSingleEntryCR<string>(store, async_rados, source_zone, bucket_info, shard_id,
-                                               key, versioned_epoch, entry.id, marker_tracker), false);
+                                               key, versioned_epoch, entry.timestamp, entry.op, entry.id, marker_tracker), false);
         }
         while ((int)num_spawned() > spawn_window) {
           yield wait_for_child();
