@@ -8111,19 +8111,18 @@ void ReplicatedPG::add_object_context_to_pg_stat(ObjectContextRef obc, pg_stat_t
 void ReplicatedPG::kick_object_context_blocked(ObjectContextRef obc)
 {
   const hobject_t& soid = obc->obs.oi.soid;
-  map<hobject_t, list<OpRequestRef> >::iterator p = waiting_for_blocked_object.find(soid);
-  if (p == waiting_for_blocked_object.end())
-    return;
-
   if (obc->is_blocked()) {
     dout(10) << __func__ << " " << soid << " still blocked" << dendl;
     return;
   }
 
-  list<OpRequestRef>& ls = p->second;
-  dout(10) << __func__ << " " << soid << " requeuing " << ls.size() << " requests" << dendl;
-  requeue_ops(ls);
-  waiting_for_blocked_object.erase(p);
+  map<hobject_t, list<OpRequestRef> >::iterator p = waiting_for_blocked_object.find(soid);
+  if (p != waiting_for_blocked_object.end()) {
+    list<OpRequestRef>& ls = p->second;
+    dout(10) << __func__ << " " << soid << " requeuing " << ls.size() << " requests" << dendl;
+    requeue_ops(ls);
+    waiting_for_blocked_object.erase(p);
+  }
 
   if (obc->requeue_scrub_on_unblock)
     osd->queue_for_scrub(this);
