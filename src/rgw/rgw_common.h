@@ -909,7 +909,7 @@ struct req_info {
   RGWHTTPArgs args;
   map<string, string> x_meta_map;
 
-  const char *host;
+  string host;
   const char *method;
   string script_uri;
   string request_uri;

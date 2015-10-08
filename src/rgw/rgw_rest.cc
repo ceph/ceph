@@ -1337,26 +1337,28 @@ int RGWREST::preprocess(struct req_state *s, RGWClientIO *cio)
   req_info& info = s->info;
 
   s->cio = cio;
-  if (info.host) {
-    string h(s->info.host);
-
-    ldout(s->cct, 10) << "host=" << s->info.host << dendl;
+  if (info.host.size()) {
+    ldout(s->cct, 10) << "host=" << info.host << dendl;
     string domain;
     string subdomain;
-    bool in_hosted_domain = rgw_find_host_in_domains(h, &domain, &subdomain);
-    ldout(s->cct, 20) << "subdomain=" << subdomain << " domain=" << domain << " in_hosted_domain=" << in_hosted_domain << dendl;
+    bool in_hosted_domain = rgw_find_host_in_domains(info.host, &domain,
+						     &subdomain);
+    ldout(s->cct, 20) << "subdomain=" << subdomain << " domain=" << domain
+		      << " in_hosted_domain=" << in_hosted_domain << dendl;
 
     if (g_conf->rgw_resolve_cname && !in_hosted_domain) {
       string cname;
       bool found;
-      int r = rgw_resolver->resolve_cname(h, cname, &found);
+      int r = rgw_resolver->resolve_cname(info.host, cname, &found);
       if (r < 0) {
 	ldout(s->cct, 0) << "WARNING: rgw_resolver->resolve_cname() returned r=" << r << dendl;
       }
       if (found) {
-        ldout(s->cct, 5) << "resolved host cname " << h << " -> " << cname << dendl;
+        ldout(s->cct, 5) << "resolved host cname " << info.host << " -> "
+			 << cname << dendl;
         in_hosted_domain = rgw_find_host_in_domains(cname, &domain, &subdomain);
-        ldout(s->cct, 20) << "subdomain=" << subdomain << " domain=" << domain << " in_hosted_domain=" << in_hosted_domain << dendl;
+        ldout(s->cct, 20) << "subdomain=" << subdomain << " domain=" << domain
+			  << " in_hosted_domain=" << in_hosted_domain << dendl;
       }
     }
 
