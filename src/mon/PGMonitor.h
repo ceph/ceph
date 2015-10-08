@@ -49,9 +49,6 @@ public:
   bool need_check_down_pgs;
   set<int> need_check_down_pg_osds;
 
-  epoch_t last_map_pg_create_osd_epoch;
-
-
 private:
   PGMap::Incremental pending_inc;
 
@@ -115,7 +112,8 @@ private:
   // when we last received PG stats from each osd
   map<int,utime_t> last_osd_report;
 
-  void register_pg(pg_pool_t& pool, pg_t pgid, epoch_t epoch, bool new_pool);
+  void register_pg(OSDMap *osdmap, pg_pool_t& pool, pg_t pgid,
+		   epoch_t epoch, bool new_pool);
 
   /**
    * check latest osdmap for new pgs to register
@@ -124,7 +122,13 @@ private:
    */
   bool register_new_pgs();
 
-  void map_pg_creates();
+  /**
+   * recalculate creating pg mappings
+   *
+   * @return true if we updated pending_inc
+   */
+  bool map_pg_creates();
+
   void send_pg_creates();
   epoch_t send_pg_creates(int osd, Connection *con, epoch_t next);
 
@@ -160,7 +164,6 @@ public:
   PGMonitor(Monitor *mn, Paxos *p, const string& service_name)
     : PaxosService(mn, p, service_name),
       need_check_down_pgs(false),
-      last_map_pg_create_osd_epoch(0),
       pgmap_meta_prefix("pgmap_meta"),
       pgmap_pg_prefix("pgmap_pg"),
       pgmap_osd_prefix("pgmap_osd")
