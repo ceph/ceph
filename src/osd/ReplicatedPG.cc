@@ -4962,7 +4962,8 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
           t->touch(soid);
 	}
         t->set_alloc_hint(soid, op.alloc_hint.expected_object_size,
-                          op.alloc_hint.expected_write_size);
+                          op.alloc_hint.expected_write_size,
+			  op.alloc_hint.flags);
         ctx->delta_stats.num_wr++;
         result = 0;
       }

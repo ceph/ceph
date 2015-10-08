@@ -265,7 +265,7 @@ struct TransGenerator : public boost::static_visitor<void> {
       i->second.set_alloc_hint(
         get_coll_ct(i->first, op.oid),
         ghobject_t(op.oid, ghobject_t::NO_GEN, i->first),
-        object_size, write_size);
+        object_size, write_size, op.flags);
     }
   }
   void operator()(const ECTransaction::NoOp &op) {}

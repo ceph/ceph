@@ -426,7 +426,14 @@ public:
       __le32 dest_cid;
       __le32 dest_oid;                  //OP_CLONE, OP_CLONERANGE
       __le64 dest_off;                  //OP_CLONERANGE
-      __le32 hint_type;                 //OP_COLL_HINT
+      union {
+	struct {
+	  __le32 hint_type;             //OP_COLL_HINT
+	};
+	struct {
+	  __le32 alloc_hint_flags;      //OP_SETALLOCHINT
+	};
+      };
       __le64 expected_object_size;      //OP_SETALLOCHINT
       __le64 expected_write_size;       //OP_SETALLOCHINT
       __le32 split_bits;                //OP_SPLIT_COLLECTION2
@@ -1722,7 +1729,8 @@ public:
       coll_t cid,
       const ghobject_t &oid,
       uint64_t expected_object_size,
-      uint64_t expected_write_size
+      uint64_t expected_write_size,
+      uint32_t flags
     ) {
       if (use_tbl) {
         __u32 op = OP_SETALLOCHINT;
@@ -1738,6 +1746,7 @@ public:
         _op->oid = _get_object_id(oid);
         _op->expected_object_size = expected_object_size;
         _op->expected_write_size = expected_write_size;
+	_op->alloc_hint_flags = flags;
       }
       data.ops++;
     }

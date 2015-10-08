@@ -506,7 +506,7 @@ void ObjectStore::Transaction::_build_actions_from_tbl()
 	::decode(expected_object_size, p);
 	::decode(expected_write_size, p);
 
-	set_alloc_hint(cid, oid, expected_object_size, expected_write_size);
+	set_alloc_hint(cid, oid, expected_object_size, expected_write_size, 0);
       }
       break;
 
