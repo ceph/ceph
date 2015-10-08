@@ -1644,6 +1644,8 @@ int FileStore::mount()
   }
 
   // all okay.
+  VOID_TEMP_FAILURE_RETRY(::close(fsid_fd));
+  fsid_fd = -1;
   return 0;
 
 close_current_fd:
