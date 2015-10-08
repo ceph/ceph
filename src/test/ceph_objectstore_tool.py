@@ -862,6 +862,27 @@ def main(argv):
     cmd = (CFSD_PREFIX + "--pgid {pg} '' notacommand").format(osd=ONEOSD, pg=ONEPG)
     ERRORS += test_failure(cmd, "Unknown object command 'notacommand'")
 
+    cmd = (CFSD_PREFIX + "foo list-omap").format(osd=ONEOSD, pg=ONEPG)
+    ERRORS += test_failure(cmd, "No object id 'foo' found or invalid JSON specified")
+
+    cmd = (CFSD_PREFIX + "'{{\"oid\":\"obj4\",\"key\":\"\",\"snapid\":-1,\"hash\":2826278768,\"max\":0,\"pool\":1,\"namespace\":\"\"}}' list-omap").format(osd=ONEOSD, pg=ONEPG)
+    ERRORS += test_failure(cmd, "Without --pgid the object '{\"oid\":\"obj4\",\"key\":\"\",\"snapid\":-1,\"hash\":2826278768,\"max\":0,\"pool\":1,\"namespace\":\"\"}' must be a JSON array")
+
+    cmd = (CFSD_PREFIX + "'[]' list-omap").format(osd=ONEOSD, pg=ONEPG)
+    ERRORS += test_failure(cmd, "Object '[]' must be a JSON array with 2 elements")
+
+    cmd = (CFSD_PREFIX + "'[\"1.0\"]' list-omap").format(osd=ONEOSD, pg=ONEPG)
+    ERRORS += test_failure(cmd, "Object '[\"1.0\"]' must be a JSON array with 2 elements")
+
+    cmd = (CFSD_PREFIX + "'[\"1.0\", 5, 8, 9]' list-omap").format(osd=ONEOSD, pg=ONEPG)
+    ERRORS += test_failure(cmd, "Object '[\"1.0\", 5, 8, 9]' must be a JSON array with 2 elements")
+
+    cmd = (CFSD_PREFIX + "'[1, 2]' list-omap").format(osd=ONEOSD, pg=ONEPG)
+    ERRORS += test_failure(cmd, "Object '[1, 2]' must be a JSON array with the first element a string")
+
+    cmd = (CFSD_PREFIX + "'[\"1.3\",{{\"snapid\":\"not an int\"}}]' list-omap").format(osd=ONEOSD, pg=ONEPG)
+    ERRORS += test_failure(cmd, "Decode object JSON error: value type is 2 not 4")
+
     TMPFILE = r"/tmp/tmp.{pid}".format(pid=pid)
     ALLPGS = OBJREPPGS + OBJECPGS
     OSDS = get_osds(ALLPGS[0], OSDDIR)
