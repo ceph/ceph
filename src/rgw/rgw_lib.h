@@ -193,8 +193,8 @@ public:
     static_cast<RGWLibProcess*>(pprocess)->enqueue_req(req); // async
   }
 
-  inline void execute_req(RGWLibRequest* req) {
-    static_cast<RGWLibProcess*>(pprocess)->process_request(req); // !async
+  inline int execute_req(RGWLibRequest* req) {
+    return static_cast<RGWLibProcess*>(pprocess)->process_request(req); // !async
   }
 
 }; /* RGWLibFrontend */
