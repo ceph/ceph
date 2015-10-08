@@ -1158,7 +1158,53 @@ def task(ctx, config):
         ceph:
           sha1: ...
 
+    When tag, branch and sha1 do not reference the same commit hash, the
+    tag takes precedence over the branch and the branch takes precedence
+    over the sha1.
+
+    When the overrides have a sha1 that is different from the sha1 of
+    the project to be installed, it will be a noop if the project has
+    a branch or tag, because they take precedence over the sha1. For
+    instance:
+
+    overrides:
+      install:
+        ceph:
+          sha1: 1234
+
+    tasks:
+    - install:
+        project: ceph
+          sha1: 4567
+          branch: foobar # which has sha1 4567
+
+    The override will transform the tasks as follows:
+
+    tasks:
+    - install:
+        project: ceph
+          sha1: 1234
+          branch: foobar # which has sha1 4567
+
+    But the branch takes precedence over the sha1 and foobar
+    will be installed. The override of the sha1 has no effect.
+
     When passed 'rhbuild' as a key, it will attempt to install an rh ceph build using ceph-deploy
+
+    Reminder regarding teuthology-suite side effects:
+
+    The teuthology-suite command always adds the following:
+
+    overrides:
+      install:
+        ceph:
+          sha1: 1234
+
+    where sha1 matches the --ceph argument. For instance if
+    teuthology-suite is called with --ceph master, the sha1 will be
+    the tip of master. If called with --ceph v0.94.1, the sha1 will be
+    the v0.94.1 (as returned by git rev-parse v0.94.1 which is not to
+    be confused with git rev-parse v0.94.1^{commit})
 
     :param ctx: the argparse.Namespace object
     :param config: the config dict
