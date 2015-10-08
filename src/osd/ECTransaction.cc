@@ -162,6 +162,12 @@ struct TransGenerator : public boost::static_visitor<void> {
 	 ++i) {
       assert(buffers.count(i->first));
       bufferlist &enc_bl = buffers[i->first];
+      i->second.set_alloc_hint(
+	get_coll_ct(i->first, op.oid),
+	ghobject_t(op.oid, ghobject_t::NO_GEN, i->first),
+	0, 0,
+	CEPH_OSD_ALLOC_HINT_FLAG_SEQUENTIAL_WRITE |
+	CEPH_OSD_ALLOC_HINT_FLAG_APPEND_ONLY);
       i->second.write(
 	get_coll_ct(i->first, op.oid),
 	ghobject_t(op.oid, ghobject_t::NO_GEN, i->first),
