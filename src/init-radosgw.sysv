@@ -35,7 +35,7 @@ done
 # prefix for radosgw instances in ceph.conf
 PREFIX='client.radosgw.'
 
-# user to run radosgw as (it not specified in ceph.conf)
+# user to run radosgw as (if not specified in ceph.conf)
 #DEFAULT_USER='www-data'
 DEFAULT_USER='root'
 
@@ -101,8 +101,19 @@ case "$1" in
         ;;
     stop)
         #start-stop-daemon --stop -x $RADOSGW --oknodo
+        timeout=0
+        for name in `ceph-conf --list-sections $PREFIX`;
+        do
+          t=`$RADOSGW -n $name --show-config-value rgw_exit_timeout_secs`
+          if [ $t -gt $timeout ]; then timeout=$t; fi
+        done
+
         killproc $RADOSGW
         echo "Stopping radosgw instance(s)..."
+        while pidof $RADOSGW >/dev/null && [ $timeout -gt 0 ] ; do
+          sleep 1
+          timeout=$(($timeout - 1))
+        done
         ;;
     status)
         daemon_is_running $RADOSGW
