@@ -291,6 +291,8 @@ class MonitorDBStore
 	  db->compact_range_async(compact.front().first, compact.front().second.first, compact.front().second.second);
 	compact.pop_front();
       }
+    } else {
+      assert(0 == "failed to write to db");
     }
     return r;
   }
@@ -564,7 +566,8 @@ class MonitorDBStore
     for (iter = prefixes.begin(); iter != prefixes.end(); ++iter) {
       dbt->rmkeys_by_prefix((*iter));
     }
-    db->submit_transaction_sync(dbt);
+    int r = db->submit_transaction_sync(dbt);
+    assert(r >= 0);
   }
 
   int open(ostream &out) {
