@@ -11,7 +11,7 @@
 namespace librbd {
 namespace operation {
 
-class Request : public AsyncRequest {
+class Request : public AsyncRequest<> {
 public:
   Request(ImageCtx &image_ctx, Context *on_finish);
 

@@ -1,0 +1,12 @@
+# /etc/sysconfig/ceph
+#
+# Environment file for ceph daemon systemd unit files.
+#
+
+## use jemalloc instead of tcmalloc
+#
+# jemalloc is generally faster for small IO workloads and when
+# ceph-osd is backed by SSDs.  However, memory usage is usually
+# higher by 200-300mb.
+#
+#LD_PRELOAD=/usr/lib64/libjemalloc.so.1

@@ -29,6 +29,11 @@ if LINUX
 libos_la_SOURCES += os/BtrfsFileStoreBackend.cc
 endif
 
+if WITH_LIBAIO
+libos_types_la_SOURCES += os/newstore/newstore_types.cc
+libos_la_SOURCES += os/newstore/NewStore.cc
+endif
+
 if WITH_LIBXFS
 libos_la_SOURCES += \
     os/fs/XFS.cc \
@@ -50,6 +55,8 @@ noinst_LTLIBRARIES += libos.la
 noinst_HEADERS += \
 	os/btrfs_ioctl.h \
 	os/chain_xattr.h \
+	os/newstore/newstore_types.h \
+	os/newstore/NewStore.h \
 	os/BtrfsFileStoreBackend.h \
 	os/CollectionIndex.h \
 	os/DBObjectMap.h \

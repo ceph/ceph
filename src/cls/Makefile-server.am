@@ -43,6 +43,11 @@ libcls_statelog_la_LIBADD = $(PTHREAD_LIBS) $(EXTRALIBS)
 libcls_statelog_la_LDFLAGS = ${AM_LDFLAGS} -module -avoid-version -shared -export-symbols-regex '.*__cls_.*'
 radoslib_LTLIBRARIES += libcls_statelog.la
 
+libcls_timeindex_la_SOURCES = cls/timeindex/cls_timeindex.cc
+libcls_timeindex_la_LIBADD = $(PTHREAD_LIBS) $(EXTRALIBS)
+libcls_timeindex_la_LDFLAGS = ${AM_LDFLAGS} -module -avoid-version -shared -export-symbols-regex '.*__cls_.*'
+radoslib_LTLIBRARIES += libcls_timeindex.la
+
 libcls_replica_log_la_SOURCES = cls/replica_log/cls_replica_log.cc
 libcls_replica_log_la_LIBADD = $(PTHREAD_LIBS) $(EXTRALIBS)
 libcls_replica_log_la_LDFLAGS = ${AM_LDFLAGS} -module -avoid-version -shared -export-symbols-regex '.*__cls_.*'

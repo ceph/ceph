@@ -7,6 +7,7 @@
 #include <boost/algorithm/string/predicate.hpp>
 #include <boost/bind.hpp>
 #include <errno.h>
+#include <include/compat.h>
 
 static void to_vector(const interval_set<uint64_t> &set,
                       std::vector<std::pair<uint64_t, uint64_t> > *vec) {
@@ -27,10 +28,10 @@ TestMemIoCtxImpl::TestMemIoCtxImpl(const TestMemIoCtxImpl& rhs)
   m_pool->get();
 }
 
-TestMemIoCtxImpl::TestMemIoCtxImpl(TestMemRadosClient &client, int64_t pool_id,
+TestMemIoCtxImpl::TestMemIoCtxImpl(TestMemRadosClient *client, int64_t pool_id,
                                    const std::string& pool_name,
                                    TestMemRadosClient::Pool *pool)
-    : TestIoCtxImpl(client, pool_id, pool_name), m_client(&client),
+    : TestIoCtxImpl(client, pool_id, pool_name), m_client(client),
       m_pool(pool) {
   m_pool->get();
 }

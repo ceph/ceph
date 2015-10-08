@@ -869,7 +869,7 @@ public:
    *
    * @returns Our first committed version (that is available)
    */
-  version_t get_first_committed() {
+  version_t get_first_committed() const{
     return cached_first_committed;
   }
   /**
@@ -877,7 +877,7 @@ public:
    *
    * @returns Our last committed version
    */
-  version_t get_last_committed() {
+  version_t get_last_committed() const{
     return cached_last_committed;
   }
 

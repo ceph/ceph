@@ -44,11 +44,11 @@ std::ostream& operator<<(std::ostream& os,
   return os;
 }
 
-class C_RollbackObject : public C_AsyncObjectThrottle {
+class C_RollbackObject : public C_AsyncObjectThrottle<> {
 public:
-  C_RollbackObject(AsyncObjectThrottle &throttle, ImageCtx *image_ctx,
+  C_RollbackObject(AsyncObjectThrottle<> &throttle, ImageCtx *image_ctx,
                    uint64_t snap_id, uint64_t object_num)
-    : C_AsyncObjectThrottle(throttle, *image_ctx), m_snap_id(snap_id),
+    : C_AsyncObjectThrottle<>(throttle, *image_ctx), m_snap_id(snap_id),
       m_object_num(object_num) {
   }
 
@@ -177,10 +177,10 @@ void SnapshotRollbackRequest::send_rollback_objects() {
   }
 
   Context *ctx = create_callback_context();
-  AsyncObjectThrottle::ContextFactory context_factory(
+  AsyncObjectThrottle<>::ContextFactory context_factory(
     boost::lambda::bind(boost::lambda::new_ptr<C_RollbackObject>(),
       boost::lambda::_1, &m_image_ctx, m_snap_id, boost::lambda::_2));
-  AsyncObjectThrottle *throttle = new AsyncObjectThrottle(
+  AsyncObjectThrottle<> *throttle = new AsyncObjectThrottle<>(
     this, m_image_ctx, context_factory, ctx, &m_prog_ctx, 0, num_objects);
   throttle->start_ops(m_image_ctx.concurrent_management_ops);
 }

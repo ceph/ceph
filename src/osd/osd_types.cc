@@ -50,6 +50,8 @@ const char *ceph_osd_flag_name(unsigned flag)
   case CEPH_OSD_FLAG_ENFORCE_SNAPC: return "enforce_snapc";
   case CEPH_OSD_FLAG_REDIRECTED: return "redirected";
   case CEPH_OSD_FLAG_KNOWN_REDIR: return "known_if_redirected";
+  case CEPH_OSD_FLAG_FULL_TRY: return "full_try";
+  case CEPH_OSD_FLAG_FULL_FORCE: return "full_force";
   default: return "???";
   }
 }
@@ -947,6 +949,7 @@ void pg_pool_t::dump(Formatter *f) const
   f->dump_unsigned("min_write_recency_for_promote", min_write_recency_for_promote);
   f->dump_unsigned("stripe_width", get_stripe_width());
   f->dump_unsigned("expected_num_objects", expected_num_objects);
+  f->dump_bool("fast_read", fast_read);
 }
 
 void pg_pool_t::convert_to_pg_shards(const vector<int> &from, set<pg_shard_t>* to) const {
@@ -1256,7 +1259,7 @@ void pg_pool_t::encode(bufferlist& bl, uint64_t features) const
     return;
   }
 
-  ENCODE_START(21, 5, bl);
+  ENCODE_START(22, 5, bl);
   ::encode(type, bl);
   ::encode(size, bl);
   ::encode(crush_ruleset, bl);
@@ -1301,12 +1304,13 @@ void pg_pool_t::encode(bufferlist& bl, uint64_t features) const
   ::encode(cache_target_dirty_high_ratio_micro, bl);
   ::encode(min_write_recency_for_promote, bl);
   ::encode(use_gmt_hitset, bl);
+  ::encode(fast_read, bl);
   ENCODE_FINISH(bl);
 }
 
 void pg_pool_t::decode(bufferlist::iterator& bl)
 {
-  DECODE_START_LEGACY_COMPAT_LEN(21, 5, 5, bl);
+  DECODE_START_LEGACY_COMPAT_LEN(22, 5, 5, bl);
   ::decode(type, bl);
   ::decode(size, bl);
   ::decode(crush_ruleset, bl);
@@ -1433,6 +1437,11 @@ void pg_pool_t::decode(bufferlist::iterator& bl)
   } else {
     use_gmt_hitset = false;
   }
+  if (struct_v >= 22) {
+    ::decode(fast_read, bl);
+  } else {
+    fast_read = false;
+  }
   DECODE_FINISH(bl);
   calc_pg_masks();
 }
@@ -1490,6 +1499,7 @@ void pg_pool_t::generate_test_instances(list<pg_pool_t*>& o)
   a.cache_min_evict_age = 2321;
   a.erasure_code_profile = "profile in osdmap";
   a.expected_num_objects = 123456;
+  a.fast_read = false;
   o.push_back(new pg_pool_t(a));
 }
 
@@ -1541,6 +1551,8 @@ ostream& operator<<(ostream& out, const pg_pool_t& p)
   out << " stripe_width " << p.get_stripe_width();
   if (p.expected_num_objects)
     out << " expected_num_objects " << p.expected_num_objects;
+  if (p.fast_read)
+    out << " fast_read " << p.fast_read;
   return out;
 }
 
@@ -2344,7 +2356,7 @@ void pool_stat_t::generate_test_instances(list<pool_stat_t*>& o)
 
 void pg_history_t::encode(bufferlist &bl) const
 {
-  ENCODE_START(6, 4, bl);
+  ENCODE_START(7, 4, bl);
   ::encode(epoch_created, bl);
   ::encode(last_epoch_started, bl);
   ::encode(last_epoch_clean, bl);
@@ -2357,12 +2369,13 @@ void pg_history_t::encode(bufferlist &bl) const
   ::encode(last_deep_scrub, bl);
   ::encode(last_deep_scrub_stamp, bl);
   ::encode(last_clean_scrub_stamp, bl);
+  ::encode(last_epoch_marked_full, bl);
   ENCODE_FINISH(bl);
 }
 
 void pg_history_t::decode(bufferlist::iterator &bl)
 {
-  DECODE_START_LEGACY_COMPAT_LEN(6, 4, 4, bl);
+  DECODE_START_LEGACY_COMPAT_LEN(7, 4, 4, bl);
   ::decode(epoch_created, bl);
   ::decode(last_epoch_started, bl);
   if (struct_v >= 3)
@@ -2384,6 +2397,9 @@ void pg_history_t::decode(bufferlist::iterator &bl)
   if (struct_v >= 6) {
     ::decode(last_clean_scrub_stamp, bl);
   }
+  if (struct_v >= 7) {
+    ::decode(last_epoch_marked_full, bl);
+  }
   DECODE_FINISH(bl);
 }
 
@@ -2393,6 +2409,7 @@ void pg_history_t::dump(Formatter *f) const
   f->dump_int("last_epoch_started", last_epoch_started);
   f->dump_int("last_epoch_clean", last_epoch_clean);
   f->dump_int("last_epoch_split", last_epoch_split);
+  f->dump_int("last_epoch_marked_full", last_epoch_marked_full);
   f->dump_int("same_up_since", same_up_since);
   f->dump_int("same_interval_since", same_interval_since);
   f->dump_int("same_primary_since", same_primary_since);
@@ -2419,6 +2436,7 @@ void pg_history_t::generate_test_instances(list<pg_history_t*>& o)
   o.back()->last_deep_scrub = eversion_t(12, 13);
   o.back()->last_deep_scrub_stamp = utime_t(14, 15);
   o.back()->last_clean_scrub_stamp = utime_t(16, 17);
+  o.back()->last_epoch_marked_full = 18;
 }
 
 
@@ -2780,6 +2798,7 @@ bool pg_interval_t::check_new_interval(
     pg_interval_t& i = (*past_intervals)[same_interval_since];
     i.first = same_interval_since;
     i.last = osdmap->get_epoch() - 1;
+    assert(i.first <= i.last);
     i.acting = old_acting;
     i.up = old_up;
     i.primary = old_acting_primary;
@@ -3760,7 +3779,7 @@ void object_copy_data_t::encode(bufferlist& bl, uint64_t features) const
     return;
   }
 
-  ENCODE_START(6, 5, bl);
+  ENCODE_START(7, 5, bl);
   ::encode(size, bl);
   ::encode(mtime, bl);
   ::encode(attrs, bl);
@@ -3774,12 +3793,14 @@ void object_copy_data_t::encode(bufferlist& bl, uint64_t features) const
   ::encode(data_digest, bl);
   ::encode(omap_digest, bl);
   ::encode(reqids, bl);
+  ::encode(truncate_seq, bl);
+  ::encode(truncate_size, bl);
   ENCODE_FINISH(bl);
 }
 
 void object_copy_data_t::decode(bufferlist::iterator& bl)
 {
-  DECODE_START(6, bl);
+  DECODE_START(7, bl);
   if (struct_v < 5) {
     // old
     ::decode(size, bl);
@@ -3830,6 +3851,10 @@ void object_copy_data_t::decode(bufferlist::iterator& bl)
     }
     if (struct_v >= 6) {
       ::decode(reqids, bl);
+    }
+    if (struct_v >= 7) {
+      ::decode(truncate_seq, bl);
+      ::decode(truncate_size, bl);
     }
   }
   DECODE_FINISH(bl);
@@ -4066,7 +4091,7 @@ ostream& operator<<(ostream& out, const osd_peer_stat_t &stat)
 
 void OSDSuperblock::encode(bufferlist &bl) const
 {
-  ENCODE_START(7, 5, bl);
+  ENCODE_START(8, 5, bl);
   ::encode(cluster_fsid, bl);
   ::encode(whoami, bl);
   ::encode(current_epoch, bl);
@@ -4077,14 +4102,14 @@ void OSDSuperblock::encode(bufferlist &bl) const
   ::encode(clean_thru, bl);
   ::encode(mounted, bl);
   ::encode(osd_fsid, bl);
-  ::encode(last_map_marked_full, bl);
-  ::encode(pool_last_map_marked_full, bl);
+  ::encode((epoch_t)0, bl);  // epoch_t last_epoch_marked_full
+  ::encode((uint32_t)0, bl);  // map<int64_t,epoch_t> pool_last_epoch_marked_full
   ENCODE_FINISH(bl);
 }
 
 void OSDSuperblock::decode(bufferlist::iterator &bl)
 {
-  DECODE_START_LEGACY_COMPAT_LEN(6, 5, 5, bl);
+  DECODE_START_LEGACY_COMPAT_LEN(8, 5, 5, bl);
   if (struct_v < 3) {
     string magic;
     ::decode(magic, bl);
@@ -4104,10 +4129,14 @@ void OSDSuperblock::decode(bufferlist::iterator &bl)
   ::decode(mounted, bl);
   if (struct_v >= 4)
     ::decode(osd_fsid, bl);
-  if (struct_v >= 6)
+  if (struct_v >= 6) {
+    epoch_t last_map_marked_full;
     ::decode(last_map_marked_full, bl);
-  if (struct_v >= 7)
+  }
+  if (struct_v >= 7) {
+    map<int64_t,epoch_t> pool_last_map_marked_full;
     ::decode(pool_last_map_marked_full, bl);
+  }
   DECODE_FINISH(bl);
 }
 
@@ -4125,7 +4154,6 @@ void OSDSuperblock::dump(Formatter *f) const
   f->close_section();
   f->dump_int("clean_thru", clean_thru);
   f->dump_int("last_epoch_mounted", mounted);
-  f->dump_int("last_map_marked_full", last_map_marked_full);
 }
 
 void OSDSuperblock::generate_test_instances(list<OSDSuperblock*>& o)
@@ -4141,7 +4169,6 @@ void OSDSuperblock::generate_test_instances(list<OSDSuperblock*>& o)
   z.mounted = 8;
   z.clean_thru = 7;
   o.push_back(new OSDSuperblock(z));
-  z.last_map_marked_full = 7;
   o.push_back(new OSDSuperblock(z));
 }
 
@@ -4699,6 +4726,7 @@ ostream &ObjectRecoveryInfo::print(ostream &out) const
 {
   return out << "ObjectRecoveryInfo("
 	     << soid << "@" << version
+	     << ", size: " << size
 	     << ", copy_subset: " << copy_subset
 	     << ", clone_subset: " << clone_subset
 	     << ")";

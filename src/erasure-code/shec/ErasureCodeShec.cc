@@ -562,6 +562,14 @@ int ErasureCodeShec::shec_make_decoding_matrix(bool prepare, int *want_, int *av
     }
   }
 
+  if (tcache.getDecodingTableFromCache(decoding_matrix,
+                                       dm_row, dm_column, minimum,
+                                       technique,
+                                       k, m, c, w,
+                                       want, avails)) {
+    return 0;
+  }
+
   for (unsigned long long pp = 0; pp < (1ull << m); ++pp) {
 
     // select parity chunks
@@ -754,6 +762,9 @@ int ErasureCodeShec::shec_make_decoding_matrix(bool prepare, int *want_, int *av
   }
 
   int ret = jerasure_invert_matrix(tmpmat, decoding_matrix, mindup, w);
+
+  tcache.putDecodingTableToCache(decoding_matrix, dm_row, dm_column, minimum, technique,
+                                 k, m, c, w, want, avails);
 
   return ret;
 }

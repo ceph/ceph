@@ -39,7 +39,8 @@ namespace librbd {
 
   class AioImageRequestWQ;
   class AsyncOperation;
-  class AsyncRequest;
+  template <typename ImageCtxT> class AsyncRequest;
+  class AsyncResizeRequest;
   class CopyupRequest;
   class ImageWatcher;
   class Journal;
@@ -128,7 +129,7 @@ namespace librbd {
     std::map<uint64_t, CopyupRequest*> copyup_list;
 
     xlist<AsyncOperation*> async_ops;
-    xlist<AsyncRequest*> async_requests;
+    xlist<AsyncRequest<>*> async_requests;
     Cond async_requests_cond;
 
     ObjectMap object_map;

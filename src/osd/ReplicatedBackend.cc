@@ -278,8 +278,12 @@ void ReplicatedBackend::objects_read_async(
   const hobject_t &hoid,
   const list<pair<boost::tuple<uint64_t, uint64_t, uint32_t>,
 		  pair<bufferlist*, Context*> > > &to_read,
-  Context *on_complete)
+  Context *on_complete,
+  bool fast_read)
 {
+  // There is no fast read implementation for replication backend yet
+  assert(!fast_read);
+
   int r = 0;
   for (list<pair<boost::tuple<uint64_t, uint64_t, uint32_t>,
 		 pair<bufferlist*, Context*> > >::const_iterator i =
@@ -1499,6 +1503,9 @@ void ReplicatedBackend::prepare_pull(
 		       recovery_info.clone_subset);
     // FIXME: this may overestimate if we are pulling multiple clones in parallel...
     dout(10) << " pulling " << recovery_info << dendl;
+
+    assert(ssc->snapset.clone_size.count(soid.snap));
+    recovery_info.size = ssc->snapset.clone_size[soid.snap];
   } else {
     // pulling head or unversioned object.
     // always pull the whole thing.

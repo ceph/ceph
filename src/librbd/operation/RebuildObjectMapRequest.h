@@ -13,7 +13,7 @@ class ProgressContext;
 
 namespace operation {
 
-class RebuildObjectMapRequest : public AsyncRequest {
+class RebuildObjectMapRequest : public AsyncRequest<> {
 public:
 
   RebuildObjectMapRequest(ImageCtx &image_ctx, Context *on_finish,

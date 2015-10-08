@@ -67,6 +67,7 @@ void _usage()
   cout << "  bucket check               check bucket index\n";
   cout << "  object rm                  remove object\n";
   cout << "  object unlink              unlink object from bucket index\n";
+  cout << "  objects expire             run expired objects cleanup\n";
   cout << "  quota set                  set quota params\n";
   cout << "  quota enable               enable quota\n";
   cout << "  quota disable              disable quota\n";
@@ -125,6 +126,7 @@ void _usage()
   cout << "   --access=<access>         Set access permissions for sub-user, should be one\n";
   cout << "                             of read, write, readwrite, full\n";
   cout << "   --display-name=<name>\n";
+  cout << "   --max_buckets             max number of buckets for a user\n";
   cout << "   --system                  set the system flag on the user\n";
   cout << "   --bucket=<bucket>\n";
   cout << "   --pool=<pool>\n";
@@ -165,6 +167,7 @@ void _usage()
   cout << "   --categories=<list>       comma separated list of categories, used in usage show\n";
   cout << "   --caps=<caps>             list of caps (e.g., \"usage=read, write; user=read\"\n";
   cout << "   --yes-i-really-mean-it    required for certain operations\n";
+  cout << "   --reset-regions           reset regionmap when regionmap update";
   cout << "\n";
   cout << "<date> := \"YYYY-MM-DD[ hh:mm:ss]\"\n";
   cout << "\nQuota options:\n";
@@ -223,6 +226,7 @@ enum {
   OPT_OBJECT_UNLINK,
   OPT_OBJECT_STAT,
   OPT_OBJECT_REWRITE,
+  OPT_OBJECTS_EXPIRE,
   OPT_BI_GET,
   OPT_BI_PUT,
   OPT_BI_LIST,
@@ -282,6 +286,7 @@ static int get_cmd(const char *cmd, const char *prev_cmd, bool *need_more)
       strcmp(cmd, "mdlog") == 0 ||
       strcmp(cmd, "metadata") == 0 ||
       strcmp(cmd, "object") == 0 ||
+      strcmp(cmd, "objects") == 0 ||
       strcmp(cmd, "olh") == 0 ||
       strcmp(cmd, "opstate") == 0 ||
       strcmp(cmd, "orphans") == 0 || 
@@ -391,6 +396,9 @@ static int get_cmd(const char *cmd, const char *prev_cmd, bool *need_more)
       return OPT_OBJECT_STAT;
     if (strcmp(cmd, "rewrite") == 0)
       return OPT_OBJECT_REWRITE;
+  } else if (strcmp(prev_cmd, "objects") == 0) {
+    if (strcmp(cmd, "expire") == 0)
+      return OPT_OBJECTS_EXPIRE;
   } else if (strcmp(prev_cmd, "olh") == 0) {
     if (strcmp(cmd, "get") == 0)
       return OPT_OLH_GET;
@@ -1142,6 +1150,7 @@ int main(int argc, char **argv)
   int include_all = false;
 
   int sync_stats = false;
+  int reset_regions = false;
 
   uint64_t min_rewrite_size = 4 * 1024 * 1024;
   uint64_t max_rewrite_size = ULLONG_MAX;
@@ -1314,6 +1323,8 @@ int main(int argc, char **argv)
      // do nothing
     } else if (ceph_argparse_binary_flag(args, i, &include_all, NULL, "--include-all", (char*)NULL)) {
      // do nothing
+    } else if (ceph_argparse_binary_flag(args, i, &reset_regions, NULL, "--reset-regions", (char*)NULL)) {
+     // do nothing
     } else if (ceph_argparse_witharg(args, i, &val, "--caps", (char*)NULL)) {
       caps = val;
     } else if (ceph_argparse_witharg(args, i, &val, "-i", "--infile", (char*)NULL)) {
@@ -1384,6 +1395,16 @@ int main(int argc, char **argv)
         default:
           break;
       }
+    }
+
+    /* check key parameter conflict */
+    if ((!access_key.empty()) && gen_access_key) {
+        cerr << "ERROR: key parameter conflict, --access-key & --gen-access-key" << std::endl;
+        return -EINVAL;
+    }
+    if ((!secret_key.empty()) && gen_secret_key) {
+        cerr << "ERROR: key parameter conflict, --secret & --gen-secret" << std::endl;
+        return -EINVAL;
     }
   }
 
@@ -1550,6 +1571,10 @@ int main(int argc, char **argv)
       if (ret < 0) {
         cerr << "failed to list regions: " << cpp_strerror(-ret) << std::endl;
 	return -ret;
+      }
+
+      if (reset_regions) {
+        regionmap.regions.clear();
       }
 
       for (list<string>::iterator iter = regions.begin(); iter != regions.end(); ++iter) {
@@ -1739,7 +1764,9 @@ int main(int argc, char **argv)
     break;
   case OPT_USER_RM:
     ret = user.remove(user_op, &err_msg);
-    if (ret < 0) {
+    if (ret == -ENOENT) {
+      cerr << err_msg << std::endl;
+    } else if (ret < 0) {
       cerr << "could not remove user: " << err_msg << std::endl;
       return -ret;
     }
@@ -2341,6 +2368,14 @@ next:
       }
     } else {
       ldout(store->ctx(), 20) << "skipped object" << dendl;
+    }
+  }
+
+  if (opt_cmd == OPT_OBJECTS_EXPIRE) {
+    int ret = store->process_expire_objects();
+    if (ret < 0) {
+      cerr << "ERROR: process_expire_objects() processing returned error: " << cpp_strerror(-ret) << std::endl;
+      return 1;
     }
   }
 

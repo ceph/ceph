@@ -1028,7 +1028,6 @@ int main(int argc, const char **argv)
   vector<const char *> def_args;
   def_args.push_back("--debug-rgw=1/5");
   def_args.push_back("--keyring=$rgw_data/keyring");
-  def_args.push_back("--log-file=/var/log/radosgw/$cluster-$name.log");
 
   vector<const char*> args;
   argv_to_vec(argc, argv, args);
@@ -1054,6 +1053,9 @@ int main(int argc, const char **argv)
   mutex.Lock();
   init_timer.add_event_after(g_conf->rgw_init_timeout, new C_InitTimeout);
   mutex.Unlock();
+
+  // Enable the perf counter before starting the service thread
+  g_ceph_context->enable_perf_counter();
 
   common_init_finish(g_ceph_context);
 

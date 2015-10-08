@@ -40,7 +40,7 @@ class BufferlistSource : public snappy::Source {
   }
   virtual void Skip(size_t n) {
     if (n + pb_off == pb->length()) {
-      pb++;
+      ++pb;
       pb_off = 0;
     } else {
       pb_off += n;

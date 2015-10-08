@@ -263,6 +263,7 @@ private:
       q.push_back(o);
     }
     Op *peek_queue() {
+      Mutex::Locker l(qlock);
       assert(apply_lock.is_locked());
       return q.front();
     }
@@ -329,7 +330,6 @@ private:
   FDCache fdcache;
   WBThrottle wbthrottle;
 
-  Sequencer default_osr;
   deque<OpSequencer*> op_queue;
   Throttle throttle_ops, throttle_bytes;
   Finisher op_finisher;

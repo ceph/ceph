@@ -11,7 +11,7 @@
 namespace librbd {
 namespace object_map {
 
-class SnapshotRemoveRequest : public AsyncRequest {
+class SnapshotRemoveRequest : public AsyncRequest<> {
 public:
   /**
    * Snapshot rollback goes through the following state machine:

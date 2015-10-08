@@ -38,11 +38,7 @@ To list your cluster's pools, execute::
 
 	ceph osd lspools
 
-The default pools include:
-
-- ``data``
-- ``metadata``
-- ``rbd``
+On a freshly installed cluster, only the ``rbd`` pool exists.
 
 
 .. _createpool:
@@ -300,6 +296,27 @@ You may set values for the following keys:
 :Type: Integer
 :Valid Range: 1 sets flag, 0 unsets flag
 :Version: Version ``FIXME``
+
+
+``write_fadvise_dontneed``
+
+:Description: Set/Unset WRITE_FADVISE_DONTNEED flag on a given pool.
+:Type: Integer
+:Valid Range: 1 sets flag, 0 unsets flag
+
+
+``noscrub``
+
+:Description: Set/Unset NOSCRUB flag on a given pool.
+:Type: Integer
+:Valid Range: 1 sets flag, 0 unsets flag
+
+
+``nodeep-scrub``
+
+:Description: Set/Unset NODEEP_SCRUB flag on a given pool.
+:Type: Integer
+:Valid Range: 1 sets flag, 0 unsets flag
 
 
 ``hit_set_type``

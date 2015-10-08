@@ -841,6 +841,8 @@ void AsyncConnection::process()
           in_seq.set(message->get_seq());
           ldout(async_msgr->cct, 10) << __func__ << " got message " << message->get_seq()
                                << " " << message << " " << *message << dendl;
+	  ldout(async_msgr->cct, 1) << " == rx == " << message->get_source() << " " << message << " " << *message
+				    << dendl;
 
           // if send_message always successfully send, it may have no
           // opportunity to send seq ack. 10 is a experience value.
@@ -977,7 +979,6 @@ int AsyncConnection::_process_connection()
         if (r < 0) {
           goto fail;
         }
-        net.set_socket_options(sd);
 
         center->create_file_event(sd, EVENT_READABLE, read_handler);
         state = STATE_CONNECTING_WAIT_BANNER;
@@ -1504,6 +1505,10 @@ int AsyncConnection::handle_connect_reply(ceph_msg_connect &connect, ceph_msg_co
   }
   if (reply.tag == CEPH_MSGR_TAG_WAIT) {
     ldout(async_msgr->cct, 3) << __func__ << " connect got WAIT (connection race)" << dendl;
+    if (!once_ready) {
+      ldout(async_msgr->cct, 1) << __func__ << " got WAIT while connection isn't registered, just closed." << dendl;
+      goto fail;
+    }
     state = STATE_WAIT;
   }
 
@@ -1921,6 +1926,8 @@ void AsyncConnection::accept(int incoming)
 int AsyncConnection::send_message(Message *m)
 {
   ldout(async_msgr->cct, 10) << __func__ << " m=" << m << dendl;
+  ldout(async_msgr->cct, 1) << " == tx == " << m << " " << *m
+			    << dendl;
 
   // optimistic think it's ok to encode(actually may broken now)
   if (!m->get_priority())
@@ -1961,7 +1968,7 @@ int AsyncConnection::send_message(Message *m)
   }
   if (!is_queued() && can_write == CANWRITE) {
     if (!can_fast_prepare)
-      prepare_send_message(f, m, bl);
+      prepare_send_message(get_features(), m, bl);
     if (write_message(m, bl) < 0) {
       ldout(async_msgr->cct, 1) << __func__ << " send msg failed" << dendl;
       // we want to handle fault within internal thread

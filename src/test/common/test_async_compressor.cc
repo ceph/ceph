@@ -142,7 +142,7 @@ class SyntheticWorkload {
       for (set<pair<uint64_t, uint64_t> >::iterator it = compress_jobs.begin();
            it != compress_jobs.end();) {
         prev = it;
-        it++;
+        ++it;
         ASSERT_EQ(0, async_compressor->get_compress_data(prev->first, data, blocking, &finished));
         if (finished) {
           c_reap++;
@@ -157,7 +157,7 @@ class SyntheticWorkload {
       for (set<pair<uint64_t, uint64_t> >::iterator it = decompress_jobs.begin();
            it != decompress_jobs.end();) {
         prev = it;
-        it++;
+        ++it;
         ASSERT_EQ(0, async_compressor->get_decompress_data(prev->first, data, blocking, &finished));
         if (finished) {
           d_reap++;

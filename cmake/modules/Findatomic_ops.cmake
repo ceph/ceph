@@ -11,10 +11,10 @@ FIND_PATH(ATOMIC_OPS_INCLUDE_DIR NAMES atomic_ops.h)
 # Look for the library.
 FIND_LIBRARY(ATOMIC_OPS_LIBRARY NAMES atomic_ops)
 
-# handle the QUIETLY and REQUIRED arguments and set ATOMIC_OPS_FOUND to TRUE if 
+# handle the QUIETLY and REQUIRED arguments and set ATOMIC_OPS_FOUND to TRUE if
 # all listed variables are TRUE
 INCLUDE(FindPackageHandleStandardArgs)
-FIND_PACKAGE_HANDLE_STANDARD_ARGS(ATOMIC_OPS DEFAULT_MSG ATOMIC_OPS_LIBRARY ATOMIC_OPS_INCLUDE_DIR)
+FIND_PACKAGE_HANDLE_STANDARD_ARGS(atomic_ops DEFAULT_MSG ATOMIC_OPS_LIBRARY ATOMIC_OPS_INCLUDE_DIR)
 
 # Copy the results to the output variables.
 IF(ATOMIC_OPS_FOUND)

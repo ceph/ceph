@@ -49,12 +49,12 @@ std::ostream& operator<<(std::ostream& os,
   return os;
 }
 
-class C_ScanPoolChildren : public C_AsyncObjectThrottle {
+class C_ScanPoolChildren : public C_AsyncObjectThrottle<> {
 public:
-  C_ScanPoolChildren(AsyncObjectThrottle &throttle, ImageCtx *image_ctx,
+  C_ScanPoolChildren(AsyncObjectThrottle<> &throttle, ImageCtx *image_ctx,
                      const parent_spec &pspec, const Pools &pools,
                      size_t pool_idx)
-    : C_AsyncObjectThrottle(throttle, *image_ctx), m_pspec(pspec),
+    : C_AsyncObjectThrottle<>(throttle, *image_ctx), m_pspec(pspec),
       m_pool(pools[pool_idx]) {
   }
 
@@ -113,7 +113,7 @@ protected:
                  << "child(ren) in pool '" << m_pool.second << "'" << dendl;
       r = -EBUSY;
     }
-    C_AsyncObjectThrottle::finish(r);
+    C_AsyncObjectThrottle<>::finish(r);
   }
 
 private:
@@ -222,10 +222,10 @@ void SnapshotUnprotectRequest::send_scan_pool_children() {
   Pools pools(pool_list.begin(), pool_list.end());
 
   Context *ctx = create_callback_context();
-  AsyncObjectThrottle::ContextFactory context_factory(
+  AsyncObjectThrottle<>::ContextFactory context_factory(
     boost::lambda::bind(boost::lambda::new_ptr<C_ScanPoolChildren>(),
       boost::lambda::_1, &m_image_ctx, pspec, pools, boost::lambda::_2));
-  AsyncObjectThrottle *throttle = new AsyncObjectThrottle(
+  AsyncObjectThrottle<> *throttle = new AsyncObjectThrottle<>(
     this, m_image_ctx, context_factory, ctx, NULL, 0,
     pools.size());
   throttle->start_ops(m_image_ctx.concurrent_management_ops);

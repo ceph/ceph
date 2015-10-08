@@ -219,6 +219,11 @@ run_expect_fail "$RADOS_TOOL" mkpool delete_me_mkpool_test3 0 0k
 
 run_expect_succ "$RADOS_TOOL" --pool "$POOL" bench 1 write
 run_expect_fail "$RADOS_TOOL" --pool "$POOL" bench 1k write
+run_expect_succ "$RADOS_TOOL" --pool "$POOL" bench 1 write --format json --output "$TDIR/bench.json"
+run_expect_fail "$RADOS_TOOL" --pool "$POOL" bench 1 write --output "$TDIR/bench.json"
+run_expect_succ "$RADOS_TOOL" --pool "$POOL" bench 5 write --format json --no-cleanup
+run_expect_succ "$RADOS_TOOL" --pool "$POOL" bench 1 rand --format json
+run_expect_succ "$RADOS_TOOL" --pool "$POOL" bench 1 seq --format json
 
 
 echo "SUCCESS!"
