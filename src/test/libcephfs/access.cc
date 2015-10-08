@@ -81,8 +81,8 @@ TEST(AccessTest, Foo) {
   // admin mount to set up test
   struct ceph_mount_info *admin;
   ASSERT_EQ(0, ceph_create(&admin, NULL));
-  ASSERT_EQ(0, ceph_conf_parse_env(admin, NULL));
   ASSERT_EQ(0, ceph_conf_read_file(admin, NULL));
+  ASSERT_EQ(0, ceph_conf_parse_env(admin, NULL));
   ASSERT_EQ(0, ceph_mount(admin, "/"));
   ASSERT_EQ(0, ceph_mkdir(admin, dir.c_str(), 0755));
 
@@ -96,8 +96,8 @@ TEST(AccessTest, Foo) {
 
   struct ceph_mount_info *cmount;
   ASSERT_EQ(0, ceph_create(&cmount, user.c_str()));
-  ASSERT_EQ(0, ceph_conf_parse_env(cmount, NULL));
   ASSERT_EQ(0, ceph_conf_read_file(cmount, NULL));
+  ASSERT_EQ(0, ceph_conf_parse_env(cmount, NULL));
   ASSERT_EQ(0, ceph_conf_set(cmount, "key", key.c_str()));
   ASSERT_EQ(0, ceph_mount(cmount, "/"));
 
@@ -114,8 +114,8 @@ TEST(AccessTest, Path) {
   string user = "libcephfs_path_test." + stringify(rand());
   struct ceph_mount_info *admin;
   ASSERT_EQ(0, ceph_create(&admin, NULL));
-  ASSERT_EQ(0, ceph_conf_parse_env(admin, NULL));
   ASSERT_EQ(0, ceph_conf_read_file(admin, NULL));
+  ASSERT_EQ(0, ceph_conf_parse_env(admin, NULL));
   ASSERT_EQ(0, ceph_mount(admin, "/"));
   ASSERT_EQ(0, ceph_mkdir(admin, good.c_str(), 0755));
   ASSERT_EQ(0, ceph_mkdir(admin, string(good + "/p").c_str(), 0755));
@@ -138,8 +138,8 @@ TEST(AccessTest, Path) {
 
   struct ceph_mount_info *cmount;
   ASSERT_EQ(0, ceph_create(&cmount, user.c_str()));
-  ASSERT_EQ(0, ceph_conf_parse_env(cmount, NULL));
   ASSERT_EQ(0, ceph_conf_read_file(cmount, NULL));
+  ASSERT_EQ(0, ceph_conf_parse_env(cmount, NULL));
   ASSERT_EQ(0, ceph_conf_set(cmount, "key", key.c_str()));
   ASSERT_EQ(0, ceph_mount(cmount, "/"));
 
@@ -200,8 +200,8 @@ TEST(AccessTest, ReadOnly) {
   string user = "libcephfs_readonly_test." + stringify(rand());
   struct ceph_mount_info *admin;
   ASSERT_EQ(0, ceph_create(&admin, NULL));
-  ASSERT_EQ(0, ceph_conf_parse_env(admin, NULL));
   ASSERT_EQ(0, ceph_conf_read_file(admin, NULL));
+  ASSERT_EQ(0, ceph_conf_parse_env(admin, NULL));
   ASSERT_EQ(0, ceph_mount(admin, "/"));
   ASSERT_EQ(0, ceph_mkdir(admin, dir.c_str(), 0755));
   int fd = ceph_open(admin, string(dir + "/out").c_str(), O_CREAT|O_WRONLY, 0755);
@@ -217,8 +217,8 @@ TEST(AccessTest, ReadOnly) {
 
   struct ceph_mount_info *cmount;
   ASSERT_EQ(0, ceph_create(&cmount, user.c_str()));
-  ASSERT_EQ(0, ceph_conf_parse_env(cmount, NULL));
   ASSERT_EQ(0, ceph_conf_read_file(cmount, NULL));
+  ASSERT_EQ(0, ceph_conf_parse_env(cmount, NULL));
   ASSERT_EQ(0, ceph_conf_set(cmount, "key", key.c_str()));
   ASSERT_EQ(0, ceph_mount(cmount, "/"));
 
@@ -245,8 +245,8 @@ TEST(AccessTest, User) {
   // admin mount to set up test
   struct ceph_mount_info *admin;
   ASSERT_EQ(0, ceph_create(&admin, NULL));
-  ASSERT_EQ(0, ceph_conf_parse_env(admin, NULL));
   ASSERT_EQ(0, ceph_conf_read_file(admin, NULL));
+  ASSERT_EQ(0, ceph_conf_parse_env(admin, NULL));
   ASSERT_EQ(0, ceph_mount(admin, "/"));
   ASSERT_EQ(0, ceph_mkdir(admin, dir.c_str(), 0755));
 
@@ -260,8 +260,8 @@ TEST(AccessTest, User) {
 
   struct ceph_mount_info *cmount;
   ASSERT_EQ(0, ceph_create(&cmount, user.c_str()));
-  ASSERT_EQ(0, ceph_conf_parse_env(cmount, NULL));
   ASSERT_EQ(0, ceph_conf_read_file(cmount, NULL));
+  ASSERT_EQ(0, ceph_conf_parse_env(cmount, NULL));
   ASSERT_EQ(0, ceph_conf_set(cmount, "key", key.c_str()));
   ASSERT_EQ(-EACCES, ceph_mount(cmount, "/"));
   ASSERT_EQ(0, ceph_conf_set(cmount, "client_mount_uid", "123"));
