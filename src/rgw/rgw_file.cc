@@ -144,8 +144,8 @@ int rgw_mkdir(struct rgw_fs *rgw_fs,
 	      const char *name, mode_t mode, struct stat *st,
 	      struct rgw_file_handle *handle)
 {
-  string uri;
   int rc;
+  string uri;
 
   rc = librgw.get_uri(parent_handle->handle, uri);
   if (rc < 0 ) { /* invalid parent */
@@ -164,11 +164,9 @@ int rgw_mkdir(struct rgw_fs *rgw_fs,
   uri += "/";
   uri += name;
   RGWCreateBucketRequest req(cct, fs->get_user(), uri);
-  (void) librgw.get_fe()->execute_req(&req);
+  rc = librgw.get_fe()->execute_req(&req);
 
-  /* TODO: result */
-
-  return 0;
+  return rc;
 }
 
 /*
@@ -282,8 +280,8 @@ int rgw_readdir(struct rgw_fs *rgw_fs,
 		const struct rgw_file_handle *parent_handle, uint64_t *offset,
 		rgw_readdir_cb rcb, void *cb_arg, bool *eof)
 {
-  string uri;
   int rc;
+  string uri;
 
   rc = librgw.get_uri(parent_handle->handle, uri);
   if (rc < 0 ) { /* invalid parent */
@@ -301,23 +299,21 @@ int rgw_readdir(struct rgw_fs *rgw_fs,
   if (is_root(uri)) {
     /* for now, root always contains one user's bucket namespace */
     RGWListBucketsRequest req(cct, fs->get_user(), rcb, cb_arg, offset);
-    (void) librgw.get_fe()->execute_req(&req);
+    rc = librgw.get_fe()->execute_req(&req);
   } else {
     /*
      * bucket?
      */
     uri += "/";
-
     RGWListBucketRequest req(cct, fs->get_user(), uri, rcb, cb_arg, offset);
-    (void) librgw.get_fe()->execute_req(&req);
+    rc = librgw.get_fe()->execute_req(&req);
 
   }
 
-  /* TODO: result */
-
+  /* XXXX request MUST set this */
   *eof = true; // XXX move into RGGWListBucket(s)Request
 
-  return 0;
+  return rc;
 }
 
 /*

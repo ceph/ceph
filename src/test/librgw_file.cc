@@ -59,6 +59,7 @@ TEST(LibRGW, CREATE_BUCKET) {
   struct stat st;
   struct rgw_file_handle fh;
   int ret = rgw_mkdir(fs, &fs->root_fh, "sorry_dave", 755, &st, &fh);
+  ASSERT_EQ(ret, 0);
 }
 
 extern "C" {
