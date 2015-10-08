@@ -5005,8 +5005,6 @@ void Client::handle_command_reply(MCommandReply *m)
     *op.outs = m->rs;
   }
 
-  op.con->mark_down();
-
   if (op.on_finish) {
     op.on_finish->complete(m->r);
   }
