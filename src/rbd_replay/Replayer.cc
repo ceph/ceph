@@ -14,8 +14,11 @@
 
 #include "Replayer.hpp"
 #include "common/errno.h"
+#include "rbd_replay/ActionTypes.h"
+#include "rbd_replay/BufferReader.h"
 #include <boost/foreach.hpp>
 #include <boost/thread/thread.hpp>
+#include <boost/scope_exit.hpp>
 #include <fstream>
 #include "global/global_context.h"
 #include "rbd_replay_debug.hpp"
@@ -24,6 +27,29 @@
 using namespace std;
 using namespace rbd_replay;
 
+namespace {
+
+bool is_versioned_replay(BufferReader &buffer_reader) {
+  bufferlist::iterator *it;
+  int r = buffer_reader.fetch(&it);
+  if (r < 0) {
+    return false;
+  }
+
+  if (it->get_remaining() < action::BANNER.size()) {
+    return false;
+  }
+
+  std::string banner;
+  it->copy(action::BANNER.size(), banner);
+  bool versioned = (banner == action::BANNER);
+  if (!versioned) {
+    it->seek(0);
+  }
+  return versioned;
+}
+
+} // anonymous namespace
 
 Worker::Worker(Replayer &replayer)
   : m_replayer(replayer),
@@ -176,18 +202,45 @@ void Replayer::run(const std::string& replay_file) {
       m_rbd = new librbd::RBD();
       map<thread_id_t, Worker*> workers;
 
-      ifstream input(replay_file.c_str(), ios::in | ios::binary);
-      if (!input.is_open()) {
-	cerr << "Failed to open " << replay_file << std::endl;
-	exit(1);
+      int fd = open(replay_file.c_str(), O_RDONLY);
+      if (fd < 0) {
+        std::cerr << "Failed to open " << replay_file << ": "
+                  << cpp_strerror(errno) << std::endl;
+        exit(1);
       }
+      BOOST_SCOPE_EXIT( (fd) ) {
+        close(fd);
+      } BOOST_SCOPE_EXIT_END;
 
-      Deser deser(input);
+      BufferReader buffer_reader(fd);
+      bool versioned = is_versioned_replay(buffer_reader);
       while (true) {
-	Action::ptr action = Action::read_from(deser);
+        action::ActionEntry action_entry;
+        try {
+          bufferlist::iterator *it;
+          int r = buffer_reader.fetch(&it);
+          if (r < 0) {
+            std::cerr << "Failed to read from trace file: " << cpp_strerror(r)
+                      << std::endl;
+            exit(-r);
+          }
+
+          if (versioned) {
+            action_entry.decode(*it);
+          } else {
+            action_entry.decode_unversioned(*it);
+          }
+        } catch (const buffer::error &err) {
+          std::cerr << "Failed to decode trace action" << std::endl;
+          exit(1);
+        }
+
+	Action::ptr action = Action::construct(action_entry);
 	if (!action) {
-	  break;
+          // unknown / unsupported action
+	  continue;
 	}
+
 	if (action->is_start_thread()) {
 	  Worker *worker = new Worker(*this);
 	  workers[action->thread_id()] = worker;
@@ -261,9 +314,9 @@ bool Replayer::is_action_complete(action_id_t id) {
   return tracker.actions.count(id) > 0;
 }
 
-void Replayer::wait_for_actions(const vector<dependency_d> &deps) {
+void Replayer::wait_for_actions(const action::Dependencies &deps) {
   boost::posix_time::ptime release_time(boost::posix_time::neg_infin);
-  BOOST_FOREACH(const dependency_d &dep, deps) {
+  BOOST_FOREACH(const action::Dependency &dep, deps) {
     dout(DEPGRAPH_LEVEL) << "Waiting for " << dep.id << dendl;
     boost::system_time start_time(boost::get_system_time());
     action_tracker_d &tracker = tracker_for(dep.id);
