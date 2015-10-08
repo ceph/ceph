@@ -32,7 +32,7 @@ struct EntryPosition {
 
   void encode(bufferlist& bl) const;
   void decode(bufferlist::iterator& iter);
-  void dump(Formatter *f);
+  void dump(Formatter *f) const;
 
   static void generate_test_instances(std::list<EntryPosition *> &o);
 };
@@ -58,7 +58,7 @@ struct ObjectSetPosition {
 
   void encode(bufferlist& bl) const;
   void decode(bufferlist::iterator& iter);
-  void dump(Formatter *f);
+  void dump(Formatter *f) const;
 
   static void generate_test_instances(std::list<ObjectSetPosition *> &o);
 };
@@ -83,7 +83,7 @@ struct Client {
 
   void encode(bufferlist& bl) const;
   void decode(bufferlist::iterator& iter);
-  void dump(Formatter *f);
+  void dump(Formatter *f) const;
 
   static void generate_test_instances(std::list<Client *> &o);
 };
