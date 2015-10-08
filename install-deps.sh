@@ -28,7 +28,7 @@ if type apt-get > /dev/null 2>&1 ; then
 fi
 
 if type zypper > /dev/null 2>&1 ; then
-    $SUDO zypper --gpg-auto-import-keys --non-interactive install openSUSE-release lsb-release
+    $SUDO zypper --gpg-auto-import-keys --non-interactive install lsb-release
 fi
 
 case $(lsb_release -si) in
@@ -77,7 +77,7 @@ CentOS|Fedora|RedHatEnterpriseServer)
         ! grep -q -i error: $DIR/yum-builddep.out || exit 1
         ;;
 *SUSE*)
-        sed -e 's/@//g' < ceph.spec.in > $DIR/ceph.spec
+        sed -e 's/@//g ; s/bcond_without selinux/bcond_with selinux/' < ceph.spec.in > $DIR/ceph.spec
         $SUDO zypper --non-interactive install $(rpmspec -q --buildrequires $DIR/ceph.spec) || exit 1
         ;;
 *)

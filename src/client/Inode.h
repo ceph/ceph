@@ -234,6 +234,8 @@ struct Inode {
   // per-mds caps
   map<mds_rank_t, Cap*> caps;            // mds -> Cap
   Cap *auth_cap;
+  int64_t cap_dirtier_uid;
+  int64_t cap_dirtier_gid;
   unsigned dirty_caps, flushing_caps;
   std::map<ceph_tid_t, int> flushing_cap_tids;
   int shared_gen, cache_gen;
@@ -304,6 +306,7 @@ struct Inode {
       flags(0),
       qtree(NULL),
       dir_hashed(false), dir_replicated(false), auth_cap(NULL),
+      cap_dirtier_uid(-1), cap_dirtier_gid(-1),
       dirty_caps(0), flushing_caps(0), shared_gen(0), cache_gen(0),
       snap_caps(0), snap_cap_refs(0),
       cap_item(this), flushing_cap_item(this),

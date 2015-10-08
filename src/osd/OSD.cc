@@ -543,7 +543,7 @@ void OSDService::agent_entry()
     dout(10) << "high_count " << flush_mode_high_count << " agent_ops " << agent_ops << " flush_quota " << agent_flush_quota << dendl;
     agent_lock.Unlock();
     if (!pg->agent_work(max, agent_flush_quota)) {
-      dout(10) << __func__ << " " << *pg
+      dout(10) << __func__ << " " << pg->get_pgid()
 	<< " no agent_work, delay for " << g_conf->osd_agent_delay_time
 	<< " seconds" << dendl;
 
@@ -7864,11 +7864,11 @@ void OSD::check_replay_queue()
       PG *pg = _lookup_lock_pg_with_map_lock_held(pgid);
       pg_map_lock.unlock();
       dout(10) << "check_replay_queue " << *pg << dendl;
-      if (pg->is_active() &&
-          pg->is_replay() &&
+      if ((pg->is_active() || pg->is_activating()) &&
+	  pg->is_replay() &&
           pg->is_primary() &&
           pg->replay_until == p->second) {
-        pg->replay_queued_ops();
+	pg->replay_queued_ops();
       }
       pg->unlock();
     } else {
@@ -7932,7 +7932,7 @@ void OSD::do_recovery(PG *pg, ThreadPool::TPHandle &handle)
     dout(20) << "  active was " << recovery_oids[pg->info.pgid] << dendl;
 #endif
     
-    int started;
+    int started = 0;
     bool more = pg->start_recovery_ops(max, handle, &started);
     dout(10) << "do_recovery started " << started << "/" << max << " on " << *pg << dendl;
     // If no recovery op is started, don't bother to manipulate the RecoveryCtx
@@ -8086,26 +8086,6 @@ void OSD::handle_op(OpRequestRef& op, OSDMapRef& osdmap)
     return;
   }
 
-  // we don't need encoded payload anymore
-  m->clear_payload();
-
-  // object name too long?
-  unsigned max_name_len = MIN(g_conf->osd_max_object_name_len,
-			      store->get_max_object_name_length());
-  if (m->get_oid().name.size() > max_name_len) {
-    dout(4) << "handle_op '" << m->get_oid().name << "' is longer than "
-	    << max_name_len << " bytes" << dendl;
-    service.reply_op_error(op, -ENAMETOOLONG);
-    return;
-  }
-
-  // blacklisted?
-  if (osdmap->is_blacklisted(m->get_source_addr())) {
-    dout(4) << "handle_op " << m->get_source_addr() << " is blacklisted" << dendl;
-    service.reply_op_error(op, -EBLACKLISTED);
-    return;
-  }
-
   // set up a map send if the Op gets blocked for some reason
   send_map_on_destruct share_map(this, m, osdmap, m->get_map_epoch());
   Session *client_session =
@@ -8121,14 +8101,6 @@ void OSD::handle_op(OpRequestRef& op, OSDMapRef& osdmap)
     client_session->put();
   }
 
-  if (op->rmw_flags == 0) {
-    int r = init_op_flags(op);
-    if (r) {
-      service.reply_op_error(op, r);
-      return;
-    }
-  }
-
   if (cct->_conf->osd_debug_drop_op_probability > 0 &&
       !m->get_source().is_mds()) {
     if ((double)rand() / (double)RAND_MAX < cct->_conf->osd_debug_drop_op_probability) {
@@ -8140,29 +8112,6 @@ void OSD::handle_op(OpRequestRef& op, OSDMapRef& osdmap)
   // calc actual pgid
   pg_t _pgid = m->get_pg();
   int64_t pool = _pgid.pool();
-  if (op->may_write()) {
-    const pg_pool_t *pi = osdmap->get_pg_pool(pool);
-    if (!pi) {
-      return;
-    }
-    
-    // invalid?
-    if (m->get_snapid() != CEPH_NOSNAP) {
-      service.reply_op_error(op, -EINVAL);
-      return;
-    }
-
-    // too big?
-    if (cct->_conf->osd_max_write_size &&
-	m->get_data_len() > ((int64_t)g_conf->osd_max_write_size) << 20) {
-      // journal can't hold commit!
-      derr << "handle_op msg data len " << m->get_data_len()
-	   << " > osd_max_write_size " << (cct->_conf->osd_max_write_size << 20)
-	   << " on " << *m << dendl;
-      service.reply_op_error(op, -OSD_WRITETOOBIG);
-      return;
-    }
-  }
 
   if ((m->get_flags() & CEPH_OSD_FLAG_PGOP) == 0 &&
       osdmap->have_pg_pool(pool))

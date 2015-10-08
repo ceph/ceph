@@ -57,8 +57,13 @@ int RGWObjectExpirer::garbage_single_object(objexp_hint_entry& hint)
   RGWBucketInfo bucket_info;
 
   int ret = init_bucket_info(hint.bucket_name, hint.bucket_id, bucket_info);
-  if (ret < 0) {
-    ldout(store->ctx(), 1) << "ERROR: could not init bucket: " << cpp_strerror(-ret) << dendl;
+  if (-ENOENT == ret) {
+    ldout(store->ctx(), 15) << "NOTICE: cannot find bucket = " \
+        << hint.bucket_name << ". The object must be already removed" << dendl;
+    return -ERR_PRECONDITION_FAILED;
+  } else if (ret < 0) {
+    ldout(store->ctx(),  1) << "ERROR: could not init bucket = " \
+        << hint.bucket_name << "due to ret = " << ret << dendl;
     return ret;
   }
 

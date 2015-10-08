@@ -839,10 +839,8 @@ void AsyncConnection::process()
 
           // note last received message.
           in_seq.set(message->get_seq());
-          ldout(async_msgr->cct, 10) << __func__ << " got message " << message->get_seq()
-                               << " " << message << " " << *message << dendl;
-	  ldout(async_msgr->cct, 1) << " == rx == " << message->get_source() << " " << message << " " << *message
-				    << dendl;
+	  ldout(async_msgr->cct, 1) << " == rx == " << message->get_source() << " seq "
+                                    << message->get_seq() << " " << message << " " << *message << dendl;
 
           // if send_message always successfully send, it may have no
           // opportunity to send seq ack. 10 is a experience value.
@@ -1742,6 +1740,7 @@ int AsyncConnection::handle_connect_msg(ceph_msg_connect &connect, bufferlist &a
   if (existing->policy.lossy) {
     // disconnect from the Connection
     existing->center->dispatch_event_external(existing->reset_handler);
+    ldout(async_msgr->cct, 1) << __func__ << " replacing on lossy channel, failing existing" << dendl;
     existing->_stop();
   } else {
     assert(can_write == NOWRITE);
@@ -1783,9 +1782,11 @@ int AsyncConnection::handle_connect_msg(ceph_msg_connect &connect, bufferlist &a
     existing->write_lock.Unlock();
     if (existing->_reply_accept(CEPH_MSGR_TAG_RETRY_GLOBAL, connect, reply, authorizer_reply) < 0) {
       // handle error
+      ldout(async_msgr->cct, 0) << __func__ << " reply fault for existing connection." << dendl;
       existing->fault();
     }
 
+    ldout(async_msgr->cct, 1) << __func__ << " stop myself to swap existing" << dendl;
     _stop();
     existing->lock.Unlock();
     return 0;
@@ -1925,9 +1926,7 @@ void AsyncConnection::accept(int incoming)
 
 int AsyncConnection::send_message(Message *m)
 {
-  ldout(async_msgr->cct, 10) << __func__ << " m=" << m << dendl;
-  ldout(async_msgr->cct, 1) << " == tx == " << m << " " << *m
-			    << dendl;
+  ldout(async_msgr->cct, 1) << " == tx == " << m << " " << *m << dendl;
 
   // optimistic think it's ok to encode(actually may broken now)
   if (!m->get_priority())
@@ -2071,7 +2070,7 @@ void AsyncConnection::fault()
   }
 
   if (policy.lossy && !(state >= STATE_CONNECTING && state < STATE_CONNECTING_READY)) {
-    ldout(async_msgr->cct, 10) << __func__ << " on lossy channel, failing" << dendl;
+    ldout(async_msgr->cct, 1) << __func__ << " on lossy channel, failing" << dendl;
     center->dispatch_event_external(reset_handler);
     _stop();
     return ;
@@ -2168,7 +2167,7 @@ void AsyncConnection::_stop()
   if (state == STATE_CLOSED)
     return ;
 
-  ldout(async_msgr->cct, 10) << __func__ << dendl;
+  ldout(async_msgr->cct, 1) << __func__ << dendl;
   Mutex::Locker l(write_lock);
   if (sd >= 0)
     center->delete_file_event(sd, EVENT_READABLE|EVENT_WRITABLE);
@@ -2334,7 +2333,7 @@ void AsyncConnection::send_keepalive()
 
 void AsyncConnection::mark_down()
 {
-  ldout(async_msgr->cct, 10) << __func__ << " started." << dendl;
+  ldout(async_msgr->cct, 1) << __func__ << " started." << dendl;
   Mutex::Locker l(lock);
   _stop();
 }
