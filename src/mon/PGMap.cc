@@ -501,7 +501,9 @@ void PGMap::stat_pg_sub(const pg_t &pgid, const pg_stat_t &s, bool nocreating,
   pg_sum.sub(s);
 
   num_pg--;
-  if (--num_pg_by_state[s.state] == 0)
+  int end = --num_pg_by_state[s.state];
+  assert(end >= 0);
+  if (end == 0)
     num_pg_by_state.erase(s.state);
 
   if (!nocreating) {
