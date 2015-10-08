@@ -1767,6 +1767,7 @@ public:
       yield {
         int r;
         if (op == CLS_RGW_OP_ADD) {
+          ldout(store->ctx(), 5) << "bucket sync: sync obj: " << source_zone << "/" << bucket_info->bucket << "/" << key << "[" << versioned_epoch << "]" << dendl;
           r = call(new RGWFetchRemoteObjCR(async_rados, store, source_zone, *bucket_info,
                                            key, versioned_epoch,
                                            true));
