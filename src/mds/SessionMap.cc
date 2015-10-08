@@ -840,7 +840,9 @@ bool Session::check_access(CInode *in, unsigned mask,
 			   int new_uid, int new_gid)
 {
   string path;
-  CInode *diri = in->get_parent_inode();
+  CInode *diri = NULL;
+  if (!in->is_base())
+    diri = in->get_projected_parent_dn()->get_dir()->get_inode();
   if (diri && diri->is_stray()){
     path = in->get_projected_inode()->stray_prior_path;
     dout(20) << __func__ << " stray_prior_path " << path << dendl;
