@@ -3599,7 +3599,7 @@ void object_copy_data_t::encode(bufferlist& bl, uint64_t features) const
     return;
   }
 
-  ENCODE_START(6, 5, bl);
+  ENCODE_START(7, 5, bl);
   ::encode(size, bl);
   ::encode(mtime, bl);
   ::encode(attrs, bl);
@@ -3613,12 +3613,14 @@ void object_copy_data_t::encode(bufferlist& bl, uint64_t features) const
   ::encode(data_digest, bl);
   ::encode(omap_digest, bl);
   ::encode(reqids, bl);
+  ::encode(truncate_seq, bl);
+  ::encode(truncate_size, bl);
   ENCODE_FINISH(bl);
 }
 
 void object_copy_data_t::decode(bufferlist::iterator& bl)
 {
-  DECODE_START(6, bl);
+  DECODE_START(7, bl);
   if (struct_v < 5) {
     // old
     ::decode(size, bl);
@@ -3675,6 +3677,10 @@ void object_copy_data_t::decode(bufferlist::iterator& bl)
     }
     if (struct_v >= 6) {
       ::decode(reqids, bl);
+    }
+    if (struct_v >= 7) {
+      ::decode(truncate_seq, bl);
+      ::decode(truncate_size, bl);
     }
   }
   DECODE_FINISH(bl);

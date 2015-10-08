@@ -2606,9 +2606,15 @@ struct object_copy_data_t {
   ///< recent reqids on this object
   vector<pair<osd_reqid_t, version_t> > reqids;
 
+  uint64_t truncate_seq;
+  uint64_t truncate_size;
+
 public:
-  object_copy_data_t() : size((uint64_t)-1), data_digest(-1),
-			 omap_digest(-1), flags(0) {}
+  object_copy_data_t() :
+    size((uint64_t)-1), data_digest(-1),
+    omap_digest(-1), flags(0),
+    truncate_seq(0),
+    truncate_size(0) {}
 
   static void generate_test_instances(list<object_copy_data_t*>& o);
   void encode_classic(bufferlist& bl) const;
