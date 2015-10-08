@@ -120,13 +120,14 @@ int RGWListBucket_ObjStore_SWIFT::get_params()
     path = prefix;
     if (path.size() && path[path.size() - 1] != '/')
       path.append("/");
-  }
 
-  int len = prefix.size();
-  int delim_size = delimiter.size();
-  if (len >= delim_size) {
-    if (prefix.substr(len - delim_size).compare(delimiter) != 0)
-      prefix.append(delimiter);
+    int len = prefix.size();
+    int delim_size = delimiter.size();
+
+    if (len >= delim_size) {
+      if (prefix.substr(len - delim_size).compare(delimiter) != 0)
+        prefix.append(delimiter);
+    }
   }
 
   return 0;
