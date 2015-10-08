@@ -5224,6 +5224,7 @@ int RGWRados::fetch_remote_obj(RGWObjectCtx& obj_ctx,
   RGWPutObjProcessor_Atomic processor(obj_ctx,
                                       dest_bucket_info, dest_obj.bucket, dest_obj.get_orig_obj(),
                                       cct->_conf->rgw_obj_stripe_size, tag, dest_bucket_info.versioning_enabled());
+  processor.set_version_id(dest_obj.get_instance());
   int ret = processor.prepare(this, NULL);
   if (ret < 0) {
     return ret;
