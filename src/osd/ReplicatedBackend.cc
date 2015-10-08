@@ -473,10 +473,11 @@ public:
   void set_alloc_hint(
     const hobject_t &hoid,
     uint64_t expected_object_size,
-    uint64_t expected_write_size
+    uint64_t expected_write_size,
+    uint32_t flags
     ) {
     t.set_alloc_hint(get_coll(hoid), ghobject_t(hoid), expected_object_size,
-                      expected_write_size);
+		     expected_write_size, flags);
   }
 
   using PGBackend::PGTransaction::append;
