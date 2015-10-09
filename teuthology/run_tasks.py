@@ -96,7 +96,7 @@ def run_tasks(tasks, ctx):
                 tags=tags,
                 extra=extra,
             ))
-            event_url = "{server}/search?q={id}".format(
+            event_url = "{server}/?q={id}".format(
                 server=teuth_config.sentry_server.strip('/'), id=exc_id)
             log.exception(" Sentry event: %s" % event_url)
             ctx.summary['sentry_event'] = event_url
