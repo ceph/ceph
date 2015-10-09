@@ -1192,9 +1192,9 @@ def get_free_partition_index(dev):
         'BYT;' not in lines):
         raise Error('parted output expected to contain one of ' +
                     'CHH; CYL; or BYT; : ' + lines)
-    if dev not in lines:
+    if os.path.realpath(dev) not in lines:
         raise Error('parted output expected to contain ' + dev + ': ' + lines)
-    _, partitions = lines.split(dev)
+    _, partitions = lines.split(os.path.realpath(dev))
     partition_numbers = extract_parted_partition_numbers(partitions)
     if partition_numbers:
         return max(partition_numbers) + 1
