@@ -14,6 +14,7 @@ class RGWRealm;
 
 enum class RGWRealmNotify {
   Reload,
+  ZonesNeedPeriod,
 };
 WRITE_RAW_ENCODER(RGWRealmNotify);
 
