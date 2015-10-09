@@ -97,7 +97,7 @@ int CephxServiceHandler::handle_request(bufferlist::iterator& indata, bufferlist
       bool should_enc_ticket = false;
 
       EntityAuth eauth;
-      if (key_server->get_auth(entity_name, eauth) < 0) {
+      if (! key_server->get_auth(entity_name, eauth)) {
 	ret = -EPERM;
 	break;
       }
