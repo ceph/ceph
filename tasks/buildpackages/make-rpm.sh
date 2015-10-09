@@ -233,7 +233,7 @@ function build_rpm_repo() {
 
     ref_dir=${buildarea}/../$codename/$base/ref
     mkdir -p $ref_dir
-    ( cd ${ceph_dir} ; git for-each-ref refs/tags/** refs/heads/** ) | grep $sha1 | while read sha1 type ref ; do
+    ( cd ${ceph_dir} ; git for-each-ref refs/tags/** refs/remotes/origin/** ) | grep $sha1 | while read sha1 type ref ; do
         base_ref=$(basename $ref)
         ( cd $ref_dir ; ln -sf ../sha1/$sha1 $base_ref )
     done
