@@ -1591,14 +1591,6 @@ bool PGMonitor::preprocess_command(MonOpRequestRef op)
     pg_map.encode(rdata);
     ss << "got pgmap version " << pg_map.version;
     r = 0;
-  } else if (prefix == "pg map_pg_creates") {
-    map_pg_creates();
-    ss << "mapped pg creates ";
-    r = 0;
-  } else if (prefix == "pg send_pg_creates") {
-    send_pg_creates();
-    ss << "sent pg creates ";
-    r = 0;
   } else if (prefix == "pg dump") {
     string val;
     vector<string> dumpcontents;
