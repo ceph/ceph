@@ -11,9 +11,3 @@ overrides:
   s3tests:
     idle_timeout: 1200
 archive-on-error: true
-tasks:
-    - buildpackages:
-        machine:
-          disk: 40 # GB
-          ram: 15000 # MB
-          cpus: 16
