@@ -1183,7 +1183,7 @@ ln -sf %{_libdir}/librbd.so.1 /usr/lib64/qemu/librbd.so.1
 %defattr(-,root,root,-)
 %attr(0600,root,root) %{_datadir}/selinux/packages/ceph.pp
 %{_datadir}/selinux/devel/include/contrib/ceph.if
-%{_mandir}/man8/ceph_selinux.8.*
+%{_mandir}/man8/ceph_selinux.8*
 
 %post selinux
 # Install the policy
