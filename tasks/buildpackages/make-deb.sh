@@ -51,7 +51,6 @@ vers=$(git describe --match "v*" | sed s/^v//)
 # change each time it is modified.
 #
 dvers="$vers-1"
-sha1=$(git rev-parse HEAD)
 : ${NPROC:=$(nproc)}
 ceph_dir=$(pwd)
 
