@@ -1937,12 +1937,14 @@ void ReplicatedPG::do_op(OpRequestRef& op)
   execute_ctx(ctx);
 }
 
-bool ReplicatedPG::maybe_handle_cache(OpRequestRef op,
-				      bool write_ordered,
-				      ObjectContextRef obc,
-                                      int r, const hobject_t& missing_oid,
-				      bool must_promote,
-				      bool in_hit_set)
+ReplicatedPG::cache_result_t ReplicatedPG::maybe_handle_cache_detail(
+  OpRequestRef op,
+  bool write_ordered,
+  ObjectContextRef obc,
+  int r, const hobject_t& missing_oid,
+  bool must_promote,
+  bool in_hit_set,
+  ObjectContextRef *promote_obc)
 {
   if (op &&
       op->get_req() &&
@@ -1950,11 +1952,11 @@ bool ReplicatedPG::maybe_handle_cache(OpRequestRef op,
       (static_cast<MOSDOp *>(op->get_req())->get_flags() &
        CEPH_OSD_FLAG_IGNORE_CACHE)) {
     dout(20) << __func__ << ": ignoring cache due to flag" << dendl;
-    return false;
+    return cache_result_t::NOOP;
   }
   // return quickly if caching is not enabled
   if (pool.info.cache_mode == pg_pool_t::CACHEMODE_NONE)
-    return false;
+    return cache_result_t::NOOP;
 
   must_promote = must_promote || op->need_promote();
 
@@ -1976,24 +1978,24 @@ bool ReplicatedPG::maybe_handle_cache(OpRequestRef op,
   if (obc.get() && obc->is_blocked() && write_ordered) {
     // we're already doing something with this object
     dout(20) << __func__ << " blocked on " << obc->obs.oi.soid << dendl;
-    return false;
+    return cache_result_t::NOOP;
   }
 
   if (r == -ENOENT && missing_oid == hobject_t()) {
     // we know this object is logically absent (e.g., an undefined clone)
-    return false;
+    return cache_result_t::NOOP;
   }
 
   if (obc.get() && obc->obs.exists) {
     osd->logger->inc(l_osd_op_cache_hit);
-    return false;
+    return cache_result_t::NOOP;
   }
   
   MOSDOp *m = static_cast<MOSDOp*>(op->get_req());
   const object_locator_t& oloc = m->get_object_locator();
 
   if (op->need_skip_handle_cache()) {
-    return false;
+    return cache_result_t::NOOP;
   }
 
   // older versions do not proxy the feature bits.
@@ -2012,35 +2014,39 @@ bool ReplicatedPG::maybe_handle_cache(OpRequestRef op,
 	if (can_proxy_read) {
 	  dout(20) << __func__ << " cache pool full, proxying read" << dendl;
 	  do_proxy_read(op);
+	  return cache_result_t::HANDLED_PROXY;
 	} else {
 	  dout(20) << __func__ << " cache pool full, redirect read" << dendl;
 	  do_cache_redirect(op);
+	  return cache_result_t::HANDLED_REDIRECT;
 	}
-	return true;
+	assert(0 == "unreachable");
       }
       dout(20) << __func__ << " cache pool full, waiting" << dendl;
-      waiting_for_cache_not_full.push_back(op);
-      return true;
+      block_write_on_full_cache(missing_oid, op);
+      return cache_result_t::BLOCKED_FULL;
     }
 
     if (!hit_set) {
-      promote_object(obc, missing_oid, oloc, op);
-      return true;
+      promote_object(obc, missing_oid, oloc, op, promote_obc);
+      return cache_result_t::BLOCKED_PROMOTE;
     } else if (op->may_write() || op->may_cache()) {
       if (can_proxy_write && !must_promote) {
         do_proxy_write(op, missing_oid);
       } else {
 	// promote if can't proxy the write
-	promote_object(obc, missing_oid, oloc, op);
-	return true;
+	promote_object(obc, missing_oid, oloc, op, promote_obc);
+	return cache_result_t::BLOCKED_PROMOTE;
       }
 
       // Promote too?
       if (!op->need_skip_promote()) {
         maybe_promote(obc, missing_oid, oloc, in_hit_set,
 	              pool.info.min_write_recency_for_promote,
-		      OpRequestRef());
+		      OpRequestRef(),
+		      promote_obc);
       }
+      return cache_result_t::HANDLED_PROXY;
     } else {
       bool did_proxy_read = false;
       if (can_proxy_read && !must_promote) {
@@ -2055,7 +2061,9 @@ bool ReplicatedPG::maybe_handle_cache(OpRequestRef op,
 	if (!did_proxy_read) {
 	  wait_for_blocked_object(obc->obs.oi.soid, op);
 	}
-        return true;
+	if (promote_obc)
+	  *promote_obc = obc;
+        return cache_result_t::BLOCKED_PROMOTE;
       }
 
       // Promote too?
@@ -2063,32 +2071,39 @@ bool ReplicatedPG::maybe_handle_cache(OpRequestRef op,
       if (!op->need_skip_promote()) {
         promoted = maybe_promote(obc, missing_oid, oloc, in_hit_set,
                                  pool.info.min_read_recency_for_promote,
-                                 promote_op);
+                                 promote_op, promote_obc);
       }
       if (!promoted && !did_proxy_read) {
 	// redirect the op if it's not proxied and not promoting
 	do_cache_redirect(op);
+	return cache_result_t::HANDLED_REDIRECT;
+      } else if (did_proxy_read) {
+	return cache_result_t::HANDLED_PROXY;
+      } else {
+	assert(promoted);
+	return cache_result_t::BLOCKED_PROMOTE;
       }
     }
-    return true;
+    assert(0 == "unreachable");
+    return cache_result_t::NOOP;
 
   case pg_pool_t::CACHEMODE_FORWARD:
     do_cache_redirect(op);
-    return true;
+    return cache_result_t::HANDLED_REDIRECT;
 
   case pg_pool_t::CACHEMODE_READONLY:
     // TODO: clean this case up
     if (!obc.get() && r == -ENOENT) {
       // we don't have the object and op's a read
-      promote_object(obc, missing_oid, oloc, op);
-      return true;
+      promote_object(obc, missing_oid, oloc, op, promote_obc);
+      return cache_result_t::BLOCKED_PROMOTE;
     }
     if (!r) { // it must be a write
       do_cache_redirect(op);
-      return true;
+      return cache_result_t::HANDLED_REDIRECT;
     }
     // crap, there was a failure of some kind
-    return false;
+    return cache_result_t::NOOP;
 
   case pg_pool_t::CACHEMODE_READFORWARD:
     // Do writeback to the cache tier for writes
@@ -2096,16 +2111,16 @@ bool ReplicatedPG::maybe_handle_cache(OpRequestRef op,
       if (agent_state &&
 	  agent_state->evict_mode == TierAgentState::EVICT_MODE_FULL) {
 	dout(20) << __func__ << " cache pool full, waiting" << dendl;
-	waiting_for_cache_not_full.push_back(op);
-	return true;
+	block_write_on_full_cache(missing_oid, op);
+	return cache_result_t::BLOCKED_FULL;
       }
-      promote_object(obc, missing_oid, oloc, op);
-      return true;
+      promote_object(obc, missing_oid, oloc, op, promote_obc);
+      return cache_result_t::BLOCKED_PROMOTE;
     }
 
     // If it is a read, we can read, we need to forward it
     do_cache_redirect(op);
-    return true;
+    return cache_result_t::HANDLED_REDIRECT;
 
   case pg_pool_t::CACHEMODE_READPROXY:
     // Do writeback to the cache tier for writes
@@ -2113,21 +2128,21 @@ bool ReplicatedPG::maybe_handle_cache(OpRequestRef op,
       if (agent_state &&
 	  agent_state->evict_mode == TierAgentState::EVICT_MODE_FULL) {
 	dout(20) << __func__ << " cache pool full, waiting" << dendl;
-	waiting_for_cache_not_full.push_back(op);
-	return true;
+	block_write_on_full_cache(missing_oid, op);
+	return cache_result_t::BLOCKED_FULL;
       }
-      promote_object(obc, missing_oid, oloc, op);
-      return true;
+      promote_object(obc, missing_oid, oloc, op, promote_obc);
+      return cache_result_t::BLOCKED_PROMOTE;
     }
 
     // If it is a read, we can read, we need to proxy it
     do_proxy_read(op);
-    return true;
+    return cache_result_t::HANDLED_PROXY;
 
   default:
     assert(0 == "unrecognized cache_mode");
   }
-  return false;
+  return cache_result_t::NOOP;
 }
 
 bool ReplicatedPG::maybe_promote(ObjectContextRef obc,
@@ -2135,19 +2150,20 @@ bool ReplicatedPG::maybe_promote(ObjectContextRef obc,
 				 const object_locator_t& oloc,
 				 bool in_hit_set,
 				 uint32_t recency,
-				 OpRequestRef promote_op)
+				 OpRequestRef promote_op,
+				 ObjectContextRef *promote_obc)
 {
   dout(20) << __func__ << " missing_oid " << missing_oid
 	   << "  in_hit_set " << in_hit_set << dendl;
 
   switch (recency) {
   case 0:
-    promote_object(obc, missing_oid, oloc, promote_op);
+    promote_object(obc, missing_oid, oloc, promote_op, promote_obc);
     break;
   case 1:
     // Check if in the current hit set
     if (in_hit_set) {
-      promote_object(obc, missing_oid, oloc, promote_op);
+      promote_object(obc, missing_oid, oloc, promote_op, promote_obc);
     } else {
       // not promoting
       return false;
@@ -2570,7 +2586,8 @@ public:
 void ReplicatedPG::promote_object(ObjectContextRef obc,
 				  const hobject_t& missing_oid,
 				  const object_locator_t& oloc,
-				  OpRequestRef op)
+				  OpRequestRef op,
+				  ObjectContextRef *promote_obc)
 {
   hobject_t hoid = obc ? obc->obs.oi.soid : missing_oid;
   assert(hoid != hobject_t());
@@ -2591,6 +2608,8 @@ void ReplicatedPG::promote_object(ObjectContextRef obc,
     assert(missing_oid != hobject_t());
     obc = get_object_context(missing_oid, true);
   }
+  if (promote_obc)
+    *promote_obc = obc;
 
   /*
    * Before promote complete, if there are  proxy-reads for the object,
