@@ -2000,7 +2000,7 @@ returned %d, but should return zero on success." % (self.name, ret))
         :para start_after: list keys starting after start_after
         :type start_after: str
         :para filter_prefix: list only keys beginning with filter_prefix
-        :type filter_prefix: int
+        :type filter_prefix: str
         :para max_return: list no more than max_return key/value pairs
         :type max_return: int
         :returns: an iterator over the the requested omap values, return value from this action
