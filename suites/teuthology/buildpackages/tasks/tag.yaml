@@ -1,0 +1,11 @@
+roles:
+    - [mon.0, client.0]
+tasks:
+    - install:
+        # tag has precedence over branch and sha1
+        tag: v0.94.1
+        branch: firefly
+        sha1: e5b6eea91cc37434f78a987d2dd1d3edd4a23f3f # dumpling
+    - exec:
+        client.0:
+          - ceph --version | grep 'version 0.94.1'

@@ -26,4 +26,6 @@ function get_ceph() {
     test -d ceph || git clone ${git_ceph_url}
     cd ceph
     git checkout ${sha1}
+    # see http://tracker.ceph.com/issues/13426
+    perl -pi -e 's|git://ceph.com/git/ceph-object-corpus.git|https://github.com/ceph/ceph-object-corpus.git|' .gitmodules
 }

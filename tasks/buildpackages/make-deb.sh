@@ -51,7 +51,6 @@ vers=$(git describe --match "v*" | sed s/^v//)
 # change each time it is modified.
 #
 dvers="$vers-1"
-sha1=$(git rev-parse HEAD)
 : ${NPROC:=$(nproc)}
 ceph_dir=$(pwd)
 
@@ -137,7 +136,7 @@ EOF
     echo $sha1 > $sha1_dir/sha1
     ref_dir=$codename/$base/ref
     mkdir -p $ref_dir
-    ( cd ${ceph_dir} ; git for-each-ref refs/tags/** refs/heads/** ) | grep $sha1 | while read sha1 type ref ; do
+    ( cd ${ceph_dir} ; git for-each-ref refs/tags/** refs/remotes/origin/** ) | grep $sha1 | while read sha1 type ref ; do
         base_ref=$(basename $ref)
         ( cd $ref_dir ; ln -sf ../sha1/$sha1 $base_ref )
     done
