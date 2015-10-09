@@ -76,6 +76,7 @@ public:
   CephContext *get_ctx() {
     return cct;
   }
+  size_t get_endpoint_count() const { return endpoints.size(); }
 
   /* sync request */
   int forward(const rgw_user& uid, req_info& info, obj_version *objv, size_t max_response, bufferlist *inbl, bufferlist *outbl);
