@@ -112,14 +112,14 @@ function TEST_crush_rule_create_erasure() {
     ./ceph osd crush rule rm $ruleset || return 1
     ! ./ceph osd crush rule ls | grep $ruleset || return 1
     #
-    # create a bugous ruleset and verify it cannot be used
-    # to create a pool.
+    # verify that if the crushmap contains a bugous ruleset,
+    # it will prevent the creation of a pool.
     #
-    ceph osd erasure-code-profile set myprofile plugin=lrc mapping=__DD__DD layers='[[ "_cDD_cDD", "" ],[ "cDDD____", "" ],[ "____cDDD", "" ],]' ruleset-steps='[ [ "choose", "datacenter", 3 ], [ "chooseleaf", "osd", 0] ]'
+    local crushtool_path_old=`ceph-conf --show-config-value crushtool`
+    ceph tell mon.* injectargs --crushtool "false"
+
     expect_failure $dir "Error EINVAL" \
-        ./ceph osd pool create mypool 1 1 erasure myprofile || return 1
-    ./ceph osd crush rule rm mypool || return 1
-    ./ceph osd erasure-code-profile rm myprofile || return 1
+        ./ceph osd pool create mypool 1 1 erasure || return 1
 }
 
 function check_ruleset_id_match_rule_id() {
