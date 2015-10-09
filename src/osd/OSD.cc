@@ -8772,13 +8772,19 @@ int OSD::init_op_flags(OpRequestRef& op)
 	}
 	is_read = flags & CLS_METHOD_RD;
 	is_write = flags & CLS_METHOD_WR;
+        bool is_promote = flags & CLS_METHOD_PROMOTE;
 
-	dout(10) << "class " << cname << " method " << mname
-		<< " flags=" << (is_read ? "r" : "") << (is_write ? "w" : "") << dendl;
+	dout(10) << "class " << cname << " method " << mname << " "
+		 << "flags=" << (is_read ? "r" : "")
+                             << (is_write ? "w" : "")
+                             << (is_promote ? "p" : "")
+                 << dendl;
 	if (is_read)
 	  op->set_class_read();
 	if (is_write)
 	  op->set_class_write();
+        if (is_promote)
+          op->set_promote();
 	break;
       }
 
