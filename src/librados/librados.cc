@@ -419,9 +419,16 @@ void librados::ObjectWriteOperation::omap_rm_keys(
 }
 
 void librados::ObjectWriteOperation::copy_from(const std::string& src,
-					       const IoCtx& src_ioctx,
-					       uint64_t src_version,
-					       uint32_t src_fadvise_flags)
+                                               const IoCtx& src_ioctx,
+                                               uint64_t src_version)
+{
+  copy_from2(src, src_ioctx, src_version, 0);
+}
+
+void librados::ObjectWriteOperation::copy_from2(const std::string& src,
+					        const IoCtx& src_ioctx,
+					        uint64_t src_version,
+					        uint32_t src_fadvise_flags)
 {
   ::ObjectOperation *o = (::ObjectOperation *)impl;
   o->copy_from(object_t(src), src_ioctx.io_ctx_impl->snap_seq,
@@ -1554,6 +1561,12 @@ int librados::IoCtx::list_lockers(const std::string &oid, const std::string &nam
   return tmp_lockers.size();
 }
 
+librados::NObjectIterator librados::IoCtx::nobjects_begin()
+{
+  bufferlist bl;
+  return nobjects_begin(bl);
+}
+
 librados::NObjectIterator librados::IoCtx::nobjects_begin(
     const bufferlist &filter)
 {
@@ -1565,6 +1578,12 @@ librados::NObjectIterator librados::IoCtx::nobjects_begin(
   }
   iter.get_next();
   return iter;
+}
+
+librados::NObjectIterator librados::IoCtx::nobjects_begin(uint32_t pos)
+{
+  bufferlist bl;
+  return nobjects_begin(pos, bl);
 }
 
 librados::NObjectIterator librados::IoCtx::nobjects_begin(
