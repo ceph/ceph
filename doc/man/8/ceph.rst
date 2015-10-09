@@ -47,7 +47,7 @@ Synopsis
 
 | **ceph** **osd** **tier** [ *add* \| *add-cache* \| *cache-mode* \| *remove* \| *remove-overlay* \| *set-overlay* ] ...
 
-| **ceph** **pg** [ *debug* \| *deep-scrub* \| *dump* \| *dump_json* \| *dump_pools_json* \| *dump_stuck* \| *force_create_pg* \| *getmap* \| *ls* \| *ls-by-osd* \| *ls-by-pool* \| *ls-by-primary* \| *map* \| *repair* \| *scrub* \| *send_pg_creates* \| *set_full_ratio* \| *set_nearfull_ratio* \| *stat* ] ...
+| **ceph** **pg** [ *debug* \| *deep-scrub* \| *dump* \| *dump_json* \| *dump_pools_json* \| *dump_stuck* \| *force_create_pg* \| *getmap* \| *ls* \| *ls-by-osd* \| *ls-by-pool* \| *ls-by-primary* \| *map* \| *repair* \| *scrub* \| *set_full_ratio* \| *set_nearfull_ratio* \| *stat* ] ...
 
 | **ceph** **quorum** [ *enter* \| *exit* ]
 
@@ -1229,12 +1229,6 @@ Subcommand ``scrub`` starts scrub on <pgid>.
 Usage::
 
 	ceph pg scrub <pgid>
-
-Subcommand ``send_pg_creates`` triggers pg creates to be issued.
-
-Usage::
-
-	ceph pg send_pg_creates
 
 Subcommand ``set_full_ratio`` sets ratio at which pgs are considered full.
 
