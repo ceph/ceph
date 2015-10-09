@@ -157,6 +157,7 @@ req_state::req_state(CephContext *_cct, class RGWEnv *e) : cct(_cct), cio(NULL),
   bucket_acl = NULL;
   object_acl = NULL;
   expect_cont = false;
+  aws4_auth_complete = false;
 
   header_ended = false;
   obj_size = 0;
