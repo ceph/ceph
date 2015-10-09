@@ -4,6 +4,11 @@
 #include "ObjectStore.h"
 #include "common/Formatter.h"
 
+#pragma GCC diagnostic ignored "-Wpragmas"
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wdeprecated-declarations"
+
+#if 0
 void ObjectStore::Transaction::_build_actions_from_tbl()
 {
   //used only for tbl encode
@@ -894,6 +899,7 @@ void ObjectStore::Transaction::dump(ceph::Formatter *f)
   }
   f->close_section();
 }
+#endif
 
 void ObjectStore::Transaction::generate_test_instances(list<ObjectStore::Transaction*>& o)
 {

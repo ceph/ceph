@@ -68,8 +68,8 @@
 #include "common/sync_filesystem.h"
 #include "common/fd.h"
 #include "HashIndex.h"
-#include "DBObjectMap.h"
-#include "KeyValueDB.h"
+#include "os/keyvaluestore/DBObjectMap.h"
+#include "os/keyvaluestore/KeyValueDB.h"
 
 #include "common/ceph_crypto.h"
 using ceph::crypto::SHA1;

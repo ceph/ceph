@@ -28,7 +28,7 @@ using namespace std;
 
 #include "include/assert.h"
 
-#include "ObjectStore.h"
+#include "os/ObjectStore.h"
 
 #include "common/WorkQueue.h"
 #include "common/Finisher.h"
@@ -38,6 +38,7 @@ using namespace std;
 #include "GenericObjectMap.h"
 #include "KeyValueDB.h"
 #include "common/random_cache.hpp"
+#include "global/global_context.h"
 
 #include "include/uuid.h"
 

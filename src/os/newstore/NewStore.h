@@ -27,7 +27,7 @@
 #include "common/WorkQueue.h"
 #include "os/ObjectStore.h"
 #include "os/fs/FS.h"
-#include "os/KeyValueDB.h"
+#include "os/keyvaluestore/KeyValueDB.h"
 
 #include "newstore_types.h"
 

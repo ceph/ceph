@@ -6,10 +6,10 @@
 
 #include "include/buffer.h"
 #include "test/ObjectMap/KeyValueDBMemory.h"
-#include "os/KeyValueDB.h"
-#include "os/DBObjectMap.h"
-#include "os/HashIndex.h"
-#include "os/LevelDBStore.h"
+#include "os/keyvaluestore/KeyValueDB.h"
+#include "os/keyvaluestore/DBObjectMap.h"
+#include "os/filestore/HashIndex.h"
+#include "os/keyvaluestore/LevelDBStore.h"
 #include <sys/types.h>
 #include "global/global_init.h"
 #include "common/ceph_argparse.h"

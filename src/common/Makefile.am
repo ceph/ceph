@@ -73,7 +73,8 @@ libcommon_internal_la_SOURCES = \
 	common/module.c \
 	common/Readahead.cc \
 	common/Cycles.cc \
-	common/ContextCompletion.cc
+	common/ContextCompletion.cc \
+	common/PluginRegistry.cc
 
 libcommon_internal_la_SOURCES += \
 	common/blkdev.cc
@@ -136,12 +137,16 @@ LIBCOMMON_DEPS += \
 	$(BOOST_RANDOM_LIBS)
 
 if LINUX
-LIBCOMMON_DEPS += -lrt -lblkid
+LIBCOMMON_DEPS += -lrt -lblkid -lnss3 -lsmime3 -luuid -lcrypto++
 endif # LINUX
+#LIBCOMMON_DEPS += -lrt -luuid -lcrypto++ -lssl -llttng-ust -lnss3
 
 libcommon_la_SOURCES = common/buffer.cc
 libcommon_la_LIBADD = $(LIBCOMMON_DEPS)
-noinst_LTLIBRARIES += libcommon.la
+
+libcommon_la_LDFLAGS = ${AM_LDFLAGS} -version-info 1:0:0
+
+lib_LTLIBRARIES += libcommon.la
 
 noinst_HEADERS += \
 	common/BackTrace.h \
@@ -235,7 +240,8 @@ noinst_HEADERS += \
 	common/ContextCompletion.h \
 	common/bit_vector.hpp \
 	common/SubProcess.h \
-	common/valgrind.h
+	common/valgrind.h \
+	common/PluginRegistry.h
 
 if ENABLE_XIO
 noinst_HEADERS += \

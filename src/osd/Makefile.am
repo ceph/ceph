@@ -30,7 +30,7 @@ libosd_la_CXXFLAGS = ${AM_CXXFLAGS}
 if WITH_KINETIC
 libosd_la_CXXFLAGS += -std=gnu++11
 endif
-libosd_la_LIBADD = $(LIBOSDC) $(LIBOS) $(LIBOSD_TYPES) $(LIBOS_TYPES)
+libosd_la_LIBADD = $(LIBOSDC) $(LIBOS) $(LIBCOMMON) $(LIBOSD_TYPES)
 if WITH_LTTNG
 libosd_la_LIBADD += $(LIBOSD_TP)
 endif

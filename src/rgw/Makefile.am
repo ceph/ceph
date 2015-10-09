@@ -119,7 +119,7 @@ ceph_rgw_jsonparser_SOURCES = \
 	rgw/rgw_common.cc \
 	rgw/rgw_env.cc \
 	rgw/rgw_json_enc.cc
-ceph_rgw_jsonparser_LDADD = $(LIBRGW) $(LIBRGW_DEPS) $(CEPH_GLOBAL)
+ceph_rgw_jsonparser_LDADD = $(LIBRGW) $(LIBRGW_DEPS) $(CEPH_GLOBAL) $(LIBCOMMON)
 bin_DEBUGPROGRAMS += ceph_rgw_jsonparser
 
 
