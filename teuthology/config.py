@@ -134,6 +134,7 @@ class TeuthologyConfig(YamlConfig):
         'ceph_git_url': None,
         'ceph_qa_suite_git_url': None,
         'gitbuilder_host': 'gitbuilder.ceph.com',
+        'check_package_signatures': True,
         'lab_domain': 'front.sepia.ceph.com',
         'lock_server': 'http://paddles.front.sepia.ceph.com/',
         'max_job_time': 259200,  # 3 days

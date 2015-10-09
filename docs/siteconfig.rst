@@ -51,6 +51,9 @@ Here is a sample configuration with many of the options set and documented::
     # Gitbuilder archive that stores e.g. ceph packages
     gitbuilder_host: gitbuilder.example.com
 
+    # Verify the packages signatures
+    check_package_signatures: true
+
     # Where all git repos are considered to reside.
     ceph_git_base_url: https://github.com/ceph/
 
