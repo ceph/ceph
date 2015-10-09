@@ -1766,20 +1766,26 @@ public:
     reenter(this) {
       yield {
         int r;
-        if (op == CLS_RGW_OP_ADD) {
+        if (op == CLS_RGW_OP_ADD ||
+            op == CLS_RGW_OP_LINK_OLH) {
+          if (op == CLS_RGW_OP_ADD && !key.instance.empty()) {
+            ldout(store->ctx(), 10) << "bucket skipping sync obj: " << source_zone << "/" << bucket_info->bucket << "/" << key << "[" << versioned_epoch << "]: versioned object will be synced on link_olh" << dendl;
+            return set_state(RGWCoroutine_Done, 0);
+
+          }
           ldout(store->ctx(), 5) << "bucket sync: sync obj: " << source_zone << "/" << bucket_info->bucket << "/" << key << "[" << versioned_epoch << "]" << dendl;
           r = call(new RGWFetchRemoteObjCR(async_rados, store, source_zone, *bucket_info,
                                            key, versioned_epoch,
                                            true));
           if (r < 0) {
             ldout(store->ctx(), 0) << "ERROR: failed to call RGWFetchRemoteObjCR()" << dendl;
-            return r;
+            return set_state(RGWCoroutine_Error, r);
           }
         } else if (op == CLS_RGW_OP_DEL) {
           r = call(new RGWRemoveObjCR(async_rados, store, source_zone, *bucket_info, key, versioned_epoch, &timestamp));
           if (r < 0) {
             ldout(store->ctx(), 0) << "ERROR: failed to call RGWRemoveObjCR()" << dendl;
-            return r;
+            return set_state(RGWCoroutine_Error, r);
           }
         }
       }
