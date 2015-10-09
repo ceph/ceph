@@ -795,6 +795,9 @@ int RGWRealm::notify_zone(bufferlist& bl)
 int RGWRealm::notify_new_period(const RGWPeriod& period)
 {
   bufferlist bl;
+  // push the period to dependent zonegroups/zones
+  ::encode(RGWRealmNotify::ZonesNeedPeriod, bl);
+  ::encode(period, bl);
   // reload the gateway with the new period
   ::encode(RGWRealmNotify::Reload, bl);
 
