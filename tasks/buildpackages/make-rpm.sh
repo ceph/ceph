@@ -47,7 +47,6 @@ releasedir=$base/$(lsb_release -si)/WORKDIR
 # d) contains the short hash of the commit
 #
 vers=$(git describe --long --match "v*" | sed s/^v//)
-sha1=$(git rev-parse HEAD)
 : ${NPROC:=$(nproc)}
 ceph_dir=$(pwd)
 
@@ -234,7 +233,7 @@ function build_rpm_repo() {
 
     ref_dir=${buildarea}/../$codename/$base/ref
     mkdir -p $ref_dir
-    ( cd ${ceph_dir} ; git for-each-ref refs/tags/** refs/heads/** ) | grep $sha1 | while read sha1 type ref ; do
+    ( cd ${ceph_dir} ; git for-each-ref refs/tags/** refs/remotes/origin/** ) | grep $sha1 | while read sha1 type ref ; do
         base_ref=$(basename $ref)
         ( cd $ref_dir ; ln -sf ../sha1/$sha1 $base_ref )
     done
