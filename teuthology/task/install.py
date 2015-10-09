@@ -908,11 +908,7 @@ def upgrade_with_ceph_deploy(ctx, node, remote, pkgs, sys_type):
     subprocess.call(['ceph-deploy', 'install'] + params)
     remote.run(args=['sudo', 'restart', 'ceph-all'])
 
-
-def upgrade_common(ctx, config, deploy_style):
-    """
-    Common code for upgrading
-    """
+def upgrade_remote_to_config(ctx, config):
     assert config is None or isinstance(config, dict), \
         "install.upgrade only supports a dictionary for configuration"
 
@@ -924,10 +920,6 @@ def upgrade_common(ctx, config, deploy_style):
         'overrides', {}).get('install', {}).get(project, {})
     log.info('project %s config %s overrides %s', project, config,
              install_overrides)
-
-    # FIXME: extra_pkgs is not distro-agnostic
-    extra_pkgs = config.get('extra_packages', [])
-    log.info('extra packages: {packages}'.format(packages=extra_pkgs))
 
     # build a normalized remote -> config dict
     remotes = {}
@@ -946,6 +938,7 @@ def upgrade_common(ctx, config, deploy_style):
                 continue
             remotes[remote] = config.get(role)
 
+    result = {}
     for remote, node in remotes.iteritems():
         if not node:
             node = {}
@@ -958,6 +951,24 @@ def upgrade_common(ctx, config, deploy_style):
             this_overrides.pop('branch', None)
         teuthology.deep_merge(node, this_overrides)
         log.info('remote %s config %s', remote, node)
+        node['project'] = project
+
+        result[remote] = node
+
+    return result
+
+def upgrade_common(ctx, config, deploy_style):
+    """
+    Common code for upgrading
+    """
+    remotes = upgrade_remote_to_config(ctx, config)
+    project = config.get('project', 'ceph')
+
+    # FIXME: extra_pkgs is not distro-agnostic
+    extra_pkgs = config.get('extra_packages', [])
+    log.info('extra packages: {packages}'.format(packages=extra_pkgs))
+
+    for remote, node in remotes.iteritems():
 
         system_type = teuthology.get_system_type(remote)
         assert system_type in ('deb', 'rpm')
@@ -968,11 +979,10 @@ def upgrade_common(ctx, config, deploy_style):
             proj=project, system_type=system_type, pkgs=', '.join(pkgs)))
             # FIXME: again, make extra_pkgs distro-agnostic
         pkgs += extra_pkgs
-        node['project'] = project
 
         deploy_style(ctx, node, remote, pkgs, system_type)
         verify_package_version(ctx, node, remote)
-
+    return len(remotes)
 
 docstring_for_upgrade = """"
     Upgrades packages for a given project.
