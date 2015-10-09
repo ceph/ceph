@@ -1,15 +1,21 @@
 """
 Build ceph packages
 
+Unit tests:
+
+py.test -v -s tests/test_buildpackages.py
+
 Integration tests:
 
-teuthology-openstack --verbose --key-name myself --key-filename ~/Downloads/myself --ceph hammer --suite teuthology/buildpackages
+teuthology-openstack --verbose --key-name myself --key-filename ~/Downloads/myself --ceph infernalis --suite teuthology/buildpackages
 
 """
+import copy
 import logging
 import os
-import subprocess
-from teuthology import packaging
+import re
+import types
+from subprocess import check_output, check_call
 from teuthology import misc as teuthology
 from teuthology.config import config as teuth_config
 from teuthology.task import install
@@ -18,10 +24,6 @@ import urlparse
 
 log = logging.getLogger(__name__)
 
-def get_install_config(ctx):
-    for task in ctx.config['tasks']:
-        if task.keys()[0] == 'install':
-            config = task['install']
 def get_tag_branch_sha1(gitbuilder):
     """The install config may have contradicting tag/branch and sha1.
     When suite.py prepares the jobs, it always overrides the sha1 with
@@ -82,8 +84,13 @@ def get_tag_branch_sha1(gitbuilder):
         tag = None
         branch = None
     return (tag, branch, sha1)
+
+def get_config_install(ctx, config):
     if config is None:
         config = {}
+    else:
+        config = copy.deepcopy(config)
+
     assert isinstance(config, dict), \
         "task install only supports a dictionary for configuration"
 
@@ -94,7 +101,33 @@ def get_tag_branch_sha1(gitbuilder):
         install_overrides = overrides.get('install', {})
         teuthology.deep_merge(config, install_overrides.get(project, {}))
     log.debug('install config %s' % config)
-    return config
+    return [config]
+
+def get_config_install_upgrade(ctx, config):
+    config = copy.deepcopy(config)
+    r = install.upgrade_remote_to_config(ctx, config).values()
+    log.info("get_config_install_upgrade " + str(r))
+    return r
+
+GET_CONFIG_FUNCTIONS = {
+    'install': get_config_install,
+    'install.upgrade': get_config_install_upgrade,
+}
+
+def lookup_configs(ctx, node):
+    configs = []
+    if type(node) is types.ListType:
+        for leaf in node:
+            configs.extend(lookup_configs(ctx, leaf))
+    elif type(node) is types.DictType:
+        for (key, value) in node.iteritems():
+            if key in ('install', 'install.upgrade'):
+                configs.extend(GET_CONFIG_FUNCTIONS[key](ctx, value))
+            elif key in ('overrides',):
+                pass
+            else:
+                configs.extend(lookup_configs(ctx, value))
+    return configs
 
 def task(ctx, config):
     """
@@ -126,59 +159,47 @@ def task(ctx, config):
     assert isinstance(config, dict), \
         'task only accepts a dict for config not ' + str(config)
     d = os.path.join(os.path.dirname(__file__), 'buildpackages')
-    install_config = get_install_config(ctx)
-    log.info('install_config ' + str(install_config))
     for remote in ctx.cluster.remotes.iterkeys():
-        gitbuilder = install._get_gitbuilder_project(
-            ctx, remote, install_config)
-        tag = packaging._get_config_value_for_remote(
-            ctx, remote, install_config, 'tag')
-        branch = packaging._get_config_value_for_remote(
-            ctx, remote, install_config, 'branch')
-        sha1 = packaging._get_config_value_for_remote(
-            ctx, remote, install_config, 'sha1')
-        uri_reference = gitbuilder.uri_reference
-        url = gitbuilder.base_url
-        assert '/' + uri_reference in url, \
-            (url + ' (from template ' + teuth_config.baseurl_template +
-             ') does not contain /' + uri_reference)
-        if 'ref/' in uri_reference:
-            ref = os.path.basename(uri_reference)
-        else:
-            ref = ''
-        subprocess.check_call(
-            "flock --close /tmp/buildpackages " +
-            "make -C " + d + " " + os.environ['HOME'] + "/.ssh_agent",
-            shell=True)
-        target = os.path.dirname(urlparse.urlparse(url).path.strip('/'))
-        target = os.path.dirname(target) + '-' + sha1
-        openstack = OpenStack()
-        select = '^(vps|eg)-'
-        build_flavor = openstack.flavor(config['machine'], select)
-        http_flavor = openstack.flavor({
-            'disk': 10, # GB
-            'ram': 1024, # MB
-            'cpus': 1,
-        }, select)
-        cmd = (". " + os.environ['HOME'] + "/.ssh_agent ; " +
-               " flock --close /tmp/buildpackages-" + sha1 +
-               " make -C " + d +
-               " CEPH_GIT_URL=" + teuth_config.get_ceph_git_url() +
-               " CEPH_PKG_TYPE=" + gitbuilder.pkg_type +
-               " CEPH_OS_TYPE=" + gitbuilder.os_type +
-               " CEPH_OS_VERSION=" + gitbuilder.os_version +
-               " CEPH_DIST=" + gitbuilder.distro +
-               " CEPH_ARCH=" + gitbuilder.arch +
-               " CEPH_SHA1=" + sha1 +
-               " CEPH_TAG=" + (tag or '') +
-               " CEPH_BRANCH=" + (branch or '') +
-               " CEPH_REF=" + ref +
-               " GITBUILDER_URL=" + url +
-               " BUILD_FLAVOR=" + build_flavor +
-               " HTTP_FLAVOR=" + http_flavor +
-               " " + target +
-               " ")
-        log.info("buildpackages: " + cmd)
-        subprocess.check_call(cmd, shell=True)
-    teuth_config.gitbuilder_host = openstack.get_ip('packages-repository', '')
-    log.info('Finished buildpackages')
+        for install_config in lookup_configs(ctx, ctx.config):
+            gitbuilder = install._get_gitbuilder_project(
+                ctx, remote, install_config)
+            (tag, branch, sha1) = get_tag_branch_sha1(gitbuilder)
+            check_call(
+                "flock --close /tmp/buildpackages " +
+                "make -C " + d + " " + os.environ['HOME'] + "/.ssh_agent",
+                shell=True)
+            url = gitbuilder.base_url
+            target = os.path.dirname(urlparse.urlparse(url).path.strip('/'))
+            target = os.path.dirname(target) + '-' + sha1
+            openstack = OpenStack()
+            if 'cloud.ovh.net' in os.environ['OS_AUTH_URL']:
+                select = '^(vps|eg)-'
+            else:
+                select = ''
+            build_flavor = openstack.flavor(config['machine'], select)
+            http_flavor = openstack.flavor({
+                'disk': 10, # GB
+                'ram': 1024, # MB
+                'cpus': 1,
+            }, select)
+            cmd = (". " + os.environ['HOME'] + "/.ssh_agent ; " +
+                   " flock --close /tmp/buildpackages-" + sha1 +
+                   " make -C " + d +
+                   " CEPH_GIT_URL=" + teuth_config.get_ceph_git_url() +
+                   " CEPH_PKG_TYPE=" + gitbuilder.pkg_type +
+                   " CEPH_OS_TYPE=" + gitbuilder.os_type +
+                   " CEPH_OS_VERSION=" + gitbuilder.os_version +
+                   " CEPH_DIST=" + gitbuilder.distro +
+                   " CEPH_ARCH=" + gitbuilder.arch +
+                   " CEPH_SHA1=" + sha1 +
+                   " CEPH_TAG=" + (tag or '') +
+                   " CEPH_BRANCH=" + (branch or '') +
+                   " GITBUILDER_URL=" + url +
+                   " BUILD_FLAVOR=" + build_flavor +
+                   " HTTP_FLAVOR=" + http_flavor +
+                   " " + target +
+                   " ")
+            log.info("buildpackages: " + cmd)
+            check_call(cmd, shell=True)
+        teuth_config.gitbuilder_host = openstack.get_ip('packages-repository', '')
+        log.info('Finished buildpackages')
