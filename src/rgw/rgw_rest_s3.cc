@@ -2440,6 +2440,10 @@ int RGW_Auth_S3::authorize_v4_complete(RGWRados *store, struct req_state *s, str
 
 }
 
+static inline bool is_base64_for_content_md5(unsigned char c) {
+  return (isalnum(c) || isspace(c) || (c == '+') || (c == '/') || (c == '='));
+}
+
 /*
  * handle v4 signatures (rados auth only)
  */
@@ -2681,6 +2685,14 @@ int RGW_Auth_S3::authorize_v4(RGWRados *store, struct req_state *s)
     if (!t) {
       dout(10) << "error getting env var" << dendl;
       return -EINVAL;
+    }
+    if (token_env == "HTTP_CONTENT_MD5") {
+      for (const char *p = t; *p; p++) {
+	if (!is_base64_for_content_md5(*p)) {
+	  dout(0) << "NOTICE: bad content-md5 provided (not base64), aborting request p=" << *p << " " << (int)*p << dendl;
+	  return -EPERM;
+	}
+      }
     }
     string token_value = string(t);
     canonical_hdrs_map[token] = rgw_trim_whitespace(token_value);
