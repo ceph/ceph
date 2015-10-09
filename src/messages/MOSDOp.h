@@ -378,9 +378,9 @@ struct ceph_osd_request_head {
       features = 0;
       reqid = osd_reqid_t();
       OSDOp::split_osd_op_vector_in_data(ops, data);
-      // In old versions, final decoding is done in first step
-      final_decode_needed = false;
 
+      // we did the full decode
+      final_decode_needed = false;
     } else if (header.version < 7) {
       ::decode(client_inc, p);
       ::decode(osdmap_epoch, p);
@@ -398,26 +398,6 @@ struct ceph_osd_request_head {
 	::decode(pgid, p);
       }
 
-    } else {
-      // new, v7 decode, splitted to partial and final
-      ::decode(pgid, p);
-      ::decode(osdmap_epoch, p);
-      ::decode(flags, p);
-      ::decode(reassert_version, p);
-      ::decode(reqid, p);
-    }
-
-    partial_decode_needed = false;
-
-  }
-
-  void finish_decode() {
-    assert(!partial_decode_needed); // partial decoding required
-
-    if (!final_decode_needed)
-      return; //Message is already final decoded
-
-    if (header.version < 7) {
       ::decode(oid, p);
 
       //::decode(ops, p);
@@ -448,29 +428,46 @@ struct ceph_osd_request_head {
 
       OSDOp::split_osd_op_vector_in_data(ops, data);
 
-    } else { // final decoding for reordered v7
-      ::decode(client_inc, p);
-      ::decode(mtime, p);
-      ::decode(oloc, p);
-      ::decode(oid, p);
-
-      __u16 num_ops;
-      ::decode(num_ops, p);
-      ops.resize(num_ops);
-      for (unsigned i = 0; i < num_ops; i++)
-        ::decode(ops[i].op, p);
-
-      ::decode(snapid, p);
-      ::decode(snap_seq, p);
-      ::decode(snaps, p);
-
-      ::decode(retry_attempt, p);
-
-      ::decode(features, p);
-
-      OSDOp::split_osd_op_vector_in_data(ops, data);
-
+      // we did the full decode
+      final_decode_needed = false;
+    } else {
+      // new, v7 decode, splitted to partial and final
+      ::decode(pgid, p);
+      ::decode(osdmap_epoch, p);
+      ::decode(flags, p);
+      ::decode(reassert_version, p);
+      ::decode(reqid, p);
     }
+
+    partial_decode_needed = false;
+  }
+
+  void finish_decode() {
+    assert(!partial_decode_needed); // partial decoding required
+    if (!final_decode_needed)
+      return; // Message is already final decoded
+    assert(header.version >= 7);
+
+    ::decode(client_inc, p);
+    ::decode(mtime, p);
+    ::decode(oloc, p);
+    ::decode(oid, p);
+
+    __u16 num_ops;
+    ::decode(num_ops, p);
+    ops.resize(num_ops);
+    for (unsigned i = 0; i < num_ops; i++)
+      ::decode(ops[i].op, p);
+
+    ::decode(snapid, p);
+    ::decode(snap_seq, p);
+    ::decode(snaps, p);
+
+    ::decode(retry_attempt, p);
+
+    ::decode(features, p);
+
+    OSDOp::split_osd_op_vector_in_data(ops, data);
 
     final_decode_needed = false;
   }
