@@ -3474,7 +3474,6 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 
     case CEPH_OSD_OP_CMPEXT:
 	tracepoint(osd, do_osd_op_pre_extent_cmp, soid.oid.name.c_str(), soid.snap.val, oi.size, oi.truncate_seq, op.extent.offset, op.extent.length, op.extent.truncate_size, op.extent.truncate_seq);
-        // TODO: Locking - this op and the write are supposed to be atomic
 	result = do_extent_cmp(ctx, osd_op);
 	break;
 
