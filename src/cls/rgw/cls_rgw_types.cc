@@ -346,6 +346,7 @@ void rgw_bi_log_entry::decode_json(JSONObj *obj)
   JSONDecoder::decode_json("timestamp", timestamp, obj);
   uint32_t f;
   JSONDecoder::decode_json("bilog_flags", f, obj);
+  JSONDecoder::decode_json("ver", ver, obj);
   bilog_flags = (uint16_t)f;
 }
 
