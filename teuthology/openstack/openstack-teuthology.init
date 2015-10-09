@@ -37,6 +37,8 @@ source /etc/default/teuthology
 
 user=${TEUTHOLOGY_USERNAME:-ubuntu}
 
+export HOME=/home/$user
+
 case $1 in
         start)
                 /etc/init.d/beanstalkd start
