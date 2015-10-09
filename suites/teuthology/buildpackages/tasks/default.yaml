@@ -1,0 +1,14 @@
+roles:
+    - [client.0]
+tasks:
+    - install:
+        tag: v0.94.1
+    - exec:
+        client.0:
+          - ceph --version | grep 'version 0.94.1'
+    - install.upgrade:
+        client.0:
+          tag: v0.94.3
+    - exec:
+        client.0:
+          - ceph --version | grep 'version 0.94.3'
