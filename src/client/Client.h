@@ -716,23 +716,24 @@ private:
   int _mknod(Inode *dir, const char *name, mode_t mode, dev_t rdev, int uid=-1, int gid=-1, InodeRef *inp = 0);
   int _do_setattr(Inode *in, struct stat *attr, int mask, int uid, int gid, InodeRef *inp);
   int _setattr(Inode *in, struct stat *attr, int mask, int uid=-1, int gid=-1, InodeRef *inp = 0);
-  int _setattr(InodeRef &in, struct stat *attr, int mask, int uid=-1, int gid=-1, InodeRef *inp = 0) {
-    return _setattr(in.get(), attr, mask, uid, gid, inp);
-  }
+  int _setattr(InodeRef &in, struct stat *attr, int mask);
   int _getattr(Inode *in, int mask, int uid=-1, int gid=-1, bool force=false);
   int _getattr(InodeRef &in, int mask, int uid=-1, int gid=-1, bool force=false) {
     return _getattr(in.get(), mask, uid, gid, force);
   }
   int _readlink(Inode *in, char *buf, size_t size);
   int _getxattr(Inode *in, const char *name, void *value, size_t len, int uid=-1, int gid=-1);
+  int _getxattr(InodeRef &in, const char *name, void *value, size_t len);
   int _listxattr(Inode *in, char *names, size_t len, int uid=-1, int gid=-1);
   int _do_setxattr(Inode *in, const char *name, const void *value, size_t len, int flags, int uid, int gid);
   int _setxattr(Inode *in, const char *name, const void *value, size_t len, int flags, int uid=-1, int gid=-1);
+  int _setxattr(InodeRef &in, const char *name, const void *value, size_t len, int flags);
   int _removexattr(Inode *in, const char *nm, int uid=-1, int gid=-1);
-  int _open(Inode *in, int flags, mode_t mode, Fh **fhp, int uid=-1, int gid=-1);
+  int _removexattr(InodeRef &in, const char *nm);
+  int _open(Inode *in, int flags, mode_t mode, Fh **fhp, int uid, int gid);
   int _create(Inode *in, const char *name, int flags, mode_t mode, InodeRef *inp, Fh **fhp,
               int stripe_unit, int stripe_count, int object_size, const char *data_pool,
-	      bool *created = NULL, int uid=-1, int gid=-1);
+	      bool *created, int uid, int gid);
 
   loff_t _lseek(Fh *fh, loff_t offset, int whence);
   int _read(Fh *fh, int64_t offset, uint64_t size, bufferlist *bl);
@@ -890,7 +891,7 @@ public:
 
   // dirs
   int mkdir(const char *path, mode_t mode);
-  int mkdirs(const char *path, mode_t mode, int uid=-1, int gid=-1);
+  int mkdirs(const char *path, mode_t mode);
   int rmdir(const char *path);
 
   // symlinks

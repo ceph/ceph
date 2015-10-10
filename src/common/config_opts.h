@@ -356,6 +356,7 @@ OPTION(client_debug_inject_tick_delay, OPT_INT, 0) // delay the client tick for 
 OPTION(client_max_inline_size, OPT_U64, 4096)
 OPTION(client_inject_release_failure, OPT_BOOL, false)  // synthetic client bug for testing
 OPTION(client_inject_fixed_oldest_tid, OPT_BOOL, false)  // synthetic client bug for testing
+OPTION(client_permissions, OPT_BOOL, true)
 OPTION(client_posix_acl, OPT_BOOL, false)
 
 // note: the max amount of "in flight" dirty data is roughly (max - target)
