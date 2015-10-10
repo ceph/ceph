@@ -5014,7 +5014,8 @@ int Client::may_delete(Inode *dir, const char *name, int uid, int gid)
   if (r < 0)
     goto out;
 
-  if (uid != 0 && (dir->mode & S_ISVTX)) {
+  /* 'name == NULL' means rmsnap */
+  if (uid != 0 && name && (dir->mode & S_ISVTX)) {
     InodeRef otherin;
     r = _lookup(dir, name, &otherin, uid, gid);
     if (r < 0)
@@ -5758,6 +5759,11 @@ int Client::path_walk(const filepath& origpath, InodeRef *end, bool followsym,
     cur = cwd;
   assert(cur);
 
+  if (uid < 0)
+    uid = get_uid();
+  if (gid < 0)
+    gid = get_gid();
+
   ldout(cct, 10) << "path_walk " << path << dendl;
 
   int symlinks = 0;
@@ -5768,6 +5774,11 @@ int Client::path_walk(const filepath& origpath, InodeRef *end, bool followsym,
     ldout(cct, 10) << " " << i << " " << *cur << " " << dname << dendl;
     ldout(cct, 20) << "  (path is " << path << ")" << dendl;
     InodeRef next;
+    if (cct->_conf->client_permissions) {
+      int r = may_lookup(cur.get(), uid, gid);
+      if (r < 0)
+	return r;
+    }
     int r = _lookup(cur.get(), dname, &next, uid, gid);
     if (r < 0)
       return r;
@@ -5834,13 +5845,24 @@ int Client::link(const char *relexisting, const char *relpath)
   path.pop_dentry();
 
   InodeRef in, dir;
-  int r;
-  r = path_walk(existing, &in);
+  int r = path_walk(existing, &in);
   if (r < 0)
     goto out;
   r = path_walk(path, &dir);
   if (r < 0)
     goto out;
+  if (cct->_conf->client_permissions) {
+    if (S_ISDIR(in->mode)) {
+      r = -EPERM;
+      goto out;
+    }
+    r = may_hardlink(in.get());
+    if (r < 0)
+      goto out;
+    r = may_create(dir.get());
+    if (r < 0)
+      goto out;
+  }
   r = _link(in.get(), dir.get(), name.c_str());
  out:
   return r;
@@ -5859,6 +5881,11 @@ int Client::unlink(const char *relpath)
   int r = path_walk(path, &dir);
   if (r < 0)
     return r;
+  if (cct->_conf->client_permissions) {
+    r = may_delete(dir.get(), name.c_str());
+    if (r < 0)
+      return r;
+  }
   return _unlink(dir.get(), name.c_str());
 }
 
@@ -5877,16 +5904,23 @@ int Client::rename(const char *relfrom, const char *relto)
   to.pop_dentry();
 
   InodeRef fromdir, todir;
-  int r;
-
-  r = path_walk(from, &fromdir);
+  int r = path_walk(from, &fromdir);
   if (r < 0)
     goto out;
   r = path_walk(to, &todir);
   if (r < 0)
     goto out;
+
+  if (cct->_conf->client_permissions) {
+    int r = may_delete(fromdir.get(), fromname.c_str());
+    if (r < 0)
+      return r;
+    r = may_delete(todir.get(), toname.c_str());
+    if (r < 0 && r != -ENOENT)
+      return r;
+  }
   r = _rename(fromdir.get(), fromname.c_str(), todir.get(), toname.c_str());
- out:
+out:
   return r;
 }
 
@@ -5905,19 +5939,26 @@ int Client::mkdir(const char *relpath, mode_t mode)
   path.pop_dentry();
   InodeRef dir;
   int r = path_walk(path, &dir);
-  if (r < 0) {
+  if (r < 0)
     return r;
+  if (cct->_conf->client_permissions) {
+    r = may_create(dir.get());
+    if (r < 0)
+      return r;
   }
   return _mkdir(dir.get(), name.c_str(), mode);
 }
 
-int Client::mkdirs(const char *relpath, mode_t mode, int uid, int gid)
+int Client::mkdirs(const char *relpath, mode_t mode)
 {
   Mutex::Locker lock(client_lock);
   ldout(cct, 10) << "Client::mkdirs " << relpath << dendl;
   tout(cct) << "mkdirs" << std::endl;
   tout(cct) << relpath << std::endl;
   tout(cct) << mode << std::endl;
+
+  uid_t uid = get_uid();
+  gid_t gid = get_gid();
 
   //get through existing parts of path
   filepath path(relpath);
@@ -5926,6 +5967,11 @@ int Client::mkdirs(const char *relpath, mode_t mode, int uid, int gid)
   InodeRef cur, next;
   cur = cwd;
   for (i=0; i<path.depth(); ++i) {
+    if (cct->_conf->client_permissions) {
+      r = may_lookup(cur.get(), uid, gid);
+      if (r < 0)
+	break;
+    }
     r = _lookup(cur.get(), path[i].c_str(), &next, uid, gid);
     if (r < 0)
       break;
@@ -5937,20 +5983,19 @@ int Client::mkdirs(const char *relpath, mode_t mode, int uid, int gid)
   ldout(cct, 20) << "mkdirs got through " << i << " directories on path " << relpath << dendl;
   //make new directory at each level
   for (; i<path.depth(); ++i) {
+    if (cct->_conf->client_permissions) {
+      r = may_create(cur.get(), uid, gid);
+      if (r < 0)
+	return r;
+    }
     //make new dir
-    r = _mkdir(cur.get(), path[i].c_str(), mode);
+    r = _mkdir(cur.get(), path[i].c_str(), mode, uid, gid, &next);
     //check proper creation/existence
     if (r < 0) return r;
-    r = _lookup(cur.get(), path[i], &next, uid, gid);
-    if (r < 0) {
-      ldout(cct, 0) << "mkdirs: successfully created new directory " << path[i]
-	      << " but can't _lookup it!" << dendl;
-      return r;
-    }
     //move to new dir and continue
     cur.swap(next);
     ldout(cct, 20) << "mkdirs: successfully created directory "
-	     << filepath(cur->ino).get_path() << dendl;
+		   << filepath(cur->ino).get_path() << dendl;
   }
   return 0;
 }
@@ -5967,6 +6012,11 @@ int Client::rmdir(const char *relpath)
   int r = path_walk(path, &dir);
   if (r < 0)
     return r;
+  if (cct->_conf->client_permissions) {
+    int r = may_delete(dir.get(), name.c_str());
+    if (r < 0)
+      return r;
+  }
   return _rmdir(dir.get(), name.c_str());
 }
 
@@ -5984,6 +6034,11 @@ int Client::mknod(const char *relpath, mode_t mode, dev_t rdev)
   int r = path_walk(path, &dir);
   if (r < 0)
     return r;
+  if (cct->_conf->client_permissions) {
+    int r = may_create(dir.get());
+    if (r < 0)
+      return r;
+  }
   return _mknod(dir.get(), name.c_str(), mode, rdev);
 }
 
@@ -6003,6 +6058,11 @@ int Client::symlink(const char *target, const char *relpath)
   int r = path_walk(path, &dir);
   if (r < 0)
     return r;
+  if (cct->_conf->client_permissions) {
+    int r = may_create(dir.get());
+    if (r < 0)
+      return r;
+  }
   return _symlink(dir.get(), name.c_str(), target);
 }
 
@@ -6226,6 +6286,16 @@ int Client::_setattr(Inode *in, struct stat *attr, int mask, int uid, int gid,
   if (mask & CEPH_SETATTR_MODE)
     ret = _posix_acl_chmod(in, attr->st_mode, uid, gid);
   return ret;
+}
+
+int Client::_setattr(InodeRef &in, struct stat *attr, int mask)
+{
+  if (cct->_conf->client_permissions) {
+    int r = may_setattr(in.get(), attr, mask);
+    if (r < 0)
+      return r;
+  }
+  return _setattr(in.get(), attr, mask);
 }
 
 int Client::setattr(const char *relpath, struct stat *attr, int mask)
@@ -6537,6 +6607,11 @@ int Client::opendir(const char *relpath, dir_result_t **dirpp)
   int r = path_walk(path, &in);
   if (r < 0)
     return r;
+  if (cct->_conf->client_permissions) {
+    int r = may_open(in.get(), O_RDONLY);
+    if (r < 0)
+      return r;
+  }
   r = _opendir(in.get(), dirpp);
   tout(cct) << (unsigned long)*dirpp << std::endl;
   return r;
@@ -7190,6 +7265,9 @@ int Client::open(const char *relpath, int flags, mode_t mode, int stripe_unit,
   tout(cct) << relpath << std::endl;
   tout(cct) << flags << std::endl;
 
+  uid_t uid = get_uid();
+  gid_t gid = get_gid();
+
   Fh *fh = NULL;
 
 #if defined(__linux__) && defined(O_PATH)
@@ -7205,7 +7283,7 @@ int Client::open(const char *relpath, int flags, mode_t mode, int stripe_unit,
   bool created = false;
   /* O_CREATE with O_EXCL enforces O_NOFOLLOW. */
   bool followsym = !((flags & O_NOFOLLOW) || ((flags & O_CREAT) && (flags & O_EXCL)));
-  int r = path_walk(path, &in, followsym);
+  int r = path_walk(path, &in, followsym, uid, gid);
 
   if (r == 0 && (flags & O_CREAT) && (flags & O_EXCL))
     return -EEXIST;
@@ -7222,24 +7300,31 @@ int Client::open(const char *relpath, int flags, mode_t mode, int stripe_unit,
     string dname = dirpath.last_dentry();
     dirpath.pop_dentry();
     InodeRef dir;
-    r = path_walk(dirpath, &dir);
+    r = path_walk(dirpath, &dir, true, uid, gid);
     if (r < 0)
       goto out;
+    if (cct->_conf->client_permissions) {
+      r = may_create(dir.get(), uid, gid);
+      if (r < 0)
+	goto out;
+    }
     r = _create(dir.get(), dname.c_str(), flags, mode, &in, &fh, stripe_unit,
-                stripe_count, object_size, data_pool, &created);
+                stripe_count, object_size, data_pool, &created, uid, gid);
   }
   if (r < 0)
     goto out;
 
   if (!created) {
     // posix says we can only check permissions of existing files
-    r = may_open(in.get(), flags);
-    if (r < 0)
-      goto out;
+    if (cct->_conf->client_permissions) {
+      r = may_open(in.get(), flags, uid, gid);
+      if (r < 0)
+	goto out;
+    }
   }
 
   if (!fh)
-    r = _open(in.get(), flags, mode, &fh);
+    r = _open(in.get(), flags, mode, &fh, uid, gid);
   if (r >= 0) {
     // allocate a integer file descriptor
     assert(fh);
@@ -8969,6 +9054,11 @@ int Client::mksnap(const char *relpath, const char *name)
   int r = path_walk(path, &in);
   if (r < 0)
     return r;
+  if (cct->_conf->client_permissions) {
+    r = may_create(in.get());
+    if (r < 0)
+      return r;
+  }
   Inode *snapdir = open_snapdir(in.get());
   return _mkdir(snapdir, name, 0);
 }
@@ -8980,6 +9070,11 @@ int Client::rmsnap(const char *relpath, const char *name)
   int r = path_walk(path, &in);
   if (r < 0)
     return r;
+  if (cct->_conf->client_permissions) {
+    r = may_delete(in.get(), NULL);
+    if (r < 0)
+      return r;
+  }
   Inode *snapdir = open_snapdir(in.get());
   return _rmdir(snapdir, name);
 }
@@ -9282,7 +9377,7 @@ int Client::getxattr(const char *path, const char *name, void *value, size_t siz
   int r = Client::path_walk(path, &in, true);
   if (r < 0)
     return r;
-  return Client::_getxattr(in.get(), name, value, size);
+  return _getxattr(in, name, value, size);
 }
 
 int Client::lgetxattr(const char *path, const char *name, void *value, size_t size)
@@ -9292,7 +9387,7 @@ int Client::lgetxattr(const char *path, const char *name, void *value, size_t si
   int r = Client::path_walk(path, &in, false);
   if (r < 0)
     return r;
-  return Client::_getxattr(in.get(), name, value, size);
+  return _getxattr(in, name, value, size);
 }
 
 int Client::fgetxattr(int fd, const char *name, void *value, size_t size)
@@ -9301,7 +9396,7 @@ int Client::fgetxattr(int fd, const char *name, void *value, size_t size)
   Fh *f = get_filehandle(fd);
   if (!f)
     return -EBADF;
-  return Client::_getxattr(f->inode.get(), name, value, size);
+  return _getxattr(f->inode, name, value, size);
 }
 
 int Client::listxattr(const char *path, char *list, size_t size)
@@ -9340,7 +9435,7 @@ int Client::removexattr(const char *path, const char *name)
   int r = Client::path_walk(path, &in, true);
   if (r < 0)
     return r;
-  return Client::_removexattr(in.get(), name);
+  return _removexattr(in, name);
 }
 
 int Client::lremovexattr(const char *path, const char *name)
@@ -9350,7 +9445,7 @@ int Client::lremovexattr(const char *path, const char *name)
   int r = Client::path_walk(path, &in, false);
   if (r < 0)
     return r;
-  return Client::_removexattr(in.get(), name);
+  return _removexattr(in, name);
 }
 
 int Client::fremovexattr(int fd, const char *name)
@@ -9359,7 +9454,7 @@ int Client::fremovexattr(int fd, const char *name)
   Fh *f = get_filehandle(fd);
   if (!f)
     return -EBADF;
-  return Client::_removexattr(f->inode.get(), name);
+  return _removexattr(f->inode, name);
 }
 
 int Client::setxattr(const char *path, const char *name, const void *value, size_t size, int flags)
@@ -9369,7 +9464,7 @@ int Client::setxattr(const char *path, const char *name, const void *value, size
   int r = Client::path_walk(path, &in, true);
   if (r < 0)
     return r;
-  return Client::_setxattr(in.get(), name, value, size, flags);
+  return _setxattr(in, name, value, size, flags);
 }
 
 int Client::lsetxattr(const char *path, const char *name, const void *value, size_t size, int flags)
@@ -9379,7 +9474,7 @@ int Client::lsetxattr(const char *path, const char *name, const void *value, siz
   int r = Client::path_walk(path, &in, false);
   if (r < 0)
     return r;
-  return Client::_setxattr(in.get(), name, value, size, flags);
+  return _setxattr(in, name, value, size, flags);
 }
 
 int Client::fsetxattr(int fd, const char *name, const void *value, size_t size, int flags)
@@ -9388,7 +9483,7 @@ int Client::fsetxattr(int fd, const char *name, const void *value, size_t size, 
   Fh *f = get_filehandle(fd);
   if (!f)
     return -EBADF;
-  return Client::_setxattr(f->inode.get(), name, value, size, flags);
+  return _setxattr(f->inode, name, value, size, flags);
 }
 
 int Client::_getxattr(Inode *in, const char *name, void *value, size_t size,
@@ -9437,6 +9532,16 @@ int Client::_getxattr(Inode *in, const char *name, void *value, size_t size,
  out:
   ldout(cct, 3) << "_getxattr(" << in->ino << ", \"" << name << "\", " << size << ") = " << r << dendl;
   return r;
+}
+
+int Client::_getxattr(InodeRef &in, const char *name, void *value, size_t size)
+{
+  if (cct->_conf->client_permissions) {
+    int r = xattr_permission(in.get(), name, MAY_READ);
+    if (r < 0)
+      return r;
+  }
+  return _getxattr(in.get(), name, value, size);
 }
 
 int Client::ll_getxattr(Inode *in, const char *name, void *value,
@@ -9607,6 +9712,17 @@ int Client::_setxattr(Inode *in, const char *name, const void *value,
   return _do_setxattr(in, name, value, size, flags, uid, gid);
 }
 
+int Client::_setxattr(InodeRef &in, const char *name, const void *value,
+		      size_t size, int flags)
+{
+  if (cct->_conf->client_permissions) {
+    int r = xattr_permission(in.get(), name, MAY_WRITE);
+    if (r < 0)
+      return r;
+  }
+  return _setxattr(in.get(), name, value, size, flags);
+}
+
 int Client::check_data_pool_exist(string name, string value, const OSDMap *osdmap)
 {
   string tmp;
@@ -9718,6 +9834,15 @@ int Client::_removexattr(Inode *in, const char *name, int uid, int gid)
   return res;
 }
 
+int Client::_removexattr(InodeRef &in, const char *name)
+{
+  if (cct->_conf->client_permissions) {
+    int r = xattr_permission(in.get(), name, MAY_WRITE);
+    if (r < 0)
+      return r;
+  }
+  return _removexattr(in.get(), name);
+}
 
 int Client::ll_removexattr(Inode *in, const char *name, int uid, int gid)
 {
@@ -10885,7 +11010,7 @@ int Client::ll_create(Inode *parent, const char *name, mode_t mode,
       }
     }
     if (fhp && (*fhp == NULL)) {
-      r = _open(in.get(), flags, mode, fhp);
+      r = _open(in.get(), flags, mode, fhp, uid, gid);
       if (r < 0)
 	goto out;
     }
