@@ -966,7 +966,7 @@ void MDSDaemon::_handle_mds_map(MDSMap *oldmap)
 void MDSDaemon::handle_signal(int signum)
 {
   assert(signum == SIGINT || signum == SIGTERM);
-  derr << "*** got signal " << sys_siglist[signum] << " ***" << dendl;
+  derr << "*** got signal " << sig_str(signum) << " ***" << dendl;
   {
     Mutex::Locker l(mds_lock);
     if (stopping) {

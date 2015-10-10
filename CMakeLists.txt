@@ -82,6 +82,8 @@ CHECK_SYMBOL_EXISTS(__u8 "sys/types.h;linux/types.h" HAVE___U8)
 CHECK_SYMBOL_EXISTS(__u64 "sys/types.h;linux/types.h" HAVE___U64)
 CHECK_SYMBOL_EXISTS(__s64 "sys/types.h;linux/types.h" HAVE___S64)
 
+CHECK_SYMBOL_EXISTS(sys_siglist "signal.h;string.h" HAVE_SYS_SIGLIST)
+
 set(CEPH_MAN_DIR "share/man" CACHE STRING "Install location for man pages (relative to prefix).")
 
 option(ENABLE_SHARED "build shared libraries" ON)

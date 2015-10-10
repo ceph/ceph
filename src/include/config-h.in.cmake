@@ -234,4 +234,7 @@
 #cmakedefine HAVE_GPERFTOOLS_MALLOC_EXTENSION_H
 #cmakedefine HAVE_GPERFTOOLS_PROFILER_H
 
+/* Define if HAVE_SYS_SIGLIST */
+#cmakedefine HAVE_SYS_SIGLIST
+
 #endif /* CONFIG_H */

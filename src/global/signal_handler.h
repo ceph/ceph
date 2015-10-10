@@ -18,7 +18,15 @@
 #include <signal.h>
 #include <string>
 
+#include "acconfig.h"
+
 typedef void (*signal_handler_t)(int);
+
+#ifdef HAVE_SYS_SIGLIST
+# define sig_str(signum) sys_siglist[signum]
+#else
+# define sig_str(signum) strsignal(signum)
+#endif
 
 void install_sighandler(int signum, signal_handler_t handler, int flags);
 
