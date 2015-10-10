@@ -188,7 +188,9 @@ def task(ctx, config):
                    " CEPH_GIT_URL=" + teuth_config.get_ceph_git_url() +
                    " CEPH_PKG_TYPE=" + gitbuilder.pkg_type +
                    " CEPH_OS_TYPE=" + gitbuilder.os_type +
-                   " CEPH_OS_VERSION=" + gitbuilder.os_version +
+                   # os_version is from the remote and will be 7.1.23 for CentOS 7
+                   # instead of the expected 7.0 for all 7.* CentOS
+                   " CEPH_OS_VERSION=" + gitbuilder._get_version() +
                    " CEPH_DIST=" + gitbuilder.distro +
                    " CEPH_ARCH=" + gitbuilder.arch +
                    " CEPH_SHA1=" + sha1 +
