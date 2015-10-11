@@ -159,10 +159,6 @@ BuildRequires:	Cython
 %if 0%{?fedora} || 0%{?rhel} 
 BuildRequires:  boost-random
 %endif
-# python-argparse for distros with Python 2.6 or lower
-%if (0%{?rhel} && 0%{?rhel} <= 6)
-BuildRequires:	python-argparse
-%endif
 # lttng and babeltrace for rbd-replay-prep
 %if %{with lttng}
 %if 0%{?fedora} || 0%{?rhel}
@@ -248,10 +244,6 @@ Requires:	python-requests
 %{?systemd_requires}
 %if 0%{?suse_version}
 Requires(pre):	pwdutils
-%endif
-# python-argparse is only needed in distros with Python 2.6 or lower
-%if (0%{?rhel} && 0%{?rhel} <= 6)
-Requires:	python-argparse
 %endif
 %description -n ceph-common
 Common utilities to mount and interact with a ceph storage cluster.
