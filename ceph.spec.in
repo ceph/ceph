@@ -33,11 +33,6 @@
 %bcond_without lttng
 %endif
 
-%if (0%{?el5} || (0%{?rhel_version} >= 500 && 0%{?rhel_version} <= 600))
-%{!?python_sitelib: %global python_sitelib %(%{__python} -c "from distutils.sysconfig import get_python_lib; print(get_python_lib())")}
-%{!?python_sitearch: %global python_sitearch %(%{__python} -c "from distutils.sysconfig import get_python_lib; print(get_python_lib(1))")}
-%endif
-
 %if %{with selinux}
 # get selinux policy version
 %{!?_selinux_policy_version: %global _selinux_policy_version %(sed -e 's,.*selinux-policy-\\([^/]*\\)/.*,\\1,' /usr/share/selinux/devel/policyhelp 2>/dev/null || echo 0.0.0)}
