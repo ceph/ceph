@@ -86,20 +86,20 @@ BuildRequires:	checkpolicy
 BuildRequires:	selinux-policy-devel
 BuildRequires:	/usr/share/selinux/devel/policyhelp
 %endif
-BuildRequires:	gcc-c++
 BuildRequires:	boost-devel
 BuildRequires:  cmake
 BuildRequires:	cryptsetup
 BuildRequires:	fuse-devel
+BuildRequires:	gcc-c++
 BuildRequires:	gdbm
 BuildRequires:	hdparm
 BuildRequires:	leveldb-devel > 1.2
 BuildRequires:	libaio-devel
-BuildRequires:	libcurl-devel
-BuildRequires:	libxml2-devel
 BuildRequires:	libblkid-devel >= 2.17
+BuildRequires:	libcurl-devel
 BuildRequires:	libudev-devel
 BuildRequires:	libtool
+BuildRequires:	libxml2-devel
 BuildRequires:	make
 BuildRequires:	parted
 BuildRequires:	perl
