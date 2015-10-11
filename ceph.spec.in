@@ -706,18 +706,9 @@ install -m 0644 -D etc/sysconfig/SuSEfirewall2.d/services/ceph-osd-mds %{buildro
 
 # udev rules
 install -m 0644 -D udev/50-rbd.rules %{buildroot}%{_udevrulesdir}/50-rbd.rules
-
-%if (0%{?rhel} && 0%{?rhel} < 7)
-install -m 0644 -D udev/95-ceph-osd-alt.rules %{buildroot}/lib/udev/rules.d/95-ceph-osd.rules
-%else
-install -m 0644 -D udev/95-ceph-osd.rules %{buildroot}/lib/udev/rules.d/95-ceph-osd.rules
-%endif
-
-%if 0%{?rhel} >= 7 || 0%{?fedora} || 0%{?suse_version}
-mv %{buildroot}/lib/udev/rules.d/95-ceph-osd.rules %{buildroot}/usr/lib/udev/rules.d/95-ceph-osd.rules
+install -m 0644 -D udev/95-ceph-osd.rules %{buildroot}%{_udevrulesdir}/95-ceph-osd.rules
 mv %{buildroot}/sbin/mount.ceph %{buildroot}/usr/sbin/mount.ceph
 mv %{buildroot}/sbin/mount.fuse.ceph %{buildroot}/usr/sbin/mount.fuse.ceph
-%endif
 
 #set up placeholder directories
 mkdir -p %{buildroot}%{_sysconfdir}/ceph
