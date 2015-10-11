@@ -50,16 +50,7 @@ restorecon -R /var/log/radosgw > /dev/null 2>&1;
 %endif
 
 %{!?_udevrulesdir: %global _udevrulesdir /lib/udev/rules.d}
-
-# Use systemd files on RHEL 7 and above and in SUSE/openSUSE.
-# Note: We don't install unit files for the services yet. For now,
-# the _with_systemd variable only implies that we'll install
-# /etc/tmpfiles.d/ceph.conf in order to set up the socket directory in
-# /var/run/ceph.
-%if 0%{?fedora} || 0%{?rhel} >= 7 || 0%{?suse_version}
-%global _with_systemd 1
 %{!?tmpfiles_create: %global tmpfiles_create systemd-tmpfiles --create}
-%endif
 
 # unify libexec for all targets
 %global _libexecdir %{_exec_prefix}/lib
@@ -130,12 +121,10 @@ BuildRequires:	yasm
 # distro-conditional dependencies
 #################################################################################
 %if 0%{?suse_version}
-%if 0%{?_with_systemd}
 BuildRequires:  pkgconfig(systemd)
 BuildRequires:	systemd-rpm-macros
 BuildRequires:	systemd
 %{?systemd_requires}
-%endif
 PreReq:		%fillup_prereq
 BuildRequires:	net-tools
 BuildRequires:	libbz2-devel
@@ -152,9 +141,7 @@ BuildRequires:  openldap2-devel
 BuildRequires:	python-Cython
 %endif
 %if 0%{?fedora} || 0%{?rhel} 
-%if 0%{?_with_systemd}
 Requires:	systemd
-%endif
 BuildRequires:	btrfs-progs
 BuildRequires:	nss-devel
 BuildRequires:	keyutils-libs-devel
@@ -258,9 +245,7 @@ Requires:	python-rados = %{epoch}:%{version}-%{release}
 Requires:	python-rbd = %{epoch}:%{version}-%{release}
 Requires:	python-cephfs = %{epoch}:%{version}-%{release}
 Requires:	python-requests
-%if 0%{?_with_systemd}
 %{?systemd_requires}
-%endif
 %if 0%{?suse_version}
 Requires(pre):	pwdutils
 %endif
@@ -679,9 +664,7 @@ export RPM_OPT_FLAGS=`echo $RPM_OPT_FLAGS | sed -e 's/i386/i486/'`
 %if 0%{?rhel} && ! 0%{?centos}
                 --enable-subman \
 %endif
-%if 0%{?_with_systemd}
 		--with-systemdsystemunitdir=%_unitdir \
-%endif
 		--docdir=%{_docdir}/ceph \
 		--with-man-pages \
 		--mandir="%_mandir" \
@@ -748,16 +731,8 @@ install -m 0644 -D etc/sysconfig/ceph $RPM_BUILD_ROOT%{_sysconfdir}/sysconfig/ce
 %if 0%{?suse_version}
 install -m 0644 -D etc/sysconfig/ceph $RPM_BUILD_ROOT%{_localstatedir}/adm/fillup-templates/sysconfig.%{name}
 %endif
-%if 0%{?_with_systemd}
-  install -m 0644 -D systemd/ceph.tmpfiles.d $RPM_BUILD_ROOT%{_tmpfilesdir}/ceph-common.conf
-  install -m 0755 -D systemd/ceph $RPM_BUILD_ROOT%{_sbindir}/rcceph
-%else
-  install -D src/init-rbdmap $RPM_BUILD_ROOT%{_initrddir}/rbdmap
-  install -D src/init-ceph $RPM_BUILD_ROOT%{_initrddir}/ceph
-  install -D src/init-radosgw $RPM_BUILD_ROOT%{_initrddir}/ceph-radosgw
-  ln -sf ../../etc/init.d/ceph %{buildroot}/%{_sbindir}/rcceph
-  ln -sf ../../etc/init.d/ceph-radosgw %{buildroot}/%{_sbindir}/rcceph-radosgw
-%endif
+install -m 0644 -D systemd/ceph.tmpfiles.d $RPM_BUILD_ROOT%{_tmpfilesdir}/ceph-common.conf
+install -m 0755 -D systemd/ceph $RPM_BUILD_ROOT%{_sbindir}/rcceph
 mkdir -p $RPM_BUILD_ROOT%{_sbindir}
 install -m 0644 -D src/logrotate.conf $RPM_BUILD_ROOT%{_sysconfdir}/logrotate.d/ceph
 chmod 0644 $RPM_BUILD_ROOT%{_docdir}/ceph/sample.ceph.conf
@@ -786,9 +761,7 @@ mv $RPM_BUILD_ROOT/sbin/mount.fuse.ceph $RPM_BUILD_ROOT/usr/sbin/mount.fuse.ceph
 
 #set up placeholder directories
 mkdir -p $RPM_BUILD_ROOT%{_sysconfdir}/ceph
-%if ! 0%{?_with_systemd}
 mkdir -p $RPM_BUILD_ROOT%{_localstatedir}/run/ceph
-%endif
 mkdir -p $RPM_BUILD_ROOT%{_localstatedir}/log/ceph
 mkdir -p $RPM_BUILD_ROOT%{_localstatedir}/lib/ceph/tmp
 mkdir -p $RPM_BUILD_ROOT%{_localstatedir}/lib/ceph/mon
@@ -820,11 +793,7 @@ rm -rf $RPM_BUILD_ROOT
 %{_bindir}/ceph-detect-init
 %{_bindir}/ceph-client-debug
 %{_bindir}/cephfs
-%if 0%{?_with_systemd}
 %{_unitdir}/ceph-create-keys@.service
-%else
-%{_initrddir}/ceph
-%endif
 %{_sbindir}/ceph-create-keys
 %{_sbindir}/rcceph
 %if 0%{?rhel} >= 7 || 0%{?fedora} || 0%{?suse_version}
@@ -872,75 +841,55 @@ rm -rf $RPM_BUILD_ROOT
 %attr(750,ceph,ceph) %dir %{_localstatedir}/lib/ceph/bootstrap-osd
 %attr(750,ceph,ceph) %dir %{_localstatedir}/lib/ceph/bootstrap-mds
 %attr(750,ceph,ceph) %dir %{_localstatedir}/lib/ceph/bootstrap-rgw
-%if ! 0%{?_with_systemd}
-%attr(770,ceph,ceph) %dir %{_localstatedir}/run/ceph
-%endif
 
 %pre base
-%if 0%{?_with_systemd}
-  %if 0%{?suse_version}
-    # service_add_pre and friends don't work with parameterized systemd service
-    # instances, only with single services or targets, so we always pass
-    # ceph.target to these macros
-    %service_add_pre ceph.target
-  %endif
+%if 0%{?suse_version}
+  # service_add_pre and friends don't work with parameterized systemd service
+  # instances, only with single services or targets, so we always pass
+  # ceph.target to these macros
+  %service_add_pre ceph.target
 %endif
 
 %post base
 /sbin/ldconfig
-%if 0%{?_with_systemd}
-  %if 0%{?suse_version}
-    %fillup_only
-    %service_add_post ceph.target
-  %endif
-%else
-  /sbin/chkconfig --add ceph
+%if 0%{?suse_version}
+  %fillup_only
+  %service_add_post ceph.target
 %endif
 
 %preun base
-%if 0%{?_with_systemd}
-  %if 0%{?suse_version}
-    %service_del_preun ceph.target
-  %endif
-  # Disable and stop on removal.
-  if [ $1 = 0 ] ; then
-    SERVICE_LIST=$(systemctl | grep -E '^ceph-mon@|^ceph-create-keys@|^ceph-osd@|^ceph-mds@|^ceph-disk-'  | cut -d' ' -f1)
-    if [ -n "$SERVICE_LIST" ]; then
-      for SERVICE in $SERVICE_LIST; do
-        /usr/bin/systemctl --no-reload disable $SERVICE > /dev/null 2>&1 || :
-        /usr/bin/systemctl stop $SERVICE > /dev/null 2>&1 || :
-      done
-    fi
-  fi
-%else
-  %if 0%{?rhel} || 0%{?fedora}
-    if [ $1 = 0 ] ; then
-      /sbin/service ceph stop >/dev/null 2>&1
-      /sbin/chkconfig --del ceph
-    fi
-  %endif
+%if 0%{?suse_version}
+  %service_del_preun ceph.target
 %endif
+# Disable and stop on removal.
+if [ $1 = 0 ] ; then
+  SERVICE_LIST=$(systemctl | grep -E '^ceph-mon@|^ceph-create-keys@|^ceph-osd@|^ceph-mds@|^ceph-disk-'  | cut -d' ' -f1)
+  if [ -n "$SERVICE_LIST" ]; then
+    for SERVICE in $SERVICE_LIST; do
+      /usr/bin/systemctl --no-reload disable $SERVICE > /dev/null 2>&1 || :
+      /usr/bin/systemctl stop $SERVICE > /dev/null 2>&1 || :
+    done
+  fi
+fi
 
 %postun base
 /sbin/ldconfig
-%if 0%{?_with_systemd}
-  if [ $1 = 1 ] ; then
-    # Restart on upgrade, but only if "CEPH_AUTO_RESTART_ON_UPGRADE" is set to
-    # "yes". In any case: if units are not running, do not touch them.
-    SYSCONF_CEPH=/etc/sysconfig/ceph
-    if [ -f $SYSCONF_CEPH -a -r $SYSCONF_CEPH ] ; then
-      source $SYSCONF_CEPH
-    fi
-    if [ "X$CEPH_AUTO_RESTART_ON_UPGRADE" = "Xyes" ] ; then
-      SERVICE_LIST=$(systemctl | grep -E '^ceph-mon@|^ceph-create-keys@|^ceph-osd@|^ceph-mds@|^ceph-disk-'  | cut -d' ' -f1)
-      if [ -n "$SERVICE_LIST" ]; then
-        for SERVICE in $SERVICE_LIST; do
-          /usr/bin/systemctl try-restart $SERVICE > /dev/null 2>&1 || :
-        done
-      fi
+if [ $1 = 1 ] ; then
+  # Restart on upgrade, but only if "CEPH_AUTO_RESTART_ON_UPGRADE" is set to
+  # "yes". In any case: if units are not running, do not touch them.
+  SYSCONF_CEPH=/etc/sysconfig/ceph
+  if [ -f $SYSCONF_CEPH -a -r $SYSCONF_CEPH ] ; then
+    source $SYSCONF_CEPH
+  fi
+  if [ "X$CEPH_AUTO_RESTART_ON_UPGRADE" = "Xyes" ] ; then
+    SERVICE_LIST=$(systemctl | grep -E '^ceph-mon@|^ceph-create-keys@|^ceph-osd@|^ceph-mds@|^ceph-disk-'  | cut -d' ' -f1)
+    if [ -n "$SERVICE_LIST" ]; then
+      for SERVICE in $SERVICE_LIST; do
+        /usr/bin/systemctl try-restart $SERVICE > /dev/null 2>&1 || :
+      done
     fi
   fi
-%endif
+fi
 
 #################################################################################
 %files common
@@ -965,9 +914,7 @@ rm -rf $RPM_BUILD_ROOT
 %endif
 %{_bindir}/ceph-post-file
 %{_bindir}/ceph-brag
-%if 0%{?_with_systemd}
 %{_tmpfilesdir}/ceph-common.conf
-%endif
 %{_mandir}/man8/ceph-authtool.8*
 %{_mandir}/man8/ceph-conf.8*
 %{_mandir}/man8/ceph-dencoder.8*
@@ -989,11 +936,7 @@ rm -rf $RPM_BUILD_ROOT
 %config %{_sysconfdir}/bash_completion.d/rados
 %config %{_sysconfdir}/bash_completion.d/rbd
 %config(noreplace) %{_sysconfdir}/ceph/rbdmap
-%if 0%{?_with_systemd}
 %{_unitdir}/rbdmap.service
-%else
-%{_initrddir}/rbdmap
-%endif
 %{python_sitelib}/ceph_argparse.py*
 %{python_sitelib}/ceph_daemon.py*
 %{_udevrulesdir}/50-rbd.rules
@@ -1022,9 +965,7 @@ fi
 exit 0
 
 %post common
-%if 0%{?_with_systemd}
 %tmpfiles_create %{_tmpfilesdir}/ceph-common.conf
-%endif
 
 %postun common
 # Package removal cleanup
@@ -1037,12 +978,8 @@ fi
 %files mds
 %{_bindir}/ceph-mds
 %{_mandir}/man8/ceph-mds.8*
-%if 0%{?_with_systemd}
 %{_unitdir}/ceph-mds@.service
 %{_unitdir}/ceph-mds.target
-%else
-%{_initrddir}/ceph
-%endif
 %attr(750,ceph,ceph) %dir %{_localstatedir}/lib/ceph/mds
 
 #################################################################################
@@ -1052,12 +989,8 @@ fi
 %{_mandir}/man8/ceph-mon.8*
 %{_mandir}/man8/ceph-rest-api.8*
 %{python_sitelib}/ceph_rest_api.py*
-%if 0%{?_with_systemd}
 %{_unitdir}/ceph-mon@.service
 %{_unitdir}/ceph-mon.target
-%else
-%{_initrddir}/ceph
-%endif
 %attr(750,ceph,ceph) %dir %{_localstatedir}/lib/ceph/mon
 
 #################################################################################
@@ -1082,10 +1015,8 @@ fi
 %defattr(-,root,root,-)
 %{_bindir}/rbd-mirror
 %{_mandir}/man8/rbd-mirror.8*
-%if 0%{?_with_systemd}
 %{_unitdir}/ceph-rbd-mirror@.service
 %{_unitdir}/ceph-rbd-mirror.target
-%endif
 
 #################################################################################
 %files -n rbd-nbd
@@ -1104,13 +1035,8 @@ fi
 %{_mandir}/man8/radosgw-admin.8*
 %config %{_sysconfdir}/bash_completion.d/radosgw-admin
 %dir %{_localstatedir}/lib/ceph/radosgw
-%if 0%{?_with_systemd}
 %{_unitdir}/ceph-radosgw@.service
 %{_unitdir}/ceph-radosgw.target
-%else
-%{_initrddir}/ceph-radosgw
-%{_sbindir}/rcceph-radosgw
-%endif
 
 %post radosgw
 /sbin/ldconfig
@@ -1122,39 +1048,35 @@ fi
 %endif
 
 %preun radosgw
-%if 0%{?_with_systemd}
-  # Disable and stop on removal.
-  if [ $1 = 0 ] ; then
-    SERVICE_LIST=$(systemctl | grep -E '^ceph-radosgw@'  | cut -d' ' -f1)
-    if [ -n "$SERVICE_LIST" ]; then
-      for SERVICE in $SERVICE_LIST; do
-        /usr/bin/systemctl --no-reload disable $SERVICE > /dev/null 2>&1 || :
-        /usr/bin/systemctl stop $SERVICE > /dev/null 2>&1 || :
-      done
-    fi
+# Disable and stop on removal.
+if [ $1 = 0 ] ; then
+  SERVICE_LIST=$(systemctl | grep -E '^ceph-radosgw@'  | cut -d' ' -f1)
+  if [ -n "$SERVICE_LIST" ]; then
+    for SERVICE in $SERVICE_LIST; do
+      /usr/bin/systemctl --no-reload disable $SERVICE > /dev/null 2>&1 || :
+      /usr/bin/systemctl stop $SERVICE > /dev/null 2>&1 || :
+    done
   fi
-%endif
+fi
 
 %postun radosgw
 /sbin/ldconfig
-%if 0%{?_with_systemd}
-  if [ $1 = 1 ] ; then
-    # Restart on upgrade, but only if "CEPH_AUTO_RESTART_ON_UPGRADE" is set to
-    # "yes". In any case: if units are not running, do not touch them.
-    SYSCONF_CEPH=/etc/sysconfig/ceph
-    if [ -f $SYSCONF_CEPH -a -r $SYSCONF_CEPH ] ; then
-      source $SYSCONF_CEPH
-    fi
-    if [ "X$CEPH_AUTO_RESTART_ON_UPGRADE" = "Xyes" ] ; then
-      SERVICE_LIST=$(systemctl | grep -E '^ceph-radosgw@'  | cut -d' ' -f1)
-      if [ -n "$SERVICE_LIST" ]; then
-        for SERVICE in $SERVICE_LIST; do
-          /usr/bin/systemctl try-restart $SERVICE > /dev/null 2>&1 || :
-        done
-      fi
+if [ $1 = 1 ] ; then
+  # Restart on upgrade, but only if "CEPH_AUTO_RESTART_ON_UPGRADE" is set to
+  # "yes". In any case: if units are not running, do not touch them.
+  SYSCONF_CEPH=/etc/sysconfig/ceph
+  if [ -f $SYSCONF_CEPH -a -r $SYSCONF_CEPH ] ; then
+    source $SYSCONF_CEPH
+  fi
+  if [ "X$CEPH_AUTO_RESTART_ON_UPGRADE" = "Xyes" ] ; then
+    SERVICE_LIST=$(systemctl | grep -E '^ceph-radosgw@'  | cut -d' ' -f1)
+    if [ -n "$SERVICE_LIST" ]; then
+      for SERVICE in $SERVICE_LIST; do
+        /usr/bin/systemctl try-restart $SERVICE > /dev/null 2>&1 || :
+      done
     fi
   fi
-%endif
+fi
 
 #################################################################################
 %files osd
@@ -1172,13 +1094,9 @@ fi
 %if 0%{?rhel} && ! 0%{?centos}
 /etc/cron.hourly/subman
 %endif
-%if 0%{?_with_systemd}
 %{_unitdir}/ceph-osd@.service
 %{_unitdir}/ceph-osd.target
 %{_unitdir}/ceph-disk@.service
-%else
-%{_initrddir}/ceph
-%endif
 %attr(750,ceph,ceph) %dir %{_localstatedir}/lib/ceph/osd
 
 #################################################################################
@@ -1190,18 +1108,10 @@ fi
 %dir %{_prefix}/lib/ocf
 %dir %{_prefix}/lib/ocf/resource.d
 %dir %{_prefix}/lib/ocf/resource.d/ceph
-%if 0%{_with_systemd}
 %exclude %{_prefix}/lib/ocf/resource.d/ceph/ceph
 %exclude %{_prefix}/lib/ocf/resource.d/ceph/mds
 %exclude %{_prefix}/lib/ocf/resource.d/ceph/mon
 %exclude %{_prefix}/lib/ocf/resource.d/ceph/osd
-%endif
-%if ! 0%{_with_systemd}
-%{_prefix}/lib/ocf/resource.d/ceph/ceph
-%{_prefix}/lib/ocf/resource.d/ceph/mds
-%{_prefix}/lib/ocf/resource.d/ceph/mon
-%{_prefix}/lib/ocf/resource.d/ceph/osd
-%endif
 %{_prefix}/lib/ocf/resource.d/ceph/rbd
 
 %endif
@@ -1432,20 +1342,12 @@ if test "$OLD_POLVER" == "$NEW_POLVER"; then
 fi
 
 # Check whether the daemons are running
-%if 0%{?_with_systemd}
-    /usr/bin/systemctl status ceph.target > /dev/null 2>&1
-%else
-    /sbin/service ceph status >/dev/null 2>&1
-%endif
+/usr/bin/systemctl status ceph.target > /dev/null 2>&1
 STATUS=$?
 
 # Stop the daemons if they were running
 if test $STATUS -eq 0; then
-%if 0%{?_with_systemd}
     /usr/bin/systemctl stop ceph.target > /dev/null 2>&1
-%else
-    /sbin/service ceph stop >/dev/null 2>&1
-%endif
 fi
 
 # Now, relabel the files
@@ -1453,11 +1355,7 @@ fi
 
 # Start the daemons iff they were running before
 if test $STATUS -eq 0; then
-%if 0%{?_with_systemd}
     /usr/bin/systemctl start ceph.target > /dev/null 2>&1 || :
-%else
-    /sbin/service ceph start >/dev/null 2>&1 || :
-%endif
 fi
 
 exit 0
@@ -1476,20 +1374,12 @@ if [ $1 -eq 0 ]; then
     fi
 
     # Check whether the daemons are running
-    %if 0%{?_with_systemd}
-        /usr/bin/systemctl status ceph.target > /dev/null 2>&1
-    %else
-        /sbin/service ceph status >/dev/null 2>&1
-    %endif
+    /usr/bin/systemctl status ceph.target > /dev/null 2>&1
     STATUS=$?
 
     # Stop the daemons if they were running
     if test $STATUS -eq 0; then
-    %if 0%{?_with_systemd}
         /usr/bin/systemctl stop ceph.target > /dev/null 2>&1
-    %else
-        /sbin/service ceph stop >/dev/null 2>&1
-    %endif
     fi
 
     # Now, relabel the files
@@ -1497,11 +1387,7 @@ if [ $1 -eq 0 ]; then
 
     # Start the daemons if they were running before
     if test $STATUS -eq 0; then
-    %if 0%{?_with_systemd}
 	/usr/bin/systemctl start ceph.target > /dev/null 2>&1 || :
-    %else
-	/sbin/service ceph start >/dev/null 2>&1 || :
-    %endif
     fi
 fi
 exit 0
