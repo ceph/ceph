@@ -1219,11 +1219,9 @@ fi
 %{_libdir}/librados_tp.so.*
 %endif
 
-%post -n librados2
-/sbin/ldconfig
+%post -n librados2 -p /sbin/ldconfig
 
-%postun -n librados2
-/sbin/ldconfig
+%postun -n librados2 -p /sbin/ldconfig
 
 #################################################################################
 %files -n librados2-devel
@@ -1256,11 +1254,9 @@ fi
 %defattr(-,root,root,-)
 %{_libdir}/libradosstriper.so.*
 
-%post -n libradosstriper1
-/sbin/ldconfig
+%post -n libradosstriper1 -p /sbin/ldconfig
 
-%postun -n libradosstriper1
-/sbin/ldconfig
+%postun -n libradosstriper1 -p /sbin/ldconfig
 
 #################################################################################
 %files -n libradosstriper1-devel
@@ -1283,8 +1279,7 @@ fi
 mkdir -p /usr/lib64/qemu/
 ln -sf %{_libdir}/librbd.so.1 /usr/lib64/qemu/librbd.so.1
 
-%postun -n librbd1
-/sbin/ldconfig
+%postun -n librbd1 -p /sbin/ldconfig
 
 #################################################################################
 %files -n librbd1-devel
@@ -1303,11 +1298,9 @@ ln -sf %{_libdir}/librbd.so.1 /usr/lib64/qemu/librbd.so.1
 %defattr(-,root,root,-)
 %{_libdir}/librgw.so.*
 
-%post -n librgw2
-/sbin/ldconfig
+%post -n librgw2 -p /sbin/ldconfig
 
-%postun -n librgw2
-/sbin/ldconfig
+%postun -n librgw2 -p /sbin/ldconfig
 
 #################################################################################
 %files -n librgw2-devel
@@ -1328,11 +1321,9 @@ ln -sf %{_libdir}/librbd.so.1 /usr/lib64/qemu/librbd.so.1
 %defattr(-,root,root,-)
 %{_libdir}/libcephfs.so.*
 
-%post -n libcephfs1
-/sbin/ldconfig
+%post -n libcephfs1 -p /sbin/ldconfig
 
-%postun -n libcephfs1
-/sbin/ldconfig
+%postun -n libcephfs1 -p /sbin/ldconfig
 
 #################################################################################
 %files -n libcephfs1-devel
@@ -1391,11 +1382,9 @@ ln -sf %{_libdir}/librbd.so.1 /usr/lib64/qemu/librbd.so.1
 %defattr(-,root,root,-)
 %{_libdir}/libcephfs_jni.so.*
 
-%post -n libcephfs_jni1
-/sbin/ldconfig
+%post -n libcephfs_jni1 -p /sbin/ldconfig
 
-%postun -n libcephfs_jni1
-/sbin/ldconfig
+%postun -n libcephfs_jni1 -p /sbin/ldconfig
 
 #################################################################################
 %files -n libcephfs_jni1-devel
