@@ -38,16 +38,16 @@
 %{!?_selinux_policy_version: %global _selinux_policy_version %(sed -e 's,.*selinux-policy-\\([^/]*\\)/.*,\\1,' /usr/share/selinux/devel/policyhelp 2>/dev/null || echo 0.0.0)}
 
 %define relabel_files() \
-restorecon -R /usr/bin/ceph-mon > /dev/null 2>&1; \
-restorecon -R /usr/bin/ceph-osd > /dev/null 2>&1; \
-restorecon -R /usr/bin/ceph-mds > /dev/null 2>&1; \
-restorecon -R /usr/bin/radosgw > /dev/null 2>&1; \
+restorecon -R %{_bindir}/ceph-mon > /dev/null 2>&1; \
+restorecon -R %{_bindir}/ceph-osd > /dev/null 2>&1; \
+restorecon -R %{_bindir}/ceph-mds > /dev/null 2>&1; \
+restorecon -R %{_bindir}/radosgw > /dev/null 2>&1; \
 restorecon -R /etc/rc\.d/init\.d/ceph > /dev/null 2>&1; \
 restorecon -R /etc/rc\.d/init\.d/radosgw > /dev/null 2>&1; \
-restorecon -R /var/run/ceph > /dev/null 2>&1; \
-restorecon -R /var/lib/ceph > /dev/null 2>&1; \
-restorecon -R /var/log/ceph > /dev/null 2>&1; \
-restorecon -R /var/log/radosgw > /dev/null 2>&1;
+restorecon -R %{_localstatedir}/run/ceph > /dev/null 2>&1; \
+restorecon -R %{_localstatedir}/lib/ceph > /dev/null 2>&1; \
+restorecon -R %{_localstatedir}/log/ceph > /dev/null 2>&1; \
+restorecon -R %{_localstatedir}/log/radosgw > /dev/null 2>&1;
 %endif
 
 %{!?_udevrulesdir: %global _udevrulesdir /lib/udev/rules.d}
@@ -644,8 +644,8 @@ export RPM_OPT_FLAGS=`echo $RPM_OPT_FLAGS | sed -e 's/i386/i486/'`
 %{configure}	CPPFLAGS="$java_inc" \
 		--prefix=/usr \
                 --libexecdir=%{_libexecdir} \
-		--localstatedir=/var \
-		--sysconfdir=/etc \
+		--localstatedir=%{_localstatedir} \
+		--sysconfdir=%{_sysconfdir} \
 %if 0%{?rhel} && ! 0%{?centos}
                 --enable-subman \
 %endif
@@ -906,8 +906,8 @@ DISABLE_RESTART_ON_UPDATE="yes"
 CEPH_GROUP_ID=167
 CEPH_USER_ID=167
 %if 0%{?rhel} || 0%{?fedora}
-%{_sbindir}/groupadd ceph -g $CEPH_GROUP_ID -o -r 2>/dev/null || :
-%{_sbindir}/useradd ceph -u $CEPH_USER_ID -o -r -g ceph -s /sbin/nologin -c "Ceph daemons" -d %{_localstatedir}/lib/ceph 2>/dev/null || :
+/usr/sbin/groupadd ceph -g $CEPH_GROUP_ID -o -r 2>/dev/null || :
+/usr/sbin/useradd ceph -u $CEPH_USER_ID -o -r -g ceph -s /sbin/nologin -c "Ceph daemons" -d %{_localstatedir}/lib/ceph 2>/dev/null || :
 %endif
 %if 0%{?suse_version}
 if ! getent group ceph >/dev/null ; then
@@ -929,8 +929,8 @@ exit 0
 %postun common
 # Package removal cleanup
 if [ "$1" -eq "0" ] ; then
-    rm -rf /var/log/ceph
-    rm -rf /etc/ceph
+    rm -rf %{_localstatedir}/log/ceph
+    rm -rf %{_sysconfdir}/ceph
 fi
 
 #################################################################################
@@ -972,7 +972,7 @@ DISABLE_RESTART_ON_UPDATE="yes"
 if [ $FIRST_ARG -ge 1 ] ; then
   # Restart on upgrade, but only if "CEPH_AUTO_RESTART_ON_UPGRADE" is set to
   # "yes". In any case: if units are not running, do not touch them.
-  SYSCONF_CEPH=/etc/sysconfig/ceph
+  SYSCONF_CEPH=%{_sysconfdir}/sysconfig/ceph
   if [ -f $SYSCONF_CEPH -a -r $SYSCONF_CEPH ] ; then
     source $SYSCONF_CEPH
   fi
@@ -1023,7 +1023,7 @@ DISABLE_RESTART_ON_UPDATE="yes"
 if [ $FIRST_ARG -ge 1 ] ; then
   # Restart on upgrade, but only if "CEPH_AUTO_RESTART_ON_UPGRADE" is set to
   # "yes". In any case: if units are not running, do not touch them.
-  SYSCONF_CEPH=/etc/sysconfig/ceph
+  SYSCONF_CEPH=%{_sysconfdir}/sysconfig/ceph
   if [ -f $SYSCONF_CEPH -a -r $SYSCONF_CEPH ] ; then
     source $SYSCONF_CEPH
   fi
@@ -1084,7 +1084,7 @@ DISABLE_RESTART_ON_UPDATE="yes"
 if [ $FIRST_ARG -ge 1 ] ; then
   # Restart on upgrade, but only if "CEPH_AUTO_RESTART_ON_UPGRADE" is set to
   # "yes". In any case: if units are not running, do not touch them.
-  SYSCONF_CEPH=/etc/sysconfig/ceph
+  SYSCONF_CEPH=%{_sysconfdir}/sysconfig/ceph
   if [ -f $SYSCONF_CEPH -a -r $SYSCONF_CEPH ] ; then
     source $SYSCONF_CEPH
   fi
@@ -1144,7 +1144,7 @@ DISABLE_RESTART_ON_UPDATE="yes"
 if [ $FIRST_ARG -ge 1 ] ; then
   # Restart on upgrade, but only if "CEPH_AUTO_RESTART_ON_UPGRADE" is set to
   # "yes". In any case: if units are not running, do not touch them.
-  SYSCONF_CEPH=/etc/sysconfig/ceph
+  SYSCONF_CEPH=%{_sysconfdir}/sysconfig/ceph
   if [ -f $SYSCONF_CEPH -a -r $SYSCONF_CEPH ] ; then
     source $SYSCONF_CEPH
   fi
@@ -1167,7 +1167,7 @@ fi
 %{_mandir}/man8/ceph-disk.8*
 %{_mandir}/man8/ceph-osd.8*
 %if 0%{?rhel} && ! 0%{?centos}
-/etc/cron.hourly/subman
+%{_sysconfdir}/cron.hourly/subman
 %endif
 %{_unitdir}/ceph-osd@.service
 %{_unitdir}/ceph-osd.target
@@ -1205,7 +1205,7 @@ DISABLE_RESTART_ON_UPDATE="yes"
 if [ $FIRST_ARG -ge 1 ] ; then
   # Restart on upgrade, but only if "CEPH_AUTO_RESTART_ON_UPGRADE" is set to
   # "yes". In any case: if units are not running, do not touch them.
-  SYSCONF_CEPH=/etc/sysconfig/ceph
+  SYSCONF_CEPH=%{_sysconfdir}/sysconfig/ceph
   if [ -f $SYSCONF_CEPH -a -r $SYSCONF_CEPH ] ; then
     source $SYSCONF_CEPH
   fi
@@ -1428,13 +1428,13 @@ ln -sf %{_libdir}/librbd.so.1 /usr/lib64/qemu/librbd.so.1
 
 %post selinux
 # Install the policy
-OLD_POLVER=$(%{_sbindir}/semodule -l | grep -P '^ceph[\t ]' | awk '{print $2}')
-%{_sbindir}/semodule -n -i %{_datadir}/selinux/packages/ceph.pp
-NEW_POLVER=$(%{_sbindir}/semodule -l | grep -P '^ceph[\t ]' | awk '{print $2}')
+OLD_POLVER=$(/usr/sbin/semodule -l | grep -P '^ceph[\t ]' | awk '{print $2}')
+/usr/sbin/semodule -n -i /usr/share/selinux/packages/ceph.pp
+NEW_POLVER=$(/usr/sbin/semodule -l | grep -P '^ceph[\t ]' | awk '{print $2}')
 
 # Load the policy if SELinux is enabled
-if %{_sbindir}/selinuxenabled; then
-    %{_sbindir}/load_policy
+if /usr/sbin/selinuxenabled; then
+    /usr/sbin/load_policy
 else
     # Do not relabel if selinux is not enabled
     exit 0
@@ -1467,11 +1467,11 @@ exit 0
 %postun selinux
 if [ $1 -eq 0 ]; then
     # Remove the module
-    %{_sbindir}/semodule -n -r ceph
+    /usr/sbin/semodule -n -r ceph
 
     # Reload the policy if SELinux is enabled
-    if %{_sbindir}/selinuxenabled ; then
-        %{_sbindir}/load_policy
+    if /usr/sbin/selinuxenabled ; then
+        /usr/sbin/load_policy
     else
         # Do not relabel if SELinux is not enabled
         exit 0
