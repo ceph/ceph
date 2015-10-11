@@ -148,9 +148,6 @@ BuildRequires:	btrfs-progs
 BuildRequires:	nss-devel
 BuildRequires:	keyutils-libs-devel
 BuildRequires:	libatomic_ops-devel
-Requires(post):	chkconfig
-Requires(preun):	chkconfig
-Requires(preun):	initscripts
 BuildRequires:	gperftools-devel
 BuildRequires:  openldap-devel
 BuildRequires:  openssl-devel
