@@ -183,12 +183,7 @@ BuildRequires:	expat-devel
 BuildRequires:	fcgi-devel
 %endif
 # python-sphinx
-%if 0%{?rhel} > 0 && 0%{?rhel} < 7
-BuildRequires:	python-sphinx10
-%endif
-%if 0%{?fedora} || 0%{?suse_version} || 0%{?rhel} >= 7
 BuildRequires:	python-sphinx
-%endif
 #hardened-cc1
 %if 0%{?fedora} || 0%{?rhel}
 BuildRequires:  redhat-rpm-config
@@ -544,13 +539,8 @@ Group:		System Environment/Libraries
 License:	LGPL-2.0
 Requires:	java
 Requires:	libcephfs_jni1 = %{epoch}:%{version}-%{release}
-%if 0%{?el6}
-Requires:	junit4
-BuildRequires:	junit4
-%else
 Requires:       junit
 BuildRequires:  junit
-%endif
 %description -n cephfs-java
 This package contains the Java libraries for the Ceph File System.
 
@@ -779,11 +769,7 @@ rm -rf $RPM_BUILD_ROOT
 %{_libexecdir}/systemd/system-preset/50-ceph.preset
 %{_sbindir}/ceph-create-keys
 %{_sbindir}/rcceph
-%if 0%{?rhel} >= 7 || 0%{?fedora} || 0%{?suse_version}
 %{_sbindir}/mount.ceph
-%else
-/sbin/mount.ceph
-%endif
 %dir %{_libexecdir}/ceph
 %{_libexecdir}/ceph/ceph_common.sh
 %dir %{_libdir}/rados-classes
@@ -1043,11 +1029,7 @@ fi
 %defattr(-,root,root,-)
 %{_bindir}/ceph-fuse
 %{_mandir}/man8/ceph-fuse.8*
-%if 0%{?rhel} >= 7 || 0%{?fedora} || 0%{?suse_version}
 %{_sbindir}/mount.fuse.ceph
-%else
-/sbin/mount.fuse.ceph
-%endif
 
 #################################################################################
 %files -n rbd-fuse
