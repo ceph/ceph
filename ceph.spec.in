@@ -680,23 +680,23 @@ make %{?_smp_mflags} check-local
 
 
 %install
-make DESTDIR=$RPM_BUILD_ROOT install
-find $RPM_BUILD_ROOT -type f -name "*.la" -exec rm -f {} ';'
-find $RPM_BUILD_ROOT -type f -name "*.a" -exec rm -f {} ';'
-install -D src/etc-rbdmap $RPM_BUILD_ROOT%{_sysconfdir}/ceph/rbdmap
+make DESTDIR=%{buildroot} install
+find %{buildroot} -type f -name "*.la" -exec rm -f {} ';'
+find %{buildroot} -type f -name "*.a" -exec rm -f {} ';'
+install -D src/etc-rbdmap %{buildroot}%{_sysconfdir}/ceph/rbdmap
 %if 0%{?fedora} || 0%{?rhel}
-install -m 0644 -D etc/sysconfig/ceph $RPM_BUILD_ROOT%{_sysconfdir}/sysconfig/ceph
+install -m 0644 -D etc/sysconfig/ceph %{buildroot}%{_sysconfdir}/sysconfig/ceph
 %endif
 %if 0%{?suse_version}
-install -m 0644 -D etc/sysconfig/ceph $RPM_BUILD_ROOT%{_localstatedir}/adm/fillup-templates/sysconfig.%{name}
+install -m 0644 -D etc/sysconfig/ceph %{buildroot}%{_localstatedir}/adm/fillup-templates/sysconfig.%{name}
 %endif
-install -m 0644 -D systemd/ceph.tmpfiles.d $RPM_BUILD_ROOT%{_tmpfilesdir}/ceph-common.conf
-install -m 0755 -D systemd/ceph $RPM_BUILD_ROOT%{_sbindir}/rcceph
-install -m 0644 -D systemd/50-ceph.preset $RPM_BUILD_ROOT%{_libexecdir}/systemd/system-preset/50-ceph.preset
-mkdir -p $RPM_BUILD_ROOT%{_sbindir}
-install -m 0644 -D src/logrotate.conf $RPM_BUILD_ROOT%{_sysconfdir}/logrotate.d/ceph
-chmod 0644 $RPM_BUILD_ROOT%{_docdir}/ceph/sample.ceph.conf
-chmod 0644 $RPM_BUILD_ROOT%{_docdir}/ceph/sample.fetch_config
+install -m 0644 -D systemd/ceph.tmpfiles.d %{buildroot}%{_tmpfilesdir}/ceph-common.conf
+install -m 0755 -D systemd/ceph %{buildroot}%{_sbindir}/rcceph
+install -m 0644 -D systemd/50-ceph.preset %{buildroot}%{_libexecdir}/systemd/system-preset/50-ceph.preset
+mkdir -p %{buildroot}%{_sbindir}
+install -m 0644 -D src/logrotate.conf %{buildroot}%{_sysconfdir}/logrotate.d/ceph
+chmod 0644 %{buildroot}%{_docdir}/ceph/sample.ceph.conf
+chmod 0644 %{buildroot}%{_docdir}/ceph/sample.fetch_config
 
 # firewall templates
 %if 0%{?suse_version}
@@ -705,35 +705,35 @@ install -m 0644 -D etc/sysconfig/SuSEfirewall2.d/services/ceph-osd-mds %{buildro
 %endif
 
 # udev rules
-install -m 0644 -D udev/50-rbd.rules $RPM_BUILD_ROOT%{_udevrulesdir}/50-rbd.rules
+install -m 0644 -D udev/50-rbd.rules %{buildroot}%{_udevrulesdir}/50-rbd.rules
 
 %if (0%{?rhel} && 0%{?rhel} < 7)
-install -m 0644 -D udev/95-ceph-osd-alt.rules $RPM_BUILD_ROOT/lib/udev/rules.d/95-ceph-osd.rules
+install -m 0644 -D udev/95-ceph-osd-alt.rules %{buildroot}/lib/udev/rules.d/95-ceph-osd.rules
 %else
-install -m 0644 -D udev/95-ceph-osd.rules $RPM_BUILD_ROOT/lib/udev/rules.d/95-ceph-osd.rules
+install -m 0644 -D udev/95-ceph-osd.rules %{buildroot}/lib/udev/rules.d/95-ceph-osd.rules
 %endif
 
 %if 0%{?rhel} >= 7 || 0%{?fedora} || 0%{?suse_version}
-mv $RPM_BUILD_ROOT/lib/udev/rules.d/95-ceph-osd.rules $RPM_BUILD_ROOT/usr/lib/udev/rules.d/95-ceph-osd.rules
-mv $RPM_BUILD_ROOT/sbin/mount.ceph $RPM_BUILD_ROOT/usr/sbin/mount.ceph
-mv $RPM_BUILD_ROOT/sbin/mount.fuse.ceph $RPM_BUILD_ROOT/usr/sbin/mount.fuse.ceph
+mv %{buildroot}/lib/udev/rules.d/95-ceph-osd.rules %{buildroot}/usr/lib/udev/rules.d/95-ceph-osd.rules
+mv %{buildroot}/sbin/mount.ceph %{buildroot}/usr/sbin/mount.ceph
+mv %{buildroot}/sbin/mount.fuse.ceph %{buildroot}/usr/sbin/mount.fuse.ceph
 %endif
 
 #set up placeholder directories
-mkdir -p $RPM_BUILD_ROOT%{_sysconfdir}/ceph
-mkdir -p $RPM_BUILD_ROOT%{_localstatedir}/run/ceph
-mkdir -p $RPM_BUILD_ROOT%{_localstatedir}/log/ceph
-mkdir -p $RPM_BUILD_ROOT%{_localstatedir}/lib/ceph/tmp
-mkdir -p $RPM_BUILD_ROOT%{_localstatedir}/lib/ceph/mon
-mkdir -p $RPM_BUILD_ROOT%{_localstatedir}/lib/ceph/osd
-mkdir -p $RPM_BUILD_ROOT%{_localstatedir}/lib/ceph/mds
-mkdir -p $RPM_BUILD_ROOT%{_localstatedir}/lib/ceph/radosgw
-mkdir -p $RPM_BUILD_ROOT%{_localstatedir}/lib/ceph/bootstrap-osd
-mkdir -p $RPM_BUILD_ROOT%{_localstatedir}/lib/ceph/bootstrap-mds
-mkdir -p $RPM_BUILD_ROOT%{_localstatedir}/lib/ceph/bootstrap-rgw
+mkdir -p %{buildroot}%{_sysconfdir}/ceph
+mkdir -p %{buildroot}%{_localstatedir}/run/ceph
+mkdir -p %{buildroot}%{_localstatedir}/log/ceph
+mkdir -p %{buildroot}%{_localstatedir}/lib/ceph/tmp
+mkdir -p %{buildroot}%{_localstatedir}/lib/ceph/mon
+mkdir -p %{buildroot}%{_localstatedir}/lib/ceph/osd
+mkdir -p %{buildroot}%{_localstatedir}/lib/ceph/mds
+mkdir -p %{buildroot}%{_localstatedir}/lib/ceph/radosgw
+mkdir -p %{buildroot}%{_localstatedir}/lib/ceph/bootstrap-osd
+mkdir -p %{buildroot}%{_localstatedir}/lib/ceph/bootstrap-mds
+mkdir -p %{buildroot}%{_localstatedir}/lib/ceph/bootstrap-rgw
 
 %clean
-rm -rf $RPM_BUILD_ROOT
+rm -rf %{buildroot}
 
 #################################################################################
 # files and systemd scriptlets
