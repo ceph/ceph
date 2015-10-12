@@ -505,7 +505,8 @@ void dump_trans_id(req_state *s)
   }
 }
 
-void end_header(struct req_state *s, RGWOp *op, const char *content_type, const int64_t proposed_content_length)
+void end_header(struct req_state *s, RGWOp *op, const char *content_type, const int64_t proposed_content_length,
+		bool force_content_type)
 {
   string ctype;
 
@@ -515,7 +516,13 @@ void end_header(struct req_state *s, RGWOp *op, const char *content_type, const 
     dump_access_control(s, op);
   }
 
-  if (!content_type || s->err.is_err()) {
+  if (s->prot_flags & RGW_REST_SWIFT && !content_type) {
+    force_content_type = true;
+  }
+
+  /* do not send content type if content length is zero
+     and the content type was not set by the user */
+  if (force_content_type || (!content_type &&  s->formatter->get_len()  != 0) || s->err.is_err()){
     switch (s->format) {
     case RGW_FORMAT_XML:
       ctype = "application/xml";
@@ -545,9 +552,13 @@ void end_header(struct req_state *s, RGWOp *op, const char *content_type, const 
       dump_content_length(s, proposed_content_length);
     }
   }
-  int r = s->cio->print("Content-type: %s\r\n", content_type);
-  if (r < 0) {
-    ldout(s->cct, 0) << "ERROR: s->cio->print() returned err=" << r << dendl;
+
+  int r;
+  if (content_type) {
+      r = s->cio->print("Content-type: %s\r\n", content_type);
+      if (r < 0) {
+	ldout(s->cct, 0) << "ERROR: s->cio->print() returned err=" << r << dendl;
+      }
   }
   r = s->cio->complete_header();
   if (r < 0) {
