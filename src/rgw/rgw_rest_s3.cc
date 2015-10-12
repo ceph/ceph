@@ -1204,7 +1204,7 @@ int RGWPostObj_ObjStore_S3::get_params()
   }
   // TODO: refactor this and the above loop to share code
   piter = parts.find(RGW_AMZ_WEBSITE_REDIRECT_LOCATION);
-  if(piter != parts.end()) {
+  if (piter != parts.end()) {
     string n = piter->first;
     string attr_name = RGW_ATTR_PREFIX;
     attr_name.append(n);
@@ -2601,7 +2601,7 @@ RGWHandler *RGWRESTMgr_S3::get_handler(struct req_state *s)
 
   RGWHandler* handler;
   // TODO: Make this more readable
-  if(is_s3website) {
+  if (is_s3website) {
     if (s->bucket_name_str.empty()) {
       handler = new RGWHandler_ObjStore_Service_S3Website;
     } else if (s->object.empty()) {
@@ -2627,7 +2627,7 @@ int RGWHandler_ObjStore_S3Website::retarget(RGWOp *op, RGWOp **new_op) {
   *new_op = op;
   ldout(s->cct, 10) << __func__ << "Starting retarget" << dendl;
 
-  if(!(s->prot_flags & RGW_PROTO_WEBSITE))
+  if (!(s->prot_flags & RGW_PROTO_WEBSITE))
     return 0;
 
   RGWObjectCtx& obj_ctx = *static_cast<RGWObjectCtx *>(s->obj_ctx);
@@ -2636,7 +2636,7 @@ int RGWHandler_ObjStore_S3Website::retarget(RGWOp *op, RGWOp **new_op) {
       // TODO-FUTURE: if the bucket does not exist, maybe expose it here?
       return -ERR_NO_SUCH_BUCKET;
   }
-  if(!s->bucket_info.has_website) {
+  if (!s->bucket_info.has_website) {
       // TODO-FUTURE: if the bucket has no WebsiteConfig, expose it here
       return -ERR_NO_SUCH_WEBSITE_CONFIGURATION;
   }
@@ -2654,7 +2654,7 @@ int RGWHandler_ObjStore_S3Website::retarget(RGWOp *op, RGWOp **new_op) {
     int redirect_code = 0;
     rrule.apply_rule(protocol, hostname, s->object.name, &s->redirect, &redirect_code);
     // APply a custom HTTP response code
-    if(redirect_code > 0)
+    if (redirect_code > 0)
       s->err.http_ret = redirect_code; // Apply a custom HTTP response code
     ldout(s->cct, 10) << "retarget redirect code=" << redirect_code << " proto+host:" << protocol << "://" << hostname << " -> " << s->redirect << dendl;
     return -ERR_WEBSITE_REDIRECT;
@@ -2716,7 +2716,7 @@ int RGWHandler_ObjStore_S3Website::error_handler(int err_no, string *error_conte
   const struct rgw_http_errors *r;
   int http_error_code = -1;
   r = search_err(err_no, RGW_HTTP_ERRORS, ARRAY_LEN(RGW_HTTP_ERRORS));
-  if(r) {
+  if (r) {
     http_error_code = r->http_ret;
   }
 
@@ -2729,11 +2729,11 @@ int RGWHandler_ObjStore_S3Website::error_handler(int err_no, string *error_conte
     int redirect_code = 0;
     rrule.apply_rule(protocol, hostname, s->object.name, &s->redirect, &redirect_code);
     // APply a custom HTTP response code
-    if(redirect_code > 0)
+    if (redirect_code > 0)
       s->err.http_ret = redirect_code; // Apply a custom HTTP response code
     ldout(s->cct, 10) << "error handler redirect code=" << redirect_code << " proto+host:" << protocol << "://" << hostname << " -> " << s->redirect << dendl;
     return -ERR_WEBSITE_REDIRECT;
-  } else if(!s->bucket_info.website_conf.error_doc.empty()) {
+  } else if (!s->bucket_info.website_conf.error_doc.empty()) {
     RGWHandler_ObjStore_S3Website::get_errordoc(s->bucket_info.website_conf.error_doc, error_content);
   } else {
     ldout(s->cct, 20) << "No special error handling today!" << dendl;
