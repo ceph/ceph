@@ -409,7 +409,8 @@ void IoCtx::close() {
 
 int IoCtx::create(const std::string& oid, bool exclusive) {
   TestIoCtxImpl *ctx = reinterpret_cast<TestIoCtxImpl*>(io_ctx_impl);
-  return ctx->create(oid, exclusive);
+  return ctx->execute_operation(
+    oid, boost::bind(&TestIoCtxImpl::create, _1, _2, exclusive));
 }
 
 void IoCtx::dup(const IoCtx& rhs) {
@@ -421,8 +422,9 @@ void IoCtx::dup(const IoCtx& rhs) {
 int IoCtx::exec(const std::string& oid, const char *cls, const char *method,
                 bufferlist& inbl, bufferlist& outbl) {
   TestIoCtxImpl *ctx = reinterpret_cast<TestIoCtxImpl*>(io_ctx_impl);
-  return ctx->exec(oid, get_class_handler(), cls, method, inbl, &outbl,
-                   ctx->get_snap_context());
+  return ctx->execute_operation(
+    oid, boost::bind(&TestIoCtxImpl::exec, _1, _2, get_class_handler(), cls,
+                     method, inbl, &outbl, ctx->get_snap_context()));
 }
 
 void IoCtx::from_rados_ioctx_t(rados_ioctx_t p, IoCtx &io) {
@@ -455,13 +457,15 @@ std::string IoCtx::get_pool_name() {
 
 int IoCtx::list_snaps(const std::string& o, snap_set_t *out_snaps) {
   TestIoCtxImpl *ctx = reinterpret_cast<TestIoCtxImpl*>(io_ctx_impl);
-  return ctx->list_snaps(o, out_snaps);
+  return ctx->execute_operation(
+    o, boost::bind(&TestIoCtxImpl::list_snaps, _1, _2, out_snaps));
 }
 
 int IoCtx::list_watchers(const std::string& o,
                          std::list<obj_watch_t> *out_watchers) {
   TestIoCtxImpl *ctx = reinterpret_cast<TestIoCtxImpl*>(io_ctx_impl);
-  return ctx->list_watchers(o, out_watchers);
+  return ctx->execute_operation(
+    o, boost::bind(&TestIoCtxImpl::list_watchers, _1, _2, out_watchers));
 }
 
 int IoCtx::notify(const std::string& o, uint64_t ver, bufferlist& bl) {
@@ -486,7 +490,9 @@ int IoCtx::omap_get_vals(const std::string& oid,
                          uint64_t max_return,
                          std::map<std::string, bufferlist> *out_vals) {
   TestIoCtxImpl *ctx = reinterpret_cast<TestIoCtxImpl*>(io_ctx_impl);
-  return ctx->omap_get_vals(oid, start_after, "", max_return, out_vals);
+  return ctx->execute_operation(
+    oid, boost::bind(&TestIoCtxImpl::omap_get_vals, _1, _2, start_after, "",
+                     max_return, out_vals));
 }
 
 int IoCtx::operate(const std::string& oid, ObjectWriteOperation *op) {
@@ -505,11 +511,14 @@ int IoCtx::operate(const std::string& oid, ObjectReadOperation *op,
 int IoCtx::read(const std::string& oid, bufferlist& bl, size_t len,
                 uint64_t off) {
   TestIoCtxImpl *ctx = reinterpret_cast<TestIoCtxImpl*>(io_ctx_impl);
-  return ctx->read(oid, len, off, &bl);
+  return ctx->execute_operation(
+    oid, boost::bind(&TestIoCtxImpl::read, _1, _2, len, off, &bl));
 }
 
 int IoCtx::remove(const std::string& oid) {
   TestIoCtxImpl *ctx = reinterpret_cast<TestIoCtxImpl*>(io_ctx_impl);
+  return ctx->execute_operation(
+    oid, boost::bind(&TestIoCtxImpl::remove, _1, _2));
   return ctx->remove(oid);
 }
 
@@ -542,12 +551,14 @@ void IoCtx::snap_set_read(snap_t seq) {
 
 int IoCtx::stat(const std::string& oid, uint64_t *psize, time_t *pmtime) {
   TestIoCtxImpl *ctx = reinterpret_cast<TestIoCtxImpl*>(io_ctx_impl);
-  return ctx->stat(oid, psize, pmtime);;
+  return ctx->execute_operation(
+    oid, boost::bind(&TestIoCtxImpl::stat, _1, _2, psize, pmtime));
 }
 
 int IoCtx::tmap_update(const std::string& oid, bufferlist& cmdbl) {
   TestIoCtxImpl *ctx = reinterpret_cast<TestIoCtxImpl*>(io_ctx_impl);
-  return ctx->tmap_update(oid, cmdbl);
+  return ctx->execute_operation(
+    oid, boost::bind(&TestIoCtxImpl::tmap_update, _1, _2, cmdbl));
 }
 
 int IoCtx::unwatch2(uint64_t handle) {
@@ -575,12 +586,16 @@ int IoCtx::watch2(const std::string& o, uint64_t *handle,
 int IoCtx::write(const std::string& oid, bufferlist& bl, size_t len,
                  uint64_t off) {
   TestIoCtxImpl *ctx = reinterpret_cast<TestIoCtxImpl*>(io_ctx_impl);
-  return ctx->write(oid, bl, len, off, ctx->get_snap_context());
+  return ctx->execute_operation(
+    oid, boost::bind(&TestIoCtxImpl::write, _1, _2, bl, len, off,
+                     ctx->get_snap_context()));
 }
 
 int IoCtx::write_full(const std::string& oid, bufferlist& bl) {
   TestIoCtxImpl *ctx = reinterpret_cast<TestIoCtxImpl*>(io_ctx_impl);
-  return ctx->write_full(oid, bl, ctx->get_snap_context());
+  return ctx->execute_operation(
+    oid, boost::bind(&TestIoCtxImpl::write_full, _1, _2, bl,
+                     ctx->get_snap_context()));
 }
 
 static int save_operation_result(int result, int *pval) {
