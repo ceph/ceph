@@ -781,7 +781,7 @@ def task(ctx, config):
 
     for obj in out:
         # TESTCASE 'log-show','log','show','after activity','returns expected info'
-        if obj[:4] == 'meta' or obj[:4] == 'data':
+        if obj[:4] == 'meta' or obj[:4] == 'data' or obj[:18] == 'obj_delete_at_hint':
             continue
 
         (err, rgwlog) = rgwadmin(ctx, client, ['log', 'show', '--object', obj],
