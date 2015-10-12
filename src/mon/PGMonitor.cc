@@ -432,16 +432,22 @@ void PGMonitor::apply_pgmap_delta(bufferlist& bl)
   while (!p.end()) {
     pg_t pgid;
     ::decode(pgid, p);
-    bufferlist bl;
-    int r = mon->store->get(pgmap_pg_prefix, stringify(pgid), bl);
-    dout(20) << " refreshing pg " << pgid << " got " << r << " len "
-	     << bl.length() << dendl;
 
-    if (pg_pool_sum_old.count(pgid.pool()) == 0)
-      pg_pool_sum_old[pgid.pool()] = pg_map.pg_pool_sum[pgid.pool()];
+    int r;
+    bufferlist pgbl;
+    if (deleted_pools.count(pgid.pool())) {
+      r = -ENOENT;
+    } else {
+      r = mon->store->get(pgmap_pg_prefix, stringify(pgid), pgbl);
+      dout(20) << " refreshing pg " << pgid << " got " << r << " len "
+	       << pgbl.length() << dendl;
+
+      if (pg_pool_sum_old.count(pgid.pool()) == 0)
+	pg_pool_sum_old[pgid.pool()] = pg_map.pg_pool_sum[pgid.pool()];
+    }
 
     if (r >= 0) {
-      pg_map.update_pg(pgid, bl);
+      pg_map.update_pg(pgid, pgbl);
     } else {
       pg_map.remove_pg(pgid);
       if (pgid.ps() == 0)
