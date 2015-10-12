@@ -661,6 +661,7 @@ void RGWPeriod::dump(Formatter *f) const
   encode_json("epoch", epoch , f);
   encode_json("predecessor_uuid", predecessor_uuid, f);
   encode_json("versions", versions, f);
+  encode_json("period_map", period_map, f);
   encode_json("master_zone", master_zone, f);
 }
 
@@ -670,6 +671,7 @@ void RGWPeriod::decode_json(JSONObj *obj)
   JSONDecoder::decode_json("epoch", epoch, obj);
   JSONDecoder::decode_json("predecessor_uuid", predecessor_uuid, obj);
   JSONDecoder::decode_json("versions", versions, obj);
+  JSONDecoder::decode_json("period_map", period_map, obj);
   JSONDecoder::decode_json("master_zone", master_zone, obj);
 }
 
