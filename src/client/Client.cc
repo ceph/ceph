@@ -5027,6 +5027,41 @@ out:
   return r;
 }
 
+int Client::may_linkat(Inode *in, int uid, int gid)
+{
+  if (uid < 0)
+    uid = get_uid();
+  if (gid < 0)
+    gid = get_gid();
+
+  int r = _getattr(in, CEPH_STAT_CAP_MODE, uid, gid);
+  if (r < 0)
+    goto out;
+
+  if (uid == 0 || (uid_t)uid == in->uid) {
+    r = 0;
+    goto out;
+  }
+
+  r = -EPERM;
+  if (!S_ISREG(in->mode))
+    goto out;
+
+  if (in->mode & S_ISUID)
+    goto out;
+
+  if ((in->mode & (S_ISGID | S_IXGRP)) == (S_ISGID | S_IXGRP))
+    goto out;
+
+  {
+    Client_UserGroups groups(this, uid, gid);
+    r = inode_permissions(in, uid, groups, MAY_READ | MAY_WRITE);
+  }
+out:
+  ldout(cct, 3) << __func__ << " " << in << " = " << r <<  dendl;
+  return r;
+}
+
 vinodeno_t Client::_get_vino(Inode *in)
 {
   /* The caller must hold the client lock */
@@ -10580,6 +10615,9 @@ int Client::ll_link(Inode *in, Inode *newparent, const char *newname,
       r = -EPERM;
       goto out;
     }
+    r = may_linkat(in, uid, gid);
+    if (r < 0)
+      goto out;
     r = may_create(newparent, uid, gid);
     if (r < 0)
       goto out;
