@@ -6,13 +6,11 @@
 
 #define dout_subsys ceph_subsys_rgw
 
-RGWRESTConn::RGWRESTConn(CephContext *_cct, RGWRados *store, const list<string>& remote_endpoints) : cct(_cct)
+RGWRESTConn::RGWRESTConn(CephContext *_cct, RGWRados *store,
+                         const list<string>& remote_endpoints)
+  : cct(_cct),
+    endpoints(remote_endpoints.begin(), remote_endpoints.end())
 {
-  list<string>::const_iterator iter;
-  int i;
-  for (i = 0, iter = remote_endpoints.begin(); iter != remote_endpoints.end(); ++iter, ++i) {
-    endpoints[i] = *iter;
-  }
   key = store->get_zone_params().system_key;
   zone_group = store->get_zonegroup().get_id();
 }
