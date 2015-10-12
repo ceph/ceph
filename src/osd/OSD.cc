@@ -4513,7 +4513,8 @@ bool OSD::_is_healthy()
       ++num;
     }
     if ((float)up < (float)num * cct->_conf->osd_heartbeat_min_healthy_ratio) {
-      dout(1) << "is_healthy false -- only " << up << "/" << num << " up peers (less than 1/3)" << dendl;
+      dout(1) << "is_healthy false -- only " << up << "/" << num << " up peers (less than "
+	      << int(cct->_conf->osd_heartbeat_min_healthy_ratio * 100.0) << "%)" << dendl;
       return false;
     }
   }
