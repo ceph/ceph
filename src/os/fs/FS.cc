@@ -18,6 +18,9 @@
 #include <fcntl.h>
 
 // from include/linux/falloc.h:
+#ifndef FALLOC_FL_KEEP_SIZE
+# define FALLOC_FL_KEEP_SIZE  0x1
+#endif
 #ifndef FALLOC_FL_PUNCH_HOLE
 # define FALLOC_FL_PUNCH_HOLE 0x2
 #endif
@@ -123,8 +126,9 @@ int FS::zero(int fd, uint64_t offset, uint64_t length)
 
 #ifdef CEPH_HAVE_FALLOCATE
 # if !defined(DARWIN) && !defined(__FreeBSD__)
-  // first try fallocate
-  r = fallocate(fd, FALLOC_FL_PUNCH_HOLE, offset, length);
+  // first try fallocate, the FALLOC_FL_PUNCH_HOLE flag must
+  // be ORed with FALLOC_FL_KEEP_SIZE when deallocating file space.
+  r = fallocate(fd, FALLOC_FL_KEEP_SIZE|FALLOC_FL_PUNCH_HOLE, offset, length);
   if (r < 0) {
     r = -errno;
   }
