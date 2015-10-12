@@ -85,7 +85,7 @@ def _socket_command(ctx, remote, socket_path, command, args):
     """
     json_fp = StringIO()
     testdir = teuthology.get_testdir(ctx)
-    max_tries = 60
+    max_tries = 120
     while True:
         proc = remote.run(
             args=[
