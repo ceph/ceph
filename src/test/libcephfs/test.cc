@@ -652,7 +652,9 @@ TEST(LibCephFS, Fchown) {
   ASSERT_EQ(ceph_fchmod(cmount, fd, 0600), 0);
 
   // change ownership to nobody -- we assume nobody exists and id is always 65534
+  ASSERT_EQ(ceph_conf_set(cmount, "client_permissions", "0"), 0);
   ASSERT_EQ(ceph_fchown(cmount, fd, 65534, 65534), 0);
+  ASSERT_EQ(ceph_conf_set(cmount, "client_permissions", "1"), 0);
 
   ceph_close(cmount, fd);
 
