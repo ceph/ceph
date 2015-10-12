@@ -42,11 +42,11 @@ HTMLFormatter::HTMLFormatter(bool pretty)
 
 HTMLFormatter::~HTMLFormatter()
 {
-  if(m_status) {
+  if (m_status) {
     free((void*)m_status);
     m_status = NULL;
   }
-  if(m_status_name) {
+  if (m_status_name) {
     free((void*)m_status_name);
     m_status_name = NULL;
   }
@@ -56,11 +56,11 @@ void HTMLFormatter::reset()
 {
   XMLFormatter::reset();
   m_header_done = false;
-  if(m_status) {
+  if (m_status) {
     free((void*)m_status);
     m_status = NULL;
   }
-  if(m_status_name) {
+  if (m_status_name) {
     free((void*)m_status_name);
     m_status_name = NULL;
   }
@@ -71,16 +71,16 @@ void HTMLFormatter::set_status(const char* status, const char* status_name)
   assert(status != NULL); // new status must not be NULL
   assert(m_status == NULL); // status should NOT be set multiple times
   m_status = strdup(status);
-  if(status_name)
+  if (status_name)
     m_status_name = strdup(status_name);
 };
 
 void HTMLFormatter::output_header() {
-  if(!m_header_done) {
+  if (!m_header_done) {
     m_header_done = true;
     assert(m_status != NULL); // it should be set by this point
     std::string status_line(m_status);
-    if(m_status_name) {
+    if (m_status_name) {
       status_line += " ";
       status_line += m_status_name;
     }
