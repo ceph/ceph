@@ -2422,7 +2422,7 @@ int main(int argc, char **argv)
 	try {
 	  decode_json_obj(zonegroupmap, &p);
 	} catch (JSONDecoder::err& e) {
-	  cout << "failed to decode: " << e.message << std::endl;	  
+	  cout << "failed to decode: " << e.message << std::endl;
 	  RGWRegionMap region_map;
 	  try {
 	    decode_json_obj(region_map, &p);
@@ -2431,12 +2431,12 @@ int main(int argc, char **argv)
 	    if (ret < 0) {
 	      cerr << "failed to init realm: " << cpp_strerror(-ret) << std::endl;
 	      return -ret;
-	    }	    
+	    }
 
 	    ret = zonegroupmap.update(realm);
 	    if (ret < 0) {
 	      cerr << "failed to update zonegroup_map: " << cpp_strerror(-ret) << std::endl;
-	    }  
+	    }
 
 	    ret = zonegroupmap.update(g_ceph_context, store, realm.get_current_period(), realm.get_id());
 	    if (ret < 0) {
@@ -2550,14 +2550,14 @@ int main(int argc, char **argv)
 	  }
 	  realm_id = zonegroup.realm_id;
 	}
-	  
+
 	RGWRealm realm(realm_id, realm_name);
 	ret = realm.init(g_ceph_context, store);
 	if (ret < 0) {
 	  cerr << "ERROR: couldn't init realm:" << cpp_strerror(-ret) << std::endl;
 	  return ret;
 	}
-	
+
 	RGWZoneGroupMap zonegroup_map;
 	ret = zonegroup_map.read(g_ceph_context, store);
 	if (ret < 0 && ret != -ENOENT) {
@@ -2617,7 +2617,7 @@ int main(int argc, char **argv)
 		 << cpp_strerror(-ret) << std::endl;
 	    return ret;
 	  }
-	
+
 	  RGWZoneGroupMap zonegroup_map;
 	  ret = zonegroup_map.read(g_ceph_context, store);
 	  if (ret < 0 && ret != -ENOENT) {
@@ -2689,7 +2689,7 @@ int main(int argc, char **argv)
       }
       break;
     case OPT_ZONE_SET:
-      {      
+      {
 	RGWZoneParams zone(zone_name);
 	int ret = zone.init(g_ceph_context, store, false);
 	if (ret < 0) {
@@ -2700,7 +2700,7 @@ int main(int argc, char **argv)
 	if (ret < 0) {
 	  return 1;
 	}
-	
+
 	if (zone.get_id().empty() && zone.get_name().empty()) {
 	  cerr << "no zone name id or name in the json provided , assuming old format" << std::endl;
 	  if (zone_name.empty()) {
