@@ -893,6 +893,7 @@ void RGWRegionMap::decode_json(JSONObj *obj)
 {
   JSONDecoder::decode_json("regions", regions, obj);
   JSONDecoder::decode_json("master_region", master_region, obj);
+  JSONDecoder::decode_json("bucket_quota", bucket_quota, f);
   JSONDecoder::decode_json("user_quota", user_quota, obj);
 }
 
