@@ -2128,7 +2128,12 @@ bool ReplicatedPG::maybe_handle_cache(OpRequestRef op,
     // TODO: clean this case up
     if (!obc.get() && r == -ENOENT) {
       // we don't have the object and op's a read
-      promote_object(obc, missing_oid, oloc, op);
+      if (can_proxy_read)
+        do_proxy_read(op);
+      else
+        promote_op = op;   // for non-proxy case promote_object needs this
+
+      promote_object(obc, missing_oid, oloc, promote_op);
       return true;
     }
     if (!r) { // it must be a write
