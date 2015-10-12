@@ -39,7 +39,7 @@ struct rgw_http_param_pair {
 class RGWRESTConn
 {
   CephContext *cct;
-  map<int, string> endpoints;
+  vector<string> endpoints;
   RGWAccessKey key;
   string zone_group;
   atomic_t counter;
