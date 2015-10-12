@@ -550,8 +550,7 @@ if(${WITH_RADOSGW})
     expat
     fcgi
     resolv
-    )
-  
+  )
 endif(${WITH_RADOSGW})
 if(${WITH_RBD})
   set(DENCODER_EXTRALIBS
