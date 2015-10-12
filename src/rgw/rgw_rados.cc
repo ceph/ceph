@@ -1504,10 +1504,13 @@ fail:
   for (uint32_t i=0; i < num_rados_handles; i++) {
     if (rados[i]) {
       delete rados[i];
+      rados[i] = NULL;
     }
   }
+  num_rados_handles = 0;
   if (rados) {
     delete[] rados;
+    rados = NULL;
   }
 
   return ret;
