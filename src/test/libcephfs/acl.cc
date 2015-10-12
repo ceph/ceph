@@ -134,6 +134,7 @@ TEST(ACL, SetACL) {
   ASSERT_EQ(0, ceph_conf_read_file(cmount, NULL));
   ASSERT_EQ(0, ceph_mount(cmount, "/"));
   ASSERT_EQ(0, ceph_conf_set(cmount, "client_posix_acl", "1"));
+  ASSERT_EQ(0, ceph_conf_set(cmount, "client_permissions", "0"));
 
   char test_file[256];
   sprintf(test_file, "file1_setacl_%d", getpid());
@@ -143,7 +144,9 @@ TEST(ACL, SetACL) {
   // change ownership to nobody -- we assume nobody exists and id is always 65534
   ASSERT_EQ(ceph_fchown(cmount, fd, 65534, 65534), 0);
 
+  ASSERT_EQ(0, ceph_conf_set(cmount, "client_permissions", "1"));
   ASSERT_EQ(ceph_open(cmount, test_file, O_RDWR, 0), -EACCES);
+  ASSERT_EQ(0, ceph_conf_set(cmount, "client_permissions", "0"));
 
   size_t acl_buf_size = acl_ea_size(5);
   void *acl_buf = malloc(acl_buf_size);
