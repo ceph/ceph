@@ -845,6 +845,12 @@ int RGWGetObj::handle_user_manifest(const char *prefix)
 
   s->obj_size = total_len;
 
+  if (!get_data) {
+    bufferlist bl;
+    send_response_data(bl, 0, 0);
+    return 0;
+  }
+
   r = iterate_user_manifest_parts(s->cct, store, ofs, end, bucket, obj_prefix, bucket_policy, NULL, get_obj_user_manifest_iterate_cb, (void *)this);
   if (r < 0)
     return r;
