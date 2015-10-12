@@ -3707,17 +3707,18 @@ static void set_copy_attrs(map<string, bufferlist>& src_attrs,
 {
   switch (attrs_mod) {
   case RGWRados::ATTRSMOD_NONE:
-    src_attrs[RGW_ATTR_ACL] = attrs[RGW_ATTR_ACL];
+    attrs = src_attrs;
     break;
   case RGWRados::ATTRSMOD_REPLACE:
     if (!attrs[RGW_ATTR_ETAG].length()) {
       attrs[RGW_ATTR_ETAG] = src_attrs[RGW_ATTR_ETAG];
     }
-    src_attrs = attrs;
     break;
   case RGWRados::ATTRSMOD_MERGE:
-    for (map<string, bufferlist>::iterator it = attrs.begin(); it != attrs.end(); ++it) {
-      src_attrs[it->first] = it->second;
+    for (map<string, bufferlist>::iterator it = src_attrs.begin(); it != src_attrs.end(); ++it) {
+      if (attrs.find(it->first) == attrs.end()) {
+       attrs[it->first] = it->second;
+      }
     }
     break;
   }
@@ -3867,8 +3868,8 @@ int RGWRados::fetch_remote_obj(RGWObjectCtx& obj_ctx,
   }
 
   if (petag) {
-    map<string, bufferlist>::iterator iter = src_attrs.find(RGW_ATTR_ETAG);
-    if (iter != src_attrs.end()) {
+    map<string, bufferlist>::iterator iter = attrs.find(RGW_ATTR_ETAG);
+    if (iter != attrs.end()) {
       bufferlist& etagbl = iter->second;
       *petag = string(etagbl.c_str(), etagbl.length());
     }
@@ -3876,9 +3877,11 @@ int RGWRados::fetch_remote_obj(RGWObjectCtx& obj_ctx,
 
   if (source_zone.empty()) {
     set_copy_attrs(src_attrs, attrs, attrs_mod);
+  } else {
+    attrs = src_attrs;
   }
 
-  ret = cb.complete(etag, mtime, set_mtime, src_attrs);
+  ret = cb.complete(etag, mtime, set_mtime, attrs);
   if (ret < 0) {
     goto set_err_state;
   }
@@ -4015,8 +4018,10 @@ int RGWRados::copy_obj(RGWObjectCtx& obj_ctx,
     return ret;
   }
 
+  src_attrs[RGW_ATTR_ACL] = attrs[RGW_ATTR_ACL];
+
   set_copy_attrs(src_attrs, attrs, attrs_mod);
-  src_attrs.erase(RGW_ATTR_ID_TAG);
+  attrs.erase(RGW_ATTR_ID_TAG);
 
   RGWObjManifest manifest;
   RGWObjState *astate = NULL;
@@ -4029,7 +4034,7 @@ int RGWRados::copy_obj(RGWObjectCtx& obj_ctx,
 
   if (remote_dest) {
     /* dest is in a different region, copy it there */
-    return copy_obj_to_remote_dest(astate, src_attrs, read_op, user_id, dest_obj, mtime);
+    return copy_obj_to_remote_dest(astate, attrs, read_op, user_id, dest_obj, mtime);
   }
   uint64_t max_chunk_size;
 
@@ -4067,7 +4072,7 @@ int RGWRados::copy_obj(RGWObjectCtx& obj_ctx,
 
   if (copy_data) { /* refcounting tail wouldn't work here, just copy the data */
     return copy_obj_data(obj_ctx, dest_bucket_info, read_op, end, dest_obj, src_obj,
-                         max_chunk_size, mtime, 0, src_attrs, category, olh_epoch,
+                         max_chunk_size, mtime, 0, attrs, category, olh_epoch,
                          version_id, ptag, petag, err);
   }
 
