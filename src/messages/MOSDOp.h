@@ -95,12 +95,15 @@ public:
   }
   osd_reqid_t get_reqid() const {
     assert(!partial_decode_needed);
-    if (reqid != osd_reqid_t())
+    if (reqid.name != entity_name_t() || reqid.tid != 0) {
       return reqid;
-    else
+    } else {
+      if (!final_decode_needed)
+	assert(reqid.inc == client_inc);  // decode() should have done this
       return osd_reqid_t(get_orig_source(),
-                         client_inc,
+                         reqid.inc,
 			 header.tid);
+    }
   }
 
   // Fields decoded in final decoding
@@ -160,9 +163,15 @@ public:
     : Message(CEPH_MSG_OSD_OP, HEAD_VERSION, COMPAT_VERSION),
       client_inc(inc),
       osdmap_epoch(_osdmap_epoch), flags(_flags), retry_attempt(-1),
-      oid(_oid), oloc(_oloc), pgid(_pgid), partial_decode_needed(false), final_decode_needed(false),
+      oid(_oid), oloc(_oloc), pgid(_pgid),
+      partial_decode_needed(false),
+      final_decode_needed(false),
       features(feat) {
     set_tid(tid);
+
+    // also put the client_inc in reqid.inc, so that get_reqid() can
+    // be used before the full message is decoded.
+    reqid.inc = inc;
   }
 private:
   ~MOSDOp() {}
@@ -376,11 +385,14 @@ struct ceph_osd_request_head {
 
       retry_attempt = -1;
       features = 0;
-      reqid = osd_reqid_t();
       OSDOp::split_osd_op_vector_in_data(ops, data);
 
       // we did the full decode
       final_decode_needed = false;
+
+      // put client_inc in reqid.inc for get_reqid()'s benefit
+      reqid = osd_reqid_t();
+      reqid.inc = client_inc;
     } else if (header.version < 7) {
       ::decode(client_inc, p);
       ::decode(osdmap_epoch, p);
@@ -430,6 +442,10 @@ struct ceph_osd_request_head {
 
       // we did the full decode
       final_decode_needed = false;
+
+      // put client_inc in reqid.inc for get_reqid()'s benefit
+      if (reqid.name == entity_name_t() && reqid.tid == 0)
+	reqid.inc = client_inc;
     } else {
       // new, v7 decode, splitted to partial and final
       ::decode(pgid, p);
