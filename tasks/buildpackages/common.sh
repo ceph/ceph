@@ -19,6 +19,14 @@ function install_deps() {
     bash -x install-deps.sh
 }
 
+function git_submodules() {
+    # see http://tracker.ceph.com/issues/13426
+    perl -pi -e 's|git://ceph.com/git/ceph-object-corpus.git|https://github.com/ceph/ceph-object-corpus.git|' .gitmodules
+    local force=$(if git submodule usage 2>&1 | grep --quiet 'update.*--force'; then echo --force ; fi)
+    git submodule sync || return 1
+    git submodule update $force --init --recursive || return 1
+}
+
 function get_ceph() {
     local git_ceph_url=$1
     local sha1=$2
@@ -26,6 +34,12 @@ function get_ceph() {
     test -d ceph || git clone ${git_ceph_url}
     cd ceph
     git checkout ${sha1}
-    # see http://tracker.ceph.com/issues/13426
-    perl -pi -e 's|git://ceph.com/git/ceph-object-corpus.git|https://github.com/ceph/ceph-object-corpus.git|' .gitmodules
+}
+
+function init_ceph() {
+    local git_ceph_url=$1
+    local sha1=$2
+    get_ceph $git_ceph_url $sha1 || return 1
+    git_submodules || return 1
+    install_deps || return 1
 }
