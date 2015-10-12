@@ -177,6 +177,7 @@ def task(ctx, config):
     log.info("reviving divergent %d", divergent)
     ctx.manager.revive_osd(divergent)
     ctx.manager.wait_run_admin_socket('osd', divergent, ['dump_ops_in_flight'])
+    time.sleep(20);
 
     log.info('allowing recovery')
     # Set osd_recovery_delay_start back to 0 and kick the queue
