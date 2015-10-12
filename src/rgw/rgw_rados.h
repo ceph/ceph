@@ -1180,7 +1180,7 @@ struct RGWZoneGroupMap {
   int update(RGWRealm& realm);
   int update(CephContext *cct, RGWRados *store,
 	     const string& period_id,
-	     const string& realm_id);  
+	     const string& realm_id);
   int update_master_zonegroup(const string& period_id,
 			      const string& master_zonegroup);
 
@@ -1236,7 +1236,7 @@ class RGWRealm : public RGWSystemMetaObj
 
 public:
   RGWRealm() {}
-  RGWRealm(const string& _id, const string& _name = "") : RGWSystemMetaObj(_id, _name) {}  
+  RGWRealm(const string& _id, const string& _name = "") : RGWSystemMetaObj(_id, _name) {}
   RGWRealm(CephContext *_cct, RGWRados *_store): RGWSystemMetaObj(_cct, _store) {}
   RGWRealm(const string& _name, CephContext *_cct, RGWRados *_store): RGWSystemMetaObj(_name, _cct, _store){}
 
@@ -1321,7 +1321,7 @@ class RGWPeriod
 
 public:
   RGWPeriod() {};
-  
+
   RGWPeriod(const string& period_id, epoch_t _epoch = 0)
     : id(period_id), epoch(_epoch) {}
 
@@ -1348,7 +1348,7 @@ public:
 	   bool setup_obj = true);
   int init(CephContext *_cct, RGWRados *_store, bool setup_obj = true);  
   int use_next_epoch();
-  
+
   int create();
   int delete_obj();
   int store_info(bool exclusive);

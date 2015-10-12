@@ -783,3 +783,4 @@ int RGWMetadataManager::remove_entry(RGWMetadataHandler *handler, string& key, R
 
   return 0;
 }
+

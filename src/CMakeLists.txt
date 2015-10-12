@@ -488,8 +488,7 @@ if(${WITH_RADOSGW})
     expat
     fcgi
     resolv
-    )
-  
+  )
 endif(${WITH_RADOSGW})
 
 add_executable(ceph-dencoder ${dencoder_srcs} $<TARGET_OBJECTS:heap_profiler_objs>)

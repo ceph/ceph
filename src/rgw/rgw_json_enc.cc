@@ -745,7 +745,7 @@ void RGWZone::dump(Formatter *f) const
 
 void RGWZone::decode_json(JSONObj *obj)
 {
-  JSONDecoder::decode_json("id", id, obj);  
+  JSONDecoder::decode_json("id", id, obj);
   JSONDecoder::decode_json("name", name, obj);
   if (id.empty()) {
     id = name;
@@ -804,7 +804,7 @@ void RGWZoneGroup::decode_json(JSONObj *obj)
     derr << "old format " << dendl;
     JSONDecoder::decode_json("name", name, obj);
     id = name;
-  }    
+  }
   JSONDecoder::decode_json("api_name", api_name, obj);
   JSONDecoder::decode_json("is_master", is_master, obj);
   JSONDecoder::decode_json("endpoints", endpoints, obj);
@@ -874,7 +874,7 @@ void RGWZoneGroupMap::decode_json(JSONObj *obj)
   if (!JSONDecoder::decode_json("realms", realms, decode_realms, obj) ) {
     throw JSONDecoder::err("Old regionmap format");
   }
-  JSONDecoder::decode_json("periods", periods, decode_periods, obj);  
+  JSONDecoder::decode_json("periods", periods, decode_periods, obj);
   JSONDecoder::decode_json("bucket_quota", bucket_quota, obj);
   JSONDecoder::decode_json("user_quota", user_quota, obj);
 }

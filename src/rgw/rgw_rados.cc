@@ -528,7 +528,7 @@ int RGWSystemMetaObj::create()
     new_uuid.print(uuid_str);
     id = uuid_str;
   }
-  
+
   ret = store_info(true);
   if (ret < 0) {
     ldout(cct, 0) << "ERROR:  storing info for " << id << ": " << cpp_strerror(-ret) << dendl;
@@ -654,7 +654,7 @@ int RGWPeriod::init(CephContext *_cct, RGWRados *_store, bool setup_obj)
       return ret;
     }
     id = realm.get_current_period();
-    realm_id = realm.get_id();      
+    realm_id = realm.get_id();
   }
 
   if (!epoch) {
@@ -2940,9 +2940,9 @@ int RGWRados::init_complete()
       }
     }
   } else {
-    RGWZoneGroup master_zonegroup;    
+    RGWZoneGroup master_zonegroup;
     for (map<string, RGWRealm>::iterator iter = zonegroup_map.realms.begin(); iter != zonegroup_map.realms.end();
-	 iter++) {      
+	 iter++) {
       if (master_zonegroup.get_id().empty()) {
 	ret = zonegroup_map.get_master_zonegroup(iter->second.get_current_period(), master_zonegroup);
 	if (ret < 0 && ret != -ENOENT) {
@@ -2956,7 +2956,7 @@ int RGWRados::init_complete()
 	ldout(cct, 0) << "ERROR: failed to read zonegroups" << dendl;
 	return ret;
       }
-      
+
       for ( map<string, RGWZoneGroup>::iterator iter = zonegroups.begin(); iter != zonegroups.end(); ++iter) {
 	RGWZoneGroup& zonegroup = iter->second;
 	add_new_connection_to_map(zonegroup_conn_map, zonegroup, new RGWRESTConn(cct, this, zonegroup.endpoints));
