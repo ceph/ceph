@@ -751,7 +751,7 @@ void RGWPeriod::dump(Formatter *f) const
   encode_json("id", id , f);
   encode_json("epoch", epoch , f);
   encode_json("predecessor_uuid", predecessor_uuid, f);
-  encode_json("versions", versions, f);
+  encode_json("sync_status", sync_status, f);
   encode_json("period_map", period_map, f);
   encode_json("master_zone", master_zone, f);
 }
@@ -761,7 +761,7 @@ void RGWPeriod::decode_json(JSONObj *obj)
   JSONDecoder::decode_json("id", id, obj);
   JSONDecoder::decode_json("epoch", epoch, obj);
   JSONDecoder::decode_json("predecessor_uuid", predecessor_uuid, obj);
-  JSONDecoder::decode_json("versions", versions, obj);
+  JSONDecoder::decode_json("sync_status", sync_status, obj);
   JSONDecoder::decode_json("period_map", period_map, obj);
   JSONDecoder::decode_json("master_zone", master_zone, obj);
 }
@@ -1107,6 +1107,20 @@ void rgw_slo_entry::decode_json(JSONObj *obj)
   JSONDecoder::decode_json("size_bytes", size_bytes, obj);
 };
 
+void rgw_meta_sync_info::decode_json(JSONObj *obj)
+{
+  string s;
+  JSONDecoder::decode_json("status", s, obj);
+  if (s == "init") {
+    state = StateInit;
+  } else if (s == "building-full-sync-maps") {
+    state = StateBuildingFullSyncMaps;
+  } else if (s == "sync") {
+    state = StateSync;
+  }    
+  JSONDecoder::decode_json("num_shards", num_shards, obj);
+}
+
 void rgw_meta_sync_info::dump(Formatter *f) const
 {
   string s;
@@ -1128,11 +1142,26 @@ void rgw_meta_sync_info::dump(Formatter *f) const
   encode_json("num_shards", num_shards, f);
 }
 
+void rgw_meta_sync_marker::decode_json(JSONObj *obj)
+{
+  int s;
+  JSONDecoder::decode_json("state", s, obj);
+  state = s;
+  JSONDecoder::decode_json("marker", marker, obj);
+  JSONDecoder::decode_json("next_step_marker", next_step_marker, obj);
+}
+
 void rgw_meta_sync_marker::dump(Formatter *f) const
 {
   encode_json("state", (int)state, f);
   encode_json("marker", marker, f);
   encode_json("next_step_marker", next_step_marker, f);
+}
+
+void rgw_meta_sync_status::decode_json(JSONObj *obj)
+{
+  JSONDecoder::decode_json("info", sync_info, obj);
+  JSONDecoder::decode_json("markers", sync_markers, obj);
 }
 
 void rgw_meta_sync_status::dump(Formatter *f) const {
