@@ -9,12 +9,29 @@ This is the first Infernalis release candidate.  There have been some
 major changes since hammer, and the upgrade process is non-trivial.
 Please read carefully.
 
+Getting the release candidate
+-----------------------------
+
+The v9.1.0 packages are pushed to the development release repositories::
+
+  http://download.ceph.com/rpm-testing
+  http://download.ceph.com/debian-testing
+
+For for info, see::
+
+  http://docs.ceph.com/docs/master/install/get-packages/
+
+Or install with ceph-deploy via::
+
+  ceph-deploy install --testing HOST
+
+
 Known issues
 ------------
 
 * librbd and librados ABI compatibility is broken.  Be careful
   installing this RC on client machines (e.g., those running qemu).
-* rgw: the get location API has a known bug
+  It will be fixed in the final v9.2.0 release.
 
 
 Major Changes from Hammer
@@ -65,7 +82,6 @@ Major Changes from Hammer
     inodes has been dramatically improved.
   * The ceph-fuse client behaves better on 32-bit hosts.
 
-
 Distro compatibility
 --------------------
 
@@ -90,6 +106,15 @@ Upgrading from Firefly
 Upgrading directly from Firefly v0.80.z is not possible.  All clusters
 must first upgrade to Hammer v0.94.4 or a later v0.94.z release; only
 then is it possible to upgrade to Infernalis 9.2.z.
+
+Note that v0.94.4 isn't released yet, but you can upgrade to a test build
+from gitbuilder with::
+
+  ceph-deploy install --dev hammer HOST
+
+The v0.94.4 Hammer point release will be out before v9.2.0 Infernalis
+is.
+
 
 Upgrading from Hammer
 ---------------------
