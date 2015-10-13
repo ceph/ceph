@@ -1181,7 +1181,7 @@ protected:
   cache_result_t maybe_handle_cache_detail(OpRequestRef op,
 					   bool write_ordered,
 					   ObjectContextRef obc, int r,
-					   const hobject_t& missing_oid,
+					   hobject_t missing_oid,
 					   bool must_promote,
 					   bool in_hit_set,
 					   ObjectContextRef *promote_obc);
