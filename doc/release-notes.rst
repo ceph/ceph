@@ -6,7 +6,7 @@ v9.1.0 Infernalis release candidate
 ===================================
 
 This is the first Infernalis release candidate.  There have been some
-major changes since hammer, and the upgrade process is non-trivial.
+major changes since Hammer, and the upgrade process is non-trivial.
 Please read carefully.
 
 Getting the release candidate
@@ -38,11 +38,14 @@ Major Changes from Hammer
 -------------------------
 
 - *General*:
+
   * Ceph daemons are now managed via systemd (with the exception of
     Ubuntu Trusty, which still uses upstart).
   * Ceph daemons run as 'ceph' user instead root.
   * On Red Hat distros, there is also an SELinux policy.
+
 - *RADOS*:
+
   * The RADOS cache tier can now proxy write operations to the base
     tier, allowing writes to be handled without forcing migration of
     an object into the cache.
@@ -55,10 +58,14 @@ Major Changes from Hammer
     (ceph-objectstore-tool).
   * The internal ObjectStore API has been significantly cleaned up in order
     to faciliate new storage backends like NewStore.
+
 - *RGW*:
+
   * The Swift API now supports object expiration.
   * There are many Swift API compatibility improvements.
+
 - *RBD*:
+
   * The ``rbd du`` command shows actual usage (quickly, when
     object-map is enabled).
   * The object-map feature has seen many stability improvements.
@@ -74,7 +81,9 @@ Major Changes from Hammer
     (e.g., ``--size 64G``).
   * There is a new ``rbd status`` command that, for now, shows who has
     the image open/mapped.
+
 - *CephFS*:
+
   * You can now rename snapshots.
   * There have been ongoing improvements around administration, diagnostics,
     and the check and repair tools.
