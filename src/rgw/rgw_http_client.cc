@@ -141,11 +141,6 @@ struct rgw_http_req_data : public RefCountedObject {
                         mgr(NULL), lock("rgw_http_req_data::lock") {
     memset(error_buf, 0, sizeof(error_buf));
   }
-  ~rgw_http_req_data() {
-    if (mgr) {
-      mgr->remove_request(id);
-    }
-  }
 
   int wait() {
     Mutex::Locker l(lock);
@@ -359,23 +354,6 @@ void RGWHTTPManager::_complete_request(rgw_http_req_data *req_data)
     completion_mgr->complete(req_data->client->get_user_info());
   }
   req_data->put();
-}
-
-void RGWHTTPManager::remove_request(uint64_t id)
-{
-  bool need_unlock = false;
-  if (!reqs_lock.is_wlocked()) {
-    assert(!reqs_lock.is_locked()); /* shouldn't happen */
-    reqs_lock.get_write();
-    need_unlock = true;
-  }
-  map<uint64_t, rgw_http_req_data *>::iterator iter = reqs.find(id);
-  if (iter != reqs.end()) {
-    reqs.erase(iter);
-  }
-  if (need_unlock) {
-    reqs_lock.unlock();
-  }
 }
 
 void RGWHTTPManager::finish_request(rgw_http_req_data *req_data, int ret)

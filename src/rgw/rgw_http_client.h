@@ -113,7 +113,6 @@ public:
   void stop();
 
   int add_request(RGWHTTPClient *client, const char *method, const char *url);
-  void remove_request(uint64_t id);
 
   /* only for non threaded case */
   int process_requests(bool wait_for_data, bool *done);
