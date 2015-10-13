@@ -381,10 +381,10 @@ int CrushTester::test_with_crushtool(const char *crushtool_cmd,
 
   bufferlist bl;
   ::encode(crush, bl);
-  bl.write_fd(crushtool.stdin());
+  bl.write_fd(crushtool.stdin_fd());
   crushtool.close_stdin();
   bl.clear();
-  ret = bl.read_fd(crushtool.stderr(), 100 * 1024);
+  ret = bl.read_fd(crushtool.stderr_fd(), 100 * 1024);
   if (ret < 0) {
     err << "failed read from crushtool: " << cpp_strerror(-ret);
     return ret;
