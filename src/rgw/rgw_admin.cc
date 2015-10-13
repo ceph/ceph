@@ -2597,7 +2597,7 @@ int main(int argc, char **argv)
 	RGWRealm realm(realm_id, realm_name);
 	RGWZoneGroup zonegroup(zonegroup_id, zonegroup_name);
 	/* if the user didn't provide zonegroup info , create stand alone zone */
-	if (!zonegroup_id.empty() || !zonegroup_id.empty()) {
+	if (!zonegroup_id.empty() || !zonegroup_name.empty()) {
 	  ret = zonegroup.init(g_ceph_context, store);
 	  if (ret < 0) {
 	    cerr << "unable to initialize zonegroup " << zonegroup_name << ": " << cpp_strerror(-ret) << std::endl;
@@ -2625,7 +2625,7 @@ int main(int argc, char **argv)
 	  return ret;
 	}
 
-	if (!zonegroup_id.empty() || !zonegroup_id.empty()) {
+	if (!zonegroup_id.empty() || !zonegroup_name.empty()) {
 	  ret = zonegroup.add_zone(zone);
 	  if (ret < 0) {
 	    cerr << "failed to add zone " << zone_name << " to zonegroup " << zonegroup.get_name() << ": "
