@@ -1006,3 +1006,36 @@ void KeystoneToken::decode_json(JSONObj *access_obj)
   JSONDecoder::decode_json("user", user, access_obj, true);
   JSONDecoder::decode_json("serviceCatalog", service_catalog, access_obj);
 }
+
+void rgw_meta_sync_info::dump(Formatter *f) const
+{
+  string s;
+  switch ((SyncState)state) {
+  case StateInit:
+    s = "init";
+    break;
+  case StateBuildingFullSyncMaps:
+    s = "building-full-sync-maps";
+    break;
+  case StateSync:
+    s = "sync";
+    break;
+  default:
+    s = "unknown";
+    break;
+  }
+  encode_json("status", s, f);
+  encode_json("num_shards", num_shards, f);
+}
+
+void rgw_meta_sync_marker::dump(Formatter *f) const
+{
+  encode_json("state", (int)state, f);
+  encode_json("marker", marker, f);
+  encode_json("next_step_marker", next_step_marker, f);
+}
+
+void rgw_meta_sync_status::dump(Formatter *f) const {
+  encode_json("info", sync_info, f);
+  encode_json("markers", sync_markers, f);
+}
