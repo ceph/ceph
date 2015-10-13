@@ -286,10 +286,9 @@ public:
   // pg state
   pg_info_t        info;
   __u8 info_struct_v;
+  // v8 was pgmeta, first appeared in hammer.
   static const __u8 cur_struct_v = 8;
-  // v7 was SnapMapper addition in 86658392516d5175b2756659ef7ffaaf95b0f8ad
-  // (first appeared in cuttlefish).
-  static const __u8 compat_struct_v = 7;
+  static const __u8 compat_struct_v = 8;
   bool must_upgrade() {
     return info_struct_v < cur_struct_v;
   }
@@ -873,7 +872,8 @@ public:
 			pg_missing_t& omissing, pg_shard_t from);
   void proc_master_log(ObjectStore::Transaction& t, pg_info_t &oinfo, pg_log_t &olog,
 		       pg_missing_t& omissing, pg_shard_t from);
-  bool proc_replica_info(pg_shard_t from, const pg_info_t &info);
+  bool proc_replica_info(
+    pg_shard_t from, const pg_info_t &info, epoch_t send_epoch);
 
 
   struct LogEntryTrimmer : public ObjectModDesc::Visitor {
@@ -1032,8 +1032,7 @@ public:
    * @returns true if any useful work was accomplished; false otherwise
    */
   virtual bool start_recovery_ops(
-    int max, RecoveryCtx *prctx,
-    ThreadPool::TPHandle &handle,
+    int max, ThreadPool::TPHandle &handle,
     int *ops_begun) = 0;
 
   void purge_strays();
@@ -2120,6 +2119,7 @@ public:
 
   int get_state() const { return state; }
   bool       is_active() const { return state_test(PG_STATE_ACTIVE); }
+  bool       is_activating() const { return state_test(PG_STATE_ACTIVATING); }
   bool       is_peering() const { return state_test(PG_STATE_PEERING); }
   bool       is_down() const { return state_test(PG_STATE_DOWN); }
   bool       is_replay() const { return state_test(PG_STATE_REPLAY); }
@@ -2189,7 +2189,8 @@ public:
     __u8 &);
   void read_state(ObjectStore *store, bufferlist &bl);
   static bool _has_removal_flag(ObjectStore *store, spg_t pgid);
-  static epoch_t peek_map_epoch(ObjectStore *store, spg_t pgid, bufferlist *bl);
+  static int peek_map_epoch(ObjectStore *store, spg_t pgid,
+			    epoch_t *pepoch, bufferlist *bl);
   void update_snap_map(
     const vector<pg_log_entry_t> &log_entries,
     ObjectStore::Transaction& t);
@@ -2228,6 +2229,8 @@ public:
   void fulfill_info(pg_shard_t from, const pg_query_t &query,
 		    pair<pg_shard_t, pg_info_t> &notify_info);
   void fulfill_log(pg_shard_t from, const pg_query_t &query, epoch_t query_epoch);
+
+  void check_full_transition(OSDMapRef lastmap, OSDMapRef osdmap);
 
   bool should_restart_peering(
     int newupprimary,

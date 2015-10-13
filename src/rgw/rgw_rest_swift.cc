@@ -200,13 +200,14 @@ int RGWListBucket_ObjStore_SWIFT::get_params()
     path = prefix;
     if (path.size() && path[path.size() - 1] != '/')
       path.append("/");
-  }
 
-  int len = prefix.size();
-  int delim_size = delimiter.size();
-  if (len >= delim_size) {
-    if (prefix.substr(len - delim_size).compare(delimiter) != 0)
-      prefix.append(delimiter);
+    int len = prefix.size();
+    int delim_size = delimiter.size();
+
+    if (len >= delim_size) {
+      if (prefix.substr(len - delim_size).compare(delimiter) != 0)
+        prefix.append(delimiter);
+    }
   }
 
   return 0;
@@ -481,15 +482,52 @@ void RGWDeleteBucket_ObjStore_SWIFT::send_response()
   rgw_flush_formatter_and_reset(s, s->formatter);
 }
 
+static int get_delete_at_param(req_state *s, time_t *delete_at)
+{
+  /* Handle Swift object expiration. */
+  utime_t delat_proposal;
+  string x_delete = s->info.env->get("HTTP_X_DELETE_AFTER", "");
+
+  if (x_delete.empty()) {
+    x_delete = s->info.env->get("HTTP_X_DELETE_AT", "");
+  } else {
+    /* X-Delete-After HTTP is present. It means we need add its value
+     * to the current time. */
+    delat_proposal = ceph_clock_now(g_ceph_context);
+  }
+
+  if (x_delete.empty()) {
+    return 0;
+  }
+  string err;
+  long ts = strict_strtoll(x_delete.c_str(), 10, &err);
+
+  if (!err.empty()) {
+    return -EINVAL;
+  }
+
+  delat_proposal += utime_t(ts, 0);
+  if (delat_proposal < ceph_clock_now(g_ceph_context)) {
+    return -EINVAL;
+  }
+
+  *delete_at = delat_proposal.sec();
+
+  return 0;
+}
+
 int RGWPutObj_ObjStore_SWIFT::get_params()
 {
-  if (s->has_bad_meta)
+  if (s->has_bad_meta) {
     return -EINVAL;
+  }
 
   if (!s->length) {
     const char *encoding = s->info.env->get("HTTP_TRANSFER_ENCODING");
-    if (!encoding || strcmp(encoding, "chunked") != 0)
+    if (!encoding || strcmp(encoding, "chunked") != 0) {
+      ldout(s->cct, 20) << "neither length nor chunked encoding" << dendl;
       return -ERR_LENGTH_REQUIRED;
+    }
 
     chunked_upload = true;
   }
@@ -497,7 +535,7 @@ int RGWPutObj_ObjStore_SWIFT::get_params()
   supplied_etag = s->info.env->get("HTTP_ETAG");
 
   if (!s->generic_attrs.count(RGW_ATTR_CONTENT_TYPE)) {
-    dout(5) << "content type wasn't provided, trying to guess" << dendl;
+    ldout(s->cct, 5) << "content type wasn't provided, trying to guess" << dendl;
     const char *suffix = strrchr(s->object.name.c_str(), '.');
     if (suffix) {
       suffix++;
@@ -514,6 +552,12 @@ int RGWPutObj_ObjStore_SWIFT::get_params()
   policy.create_default(s->user.user_id, s->user.display_name);
 
   obj_manifest = s->info.env->get("HTTP_X_OBJECT_MANIFEST");
+
+  int r = get_delete_at_param(s, &delete_at);
+  if (r < 0) {
+    ldout(s->cct, 5) << "ERROR: failed to get Delete-At param" << dendl;
+    return r;
+  }
 
   return RGWPutObj_ObjStore::get_params();
 }
@@ -620,6 +664,13 @@ int RGWPutMetadataObject_ObjStore_SWIFT::get_params()
     return -EINVAL;
   }
 
+  /* Handle Swift object expiration. */
+  int r = get_delete_at_param(s, &delete_at);
+  if (r < 0) {
+    ldout(s->cct, 5) << "ERROR: failed to get Delete-At param" << dendl;
+    return r;
+  }
+
   placement_rule = s->info.env->get("HTTP_X_STORAGE_POLICY", "");
   return 0;
 }
@@ -683,6 +734,17 @@ static void dump_object_metadata(struct req_state * const s,
   for (riter = response_attrs.begin(); riter != response_attrs.end(); ++riter) {
     s->cio->print("%s: %s\r\n", riter->first.c_str(), riter->second.c_str());
   }
+
+  iter = attrs.find(RGW_ATTR_DELETE_AT);
+  if (iter != attrs.end()) {
+    utime_t delete_at;
+    try {
+      ::decode(delete_at, iter->second);
+      s->cio->print("X-Delete-At: %lu\r\n", delete_at.sec());
+    } catch (buffer::error& err) {
+      dout(0) << "ERROR: cannot decode object's " RGW_ATTR_DELETE_AT " attr, ignoring" << dendl;
+    }
+  }
 }
 
 int RGWCopyObj_ObjStore_SWIFT::init_dest_policy()
@@ -709,6 +771,12 @@ int RGWCopyObj_ObjStore_SWIFT::get_params()
     attrs_mod = RGWRados::ATTRSMOD_REPLACE;
   } else {
     attrs_mod = RGWRados::ATTRSMOD_MERGE;
+  }
+
+  int r = get_delete_at_param(s, &delete_at);
+  if (r < 0) {
+    ldout(s->cct, 5) << "ERROR: failed to get Delete-At param" << dendl;
+    return r;
   }
 
   return 0;
@@ -773,15 +841,32 @@ void RGWCopyObj_ObjStore_SWIFT::send_response()
   }
 }
 
+int RGWGetObj_ObjStore_SWIFT::get_params()
+{
+  const string& mm = s->info.args.get("multipart-manifest");
+  skip_manifest = (mm.compare("get") == 0);
+
+  return RGWGetObj_ObjStore::get_params();
+}
+
 int RGWGetObj_ObjStore_SWIFT::send_response_data(bufferlist& bl, off_t bl_ofs, off_t bl_len)
 {
   string content_type;
 
-  if (sent_header)
+  if (sent_header) {
     goto send_data;
+  }
 
-  if (range_str)
+  set_req_state_err(s, (partial_content && !ret) ? STATUS_PARTIAL_CONTENT : ret);
+  dump_errno(s);
+  if (s->err.is_err()) {
+    end_header(s, NULL);
+    return 0;
+  }
+
+  if (range_str) {
     dump_range(s, ofs, end, s->obj_size);
+  }
 
   dump_content_length(s, total_len);
   dump_last_modified(s, lastmod);
@@ -801,8 +886,6 @@ int RGWGetObj_ObjStore_SWIFT::send_response_data(bufferlist& bl, off_t bl_ofs, o
     dump_object_metadata(s, attrs);
   }
 
-  set_req_state_err(s, (partial_content && !ret) ? STATUS_PARTIAL_CONTENT : ret);
-  dump_errno(s);
   end_header(s, this, !content_type.empty() ? content_type.c_str() : "binary/octet-stream");
 
   sent_header = true;

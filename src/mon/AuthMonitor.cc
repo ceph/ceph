@@ -452,8 +452,6 @@ bool AuthMonitor::prep_auth(MonOpRequestRef op, bool paxos_writable)
         goto done;
       }
 
-      s->put();
-
       if (!mon->is_leader()) {
 	dout(10) << "not the leader, requesting more ids from leader" << dendl;
 	int leader = mon->get_leader();
@@ -511,7 +509,6 @@ reply:
   reply = new MAuthReply(proto, &response_bl, ret, s->global_id);
   mon->send_reply(op, reply);
 done:
-  s->put();
   return true;
 }
 
@@ -867,17 +864,25 @@ bool AuthMonitor::prepare_command(MonOpRequestRef op)
       goto done;
     }
 
+    // Parse the list of caps into a map
+    std::map<std::string, bufferlist> wanted_caps;
+    for (vector<string>::const_iterator it = caps_vec.begin();
+	 it != caps_vec.end() && (it + 1) != caps_vec.end();
+	 it += 2) {
+      const std::string &sys = *it;
+      bufferlist cap;
+      ::encode(*(it+1), cap);
+      wanted_caps[sys] = cap;
+    }
+
     // do we have it?
     EntityAuth entity_auth;
     if (mon->key_server.get_auth(entity, entity_auth)) {
-      for (vector<string>::iterator it = caps_vec.begin();
-	   it != caps_vec.end(); it += 2) {
-	string sys = *it;
-	bufferlist cap;
-	::encode(*(it+1), cap);
-	if (entity_auth.caps.count(sys) == 0 ||
-	    !entity_auth.caps[sys].contents_equal(cap)) {
-	  ss << "key for " << entity << " exists but cap " << sys << " does not match";
+      for (const auto &sys_cap : wanted_caps) {
+	if (entity_auth.caps.count(sys_cap.first) == 0 ||
+	    !entity_auth.caps[sys_cap.first].contents_equal(sys_cap.second)) {
+	  ss << "key for " << entity << " exists but cap " << sys_cap.first
+            << " does not match";
 	  err = -EINVAL;
 	  goto done;
 	}
@@ -893,6 +898,7 @@ bool AuthMonitor::prepare_command(MonOpRequestRef op)
 	KeyRing kr;
 	kr.add(entity, entity_auth.key);
         if (f) {
+          kr.set_caps(entity, entity_auth.caps);
           kr.encode_formatted("auth", f.get(), rdata);
         } else {
           kr.encode_plaintext(rdata);
@@ -924,9 +930,7 @@ bool AuthMonitor::prepare_command(MonOpRequestRef op)
     auth_inc.op = KeyServerData::AUTH_INC_ADD;
     auth_inc.name = entity;
     auth_inc.auth.key.create(g_ceph_context, CEPH_CRYPTO_AES);
-    for (vector<string>::iterator it = caps_vec.begin();
-	 it != caps_vec.end(); it += 2)
-      ::encode(*(it+1), auth_inc.auth.caps[*it]);
+    auth_inc.auth.caps = wanted_caps;
 
     push_cephx_inc(auth_inc);
 
@@ -940,6 +944,7 @@ bool AuthMonitor::prepare_command(MonOpRequestRef op)
       KeyRing kr;
       kr.add(entity, auth_inc.auth.key);
       if (f) {
+        kr.set_caps(entity, wanted_caps);
         kr.encode_formatted("auth", f.get(), rdata);
       } else {
         kr.encode_plaintext(rdata);

@@ -156,14 +156,21 @@ namespace std {
  */
 static inline void encode(const sockaddr_storage& a, bufferlist& bl) {
   struct sockaddr_storage ss = a;
-#if !defined(__FreeBSD__)
+#if defined(DARWIN) || defined(__FreeBSD__)
+  unsigned short *ss_family = reinterpret_cast<unsigned short*>(&ss);
+  *ss_family = htons(a.ss_family);
+#else
   ss.ss_family = htons(ss.ss_family);
 #endif
   ::encode_raw(ss, bl);
 }
 static inline void decode(sockaddr_storage& a, bufferlist::iterator& bl) {
   ::decode_raw(a, bl);
-#if !defined(__FreeBSD__)
+#if defined(DARWIN) || defined(__FreeBSD__)
+  unsigned short *ss_family = reinterpret_cast<unsigned short *>(&a);
+  a.ss_family = ntohs(*ss_family);
+  a.ss_len = 0;
+#else
   a.ss_family = ntohs(a.ss_family);
 #endif
 }

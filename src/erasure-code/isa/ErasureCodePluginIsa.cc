@@ -35,7 +35,8 @@ class ErasureCodePluginIsa : public ErasureCodePlugin {
 public:
   ErasureCodeIsaTableCache tcache;
 
-  virtual int factory(ErasureCodeProfile &profile,
+  virtual int factory(const std::string &directory,
+		      ErasureCodeProfile &profile,
                       ErasureCodeInterfaceRef *erasure_code,
                       ostream *ss)
   {

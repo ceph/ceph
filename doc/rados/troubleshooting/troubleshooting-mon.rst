@@ -82,12 +82,12 @@ admin socket, with ``ceph`` likely returning ``Error 111: Connection Refused``.
 Accessing the admin socket is as simple as telling the ``ceph`` tool to use
 the ``asok`` file.  In pre-Dumpling Ceph, this can be achieved by::
 
-  ceph --admin-daemon /var/run/ceph/ceph-mon.ID.asok <command>
+  ceph --admin-daemon /var/run/ceph/ceph-mon.<id>.asok <command>
 
 while in Dumpling and beyond you can use the alternate (and recommended)
 format::
 
-  ceph daemon mon.ID <command>
+  ceph daemon mon.<id> <command>
 
 Using ``help`` as the command to the ``ceph`` tool will show you the
 supported commands available through the admin socket. Please take a look

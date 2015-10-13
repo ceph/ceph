@@ -2238,12 +2238,12 @@ TEST_F(LibRadosTwoPoolsPP, HitSetTrim) {
 
 TEST_F(LibRadosTwoPoolsPP, PromoteOn2ndRead) {
   // create object
-  {
+  for (int i=0; i<20; ++i) {
     bufferlist bl;
     bl.append("hi there");
     ObjectWriteOperation op;
     op.write_full(bl);
-    ASSERT_EQ(0, ioctx.operate("foo", &op));
+    ASSERT_EQ(0, ioctx.operate("foo" + stringify(i), &op));
   }
 
   // configure cache
@@ -2279,40 +2279,63 @@ TEST_F(LibRadosTwoPoolsPP, PromoteOn2ndRead) {
   // wait for maps to settle
   cluster.wait_for_latest_osdmap();
 
-  // 1st read, don't trigger a promote
-  utime_t start = ceph_clock_now(NULL);
-  {
-    bufferlist bl;
-    ASSERT_EQ(1, ioctx.read("foo", bl, 1, 0));
-  }
-  utime_t end = ceph_clock_now(NULL);
-  float dur = end - start;
-  cout << "duration " << dur << std::endl;
-
-  // verify the object is NOT present in the cache tier
-  {
-    NObjectIterator it = cache_ioctx.nobjects_begin();
-    if (it != cache_ioctx.nobjects_end()) {
-      if (dur > 1.0) {
-	cout << " object got promoted, but read was slow, ignoring" << std::endl;
-      } else {
-	ASSERT_TRUE(it == cache_ioctx.nobjects_end());
+  int fake = 0;  // set this to non-zero to test spurious promotion,
+		 // e.g. from thrashing
+  int attempt = 0;
+  string obj;
+  while (true) {
+    // 1st read, don't trigger a promote
+    obj = "foo" + stringify(attempt);
+    cout << obj << std::endl;
+    {
+      bufferlist bl;
+      ASSERT_EQ(1, ioctx.read(obj.c_str(), bl, 1, 0));
+      if (--fake >= 0) {
+	sleep(1);
+	ASSERT_EQ(1, ioctx.read(obj.c_str(), bl, 1, 0));
+	sleep(1);
       }
     }
+
+    // verify the object is NOT present in the cache tier
+    {
+      bool found = false;
+      NObjectIterator it = cache_ioctx.nobjects_begin();
+      while (it != cache_ioctx.nobjects_end()) {
+	cout << " see " << it->get_oid() << std::endl;
+	if (it->get_oid() == string(obj.c_str())) {
+	  found = true;
+	  break;
+	}
+	++it;
+      }
+      if (!found)
+	break;
+    }
+
+    ++attempt;
+    ASSERT_LE(attempt, 20);
+    cout << "hrm, object is present in cache on attempt " << attempt
+	 << ", retrying" << std::endl;
   }
 
   // Read until the object is present in the cache tier
+  cout << "verifying " << obj << " is eventually promoted" << std::endl;
   while (true) {
     bufferlist bl;
-    ASSERT_EQ(1, ioctx.read("foo", bl, 1, 0));
+    ASSERT_EQ(1, ioctx.read(obj.c_str(), bl, 1, 0));
 
+    bool there = false;
     NObjectIterator it = cache_ioctx.nobjects_begin();
-    if (it != cache_ioctx.nobjects_end()) {
-      ASSERT_TRUE(it->get_oid() == string("foo"));
+    while (it != cache_ioctx.nobjects_end()) {
+      if (it->get_oid() == string(obj.c_str())) {
+	there = true;
+	break;
+      }
       ++it;
-      ASSERT_TRUE(it == cache_ioctx.nobjects_end());
-      break;
     }
+    if (there)
+      break;
 
     sleep(1);
   }

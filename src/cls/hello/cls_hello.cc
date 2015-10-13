@@ -258,6 +258,40 @@ static int bad_writer(cls_method_context_t hctx, bufferlist *in, bufferlist *out
 }
 
 
+class PGLSHelloFilter : public PGLSFilter {
+  string val;
+public:
+  int init(bufferlist::iterator& params) {
+    try {
+      ::decode(xattr, params);
+      ::decode(val, params);
+    } catch (buffer::error &e) {
+      return -EINVAL;
+    }
+    return 0;
+  }
+
+  virtual ~PGLSHelloFilter() {}
+  virtual bool filter(const hobject_t &obj, bufferlist& xattr_data,
+                      bufferlist& outdata)
+  {
+    if (val.size() != xattr_data.length())
+      return false;
+
+    if (memcmp(val.c_str(), xattr_data.c_str(), val.size()))
+      return false;
+
+    return true;
+  }
+};
+
+
+PGLSFilter *hello_filter()
+{
+  return new PGLSHelloFilter();
+}
+
+
 /**
  * initialize class
  *
@@ -304,4 +338,7 @@ void __cls_init()
 			  bad_reader, &h_bad_reader);
   cls_register_cxx_method(h_class, "bad_writer", CLS_METHOD_RD,
 			  bad_writer, &h_bad_writer);
+
+  // A PGLS filter
+  cls_register_cxx_filter(h_class, "hello", hello_filter);
 }

@@ -533,7 +533,7 @@ public:
   }
 
   explicit coll_t(spg_t pgid)
-    : type(TYPE_PG), pgid(pgid)
+    : type(TYPE_PG), pgid(pgid), removal_seq(0)
   {
     calc_str();
   }
@@ -922,6 +922,8 @@ struct pg_pool_t {
     FLAG_NOPGCHANGE = 1<<5, // pool's pg and pgp num can't be changed
     FLAG_NOSIZECHANGE = 1<<6, // pool's size and min size can't be changed
     FLAG_WRITE_FADVISE_DONTNEED = 1<<7, // write mode with LIBRADOS_OP_FLAG_FADVISE_DONTNEED
+    FLAG_NOSCRUB = 1<<8, // block periodic scrub
+    FLAG_NODEEP_SCRUB = 1<<9, // block periodic deep-scrub
   };
 
   static const char *get_flag_name(int f) {
@@ -934,6 +936,8 @@ struct pg_pool_t {
     case FLAG_NOPGCHANGE: return "nopgchange";
     case FLAG_NOSIZECHANGE: return "nosizechange";
     case FLAG_WRITE_FADVISE_DONTNEED: return "write_fadvise_dontneed";
+    case FLAG_NOSCRUB: return "noscrub";
+    case FLAG_NODEEP_SCRUB: return "nodeep-scrub";
     default: return "???";
     }
   }
@@ -968,6 +972,10 @@ struct pg_pool_t {
       return FLAG_NOSIZECHANGE;
     if (name == "write_fadvise_dontneed")
       return FLAG_WRITE_FADVISE_DONTNEED;
+    if (name == "noscrub")
+      return FLAG_NOSCRUB;
+    if (name == "nodeep-scrub")
+      return FLAG_NODEEP_SCRUB;
     return 0;
   }
 
@@ -1111,6 +1119,7 @@ public:
   HitSet::Params hit_set_params; ///< The HitSet params to use on this pool
   uint32_t hit_set_period;      ///< periodicity of HitSet segments (seconds)
   uint32_t hit_set_count;       ///< number of periods to retain
+  bool use_gmt_hitset;	        ///< use gmt to name the hitset archive object
   uint32_t min_read_recency_for_promote;   ///< minimum number of HitSet to check before promote on read
   uint32_t min_write_recency_for_promote;  ///< minimum number of HitSet to check before promote on write
 
@@ -1118,6 +1127,7 @@ public:
 
   uint64_t expected_num_objects; ///< expected number of objects on this pool, a value of 0 indicates
                                  ///< user does not specify any expected value
+  bool fast_read;            ///< whether turn on fast read on the pool or not
 
   pg_pool_t()
     : flags(0), type(0), size(0), min_size(0),
@@ -1141,10 +1151,12 @@ public:
       hit_set_params(),
       hit_set_period(0),
       hit_set_count(0),
+      use_gmt_hitset(true),
       min_read_recency_for_promote(0),
       min_write_recency_for_promote(0),
       stripe_width(0),
-      expected_num_objects(0)
+      expected_num_objects(0),
+      fast_read(false)
   { }
 
   void dump(Formatter *f) const;
@@ -1717,10 +1729,9 @@ WRITE_CLASS_ENCODER_FEATURES(pool_stat_t)
 struct pg_hit_set_info_t {
   utime_t begin, end;   ///< time interval
   eversion_t version;   ///< version this HitSet object was written
-
-  pg_hit_set_info_t() {}
-  pg_hit_set_info_t(utime_t b)
-    : begin(b) {}
+  bool using_gmt;	///< use gmt for creating the hit_set archive object name
+  pg_hit_set_info_t(bool using_gmt = true)
+    : using_gmt(using_gmt) {}
 
   void encode(bufferlist &bl) const;
   void decode(bufferlist::iterator &bl);
@@ -1737,8 +1748,6 @@ WRITE_CLASS_ENCODER(pg_hit_set_info_t)
  */
 struct pg_hit_set_history_t {
   eversion_t current_last_update;  ///< last version inserted into current set
-  utime_t current_last_stamp;      ///< timestamp of last insert
-  pg_hit_set_info_t current_info;  ///< metadata about the current set
   list<pg_hit_set_info_t> history; ///< archived sets, sorted oldest -> newest
 
   void encode(bufferlist &bl) const;
@@ -1762,6 +1771,7 @@ struct pg_history_t {
   epoch_t last_epoch_started;  // lower bound on last epoch started (anywhere, not necessarily locally)
   epoch_t last_epoch_clean;    // lower bound on last epoch the PG was completely clean.
   epoch_t last_epoch_split;    // as parent
+  epoch_t last_epoch_marked_full;  // pool or cluster
   
   /**
    * In the event of a map discontinuity, same_*_since may reflect the first
@@ -1783,6 +1793,7 @@ struct pg_history_t {
   pg_history_t()
     : epoch_created(0),
       last_epoch_started(0), last_epoch_clean(0), last_epoch_split(0),
+      last_epoch_marked_full(0),
       same_up_since(0), same_interval_since(0), same_primary_since(0) {}
   
   bool merge(const pg_history_t &other) {
@@ -1802,6 +1813,10 @@ struct pg_history_t {
     }
     if (last_epoch_split < other.last_epoch_split) {
       last_epoch_split = other.last_epoch_split; 
+      modified = true;
+    }
+    if (last_epoch_marked_full < other.last_epoch_marked_full) {
+      last_epoch_marked_full = other.last_epoch_marked_full;
       modified = true;
     }
     if (other.last_scrub > last_scrub) {
@@ -1836,7 +1851,8 @@ WRITE_CLASS_ENCODER(pg_history_t)
 
 inline ostream& operator<<(ostream& out, const pg_history_t& h) {
   return out << "ec=" << h.epoch_created
-	     << " les/c " << h.last_epoch_started << "/" << h.last_epoch_clean
+	     << " les/c/f " << h.last_epoch_started << "/" << h.last_epoch_clean
+	     << "/" << h.last_epoch_marked_full
 	     << " " << h.same_up_since << "/" << h.same_interval_since << "/" << h.same_primary_since;
 }
 
@@ -2736,9 +2752,15 @@ struct object_copy_data_t {
   ///< recent reqids on this object
   vector<pair<osd_reqid_t, version_t> > reqids;
 
+  uint64_t truncate_seq;
+  uint64_t truncate_size;
+
 public:
-  object_copy_data_t() : size((uint64_t)-1), data_digest(-1),
-			 omap_digest(-1), flags(0) {}
+  object_copy_data_t() :
+    size((uint64_t)-1), data_digest(-1),
+    omap_digest(-1), flags(0),
+    truncate_seq(0),
+    truncate_size(0) {}
 
   static void generate_test_instances(list<object_copy_data_t*>& o);
   void encode_classic(bufferlist& bl) const;
@@ -2834,12 +2856,11 @@ public:
   // last interval over which i mounted and was then active
   epoch_t mounted;     // last epoch i mounted
   epoch_t clean_thru;  // epoch i was active and clean thru
-  epoch_t last_map_marked_full; // last epoch osdmap was marked full
 
   OSDSuperblock() : 
     whoami(-1), 
     current_epoch(0), oldest_map(0), newest_map(0), weight(0),
-    mounted(0), clean_thru(0), last_map_marked_full(0) {
+    mounted(0), clean_thru(0) {
   }
 
   void encode(bufferlist &bl) const;
@@ -2960,12 +2981,15 @@ static inline ostream& operator<<(ostream& out, const watch_info_t& w) {
 
 struct notify_info_t {
   uint64_t cookie;
+  uint64_t notify_id;
   uint32_t timeout;
   bufferlist bl;
 };
 
 static inline ostream& operator<<(ostream& out, const notify_info_t& n) {
-  return out << "notify(cookie " << n.cookie << " " << n.timeout << "s)";
+  return out << "notify(cookie " << n.cookie
+	     << " notify" << n.notify_id
+	     << " " << n.timeout << "s)";
 }
 
 

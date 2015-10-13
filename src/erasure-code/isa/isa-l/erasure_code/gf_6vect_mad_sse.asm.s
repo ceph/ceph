@@ -31,6 +31,8 @@
 ;;; gf_6vect_mad_sse(len, vec, vec_i, mul_array, src, dest);
 ;;;
 
+%include "reg_sizes.asm"
+
 %define PS 8
 
 %ifidn __OUTPUT_FORMAT__, win64
@@ -400,15 +402,5 @@ mask0f: ddq 0x0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f
 constip16:
 	ddq 0xf0f1f2f3f4f5f6f7f8f9fafbfcfdfeff
 
-%macro slversion 4
-global %1_slver_%2%3%4
-global %1_slver
-%1_slver:
-%1_slver_%2%3%4:
-	dw 0x%4
-	db 0x%3, 0x%2
-%endmacro
 ;;;       func             core, ver, snum
-slversion gf_6vect_mad_sse, 00,  00,  020f
-; inform linker that this doesn't require executable stack
-section .note.GNU-stack noalloc noexec nowrite progbits
+slversion gf_6vect_mad_sse, 00,  01,  020f

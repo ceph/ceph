@@ -187,3 +187,16 @@ TEST(PerfCounters, MultiplePerfCounters) {
   ASSERT_EQ("", client.do_request("{ \"prefix\": \"perf dump\", \"format\": \"json\" }", &msg));
   ASSERT_EQ("{}", msg);
 }
+
+TEST(PerfCounters, CephContextPerfCounters) {
+  // Enable the perf counter
+  g_ceph_context->enable_perf_counter();
+  AdminSocketClient client(get_rand_socket_path());
+  std::string msg;
+
+  ASSERT_EQ("", client.do_request("{ \"prefix\": \"perf dump\", \"format\": \"json\" }", &msg));
+  ASSERT_EQ(sd("{\"cct\":{\"total_workers\":0,\"unhealthy_workers\":0}}"), msg);
+
+  // Restore to avoid impact to other test cases
+  g_ceph_context->disable_perf_counter();
+}

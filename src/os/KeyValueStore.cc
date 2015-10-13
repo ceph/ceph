@@ -272,8 +272,7 @@ int StripObjectMap::get_keys_with_header(const StripObjectHeaderRef header,
 {
   ObjectMap::ObjectMapIterator iter = _get_iterator(header->header, prefix);
   for (iter->seek_to_first(); iter->valid(); iter->next()) {
-    if (iter->status())
-      return iter->status();
+    assert(!iter->status());
     keys->insert(iter->key());
   }
   return 0;
@@ -284,8 +283,7 @@ int StripObjectMap::get_with_header(const StripObjectHeaderRef header,
 {
   ObjectMap::ObjectMapIterator iter = _get_iterator(header->header, prefix);
   for (iter->seek_to_first(); iter->valid(); iter->next()) {
-    if (iter->status())
-      return iter->status();
+    assert(!iter->status());
     out->insert(make_pair(iter->key(), iter->value()));
   }
 
@@ -538,7 +536,6 @@ KeyValueStore::KeyValueStore(const std::string &base,
   ondisk_finisher(g_ceph_context),
   collections_lock("KeyValueStore::collections_lock"),
   lock("KeyValueStore::lock"),
-  default_osr("default"),
   throttle_ops(g_ceph_context, "keyvaluestore_ops", g_conf->keyvaluestore_queue_max_ops),
   throttle_bytes(g_ceph_context, "keyvaluestore_bytes", g_conf->keyvaluestore_queue_max_bytes),
   op_finisher(g_ceph_context),
@@ -1053,17 +1050,16 @@ int KeyValueStore::queue_transactions(Sequencer *posr, list<Transaction*> &tls,
 
   // set up the sequencer
   OpSequencer *osr;
-  if (!posr)
-    posr = &default_osr;
+  assert(posr);
   if (posr->p) {
     osr = static_cast<OpSequencer *>(posr->p.get());
-    dout(5) << "queue_transactions existing " << *osr << "/" << osr->parent
+    dout(5) << "queue_transactions existing " << osr << " " << *osr << "/" << osr->parent
             << dendl; //<< " w/ q " << osr->q << dendl;
   } else {
     osr = new OpSequencer;
     osr->parent = posr;
     posr->p = osr;
-    dout(5) << "queue_transactions new " << *osr << "/" << osr->parent << dendl;
+    dout(5) << "queue_transactions new " << osr << " " << *osr << "/" << osr->parent << dendl;
   }
 
   Op *o = build_op(tls, ondisk, onreadable, onreadable_sync, osd_op);
@@ -1460,15 +1456,8 @@ unsigned KeyValueStore::_do_transaction(Transaction& transaction,
       break;
 
     case Transaction::OP_COLL_SETATTR:
-      {
-        assert(0 == "not implemented");
-      }
-      break;
-
     case Transaction::OP_COLL_RMATTR:
-      {
-        assert(0 == "not implemented");
-      }
+      assert(0 == "coll attrs no longer supported");
       break;
 
     case Transaction::OP_STARTSYNC:
@@ -2037,7 +2026,7 @@ int KeyValueStore::_zero(coll_t cid, const ghobject_t& oid, uint64_t offset,
   r = check_get_rc(header->cid, header->oid, r, lookup_keys.size() == values.size());
   if (r < 0)
     return r;
-  for(set<string>::iterator it = lookup_keys.begin(); it != lookup_keys.end(); it++)
+  for(set<string>::iterator it = lookup_keys.begin(); it != lookup_keys.end(); ++it)
   {
     pair<uint64_t, uint64_t> p = off_len[*it];
     values[*it].zero(p.first, p.second);
@@ -2161,17 +2150,21 @@ int KeyValueStore::getattr(coll_t cid, const ghobject_t& oid, const char *name,
 int KeyValueStore::getattrs(coll_t cid, const ghobject_t& oid,
                            map<string,bufferptr>& aset)
 {
-  int r;
   map<string, bufferlist> attr_aset;
+  int r;
+  StripObjectMap::StripObjectHeaderRef header;
 
-  r = backend->get(cid, oid, OBJECT_XATTR, &attr_aset);
-  if (r < 0 && r != -ENOENT) {
+  r = backend->lookup_strip_header(cid, oid, &header);
+  if (r < 0) {
+    dout(10) << __func__ << " lookup_strip_header failed: r =" << r << dendl;
+    return r;
+  }
+
+  r = backend->get_with_header(header, OBJECT_XATTR, &attr_aset);
+  if (r < 0) {
     dout(10) << __func__ << " could not get attrs r = " << r << dendl;
     goto out;
   }
-
-  if (r == -ENOENT)
-    r = 0;
 
   for (map<string, bufferlist>::iterator i = attr_aset.begin();
        i != attr_aset.end(); ++i) {
@@ -2258,7 +2251,7 @@ int KeyValueStore::_rmattrs(coll_t cid, const ghobject_t& oid,
   }
 
   r = backend->get_keys_with_header(header, OBJECT_XATTR, &attrs);
-  if (r < 0 && r != -ENOENT) {
+  if (r < 0) {
     dout(10) << __func__ << " could not get attrs r = " << r << dendl;
     return r;
   }
@@ -2532,7 +2525,7 @@ int KeyValueStore::omap_get(coll_t c, const ghobject_t &hoid,
   }
 
   r = backend->get_with_header(header, OBJECT_OMAP, out);
-  if (r < 0 && r != -ENOENT) {
+  if (r < 0) {
     dout(10) << __func__ << " err r =" << r << dendl;
     return r;
   }
@@ -2597,7 +2590,7 @@ int KeyValueStore::omap_get_keys(coll_t c, const ghobject_t &hoid, set<string> *
   }
 
   r = backend->get_keys_with_header(header, OBJECT_OMAP, keys);
-  if (r < 0 && r != -ENOENT) {
+  if (r < 0) {
     return r;
   }
   return 0;
@@ -2658,7 +2651,7 @@ int KeyValueStore::_omap_clear(coll_t cid, const ghobject_t &hoid,
 
   set<string> keys;
   r = backend->get_keys_with_header(header, OBJECT_OMAP, &keys);
-  if (r < 0 && r != -ENOENT) {
+  if (r < 0) {
     dout(10) << __func__ << " could not get omap_keys r = " << r << dendl;
     return r;
   }

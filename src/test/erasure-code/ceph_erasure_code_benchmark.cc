@@ -87,6 +87,7 @@ int ErasureCodeBench::setup(int argc, char** argv) {
     CINIT_FLAG_NO_DEFAULT_CONFIG_FILE);
   common_init_finish(g_ceph_context);
   g_ceph_context->_conf->apply_changes(NULL);
+  g_conf->set_val("erasure_code_dir", ".libs", false, false);
 
   if (vm.count("help")) {
     cout << desc << std::endl;
@@ -107,9 +108,6 @@ int ErasureCodeBench::setup(int argc, char** argv) {
       }
     }
   }
-
-  if (profile.count("directory") == 0)
-    profile["directory"] = ".libs";
 
   in_size = vm["size"].as<int>();
   max_iterations = vm["iterations"].as<int>();
@@ -155,7 +153,9 @@ int ErasureCodeBench::encode()
   ErasureCodePluginRegistry &instance = ErasureCodePluginRegistry::instance();
   ErasureCodeInterfaceRef erasure_code;
   stringstream messages;
-  int code = instance.factory(plugin, profile, &erasure_code, &messages);
+  int code = instance.factory(plugin,
+			      g_conf->erasure_code_dir,
+			      profile, &erasure_code, &messages);
   if (code) {
     cerr << messages.str() << endl;
     return code;
@@ -257,7 +257,9 @@ int ErasureCodeBench::decode()
   ErasureCodePluginRegistry &instance = ErasureCodePluginRegistry::instance();
   ErasureCodeInterfaceRef erasure_code;
   stringstream messages;
-  int code = instance.factory(plugin, profile, &erasure_code, &messages);
+  int code = instance.factory(plugin,
+			      g_conf->erasure_code_dir,
+			      profile, &erasure_code, &messages);
   if (code) {
     cerr << messages.str() << endl;
     return code;

@@ -81,6 +81,7 @@ EXTRA_DIST += \
 	$(srcdir)/ceph-rbdnamer \
 	$(srcdir)/tools/ceph-monstore-update-crush.sh \
 	$(srcdir)/upstart/ceph-all.conf \
+	$(srcdir)/upstart/ceph-disk.conf \
 	$(srcdir)/upstart/ceph-mon.conf \
 	$(srcdir)/upstart/ceph-mon-all.conf \
 	$(srcdir)/upstart/ceph-mon-all-starter.conf \
@@ -149,7 +150,7 @@ endif
 core-daemons: ceph-mon ceph-osd ceph-mds radosgw
 admin-tools: monmaptool osdmaptool crushtool ceph-authtool
 base: core-daemons admin-tools \
-	cephfs ceph-syn ceph-conf \
+	cephfs ceph-fuse ceph-syn ceph-conf \
 	rados radosgw-admin librados-config \
 	init-ceph ceph-post-file \
 	ceph

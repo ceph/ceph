@@ -82,21 +82,26 @@ Mutex::~Mutex() {
 }
 
 void Mutex::Lock(bool no_lockdep) {
-  utime_t start;
   int r;
 
   if (lockdep && g_lockdep && !no_lockdep) _will_lock();
 
-  if (TryLock()) {
-    goto out;
-  }
-
-  if (logger && cct && cct->_conf->mutex_perf_counter)
+  if (logger && cct && cct->_conf->mutex_perf_counter) {
+    utime_t start;
+    // instrumented mutex enabled
     start = ceph_clock_now(cct);
-  r = pthread_mutex_lock(&_m);
-  if (logger && cct && cct->_conf->mutex_perf_counter)
+    if (TryLock()) {
+      goto out;
+    }
+
+    r = pthread_mutex_lock(&_m);
+
     logger->tinc(l_mutex_wait,
 		 ceph_clock_now(cct) - start);
+  } else {
+    r = pthread_mutex_lock(&_m);
+  }
+
   assert(r == 0);
   if (lockdep && g_lockdep) _locked();
   _post_lock();

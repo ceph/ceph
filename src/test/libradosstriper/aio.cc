@@ -5,6 +5,7 @@
 #include "test/librados/test.h"
 #include "test/libradosstriper/TestCase.h"
 
+#include <fcntl.h>
 #include <semaphore.h>
 #include <errno.h>
 
@@ -16,14 +17,14 @@ class AioTestData
 {
 public:
   AioTestData() : m_complete(false), m_safe(false) {
-    sem_init(&m_sem, 0, 0);
+    m_sem = sem_open("test_libradosstriper_aio_sem", O_CREAT, 0644, 0);
   }
 
   ~AioTestData() {
-    sem_destroy(&m_sem);
+    sem_close(m_sem);
   }
 
-  sem_t m_sem;
+  sem_t *m_sem;
   bool m_complete;
   bool m_safe;
 };
@@ -32,14 +33,14 @@ void set_completion_complete(rados_completion_t cb, void *arg)
 {
   AioTestData *test = static_cast<AioTestData*>(arg);
   test->m_complete = true;
-  sem_post(&test->m_sem);
+  sem_post(test->m_sem);
 }
 
 void set_completion_safe(rados_completion_t cb, void *arg)
 {
   AioTestData *test = static_cast<AioTestData*>(arg);
   test->m_safe = true;
-  sem_post(&test->m_sem);
+  sem_post(test->m_sem);
 }
 
 TEST_F(StriperTest, SimpleWrite) {
@@ -51,8 +52,8 @@ TEST_F(StriperTest, SimpleWrite) {
   memset(buf, 0xcc, sizeof(buf));
   ASSERT_EQ(0, rados_striper_aio_write(striper, "StriperTest", my_completion, buf, sizeof(buf), 0));
   TestAlarm alarm;
-  sem_wait(&test_data.m_sem);
-  sem_wait(&test_data.m_sem);
+  sem_wait(test_data.m_sem);
+  sem_wait(test_data.m_sem);
   rados_aio_release(my_completion);
 }
 
@@ -66,8 +67,8 @@ TEST_F(StriperTestPP, SimpleWritePP) {
   bl1.append(buf, sizeof(buf));
   ASSERT_EQ(0, striper.aio_write("SimpleWritePP", my_completion, bl1, sizeof(buf), 0));
   TestAlarm alarm;
-  sem_wait(&test_data.m_sem);
-  sem_wait(&test_data.m_sem);
+  sem_wait(test_data.m_sem);
+  sem_wait(test_data.m_sem);
   my_completion->release();
 }
 
@@ -81,8 +82,8 @@ TEST_F(StriperTest, WaitForSafe) {
   ASSERT_EQ(0, rados_striper_aio_write(striper, "WaitForSafe", my_completion, buf, sizeof(buf), 0));
   TestAlarm alarm;
   rados_aio_wait_for_safe(my_completion);
-  sem_wait(&test_data.m_sem);
-  sem_wait(&test_data.m_sem);
+  sem_wait(test_data.m_sem);
+  sem_wait(test_data.m_sem);
   rados_aio_release(my_completion);
 }
 
@@ -97,8 +98,8 @@ TEST_F(StriperTestPP, WaitForSafePP) {
   ASSERT_EQ(0, striper.aio_write("WaitForSafePP", my_completion, bl1, sizeof(buf), 0));
   TestAlarm alarm;
   my_completion->wait_for_safe();
-  sem_wait(&test_data.m_sem);
-  sem_wait(&test_data.m_sem);
+  sem_wait(test_data.m_sem);
+  sem_wait(test_data.m_sem);
   my_completion->release();
 }
 
@@ -112,8 +113,8 @@ TEST_F(StriperTest, RoundTrip) {
   ASSERT_EQ(0, rados_striper_aio_write(striper, "RoundTrip", my_completion, buf, sizeof(buf), 0));
   {
     TestAlarm alarm;
-    sem_wait(&test_data.m_sem);
-    sem_wait(&test_data.m_sem);
+    sem_wait(test_data.m_sem);
+    sem_wait(test_data.m_sem);
   }
   char buf2[128];
   memset(buf2, 0, sizeof(buf2));
@@ -126,8 +127,8 @@ TEST_F(StriperTest, RoundTrip) {
     rados_aio_wait_for_complete(my_completion2);
   }
   ASSERT_EQ(0, memcmp(buf, buf2, sizeof(buf)));
-  sem_wait(&test_data.m_sem);
-  sem_wait(&test_data.m_sem);
+  sem_wait(test_data.m_sem);
+  sem_wait(test_data.m_sem);
   rados_aio_release(my_completion);
   rados_aio_release(my_completion2);
 }
@@ -142,8 +143,8 @@ TEST_F(StriperTest, RoundTrip2) {
   ASSERT_EQ(0, rados_striper_aio_write(striper, "RoundTrip2", my_completion, buf, sizeof(buf), 0));
   {
     TestAlarm alarm;
-    sem_wait(&test_data.m_sem);
-    sem_wait(&test_data.m_sem);
+    sem_wait(test_data.m_sem);
+    sem_wait(test_data.m_sem);
   }
   char buf2[128];
   memset(buf2, 0, sizeof(buf2));
@@ -156,8 +157,8 @@ TEST_F(StriperTest, RoundTrip2) {
     rados_aio_wait_for_safe(my_completion2);
   }
   ASSERT_EQ(0, memcmp(buf, buf2, sizeof(buf)));
-  sem_wait(&test_data.m_sem);
-  sem_wait(&test_data.m_sem);
+  sem_wait(test_data.m_sem);
+  sem_wait(test_data.m_sem);
   rados_aio_release(my_completion);
   rados_aio_release(my_completion2);
 }
@@ -173,8 +174,8 @@ TEST_F(StriperTestPP, RoundTripPP) {
   ASSERT_EQ(0, striper.aio_write("RoundTripPP", my_completion, bl1, sizeof(buf), 0));
   {
     TestAlarm alarm;
-    sem_wait(&test_data.m_sem);
-    sem_wait(&test_data.m_sem);
+    sem_wait(test_data.m_sem);
+    sem_wait(test_data.m_sem);
   }
   bufferlist bl2;
   AioCompletion *my_completion2 = librados::Rados::aio_create_completion
@@ -185,8 +186,8 @@ TEST_F(StriperTestPP, RoundTripPP) {
     my_completion2->wait_for_complete();
   }
   ASSERT_EQ(0, memcmp(buf, bl2.c_str(), sizeof(buf)));
-  sem_wait(&test_data.m_sem);
-  sem_wait(&test_data.m_sem);
+  sem_wait(test_data.m_sem);
+  sem_wait(test_data.m_sem);
   my_completion->release();
   my_completion2->release();
 }
@@ -202,8 +203,8 @@ TEST_F(StriperTestPP, RoundTripPP2) {
   ASSERT_EQ(0, striper.aio_write("RoundTripPP2", my_completion, bl1, sizeof(buf), 0));
   {
     TestAlarm alarm;
-    sem_wait(&test_data.m_sem);
-    sem_wait(&test_data.m_sem);
+    sem_wait(test_data.m_sem);
+    sem_wait(test_data.m_sem);
   }
   bufferlist bl2;
   AioCompletion *my_completion2 = librados::Rados::aio_create_completion
@@ -214,8 +215,8 @@ TEST_F(StriperTestPP, RoundTripPP2) {
     my_completion2->wait_for_safe();
   }
   ASSERT_EQ(0, memcmp(buf, bl2.c_str(), sizeof(buf)));
-  sem_wait(&test_data.m_sem);
-  sem_wait(&test_data.m_sem);
+  sem_wait(test_data.m_sem);
+  sem_wait(test_data.m_sem);
   my_completion->release();
   my_completion2->release();
 }
@@ -230,8 +231,8 @@ TEST_F(StriperTest, IsComplete) {
   ASSERT_EQ(0, rados_striper_aio_write(striper, "IsComplete", my_completion, buf, sizeof(buf), 0));
   {
     TestAlarm alarm;
-    sem_wait(&test_data.m_sem);
-    sem_wait(&test_data.m_sem);
+    sem_wait(test_data.m_sem);
+    sem_wait(test_data.m_sem);
   }
   char buf2[128];
   memset(buf2, 0, sizeof(buf2));
@@ -250,8 +251,8 @@ TEST_F(StriperTest, IsComplete) {
     }
   }
   ASSERT_EQ(0, memcmp(buf, buf2, sizeof(buf)));
-  sem_wait(&test_data.m_sem);
-  sem_wait(&test_data.m_sem);
+  sem_wait(test_data.m_sem);
+  sem_wait(test_data.m_sem);
   rados_aio_release(my_completion);
   rados_aio_release(my_completion2);
 }
@@ -267,8 +268,8 @@ TEST_F(StriperTestPP, IsCompletePP) {
   ASSERT_EQ(0, striper.aio_write("IsCompletePP", my_completion, bl1, sizeof(buf), 0));
   {
     TestAlarm alarm;
-    sem_wait(&test_data.m_sem);
-    sem_wait(&test_data.m_sem);
+    sem_wait(test_data.m_sem);
+    sem_wait(test_data.m_sem);
   }
   bufferlist bl2;
   AioCompletion *my_completion2 = librados::Rados::aio_create_completion
@@ -285,8 +286,8 @@ TEST_F(StriperTestPP, IsCompletePP) {
     }
   }
   ASSERT_EQ(0, memcmp(buf, bl2.c_str(), sizeof(buf)));
-  sem_wait(&test_data.m_sem);
-  sem_wait(&test_data.m_sem);
+  sem_wait(test_data.m_sem);
+  sem_wait(test_data.m_sem);
   my_completion->release();
   my_completion2->release();
 }
@@ -320,8 +321,8 @@ TEST_F(StriperTest, IsSafe) {
     rados_aio_wait_for_complete(my_completion2);
   }
   ASSERT_EQ(0, memcmp(buf, buf2, sizeof(buf)));
-  sem_wait(&test_data.m_sem);
-  sem_wait(&test_data.m_sem);
+  sem_wait(test_data.m_sem);
+  sem_wait(test_data.m_sem);
   rados_aio_release(my_completion);
   rados_aio_release(my_completion2);
 }
@@ -354,8 +355,8 @@ TEST_F(StriperTestPP, IsSafePP) {
     my_completion2->wait_for_complete();
   }
   ASSERT_EQ(0, memcmp(buf, bl2.c_str(), sizeof(buf)));
-  sem_wait(&test_data.m_sem);
-  sem_wait(&test_data.m_sem);
+  sem_wait(test_data.m_sem);
+  sem_wait(test_data.m_sem);
   my_completion->release();
   my_completion2->release();
 }
@@ -393,8 +394,8 @@ TEST_F(StriperTest, RoundTripAppend) {
   ASSERT_EQ((int)(sizeof(buf) + sizeof(buf2)), rados_aio_get_return_value(my_completion3));
   ASSERT_EQ(0, memcmp(buf3, buf, sizeof(buf)));
   ASSERT_EQ(0, memcmp(buf3 + sizeof(buf), buf2, sizeof(buf2)));
-  sem_wait(&test_data.m_sem);
-  sem_wait(&test_data.m_sem);
+  sem_wait(test_data.m_sem);
+  sem_wait(test_data.m_sem);
   rados_aio_release(my_completion);
   rados_aio_release(my_completion2);
   rados_aio_release(my_completion3);
@@ -435,8 +436,8 @@ TEST_F(StriperTestPP, RoundTripAppendPP) {
   ASSERT_EQ(sizeof(buf) + sizeof(buf2), (unsigned)my_completion3->get_return_value());
   ASSERT_EQ(0, memcmp(bl3.c_str(), buf, sizeof(buf)));
   ASSERT_EQ(0, memcmp(bl3.c_str() + sizeof(buf), buf2, sizeof(buf2)));
-  sem_wait(&test_data.m_sem);
-  sem_wait(&test_data.m_sem);
+  sem_wait(test_data.m_sem);
+  sem_wait(test_data.m_sem);
   my_completion->release();
   my_completion2->release();
   my_completion3->release();
@@ -462,8 +463,8 @@ TEST_F(StriperTest, Flush) {
     rados_aio_wait_for_complete(my_completion2);
   }
   ASSERT_EQ(0, memcmp(buf, buf2, sizeof(buf)));
-  sem_wait(&test_data.m_sem);
-  sem_wait(&test_data.m_sem);
+  sem_wait(test_data.m_sem);
+  sem_wait(test_data.m_sem);
   rados_aio_release(my_completion);
   rados_aio_release(my_completion2);
 }
@@ -487,8 +488,8 @@ TEST_F(StriperTestPP, FlushPP) {
     my_completion2->wait_for_complete();
   }
   ASSERT_EQ(0, memcmp(buf, bl2.c_str(), sizeof(buf)));
-  sem_wait(&test_data.m_sem);
-  sem_wait(&test_data.m_sem);
+  sem_wait(test_data.m_sem);
+  sem_wait(test_data.m_sem);
   my_completion->release();
   my_completion2->release();
 }
@@ -525,8 +526,8 @@ TEST_F(StriperTest, RoundTripWriteFull) {
   }
   ASSERT_EQ(sizeof(buf2), (unsigned)rados_aio_get_return_value(my_completion3));
   ASSERT_EQ(0, memcmp(buf3, buf2, sizeof(buf2)));
-  sem_wait(&test_data.m_sem);
-  sem_wait(&test_data.m_sem);
+  sem_wait(test_data.m_sem);
+  sem_wait(test_data.m_sem);
   rados_aio_release(my_completion);
   rados_aio_release(my_completion2);
   rados_aio_release(my_completion3);
@@ -566,8 +567,8 @@ TEST_F(StriperTestPP, RoundTripWriteFullPP) {
   }
   ASSERT_EQ(sizeof(buf2), (unsigned)my_completion3->get_return_value());
   ASSERT_EQ(0, memcmp(bl3.c_str(), buf2, sizeof(buf2)));
-  sem_wait(&test_data.m_sem);
-  sem_wait(&test_data.m_sem);
+  sem_wait(test_data.m_sem);
+  sem_wait(test_data.m_sem);
   my_completion->release();
   my_completion2->release();
   my_completion3->release();

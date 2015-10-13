@@ -41,7 +41,7 @@ function TEST_osd_pool_get_set() {
     run_mon $dir a || return 1
 
     local flag
-    for flag in hashpspool nodelete nopgchange nosizechange; do
+    for flag in hashpspool nodelete nopgchange nosizechange write_fadvise_dontneed noscrub nodeep-scrub; do
         if [ $flag = hashpspool ]; then
 	    ./ceph osd dump | grep 'pool ' | grep $flag || return 1
         else

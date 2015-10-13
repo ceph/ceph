@@ -710,6 +710,20 @@ public:
     _dequeue(pg, old_priority);
   }
 
+  /// note start of an async (evict) op
+  void agent_start_evict_op() {
+    Mutex::Locker l(agent_lock);
+    ++agent_ops;
+  }
+
+  /// note finish or cancellation of an async (evict) op
+  void agent_finish_evict_op() {
+    Mutex::Locker l(agent_lock);
+    assert(agent_ops > 0);
+    --agent_ops;
+    agent_cond.Signal();
+  }
+
   /// note start of an async (flush) op
   void agent_start_op(const hobject_t& oid) {
     Mutex::Locker l(agent_lock);
@@ -1799,7 +1813,7 @@ private:
   void handle_osd_map(class MOSDMap *m);
   void note_down_osd(int osd);
   void note_up_osd(int osd);
-  
+
   bool advance_pg(
     epoch_t advance_to, PG *pg,
     ThreadPool::TPHandle &handle,
@@ -1994,6 +2008,12 @@ protected:
 
   void queue_want_up_thru(epoch_t want);
   void send_alive();
+
+  // -- full map requests --
+  epoch_t requested_full_first, requested_full_last;
+
+  void request_full_map(epoch_t first, epoch_t last);
+  void got_full_map(epoch_t e);
 
   // -- failures --
   map<int,utime_t> failure_queue;

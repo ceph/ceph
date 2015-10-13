@@ -370,13 +370,19 @@ void dump_content_length(struct req_state *s, uint64_t len)
   }
 }
 
-void dump_etag(struct req_state *s, const char *etag)
+void dump_etag(struct req_state * const s, const char * const etag)
 {
+  if ('\0' == *etag) {
+    return;
+  }
+
   int r;
-  if (s->prot_flags & RGW_PROTO_SWIFT)
+  if (s->prot_flags & RGW_PROTO_SWIFT) {
     r = s->cio->print("etag: %s\r\n", etag);
-  else
+  } else {
     r = s->cio->print("ETag: \"%s\"\r\n", etag);
+  }
+
   if (r < 0) {
     ldout(s->cct, 0) << "ERROR: s->cio->print() returned err=" << r << dendl;
   }
@@ -600,7 +606,7 @@ void end_header(struct req_state *s, RGWOp *op, const char *content_type, const 
 
   int r;
   if (content_type) {
-      r = s->cio->print("Content-type: %s\r\n", content_type);
+      r = s->cio->print("Content-Type: %s\r\n", content_type);
       if (r < 0) {
 	ldout(s->cct, 0) << "ERROR: s->cio->print() returned err=" << r << dendl;
       }
