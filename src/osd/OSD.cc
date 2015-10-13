@@ -3078,6 +3078,8 @@ void OSD::build_past_intervals_parallel()
 		 << " " << debug.str() << dendl;
 	p.old_up = up;
 	p.old_acting = acting;
+	p.primary = primary;
+	p.up_primary = up_primary;
 	p.same_interval_since = cur_epoch;
       }
     }
