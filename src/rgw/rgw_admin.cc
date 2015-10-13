@@ -1855,7 +1855,22 @@ int main(int argc, char **argv)
 	  cerr << "Error initing realm " << cpp_strerror(-ret) << std::endl;
 	  return ret;
 	}
-	ret = realm.set_current_period(period_id);
+	/* read latest sync data */
+	RGWMetaSyncStatusManager sync(store);
+
+	ret = sync.init();
+	if (ret < 0) {
+	  cerr << "ERROR: sync.init() returned ret=" << ret << std::endl;
+	  return -ret;
+	}
+
+	ret = sync.read_sync_status();
+	if (ret < 0) {
+	  cerr << "ERROR: sync.read_sync_status() returned ret=" << ret << std::endl;
+	  return -ret;
+	}
+
+	ret = realm.set_current_period(period_id, &sync.get_sync_status());
 	if (ret < 0 ) {
 	  cerr << "Error setting current period " << period_id << ":" << cpp_strerror(-ret) << std::endl;
 	  return ret;

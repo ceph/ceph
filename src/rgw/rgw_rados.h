@@ -16,6 +16,7 @@
 #include "cls/timeindex/cls_timeindex_types.h"
 #include "rgw_log.h"
 #include "rgw_metadata.h"
+#include "rgw_meta_sync_status.h"
 
 class RGWWatcher;
 class SafeTimer;
@@ -1271,7 +1272,7 @@ public:
   const string& get_current_period() const {
     return current_period;
   }
-  int set_current_period(const string& period_id);  
+  int set_current_period(const string& period_id, const rgw_meta_sync_status* sync_status = NULL);
 };
 WRITE_CLASS_ENCODER(RGWRealm)
 
@@ -1300,7 +1301,7 @@ class RGWPeriod
   string id;
   epoch_t epoch;
   string predecessor_uuid;
-  map<int, version_t> versions;
+  rgw_meta_sync_status sync_status;
   RGWPeriodMap period_map;
   string master_zone;
 
@@ -1331,6 +1332,7 @@ public:
   const string& get_master_zone() { return master_zone;}
   const string& get_realm() { return realm_id;}
   const RGWPeriodMap& get_map() { return period_map;}
+  const rgw_meta_sync_status& get_sync_status() { return sync_status;}
   const string& get_pool_name(CephContext *cct);
   const string& get_latest_epoch_oid();
   const string& get_info_oid_prefix();
@@ -1343,6 +1345,11 @@ public:
   void set_realm_id(const string& _realm_id) {
     realm_id = _realm_id;
   }
+
+  void set_sync_status(const rgw_meta_sync_status& _sync_status) {
+    sync_status = _sync_status;
+  }
+
   int get_latest_epoch(epoch_t& epoch);
   int init(CephContext *_cct, RGWRados *_store, const string &period_realm_id, const string &period_realm_name = "",
 	   bool setup_obj = true);
@@ -1359,7 +1366,7 @@ public:
     ::encode(id, bl);
     ::encode(epoch, bl);
     ::encode(predecessor_uuid, bl);
-    ::encode(versions, bl);
+    ::encode(sync_status, bl);
     ::encode(period_map, bl);
     ::encode(master_zone, bl);
     ENCODE_FINISH(bl);
@@ -1370,7 +1377,7 @@ public:
     ::decode(id, bl);
     ::decode(epoch, bl);
     ::decode(predecessor_uuid, bl);
-    ::decode(versions, bl);
+    ::decode(sync_status, bl);
     ::decode(period_map, bl);
     ::decode(master_zone, bl);
     DECODE_FINISH(bl);
