@@ -3,6 +3,7 @@
 
 #include "rgw_coroutine.h"
 #include "rgw_http_client.h"
+#include "rgw_meta_sync_status.h"
 
 #include "common/RWLock.h"
 
@@ -15,94 +16,11 @@ struct rgw_mdlog_info {
   void decode_json(JSONObj *obj);
 };
 
-struct rgw_meta_sync_info {
-  enum SyncState {
-    StateInit = 0,
-    StateBuildingFullSyncMaps = 1,
-    StateSync = 2,
-  };
-
-  uint16_t state;
-  uint32_t num_shards;
-
-  void encode(bufferlist& bl) const {
-    ENCODE_START(1, 1, bl);
-    ::encode(state, bl);
-    ::encode(num_shards, bl);
-    ENCODE_FINISH(bl);
-  }
-
-  void decode(bufferlist::iterator& bl) {
-     DECODE_START(1, bl);
-     ::decode(state, bl);
-     ::decode(num_shards, bl);
-     DECODE_FINISH(bl);
-  }
-
-  void dump(Formatter *f) const;
-
-  rgw_meta_sync_info() : state((int)StateInit), num_shards(0) {}
-};
-WRITE_CLASS_ENCODER(rgw_meta_sync_info)
-
-struct rgw_meta_sync_marker {
-  enum SyncState {
-    FullSync = 0,
-    IncrementalSync = 1,
-  };
-  uint16_t state;
-  string marker;
-  string next_step_marker;
-
-  rgw_meta_sync_marker() : state(FullSync) {}
-
-  void encode(bufferlist& bl) const {
-    ENCODE_START(1, 1, bl);
-    ::encode(state, bl);
-    ::encode(marker, bl);
-    ::encode(next_step_marker, bl);
-    ENCODE_FINISH(bl);
-  }
-
-  void decode(bufferlist::iterator& bl) {
-     DECODE_START(1, bl);
-    ::decode(state, bl);
-    ::decode(marker, bl);
-    ::decode(next_step_marker, bl);
-     DECODE_FINISH(bl);
-  }
-
-  void dump(Formatter *f) const;
-};
-WRITE_CLASS_ENCODER(rgw_meta_sync_marker)
-
-struct rgw_meta_sync_status {
-  rgw_meta_sync_info sync_info;
-  map<uint32_t, rgw_meta_sync_marker> sync_markers;
-
-  rgw_meta_sync_status() {}
-
-  void encode(bufferlist& bl) const {
-    ENCODE_START(1, 1, bl);
-    ::encode(sync_info, bl);
-    ::encode(sync_markers, bl);
-    ENCODE_FINISH(bl);
-  }
-
-  void decode(bufferlist::iterator& bl) {
-     DECODE_START(1, bl);
-    ::decode(sync_info, bl);
-    ::decode(sync_markers, bl);
-     DECODE_FINISH(bl);
-  }
-
-  void dump(Formatter *f) const;
-};
-WRITE_CLASS_ENCODER(rgw_meta_sync_status)
 
 class RGWAsyncRadosProcessor;
 class RGWMetaSyncStatusManager;
 class RGWMetaSyncCR;
+class RGWRESTConn;
 
 class RGWRemoteMetaLog : public RGWCoroutinesManager {
   RGWRados *store;
