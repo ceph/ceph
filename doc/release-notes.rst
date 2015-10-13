@@ -182,10 +182,10 @@ time-consuming process for generating them.
 * librados: add FULL_TRY and FULL_FORCE flags for dealing with full clusters or pools (Sage Weil)
 * librados: fix notify completion race (#13114 Sage Weil)
 * librados, libcephfs: randomize client nonces (Josh Durgin)
-* librados: pybind: fix binary omap values (Josh Durgin)
-* librbd: fix reads larger than the cache size
+* librados: pybind: fix binary omap values (Robin H. Johnson)
+* librbd: fix reads larger than the cache size (Lu Shi)
 * librbd: metadata filter fixes (Haomai Wang)
-* librbd: use write_full when possible
+* librbd: use write_full when possible (Zhiqiang Wang)
 * mds: avoid emitting cap warnigns before evicting session (John Spray)
 * mds: fix expected holes in journal objects (#13167 Yan, Zheng)
 * mds: fix SnapServer crash on deleted pool (John Spray)
