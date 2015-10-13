@@ -604,7 +604,7 @@ const string& RGWRealm::get_info_oid_prefix(bool old_format)
   return realm_info_oid_prefix;
 }
 
-int RGWRealm::set_current_period(const string& period_id) {
+int RGWRealm::set_current_period(const string& period_id, const rgw_meta_sync_status* sync_status) {
   /* check to see period id is valid */
   RGWPeriod new_current(period_id);
   int ret = new_current.init(cct, store, id, name);
@@ -613,6 +613,10 @@ int RGWRealm::set_current_period(const string& period_id) {
     return ret;
   }
   new_current.set_predecessor(current_period);
+  if (sync_status) {
+    new_current.set_sync_status(*sync_status);
+  }
+
   ret = new_current.store_info(false);
   if (ret < 0) {
     return ret;
