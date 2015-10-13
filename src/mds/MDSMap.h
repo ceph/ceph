@@ -409,7 +409,7 @@ public:
     return NULL;
   }
 
-  mds_gid_t find_standby_for(mds_rank_t mds, std::string& name) {
+  mds_gid_t find_standby_for(mds_rank_t mds, std::string& name) const {
     std::map<mds_gid_t, mds_info_t>::const_iterator generic_standby
       = mds_info.end();
     for (std::map<mds_gid_t, mds_info_t>::const_iterator p = mds_info.begin();
@@ -446,7 +446,7 @@ public:
     return MDS_GID_NONE;
   }
 
-  mds_gid_t find_replacement_for(mds_rank_t mds, std::string& name) {
+  mds_gid_t find_replacement_for(mds_rank_t mds, std::string& name) const {
     const mds_gid_t standby = find_standby_for(mds, name);
     if (standby)
       return standby;
@@ -456,6 +456,13 @@ public:
 
   void get_health(list<pair<health_status_t,std::string> >& summary,
 		  list<pair<health_status_t,std::string> > *detail) const;
+
+  /**
+   * If any of the ranks are stuck unavailable, return true.  This is a
+   * heuristic for clients to see if they should bother waiting to talk to
+   * MDSs, or whether they should error out at startup/mount.
+   */
+  bool cluster_unavailable() const;
 
   // mds states
   bool is_down(mds_rank_t m) const { return up.count(m) == 0; }

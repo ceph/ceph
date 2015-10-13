@@ -638,3 +638,41 @@ void MDSMap::decode(bufferlist::iterator& p)
   }
   DECODE_FINISH(p);
 }
+
+bool MDSMap::cluster_unavailable() const
+{
+  if (epoch == 0) {
+    return false;
+  }
+
+  // If a rank is marked damage (unavailable until operator intervenes)
+  if (damaged.size()) {
+    return true;
+  }
+
+  // If no ranks are created (filesystem not initialized)
+  if (in.empty()) {
+    return true;
+  }
+
+  for (const auto rank : in) {
+    std::string name;
+    if (up.count(rank) != 0) {
+      name = mds_info.at(up.at(rank)).name;
+    }
+    const bool standby_avail = find_replacement_for(rank, name) != MDS_GID_NONE;
+
+    // If the rank is unfilled, and there are no standbys, we're unavailable
+    if (up.count(rank) == 0 && !standby_avail) {
+      return true;
+    } else if (up.count(rank) && mds_info.at(up.at(rank)).laggy() && !standby_avail) {
+      // If the daemon is laggy and there are no standbys, we're unavailable.
+      // It would be nice to give it some grace here, but to do so callers
+      // would have to poll this time-wise, vs. just waiting for updates
+      // to mdsmap, so it's not worth the complexity.
+      return true;
+    }
+  }
+
+  return false;
+}
