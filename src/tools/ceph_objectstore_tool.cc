@@ -2923,7 +2923,8 @@ int main(int argc, char **argv)
   }
 
   if (file_fd != fd_none && file_fd < 0) {
-    perror("open");
+    string err = string("file: ") + file;
+    perror(err.c_str());
     myexit(1);
   }
 
@@ -2956,15 +2957,21 @@ int main(int argc, char **argv)
   // Special handling for filestore journal, so we can dump it without mounting
   if (op == "dump-journal" && type == "filestore") {
     int ret = mydump_journal(formatter, jpath, g_conf->journal_dio);
+    if (ret < 0) {
+      cerr << "journal-path: " << jpath << ": "
+	   << cpp_strerror(ret) << std::endl;
+      myexit(1);
+    }
     formatter->flush(cout);
-    myexit(ret != 0);
+    myexit(0);
   }
 
   //Verify that data-path really exists
   struct stat st;
   if (::stat(dpath.c_str(), &st) == -1) {
-     perror("data-path");
-     myexit(1);
+    string err = string("data-path: ") + dpath;
+    perror(err.c_str());
+    myexit(1);
   }
   //Verify data data-path really is a filestore
   if (type == "filestore") {
