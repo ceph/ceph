@@ -26,6 +26,7 @@ gitbuilder_host=$1
 codename=$2
 git_ceph_url=$3
 sha1=$4
+flavor=$5
 
 sudo apt-get update
 sudo apt-get install -y git
@@ -67,7 +68,8 @@ function build_package() {
     # options (otherwise parts of the source tree will be left out).
     #
     ./autogen.sh
-    ./configure --with-rocksdb --with-ocf \
+    ./configure $(flavor2configure $flavor) \
+        --with-rocksdb --with-ocf \
         --with-nss --with-debug --enable-cephfs-java \
         --with-lttng --with-babeltrace
     #
@@ -121,7 +123,7 @@ function build_repo() {
     # as
     #
     arch=x86_64
-    base=ceph-deb-$codename-$arch-basic
+    base=ceph-deb-$codename-$arch-$flavor
     sha1_dir=$codename/$base/sha1/$sha1
     mkdir -p $sha1_dir/conf
     cat > $sha1_dir/conf/distributions <<EOF

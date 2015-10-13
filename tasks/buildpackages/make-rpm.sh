@@ -27,6 +27,7 @@ gitbuilder_host=$1
 codename=$2
 git_ceph_url=$3
 sha1=$4
+flavor=$5
 
 sudo yum install -y git
 
@@ -54,7 +55,7 @@ ceph_dir=$(pwd)
 # as
 #
 arch=x86_64
-base=ceph-rpm-$codename-$arch-basic
+base=ceph-rpm-$codename-$arch-$flavor
 
 function setup_rpmmacros() {
     if ! grep -q find_debuginfo_dwz_opts $HOME/.rpmmacros ; then
@@ -81,7 +82,7 @@ function build_package() {
     #
     sudo yum install -y bzip2
     ./autogen.sh
-    ./configure --with-debug --with-radosgw --with-fuse --with-libatomic-ops --with-gtk2 --with-nss
+    ./configure $(flavor2configure $flavor) --with-debug --with-radosgw --with-fuse --with-libatomic-ops --with-gtk2 --with-nss
     #
     # use distdir= to set the name of the top level directory of the
     # tarbal to match the desired version
