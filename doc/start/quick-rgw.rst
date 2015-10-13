@@ -83,3 +83,6 @@ To start a Ceph Object Gateway, follow this procedure:
 
 See the `Configuring Ceph Object Gateway`_ guide for additional administration
 and API details.
+
+.. _Configuring Ceph Object Gateway: ../../radosgw/config
+.. _Preflight Checklist: ../quick-start-preflight
