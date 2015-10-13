@@ -2503,7 +2503,7 @@ int main(int argc, char **argv)
 	  cerr << "unable to initialize zone: " << cpp_strerror(-ret) << std::endl;
 	  return -ret;
 	}
-	ret = zonegroup.add_zone(zone);
+	ret = zonegroup.add_zone(zone, is_master);
 	if (ret < 0) {
 	  cerr << "failed to add zone " << zone_name << " to zonegroup " << zonegroup.get_name() << ": "
 	       << cpp_strerror(-ret) << std::endl;
@@ -2565,7 +2565,7 @@ int main(int argc, char **argv)
 	  }
 	}
 
-	RGWZoneParams zone(zone_name, is_master);
+	RGWZoneParams zone(zone_name);
 	ret = zone.init(g_ceph_context, store, false);
 	if (ret < 0) {
 	  cerr << "unable to initialize zone: " << cpp_strerror(-ret) << std::endl;
@@ -2578,7 +2578,7 @@ int main(int argc, char **argv)
 	}
 
 	if (!zonegroup_id.empty() || !zonegroup_name.empty()) {
-	  ret = zonegroup.add_zone(zone);
+	  ret = zonegroup.add_zone(zone, is_master);
 	  if (ret < 0) {
 	    cerr << "failed to add zone " << zone_name << " to zonegroup " << zonegroup.get_name() << ": "
 		 << cpp_strerror(-ret) << std::endl;
