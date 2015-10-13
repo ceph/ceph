@@ -393,13 +393,21 @@ void RGWGetBucketLocation_ObjStore_S3::send_response()
   end_header(s, this);
   dump_start(s);
 
-  string location_constraint(s->bucket_info.region);
-  if (s->bucket_info.region == "default")
-    location_constraint.clear();
+  string region = s->bucket_info.region;
+  string api_name;
+
+  map<string, RGWRegion>::iterator iter = store->region_map.regions.find(region);
+  if (iter != store->region_map.regions.end()) {
+    api_name = iter->second.api_name;
+  } else  {
+    if (region != "default") {
+      api_name = region;
+    }
+  }
 
   s->formatter->dump_format_ns("LocationConstraint",
 			       "http://doc.s3.amazonaws.com/doc/2006-03-01/",
-			       "%s",location_constraint.c_str());
+			       "%s",api_name.c_str());
   rgw_flush_formatter_and_reset(s, s->formatter);
 }
 
