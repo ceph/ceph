@@ -349,7 +349,7 @@ class CephFSMount(object):
         self.background_procs.append(rproc)
         return rproc
 
-    def create_n_files(self, fs_path, count):
+    def create_n_files(self, fs_path, count, sync=False):
         assert(self.is_mounted())
 
         abs_path = os.path.join(self.mountpoint, fs_path)
@@ -369,8 +369,11 @@ class CephFSMount(object):
                 fname = "{{0}}_{{1}}".format(abs_path, i)
                 h = open(fname, 'w')
                 h.write('content')
+                if {sync}:
+                    h.flush()
+                    os.fsync(h.fileno())
                 h.close()
-            """).format(abs_path=abs_path, count=count)
+            """).format(abs_path=abs_path, count=count, sync=str(sync))
 
         self.run_python(pyscript)
 
