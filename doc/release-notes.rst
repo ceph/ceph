@@ -9,12 +9,29 @@ This is the first Infernalis release candidate.  There have been some
 major changes since hammer, and the upgrade process is non-trivial.
 Please read carefully.
 
+Getting the release candidate
+-----------------------------
+
+The v9.1.0 packages are pushed to the development release repositories::
+
+  http://download.ceph.com/rpm-testing
+  http://download.ceph.com/debian-testing
+
+For for info, see::
+
+  http://docs.ceph.com/docs/master/install/get-packages/
+
+Or install with ceph-deploy via::
+
+  ceph-deploy install --testing HOST
+
+
 Known issues
 ------------
 
 * librbd and librados ABI compatibility is broken.  Be careful
   installing this RC on client machines (e.g., those running qemu).
-* rgw: the get location API has a known bug
+  It will be fixed in the final v9.2.0 release.
 
 
 Major Changes from Hammer
@@ -65,7 +82,6 @@ Major Changes from Hammer
     inodes has been dramatically improved.
   * The ceph-fuse client behaves better on 32-bit hosts.
 
-
 Distro compatibility
 --------------------
 
@@ -90,6 +106,15 @@ Upgrading from Firefly
 Upgrading directly from Firefly v0.80.z is not possible.  All clusters
 must first upgrade to Hammer v0.94.4 or a later v0.94.z release; only
 then is it possible to upgrade to Infernalis 9.2.z.
+
+Note that v0.94.4 isn't released yet, but you can upgrade to a test build
+from gitbuilder with::
+
+  ceph-deploy install --dev hammer HOST
+
+The v0.94.4 Hammer point release will be out before v9.2.0 Infernalis
+is.
+
 
 Upgrading from Hammer
 ---------------------
@@ -165,7 +190,77 @@ Upgrade notes
 Notable changes
 ---------------
 
-(write me)
+NOTE: These notes are somewhat abbreviated while we find a less
+time-consuming process for generating them.
+
+* build: C++11 now supported
+* build: many cmake improvements
+* build: OSX build fixes (Yan, Zheng)
+* build: remove rest-bench
+* ceph-disk: many fixes (Loic Dachary)
+* ceph-disk: support for multipath devices (Loic Dachary)
+* ceph-fuse: mostly behave on 32-bit hosts (Yan, Zheng)
+* ceph-objectstore-tool: many improvements (David Zafman)
+* common: bufferlist performance tuning (Piotr Dalek, Sage Weil)
+* common: make mutex more efficient
+* common: some async compression infrastructure (Haomai Wang)
+* librados: add FULL_TRY and FULL_FORCE flags for dealing with full clusters or pools (Sage Weil)
+* librados: fix notify completion race (#13114 Sage Weil)
+* librados, libcephfs: randomize client nonces (Josh Durgin)
+* librados: pybind: fix binary omap values (Robin H. Johnson)
+* librbd: fix reads larger than the cache size (Lu Shi)
+* librbd: metadata filter fixes (Haomai Wang)
+* librbd: use write_full when possible (Zhiqiang Wang)
+* mds: avoid emitting cap warnigns before evicting session (John Spray)
+* mds: fix expected holes in journal objects (#13167 Yan, Zheng)
+* mds: fix SnapServer crash on deleted pool (John Spray)
+* mds: many fixes (Yan, Zheng, John Spray, Greg Farnum)
+* mon: add cache over MonitorDBStore (Kefu Chai)
+* mon: 'ceph osd metadata' can dump all osds (Haomai Wang)
+* mon: detect kv backend failures (Sage Weil)
+* mon: fix CRUSH map test for new pools (Sage Weil)
+* mon: fix min_last_epoch_clean tracking (Kefu Chai)
+* mon: misc scaling fixes (Sage Weil)
+* mon: streamline session handling, fix memory leaks (Sage Weil)
+* mon: upgrades must pass through hammer (Sage Weil)
+* msg/async: many fixes (Haomai Wang)
+* osd: cache proxy-write support (Zhiqiang Wang, Samuel Just)
+* osd: configure promotion based on write recency (Zhiqiang Wang)
+* osd: don't send dup MMonGetOSDMap requests (Sage Weil, Kefu Chai)
+* osd: erasure-code: fix SHEC floating point bug (#12936 Loic Dachary)
+* osd: erasure-code: update to ISA-L 2.14 (Yuan Zhou)
+* osd: fix hitset object naming to use GMT (Kefu Chai)
+* osd: fix misc memory leaks (Sage Weil)
+* osd: fix peek_queue locking in FileStore (Xinze Chi)
+* osd: fix promotion vs full cache tier (Samuel Just)
+* osd: fix replay requeue when pg is still activating (#13116 Samuel Just)
+* osd: fix scrub stat bugs (Sage Weil, Samuel Just)
+* osd: force promotion for ops EC can't handle (Zhiqiang Wang)
+* osd: improve behavior on machines with large memory pages (Steve Capper)
+* osd: merge multiple setattr calls into a setattrs call (Xinxin Shu)
+* osd: newstore prototype (Sage Weil)
+* osd: ObjectStore internal API refactor (Sage Weil)
+* osd: SHEC no longer experimental
+* osd: throttle evict ops (Yunchuan Wen)
+* osd: upgrades must pass through hammer (Sage Weil)
+* osd: use SEEK_HOLE / SEEK_DATA for sparse copy (Xinxin Shu)
+* rbd: rbd-replay-prep and rbd-replay improvements (Jason Dillaman)
+* rgw: expose the number of unhealthy workers through admin socket (Guang Yang)
+* rgw: fix casing of Content-Type header (Robin H. Johnson)
+* rgw: fix decoding of X-Object-Manifest from GET on Swift DLO (Radslow Rzarzynski)
+* rgw: fix sysvinit script
+* rgw: fix sysvinit script w/ multiple instances (Sage Weil, Pavan Rallabhandi)
+* rgw: improve handling of already removed buckets in expirer (Radoslaw Rzarzynski)
+* rgw: log to /var/log/ceph instead of /var/log/radosgw
+* rgw: rework X-Trans-Id header to be conform with Swift API (Radoslaw Rzarzynski)
+* rgw: s3 encoding-type for get bucket (Jeff Weber)
+* rgw: set max buckets per user in ceph.conf (Vikhyat Umrao)
+* rgw: support for Swift expiration API (Radoslaw Rzarzynski, Yehuda Sadeh)
+* rgw: user rm is idempotent (Orit Wasserman)
+* selinux policy (Boris Ranto, Milan Broz)
+* systemd: many fixes (Sage Weil, Owen Synge, Boris Ranto, Dan van der Ster)
+* systemd: run daemons as user ceph
+
 
 v9.0.3
 ======
