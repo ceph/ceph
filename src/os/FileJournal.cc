@@ -37,6 +37,10 @@
 #include "common/Formatter.h"
 #include "common/JSONFormatter.h"
 
+#if defined(__FreeBSD__)
+#define O_DSYNC O_SYNC
+#endif
+
 #define dout_subsys ceph_subsys_journal
 #undef dout_prefix
 #define dout_prefix *_dout << "journal "
@@ -298,14 +302,14 @@ int FileJournal::_open_file(int64_t oldsize, blksize_t blksize,
     }
     memset(static_cast<void*>(buf), 0, write_size);
     uint64_t i = 0;
-    for (; (i + write_size) <= (unsigned)max_size; i += write_size) {
+    for (; (i + write_size) <= (uint64_t)max_size; i += write_size) {
       ret = ::pwrite(fd, static_cast<void*>(buf), write_size, i);
       if (ret < 0) {
 	free(buf);
 	return -errno;
       }
     }
-    if (i < (unsigned)max_size) {
+    if (i < (uint64_t)max_size) {
       ret = ::pwrite(fd, static_cast<void*>(buf), max_size - i, i);
       if (ret < 0) {
 	free(buf);
@@ -748,13 +752,21 @@ int FileJournal::read_header(header_t *hdr) const
   bufferlist bl;
 
   buffer::ptr bp = buffer::create_page_aligned(block_size);
-  bp.zero();
-  int r = ::pread(fd, bp.c_str(), bp.length(), 0);
+  char* bpdata = bp.c_str();
+  int r = ::pread(fd, bpdata, bp.length(), 0);
 
   if (r < 0) {
     int err = errno;
     dout(0) << "read_header got " << cpp_strerror(err) << dendl;
     return -err;
+  }
+
+  // don't use bp.zero() here, because it also invalidates
+  // crc cache (which is not yet populated anyway)
+  if (bp.length() != (size_t)r) {
+      // r will be always less or equal than bp.length
+      bpdata += r;
+      memset(bpdata, 0, bp.length() - r);
   }
 
   bl.push_back(bp);
@@ -795,8 +807,12 @@ bufferptr FileJournal::prepare_header()
   }
   ::encode(header, bl);
   bufferptr bp = buffer::create_page_aligned(get_top());
-  bp.zero();
-  memcpy(bp.c_str(), bl.c_str(), bl.length());
+  // don't use bp.zero() here, because it also invalidates
+  // crc cache (which is not yet populated anyway)
+  char* data = bp.c_str();
+  memcpy(data, bl.c_str(), bl.length());
+  data += bl.length();
+  memset(data, 0, bp.length()-bl.length());
   return bp;
 }
 

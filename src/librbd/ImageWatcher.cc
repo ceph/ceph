@@ -324,7 +324,7 @@ int ImageWatcher::lock() {
   // send the notification when we aren't holding locks
   FunctionContext *ctx = new FunctionContext(
     boost::bind(&IoCtx::notify2, &m_image_ctx.md_ctx, m_image_ctx.header_oid,
-		bl, NOTIFY_TIMEOUT, reinterpret_cast<bufferlist *>(NULL)));
+		bl, NOTIFY_TIMEOUT, reinterpret_cast<bufferlist *>(0)));
   m_task_finisher->queue(TASK_CODE_ACQUIRED_LOCK, ctx);
   return 0;
 }

@@ -19,6 +19,7 @@
 #include "include/types.h"
 
 // stl
+#include <functional>
 #include <string>
 #include <memory>
 #include <set>
@@ -96,6 +97,8 @@ struct CommandOp
   std::string  *outs;
 };
 
+/* error code for ceph_fuse */
+#define CEPH_FUSE_NO_MDS_UP    -(1<<2) /* no mds up deteced in ceph_fuse */
 
 // ============================================
 // types for my local metadata cache
@@ -168,6 +171,8 @@ struct dir_result_t {
 
 
   InodeRef inode;
+  int owner_uid;
+  int owner_gid;
 
   int64_t offset;        // high bits: frag_t, low bits: an offset
 
@@ -257,10 +262,23 @@ class Client : public Dispatcher, public md_config_obs_t {
 public:
   void tick();
 
- protected:
+protected:
   MonClient *monclient;
   Messenger *messenger;  
   client_t whoami;
+
+  int user_id, group_id;
+
+  int get_uid() {
+    if (user_id >= 0)
+      return user_id;
+    return ::geteuid();
+  }
+  int get_gid() {
+    if (group_id >= 0)
+      return group_id;
+    return ::getegid();
+  }
 
   void set_cap_epoch_barrier(epoch_t e);
   epoch_t cap_epoch_barrier;
@@ -292,8 +310,10 @@ public:
   // mds requests
   ceph_tid_t last_tid;
   ceph_tid_t oldest_tid; // oldest incomplete mds request, excluding setfilelock requests
-  ceph_tid_t last_flush_seq;
   map<ceph_tid_t, MetaRequest*> mds_requests;
+
+  // cap flushing
+  ceph_tid_t last_flush_tid;
 
   void dump_mds_requests(Formatter *f);
   void dump_mds_sessions(Formatter *f);
@@ -346,6 +366,17 @@ protected:
 
   // cache
   ceph::unordered_map<vinodeno_t, Inode*> inode_map;
+
+  // fake inode number for 32-bits ino_t
+  ceph::unordered_map<ino_t, vinodeno_t> faked_ino_map;
+  interval_set<ino_t> free_faked_inos;
+  ino_t last_used_faked_ino;
+  void _assign_faked_ino(Inode *in);
+  void _release_faked_ino(Inode *in);
+  bool _use_faked_inos;
+  void _reset_faked_inos();
+  vinodeno_t _map_faked_ino(ino_t ino);
+
   Inode*                 root;
   map<Inode*, InodeRef>  root_parents;
   Inode*                 root_ancestor;
@@ -439,7 +470,8 @@ protected:
 
   // path traversal for high-level interface
   InodeRef cwd;
-  int path_walk(const filepath& fp, InodeRef *end, bool followsym=true);
+  int path_walk(const filepath& fp, InodeRef *end, bool followsym=true,
+		int uid=-1, int gid=-1);
   int fill_stat(Inode *in, struct stat *st, frag_info_t *dirstat=0, nest_info_t *rstat=0);
   int fill_stat(InodeRef& in, struct stat *st, frag_info_t *dirstat=0, nest_info_t *rstat=0) {
     return fill_stat(in.get(), st, dirstat, rstat);
@@ -482,6 +514,10 @@ protected:
   void put_qtree(Inode *in);
   void invalidate_quota_tree(Inode *in);
   Inode* get_quota_root(Inode *in);
+
+  bool check_quota_condition(
+      Inode *in,
+      std::function<bool (const Inode &)> test);
   bool is_quota_files_exceeded(Inode *in);
   bool is_quota_bytes_exceeded(Inode *in, int64_t new_bytes);
   bool is_quota_bytes_approaching(Inode *in);
@@ -534,10 +570,12 @@ protected:
   void remove_all_caps(Inode *in);
   void remove_session_caps(MetaSession *session);
   void mark_caps_dirty(Inode *in, int caps);
-  int mark_caps_flushing(Inode *in);
+  int mark_caps_flushing(Inode *in, ceph_tid_t *ptid);
+  void adjust_session_flushing_caps(Inode *in, MetaSession *old_s, MetaSession *new_s);
   void flush_caps();
   void flush_caps(Inode *in, MetaSession *session);
   void kick_flushing_caps(MetaSession *session);
+  void early_kick_flushing_caps(MetaSession *session);
   void kick_maxsize_requests(MetaSession *session);
   int get_caps(Inode *in, int need, int want, int *have, loff_t endoff);
   int get_caps_used(Inode *in);
@@ -556,13 +594,14 @@ protected:
   void handle_cap_grant(MetaSession *session, Inode *in, Cap *cap, class MClientCaps *m);
   void cap_delay_requeue(Inode *in);
   void send_cap(Inode *in, MetaSession *session, Cap *cap,
-		int used, int want, int retain, int flush);
+		int used, int want, int retain, int flush,
+		ceph_tid_t flush_tid);
   void check_caps(Inode *in, bool is_delayed);
   void get_cap_ref(Inode *in, int cap);
   void put_cap_ref(Inode *in, int cap);
   void flush_snaps(Inode *in, bool all_again=false, CapSnap *again=0);
-  void wait_sync_caps(Inode *in, uint16_t flush_tid[]);
-  void wait_sync_caps(uint64_t want);
+  void wait_sync_caps(Inode *in, ceph_tid_t want);
+  void wait_sync_caps(ceph_tid_t want);
   void queue_cap_snap(Inode *in, SnapContext &old_snapc);
   void finish_cap_snap(Inode *in, CapSnap *capsnap, int used);
   void _flushed_cap_snap(Inode *in, snapid_t seq);
@@ -615,6 +654,8 @@ protected:
 			      Dentry *old_dentry = NULL);
   void update_dentry_lease(Dentry *dn, LeaseStat *dlease, utime_t from, MetaSession *session);
 
+  bool use_faked_inos() { return _use_faked_inos; }
+  vinodeno_t map_faked_ino(ino_t ino);
 
   // ----------------------
   // fs ops.
@@ -658,8 +699,8 @@ private:
 
   // internal interface
   //   call these with client_lock held!
-  int _do_lookup(Inode *dir, const string& name, InodeRef *target);
-  int _lookup(Inode *dir, const string& dname, InodeRef *target);
+  int _do_lookup(Inode *dir, const string& name, InodeRef *target, int uid, int gid);
+  int _lookup(Inode *dir, const string& dname, InodeRef *target, int uid, int gid);
 
   int _link(Inode *in, Inode *dir, const char *name, int uid=-1, int gid=-1, InodeRef *inp = 0);
   int _unlink(Inode *dir, const char *name, int uid=-1, int gid=-1);
@@ -704,6 +745,8 @@ private:
 		    Dentry **pdn, bool expect_null=false);
 
   int check_permissions(Inode *in, int flags, int uid, int gid);
+
+  int check_data_pool_exist(string name, string value, const OSDMap *osdmap);
 
   vinodeno_t _get_vino(Inode *in);
   inodeno_t _get_inodeno(Inode *in);
@@ -763,7 +806,7 @@ private:
   void _release_filelocks(Fh *fh);
   void _update_lock_state(struct flock *fl, uint64_t owner, ceph_lock_state_t *lock_state);
 public:
-  int mount(const std::string &mount_root);
+  int mount(const std::string &mount_root, bool require_mds=false);
   void unmount();
 
   int mds_command(
@@ -822,7 +865,7 @@ public:
 
   // dirs
   int mkdir(const char *path, mode_t mode);
-  int mkdirs(const char *path, mode_t mode);
+  int mkdirs(const char *path, mode_t mode, int uid=-1, int gid=-1);
   int rmdir(const char *path);
 
   // symlinks
@@ -923,6 +966,8 @@ public:
     Mutex::Locker lock(client_lock);
     return _get_vino(in);
   }
+  // get inode from faked ino
+  Inode *ll_get_inode(ino_t ino);
   Inode *ll_get_inode(vinodeno_t vino);
   int ll_lookup(Inode *parent, const char *name, struct stat *attr,
 		Inode **out, int uid = -1, int gid = -1);

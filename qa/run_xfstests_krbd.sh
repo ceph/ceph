@@ -11,7 +11,7 @@ set -x
 SCRIPT="run_xfstests.sh"
 
 if [ -z "${URL_BASE}" ]; then
-	URL_BASE="https://ceph.com/git/?p=ceph.git;a=blob_plain;f=qa"
+	URL_BASE="https://git.ceph.com/?p=ceph.git;a=blob_plain;f=qa"
 fi
 
 cd "${TESTDIR}"

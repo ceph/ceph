@@ -11,7 +11,7 @@ namespace librbd
 class ImageCtx;
 class ProgressContext;
 
-class AsyncTrimRequest : public AsyncRequest
+class AsyncTrimRequest : public AsyncRequest<>
 {
 public:
   AsyncTrimRequest(ImageCtx &image_ctx, Context *on_finish,

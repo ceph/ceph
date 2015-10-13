@@ -10,11 +10,20 @@
 #include "msg/xio/XioMessenger.h"
 #endif
 
+Messenger *Messenger::create_client_messenger(CephContext *cct, string lname)
+{
+  uint64_t nonce = 0;
+  get_random_bytes((char*)&nonce, sizeof(nonce));
+  return Messenger::create(cct, cct->_conf->ms_type, entity_name_t::CLIENT(),
+			   lname, nonce, 0);
+}
+
 Messenger *Messenger::create(CephContext *cct, const string &type,
 			     entity_name_t name, string lname,
 			     uint64_t nonce, uint64_t features)
 {
   int r = -1;
+  srand(time(NULL));
   if (type == "random")
     r = rand() % 2; // random does not include xio
   if (r == 0 || type == "simple")

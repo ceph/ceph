@@ -155,7 +155,7 @@ public:
       Context *c ///< [in] context to call upon flush/commit
       ) = 0; ///< @return true if idle, false otherwise
 
-    Sequencer_impl() : RefCountedObject(0) {}
+    Sequencer_impl() : RefCountedObject(NULL, 0) {}
     virtual ~Sequencer_impl() {}
   };
   typedef boost::intrusive_ptr<Sequencer_impl> Sequencer_implRef;
@@ -358,9 +358,9 @@ public:
       OP_RMCOLL =       21,  // cid
       OP_COLL_ADD =     22,  // cid, oldcid, oid
       OP_COLL_REMOVE =  23,  // cid, oid
-      OP_COLL_SETATTR = 24,  // cid, attrname, bl
-      OP_COLL_RMATTR =  25,  // cid, attrname
-      OP_COLL_SETATTRS = 26,  // cid, attrset
+      OP_COLL_SETATTR = 24,  // cid, attrname, bl  **DEPRECATED**
+      OP_COLL_RMATTR =  25,  // cid, attrname  **DEPRECATED**
+      OP_COLL_SETATTRS = 26,  // cid, attrset  **DEPRECATED**
       OP_COLL_MOVE =    8,   // newcid, oldcid, oid
 
       OP_STARTSYNC =    27,  // start a sync
@@ -777,9 +777,11 @@ public:
 
       bufferlist::iterator data_bl_p;
 
+    public:
       vector<coll_t> colls;
       vector<ghobject_t> objects;
 
+    private:
       iterator(Transaction *t)
         : t(t),
 	  data_bl_p(t->data_bl.begin()),
@@ -872,7 +874,6 @@ private:
     Op* _get_next_op() {
       if (op_ptr.length() == 0 || op_ptr.offset() >= op_ptr.length()) {
         op_ptr = bufferptr(sizeof(Op) * OPS_PER_PTR);
-	op_ptr.zero();
       }
       bufferptr ptr(op_ptr, 0, sizeof(Op));
       op_bl.append(ptr);
@@ -880,6 +881,7 @@ private:
       op_ptr.set_offset(op_ptr.offset() + sizeof(Op));
 
       char* p = ptr.c_str();
+      memset(p, 0, sizeof(Op));
       return reinterpret_cast<Op*>(p);
     }
     __le32 _get_coll_id(const coll_t& coll) {
@@ -1294,76 +1296,6 @@ public:
       data.ops++;
     }
 
-    // NOTE: Collection attr operations are all DEPRECATED.  new
-    // backends need not implement these at all.
-
-    /// Set an xattr on a collection
-    void collection_setattr(coll_t cid, const string& name, bufferlist& val)
-      __attribute__ ((deprecated)) {
-      if (use_tbl) {
-        __u32 op = OP_COLL_SETATTR;
-        ::encode(op, tbl);
-        ::encode(cid, tbl);
-        ::encode(name, tbl);
-        ::encode(val, tbl);
-      } else {
-        Op* _op = _get_next_op();
-        _op->op = OP_COLL_SETATTR;
-        _op->cid = _get_coll_id(cid);
-        ::encode(name, data_bl);
-        ::encode(val, data_bl);
-      }
-      data.ops++;
-    }
-
-    /// Remove an xattr from a collection
-    void collection_rmattr(coll_t cid, const string& name)
-      __attribute__ ((deprecated)) {
-      if (use_tbl) {
-        __u32 op = OP_COLL_RMATTR;
-        ::encode(op, tbl);
-        ::encode(cid, tbl);
-        ::encode(name, tbl);
-      } else {
-        Op* _op = _get_next_op();
-        _op->op = OP_COLL_RMATTR;
-        _op->cid = _get_coll_id(cid);
-        ::encode(name, data_bl);
-      }
-      data.ops++;
-    }
-    /// Set multiple xattrs on a collection
-    void collection_setattrs(coll_t cid, map<string,bufferptr>& aset)
-      __attribute__ ((deprecated)) {
-      if (use_tbl) {
-        __u32 op = OP_COLL_SETATTRS;
-        ::encode(op, tbl);
-        ::encode(cid, tbl);
-        ::encode(aset, tbl);
-      } else {
-        Op* _op = _get_next_op();
-        _op->op = OP_COLL_SETATTRS;
-        _op->cid = _get_coll_id(cid);
-        ::encode(aset, data_bl);
-      }
-      data.ops++;
-    }
-    /// Set multiple xattrs on a collection
-    void collection_setattrs(coll_t cid, map<string,bufferlist>& aset)
-      __attribute__ ((deprecated)) {
-      if (use_tbl) {
-        __u32 op = OP_COLL_SETATTRS;
-        ::encode(op, tbl);
-        ::encode(cid, tbl);
-        ::encode(aset, tbl);
-      } else {
-        Op* _op = _get_next_op();
-        _op->op = OP_COLL_SETATTRS;
-        _op->cid = _get_coll_id(cid);
-        ::encode(aset, data_bl);
-      }
-      data.ops++;
-    }
     /// Remove omap from oid
     void omap_clear(
       coll_t cid,           ///< [in] Collection containing oid
@@ -1668,18 +1600,10 @@ public:
   };
 
   // synchronous wrappers
-  unsigned apply_transaction(Transaction& t, Context *ondisk=0) {
-    list<Transaction*> tls;
-    tls.push_back(&t);
-    return apply_transactions(NULL, tls, ondisk);
-  }
   unsigned apply_transaction(Sequencer *osr, Transaction& t, Context *ondisk=0) {
     list<Transaction*> tls;
     tls.push_back(&t);
     return apply_transactions(osr, tls, ondisk);
-  }
-  unsigned apply_transactions(list<Transaction*>& tls, Context *ondisk=0) {
-    return apply_transactions(NULL, tls, ondisk);
   }
   unsigned apply_transactions(Sequencer *osr, list<Transaction*>& tls, Context *ondisk=0);
 
@@ -1978,45 +1902,6 @@ public:
    * @returns true if it exists, false otherwise
    */
   virtual bool collection_exists(coll_t c) = 0;
-  /**
-   * collection_getattr - get an xattr of a collection
-   *
-   * @param cid collection name
-   * @param name xattr name
-   * @param value pointer of buffer to receive value
-   * @param size size of buffer to receive value
-   * @returns 0 on success, negative error code on failure
-   */
-  virtual int collection_getattr(coll_t cid, const char *name,
-	                         void *value, size_t size)
-    __attribute__ ((deprecated)) {
-    return -EOPNOTSUPP;
-  }
-
-  /**
-   * collection_getattr - get an xattr of a collection
-   *
-   * @param cid collection name
-   * @param name xattr name
-   * @param bl buffer to receive value
-   * @returns 0 on success, negative error code on failure
-   */
-  virtual int collection_getattr(coll_t cid, const char *name, bufferlist& bl)
-    __attribute__ ((deprecated)) {
-    return -EOPNOTSUPP;
-  }
-
-  /**
-   * collection_getattrs - get all xattrs of a collection
-   *
-   * @param cid collection name
-   * @param aset map of keys and buffers that contain the values
-   * @returns 0 on success, negative error code on failure
-   */
-  virtual int collection_getattrs(coll_t cid, map<string,bufferptr> &aset)
-    __attribute__ ((deprecated)) {
-    return -EOPNOTSUPP;
-  }
 
   /**
    * is a collection empty?

@@ -23,6 +23,8 @@
 #include "AsyncMessenger.h"
 #include "AsyncConnection.h"
 
+#include "include/sock_compat.h"
+
 // Constant to limit starting sequence number to 2^31.  Nothing special about it, just a big number.  PLR
 #define SEQ_MASK  0x7fffffff 
 
@@ -536,7 +538,7 @@ void AsyncConnection::process()
           ldout(async_msgr->cct, 20) << __func__ << " begin MSG" << dendl;
           ceph_msg_header header;
           ceph_msg_header_old oldheader;
-          __u32 header_crc;
+          __u32 header_crc = 0;
           int len;
           if (has_feature(CEPH_FEATURE_NOSRCADDR))
             len = sizeof(header);
@@ -837,8 +839,8 @@ void AsyncConnection::process()
 
           // note last received message.
           in_seq.set(message->get_seq());
-          ldout(async_msgr->cct, 10) << __func__ << " got message " << message->get_seq()
-                               << " " << message << " " << *message << dendl;
+	  ldout(async_msgr->cct, 1) << " == rx == " << message->get_source() << " seq "
+                                    << message->get_seq() << " " << message << " " << *message << dendl;
 
           // if send_message always successfully send, it may have no
           // opportunity to send seq ack. 10 is a experience value.
@@ -975,7 +977,6 @@ int AsyncConnection::_process_connection()
         if (r < 0) {
           goto fail;
         }
-        net.set_socket_options(sd);
 
         center->create_file_event(sd, EVENT_READABLE, read_handler);
         state = STATE_CONNECTING_WAIT_BANNER;
@@ -1502,6 +1503,10 @@ int AsyncConnection::handle_connect_reply(ceph_msg_connect &connect, ceph_msg_co
   }
   if (reply.tag == CEPH_MSGR_TAG_WAIT) {
     ldout(async_msgr->cct, 3) << __func__ << " connect got WAIT (connection race)" << dendl;
+    if (!once_ready) {
+      ldout(async_msgr->cct, 1) << __func__ << " got WAIT while connection isn't registered, just closed." << dendl;
+      goto fail;
+    }
     state = STATE_WAIT;
   }
 
@@ -1735,6 +1740,7 @@ int AsyncConnection::handle_connect_msg(ceph_msg_connect &connect, bufferlist &a
   if (existing->policy.lossy) {
     // disconnect from the Connection
     existing->center->dispatch_event_external(existing->reset_handler);
+    ldout(async_msgr->cct, 1) << __func__ << " replacing on lossy channel, failing existing" << dendl;
     existing->_stop();
   } else {
     assert(can_write == NOWRITE);
@@ -1776,9 +1782,11 @@ int AsyncConnection::handle_connect_msg(ceph_msg_connect &connect, bufferlist &a
     existing->write_lock.Unlock();
     if (existing->_reply_accept(CEPH_MSGR_TAG_RETRY_GLOBAL, connect, reply, authorizer_reply) < 0) {
       // handle error
+      ldout(async_msgr->cct, 0) << __func__ << " reply fault for existing connection." << dendl;
       existing->fault();
     }
 
+    ldout(async_msgr->cct, 1) << __func__ << " stop myself to swap existing" << dendl;
     _stop();
     existing->lock.Unlock();
     return 0;
@@ -1918,7 +1926,7 @@ void AsyncConnection::accept(int incoming)
 
 int AsyncConnection::send_message(Message *m)
 {
-  ldout(async_msgr->cct, 10) << __func__ << " m=" << m << dendl;
+  ldout(async_msgr->cct, 1) << " == tx == " << m << " " << *m << dendl;
 
   // optimistic think it's ok to encode(actually may broken now)
   if (!m->get_priority())
@@ -1959,7 +1967,7 @@ int AsyncConnection::send_message(Message *m)
   }
   if (!is_queued() && can_write == CANWRITE) {
     if (!can_fast_prepare)
-      prepare_send_message(f, m, bl);
+      prepare_send_message(get_features(), m, bl);
     if (write_message(m, bl) < 0) {
       ldout(async_msgr->cct, 1) << __func__ << " send msg failed" << dendl;
       // we want to handle fault within internal thread
@@ -2062,7 +2070,7 @@ void AsyncConnection::fault()
   }
 
   if (policy.lossy && !(state >= STATE_CONNECTING && state < STATE_CONNECTING_READY)) {
-    ldout(async_msgr->cct, 10) << __func__ << " on lossy channel, failing" << dendl;
+    ldout(async_msgr->cct, 1) << __func__ << " on lossy channel, failing" << dendl;
     center->dispatch_event_external(reset_handler);
     _stop();
     return ;
@@ -2159,7 +2167,7 @@ void AsyncConnection::_stop()
   if (state == STATE_CLOSED)
     return ;
 
-  ldout(async_msgr->cct, 10) << __func__ << dendl;
+  ldout(async_msgr->cct, 1) << __func__ << dendl;
   Mutex::Locker l(write_lock);
   if (sd >= 0)
     center->delete_file_event(sd, EVENT_READABLE|EVENT_WRITABLE);
@@ -2325,7 +2333,7 @@ void AsyncConnection::send_keepalive()
 
 void AsyncConnection::mark_down()
 {
-  ldout(async_msgr->cct, 10) << __func__ << " started." << dendl;
+  ldout(async_msgr->cct, 1) << __func__ << " started." << dendl;
   Mutex::Locker l(lock);
   _stop();
 }

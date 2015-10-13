@@ -633,6 +633,8 @@ struct ObjectOperation {
     uint32_t *out_data_digest;
     uint32_t *out_omap_digest;
     vector<pair<osd_reqid_t, version_t> > *out_reqids;
+    uint64_t *out_truncate_seq;
+    uint64_t *out_truncate_size;
     int *prval;
     C_ObjectOperation_copyget(object_copy_cursor_t *c,
 			      uint64_t *s,
@@ -646,13 +648,18 @@ struct ObjectOperation {
 			      uint32_t *dd,
 			      uint32_t *od,
 			      vector<pair<osd_reqid_t, version_t> > *oreqids,
+			      uint64_t *otseq,
+			      uint64_t *otsize,
 			      int *r)
       : cursor(c),
 	out_size(s), out_mtime(m),
 	out_attrs(a), out_data(d), out_omap_header(oh),
 	out_omap_data(o), out_snaps(osnaps), out_snap_seq(osnap_seq),
 	out_flags(flags), out_data_digest(dd), out_omap_digest(od),
-        out_reqids(oreqids), prval(r) {}
+        out_reqids(oreqids),
+        out_truncate_seq(otseq),
+        out_truncate_size(otsize),
+        prval(r) {}
     void finish(int r) {
       // reqids are copied on ENOENT
       if (r < 0 && r != -ENOENT)
@@ -690,6 +697,10 @@ struct ObjectOperation {
 	  *out_omap_digest = copy_reply.omap_digest;
 	if (out_reqids)
 	  *out_reqids = copy_reply.reqids;
+	if (out_truncate_seq)
+	  *out_truncate_seq = copy_reply.truncate_seq;
+	if (out_truncate_size)
+	  *out_truncate_size = copy_reply.truncate_size;
 	*cursor = copy_reply.cursor;
       } catch (buffer::error& e) {
 	if (prval)
@@ -713,6 +724,8 @@ struct ObjectOperation {
 		uint32_t *out_data_digest,
 		uint32_t *out_omap_digest,
 		vector<pair<osd_reqid_t, version_t> > *out_reqids,
+		uint64_t *truncate_seq,
+		uint64_t *truncate_size,
 		int *prval) {
     OSDOp& osd_op = add_op(CEPH_OSD_OP_COPY_GET);
     osd_op.op.copy_get.max = max;
@@ -726,7 +739,8 @@ struct ObjectOperation {
                                     out_attrs, out_data, out_omap_header,
 				    out_omap_data, out_snaps, out_snap_seq,
 				    out_flags, out_data_digest, out_omap_digest,
-				    out_reqids, prval);
+				    out_reqids, truncate_seq, truncate_size,
+				    prval);
     out_bl[p] = &h->bl;
     out_handler[p] = h;
   }
@@ -1123,18 +1137,19 @@ public:
     object_t target_oid;
     object_locator_t target_oloc;
 
-    bool precalc_pgid;   ///< true if we are directed at base_pgid, not base_oid
-    pg_t base_pgid;      ///< explciti pg target, if any
+    bool precalc_pgid;    ///< true if we are directed at base_pgid, not base_oid
+    pg_t base_pgid;       ///< explciti pg target, if any
 
-    pg_t pgid;           ///< last pg we mapped to
-    unsigned pg_num;     ///< last pg_num we mapped to
-    vector<int> up;      ///< set of up osds for last pg we mapped to
-    vector<int> acting;  ///< set of acting osds for last pg we mapped to
-    int up_primary;      ///< primary for last pg we mapped to based on the up set
-    int acting_primary;  ///< primary for last pg we mapped to based on the acting set
-    int size;        ///< the size of the pool when were were last mapped
-    int min_size;        ///< the min size of the pool when were were last mapped
-    bool sort_bitwise;   ///< whether the hobject_t sort order is bitwise
+    pg_t pgid;            ///< last pg we mapped to
+    unsigned pg_num;      ///< last pg_num we mapped to
+    unsigned pg_num_mask; ///< last pg_num_mask we mapped to
+    vector<int> up;       ///< set of up osds for last pg we mapped to
+    vector<int> acting;   ///< set of acting osds for last pg we mapped to
+    int up_primary;       ///< primary for last pg we mapped to based on the up set
+    int acting_primary;   ///< primary for last pg we mapped to based on the acting set
+    int size;             ///< the size of the pool when were were last mapped
+    int min_size;         ///< the min size of the pool when were were last mapped
+    bool sort_bitwise;    ///< whether the hobject_t sort order is bitwise
 
     bool used_replica;
     bool paused;
@@ -1147,6 +1162,7 @@ public:
 	base_oloc(oloc),
 	precalc_pgid(false),
 	pg_num(0),
+        pg_num_mask(0),
 	up_primary(-1),
 	acting_primary(-1),
 	size(-1),
@@ -1563,6 +1579,7 @@ public:
     // we trigger these from an async finisher
     Context *on_notify_finish;
     bufferlist *notify_result_bl;
+    uint64_t notify_id;
 
     WatchContext *watch_context;
 
@@ -1597,6 +1614,7 @@ public:
 		 on_reg_commit(NULL),
 		 on_notify_finish(NULL),
 		 notify_result_bl(NULL),
+		 notify_id(0),
 		 watch_context(NULL),
 		 session(NULL),
 		 register_tid(0),
@@ -1621,6 +1639,7 @@ public:
   struct C_Linger_Commit : public Context {
     Objecter *objecter;
     LingerOp *info;
+    bufferlist outbl;  // used for notify only
     C_Linger_Commit(Objecter *o, LingerOp *l) : objecter(o), info(l) {
       info->get();
     }
@@ -1628,7 +1647,7 @@ public:
       info->put();
     }
     void finish(int r) {
-      objecter->_linger_commit(info, r);
+      objecter->_linger_commit(info, r, outbl);
     }
   };
 
@@ -1709,6 +1728,9 @@ public:
   map<int,OSDSession*> osd_sessions;
 
   bool osdmap_full_flag() const;
+  bool osdmap_pool_full(const int64_t pool_id) const;
+
+ private:
 
   /**
    * Test pg_pool_t::FLAG_FULL on a pool
@@ -1716,9 +1738,10 @@ public:
    * @return true if the pool exists and has the flag set, or
    *         the global full flag is set, else false
    */
-  bool osdmap_pool_full(const int64_t pool_id) const;
+  bool _osdmap_pool_full(const int64_t pool_id) const;
+  bool _osdmap_pool_full(const pg_pool_t &p) const;
+  void update_pool_full_map(map<int64_t, bool>& pool_full_map);
 
- private:
   map<uint64_t, LingerOp*>  linger_ops;
   // we use this just to confirm a cookie is valid before dereferencing the ptr
   set<LingerOp*>            linger_ops_set;
@@ -1748,7 +1771,7 @@ public:
   void _send_op_account(Op *op);
   void _cancel_linger_op(Op *op);
   void finish_op(OSDSession *session, ceph_tid_t tid);
-  void _finish_op(Op *op);
+  void _finish_op(Op *op, int r);
   static bool is_pg_changed(
     int oldprimary,
     const vector<int>& oldacting,
@@ -1763,6 +1786,7 @@ public:
     RECALC_OP_TARGET_OSD_DOWN,
   };
   bool _osdmap_full_flag() const;
+  bool _osdmap_has_pool_full() const;
 
   bool target_should_be_paused(op_target_t *op);
   int _calc_target(op_target_t *t, epoch_t *last_force_resend=0, bool any_change=false);
@@ -1781,7 +1805,7 @@ public:
 
   void _linger_submit(LingerOp *info);
   void _send_linger(LingerOp *info);
-  void _linger_commit(LingerOp *info, int r);
+  void _linger_commit(LingerOp *info, int r, bufferlist& outbl);
   void _linger_reconnect(LingerOp *info, int r);
   void _send_linger_ping(LingerOp *info);
   void _linger_ping(LingerOp *info, int r, utime_t sent, uint32_t register_gen);
@@ -1926,7 +1950,8 @@ private:
 
   void _scan_requests(OSDSession *s,
                      bool force_resend,
-		     bool force_resend_writes,
+		     bool cluster_full,
+                     map<int64_t, bool> *pool_full_map,
 		     map<ceph_tid_t, Op*>& need_resend,
 		     list<LingerOp*>& need_resend_linger,
 		     map<ceph_tid_t, CommandOp*>& need_resend_command);
@@ -1972,6 +1997,7 @@ private:
 public:
   ceph_tid_t op_submit(Op *op, int *ctx_budget = NULL);
   bool is_active() {
+    RWLock::RLocker l(rwlock);
     return !((!inflight_ops.read()) && linger_ops.empty() && poolstat_ops.empty() && statfs_ops.empty());
   }
 
@@ -2193,7 +2219,8 @@ public:
   ceph_tid_t read(const object_t& oid, const object_locator_t& oloc,
 	     uint64_t off, uint64_t len, snapid_t snap, bufferlist *pbl, int flags,
 	     Context *onfinish,
-	     version_t *objver = NULL, ObjectOperation *extra_ops = NULL) {
+	     version_t *objver = NULL, ObjectOperation *extra_ops = NULL,
+	     int op_flags = 0) {
     vector<OSDOp> ops;
     int i = init_ops(ops, 1, extra_ops);
     ops[i].op.op = CEPH_OSD_OP_READ;
@@ -2201,6 +2228,7 @@ public:
     ops[i].op.extent.length = len;
     ops[i].op.extent.truncate_size = 0;
     ops[i].op.extent.truncate_seq = 0;
+    ops[i].op.flags = op_flags;
     Op *o = new Op(oid, oloc, ops, flags | global_op_flags.read() | CEPH_OSD_FLAG_READ, onfinish, 0, objver);
     o->snapid = snap;
     o->outbl = pbl;
@@ -2210,8 +2238,9 @@ public:
   ceph_tid_t read_trunc(const object_t& oid, const object_locator_t& oloc,
 	     uint64_t off, uint64_t len, snapid_t snap, bufferlist *pbl, int flags,
 	     uint64_t trunc_size, __u32 trunc_seq,
-	     Context *onfinish,
-	     version_t *objver = NULL, ObjectOperation *extra_ops = NULL) {
+	     Context *onfinish, 
+	     version_t *objver = NULL, ObjectOperation *extra_ops = NULL,
+	     int op_flags = 0) {
     vector<OSDOp> ops;
     int i = init_ops(ops, 1, extra_ops);
     ops[i].op.op = CEPH_OSD_OP_READ;
@@ -2219,6 +2248,7 @@ public:
     ops[i].op.extent.length = len;
     ops[i].op.extent.truncate_size = trunc_size;
     ops[i].op.extent.truncate_seq = trunc_seq;
+    ops[i].op.flags = op_flags;
     Op *o = new Op(oid, oloc, ops, flags | global_op_flags.read() | CEPH_OSD_FLAG_READ, onfinish, 0, objver);
     o->snapid = snap;
     o->outbl = pbl;
@@ -2275,7 +2305,8 @@ public:
 		  snapid_t snap, bufferlist *pbl, int flags,
 		  Context *onfinish,
 	          version_t *objver = NULL, ObjectOperation *extra_ops = NULL) {
-    return read(oid, oloc, 0, 0, snap, pbl, flags | global_op_flags.read() | CEPH_OSD_FLAG_READ, onfinish, objver);
+    return read(oid, oloc, 0, 0, snap, pbl, flags | global_op_flags.read() | CEPH_OSD_FLAG_READ,
+		onfinish, objver, extra_ops);
   }
 
 
@@ -2294,7 +2325,8 @@ public:
 	      uint64_t off, uint64_t len, const SnapContext& snapc, const bufferlist &bl,
 	      utime_t mtime, int flags,
 	      Context *onack, Context *oncommit,
-	      version_t *objver = NULL, ObjectOperation *extra_ops = NULL) {
+	      version_t *objver = NULL, ObjectOperation *extra_ops = NULL,
+	      int op_flags = 0) {
     vector<OSDOp> ops;
     int i = init_ops(ops, 1, extra_ops);
     ops[i].op.op = CEPH_OSD_OP_WRITE;
@@ -2303,6 +2335,7 @@ public:
     ops[i].op.extent.truncate_size = 0;
     ops[i].op.extent.truncate_seq = 0;
     ops[i].indata = bl;
+    ops[i].op.flags = op_flags;
     Op *o = new Op(oid, oloc, ops, flags | global_op_flags.read() | CEPH_OSD_FLAG_WRITE, onack, oncommit, objver);
     o->mtime = mtime;
     o->snapc = snapc;
@@ -2331,7 +2364,8 @@ public:
 	      utime_t mtime, int flags,
 	      uint64_t trunc_size, __u32 trunc_seq,
 	      Context *onack, Context *oncommit,
-	      version_t *objver = NULL, ObjectOperation *extra_ops = NULL) {
+	      version_t *objver = NULL, ObjectOperation *extra_ops = NULL,
+	      int op_flags = 0) {
     vector<OSDOp> ops;
     int i = init_ops(ops, 1, extra_ops);
     ops[i].op.op = CEPH_OSD_OP_WRITE;
@@ -2340,6 +2374,7 @@ public:
     ops[i].op.extent.truncate_size = trunc_size;
     ops[i].op.extent.truncate_seq = trunc_seq;
     ops[i].indata = bl;
+    ops[i].op.flags = op_flags;
     Op *o = new Op(oid, oloc, ops, flags | global_op_flags.read() | CEPH_OSD_FLAG_WRITE, onack, oncommit, objver);
     o->mtime = mtime;
     o->snapc = snapc;
@@ -2348,13 +2383,15 @@ public:
   ceph_tid_t write_full(const object_t& oid, const object_locator_t& oloc,
 		   const SnapContext& snapc, const bufferlist &bl, utime_t mtime, int flags,
 		   Context *onack, Context *oncommit,
-		   version_t *objver = NULL, ObjectOperation *extra_ops = NULL) {
+		   version_t *objver = NULL, ObjectOperation *extra_ops = NULL,
+		   int op_flags = 0) {
     vector<OSDOp> ops;
     int i = init_ops(ops, 1, extra_ops);
     ops[i].op.op = CEPH_OSD_OP_WRITEFULL;
     ops[i].op.extent.offset = 0;
     ops[i].op.extent.length = bl.length();
     ops[i].indata = bl;
+    ops[i].op.flags = op_flags;
     Op *o = new Op(oid, oloc, ops, flags | global_op_flags.read() | CEPH_OSD_FLAG_WRITE, onack, oncommit, objver);
     o->mtime = mtime;
     o->snapc = snapc;
@@ -2477,7 +2514,7 @@ public:
 private:
   void pool_op_submit(PoolOp *op);
   void _pool_op_submit(PoolOp *op);
-  void _finish_pool_op(PoolOp *op);
+  void _finish_pool_op(PoolOp *op, int r);
   void _do_delete_pool(int64_t pool, Context *onfinish);
 public:
   int create_pool_snap(int64_t pool, string& snapName, Context *onfinish);
@@ -2503,7 +2540,7 @@ public:
   void get_pool_stats(list<string>& pools, map<string,pool_stat_t> *result,
 		      Context *onfinish);
   int pool_stat_op_cancel(ceph_tid_t tid, int r);
-  void _finish_pool_stat_op(PoolStatOp *op);
+  void _finish_pool_stat_op(PoolStatOp *op, int r);
 
   // ---------------------------
   // df stats
@@ -2513,7 +2550,7 @@ public:
   void handle_fs_stats_reply(MStatfsReply *m);
   void get_fs_stats(struct ceph_statfs& result, Context *onfinish);
   int statfs_op_cancel(ceph_tid_t tid, int r);
-  void _finish_statfs_op(StatfsOp *op);
+  void _finish_statfs_op(StatfsOp *op, int r);
 
   // ---------------------------
   // some scatter/gather hackery
@@ -2539,33 +2576,36 @@ public:
   };
 
   void sg_read_trunc(vector<ObjectExtent>& extents, snapid_t snap, bufferlist *bl, int flags,
-		uint64_t trunc_size, __u32 trunc_seq, Context *onfinish) {
+		uint64_t trunc_size, __u32 trunc_seq, Context *onfinish, int op_flags = 0) {
     if (extents.size() == 1) {
       read_trunc(extents[0].oid, extents[0].oloc, extents[0].offset, extents[0].length,
-	   snap, bl, flags, extents[0].truncate_size, trunc_seq, onfinish);
+	   snap, bl, flags, extents[0].truncate_size, trunc_seq, onfinish, 
+	   0, 0, op_flags);
     } else {
       C_GatherBuilder gather(cct);
       vector<bufferlist> resultbl(extents.size());
       int i=0;
       for (vector<ObjectExtent>::iterator p = extents.begin(); p != extents.end(); ++p) {
 	read_trunc(p->oid, p->oloc, p->offset, p->length,
-	     snap, &resultbl[i++], flags, p->truncate_size, trunc_seq, gather.new_sub());
+	     snap, &resultbl[i++], flags, p->truncate_size, trunc_seq, gather.new_sub(),
+	     0, 0, op_flags);
       }
       gather.set_finisher(new C_SGRead(this, extents, resultbl, bl, onfinish));
       gather.activate();
     }
   }
 
-  void sg_read(vector<ObjectExtent>& extents, snapid_t snap, bufferlist *bl, int flags, Context *onfinish) {
-    sg_read_trunc(extents, snap, bl, flags, 0, 0, onfinish);
+  void sg_read(vector<ObjectExtent>& extents, snapid_t snap, bufferlist *bl, int flags, Context *onfinish, int op_flags = 0) {
+    sg_read_trunc(extents, snap, bl, flags, 0, 0, onfinish, op_flags);
   }
 
   void sg_write_trunc(vector<ObjectExtent>& extents, const SnapContext& snapc, const bufferlist& bl, utime_t mtime,
 		int flags, uint64_t trunc_size, __u32 trunc_seq,
-		Context *onack, Context *oncommit) {
+		Context *onack, Context *oncommit, int op_flags = 0) {
     if (extents.size() == 1) {
       write_trunc(extents[0].oid, extents[0].oloc, extents[0].offset, extents[0].length,
-	    snapc, bl, mtime, flags, extents[0].truncate_size, trunc_seq, onack, oncommit);
+	    snapc, bl, mtime, flags, extents[0].truncate_size, trunc_seq, onack, oncommit,
+	    0, 0, op_flags);
     } else {
       C_GatherBuilder gack(cct, onack);
       C_GatherBuilder gcom(cct, oncommit);
@@ -2579,7 +2619,8 @@ public:
 	write_trunc(p->oid, p->oloc, p->offset, p->length, 
 	      snapc, cur, mtime, flags, p->truncate_size, trunc_seq,
 	      onack ? gack.new_sub():0,
-	      oncommit ? gcom.new_sub():0);
+	      oncommit ? gcom.new_sub():0,
+	      0, 0, op_flags);
       }
       gack.activate();
       gcom.activate();
@@ -2587,8 +2628,8 @@ public:
   }
 
   void sg_write(vector<ObjectExtent>& extents, const SnapContext& snapc, const bufferlist& bl, utime_t mtime,
-		int flags, Context *onack, Context *oncommit) {
-    sg_write_trunc(extents, snapc, bl, mtime, flags, 0, 0, onack, oncommit);
+		int flags, Context *onack, Context *oncommit, int op_flags = 0) {
+    sg_write_trunc(extents, snapc, bl, mtime, flags, 0, 0, onack, oncommit, op_flags);
   }
 
   void ms_handle_connect(Connection *con);

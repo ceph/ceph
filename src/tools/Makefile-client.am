@@ -25,7 +25,7 @@ bin_PROGRAMS += rados
 if WITH_CEPHFS
 
 ceph_client_debug_SOURCES = tools/ceph-client-debug.cc
-ceph_client_debug_LDADD = $(LIBCEPHFS) $(CEPH_GLOBAL) $(LIBCOMMON)
+ceph_client_debug_LDADD = $(LIBCEPHFS) $(LIBCLIENT) $(CEPH_GLOBAL) $(LIBCOMMON)
 bin_DEBUGPROGRAMS += ceph-client-debug
 
 endif # WITH_CEPHFS

@@ -11,6 +11,7 @@
 #include <boost/uuid/uuid.hpp>
 #include <boost/uuid/uuid_generators.hpp>
 #include <boost/uuid/uuid_io.hpp>
+#include <boost/random/random_device.hpp>
 
 struct uuid_d {
   boost::uuids::uuid uuid;
@@ -25,7 +26,8 @@ struct uuid_d {
   }
 
   void generate_random() {
-    boost::uuids::random_generator gen;
+    boost::random::random_device rng("/dev/urandom");
+    boost::uuids::basic_random_generator<boost::random::random_device> gen(&rng);
     uuid = gen();
   }
   

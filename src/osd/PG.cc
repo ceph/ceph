@@ -316,11 +316,18 @@ void PG::proc_replica_log(
   peer_missing[from].swap(omissing);
 }
 
-bool PG::proc_replica_info(pg_shard_t from, const pg_info_t &oinfo)
+bool PG::proc_replica_info(
+  pg_shard_t from, const pg_info_t &oinfo, epoch_t send_epoch)
 {
   map<pg_shard_t, pg_info_t>::iterator p = peer_info.find(from);
   if (p != peer_info.end() && p->second.last_update == oinfo.last_update) {
     dout(10) << " got dup osd." << from << " info " << oinfo << ", identical to ours" << dendl;
+    return false;
+  }
+
+  if (!get_osdmap()->has_been_up_since(from.osd, send_epoch)) {
+    dout(10) << " got info " << oinfo << " from down osd." << from
+	     << " discarding" << dendl;
     return false;
   }
 
@@ -658,7 +665,7 @@ bool PG::_calc_past_interval_range(epoch_t *start, epoch_t *end, epoch_t oldest_
     *end = info.history.same_interval_since;
   } else {
     // PG must be imported, so let's calculate the whole range.
-    *end = osd->get_superblock().newest_map;
+    *end = osdmap_ref->get_epoch();
   }
 
   // Do we already have the intervals we want?
@@ -746,10 +753,8 @@ void PG::generate_past_intervals()
     }
   }
 
-  // Verify same_interval_since is correct
-  if (info.history.same_interval_since) {
-    assert(info.history.same_interval_since == same_interval_since);
-  } else {
+  // PG import needs recalculated same_interval_since
+  if (info.history.same_interval_since == 0) {
     assert(same_interval_since);
     dout(10) << __func__ << " fix same_interval_since " << same_interval_since << " pg " << *this << dendl;
     dout(10) << __func__ << " past_intervals " << past_intervals << dendl;
@@ -1890,6 +1895,7 @@ void PG::queue_op(OpRequestRef& op)
 void PG::replay_queued_ops()
 {
   assert(is_replay());
+  assert(is_active() || is_activating());
   eversion_t c = info.last_update;
   list<OpRequestRef> replay;
   dout(10) << "replay_queued_ops" << dendl;
@@ -1910,9 +1916,13 @@ void PG::replay_queued_ops()
     replay.push_back(p->second);
   }
   replay_queue.clear();
-  requeue_ops(replay);
-  requeue_ops(waiting_for_active);
-  assert(waiting_for_peered.empty());
+  if (is_active()) {
+    requeue_ops(replay);
+    requeue_ops(waiting_for_active);
+    assert(waiting_for_peered.empty());
+  } else {
+    waiting_for_active.splice(waiting_for_active.begin(), replay);
+  }
 
   publish_stats_to_osd();
 }
@@ -2634,46 +2644,13 @@ void PG::init(
   write_if_dirty(*t);
 }
 
-#pragma GCC diagnostic ignored "-Wpragmas"
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wdeprecated-declarations"
-
 void PG::upgrade(ObjectStore *store)
 {
   assert(info_struct_v <= 8);
   ObjectStore::Transaction t;
 
-  assert(info_struct_v == 7);
-
-  // 7 -> 8
-  pg_log.mark_log_for_rewrite();
-  ghobject_t log_oid(OSD::make_pg_log_oid(pg_id));
-  ghobject_t biginfo_oid(OSD::make_pg_biginfo_oid(pg_id));
-  t.remove(coll_t::meta(), log_oid);
-  t.remove(coll_t::meta(), biginfo_oid);
-  t.collection_rmattr(coll, "info");
-
-  t.touch(coll, pgmeta_oid);
-  map<string,bufferlist> v;
-  __u8 ver = cur_struct_v;
-  ::encode(ver, v[infover_key]);
-  t.omap_setkeys(coll, pgmeta_oid, v);
-
-  dirty_info = true;
-  dirty_big_info = true;
-  write_if_dirty(t);
-
-  int r = store->apply_transaction(t);
-  if (r != 0) {
-    derr << __func__ << ": apply_transaction returned "
-	 << cpp_strerror(r) << dendl;
-    assert(0);
-  }
-  assert(r == 0);
+  assert(0 == "no support for pre v8");
 }
-
-#pragma GCC diagnostic pop
-#pragma GCC diagnostic warning "-Wpragmas"
 
 int PG::_prepare_write_info(map<string,bufferlist> *km,
 			    epoch_t epoch,
@@ -2744,10 +2721,6 @@ void PG::prepare_write_info(map<string,bufferlist> *km)
   dirty_big_info = false;
 }
 
-#pragma GCC diagnostic ignored "-Wpragmas"
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wdeprecated-declarations"
-
 bool PG::_has_removal_flag(ObjectStore *store,
 			   spg_t pgid)
 {
@@ -2762,16 +2735,13 @@ bool PG::_has_removal_flag(ObjectStore *store,
       values.size() == 1)
     return true;
 
-  // try old way.  tolerate EOPNOTSUPP.
-  char val;
-  if (store->collection_getattr(coll, "remove", &val, 1) > 0)
-    return true;
   return false;
 }
 
-epoch_t PG::peek_map_epoch(ObjectStore *store,
-			   spg_t pgid,
-			   bufferlist *bl)
+int PG::peek_map_epoch(ObjectStore *store,
+		       spg_t pgid,
+		       epoch_t *pepoch,
+		       bufferlist *bl)
 {
   coll_t coll(pgid);
   ghobject_t legacy_infos_oid(OSD::make_infos_oid());
@@ -2790,49 +2760,25 @@ epoch_t PG::peek_map_epoch(ObjectStore *store,
   keys.insert(epoch_key);
   map<string,bufferlist> values;
   int r = store->omap_get_values(coll, pgmeta_oid, keys, &values);
-  if (r == 0) {
-    assert(values.size() == 2);
-
-    // sanity check version
-    bufferlist::iterator bp = values[infover_key].begin();
-    __u8 struct_v = 0;
-    ::decode(struct_v, bp);
-    assert(struct_v >= 8);
-
-    // get epoch
-    bp = values[epoch_key].begin();
-    ::decode(cur_epoch, bp);
-  } else if (r == -ENOENT) {
-    // legacy: try v7 or older
-    r = store->collection_getattr(coll, "info", *bl);
-    assert(r > 0);
-    bufferlist::iterator bp = bl->begin();
-    __u8 struct_v = 0;
-    ::decode(struct_v, bp);
-    if (struct_v < 5)
-      return 0;
-    if (struct_v < 6) {
-      ::decode(cur_epoch, bp);
-      return cur_epoch;
-    }
-
-    // get epoch out of leveldb
-    string ek = get_epoch_key(pgid);
-    keys.clear();
-    values.clear();
-    keys.insert(ek);
-    store->omap_get_values(coll_t::meta(), legacy_infos_oid, keys, &values);
-    assert(values.size() == 1);
-    bufferlist::iterator p = values[ek].begin();
-    ::decode(cur_epoch, p);
-  } else {
-    assert(0 == "unable to open pg metadata");
+  if (r != 0) {
+    // probably bug 10617; see OSD::load_pgs()
+    return -1;
   }
-  return cur_epoch;
-}
+  assert(values.size() == 2);
 
-#pragma GCC diagnostic pop
-#pragma GCC diagnostic warning "-Wpragmas"
+  // sanity check version
+  bufferlist::iterator bp = values[infover_key].begin();
+  __u8 struct_v = 0;
+  ::decode(struct_v, bp);
+  assert(struct_v >= 8);
+
+  // get epoch
+  bp = values[epoch_key].begin();
+  ::decode(cur_epoch, bp);
+
+  *pepoch = cur_epoch;
+  return 0;
+}
 
 void PG::write_if_dirty(ObjectStore::Transaction& t)
 {
@@ -3215,16 +3161,18 @@ bool PG::sched_scrub()
 
   bool time_for_deep = (ceph_clock_now(cct) >
     info.history.last_deep_scrub_stamp + cct->_conf->osd_deep_scrub_interval);
- 
+
   //NODEEP_SCRUB so ignore time initiated deep-scrub
-  if (osd->osd->get_osdmap()->test_flag(CEPH_OSDMAP_NODEEP_SCRUB))
+  if (osd->osd->get_osdmap()->test_flag(CEPH_OSDMAP_NODEEP_SCRUB) ||
+      pool.info.has_flag(pg_pool_t::FLAG_NODEEP_SCRUB))
     time_for_deep = false;
 
   if (!scrubber.must_scrub) {
     assert(!scrubber.must_deep_scrub);
 
     //NOSCRUB so skip regular scrubs
-    if (osd->osd->get_osdmap()->test_flag(CEPH_OSDMAP_NOSCRUB) && !time_for_deep)
+    if ((osd->osd->get_osdmap()->test_flag(CEPH_OSDMAP_NOSCRUB) ||
+	 pool.info.has_flag(pg_pool_t::FLAG_NOSCRUB)) && !time_for_deep)
       return false;
   }
 
@@ -3705,8 +3653,14 @@ void PG::replica_scrub(
     return;
   }
 
+  // compensate for hobject_t's with wrong pool from sloppy hammer OSDs
+  hobject_t start = msg->start;
+  hobject_t end = msg->end;
+  start.pool = info.pgid.pool();
+  end.pool = info.pgid.pool();
+
   build_scrub_map_chunk(
-    map, msg->start, msg->end, msg->deep, msg->seed,
+    map, start, end, msg->deep, msg->seed,
     handle);
 
   vector<OSDOp> scrub(1);
@@ -4542,6 +4496,29 @@ bool PG::may_need_replay(const OSDMapRef osdmap) const
   return crashed;
 }
 
+void PG::check_full_transition(OSDMapRef lastmap, OSDMapRef osdmap)
+{
+  bool changed = false;
+  if (osdmap->test_flag(CEPH_OSDMAP_FULL) &&
+      !lastmap->test_flag(CEPH_OSDMAP_FULL)) {
+    dout(10) << " cluster was marked full in " << osdmap->get_epoch() << dendl;
+    changed = true;
+  }
+  const pg_pool_t *pi = osdmap->get_pg_pool(info.pgid.pool());
+  assert(pi);
+  if (pi->has_flag(pg_pool_t::FLAG_FULL)) {
+    const pg_pool_t *opi = lastmap->get_pg_pool(info.pgid.pool());
+    if (!opi || !opi->has_flag(pg_pool_t::FLAG_FULL)) {
+      dout(10) << " pool was marked full in " << osdmap->get_epoch() << dendl;
+      changed = true;
+    }
+  }
+  if (changed) {
+    info.history.last_epoch_marked_full = osdmap->get_epoch();
+    dirty_info = true;
+  }
+}
+
 bool PG::should_restart_peering(
   int newupprimary,
   int newactingprimary,
@@ -4987,6 +4964,7 @@ ostream& operator<<(ostream& out, const PG& pg)
 bool PG::can_discard_op(OpRequestRef& op)
 {
   MOSDOp *m = static_cast<MOSDOp*>(op->get_req());
+
   if (OSD::op_is_discardable(m)) {
     dout(20) << " discard " << *m << dendl;
     return true;
@@ -5279,12 +5257,12 @@ void PG::handle_advance_map(
 	   << dendl;
   update_osdmap_ref(osdmap);
   pool.update(osdmap);
-  if (pool.info.last_change == osdmap_ref->get_epoch())
-    on_pool_change();
   AdvMap evt(
     osdmap, lastmap, newup, up_primary,
     newacting, acting_primary);
   recovery_state.handle_event(evt, rctx);
+  if (pool.info.last_change == osdmap_ref->get_epoch())
+    on_pool_change();
 }
 
 void PG::handle_activate_map(RecoveryCtx *rctx)
@@ -5376,7 +5354,8 @@ boost::statechart::result PG::RecoveryState::Initial::react(const Load& l)
 boost::statechart::result PG::RecoveryState::Initial::react(const MNotifyRec& notify)
 {
   PG *pg = context< RecoveryMachine >().pg;
-  pg->proc_replica_info(notify.from, notify.notify.info);
+  pg->proc_replica_info(
+    notify.from, notify.notify.info, notify.notify.epoch_sent);
   pg->update_heartbeat_peers();
   pg->set_last_peering_reset();
   return transit< Primary >();
@@ -5436,6 +5415,7 @@ boost::statechart::result PG::RecoveryState::Started::react(const AdvMap& advmap
 {
   dout(10) << "Started advmap" << dendl;
   PG *pg = context< RecoveryMachine >().pg;
+  pg->check_full_transition(advmap.lastmap, advmap.osdmap);
   if (pg->should_restart_peering(
 	advmap.up_primary,
 	advmap.acting_primary,
@@ -5504,6 +5484,8 @@ boost::statechart::result PG::RecoveryState::Reset::react(const AdvMap& advmap)
   // make sure we have past_intervals filled in.  hopefully this will happen
   // _before_ we are active.
   pg->generate_past_intervals();
+
+  pg->check_full_transition(advmap.lastmap, advmap.osdmap);
 
   if (pg->should_restart_peering(
 	advmap.up_primary,
@@ -5609,7 +5591,8 @@ boost::statechart::result PG::RecoveryState::Primary::react(const MNotifyRec& no
     dout(10) << *pg << " got dup osd." << notevt.from << " info " << notevt.notify.info
 	     << ", identical to ours" << dendl;
   } else {
-    pg->proc_replica_info(notevt.from, notevt.notify.info);
+    pg->proc_replica_info(
+      notevt.from, notevt.notify.info, notevt.notify.epoch_sent);
   }
   return discard_event();
 }
@@ -6452,7 +6435,8 @@ boost::statechart::result PG::RecoveryState::Active::react(const MNotifyRec& not
     dout(10) << "Active: got notify from " << notevt.from 
 	     << ", calling proc_replica_info and discover_all_missing"
 	     << dendl;
-    pg->proc_replica_info(notevt.from, notevt.notify.info);
+    pg->proc_replica_info(
+      notevt.from, notevt.notify.info, notevt.notify.epoch_sent);
     if (pg->have_unfound()) {
       pg->discover_all_missing(*context< RecoveryMachine >().get_query_map());
     }
@@ -6889,7 +6873,8 @@ boost::statechart::result PG::RecoveryState::GetInfo::react(const MNotifyRec& in
   }
 
   epoch_t old_start = pg->info.history.last_epoch_started;
-  if (pg->proc_replica_info(infoevt.from, infoevt.notify.info)) {
+  if (pg->proc_replica_info(
+	infoevt.from, infoevt.notify.info, infoevt.notify.epoch_sent)) {
     // we got something new ...
     unique_ptr<PriorSet> &prior_set = context< Peering >().prior_set;
     if (old_start < pg->info.history.last_epoch_started) {
@@ -7246,7 +7231,8 @@ boost::statechart::result PG::RecoveryState::Incomplete::react(const MNotifyRec&
 	     << ", identical to ours" << dendl;
     return discard_event();
   } else {
-    pg->proc_replica_info(notevt.from, notevt.notify.info);
+    pg->proc_replica_info(
+      notevt.from, notevt.notify.info, notevt.notify.epoch_sent);
     // try again!
     return transit< GetLog >();
   }

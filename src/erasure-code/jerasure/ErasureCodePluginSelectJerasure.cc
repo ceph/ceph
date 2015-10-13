@@ -54,7 +54,8 @@ static string get_variant() {
 
 class ErasureCodePluginSelectJerasure : public ErasureCodePlugin {
 public:
-  virtual int factory(ErasureCodeProfile &profile,
+  virtual int factory(const std::string &directory,
+		      ErasureCodeProfile &profile,
 		      ErasureCodeInterfaceRef *erasure_code,
 		      ostream *ss) {
     ErasureCodePluginRegistry &instance = ErasureCodePluginRegistry::instance();
@@ -66,11 +67,13 @@ public:
       dout(10) << "jerasure-variant " 
 	       << profile.find("jerasure-variant")->second << dendl;
       ret = instance.factory(name + "_" + profile.find("jerasure-variant")->second,
+			     directory,
 			     profile, erasure_code, ss);
     } else {
       string variant = get_variant();
       dout(10) << variant << " plugin" << dendl;
-      ret = instance.factory(name + "_" + variant, profile, erasure_code, ss);
+      ret = instance.factory(name + "_" + variant, directory,
+			     profile, erasure_code, ss);
     }
     return ret;
   }

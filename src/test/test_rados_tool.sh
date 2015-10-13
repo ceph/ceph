@@ -38,6 +38,12 @@ run_expect_succ() {
     [ $? -ne 0 ] && die "expected success, but got failure! cmd: $@"
 }
 
+run_expect_nosignal() {
+    echo "RUN_EXPECT_NOSIGNAL: " "$@"
+    do_run "$@"
+    [ $? -ge 128 ] && die "expected succes or fail, but got signal! cmd: $@"
+}
+
 run() {
     echo "RUN: " $@
     do_run "$@"
@@ -219,7 +225,18 @@ run_expect_fail "$RADOS_TOOL" mkpool delete_me_mkpool_test3 0 0k
 
 run_expect_succ "$RADOS_TOOL" --pool "$POOL" bench 1 write
 run_expect_fail "$RADOS_TOOL" --pool "$POOL" bench 1k write
+run_expect_succ "$RADOS_TOOL" --pool "$POOL" bench 1 write --format json --output "$TDIR/bench.json"
+run_expect_fail "$RADOS_TOOL" --pool "$POOL" bench 1 write --output "$TDIR/bench.json"
+run_expect_succ "$RADOS_TOOL" --pool "$POOL" bench 5 write --format json --no-cleanup
+run_expect_succ "$RADOS_TOOL" --pool "$POOL" bench 1 rand --format json
+run_expect_succ "$RADOS_TOOL" --pool "$POOL" bench 1 seq --format json
 
+for i in $("$RADOS_TOOL" --pool "$POOL" ls | grep "benchmark_data"); do
+    "$RADOS_TOOL" --pool "$POOL" truncate $i 0
+done
+
+run_expect_nosignal "$RADOS_TOOL" --pool "$POOL" bench 1 rand
+run_expect_nosignal "$RADOS_TOOL" --pool "$POOL" bench 1 seq
 
 echo "SUCCESS!"
 exit 0

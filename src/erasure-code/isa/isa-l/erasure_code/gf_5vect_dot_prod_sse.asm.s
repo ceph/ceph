@@ -31,6 +31,8 @@
 ;;; gf_5vect_dot_prod_sse(len, vec, *g_tbls, **buffs, **dests);
 ;;;
 
+%include "reg_sizes.asm"
+
 %ifidn __OUTPUT_FORMAT__, elf64
  %define arg0  rdi
  %define arg1  rsi
@@ -298,15 +300,5 @@ section .data
 align 16
 mask0f:	ddq 0x0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f
 
-%macro slversion 4
-global %1_slver_%2%3%4
-global %1_slver
-%1_slver:
-%1_slver_%2%3%4:
-	dw 0x%4
-	db 0x%3, 0x%2
-%endmacro
 ;;;       func                  core, ver, snum
-slversion gf_5vect_dot_prod_sse, 00,  04,  0065
-; inform linker that this doesn't require executable stack
-section .note.GNU-stack noalloc noexec nowrite progbits
+slversion gf_5vect_dot_prod_sse, 00,  05,  0065

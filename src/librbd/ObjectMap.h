@@ -60,7 +60,7 @@ public:
 
 private:
 
-  class Request : public AsyncRequest {
+  class Request : public AsyncRequest<> {
   public:
     Request(ImageCtx &image_ctx, uint64_t snap_id, Context *on_finish)
       : AsyncRequest(image_ctx, on_finish), m_snap_id(snap_id),

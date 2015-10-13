@@ -217,7 +217,12 @@ TEST(AdminSocketClient, Ping) {
   {
     bool ok;
     std::string result = client.ping(&ok);
-    EXPECT_NE(std::string::npos, result.find("Connection refused"));
+#if defined(__APPLE__) || defined(__FreeBSD__)
+    const char* errmsg = "Socket operation on non-socket";
+#else
+    const char* errmsg = "Connection refused";
+#endif
+    EXPECT_NE(std::string::npos, result.find(errmsg));
     ASSERT_FALSE(ok);
   }
   // a daemon is connected to the socket

@@ -367,29 +367,38 @@ int EventCenter::process_events(int timeout_microseconds)
   vector<FiredFileEvent> fired_events;
   next_time = shortest;
   numevents = driver->event_wait(fired_events, &tv);
+  file_lock.Lock();
   for (int j = 0; j < numevents; j++) {
     int rfired = 0;
     FileEvent *event;
-    {
-      Mutex::Locker l(file_lock);
-      event = _get_file_event(fired_events[j].fd);
-    }
+    EventCallbackRef cb;
+    event = _get_file_event(fired_events[j].fd);
 
+    // FIXME: Actually we need to pick up some ways to reduce potential
+    // file_lock contention here.
     /* note the event->mask & mask & ... code: maybe an already processed
     * event removed an element that fired and we still didn't
     * processed, so we check if the event is still valid. */
     if (event->mask & fired_events[j].mask & EVENT_READABLE) {
       rfired = 1;
-      event->read_cb->do_request(fired_events[j].fd);
+      cb = event->read_cb;
+      file_lock.Unlock();
+      cb->do_request(fired_events[j].fd);
+      file_lock.Lock();
     }
 
     if (event->mask & fired_events[j].mask & EVENT_WRITABLE) {
-      if (!rfired || event->read_cb != event->write_cb)
-        event->write_cb->do_request(fired_events[j].fd);
+      if (!rfired || event->read_cb != event->write_cb) {
+        cb = event->write_cb;
+        file_lock.Unlock();
+        cb->do_request(fired_events[j].fd);
+        file_lock.Lock();
+      }
     }
 
     ldout(cct, 20) << __func__ << " event_wq process is " << fired_events[j].fd << " mask is " << fired_events[j].mask << dendl;
   }
+  file_lock.Unlock();
 
   if (trigger_time)
     numevents += process_time_events();

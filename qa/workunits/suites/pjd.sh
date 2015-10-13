@@ -3,7 +3,7 @@
 set -e
 
 #wget http://ceph.com/qa/pjd-fstest-20090130-RC-open24.tgz
-wget http://ceph.com/qa/pjd-fstest-20090130-RC-aclfixes.tgz
+wget http://download.ceph.com/qa/pjd-fstest-20090130-RC-aclfixes.tgz
 tar zxvf pjd*.tgz
 cd pjd*
 make clean

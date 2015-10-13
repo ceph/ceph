@@ -798,7 +798,7 @@ public:
     ldout(cct, 10) << "canceling async requests: count="
                    << async_requests.size() << dendl;
 
-    for (xlist<AsyncRequest*>::iterator it = async_requests.begin();
+    for (xlist<AsyncRequest<>*>::iterator it = async_requests.begin();
          !it.end(); ++it) {
       ldout(cct, 10) << "canceling async request: " << *it << dendl;
       (*it)->cancel();
@@ -815,17 +815,17 @@ public:
 
     string start = prefix;
     for (map<string, bufferlist>::iterator it = pairs.begin(); it != pairs.end(); ++it) {
-      if (it->first.size() <= conf_prefix_len || it->first.compare(0, conf_prefix_len, prefix))
+      if (it->first.compare(0, MIN(conf_prefix_len, it->first.size()), prefix) > 0)
         return false;
 
+      if (it->first.size() <= conf_prefix_len)
+        continue;
+
       string key = it->first.substr(conf_prefix_len, it->first.size() - conf_prefix_len);
-      for (map<string, bool>::iterator cit = configs.begin();
-           cit != configs.end(); ++cit) {
-        if (!key.compare(cit->first)) {
-          cit->second = true;
-          res->insert(make_pair(key, it->second));
-          break;
-        }
+      map<string, bool>::iterator cit = configs.find(key);
+      if ( cit != configs.end()) {
+        cit->second = true;
+        res->insert(make_pair(key, it->second));
       }
     }
     return true;
@@ -882,20 +882,22 @@ public:
                                                  pairs, &res);
       for (map<string, bufferlist>::iterator it = res.begin();
            it != res.end(); ++it) {
-        j = local_config_t.set_val(it->first.c_str(), it->second.c_str());
+        string val(it->second.c_str(), it->second.length());
+        j = local_config_t.set_val(it->first.c_str(), val);
         if (j < 0) {
           lderr(cct) << __func__ << " failed to set config " << it->first
                      << " with value " << it->second.c_str() << ": " << j
                      << dendl;
         }
-        break;
       }
       start = pairs.rbegin()->first;
     }
 
 #define ASSIGN_OPTION(config)                                                  \
     do {                                                                       \
-      if (configs[#config])                                                    \
+      string key = "rbd_";						       \
+      key = key + #config;					      	       \
+      if (configs[key])                                                        \
         config = local_config_t.rbd_##config;                                  \
       else                                                                     \
         config = cct->_conf->rbd_##config;                                     \

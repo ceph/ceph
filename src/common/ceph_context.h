@@ -28,6 +28,7 @@
 class AdminSocket;
 class CephContextServiceThread;
 class PerfCountersCollection;
+class PerfCounters;
 class md_config_obs_t;
 struct md_config_t;
 class CephContextHook;
@@ -93,6 +94,22 @@ public:
   ceph::HeartbeatMap *get_heartbeat_map() {
     return _heartbeat_map;
   }
+
+  /**
+   * Enable the performance counter, currently we only have counter for the
+   * number of total/unhealthy workers.
+   */
+  void enable_perf_counter();
+
+  /**
+   * Disable the performance counter.
+   */
+  void disable_perf_counter();
+
+  /**
+   * Refresh perf counter values.
+   */
+  void refresh_perf_values();
 
   /**
    * Get the admin socket associated with this CephContext.
@@ -177,6 +194,15 @@ private:
   std::set<std::string> _experimental_features;
 
   md_config_obs_t *_lockdep_obs;
+
+  enum {
+    l_cct_first,
+    l_cct_total_workers,
+    l_cct_unhealthy_workers,
+    l_cct_last
+  };
+  PerfCounters *_cct_perf;
+  ceph_spinlock_t _cct_perf_lock;
 
   friend class CephContextObs;
 };

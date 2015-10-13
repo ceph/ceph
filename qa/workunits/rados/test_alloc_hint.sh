@@ -61,7 +61,7 @@ function expect_alloc_hint_eq() {
 
         # e.g., .../25.6_head/foo__head_7FC1F406__19
         #       .../26.bs1_head/bar__head_EFE6384B__1a_ffffffffffffffff_1
-        local fns=(${OSD_DATA[i]}/current/${PGID}*_head/${OBJ}_*)
+        local fns=$(sudo sh -c "ls ${OSD_DATA[i]}/current/${PGID}*_head/${OBJ}_*")
         local count="${#fns[@]}"
         if [ "${count}" -ne 1 ]; then
             echo "bad fns count: ${count}" >&2

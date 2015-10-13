@@ -179,7 +179,7 @@ public:
   // replay state
   map<inodeno_t, set<inodeno_t> >   pending_exports;
 
-
+  void set_write_iohint(unsigned iohint_flags);
 
 public:
   MDLog(MDSRank *m) : mds(m),

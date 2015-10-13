@@ -27,6 +27,4 @@ usr/bin/ceph-monstore-tool
 usr/bin/ceph-osdomap-tool
 usr/bin/ceph-kvstore-tool
 usr/share/java/libcephfs-test.jar
-usr/bin/rbd-replay*
-usr/share/man/man8/rbd-replay*.8
 usr/lib/ceph/ceph-monstore-update-crush.sh

@@ -37,7 +37,8 @@ class ErasureCodePluginShec : public ErasureCodePlugin {
 public:
   ErasureCodeShecTableCache tcache;
 
-  virtual int factory(ErasureCodeProfile &profile,
+  virtual int factory(const std::string &directory,
+		      ErasureCodeProfile &profile,
 		      ErasureCodeInterfaceRef *erasure_code,
 		      ostream *ss) {
     ErasureCodeShec *interface;

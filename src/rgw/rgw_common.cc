@@ -99,7 +99,7 @@ is_err() const
 
 
 req_info::req_info(CephContext *cct, class RGWEnv *e) : env(e) {
-  method = env->get("REQUEST_METHOD");
+  method = env->get("REQUEST_METHOD", "");
   script_uri = env->get("SCRIPT_URI", cct->_conf->rgw_script_uri.c_str());
   request_uri = env->get("REQUEST_URI", cct->_conf->rgw_request_uri.c_str());
   int pos = request_uri.find('?');
@@ -109,7 +109,7 @@ req_info::req_info(CephContext *cct, class RGWEnv *e) : env(e) {
   } else {
     request_params = env->get("QUERY_STRING", "");
   }
-  host = env->get("HTTP_HOST");
+  host = env->get("HTTP_HOST", "");
 
   // strip off any trailing :port from host (added by CrossFTP and maybe others)
   size_t colon_offset = host.find_last_of(':');
@@ -357,18 +357,17 @@ bool parse_iso8601(const char *s, struct tm *t)
   }
   string str;
   trim_whitespace(p, str);
-  if (str.size() == 1 && str[0] == 'Z')
+  int len = str.size();
+
+  if (len == 1 && str[0] == 'Z')
     return true;
 
-  if (str.size() != 5) {
-    return false;
-  }
   if (str[0] != '.' ||
-      str[str.size() - 1] != 'Z')
+      str[len - 1] != 'Z')
     return false;
 
   uint32_t ms;
-  int r = stringtoul(str.substr(1, 3), &ms);
+  int r = stringtoul(str.substr(1, len - 2), &ms);
   if (r < 0)
     return false;
 

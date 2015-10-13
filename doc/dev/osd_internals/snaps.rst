@@ -101,7 +101,7 @@ to flush the filestore.  *SnapMapper* provides two mappings:
 
   1. hobject_t -> set<snapid_t>: stores the set of snaps for each clone
      object
-  2. snapid_t -> hobject_t: stores the set of hobjects with a the snapshot
+  2. snapid_t -> hobject_t: stores the set of hobjects with the snapshot
      as one of its snaps
 
 Assumption: there are lots of hobjects and relatively few snaps.  The
@@ -113,8 +113,7 @@ is constant length.  These keys have a bufferlist encoding
 pair<snapid, hobject_t> as a value.  Thus, creating or trimming a single
 object does not involve reading all objects for any snap.  Additionally,
 upon construction, the *SnapMapper* is provided with a mask for filtering
-identifying the objects in the single SnapMapper keyspace belonging to that
-pg.
+the objects in the single SnapMapper keyspace belonging to that pg.
 
 Split
 -----

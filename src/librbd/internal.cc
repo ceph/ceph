@@ -1164,8 +1164,8 @@ reprotect_and_return_err:
     if (!*order)
       *order = RBD_DEFAULT_OBJ_ORDER;
 
-    if (*order > 64 || *order < 12) {
-      lderr(cct) << "order must be in the range [12, 64]" << dendl;
+    if (*order > 25 || *order < 12) {
+      lderr(cct) << "order must be in the range [12, 25]" << dendl;
       return -EDOM;
     }
 
@@ -2140,11 +2140,12 @@ reprotect_and_return_err:
     if (ictx->parent) {
       uint64_t overlap;
       r = ictx->get_parent_overlap(ictx->snap_id, &overlap);
-      if (r < 0)
+      if (r < 0 && r != -ENOENT) {
 	return r;
-      if (!overlap ||
+      }
+      if (r == -ENOENT || overlap == 0 ||
 	  ictx->parent->md_ctx.get_id() !=
-	  ictx->get_parent_pool_id(ictx->snap_id) ||
+            ictx->get_parent_pool_id(ictx->snap_id) ||
 	  ictx->parent->id != ictx->get_parent_image_id(ictx->snap_id) ||
 	  ictx->parent->snap_id != ictx->get_parent_snap_id(ictx->snap_id)) {
 	ictx->clear_nonexistence_cache();

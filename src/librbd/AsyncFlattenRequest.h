@@ -12,7 +12,7 @@ namespace librbd {
 class ImageCtx;
 class ProgressContext;
 
-class AsyncFlattenRequest : public AsyncRequest
+class AsyncFlattenRequest : public AsyncRequest<>
 {
 public:
   AsyncFlattenRequest(ImageCtx &image_ctx, Context *on_finish,

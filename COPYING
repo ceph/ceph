@@ -144,3 +144,8 @@ File: qa/workunits/erasure-code/jquery.js
 Files: qa/workunits/erasure-code/jquery.{flot.categories,flot}.js
   Copyright (c) 2007-2014 IOLA and Ole Laursen.
   Licensed under the MIT license.
+
+Files: src/include/timegm.h
+  Copyright (C) Copyright Howard Hinnant
+  Copyright (C) Copyright 2010-2011 Vicente J. Botet Escriba
+  License: Boost Software License, Version 1.0

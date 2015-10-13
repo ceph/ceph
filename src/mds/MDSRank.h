@@ -119,7 +119,7 @@ class MDSRank {
 
     // Incarnation as seen in MDSMap at the point where a rank is
     // assigned.
-    const int incarnation;
+    int incarnation;
 
   public:
     mds_rank_t get_nodeid() const { return whoami; }
@@ -265,7 +265,6 @@ class MDSRank {
 
     MDSRank(
         mds_rank_t whoami_,
-        int incarnation_,
         Mutex &mds_lock_,
         LogChannelRef &clog_,
         SafeTimer &timer_,
@@ -496,7 +495,6 @@ public:
 
   MDSRankDispatcher(
       mds_rank_t whoami_,
-      int incarnation_,
       Mutex &mds_lock_,
       LogChannelRef &clog_,
       SafeTimer &timer_,
