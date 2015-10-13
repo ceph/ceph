@@ -169,7 +169,10 @@ class TestClientLimits(CephFSTestCase):
         self.fs.mds_asok(['config', 'set', 'mds_max_completed_requests', '{0}'.format(max_requests)])
 
         # Create lots of files
-        self.mount_a.create_n_files("testdir/file", max_requests + 100)
+        self.mount_a.create_n_files("testdir/file1", max_requests + 100)
+
+        # Create a few files synchronously. This makes sure previous requests are completed
+        self.mount_a.create_n_files("testdir/file2", 5, True)
 
         # Wait for the health warnings. Assume mds can handle 10 request per second at least
         self.wait_for_health("failing to advance its oldest client/flush tid", max_requests / 10)
