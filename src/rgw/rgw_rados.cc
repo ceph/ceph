@@ -160,7 +160,8 @@ int RGWZoneGroup::create_default(bool old_format)
   RGWZone& default_zone = zones[zone_params.get_id()];
   default_zone.name = zone_params.get_name();
   default_zone.id = zone_params.get_id();
-
+  master_zone = default_zone.id;
+  
   r = create();
   if (r < 0 && r != -EEXIST) {
     derr << "error storing zone group info: " << cpp_strerror(-r) << dendl;
@@ -228,8 +229,17 @@ int RGWZoneGroup::equals(const string& other_zonegroup) const
   return (id  == other_zonegroup);
 }
 
-int RGWZoneGroup::add_zone(const RGWZoneParams& zone_params)
+int RGWZoneGroup::add_zone(const RGWZoneParams& zone_params, bool is_master)
 {
+  if (is_master) {
+    if (!master_zone.empty()) {
+      lderr(cct) << "Master zone already defined " << master_zone  << " cannot add zone "
+		 << zone_params.get_id() << dendl;
+      return -EINVAL;
+    }
+    master_zone = zone_params.get_id();
+  }
+
   RGWZone& zone = zones[zone_params.get_id()];
   zone.name = zone_params.get_name();
   zone.id = zone_params.get_id();
@@ -897,7 +907,6 @@ int RGWPeriod::add_zonegroup(const RGWZoneGroup& zonegroup)
 int RGWZoneParams::create_default(bool old_format)
 {
   name = default_zone_name;
-  is_master = true;
 
   domain_root = "rgw.data.root";
   metadata_heap = "rgw.meta";
@@ -1000,10 +1009,6 @@ int RGWZoneParams::init(CephContext *cct, RGWRados *store, RGWZoneGroup& zonegro
   if (ret < 0) {
     return ret;
   }
-
-  is_master = (id == zonegroup.master_zone) || (zonegroup.master_zone.empty() && id == default_zone_name);
-
-  ldout(cct, 2) << "zone " << name << " is " << (is_master ? "" : "NOT ") << "master" << dendl;
 
   return ret;
 }
