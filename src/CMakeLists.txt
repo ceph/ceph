@@ -554,6 +554,7 @@ set(ceph_mon_srcs
   ceph_mon.cc
   common/TextTable.cc)
 add_executable(ceph-mon ${ceph_mon_srcs} $<TARGET_OBJECTS:heap_profiler_objs>)
+add_dependencies(ceph-mon erasure_code_plugins)
 target_link_libraries(ceph-mon mon boost_thread common os global ${EXTRALIBS}
   ${CMAKE_DL_LIBS} ${TCMALLOC_LIBS})
 install(TARGETS ceph-mon DESTINATION bin)
@@ -641,6 +642,7 @@ set(ceph_osd_srcs
 add_executable(ceph-osd ${ceph_osd_srcs}
   $<TARGET_OBJECTS:heap_profiler_objs>
   $<TARGET_OBJECTS:common_util_obj>)
+add_dependencies(ceph-osd erasure_code_plugins)
 target_link_libraries(ceph-osd osd os global ${BLKID_LIBRARIES} ${TCMALLOC_LIBS})
 install(TARGETS ceph-osd DESTINATION bin)
 
