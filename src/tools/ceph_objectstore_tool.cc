@@ -1594,7 +1594,9 @@ int get_object_rados(librados::IoCtx &ioctx, bufferlist &bl, bool no_overwrite)
       if (dry_run || skipping)
         break;
       for (i = as.data.begin(); i != as.data.end(); ++i) {
-        if (i->first == "_" || i->first == "snapset")
+        // The user xattrs that we want all begin with "_" with length > 1.
+        // Drop key "_" and all attributes that do not start with '_'
+        if (i->first == "_" || i->first[0] != '_')
           continue;
         abl.clear();
         abl.push_front(i->second);
