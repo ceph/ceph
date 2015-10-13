@@ -1955,7 +1955,7 @@ ReplicatedPG::cache_result_t ReplicatedPG::maybe_handle_cache_detail(
   OpRequestRef op,
   bool write_ordered,
   ObjectContextRef obc,
-  int r, const hobject_t& missing_oid,
+  int r, hobject_t missing_oid,
   bool must_promote,
   bool in_hit_set,
   ObjectContextRef *promote_obc)
@@ -2004,7 +2004,11 @@ ReplicatedPG::cache_result_t ReplicatedPG::maybe_handle_cache_detail(
     osd->logger->inc(l_osd_op_cache_hit);
     return cache_result_t::NOOP;
   }
-  
+
+  if (missing_oid == hobject_t() && obc.get()) {
+    missing_oid = obc->obs.oi.soid;
+  }
+
   MOSDOp *m = static_cast<MOSDOp*>(op->get_req());
   const object_locator_t& oloc = m->get_object_locator();
 
