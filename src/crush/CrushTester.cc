@@ -355,11 +355,24 @@ void CrushTester::write_integer_indexed_scalar_data_string(vector<string> &dst, 
   dst.push_back( data_buffer.str() );
 }
 
-int CrushTester::test_with_crushtool(const char *crushtool_cmd, int max_id, int timeout)
+int CrushTester::test_with_crushtool(const char *crushtool_cmd,
+				     int max_id, int timeout,
+				     int ruleset)
 {
   SubProcessTimed crushtool(crushtool_cmd, true, false, true, timeout);
   string opt_max_id = boost::lexical_cast<string>(max_id);
-  crushtool.add_cmd_args("-i", "-", "--test", "--check", opt_max_id.c_str(), NULL);
+  crushtool.add_cmd_args(
+    "-i", "-",
+    "--test", "--check", opt_max_id.c_str(),
+    "--min-x", "1",
+    "--max-x", "50",
+    NULL);
+  if (ruleset >= 0) {
+    crushtool.add_cmd_args(
+      "--ruleset",
+      stringify(ruleset).c_str(),
+      NULL);
+  }
   int ret = crushtool.spawn();
   if (ret != 0) {
     err << "failed run crushtool: " << crushtool.err();
@@ -484,6 +497,10 @@ int CrushTester::test()
     if (!crush.rule_exists(r)) {
       if (output_statistics)
         err << "rule " << r << " dne" << std::endl;
+      continue;
+    }
+    if (ruleset >= 0 &&
+	crush.get_rule_mask_ruleset(r) != ruleset) {
       continue;
     }
     int minr = min_rep, maxr = max_rep;

@@ -96,6 +96,7 @@ int SimpleMessenger::_send_message(Message *m, const entity_inst_t& dest)
 {
   // set envelope
   m->get_header().src = get_myname();
+  m->set_cct(cct);
 
   if (!m->get_priority()) m->set_priority(get_default_send_priority());
  
@@ -533,9 +534,10 @@ void SimpleMessenger::wait()
   }
   lock.Unlock();
 
-  if(dispatch_queue.is_started()) {
+  if (dispatch_queue.is_started()) {
     ldout(cct,10) << "wait: waiting for dispatch queue" << dendl;
     dispatch_queue.wait();
+    dispatch_queue.discard_local();
     ldout(cct,10) << "wait: dispatch queue is stopped" << dendl;
   }
 

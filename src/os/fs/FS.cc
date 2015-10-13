@@ -14,7 +14,6 @@
 
 #include <errno.h>
 #include <sys/types.h>
-#include <sys/vfs.h>
 #include <sys/stat.h>
 #include <fcntl.h>
 
@@ -25,9 +24,18 @@
 
 #include "FS.h"
 
-#include "XFS.h"
-
 #include "acconfig.h"
+
+#ifdef HAVE_LIBXFS
+#include "XFS.h"
+#endif
+
+#if defined(DARWIN) || defined(__FreeBSD__)
+#include <sys/mount.h>
+#else
+#include <sys/vfs.h>
+#endif
+#include "include/compat.h"
 
 // ---------------
 

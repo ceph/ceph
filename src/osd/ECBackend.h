@@ -145,13 +145,22 @@ public:
     const hobject_t &hoid,
     const list<pair<boost::tuple<uint64_t, uint64_t, uint32_t>,
 		    pair<bufferlist*, Context*> > > &to_read,
-    Context *on_complete);
+    Context *on_complete,
+    bool fast_read = false);
 
 private:
   friend struct ECRecoveryHandle;
   uint64_t get_recovery_chunk_size() const {
     return ROUND_UP_TO(cct->_conf->osd_recovery_max_chunk,
 			sinfo.get_stripe_width());
+  }
+
+  void get_want_to_read_shards(set<int> *want_to_read) const {
+    const vector<int> &chunk_mapping = ec_impl->get_chunk_mapping();
+    for (int i = 0; i < (int)ec_impl->get_data_chunk_count(); ++i) {
+      int chunk = (int)chunk_mapping.size() > i ? chunk_mapping[i] : i;
+      want_to_read->insert(chunk);
+    }
   }
 
   /**
@@ -284,6 +293,13 @@ public:
     int priority;
     ceph_tid_t tid;
     OpRequestRef op; // may be null if not on behalf of a client
+    // True if redundant reads are issued, false otherwise,
+    // this is useful to tradeoff some resources (redundant ops) for
+    // low latency read, especially on relatively idle cluster
+    bool do_redundant_reads;
+    // True if reading for recovery which could possibly reading only a subset
+    // of the available shards.
+    bool for_recovery;
 
     map<hobject_t, read_request_t, hobject_t::BitwiseComparator> to_read;
     map<hobject_t, read_result_t, hobject_t::BitwiseComparator> complete;
@@ -306,7 +322,14 @@ public:
   void start_read_op(
     int priority,
     map<hobject_t, read_request_t, hobject_t::BitwiseComparator> &to_read,
-    OpRequestRef op);
+    OpRequestRef op,
+    bool do_redundant_reads, bool for_recovery);
+
+  void start_remaining_read_op(ReadOp &rop,
+    map<hobject_t, read_request_t, hobject_t::BitwiseComparator> &to_read);
+  int objects_remaining_read_async(
+    const hobject_t &hoid,
+    ReadOp &rop);
 
 
   /**
@@ -433,7 +456,7 @@ public:
   const ECUtil::stripe_info_t sinfo;
   /// If modified, ensure that the ref is held until the update is applied
   SharedPtrRegistry<hobject_t, ECUtil::HashInfo, hobject_t::BitwiseComparator> unstable_hashinfo_registry;
-  ECUtil::HashInfoRef get_hash_info(const hobject_t &hoid);
+  ECUtil::HashInfoRef get_hash_info(const hobject_t &hoid, bool checks = true);
 
   friend struct ReadCB;
   void check_op(Op *op);
@@ -452,8 +475,14 @@ public:
     const hobject_t &hoid,     ///< [in] object
     const set<int> &want,      ///< [in] desired shards
     bool for_recovery,         ///< [in] true if we may use non-acting replicas
+    bool do_redundant_reads,   ///< [in] true if we want to issue redundant reads to reduce latency
     set<pg_shard_t> *to_read   ///< [out] shards to read
     ); ///< @return error code, 0 on success
+
+  int get_remaining_shards(
+    const hobject_t &hoid,
+    const set<int> &avail,
+    set<pg_shard_t> *to_read);
 
   int objects_get_attrs(
     const hobject_t &hoid,

@@ -379,12 +379,14 @@ whenever it is run. grep -v to ignore it, but still work on other distros.
   quux
   bar
   baz
+  quuy
   $ rbd list --format json | python -mjson.tool | sed 's/,$/, /'
   [
       "foo", 
       "quux", 
       "bar", 
-      "baz"
+      "baz", 
+      "quuy"
   ]
   $ rbd list --format xml | xml_pp 2>&1 | grep -v '^new version at /usr/bin/xml_pp'
   <images>
@@ -392,6 +394,7 @@ whenever it is run. grep -v to ignore it, but still work on other distros.
     <name>quux</name>
     <name>bar</name>
     <name>baz</name>
+    <name>quuy</name>
   </images>
   $ rbd list -l
   NAME       SIZE PARENT FMT PROT LOCK 
@@ -402,6 +405,7 @@ whenever it is run. grep -v to ignore it, but still work on other distros.
   bar@snap   512M          2 yes       
   bar@snap2 1024M          2           
   baz       2048M          2      shr  
+  quuy      2048M          2           
   $ rbd list -l --format json | python -mjson.tool | sed 's/,$/, /'
   [
       {
@@ -445,6 +449,11 @@ whenever it is run. grep -v to ignore it, but still work on other distros.
           "format": 2, 
           "image": "baz", 
           "lock_type": "shared", 
+          "size": 2147483648
+      }, 
+      {
+          "format": 2, 
+          "image": "quuy", 
           "size": 2147483648
       }
   ]
@@ -492,6 +501,11 @@ whenever it is run. grep -v to ignore it, but still work on other distros.
       <size>2147483648</size>
       <format>2</format>
       <lock_type>shared</lock_type>
+    </image>
+    <image>
+      <image>quuy</image>
+      <size>2147483648</size>
+      <format>2</format>
     </image>
   </images>
   $ rbd list rbd_other
@@ -681,13 +695,13 @@ whenever it is run. grep -v to ignore it, but still work on other distros.
       <size>536870912</size>
     </snapshot>
   </snapshots>
-  $ rbd disk-usage rbd_other
+  $ rbd disk-usage --pool rbd_other
   warning: fast-diff map is not enabled for child. operation may be slow.
   NAME       PROVISIONED  USED 
   child@snap        512M     0 
   child             512M 4096k 
   <TOTAL>           512M 4096k 
-  $ rbd disk-usage rbd_other --format json | python -mjson.tool | sed 's/,$/, /'
+  $ rbd disk-usage --pool rbd_other --format json | python -mjson.tool | sed 's/,$/, /'
   warning: fast-diff map is not enabled for child. operation may be slow.
   {
       "images": [
@@ -706,7 +720,7 @@ whenever it is run. grep -v to ignore it, but still work on other distros.
       "total_provisioned_size": 536870912, 
       "total_used_size": 4194304
   }
-  $ rbd disk-usage rbd_other --format xml | xml_pp 2>&1 | grep -v '^new version at /usr/bin/xml_pp'
+  $ rbd disk-usage --pool rbd_other --format xml | xml_pp 2>&1 | grep -v '^new version at /usr/bin/xml_pp'
   warning: fast-diff map is not enabled for child. operation may be slow.
   <stats>
     <images>

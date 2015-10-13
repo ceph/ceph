@@ -267,11 +267,17 @@ By default, Ceph sockets reside under ``/var/run/ceph``. To access a daemon
 via the admin socket, login to the host running the daemon and use the 
 following command:: 
 
-	ceph --admin-daemon /var/run/ceph/{socket-name}
+	ceph daemon {daemon-name}
+	ceph daemon {path-to-socket-file}
+
+For example, the following are equivalent::
+
+    ceph daemon osd.0 foo
+    ceph daemon /var/run/ceph/ceph-osd.0.asok foo
 
 To view the available admin socket commands, execute the following command:: 
 
-	ceph --admin-daemon /var/run/ceph/{socket-name} help
+	ceph daemon {daemon-name} help
 
 The admin socket command enables you to show and set your configuration at
 runtime. See `Viewing a Configuration at Runtime`_ for details.

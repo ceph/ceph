@@ -25,6 +25,7 @@ Makefile
 /ceph-mon
 /ceph-osd
 /ceph-syn
+/ceph.tmpe
 /ceph.conf
 /ceph_bench_log
 /ceph-objectstore-tool
@@ -48,6 +49,7 @@ Makefile
 /ceph_xattr_bench
 /ceph_kvstorebench
 /ceph_omapbench
+/ceph_objectstore_bench
 /ceph_smalliobench
 /ceph_smalliobenchdumb
 /ceph_smalliobenchfs
@@ -70,6 +72,7 @@ Makefile
 /rados
 /radosgw
 /radosgw-admin
+/radosgw-object-expirer
 /rbd
 /rbd-fuse
 /rbd-replay
@@ -92,3 +95,6 @@ Makefile
 /mkcephfs
 /.ceph_port
 /store_test_temp_dir
+
+# not sure what generates this...
+/ceph.tmpe

@@ -12,7 +12,9 @@
  * 
  */
 
+#include <sys/types.h>
 #include <sys/socket.h>
+#include <netinet/in.h>
 #include <netinet/ip.h>
 #include <netinet/tcp.h>
 #include <sys/uio.h>
@@ -31,6 +33,8 @@
 #include "auth/Crypto.h"
 #include "auth/cephx/CephxProtocol.h"
 #include "auth/AuthSessionHandler.h"
+
+#include "include/sock_compat.h"
 
 // Constant to limit starting sequence number to 2^31.  Nothing special about it, just a big number.  PLR
 #define SEQ_MASK  0x7fffffff 
@@ -52,26 +56,6 @@ ostream& Pipe::_pipe_prefix(std::ostream &out) const {
 ostream& operator<<(ostream &out, const Pipe &pipe) {
   return pipe._pipe_prefix(out);
 }
-
-/*
- * This optimization may not be available on all platforms (e.g. OSX).
- * Apparently a similar approach based on TCP_CORK can be used.
- */
-#ifndef MSG_MORE
-# define MSG_MORE 0
-#endif
-
-/*
- * On BSD SO_NOSIGPIPE can be set via setsockopt to block SIGPIPE.
- */
-#ifndef MSG_NOSIGNAL
-# define MSG_NOSIGNAL 0
-# ifdef SO_NOSIGPIPE
-#  define CEPH_USE_SO_NOSIGPIPE
-# else
-#  error "Cannot block SIGPIPE!"
-# endif
-#endif
 
 /**************************************
  * Pipe
@@ -854,7 +838,7 @@ void Pipe::set_socket_options()
 
   int prio = msgr->get_socket_priority();
   if (prio >= 0) {
-    int r;
+    int r = -1;
 #ifdef IPTOS_CLASS_CS6
     int iptos = IPTOS_CLASS_CS6;
     r = ::setsockopt(sd, IPPROTO_IP, IP_TOS, &iptos, sizeof(iptos));
@@ -866,7 +850,9 @@ void Pipe::set_socket_options()
     // setsockopt(IPTOS_CLASS_CS6) sets the priority of the socket as 0.
     // See http://goo.gl/QWhvsD and http://goo.gl/laTbjT
     // We need to call setsockopt(SO_PRIORITY) after it.
+#if defined(__linux__)
     r = ::setsockopt(sd, SOL_SOCKET, SO_PRIORITY, &prio, sizeof(prio));
+#endif
     if (r < 0) {
       ldout(msgr->cct,0) << "couldn't set SO_PRIORITY to " << prio
                          << ": " << cpp_strerror(errno) << dendl;
@@ -913,6 +899,9 @@ int Pipe::connect()
   }
 
   recv_reset();
+
+  set_socket_options();
+
   // connect!
   ldout(msgr->cct,10) << "connecting to " << peer_addr << dendl;
   rc = ::connect(sd, (sockaddr*)&peer_addr.addr, peer_addr.addr_size());
@@ -921,8 +910,6 @@ int Pipe::connect()
 	     << ", " << cpp_strerror(errno) << dendl;
     goto fail;
   }
-
-  set_socket_options();
 
   // verify banner
   // FIXME: this should be non-blocking, or in some other way verify the banner as we get it.

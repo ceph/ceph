@@ -19,6 +19,11 @@
 #include <getopt.h>
 #include <assert.h>
 
+#if defined(__FreeBSD__)
+#include <sys/param.h>
+#endif
+
+#include "include/compat.h"
 #include "include/rbd/librbd.h"
 
 static int gotrados = 0;
@@ -597,7 +602,12 @@ struct rbdfuse_attr {
 
 int
 rbdfs_setxattr(const char *path, const char *name, const char *value,
-		 size_t size, int flags)
+	       size_t size,
+	       int flags
+#if defined(DARWIN)
+	       ,uint32_t pos
+#endif
+    )
 {
 	struct rbdfuse_attr *ap;
 	if (strcmp(path, "/") != 0)
@@ -616,7 +626,11 @@ rbdfs_setxattr(const char *path, const char *name, const char *value,
 
 int
 rbdfs_getxattr(const char *path, const char *name, char *value,
-		 size_t size)
+		 size_t size
+#if defined(DARWIN)
+	       ,uint32_t position
+#endif
+  )
 {
 	struct rbdfuse_attr *ap;
 	char buf[128];

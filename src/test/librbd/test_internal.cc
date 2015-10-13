@@ -369,7 +369,49 @@ TEST_F(TestInternal, MultipleResize) {
   ASSERT_EQ(0U, size);
 }
 
-TEST_F(TestInternal, MetadatConfig) {
+TEST_F(TestInternal, Metadata) {
+  REQUIRE_FEATURE(RBD_FEATURE_LAYERING);
+
+  map<string, bool> test_confs = boost::assign::map_list_of(
+    "aaaaaaa", false)(
+    "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", false)(
+    "cccccccccccccc", false);
+  map<string, bool>::iterator it = test_confs.begin();
+  int r;
+  librbd::ImageCtx *ictx;
+  ASSERT_EQ(0, open_image(m_image_name, &ictx));
+
+  r = librbd::metadata_set(ictx, it->first, "value1");
+  ASSERT_EQ(0, r);
+  ++it;
+  r = librbd::metadata_set(ictx, it->first, "value2");
+  ASSERT_EQ(0, r);
+  ++it;
+  r = librbd::metadata_set(ictx, it->first, "value3");
+  ASSERT_EQ(0, r);
+  r = librbd::metadata_set(ictx, "abcd", "value4");
+  ASSERT_EQ(0, r);
+  r = librbd::metadata_set(ictx, "xyz", "value5");
+  ASSERT_EQ(0, r);
+  map<string, bufferlist> pairs;
+  r = librbd::metadata_list(ictx, "", 0, &pairs);
+  ASSERT_EQ(0, r);
+  ASSERT_EQ(5u, pairs.size());
+  r = librbd::metadata_remove(ictx, "abcd");
+  ASSERT_EQ(0, r);
+  r = librbd::metadata_remove(ictx, "xyz");
+  ASSERT_EQ(0, r);
+  pairs.clear();
+  r = librbd::metadata_list(ictx, "", 0, &pairs);
+  ASSERT_EQ(0, r);
+  ASSERT_EQ(3u, pairs.size());
+  string val;
+  r = librbd::metadata_get(ictx, it->first, &val);
+  ASSERT_EQ(0, r);
+  ASSERT_STREQ(val.c_str(), "value3");
+}
+
+TEST_F(TestInternal, MetadataFilter) {
   REQUIRE_FEATURE(RBD_FEATURE_LAYERING);
 
   map<string, bool> test_confs = boost::assign::map_list_of(
@@ -384,6 +426,8 @@ TEST_F(TestInternal, MetadatConfig) {
 
   librbd::Image image1;
   map<string, bufferlist> pairs, res;
+  pairs["abc"].append("value");
+  pairs["abcabc"].append("value");
   pairs[prefix+it->first].append("value1");
   ++it;
   pairs[prefix+it->first].append("value2");

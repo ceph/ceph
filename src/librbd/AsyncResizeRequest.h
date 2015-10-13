@@ -12,7 +12,7 @@ namespace librbd
 class ImageCtx;
 class ProgressContext;
 
-class AsyncResizeRequest : public AsyncRequest
+class AsyncResizeRequest : public AsyncRequest<>
 {
 public:
   AsyncResizeRequest(ImageCtx &image_ctx, Context *on_finish, uint64_t new_size,

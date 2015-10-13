@@ -69,10 +69,7 @@ private:
     string expand_channel_meta(const string &input,
                                const string &change_to);
 
-    bool do_log_to_syslog(const string &channel) {
-      return (get_str_map_key(log_to_syslog, channel,
-                              &CLOG_CONFIG_DEFAULT_KEY) == "true");
-    }
+    bool do_log_to_syslog(const string &channel);
 
     string get_facility(const string &channel) {
       return get_str_map_key(syslog_facility, channel,

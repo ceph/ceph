@@ -35,3 +35,8 @@ if (LEVELDB_INCLUDE AND LEVELDB_LIBS)
      message(STATUS "${LEVELDB_DIR_MESSAGE}")
    endif ()
  endif ()
+
+# handle the QUIETLY and REQUIRED arguments and set GPERFTOOLS_FOUND to TRUE if
+# all listed variables are TRUE
+include(FindPackageHandleStandardArgs)
+find_package_handle_standard_args(leveldb DEFAULT_MSG LEVELDB_LIBS LEVELDB_INCLUDE)
