@@ -813,13 +813,15 @@ void Session::_update_human_name()
   if (info.client_metadata.count("hostname")) {
     // Happy path, refer to clients by hostname
     human_name = info.client_metadata["hostname"];
-    if (info.client_metadata.count("entity_id")) {
-      EntityName entity;
-      entity.set_id(info.client_metadata["entity_id"]);
-      if (!entity.has_default_id()) {
-        // When a non-default entity ID is set by the user, assume they
-        // would like to see it in references to the client
-        human_name += std::string(":") + entity.get_id();
+    if (!info.auth_name.has_default_id()) {
+      // When a non-default entity ID is set by the user, assume they
+      // would like to see it in references to the client, if it's
+      // reasonable short.  Limit the length because we don't want
+      // to put e.g. uuid-generated names into a "human readable"
+      // rendering.
+      const int arbitrarily_short = 16;
+      if (info.auth_name.get_id().size() < arbitrarily_short) {
+        human_name += std::string(":") + info.auth_name.get_id();
       }
     }
   } else {
@@ -859,5 +861,122 @@ bool Session::check_access(CInode *in, unsigned mask,
     return true;
   }
   return false;
+}
+
+int SessionFilter::parse(
+    const std::vector<std::string> &args,
+    std::stringstream *ss)
+{
+  assert(ss != NULL);
+
+  for (const auto &s : args) {
+    dout(20) << __func__ << " parsing filter '" << s << "'" << dendl;
+
+    auto eq = s.find("=");
+    if (eq == std::string::npos || eq == s.size()) {
+      *ss << "Invalid filter '" << s << "'";
+      return -EINVAL;
+    }
+
+    // Keys that start with this are to be taken as referring
+    // to freeform client metadata fields.
+    const std::string metadata_prefix("client_metadata.");
+
+    auto k = s.substr(0, eq);
+    auto v = s.substr(eq + 1);
+
+    dout(20) << __func__ << " parsed k='" << k << "', v='" << v << "'" << dendl;
+
+    if (k.compare(0, metadata_prefix.size(), metadata_prefix) == 0
+        && k.size() > metadata_prefix.size()) {
+      // Filter on arbitrary metadata key (no fixed schema for this,
+      // so anything after the dot is a valid field to filter on)
+      auto metadata_key = k.substr(metadata_prefix.size());
+      metadata.insert(std::make_pair(metadata_key, v));
+    } else if (k == "auth_name") {
+      // Filter on client entity name
+      auth_name = v;
+    } else if (k == "state") {
+      state = v;
+    } else if (k == "id") {
+      std::string err;
+      id = strict_strtoll(v.c_str(), 10, &err);
+      if (!err.empty()) {
+        *ss << err;
+        return -EINVAL;
+      }
+    } else if (k == "reconnecting") {
+
+      /**
+       * Strict boolean parser.  Allow true/false/0/1.
+       * Anything else is -EINVAL.
+       */
+      auto is_true = [](const std::string &bstr, bool *out) -> bool
+      {
+        assert(out != nullptr);
+
+        if (bstr == "true" || bstr == "1") {
+          *out = true;
+          return 0;
+        } else if (bstr == "false" || bstr == "0") {
+          *out = false;
+          return 0;
+        } else {
+          return -EINVAL;
+        }
+      };
+
+      bool bval;
+      int r = is_true(v, &bval);
+      if (r == 0) {
+        set_reconnecting(bval);
+      } else {
+        *ss << "Invalid boolean value '" << v << "'";
+        return -EINVAL;
+      }
+    } else {
+      *ss << "Invalid filter key '" << k << "'";
+      return -EINVAL;
+    }
+  }
+
+  return 0;
+}
+
+bool SessionFilter::match(
+    const Session &session,
+    std::function<bool(client_t)> is_reconnecting) const
+{
+  for (auto m : metadata) {
+    auto k = m.first;
+    auto v = m.second;
+    if (session.info.client_metadata.count(k) == 0) {
+      return false;
+    }
+    if (session.info.client_metadata.at(k) != v) {
+      return false;
+    }
+  }
+
+  if (!auth_name.empty() && auth_name != session.info.auth_name.get_id()) {
+    return false;
+  }
+
+  if (!state.empty() && state != session.get_state_name()) {
+    return false;
+  }
+
+  if (id != 0 && id != session.info.inst.name.num()) {
+    return false;
+  }
+
+  if (reconnecting.first) {
+    const bool am_reconnecting = is_reconnecting(session.info.inst.name.num());
+    if (reconnecting.second != am_reconnecting) {
+      return false;
+    }
+  }
+
+  return true;
 }
 
