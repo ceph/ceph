@@ -677,6 +677,7 @@ void RGWPeriod::decode_json(JSONObj *obj)
 
 void RGWZoneParams::dump(Formatter *f) const
 {
+  RGWSystemMetaObj::dump(f);
   encode_json("domain_root", domain_root.data_pool, f);
   encode_json("control_pool", control_pool.data_pool, f);
   encode_json("gc_pool", gc_pool.data_pool, f);
@@ -687,7 +688,6 @@ void RGWZoneParams::dump(Formatter *f) const
   encode_json("user_email_pool", user_email_pool.data_pool, f);
   encode_json("user_swift_pool", user_swift_pool.data_pool, f);
   encode_json("user_uid_pool", user_uid_pool.data_pool, f);
-  RGWSystemMetaObj::dump(f);
   encode_json_plain("system_key", system_key, f);
   encode_json("placement_pools", placement_pools, f);
   encode_json("metadata_heap", metadata_heap.data_pool, f);
@@ -719,6 +719,7 @@ void RGWZonePlacementInfo::decode_json(JSONObj *obj)
 
 void RGWZoneParams::decode_json(JSONObj *obj)
 {
+  RGWSystemMetaObj::decode_json(obj);
   ::decode_json("domain_root", domain_root, obj);
   ::decode_json("control_pool", control_pool, obj);
   ::decode_json("gc_pool", gc_pool, obj);
@@ -729,7 +730,6 @@ void RGWZoneParams::decode_json(JSONObj *obj)
   ::decode_json("user_email_pool", user_email_pool, obj);
   ::decode_json("user_swift_pool", user_swift_pool, obj);
   ::decode_json("user_uid_pool", user_uid_pool, obj);
-  RGWSystemMetaObj::decode_json(obj);
   JSONDecoder::decode_json("system_key", system_key, obj);
   JSONDecoder::decode_json("placement_pools", placement_pools, obj);
   ::decode_json("metadata_heap", metadata_heap, obj);
