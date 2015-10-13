@@ -4515,6 +4515,15 @@ int RGWRados::delete_bucket(rgw_bucket& bucket, RGWObjVersionTracker& objv_track
     }
   } while (is_truncated);
 
+  // Get the bucket info
+  RGWBucketInfo binfo;
+  RGWObjectCtx obj_ctx(this);
+  r = get_bucket_instance_info(obj_ctx, bucket, binfo, NULL, NULL);
+  if (r < 0) {
+    ldout(cct, 0) << "NOTICE: get_bucket_info on bucket=" << bucket.name << " ret= " << r << dendl;
+    return r;
+  }
+
   r = rgw_bucket_delete_bucket_obj(this, bucket.name, objv_tracker);
   if (r < 0)
     return r;
@@ -4528,7 +4537,34 @@ int RGWRados::delete_bucket(rgw_bucket& bucket, RGWObjVersionTracker& objv_track
     if (r < 0) {
       return r;
     }
+
+    map<int, string> bucket_objs;
+    get_bucket_index_objects(oid, binfo.num_shards, bucket_objs, -1);
+
+    if (!binfo.num_shards) {
+      // By default with no sharding, we use the bucket oid as itself
+      string bucket_oid = oid;
+      ObjectWriteOperation op;
+      op.remove();
+      librados::AioCompletion *completion = get_rados_handle()->aio_create_completion(NULL, NULL, NULL);
+      r = index_ctx.aio_operate(bucket_oid, completion, &op);
+      completion->release();
+      if (r < 0)
+        return r;
+    } else {
+      for (uint32_t i = 0; i < binfo.num_shards; ++i) {
+        string bucket_oid = bucket_objs[i];
+        ObjectWriteOperation op;
+        op.remove();
+        librados::AioCompletion *completion = get_rados_handle()->aio_create_completion(NULL, NULL, NULL);
+        r = index_ctx.aio_operate(bucket_oid, completion, &op);
+        completion->release();
+        if (r < 0)
+          return r;
+      }
+    }
   }
+
   return 0;
 }
 
