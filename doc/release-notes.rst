@@ -2,12 +2,69 @@
  Release Notes
 ===============
 
-v9.1.0
-======
+v9.1.0 Infernalis release candidate
+===================================
 
 This is the first Infernalis release candidate.  There have been some
 major changes since hammer, and the upgrade process is non-trivial.
 Please read carefully.
+
+Known issues
+------------
+
+* librbd and librados ABI compatibility is broken.  Be careful
+  installing this RC on client machines (e.g., those running qemu).
+* rgw: the get location API has a known bug
+
+
+Major Changes from Hammer
+-------------------------
+
+* *General*:
+  * Ceph daemons are now managed via systemd (with the exception of
+    Ubuntu Trusty, which still uses upstart).
+  * Ceph daemons run as 'ceph' user instead root.
+  * On Red Hat distros, there is also an SELinux policy.
+* *RADOS*:
+  * The RADOS cache tier can now proxy write operations to the base
+    tier, allowing writes to be handled without forcing migration of
+    an object into the cache.
+  * The SHEC erasure coding support is no longer flagged as
+    experimental. SHEC trades some additional storage space for faster
+    repair.
+  * There is now a unified queue (and thus prioritization) of client
+    IO, recovery, scrubbing, and snapshot trimming.
+  * There have been many improvements to low-level repair tooling
+    (ceph-objectstore-tool).
+  * The internal ObjectStore API has been significantly cleaned up in order
+    to faciliate new storage backends like NewStore.
+* *RGW*:
+  * The Swift API now supports object expiration.
+  * There are many Swift API compatibility improvements.
+* *RBD*:
+  * The ``rbd du`` command shows actual usage (quickly, when
+    object-map is enabled).
+  * The object-map feature has seen many stability improvements.
+  * Object-map and exclusive-lock features can be enabled or disabled
+    dynamically.
+  * You can now store user metadata and set persistent librbd options
+    associated with individual images.
+  * The new deep-flatten features allows flattening of a clone and all
+    of its snapshots.  (Previously snapshots could not be flattened.)
+  * The export-diff command command is now faster (it uses aio).  There is also
+    a new fast-diff feature.
+  * The --size argument can be specified with a suffix for units
+    (e.g., ``--size 64G``).
+  * There is a new ``rbd status`` command that, for now, shows who has
+    the image open/mapped.
+* *CephFS*:
+  * You can now rename snapshots.
+  * There have been ongoing improvements around administration, diagnostics,
+    and the check and repair tools.
+  * The caching and revocation of client cache state due to unused
+    inodes has been dramatically improved.
+  * The ceph-fuse client behaves better on 32-bit hosts.
+
 
 Distro compatibility
 --------------------
