@@ -43,3 +43,11 @@ function init_ceph() {
     git_submodules || return 1
     install_deps || return 1
 }
+
+function flavor2configure() {
+    local flavor=$1
+
+    if test $flavor = notcmalloc ; then
+        echo --without-tcmalloc --without-cryptopp
+    fi
+}
