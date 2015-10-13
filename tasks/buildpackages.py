@@ -196,6 +196,7 @@ def task(ctx, config):
                    " CEPH_SHA1=" + sha1 +
                    " CEPH_TAG=" + (tag or '') +
                    " CEPH_BRANCH=" + (branch or '') +
+                   " CEPH_FLAVOR=" + gitbuilder.flavor +
                    " GITBUILDER_URL=" + url +
                    " BUILD_FLAVOR=" + build_flavor +
                    " HTTP_FLAVOR=" + http_flavor +
