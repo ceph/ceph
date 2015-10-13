@@ -760,7 +760,13 @@ def main(argv):
 
     os.unlink(OTHERFILE)
     cmd = (CFSD_PREFIX + "--op import --file {FOO}").format(osd=ONEOSD, FOO=OTHERFILE)
-    ERRORS += test_failure(cmd, "open: No such file or directory")
+    ERRORS += test_failure(cmd, "file: {FOO}: No such file or directory".format(FOO=OTHERFILE))
+
+    cmd = "./ceph-objectstore-tool --data-path BAD_DATA_PATH --journal-path " + OSDDIR + "/{osd}.journal --op list".format(osd=ONEOSD)
+    ERRORS += test_failure(cmd, "data-path: BAD_DATA_PATH: No such file or directory")
+
+    cmd = "./ceph-objectstore-tool --journal-path BAD_JOURNAL_PATH --op dump-journal"
+    ERRORS += test_failure(cmd, "journal-path: BAD_JOURNAL_PATH: (2) No such file or directory")
 
     # On import can't use stdin from a terminal
     cmd = (CFSD_PREFIX + "--op import --pgid {pg}").format(osd=ONEOSD, pg=ONEPG)
