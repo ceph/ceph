@@ -251,10 +251,17 @@ int TestIoCtxImpl::watch(const std::string& o, uint64_t *handle,
                                             ctx2);
 }
 
+int TestIoCtxImpl::execute_operation(const std::string& oid,
+                                     const Operation &operation) {
+  TestRadosClient::Transaction transaction(m_client, oid);
+  return operation(this, oid);
+}
+
 int TestIoCtxImpl::execute_aio_operations(const std::string& oid,
                                           TestObjectOperationImpl *ops,
                                           bufferlist *pbl,
                                           const SnapContext &snapc) {
+  TestRadosClient::Transaction transaction(m_client, oid);
   int ret = 0;
   for (ObjectOperations::iterator it = ops->ops.begin();
        it != ops->ops.end(); ++it) {

@@ -846,17 +846,20 @@ class OmapIterator(object):
         Get the next key-value pair in the object
         :returns: next rados.OmapItem
         """
-        key = c_char_p()
-        value = c_char_p()
-        lens  = c_int()
-        run_in_thread(self.ioctx.librados.rados_omap_get_next,
-                      (self.ctx, pointer(key), pointer(value),
-                       pointer(lens)))
-        if key.value is None and value.value is None:
+        key_ = c_char_p(0)
+        val_ = c_char_p(0)
+        len_ = c_int(0)
+        ret = run_in_thread(self.ioctx.librados.rados_omap_get_next,
+                      (self.ctx, byref(key_), byref(val_), byref(len_)))
+        if (ret != 0):
+            raise make_ex(ret, "error iterating over the omap")
+        if key_.value is None:
             raise StopIteration()
-        if lens.value:
-            value.value = value.value[0:lens.value]
-        return (key.value, value.value)
+        key = ctypes.string_at(key_)
+        val = None
+        if val_.value is not None:
+            val = ctypes.string_at(val_, len_)
+        return (key, val)
 
     def __del__(self):
         run_in_thread(self.ioctx.librados.rados_omap_get_end, (self.ctx,))
@@ -1997,7 +2000,7 @@ returned %d, but should return zero on success." % (self.name, ret))
         :para start_after: list keys starting after start_after
         :type start_after: str
         :para filter_prefix: list only keys beginning with filter_prefix
-        :type filter_prefix: int
+        :type filter_prefix: str
         :para max_return: list no more than max_return key/value pairs
         :type max_return: int
         :returns: an iterator over the the requested omap values, return value from this action

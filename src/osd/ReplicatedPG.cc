@@ -2005,6 +2005,8 @@ bool ReplicatedPG::maybe_handle_cache(OpRequestRef op,
   if (pool.info.cache_mode == pg_pool_t::CACHEMODE_NONE)
     return false;
 
+  must_promote = must_promote || op->need_promote();
+
   if (obc)
     dout(25) << __func__ << " " << obc->obs.oi << " "
 	     << (obc->obs.exists ? "exists" : "DNE")
@@ -2039,11 +2041,6 @@ bool ReplicatedPG::maybe_handle_cache(OpRequestRef op,
   MOSDOp *m = static_cast<MOSDOp*>(op->get_req());
   const object_locator_t& oloc = m->get_object_locator();
 
-  if (must_promote || op->need_promote()) {
-    promote_object(obc, missing_oid, oloc, op);
-    return true;
-  }
-
   if (op->need_skip_handle_cache()) {
     return false;
   }
@@ -2059,7 +2056,8 @@ bool ReplicatedPG::maybe_handle_cache(OpRequestRef op,
   case pg_pool_t::CACHEMODE_WRITEBACK:
     if (agent_state &&
 	agent_state->evict_mode == TierAgentState::EVICT_MODE_FULL) {
-      if (!op->may_write() && !op->may_cache() && !write_ordered) {
+      if (!op->may_write() && !op->may_cache() &&
+	  !write_ordered && !must_promote) {
 	if (can_proxy_read) {
 	  dout(20) << __func__ << " cache pool full, proxying read" << dendl;
 	  do_proxy_read(op);
@@ -2078,7 +2076,7 @@ bool ReplicatedPG::maybe_handle_cache(OpRequestRef op,
       promote_object(obc, missing_oid, oloc, op);
       return true;
     } else if (op->may_write() || op->may_cache()) {
-      if (can_proxy_write) {
+      if (can_proxy_write && !must_promote) {
         do_proxy_write(op, missing_oid);
       } else {
 	// promote if can't proxy the write
@@ -2093,14 +2091,17 @@ bool ReplicatedPG::maybe_handle_cache(OpRequestRef op,
 		      OpRequestRef());
       }
     } else {
-      if (can_proxy_read)
+      bool did_proxy_read = false;
+      if (can_proxy_read && !must_promote) {
         do_proxy_read(op);
-      else
+	did_proxy_read = true;
+      } else {
         promote_op = op;   // for non-proxy case promote_object needs this
+      }
 
       // Avoid duplicate promotion
       if (obc.get() && obc->is_blocked()) {
-	if (!can_proxy_read) {
+	if (!did_proxy_read) {
 	  wait_for_blocked_object(obc->obs.oi.soid, op);
 	}
         return true;
@@ -2113,7 +2114,7 @@ bool ReplicatedPG::maybe_handle_cache(OpRequestRef op,
                                  pool.info.min_read_recency_for_promote,
                                  promote_op);
       }
-      if (!promoted && !can_proxy_read) {
+      if (!promoted && !did_proxy_read) {
 	// redirect the op if it's not proxied and not promoting
 	do_cache_redirect(op);
       }
