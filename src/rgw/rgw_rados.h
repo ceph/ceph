@@ -855,15 +855,13 @@ struct RGWZoneParams : RGWSystemMetaObj {
   rgw_bucket user_swift_pool;
   rgw_bucket user_uid_pool;
 
-  bool is_master;
-
   RGWAccessKey system_key;
 
   map<string, RGWZonePlacementInfo> placement_pools;
 
-  RGWZoneParams() : is_master(false) {}
-  RGWZoneParams(const string& name, bool _is_master = false) : RGWSystemMetaObj(name), is_master(_is_master) {}
-  RGWZoneParams(const string& id, const string& name) : RGWSystemMetaObj(id, name), is_master(false) {}
+  RGWZoneParams() : RGWSystemMetaObj() {}
+  RGWZoneParams(const string& name) : RGWSystemMetaObj(name){}
+  RGWZoneParams(const string& id, const string& name) : RGWSystemMetaObj(id, name) {}
 
   const string& get_pool_name(CephContext *cct);
   const string& get_default_oid(bool old_format = false);
@@ -1101,7 +1099,7 @@ struct RGWZoneGroup : public RGWSystemMetaObj {
 
   int create_default(bool old_format = false);
   int equals(const string& other_zonegroup) const;
-  int add_zone(const RGWZoneParams& zone_params);
+  int add_zone(const RGWZoneParams& zone_params, bool is_master);
   int remove_zone(const RGWZoneParams& zone_params);
 
   const string& get_pool_name(CephContext *cct);
