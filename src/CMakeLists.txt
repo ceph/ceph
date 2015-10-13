@@ -1012,3 +1012,24 @@ if(${WITH_RADOSGW})
     curl expat global fcgi resolv ${TCMALLOC_LIBS})
   install(TARGETS radosgw-object-expirer DESTINATION bin)
 endif(${WITH_RADOSGW})
+
+# Everything you need to spin up a cluster with vstart.sh
+add_custom_target(vstart DEPENDS
+    ceph-osd
+    ceph-mon
+    ceph-mds
+    ceph-authtool
+    ceph-conf
+    monmaptool
+    crushtool)
+
+# Everything you need to run CephFS tests
+add_custom_target(cephfs_testing DEPENDS
+    vstart
+    rados
+    ceph-fuse
+    ceph-dencoder
+    cephfs-journal-tool
+    cephfs-data-scan
+    cephfs-table-tool)
+
