@@ -2751,7 +2751,7 @@ next:
         cerr << "ERROR: lists_keys_next(): " << cpp_strerror(-ret) << std::endl;
         return -ret;
       }
-      if (ret == -ENOENT){
+      if (ret == -ENOENT) {
         ret = 0;
         break;
       }
