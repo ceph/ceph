@@ -32,8 +32,7 @@ sudo yum install -y git
 
 source $(dirname $0)/common.sh
 
-get_ceph $git_ceph_url $sha1
-install_deps
+init_ceph $git_ceph_url $sha1
 
 #id=$(lsb_release -s -i | tr A-Z a-z)
 #major=$(lsb_release -s -r | sed -s "s;\..*;;g")

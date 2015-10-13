@@ -32,8 +32,7 @@ sudo apt-get install -y git
 
 source $(dirname $0)/common.sh
 
-get_ceph $git_ceph_url $sha1
-install_deps
+init_ceph $git_ceph_url $sha1
 
 #codename=$(lsb_release -sc)
 releasedir=$base/$(lsb_release -si)/WORKDIR
