@@ -163,17 +163,21 @@ void Objecter::handle_conf_change(const struct md_config_t *conf,
 				  const std::set <std::string> &changed)
 {
   if (changed.count("crush_location")) {
-    crush_location.clear();
-    vector<string> lvec;
-    get_str_vec(cct->_conf->crush_location, ";, \t", lvec);
-    int r = CrushWrapper::parse_loc_multimap(lvec, &crush_location);
-    if (r < 0) {
-      lderr(cct) << "warning: crush_location '" << cct->_conf->crush_location
-		 << "' does not parse" << dendl;
-    }
+    update_crush_location();
   }
 }
 
+void Objecter::update_crush_location()
+{
+  crush_location.clear();
+  vector<string> lvec;
+  get_str_vec(cct->_conf->crush_location, ";, \t", lvec);
+  int r = CrushWrapper::parse_loc_multimap(lvec, &crush_location);
+  if (r < 0) {
+    lderr(cct) << "warning: crush_location '" << cct->_conf->crush_location
+               << "' does not parse" << dendl;
+  }
+}
 
 // messages ------------------------------
 
@@ -288,6 +292,7 @@ void Objecter::init()
   timer.init();
   timer_lock.Unlock();
 
+  update_crush_location();
   cct->_conf->add_observer(this);
 
   initialized.set(1);
