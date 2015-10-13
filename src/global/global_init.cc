@@ -34,10 +34,6 @@
 
 #include <errno.h>
 #include <deque>
-#ifdef WITH_LTTNG
-#include <lttng/ust.h>
-#endif
-
 
 #define dout_subsys ceph_subsys_
 
@@ -288,11 +284,6 @@ void global_init_daemonize(CephContext *cct, int flags)
   if (global_init_prefork(cct, flags) < 0)
     return;
 
-#ifdef WITH_LTTNG
-  sigset_t sigset;
-  ust_before_fork(&sigset);
-#endif
-
   int ret = daemon(1, 1);
   if (ret) {
     ret = errno;
@@ -301,9 +292,6 @@ void global_init_daemonize(CephContext *cct, int flags)
     exit(1);
   }
 
-#ifdef WITH_LTTNG
-  ust_after_fork_child(&sigset);
-#endif
   global_init_postfork_start(cct);
   global_init_postfork_finish(cct, flags);
 }

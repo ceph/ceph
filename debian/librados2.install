@@ -1,2 +1,2 @@
-
 usr/lib/librados.so.*
+usr/lib/librados_tp.so.*
