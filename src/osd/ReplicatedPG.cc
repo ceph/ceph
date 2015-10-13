@@ -453,6 +453,16 @@ void ReplicatedPG::wait_for_degraded_object(const hobject_t& soid, OpRequestRef 
   op->mark_delayed("waiting for degraded object");
 }
 
+void ReplicatedPG::block_write_on_full_cache(
+  const hobject_t& _oid, OpRequestRef op)
+{
+  const hobject_t oid = _oid.get_head();
+  dout(20) << __func__ << ": blocking object " << oid
+	   << " on full cache" << dendl;
+  objects_blocked_on_cache_full.insert(oid);
+  waiting_for_cache_not_full.push_back(op);
+}
+
 void ReplicatedPG::block_write_on_snap_rollback(
   const hobject_t& oid, ObjectContextRef obc, OpRequestRef op)
 {
@@ -1566,6 +1576,10 @@ void ReplicatedPG::do_op(OpRequestRef& op)
     wait_for_blocked_object(
       blocked_snap_promote_iter->second->obs.oi.soid,
       op);
+    return;
+  }
+  if (write_ordered && objects_blocked_on_cache_full.count(head)) {
+    block_write_on_full_cache(head, op);
     return;
   }
 
@@ -5745,16 +5759,33 @@ int ReplicatedPG::_rollback_to(OpContext *ctx, ceph_osd_op& op)
     block_write_on_degraded_snap(missing_oid, ctx->op);
     return ret;
   }
-  if (maybe_handle_cache(ctx->op, true, rollback_to, ret, missing_oid, true)) {
-    // promoting the rollback src, presumably
-    if (!rollback_to) {
-      // the obc must be cached now for the promotion to be happening
-      rollback_to = get_object_context(missing_oid, false);
-      assert(rollback_to);
+  {
+    ObjectContextRef promote_obc;
+    switch (
+      maybe_handle_cache_detail(
+	ctx->op,
+	true,
+	rollback_to,
+	ret,
+	missing_oid,
+	true,
+	false,
+	&promote_obc)) {
+    case cache_result_t::NOOP:
+      break;
+    case cache_result_t::BLOCKED_PROMOTE:
+      assert(promote_obc);
+      block_write_on_snap_rollback(soid, promote_obc, ctx->op);
+      return -EAGAIN;
+    case cache_result_t::BLOCKED_FULL:
+      block_write_on_full_cache(soid, ctx->op);
+      return -EAGAIN;
+    default:
+      assert(0 == "must promote was set, other values are not valid");
+      return -EAGAIN;
     }
-    block_write_on_snap_rollback(soid, rollback_to, ctx->op);
-    return -EAGAIN;
   }
+
   if (ret == -ENOENT || (rollback_to && rollback_to->obs.oi.is_whiteout())) {
     // there's no snapshot here, or there's no object.
     // if there's no snapshot, we delete the object; otherwise, do nothing.
@@ -9530,6 +9561,7 @@ void ReplicatedPG::on_change(ObjectStore::Transaction *t)
     waiting_for_cache_not_full.clear();
     waiting_for_all_missing.clear();
   }
+  objects_blocked_on_cache_full.clear();
 
 
   for (list<pair<OpRequestRef, OpContext*> >::iterator i =
@@ -9585,6 +9617,7 @@ void ReplicatedPG::on_pool_change()
     dout(10) << __func__ << " requeuing full waiters (not in writeback) "
 	     << dendl;
     requeue_ops(waiting_for_cache_not_full);
+    objects_blocked_on_cache_full.clear();
   }
   hit_set_setup();
   agent_setup();
@@ -11820,6 +11853,7 @@ bool ReplicatedPG::agent_choose_mode(bool restart, OpRequestRef op)
 	requeue_op(op);
       requeue_ops(waiting_for_active);
       requeue_ops(waiting_for_cache_not_full);
+      objects_blocked_on_cache_full.clear();
       requeued = true;
     }
     if (evict_mode == TierAgentState::EVICT_MODE_SOME) {
