@@ -287,7 +287,13 @@ void Server::handle_client_session(MClientSession *m)
       if (!session->auth_caps.path_capable(claimed_root)) {
         derr << __func__ << " forbidden path claimed as mount root: "
              << claimed_root << " by " << m->get_source() << dendl;
-        session->info.client_metadata.erase("root");
+        // Tell the client we're rejecting their open
+        mds->send_message_client(new MClientSession(CEPH_SESSION_REJECT), session);
+        mds->clog->warn() << "client session with invalid root '" <<
+          claimed_root << "' denied (" << session->info.inst << ")";
+        session->clear();
+        // Drop out; don't record this session in SessionMap or journal it.
+        break;
       }
     }
 
