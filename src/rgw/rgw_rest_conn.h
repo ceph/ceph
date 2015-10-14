@@ -46,7 +46,7 @@ class RGWRESTConn
 
 public:
 
-  RGWRESTConn(CephContext *_cct, RGWRados *store, list<string>& endpoints);
+  RGWRESTConn(CephContext *_cct, RGWRados *store, const list<string>& endpoints);
   int get_url(string& endpoint);
   string get_url();
   const string& get_zonegroup() {
