@@ -184,6 +184,7 @@ void _usage()
   cerr << "   --rgw-zonegroup=<zonegroup>   zonegroup name\n";
   cerr << "   --zone=<zone>             zone name\n";
   cerr << "   --rgw-zone=<zone>         zone in which radosgw is running\n";
+  cerr << "   --endpoints=<list>        zone endpoints\n";
   cerr << "   --fix                     besides checking bucket index, will also fix it\n";
   cerr << "   --check-objects           bucket check: rebuilds bucket index according to\n";
   cerr << "                             actual objects state\n";
@@ -1344,6 +1345,7 @@ int main(int argc, char **argv)
   std::string realm_name, realm_id, realm_new_name;
   std::string zone_name, zone_id, zone_new_name;
   std::string zonegroup_name, zonegroup_id, zonegroup_new_name;
+  list<string> endpoints;
   std::string master_url;
   int is_master = false;
   int key_type = KEY_TYPE_UNDEFINED;
@@ -1655,6 +1657,9 @@ int main(int argc, char **argv)
       zone_id = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--zone-new-name", (char*)NULL)) {
       zone_new_name = val;
+    } else if (ceph_argparse_witharg(args, i, &val, "--endpoints", (char*)NULL)) {
+      list<string>::iterator iter;
+      get_str_list(val, endpoints);
     } else if (ceph_argparse_witharg(args, i, &val, "--source-zone", (char*)NULL)) {
       source_zone = val;
     } else if (strncmp(*i, "-", 1) == 0) {
@@ -2587,7 +2592,7 @@ int main(int argc, char **argv)
 	  cerr << "unable to initialize zone: " << cpp_strerror(-ret) << std::endl;
 	  return -ret;
 	}
-	ret = zonegroup.add_zone(zone, is_master);
+	ret = zonegroup.add_zone(zone, is_master, endpoints);
 	if (ret < 0) {
 	  cerr << "failed to add zone " << zone_name << " to zonegroup " << zonegroup.get_name() << ": "
 	       << cpp_strerror(-ret) << std::endl;
@@ -2662,7 +2667,7 @@ int main(int argc, char **argv)
 	    cerr << "ERROR: couldn't init realm:" << cpp_strerror(-ret) << std::endl;
 	    return ret;
 	  }
-	  ret = zonegroup.add_zone(zone, is_master);
+	  ret = zonegroup.add_zone(zone, is_master, endpoints);
 	  if (ret < 0) {
 	    cerr << "failed to add zone " << zone_name << " to zonegroup " << zonegroup.get_name()
 		 << ": " << cpp_strerror(-ret) << std::endl;
@@ -2834,7 +2839,7 @@ int main(int argc, char **argv)
 	  return -ret;
 	}
 
-	ret = zonegroup.add_zone(zone, is_master);
+	ret = zonegroup.add_zone(zone, is_master, endpoints);
 	if (ret < 0) {
 	  cerr << "failed to update zonegroup: " << cpp_strerror(-ret) << std::endl;
 	  return -ret;

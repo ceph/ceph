@@ -1102,7 +1102,7 @@ struct RGWZoneGroup : public RGWSystemMetaObj {
 
   int create_default(bool old_format = false);
   int equals(const string& other_zonegroup) const;
-  int add_zone(const RGWZoneParams& zone_params, bool is_master);
+  int add_zone(const RGWZoneParams& zone_params, bool is_master, const list<string>& endpoints);
   int remove_zone(const RGWZoneParams& zone_params);
 
   const string& get_pool_name(CephContext *cct);
