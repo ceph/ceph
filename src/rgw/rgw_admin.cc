@@ -2620,6 +2620,10 @@ int main(int argc, char **argv)
       break;
     case OPT_ZONE_CREATE:
       {
+        if (zone_name.empty()) {
+	  cerr << "zone name not provided" << std::endl;
+	  return -EINVAL;
+        }
 	int ret;
 	RGWZoneGroup zonegroup(zonegroup_id, zonegroup_name);
 	/* if the user didn't provide zonegroup info , create stand alone zone */
