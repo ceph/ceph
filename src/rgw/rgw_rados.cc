@@ -572,8 +572,16 @@ const string& RGWRealm::get_predefined_id() {
 
 int RGWRealm::create(bool exclusive)
 {
+  list<string> realms;
+  int ret = store->list_realms(realms);
+  if (ret < 0 && ret != -ENOENT) {
+    ldout(cct, 0) << "ERROR: listing realms, ret=" << ret << dendl;
+    return ret;
+  }
 
-  int ret = RGWSystemMetaObj::create(exclusive);
+  bool first_realm = realms.empty();
+
+  ret = RGWSystemMetaObj::create(exclusive);
   if (ret < 0) {
     ldout(cct, 0) << "ERROR creating new realm object " << name << ": " << cpp_strerror(-ret) << dendl;
     return ret;
@@ -589,7 +597,19 @@ int RGWRealm::create(bool exclusive)
     ldout(cct, 0) << "ERROR creating new period for realm " << name << ": " << cpp_strerror(-ret) << dendl;
     return ret;
   }
-  return set_current_period(period.get_id());
+  ret = set_current_period(period.get_id());
+  if (ret < 0) {
+    return ret;
+  }
+
+  if (first_realm) { /* this is racy, but it's fine */
+    ret = set_as_default();
+    if (ret < 0) {
+      ldout(cct, 0) << "WARNING: failed to set realm as default realm, ret=" << ret << dendl;
+    }
+  }
+
+  return 0;
 }
 
 const string& RGWRealm::get_pool_name(CephContext *cct)
