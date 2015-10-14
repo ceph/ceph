@@ -15,3 +15,10 @@ target_link_libraries(erasure_code dl)
 add_dependencies(erasure_code ${CMAKE_SOURCE_DIR}/src/ceph_ver.h)
 
 add_library(erasure_code_objs OBJECT ErasureCode.cc)
+
+add_custom_target(erasure_code_plugins DEPENDS
+    ec_isa
+    ec_lrc
+    ec_jerasure_sse3
+    ec_jerasure_sse4
+    ec_jerasure)
