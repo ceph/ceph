@@ -964,6 +964,10 @@ AC_CHECK_FUNC([fallocate],
 	[AC_DEFINE([CEPH_HAVE_FALLOCATE], [], [fallocate(2) is supported])],
 	[])
 
+# mallinfo
+AC_CHECK_FUNC([mallinfo],
+  [AC_DEFINE(HAVE_MALLINFO, 1, [Define if you have mallinfo])])
+
 # getgrouplist
 AC_CHECK_FUNCS([getgrouplist])
 
