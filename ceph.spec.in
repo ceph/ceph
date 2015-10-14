@@ -921,7 +921,7 @@ exit 0
 
 %post -n ceph-common
 %if 0%{?_with_systemd}
-systemd-tmpfiles --create
+systemd-tmpfiles --create --prefix=/run/ceph
 %endif
 
 %postun -n ceph-common
