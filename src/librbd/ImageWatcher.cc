@@ -408,6 +408,12 @@ int ImageWatcher::release_lock()
       lderr(cct) << this << " failed to flush: " << cpp_strerror(r) << dendl;
       goto err_cancel_unlock;
     }
+    r = m_image_ctx.flush_cache();
+    if (r < 0) {
+      lderr(cct) << this << " failed to flush cache: " << cpp_strerror(r)
+		 << dendl;
+      goto err_cancel_unlock;
+    }
   }
 
   m_image_ctx.owner_lock.get_write();
