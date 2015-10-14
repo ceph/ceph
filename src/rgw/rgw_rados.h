@@ -869,7 +869,7 @@ struct RGWZoneParams : RGWSystemMetaObj {
   const string& get_info_oid_prefix(bool old_format = false);
   const string& get_predefined_id();
 
-  int init(CephContext *_cct, RGWRados *_store, RGWZoneGroup& zonegroup, bool setup_obj = true,
+  int init(CephContext *_cct, RGWRados *_store, bool setup_obj = true,
 	   bool old_format = false);
   using RGWSystemMetaObj::init;
   int create_default(bool old_format = false);
