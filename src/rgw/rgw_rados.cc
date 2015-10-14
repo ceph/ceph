@@ -992,22 +992,9 @@ const string& RGWZoneParams::get_predefined_id() {
   return cct->_conf->rgw_zone;
 }
 
-void RGWZoneParams::init_id(CephContext *cct, RGWZoneGroup& zonegroup)
-{
-  name = cct->_conf->rgw_zone;
-
-  if (name.empty()) {
-    name = default_zone_name;
-  }
-
-  if (name.empty()) {
-    id = zonegroup.master_zone;
-  }
-}
-
 int RGWZoneParams::init(CephContext *cct, RGWRados *store, RGWZoneGroup& zonegroup, bool setup_obj, bool old_format)
 {
-  init_id(cct, zonegroup);
+  name = cct->_conf->rgw_zone;
 
   int ret = RGWSystemMetaObj::init(cct, store, setup_obj, old_format);
   if (ret < 0) {

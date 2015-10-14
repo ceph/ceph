@@ -302,6 +302,7 @@ enum {
   OPT_ZONE_SET,
   OPT_ZONE_LIST,
   OPT_ZONE_RENAME,
+  OPT_ZONE_DEFAULT,
   OPT_CAPS_ADD,
   OPT_CAPS_RM,
   OPT_METADATA_GET,
@@ -595,6 +596,8 @@ static int get_cmd(const char *cmd, const char *prev_cmd, const char *prev_prev_
       return OPT_ZONE_MODIFY;
     if (strcmp(cmd, "rename") == 0)
       return OPT_ZONE_RENAME;
+    if (strcmp(cmd, "default") == 0)
+      return OPT_ZONE_DEFAULT;
   } else if (strcmp(prev_cmd, "zones") == 0) {
     if (strcmp(cmd, "list") == 0)
       return OPT_ZONE_LIST;
@@ -1739,7 +1742,7 @@ int main(int argc, char **argv)
                          opt_cmd == OPT_ZONEGROUPMAP_UPDATE ||
 			 opt_cmd == OPT_ZONE_ADD || opt_cmd == OPT_ZONE_CREATE || opt_cmd == OPT_ZONE_DELETE ||
                          opt_cmd == OPT_ZONE_GET || opt_cmd == OPT_ZONE_SET || opt_cmd == OPT_ZONE_RENAME ||
-                         opt_cmd == OPT_ZONE_LIST || opt_cmd == OPT_ZONE_MODIFY ||
+                         opt_cmd == OPT_ZONE_LIST || opt_cmd == OPT_ZONE_MODIFY || opt_cmd == OPT_ZONE_DEFAULT ||
 			 opt_cmd == OPT_REALM_CREATE ||
 			 opt_cmd == OPT_PERIOD_PREPARE || opt_cmd == OPT_PERIOD_ACTIVATE ||
 			 opt_cmd == OPT_PERIOD_DELETE || opt_cmd == OPT_PERIOD_GET ||
@@ -2694,7 +2697,32 @@ int main(int argc, char **argv)
 	cout << std::endl;
       }
       break;
-   case OPT_ZONE_DELETE:
+    case OPT_ZONE_DEFAULT:
+      {
+	RGWZoneGroup zonegroup(zonegroup_id,zonegroup_name);
+	int ret = zonegroup.init(g_ceph_context, store);
+	if (ret < 0) {
+	  cerr << "WARNING: failed to initialize zonegroup " << zonegroup_name << std::endl;
+	}
+        string zone_name = g_conf->rgw_zone;
+	if (zone_id.empty() && zone_name.empty()) {
+	  cerr << "no zone name or id provided" << std::endl;
+	  return -EINVAL;
+	}
+	RGWZoneParams zone(zone_id, zone_name);
+	ret = zone.init(g_ceph_context, store, zonegroup);
+	if (ret < 0) {
+	  cerr << "unable to initialize zone: " << cpp_strerror(-ret) << std::endl;
+	  return -ret;
+	}
+	ret = zone.set_as_default();
+	if (ret < 0) {
+	  cerr << "failed to set zone as default: " << cpp_strerror(-ret) << std::endl;
+	  return -ret;
+	}
+      }
+      break;
+    case OPT_ZONE_DELETE:
       {
 	if (zonegroup_id.empty() && zonegroup_name.empty()) {
 	  cerr << "no zonegroup name or id provided" << std::endl;
@@ -2732,7 +2760,7 @@ int main(int argc, char **argv)
       break;
     case OPT_ZONE_GET:
       {
-	RGWZoneGroup zonegroup(zonegroup_id,zonegroup_name);
+	RGWZoneGroup zonegroup(zonegroup_id, zonegroup_name);
 	int ret;
 	if (!zonegroup_id.empty() || !zonegroup_name.empty()) {
 	  ret = zonegroup.init(g_ceph_context, store);
