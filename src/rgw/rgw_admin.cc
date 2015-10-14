@@ -2615,7 +2615,6 @@ int main(int argc, char **argv)
     case OPT_ZONE_CREATE:
       {
 	int ret;
-	RGWRealm realm(realm_id, realm_name);
 	RGWZoneGroup zonegroup(zonegroup_id, zonegroup_name);
 	/* if the user didn't provide zonegroup info , create stand alone zone */
 	if (!zonegroup_id.empty() || !zonegroup_name.empty()) {
@@ -2626,11 +2625,6 @@ int main(int argc, char **argv)
 	  }
 	  if (realm_id.empty() && realm_name.empty()) {
 	    realm_id = zonegroup.realm_id;
-	  }
-	  ret = realm.init(g_ceph_context, store);
-	  if (ret < 0) {
-	    cerr << "ERROR: couldn't init realm:" << cpp_strerror(-ret) << std::endl;
-	    return ret;
 	  }
 	}
 
@@ -2647,10 +2641,16 @@ int main(int argc, char **argv)
 	}
 
 	if (!zonegroup_id.empty() || !zonegroup_name.empty()) {
+	  RGWRealm realm(realm_id, realm_name);
+	  ret = realm.init(g_ceph_context, store);
+	  if (ret < 0) {
+	    cerr << "ERROR: couldn't init realm:" << cpp_strerror(-ret) << std::endl;
+	    return ret;
+	  }
 	  ret = zonegroup.add_zone(zone, is_master);
 	  if (ret < 0) {
-	    cerr << "failed to add zone " << zone_name << " to zonegroup " << zonegroup.get_name() << ": "
-		 << cpp_strerror(-ret) << std::endl;
+	    cerr << "failed to add zone " << zone_name << " to zonegroup " << zonegroup.get_name()
+		 << ": " << cpp_strerror(-ret) << std::endl;
 	    return ret;
 	  }
 
