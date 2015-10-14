@@ -18,7 +18,7 @@
 #include "FS.h"
 
 # ifndef XFS_SUPER_MAGIC
-static const __SWORD_TYPE XFS_SUPER_MAGIC(0x58465342);
+#define XFS_SUPER_MAGIC 0x58465342
 # endif
 
 class XFS : public FS {
