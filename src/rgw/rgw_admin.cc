@@ -2298,6 +2298,11 @@ int main(int argc, char **argv)
       break;
     case OPT_ZONEGROUP_MODIFY:
       {
+	if (zonegroup_id.empty() && zonegroup_name.empty()) {
+	  cerr << "no zonegroup name or id provided" << std::endl;
+	  return -EINVAL;
+	}
+
 	RGWRealm realm(realm_id, realm_name);
 	int ret = realm.init(g_ceph_context, store);
 	if (ret < 0) {
