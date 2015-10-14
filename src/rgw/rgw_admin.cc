@@ -2730,9 +2730,12 @@ int main(int argc, char **argv)
     case OPT_ZONE_GET:
       {
 	RGWZoneGroup zonegroup(zonegroup_id,zonegroup_name);
-	int ret = zonegroup.init(g_ceph_context, store);
-	if (ret < 0) {
-	  cerr << "WARNING: failed to initialize zonegroup" << std::endl;
+	int ret;
+	if (!zonegroup_id.empty() || !zonegroup_name.empty()) {
+	  ret = zonegroup.init(g_ceph_context, store);
+	  if (ret < 0) {
+	    cerr << "WARNING: failed to initialize zonegroup" << std::endl;
+	  }
 	}
 	RGWZoneParams zone;
 	ret = zone.init(g_ceph_context, store, zonegroup);
@@ -2865,9 +2868,12 @@ int main(int argc, char **argv)
     case OPT_ZONE_RENAME:
       {
 	RGWZoneGroup zonegroup(zonegroup_id,zonegroup_name);
-	int ret = zonegroup.init(g_ceph_context, store);
-	if (ret < 0) {
-	  cerr << "WARNING: failed to initialize zonegroup " << zonegroup_name << std::endl;
+	int ret;
+	if (!zonegroup_id.empty() || !zonegroup_name.empty()) {
+	  ret = zonegroup.init(g_ceph_context, store);
+	  if (ret < 0) {
+	    cerr << "WARNING: failed to initialize zonegroup " << zonegroup_name << std::endl;
+	  }
 	}
 	if (zone_new_name.empty()) {
 	  cerr << " missing zone new name" << std::endl;
