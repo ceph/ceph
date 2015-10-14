@@ -1349,6 +1349,7 @@ int main(int argc, char **argv)
   list<string> endpoints;
   std::string master_url;
   int is_master = false;
+  bool is_master_set = false;
   int key_type = KEY_TYPE_UNDEFINED;
   rgw_bucket bucket;
   uint32_t perm_mask = 0;
@@ -1622,6 +1623,7 @@ int main(int argc, char **argv)
     } else if (ceph_argparse_witharg(args, i, &val, "--parent", (char*)NULL)) {
       parent_period = val;
     } else if (ceph_argparse_binary_flag(args, i, &is_master, NULL, "--master", (char*)NULL)) {
+      is_master_set = true;
     } else if (ceph_argparse_witharg(args, i, &val, "--master-url", (char*)NULL)) {
       master_url = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--master-zonegroup", (char*)NULL)) {
@@ -2297,9 +2299,24 @@ int main(int argc, char **argv)
 	  return -ret;
 	}
 
-	/* update zonegroup only if there is a change */
-	if (is_master != zonegroup.is_master_zonegroup()) {
+        bool need_update = false;
+
+        if (!master_zone.empty()) {
+          zonegroup.master_zone = master_zone;
+          need_update = true;
+        }
+
+	if (is_master_set) {
 	  zonegroup.update_master(is_master);
+          need_update = true;
+        }
+
+        if (!endpoints.empty()) {
+          zonegroup.endpoints = endpoints;
+          need_update = true;
+        }
+
+        if (need_update) {
 	  ret = zonegroup.update();
 	  if (ret < 0) {
 	    cerr << "failed to update zonegroup: " << cpp_strerror(-ret) << std::endl;
