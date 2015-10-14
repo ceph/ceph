@@ -52,14 +52,14 @@ using namespace std;
 
 #if defined(__linux__)
 # ifndef BTRFS_SUPER_MAGIC
-static const __SWORD_TYPE BTRFS_SUPER_MAGIC(0x9123683E);
+#define BTRFS_SUPER_MAGIC 0x9123683E
 # endif
 # ifndef XFS_SUPER_MAGIC
-static const __SWORD_TYPE XFS_SUPER_MAGIC(0x58465342);
+#define XFS_SUPER_MAGIC 0x58465342
 # endif
-#ifndef ZFS_SUPER_MAGIC
-static const __SWORD_TYPE ZFS_SUPER_MAGIC(0x2fc12fc1);
-#endif
+# ifndef ZFS_SUPER_MAGIC
+#define ZFS_SUPER_MAGIC 0x2fc12fc1
+# endif
 #endif
 
 
