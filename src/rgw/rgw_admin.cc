@@ -2211,6 +2211,11 @@ int main(int argc, char **argv)
       break;
     case OPT_ZONEGROUP_DEFAULT:
       {
+	if (zonegroup_id.empty() && zonegroup_name.empty()) {
+	  cerr << "no zonegroup name or id provided" << std::endl;
+	  return -EINVAL;
+	}
+
 	RGWZoneGroup zonegroup(zonegroup_id, zonegroup_name);
 	int ret = zonegroup.init(g_ceph_context, store);
 	if (ret < 0) {
