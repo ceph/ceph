@@ -105,6 +105,7 @@ void _usage()
   cerr << "  zone add                   add a zone to a zonegroup\n";
   cerr << "  zone create                create a new zone\n";
   cerr << "  zone get                   show zone cluster params\n";
+  cerr << "  zone modify                set/clear zone master status\n";
   cerr << "  zone set                   set zone cluster params (requires infile)\n";
   cerr << "  zone list                  list all zones set on this cluster\n";
   cerr << "  pool add                   add an existing pool for data placement\n";
@@ -297,6 +298,7 @@ enum {
   OPT_ZONE_CREATE,  
   OPT_ZONE_DELETE,
   OPT_ZONE_GET,
+  OPT_ZONE_MODIFY,
   OPT_ZONE_SET,
   OPT_ZONE_LIST,
   OPT_ZONE_RENAME,
@@ -589,6 +591,8 @@ static int get_cmd(const char *cmd, const char *prev_cmd, const char *prev_prev_
       return OPT_ZONE_SET;
     if (strcmp(cmd, "list") == 0)
       return OPT_ZONE_LIST;
+    if (strcmp(cmd, "modify") == 0)
+      return OPT_ZONE_MODIFY;
     if (strcmp(cmd, "rename") == 0)
       return OPT_ZONE_RENAME;
   } else if (strcmp(prev_cmd, "zones") == 0) {
@@ -1735,7 +1739,8 @@ int main(int argc, char **argv)
                          opt_cmd == OPT_ZONEGROUPMAP_UPDATE ||
 			 opt_cmd == OPT_ZONE_ADD || opt_cmd == OPT_ZONE_CREATE || opt_cmd == OPT_ZONE_DELETE ||
                          opt_cmd == OPT_ZONE_GET || opt_cmd == OPT_ZONE_SET || opt_cmd == OPT_ZONE_RENAME ||
-                         opt_cmd == OPT_ZONE_LIST || opt_cmd == OPT_REALM_CREATE ||
+                         opt_cmd == OPT_ZONE_LIST || opt_cmd == OPT_ZONE_MODIFY ||
+			 opt_cmd == OPT_REALM_CREATE ||
 			 opt_cmd == OPT_PERIOD_PREPARE || opt_cmd == OPT_PERIOD_ACTIVATE ||
 			 opt_cmd == OPT_PERIOD_DELETE || opt_cmd == OPT_PERIOD_GET ||
 			 opt_cmd == OPT_PERIOD_GET_CURRENT || opt_cmd == OPT_PERIOD_LIST ||
@@ -2771,6 +2776,60 @@ int main(int argc, char **argv)
 	formatter->close_section();
 	formatter->flush(cout);
 	cout << std::endl;
+      }
+      break;
+    case OPT_ZONE_MODIFY:
+      {
+	RGWZoneParams zone(zone_id, zone_name);
+	int ret = zone.init(g_ceph_context, store);
+        if (ret < 0) {
+	  cerr << "failed to init zone: " << cpp_strerror(-ret) << std::endl;
+	  return -ret;
+	}
+
+	RGWRealm realm(realm_id, realm_name);
+	ret = realm.init(g_ceph_context, store);
+	if (ret < 0) {
+	  cerr << "failed to init realm: " << cpp_strerror(-ret) << std::endl;
+	  return -ret;
+	}
+
+	RGWZoneGroup zonegroup(zonegroup_id, zonegroup_name);
+	ret = zonegroup.init(g_ceph_context, store);
+	if (ret < 0) {
+	  cerr << "failed to init zonegroup: " << cpp_strerror(-ret) << std::endl;
+	  return -ret;
+	}
+
+	ret = zonegroup.add_zone(zone, is_master);
+	if (ret < 0) {
+	  cerr << "failed to update zonegroup: " << cpp_strerror(-ret) << std::endl;
+	  return -ret;
+	}
+
+	ret = zonegroup.update();
+	if (ret < 0) {
+	  cerr << "failed to update zonegroup: " << cpp_strerror(-ret) << std::endl;
+	  return -ret;
+	}
+	
+	RGWZoneGroupMap zonegroup_map;
+	ret = zonegroup_map.read(g_ceph_context, store);
+	if (ret < 0 && ret != -ENOENT) {
+	  cerr << "ERROR: couldn't read zonegroup_map: " << cpp_strerror(-ret) << std::endl;
+	  return ret;
+	}
+
+	ret = zonegroup_map.update(g_ceph_context, store, realm, zonegroup);
+	if (ret < 0) {
+	  cerr << "failed to update master zonegroup: " << cpp_strerror(-ret) << std::endl;
+	  return -ret;
+	}
+	ret = zonegroup_map.store(g_ceph_context, store);
+	if (ret < 0) {
+	  cerr << "failed to store zonegroup_map: " << cpp_strerror(-ret) << std::endl;
+	  return -ret;
+	}
       }
       break;
     case OPT_ZONE_RENAME:
