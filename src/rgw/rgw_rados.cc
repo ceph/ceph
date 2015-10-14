@@ -145,7 +145,7 @@ int RGWZoneGroup::create_default(bool old_format)
 
   RGWZoneParams zone_params(default_zone_name);
 
-  int r = zone_params.init(cct, store, *this, false);
+  int r = zone_params.init(cct, store, false);
   if (r < 0) {
     derr << "create_default: error initializing zone params: " << cpp_strerror(-r) << dendl;
     return r;
@@ -992,7 +992,7 @@ const string& RGWZoneParams::get_predefined_id() {
   return cct->_conf->rgw_zone;
 }
 
-int RGWZoneParams::init(CephContext *cct, RGWRados *store, RGWZoneGroup& zonegroup, bool setup_obj, bool old_format)
+int RGWZoneParams::init(CephContext *cct, RGWRados *store, bool setup_obj, bool old_format)
 {
   name = cct->_conf->rgw_zone;
 
@@ -2914,7 +2914,7 @@ int RGWRados::init_complete()
     return ret;
   }
 
-  ret = zone.init(cct, this, zonegroup);
+  ret = zone.init(cct, this);
   if (ret < 0 && ret != -ENOENT) {
     lderr(cct) << "failed reading zone info: ret "<< ret << " " << cpp_strerror(-ret) << dendl;
     return ret;

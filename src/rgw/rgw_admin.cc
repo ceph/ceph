@@ -2573,7 +2573,7 @@ int main(int argc, char **argv)
 	  return ret;
 	}
 	RGWZoneParams zone(zone_id, zone_name);
-	ret = zone.init(g_ceph_context, store, zonegroup);
+	ret = zone.init(g_ceph_context, store);
 	if (ret < 0) {
 	  cerr << "unable to initialize zone: " << cpp_strerror(-ret) << std::endl;
 	  return -ret;
@@ -2699,7 +2699,7 @@ int main(int argc, char **argv)
 	  return -EINVAL;
 	}
 	RGWZoneParams zone(zone_id, zone_name);
-	ret = zone.init(g_ceph_context, store, zonegroup);
+	ret = zone.init(g_ceph_context, store);
 	if (ret < 0) {
 	  cerr << "unable to initialize zone: " << cpp_strerror(-ret) << std::endl;
 	  return -ret;
@@ -2713,32 +2713,38 @@ int main(int argc, char **argv)
       break;
     case OPT_ZONE_DELETE:
       {
-	if (zonegroup_id.empty() && zonegroup_name.empty()) {
-	  cerr << "no zonegroup name or id provided" << std::endl;
-	  return -EINVAL;
-	}
-
-	RGWZoneGroup zonegroup(zonegroup_id,zonegroup_name);
-	int ret = zonegroup.init(g_ceph_context, store);
-	if (ret < 0) {
-	  cerr << "WARNING: failed to initialize zonegroup " << zonegroup_name << std::endl;
-	}
 	if (zone_id.empty() && zone_name.empty()) {
 	  cerr << "no zone name or id provided" << std::endl;
 	  return -EINVAL;
 	}
 	RGWZoneParams zone(zone_id, zone_name);
-	ret = zone.init(g_ceph_context, store, zonegroup);
+	int ret = zone.init(g_ceph_context, store);
 	if (ret < 0) {
 	  cerr << "unable to initialize zone: " << cpp_strerror(-ret) << std::endl;
 	  return -ret;
 	}
-	ret = zonegroup.remove_zone(zone);
-	if (ret < 0 && ret != -ENOENT) {
-	  cerr << "failed to remove zone " << zone_name << " from zonegroup " << zonegroup.get_name() << ": "
-	       << cpp_strerror(-ret) << std::endl;
-	  return ret;
+
+        list<string> zonegroups;
+	ret = store->list_zonegroups(zonegroups);
+	if (ret < 0) {
+	  cerr << "failed to list zonegroups: " << cpp_strerror(-ret) << std::endl;
+	  return -ret;
 	}
+
+        for (list<string>::iterator iter = zonegroups.begin(); iter != zonegroups.end(); ++iter) {
+          RGWZoneGroup zonegroup(string(), *iter);
+          int ret = zonegroup.init(g_ceph_context, store);
+          if (ret < 0) {
+            cerr << "WARNING: failed to initialize zonegroup " << zonegroup_name << std::endl;
+            continue;
+          }
+          ret = zonegroup.remove_zone(zone);
+          if (ret < 0 && ret != -ENOENT) {
+            cerr << "failed to remove zone " << zone_name << " from zonegroup " << zonegroup.get_name() << ": "
+              << cpp_strerror(-ret) << std::endl;
+          }
+        }
+
 	ret = zone.delete_obj();
 	if (ret < 0) {
 	  cerr << "failed to create zone " << zone_name << ": " << cpp_strerror(-ret) << std::endl;
@@ -2757,7 +2763,7 @@ int main(int argc, char **argv)
 	  }
 	}
 	RGWZoneParams zone;
-	ret = zone.init(g_ceph_context, store, zonegroup);
+	ret = zone.init(g_ceph_context, store);
 	if (ret < 0) {
 	  cerr << "unable to initialize zone: " << cpp_strerror(-ret) << std::endl;
 	  return -ret;
@@ -2903,7 +2909,7 @@ int main(int argc, char **argv)
 	  return -EINVAL;
 	}
 	RGWZoneParams zone(zone_id,zone_name);
-	ret = zone.init(g_ceph_context, store, zonegroup);
+	ret = zone.init(g_ceph_context, store);
 	if (ret < 0) {
 	  cerr << "unable to initialize zone: " << cpp_strerror(-ret) << std::endl;
 	  return -ret;
