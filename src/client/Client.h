@@ -71,6 +71,7 @@ class MClientCapRelease;
 struct DirStat;
 struct LeaseStat;
 struct InodeStat;
+class UserGroups;
 
 class Filer;
 class Objecter;
@@ -139,8 +140,9 @@ typedef void (*client_dentry_callback_t)(void *handle, vinodeno_t dirino,
 					 vinodeno_t ino, string& name);
 typedef int (*client_remount_callback_t)(void *handle);
 
-typedef int (*client_getgroups_callback_t)(void *handle, uid_t uid, gid_t **sgids);
-typedef void(*client_switch_interrupt_callback_t)(void *req, void *data);
+typedef int (*client_getgroups_callback_t)(void *handle, gid_t **sgids);
+typedef void(*client_switch_interrupt_callback_t)(void *handle, void *data);
+typedef mode_t (*client_umask_callback_t)(void *handle);
 
 struct client_callback_args {
   void *handle;
@@ -149,6 +151,7 @@ struct client_callback_args {
   client_switch_interrupt_callback_t switch_intr_cb;
   client_remount_callback_t remount_cb;
   client_getgroups_callback_t getgroups_cb;
+  client_umask_callback_t umask_cb;
 };
 
 // ========================================================
@@ -245,6 +248,7 @@ class Client : public Dispatcher, public md_config_obs_t {
   client_ino_callback_t ino_invalidate_cb;
   client_dentry_callback_t dentry_invalidate_cb;
   client_getgroups_callback_t getgroups_cb;
+  client_umask_callback_t umask_cb;
   bool can_invalidate_dentries;
   bool require_remount;
 
@@ -455,6 +459,7 @@ protected:
   friend class C_Client_SyncCommit; // Asserts on client_lock
   friend class C_Client_RequestInterrupt;
   friend class C_Client_Remount;
+  friend class Client_UserGroups;
   friend void intrusive_ptr_release(Inode *in);
 
   //int get_cache_size() { return lru.lru_get_size(); }
@@ -709,23 +714,26 @@ private:
   int _rmdir(Inode *dir, const char *name, int uid=-1, int gid=-1);
   int _symlink(Inode *dir, const char *name, const char *target, int uid=-1, int gid=-1, InodeRef *inp = 0);
   int _mknod(Inode *dir, const char *name, mode_t mode, dev_t rdev, int uid=-1, int gid=-1, InodeRef *inp = 0);
+  int _do_setattr(Inode *in, struct stat *attr, int mask, int uid, int gid, InodeRef *inp);
   int _setattr(Inode *in, struct stat *attr, int mask, int uid=-1, int gid=-1, InodeRef *inp = 0);
-  int _setattr(InodeRef &in, struct stat *attr, int mask, int uid=-1, int gid=-1, InodeRef *inp = 0) {
-    return _setattr(in.get(), attr, mask, uid, gid, inp);
-  }
+  int _setattr(InodeRef &in, struct stat *attr, int mask);
   int _getattr(Inode *in, int mask, int uid=-1, int gid=-1, bool force=false);
   int _getattr(InodeRef &in, int mask, int uid=-1, int gid=-1, bool force=false) {
     return _getattr(in.get(), mask, uid, gid, force);
   }
   int _readlink(Inode *in, char *buf, size_t size);
   int _getxattr(Inode *in, const char *name, void *value, size_t len, int uid=-1, int gid=-1);
+  int _getxattr(InodeRef &in, const char *name, void *value, size_t len);
   int _listxattr(Inode *in, char *names, size_t len, int uid=-1, int gid=-1);
+  int _do_setxattr(Inode *in, const char *name, const void *value, size_t len, int flags, int uid, int gid);
   int _setxattr(Inode *in, const char *name, const void *value, size_t len, int flags, int uid=-1, int gid=-1);
+  int _setxattr(InodeRef &in, const char *name, const void *value, size_t len, int flags);
   int _removexattr(Inode *in, const char *nm, int uid=-1, int gid=-1);
-  int _open(Inode *in, int flags, mode_t mode, Fh **fhp, int uid=-1, int gid=-1);
+  int _removexattr(InodeRef &in, const char *nm);
+  int _open(Inode *in, int flags, mode_t mode, Fh **fhp, int uid, int gid);
   int _create(Inode *in, const char *name, int flags, mode_t mode, InodeRef *inp, Fh **fhp,
               int stripe_unit, int stripe_count, int object_size, const char *data_pool,
-	      bool *created = NULL, int uid=-1, int gid=-1);
+	      bool *created, int uid, int gid);
 
   loff_t _lseek(Fh *fh, loff_t offset, int whence);
   int _read(Fh *fh, int64_t offset, uint64_t size, bufferlist *bl);
@@ -738,13 +746,27 @@ private:
   int _sync_fs();
   int _fallocate(Fh *fh, int mode, int64_t offset, int64_t length);
   int _getlk(Fh *fh, struct flock *fl, uint64_t owner);
-  int _setlk(Fh *fh, struct flock *fl, uint64_t owner, int sleep, void *fuse_req=NULL);
-  int _flock(Fh *fh, int cmd, uint64_t owner, void *fuse_req=NULL);
+  int _setlk(Fh *fh, struct flock *fl, uint64_t owner, int sleep);
+  int _flock(Fh *fh, int cmd, uint64_t owner);
 
   int get_or_create(Inode *dir, const char* name,
 		    Dentry **pdn, bool expect_null=false);
 
-  int check_permissions(Inode *in, int flags, int uid, int gid);
+  enum {
+    MAY_EXEC = 1,
+    MAY_WRITE = 2,
+    MAY_READ = 4,
+  };
+
+  int inode_permissions(Inode *in, uid_t uid, UserGroups& groups, unsigned want);
+  int xattr_permission(Inode *in, const char *name, unsigned want, int uid=-1, int gid=-1);
+  int inode_change_ok(Inode *in, struct stat *st, int mask, int uid=-1, int gid=-1);
+  int may_open(Inode *in, int flags, int uid=-1, int gid=-1);
+  int may_lookup(Inode *dir, int uid=-1, int gid=-1);
+  int may_create(Inode *dir, int uid=-1, int gid=-1);
+  int may_delete(Inode *dir, const char *name, int uid=-1, int gid=-1);
+  int may_linkat(Inode *in, int uid=-1, int gid=-1);
+  int _getgrouplist(gid_t **sgids, int uid=-1, int gid=-1);
 
   int check_data_pool_exist(string name, string value, const OSDMap *osdmap);
 
@@ -800,11 +822,15 @@ private:
   }
 
   int _do_filelock(Inode *in, Fh *fh, int lock_type, int op, int sleep,
-		   struct flock *fl, uint64_t owner, void *fuse_req=NULL);
+		   struct flock *fl, uint64_t owner);
   int _interrupt_filelock(MetaRequest *req);
   void _encode_filelocks(Inode *in, bufferlist& bl);
   void _release_filelocks(Fh *fh);
   void _update_lock_state(struct flock *fl, uint64_t owner, ceph_lock_state_t *lock_state);
+
+  int _posix_acl_create(Inode *dir, mode_t *mode, bufferlist& xattrs_bl, int uid, int gid);
+  int _posix_acl_chmod(Inode *in, mode_t mode, int uid, int gid);
+  int _posix_acl_permission(Inode *in, uid_t uid, UserGroups& groups, unsigned want);
 public:
   int mount(const std::string &mount_root, bool require_mds=false);
   void unmount();
@@ -865,7 +891,7 @@ public:
 
   // dirs
   int mkdir(const char *path, mode_t mode);
-  int mkdirs(const char *path, mode_t mode, int uid=-1, int gid=-1);
+  int mkdirs(const char *path, mode_t mode);
   int rmdir(const char *path);
 
   // symlinks
@@ -982,7 +1008,7 @@ public:
 		  int flags, int uid=-1, int gid=-1);
   int ll_removexattr(Inode *in, const char *name, int uid=-1, int gid=-1);
   int ll_listxattr(Inode *in, char *list, size_t size, int uid=-1, int gid=-1);
-  int ll_opendir(Inode *in, dir_result_t **dirpp, int uid = -1, int gid = -1);
+  int ll_opendir(Inode *in, int flags, dir_result_t **dirpp, int uid = -1, int gid = -1);
   int ll_releasedir(dir_result_t* dirp);
   int ll_fsyncdir(dir_result_t* dirp);
   int ll_readlink(Inode *in, char *buf, size_t bufsize, int uid = -1, int gid = -1);
@@ -1027,8 +1053,8 @@ public:
   int ll_fallocate(Fh *fh, int mode, loff_t offset, loff_t length);
   int ll_release(Fh *fh);
   int ll_getlk(Fh *fh, struct flock *fl, uint64_t owner);
-  int ll_setlk(Fh *fh, struct flock *fl, uint64_t owner, int sleep, void *fuse_req);
-  int ll_flock(Fh *fh, int cmd, uint64_t owner, void *fuse_req);
+  int ll_setlk(Fh *fh, struct flock *fl, uint64_t owner, int sleep);
+  int ll_flock(Fh *fh, int cmd, uint64_t owner);
   int ll_file_layout(Fh *fh, ceph_file_layout *layout);
   void ll_interrupt(void *d);
   int ll_get_stripe_osd(struct Inode *in, uint64_t blockno,
