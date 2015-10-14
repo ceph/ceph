@@ -764,6 +764,9 @@ protected:
 			     waiting_for_degraded_object,
 			     waiting_for_blocked_object;
 
+  set<
+    hobject_t,
+    hobject_t::BitwiseComparator> objects_blocked_on_cache_full;
   map<
     hobject_t,
     snapid_t,
