@@ -177,7 +177,7 @@ void _usage()
   cerr << "   --master-url              master url\n";
   cerr << "   --master-zonegroup=<id>   master zonegroup id\n";
   cerr << "   --master-zone=<id>        master zone id\n";
-  cerr << "   --realm=<realm>           realm name\n";
+  cerr << "   --rgw-realm=<realm>       realm name\n";
   cerr << "   --realm-id=<realm id>     realm id\n";
   cerr << "   --realm-new-name=<realm new name> realm new name\n";
   cerr << "   --rgw-zonegroup=<zonegroup>   zonegroup name\n";
@@ -1636,8 +1636,6 @@ int main(int argc, char **argv)
       remote = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--url", (char*)NULL)) {
       url = val;
-    } else if (ceph_argparse_witharg(args, i, &val, "--realm", (char*)NULL)) {
-      realm_name = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--realm-id", (char*)NULL)) {
       realm_id = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--realm-new-name", (char*)NULL)) {
@@ -1727,6 +1725,7 @@ int main(int argc, char **argv)
     return usage();
   }
 
+  realm_name = g_conf->rgw_realm;
   zone_name = g_conf->rgw_zone;
   zonegroup_name = g_conf->rgw_zonegroup;
 
@@ -1822,7 +1821,7 @@ int main(int argc, char **argv)
 	  epoch = atoi(period_epoch.c_str());
 	}
 	RGWPeriod period(period_id, epoch);
-	int ret = period.init(g_ceph_context, store);
+	int ret = period.init(g_ceph_context, store, realm_id, realm_name);
 	if (ret < 0) {
 	  cerr << "period init failed: " << cpp_strerror(-ret) << std::endl;
 	  return -ret;
@@ -1838,7 +1837,7 @@ int main(int argc, char **argv)
 	RGWRealm realm(realm_id, realm_name);
 	int ret = realm.init(g_ceph_context, store);
 	if (ret < 0 ) {
-	  cerr << "Error initing realm " << cpp_strerror(-ret) << std::endl;
+	  cerr << "Error initializing realm " << cpp_strerror(-ret) << std::endl;
 	  return ret;
 	}
 	string current_id = realm.get_current_period();
@@ -1861,7 +1860,7 @@ int main(int argc, char **argv)
 	RGWRealm realm(realm_id, realm_name);
 	int ret = realm.init(g_ceph_context, store);
 	if (ret < 0 ) {
-	  cerr << "Error initing realm " << cpp_strerror(-ret) << std::endl;
+	  cerr << "Error initializing realm " << cpp_strerror(-ret) << std::endl;
 	  return ret;
 	}
 	/* read latest sync data */
