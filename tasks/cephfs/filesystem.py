@@ -205,12 +205,11 @@ class Filesystem(object):
 
         return active_count >= status['max_mds']
 
-    def get_active_names(self):
+    def get_daemon_names(self, state):
         """
-        Return MDS daemon names of those daemons holding ranks
-        in state up:active
-
-        :return: list of strings like ['a', 'b'], sorted by rank
+        Return MDS daemon names of those daemons in the given state
+        :param state:
+        :return:
         """
         status = self.mon_manager.get_mds_status_all()
         result = []
@@ -219,6 +218,15 @@ class Filesystem(object):
                 result.append(mds_status['name'])
 
         return result
+
+    def get_active_names(self):
+        """
+        Return MDS daemon names of those daemons holding ranks
+        in state up:active
+
+        :return: list of strings like ['a', 'b'], sorted by rank
+        """
+        return self.get_daemon_names("up:active")
 
     def get_rank_names(self):
         """
