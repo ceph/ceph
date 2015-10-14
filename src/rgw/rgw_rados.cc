@@ -229,7 +229,7 @@ int RGWZoneGroup::equals(const string& other_zonegroup) const
   return (id  == other_zonegroup);
 }
 
-int RGWZoneGroup::add_zone(const RGWZoneParams& zone_params, bool is_master)
+int RGWZoneGroup::add_zone(const RGWZoneParams& zone_params, bool is_master, const list<string>& endpoints)
 {
   if (is_master) {
     if (!master_zone.empty() && master_zone != zone_params.get_id()) {
@@ -245,7 +245,9 @@ int RGWZoneGroup::add_zone(const RGWZoneParams& zone_params, bool is_master)
   RGWZone& zone = zones[zone_params.get_id()];
   zone.name = zone_params.get_name();
   zone.id = zone_params.get_id();
-
+  if (!endpoints.empty()) {
+    zone.endpoints = endpoints;
+  }
   return update();
 }
 
