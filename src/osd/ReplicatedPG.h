@@ -1170,16 +1170,42 @@ protected:
 				   bool force_changesize=false);
   void add_interval_usage(interval_set<uint64_t>& s, object_stat_sum_t& st);
 
+
+  enum class cache_result_t {
+    NOOP,
+    BLOCKED_FULL,
+    BLOCKED_PROMOTE,
+    HANDLED_PROXY,
+    HANDLED_REDIRECT,
+  };
+  cache_result_t maybe_handle_cache_detail(OpRequestRef op,
+					   bool write_ordered,
+					   ObjectContextRef obc, int r,
+					   hobject_t missing_oid,
+					   bool must_promote,
+					   bool in_hit_set,
+					   ObjectContextRef *promote_obc);
   /**
    * This helper function is called from do_op if the ObjectContext lookup fails.
    * @returns true if the caching code is handling the Op, false otherwise.
    */
-  inline bool maybe_handle_cache(OpRequestRef op,
-				 bool write_ordered,
-				 ObjectContextRef obc, int r,
-				 const hobject_t& missing_oid,
-				 bool must_promote,
-				 bool in_hit_set = false);
+  bool maybe_handle_cache(OpRequestRef op,
+			  bool write_ordered,
+			  ObjectContextRef obc, int r,
+			  const hobject_t& missing_oid,
+			  bool must_promote,
+			  bool in_hit_set = false) {
+    return cache_result_t::NOOP != maybe_handle_cache_detail(
+      op,
+      write_ordered,
+      obc,
+      r,
+      missing_oid,
+      must_promote,
+      in_hit_set,
+      nullptr);
+  }
+
   /**
    * This helper function checks if a promotion is needed.
    */
@@ -1188,7 +1214,8 @@ protected:
 		     const object_locator_t& oloc,
 		     bool in_hit_set,
 		     uint32_t recency,
-		     OpRequestRef promote_op);
+		     OpRequestRef promote_op,
+		     ObjectContextRef *promote_obc = nullptr);
   /**
    * This helper function tells the client to redirect their request elsewhere.
    */
@@ -1199,10 +1226,13 @@ protected:
    * this is a noop.  If a future user wants to be able to distinguish
    * these cases, a return value should be added.
    */
-  void promote_object(ObjectContextRef obc,            ///< [optional] obc
-		      const hobject_t& missing_object, ///< oid (if !obc)
-		      const object_locator_t& oloc,    ///< locator for obc|oid
-		      OpRequestRef op);                ///< [optional] client op
+  void promote_object(
+    ObjectContextRef obc,            ///< [optional] obc
+    const hobject_t& missing_object, ///< oid (if !obc)
+    const object_locator_t& oloc,    ///< locator for obc|oid
+    OpRequestRef op,                 ///< [optional] client op
+    ObjectContextRef *promote_obc = nullptr ///< [optional] new obc for object
+    );
 
   int prepare_transaction(OpContext *ctx);
   list<pair<OpRequestRef, OpContext*> > in_progress_async_reads;
@@ -1552,6 +1582,8 @@ public:
   bool is_degraded_or_backfilling_object(const hobject_t& oid);
   void wait_for_degraded_object(const hobject_t& oid, OpRequestRef op);
 
+  void block_write_on_full_cache(
+    const hobject_t& oid, OpRequestRef op);
   void block_write_on_snap_rollback(
     const hobject_t& oid, ObjectContextRef obc, OpRequestRef op);
   void block_write_on_degraded_snap(const hobject_t& oid, OpRequestRef op);
