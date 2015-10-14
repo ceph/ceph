@@ -1039,11 +1039,11 @@ void RGWPeriodMap::decode(bufferlist::iterator& bl) {
   }
 }
 
-
 int RGWPeriodMap::update(const RGWZoneGroup& zonegroup)
 {
-  if (zonegroup.is_master && !zonegroup.equals(master_zonegroup)) {
-    derr << "cannot update zonegroup map, master_zonegroup conflict" << dendl;
+  if (zonegroup.is_master && (!master_zonegroup.empty() && zonegroup.get_id() != master_zonegroup)) {
+      derr << "cannot update zonegroup map, master_zonegroup conflict master zonegroup " <<
+	master_zonegroup << dendl;
     return -EINVAL;
   }
   map<string, RGWZoneGroup>::iterator iter = zonegroups.find(zonegroup.get_id());
@@ -1061,7 +1061,10 @@ int RGWPeriodMap::update(const RGWZoneGroup& zonegroup)
 
   if (zonegroup.is_master) {
     master_zonegroup = zonegroup.get_id();
+  } else if (master_zonegroup == zonegroup.get_id()) {
+    master_zonegroup = "";
   }
+
   return 0;
 }
 
@@ -1244,7 +1247,7 @@ int RGWZoneGroupMap::update_master_zonegroup(const string& period_id,
 }
 
 int RGWZoneGroupMap::get_master_zonegroup(const string& current_period,
-					  RGWZoneGroup& zonegroup)
+					  string& master_zonegroup)
 {
   map<string, RGWPeriodMap>::iterator period_iter = periods.find(current_period);
   if (period_iter == periods.end()) {
@@ -1252,18 +1255,7 @@ int RGWZoneGroupMap::get_master_zonegroup(const string& current_period,
     return -EINVAL;
   }
 
-  string master_zonegroup = period_iter->second.master_zonegroup;
-  if (master_zonegroup.empty()) {
-    return -ENOENT;
-  }
-
-  map<string, RGWZoneGroup>::iterator iter = period_iter->second.zonegroups.find(master_zonegroup);
-  if (iter == period_iter->second.zonegroups.end()) {
-    derr << "ERROR: bad zonegroup map: inconsistent master zonegroup" << dendl;
-    return -EINVAL;
-  }
-
-  zonegroup = iter->second;
+  master_zonegroup = period_iter->second.master_zonegroup;
 
   return 0;
 }
@@ -2949,10 +2941,10 @@ int RGWRados::init_complete()
       }
     }
   } else {
-    RGWZoneGroup master_zonegroup;
+    string master_zonegroup;
     for (map<string, RGWRealm>::iterator iter = zonegroup_map.realms.begin(); iter != zonegroup_map.realms.end();
 	 iter++) {
-      if (master_zonegroup.get_id().empty()) {
+      if (master_zonegroup.empty()) {
 	ret = zonegroup_map.get_master_zonegroup(iter->second.get_current_period(), master_zonegroup);
 	if (ret < 0 && ret != -ENOENT) {
 	  ldout(cct, 0) << "ERROR: failed to read master zonegroup:" << cpp_strerror(-ret) << dendl;
@@ -2969,9 +2961,9 @@ int RGWRados::init_complete()
       for ( map<string, RGWZoneGroup>::iterator iter = zonegroups.begin(); iter != zonegroups.end(); ++iter) {
 	RGWZoneGroup& zonegroup = iter->second;
 	add_new_connection_to_map(zonegroup_conn_map, zonegroup, new RGWRESTConn(cct, this, zonegroup.endpoints));
-      }
-      if (!master_zonegroup.get_id().empty()) {
-	rest_master_conn = new RGWRESTConn(cct, this, master_zonegroup.endpoints);
+	if (!master_zonegroup.empty() && zonegroup.get_id() == master_zonegroup) {
+	  rest_master_conn = new RGWRESTConn(cct, this, zonegroup.endpoints);
+	}
       }
     }
   }

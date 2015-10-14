@@ -96,6 +96,7 @@ void _usage()
   cerr << "  zonegroup default          set default zone group\n";
   cerr << "  zonegroup delete           delete a zone group info\n";
   cerr << "  zonegroup get              show zone group info\n";
+  cerr << "  zonegroup modify           set/clear zonegroup master status\n";
   cerr << "  zonegroup set              set zone group info (requires infile)\n";
   cerr << "  zonegroup rename           rename a zone group\n";
   cerr << "  zonegroup list             list all zone groups set on this cluster\n";
@@ -171,7 +172,7 @@ void _usage()
   cerr << "   --parent=<id>             parent period id\n";
   cerr << "   --period=<id>             period id\n";
   cerr << "   --epoch=<number>          period epoch\n";
-  cerr << "   --master=<true|false>     set as master\n";
+  cerr << "   --master                  set as master\n";
   cerr << "   --master-url              master url\n";
   cerr << "   --master-zonegroup=<id>   master zonegroup id\n";
   cerr << "   --master-zone=<id>        master zone id\n";
@@ -285,6 +286,7 @@ enum {
   OPT_ZONEGROUP_DEFAULT,
   OPT_ZONEGROUP_DELETE,
   OPT_ZONEGROUP_GET,
+  OPT_ZONEGROUP_MODIFY,
   OPT_ZONEGROUP_SET,
   OPT_ZONEGROUP_LIST,
   OPT_ZONEGROUP_RENAME ,  
@@ -548,6 +550,8 @@ static int get_cmd(const char *cmd, const char *prev_cmd, const char *prev_prev_
       return OPT_ZONEGROUP_DELETE;
     if (strcmp(cmd, "get") == 0)
       return OPT_ZONEGROUP_GET;
+    if (strcmp(cmd, "modify") == 0)
+      return OPT_ZONEGROUP_MODIFY;
     if (strcmp(cmd, "list") == 0)
       return OPT_ZONEGROUP_LIST;
     if (strcmp(cmd, "set") == 0)
@@ -1337,7 +1341,7 @@ int main(int argc, char **argv)
   std::string zone_name, zone_id, zone_new_name;
   std::string zonegroup_name, zonegroup_id, zonegroup_new_name;
   std::string master_url;
-  bool is_master = false;
+  int is_master = false;
   int key_type = KEY_TYPE_UNDEFINED;
   rgw_bucket bucket;
   uint32_t perm_mask = 0;
@@ -1610,8 +1614,7 @@ int main(int argc, char **argv)
       }
     } else if (ceph_argparse_witharg(args, i, &val, "--parent", (char*)NULL)) {
       parent_period = val;
-    } else if (ceph_argparse_witharg(args, i, &val, "--master", (char*)NULL)) {
-      is_master = true;
+    } else if (ceph_argparse_binary_flag(args, i, &is_master, NULL, "--master", (char*)NULL)) {
     } else if (ceph_argparse_witharg(args, i, &val, "--master-url", (char*)NULL)) {
       master_url = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--master-zonegroup", (char*)NULL)) {
@@ -1725,9 +1728,9 @@ int main(int argc, char **argv)
   RGWStreamFlusher f(formatter, cout);
 
   bool raw_storage_op = (opt_cmd == OPT_ZONEGROUP_CREATE || opt_cmd == OPT_ZONEGROUP_DELETE ||
-			 opt_cmd == OPT_ZONEGROUP_GET || opt_cmd == OPT_ZONEGROUP_LIST ||
+			 opt_cmd == OPT_ZONEGROUP_GET || opt_cmd == OPT_ZONEGROUP_LIST ||  
                          opt_cmd == OPT_ZONEGROUP_SET || opt_cmd == OPT_ZONEGROUP_DEFAULT ||
-			 opt_cmd == OPT_ZONEGROUP_RENAME ||
+			 opt_cmd == OPT_ZONEGROUP_RENAME || opt_cmd == OPT_ZONEGROUP_MODIFY ||
                          opt_cmd == OPT_ZONEGROUPMAP_GET || opt_cmd == OPT_ZONEGROUPMAP_SET ||
                          opt_cmd == OPT_ZONEGROUPMAP_UPDATE ||
 			 opt_cmd == OPT_ZONE_ADD || opt_cmd == OPT_ZONE_CREATE || opt_cmd == OPT_ZONE_DELETE ||
@@ -2281,6 +2284,67 @@ int main(int argc, char **argv)
 	formatter->close_section();
 	formatter->flush(cout);
 	cout << std::endl;
+      }
+      break;
+    case OPT_ZONEGROUP_MODIFY:
+      {
+	RGWRealm realm(realm_id, realm_name);
+	int ret = realm.init(g_ceph_context, store);
+	if (ret < 0) {
+	  cerr << "failed to init realm: " << cpp_strerror(-ret) << std::endl;
+	  return -ret;
+	}
+
+	RGWZoneGroup zonegroup(zonegroup_id, zonegroup_name);
+	ret = zonegroup.init(g_ceph_context, store);
+	if (ret < 0) {
+	  cerr << "failed to init zonegroup: " << cpp_strerror(-ret) << std::endl;
+	  return -ret;
+	}
+
+	/* update zonegroup only if there is a change */
+	if (is_master != zonegroup.is_master_zonegroup()) {
+	  zonegroup.update_master(is_master);
+	  ret = zonegroup.update();
+	  if (ret < 0) {
+	    cerr << "failed to update zonegroup: " << cpp_strerror(-ret) << std::endl;
+	    return -ret;
+	  }
+	}
+
+	RGWZoneGroupMap zonegroup_map;
+	ret = zonegroup_map.read(g_ceph_context, store);
+	if (ret < 0 && ret != -ENOENT) {
+	  cerr << "ERROR: couldn't read zonegroup_map: " << cpp_strerror(-ret) << std::endl;
+	  return ret;
+	}
+
+	string master_zonegroup;
+	if (ret != -ENOENT) {
+	  ret  = zonegroup_map.get_master_zonegroup(realm.get_current_period(), master_zonegroup);
+	  if (ret < 0 && ret != -ENOENT) {
+	    cerr << "ERROR: couldn't read zonegroup_map: " << cpp_strerror(-ret) << std::endl;
+	    return ret;
+	  }
+	}
+
+	if (is_master) {
+	  /* zonegroup already set as master zonegroup nothing to do*/
+	  if (master_zonegroup == zonegroup.get_id()) {
+	    return 0;
+	  }
+	}
+
+	ret = zonegroup_map.update(g_ceph_context, store, realm, zonegroup);
+	if (ret < 0) {
+	  cerr << "failed to update master zonegroup: " << cpp_strerror(-ret) << std::endl;
+	  return -ret;
+	}
+	ret = zonegroup_map.store(g_ceph_context, store);
+	if (ret < 0) {
+	  cerr << "failed to store zonegroup_map: " << cpp_strerror(-ret) << std::endl;
+	  return -ret;
+	}
       }
       break;
     case OPT_ZONEGROUP_SET:
