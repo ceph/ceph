@@ -1188,6 +1188,14 @@ int RGWZoneGroupMap::update(CephContext *cct, RGWRados *store,
     return ret;
   }
 
+  /* update rest_master_conn if not already created*/
+  if (zonegroup.is_master) {
+    if (!store->rest_master_conn) {
+      store->rest_master_conn = new RGWRESTConn(cct, store, zonegroup.endpoints);
+      derr << "creating rest_master_conn  " << dendl;
+    }
+  }
+
   RGWPeriod period(realm.get_current_period());
   ret = period.init(cct, store, realm.get_id());
   if (ret < 0) {
