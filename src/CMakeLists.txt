@@ -486,6 +486,11 @@ if(${WITH_RADOSGW})
     resolv
   )
 endif(${WITH_RADOSGW})
+if(${WITH_RBD})
+  set(DENCODER_EXTRALIBS
+      ${DENCODER_EXTRALIBS}
+      librbd_replay_types)
+endif(${WITH_RBD})
 target_link_libraries(ceph-dencoder
   librados
   librbd
@@ -866,16 +871,19 @@ if(${WITH_RBD})
   install(TARGETS rbd DESTINATION bin)
   install(PROGRAMS ${CMAKE_SOURCE_DIR}/src/ceph-rbdnamer DESTINATION bin)
 
+  set(librbd_replay_types_srcs
+      rbd_replay/ActionTypes.cc)
+  add_library(librbd_replay_types STATIC ${librbd_replay_types_srcs})
+
   set(librbd_replay_srcs
-      rbd_replay/actions.cc 
-      rbd_replay/Deser.cc 
-      rbd_replay/ImageNameMap.cc 
-      rbd_replay/PendingIO.cc 
-      rbd_replay/rbd_loc.cc 
-      rbd_replay/Replayer.cc 
-      rbd_replay/Ser.cc)
+      rbd_replay/actions.cc
+      rbd_replay/BufferReader.cc
+      rbd_replay/ImageNameMap.cc
+      rbd_replay/PendingIO.cc
+      rbd_replay/rbd_loc.cc
+      rbd_replay/Replayer.cc)
   add_library(librbd_replay STATIC ${librbd_replay_srcs})
-  target_link_libraries(librbd_replay PRIVATE librbd librados global udev)
+  target_link_libraries(librbd_replay PRIVATE librbd_replay_types librbd librados global udev)
 
   add_executable(rbd_replay
     rbd_replay/rbd-replay.cc
