@@ -1346,6 +1346,7 @@ int main(int argc, char **argv)
   std::string realm_name, realm_id, realm_new_name;
   std::string zone_name, zone_id, zone_new_name;
   std::string zonegroup_name, zonegroup_id, zonegroup_new_name;
+  std::string api_name;
   list<string> endpoints;
   std::string master_url;
   int is_master = false;
@@ -1646,6 +1647,8 @@ int main(int argc, char **argv)
       zonegroup_id = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--zonegroup-new-name", (char*)NULL)) {
       zonegroup_new_name = val;
+    } else if (ceph_argparse_witharg(args, i, &val, "--api-name", (char*)NULL)) {
+      api_name = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--zone-id", (char*)NULL)) {
       zone_id = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--zone-new-name", (char*)NULL)) {
@@ -2172,6 +2175,7 @@ int main(int argc, char **argv)
 	}
 
 	RGWZoneGroup zonegroup(zonegroup_name, is_master, g_ceph_context, store, realm.get_id(), endpoints);
+        zonegroup.api_name = (api_name.empty() ? zonegroup_name : api_name);
 	ret = zonegroup.create();
 	if (ret < 0) {
 	  cerr << "failed to create zonegroup" << zonegroup_name << ": " << cpp_strerror(-ret) << std::endl;
@@ -2313,6 +2317,11 @@ int main(int argc, char **argv)
 
         if (!endpoints.empty()) {
           zonegroup.endpoints = endpoints;
+          need_update = true;
+        }
+
+        if (!api_name.empty()) {
+          zonegroup.api_name = api_name;
           need_update = true;
         }
 
