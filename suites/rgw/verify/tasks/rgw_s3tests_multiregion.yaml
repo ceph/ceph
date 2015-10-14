@@ -48,6 +48,8 @@ tasks:
         name: client1-system-user
         access key: 0te6NH5mcdcq0Tc5i8i2
         secret key: Oy4IOauQoL18Gp2zM7lC1vLmoawgqcYPbYGcWfXv
+- sleep:
+    duration: 5
 - radosgw-agent:
     client.0:
       src: client.0
