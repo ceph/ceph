@@ -344,6 +344,7 @@ class TestDataScan(CephFSTestCase):
 
         # Start the MDS
         self.fs.mds_restart()
+        self.fs.wait_for_daemons()
 
         # Mount a client
         self.mount_a.mount()
@@ -435,6 +436,7 @@ class TestDataScan(CephFSTestCase):
 
         # Start filesystem back up, observe that the file appears to be gone in an `ls`
         self.fs.mds_restart()
+        self.fs.wait_for_daemons()
         self.mount_a.mount()
         self.mount_a.wait_until_mounted()
         files = self.mount_a.run_shell(["ls", "subdir/"]).stdout.getvalue().strip().split("\n")
@@ -454,6 +456,7 @@ class TestDataScan(CephFSTestCase):
         # Start the filesystem and check that the dentry we deleted is now once again visible
         # and points to the correct file data.
         self.fs.mds_restart()
+        self.fs.wait_for_daemons()
         self.mount_a.mount()
         self.mount_a.wait_until_mounted()
         out = self.mount_a.run_shell(["sudo", "cat", "subdir/{0}".format(victim_dentry)]).stdout.getvalue().strip()
