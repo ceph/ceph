@@ -540,6 +540,7 @@ ObjectCacher::ObjectCacher(CephContext *cct_, string name, WritebackHandler& wb,
   this->max_dirty_age.set_from_double(max_dirty_age);
   perf_start();
   finisher.start();
+  scattered_write = writeback_handler.can_scattered_write();
 }
 
 ObjectCacher::~ObjectCacher()
@@ -830,6 +831,105 @@ void ObjectCacher::bh_read_finish(int64_t poolid, sobject_t oid, ceph_tid_t tid,
   read_cond.Signal();
 }
 
+void ObjectCacher::bh_write_adjacencies(BufferHead *bh, utime_t cutoff,
+					int64_t *max_amount, int *max_count)
+{
+  list<BufferHead*> blist;
+
+  int count = 0;
+  int64_t total_len = 0;
+  set<BufferHead*, BufferHead::ptr_lt>::iterator it = dirty_or_tx_bh.find(bh);
+  assert(it != dirty_or_tx_bh.end());
+  for (set<BufferHead*, BufferHead::ptr_lt>::iterator p = it;
+       p != dirty_or_tx_bh.end();
+       ++p) {
+    BufferHead *obh = *p;
+    if (obh->ob != bh->ob)
+      break;
+    if (obh->is_dirty() && obh->last_write < cutoff) {
+      blist.push_back(obh);
+      ++count;
+      total_len += obh->length();
+      if ((max_count && count > *max_count) ||
+	  (max_amount && total_len > *max_amount))
+	break;
+    }
+  }
+
+  while (it != dirty_or_tx_bh.begin()) {
+    --it;
+    BufferHead *obh = *it;
+    if (obh->ob != bh->ob)
+      break;
+    if (obh->is_dirty() && obh->last_write < cutoff) {
+      blist.push_front(obh);
+      ++count;
+      total_len += obh->length();
+      if ((max_count && count > *max_count) ||
+	  (max_amount && total_len > *max_amount))
+	break;
+    }
+  }
+  if (max_count)
+    *max_count -= count;
+  if (max_amount)
+    *max_amount -= total_len;
+
+  bh_write_scattered(blist);
+}
+
+void ObjectCacher::bh_write_scattered(list<BufferHead*>& blist)
+{
+  assert(lock.is_locked());
+
+  Object *ob = blist.front()->ob;
+  ob->get();
+
+  utime_t last_write;
+  SnapContext snapc;
+  vector<pair<loff_t, uint64_t> > ranges;
+  vector<pair<uint64_t, bufferlist> > io_vec;
+
+  ranges.reserve(blist.size());
+  io_vec.reserve(blist.size());
+
+  uint64_t total_len = 0;
+  for (list<BufferHead*>::iterator p = blist.begin(); p != blist.end(); ++p) {
+    BufferHead *bh = *p;
+    ldout(cct, 7) << "bh_write_scattered " << *bh << dendl;
+    assert(bh->ob == ob);
+    assert(bh->bl.length() == bh->length());
+    ranges.push_back(pair<loff_t, uint64_t>(bh->start(), bh->length()));
+
+    int n = io_vec.size();
+    io_vec.resize(n + 1);
+    io_vec[n].first = bh->start();
+    io_vec[n].second = bh->bl;
+
+    total_len += bh->length();
+    if (bh->snapc.seq > snapc.seq)
+      snapc = bh->snapc;
+    if (bh->last_write > last_write)
+      bh->last_write = bh->last_write;
+  }
+
+  C_WriteCommit *oncommit = new C_WriteCommit(this, ob->oloc.pool, ob->get_soid(), ranges);
+
+  ceph_tid_t tid = writeback_handler.write(ob->get_oid(), ob->get_oloc(),
+					   io_vec, snapc, last_write,
+					   ob->truncate_size, ob->truncate_seq,
+					   oncommit);
+  oncommit->tid = tid;
+  ob->last_write_tid = tid;
+  for (list<BufferHead*>::iterator p = blist.begin(); p != blist.end(); ++p) {
+    BufferHead *bh = *p;
+    bh->last_write_tid = tid;
+    mark_tx(bh);
+  }
+
+  if (perfcounter)
+    perfcounter->inc(l_objectcacher_data_flushed, total_len);
+}
 
 void ObjectCacher::bh_write(BufferHead *bh)
 {
@@ -861,23 +961,31 @@ void ObjectCacher::bh_write(BufferHead *bh)
   mark_tx(bh);
 }
 
-void ObjectCacher::bh_write_commit(int64_t poolid, sobject_t oid, loff_t start,
-				   uint64_t length, ceph_tid_t tid, int r)
+void ObjectCacher::bh_write_commit(int64_t poolid, sobject_t oid,
+				   vector<pair<loff_t, uint64_t> >& ranges,
+				   ceph_tid_t tid, int r)
 {
   assert(lock.is_locked());
   ldout(cct, 7) << "bh_write_commit " 
 		<< oid 
 		<< " tid " << tid
-		<< " " << start << "~" << length
+		<< " ranges " << ranges
 		<< " returned " << r
 		<< dendl;
 
   if (objects[poolid].count(oid) == 0) {
     ldout(cct, 7) << "bh_write_commit no object cache" << dendl;
-  } else {
-    Object *ob = objects[poolid][oid];
-    int was_dirty_or_tx = ob->oset->dirty_or_tx;
-    
+    return;
+  }
+
+  Object *ob = objects[poolid][oid];
+  int was_dirty_or_tx = ob->oset->dirty_or_tx;
+
+  for (vector<pair<loff_t, uint64_t> >::iterator p = ranges.begin();
+       p != ranges.end();
+       ++p) {
+    loff_t start = p->first;
+    uint64_t length = p->second;
     if (!ob->exists) {
       ldout(cct, 10) << "bh_write_commit marking exists on " << *ob << dendl;
       ob->exists = true;
@@ -938,31 +1046,31 @@ void ObjectCacher::bh_write_commit(int64_t poolid, sobject_t oid, loff_t start,
       assert(*bh);
       ob->try_merge_bh(*bh);
     }
-
-    // update last_commit.
-    assert(ob->last_commit_tid < tid);
-    ob->last_commit_tid = tid;
-
-    // waiters?
-    list<Context*> ls;
-    if (ob->waitfor_commit.count(tid)) {
-      ls.splice(ls.begin(), ob->waitfor_commit[tid]);
-      ob->waitfor_commit.erase(tid);
-    }
-
-    // is the entire object set now clean and fully committed?
-    ObjectSet *oset = ob->oset;
-    ob->put();
-
-    if (flush_set_callback &&
-	was_dirty_or_tx > 0 &&
-	oset->dirty_or_tx == 0) {        // nothing dirty/tx
-      flush_set_callback(flush_set_callback_arg, oset);      
-    }
-
-    if (!ls.empty())
-      finish_contexts(cct, ls, r);
   }
+
+  // update last_commit.
+  assert(ob->last_commit_tid < tid);
+  ob->last_commit_tid = tid;
+
+  // waiters?
+  list<Context*> ls;
+  if (ob->waitfor_commit.count(tid)) {
+    ls.splice(ls.begin(), ob->waitfor_commit[tid]);
+    ob->waitfor_commit.erase(tid);
+  }
+
+  // is the entire object set now clean and fully committed?
+  ObjectSet *oset = ob->oset;
+  ob->put();
+
+  if (flush_set_callback &&
+      was_dirty_or_tx > 0 &&
+      oset->dirty_or_tx == 0) {        // nothing dirty/tx
+    flush_set_callback(flush_set_callback_arg, oset);
+  }
+
+  if (!ls.empty())
+    finish_contexts(cct, ls, r);
 }
 
 void ObjectCacher::flush(loff_t amount)
@@ -977,14 +1085,18 @@ void ObjectCacher::flush(loff_t amount)
    * tail item.  Then we call bh_write, which moves it to the other LRU, so that we
    * can call lru_dirty.lru_get_next_expire() again.
    */
-  loff_t did = 0;
-  while (amount == 0 || did < amount) {
+  int64_t left = amount;
+  while (amount == 0 || left > 0) {
     BufferHead *bh = static_cast<BufferHead*>(bh_lru_dirty.lru_get_next_expire());
     if (!bh) break;
     if (bh->last_write > cutoff) break;
 
-    did += bh->length();
-    bh_write(bh);
+    if (scattered_write) {
+      bh_write_adjacencies(bh, cutoff, amount > 0 ? &left : NULL, NULL);
+    } else {
+      left -= bh->length();
+      bh_write(bh);
+    }
   }    
 }
 
@@ -1102,6 +1214,7 @@ int ObjectCacher::_readx(OSDRead *rd, ObjectSet *oset, Context *onfinish,
       if (writeback_handler.may_copy_on_write(soid.oid, ex_it->offset, ex_it->length, soid.snap)) {
 	ldout(cct, 20) << "readx  may copy on write" << dendl;
 	bool wait = false;
+	list<BufferHead*> blist;
 	for (map<loff_t, BufferHead*>::iterator bh_it = o->data.begin();
 	     bh_it != o->data.end();
 	     ++bh_it) {
@@ -1109,10 +1222,16 @@ int ObjectCacher::_readx(OSDRead *rd, ObjectSet *oset, Context *onfinish,
 	  if (bh->is_dirty() || bh->is_tx()) {
 	    ldout(cct, 10) << "readx  flushing " << *bh << dendl;
 	    wait = true;
-	    if (bh->is_dirty())
-	      bh_write(bh);
+	    if (bh->is_dirty()) {
+	      if (scattered_write)
+		blist.push_back(bh);
+	      else
+		bh_write(bh);
+	    }
 	  }
 	}
+	if (scattered_write && !blist.empty())
+	  bh_write_scattered(blist);
 	if (wait) {
 	  ldout(cct, 10) << "readx  waiting on tid " << o->last_write_tid << " on " << *o << dendl;
 	  o->waitfor_commit[o->last_write_tid].push_back(new C_RetryRead(this, rd, oset, onfinish));
@@ -1563,9 +1682,14 @@ void ObjectCacher::flusher_entry()
       int max = MAX_FLUSH_UNDER_LOCK;
       while ((bh = static_cast<BufferHead*>(bh_lru_dirty.lru_get_next_expire())) != 0 &&
 	     bh->last_write < cutoff &&
-	     --max > 0) {
+	     max > 0) {
 	ldout(cct, 10) << "flusher flushing aged dirty bh " << *bh << dendl;
-	bh_write(bh);
+	if (scattered_write) {
+	  bh_write_adjacencies(bh, cutoff, NULL, &max);
+        } else {
+	  bh_write(bh);
+	  --max;
+	}
       }
       if (!max) {
 	// back off the lock to avoid starving other threads
@@ -1681,6 +1805,7 @@ void ObjectCacher::purge(Object *ob)
 bool ObjectCacher::flush(Object *ob, loff_t offset, loff_t length)
 {
   assert(lock.is_locked());
+  list<BufferHead*> blist;
   bool clean = true;
   ldout(cct, 10) << "flush " << *ob << " " << offset << "~" << length << dendl;
   for (map<loff_t,BufferHead*>::iterator p = ob->data_lower_bound(offset); p != ob->data.end(); ++p) {
@@ -1696,9 +1821,16 @@ bool ObjectCacher::flush(Object *ob, loff_t offset, loff_t length)
     if (!bh->is_dirty()) {
       continue;
     }
-    bh_write(bh);
+
+    if (scattered_write)
+      blist.push_back(bh);
+    else
+      bh_write(bh);
     clean = false;
   }
+  if (scattered_write && !blist.empty())
+    bh_write_scattered(blist);
+
   return clean;
 }
 
@@ -1734,18 +1866,35 @@ bool ObjectCacher::flush_set(ObjectSet *oset, Context *onfinish)
   C_GatherBuilder gather(cct);
   set<Object*> waitfor_commit;
 
-  set<BufferHead*>::iterator next, it;
+  list<BufferHead*> blist;
+  Object *last_ob = NULL;
+  set<BufferHead*, BufferHead::ptr_lt>::iterator next, it;
   next = it = dirty_or_tx_bh.begin();
   while (it != dirty_or_tx_bh.end()) {
     ++next;
     BufferHead *bh = *it;
     waitfor_commit.insert(bh->ob);
 
-    if (bh->is_dirty())
-      bh_write(bh);
+    if (bh->is_dirty()) {
+      if (scattered_write) {
+	if (last_ob != bh->ob) {
+	  if (!blist.empty()) {
+	    bh_write_scattered(blist);
+	    blist.clear();
+	  }
+	  last_ob = bh->ob;
+	}
+	blist.push_back(bh);
+      } else {
+	bh_write(bh);
+      }
+    }
 
     it = next;
   }
+
+  if (scattered_write && !blist.empty())
+    bh_write_scattered(blist);
 
   for (set<Object*>::iterator i = waitfor_commit.begin();
        i != waitfor_commit.end(); ++i) {
