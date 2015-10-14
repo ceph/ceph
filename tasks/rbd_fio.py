@@ -49,20 +49,21 @@ or
     if config.get('all'):
         client_config = config['all']  
     clients = ctx.cluster.only(teuthology.is_type('client'))
+    rbd_test_dir = teuthology.get_testdir(ctx) + "/rbd_fio_test"
     for remote,role in clients.remotes.iteritems():
         if 'client_config' in locals():
            with parallel() as p: 
-               p.spawn(run_fio, remote, client_config)
+               p.spawn(run_fio, remote, client_config, rbd_test_dir)
         else:    
            for client_config in config:
               if client_config in role:
                  with parallel() as p:
-                     p.spawn(run_fio, remote, config[client_config])
+                     p.spawn(run_fio, remote, config[client_config], rbd_test_dir)
             
     yield
     
     
-def run_fio(remote, config):
+def run_fio(remote, config, rbd_test_dir):
     """
     create fio config file with options based on above config
     get the fio from github, generate binary, and use it to run on
@@ -183,16 +184,16 @@ def run_fio(remote, config):
     try:
         log.info("Running rbd feature - fio test on {sn}".format(sn=sn))
         fio = "https://github.com/axboe/fio/archive/fio-" + fio_version + ".tar.gz"
-        remote.run(args=['mkdir', run.Raw('~/rbd-fio-test'),])
-        remote.run(args=['cd' , run.Raw('~/rbd-fio-test'),
+        remote.run(args=['mkdir', run.Raw(rbd_test_dir),])
+        remote.run(args=['cd' , run.Raw(rbd_test_dir),
                          run.Raw(';'), 'wget' , fio , run.Raw(';'), run.Raw('tar -xvf fio*tar.gz'), run.Raw(';'),
                          run.Raw('cd fio-fio*'), 'configure', run.Raw(';') ,'make'])
         remote.run(args=['sudo', 'ceph', '-s'])
-        remote.run(args=['sudo', run.Raw('~/rbd-fio-test/fio-fio-{v}/fio {f}'.format(v=fio_version,f=fio_config.name))])
+        remote.run(args=['sudo', run.Raw('{tdir}/fio-fio-{v}/fio {f}'.format(tdir=rbd_test_dir,v=fio_version,f=fio_config.name))])
         remote.run(args=['sudo', 'ceph', '-s'])
     finally:
         log.info("Cleaning up fio install")
-        remote.run(args=['rm','-rf', run.Raw('~/rbd-fio-test')])
+        remote.run(args=['rm','-rf', run.Raw(rbd_test_dir)])
         if system_type == 'rpm' and ioengine == 'rbd':
             log.info("Uninstall librbd1 devel package on {sn}".format(sn=sn))
             remote.run(args=['sudo', 'yum' , 'remove', 'librbd1-devel', '-y'])
