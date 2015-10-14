@@ -3296,7 +3296,7 @@ int main(int argc, char **argv)
 	  if (lookup.size() != 1) {
 	    stringstream ss;
 	    if (lookup.size() == 0)
-	      ss << "No object id '" << object << "' found";
+	      ss << "No object id '" << object << "' found or invalid JSON specified";
 	    else
 	      ss << "Found " << lookup.size() << " objects with id '" << object
 		 << "', please use a JSON spec from --op list instead";
@@ -3310,18 +3310,22 @@ int main(int argc, char **argv)
       } else {
 	stringstream ss;
 	if (pgidstr.length() == 0 && v.type() != json_spirit::array_type) {
-	  ss << "object '" << object
-	     << "' must be a JSON array but is of type "
-	     << v.type() << " instead";
+	  ss << "Without --pgid the object '" << object
+	     << "' must be a JSON array";
 	  throw std::runtime_error(ss.str());
 	}
 	if (v.type() == json_spirit::array_type) {
 	  json_spirit::Array array = v.get_array();
+	  if (array.size() != 2) {
+	    ss << "Object '" << object
+	       << "' must be a JSON array with 2 elements";
+	    throw std::runtime_error(ss.str());
+	  }
 	  vector<json_spirit::Value>::iterator i = array.begin();
+	  //if (i == array.end() || i->type() != json_spirit::str_type) {
 	  if (i->type() != json_spirit::str_type) {
-	    ss << "object '" << object
-	       << "' must be a JSON array with the first element a string but "
-	       << "found type " << v.type() << " instead";
+	    ss << "Object '" << object
+	       << "' must be a JSON array with the first element a string";
 	    throw std::runtime_error(ss.str());
 	  }
 	  string object_pgidstr = i->get_str();
@@ -3344,7 +3348,7 @@ int main(int argc, char **argv)
 	try {
 	  ghobj.decode(v);
 	} catch (std::runtime_error& e) {
-	  ss << "Decode object json error: " << e.what();
+	  ss << "Decode object JSON error: " << e.what();
 	  throw std::runtime_error(ss.str());
 	}
         if ((uint64_t)pgid.pgid.m_pool != (uint64_t)ghobj.hobj.pool) {
