@@ -1057,8 +1057,9 @@ struct RGWZoneGroup : public RGWSystemMetaObj {
   RGWZoneGroup(const std::string &id, const std::string &name):RGWSystemMetaObj(id, name) {}
   RGWZoneGroup(const std::string &_name):RGWSystemMetaObj(_name) {}
   RGWZoneGroup(const std::string &_name, bool _is_master, CephContext *cct, RGWRados* store,
-	       const string& _realm_id)
-    : RGWSystemMetaObj(_name, cct , store),is_master(_is_master), realm_id(_realm_id) {}
+	       const string& _realm_id, const list<string>& _endpoints)
+    : RGWSystemMetaObj(_name, cct , store), endpoints(_endpoints), is_master(_is_master),
+      realm_id(_realm_id) {}
 
   bool is_master_zonegroup() const { return is_master;}
   void update_master(bool _is_master) { is_master = _is_master;}

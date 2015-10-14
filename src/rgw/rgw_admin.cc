@@ -2184,7 +2184,7 @@ int main(int argc, char **argv)
 	  return -ret;
 	}
 
-	RGWZoneGroup zonegroup(zonegroup_name, is_master, g_ceph_context, store, realm.get_id());
+	RGWZoneGroup zonegroup(zonegroup_name, is_master, g_ceph_context, store, realm.get_id(), endpoints);
 	ret = zonegroup.create();
 	if (ret < 0) {
 	  cerr << "failed to create zonegroup" << zonegroup_name << ": " << cpp_strerror(-ret) << std::endl;
