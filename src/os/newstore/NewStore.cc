@@ -3491,7 +3491,8 @@ int NewStore::_do_write(TransContext *txc,
   _dump_onode(o);
   o->exists = true;
 
-  if (!o->onode.frag_size && o->onode.data_map.empty()) {
+  if (!o->onode.frag_size && o->onode.data_map.empty() &&
+      o->onode.overlay_map.empty()) {
     o->onode.frag_size = g_conf->newstore_min_frag_size;
     dout(20) << __func__ << " set frag_size " << o->onode.frag_size << dendl;
   }
@@ -4320,7 +4321,7 @@ int NewStore::_setallochint(TransContext *txc,
   o->onode.expected_write_size = expected_write_size;
   txc->write_onode(o);
 
-  if (o->onode.data_map.empty()) {
+  if (o->onode.data_map.empty() && o->onode.overlay_map.empty()) {
     // FIXME: we could do something clever with onode.frag_size here.
   }
 
