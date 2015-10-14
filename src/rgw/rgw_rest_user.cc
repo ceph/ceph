@@ -72,6 +72,15 @@ void RGWOp_User_Create::execute()
 
   uint32_t max_buckets;
   uint32_t default_max_buckets = s->cct->_conf->rgw_user_max_buckets;
+  
+  RGWQuotaInfo quota;
+  bool bucket_quota_enabled = s->cct->_conf->rgw_bucket_quota_enabled;
+  int32_t bucket_quota_max_size_kb = rgw_rounded_kb(s->cct->_conf->rgw_bucket_quota_max_size_kb);
+  int32_t bucket_quota_max_objects = s->cct->_conf->rgw_bucket_quota_max_objects;
+  
+  bool user_quota_enabled = s->cct->_conf->rgw_user_quota_enabled;
+  int32_t user_quota_max_size_kb = rgw_rounded_kb(s->cct->_conf->rgw_user_quota_max_size_kb);
+  int32_t user_quota_max_objects = s->cct->_conf->rgw_user_quota_max_objects;
 
   RGWUserAdminOpState op_state;
 
@@ -137,6 +146,20 @@ void RGWOp_User_Create::execute()
 
   if (gen_key)
     op_state.set_generate_key();
+
+  if (bucket_quota_enabled) {
+    quota.enabled = bucket_quota_enabled;
+    quota.max_size_kb = bucket_quota_max_size_kb;
+    quota.max_objects = bucket_quota_max_objects;
+    op_state.set_bucket_quota(quota);
+  }
+  
+  if (user_quota_enabled) {
+    quota.enabled = user_quota_enabled;
+    quota.max_size_kb = user_quota_max_size_kb;
+    quota.max_objects = user_quota_max_objects;
+    op_state.set_user_quota(quota);
+  }
 
   http_ret = RGWUserAdminOp_User::create(store, op_state, flusher);
 }
