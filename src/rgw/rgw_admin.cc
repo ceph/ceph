@@ -2195,7 +2195,7 @@ int main(int argc, char **argv)
     case OPT_ZONEGROUP_CREATE:
       {
 	if (zonegroup_name.empty()) {
-	  cerr << " Missing zonegroup name" << std::endl;
+	  cerr << "Missing zonegroup name" << std::endl;
 	  return -EINVAL;
 	}
 	RGWRealm realm(realm_id, realm_name);
@@ -2277,11 +2277,6 @@ int main(int argc, char **argv)
       break;
     case OPT_ZONEGROUP_GET:
       {
-	if (zonegroup_id.empty() && zonegroup_name.empty()) {
-	  cerr << "no zonegroup name or id provided" << std::endl;
-	  return -EINVAL;
-	}
-
 	RGWZoneGroup zonegroup(zonegroup_id, zonegroup_name);
 	int ret = zonegroup.init(g_ceph_context, store);
 	if (ret < 0) {
@@ -2324,11 +2319,6 @@ int main(int argc, char **argv)
       break;
     case OPT_ZONEGROUP_MODIFY:
       {
-	if (zonegroup_id.empty() && zonegroup_name.empty()) {
-	  cerr << "no zonegroup name or id provided" << std::endl;
-	  return -EINVAL;
-	}
-
 	RGWRealm realm(realm_id, realm_name);
 	int ret = realm.init(g_ceph_context, store);
 	if (ret < 0) {
