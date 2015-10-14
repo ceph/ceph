@@ -1860,10 +1860,6 @@ int main(int argc, char **argv)
       break;
     case OPT_PERIOD_GET:
       {
-	if (period_id.empty()) {
-	  cerr << "missing period id" << std::endl;
-	  return -EINVAL;
-	}
 	epoch_t epoch = 0;
 	if (!period_epoch.empty()) {
 	  epoch = atoi(period_epoch.c_str());
