@@ -97,6 +97,8 @@ using namespace std;
 #include "MetaSession.h"
 #include "MetaRequest.h"
 #include "ObjecterWriteback.h"
+#include "posix_acl.h"
+#include "UserGroups.h"
 
 #include "include/assert.h"
 #include "include/stat.h"
@@ -238,6 +240,7 @@ Client::Client(Messenger *m, MonClient *mc)
     ino_invalidate_cb(NULL),
     dentry_invalidate_cb(NULL),
     getgroups_cb(NULL),
+    umask_cb(NULL),
     can_invalidate_dentries(false),
     require_remount(false),
     async_ino_invalidator(m->cct),
@@ -1844,6 +1847,9 @@ void Client::populate_metadata()
   // Ceph entity id (the '0' in "client.0")
   metadata["entity_id"] = cct->_conf->name.get_id();
 
+  // Our mount position
+  metadata["root"] = cct->_conf->client_mountpoint;
+
   // Ceph version
   metadata["ceph_version"] = pretty_version_to_str();
   metadata["ceph_sha1"] = git_version_to_str();
@@ -1876,6 +1882,21 @@ MetaSession *Client::_open_mds_session(mds_rank_t mds)
   session->con = messenger->get_connection(session->inst);
   session->state = MetaSession::STATE_OPENING;
   mds_sessions[mds] = session;
+
+  // Maybe skip sending a request to open if this MDS daemon
+  // has previously sent us a REJECT.
+  if (rejected_by_mds.count(mds)) {
+    if (rejected_by_mds[mds] == session->inst) {
+      ldout(cct, 4) << "_open_mds_session mds." << mds << " skipping "
+                       "because we were rejected" << dendl;
+      return session;
+    } else {
+      ldout(cct, 4) << "_open_mds_session mds." << mds << " old inst "
+                       "rejected us, trying with new inst" << dendl;
+      rejected_by_mds.erase(mds);
+    }
+  }
+
   MClientSession *m = new MClientSession(CEPH_SESSION_REQUEST_OPEN);
   m->client_meta = metadata;
   session->con->send_message(m);
@@ -1950,6 +1971,12 @@ void Client::handle_client_session(MClientSession *m)
 
   case CEPH_SESSION_FORCE_RO:
     force_session_readonly(session);
+    break;
+
+  case CEPH_SESSION_REJECT:
+    rejected_by_mds[session->mds_num] = session->inst;
+    _closed_mds_session(session);
+
     break;
 
   default:
@@ -4728,65 +4755,337 @@ void Client::handle_cap_grant(MetaSession *session, Inode *in, Cap *cap, MClient
   m->put();
 }
 
-int Client::check_permissions(Inode *in, int flags, int uid, int gid)
+class Client_UserGroups : public UserGroups {
+  Client *client;
+  uid_t uid;
+  gid_t gid;
+  int sgid_count;
+  gid_t *sgids;
+  void init() {
+    sgid_count = client->_getgrouplist(&sgids, uid, gid);
+  }
+  public:
+  Client_UserGroups(Client *c, uid_t u, gid_t g) :
+    client(c), uid(u), gid(g), sgid_count(-1), sgids(NULL) {}
+  ~Client_UserGroups() {
+    free(sgids);
+  }
+  bool is_in(gid_t id) {
+    if (id == gid)
+      return true;
+    if (sgid_count < 0)
+      init();
+    for (int i = 0; i < sgid_count; ++i) {
+      if (id == sgids[i])
+	return true;
+    }
+    return false;
+  }
+  gid_t get_gid() {
+    return gid;
+  }
+};
+
+int Client::_getgrouplist(gid_t** sgids, int uid, int gid)
 {
-  gid_t *sgids = NULL;
-  int sgid_count = 0;
+  int sgid_count;
+  gid_t *sgid_buf;
+
   if (getgroups_cb) {
-    sgid_count = getgroups_cb(callback_handle, uid, &sgids);
-    if (sgid_count < 0) {
-      ldout(cct, 3) << "getgroups failed!" << dendl;
+    sgid_count = getgroups_cb(callback_handle, &sgid_buf);
+    if (sgid_count >= 0) {
+      *sgids = sgid_buf;
       return sgid_count;
     }
   }
+
 #if HAVE_GETGROUPLIST
-  else {
-    //use PAM to get the group list
-    // initial number of group entries, defaults to posix standard of 16
-    // PAM implementations may provide more than 16 groups....
-    sgid_count = 16;
-    sgids = (gid_t*)malloc(sgid_count * sizeof(gid_t));
-    if (sgids == NULL) {
-      ldout(cct, 3) << "allocating group memory failed" << dendl;
-      return -EACCES;
-    }
-    struct passwd *pw;
-    pw = getpwuid(uid);
-    if (pw == NULL) {
-      ldout(cct, 3) << "getting user entry failed" << dendl;
-      free(sgids); 
-      return -EACCES;
-    }
-    while (1) {
-#if defined(__APPLE__)
-      if (getgrouplist(pw->pw_name, gid, (int *)sgids, &sgid_count) == -1) {
-#else
-      if (getgrouplist(pw->pw_name, gid, sgids, &sgid_count) == -1) {
-#endif
-        // we need to resize the group list and try again
-	void *_realloc = NULL;
-        if ((_realloc = realloc(sgids, sgid_count * sizeof(gid_t))) == NULL) {
-          ldout(cct, 3) << "allocating group memory failed" << dendl;
-	  free(sgids);
-          return -EACCES;
-        }
-	sgids = (gid_t*)_realloc;
-        continue;
-      }
-      // list was successfully retrieved
-      break;
-    }    
+  struct passwd *pw;
+  pw = getpwuid(uid);
+  if (pw == NULL) {
+    ldout(cct, 3) << "getting user entry failed" << dendl;
+    return -errno;
   }
+  //use PAM to get the group list
+  // initial number of group entries, defaults to posix standard of 16
+  // PAM implementations may provide more than 16 groups....
+  sgid_count = 16;
+  sgid_buf = (gid_t*)malloc(sgid_count * sizeof(gid_t));
+  if (sgid_buf == NULL) {
+    ldout(cct, 3) << "allocating group memory failed" << dendl;
+    return -ENOMEM;
+  }
+
+  while (1) {
+#if defined(__APPLE__)
+    if (getgrouplist(pw->pw_name, gid, (int*)sgid_buf, &sgid_count) == -1) {
+#else
+    if (getgrouplist(pw->pw_name, gid, sgid_buf, &sgid_count) == -1) {
 #endif
+      // we need to resize the group list and try again
+      void *_realloc = NULL;
+      if ((_realloc = realloc(sgid_buf, sgid_count * sizeof(gid_t))) == NULL) {
+	ldout(cct, 3) << "allocating group memory failed" << dendl;
+	free(sgid_buf);
+	return -ENOMEM;
+      }
+      sgid_buf = (gid_t*)_realloc;
+      continue;
+    }
+    // list was successfully retrieved
+    break;
+  }
+  *sgids = sgid_buf;
+  return sgid_count;
+#else
+  return 0;
+#endif
+}
+
+int Client::inode_permissions(Inode *in, uid_t uid, UserGroups& groups, unsigned want)
+{
+  if (uid == 0)
+    return 0;
+
+  int ret;
+  if (uid != in->uid && (in->mode & S_IRWXG)) {
+    ret = _posix_acl_permission(in, uid, groups, want);
+    if (ret != -EAGAIN)
+      return ret;
+  }
 
   // check permissions before doing anything else
-  int ret = 0;
-  if (uid != 0 && !in->check_mode(uid, gid, sgids, sgid_count, flags)) {
-    ret = -EACCES;
+  if (!in->check_mode(uid, groups, want))
+    return -EACCES;
+  return 0;
+}
+
+int Client::xattr_permission(Inode *in, const char *name, unsigned want, int uid, int gid)
+{
+  if (uid < 0)
+    uid = get_uid();
+  if (gid < 0)
+    gid = get_gid();
+
+  int r = _getattr(in, CEPH_STAT_CAP_MODE, uid, gid);
+  if (r < 0)
+    goto out;
+
+  r = 0;
+  if (strncmp(name, "system.", 7) == 0) {
+    if ((want & MAY_WRITE) && (uid != 0 && (uid_t)uid != in->uid))
+      r = -EPERM;
+  } else {
+    Client_UserGroups groups(this, uid, gid);
+    r = inode_permissions(in, uid, groups, want);
   }
-  if (sgids)
-    free(sgids);
-  return ret;
+out:
+  ldout(cct, 3) << __func__ << " " << in << " = " << r <<  dendl;
+  return r;
+}
+
+int Client::inode_change_ok(Inode *in, struct stat *st, int mask,
+			    int uid, int gid)
+{
+  if (uid < 0)
+    uid = get_uid();
+  if (gid < 0)
+    gid = get_gid();
+
+  int r = _getattr(in, CEPH_STAT_CAP_MODE, uid, gid);
+  if (r < 0)
+    goto out;
+
+  {
+    Client_UserGroups groups(this, uid, gid);
+
+    if (mask & CEPH_SETATTR_SIZE) {
+      r = inode_permissions(in, uid, groups, MAY_WRITE);
+      if (r < 0)
+	goto out;
+    }
+
+    r = -EPERM;
+    if (mask & CEPH_SETATTR_UID) {
+      if (uid != 0 && ((uid_t)uid != in->uid || st->st_uid != in->uid))
+	goto out;
+    }
+    if (mask & CEPH_SETATTR_GID) {
+      if (uid != 0 && ((uid_t)uid != in->uid ||
+		       (!groups.is_in(st->st_gid) && st->st_gid != in->gid)))
+	goto out;
+    }
+
+    if (mask & CEPH_SETATTR_MODE) {
+      if (uid != 0 && (uid_t)uid != in->uid)
+	goto out;
+
+      gid_t i_gid = (mask & CEPH_SETATTR_GID) ? st->st_gid : in->gid;
+      if (uid != 0 && !groups.is_in(i_gid))
+	st->st_mode &= ~S_ISGID;
+    }
+
+    if (mask & (CEPH_SETATTR_CTIME | CEPH_SETATTR_MTIME | CEPH_SETATTR_ATIME)) {
+      if (uid != 0 && (uid_t)uid != in->uid)
+	goto out;
+    }
+  }
+  r = 0;
+out:
+  ldout(cct, 3) << __func__ << " " << in << " = " << r <<  dendl;
+  return r;
+}
+
+int Client::may_open(Inode *in, int flags, int uid, int gid)
+{
+  unsigned want = 0;
+
+  if ((flags & O_ACCMODE) == O_WRONLY)
+    want = MAY_WRITE;
+  else if ((flags & O_ACCMODE) == O_RDWR)
+    want = MAY_READ | MAY_WRITE;
+  else if ((flags & O_ACCMODE) == O_RDONLY)
+    want = MAY_READ;
+  if (flags & O_TRUNC)
+    want |= MAY_WRITE;
+
+  int r = 0;
+  switch (in->mode & S_IFMT) {
+    case S_IFLNK:
+      r = -ELOOP;
+      goto out;
+    case S_IFDIR:
+      if (want & MAY_WRITE) {
+	r = -EISDIR;
+	goto out;
+      }
+      break;
+  }
+
+  if (uid < 0)
+    uid = get_uid();
+  if (gid < 0)
+    gid = get_gid();
+
+  r = _getattr(in, CEPH_STAT_CAP_MODE, uid, gid);
+  if (r < 0)
+    goto out;
+
+  {
+    Client_UserGroups groups(this, uid, gid);
+    r = inode_permissions(in, uid, groups, want);
+  }
+out:
+  ldout(cct, 3) << __func__ << " " << in << " = " << r <<  dendl;
+  return r;
+}
+
+int Client::may_lookup(Inode *dir, int uid, int gid)
+{
+  if (uid < 0)
+    uid = get_uid();
+  if (gid < 0)
+    gid = get_gid();
+
+  int r = _getattr(dir, CEPH_STAT_CAP_MODE, uid, gid);
+  if (r < 0)
+    goto out;
+
+  {
+    Client_UserGroups groups(this, uid, gid);
+    r = inode_permissions(dir, uid, groups, MAY_EXEC);
+  }
+out:
+  ldout(cct, 3) << __func__ << " " << dir << " = " << r <<  dendl;
+  return r;
+}
+
+int Client::may_create(Inode *dir, int uid, int gid)
+{
+  if (uid < 0)
+    uid = get_uid();
+  if (gid < 0)
+    gid = get_gid();
+
+  int r = _getattr(dir, CEPH_STAT_CAP_MODE, uid, gid);
+  if (r < 0)
+    goto out;
+
+  {
+    Client_UserGroups groups(this, uid, gid);
+    r = inode_permissions(dir, uid, groups, MAY_EXEC | MAY_WRITE);
+  }
+out:
+  ldout(cct, 3) << __func__ << " " << dir << " = " << r <<  dendl;
+  return r;
+}
+
+int Client::may_delete(Inode *dir, const char *name, int uid, int gid)
+{
+  if (uid < 0)
+    uid = get_uid();
+  if (gid < 0)
+    gid = get_gid();
+
+  int r = _getattr(dir, CEPH_STAT_CAP_MODE, uid, gid);
+  if (r < 0)
+    goto out;
+
+  {
+    Client_UserGroups groups(this, uid, gid);
+    r = inode_permissions(dir, uid, groups, MAY_EXEC | MAY_WRITE);
+    if (r < 0)
+      goto out;
+  }
+
+  /* 'name == NULL' means rmsnap */
+  if (uid != 0 && name && (dir->mode & S_ISVTX)) {
+    InodeRef otherin;
+    r = _lookup(dir, name, &otherin, uid, gid);
+    if (r < 0)
+      goto out;
+    if (dir->uid != (uid_t)uid && otherin->uid != (uid_t)uid)
+      r = -EPERM;
+  }
+
+out:
+  ldout(cct, 3) << __func__ << " " << dir << " = " << r <<  dendl;
+  return r;
+}
+
+int Client::may_linkat(Inode *in, int uid, int gid)
+{
+  if (uid < 0)
+    uid = get_uid();
+  if (gid < 0)
+    gid = get_gid();
+
+  int r = _getattr(in, CEPH_STAT_CAP_MODE, uid, gid);
+  if (r < 0)
+    goto out;
+
+  if (uid == 0 || (uid_t)uid == in->uid) {
+    r = 0;
+    goto out;
+  }
+
+  r = -EPERM;
+  if (!S_ISREG(in->mode))
+    goto out;
+
+  if (in->mode & S_ISUID)
+    goto out;
+
+  if ((in->mode & (S_ISGID | S_IXGRP)) == (S_ISGID | S_IXGRP))
+    goto out;
+
+  {
+    Client_UserGroups groups(this, uid, gid);
+    r = inode_permissions(in, uid, groups, MAY_READ | MAY_WRITE);
+  }
+out:
+  ldout(cct, 3) << __func__ << " " << in << " = " << r <<  dendl;
+  return r;
 }
 
 vinodeno_t Client::_get_vino(Inode *in)
@@ -5477,6 +5776,11 @@ int Client::path_walk(const filepath& origpath, InodeRef *end, bool followsym,
     cur = cwd;
   assert(cur);
 
+  if (uid < 0)
+    uid = get_uid();
+  if (gid < 0)
+    gid = get_gid();
+
   ldout(cct, 10) << "path_walk " << path << dendl;
 
   int symlinks = 0;
@@ -5487,6 +5791,11 @@ int Client::path_walk(const filepath& origpath, InodeRef *end, bool followsym,
     ldout(cct, 10) << " " << i << " " << *cur << " " << dname << dendl;
     ldout(cct, 20) << "  (path is " << path << ")" << dendl;
     InodeRef next;
+    if (cct->_conf->client_permissions) {
+      int r = may_lookup(cur.get(), uid, gid);
+      if (r < 0)
+	return r;
+    }
     int r = _lookup(cur.get(), dname, &next, uid, gid);
     if (r < 0)
       return r;
@@ -5553,13 +5862,24 @@ int Client::link(const char *relexisting, const char *relpath)
   path.pop_dentry();
 
   InodeRef in, dir;
-  int r;
-  r = path_walk(existing, &in);
+  int r = path_walk(existing, &in);
   if (r < 0)
     goto out;
   r = path_walk(path, &dir);
   if (r < 0)
     goto out;
+  if (cct->_conf->client_permissions) {
+    if (S_ISDIR(in->mode)) {
+      r = -EPERM;
+      goto out;
+    }
+    r = may_linkat(in.get());
+    if (r < 0)
+      goto out;
+    r = may_create(dir.get());
+    if (r < 0)
+      goto out;
+  }
   r = _link(in.get(), dir.get(), name.c_str());
  out:
   return r;
@@ -5578,6 +5898,11 @@ int Client::unlink(const char *relpath)
   int r = path_walk(path, &dir);
   if (r < 0)
     return r;
+  if (cct->_conf->client_permissions) {
+    r = may_delete(dir.get(), name.c_str());
+    if (r < 0)
+      return r;
+  }
   return _unlink(dir.get(), name.c_str());
 }
 
@@ -5596,16 +5921,23 @@ int Client::rename(const char *relfrom, const char *relto)
   to.pop_dentry();
 
   InodeRef fromdir, todir;
-  int r;
-
-  r = path_walk(from, &fromdir);
+  int r = path_walk(from, &fromdir);
   if (r < 0)
     goto out;
   r = path_walk(to, &todir);
   if (r < 0)
     goto out;
+
+  if (cct->_conf->client_permissions) {
+    int r = may_delete(fromdir.get(), fromname.c_str());
+    if (r < 0)
+      return r;
+    r = may_delete(todir.get(), toname.c_str());
+    if (r < 0 && r != -ENOENT)
+      return r;
+  }
   r = _rename(fromdir.get(), fromname.c_str(), todir.get(), toname.c_str());
- out:
+out:
   return r;
 }
 
@@ -5624,19 +5956,26 @@ int Client::mkdir(const char *relpath, mode_t mode)
   path.pop_dentry();
   InodeRef dir;
   int r = path_walk(path, &dir);
-  if (r < 0) {
+  if (r < 0)
     return r;
+  if (cct->_conf->client_permissions) {
+    r = may_create(dir.get());
+    if (r < 0)
+      return r;
   }
   return _mkdir(dir.get(), name.c_str(), mode);
 }
 
-int Client::mkdirs(const char *relpath, mode_t mode, int uid, int gid)
+int Client::mkdirs(const char *relpath, mode_t mode)
 {
   Mutex::Locker lock(client_lock);
   ldout(cct, 10) << "Client::mkdirs " << relpath << dendl;
   tout(cct) << "mkdirs" << std::endl;
   tout(cct) << relpath << std::endl;
   tout(cct) << mode << std::endl;
+
+  uid_t uid = get_uid();
+  gid_t gid = get_gid();
 
   //get through existing parts of path
   filepath path(relpath);
@@ -5645,6 +5984,11 @@ int Client::mkdirs(const char *relpath, mode_t mode, int uid, int gid)
   InodeRef cur, next;
   cur = cwd;
   for (i=0; i<path.depth(); ++i) {
+    if (cct->_conf->client_permissions) {
+      r = may_lookup(cur.get(), uid, gid);
+      if (r < 0)
+	break;
+    }
     r = _lookup(cur.get(), path[i].c_str(), &next, uid, gid);
     if (r < 0)
       break;
@@ -5656,20 +6000,19 @@ int Client::mkdirs(const char *relpath, mode_t mode, int uid, int gid)
   ldout(cct, 20) << "mkdirs got through " << i << " directories on path " << relpath << dendl;
   //make new directory at each level
   for (; i<path.depth(); ++i) {
+    if (cct->_conf->client_permissions) {
+      r = may_create(cur.get(), uid, gid);
+      if (r < 0)
+	return r;
+    }
     //make new dir
-    r = _mkdir(cur.get(), path[i].c_str(), mode);
+    r = _mkdir(cur.get(), path[i].c_str(), mode, uid, gid, &next);
     //check proper creation/existence
     if (r < 0) return r;
-    r = _lookup(cur.get(), path[i], &next, uid, gid);
-    if (r < 0) {
-      ldout(cct, 0) << "mkdirs: successfully created new directory " << path[i]
-	      << " but can't _lookup it!" << dendl;
-      return r;
-    }
     //move to new dir and continue
     cur.swap(next);
     ldout(cct, 20) << "mkdirs: successfully created directory "
-	     << filepath(cur->ino).get_path() << dendl;
+		   << filepath(cur->ino).get_path() << dendl;
   }
   return 0;
 }
@@ -5686,6 +6029,11 @@ int Client::rmdir(const char *relpath)
   int r = path_walk(path, &dir);
   if (r < 0)
     return r;
+  if (cct->_conf->client_permissions) {
+    int r = may_delete(dir.get(), name.c_str());
+    if (r < 0)
+      return r;
+  }
   return _rmdir(dir.get(), name.c_str());
 }
 
@@ -5699,11 +6047,16 @@ int Client::mknod(const char *relpath, mode_t mode, dev_t rdev)
   filepath path(relpath);
   string name = path.last_dentry();
   path.pop_dentry();
-  InodeRef in;
-  int r = path_walk(path, &in);
+  InodeRef dir;
+  int r = path_walk(path, &dir);
   if (r < 0)
     return r;
-  return _mknod(in.get(), name.c_str(), mode, rdev);
+  if (cct->_conf->client_permissions) {
+    int r = may_create(dir.get());
+    if (r < 0)
+      return r;
+  }
+  return _mknod(dir.get(), name.c_str(), mode, rdev);
 }
 
 // symlinks
@@ -5722,6 +6075,11 @@ int Client::symlink(const char *target, const char *relpath)
   int r = path_walk(path, &dir);
   if (r < 0)
     return r;
+  if (cct->_conf->client_permissions) {
+    int r = may_create(dir.get());
+    if (r < 0)
+      return r;
+  }
   return _symlink(dir.get(), name.c_str(), target);
 }
 
@@ -5776,8 +6134,8 @@ int Client::_getattr(Inode *in, int mask, int uid, int gid, bool force)
   return res;
 }
 
-int Client::_setattr(Inode *in, struct stat *attr, int mask, int uid, int gid,
-		     InodeRef *inp)
+int Client::_do_setattr(Inode *in, struct stat *attr, int mask, int uid, int gid,
+			InodeRef *inp)
 {
   int issued = in->caps_issued();
 
@@ -5934,6 +6292,27 @@ force_request:
   int res = make_request(req, uid, gid, inp);
   ldout(cct, 10) << "_setattr result=" << res << dendl;
   return res;
+}
+
+int Client::_setattr(Inode *in, struct stat *attr, int mask, int uid, int gid,
+		     InodeRef *inp)
+{
+  int ret = _do_setattr(in, attr, mask, uid, gid, inp);
+  if (ret < 0)
+   return ret;
+  if (mask & CEPH_SETATTR_MODE)
+    ret = _posix_acl_chmod(in, attr->st_mode, uid, gid);
+  return ret;
+}
+
+int Client::_setattr(InodeRef &in, struct stat *attr, int mask)
+{
+  if (cct->_conf->client_permissions) {
+    int r = inode_change_ok(in.get(), attr, mask);
+    if (r < 0)
+      return r;
+  }
+  return _setattr(in.get(), attr, mask);
 }
 
 int Client::setattr(const char *relpath, struct stat *attr, int mask)
@@ -6232,7 +6611,7 @@ int Client::flock(int fd, int operation, uint64_t owner)
   if (!f)
     return -EBADF;
 
-  return _flock(f, operation, owner, NULL);
+  return _flock(f, operation, owner);
 }
 
 int Client::opendir(const char *relpath, dir_result_t **dirpp) 
@@ -6245,6 +6624,11 @@ int Client::opendir(const char *relpath, dir_result_t **dirpp)
   int r = path_walk(path, &in);
   if (r < 0)
     return r;
+  if (cct->_conf->client_permissions) {
+    int r = may_open(in.get(), O_RDONLY);
+    if (r < 0)
+      return r;
+  }
   r = _opendir(in.get(), dirpp);
   tout(cct) << (unsigned long)*dirpp << std::endl;
   return r;
@@ -6899,6 +7283,9 @@ int Client::open(const char *relpath, int flags, mode_t mode, int stripe_unit,
   tout(cct) << relpath << std::endl;
   tout(cct) << flags << std::endl;
 
+  uid_t uid = get_uid();
+  gid_t gid = get_gid();
+
   Fh *fh = NULL;
 
 #if defined(__linux__) && defined(O_PATH)
@@ -6914,7 +7301,7 @@ int Client::open(const char *relpath, int flags, mode_t mode, int stripe_unit,
   bool created = false;
   /* O_CREATE with O_EXCL enforces O_NOFOLLOW. */
   bool followsym = !((flags & O_NOFOLLOW) || ((flags & O_CREAT) && (flags & O_EXCL)));
-  int r = path_walk(path, &in, followsym);
+  int r = path_walk(path, &in, followsym, uid, gid);
 
   if (r == 0 && (flags & O_CREAT) && (flags & O_EXCL))
     return -EEXIST;
@@ -6931,26 +7318,31 @@ int Client::open(const char *relpath, int flags, mode_t mode, int stripe_unit,
     string dname = dirpath.last_dentry();
     dirpath.pop_dentry();
     InodeRef dir;
-    r = path_walk(dirpath, &dir);
+    r = path_walk(dirpath, &dir, true, uid, gid);
     if (r < 0)
-      return r;
+      goto out;
+    if (cct->_conf->client_permissions) {
+      r = may_create(dir.get(), uid, gid);
+      if (r < 0)
+	goto out;
+    }
     r = _create(dir.get(), dname.c_str(), flags, mode, &in, &fh, stripe_unit,
-                stripe_count, object_size, data_pool, &created);
+                stripe_count, object_size, data_pool, &created, uid, gid);
   }
   if (r < 0)
     goto out;
 
   if (!created) {
     // posix says we can only check permissions of existing files
-    uid_t uid = get_uid();
-    gid_t gid = get_gid();
-    r = check_permissions(in.get(), flags, uid, gid);
-    if (r < 0)
-      goto out;
+    if (cct->_conf->client_permissions) {
+      r = may_open(in.get(), flags, uid, gid);
+      if (r < 0)
+	goto out;
+    }
   }
 
   if (!fh)
-    r = _open(in.get(), flags, mode, &fh);
+    r = _open(in.get(), flags, mode, &fh, uid, gid);
   if (r >= 0) {
     // allocate a integer file descriptor
     assert(fh);
@@ -8241,7 +8633,7 @@ int Client::statfs(const char *path, struct statvfs *stbuf)
 }
 
 int Client::_do_filelock(Inode *in, Fh *fh, int lock_type, int op, int sleep,
-			 struct flock *fl, uint64_t owner, void *fuse_req)
+			 struct flock *fl, uint64_t owner)
 {
   ldout(cct, 10) << "_do_filelock ino " << in->ino
 		 << (lock_type == CEPH_LOCK_FCNTL ? " fcntl" : " flock")
@@ -8285,14 +8677,14 @@ int Client::_do_filelock(Inode *in, Fh *fh, int lock_type, int op, int sleep,
   int ret;
   bufferlist bl;
 
-  if (sleep && switch_interrupt_cb && fuse_req) {
+  if (sleep && switch_interrupt_cb) {
     // enable interrupt
-    switch_interrupt_cb(fuse_req, req->get());
+    switch_interrupt_cb(callback_handle, req->get());
 
     ret = make_request(req, -1, -1, NULL, NULL, -1, &bl);
 
     // disable interrupt
-    switch_interrupt_cb(fuse_req, NULL);
+    switch_interrupt_cb(callback_handle, NULL);
     put_request(req);
   } else {
     ret = make_request(req, -1, -1, NULL, NULL, -1, &bl);
@@ -8486,16 +8878,16 @@ int Client::_getlk(Fh *fh, struct flock *fl, uint64_t owner)
   return ret;
 }
 
-int Client::_setlk(Fh *fh, struct flock *fl, uint64_t owner, int sleep, void *fuse_req)
+int Client::_setlk(Fh *fh, struct flock *fl, uint64_t owner, int sleep)
 {
   Inode *in = fh->inode.get();
   ldout(cct, 10) << "_setlk " << fh << " ino " << in->ino << dendl;
-  int ret =  _do_filelock(in, fh, CEPH_LOCK_FCNTL, CEPH_MDS_OP_SETFILELOCK, sleep, fl, owner, fuse_req);
+  int ret =  _do_filelock(in, fh, CEPH_LOCK_FCNTL, CEPH_MDS_OP_SETFILELOCK, sleep, fl, owner);
   ldout(cct, 10) << "_setlk " << fh << " ino " << in->ino << " result=" << ret << dendl;
   return ret;
 }
 
-int Client::_flock(Fh *fh, int cmd, uint64_t owner, void *fuse_req)
+int Client::_flock(Fh *fh, int cmd, uint64_t owner)
 {
   Inode *in = fh->inode.get();
   ldout(cct, 10) << "_flock " << fh << " ino " << in->ino << dendl;
@@ -8523,7 +8915,7 @@ int Client::_flock(Fh *fh, int cmd, uint64_t owner, void *fuse_req)
   fl.l_type = type;
   fl.l_whence = SEEK_SET;
 
-  int ret =  _do_filelock(in, fh, CEPH_LOCK_FLOCK, CEPH_MDS_OP_SETFILELOCK, sleep, &fl, owner, fuse_req);
+  int ret =  _do_filelock(in, fh, CEPH_LOCK_FLOCK, CEPH_MDS_OP_SETFILELOCK, sleep, &fl, owner);
   ldout(cct, 10) << "_flock " << fh << " ino " << in->ino << " result=" << ret << dendl;
   return ret;
 }
@@ -8566,6 +8958,7 @@ void Client::ll_register_callbacks(struct client_callback_args *args)
     remount_finisher.start();
   }
   getgroups_cb = args->getgroups_cb;
+  umask_cb = args->umask_cb;
 }
 
 int Client::test_dentry_handling(bool can_invalidate)
@@ -8670,6 +9063,11 @@ int Client::mksnap(const char *relpath, const char *name)
   int r = path_walk(path, &in);
   if (r < 0)
     return r;
+  if (cct->_conf->client_permissions) {
+    r = may_create(in.get());
+    if (r < 0)
+      return r;
+  }
   Inode *snapdir = open_snapdir(in.get());
   return _mkdir(snapdir, name, 0);
 }
@@ -8681,6 +9079,11 @@ int Client::rmsnap(const char *relpath, const char *name)
   int r = path_walk(path, &in);
   if (r < 0)
     return r;
+  if (cct->_conf->client_permissions) {
+    r = may_delete(in.get(), NULL);
+    if (r < 0)
+      return r;
+  }
   Inode *snapdir = open_snapdir(in.get());
   return _rmdir(snapdir, name);
 }
@@ -8750,9 +9153,15 @@ int Client::ll_lookup(Inode *parent, const char *name, struct stat *attr,
   tout(cct) << "ll_lookup" << std::endl;
   tout(cct) << name << std::endl;
 
+  int r = 0;
+  if (!cct->_conf->fuse_default_permissions) {
+    r = may_lookup(parent, uid, gid);
+    if (r < 0)
+      return r;
+  }
+
   string dname(name);
   InodeRef in;
-  int r = 0;
 
   r = _lookup(parent, dname, &in, uid, gid);
   if (r < 0) {
@@ -8949,6 +9358,12 @@ int Client::ll_setattr(Inode *in, struct stat *attr, int mask, int uid,
   tout(cct) << attr->st_atime << std::endl;
   tout(cct) << mask << std::endl;
 
+  if (!cct->_conf->fuse_default_permissions) {
+    int res = inode_change_ok(in, attr, mask, uid, gid);
+    if (res < 0)
+      return res;
+  }
+
   InodeRef target(in);
   int res = _setattr(in, attr, mask, uid, gid, &target);
   if (res == 0) {
@@ -8971,7 +9386,7 @@ int Client::getxattr(const char *path, const char *name, void *value, size_t siz
   int r = Client::path_walk(path, &in, true);
   if (r < 0)
     return r;
-  return Client::_getxattr(in.get(), name, value, size);
+  return _getxattr(in, name, value, size);
 }
 
 int Client::lgetxattr(const char *path, const char *name, void *value, size_t size)
@@ -8981,7 +9396,7 @@ int Client::lgetxattr(const char *path, const char *name, void *value, size_t si
   int r = Client::path_walk(path, &in, false);
   if (r < 0)
     return r;
-  return Client::_getxattr(in.get(), name, value, size);
+  return _getxattr(in, name, value, size);
 }
 
 int Client::fgetxattr(int fd, const char *name, void *value, size_t size)
@@ -8990,7 +9405,7 @@ int Client::fgetxattr(int fd, const char *name, void *value, size_t size)
   Fh *f = get_filehandle(fd);
   if (!f)
     return -EBADF;
-  return Client::_getxattr(f->inode.get(), name, value, size);
+  return _getxattr(f->inode, name, value, size);
 }
 
 int Client::listxattr(const char *path, char *list, size_t size)
@@ -9029,7 +9444,7 @@ int Client::removexattr(const char *path, const char *name)
   int r = Client::path_walk(path, &in, true);
   if (r < 0)
     return r;
-  return Client::_removexattr(in.get(), name);
+  return _removexattr(in, name);
 }
 
 int Client::lremovexattr(const char *path, const char *name)
@@ -9039,7 +9454,7 @@ int Client::lremovexattr(const char *path, const char *name)
   int r = Client::path_walk(path, &in, false);
   if (r < 0)
     return r;
-  return Client::_removexattr(in.get(), name);
+  return _removexattr(in, name);
 }
 
 int Client::fremovexattr(int fd, const char *name)
@@ -9048,7 +9463,7 @@ int Client::fremovexattr(int fd, const char *name)
   Fh *f = get_filehandle(fd);
   if (!f)
     return -EBADF;
-  return Client::_removexattr(f->inode.get(), name);
+  return _removexattr(f->inode, name);
 }
 
 int Client::setxattr(const char *path, const char *name, const void *value, size_t size, int flags)
@@ -9058,7 +9473,7 @@ int Client::setxattr(const char *path, const char *name, const void *value, size
   int r = Client::path_walk(path, &in, true);
   if (r < 0)
     return r;
-  return Client::_setxattr(in.get(), name, value, size, flags);
+  return _setxattr(in, name, value, size, flags);
 }
 
 int Client::lsetxattr(const char *path, const char *name, const void *value, size_t size, int flags)
@@ -9068,7 +9483,7 @@ int Client::lsetxattr(const char *path, const char *name, const void *value, siz
   int r = Client::path_walk(path, &in, false);
   if (r < 0)
     return r;
-  return Client::_setxattr(in.get(), name, value, size, flags);
+  return _setxattr(in, name, value, size, flags);
 }
 
 int Client::fsetxattr(int fd, const char *name, const void *value, size_t size, int flags)
@@ -9077,7 +9492,7 @@ int Client::fsetxattr(int fd, const char *name, const void *value, size_t size, 
   Fh *f = get_filehandle(fd);
   if (!f)
     return -EBADF;
-  return Client::_setxattr(f->inode.get(), name, value, size, flags);
+  return _setxattr(f->inode, name, value, size, flags);
 }
 
 int Client::_getxattr(Inode *in, const char *name, void *value, size_t size,
@@ -9104,6 +9519,11 @@ int Client::_getxattr(Inode *in, const char *name, void *value, size_t size,
     goto out;
   }
 
+  if (!cct->_conf->client_posix_acl && !strncmp(name, "system.", 7)) {
+    r = -EOPNOTSUPP;
+    goto out;
+  }
+
   r = _getattr(in, CEPH_STAT_CAP_XATTR, uid, gid, in->xattr_version == 0);
   if (r == 0) {
     string n(name);
@@ -9123,6 +9543,16 @@ int Client::_getxattr(Inode *in, const char *name, void *value, size_t size,
   return r;
 }
 
+int Client::_getxattr(InodeRef &in, const char *name, void *value, size_t size)
+{
+  if (cct->_conf->client_permissions) {
+    int r = xattr_permission(in.get(), name, MAY_READ);
+    if (r < 0)
+      return r;
+  }
+  return _getxattr(in.get(), name, value, size);
+}
+
 int Client::ll_getxattr(Inode *in, const char *name, void *value,
 			size_t size, int uid, int gid)
 {
@@ -9134,6 +9564,12 @@ int Client::ll_getxattr(Inode *in, const char *name, void *value,
   tout(cct) << "ll_getxattr" << std::endl;
   tout(cct) << vino.ino.val << std::endl;
   tout(cct) << name << std::endl;
+
+  if (!cct->_conf->fuse_default_permissions) {
+    int r = xattr_permission(in, name, MAY_READ, uid, gid);
+    if (r < 0)
+      return r;
+  }
 
   return _getxattr(in, name, value, size, uid, gid);
 }
@@ -9197,23 +9633,9 @@ int Client::ll_listxattr(Inode *in, char *names, size_t size, int uid,
   return _listxattr(in, names, size, uid, gid);
 }
 
-int Client::_setxattr(Inode *in, const char *name, const void *value,
-		      size_t size, int flags, int uid, int gid)
+int Client::_do_setxattr(Inode *in, const char *name, const void *value,
+			 size_t size, int flags, int uid, int gid)
 {
-  if (in->snapid != CEPH_NOSNAP) {
-    return -EROFS;
-  }
-
-  // same xattrs supported by kernel client
-  if (strncmp(name, "user.", 5) &&
-      strncmp(name, "security.", 9) &&
-      strncmp(name, "trusted.", 8) &&
-      strncmp(name, "ceph.", 5))
-    return -EOPNOTSUPP;
-
-  const VXattr *vxattr = _match_vxattr(in, name);
-  if (vxattr && vxattr->readonly)
-    return -EOPNOTSUPP;
 
   int xattr_flags = 0;
   if (!value)
@@ -9241,6 +9663,72 @@ int Client::_setxattr(Inode *in, const char *name, const void *value,
   ldout(cct, 3) << "_setxattr(" << in->ino << ", \"" << name << "\") = " <<
     res << dendl;
   return res;
+}
+
+int Client::_setxattr(Inode *in, const char *name, const void *value,
+		      size_t size, int flags, int uid, int gid)
+{
+  if (in->snapid != CEPH_NOSNAP) {
+    return -EROFS;
+  }
+
+  int posix_acl_xattr = cct->_conf->client_posix_acl &&
+			!strncmp(name, "system.", 7);
+
+  if (strncmp(name, "user.", 5) &&
+      strncmp(name, "security.", 9) &&
+      strncmp(name, "trusted.", 8) &&
+      strncmp(name, "ceph.", 5) &&
+      !posix_acl_xattr)
+    return -EOPNOTSUPP;
+
+  if (posix_acl_xattr) {
+    if (!strcmp(name, POSIX_ACL_XATTR_ACCESS)) {
+      mode_t new_mode = in->mode;
+      if (value) {
+	int ret = posix_acl_equiv_mode(value, size, &new_mode);
+	if (ret < 0)
+	  return ret;
+	if (ret == 0) {
+	  value = NULL;
+	  size = 0;
+	}
+	if (new_mode != in->mode) {
+	  struct stat attr;
+	  attr.st_mode = new_mode;
+	  ret = _do_setattr(in, &attr, CEPH_SETATTR_MODE, uid, gid, NULL);
+	  if (ret < 0)
+	    return ret;
+	}
+      }
+    } else if (!strcmp(name, POSIX_ACL_XATTR_DEFAULT)) {
+      if (value) {
+	if (!S_ISDIR(in->mode))
+	  return -EACCES;
+	if (!posix_acl_valid(value, size))
+	  return -EINVAL;
+      }
+    } else {
+      return -EOPNOTSUPP;
+    }
+  } else {
+    const VXattr *vxattr = _match_vxattr(in, name);
+    if (vxattr && vxattr->readonly)
+      return -EOPNOTSUPP;
+  }
+
+  return _do_setxattr(in, name, value, size, flags, uid, gid);
+}
+
+int Client::_setxattr(InodeRef &in, const char *name, const void *value,
+		      size_t size, int flags)
+{
+  if (cct->_conf->client_permissions) {
+    int r = xattr_permission(in.get(), name, MAY_WRITE);
+    if (r < 0)
+      return r;
+  }
+  return _setxattr(in.get(), name, value, size, flags);
 }
 
 int Client::check_data_pool_exist(string name, string value, const OSDMap *osdmap)
@@ -9313,6 +9801,12 @@ int Client::ll_setxattr(Inode *in, const char *name, const void *value,
   tout(cct) << vino.ino.val << std::endl;
   tout(cct) << name << std::endl;
 
+  if (!cct->_conf->fuse_default_permissions) {
+    int r = xattr_permission(in, name, MAY_WRITE, uid, gid);
+    if (r < 0)
+      return r;
+  }
+
   return _setxattr(in, name, value, size, flags, uid, gid);
 }
 
@@ -9324,6 +9818,7 @@ int Client::_removexattr(Inode *in, const char *name, int uid, int gid)
 
   // same xattrs supported by kernel client
   if (strncmp(name, "user.", 5) &&
+      strncmp(name, "system.", 7) &&
       strncmp(name, "security.", 9) &&
       strncmp(name, "trusted.", 8) &&
       strncmp(name, "ceph.", 5))
@@ -9347,6 +9842,15 @@ int Client::_removexattr(Inode *in, const char *name, int uid, int gid)
   return res;
 }
 
+int Client::_removexattr(InodeRef &in, const char *name)
+{
+  if (cct->_conf->client_permissions) {
+    int r = xattr_permission(in.get(), name, MAY_WRITE);
+    if (r < 0)
+      return r;
+  }
+  return _removexattr(in.get(), name);
+}
 
 int Client::ll_removexattr(Inode *in, const char *name, int uid, int gid)
 {
@@ -9358,6 +9862,12 @@ int Client::ll_removexattr(Inode *in, const char *name, int uid, int gid)
   tout(cct) << "ll_removexattr" << std::endl;
   tout(cct) << vino.ino.val << std::endl;
   tout(cct) << name << std::endl;
+
+  if (!cct->_conf->fuse_default_permissions) {
+    int r = xattr_permission(in, name, MAY_WRITE, uid, gid);
+    if (r < 0)
+      return r;
+  }
 
   return _removexattr(in, name, uid, gid);
 }
@@ -9619,13 +10129,20 @@ int Client::_mknod(Inode *dir, const char *name, mode_t mode, dev_t rdev,
   path.push_dentry(name);
   req->set_filepath(path); 
   req->set_inode(dir);
-  req->head.args.mknod.mode = mode;
   req->head.args.mknod.rdev = rdev;
   req->dentry_drop = CEPH_CAP_FILE_SHARED;
   req->dentry_unless = CEPH_CAP_FILE_EXCL;
 
+  bufferlist xattrs_bl;
+  int res = _posix_acl_create(dir, &mode, xattrs_bl, uid, gid);
+  if (res < 0)
+    goto fail;
+  req->head.args.mknod.mode = mode;
+  if (xattrs_bl.length() > 0)
+    req->set_data(xattrs_bl);
+
   Dentry *de;
-  int res = get_or_create(dir, name, &de);
+  res = get_or_create(dir, name, &de);
   if (res < 0)
     goto fail;
   req->set_dentry(de);
@@ -9656,6 +10173,12 @@ int Client::ll_mknod(Inode *parent, const char *name, mode_t mode,
   tout(cct) << name << std::endl;
   tout(cct) << mode << std::endl;
   tout(cct) << rdev << std::endl;
+
+  if (!cct->_conf->fuse_default_permissions) {
+    int r = may_create(parent, uid, gid);
+    if (r < 0)
+      return r;
+  }
 
   InodeRef in;
   int r = _mknod(parent, name, mode, rdev, uid, gid, &in);
@@ -9710,7 +10233,6 @@ int Client::_create(Inode *dir, const char *name, int flags, mode_t mode,
   req->set_filepath(path);
   req->set_inode(dir);
   req->head.args.open.flags = flags | O_CREAT;
-  req->head.args.open.mode = mode;
 
   req->head.args.open.stripe_unit = stripe_unit;
   req->head.args.open.stripe_count = stripe_count;
@@ -9719,11 +10241,17 @@ int Client::_create(Inode *dir, const char *name, int flags, mode_t mode,
   req->dentry_drop = CEPH_CAP_FILE_SHARED;
   req->dentry_unless = CEPH_CAP_FILE_EXCL;
 
-  bufferlist extra_bl;
-  inodeno_t created_ino;
+  mode |= S_IFREG;
+  bufferlist xattrs_bl;
+  int res = _posix_acl_create(dir, &mode, xattrs_bl, uid, gid);
+  if (res < 0)
+    goto fail;
+  req->head.args.open.mode = mode;
+  if (xattrs_bl.length() > 0)
+    req->set_data(xattrs_bl);
 
   Dentry *de;
-  int res = get_or_create(dir, name, &de);
+  res = get_or_create(dir, name, &de);
   if (res < 0)
     goto fail;
   req->set_dentry(de);
@@ -9779,12 +10307,20 @@ int Client::_mkdir(Inode *dir, const char *name, mode_t mode, int uid, int gid,
   path.push_dentry(name);
   req->set_filepath(path);
   req->set_inode(dir);
-  req->head.args.mkdir.mode = mode;
   req->dentry_drop = CEPH_CAP_FILE_SHARED;
   req->dentry_unless = CEPH_CAP_FILE_EXCL;
 
+  mode |= S_IFDIR;
+  bufferlist xattrs_bl;
+  int res = _posix_acl_create(dir, &mode, xattrs_bl, uid, gid);
+  if (res < 0)
+    goto fail;
+  req->head.args.mkdir.mode = mode;
+  if (xattrs_bl.length() > 0)
+    req->set_data(xattrs_bl);
+
   Dentry *de;
-  int res = get_or_create(dir, name, &de);
+  res = get_or_create(dir, name, &de);
   if (res < 0)
     goto fail;
   req->set_dentry(de);
@@ -9815,6 +10351,12 @@ int Client::ll_mkdir(Inode *parent, const char *name, mode_t mode,
   tout(cct) << vparent.ino.val << std::endl;
   tout(cct) << name << std::endl;
   tout(cct) << mode << std::endl;
+
+  if (!cct->_conf->fuse_default_permissions) {
+    int r = may_create(parent, uid, gid);
+    if (r < 0)
+      return r;
+  }
 
   InodeRef in;
   int r = _mkdir(parent, name, mode, uid, gid, &in);
@@ -9888,6 +10430,12 @@ int Client::ll_symlink(Inode *parent, const char *name, const char *value,
   tout(cct) << name << std::endl;
   tout(cct) << value << std::endl;
 
+  if (!cct->_conf->fuse_default_permissions) {
+    int r = may_create(parent, uid, gid);
+    if (r < 0)
+      return r;
+  }
+
   InodeRef in;
   int r = _symlink(parent, name, value, uid, gid, &in);
   if (r == 0) {
@@ -9956,6 +10504,11 @@ int Client::ll_unlink(Inode *in, const char *name, int uid, int gid)
   tout(cct) << vino.ino.val << std::endl;
   tout(cct) << name << std::endl;
 
+  if (!cct->_conf->fuse_default_permissions) {
+    int r = may_delete(in, name, uid, gid);
+    if (r < 0)
+      return r;
+  }
   return _unlink(in, name, uid, gid);
 }
 
@@ -10016,6 +10569,12 @@ int Client::ll_rmdir(Inode *in, const char *name, int uid, int gid)
   tout(cct) << "ll_rmdir" << std::endl;
   tout(cct) << vino.ino.val << std::endl;
   tout(cct) << name << std::endl;
+
+  if (!cct->_conf->fuse_default_permissions) {
+    int r = may_delete(in, name, uid, gid);
+    if (r < 0)
+      return r;
+  }
 
   return _rmdir(in, name, uid, gid);
 }
@@ -10126,6 +10685,15 @@ int Client::ll_rename(Inode *parent, const char *name, Inode *newparent,
   tout(cct) << vnewparent.ino.val << std::endl;
   tout(cct) << newname << std::endl;
 
+  if (!cct->_conf->fuse_default_permissions) {
+    int r = may_delete(parent, name, uid, gid);
+    if (r < 0)
+      return r;
+    r = may_delete(newparent, newname, uid, gid);
+    if (r < 0 && r != -ENOENT)
+      return r;
+  }
+
   return _rename(parent, name, newparent, newname, uid, gid);
 }
 
@@ -10173,28 +10741,44 @@ int Client::_link(Inode *in, Inode *dir, const char *newname, int uid, int gid, 
   return res;
 }
 
-int Client::ll_link(Inode *parent, Inode *newparent, const char *newname,
+int Client::ll_link(Inode *in, Inode *newparent, const char *newname,
 		    struct stat *attr, int uid, int gid)
 {
   Mutex::Locker lock(client_lock);
 
-  vinodeno_t vparent = _get_vino(parent);
+  vinodeno_t vino = _get_vino(in);
   vinodeno_t vnewparent = _get_vino(newparent);
 
-  ldout(cct, 3) << "ll_link " << parent << " to " << vnewparent << " " <<
+  ldout(cct, 3) << "ll_link " << in << " to " << vnewparent << " " <<
     newname << dendl;
   tout(cct) << "ll_link" << std::endl;
-  tout(cct) << vparent.ino.val << std::endl;
+  tout(cct) << vino.ino.val << std::endl;
   tout(cct) << vnewparent << std::endl;
   tout(cct) << newname << std::endl;
 
+  int r = 0;
   InodeRef target;
-  int r = _link(parent, newparent, newname, uid, gid, &target);
+
+  if (!cct->_conf->fuse_default_permissions) {
+    if (S_ISDIR(in->mode)) {
+      r = -EPERM;
+      goto out;
+    }
+    r = may_linkat(in, uid, gid);
+    if (r < 0)
+      goto out;
+    r = may_create(newparent, uid, gid);
+    if (r < 0)
+      goto out;
+  }
+
+  r = _link(in, newparent, newname, uid, gid, &target);
   if (r == 0) {
     assert(target);
     fill_stat(target, attr);
     _ll_get(target.get());
   }
+out:
   return r;
 }
 
@@ -10295,7 +10879,8 @@ uint64_t Client::ll_get_internal_offset(Inode *in, uint64_t blockno)
   return (blockno % stripes_per_object) * su;
 }
 
-int Client::ll_opendir(Inode *in, dir_result_t** dirpp, int uid, int gid)
+int Client::ll_opendir(Inode *in, int flags, dir_result_t** dirpp,
+		       int uid, int gid)
 {
   Mutex::Locker lock(client_lock);
 
@@ -10304,6 +10889,12 @@ int Client::ll_opendir(Inode *in, dir_result_t** dirpp, int uid, int gid)
   ldout(cct, 3) << "ll_opendir " << vino << dendl;
   tout(cct) << "ll_opendir" << std::endl;
   tout(cct) << vino.ino.val << std::endl;
+
+  if (!cct->_conf->fuse_default_permissions) {
+    int r = may_open(in, flags, uid, gid);
+    if (r < 0)
+      return r;
+  }
 
   int r = 0;
   if (vino.snapid == CEPH_SNAPDIR) {
@@ -10358,7 +10949,7 @@ int Client::ll_open(Inode *in, int flags, Fh **fhp, int uid, int gid)
     gid = get_gid();
   }
   if (!cct->_conf->fuse_default_permissions) {
-    r = check_permissions(in, flags, uid, gid);
+    r = may_open(in, flags, uid, gid);
     if (r < 0)
       goto out;
   }
@@ -10396,8 +10987,13 @@ int Client::ll_create(Inode *parent, const char *name, mode_t mode,
   if (r == 0 && (flags & O_CREAT) && (flags & O_EXCL))
     return -EEXIST;
 
-   if (r == -ENOENT && (flags & O_CREAT)) {
-     r = _create(parent, name, flags, mode, &in, fhp /* may be NULL */,
+  if (r == -ENOENT && (flags & O_CREAT)) {
+    if (!cct->_conf->fuse_default_permissions) {
+      r = may_create(parent, uid, gid);
+      if (r < 0)
+	goto out;
+    }
+    r = _create(parent, name, flags, mode, &in, fhp /* may be NULL */,
 	        0, 0, 0, NULL, &created, uid, gid);
     if (r < 0)
       goto out;
@@ -10412,7 +11008,7 @@ int Client::ll_create(Inode *parent, const char *name, mode_t mode,
   ldout(cct, 20) << "ll_create created = " << created << dendl;
   if (!created) {
     if (!cct->_conf->fuse_default_permissions) {
-      r = check_permissions(in.get(), flags, uid, gid);
+      r = may_open(in.get(), flags, uid, gid);
       if (r < 0) {
 	if (fhp && *fhp) {
 	  int release_r = _release_fh(*fhp);
@@ -10422,7 +11018,7 @@ int Client::ll_create(Inode *parent, const char *name, mode_t mode,
       }
     }
     if (fhp && (*fhp == NULL)) {
-      r = _open(in.get(), flags, mode, fhp);
+      r = _open(in.get(), flags, mode, fhp, uid, gid);
       if (r < 0)
 	goto out;
     }
@@ -10840,24 +11436,24 @@ int Client::ll_getlk(Fh *fh, struct flock *fl, uint64_t owner)
   return _getlk(fh, fl, owner);
 }
 
-int Client::ll_setlk(Fh *fh, struct flock *fl, uint64_t owner, int sleep, void *fuse_req)
+int Client::ll_setlk(Fh *fh, struct flock *fl, uint64_t owner, int sleep)
 {
   Mutex::Locker lock(client_lock);
 
   ldout(cct, 3) << "ll_setlk  (fh) " << fh << " " << fh->inode->ino << dendl;
   tout(cct) << "ll_setk (fh)" << (unsigned long)fh << std::endl;
 
-  return _setlk(fh, fl, owner, sleep, fuse_req);
+  return _setlk(fh, fl, owner, sleep);
 }
 
-int Client::ll_flock(Fh *fh, int cmd, uint64_t owner, void *fuse_req)
+int Client::ll_flock(Fh *fh, int cmd, uint64_t owner)
 {
   Mutex::Locker lock(client_lock);
 
   ldout(cct, 3) << "ll_flock  (fh) " << fh << " " << fh->inode->ino << dendl;
   tout(cct) << "ll_flock (fh)" << (unsigned long)fh << std::endl;
 
-  return _flock(fh, cmd, owner, fuse_req);
+  return _flock(fh, cmd, owner);
 }
 
 class C_Client_RequestInterrupt : public Context  {
@@ -11412,6 +12008,93 @@ int Client::check_pool_perm(Inode *in, int need)
     return -EPERM;
   }
 
+  return 0;
+}
+
+int Client::_posix_acl_permission(Inode *in, uid_t uid, UserGroups& groups, unsigned want)
+{
+  if (cct->_conf->client_posix_acl) {
+    int r = _getattr(in, CEPH_STAT_CAP_XATTR | CEPH_STAT_CAP_MODE,
+		     uid, groups.get_gid(), in->xattr_version == 0);
+    if (r < 0)
+      return r;
+
+    if (in->xattrs.count(POSIX_ACL_XATTR_ACCESS)) {
+      const bufferptr& access_acl = in->xattrs[POSIX_ACL_XATTR_ACCESS];
+      return posix_acl_permission(access_acl, in->uid, in->gid,
+				  uid, groups, want);
+    }
+  }
+  return -EAGAIN;
+}
+
+int Client::_posix_acl_chmod(Inode *in, mode_t mode, int uid, int gid)
+{
+  if (!cct->_conf->client_posix_acl)
+    return 0;
+
+  int r = _getattr(in, CEPH_STAT_CAP_XATTR, uid, gid, in->xattr_version == 0);
+  if (r < 0)
+    goto out;
+
+  if (in->xattrs.count(POSIX_ACL_XATTR_ACCESS)) {
+    const bufferptr& access_acl = in->xattrs[POSIX_ACL_XATTR_ACCESS];
+    bufferptr acl(access_acl.c_str(), access_acl.length());
+    r = posix_acl_chmod_masq(acl, mode);
+    if (r < 0)
+      goto out;
+    r = _do_setxattr(in, POSIX_ACL_XATTR_ACCESS, acl.c_str(), acl.length(), 0, uid, gid);
+  } else {
+    r = 0;
+  }
+out:
+  ldout(cct, 10) << __func__ << " ino " << in->ino << " result=" << r << dendl;
+  return r;
+}
+
+int Client::_posix_acl_create(Inode *dir, mode_t *mode, bufferlist& xattrs_bl,
+			      int uid, int gid)
+{
+  if (!cct->_conf->client_posix_acl)
+    return 0;
+
+  if (S_ISLNK(*mode))
+    return 0;
+
+  int r = _getattr(dir, CEPH_STAT_CAP_XATTR, uid, gid, dir->xattr_version == 0);
+  if (r < 0)
+    goto out;
+
+  if (dir->xattrs.count(POSIX_ACL_XATTR_DEFAULT)) {
+    map<string, bufferptr> xattrs;
+
+    const bufferptr& default_acl = dir->xattrs[POSIX_ACL_XATTR_DEFAULT];
+    bufferptr acl(default_acl.c_str(), default_acl.length());
+    r = posix_acl_create_masq(acl, mode);
+    if (r < 0)
+      goto out;
+
+    if (r > 0) {
+      r = posix_acl_equiv_mode(acl.c_str(), acl.length(), mode);
+      if (r < 0)
+	goto out;
+      if (r > 0)
+	xattrs[POSIX_ACL_XATTR_ACCESS] = acl;
+    }
+
+    if (S_ISDIR(*mode))
+      xattrs[POSIX_ACL_XATTR_DEFAULT] = dir->xattrs[POSIX_ACL_XATTR_DEFAULT];
+
+    r = xattrs.size();
+    if (r > 0)
+      ::encode(xattrs, xattrs_bl);
+  } else {
+    if (umask_cb)
+      *mode &= ~umask_cb(callback_handle);
+    r = 0;
+  }
+out:
+  ldout(cct, 10) << __func__ << " dir ino " << dir->ino << " result=" << r << dendl;
   return 0;
 }
 

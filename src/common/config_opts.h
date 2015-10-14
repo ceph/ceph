@@ -356,9 +356,12 @@ OPTION(client_debug_inject_tick_delay, OPT_INT, 0) // delay the client tick for 
 OPTION(client_max_inline_size, OPT_U64, 4096)
 OPTION(client_inject_release_failure, OPT_BOOL, false)  // synthetic client bug for testing
 OPTION(client_inject_fixed_oldest_tid, OPT_BOOL, false)  // synthetic client bug for testing
+OPTION(client_permissions, OPT_BOOL, true)
+OPTION(client_posix_acl, OPT_BOOL, false)
 
 // note: the max amount of "in flight" dirty data is roughly (max - target)
 OPTION(fuse_use_invalidate_cb, OPT_BOOL, false) // use fuse 2.8+ invalidate callback to keep page cache consistent
+OPTION(fuse_disable_pagecache, OPT_BOOL, false)
 OPTION(fuse_allow_other, OPT_BOOL, true)
 OPTION(fuse_default_permissions, OPT_BOOL, true)
 OPTION(fuse_big_writes, OPT_BOOL, true)
