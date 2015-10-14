@@ -2659,6 +2659,10 @@ int main(int argc, char **argv)
 	  cerr << "unable to initialize zone: " << cpp_strerror(-ret) << std::endl;
 	  return -ret;
 	}
+
+        zone.system_key.id = access_key;
+        zone.system_key.key = secret_key;
+
 	ret = zone.create();
 	if (ret < 0) {
 	  cerr << "failed to create zone " << zone_name << ": " << cpp_strerror(-ret) << std::endl;
@@ -2843,22 +2847,31 @@ int main(int argc, char **argv)
       break;
     case OPT_ZONE_MODIFY:
       {
-	if (zone_id.empty() && zone_name.empty()) {
-	  cerr << "no zone name or id provided" << std::endl;
-	  return -EINVAL;
-	}
-
-	if (zonegroup_id.empty() && zonegroup_name.empty()) {
-	  cerr << "no zonegroup name or id provided" << std::endl;
-	  return -EINVAL;
-	}
-
 	RGWZoneParams zone(zone_id, zone_name);
 	int ret = zone.init(g_ceph_context, store);
         if (ret < 0) {
 	  cerr << "failed to init zone: " << cpp_strerror(-ret) << std::endl;
 	  return -ret;
 	}
+
+        bool need_zone_update = false;
+        if (!access_key.empty()) {
+          zone.system_key.id = access_key;
+          need_zone_update = true;
+        }
+
+        if (!secret_key.empty()) {
+          zone.system_key.key = secret_key;
+          need_zone_update = true;
+        }
+
+        if (need_zone_update) {
+          ret = zone.update();
+          if (ret < 0) {
+            cerr << "failed to save zone info: " << cpp_strerror(-ret) << std::endl;
+            return -ret;
+          }
+        }
 
 	RGWRealm realm(realm_id, realm_name);
 	ret = realm.init(g_ceph_context, store);
