@@ -13,16 +13,16 @@ add_definitions("-DCEPH_PKGLIBDIR=\"${libdir}\"")
 add_definitions("-DHAVE_CONFIG_H -D__CEPH__ -D_FILE_OFFSET_BITS=64 -D_REENTRANT -D_THREAD_SAFE -D__STDC_FORMAT_MACROS -D_GNU_SOURCE")
 
 set(CMAKE_ASM_COMPILER  ${PROJECT_SOURCE_DIR}/src/yasm-wrapper)
-message(status " ams compiler ${CMAKE_ASM_COMPILER}")
+message(status " asm compiler ${CMAKE_ASM_COMPILER}")
 set(CMAKE_ASM_FLAGS "-f elf64")
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -rdynamic -Wall -Wtype-limits -Wignored-qualifiers -Winit-self -Wpointer-arith -Werror=format-security -fno-strict-aliasing -fsigned-char -fPIC")
 
 execute_process(
-  COMMAND "yasm -f elf64 ${CMAKE_SOURCE_DIR}/src/common/crc32c_intel_fast_asm.S -o /dev/null"
-  RETURN_VALUE no_yasm
+  COMMAND yasm -f elf64 ${CMAKE_SOURCE_DIR}/src/common/crc32c_intel_fast_asm.S -o /dev/null
+  RESULT_VARIABLE no_yasm
   OUTPUT_QUIET)
 if(no_yasm)
-  message("we do not have a modern/working yasm")
+  message(FATAL_ERROR "we do not have a modern/working yasm")
 else(no_yasm)
   message("we have a modern and working yasm")
   execute_process(
@@ -506,6 +506,7 @@ target_link_libraries(ceph-dencoder
   blkid
   udev
   keyutils
+  librbd_replay
   ${EXTRALIBS}
   ${TCMALLOC_LIBS}
   ${CMAKE_DL_LIBS}
@@ -868,12 +869,12 @@ if(${WITH_RBD})
 
   set(librbd_replay_srcs
       rbd_replay/actions.cc 
-      rbd_replay/Deser.cc 
+      rbd_replay/ActionTypes.cc 
+      rbd_replay/BufferReader.cc 
       rbd_replay/ImageNameMap.cc 
       rbd_replay/PendingIO.cc 
       rbd_replay/rbd_loc.cc 
-      rbd_replay/Replayer.cc 
-      rbd_replay/Ser.cc)
+      rbd_replay/Replayer.cc)
   add_library(librbd_replay STATIC ${librbd_replay_srcs})
   target_link_libraries(librbd_replay PRIVATE librbd librados global udev)
 
