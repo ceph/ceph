@@ -97,8 +97,8 @@ void _usage()
   cerr << "  zonegroup delete           delete a zone group info\n";
   cerr << "  zonegroup get              show zone group info\n";
   cerr << "  zonegroup set              set zone group info (requires infile)\n";
-  cerr << "  zonegroup rename          rename a zone group\n";
-  cerr << "  zonegroups list            list all zone groups set on this cluster\n";
+  cerr << "  zonegroup rename           rename a zone group\n";
+  cerr << "  zonegroup list             list all zone groups set on this cluster\n";
   cerr << "  zonegroup-map get          show zonegroup-map\n";
   cerr << "  zonegroup-map set          set zonegroup-map (requires infile)\n";
   cerr << "  zone add                   add a zone to a zonegroup\n";
@@ -171,7 +171,7 @@ void _usage()
   cerr << "   --parent=<id>             parent period id\n";
   cerr << "   --period=<id>             period id\n";
   cerr << "   --epoch=<number>          period epoch\n";
-  cerr << "   --master                  set as master\n";
+  cerr << "   --master=<true|false>     set as master\n";
   cerr << "   --master-url              master url\n";
   cerr << "   --master-zonegroup=<id>   master zonegroup id\n";
   cerr << "   --master-zone=<id>        master zone id\n";
