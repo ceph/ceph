@@ -232,12 +232,14 @@ int RGWZoneGroup::equals(const string& other_zonegroup) const
 int RGWZoneGroup::add_zone(const RGWZoneParams& zone_params, bool is_master)
 {
   if (is_master) {
-    if (!master_zone.empty()) {
+    if (!master_zone.empty() && master_zone != zone_params.get_id()) {
       lderr(cct) << "Master zone already defined " << master_zone  << " cannot add zone "
 		 << zone_params.get_id() << dendl;
       return -EINVAL;
     }
     master_zone = zone_params.get_id();
+  } else if (master_zone == zone_params.get_id()) {
+    master_zone ="";
   }
 
   RGWZone& zone = zones[zone_params.get_id()];
