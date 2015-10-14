@@ -1,3 +1,5 @@
+# Amazon::S3 is not available on el7
+os_type: ubuntu
 tasks:
 - install:
 - ceph:
