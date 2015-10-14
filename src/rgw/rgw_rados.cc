@@ -937,12 +937,6 @@ int RGWZoneParams::create_default(bool old_format)
     return r;
   }
 
-  r = set_as_default();
-  if (r < 0) {
-    derr << "RGWZoneParams::create_default: error in set_as_default default zone params: " << cpp_strerror(-r) << dendl;
-    return r;
-  }
-
   if (old_format) {
     name = id;
   }
@@ -953,6 +947,12 @@ int RGWZoneParams::create_default(bool old_format)
 
 int RGWZoneParams::create(bool exclusive)
 {
+  list<string> zones;
+  int r = store->list_zones(zones);
+  if (r < 0) {
+    ldout(cct, 0) << "WARNING: store->list_zones() returned r=" << r << dendl;
+  }
+
   domain_root = name + ".rgw.data.root";
   metadata_heap = name + ".rgw.meta";
   control_pool = name + ".rgw.control";
@@ -967,7 +967,7 @@ int RGWZoneParams::create(bool exclusive)
 
   /* check for old pools config */
   rgw_obj obj(domain_root, avail_pools);
-  int r =  store->raw_obj_stat(obj, NULL, NULL, NULL, NULL, NULL, NULL);
+  r = store->raw_obj_stat(obj, NULL, NULL, NULL, NULL, NULL, NULL);
   if (r < 0) {
     ldout(store->ctx(), 0) << "couldn't find old data placement pools config, setting up new ones for the zone" << dendl;
     /* a new system, let's set new placement info */
@@ -989,6 +989,11 @@ int RGWZoneParams::create(bool exclusive)
     r = read_info(id);
     if (r < 0) {
       return r;
+    }
+  } else if (zones.empty()) { /* first zone? maybe, it's a racy check */
+    r = set_as_default();
+    if (r < 0) {
+      ldout(cct, 0) << "WARNING: failed to set zone as default, r=" << r << dendl;
     }
   }
 
