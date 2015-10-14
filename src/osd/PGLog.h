@@ -511,11 +511,11 @@ public:
   void recover_got(hobject_t oid, eversion_t v, pg_info_t &info) {
     if (missing.is_missing(oid, v)) {
       missing.got(oid, v);
-      
+
       // raise last_complete?
       if (missing.missing.empty()) {
-	log.complete_to = log.log.end();
-	info.last_complete = info.last_update;
+        log.complete_to = log.log.end();
+        info.last_complete = info.last_update;
       }
       while (log.complete_to != log.log.end()) {
 	if (missing.missing[missing.rmissing.begin()->second].need <=
@@ -524,6 +524,14 @@ public:
 	if (info.last_complete < log.complete_to->version)
 	  info.last_complete = log.complete_to->version;
 	++log.complete_to;
+      }
+    } else {
+      // there is a chance the object is not in the missing list (it could happen
+      // when we mark unfound objects as lost), we still take the chance to advance
+      // the log pointer if all objects have been recovered
+      if (missing.missing.empty()) {
+        log.complete_to = log.log.end();
+        info.last_complete = info.last_update;
       }
     }
 
