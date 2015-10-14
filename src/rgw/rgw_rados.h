@@ -789,7 +789,7 @@ public:
   int read_default_id(string& default_id, bool old_format = false);
   int set_as_default();
   int delete_default();
-  virtual int create();
+  virtual int create(bool exclusive = true);
   int delete_obj(bool old_format = false);
   int rename(const string& new_name);
   int update() { return store_info(false);}
@@ -1258,7 +1258,7 @@ public:
     DECODE_FINISH(bl);
   }
 
-  int create();
+  int create(bool exclusive = true);
   const string& get_pool_name(CephContext *cct);
   const string& get_default_oid(bool old_format = false);
   const string& get_names_oid_prefix();
@@ -1349,7 +1349,7 @@ public:
   int init(CephContext *_cct, RGWRados *_store, bool setup_obj = true);  
   int use_next_epoch();
 
-  int create();
+  int create(bool exclusive = true);
   int delete_obj();
   int store_info(bool exclusive);
   int add_zonegroup(const RGWZoneGroup& zonegroup);
