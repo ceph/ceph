@@ -872,7 +872,6 @@ struct RGWZoneParams : RGWSystemMetaObj {
   int init(CephContext *_cct, RGWRados *_store, RGWZoneGroup& zonegroup, bool setup_obj = true,
 	   bool old_format = false);
   using RGWSystemMetaObj::init;
-  void init_id(CephContext *cct, RGWZoneGroup& zonegroup);
   int create_default(bool old_format = false);
 
   void encode(bufferlist& bl) const {
