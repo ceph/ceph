@@ -1847,6 +1847,9 @@ void Client::populate_metadata()
   // Ceph entity id (the '0' in "client.0")
   metadata["entity_id"] = cct->_conf->name.get_id();
 
+  // Our mount position
+  metadata["root"] = cct->_conf->client_mountpoint;
+
   // Ceph version
   metadata["ceph_version"] = pretty_version_to_str();
   metadata["ceph_sha1"] = git_version_to_str();
@@ -1879,6 +1882,21 @@ MetaSession *Client::_open_mds_session(mds_rank_t mds)
   session->con = messenger->get_connection(session->inst);
   session->state = MetaSession::STATE_OPENING;
   mds_sessions[mds] = session;
+
+  // Maybe skip sending a request to open if this MDS daemon
+  // has previously sent us a REJECT.
+  if (rejected_by_mds.count(mds)) {
+    if (rejected_by_mds[mds] == session->inst) {
+      ldout(cct, 4) << "_open_mds_session mds." << mds << " skipping "
+                       "because we were rejected" << dendl;
+      return session;
+    } else {
+      ldout(cct, 4) << "_open_mds_session mds." << mds << " old inst "
+                       "rejected us, trying with new inst" << dendl;
+      rejected_by_mds.erase(mds);
+    }
+  }
+
   MClientSession *m = new MClientSession(CEPH_SESSION_REQUEST_OPEN);
   m->client_meta = metadata;
   session->con->send_message(m);
@@ -1953,6 +1971,12 @@ void Client::handle_client_session(MClientSession *m)
 
   case CEPH_SESSION_FORCE_RO:
     force_session_readonly(session);
+    break;
+
+  case CEPH_SESSION_REJECT:
+    rejected_by_mds[session->mds_num] = session->inst;
+    _closed_mds_session(session);
+
     break;
 
   default:
