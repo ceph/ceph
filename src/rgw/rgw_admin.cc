@@ -1986,12 +1986,6 @@ int main(int argc, char **argv)
     case OPT_REALM_GET:
       {
 	RGWRealm realm(realm_id, realm_name);
-#if 0
-	if (
-	  cerr << "missing realm name or id" << std::endl;
-	  return -EINVAL;
-	}
-#endif
 	int ret = realm.init(g_ceph_context, store);
 	if (ret < 0) {
 	  if (ret == -ENOENT && realm_name.empty() && realm_id.empty()) {

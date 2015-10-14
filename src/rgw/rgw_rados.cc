@@ -662,7 +662,7 @@ int RGWPeriod::init(CephContext *_cct, RGWRados *_store, bool setup_obj)
   if (!setup_obj)
     return 0;
 
-  if (id.empty() || realm_id.empty()) {
+  if (id.empty()) {
     RGWRealm realm(realm_id, realm_name);
     int ret = realm.init(cct, store);
     if (ret < 0) {
@@ -702,7 +702,7 @@ const string& RGWPeriod::get_info_oid_prefix()
 
 const string RGWPeriod::get_period_oid_prefix()
 {
-  return get_info_oid_prefix() + realm_id + "." + id;
+  return get_info_oid_prefix() + id;
 }
 
 const string RGWPeriod::get_period_oid()
@@ -860,7 +860,7 @@ int RGWPeriod::store_info(bool exclusive)
   rgw_bucket pool(pool_name.c_str());
 
   std::ostringstream oss;
-  oss << get_info_oid_prefix() << realm_id << "." << id << "." << epoch;
+  oss << get_info_oid_prefix() << id << "." << epoch;
   string oid = oss.str();
   bufferlist bl;
   ::encode(*this, bl);
