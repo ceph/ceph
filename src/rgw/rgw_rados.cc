@@ -70,9 +70,9 @@ static string notify_oid_prefix = "notify";
 static string *notify_oids = NULL;
 static string shadow_ns = "shadow";
 static string dir_oid_prefix = ".dir.";
-static string default_storage_pool = "rgw.buckets.data";
-static string default_bucket_index_pool = "rgw.buckets.index";
-static string default_storage_extra_pool = "rgw.buckets.non-ec";
+static string default_storage_pool_suffix = "rgw.buckets.data";
+static string default_bucket_index_pool_suffix = "rgw.buckets.index";
+static string default_storage_extra_pool_suffix = "rgw.buckets.non-ec";
 static string avail_pools = ".pools.avail";
 
 static string zone_info_oid_prefix = "zone_info.";
@@ -932,43 +932,9 @@ int RGWZoneParams::create_default(bool old_format)
 {
   name = default_zone_name;
 
-  domain_root = "rgw.data.root";
-  metadata_heap = "rgw.meta";
-  control_pool = "rgw.control";
-  gc_pool = "rgw.gc";
-  log_pool = "rgw.log";
-  intent_log_pool = "rgw.intent-log";
-  usage_log_pool = "rgw.usage";
-  user_keys_pool = "rgw.users.keys";
-  user_email_pool = "rgw.users.email";
-  user_swift_pool = "rgw.users.swift";
-  user_uid_pool = "rgw.users.uid";
-
-  /* check for old pools config */
-  rgw_obj obj(domain_root, avail_pools);
-  int r =  store->raw_obj_stat(obj, NULL, NULL, NULL, NULL, NULL, NULL);
+  int r = create();
   if (r < 0) {
-    ldout(store->ctx(), 0) << "couldn't find old data placement pools config, setting up new ones for the zone" << dendl;
-    /* a new system, let's set new placement info */
-    RGWZonePlacementInfo default_placement;
-    default_placement.index_pool = default_bucket_index_pool;
-    default_placement.data_pool = default_storage_pool;
-    default_placement.data_extra_pool = default_storage_extra_pool;
-    placement_pools["default-placement"] = default_placement;
-  }
-
-  r = create();
-  if (r < 0 && r != -EEXIST) {
-    derr << "RGWZoneParams::create_default: error creating default zone params: " << cpp_strerror(-r) << dendl;
     return r;
-  }
-
-  if (r == -EEXIST) {
-    ldout(cct, 0) << "RGWZoneParams::create_default() returned -EEXIST, we raced with another zone params creation" << dendl;
-    r = read_info(id);
-    if (r < 0) {
-      return r;
-    }
   }
 
   r = set_as_default();
@@ -982,6 +948,51 @@ int RGWZoneParams::create_default(bool old_format)
   }
 
   return r;
+}
+
+
+int RGWZoneParams::create(bool exclusive)
+{
+  domain_root = name + ".rgw.data.root";
+  metadata_heap = name + ".rgw.meta";
+  control_pool = name + ".rgw.control";
+  gc_pool = name + ".rgw.gc";
+  log_pool = name + ".rgw.log";
+  intent_log_pool = name + ".rgw.intent-log";
+  usage_log_pool = name + ".rgw.usage";
+  user_keys_pool = name + ".rgw.users.keys";
+  user_email_pool = name + ".rgw.users.email";
+  user_swift_pool = name + ".rgw.users.swift";
+  user_uid_pool = name + ".rgw.users.uid";
+
+  /* check for old pools config */
+  rgw_obj obj(domain_root, avail_pools);
+  int r =  store->raw_obj_stat(obj, NULL, NULL, NULL, NULL, NULL, NULL);
+  if (r < 0) {
+    ldout(store->ctx(), 0) << "couldn't find old data placement pools config, setting up new ones for the zone" << dendl;
+    /* a new system, let's set new placement info */
+    RGWZonePlacementInfo default_placement;
+    default_placement.index_pool = name + "." + default_bucket_index_pool_suffix;
+    default_placement.data_pool = name + "." + default_storage_pool_suffix;
+    default_placement.data_extra_pool = name + "." + default_storage_extra_pool_suffix;
+    placement_pools["default-placement"] = default_placement;
+  }
+
+  r = RGWSystemMetaObj::create(exclusive);
+  if (r < 0 && r != -EEXIST) {
+    derr << "RGWZoneParams::creat(): error creating default zone params: " << cpp_strerror(-r) << dendl;
+    return r;
+  }
+
+  if (r == -EEXIST) {
+    ldout(cct, 0) << "RGWZoneParams::create() returned -EEXIST, we raced with another zone params creation" << dendl;
+    r = read_info(id);
+    if (r < 0) {
+      return r;
+    }
+  }
+
+  return 0;
 }
 
 const string& RGWZoneParams::get_pool_name(CephContext *cct)
@@ -4519,16 +4530,17 @@ read_omap:
 
   if (ret < 0 || m.empty()) {
     vector<string> names;
-    names.push_back(default_storage_pool);
+    string s = string("default.") + default_storage_pool_suffix;
+    names.push_back(s);
     vector<int> retcodes;
     bufferlist bl;
     ret = create_pools(names, retcodes);
     if (ret < 0)
       return ret;
-    ret = omap_set(obj, default_storage_pool, bl);
+    ret = omap_set(obj, s, bl);
     if (ret < 0)
       return ret;
-    m[default_storage_pool] = bl;
+    m[s] = bl;
   }
 
   if (write_map) {

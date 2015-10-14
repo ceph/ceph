@@ -873,6 +873,7 @@ struct RGWZoneParams : RGWSystemMetaObj {
 	   bool old_format = false);
   using RGWSystemMetaObj::init;
   int create_default(bool old_format = false);
+  int create(bool exclusive = true);
 
   void encode(bufferlist& bl) const {
     ENCODE_START(6, 1, bl);

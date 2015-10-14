@@ -608,6 +608,10 @@ struct rgw_bucket {
     marker = b.marker;
     bucket_id = b.bucket_id;
   }
+  rgw_bucket(const string& s) : name(s) {
+    data_pool = index_pool = s;
+    marker = "";
+  }
   rgw_bucket(const char *n) : name(n) {
     data_pool = index_pool = n;
     marker = "";
