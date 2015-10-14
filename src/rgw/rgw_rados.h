@@ -1077,6 +1077,9 @@ struct RGWZoneGroup : public RGWSystemMetaObj {
 	       const string& _realm_id)
     : RGWSystemMetaObj(_name, cct , store),is_master(_is_master), realm_id(_realm_id) {}
 
+  bool is_master_zonegroup() const { return is_master;}
+  void update_master(bool _is_master) { is_master = _is_master;}
+
   void encode(bufferlist& bl) const {
     ENCODE_START(4, 1, bl);
     ::encode(name, bl);
@@ -1204,9 +1207,8 @@ struct RGWZoneGroupMap {
 	     const string& realm_id);
   int update_master_zonegroup(const string& period_id,
 			      const string& master_zonegroup);
-
   int get_master_zonegroup(const string& current_period,
-			   RGWZoneGroup& master_zonegroup);
+			   string& master_zonegroup);
 
   int get_zonegroups(const string& current_period,
 		     map<string, RGWZoneGroup>& zonegroups);
