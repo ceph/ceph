@@ -506,14 +506,14 @@ int RGWSystemMetaObj::read_info(const string& obj_id, bool old_format)
   return 0;
 }
 
-int RGWSystemMetaObj::create()
+int RGWSystemMetaObj::create(bool exclusive)
 {
   int ret;
   
   /* check to see the name is not used */
   ret = read_id(name, id);
-  if (ret == 0) {
-    ldout(cct, 0) << "ERROR: name " << name << "already in use for obj id " << id << dendl;
+  if (exclusive && ret == 0) {
+    ldout(cct, 0) << "ERROR: name " << name << " already in use for obj id " << id << dendl;
     return -EEXIST;
   } else if ( ret != -ENOENT) {
     lderr(cct) << "failed reading obj id  " << id << ": " << cpp_strerror(-ret) << dendl;
@@ -556,10 +556,10 @@ const string& RGWRealm::get_predefined_id() {
   return cct->_conf->rgw_realm;
 }
 
-int RGWRealm::create()
+int RGWRealm::create(bool exclusive)
 {
 
-  int ret = RGWSystemMetaObj::create();
+  int ret = RGWSystemMetaObj::create(exclusive);
   if (ret < 0) {
     ldout(cct, 0) << "ERROR creating new realm object " << name << ": " << cpp_strerror(-ret) << dendl;
     return ret;
@@ -570,7 +570,7 @@ int RGWRealm::create()
   if (ret < 0 ) {
     return ret;
   }
-  ret = period.create();
+  ret = period.create(true);
   if (ret < 0) {
     ldout(cct, 0) << "ERROR creating new period for realm " << name << ": " << cpp_strerror(-ret) << dendl;
     return ret;
@@ -807,7 +807,7 @@ int RGWPeriod::read_info()
   return 0;
 }
 
-int RGWPeriod::create()
+int RGWPeriod::create(bool exclusive)
 {
   int ret;
   
@@ -822,7 +822,7 @@ int RGWPeriod::create()
 
   period_map.id = id;
   
-  ret = store_info(true);
+  ret = store_info(exclusive);
   if (ret < 0) {
     ldout(cct, 0) << "ERROR:  storing info for " << id << ": " << cpp_strerror(-ret) << dendl;
   }
@@ -977,14 +977,14 @@ const string& RGWZoneParams::get_predefined_id() {
 
 void RGWZoneParams::init_id(CephContext *cct, RGWZoneGroup& zonegroup)
 {
-  id = cct->_conf->rgw_zone;
+  name = cct->_conf->rgw_zone;
 
-  if (id.empty()) {
+  if (name.empty()) {
+    name = default_zone_name;
+  }
+
+  if (name.empty()) {
     id = zonegroup.master_zone;
-
-    if (id.empty() && name.empty()) {
-      name = default_zone_name;
-    }
   }
 }
 
