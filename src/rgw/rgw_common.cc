@@ -713,11 +713,17 @@ bool verify_requester_payer_permission(struct req_state *s)
     return true;
 
   const char *request_payer = s->info.env->get("HTTP_X_AMZ_REQUEST_PAYER");
-  if (!request_payer)
-    return false;
+  if (!request_payer) {
+    bool exists;
+    request_payer = s->info.args.get("x-amz-request-payer", &exists).c_str();
+    if (!exists) {
+      return false;
+    }
+  }
 
-  if (strcasecmp(request_payer, "requester") == 0)
+  if (strcasecmp(request_payer, "requester") == 0) {
     return true;
+  }
 
   return false;
 }
