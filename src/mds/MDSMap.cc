@@ -660,7 +660,8 @@ bool MDSMap::cluster_unavailable() const
     if (up.count(rank) != 0) {
       name = mds_info.at(up.at(rank)).name;
     }
-    const bool standby_avail = find_replacement_for(rank, name) != MDS_GID_NONE;
+    const mds_rank_t replacement = find_replacement_for(rank, name, false);
+    const bool standby_avail = replacement != MDS_GID_NONE;
 
     // If the rank is unfilled, and there are no standbys, we're unavailable
     if (up.count(rank) == 0 && !standby_avail) {

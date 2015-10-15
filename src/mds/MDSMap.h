@@ -429,7 +429,8 @@ public:
     return MDS_GID_NONE;
   }
 
-  mds_gid_t find_unused_for(mds_rank_t mds, std::string& name) const {
+  mds_gid_t find_unused_for(mds_rank_t mds, std::string& name,
+                            bool force_standby_active) const {
     for (std::map<mds_gid_t,mds_info_t>::const_iterator p = mds_info.begin();
          p != mds_info.end();
          ++p) {
@@ -439,19 +440,20 @@ public:
         continue;
       if ((p->second.standby_for_rank == MDS_NO_STANDBY_PREF ||
            p->second.standby_for_rank == MDS_MATCHED_ACTIVE ||
-           (p->second.standby_for_rank == MDS_STANDBY_ANY && g_conf->mon_force_standby_active))) {
+           (p->second.standby_for_rank == MDS_STANDBY_ANY && force_standby_active))) {
         return p->first;
       }
     }
     return MDS_GID_NONE;
   }
 
-  mds_gid_t find_replacement_for(mds_rank_t mds, std::string& name) const {
+  mds_gid_t find_replacement_for(mds_rank_t mds, std::string& name,
+                                 bool force_standby_active) const {
     const mds_gid_t standby = find_standby_for(mds, name);
     if (standby)
       return standby;
     else
-      return find_unused_for(mds, name);
+      return find_unused_for(mds, name, force_standby_active);
   }
 
   void get_health(list<pair<health_status_t,std::string> >& summary,
