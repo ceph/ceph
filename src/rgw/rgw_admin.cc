@@ -118,7 +118,8 @@ void _usage()
   cout << "   --subuser=<name>          subuser name\n";
   cout << "   --access-key=<key>        S3 access key\n";
   cout << "   --email=<email>\n";
-  cout << "   --secret=<key>            specify secret key\n";
+  cout << "   --secret/--secret-key=<key>\n";
+  cout << "                             specify secret key\n";
   cout << "   --gen-access-key          generate random access key (for S3)\n";
   cout << "   --gen-secret              generate random secret key\n";
   cout << "   --key-type=<type>         key type, options are: swift, s3\n";
@@ -1180,7 +1181,7 @@ int main(int argc, char **argv)
       access_key = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--subuser", (char*)NULL)) {
       subuser = val;
-    } else if (ceph_argparse_witharg(args, i, &val, "--secret", (char*)NULL)) {
+    } else if (ceph_argparse_witharg(args, i, &val, "--secret", "--secret-key", (char*)NULL)) {
       secret_key = val;
     } else if (ceph_argparse_witharg(args, i, &val, "-e", "--email", (char*)NULL)) {
       user_email = val;

@@ -75,7 +75,8 @@
      --subuser=<name>          subuser name
      --access-key=<key>        S3 access key
      --email=<email>
-     --secret=<key>            specify secret key
+     --secret/--secret-key=<key>
+                               specify secret key
      --gen-access-key          generate random access key (for S3)
      --gen-secret              generate random secret key
      --key-type=<type>         key type, options are: swift, s3
