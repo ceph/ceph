@@ -346,6 +346,7 @@ enum {
   OPT_PERIOD_PULL,
   OPT_PERIOD_PUSH,
   OPT_PERIOD_LIST,
+  OPT_PERIOD_UPDATE,
 };
 
 static int get_cmd(const char *cmd, const char *prev_cmd, const char *prev_prev_cmd, bool *need_more)
@@ -522,6 +523,8 @@ static int get_cmd(const char *cmd, const char *prev_cmd, const char *prev_prev_
       return OPT_PERIOD_PUSH;
     if (strcmp(cmd, "list") == 0)
       return OPT_PERIOD_LIST;
+    if (strcmp(cmd, "update") == 0)
+      return OPT_PERIOD_UPDATE;
   } else if (strcmp(prev_cmd, "realm") == 0) {
     if (strcmp(cmd, "create") == 0)
       return OPT_REALM_CREATE;
@@ -1749,6 +1752,7 @@ int main(int argc, char **argv)
 			 opt_cmd == OPT_PERIOD_PREPARE || opt_cmd == OPT_PERIOD_ACTIVATE ||
 			 opt_cmd == OPT_PERIOD_DELETE || opt_cmd == OPT_PERIOD_GET ||
 			 opt_cmd == OPT_PERIOD_GET_CURRENT || opt_cmd == OPT_PERIOD_LIST ||
+			 opt_cmd == OPT_PERIOD_UPDATE ||
 			 opt_cmd == OPT_REALM_DELETE || opt_cmd == OPT_REALM_GET || opt_cmd == OPT_REALM_LIST ||
 			 opt_cmd == OPT_REALM_LIST_PERIODS ||
 			 opt_cmd == OPT_REALM_GET_DEFAULT || opt_cmd == OPT_REALM_REMOVE ||
@@ -1921,6 +1925,25 @@ int main(int argc, char **argv)
 	formatter->close_section();
 	formatter->flush(cout);
 	cout << std::endl;
+      }
+      break;
+    case OPT_PERIOD_UPDATE:
+      {
+	RGWRealm realm(realm_id, realm_name);
+	int ret = realm.init(g_ceph_context, store);
+	if (ret < 0 ) {
+	  cerr << "Error initializing realm " << cpp_strerror(-ret) << std::endl;
+	  return ret;
+	}
+        RGWPeriod period(realm.get_current_period(), 0);
+	ret = period.init(g_ceph_context, store, realm.get_id(), realm.get_name());
+	if (ret < 0) {
+	  cerr << "period init failed: " << cpp_strerror(-ret) << std::endl;
+	  return -ret;
+	}
+        period.fork();
+        period.update();
+        period.store_info(false);
       }
       break;
     case OPT_REALM_CREATE:
