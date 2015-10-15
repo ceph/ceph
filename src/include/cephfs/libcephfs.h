@@ -15,6 +15,7 @@
 #ifndef CEPH_LIB_H
 #define CEPH_LIB_H
 
+#include <features.h>
 #include <utime.h>
 #include <sys/stat.h>
 #include <sys/types.h>
@@ -41,11 +42,10 @@ extern "C" {
 #define LIBCEPHFS_VERSION_CODE LIBCEPHFS_VERSION(LIBCEPHFS_VER_MAJOR, LIBCEPHFS_VER_MINOR, LIBCEPHFS_VER_EXTRA)
 
 /*
- * On FreeBSD and Apple the offset is 64 bit, but libc doesn't announce it in
- * the way glibc does.
+ * If using glibc check that file offset is 64-bit.
  */
-#if !defined(__FreeBSD__) && !defined(__APPLE__) && !defined(__USE_FILE_OFFSET64)
-# error libceph: must define __USE_FILE_OFFSET64 or readdir results will be corrupted
+#if defined(__GLIBC__) && !defined(__USE_FILE_OFFSET64)
+# error libceph: glibc must define __USE_FILE_OFFSET64 or readdir results will be corrupted
 #endif
 
 /*
