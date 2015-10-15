@@ -1906,7 +1906,8 @@ void MDSMonitor::tick()
     string name;
     while (pending_mdsmap.is_in(mds))
       mds++;
-    mds_gid_t newgid = pending_mdsmap.find_replacement_for(mds, name);
+    mds_gid_t newgid = pending_mdsmap.find_replacement_for(mds, name,
+                         g_conf->mon_force_standby_active);
     if (!newgid)
       break;
 
@@ -1976,7 +1977,8 @@ void MDSMonitor::tick()
       if (info.rank >= 0 &&
 	  info.state != MDSMap::STATE_STANDBY &&
 	  info.state != MDSMap::STATE_STANDBY_REPLAY &&
-	  (sgid = pending_mdsmap.find_replacement_for(info.rank, info.name)) != MDS_GID_NONE) {
+	  (sgid = pending_mdsmap.find_replacement_for(info.rank, info.name, 
+                    g_conf->mon_force_standby_active)) != MDS_GID_NONE) {
 	MDSMap::mds_info_t& si = pending_mdsmap.mds_info[sgid];
 	dout(10) << " replacing " << gid << " " << info.addr << " mds." << info.rank << "." << info.inc
 		 << " " << ceph_mds_state_name(info.state)
@@ -2063,7 +2065,8 @@ void MDSMonitor::tick()
     while (p != failed.end()) {
       mds_rank_t f = *p++;
       string name;  // FIXME
-      mds_gid_t sgid = pending_mdsmap.find_replacement_for(f, name);
+      mds_gid_t sgid = pending_mdsmap.find_replacement_for(f, name,
+          g_conf->mon_force_standby_active);
       if (sgid) {
 	MDSMap::mds_info_t& si = pending_mdsmap.mds_info[sgid];
 	dout(0) << " taking over failed mds." << f << " with " << sgid << "/" << si.name << " " << si.addr << dendl;
