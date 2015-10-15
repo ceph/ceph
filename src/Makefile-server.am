@@ -43,7 +43,12 @@ bin_SCRIPTS += \
 	ceph-clsinfo
 
 ceph_osd_SOURCES = ceph_osd.cc
-ceph_osd_LDADD = $(LIBOSD) $(CEPH_GLOBAL) $(LIBCOMMON)
+ceph_osd_LDADD = \
+	$(LIBOSDC) $(LIBOS) $(LIBOSD) $(LIBOSD_TYPES) $(LIBOS_TYPES) \
+	$(CEPH_GLOBAL) $(LIBCOMMON)
+if WITH_LTTNG
+ceph_osd_LDADD += $(LIBOSD_TP)
+endif
 bin_PROGRAMS += ceph-osd
 
 endif # WITH_OSD
