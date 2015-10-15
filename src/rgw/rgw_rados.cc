@@ -979,7 +979,6 @@ int RGWPeriod::update()
 
   for (auto iter : zonegroups) {
     RGWZoneGroup zg(string(), iter);
-cerr << __FILE__ << ":" << __LINE__ << " iter=" << iter << std::endl;
     ret = zg.init(cct, store);
     if (ret < 0) {
       ldout(cct, 0) << "WARNING: zg.init() failed: " << cpp_strerror(-ret) << dendl;
@@ -1003,8 +1002,9 @@ cerr << __FILE__ << ":" << __LINE__ << " iter=" << iter << std::endl;
 
 void RGWPeriod::fork()
 {
+  predecessor_uuid = id;
   epoch = 1;
-  id = realm_id + ":staging";
+  id = get_staging_id(realm_id);
   period_map.reset();
 }
 
@@ -1301,17 +1301,6 @@ int RGWZoneGroupMap::update(CephContext *cct, RGWRados *store,
     }
   }
 
-  RGWPeriod period(realm.get_current_period());
-  ret = period.init(cct, store, realm.get_id());
-  if (ret < 0) {
-    derr << " failed to init period:" << cpp_strerror(-ret) << dendl;
-    return ret;
-  }
-  ret = period.add_zonegroup(zonegroup);
-  if (ret < 0) {
-    derr << " failed to add zonegroup to period :" << cpp_strerror(-ret) << dendl;
-    return ret;
-  }
   return 0;
 }
 
