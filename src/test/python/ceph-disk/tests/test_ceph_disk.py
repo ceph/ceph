@@ -685,7 +685,8 @@ class TestCephDiskDeactivateAndDestroy(unittest.TestCase):
             self.assertRaises(IOError, ceph_disk.main_deactivate, args)
             # clear the created file by unit test
 
-    def test_main_deactivate_non_exists_non_cluster_by_dev(self):
+    @patch('os.path.exists', return_value=False)
+    def test_main_deactivate_non_exists_non_cluster_by_dev(self, mock_path_exists):
         args = ceph_disk.parse_args(['deactivate', \
                                      '/dev/Xda1'])
         self.assertRaises(Exception, ceph_disk.main_deactivate, args)
@@ -704,6 +705,26 @@ class TestCephDiskDeactivateAndDestroy(unittest.TestCase):
                 ):
             self.assertRaises(Exception, ceph_disk.main_deactivate, args)
 
+    def test_main_deactivate_dmcrypt_not_mounted_by_id(self):
+        args = ceph_disk.parse_args(['deactivate', \
+                                     '--cluster', 'ceph', \
+                                     '--mark-out', \
+                                     '/dev/Xda1'])
+        patcher = patch('os.path.exists')
+        patch_path = patcher.start()
+        patch_path.side_effect = path_exists
+        mount_path = '/mnt'
+        part_type = '4fbd7e29-9d25-41b8-afd0-5ec00ceff05d'
+        part_uuid = '0ce28a16-6d5d-11e5-aec3-fa163e5c167b'
+        with patch.multiple(
+                ceph_disk,
+                patch_path,
+                get_partition_type=lambda dev: part_type,
+                get_partition_uuid=lambda dev: part_uuid,
+                is_mounted=lambda dev: None,
+                ):
+            self.assertRaises(Exception, ceph_disk.main_deactivate, args)
+
     def test_main_deactivate_osd_in_and_down_by_dev(self):
         args = ceph_disk.parse_args(['deactivate', \
                                      '--cluster', 'ceph', \
@@ -713,11 +734,13 @@ class TestCephDiskDeactivateAndDestroy(unittest.TestCase):
         patch_path = patcher.start()
         patch_path.side_effect = path_exists
         mount_path = '/mnt'
+        part_type = '4fbd7e29-9d25-41b8-afd0-062c0ceff05d'
         with patch.multiple(
                 ceph_disk,
                 patch_path,
+                get_partition_type=lambda dev: part_type,
                 is_mounted=lambda dev: mount_path,
-                get_oneliner=lambda mount_path, filen: 5566,
+                get_osd_id=lambda mount_path: 5566,
                 _check_osd_status=lambda ceph, status: 2,
                 _mark_osd_out=lambda ceph, osd_id: True
                 ):
@@ -731,11 +754,13 @@ class TestCephDiskDeactivateAndDestroy(unittest.TestCase):
         patch_path = patcher.start()
         patch_path.side_effect = path_exists
         mount_path = '/mnt'
+        part_type = '4fbd7e29-9d25-41b8-afd0-062c0ceff05d'
         with patch.multiple(
                 ceph_disk,
                 patch_path,
+                get_partition_type=lambda dev: part_type,
                 is_mounted=lambda dev: mount_path,
-                get_oneliner=lambda mount_path, filen: 5566,
+                get_osd_id=lambda mount_path: 5566,
                 _check_osd_status=lambda ceph, osd_id: 0,
                 ):
             ceph_disk.main_deactivate(args)
@@ -749,11 +774,13 @@ class TestCephDiskDeactivateAndDestroy(unittest.TestCase):
         patch_path.side_effect = path_exists
         ceph = 'ceph'
         mount_path = '/tmp'
+        part_type = '4fbd7e29-9d25-41b8-afd0-062c0ceff05d'
         with patch.multiple(
                 ceph_disk,
                 patch_path,
+                get_partition_type=lambda dev: part_type,
                 is_mounted=lambda dev: mount_path,
-                get_oneliner=lambda mount_path, filen: 5566,
+                get_osd_id=lambda mount_path: 5566,
                 _check_osd_status=lambda ceph, osd_id: 1,
                 stop_daemon=lambda ceph, osd_id: True,
                 _remove_osd_directory_files=lambda mount_path, ceph: True,
@@ -773,11 +800,13 @@ class TestCephDiskDeactivateAndDestroy(unittest.TestCase):
         patch_path.side_effect = path_exists
         ceph = 'ceph'
         mount_path = '/tmp'
+        part_type = '4fbd7e29-9d25-41b8-afd0-062c0ceff05d'
         with patch.multiple(
                 ceph_disk,
                 patch_path,
+                get_partition_type=lambda dev: part_type,
                 is_mounted=lambda dev: mount_path,
-                get_oneliner=lambda mount_path, filen: 5566,
+                get_osd_id=lambda mount_path: 5566,
                 _check_osd_status=lambda ceph, osd_id: 3,
                 _mark_osd_out=lambda ceph, osd_id: True,
                 stop_daemon=lambda ceph, osd_id: True,
@@ -897,7 +926,6 @@ class TestCephDiskDeactivateAndDestroy(unittest.TestCase):
         with patch.multiple(
                 ceph_disk,
                 check_path,
-                #join_path,
                 command_check_call=stop_daemon_fail,
                 ):
             self.assertRaises(Exception, ceph_disk.stop_daemon, 'ceph', '5566')
@@ -960,6 +988,52 @@ class TestCephDiskDeactivateAndDestroy(unittest.TestCase):
                 command_check_call=stop_daemon_fail,
                 ):
             self.assertRaises(Exception, ceph_disk.stop_daemon, 'ceph', '5566')
+
+    def test_get_osd_id_journal_dm_mount_failure(self):
+        args = {
+            'dev': '/dev/Xda1',
+            'dmcrypt': 'True',
+        }
+        fstype = 'ext4'
+        with patch.multiple(
+                ceph_disk,
+                get_dev_fs=lambda dev: Exception,
+                ):
+            self.assertRaises(Exception, ceph_disk.get_osd_id_journal_dm, args)
+
+    @patch('os.path.islink', return_value=True)
+    @patch('os.path.realpath', return_value='/dev/dmX')
+    def test_get_osd_id_journal_dm_mount_failure(self, mock_islink, mock_realpath):
+       fstype = 'ext4'
+       with patch.multiple(
+               ceph_disk,
+               get_dev_fs=lambda dev: fstype,
+               mount=lambda dev, fstype, options: '/somewhere',
+               get_osd_id=lambda dev: '5566',
+               unmount=lambda dev: True,
+               ):
+           ceph_disk.get_osd_id_journal_dm('/dev/mapper/0ce28a16-6d5d-11e5-aec3-fa163e5c167b', True)
+
+    def test_get_dmcrypt_status_fail(self):
+        with patch.multiple(
+                ceph_disk,
+                command=lambda exec_command: Exception,
+                ):
+            self.assertRaises(Exception, ceph_disk.get_dmcrypt_status, '0ce28a16-6d5d-11e5-aec3-fa163e5c167b')
+
+    def test_get_dmcrypt_status_inactive(self):
+        with patch.multiple(
+                ceph_disk,
+                command=lambda exec_command: ('inactive', 0)
+                ):
+            ceph_disk.get_dmcrypt_status('0ce28a16-6d5d-11e5-aec3-fa163e5c167b')
+
+    def test_get_dmcrypt_status_active(self):
+        with patch.multiple(
+                ceph_disk,
+                command=lambda exec_command: ('active', 0)
+                ):
+            ceph_disk.get_dmcrypt_status('0ce28a16-6d5d-11e5-aec3-fa163e5c167b')
 
     def test_convert_osd_id(self):
         file_output = StringIO.StringIO('/dev/sdX1 /var/lib/ceph/osd/ceph-1234 xfs rw,noatime 0 0\n' \
@@ -1078,63 +1152,48 @@ class TestCephDiskDeactivateAndDestroy(unittest.TestCase):
                 ):
             ceph_disk.unmount(path)
 
-    def test_main_destroy_without_zap_by_id(self):
+    def test_main_destroy_without_zap_dmcrypt_by_id(self):
         args = ceph_disk.parse_args(['destroy', \
                                      '--cluster', 'ceph', \
                                      '--destroy-by-id', '5566'])
         cluster = 'ceph'
         osd_id = '5566'
+        base_dev = '/dev/Xda'
+        disk = 'Xda'
+        partition = 'Xda1'
+        part_type = '4fbd7e29-9d25-41b8-afd0-5ec00ceff05d'
+        part_uuid = '0ce28a16-6d5d-11e5-aec3-fa163e5c167b'
+        return_get_osd_id_journal_dm = (osd_id, part_uuid)
         with patch.multiple(
                 ceph_disk,
+                list_all_partitions=lambda names: { disk: [partition] },
+                get_partition_type=lambda dev: part_type,
+                get_partition_uuid=lambda dev: part_uuid,
+                get_osd_id_journal_dm=lambda dev, True: return_get_osd_id_journal_dm,
+                split_dev_base_partnum=lambda names: (base_dev, 1),
                 _check_osd_status=lambda cluster, osd_id: 0,
                 _remove_from_crush_map=lambda cluster, osd_id: True,
                 _delete_osd_auth_key=lambda cluster, osd_id: True,
                 _deallocate_osd_id=lambda cluster, osd_id: True,
+                dmcrypt_unmap=lambda part_uuid: True,
                 ):
             ceph_disk.main_destroy(args)
 
-    def test_main_destroy_with_zap_find_part_fail_by_id(self):
+    def test_main_destroy_unknow_partition_type(self):
         args = ceph_disk.parse_args(['destroy', \
                                      '--cluster', 'ceph', \
                                      '--zap', \
                                      '--destroy-by-id', '5566'])
         cluster = 'ceph'
         osd_id = '5566'
-        fake_part_return = {'Xda': ['Xda1'], 'Xdb': []}
         disk = 'Xda'
         partition = 'Xda1'
+        part_type = '00000000-0000-0000-0000-000000000000'
         with patch.multiple(
                 ceph_disk,
-                _check_osd_status=lambda cluster, osd_id: 0,
-                _remove_from_crush_map=lambda cluster, osd_id: True,
-                _delete_osd_auth_key=lambda cluster, osd_id: True,
-                _deallocate_osd_id=lambda cluster, osd_id: True,
-                list_all_partitions=lambda names: fake_part_return,
-                split_dev_base_partnum=lambda names: (disk, 1)
-                ):
-            self.assertRaises(Exception, ceph_disk.main_destroy, args)
-
-    def test_main_destroy_with_zap_mount_part_fail_by_id(self):
-        args = ceph_disk.parse_args(['destroy', \
-                                     '--cluster', 'ceph', \
-                                     '--zap', \
-                                     '--destroy-by-id', '5566'])
-        cluster = 'ceph'
-        osd_id = '5566'
-        fake_part_return = {'Xda': ['Xda1'], 'Xdb': []}
-        disk = 'Xda'
-        partition = 'Xda1'
-        fstype = 'ext4'
-        with patch.multiple(
-                ceph_disk,
-                _check_osd_status=lambda cluster, osd_id: 0,
-                _remove_from_crush_map=lambda cluster, osd_id: True,
-                _delete_osd_auth_key=lambda cluster, osd_id: True,
-                _deallocate_osd_id=lambda cluster, osd_id: True,
-                list_all_partitions=lambda names: fake_part_return,
+                list_all_partitions=lambda names: { disk: [partition] },
                 split_dev_base_partnum=lambda names: (disk, 1),
-                get_dev_fs=lambda dev:fstype,
-                mount=lambda dev, fstype, options:Exception
+                get_partition_type=lambda dev: part_type
                 ):
             self.assertRaises(Exception, ceph_disk.main_destroy, args)
 
@@ -1145,82 +1204,25 @@ class TestCephDiskDeactivateAndDestroy(unittest.TestCase):
                                      '--destroy-by-id', '5566'])
         cluster = 'ceph'
         osd_id = '5566'
+        base_dev = '/dev/Xda'
         disk = 'Xda'
         partition = 'Xda1'
-        fstype = 'ext4'
+        part_type = '4fbd7e29-9d25-41b8-afd0-062c0ceff05d'
+        return_get_osd_id_journal_dm = (osd_id, '')
         with patch.multiple(
                 ceph_disk,
+                get_partition_type=lambda dev: part_type,
+                get_osd_id_journal_dm=lambda dev, False: return_get_osd_id_journal_dm,
                 _check_osd_status=lambda cluster, osd_id: 0,
                 _remove_from_crush_map=lambda cluster, osd_id: True,
                 _delete_osd_auth_key=lambda cluster, osd_id: True,
                 _deallocate_osd_id=lambda cluster, osd_id: True,
                 list_all_partitions=lambda names: { disk: [partition] },
-                split_dev_base_partnum=lambda names: (disk, 1),
-                get_dev_fs=lambda dev:fstype,
-                mount=lambda dev, fstype, options: '/somewhere',
-                unmount=lambda path: True,
-                get_oneliner=lambda tpath, whoami: osd_id,
+                split_dev_base_partnum=lambda names: (base_dev, 1),
+                get_partition_base=lambda dev: base_dev,
                 zap=lambda dev: True
                 ):
             ceph_disk.main_destroy(args)
-
-    def test_main_destroy_fs_type_error_by_dev(self):
-        args = ceph_disk.parse_args(['destroy', \
-                                     '--cluster', 'ceph', \
-                                     '/dev/Xda1'])
-        patcher = patch('os.path.exists')
-        patch_path = patcher.start()
-        patch_path.side_effect = path_exists
-        with patch.multiple(
-                ceph_disk,
-                patch_path,
-                get_dev_fs=lambda dev:None,
-                ):
-            self.assertRaises(Exception, ceph_disk.main_destroy, args)
-
-    def test_main_destroy_mount_error_by_dev(self):
-        args = ceph_disk.parse_args(['destroy', \
-                                     '--cluster', 'ceph', \
-                                     '/dev/Xda1'])
-        fstype = 'ext4'
-        patcher = patch('os.path.exists')
-        patch_path = patcher.start()
-        patch_path.side_effect = path_exists
-        with patch.multiple(
-                ceph_disk,
-                patch_path,
-                get_dev_fs=lambda dev:fstype,
-                ):
-            self.assertRaises(Exception, ceph_disk.main_destroy, args)
-
-    def test_main_destroy_with_zap_failure_by_dev(self):
-        args = ceph_disk.parse_args(['destroy', \
-                                     '--cluster', 'ceph', \
-                                     '--zap', \
-                                     '/dev/Xda1'])
-        dev = '/dev/Xda1'
-        base_dev = '/dev/Xda'
-        cluster = 'ceph'
-        fstype = 'ext4'
-        tpath = 'mnt'
-        osd_id = '5566'
-        patcher = patch('os.path.exists')
-        patch_path = patcher.start()
-        patch_path.side_effect = path_exists
-        with patch.multiple(
-                ceph_disk,
-                patch_path,
-                get_dev_fs=lambda dev:fstype,
-                mount=lambda dev, fstype, options:tpath,
-                get_oneliner=lambda mount_path, filen: osd_id,
-                unmount=lambda path:True,
-                _check_osd_status=lambda cluster, osd_id: 0,
-                _remove_from_crush_map=lambda cluster, osd_id: True,
-                _delete_osd_auth_key=lambda cluster, osd_id: True,
-                _deallocate_osd_id=lambda cluster, osd_id: True,
-                get_partition_base=lambda dev: base_dev,
-                ):
-            self.assertRaises(Exception, ceph_disk.main_destroy, args)
 
     def test_main_destroy_with_zap_by_dev(self):
         args = ceph_disk.parse_args(['destroy', \
@@ -1233,16 +1235,16 @@ class TestCephDiskDeactivateAndDestroy(unittest.TestCase):
         fstype = 'ext4'
         tpath = 'mnt'
         osd_id = '5566'
+        part_type = '4fbd7e29-9d25-41b8-afd0-062c0ceff05d'
         patcher = patch('os.path.exists')
         patch_path = patcher.start()
         patch_path.side_effect = path_exists
+        return_get_osd_id_journal_dm = (osd_id, '')
         with patch.multiple(
                 ceph_disk,
                 patch_path,
-                get_dev_fs=lambda dev:fstype,
-                mount=lambda dev, fstype, options:tpath,
-                get_oneliner=lambda mount_path, filen: osd_id,
-                unmount=lambda path:True,
+                get_partition_type=lambda dev: part_type,
+                get_osd_id_journal_dm=lambda dev, False: return_get_osd_id_journal_dm,
                 _check_osd_status=lambda cluster, osd_id: 0,
                 _remove_from_crush_map=lambda cluster, osd_id: True,
                 _delete_osd_auth_key=lambda cluster, osd_id: True,
@@ -1252,28 +1254,33 @@ class TestCephDiskDeactivateAndDestroy(unittest.TestCase):
                 ):
             ceph_disk.main_destroy(args)
 
-    def test_main_destroy_without_zap_by_dev(self):
+    def test_main_destroy_without_zap_with_dmcrypt_by_dev(self):
         args = ceph_disk.parse_args(['destroy', \
                                      '--cluster', 'ceph', \
                                      '/dev/Xda1'])
         cluster = 'ceph'
         fstype = 'ext4'
+        base_dev = '/dev/Xda'
         tpath = 'mnt'
         osd_id = '5566'
+        part_type = '4fbd7e29-9d25-41b8-afd0-5ec00ceff05d'
+        part_uuid = '0ce28a16-6d5d-11e5-aec3-fa163e5c167b'
         patcher = patch('os.path.exists')
         patch_path = patcher.start()
         patch_path.side_effect = path_exists
+        return_get_osd_id_journal_dm = (osd_id, part_uuid)
         with patch.multiple(
                 ceph_disk,
                 patch_path,
-                get_dev_fs=lambda dev:fstype,
-                mount=lambda dev, fstype, options:tpath,
-                get_oneliner=lambda mount_path, filen: osd_id,
-                unmount=lambda path:True,
+                get_partition_type=lambda dev: part_type,
+                get_partition_uuid=lambda dev: part_uuid,
+                get_osd_id_journal_dm=lambda dev, False: return_get_osd_id_journal_dm,
+                get_partition_base=lambda dev: base_dev,
                 _check_osd_status=lambda cluster, osd_id: 0,
                 _remove_from_crush_map=lambda cluster, osd_id: True,
                 _delete_osd_auth_key=lambda cluster, osd_id: True,
                 _deallocate_osd_id=lambda cluster, osd_id: True,
+                dmcrypt_unmap=lambda part_uuid: True,
                 ):
             ceph_disk.main_destroy(args)
 
@@ -1282,19 +1289,21 @@ class TestCephDiskDeactivateAndDestroy(unittest.TestCase):
                                      '--cluster', 'ceph', \
                                      '/dev/Xda1'])
         cluster = 'ceph'
+        base_dev = '/dev/Xda'
         fstype = 'ext4'
         tpath = 'mnt'
         osd_id = '5566'
+        part_type = '4fbd7e29-9d25-41b8-afd0-062c0ceff05d'
         patcher = patch('os.path.exists')
         patch_path = patcher.start()
         patch_path.side_effect = path_exists
+        return_get_osd_id_journal_dm = (osd_id, '')
         with patch.multiple(
                 ceph_disk,
                 patch_path,
-                get_dev_fs=lambda dev:fstype,
-                mount=lambda dev, fstype, options:tpath,
-                get_oneliner=lambda mount_path, filen: osd_id,
-                unmount=lambda path:True,
+                get_partition_type=lambda dev: part_type,
+                get_osd_id_journal_dm=lambda dev, False: return_get_osd_id_journal_dm,
+                get_partition_base=lambda dev: base_dev,
                 _check_osd_status=lambda cluster, osd_id: 3,
                 ):
             self.assertRaises(Exception, ceph_disk.main_destroy, args)
