@@ -299,20 +299,20 @@ struct PGLog {
 
 protected:
   //////////////////// data members ////////////////////
-  bool pg_log_debug;
 
   map<eversion_t, hobject_t> divergent_priors;
   pg_missing_t     missing;
   IndexedLog  log;
 
-  /// Log is clean on [dirty_to, dirty_from)
-  bool touched_log;
   eversion_t dirty_to;         ///< must clear/writeout all keys <= dirty_to
   eversion_t dirty_from;       ///< must clear/writeout all keys >= dirty_from
   eversion_t writeout_from;    ///< must writout keys >= writeout_from
   set<eversion_t> trimmed;     ///< must clear keys in trimmed
-  bool dirty_divergent_priors;
   CephContext *cct;
+  bool pg_log_debug;
+  /// Log is clean on [dirty_to, dirty_from)
+  bool touched_log;
+  bool dirty_divergent_priors;
 
   bool is_dirty() const {
     return !touched_log ||
@@ -375,10 +375,11 @@ protected:
   }
 public:
   PGLog(CephContext *cct = 0) :
+    dirty_from(eversion_t::max()),
+    writeout_from(eversion_t::max()), 
+    cct(cct), 
     pg_log_debug(!(cct && !(cct->_conf->osd_debug_pg_log_writeout))),
-    touched_log(false), dirty_from(eversion_t::max()),
-    writeout_from(eversion_t::max()),
-    dirty_divergent_priors(false), cct(cct) {}
+    touched_log(false), dirty_divergent_priors(false) {}
 
 
   void reset_backfill();
