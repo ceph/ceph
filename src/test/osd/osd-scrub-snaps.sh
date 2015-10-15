@@ -132,9 +132,22 @@ sleep 5
 ./ceph pg scrub 1.0
 timeout 30 ./ceph -w
 
-./stop.sh
+for i in `seq 1 7`
+do
+    ./rados -p test rmsnap snap$i
+done
+
+sleep 10
 
 ERRORS=0
+
+if ! killall ceph-osd
+then
+    echo "OSD crash occurred"
+    ERRORS=$(expr $ERRORS + 1)
+fi
+
+./stop.sh
 
 declare -a err_strings
 err_strings[0]="log_channel[(]cluster[)] log [[]ERR[]] : scrub 1.0 1/2acecc8b/obj10/1 is missing in clone_overlap"
