@@ -283,9 +283,6 @@ int RGWSystemMetaObj::init(CephContext *_cct, RGWRados *_store, bool setup_obj, 
       name = get_predefined_name();
       if (id.empty()) {
 	r = use_default(old_format);
-	if (r == -ENOENT) { 
-	  r = create_default();
-	}
 	if (r < 0) {
 	  return r;
 	}
@@ -2948,6 +2945,19 @@ int RGWRados::init_complete()
   if (ret < 0 && ret != -ENOENT) {
     lderr(cct) << "failed reading zonegroup info: ret "<< ret << " " << cpp_strerror(-ret) << dendl;
     return ret;
+  } else if (ret == -ENOENT) {
+    ret = zonegroup.create_default();
+    if (ret < 0) {
+      lderr(cct) << "failure in zonegroup create_default: ret "<< ret << " " << cpp_strerror(-ret)
+		 << dendl;
+      return ret;
+    }
+    ret = zonegroup.init(cct, this);
+    if (ret < 0) {
+      lderr(cct) << "failure in zonegroup create_default: ret "<< ret << " " << cpp_strerror(-ret)
+		 << dendl;
+      return ret;
+    }
   }
 
   ret = zone.init(cct, this);
