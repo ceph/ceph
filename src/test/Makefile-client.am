@@ -362,12 +362,6 @@ noinst_HEADERS += \
 	test/librbd/mock/MockImageWatcher.h \
 	test/librbd/mock/MockObjectMap.h
 
-if WITH_LTTNG
-unittest_librbd_LDADD += $(LIBRBD_TP)
-ceph_test_librbd_LDADD += $(LIBRBD_TP)
-ceph_test_librbd_api_LDADD += $(LIBRBD_TP)
-endif
-
 if LINUX
 ceph_test_librbd_fsx_SOURCES = test/librbd/fsx.cc
 ceph_test_librbd_fsx_LDADD = \

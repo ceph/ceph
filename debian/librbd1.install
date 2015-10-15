@@ -1,1 +1,2 @@
 usr/lib/librbd.so.*
+usr/lib/librbd_tp.so.*

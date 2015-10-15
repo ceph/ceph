@@ -33,6 +33,7 @@ using namespace std;
 #include "msg/Messenger.h"
 
 #include "common/Timer.h"
+#include "common/TracepointProvider.h"
 #include "common/ceph_argparse.h"
 
 #include "global/global_init.h"
@@ -49,6 +50,15 @@ using namespace std;
 #include "erasure-code/ErasureCodePlugin.h"
 
 #define dout_subsys ceph_subsys_osd
+
+namespace {
+
+TracepointProvider::Traits osd_tracepoint_traits("libosd_tp.so",
+                                                 "osd_tracing");
+TracepointProvider::Traits os_tracepoint_traits("libos_tp.so",
+                                                "osd_objectstore_tracing");
+
+} // anonymous namespace
 
 OSD *osd = NULL;
 
@@ -527,6 +537,9 @@ int main(int argc, const char **argv)
   // Set up crypto, daemonize, etc.
   global_init_daemonize(g_ceph_context, 0);
   common_init_finish(g_ceph_context);
+
+  TracepointProvider::initialize<osd_tracepoint_traits>(g_ceph_context);
+  TracepointProvider::initialize<os_tracepoint_traits>(g_ceph_context);
 
   MonClient mc(g_ceph_context);
   if (mc.build_initial_monmap() < 0)
