@@ -956,6 +956,9 @@ int RGWPeriod::use_next_epoch()
 
 int RGWPeriod::add_zonegroup(const RGWZoneGroup& zonegroup)
 {
+  if (zonegroup.realm_id != realm_id) {
+    return 0;
+  }
   int ret = period_map.update(zonegroup);
   if (ret < 0) {
     ldout(cct, 0) << "ERROR: updating period map: " << cpp_strerror(-ret) << dendl;
@@ -963,6 +966,46 @@ int RGWPeriod::add_zonegroup(const RGWZoneGroup& zonegroup)
   }
 
   return store_info(false);
+}
+
+int RGWPeriod::update()
+{
+  list<string> zonegroups;
+  int ret = store->list_zonegroups(zonegroups);
+  if (ret < 0) {
+    ldout(cct, 0) << "ERROR: failed to list zonegroups: " << cpp_strerror(-ret) << dendl;
+    return ret;
+  }
+
+  for (auto iter : zonegroups) {
+    RGWZoneGroup zg(string(), iter);
+cerr << __FILE__ << ":" << __LINE__ << " iter=" << iter << std::endl;
+    ret = zg.init(cct, store);
+    if (ret < 0) {
+      ldout(cct, 0) << "WARNING: zg.init() failed: " << cpp_strerror(-ret) << dendl;
+      continue;
+    }
+
+    if (zg.realm_id != realm_id) {
+      ldout(cct, 20) << "skippinh zonegroup " << zg.get_name() << ", not on our realm" << dendl;
+      continue;
+    }
+    
+    int ret = period_map.update(zg);
+    if (ret < 0) {
+      ldout(cct, 0) << "ERROR: updating period map: " << cpp_strerror(-ret) << dendl;
+      return ret;
+    }
+  }
+
+  return 0;
+}
+
+void RGWPeriod::fork()
+{
+  epoch = 1;
+  id = realm_id + ":staging";
+  period_map.reset();
 }
 
 int RGWZoneParams::create_default(bool old_format)

@@ -1156,6 +1156,11 @@ struct RGWPeriodMap
 
   void dump(Formatter *f) const;
   void decode_json(JSONObj *obj);
+
+  void reset() {
+    zonegroups.clear();
+    zonegroups_by_api.clear();
+  }
 };
 WRITE_CLASS_ENCODER(RGWPeriodMap)
 
@@ -1392,6 +1397,9 @@ public:
   int delete_obj();
   int store_info(bool exclusive);
   int add_zonegroup(const RGWZoneGroup& zonegroup);
+
+  void fork();
+  int update();
 
   void encode(bufferlist& bl) const {
     ENCODE_START(1, 1, bl);    
