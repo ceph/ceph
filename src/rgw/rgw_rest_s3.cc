@@ -2565,7 +2565,8 @@ int RGW_Auth_S3::authorize_v4(RGWRados *store, struct req_state *s)
 
     /* grab date */
 
-    s->aws4_auth_date = s->info.env->get("HTTP_X_AMZ_DATE");
+    const char *d = s->info.env->get("HTTP_X_AMZ_DATE");
+    s->aws4_auth_date = d ? d : "";
     if (s->aws4_auth_date.empty()) {
       dout(10) << "error reading date via http_x_amz_date" << dendl;
       return -EINVAL;
