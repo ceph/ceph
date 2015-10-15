@@ -35,6 +35,7 @@ const static struct rgw_http_errors RGW_HTTP_ERRORS[] = {
     { ERR_TOO_SMALL, 400, "EntityTooSmall" },
     { ERR_TOO_MANY_BUCKETS, 400, "TooManyBuckets" },
     { ERR_MALFORMED_XML, 400, "MalformedXML" },
+    { ERR_AMZ_CONTENT_SHA256_MISMATCH, 400, "XAmzContentSHA256Mismatch" },
     { ERR_LENGTH_REQUIRED, 411, "MissingContentLength" },
     { EACCES, 403, "AccessDenied" },
     { EPERM, 403, "AccessDenied" },

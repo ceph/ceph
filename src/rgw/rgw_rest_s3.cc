@@ -2391,6 +2391,17 @@ int RGW_Auth_S3::authorize_v4_complete(RGWRados *store, struct req_state *s, str
       s->aws4_auth_canonical_hdrs, s->aws4_auth_signed_hdrs, request_payload, unsigned_payload,
       canonical_req, canonical_req_hash);
 
+  /* Validate x-amz-sha256 */
+
+  if (s->aws4_auth_complete) {
+    const char *expected_request_payload_hash = s->info.env->get("HTTP_X_AMZ_CONTENT_SHA256");
+    if (expected_request_payload_hash &&
+	s->aws4_auth_payload_hash.compare(expected_request_payload_hash) != 0) {
+      dout(10) << "ERROR: x-amz-content-sha256 does not match" << dendl;
+      return -ERR_AMZ_CONTENT_SHA256_MISMATCH;
+    }
+  }
+
   /*
    * create a string to sign
    *
