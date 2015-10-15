@@ -5,7 +5,7 @@ noinst_LTLIBRARIES += libmon_types.la
 if ENABLE_SERVER
 if WITH_MON
 
-libmon_la_SOURCES = \
+libmon_a_SOURCES = \
 	mon/Monitor.cc \
 	mon/Paxos.cc \
 	mon/PaxosService.cc \
@@ -19,8 +19,8 @@ libmon_la_SOURCES = \
 	mon/HealthMonitor.cc \
 	mon/DataHealthService.cc \
 	mon/ConfigKeyService.cc
-libmon_la_LIBADD = $(LIBAUTH) $(LIBCOMMON) $(LIBOS) $(LIBMON_TYPES)
-noinst_LTLIBRARIES += libmon.la
+libmon_a_LIBADD =
+noinst_LIBRARIES += libmon.a
 
 noinst_HEADERS += \
 	mon/AuthMonitor.h \

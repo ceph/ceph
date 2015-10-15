@@ -175,7 +175,7 @@ LIBOS_TYPES = libos_types.la
 LIBOSD = libosd.a
 LIBOSD_TYPES = libosd_types.la
 LIBOSDC = libosdc.la
-LIBMON = libmon.la
+LIBMON = libmon.a
 LIBMON_TYPES = libmon_types.la
 LIBMDS = libmds.la
 LIBCLIENT = libclient.la
@@ -234,6 +234,8 @@ LIBOSD += $(LIBOSD_TYPES) $(LIBOS_TYPES)
 
 # Always use system leveldb
 LIBOS += -lleveldb -lsnappy
+
+LIBMON += $(LIBMON_TYPES)
 
 # Use this for binaries requiring libglobal
 CEPH_GLOBAL = $(LIBGLOBAL) $(LIBCOMMON) $(PTHREAD_LIBS) -lm $(CRYPTO_LIBS) $(EXTRALIBS)
