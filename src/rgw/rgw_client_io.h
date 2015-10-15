@@ -4,6 +4,8 @@
 #ifndef CEPH_RGW_CLIENT_IO_H
 #define CEPH_RGW_CLIENT_IO_H
 
+#include <streambuf>
+#include <istream>
 #include <stdlib.h>
 
 #include "include/types.h"
@@ -48,6 +50,67 @@ public:
 
   uint64_t get_bytes_sent() { return bytes_sent; }
   uint64_t get_bytes_received() { return bytes_received; }
+};
+
+
+class RGWClientIOStreamBuf : public std::streambuf {
+protected:
+  RGWClientIO &cio;
+  std::size_t const window_size;
+  std::size_t const putback_size;
+  std::vector<char> buffer;
+
+public:
+  RGWClientIOStreamBuf(RGWClientIO &c, std::size_t ws, std::size_t ps = 1)
+    : cio(c),
+      window_size(ws),
+      putback_size(ps),
+      buffer(ws + ps)
+  {
+    setg(nullptr, nullptr, nullptr);
+  }
+
+  std::streambuf::int_type underflow() {
+    if (gptr() < egptr()) {
+      return traits_type::to_int_type(*gptr());
+    }
+
+    char * const base = buffer.data();
+    char * start;
+
+    if (nullptr != eback()) {
+      /* We need to skip moving bytes on first underflow. In such case
+       * there is simply no previous data we should preserve for unget()
+       * or something similar. */
+      std::memmove(base, egptr() - putback_size, putback_size);
+      start = base + putback_size;
+    } else {
+      start = base;
+    }
+
+    int read_len;
+    int ret = cio.read(base, window_size, &read_len);
+    if (ret < 0 || 0 == read_len) {
+      return traits_type::eof();
+    }
+
+    setg(base, start, start + read_len);
+
+    return traits_type::to_int_type(*gptr());
+  }
+};
+
+
+class RGWClientIOStream : private RGWClientIOStreamBuf, public std::istream {
+/* Inheritance from RGWClientIOStreamBuf is a kind of shadow, undirect
+ * form of composition here. We cannot do that explicitly because istream
+ * ctor is being called prior to construction of any member of this class. */
+
+public:
+  RGWClientIOStream(RGWClientIO &c)
+    : RGWClientIOStreamBuf(c, 1, 2),
+      istream(static_cast<RGWClientIOStreamBuf *>(this)) {
+  }
 };
 
 #endif
