@@ -1354,6 +1354,7 @@ int main(int argc, char **argv)
   std::string master_url;
   int is_master = false;
   bool is_master_set = false;
+  int staging = false;
   int key_type = KEY_TYPE_UNDEFINED;
   rgw_bucket bucket;
   uint32_t perm_mask = 0;
@@ -1494,6 +1495,8 @@ int main(int argc, char **argv)
       // do nothing
     } else if (ceph_argparse_binary_flag(args, i, &system, NULL, "--system", (char*)NULL)) {
       system_specified = true;
+    } else if (ceph_argparse_binary_flag(args, i, &staging, NULL, "--staging", (char*)NULL)) {
+      // do nothing
     } else if (ceph_argparse_witharg(args, i, &tmp, errs, "-a", "--auth-uid", (char*)NULL)) {
       if (!errs.str().empty()) {
 	cerr << errs.str() << std::endl;
@@ -1825,13 +1828,22 @@ int main(int argc, char **argv)
 	if (!period_epoch.empty()) {
 	  epoch = atoi(period_epoch.c_str());
 	}
+        if (staging) {
+          RGWRealm realm(realm_id, realm_name);
+          int ret = realm.init(g_ceph_context, store);
+          if (ret < 0 ) {
+            cerr << "Error initializing realm " << cpp_strerror(-ret) << std::endl;
+            return ret;
+          }
+          period_id = RGWPeriod::get_staging_id(realm.get_id());
+          epoch = 1;
+        }
 	RGWPeriod period(period_id, epoch);
 	int ret = period.init(g_ceph_context, store, realm_id, realm_name);
 	if (ret < 0) {
 	  cerr << "period init failed: " << cpp_strerror(-ret) << std::endl;
 	  return -ret;
 	}
-	encode_json("realm", period.get_realm(), formatter);
 	encode_json("period", period, formatter);
 	formatter->flush(cout);
 	cout << std::endl;
@@ -1935,8 +1947,12 @@ int main(int argc, char **argv)
 	  cerr << "Error initializing realm " << cpp_strerror(-ret) << std::endl;
 	  return ret;
 	}
-        RGWPeriod period(realm.get_current_period(), 0);
-	ret = period.init(g_ceph_context, store, realm.get_id(), realm.get_name());
+	epoch_t epoch = 0;
+	if (!period_epoch.empty()) {
+	  epoch = atoi(period_epoch.c_str());
+	}
+        RGWPeriod period(period_id, epoch);
+	ret = period.init(g_ceph_context, store);
 	if (ret < 0) {
 	  cerr << "period init failed: " << cpp_strerror(-ret) << std::endl;
 	  return -ret;

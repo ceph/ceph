@@ -657,12 +657,16 @@ void RGWPeriodLatestEpochInfo::decode_json(JSONObj *obj) {
 
 void RGWPeriod::dump(Formatter *f) const
 {
-  encode_json("id", id , f);
+  encode_json("id", id, f);
   encode_json("epoch", epoch , f);
   encode_json("predecessor_uuid", predecessor_uuid, f);
   encode_json("sync_status", sync_status, f);
   encode_json("period_map", period_map, f);
+  encode_json("master_zonegroup", master_zonegroup, f);
   encode_json("master_zone", master_zone, f);
+  encode_json("period_config", period_config, f);
+  encode_json("realm_id", realm_id, f);
+  encode_json("realm_name", realm_name, f);
 }
 
 void RGWPeriod::decode_json(JSONObj *obj)
@@ -672,7 +676,11 @@ void RGWPeriod::decode_json(JSONObj *obj)
   JSONDecoder::decode_json("predecessor_uuid", predecessor_uuid, obj);
   JSONDecoder::decode_json("sync_status", sync_status, obj);
   JSONDecoder::decode_json("period_map", period_map, obj);
+  JSONDecoder::decode_json("master_zonegroup", master_zonegroup, obj);
   JSONDecoder::decode_json("master_zone", master_zone, obj);
+  JSONDecoder::decode_json("period_config", period_config, obj);
+  JSONDecoder::decode_json("realm_id", realm_id, obj);
+  JSONDecoder::decode_json("realm_name", realm_name, obj);
 }
 
 void RGWZoneParams::dump(Formatter *f) const
@@ -823,7 +831,6 @@ void RGWPeriodMap::dump(Formatter *f) const
 {
   encode_json("id", id, f);
   encode_json_map("zonegroups", zonegroups, f);
-  encode_json("master_zonegroup", master_zonegroup, f);
 }
 
 static void decode_zonegroups(map<string, RGWZoneGroup>& zonegroups, JSONObj *o)
@@ -841,11 +848,23 @@ void RGWPeriodMap::decode_json(JSONObj *obj)
   if (zonegroups.empty()) {
     JSONDecoder::decode_json("regions", zonegroups, obj);
   }
-  JSONDecoder::decode_json("master_zonegroup", master_zonegroup, obj);
   /* backward compatability with region */
   if (master_zonegroup.empty()) {
     JSONDecoder::decode_json("master_region", master_zonegroup, obj);
   }
+}
+
+
+void RGWPeriodConfig::dump(Formatter *f) const
+{
+  encode_json("bucket_quota", bucket_quota, f);
+  encode_json("user_quota", user_quota, f);
+}
+
+void RGWPeriodConfig::decode_json(JSONObj *obj)
+{
+  JSONDecoder::decode_json("bucket_quota", bucket_quota, obj);
+  JSONDecoder::decode_json("user_quota", user_quota, obj);
 }
 
 static void decode_realms(map<string, RGWRealm>& realms, JSONObj *o)

@@ -1142,6 +1142,30 @@ struct RGWPeriodMap
 };
 WRITE_CLASS_ENCODER(RGWPeriodMap)
 
+struct RGWPeriodConfig
+{
+  RGWQuotaInfo bucket_quota;
+  RGWQuotaInfo user_quota;
+
+  void encode(bufferlist& bl) const {
+    ENCODE_START(1, 1, bl);
+    ::encode(bucket_quota, bl);
+    ::encode(user_quota, bl);
+    ENCODE_FINISH(bl);
+  }
+
+  void decode(bufferlist::iterator& bl) {
+    DECODE_START(1, bl);
+    ::decode(bucket_quota, bl);
+    ::decode(user_quota, bl);
+    DECODE_FINISH(bl);
+  }
+
+  void dump(Formatter *f) const;
+  void decode_json(JSONObj *obj);
+};
+WRITE_CLASS_ENCODER(RGWPeriodConfig)
+
 struct RGWRegionMap {
   map<string, RGWZoneGroup> regions;
   map<string, RGWZoneGroup> regions_by_api;
@@ -1310,6 +1334,8 @@ class RGWPeriod
   string predecessor_uuid;
   rgw_meta_sync_status sync_status;
   RGWPeriodMap period_map;
+  RGWPeriodConfig period_config;
+  string master_zonegroup;
   string master_zone;
 
   string realm_id;
@@ -1339,6 +1365,7 @@ public:
   const string& get_master_zone() { return master_zone;}
   const string& get_realm() { return realm_id;}
   const RGWPeriodMap& get_map() { return period_map;}
+  const RGWPeriodConfig& get_config() { return period_config;}
   const rgw_meta_sync_status& get_sync_status() { return sync_status;}
   const string& get_pool_name(CephContext *cct);
   const string& get_latest_epoch_oid();
@@ -1379,6 +1406,10 @@ public:
     ::encode(sync_status, bl);
     ::encode(period_map, bl);
     ::encode(master_zone, bl);
+    ::encode(master_zonegroup, bl);
+    ::encode(period_config, bl);
+    ::encode(realm_id, bl);
+    ::encode(realm_name, bl);
     ENCODE_FINISH(bl);
   }
 
@@ -1390,10 +1421,18 @@ public:
     ::decode(sync_status, bl);
     ::decode(period_map, bl);
     ::decode(master_zone, bl);
+    ::decode(master_zonegroup, bl);
+    ::decode(period_config, bl);
+    ::decode(realm_id, bl);
+    ::decode(realm_name, bl);
     DECODE_FINISH(bl);
   }
   void dump(Formatter *f) const;
   void decode_json(JSONObj *obj);
+
+  static string get_staging_id(const string& realm_id) {
+    return realm_id + ":staging";
+  }
 };
 WRITE_CLASS_ENCODER(RGWPeriod)
 
