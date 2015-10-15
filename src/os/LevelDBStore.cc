@@ -227,15 +227,21 @@ bufferlist LevelDBStore::to_bufferlist(leveldb::Slice in)
 
 int LevelDBStore::split_key(leveldb::Slice in, string *prefix, string *key)
 {
-  string in_prefix = in.ToString();
-  size_t prefix_len = in_prefix.find('\0');
-  if (prefix_len >= in_prefix.size())
+  size_t prefix_len = 0;
+  
+  // Find separator inside Slice
+  char* separator = (char*) memchr(in.data(), 0, in.size());
+  if (separator == NULL)
+     return -EINVAL;
+  prefix_len = size_t(separator - in.data());
+  if (prefix_len >= in.size())
     return -EINVAL;
 
+  // Fetch prefix and/or key directly from Slice
   if (prefix)
-    *prefix = string(in_prefix, 0, prefix_len);
+    *prefix = string(in.data(), 0, prefix_len);
   if (key)
-    *key= string(in_prefix, prefix_len + 1);
+    *key = string(separator+1, 0, in.size()-prefix_len-1);
   return 0;
 }
 
