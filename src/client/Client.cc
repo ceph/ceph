@@ -554,6 +554,12 @@ void Client::shutdown()
 {
   ldout(cct, 1) << "shutdown" << dendl;
 
+  // If we were not mounted, but were being used for sending
+  // MDS commands, we may have sessions that need closing.
+  client_lock.Lock();
+  close_sessions();
+  client_lock.Unlock();
+
   cct->_conf->remove_observer(this);
 
   AdminSocket* admin_socket = cct->get_admin_socket();
@@ -5100,6 +5106,24 @@ int Client::mount(const std::string &mount_root, bool require_mds)
 
 // UNMOUNT
 
+void Client::close_sessions()
+{
+  while (!mds_sessions.empty()) {
+    // send session closes!
+    for (map<mds_rank_t,MetaSession*>::iterator p = mds_sessions.begin();
+	p != mds_sessions.end();
+	++p) {
+      if (p->second->state != MetaSession::STATE_CLOSING) {
+	_close_mds_session(p->second);
+      }
+    }
+
+    // wait for sessions to close
+    ldout(cct, 2) << "waiting for " << mds_sessions.size() << " mds sessions to close" << dendl;
+    mount_cond.Wait(client_lock);
+  }
+}
+
 void Client::unmount()
 {
   Mutex::Locker lock(client_lock);
@@ -5184,21 +5208,7 @@ void Client::unmount()
     traceout.close();
   }
 
-  
-  while (!mds_sessions.empty()) {
-    // send session closes!
-    for (map<mds_rank_t,MetaSession*>::iterator p = mds_sessions.begin();
-	p != mds_sessions.end();
-	++p) {
-      if (p->second->state != MetaSession::STATE_CLOSING) {
-	_close_mds_session(p->second);
-      }
-    }
-
-    // wait for sessions to close
-    ldout(cct, 2) << "waiting for " << mds_sessions.size() << " mds sessions to close" << dendl;
-    mount_cond.Wait(client_lock);
-  }
+  close_sessions();
 
   mounted = false;
 
