@@ -228,9 +228,10 @@ void RebuildObjectMapRequest::send_resize_object_map() {
   CephContext *cct = m_image_ctx.cct;
 
   uint64_t num_objects;
+  uint64_t size;
   {
     RWLock::RLocker l(m_image_ctx.snap_lock);
-    uint64_t size = get_image_size();
+    size = get_image_size();
     num_objects = Striper::get_num_objects(m_image_ctx.layout, size);
   }
 
@@ -245,7 +246,7 @@ void RebuildObjectMapRequest::send_resize_object_map() {
   // should have been canceled prior to releasing lock
   assert(!m_image_ctx.image_watcher->is_lock_supported() ||
          m_image_ctx.image_watcher->is_lock_owner());
-  m_image_ctx.object_map.aio_resize(num_objects, OBJECT_NONEXISTENT,
+  m_image_ctx.object_map.aio_resize(size, OBJECT_NONEXISTENT,
                                     create_callback_context());
 }
 
