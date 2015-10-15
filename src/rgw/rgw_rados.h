@@ -799,7 +799,7 @@ public:
   virtual const string& get_default_oid(bool old_format = false) = 0;
   virtual const string& get_names_oid_prefix() = 0;
   virtual const string& get_info_oid_prefix(bool old_format = false) = 0;
-  virtual const string& get_predefined_id() = 0;
+  virtual const string& get_predefined_name() = 0;
 
   void dump(Formatter *f) const;
   void decode_json(JSONObj *obj);
@@ -867,7 +867,7 @@ struct RGWZoneParams : RGWSystemMetaObj {
   const string& get_default_oid(bool old_format = false);
   const string& get_names_oid_prefix();
   const string& get_info_oid_prefix(bool old_format = false);
-  const string& get_predefined_id();
+  const string& get_predefined_name();
 
   int init(CephContext *_cct, RGWRados *_store, bool setup_obj = true,
 	   bool old_format = false);
@@ -1110,7 +1110,7 @@ struct RGWZoneGroup : public RGWSystemMetaObj {
   const string& get_default_oid(bool old_region_format = false);
   const string& get_info_oid_prefix(bool old_region_format = false);
   const string& get_names_oid_prefix();
-  const string& get_predefined_id();
+  const string& get_predefined_name();
 
   void dump(Formatter *f) const;
   void decode_json(JSONObj *obj);
@@ -1265,7 +1265,7 @@ public:
   const string& get_default_oid(bool old_format = false);
   const string& get_names_oid_prefix();
   const string& get_info_oid_prefix(bool old_format = false);
-  const string& get_predefined_id();
+  const string& get_predefined_name();
 
   void dump(Formatter *f) const;
   void decode_json(JSONObj *obj);

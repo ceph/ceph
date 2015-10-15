@@ -217,7 +217,7 @@ const string& RGWZoneGroup::get_names_oid_prefix()
   return zonegroup_names_oid_prefix;
 }
 
-const string& RGWZoneGroup::get_predefined_id() {
+const string& RGWZoneGroup::get_predefined_name() {
   return cct->_conf->rgw_zonegroup;
 }
 
@@ -280,7 +280,7 @@ int RGWSystemMetaObj::init(CephContext *_cct, RGWRados *_store, bool setup_obj, 
   if (id.empty()) {
     int r;
     if (name.empty()) {
-      id = get_predefined_id();
+      name = get_predefined_name();
       if (id.empty()) {
 	r = use_default(old_format);
 	if (r == -ENOENT) { 
@@ -566,7 +566,7 @@ int RGWSystemMetaObj::store_info(bool exclusive)
 }
 
 
-const string& RGWRealm::get_predefined_id() {
+const string& RGWRealm::get_predefined_name() {
   return cct->_conf->rgw_realm;
 }
 
@@ -1024,7 +1024,7 @@ const string& RGWZoneParams::get_info_oid_prefix(bool old_format)
   return zone_info_oid_prefix;
 }
 
-const string& RGWZoneParams::get_predefined_id() {
+const string& RGWZoneParams::get_predefined_name() {
   return cct->_conf->rgw_zone;
 }
 
