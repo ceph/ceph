@@ -113,6 +113,8 @@ else(${ENABLE_SHARED})
  set(CEPH_SHARED STATIC)
 endif(${ENABLE_SHARED})
 
+find_package(execinfo)
+
 find_package(udev REQUIRED)
 set(HAVE_UDEV ${UDEV_FOUND})
 
