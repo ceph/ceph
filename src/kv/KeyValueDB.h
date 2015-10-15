@@ -128,6 +128,7 @@ public:
     virtual int prev() = 0;
     virtual std::string key() = 0;
     virtual std::pair<std::string,std::string> raw_key() = 0;
+    virtual bool raw_key_is_prefixed(const std::string &prefix) = 0;
     virtual bufferlist value() = 0;
     virtual int status() = 0;
     virtual ~WholeSpaceIteratorImpl() { }
@@ -157,8 +158,7 @@ public:
     bool valid() {
       if (!generic_iter->valid())
 	return false;
-      std::pair<std::string,std::string> raw_key = generic_iter->raw_key();
-      return (raw_key.first.compare(0, prefix.length(), prefix) == 0);
+      return generic_iter->raw_key_is_prefixed(prefix);
     }
     int next() {
       if (valid())

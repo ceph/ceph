@@ -303,15 +303,21 @@ bufferlist RocksDBStore::to_bufferlist(rocksdb::Slice in)
 
 int RocksDBStore::split_key(rocksdb::Slice in, string *prefix, string *key)
 {
-  string in_prefix = in.ToString();
-  size_t prefix_len = in_prefix.find('\0');
-  if (prefix_len >= in_prefix.size())
+  size_t prefix_len = 0;
+  
+  // Find separator inside Slice
+  char* separator = (char*) memchr(in.data(), 0, in.size());
+  if (separator == NULL)
+     return -EINVAL;
+  prefix_len = size_t(separator - in.data());
+  if (prefix_len >= in.size())
     return -EINVAL;
 
+  // Fetch prefix and/or key directly from Slice
   if (prefix)
-    *prefix = string(in_prefix, 0, prefix_len);
+    *prefix = string(in.data(), 0, prefix_len);
   if (key)
-    *key= string(in_prefix, prefix_len + 1);
+    *key = string(separator+1, 0, in.size()-prefix_len-1);
   return 0;
 }
 
@@ -473,6 +479,17 @@ pair<string,string> RocksDBStore::RocksDBWholeSpaceIteratorImpl::raw_key()
   split_key(dbiter->key(), &prefix, &key);
   return make_pair(prefix, key);
 }
+
+bool RocksDBStore::RocksDBWholeSpaceIteratorImpl::raw_key_is_prefixed(const string &prefix) {
+  // Look for "prefix\0" right in rocksb::Slice
+  rocksdb::Slice key = dbiter->key();
+  if ((key.size() > prefix.length()) && (key[prefix.length()] == '\0')) {
+    return memcmp(key.data(), prefix.c_str(), prefix.length()) == 0;
+  } else {
+    return false;
+  }
+}
+
 bufferlist RocksDBStore::RocksDBWholeSpaceIteratorImpl::value()
 {
   return to_bufferlist(dbiter->value());
