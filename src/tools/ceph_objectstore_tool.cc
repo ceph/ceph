@@ -2080,6 +2080,71 @@ int clear_snapset(ObjectStore *store, coll_t coll, ghobject_t &ghobj,
   return 0;
 }
 
+vector<snapid_t>::iterator find(vector<snapid_t> &v, snapid_t clid)
+{
+  return std::find(v.begin(), v.end(), clid);
+}
+
+map<snapid_t, interval_set<uint64_t> >::iterator
+find(map<snapid_t, interval_set<uint64_t> > &m, snapid_t clid)
+{
+  return m.find(clid);
+}
+
+map<snapid_t, uint64_t>::iterator find(map<snapid_t, uint64_t> &m,
+				       snapid_t clid)
+{
+  return m.find(clid);
+}
+
+template<class T>
+int remove_from(T &mv, string name, snapid_t cloneid, bool force)
+{
+  typename T::iterator i = find(mv, cloneid);
+  if (i != mv.end()) {
+    mv.erase(i);
+  } else {
+    cerr << "Clone " << cloneid << " doesn't exist in " << name;
+    if (force) {
+      cerr << " (ignored)" << std::endl;
+      return 0;
+    }
+    cerr << std::endl;
+    return -EINVAL;
+  }
+  return 0;
+}
+
+int remove_clone(ObjectStore *store, coll_t coll, ghobject_t &ghobj, snapid_t cloneid, bool force,
+		     ObjectStore::Sequencer &osr)
+{
+  SnapSet ss;
+  int ret = get_snapset(store, coll, ghobj, ss);
+  if (ret < 0)
+    return ret;
+
+  //ret = remove_from(ss.snaps, "snaps", cloneid, force);
+  //if (ret) return ret;
+  ret = remove_from(ss.clones, "clones", cloneid, force);
+  if (ret) return ret;
+  ret = remove_from(ss.clone_overlap, "clone_overlap", cloneid, force);
+  if (ret) return ret;
+  ret = remove_from(ss.clone_size, "clone_size", cloneid, force);
+  if (ret) return ret;
+
+  bufferlist bl;
+  ::encode(ss, bl);
+  ObjectStore::Transaction t;
+  t.setattr(coll, ghobj, SS_ATTR, bl);
+  int r = store->apply_transaction(&osr, t);
+  if (r < 0) {
+    cerr << "Error setting snapset on : " << make_pair(coll, ghobj) << ", "
+	 << cpp_strerror(r) << std::endl;
+    return r;
+  }
+  return 0;
+}
+
 void usage(po::options_description &desc)
 {
     cerr << std::endl;
@@ -2097,6 +2162,7 @@ void usage(po::options_description &desc)
     cerr << "ceph-objectstore-tool ... <object> remove" << std::endl;
     cerr << "ceph-objectstore-tool ... <object> dump" << std::endl;
     cerr << "ceph-objectstore-tool ... <object> set-size" << std::endl;
+    cerr << "ceph-objectstore-tool ... <object> remove-clone-metadata <cloneid>" << std::endl;
     cerr << std::endl;
     cerr << "<object> can be a JSON object description as displayed" << std::endl;
     cerr << "by --op list." << std::endl;
@@ -2460,6 +2526,9 @@ int main(int argc, char **argv)
     json_spirit::Value v;
     try {
       if (!json_spirit::read(object, v)) {
+        // Special: Need head/snapdir so set even if user didn't specify
+        if (vm.count("objcmd") && (objcmd == "remove-clone-metadata"))
+	  head = true;
 	lookup_ghobject lookup(object, head);
 	if (action_on_all_objects(fs, lookup, debug)) {
 	  throw std::runtime_error("Internal error");
@@ -3042,6 +3111,26 @@ int main(int argc, char **argv)
 	}
         ret = clear_snapset(fs, coll, ghobj, arg1, *osr);
         goto out;
+      } else if (objcmd == "remove-clone-metadata") {
+        // Extra arg
+	if (vm.count("arg1") == 0 || vm.count("arg2")) {
+	  usage(desc);
+          ret = 1;
+          goto out;
+        }
+	if (!ghobj.hobj.has_snapset()) {
+	  cerr << "'" << objcmd << "' requires a head or snapdir object" << std::endl;
+	  ret = 1;
+	  goto out;
+	}
+        if (arg1.length() == 0 || !isdigit(arg1.c_str()[0])) {
+	  cerr << "Invalid cloneid '" << arg1 << "' specified" << std::endl;
+	  ret = 1;
+	  goto out;
+	}
+        snapid_t cloneid = atoi(arg1.c_str());
+	ret = remove_clone(fs, coll, ghobj, cloneid, force, *osr);
+	goto out;
       }
       cerr << "Unknown object command '" << objcmd << "'" << std::endl;
       usage(desc);
