@@ -754,9 +754,6 @@ protected:
 		   const string& oid);
   /* read and use default id */
   int use_default(bool old_format = false);
-  virtual int create_default(bool old_format = false) {
-    return -ENOENT;
-  }
 
 public:
   RGWSystemMetaObj() {}
