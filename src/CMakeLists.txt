@@ -349,6 +349,10 @@ add_library(common_utf8 STATIC common/utf8.c)
 
 target_link_libraries( common json_spirit common_utf8 erasure_code rt uuid ${CRYPTO_LIBS} ${Boost_LIBRARIES} ${BLKID_LIBRARIES})
 
+if(${WITH_LTTNG})
+  add_subdirectory(tracing)
+endif(${WITH_LTTNG})
+
 set(libglobal_srcs
   global/global_init.cc
   global/pidfile.cc 
@@ -360,6 +364,9 @@ add_library(global STATIC ${libglobal_srcs}
   $<TARGET_OBJECTS:global_common_objs>)
 target_link_libraries(global common ${CMAKE_THREAD_LIBS_INIT} ${CRYPTO_LIBS}
   ${EXTRALIBS})
+if(${WITH_LTTNG})
+  target_link_libraries(global lttng-ust dl) 
+endif(${WITH_LTTNG})
 if(${ENABLE_SHARED})
   set_target_properties(global PROPERTIES
     OUTPUT_NAME ceph-global VERSION "1.0.0" SOVERSION "1")
@@ -393,6 +400,9 @@ add_dependencies(librados osdc)
 target_link_libraries(librados PRIVATE osdc osd os global common cls_lock_client
   ${BLKID_LIBRARIES}
   ${CRYPTO_LIBS} ${EXTRALIBS} ${TCMALLOC_LIBS})
+if(${WITH_LTTNG})
+  target_link_libraries(librados PRIVATE librados_tp)
+endif(${WITH_LTTNG})
 if(${ENABLE_SHARED})
   set_target_properties(librados PROPERTIES OUTPUT_NAME rados VERSION 2.0.0
     SOVERSION 2)
@@ -525,6 +535,7 @@ target_link_libraries(ceph-dencoder
   blkid
   udev
   keyutils
+  librbd_replay
   ${EXTRALIBS}
   ${TCMALLOC_LIBS}
   ${CMAKE_DL_LIBS}
@@ -606,6 +617,9 @@ add_library(os STATIC ${libos_srcs} $<TARGET_OBJECTS:os_mon_objs>)
 if(${HAVE_LIBAIO})
   target_link_libraries(os aio)
 endif(${HAVE_LIBAIO})
+if(${WITH_LTTNG})
+  target_link_libraries(os libos_tp)
+endif(${WITH_LTTNG})
 target_link_libraries(os leveldb snappy)
 
 set(cls_references_files objclass/class_api.cc)
@@ -644,6 +658,9 @@ add_library(osd_mon_objs OBJECT ${osd_mon_files})
 add_library(osd STATIC ${osd_srcs} $<TARGET_OBJECTS:osd_mon_objs>
   $<TARGET_OBJECTS:cls_references_objs>)
 target_link_libraries(osd dl leveldb)
+if(${WITH_LTTNG})
+  target_link_libraries(osd libosd_tp) 
+endif(${WITH_LTTNG})
 
 set(ceph_osd_srcs
   ceph_osd.cc
@@ -896,6 +913,9 @@ if(${WITH_RBD})
     $<TARGET_OBJECTS:common_util_obj>)
   target_link_libraries(librbd PRIVATE librados common cls_lock_client cls_rbd_client
     ${CMAKE_DL_LIBS})
+  if(${WITH_LTTNG})
+    target_link_libraries(librbd PRIVATE librbd_tp)
+  endif(${WITH_LTTNG})
   if(${ENABLE_SHARED})
     set_target_properties(librbd PROPERTIES VERSION "1.0.0" SOVERSION "1"
       OUTPUT_NAME rbd)
@@ -951,11 +971,12 @@ if(${WITH_RBD})
   add_library(librbd_replay_types STATIC ${librbd_replay_types_srcs})
 
   set(librbd_replay_srcs
-      rbd_replay/actions.cc
+      rbd_replay/actions.cc 
+      rbd_replay/ActionTypes.cc
       rbd_replay/BufferReader.cc
-      rbd_replay/ImageNameMap.cc
-      rbd_replay/PendingIO.cc
-      rbd_replay/rbd_loc.cc
+      rbd_replay/ImageNameMap.cc 
+      rbd_replay/PendingIO.cc 
+      rbd_replay/rbd_loc.cc 
       rbd_replay/Replayer.cc)
   add_library(librbd_replay STATIC ${librbd_replay_srcs})
   target_link_libraries(librbd_replay PRIVATE librbd_replay_types librbd librados global udev)

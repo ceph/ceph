@@ -232,6 +232,9 @@
 /* Defined if XIO */
 #cmakedefine HAVE_XIO
 
+/* Defined if LTTNG */
+#cmakedefine WITH_LTTNG
+
 /* Defined if new gperftools */
 #cmakedefine HAVE_GPERFTOOLS_HEAP_PROFILER_H
 #cmakedefine HAVE_GPERFTOOLS_MALLOC_EXTENSION_H
