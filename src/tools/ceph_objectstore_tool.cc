@@ -254,10 +254,14 @@ struct pgid_object_list {
 struct lookup_ghobject : public action_on_object_t {
   pgid_object_list _objects;
   const string _name;
+  bool _need_snapset;
 
-  lookup_ghobject(const string& name) : _name(name) { }
+  lookup_ghobject(const string& name, bool need_snapset = false) : _name(name),
+		  _need_snapset(need_snapset) { }
 
   virtual int call(ObjectStore *store, coll_t coll, ghobject_t &ghobj, object_info_t &oi) {
+    if (_need_snapset && !ghobj.hobj.has_snapset())
+      return 0;
     if (_name.length() == 0 || ghobj.hobj.oid.name == _name)
       _objects.insert(coll, ghobj);
     return 0;
@@ -1845,31 +1849,85 @@ struct do_fix_lost : public action_on_object_t {
   }
 };
 
-int print_obj_info(ObjectStore *store, coll_t coll, ghobject_t &ghobj, Formatter* formatter)
+int get_snapset(ObjectStore *store, coll_t coll, ghobject_t &ghobj, SnapSet &ss)
 {
   bufferlist attr;
-  int r = store->getattr(coll, ghobj, OI_ATTR, attr);
+  int r = store->getattr(coll, ghobj, SS_ATTR, attr);
   if (r < 0) {
-    cerr << "Error getting attr on : " << make_pair(coll, ghobj) << ", "
+    cerr << "Error getting snapset on : " << make_pair(coll, ghobj) << ", "
        << cpp_strerror(r) << std::endl;
     return r;
   }
-  object_info_t oi;
   bufferlist::iterator bp = attr.begin();
   try {
-    ::decode(oi, bp);
+    ::decode(ss, bp);
   } catch (...) {
     r = -EINVAL;
-    cerr << "Error getting attr on : " << make_pair(coll, ghobj) << ", "
+    cerr << "Error decoding snapset on : " << make_pair(coll, ghobj) << ", "
          << cpp_strerror(r) << std::endl;
     return r;
   }
-  formatter->open_object_section("info");
-  oi.dump(formatter);
+  return 0;
+}
+
+int print_obj_info(ObjectStore *store, coll_t coll, ghobject_t &ghobj, Formatter* formatter)
+{
+  int r = 0;
+  formatter->open_object_section("obj");
+  formatter->open_object_section("id");
+  ghobj.dump(formatter);
+  formatter->close_section();
+
+  bufferlist attr;
+  int gr = store->getattr(coll, ghobj, OI_ATTR, attr);
+  if (gr < 0) {
+    r = gr;
+    cerr << "Error getting attr on : " << make_pair(coll, ghobj) << ", "
+       << cpp_strerror(r) << std::endl;
+  } else {
+    object_info_t oi;
+    bufferlist::iterator bp = attr.begin();
+    try {
+      ::decode(oi, bp);
+      formatter->open_object_section("info");
+      oi.dump(formatter);
+      formatter->close_section();
+    } catch (...) {
+      r = -EINVAL;
+      cerr << "Error decoding attr on : " << make_pair(coll, ghobj) << ", "
+           << cpp_strerror(r) << std::endl;
+    }
+  }
+  struct stat st;
+  int sr =  store->stat(coll, ghobj, &st, true);
+  if (sr < 0) {
+    r = sr;
+    cerr << "Error stat on : " << make_pair(coll, ghobj) << ", "
+         << cpp_strerror(r) << std::endl;
+  } else {
+    formatter->open_object_section("stat");
+    formatter->dump_int("size", st.st_size);
+    formatter->dump_int("blksize", st.st_blksize);
+    formatter->dump_int("blocks", st.st_blocks);
+    formatter->dump_int("nlink", st.st_nlink);
+    formatter->close_section();
+  }
+
+  if (ghobj.hobj.has_snapset()) {
+    SnapSet ss;
+    int snr = get_snapset(store, coll, ghobj, ss);
+    if (snr < 0) {
+      r = snr;
+    } else {
+      formatter->open_object_section("SnapSet");
+      ss.dump(formatter);
+      formatter->close_section();
+    }
+  }
   formatter->close_section();
   formatter->flush(cout);
   cout << std::endl;
-  return 0;
+  return r;
 }
 
 void usage(po::options_description &desc)
@@ -1887,7 +1945,7 @@ void usage(po::options_description &desc)
     cerr << "ceph-objectstore-tool ... <object> list-attrs" << std::endl;
     cerr << "ceph-objectstore-tool ... <object> list-omap" << std::endl;
     cerr << "ceph-objectstore-tool ... <object> remove" << std::endl;
-    cerr << "ceph-objectstore-tool ... <object> dump-info" << std::endl;
+    cerr << "ceph-objectstore-tool ... <object> dump" << std::endl;
     cerr << std::endl;
     cerr << "<object> can be a JSON object description as displayed" << std::endl;
     cerr << "by --op list." << std::endl;
@@ -1928,6 +1986,7 @@ int main(int argc, char **argv)
   bool human_readable;
   bool force;
   Formatter *formatter;
+  bool head;
 
   po::options_description desc("Allowed options");
   desc.add_options()
@@ -1953,6 +2012,7 @@ int main(int argc, char **argv)
     ("force", "Ignore some types of errors and proceed with operation - USE WITH CAUTION: CORRUPTION POSSIBLE NOW OR IN THE FUTURE")
     ("skip-journal-replay", "Disable journal replay")
     ("skip-mount-omap", "Disable mounting of omap")
+    ("head", "Find head/snapdir when searching for objects by name")
     ("dry-run", "Don't modify the objectstore")
     ;
 
@@ -2009,6 +2069,11 @@ int main(int argc, char **argv)
     flags |= SKIP_JOURNAL_REPLAY;
   if (vm.count("skip-mount-omap"))
     flags |= SKIP_MOUNT_OMAP;
+
+  if (!vm.count("head"))
+    head = false;
+  else
+    head = true;
 
   vector<const char *> ceph_options;
   env_to_vec(ceph_options);
@@ -2244,7 +2309,7 @@ int main(int argc, char **argv)
     json_spirit::Value v;
     try {
       if (!json_spirit::read(object, v)) {
-	lookup_ghobject lookup(object);
+	lookup_ghobject lookup(object, head);
 	if (action_on_all_objects(fs, lookup, debug)) {
 	  throw std::runtime_error("Internal error");
 	} else {
@@ -2788,7 +2853,13 @@ int main(int argc, char **argv)
 	if (fd != STDIN_FILENO)
 	  close(fd);
         goto out;
-      } else if (objcmd == "dump-info") {
+      } else if (objcmd == "dump") {
+	// There should not be any other arguments
+	if (vm.count("arg1") || vm.count("arg2")) {
+	  usage(desc);
+	  ret = 1;
+	  goto out;
+	}
 	ret = print_obj_info(fs, coll, ghobj, formatter);
 	goto out;
       }
