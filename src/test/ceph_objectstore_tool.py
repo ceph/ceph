@@ -1036,6 +1036,28 @@ def main(argv):
     except:
         pass
 
+    # Test dump
+    print "Test dump"
+    for nspace in db.keys():
+        for basename in db[nspace].keys():
+            file = os.path.join(DATADIR, nspace + "-" + basename + "__head")
+            JSON = db[nspace][basename]['json']
+            GETNAME = "/tmp/getbytes.{pid}".format(pid=pid)
+            for pg in OBJREPPGS:
+                OSDS = get_osds(pg, OSDDIR)
+                for osd in OSDS:
+                    DIR = os.path.join(OSDDIR, os.path.join(osd, os.path.join("current", "{pg}_head".format(pg=pg))))
+                    fnames = [f for f in os.listdir(DIR) if os.path.isfile(os.path.join(DIR, f))
+                              and f.split("_")[0] == basename and f.split("_")[4] == nspace]
+                    if not fnames:
+                        continue
+                    cmd = (CFSD_PREFIX + " '{json}' dump | grep '\"snap\": 1,' > /dev/null").format(osd=osd, json=JSON)
+                    logging.debug(cmd)
+                    ret = call(cmd, shell=True)
+                    if ret != 0:
+                        logging.error("Invalid dump for {json}".format(json=JSON))
+                        ERRORS += 1
+
     print "Test list-attrs get-attr"
     ATTRFILE = r"/tmp/attrs.{pid}".format(pid=pid)
     VALFILE = r"/tmp/val.{pid}".format(pid=pid)
