@@ -34,10 +34,6 @@ using namespace std;
 #include "global/global_init.h"
 #include "common/safe_io.h"
        
-#if !defined(DARWIN) && !defined(__FreeBSD__)
-#include <envz.h>
-#endif // DARWIN
-
 #include <sys/types.h>
 #include <fcntl.h>
 
