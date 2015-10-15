@@ -2646,13 +2646,14 @@ struct do_fix_lost : public action_on_object_t {
   }
 };
 
-int get_snapset(ObjectStore *store, coll_t coll, ghobject_t &ghobj, SnapSet &ss)
+int get_snapset(ObjectStore *store, coll_t coll, ghobject_t &ghobj, SnapSet &ss, bool silent = false)
 {
   bufferlist attr;
   int r = store->getattr(coll, ghobj, SS_ATTR, attr);
   if (r < 0) {
-    cerr << "Error getting snapset on : " << make_pair(coll, ghobj) << ", "
-       << cpp_strerror(r) << std::endl;
+    if (!silent)
+      cerr << "Error getting snapset on : " << make_pair(coll, ghobj) << ", "
+	   << cpp_strerror(r) << std::endl;
     return r;
   }
   bufferlist::iterator bp = attr.begin();
@@ -2727,6 +2728,100 @@ int print_obj_info(ObjectStore *store, coll_t coll, ghobject_t &ghobj, Formatter
   return r;
 }
 
+int set_size(ObjectStore *store, coll_t coll, ghobject_t &ghobj, uint64_t setsize, Formatter* formatter)
+{
+  if (ghobj.hobj.is_snapdir()) {
+    cerr << "Can't set the size of a snapdir" << std::endl;
+    return -EINVAL;
+  }
+  bufferlist attr;
+  int r = store->getattr(coll, ghobj, OI_ATTR, attr);
+  if (r < 0) {
+    cerr << "Error getting attr on : " << make_pair(coll, ghobj) << ", "
+       << cpp_strerror(r) << std::endl;
+    return r;
+  }
+  object_info_t oi;
+  bufferlist::iterator bp = attr.begin();
+  try {
+    ::decode(oi, bp);
+  } catch (...) {
+    r = -EINVAL;
+    cerr << "Error getting attr on : " << make_pair(coll, ghobj) << ", "
+         << cpp_strerror(r) << std::endl;
+    return r;
+  }
+  struct stat st;
+  r =  store->stat(coll, ghobj, &st, true);
+  if (r < 0) {
+    cerr << "Error stat on : " << make_pair(coll, ghobj) << ", "
+         << cpp_strerror(r) << std::endl;
+  }
+  ghobject_t head(ghobj);
+  SnapSet ss;
+  bool found_head = true;
+  map<snapid_t, uint64_t>::iterator csi;
+  bool is_snap = ghobj.hobj.is_snap();
+  if (is_snap) {
+    head.hobj = head.hobj.get_head();
+    r = get_snapset(store, coll, head, ss, true);
+    if (r < 0 && r != -ENOENT) {
+      // Requested get_snapset() silent, so if not -ENOENT show error
+      cerr << "Error getting snapset on : " << make_pair(coll, head) << ", "
+	   << cpp_strerror(r) << std::endl;
+      return r;
+    }
+    if (r == -ENOENT) {
+      head.hobj = head.hobj.get_snapdir();
+      r = get_snapset(store, coll, head, ss);
+      if (r < 0)
+        return r;
+      found_head = false;
+    } else {
+      found_head = true;
+    }
+    csi = ss.clone_size.find(ghobj.hobj.snap);
+    if (csi == ss.clone_size.end()) {
+      cerr << "SnapSet is missing clone_size for snap " << ghobj.hobj.snap << std::endl;
+      return -EINVAL;
+    }
+  }
+  if ((uint64_t)st.st_size == setsize && oi.size == setsize
+       && (!is_snap || csi->second == setsize)) {
+    cout << "Size of object is already " << setsize << std::endl;
+    return 0;
+  }
+  cout << "Setting size to " << setsize << ", stat size " << st.st_size
+       << ", obj info size " << oi.size;
+  if (is_snap) {
+    cout << ", " << (found_head ? "head" : "snapdir")
+	 << " clone_size " << csi->second;
+    csi->second = setsize;
+  }
+  cout << std::endl;
+  if (!dry_run) {
+    attr.clear();
+    oi.size = setsize;
+    ::encode(oi, attr);
+    ObjectStore::Transaction t;
+    t.setattr(coll, ghobj, OI_ATTR, attr);
+    t.truncate(coll, ghobj, setsize);
+    if (is_snap) {
+      bufferlist snapattr;
+      snapattr.clear();
+      ::encode(ss, snapattr);
+      t.setattr(coll, head, SS_ATTR, snapattr);
+    }
+    r = store->apply_transaction(t);
+    if (r < 0) {
+      cerr << "Error writing object info: " << make_pair(coll, ghobj) << ", "
+         << cpp_strerror(r) << std::endl;
+      return r;
+    }
+  }
+  return 0;
+}
+
 void usage(po::options_description &desc)
 {
     cerr << std::endl;
@@ -2743,6 +2838,7 @@ void usage(po::options_description &desc)
     cerr << "ceph-objectstore-tool ... <object> list-omap" << std::endl;
     cerr << "ceph-objectstore-tool ... <object> remove" << std::endl;
     cerr << "ceph-objectstore-tool ... <object> dump" << std::endl;
+    cerr << "ceph-objectstore-tool ... <object> set-size" << std::endl;
     cerr << std::endl;
     cerr << "ceph-objectstore-tool import-rados <pool> [file]" << std::endl;
     cerr << std::endl;
@@ -3679,6 +3775,21 @@ int main(int argc, char **argv)
 	  goto out;
 	}
 	ret = print_obj_info(fs, coll, ghobj, formatter);
+	goto out;
+      } else if (objcmd == "set-size") {
+        // Extra arg
+	if (vm.count("arg1") == 0 || vm.count("arg2")) {
+	  usage(desc);
+          ret = 1;
+          goto out;
+        }
+        if (arg1.length() == 0 || !isdigit(arg1.c_str()[0])) {
+	  cerr << "Invalid size '" << arg1 << "' specified" << std::endl;
+	  ret = 1;
+	  goto out;
+	}
+	uint64_t size = atoll(arg1.c_str());
+	ret = set_size(fs, coll, ghobj, size, formatter);
 	goto out;
       }
       cerr << "Unknown object command '" << objcmd << "'" << std::endl;
