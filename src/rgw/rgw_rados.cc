@@ -185,6 +185,8 @@ int RGWZoneGroup::create_default(bool old_format)
     name = id;
   }
 
+  post_process_params();
+
   return 0;
 }
 
@@ -248,7 +250,43 @@ int RGWZoneGroup::add_zone(const RGWZoneParams& zone_params, bool is_master, con
   if (!endpoints.empty()) {
     zone.endpoints = endpoints;
   }
+
+  post_process_params();
+
   return update();
+}
+
+void RGWZoneGroup::post_process_params()
+{
+  bool log_data = zones.size() > 1;
+
+  for (map<string, RGWZone>::iterator iter = zones.begin(); iter != zones.end(); ++iter) {
+    RGWZone& zone = iter->second;
+    zone.log_data = log_data;
+    zone.log_meta = (is_master && zone.name == master_zone);
+
+    RGWZoneParams zone_params(zone.id, zone.name);
+    int ret = zone_params.init(cct, store);
+    if (ret < 0) {
+      ldout(cct, 0) << "WARNING: could not read zone params for zone id=" << zone.id << " name=" << zone.name << dendl;
+      continue;
+    }
+
+    for (map<string, RGWZonePlacementInfo>::iterator iter = zone_params.placement_pools.begin(); 
+         iter != zone_params.placement_pools.end(); ++iter) {
+      const string& placement_name = iter->first;
+      if (placement_targets.find(placement_name) == placement_targets.end()) {
+        RGWZoneGroupPlacementTarget placement_target;
+        placement_target.name = placement_name;
+        placement_targets[placement_name] = placement_target;
+      }
+    }
+
+    if (default_placement.empty() && !placement_targets.empty()) {
+      default_placement = placement_targets.begin()->first;
+    }
+
+  }
 }
 
 int RGWZoneGroup::remove_zone(const RGWZoneParams& zone_params)
@@ -261,6 +299,8 @@ int RGWZoneGroup::remove_zone(const RGWZoneParams& zone_params)
   }
 
   zones.erase(iter);
+
+  post_process_params();
 
   return update();
 }

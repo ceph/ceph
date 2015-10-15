@@ -1059,7 +1059,11 @@ struct RGWZoneGroup : public RGWSystemMetaObj {
       realm_id(_realm_id) {}
 
   bool is_master_zonegroup() const { return is_master;}
-  void update_master(bool _is_master) { is_master = _is_master;}
+  void update_master(bool _is_master) {
+    is_master = _is_master;
+    post_process_params();
+  }
+  void post_process_params();
 
   void encode(bufferlist& bl) const {
     ENCODE_START(3, 1, bl);
