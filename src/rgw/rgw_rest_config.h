@@ -30,40 +30,9 @@ public:
   }
 };
 
-class RGWOp_Period_Get : public RGWRESTOp {
-  RGWPeriod *period;
-public:
-  RGWOp_Period_Get() : period(NULL) {}
-  ~RGWOp_Period_Get() { delete period; }
-
-  int verify_permission() {
-    return 0;
-  }
-  void execute();
-  virtual void send_response();
-  virtual const string name() {
-    return "get_period";
-  }
-};
-
-class RGWOp_Period_Post : public RGWRESTOp {
-public:
-  RGWOp_Period_Post() {}
-  ~RGWOp_Period_Post() {}
-
-  int verify_permission() {
-    return 0;
-  }
-  void execute();
-  virtual const string name() {
-    return "post_period";
-  }
-};
-
 class RGWHandler_Config : public RGWHandler_Auth_S3 {
 protected:
-  RGWOp *op_get();
-  RGWOp *op_post();
+  RGWOp *op_get() { return new RGWOp_ZoneGroupMap_Get; }
 
   int read_permissions(RGWOp*) {
     return 0;
