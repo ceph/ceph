@@ -1614,7 +1614,9 @@ int NewStore::collection_list(
       temp = false;
       assert(k >= start_key && k < end_key);
     }
-    it->upper_bound(k);
+    dout(20) << " start from " << pretty_binary_string(k)
+	     << " temp=" << (int)temp << dendl;
+    it->lower_bound(k);
   }
   if (end.hobj.is_max()) {
     pend = temp ? temp_end_key.c_str() : end_key.c_str();
@@ -1653,12 +1655,13 @@ int NewStore::collection_list(
     ghobject_t oid;
     int r = get_key_object(it->key(), &oid);
     assert(r == 0);
-    ls->push_back(oid);
     if (ls->size() >= (unsigned)max) {
+      dout(20) << __func__ << " reached max " << max << dendl;
       *pnext = oid;
       set_next = true;
       break;
     }
+    ls->push_back(oid);
     it->next();
   }
   if (!set_next) {
