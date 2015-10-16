@@ -790,6 +790,7 @@ All v0.94.x Hammer users are strongly encouraged to upgrade.
 
 Notable Changes
 ---------------
+* build/ops: ceph.spec.in: dependency problem with Ceph "Firefly" upstream and EPEL (`issue#11104 <http://tracker.ceph.com/issues/11104>`_, Zack Cerza)
 * build/ops: ceph.spec.in: 50-rbd.rules conditional is wrong (`issue#12166 <http://tracker.ceph.com/issues/12166>`_, `pr#5207 <http://github.com/ceph/ceph/pull/5207>`_, Nathan Cutler)
 * build/ops: ceph.spec.in: ceph-common needs python-argparse on older distros, but doesn't require it (`issue#12034 <http://tracker.ceph.com/issues/12034>`_, `pr#5216 <http://github.com/ceph/ceph/pull/5216>`_, Nathan Cutler)
 * build/ops: ceph.spec.in: radosgw requires apache for SUSE only -- makes no sense (`issue#12358 <http://tracker.ceph.com/issues/12358>`_, `pr#5411 <http://github.com/ceph/ceph/pull/5411>`_, Nathan Cutler)
@@ -861,6 +862,7 @@ Notable Changes
 
 Here is the same as above, in plain text:
 
+* build/ops: ceph.spec.in: dependency problem with Ceph "Firefly" upstream and EPEL (issue#11104, Zack Cerza)
 * build/ops: ceph.spec.in: 50-rbd.rules conditional is wrong (#12166, Nathan Cutler)
 * build/ops: ceph.spec.in: ceph-common needs python-argparse on older distros, but doesn't require it (#12034, Nathan Cutler)
 * build/ops: ceph.spec.in: radosgw requires apache for SUSE only -- makes no sense (#12358, Nathan Cutler)
