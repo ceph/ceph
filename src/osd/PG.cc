@@ -3163,7 +3163,7 @@ bool PG::sched_scrub()
     return false;
   }
 
-  bool time_for_deep = (ceph_clock_now(cct) >
+  bool time_for_deep = (ceph_clock_now(cct) >=
     info.history.last_deep_scrub_stamp + cct->_conf->osd_deep_scrub_interval);
 
   //NODEEP_SCRUB so ignore time initiated deep-scrub
