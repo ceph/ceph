@@ -3152,6 +3152,12 @@ int RGWRados::init_complete()
     meta_notifier->start();
   }
 
+  /* not point of running sync thread if there is a single zone or
+     we don't have a master zone configured or there is no rest_master_conn */
+  if (zonegroup.zones.size() < 2 || zonegroup.master_zone.empty() || !rest_master_conn) {
+    run_sync_thread = false;
+  }
+
   if (run_sync_thread) {
     Mutex::Locker l(meta_sync_thread_lock);
     meta_sync_processor_thread = new RGWMetaSyncProcessorThread(this);
