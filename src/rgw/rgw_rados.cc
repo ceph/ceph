@@ -231,9 +231,9 @@ int RGWZoneGroup::equals(const string& other_zonegroup) const
   return (id  == other_zonegroup);
 }
 
-int RGWZoneGroup::add_zone(const RGWZoneParams& zone_params, bool is_master, const list<string>& endpoints)
+int RGWZoneGroup::add_zone(const RGWZoneParams& zone_params, bool *is_master, bool *read_only, const list<string>& endpoints)
 {
-  if (is_master) {
+  if (is_master && *is_master) {
     if (!master_zone.empty() && master_zone != zone_params.get_id()) {
       ldout(cct, 0) << "NOTICE: overriding master zone: " << master_zone  << dendl;
     }
@@ -247,6 +247,9 @@ int RGWZoneGroup::add_zone(const RGWZoneParams& zone_params, bool is_master, con
   zone.id = zone_params.get_id();
   if (!endpoints.empty()) {
     zone.endpoints = endpoints;
+  }
+  if (read_only) {
+    zone.read_only = *read_only;
   }
 
   post_process_params();

@@ -931,6 +931,7 @@ struct RGWZone {
   list<string> endpoints;
   bool log_meta;
   bool log_data;
+  bool read_only;
 
 /**
  * Represents the number of shards for the bucket index object, a value of zero
@@ -941,24 +942,22 @@ struct RGWZone {
  */
   uint32_t bucket_index_max_shards;
 
-  RGWZone() : log_meta(false), log_data(false), bucket_index_max_shards(0) {}
+  RGWZone() : log_meta(false), log_data(false), read_only(false), bucket_index_max_shards(0) {}
 
   void encode(bufferlist& bl) const {
     ENCODE_START(4, 1, bl);
-    ::encode(id, bl);
     ::encode(name, bl);
     ::encode(endpoints, bl);
     ::encode(log_meta, bl);
     ::encode(log_data, bl);
     ::encode(bucket_index_max_shards, bl);
+    ::encode(id, bl);
+    ::encode(read_only, bl);
     ENCODE_FINISH(bl);
   }
 
   void decode(bufferlist::iterator& bl) {
-    DECODE_START(3, bl);
-    if (struct_v >= 4) {
-      ::decode(id, bl);
-    }
+    DECODE_START(4, bl);
     ::decode(name, bl);
     if (struct_v < 4) {
       id = name;
@@ -971,11 +970,17 @@ struct RGWZone {
     if (struct_v >= 3) {
       ::decode(bucket_index_max_shards, bl);
     }
+    if (struct_v >= 4) {
+      ::decode(id, bl);
+      ::decode(read_only, bl);
+    }
     DECODE_FINISH(bl);
   }
   void dump(Formatter *f) const;
   void decode_json(JSONObj *obj);
   static void generate_test_instances(list<RGWZone*>& o);
+
+  bool is_read_only() { return read_only; }
 };
 WRITE_CLASS_ENCODER(RGWZone)
 
@@ -1055,10 +1060,12 @@ struct RGWZoneGroup : public RGWSystemMetaObj {
   RGWZoneGroup(): is_master(false){}
   RGWZoneGroup(const std::string &id, const std::string &name):RGWSystemMetaObj(id, name) {}
   RGWZoneGroup(const std::string &_name):RGWSystemMetaObj(_name) {}
-  RGWZoneGroup(const std::string &_name, bool _is_master, CephContext *cct, RGWRados* store,
+  RGWZoneGroup(const std::string& _id, const std::string &_name, bool _is_master, CephContext *cct, RGWRados* store,
 	       const string& _realm_id, const list<string>& _endpoints)
     : RGWSystemMetaObj(_name, cct , store), endpoints(_endpoints), is_master(_is_master),
-      realm_id(_realm_id) {}
+      realm_id(_realm_id) {
+    set_id(_id);
+  }
 
   bool is_master_zonegroup() const { return is_master;}
   void update_master(bool _is_master) {
@@ -1106,7 +1113,7 @@ struct RGWZoneGroup : public RGWSystemMetaObj {
 
   int create_default(bool old_format = false);
   int equals(const string& other_zonegroup) const;
-  int add_zone(const RGWZoneParams& zone_params, bool is_master, const list<string>& endpoints);
+  int add_zone(const RGWZoneParams& zone_params, bool *is_master, bool *read_only, const list<string>& endpoints);
   int remove_zone(const RGWZoneParams& zone_params);
 
   const string& get_pool_name(CephContext *cct);

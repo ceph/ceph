@@ -479,9 +479,8 @@ int RGWOp::verify_op_mask()
     return -EPERM;
   }
 
-  if (!s->system_request && (required_mask & RGW_OP_TYPE_MODIFY) && store->get_zonegroup().master_zone
-      != store->zone.get_id())  {
-    ldout(s->cct, 5) << "NOTICE: modify request to a non-master zone by a non-system user, permission denied"  << dendl;
+  if (!s->system_request && (required_mask & RGW_OP_TYPE_MODIFY) && store->get_zone().is_read_only()) {
+    ldout(s->cct, 5) << "NOTICE: modify request to a read-only zone by a non-system user, permission denied"  << dendl;
     return -EPERM;
   }
 

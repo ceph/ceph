@@ -1352,8 +1352,12 @@ int main(int argc, char **argv)
   std::string api_name;
   list<string> endpoints;
   std::string master_url;
-  int is_master = false;
+  int is_master_int;
+  bool is_master = false;
   bool is_master_set = false;
+  int read_only_int;
+  bool read_only = false;
+  int is_read_only_set = false;
   int staging = false;
   int key_type = KEY_TYPE_UNDEFINED;
   rgw_bucket bucket;
@@ -1629,8 +1633,12 @@ int main(int argc, char **argv)
       }
     } else if (ceph_argparse_witharg(args, i, &val, "--parent", (char*)NULL)) {
       parent_period = val;
-    } else if (ceph_argparse_binary_flag(args, i, &is_master, NULL, "--master", (char*)NULL)) {
+    } else if (ceph_argparse_binary_flag(args, i, &is_master_int, NULL, "--master", (char*)NULL)) {
+      is_master = (bool)is_master_int;
       is_master_set = true;
+    } else if (ceph_argparse_binary_flag(args, i, &read_only_int, NULL, "--read-only", (char*)NULL)) {
+      read_only = (bool)read_only_int;
+      is_read_only_set = true;
     } else if (ceph_argparse_witharg(args, i, &val, "--master-url", (char*)NULL)) {
       master_url = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--master-zonegroup", (char*)NULL)) {
@@ -2220,7 +2228,10 @@ int main(int argc, char **argv)
 	  cerr << "unable to initialize zone: " << cpp_strerror(-ret) << std::endl;
 	  return -ret;
 	}
-	ret = zonegroup.add_zone(zone, is_master, endpoints);
+        ret = zonegroup.add_zone(zone,
+                                 (is_master_set ? &is_master : NULL),
+                                 (is_read_only_set ? &read_only : NULL),
+                                 endpoints);
 	if (ret < 0) {
 	  cerr << "failed to add zone " << zone_name << " to zonegroup " << zonegroup.get_name() << ": "
 	       << cpp_strerror(-ret) << std::endl;
@@ -2273,7 +2284,7 @@ int main(int argc, char **argv)
 	  return -ret;
 	}
 
-	RGWZoneGroup zonegroup(zonegroup_name, is_master, g_ceph_context, store, realm.get_id(), endpoints);
+	RGWZoneGroup zonegroup(zonegroup_id, zonegroup_name, is_master, g_ceph_context, store, realm.get_id(), endpoints);
         zonegroup.api_name = (api_name.empty() ? zonegroup_name : api_name);
 	ret = zonegroup.create();
 	if (ret < 0) {
@@ -2716,7 +2727,10 @@ int main(int argc, char **argv)
 	    cerr << "ERROR: couldn't init realm:" << cpp_strerror(-ret) << std::endl;
 	    return ret;
 	  }
-	  ret = zonegroup.add_zone(zone, is_master, endpoints);
+	  ret = zonegroup.add_zone(zone,
+                                   (is_master_set ? &is_master : NULL),
+                                   (is_read_only_set ? &read_only : NULL),
+                                   endpoints);
 	  if (ret < 0) {
 	    cerr << "failed to add zone " << zone_name << " to zonegroup " << zonegroup.get_name()
 		 << ": " << cpp_strerror(-ret) << std::endl;
@@ -2943,7 +2957,10 @@ int main(int argc, char **argv)
 	  return -ret;
 	}
 
-	ret = zonegroup.add_zone(zone, is_master, endpoints);
+        ret = zonegroup.add_zone(zone,
+                                 (is_master_set ? &is_master : NULL),
+                                 (is_read_only_set ? &read_only : NULL),
+                                 endpoints);
 	if (ret < 0) {
 	  cerr << "failed to update zonegroup: " << cpp_strerror(-ret) << std::endl;
 	  return -ret;
