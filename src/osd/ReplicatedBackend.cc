@@ -889,7 +889,7 @@ struct C_ReplicatedBackend_OnPullComplete : GenContext<ThreadPool::TPHandle&> {
       assert(j != bc->pulling.end());
       if (!bc->start_pushes(*i, j->second.obc, h)) {
 	bc->get_parent()->on_global_recover(
-	  *i);
+	  *i, j->second.stat);
       }
       bc->pulling.erase(*i);
       handle.reset_tp_timeout();
@@ -1859,8 +1859,6 @@ bool ReplicatedBackend::handle_pull_response(
 
   pi.recovery_progress = pop.after_progress;
 
-  pi.stat.num_bytes_recovered += data.length();
-
   dout(10) << "new recovery_info " << pi.recovery_info
 	   << ", new progress " << pi.recovery_progress
 	   << dendl;
@@ -1875,13 +1873,10 @@ bool ReplicatedBackend::handle_pull_response(
 		   pop.omap_entries,
 		   t);
 
-  pi.stat.num_keys_recovered += pop.omap_entries.size();
-
   if (complete) {
     to_continue->push_back(hoid);
-    pi.stat.num_objects_recovered++;
     get_parent()->on_local_recover(
-      hoid, pi.stat, pi.recovery_info, pi.obc, t);
+      hoid, pi.recovery_info, pi.obc, t);
     pull_from_peer[from].erase(hoid);
     if (pull_from_peer[from].empty())
       pull_from_peer.erase(from);
@@ -1923,7 +1918,6 @@ void ReplicatedBackend::handle_push(
   if (complete)
     get_parent()->on_local_recover(
       pop.recovery_info.soid,
-      object_stat_sum_t(),
       pop.recovery_info,
       ObjectContextRef(), // ok, is replica
       t);
@@ -2216,12 +2210,17 @@ bool ReplicatedBackend::handle_push_reply(pg_shard_t peer, PushReplyOp &op, Push
 	peer, soid, pi->recovery_info,
 	pi->stat);
 
+      object_stat_sum_t stat;
+      stat.num_bytes_recovered = pi->recovery_info.size;
+      stat.num_keys_recovered = reply->omap_entries.size();
+      stat.num_objects_recovered = 1;
+
       pushing[soid].erase(peer);
       pi = NULL;
 
 
       if (pushing[soid].empty()) {
-	get_parent()->on_global_recover(soid);
+	get_parent()->on_global_recover(soid, stat);
 	pushing.erase(soid);
       } else {
 	dout(10) << "pushed " << soid << ", still waiting for push ack from "

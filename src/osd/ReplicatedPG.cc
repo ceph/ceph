@@ -178,7 +178,6 @@ public:
 
 void ReplicatedPG::on_local_recover(
   const hobject_t &hoid,
-  const object_stat_sum_t &stat_diff,
   const ObjectRecoveryInfo &_recovery_info,
   ObjectContextRef obc,
   ObjectStore::Transaction *t
@@ -227,8 +226,6 @@ void ReplicatedPG::on_local_recover(
   recover_got(recovery_info.soid, recovery_info.version);
 
   if (is_primary()) {
-    info.stats.stats.sum.add(stat_diff);
-
     assert(obc);
     obc->obs.exists = true;
     obc->ondisk_write_lock();
@@ -276,8 +273,10 @@ void ReplicatedPG::on_local_recover(
 }
 
 void ReplicatedPG::on_global_recover(
-  const hobject_t &soid)
+  const hobject_t &soid,
+  const object_stat_sum_t &stat_diff)
 {
+  info.stats.stats.sum.add(stat_diff);
   missing_loc.recovered(soid);
   publish_stats_to_osd();
   dout(10) << "pushed " << soid << " to all replicas" << dendl;

@@ -305,19 +305,14 @@ void ECBackend::handle_recovery_push(
     if ((get_parent()->pgb_is_primary())) {
       assert(recovery_ops.count(op.soid));
       assert(recovery_ops[op.soid].obc);
-      object_stat_sum_t stats;
-      stats.num_objects_recovered = 1;
-      stats.num_bytes_recovered = recovery_ops[op.soid].obc->obs.oi.size;
       get_parent()->on_local_recover(
 	op.soid,
-	stats,
 	op.recovery_info,
 	recovery_ops[op.soid].obc,
 	m->t);
     } else {
       get_parent()->on_local_recover(
 	op.soid,
-	object_stat_sum_t(),
 	op.recovery_info,
 	ObjectContextRef(),
 	m->t);
@@ -599,7 +594,11 @@ void ECBackend::continue_recovery_op(
 		object_stat_sum_t());
 	    }
 	  }
-	  get_parent()->on_global_recover(op.hoid);
+	  object_stat_sum_t stat;
+	  stat.num_bytes_recovered = op.recovery_info.size;
+	  stat.num_keys_recovered = 0; // ??? op ... omap_entries.size(); ?
+	  stat.num_objects_recovered = 1;
+	  get_parent()->on_global_recover(op.hoid, stat);
 	  dout(10) << __func__ << ": WRITING return " << op << dendl;
 	  recovery_ops.erase(op.hoid);
 	  return;
