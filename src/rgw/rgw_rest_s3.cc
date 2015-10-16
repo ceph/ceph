@@ -430,15 +430,16 @@ void RGWGetBucketLocation_ObjStore_S3::send_response()
   end_header(s, this);
   dump_start(s);
 
-  string zonegroup = s->bucket_info.zonegroup;
+  string zonegroup_id = s->bucket_info.zonegroup;
   string api_name;
 
-  map<string, RGWZoneGroup>::iterator iter = store->zonegroup_map.zonegroups.find(zonegroup);
-  if (iter != store->zonegroup_map.zonegroups.end()) {
-    api_name = iter->second.api_name;
+  RGWZoneGroup zonegroup;
+  int ret = store->current_period.get_zonegroup(zonegroup, zonegroup_id);  
+  if (!ret) {
+    api_name = zonegroup.api_name;
   } else  {
-    if (zonegroup != "default") {
-      api_name = zonegroup;
+    if (zonegroup_id != "default") {
+      api_name = zonegroup_id;
     }
   }
 
