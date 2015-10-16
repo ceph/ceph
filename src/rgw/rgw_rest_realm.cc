@@ -92,8 +92,57 @@ class RGWRESTMgr_Period : public RGWRESTMgr {
   }
 };
 
+
+// GET /admin/realm
+class RGWOp_Realm_Get : public RGWRESTOp {
+  std::unique_ptr<RGWRealm> realm;
+public:
+  int verify_permission() override { return 0; }
+  void execute() override;
+  void send_response() override;
+  const string name() { return "get_realm"; }
+};
+
+void RGWOp_Realm_Get::execute()
+{
+  string id;
+  RESTArgs::get_string(s, "id", id, &id);
+  string name;
+  RESTArgs::get_string(s, "name", name, &name);
+
+  // read realm
+  realm.reset(new RGWRealm(id, name));
+  http_ret = realm->init(g_ceph_context, store);
+  if (http_ret < 0)
+    lderr(store->ctx()) << "failed to read realm id=" << id
+        << " name=" << name << dendl;
+}
+
+void RGWOp_Realm_Get::send_response()
+{
+  set_req_state_err(s, http_ret);
+  dump_errno(s);
+  end_header(s);
+
+  if (http_ret < 0)
+    return;
+
+  encode_json("realm", *realm, s->formatter);
+  flusher.flush();
+}
+
+class RGWHandler_Realm : public RGWHandler_Auth_S3 {
+protected:
+  RGWOp *op_get() { return new RGWOp_Realm_Get; }
+};
+
 RGWRESTMgr_Realm::RGWRESTMgr_Realm()
 {
   // add the /admin/realm/period resource
   register_resource("period", new RGWRESTMgr_Period);
+}
+
+RGWHandler* RGWRESTMgr_Realm::get_handler(struct req_state*)
+{
+  return new RGWHandler_Realm;
 }
