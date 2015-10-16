@@ -815,37 +815,39 @@ int ReplicatedPG::do_command(cmdmap_t cmdmap, ostream& ss,
     }
     f->dump_int("num_missing", missing.num_missing());
     f->dump_int("num_unfound", get_num_unfound());
-    map<hobject_t,pg_missing_t::item, hobject_t::ComparatorWithDefault>::const_iterator p = missing.missing.upper_bound(offset);
+    const map<hobject_t, pg_missing_t::item, hobject_t::BitwiseComparator> &needs_recovery_map =
+      missing_loc.get_needs_recovery();
+    map<hobject_t, pg_missing_t::item, hobject_t::BitwiseComparator>::const_iterator p =
+      needs_recovery_map.upper_bound(offset);
     {
       f->open_array_section("objects");
       int32_t num = 0;
       bufferlist bl;
-      while (p != missing.missing.end() && num < cct->_conf->osd_command_max_records) {
-	f->open_object_section("object");
-	{
-	  f->open_object_section("oid");
-	  p->first.dump(f.get());
-	  f->close_section();
-	}
-	p->second.dump(f.get());  // have, need keys
-	{
-	  f->open_array_section("locations");
-	  if (missing_loc.needs_recovery(p->first)) {
-	    for (set<pg_shard_t>::iterator r =
-		   missing_loc.get_locations(p->first).begin();
-		 r != missing_loc.get_locations(p->first).end();
-		 ++r)
-	      f->dump_stream("shard") << *r;
+      for (; p != needs_recovery_map.end() && num < cct->_conf->osd_command_max_records; ++p) {
+        if (missing_loc.is_unfound(p->first)) {
+	  f->open_object_section("object");
+	  {
+	    f->open_object_section("oid");
+	    p->first.dump(f.get());
+	    f->close_section();
+	  }
+          p->second.dump(f.get()); // have, need keys
+	  {
+	    f->open_array_section("locations");
+            for (set<pg_shard_t>::iterator r =
+                missing_loc.get_locations(p->first).begin();
+                r != missing_loc.get_locations(p->first).end();
+                ++r)
+              f->dump_stream("shard") << *r;
+	    f->close_section();
 	  }
 	  f->close_section();
-	}
-	f->close_section();
-	++p;
-	num++;
+	  num++;
+        }
       }
       f->close_section();
     }
-    f->dump_int("more", p != missing.missing.end());
+    f->dump_int("more", p != needs_recovery_map.end());
     f->close_section();
     f->flush(odata);
     return 0;
