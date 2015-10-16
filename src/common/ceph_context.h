@@ -20,10 +20,12 @@
 #include <string>
 #include <set>
 
+#include "include/assert.h"
 #include "include/buffer.h"
 #include "include/atomic.h"
 #include "common/cmdparse.h"
 #include "include/Spinlock.h"
+#include <boost/noncopyable.hpp>
 
 class AdminSocket;
 class CephContextServiceThread;
@@ -60,10 +62,6 @@ private:
   ~CephContext();
   atomic_t nref;
 public:
-  class AssociatedSingletonObject {
-   public:
-    virtual ~AssociatedSingletonObject() {}
-  };
   CephContext *get() {
     nref.inc();
     return this;
@@ -132,9 +130,12 @@ public:
     ceph_spin_lock(&_associated_objs_lock);
     if (!_associated_objs.count(name)) {
       p = new T(this);
-      _associated_objs[name] = reinterpret_cast<AssociatedSingletonObject*>(p);
+      _associated_objs[name] = new TypedSingletonWrapper<T>(p);
     } else {
-      p = reinterpret_cast<T*>(_associated_objs[name]);
+      TypedSingletonWrapper<T> *wrapper =
+        dynamic_cast<TypedSingletonWrapper<T> *>(_associated_objs[name]);
+      assert(wrapper != NULL);
+      p = wrapper->singleton;
     }
     ceph_spin_unlock(&_associated_objs_lock);
   }
@@ -149,6 +150,21 @@ public:
 					  std::ostream *message);
 
 private:
+  struct SingletonWrapper : boost::noncopyable {
+    virtual ~SingletonWrapper() {}
+  };
+
+  template <typename T>
+  struct TypedSingletonWrapper : public SingletonWrapper {
+    TypedSingletonWrapper(T *p) : singleton(p) {
+    }
+    virtual ~TypedSingletonWrapper() {
+      delete singleton;
+    }
+
+    T *singleton;
+  };
+
   CephContext(const CephContext &rhs);
   CephContext &operator=(const CephContext &rhs);
 
@@ -182,7 +198,7 @@ private:
   ceph::HeartbeatMap *_heartbeat_map;
 
   ceph_spinlock_t _associated_objs_lock;
-  std::map<std::string, AssociatedSingletonObject*> _associated_objs;
+  std::map<std::string, SingletonWrapper*> _associated_objs;
 
   // crypto
   CryptoHandler *_crypto_none;

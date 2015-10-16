@@ -305,7 +305,7 @@ static int do_copy(IoCtx& io_ctx, const char *objname,
   __le32 src_fadvise_flags = LIBRADOS_OP_FLAG_FADVISE_SEQUENTIAL | LIBRADOS_OP_FLAG_FADVISE_NOCACHE;
   __le32 dest_fadvise_flags = LIBRADOS_OP_FLAG_FADVISE_SEQUENTIAL | LIBRADOS_OP_FLAG_FADVISE_DONTNEED;
   ObjectWriteOperation op;
-  op.copy_from(objname, io_ctx, 0, src_fadvise_flags);
+  op.copy_from2(objname, io_ctx, 0, src_fadvise_flags);
   op.set_op_flags2(dest_fadvise_flags);
 
   return target_ctx.operate(target_obj, &op);
