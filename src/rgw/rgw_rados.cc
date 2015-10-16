@@ -563,6 +563,16 @@ int RGWSystemMetaObj::read_info(const string& obj_id, bool old_format)
   return 0;
 }
 
+int RGWSystemMetaObj::read()
+{
+  int ret = read_id(name, id);
+  if (ret < 0) {
+    return ret;
+  }
+
+  return read_info(id);
+}
+
 int RGWSystemMetaObj::create(bool exclusive)
 {
   int ret;
@@ -572,7 +582,7 @@ int RGWSystemMetaObj::create(bool exclusive)
   if (exclusive && ret == 0) {
     ldout(cct, 0) << "ERROR: name " << name << " already in use for obj id " << id << dendl;
     return -EEXIST;
-  } else if ( ret != -ENOENT) {
+  } else if ( ret < 0 && ret != -ENOENT) {
     lderr(cct) << "failed reading obj id  " << id << ": " << cpp_strerror(-ret) << dendl;
     return ret;
   }
@@ -586,7 +596,7 @@ int RGWSystemMetaObj::create(bool exclusive)
     id = uuid_str;
   }
 
-  ret = store_info(true);
+  ret = store_info(exclusive);
   if (ret < 0) {
     ldout(cct, 0) << "ERROR:  storing info for " << id << ": " << cpp_strerror(-ret) << dendl;
     return ret;
@@ -606,6 +616,21 @@ int RGWSystemMetaObj::store_info(bool exclusive)
   bufferlist bl;
   ::encode(*this, bl);
   return  rgw_put_system_obj(store, pool, oid, bl.c_str(), bl.length(), exclusive, NULL, 0, NULL);
+}
+
+int RGWSystemMetaObj::write(bool exclusive)
+{
+  int ret = store_info(exclusive);
+  if (ret < 0) {
+    ldout(cct, 20) << __func__ << "(): store_info() returned ret=" << ret << dendl;
+    return ret;
+  }
+  ret = store_name(exclusive);
+  if (ret < 0) {
+    ldout(cct, 20) << __func__ << "(): store_name() returned ret=" << ret << dendl;
+    return ret;
+  }
+  return 0;
 }
 
 
