@@ -262,7 +262,6 @@ public:
   /// Listener methods
   void on_local_recover(
     const hobject_t &oid,
-    const object_stat_sum_t &stat_diff,
     const ObjectRecoveryInfo &recovery_info,
     ObjectContextRef obc,
     ObjectStore::Transaction *t
@@ -277,7 +276,8 @@ public:
     pg_shard_t peer,
     const hobject_t oid);
   void on_global_recover(
-    const hobject_t &oid);
+    const hobject_t &oid,
+    const object_stat_sum_t &stat_diff);
   void failed_push(pg_shard_t from, const hobject_t &soid);
   void cancel_pull(const hobject_t &soid);
 
