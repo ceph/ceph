@@ -615,7 +615,8 @@ int invoke_async_request(ImageCtx *ictx, const std::string& request_type,
     assert(ictx->owner_lock.is_locked());
     assert(!ictx->image_watcher->is_lock_supported() ||
 	   ictx->image_watcher->is_lock_owner());
-
+    uint64_t snap_nums = 0;
+    
     ldout(ictx->cct, 20) << "snap_create_helper " << ictx << " " << snap_name
                          << dendl;
 
@@ -625,6 +626,12 @@ int invoke_async_request(ImageCtx *ictx, const std::string& request_type,
     }
 
     RWLock::WLocker md_locker(ictx->md_lock);
+    snap_list_nums(ictx, &snap_nums);
+    if (ictx->cct->_conf->rbd_snap_max_nums <= snap_nums)
+    {
+    	lderr(ictx->cct) << "snap_create " << ictx << " " << "snap more than max: " << ictx->cct->_conf->rbd_snap_max_nums << dendl;
+    	return -EPERM;
+    }
     r = _flush(ictx);
     if (r < 0) {
       return r;
@@ -2008,7 +2015,18 @@ reprotect_and_return_err:
 
     return 0;
   }
+  
+  // Before the call snap_list_nums ()
+  // use ictx_check () detection
+  int snap_list_nums(ImageCtx *ictx, uint64_t *snap_nums)
+  {
+    ldout(ictx->cct, 20) << "snap_list " << ictx << dendl;
 
+    RWLock::RLocker l(ictx->snap_lock);
+	*snap_nums = ictx->snap_info.size();
+    return 0;
+  } 
+  
   bool snap_exists(ImageCtx *ictx, const char *snap_name)
   {
     ldout(ictx->cct, 20) << "snap_exists " << ictx << " " << snap_name << dendl;
