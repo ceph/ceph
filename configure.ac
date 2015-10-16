@@ -1336,7 +1336,6 @@ AC_CONFIG_FILES([Makefile
 	src/ocf/ceph
 	src/ocf/rbd
 	src/java/Makefile
-	src/tracing/Makefile
 	systemd/Makefile
 	man/Makefile
 	doc/Makefile

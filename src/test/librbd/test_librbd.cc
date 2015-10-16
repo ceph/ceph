@@ -3080,6 +3080,31 @@ TEST_F(TestLibRBD, RebuildObjectMap)
   ASSERT_PASSED(validate_object_map, image2);
 }
 
+TEST_F(TestLibRBD, RebuildNewObjectMap)
+{
+  REQUIRE_FEATURE(RBD_FEATURE_LAYERING);
+
+  rados_ioctx_t ioctx;
+  rados_ioctx_create(_cluster, m_pool_name.c_str(), &ioctx);
+
+  std::string name = get_temp_image_name();
+  uint64_t size = 1 << 20;
+  int order = 18;
+  uint64_t features = RBD_FEATURE_EXCLUSIVE_LOCK;
+  ASSERT_EQ(0, create_image_full(ioctx, name.c_str(), size, &order,
+				 false, features));
+
+  rbd_image_t image;
+  ASSERT_EQ(0, rbd_open(ioctx, name.c_str(), &image, NULL));
+  ASSERT_EQ(0, rbd_update_features(image, RBD_FEATURE_OBJECT_MAP, true));
+  ASSERT_EQ(0, rbd_rebuild_object_map(image, print_progress_percent, NULL));
+
+  ASSERT_PASSED(validate_object_map, image);
+
+  ASSERT_EQ(0, rbd_close(image));
+  rados_ioctx_destroy(ioctx);
+}
+
 TEST_F(TestLibRBD, BlockingAIO)
 {
   librados::IoCtx ioctx;
