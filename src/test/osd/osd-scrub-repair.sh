@@ -144,6 +144,49 @@ function corrupt_and_repair_erasure_coded() {
 
 }
 
+function TEST_auto_repair_erasure_coded() {
+    local dir=$1
+    local poolname=ecpool
+
+    # Launch a cluster with 5 seconds scrub interval
+    setup $dir || return 1
+    run_mon $dir a || return 1
+    for id in $(seq 0 2) ; do
+        run_osd $dir $id \
+            --osd-scrub-auto-repair=true \
+            --osd-deep-scrub-interval=5 \
+            --osd-scrub-max-interval=5 \
+            --osd-scrub-min-interval=5 \
+            --osd-scrub-interval-randomize-ratio=0
+    done
+    wait_for_clean || return 1
+
+    # Create an EC pool
+    ceph osd erasure-code-profile set myprofile \
+        k=2 m=1 ruleset-failure-domain=osd || return 1
+    ceph osd pool create $poolname 8 8 erasure myprofile || return 1
+    wait_for_clean || return 1
+
+    # Put an object
+    local payload=ABCDEF
+    echo $payload > $dir/ORIGINAL
+    rados --pool $poolname put SOMETHING $dir/ORIGINAL || return 1
+
+    # Remove the object from one shard physically
+    objectstore_tool $dir $(get_not_primary $poolname SOMETHING) SOMETHING remove || return 1
+
+    # Give some time for auto repair
+    sleep 20
+
+    # Verify - the file should be back
+    objectstore_tool $dir $(get_not_primary $poolname SOMETHING) SOMETHING list-attrs || return 1
+    rados --pool $poolname get SOMETHING $dir/COPY || return 1
+    diff $dir/ORIGINAL $dir/COPY || return 1
+
+    # Tear down
+    teardown $dir || return 1
+}
+
 function TEST_corrupt_and_repair_jerasure() {
     local dir=$1
     local poolname=ecpool
