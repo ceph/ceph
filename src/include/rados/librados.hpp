@@ -1143,6 +1143,7 @@ namespace librados
     int blacklist_add(const std::string& client_address,
                       uint32_t expire_seconds);
 
+    int map_object(const char *obj_name, std::vector<int>& up, int64_t pool_id);
     /*
      * pool aio
      *

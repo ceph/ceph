@@ -2832,6 +2832,20 @@ CEPH_RADOS_API int rados_blacklist_add(rados_t cluster,
 				       uint32_t expire_seconds);
 
 /**
+ * Give the up set of OSDs for specific object
+ *
+ * @param cluster cluster handle
+ * @param obj_name object name
+ * @param pool_id id of pool to look up (-1 for default to look up in pool 0)
+ * @param up up set of OSDs
+ * @param up_size size of the up set
+ * @returns 0 on success, negative error code on failure
+ */
+CEPH_RADOS_API int rados_map_object(rados_t cluster, const char *obj_name,
+                                    char **up, size_t *up_size,
+                                    int64_t pool_id);
+
+/**
  * @name Mon/OSD/PG Commands
  *
  * These interfaces send commands relating to the monitor, OSD, or PGs.
