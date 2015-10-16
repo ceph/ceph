@@ -101,6 +101,21 @@ public:
 	      << __func__
 	      << " iterator not valid";
     }
+    
+    if (!it->raw_key_is_prefixed(expected_prefix)) {
+      return ::testing::AssertionFailure()
+	      << __func__
+	      << " expected raw_key_is_prefixed() == TRUE"
+	      << " got FALSE";
+    }
+    
+    if (it->raw_key_is_prefixed("??__SomeUnexpectedValue__??")) {
+      return ::testing::AssertionFailure()
+	      << __func__
+	      << " expected raw_key_is_prefixed() == FALSE"
+	      << " got TRUE";
+    }
+ 
     pair<string,string> key = it->raw_key();
 
     if (expected_prefix != key.first) {
