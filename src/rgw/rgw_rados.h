@@ -791,6 +791,8 @@ public:
   int delete_obj(bool old_format = false);
   int rename(const string& new_name);
   int update() { return store_info(false);}
+  int read();
+  int write(bool exclusive);
 
   virtual const string& get_pool_name(CephContext *cct) = 0;
   virtual const string& get_default_oid(bool old_format = false) = 0;
@@ -907,7 +909,7 @@ struct RGWZoneParams : RGWSystemMetaObj {
       RGWSystemMetaObj::decode(bl);
     } else if (struct_v >= 2) {
       ::decode(name, bl);
-	id = name;
+      id = name;
     }
     if (struct_v >= 3)
       ::decode(system_key, bl);

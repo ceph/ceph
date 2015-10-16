@@ -2839,31 +2839,47 @@ int main(int argc, char **argv)
 	  return -ret;
 	}
 
+        ret = zone.read();
+        if (ret < 0 && ret != -ENOENT) {
+	  cerr << "zone.read() returned ret=" << ret << std::endl;
+          return -ret;
+        }
+
+        string orig_id = zone.get_id();
+
 	ret = read_decode_json(infile, zone);
 	if (ret < 0) {
 	  return 1;
 	}
 
-	if (zone.get_id().empty() && zone.get_name().empty()) {
-	  cerr << "no zone name id or name in the json provided , assuming old format" << std::endl;
+        if (zone.get_name().empty()) {
+          zone.set_name(zone_name);
+          if (zone.get_name().empty()) {
+            cerr << "no zone name specified" << std::endl;
+            return EINVAL;
+          }
+        }
+
+        zone_name = zone.get_name();
+
+        if (zone.get_id().empty()) {
+          zone.set_id(orig_id);
+        }
+
+	if (zone.get_id().empty()) {
+	  cerr << "no zone name id the json provided, assuming old format" << std::endl;
 	  if (zone_name.empty()) {
 	    cerr << "missing zone name"  << std::endl;
-	    return -EINVAL;
+	    return EINVAL;
 	  }
 	  zone.set_name(zone_name);
 	  zone.set_id(zone_name);
 	}
 
-	ret = zone.create();
-	if (ret < 0 && ret != -EEXIST) {
+	ret = zone.write(false);
+	if (ret < 0) {
 	  cerr << "ERROR: couldn't create zone: " << cpp_strerror(-ret) << std::endl;
 	  return 1;
-	} if (ret == -EEXIST) {
-	  ret = zone.update();
-	  if (ret < 0) {
-	    cerr << "ERROR: couldn't update zone: " << cpp_strerror(-ret) << std::endl;
-	    return 1;
-	  }
 	}
 
 	encode_json("zone", zone, formatter);
