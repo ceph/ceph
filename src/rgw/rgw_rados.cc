@@ -260,10 +260,17 @@ void RGWZoneGroup::post_process_params()
 {
   bool log_data = zones.size() > 1;
 
+  if (master_zone.empty()) {
+    map<string, RGWZone>::iterator iter = zones.begin();
+    if (iter != zones.end()) {
+      master_zone = iter->first;
+    }
+  }
+  
   for (map<string, RGWZone>::iterator iter = zones.begin(); iter != zones.end(); ++iter) {
     RGWZone& zone = iter->second;
     zone.log_data = log_data;
-    zone.log_meta = (is_master && zone.name == master_zone);
+    zone.log_meta = (is_master && zone.id == master_zone);
 
     RGWZoneParams zone_params(zone.id, zone.name);
     int ret = zone_params.init(cct, store);
@@ -281,11 +288,10 @@ void RGWZoneGroup::post_process_params()
         placement_targets[placement_name] = placement_target;
       }
     }
+  }
 
-    if (default_placement.empty() && !placement_targets.empty()) {
-      default_placement = placement_targets.begin()->first;
-    }
-
+  if (default_placement.empty() && !placement_targets.empty()) {
+    default_placement = placement_targets.begin()->first;
   }
 }
 
@@ -990,6 +996,11 @@ int RGWPeriod::update()
       continue;
     }
     
+    if (zg.is_master_zonegroup()) {
+      master_zonegroup = zg.get_id();
+      master_zone = zg.master_zone;
+    }
+
     int ret = period_map.update(zg);
     if (ret < 0) {
       ldout(cct, 0) << "ERROR: updating period map: " << cpp_strerror(-ret) << dendl;
