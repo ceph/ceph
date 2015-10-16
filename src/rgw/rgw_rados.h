@@ -1363,6 +1363,7 @@ public:
   epoch_t get_epoch() { return epoch;}
   const string& get_predecessor() { return predecessor_uuid;}
   const string& get_master_zone() { return master_zone;}
+  const string& get_master_zonegroup() { return master_zonegroup;}
   const string& get_realm() { return realm_id;}
   const RGWPeriodMap& get_map() { return period_map;}
   const RGWPeriodConfig& get_config() { return period_config;}
