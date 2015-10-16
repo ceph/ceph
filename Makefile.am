@@ -2,7 +2,7 @@ AUTOMAKE_OPTIONS = gnu
 ACLOCAL_AMFLAGS = -I m4
 EXTRA_DIST = autogen.sh ceph.spec.in ceph.spec install-deps.sh
 # the "." here makes sure check-local builds gtest and gmock before they are used
-SUBDIRS = . src man doc
+SUBDIRS = . src man doc systemd selinux
 
 EXTRA_DIST += \
 	src/test/run-cli-tests \
@@ -10,6 +10,10 @@ EXTRA_DIST += \
 	src/test/cli \
 	src/test/downloads \
 	systemd/ceph.tmpfiles.d \
+	etc/default/ceph \
+	etc/sysconfig/ceph \
+	etc/sysconfig/SuSEfirewall2.d/services/ceph-mon \
+	etc/sysconfig/SuSEfirewall2.d/services/ceph-osd-mds \
 	udev/50-rbd.rules \
 	udev/60-ceph-partuuid-workaround.rules \
 	udev/95-ceph-osd.rules \
@@ -21,9 +25,9 @@ EXTRA_DIST += \
 # why is it so hard to make autotools to this?
 install-data-local::
 	-mkdir -p $(DESTDIR)$(datadir)/ceph
-	-install -m 644 share/known_hosts_drop.ceph.com $(DESTDIR)$(datadir)/ceph/known_hosts_drop.ceph.com
-	-install -m 644 share/id_dsa_drop.ceph.com $(DESTDIR)$(datadir)/ceph/id_dsa_drop.ceph.com
-	-install -m 644 share/id_dsa_drop.ceph.com.pub $(DESTDIR)$(datadir)/ceph/id_dsa_drop.ceph.com.pub
+	-install -m 600 share/known_hosts_drop.ceph.com $(DESTDIR)$(datadir)/ceph/known_hosts_drop.ceph.com
+	-install -m 600 share/id_dsa_drop.ceph.com $(DESTDIR)$(datadir)/ceph/id_dsa_drop.ceph.com
+	-install -m 600 share/id_dsa_drop.ceph.com.pub $(DESTDIR)$(datadir)/ceph/id_dsa_drop.ceph.com.pub
 
 all-local::
 if WITH_DEBUG

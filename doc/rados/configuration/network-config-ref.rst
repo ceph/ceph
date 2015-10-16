@@ -124,26 +124,22 @@ By default, Ceph OSD Daemons `bind`_ to the first available ports on a Ceph Node
 beginning at port 6800.  Note that this behavior is not deterministic, so if you
 are running more than one OSD or MDS on the same host, or if you restart the
 daemons within a short window of time, the daemons will bind to higher ports.
-Each Ceph OSD Daemon on a Ceph Node may use up to three ports:
+Each Ceph OSD Daemon on a Ceph Node may use up to four ports:
 
 #. One for talking to clients and monitors.
 #. One for sending data to other OSDs.
-#. One for heartbeating.
+#. Two for heartbeating on each interface.
 
 .. ditaa:: 
               /---------------\
               |      OSD      |
-              |           +---+----------------+
-              |           | Clients & Monitors |
-              |           +---+----------------+
+              |           +---+----------------+-----------+
+              |           | Clients & Monitors | Heartbeat |
+              |           +---+----------------+-----------+
               |               |
-              |           +---+----------------+
-              |           | Data Replication   |
-              |           +---+----------------+
-              |               |
-              |           +---+----------------+
-              |           | Heartbeat          |
-              |           +---+----------------+
+              |           +---+----------------+-----------+
+              |           | Data Replication   | Heartbeat |
+              |           +---+----------------+-----------+
               | cCCC          |
               \---------------/
 
@@ -423,13 +419,13 @@ TCP
 Ceph disables TCP buffering by default.
 
 
-``tcp nodelay``
+``ms tcp nodelay``
 
-:Description: Ceph enables ``tcp nodelay`` so that each request is sent 
+:Description: Ceph enables ``ms tcp nodelay`` so that each request is sent 
               immediately (no buffering). Disabling `Nagle's algorithm`_
               increases network traffic, which can introduce latency. If you 
               experience large numbers of small packets, you may try 
-              disabling ``tcp nodelay``. 
+              disabling ``ms tcp nodelay``. 
 
 :Type: Boolean
 :Required: No
@@ -437,7 +433,7 @@ Ceph disables TCP buffering by default.
 
 
 
-``tcp rcvbuf``
+``ms tcp rcvbuf``
 
 :Description: The size of the socket buffer on the receiving end of a network
               connection. Disable by default.
@@ -451,7 +447,7 @@ Ceph disables TCP buffering by default.
 ``ms tcp read timeout``
 
 :Description: If a client or daemon makes a request to another Ceph daemon and
-              does not drop an unused connection, the ``tcp read timeout`` 
+              does not drop an unused connection, the ``ms tcp read timeout`` 
               defines the connection as idle after the specified number 
               of seconds.
 

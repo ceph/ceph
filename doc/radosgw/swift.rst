@@ -2,7 +2,7 @@
  Ceph Object Gateway Swift API
 ===============================
 
-Ceph supports a RESTful API that is compatible with the basic data access model of the Swift API.
+Ceph supports a RESTful API that is compatible with the basic data access model of the `Swift API`_.
 
 API
 ---
@@ -72,3 +72,4 @@ The following table describes the support status for current Swift functional fe
 | **CORS**                        | Not Supported   |                                        |
 +---------------------------------+-----------------+----------------------------------------+
 
+.. _Swift API: http://developer.openstack.org/api-ref-objectstorage-v1.html

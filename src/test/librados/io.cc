@@ -118,6 +118,15 @@ TEST_F(LibRadosIoPP, ReadOpPP) {
   }
 
   {
+      bufferlist op_bl;
+      ObjectReadOperation op;
+      op.read(0, 0, NULL, NULL); //len=0 mean read the whole object data.
+      ASSERT_EQ(0, ioctx.operate("foo", &op, &op_bl));
+      ASSERT_EQ(sizeof(buf), op_bl.length());
+      ASSERT_EQ(0, memcmp(op_bl.c_str(), buf, sizeof(buf)));
+  }
+
+  {
       bufferlist read_bl, op_bl;
       ObjectReadOperation op;
       op.read(0, sizeof(buf), &read_bl, NULL);
@@ -220,6 +229,25 @@ TEST_F(LibRadosIoPP, ReadOpPP) {
       ASSERT_EQ(0, rval2);
       ASSERT_EQ(0, memcmp(read_bl1.c_str(), buf, sizeof(buf)));
       ASSERT_EQ(0, memcmp(read_bl2.c_str(), buf, sizeof(buf)));
+  }
+}
+
+TEST_F(LibRadosIoPP, SparseReadOpPP) {
+  char buf[128];
+  memset(buf, 0xcc, sizeof(buf));
+  bufferlist bl;
+  bl.append(buf, sizeof(buf));
+  ASSERT_EQ(0, ioctx.write("foo", bl, sizeof(buf), 0));
+
+  {
+    std::map<uint64_t, uint64_t> extents;
+    bufferlist read_bl;
+    int rval = -1;
+    ObjectReadOperation op;
+    op.sparse_read(0, sizeof(buf), &extents, &read_bl, &rval);
+    ASSERT_EQ(0, ioctx.operate("foo", &op, nullptr));
+    ASSERT_EQ(0, rval);
+    assert_eq_sparse(bl, extents, read_bl);
   }
 }
 
@@ -463,6 +491,17 @@ TEST_F(LibRadosIo, RmXattr) {
       rados_setxattr(ioctx, "foo", attr1, attr1_buf, sizeof(attr1_buf)));
   ASSERT_EQ(0, rados_rmxattr(ioctx, "foo", attr1));
   ASSERT_EQ(-ENODATA, rados_getxattr(ioctx, "foo", attr1, buf, sizeof(buf)));
+
+  // Test rmxattr on a removed object
+  char buf2[128];
+  char attr2[] = "attr2";
+  char attr2_buf[] = "foo bar baz";
+  memset(buf2, 0xbb, sizeof(buf2));
+  ASSERT_EQ(0, rados_write(ioctx, "foo_rmxattr", buf2, sizeof(buf2), 0));
+  ASSERT_EQ(0,
+      rados_setxattr(ioctx, "foo_rmxattr", attr2, attr2_buf, sizeof(attr2_buf)));
+  ASSERT_EQ(0, rados_remove(ioctx, "foo_rmxattr"));
+  ASSERT_EQ(-ENOENT, rados_rmxattr(ioctx, "foo_rmxattr", attr2));
 }
 
 TEST_F(LibRadosIoPP, RmXattrPP) {
@@ -479,6 +518,20 @@ TEST_F(LibRadosIoPP, RmXattrPP) {
   ASSERT_EQ(0, ioctx.rmxattr("foo", attr1));
   bufferlist bl3;
   ASSERT_EQ(-ENODATA, ioctx.getxattr("foo", attr1, bl3));
+
+  // Test rmxattr on a removed object
+  char buf2[128];
+  char attr2[] = "attr2";
+  char attr2_buf[] = "foo bar baz";
+  memset(buf2, 0xbb, sizeof(buf2));
+  bufferlist bl21;
+  bl21.append(buf, sizeof(buf));
+  ASSERT_EQ(0, ioctx.write("foo_rmxattr", bl21, sizeof(buf2), 0));
+  bufferlist bl22;
+  bl22.append(attr2_buf, sizeof(attr2_buf));
+  ASSERT_EQ(0, ioctx.setxattr("foo_rmxattr", attr2, bl22));
+  ASSERT_EQ(0, ioctx.remove("foo_rmxattr"));
+  ASSERT_EQ(-ENOENT, ioctx.rmxattr("foo_rmxattr", attr2));
 }
 
 TEST_F(LibRadosIo, XattrIter) {
@@ -591,6 +644,15 @@ TEST_F(LibRadosIoECPP, ReadOpPP) {
   }
 
   {
+    bufferlist op_bl;
+    ObjectReadOperation op;
+    op.read(0, 0, NULL, NULL); //len=0 mean read the whole object data
+    ASSERT_EQ(0, ioctx.operate("foo", &op, &op_bl));
+    ASSERT_EQ(sizeof(buf), op_bl.length());
+    ASSERT_EQ(0, memcmp(op_bl.c_str(), buf, sizeof(buf)));
+  }
+
+  {
       bufferlist read_bl, op_bl;
       ObjectReadOperation op;
       op.read(0, sizeof(buf), &read_bl, NULL);
@@ -693,6 +755,25 @@ TEST_F(LibRadosIoECPP, ReadOpPP) {
       ASSERT_EQ(0, rval2);
       ASSERT_EQ(0, memcmp(read_bl1.c_str(), buf, sizeof(buf)));
       ASSERT_EQ(0, memcmp(read_bl2.c_str(), buf, sizeof(buf)));
+  }
+}
+
+TEST_F(LibRadosIoECPP, SparseReadOpPP) {
+  char buf[128];
+  memset(buf, 0xcc, sizeof(buf));
+  bufferlist bl;
+  bl.append(buf, sizeof(buf));
+  ASSERT_EQ(0, ioctx.write("foo", bl, sizeof(buf), 0));
+
+  {
+    std::map<uint64_t, uint64_t> extents;
+    bufferlist read_bl;
+    int rval = -1;
+    ObjectReadOperation op;
+    op.sparse_read(0, sizeof(buf), &extents, &read_bl, &rval);
+    ASSERT_EQ(0, ioctx.operate("foo", &op, nullptr));
+    ASSERT_EQ(0, rval);
+    assert_eq_sparse(bl, extents, read_bl);
   }
 }
 
@@ -960,6 +1041,17 @@ TEST_F(LibRadosIoEC, RmXattr) {
       rados_setxattr(ioctx, "foo", attr1, attr1_buf, sizeof(attr1_buf)));
   ASSERT_EQ(0, rados_rmxattr(ioctx, "foo", attr1));
   ASSERT_EQ(-ENODATA, rados_getxattr(ioctx, "foo", attr1, buf, sizeof(buf)));
+
+  // Test rmxattr on a removed object
+  char buf2[128];
+  char attr2[] = "attr2";
+  char attr2_buf[] = "foo bar baz";
+  memset(buf2, 0xbb, sizeof(buf2));
+  ASSERT_EQ(0, rados_write(ioctx, "foo_rmxattr", buf2, sizeof(buf2), 0));
+  ASSERT_EQ(0,
+      rados_setxattr(ioctx, "foo_rmxattr", attr2, attr2_buf, sizeof(attr2_buf)));
+  ASSERT_EQ(0, rados_remove(ioctx, "foo_rmxattr"));
+  ASSERT_EQ(-ENOENT, rados_rmxattr(ioctx, "foo_rmxattr", attr2));
 }
 
 TEST_F(LibRadosIoECPP, RmXattrPP) {
@@ -976,6 +1068,20 @@ TEST_F(LibRadosIoECPP, RmXattrPP) {
   ASSERT_EQ(0, ioctx.rmxattr("foo", attr1));
   bufferlist bl3;
   ASSERT_EQ(-ENODATA, ioctx.getxattr("foo", attr1, bl3));
+
+  // Test rmxattr on a removed object
+  char buf2[128];
+  char attr2[] = "attr2";
+  char attr2_buf[] = "foo bar baz";
+  memset(buf2, 0xbb, sizeof(buf2));
+  bufferlist bl21;
+  bl21.append(buf, sizeof(buf));
+  ASSERT_EQ(0, ioctx.write("foo_rmxattr", bl21, sizeof(buf2), 0));
+  bufferlist bl22;
+  bl22.append(attr2_buf, sizeof(attr2_buf));
+  ASSERT_EQ(0, ioctx.setxattr("foo_rmxattr", attr2, bl22));
+  ASSERT_EQ(0, ioctx.remove("foo_rmxattr"));
+  ASSERT_EQ(-ENOENT, ioctx.rmxattr("foo_rmxattr", attr2));
 }
 
 TEST_F(LibRadosIoEC, XattrIter) {

@@ -157,6 +157,7 @@ namespace librbd {
 			       uint64_t trunc_size, __u32 trunc_seq,
 			       Context *oncommit)
   {
+    assert(m_ictx->owner_lock.is_locked());
     uint64_t object_no = oid_to_object_no(oid.name, m_ictx->object_prefix);
     
     write_result_d *result = new write_result_d(oid.name, oncommit);
@@ -167,6 +168,14 @@ namespace librbd {
                                  req_comp);
     req->send();
     return ++m_tid;
+  }
+
+  void LibrbdWriteback::get_client_lock() {
+    m_ictx->owner_lock.get_read();
+  }
+
+  void LibrbdWriteback::put_client_lock() {
+    m_ictx->owner_lock.put_read();
   }
 
   void LibrbdWriteback::complete_writes(const std::string& oid)

@@ -39,7 +39,7 @@
 
 #include "LogSegment.h"
 
-#include "MDS.h"
+#include "MDSRank.h"
 #include "MDLog.h"
 #include "MDCache.h"
 #include "Server.h"
@@ -63,7 +63,7 @@
 // -----------------------
 // LogSegment
 
-void LogSegment::try_to_expire(MDS *mds, MDSGatherBuilder &gather_bld, int op_prio)
+void LogSegment::try_to_expire(MDSRank *mds, MDSGatherBuilder &gather_bld, int op_prio)
 {
   set<CDir*> commit;
 
@@ -301,7 +301,7 @@ EMetaBlob::EMetaBlob(MDLog *mdlog) : opened_ino(0), renamed_dirino(0),
 
 void EMetaBlob::add_dir_context(CDir *dir, int mode)
 {
-  MDS *mds = dir->cache->mds;
+  MDSRank *mds = dir->cache->mds;
 
   list<CDentry*> parents;
 
@@ -532,7 +532,7 @@ void EMetaBlob::fullbit::generate_test_instances(list<EMetaBlob::fullbit*>& ls)
   ls.push_back(sample);
 }
 
-void EMetaBlob::fullbit::update_inode(MDS *mds, CInode *in)
+void EMetaBlob::fullbit::update_inode(MDSRank *mds, CInode *in)
 {
   in->inode = inode;
   in->xattrs = xattrs;
@@ -753,7 +753,7 @@ void EMetaBlob::dirlump::generate_test_instances(list<dirlump*>& ls)
  */
 void EMetaBlob::encode(bufferlist& bl) const
 {
-  ENCODE_START(7, 5, bl);
+  ENCODE_START(8, 5, bl);
   ::encode(lump_order, bl);
   ::encode(lump_map, bl);
   ::encode(roots, bl);
@@ -772,12 +772,13 @@ void EMetaBlob::encode(bufferlist& bl) const
   ::encode(renamed_dirino, bl);
   ::encode(renamed_dir_frags, bl);
   {
-    // make MDS use v6 format happy
+    // make MDSRank use v6 format happy
     int64_t i = -1;
     bool b = false;
     ::encode(i, bl);
     ::encode(b, bl);
   }
+  ::encode(client_flushes, bl);
   ENCODE_FINISH(bl);
 }
 void EMetaBlob::decode(bufferlist::iterator &bl)
@@ -826,6 +827,9 @@ void EMetaBlob::decode(bufferlist::iterator &bl)
     bool b;
     ::decode(i, bl);
     ::decode(b, bl);
+  }
+  if (struct_v >= 8) {
+    ::decode(client_flushes, bl);
   }
   DECODE_FINISH(bl);
 }
@@ -1108,7 +1112,7 @@ void EMetaBlob::generate_test_instances(list<EMetaBlob*>& ls)
   ls.push_back(new EMetaBlob());
 }
 
-void EMetaBlob::replay(MDS *mds, LogSegment *logseg, MDSlaveUpdate *slaveup)
+void EMetaBlob::replay(MDSRank *mds, LogSegment *logseg, MDSlaveUpdate *slaveup)
 {
   dout(10) << "EMetaBlob.replay " << lump_map.size() << " dirlumps by " << client_name << dendl;
 
@@ -1607,6 +1611,21 @@ void EMetaBlob::replay(MDS *mds, LogSegment *logseg, MDSlaveUpdate *slaveup)
     }
   }
 
+  // client flushes
+  for (list<pair<metareqid_t, uint64_t> >::iterator p = client_flushes.begin();
+       p != client_flushes.end();
+       ++p) {
+    if (p->first.name.is_client()) {
+      dout(10) << "EMetaBlob.replay flush " << p->first << " trim_to " << p->second << dendl;
+      Session *session = mds->sessionmap.get_session(p->first.name);
+      if (session) {
+	session->add_completed_flush(p->first.tid);
+	if (p->second)
+	  session->trim_completed_flushes(p->second);
+      }
+    }
+  }
+
   // update segment
   update_segment(logseg);
 
@@ -1623,7 +1642,7 @@ void ESession::update_segment()
     _segment->inotablev = inotablev;
 }
 
-void ESession::replay(MDS *mds)
+void ESession::replay(MDSRank *mds)
 {
   if (mds->sessionmap.get_version() >= cmapv) {
     dout(10) << "ESession.replay sessionmap " << mds->sessionmap.get_version() 
@@ -1781,7 +1800,7 @@ void ESessions::update_segment()
   _segment->sessionmapv = cmapv;
 }
 
-void ESessions::replay(MDS *mds)
+void ESessions::replay(MDSRank *mds)
 {
   if (mds->sessionmap.get_version() >= cmapv) {
     dout(10) << "ESessions.replay sessionmap " << mds->sessionmap.get_version()
@@ -1850,7 +1869,7 @@ void ETableServer::update_segment()
   _segment->tablev[table] = version;
 }
 
-void ETableServer::replay(MDS *mds)
+void ETableServer::replay(MDSRank *mds)
 {
   MDSTableServer *server = mds->get_table_server(table);
   if (!server)
@@ -1932,7 +1951,7 @@ void ETableClient::generate_test_instances(list<ETableClient*>& ls)
   ls.push_back(new ETableClient());
 }
 
-void ETableClient::replay(MDS *mds)
+void ETableClient::replay(MDSRank *mds)
 {
   dout(10) << " ETableClient.replay " << get_mdstable_name(table)
 	   << " op " << get_mdstableserver_opname(op)
@@ -1955,7 +1974,7 @@ void ESnap::update_segment()
   _segment->tablev[TABLE_SNAP] = version;
 }
 
-void ESnap::replay(MDS *mds)
+void ESnap::replay(MDSRank *mds)
 {
   if (mds->snaptable->get_version() >= version) {
     dout(10) << "ESnap.replay event " << version
@@ -2039,7 +2058,7 @@ void EUpdate::update_segment()
     _segment->uncommitted_masters.insert(reqid);
 }
 
-void EUpdate::replay(MDS *mds)
+void EUpdate::replay(MDSRank *mds)
 {
   metablob.replay(mds, _segment);
   
@@ -2117,7 +2136,7 @@ void EOpen::update_segment()
   // ??
 }
 
-void EOpen::replay(MDS *mds)
+void EOpen::replay(MDSRank *mds)
 {
   dout(10) << "EOpen.replay " << dendl;
   metablob.replay(mds, _segment);
@@ -2139,7 +2158,7 @@ void EOpen::replay(MDS *mds)
 // -----------------------
 // ECommitted
 
-void ECommitted::replay(MDS *mds)
+void ECommitted::replay(MDSRank *mds)
 {
   if (mds->mdcache->uncommitted_masters.count(reqid)) {
     dout(10) << "ECommitted.replay " << reqid << dendl;
@@ -2410,7 +2429,7 @@ void ESlaveUpdate::generate_test_instances(list<ESlaveUpdate*>& ls)
 }
 
 
-void ESlaveUpdate::replay(MDS *mds)
+void ESlaveUpdate::replay(MDSRank *mds)
 {
   MDSlaveUpdate *su;
   switch (op) {
@@ -2515,7 +2534,7 @@ void ESubtreeMap::generate_test_instances(list<ESubtreeMap*>& ls)
   ls.push_back(new ESubtreeMap());
 }
 
-void ESubtreeMap::replay(MDS *mds) 
+void ESubtreeMap::replay(MDSRank *mds) 
 {
   if (expire_pos && expire_pos > mds->mdlog->journaler->get_expire_pos())
     mds->mdlog->journaler->set_expire_pos(expire_pos);
@@ -2542,7 +2561,7 @@ void ESubtreeMap::replay(MDS *mds)
 	++errors;
 	continue;
       }
-      if (dir->get_dir_auth().first != mds->whoami) {
+      if (dir->get_dir_auth().first != mds->get_nodeid()) {
 	mds->clog->error() << " replayed ESubtreeMap at " << get_start_off()
 			  << " subtree root " << p->first
 			  << " is not mine in cache (it's " << dir->get_dir_auth() << ")";
@@ -2596,7 +2615,7 @@ void ESubtreeMap::replay(MDS *mds)
     mds->mdcache->list_subtrees(subs);
     for (list<CDir*>::iterator p = subs.begin(); p != subs.end(); ++p) {
       CDir *dir = *p;
-      if (dir->get_dir_auth().first != mds->whoami)
+      if (dir->get_dir_auth().first != mds->get_nodeid())
 	continue;
       if (subtrees.count(dir->dirfrag()) == 0) {
 	mds->clog->error() << " replayed ESubtreeMap at " << get_start_off()
@@ -2647,7 +2666,7 @@ void ESubtreeMap::replay(MDS *mds)
 // -----------------------
 // EFragment
 
-void EFragment::replay(MDS *mds)
+void EFragment::replay(MDSRank *mds)
 {
   dout(10) << "EFragment.replay " << op_name(op) << " " << ino << " " << basefrag << " by " << bits << dendl;
 
@@ -2770,7 +2789,7 @@ void dirfrag_rollback::decode(bufferlist::iterator &bl)
 // -----------------------
 // EExport
 
-void EExport::replay(MDS *mds)
+void EExport::replay(MDSRank *mds)
 {
   dout(10) << "EExport.replay " << base << dendl;
   metablob.replay(mds, _segment);
@@ -2844,7 +2863,7 @@ void EImportStart::update_segment()
   _segment->sessionmapv = cmapv;
 }
 
-void EImportStart::replay(MDS *mds)
+void EImportStart::replay(MDSRank *mds)
 {
   dout(10) << "EImportStart.replay " << base << " bounds " << bounds << dendl;
   //metablob.print(*_dout);
@@ -2930,7 +2949,7 @@ void EImportStart::generate_test_instances(list<EImportStart*>& ls)
 // -----------------------
 // EImportFinish
 
-void EImportFinish::replay(MDS *mds)
+void EImportFinish::replay(MDSRank *mds)
 {
   if (mds->mdcache->have_ambiguous_import(base)) {
     dout(10) << "EImportFinish.replay " << base << " success=" << success << dendl;
@@ -3015,20 +3034,20 @@ void EResetJournal::generate_test_instances(list<EResetJournal*>& ls)
   ls.push_back(new EResetJournal());
 }
 
-void EResetJournal::replay(MDS *mds)
+void EResetJournal::replay(MDSRank *mds)
 {
   dout(1) << "EResetJournal" << dendl;
 
   mds->sessionmap.wipe();
   mds->inotable->replay_reset();
 
-  if (mds->mdsmap->get_root() == mds->whoami) {
+  if (mds->mdsmap->get_root() == mds->get_nodeid()) {
     CDir *rootdir = mds->mdcache->get_root()->get_or_open_dirfrag(mds->mdcache, frag_t());
-    mds->mdcache->adjust_subtree_auth(rootdir, mds->whoami);   
+    mds->mdcache->adjust_subtree_auth(rootdir, mds->get_nodeid());   
   }
 
   CDir *mydir = mds->mdcache->get_myin()->get_or_open_dirfrag(mds->mdcache, frag_t());
-  mds->mdcache->adjust_subtree_auth(mydir, mds->whoami);   
+  mds->mdcache->adjust_subtree_auth(mydir, mds->get_nodeid());   
 
   mds->mdcache->recalc_auth_bits(true);
 
@@ -3063,7 +3082,7 @@ void ENoOp::decode(bufferlist::iterator &bl)
 }
 
 
-void ENoOp::replay(MDS *mds)
+void ENoOp::replay(MDSRank *mds)
 {
   dout(4) << "ENoOp::replay, " << pad_size << " bytes skipped in journal" << dendl;
 }
@@ -3074,14 +3093,14 @@ void ENoOp::replay(MDS *mds)
  * it.
  *
  * @param mds
- * MDS instance, just used for logging
+ * MDSRank instance, just used for logging
  * @param old_to_new
  * Map of old journal segment segment sequence numbers to new journal segment sequence numbers
  *
  * @return
  * True if the event was modified.
  */
-bool EMetaBlob::rewrite_truncate_finish(MDS const *mds,
+bool EMetaBlob::rewrite_truncate_finish(MDSRank const *mds,
     std::map<log_segment_seq_t, log_segment_seq_t> const &old_to_new)
 {
   bool modified = false;

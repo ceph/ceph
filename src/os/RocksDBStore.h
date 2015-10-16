@@ -9,7 +9,7 @@
 #include <set>
 #include <map>
 #include <string>
-#include <tr1/memory>
+#include <memory>
 #include <boost/scoped_ptr.hpp>
 
 #include <errno.h>
@@ -107,6 +107,7 @@ public:
     cct(c),
     logger(NULL),
     path(path),
+    db(NULL),
     compact_queue_lock("RocksDBStore::compact_thread_lock"),
     compact_queue_stop(false),
     compact_thread(this),
@@ -131,8 +132,6 @@ public:
   class RocksDBTransactionImpl : public KeyValueDB::TransactionImpl {
   public:
     rocksdb::WriteBatch *bat;
-    list<bufferlist> buffers;
-    list<string> keys;
     RocksDBStore *db;
 
     RocksDBTransactionImpl(RocksDBStore *_db);
@@ -150,7 +149,7 @@ public:
   };
 
   KeyValueDB::Transaction get_transaction() {
-    return std::tr1::shared_ptr< RocksDBTransactionImpl >(
+    return std::shared_ptr< RocksDBTransactionImpl >(
       new RocksDBTransactionImpl(this));
   }
 

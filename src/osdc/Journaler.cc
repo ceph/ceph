@@ -55,7 +55,7 @@ void Journaler::create(ceph_file_layout *l, stream_format_t const sf)
 
   prezeroing_pos = prezero_pos = write_pos = flush_pos = safe_pos =
     read_pos = requested_pos = received_pos =
-    expire_pos = trimming_pos = trimmed_pos = layout.fl_stripe_count * layout.fl_object_size;
+    expire_pos = trimming_pos = trimmed_pos = (uint64_t)layout.fl_stripe_count * layout.fl_object_size;
 
   ldout(cct, 1) << "created blank journal at inode 0x" << std::hex << ino << std::dec
     << ", format=" << stream_format << dendl;
@@ -141,6 +141,10 @@ public:
 void Journaler::recover(Context *onread) 
 {
   Mutex::Locker l(lock);
+  if (stopping) {
+    onread->complete(-EAGAIN);
+    return;
+  }
 
   ldout(cct, 1) << "recover start" << dendl;
   assert(state != STATE_ACTIVE);
@@ -150,7 +154,7 @@ void Journaler::recover(Context *onread)
     waitfor_recover.push_back(onread);
   
   if (state != STATE_UNDEF) {
-    ldout(cct, 1) << "recover - already recoverying" << dendl;
+    ldout(cct, 1) << "recover - already recovering" << dendl;
     return;
   }
 
@@ -427,7 +431,8 @@ void Journaler::_write_head(Context *oncommit)
   object_locator_t oloc(pg_pool);
   objecter->write_full(oid, oloc, snapc, bl, ceph_clock_now(cct), 0, 
 		       NULL, 
-		       wrap_finisher(new C_WriteHead(this, last_written, wrap_finisher(oncommit))));
+		       wrap_finisher(new C_WriteHead(this, last_written, wrap_finisher(oncommit))),
+		       0, 0, write_iohint);
 }
 
 void Journaler::_finish_write_head(int r, Header &wrote, C_OnFinisher *oncommit)
@@ -619,7 +624,7 @@ void Journaler::_do_flush(unsigned amount)
   filer.write(ino, &layout, snapc,
 	      flush_pos, len, write_bl, ceph_clock_now(cct),
 	      0,
-	      NULL, wrap_finisher(onsafe));
+	      NULL, wrap_finisher(onsafe), write_iohint);
 
   flush_pos += len;
   assert(write_buf.length() == write_pos - flush_pos);
@@ -634,6 +639,10 @@ void Journaler::_do_flush(unsigned amount)
 void Journaler::wait_for_flush(Context *onsafe)
 {
   Mutex::Locker l(lock);
+  if (stopping) {
+    onsafe->complete(-EAGAIN);
+    return;
+  }
   _wait_for_flush(onsafe);
 }
 
@@ -794,11 +803,12 @@ void Journaler::_finish_prezero(int r, uint64_t start, uint64_t len)
 class Journaler::C_Read : public Context {
   Journaler *ls;
   uint64_t offset;
+  uint64_t length;
 public:
   bufferlist bl;
-  C_Read(Journaler *l, uint64_t o) : ls(l), offset(o) {}
+  C_Read(Journaler *j, uint64_t o, uint64_t l) : ls(j), offset(o), length(l) {}
   void finish(int r) {
-    ls->_finish_read(r, offset, bl);
+    ls->_finish_read(r, offset, length, bl);
   }
 };
 
@@ -813,32 +823,50 @@ public:
   }  
 };
 
-void Journaler::_finish_read(int r, uint64_t offset, bufferlist& bl)
+void Journaler::_finish_read(int r, uint64_t offset, uint64_t length, bufferlist& bl)
 {
   Mutex::Locker l(lock);
 
   if (r < 0) {
     ldout(cct, 0) << "_finish_read got error " << r << dendl;
     error = r;
+  } else {
+    ldout(cct, 10) << "_finish_read got " << offset << "~" << bl.length() << dendl;
+    if (bl.length() < length) {
+      ldout(cct, 0) << "_finish_read got less than expected (" << length << ")" << dendl;
+      error = -EINVAL;
+    }
+  }
+
+  if (error) {
     if (on_readable) {
       C_OnFinisher *f = on_readable;
       on_readable = 0;
-      f->complete(r);
+      f->complete(error);
     }
     return;
   }
-  assert(r>=0);
 
-  ldout(cct, 10) << "_finish_read got " << offset << "~" << bl.length() << dendl;
   prefetch_buf[offset].swap(bl);
 
-  _assimilate_prefetch();
+  try {
+    _assimilate_prefetch();
+  } catch (const buffer::error &err) {
+    lderr(cct) << "_decode error from assimilate_prefetch" << dendl;
+    error = -EINVAL;
+    if (on_readable) {
+      C_OnFinisher *f = on_readable;
+      on_readable = 0;
+      f->complete(error);
+    }
+    return;
+  }
   _prefetch();
 }
 
 void Journaler::_assimilate_prefetch()
 {
-  bool was_readable = _is_readable();
+  bool was_readable = readable;
 
   bool got_any = false;
   while (!prefetch_buf.empty()) {
@@ -858,13 +886,17 @@ void Journaler::_assimilate_prefetch()
     got_any = true;
   }
 
-  if (got_any)
+  if (got_any) {
     ldout(cct, 10) << "_assimilate_prefetch read_buf now " << read_pos << "~" << read_buf.length() 
 	     << ", read pointers " << read_pos << "/" << received_pos << "/" << requested_pos
 	     << dendl;
 
-  if ((got_any && !was_readable && _is_readable()) ||
-      read_pos == write_pos) {
+    // Update readability (this will also hit any decode errors resulting
+    // from bad data)
+    readable = _is_readable();
+  }
+
+  if ((got_any && !was_readable && readable) || read_pos == write_pos) {
     // readable!
     ldout(cct, 10) << "_finish_read now readable (or at journal end)" << dendl;
     if (on_readable) {
@@ -916,8 +948,8 @@ void Journaler::_issue_read(uint64_t len)
     uint64_t l = e - requested_pos;
     if (l > len)
       l = len;
-    C_Read *c = new C_Read(this, requested_pos);
-    filer.read(ino, &layout, CEPH_NOSNAP, requested_pos, l, &c->bl, 0, wrap_finisher(c));
+    C_Read *c = new C_Read(this, requested_pos, l);
+    filer.read(ino, &layout, CEPH_NOSNAP, requested_pos, l, &c->bl, 0, wrap_finisher(c), CEPH_OSD_OP_FLAG_FADVISE_DONTNEED);
     requested_pos += l;
     len -= l;
   }
@@ -1008,7 +1040,11 @@ bool Journaler::is_readable()
 {
   Mutex::Locker l(lock);
 
-  bool r = _is_readable();
+  if (error != 0) {
+    return false;
+  }
+
+  bool r = readable;
   _prefetch();
   return r;
 }
@@ -1058,13 +1094,13 @@ void Journaler::_finish_erase(int data_result, C_OnFinisher *completion)
 
 /* try_read_entry(bl)
  *  read entry into bl if it's ready.
- *  otherwise, do nothing.  (well, we'll start fetching it for good measure.)
+ *  otherwise, do nothing.
  */
 bool Journaler::try_read_entry(bufferlist& bl)
 {
   Mutex::Locker l(lock);
 
-  if (!_is_readable()) {  // this may start a read.
+  if (!readable) {
     ldout(cct, 10) << "try_read_entry at " << read_pos << " not readable" << dendl;
     return false;
   }
@@ -1077,6 +1113,7 @@ bool Journaler::try_read_entry(bufferlist& bl)
       assert(start_ptr == read_pos);
     }
   } catch (const buffer::error &e) {
+    lderr(cct) << __func__ << ": decode error from journal_stream" << dendl;
     error = -EINVAL;
     return false;
   }
@@ -1085,6 +1122,14 @@ bool Journaler::try_read_entry(bufferlist& bl)
 	   << read_pos << "~" << consumed << " (have " << read_buf.length() << ")" << dendl;
 
   read_pos += consumed;
+  try {
+    // We were readable, we might not be any more
+    readable = _is_readable();
+  } catch (const buffer::error &e) {
+    lderr(cct) << __func__ << ": decode error from _is_readable" << dendl;
+    error = -EINVAL;
+    return false;
+  }
 
   // prefetch?
   _prefetch();
@@ -1094,9 +1139,13 @@ bool Journaler::try_read_entry(bufferlist& bl)
 void Journaler::wait_for_readable(Context *onreadable)
 {
   Mutex::Locker l(lock);
+  if (stopping) {
+    onreadable->complete(-EAGAIN);
+    return;
+  }
 
   assert(on_readable == 0);
-  if (!_is_readable()) {
+  if (!readable) {
     ldout(cct, 10) << "wait_for_readable at " << read_pos << " onreadable " << onreadable << dendl;
     on_readable = wrap_finisher(onreadable);
   } else {
@@ -1367,3 +1416,30 @@ C_OnFinisher *Journaler::wrap_finisher(Context *c)
     return NULL;
   }
 }
+
+void Journaler::shutdown()
+{
+  Mutex::Locker l(lock);
+
+  ldout(cct, 1) << __func__ << dendl;
+
+  readable = false;
+  stopping = true;
+
+  // Kick out anyone reading from journal
+  error = -EAGAIN;
+  if (on_readable) {
+    C_OnFinisher *f = on_readable;
+    on_readable = 0;
+    f->complete(-EAGAIN);
+  }
+
+  finish_contexts(cct, waitfor_recover, 0);
+
+  std::map<uint64_t, std::list<Context*> >::iterator i;
+  for (i = waitfor_safe.begin(); i != waitfor_safe.end(); ++i) {
+    finish_contexts(cct, i->second, -EAGAIN);
+  }
+  waitfor_safe.clear();
+}
+

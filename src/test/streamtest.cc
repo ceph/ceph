@@ -143,9 +143,10 @@ int main(int argc, const char **argv)
     return -1;
   }
 
+  ObjectStore::Sequencer osr(__func__);
   ObjectStore::Transaction ft;
-  ft.create_collection(coll_t());
-  fs->apply_transaction(ft);
+  ft.create_collection(coll_t(), 0);
+  fs->apply_transaction(&osr, ft);
 
   utime_t now = ceph_clock_now(g_ceph_context);
   utime_t start = now;
@@ -159,7 +160,7 @@ int main(int argc, const char **argv)
 
     set_start(pos, ceph_clock_now(g_ceph_context));
     ObjectStore::Transaction *t = new ObjectStore::Transaction;
-    t->write(coll_t(), hobject_t(poid), pos, bytes, bl);
+    t->write(coll_t(), ghobject_t(hobject_t(poid)), pos, bytes, bl);
     fs->queue_transaction(NULL, t, new C_Ack(pos), new C_Commit(pos));
     pos += bytes;
 

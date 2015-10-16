@@ -8,36 +8,50 @@
 #include "encoding.h"
 #include <ostream>
 
-extern "C" {
-#include <uuid/uuid.h>
-#include <unistd.h>
-}
+#include <boost/uuid/uuid.hpp>
+#include <boost/uuid/uuid_generators.hpp>
+#include <boost/uuid/uuid_io.hpp>
+#include <boost/random/random_device.hpp>
 
 struct uuid_d {
-  uuid_t uuid;
+  boost::uuids::uuid uuid;
 
   uuid_d() {
-    memset(&uuid, 0, sizeof(uuid));
+    boost::uuids::nil_generator gen;
+    uuid = gen();
   }
 
   bool is_zero() const {
-    return uuid_is_null(uuid);
+    return uuid.is_nil();
   }
 
   void generate_random() {
-    uuid_generate(uuid);
+    boost::random::random_device rng("/dev/urandom");
+    boost::uuids::basic_random_generator<boost::random::random_device> gen(&rng);
+    uuid = gen();
   }
   
   bool parse(const char *s) {
-    return uuid_parse(s, uuid) == 0;
+    try {
+      boost::uuids::string_generator gen;
+      uuid = gen(s);
+      return true;
+    } catch (std::runtime_error& e) {
+      return false;
+    }
   }
-  void print(char *s) {
-    return uuid_unparse(uuid, s);
+  void print(char *s) const {
+    memcpy(s, boost::uuids::to_string(uuid).c_str(), 37);
+  }
+
+  char *bytes() const {
+    return (char*)uuid.data;
   }
   
   void encode(bufferlist& bl) const {
     ::encode_raw(uuid, bl);
   }
+
   void decode(bufferlist::iterator& p) const {
     ::decode_raw(uuid, p);
   }
@@ -46,15 +60,15 @@ WRITE_CLASS_ENCODER(uuid_d)
 
 inline std::ostream& operator<<(std::ostream& out, const uuid_d& u) {
   char b[37];
-  uuid_unparse(u.uuid, b);
+  u.print(b);
   return out << b;
 }
 
 inline bool operator==(const uuid_d& l, const uuid_d& r) {
-  return uuid_compare(l.uuid, r.uuid) == 0;
+  return l.uuid == r.uuid;
 }
 inline bool operator!=(const uuid_d& l, const uuid_d& r) {
-  return uuid_compare(l.uuid, r.uuid) != 0;
+  return l.uuid != r.uuid;
 }
 
 

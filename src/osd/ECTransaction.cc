@@ -23,8 +23,8 @@
 #include "os/ObjectStore.h"
 
 struct AppendObjectsGenerator: public boost::static_visitor<void> {
-  set<hobject_t> *out;
-  AppendObjectsGenerator(set<hobject_t> *out) : out(out) {}
+  set<hobject_t, hobject_t::BitwiseComparator> *out;
+  AppendObjectsGenerator(set<hobject_t, hobject_t::BitwiseComparator> *out) : out(out) {}
   void operator()(const ECTransaction::AppendOp &op) {
     out->insert(op.oid);
   }
@@ -51,31 +51,31 @@ struct AppendObjectsGenerator: public boost::static_visitor<void> {
   void operator()(const ECTransaction::NoOp &op) {}
 };
 void ECTransaction::get_append_objects(
-  set<hobject_t> *out) const
+  set<hobject_t, hobject_t::BitwiseComparator> *out) const
 {
   AppendObjectsGenerator gen(out);
   reverse_visit(gen);
 }
 
 struct TransGenerator : public boost::static_visitor<void> {
-  map<hobject_t, ECUtil::HashInfoRef> &hash_infos;
+  map<hobject_t, ECUtil::HashInfoRef, hobject_t::BitwiseComparator> &hash_infos;
 
   ErasureCodeInterfaceRef &ecimpl;
   const pg_t pgid;
   const ECUtil::stripe_info_t sinfo;
   map<shard_id_t, ObjectStore::Transaction> *trans;
   set<int> want;
-  set<hobject_t> *temp_added;
-  set<hobject_t> *temp_removed;
+  set<hobject_t, hobject_t::BitwiseComparator> *temp_added;
+  set<hobject_t, hobject_t::BitwiseComparator> *temp_removed;
   stringstream *out;
   TransGenerator(
-    map<hobject_t, ECUtil::HashInfoRef> &hash_infos,
+    map<hobject_t, ECUtil::HashInfoRef, hobject_t::BitwiseComparator> &hash_infos,
     ErasureCodeInterfaceRef &ecimpl,
     pg_t pgid,
     const ECUtil::stripe_info_t &sinfo,
     map<shard_id_t, ObjectStore::Transaction> *trans,
-    set<hobject_t> *temp_added,
-    set<hobject_t> *temp_removed,
+    set<hobject_t, hobject_t::BitwiseComparator> *temp_added,
+    set<hobject_t, hobject_t::BitwiseComparator> *temp_removed,
     stringstream *out)
     : hash_infos(hash_infos),
       ecimpl(ecimpl), pgid(pgid),
@@ -93,20 +93,17 @@ struct TransGenerator : public boost::static_visitor<void> {
       temp_removed->erase(hoid);
       temp_added->insert(hoid);
     }
-    return get_coll(shard, hoid);
+    return get_coll(shard);
   }
   coll_t get_coll_rm(shard_id_t shard, const hobject_t &hoid) {
     if (hoid.is_temp()) {
       temp_added->erase(hoid);
       temp_removed->insert(hoid);
     }
-    return get_coll(shard, hoid);
+    return get_coll(shard);
   }
-  coll_t get_coll(shard_id_t shard, const hobject_t &hoid) {
-    if (hoid.is_temp())
-      return coll_t::make_temp_coll(spg_t(pgid, shard));
-    else
-      return coll_t(spg_t(pgid, shard));
+  coll_t get_coll(shard_id_t shard) {
+    return coll_t(spg_t(pgid, shard));
   }
 
   void operator()(const ECTransaction::TouchOp &op) {
@@ -276,13 +273,13 @@ struct TransGenerator : public boost::static_visitor<void> {
 
 
 void ECTransaction::generate_transactions(
-  map<hobject_t, ECUtil::HashInfoRef> &hash_infos,
+  map<hobject_t, ECUtil::HashInfoRef, hobject_t::BitwiseComparator> &hash_infos,
   ErasureCodeInterfaceRef &ecimpl,
   pg_t pgid,
   const ECUtil::stripe_info_t &sinfo,
   map<shard_id_t, ObjectStore::Transaction> *transactions,
-  set<hobject_t> *temp_added,
-  set<hobject_t> *temp_removed,
+  set<hobject_t, hobject_t::BitwiseComparator> *temp_added,
+  set<hobject_t, hobject_t::BitwiseComparator> *temp_removed,
   stringstream *out) const
 {
   TransGenerator gen(

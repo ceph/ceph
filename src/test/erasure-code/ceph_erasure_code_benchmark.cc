@@ -60,7 +60,7 @@ int ErasureCodeBench::setup(int argc, char** argv) {
      " (i.e. k=4,m=3 with one erasure will try to recover from the erasure of "
      " the first chunk, then the second etc.)")
     ("parameter,P", po::value<vector<string> >(),
-     "parameters")
+     "add a parameter to the erasure code profile")
     ;
 
   po::variables_map vm;
@@ -87,6 +87,7 @@ int ErasureCodeBench::setup(int argc, char** argv) {
     CINIT_FLAG_NO_DEFAULT_CONFIG_FILE);
   common_init_finish(g_ceph_context);
   g_ceph_context->_conf->apply_changes(NULL);
+  g_conf->set_val("erasure_code_dir", ".libs", false, false);
 
   if (vm.count("help")) {
     cout << desc << std::endl;
@@ -103,13 +104,10 @@ int ErasureCodeBench::setup(int argc, char** argv) {
       if (strs.size() != 2) {
 	cerr << "--parameter " << *i << " ignored because it does not contain exactly one =" << endl;
       } else {
-	parameters[strs[0]] = strs[1];
+	profile[strs[0]] = strs[1];
       }
     }
   }
-
-  if (parameters.count("directory") == 0)
-    parameters["directory"] = ".libs";
 
   in_size = vm["size"].as<int>();
   max_iterations = vm["iterations"].as<int>();
@@ -124,8 +122,8 @@ int ErasureCodeBench::setup(int argc, char** argv) {
   if (vm.count("erased") > 0)
     erased = vm["erased"].as<vector<int> >();
 
-  k = atoi(parameters["k"].c_str());
-  m = atoi(parameters["m"].c_str());
+  k = atoi(profile["k"].c_str());
+  m = atoi(profile["m"].c_str());
   
   if (k <= 0) {
     cout << "parameter k is " << k << ". But k needs to be > 0." << endl;
@@ -155,7 +153,9 @@ int ErasureCodeBench::encode()
   ErasureCodePluginRegistry &instance = ErasureCodePluginRegistry::instance();
   ErasureCodeInterfaceRef erasure_code;
   stringstream messages;
-  int code = instance.factory(plugin, parameters, &erasure_code, messages);
+  int code = instance.factory(plugin,
+			      g_conf->erasure_code_dir,
+			      profile, &erasure_code, &messages);
   if (code) {
     cerr << messages.str() << endl;
     return code;
@@ -257,7 +257,9 @@ int ErasureCodeBench::decode()
   ErasureCodePluginRegistry &instance = ErasureCodePluginRegistry::instance();
   ErasureCodeInterfaceRef erasure_code;
   stringstream messages;
-  int code = instance.factory(plugin, parameters, &erasure_code, messages);
+  int code = instance.factory(plugin,
+			      g_conf->erasure_code_dir,
+			      profile, &erasure_code, &messages);
   if (code) {
     cerr << messages.str() << endl;
     return code;
@@ -289,7 +291,7 @@ int ErasureCodeBench::decode()
   if (erased.size() > 0) {
     for (vector<int>::const_iterator i = erased.begin();
 	 i != erased.end();
-	 i++)
+	 ++i)
       encoded.erase(*i);
     display_chunks(encoded, erasure_code->get_chunk_count());
   }

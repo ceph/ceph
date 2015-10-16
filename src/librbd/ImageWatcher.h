@@ -38,8 +38,8 @@ namespace librbd {
     int unregister_watch();
 
     int try_lock();
-    int request_lock(const boost::function<int(AioCompletion*)>& restart_op,
-		     AioCompletion* c);
+    void request_lock(const boost::function<void(AioCompletion*)>& restart_op,
+		      AioCompletion* c);
     void prepare_unlock();
     void cancel_unlock();
     int unlock();
@@ -84,7 +84,7 @@ namespace librbd {
     };
 
     typedef std::pair<Context *, ProgressContext *> AsyncRequest;
-    typedef std::pair<boost::function<int(AioCompletion *)>,
+    typedef std::pair<boost::function<void(AioCompletion *)>,
 		      AioCompletion *> AioRequest;
 
     class Task {
@@ -222,6 +222,7 @@ namespace librbd {
     void schedule_cancel_async_requests();
     void cancel_async_requests();
 
+    void set_owner_client_id(const WatchNotify::ClientId &client_id);
     WatchNotify::ClientId get_client_id();
 
     void notify_release_lock();

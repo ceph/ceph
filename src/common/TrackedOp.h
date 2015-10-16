@@ -161,7 +161,8 @@ protected:
     warn_interval_multiplier(1)
   {
     tracker->register_inflight_op(&xitem);
-    events.push_back(make_pair(initiated_at, "initiated"));
+    if (tracker->tracking_enabled)
+      events.push_back(make_pair(initiated_at, "initiated"));
   }
 
   /// output any type-specific data you want to get when dump() is called
@@ -179,11 +180,12 @@ public:
   const utime_t& get_initiated() const {
     return initiated_at;
   }
-  // This function maybe needs some work; assumes last event is completion time
+
   double get_duration() const {
-    return events.empty() ?
-      0.0 :
-      (events.rbegin()->first - get_initiated());
+    if (!events.empty() && events.rbegin()->second.compare("done") == 0)
+      return events.rbegin()->first - get_initiated();
+    else
+      return ceph_clock_now(NULL) - get_initiated();
   }
 
   void mark_event(const string &event);

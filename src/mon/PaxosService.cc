@@ -22,6 +22,8 @@
 #include "include/assert.h"
 #include "common/Formatter.h"
 
+#include "mon/MonOpRequest.h"
+
 #define dout_subsys ceph_subsys_paxos
 #undef dout_prefix
 #define dout_prefix _prefix(_dout, mon, paxos, service_name, get_first_committed(), get_last_committed())
@@ -32,12 +34,17 @@ static ostream& _prefix(std::ostream *_dout, Monitor *mon, Paxos *paxos, string 
 		<< ").paxosservice(" << service_name << " " << fc << ".." << lc << ") ";
 }
 
-bool PaxosService::dispatch(PaxosServiceMessage *m)
+bool PaxosService::dispatch(MonOpRequestRef op)
 {
-  dout(10) << "dispatch " << *m << " from " << m->get_orig_source_inst() << dendl;
+  assert(op->is_type_service() || op->is_type_command());
+  PaxosServiceMessage *m = static_cast<PaxosServiceMessage*>(op->get_req());
+  op->mark_event("psvc:dispatch");
+
+  dout(10) << "dispatch " << m << " " << *m
+	   << " from " << m->get_orig_source_inst()
+	   << " con " << m->get_connection() << dendl;
 
   if (mon->is_shutdown()) {
-    m->put();
     return true;
   }
 
@@ -46,7 +53,6 @@ bool PaxosService::dispatch(PaxosServiceMessage *m)
       m->rx_election_epoch < mon->get_epoch()) {
     dout(10) << " discarding forwarded message from previous election epoch "
 	     << m->rx_election_epoch << " < " << mon->get_epoch() << dendl;
-    m->put();
     return true;
   }
 
@@ -59,36 +65,35 @@ bool PaxosService::dispatch(PaxosServiceMessage *m)
       m->get_connection()->get_messenger() != NULL) {
     dout(10) << " discarding message from disconnected client "
 	     << m->get_source_inst() << " " << *m << dendl;
-    m->put();
     return true;
   }
 
   // make sure our map is readable and up to date
   if (!is_readable(m->version)) {
     dout(10) << " waiting for paxos -> readable (v" << m->version << ")" << dendl;
-    wait_for_readable(new C_RetryMessage(this, m), m->version);
+    wait_for_readable(op, new C_RetryMessage(this, op), m->version);
     return true;
   }
 
   // preprocess
-  if (preprocess_query(m)) 
+  if (preprocess_query(op)) 
     return true;  // easy!
 
   // leader?
   if (!mon->is_leader()) {
-    mon->forward_request_leader(m);
+    mon->forward_request_leader(op);
     return true;
   }
   
   // writeable?
   if (!is_writeable()) {
     dout(10) << " waiting for paxos -> writeable" << dendl;
-    wait_for_writeable(new C_RetryMessage(this, m));
+    wait_for_writeable(op, new C_RetryMessage(this, op));
     return true;
   }
 
   // update
-  if (prepare_update(m)) {
+  if (prepare_update(op)) {
     double delay = 0.0;
     if (should_propose(delay)) {
       if (delay == 0.0) {
@@ -128,6 +133,16 @@ void PaxosService::refresh(bool *need_bootstrap)
   update_from_paxos(need_bootstrap);
 }
 
+void PaxosService::post_refresh()
+{
+  dout(10) << __func__ << dendl;
+
+  post_paxos_update();
+
+  if (mon->is_peon() && !waiting_for_finished_proposal.empty()) {
+    finish_contexts(g_ceph_context, waiting_for_finished_proposal, -EAGAIN);
+  }
+}
 
 void PaxosService::remove_legacy_versions()
 {
@@ -258,7 +273,7 @@ void PaxosService::_active()
   }
   if (!is_active()) {
     dout(10) << "_active - not active" << dendl;
-    wait_for_active(new C_Active(this));
+    wait_for_active_ctx(new C_Active(this));
     return;
   }
   dout(10) << "_active" << dendl;

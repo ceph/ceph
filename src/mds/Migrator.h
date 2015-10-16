@@ -27,7 +27,7 @@ using std::list;
 using std::set;
 
 
-class MDS;
+class MDSRank;
 class CDir;
 class CInode;
 class CDentry;
@@ -51,7 +51,7 @@ class EImportStart;
 
 class Migrator {
 private:
-  MDS *mds;
+  MDSRank *mds;
   MDCache *cache;
 
   // -- exports --
@@ -147,7 +147,7 @@ protected:
 
 public:
   // -- cons --
-  Migrator(MDS *m, MDCache *c) : mds(m), cache(c) {}
+  Migrator(MDSRank *m, MDCache *c) : mds(m), cache(c) {}
 
   void dispatch(Message*);
 

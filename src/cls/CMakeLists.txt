@@ -60,6 +60,13 @@ install(TARGETS cls_statelog DESTINATION lib/rados-classes)
 
 add_library(cls_statelog_client statelog/cls_statelog_client.cc)
 
+# cls_timeindex
+add_library(cls_timeindex SHARED timeindex/cls_timeindex.cc)
+set_target_properties(cls_timeindex PROPERTIES VERSION "1.0.0" SOVERSION "1")
+install(TARGETS cls_timeindex DESTINATION lib/rados-classes)
+
+add_library(cls_timeindex_client timeindex/cls_timeindex_client.cc)
+
 # cls_replica_log
 add_library(cls_replica_log SHARED replica_log/cls_replica_log.cc)
 set_target_properties(cls_replica_log PROPERTIES VERSION "1.0.0" SOVERSION "1")
@@ -96,3 +103,14 @@ if (WITH_RADOSGW)
     rgw/cls_rgw_types.cc
     rgw/cls_rgw_ops.cc)
 endif (WITH_RADOSGW)
+
+# cls_cephfs
+if (WITH_CEPHFS)
+  add_library(cls_cephfs SHARED
+    cephfs/cls_cephfs.cc)
+  set_target_properties(cls_cephfs PROPERTIES VERSION "1.0.0" SOVERSION "1")
+  install(TARGETS cls_cephfs DESTINATION lib/rados-classes)
+
+  add_library(cls_cephfs_client
+    cephfs/cls_cephfs_client.cc)
+endif (WITH_CEPHFS)

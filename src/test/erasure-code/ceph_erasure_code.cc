@@ -36,7 +36,7 @@ namespace po = boost::program_options;
 
 class ErasureCodeCommand {
   po::variables_map vm;
-  map<string,string> parameters;
+  ErasureCodeProfile profile;
 public:
   int setup(int argc, char** argv);
   int run();
@@ -88,6 +88,7 @@ int ErasureCodeCommand::setup(int argc, char** argv) {
     CINIT_FLAG_NO_DEFAULT_CONFIG_FILE);
   common_init_finish(g_ceph_context);
   g_ceph_context->_conf->apply_changes(NULL);
+  g_conf->set_val("erasure_code_dir", ".libs", false, false);
 
   if (vm.count("help")) {
     cout << desc << std::endl;
@@ -105,13 +106,10 @@ int ErasureCodeCommand::setup(int argc, char** argv) {
 	cerr << "--parameter " << *i
 	     << " ignored because it does not contain exactly one =" << endl;
       } else {
-	parameters[strs[0]] = strs[1];
+	profile[strs[0]] = strs[1];
       }
     }
   }
-
-  if (parameters.count("directory") == 0)
-    parameters["directory"] = ".libs";
 
   return 0;
 }
@@ -128,7 +126,8 @@ int ErasureCodeCommand::plugin_exists() {
   ErasureCodePlugin *plugin = 0;
   Mutex::Locker l(instance.lock);
   stringstream ss;
-  int code = instance.load(vm["plugin_exists"].as<string>(), parameters["directory"], &plugin, ss);
+  int code = instance.load(vm["plugin_exists"].as<string>(),
+			   g_conf->erasure_code_dir, &plugin, &ss);
   if (code)
     cerr << ss.str() << endl;
   return code;
@@ -138,14 +137,15 @@ int ErasureCodeCommand::display_information() {
   ErasureCodePluginRegistry &instance = ErasureCodePluginRegistry::instance();
   ErasureCodeInterfaceRef erasure_code;
 
-  if (parameters.count("plugin") == 0) {
+  if (profile.count("plugin") == 0) {
     cerr << "--parameter plugin=<plugin> is mandatory" << endl;
     return 1;
   }
 
-  int code = instance.factory(parameters["plugin"],
-			      parameters,
-			      &erasure_code, cerr);
+  int code = instance.factory(profile["plugin"],
+			      g_conf->erasure_code_dir,
+			      profile,
+			      &erasure_code, &cerr);
   if (code)
     return code;
 

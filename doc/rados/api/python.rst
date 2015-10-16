@@ -22,7 +22,8 @@ perform object operations as a ``client.admin`` user.
    running Ceph cluster. To set one up quickly, see `Getting Started`_.
 
 First, create a Python source file for your Ceph client. ::
-
+   :linenos:
+   
 	sudo vim client.py
 
 
@@ -32,6 +33,7 @@ Import the Module
 To use the ``rados.py`` module, import it into your source file.
 
 .. code-block:: python
+   :linenos:
 
 	import rados
 
@@ -50,6 +52,7 @@ specifying the path to your Ceph configuration file, which contains the location
 of the initial Ceph monitors.
 
 .. code-block:: python
+   :linenos:
 
 	import rados, sys
 	
@@ -109,7 +112,8 @@ configuration file example uses the ``client.admin`` keyring you generated with
 ``ceph-deploy``.
 
 .. code-block:: ini
-
+   :linenos:
+   
 	[global]
 	...
 	keyring=/path/to/keyring/ceph.client.admin.keyring
@@ -158,12 +162,13 @@ pool.
 Input/Output Context
 --------------------
 
-Reading from and writing to the Ceph Storage Cluster requries an input/output
+Reading from and writing to the Ceph Storage Cluster requires an input/output
 context (ioctx). You can create an ioctx with the ``open_ioctx()`` method of the
 ``Rados`` class. The ``ioctx_name`` parameter is the name of the  pool you wish
 to use.
 
 .. code-block:: python
+   :linenos:
 
 	ioctx = cluster.open_ioctx('data')
 
@@ -173,6 +178,7 @@ and perform a number of other operations. After you complete operations, ensure
 that you close the connection. For example: 
 
 .. code-block:: python
+   :linenos:
 
 	print "\nClosing the connection."
 	ioctx.close()

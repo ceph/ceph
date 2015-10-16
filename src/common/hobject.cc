@@ -80,7 +80,7 @@ string hobject_t::to_str() const
   uint64_t poolid(pool);
   t += snprintf(t, end - t, "%.*llX", 16, (long long unsigned)poolid);
 
-  uint32_t revhash(get_filestore_key_u32());
+  uint32_t revhash(get_nibblewise_key_u32());
   t += snprintf(t, end - t, ".%.*X", 8, revhash);
 
   if (snap == CEPH_NOSNAP)
@@ -130,9 +130,21 @@ void hobject_t::decode(bufferlist::iterator& bl)
   if (struct_v >= 4) {
     ::decode(nspace, bl);
     ::decode(pool, bl);
+    // for compat with hammer, which did not handle the transition
+    // from pool -1 -> pool INT64_MIN for MIN properly.  this object
+    // name looks a bit like a pgmeta object for the meta collection,
+    // but those do not ever exist (and is_pgmeta() pool >= 0).
+    if (pool == -1 &&
+	snap == 0 &&
+	hash == 0 &&
+	!max &&
+	oid.name.empty()) {
+      pool = INT64_MIN;
+      assert(is_min());
+    }
   }
   DECODE_FINISH(bl);
-  build_filestore_key_cache();
+  build_hash_cache();
 }
 
 void hobject_t::decode(json_spirit::Value& v)
@@ -156,7 +168,7 @@ void hobject_t::decode(json_spirit::Value& v)
     else if (p.name_ == "namespace")
       nspace = p.value_.get_str();
   }
-  build_filestore_key_cache();
+  build_hash_cache();
 }
 
 void hobject_t::dump(Formatter *f) const
@@ -184,21 +196,99 @@ void hobject_t::generate_test_instances(list<hobject_t*>& o)
 
 ostream& operator<<(ostream& out, const hobject_t& o)
 {
+  if (o == hobject_t())
+    return out << "MIN";
   if (o.is_max())
     return out << "MAX";
-  out << std::hex << o.get_hash() << std::dec;
+  out << o.pool << '/';
+  out << std::hex;
+  out.width(8);
+  out.fill('0');
+  out << o.get_hash();
+  out.width(0);
+  out.fill(' ');
+  out << std::dec;
+  if (o.nspace.length())
+    out << ":" << o.nspace;
   if (o.get_key().length())
     out << "." << o.get_key();
   out << "/" << o.oid << "/" << o.snap;
-  out << "/" << o.nspace << "/" << o.pool;
   return out;
 }
+
+int cmp_nibblewise(const hobject_t& l, const hobject_t& r)
+{
+  if (l.max < r.max)
+    return -1;
+  if (l.max > r.max)
+    return 1;
+  if (l.pool < r.pool)
+    return -1;
+  if (l.pool > r.pool)
+    return 1;
+  if (l.get_nibblewise_key() < r.get_nibblewise_key())
+    return -1;
+  if (l.get_nibblewise_key() > r.get_nibblewise_key())
+    return 1;
+  if (l.nspace < r.nspace)
+    return -1;
+  if (l.nspace > r.nspace)
+    return 1;
+  if (l.get_effective_key() < r.get_effective_key())
+    return -1;
+  if (l.get_effective_key() > r.get_effective_key())
+    return 1;
+  if (l.oid < r.oid)
+    return -1;
+  if (l.oid > r.oid)
+    return 1;
+  if (l.snap < r.snap)
+    return -1;
+  if (l.snap > r.snap)
+    return 1;
+  return 0;
+}
+
+int cmp_bitwise(const hobject_t& l, const hobject_t& r)
+{
+  if (l.max < r.max)
+    return -1;
+  if (l.max > r.max)
+    return 1;
+  if (l.pool < r.pool)
+    return -1;
+  if (l.pool > r.pool)
+    return 1;
+  if (l.get_bitwise_key() < r.get_bitwise_key())
+    return -1;
+  if (l.get_bitwise_key() > r.get_bitwise_key())
+    return 1;
+  if (l.nspace < r.nspace)
+    return -1;
+  if (l.nspace > r.nspace)
+    return 1;
+  if (l.get_effective_key() < r.get_effective_key())
+    return -1;
+  if (l.get_effective_key() > r.get_effective_key())
+    return 1;
+  if (l.oid < r.oid)
+    return -1;
+  if (l.oid > r.oid)
+    return 1;
+  if (l.snap < r.snap)
+    return -1;
+  if (l.snap > r.snap)
+    return 1;
+  return 0;
+}
+
+
 
 // This is compatible with decode for hobject_t prior to
 // version 5.
 void ghobject_t::encode(bufferlist& bl) const
 {
-  ENCODE_START(5, 3, bl);
+  ENCODE_START(6, 3, bl);
   ::encode(hobj.key, bl);
   ::encode(hobj.oid, bl);
   ::encode(hobj.snap, bl);
@@ -208,12 +298,13 @@ void ghobject_t::encode(bufferlist& bl) const
   ::encode(hobj.pool, bl);
   ::encode(generation, bl);
   ::encode(shard_id, bl);
+  ::encode(max, bl);
   ENCODE_FINISH(bl);
 }
 
 void ghobject_t::decode(bufferlist::iterator& bl)
 {
-  DECODE_START_LEGACY_COMPAT_LEN(5, 3, 3, bl);
+  DECODE_START_LEGACY_COMPAT_LEN(6, 3, 3, bl);
   if (struct_v >= 1)
     ::decode(hobj.key, bl);
   ::decode(hobj.oid, bl);
@@ -226,6 +317,16 @@ void ghobject_t::decode(bufferlist::iterator& bl)
   if (struct_v >= 4) {
     ::decode(hobj.nspace, bl);
     ::decode(hobj.pool, bl);
+    // for compat with hammer, which did not handle the transition from
+    // pool -1 -> pool INT64_MIN for MIN properly (see hobject_t::decode()).
+    if (hobj.pool == -1 &&
+	hobj.snap == 0 &&
+	hobj.hash == 0 &&
+	!hobj.max &&
+	hobj.oid.name.empty()) {
+      hobj.pool = INT64_MIN;
+      assert(hobj.is_min());
+    }
   }
   if (struct_v >= 5) {
     ::decode(generation, bl);
@@ -234,8 +335,13 @@ void ghobject_t::decode(bufferlist::iterator& bl)
     generation = ghobject_t::NO_GEN;
     shard_id = shard_id_t::NO_SHARD;
   }
+  if (struct_v >= 6) {
+    ::decode(max, bl);
+  } else {
+    max = false;
+  }
   DECODE_FINISH(bl);
-  hobj.set_hash(hobj.get_hash()); //to call build_filestore_key_cache();
+  hobj.build_hash_cache();
 }
 
 void ghobject_t::decode(json_spirit::Value& v)
@@ -249,6 +355,8 @@ void ghobject_t::decode(json_spirit::Value& v)
       generation = p.value_.get_uint64();
     else if (p.name_ == "shard_id")
       shard_id.id = p.value_.get_int();
+    else if (p.name_ == "max")
+      max = p.value_.get_int();
   }
 }
 
@@ -259,6 +367,7 @@ void ghobject_t::dump(Formatter *f) const
     f->dump_int("generation", generation);
   if (shard_id != shard_id_t::NO_SHARD)
     f->dump_int("shard_id", shard_id);
+  f->dump_int("max", (int)max);
 }
 
 void ghobject_t::generate_test_instances(list<ghobject_t*>& o)
@@ -288,11 +397,55 @@ void ghobject_t::generate_test_instances(list<ghobject_t*>& o)
 
 ostream& operator<<(ostream& out, const ghobject_t& o)
 {
+  if (o == ghobject_t())
+    return out << "GHMIN";
+  if (o.is_max())
+    return out << "GHMAX";
+  if (o.shard_id != shard_id_t::NO_SHARD)
+    out << std::hex << o.shard_id << std::dec << ":";
   out << o.hobj;
-  if (o.generation != ghobject_t::NO_GEN ||
-      o.shard_id != shard_id_t::NO_SHARD) {
-    assert(o.shard_id != shard_id_t::NO_SHARD);
-    out << "/" << std::hex << o.generation << "/" << (unsigned)(o.shard_id) << std::dec;
+  if (o.generation != ghobject_t::NO_GEN) {
+    out << "/" << std::hex << (unsigned)(o.generation) << std::dec;
   }
   return out;
+}
+
+int cmp_nibblewise(const ghobject_t& l, const ghobject_t& r)
+{
+  if (l.max < r.max)
+    return -1;
+  if (l.max > r.max)
+    return 1;
+  if (l.shard_id < r.shard_id)
+    return -1;
+  if (l.shard_id > r.shard_id)
+    return 1;
+  int ret = cmp_nibblewise(l.hobj, r.hobj);
+  if (ret != 0)
+    return ret;
+  if (l.generation < r.generation)
+    return -1;
+  if (l.generation > r.generation)
+    return 1;
+  return 0;
+}
+
+int cmp_bitwise(const ghobject_t& l, const ghobject_t& r)
+{
+  if (l.max < r.max)
+    return -1;
+  if (l.max > r.max)
+    return 1;
+  if (l.shard_id < r.shard_id)
+    return -1;
+  if (l.shard_id > r.shard_id)
+    return 1;
+  int ret = cmp_bitwise(l.hobj, r.hobj);
+  if (ret != 0)
+    return ret;
+  if (l.generation < r.generation)
+    return -1;
+  if (l.generation > r.generation)
+    return 1;
+  return 0;
 }

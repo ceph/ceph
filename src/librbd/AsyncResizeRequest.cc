@@ -24,25 +24,20 @@ AsyncResizeRequest::AsyncResizeRequest(ImageCtx &image_ctx, Context *on_finish,
     m_prog_ctx(prog_ctx), m_new_parent_overlap(0),
     m_xlist_item(this)
 {
-  RWLock::WLocker l(m_image_ctx.snap_lock);
-  m_image_ctx.async_resize_reqs.push_back(&m_xlist_item);
-  m_original_size = m_image_ctx.size;
-  compute_parent_overlap();
 }
 
 AsyncResizeRequest::~AsyncResizeRequest() {
   AsyncResizeRequest *next_req = NULL;
   {
-    RWLock::WLocker l(m_image_ctx.snap_lock);
+    RWLock::WLocker snap_locker(m_image_ctx.snap_lock);
     assert(m_xlist_item.remove_myself());
     if (!m_image_ctx.async_resize_reqs.empty()) {
       next_req = m_image_ctx.async_resize_reqs.front();
-      next_req->m_original_size = m_image_ctx.size;
-      next_req->compute_parent_overlap();
     }
   }
 
   if (next_req != NULL) {
+    RWLock::RLocker owner_locker(m_image_ctx.owner_lock);
     next_req->send();
   }
 }
@@ -72,7 +67,12 @@ bool AsyncResizeRequest::should_complete(int r) {
     lderr(cct) << "resize encountered an error: " << cpp_strerror(r) << dendl;
     return true;
   }
+  if (m_state == STATE_FINISHED) {
+    ldout(cct, 5) << "FINISHED" << dendl;
+    return true;
+  }
 
+  RWLock::RLocker owner_lock(m_image_ctx.owner_lock);
   switch (m_state) {
   case STATE_FLUSH:
     ldout(cct, 5) << "FLUSH" << dendl;
@@ -107,10 +107,6 @@ bool AsyncResizeRequest::should_complete(int r) {
     update_size_and_overlap();
     return true;
 
-  case STATE_FINISHED:
-    ldout(cct, 5) << "FINISHED" << dendl;
-    return true;
-
   default:
     lderr(cct) << "invalid state: " << m_state << dendl;
     assert(false);
@@ -120,14 +116,20 @@ bool AsyncResizeRequest::should_complete(int r) {
 }
 
 void AsyncResizeRequest::send() {
-  {
-    RWLock::RLocker l(m_image_ctx.snap_lock);
-    assert(!m_image_ctx.async_resize_reqs.empty());
+  assert(m_image_ctx.owner_lock.is_locked());
 
-    // only allow a single concurrent resize request
-    if (m_image_ctx.async_resize_reqs.front() != this) {
-      return;
+  {
+    RWLock::WLocker snap_locker(m_image_ctx.snap_lock);
+    if (!m_xlist_item.is_on_list()) {
+      m_image_ctx.async_resize_reqs.push_back(&m_xlist_item);
+      if (m_image_ctx.async_resize_reqs.front() != this) {
+        return;
+      }
     }
+
+    assert(m_image_ctx.async_resize_reqs.front() == this);
+    m_original_size = m_image_ctx.size;
+    compute_parent_overlap();
   }
 
   CephContext *cct = m_image_ctx.cct;
@@ -156,11 +158,13 @@ void AsyncResizeRequest::send_flush() {
   m_state = STATE_FLUSH;
 
   // with clipping adjusted, ensure that write / copy-on-read operations won't
-  // (re-)create objects that we just removed
-  m_image_ctx.flush_async_operations(create_callback_context());
+  // (re-)create objects that we just removed. need async callback to ensure
+  // we don't have cache_lock already held
+  m_image_ctx.flush_async_operations(create_async_callback_context());
 }
 
 void AsyncResizeRequest::send_invalidate_cache() {
+  assert(m_image_ctx.owner_lock.is_locked());
   ldout(m_image_ctx.cct, 5) << this << " send_invalidate_cache: "
                             << " original_size=" << m_original_size
                             << " new_size=" << m_new_size << dendl;
@@ -172,6 +176,7 @@ void AsyncResizeRequest::send_invalidate_cache() {
 }
 
 void AsyncResizeRequest::send_trim_image() {
+  assert(m_image_ctx.owner_lock.is_locked());
   ldout(m_image_ctx.cct, 5) << this << " send_trim_image: "
                             << " original_size=" << m_original_size
                             << " new_size=" << m_new_size << dendl;
@@ -185,109 +190,76 @@ void AsyncResizeRequest::send_trim_image() {
 }
 
 void AsyncResizeRequest::send_grow_object_map() {
-  bool lost_exclusive_lock = false;
-  bool object_map_enabled = true;
-  {
-    RWLock::RLocker l(m_image_ctx.owner_lock);
-    if (!m_image_ctx.object_map.enabled()) {
-      object_map_enabled = false;
-    } else { 
-      ldout(m_image_ctx.cct, 5) << this << " send_grow_object_map: "
-                                << " original_size=" << m_original_size
-                                << " new_size=" << m_new_size << dendl;
-      m_state = STATE_GROW_OBJECT_MAP;
-
-      if (m_image_ctx.image_watcher->is_lock_supported() &&
-	  !m_image_ctx.image_watcher->is_lock_owner()) {
-	ldout(m_image_ctx.cct, 1) << "lost exclusive lock during grow object map" << dendl;
-	lost_exclusive_lock = true;
-      } else {
-	m_image_ctx.object_map.aio_resize(m_new_size, OBJECT_NONEXISTENT,
-					   create_callback_context());
-	object_map_enabled = true;
-      }
-    }
-  }
-
-  // avoid possible recursive lock attempts
-  if (!object_map_enabled) {
+  assert(m_image_ctx.owner_lock.is_locked());
+  if (!m_image_ctx.object_map.enabled()) {
     send_update_header();
-  } else if (lost_exclusive_lock) {
-    complete(-ERESTART);
+    return;
   }
+
+  ldout(m_image_ctx.cct, 5) << this << " send_grow_object_map: "
+                            << " original_size=" << m_original_size
+                            << " new_size=" << m_new_size << dendl;
+  m_state = STATE_GROW_OBJECT_MAP;
+
+  // should have been canceled prior to releasing lock
+  assert(!m_image_ctx.image_watcher->is_lock_supported() ||
+         m_image_ctx.image_watcher->is_lock_owner());
+
+  m_image_ctx.object_map.aio_resize(m_new_size, OBJECT_NONEXISTENT,
+				    create_callback_context());
 }
 
 bool AsyncResizeRequest::send_shrink_object_map() {
-  bool lost_exclusive_lock = false;
-  {
-    RWLock::RLocker l(m_image_ctx.owner_lock);
-    if (!m_image_ctx.object_map.enabled() || m_new_size > m_original_size) {
-      return true;
-    }
-
-    ldout(m_image_ctx.cct, 5) << this << " send_shrink_object_map: "
-			      << " original_size=" << m_original_size
-			      << " new_size=" << m_new_size << dendl;
-    m_state = STATE_SHRINK_OBJECT_MAP;
-
-    if (m_image_ctx.image_watcher->is_lock_supported() &&
-        !m_image_ctx.image_watcher->is_lock_owner()) {
-      ldout(m_image_ctx.cct, 1) << "lost exclusive lock during shrink object map" << dendl;
-      lost_exclusive_lock = true;
-    } else {
-      m_image_ctx.object_map.aio_resize(m_new_size, OBJECT_NONEXISTENT,
-					 create_callback_context());
-    }
+  assert(m_image_ctx.owner_lock.is_locked());
+  if (!m_image_ctx.object_map.enabled() || m_new_size > m_original_size) {
+    return true;
   }
 
-  // avoid possible recursive lock attempts
-  if (lost_exclusive_lock) {
-    complete(-ERESTART);
-  }
+  ldout(m_image_ctx.cct, 5) << this << " send_shrink_object_map: "
+		            << " original_size=" << m_original_size
+			    << " new_size=" << m_new_size << dendl;
+  m_state = STATE_SHRINK_OBJECT_MAP;
+
+  // should have been canceled prior to releasing lock
+  assert(!m_image_ctx.image_watcher->is_lock_supported() ||
+         m_image_ctx.image_watcher->is_lock_owner());
+
+  m_image_ctx.object_map.aio_resize(m_new_size, OBJECT_NONEXISTENT,
+				    create_callback_context());
   return false;
 }
 
 void AsyncResizeRequest::send_update_header() {
-  bool lost_exclusive_lock = false;
+  assert(m_image_ctx.owner_lock.is_locked());
 
   ldout(m_image_ctx.cct, 5) << this << " send_update_header: "
                             << " original_size=" << m_original_size
                             << " new_size=" << m_new_size << dendl;
   m_state = STATE_UPDATE_HEADER;
 
-  {
-    RWLock::RLocker l(m_image_ctx.owner_lock);
-    if (m_image_ctx.image_watcher->is_lock_supported() &&
-	!m_image_ctx.image_watcher->is_lock_owner()) {
-      ldout(m_image_ctx.cct, 1) << "lost exclusive lock during header update" << dendl;
-      lost_exclusive_lock = true;
-    } else {
-      librados::ObjectWriteOperation op;
-      if (m_image_ctx.old_format) {
-	// rewrite header
-	bufferlist bl;
-	m_image_ctx.header.image_size = m_new_size;
-	bl.append((const char *)&m_image_ctx.header, sizeof(m_image_ctx.header));
-	op.write(0, bl);
-      } else {
-	if (m_image_ctx.image_watcher->is_lock_supported()) {
-	  m_image_ctx.image_watcher->assert_header_locked(&op);
-	}
-	cls_client::set_size(&op, m_new_size);
-      }
+  // should have been canceled prior to releasing lock
+  assert(!m_image_ctx.image_watcher->is_lock_supported() ||
+         m_image_ctx.image_watcher->is_lock_owner());
 
-      librados::AioCompletion *rados_completion = create_callback_completion();
-      int r = m_image_ctx.md_ctx.aio_operate(m_image_ctx.header_oid,
-					     rados_completion, &op);
-      assert(r == 0);
-      rados_completion->release();
+  librados::ObjectWriteOperation op;
+  if (m_image_ctx.old_format) {
+    // rewrite header
+    bufferlist bl;
+    m_image_ctx.header.image_size = m_new_size;
+    bl.append((const char *)&m_image_ctx.header, sizeof(m_image_ctx.header));
+    op.write(0, bl);
+  } else {
+    if (m_image_ctx.image_watcher->is_lock_supported()) {
+      m_image_ctx.image_watcher->assert_header_locked(&op);
     }
+    cls_client::set_size(&op, m_new_size);
   }
 
-  // avoid possible recursive lock attempts
-  if (lost_exclusive_lock) {
-    complete(-ERESTART);
-  }
+  librados::AioCompletion *rados_completion = create_callback_completion();
+  int r = m_image_ctx.md_ctx.aio_operate(m_image_ctx.header_oid,
+    				     rados_completion, &op);
+  assert(r == 0);
+  rados_completion->release();
 }
 
 void AsyncResizeRequest::compute_parent_overlap() {

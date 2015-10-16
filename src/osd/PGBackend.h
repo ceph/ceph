@@ -43,7 +43,6 @@
  protected:
    ObjectStore *store;
    const coll_t coll;
-   const coll_t temp_coll;
  public:	
    /**
     * Provides interfaces for PGBackend callbacks
@@ -56,9 +55,6 @@
    public:
      /// Recovery
 
-     virtual void on_local_recover_start(
-       const hobject_t &oid,
-       ObjectStore::Transaction *t) = 0;
      /**
       * Called with the transaction recovering oid
       */
@@ -109,6 +105,10 @@
        ObjectStore::Transaction *t,
        OpRequestRef op = OpRequestRef()
        ) = 0;
+     virtual void queue_transactions(
+       list<ObjectStore::Transaction*>& tls,
+       OpRequestRef op = OpRequestRef()
+       ) = 0;
      virtual epoch_t get_epoch() const = 0;
 
      virtual const set<pg_shard_t> &get_actingbackfill_shards() const = 0;
@@ -117,7 +117,7 @@
 
      virtual std::string gen_dbg_prefix() const = 0;
 
-     virtual const map<hobject_t, set<pg_shard_t> > &get_missing_loc_shards()
+     virtual const map<hobject_t, set<pg_shard_t>, hobject_t::BitwiseComparator> &get_missing_loc_shards()
        const = 0;
 
      virtual const pg_missing_t &get_local_missing() const = 0;
@@ -205,8 +205,11 @@
      virtual pg_shard_t primary_shard() const = 0;
 
      virtual uint64_t min_peer_features() const = 0;
+     virtual bool sort_bitwise() const = 0;
 
      virtual bool transaction_use_tbl() = 0;
+     virtual hobject_t get_temp_recovery_object(eversion_t version,
+						snapid_t snap) = 0;
 
      virtual void send_message_osd_cluster(
        int peer, Message *m, epoch_t from_epoch) = 0;
@@ -227,11 +230,10 @@
    };
    Listener *parent;
    Listener *get_parent() const { return parent; }
-   PGBackend(Listener *l, ObjectStore *store, coll_t coll, coll_t temp_coll) :
+   PGBackend(Listener *l, ObjectStore *store, coll_t coll) :
      store(store),
      coll(coll),
-     temp_coll(temp_coll),
-     parent(l), temp_created(false) {}
+     parent(l) {}
    bool is_primary() const { return get_parent()->pgb_is_primary(); }
    OSDMapRef get_osdmap() const { return get_parent()->pgb_get_osdmap(); }
    const pg_info_t &get_info() { return get_parent()->get_info(); }
@@ -249,6 +251,9 @@
     * the pending recovery operations.
     */
    struct RecoveryHandle {
+     bool cache_dont_need;
+
+     RecoveryHandle(): cache_dont_need(false) {}
      virtual ~RecoveryHandle() {}
    };
 
@@ -318,70 +323,26 @@
 
    virtual void on_flushed() = 0;
 
-   class IsRecoverablePredicate {
-   public:
-     /**
-      * have encodes the shards available
-      */
-     virtual bool operator()(const set<pg_shard_t> &have) const = 0;
-     virtual ~IsRecoverablePredicate() {}
-   };
-   virtual IsRecoverablePredicate *get_is_recoverable_predicate() = 0;
-
-   class IsReadablePredicate {
-   public:
-     /**
-      * have encodes the shards available
-      */
-     virtual bool operator()(const set<pg_shard_t> &have) const = 0;
-     virtual ~IsReadablePredicate() {}
-   };
-   virtual IsReadablePredicate *get_is_readable_predicate() = 0;
-
-   void temp_colls(list<coll_t> *out) {
-     if (temp_created)
-       out->push_back(temp_coll);
-   }
-   void split_colls(
-     spg_t child,
-     int split_bits,
-     int seed,
-     ObjectStore::Transaction *t) {
-     coll_t target = coll_t::make_temp_coll(child);
-     if (!temp_created)
-       return;
-     t->create_collection(target);
-     t->split_collection(
-       temp_coll,
-       split_bits,
-       seed,
-       target);
-   }
+   virtual IsPGRecoverablePredicate *get_is_recoverable_predicate() = 0;
+   virtual IsPGReadablePredicate *get_is_readable_predicate() = 0;
 
    virtual void dump_recovery_info(Formatter *f) const = 0;
 
  private:
-   bool temp_created;
-   set<hobject_t> temp_contents;
+   set<hobject_t, hobject_t::BitwiseComparator> temp_contents;
  public:
-   coll_t get_temp_coll(ObjectStore::Transaction *t);
-   coll_t get_temp_coll() const {
-    return temp_coll;
-   }
-   bool have_temp_coll() const { return temp_created; }
-
    // Track contents of temp collection, clear on reset
    void add_temp_obj(const hobject_t &oid) {
      temp_contents.insert(oid);
    }
-   void add_temp_objs(const set<hobject_t> &oids) {
+   void add_temp_objs(const set<hobject_t, hobject_t::BitwiseComparator> &oids) {
      temp_contents.insert(oids.begin(), oids.end());
    }
    void clear_temp_obj(const hobject_t &oid) {
      temp_contents.erase(oid);
    }
-   void clear_temp_objs(const set<hobject_t> &oids) {
-     for (set<hobject_t>::const_iterator i = oids.begin();
+   void clear_temp_objs(const set<hobject_t, hobject_t::BitwiseComparator> &oids) {
+     for (set<hobject_t, hobject_t::BitwiseComparator>::const_iterator i = oids.begin();
 	  i != oids.end();
 	  ++i) {
        temp_contents.erase(*i);
@@ -554,7 +515,6 @@
      const hobject_t &begin,
      int min,
      int max,
-     snapid_t seq,
      vector<hobject_t> *ls,
      hobject_t *next);
 
@@ -585,7 +545,7 @@
      const hobject_t &hoid,
      const list<pair<boost::tuple<uint64_t, uint64_t, uint32_t>,
 		pair<bufferlist*, Context*> > > &to_read,
-     Context *on_complete) = 0;
+     Context *on_complete, bool fast_read = false) = 0;
 
    virtual bool scrub_supported() { return false; }
    void be_scan_list(
@@ -607,10 +567,10 @@
      const map<pg_shard_t,ScrubMap*> &maps,
      bool okseed,   ///< true if scrub digests have same seed our oi digests
      bool repair,
-     map<hobject_t, set<pg_shard_t> > &missing,
-     map<hobject_t, set<pg_shard_t> > &inconsistent,
-     map<hobject_t, list<pg_shard_t> > &authoritative,
-     map<hobject_t, pair<uint32_t,uint32_t> > &missing_digest,
+     map<hobject_t, set<pg_shard_t>, hobject_t::BitwiseComparator> &missing,
+     map<hobject_t, set<pg_shard_t>, hobject_t::BitwiseComparator> &inconsistent,
+     map<hobject_t, list<pg_shard_t>, hobject_t::BitwiseComparator> &authoritative,
+     map<hobject_t, pair<uint32_t,uint32_t>, hobject_t::BitwiseComparator> &missing_digest,
      int &shallow_errors, int &deep_errors,
      const spg_t& pgid,
      const vector<int> &acting,
@@ -628,7 +588,6 @@
      const OSDMapRef curmap,
      Listener *l,
      coll_t coll,
-     coll_t temp_coll,
      ObjectStore *store,
      CephContext *cct);
  };

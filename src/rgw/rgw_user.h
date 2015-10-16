@@ -55,17 +55,37 @@ extern bool rgw_user_is_authenticated(RGWUserInfo& info);
  * Save the given user information to storage.
  * Returns: 0 on success, -ERR# on failure.
  */
-extern int rgw_store_user_info(RGWRados *store, RGWUserInfo& info, RGWUserInfo *old_info,
-                               RGWObjVersionTracker *objv_tracker, time_t mtime, bool exclusive);
+extern int rgw_store_user_info(RGWRados *store,
+                               RGWUserInfo& info,
+                               RGWUserInfo *old_info,
+                               RGWObjVersionTracker *objv_tracker,
+                               time_t mtime,
+                               bool exclusive,
+                               map<string, bufferlist> *pattrs = NULL);
 /**
- * Given an email, finds the user info associated with it.
+ * Save the custom user metadata given in @attrs and delete those in @rmattrs
+ * for user specified in @user_id.
+ * Returns: 0 on success, -ERR# on failure.
+ */
+extern int rgw_store_user_attrs(RGWRados *store,
+                                string& user_id,
+                                map<string, bufferlist>& attrs,
+                                map<string, bufferlist>* rmattrs,
+                                RGWObjVersionTracker *objv_tracker);
+
+/**
+ * Given an user_id, finds the user info associated with it.
  * returns: 0 on success, -ERR# on failure (including nonexistence)
  */
-extern int rgw_get_user_info_by_uid(RGWRados *store, string& user_id, RGWUserInfo& info,
-                                    RGWObjVersionTracker *objv_tracker = NULL, time_t *pmtime = NULL,
-                                    rgw_cache_entry_info *cache_info = NULL);
+extern int rgw_get_user_info_by_uid(RGWRados *store,
+                                    string& user_id,
+                                    RGWUserInfo& info,
+                                    RGWObjVersionTracker *objv_tracker = NULL,
+                                    time_t *pmtime                     = NULL,
+                                    rgw_cache_entry_info *cache_info   = NULL,
+                                    map<string, bufferlist> *pattrs    = NULL);
 /**
- * Given an swift username, finds the user info associated with it.
+ * Given an email, finds the user info associated with it.
  * returns: 0 on success, -ERR# on failure (including nonexistence)
  */
 extern int rgw_get_user_info_by_email(RGWRados *store, string& email, RGWUserInfo& info,
@@ -82,6 +102,15 @@ extern int rgw_get_user_info_by_swift(RGWRados *store, string& swift_name, RGWUs
  */
 extern int rgw_get_user_info_by_access_key(RGWRados *store, string& access_key, RGWUserInfo& info,
                                            RGWObjVersionTracker *objv_tracker = NULL, time_t *pmtime = NULL);
+/**
+ * Get all the custom metadata stored for user specified in @user_id
+ * and put it into @attrs.
+ * Returns: 0 on success, -ERR# on failure.
+ */
+extern int rgw_get_user_attrs_by_uid(RGWRados *store,
+                                     const string& user_id,
+                                     map<string, bufferlist>& attrs,
+                                     RGWObjVersionTracker *objv_tracker = NULL);
 /**
  * Given an RGWUserInfo, deletes the user and its bucket ACLs.
  */
@@ -161,6 +190,7 @@ struct RGWUserAdminOpState {
   bool id_specified;
   bool key_specified;
   bool type_specified;
+  bool key_type_setbycontext;   // key type set by user or subuser context
   bool purge_data;
   bool purge_keys;
   bool display_name_specified;
@@ -411,7 +441,7 @@ struct RGWUserAdminOpState {
   {
     max_buckets = RGW_DEFAULT_MAX_BUCKETS;
     key_type = -1;
-    perm_mask = 0;
+    perm_mask = RGW_PERM_NONE;
     suspended = 0;
     system = 0;
     exclusive = 0;
@@ -431,6 +461,7 @@ struct RGWUserAdminOpState {
     id_specified = false;
     key_specified = false;
     type_specified = false;
+    key_type_setbycontext = false;
     purge_data = false;
     display_name_specified = false;
     user_email_specified = false;

@@ -143,11 +143,6 @@ int LFNIndex::lookup(const ghobject_t &oid,
   );
 }
 
-int LFNIndex::collection_list(vector<ghobject_t> *ls)
-{
-  return _collection_list(ls);
-}
-
 int LFNIndex::pre_hash_collection(uint32_t pg_num, uint64_t expected_num_objs)
 {
   return _pre_hash_collection(pg_num, expected_num_objs);
@@ -155,13 +150,13 @@ int LFNIndex::pre_hash_collection(uint32_t pg_num, uint64_t expected_num_objs)
 
 
 int LFNIndex::collection_list_partial(const ghobject_t &start,
-				      int min_count,
+				      const ghobject_t &end,
+				      bool sort_bitwise,
 				      int max_count,
-				      snapid_t seq,
 				      vector<ghobject_t> *ls,
 				      ghobject_t *next)
 {
-  return _collection_list_partial(start, min_count, max_count, seq, ls, next);
+  return _collection_list_partial(start, end, sort_bitwise, max_count, ls, next);
 }
 
 /* Derived class utility methods */
@@ -390,7 +385,7 @@ static int get_hobject_from_oinfo(const char *dir, const char *file,
   bufferlist bl;
   bl.push_back(bp);
   object_info_t oi(bl);
-  *o = oi.soid;
+  *o = ghobject_t(oi.soid);
   return 0;
 }
 
@@ -457,7 +452,7 @@ int LFNIndex::list_objects(const vector<string> &to_list, int max_objs,
 }
 
 int LFNIndex::list_subdirs(const vector<string> &to_list,
-				  set<string> *out)
+			   vector<string> *out)
 {
   string to_list_path = get_full_path_subdir(to_list);
   DIR *dir = ::opendir(to_list_path.c_str());
@@ -474,7 +469,7 @@ int LFNIndex::list_subdirs(const vector<string> &to_list,
     string demangled_name;
     ghobject_t obj;
     if (lfn_is_subdir(short_name, &demangled_name)) {
-      out->insert(demangled_name);
+      out->push_back(demangled_name);
     }
   }
 
@@ -1025,7 +1020,7 @@ bool LFNIndex::lfn_parse_object_name_keyless(const string &long_name, ghobject_t
   bool r = parse_object(long_name.c_str(), *out);
   int64_t pool = -1;
   spg_t pg;
-  if (coll().is_pg_prefix(pg))
+  if (coll().is_pg_prefix(&pg))
     pool = (int64_t)pg.pgid.pool();
   out->hobj.pool = pool;
   if (!r) return r;
@@ -1118,7 +1113,7 @@ bool LFNIndex::lfn_parse_object_name_poolless(const string &long_name,
 
   int64_t pool = -1;
   spg_t pg;
-  if (coll().is_pg_prefix(pg))
+  if (coll().is_pg_prefix(&pg))
     pool = (int64_t)pg.pgid.pool();
   (*out) = ghobject_t(hobject_t(name, key, snap, hash, pool, ""));
   return true;

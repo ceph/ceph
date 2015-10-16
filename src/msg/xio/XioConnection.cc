@@ -178,18 +178,17 @@ int XioConnection::passive_setup()
 
   /* notify hook */
   msgr->ms_deliver_handle_accept(this);
+  msgr->ms_deliver_handle_fast_accept(this);
 
   /* try to insert in conns_entity_map */
   msgr->try_insert(this);
   return (0);
 }
 
-#define uint_to_timeval(tv, s) ((tv).tv_sec = (s), (tv).tv_usec = 0)
-
 static inline XioDispatchHook* pool_alloc_xio_dispatch_hook(
   XioConnection *xcon, Message *m, XioInSeq& msg_seq)
 {
-  struct xio_mempool_obj mp_mem;
+  struct xio_reg_mem mp_mem;
   int e = xpool_alloc(xio_msgr_noreg_mpool,
 		      sizeof(XioDispatchHook), &mp_mem);
   if (!!e)
@@ -247,7 +246,7 @@ int XioConnection::on_msg_req(struct xio_session *session,
   ceph_msg_footer footer;
   buffer::list payload, middle, data;
 
-  struct timeval t1, t2;
+  const utime_t recv_stamp = ceph_clock_now(msgr->cct);
 
   ldout(msgr->cct,4) << __func__ << " " << "msg_seq.size()="  << msg_seq.size() <<
     dendl;
@@ -257,8 +256,6 @@ int XioConnection::on_msg_req(struct xio_session *session,
   XioMsgHdr hdr(header, footer,
 		buffer::create_static(treq->in.header.iov_len,
 				      (char*) treq->in.header.iov_base));
-
-  uint_to_timeval(t1, treq->timestamp);
 
   if (magic & (MSG_MAGIC_TRACE_XCON)) {
     if (hdr.hdr->type == 43) {
@@ -370,8 +367,6 @@ int XioConnection::on_msg_req(struct xio_session *session,
     }
   }
 
-  uint_to_timeval(t2, treq->timestamp);
-
   /* update connection timestamp */
   recv.set(treq->timestamp);
 
@@ -391,8 +386,8 @@ int XioConnection::on_msg_req(struct xio_session *session,
     m->set_magic(magic);
 
     /* update timestamps */
-    m->set_recv_stamp(t1);
-    m->set_recv_complete_stamp(t2);
+    m->set_recv_stamp(recv_stamp);
+    m->set_recv_complete_stamp(ceph_clock_now(msgr->cct));
     m->set_seq(header.seq);
 
     /* MP-SAFE */
@@ -526,8 +521,7 @@ int XioConnection::discard_input_queue(uint32_t flags)
     pthread_spin_unlock(&sp);
 
   // mqueue
-  int ix, q_size =  disc_q.size();
-  for (ix = 0; ix < q_size; ++ix) {
+  while (!disc_q.empty()) {
     Message::Queue::iterator q_iter = disc_q.begin();
     Message* m = &(*q_iter);
     disc_q.erase(q_iter);
@@ -535,8 +529,7 @@ int XioConnection::discard_input_queue(uint32_t flags)
   }
 
   // requeue
-  q_size =  deferred_q.size();
-  for (ix = 0; ix < q_size; ++ix) {
+  while (!deferred_q.empty()) {
     XioSubmit::Queue::iterator q_iter = deferred_q.begin();
     XioSubmit* xs = &(*q_iter);
     XioMsg* xmsg;
@@ -545,8 +538,7 @@ int XioConnection::discard_input_queue(uint32_t flags)
 	xmsg = static_cast<XioMsg*>(xs);
 	deferred_q.erase(q_iter);
 	// release once for each chained xio_msg
-	for (ix = 0; ix < int(xmsg->hdr.msg_cnt); ++ix)
-	  xmsg->put();
+	xmsg->put(xmsg->hdr.msg_cnt);
 	break;
       case XioSubmit::INCOMING_MSG_RELEASE:
 	deferred_q.erase(q_iter);

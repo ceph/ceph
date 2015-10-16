@@ -34,23 +34,25 @@ void TestFileStoreBackend::write(
   size_t sep = oid.find("/");
   assert(sep != string::npos);
   assert(sep + 1 < oid.size());
-  string coll_str(oid.substr(0, sep));
+  coll_t c;
+  bool valid_coll = c.parse(oid.substr(0, sep));
+  assert(valid_coll);
+  string coll_str = c.to_str();
 
   if (!osrs.count(coll_str))
     osrs.insert(make_pair(coll_str, ObjectStore::Sequencer(coll_str)));
   ObjectStore::Sequencer *osr = &(osrs.find(coll_str)->second);
 
-
-  coll_t c(coll_str);
   hobject_t h(sobject_t(oid.substr(sep+1), 0));
-  t->write(c, h, offset, bl.length(), bl);
+  h.pool = 0;
+  t->write(c, ghobject_t(h), offset, bl.length(), bl);
 
   if (write_infos) {
     bufferlist bl2;
     for (uint64_t j = 0; j < 128; ++j) bl2.append(0);
-    coll_t meta("meta");
+    coll_t meta;
     hobject_t info(sobject_t(string("info_")+coll_str, 0));
-    t->write(meta, info, 0, bl2.length(), bl2);
+    t->write(meta, ghobject_t(info), 0, bl2.length(), bl2);
   }
 
   os->queue_transaction(
@@ -70,8 +72,11 @@ void TestFileStoreBackend::read(
   size_t sep = oid.find("/");
   assert(sep != string::npos);
   assert(sep + 1 < oid.size());
-  coll_t c(oid.substr(0, sep));
+  coll_t c;
+  bool valid_coll = c.parse(oid.substr(0, sep));
+  assert(valid_coll);
   hobject_t h(sobject_t(oid.substr(sep+1), 0));
-  os->read(c, h, offset, length, *bl);
+  h.pool = 0;
+  os->read(c, ghobject_t(h), offset, length, *bl);
   finisher.queue(on_complete);
 }

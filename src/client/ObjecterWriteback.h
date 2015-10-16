@@ -39,13 +39,6 @@ class ObjecterWriteback : public WritebackHandler {
 						    m_finisher));
   }
 
-  virtual ceph_tid_t lock(const object_t& oid, const object_locator_t& oloc, int op,
-		     int flags, Context *onack, Context *oncommit) {
-    return m_objecter->lock(oid, oloc, op, flags, onack,
-			    new C_OnFinisher(new C_Lock(m_lock, oncommit),
-					     m_finisher));
-  }
-
  private:
   Objecter *m_objecter;
   Finisher *m_finisher;

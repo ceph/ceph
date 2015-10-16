@@ -808,8 +808,13 @@ int RGWGetObj::handle_user_manifest(const char *prefix)
   if (pos < 0)
     return -EINVAL;
 
-  string bucket_name = prefix_str.substr(0, pos);
-  string obj_prefix = prefix_str.substr(pos + 1);
+  string bucket_name_raw, bucket_name;
+  bucket_name_raw = prefix_str.substr(0, pos);
+  url_decode(bucket_name_raw, bucket_name);
+
+  string obj_prefix_raw, obj_prefix;
+  obj_prefix_raw = prefix_str.substr(pos + 1);
+  url_decode(obj_prefix_raw, obj_prefix);
 
   rgw_bucket bucket;
 
@@ -845,6 +850,12 @@ int RGWGetObj::handle_user_manifest(const char *prefix)
 
   s->obj_size = total_len;
 
+  if (!get_data) {
+    bufferlist bl;
+    send_response_data(bl, 0, 0);
+    return 0;
+  }
+
   r = iterate_user_manifest_parts(s->cct, store, ofs, end, bucket, obj_prefix, bucket_policy, NULL, get_obj_user_manifest_iterate_cb, (void *)this);
   if (r < 0)
     return r;
@@ -879,9 +890,55 @@ int RGWGetObj::get_data_cb(bufferlist& bl, off_t bl_ofs, off_t bl_len)
   return send_response_data(bl, bl_ofs, bl_len);
 }
 
+bool RGWGetObj::prefetch_data()
+{
+  /* HEAD request, stop prefetch*/
+  if (!get_data) {
+    return false;
+  }
+
+  bool prefetch_first_chunk = true;
+  range_str = s->info.env->get("HTTP_RANGE");
+
+  if(range_str) {
+    int r = parse_range(range_str, ofs, end, &partial_content);
+    /* error on parsing the range, stop prefetch and will fail in execte() */
+    if (r < 0) {
+      range_parsed = false;
+      return false;
+    } else {
+      range_parsed = true;
+    }
+    /* range get goes to shadown objects, stop prefetch */
+    if (ofs >= s->cct->_conf->rgw_max_chunk_size) {
+      prefetch_first_chunk = false;
+    }
+  }
+
+  return get_data && prefetch_first_chunk;
+}
 void RGWGetObj::pre_exec()
 {
   rgw_bucket_object_pre_exec(s);
+}
+
+static bool object_is_expired(map<string, bufferlist>& attrs) {
+  map<string, bufferlist>::iterator iter = attrs.find(RGW_ATTR_DELETE_AT);
+  if (iter != attrs.end()) {
+    utime_t delete_at;
+    try {
+      ::decode(delete_at, iter->second);
+    } catch (buffer::error& err) {
+      dout(0) << "ERROR: " << __func__ << ": failed to decode " RGW_ATTR_DELETE_AT " attr" << dendl;
+      return false;
+    }
+
+    if (delete_at <= ceph_clock_now(g_ceph_context)) {
+      return true;
+    }
+  }
+
+  return false;
 }
 
 void RGWGetObj::execute()
@@ -927,12 +984,19 @@ void RGWGetObj::execute()
     goto done_err;
 
   attr_iter = attrs.find(RGW_ATTR_USER_MANIFEST);
-  if (attr_iter != attrs.end()) {
+  if (attr_iter != attrs.end() && !skip_manifest) {
     ret = handle_user_manifest(attr_iter->second.c_str());
     if (ret < 0) {
       ldout(s->cct, 0) << "ERROR: failed to handle user manifest ret=" << ret << dendl;
     }
     return;
+  }
+
+  /* Check whether the object has expired. Swift API documentation
+   * stands that we should return 404 Not Found in such case. */
+  if (need_object_expiration() && object_is_expired(attrs)) {
+    ret = -ENOENT;
+    goto done_err;
   }
 
   ofs = new_ofs;
@@ -960,9 +1024,12 @@ done_err:
 int RGWGetObj::init_common()
 {
   if (range_str) {
-    int r = parse_range(range_str, ofs, end, &partial_content);
-    if (r < 0)
-      return r;
+    /* range parsed error when prefetch*/
+    if (!range_parsed) {
+      int r = parse_range(range_str, ofs, end, &partial_content);
+      if (r < 0)
+        return r;
+    }
   }
   if (if_mod) {
     if (parse_time(if_mod, &mod_time) < 0)
@@ -993,8 +1060,16 @@ void RGWListBuckets::execute()
   uint64_t max_buckets = s->cct->_conf->rgw_list_buckets_max_chunk;
 
   ret = get_params();
-  if (ret < 0)
+  if (ret < 0) {
     goto send_end;
+  }
+
+  if (supports_account_metadata()) {
+    ret = rgw_get_user_attrs_by_uid(store, s->user.user_id, attrs);
+    if (ret < 0) {
+      goto send_end;
+    }
+  }
 
   do {
     RGWUserBuckets buckets;
@@ -1517,7 +1592,7 @@ class RGWPutObjProcessor_Multipart : public RGWPutObjProcessor_Atomic
 protected:
   int prepare(RGWRados *store, string *oid_rand);
   int do_complete(string& etag, time_t *mtime, time_t set_mtime,
-                  map<string, bufferlist>& attrs,
+                  map<string, bufferlist>& attrs, time_t delete_at,
                   const char *if_match = NULL, const char *if_nomatch = NULL);
 
 public:
@@ -1591,7 +1666,7 @@ static bool is_v2_upload_id(const string& upload_id)
 }
 
 int RGWPutObjProcessor_Multipart::do_complete(string& etag, time_t *mtime, time_t set_mtime,
-                                              map<string, bufferlist>& attrs,
+                                              map<string, bufferlist>& attrs, time_t delete_at,
                                               const char *if_match, const char *if_nomatch)
 {
   complete_writing_data();
@@ -1602,6 +1677,7 @@ int RGWPutObjProcessor_Multipart::do_complete(string& etag, time_t *mtime, time_
   head_obj_op.meta.set_mtime = set_mtime;
   head_obj_op.meta.mtime = mtime;
   head_obj_op.meta.owner = s->owner.get_id();
+  head_obj_op.meta.delete_at = delete_at;
 
   int r = head_obj_op.write_meta(s->obj_size, attrs);
   if (r < 0)
@@ -1724,6 +1800,17 @@ static int get_system_versioning_params(req_state *s, uint64_t *olh_epoch, strin
   return 0;
 }
 
+static void encode_delete_at_attr(time_t delete_at, map<string, bufferlist>& attrs)
+{
+  if (delete_at == 0) {
+    return;
+  }
+
+  bufferlist delatbl;
+  ::encode(utime_t(delete_at, 0), delatbl);
+  attrs[RGW_ATTR_DELETE_AT] = delatbl;
+}
+
 void RGWPutObj::execute()
 {
   RGWPutObjProcessor *processor = NULL;
@@ -1748,11 +1835,15 @@ void RGWPutObj::execute()
   }
 
   ret = get_params();
-  if (ret < 0)
+  if (ret < 0) {
+    ldout(s->cct, 20) << "get_params() returned ret=" << ret << dendl;
     goto done;
+  }
 
   ret = get_system_versioning_params(s, &olh_epoch, &version_id);
   if (ret < 0) {
+    ldout(s->cct, 20) << "get_system_versioning_params() returned ret=" \
+        << ret << dendl;
     goto done;
   }
 
@@ -1777,6 +1868,7 @@ void RGWPutObj::execute()
     ret = store->check_quota(s->bucket_owner.get_id(), s->bucket,
                              user_quota, bucket_quota, s->content_length);
     if (ret < 0) {
+      ldout(s->cct, 20) << "check_quota() returned ret=" << ret << dendl;
       goto done;
     }
   }
@@ -1789,8 +1881,10 @@ void RGWPutObj::execute()
   processor = select_processor(*static_cast<RGWObjectCtx *>(s->obj_ctx), &multipart);
 
   ret = processor->prepare(store, NULL);
-  if (ret < 0)
+  if (ret < 0) {
+    ldout(s->cct, 20) << "processor->prepare() returned ret=" << ret << dendl;
     goto done;
+  }
 
   do {
     bufferlist data;
@@ -1807,6 +1901,12 @@ void RGWPutObj::execute()
      */
     bool need_to_wait = (ofs == 0) && multipart;
 
+    bufferlist orig_data;
+
+    if (need_to_wait) {
+      orig_data = data;
+    }
+
     ret = put_data_and_throttle(processor, data, ofs, (need_calc_md5 ? &hash : NULL), need_to_wait);
     if (ret < 0) {
       if (!need_to_wait || ret != -EEXIST) {
@@ -1815,6 +1915,9 @@ void RGWPutObj::execute()
       }
 
       ldout(s->cct, 5) << "NOTICE: processor->throttle_data() returned -EEXIST, need to restart write" << dendl;
+
+      /* restore original data */
+      data.swap(orig_data);
 
       /* restart processing with different oid suffix */
 
@@ -1851,6 +1954,7 @@ void RGWPutObj::execute()
   ret = store->check_quota(s->bucket_owner.get_id(), s->bucket,
                            user_quota, bucket_quota, s->obj_size);
   if (ret < 0) {
+    ldout(s->cct, 20) << "second check_quota() returned ret=" << ret << dendl;
     goto done;
   }
 
@@ -1912,8 +2016,10 @@ void RGWPutObj::execute()
   }
 
   rgw_get_request_metadata(s->cct, s->info, attrs);
+  encode_delete_at_attr(delete_at, attrs);
 
-  ret = processor->complete(etag, &mtime, 0, attrs, if_match, if_nomatch);
+  ret = processor->complete(etag, &mtime, 0, attrs, delete_at, if_match, if_nomatch);
+
 done:
   dispose_processor(processor);
   perfcounter->tinc(l_rgw_put_lat,
@@ -2016,6 +2122,7 @@ void RGWPostObj::execute()
     goto done;
   }
 
+  processor->complete_hash(&hash);
   hash.Final(m);
   buf_to_hex(m, CEPH_CRYPTO_MD5_DIGESTSIZE, calc_md5);
 
@@ -2032,131 +2139,75 @@ void RGWPostObj::execute()
     attrs[RGW_ATTR_CONTENT_TYPE] = ct_bl;
   }
 
-  ret = processor->complete(etag, NULL, 0, attrs);
+  ret = processor->complete(etag, NULL, 0, attrs, delete_at);
 
 done:
   dispose_processor(processor);
 }
 
 
-int RGWPutMetadata::verify_permission()
+static void populate_with_generic_attrs(const req_state * const s,
+                                        map<string, bufferlist>& out_attrs)
 {
-  if (!s->object.empty()) {
-    if (!verify_object_permission(s, RGW_PERM_WRITE))
-      return -EACCES;
-  } else {
-    if (!verify_bucket_permission(s, RGW_PERM_WRITE))
-      return -EACCES;
-  }
+  map<string, string>::const_iterator giter;
 
-  return 0;
-}
-
-void RGWPutMetadata::pre_exec()
-{
-  rgw_bucket_object_pre_exec(s);
-}
-
-void RGWPutMetadata::execute()
-{
-  const char *meta_prefix = RGW_ATTR_META_PREFIX;
-  int meta_prefix_len = sizeof(RGW_ATTR_META_PREFIX) - 1;
-  map<string, bufferlist> attrs, orig_attrs, rmattrs;
-  map<string, bufferlist>::iterator iter;
-  bufferlist bl, cors_bl;
-
-  rgw_obj obj(s->bucket, s->object);
-
-  store->set_atomic(s->obj_ctx, obj);
-
-  ret = get_params();
-  if (ret < 0)
-    return;
-
-  RGWObjVersionTracker *ptracker = NULL;
-  bool is_object_op = (!s->object.empty());
-
-  rgw_get_request_metadata(s->cct, s->info, attrs, is_object_op);
-
-  if (is_object_op) {
-    /* check if obj exists, read orig attrs */
-    ret = get_obj_attrs(store, s, obj, orig_attrs);
-    if (ret < 0)
-      return;
-  } else {
-    ptracker = &s->bucket_info.objv_tracker;
-    orig_attrs = s->bucket_attrs;
-
-    if (!placement_rule.empty() &&
-        placement_rule != s->bucket_info.placement_rule) {
-      ret = -EEXIST;
-      return;
-    }
-  }
-
-  for (iter = orig_attrs.begin(); iter != orig_attrs.end(); ++iter) {
-    const string& name = iter->first;
-    /* check if the attr is user-defined metadata item */
-    if (name.compare(0, meta_prefix_len, meta_prefix) == 0) {
-      if (is_object_op) {
-        /* for the objects all existing meta attrs have to be removed */
-        rmattrs[name] = iter->second;
-      } else {
-        /* for the buckets all existing meta attrs are preserved,
-           except those that are listed in rmattr_names. */
-        if (rmattr_names.find(name) != rmattr_names.end()) {
-          map<string, bufferlist>::iterator aiter = attrs.find(name);
-          if (aiter != attrs.end()) {
-            attrs.erase(aiter);
-          }
-          rmattrs[name] = iter->second;
-        }
-      }
-    } else if (attrs.find(name) == attrs.end()) {
-      attrs[name] = iter->second;
-    }
-  }
-
-  map<string, string>::iterator giter;
   for (giter = s->generic_attrs.begin(); giter != s->generic_attrs.end(); ++giter) {
-    bufferlist& attrbl = attrs[giter->first];
+    bufferlist& attrbl = out_attrs[giter->first];
     const string& val = giter->second;
     attrbl.clear();
     attrbl.append(val.c_str(), val.size() + 1);
   }
+}
 
-  if (has_policy) {
-    policy.encode(bl);
-    attrs[RGW_ATTR_ACL] = bl;
-  }
-  if (has_cors) {
-    cors_config.encode(cors_bl);
-    attrs[RGW_ATTR_CORS] = cors_bl;
-  }
-  if (is_object_op) {
-    ret = store->set_attrs(s->obj_ctx, obj, attrs, &rmattrs, ptracker);
-  } else {
-    ret = rgw_bucket_set_attrs(store, s->bucket_info, attrs, &rmattrs, ptracker);
+static void prepare_add_del_attrs(const map<string, bufferlist>& orig_attrs,
+                                  map<string, bufferlist>& out_attrs,
+                                  map<string, bufferlist>& out_rmattrs)
+{
+  map<string, bufferlist>::const_iterator iter;
+
+  for (iter = orig_attrs.begin(); iter != orig_attrs.end(); ++iter) {
+    const string& name = iter->first;
+    /* check if the attr is user-defined metadata item */
+    if (name.compare(0, sizeof(RGW_ATTR_META_PREFIX) - 1, RGW_ATTR_META_PREFIX) == 0) {
+      /* for the objects all existing meta attrs have to be removed */
+      out_rmattrs[name] = iter->second;
+    } else if (out_attrs.find(name) == out_attrs.end()) {
+      out_attrs[name] = iter->second;
+    }
   }
 }
 
-int RGWSetTempUrl::verify_permission()
+static void prepare_add_del_attrs(const map<string, bufferlist>& orig_attrs,
+                                  const set<string>& rmattr_names,
+                                  map<string, bufferlist>& out_attrs,
+                                  map<string, bufferlist>& out_rmattrs)
 {
-  if (s->perm_mask != RGW_PERM_FULL_CONTROL)
-    return -EACCES;
+  map<string, bufferlist>::const_iterator iter;
 
-  return 0;
+  for (iter = orig_attrs.begin(); iter != orig_attrs.end(); ++iter) {
+    const string& name = iter->first;
+    /* check if the attr is user-defined metadata item */
+    if (name.compare(0, strlen(RGW_ATTR_META_PREFIX), RGW_ATTR_META_PREFIX) == 0) {
+      /* for the buckets all existing meta attrs are preserved,
+         except those that are listed in rmattr_names. */
+      if (rmattr_names.find(name) != rmattr_names.end()) {
+        map<string, bufferlist>::iterator aiter = out_attrs.find(name);
+        if (aiter != out_attrs.end()) {
+          out_attrs.erase(aiter);
+        }
+        out_rmattrs[name] = iter->second;
+      }
+    } else if (out_attrs.find(name) == out_attrs.end()) {
+      out_attrs[name] = iter->second;
+    }
+  }
 }
 
-void RGWSetTempUrl::execute()
-{
-  ret = get_params();
-  if (ret < 0)
-    return;
-
+int RGWPutMetadataAccount::handle_temp_url_update(const map<int, string>& temp_url_keys) {
   RGWUserAdminOpState user_op;
   user_op.set_user_id(s->user.user_id);
-  map<int, string>::iterator iter;
+
+  map<int, string>::const_iterator iter;
   for (iter = temp_url_keys.begin(); iter != temp_url_keys.end(); ++iter) {
     user_op.set_temp_url_key(iter->second, iter->first);
   }
@@ -2165,16 +2216,200 @@ void RGWSetTempUrl::execute()
   ret = user.init(store, user_op);
   if (ret < 0) {
     ldout(store->ctx(), 0) << "ERROR: could not init user ret=" << ret << dendl;
-    return;
+    return ret;
   }
+
   string err_msg;
   ret = user.modify(user_op, &err_msg);
   if (ret < 0) {
     ldout(store->ctx(), 10) << "user.modify() returned " << ret << ": " << err_msg << dendl;
-    return;
+    return ret;
+  }
+  return 0;
+}
+
+int RGWPutMetadataAccount::verify_permission()
+{
+  if (!rgw_user_is_authenticated(s->user)) {
+    return -EACCES;
+  }
+  return 0;
+}
+
+void RGWPutMetadataAccount::filter_out_temp_url(map<string, bufferlist>& add_attrs,
+                                                const set<string>& rmattr_names,
+                                                map<int, string>& temp_url_keys)
+{
+  map<string, bufferlist>::iterator iter;
+
+  iter = add_attrs.find(RGW_ATTR_TEMPURL_KEY1);
+  if (iter != add_attrs.end()) {
+    temp_url_keys[0] = iter->second.c_str();
+    add_attrs.erase(iter);
+  }
+
+  iter = add_attrs.find(RGW_ATTR_TEMPURL_KEY2);
+  if (iter != add_attrs.end()) {
+    temp_url_keys[1] = iter->second.c_str();
+    add_attrs.erase(iter);
+  }
+
+  set<string>::const_iterator riter;
+  for(riter = rmattr_names.begin(); riter != rmattr_names.end(); ++riter) {
+    const string& name = *riter;
+
+    if (name.compare(RGW_ATTR_TEMPURL_KEY1) == 0) {
+      temp_url_keys[0] = string();
+    }
+    if (name.compare(RGW_ATTR_TEMPURL_KEY2) == 0) {
+      temp_url_keys[1] = string();
+    }
   }
 }
 
+void RGWPutMetadataAccount::execute()
+{
+  rgw_obj obj;
+  map<string, bufferlist> attrs, orig_attrs, rmattrs;
+  RGWObjVersionTracker acct_op_tracker;
+
+  /* Get the name of raw object which stores the metadata in its xattrs. */
+  string buckets_obj_id;
+  rgw_get_buckets_obj(s->user.user_id, buckets_obj_id);
+  obj = rgw_obj(store->zone.user_uid_pool, buckets_obj_id);
+
+  ret = get_params();
+  if (ret < 0) {
+    return;
+  }
+
+  rgw_get_request_metadata(s->cct, s->info, attrs, false);
+  rgw_get_user_attrs_by_uid(store, s->user.user_id, orig_attrs, &acct_op_tracker);
+  prepare_add_del_attrs(orig_attrs, rmattr_names, attrs, rmattrs);
+  populate_with_generic_attrs(s, attrs);
+
+  /* Handle the TempURL-related stuff. */
+  map<int, string> temp_url_keys;
+  filter_out_temp_url(attrs, rmattr_names, temp_url_keys);
+  if (!temp_url_keys.empty()) {
+    if (s->perm_mask != RGW_PERM_FULL_CONTROL) {
+      ret = -EPERM;
+      return;
+    }
+  }
+
+  ret = rgw_store_user_attrs(store, s->user.user_id, attrs, &rmattrs, &acct_op_tracker);
+  if (ret < 0) {
+    return;
+  }
+
+  if (!temp_url_keys.empty()) {
+    ret = handle_temp_url_update(temp_url_keys);
+    if (ret < 0) {
+      return;
+    }
+  }
+}
+
+int RGWPutMetadataBucket::verify_permission()
+{
+  if (!verify_bucket_permission(s, RGW_PERM_WRITE)) {
+    return -EACCES;
+  }
+
+  return 0;
+}
+
+void RGWPutMetadataBucket::pre_exec()
+{
+  rgw_bucket_object_pre_exec(s);
+}
+
+void RGWPutMetadataBucket::execute()
+{
+  rgw_obj obj(s->bucket, s->object);
+  map<string, bufferlist> attrs, orig_attrs, rmattrs;
+
+  ret = get_params();
+  if (ret < 0) {
+    return;
+  }
+
+  rgw_get_request_metadata(s->cct, s->info, attrs, false);
+
+  if (!placement_rule.empty() &&
+      placement_rule != s->bucket_info.placement_rule) {
+    ret = -EEXIST;
+    return;
+  }
+
+  orig_attrs = s->bucket_attrs;
+  prepare_add_del_attrs(orig_attrs, rmattr_names, attrs, rmattrs);
+  populate_with_generic_attrs(s, attrs);
+
+  if (has_policy) {
+    bufferlist bl;
+    policy.encode(bl);
+    attrs[RGW_ATTR_ACL] = bl;
+  }
+
+  if (has_cors) {
+    bufferlist bl;
+    cors_config.encode(bl);
+    attrs[RGW_ATTR_CORS] = bl;
+  }
+
+  ret = rgw_bucket_set_attrs(store, s->bucket_info, attrs, &rmattrs,
+          &s->bucket_info.objv_tracker);
+}
+
+int RGWPutMetadataObject::verify_permission()
+{
+  if (!verify_object_permission(s, RGW_PERM_WRITE)) {
+    return -EACCES;
+  }
+
+  return 0;
+}
+
+void RGWPutMetadataObject::pre_exec()
+{
+  rgw_bucket_object_pre_exec(s);
+}
+
+void RGWPutMetadataObject::execute()
+{
+  rgw_obj obj(s->bucket, s->object);
+  map<string, bufferlist> attrs, orig_attrs, rmattrs;
+
+  store->set_atomic(s->obj_ctx, obj);
+
+  ret = get_params();
+  if (ret < 0) {
+    return;
+  }
+
+  rgw_get_request_metadata(s->cct, s->info, attrs);
+  /* check if obj exists, read orig attrs */
+  ret = get_obj_attrs(store, s, obj, orig_attrs);
+  if (ret < 0) {
+    return;
+  }
+
+  /* Check whether the object has expired. Swift API documentation
+   * stands that we should return 404 Not Found in such case. */
+  if (need_object_expiration() && object_is_expired(orig_attrs)) {
+    ret = -ENOENT;
+    return;
+  }
+
+  /* Filter currently existing attributes. */
+  prepare_add_del_attrs(orig_attrs, attrs, rmattrs);
+  populate_with_generic_attrs(s, attrs);
+  encode_delete_at_attr(delete_at, attrs);
+
+  ret = store->set_attrs(s->obj_ctx, obj, attrs, &rmattrs, NULL);
+}
 
 int RGWDeleteObj::verify_permission()
 {
@@ -2305,6 +2540,7 @@ int RGWCopyObj::verify_permission()
 
   if (src_bucket_name.compare(dest_bucket_name) == 0) { /* will only happen if s->local_source */
     dest_bucket_info = src_bucket_info;
+    dest_attrs = src_attrs;
   } else {
     ret = store->get_bucket_info(obj_ctx, dest_bucket_name, dest_bucket_info, NULL, &dest_attrs);
     if (ret < 0)
@@ -2405,6 +2641,8 @@ void RGWCopyObj::execute()
   obj_ctx.set_atomic(src_obj);
   obj_ctx.set_atomic(dst_obj);
 
+  encode_delete_at_attr(delete_at, attrs);
+
   ret = store->copy_obj(obj_ctx,
                         s->user.user_id,
                         client_id,
@@ -2424,6 +2662,7 @@ void RGWCopyObj::execute()
                         attrs_mod,
                         attrs, RGW_OBJ_CATEGORY_MAIN,
                         olh_epoch,
+			delete_at,
                         (version_id.empty() ? NULL : &version_id),
                         &s->req_id, /* use req_id as tag */
                         &etag,
@@ -2988,8 +3227,13 @@ void RGWCompleteMultipart::execute()
   }
 
   parts = static_cast<RGWMultiCompleteUpload *>(parser.find_first("CompleteMultipartUpload"));
-  if (!parts || parts->parts.size() == 0) {
+  if (!parts || parts->parts.empty()) {
     ret = -ERR_MALFORMED_XML;
+    return;
+  }
+
+  if ((int)parts->parts.size() > s->cct->_conf->rgw_multipart_part_upload_limit) {
+    ret = -ERANGE;
     return;
   }
 

@@ -84,52 +84,42 @@ void PGBackend::on_change_cleanup(ObjectStore::Transaction *t)
 {
   dout(10) << __func__ << dendl;
   // clear temp
-  for (set<hobject_t>::iterator i = temp_contents.begin();
+  for (set<hobject_t, hobject_t::BitwiseComparator>::iterator i = temp_contents.begin();
        i != temp_contents.end();
        ++i) {
     dout(10) << __func__ << ": Removing oid "
 	     << *i << " from the temp collection" << dendl;
     t->remove(
-      get_temp_coll(t),
+      coll,
       ghobject_t(*i, ghobject_t::NO_GEN, get_parent()->whoami_shard().shard));
   }
   temp_contents.clear();
-}
-
-coll_t PGBackend::get_temp_coll(ObjectStore::Transaction *t)
-{
-  if (temp_created)
-    return temp_coll;
-  if (!store->collection_exists(temp_coll))
-      t->create_collection(temp_coll);
-  temp_created = true;
-  return temp_coll;
 }
 
 int PGBackend::objects_list_partial(
   const hobject_t &begin,
   int min,
   int max,
-  snapid_t seq,
   vector<hobject_t> *ls,
   hobject_t *next)
 {
   assert(ls);
-  // Starts with the smallest shard id and generation to
-  // make sure the result list has the marker object (
-  // it might have multiple generations though, which would
-  // be filtered).
-  ghobject_t _next(begin, 0, shard_id_t(0));
+  // Starts with the smallest generation to make sure the result list
+  // has the marker object (it might have multiple generations
+  // though, which would be filtered).
+  ghobject_t _next;
+  if (!begin.is_min())
+    _next = ghobject_t(begin, 0, get_parent()->whoami_shard().shard);
   ls->reserve(max);
   int r = 0;
   while (!_next.is_max() && ls->size() < (unsigned)min) {
     vector<ghobject_t> objects;
-    int r = store->collection_list_partial(
+    int r = store->collection_list(
       coll,
       _next,
-      min - ls->size(),
+      ghobject_t::get_max(),
+      parent->sort_bitwise(),
       max - ls->size(),
-      seq,
       &objects,
       &_next);
     if (r != 0)
@@ -137,7 +127,7 @@ int PGBackend::objects_list_partial(
     for (vector<ghobject_t>::iterator i = objects.begin();
 	 i != objects.end();
 	 ++i) {
-      if (i->is_pgmeta()) {
+      if (i->is_pgmeta() || i->hobj.is_temp()) {
 	continue;
       }
       if (i->is_no_gen()) {
@@ -159,17 +149,19 @@ int PGBackend::objects_list_range(
 {
   assert(ls);
   vector<ghobject_t> objects;
-  int r = store->collection_list_range(
+  int r = store->collection_list(
     coll,
-    start,
-    end,
-    seq,
-    &objects);
+    ghobject_t(start, ghobject_t::NO_GEN, get_parent()->whoami_shard().shard),
+    ghobject_t(end, ghobject_t::NO_GEN, get_parent()->whoami_shard().shard),
+    parent->sort_bitwise(),
+    INT_MAX,
+    &objects,
+    NULL);
   ls->reserve(objects.size());
   for (vector<ghobject_t>::iterator i = objects.begin();
        i != objects.end();
        ++i) {
-    if (i->is_pgmeta()) {
+    if (i->is_pgmeta() || i->hobj.is_temp()) {
       continue;
     }
     if (i->is_no_gen()) {
@@ -188,7 +180,7 @@ int PGBackend::objects_get_attr(
 {
   bufferptr bp;
   int r = store->getattr(
-    hoid.is_temp() ? temp_coll : coll,
+    coll,
     ghobject_t(hoid, ghobject_t::NO_GEN, get_parent()->whoami_shard().shard),
     attr.c_str(),
     bp);
@@ -204,7 +196,7 @@ int PGBackend::objects_get_attrs(
   map<string, bufferlist> *out)
 {
   return store->getattrs(
-    hoid.is_temp() ? temp_coll : coll,
+    coll,
     ghobject_t(hoid, ghobject_t::NO_GEN, get_parent()->whoami_shard().shard),
     *out);
 }
@@ -282,29 +274,28 @@ PGBackend *PGBackend::build_pg_backend(
   const OSDMapRef curmap,
   Listener *l,
   coll_t coll,
-  coll_t temp_coll,
   ObjectStore *store,
   CephContext *cct)
 {
   switch (pool.type) {
   case pg_pool_t::TYPE_REPLICATED: {
-    return new ReplicatedBackend(l, coll, temp_coll, store, cct);
+    return new ReplicatedBackend(l, coll, store, cct);
   }
   case pg_pool_t::TYPE_ERASURE: {
     ErasureCodeInterfaceRef ec_impl;
-    const map<string,string> &profile = curmap->get_erasure_code_profile(pool.erasure_code_profile);
+    ErasureCodeProfile profile = curmap->get_erasure_code_profile(pool.erasure_code_profile);
     assert(profile.count("plugin"));
     stringstream ss;
     ceph::ErasureCodePluginRegistry::instance().factory(
       profile.find("plugin")->second,
+      g_conf->erasure_code_dir,
       profile,
       &ec_impl,
-      ss);
+      &ss);
     assert(ec_impl);
     return new ECBackend(
       l,
       coll,
-      temp_coll,
       store,
       cct,
       ec_impl,
@@ -461,7 +452,7 @@ map<pg_shard_t, ScrubMap *>::const_iterator
   for (map<pg_shard_t, ScrubMap *>::const_iterator j = maps.begin();
        j != maps.end();
        ++j) {
-    map<hobject_t, ScrubMap::object>::iterator i =
+    map<hobject_t, ScrubMap::object, hobject_t::BitwiseComparator>::iterator i =
       j->second->objects.find(obj);
     if (i == j->second->objects.end()) {
       continue;
@@ -547,18 +538,18 @@ void PGBackend::be_compare_scrubmaps(
   const map<pg_shard_t,ScrubMap*> &maps,
   bool okseed,
   bool repair,
-  map<hobject_t, set<pg_shard_t> > &missing,
-  map<hobject_t, set<pg_shard_t> > &inconsistent,
-  map<hobject_t, list<pg_shard_t> > &authoritative,
-  map<hobject_t, pair<uint32_t,uint32_t> > &missing_digest,
+  map<hobject_t, set<pg_shard_t>, hobject_t::BitwiseComparator> &missing,
+  map<hobject_t, set<pg_shard_t>, hobject_t::BitwiseComparator> &inconsistent,
+  map<hobject_t, list<pg_shard_t>, hobject_t::BitwiseComparator> &authoritative,
+  map<hobject_t, pair<uint32_t,uint32_t>, hobject_t::BitwiseComparator> &missing_digest,
   int &shallow_errors, int &deep_errors,
   const spg_t& pgid,
   const vector<int> &acting,
   ostream &errorstream)
 {
-  map<hobject_t,ScrubMap::object>::const_iterator i;
-  map<pg_shard_t, ScrubMap *>::const_iterator j;
-  set<hobject_t> master_set;
+  map<hobject_t,ScrubMap::object, hobject_t::BitwiseComparator>::const_iterator i;
+  map<pg_shard_t, ScrubMap *, hobject_t::BitwiseComparator>::const_iterator j;
+  set<hobject_t, hobject_t::BitwiseComparator> master_set;
   utime_t now = ceph_clock_now(NULL);
 
   // Construct master set
@@ -569,7 +560,7 @@ void PGBackend::be_compare_scrubmaps(
   }
 
   // Check maps against master set and each other
-  for (set<hobject_t>::const_iterator k = master_set.begin();
+  for (set<hobject_t, hobject_t::BitwiseComparator>::const_iterator k = master_set.begin();
        k != master_set.end();
        ++k) {
     object_info_t auth_oi;

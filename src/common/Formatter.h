@@ -6,10 +6,9 @@
 #include "include/int_types.h"
 
 #include <deque>
-#include <iostream>
+#include <iosfwd>
 #include <list>
 #include <vector>
-#include <ostream>
 #include <sstream>
 #include <stdarg.h>
 #include <string>
@@ -62,6 +61,12 @@ namespace ceph {
     virtual void dump_bool(const char *name, bool b)
     {
       dump_format_unquoted(name, "%s", (b ? "true" : "false"));
+    }
+    template<typename T>
+    void dump_object(const char *name, const T& foo) {
+      open_object_section(name);
+      foo.dump(this);
+      close_section();
     }
     virtual std::ostream& dump_stream(const char *name) = 0;
     virtual void dump_format_va(const char *name, const char *ns, bool quoted, const char *fmt, va_list ap) = 0;

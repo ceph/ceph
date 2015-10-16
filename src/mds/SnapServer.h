@@ -18,12 +18,12 @@
 #include "MDSTableServer.h"
 #include "snap.h"
 
-class MDS;
+class MDSRank;
+class MonClient;
 
 class SnapServer : public MDSTableServer {
-public:
-  
 protected:
+  MonClient *mon_client;
   snapid_t last_snap;
   map<snapid_t, SnapInfo> snaps;
   map<int, set<snapid_t> > need_to_purge;
@@ -35,8 +35,9 @@ protected:
   version_t last_checked_osdmap;
 
 public:
-  SnapServer(MDS *m) : MDSTableServer(m, TABLE_SNAP),
-		       last_checked_osdmap(0) { }
+  SnapServer(MDSRank *m, MonClient *monc)
+    : MDSTableServer(m, TABLE_SNAP), mon_client(monc), last_checked_osdmap(0)
+  {}
     
   void reset_state();
   void encode_server_state(bufferlist& bl) const {

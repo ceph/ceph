@@ -32,25 +32,35 @@
 #define dout_subsys ceph_subsys_ms
 
 #undef dout_prefix
+#define dout_prefix *_dout << "EventCallback "
+class C_handle_notify : public EventCallback {
+  EventCenter *center;
+  CephContext *cct;
+
+ public:
+  C_handle_notify(EventCenter *c, CephContext *cc): center(c), cct(cc) {}
+  void do_request(int fd_or_id) {
+    char c[256];
+    int r;
+    do {
+      center->already_wakeup.set(0);
+      r = read(fd_or_id, c, sizeof(c));
+      if (r < 0) {
+        ldout(cct, 1) << __func__ << " read notify pipe failed: " << cpp_strerror(errno) << dendl;
+        break;
+      }
+    } while (center->already_wakeup.read());
+  }
+};
+
+#undef dout_prefix
 #define dout_prefix _event_prefix(_dout)
+
 ostream& EventCenter::_event_prefix(std::ostream *_dout)
 {
   return *_dout << "Event(" << this << " owner=" << get_owner() << " nevent=" << nevent
                 << " time_id=" << time_event_next_id << ").";
 }
-
-class C_handle_notify : public EventCallback {
-  EventCenter *center;
-
- public:
-  C_handle_notify(EventCenter *c): center(c) {}
-  void do_request(int fd_or_id) {
-    char c[256];
-    center->already_wakeup.set(0);
-    int r = read(fd_or_id, c, sizeof(c));
-    assert(r > 0);
-  }
-};
 
 int EventCenter::init(int n)
 {
@@ -98,7 +108,7 @@ int EventCenter::init(int n)
   memset(file_events, 0, sizeof(FileEvent)*n);
 
   nevent = n;
-  create_file_event(notify_receive_fd, EVENT_READABLE, EventCallbackRef(new C_handle_notify(this)));
+  create_file_event(notify_receive_fd, EVENT_READABLE, EventCallbackRef(new C_handle_notify(this, cct)));
   return 0;
 }
 
@@ -147,8 +157,13 @@ int EventCenter::create_file_event(int fd, int mask, EventCallbackRef ctxt)
     return 0;
 
   r = driver->add_event(fd, event->mask, mask);
-  if (r < 0)
+  if (r < 0) {
+    // Actually we don't allow any failed error code, caller doesn't prepare to
+    // handle error status. So now we need to assert failure here. In practice,
+    // add_event shouldn't report error, otherwise it must be a innermost bug!
+    assert(0 == "BUG!");
     return r;
+  }
 
   event->mask |= mask;
   if (mask & EVENT_READABLE) {
@@ -177,7 +192,11 @@ void EventCenter::delete_file_event(int fd, int mask)
   if (!event->mask)
     return ;
 
-  driver->del_event(fd, event->mask, mask);
+  int r = driver->del_event(fd, event->mask, mask);
+  if (r < 0) {
+    // see create_file_event
+    assert(0 == "BUG!");
+  }
 
   if (mask & EVENT_READABLE && event->read_cb) {
     event->read_cb.reset();
@@ -348,29 +367,38 @@ int EventCenter::process_events(int timeout_microseconds)
   vector<FiredFileEvent> fired_events;
   next_time = shortest;
   numevents = driver->event_wait(fired_events, &tv);
+  file_lock.Lock();
   for (int j = 0; j < numevents; j++) {
     int rfired = 0;
     FileEvent *event;
-    {
-      Mutex::Locker l(file_lock);
-      event = _get_file_event(fired_events[j].fd);
-    }
+    EventCallbackRef cb;
+    event = _get_file_event(fired_events[j].fd);
 
+    // FIXME: Actually we need to pick up some ways to reduce potential
+    // file_lock contention here.
     /* note the event->mask & mask & ... code: maybe an already processed
     * event removed an element that fired and we still didn't
     * processed, so we check if the event is still valid. */
     if (event->mask & fired_events[j].mask & EVENT_READABLE) {
       rfired = 1;
-      event->read_cb->do_request(fired_events[j].fd);
+      cb = event->read_cb;
+      file_lock.Unlock();
+      cb->do_request(fired_events[j].fd);
+      file_lock.Lock();
     }
 
     if (event->mask & fired_events[j].mask & EVENT_WRITABLE) {
-      if (!rfired || event->read_cb != event->write_cb)
-        event->write_cb->do_request(fired_events[j].fd);
+      if (!rfired || event->read_cb != event->write_cb) {
+        cb = event->write_cb;
+        file_lock.Unlock();
+        cb->do_request(fired_events[j].fd);
+        file_lock.Lock();
+      }
     }
 
     ldout(cct, 20) << __func__ << " event_wq process is " << fired_events[j].fd << " mask is " << fired_events[j].mask << dendl;
   }
+  file_lock.Unlock();
 
   if (trigger_time)
     numevents += process_time_events();

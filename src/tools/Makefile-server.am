@@ -11,11 +11,15 @@ ceph_kvstore_tool_LDADD = $(LIBOS) $(CEPH_GLOBAL)
 ceph_kvstore_tool_CXXFLAGS = $(UNITTEST_CXXFLAGS)
 bin_DEBUGPROGRAMS += ceph-kvstore-tool
 
+if WITH_MON
+ceph_monstore_update_crushdir = $(libdir)/ceph
+ceph_monstore_update_crush_SCRIPTS = tools/ceph-monstore-update-crush.sh
+endif
 
 if WITH_OSD
 
-ceph_objectstore_tool_SOURCES = tools/ceph_objectstore_tool.cc
-ceph_objectstore_tool_LDADD = $(LIBOSD) $(LIBOS) $(CEPH_GLOBAL) $(BOOST_PROGRAM_OPTIONS_LIBS) $(LIBRADOS)
+ceph_objectstore_tool_SOURCES = tools/ceph_objectstore_tool.cc tools/RadosDump.cc
+ceph_objectstore_tool_LDADD = $(LIBOSD) $(LIBOS) $(CEPH_GLOBAL) $(BOOST_PROGRAM_OPTIONS_LIBS)
 if LINUX
 ceph_objectstore_tool_LDADD += -ldl
 endif # LINUX
@@ -46,6 +50,13 @@ cephfs_table_tool_SOURCES = \
 	tools/cephfs/MDSUtility.cc
 cephfs_table_tool_LDADD = $(LIBMDS) $(LIBRADOS) $(CEPH_GLOBAL)
 bin_PROGRAMS += cephfs-table-tool
+
+cephfs_data_scan_SOURCES = \
+	tools/cephfs/cephfs-data-scan.cc \
+	tools/cephfs/DataScan.cc \
+	tools/cephfs/MDSUtility.cc
+cephfs_data_scan_LDADD = $(LIBMDS) libcls_cephfs_client.la $(LIBRADOS) $(CEPH_GLOBAL)
+bin_PROGRAMS += cephfs-data-scan
 
 endif # WITH_RADOS
 endif # ENABLE_CLIENT

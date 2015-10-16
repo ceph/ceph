@@ -77,6 +77,19 @@ map<string, string> map_options; // -o / --options map
 
 #define dout_subsys ceph_subsys_rbd
 
+namespace {
+
+void aio_context_callback(librbd::completion_t completion, void *arg)
+{
+  librbd::RBD::AioCompletion *aio_completion =
+    reinterpret_cast<librbd::RBD::AioCompletion*>(completion);
+  Context *context = reinterpret_cast<Context *>(arg);
+  context->complete(aio_completion->get_return_value());
+  aio_completion->release();
+}
+
+} // anonymous namespace
+
 static std::map<uint64_t, std::string> feature_mapping =
   boost::assign::map_list_of(
     RBD_FEATURE_LAYERING, "layering")(
@@ -91,84 +104,94 @@ void usage()
   cout <<
 "usage: rbd [-n <auth user>] [OPTIONS] <cmd> ...\n"
 "where 'pool' is a rados pool name (default is 'rbd') and 'cmd' is one of:\n"
-"  (ls | list) [-l | --long ] [pool-name] list rbd images\n"
+"  (ls | list) [-l | --long ] [pool-name]      list rbd images\n"
 "                                              (-l includes snapshots/clones)\n"
-"  (du | disk-usage) [--image <name>] [pool-name]\n"
-"                                              show pool image disk usage stats\n"
-"  info <image-name>                           show information about image size,\n"
+"  (du | disk-usage) [<image-spec> | <snap-spec>]\n"
+"                                              show disk usage stats for pool,\n"
+"                                              image or snapshot\n"
+"  info <image-spec> | <snap-spec>             show information about image size,\n"
 "                                              striping, etc.\n"
 "  create [--order <bits>] [--image-features <features>] [--image-shared]\n"
-"         --size <MB> <name>                   create an empty image\n"
+"         --size <M/G/T> <image-spec>          create an empty image\n"
 "  clone [--order <bits>] [--image-features <features>] [--image-shared]\n"
-"        <parentsnap> <clonename>              clone a snapshot into a COW\n"
+"         <parent-snap-spec> <child-image-spec>\n"
+"                                              clone a snapshot into a COW\n"
 "                                              child image\n"
-"  children <snap-name>                        display children of snapshot\n"
-"  flatten <image-name>                        fill clone with parent data\n"
+"  children <snap-spec>                        display children of snapshot\n"
+"  flatten <image-spec>                        fill clone with parent data\n"
 "                                              (make it independent)\n"
-"  resize --size <MB> <image-name>             resize (expand or contract) image\n"
-"  rm <image-name>                             delete an image\n"
-"  export <image-name> <path>                  export image to file\n"
+"  resize --size <M/G/T> <image-spec>          resize (expand or contract) image\n"
+"  rm <image-spec>                             delete an image\n"
+"  export (<image-spec> | <snap-spec>) [<path>]\n"
+"                                              export image to file\n"
 "                                              \"-\" for stdout\n"
 "  import [--image-features <features>] [--image-shared]\n"
-"         <path> <image-name>                  import image from file (dest\n"
-"                                              defaults as the filename part\n"
-"                                              of file). \"-\" for stdin\n"
-"  diff [--from-snap <snap-name>] [--object-extents] <image-name>\n"
-"                                              print extents that differ since\n"
+"         <path> [<image-spec>]                import image from file\n"
+"                                              \"-\" for stdin\n"
+"                                              \"rbd/$(basename <path>)\" is\n"
+"                                              assumed for <image-spec> if\n"
+"                                              omitted\n"
+"  diff [--from-snap <snap-name>] [--whole-object]\n"
+"         <image-spec> | <snap-spec>           print extents that differ since\n"
 "                                              a previous snap, or image creation\n"
-"  export-diff [--from-snap <snap-name>] [--object-extents] <image-name> <path>\n"
-"                                              export an incremental diff to\n"
+"  export-diff [--from-snap <snap-name>] [--whole-object]\n"
+"         (<image-spec> | <snap-spec>) <path>  export an incremental diff to\n"
 "                                              path, or \"-\" for stdout\n"
 "  merge-diff <diff1> <diff2> <path>           merge <diff1> and <diff2> into\n"
 "                                              <path>, <diff1> could be \"-\"\n"
 "                                              for stdin, and <path> could be \"-\"\n"
 "                                              for stdout\n"
-"  import-diff <path> <image-name>             import an incremental diff from\n"
+"  import-diff <path> <image-spec>             import an incremental diff from\n"
 "                                              path or \"-\" for stdin\n"
-"  (cp | copy) <src> <dest>                    copy src image to dest\n"
-"  (mv | rename) <src> <dest>                  rename src image to dest\n"
-"  image-meta list <image-name>                image metadata list keys with values\n"
-"  image-meta get <image-name> <key>           image metadata get the value associated with the key\n"
-"  image-meta set <image-name> <key> <value>   image metadata set key with value\n"
-"  image-meta remove <image-name> <key>        image metadata remove the key and value associated\n"
-"  object-map rebuild <image-name>             rebuild an invalid object map\n"
-"  snap ls <image-name>                        dump list of image snapshots\n"
-"  snap create <snap-name>                     create a snapshot\n"
-"  snap rollback <snap-name>                   rollback image to snapshot\n"
-"  snap rm <snap-name>                         deletes a snapshot\n"
-"  snap purge <image-name>                     deletes all snapshots\n"
-"  snap protect <snap-name>                    prevent a snapshot from being deleted\n"
-"  snap unprotect <snap-name>                  allow a snapshot to be deleted\n"
-"  watch <image-name>                          watch events on image\n"
-"  status <image-name>                         show the status of this image\n"
-"  map <image-name>                            map image to a block device\n"
+"  (cp | copy) (<src-image-spec> | <src-snap-spec>) <dest-image-spec>\n"
+"                                              copy src image to dest\n"
+"  (mv | rename) <src-image-spec> <dest-image-spec>\n"
+"                                              rename src image to dest\n"
+"  image-meta list <image-spec>                image metadata list keys with values\n"
+"  image-meta get <image-spec> <key>           image metadata get the value associated with the key\n"
+"  image-meta set <image-spec> <key> <value>   image metadata set key with value\n"
+"  image-meta remove <image-spec> <key>        image metadata remove the key and value associated\n"
+"  object-map rebuild <image-spec> | <snap-spec>\n"
+"                                              rebuild an invalid object map\n"
+"  snap ls <image-spec>                        dump list of image snapshots\n"
+"  snap create <snap-spec>                     create a snapshot\n"
+"  snap rollback <snap-spec>                   rollback image to snapshot\n"
+"  snap rm <snap-spec>                         deletes a snapshot\n"
+"  snap purge <image-spec>                     deletes all snapshots\n"
+"  snap protect <snap-spec>                    prevent a snapshot from being deleted\n"
+"  snap unprotect <snap-spec>                  allow a snapshot to be deleted\n"
+"  watch <image-spec>                          watch events on image\n"
+"  status <image-spec>                         show the status of this image\n"
+"  map <image-spec> | <snap-spec>              map image to a block device\n"
 "                                              using the kernel\n"
-"  unmap <image-name> | <device>               unmap a rbd device that was\n"
+"  unmap <image-spec> | <snap-spec> | <device> unmap a rbd device that was\n"
 "                                              mapped by the kernel\n"
 "  showmapped                                  show the rbd images mapped\n"
 "                                              by the kernel\n"
-"  feature disable <image-name> <feature>      disable the specified image feature\n"
-"  feature enable <image-name> <feature>       enable the specified image feature\n"
-"  lock list <image-name>                      show locks held on an image\n"
-"  lock add <image-name> <id> [--shared <tag>] take a lock called id on an image\n"
-"  lock remove <image-name> <id> <locker>      release a lock on an image\n"
-"  bench-write <image-name>                    simple write benchmark\n"
-"                 --io-size <bytes>              write size\n"
-"                 --io-threads <num>             ios in flight\n"
-"                 --io-total <bytes>             total bytes to write\n"
-"                 --io-pattern <seq|rand>        write pattern\n"
+"  feature disable <image-spec> <feature>      disable the specified image feature\n"
+"  feature enable <image-spec> <feature>       enable the specified image feature\n"
+"  lock list <image-spec>                      show locks held on an image\n"
+"  lock add <image-spec> <id> [--shared <tag>] take a lock called id on an image\n"
+"  lock remove <image-spec> <id> <locker>      release a lock on an image\n"
+"  bench-write <image-spec>                    simple write benchmark\n"
+"               --io-size <size in B/K/M/G/T>    write size\n"
+"               --io-threads <num>               ios in flight\n"
+"               --io-total <size in B/K/M/G/T>   total size to write\n"
+"               --io-pattern <seq|rand>          write pattern\n"
 "\n"
-"<image-name>, <snap-name> are [pool/]name[@snap], or you may specify\n"
-"individual pieces of names with -p/--pool, --image, and/or --snap.\n"
+"<image-spec> is [<pool-name>]/<image-name>,\n"
+"<snap-spec> is [<pool-name>]/<image-name>@<snap-name>,\n"
+"or you may specify individual pieces of names with -p/--pool <pool-name>,\n"
+"--image <image-name> and/or --snap <snap-name>.\n"
 "\n"
 "Other input options:\n"
-"  -p, --pool <pool>                  source pool name\n"
+"  -p, --pool <pool-name>             source pool name\n"
+"  --dest-pool <pool-name>            destination pool name\n"
 "  --image <image-name>               image name\n"
-"  --dest <image-name>                destination [pool and] image name\n"
+"  --dest <image-name>                destination image name\n"
 "  --snap <snap-name>                 snapshot name\n"
-"  --dest-pool <name>                 destination pool name\n"
 "  --path <path-name>                 path name for import/export\n"
-"  --size <size in MB>                size of image for create and resize\n"
+"  -s, --size <size in M/G/T>         size of image for create and resize\n"
 "  --order <bits>                     the object size in bits; object size will be\n"
 "                                     (1 << order) bytes. Default is 22 (4 MB).\n"
 "  --image-format <format-number>     format to use when creating an image\n"
@@ -178,11 +201,12 @@ void usage()
 "                                     use multiple times to enable multiple features\n"
 "  --image-shared                     image will be used concurrently (disables\n"
 "                                     RBD exclusive lock and dependent features)\n"
-"  --stripe-unit <size-in-bytes>      size (in bytes) of a block of data\n"
+"  --stripe-unit <size in B/K/M>      size of a block of data\n"
 "  --stripe-count <num>               number of consecutive objects in a stripe\n"
 "  --id <username>                    rados user (without 'client.'prefix) to\n"
 "                                     authenticate as\n"
 "  --keyfile <path>                   file containing secret key for use with cephx\n"
+"  --keyring <path>                   file containing keyring for use with cephx\n"
 "  --shared <tag>                     take a shared (rather than exclusive) lock\n"
 "  --format <output-format>           output format (default: plain, json, xml)\n"
 "  --pretty-format                    make json or xml output more readable\n"
@@ -761,23 +785,37 @@ static int do_purge_snaps(librbd::Image& image)
 {
   MyProgressContext pc("Removing all snapshots");
   std::vector<librbd::snap_info_t> snaps;
+  bool is_protected = false;
   int r = image.snap_list(snaps);
   if (r < 0) {
     pc.fail();
     return r;
-  }
-
-  for (size_t i = 0; i < snaps.size(); ++i) {
-    r = image.snap_remove(snaps[i].name.c_str());
-    if (r < 0) {
-      pc.fail();
-      return r;
+  } else if (0 == snaps.size()) {
+    return 0;
+  } else {  
+    for (size_t i = 0; i < snaps.size(); ++i) {
+      r = image.snap_is_protected(snaps[i].name.c_str(), &is_protected);      
+      if (r < 0) {
+        pc.fail();
+        return r;
+      } else if (is_protected == true) {
+        pc.fail();
+        cerr << "\r" << "rbd: snapshot '" <<snaps[i].name.c_str()<< "' is protected from removal." << std::endl;
+        return -EBUSY;
+      }
     }
-    pc.update_progress(i + 1, snaps.size());
-  }
+    for (size_t i = 0; i < snaps.size(); ++i) {
+      r = image.snap_remove(snaps[i].name.c_str());
+      if (r < 0) {
+        pc.fail();
+        return r;
+      }
+      pc.update_progress(i + 1, snaps.size());
+    }
 
-  pc.finish();
-  return 0;
+    pc.finish();
+    return 0;
+  }
 }
 
 static int do_protect_snap(librbd::Image& image, const char *snapname)
@@ -1024,15 +1062,7 @@ static int do_bench_write(librbd::Image& image, uint64_t io_size,
   for (off = 0; off < io_bytes; ) {
     b.wait_for(io_threads - 1);
     i = 0;
-    while (i < io_threads && off < io_bytes &&
-	   b.start_write(io_threads, thread_offset[i], io_size, bl, op_flags)) {
-      ++i;
-      ++ios;
-      off += io_size;
-
-      ++cur_ios;
-      cur_off += io_size;
-
+    while (i < io_threads && off < io_bytes) {
       if (pattern == "rand") {
         thread_offset[i] = (rand() % (size / io_size)) * io_size;
       } else {
@@ -1040,6 +1070,16 @@ static int do_bench_write(librbd::Image& image, uint64_t io_size,
         if (thread_offset[i] + io_size > size)
           thread_offset[i] = 0;
       }
+
+      if (!b.start_write(io_threads, thread_offset[i], io_size, bl, op_flags))
+	break;
+
+      ++i;
+      ++ios;
+      off += io_size;
+
+      ++cur_ios;
+      cur_off += io_size;
     }
 
     utime_t now = ceph_clock_now(NULL);
@@ -1077,46 +1117,31 @@ static int do_bench_write(librbd::Image& image, uint64_t io_size,
   return 0;
 }
 
-struct ExportContext {
-  librbd::Image *image;
-  int fd;
-  uint64_t totalsize;
-  MyProgressContext pc;
-
-  ExportContext(librbd::Image *i, int f, uint64_t t) :
-    image(i),
-    fd(f),
-    totalsize(t),
-    pc("Exporting image")
-  {}
-};
-
-class AioExportContext : public Context
+class C_Export : public Context
 {
 public:
-  AioExportContext(SimpleThrottle &simple_throttle, librbd::Image &image,
+  C_Export(SimpleThrottle &simple_throttle, librbd::Image &image,
                    uint64_t offset, uint64_t length, int fd)
     : m_aio_completion(
-        new librbd::RBD::AioCompletion(this, &AioExportContext::aio_callback)),
-      m_throttle(simple_throttle),
-      m_offset(offset),
-      m_fd(fd)
+        new librbd::RBD::AioCompletion(this, &aio_context_callback)),
+      m_throttle(simple_throttle), m_image(image), m_offset(offset),
+      m_length(length), m_fd(fd)
+  {
+  }
+
+  void send()
   {
     m_throttle.start_op();
 
     int op_flags = LIBRADOS_OP_FLAG_FADVISE_SEQUENTIAL |
 		   LIBRADOS_OP_FLAG_FADVISE_NOCACHE;
-    int r = image.aio_read2(offset, length, m_bufferlist, m_aio_completion,
-			    op_flags);
+    int r = m_image.aio_read2(m_offset, m_length, m_bufferlist,
+                              m_aio_completion, op_flags);
     if (r < 0) {
       cerr << "rbd: error requesting read from source image" << std::endl;
+      m_aio_completion->release();
       m_throttle.end_op(r);
     }
-  }
-
-  virtual ~AioExportContext()
-  {
-    m_aio_completion->release();
   }
 
   virtual void finish(int r)
@@ -1154,19 +1179,13 @@ public:
     }
   }
 
-  static void aio_callback(librbd::completion_t completion, void *arg)
-  {
-    librbd::RBD::AioCompletion *aio_completion =
-      reinterpret_cast<librbd::RBD::AioCompletion*>(completion);
-    AioExportContext *export_context = reinterpret_cast<AioExportContext*>(arg);
-    export_context->complete(aio_completion->get_return_value());
-  }
-
 private:
   librbd::RBD::AioCompletion *m_aio_completion;
   SimpleThrottle &m_throttle;
+  librbd::Image &m_image;
   bufferlist m_bufferlist;
   uint64_t m_offset;
+  uint64_t m_length;
   int m_fd;
 };
 
@@ -1197,8 +1216,14 @@ static int do_export(librbd::Image& image, const char *path)
   SimpleThrottle throttle(max_concurrent_ops, false);
   uint64_t period = image.get_stripe_count() * (1ull << info.order);
   for (uint64_t offset = 0; offset < info.size; offset += period) {
+    if (throttle.pending_error()) {
+      break;
+    }
+
     uint64_t length = min(period, info.size - offset);
-    new AioExportContext(throttle, image, offset, length, fd);
+    C_Export *ctx = new C_Export(throttle, image, offset, length, fd);
+    ctx->send();
+
     pc.update_progress(offset, info.size);
   }
 
@@ -1218,40 +1243,96 @@ static int do_export(librbd::Image& image, const char *path)
   return r;
 }
 
-static int export_diff_cb(uint64_t ofs, size_t _len, int exists, void *arg)
-{
-  ExportContext *ec = static_cast<ExportContext *>(arg);
-  int r;
+struct ExportDiffContext {
+  librbd::Image *image;
+  int fd;
+  uint64_t totalsize;
+  MyProgressContext pc;
+  OrderedThrottle throttle;
 
-  // extent
-  bufferlist bl;
-  __u8 tag = exists ? 'w' : 'z';
-  ::encode(tag, bl);
-  ::encode(ofs, bl);
-  uint64_t len = _len;
-  ::encode(len, bl);
-  r = bl.write_fd(ec->fd);
-  if (r < 0)
-    return r;
+  ExportDiffContext(librbd::Image *i, int f, uint64_t t, int max_ops) :
+    image(i), fd(f), totalsize(t), pc("Exporting image"),
+    throttle(max_ops, true) {
+  }
+};
 
-  if (exists) {
-    // read block
-    bl.clear();
-    r = ec->image->read2(ofs, len, bl, LIBRADOS_OP_FLAG_FADVISE_NOCACHE);
-    if (r < 0)
-      return r;
-    r = bl.write_fd(ec->fd);
-    if (r < 0)
-      return r;
+class C_ExportDiff : public Context {
+public:
+  C_ExportDiff(ExportDiffContext *edc, uint64_t offset, uint64_t length,
+               bool exists)
+    : m_export_diff_context(edc), m_offset(offset), m_length(length),
+      m_exists(exists) {
   }
 
-  ec->pc.update_progress(ofs, ec->totalsize);
+  int send() {
+    if (m_export_diff_context->throttle.pending_error()) {
+      return m_export_diff_context->throttle.wait_for_ret();
+    }
 
-  return 0;
-}
+    C_OrderedThrottle *ctx = m_export_diff_context->throttle.start_op(this);
+    if (m_exists) {
+      librbd::RBD::AioCompletion *aio_completion =
+        new librbd::RBD::AioCompletion(ctx, &aio_context_callback);
+
+      int op_flags = LIBRADOS_OP_FLAG_FADVISE_NOCACHE;
+      int r = m_export_diff_context->image->aio_read2(
+        m_offset, m_length, m_read_data, aio_completion, op_flags);
+      if (r < 0) {
+        aio_completion->release();
+        ctx->complete(r);
+      }
+    } else {
+      ctx->complete(0);
+    }
+    return 0;
+  }
+
+  static int export_diff_cb(uint64_t offset, size_t length, int exists,
+                            void *arg) {
+    ExportDiffContext *edc = reinterpret_cast<ExportDiffContext *>(arg);
+
+    C_ExportDiff *context = new C_ExportDiff(edc, offset, length, exists);
+    return context->send();
+  }
+
+protected:
+  virtual void finish(int r) {
+    if (r >= 0) {
+      if (m_exists) {
+        m_exists = !m_read_data.is_zero();
+      }
+      r = write_extent(m_export_diff_context, m_offset, m_length, m_exists);
+      if (r == 0 && m_exists) {
+        r = m_read_data.write_fd(m_export_diff_context->fd);
+      }
+    }
+    m_export_diff_context->throttle.end_op(r);
+  }
+
+private:
+  ExportDiffContext *m_export_diff_context;
+  uint64_t m_offset;
+  uint64_t m_length;
+  bool m_exists;
+  bufferlist m_read_data;
+
+  static int write_extent(ExportDiffContext *edc, uint64_t offset,
+                          uint64_t length, bool exists) {
+    // extent
+    bufferlist bl;
+    __u8 tag = exists ? 'w' : 'z';
+    ::encode(tag, bl);
+    ::encode(offset, bl);
+    ::encode(length, bl);
+    int r = bl.write_fd(edc->fd);
+
+    edc->pc.update_progress(offset, edc->totalsize);
+    return r;
+  }
+};
 
 static int do_export_diff(librbd::Image& image, const char *fromsnapname,
-			  const char *endsnapname, bool object_extents,
+			  const char *endsnapname, bool whole_object,
 			  const char *path)
 {
   int r;
@@ -1268,6 +1349,13 @@ static int do_export_diff(librbd::Image& image, const char *fromsnapname,
     fd = open(path, O_WRONLY | O_CREAT | O_EXCL, 0644);
   if (fd < 0)
     return -errno;
+
+  BOOST_SCOPE_EXIT((&r) (&fd) (&path)) {
+    close(fd);
+    if (r < 0 && fd != 1) {
+      remove(path);
+    }
+  } BOOST_SCOPE_EXIT_END
 
   {
     // header
@@ -1296,16 +1384,22 @@ static int do_export_diff(librbd::Image& image, const char *fromsnapname,
 
     r = bl.write_fd(fd);
     if (r < 0) {
-      close(fd);
       return r;
     }
   }
 
-  ExportContext ec(&image, fd, info.size);
-  r = image.diff_iterate2(fromsnapname, 0, info.size, true, object_extents,
-                          export_diff_cb, (void *)&ec);
-  if (r < 0)
+  ExportDiffContext edc(&image, fd, info.size,
+                        g_conf->rbd_concurrent_management_ops);
+  r = image.diff_iterate2(fromsnapname, 0, info.size, true, whole_object,
+                          &C_ExportDiff::export_diff_cb, (void *)&edc);
+  if (r < 0) {
     goto out;
+  }
+
+  r = edc.throttle.wait_for_ret();
+  if (r < 0) {
+    goto out;
+  }
 
   {
     __u8 tag = 'e';
@@ -1315,11 +1409,10 @@ static int do_export_diff(librbd::Image& image, const char *fromsnapname,
   }
 
  out:
-  close(fd);
   if (r < 0)
-    ec.pc.fail();
+    edc.pc.fail();
   else
-    ec.pc.finish();
+    edc.pc.finish();
   return r;
 }
 
@@ -1348,7 +1441,7 @@ static int diff_cb(uint64_t ofs, size_t len, int exists, void *arg)
 }
 
 static int do_diff(librbd::Image& image, const char *fromsnapname,
-                   bool object_extents, Formatter *f)
+                   bool whole_object, Formatter *f)
 {
   int r;
   librbd::image_info_t info;
@@ -1368,7 +1461,7 @@ static int do_diff(librbd::Image& image, const char *fromsnapname,
     om.t->define_column("Type", TextTable::LEFT, TextTable::LEFT);
   }
 
-  r = image.diff_iterate2(fromsnapname, 0, info.size, true, object_extents,
+  r = image.diff_iterate2(fromsnapname, 0, info.size, true, whole_object,
                           diff_cb, &om);
   if (f) {
     f->close_section();
@@ -1437,31 +1530,31 @@ done_img:
   update_snap_name(*new_img, snap);
 }
 
-class AioImportContext : public Context
+class C_Import : public Context
 {
 public:
-  AioImportContext(SimpleThrottle &simple_throttle, librbd::Image &image,
-                   bufferlist &bl, uint64_t offset)
-    : m_throttle(simple_throttle),
+  C_Import(SimpleThrottle &simple_throttle, librbd::Image &image,
+           bufferlist &bl, uint64_t offset)
+    : m_throttle(simple_throttle), m_image(image),
       m_aio_completion(
-        new librbd::RBD::AioCompletion(this, &AioImportContext::aio_callback)),
+        new librbd::RBD::AioCompletion(this, &aio_context_callback)),
       m_bufferlist(bl), m_offset(offset)
+  {
+  }
+
+  void send()
   {
     m_throttle.start_op();
 
     int op_flags = LIBRADOS_OP_FLAG_FADVISE_SEQUENTIAL |
 		   LIBRADOS_OP_FLAG_FADVISE_NOCACHE;
-    int r = image.aio_write2(m_offset, m_bufferlist.length(), m_bufferlist,
-			     m_aio_completion, op_flags);
+    int r = m_image.aio_write2(m_offset, m_bufferlist.length(), m_bufferlist,
+			       m_aio_completion, op_flags);
     if (r < 0) {
       cerr << "rbd: error requesting write to destination image" << std::endl;
+      m_aio_completion->release();
       m_throttle.end_op(r);
     }
-  }
-
-  virtual ~AioImportContext()
-  {
-    m_aio_completion->release();
   }
 
   virtual void finish(int r)
@@ -1473,16 +1566,9 @@ public:
     m_throttle.end_op(r);
   }
 
-  static void aio_callback(librbd::completion_t completion, void *arg)
-  {
-    librbd::RBD::AioCompletion *aio_completion =
-      reinterpret_cast<librbd::RBD::AioCompletion*>(completion);
-    AioImportContext *import_context = reinterpret_cast<AioImportContext*>(arg);
-    import_context->complete(aio_completion->get_return_value());
-  }
-
 private:
   SimpleThrottle &m_throttle;
+  librbd::Image &m_image;
   librbd::RBD::AioCompletion *m_aio_completion;
   bufferlist m_bufferlist;
   uint64_t m_offset;
@@ -1567,6 +1653,10 @@ static int do_import(librbd::RBD &rbd, librados::IoCtx& io_ctx,
 
   // loop body handles 0 return, as we may have a block to flush
   while ((readlen = ::read(fd, p + blklen, reqlen)) >= 0) {
+    if (throttle->pending_error()) {
+      break;
+    }
+
     blklen += readlen;
     // if read was short, try again to fill the block before writing
     if (readlen && ((size_t)readlen < reqlen)) {
@@ -1591,7 +1681,8 @@ static int do_import(librbd::RBD &rbd, librados::IoCtx& io_ctx,
     // write as much as we got; perhaps less than imgblklen
     // but skip writing zeros to create sparse images
     if (!bl.is_zero()) {
-      new AioImportContext(*throttle, image, bl, image_pos);
+      C_Import *ctx = new C_Import(*throttle, image, bl, image_pos);
+      ctx->send();
     }
 
     // done with whole block, whether written or not
@@ -1615,7 +1706,7 @@ static int do_import(librbd::RBD &rbd, librados::IoCtx& io_ctx,
     }
   }
 
-  r = 0;
+  r = image.close();
 
  done:
   if (!from_stdin) {
@@ -1975,12 +2066,16 @@ static int do_merge_diff(const char *first, const char *second, const char *path
   // and the (offset,length) in wztag must be ascending order.
 
   r = parse_diff_header(fd, &f_tag, &f_from, &f_to, &f_size);
-  if (r < 0)
+  if (r < 0) {
+    cerr << "rbd: failed to parse first diff header" << std::endl;
     goto done;
+  }
 
   r = parse_diff_header(sd, &s_tag, &s_from, &s_to, &s_size);
-  if (r < 0)
+  if (r < 0) {
+    cerr << "rbd: failed to parse second diff header" << std::endl;
     goto done;
+  }
 
   if (f_to != s_from) {
     r = -EINVAL;
@@ -2011,8 +2106,10 @@ static int do_merge_diff(const char *first, const char *second, const char *path
     ::encode(s_size, bl);
 
     r = bl.write_fd(pd);
-    if (r < 0)
+    if (r < 0) {
+      cerr << "rbd: failed to write merged diff header" << std::endl;
       goto done;
+    }
   }
 
   if (f_size > s_size)
@@ -2029,8 +2126,13 @@ static int do_merge_diff(const char *first, const char *second, const char *path
       uint64_t last_off = f_off;
 
       r = parse_diff_body(fd, &f_tag, &f_off, &f_len);
-      if (r < 0)
+      dout(2) << "first diff data chunk: tag=" << f_tag << ", "
+              << "off=" << f_off << ", "
+              << "len=" << f_len << dendl;
+      if (r < 0) {
+        cerr << "rbd: failed to read first diff data chunk header" << std::endl;
         goto done;
+      }
 
       if (f_tag == 'e') {
         f_end = true;
@@ -2044,6 +2146,8 @@ static int do_merge_diff(const char *first, const char *second, const char *path
 
       if (last_off > f_off) {
         r = -ENOTSUP;
+        cerr << "rbd: out-of-order offset from first diff ("
+             << last_off << " > " << f_off << ")" << std::endl;
         goto done;
       }
     }
@@ -2052,8 +2156,14 @@ static int do_merge_diff(const char *first, const char *second, const char *path
       uint64_t last_off = s_off;
 
       r = parse_diff_body(sd, &s_tag, &s_off, &s_len);
-      if (r < 0)
+      dout(2) << "second diff data chunk: tag=" << f_tag << ", "
+              << "off=" << f_off << ", "
+              << "len=" << f_len << dendl;
+      if (r < 0) {
+        cerr << "rbd: failed to read second diff data chunk header"
+             << std::endl;
         goto done;
+      }
 
       if (s_tag == 'e') {
         s_end = true;
@@ -2066,6 +2176,8 @@ static int do_merge_diff(const char *first, const char *second, const char *path
 
       if (last_off > s_off) {
         r = -ENOTSUP;
+        cerr << "rbd: out-of-order offset from second diff ("
+             << last_off << " > " << s_off << ")" << std::endl;
         goto done;
       }
     }
@@ -2093,12 +2205,12 @@ static int do_merge_diff(const char *first, const char *second, const char *path
         if (first_stdin) {
           bufferptr bp = buffer::create(delta);
           r = safe_read_exact(fd, bp.c_str(), delta);
-          if (r < 0)
-            goto done;
         } else {
           r = lseek(fd, delta, SEEK_CUR);
-          if(r < 0)
-            goto done;
+        }
+        if (r < 0) {
+          cerr << "rbd: failed to skip first diff data" << std::endl;
+          goto done;
         }
       }
       f_off += delta;
@@ -2153,8 +2265,10 @@ static int do_metadata_list(librbd::Image& image, Formatter *f)
   TextTable tbl;
 
   r = image.metadata_list("", 0, &pairs);
-  if (r < 0)
+  if (r < 0) {
+    cerr << "failed to list metadata of image : " << cpp_strerror(r) << std::endl;
     return r;
+  }
 
   if (f) {
     f->open_object_section("metadatas");
@@ -2173,10 +2287,11 @@ static int do_metadata_list(librbd::Image& image, Formatter *f)
 
     for (map<string, bufferlist>::iterator it = pairs.begin();
          it != pairs.end(); ++it) {
+      string val(it->second.c_str(), it->second.length());
       if (f) {
-        f->dump_string(it->first.c_str(), it->second.c_str());
+        f->dump_string(it->first.c_str(), val.c_str());
       } else {
-        tbl << it->first << it->second.c_str() << TextTable::endrow;
+        tbl << it->first << val.c_str() << TextTable::endrow;
       }
     }
     if (!f)
@@ -2193,22 +2308,32 @@ static int do_metadata_list(librbd::Image& image, Formatter *f)
 static int do_metadata_set(librbd::Image& image, const char *key,
                           const char *value)
 {
-  return image.metadata_set(key, value);
+  int r = image.metadata_set(key, value);
+  if (r < 0) {
+    cerr << "failed to set metadata " << key << " of image : " << cpp_strerror(r) << std::endl;
+  }
+  return r;
 }
 
 static int do_metadata_remove(librbd::Image& image, const char *key)
 {
-  return image.metadata_remove(key);
+  int r = image.metadata_remove(key);
+  if (r < 0) {
+    cerr << "failed to remove metadata " << key << " of image : " << cpp_strerror(r) << std::endl;
+  }
+  return r;
 }
 
 static int do_metadata_get(librbd::Image& image, const char *key)
 {
   string s;
   int r = image.metadata_get(key, &s);
-  if (r < 0)
+  if (r < 0) {
+    cerr << "failed to get metadata " << key << " of image : " << cpp_strerror(r) << std::endl;
     return r;
-  cout << s;
-  return 0;
+  }
+  cout << s << std::endl;
+  return r;
 }
 
 static int do_copy(librbd::Image &src, librados::IoCtx& dest_pp,
@@ -2545,6 +2670,9 @@ static int parse_map_options(char *options)
         return 1;
     } else if (!strcmp(this_char, "rw") || !strcmp(this_char, "ro")) {
       put_map_option("rw", this_char);
+    } else if (!strcmp(this_char, "queue_depth")) {
+      if (put_map_option_value("queue_depth", value_char, map_option_int_cb))
+        return 1;
     } else {
       cerr << "rbd: unknown map option '" << this_char << "'" << std::endl;
       return 1;
@@ -2971,11 +3099,12 @@ int main(int argc, const char **argv)
   long long stripe_unit = 0, stripe_count = 0;
   long long bench_io_size = 4096, bench_io_threads = 16, bench_bytes = 1 << 30;
   string bench_pattern = "seq";
-  bool diff_object_extents = false;
+  bool diff_whole_object = false;
+  bool input_feature = false;
 
   std::string val, parse_err;
   std::ostringstream err;
-  long long sizell = 0;
+  uint64_t sizell = 0;
   std::vector<const char*>::iterator i;
   for (i = args.begin(); i != args.end(); ) {
     if (ceph_argparse_double_dash(args, i)) {
@@ -2998,7 +3127,10 @@ int main(int argc, const char **argv)
 	return EXIT_FAILURE;
       }
       format_specified = true;
-      g_conf->set_val_or_die("rbd_default_format", val.c_str());
+      if (0 != g_conf->set_val("rbd_default_format", val.c_str())) {
+        cerr << "rbd: image format must be 1 or 2" << std::endl;
+        return EXIT_FAILURE;
+      }
     } else if (ceph_argparse_witharg(args, i, &val, "-p", "--pool", (char*)NULL)) {
       poolname = strdup(val.c_str());
     } else if (ceph_argparse_witharg(args, i, &val, "--dest-pool", (char*)NULL)) {
@@ -3009,41 +3141,69 @@ int main(int argc, const char **argv)
       fromsnapname = strdup(val.c_str());
     } else if (ceph_argparse_witharg(args, i, &val, "-i", "--image", (char*)NULL)) {
       imgname = strdup(val.c_str());
-    } else if (ceph_argparse_witharg(args, i, &sizell, err, "-s", "--size", (char*)NULL)) {
+    } else if (ceph_argparse_witharg(args, i, &val, err, "-s", "--size", (char*)NULL)) {
       if (!err.str().empty()) {
-	cerr << "rbd: " << err.str() << std::endl;
-	return EXIT_FAILURE;
+        cerr << "rbd: " << err.str() << std::endl;
+        return EXIT_FAILURE;
       }
-      if (sizell < 0) {
-	cerr << "rbd: size must be >= 0" << std::endl;
-	return EXIT_FAILURE;
+      const char *sizeval = val.c_str();
+      size = strict_sistrtoll(sizeval, &parse_err);
+      if (!parse_err.empty()) {
+        cerr << "rbd: error parsing --size " << parse_err << std::endl;
+        return EXIT_FAILURE;
       }
-      size = sizell << 20;   // bytes to MB
+      //NOTE: We can remove below given three lines of code once all applications,
+      //which use this CLI will adopt B/K/M/G/T/P/E with size value 
+      sizell = atoll(sizeval);
+      if (size == sizell) 
+        size = size << 20;   // Default MB to Bytes
       size_set = true;
     } else if (ceph_argparse_flag(args, i, "-l", "--long", (char*)NULL)) {
       lflag = true;
-    } else if (ceph_argparse_witharg(args, i, &stripe_unit, err, "--stripe-unit", (char*)NULL)) {
+    } else if (ceph_argparse_witharg(args, i, &val, err, "--stripe-unit", (char*)NULL)) {
+      if (!err.str().empty()) {
+        cerr << "rbd: " << err.str() << std::endl;
+        return EXIT_FAILURE;
+      }
+      const char *stripeval = val.c_str();
+      stripe_unit = strict_sistrtoll(stripeval, &parse_err);
+      if (!parse_err.empty()) {
+        cerr << "rbd: error parsing --stripe-unit " << parse_err << std::endl;
+        return EXIT_FAILURE;
+      }
     } else if (ceph_argparse_witharg(args, i, &stripe_count, err, "--stripe-count", (char*)NULL)) {
     } else if (ceph_argparse_witharg(args, i, &order, err, "--order", (char*)NULL)) {
       if (!err.str().empty()) {
 	cerr << "rbd: " << err.str() << std::endl;
 	return EXIT_FAILURE;
       }
-      if ((order <= 0) || (order < 12) || (order > 25)) {
-	cerr << "rbd: order must be between 12 (4 KB) and 25 (32 MB)" << std::endl;
-	return EXIT_FAILURE;
-      }
-    } else if (ceph_argparse_witharg(args, i, &bench_io_size, err, "--io-size", (char*)NULL)) {
+    } else if (ceph_argparse_witharg(args, i, &val, err, "--io-size", (char*)NULL)) {
       if (!err.str().empty()) {
 	cerr << "rbd: " << err.str() << std::endl;
 	return EXIT_FAILURE;
+      }
+      const char *iosval = val.c_str();
+      bench_io_size = strict_sistrtoll(iosval, &parse_err);
+      if (!parse_err.empty()) {
+        cerr << "rbd: error parsing --io-size " << parse_err << std::endl;
+        return EXIT_FAILURE;
       }
       if (bench_io_size == 0) {
 	cerr << "rbd: io-size must be > 0" << std::endl;
 	return EXIT_FAILURE;
       }
     } else if (ceph_argparse_witharg(args, i, &bench_io_threads, err, "--io-threads", (char*)NULL)) {
-    } else if (ceph_argparse_witharg(args, i, &bench_bytes, err, "--io-total", (char*)NULL)) {
+    } else if (ceph_argparse_witharg(args, i, &val, err, "--io-total", (char*)NULL)) {
+      if (!err.str().empty()) {
+       cerr << "rbd: " << err.str() << std::endl;
+       return EXIT_FAILURE;
+      }
+      const char *iotval = val.c_str();
+      bench_bytes = strict_sistrtoll(iotval, &parse_err);
+      if (!parse_err.empty()) {
+        cerr << "rbd: error parsing --io-total " << parse_err << std::endl;
+        return EXIT_FAILURE;
+      }
     } else if (ceph_argparse_witharg(args, i, &bench_pattern, "--io-pattern", (char*)NULL)) {
     } else if (ceph_argparse_witharg(args, i, &val, "--path", (char*)NULL)) {
       path = strdup(val.c_str());
@@ -3066,6 +3226,7 @@ int main(int argc, const char **argv)
       resize_allow_shrink = true;
     } else if (ceph_argparse_witharg(args, i, &val, "--image-feature", (char *)NULL)) {
       uint64_t feature;
+      input_feature = true;
       if (!decode_feature(val.c_str(), &feature)) {
         cerr << "rbd: invalid image feature: " << val << std::endl;
         return EXIT_FAILURE;
@@ -3075,6 +3236,7 @@ int main(int argc, const char **argv)
       cerr << "rbd: using --image-features for specifying the rbd image format is"
 	   << " deprecated, use --image-feature instead" << std::endl;
       features = strict_strtol(val.c_str(), 10, &parse_err);
+      input_feature = true;
       if (!parse_err.empty()) {
 	cerr << "rbd: error parsing --image-features: " << parse_err
              << std::endl;
@@ -3095,8 +3257,8 @@ int main(int argc, const char **argv)
 	output_format = strdup(val.c_str());
 	output_format_specified = true;
       }
-    } else if (ceph_argparse_flag(args, i, "--object-extents", (char *)NULL)) {
-      diff_object_extents = true;
+    } else if (ceph_argparse_flag(args, i, "--whole-object", (char *)NULL)) {
+      diff_whole_object = true;
     } else if (ceph_argparse_binary_flag(args, i, &pretty_format, NULL, "--pretty-format", (char*)NULL)) {
     } else {
       ++i;
@@ -3164,7 +3326,6 @@ if (!set_conf_param(v, p1, p2, p3)) { \
     const char *v = *i;
     switch (opt_cmd) {
       case OPT_LIST:
-      case OPT_DISK_USAGE:
 	SET_CONF_PARAM(v, &poolname, NULL, NULL);
 	break;
       case OPT_INFO:
@@ -3188,6 +3349,7 @@ if (!set_conf_param(v, p1, p2, p3)) { \
       case OPT_METADATA_LIST:
       case OPT_DIFF:
       case OPT_OBJECT_MAP_REBUILD:
+      case OPT_DISK_USAGE:
 	SET_CONF_PARAM(v, &imgname, NULL, NULL);
 	break;
       case OPT_EXPORT:
@@ -3216,7 +3378,7 @@ if (!set_conf_param(v, p1, p2, p3)) { \
 	SET_CONF_PARAM(v, &imgname, &lock_cookie, NULL);
 	break;
       case OPT_LOCK_REMOVE:
-	SET_CONF_PARAM(v, &imgname, &lock_client, &lock_cookie);
+	SET_CONF_PARAM(v, &imgname, &lock_cookie, &lock_client);
 	break;
       case OPT_METADATA_SET:
 	SET_CONF_PARAM(v, &imgname, &key, &value);
@@ -3258,6 +3420,12 @@ if (!set_conf_param(v, p1, p2, p3)) { \
     return EXIT_FAILURE;
   }
 
+  if (opt_cmd != OPT_LOCK_ADD && lock_tag) {
+    cerr << "rbd: only the lock add command uses the --shared option"
+	 << std::endl;
+    return EXIT_FAILURE;
+  }
+
   if (pretty_format && !strcmp(output_format, "plain")) {
     cerr << "rbd: --pretty-format only works when --format is json or xml"
 	 << std::endl;
@@ -3285,11 +3453,6 @@ if (!set_conf_param(v, p1, p2, p3)) { \
     }
   }
 
-  if (opt_cmd == OPT_EXPORT && !imgname) {
-    cerr << "rbd: image name was not specified" << std::endl;
-    return EXIT_FAILURE;
-  }
-
   if ((opt_cmd == OPT_IMPORT || opt_cmd == OPT_IMPORT_DIFF) && !path) {
     cerr << "rbd: path was not specified" << std::endl;
     return EXIT_FAILURE;
@@ -3302,21 +3465,8 @@ if (!set_conf_param(v, p1, p2, p3)) { \
     imgname = NULL;
   }
 
-  if (opt_cmd != OPT_LOCK_ADD && lock_tag) {
-    cerr << "rbd: only the lock add command uses the --shared option"
-	 << std::endl;
-    return EXIT_FAILURE;
-  }
-
-  if ((opt_cmd == OPT_LOCK_ADD || opt_cmd == OPT_LOCK_REMOVE) &&
-      !lock_cookie) {
-    cerr << "rbd: lock id was not specified" << std::endl;
-    return EXIT_FAILURE;
-  }
-
   if (opt_cmd != OPT_LIST &&
       opt_cmd != OPT_IMPORT &&
-      opt_cmd != OPT_IMPORT_DIFF &&
       opt_cmd != OPT_UNMAP && /* needs imgname but handled below */
       opt_cmd != OPT_SHOWMAPPED &&
       opt_cmd != OPT_MERGE_DIFF &&
@@ -3338,7 +3488,6 @@ if (!set_conf_param(v, p1, p2, p3)) { \
       return EXIT_FAILURE;
     }
   }
-
   if (opt_cmd == OPT_UNMAP) {
     if (!imgname) {
       cerr << "rbd: unmap requires either image name or device path" << std::endl;
@@ -3348,24 +3497,6 @@ if (!set_conf_param(v, p1, p2, p3)) { \
     if (strncmp(imgname, "/dev/", 5) == 0) {
       devpath = imgname;
       imgname = NULL;
-    }
-  }
-
-  if (opt_cmd == OPT_FEATURE_DISABLE || opt_cmd == OPT_FEATURE_ENABLE) {
-    if (feature_names.empty()) {
-      cerr << "rbd: at least one feature name must be specified" << std::endl;
-      return EXIT_FAILURE;
-    }
-
-    features = 0;
-    for (size_t i = 0; i < feature_names.size(); ++i) {
-      uint64_t feature;
-      if (!decode_feature(feature_names[i], &feature)) {
-        cerr << "rbd: invalid feature name specified: " << feature_names[i]
-             << std::endl;
-        return EXIT_FAILURE;
-      }
-      features |= feature;
     }
   }
 
@@ -3395,6 +3526,12 @@ if (!set_conf_param(v, p1, p2, p3)) { \
 
   set_pool_image_name(destname, (char **)&dest_poolname,
 		      (char **)&destname, (char **)&dest_snapname);
+  if (dest_snapname) {
+    // no command uses dest_snapname
+    cerr << "rbd: destination snapname specified for a command that doesn't use it"
+         << std::endl;
+    return EXIT_FAILURE;
+  }
 
   if (opt_cmd == OPT_IMPORT) {
     if (poolname && dest_poolname) {
@@ -3424,22 +3561,20 @@ if (!set_conf_param(v, p1, p2, p3)) { \
       cerr << "rbd: second diff was not specified" << std::endl;
       return EXIT_FAILURE;
     }
-    if (!path) {
+  }
+  if ((opt_cmd == OPT_EXPORT || opt_cmd == OPT_EXPORT_DIFF ||
+      opt_cmd == OPT_MERGE_DIFF) && !path) {
+    if (opt_cmd == OPT_EXPORT) {
+      path = imgname;
+    } else {
       cerr << "rbd: path was not specified" << std::endl;
       return EXIT_FAILURE;
     }
   }
-  if (opt_cmd == OPT_EXPORT && !path)
-    path = imgname;
 
   if ((opt_cmd == OPT_COPY || opt_cmd == OPT_CLONE || opt_cmd == OPT_RENAME) &&
-      !destname ) {
+      ((!destname) || (destname[0] == '\0')) ) {
     cerr << "rbd: destination image name was not specified" << std::endl;
-    return EXIT_FAILURE;
-  }
-
-  if ((opt_cmd == OPT_CLONE) && dest_snapname) {
-    cerr << "rbd: cannot clone to a snapshot" << std::endl;
     return EXIT_FAILURE;
   }
 
@@ -3453,6 +3588,47 @@ if (!set_conf_param(v, p1, p2, p3)) { \
     cerr << "source pool: " << poolname << " dest pool: " << dest_poolname
       << std::endl;
     return EXIT_FAILURE;
+  }
+
+  if (opt_cmd == OPT_LOCK_ADD || opt_cmd == OPT_LOCK_REMOVE) {
+    if (!lock_cookie) {
+      cerr << "rbd: lock id was not specified" << std::endl;
+      return EXIT_FAILURE;
+    }
+    if (opt_cmd == OPT_LOCK_REMOVE && !lock_client) {
+      cerr << "rbd: locker was not specified" << std::endl;
+      return EXIT_FAILURE;
+    }
+  }
+
+  if (opt_cmd == OPT_FEATURE_DISABLE || opt_cmd == OPT_FEATURE_ENABLE) {
+    if (feature_names.empty()) {
+      cerr << "rbd: at least one feature name must be specified" << std::endl;
+      return EXIT_FAILURE;
+    }
+
+    features = 0;
+    for (size_t i = 0; i < feature_names.size(); ++i) {
+      uint64_t feature;
+      if (!decode_feature(feature_names[i], &feature)) {
+        cerr << "rbd: invalid feature name specified: " << feature_names[i]
+             << std::endl;
+        return EXIT_FAILURE;
+      }
+      features |= feature;
+    }
+  }
+
+  if (opt_cmd == OPT_METADATA_GET || opt_cmd == OPT_METADATA_REMOVE ||
+      opt_cmd == OPT_METADATA_SET) {
+    if (!key) {
+      cerr << "rbd: metadata key was not specified" << std::endl;
+      return EXIT_FAILURE;
+    }
+    if (opt_cmd == OPT_METADATA_SET && !value) {
+      cerr << "rbd: metadata value was not specified" << std::endl;
+      return EXIT_FAILURE;
+    }
   }
 
   bool talk_to_cluster = (opt_cmd != OPT_MAP &&
@@ -3540,7 +3716,7 @@ if (!set_conf_param(v, p1, p2, p3)) { \
 
   if (opt_cmd == OPT_CREATE || opt_cmd == OPT_RESIZE) {
     if (!size_set) {
-      cerr << "rbd: must specify --size <MB>" << std::endl;
+      cerr << "rbd: must specify --size <M/G/T>" << std::endl;
       return EINVAL;
     }
   }
@@ -3571,6 +3747,10 @@ if (!set_conf_param(v, p1, p2, p3)) { \
     break;
 
   case OPT_CREATE:
+    if (input_feature && (format == 1)){
+      cerr << "feature not allowed with format 1; use --image-format 2" << std::endl;
+      return EINVAL;
+    }
     r = do_create(rbd, io_ctx, imgname, size, &order, format, features,
 		  stripe_unit, stripe_count);
     if (r < 0) {
@@ -3654,10 +3834,6 @@ if (!set_conf_param(v, p1, p2, p3)) { \
     break;
 
   case OPT_SNAP_LIST:
-    if (!imgname) {
-      cerr << "rbd: snap list requires an image parameter" << std::endl;
-      return EXIT_FAILURE;
-    }
     r = do_list_snaps(image, formatter.get());
     if (r < 0) {
       cerr << "rbd: failed to list snapshots: " << cpp_strerror(-r)
@@ -3667,10 +3843,6 @@ if (!set_conf_param(v, p1, p2, p3)) { \
     break;
 
   case OPT_SNAP_CREATE:
-    if (!imgname || !snapname) {
-      cerr << "rbd: snap create requires image and snapname" << std::endl;
-      return EINVAL;
-    }
     r = do_add_snap(image, snapname);
     if (r < 0) {
       cerr << "rbd: failed to create snapshot: " << cpp_strerror(-r)
@@ -3680,10 +3852,6 @@ if (!set_conf_param(v, p1, p2, p3)) { \
     break;
 
   case OPT_SNAP_ROLLBACK:
-    if (!imgname) {
-      cerr << "rbd: snap rollback requires image name" << std::endl;
-      return EINVAL;
-    }
     r = do_rollback_snap(image, snapname);
     if (r < 0) {
       cerr << "rbd: rollback failed: " << cpp_strerror(-r) << std::endl;
@@ -3692,10 +3860,6 @@ if (!set_conf_param(v, p1, p2, p3)) { \
     break;
 
   case OPT_SNAP_REMOVE:
-    if (!imgname) {
-      cerr << "rbd: snap remove requires image name" << std::endl;
-      return EINVAL;
-    }
     r = do_remove_snap(image, snapname);
     if (r < 0) {
       if (r == -EBUSY) {
@@ -3710,22 +3874,16 @@ if (!set_conf_param(v, p1, p2, p3)) { \
     break;
 
   case OPT_SNAP_PURGE:
-    if (!imgname) {
-      cerr << "rbd: snap purge requires image name" << std::endl;
-      return EINVAL;
-    }
     r = do_purge_snaps(image);
     if (r < 0) {
-      cerr << "rbd: removing snaps failed: " << cpp_strerror(-r) << std::endl;
+      if (r != -EBUSY) {
+        cerr << "rbd: removing snaps failed: " << cpp_strerror(-r) << std::endl;
+      }
       return -r;
     }
     break;
 
   case OPT_SNAP_PROTECT:
-    if (!imgname) {
-      cerr << "rbd: snap protect requires image name" << std::endl;
-      return EINVAL;
-    }
     r = do_protect_snap(image, snapname);
     if (r < 0) {
       cerr << "rbd: protecting snap failed: " << cpp_strerror(-r) << std::endl;
@@ -3734,10 +3892,6 @@ if (!set_conf_param(v, p1, p2, p3)) { \
     break;
 
   case OPT_SNAP_UNPROTECT:
-    if (!imgname) {
-      cerr << "rbd: snap unprotect requires image name" << std::endl;
-      return EINVAL;
-    }
     r = do_unprotect_snap(image, snapname);
     if (r < 0) {
       cerr << "rbd: unprotecting snap failed: " << cpp_strerror(-r)
@@ -3755,10 +3909,6 @@ if (!set_conf_param(v, p1, p2, p3)) { \
     break;
 
   case OPT_EXPORT:
-    if (!path) {
-      cerr << "rbd: export requires pathname" << std::endl;
-      return EINVAL;
-    }
     r = do_export(image, path);
     if (r < 0) {
       cerr << "rbd: export error: " << cpp_strerror(-r) << std::endl;
@@ -3767,7 +3917,7 @@ if (!set_conf_param(v, p1, p2, p3)) { \
     break;
 
   case OPT_DIFF:
-    r = do_diff(image, fromsnapname, diff_object_extents, formatter.get());
+    r = do_diff(image, fromsnapname, diff_whole_object, formatter.get());
     if (r < 0) {
       cerr << "rbd: diff error: " << cpp_strerror(-r) << std::endl;
       return -r;
@@ -3775,11 +3925,7 @@ if (!set_conf_param(v, p1, p2, p3)) { \
     break;
 
   case OPT_EXPORT_DIFF:
-    if (!path) {
-      cerr << "rbd: export-diff requires pathname" << std::endl;
-      return EINVAL;
-    }
-    r = do_export_diff(image, fromsnapname, snapname, diff_object_extents, path);
+    r = do_export_diff(image, fromsnapname, snapname, diff_whole_object, path);
     if (r < 0) {
       cerr << "rbd: export-diff error: " << cpp_strerror(-r) << std::endl;
       return -r;
@@ -3795,10 +3941,6 @@ if (!set_conf_param(v, p1, p2, p3)) { \
     break;
 
   case OPT_IMPORT:
-    if (!path) {
-      cerr << "rbd: import requires pathname" << std::endl;
-      return EINVAL;
-    }
     r = do_import(rbd, dest_io_ctx, destname, &order, path,
 		  format, features, size, stripe_unit, stripe_count);
     if (r < 0) {
@@ -3808,7 +3950,6 @@ if (!set_conf_param(v, p1, p2, p3)) { \
     break;
 
   case OPT_IMPORT_DIFF:
-    assert(path);
     r = do_import_diff(image, path);
     if (r < 0) {
       cerr << "rbd: import-diff failed: " << cpp_strerror(-r) << std::endl;
@@ -3890,7 +4031,7 @@ if (!set_conf_param(v, p1, p2, p3)) { \
     break;
 
   case OPT_LOCK_REMOVE:
-    r = do_lock_remove(image, lock_cookie, lock_client);
+    r = do_lock_remove(image, lock_client, lock_cookie);
     if (r < 0) {
       cerr << "rbd: releasing lock failed: " << cpp_strerror(r) << std::endl;
       return -r;
@@ -3963,6 +4104,12 @@ if (!set_conf_param(v, p1, p2, p3)) { \
       return -r;
     }
     break;
+  }
+
+  r = image.close();
+  if (r < 0) {
+    cerr << "rbd: error while closing image: " << cpp_strerror(-r) << std::endl;
+    return -r;
   }
   return 0;
 }

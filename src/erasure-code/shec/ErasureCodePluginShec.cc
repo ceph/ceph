@@ -37,29 +37,30 @@ class ErasureCodePluginShec : public ErasureCodePlugin {
 public:
   ErasureCodeShecTableCache tcache;
 
-  virtual int factory(const map<std::string,std::string> &parameters,
-		      ErasureCodeInterfaceRef *erasure_code) {
+  virtual int factory(const std::string &directory,
+		      ErasureCodeProfile &profile,
+		      ErasureCodeInterfaceRef *erasure_code,
+		      ostream *ss) {
     ErasureCodeShec *interface;
-    std::string t = "multiple";
 
-    if (parameters.find("technique") != parameters.end()){
-      t = parameters.find("technique")->second;
-    }
+    if (profile.find("technique") == profile.end())
+      profile["technique"] = "multiple";
+    std::string t = profile.find("technique")->second;
 
     if (t == "single"){
       interface = new ErasureCodeShecReedSolomonVandermonde(tcache, ErasureCodeShec::SINGLE);
     } else if (t == "multiple"){
       interface = new ErasureCodeShecReedSolomonVandermonde(tcache, ErasureCodeShec::MULTIPLE);
     } else {
-      derr << "technique=" << t << " is not a valid coding technique. "
-	   << " Choose one of the following: "
-	   << "single, multiple"
-	   << dendl;
+      *ss << "technique=" << t << " is not a valid coding technique. "
+	  << "Choose one of the following: "
+	  << "single, multiple ";
       return -ENOENT;
     }
-    int err = interface->init(parameters);
-    if (err) {
-      return err;
+    int r = interface->init(profile, ss);
+    if (r) {
+      delete interface;
+      return r;
     }
     *erasure_code = ErasureCodeInterfaceRef(interface);
 

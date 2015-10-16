@@ -8,9 +8,24 @@
 
 #include <errno.h>
 
+#if defined(__linux__)
+#include <limits.h>
+#define CHAIN_XATTR_MAX_NAME_LEN ((XATTR_NAME_MAX + 1) / 2)
+#elif defined(__APPLE__)
+#include <sys/xattr.h>
+#define CHAIN_XATTR_MAX_NAME_LEN ((XATTR_MAXNAMELEN + 1) / 2)
+#else
 #define CHAIN_XATTR_MAX_NAME_LEN  128
+#endif
+
 #define CHAIN_XATTR_MAX_BLOCK_LEN 2048
 
+/*
+ * XFS will only inline xattrs < 255 bytes, so for xattrs that are
+ * likely to fit in the inode, stripe over short xattrs.
+ */
+#define CHAIN_XATTR_SHORT_BLOCK_LEN 250
+#define CHAIN_XATTR_SHORT_LEN_THRESHOLD 1000
 
 // wrappers to hide annoying errno handling.
 

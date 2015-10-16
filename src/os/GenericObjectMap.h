@@ -117,7 +117,7 @@ class GenericObjectMap {
   bool check(std::ostream &out);
 
   /// Util, list all objects, there must be no other concurrent access
-  int list_objects(const coll_t &cid, ghobject_t start, int max,
+  int list_objects(const coll_t &cid, ghobject_t start, ghobject_t end, int max,
                    vector<ghobject_t> *objs, ///< [out] objects
                    ghobject_t *next);
 
@@ -240,6 +240,7 @@ class GenericObjectMap {
   int rm_keys(
     const Header header,
     const string &prefix,
+    const set<string> &buffered_keys,
     const set<string> &to_clear,
     KeyValueDB::Transaction t
     );
@@ -259,9 +260,6 @@ class GenericObjectMap {
     const ghobject_t &target,
     KeyValueDB::Transaction t
     );
-
-  /// Ensure that all previous operations are durable
-  int sync(const Header header, KeyValueDB::Transaction t);
 
   static const string GLOBAL_STATE_KEY;
   static const string PARENT_KEY;

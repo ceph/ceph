@@ -233,6 +233,14 @@ public:
     stamp = s;
   }
 
+  size_t get_num_pg_by_osd(int osd) const {
+    ceph::unordered_map<int,set<pg_t> >::const_iterator p = pg_by_osd.find(osd);
+    if (p == pg_by_osd.end())
+      return 0;
+    else
+      return p->second.size();
+  }
+
   pool_stat_t get_pg_pool_sum_stat(int64_t pool) const {
     ceph::unordered_map<int,pool_stat_t>::const_iterator p =
       pg_pool_sum.find(pool);
@@ -250,9 +258,9 @@ public:
   void redo_full_sets();
   void register_nearfull_status(int osd, const osd_stat_t& s);
   void calc_stats();
-  void stat_pg_add(const pg_t &pgid, const pg_stat_t &s, bool sumonly=false,
+  void stat_pg_add(const pg_t &pgid, const pg_stat_t &s, bool nocreating=false,
 		   bool sameosds=false);
-  void stat_pg_sub(const pg_t &pgid, const pg_stat_t &s, bool sumonly=false,
+  void stat_pg_sub(const pg_t &pgid, const pg_stat_t &s, bool nocreating=false,
 		   bool sameosds=false);
   void stat_pg_update(const pg_t pgid, pg_stat_t &prev, bufferlist::iterator& blp);
   void stat_osd_add(const osd_stat_t &s);
@@ -294,7 +302,7 @@ public:
   void dump_osd_blocked_by_stats(Formatter *f) const;
   void print_osd_blocked_by_stats(std::ostream *ss) const;
 
-  void get_filtered_pg_stats(string& state, int64_t poolid, int64_t osdid,
+  void get_filtered_pg_stats(const string& state, int64_t poolid, int64_t osdid,
                              bool primary, set<pg_t>& pgs);
   void recovery_summary(Formatter *f, list<string> *psl,
                         const pool_stat_t& delta_sum) const;
@@ -326,6 +334,25 @@ public:
    */
   void pool_client_io_rate_summary(Formatter *f, ostream *out,
                                    uint64_t poolid) const;
+  /**
+   * Obtain a formatted/plain output for cache tier IO, source from stats for a
+   * given @p delta_sum pool over a given @p delta_stamp period of time.
+   */
+  void cache_io_rate_summary(Formatter *f, ostream *out,
+                             const pool_stat_t& delta_sum,
+                             utime_t delta_stamp) const;
+  /**
+   * Obtain a formatted/plain output for the overall cache tier IO, which is
+   * calculated resorting to @p pg_sum_delta and @p stamp_delta.
+   */
+  void overall_cache_io_rate_summary(Formatter *f, ostream *out) const;
+  /**
+   * Obtain a formatted/plain output for cache tier IO over a given pool
+   * with id @p pool_id.  We will then obtain pool-specific data
+   * from @p per_pool_sum_delta.
+   */
+  void pool_cache_io_rate_summary(Formatter *f, ostream *out,
+                                  uint64_t poolid) const;
 
   void print_summary(Formatter *f, ostream *out) const;
   void print_oneline_summary(Formatter *f, ostream *out) const;

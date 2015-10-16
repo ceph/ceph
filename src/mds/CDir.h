@@ -23,7 +23,7 @@
 #include "common/config.h"
 #include "common/DecayCounter.h"
 
-#include <iostream>
+#include <iosfwd>
 
 #include <list>
 #include <set>
@@ -497,6 +497,21 @@ private:
   void fetch(MDSInternalContextBase *c, const std::string& want_dn, bool ignore_authpinnability=false);
 protected:
   void _omap_fetch(const std::string& want_dn);
+  CDentry *_load_dentry(
+      const std::string &key,
+      const std::string &dname,
+      snapid_t last,
+      bufferlist &bl,
+      int pos,
+      const std::set<snapid_t> *snaps,
+      bool *force_dirty,
+      list<CInode*> *undef_inodes);
+
+  /**
+   * Mark this fragment as BADFRAG
+   */
+  void go_bad();
+
   void _omap_fetched(bufferlist& hdrbl, std::map<std::string, bufferlist>& omap,
 		     const std::string& want_dn, int r);
   void _tmap_fetch(const std::string& want_dn);

@@ -73,19 +73,17 @@ TEST_P(ParameterTest, parameter_all)
   ErasureCodeShec* shec = new ErasureCodeShecReedSolomonVandermonde(
 				  tcache,
 				  ErasureCodeShec::MULTIPLE);
-  map < std::string, std::string > *parameters = new map<std::string,
-							 std::string>();
-  (*parameters)["plugin"] = "shec";
-  (*parameters)["technique"] = "";
-  (*parameters)["directory"] = "/usr/lib64/ceph/erasure-code";
-  (*parameters)["ruleset-failure-domain"] = "osd";
-  (*parameters)["k"] = k;
-  (*parameters)["m"] = m;
-  (*parameters)["c"] = c;
+  ErasureCodeProfile *profile = new ErasureCodeProfile();
+  (*profile)["plugin"] = "shec";
+  (*profile)["technique"] = "";
+  (*profile)["ruleset-failure-domain"] = "osd";
+  (*profile)["k"] = k;
+  (*profile)["m"] = m;
+  (*profile)["c"] = c;
 
-  result = shec->init(*parameters);
+  result = shec->init(*profile, &cerr);
 
-  //check parameters
+  //check profile
   EXPECT_EQ(i_k, shec->k);
   EXPECT_EQ(i_m, shec->m);
   EXPECT_EQ(i_c, shec->c);
@@ -257,7 +255,7 @@ TEST_P(ParameterTest, parameter_all)
   EXPECT_EQ(c_size, shec->get_chunk_size(192));
 
   delete shec;
-  delete parameters;
+  delete profile;
   delete crush;
 }
 
@@ -297,6 +295,8 @@ int main(int argc, char **argv)
 
   global_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT, CODE_ENVIRONMENT_UTILITY, 0);
   common_init_finish(g_ceph_context);
+
+  g_conf->set_val("erasure_code_dir", ".libs", false, false);
 
   ::testing::InitGoogleTest(&argc, argv);
 

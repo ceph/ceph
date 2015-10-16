@@ -1,9 +1,6 @@
 [submodule "ceph-object-corpus"]
 	path = ceph-object-corpus
 	url = https://github.com/ceph/ceph-object-corpus.git
-[submodule "src/libs3"]
-	path = src/libs3
-	url = https://github.com/ceph/libs3.git
 [submodule "src/civetweb"]
 	path = src/civetweb
 	url = https://github.com/ceph/civetweb

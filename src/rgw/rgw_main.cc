@@ -214,6 +214,7 @@ protected:
       perfcounter->inc(l_rgw_qlen, -1);
       return req;
     }
+    using ThreadPool::WorkQueue<RGWRequest>::_process;
     void _process(RGWRequest *req) {
       perfcounter->inc(l_rgw_qactive);
       process->handle_request(req);
@@ -555,8 +556,9 @@ static int process_request(RGWRados *store, RGWREST *rest, RGWRequest *req, RGWC
   s->obj_ctx = &rados_ctx;
 
   s->req_id = store->unique_id(req->id);
+  s->trans_id = store->unique_trans_id(req->id);
 
-  req->log(s, "initializing");
+  req->log_format(s, "initializing for trans_id = %s", s->trans_id.c_str());
 
   RGWOp *op = NULL;
   int init_error = 0;
@@ -715,9 +717,6 @@ static int civetweb_callback(struct mg_connection *conn) {
 
   RGWRequest *req = new RGWRequest(store->get_new_req_id());
   RGWMongoose client_io(conn, pe->port);
-
-  client_io.init(g_ceph_context);
-
 
   int ret = process_request(store, rest, req, &client_io, olog);
   if (ret < 0) {
@@ -1029,7 +1028,6 @@ int main(int argc, const char **argv)
   vector<const char *> def_args;
   def_args.push_back("--debug-rgw=1/5");
   def_args.push_back("--keyring=$rgw_data/keyring");
-  def_args.push_back("--log-file=/var/log/radosgw/$cluster-$name.log");
 
   vector<const char*> args;
   argv_to_vec(argc, argv, args);
@@ -1055,6 +1053,9 @@ int main(int argc, const char **argv)
   mutex.Lock();
   init_timer.add_event_after(g_conf->rgw_init_timeout, new C_InitTimeout);
   mutex.Unlock();
+
+  // Enable the perf counter before starting the service thread
+  g_ceph_context->enable_perf_counter();
 
   common_init_finish(g_ceph_context);
 
@@ -1260,8 +1261,6 @@ int main(int argc, const char **argv)
 
   dout(1) << "final shutdown" << dendl;
   g_ceph_context->put();
-
-  ceph::crypto::shutdown();
 
   signal_fd_finalize();
 

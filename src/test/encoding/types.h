@@ -93,16 +93,16 @@ TYPE(PushReplyOp)
 TYPE(ECUtil::HashInfo)
 
 #include "osd/ECMsgTypes.h"
-TYPE(ECSubWrite)
+TYPE_NOCOPY(ECSubWrite)
 TYPE(ECSubWriteReply)
 TYPE_FEATUREFUL(ECSubRead)
 TYPE(ECSubReadReply)
 
 #include "osd/HitSet.h"
-TYPE(ExplicitHashHitSet)
-TYPE(ExplicitObjectHitSet)
+TYPE_NONDETERMINISTIC(ExplicitHashHitSet)
+TYPE_NONDETERMINISTIC(ExplicitObjectHitSet)
 TYPE(BloomHitSet)
-TYPE(HitSet)
+TYPE_NONDETERMINISTIC(HitSet)   // because some subclasses are
 TYPE(HitSet::Params)
 
 #include "os/ObjectStore.h"
@@ -120,7 +120,7 @@ TYPE(AuthMonitor::Incremental)
 
 #include "mon/PGMap.h"
 TYPE(PGMap::Incremental)
-TYPE(PGMap)
+TYPE_NONDETERMINISTIC(PGMap)
 
 #include "mon/MonitorDBStore.h"
 TYPE(MonitorDBStore::Transaction)
@@ -169,6 +169,7 @@ TYPE(cap_reconnect_t)
 TYPE(inode_backtrace_t)
 TYPE(inode_backpointer_t)
 TYPE(quota_info_t)
+TYPE(ceph_file_layout_wrapper)
 
 #include "mds/CInode.h"
 TYPE(InodeStore)
@@ -184,7 +185,7 @@ TYPE_NOCOPY(Capability)
 TYPE(InoTable)
 
 #include "mds/SnapServer.h"
-TYPEWITHSTRAYDATA(SnapServer)
+TYPE_STRAYDATA(SnapServer)
 
 #include "mds/events/ECommitted.h"
 TYPE(ECommitted)
@@ -229,12 +230,20 @@ TYPE(EUpdate)
 TYPE(librbd::WatchNotify::NotifyMessage)
 TYPE(librbd::WatchNotify::ResponseMessage)
 
+#include "rbd_replay/ActionTypes.h"
+TYPE(rbd_replay::action::Dependency)
+TYPE(rbd_replay::action::ActionEntry);
+
 #ifdef WITH_RADOSGW
 
 #include "rgw/rgw_rados.h"
 TYPE(RGWObjManifestPart)
 TYPE(RGWObjManifest)
-
+TYPE(RGWOLHInfo)
+TYPE(RGWRegion)
+TYPE(RGWZone)
+TYPE(RGWZoneParams)     
+   
 #include "rgw/rgw_acl.h"
 TYPE(ACLPermission)
 TYPE(ACLGranteeType)

@@ -38,7 +38,6 @@ CHECK_INCLUDE_FILES("dirent.h" HAVE_DIRENT_H)
 CHECK_INCLUDE_FILES("dlfcn.h" HAVE_DLFCN_H)
 CHECK_INCLUDE_FILES("inttypes.h" HAVE_INTTYPES_H)
 CHECK_INCLUDE_FILES("linux/types.h" HAVE_LINUX_TYPES_H)
-CHECK_INCLUDE_FILES("leveldb/filter_policy.h" HAVE_LEVELDB_FILTER_POLICY)
 CHECK_INCLUDE_FILES("memory.h" HAVE_MEMORY_H)
 CHECK_INCLUDE_FILES("ndir.h" HAVE_NDIR_H)
 CHECK_INCLUDE_FILES("netdb.h" HAVE_NETDB_H)
@@ -66,12 +65,8 @@ CHECK_INCLUDE_FILES("sys/xattr.h" HAVE_SYS_XATTR_H)
 CHECK_INCLUDE_FILES("unistd.h" HAVE_UNISTD_H)
 CHECK_INCLUDE_FILES("utime.h" HAVE_UTIME_H)
 CHECK_INCLUDE_FILES("${CMAKE_SOURCE_DIR}/src/include/fiemap.h" HAVE_FIEMAP_H)
-CHECK_INCLUDE_FILES("expat.h" HAVE_EXPAT_H)
 CHECK_INCLUDE_FILES("fuse/fuse_lowlevel.h" HAVE_FUSE_LOWLEVEL_H)
-CHECK_INCLUDE_FILES("curl/curl.h" HAVE_FUSE_LOWLEVEL_H)
 CHECK_INCLUDE_FILES("fuse/fuse.h" HAVE_FUSE_H)
-CHECK_INCLUDE_FILES("google/profiler.h" HAVE_PROFILER_H)
-CHECK_INCLUDE_FILES("libedit/vis.h" HAVE_LIBEDIT_VIS_H)
 CHECK_INCLUDE_FILES("fcgi_config.h"  HAVE_FASTCGI_CONFIG_H)
 CHECK_INCLUDE_FILES("fastcgi.h" HAVE_FASTCGI_H)
 CHECK_INCLUDE_FILES("fcgiapp.h" FASTCGI_FASTCGI_APP_DIR)
@@ -80,9 +75,6 @@ CHECK_INCLUDE_FILES("fcgio.h" HAVE_FASTCGIO_H)
 CHECK_INCLUDE_FILES("fcgios.h" FASTCGI_FASTCGIOS_DIR)
 CHECK_INCLUDE_FILES("fcgi_stdio.h" HAVE_FASTCGI_STDIO_H)
 CHECK_INCLUDE_FILES("openssl/ssl.h" HAVE_SSL_H)
-CHECK_INCLUDE_FILES("snappy.h" HAVE_SNAPPY_H)
-CHECK_INCLUDE_FILES("uuid/uuid.h" HAVE_UUID_H)
-CHECK_INCLUDE_FILES("atomic_ops.h" HAVE_ATOMIC_OPS)
 CHECK_INCLUDE_FILES("keyutils.h" HAVE_KEYUTILS_H)
 
 include(CheckSymbolExists)
@@ -101,7 +93,6 @@ endif(${ENABLE_SHARED})
 
 find_package(udev REQUIRED)
 set(HAVE_UDEV ${UDEV_FOUND})
-message(STATUS "${UDEV_LIBS}")
 
 option(WITH_AIO "AIO is here ON" ON)
 if(${WITH_AIO})
@@ -112,10 +103,19 @@ endif(${WITH_AIO})
 
 option(WITH_FUSE "Fuse is here" ON)
 if(${WITH_FUSE})
-find_package(fuse REQUIRED)
-set(HAVE_LIBFUSE ${FUSE_FOUND})
+find_package(fuse)
+set(HAVE_FUSE ${FUSE_FOUND})
 CHECK_FUNCTION_EXISTS(fuse_getgroups HAVE_FUSE_GETGROUPS)
 endif(${WITH_FUSE})
+
+option(WITH_XFS "XFS is here" ON)
+if(${WITH_XFS})
+find_package(xfs)
+set(HAVE_XFS ${XFS_FOUND})
+endif(${WITH_XFS})
+
+find_package(blkid REQUIRED)
+set(HAVE_LIBBLKID ${BLKID_FOUND})
 
 # probably fuse etc need this -- how to check? XXX
 option(WITH_MDS "MDS is here" ON)
@@ -129,16 +129,12 @@ option(WITH_KVS "Key value store is here" ON)
 
 # remote block storage
 option(WITH_RBD "Remote block storage is here" ON)
-if(${WITH_RBD})
-find_package(blkid REQUIRED)
-set(HAVE_LIBBLKID ${BLKID_FOUND})
-endif(${WITH_RBD})
 
 option(WITH_LEVELDB "LevelDB is here" ON)
 if(${WITH_LEVELDB})
 find_package(leveldb REQUIRED)
 set(HAVE_LIBLEVELDB ${LEVELDB_FOUND})
-CHECK_INCLUDE_FILES("leveldb/filter_policy.h" HAVE_LEVELDB_FILTER_POLICY)
+find_file(HAVE_LEVELDB_FILTER_POLICY filter_policy.h PATHS /usr/include/leveldb)
 endif(${WITH_LEVELDB})
 
 option(WITH_EXPAT "EXPAT is here" ON)
@@ -147,35 +143,38 @@ find_package(expat REQUIRED)
 set(HAVE_EXPAT ${EXPAT_FOUND})
 endif(${WITH_EXPAT})
 
-option(WITH_FCGI "FCGI is here" ON)
-if(${WITH_FCGI})
 find_package(fcgi REQUIRED)
-set(HAVE_FCGI ${FCGI_FOUND})
-endif(${WITH_FCGI})
 
-option(WITH_ATOMICS_OPS "Atomic Ops is here" ON)
-if(${WITH_ATOMIC_OPS})
 find_package(atomic_ops REQUIRED)
 set(HAVE_ATOMIC_OPS ${ATOMIC_OPS_FOUND})
-endif(${WITH_ATOMIC_OPS})
+message(STATUS "${ATOMIC_OPS_LIBRARIES}")
 
-option(WITH_PROFILER "The Profiler is here" ON)
-if(${WITH_PROFILER})
-find_package(profiler REQUIRED)
-set(HAVE_PROFILER ${PROFILER_FOUND})
-endif(${WITH_PROFILER})
+option(WITH_GPERFTOOLS "gperftools is here" ON)
+if(${WITH_GPERFTOOLS})
+	find_package(gperftools)
+	set(HAVE_GPERFTOOLS ${GPERFTOOLS_FOUND})
+	if(${HAVE_GPERFTOOLS})
+		find_file(HAVE_GPERFTOOLS_HEAP_PROFILER_H heap-profiler.h PATHS /usr/include/gperftools)
+		find_file(HAVE_GPERFTOOLS_MALLOC_EXTENSION_H malloc_extension.h PATHS /usr/include/gperftools)
+		find_file(HAVE_GPERFTOOLS_PROFILER_H profiler.h PATHS /usr/include/gperftools)
+	endif(${HAVE_GPERFTOOLS})
+endif(${WITH_GPERFTOOLS})
 
-option(WITH_SNAPPY "Snappy is here" ON)
-if(${WITH_SNAPPY})
 find_package(snappy REQUIRED)
-set(HAVE_LIBSNAPPY ${SNAPPY_FOUND})
-endif(${WITH_SNAPPY})
 
 option(WITH_TCMALLOC "Use TCMalloc as Allocator" ON)
 if(${WITH_TCMALLOC})
 find_package(tcmalloc REQUIRED)
 set(HAVE_LIBTCMALLOC ${Tcmalloc_FOUND})
 endif(${WITH_TCMALLOC})
+
+find_package(keyutils REQUIRED)
+
+find_package(libuuid REQUIRED)
+
+find_package(libcurl REQUIRED)
+
+find_package(libedit REQUIRED)
 
 option(USE_CRYPTOPP "Cryptopp is ON" ON)
 find_package(cryptopp)
@@ -185,7 +184,7 @@ if(CRYPTOPP_FOUND)
 	set(USE_NSS 0)
 else()
         MESSAGE(STATUS "Cryptopp not found using NSS instead")
-        find_package(NSS)
+	find_package(NSS REQUIRED)
         if(NSS_FOUND)
 		set(USE_NSS 1)
 		set(USE_CRYPTOPP 0)
@@ -207,6 +206,9 @@ endif(WITH_XIO)
 #option for RGW
 option(WITH_RADOSGW "Rados Gateway is enabled" ON)
 
+#option for CephFS
+option(WITH_CEPHFS "CephFS is enabled" ON)
+
 # Now create a useable config.h
 configure_file(
   ${PROJECT_SOURCE_DIR}/src/include/config-h.in.cmake
@@ -223,7 +225,7 @@ else(${ENABLE_SHARED})
 endif(${ENABLE_SHARED})
 
 set(Boost_USE_MULTITHREADED ON)
-find_package(Boost COMPONENTS thread system regex REQUIRED)
+find_package(Boost COMPONENTS thread system regex random REQUIRED)
 include_directories(${Boost_INCLUDE_DIRS})
 
 find_package(Threads REQUIRED)
@@ -240,5 +242,12 @@ if(${CMAKE_SYSTEM_NAME} MATCHES "Darwin")
 set(OperatingSystem "Mac OS X")  
 endif(${CMAKE_SYSTEM_NAME} MATCHES "Darwin")
 
+# enables testing and creates Make check command
+enable_testing()
+set(CMAKE_CTEST_COMMAND ctest -V)
+add_custom_target(check COMMAND ${CMAKE_CTEST_COMMAND})
+
 add_subdirectory(src)
-add_subdirectory(man)
+
+# man pages must be preprocessed, not supported yet
+#add_subdirectory(man)

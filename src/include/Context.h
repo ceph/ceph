@@ -22,7 +22,6 @@
 #include <list>
 #include <set>
 
-#include <iostream>
 #include "include/assert.h"
 #include "include/memory.h"
 

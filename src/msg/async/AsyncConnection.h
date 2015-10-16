@@ -25,6 +25,7 @@ using namespace std;
 
 #include "auth/AuthSessionHandler.h"
 #include "common/Mutex.h"
+#include "common/perf_counters.h"
 #include "include/buffer.h"
 #include "msg/Connection.h"
 #include "msg/Messenger.h"
@@ -45,10 +46,15 @@ class AsyncConnection : public Connection {
 
   int read_bulk(int fd, char *buf, int len);
   int do_sendmsg(struct msghdr &msg, int len, bool more);
+  int try_send(bufferlist &bl, bool send=true) {
+    Mutex::Locker l(write_lock);
+    return _try_send(bl, send);
+  }
   // if "send" is false, it will only append bl to send buffer
   // the main usage is avoid error happen outside messenger threads
-  int _try_send(bufferlist bl, bool send=true);
+  int _try_send(bufferlist &bl, bool send=true);
   int _send(Message *m);
+  void prepare_send_message(uint64_t features, Message *m, bufferlist &bl);
   int read_until(uint64_t needed, char *p);
   int _process_connection();
   void _connect();
@@ -63,7 +69,7 @@ class AsyncConnection : public Connection {
   int randomize_out_seq();
   void handle_ack(uint64_t seq);
   void _send_keepalive_or_ack(bool ack=false, utime_t *t=NULL);
-  int write_message(const ceph_msg_header& header, const ceph_msg_footer& footer, bufferlist& blist);
+  int write_message(Message *m, bufferlist& bl);
   int _reply_accept(char tag, ceph_msg_connect &connect, ceph_msg_connect_reply &reply,
                     bufferlist authorizer_reply) {
     bufferlist reply_bl;
@@ -74,7 +80,7 @@ class AsyncConnection : public Connection {
     if (reply.authorizer_len) {
       reply_bl.append(authorizer_reply.c_str(), authorizer_reply.length());
     }
-    int r = _try_send(reply_bl);
+    int r = try_send(reply_bl);
     if (r < 0)
       return -1;
 
@@ -82,27 +88,33 @@ class AsyncConnection : public Connection {
     return 0;
   }
   bool is_queued() {
+    assert(write_lock.is_locked());
     return !out_q.empty() || outcoming_bl.length();
   }
   void shutdown_socket() {
     if (sd >= 0)
       ::shutdown(sd, SHUT_RDWR);
   }
-  Message *_get_next_outgoing() {
+  Message *_get_next_outgoing(bufferlist *bl) {
+    assert(write_lock.is_locked());
     Message *m = 0;
     while (!m && !out_q.empty()) {
-      map<int, list<Message*> >::reverse_iterator p = out_q.rbegin();
-      if (!p->second.empty()) {
-        m = p->second.front();
-        p->second.pop_front();
+      map<int, list<pair<bufferlist, Message*> > >::reverse_iterator it = out_q.rbegin();
+      if (!it->second.empty()) {
+        list<pair<bufferlist, Message*> >::iterator p = it->second.begin();
+        m = p->second;
+        if (bl)
+          bl->swap(p->first);
+        it->second.erase(p);
       }
-      if (p->second.empty())
-        out_q.erase(p->first);
+      if (it->second.empty())
+        out_q.erase(it->first);
     }
     return m;
   }
+
  public:
-  AsyncConnection(CephContext *cct, AsyncMessenger *m, EventCenter *c);
+  AsyncConnection(CephContext *cct, AsyncMessenger *m, EventCenter *c, PerfCounters *p);
   ~AsyncConnection();
 
   ostream& _conn_prefix(std::ostream *_dout);
@@ -204,21 +216,32 @@ class AsyncConnection : public Connection {
   }
 
   AsyncMessenger *async_msgr;
+  PerfCounters *logger;
   int global_seq;
   __u32 connect_seq, peer_global_seq;
-  uint64_t out_seq;
-  uint64_t in_seq, in_seq_acked;
+  atomic_t out_seq;
+  atomic_t ack_left, in_seq;
   int state;
   int state_after_send;
   int sd;
   int port;
   Messenger::Policy policy;
-  map<int, list<Message*> > out_q;  // priority queue for outbound msgs
-  list<Message*> sent;
+
+  Mutex write_lock;
+  enum {
+    NOWRITE,
+    CANWRITE,
+    CLOSED
+  } can_write;
+  bool open_write;
+  map<int, list<pair<bufferlist, Message*> > > out_q;  // priority queue for outbound msgs
+  list<Message*> sent; // the first bufferlist need to inject seq
   list<Message*> local_messages;    // local deliver
+  bufferlist outcoming_bl;
+  bool keepalive;
+
   Mutex lock;
   utime_t backoff;         // backoff time
-  bool open_write;
   EventCallbackRef read_handler;
   EventCallbackRef write_handler;
   EventCallbackRef reset_handler;
@@ -226,7 +249,6 @@ class AsyncConnection : public Connection {
   EventCallbackRef connect_handler;
   EventCallbackRef local_deliver_handler;
   EventCallbackRef wakeup_handler;
-  bool keepalive;
   struct iovec msgvec[IOV_MAX];
   char *recv_buf;
   uint32_t recv_max_prefetch;
@@ -265,7 +287,6 @@ class AsyncConnection : public Connection {
   char *state_buffer;
   // used only by "read_until"
   uint64_t state_offset;
-  bufferlist outcoming_bl;
   NetHandler net;
   EventCenter *center;
   ceph::shared_ptr<AuthSessionHandler> session_security;
@@ -291,6 +312,9 @@ class AsyncConnection : public Connection {
     connect_handler.reset();
     local_deliver_handler.reset();
     wakeup_handler.reset();
+  }
+  PerfCounters *get_perf_counter() {
+    return logger;
   }
 }; /* AsyncConnection */
 

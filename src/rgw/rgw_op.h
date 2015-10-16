@@ -44,7 +44,9 @@ enum RGWOpType {
   RGW_OP_DELETE_BUCKET,
   RGW_OP_PUT_OBJ,
   RGW_OP_POST_OBJ,
-  RGW_OP_PUT_METADATA,
+  RGW_OP_PUT_METADATA_ACCOUNT,
+  RGW_OP_PUT_METADATA_BUCKET,
+  RGW_OP_PUT_METADATA_OBJECT,
   RGW_OP_SET_TEMPURL,
   RGW_OP_DELETE_OBJ,
   RGW_OP_COPY_OBJ,
@@ -132,6 +134,8 @@ protected:
   int ret;
   bool get_data;
   bool partial_content;
+  bool range_parsed;
+  bool skip_manifest;
   rgw_obj obj;
   utime_t gc_invalidate_time;
 
@@ -154,10 +158,12 @@ public:
     unmod_ptr = NULL;
     get_data = false;
     partial_content = false;
+    range_parsed = false;
+    skip_manifest = false;
     ret = 0;
  }
 
-  virtual bool prefetch_data() { return get_data; }
+  bool prefetch_data();
 
   void set_get_data(bool get_data) {
     this->get_data = get_data;
@@ -176,6 +182,7 @@ public:
   virtual const string name() { return "get_obj"; }
   virtual RGWOpType get_type() { return RGW_OP_GET_OBJ; }
   virtual uint32_t op_mask() { return RGW_OP_TYPE_READ; }
+  virtual bool need_object_expiration() { return false; }
 };
 
 #define RGW_LIST_BUCKETS_LIMIT_MAX 10000
@@ -191,6 +198,7 @@ protected:
   uint64_t buckets_objcount;
   uint64_t buckets_size;
   uint64_t buckets_size_rounded;
+  map<string, bufferlist> attrs;
 
 public:
   RGWListBuckets() : ret(0), sent_data(false) {
@@ -211,6 +219,7 @@ public:
   virtual void send_response() {}
 
   virtual bool should_get_stats() { return false; }
+  virtual bool supports_account_metadata() { return false; }
 
   virtual const string name() { return "list_buckets"; }
   virtual RGWOpType get_type() { return RGW_OP_LIST_BUCKETS; }
@@ -235,7 +244,7 @@ public:
   }
 
   int verify_permission();
-  void execute();
+  virtual void execute();
 
   virtual void send_response() = 0;
   virtual const string name() { return "stat_account"; }
@@ -252,6 +261,7 @@ protected:
   rgw_obj_key end_marker;
   string max_keys;
   string delimiter;
+  string encoding_type;
   bool list_versions;
   int max;
   int ret;
@@ -428,6 +438,8 @@ protected:
   uint64_t olh_epoch;
   string version_id;
 
+  time_t delete_at;
+
 public:
   RGWPutObj() {
     ret = 0;
@@ -441,6 +453,7 @@ public:
     mtime = 0;
     user_manifest_parts_hash = NULL;
     olh_epoch = 0;
+    delete_at = 0;
   }
 
   virtual void init(RGWRados *store, struct req_state *s, RGWHandler *h) {
@@ -481,11 +494,12 @@ protected:
   string content_type;
   RGWAccessControlPolicy policy;
   map<string, bufferlist> attrs;
+  time_t delete_at;
 
 public:
   RGWPostObj() : min_len(0), max_len(LLONG_MAX), ret(0), len(0), ofs(0),
 		 supplied_md5_b64(NULL), supplied_etag(NULL),
-		 data_pending(false) {}
+		 data_pending(false), delete_at(0) {}
 
   virtual void init(RGWRados *store, struct req_state *s, RGWHandler *h) {
     RGWOp::init(store, s, h);
@@ -507,7 +521,37 @@ public:
   virtual uint32_t op_mask() { return RGW_OP_TYPE_WRITE; }
 };
 
-class RGWPutMetadata : public RGWOp {
+class RGWPutMetadataAccount : public RGWOp {
+protected:
+  int ret;
+  set<string> rmattr_names;
+  RGWAccessControlPolicy policy;
+
+public:
+  RGWPutMetadataAccount()
+    : ret(0)
+  {}
+
+  virtual void init(RGWRados *store, struct req_state *s, RGWHandler *h) {
+    RGWOp::init(store, s, h);
+    policy.set_ctx(s->cct);
+  }
+  int verify_permission();
+  void pre_exec() { return; }
+  void execute();
+
+  virtual int get_params() = 0;
+  virtual void send_response() = 0;
+  virtual void filter_out_temp_url(map<string, bufferlist>& add_attrs,
+                                   const set<string>& rmattr_names,
+                                   map<int, string>& temp_url_keys);
+  virtual int handle_temp_url_update(const map<int, string>& temp_url_keys);
+  virtual const string name() { return "put_account_metadata"; }
+  virtual RGWOpType get_type() { return RGW_OP_PUT_METADATA_ACCOUNT; }
+  virtual uint32_t op_mask() { return RGW_OP_TYPE_WRITE; }
+};
+
+class RGWPutMetadataBucket : public RGWOp {
 protected:
   int ret;
   set<string> rmattr_names;
@@ -517,11 +561,36 @@ protected:
   string placement_rule;
 
 public:
-  RGWPutMetadata() {
-    has_cors = false;
-    has_policy = false;
-    ret = 0;
+  RGWPutMetadataBucket()
+    : ret(0), has_policy(false), has_cors(false)
+  {}
+
+  virtual void init(RGWRados *store, struct req_state *s, RGWHandler *h) {
+    RGWOp::init(store, s, h);
+    policy.set_ctx(s->cct);
   }
+  int verify_permission();
+  void pre_exec();
+  void execute();
+
+  virtual int get_params() = 0;
+  virtual void send_response() = 0;
+  virtual const string name() { return "put_bucket_metadata"; }
+  virtual RGWOpType get_type() { return RGW_OP_PUT_METADATA_BUCKET; }
+  virtual uint32_t op_mask() { return RGW_OP_TYPE_WRITE; }
+};
+
+class RGWPutMetadataObject : public RGWOp {
+protected:
+  int ret;
+  RGWAccessControlPolicy policy;
+  string placement_rule;
+  time_t delete_at;
+
+public:
+  RGWPutMetadataObject()
+    : ret(0), delete_at(0)
+  {}
 
   virtual void init(RGWRados *store, struct req_state *s, RGWHandler *h) {
     RGWOp::init(store, s, h);
@@ -534,24 +603,9 @@ public:
   virtual int get_params() = 0;
   virtual void send_response() = 0;
   virtual const string name() { return "put_obj_metadata"; }
-  virtual RGWOpType get_type() { return RGW_OP_PUT_METADATA; }
+  virtual RGWOpType get_type() { return RGW_OP_PUT_METADATA_OBJECT; }
   virtual uint32_t op_mask() { return RGW_OP_TYPE_WRITE; }
-};
-
-class RGWSetTempUrl : public RGWOp {
-protected:
-  int ret;
-  map<int, string> temp_url_keys;
-public:
-  RGWSetTempUrl() : ret(0) {}
-
-  int verify_permission();
-  void execute();
-
-  virtual int get_params() = 0;
-  virtual void send_response() = 0;
-  virtual const string name() { return "set_temp_url"; }
-  virtual RGWOpType get_type() { return RGW_OP_SET_TEMPURL; }
+  virtual bool need_object_expiration() { return false; }
 };
 
 class RGWDeleteObj : public RGWOp {
@@ -610,6 +664,7 @@ protected:
   string version_id;
   uint64_t olh_epoch;
 
+  time_t delete_at;
 
   int init_common();
 
@@ -632,6 +687,7 @@ public:
     attrs_mod = RGWRados::ATTRSMOD_NONE;
     last_ofs = 0;
     olh_epoch = 0;
+    delete_at = 0;
   }
 
   static bool parse_copy_location(const string& src, string& bucket_name, rgw_obj_key& object);

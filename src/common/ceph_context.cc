@@ -20,6 +20,7 @@
 #include "common/perf_counters.h"
 #include "common/Thread.h"
 #include "common/ceph_context.h"
+#include "common/ceph_crypto.h"
 #include "common/config.h"
 #include "common/debug.h"
 #include "common/HeartbeatMap.h"
@@ -38,6 +39,41 @@
 #include "include/Spinlock.h"
 
 using ceph::HeartbeatMap;
+
+namespace {
+
+class LockdepObs : public md_config_obs_t {
+public:
+  LockdepObs(CephContext *cct) : m_cct(cct), m_registered(false) {
+  }
+  virtual ~LockdepObs() {
+    if (m_registered) {
+      lockdep_unregister_ceph_context(m_cct);
+    }
+  }
+
+  const char** get_tracked_conf_keys() const {
+    static const char *KEYS[] = {"lockdep", NULL};
+    return KEYS;
+  }
+
+  void handle_conf_change(const md_config_t *conf,
+                          const std::set <std::string> &changed) {
+    if (conf->lockdep && !m_registered) {
+      lockdep_register_ceph_context(m_cct);
+      m_registered = true;
+    } else if (!conf->lockdep && m_registered) {
+      lockdep_unregister_ceph_context(m_cct);
+      m_registered = false;
+    }
+  }
+private:
+  CephContext *m_cct;
+  bool m_registered;
+};
+
+
+} // anonymous namespace
 
 class CephContextServiceThread : public Thread
 {
@@ -70,6 +106,9 @@ public:
         _reopen_logs = false;
       }
       _cct->_heartbeat_map->check_touch_file();
+
+      // refresh the perf coutners
+      _cct->refresh_perf_values();
     }
     return NULL;
   }
@@ -194,7 +233,8 @@ bool CephContext::check_experimental_feature_enabled(const std::string& feat,
 						     std::ostream *message)
 {
   ceph_spin_lock(&_feature_lock);
-  bool enabled = _experimental_features.count(feat);
+  bool enabled = (_experimental_features.count(feat) ||
+		  _experimental_features.count("*"));
   ceph_spin_unlock(&_feature_lock);
 
   if (enabled) {
@@ -363,6 +403,7 @@ CephContext::CephContext(uint32_t module_type_)
     _conf(new md_config_t()),
     _log(NULL),
     _module_type(module_type_),
+    _crypto_inited(false),
     _service_thread(NULL),
     _log_obs(NULL),
     _admin_socket(NULL),
@@ -370,11 +411,14 @@ CephContext::CephContext(uint32_t module_type_)
     _perf_counters_conf_obs(NULL),
     _heartbeat_map(NULL),
     _crypto_none(NULL),
-    _crypto_aes(NULL)
+    _crypto_aes(NULL),
+    _lockdep_obs(NULL),
+    _cct_perf(NULL)
 {
   ceph_spin_init(&_service_thread_lock);
   ceph_spin_init(&_associated_objs_lock);
   ceph_spin_init(&_feature_lock);
+  ceph_spin_init(&_cct_perf_lock);
 
   _log = new ceph::log::Log(&_conf->subsys);
   _log->start();
@@ -385,7 +429,11 @@ CephContext::CephContext(uint32_t module_type_)
   _cct_obs = new CephContextObs(this);
   _conf->add_observer(_cct_obs);
 
+  _lockdep_obs = new LockdepObs(this);
+  _conf->add_observer(_lockdep_obs);
+
   _perf_counters_collection = new PerfCountersCollection(this);
+ 
   _admin_socket = new AdminSocket(this);
   _heartbeat_map = new HeartbeatMap(this);
 
@@ -419,8 +467,10 @@ CephContext::~CephContext()
        it != _associated_objs.end(); ++it)
     delete it->second;
 
-  if (_conf->lockdep) {
-    lockdep_unregister_ceph_context(this);
+  if (_cct_perf) {
+    _perf_counters_collection->remove(_cct_perf);
+    delete _cct_perf;
+    _cct_perf = NULL;
   }
 
   _admin_socket->unregister_command("perfcounters_dump");
@@ -456,6 +506,10 @@ CephContext::~CephContext()
   delete _cct_obs;
   _cct_obs = NULL;
 
+  _conf->remove_observer(_lockdep_obs);
+  delete _lockdep_obs;
+  _lockdep_obs = NULL;
+
   _log->stop();
   delete _log;
   _log = NULL;
@@ -464,9 +518,18 @@ CephContext::~CephContext()
   ceph_spin_destroy(&_service_thread_lock);
   ceph_spin_destroy(&_associated_objs_lock);
   ceph_spin_destroy(&_feature_lock);
+  ceph_spin_destroy(&_cct_perf_lock);
 
   delete _crypto_none;
   delete _crypto_aes;
+  if (_crypto_inited)
+    ceph::crypto::shutdown();
+}
+
+void CephContext::init_crypto()
+{
+  ceph::crypto::init(this);
+  _crypto_inited = true;
 }
 
 void CephContext::start_service_thread()
@@ -526,6 +589,41 @@ uint32_t CephContext::get_module_type() const
 PerfCountersCollection *CephContext::get_perfcounters_collection()
 {
   return _perf_counters_collection;
+}
+
+void CephContext::enable_perf_counter()
+{
+  PerfCountersBuilder plb(this, "cct", l_cct_first, l_cct_last);
+  plb.add_u64_counter(l_cct_total_workers, "total_workers", "Total workers");
+  plb.add_u64_counter(l_cct_unhealthy_workers, "unhealthy_workers", "Unhealthy workers");
+  PerfCounters *perf_tmp = plb.create_perf_counters();
+
+  ceph_spin_lock(&_cct_perf_lock);
+  assert(_cct_perf == NULL);
+  _cct_perf = perf_tmp;
+  ceph_spin_unlock(&_cct_perf_lock);
+
+  _perf_counters_collection->add(_cct_perf);
+}
+
+void CephContext::disable_perf_counter()
+{
+  _perf_counters_collection->remove(_cct_perf);
+
+  ceph_spin_lock(&_cct_perf_lock);
+  delete _cct_perf;
+  _cct_perf = NULL;
+  ceph_spin_unlock(&_cct_perf_lock);
+}
+
+void CephContext::refresh_perf_values()
+{
+  ceph_spin_lock(&_cct_perf_lock);
+  if (_cct_perf) {
+    _cct_perf->set(l_cct_total_workers, _heartbeat_map->get_total_workers());
+    _cct_perf->set(l_cct_unhealthy_workers, _heartbeat_map->get_unhealthy_workers());
+  }
+  ceph_spin_unlock(&_cct_perf_lock);
 }
 
 AdminSocket *CephContext::get_admin_socket()

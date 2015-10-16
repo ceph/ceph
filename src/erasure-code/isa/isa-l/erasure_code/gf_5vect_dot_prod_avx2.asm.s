@@ -31,6 +31,8 @@
 ;;; gf_5vect_dot_prod_avx2(len, vec, *g_tbls, **buffs, **dests);
 ;;;
 
+%include "reg_sizes.asm"
+
 %ifidn __OUTPUT_FORMAT__, elf64
  %define arg0  rdi
  %define arg1  rsi
@@ -309,13 +311,5 @@ endproc_frame
 
 section .data
 
-%macro slversion 4
-global %1_slver_%2%3%4
-global %1_slver
-%1_slver:
-%1_slver_%2%3%4:
-	dw 0x%4
-	db 0x%3, 0x%2
-%endmacro
 ;;;       func                  core, ver, snum
-slversion gf_5vect_dot_prod_avx2, 04,  03,  0199
+slversion gf_5vect_dot_prod_avx2, 04,  04,  0199

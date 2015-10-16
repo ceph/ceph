@@ -60,7 +60,7 @@ public:
 
 private:
 
-  class Request : public AsyncRequest {
+  class Request : public AsyncRequest<> {
   public:
     Request(ImageCtx &image_ctx, uint64_t snap_id, Context *on_finish)
       : AsyncRequest(image_ctx, on_finish), m_snap_id(snap_id),
@@ -71,6 +71,9 @@ private:
   protected:
     const uint64_t m_snap_id;
 
+    virtual bool safely_cancel(int r) {
+      return false;
+    }
     virtual bool should_complete(int r);
     virtual int filter_return_code(int r) {
       // never propagate an error back to the caller
@@ -140,7 +143,7 @@ private:
   uint64_t m_snap_id;
   bool m_enabled;
 
-  void invalidate(uint64_t snap_id);
+  void invalidate(uint64_t snap_id, bool force);
   void resize(uint64_t num_objs, uint8_t default_state);
 };
 

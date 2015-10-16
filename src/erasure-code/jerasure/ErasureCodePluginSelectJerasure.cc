@@ -54,26 +54,27 @@ static string get_variant() {
 
 class ErasureCodePluginSelectJerasure : public ErasureCodePlugin {
 public:
-  virtual int factory(const map<string,string> &parameters,
-		      ErasureCodeInterfaceRef *erasure_code) {
+  virtual int factory(const std::string &directory,
+		      ErasureCodeProfile &profile,
+		      ErasureCodeInterfaceRef *erasure_code,
+		      ostream *ss) {
     ErasureCodePluginRegistry &instance = ErasureCodePluginRegistry::instance();
-    stringstream ss;
     int ret;
     string name = "jerasure";
-    if (parameters.count("jerasure-name"))
-      name = parameters.find("jerasure-name")->second;
-    if (parameters.count("jerasure-variant")) {
+    if (profile.count("jerasure-name"))
+      name = profile.find("jerasure-name")->second;
+    if (profile.count("jerasure-variant")) {
       dout(10) << "jerasure-variant " 
-	       << parameters.find("jerasure-variant")->second << dendl;
-      ret = instance.factory(name + "_" + parameters.find("jerasure-variant")->second,
-			     parameters, erasure_code, ss);
+	       << profile.find("jerasure-variant")->second << dendl;
+      ret = instance.factory(name + "_" + profile.find("jerasure-variant")->second,
+			     directory,
+			     profile, erasure_code, ss);
     } else {
       string variant = get_variant();
       dout(10) << variant << " plugin" << dendl;
-      ret = instance.factory(name + "_" + variant, parameters, erasure_code, ss);
+      ret = instance.factory(name + "_" + variant, directory,
+			     profile, erasure_code, ss);
     }
-    if (ret)
-      derr << ss.str() << dendl;
     return ret;
   }
 };
@@ -87,7 +88,7 @@ int __erasure_code_init(char *plugin_name, char *directory)
   ErasureCodePlugin *plugin;
   stringstream ss;
   int r = instance.load(plugin_name + string("_") + variant,
-			directory, &plugin, ss);
+			directory, &plugin, &ss);
   if (r) {
     derr << ss.str() << dendl;
     return r;

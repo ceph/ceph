@@ -39,8 +39,8 @@ and erasure coding which PGBackend must abstract over:
 5. Selection of a pgtemp for backfill may differ between replicated
    and erasure coded backends.
 6. The set of necessary OSDs from a particular interval required to
-   to continue peering may differ between replicated and erasure
-   coded backends.
+   continue peering may differ between replicated and erasure coded
+   backends.
 7. The selection of the authoritative log may differ between replicated
    and erasure coded backends.
 

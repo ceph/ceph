@@ -26,7 +26,7 @@ using namespace std;
 #include "common/strtol.h"
 
 #include "mon/MonMap.h"
-#include "mds/MDS.h"
+#include "mds/MDSDaemon.h"
 
 #include "msg/Messenger.h"
 
@@ -78,7 +78,7 @@ static int parse_rank(const char *opt_name, const std::string &val)
 
 
 
-MDS *mds = NULL;
+MDSDaemon *mds = NULL;
 
 
 static void handle_mds_signal(int signum)
@@ -199,13 +199,13 @@ int main(int argc, const char **argv)
   msgr->start();
 
   // start mds
-  mds = new MDS(g_conf->name.get_id().c_str(), msgr, &mc);
+  mds = new MDSDaemon(g_conf->name.get_id().c_str(), msgr, &mc);
 
   // in case we have to respawn...
   mds->orig_argc = argc;
   mds->orig_argv = argv;
 
-  if (shadow)
+  if (shadow != MDSMap::STATE_NULL)
     r = mds->init(shadow);
   else
     r = mds->init();
@@ -238,8 +238,10 @@ int main(int argc, const char **argv)
 
   // only delete if it was a clean shutdown (to aid memory leak
   // detection, etc.).  don't bother if it was a suicide.
-  if (mds->is_stopped())
+  if (mds->is_clean_shutdown()) {
     delete mds;
+    delete msgr;
+  }
 
   g_ceph_context->put();
 

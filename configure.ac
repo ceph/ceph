@@ -8,7 +8,9 @@ AC_PREREQ(2.59)
 # VERSION define is not used by the code.  It gets a version string
 # from 'git describe'; see src/ceph_ver.[ch]
 
-AC_INIT([ceph], [9.0.0], [ceph-devel@vger.kernel.org])
+AC_INIT([ceph], [9.1.0], [ceph-devel@vger.kernel.org])
+
+AX_CXX_COMPILE_STDCXX_11(, mandatory)
 
 # Create release string.  Used with VERSION for RPMs.
 RPM_RELEASE=0
@@ -44,14 +46,13 @@ AC_CANONICAL_TARGET
 m4_ifdef([AM_PROG_AR], [AM_PROG_AR])
 
 # Automake
-AM_INIT_AUTOMAKE
 AM_PROG_CC_C_O
 AM_PROG_LIBTOOL
 AM_PROG_AS
 
 
+AM_INIT_AUTOMAKE([foreign parallel-tests tar-ustar])
 # enable make V=0 (if automake >1.11)
-AM_INIT_AUTOMAKE([foreign])
 m4_ifdef([AM_SILENT_RULES], [AM_SILENT_RULES([yes])])
 
 # Platform
@@ -97,9 +98,7 @@ AC_PROG_LIBTOOL
 AC_SUBST(AM_CXXFLAGS)
 AM_CXXFLAGS="${AM_CXXFLAGS}"
 
-
-###### PATCH STARTS HERE ######
-# Find out what to build (default is all of these)
+# Find out what to build (default is most of these)
 
 # rados?
 AC_ARG_WITH([rados],
@@ -130,11 +129,21 @@ AM_CONDITIONAL(WITH_CEPHFS, test "$with_cephfs" = "yes")
 # radosgw?
 # radosgw requires rados
 AC_ARG_WITH([radosgw],
-            [AS_HELP_STRING([--with-radosgw], [build RADOS gateway])],
-            [],
-            [with_radosgw=check])
+	[AS_HELP_STRING([--with-radosgw], [build RADOS gateway])],
+	[],
+	[with_radosgw=check])
 # AM_CONDITIONAL is defined later -- we need to check whether we can enable radosgw if no option is present
 #AS_IF([test "$with_radosgw" = "yes"], [AC_DEFINE([WITH_RADOS, WITH_RADOSGW])])
+
+AC_ARG_WITH([selinux],
+	[AS_HELP_STRING([--with-selinux], [build SELinux policy])],
+	[],
+	[with_selinux=no])
+AM_CONDITIONAL(WITH_SELINUX, test "$with_selinux" = "yes")
+if test "x$with_selinux" = x"yes"; then
+	AC_CHECK_FILE([/usr/share/selinux/devel/policyhelp], [true], [AC_MSG_FAILURE([No SELinux found])])
+	AC_CHECK_FILE([/usr/share/selinux/devel/include/Makefile], [true],  [AC_MSG_FAILURE([No SELinux Makefile found])])
+fi
 
 # radosstriper?
 AC_ARG_WITH([radosstriper],
@@ -191,8 +200,6 @@ AS_IF([test "$enable_server" = "yes" -a \( "$with_osd" = "yes" -o "$with_mon" = 
 # cond-check leveldb, necessary if server, osd or mon enabled
 AS_IF([test "$enable_server" = "yes" -a \( "$with_osd" = "yes" -o "$with_mon" = "yes" \)],
 	[AC_CHECK_LIB([leveldb], [leveldb_open], [true], [AC_MSG_FAILURE([libleveldb not found])], [-lsnappy -lpthread])])
-###### PATCH ENDS HERE ######
-
 
 # Check for yasm
 AC_CHECK_PROG(YASM_CHECK, yasm, yes)
@@ -211,7 +218,7 @@ if test x"$YASM_CHECK" = x"yes"; then
            AC_DEFINE([HAVE_GOOD_YASM_ELF64], [1], [we have a recent yasm and are x86_64])
            with_good_yasm=yes
   
-           if yasm -f elf64 -i src/ceph/src/ceph/src/erasure-code/isa/isa-l/include/ src/erasure-code/isa/isa-l/erasure_code/gf_vect_dot_prod_avx2.asm.s -o /dev/null 2> /dev/null ; then
+           if yasm -f elf64 -i src/erasure-code/isa/isa-l/include/ src/erasure-code/isa/isa-l/erasure_code/gf_vect_dot_prod_avx2.asm.s -o /dev/null 2> /dev/null ; then
               echo 'yasm can also build the isa-l stuff'
               AC_DEFINE([HAVE_BETTER_YASM_ELF64], [1], [yasm can also build the isa-l])
   	    with_better_yasm=yes
@@ -266,27 +273,37 @@ AX_C_PRETTY_FUNC
 # Checks for libraries.
 ACX_PTHREAD
 
-AC_CHECK_LIB([uuid], [uuid_parse], [true], AC_MSG_FAILURE([libuuid not found]))
 
-# rbd {map,unmap,showmapped} dependencies, Linux only
-if test x"$linux" = x"yes" -a x"$with_rbd" = x"yes"; then
+#Linux only dependencies
+if test x"$linux" = x"yes"; then
   # libblkid
   AC_CHECK_HEADER([blkid/blkid.h], [],
     AC_MSG_ERROR([blkid/blkid.h not found (libblkid-dev, libblkid-devel)]))
-  AC_CHECK_LIB([blkid], [blkid_devno_to_wholedisk], [true],
+  AC_CHECK_LIB([blkid], [blkid_get_cache], [true],
+    AC_MSG_FAILURE([libblkid not found]))
+  AC_CHECK_LIB([blkid], [blkid_find_dev_with_tag], [true],
+    AC_MSG_FAILURE([libblkid not found]))
+  AC_CHECK_LIB([blkid], [blkid_dev_devname], [true],
     AC_MSG_FAILURE([libblkid not found]))
 
-  # libudev
-  AC_CHECK_HEADER([libudev.h], [],
-    AC_MSG_ERROR([libudev.h not found (libudev-dev, libudev-devel)]))
-  AC_CHECK_LIB([udev], [udev_monitor_receive_device], [true],
-    AC_MSG_FAILURE([libudev not found]))
+  # rbd {map,unmap,showmapped} dependencies, Linux only
+  if test x"$with_rbd" = x"yes"; then
+    # libblkid
+    AC_CHECK_LIB([blkid], [blkid_devno_to_wholedisk], [true],
+      AC_MSG_FAILURE([libblkid not found]))
 
-  # libexpat
-  AC_CHECK_HEADER([expat.h], [],
-    AC_MSG_ERROR([expat.h not found (libexpat-devel)]))
-  AC_CHECK_LIB([expat], [XML_Parse], [true],
-    AC_MSG_FAILURE([libexpat not found]))
+    # libudev
+    AC_CHECK_HEADER([libudev.h], [],
+      AC_MSG_ERROR([libudev.h not found (libudev-dev, libudev-devel)]))
+    AC_CHECK_LIB([udev], [udev_monitor_receive_device], [true],
+      AC_MSG_FAILURE([libudev not found]))
+
+    # libexpat
+    AC_CHECK_HEADER([expat.h], [],
+      AC_MSG_ERROR([expat.h not found (libexpat-devel)]))
+    AC_CHECK_LIB([expat], [XML_Parse], [true],
+      AC_MSG_FAILURE([libexpat not found]))
+  fi
 fi
 
 #
@@ -400,12 +417,6 @@ AC_ARG_ENABLE(gitversion,
 
 AM_CONDITIONAL(NO_GIT_VERSION, [test "x$enable_gitversion" = "xno"])
 
-AC_ARG_ENABLE([root-make-check],
-            [AS_HELP_STRING([--enable-root-make-check], [enable make check tests that require root privileges])],
-            [],
-            [enable_root_make_check=no])
-AM_CONDITIONAL(ENABLE_ROOT_MAKE_CHECK, test "x$enable_root_make_check" != xno)
-
 # profiler?
 AC_ARG_WITH([profiler],
             [AS_HELP_STRING([--with-profiler], [build extra profiler binaries])],
@@ -432,7 +443,7 @@ AS_IF([test "$with_profiler" = "yes"],
 
 # debug crap?
 AC_ARG_WITH([debug],
-            [AS_HELP_STRING([--with-debug], [build extra debug binaries])],
+            [AS_HELP_STRING([--with-debug], [build extra debug binaries and tests])],
             [case "${withval}" in
 		  yes) with_debug=yes ;;
 		  no)  with_debug=no ;;
@@ -490,20 +501,11 @@ AC_ARG_WITH([fuse],
             [],
             [with_fuse=yes])
 LIBFUSE=
-AS_IF([test "x$with_fuse" != xno],
-	    [AC_CHECK_LIB([fuse], [fuse_main],
-             [AC_SUBST([LIBFUSE], ["-lfuse"])
-               AC_DEFINE([HAVE_LIBFUSE], [1],
-                         [Define if you have fuse])
-               HAVE_LIBFUSE=1
-	       # look for fuse_getgroups and define FUSE_GETGROUPS if found
-           LIBS_saved="$LIBS"
-           LIBS="$LIBS -lfuse"
-	       AC_CHECK_FUNCS([fuse_getgroups])
-           LIBS="$LIBS_saved"
-              ],
-             [AC_MSG_FAILURE(
-                   [no FUSE found (use --without-fuse to disable)])])])
+AS_IF([test "x$with_fuse" != xno], [
+  PKG_CHECK_MODULES([LIBFUSE], [fuse],
+    [HAVE_LIBFUSE=1],
+    [AC_MSG_FAILURE([no FUSE found (use --without-fuse to disable)])])
+])
 AM_CONDITIONAL(WITH_FUSE, [test "$HAVE_LIBFUSE" = "1"])
 
 # jemalloc?
@@ -629,9 +631,9 @@ if test "x$enable_cephfs_java" = "xyes"; then
         # the search path.
         AS_IF([test "x$with_debug" = "xyes"], [
         	dir='/usr/share/java'
-	        junit4_jar=`find $dir -name junit4.jar | head -n 1`
+	        junit4_jar=`( find $dir -name junit4.jar;find $dir -name junit.jar ) | head -n 1`
 		AS_IF([test -r "$junit4_jar"], [
-		      EXTRA_CLASSPATH_JAR=`dirname $junit4_jar`/junit4.jar
+		      EXTRA_CLASSPATH_JAR="$junit4_jar"
 		      AC_SUBST(EXTRA_CLASSPATH_JAR)
 		      [have_junit4=1]], [
 		      AC_MSG_NOTICE([Cannot find junit4.jar (apt-get install junit4)])
@@ -802,24 +804,6 @@ if test "x$with_jemalloc" = "xyes"; then
 	fi
 fi
 
-# use system libs3?
-AC_ARG_WITH([system-libs3],
-	[AS_HELP_STRING([--with-system-libs3], [use system libs3])],
-	,
-	[with_system_libs3=no])
-AS_IF([test "x$with_system_libs3" = xyes],
-            [AC_CHECK_LIB([s3], [S3_initialize], [true], [AC_MSG_FAILURE([libs3 not found])], [-lpthread])])
-AS_IF([test "x$with_system_libs3" = xcheck],
-            [AC_SEARCH_LIBS([S3_initialize], [s3], [with_system_libs3=yes], [true], [-lpthread])])
-AM_CONDITIONAL(WITH_SYSTEM_LIBS3, [ test "$with_system_libs3" = "yes" ])
-
-# rest-bench?
-AC_ARG_WITH([rest-bench],
-	    [AS_HELP_STRING([--with-rest-bench], [enables rest-bench])],
-	    [],
-	    [with_rest_bench=no])
-AM_CONDITIONAL(WITH_REST_BENCH, [ test "$with_rest_bench" = "yes" ])
-
 # needs libcurl and libxml2
 if test "x$with_rest_bench" = xyes && test "x$with_system_libs3" = xno; then
    AC_CHECK_LIB([curl], [curl_easy_init], [], AC_MSG_ERROR([libcurl not found]))
@@ -915,6 +899,17 @@ BOOST_THREAD_LIBS="${LIBS}"
 LIBS="${saved_LIBS}"
 AC_SUBST(BOOST_THREAD_LIBS)
 
+# boost-random
+BOOST_RANDOM_LIBS=""
+saved_LIBS="${LIBS}"
+LIBS=""
+AC_CHECK_LIB(boost_random-mt, main, [],
+    [AC_CHECK_LIB(boost_random, main, [],
+        AC_MSG_FAILURE(["Boost random library not found."]))])
+BOOST_RANDOM_LIBS="${LIBS}"
+LIBS="${saved_LIBS}"
+AC_SUBST(BOOST_RANDOM_LIBS)
+
 #
 # Check for boost_program_options library (defines BOOST_PROGRAM_OPTIONS_LIBS).
 #
@@ -954,6 +949,11 @@ AC_CHECK_HEADERS([ \
 	utime.h \
 ])
 
+# name_to_handle_at
+AC_CHECK_FUNC([name_to_handle_at],
+	[AC_DEFINE([HAVE_NAME_TO_HANDLE_AT], [], [name_to_handle_at exists])],
+	[])
+
 # sync_file_range
 AC_CHECK_FUNC([sync_file_range],
 	[AC_DEFINE([HAVE_SYNC_FILE_RANGE], [], [sync_file_range(2) is supported])],
@@ -963,6 +963,9 @@ AC_CHECK_FUNC([sync_file_range],
 AC_CHECK_FUNC([fallocate],
 	[AC_DEFINE([CEPH_HAVE_FALLOCATE], [], [fallocate(2) is supported])],
 	[])
+
+# getgrouplist
+AC_CHECK_FUNCS([getgrouplist])
 
 #
 # Test for time-related `struct stat` members.
@@ -1154,11 +1157,125 @@ AC_ARG_ENABLE([valgrind],
               [AS_HELP_STRING([--enable-valgrind], [enable valgrind unit tests])],
               [enable_valgrind=$enableval], [enable_valgrind=])
 AC_CHECK_PROG(HAVE_VALGRIND, valgrind, yes)
-AS_IF([test "x$HAVE_VALGRIND" = "x"],
-  AS_IF([test "x$enable_valgrind" = "xyes"], [AC_MSG_ERROR([valgrind not found])]),
+AS_IF(
+  [test "x$HAVE_VALGRIND" = "x"], AS_IF([test "x$enable_valgrind" = "xyes"], [AC_MSG_ERROR([valgrind not found])]),
   [test "x$enable_valgrind" = "x"], [enable_valgrind=yes])
 
 AM_CONDITIONAL([VALGRIND_ENABLED], [test "x$enable_valgrind" = "xyes"])
+if test "x$enable_valgrind" = "xyes"; then
+  AC_CHECK_HEADERS([valgrind/helgrind.h])
+fi
+
+dnl systemd-libexec-dir
+AC_SUBST(systemd_libexec_dir)
+AC_ARG_WITH(
+    systemd-libexec-dir,
+    AS_HELP_STRING(
+	    [--with-systemd-libexec-dir=DIR],
+	    [systemd libexec directory @<:@SYSTEMD_LIBEXEC_DIR@:>@
+        defaults to --libexecdir=DIR]
+    ),
+    [
+	    systemd_libexec_dir="$withval"
+    ],
+    [
+        if test "x$SYSTEMD_LIBEXEC_DIR" = "x"; then
+            dnl store old values
+
+            prefix_save=$prefix
+            exec_prefix_save=$exec_prefix
+
+            dnl if no prefix given, then use /usr/local, the default prefix
+            if test "x$prefix" = "xNONE"; then
+                prefix="$ac_default_prefix"
+            fi
+            dnl if no exec_prefix given, then use prefix
+            if test "x$exec_prefix" = "xNONE"; then
+                exec_prefix=$prefix
+            fi
+
+            dnl now get the expanded default
+            systemd_libexec_dir="`eval exec_prefix=$exec_prefix prefix=$prefix echo $libexecdir`"
+
+            dnl now cleanup prefix and exec_prefix
+
+            prefix=$prefix_save
+            exec_prefix=$exec_prefix_save
+        else
+            systemd_libexec_dir="$SYSTEMD_LIBEXEC_DIR"
+        fi
+    ]
+)
+
+
+dnl rgw-user
+AC_SUBST(user_rgw)
+AC_ARG_WITH(
+    rgw-user,
+    AS_HELP_STRING(
+        [--with-rgw-user=USER],
+        [systemd unit directory @<:@USER_RGW@:>@
+        Defaults to "www-data"]
+    ),
+    [
+        user_rgw="$withval"
+    ],
+    [
+        if test "x$USER_RGW" = "x"; then
+            user_rgw=www-data
+        else
+            user_rgw="$USER_RGW"
+        fi
+    ]
+)
+
+dnl rgw-group
+AC_SUBST(group_rgw)
+AC_ARG_WITH(
+    rgw-group,
+    AS_HELP_STRING(
+        [--with-rgw-group=GROUP],
+        [systemd unit directory @<:@GROUP_RGW@:>@
+        Defaults to "www-data"]
+    ),
+    [
+        group_rgw="$withval"
+    ],
+    [
+        if test "x$GROUP_RGW" = "x"; then
+            group_rgw=www-data
+        else
+            group_rgw="$GROUP_RGW"
+        fi
+    ]
+)
+
+
+AC_SUBST(systemd_unit_dir)
+AC_ARG_WITH(
+    systemd-unit-dir,
+    AS_HELP_STRING(
+	    [--with-systemdsystemunitdir=DIR],
+	    [systemd unit directory @<:@SYSTEMD_UNIT_DIR@:>@
+        Defaults to the correct value for debian /etc/systemd/system/]
+    ),
+    [
+	    systemd_unit_dir="$withval"
+    ],
+    [
+        # default to the systemd admin unit directory
+        which pkg-config
+        pkg_config_exists=$?
+        if test x"$pkg_config_exists" = x"0"; then
+            systemd_unit_dir=`pkg-config systemd --variable=systemdsystemunitdir`
+        else
+            systemd_unit_dir="/etc/systemd/system/"
+        fi
+    ]
+)
+
+
+
 
 # Checks for typedefs, structures, and compiler characteristics.
 #AC_HEADER_STDBOOL
@@ -1220,7 +1337,9 @@ AC_CONFIG_FILES([Makefile
 	src/ocf/rbd
 	src/java/Makefile
 	src/tracing/Makefile
+	systemd/Makefile
 	man/Makefile
 	doc/Makefile
+	selinux/Makefile
 	ceph.spec])
 AC_OUTPUT

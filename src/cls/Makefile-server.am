@@ -6,6 +6,10 @@ libcls_hello_la_LIBADD = $(PTHREAD_LIBS) $(EXTRALIBS)
 libcls_hello_la_LDFLAGS = ${AM_LDFLAGS} -module -avoid-version -shared -export-symbols-regex '.*__cls_.*'
 radoslib_LTLIBRARIES += libcls_hello.la
 
+libcls_numops_la_SOURCES = cls/numops/cls_numops.cc
+libcls_numops_la_LDFLAGS = ${AM_LDFLAGS} -module -avoid-version -shared -export-symbols-regex '.*__cls_.*'
+radoslib_LTLIBRARIES += libcls_numops.la
+
 libcls_rbd_la_SOURCES = cls/rbd/cls_rbd.cc
 libcls_rbd_la_LIBADD = $(PTHREAD_LIBS) $(EXTRALIBS)
 libcls_rbd_la_LDFLAGS = ${AM_LDFLAGS} -module -avoid-version -shared -export-symbols-regex '.*__cls_.*'
@@ -39,6 +43,11 @@ libcls_statelog_la_LIBADD = $(PTHREAD_LIBS) $(EXTRALIBS)
 libcls_statelog_la_LDFLAGS = ${AM_LDFLAGS} -module -avoid-version -shared -export-symbols-regex '.*__cls_.*'
 radoslib_LTLIBRARIES += libcls_statelog.la
 
+libcls_timeindex_la_SOURCES = cls/timeindex/cls_timeindex.cc
+libcls_timeindex_la_LIBADD = $(PTHREAD_LIBS) $(EXTRALIBS)
+libcls_timeindex_la_LDFLAGS = ${AM_LDFLAGS} -module -avoid-version -shared -export-symbols-regex '.*__cls_.*'
+radoslib_LTLIBRARIES += libcls_timeindex.la
+
 libcls_replica_log_la_SOURCES = cls/replica_log/cls_replica_log.cc
 libcls_replica_log_la_LIBADD = $(PTHREAD_LIBS) $(EXTRALIBS)
 libcls_replica_log_la_LDFLAGS = ${AM_LDFLAGS} -module -avoid-version -shared -export-symbols-regex '.*__cls_.*'
@@ -57,4 +66,9 @@ libcls_rgw_la_SOURCES = \
 libcls_rgw_la_LIBADD = libjson_spirit.la $(PTHREAD_LIBS) $(EXTRALIBS)
 libcls_rgw_la_LDFLAGS = ${AM_LDFLAGS} -module -avoid-version -shared -export-symbols-regex '.*__cls_.*'
 radoslib_LTLIBRARIES += libcls_rgw.la
+
+libcls_cephfs_la_SOURCES = cls/cephfs/cls_cephfs.cc
+libcls_cephfs_la_LIBADD = $(PTHREAD_LIBS) $(EXTRALIBS)
+libcls_cephfs_la_LDFLAGS = ${AM_LDFLAGS} -module -avoid-version -shared -export-symbols-regex '.*__cls_.*'
+radoslib_LTLIBRARIES += libcls_cephfs.la
 endif # WITH_OSD

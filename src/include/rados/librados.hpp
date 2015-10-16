@@ -109,6 +109,12 @@ namespace librados
     /// move the iterator to a given hash position.  this may (will!) be rounded to the nearest pg.
     uint32_t seek(uint32_t pos);
 
+    /**
+     * Configure PGLS filter to be applied OSD-side (requires caller
+     * to know/understand the format expected by the OSD)
+     */
+    void set_filter(const bufferlist &bl);
+
   private:
     NObjectIterator(ObjListCtx *ctx_);
     void get_next();
@@ -259,6 +265,10 @@ namespace librados
     OPERATION_IGNORE_CACHE       = LIBRADOS_OPERATION_IGNORE_CACHE,
     OPERATION_SKIPRWLOCKS        = LIBRADOS_OPERATION_SKIPRWLOCKS,
     OPERATION_IGNORE_OVERLAY     = LIBRADOS_OPERATION_IGNORE_OVERLAY,
+    // send requests to cluster despite the cluster or pool being
+    // marked full; ops will either succeed (e.g., delete) or return
+    // EDQUOT or ENOSPC
+    OPERATION_FULL_TRY           = LIBRADOS_OPERATION_FULL_TRY,
   };
 
   /*
@@ -408,10 +418,11 @@ namespace librados
      *
      * @param src source object name
      * @param src_ioctx ioctx for the source object
-     * @param version current version of the source object
+     * @param src_version current version of the source object
+     * @param src_fadvise_flags the fadvise flags for source object
      */
     void copy_from(const std::string& src, const IoCtx& src_ioctx,
-		   uint64_t src_version);
+		   uint64_t src_version, uint32_t src_fadvise_flags);
 
     /**
      * undirty an object
@@ -764,9 +775,10 @@ namespace librados
 
 
     /// Start enumerating objects for a pool
-    NObjectIterator nobjects_begin();
+    NObjectIterator nobjects_begin(const bufferlist &filter=bufferlist());
     /// Start enumerating objects for a pool starting from a hash position
-    NObjectIterator nobjects_begin(uint32_t start_hash_position);
+    NObjectIterator nobjects_begin(uint32_t start_hash_position,
+                                   const bufferlist &filter=bufferlist());
     /// Iterator indicating the end of a pool
     const NObjectIterator& nobjects_end() const;
 

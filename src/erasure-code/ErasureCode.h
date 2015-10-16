@@ -33,8 +33,20 @@ namespace ceph {
     static const unsigned SIMD_ALIGN;
 
     vector<int> chunk_mapping;
+    ErasureCodeProfile _profile;
 
     virtual ~ErasureCode() {}
+
+    virtual int init(ErasureCodeProfile &profile, ostream *ss) {
+      _profile = profile;
+      return 0;
+    }
+
+    virtual const ErasureCodeProfile &get_profile() const {
+      return _profile;
+    }
+
+    int sanity_check_k(int k, ostream *ss);
 
     virtual unsigned int get_coding_chunk_count() const {
       return get_chunk_count() - get_data_chunk_count();
@@ -66,28 +78,35 @@ namespace ceph {
                               const map<int, bufferlist> &chunks,
                               map<int, bufferlist> *decoded);
 
-    virtual int parse(const map<std::string,std::string> &parameters,
-		      ostream *ss);
-
     virtual const vector<int> &get_chunk_mapping() const;
 
-    int to_mapping(const map<std::string,std::string> &parameters,
+    int to_mapping(const ErasureCodeProfile &profile,
 		   ostream *ss);
 
     static int to_int(const std::string &name,
-		      const map<std::string,std::string> &parameters,
+		      ErasureCodeProfile &profile,
 		      int *value,
-		      int default_value,
+		      const std::string &default_value,
 		      ostream *ss);
 
     static int to_bool(const std::string &name,
-		       const map<std::string,std::string> &parameters,
+		       ErasureCodeProfile &profile,
 		       bool *value,
-		       bool default_value,
+		       const std::string &default_value,
 		       ostream *ss);
+
+    static int to_string(const std::string &name,
+			 ErasureCodeProfile &profile,
+			 std::string *value,
+			 const std::string &default_value,
+			 ostream *ss);
 
     virtual int decode_concat(const map<int, bufferlist> &chunks,
 			      bufferlist *decoded);
+
+  protected:
+    int parse(const ErasureCodeProfile &profile,
+	      ostream *ss);
 
   private:
     int chunk_index(unsigned int i) const;

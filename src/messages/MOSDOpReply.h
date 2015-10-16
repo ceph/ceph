@@ -169,6 +169,7 @@ public:
       }
       ::encode_nohead(oid.name, payload);
     } else {
+      header.version = HEAD_VERSION;
       ::encode(oid, payload);
       ::encode(pgid, payload);
       ::encode(flags, payload);

@@ -106,4 +106,4 @@ connections, traffic forwarding, etc. to allow what you need).
 Once you have completed this pre-flight checklist, you are ready to begin using
 ``ceph-deploy``.
 
-.. _OS Recommendations: ../../../install/os-recommendations
+.. _OS Recommendations: ../../../start/os-recommendations

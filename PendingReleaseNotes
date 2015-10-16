@@ -1,6 +1,0 @@
-v0.80.10
-~~~~~~~~
-If rgw_socket_path is defined and rgw_frontends defines a socket_port and socket_host,
-we now allow the rgw_frontends settings to take precedence. This change should only
-affect users who have made non-standard changes to their radosgw configuration
-.

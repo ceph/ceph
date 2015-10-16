@@ -30,11 +30,35 @@ ceph_perf_objectstore_LDADD = $(LIBOS) $(UNITTEST_LDADD) $(CEPH_GLOBAL)
 ceph_perf_objectstore_CXXFLAGS = $(UNITTEST_CXXFLAGS)
 bin_DEBUGPROGRAMS += ceph_perf_objectstore
 
+ceph_perf_local_SOURCES = test/perf_local.cc test/perf_helper.cc
+ceph_perf_local_LDADD = $(LIBOS) $(CEPH_GLOBAL)
+ceph_perf_local_CXXFLAGS = ${AM_CXXFLAGS} 	\
+	${INTEL_SSE_FLAGS} \
+	${INTEL_SSE2_FLAGS}
+
+noinst_HEADERS += test/perf_helper.h
+bin_DEBUGPROGRAMS += ceph_perf_local
+
+ceph_perf_msgr_server_SOURCES = test/msgr/perf_msgr_server.cc
+ceph_perf_msgr_server_LDADD = $(LIBOS) $(UNITTEST_LDADD) $(CEPH_GLOBAL)
+ceph_perf_msgr_server_CXXFLAGS = $(UNITTEST_CXXFLAGS)
+bin_DEBUGPROGRAMS += ceph_perf_msgr_server
+
+ceph_perf_msgr_client_SOURCES = test/msgr/perf_msgr_client.cc
+ceph_perf_msgr_client_LDADD = $(LIBOS) $(UNITTEST_LDADD) $(CEPH_GLOBAL)
+ceph_perf_msgr_client_CXXFLAGS = $(UNITTEST_CXXFLAGS)
+bin_DEBUGPROGRAMS += ceph_perf_msgr_client
+
 if LINUX
 ceph_test_objectstore_SOURCES = test/objectstore/store_test.cc
 ceph_test_objectstore_LDADD = $(LIBOS) $(UNITTEST_LDADD) $(CEPH_GLOBAL)
 ceph_test_objectstore_CXXFLAGS = $(UNITTEST_CXXFLAGS)
 bin_DEBUGPROGRAMS += ceph_test_objectstore
+
+ceph_test_keyvaluedb_SOURCES = test/objectstore/test_kv.cc
+ceph_test_keyvaluedb_LDADD = $(LIBOS) $(UNITTEST_LDADD) $(CEPH_GLOBAL)
+ceph_test_keyvaluedb_CXXFLAGS = $(UNITTEST_CXXFLAGS)
+bin_DEBUGPROGRAMS += ceph_test_keyvaluedb
 
 ceph_test_filestore_SOURCES = test/filestore/TestFileStore.cc
 ceph_test_filestore_LDADD = $(LIBOS) $(UNITTEST_LDADD) $(CEPH_GLOBAL)
@@ -181,6 +205,11 @@ ceph_test_snap_mapper_LDADD = $(LIBOSD) $(UNITTEST_LDADD) $(CEPH_GLOBAL)
 ceph_test_snap_mapper_CXXFLAGS = $(UNITTEST_CXXFLAGS)
 bin_DEBUGPROGRAMS += ceph_test_snap_mapper
 
+unittest_pageset_SOURCES = test/test_pageset.cc
+unittest_pageset_LDADD = $(UNITTEST_LDADD)
+unittest_pageset_CXXFLAGS = $(UNITTEST_CXXFLAGS)
+check_TESTPROGRAMS += unittest_pageset
+
 endif # WITH_OSD
 
 if WITH_SLIBROCKSDB
@@ -201,11 +230,6 @@ unittest_chain_xattr_SOURCES = test/objectstore/chain_xattr.cc
 unittest_chain_xattr_LDADD = $(LIBOS) $(UNITTEST_LDADD) $(CEPH_GLOBAL)
 unittest_chain_xattr_CXXFLAGS = $(UNITTEST_CXXFLAGS)
 check_TESTPROGRAMS += unittest_chain_xattr
-
-unittest_flatindex_SOURCES = test/os/TestFlatIndex.cc
-unittest_flatindex_LDADD = $(LIBOS) $(UNITTEST_LDADD) $(CEPH_GLOBAL)
-unittest_flatindex_CXXFLAGS = $(UNITTEST_CXXFLAGS)
-check_TESTPROGRAMS += unittest_flatindex
 
 unittest_lfnindex_SOURCES = test/os/TestLFNIndex.cc
 unittest_lfnindex_LDADD = $(LIBOS) $(UNITTEST_LDADD) $(CEPH_GLOBAL)

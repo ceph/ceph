@@ -11,7 +11,7 @@ namespace librbd {
 class ImageCtx;
 class ProgressContext;
 
-class RebuildObjectMapRequest : public AsyncRequest {
+class RebuildObjectMapRequest : public AsyncRequest<> {
 public:
 
   RebuildObjectMapRequest(ImageCtx &image_ctx, Context *on_finish,
@@ -66,8 +66,8 @@ private:
   void send_resize_object_map();
   void send_trim_image();
   void send_verify_objects();
-  bool send_save_object_map();
-  bool send_update_header();
+  void send_save_object_map();
+  void send_update_header();
 
   uint64_t get_image_size() const;
 

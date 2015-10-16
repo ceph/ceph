@@ -5,11 +5,13 @@ Wants=network-online.target local-fs.target
 PartOf=ceph.target
 
 [Service]
+LimitNOFILE=1048576
+LimitNPROC=1048576
 EnvironmentFile=-/etc/sysconfig/ceph
 Environment=CLUSTER=ceph
-ExecStart=/usr/bin/ceph-osd -f --cluster ${CLUSTER} --id %i
-ExecStartPre=/usr/libexec/ceph/ceph-osd-prestart.sh --cluster ${CLUSTER} --id %i
-LimitNOFILE=131072
+ExecStart=/usr/bin/ceph-osd -f --cluster ${CLUSTER} --id %i --setuser ceph --setgroup ceph
+ExecStartPre=/usr/libexec/ceph/ceph-osd-prestart.sh --cluster ${CLUSTER} --id %i --setuser ceph --setgroup ceph
+ExecReload=/bin/kill -HUP $MAINPID
 
 [Install]
 WantedBy=ceph.target

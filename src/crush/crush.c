@@ -1,15 +1,10 @@
-
 #ifdef __KERNEL__
 # include <linux/slab.h>
+# include <linux/crush/crush.h>
 #else
-# include <stdlib.h>
-# include <assert.h>
-# define kfree(x) do { if (x) free(x); } while (0)
-# define BUG_ON(x) assert(!(x))
-# include "include/int_types.h"
+# include "crush_compat.h"
+# include "crush.h"
 #endif
-
-#include "crush.h"
 
 const char *crush_bucket_alg_name(int alg)
 {
@@ -135,31 +130,13 @@ void crush_destroy(struct crush_map *map)
 		kfree(map->rules);
 	}
 
+#ifndef __KERNEL__
 	kfree(map->choose_tries);
+#endif
 	kfree(map);
 }
 
 void crush_destroy_rule(struct crush_rule *rule)
 {
 	kfree(rule);
-}
-
-// methods to check for safe arithmetic operations
-int crush_addition_is_unsafe(__u32 a, __u32 b)
-{
-  if ((((__u32)(-1)) - b) < a)
-    return 1;
-  else
-    return 0;
-}
-
-int crush_multiplication_is_unsafe(__u32  a, __u32 b)
-{
-  // prevent division by zero 
-  if (!b)
-    return 1;
-  if ((((__u32)(-1)) / b) < a)
-    return 1;
-  else
-    return 0;
 }

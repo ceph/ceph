@@ -12,6 +12,8 @@
  * 
  */
 
+#include <boost/algorithm/string/predicate.hpp>
+
 #include <sstream>
 #include <syslog.h>
 
@@ -28,6 +30,7 @@
 #include "osd/osd_types.h"
 #include "common/errno.h"
 #include "common/config.h"
+#include "common/strtol.h"
 #include "include/assert.h"
 #include "include/str_list.h"
 #include "include/str_map.h"
@@ -138,7 +141,7 @@ void LogMonitor::update_from_paxos(bool *need_bootstrap)
 
       if (channels.do_log_to_syslog(channel)) {
         string level = channels.get_level(channel);
-        string facility = channels.get_facility(facility);
+        string facility = channels.get_facility(channel);
         if (level.empty() || facility.empty()) {
           derr << __func__ << " unable to log to syslog -- level or facility"
                << " not defined (level: " << level << ", facility: "
@@ -264,40 +267,44 @@ version_t LogMonitor::get_trim_to()
   return 0;
 }
 
-bool LogMonitor::preprocess_query(PaxosServiceMessage *m)
+bool LogMonitor::preprocess_query(MonOpRequestRef op)
 {
+  op->mark_logmon_event("preprocess_query");
+  PaxosServiceMessage *m = static_cast<PaxosServiceMessage*>(op->get_req());
   dout(10) << "preprocess_query " << *m << " from " << m->get_orig_source_inst() << dendl;
   switch (m->get_type()) {
   case MSG_MON_COMMAND:
-    return preprocess_command(static_cast<MMonCommand*>(m));
+    return preprocess_command(op);
 
   case MSG_LOG:
-    return preprocess_log((MLog*)m);
+    return preprocess_log(op);
 
   default:
     assert(0);
-    m->put();
     return true;
   }
 }
 
-bool LogMonitor::prepare_update(PaxosServiceMessage *m)
+bool LogMonitor::prepare_update(MonOpRequestRef op)
 {
+  op->mark_logmon_event("prepare_update");
+  PaxosServiceMessage *m = static_cast<PaxosServiceMessage*>(op->get_req());
   dout(10) << "prepare_update " << *m << " from " << m->get_orig_source_inst() << dendl;
   switch (m->get_type()) {
   case MSG_MON_COMMAND:
-    return prepare_command(static_cast<MMonCommand*>(m));
+    return prepare_command(op);
   case MSG_LOG:
-    return prepare_log((MLog*)m);
+    return prepare_log(op);
   default:
     assert(0);
-    m->put();
     return false;
   }
 }
 
-bool LogMonitor::preprocess_log(MLog *m)
+bool LogMonitor::preprocess_log(MonOpRequestRef op)
 {
+  op->mark_logmon_event("preprocess_log");
+  MLog *m = static_cast<MLog*>(op->get_req());
   dout(10) << "preprocess_log " << *m << " from " << m->get_orig_source() << dendl;
   int num_new = 0;
 
@@ -324,18 +331,18 @@ bool LogMonitor::preprocess_log(MLog *m)
   return false;
 
  done:
-  m->put();
   return true;
 }
 
-bool LogMonitor::prepare_log(MLog *m) 
+bool LogMonitor::prepare_log(MonOpRequestRef op) 
 {
+  op->mark_logmon_event("prepare_log");
+  MLog *m = static_cast<MLog*>(op->get_req());
   dout(10) << "prepare_log " << *m << " from " << m->get_orig_source() << dendl;
 
   if (m->fsid != mon->monmap->fsid) {
     dout(0) << "handle_log on fsid " << m->fsid << " != " << mon->monmap->fsid 
 	    << dendl;
-    m->put();
     return false;
   }
 
@@ -348,16 +355,15 @@ bool LogMonitor::prepare_log(MLog *m)
       pending_log.insert(pair<utime_t,LogEntry>(p->stamp, *p));
     }
   }
-  wait_for_finished_proposal(new C_Log(this, m));
+  wait_for_finished_proposal(op, new C_Log(this, op));
   return true;
 }
 
-void LogMonitor::_updated_log(MLog *m)
+void LogMonitor::_updated_log(MonOpRequestRef op)
 {
+  MLog *m = static_cast<MLog*>(op->get_req());
   dout(7) << "_updated_log for " << m->get_orig_source_inst() << dendl;
-  mon->send_reply(m, new MLogAck(m->fsid, m->entries.rbegin()->seq));
-
-  m->put();
+  mon->send_reply(op, new MLogAck(m->fsid, m->entries.rbegin()->seq));
 }
 
 bool LogMonitor::should_propose(double& delay)
@@ -372,8 +378,9 @@ bool LogMonitor::should_propose(double& delay)
 }
 
 
-bool LogMonitor::preprocess_command(MMonCommand *m)
+bool LogMonitor::preprocess_command(MonOpRequestRef op)
 {
+  op->mark_logmon_event("preprocess_command");
   int r = -1;
   bufferlist rdata;
   stringstream ss;
@@ -381,15 +388,17 @@ bool LogMonitor::preprocess_command(MMonCommand *m)
   if (r != -1) {
     string rs;
     getline(ss, rs);
-    mon->reply_command(m, r, rs, rdata, get_last_committed());
+    mon->reply_command(op, r, rs, rdata, get_last_committed());
     return true;
   } else
     return false;
 }
 
 
-bool LogMonitor::prepare_command(MMonCommand *m)
+bool LogMonitor::prepare_command(MonOpRequestRef op)
 {
+  op->mark_logmon_event("prepare_command");
+  MMonCommand *m = static_cast<MMonCommand*>(op->get_req());
   stringstream ss;
   string rs;
   int err = -EINVAL;
@@ -398,7 +407,7 @@ bool LogMonitor::prepare_command(MMonCommand *m)
   if (!cmdmap_from_json(m->cmd, &cmdmap, ss)) {
     // ss has reason for failure
     string rs = ss.str();
-    mon->reply_command(m, -EINVAL, rs, get_last_committed());
+    mon->reply_command(op, -EINVAL, rs, get_last_committed());
     return true;
   }
 
@@ -407,7 +416,7 @@ bool LogMonitor::prepare_command(MMonCommand *m)
 
   MonSession *session = m->get_session();
   if (!session) {
-    mon->reply_command(m, -EACCES, "access denied", get_last_committed());
+    mon->reply_command(op, -EACCES, "access denied", get_last_committed());
     return true;
   }
 
@@ -422,13 +431,13 @@ bool LogMonitor::prepare_command(MMonCommand *m)
     le.msg = str_join(logtext, " ");
     pending_summary.add(le);
     pending_log.insert(pair<utime_t,LogEntry>(le.stamp, le));
-    wait_for_finished_proposal(new Monitor::C_Command(mon, m, 0, string(),
-					      get_last_committed() + 1));
+    wait_for_finished_proposal(op, new Monitor::C_Command(
+          mon, op, 0, string(), get_last_committed() + 1));
     return true;
   }
 
   getline(ss, rs);
-  mon->reply_command(m, err, rs, get_last_committed());
+  mon->reply_command(op, err, rs, get_last_committed());
   return false;
 }
 
@@ -665,6 +674,33 @@ string LogMonitor::log_channel_info::expand_channel_meta(
                    << "' to '" << s << "'" << dendl;
 
   return s;
+}
+
+bool LogMonitor::log_channel_info::do_log_to_syslog(const string &channel) {
+  string v = get_str_map_key(log_to_syslog, channel,
+                             &CLOG_CONFIG_DEFAULT_KEY);
+  // We expect booleans, but they are in k/v pairs, kept
+  // as strings, in 'log_to_syslog'. We must ensure
+  // compatibility with existing boolean handling, and so
+  // we are here using a modified version of how
+  // md_config_t::set_val_raw() handles booleans. We will
+  // accept both 'true' and 'false', but will also check for
+  // '1' and '0'. The main distiction between this and the
+  // original code is that we will assume everything not '1',
+  // '0', 'true' or 'false' to be 'false'.
+  bool ret = false;
+
+  if (boost::iequals(v, "false")) {
+    ret = false;
+  } else if (boost::iequals(v, "true")) {
+    ret = true;
+  } else {
+    std::string err;
+    int b = strict_strtol(v.c_str(), 10, &err);
+    ret = (err.empty() && b == 1);
+  }
+
+  return ret;
 }
 
 void LogMonitor::handle_conf_change(const struct md_config_t *conf,

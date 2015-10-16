@@ -1,3 +1,4 @@
+#!@PYTHON_EXECUTABLE@
 # -*- mode:python -*-
 # vim: ts=4 sw=4 smarttab expandtab
 #
@@ -22,6 +23,9 @@ import os
 import sys
 import platform
 
+CEPH_GIT_VER="@CEPH_GIT_VER@"
+CEPH_GIT_NICE_VER="@CEPH_GIT_NICE_VER@"
+
 # Make life easier on developers:
 # If in src/, and .libs and pybind exist here, assume we're running
 # from a Ceph source dir and tweak PYTHONPATH and LD_LIBRARY_PATH
@@ -31,9 +35,10 @@ MYPATH = os.path.abspath(__file__)
 MYDIR = os.path.dirname(MYPATH)
 DEVMODEMSG = '*** DEVELOPER MODE: setting PATH, PYTHONPATH and LD_LIBRARY_PATH ***'
 
-if MYDIR.endswith('src') and \
-   os.path.exists(os.path.join(MYDIR, '.libs')) and \
-   os.path.exists(os.path.join(MYDIR, 'pybind')):
+def respawn_in_path(lib_path, pybind_path):
+    execv_cmd = ['python']
+    if 'CEPH_DBG' in os.environ:
+        execv_cmd += ['-mpdb']
 
     if platform.system() == "Darwin":
         lib_path_var = "DYLD_LIBRARY_PATH"
@@ -41,22 +46,47 @@ if MYDIR.endswith('src') and \
         lib_path_var = "LD_LIBRARY_PATH"
 
     py_binary = os.environ.get("PYTHON", "python")
-    MYLIBPATH = os.path.join(MYDIR, '.libs')
-    execv_cmd = ['python']
-    if 'CEPH_DBG' in os.environ:
-        execv_cmd += ['-mpdb']
+
     if lib_path_var in os.environ:
-        if MYLIBPATH not in os.environ[lib_path_var]:
-            os.environ[lib_path_var] += ':' + MYLIBPATH
+        if lib_path not in os.environ[lib_path_var]:
+            os.environ[lib_path_var] += ':' + lib_path
             print >> sys.stderr, DEVMODEMSG
             os.execvp(py_binary, execv_cmd + sys.argv)
     else:
-        os.environ[lib_path_var] = MYLIBPATH
+        os.environ[lib_path_var] = lib_path
         print >> sys.stderr, DEVMODEMSG
         os.execvp(py_binary, execv_cmd + sys.argv)
-    sys.path.insert(0, os.path.join(MYDIR, 'pybind'))
+    sys.path.insert(0, os.path.join(MYDIR, pybind_path))
+
+if MYDIR.endswith('src') and \
+   os.path.exists(os.path.join(MYDIR, '.libs')) and \
+   os.path.exists(os.path.join(MYDIR, 'pybind')):
+
+    respawn_in_path(os.path.join(MYDIR, '.libs'), "pybind")
     if os.environ.has_key('PATH') and MYDIR not in os.environ['PATH']:
         os.environ['PATH'] += ':' + MYDIR
+
+elif os.path.exists(os.path.join(os.getcwd(), "CMakeCache.txt")) \
+     and os.path.exists(os.path.join(os.getcwd(), "init-ceph")):
+    src_path = None
+    for l in open("./CMakeCache.txt").readlines():
+        if l.startswith("Ceph_SOURCE_DIR:STATIC="):
+            src_path = l.split("=")[1].strip()
+
+    if src_path is None:
+        # Huh, maybe we're not really in a cmake environment?
+        pass
+    else:
+        # Developer mode, but in a cmake build dir instead of the src dir
+        lib_path = os.path.join(os.getcwd(), "src")
+        pybind_path = os.path.join(src_path, "src", "pybind")
+        respawn_in_path(lib_path, pybind_path)
+
+    sys.path.insert(0, os.path.join(MYDIR, pybind_path))
+
+    # Add src/ to path for e.g. ceph-conf
+    if os.environ.has_key('PATH') and lib_path not in os.environ['PATH']:
+        os.environ['PATH'] += ':' + lib_path
 
 import argparse
 import errno
@@ -64,9 +94,7 @@ import json
 import rados
 import shlex
 import signal
-import socket
 import string
-import struct
 import subprocess
 
 from ceph_argparse import \
@@ -211,7 +239,7 @@ def do_extended_help(parser, args):
 
     def help_for_target(target, partial=None):
         ret, outbuf, outs = json_command(cluster_handle, target=target,
-                                         prefix='get_command_descriptions', 
+                                         prefix='get_command_descriptions',
                                          timeout=10)
         if ret:
             print >> sys.stderr, \
@@ -382,7 +410,7 @@ def new_style_command(parsed_args, cmdargs, target, sigdict, inbuf, verbose):
             if sys.stdin.isatty():
                 # do the command-interpreter looping
                 # for raw_input to do readline cmd editing
-                import readline
+                import readline  # noqa
 
             while True:
                 interactive_input = read_input()
@@ -423,7 +451,7 @@ def new_style_command(parsed_args, cmdargs, target, sigdict, inbuf, verbose):
 def complete(sigdict, args, target):
     """
     Command completion.  Match as much of [args] as possible,
-    and print every possible match separated by newlines. 
+    and print every possible match separated by newlines.
     Return exitcode.
     """
     # XXX this looks a lot like the front of validate_command().  Refactor?
@@ -513,7 +541,7 @@ def main():
     parser, parsed_args, childargs = parse_cmdargs()
 
     if parsed_args.version:
-        print 'ceph version {0} ({1})'.format(CEPH_GIT_NICE_VER, CEPH_GIT_VER)
+        print 'ceph version {0} ({1})'.format(CEPH_GIT_NICE_VER, CEPH_GIT_VER)  # noqa
         return 0
 
     global verbose
@@ -656,7 +684,7 @@ def main():
     if len(childargs) >= 2 and \
         childargs[0] in ['mon', 'osd'] and \
         childargs[1] == 'tell':
-        print >> sys.stderr, '"{0} tell" is deprecated; try "tell {0}.<id>" instead (id can be "*") '.format(childargs[0])
+        print >> sys.stderr, '"{0} tell" is deprecated; try "tell {0}.<id> <command> [options...]" instead (id can be "*") '.format(childargs[0])
         return 1
 
     if childargs in [['mon'], ['osd']]:
@@ -721,7 +749,7 @@ def main():
 
         # this instance keeps the watch connection alive, but is
         # otherwise unused
-        logwatch = rados.MonitorLog(cluster_handle, level, watch_cb, 0)
+        rados.MonitorLog(cluster_handle, level, watch_cb, 0)
 
         # loop forever letting watch_cb print lines
         try:
@@ -774,7 +802,9 @@ def main():
             childargs = injectargs
         if not len(childargs):
             print >> sys.stderr, \
-                'Cannot use \'tell\' with interactive mode'
+                'Cannot use \'tell\' with interactive mode.', \
+                'For an interactive shell,', \
+                'please start "{0}" without non-option arguments.'.format(sys.argv[0])
             return errno.EINVAL
 
     # fetch JSON sigs from command

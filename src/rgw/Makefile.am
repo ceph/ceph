@@ -45,7 +45,8 @@ librgw_la_SOURCES =  \
 	rgw/rgw_replica_log.cc \
 	rgw/rgw_keystone.cc \
 	rgw/rgw_quota.cc \
-	rgw/rgw_dencoder.cc
+	rgw/rgw_dencoder.cc \
+	rgw/rgw_object_expirer_core.cc
 librgw_la_CXXFLAGS = -Woverloaded-virtual ${AM_CXXFLAGS}
 noinst_LTLIBRARIES += librgw.la
 
@@ -54,6 +55,7 @@ LIBRGW_DEPS += \
 	libcls_rgw_client.la \
 	libcls_log_client.a \
 	libcls_statelog_client.a \
+	libcls_timeindex_client.a \
 	libcls_user_client.a \
 	libcls_replica_log_client.a \
 	libcls_lock_client.la \
@@ -65,7 +67,7 @@ LIBRGW_DEPS += \
 	-lfcgi \
 	-ldl
 
-CIVETWEB_INCLUDE = --include civetweb/include/civetweb_conf.h
+CIVETWEB_INCLUDE = --include $(srcdir)/civetweb/include/civetweb_conf.h
 
 libcivetweb_la_SOURCES =  \
 	rgw/rgw_civetweb.cc \
@@ -73,7 +75,7 @@ libcivetweb_la_SOURCES =  \
 	civetweb/src/civetweb.c
 
 libcivetweb_la_CXXFLAGS = ${CIVETWEB_INCLUDE} -Woverloaded-virtual ${AM_CXXFLAGS}
-libcivetweb_la_CFLAGS = -Icivetweb/include ${CIVETWEB_INCLUDE}
+libcivetweb_la_CFLAGS = -I$(srcdir)/civetweb/include ${CIVETWEB_INCLUDE}
 
 noinst_LTLIBRARIES += libcivetweb.la
 
@@ -100,9 +102,13 @@ radosgw_CFLAGS = -I$(srcdir)/civetweb/include
 radosgw_LDADD = $(LIBRGW) $(LIBCIVETWEB) $(LIBRGW_DEPS) $(RESOLV_LIBS) $(CEPH_GLOBAL)
 bin_PROGRAMS += radosgw
 
-radosgw_admin_SOURCES = rgw/rgw_admin.cc
+radosgw_admin_SOURCES = rgw/rgw_admin.cc rgw/rgw_orphan.cc
 radosgw_admin_LDADD = $(LIBRGW) $(LIBRGW_DEPS) $(CEPH_GLOBAL)
 bin_PROGRAMS += radosgw-admin
+
+radosgw_object_expirer_SOURCES = rgw/rgw_object_expirer.cc
+radosgw_object_expirer_LDADD = $(LIBRGW) $(LIBRGW_DEPS) $(CEPH_GLOBAL)
+bin_PROGRAMS += radosgw-object-expirer
 
 ceph_rgw_multiparser_SOURCES = rgw/rgw_multiparser.cc
 ceph_rgw_multiparser_LDADD = $(LIBRGW) $(LIBRGW_DEPS) $(CEPH_GLOBAL)
@@ -118,7 +124,6 @@ bin_DEBUGPROGRAMS += ceph_rgw_jsonparser
 
 
 noinst_HEADERS += \
-	rgw/logrotate.conf \
 	rgw/rgw_acl.h \
 	rgw/rgw_acl_s3.h \
 	rgw/rgw_acl_swift.h \
@@ -140,7 +145,9 @@ noinst_HEADERS += \
 	rgw/rgw_gc.h \
 	rgw/rgw_metadata.h \
 	rgw/rgw_multi_del.h \
+	rgw/rgw_object_expirer_core.h \
 	rgw/rgw_op.h \
+	rgw/rgw_orphan.h \
 	rgw/rgw_http_client.h \
 	rgw/rgw_swift.h \
 	rgw/rgw_swift_auth.h \

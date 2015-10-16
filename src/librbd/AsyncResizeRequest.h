@@ -12,7 +12,7 @@ namespace librbd
 class ImageCtx;
 class ProgressContext;
 
-class AsyncResizeRequest : public AsyncRequest
+class AsyncResizeRequest : public AsyncRequest<>
 {
 public:
   AsyncResizeRequest(ImageCtx &image_ctx, Context *on_finish, uint64_t new_size,
@@ -27,10 +27,6 @@ public:
 
   inline uint64_t get_image_size() const {
     return m_new_size;
-  }
-
-  inline uint64_t get_parent_overlap() const {
-    return m_new_parent_overlap;
   }
 
 private:

@@ -18,7 +18,7 @@
 #include "common/config.h"
 #include "include/types.h"
 
-#include "../MDS.h"
+#include "../MDSRank.h"
 #include "../LogEvent.h"
 
 class EImportFinish : public LogEvent {
@@ -45,7 +45,7 @@ class EImportFinish : public LogEvent {
   void dump(Formatter *f) const;
   static void generate_test_instances(list<EImportFinish*>& ls);
   
-  void replay(MDS *mds);
+  void replay(MDSRank *mds);
 
 };
 

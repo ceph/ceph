@@ -4,7 +4,7 @@
 #include <set>
 #include <map>
 #include <string>
-#include <tr1/memory>
+#include <memory>
 #include <errno.h>
 
 #include "rocksdb/db.h"
@@ -73,11 +73,11 @@ int RocksDBStore::tryInterpret(const string key, const string val, rocksdb::Opti
 int RocksDBStore::ParseOptionsFromString(const string opt_str, rocksdb::Options &opt)
 {
   map<string, string> str_map;
-  int r = get_str_map(opt_str, "\n;", &str_map);
+  int r = get_str_map(opt_str, ",\n;", &str_map);
   if (r < 0)
     return r;
   map<string, string>::iterator it;
-  for(it = str_map.begin(); it != str_map.end(); it++) {
+  for(it = str_map.begin(); it != str_map.end(); ++it) {
     string this_opt = it->first + "=" + it->second;
     rocksdb::Status status = rocksdb::GetOptionsFromString(opt, this_opt , &opt); 
     if (!status.ok()) {
@@ -88,6 +88,8 @@ int RocksDBStore::ParseOptionsFromString(const string opt_str, rocksdb::Options 
 	return -EINVAL;
       }
     }
+    lgeneric_dout(cct, 0) << " set rocksdb option " << it->first
+			  << " = " << it->second << dendl;
   }
   return 0;
 }
@@ -237,21 +239,18 @@ void RocksDBStore::RocksDBTransactionImpl::set(
   const string &k,
   const bufferlist &to_set_bl)
 {
-  buffers.push_back(to_set_bl);
-  bufferlist &bl = *(buffers.rbegin());
   string key = combine_strings(prefix, k);
-  keys.push_back(key);
-  bat->Delete(rocksdb::Slice(*(keys.rbegin())));
-  bat->Put(rocksdb::Slice(*(keys.rbegin())),
-	  rocksdb::Slice(bl.c_str(), bl.length()));
+  //bufferlist::c_str() is non-constant, so we need to make a copy
+  bufferlist val = to_set_bl;
+  bat->Delete(rocksdb::Slice(key));
+  bat->Put(rocksdb::Slice(key),
+	  rocksdb::Slice(val.c_str(), val.length()));
 }
 
 void RocksDBStore::RocksDBTransactionImpl::rmkey(const string &prefix,
 					         const string &k)
 {
-  string key = combine_strings(prefix, k);
-  keys.push_back(key);
-  bat->Delete(rocksdb::Slice(*(keys.rbegin())));
+  bat->Delete(combine_strings(prefix, k));
 }
 
 void RocksDBStore::RocksDBTransactionImpl::rmkeys_by_prefix(const string &prefix)
@@ -260,9 +259,7 @@ void RocksDBStore::RocksDBTransactionImpl::rmkeys_by_prefix(const string &prefix
   for (it->seek_to_first();
        it->valid();
        it->next()) {
-    string key = combine_strings(prefix, it->key());
-    keys.push_back(key);
-    bat->Delete(*(keys.rbegin()));
+    bat->Delete(combine_strings(prefix, it->key()));
   }
 }
 
@@ -494,7 +491,7 @@ string RocksDBStore::past_prefix(const string &prefix)
 
 RocksDBStore::WholeSpaceIterator RocksDBStore::_get_iterator()
 {
-  return std::tr1::shared_ptr<KeyValueDB::WholeSpaceIteratorImpl>(
+  return std::shared_ptr<KeyValueDB::WholeSpaceIteratorImpl>(
     new RocksDBWholeSpaceIteratorImpl(
       db->NewIterator(rocksdb::ReadOptions())
     )
@@ -509,7 +506,7 @@ RocksDBStore::WholeSpaceIterator RocksDBStore::_get_snapshot_iterator()
   snapshot = db->GetSnapshot();
   options.snapshot = snapshot;
 
-  return std::tr1::shared_ptr<KeyValueDB::WholeSpaceIteratorImpl>(
+  return std::shared_ptr<KeyValueDB::WholeSpaceIteratorImpl>(
     new RocksDBSnapshotIteratorImpl(db, snapshot,
       db->NewIterator(options))
   );

@@ -590,6 +590,10 @@ void OSDMap::Incremental::decode(bufferlist::iterator& bl)
     bl.advance(-struct_v_size);
     decode_classic(bl);
     encode_features = 0;
+    if (struct_v >= 6)
+      encode_features = CEPH_FEATURE_PGID64;
+    else
+      encode_features = 0;
     return;
   }
   {
@@ -641,7 +645,7 @@ void OSDMap::Incremental::decode(bufferlist::iterator& bl)
     if (struct_v >= 2)
       ::decode(encode_features, bl);
     else
-      encode_features = 0;
+      encode_features = CEPH_FEATURE_PGID64 | CEPH_FEATURE_OSDMAP_ENC;
     DECODE_FINISH(bl); // osd-only data
   }
 
@@ -1066,9 +1070,12 @@ uint64_t OSDMap::get_features(int entity_type, uint64_t *pmask) const
 	 ++p) {
       const map<string,string> &profile = p->second;
       map<string,string>::const_iterator plugin = profile.find("plugin");
-      if (plugin != profile.end() && (plugin->second == "isa" ||
-				      plugin->second == "lrc"))
-	features |= CEPH_FEATURE_ERASURE_CODE_PLUGINS_V2;
+      if (plugin != profile.end()) {
+	if (plugin->second == "isa" || plugin->second == "lrc")
+	  features |= CEPH_FEATURE_ERASURE_CODE_PLUGINS_V2;
+	if (plugin->second == "shec")
+	  features |= CEPH_FEATURE_ERASURE_CODE_PLUGINS_V3;
+      }
     }
   }
   mask |= CEPH_FEATURE_OSDHASHPSPOOL | CEPH_FEATURE_OSD_CACHEPOOL;
@@ -1283,13 +1290,6 @@ int OSDMap::apply_incremental(const Incremental &inc)
   if (inc.new_pool_max != -1)
     pool_max = inc.new_pool_max;
 
-  for (set<int64_t>::const_iterator p = inc.old_pools.begin();
-       p != inc.old_pools.end();
-       ++p) {
-    pools.erase(*p);
-    name_pool.erase(pool_name[*p]);
-    pool_name.erase(*p);
-  }
   for (map<int64_t,pg_pool_t>::const_iterator p = inc.new_pools.begin();
        p != inc.new_pools.end();
        ++p) {
@@ -1303,6 +1303,13 @@ int OSDMap::apply_incremental(const Incremental &inc)
       name_pool.erase(pool_name[p->first]);
     pool_name[p->first] = p->second;
     name_pool[p->second] = p->first;
+  }
+  for (set<int64_t>::const_iterator p = inc.old_pools.begin();
+       p != inc.old_pools.end();
+       ++p) {
+    pools.erase(*p);
+    name_pool.erase(pool_name[*p]);
+    pool_name.erase(*p);
   }
 
   for (map<int32_t,uint32_t>::const_iterator i = inc.new_weight.begin();
@@ -2223,15 +2230,6 @@ void OSDMap::dump_erasure_code_profiles(const map<string,map<string,string> > &p
   f->close_section();
 }
 
-void OSDMap::dump_json(ostream& out) const
-{
-  JSONFormatter jsf(true);
-  jsf.open_object_section("osdmap");
-  dump(&jsf);
-  jsf.close_section();
-  jsf.flush(out);
-}
-
 void OSDMap::dump(Formatter *f) const
 {
   f->dump_int("epoch", get_epoch());
@@ -2318,7 +2316,7 @@ void OSDMap::dump(Formatter *f) const
   }
   f->close_section(); // primary_temp
 
-  f->open_array_section("blacklist");
+  f->open_object_section("blacklist");
   for (ceph::unordered_map<entity_addr_t,utime_t>::const_iterator p = blacklist.begin();
        p != blacklist.end();
        ++p) {
@@ -2377,6 +2375,8 @@ string OSDMap::get_flag_string(unsigned f)
     s += ",nodeep-scrub";
   if (f & CEPH_OSDMAP_NOTIERAGENT)
     s += ",notieragent";
+  if (f & CEPH_OSDMAP_SORTBITWISE)
+    s += ",sortbitwise";
   if (s.length())
     s.erase(0, 1);
   return s;
@@ -2561,15 +2561,16 @@ private:
   const OSDMap *osdmap;
 };
 
-void OSDMap::print_tree(ostream *out, Formatter *f) const
+void OSDMap::print_tree(Formatter *f, ostream *out) const
 {
-  if (out) {
+  if (f)
+    OSDTreeFormattingDumper(crush.get(), this).dump(f);
+  else {
+    assert(out);
     TextTable tbl;
     OSDTreePlainDumper(crush.get(), this).dump(&tbl);
     *out << tbl;
   }
-  if (f)
-    OSDTreeFormattingDumper(crush.get(), this).dump(f);
 }
 
 void OSDMap::print_summary(Formatter *f, ostream& out) const
@@ -2671,6 +2672,7 @@ int OSDMap::build_simple(CephContext *cct, epoch_t e, uuid_d &fsid,
     r = build_simple_crush_map(cct, *crush, nosd, &ss);
   else
     r = build_simple_crush_map_from_conf(cct, *crush, &ss);
+  assert(r == 0);
 
   int poolbase = get_max_osd() ? get_max_osd() : 1;
 
@@ -2701,9 +2703,6 @@ int OSDMap::build_simple(CephContext *cct, epoch_t e, uuid_d &fsid,
     name_pool[*p] = pool;
   }
 
-  if (r < 0)
-    lderr(cct) << ss.str() << dendl;
-  
   for (int i=0; i<get_max_osd(); i++) {
     set_state(i, 0);
     set_weight(i, CEPH_OSD_OUT);
@@ -2726,8 +2725,6 @@ int OSDMap::get_erasure_code_profile_default(CephContext *cct,
   int r = get_json_str_map(cct->_conf->osd_pool_default_erasure_code_profile,
 		      *ss,
 		      &profile_map);
-  profile_map["directory"] =
-    cct->_conf->osd_pool_default_erasure_code_directory;
   return r;
 }
 
@@ -2857,12 +2854,18 @@ int OSDMap::build_simple_crush_rulesets(CephContext *cct,
 					const string& root,
 					ostream *ss)
 {
+  int crush_ruleset =
+      crush._get_osd_pool_default_crush_replicated_ruleset(cct, true);
   string failure_domain =
     crush.get_type_name(cct->_conf->osd_crush_chooseleaf_type);
 
+  if (crush_ruleset == CEPH_DEFAULT_CRUSH_REPLICATED_RULESET)
+    crush_ruleset = -1; // create ruleset 0 by default
+
   int r;
-  r = crush.add_simple_ruleset("replicated_ruleset", root, failure_domain,
-			       "firstn", pg_pool_t::TYPE_REPLICATED, ss);
+  r = crush.add_simple_ruleset_at("replicated_ruleset", root, failure_domain,
+                                  "firstn", pg_pool_t::TYPE_REPLICATED,
+                                  crush_ruleset, ss);
   if (r < 0)
     return r;
   // do not add an erasure rule by default or else we will implicitly

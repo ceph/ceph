@@ -17,12 +17,10 @@
 
 #include <unistd.h>
 
-#ifndef __CYGWIN__
-# ifndef DARWIN
-#  include <sys/ioctl.h>
-#  include <syscall.h>
-#  include "../os/btrfs_ioctl.h"
-# endif
+#if defined(__linux__)
+#include <sys/ioctl.h>
+#include <syscall.h>
+#include "../os/btrfs_ioctl.h"
 #endif
 
 inline int sync_filesystem(int fd)
@@ -34,18 +32,21 @@ inline int sync_filesystem(int fd)
 #ifdef HAVE_SYS_SYNCFS
   if (syncfs(fd) == 0)
     return 0;
-  else
-    return -errno;
 #elif defined(SYS_syncfs)
   if (syscall(SYS_syncfs, fd) == 0)
     return 0;
-  else
-    return -errno;
 #elif defined(__NR_syncfs)
   if (syscall(__NR_syncfs, fd) == 0)
     return 0;
-  else
+#endif
+
+#if defined(HAVE_SYS_SYNCFS) || defined(SYS_syncfs) || defined(__NR_syncfs)
+  else if (errno == ENOSYS) {
+    sync();
+    return 0;
+  } else {
     return -errno;
+  }
 #else
   sync();
   return 0;

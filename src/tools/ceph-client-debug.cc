@@ -163,7 +163,7 @@ int main(int argc, const char **argv)
   // Release Inode references
   ceph_ll_forget(client, ino, 1);
   for (std::vector<Dentry*>::reverse_iterator p = path.rbegin(); p != path.rend(); ++p) {
-    ceph_ll_forget(client, (*p)->inode, 1);
+    ceph_ll_forget(client, (*p)->inode.get(), 1);
   }
   ino = NULL;
   path.clear();  

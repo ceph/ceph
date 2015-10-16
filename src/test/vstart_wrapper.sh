@@ -16,7 +16,7 @@
 # GNU Library Public License for more details.
 #
 
-source test/ceph-helpers.sh
+source ../qa/workunits/ceph-helpers.sh
 
 export CEPH_VSTART_WRAPPER=1
 export CEPH_DIR="$PWD/testdir/test-$CEPH_PORT"

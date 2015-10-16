@@ -80,7 +80,7 @@ public:
   typedef enum {
     // States of an MDS daemon not currently holding a rank
     // ====================================================
-    STATE_NULL     =   0,                                  // null value for fns returning this type.
+    STATE_NULL     =   CEPH_MDS_STATE_NULL,                                  // null value for fns returning this type.
     STATE_BOOT     =   CEPH_MDS_STATE_BOOT,                // up, boot announcement.  destiny unknown.
     STATE_STANDBY  =   CEPH_MDS_STATE_STANDBY,             // up, idle.  waiting for assignment by monitor.
     STATE_STANDBY_REPLAY = CEPH_MDS_STATE_STANDBY_REPLAY,  // up, replaying active node, ready to take over.

@@ -135,10 +135,7 @@ bool WBThrottle::get_next_should_flush(
 {
   assert(lock.is_locked());
   assert(next);
-  while (!stopping &&
-         cur_ios < io_limits.first &&
-         pending_wbs.size() < fd_limits.first &&
-         cur_size < size_limits.first)
+  while (!stopping && !beyond_limit())
          cond.Wait(lock);
   if (stopping)
     return false;
@@ -159,6 +156,14 @@ void *WBThrottle::entry()
   boost::tuple<ghobject_t, FDRef, PendingWB> wb;
   while (get_next_should_flush(&wb)) {
     clearing = wb.get<0>();
+    cur_ios -= wb.get<2>().ios;
+    logger->dec(l_wbthrottle_ios_dirtied, wb.get<2>().ios);
+    logger->inc(l_wbthrottle_ios_wb, wb.get<2>().ios);
+    cur_size -= wb.get<2>().size;
+    logger->dec(l_wbthrottle_bytes_dirtied, wb.get<2>().size);
+    logger->inc(l_wbthrottle_bytes_wb, wb.get<2>().size);
+    logger->dec(l_wbthrottle_inodes_dirtied);
+    logger->inc(l_wbthrottle_inodes_wb);
     lock.Unlock();
 #ifdef HAVE_FDATASYNC
     ::fdatasync(**wb.get<1>());
@@ -173,14 +178,6 @@ void *WBThrottle::entry()
 #endif
     lock.Lock();
     clearing = ghobject_t();
-    cur_ios -= wb.get<2>().ios;
-    logger->dec(l_wbthrottle_ios_dirtied, wb.get<2>().ios);
-    logger->inc(l_wbthrottle_ios_wb, wb.get<2>().ios);
-    cur_size -= wb.get<2>().size;
-    logger->dec(l_wbthrottle_bytes_dirtied, wb.get<2>().size);
-    logger->inc(l_wbthrottle_bytes_wb, wb.get<2>().size);
-    logger->dec(l_wbthrottle_inodes_dirtied);
-    logger->inc(l_wbthrottle_inodes_wb);
     cond.Signal();
     wb = boost::tuple<ghobject_t, FDRef, PendingWB>();
   }
@@ -212,7 +209,8 @@ void WBThrottle::queue_wb(
 
   wbiter->second.first.add(nocache, len, 1);
   insert_object(hoid);
-  cond.Signal();
+  if (beyond_limit())
+    cond.Signal();
 }
 
 void WBThrottle::clear()
@@ -229,12 +227,11 @@ void WBThrottle::clear()
     }
 #endif
 
-    cur_ios -= i->second.first.ios;
-    logger->dec(l_wbthrottle_ios_dirtied, i->second.first.ios);
-    cur_size -= i->second.first.size;
-    logger->dec(l_wbthrottle_bytes_dirtied, i->second.first.size);
-    logger->dec(l_wbthrottle_inodes_dirtied);
   }
+  cur_ios = cur_size = 0;
+  logger->set(l_wbthrottle_ios_dirtied, 0);
+  logger->set(l_wbthrottle_bytes_dirtied, 0);
+  logger->set(l_wbthrottle_inodes_dirtied, 0);
   pending_wbs.clear();
   lru.clear();
   rev_lru.clear();
@@ -259,15 +256,13 @@ void WBThrottle::clear_object(const ghobject_t &hoid)
 
   pending_wbs.erase(i);
   remove_object(hoid);
+  cond.Signal();
 }
 
 void WBThrottle::throttle()
 {
   Mutex::Locker l(lock);
-  while (!stopping && !(
-	   cur_ios < io_limits.second &&
-	   pending_wbs.size() < fd_limits.second &&
-	   cur_size < size_limits.second)) {
+  while (!stopping && beyond_limit()) {
     cond.Wait(lock);
   }
 }

@@ -23,6 +23,14 @@ Timeline
 |                |Development|`Dumpling`_|`Emperor`_ |`Firefly`_ |`Giant`_   |`Hammer`_  |
 |                |Testing    |LTS        |Stable     |LTS        |Stable     |LTS        |
 +----------------+-----------+-----------+-----------+-----------+-----------+-----------+
+| October   2015 |`9.1.0`_   |           |           |           |           |           |
++----------------+-----------+-----------+-----------+-----------+-----------+-----------+
+| August    2015 |`9.0.3`_   |           |           |           |           |`0.94.3`_  |
++----------------+-----------+-----------+-----------+-----------+-----------+-----------+
+| July      2015 |`9.0.2`_   |           |           |`0.80.10`_ |           |           |
++----------------+-----------+-----------+-----------+-----------+-----------+-----------+
+| June      2015 |`9.0.1`_   |           |           |           |           |`0.94.2`_  |
++----------------+-----------+-----------+-----------+-----------+-----------+-----------+
 | May       2015 |`9.0.0`_   |           |           |           |           |           |
 +----------------+-----------+-----------+-----------+-----------+-----------+-----------+
 | April     2015 |           |           |           |           |`0.87.2`_  |`0.94.1`_  |
@@ -102,8 +110,14 @@ Timeline
 |                |           |`0.67`_    |           |           |           |           |
 +----------------+-----------+-----------+-----------+-----------+-----------+-----------+
 
+.. _9.1.0: ../release-notes#v9-1-0
+.. _9.0.3: ../release-notes#v9-0-3
+.. _9.0.2: ../release-notes#v9-0-2
+.. _9.0.1: ../release-notes#v9-0-1
 .. _9.0.0: ../release-notes#v9-0-0
 
+.. _0.94.3: ../release-notes#v0-94-3-hammer
+.. _0.94.2: ../release-notes#v0-94-2-hammer
 .. _0.94.1: ../release-notes#v0-94-1-hammer
 .. _0.94: ../release-notes#v0-94-hammer
 .. _Hammer: ../release-notes#v0-94-hammer
@@ -127,6 +141,7 @@ Timeline
 .. _0.82: ../release-notes#v0-82
 .. _0.81: ../release-notes#v0-81
 
+.. _0.80.10: ../release-notes#v0-80-10-firefly
 .. _0.80.9: ../release-notes#v0-80-9-firefly
 .. _0.80.8: ../release-notes#v0-80-8-firefly
 .. _0.80.7: ../release-notes#v0-80-7-firefly
@@ -183,7 +198,7 @@ backport fixes; developer focus in on the next development release
 which is usually only a few weeks away.
 
 There are three to four stable releases a year.  Each stable release
-will receive a name (e.g., `Firefly') and bug fix backports at least
+will receive a name (e.g., 'Firefly') and bug fix backports at least
 until the next stable release is out.
 
 Every other stable releases is a LTS (Long Term Stable) and will

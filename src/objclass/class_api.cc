@@ -82,6 +82,25 @@ int cls_unregister_method(cls_method_handle_t handle)
   return 1;
 }
 
+int cls_register_cxx_filter(cls_handle_t hclass,
+                            const std::string &filter_name,
+                            cls_cxx_filter_factory_t fn,
+                            cls_filter_handle_t *handle)
+{
+  ClassHandler::ClassData *cls = (ClassHandler::ClassData *)hclass;
+  cls_filter_handle_t hfilter = (cls_filter_handle_t)cls->register_cxx_filter(filter_name, fn);
+  if (handle) {
+    *handle = hfilter;
+  }
+  return (hfilter != NULL);
+}
+
+void cls_unregister_filter(cls_filter_handle_t handle)
+{
+  ClassHandler::ClassFilter *filter = (ClassHandler::ClassFilter *)handle;
+  filter->unregister();
+}
+
 int cls_call(cls_method_context_t hctx, const char *cls, const char *method,
                                  char *indata, int datalen,
                                  char **outdata, int *outdatalen)
@@ -573,7 +592,7 @@ int cls_gen_rand_base64(char *dest, int size) /* size should be the required str
   }
   tmp_dest[ret] = '\0';
   memcpy(dest, tmp_dest, size);
-  dest[size] = '\0';
+  dest[size-1] = '\0';
 
   return 0;
 }

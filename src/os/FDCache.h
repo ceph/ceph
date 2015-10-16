@@ -52,14 +52,14 @@ public:
 private:
   CephContext *cct;
   const int registry_shards;
-  SharedLRU<ghobject_t, FD> *registry;
+  SharedLRU<ghobject_t, FD, ghobject_t::BitwiseComparator> *registry;
 
 public:
   FDCache(CephContext *cct) : cct(cct),
   registry_shards(cct->_conf->filestore_fd_cache_shards) {
     assert(cct);
     cct->_conf->add_observer(this);
-    registry = new SharedLRU<ghobject_t, FD>[registry_shards];
+    registry = new SharedLRU<ghobject_t, FD, ghobject_t::BitwiseComparator>[registry_shards];
     for (int i = 0; i < registry_shards; ++i) {
       registry[i].set_cct(cct);
       registry[i].set_size(

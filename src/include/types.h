@@ -62,7 +62,6 @@ extern "C" {
 using namespace std;
 
 #include "include/unordered_map.h"
-#include "include/hash_namespace.h"
 
 #include "object.h"
 #include "intarith.h"
@@ -140,6 +139,17 @@ inline ostream& operator<<(ostream& out, const set<A>& iset) {
   return out;
 }
 
+template<class A, class C>
+inline ostream& operator<<(ostream& out, const set<A, C>& iset) {
+  for (typename set<A, C>::const_iterator it = iset.begin();
+       it != iset.end();
+       ++it) {
+    if (it != iset.begin()) out << ",";
+    out << *it;
+  }
+  return out;
+}
+
 template<class A>
 inline ostream& operator<<(ostream& out, const multiset<A>& iset) {
   for (typename multiset<A>::const_iterator it = iset.begin();
@@ -156,6 +166,20 @@ inline ostream& operator<<(ostream& out, const map<A,B>& m)
 {
   out << "{";
   for (typename map<A,B>::const_iterator it = m.begin();
+       it != m.end();
+       ++it) {
+    if (it != m.begin()) out << ",";
+    out << it->first << "=" << it->second;
+  }
+  out << "}";
+  return out;
+}
+
+template<class A,class B, class C>
+inline ostream& operator<<(ostream& out, const map<A,B,C>& m)
+{
+  out << "{";
+  for (typename map<A,B,C>::const_iterator it = m.begin();
        it != m.end();
        ++it) {
     if (it != m.begin()) out << ",";
@@ -303,7 +327,7 @@ inline ostream& operator<<(ostream& out, inodeno_t ino) {
   return out << hex << ino.val << dec;
 }
 
-CEPH_HASH_NAMESPACE_START
+namespace std {
   template<> struct hash< inodeno_t >
   {
     size_t operator()( const inodeno_t& x ) const
@@ -312,7 +336,7 @@ CEPH_HASH_NAMESPACE_START
       return H(x.val);
     }
   };
-CEPH_HASH_NAMESPACE_END
+} // namespace std
 
 
 // file modes
@@ -470,12 +494,12 @@ inline ostream& operator<<(ostream& out, const weightf_t& w)
 }
 
 struct shard_id_t {
-  uint8_t id;
+  int8_t id;
 
   shard_id_t() : id(0) {}
-  explicit shard_id_t(uint8_t _id) : id(_id) {}
+  explicit shard_id_t(int8_t _id) : id(_id) {}
 
-  operator uint8_t() const { return id; }
+  operator int8_t() const { return id; }
 
   const static shard_id_t NO_SHARD;
 

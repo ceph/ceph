@@ -134,7 +134,7 @@ class DispatchQueue;
 
     SimpleMessenger *msgr;
     uint64_t conn_id;
-    ostream& _pipe_prefix(std::ostream *_dout);
+    ostream& _pipe_prefix(std::ostream &out) const;
 
     Pipe* get() {
       return static_cast<Pipe*>(RefCountedObject::get());

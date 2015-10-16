@@ -12,7 +12,9 @@
  * 
  */
 
+#include <sys/types.h>
 #include <sys/socket.h>
+#include <netinet/in.h>
 #include <netinet/ip.h>
 #include <netinet/tcp.h>
 #include <sys/uio.h>
@@ -32,42 +34,28 @@
 #include "auth/cephx/CephxProtocol.h"
 #include "auth/AuthSessionHandler.h"
 
+#include "include/sock_compat.h"
+
 // Constant to limit starting sequence number to 2^31.  Nothing special about it, just a big number.  PLR
 #define SEQ_MASK  0x7fffffff 
 #define dout_subsys ceph_subsys_ms
 
 #undef dout_prefix
-#define dout_prefix _pipe_prefix(_dout)
-ostream& Pipe::_pipe_prefix(std::ostream *_dout) {
-  return *_dout << "-- " << msgr->get_myinst().addr << " >> " << peer_addr << " pipe(" << this
-		<< " sd=" << sd << " :" << port
-		<< " s=" << state
-		<< " pgs=" << peer_global_seq
-		<< " cs=" << connect_seq
-		<< " l=" << policy.lossy
-		<< " c=" << connection_state
-		<< ").";
+#define dout_prefix *_dout << *this
+ostream& Pipe::_pipe_prefix(std::ostream &out) const {
+  return out << "-- " << msgr->get_myinst().addr << " >> " << peer_addr << " pipe(" << this
+	     << " sd=" << sd << " :" << port
+             << " s=" << state
+             << " pgs=" << peer_global_seq
+             << " cs=" << connect_seq
+             << " l=" << policy.lossy
+             << " c=" << connection_state
+             << ").";
 }
 
-/*
- * This optimization may not be available on all platforms (e.g. OSX).
- * Apparently a similar approach based on TCP_CORK can be used.
- */
-#ifndef MSG_MORE
-# define MSG_MORE 0
-#endif
-
-/*
- * On BSD SO_NOSIGPIPE can be set via setsockopt to block SIGPIPE.
- */
-#ifndef MSG_NOSIGNAL
-# define MSG_NOSIGNAL 0
-# ifdef SO_NOSIGPIPE
-#  define CEPH_USE_SO_NOSIGPIPE
-# else
-#  error "Cannot block SIGPIPE!"
-# endif
-#endif
+ostream& operator<<(ostream &out, const Pipe &pipe) {
+  return pipe._pipe_prefix(out);
+}
 
 /**************************************
  * Pipe
@@ -181,7 +169,7 @@ void Pipe::join_reader()
 
 void Pipe::DelayedDelivery::discard()
 {
-  lgeneric_subdout(pipe->msgr->cct, ms, 20) << pipe->_pipe_prefix(_dout) << "DelayedDelivery::discard" << dendl;
+  lgeneric_subdout(pipe->msgr->cct, ms, 20) << *pipe << "DelayedDelivery::discard" << dendl;
   Mutex::Locker l(delay_lock);
   while (!delay_queue.empty()) {
     Message *m = delay_queue.front().second;
@@ -193,7 +181,7 @@ void Pipe::DelayedDelivery::discard()
 
 void Pipe::DelayedDelivery::flush()
 {
-  lgeneric_subdout(pipe->msgr->cct, ms, 20) << pipe->_pipe_prefix(_dout) << "DelayedDelivery::flush" << dendl;
+  lgeneric_subdout(pipe->msgr->cct, ms, 20) << *pipe << "DelayedDelivery::flush" << dendl;
   Mutex::Locker l(delay_lock);
   flush_count = delay_queue.size();
   delay_cond.Signal();
@@ -202,11 +190,11 @@ void Pipe::DelayedDelivery::flush()
 void *Pipe::DelayedDelivery::entry()
 {
   Mutex::Locker locker(delay_lock);
-  lgeneric_subdout(pipe->msgr->cct, ms, 20) << pipe->_pipe_prefix(_dout) << "DelayedDelivery::entry start" << dendl;
+  lgeneric_subdout(pipe->msgr->cct, ms, 20) << *pipe << "DelayedDelivery::entry start" << dendl;
 
   while (!stop_delayed_delivery) {
     if (delay_queue.empty()) {
-      lgeneric_subdout(pipe->msgr->cct, ms, 30) << pipe->_pipe_prefix(_dout) << "DelayedDelivery::entry sleeping on delay_cond because delay queue is empty" << dendl;
+      lgeneric_subdout(pipe->msgr->cct, ms, 30) << *pipe << "DelayedDelivery::entry sleeping on delay_cond because delay queue is empty" << dendl;
       delay_cond.Wait(delay_lock);
       continue;
     }
@@ -216,11 +204,11 @@ void *Pipe::DelayedDelivery::entry()
     if (!flush_count &&
         (release > ceph_clock_now(pipe->msgr->cct) &&
          (delay_msg_type.empty() || m->get_type_name() == delay_msg_type))) {
-      lgeneric_subdout(pipe->msgr->cct, ms, 10) << pipe->_pipe_prefix(_dout) << "DelayedDelivery::entry sleeping on delay_cond until " << release << dendl;
+      lgeneric_subdout(pipe->msgr->cct, ms, 10) << *pipe << "DelayedDelivery::entry sleeping on delay_cond until " << release << dendl;
       delay_cond.WaitUntil(delay_lock, release);
       continue;
     }
-    lgeneric_subdout(pipe->msgr->cct, ms, 10) << pipe->_pipe_prefix(_dout) << "DelayedDelivery::entry dequeuing message " << m << " for delivery, past " << release << dendl;
+    lgeneric_subdout(pipe->msgr->cct, ms, 10) << *pipe << "DelayedDelivery::entry dequeuing message " << m << " for delivery, past " << release << dendl;
     delay_queue.pop_front();
     if (flush_count > 0) {
       --flush_count;
@@ -245,7 +233,7 @@ void *Pipe::DelayedDelivery::entry()
     }
     active_flush = false;
   }
-  lgeneric_subdout(pipe->msgr->cct, ms, 20) << pipe->_pipe_prefix(_dout) << "DelayedDelivery::entry stop" << dendl;
+  lgeneric_subdout(pipe->msgr->cct, ms, 20) << *pipe << "DelayedDelivery::entry stop" << dendl;
   return NULL;
 }
 
@@ -850,7 +838,7 @@ void Pipe::set_socket_options()
 
   int prio = msgr->get_socket_priority();
   if (prio >= 0) {
-    int r;
+    int r = -1;
 #ifdef IPTOS_CLASS_CS6
     int iptos = IPTOS_CLASS_CS6;
     r = ::setsockopt(sd, IPPROTO_IP, IP_TOS, &iptos, sizeof(iptos));
@@ -862,7 +850,9 @@ void Pipe::set_socket_options()
     // setsockopt(IPTOS_CLASS_CS6) sets the priority of the socket as 0.
     // See http://goo.gl/QWhvsD and http://goo.gl/laTbjT
     // We need to call setsockopt(SO_PRIORITY) after it.
+#if defined(__linux__)
     r = ::setsockopt(sd, SOL_SOCKET, SO_PRIORITY, &prio, sizeof(prio));
+#endif
     if (r < 0) {
       ldout(msgr->cct,0) << "couldn't set SO_PRIORITY to " << prio
                          << ": " << cpp_strerror(errno) << dendl;
@@ -909,6 +899,9 @@ int Pipe::connect()
   }
 
   recv_reset();
+
+  set_socket_options();
+
   // connect!
   ldout(msgr->cct,10) << "connecting to " << peer_addr << dendl;
   rc = ::connect(sd, (sockaddr*)&peer_addr.addr, peer_addr.addr_size());
@@ -917,8 +910,6 @@ int Pipe::connect()
 	     << ", " << cpp_strerror(errno) << dendl;
     goto fail;
   }
-
-  set_socket_options();
 
   // verify banner
   // FIXME: this should be non-blocking, or in some other way verify the banner as we get it.

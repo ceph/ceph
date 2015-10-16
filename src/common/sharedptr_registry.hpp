@@ -24,7 +24,7 @@
  * Provides a registry of shared_ptr<V> indexed by K while
  * the references are alive.
  */
-template <class K, class V>
+template <class K, class V, class C = std::less<K> >
 class SharedPtrRegistry {
 public:
   typedef ceph::shared_ptr<V> VPtr;
@@ -33,18 +33,18 @@ public:
 private:
   Mutex lock;
   Cond cond;
-  map<K, pair<WeakVPtr, V*> > contents;
+  map<K, pair<WeakVPtr, V*>, C> contents;
 
   class OnRemoval {
-    SharedPtrRegistry<K,V> *parent;
+    SharedPtrRegistry<K,V,C> *parent;
     K key;
   public:
-    OnRemoval(SharedPtrRegistry<K,V> *parent, K key) :
+    OnRemoval(SharedPtrRegistry<K,V,C> *parent, K key) :
       parent(parent), key(key) {}
     void operator()(V *to_remove) {
       {
 	Mutex::Locker l(parent->lock);
-	typename map<K, pair<WeakVPtr, V*> >::iterator i =
+	typename map<K, pair<WeakVPtr, V*>, C>::iterator i =
 	  parent->contents.find(key);
 	if (i != parent->contents.end() &&
 	    i->second.second == to_remove) {
@@ -73,7 +73,7 @@ public:
     {
       Mutex::Locker l(lock);
       VPtr next_val;
-      typename map<K, pair<WeakVPtr, V*> >::iterator i =
+      typename map<K, pair<WeakVPtr, V*>, C>::iterator i =
 	contents.upper_bound(key);
       while (i != contents.end() &&
 	     !(next_val = i->second.first.lock()))
@@ -92,7 +92,7 @@ public:
   bool get_next(const K &key, pair<K, V> *next) {
     VPtr next_val;
     Mutex::Locker l(lock);
-    typename map<K, pair<WeakVPtr, V*> >::iterator i =
+    typename map<K, pair<WeakVPtr, V*>, C>::iterator i =
       contents.upper_bound(key);
     while (i != contents.end() &&
 	   !(next_val = i->second.first.lock()))
@@ -108,7 +108,7 @@ public:
     Mutex::Locker l(lock);
     waiting++;
     while (1) {
-      typename map<K, pair<WeakVPtr, V*> >::iterator i =
+      typename map<K, pair<WeakVPtr, V*>, C>::iterator i =
 	contents.find(key);
       if (i != contents.end()) {
 	VPtr retval = i->second.first.lock();
@@ -129,7 +129,7 @@ public:
     Mutex::Locker l(lock);
     waiting++;
     while (1) {
-      typename map<K, pair<WeakVPtr, V*> >::iterator i =
+      typename map<K, pair<WeakVPtr, V*>, C>::iterator i =
 	contents.find(key);
       if (i != contents.end()) {
 	VPtr retval = i->second.first.lock();
@@ -165,7 +165,7 @@ public:
     Mutex::Locker l(lock);
     waiting++;
     while (1) {
-      typename map<K, pair<WeakVPtr, V*> >::iterator i =
+      typename map<K, pair<WeakVPtr, V*>, C>::iterator i =
 	contents.find(key);
       if (i != contents.end()) {
 	VPtr retval = i->second.first.lock();

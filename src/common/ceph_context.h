@@ -15,7 +15,7 @@
 #ifndef CEPH_CEPHCONTEXT_H
 #define CEPH_CEPHCONTEXT_H
 
-#include <iostream>
+#include <iosfwd>
 #include <stdint.h>
 #include <string>
 #include <set>
@@ -28,6 +28,7 @@
 class AdminSocket;
 class CephContextServiceThread;
 class PerfCountersCollection;
+class PerfCounters;
 class md_config_obs_t;
 struct md_config_t;
 class CephContextHook;
@@ -75,6 +76,9 @@ public:
   md_config_t *_conf;
   ceph::log::Log *_log;
 
+  /* init ceph::crypto */
+  void init_crypto();
+
   /* Start the Ceph Context's service thread */
   void start_service_thread();
 
@@ -90,6 +94,22 @@ public:
   ceph::HeartbeatMap *get_heartbeat_map() {
     return _heartbeat_map;
   }
+
+  /**
+   * Enable the performance counter, currently we only have counter for the
+   * number of total/unhealthy workers.
+   */
+  void enable_perf_counter();
+
+  /**
+   * Disable the performance counter.
+   */
+  void disable_perf_counter();
+
+  /**
+   * Refresh perf counter values.
+   */
+  void refresh_perf_values();
 
   /**
    * Get the admin socket associated with this CephContext.
@@ -137,6 +157,8 @@ private:
 
   uint32_t _module_type;
 
+  bool _crypto_inited;
+
   /* libcommon service thread.
    * SIGHUP wakes this thread, which then reopens logfiles */
   friend class CephContextServiceThread;
@@ -170,6 +192,17 @@ private:
   CephContextObs *_cct_obs;
   ceph_spinlock_t _feature_lock;
   std::set<std::string> _experimental_features;
+
+  md_config_obs_t *_lockdep_obs;
+
+  enum {
+    l_cct_first,
+    l_cct_total_workers,
+    l_cct_unhealthy_workers,
+    l_cct_last
+  };
+  PerfCounters *_cct_perf;
+  ceph_spinlock_t _cct_perf_lock;
 
   friend class CephContextObs;
 };

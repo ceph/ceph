@@ -21,6 +21,10 @@
 #include "KeyValueStore.h"
 #include "common/safe_io.h"
 
+#if defined(HAVE_LIBAIO)
+#include "newstore/NewStore.h"
+#endif
+
 ObjectStore *ObjectStore::create(CephContext *cct,
 				 const string& type,
 				 const string& data,
@@ -37,6 +41,12 @@ ObjectStore *ObjectStore::create(CephContext *cct,
       cct->check_experimental_feature_enabled("keyvaluestore")) {
     return new KeyValueStore(data);
   }
+#if defined(HAVE_LIBAIO)
+  if (type == "newstore" &&
+      cct->check_experimental_feature_enabled("newstore")) {
+    return new NewStore(cct, data);
+  }
+#endif
   return NULL;
 }
 
@@ -112,50 +122,4 @@ int ObjectStore::queue_transactions(
     oncommit, _complete);
   return queue_transactions(osr, tls, _onreadable, _oncommit,
 			    onreadable_sync, op);
-}
-
-int ObjectStore::collection_list(coll_t c, vector<hobject_t>& o)
-{
-  vector<ghobject_t> go;
-  int ret = collection_list(c, go);
-  if (ret == 0) {
-    o.reserve(go.size());
-    for (vector<ghobject_t>::iterator i = go.begin(); i != go.end() ; ++i)
-      o.push_back(i->hobj);
-  }
-  return ret;
-}
-
-int ObjectStore::collection_list_partial(coll_t c, hobject_t start,
-			      int min, int max, snapid_t snap,
-				      vector<hobject_t> *ls, hobject_t *next)
-{
-  vector<ghobject_t> go;
-  ghobject_t gnext, gstart(start);
-  int ret = collection_list_partial(c, gstart, min, max, snap, &go, &gnext);
-  if (ret == 0) {
-    *next = gnext.hobj;
-    ls->reserve(go.size());
-    for (vector<ghobject_t>::iterator i = go.begin(); i != go.end() ; ++i)
-      ls->push_back(i->hobj);
-  }
-  return ret;
-}
-
-int ObjectStore::collection_list_range(coll_t c, hobject_t start, hobject_t end,
-			    snapid_t seq, vector<hobject_t> *ls)
-{
-  vector<ghobject_t> go;
-  // Starts with the smallest shard id and generation to
-  // make sure the result list has the marker object
-  ghobject_t gstart(start, 0, shard_id_t(0));
-  // Exclusive end, choose the smallest end ghobject
-  ghobject_t gend(end, 0, shard_id_t(0));
-  int ret = collection_list_range(c, gstart, gend, seq, &go);
-  if (ret == 0) {
-    ls->reserve(go.size());
-    for (vector<ghobject_t>::iterator i = go.begin(); i != go.end() ; ++i)
-      ls->push_back(i->hobj);
-  }
-  return ret;
 }

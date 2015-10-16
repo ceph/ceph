@@ -2,7 +2,6 @@
  Differences from POSIX
 ========================
 
-.. todo:: delete http://ceph.com/wiki/Differences_from_POSIX
 
 Ceph does have a few places where it diverges from strict POSIX semantics for various reasons:
 

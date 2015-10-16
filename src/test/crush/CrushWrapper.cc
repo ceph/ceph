@@ -408,6 +408,10 @@ TEST(CrushWrapper, adjust_item_weight) {
     EXPECT_EQ(true, c->bucket_exists(bucket_id));
     EXPECT_EQ(host_weight, c->get_bucket_weightf(bucket_id));
 
+    map<string,string> bloc;
+    bloc["root"] = "default";
+    EXPECT_EQ(0, c->insert_item(g_ceph_context, host0, host_weight,
+				HOST0, bloc));
   }
 
   {
@@ -426,6 +430,11 @@ TEST(CrushWrapper, adjust_item_weight) {
     bucket_id = c->get_item_id("fake");
     EXPECT_EQ(true, c->bucket_exists(bucket_id));
     EXPECT_EQ(host_weight, c->get_bucket_weightf(bucket_id));
+
+    map<string,string> bloc;
+    bloc["root"] = "default";
+    EXPECT_EQ(0, c->insert_item(g_ceph_context, hostfake, host_weight,
+				FAKE, bloc));
   }
 
   //
@@ -468,6 +477,99 @@ TEST(CrushWrapper, adjust_item_weight) {
   EXPECT_EQ(1, c->adjust_item_weightf_in_loc(g_ceph_context, item, modified_weight, loc_two));
   EXPECT_EQ(original_weight, c->get_item_weightf_in_loc(item, loc_one));
   EXPECT_EQ(modified_weight, c->get_item_weightf_in_loc(item, loc_two));
+}
+
+TEST(CrushWrapper, adjust_subtree_weight) {
+  CrushWrapper *c = new CrushWrapper;
+
+  const int ROOT_TYPE = 2;
+  c->set_type_name(ROOT_TYPE, "root");
+  const int HOST_TYPE = 1;
+  c->set_type_name(HOST_TYPE, "host");
+  const int OSD_TYPE = 0;
+  c->set_type_name(OSD_TYPE, "osd");
+
+  int rootno;
+  c->add_bucket(0, CRUSH_BUCKET_STRAW, CRUSH_HASH_RJENKINS1,
+		ROOT_TYPE, 0, NULL, NULL, &rootno);
+  c->set_item_name(rootno, "default");
+
+  const string HOST0("host0");
+  int host0;
+  c->add_bucket(0, CRUSH_BUCKET_STRAW, CRUSH_HASH_RJENKINS1,
+		HOST_TYPE, 0, NULL, NULL, &host0);
+  c->set_item_name(host0, HOST0);
+
+  const string FAKE("fake");
+  int hostfake;
+  c->add_bucket(0, CRUSH_BUCKET_STRAW, CRUSH_HASH_RJENKINS1,
+		HOST_TYPE, 0, NULL, NULL, &hostfake);
+  c->set_item_name(hostfake, FAKE);
+
+  int item = 0;
+
+  // construct crush map
+
+  {
+    map<string,string> loc;
+    loc["host"] = "host0";
+    float host_weight = 2.0;
+    int bucket_id = 0;
+
+    item = 0;
+    EXPECT_EQ(0, c->insert_item(g_ceph_context, item, 1.0,
+				"osd." + stringify(item), loc));
+    item = 1;
+    EXPECT_EQ(0, c->insert_item(g_ceph_context, item, 1.0,
+				"osd." + stringify(item), loc));
+
+    bucket_id = c->get_item_id("host0");
+    EXPECT_EQ(true, c->bucket_exists(bucket_id));
+    EXPECT_EQ(host_weight, c->get_bucket_weightf(bucket_id));
+
+    map<string,string> bloc;
+    bloc["root"] = "default";
+    EXPECT_EQ(0, c->insert_item(g_ceph_context, host0, host_weight,
+				HOST0, bloc));
+  }
+
+  {
+    map<string,string> loc;
+    loc["host"] = "fake";
+    float host_weight = 2.0;
+    int bucket_id = 0;
+
+    item = 0;
+    EXPECT_EQ(0, c->insert_item(g_ceph_context, item, 1.0,
+				"osd." + stringify(item), loc));
+    item = 1;
+    EXPECT_EQ(0, c->insert_item(g_ceph_context, item, 1.0,
+				"osd." + stringify(item), loc));
+
+    bucket_id = c->get_item_id("fake");
+    EXPECT_EQ(true, c->bucket_exists(bucket_id));
+    EXPECT_EQ(host_weight, c->get_bucket_weightf(bucket_id));
+
+    map<string,string> bloc;
+    bloc["root"] = "default";
+    EXPECT_EQ(0, c->insert_item(g_ceph_context, hostfake, host_weight,
+				FAKE, bloc));
+  }
+
+  //cout << "--------before---------" << std::endl;
+  //c->dump_tree(&cout, NULL);
+  ASSERT_EQ(c->get_bucket_weight(host0), 131072);
+  ASSERT_EQ(c->get_bucket_weight(rootno), 262144);
+
+  int r = c->adjust_subtree_weightf(g_ceph_context, host0, 2.0);
+  ASSERT_EQ(r, 2); // 2 items changed
+
+  //cout << "--------after---------" << std::endl;
+  //c->dump_tree(&cout, NULL);
+
+  ASSERT_EQ(c->get_bucket_weight(host0), 262144);
+  ASSERT_EQ(c->get_item_weight(host0), 262144);
+  ASSERT_EQ(c->get_bucket_weight(rootno), 262144 + 131072);
 }
 
 TEST(CrushWrapper, insert_item) {
@@ -798,6 +900,7 @@ TEST(CrushWrapper, distance) {
 int main(int argc, char **argv) {
   vector<const char*> args;
   argv_to_vec(argc, (const char **)argv, args);
+  env_to_vec(args);
 
   vector<const char*> def_args;
   def_args.push_back("--debug-crush=0");

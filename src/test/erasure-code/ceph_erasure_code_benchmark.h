@@ -35,7 +35,7 @@ class ErasureCodeBench {
   vector<int> erased;
   string workload;
 
-  map<string,string> parameters;
+  ErasureCodeProfile profile;
 
   bool verbose;
 public:

@@ -261,7 +261,10 @@ void BitVector<_b>::get_data_extents(uint64_t offset, uint64_t length,
   end_offset += (CEPH_PAGE_SIZE - (end_offset % CEPH_PAGE_SIZE));
   assert(*byte_offset <= end_offset);
 
-  *byte_length = MIN(end_offset - *byte_offset, m_data.length());
+  *byte_length = end_offset - *byte_offset;
+  if (*byte_offset + *byte_length > m_data.length()) {
+    *byte_length = m_data.length() - *byte_offset;
+  }
 }
 
 template <uint8_t _b>

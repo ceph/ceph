@@ -466,7 +466,7 @@ int caps_rm(const char * name, const char *perm) {
 }
 
 static int create_bucket(void){
-  g_test->send_request(string("PUT"), string("/"TEST_BUCKET_NAME));
+  g_test->send_request(string("PUT"), string("/" TEST_BUCKET_NAME));
   if(g_test->get_resp_code() != 200U){
     cout << "Error creating bucket, http code " << g_test->get_resp_code();
     return -1;
@@ -475,7 +475,7 @@ static int create_bucket(void){
 }
 
 static int delete_bucket(void){
-  g_test->send_request(string("DELETE"), string("/"TEST_BUCKET_NAME));
+  g_test->send_request(string("DELETE"), string("/" TEST_BUCKET_NAME));
   if(g_test->get_resp_code() != 204U){
     cout << "Error deleting bucket, http code " << g_test->get_resp_code();
     return -1;
@@ -495,7 +495,7 @@ size_t read_bucket_object(void *ptr, size_t s, size_t n, void *ud) {
 }
 
 static int put_bucket_obj(const char *obj_name, char *data, unsigned len) {
-  string req = "/"TEST_BUCKET_NAME"/";
+  string req = "/" TEST_BUCKET_NAME"/";
   req.append(obj_name);
   g_test->send_request(string("PUT"), req,
                        read_bucket_object, (void *)data, (size_t)len);
@@ -507,7 +507,7 @@ static int put_bucket_obj(const char *obj_name, char *data, unsigned len) {
 }
 
 static int read_bucket_obj(const char *obj_name) {
-  string req = "/"TEST_BUCKET_NAME"/";
+  string req = "/" TEST_BUCKET_NAME"/";
   req.append(obj_name);
   g_test->send_request(string("GET"), req);
   if (g_test->get_resp_code() != 200U) {
@@ -518,7 +518,7 @@ static int read_bucket_obj(const char *obj_name) {
 }
 
 static int delete_obj(const char *obj_name) {
-  string req = "/"TEST_BUCKET_NAME"/";
+  string req = "/" TEST_BUCKET_NAME"/";
   req.append(obj_name);
   g_test->send_request(string("DELETE"), req);
   if (g_test->get_resp_code() != 204U) {
@@ -1403,7 +1403,7 @@ TEST(TestRGWAdmin, bilog_list) {
   EXPECT_EQ(put_bucket_obj(TEST_BUCKET_OBJECT, bucket_obj, TEST_BUCKET_OBJECT_SIZE), 0);
   free(bucket_obj);
   
-  rest_req = "/admin/log?type=bucket-index&bucket="TEST_BUCKET_NAME;
+  rest_req = "/admin/log?type=bucket-index&bucket=" TEST_BUCKET_NAME;
   g_test->send_request(string("GET"), rest_req);
   EXPECT_EQ(200U, g_test->get_resp_code());
   list<cls_bilog_entry> entries;
@@ -1433,7 +1433,7 @@ TEST(TestRGWAdmin, bilog_list) {
   EXPECT_EQ(put_bucket_obj(TEST_BUCKET_OBJECT_1, bucket_obj, TEST_BUCKET_OBJECT_SIZE), 0);
   free(bucket_obj);
   
-  rest_req = "/admin/log?type=bucket-index&bucket="TEST_BUCKET_NAME;
+  rest_req = "/admin/log?type=bucket-index&bucket=" TEST_BUCKET_NAME;
   g_test->send_request(string("GET"), rest_req);
   EXPECT_EQ(200U, g_test->get_resp_code());
   entries.clear();
@@ -1455,7 +1455,7 @@ TEST(TestRGWAdmin, bilog_list) {
   }
 
   ASSERT_EQ(0, delete_obj(TEST_BUCKET_OBJECT));
-  rest_req = "/admin/log?type=bucket-index&bucket="TEST_BUCKET_NAME;
+  rest_req = "/admin/log?type=bucket-index&bucket=" TEST_BUCKET_NAME;
   g_test->send_request(string("GET"), rest_req);
   EXPECT_EQ(200U, g_test->get_resp_code());
   entries.clear();
@@ -1479,7 +1479,7 @@ TEST(TestRGWAdmin, bilog_list) {
     EXPECT_EQ(it->index_ver, 6U);
   }
 
-  rest_req = "/admin/log?type=bucket-index&bucket="TEST_BUCKET_NAME;
+  rest_req = "/admin/log?type=bucket-index&bucket=" TEST_BUCKET_NAME;
   rest_req.append("&marker=");
   rest_req.append(marker);
   g_test->send_request(string("GET"), rest_req);
@@ -1495,7 +1495,7 @@ TEST(TestRGWAdmin, bilog_list) {
     EXPECT_EQ(it->op.compare("del"), 0);
   }
 
-  rest_req = "/admin/log?type=bucket-index&bucket="TEST_BUCKET_NAME;
+  rest_req = "/admin/log?type=bucket-index&bucket=" TEST_BUCKET_NAME;
   rest_req.append("&marker=");
   rest_req.append(marker);
   rest_req.append("&max-entries=1");
@@ -1509,14 +1509,14 @@ TEST(TestRGWAdmin, bilog_list) {
   ASSERT_EQ(0, caps_rm(cname, perm));
   perm = "read";
   ASSERT_EQ(0, caps_add(cname, perm));
-  rest_req = "/admin/log?type=bucket-index&bucket="TEST_BUCKET_NAME;
+  rest_req = "/admin/log?type=bucket-index&bucket=" TEST_BUCKET_NAME;
   g_test->send_request(string("GET"), rest_req);
   EXPECT_EQ(200U, g_test->get_resp_code());
 
   ASSERT_EQ(0, caps_rm(cname, perm));
   perm = "write";
   ASSERT_EQ(0, caps_add(cname, perm));
-  rest_req = "/admin/log?type=bucket-index&bucket="TEST_BUCKET_NAME;
+  rest_req = "/admin/log?type=bucket-index&bucket=" TEST_BUCKET_NAME;
   g_test->send_request(string("GET"), rest_req);
   EXPECT_EQ(403U, g_test->get_resp_code());
 
@@ -1535,7 +1535,7 @@ TEST(TestRGWAdmin, bilog_trim) {
 
   ASSERT_EQ(0, create_bucket());
 
-  rest_req = "/admin/log?type=bucket-index&bucket="TEST_BUCKET_NAME;
+  rest_req = "/admin/log?type=bucket-index&bucket=" TEST_BUCKET_NAME;
   g_test->send_request(string("DELETE"), rest_req);
   EXPECT_EQ(400U, g_test->get_resp_code()); /*Bad request*/
 
@@ -1544,7 +1544,7 @@ TEST(TestRGWAdmin, bilog_trim) {
   EXPECT_EQ(put_bucket_obj(TEST_BUCKET_OBJECT, bucket_obj, TEST_BUCKET_OBJECT_SIZE), 0);
   free(bucket_obj);
   
-  rest_req = "/admin/log?type=bucket-index&bucket="TEST_BUCKET_NAME;
+  rest_req = "/admin/log?type=bucket-index&bucket=" TEST_BUCKET_NAME;
   g_test->send_request(string("GET"), rest_req);
   EXPECT_EQ(200U, g_test->get_resp_code());
   list<cls_bilog_entry> entries;
@@ -1556,7 +1556,7 @@ TEST(TestRGWAdmin, bilog_trim) {
   ++it;
   end_marker = it->op_id;
 
-  rest_req = "/admin/log?type=bucket-index&bucket="TEST_BUCKET_NAME;
+  rest_req = "/admin/log?type=bucket-index&bucket=" TEST_BUCKET_NAME;
   rest_req.append("&start-marker=");
   rest_req.append(start_marker);
   rest_req.append("&end-marker=");
@@ -1564,7 +1564,7 @@ TEST(TestRGWAdmin, bilog_trim) {
   g_test->send_request(string("DELETE"), rest_req);
   EXPECT_EQ(200U, g_test->get_resp_code());
 
-  rest_req = "/admin/log?type=bucket-index&bucket="TEST_BUCKET_NAME;
+  rest_req = "/admin/log?type=bucket-index&bucket=" TEST_BUCKET_NAME;
   g_test->send_request(string("GET"), rest_req);
   EXPECT_EQ(200U, g_test->get_resp_code());
   entries.clear();

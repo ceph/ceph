@@ -26,6 +26,9 @@
 #include "ErasureCodeShecTableCache.h"
 #include <list>
 
+#define DEFAULT_RULESET_ROOT "default"
+#define DEFAULT_RULESET_FAILURE_DOMAIN "host"
+
 class ErasureCodeShec : public ErasureCode {
 
 public:
@@ -60,8 +63,8 @@ public:
     w(0),
     DEFAULT_W(8),
     technique(_technique),
-    ruleset_root("default"),
-    ruleset_failure_domain("host"),
+    ruleset_root(DEFAULT_RULESET_ROOT),
+    ruleset_failure_domain(DEFAULT_RULESET_FAILURE_DOMAIN),
     matrix(0)
   {}
 
@@ -81,11 +84,11 @@ public:
 
   virtual unsigned int get_chunk_size(unsigned int object_size) const;
 
-  virtual int minimum_to_decode(const set<int> &want_to_decode,
+  virtual int minimum_to_decode(const set<int> &want_to_read,
 				const set<int> &available_chunks,
 				set<int> *minimum);
 
-  virtual int minimum_to_decode_with_cost(const set<int> &want_to_decode,
+  virtual int minimum_to_decode_with_cost(const set<int> &want_to_read,
 					  const map<int, int> &available,
 					  set<int> *minimum);
 
@@ -102,7 +105,7 @@ public:
 			    const map<int, bufferlist> &chunks,
 			    map<int, bufferlist> *decoded);
 
-  int init(const map<std::string,std::string> &parameters);
+  virtual int init(ErasureCodeProfile &profile, ostream *ss);
   virtual void shec_encode(char **data,
 			   char **coding,
 			   int blocksize) = 0;
@@ -112,8 +115,21 @@ public:
 			  char **coding,
 			  int blocksize) = 0;
   virtual unsigned get_alignment() const = 0;
-  virtual int parse(const map<std::string,std::string> &parameters) = 0;
   virtual void prepare() = 0;
+
+  virtual int shec_matrix_decode(int *erased, int *avails,
+                                 char **data_ptrs, char **coding_ptrs, int size);
+  virtual int* shec_reedsolomon_coding_matrix(int is_single);
+
+private:
+  virtual int parse(const ErasureCodeProfile &profile) = 0;
+
+  virtual double shec_calc_recovery_efficiency1(int k, int m1, int m2, int c1, int c2);
+  virtual int shec_make_decoding_matrix(bool prepare,
+                                        int *want, int *avails,
+                                        int *decoding_matrix,
+                                        int *dm_row, int *dm_column,
+                                        int *minimum);
 };
 
 class ErasureCodeShecReedSolomonVandermonde : public ErasureCodeShec {
@@ -136,8 +152,9 @@ public:
 			  char **coding,
 			  int blocksize);
   virtual unsigned get_alignment() const;
-  virtual int parse(const map<std::string,std::string> &parameters);
   virtual void prepare();
+private:
+  virtual int parse(const ErasureCodeProfile &profile);
 };
 
 #endif

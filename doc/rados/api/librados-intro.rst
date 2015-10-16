@@ -72,7 +72,7 @@ distributions, execute the following::
 
 	sudo apt-get install python-rados
 
-To install ``librados`` development support files for C/C++ on RHEL/CentOS
+To install ``librados`` development support files for Python on RHEL/CentOS
 distributions, execute the following::
 
 	sudo yum install python-rados

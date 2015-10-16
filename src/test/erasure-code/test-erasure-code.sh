@@ -16,7 +16,7 @@
 # GNU Library Public License for more details.
 #
 
-source test/ceph-helpers.sh
+source ../qa/workunits/ceph-helpers.sh
 
 function run() {
     local dir=$1
@@ -25,7 +25,6 @@ function run() {
     export CEPH_MON="127.0.0.1:7101"
     export CEPH_ARGS
     CEPH_ARGS+="--fsid=$(uuidgen) --auth-supported=none "
-    CEPH_ARGS+="--enable-experimental-unrecoverable-data-corrupting-features=shec "
     CEPH_ARGS+="--mon-host=$CEPH_MON "
 
     setup $dir || return 1
@@ -86,7 +85,7 @@ function rados_put_get() {
     rm $dir/COPY
 
     #
-    # take out the first OSD used to store the object and
+    # take out an OSD used to store the object and
     # check the object can still be retrieved, which implies
     # recovery
     #
@@ -101,20 +100,56 @@ function rados_put_get() {
     rm $dir/ORIGINAL
 }
 
-function plugin_exists() {
-    local plugin=$1
+function rados_osds_out_in() {
+    local dir=$1
+    local poolname=$2
+    local objname=${3:-SOMETHING}
 
-    local status
-    ./ceph osd erasure-code-profile set TESTPROFILE plugin=$plugin
-    if ./ceph osd crush rule create-erasure TESTRULE TESTPROFILE 2>&1 |
-        grep "$plugin.*No such file" ; then
-        status=1
-    else
-        ./ceph osd crush rule rm TESTRULE
-        status=0
-    fi
-    ./ceph osd erasure-code-profile rm TESTPROFILE 
-    return $status
+
+    for marker in FFFF GGGG HHHH IIII ; do
+        printf "%*s" 1024 $marker
+    done > $dir/ORIGINAL
+
+    #
+    # get and put an object, compare they are equal
+    #
+    ./rados --pool $poolname put $objname $dir/ORIGINAL || return 1
+    ./rados --pool $poolname get $objname $dir/COPY || return 1
+    diff $dir/ORIGINAL $dir/COPY || return 1
+    rm $dir/COPY
+
+    #
+    # take out two OSDs used to store the object, wait for the cluster
+    # to be clean (i.e. all PG are clean and active) again which
+    # implies the PG have been moved to use the remaining OSDs.  Check
+    # the object can still be retrieved.
+    #
+    wait_for_clean || return 1
+    local osds_list=$(get_osds $poolname $objname)
+    local -a osds=($osds_list)
+    for osd in 0 1 ; do
+        ./ceph osd out ${osds[$osd]} || return 1
+    done
+    wait_for_clean || return 1
+    #
+    # verify the object is no longer mapped to the osds that are out
+    #
+    for osd in 0 1 ; do
+        ! get_osds $poolname $objname | grep '\<'${osds[$osd]}'\>' || return 1
+    done
+    ./rados --pool $poolname get $objname $dir/COPY || return 1
+    diff $dir/ORIGINAL $dir/COPY || return 1
+    #
+    # bring the osds back in, , wait for the cluster
+    # to be clean (i.e. all PG are clean and active) again which
+    # implies the PG go back to using the same osds as before
+    #
+    for osd in 0 1 ; do
+        ./ceph osd in ${osds[$osd]} || return 1
+    done
+    wait_for_clean || return 1
+    test "$osds_list" = "$(get_osds $poolname $objname)" || return 1
+    rm $dir/ORIGINAL
 }
 
 function TEST_rados_put_get_lrc_advanced() {
@@ -155,7 +190,7 @@ function TEST_rados_put_get_lrc_kml() {
 }
 
 function TEST_rados_put_get_isa() {
-    if ! plugin_exists isa ; then
+    if ! erasure_code_plugin_exists isa ; then
         echo "SKIP because plugin isa has not been built"
         return 0
     fi
@@ -189,6 +224,7 @@ function TEST_rados_put_get_jerasure() {
         || return 1
 
     rados_put_get $dir $poolname || return 1
+    rados_osds_out_in $dir $poolname || return 1
 
     delete_pool $poolname
     ./ceph osd erasure-code-profile rm $profile

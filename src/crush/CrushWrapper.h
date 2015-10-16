@@ -9,7 +9,7 @@
 #include <set>
 #include <string>
 
-#include <iostream> //for testing, remove
+#include <iosfwd>
 
 #include "include/types.h"
 
@@ -587,6 +587,7 @@ public:
 private:
   bool _maybe_remove_last_instance(CephContext *cct, int id, bool unlink_only);
   int _remove_item_under(CephContext *cct, int id, int ancestor, bool unlink_only);
+  bool _bucket_is_in_use(CephContext *cct, int id);
 public:
   int remove_item_under(CephContext *cct, int id, int ancestor, bool unlink_only);
 
@@ -796,6 +797,12 @@ public:
 
   int add_simple_ruleset(string name, string root_name, string failure_domain_type,
 			 string mode, int rule_type, ostream *err = 0);
+  /**
+   * @param rno ruleset id to use, -1 to pick the lowest available
+   */
+  int add_simple_ruleset_at(string name, string root_name,
+                            string failure_domain_type, string mode,
+                            int rule_type, int rno, ostream *err = 0);
 
   int remove_rule(int ruleno);
 
@@ -1053,8 +1060,11 @@ public:
   void dump_tunables(Formatter *f) const;
   void list_rules(Formatter *f) const;
   void dump_tree(ostream *out, Formatter *f) const;
+  void dump_tree(Formatter *f) const;
   static void generate_test_instances(list<CrushWrapper*>& o);
 
+  int _get_osd_pool_default_crush_replicated_ruleset(CephContext *cct,
+                                                     bool quiet);
   int get_osd_pool_default_crush_replicated_ruleset(CephContext *cct);
 
   static bool is_valid_crush_name(const string& s);

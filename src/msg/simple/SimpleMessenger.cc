@@ -38,7 +38,7 @@ static ostream& _prefix(std::ostream *_dout, SimpleMessenger *msgr) {
  */
 
 SimpleMessenger::SimpleMessenger(CephContext *cct, entity_name_t name,
-				 string mname, uint64_t _nonce)
+				 string mname, uint64_t _nonce, uint64_t features)
   : SimplePolicyMessenger(cct, name,mname, _nonce),
     accepter(this, _nonce),
     dispatch_queue(cct, this),
@@ -54,6 +54,7 @@ SimpleMessenger::SimpleMessenger(CephContext *cct, entity_name_t name,
     local_connection(new PipeConnection(cct, this))
 {
   ceph_spin_init(&global_seq_lock);
+  local_features = features;
   init_local_connection();
 }
 
@@ -95,6 +96,7 @@ int SimpleMessenger::_send_message(Message *m, const entity_inst_t& dest)
 {
   // set envelope
   m->get_header().src = get_myname();
+  m->set_cct(cct);
 
   if (!m->get_priority()) m->set_priority(get_default_send_priority());
  
@@ -532,9 +534,10 @@ void SimpleMessenger::wait()
   }
   lock.Unlock();
 
-  if(dispatch_queue.is_started()) {
+  if (dispatch_queue.is_started()) {
     ldout(cct,10) << "wait: waiting for dispatch queue" << dendl;
     dispatch_queue.wait();
+    dispatch_queue.discard_local();
     ldout(cct,10) << "wait: dispatch queue is stopped" << dendl;
   }
 
@@ -710,5 +713,6 @@ void SimpleMessenger::init_local_connection()
 {
   local_connection->peer_addr = my_inst.addr;
   local_connection->peer_type = my_inst.name.type();
+  local_connection->set_features(local_features);
   ms_deliver_handle_fast_connect(local_connection.get());
 }

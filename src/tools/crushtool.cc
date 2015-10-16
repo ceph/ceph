@@ -165,11 +165,12 @@ void usage()
   cout << "Options for the display/test stage\n";
   cout << "\n";
   cout << "   --tree                print map summary as a tree\n";
+  cout << "   --check [max_id]      check if any item is referencing an unknown name/type\n";
   cout << "   -i mapfn --show-location id\n";
   cout << "                         show location for given device id\n";
   cout << "   -i mapfn --test       test a range of inputs on the map\n";
   cout << "      [--min-x x] [--max-x x] [--x x]\n";
-  cout << "      [--min-rule r] [--max-rule r] [--rule r]\n";
+  cout << "      [--min-rule r] [--max-rule r] [--rule r] [--ruleset rs]\n";
   cout << "      [--num-rep n]\n";
   cout << "      [--batches b]      split the CRUSH mapping into b > 1 rounds\n";
   cout << "      [--weight|-w devno weight]\n";
@@ -226,6 +227,8 @@ int main(int argc, const char **argv)
   std::string infn, srcfn, outfn, add_name, remove_name, reweight_name;
   bool compile = false;
   bool decompile = false;
+  bool check = false;
+  int max_id = -1;
   bool test = false;
   bool display = false;
   bool tree = false;
@@ -311,6 +314,8 @@ int main(int argc, const char **argv)
     } else if (ceph_argparse_witharg(args, i, &val, "-c", "--compile", (char*)NULL)) {
       srcfn = val;
       compile = true;
+    } else if (ceph_argparse_witharg(args, i, &max_id, err, "--check", (char*)NULL)) {
+      check = true;
     } else if (ceph_argparse_flag(args, i, "-t", "--test", (char*)NULL)) {
       test = true;
     } else if (ceph_argparse_witharg(args, i, &full_location, err, "--show-location", (char*)NULL)) {
@@ -460,6 +465,12 @@ int main(int argc, const char **argv)
 	exit(EXIT_FAILURE);
       }
       tester.set_rule(x);
+    } else if (ceph_argparse_witharg(args, i, &x, err, "--ruleset", (char*)NULL)) {
+      if (!err.str().empty()) {
+	cerr << err.str() << std::endl;
+	exit(EXIT_FAILURE);
+      }
+      tester.set_ruleset(x);
     } else if (ceph_argparse_witharg(args, i, &x, err, "--batches", (char*)NULL)) {
       if (!err.str().empty()) {
 	cerr << err.str() << std::endl;
@@ -497,7 +508,7 @@ int main(int argc, const char **argv)
     }
   }
 
-  if (test && !display && !write_to_file) {
+  if (test && !check && !display && !write_to_file) {
     cerr << "WARNING: no output selected; use --output-csv or --show-X" << std::endl;
   }
 
@@ -505,7 +516,7 @@ int main(int argc, const char **argv)
     cerr << "cannot specify more than one of compile, decompile, and build" << std::endl;
     exit(EXIT_FAILURE);
   }
-  if (!compile && !decompile && !build && !test && !reweight && !adjust && !tree &&
+  if (!check && !compile && !decompile && !build && !test && !reweight && !adjust && !tree &&
       add_item < 0 && full_location < 0 &&
       remove_name.empty() && reweight_name.empty()) {
     cerr << "no action specified; -h for help" << std::endl;
@@ -820,6 +831,12 @@ int main(int argc, const char **argv)
       o.close();
     } else {
       cc.decompile(cout);
+    }
+  }
+
+  if (check) {
+    if (!tester.check_name_maps(max_id)) {
+      exit(1);
     }
   }
 

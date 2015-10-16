@@ -420,11 +420,12 @@ void librados::ObjectWriteOperation::omap_rm_keys(
 
 void librados::ObjectWriteOperation::copy_from(const std::string& src,
 					       const IoCtx& src_ioctx,
-					       uint64_t src_version)
+					       uint64_t src_version,
+					       uint32_t src_fadvise_flags)
 {
   ::ObjectOperation *o = (::ObjectOperation *)impl;
   o->copy_from(object_t(src), src_ioctx.io_ctx_impl->snap_seq,
-	       src_ioctx.io_ctx_impl->oloc, src_version, 0, 0);
+	       src_ioctx.io_ctx_impl->oloc, src_version, 0, src_fadvise_flags);
 }
 
 void librados::ObjectWriteOperation::undirty()
@@ -623,6 +624,18 @@ uint32_t librados::NObjectIteratorImpl::seek(uint32_t pos)
   return r;
 }
 
+void librados::NObjectIteratorImpl::set_filter(const bufferlist &bl)
+{
+  assert(ctx);
+  if (ctx->nlc) {
+    ctx->nlc->filter = bl;
+  }
+
+  if (ctx->lc) {
+    ctx->lc->filter = bl;
+  }
+}
+
 void librados::NObjectIteratorImpl::get_next()
 {
   const char *entry, *key, *nspace;
@@ -694,23 +707,31 @@ librados::NObjectIterator& librados::NObjectIterator::operator=(const librados::
 
 bool librados::NObjectIterator::operator==(const librados::NObjectIterator& rhs) const 
 {
-  return *impl == *(rhs.impl);
+  if (impl && rhs.impl) {
+    return *impl == *(rhs.impl);
+  } else {
+    return impl == rhs.impl;
+  }
 }
 
-bool librados::NObjectIterator::operator!=(const librados::NObjectIterator& rhs) const {
-  return !(*impl == *(rhs.impl));
+bool librados::NObjectIterator::operator!=(const librados::NObjectIterator& rhs) const
+{
+  return !(*this == rhs);
 }
 
 const librados::ListObject& librados::NObjectIterator::operator*() const {
+  assert(impl);
   return *(impl->get_listobjectp());
 }
 
 const librados::ListObject* librados::NObjectIterator::operator->() const {
+  assert(impl);
   return impl->get_listobjectp();
 }
 
 librados::NObjectIterator& librados::NObjectIterator::operator++()
 {
+  assert(impl);
   impl->get_next();
   return *this;
 }
@@ -724,16 +745,24 @@ librados::NObjectIterator librados::NObjectIterator::operator++(int)
 
 uint32_t librados::NObjectIterator::seek(uint32_t pos)
 {
+  assert(impl);
   return impl->seek(pos);
+}
+
+void librados::NObjectIterator::set_filter(const bufferlist &bl)
+{
+  impl->set_filter(bl);
 }
 
 void librados::NObjectIterator::get_next()
 {
+  assert(impl);
   impl->get_next();
 }
 
 uint32_t librados::NObjectIterator::get_pg_hash_position() const
 {
+  assert(impl);
   return impl->get_pg_hash_position();
 }
 
@@ -1290,6 +1319,8 @@ static int translate_flags(int flags)
     op_flags |= CEPH_OSD_FLAG_SKIPRWLOCKS;
   if (flags & librados::OPERATION_IGNORE_OVERLAY)
     op_flags |= CEPH_OSD_FLAG_IGNORE_OVERLAY;
+  if (flags & librados::OPERATION_FULL_TRY)
+    op_flags |= CEPH_OSD_FLAG_FULL_TRY;
 
   return op_flags;
 }
@@ -1523,20 +1554,28 @@ int librados::IoCtx::list_lockers(const std::string &oid, const std::string &nam
   return tmp_lockers.size();
 }
 
-librados::NObjectIterator librados::IoCtx::nobjects_begin()
+librados::NObjectIterator librados::IoCtx::nobjects_begin(
+    const bufferlist &filter)
 {
   rados_list_ctx_t listh;
   rados_nobjects_list_open(io_ctx_impl, &listh);
   NObjectIterator iter((ObjListCtx*)listh);
+  if (filter.length() > 0) {
+    iter.set_filter(filter);
+  }
   iter.get_next();
   return iter;
 }
 
-librados::NObjectIterator librados::IoCtx::nobjects_begin(uint32_t pos)
+librados::NObjectIterator librados::IoCtx::nobjects_begin(
+  uint32_t pos, const bufferlist &filter)
 {
   rados_list_ctx_t listh;
   rados_nobjects_list_open(io_ctx_impl, &listh);
   NObjectIterator iter((ObjListCtx*)listh);
+  if (filter.length() > 0) {
+    iter.set_filter(filter);
+  }
   iter.seek(pos);
   return iter;
 }

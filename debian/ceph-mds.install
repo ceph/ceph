@@ -1,4 +1,5 @@
 usr/bin/ceph-mds
 usr/bin/cephfs-journal-tool
 usr/bin/cephfs-table-tool
+usr/bin/cephfs-data-scan
 usr/share/man/man8/ceph-mds.8

@@ -42,7 +42,6 @@
 #include "include/krbd.h"
 #include "include/rados/librados.h"
 #include "include/rbd/librbd.h"
-#include "common/ceph_crypto.h"
 
 #define NUMPRINTCOLUMNS 32	/* # columns of data to print on each line */
 
@@ -628,7 +627,7 @@ krbd_write(struct rbd_ctx *ctx, uint64_t off, size_t len, const char *buf)
 }
 
 int
-__krbd_flush(struct rbd_ctx *ctx)
+__krbd_flush(struct rbd_ctx *ctx, bool invalidate)
 {
 	int ret;
 
@@ -636,13 +635,26 @@ __krbd_flush(struct rbd_ctx *ctx)
 		return 0;
 
 	/*
-	 * fsync(2) on the block device does not sync the filesystem
-	 * mounted on top of it, but that's OK - we control the entire
-	 * lifetime of the block device and write directly to it.
+	 * BLKFLSBUF will sync the filesystem on top of the device (we
+	 * don't care about that here, since we write directly to it),
+	 * write out any dirty buffers and invalidate the buffer cache.
+	 * It won't do a hardware cache flush.
+	 *
+	 * fsync() will write out any dirty buffers and do a hardware
+	 * cache flush (which we don't care about either, because for
+	 * krbd it's a noop).  It won't try to empty the buffer cache
+	 * nor poke the filesystem before writing out.
+	 *
+	 * Given that, for our purposes, fsync is a flush, while
+	 * BLKFLSBUF is a flush+invalidate.
 	 */
-	if (fsync(ctx->krbd_fd) < 0) {
+        if (invalidate)
+		ret = ioctl(ctx->krbd_fd, BLKFLSBUF, NULL);
+	else
+		ret = fsync(ctx->krbd_fd);
+	if (ret < 0) {
 		ret = -errno;
-		prt("fsync failed\n");
+		prt("%s failed\n", invalidate ? "BLKFLSBUF" : "fsync");
 		return ret;
 	}
 
@@ -652,7 +664,7 @@ __krbd_flush(struct rbd_ctx *ctx)
 int
 krbd_flush(struct rbd_ctx *ctx)
 {
-	return __krbd_flush(ctx);
+	return __krbd_flush(ctx, false);
 }
 
 int
@@ -662,16 +674,22 @@ krbd_discard(struct rbd_ctx *ctx, uint64_t off, uint64_t len)
 	int ret;
 
 	/*
-	 * BLKDISCARD doesn't affect dirty pages.  This means we can't
-	 * rely on discarded sectors to match good_buf (i.e. contain
-	 * zeros) without a preceding cache flush:
+	 * BLKDISCARD goes straight to disk and doesn't do anything
+	 * about dirty buffers.  This means we need to flush so that
 	 *
 	 *   write 0..3M
 	 *   discard 1..2M
 	 *
-	 * results in "data data data" rather than "data 0000 data".
+	 * results in "data 0000 data" rather than "data data data" on
+	 * disk and invalidate so that
+	 *
+	 *   discard 1..2M
+	 *   read 0..3M
+	 *
+	 * returns "data 0000 data" rather than "data data data" in
+	 * case 1..2M was cached.
 	 */
-	ret = __krbd_flush(ctx);
+	ret = __krbd_flush(ctx, true);
 	if (ret < 0)
 		return ret;
 
@@ -693,10 +711,9 @@ int
 krbd_get_size(struct rbd_ctx *ctx, uint64_t *size)
 {
 	uint64_t bytes;
-	int ret;
 
 	if (ioctl(ctx->krbd_fd, BLKGETSIZE64, &bytes) < 0) {
-		ret = -errno;
+		int ret = -errno;
 		prt("BLKGETSIZE64 failed\n");
 		return ret;
 	}
@@ -718,16 +735,16 @@ krbd_resize(struct rbd_ctx *ctx, uint64_t size)
 	 * which ends up calling invalidate_bdev(), which invalidates
 	 * clean pages and does nothing about dirty pages beyond the
 	 * new size.  The preceding cache flush makes sure those pages
-	 * are invalidated, which is what we need on shrink:
+	 * are invalidated, which is what we need on shrink so that
 	 *
 	 *  write 0..1M
 	 *  resize 0
 	 *  resize 2M
-	 *  write 1..2M
+	 *  read 0..2M
 	 *
-	 * results in "data data" rather than "0000 data".
+	 * returns "0000 0000" rather than "data 0000".
 	 */
-	ret = __krbd_flush(ctx);
+	ret = __krbd_flush(ctx, false);
 	if (ret < 0)
 		return ret;
 
@@ -741,7 +758,7 @@ krbd_clone(struct rbd_ctx *ctx, const char *src_snapname,
 {
 	int ret;
 
-	ret = __krbd_flush(ctx);
+	ret = __krbd_flush(ctx, false);
 	if (ret < 0)
 		return ret;
 
@@ -754,7 +771,7 @@ krbd_flatten(struct rbd_ctx *ctx)
 {
 	int ret;
 
-	ret = __krbd_flush(ctx);
+	ret = __krbd_flush(ctx, false);
 	if (ret < 0)
 		return ret;
 
@@ -974,25 +991,22 @@ report_failure(int status)
 void
 check_buffers(char *good_buf, char *temp_buf, unsigned offset, unsigned size)
 {
-	unsigned char c, t;
-	unsigned i = 0;
-	unsigned n = 0;
-	unsigned op = 0;
-	unsigned bad = 0;
-
 	if (memcmp(good_buf + offset, temp_buf, size) != 0) {
+		unsigned i = 0;
+		unsigned n = 0;
+
 		prt("READ BAD DATA: offset = 0x%x, size = 0x%x, fname = %s\n",
 		    offset, size, iname);
 		prt("OFFSET\tGOOD\tBAD\tRANGE\n");
 		while (size > 0) {
-			c = good_buf[offset];
-			t = temp_buf[i];
+			unsigned char c = good_buf[offset];
+			unsigned char t = temp_buf[i];
 			if (c != t) {
 			        if (n < 16) {
-					bad = short_at(&temp_buf[i]);
+					unsigned bad = short_at(&temp_buf[i]);
 				        prt("0x%5x\t0x%04x\t0x%04x", offset,
 				            short_at(&good_buf[offset]), bad);
-					op = temp_buf[offset & 1 ? i+1 : i];
+					unsigned op = temp_buf[offset & 1 ? i+1 : i];
 				        prt("\t0x%5x\n", n);
 					if (op)
 						prt("operation# (mod 256) for "
@@ -2002,7 +2016,7 @@ main(int argc, char **argv)
 		case 'b':
 			simulatedopcount = getnum(optarg, &endp);
 			if (!quiet)
-				fprintf(stdout, "Will begin at operation %ld\n",
+				fprintf(stdout, "Will begin at operation %lu\n",
 					simulatedopcount);
 			if (simulatedopcount == 0)
 				usage();
@@ -2029,9 +2043,12 @@ main(int argc, char **argv)
 				usage();
 			break;
 		case 'l':
-			maxfilelen = getnum(optarg, &endp);
-			if (maxfilelen <= 0)
-				usage();
+			{
+				int _num = getnum(optarg, &endp);
+				if (_num <= 0)
+					usage();
+				maxfilelen = _num;
+			}
 			break;
 		case 'm':
 			monitorstart = getnum(optarg, &endp);
@@ -2132,7 +2149,8 @@ main(int argc, char **argv)
 				prt("file name to long\n");
 				exit(1);
 			}
-			strncpy(logfile, dirpath, sizeof(logfile));
+			strncpy(logfile, dirpath, sizeof(logfile)-1);
+			logfile[sizeof(logfile)-1] = '\0';
 			if (strlen(logfile) < sizeof(logfile)-2) {
 				strcat(logfile, "/");
 			} else {
@@ -2335,7 +2353,6 @@ main(int argc, char **argv)
 	krbd_destroy(krbd);
 	rados_shutdown(cluster);
 
-        ceph::crypto::shutdown();
 	free(original_buf);
 	free(good_buf);
 	free(temp_buf);

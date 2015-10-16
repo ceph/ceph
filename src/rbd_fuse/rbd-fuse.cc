@@ -19,6 +19,11 @@
 #include <getopt.h>
 #include <assert.h>
 
+#if defined(__FreeBSD__)
+#include <sys/param.h>
+#endif
+
+#include "include/compat.h"
 #include "include/rbd/librbd.h"
 
 static int gotrados = 0;
@@ -351,7 +356,7 @@ static int rbdfs_write(const char *path, const char *buf, size_t size,
 
 		if ((size_t)(offset + size) > rbdsize(fi->fh)) {
 			int r;
-			fprintf(stderr, "rbdfs_write resizing %s to 0x%"PRIxMAX"\n",
+			fprintf(stderr, "rbdfs_write resizing %s to 0x%" PRIxMAX "\n",
 				path, offset+size);
 			r = rbd_resize(rbd->image, offset+size);
 			if (r < 0)
@@ -562,7 +567,8 @@ rbdfs_truncate(const char *path, off_t size)
 		return -ENOENT;
 
 	rbd = &opentbl[fd];
-	fprintf(stderr, "truncate %s to %"PRIdMAX" (0x%"PRIxMAX")\n", path, size, size);
+	fprintf(stderr, "truncate %s to %" PRIdMAX " (0x%" PRIxMAX ")\n",
+          path, size, size);
 	r = rbd_resize(rbd->image, size);
 	if (r < 0)
 		return r;
@@ -596,7 +602,12 @@ struct rbdfuse_attr {
 
 int
 rbdfs_setxattr(const char *path, const char *name, const char *value,
-		 size_t size, int flags)
+	       size_t size,
+	       int flags
+#if defined(DARWIN)
+	       ,uint32_t pos
+#endif
+    )
 {
 	struct rbdfuse_attr *ap;
 	if (strcmp(path, "/") != 0)
@@ -605,7 +616,7 @@ rbdfs_setxattr(const char *path, const char *name, const char *value,
 	for (ap = attrs; ap->attrname != NULL; ap++) {
 		if (strcmp(name, ap->attrname) == 0) {
 			*ap->attrvalp = strtoull(value, NULL, 0);
-			fprintf(stderr, "rbd-fuse: %s set to 0x%"PRIx64"\n",
+			fprintf(stderr, "rbd-fuse: %s set to 0x%" PRIx64 "\n",
 				ap->attrname, *ap->attrvalp);
 			return 0;
 		}
@@ -615,7 +626,11 @@ rbdfs_setxattr(const char *path, const char *name, const char *value,
 
 int
 rbdfs_getxattr(const char *path, const char *name, char *value,
-		 size_t size)
+		 size_t size
+#if defined(DARWIN)
+	       ,uint32_t position
+#endif
+  )
 {
 	struct rbdfuse_attr *ap;
 	char buf[128];
@@ -624,7 +639,7 @@ rbdfs_getxattr(const char *path, const char *name, char *value,
 
 	for (ap = attrs; ap->attrname != NULL; ap++) {
 		if (strcmp(name, ap->attrname) == 0) {
-			sprintf(buf, "%"PRIu64, *ap->attrvalp);
+			sprintf(buf, "%" PRIu64, *ap->attrvalp);
 			if (value != NULL && size >= strlen(buf))
 				strcpy(value, buf);
 			fprintf(stderr, "rbd-fuse: get %s\n", ap->attrname);

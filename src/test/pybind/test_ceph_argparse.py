@@ -1,6 +1,6 @@
 #!/usr/bin/nosetests --nocapture
-# -*- mode:python; tab-width:4; indent-tabs-mode:t -*-
-# vim: ts=4 sw=4 smarttab expandtab
+# -*- mode:python; tab-width:4; indent-tabs-mode:t; coding:utf-8 -*-
+# vim: ts=4 sw=4 smarttab expandtab fileencoding=utf-8
 #
 # Ceph - scalable distributed file system
 #
@@ -84,6 +84,15 @@ class TestArgparse:
         assert_equal({}, validate_command(sigdict, [prefix,
                                                     command,
                                                     'toomany']))
+
+
+class TestBasic:
+
+	def test_non_ascii_in_non_options(self):
+		# unicode() is not able to convert this str parameter into unicode
+		# using the default encoding 'ascii'. and validate_command() should
+		# not choke on it.
+		assert_is_none(validate_command(sigdict, ['章鱼和鱿鱼']))
 
 
 class TestPG(TestArgparse):
@@ -390,17 +399,13 @@ class TestMDS(TestArgparse):
         self.check_1_string_arg('mds', 'fail')
 
     def test_rm(self):
+        # Valid: single GID argument present
+        self.assert_valid_command(['mds', 'rm', '1'])
+
+        # Missing GID arg: invalid
         assert_equal({}, validate_command(sigdict, ['mds', 'rm']))
-        assert_equal({}, validate_command(sigdict, ['mds', 'rm', '1']))
-        for name in ('osd', 'mon', 'client', 'mds'):
-            self.assert_valid_command(['mds', 'rm', '1', name + '.42'])
-            assert_equal({}, validate_command(sigdict, ['mds', 'rm',
-                                                        '-1', name + '.42']))
-            assert_equal({}, validate_command(sigdict, ['mds', 'rm',
-                                                        '-1', name]))
-            assert_equal({}, validate_command(sigdict, ['mds', 'rm',
-                                                        '1', name + '.42',
-                                                        'toomany']))
+        # Extra arg: invalid
+        assert_equal({}, validate_command(sigdict, ['mds', 'rm', '1', 'mds.42']))
 
     def test_rmfailed(self):
         self.check_1_natural_arg('mds', 'rmfailed')
@@ -556,7 +561,7 @@ class TestOSD(TestArgparse):
                                                     'toomany']))
 
     def test_metadata(self):
-        self.check_1_natural_arg('osd', 'metadata')
+        self.check_0_or_1_natural_arg('osd', 'metadata')
 
     def test_scrub(self):
         self.check_1_string_arg('osd', 'scrub')
@@ -601,7 +606,7 @@ class TestOSD(TestArgparse):
         self.assert_valid_command(['osd', 'crush', 'dump'])
         assert_equal({}, validate_command(sigdict, ['osd', 'crush']))
         assert_equal({}, validate_command(sigdict, ['osd', 'crush',
-                                                    'dump', 
+                                                    'dump',
                                                     'toomany']))
 
     def test_setcrushmap(self):
@@ -986,7 +991,7 @@ class TestOSD(TestArgparse):
         assert_equal({}, validate_command(sigdict, ['osd', 'pool', 'create',
                                                     'poolname',
                                                     '128', '128',
-                                                    'erasure', '^^^', 
+                                                    'erasure', '^^^',
 													'ruleset']))
         assert_equal({}, validate_command(sigdict, ['osd', 'pool', 'create',
                                                     'poolname',
@@ -1030,7 +1035,7 @@ class TestOSD(TestArgparse):
 
     def test_pool_get(self):
         for var in ('size', 'min_size', 'crash_replay_interval',
-                    'pg_num', 'pgp_num', 'crush_ruleset', 'auid'):
+                    'pg_num', 'pgp_num', 'crush_ruleset', 'auid', 'fast_read'):
             self.assert_valid_command(['osd', 'pool', 'get', 'poolname', var])
         assert_equal({}, validate_command(sigdict, ['osd', 'pool']))
         assert_equal({}, validate_command(sigdict, ['osd', 'pool',
@@ -1047,7 +1052,7 @@ class TestOSD(TestArgparse):
     def test_pool_set(self):
         for var in ('size', 'min_size', 'crash_replay_interval',
                     'pg_num', 'pgp_num', 'crush_ruleset',
-                    'hashpspool', 'auid'):
+                    'hashpspool', 'auid', 'fast_read'):
             self.assert_valid_command(['osd', 'pool',
                                        'set', 'poolname', var, 'value'])
         assert_equal({}, validate_command(sigdict, ['osd', 'pool',
@@ -1155,7 +1160,7 @@ class TestConfigKey(TestArgparse):
     def test_list(self):
         self.check_no_arg('config-key', 'list')
 # Local Variables:
-# compile-command: "cd ../.. ; make -j4 && 
+# compile-command: "cd ../.. ; make -j4 &&
 #  PYTHONPATH=pybind nosetests --stop \
 #  test/pybind/test_ceph_argparse.py # test_ceph_argparse.py:TestOSD.test_rm"
 # End:

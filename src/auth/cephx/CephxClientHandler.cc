@@ -40,7 +40,11 @@ int CephxClientHandler::build_request(bufferlist& bl) const
     ::encode(header, bl);
 
     CryptoKey secret;
-    keyring->get_secret(cct->_conf->name, secret);
+    const bool got = keyring->get_secret(cct->_conf->name, secret);
+    if (!got) {
+      ldout(cct, 20) << "no secret found for entity: " << cct->_conf->name << dendl;
+      return -ENOENT;
+    }
 
     CephXAuthenticate req;
     get_random_bytes((char *)&req.client_challenge, sizeof(req.client_challenge));
@@ -113,7 +117,11 @@ int CephxClientHandler::handle_response(int ret, bufferlist::iterator& indata)
     {
       ldout(cct, 10) << " get_auth_session_key" << dendl;
       CryptoKey secret;
-      keyring->get_secret(cct->_conf->name, secret);
+      const bool got = keyring->get_secret(cct->_conf->name, secret);
+      if (!got) {
+	ldout(cct, 0) << "key not found for " << cct->_conf->name << dendl;
+	return -ENOENT;
+      }
 	
       if (!tickets.verify_service_ticket_reply(secret, indata)) {
 	ldout(cct, 0) << "could not verify service_ticket reply" << dendl;
@@ -150,7 +158,11 @@ int CephxClientHandler::handle_response(int ret, bufferlist::iterator& indata)
       if (rotating_secrets) {
 	RotatingSecrets secrets;
 	CryptoKey secret_key;
-	keyring->get_secret(cct->_conf->name, secret_key);
+	const bool got = keyring->get_secret(cct->_conf->name, secret_key);
+        if (!got) {
+          ldout(cct, 0) << "key not found for " << cct->_conf->name << dendl;
+          return -ENOENT;
+        }
 	std::string error;
 	if (decode_decrypt(cct, secrets, secret_key, indata, error)) {
 	  ldout(cct, 0) << "could not set rotating key: decode_decrypt failed. error:"

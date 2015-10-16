@@ -24,7 +24,6 @@
 
 #include "CollectionIndex.h"
 #include "HashIndex.h"
-#include "FlatIndex.h"
 
 
 /// Public type for Index

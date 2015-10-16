@@ -145,13 +145,22 @@ public:
     const hobject_t &hoid,
     const list<pair<boost::tuple<uint64_t, uint64_t, uint32_t>,
 		    pair<bufferlist*, Context*> > > &to_read,
-    Context *on_complete);
+    Context *on_complete,
+    bool fast_read = false);
 
 private:
   friend struct ECRecoveryHandle;
   uint64_t get_recovery_chunk_size() const {
     return ROUND_UP_TO(cct->_conf->osd_recovery_max_chunk,
 			sinfo.get_stripe_width());
+  }
+
+  void get_want_to_read_shards(set<int> *want_to_read) const {
+    const vector<int> &chunk_mapping = ec_impl->get_chunk_mapping();
+    for (int i = 0; i < (int)ec_impl->get_data_chunk_count(); ++i) {
+      int chunk = (int)chunk_mapping.size() > i ? chunk_mapping[i] : i;
+      want_to_read->insert(chunk);
+    }
   }
 
   /**
@@ -231,7 +240,7 @@ private:
     RecoveryOp() : pending_read(false), state(IDLE) {}
   };
   friend ostream &operator<<(ostream &lhs, const RecoveryOp &rhs);
-  map<hobject_t, RecoveryOp> recovery_ops;
+  map<hobject_t, RecoveryOp, hobject_t::BitwiseComparator> recovery_ops;
 
 public:
   /**
@@ -284,12 +293,19 @@ public:
     int priority;
     ceph_tid_t tid;
     OpRequestRef op; // may be null if not on behalf of a client
+    // True if redundant reads are issued, false otherwise,
+    // this is useful to tradeoff some resources (redundant ops) for
+    // low latency read, especially on relatively idle cluster
+    bool do_redundant_reads;
+    // True if reading for recovery which could possibly reading only a subset
+    // of the available shards.
+    bool for_recovery;
 
-    map<hobject_t, read_request_t> to_read;
-    map<hobject_t, read_result_t> complete;
+    map<hobject_t, read_request_t, hobject_t::BitwiseComparator> to_read;
+    map<hobject_t, read_result_t, hobject_t::BitwiseComparator> complete;
 
-    map<hobject_t, set<pg_shard_t> > obj_to_source;
-    map<pg_shard_t, set<hobject_t> > source_to_obj;
+    map<hobject_t, set<pg_shard_t>, hobject_t::BitwiseComparator> obj_to_source;
+    map<pg_shard_t, set<hobject_t, hobject_t::BitwiseComparator> > source_to_obj;
 
     void dump(Formatter *f) const;
 
@@ -305,8 +321,15 @@ public:
   map<pg_shard_t, set<ceph_tid_t> > shard_to_read_map;
   void start_read_op(
     int priority,
-    map<hobject_t, read_request_t> &to_read,
-    OpRequestRef op);
+    map<hobject_t, read_request_t, hobject_t::BitwiseComparator> &to_read,
+    OpRequestRef op,
+    bool do_redundant_reads, bool for_recovery);
+
+  void start_remaining_read_op(ReadOp &rop,
+    map<hobject_t, read_request_t, hobject_t::BitwiseComparator> &to_read);
+  int objects_remaining_read_async(
+    const hobject_t &hoid,
+    ReadOp &rop);
 
 
   /**
@@ -338,13 +361,13 @@ public:
 
     ECTransaction *t;
 
-    set<hobject_t> temp_added;
-    set<hobject_t> temp_cleared;
+    set<hobject_t, hobject_t::BitwiseComparator> temp_added;
+    set<hobject_t, hobject_t::BitwiseComparator> temp_cleared;
 
     set<pg_shard_t> pending_commit;
     set<pg_shard_t> pending_apply;
 
-    map<hobject_t, ECUtil::HashInfoRef> unstable_hash_infos;
+    map<hobject_t, ECUtil::HashInfoRef, hobject_t::BitwiseComparator> unstable_hash_infos;
     ~Op() {
       delete t;
       delete on_local_applied_sync;
@@ -385,7 +408,7 @@ public:
    *
    * Determines the whether _have is suffient to recover an object
    */
-  class ECRecPred : public IsRecoverablePredicate {
+  class ECRecPred : public IsPGRecoverablePredicate {
     set<int> want;
     ErasureCodeInterfaceRef ec_impl;
   public:
@@ -405,7 +428,7 @@ public:
       return ec_impl->minimum_to_decode(want, have, &min) == 0;
     }
   };
-  IsRecoverablePredicate *get_is_recoverable_predicate() {
+  IsPGRecoverablePredicate *get_is_recoverable_predicate() {
     return new ECRecPred(ec_impl);
   }
 
@@ -414,7 +437,7 @@ public:
    *
    * Determines the whether _have is suffient to read an object
    */
-  class ECReadPred : public IsReadablePredicate {
+  class ECReadPred : public IsPGReadablePredicate {
     pg_shard_t whoami;
     ECRecPred rec_pred;
   public:
@@ -425,15 +448,15 @@ public:
       return _have.count(whoami) && rec_pred(_have);
     }
   };
-  IsReadablePredicate *get_is_readable_predicate() {
+  IsPGReadablePredicate *get_is_readable_predicate() {
     return new ECReadPred(get_parent()->whoami_shard(), ec_impl);
   }
 
 
   const ECUtil::stripe_info_t sinfo;
   /// If modified, ensure that the ref is held until the update is applied
-  SharedPtrRegistry<hobject_t, ECUtil::HashInfo> unstable_hashinfo_registry;
-  ECUtil::HashInfoRef get_hash_info(const hobject_t &hoid);
+  SharedPtrRegistry<hobject_t, ECUtil::HashInfo, hobject_t::BitwiseComparator> unstable_hashinfo_registry;
+  ECUtil::HashInfoRef get_hash_info(const hobject_t &hoid, bool checks = true);
 
   friend struct ReadCB;
   void check_op(Op *op);
@@ -442,7 +465,6 @@ public:
   ECBackend(
     PGBackend::Listener *pg,
     coll_t coll,
-    coll_t temp_coll,
     ObjectStore *store,
     CephContext *cct,
     ErasureCodeInterfaceRef ec_impl,
@@ -453,8 +475,14 @@ public:
     const hobject_t &hoid,     ///< [in] object
     const set<int> &want,      ///< [in] desired shards
     bool for_recovery,         ///< [in] true if we may use non-acting replicas
+    bool do_redundant_reads,   ///< [in] true if we want to issue redundant reads to reduce latency
     set<pg_shard_t> *to_read   ///< [out] shards to read
     ); ///< @return error code, 0 on success
+
+  int get_remaining_shards(
+    const hobject_t &hoid,
+    const set<int> &avail,
+    set<pg_shard_t> *to_read);
 
   int objects_get_attrs(
     const hobject_t &hoid,

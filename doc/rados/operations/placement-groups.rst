@@ -9,7 +9,7 @@ A preselection of pg_num
 
 When creating a new pool with::
 
-        ceph osd pool set {pool-name} pg_num
+        ceph osd pool create {pool-name} pg_num
 
 it is mandatory to choose the value of ``pg_num`` because it cannot be
 calculated automatically. Here are a few values commonly used:
@@ -22,6 +22,8 @@ calculated automatically. Here are a few values commonly used:
 
 - If you have more than 50 OSDs, you need to understand the tradeoffs
   and how to calculate the ``pg_num`` value by yourself
+
+- For calculating ``pg_num`` value by yourself please take help of `pgcalc`_ tool 
 
 As the number of OSDs increases, chosing the right value for pg_num
 becomes more important because it has a significant influence on the
@@ -58,11 +60,10 @@ cannot realistically track placement on a per-object basis.
                   |                       |
                   +-----------------------+
 
-Placement groups are invisible to the Ceph user: the CRUSH algorithm
-determines in which placement group the object will be
-placed. Although CRUSH is a deterministic function using the object
-name as a parameter, there is no way to force an object into a given
-placement group.
+The Ceph client will calculate which placement group an object should
+be in. It does this by hashing the object ID and applying an operation
+based on the number of PGs in the defined pool and the ID of the pool.
+See `Mapping PGs to OSDs`_ for details.
 
 The object's contents within a placement group are stored in a set of
 OSDs. For instance, in a replicated pool of size two, each placement
@@ -310,10 +311,14 @@ placement groups, execute the following::
         ceph osd pool set {pool-name} pg_num {pg_num}
 
 Once you increase the number of placement groups, you must also
-increase the number of placement groups for placement (``pgp_num``) before your
-cluster will rebalance. The ``pgp_num`` should be equal to the ``pg_num``.
-To increase the number of placement groups for placement, execute the
-following::
+increase the number of placement groups for placement (``pgp_num``)
+before your cluster will rebalance. The ``pgp_num`` will be the number of
+placement groups that will be considered for placement by the CRUSH
+algorithm. Increasing ``pg_num`` splits the placement groups but data
+will not be migrated to the newer placement groups until placement
+groups for placement, ie. ``pgp_num`` is increased. The ``pgp_num``
+should be equal to the ``pg_num``.  To increase the number of
+placement groups for placement, execute the following::
 
         ceph osd pool set {pool-name} pgp_num {pgp_num}
 
@@ -427,3 +432,5 @@ entirely. To mark the "unfound" objects as "lost", execute the following::
 
 
 .. _Create a Pool: ../pools#createpool
+.. _Mapping PGs to OSDs: ../../../architecture#mapping-pgs-to-osds
+.. _pgcalc: http://ceph.com/pgcalc/

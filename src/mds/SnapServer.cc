@@ -13,7 +13,7 @@
  */
 
 #include "SnapServer.h"
-#include "MDS.h"
+#include "MDSRank.h"
 #include "osd/OSDMap.h"
 #include "osdc/Objecter.h"
 #include "mon/MonClient.h"
@@ -46,6 +46,11 @@ void SnapServer::reset_state()
          p != mds->mdsmap->get_data_pools().end();
          ++p) {
       const pg_pool_t *pi = osdmap->get_pg_pool(*p);
+      if (!pi) {
+        // If pool isn't in OSDMap yet then can't have any snaps needing
+        // removal, skip.
+        continue;
+      }
       if (!pi->removed_snaps.empty() &&
           pi->removed_snaps.range_end() > first_free)
         first_free = pi->removed_snaps.range_end();
@@ -260,6 +265,12 @@ void SnapServer::check_osd_map(bool force)
        ++p) {
     int id = p->first;
     const pg_pool_t *pi = osdmap->get_pg_pool(id);
+    if (pi == NULL) {
+      // The pool is gone.  So are the snapshots.
+      all_purged[id] = std::vector<snapid_t>(p->second.begin(), p->second.end());
+      continue;
+    }
+
     for (set<snapid_t>::iterator q = p->second.begin();
 	 q != p->second.end();
 	 ++q) {
@@ -283,7 +294,7 @@ void SnapServer::check_osd_map(bool force)
   if (!all_purge.empty()) {
     dout(10) << "requesting removal of " << all_purge << dendl;
     MRemoveSnaps *m = new MRemoveSnaps(all_purge);
-    mds->monc->send_mon_message(m);
+    mon_client->send_mon_message(m);
   }
 
   last_checked_osdmap = version;

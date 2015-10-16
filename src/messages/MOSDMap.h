@@ -80,6 +80,7 @@ public:
     }
   }
   void encode_payload(uint64_t features) {
+    header.version = HEAD_VERSION;
     ::encode(fsid, payload);
     if ((features & CEPH_FEATURE_PGID64) == 0 ||
 	(features & CEPH_FEATURE_PGPOOL3) == 0 ||

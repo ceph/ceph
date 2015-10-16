@@ -125,7 +125,7 @@ public:
     int32_t new_flags;
 
     // full (rare)
-    bufferlist fullmap;  // in leiu of below.
+    bufferlist fullmap;  // in lieu of below.
     bufferlist crush;
 
     // incremental
@@ -260,7 +260,6 @@ private:
 
   friend class OSDMonitor;
   friend class PGMonitor;
-  friend class MDS;
 
  public:
   OSDMap() : epoch(0), 
@@ -341,7 +340,7 @@ public:
   }
 
   int get_flags() const { return flags; }
-  int test_flag(int f) const { return flags & f; }
+  bool test_flag(int f) const { return flags & f; }
   void set_flag(int f) { flags |= f; }
   void clear_flag(int f) { flags &= ~f; }
 
@@ -428,6 +427,10 @@ public:
 
   bool is_up(int osd) const {
     return exists(osd) && (osd_state[osd] & CEPH_OSD_UP);
+  }
+
+  bool has_been_up_since(int osd, epoch_t epoch) const {
+    return is_up(osd) && get_up_from(osd) <= epoch;
   }
 
   bool is_down(int osd) const {
@@ -842,13 +845,12 @@ public:
   void print_pools(ostream& out) const;
   void print_summary(Formatter *f, ostream& out) const;
   void print_oneline_summary(ostream& out) const;
-  void print_tree(ostream *out, Formatter *f) const;
+  void print_tree(Formatter *f, ostream *out) const;
 
   string get_flag_string() const;
   static string get_flag_string(unsigned flags);
   static void dump_erasure_code_profiles(const map<string,map<string,string> > &profiles,
 					 Formatter *f);
-  void dump_json(ostream& out) const;
   void dump(Formatter *f) const;
   static void generate_test_instances(list<OSDMap*>& o);
   bool check_new_blacklist_entries() const { return new_blacklist_entries; }

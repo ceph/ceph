@@ -18,12 +18,14 @@
 #include "common/config.h"
 #include "common/Cond.h"
 #include "common/ceph_context.h"
+#include "common/Formatter.h"
+#include <cfloat>
 
 struct bench_interval_data {
-  double min_bandwidth;
-  double max_bandwidth;
-  int min_iops;
-  int max_iops;
+  double min_bandwidth = DBL_MAX;
+  double max_bandwidth = 0;
+  int min_iops = INT_MAX;
+  int max_iops = 0;
 };
 
 struct bench_history {
@@ -34,7 +36,7 @@ struct bench_history {
 
 struct bench_data {
   bool done; //is the benchmark is done
-  int object_size; //the size of the objects
+  size_t object_size; //the size of the objects
   // same as object_size for write tests
   int in_flight; //number of reads/writes being waited on
   int started;
@@ -53,8 +55,13 @@ const int OP_WRITE     = 1;
 const int OP_SEQ_READ  = 2;
 const int OP_RAND_READ = 3;
 
+// Object is composed of <oid,namespace>
+typedef std::pair<std::string, std::string> Object;
+
 class ObjBencher {
   bool show_time;
+  Formatter *formatter = NULL;
+  ostream *outstream = NULL;
 public:
   CephContext *cct;
 protected:
@@ -64,15 +71,14 @@ protected:
 
   struct bench_data data;
 
-  int fetch_bench_metadata(const std::string& metadata_file, int* object_size, int* num_objects, int* prevPid);
+  int fetch_bench_metadata(const std::string& metadata_file, size_t* object_size, int* num_objects, int* prevPid);
 
   int write_bench(int secondsToRun, int concurrentios, const string& run_name_meta);
-  int seq_read_bench(int secondsToRun, int num_objects, int concurrentios, int writePid);
-  int rand_read_bench(int secondsToRun, int num_objects, int concurrentios, int writePid);
+  int seq_read_bench(int secondsToRun, int num_objects, int concurrentios, int writePid, bool no_verify=false);
+  int rand_read_bench(int secondsToRun, int num_objects, int concurrentios, int writePid, bool no_verify=false);
 
   int clean_up(int num_objects, int prevPid, int concurrentios);
-  int clean_up_slow(const std::string& prefix, int concurrentios);
-  bool more_objects_matching_prefix(const std::string& prefix, std::list<std::string>* name);
+  bool more_objects_matching_prefix(const std::string& prefix, std::list<Object>* name);
 
   virtual int completions_init(int concurrentios) = 0;
   virtual void completions_done() = 0;
@@ -91,7 +97,8 @@ protected:
   virtual int sync_write(const std::string& oid, bufferlist& bl, size_t len) = 0;
   virtual int sync_remove(const std::string& oid) = 0;
 
-  virtual bool get_objects(std::list<std::string>* objects, int num) = 0;
+  virtual bool get_objects(std::list< std::pair<std::string, std::string> >* objects, int num) = 0;
+  virtual void set_namespace(const std::string&) {}
 
   ostream& out(ostream& os);
   ostream& out(ostream& os, utime_t& t);
@@ -100,12 +107,19 @@ public:
   virtual ~ObjBencher() {}
   int aio_bench(
     int operation, int secondsToRun,
-    int concurrentios, int op_size, bool cleanup, const char* run_name);
-  int clean_up(const char* prefix, int concurrentios, const char* run_name);
+    int concurrentios, size_t op_size, bool cleanup, const std::string& run_name, bool no_verify=false);
+  int clean_up(const std::string& prefix, int concurrentios, const std::string& run_name);
 
   void set_show_time(bool dt) {
     show_time = dt;
   }
+  void set_formatter(Formatter *f) {
+    formatter = f;
+  }
+  void set_outstream(ostream& os) {
+    outstream = &os;
+  }
+  int clean_up_slow(const std::string& prefix, int concurrentios);
 };
 
 

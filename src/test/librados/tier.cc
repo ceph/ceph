@@ -76,16 +76,15 @@ protected:
   static void SetUpTestCase() {
     pool_name = get_temp_pool_name();
     ASSERT_EQ("", create_one_pool_pp(pool_name, s_cluster));
-    cache_pool_name = get_temp_pool_name();
-    ASSERT_EQ(0, s_cluster.pool_create(cache_pool_name.c_str()));
   }
   static void TearDownTestCase() {
-    ASSERT_EQ(0, s_cluster.pool_delete(cache_pool_name.c_str()));
     ASSERT_EQ(0, destroy_one_pool_pp(pool_name, s_cluster));
   }
   static std::string cache_pool_name;
 
   virtual void SetUp() {
+    cache_pool_name = get_temp_pool_name();
+    ASSERT_EQ(0, s_cluster.pool_create(cache_pool_name.c_str()));
     RadosTestPP::SetUp();
     ASSERT_EQ(0, cluster.ioctx_create(cache_pool_name.c_str(), cache_ioctx));
     cache_ioctx.set_namespace(nspace);
@@ -114,6 +113,7 @@ protected:
     cleanup_namespace(cache_ioctx, nspace);
 
     cache_ioctx.close();
+    ASSERT_EQ(0, s_cluster.pool_delete(cache_pool_name.c_str()));
   }
   librados::IoCtx cache_ioctx;
 };
@@ -2216,7 +2216,6 @@ TEST_F(LibRadosTwoPoolsPP, HitSetTrim) {
     c->wait_for_complete();
     c->release();
 
-    ASSERT_TRUE(ls.size() <= count + 1);
     cout << " got ls " << ls << std::endl;
     if (!ls.empty()) {
       if (!first) {
@@ -2239,12 +2238,12 @@ TEST_F(LibRadosTwoPoolsPP, HitSetTrim) {
 
 TEST_F(LibRadosTwoPoolsPP, PromoteOn2ndRead) {
   // create object
-  {
+  for (int i=0; i<20; ++i) {
     bufferlist bl;
     bl.append("hi there");
     ObjectWriteOperation op;
     op.write_full(bl);
-    ASSERT_EQ(0, ioctx.operate("foo", &op));
+    ASSERT_EQ(0, ioctx.operate("foo" + stringify(i), &op));
   }
 
   // configure cache
@@ -2280,40 +2279,63 @@ TEST_F(LibRadosTwoPoolsPP, PromoteOn2ndRead) {
   // wait for maps to settle
   cluster.wait_for_latest_osdmap();
 
-  // 1st read, don't trigger a promote
-  utime_t start = ceph_clock_now(NULL);
-  {
-    bufferlist bl;
-    ASSERT_EQ(1, ioctx.read("foo", bl, 1, 0));
-  }
-  utime_t end = ceph_clock_now(NULL);
-  float dur = end - start;
-  cout << "duration " << dur << std::endl;
-
-  // verify the object is NOT present in the cache tier
-  {
-    NObjectIterator it = cache_ioctx.nobjects_begin();
-    if (it != cache_ioctx.nobjects_end()) {
-      if (dur > 1.0) {
-	cout << " object got promoted, but read was slow, ignoring" << std::endl;
-      } else {
-	ASSERT_TRUE(it == cache_ioctx.nobjects_end());
+  int fake = 0;  // set this to non-zero to test spurious promotion,
+		 // e.g. from thrashing
+  int attempt = 0;
+  string obj;
+  while (true) {
+    // 1st read, don't trigger a promote
+    obj = "foo" + stringify(attempt);
+    cout << obj << std::endl;
+    {
+      bufferlist bl;
+      ASSERT_EQ(1, ioctx.read(obj.c_str(), bl, 1, 0));
+      if (--fake >= 0) {
+	sleep(1);
+	ASSERT_EQ(1, ioctx.read(obj.c_str(), bl, 1, 0));
+	sleep(1);
       }
     }
+
+    // verify the object is NOT present in the cache tier
+    {
+      bool found = false;
+      NObjectIterator it = cache_ioctx.nobjects_begin();
+      while (it != cache_ioctx.nobjects_end()) {
+	cout << " see " << it->get_oid() << std::endl;
+	if (it->get_oid() == string(obj.c_str())) {
+	  found = true;
+	  break;
+	}
+	++it;
+      }
+      if (!found)
+	break;
+    }
+
+    ++attempt;
+    ASSERT_LE(attempt, 20);
+    cout << "hrm, object is present in cache on attempt " << attempt
+	 << ", retrying" << std::endl;
   }
 
   // Read until the object is present in the cache tier
+  cout << "verifying " << obj << " is eventually promoted" << std::endl;
   while (true) {
     bufferlist bl;
-    ASSERT_EQ(1, ioctx.read("foo", bl, 1, 0));
+    ASSERT_EQ(1, ioctx.read(obj.c_str(), bl, 1, 0));
 
+    bool there = false;
     NObjectIterator it = cache_ioctx.nobjects_begin();
-    if (it != cache_ioctx.nobjects_end()) {
-      ASSERT_TRUE(it->get_oid() == string("foo"));
+    while (it != cache_ioctx.nobjects_end()) {
+      if (it->get_oid() == string(obj.c_str())) {
+	there = true;
+	break;
+      }
       ++it;
-      ASSERT_TRUE(it == cache_ioctx.nobjects_end());
-      break;
     }
+    if (there)
+      break;
 
     sleep(1);
   }
@@ -2399,16 +2421,15 @@ protected:
   static void SetUpTestCase() {
     pool_name = get_temp_pool_name();
     ASSERT_EQ("", create_one_ec_pool_pp(pool_name, s_cluster));
-    cache_pool_name = get_temp_pool_name();
-    ASSERT_EQ(0, s_cluster.pool_create(cache_pool_name.c_str()));
   }
   static void TearDownTestCase() {
-    ASSERT_EQ(0, s_cluster.pool_delete(cache_pool_name.c_str()));
     ASSERT_EQ(0, destroy_one_ec_pool_pp(pool_name, s_cluster));
   }
   static std::string cache_pool_name;
 
   virtual void SetUp() {
+    cache_pool_name = get_temp_pool_name();
+    ASSERT_EQ(0, s_cluster.pool_create(cache_pool_name.c_str()));
     RadosTestECPP::SetUp();
     ASSERT_EQ(0, cluster.ioctx_create(cache_pool_name.c_str(), cache_ioctx));
     cache_ioctx.set_namespace(nspace);
@@ -2437,6 +2458,7 @@ protected:
     cleanup_namespace(cache_ioctx, nspace);
 
     cache_ioctx.close();
+    ASSERT_EQ(0, s_cluster.pool_delete(cache_pool_name.c_str()));
   }
 
   librados::IoCtx cache_ioctx;
@@ -4264,7 +4286,6 @@ TEST_F(LibRadosTwoPoolsECPP, HitSetTrim) {
     c->wait_for_complete();
     c->release();
 
-    ASSERT_TRUE(ls.size() <= count + 1);
     cout << " got ls " << ls << std::endl;
     if (!ls.empty()) {
       if (!first) {
@@ -4433,57 +4454,6 @@ TEST_F(LibRadosTwoPoolsECPP, ProxyRead) {
   ASSERT_EQ(0, cluster.mon_command(
     "{\"prefix\": \"osd tier remove\", \"pool\": \"" + pool_name +
     "\", \"tierpool\": \"" + cache_pool_name + "\"}",
-    inbl, NULL, NULL));
-
-  // wait for maps to settle before next test
-  cluster.wait_for_latest_osdmap();
-}
-
-//Make ecpool as cache pool; no-ecpool as data pool
-//Judge promote object which has omap from no-ecpool into ecpool.
-TEST_F(LibRadosTwoPoolsECPP, OmapOperation) {
-  // create object
-  {
-    bufferlist bl;
-    bl.append("hi there");
-    ASSERT_EQ(0, cache_ioctx.omap_set_header("foo", bl));
-  }
-
-  // configure cache.
-  bufferlist inbl;
-  ASSERT_EQ(0, cluster.mon_command(
-    "{\"prefix\": \"osd tier add\", \"pool\": \"" + cache_pool_name +
-    "\", \"tierpool\": \"" + pool_name +
-    "\", \"force_nonempty\": \"--force-nonempty\" }",
-    inbl, NULL, NULL));
-  ASSERT_EQ(0, cluster.mon_command(
-    "{\"prefix\": \"osd tier set-overlay\", \"pool\": \"" + cache_pool_name +
-    "\", \"overlaypool\": \"" + pool_name + "\"}",
-    inbl, NULL, NULL));
-  ASSERT_EQ(0, cluster.mon_command(
-    "{\"prefix\": \"osd tier cache-mode\", \"pool\": \"" + pool_name +
-    "\", \"mode\": \"writeback\"}",
-    inbl, NULL, NULL));
-
-
-  // wait for maps to settle
-  cluster.wait_for_latest_osdmap();
-
-  {
-    bufferlist got;
-    ObjectReadOperation o;
-    o.omap_get_header(&got, NULL);
-    ASSERT_EQ(-EOPNOTSUPP, ioctx.operate("foo", &o, NULL));
-
-  }
-  // tear down tiers
-  ASSERT_EQ(0, cluster.mon_command(
-    "{\"prefix\": \"osd tier remove-overlay\", \"pool\": \"" + cache_pool_name +
-    "\"}",
-    inbl, NULL, NULL));
-  ASSERT_EQ(0, cluster.mon_command(
-    "{\"prefix\": \"osd tier remove\", \"pool\": \"" + cache_pool_name +
-    "\", \"tierpool\": \"" + pool_name + "\"}",
     inbl, NULL, NULL));
 
   // wait for maps to settle before next test

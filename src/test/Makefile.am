@@ -68,24 +68,25 @@ check_SCRIPTS += \
 	test/cephtool-test-osd.sh \
 	test/cephtool-test-mon.sh \
 	test/cephtool-test-mds.sh \
+	test/cephtool-test-rados.sh \
 	unittest_bufferlist.sh \
 	test/encoding/check-generated.sh \
 	test/mon/osd-pool-create.sh \
 	test/mon/misc.sh \
 	test/mon/osd-crush.sh \
+	test/mon/mon-ping.sh \
 	test/mon/osd-erasure-code-profile.sh \
 	test/mon/mkfs.sh \
+	test/mon/mon-scrub.sh \
 	test/osd/osd-scrub-repair.sh \
 	test/osd/osd-config.sh \
 	test/osd/osd-bench.sh \
 	test/osd/osd-copy-from.sh \
-	test/mon/mon-handle-forward.sh
+	test/mon/mon-handle-forward.sh \
+	test/libradosstriper/rados-striper.sh \
+	test/test_objectstore_memstore.sh
 
-if ENABLE_ROOT_MAKE_CHECK
-check_SCRIPTS += test/ceph-disk-root.sh
-else
 check_SCRIPTS += test/ceph-disk.sh
-endif
 
 EXTRA_DIST += \
 	$(srcdir)/test/python/ceph-disk/setup.py \
@@ -118,14 +119,6 @@ EXTRA_DIST += \
         $(srcdir)/test/coverage.sh \
 	$(patsubst %,$(srcdir)/%,$(check_SCRIPTS))
 
-docker-check:
-	$(srcdir)/test/container-make-check-ubuntu-14.04.sh
-	$(srcdir)/test/container-make-check-centos-centos7.sh
-
-EXTRA_DIST += \
-	$(srcdir)/test/container-make-check-ubuntu-14.04.sh
-	$(srcdir)/test/container-make-check-centos-centos7.sh
-
 # target to build but not run the unit tests
 unittests:: $(check_PROGRAMS)
 
@@ -149,7 +142,9 @@ check_TESTPROGRAMS += unittest_addrs
 unittest_blkdev_SOURCES = test/common/test_blkdev.cc
 unittest_blkdev_CXXFLAGS = $(UNITTEST_CXXFLAGS)
 unittest_blkdev_LDADD = $(UNITTEST_LDADD) $(CEPH_GLOBAL)
+if LINUX
 check_TESTPROGRAMS += unittest_blkdev
+endif
 
 unittest_bloom_filter_SOURCES = test/common/test_bloom_filter.cc
 unittest_bloom_filter_CXXFLAGS = $(UNITTEST_CXXFLAGS)
@@ -414,6 +409,11 @@ unittest_subprocess_LDADD = $(LIBCOMMON) $(UNITTEST_LDADD)
 unittest_subprocess_CXXFLAGS = $(UNITTEST_CXXFLAGS)
 check_PROGRAMS += unittest_subprocess
 
+unittest_async_compressor_SOURCES = test/common/test_async_compressor.cc
+unittest_async_compressor_CXXFLAGS = $(UNITTEST_CXXFLAGS)
+unittest_async_compressor_LDADD = $(UNITTEST_LDADD) $(CEPH_GLOBAL) $(LIBCOMPRESSOR)
+check_PROGRAMS += unittest_async_compressor
+
 check_SCRIPTS += test/pybind/test_ceph_argparse.py
 check_SCRIPTS += test/pybind/test_ceph_daemon.py
 
@@ -451,8 +451,6 @@ noinst_HEADERS += \
 	test/librados/test.h \
 	test/librados/TestCase.h \
 	test/libradosstriper/TestCase.h \
-	test/librbd/test_fixture.h \
-	test/librbd/test_support.h \
 	test/ObjectMap/KeyValueDBMemory.h \
 	test/omap_bench.h \
 	test/osdc/FakeWriteback.h \

@@ -307,9 +307,9 @@ protected:
 
   /// Log is clean on [dirty_to, dirty_from)
   bool touched_log;
-  eversion_t dirty_to;         ///< must clear/writeout all keys up to dirty_to
-  eversion_t dirty_from;       ///< must clear/writeout all keys past dirty_from
-  eversion_t writeout_from;    ///< must writout keys past writeout_from
+  eversion_t dirty_to;         ///< must clear/writeout all keys <= dirty_to
+  eversion_t dirty_from;       ///< must clear/writeout all keys >= dirty_from
+  eversion_t writeout_from;    ///< must writout keys >= writeout_from
   set<eversion_t> trimmed;     ///< must clear keys in trimmed
   bool dirty_divergent_priors;
   CephContext *cct;
@@ -388,9 +388,12 @@ public:
   //////////////////// get or set missing ////////////////////
 
   const pg_missing_t& get_missing() const { return missing; }
+  void resort_missing(bool sort_bitwise) {
+    missing.resort(sort_bitwise);
+  }
 
-  void missing_got(map<hobject_t, pg_missing_t::item>::const_iterator m) {
-    map<hobject_t, pg_missing_t::item>::iterator p = missing.missing.find(m->first);
+  void missing_got(map<hobject_t, pg_missing_t::item, hobject_t::ComparatorWithDefault>::const_iterator m) {
+    map<hobject_t, pg_missing_t::item, hobject_t::ComparatorWithDefault>::iterator p = missing.missing.find(m->first);
     missing.got(p);
   }
 
@@ -406,8 +409,8 @@ public:
     missing.add(oid, need, have);
   }
 
-  void missing_rm(map<hobject_t, pg_missing_t::item>::const_iterator m) {
-    map<hobject_t, pg_missing_t::item>::iterator p = missing.missing.find(m->first);
+  void missing_rm(map<hobject_t, pg_missing_t::item, hobject_t::ComparatorWithDefault>::const_iterator m) {
+    map<hobject_t, pg_missing_t::item, hobject_t::ComparatorWithDefault>::iterator p = missing.missing.find(m->first);
     missing.rm(p);
   }
 
@@ -550,7 +553,7 @@ public:
 protected:
   static void split_by_object(
     list<pg_log_entry_t> &entries,
-    map<hobject_t, list<pg_log_entry_t> > *out_entries) {
+    map<hobject_t, list<pg_log_entry_t>, hobject_t::BitwiseComparator> *out_entries) {
     while (!entries.empty()) {
       list<pg_log_entry_t> &out_list = (*out_entries)[entries.front().soid];
       out_list.splice(out_list.end(), entries, entries.begin());
@@ -583,9 +586,9 @@ protected:
     map<eversion_t, hobject_t> *priors,  ///< [out] target for new priors
     LogEntryHandler *rollbacker          ///< [in] optional rollbacker object
     ) {
-    map<hobject_t, list<pg_log_entry_t> > split;
+    map<hobject_t, list<pg_log_entry_t>, hobject_t::BitwiseComparator > split;
     split_by_object(entries, &split);
-    for (map<hobject_t, list<pg_log_entry_t> >::iterator i = split.begin();
+    for (map<hobject_t, list<pg_log_entry_t>, hobject_t::BitwiseComparator>::iterator i = split.begin();
 	 i != split.end();
 	 ++i) {
       boost::optional<pair<eversion_t, hobject_t> > new_divergent_prior;

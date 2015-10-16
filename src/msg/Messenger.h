@@ -34,7 +34,6 @@ using namespace std;
 
 #define SOCKET_PRIORITY_MIN_DELAY 6
 
-class MDS;
 class Timer;
 
 
@@ -151,12 +150,29 @@ public:
    * @param name entity name to register
    * @param lname logical name of the messenger in this process (e.g., "client")
    * @param nonce nonce value to uniquely identify this instance on the current host
+   * @param features bits for the local connection
    */
   static Messenger *create(CephContext *cct,
                            const string &type,
                            entity_name_t name,
 			   string lname,
-                           uint64_t nonce);
+                           uint64_t nonce,
+			   uint64_t features = 0);
+
+  /**
+   * create a new messenger
+   *
+   * Create a new messenger instance.
+   * Same as the above, but a slightly simpler interface for clients:
+   * - Generate a random nonce
+   * - use the default feature bits
+   * - get the messenger type from cct
+   * - use the client entity_type
+   *
+   * @param cct context
+   * @param lname logical name of the messenger in this process (e.g., "client")
+   */
+  static Messenger *create_client_messenger(CephContext *cct, string lname);
 
   /**
    * @defgroup Accessors

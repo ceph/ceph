@@ -83,19 +83,9 @@ int Dumper::dump(const char *dump_file)
   uint64_t end = journaler.get_write_pos();
   uint64_t len = end-start;
 
-  cout << "journal is " << start << "~" << len << std::endl;
-
   Filer filer(objecter, &finisher);
-  bufferlist bl;
 
-  C_SaferCond cond;
-  lock.Lock();
-  filer.read(ino, &journaler.get_layout(), CEPH_NOSNAP,
-             start, len, &bl, 0, &cond);
-  lock.Unlock();
-  r = cond.wait();
-
-  cout << "read " << bl.length() << " bytes at offset " << start << std::endl;
+  cout << "journal is " << start << "~" << len << std::endl;
 
   int fd = ::open(dump_file, O_WRONLY|O_CREAT|O_TRUNC, 0644);
   if (fd >= 0) {
@@ -105,7 +95,7 @@ int Dumper::dump(const char *dump_file)
     sprintf(buf, "Ceph mds%d journal dump\n start offset %llu (0x%llx)\n       length %llu (0x%llx)\n    write_pos %llu (0x%llx)\n    format %llu\n    trimmed_pos %llu (0x%llx)\n%c",
 	    rank, 
 	    (unsigned long long)start, (unsigned long long)start,
-	    (unsigned long long)bl.length(), (unsigned long long)bl.length(),
+	    (unsigned long long)len, (unsigned long long)len,
 	    (unsigned long long)journaler.last_committed.write_pos, (unsigned long long)journaler.last_committed.write_pos,
 	    (unsigned long long)journaler.last_committed.stream_format,
 	    (unsigned long long)journaler.last_committed.trimmed_pos, (unsigned long long)journaler.last_committed.trimmed_pos,
@@ -125,11 +115,39 @@ int Dumper::dump(const char *dump_file)
       ::close(fd);
       return r;
     }
-    r = bl.write_fd(fd);
-    if (r) {
-      derr << "Error " << r << " (" << cpp_strerror(r) << ") writing journal file" << dendl;
-      ::close(fd);
-      return r;
+
+
+    // Read and write 32MB chunks.  Slower than it could be because we're not
+    // streaming, but that's okay because this is just a debug/disaster tool.
+    const uint32_t chunk_size = 32 * 1024 * 1024;
+
+    for (uint64_t pos = start; pos < start + len; pos += chunk_size) {
+      bufferlist bl;
+      dout(10) << "Reading at pos=0x" << std::hex << pos << std::dec << dendl;
+
+      const uint32_t read_size = MIN(chunk_size, end - pos);
+
+      C_SaferCond cond;
+      lock.Lock();
+      filer.read(ino, &journaler.get_layout(), CEPH_NOSNAP,
+                 pos, read_size, &bl, 0, &cond);
+      lock.Unlock();
+      r = cond.wait();
+      if (r < 0) {
+        derr << "Error " << r << " (" << cpp_strerror(r) << ") reading "
+                "journal at offset 0x" << std::hex << pos << std::dec << dendl;
+        ::close(fd);
+        return r;
+      }
+      dout(10) << "Got 0x" << std::hex << bl.length() << std::dec
+               << " bytes" << dendl;
+
+      r = bl.write_fd(fd);
+      if (r) {
+        derr << "Error " << r << " (" << cpp_strerror(r) << ") writing journal file" << dendl;
+        ::close(fd);
+        return r;
+      }
     }
 
     r = ::close(fd);
@@ -139,7 +157,7 @@ int Dumper::dump(const char *dump_file)
       return r;
     }
 
-    cout << "wrote " << bl.length() << " bytes at offset " << start << " to " << dump_file << "\n"
+    cout << "wrote " << len << " bytes at offset " << start << " to " << dump_file << "\n"
 	 << "NOTE: this is a _sparse_ file; you can\n"
 	 << "\t$ tar cSzf " << dump_file << ".tgz " << dump_file << "\n"
 	 << "      to efficiently compress it while preserving sparseness." << std::endl;

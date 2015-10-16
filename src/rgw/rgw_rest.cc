@@ -232,8 +232,8 @@ static bool rgw_find_host_in_domains(const string& host, string *domain, string 
     if (!str_ends_with(host, *iter, &pos))
       continue;
 
-    *domain = host.substr(pos);
     if (pos == 0) {
+      *domain = host;
       subdomain->clear();
     } else {
       if (host[pos - 1] != '.') {
@@ -339,13 +339,19 @@ void dump_content_length(struct req_state *s, uint64_t len)
   }
 }
 
-void dump_etag(struct req_state *s, const char *etag)
+void dump_etag(struct req_state * const s, const char * const etag)
 {
+  if ('\0' == *etag) {
+    return;
+  }
+
   int r;
-  if (s->prot_flags & RGW_REST_SWIFT)
+  if (s->prot_flags & RGW_REST_SWIFT) {
     r = s->cio->print("etag: %s\r\n", etag);
-  else
+  } else {
     r = s->cio->print("ETag: \"%s\"\r\n", etag);
+  }
+
   if (r < 0) {
     ldout(s->cct, 0) << "ERROR: s->cio->print() returned err=" << r << dendl;
   }
@@ -361,8 +367,11 @@ void dump_bucket_from_state(struct req_state *s)
 {
   int expose_bucket = g_conf->rgw_expose_bucket;
   if (expose_bucket) {
-    if (!s->bucket_name_str.empty())
-      s->cio->print("Bucket: \"%s\"\r\n", s->bucket_name_str.c_str());
+    if (!s->bucket_name_str.empty()) {
+      string b;
+      url_encode(s->bucket_name_str, b);
+      s->cio->print("Bucket: %s\r\n", b.c_str());
+    }
   }
 }
 
@@ -494,13 +503,29 @@ void dump_start(struct req_state *s)
   }
 }
 
+void dump_trans_id(req_state *s)
+{
+  if (s->prot_flags & RGW_REST_SWIFT) {
+    s->cio->print("X-Trans-Id: %s\r\n", s->trans_id.c_str());
+  }
+  else {
+    s->cio->print("x-amz-request-id: %s\r\n", s->trans_id.c_str());
+  }
+}
+
 void end_header(struct req_state *s, RGWOp *op, const char *content_type, const int64_t proposed_content_length,
 		bool force_content_type)
 {
   string ctype;
 
+  dump_trans_id(s);
+
   if (op) {
     dump_access_control(s, op);
+  }
+
+  if (s->prot_flags & RGW_REST_SWIFT && !content_type) {
+    force_content_type = true;
   }
 
   /* do not send content type if content length is zero
@@ -528,6 +553,8 @@ void end_header(struct req_state *s, RGWOp *op, const char *content_type, const 
       s->formatter->dump_string("Code", s->err.s3_code);
     if (!s->err.message.empty())
       s->formatter->dump_string("Message", s->err.message);
+    if (!s->trans_id.empty())
+      s->formatter->dump_string("RequestId", s->trans_id);
     s->formatter->close_section();
     dump_content_length(s, s->formatter->get_len());
   } else {
@@ -538,7 +565,7 @@ void end_header(struct req_state *s, RGWOp *op, const char *content_type, const 
 
   int r;
   if (content_type) {
-      r = s->cio->print("Content-type: %s\r\n", content_type);
+      r = s->cio->print("Content-Type: %s\r\n", content_type);
       if (r < 0) {
 	ldout(s->cct, 0) << "ERROR: s->cio->print() returned err=" << r << dendl;
       }
@@ -800,7 +827,7 @@ int RGWPutObj_ObjStore::verify_params()
 {
   if (s->length) {
     off_t len = atoll(s->length);
-    if (len > (off_t)RGW_MAX_PUT_SIZE) {
+    if (len > (off_t)(s->cct->_conf->rgw_max_put_size)) {
       return -ERR_TOO_LARGE;
     }
   }
@@ -839,7 +866,7 @@ int RGWPutObj_ObjStore::get_data(bufferlist& bl)
     bl.append(bp, 0, len);
   }
 
-  if ((uint64_t)ofs + len > RGW_MAX_PUT_SIZE) {
+  if ((uint64_t)ofs + len > s->cct->_conf->rgw_max_put_size) {
     return -ERR_TOO_LARGE;
   }
 
@@ -858,7 +885,7 @@ int RGWPostObj_ObjStore::verify_params()
     return -ERR_LENGTH_REQUIRED;
   }
   off_t len = atoll(s->length);
-  if (len > (off_t)RGW_MAX_PUT_SIZE) {
+  if (len > (off_t)(s->cct->_conf->rgw_max_put_size)) {
     return -ERR_TOO_LARGE;
   }
 
@@ -1331,26 +1358,28 @@ int RGWREST::preprocess(struct req_state *s, RGWClientIO *cio)
   req_info& info = s->info;
 
   s->cio = cio;
-  if (info.host) {
-    string h(s->info.host);
-
-    ldout(s->cct, 10) << "host=" << s->info.host << dendl;
+  if (info.host.size()) {
+    ldout(s->cct, 10) << "host=" << info.host << dendl;
     string domain;
     string subdomain;
-    bool in_hosted_domain = rgw_find_host_in_domains(h, &domain, &subdomain);
-    ldout(s->cct, 20) << "subdomain=" << subdomain << " domain=" << domain << " in_hosted_domain=" << in_hosted_domain << dendl;
+    bool in_hosted_domain = rgw_find_host_in_domains(info.host, &domain,
+						     &subdomain);
+    ldout(s->cct, 20) << "subdomain=" << subdomain << " domain=" << domain
+		      << " in_hosted_domain=" << in_hosted_domain << dendl;
 
     if (g_conf->rgw_resolve_cname && !in_hosted_domain) {
       string cname;
       bool found;
-      int r = rgw_resolver->resolve_cname(h, cname, &found);
+      int r = rgw_resolver->resolve_cname(info.host, cname, &found);
       if (r < 0) {
 	ldout(s->cct, 0) << "WARNING: rgw_resolver->resolve_cname() returned r=" << r << dendl;
       }
       if (found) {
-        ldout(s->cct, 5) << "resolved host cname " << h << " -> " << cname << dendl;
+        ldout(s->cct, 5) << "resolved host cname " << info.host << " -> "
+			 << cname << dendl;
         in_hosted_domain = rgw_find_host_in_domains(cname, &domain, &subdomain);
-        ldout(s->cct, 20) << "subdomain=" << subdomain << " domain=" << domain << " in_hosted_domain=" << in_hosted_domain << dendl;
+        ldout(s->cct, 20) << "subdomain=" << subdomain << " domain=" << domain
+			  << " in_hosted_domain=" << in_hosted_domain << dendl;
       }
     }
 

@@ -20,6 +20,8 @@
 #include "osd/OSDMap.h"
 #include "gtest/gtest.h"
 #include "common/Thread.h"
+#include "include/stringify.h"
+#include "osd/ReplicatedBackend.h"
 
 #include <sstream>
 
@@ -139,6 +141,7 @@ TEST(pg_interval_t, check_new_interval)
   int64_t pool_id = 200;
   int pg_num = 4;
   __u8 min_size = 2;
+  boost::scoped_ptr<IsPGRecoverablePredicate> recoverable(new ReplicatedBackend::RPCRecPred());
   {
     OSDMap::Incremental inc(epoch + 1);
     inc.new_pools[pool_id].min_size = min_size;
@@ -183,6 +186,7 @@ TEST(pg_interval_t, check_new_interval)
 						   osdmap,
 						   lastmap,
 						   pgid,
+                                                   recoverable.get(),
 						   &past_intervals));
     ASSERT_TRUE(past_intervals.empty());
   }
@@ -212,6 +216,7 @@ TEST(pg_interval_t, check_new_interval)
 						  osdmap,
 						  lastmap,
 						  pgid,
+                                                  recoverable.get(),
 						  &past_intervals));
     ASSERT_EQ((unsigned int)1, past_intervals.size());
     ASSERT_EQ(same_interval_since, past_intervals[same_interval_since].first);
@@ -244,6 +249,7 @@ TEST(pg_interval_t, check_new_interval)
 						  osdmap,
 						  lastmap,
 						  pgid,
+                                                  recoverable.get(),
 						  &past_intervals));
     old_primary = new_primary;
     ASSERT_EQ((unsigned int)1, past_intervals.size());
@@ -277,6 +283,7 @@ TEST(pg_interval_t, check_new_interval)
 						  osdmap,
 						  lastmap,
 						  pgid,
+                                                  recoverable.get(),
 						  &past_intervals));
     ASSERT_EQ((unsigned int)1, past_intervals.size());
     ASSERT_EQ(same_interval_since, past_intervals[same_interval_since].first);
@@ -308,6 +315,7 @@ TEST(pg_interval_t, check_new_interval)
 						  osdmap,
 						  lastmap,
 						  pgid,
+                                                  recoverable.get(),
 						  &past_intervals));
     ASSERT_EQ((unsigned int)1, past_intervals.size());
     ASSERT_EQ(same_interval_since, past_intervals[same_interval_since].first);
@@ -346,6 +354,7 @@ TEST(pg_interval_t, check_new_interval)
 						  osdmap,
 						  lastmap,
 						  pgid,
+                                                  recoverable.get(),
 						  &past_intervals));
     ASSERT_EQ((unsigned int)1, past_intervals.size());
     ASSERT_EQ(same_interval_since, past_intervals[same_interval_since].first);
@@ -384,6 +393,7 @@ TEST(pg_interval_t, check_new_interval)
 						  osdmap,
 						  lastmap,
 						  pgid,
+                                                  recoverable.get(),
 						  &past_intervals));
     ASSERT_EQ((unsigned int)1, past_intervals.size());
     ASSERT_EQ(same_interval_since, past_intervals[same_interval_since].first);
@@ -417,6 +427,7 @@ TEST(pg_interval_t, check_new_interval)
 						  osdmap,
 						  lastmap,
 						  pgid,
+                                                  recoverable.get(),
 						  &past_intervals,
 						  &out));
     ASSERT_EQ((unsigned int)1, past_intervals.size());
@@ -468,6 +479,7 @@ TEST(pg_interval_t, check_new_interval)
 						  osdmap,
 						  lastmap,
 						  pgid,
+                                                  recoverable.get(),
 						  &past_intervals,
 						  &out));
     ASSERT_EQ((unsigned int)1, past_intervals.size());
@@ -502,6 +514,7 @@ TEST(pg_interval_t, check_new_interval)
 						  osdmap,
 						  lastmap,
 						  pgid,
+                                                  recoverable.get(),
 						  &past_intervals,
 						  &out));
     ASSERT_EQ((unsigned int)1, past_intervals.size());
@@ -546,6 +559,7 @@ TEST(pg_interval_t, check_new_interval)
 						  osdmap,
 						  lastmap,
 						  pgid,
+                                                  recoverable.get(),
 						  &past_intervals,
 						  &out));
     ASSERT_EQ((unsigned int)1, past_intervals.size());
@@ -594,6 +608,7 @@ TEST(pg_interval_t, check_new_interval)
 						  osdmap,
 						  lastmap,
 						  pgid,
+                                                  recoverable.get(),
 						  &past_intervals,
 						  &out));
     ASSERT_EQ((unsigned int)1, past_intervals.size());
@@ -1290,6 +1305,87 @@ TEST(shard_id_t, iostream) {
     ostringstream out;
     out << shards;
     ASSERT_EQ(out.str(), "0,1,2");
+
+    shard_id_t noshard = shard_id_t::NO_SHARD;
+    shard_id_t zero(0);
+    ASSERT_GT(zero, noshard);
+}
+
+TEST(spg_t, parse) {
+  spg_t a(pg_t(1,2), shard_id_t::NO_SHARD);
+  spg_t aa, bb;
+  spg_t b(pg_t(3,2), shard_id_t(2));
+  std::string s = stringify(a);
+  ASSERT_TRUE(aa.parse(s.c_str()));
+  ASSERT_EQ(a, aa);
+
+  s = stringify(b);
+  ASSERT_TRUE(bb.parse(s.c_str()));
+  ASSERT_EQ(b, bb);
+}
+
+TEST(coll_t, parse) {
+  const char *ok[] = {
+    "meta",
+    "1.2_head",
+    "1.2_TEMP",
+    "1.2s3_head",
+    "1.3s2_TEMP",
+    "1.2s0_head",
+    0
+  };
+  const char *bad[] = {
+    "foo",
+    "1.2_food",
+    "1.2_head ",
+    //" 1.2_head",   // hrm, this parses, which is not ideal.. pg_t's fault?
+    "1.2_temp",
+    "1.2_HEAD",
+    "1.xS3_HEAD",
+    "1.2s_HEAD",
+    "1.2sfoo_HEAD",
+    0
+  };
+  coll_t a;
+  for (int i = 0; ok[i]; ++i) {
+    cout << "check ok " << ok[i] << std::endl;
+    ASSERT_TRUE(a.parse(ok[i]));
+    ASSERT_EQ(string(ok[i]), a.to_str());
+  }
+  for (int i = 0; bad[i]; ++i) {
+    cout << "check bad " << bad[i] << std::endl;
+    ASSERT_FALSE(a.parse(bad[i]));
+  }
+}
+
+TEST(coll_t, temp) {
+  spg_t pgid;
+  coll_t foo(pgid);
+  ASSERT_EQ(foo.to_str(), string("0.0_head"));
+
+  coll_t temp = foo.get_temp();
+  ASSERT_EQ(temp.to_str(), string("0.0_TEMP"));
+
+  spg_t pgid2;
+  ASSERT_TRUE(temp.is_temp());
+  ASSERT_TRUE(temp.is_temp(&pgid2));
+  ASSERT_EQ(pgid, pgid2);
+}
+
+TEST(ghobject_t, cmp) {
+  ghobject_t min;
+  ghobject_t sep;
+  sep.set_shard(shard_id_t(1));
+  sep.hobj.pool = -1;
+  cout << min << " < " << sep << std::endl;
+  ASSERT_TRUE(cmp_bitwise(min, sep) < 0);
+
+  sep.set_shard(shard_id_t::NO_SHARD);
+  cout << "sep shard " << sep.shard_id << std::endl;
+  ghobject_t o(hobject_t(object_t(), string(), CEPH_NOSNAP, 0x42,
+			 1, string()));
+  cout << "o " << o << std::endl;
+  ASSERT_TRUE(cmp_bitwise(o, sep) > 0);
 }
 
 /*

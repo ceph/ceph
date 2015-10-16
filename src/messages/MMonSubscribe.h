@@ -74,6 +74,7 @@ public:
   void encode_payload(uint64_t features) {
     if (features & CEPH_FEATURE_SUBSCRIBE2) {
       ::encode(what, payload);
+      header.version = HEAD_VERSION;
     } else {
       header.version = 0;
       map<string, ceph_mon_subscribe_item_old> oldwhat;

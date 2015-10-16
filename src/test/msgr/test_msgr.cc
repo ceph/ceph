@@ -87,10 +87,11 @@ class FakeDispatcher : public Dispatcher {
   bool got_new;
   bool got_remote_reset;
   bool got_connect;
+  bool loopback;
 
   FakeDispatcher(bool s): Dispatcher(g_ceph_context), lock("FakeDispatcher::lock"),
                           is_server(s), got_new(false), got_remote_reset(false),
-                          got_connect(false) {}
+                          got_connect(false), loopback(false) {}
   bool ms_can_fast_dispatch_any() const { return true; }
   bool ms_can_fast_dispatch(Message *m) const {
     switch (m->get_type()) {
@@ -177,7 +178,12 @@ class FakeDispatcher : public Dispatcher {
     s->count++;
     cerr << __func__ << " conn: " << m->get_connection() << " session " << s << " count: " << s->count << std::endl;
     if (is_server) {
-      reply_message(m);
+      if (loopback)
+        assert(m->get_source().is_osd());
+      else
+        reply_message(m);
+    } else if (loopback) {
+      assert(m->get_source().is_client());
     }
     got_new = true;
     cond.Signal();
@@ -256,6 +262,7 @@ TEST_P(MessengerTest, SimpleTest) {
   ASSERT_FALSE(conn->is_connected());
 
   // 5. loopback connection
+  srv_dispatcher.loopback = true;
   conn = client_msgr->get_loopback_connection();
   {
     m = new MPing();
@@ -265,6 +272,7 @@ TEST_P(MessengerTest, SimpleTest) {
       cli_dispatcher.cond.Wait(cli_dispatcher.lock);
     cli_dispatcher.got_new = false;
   }
+  srv_dispatcher.loopback = false;
   ASSERT_TRUE(static_cast<Session*>(conn->get_priv())->get_count() == 1);
   client_msgr->shutdown();
   client_msgr->wait();
@@ -737,6 +745,12 @@ class SyntheticDispatcher : public Dispatcher {
     got_remote_reset = true;
   }
   void ms_fast_dispatch(Message *m) {
+    // MSG_COMMAND is used to disorganize regular message flow
+    if (m->get_type() == MSG_COMMAND) {
+      m->put();
+      return ;
+    }
+
     Mutex::Locker l(lock);
     uint64_t i;
     bool reply;
@@ -745,10 +759,10 @@ class SyntheticDispatcher : public Dispatcher {
     ::decode(i, blp);
     ::decode(reply, blp);
     if (reply) {
-      cerr << __func__ << " reply=" << reply << " i=" << i << std::endl;
+      //cerr << __func__ << " reply=" << reply << " i=" << i << std::endl;
       reply_message(m, i);
     } else if (sent.count(i)) {
-      cerr << __func__ << " reply=" << reply << " i=" << i << std::endl;
+      //cerr << __func__ << " reply=" << reply << " i=" << i << std::endl;
       ASSERT_EQ(conn_sent[m->get_connection()].front(), i);
       ASSERT_TRUE(m->get_data().contents_equal(sent[i]));
       conn_sent[m->get_connection()].pop_front();
@@ -776,6 +790,7 @@ class SyntheticDispatcher : public Dispatcher {
     if (m->get_middle().length())
       rm->set_middle(bl);
     m->get_connection()->send_message(rm);
+    //cerr << __func__ << " conn=" << m->get_connection() << " reply m=" << m << " i=" << i << std::endl;
   }
 
   void send_message_wrap(ConnectionRef con, Message *m) {
@@ -791,6 +806,7 @@ class SyntheticDispatcher : public Dispatcher {
         sent[i] = m->get_data();
         conn_sent[con].push_back(i);
       }
+      //cerr << __func__ << " conn=" << con.get() << " send m=" << m << " i=" << i << std::endl;
     }
     ASSERT_EQ(con->send_message(m), 0);
   }
@@ -921,25 +937,43 @@ class SyntheticWorkload {
     pair<Messenger*, Messenger*> p;
     {
       boost::uniform_int<> choose(0, available_servers.size() - 1);
-      if (server->get_default_policy().server || choose(rng) % 2)
+      if (server->get_default_policy().server) {
         p = make_pair(client, server);
-      else
-        p = make_pair(server, client);
+      } else {
+        ConnectionRef conn = client->get_connection(server->get_myinst());
+        if (available_connections.count(conn) || choose(rng) % 2)
+          p = make_pair(client, server);
+        else
+          p = make_pair(server, client);
+      }
     }
     ConnectionRef conn = p.first->get_connection(p.second->get_myinst());
     available_connections[conn] = p;
   }
 
   void send_message() {
-    Message *m = new MPing();
-    bufferlist bl;
-    boost::uniform_int<> u(0, rand_data.size()-1);
-    uint64_t index = u(rng);
-    bl = rand_data[index];
-    m->set_data(bl);
     Mutex::Locker l(lock);
     ConnectionRef conn = _get_random_connection();
-    dispatcher.send_message_wrap(conn, m);
+    boost::uniform_int<> true_false(0, 99);
+    int val = true_false(rng);
+    if (val >= 95) {
+      uuid_d uuid;
+      uuid.generate_random();
+      MCommand *m = new MCommand(uuid);
+      vector<string> cmds;
+      cmds.push_back("command");
+      m->cmd = cmds;
+      m->set_priority(200);
+      conn->send_message(m);
+    } else {
+      Message *m = new MPing();
+      bufferlist bl;
+      boost::uniform_int<> u(0, rand_data.size()-1);
+      uint64_t index = u(rng);
+      bl = rand_data[index];
+      m->set_data(bl);
+      dispatcher.send_message_wrap(conn, m);
+    }
   }
 
   void drop_connection() {
@@ -949,6 +983,15 @@ class SyntheticWorkload {
     ConnectionRef conn = _get_random_connection();
     dispatcher.clear_pending(conn);
     conn->mark_down();
+    pair<Messenger*, Messenger*> &p = available_connections[conn];
+    // it's a lossless policy, so we need to mark down each side
+    if (!p.first->get_default_policy().server && !p.second->get_default_policy().server) {
+      ASSERT_EQ(conn->get_messenger(), p.first);
+      ConnectionRef peer = p.second->get_connection(p.first->get_myinst());
+      peer->mark_down();
+      dispatcher.clear_pending(peer);
+      available_connections.erase(peer);
+    }
     ASSERT_EQ(available_connections.erase(conn), 1U);
   }
 
@@ -1336,6 +1379,7 @@ TEST(DummyTest, ValueParameterizedTestsAreNotSupportedOnThisPlatform) {}
 int main(int argc, char **argv) {
   vector<const char*> args;
   argv_to_vec(argc, (const char **)argv, args);
+  env_to_vec(args);
 
   global_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT, CODE_ENVIRONMENT_UTILITY, 0);
   g_ceph_context->_conf->set_val("auth_cluster_required", "none");

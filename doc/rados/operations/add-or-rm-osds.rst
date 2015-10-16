@@ -79,10 +79,10 @@ weight).
    Note, in this case the command may fail if the number is already in use.
 
    .. warning:: In general, explicitly specifying {id} is not recommended.
-   IDs are allocated as an array, and skipping entries consumes some extra
-   memory. This can become significant if there are large gaps and/or
-   clusters are large. If {id} is not specified, the smallest available is
-   used.
+      IDs are allocated as an array, and skipping entries consumes some extra
+      memory. This can become significant if there are large gaps and/or
+      clusters are large. If {id} is not specified, the smallest available is
+      used.
 
 #. Create the default directory on your new OSD. :: 
 

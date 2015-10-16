@@ -584,7 +584,7 @@ Rados object in state %s." % self.state)
                 return c_name.value
                 break
 
-    @requires(('pool_name', str), ('auid', opt(int)), ('crush_rule', opt(str)))
+    @requires(('pool_name', str), ('auid', opt(int)), ('crush_rule', opt(int)))
     def create_pool(self, pool_name, auid=None, crush_rule=None):
         """
         Create a pool:
@@ -598,7 +598,7 @@ Rados object in state %s." % self.state)
         :param auid: the id of the owner of the new pool
         :type auid: int
         :param crush_rule: rule to use for placement in the new pool
-        :type crush_rule: str
+        :type crush_rule: int
 
         :raises: :class:`TypeError`, :class:`Error`
         """
@@ -830,6 +830,39 @@ Rados object in state %s." % self.state)
                              c_uint32(expire_seconds)))
         if ret < 0:
             raise make_ex(ret, "error blacklisting client '%s'" % client_address)
+
+
+class OmapIterator(object):
+    """Omap iterator"""
+    def __init__(self, ioctx, ctx):
+        self.ioctx = ioctx
+        self.ctx = ctx
+
+    def __iter__(self):
+        return self
+
+    def next(self):
+        """
+        Get the next key-value pair in the object
+        :returns: next rados.OmapItem
+        """
+        key_ = c_char_p(0)
+        val_ = c_char_p(0)
+        len_ = c_int(0)
+        ret = run_in_thread(self.ioctx.librados.rados_omap_get_next,
+                      (self.ctx, byref(key_), byref(val_), byref(len_)))
+        if (ret != 0):
+            raise make_ex(ret, "error iterating over the omap")
+        if key_.value is None:
+            raise StopIteration()
+        key = ctypes.string_at(key_)
+        val = None
+        if val_.value is not None:
+            val = ctypes.string_at(val_, len_)
+        return (key, val)
+
+    def __del__(self):
+        run_in_thread(self.ioctx.librados.rados_omap_get_end, (self.ctx,))
 
 
 class ObjectIterator(object):
@@ -1069,6 +1102,39 @@ class Completion(object):
         """
         run_in_thread(self.ioctx.librados.rados_aio_release,
                       (self.rados_comp,))
+
+
+class WriteOpCtx(object):
+    """write operation context manager"""
+    def __init__(self, ioctx):
+        self.ioctx = ioctx
+
+    def __enter__(self):
+        self.ioctx.librados.rados_create_write_op.restype = c_void_p
+        ret = run_in_thread(self.ioctx.librados.rados_create_write_op, (None,))
+        self.write_op = ret
+        return ret
+
+    def __exit__(self, type, msg, traceback):
+        self.ioctx.librados.rados_release_write_op.argtypes = [c_void_p]
+        run_in_thread(self.ioctx.librados.rados_release_write_op, (c_void_p(self.write_op),))
+
+
+class ReadOpCtx(object):
+    """read operation context manager"""
+    def __init__(self, ioctx):
+        self.ioctx = ioctx
+
+    def __enter__(self):
+        self.ioctx.librados.rados_create_read_op.restype = c_void_p
+        ret = run_in_thread(self.ioctx.librados.rados_create_read_op, (None,))
+        self.read_op = ret
+        return ret
+
+    def __exit__(self, type, msg, traceback):
+        self.ioctx.librados.rados_release_read_op.argtypes = [c_void_p]
+        run_in_thread(self.ioctx.librados.rados_release_read_op, (c_void_p(self.read_op),))
+
 
 RADOS_CB = CFUNCTYPE(c_int, c_void_p, c_void_p)
 
@@ -1830,6 +1896,188 @@ returned %d, but should return zero on success." % (self.name, ret))
         """
         self.require_ioctx_open()
         return run_in_thread(self.librados.rados_get_last_version, (self.io,))
+
+    def create_write_op(self):
+        """
+        create write operation object.
+        need call release_write_op after use
+        """
+        self.librados.rados_create_write_op.restype = c_void_p
+        return run_in_thread(self.librados.rados_create_write_op, (None,))
+
+    def create_read_op(self):
+        """
+        create read operation object.
+        need call release_read_op after use
+        """
+        self.librados.rados_create_read_op.restype = c_void_p
+        return run_in_thread(self.librados.rados_create_read_op, (None,))
+
+    def release_write_op(self, write_op):
+        """
+        release memory alloc by create_write_op
+        """
+        self.librados.rados_release_write_op.argtypes = [c_void_p]
+        run_in_thread(self.librados.rados_release_write_op, (c_void_p(write_op),))
+
+    def release_read_op(self, read_op):
+        """
+        release memory alloc by create_read_op
+        :para read_op: read_op object
+        :type: int
+        """
+        self.librados.rados_release_read_op.argtypes = [c_void_p]
+        run_in_thread(self.librados.rados_release_read_op, (c_void_p(read_op),))
+
+    @requires(('write_op', int), ('keys', tuple), ('values', tuple))
+    def set_omap(self, write_op, keys, values):
+        """
+        set keys values to write_op
+        :para write_op: write_operation object
+        :type write_op: int
+        :para keys: a tuple of keys
+        :type keys: tuple
+        :para values: a tuple of values
+        :type values: tuple
+        """
+        if len(keys) != len(values):
+            raise Error("Rados(): keys and values must have the same number of items")
+        key_num = len(keys)
+        key_array_type = c_char_p*key_num
+        key_array = key_array_type()
+        key_array[:] = keys
+
+        value_array_type = c_char_p*key_num
+        value_array = value_array_type()
+        value_array[:] = values
+
+        lens_array_type = c_size_t*key_num
+        lens_array = lens_array_type()
+        for index, value in enumerate(values):
+            lens_array[index] = c_size_t(len(value))
+
+        run_in_thread(self.librados.rados_write_op_omap_set,
+                      (c_void_p(write_op), byref(key_array), byref(value_array),
+                       byref(lens_array), c_int(key_num),))
+
+    @requires(('write_op', int), ('oid', str), ('mtime', opt(int)), ('flags', opt(int)))
+    def operate_write_op(self, write_op, oid, mtime=0, flags=0):
+        """
+        excute the real write operation
+        :para write_op: write operation object
+        :type write_op: int
+        :para oid: object name
+        :type oid: str
+        :para mtime: the time to set the mtime to, 0 for the current time
+        :type mtime: int
+        :para flags: flags to apply to the entire operation
+        :type flags: int
+        """
+        run_in_thread(self.librados.rados_write_op_operate,
+                      (c_void_p(write_op), self.io, c_char_p(oid),
+                       c_long(mtime), c_int(flags),))
+
+    @requires(('read_op', int), ('oid', str), ('flag', opt(int)))
+    def operate_read_op(self, read_op, oid, flag=0):
+        """
+        excute the real read operation
+        :para read_op: read operation object
+        :type read_op: int
+        :para oid: object name
+        :type oid: str
+        :para flag: flags to apply to the entire operation
+        :type flag: int
+        """
+        run_in_thread(self.librados.rados_read_op_operate,
+                      (c_void_p(read_op), self.io, c_char_p(oid), c_int(flag),))
+
+    @requires(('read_op', int), ('start_after', str), ('filter_prefix', str), ('max_return', int))
+    def get_omap_vals(self, read_op, start_after, filter_prefix, max_return):
+        """
+        get the omap values
+        :para read_op: read operation object
+        :type read_op: int
+        :para start_after: list keys starting after start_after
+        :type start_after: str
+        :para filter_prefix: list only keys beginning with filter_prefix
+        :type filter_prefix: str
+        :para max_return: list no more than max_return key/value pairs
+        :type max_return: int
+        :returns: an iterator over the the requested omap values, return value from this action
+        """
+        prval = c_int()
+        iter_addr = c_void_p()
+        run_in_thread(self.librados.rados_read_op_omap_get_vals,
+                      (c_void_p(read_op), c_char_p(start_after),
+                       c_char_p(filter_prefix), c_int(max_return),
+                       byref(iter_addr), pointer(prval)))
+        return OmapIterator(self, iter_addr), prval.value
+
+    @requires(('read_op', int), ('start_after', str), ('max_return', int))
+    def get_omap_keys(self, read_op, start_after, max_return):
+        """
+        get the omap keys
+        :para read_op: read operation object
+        :type read_op: int
+        :para start_after: list keys starting after start_after
+        :type start_after: str
+        :para max_return: list no more than max_return key/value pairs
+        :type max_return: int
+        :returns: an iterator over the the requested omap values, return value from this action
+        """
+        prval = c_int()
+        iter_addr = c_void_p()
+        run_in_thread(self.librados.rados_read_op_omap_get_keys,
+                      (c_void_p(read_op), c_char_p(start_after),
+                       c_int(max_return), byref(iter_addr), pointer(prval)))
+        return OmapIterator(self, iter_addr), prval.value
+
+    @requires(('read_op', int), ('keys', tuple))
+    def get_omap_vals_by_keys(self, read_op, keys):
+        """
+        get the omap values by keys
+        :para read_op: read operation object
+        :type read_op: int
+        :para keys: input key tuple
+        :type keys: tuple
+        :returns: an iterator over the the requested omap values, return value from this action
+        """
+        prval = c_int()
+        iter_addr = c_void_p()
+        key_num = len(keys)
+        key_array_type = c_char_p*key_num
+        key_array = key_array_type()
+        key_array[:] = keys
+        run_in_thread(self.librados.rados_read_op_omap_get_vals_by_keys,
+                      (c_void_p(read_op), byref(key_array), c_int(key_num),
+                       byref(iter_addr), pointer(prval)))
+        return OmapIterator(self, iter_addr), prval.value
+
+    @requires(('write_op', int), ('keys', tuple))
+    def remove_omap_keys(self, write_op, keys):
+        """
+        remove omap keys specifiled
+        :para write_op: write operation object
+        :type write_op: int
+        :para keys: input key tuple
+        :type keys: tuple
+        """
+        key_num = len(keys)
+        key_array_type = c_char_p*key_num
+        key_array = key_array_type()
+        key_array[:] = keys
+        run_in_thread(self.librados.rados_write_op_omap_rm_keys,
+                      (c_void_p(write_op), byref(key_array), c_int(key_num)))
+
+    @requires(('write_op', int))
+    def clear_omap(self, write_op):
+        """
+        Remove all key/value pairs from an object
+        :para write_op: write operation object
+        :type write_op: int
+        """
+        run_in_thread(self.librados.rados_write_op_omap_clear,
+                      (c_void_p(write_op),))
 
     @requires(('key', str), ('name', str), ('cookie', str), ('desc', str),
               ('duration', opt(int)), ('flags', int))

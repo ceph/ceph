@@ -84,7 +84,7 @@ void *Thread::entry_wrapper()
   return entry();
 }
 
-const pthread_t &Thread::get_thread_id()
+const pthread_t &Thread::get_thread_id() const
 {
   return thread_id;
 }
@@ -94,7 +94,7 @@ bool Thread::is_started() const
   return thread_id != 0;
 }
 
-bool Thread::am_self()
+bool Thread::am_self() const
 {
   return (pthread_self() == thread_id);
 }
@@ -110,11 +110,11 @@ int Thread::kill(int signal)
 int Thread::try_create(size_t stacksize)
 {
   pthread_attr_t *thread_attr = NULL;
+  pthread_attr_t thread_attr_loc;
+  
   stacksize &= CEPH_PAGE_MASK;  // must be multiple of page
   if (stacksize) {
-    thread_attr = (pthread_attr_t*) malloc(sizeof(pthread_attr_t));
-    if (!thread_attr)
-      return -ENOMEM;
+    thread_attr = &thread_attr_loc;
     pthread_attr_init(thread_attr);
     pthread_attr_setstacksize(thread_attr, stacksize);
   }
@@ -136,8 +136,10 @@ int Thread::try_create(size_t stacksize)
   r = pthread_create(&thread_id, thread_attr, _entry_func, (void*)this);
   restore_sigset(&old_sigset);
 
-  if (thread_attr)
-    free(thread_attr);
+  if (thread_attr) {
+    pthread_attr_destroy(thread_attr);	
+  }
+
   return r;
 }
 
@@ -161,7 +163,14 @@ int Thread::join(void **prval)
   }
 
   int status = pthread_join(thread_id, prval);
-  assert(status == 0);
+  if (status != 0) {
+    char buf[256];
+    snprintf(buf, sizeof(buf), "Thread::join(): pthread_join "
+             "failed with error %d\n", status);
+    dout_emergency(buf);
+    assert(status == 0);
+  }
+
   thread_id = 0;
   return status;
 }

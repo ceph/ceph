@@ -65,10 +65,14 @@ using ceph::crypto::MD5;
 #define RGW_ATTR_CONTENT_ENC	RGW_ATTR_PREFIX "content_encoding"
 #define RGW_ATTR_CONTENT_LANG	RGW_ATTR_PREFIX "content_language"
 #define RGW_ATTR_EXPIRES	RGW_ATTR_PREFIX "expires"
+#define RGW_ATTR_DELETE_AT 	RGW_ATTR_PREFIX "delete_at"
 #define RGW_ATTR_ID_TAG    	RGW_ATTR_PREFIX "idtag"
 #define RGW_ATTR_SHADOW_OBJ    	RGW_ATTR_PREFIX "shadow_name"
 #define RGW_ATTR_MANIFEST    	RGW_ATTR_PREFIX "manifest"
 #define RGW_ATTR_USER_MANIFEST  RGW_ATTR_PREFIX "user_manifest"
+
+#define RGW_ATTR_TEMPURL_KEY1   RGW_ATTR_META_PREFIX "temp-url-key"
+#define RGW_ATTR_TEMPURL_KEY2   RGW_ATTR_META_PREFIX "temp-url-key-2"
 
 #define RGW_ATTR_OLH_PREFIX     RGW_ATTR_PREFIX "olh."
 
@@ -80,7 +84,6 @@ using ceph::crypto::MD5;
 #define RGW_BUCKETS_OBJ_SUFFIX ".buckets"
 
 #define RGW_MAX_PENDING_CHUNKS  16
-#define RGW_MAX_PUT_SIZE        (5ULL*1024*1024*1024)
 #define RGW_MIN_MULTIPART_SIZE (5ULL*1024*1024)
 
 #define RGW_FORMAT_PLAIN        0
@@ -146,8 +149,10 @@ using ceph::crypto::MD5;
 #define ERR_SIGNATURE_NO_MATCH   2027
 #define ERR_INVALID_ACCESS_KEY   2028
 #define ERR_MALFORMED_XML        2029
+#define ERR_USER_EXIST           2030
 #define ERR_USER_SUSPENDED       2100
 #define ERR_INTERNAL_ERROR       2200
+#define ERR_NOT_IMPLEMENTED      2201
 
 #ifndef UINT32_MAX
 #define UINT32_MAX (0xffffffffu)
@@ -195,6 +200,7 @@ extern int gen_rand_alphanumeric(CephContext *cct, char *dest, int size);
 extern int gen_rand_alphanumeric_lower(CephContext *cct, char *dest, int size);
 extern int gen_rand_alphanumeric_upper(CephContext *cct, char *dest, int size);
 extern int gen_rand_alphanumeric_no_underscore(CephContext *cct, char *dest, int size);
+extern int gen_rand_alphanumeric_plain(CephContext *cct, char *dest, int size);
 
 extern int gen_rand_alphanumeric_lower(CephContext *cct, string *str, int length);
 
@@ -909,7 +915,7 @@ struct req_info {
   RGWHTTPArgs args;
   map<string, string> x_meta_map;
 
-  const char *host;
+  string host;
   const char *method;
   string script_uri;
   string request_uri;
@@ -932,6 +938,10 @@ struct rgw_obj_key {
   }
   rgw_obj_key(const string& n, const string& i) {
     set(n, i);
+  }
+
+  rgw_obj_key(const cls_rgw_obj_key& k) {
+    set(k);
   }
 
   void set(const cls_rgw_obj_key& k) {
@@ -1061,6 +1071,8 @@ struct req_state {
 
    string req_id;
 
+   string trans_id;
+
    req_info info;
 
    req_state(CephContext *_cct, class RGWEnv *e);
@@ -1183,8 +1195,7 @@ public:
     init(b, o);
   }
   rgw_obj(rgw_bucket& b, const rgw_obj_key& k) : in_extra_data(false) {
-    init(b, k.name);
-    set_instance(k.instance);
+    from_index_key(b, k);
   }
   void init(rgw_bucket& b, const std::string& o) {
     bucket = b;
@@ -1234,7 +1245,7 @@ public:
      * having object locator at all for most objects but the ones that started with underscore as
      * these were escaped.
      */
-    if (orig_obj[0] == '_') {
+    if (orig_obj[0] == '_' && ns.empty()) {
       loc = orig_obj;
     }
   }
@@ -1293,6 +1304,29 @@ public:
     return string(buf) + orig_obj;
   };
 
+  void from_index_key(rgw_bucket& b, const rgw_obj_key& key) {
+    if (key.name[0] != '_') {
+      init(b, key.name);
+      set_instance(key.instance);
+      return;
+    }
+    if (key.name[1] == '_') {
+      init(b, key.name.substr(1));
+      set_instance(key.instance);
+      return;
+    }
+    ssize_t pos = key.name.find('_', 1);
+    if (pos < 0) {
+      /* shouldn't happen, just use key */
+      init(b, key.name);
+      set_instance(key.instance);
+      return;
+    }
+
+    init_ns(b, key.name.substr(pos + 1), key.name.substr(1, pos -1));
+    set_instance(key.instance);
+  }
+
   void get_index_key(rgw_obj_key *key) const {
     key->name = get_index_key_name();
     key->instance = instance;
@@ -1320,31 +1354,46 @@ public:
    * part of the given namespace, it returns false.
    */
   static bool translate_raw_obj_to_obj_in_ns(string& obj, string& instance, string& ns) {
-    if (ns.empty()) {
-      if (obj[0] != '_')
-        return true;
-
-      if (obj.size() >= 2 && obj[1] == '_') {
-        obj = obj.substr(1);
+    if (obj[0] != '_') {
+      if (ns.empty()) {
         return true;
       }
-
       return false;
     }
 
-    if (obj[0] != '_' || obj.size() < 3) // for namespace, min size would be 3: _x_
+    string obj_ns;
+    bool ret = parse_raw_oid(obj, &obj, &instance, &obj_ns);
+    if (!ret) {
+      return ret;
+    }
+
+    return (ns == obj_ns);
+  }
+
+  static bool parse_raw_oid(const string& oid, string *obj_name, string *obj_instance, string *obj_ns) {
+    obj_instance->clear();
+    obj_ns->clear();
+    if (oid[0] != '_') {
+      *obj_name = oid;
+      return true;
+    }
+
+    if (oid.size() >= 2 && oid[1] == '_') {
+      *obj_name = oid.substr(1);
+      return true;
+    }
+
+    if (oid[0] != '_' || oid.size() < 3) // for namespace, min size would be 3: _x_
       return false;
 
-    int pos = obj.find('_', 1);
+    int pos = oid.find('_', 1);
     if (pos <= 1) // if it starts with __, it's not in our namespace
       return false;
 
-    string obj_ns = obj.substr(1, pos - 1);
-    parse_ns_field(obj_ns, instance);
-    if (obj_ns.compare(ns) != 0)
-        return false;
+    *obj_ns = oid.substr(1, pos - 1);
+    parse_ns_field(*obj_ns, *obj_instance);
 
-    obj = obj.substr(pos + 1);
+    *obj_name = oid.substr(pos + 1);
     return true;
   }
 
@@ -1366,6 +1415,11 @@ public:
     size_t pos = obj.find('_', 1);
     if (pos == string::npos) {
       return false;
+    }
+
+    if (obj[1] == '_') {
+      obj = obj.substr(1);
+      return true;
     }
 
     size_t period_pos = obj.find('.');
@@ -1412,7 +1466,11 @@ public:
     if (struct_v >= 4)
       ::decode(instance, bl);
     if (ns.empty() && instance.empty()) {
-      orig_obj = object;
+      if (object[0] != '_') {
+        orig_obj = object;
+      } else {
+	orig_obj = object.substr(1);
+      }
     } else {
       if (struct_v >= 5) {
         ::decode(orig_obj, bl);

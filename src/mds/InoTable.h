@@ -19,14 +19,14 @@
 #include "MDSTable.h"
 #include "include/interval_set.h"
 
-class MDS;
+class MDSRank;
 
 class InoTable : public MDSTable {
   interval_set<inodeno_t> free;   // unused ids
   interval_set<inodeno_t> projected_free;
 
  public:
-  InoTable(MDS *m) : MDSTable(m, "inotable", true) { }
+  InoTable(MDSRank *m) : MDSTable(m, "inotable", true) { }
 
   inodeno_t project_alloc_id(inodeno_t id=0);
   void apply_alloc_id(inodeno_t id);

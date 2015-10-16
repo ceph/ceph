@@ -23,11 +23,16 @@
 #include "json_spirit/json_spirit_value.h"
 #include "include/assert.h"   // spirit clobbers it!
 
-typedef uint64_t filestore_hobject_key_t;
-
 namespace ceph {
   class Formatter;
 }
+
+#ifndef UINT64_MAX
+#define UINT64_MAX (18446744073709551615ULL)
+#endif
+#ifndef INT64_MIN
+#define INT64_MIN ((int64_t)0x8000000000000000ll)
+#endif
 
 struct hobject_t {
   object_t oid;
@@ -35,8 +40,11 @@ struct hobject_t {
 private:
   uint32_t hash;
   bool max;
-  filestore_hobject_key_t filestore_key_cache;
-  static const int64_t POOL_IS_TEMP = -1;
+  uint32_t nibblewise_key_cache;
+  uint32_t hash_reverse_bits;
+  static const int64_t POOL_META = -1;
+  static const int64_t POOL_TEMP_START = -2; // and then negative
+  friend class spg_t;  // for POOL_TEMP_START
 public:
   int64_t pool;
   string nspace;
@@ -49,6 +57,13 @@ public:
     return key;
   }
 
+  void set_key(const std::string &key_) {
+    if (key_ == oid.name)
+      key.clear();
+    else
+      key = key_;
+  }
+
   string to_str() const;
   
   uint32_t get_hash() const { 
@@ -56,7 +71,7 @@ public:
   }
   void set_hash(uint32_t value) { 
     hash = value;
-    build_filestore_key_cache();
+    build_hash_cache();
   }
 
   static bool match_hash(uint32_t to_check, uint32_t bits, uint32_t match) {
@@ -66,15 +81,15 @@ public:
     return match_hash(hash, bits, match);
   }
 
-  static hobject_t make_temp(const string &name) {
-    return hobject_t(object_t(name), "", CEPH_NOSNAP, 0, POOL_IS_TEMP, "");
-  }
   bool is_temp() const {
-    return pool == POOL_IS_TEMP;
+    return pool <= POOL_TEMP_START && pool != INT64_MIN;
+  }
+  bool is_meta() const {
+    return pool == POOL_META;
   }
 
-  hobject_t() : snap(0), hash(0), max(false), pool(-1) {
-    build_filestore_key_cache();
+  hobject_t() : snap(0), hash(0), max(false), pool(INT64_MIN) {
+    build_hash_cache();
   }
 
   hobject_t(object_t oid, const string& key, snapid_t snap, uint64_t hash,
@@ -82,7 +97,7 @@ public:
     : oid(oid), snap(snap), hash(hash), max(false),
       pool(pool), nspace(nspace),
       key(oid.name == key ? string() : key) {
-    build_filestore_key_cache();
+    build_hash_cache();
   }
 
   hobject_t(const sobject_t &soid, const string &key, uint32_t hash,
@@ -90,7 +105,7 @@ public:
     : oid(soid.oid), snap(soid.snap), hash(hash), max(false),
       pool(pool), nspace(nspace),
       key(soid.oid.name == key ? string() : key) {
-    build_filestore_key_cache();
+    build_hash_cache();
   }
 
   /// @return min hobject_t ret s.t. ret.hash == this->hash
@@ -99,6 +114,7 @@ public:
       return *this;
     hobject_t ret;
     ret.set_hash(hash);
+    ret.pool = pool;
     return ret;
   }
 
@@ -138,8 +154,8 @@ public:
 
   /* Do not use when a particular hash function is needed */
   explicit hobject_t(const sobject_t &o) :
-    oid(o.oid), snap(o.snap), max(false), pool(-1) {
-    set_hash(CEPH_HASH_NAMESPACE::hash<sobject_t>()(o));
+    oid(o.oid), snap(o.snap), max(false), pool(POOL_META) {
+    set_hash(std::hash<sobject_t>()(o));
   }
 
   // maximum sorted value.
@@ -156,9 +172,23 @@ public:
     return snap == 0 &&
 	   hash == 0 &&
 	   !max &&
-	   pool == -1;
+	   pool == INT64_MIN;
   }
 
+  static uint32_t _reverse_bits(uint32_t v) {
+    // reverse bits
+    // swap odd and even bits
+    v = ((v >> 1) & 0x55555555) | ((v & 0x55555555) << 1);
+    // swap consecutive pairs
+    v = ((v >> 2) & 0x33333333) | ((v & 0x33333333) << 2);
+    // swap nibbles ...
+    v = ((v >> 4) & 0x0F0F0F0F) | ((v & 0x0F0F0F0F) << 4);
+    // swap bytes
+    v = ((v >> 8) & 0x00FF00FF) | ((v & 0x00FF00FF) << 8);
+    // swap 2-byte long pairs
+    v = ( v >> 16             ) | ( v               << 16);
+    return v;
+  }
   static uint32_t _reverse_nibbles(uint32_t retval) {
     // reverse nibbles
     retval = ((retval & 0x0f0f0f0f) << 4) | ((retval & 0xf0f0f0f0) >> 4);
@@ -179,15 +209,35 @@ public:
     uint32_t mask,
     int64_t pool);
 
-  filestore_hobject_key_t get_filestore_key_u32() const {
+  // filestore nibble-based key
+  uint32_t get_nibblewise_key_u32() const {
     assert(!max);
-    return _reverse_nibbles(hash);
+    return nibblewise_key_cache;
   }
-  filestore_hobject_key_t get_filestore_key() const {
-    return max ? 0x100000000ull : filestore_key_cache;
+  uint64_t get_nibblewise_key() const {
+    return max ? 0x100000000ull : nibblewise_key_cache;
   }
-  void build_filestore_key_cache() {    
-    filestore_key_cache = _reverse_nibbles(hash);
+
+  // newer bit-reversed key
+  uint32_t get_bitwise_key_u32() const {
+    assert(!max);
+    return hash_reverse_bits;
+  }
+  uint64_t get_bitwise_key() const {
+    return max ? 0x100000000ull : hash_reverse_bits;
+  }
+
+  void build_hash_cache() {
+    nibblewise_key_cache = _reverse_nibbles(hash);
+    hash_reverse_bits = _reverse_bits(hash);
+  }
+  void set_nibblewise_key_u32(uint32_t value) {
+    hash = _reverse_nibbles(value);
+    build_hash_cache();
+  }
+  void set_bitwise_key_u32(uint32_t value) {
+    hash = _reverse_bits(value);
+    build_hash_cache();
   }
 
   const string& get_effective_key() const {
@@ -211,17 +261,48 @@ public:
   void decode(json_spirit::Value& v);
   void dump(Formatter *f) const;
   static void generate_test_instances(list<hobject_t*>& o);
-  friend bool operator<(const hobject_t&, const hobject_t&);
-  friend bool operator>(const hobject_t&, const hobject_t&);
-  friend bool operator<=(const hobject_t&, const hobject_t&);
-  friend bool operator>=(const hobject_t&, const hobject_t&);
+  friend int cmp_nibblewise(const hobject_t& l, const hobject_t& r);
+  friend int cmp_bitwise(const hobject_t& l, const hobject_t& r);
   friend bool operator==(const hobject_t&, const hobject_t&);
   friend bool operator!=(const hobject_t&, const hobject_t&);
   friend struct ghobject_t;
+
+  struct NibblewiseComparator {
+    bool operator()(const hobject_t& l, const hobject_t& r) const {
+      return cmp_nibblewise(l, r) < 0;
+    }
+  };
+
+  struct BitwiseComparator {
+    bool operator()(const hobject_t& l, const hobject_t& r) const {
+      return cmp_bitwise(l, r) < 0;
+    }
+  };
+
+  struct Comparator {
+    bool bitwise;
+    Comparator(bool b) : bitwise(b) {}
+    bool operator()(const hobject_t& l, const hobject_t& r) const {
+      if (bitwise)
+	return cmp_bitwise(l, r) < 0;
+      else
+	return cmp_nibblewise(l, r) < 0;
+    }
+  };
+  struct ComparatorWithDefault {
+    bool bitwise;
+    ComparatorWithDefault(bool b=true) : bitwise(b) {}
+    bool operator()(const hobject_t& l, const hobject_t& r) const {
+      if (bitwise)
+	return cmp_bitwise(l, r) < 0;
+      else
+	return cmp_nibblewise(l, r) < 0;
+    }
+  };
 };
 WRITE_CLASS_ENCODER(hobject_t)
 
-CEPH_HASH_NAMESPACE_START
+namespace std {
   template<> struct hash<hobject_t> {
     size_t operator()(const hobject_t &r) const {
       static hash<object_t> H;
@@ -229,47 +310,70 @@ CEPH_HASH_NAMESPACE_START
       return H(r.oid) ^ I(r.snap);
     }
   };
-CEPH_HASH_NAMESPACE_END
+} // namespace std
 
 ostream& operator<<(ostream& out, const hobject_t& o);
 
-WRITE_EQ_OPERATORS_7(hobject_t, oid, get_key(), snap, hash, max, pool, nspace)
-// sort hobject_t's by <max, get_filestore_key(hash), key, oid, snapid>
-WRITE_CMP_OPERATORS_7(hobject_t,
-		      max,
-		      get_filestore_key(),
-		      nspace,
-		      pool,
-		      get_effective_key(),
-		      oid,
-		      snap)
+WRITE_EQ_OPERATORS_7(hobject_t, hash, oid, get_key(), snap, pool, max, nspace)
+
+extern int cmp_nibblewise(const hobject_t& l, const hobject_t& r);
+extern int cmp_bitwise(const hobject_t& l, const hobject_t& r);
+static inline int cmp(const hobject_t& l, const hobject_t& r, bool sort_bitwise) {
+  if (sort_bitwise)
+    return cmp_bitwise(l, r);
+  else
+    return cmp_nibblewise(l, r);
+}
+
+// these are convenient
+static inline hobject_t MAX_HOBJ(const hobject_t& l, const hobject_t& r, bool bitwise) {
+  if (cmp(l, r, bitwise) >= 0)
+    return l;
+  else
+    return r;
+}
+
+static inline hobject_t MIN_HOBJ(const hobject_t& l, const hobject_t& r, bool bitwise) {
+  if (cmp(l, r, bitwise) <= 0)
+    return l;
+  else
+    return r;
+}
 
 typedef version_t gen_t;
-
-#ifndef UINT64_MAX
-#define UINT64_MAX (18446744073709551615ULL)
-#endif
 
 struct ghobject_t {
   hobject_t hobj;
   gen_t generation;
   shard_id_t shard_id;
+  bool max;
 
 public:
   static const gen_t NO_GEN = UINT64_MAX;
 
-  ghobject_t() : generation(NO_GEN), shard_id(shard_id_t::NO_SHARD) {}
+  ghobject_t()
+    : generation(NO_GEN),
+      shard_id(shard_id_t::NO_SHARD),
+      max(false) {}
 
-  ghobject_t(const hobject_t &obj) : hobj(obj), generation(NO_GEN), shard_id(shard_id_t::NO_SHARD) {}
+  explicit ghobject_t(const hobject_t &obj)
+    : hobj(obj),
+      generation(NO_GEN),
+      shard_id(shard_id_t::NO_SHARD),
+      max(false) {}
 
-  ghobject_t(const hobject_t &obj, gen_t gen, shard_id_t shard) : hobj(obj), generation(gen), shard_id(shard) {}
+  ghobject_t(const hobject_t &obj, gen_t gen, shard_id_t shard)
+    : hobj(obj),
+      generation(gen),
+      shard_id(shard),
+      max(false) {}
 
   static ghobject_t make_pgmeta(int64_t pool, uint32_t hash, shard_id_t shard) {
     hobject_t h(object_t(), string(), CEPH_NOSNAP, hash, pool, string());
     return ghobject_t(h, NO_GEN, shard);
   }
   bool is_pgmeta() const {
-    // make sure we are distinct from hobject_t(), which has pool -1
+    // make sure we are distinct from hobject_t(), which has pool INT64_MIN
     return hobj.pool >= 0 && hobj.oid.name.empty();
   }
 
@@ -282,13 +386,15 @@ public:
       return *this;
     ghobject_t ret;
     ret.hobj.set_hash(hobj.hash);
+    ret.shard_id = shard_id;
+    ret.hobj.pool = hobj.pool;
     return ret;
   }
-  filestore_hobject_key_t get_filestore_key_u32() const {
-    return hobj.get_filestore_key_u32();
+  uint32_t get_nibblewise_key_u32() const {
+    return hobj.get_nibblewise_key_u32();
   }
-  filestore_hobject_key_t get_filestore_key() const {
-    return hobj.get_filestore_key();
+  uint32_t get_nibblewise_key() const {
+    return hobj.get_nibblewise_key();
   }
 
   bool is_degenerate() const {
@@ -303,13 +409,22 @@ public:
     return shard_id == shard_id_t::NO_SHARD;
   }
 
+  void set_shard(shard_id_t s) {
+    shard_id = s;
+  }
+
   // maximum sorted value.
   static ghobject_t get_max() {
-    ghobject_t h(hobject_t::get_max());
+    ghobject_t h;
+    h.max = true;
+    h.hobj = hobject_t::get_max();  // so that is_max() => hobj.is_max()
     return h;
   }
   bool is_max() const {
-    return hobj.is_max();
+    return max;
+  }
+  bool is_min() const {
+    return *this == ghobject_t();
   }
 
   void swap(ghobject_t &o) {
@@ -323,16 +438,37 @@ public:
   void decode(json_spirit::Value& v);
   void dump(Formatter *f) const;
   static void generate_test_instances(list<ghobject_t*>& o);
-  friend bool operator<(const ghobject_t&, const ghobject_t&);
-  friend bool operator>(const ghobject_t&, const ghobject_t&);
-  friend bool operator<=(const ghobject_t&, const ghobject_t&);
-  friend bool operator>=(const ghobject_t&, const ghobject_t&);
+  friend int cmp_nibblewise(const ghobject_t& l, const ghobject_t& r);
+  friend int cmp_bitwise(const ghobject_t& l, const ghobject_t& r);
   friend bool operator==(const ghobject_t&, const ghobject_t&);
   friend bool operator!=(const ghobject_t&, const ghobject_t&);
+
+  struct NibblewiseComparator {
+    bool operator()(const ghobject_t& l, const ghobject_t& r) const {
+      return cmp_nibblewise(l, r) < 0;
+    }
+  };
+
+  struct BitwiseComparator {
+    bool operator()(const ghobject_t& l, const ghobject_t& r) const {
+      return cmp_bitwise(l, r) < 0;
+    }
+  };
+
+  struct Comparator {
+    bool bitwise;
+    Comparator(bool b) : bitwise(b) {}
+    bool operator()(const ghobject_t& l, const ghobject_t& r) const {
+         if (bitwise)
+	return cmp_bitwise(l, r) < 0;
+      else
+	return cmp_nibblewise(l, r) < 0;
+    }
+  };
 };
 WRITE_CLASS_ENCODER(ghobject_t)
 
-CEPH_HASH_NAMESPACE_START
+namespace std {
   template<> struct hash<ghobject_t> {
     size_t operator()(const ghobject_t &r) const {
       static hash<object_t> H;
@@ -340,18 +476,37 @@ CEPH_HASH_NAMESPACE_START
       return H(r.hobj.oid) ^ I(r.hobj.snap);
     }
   };
-CEPH_HASH_NAMESPACE_END
+} // namespace std
 
 ostream& operator<<(ostream& out, const ghobject_t& o);
 
-WRITE_EQ_OPERATORS_3(ghobject_t, hobj, shard_id, generation)
-// sort ghobject_t's by <hobj, shard_id, generation> 
-// 
-// Two objects which differ by generation are more related than
-// two objects of the same generation which differ by shard.
-// 
-WRITE_CMP_OPERATORS_3(ghobject_t,
-		      hobj,
-		      shard_id,
-		      generation)
+WRITE_EQ_OPERATORS_4(ghobject_t, max, shard_id, hobj, generation)
+
+extern int cmp_nibblewise(const ghobject_t& l, const ghobject_t& r);
+extern int cmp_bitwise(const ghobject_t& l, const ghobject_t& r);
+static inline int cmp(const ghobject_t& l, const ghobject_t& r,
+		      bool sort_bitwise) {
+  if (sort_bitwise)
+    return cmp_bitwise(l, r);
+  else
+    return cmp_nibblewise(l, r);
+}
+
+// these are convenient
+static inline ghobject_t MAX_GHOBJ(const ghobject_t& l, const ghobject_t& r,
+				   bool bitwise) {
+  if (cmp(l, r, bitwise) >= 0)
+    return l;
+  else
+    return r;
+}
+
+static inline ghobject_t MIN_GHOBJ(const ghobject_t& l, const ghobject_t& r,
+				   bool bitwise) {
+  if (cmp(l, r, bitwise) <= 0)
+    return l;
+  else
+    return r;
+}
+
 #endif

@@ -20,7 +20,6 @@
 #include "include/types.h"
 #include "include/blobhash.h"
 #include "include/encoding.h"
-#include "include/hash_namespace.h"
 
 namespace ceph {
   class Formatter;
@@ -133,7 +132,7 @@ inline std::ostream& operator<<(std::ostream& out, const ceph_entity_name& addr)
   return out << *(const entity_name_t*)&addr;
 }
 
-CEPH_HASH_NAMESPACE_START
+namespace std {
   template<> struct hash< entity_name_t >
   {
     size_t operator()( const entity_name_t &m ) const
@@ -141,7 +140,7 @@ CEPH_HASH_NAMESPACE_START
       return rjhash32(m.type() ^ m.num());
     }
   };
-CEPH_HASH_NAMESPACE_END
+} // namespace std
 
 
 
@@ -157,14 +156,21 @@ CEPH_HASH_NAMESPACE_END
  */
 static inline void encode(const sockaddr_storage& a, bufferlist& bl) {
   struct sockaddr_storage ss = a;
-#if !defined(__FreeBSD__)
+#if defined(DARWIN) || defined(__FreeBSD__)
+  unsigned short *ss_family = reinterpret_cast<unsigned short*>(&ss);
+  *ss_family = htons(a.ss_family);
+#else
   ss.ss_family = htons(ss.ss_family);
 #endif
   ::encode_raw(ss, bl);
 }
 static inline void decode(sockaddr_storage& a, bufferlist::iterator& bl) {
   ::decode_raw(a, bl);
-#if !defined(__FreeBSD__)
+#if defined(DARWIN) || defined(__FreeBSD__)
+  unsigned short *ss_family = reinterpret_cast<unsigned short *>(&a);
+  a.ss_family = ntohs(*ss_family);
+  a.ss_len = 0;
+#else
   a.ss_family = ntohs(a.ss_family);
 #endif
 }
@@ -353,7 +359,7 @@ inline bool operator<=(const entity_addr_t& a, const entity_addr_t& b) { return 
 inline bool operator>(const entity_addr_t& a, const entity_addr_t& b) { return memcmp(&a, &b, sizeof(a)) > 0; }
 inline bool operator>=(const entity_addr_t& a, const entity_addr_t& b) { return memcmp(&a, &b, sizeof(a)) >= 0; }
 
-CEPH_HASH_NAMESPACE_START
+namespace std {
   template<> struct hash< entity_addr_t >
   {
     size_t operator()( const entity_addr_t& x ) const
@@ -362,7 +368,7 @@ CEPH_HASH_NAMESPACE_START
       return H((const char*)&x, sizeof(x));
     }
   };
-CEPH_HASH_NAMESPACE_END
+} // namespace std
 
 
 /*
@@ -407,7 +413,7 @@ inline bool operator<=(const entity_inst_t& a, const entity_inst_t& b) {
 inline bool operator>(const entity_inst_t& a, const entity_inst_t& b) { return b < a; }
 inline bool operator>=(const entity_inst_t& a, const entity_inst_t& b) { return b <= a; }
 
-CEPH_HASH_NAMESPACE_START
+namespace std {
   template<> struct hash< entity_inst_t >
   {
     size_t operator()( const entity_inst_t& x ) const
@@ -417,7 +423,7 @@ CEPH_HASH_NAMESPACE_START
       return H(x.name) ^ I(x.addr);
     }
   };
-CEPH_HASH_NAMESPACE_END
+} // namespace std
 
 
 inline ostream& operator<<(ostream& out, const entity_inst_t &i)

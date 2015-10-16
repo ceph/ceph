@@ -5,7 +5,11 @@ CEPH_VER_HEADER=
 NO_VERSION=0
 
 is_git() {
-    type git > /dev/null 2>&1 || { echo "Could not find git command. Please install. Aborting."; exit 1; }
+    type git > /dev/null 2>&1
+    if [ $? -ne 0 ]; then
+        echo "Could not find git command. Assuming this is not a git repository, not updating .git_version"
+        return 1
+    fi
     git status > /dev/zero 2>&1;
     if [ $? -ne 0 ]; then
         echo "This is no git repository, not updating .git_version"

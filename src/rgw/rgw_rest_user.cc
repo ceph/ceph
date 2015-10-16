@@ -71,6 +71,7 @@ void RGWOp_User_Create::execute()
   bool exclusive;
 
   uint32_t max_buckets;
+  uint32_t default_max_buckets = s->cct->_conf->rgw_user_max_buckets;
 
   RGWUserAdminOpState op_state;
 
@@ -83,7 +84,7 @@ void RGWOp_User_Create::execute()
   RESTArgs::get_string(s, "user-caps", caps, &caps);
   RESTArgs::get_bool(s, "generate-key", true, &gen_key);
   RESTArgs::get_bool(s, "suspended", false, &suspended);
-  RESTArgs::get_uint32(s, "max-buckets", RGW_DEFAULT_MAX_BUCKETS, &max_buckets);
+  RESTArgs::get_uint32(s, "max-buckets", default_max_buckets, &max_buckets);
   RESTArgs::get_bool(s, "system", false, &system);
   RESTArgs::get_bool(s, "exclusive", false, &exclusive);
 
@@ -122,7 +123,7 @@ void RGWOp_User_Create::execute()
     op_state.set_key_type(key_type);
   }
 
-  if (max_buckets != RGW_DEFAULT_MAX_BUCKETS)
+  if (max_buckets != default_max_buckets)
     op_state.set_max_buckets(max_buckets);
 
   if (s->info.args.exists("suspended"))
@@ -306,6 +307,7 @@ void RGWOp_Subuser_Create::execute()
   RESTArgs::get_bool(s, "generate-secret", false, &gen_secret);
 
   perm_mask = rgw_str_to_perm(perm_str.c_str());
+  op_state.set_perm(perm_mask);
 
   // FIXME: no double checking
   if (!uid.empty())
@@ -316,9 +318,6 @@ void RGWOp_Subuser_Create::execute()
 
   if (!secret_key.empty())
     op_state.set_secret_key(secret_key);
-
-  if (perm_mask != 0)
-    op_state.set_perm(perm_mask);
 
   op_state.set_generate_subuser(gen_subuser);
 
@@ -373,6 +372,7 @@ void RGWOp_Subuser_Modify::execute()
   RESTArgs::get_bool(s, "generate-secret", false, &gen_secret);
 
   perm_mask = rgw_str_to_perm(perm_str.c_str());
+  op_state.set_perm(perm_mask);
 
   // FIXME: no double checking
   if (!uid.empty())
@@ -386,9 +386,6 @@ void RGWOp_Subuser_Modify::execute()
 
   if (gen_secret)
     op_state.set_gen_secret();
-
-  if (perm_mask != 0)
-    op_state.set_perm(perm_mask);
 
   if (!key_type_str.empty()) {
     if (key_type_str.compare("swift") == 0)
@@ -692,6 +689,7 @@ void RGWOp_Quota_Info::execute()
   if (http_ret < 0)
     return;
 
+  flusher.start(0);
   if (show_all) {
     UserQuotas quotas(info);
     encode_json("quota", quotas, s->formatter);
