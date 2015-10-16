@@ -235,9 +235,7 @@ int RGWZoneGroup::add_zone(const RGWZoneParams& zone_params, bool is_master, con
 {
   if (is_master) {
     if (!master_zone.empty() && master_zone != zone_params.get_id()) {
-      lderr(cct) << "Master zone already defined " << master_zone  << " cannot add zone "
-		 << zone_params.get_id() << dendl;
-      return -EINVAL;
+      ldout(cct, 0) << "NOTICE: overriding master zone: " << master_zone  << dendl;
     }
     master_zone = zone_params.get_id();
   } else if (master_zone == zone_params.get_id()) {
