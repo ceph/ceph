@@ -129,8 +129,8 @@ For **ALL** Ceph Nodes perform the following steps:
 #. Ensure the SSH server is running on **ALL** Ceph Nodes.
 
 
-Create a Ceph User
-------------------
+Create a Ceph Deploy User
+-------------------------
 
 The ``ceph-deploy`` utility must login to a Ceph node as a user
 that has passwordless ``sudo`` privileges, because it needs to install
@@ -142,20 +142,25 @@ this is **NOT** recommended). To use ``ceph-deploy --username {username}``, the
 user you specify must have password-less SSH access to the Ceph node, as
 ``ceph-deploy`` will not prompt you for a password.
 
-We recommend creating a Ceph user on **ALL** Ceph nodes in the cluster. A
-uniform user name across the cluster may improve ease of use  (not required),
-but you should avoid obvious user names, because hackers typically use them with
-brute force hacks (e.g., ``root``,  ``admin``, ``{productname}``). The following
-procedure, substituting  ``{username}`` for the user name you define, describes
-how to create a user  with passwordless ``sudo``.
+We recommend creating a specific user for ``ceph-deploy`` on **ALL** Ceph nodes
+in the cluster. Please do **NOT** use "ceph" as the user name. A uniform user
+name across the cluster may improve ease of use (not required), but you should
+avoid obvious user names, because hackers typically use them with brute force
+hacks (e.g., ``root``,  ``admin``, ``{productname}``). The following procedure,
+substituting  ``{username}`` for the user name you define, describes how to
+create a user with passwordless ``sudo``.
 
-#. Create a user on each Ceph Node. ::
+.. note:: Starting with the `Infernalis release`_ the "ceph" user name is reserved
+   for the Ceph daemons. If the "ceph" user already exists on the Ceph nodes,
+   removing the user must be done before attempting an upgrade.
+
+#. Create a new user on each Ceph Node. ::
 
 	ssh user@ceph-server
 	sudo useradd -d /home/{username} -m {username}
 	sudo passwd {username}
 
-#. For the user you added to each Ceph node, ensure that the user has
+#. For the new user you added to each Ceph node, ensure that the user has
    ``sudo`` privileges. ::
 
 	echo "{username} ALL = (root) NOPASSWD:ALL" | sudo tee /etc/sudoers.d/{username}
@@ -183,7 +188,7 @@ monitors.
 	Your public key has been saved in /ceph-admin/.ssh/id_rsa.pub.
 
 #. Copy the key to each Ceph Node, replacing ``{username}`` with the user name
-   you created with `Create a Ceph User`_. ::
+   you created with `Create a Ceph Deploy User`_. ::
 
 	ssh-copy-id {username}@node1
 	ssh-copy-id {username}@node2
@@ -273,7 +278,7 @@ On CentOS and RHEL, you may receive an error while trying to execute
 nodes, disable it by executing ``sudo visudo`` and locate the ``Defaults
 requiretty`` setting. Change it to ``Defaults:ceph !requiretty`` or comment it
 out to ensure that ``ceph-deploy`` can connect using the user you created with
-`Create a Ceph User`_.
+`Create a Ceph Deploy User`_.
 
 .. note:: If editing, ``/etc/sudoers``, ensure that you use
    ``sudo visudo`` rather than a text editor.
@@ -321,3 +326,4 @@ Quick Start`_.
 .. _Network Configuration Reference: ../../rados/configuration/network-config-ref
 .. _Clock: ../../rados/configuration/mon-config-ref#clock
 .. _NTP: http://www.ntp.org/
+.. _Infernalis release: ../../release-notes/#v9-1-0-infernalis-release-candidate
