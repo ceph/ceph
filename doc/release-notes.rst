@@ -788,6 +788,29 @@ later before upgrading to Infernalis (or future releases).
 
 All v0.94.x Hammer users are strongly encouraged to upgrade.
 
+Upgrading
+---------
+
+* Users on RPM-based systems may see an yum error on upgrade that looks like::
+
+		Error: Package: ceph-common-0.80.10-140.g028da25.el7.x86_64 (Ceph)
+		           Requires: python-ceph = 0.80.10-140.g028da25.el7
+		           Available: python-ceph-0.80.10-140.g028da25.el7.x86_64 (Ceph)
+		               python-ceph = 0.80.10-140.g028da25.el7
+
+  This can be mostly attributed to a bug in yum.  To work around it, either:
+
+		#. Uninstall the existing python-ceph package and then proceed.
+			 It is possible the package came from EPEL and should be removed
+			 anyway.
+
+    #. Remove the "check_obsoletes = 1" lines from /etc/yum/pluginconf.d/priorities.conf
+
+	  #. Explicitly override the error with::
+
+			    yum install -x python-rados -x python-rbd ceph
+
+
 Notable Changes
 ---------------
 * build/ops: ceph.spec.in: 50-rbd.rules conditional is wrong (`issue#12166 <http://tracker.ceph.com/issues/12166>`_, `pr#5207 <http://github.com/ceph/ceph/pull/5207>`_, Nathan Cutler)
