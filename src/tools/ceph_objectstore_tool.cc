@@ -407,38 +407,35 @@ void remove_coll(ObjectStore *store, const coll_t &coll,
   ghobject_t next;
   int r = 0;
   int64_t num = 0;
-  ObjectStore::Transaction *t = new ObjectStore::Transaction;
+  ObjectStore::Transaction t;
   cout << "remove_coll " << coll << std::endl;
   while (!next.is_max()) {
     vector<ghobject_t> objects;
     r = store->collection_list(coll, next, ghobject_t::get_max(), true, 300,
       &objects, &next);
     if (r < 0)
-      goto out;
+      return;
     for (vector<ghobject_t>::iterator i = objects.begin();
 	 i != objects.end();
 	 ++i, ++num) {
 
-      OSDriver::OSTransaction _t(driver.get_transaction(t));
+      OSDriver::OSTransaction _t(driver.get_transaction(&t));
       cout << "remove " << *i << std::endl;
       int r = mapper.remove_oid(i->hobj, &_t);
       if (r != 0 && r != -ENOENT) {
         assert(0);
       }
 
-      t->remove(coll, *i);
+      t.remove(coll, *i);
       if (num >= 30) {
-        store->apply_transaction(&osr, *t);
-        delete t;
-        t = new ObjectStore::Transaction;
+        store->apply_transaction(&osr, t);
+        t = ObjectStore::Transaction();
         num = 0;
       }
     }
   }
-  t->remove_collection(coll);
-  store->apply_transaction(&osr, *t);
-out:
-  delete t;
+  t.remove_collection(coll);
+  store->apply_transaction(&osr, t);
 }
 
 //Based on part of OSD::load_pgs()
@@ -507,13 +504,12 @@ int initiate_new_remove_pg(ObjectStore *store, spg_t r_pgid,
   cout << " marking collection for removal" << std::endl;
   if (dry_run)
     return 0;
-  ObjectStore::Transaction *rmt = new ObjectStore::Transaction;
-  int r = mark_pg_for_removal(store, r_pgid, rmt);
+  ObjectStore::Transaction rmt;
+  int r = mark_pg_for_removal(store, r_pgid, &rmt);
   if (r < 0) {
-    delete rmt;
     return r;
   }
-  store->apply_transaction(&osr, *rmt);
+  store->apply_transaction(&osr, rmt);
   finish_remove_pgs(store);
   return r;
 }
@@ -1331,18 +1327,17 @@ int ObjectStoreTool::do_import(ObjectStore *store, OSDSuperblock& sb,
   }
 
   if (!dry_run) {
-    ObjectStore::Transaction *t = new ObjectStore::Transaction;
-    PG::_create(*t, pgid,
+    ObjectStore::Transaction t;
+    PG::_create(t, pgid,
 		pgid.get_split_bits(curmap.get_pg_pool(pgid.pool())->get_pg_num()));
-    PG::_init(*t, pgid, NULL);
+    PG::_init(t, pgid, NULL);
 
     // mark this coll for removal until we're done
     map<string,bufferlist> values;
     ::encode((char)1, values["_remove"]);
-    t->omap_setkeys(coll, pgid.make_pgmeta_oid(), values);
+    t.omap_setkeys(coll, pgid.make_pgmeta_oid(), values);
 
-    store->apply_transaction(&osr, *t);
-    delete t;
+    store->apply_transaction(&osr, t);
   }
 
   cout << "Importing pgid " << pgid;
@@ -1494,18 +1489,17 @@ int do_remove_object(ObjectStore *store, coll_t coll,
   cout << "remove " << ghobj << std::endl;
   if (dry_run)
     return 0;
-  ObjectStore::Transaction *t = new ObjectStore::Transaction;
-  OSDriver::OSTransaction _t(driver.get_transaction(t));
+  ObjectStore::Transaction t;
+  OSDriver::OSTransaction _t(driver.get_transaction(&t));
   r = mapper.remove_oid(ghobj.hobj, &_t);
   if (r < 0 && r != -ENOENT) {
     cerr << "remove_oid returned " << cpp_strerror(r) << std::endl;
     return r;
   }
 
-  t->remove(coll, ghobj);
+  t.remove(coll, ghobj);
 
-  store->apply_transaction(&osr, *t);
-  delete t;
+  store->apply_transaction(&osr, t);
   return 0;
 }
 
