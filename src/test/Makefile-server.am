@@ -214,8 +214,8 @@ endif # WITH_OSD
 
 if WITH_SLIBROCKSDB
 unittest_rocksdb_option_static_SOURCES = test/objectstore/TestRocksdbOptionParse.cc
-unittest_rocksdb_option_static_LDADD = $(LIBOS) $(UNITTEST_LDADD) $(CEPH_GLOBAL) rocksdb/librocksdb.la
-unittest_rocksdb_option_static_CXXFLAGS = $(UNITTEST_CXXFLAGS) ${AM_CXXFLAGS} ${LIBROCKSDB_CFLAGS} -std=gnu++11 -I rocksdb/include
+unittest_rocksdb_option_static_LDADD = $(LIBOS) $(UNITTEST_LDADD) $(CEPH_GLOBAL)
+unittest_rocksdb_option_static_CXXFLAGS = $(UNITTEST_CXXFLAGS) ${AM_CXXFLAGS} ${LIBROCKSDB_CFLAGS} -I rocksdb/include
 check_TESTPROGRAMS += unittest_rocksdb_option_static
 endif
 
