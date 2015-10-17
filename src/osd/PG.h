@@ -2189,11 +2189,10 @@ public:
   static int read_info(
     ObjectStore *store, spg_t pgid, const coll_t &coll,
     bufferlist &bl, pg_info_t &info, map<epoch_t,pg_interval_t> &past_intervals,
-    __u8 &);
-  void read_state(ObjectStore *store, bufferlist &bl);
+    __u8 &, ghobject_t& pgmeta_oid);
+  void read_state(ObjectStore *store, bufferlist &bl, ghobject_t& pgmeta_oid);
   static bool _has_removal_flag(ObjectStore *store, spg_t pgid);
-  static int peek_map_epoch(ObjectStore *store, spg_t pgid,
-			    epoch_t *pepoch, bufferlist *bl);
+  static int peek_map_epoch(ObjectStore *store, coll_t& coll, epoch_t *pepoch, bufferlist *bl, ghobject_t& pgmeta_oid);
   void update_snap_map(
     const vector<pg_log_entry_t> &log_entries,
     ObjectStore::Transaction& t);

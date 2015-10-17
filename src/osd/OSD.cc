@@ -2831,30 +2831,24 @@ void OSD::load_pgs()
     derr << "failed to list pgs: " << cpp_strerror(-r) << dendl;
   }
 
-  set<spg_t> pgs;
+  bool has_upgraded = false;
+    
   for (vector<coll_t>::iterator it = ls.begin();
        it != ls.end();
        ++it) {
+
     spg_t pgid;
-    if (it->is_temp(&pgid) ||
-	it->is_removal(&pgid) ||
-	(it->is_pg(&pgid) && PG::_has_removal_flag(store, pgid))) {
+    if (it->is_temp(&pgid) ||it->is_removal(&pgid) ||
+	      (it->is_pg(&pgid) && PG::_has_removal_flag(store, pgid))) {
       dout(10) << "load_pgs " << *it << " clearing temp" << dendl;
       recursive_remove_collection(store, pgid, *it);
       continue;
     }
 
-    if (it->is_pg(&pgid)) {
-      pgs.insert(pgid);
+    if (!it->is_pg(&pgid)) {
+      dout(10) << "load_pgs ignoring unrecognized " << *it << dendl;
       continue;
     }
-
-    dout(10) << "load_pgs ignoring unrecognized " << *it << dendl;
-  }
-
-  bool has_upgraded = false;
-  for (set<spg_t>::iterator i = pgs.begin(); i != pgs.end(); ++i) {
-    spg_t pgid(*i);
 
     if (pgid.preferred() >= 0) {
       dout(10) << __func__ << ": skipping localized PG " << pgid << dendl;
@@ -2865,13 +2859,13 @@ void OSD::load_pgs()
     dout(10) << "pgid " << pgid << " coll " << coll_t(pgid) << dendl;
     bufferlist bl;
     epoch_t map_epoch = 0;
-    int r = PG::peek_map_epoch(store, pgid, &map_epoch, &bl);
+    ghobject_t pgmeta_oid(pgid.make_pgmeta_oid());
+    int r = PG::peek_map_epoch(store, *it, &map_epoch, &bl, pgmeta_oid);
     if (r < 0) {
       derr << __func__ << " unable to peek at " << pgid << " metadata, skipping"
 	   << dendl;
       continue;
     }
-
     PG *pg = NULL;
     if (map_epoch > 0) {
       OSDMapRef pgosdmap = service.try_get_map(map_epoch);
@@ -2897,7 +2891,7 @@ void OSD::load_pgs()
     // there can be no waiters here, so we don't call wake_pg_waiters
 
     // read pg state, log
-    pg->read_state(store, bl);
+    pg->read_state(store, bl, pgmeta_oid);
 
     if (pg->must_upgrade()) {
       if (!pg->can_upgrade()) {
@@ -2914,12 +2908,13 @@ void OSD::load_pgs()
       pg->upgrade(store);
     }
 
-    service.init_splits_between(pg->info.pgid, pg->get_osdmap(), osdmap);
+    OSDMapRef pgosdmap = pg->get_osdmap();
+    service.init_splits_between(pg->info.pgid, pgosdmap, osdmap);
 
     // generate state for PG's current mapping
     int primary, up_primary;
     vector<int> acting, up;
-    pg->get_osdmap()->pg_to_up_acting_osds(
+    pgosdmap->pg_to_up_acting_osds(
       pgid.pgid, &up, &up_primary, &acting, &primary);
     pg->init_primary_up_acting(
       up,

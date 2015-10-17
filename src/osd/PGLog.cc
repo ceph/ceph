@@ -124,7 +124,7 @@ void PGLog::IndexedLog::trim(
     tail = s;
 }
 
-ostream& PGLog::IndexedLog::print(ostream& out) const 
+ostream& PGLog::IndexedLog::print(ostream& out)
 {
   out << *this << std::endl;
   for (list<pg_log_entry_t>::const_iterator p = log.begin();
@@ -897,12 +897,8 @@ void PGLog::read_log(ObjectStore *store, coll_t pg_coll,
 	::decode(divergent_priors, bp);
 	dout(20) << "read_log " << divergent_priors.size() << " divergent_priors" << dendl;
       } else if (p->key() == "can_rollback_to") {
-	bufferlist bl = p->value();
-	bufferlist::iterator bp = bl.begin();
 	::decode(log.can_rollback_to, bp);
       } else if (p->key() == "rollback_info_trimmed_to") {
-	bufferlist bl = p->value();
-	bufferlist::iterator bp = bl.begin();
 	::decode(log.rollback_info_trimmed_to, bp);
       } else {
 	pg_log_entry_t e;
@@ -921,7 +917,7 @@ void PGLog::read_log(ObjectStore *store, coll_t pg_coll,
     }
   }
   log.head = info.last_update;
-  log.index();
+
 
   // build missing
   if (info.last_complete < info.last_update) {

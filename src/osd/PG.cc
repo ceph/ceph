@@ -2743,13 +2743,12 @@ bool PG::_has_removal_flag(ObjectStore *store,
 }
 
 int PG::peek_map_epoch(ObjectStore *store,
-		       spg_t pgid,
+               coll_t& coll,
 		       epoch_t *pepoch,
-		       bufferlist *bl)
+               bufferlist *bl,
+		       ghobject_t& pgmeta_oid)
 {
-  coll_t coll(pgid);
   ghobject_t legacy_infos_oid(OSD::make_infos_oid());
-  ghobject_t pgmeta_oid(pgid.make_pgmeta_oid());
   epoch_t cur_epoch = 0;
 
   assert(bl);
@@ -2920,14 +2919,13 @@ std::string PG::get_corrupt_pg_log_name() const
 int PG::read_info(
   ObjectStore *store, spg_t pgid, const coll_t &coll, bufferlist &bl,
   pg_info_t &info, map<epoch_t,pg_interval_t> &past_intervals,
-  __u8 &struct_v)
+  __u8 &struct_v, ghobject_t& pgmeta_oid)
 {
   // try for v8 or later
   set<string> keys;
   keys.insert(infover_key);
   keys.insert(info_key);
   keys.insert(biginfo_key);
-  ghobject_t pgmeta_oid(pgid.make_pgmeta_oid());
   map<string,bufferlist> values;
   int r = store->omap_get_values(coll, pgmeta_oid, keys, &values);
   if (r == 0) {
@@ -2973,10 +2971,10 @@ int PG::read_info(
   return 0;
 }
 
-void PG::read_state(ObjectStore *store, bufferlist &bl)
+void PG::read_state(ObjectStore *store, bufferlist &bl, ghobject_t& pgmeta_oid)
 {
   int r = read_info(store, pg_id, coll, bl, info, past_intervals,
-		    info_struct_v);
+		    info_struct_v, pgmeta_oid);
   assert(r >= 0);
 
   ostringstream oss;
