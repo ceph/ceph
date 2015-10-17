@@ -44,8 +44,9 @@ if WITH_LIBZFS
 libos_a_SOURCES += os/ZFSFileStoreBackend.cc
 endif
 
-libos_a_CXXFLAGS = ${AM_CXXFLAGS}
-libos_a_LIBADD = $(LIBOS_TYPES)
+libos_a_CXXFLAGS = ${AM_CXXFLAGS} -I rocksdb/include
+libos_a_LIBADD = libos_types.a
+
 if WITH_LTTNG
 libos_a_LIBADD += $(LIBOS_TP)
 endif
@@ -85,19 +86,22 @@ noinst_HEADERS += \
 	os/ZFSFileStoreBackend.h
 
 if WITH_SLIBROCKSDB
-libos_rocksdb_la_SOURCES = os/RocksDBStore.cc
-libos_rocksdb_la_CXXFLAGS = ${AM_CXXFLAGS} ${LIBROCKSDB_CFLAGS} -std=gnu++11 -I rocksdb/include
-libos_rocksdb_la_LIBADD = rocksdb/librocksdb.la
-noinst_LTLIBRARIES += libos_rocksdb.la
+# build rocksdb with its own makefile
+# for some stupid reason this needs -fPIC...
+rocksdb/librocksdb.a:
+	cd rocksdb && EXTRA_CXXFLAGS=-fPIC make -j$(shell nproc) static_lib
+libos_a_CXXFLAGS +=  -I rocksdb/include -fPIC
+libos_a_SOURCES += os/RocksDBStore.cc
+libos_a_LIBADD += rocksdb/librocksdb.a
 noinst_HEADERS += os/RocksDBStore.h
 endif
+
 if WITH_DLIBROCKSDB
-libos_rocksdb_la_SOURCES = os/RocksDBStore.cc
-libos_rocksdb_la_CXXFLAGS = ${AM_CXXFLAGS} ${LIBROCKSDB_CFLAGS} -std=gnu++11
-libos_rocksdb_la_LIBADD = -lrocksdb
-noinst_LTLIBRARIES += libos_rocksdb.la
+libos_a_SOURCES += os/RocksDBStore.cc
+libos_a_LIBADD += -lrocksdb
 noinst_HEADERS += os/RocksDBStore.h
 endif
+
 if WITH_LIBZFS
 libos_zfs_a_SOURCES = os/ZFS.cc
 libos_zfs_a_CXXFLAGS = ${AM_CXXFLAGS} ${LIBZFS_CFLAGS}
