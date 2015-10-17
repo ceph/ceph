@@ -198,10 +198,6 @@ if WITH_LIBZFS
 LIBOS += libos_zfs.a -lzfs
 endif # WITH_LIBZFS
 
-if WITH_LIBROCKSDB
-LIBOS += libos_rocksdb.la
-endif # WITH_LIBROCKSDB
-
 if WITH_TCMALLOC_MINIMAL
 LIBPERFGLUE += -ltcmalloc_minimal
 endif # WITH_TCMALLOC_MINIMAL
@@ -232,9 +228,12 @@ LIBMDS += $(LIBPERFGLUE)
 # OSD needs types
 LIBOSD += $(LIBOSD_TYPES) $(LIBOS_TYPES)
 
-# Always use system leveldb
-LIBOS += -lleveldb -lsnappy
+# libos linking order is ornery
 LIBOS += $(LIBOS_TYPES)
+if WITH_SLIBROCKSDB
+LIBOS += rocksdb/librocksdb.a
+endif
+LIBOS += -lbz2 -lz -lleveldb -lsnappy
 
 LIBMON += $(LIBMON_TYPES)
 
