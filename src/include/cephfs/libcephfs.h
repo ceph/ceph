@@ -23,12 +23,6 @@
 #include <stdint.h>
 #include <stdbool.h>
 
-// FreeBSD compatibility
-#if defined(__FreeBSD__) || defined(__APPLE__)
-typedef off_t loff_t;
-typedef off_t off64_t;
-#endif
-
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -1387,8 +1381,8 @@ int ceph_ll_setattr(struct ceph_mount_info *cmount, struct Inode *in,
 		    struct stat *st, int mask, int uid, int gid);
 int ceph_ll_open(struct ceph_mount_info *cmount, struct Inode *in, int flags,
 		 struct Fh **fh, int uid, int gid);
-loff_t ceph_ll_lseek(struct ceph_mount_info *cmount, struct Fh* filehandle,
-		     loff_t offset, int whence);
+off_t ceph_ll_lseek(struct ceph_mount_info *cmount, struct Fh* filehandle,
+		     off_t offset, int whence);
 int ceph_ll_read(struct ceph_mount_info *cmount, struct Fh* filehandle,
 		 int64_t off, uint64_t len, char* buf);
 int ceph_ll_fsync(struct ceph_mount_info *cmount, struct Fh *fh,
