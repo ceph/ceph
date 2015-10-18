@@ -676,8 +676,8 @@ class GenericBlockDev(BlockDevBase):
     """
     def get_partition_dev(self, SearchPartNum):
         for childDev in self.device.children:
-            partNum = int(childDev.get('ID_PART_ENTRY_NUMBER'))
-            if partNum is SearchPartNum:
+            partNum = childDev.get('ID_PART_ENTRY_NUMBER')
+            if partNum and int(partNum) is SearchPartNum:
                 return childDev.device_node
         return None
 
@@ -686,7 +686,7 @@ class GenericBlockDev(BlockDevBase):
     """
     def get_partition_base(self):
         if self.is_partition():
-            return self.device.find_parent('block').device_node
+            return self.device.find_parent('block', 'disk').device_node
         else:
             return None
 
@@ -697,7 +697,6 @@ class GenericBlockDev(BlockDevBase):
         name = os.path.basename(self.device.device_node)
         if self.is_partition():
             base = os.path.basename(self.get_partition_base())
-
             return os.listdir(os.path.join('/sys/block', base, name, 'holders'))
         else:
             return os.listdir(os.path.join('/sys/block', name, 'holders'))
@@ -708,7 +707,8 @@ class GenericBlockDev(BlockDevBase):
     def list_partitions(self):
         partitions = []
         for childDev in self.device.children:
-            partitions.append(get_dev_name(childDev.device_node))
+            if childDev.get('DEVTYPE') == 'partition':
+                partitions.append(get_dev_name(childDev.device_node))
 
         return partitions
 
@@ -720,6 +720,7 @@ class GenericBlockDev(BlockDevBase):
         if not part_num:
             LOG.debug('Read Part GUID on non partiton dev: %s', self.get_dev_node())
             return None, None
+
         base = self.get_partition_base()
         part = self.get_dev_node()
         return get_partition_guids(self, base, part, part_num)
@@ -776,12 +777,18 @@ DM Device Class. Implements APIs for accessing properties of
 Device mapper devices
 ----------------------------------------------------------------------------
 """
+def get_dm_partition_num(device):
+    partNum = device.get('DM_PART')
+    if not partNum:
+        partNum = device.get('ID_PART_ENTRY_NUMBER')
+
+    return partNum
+
 class DMBlockDev(BlockDevBase):
 
     def __init__(self, udevCtx, device):
         self.udevCtx = udevCtx
         self.device  = device
-
 
     """
     Get Device node name
@@ -799,11 +806,10 @@ class DMBlockDev(BlockDevBase):
     Get partition Number
     """
     def get_partition_num(self):
-        partNum = self.device.get('DM_PART')
+        partNum = get_dm_partition_num(self.device)
         if partNum:
             return int(partNum)
-        else:
-            return None
+        return None
 
     """
     Check if the block device is a partition
@@ -823,19 +829,15 @@ class DMBlockDev(BlockDevBase):
     """
     def get_partition_dev(self, pnum):
         name = os.path.basename(self.device.device_node)
-        for f in os.listdir(os.path.join('/sys/block', name, 'holders')):
-            part = os.path.realpath(os.path.join('/sys/block', name, 'holders', f))
-            partDev = pyudev.Device.from_path(self.udevCtx, part)
+        for holder in os.listdir(os.path.join('/sys/block', name, 'holders')):
+            partDev = pyudev.Device.from_name(self.udevCtx, 'block', holder)
             partDevNum = None
             if partDev:
-                partDevProp = partDev.get('DM_PART')
-                if partDevProp:
-                    partDevNum = int(partDevProp)
+                partDevNum = get_dm_partition_num(partDev)
 
-            if partDevNum is pnum:
+            if partDevNum and int(partDevNum) is pnum:
                 return partDev.device_node
         return None
-
 
     """
     Get the underlying base device for a partition
@@ -846,9 +848,8 @@ class DMBlockDev(BlockDevBase):
         if self.is_partition():
             name = os.path.basename(self.device.device_node)
             myPartNum = self.get_partition_num()
-            for f in os.listdir(os.path.join('/sys/block', name, 'slaves')):
-                base = os.path.realpath(os.path.join('/sys/block', name, 'slaves', f))
-                baseDev = pyudev.Device.from_path(self.udevCtx, base)
+            for slave in os.listdir(os.path.join('/sys/block', name, 'slaves')):
+                baseDev = pyudev.Device.from_name(self.udevCtx, 'block', slave)
                 baseDevCtx = get_block_device_ctx(baseDev.device_node)
                 if baseDevCtx:
                     partName = baseDevCtx.get_partition_dev(myPartNum)
@@ -866,13 +867,12 @@ class DMBlockDev(BlockDevBase):
     def is_held(self):
         name = os.path.basename(self.device.device_node)
         holders = []
-        for f in os.listdir(os.path.join('/sys/block', name, 'holders')):
-            holder = os.path.realpath(os.path.join('/sys/block', name, 'holders', f))
-            holderDev = pyudev.Device.from_path(self.udevCtx, holder)
+        for holder in os.listdir(os.path.join('/sys/block', name, 'holders')):
+            holderDev = pyudev.Device.from_name(self.udevCtx, 'block', holder)
             devCtx = get_block_device_ctx(holderDev.device_node)
             if devCtx:
                 if not devCtx.is_partition():
-                    holders.append(f)
+                    holders.append(holder)
         return holders
 
     """
@@ -882,9 +882,8 @@ class DMBlockDev(BlockDevBase):
     def list_partitions(self):
         name = os.path.basename(self.device.device_node)
         partitions = []
-        for f in os.listdir(os.path.join('/sys/block', name, 'holders')):
-            part = os.path.realpath(os.path.join('/sys/block', name, 'holders', f))
-            partDev = pyudev.Device.from_path(self.udevCtx, part)
+        for holder in os.listdir(os.path.join('/sys/block', name, 'holders')):
+            partDev = pyudev.Device.from_name(self.udevCtx, 'block', holder)
             devCtx = get_block_device_ctx(partDev.device_node)
             if devCtx:
                 if devCtx.is_partition():
@@ -899,6 +898,7 @@ class DMBlockDev(BlockDevBase):
         if not part_num:
             LOG.debug('Read Part GUID on non partiton dev: %s', self.get_dev_node())
             return None, None
+
         base = self.get_partition_base()
         part = self.get_dev_node()
         return get_partition_guids(self, base, part, part_num)
@@ -1067,7 +1067,8 @@ def list_all_partitions(names):
             continue
         dev = os.path.join('/dev', name)
         devCtx = get_block_device_ctx(dev)
-        dev_part_list[name] = devCtx.list_partitions()
+        if not devCtx.is_partition():
+            dev_part_list[name] = devCtx.list_partitions()
     return dev_part_list
 
 '''
@@ -1721,30 +1722,23 @@ SizeMB is returned assuming hw sectors size aligns 1MB
 def get_largest_free_part_size(dev, sect_size):
 
     out, ret = command(['sgdisk', '--first-aligned-in-largest', dev])
-    if ret:
+    if 'invalid GPT' in out or 'Creating new GPT entries' in out or ret != 0:
         return None
+
     start = out.split('\n', 1)[0]
+
     out, ret = command(['sgdisk', '--end-of-largest', dev])
-    if ret:
+    if 'invalid GPT' in out or 'Creating new GPT entries' in out or ret != 0:
         return None
 
     end = out.split('\n', 1)[0]
-    size = long(end) - long(start)
-    sizeMB = (size * sect_size)/(1024 * 1024)
+    if start and end:
+        size = long(end) - long(start)
+        sizeMB = (size * sect_size)/(1048576)
+    else:
+        sizeMB = 0
 
     return sizeMB
-
-    udevCtx = pyudev.Context()
-    device  = pyudev.Device.from_device_file(udevCtx, dev)
-    sysNode = device.get('DEVPATH')
-    if sysNode:
-        sectSizePath = os.path.join(sysNode, 'queue')
-        sectSizePath = '/sys' + sectSizePath
-        sectSizeStr = read_one_line(sectSizePath, 'hw_sector_size')
-        if sectSizeStr:
-            return sizeMB
-
-    return None
 
 def get_free_partition_index(dev):
     """
@@ -1974,9 +1968,9 @@ def prepare_journal_dev(
         udev_settle()
 
         LOG.debug('Journal is GPT partition %s', journal_symlink)
-		#
-		# Check if the kernel/udev detected the change, if not then we need to probe
-		#
+        #
+        # Check if the kernel/udev detected the change, if not then we need to probe
+        #
         partdev = wait_partition(jrnlDevCtx, num, 8)
         if not partdev:
             LOG.info('Journal Partition device not auto-updated, probing now')
@@ -2571,7 +2565,7 @@ def main_prepare(args):
                 if e2.errno != errno.ENOENT: # errno.ENOENT = no such file or directory
                     raise # re-raise exception if a different error occured
         prepare_lock.release()  # noqa
-        raise
+        raise e
 
 
 ###########################
@@ -3132,7 +3126,7 @@ def get_journal_osd_uuid(path):
     if not stat.S_ISBLK(mode):
         raise Error('%s is not a block device' % path)
 
-    devCtx = get_block_device_ctx(args.path)
+    devCtx = get_block_device_ctx(path)
     if (devCtx.is_partition() and
         devCtx.get_partition_type() == MPATH_OSD_UUID and
         devCtx.get_device_class() != 'dm-multipath'):
@@ -3409,6 +3403,7 @@ def rawread_partition_guids(base_dev, part_num, hw_sector_sz):
     try:
         os.lseek(fd, gpt_hdr_offset, os.SEEK_SET)
     except Exception as error:
+        LOG.debug('failed to open Dev %s: Error: %s' % (base_dev, str(error)))
         os.close(fd)
         return None, None
 
@@ -3416,6 +3411,7 @@ def rawread_partition_guids(base_dev, part_num, hw_sector_sz):
     try:
         gpt_hdr_raw = os.read(fd, read_sz)
     except Exception as error:
+        LOG.debug('failed to read Dev %s: Error: %s' % (base_dev, str(error)))
         os.close(fd)
         return None, None
 
@@ -3491,7 +3487,6 @@ def get_partition_guids(devCtx, basedev, partdev, partnum):
     1. Read the uuids from the udev db
     """
 
-    LOG.debug('Part Get-ID udev');
     ptype, puuid = get_udev_partition_ids(devCtx)
     if ptype and puuid:
         return ptype, puuid
@@ -3499,7 +3494,6 @@ def get_partition_guids(devCtx, basedev, partdev, partnum):
     """
     2. Use blkid/sgdisk
     """
-    LOG.debug('Part Get-ID blkid/sgdisk');
     ptype = get_blkdev_partition_type(basedev, partdev, partnum)
     puuid = get_blkdev_partition_uuid(basedev, partdev, partnum)
     if ptype and puuid:
@@ -3509,7 +3503,6 @@ def get_partition_guids(devCtx, basedev, partdev, partnum):
     3. Attempt a rawread
 
     """
-    LOG.debug('Part Get-ID raw-read');
     hw_sector_sz = devCtx.get_hw_sector_size()
     if hw_sector_sz:
         ptype, puuid = rawread_partition_guids(basedev, partnum, hw_sector_sz)
@@ -3709,7 +3702,7 @@ def list_devices(args):
                          DMCRYPT_LUKS_OSD_UUID):
                 if ptype in (DMCRYPT_OSD_UUID,
                              DMCRYPT_LUKS_OSD_UUID):
-                    holders = is_held(dev)
+                    holders = devCtx.is_held()
                     if len(holders) != 1:
                         continue
                     dev_to_mount = '/dev/' + holders[0]
