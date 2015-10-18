@@ -1453,8 +1453,8 @@ extern "C" int ceph_ll_fsync(class ceph_mount_info *cmount,
   return (cmount->get_client()->ll_fsync(fh, syncdataonly));
 }
 
-extern "C" loff_t ceph_ll_lseek(class ceph_mount_info *cmount,
-				Fh *fh, loff_t offset, int whence)
+extern "C" off_t ceph_ll_lseek(class ceph_mount_info *cmount,
+				Fh *fh, off_t offset, int whence)
 {
   return (cmount->get_client()->ll_lseek(fh, offset, whence));
 }
