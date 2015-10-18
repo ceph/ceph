@@ -1305,12 +1305,12 @@ exit 0
 %files libs-compat
 # We need an empty %%files list for ceph-libs-compat, to tell rpmbuild to actually
 # build this meta package.
+%endif
 
 #################################################################################
 %files devel-compat
 # We need an empty %%files list for ceph-devel-compat, to tell rpmbuild to
 # actually build this meta package.
-%endif
 
 #################################################################################
 %files -n python-ceph-compat
