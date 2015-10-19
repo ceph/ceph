@@ -51,12 +51,17 @@ class TestJournalRepair(CephFSTestCase):
         self.mount_a.run_shell(["rm", "-f", "linkdir/link3"])
         self.mount_a.run_shell(["ln", "rootfile", "linkdir/link3"])
 
+        # Test an empty directory
+        self.mount_a.run_shell(["mkdir", "subdir/subsubdir"])
+        self.mount_a.run_shell(["sync"])
+
         # Before we unmount, make a note of the inode numbers, later we will
         # check that they match what we recover from the journal
         rootfile_ino = self.mount_a.path_to_ino("rootfile")
         subdir_ino = self.mount_a.path_to_ino("subdir")
         linkdir_ino = self.mount_a.path_to_ino("linkdir")
         subdirfile_ino = self.mount_a.path_to_ino("subdir/subdirfile")
+        subsubdir_ino = self.mount_a.path_to_ino("subdir/subsubdir")
 
         self.mount_a.umount_wait()
 
@@ -75,7 +80,7 @@ class TestJournalRepair(CephFSTestCase):
 
         # Dentries in ROOT_INO are present
         self.assertEqual(sorted(self.fs.list_dirfrag(ROOT_INO)), sorted(['rootfile_head', 'subdir_head', 'linkdir_head']))
-        self.assertEqual(self.fs.list_dirfrag(subdir_ino), ['subdirfile_head'])
+        self.assertEqual(self.fs.list_dirfrag(subdir_ino), ['subdirfile_head', 'subsubdir_head'])
         self.assertEqual(sorted(self.fs.list_dirfrag(linkdir_ino)),
                          sorted(['link0_head', 'link1_head', 'link2_head', 'link3_head']))
 
@@ -115,12 +120,16 @@ class TestJournalRepair(CephFSTestCase):
 
                          ./subdir:
                          subdirfile
+                         subsubdir
+
+                         ./subdir/subsubdir:
                          """).strip())
 
         # Check the correct inos were preserved by path
         self.assertEqual(rootfile_ino, self.mount_a.path_to_ino("rootfile"))
         self.assertEqual(subdir_ino, self.mount_a.path_to_ino("subdir"))
         self.assertEqual(subdirfile_ino, self.mount_a.path_to_ino("subdir/subdirfile"))
+        self.assertEqual(subsubdir_ino, self.mount_a.path_to_ino("subdir/subsubdir"))
 
         # Check that the hard link handling came out correctly
         self.assertEqual(self.mount_a.path_to_ino("linkdir/link0"), subdirfile_ino)
@@ -133,6 +142,9 @@ class TestJournalRepair(CephFSTestCase):
         self.mount_a.run_shell(["touch", "afterwards"])
         new_ino = self.mount_a.path_to_ino("afterwards")
         self.assertNotIn(new_ino, [rootfile_ino, subdir_ino, subdirfile_ino])
+
+        # Check that we can do metadata ops in the recovered directory
+        self.mount_a.run_shell(["touch", "subdir/subsubdir/subsubdirfile"])
 
     @long_running # 308s
     def test_reset(self):
