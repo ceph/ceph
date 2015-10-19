@@ -17,6 +17,7 @@
 #include "common/dout.h"
 #include "include/assert.h"
 #include "common/Formatter.h"
+#include "common/Cond.h"
 
 #include "common/ceph_context.h"
 class PerfCounters;
