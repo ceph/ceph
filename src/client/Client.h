@@ -794,7 +794,8 @@ private:
   int may_create(Inode *dir, int uid=-1, int gid=-1);
   int may_delete(Inode *dir, const char *name, int uid=-1, int gid=-1);
   int may_hardlink(Inode *in, int uid=-1, int gid=-1);
-  int _getgrouplist(gid_t **sgids, int uid=-1, int gid=-1);
+  int _getattr_for_perm(Inode *in, int uid, int gid);
+  int _getgrouplist(gid_t **sgids, int uid, int gid);
 
   int check_data_pool_exist(string name, string value, const OSDMap *osdmap);
 
