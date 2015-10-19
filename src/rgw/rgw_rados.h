@@ -1326,15 +1326,15 @@ public:
   RGWPeriod(const string& period_id, epoch_t _epoch = 0)
     : id(period_id), epoch(_epoch) {}
 
-  const string& get_id() { return id;}
-  epoch_t get_epoch() { return epoch;}
-  const string& get_predecessor() { return predecessor_uuid;}
-  const string& get_master_zone() { return master_zone;}
-  const string& get_master_zonegroup() { return master_zonegroup;}
-  const string& get_realm() { return realm_id;}
-  const RGWPeriodMap& get_map() { return period_map;}
-  const RGWPeriodConfig& get_config() { return period_config;}
-  const rgw_meta_sync_status& get_sync_status() { return sync_status;}
+  const string& get_id() const { return id; }
+  epoch_t get_epoch() const { return epoch; }
+  const string& get_predecessor() const { return predecessor_uuid; }
+  const string& get_master_zone() const { return master_zone; }
+  const string& get_master_zonegroup() const { return master_zonegroup; }
+  const string& get_realm() const { return realm_id; }
+  const RGWPeriodMap& get_map() const { return period_map; }
+  const RGWPeriodConfig& get_config() const { return period_config; }
+  const rgw_meta_sync_status& get_sync_status() const { return sync_status; }
   const string& get_pool_name(CephContext *cct);
   const string& get_latest_epoch_oid();
   const string& get_info_oid_prefix();
