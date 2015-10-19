@@ -1929,10 +1929,6 @@ int OSD::init()
     tick_timer_without_osd_lock.add_event_after(cct->_conf->osd_heartbeat_interval, new C_Tick_WithoutOSDLock(this));
   }
 
-  service.init();
-  service.publish_map(osdmap);
-  service.publish_superblock(superblock);
-
   osd_lock.Unlock();
 
   r = monc->authenticate();
@@ -1951,6 +1947,10 @@ int OSD::init()
   if (is_stopping())
     return 0;
 
+  service.init();
+  service.publish_map(osdmap);
+  service.publish_superblock(superblock);
+
   check_config();
 
   dout(10) << "ensuring pgs have consumed prior maps" << dendl;
@@ -1959,6 +1959,9 @@ int OSD::init()
 
   dout(0) << "done with init, starting boot process" << dendl;
   set_state(STATE_BOOTING);
+
+  // we don't need to ask for an osdmap here; objecter will
+
   start_boot();
 
   return 0;
