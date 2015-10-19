@@ -11,6 +11,7 @@ import ctypes
 import errno
 import threading
 import time
+import sys
 
 from collections import Iterator
 from datetime import datetime
@@ -26,6 +27,12 @@ LIBRADOS_OP_FLAG_FADVISE_SEQUENTIAL = 0x8
 LIBRADOS_OP_FLAG_FADVISE_WILLNEED = 0x10
 LIBRADOS_OP_FLAG_FADVISE_DONTNEED = 0x20
 LIBRADOS_OP_FLAG_FADVISE_NOCACHE = 0x40
+
+
+if sys.hexversion < 0x03000000:
+    str_type = basestring
+else:
+    str_type = str
 
 
 class Error(Exception):
@@ -288,8 +295,8 @@ class Rados(object):
         raise RadosStateError("You cannot perform that operation on a \
 Rados object in state %s." % self.state)
 
-    @requires(('rados_id', opt(str)), ('name', opt(str)), ('clustername', opt(str)),
-              ('conffile', opt(str)))
+    @requires(('rados_id', opt(str_type)), ('name', opt(str_type)), ('clustername', opt(str_type)),
+              ('conffile', opt(str_type)))
     def __init__(self, rados_id=None, name=None, clustername=None,
                  conf_defaults=None, conffile=None, conf=None, flags=0):
         library_path = find_library('rados')
@@ -362,7 +369,7 @@ Rados object in state %s." % self.state)
         return Version(major.value, minor.value, extra.value)
 
 
-    @requires(('path', opt(str)))
+    @requires(('path', opt(str_type)))
     def conf_read_file(self, path=None):
         """
         Configure the cluster handle using a Ceph config file.
@@ -413,7 +420,7 @@ Rados object in state %s." % self.state)
         if (ret != 0):
             raise make_ex(ret, "error calling conf_parse_env")
 
-    @requires(('option', str))
+    @requires(('option', str_type))
     def conf_get(self, option):
         """
         Get the value of a configuration option
@@ -440,7 +447,7 @@ Rados object in state %s." % self.state)
             else:
                 raise make_ex(ret, "error calling conf_get")
 
-    @requires(('option', str), ('val', str))
+    @requires(('option', str_type), ('val', str_type))
     def conf_set(self, option, val):
         """
         Set the value of a configuration option
@@ -529,7 +536,7 @@ Rados object in state %s." % self.state)
                 'kb_avail': stats.kb_avail,
                 'num_objects': stats.num_objects}
 
-    @requires(('pool_name', str))
+    @requires(('pool_name', str_type))
     def pool_exists(self, pool_name):
         """
         Checks if a given pool exists.
@@ -550,7 +557,7 @@ Rados object in state %s." % self.state)
         else:
             raise make_ex(ret, "error looking up pool '%s'" % pool_name)
 
-    @requires(('pool_name', str))
+    @requires(('pool_name', str_type))
     def pool_lookup(self, pool_name):
         """
         Returns a pool's ID based on its name.
@@ -598,7 +605,7 @@ Rados object in state %s." % self.state)
                 return c_name.value
                 break
 
-    @requires(('pool_name', str), ('auid', opt(int)), ('crush_rule', opt(int)))
+    @requires(('pool_name', str_type), ('auid', opt(int)), ('crush_rule', opt(int)))
     def create_pool(self, pool_name, auid=None, crush_rule=None):
         """
         Create a pool:
@@ -653,7 +660,7 @@ Rados object in state %s." % self.state)
             raise make_ex(ret, "get_pool_base_tier(%d)" % pool_id)
         return base_tier.value
 
-    @requires(('pool_name', str))
+    @requires(('pool_name', str_type))
     def delete_pool(self, pool_name):
         """
         Delete a pool and all data inside it.
@@ -707,7 +714,7 @@ Rados object in state %s." % self.state)
             raise make_ex(ret, "error getting cluster fsid")
         return fsid.value
 
-    @requires(('ioctx_name', str))
+    @requires(('ioctx_name', str_type))
     def open_ioctx(self, ioctx_name):
         """
         Create an io context
@@ -1441,7 +1448,7 @@ class Ioctx(object):
             raise make_ex(ret, "error changing auid of '%s' to %d"
                           % (self.name, auid))
 
-    @requires(('loc_key', str))
+    @requires(('loc_key', str_type))
     def set_locator_key(self, loc_key):
         """
         Set the key for mapping objects to pgs within an io context.
@@ -1471,7 +1478,7 @@ class Ioctx(object):
         return self.locator_key
 
 
-    @requires(('nspace', str))
+    @requires(('nspace', str_type))
     def set_namespace(self, nspace):
         """
         Set the namespace for objects within an io context.
@@ -1516,7 +1523,7 @@ class Ioctx(object):
             self.state = "closed"
 
 
-    @requires(('key', str), ('data', bytes))
+    @requires(('key', str_type), ('data', bytes))
     def write(self, key, data, offset=0):
         """
         Write data to an object synchronously
@@ -1546,7 +1553,7 @@ class Ioctx(object):
             raise LogicError("Ioctx.write(%s): rados_write \
 returned %d, but should return zero on success." % (self.name, ret))
 
-    @requires(('key', str), ('data', bytes))
+    @requires(('key', str_type), ('data', bytes))
     def write_full(self, key, data):
         """
         Write an entire object synchronously.
@@ -1577,7 +1584,7 @@ returned %d, but should return zero on success." % (self.name, ret))
             raise LogicError("Ioctx.write_full(%s): rados_write_full \
 returned %d, but should return zero on success." % (self.name, ret))
 
-    @requires(('key', str), ('data', bytes))
+    @requires(('key', str_type), ('data', bytes))
     def append(self, key, data):
         """
         Append data to an object synchronously
@@ -1605,7 +1612,7 @@ returned %d, but should return zero on success." % (self.name, ret))
             raise LogicError("Ioctx.append(%s): rados_append \
 returned %d, but should return zero on success." % (self.name, ret))
 
-    @requires(('key', str))
+    @requires(('key', str_type))
     def read(self, key, length=8192, offset=0):
         """
         Read data from an object synchronously
@@ -1680,7 +1687,7 @@ returned %d, but should return zero on success." % (self.name, ret))
                 "num_wr": stats.num_wr,
                 "num_wr_kb": stats.num_wr_kb}
 
-    @requires(('key', str))
+    @requires(('key', str_type))
     def remove_object(self, key):
         """
         Delete an object
@@ -1701,7 +1708,7 @@ returned %d, but should return zero on success." % (self.name, ret))
             raise make_ex(ret, "Failed to remove '%s'" % key)
         return True
 
-    @requires(('key', str))
+    @requires(('key', str_type))
     def trunc(self, key, size):
         """
         Resize an object
@@ -1726,7 +1733,7 @@ returned %d, but should return zero on success." % (self.name, ret))
             raise make_ex(ret, "Ioctx.trunc(%s): failed to truncate %s" % (self.name, key))
         return ret
 
-    @requires(('key', str))
+    @requires(('key', str_type))
     def stat(self, key):
         """
         Get object stats (size/mtime)
@@ -1749,7 +1756,7 @@ returned %d, but should return zero on success." % (self.name, ret))
             raise make_ex(ret, "Failed to stat %r" % key)
         return psize.value, time.localtime(pmtime.value)
 
-    @requires(('key', str), ('xattr_name', str))
+    @requires(('key', str_type), ('xattr_name', str_type))
     def get_xattr(self, key, xattr_name):
         """
         Get the value of an extended attribute on an object.
@@ -1778,7 +1785,7 @@ returned %d, but should return zero on success." % (self.name, ret))
                 break
         return ctypes.string_at(ret_buf, ret)
 
-    @requires(('oid', str))
+    @requires(('oid', str_type))
     def get_xattrs(self, oid):
         """
         Start iterating over xattrs on an object.
@@ -1798,7 +1805,7 @@ returned %d, but should return zero on success." % (self.name, ret))
             raise make_ex(ret, "Failed to get rados xattrs for object %r" % oid)
         return XattrIterator(self, it, oid)
 
-    @requires(('key', str), ('xattr_name', str), ('xattr_value', bytes))
+    @requires(('key', str_type), ('xattr_name', str_type), ('xattr_value', bytes))
     def set_xattr(self, key, xattr_name, xattr_value):
         """
         Set an extended attribute on an object.
@@ -1822,7 +1829,7 @@ returned %d, but should return zero on success." % (self.name, ret))
             raise make_ex(ret, "Failed to set xattr %r" % xattr_name)
         return True
 
-    @requires(('key', str), ('xattr_name', str))
+    @requires(('key', str_type), ('xattr_name', str_type))
     def rm_xattr(self, key, xattr_name):
         """
         Removes an extended attribute on from an object.
@@ -1862,7 +1869,7 @@ returned %d, but should return zero on success." % (self.name, ret))
         self.require_ioctx_open()
         return SnapIterator(self)
 
-    @requires(('snap_name', str))
+    @requires(('snap_name', str_type))
     def create_snap(self, snap_name):
         """
         Create a pool-wide snapshot
@@ -1879,7 +1886,7 @@ returned %d, but should return zero on success." % (self.name, ret))
         if (ret != 0):
             raise make_ex(ret, "Failed to create snap %s" % snap_name)
 
-    @requires(('snap_name', str))
+    @requires(('snap_name', str_type))
     def remove_snap(self, snap_name):
         """
         Removes a pool-wide snapshot
@@ -1896,7 +1903,7 @@ returned %d, but should return zero on success." % (self.name, ret))
         if (ret != 0):
             raise make_ex(ret, "Failed to remove snap %s" % snap_name)
 
-    @requires(('snap_name', str))
+    @requires(('snap_name', str_type))
     def lookup_snap(self, snap_name):
         """
         Get the id of a pool snapshot
@@ -1991,7 +1998,7 @@ returned %d, but should return zero on success." % (self.name, ret))
                       (c_void_p(write_op), byref(key_array), byref(value_array),
                        byref(lens_array), c_int(key_num),))
 
-    @requires(('write_op', int), ('oid', str), ('mtime', opt(int)), ('flags', opt(int)))
+    @requires(('write_op', int), ('oid', str_type), ('mtime', opt(int)), ('flags', opt(int)))
     def operate_write_op(self, write_op, oid, mtime=0, flags=0):
         """
         excute the real write operation
@@ -2008,7 +2015,7 @@ returned %d, but should return zero on success." % (self.name, ret))
                       (c_void_p(write_op), self.io, cstr(oid),
                        c_long(mtime), c_int(flags),))
 
-    @requires(('read_op', int), ('oid', str), ('flag', opt(int)))
+    @requires(('read_op', int), ('oid', str_type), ('flag', opt(int)))
     def operate_read_op(self, read_op, oid, flag=0):
         """
         excute the real read operation
@@ -2022,7 +2029,7 @@ returned %d, but should return zero on success." % (self.name, ret))
         run_in_thread(self.librados.rados_read_op_operate,
                       (c_void_p(read_op), self.io, cstr(oid), c_int(flag),))
 
-    @requires(('read_op', int), ('start_after', str), ('filter_prefix', str), ('max_return', int))
+    @requires(('read_op', int), ('start_after', str_type), ('filter_prefix', str_type), ('max_return', int))
     def get_omap_vals(self, read_op, start_after, filter_prefix, max_return):
         """
         get the omap values
@@ -2044,7 +2051,7 @@ returned %d, but should return zero on success." % (self.name, ret))
                        byref(iter_addr), pointer(prval)))
         return OmapIterator(self, iter_addr), prval.value
 
-    @requires(('read_op', int), ('start_after', str), ('max_return', int))
+    @requires(('read_op', int), ('start_after', str_type), ('max_return', int))
     def get_omap_keys(self, read_op, start_after, max_return):
         """
         get the omap keys
@@ -2110,7 +2117,7 @@ returned %d, but should return zero on success." % (self.name, ret))
         run_in_thread(self.librados.rados_write_op_omap_clear,
                       (c_void_p(write_op),))
 
-    @requires(('key', str), ('name', str), ('cookie', str), ('desc', str),
+    @requires(('key', str_type), ('name', str_type), ('cookie', str_type), ('desc', str_type),
               ('duration', opt(int)), ('flags', int))
     def lock_exclusive(self, key, name, cookie, desc="", duration=None, flags=0):
 
@@ -2143,8 +2150,8 @@ returned %d, but should return zero on success." % (self.name, ret))
         if ret < 0:
             raise make_ex(ret, "Ioctx.rados_lock_exclusive(%s): failed to set lock %s on %s" % (self.name, name, key))
 
-    @requires(('key', str), ('name', str), ('cookie', str), ('tag', str),
-              ('desc', str), ('duration', opt(int)), ('flags', int))
+    @requires(('key', str_type), ('name', str_type), ('cookie', str_type), ('tag', str_type),
+              ('desc', str_type), ('duration', opt(int)), ('flags', int))
     def lock_shared(self, key, name, cookie, tag, desc="", duration=None, flags=0):
 
         """
@@ -2178,7 +2185,7 @@ returned %d, but should return zero on success." % (self.name, ret))
         if ret < 0:
             raise make_ex(ret, "Ioctx.rados_lock_exclusive(%s): failed to set lock %s on %s" % (self.name, name, key))
 
-    @requires(('key', str), ('name', str), ('cookie', str))
+    @requires(('key', str_type), ('name', str_type), ('cookie', str_type))
     def unlock(self, key, name, cookie):
 
         """
