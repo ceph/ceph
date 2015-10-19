@@ -1,0 +1,4 @@
+Verify that we can upgrade straight from firefly to x without ever installing
+hammer.
+
+This would be an offline upgrade, though.. all osds have to be restarted!

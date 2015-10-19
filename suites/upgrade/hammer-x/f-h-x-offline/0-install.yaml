@@ -1,0 +1,6 @@
+roles:
+- [mon.a, mon.b, mon.c, osd.0, osd.1, osd.2, client.0]
+tasks:
+- install:
+    branch: firefly
+- ceph:
