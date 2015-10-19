@@ -124,7 +124,7 @@ public:
     int upper_bound(const string &after);
     int lower_bound(const string &to);
     bool valid();
-    int next();
+    int next(bool validate=true);
     string key();
     bufferlist value();
     int status() {
