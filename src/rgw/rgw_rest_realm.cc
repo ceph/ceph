@@ -105,7 +105,16 @@ void RGWOp_Period_Post::execute()
     return;
   }
 
-  // nobody is allowed to push to the master zone
+  // if period id is empty, handle as 'period commit'
+  if (period.get_id().empty()) {
+    http_ret = period.commit(realm, current_period);
+    if (http_ret < 0) {
+      lderr(cct) << "master zone failed to commit period" << dendl;
+    }
+    return;
+  }
+
+  // if it's not period commit, nobody is allowed to push to the master zone
   if (period.get_master_zone() == store->get_zone_params().get_id()) {
     ldout(cct, 10) << "master zone rejecting period id="
         << period.get_id() << " epoch=" << period.get_epoch() << dendl;
