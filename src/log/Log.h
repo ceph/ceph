@@ -14,7 +14,7 @@
 
 namespace ceph {
 namespace log {
-
+class DateCache;
 class Log : private Thread
 {
   Log **m_indirect_this;
@@ -43,6 +43,7 @@ class Log : private Thread
   int m_max_new, m_max_recent;
 
   bool m_inject_segv;
+  DateCache* m_date_cache;
 
   void *entry();
 
