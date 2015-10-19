@@ -871,7 +871,7 @@ int RGWPeriod::use_latest_epoch()
   return 0;
 }
 
-int RGWPeriod::set_latest_epoch(const epoch_t& epoch)
+int RGWPeriod::set_latest_epoch(epoch_t epoch)
 {
   string pool_name = get_pool_name(cct);
   string oid = get_period_oid_prefix() + get_latest_epoch_oid();
@@ -889,9 +889,8 @@ int RGWPeriod::set_latest_epoch(const epoch_t& epoch)
     return ret;
 
   return 0;
-
-
 }
+
 int RGWPeriod::delete_obj()
 {
   string pool_name = get_pool_name(cct);
