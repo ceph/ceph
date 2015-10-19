@@ -3050,17 +3050,17 @@ int NewStore::_txc_add_transaction(TransContext *txc, Transaction *t)
     case Transaction::OP_OMAP_SETKEYS:
       {
         ghobject_t oid = i.get_oid(op->oid);
-        map<string, bufferlist> aset;
-        i.decode_attrset(aset);
-	r = _omap_setkeys(txc, c, oid, aset);
+	bufferlist aset_bl;
+        i.decode_attrset_bl(&aset_bl);
+	r = _omap_setkeys(txc, c, oid, aset_bl);
       }
       break;
     case Transaction::OP_OMAP_RMKEYS:
       {
         ghobject_t oid = i.get_oid(op->oid);
-        set<string> keys;
-        i.decode_keyset(keys);
-	r = _omap_rmkeys(txc, c, oid, keys);
+	bufferlist keys_bl;
+        i.decode_keyset_bl(&keys_bl);
+	r = _omap_rmkeys(txc, c, oid, keys_bl);
       }
       break;
     case Transaction::OP_OMAP_RMKEYRANGE:
@@ -4031,10 +4031,12 @@ int NewStore::_omap_clear(TransContext *txc,
 int NewStore::_omap_setkeys(TransContext *txc,
 			    CollectionRef& c,
 			    const ghobject_t& oid,
-			    const map<string,bufferlist>& m)
+			    bufferlist &bl)
 {
   dout(15) << __func__ << " " << c->cid << " " << oid << dendl;
   int r = 0;
+  bufferlist::iterator p = bl.begin();
+  __u32 num;
 
   RWLock::WLocker l(c->lock);
   OnodeRef o = c->get_onode(oid, false);
@@ -4046,11 +4048,16 @@ int NewStore::_omap_setkeys(TransContext *txc,
     o->onode.omap_head = o->onode.nid;
     txc->write_onode(o);
   }
-  for (map<string,bufferlist>::const_iterator p = m.begin(); p != m.end(); ++p) {
+  ::decode(num, p);
+  while (num--) {
     string key;
-    get_omap_key(o->onode.omap_head, p->first, &key);
-    dout(30) << __func__ << "  " << key << " <- " << p->first << dendl;
-    txc->t->set(PREFIX_OMAP, key, p->second);
+    bufferlist value;
+    ::decode(key, p);
+    ::decode(value, p);
+    string final_key;
+    get_omap_key(o->onode.omap_head, key, &final_key);
+    dout(30) << __func__ << "  " << final_key << " <- " << value << dendl;
+    txc->t->set(PREFIX_OMAP, final_key, value);
   }
   r = 0;
 
@@ -4090,10 +4097,12 @@ int NewStore::_omap_setheader(TransContext *txc,
 int NewStore::_omap_rmkeys(TransContext *txc,
 			   CollectionRef& c,
 			   const ghobject_t& oid,
-			   const set<string>& m)
+			   bufferlist& bl)
 {
   dout(15) << __func__ << " " << c->cid << " " << oid << dendl;
   int r = 0;
+  bufferlist::iterator p = bl.begin();
+  __u32 num;
 
   RWLock::WLocker l(c->lock);
   OnodeRef o = c->get_onode(oid, false);
@@ -4109,11 +4118,14 @@ int NewStore::_omap_rmkeys(TransContext *txc,
     o->onode.omap_head = o->onode.nid;
     txc->write_onode(o);
   }
-  for (set<string>::const_iterator p = m.begin(); p != m.end(); ++p) {
+  ::decode(num, p);
+  while (num--) {
     string key;
-    get_omap_key(o->onode.omap_head, *p, &key);
-    dout(30) << __func__ << "  rm " << key << " <- " << *p << dendl;
-    txc->t->rmkey(PREFIX_OMAP, key);
+    ::decode(key, p);
+    string final_key;
+    get_omap_key(o->onode.omap_head, key, &final_key);
+    dout(30) << __func__ << "  rm " << final_key << " <- " << key << dendl;
+    txc->t->rmkey(PREFIX_OMAP, final_key);
   }
   r = 0;
 
