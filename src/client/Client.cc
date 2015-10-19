@@ -4856,7 +4856,7 @@ int Client::xattr_permission(Inode *in, const char *name, unsigned want, int uid
     gid = get_gid();
   RequestUserGroups groups(this, uid, gid);
 
-  int r = _getattr(in, CEPH_STAT_CAP_MODE, uid, gid);
+  int r = _getattr_for_perm(in, uid, gid);
   if (r < 0)
     goto out;
 
@@ -4880,7 +4880,7 @@ int Client::may_setattr(Inode *in, struct stat *st, int mask, int uid, int gid)
     gid = get_gid();
   RequestUserGroups groups(this, uid, gid);
 
-  int r = _getattr(in, CEPH_STAT_CAP_MODE, uid, gid);
+  int r = _getattr_for_perm(in, uid, gid);
   if (r < 0)
     goto out;
 
@@ -4952,7 +4952,7 @@ int Client::may_open(Inode *in, int flags, int uid, int gid)
       break;
   }
 
-  r = _getattr(in, CEPH_STAT_CAP_MODE, uid, gid);
+  r = _getattr_for_perm(in, uid, gid);
   if (r < 0)
     goto out;
 
@@ -4970,7 +4970,7 @@ int Client::may_lookup(Inode *dir, int uid, int gid)
     gid = get_gid();
   RequestUserGroups groups(this, uid, gid);
 
-  int r = _getattr(dir, CEPH_STAT_CAP_MODE, uid, gid);
+  int r = _getattr_for_perm(dir, uid, gid);
   if (r < 0)
     goto out;
 
@@ -4988,7 +4988,7 @@ int Client::may_create(Inode *dir, int uid, int gid)
     gid = get_gid();
   RequestUserGroups groups(this, uid, gid);
 
-  int r = _getattr(dir, CEPH_STAT_CAP_MODE, uid, gid);
+  int r = _getattr_for_perm(dir, uid, gid);
   if (r < 0)
     goto out;
 
@@ -5006,7 +5006,7 @@ int Client::may_delete(Inode *dir, const char *name, int uid, int gid)
     gid = get_gid();
   RequestUserGroups groups(this, uid, gid);
 
-  int r = _getattr(dir, CEPH_STAT_CAP_MODE, uid, gid);
+  int r = _getattr_for_perm(dir, uid, gid);
   if (r < 0)
     goto out;
 
@@ -5036,7 +5036,7 @@ int Client::may_hardlink(Inode *in, int uid, int gid)
     gid = get_gid();
   RequestUserGroups groups(this, uid, gid);
 
-  int r = _getattr(in, CEPH_STAT_CAP_MODE, uid, gid);
+  int r = _getattr_for_perm(in, uid, gid);
   if (r < 0)
     goto out;
 
@@ -5059,6 +5059,17 @@ int Client::may_hardlink(Inode *in, int uid, int gid)
 out:
   ldout(cct, 3) << __func__ << " " << in << " = " << r <<  dendl;
   return r;
+}
+
+int Client::_getattr_for_perm(Inode *in, int uid, int gid)
+{
+  int mask = CEPH_STAT_CAP_MODE;
+  bool force = false;
+  if (acl_type != NO_ACL) {
+    mask |= CEPH_STAT_CAP_XATTR;
+    force = in->xattr_version == 0;
+  }
+  return _getattr(in, mask, uid, gid, force);
 }
 
 vinodeno_t Client::_get_vino(Inode *in)
@@ -12014,11 +12025,6 @@ int Client::check_pool_perm(Inode *in, int need)
 int Client::_posix_acl_permission(Inode *in, uid_t uid, UserGroups& groups, unsigned want)
 {
   if (acl_type == POSIX_ACL) {
-    int r = _getattr(in, CEPH_STAT_CAP_XATTR | CEPH_STAT_CAP_MODE,
-		     uid, groups.get_gid(), in->xattr_version == 0);
-    if (r < 0)
-      return r;
-
     if (in->xattrs.count(ACL_EA_ACCESS)) {
       const bufferptr& access_acl = in->xattrs[ACL_EA_ACCESS];
       return posix_acl_permits(access_acl, in->uid, in->gid, uid, groups, want);
