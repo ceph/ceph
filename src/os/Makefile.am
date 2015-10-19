@@ -22,8 +22,7 @@ libos_a_SOURCES = \
 	os/KeyValueDB.cc \
 	os/KeyValueStore.cc \
 	os/ObjectStore.cc \
-	os/WBThrottle.cc \
-	common/TrackedOp.cc
+	os/WBThrottle.cc
 
 if LINUX
 libos_a_SOURCES += os/BtrfsFileStoreBackend.cc
