@@ -1333,7 +1333,7 @@ static simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZER;
     }
   }
   
-  bool buffer::list::is_contiguous()
+  bool buffer::list::is_contiguous() const
   {
     return &(*_buffers.begin()) == &(*_buffers.rbegin());
   }
