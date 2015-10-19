@@ -161,6 +161,11 @@ public:
     const std::set<string> &key,
     std::map<string, bufferlist> *out
     );
+  int get(
+    const string &prefix,
+    const string &key,
+    bufferlist *out
+    );
 
   class RocksDBWholeSpaceIteratorImpl :
     public KeyValueDB::WholeSpaceIteratorImpl {
