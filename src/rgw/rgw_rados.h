@@ -1736,6 +1736,10 @@ protected:
   RGWZoneGroup zonegroup;
   RGWZone zone_public_config; /* external zone params, e.g., entrypoints, log flags, etc. */  
 
+  RGWZoneGroup period_zonegroup;
+  RGWZone period_zone; /* external zone params, e.g., entrypoints, log flags, etc. */  
+  bool has_period_zonegroup;
+  bool has_period_zone;
 public:
   RGWRados() : max_req_id(0), lock("rados_timer_lock"), watchers_lock("watchers_lock"), timer(NULL),
                gc(NULL), obj_expirer(NULL), use_gc_thread(false), quota_threads(false),
@@ -1752,6 +1756,8 @@ public:
                pools_initialized(false),
                quota_handler(NULL),
                finisher(NULL),
+	       has_period_zonegroup(false),
+	       has_period_zone(false),
                rest_master_conn(NULL),
                meta_mgr(NULL), data_log(NULL) {}
 
@@ -1772,8 +1778,20 @@ public:
   map<string, RGWRESTConn *> zonegroup_conn_map;
 
   RGWZoneParams& get_zone_params() { return zone; }
-  RGWZoneGroup& get_zonegroup() { return zonegroup;}
-  RGWZone& get_zone() { return zone_public_config;}
+  RGWZoneGroup& get_zonegroup() {
+    if (has_period_zonegroup) {
+      return period_zonegroup;
+    } else {
+      return zonegroup;
+    }
+  }
+  RGWZone& get_zone() {
+    if (has_period_zone) {
+      return period_zone;
+    } else {
+      return zone_public_config;
+    }
+  }
 
   RGWMetadataManager *meta_mgr;
 

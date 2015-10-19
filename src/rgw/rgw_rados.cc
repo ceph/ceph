@@ -3050,6 +3050,26 @@ int RGWRados::init_complete()
     if (ret < 0 && ret != -ENOENT) {
       lderr(cct) << "failed reading current period info: " << " " << cpp_strerror(-ret) << dendl;
       return ret;
+    } else {
+      
+      map<string, RGWZoneGroup>::const_iterator iter =
+	current_period.get_map().zonegroups.find(zonegroup.get_predefined_name(cct));
+      if (iter != current_period.get_map().zonegroups.end()) {
+	period_zonegroup = iter->second;
+	has_period_zonegroup = true;
+	map<string, RGWZone>::iterator zone_iter =
+	  period_zonegroup.zones.find(zone.get_predefined_name(cct));
+	if (zone_iter != zonegroup.zones.end()) {
+	  period_zone= zone_iter->second;
+	  has_period_zone = true;
+	} else {
+	  lderr(cct) << "Cannot find zone " << zone.get_predefined_name(cct) <<
+	    " in current period using local" << dendl;
+	}
+      } else {
+	lderr(cct) << "Cannot find zonegroup" << zonegroup.get_predefined_name(cct) <<
+	  " in current period using local" << dendl;
+      }
     }
   }
 
