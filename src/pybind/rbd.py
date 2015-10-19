@@ -22,6 +22,7 @@ from ctypes import CDLL, c_char, c_char_p, c_size_t, c_void_p, c_int, \
 from ctypes.util import find_library
 import ctypes
 import errno
+import sys
 
 ANONYMOUS_AUID = 0xffffffffffffffff
 ADMIN_AUID = 0
@@ -65,6 +66,12 @@ RBD_FEATURES_SINGLE_CLIENT = (RBD_FEATURE_EXCLUSIVE_LOCK |
                               RBD_FEATURE_FAST_DIFF)
 
 RBD_FLAG_OBJECT_MAP_INVALID = 1
+
+
+if sys.hexversion < 0x03000000:
+    str_type = basestring
+else:
+    str_type = str
 
 
 class Error(Exception):
@@ -258,7 +265,7 @@ class RBD(object):
         """
         if order is None:
             order = 0
-        if not isinstance(name, str):
+        if not isinstance(name, str_type):
             raise TypeError('name must be a string')
         if old_format:
             if features != 0 or stripe_unit != 0 or stripe_count != 0:
@@ -317,9 +324,9 @@ class RBD(object):
         """
         if order is None:
             order = 0
-        if not isinstance(p_snapname, str) or not isinstance(p_name, str):
+        if not isinstance(p_snapname, str_type) or not isinstance(p_name, str_type):
             raise TypeError('parent name and snapname must be strings')
-        if not isinstance(c_name, str):
+        if not isinstance(c_name, str_type):
             raise TypeError('child name must be a string')
 
         ret = self.librbd.rbd_clone(p_ioctx.io, cstr(p_name),
@@ -366,7 +373,7 @@ class RBD(object):
         :raises: :class:`ImageNotFound`, :class:`ImageBusy`,
                  :class:`ImageHasSnapshots`
         """
-        if not isinstance(name, str):
+        if not isinstance(name, str_type):
             raise TypeError('name must be a string')
         ret = self.librbd.rbd_remove(ioctx.io, cstr(name))
         if ret != 0:
@@ -384,7 +391,7 @@ class RBD(object):
         :type dest: str
         :raises: :class:`ImageNotFound`, :class:`ImageExists`
         """
-        if not isinstance(src, str) or not isinstance(dest, str):
+        if not isinstance(src, str_type) or not isinstance(dest, str_type):
             raise TypeError('src and dest must be strings')
         ret = self.librbd.rbd_rename(ioctx.io, cstr(src), cstr(dest))
         if ret != 0:
@@ -427,9 +434,9 @@ class Image(object):
         self.librbd = load_librbd()
         self.image = c_void_p()
         self.name = name
-        if not isinstance(name, str):
+        if not isinstance(name, str_type):
             raise TypeError('name must be a string')
-        if snapshot is not None and not isinstance(snapshot, str):
+        if snapshot is not None and not isinstance(snapshot, str_type):
             raise TypeError('snapshot must be a string or None')
         if read_only:
             if not hasattr(self.librbd, 'rbd_open_read_only'):
@@ -657,7 +664,7 @@ class Image(object):
         :type dest_name: str
         :raises: :class:`ImageExists`
         """
-        if not isinstance(dest_name, str):
+        if not isinstance(dest_name, str_type):
             raise TypeError('dest_name must be a string')
         ret = self.librbd.rbd_copy(self.image, dest_ioctx.io, cstr(dest_name))
         if ret < 0:
@@ -679,7 +686,7 @@ class Image(object):
         :type name: str
         :raises: :class:`ImageExists`
         """
-        if not isinstance(name, str):
+        if not isinstance(name, str_type):
             raise TypeError('name must be a string')
         ret = self.librbd.rbd_snap_create(self.image, cstr(name))
         if ret != 0:
@@ -693,7 +700,7 @@ class Image(object):
         :type name: str
         :raises: :class:`IOError`, :class:`ImageBusy`
         """
-        if not isinstance(name, str):
+        if not isinstance(name, str_type):
             raise TypeError('name must be a string')
         ret = self.librbd.rbd_snap_remove(self.image, cstr(name))
         if ret != 0:
@@ -709,7 +716,7 @@ class Image(object):
         :type name: str
         :raises: :class:`IOError`
         """
-        if not isinstance(name, str):
+        if not isinstance(name, str_type):
             raise TypeError('name must be a string')
         ret = self.librbd.rbd_snap_rollback(self.image, cstr(name))
         if ret != 0:
@@ -724,7 +731,7 @@ class Image(object):
         :type name: str
         :raises: :class:`IOError`, :class:`ImageNotFound`
         """
-        if not isinstance(name, str):
+        if not isinstance(name, str_type):
             raise TypeError('name must be a string')
         ret = self.librbd.rbd_snap_protect(self.image, cstr(name))
         if ret != 0:
@@ -739,7 +746,7 @@ class Image(object):
         :type name: str
         :raises: :class:`IOError`, :class:`ImageNotFound`
         """
-        if not isinstance(name, str):
+        if not isinstance(name, str_type):
             raise TypeError('name must be a string')
         ret = self.librbd.rbd_snap_unprotect(self.image, cstr(name))
         if ret != 0:
@@ -754,7 +761,7 @@ class Image(object):
         :returns: bool - whether the snapshot is protected
         :raises: :class:`IOError`, :class:`ImageNotFound`
         """
-        if not isinstance(name, str):
+        if not isinstance(name, str_type):
             raise TypeError('name must be a string')
         is_protected = c_int()
         ret = self.librbd.rbd_snap_is_protected(self.image, cstr(name),
@@ -772,7 +779,7 @@ class Image(object):
         :param name: the snapshot to read from, or None to unset the snapshot
         :type name: str or None
         """
-        if name is not None and not isinstance(name, str):
+        if name is not None and not isinstance(name, str_type):
             raise TypeError('name must be a string')
         ret = self.librbd.rbd_snap_set(self.image, cstr(name))
         if ret != 0:
@@ -846,7 +853,7 @@ class Image(object):
         :raises: :class:`InvalidArgument`, :class:`IOError`,
                  :class:`ImageNotFound`
         """
-        if from_snapshot is not None and not isinstance(from_snapshot, str):
+        if from_snapshot is not None and not isinstance(from_snapshot, str_type):
             raise TypeError('client must be a string')
 
         RBD_DIFF_CB = CFUNCTYPE(c_int, c_uint64, c_size_t, c_int, c_void_p)
@@ -1041,7 +1048,7 @@ written." % (self.name, ret, length))
         :raises: :class:`ImageBusy` if a different client or cookie locked it
                  :class:`ImageExists` if the same client and cookie locked it
         """
-        if not isinstance(cookie, str):
+        if not isinstance(cookie, str_type):
             raise TypeError('cookie must be a string')
         ret = self.librbd.rbd_lock_exclusive(self.image, cstr(cookie))
         if ret < 0:
@@ -1055,9 +1062,9 @@ written." % (self.name, ret, length))
         :raises: :class:`ImageBusy` if a different client or cookie locked it
                  :class:`ImageExists` if the same client and cookie locked it
         """
-        if not isinstance(cookie, str):
+        if not isinstance(cookie, str_type):
             raise TypeError('cookie must be a string')
-        if not isinstance(tag, str):
+        if not isinstance(tag, str_type):
             raise TypeError('tag must be a string')
         ret = self.librbd.rbd_lock_shared(self.image, cstr(cookie),
                                           cstr(tag))
@@ -1068,7 +1075,7 @@ written." % (self.name, ret, length))
         """
         Release a lock on the image that was locked by this rados client.
         """
-        if not isinstance(cookie, str):
+        if not isinstance(cookie, str_type):
             raise TypeError('cookie must be a string')
         ret = self.librbd.rbd_unlock(self.image, cstr(cookie))
         if ret < 0:
@@ -1078,9 +1085,9 @@ written." % (self.name, ret, length))
         """
         Release a lock held by another rados client.
         """
-        if not isinstance(client, str):
+        if not isinstance(client, str_type):
             raise TypeError('client must be a string')
-        if not isinstance(cookie, str):
+        if not isinstance(cookie, str_type):
             raise TypeError('cookie must be a string')
         ret = self.librbd.rbd_break_lock(self.image, cstr(client),
                                          cstr(cookie))
