@@ -20,7 +20,7 @@
 #include <string>
 #include <vector>
 #include "include/memory.h"
-#include "os/KeyValueDB.h"
+#include "kv/KeyValueDB.h"
 
 /**
  * Encapsulates the FileStore key value store
