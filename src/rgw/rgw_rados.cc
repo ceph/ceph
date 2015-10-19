@@ -3179,10 +3179,10 @@ int RGWRados::init_complete()
     RGWZone& z = ziter->second;
     if (id != zone.get_id()) {
       if (!z.endpoints.empty()) {
-        ldout(cct, 20) << "generating connection object for zone " << zone.get_name() << " id " << zone.get_id() << dendl;
+        ldout(cct, 20) << "generating connection object for zone " << z.name << " id " << z.id << dendl;
         zone_conn_map[id] = new RGWRESTConn(cct, this, z.endpoints);
       } else {
-        ldout(cct, 0) << "WARNING: can't generate connection for zone " << zone.get_name() << " id " << zone.get_id() << ": no endpoints defined" << dendl;
+        ldout(cct, 0) << "WARNING: can't generate connection for zone " << z.id << " id " << z.name << ": no endpoints defined" << dendl;
       }
     } else {
       zone_public_config = z;
