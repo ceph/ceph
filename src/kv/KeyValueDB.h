@@ -10,6 +10,7 @@
 #include <string>
 #include "include/memory.h"
 #include <boost/scoped_ptr.hpp>
+#include "include/encoding.h"
 
 using std::string;
 /**
@@ -31,6 +32,23 @@ public:
 	set(prefix, it->first, it->second);
     }
 
+    /// Set Keys (via encoded bufferlist)
+    void set(
+      const std::string &prefix,      ///< [in] prefix
+      bufferlist& to_set_bl     ///< [in] encoded key/values to set
+      ) {
+      bufferlist::iterator p = to_set_bl.begin();
+      uint32_t num;
+      ::decode(num, p);
+      while (num--) {
+	string key;
+	bufferlist value;
+	::decode(key, p);
+	::decode(value, p);
+	set(prefix, key, value);
+      }
+    }
+
     /// Set Key
     virtual void set(
       const std::string &prefix,   ///< [in] Prefix for the key
@@ -38,6 +56,21 @@ public:
       const bufferlist &bl    ///< [in] Value to set
       ) = 0;
 
+
+    /// Removes Keys (via encoded bufferlist)
+    void rmkeys(
+      const std::string &prefix,   ///< [in] Prefix to search for
+      bufferlist &keys_bl ///< [in] Keys to remove
+    ) {
+      bufferlist::iterator p = keys_bl.begin();
+      uint32_t num;
+      ::decode(num, p);
+      while (num--) {
+	string key;
+	::decode(key, p);
+	rmkey(prefix, key);
+      }
+    }
 
     /// Removes Keys
     void rmkeys(
