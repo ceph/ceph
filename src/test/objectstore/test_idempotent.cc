@@ -21,7 +21,6 @@
 #include "common/debug.h"
 #include "test/common/ObjectContents.h"
 #include "FileStoreTracker.h"
-#include "os/LevelDBStore.h"
 #include "os/KeyValueDB.h"
 #include "os/ObjectStore.h"
 
@@ -63,7 +62,7 @@ int main(int argc, char **argv) {
   bool start_new = false;
   if (string(args[0]) == string("new")) start_new = true;
 
-  LevelDBStore *_db = new LevelDBStore(g_ceph_context, db_path);
+  KeyValueDB *_db = KeyValueDB::create(g_ceph_context, "leveldb", db_path);
   assert(!_db->create_and_open(std::cerr));
   boost::scoped_ptr<KeyValueDB> db(_db);
   boost::scoped_ptr<ObjectStore> store(new FileStore(store_path, store_dev));
