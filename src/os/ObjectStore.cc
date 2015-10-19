@@ -25,6 +25,41 @@
 #include "newstore/NewStore.h"
 #endif
 
+void decode_str_str_map_to_bl(bufferlist::iterator& p,
+			      bufferlist *out)
+{
+  bufferlist::iterator start = p;
+  __u32 n;
+  ::decode(n, p);
+  unsigned len = 4;
+  while (n--) {
+    __u32 l;
+    ::decode(l, p);
+    p.advance(l);
+    len += 4 + l;
+    ::decode(l, p);
+    p.advance(l);
+    len += 4 + l;
+  }
+  start.copy(len, *out);
+}
+
+void decode_str_set_to_bl(bufferlist::iterator& p,
+			  bufferlist *out)
+{
+  bufferlist::iterator start = p;
+  __u32 n;
+  ::decode(n, p);
+  unsigned len = 4;
+  while (n--) {
+    __u32 l;
+    ::decode(l, p);
+    p.advance(l);
+    len += 4 + l;
+  }
+  start.copy(len, *out);
+}
+
 ObjectStore *ObjectStore::create(CephContext *cct,
 				 const string& type,
 				 const string& data,
