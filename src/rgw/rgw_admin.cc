@@ -1908,28 +1908,6 @@ int main(int argc, char **argv)
 	  cerr << "Error setting current period " << period_id << ":" << cpp_strerror(-ret) << std::endl;
 	  return ret;
 	}
-	RGWZoneGroupMap zonegroup_map;
-	ret = zonegroup_map.read(g_ceph_context, store);
-	if (ret < 0 && ret != -ENOENT) {
-	  cerr << "ERROR: couldn't read zonegroup_map: " << cpp_strerror(-ret) << std::endl;
-	  return ret;
-	}
-	ret = zonegroup_map.update(realm);
-	if (ret < 0) {
-	  cerr << "ERROR: couldn't update realm " << realm_name << ": " << cpp_strerror(-ret) << std::endl;
-	  return ret;
-	}
-	ret = zonegroup_map.update(g_ceph_context, store, realm.get_current_period(), realm.get_id());
-	if (ret < 0) {
-	  cerr << "ERROR: couldn't update " << realm_name << " current period: " << cpp_strerror(-ret)
-	       << std::endl;
-	  return ret;
-	}
-	ret = zonegroup_map.store(g_ceph_context, store);
-	if (ret < 0) {
-	  cerr << "ERROR: couldn't store zonegroup map info: " << cpp_strerror(-ret) << std::endl;
-	  return 1;
-	}
       }
       break;
     case OPT_PERIOD_LIST:
@@ -1982,32 +1960,6 @@ int main(int argc, char **argv)
 	if (ret < 0) {
 	  cerr << "ERROR: couldn't create realm " << realm_name << ": " << cpp_strerror(-ret) << std::endl;
 	  return ret;
-	}
-
-	RGWZoneGroupMap zonegroup_map;
-	ret = zonegroup_map.read(g_ceph_context, store);
-	if (ret < 0 && ret != -ENOENT) {
-	  cerr << "ERROR: couldn't read zonegroup_map: " << cpp_strerror(-ret) << std::endl;
-	  return ret;
-	}
-
-	ret = zonegroup_map.update(realm);
-	if (ret < 0) {
-	  cerr << "ERROR: couldn't update realm " << realm_name << ": " << cpp_strerror(-ret) << std::endl;
-	  return ret;
-	}
-
-	ret = zonegroup_map.update(g_ceph_context, store, realm.get_current_period(), realm.get_id());
-	if (ret < 0) {
-	  cerr << "ERROR: couldn't update " << realm_name << " current period: " << cpp_strerror(-ret)
-	       << std::endl;
-	  return ret;
-	}
-
-	ret = zonegroup_map.store(g_ceph_context, store);
-	if (ret < 0) {
-	  cerr << "ERROR: couldn't store zonegroup map info: " << cpp_strerror(-ret) << std::endl;
-	  return 1;
 	}
 
 	encode_json("realm", realm, formatter);
@@ -2162,32 +2114,6 @@ int main(int argc, char **argv)
 	  return 1;
 	}
 
-		RGWZoneGroupMap zonegroup_map;
-	ret = zonegroup_map.read(g_ceph_context, store);
-	if (ret < 0 && ret != -ENOENT) {
-	  cerr << "ERROR: couldn't read zonegroup_map: " << cpp_strerror(-ret) << std::endl;
-	  return ret;
-	}
-
-	ret = zonegroup_map.update(realm);
-	if (ret < 0) {
-	  cerr << "ERROR: couldn't update realm " << realm_name << ": " << cpp_strerror(-ret) << std::endl;
-	  return ret;
-	}
-
-	ret = zonegroup_map.update(g_ceph_context, store, realm.get_current_period(), realm.get_id());
-	if (ret < 0) {
-	  cerr << "ERROR: couldn't update " << realm_name << " current period: " << cpp_strerror(-ret)
-	       << std::endl;
-	  return ret;
-	}
-
-	ret = zonegroup_map.store(g_ceph_context, store);
-	if (ret < 0) {
-	  cerr << "ERROR: couldn't store zonegroup map info: " << cpp_strerror(-ret) << std::endl;
-	  return 1;
-	}
-
 	encode_json("realm", realm, formatter);
 	formatter->flush(cout);
       }
@@ -2237,38 +2163,6 @@ int main(int argc, char **argv)
 	       << cpp_strerror(-ret) << std::endl;
 	  return ret;
 	}
-
-	if (realm_id.empty() && realm_name.empty()) {
-	  if (zonegroup.realm_id.empty()) {
-	    cerr << "no realm info provided" << std::endl;
-	    return -EINVAL;
-	  }
-	  realm_id = zonegroup.realm_id;
-	}
-
-	RGWRealm realm(realm_id, realm_name);
-	ret = realm.init(g_ceph_context, store);
-	if (ret < 0) {
-	  cerr << "ERROR: couldn't init realm:" << cpp_strerror(-ret) << std::endl;
-	  return ret;
-	}
-
-	RGWZoneGroupMap zonegroup_map;
-	ret = zonegroup_map.read(g_ceph_context, store);
-	if (ret < 0 && ret != -ENOENT) {
-	  cerr << "ERROR: couldn't read zonegroup_map: " << cpp_strerror(-ret) << std::endl;
-	  return ret;
-	}
-	ret = zonegroup_map.update(g_ceph_context, store, realm, zonegroup);
-	if (ret < 0) {
-	  cerr << "failed to update zonegroup_map: " << cpp_strerror(-ret) << std::endl;
-	  return -ret;
-	}
-	ret = zonegroup_map.store(g_ceph_context, store);
-	if (ret < 0) {
-	  cerr << "failed to store zonegroup_map: " << cpp_strerror(-ret) << std::endl;
-	  return -ret;
-	}
       }
       break;
     case OPT_ZONEGROUP_CREATE:
@@ -2289,24 +2183,6 @@ int main(int argc, char **argv)
 	ret = zonegroup.create();
 	if (ret < 0) {
 	  cerr << "failed to create zonegroup" << zonegroup_name << ": " << cpp_strerror(-ret) << std::endl;
-	  return -ret;
-	}
-
-	RGWZoneGroupMap zonegroup_map;
-	ret = zonegroup_map.read(g_ceph_context, store);
-	if (ret < 0 && ret != -ENOENT) {
-	  cerr << "ERROR: couldn't read zonegroup_map: " << cpp_strerror(-ret) << std::endl;
-	  return ret;
-	}
-
-	ret = zonegroup_map.update(g_ceph_context, store, realm, zonegroup);
-	if (ret < 0) {
-	  cerr << "failed to update zonegroup_map: " << cpp_strerror(-ret) << std::endl;
-	  return -ret;
-	}
-	ret = zonegroup_map.store(g_ceph_context, store);
-	if (ret < 0) {
-	  cerr << "failed to store zonegroup_map: " << cpp_strerror(-ret) << std::endl;
 	  return -ret;
 	}
 
@@ -2443,40 +2319,6 @@ int main(int argc, char **argv)
 	    return -ret;
 	  }
 	}
-
-	RGWZoneGroupMap zonegroup_map;
-	ret = zonegroup_map.read(g_ceph_context, store);
-	if (ret < 0 && ret != -ENOENT) {
-	  cerr << "ERROR: couldn't read zonegroup_map: " << cpp_strerror(-ret) << std::endl;
-	  return ret;
-	}
-
-	string master_zonegroup;
-	if (ret != -ENOENT) {
-	  ret  = zonegroup_map.get_master_zonegroup(realm.get_current_period(), master_zonegroup);
-	  if (ret < 0 && ret != -ENOENT) {
-	    cerr << "ERROR: couldn't read zonegroup_map: " << cpp_strerror(-ret) << std::endl;
-	    return ret;
-	  }
-	}
-
-	if (is_master) {
-	  /* zonegroup already set as master zonegroup nothing to do*/
-	  if (master_zonegroup == zonegroup.get_id()) {
-	    return 0;
-	  }
-	}
-
-	ret = zonegroup_map.update(g_ceph_context, store, realm, zonegroup);
-	if (ret < 0) {
-	  cerr << "failed to update master zonegroup: " << cpp_strerror(-ret) << std::endl;
-	  return -ret;
-	}
-	ret = zonegroup_map.store(g_ceph_context, store);
-	if (ret < 0) {
-	  cerr << "failed to store zonegroup_map: " << cpp_strerror(-ret) << std::endl;
-	  return -ret;
-	}
       }
       break;
     case OPT_ZONEGROUP_SET:
@@ -2510,24 +2352,6 @@ int main(int argc, char **argv)
 	  }
 	}
 
-	RGWZoneGroupMap zonegroup_map;
-	ret = zonegroup_map.read(g_ceph_context, store);
-	if (ret < 0 && ret != -ENOENT) {
-	  cerr << "ERROR: couldn't read zonegroup_map: " << cpp_strerror(-ret) << std::endl;
-	  return ret;
-	}
-
-	ret = zonegroup_map.update(g_ceph_context, store, realm, zonegroup);
-	if (ret < 0) {
-	  cerr << "failed to update zonegroup_map: " << cpp_strerror(-ret) << std::endl;
-	  return -ret;
-	}
-	ret = zonegroup_map.store(g_ceph_context, store);
-	if (ret < 0) {
-	  cerr << "failed to store zonegroup_map: " << cpp_strerror(-ret) << std::endl;
-	  return -ret;
-	}
-
 	encode_json("zonegroup", zonegroup, formatter);
 	formatter->flush(cout);
       }
@@ -2558,11 +2382,13 @@ int main(int argc, char **argv)
     case OPT_ZONEGROUPMAP_GET:
       {
 	RGWZoneGroupMap zonegroupmap;
+
 	int ret = zonegroupmap.read(g_ceph_context, store);
 	if (ret < 0) {
-	  cerr << "failed to read zonegroup map: " << cpp_strerror(-ret) << std::endl;
-	  return -ret;
+	  cerr << "failed to read zonegroupmap info: " << cpp_strerror(ret);
+	  return ret;
 	}
+		
 	encode_json("zonegroup-map", zonegroupmap, formatter);
 	formatter->flush(cout);
       }
@@ -2570,73 +2396,13 @@ int main(int argc, char **argv)
     case OPT_ZONEGROUPMAP_SET:
       {
 	RGWZoneGroupMap zonegroupmap;
-	bufferlist bl;
-	int ret = read_input(infile, bl);
+	int ret = read_decode_json(infile, zonegroupmap);
 	if (ret < 0) {
-	  cerr << "ERROR: failed to read input: " << cpp_strerror(-ret) << std::endl;
+	  cerr << "ERROR: failed to read map json: " << cpp_strerror(-ret) << std::endl;
 	  return ret;
 	}
-	JSONParser p;
-	ret = p.parse(bl.c_str(), bl.length());
-	if (ret < 0) {
-	  cout << "failed to parse JSON" << std::endl;
-	  return ret;
-	}
-	try {
-	  decode_json_obj(zonegroupmap, &p);
-	} catch (JSONDecoder::err& e) {
-	  cout << "failed to decode: " << e.message << std::endl;
-	  RGWRegionMap region_map;
-	  try {
-	    decode_json_obj(region_map, &p);
-	    RGWRealm realm(realm_id, realm_name);
-	    ret = realm.init(g_ceph_context, store);
-	    if (ret < 0) {
-	      cerr << "failed to init realm: " << cpp_strerror(-ret) << std::endl;
-	      return -ret;
-	    }
 
-	    ret = zonegroupmap.update(realm);
-	    if (ret < 0) {
-	      cerr << "failed to update zonegroup_map: " << cpp_strerror(-ret) << std::endl;
-	    }
-
-	    ret = zonegroupmap.update(g_ceph_context, store, realm.get_current_period(), realm.get_id());
-	    if (ret < 0) {
-	      cerr << "ERROR: couldn't update current period: " << cpp_strerror(-ret)
-		   << std::endl;
-	      return ret;
-	    }
-
-	    for(map<string, RGWZoneGroup>::iterator iter = region_map.regions.begin();
-		iter != region_map.regions.end(); iter++) {
-	      iter->second.set_id(iter->second.get_name());
-	      ret = zonegroupmap.update(g_ceph_context, store, realm, iter->second);
-	      if (ret < 0) {
-		cerr << "failed to update zonegroup_map: " << cpp_strerror(-ret) << std::endl;
-		return -ret;
-	      }
-	    }
-	    ret = zonegroupmap.update_master_zonegroup(realm.get_current_period(),
-						       region_map.master_region);
-	    if (ret < 0) {
-	      cerr << "ERROR: couldn't update master_zonegroup " << region_map.master_region << ": "
-		   << cpp_strerror(-ret) << std::endl;
-	      return ret;
-	    }
-	    zonegroupmap.bucket_quota = region_map.bucket_quota;
-	    zonegroupmap.user_quota = region_map.user_quota;
-	  } catch (JSONDecoder::err& e) {
-	    cout << "failed to decode: " << e.message << std::endl;
-	    return -EINVAL;
-	  }
-	}
-
-	ret = zonegroupmap.store(g_ceph_context, store);
-	if (ret < 0) {
-	  cerr << "ERROR: couldn't store zonegroup map info: " << cpp_strerror(-ret) << std::endl;
-	  return 1;
-	}
+	#warning need to implement for backward compatabilty
 
 	encode_json("zonegroup-map", zonegroupmap, formatter);
 	formatter->flush(cout);
@@ -2651,8 +2417,10 @@ int main(int argc, char **argv)
 	  return -ret;
 	}
 
-        if (reset_regions) {
-          zonegroupmap.clear_zonegroups();
+        #warning need to implement for backward compatabilty
+
+	if (reset_regions) {
+          zonegroupmap.zonegroups.clear();
         }
 
 	list<string> realms;
@@ -2670,14 +2438,6 @@ int main(int argc, char **argv)
 	    cerr << "failed to init realm: " << cpp_strerror(-ret) << std::endl;
 	    return -ret;
 	  }
-	  zonegroupmap.update(realm);
-	  zonegroupmap.update(g_ceph_context, store, realm.get_current_period(), realm.get_id());
-	}
-
-	ret = zonegroupmap.store(g_ceph_context, store);
-	if (ret < 0) {
-	  cerr << "ERROR: couldn't store zonegroup map info: " << cpp_strerror(-ret) << std::endl;
-	  return 1;
 	}
 
 	encode_json("zonegroup-map", zonegroupmap, formatter);
@@ -2735,23 +2495,6 @@ int main(int argc, char **argv)
 	    cerr << "failed to add zone " << zone_name << " to zonegroup " << zonegroup.get_name()
 		 << ": " << cpp_strerror(-ret) << std::endl;
 	    return ret;
-	  }
-
-	  RGWZoneGroupMap zonegroup_map;
-	  ret = zonegroup_map.read(g_ceph_context, store);
-	  if (ret < 0 && ret != -ENOENT) {
-	    cerr << "ERROR: couldn't read zonegroup_map: " << cpp_strerror(-ret) << std::endl;
-	    return ret;
-	  }
-	  ret = zonegroup_map.update(g_ceph_context, store, realm, zonegroup);
-	  if (ret < 0) {
-	    cerr << "failed to update zonegroup_map: " << cpp_strerror(-ret) << std::endl;
-	    return -ret;
-	  }
-	  ret = zonegroup_map.store(g_ceph_context, store);
-	  if (ret < 0) {
-	    cerr << "failed to store zonegroup_map: " << cpp_strerror(-ret) << std::endl;
-	    return -ret;
 	  }
 	}
 
@@ -2969,24 +2712,6 @@ int main(int argc, char **argv)
 	ret = zonegroup.update();
 	if (ret < 0) {
 	  cerr << "failed to update zonegroup: " << cpp_strerror(-ret) << std::endl;
-	  return -ret;
-	}
-	
-	RGWZoneGroupMap zonegroup_map;
-	ret = zonegroup_map.read(g_ceph_context, store);
-	if (ret < 0 && ret != -ENOENT) {
-	  cerr << "ERROR: couldn't read zonegroup_map: " << cpp_strerror(-ret) << std::endl;
-	  return ret;
-	}
-
-	ret = zonegroup_map.update(g_ceph_context, store, realm, zonegroup);
-	if (ret < 0) {
-	  cerr << "failed to update master zonegroup: " << cpp_strerror(-ret) << std::endl;
-	  return -ret;
-	}
-	ret = zonegroup_map.store(g_ceph_context, store);
-	if (ret < 0) {
-	  cerr << "failed to store zonegroup_map: " << cpp_strerror(-ret) << std::endl;
 	  return -ret;
 	}
       }

@@ -869,51 +869,27 @@ void RGWPeriodConfig::decode_json(JSONObj *obj)
   JSONDecoder::decode_json("user_quota", user_quota, obj);
 }
 
-static void decode_realms(map<string, RGWRealm>& realms, JSONObj *o)
-{
-  RGWRealm r;
-  r.decode_json(o);
-  realms[r.get_id()] = r;
-}
-
-static void decode_periods(map<string, RGWPeriodMap>& periods, JSONObj *o)
-{
-  RGWPeriodMap p;
-  p.decode_json(o);
-  periods[p.id] = p;
-}
-
 void RGWZoneGroupMap::dump(Formatter *f) const
 {
-  encode_json_map("realms", realms, f);
-  encode_json_map("periods", periods, f);
+  encode_json("zonegroups", zonegroups, f);
+  encode_json("master_zonegroup", master_zonegroup, f);
   encode_json("bucket_quota", bucket_quota, f);
   encode_json("user_quota", user_quota, f);
 }
 
 void RGWZoneGroupMap::decode_json(JSONObj *obj)
 {
-  /* check for old format */
-  if (!JSONDecoder::decode_json("realms", realms, decode_realms, obj) ) {
-    throw JSONDecoder::err("Old regionmap format");
+  JSONDecoder::decode_json("zonegroups", zonegroups, obj);
+  /* backward compatability with region */
+  if (zonegroups.empty()) {
+    JSONDecoder::decode_json("regions", zonegroups, obj);
   }
-  JSONDecoder::decode_json("periods", periods, decode_periods, obj);
-  JSONDecoder::decode_json("bucket_quota", bucket_quota, obj);
-  JSONDecoder::decode_json("user_quota", user_quota, obj);
-}
+  JSONDecoder::decode_json("master_zonegroup", master_zonegroup, obj);
+  /* backward compatability with region */
+  if (master_zonegroup.empty()) {
+    JSONDecoder::decode_json("master_region", master_zonegroup, obj);
+  }
 
-void RGWRegionMap::dump(Formatter *f) const
-{
-  encode_json("regions", regions, f);
-  encode_json("master_region", master_region, f);
-  encode_json("bucket_quota", bucket_quota, f);
-  encode_json("user_quota", user_quota, f);
-}
-
-void RGWRegionMap::decode_json(JSONObj *obj)
-{
-  JSONDecoder::decode_json("regions", regions, obj);
-  JSONDecoder::decode_json("master_region", master_region, obj);
   JSONDecoder::decode_json("bucket_quota", bucket_quota, obj);
   JSONDecoder::decode_json("user_quota", user_quota, obj);
 }
