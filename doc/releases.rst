@@ -116,6 +116,7 @@ Timeline
 .. _9.0.1: ../release-notes#v9-0-1
 .. _9.0.0: ../release-notes#v9-0-0
 
+.. _0.94.4: ../release-notes#v0-94-4-hammer
 .. _0.94.3: ../release-notes#v0-94-3-hammer
 .. _0.94.2: ../release-notes#v0-94-2-hammer
 .. _0.94.1: ../release-notes#v0-94-1-hammer
