@@ -1106,12 +1106,20 @@ int RGWRemoteMetaLog::fetch(int num_shards, vector<string>& clone_markers)
 
 int RGWRemoteMetaLog::read_sync_status(rgw_meta_sync_status *sync_status)
 {
+  if (store->is_meta_master()) {
+    return 0;
+  }
+
   RGWObjectCtx obj_ctx(store, NULL);
   return run(new RGWReadSyncStatusCoroutine(async_rados, store, obj_ctx, sync_status));
 }
 
 int RGWRemoteMetaLog::init_sync_status(int num_shards)
 {
+  if (store->is_meta_master()) {
+    return 0;
+  }
+
   RGWObjectCtx obj_ctx(store, NULL);
   return run(new RGWInitSyncStatusCoroutine(async_rados, store, &http_manager, obj_ctx, num_shards));
 }
