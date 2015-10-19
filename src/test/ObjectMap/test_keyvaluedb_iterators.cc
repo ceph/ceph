@@ -18,7 +18,6 @@
 
 #include "test/ObjectMap/KeyValueDBMemory.h"
 #include "os/KeyValueDB.h"
-#include "os/LevelDBStore.h"
 #include <sys/types.h>
 #include "global/global_init.h"
 #include "common/ceph_argparse.h"
@@ -37,7 +36,7 @@ public:
   virtual void SetUp() {
     assert(!store_path.empty());
 
-    LevelDBStore *db_ptr = new LevelDBStore(g_ceph_context, store_path);
+    KeyValueDB *db_ptr = KeyValueDB::create(g_ceph_context, "leveldb", store_path);
     assert(!db_ptr->create_and_open(std::cerr));
     db.reset(db_ptr);
     mock.reset(new KeyValueDBMemory());
