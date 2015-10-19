@@ -1228,274 +1228,52 @@ int RGWPeriodMap::update(const RGWZoneGroup& zonegroup)
   return 0;
 }
 
-void RGWRegionMap::encode(bufferlist& bl) const {
-  ENCODE_START(3, 1, bl);
-  ::encode(regions, bl);
-  ::encode(master_region, bl);
-  ::encode(bucket_quota, bl);
-  ::encode(user_quota, bl);
-  ENCODE_FINISH(bl);
-}
 
-void RGWRegionMap::decode(bufferlist::iterator& bl) {
-  DECODE_START(3, bl);
-  ::decode(regions, bl);
-  ::decode(master_region, bl);
+int RGWZoneGroupMap::read(CephContext *cct, RGWRados *store) {
 
-  if (struct_v >= 2)
-    ::decode(bucket_quota, bl);
-  if (struct_v >= 3)
-    ::decode(user_quota, bl);
-  DECODE_FINISH(bl);
-
-  regions_by_api.clear();
-  for (map<string, RGWZoneGroup>::iterator iter = regions.begin();
-       iter != regions.end(); ++iter) {
-    RGWZoneGroup& region = iter->second;
-    regions_by_api[region.api_name] = region;
-    if (region.is_master) {
-      master_region = region.get_name();
-    }
+  RGWPeriod period;
+  int ret = period.init(cct, store);
+  if (ret < 0) {
+    cerr << "failed to read current period info: " << cpp_strerror(ret);
+    return ret;
   }
-}
+	
+  bucket_quota = period.get_config().bucket_quota;
+  user_quota = period.get_config().user_quota;
+  zonegroups = period.get_map().zonegroups;
+  zonegroups_by_api = period.get_map().zonegroups_by_api;
+  master_zonegroup = period.get_map().master_zonegroup;
 
+  return 0;
+}
+  
 void RGWZoneGroupMap::encode(bufferlist& bl) const {
-  ENCODE_START(1, 1, bl);
-  ::encode(realms, bl);
-  ::encode(periods, bl);
+  ENCODE_START( 3, 1, bl);
+  ::encode(zonegroups, bl);
+  ::encode(master_zonegroup, bl);
   ::encode(bucket_quota, bl);
   ::encode(user_quota, bl);
   ENCODE_FINISH(bl);
 }
 
 void RGWZoneGroupMap::decode(bufferlist::iterator& bl) {
-  DECODE_START(1, bl);
-  ::decode(realms, bl);
-  ::decode(periods, bl);
-  ::decode(bucket_quota, bl);
-  ::decode(user_quota, bl);
+  DECODE_START(3, bl);
+  ::decode(zonegroups, bl);
+  ::decode(master_zonegroup, bl);
+  if (struct_v >= 2)
+    ::decode(bucket_quota, bl);
+  if (struct_v >= 3)
+    ::decode(user_quota, bl);
   DECODE_FINISH(bl);
-}
 
-void RGWZoneGroupMap::get_params(CephContext *cct, string& pool_name, string& oid)
-{
-  pool_name = cct->_conf->rgw_zone_root_pool;
-  if (pool_name.empty()) {
-    pool_name = RGW_DEFAULT_ZONE_ROOT_POOL;
-  }
-  oid = region_map_oid;
-}
-
-int RGWZoneGroupMap::read(CephContext *cct, RGWRados *store)
-{
-  Mutex::Locker l(lock);
-
-  string pool_name, oid;
-
-  get_params(cct, pool_name, oid);
-
-  rgw_bucket pool(pool_name.c_str());
-
-  bufferlist bl;
-  RGWObjectCtx obj_ctx(store);
-  int ret = rgw_get_system_obj(store, obj_ctx, pool, oid, bl, NULL, NULL);
-  if (ret < 0)
-    return ret;
-
-
-  try {
-    bufferlist::iterator iter = bl.begin();
-    ::decode(*this, iter);
-  } catch (buffer::error& err) {
-    ldout(cct, 0) << "ERROR: failed to decode zone group map info from " << pool << ":" << oid << dendl;
-    return -EIO;
-  }
-
-  return 0;
-}
-
-int RGWZoneGroupMap::store(CephContext *cct, RGWRados *store)
-{
-  string pool_name, oid;
-
-  get_params(cct, pool_name, oid);
-
-  rgw_bucket pool(pool_name.c_str());
-
-  bufferlist bl;
-  ::encode(*this, bl);
-  int ret = rgw_put_system_obj(store, pool, oid, bl.c_str(), bl.length(), false, NULL, 0, NULL);
-
-  return ret;
-}
-
-int RGWZoneGroupMap::update(CephContext *cct, RGWRados *store,
-			    const RGWRealm& realm, const RGWZoneGroup& zonegroup)
-{
-  Mutex::Locker l(lock);
-
-  map<string, RGWPeriodMap>::iterator iter = periods.find(realm.get_current_period());
-  if (iter == periods.end()) {
-    derr  << "ERROR: cannot find period " << realm.get_current_period() << dendl;
-    return -EINVAL;
-  }
-
-  int ret =  iter->second.update(zonegroup);
-  if (ret < 0) {
-    derr  << "ERROR: failed update period " << iter->first << ":" << cpp_strerror(-ret) << dendl;
-    return ret;
-  }
-
-  /* update rest_master_conn if not already created*/
-  if (zonegroup.is_master) {
-    if (!store->rest_master_conn) {
-      store->rest_master_conn = new RGWRESTConn(cct, store, zonegroup.endpoints);
-      derr << "creating rest_master_conn  " << dendl;
+  zonegroups_by_api.clear();
+  for (map<string, RGWZoneGroup>::iterator iter = zonegroups.begin();
+       iter != zonegroups.end(); ++iter) {
+    RGWZoneGroup& zonegroup = iter->second;
+    zonegroups_by_api[zonegroup.api_name] = zonegroup;
+    if (zonegroup.is_master) {
+      master_zonegroup = zonegroup.get_name();
     }
-  }
-
-  return 0;
-}
-
-int RGWZoneGroupMap::update(RGWRealm& realm)
-{
-  Mutex::Locker l(lock);
-  realms[realm.get_id()] = realm;
-  return 0;
-}
-
-int RGWZoneGroupMap::update(CephContext *cct, RGWRados *store,
-			    const string& period_id,
-			    const string& realm_id)
-{
-  Mutex::Locker l(lock);
-  RGWPeriod period(period_id);
-
-  int ret = period.init(cct, store, realm_id);
-  if (ret < 0) {
-    derr << "failed to init period: " << cpp_strerror(-ret) << dendl;
-    return ret;
-  }
-
-  periods[period_id] = period.get_map();
-
-  return 0;
-}
-
-
-int RGWZoneGroupMap::update_master_zonegroup(const string& period_id,
-					     const string& master_zonegroup)
-{
-  map<string, RGWPeriodMap>::iterator period_iter = periods.find(period_id);
-  if (period_iter == periods.end()) {
-    derr << "ERROR: period " << period_id << " not found" << dendl;
-    return -EINVAL;
-  }
-
-  map<string, RGWZoneGroup>::iterator iter = period_iter->second.zonegroups.find(master_zonegroup);
-  if (iter == period_iter->second.zonegroups.end()) {
-    derr << "ERROR: bad zonegroup map: inconsistent master zonegroup" << dendl;
-    return -EINVAL;
-  }
-
-  period_iter->second.master_zonegroup = master_zonegroup;
-
-  return 0;
-}
-
-int RGWZoneGroupMap::get_master_zonegroup(const string& current_period,
-					  string& master_zonegroup)
-{
-  map<string, RGWPeriodMap>::iterator period_iter = periods.find(current_period);
-  if (period_iter == periods.end()) {
-    derr << "ERROR: period " << current_period << " not found" << dendl;
-    return -EINVAL;
-  }
-
-  master_zonegroup = period_iter->second.master_zonegroup;
-
-  return 0;
-}
-
-int RGWZoneGroupMap::get_zonegroups(const string& current_period,
-				    map<string, RGWZoneGroup>& zonegroups)
-{
-  map<string, RGWPeriodMap>::iterator period_iter = periods.find(current_period);
-  if (period_iter == periods.end()) {
-    derr << "ERROR: period " << current_period << " not found" << dendl;
-    return -EINVAL;
-  }
-
-  zonegroups = period_iter->second.zonegroups;
-
-  return 0;
-}
-
-int RGWZoneGroupMap::get_zonegroup(CephContext *cct, RGWRados *store,
-				   RGWZoneGroup& zonegroup,
-				   const string& zonegroup_id,
-				   const string& current_period)
-{
-  map<string, RGWPeriodMap>::iterator period_iter;
-  if (!current_period.empty()) {
-    period_iter = periods.find(current_period);
-  } else {
-    RGWRealm realm;
-    int ret = realm.init(cct, store);
-    if (ret < 0) {
-      ldout(cct, 0) << "ERROR: period " << current_period << " not found" << dendl;
-      return ret;
-    }
-    period_iter = periods.find(realm.get_current_period());
-  }
-
-  if (period_iter == periods.end()) {
-    ldout(cct, 0) << "ERROR: period " << current_period << " not found" << dendl;
-    return -EINVAL;
-  }
-
-  map<string, RGWZoneGroup>::iterator iter = period_iter->second.zonegroups.find(zonegroup_id);
-  if (iter == period_iter->second.zonegroups.end()) {
-    ldout(cct, 0) << "ERROR: bad zonegroup map: inconsistent master zonegroup" << dendl;
-    return -EINVAL;
-  }
-
-  zonegroup = iter->second;
-
-  return 0;
-}
-
-bool RGWZoneGroupMap::is_single_zonegroup(CephContext *cct, RGWRados *store)
-{
-
-  if (periods.empty()) {
-    return true;
-  }
-
-  map<string, RGWPeriodMap>::iterator period_iter;
-  RGWRealm realm;
-  int ret = realm.init(cct, store);
-  if (ret < 0) {
-    ldout(cct, 0) << "ERROR: init realm" << dendl;
-    return false;
-  }
-
-  period_iter = periods.find(realm.get_current_period());
-
-  if (period_iter == periods.end()) {
-    ldout(cct, 0) << "ERROR: current period " << realm.get_current_period() << " not found" << dendl;
-    return false;
-  }
-
-  return (period_iter->second.zonegroups.size() == 1);
-}
-
-
-void RGWZoneGroupMap::clear_zonegroups()
-{
-  for (map<string, RGWPeriodMap>::iterator period_iter = periods.begin(); period_iter != periods.end();
-       period_iter++) {
-    period_iter->second.zonegroups.clear();
   }
 }
 
