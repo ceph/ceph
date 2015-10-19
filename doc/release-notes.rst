@@ -777,8 +777,8 @@ Notable Changes
 * rocksdb: update to latest (Xiaoxi Chen)
 * rpm: loosen ceph-test dependencies (Ken Dreyer)
 
-v0.94.4 Hammer (draft)
-======================
+v0.94.4 Hammer
+==============
 
 This Hammer point fixes several important bugs in Hammer, as well as
 fixing interoperability issues that are required before an upgrade to
@@ -973,6 +973,9 @@ Here is the same as above, in plain text:
 * tests: qa/workunits/cephtool/test.sh: don't assume crash_replay_interval=45 (#13406, Sage Weil)
 * tests: TEST_crush_rule_create_erasure consistently fails on i386 builder (#12419, Loic Dachary)
 * tools: ceph-disk zap should ensure block device (#11272, Loic Dachary)
+
+For more detailed information, see :download:`the complete changelog <changelog/v0.94.4.txt>`.
+
 
 v0.94.3 Hammer
 ==============
