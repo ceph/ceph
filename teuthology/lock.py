@@ -13,6 +13,7 @@ import teuthology
 from . import misc
 from . import provision
 from .config import config
+from .contextutil import safe_while
 from .lockstatus import get_status
 
 log = logging.getLogger(__name__)
@@ -513,7 +514,14 @@ def unlock_one(ctx, name, user, description=None):
     request = dict(name=name, locked=False, locked_by=user,
                    description=description)
     uri = os.path.join(config.lock_server, 'nodes', name, 'lock', '')
-    response = requests.put(uri, json.dumps(request))
+    with safe_while(
+            sleep=1, increment=0.5, action="unlock %s" % name) as proceed:
+        while proceed():
+            try:
+                response = requests.put(uri, json.dumps(request))
+            # Work around https://github.com/kennethreitz/requests/issues/2364
+            except requests.exception.ConnectionError as e:
+                log.warn("Saw %s while unlocking; retrying...", str(e))
     success = response.ok
     if success:
         log.info('unlocked %s', name)
