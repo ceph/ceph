@@ -164,11 +164,19 @@ void LevelDBStore::LevelDBTransactionImpl::set(
   const bufferlist &to_set_bl)
 {
   string key = combine_strings(prefix, k);
-  //bufferlist::c_str() is non-constant, so we need to make a copy
-  bufferlist val = to_set_bl;
   bat.Delete(leveldb::Slice(key));
-  bat.Put(leveldb::Slice(key),
-	  leveldb::Slice(val.c_str(), val.length()));
+
+  // bufferlist::c_str() is non-constant, so we can't call c_str()
+  if (to_set_bl.is_contiguous() && to_set_bl.length() > 0) {
+    bat.Put(leveldb::Slice(key),
+	    leveldb::Slice(to_set_bl.buffers().front().c_str(),
+			   to_set_bl.length()));
+  } else {
+    // make a copy
+    bufferlist val = to_set_bl;
+    bat.Put(leveldb::Slice(key),
+	    leveldb::Slice(val.c_str(), val.length()));
+  }
 }
 
 void LevelDBStore::LevelDBTransactionImpl::rmkey(const string &prefix,
