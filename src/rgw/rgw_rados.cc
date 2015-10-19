@@ -3045,6 +3045,12 @@ int RGWRados::init_complete()
   if (ret < 0 && ret != -ENOENT) {
     lderr(cct) << "failed reading realm info: ret "<< ret << " " << cpp_strerror(-ret) << dendl;
     return ret;
+  } else {
+    ret = current_period.init(cct, this, realm.get_id(), realm.get_name());
+    if (ret < 0 && ret != -ENOENT) {
+      lderr(cct) << "failed reading current period info: " << " " << cpp_strerror(-ret) << dendl;
+      return ret;
+    }
   }
 
   ret = zonegroup.init(cct, this);

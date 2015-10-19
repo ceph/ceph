@@ -1734,7 +1734,7 @@ protected:
   Finisher *finisher;
 
   RGWZoneGroup zonegroup;
-  RGWZone zone_public_config; /* external zone params, e.g., entrypoints, log flags, etc. */
+  RGWZone zone_public_config; /* external zone params, e.g., entrypoints, log flags, etc. */  
 
 public:
   RGWRados() : max_req_id(0), lock("rados_timer_lock"), watchers_lock("watchers_lock"), timer(NULL),
@@ -1764,6 +1764,7 @@ public:
   }
 
   RGWRealm realm;
+  RGWPeriod current_period;
   RGWZoneParams zone; /* internal zone params, e.g., rados pools */
   RGWZoneGroupMap zonegroup_map;
   RGWRESTConn *rest_master_conn;
