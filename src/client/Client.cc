@@ -21,6 +21,7 @@
 #include <sys/stat.h>
 #include <sys/param.h>
 #include <fcntl.h>
+#include <sys/file.h>
 #include <sys/utsname.h>
 #include <sys/uio.h>
 
