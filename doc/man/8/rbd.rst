@@ -9,8 +9,8 @@
 Synopsis
 ========
 
-| **rbd** [ -c *ceph.conf* ] [ -m *monaddr* ] [ -p | --pool *pool* ] [
-  --size *size* ] [ --order *bits* ] [ *command* ... ]
+| **rbd** [ -c *ceph.conf* ] [ -m *monaddr* ] [--cluster *cluster name*]
+  [ -p | --pool *pool* ] [--size *size* ] [ --order *bits* ] [ *command* ... ] 
 
 
 Description
@@ -34,6 +34,10 @@ Options
 .. option:: -m monaddress[:port]
 
    Connect to specified monitor (instead of looking through ceph.conf).
+
+.. option:: --cluster cluster name
+
+   Use different cluster name as compared to default cluster name *ceph*.
 
 .. option:: -p pool-name, --pool pool-name
 
@@ -477,6 +481,10 @@ To delete a snapshot::
 To map an image via the kernel with cephx enabled::
 
        rbd map mypool/myimage --id admin --keyfile secretfile
+
+To map an image via the kernel with different cluster name other than default *ceph*.
+
+       rbd map mypool/myimage --cluster *cluster name*
 
 To unmap an image::
 
