@@ -19,6 +19,9 @@ namespace po = boost::program_options;
 
 namespace {
 
+static const std::string HELP_SPEC("help");
+static const std::string BASH_COMPLETION_SPEC("bash-completion");
+
 struct Secret {};
 
 void validate(boost::any& v, const std::vector<std::string>& values,
@@ -50,6 +53,22 @@ std::string format_command_name(const Shell::CommandSpec &spec,
   return name;
 }
 
+std::string format_option_suffix(
+    const boost::shared_ptr<po::option_description> &option) {
+  std::string suffix;
+  if (option->semantic()->max_tokens() != 0) {
+    if (option->description().find("path") != std::string::npos ||
+        option->description().find("file") != std::string::npos) {
+      suffix += " path";
+    } else if (option->description().find("host") != std::string::npos) {
+      suffix += " host";
+    } else {
+      suffix += " arg";
+    }
+  }
+  return suffix;
+}
+
 } // anonymous namespace
 
 std::vector<Shell::Action *> Shell::s_actions;
@@ -68,7 +87,7 @@ int Shell::execute(int arg_count, const char **arg_values) {
     // list all available actions
     print_help(app_name);
     return 0;
-  } else if (command_spec[0] == "help") {
+  } else if (command_spec[0] == HELP_SPEC) {
     // list help for specific action
     command_spec.erase(command_spec.begin());
     Action *action = find_action(command_spec, NULL);
@@ -79,6 +98,10 @@ int Shell::execute(int arg_count, const char **arg_values) {
       print_action_help(app_name, action);
       return 0;
     }
+  } else if (command_spec[0] == BASH_COMPLETION_SPEC) {
+    command_spec.erase(command_spec.begin());
+    print_bash_completion(command_spec);
+    return 0;
   }
 
   CommandSpec *matching_spec;
@@ -154,7 +177,7 @@ void Shell::get_command_spec(const std::vector<std::string> &arguments,
   for (size_t i = 0; i < arguments.size(); ++i) {
     std::string arg(arguments[i]);
     if (arg == "-h" || arg == "--help") {
-      *command_spec = {"help"};
+      *command_spec = {HELP_SPEC};
       return;
     } else if (arg == "--") {
       // all arguments after a double-dash are positional
@@ -333,6 +356,49 @@ void Shell::print_unknown_action(const std::string &app_name,
                                     command_spec.end(), " ") << "'"
             << std::endl << std::endl;
   print_help(app_name);
+}
+
+void Shell::print_bash_completion(const CommandSpec &command_spec) {
+  Action *action = find_action(command_spec, NULL);
+  po::options_description global_opts;
+  get_global_options(&global_opts);
+  print_bash_completion_options(global_opts);
+
+  if (action != nullptr) {
+    po::options_description positional_opts;
+    po::options_description command_opts;
+    (*action->get_arguments)(&positional_opts, &command_opts);
+    print_bash_completion_options(command_opts);
+  } else {
+    std::cout << "|help";
+    for (size_t i = 0; i < s_actions.size(); ++i) {
+      Action *action = s_actions[i];
+      std::cout << "|"
+                << joinify<std::string>(action->command_spec.begin(),
+                                        action->command_spec.end(), " ");
+      if (!action->alias_command_spec.empty()) {
+        std::cout << "|"
+                   << joinify<std::string>(action->alias_command_spec.begin(),
+                                          action->alias_command_spec.end(),
+                                          " ");
+      }
+    }
+  }
+  std::cout << "|" << std::endl;
+}
+
+void Shell::print_bash_completion_options(const po::options_description &ops) {
+  for (size_t i = 0; i < ops.options().size(); ++i) {
+    auto option = ops.options()[i];
+    std::string long_name(option->canonical_display_name(0));
+    std::string short_name(option->canonical_display_name(
+      po::command_line_style::allow_dash_for_short));
+
+    std::cout << "|--" << long_name << format_option_suffix(option);
+    if (long_name != short_name) {
+      std::cout << "|" << short_name << format_option_suffix(option);
+    }
+  }
 }
 
 } // namespace rbd
