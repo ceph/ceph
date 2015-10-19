@@ -286,6 +286,26 @@ int RocksDBStore::get(
   return 0;
 }
 
+int RocksDBStore::get(
+    const string &prefix,
+    const string &key,
+    bufferlist *out)
+{
+  utime_t start = ceph_clock_now(g_ceph_context);
+  int r = 0;
+  KeyValueDB::Iterator it = get_iterator(prefix);
+  it->lower_bound(key);
+  if (it->valid() && it->key() == key) {
+    *out = it->value();
+  } else {
+    r = -ENOENT;
+  }
+  utime_t lat = ceph_clock_now(g_ceph_context) - start;
+  logger->inc(l_rocksdb_gets);
+  logger->tinc(l_rocksdb_get_latency, lat);
+  return r;
+}
+
 string RocksDBStore::combine_strings(const string &prefix, const string &value)
 {
   string out = prefix;
