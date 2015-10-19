@@ -451,7 +451,7 @@ int RGWCreateBucket_ObjStore_SWIFT::get_params()
     policy.create_default(s->user.user_id, s->user.display_name);
   }
 
-  location_constraint = store->zonegroup.api_name;
+  location_constraint = store->get_zonegroup().api_name;
   placement_rule = s->info.env->get("HTTP_X_STORAGE_POLICY", "");
 
   return 0;

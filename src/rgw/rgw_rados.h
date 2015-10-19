@@ -1733,6 +1733,9 @@ protected:
 
   Finisher *finisher;
 
+  RGWZoneGroup zonegroup;
+  RGWZone zone_public_config; /* external zone params, e.g., entrypoints, log flags, etc. */
+
 public:
   RGWRados() : max_req_id(0), lock("rados_timer_lock"), watchers_lock("watchers_lock"), timer(NULL),
                gc(NULL), obj_expirer(NULL), use_gc_thread(false), quota_threads(false),
@@ -1761,15 +1764,15 @@ public:
   }
 
   RGWRealm realm;
-  RGWZoneGroup zonegroup;
   RGWZoneParams zone; /* internal zone params, e.g., rados pools */
-  RGWZone zone_public_config; /* external zone params, e.g., entrypoints, log flags, etc. */
   RGWZoneGroupMap zonegroup_map;
   RGWRESTConn *rest_master_conn;
   map<string, RGWRESTConn *> zone_conn_map;
   map<string, RGWRESTConn *> zonegroup_conn_map;
 
   RGWZoneParams& get_zone_params() { return zone; }
+  RGWZoneGroup& get_zonegroup() { return zonegroup;}
+  RGWZone& get_zone() { return zone_public_config;}
 
   RGWMetadataManager *meta_mgr;
 
