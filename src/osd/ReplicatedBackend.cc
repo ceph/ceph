@@ -398,11 +398,24 @@ public:
       written += p->first.length() + p->second.length();
     return t->omap_setkeys(get_coll(hoid), ghobject_t(hoid), keys);
   }
+  void omap_setkeys(
+    const hobject_t &hoid,
+    bufferlist &keys_bl
+    ) {
+    written += keys_bl.length();
+    return t->omap_setkeys(get_coll(hoid), ghobject_t(hoid), keys_bl);
+  }
   void omap_rmkeys(
     const hobject_t &hoid,
     set<string> &keys
     ) {
     t->omap_rmkeys(get_coll(hoid), ghobject_t(hoid), keys);
+  }
+  void omap_rmkeys(
+    const hobject_t &hoid,
+    bufferlist &keys_bl
+    ) {
+    t->omap_rmkeys(get_coll(hoid), ghobject_t(hoid), keys_bl);
   }
   void omap_clear(
     const hobject_t &hoid
