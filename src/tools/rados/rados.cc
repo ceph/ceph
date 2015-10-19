@@ -822,6 +822,11 @@ void LoadGen::cleanup()
   }
 }
 
+enum OpWriteDest {
+  OP_WRITE_DEST_OBJ = 2 << 0,
+  OP_WRITE_DEST_OMAP = 2 << 1,
+  OP_WRITE_DEST_XATTR = 2 << 2,
+};
 
 class RadosBencher : public ObjBencher {
   librados::AioCompletion **completions;
@@ -829,6 +834,8 @@ class RadosBencher : public ObjBencher {
   librados::IoCtx& io_ctx;
   librados::NObjectIterator oi;
   bool iterator_valid;
+  OpWriteDest write_destination;
+
 protected:
   int completions_init(int concurrentios) {
     completions = new librados::AioCompletion *[concurrentios];
@@ -856,7 +863,23 @@ protected:
   }
 
   int aio_write(const std::string& oid, int slot, bufferlist& bl, size_t len) {
-    return io_ctx.aio_write(oid, completions[slot], bl, len, 0);
+    librados::ObjectWriteOperation op;
+
+    if (write_destination & OP_WRITE_DEST_OBJ) {
+      op.write(0, bl);
+    }
+
+    if (write_destination & OP_WRITE_DEST_OMAP) {
+      std::map<std::string, librados::bufferlist> omap;
+      omap["bench-omap-key"] = bl;
+      op.omap_set(omap);
+    }
+
+    if (write_destination & OP_WRITE_DEST_XATTR) {
+      op.setxattr("bench-xattr-key", bl);
+    }
+
+    return io_ctx.aio_operate(oid, completions[slot], &op);
   }
 
   int aio_remove(const std::string& oid, int slot) {
@@ -916,8 +939,12 @@ protected:
 
 public:
   RadosBencher(CephContext *cct_, librados::Rados& _r, librados::IoCtx& _i)
-    : ObjBencher(cct_), completions(NULL), rados(_r), io_ctx(_i), iterator_valid(false) {}
+    : ObjBencher(cct_), completions(NULL), rados(_r), io_ctx(_i), iterator_valid(false), write_destination(OP_WRITE_DEST_OBJ) {}
   ~RadosBencher() { }
+
+  void set_write_destination(OpWriteDest dest) {
+    write_destination = dest;
+  }
 };
 
 static int do_lock_cmd(std::vector<const char*> &nargs,
