@@ -88,8 +88,9 @@ noinst_HEADERS += \
 if WITH_SLIBROCKSDB
 # build rocksdb with its own makefile
 # for some stupid reason this needs -fPIC...
+# PORTABLE=1 fixes the aarch64 build (-march=native doesn't work there)
 rocksdb/librocksdb.a:
-	cd rocksdb && EXTRA_CXXFLAGS=-fPIC make -j$(shell nproc) static_lib
+	cd rocksdb && EXTRA_CXXFLAGS=-fPIC PORTABLE=1 make -j$(shell nproc) static_lib
 libos_a_CXXFLAGS +=  -I rocksdb/include -fPIC
 libos_a_SOURCES += os/RocksDBStore.cc
 libos_a_LIBADD += rocksdb/librocksdb.a
