@@ -2409,7 +2409,7 @@ int main(int argc, char **argv)
 	RGWZoneGroupMap zonegroupmap;
 
 	int ret = zonegroupmap.read(g_ceph_context, store);
-	if (ret < 0) {
+	if (ret < 0 && ret != -ENOENT) {
 	  cerr << "failed to read zonegroupmap info: " << cpp_strerror(ret);
 	  return ret;
 	}
