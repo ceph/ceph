@@ -4,6 +4,10 @@
 #include "ObjectStore.h"
 #include "common/Formatter.h"
 
+#pragma GCC diagnostic ignored "-Wpragmas"
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wdeprecated-declarations"
+
 void ObjectStore::Transaction::_build_actions_from_tbl()
 {
   //used only for tbl encode
@@ -320,9 +324,41 @@ void ObjectStore::Transaction::_build_actions_from_tbl()
       break;
 
     case Transaction::OP_COLL_SETATTR:
+      {
+	coll_t cid;
+	string name;
+	bufferlist bl;
+
+	::decode(cid, p);
+	::decode(name, p);
+	::decode(bl, p);
+
+	collection_setattr(cid, name, bl);
+      }
+      break;
+
     case Transaction::OP_COLL_SETATTRS:
+      {
+	coll_t cid;
+	map<string,bufferptr> aset;
+
+	::decode(cid, p);
+	::decode(aset, p);
+
+	collection_setattrs(cid, aset);
+      }
+      break;
+
     case Transaction::OP_COLL_RMATTR:
-      assert(0 == "collection attrs no longer supported");
+      {
+	coll_t cid;
+	string name;
+
+	::decode(cid, p);
+	::decode(name, p);
+
+	collection_rmattr(cid, name);
+      }
       break;
 
     case Transaction::OP_STARTSYNC:
@@ -467,6 +503,9 @@ void ObjectStore::Transaction::_build_actions_from_tbl()
   use_tbl = true;
   assert(ops == data.ops);
 }
+
+#pragma GCC diagnostic pop
+#pragma GCC diagnostic warning "-Wpragmas"
 
 void ObjectStore::Transaction::dump(ceph::Formatter *f)
 {
@@ -895,6 +934,10 @@ void ObjectStore::Transaction::dump(ceph::Formatter *f)
   f->close_section();
 }
 
+#pragma GCC diagnostic ignored "-Wpragmas"
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wdeprecated-declarations"
+
 void ObjectStore::Transaction::generate_test_instances(list<ObjectStore::Transaction*>& o)
 {
   o.push_back(new Transaction);
@@ -934,6 +977,11 @@ void ObjectStore::Transaction::generate_test_instances(list<ObjectStore::Transac
   t->create_collection(c, 12);
   t->collection_move_rename(c, o2, c2, o3);
   t->remove_collection(c);
+  t->collection_setattr(c, string("this"), bl);
+  t->collection_rmattr(c, string("foo"));
+  t->collection_setattrs(c, m);
   o.push_back(t);  
 }
 
+#pragma GCC diagnostic pop
+#pragma GCC diagnostic warning "-Wpragmas"
