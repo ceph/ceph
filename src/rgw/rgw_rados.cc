@@ -3073,29 +3073,33 @@ int RGWRados::init_complete()
     }
   }
 
-  ret = zonegroup.init(cct, this);
-  if (ret < 0 && ret != -ENOENT) {
-    lderr(cct) << "failed reading zonegroup info: ret "<< ret << " " << cpp_strerror(-ret) << dendl;
-    return ret;
-  } else if (ret == -ENOENT) {
-    ret = zonegroup.create_default();
-    if (ret < 0) {
-      lderr(cct) << "failure in zonegroup create_default: ret "<< ret << " " << cpp_strerror(-ret)
-		 << dendl;
-      return ret;
-    }
+  if (!has_period_zonegroup) {
     ret = zonegroup.init(cct, this);
-    if (ret < 0) {
-      lderr(cct) << "failure in zonegroup create_default: ret "<< ret << " " << cpp_strerror(-ret)
-		 << dendl;
+    if (ret < 0 && ret != -ENOENT) {
+      lderr(cct) << "failed reading zonegroup info: ret "<< ret << " " << cpp_strerror(-ret) << dendl;
       return ret;
+    } else if (ret == -ENOENT) {
+      ret = zonegroup.create_default();
+      if (ret < 0) {
+	lderr(cct) << "failure in zonegroup create_default: ret "<< ret << " " << cpp_strerror(-ret)
+		   << dendl;
+	return ret;
+      }
+      ret = zonegroup.init(cct, this);
+      if (ret < 0) {
+	lderr(cct) << "failure in zonegroup create_default: ret "<< ret << " " << cpp_strerror(-ret)
+		   << dendl;
+	return ret;
+      }
     }
   }
 
-  ret = zone.init(cct, this);
-  if (ret < 0 && ret != -ENOENT) {
-    lderr(cct) << "failed reading zone info: ret "<< ret << " " << cpp_strerror(-ret) << dendl;
-    return ret;
+  if (!has_period_zone) {
+    ret = zone.init(cct, this);
+    if (ret < 0 && ret != -ENOENT) {
+      lderr(cct) << "failed reading zone info: ret "<< ret << " " << cpp_strerror(-ret) << dendl;
+      return ret;
+    }
   }
 
   init_unique_trans_id_deps();
