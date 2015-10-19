@@ -316,9 +316,8 @@ private:
 		   const ghobject_t& newoid,
 		   uint64_t srcoff, uint64_t len, uint64_t dstoff);
   int _omap_clear(coll_t cid, const ghobject_t &oid);
-  int _omap_setkeys(coll_t cid, const ghobject_t &oid,
-		    const map<string, bufferlist> &aset);
-  int _omap_rmkeys(coll_t cid, const ghobject_t &oid, const set<string> &keys);
+  int _omap_setkeys(coll_t cid, const ghobject_t &oid, bufferlist& aset_bl);
+  int _omap_rmkeys(coll_t cid, const ghobject_t &oid, bufferlist& keys_bl);
   int _omap_rmkeyrange(coll_t cid, const ghobject_t &oid,
 		       const string& first, const string& last);
   int _omap_setheader(coll_t cid, const ghobject_t &oid, const bufferlist &bl);
