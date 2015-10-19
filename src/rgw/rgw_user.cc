@@ -167,7 +167,7 @@ int rgw_store_user_info(RGWRados *store,
   if (!info.user_email.empty()) {
     if (!old_info ||
         old_info->user_email.compare(info.user_email) != 0) { /* only if new index changed */
-      ret = rgw_put_system_obj(store, store->zone.user_email_pool, info.user_email,
+      ret = rgw_put_system_obj(store, store->get_zone_params().user_email_pool, info.user_email,
                                link_bl.c_str(), link_bl.length(), exclusive, NULL, 0);
       if (ret < 0)
         return ret;
@@ -181,7 +181,7 @@ int rgw_store_user_info(RGWRados *store,
       if (old_info && old_info->access_keys.count(iter->first) != 0)
 	continue;
 
-      ret = rgw_put_system_obj(store, store->zone.user_keys_pool, k.id,
+      ret = rgw_put_system_obj(store, store->get_zone_params().user_keys_pool, k.id,
                                link_bl.c_str(), link_bl.length(), exclusive,
                                NULL, 0);
       if (ret < 0)
@@ -309,7 +309,7 @@ int rgw_get_user_info_by_uid(RGWRados *store,
 int rgw_get_user_info_by_email(RGWRados *store, string& email, RGWUserInfo& info,
                                RGWObjVersionTracker *objv_tracker, time_t *pmtime)
 {
-  return rgw_get_user_info_from_index(store, email, store->zone.user_email_pool, info, objv_tracker, pmtime);
+  return rgw_get_user_info_from_index(store, email, store->get_zone_params().user_email_pool, info, objv_tracker, pmtime);
 }
 
 /**
@@ -319,7 +319,7 @@ int rgw_get_user_info_by_email(RGWRados *store, string& email, RGWUserInfo& info
 extern int rgw_get_user_info_by_swift(RGWRados *store, string& swift_name, RGWUserInfo& info,
                                       RGWObjVersionTracker *objv_tracker, time_t *pmtime)
 {
-  return rgw_get_user_info_from_index(store, swift_name, store->zone.user_swift_pool, info, objv_tracker, pmtime);
+  return rgw_get_user_info_from_index(store, swift_name, store->get_zone_params().user_swift_pool, info, objv_tracker, pmtime);
 }
 
 /**
@@ -329,7 +329,7 @@ extern int rgw_get_user_info_by_swift(RGWRados *store, string& swift_name, RGWUs
 extern int rgw_get_user_info_by_access_key(RGWRados *store, string& access_key, RGWUserInfo& info,
                                            RGWObjVersionTracker *objv_tracker, time_t *pmtime)
 {
-  return rgw_get_user_info_from_index(store, access_key, store->zone.user_keys_pool, info, objv_tracker, pmtime);
+  return rgw_get_user_info_from_index(store, access_key, store->get_zone_params().user_keys_pool, info, objv_tracker, pmtime);
 }
 
 int rgw_get_user_attrs_by_uid(RGWRados *store,
