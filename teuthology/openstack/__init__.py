@@ -485,7 +485,7 @@ ssh access   : ssh {identity}{username}@{ip} # logs in /usr/share/nginx/html
         # for the rest.
         misc.sh("""
 openstack security group create teuthology
-openstack security group rule create --dst-port 1:10000 teuthology
+openstack security group rule create --dst-port 1:65535 teuthology
 openstack security group rule create --proto udp --dst-port 53 teuthology # dns
         """)
 
