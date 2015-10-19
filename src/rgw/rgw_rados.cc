@@ -2927,7 +2927,8 @@ fail:
  * @param zonegroup zonegroup which new connection will connect to
  * @param new_connection pointer to new connection instance
  */
-static void add_new_connection_to_map(map<string, RGWRESTConn *> &zonegroup_conn_map, RGWZoneGroup &zonegroup, RGWRESTConn *new_connection)
+static void add_new_connection_to_map(map<string, RGWRESTConn *> &zonegroup_conn_map,
+				      const RGWZoneGroup &zonegroup, RGWRESTConn *new_connection)
 {
   // Delete if connection is already exists
   map<string, RGWRESTConn *>::iterator iterZoneGroup = zonegroup_conn_map.find(zonegroup.get_id());
@@ -3051,7 +3052,6 @@ int RGWRados::init_complete()
       lderr(cct) << "failed reading current period info: " << " " << cpp_strerror(-ret) << dendl;
       return ret;
     } else {
-      
       map<string, RGWZoneGroup>::const_iterator iter =
 	current_period.get_map().zonegroups.find(zonegroup.get_predefined_name(cct));
       if (iter != current_period.get_map().zonegroups.end()) {
@@ -3069,6 +3069,16 @@ int RGWRados::init_complete()
       } else {
 	lderr(cct) << "Cannot find zonegroup" << zonegroup.get_predefined_name(cct) <<
 	  " in current period using local" << dendl;
+      }
+
+      for (iter = current_period.get_map().zonegroups.begin();
+	   iter != current_period.get_map().zonegroups.end(); ++iter){
+	const RGWZoneGroup& zonegroup = iter->second;
+	add_new_connection_to_map(zonegroup_conn_map, zonegroup, new RGWRESTConn(cct, this, zonegroup.endpoints));
+	if (!current_period.get_master_zonegroup().empty() &&
+	    zonegroup.get_id() == current_period.get_master_zonegroup()) {
+	  rest_master_conn = new RGWRESTConn(cct, this, zonegroup.endpoints);
+	}
       }
     }
   }
