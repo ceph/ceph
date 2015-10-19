@@ -1394,6 +1394,11 @@ public:
     sync_status = _sync_status;
   }
 
+  int get_zonegroup(RGWZoneGroup& zonegroup,
+		    const string& zonegroup_id);
+
+  bool is_single_zonegroup(CephContext *cct, RGWRados *store);
+
   int get_latest_epoch(epoch_t& epoch);
   int init(CephContext *_cct, RGWRados *_store, const string &period_realm_id, const string &period_realm_name = "",
 	   bool setup_obj = true);
@@ -1779,7 +1784,6 @@ public:
   RGWRealm realm;
   RGWPeriod current_period;
   RGWZoneParams zone; /* internal zone params, e.g., rados pools */
-  RGWZoneGroupMap zonegroup_map;
   RGWRESTConn *rest_master_conn;
   map<string, RGWRESTConn *> zone_conn_map;
   map<string, RGWRESTConn *> zonegroup_conn_map;
@@ -1798,6 +1802,14 @@ public:
     } else {
       return zone_public_config;
     }
+  }
+
+  const RGWQuotaInfo& get_bucket_quota() {
+    return current_period.get_config().bucket_quota;
+  }
+
+  const RGWQuotaInfo& get_user_quota() {
+    return current_period.get_config().user_quota;
   }
 
   RGWMetadataManager *meta_mgr;

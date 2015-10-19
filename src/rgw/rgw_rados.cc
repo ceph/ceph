@@ -776,6 +776,22 @@ int RGWPeriod::init(CephContext *_cct, RGWRados *_store, bool setup_obj)
   return read_info();
 }
 
+
+int RGWPeriod::get_zonegroup(RGWZoneGroup& zonegroup, const string& zonegroup_id) {
+  map<string, RGWZoneGroup>::const_iterator iter = period_map.zonegroups.find(zonegroup_id);
+  if (iter != period_map.zonegroups.end()) {
+    zonegroup = iter->second;
+    return 0;
+  }
+
+  return -ENOENT;
+}
+
+bool RGWPeriod::is_single_zonegroup(CephContext *cct, RGWRados *store)
+{
+  return (period_map.zonegroups.size() == 1);
+}
+
 const string& RGWPeriod::get_latest_epoch_oid()
 {
   if (cct->_conf->rgw_period_latest_epoch_info_oid.empty()) {
@@ -3117,51 +3133,6 @@ int RGWRados::init_complete()
 
   init_unique_trans_id_deps();
 
-  ret = zonegroup_map.read(cct, this);
-  if (ret < 0) {
-    if (ret != -ENOENT) {
-      ldout(cct, 0) << "WARNING: cannot read zonegroup map" << dendl;
-    }
-    if (!realm.get_id().empty()) {
-      ret = zonegroup_map.update(realm);
-      if (ret < 0) {
-	ldout(cct, 0) << "ERROR: failed to update zonegroupmap with local realm info" << dendl;
-	return -EIO;
-      }
-      ret = zonegroup_map.update(cct, this, realm, zonegroup);
-      if (ret < 0) {
-	ldout(cct, 0) << "ERROR: failed to update zonegroupmap with local zonegroup info" << dendl;
-	return -EIO;
-      }
-    }
-  } else {
-    string master_zonegroup;
-    for (map<string, RGWRealm>::iterator iter = zonegroup_map.realms.begin(); iter != zonegroup_map.realms.end();
-	 iter++) {
-      if (master_zonegroup.empty()) {
-	ret = zonegroup_map.get_master_zonegroup(iter->second.get_current_period(), master_zonegroup);
-	if (ret < 0 && ret != -ENOENT) {
-	  ldout(cct, 0) << "ERROR: failed to read master zonegroup:" << cpp_strerror(-ret) << dendl;
-	  return ret;
-	}
-      }
-      map<string, RGWZoneGroup> zonegroups;
-      ret = zonegroup_map.get_zonegroups(iter->second.get_current_period(), zonegroups);
-      if (ret < 0) {
-	ldout(cct, 0) << "ERROR: failed to read zonegroups" << dendl;
-	return ret;
-      }
-
-      for ( map<string, RGWZoneGroup>::iterator iter = zonegroups.begin(); iter != zonegroups.end(); ++iter) {
-	RGWZoneGroup& zonegroup = iter->second;
-	add_new_connection_to_map(zonegroup_conn_map, zonegroup, new RGWRESTConn(cct, this, zonegroup.endpoints));
-	if (!master_zonegroup.empty() && zonegroup.get_id() == master_zonegroup) {
-	  rest_master_conn = new RGWRESTConn(cct, this, zonegroup.endpoints);
-	}
-      }
-    }
-  }
-
   finisher = new Finisher(cct);
   finisher->start();
 
@@ -4575,7 +4546,7 @@ int RGWRados::select_new_bucket_location(RGWUserInfo& user_info, const string& z
 {
   /* first check that rule exists within the specific zonegroup */
   RGWZoneGroup zonegroup;
-  int ret = zonegroup_map.get_zonegroup(cct, this, zonegroup, zonegroup_name);
+  int ret = current_period.get_zonegroup(zonegroup, zonegroup_name);
   if (ret < 0) {
     ldout(cct, 0) << "could not find zonegroup " << zonegroup_name << " in zonegroup map" << dendl;
     return ret;
@@ -6263,12 +6234,12 @@ bool RGWRados::is_meta_master()
 bool RGWRados::is_syncing_bucket_meta(rgw_bucket& bucket)
 {
   /* zonegroup is not master zonegroup */
-  if (!zonegroup.is_master) {
+  if (!get_zonegroup().is_master) {
     return false;
   }
 
   /* single zonegroup and a single zone */
-  if (zonegroup_map.is_single_zonegroup(cct, this) && zonegroup.zones.size() == 1) {
+  if (current_period.is_single_zonegroup(cct, this) && get_zonegroup().zones.size() == 1) {
     return false;
   }
 

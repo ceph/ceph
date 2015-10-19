@@ -408,7 +408,7 @@ static int rgw_build_policies(RGWRados *store, struct req_state *s, bool only_bu
     s->bucket_owner = s->bucket_acl->get_owner();
 
     RGWZoneGroup zonegroup;
-    ret = store->zonegroup_map.get_zonegroup(s->cct, store, zonegroup, s->bucket_info.zonegroup);
+    ret = store->current_period.get_zonegroup(zonegroup, s->bucket_info.zonegroup);
     if (!ret && !zonegroup.endpoints.empty()) {
       s->zonegroup_endpoint = zonegroup.endpoints.front();
     }
@@ -520,13 +520,13 @@ int RGWOp::init_quota()
   } else if (uinfo->bucket_quota.enabled) {
     bucket_quota = uinfo->bucket_quota;
   } else {
-    bucket_quota = store->zonegroup_map.bucket_quota;
+    bucket_quota = store->get_bucket_quota();
   }
 
   if (uinfo->user_quota.enabled) {
     user_quota = uinfo->user_quota;
   } else {
-    user_quota = store->zonegroup_map.user_quota;
+    user_quota = store->get_user_quota();
   }
 
   return 0;
