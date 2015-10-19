@@ -1315,7 +1315,6 @@ class RGWPeriod
   int read_info();
   int read_latest_epoch(RGWPeriodLatestEpochInfo& epoch_info);
   int use_latest_epoch();
-  int set_latest_epoch(const epoch_t& epoch);
   int use_current_period();
 
   const string get_period_oid();
@@ -1340,6 +1339,12 @@ public:
   const string& get_latest_epoch_oid();
   const string& get_info_oid_prefix();
 
+  void set_id(const string& id) {
+    this->id = id;
+    period_map.id = id;
+  }
+  void set_epoch(epoch_t epoch) { this->epoch = epoch; }
+
   void set_predecessor(const string& predecessor)
   {
     predecessor_uuid = predecessor;
@@ -1361,6 +1366,8 @@ public:
   bool is_single_zonegroup(CephContext *cct, RGWRados *store);
 
   int get_latest_epoch(epoch_t& epoch);
+  int set_latest_epoch(epoch_t epoch);
+
   int init(CephContext *_cct, RGWRados *_store, const string &period_realm_id, const string &period_realm_name = "",
 	   bool setup_obj = true);
   int init(CephContext *_cct, RGWRados *_store, bool setup_obj = true);  
