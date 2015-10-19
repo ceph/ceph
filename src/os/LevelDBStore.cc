@@ -8,6 +8,7 @@
 #include "include/memory.h"
 #include <errno.h>
 using std::string;
+#include "common/debug.h"
 #include "common/perf_counters.h"
 
 int LevelDBStore::init(string option_str)

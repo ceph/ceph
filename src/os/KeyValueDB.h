@@ -4,12 +4,12 @@
 #define KEY_VALUE_DB_H
 
 #include "include/buffer.h"
+#include <ostream>
 #include <set>
 #include <map>
 #include <string>
 #include "include/memory.h"
 #include <boost/scoped_ptr.hpp>
-#include "ObjectMap.h"
 
 using std::string;
 /**
@@ -23,41 +23,41 @@ public:
   public:
     /// Set Keys
     void set(
-      const string &prefix,                 ///< [in] Prefix for keys
-      const std::map<string, bufferlist> &to_set ///< [in] keys/values to set
+      const std::string &prefix,                 ///< [in] Prefix for keys
+      const std::map<std::string, bufferlist> &to_set ///< [in] keys/values to set
     ) {
-      std::map<string, bufferlist>::const_iterator it;
+      std::map<std::string, bufferlist>::const_iterator it;
       for (it = to_set.begin(); it != to_set.end(); ++it)
 	set(prefix, it->first, it->second);
     }
 
     /// Set Key
     virtual void set(
-      const string &prefix,   ///< [in] Prefix for the key
-      const string &k,	      ///< [in] Key to set
+      const std::string &prefix,   ///< [in] Prefix for the key
+      const std::string &k,	      ///< [in] Key to set
       const bufferlist &bl    ///< [in] Value to set
       ) = 0;
 
 
     /// Removes Keys
     void rmkeys(
-      const string &prefix,   ///< [in] Prefix to search for
-      const std::set<string> &keys ///< [in] Keys to remove
+      const std::string &prefix,   ///< [in] Prefix to search for
+      const std::set<std::string> &keys ///< [in] Keys to remove
     ) {
-      std::set<string>::const_iterator it;
+      std::set<std::string>::const_iterator it;
       for (it = keys.begin(); it != keys.end(); ++it)
 	rmkey(prefix, *it);
     }
 
     /// Remove Key
     virtual void rmkey(
-      const string &prefix,   ///< [in] Prefix to search for
-      const string &k	      ///< [in] Key to remove
+      const std::string &prefix,   ///< [in] Prefix to search for
+      const std::string &k	      ///< [in] Key to remove
       ) = 0;
 
     /// Removes keys beginning with prefix
     virtual void rmkeys_by_prefix(
-      const string &prefix ///< [in] Prefix by which to remove keys
+      const std::string &prefix ///< [in] Prefix by which to remove keys
       ) = 0;
 
     virtual ~TransactionImpl() {}
@@ -65,14 +65,14 @@ public:
   typedef ceph::shared_ptr< TransactionImpl > Transaction;
 
   /// create a new instance
-  static KeyValueDB *create(CephContext *cct, const string& type,
-			    const string& dir);
+  static KeyValueDB *create(CephContext *cct, const std::string& type,
+			    const std::string& dir);
 
   /// test whether we can successfully initialize; may have side effects (e.g., create)
-  static int test_init(const string& type, const string& dir);
+  static int test_init(const std::string& type, const std::string& dir);
   virtual int init(string option_str="") = 0;
-  virtual int open(ostream &out) = 0;
-  virtual int create_and_open(ostream &out) = 0;
+  virtual int open(std::ostream &out) = 0;
+  virtual int create_and_open(std::ostream &out) = 0;
 
   virtual Transaction get_transaction() = 0;
   virtual int submit_transaction(Transaction) = 0;
@@ -82,16 +82,16 @@ public:
 
   /// Retrieve Keys
   virtual int get(
-    const string &prefix,        ///< [in] Prefix for key
-    const std::set<string> &key,      ///< [in] Key to retrieve
-    std::map<string, bufferlist> *out ///< [out] Key value retrieved
+    const std::string &prefix,        ///< [in] Prefix for key
+    const std::set<std::string> &key,      ///< [in] Key to retrieve
+    std::map<std::string, bufferlist> *out ///< [out] Key value retrieved
     ) = 0;
-  virtual int get(const string &prefix, ///< [in] prefix
-		  const string &key,    ///< [in] key
+  virtual int get(const std::string &prefix, ///< [in] prefix
+		  const std::string &key,    ///< [in] key
 		  bufferlist *value) {  ///< [out] value
-    set<string> ks;
+    std::set<std::string> ks;
     ks.insert(key);
-    map<string,bufferlist> om;
+    std::map<std::string,bufferlist> om;
     int r = get(prefix, ks, &om);
     if (om.find(key) != om.end()) {
       *value = om[key];
@@ -102,30 +102,43 @@ public:
     return r;
   }
 
+  class GenericIteratorImpl {
+  public:
+    virtual int seek_to_first() = 0;
+    virtual int upper_bound(const std::string &after) = 0;
+    virtual int lower_bound(const std::string &to) = 0;
+    virtual bool valid() = 0;
+    virtual int next() = 0;
+    virtual std::string key() = 0;
+    virtual bufferlist value() = 0;
+    virtual int status() = 0;
+    virtual ~GenericIteratorImpl() {}
+  };
+
   class WholeSpaceIteratorImpl {
   public:
     virtual int seek_to_first() = 0;
-    virtual int seek_to_first(const string &prefix) = 0;
+    virtual int seek_to_first(const std::string &prefix) = 0;
     virtual int seek_to_last() = 0;
-    virtual int seek_to_last(const string &prefix) = 0;
-    virtual int upper_bound(const string &prefix, const string &after) = 0;
-    virtual int lower_bound(const string &prefix, const string &to) = 0;
+    virtual int seek_to_last(const std::string &prefix) = 0;
+    virtual int upper_bound(const std::string &prefix, const std::string &after) = 0;
+    virtual int lower_bound(const std::string &prefix, const std::string &to) = 0;
     virtual bool valid() = 0;
     virtual int next() = 0;
     virtual int prev() = 0;
-    virtual string key() = 0;
-    virtual pair<string,string> raw_key() = 0;
+    virtual std::string key() = 0;
+    virtual std::pair<std::string,std::string> raw_key() = 0;
     virtual bufferlist value() = 0;
     virtual int status() = 0;
     virtual ~WholeSpaceIteratorImpl() { }
   };
   typedef ceph::shared_ptr< WholeSpaceIteratorImpl > WholeSpaceIterator;
 
-  class IteratorImpl : public ObjectMap::ObjectMapIteratorImpl {
-    const string prefix;
+  class IteratorImpl : public GenericIteratorImpl {
+    const std::string prefix;
     WholeSpaceIterator generic_iter;
   public:
-    IteratorImpl(const string &prefix, WholeSpaceIterator iter) :
+    IteratorImpl(const std::string &prefix, WholeSpaceIterator iter) :
       prefix(prefix), generic_iter(iter) { }
     virtual ~IteratorImpl() { }
 
@@ -135,16 +148,16 @@ public:
     int seek_to_last() {
       return generic_iter->seek_to_last(prefix);
     }
-    int upper_bound(const string &after) {
+    int upper_bound(const std::string &after) {
       return generic_iter->upper_bound(prefix, after);
     }
-    int lower_bound(const string &to) {
+    int lower_bound(const std::string &to) {
       return generic_iter->lower_bound(prefix, to);
     }
     bool valid() {
       if (!generic_iter->valid())
 	return false;
-      pair<string,string> raw_key = generic_iter->raw_key();
+      std::pair<std::string,std::string> raw_key = generic_iter->raw_key();
       return (raw_key.first.compare(0, prefix.length(), prefix) == 0);
     }
     int next() {
@@ -157,10 +170,10 @@ public:
 	return generic_iter->prev();
       return status();
     }
-    string key() {
+    std::string key() {
       return generic_iter->key();
     }
-    pair<string, string> raw_key() {
+    std::pair<std::string, std::string> raw_key() {
       return generic_iter->raw_key();
     }
     bufferlist value() {
@@ -177,7 +190,7 @@ public:
     return _get_iterator();
   }
 
-  Iterator get_iterator(const string &prefix) {
+  Iterator get_iterator(const std::string &prefix) {
     return ceph::shared_ptr<IteratorImpl>(
       new IteratorImpl(prefix, get_iterator())
     );
@@ -187,13 +200,13 @@ public:
     return _get_snapshot_iterator();
   }
 
-  Iterator get_snapshot_iterator(const string &prefix) {
+  Iterator get_snapshot_iterator(const std::string &prefix) {
     return ceph::shared_ptr<IteratorImpl>(
       new IteratorImpl(prefix, get_snapshot_iterator())
     );
   }
 
-  virtual uint64_t get_estimated_size(map<string,uint64_t> &extra) = 0;
+  virtual uint64_t get_estimated_size(std::map<std::string,uint64_t> &extra) = 0;
   virtual int get_statfs(struct statfs *buf) {
     return -EOPNOTSUPP;
   }
@@ -204,13 +217,13 @@ public:
   virtual void compact() {}
 
   /// compact db for all keys with a given prefix
-  virtual void compact_prefix(const string& prefix) {}
+  virtual void compact_prefix(const std::string& prefix) {}
   /// compact db for all keys with a given prefix, async
-  virtual void compact_prefix_async(const string& prefix) {}
-  virtual void compact_range(const string& prefix,
-			     const string& start, const string& end) {}
-  virtual void compact_range_async(const string& prefix,
-				   const string& start, const string& end) {}
+  virtual void compact_prefix_async(const std::string& prefix) {}
+  virtual void compact_range(const std::string& prefix,
+			     const std::string& start, const std::string& end) {}
+  virtual void compact_range_async(const std::string& prefix,
+				   const std::string& start, const std::string& end) {}
 
 protected:
   virtual WholeSpaceIterator _get_iterator() = 0;
