@@ -1807,13 +1807,6 @@ int OSD::init()
     goto out;
   }
 
-  if (!superblock.compat_features.incompat.contains(CEPH_OSD_FEATURE_INCOMPAT_PGMETA)) {
-    derr << "OSD store does not have PGMETA feature." << dendl;
-    derr << "You must first upgrade to hammer." << dendl;
-    r = -EINVAL;
-    goto out;
-  }
-
   if (osd_compat.compare(superblock.compat_features) < 0) {
     derr << "The disk uses features unsupported by the executable." << dendl;
     derr << " ondisk features " << superblock.compat_features << dendl;
@@ -1936,10 +1929,6 @@ int OSD::init()
     tick_timer_without_osd_lock.add_event_after(cct->_conf->osd_heartbeat_interval, new C_Tick_WithoutOSDLock(this));
   }
 
-  service.init();
-  service.publish_map(osdmap);
-  service.publish_superblock(superblock);
-
   osd_lock.Unlock();
 
   r = monc->authenticate();
@@ -1958,6 +1947,10 @@ int OSD::init()
   if (is_stopping())
     return 0;
 
+  service.init();
+  service.publish_map(osdmap);
+  service.publish_superblock(superblock);
+
   check_config();
 
   dout(10) << "ensuring pgs have consumed prior maps" << dendl;
@@ -1966,6 +1959,9 @@ int OSD::init()
 
   dout(0) << "done with init, starting boot process" << dendl;
   set_state(STATE_BOOTING);
+
+  // we don't need to ask for an osdmap here; objecter will
+
   start_boot();
 
   return 0;
