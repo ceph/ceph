@@ -191,6 +191,12 @@ void usage(ostream& out)
 "        prefix output with date/time\n"
 "   --no-verify\n"
 "        do not verify contents of read objects\n"
+"   --write-object\n"
+"        write contents to the objects\n"
+"   --write-omap\n"
+"        write contents to the omap\n"
+"   --write-xattr\n"
+"        write contents to the extended attributes\n"
 "\n"
 "LOAD GEN OPTIONS:\n"
 "   --num-objects                    total number of objects\n"
@@ -1209,6 +1215,7 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
   int concurrent_ios = 16;
   unsigned op_size = default_op_size;
   bool block_size_specified = false;
+  int bench_write_dest = 0;
   bool cleanup = true;
   bool no_verify = false;
   bool use_striper = false;
@@ -1392,7 +1399,18 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
   if (i != opts.end()) {
     output = i->second.c_str();
   }
-
+  i = opts.find("write-dest-obj");
+  if (i != opts.end()) {
+    bench_write_dest |= static_cast<int>(OP_WRITE_DEST_OBJ);
+  }
+  i = opts.find("write-dest-omap");
+  if (i != opts.end()) {
+    bench_write_dest |= static_cast<int>(OP_WRITE_DEST_OMAP);
+  }
+  i = opts.find("write-dest-xattr");
+  if (i != opts.end()) {
+    bench_write_dest |= static_cast<int>(OP_WRITE_DEST_XATTR);
+  }
 
   // open rados
   ret = rados.init_with_context(g_ceph_context);
@@ -2432,12 +2450,25 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
       operation = OP_RAND_READ;
     else
       usage_exit();
-    if (block_size_specified && (operation != OP_WRITE)){
-      cerr << "-b|--block_size option can be used only with `write' bench test"
-           << std::endl;
-      ret = -EINVAL;
-      goto out;
+    if (operation != OP_WRITE) {
+      if (block_size_specified) {
+        cerr << "-b|--block_size option can be used only with `write' bench test"
+             << std::endl;
+        ret = -EINVAL;
+        goto out;
+      }
+      if (bench_write_dest != 0) {
+        cerr << "--write-object, --write-omap and --write-xattr options can "
+                "only be used with the 'write' bench test"
+             << std::endl;
+        ret = -EINVAL;
+        goto out;
+      }
     }
+    else if (bench_write_dest == 0) {
+      bench_write_dest = OP_WRITE_DEST_OBJ;
+    }
+
     if (!formatter && output) {
       cerr << "-o|--output option can be used only with '--format' option"
            << std::endl;
@@ -2446,6 +2477,8 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
     }
     RadosBencher bencher(g_ceph_context, rados, io_ctx);
     bencher.set_show_time(show_time);
+    bencher.set_write_destination(static_cast<OpWriteDest>(bench_write_dest));
+
     ostream *outstream = NULL;
     if (formatter) {
       bencher.set_formatter(formatter);
@@ -2977,6 +3010,12 @@ int main(int argc, const char **argv)
       opts["default"] = "true";
     } else if (ceph_argparse_witharg(args, i, &val, "-o", "--output", (char*)NULL)) {
       opts["output"] = val;
+    } else if (ceph_argparse_flag(args, i, "--write-omap", (char*)NULL)) {
+      opts["write-dest-omap"] = "true";
+    } else if (ceph_argparse_flag(args, i, "--write-object", (char*)NULL)) {
+      opts["write-dest-obj"] = "true";
+    } else if (ceph_argparse_flag(args, i, "--write-xattr", (char*)NULL)) {
+      opts["write-dest-xattr"] = "true";
     } else {
       if (val[0] == '-')
         usage_exit();
