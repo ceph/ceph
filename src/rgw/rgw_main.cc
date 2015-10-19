@@ -32,6 +32,7 @@
 #include "common/Throttle.h"
 #include "common/QueueRing.h"
 #include "common/safe_io.h"
+#include "include/compat.h"
 #include "include/str_list.h"
 #include "rgw_common.h"
 #include "rgw_rados.h"
