@@ -1708,7 +1708,7 @@ bool NewStore::OmapIteratorImpl::valid()
   }
 }
 
-int NewStore::OmapIteratorImpl::next()
+int NewStore::OmapIteratorImpl::next(bool validate)
 {
   RWLock::RLocker l(c->lock);
   if (o->onode.omap_head) {

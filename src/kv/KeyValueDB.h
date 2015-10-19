@@ -141,7 +141,7 @@ public:
     virtual int upper_bound(const std::string &after) = 0;
     virtual int lower_bound(const std::string &to) = 0;
     virtual bool valid() = 0;
-    virtual int next() = 0;
+    virtual int next(bool validate=true) = 0;
     virtual std::string key() = 0;
     virtual bufferlist value() = 0;
     virtual int status() = 0;
@@ -193,15 +193,26 @@ public:
 	return false;
       return generic_iter->raw_key_is_prefixed(prefix);
     }
-    int next() {
-      if (valid())
-	return generic_iter->next();
-      return status();
+    // Note that next() and prev() shouldn't validate iters,
+    // it's responsibility of caller to ensure they're valid.
+    int next(bool validate=true) {
+      if (validate) {
+        if (valid())
+          return generic_iter->next();
+        return status();
+      } else {
+        return generic_iter->next();  
+      }      
     }
-    int prev() {
-      if (valid())
-	return generic_iter->prev();
-      return status();
+    
+    int prev(bool validate=true) {
+      if (validate) {
+        if (valid())
+          return generic_iter->prev();
+        return status();
+      } else {
+        return generic_iter->prev();  
+      }      
     }
     std::string key() {
       return generic_iter->key();
