@@ -476,9 +476,15 @@ int rgw_remove_bucket(RGWRados *store, rgw_bucket& bucket, bool delete_children)
   return ret;
 }
 
-int rgw_bucket_delete_bucket_obj(RGWRados *store, string& bucket_name, RGWObjVersionTracker& objv_tracker)
+int rgw_bucket_delete_bucket_obj(RGWRados *store,
+                                 const string& tenant_name,
+                                 const string& bucket_name,
+                                 RGWObjVersionTracker& objv_tracker)
 {
-  return store->meta_mgr->remove_entry(bucket_meta_handler, bucket_name, &objv_tracker);
+  string key;
+
+  rgw_make_bucket_entry_name(tenant_name, bucket_name, key);
+  return store->meta_mgr->remove_entry(bucket_meta_handler, key, &objv_tracker);
 }
 
 static void set_err_msg(std::string *sink, std::string msg)
@@ -1016,7 +1022,7 @@ int RGWBucketAdminOp::remove_object(RGWRados *store, RGWBucketAdminOpState& op_s
   return bucket.remove_object(op_state);
 }
 
-static int bucket_stats(RGWRados *store, std::string& tenant_name, std::string&  bucket_name, Formatter *formatter)
+static int bucket_stats(RGWRados *store, const std::string& tenant_name, std::string&  bucket_name, Formatter *formatter)
 {
   RGWBucketInfo bucket_info;
   rgw_bucket bucket;
@@ -1542,17 +1548,6 @@ public:
 
 class RGWBucketMetadataHandler : public RGWMetadataHandler {
 
-  /*
-   * The tenant_name is always returned on purpose. May be empty, of course.
-   */
-  static void parse_bucket(const string &bucket,
-                           string &tenant_name, string &bucket_name)
-  {
-    int pos = bucket.find('/');
-    tenant_name = bucket.substr(0, pos);
-    bucket_name = bucket.substr(pos + 1);
-  }
-
 public:
   string get_type() { return "bucket"; }
 
@@ -1642,7 +1637,7 @@ public:
       lderr(store->ctx()) << "could not unlink bucket=" << entry << " owner=" << be.owner << dendl;
     }
 
-    ret = rgw_bucket_delete_bucket_obj(store, entry, objv_tracker);
+    ret = rgw_bucket_delete_bucket_obj(store, tenant_name, bucket_name, objv_tracker);
     if (ret < 0) {
       lderr(store->ctx()) << "could not delete bucket=" << entry << dendl;
     }
@@ -1728,7 +1723,7 @@ public:
     return 0;
   }
 
-  int put(RGWRados *store, string& oid, RGWObjVersionTracker& objv_tracker,
+  int put(RGWRados *store, string& entry, RGWObjVersionTracker& objv_tracker,
           time_t mtime, JSONObj *obj, sync_type_t sync_type) {
     RGWBucketCompleteInfo bci, old_bci;
     decode_json_obj(bci, obj);
@@ -1736,19 +1731,22 @@ public:
     time_t orig_mtime;
     RGWObjectCtx obj_ctx(store);
 
-    int ret = store->get_bucket_instance_info(obj_ctx, oid, old_bci.info, &orig_mtime, &old_bci.attrs);
+    int ret = store->get_bucket_instance_info(obj_ctx, entry, old_bci.info,
+            &orig_mtime, &old_bci.attrs);
     bool exists = (ret != -ENOENT);
     if (ret < 0 && exists)
       return ret;
 
-
     if (!exists || old_bci.info.bucket.bucket_id != bci.info.bucket.bucket_id) {
       /* a new bucket, we need to select a new bucket placement for it */
+      // XXX not sure if this is correct -- stolen from Radoslaw; what about get()?
+      string tenant_name;
+      string bucket_name;
+      parse_bucket(entry, tenant_name, bucket_name);
+
       rgw_bucket bucket;
-      // XXX woops, conflict with the model of set_bucket_location_by_rule:
-      // the bucket name is not oid now.
-      string empty_tenant = "";
-      ret = store->set_bucket_location_by_rule(bci.info.placement_rule, empty_tenant, oid, bucket);
+      ret = store->set_bucket_location_by_rule(bci.info.placement_rule,
+                                           tenant_name, bucket_name, bucket);
       if (ret < 0) {
         ldout(store->ctx(), 0) << "ERROR: select_bucket_placement() returned " << ret << dendl;
         return ret;

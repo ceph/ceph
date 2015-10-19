@@ -996,26 +996,34 @@ struct RGWRegionMap {
 WRITE_CLASS_ENCODER(RGWRegionMap)
 
 struct objexp_hint_entry {
+  string tenant;
   string bucket_name;
   string bucket_id;
   rgw_obj_key obj_key;
   utime_t exp_time;
 
   void encode(bufferlist& bl) const {
-    ENCODE_START(1, 1, bl);
+    ENCODE_START(2, 1, bl);
     ::encode(bucket_name, bl);
     ::encode(bucket_id, bl);
     ::encode(obj_key, bl);
     ::encode(exp_time, bl);
+    ::encode(tenant, bl);
     ENCODE_FINISH(bl);
   }
 
   void decode(bufferlist::iterator& bl) {
-    DECODE_START(1, bl);
+    // XXX Do we want DECODE_START_LEGACY_COMPAT_LEN(2, 1, 1, bl); ?
+    DECODE_START(2, bl);
     ::decode(bucket_name, bl);
     ::decode(bucket_id, bl);
     ::decode(obj_key, bl);
     ::decode(exp_time, bl);
+    if (struct_v >= 2) {
+      ::decode(tenant, bl);
+    } else {
+      tenant.clear();
+    }
     DECODE_FINISH(bl);
   }
 };
@@ -2123,6 +2131,7 @@ public:
   void objexp_get_shard(int shard_num,
                         string& shard);                       /* out */
   int objexp_hint_add(const utime_t& delete_at,
+                      const string& tenant_name,
                       const string& bucket_name,
                       const string& bucket_id,
                       const rgw_obj_key& obj_key);

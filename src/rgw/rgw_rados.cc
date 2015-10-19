@@ -2374,21 +2374,25 @@ int RGWRados::objexp_key_shard(const rgw_obj_key& key)
   return sid % num_shards;
 }
 
-static string objexp_hint_get_keyext(const string& bucket_name,
+static string objexp_hint_get_keyext(const string& tenant_name,
+                                     const string& bucket_name,
                                      const string& bucket_id,
                                      const rgw_obj_key& obj_key)
 {
-  return bucket_name + ":" + bucket_id + ":" + obj_key.name + ":" + obj_key.instance;
+  return tenant_name + ":" + bucket_name + ":" + bucket_id +
+      ":" + obj_key.name + ":" + obj_key.instance;
 }
 
 int RGWRados::objexp_hint_add(const utime_t& delete_at,
+                              const string& tenant_name,
                               const string& bucket_name,
                               const string& bucket_id,
                               const rgw_obj_key& obj_key)
 {
-  const string keyext = objexp_hint_get_keyext(bucket_name,
+  const string keyext = objexp_hint_get_keyext(tenant_name, bucket_name,
           bucket_id, obj_key);
   objexp_hint_entry he = {
+      .tenant = tenant_name,
       .bucket_name = bucket_name,
       .bucket_id = bucket_id,
       .obj_key = obj_key,
@@ -2931,6 +2935,7 @@ int RGWRados::select_new_bucket_location(RGWUserInfo& user_info, const string& r
 
 int RGWRados::set_bucket_location_by_rule(const string& location_rule, const string& tenant_name, const string& bucket_name, rgw_bucket& bucket)
 {
+  bucket.tenant = tenant_name;
   bucket.name = bucket_name;
 
   if (location_rule.empty()) {
@@ -3622,7 +3627,8 @@ int RGWRados::Object::Write::write_meta(uint64_t size,
     rgw_obj_key obj_key;
     obj.get_index_key(&obj_key);
 
-    r = store->objexp_hint_add(utime_t(meta.delete_at, 0), bucket.name, bucket.bucket_id, obj_key);
+    r = store->objexp_hint_add(utime_t(meta.delete_at, 0),
+            bucket.tenant, bucket.name, bucket.bucket_id, obj_key);
     if (r < 0) {
       ldout(store->ctx(), 0) << "ERROR: objexp_hint_add() returned r=" << r << ", object will not get removed" << dendl;
       /* ignoring error, nothing we can do at this point */
@@ -4522,11 +4528,11 @@ int RGWRados::delete_bucket(rgw_bucket& bucket, RGWObjVersionTracker& objv_track
     }
   } while (is_truncated);
 
-  string bucket_entry;
-  rgw_make_bucket_entry_name(bucket.tenant, bucket.name, bucket_entry);
-  r = rgw_bucket_delete_bucket_obj(this, bucket_entry, objv_tracker);
-  if (r < 0)
+  r = rgw_bucket_delete_bucket_obj(this, bucket.tenant, bucket.name, objv_tracker);
+  if (r < 0) {
+    ldout(cct, 0) << "rgw_bucket_delete_bucket_obj() returned r=" << r << dendl;
     return r;
+  }
 
   /* if the bucket is not synced we can remove the meta file */
   if (!is_syncing_bucket_meta(bucket)) {
@@ -5537,7 +5543,7 @@ int RGWRados::set_attrs(void *ctx, rgw_obj& obj,
         rgw_obj_key obj_key;
         obj.get_index_key(&obj_key);
 
-        objexp_hint_add(ts, bucket.name, bucket.bucket_id, obj_key);
+        objexp_hint_add(ts, bucket.tenant, bucket.name, bucket.bucket_id, obj_key);
       } catch (buffer::error& err) {
 	ldout(cct, 0) << "ERROR: failed to decode " RGW_ATTR_DELETE_AT << " attr" << dendl;
       }
@@ -7598,7 +7604,10 @@ int RGWRados::get_bucket_info(RGWObjectCtx& obj_ctx,
                               time_t *pmtime, map<string, bufferlist> *pattrs)
 {
   bucket_info_entry e;
-  if (binfo_cache.find(bucket_name, &e)) {
+  string bucket_entry;
+  rgw_make_bucket_entry_name(tenant, bucket_name, bucket_entry);
+
+  if (binfo_cache.find(bucket_entry, &e)) {
     info = e.info;
     if (pattrs)
       *pattrs = e.attrs;
@@ -7615,7 +7624,9 @@ int RGWRados::get_bucket_info(RGWObjectCtx& obj_ctx,
   rgw_cache_entry_info entry_cache_info;
   int ret = get_bucket_entrypoint_info(obj_ctx, tenant, bucket_name, entry_point, &ot, &ep_mtime, pattrs, &entry_cache_info);
   if (ret < 0) {
-    info.bucket.name = bucket_name; /* only init this field */
+    /* only init these fields */
+    info.bucket.tenant = tenant;
+    info.bucket.name = bucket_name;
     return ret;
   }
 
@@ -7651,7 +7662,7 @@ int RGWRados::get_bucket_info(RGWObjectCtx& obj_ctx,
   e.info.ep_objv = ot.read_version;
   info = e.info;
   if (ret < 0) {
-    // XXX not tenant like above?
+    info.bucket.tenant = tenant;
     info.bucket.name = bucket_name;
     // XXX and why return anything in case of an error anyway?
     return ret;
@@ -7668,7 +7679,7 @@ int RGWRados::get_bucket_info(RGWObjectCtx& obj_ctx,
 
 
   /* chain to both bucket entry point and bucket instance */
-  if (!binfo_cache.put(this, bucket_name, &e, cache_info_entries)) {
+  if (!binfo_cache.put(this, bucket_entry, &e, cache_info_entries)) {
     ldout(cct, 20) << "couldn't put binfo cache entry, might have raced with data changes" << dendl;
   }
 

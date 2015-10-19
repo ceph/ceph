@@ -36,7 +36,10 @@ extern int rgw_bucket_parse_bucket_instance(const string& bucket_instance, strin
 
 extern int rgw_bucket_instance_remove_entry(RGWRados *store, string& entry, RGWObjVersionTracker *objv_tracker);
 
-extern int rgw_bucket_delete_bucket_obj(RGWRados *store, string& bucket_name, RGWObjVersionTracker& objv_tracker);
+extern int rgw_bucket_delete_bucket_obj(RGWRados *store,
+                                        const string& tenant_name,
+                                        const string& bucket_name,
+                                        RGWObjVersionTracker& objv_tracker);
 
 extern int rgw_bucket_sync_user_stats(RGWRados *store, const rgw_user& user_id, rgw_bucket& bucket);
 extern int rgw_bucket_sync_user_stats(RGWRados *store, const string& tenant_name, const string& bucket_name);

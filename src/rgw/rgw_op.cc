@@ -1336,6 +1336,11 @@ int RGWCreateBucket::verify_permission()
   if (!rgw_user_is_authenticated(s->user))
     return -EACCES;
 
+  /* XXX: maybe we need to check ACLs here! */
+  // if ((s->perm_mask & RGW_PERM_WRITE) == 0) {
+  //   return -EACCES;
+  // }
+
   if (s->user.max_buckets) {
     RGWUserBuckets buckets;
     string marker;
@@ -1389,8 +1394,6 @@ void RGWCreateBucket::execute()
   bufferlist corsbl;
   bool existed;
   string bucket_name;
-  // P3
-  ldout(s->cct, 10) << "RGWCreateBucket::execute tenant " << s->user.user_id.tenant << " bucket " << s->bucket_name_str << dendl;
   rgw_make_bucket_entry_name(s->user.user_id.tenant, s->bucket_name_str, bucket_name);
   rgw_obj obj(store->zone.domain_root, bucket_name);
   obj_version objv, *pobjv = NULL;
@@ -2246,6 +2249,9 @@ int RGWPutMetadataAccount::verify_permission()
   if (!rgw_user_is_authenticated(s->user)) {
     return -EACCES;
   }
+  // if ((s->perm_mask & RGW_PERM_WRITE) == 0) {
+  //   return -EACCES;
+  // }
   return 0;
 }
 
@@ -2282,14 +2288,8 @@ void RGWPutMetadataAccount::filter_out_temp_url(map<string, bufferlist>& add_att
 
 void RGWPutMetadataAccount::execute()
 {
-  rgw_obj obj;
   map<string, bufferlist> attrs, orig_attrs, rmattrs;
   RGWObjVersionTracker acct_op_tracker;
-
-  /* Get the name of raw object which stores the metadata in its xattrs. */
-  string buckets_obj_id;
-  rgw_get_buckets_obj(s->user.user_id, buckets_obj_id);
-  obj = rgw_obj(store->zone.user_uid_pool, buckets_obj_id);
 
   ret = get_params();
   if (ret < 0) {
