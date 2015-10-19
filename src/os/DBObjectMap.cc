@@ -11,7 +11,7 @@
 #include <vector>
 
 #include "ObjectMap.h"
-#include "KeyValueDB.h"
+#include "kv/KeyValueDB.h"
 #include "DBObjectMap.h"
 #include <errno.h>
 

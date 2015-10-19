@@ -25,7 +25,7 @@
 #include "include/stringify.h"
 #include "include/utime.h"
 #include "common/Clock.h"
-#include "os/KeyValueDB.h"
+#include "kv/KeyValueDB.h"
 
 using namespace std;
 

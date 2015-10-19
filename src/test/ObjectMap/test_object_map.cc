@@ -6,7 +6,7 @@
 
 #include "include/buffer.h"
 #include "test/ObjectMap/KeyValueDBMemory.h"
-#include "os/KeyValueDB.h"
+#include "kv/KeyValueDB.h"
 #include "os/DBObjectMap.h"
 #include "os/HashIndex.h"
 #include <sys/types.h>
