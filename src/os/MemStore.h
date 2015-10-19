@@ -271,7 +271,7 @@ private:
       std::lock_guard<std::mutex>(o->omap_mutex);
       return it != o->omap.end();      
     }
-    int next() {
+    int next(bool validate=true) {
       std::lock_guard<std::mutex>(o->omap_mutex);
       ++it;
       return 0;

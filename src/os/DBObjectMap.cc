@@ -344,7 +344,7 @@ bool DBObjectMap::DBObjectMapIteratorImpl::valid_parent()
   return false;
 }
 
-int DBObjectMap::DBObjectMapIteratorImpl::next()
+int DBObjectMap::DBObjectMapIteratorImpl::next(bool validate)
 {
   assert(cur_iter->valid());
   assert(valid());
