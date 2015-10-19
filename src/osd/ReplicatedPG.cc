@@ -8574,9 +8574,6 @@ int ReplicatedPG::find_object_context(const hobject_t& oid,
        << dendl;
     *pobc = obc;
 
-    if (can_create && !obc->ssc)
-      obc->ssc = get_snapset_context(oid, true);
-
     return 0;
   }
 
