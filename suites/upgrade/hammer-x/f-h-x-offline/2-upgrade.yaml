@@ -1,0 +1,10 @@
+tasks:
+- install.upgrade:
+- ceph.restart: [mon.a, mon.b, mon.c]
+- ceph.stop: [osd.0, osd.1, osd.2]
+- exec:
+    mon.a:
+      - ceph osd down 0 1 2
+- ceph.restart: [osd.0, osd.1, osd.2]
+- sleep:
+    duration: 10
