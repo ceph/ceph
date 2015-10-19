@@ -21,7 +21,7 @@
 #include "common/debug.h"
 #include "test/common/ObjectContents.h"
 #include "FileStoreTracker.h"
-#include "os/KeyValueDB.h"
+#include "kv/KeyValueDB.h"
 #include "os/ObjectStore.h"
 
 void usage(const string &name) {

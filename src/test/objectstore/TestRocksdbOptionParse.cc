@@ -5,7 +5,7 @@
 #include "rocksdb/db.h"
 #include "rocksdb/env.h"
 #include "rocksdb/thread_status.h"
-#include "os/RocksDBStore.h"
+#include "kv/RocksDBStore.h"
 #include <iostream>
 using namespace std;
 

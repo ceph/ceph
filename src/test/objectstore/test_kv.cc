@@ -17,7 +17,7 @@
 #include <iostream>
 #include <time.h>
 #include <sys/mount.h>
-#include "os/KeyValueDB.h"
+#include "kv/KeyValueDB.h"
 #include "include/Context.h"
 #include "common/ceph_argparse.h"
 #include "global/global_init.h"

@@ -169,6 +169,7 @@ LIBMSG = libmsg.la
 LIBCRUSH = libcrush.la
 LIBCOMPRESSOR = libcompressor.la -lsnappy
 LIBJSON_SPIRIT = libjson_spirit.la
+LIBKV = libkv.a
 LIBLOG = liblog.la
 LIBOS = libos.a
 LIBOS_TYPES = libos_types.a
@@ -228,12 +229,12 @@ LIBMDS += $(LIBPERFGLUE)
 # OSD needs types
 LIBOSD += $(LIBOSD_TYPES) $(LIBOS_TYPES)
 
-# libos linking order is ornery
-LIBOS += $(LIBOS_TYPES)
+# libkv/libos linking order is ornery
 if WITH_SLIBROCKSDB
-LIBOS += rocksdb/librocksdb.a
+LIBKV += rocksdb/librocksdb.a
 endif
-LIBOS += -lbz2 -lz -lleveldb -lsnappy
+LIBKV += -lbz2 -lz -lleveldb -lsnappy
+LIBOS += $(LIBOS_TYPES) $(LIBKV)
 
 LIBMON += $(LIBMON_TYPES)
 

@@ -17,7 +17,7 @@
 #include <boost/scoped_ptr.hpp>
 
 #include "test/ObjectMap/KeyValueDBMemory.h"
-#include "os/KeyValueDB.h"
+#include "kv/KeyValueDB.h"
 #include <sys/types.h>
 #include "global/global_init.h"
 #include "common/ceph_argparse.h"

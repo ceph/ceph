@@ -14,6 +14,7 @@ include auth/Makefile.am
 include brag/Makefile.am
 include ceph-detect-init/Makefile.am
 include crush/Makefile.am
+include kv/Makefile.am
 include mon/Makefile.am
 include mds/Makefile.am
 include os/Makefile.am

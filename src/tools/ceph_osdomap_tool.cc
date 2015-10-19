@@ -20,7 +20,7 @@
 #include "global/global_init.h"
 
 #include "os/DBObjectMap.h"
-#include "os/KeyValueDB.h"
+#include "kv/KeyValueDB.h"
 
 namespace po = boost::program_options;
 using namespace std;

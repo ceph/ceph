@@ -26,7 +26,7 @@
 
 #include "include/memory.h"
 #include "ObjectMap.h"
-#include "KeyValueDB.h"
+#include "kv/KeyValueDB.h"
 #include "osd/osd_types.h"
 #include "common/Mutex.h"
 #include "common/Cond.h"

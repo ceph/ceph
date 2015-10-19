@@ -69,7 +69,7 @@
 #include "common/fd.h"
 #include "HashIndex.h"
 #include "DBObjectMap.h"
-#include "KeyValueDB.h"
+#include "kv/KeyValueDB.h"
 
 #include "common/ceph_crypto.h"
 using ceph::crypto::SHA1;
