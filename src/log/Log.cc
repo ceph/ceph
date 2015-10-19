@@ -209,7 +209,6 @@ void Log::flush()
 void Log::_flush(EntryQueue *t, EntryQueue *requeue, bool crash)
 {
   Entry *e;
-  char buf[80];
   while ((e = t->dequeue()) != NULL) {
     unsigned sub = e->m_subsys;
 
@@ -219,7 +218,8 @@ void Log::_flush(EntryQueue *t, EntryQueue *requeue, bool crash)
     bool do_stderr = m_stderr_crash >= e->m_prio && should_log;
 
     if (do_fd || do_syslog || do_stderr) {
-      int buflen = 0;
+      size_t buflen = 0;
+      char buf[80 + e->size()];
 
       if (crash)
 	buflen += snprintf(buf, sizeof(buf), "%6d> ", -t->m_len);
@@ -227,25 +227,23 @@ void Log::_flush(EntryQueue *t, EntryQueue *requeue, bool crash)
       buflen += snprintf(buf + buflen, sizeof(buf)-buflen, " %lx %2d ",
 			(unsigned long)e->m_thread, e->m_prio);
 
-      // FIXME: this is slow
-      string s = e->get_str();
-
-      if (do_fd) {
-	int r = safe_write(m_fd, buf, buflen);
-	if (r >= 0)
-	  r = safe_write(m_fd, s.data(), s.size());
-	if (r >= 0)
-	  r = write(m_fd, "\n", 1);
-	if (r < 0)
-	  cerr << "problem writing to " << m_log_file << ": " << cpp_strerror(r) << std::endl;
-      }
+      buflen += e->snprintf(buf + buflen, sizeof(buf) - buflen - 1 );
+      if(buflen > sizeof(buf) - 1 ) //paranoid check, buf was declared to hold everything
+        buflen = sizeof(buf) - 1;
 
       if (do_syslog) {
-	syslog(LOG_USER, "%s%s", buf, s.c_str());
+        syslog(LOG_USER, "%s", buf);
       }
 
       if (do_stderr) {
-	cerr << buf << s << std::endl;
+        cerr << buf << std::endl;
+      }
+      if (do_fd) {
+        buf[buflen-1]='\n';
+        buf[buflen]='\0';
+        int r=safe_write(m_fd, buf, buflen+1);
+        if (r < 0)
+          cerr << "problem writing to " << m_log_file << ": " << cpp_strerror(r) << std::endl;
       }
     }
 
