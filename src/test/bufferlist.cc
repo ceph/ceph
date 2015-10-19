@@ -1421,6 +1421,19 @@ TEST(BufferList, rebuild) {
     EXPECT_TRUE(bl.is_page_aligned());
     EXPECT_EQ((unsigned)1, bl.buffers().size());
   }
+  {
+    bufferlist bl;
+    char t1[] = "X";
+    bufferlist a2;
+    a2.append(t1, 1);
+    bl.rebuild();
+    bl.append(a2);
+    EXPECT_EQ((unsigned)1, bl.length());
+    bufferlist::iterator p = bl.begin();
+    char dst[1];
+    p.copy(1, dst);
+    EXPECT_EQ(0, memcmp(dst, "X", 1));
+  }
 }
 
 TEST(BufferList, rebuild_page_aligned) {
@@ -2220,6 +2233,17 @@ TEST(BufferList, zero) {
     }
     bl.zero((unsigned)3, (unsigned)3);
     EXPECT_EQ(0, ::memcmp("ABC\0\0\0GHIKLM", bl.c_str(), 9));
+  }
+  {
+    bufferlist bl;
+    bufferptr ptr1(4);
+    bufferptr ptr2(4);
+    memset(ptr1.c_str(), 'a', 4);
+    memset(ptr2.c_str(), 'b', 4);
+    bl.append(ptr1);
+    bl.append(ptr2);
+    bl.zero((unsigned)2, (unsigned)4);
+    EXPECT_EQ(0, ::memcmp("aa\0\0\0\0bb", bl.c_str(), 8));
   }
 }
 

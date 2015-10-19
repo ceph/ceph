@@ -762,7 +762,8 @@ if(${WITH_RADOSGW})
     rgw/rgw_main.cc)
 
   set(radosgw_admin_srcs
-    rgw/rgw_admin.cc)
+    rgw/rgw_admin.cc
+    rgw/rgw_orphan.cc)
 
   add_executable(radosgw ${radosgw_srcs} $<TARGET_OBJECTS:heap_profiler_objs>)
   target_link_libraries(radosgw rgw_a librados

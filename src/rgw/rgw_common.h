@@ -194,6 +194,7 @@ extern int gen_rand_alphanumeric(CephContext *cct, char *dest, int size);
 extern int gen_rand_alphanumeric_lower(CephContext *cct, char *dest, int size);
 extern int gen_rand_alphanumeric_upper(CephContext *cct, char *dest, int size);
 extern int gen_rand_alphanumeric_no_underscore(CephContext *cct, char *dest, int size);
+extern int gen_rand_alphanumeric_plain(CephContext *cct, char *dest, int size);
 
 extern int gen_rand_alphanumeric_lower(CephContext *cct, string *str, int length);
 
@@ -908,7 +909,7 @@ struct req_info {
   RGWHTTPArgs args;
   map<string, string> x_meta_map;
 
-  const char *host;
+  string host;
   const char *method;
   string script_uri;
   string request_uri;
@@ -1056,6 +1057,8 @@ struct req_state {
    string dialect;
 
    string req_id;
+
+   string trans_id;
 
    req_info info;
 
@@ -1230,7 +1233,7 @@ public:
      * having object locator at all for most objects but the ones that started with underscore as
      * these were escaped.
      */
-    if (orig_obj[0] == '_') {
+    if (orig_obj[0] == '_' && ns.empty()) {
       loc = orig_obj;
     }
   }
@@ -1316,31 +1319,46 @@ public:
    * part of the given namespace, it returns false.
    */
   static bool translate_raw_obj_to_obj_in_ns(string& obj, string& instance, string& ns) {
-    if (ns.empty()) {
-      if (obj[0] != '_')
-        return true;
-
-      if (obj.size() >= 2 && obj[1] == '_') {
-        obj = obj.substr(1);
+    if (obj[0] != '_') {
+      if (ns.empty()) {
         return true;
       }
-
       return false;
     }
 
-    if (obj[0] != '_' || obj.size() < 3) // for namespace, min size would be 3: _x_
+    string obj_ns;
+    bool ret = parse_raw_oid(obj, &obj, &instance, &obj_ns);
+    if (!ret) {
+      return ret;
+    }
+
+    return (ns == obj_ns);
+  }
+
+  static bool parse_raw_oid(const string& oid, string *obj_name, string *obj_instance, string *obj_ns) {
+    obj_instance->clear();
+    obj_ns->clear();
+    if (oid[0] != '_') {
+      *obj_name = oid;
+      return true;
+    }
+
+    if (oid.size() >= 2 && oid[1] == '_') {
+      *obj_name = oid.substr(1);
+      return true;
+    }
+
+    if (oid[0] != '_' || oid.size() < 3) // for namespace, min size would be 3: _x_
       return false;
 
-    int pos = obj.find('_', 1);
+    int pos = oid.find('_', 1);
     if (pos <= 1) // if it starts with __, it's not in our namespace
       return false;
 
-    string obj_ns = obj.substr(1, pos - 1);
-    parse_ns_field(obj_ns, instance);
-    if (obj_ns.compare(ns) != 0)
-        return false;
+    *obj_ns = oid.substr(1, pos - 1);
+    parse_ns_field(*obj_ns, *obj_instance);
 
-    obj = obj.substr(pos + 1);
+    *obj_name = oid.substr(pos + 1);
     return true;
   }
 

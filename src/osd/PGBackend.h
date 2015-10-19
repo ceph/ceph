@@ -318,25 +318,8 @@
 
    virtual void on_flushed() = 0;
 
-   class IsRecoverablePredicate {
-   public:
-     /**
-      * have encodes the shards available
-      */
-     virtual bool operator()(const set<pg_shard_t> &have) const = 0;
-     virtual ~IsRecoverablePredicate() {}
-   };
-   virtual IsRecoverablePredicate *get_is_recoverable_predicate() = 0;
-
-   class IsReadablePredicate {
-   public:
-     /**
-      * have encodes the shards available
-      */
-     virtual bool operator()(const set<pg_shard_t> &have) const = 0;
-     virtual ~IsReadablePredicate() {}
-   };
-   virtual IsReadablePredicate *get_is_readable_predicate() = 0;
+   virtual IsPGRecoverablePredicate *get_is_recoverable_predicate() = 0;
+   virtual IsPGReadablePredicate *get_is_readable_predicate() = 0;
 
    void temp_colls(list<coll_t> *out) {
      if (temp_created)
@@ -606,6 +589,7 @@
    void be_compare_scrubmaps(
      const map<pg_shard_t,ScrubMap*> &maps,
      bool okseed,   ///< true if scrub digests have same seed our oi digests
+     bool repair,
      map<hobject_t, set<pg_shard_t> > &missing,
      map<hobject_t, set<pg_shard_t> > &inconsistent,
      map<hobject_t, list<pg_shard_t> > &authoritative,

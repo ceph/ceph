@@ -31,6 +31,7 @@
 #include "librbd/parent_types.h"
 
 class CephContext;
+class ContextWQ;
 class Finisher;
 class PerfCounters;
 
@@ -130,6 +131,9 @@ namespace librbd {
 
     xlist<AsyncResizeRequest*> async_resize_reqs;
 
+    ContextWQ *aio_work_queue;
+    ContextWQ *op_work_queue;
+
     /**
      * Either image_name or image_id must be set.
      * If id is not known, pass the empty std::string,
@@ -187,13 +191,11 @@ namespace librbd {
 			     int fadvise_flags);
     void write_to_cache(object_t o, const bufferlist& bl, size_t len,
 			uint64_t off, Context *onfinish, int fadvise_flags);
-    int read_from_cache(object_t o, uint64_t object_no, bufferlist *bl,
-			size_t len, uint64_t off);
     void user_flushed();
     void flush_cache_aio(Context *onfinish);
     int flush_cache();
     void shutdown_cache();
-    int invalidate_cache();
+    int invalidate_cache(bool purge_on_error=false);
     void invalidate_cache(Context *on_finish);
     void invalidate_cache_completion(int r, Context *on_finish);
     void clear_nonexistence_cache();

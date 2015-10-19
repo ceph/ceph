@@ -62,6 +62,7 @@ import argparse
 import errno
 import json
 import rados
+import shlex
 import signal
 import socket
 import string
@@ -384,6 +385,25 @@ def ceph_conf(parsed_args, field, name):
 
 PROMPT = 'ceph> '
 
+if sys.stdin.isatty():
+    def read_input():
+        while True:
+            line = raw_input(PROMPT).rstrip()
+            if line in ['q', 'quit', 'Q']:
+                return None
+            if line:
+                return line
+else:
+    def read_input():
+        while True:
+            line = sys.stdin.readline()
+            if not line:
+                return None
+            line = line.rstrip()
+            if line:
+                return line
+
+
 def new_style_command(parsed_args, cmdargs, target, sigdict, inbuf, verbose):
     """
     Do new-style command dance.
@@ -411,26 +431,22 @@ def new_style_command(parsed_args, cmdargs, target, sigdict, inbuf, verbose):
             else:
                 return -errno.EINVAL, '', 'invalid command'
         else:
-            # do the command-interpreter looping
-            # for raw_input to do readline cmd editing
-            import readline
-
             if sys.stdin.isatty():
-                prompt = PROMPT
-            else:
-                prompt = ''
+                # do the command-interpreter looping
+                # for raw_input to do readline cmd editing
+                import readline
 
             while True:
-                interactive_input = raw_input(prompt)
-                if interactive_input in ['q', 'quit', 'Q']:
+                interactive_input = read_input()
+                if interactive_input is None:
                     return 0, '', ''
-                cmdargs = parse_cmdargs(interactive_input.split())[2]
+                cmdargs = parse_cmdargs(shlex.split(interactive_input))[2]
                 try:
                     target = find_cmd_target(cmdargs)
                 except Exception as e:
                     print >> sys.stderr, \
                             'error handling command target: {0}'.format(e)
-                    return 1
+                    return 1, '', ''
                 valid_dict = validate_command(sigdict, cmdargs, verbose)
                 if valid_dict:
                     if parsed_args.output_format:
@@ -443,7 +459,7 @@ def new_style_command(parsed_args, cmdargs, target, sigdict, inbuf, verbose):
                     if ret:
                         ret = abs(ret)
                         print >> sys.stderr, \
-                            'Error: {0} {1}'.format(ret, errno.errorcode[ret])
+                            'Error: {0} {1}'.format(ret, errno.errorcode.get(ret, 'Unknown'))
                     if outbuf:
                         print outbuf
                     if outs:
@@ -663,7 +679,7 @@ def main():
     if len(childargs) >= 2 and \
         childargs[0] in ['mon', 'osd'] and \
         childargs[1] == 'tell':
-        print >> sys.stderr, '"{0} tell" is deprecated; try "tell {0}.<id>" instead (id can be "*") '.format(childargs[0])
+        print >> sys.stderr, '"{0} tell" is deprecated; try "tell {0}.<id> <command> [options...]" instead (id can be "*") '.format(childargs[0])
         return 1
 
     if parsed_args.help:
@@ -778,7 +794,9 @@ def main():
             childargs = injectargs
         if not len(childargs):
             print >> sys.stderr, \
-                'Cannot use \'tell\' with interactive mode'
+                'Cannot use \'tell\' with interactive mode.', \
+                'For an interactive shell,', \
+                'please start "{0}" without non-option arguments.'.format(sys.argv[0])
             return errno.EINVAL
 
     # fetch JSON sigs from command
@@ -842,11 +860,11 @@ def main():
                                                           sigdict, inbuf, verbose)
                     if ret < 0:
                         ret = -ret
-                        print >> sys.stderr, prefix + 'Second attempt of previously successful command failed with {0}: {1}'.format(errno.errorcode[ret], outs)
+                        print >> sys.stderr, prefix + 'Second attempt of previously successful command failed with {0}: {1}'.format(errno.errorcode.get(ret, 'Unknown'), outs)
 
         if ret < 0:
             ret = -ret
-            print >> sys.stderr, prefix + 'Error {0}: {1}'.format(errno.errorcode[ret], outs)
+            print >> sys.stderr, prefix + 'Error {0}: {1}'.format(errno.errorcode.get(ret, 'Unknown'), outs)
             if len(targets) > 1:
                 final_ret = ret
             else:

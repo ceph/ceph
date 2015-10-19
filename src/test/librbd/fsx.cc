@@ -196,7 +196,7 @@ warn(const char * fmt, ...)  {
 #define BUF_SIZE 1024
 
 void
-prt(char *fmt, ...)
+prt(const char *fmt, ...)
 {
 	va_list args;
 	char buffer[BUF_SIZE];
@@ -210,13 +210,13 @@ prt(char *fmt, ...)
 }
 
 void
-prterr(char *prefix)
+prterr(const char *prefix)
 {
 	prt("%s%s%s\n", prefix, prefix ? ": " : "", strerror(errno));
 }
 
 void
-prterrcode(char *prefix, int code)
+prterrcode(const char *prefix, int code)
 {
 	prt("%s%s%s\n", prefix, prefix ? ": " : "", strerror(-code));
 }
@@ -264,8 +264,8 @@ struct rbd_ctx {
 struct rbd_operations {
 	int (*open)(const char *name, struct rbd_ctx *ctx);
 	int (*close)(struct rbd_ctx *ctx);
-	ssize_t (*read)(struct rbd_ctx *ctx, uint64_t off, size_t len, void *buf);
-	ssize_t (*write)(struct rbd_ctx *ctx, uint64_t off, size_t len, void *buf);
+	ssize_t (*read)(struct rbd_ctx *ctx, uint64_t off, size_t len, char *buf);
+	ssize_t (*write)(struct rbd_ctx *ctx, uint64_t off, size_t len, const char *buf);
 	int (*flush)(struct rbd_ctx *ctx);
 	int (*discard)(struct rbd_ctx *ctx, uint64_t off, uint64_t len);
 	int (*get_size)(struct rbd_ctx *ctx, uint64_t *size);
@@ -362,7 +362,7 @@ librbd_verify_object_map(struct rbd_ctx *ctx)
 }
 
 ssize_t
-librbd_read(struct rbd_ctx *ctx, uint64_t off, size_t len, void *buf)
+librbd_read(struct rbd_ctx *ctx, uint64_t off, size_t len, char *buf)
 {
 	ssize_t n;
 
@@ -374,7 +374,7 @@ librbd_read(struct rbd_ctx *ctx, uint64_t off, size_t len, void *buf)
 }
 
 ssize_t
-librbd_write(struct rbd_ctx *ctx, uint64_t off, size_t len, void *buf)
+librbd_write(struct rbd_ctx *ctx, uint64_t off, size_t len, const char *buf)
 {
 	ssize_t n;
 	int ret;
@@ -525,16 +525,16 @@ librbd_flatten(struct rbd_ctx *ctx)
 }
 
 const struct rbd_operations librbd_operations = {
-	.open	= librbd_open,
-	.close	= librbd_close,
-	.read	= librbd_read,
-	.write	= librbd_write,
-	.flush	= librbd_flush,
-	.discard = librbd_discard,
-	.get_size = librbd_get_size,
-	.resize	= librbd_resize,
-	.clone	= librbd_clone,
-	.flatten = librbd_flatten,
+	librbd_open,
+	librbd_close,
+	librbd_read,
+	librbd_write,
+	librbd_flush,
+	librbd_discard,
+	librbd_get_size,
+	librbd_resize,
+	librbd_clone,
+	librbd_flatten
 };
 
 int
@@ -595,7 +595,7 @@ krbd_close(struct rbd_ctx *ctx)
 }
 
 ssize_t
-krbd_read(struct rbd_ctx *ctx, uint64_t off, size_t len, void *buf)
+krbd_read(struct rbd_ctx *ctx, uint64_t off, size_t len, char *buf)
 {
 	ssize_t n;
 
@@ -610,7 +610,7 @@ krbd_read(struct rbd_ctx *ctx, uint64_t off, size_t len, void *buf)
 }
 
 ssize_t
-krbd_write(struct rbd_ctx *ctx, uint64_t off, size_t len, void *buf)
+krbd_write(struct rbd_ctx *ctx, uint64_t off, size_t len, const char *buf)
 {
 	ssize_t n;
 
@@ -738,16 +738,16 @@ krbd_flatten(struct rbd_ctx *ctx)
 }
 
 const struct rbd_operations krbd_operations = {
-	.open	= krbd_open,
-	.close	= krbd_close,
-	.read	= krbd_read,
-	.write	= krbd_write,
-	.flush	= krbd_flush,
-	.discard = krbd_discard,
-	.get_size = krbd_get_size,
-	.resize	= krbd_resize,
-	.clone	= krbd_clone,
-	.flatten = krbd_flatten,
+	krbd_open,
+	krbd_close,
+	krbd_read,
+	krbd_write,
+	krbd_flush,
+	krbd_discard,
+	krbd_get_size,
+	krbd_resize,
+	krbd_clone,
+	krbd_flatten,
 };
 
 struct rbd_ctx ctx = RBD_CTX_INIT;
@@ -793,7 +793,7 @@ logdump(void)
 {
 	int	i, count, down;
 	struct log_entry	*lp;
-	char *falloc_type[3] = {"PAST_EOF", "EXTENDING", "INTERIOR"};
+	const char *falloc_type[3] = {"PAST_EOF", "EXTENDING", "INTERIOR"};
 
 	prt("LOG DUMP (%d total operations):\n", logcount);
 	if (logcount < LOGSIZE) {
@@ -1744,8 +1744,7 @@ out:
 
 
 void
-cleanup(sig)
-	int	sig;
+cleanup(int sig)
 {
 	if (sig)
 		prt("signal %d\n", sig);

@@ -38,6 +38,9 @@ namespace librbd {
 			const bufferlist &bl, utime_t mtime, uint64_t trunc_size,
 			__u32 trunc_seq, Context *oncommit);
 
+    virtual void get_client_lock();
+    virtual void put_client_lock();
+
     struct write_result_d {
       bool done;
       int ret;

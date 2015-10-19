@@ -31,6 +31,7 @@ using namespace std;
 #include "rgw_formats.h"
 #include "rgw_usage.h"
 #include "rgw_replica_log.h"
+#include "rgw_orphan.h"
 
 #define dout_subsys ceph_subsys_rgw
 
@@ -124,6 +125,7 @@ void _usage()
   cerr << "   --access=<access>         Set access permissions for sub-user, should be one\n";
   cerr << "                             of read, write, readwrite, full\n";
   cerr << "   --display-name=<name>\n";
+  cerr << "   --max_buckets             max number of buckets for a user\n";
   cerr << "   --system                  set the system flag on the user\n";
   cerr << "   --bucket=<bucket>\n";
   cerr << "   --pool=<pool>\n";
@@ -164,6 +166,7 @@ void _usage()
   cerr << "   --categories=<list>       comma separated list of categories, used in usage show\n";
   cerr << "   --caps=<caps>             list of caps (e.g., \"usage=read, write; user=read\"\n";
   cerr << "   --yes-i-really-mean-it    required for certain operations\n";
+  cerr << "   --reset-regions           reset regionmap when regionmap update";
   cerr << "\n";
   cerr << "<date> := \"YYYY-MM-DD[ hh:mm:ss]\"\n";
   cerr << "\nQuota options:\n";
@@ -232,6 +235,8 @@ enum {
   OPT_QUOTA_DISABLE,
   OPT_GC_LIST,
   OPT_GC_PROCESS,
+  OPT_ORPHANS_FIND,
+  OPT_ORPHANS_FINISH,
   OPT_REGION_GET,
   OPT_REGION_LIST,
   OPT_REGION_SET,
@@ -281,6 +286,7 @@ static int get_cmd(const char *cmd, const char *prev_cmd, bool *need_more)
       strcmp(cmd, "object") == 0 ||
       strcmp(cmd, "olh") == 0 ||
       strcmp(cmd, "opstate") == 0 ||
+      strcmp(cmd, "orphans") == 0 || 
       strcmp(cmd, "pool") == 0 ||
       strcmp(cmd, "pools") == 0 ||
       strcmp(cmd, "quota") == 0 ||
@@ -441,6 +447,11 @@ static int get_cmd(const char *cmd, const char *prev_cmd, bool *need_more)
       return OPT_GC_LIST;
     if (strcmp(cmd, "process") == 0)
       return OPT_GC_PROCESS;
+  } else if (strcmp(prev_cmd, "orphans") == 0) {
+    if (strcmp(cmd, "find") == 0)
+      return OPT_ORPHANS_FIND;
+    if (strcmp(cmd, "finish") == 0)
+      return OPT_ORPHANS_FINISH;
   } else if (strcmp(prev_cmd, "metadata") == 0) {
     if (strcmp(cmd, "get") == 0)
       return OPT_METADATA_GET;
@@ -908,9 +919,10 @@ int check_min_obj_stripe_size(RGWRados *store, RGWBucketInfo& bucket_info, rgw_o
 }
 
 
-int check_obj_locator_underscore(RGWBucketInfo& bucket_info, rgw_obj& obj, rgw_obj_key& key, bool fix, Formatter *f) {
+int check_obj_locator_underscore(RGWBucketInfo& bucket_info, rgw_obj& obj, rgw_obj_key& key, bool fix, bool remove_bad, Formatter *f) {
   f->open_object_section("object");
   f->open_object_section("key");
+  f->dump_string("type", "head");
   f->dump_string("name", key.name);
   f->dump_string("instance", key.instance);
   f->close_section();
@@ -936,8 +948,8 @@ int check_obj_locator_underscore(RGWBucketInfo& bucket_info, rgw_obj& obj, rgw_o
 
   string status = (needs_fixing ? "needs_fixing" : "ok");
 
-  if (needs_fixing && fix) {
-    ret = store->fix_head_obj_locator(obj.bucket, key);
+  if ((needs_fixing || remove_bad) && fix) {
+    ret = store->fix_head_obj_locator(obj.bucket, needs_fixing, remove_bad, key);
     if (ret < 0) {
       cerr << "ERROR: fix_head_object_locator() returned ret=" << ret << std::endl;
       goto done;
@@ -953,8 +965,43 @@ done:
   return 0;
 }
 
-int do_check_object_locator(const string& bucket_name, bool fix, Formatter *f)
+int check_obj_tail_locator_underscore(RGWBucketInfo& bucket_info, rgw_obj& obj, rgw_obj_key& key, bool fix, Formatter *f) {
+  f->open_object_section("object");
+  f->open_object_section("key");
+  f->dump_string("type", "tail");
+  f->dump_string("name", key.name);
+  f->dump_string("instance", key.instance);
+  f->close_section();
+
+  string oid;
+  string locator;
+
+  bool needs_fixing;
+  string status;
+
+  int ret = store->fix_tail_obj_locator(obj.bucket, key, fix, &needs_fixing);
+  if (ret < 0) {
+    cerr << "ERROR: fix_tail_object_locator_underscore() returned ret=" << ret << std::endl;
+    status = "failed";
+  } else {
+    status = (needs_fixing && !fix ? "needs_fixing" : "ok");
+  }
+
+  f->dump_bool("needs_fixing", needs_fixing);
+  f->dump_string("status", status);
+
+  f->close_section();
+
+  return 0;
+}
+
+int do_check_object_locator(const string& bucket_name, bool fix, bool remove_bad, Formatter *f)
 {
+  if (remove_bad && !fix) {
+    cerr << "ERROR: can't have remove_bad specified without fix" << std::endl;
+    return -EINVAL;
+  }
+
   RGWBucketInfo bucket_info;
   rgw_bucket bucket;
   string bucket_id;
@@ -986,7 +1033,7 @@ int do_check_object_locator(const string& bucket_name, bool fix, Formatter *f)
   list_op.params.delim = delim;
   list_op.params.marker = rgw_obj_key(marker);
   list_op.params.ns = ns;
-  list_op.params.enforce_ns = false;
+  list_op.params.enforce_ns = true;
   list_op.params.list_versions = true;
   
   f->open_array_section("check_objects");
@@ -1005,8 +1052,12 @@ int do_check_object_locator(const string& bucket_name, bool fix, Formatter *f)
       rgw_obj obj(bucket, key);
 
       if (key.name[0] == '_') {
-        ret = check_obj_locator_underscore(bucket_info, obj, key, fix, f);
+        ret = check_obj_locator_underscore(bucket_info, obj, key, fix, remove_bad, f);
         /* ignore return code, move to the next one */
+	
+	if (ret >= 0) {
+          ret = check_obj_tail_locator_underscore(bucket_info, obj, key, fix, f);
+	}
       }
     }
     f->flush(cout);
@@ -1018,6 +1069,7 @@ int do_check_object_locator(const string& bucket_name, bool fix, Formatter *f)
 
   return 0;
 }
+
 
 int main(int argc, char **argv) 
 {
@@ -1056,6 +1108,7 @@ int main(int argc, char **argv)
   int yes_i_really_mean_it = false;
   int delete_child_objects = false;
   int fix = false;
+  int remove_bad = false;
   int check_head_obj_locator = false;
   int max_buckets = -1;
   map<string, bool> categories;
@@ -1092,12 +1145,18 @@ int main(int argc, char **argv)
   int include_all = false;
 
   int sync_stats = false;
+  int reset_regions = false;
 
   uint64_t min_rewrite_size = 4 * 1024 * 1024;
   uint64_t max_rewrite_size = ULLONG_MAX;
   uint64_t min_rewrite_stripe_size = 0;
 
   BIIndexType bi_index_type = PlainIdx;
+
+  string job_id;
+  int num_shards = 0;
+  int max_concurrent_ios = 32;
+  uint64_t orphan_stale_secs = (24 * 3600);
 
   std::string val;
   std::ostringstream errs;
@@ -1148,6 +1207,8 @@ int main(int argc, char **argv)
         cerr << "bad key type: " << key_type_str << std::endl;
         return usage();
       }
+    } else if (ceph_argparse_witharg(args, i, &val, "--job-id", (char*)NULL)) {
+      job_id = val;
     } else if (ceph_argparse_binary_flag(args, i, &gen_access_key, NULL, "--gen-access-key", (char*)NULL)) {
       // do nothing
     } else if (ceph_argparse_binary_flag(args, i, &gen_secret_key, NULL, "--gen-secret", (char*)NULL)) {
@@ -1197,6 +1258,12 @@ int main(int argc, char **argv)
       start_date = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--end-date", "--end-time", (char*)NULL)) {
       end_date = val;
+    } else if (ceph_argparse_witharg(args, i, &val, "--num-shards", (char*)NULL)) {
+      num_shards = atoi(val.c_str());
+    } else if (ceph_argparse_witharg(args, i, &val, "--max-concurrent-ios", (char*)NULL)) {
+      max_concurrent_ios = atoi(val.c_str());
+    } else if (ceph_argparse_witharg(args, i, &val, "--orphan-stale-secs", (char*)NULL)) {
+      orphan_stale_secs = (uint64_t)atoi(val.c_str());
     } else if (ceph_argparse_witharg(args, i, &val, "--shard-id", (char*)NULL)) {
       shard_id = atoi(val.c_str());
       specified_shard_id = true;
@@ -1241,6 +1308,8 @@ int main(int argc, char **argv)
       // do nothing
     } else if (ceph_argparse_binary_flag(args, i, &fix, NULL, "--fix", (char*)NULL)) {
       // do nothing
+    } else if (ceph_argparse_binary_flag(args, i, &remove_bad, NULL, "--remove-bad", (char*)NULL)) {
+      // do nothing
     } else if (ceph_argparse_binary_flag(args, i, &check_head_obj_locator, NULL, "--check-head-obj-locator", (char*)NULL)) {
       // do nothing
     } else if (ceph_argparse_binary_flag(args, i, &check_objects, NULL, "--check-objects", (char*)NULL)) {
@@ -1248,6 +1317,8 @@ int main(int argc, char **argv)
     } else if (ceph_argparse_binary_flag(args, i, &sync_stats, NULL, "--sync-stats", (char*)NULL)) {
      // do nothing
     } else if (ceph_argparse_binary_flag(args, i, &include_all, NULL, "--include-all", (char*)NULL)) {
+     // do nothing
+    } else if (ceph_argparse_binary_flag(args, i, &reset_regions, NULL, "--reset-regions", (char*)NULL)) {
      // do nothing
     } else if (ceph_argparse_witharg(args, i, &val, "--caps", (char*)NULL)) {
       caps = val;
@@ -1487,6 +1558,10 @@ int main(int argc, char **argv)
 	return -ret;
       }
 
+      if (reset_regions) {
+        regionmap.regions.clear();
+      }
+
       for (list<string>::iterator iter = regions.begin(); iter != regions.end(); ++iter) {
         ret = region.read_info(*iter);
         if (ret < 0) {
@@ -1705,14 +1780,6 @@ int main(int argc, char **argv)
       cerr << "could not modify subuser: " << err_msg << std::endl;
       return -ret;
     }
-
-    ret = user.info(info, &err_msg);
-    if (ret < 0) {
-      cerr << "could not fetch user info: " << err_msg << std::endl;
-      return -ret;
-    }
-
-    show_user_info(info, formatter);
 
     break;
   case OPT_SUBUSER_RM:
@@ -2468,7 +2535,7 @@ next:
         cerr << "ERROR: need to specify bucket name" << std::endl;
         return EINVAL;
       }
-      do_check_object_locator(bucket_name, fix, formatter);
+      do_check_object_locator(bucket_name, fix, remove_bad, formatter);
     } else {
       RGWBucketAdminOp::check_index(store, bucket_op, f);
     }
@@ -2519,6 +2586,55 @@ next:
     if (ret < 0) {
       cerr << "ERROR: gc processing returned error: " << cpp_strerror(-ret) << std::endl;
       return 1;
+    }
+  }
+
+  if (opt_cmd == OPT_ORPHANS_FIND) {
+    RGWOrphanSearch search(store, max_concurrent_ios, orphan_stale_secs);
+
+    if (job_id.empty()) {
+      cerr << "ERROR: --job-id not specified" << std::endl;
+      return EINVAL;
+    }
+    if (pool_name.empty()) {
+      cerr << "ERROR: --pool not specified" << std::endl;
+      return EINVAL;
+    }
+
+    RGWOrphanSearchInfo info;
+
+    info.pool = pool_name;
+    info.job_name = job_id;
+    info.num_shards = num_shards;
+
+    int ret = search.init(job_id, &info);
+    if (ret < 0) {
+      cerr << "could not init search, ret=" << ret << std::endl;
+      return -ret;
+    }
+    ret = search.run();
+    if (ret < 0) {
+      return -ret;
+    }
+  }
+
+  if (opt_cmd == OPT_ORPHANS_FINISH) {
+    RGWOrphanSearch search(store, max_concurrent_ios, orphan_stale_secs);
+
+    if (job_id.empty()) {
+      cerr << "ERROR: --job-id not specified" << std::endl;
+      return EINVAL;
+    }
+    int ret = search.init(job_id, NULL);
+    if (ret < 0) {
+      if (ret == -ENOENT) {
+        cerr << "job not found" << std::endl;
+      }
+      return -ret;
+    }
+    ret = search.finish();
+    if (ret < 0) {
+      return -ret;
     }
   }
 

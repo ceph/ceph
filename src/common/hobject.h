@@ -29,6 +29,13 @@ namespace ceph {
   class Formatter;
 }
 
+#ifndef UINT64_MAX
+#define UINT64_MAX (18446744073709551615ULL)
+#endif
+#ifndef INT64_MIN
+#define INT64_MIN ((int64_t)0x8000000000000000ll)
+#endif
+
 struct hobject_t {
   object_t oid;
   snapid_t snap;
@@ -99,6 +106,7 @@ public:
       return *this;
     hobject_t ret;
     ret.set_hash(hash);
+    ret.pool = pool;
     return ret;
   }
 
@@ -282,6 +290,8 @@ public:
       return *this;
     ghobject_t ret;
     ret.hobj.set_hash(hobj.hash);
+    ret.shard_id = shard_id;
+    ret.hobj.pool = hobj.pool;
     return ret;
   }
   filestore_hobject_key_t get_filestore_key_u32() const {

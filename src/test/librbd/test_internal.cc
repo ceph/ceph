@@ -1,6 +1,7 @@
 // -*- mode:C; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 #include "test/librbd/test_fixture.h"
+#include "test/librbd/test_support.h"
 #include "librbd/AioCompletion.h"
 #include "librbd/ImageWatcher.h"
 #include "librbd/internal.h"
@@ -249,12 +250,17 @@ TEST_F(TestInternal, AioWriteRequestsLock) {
   DummyContext *ctx = new DummyContext();
   librbd::AioCompletion *c =
     librbd::aio_create_completion_internal(ctx, librbd::rbd_ctx_cb);
-  ASSERT_EQ(0, aio_write(ictx, 0, buffer.size(), buffer.c_str(), c, 0));
+  c->get();
+  aio_write(ictx, 0, buffer.size(), buffer.c_str(), c, 0);
 
   bool is_owner;
   ASSERT_EQ(0, librbd::is_exclusive_lock_owner(ictx, &is_owner));
   ASSERT_FALSE(is_owner);
   ASSERT_FALSE(c->is_complete());
+
+  unlock_image();
+  ASSERT_EQ(0, c->wait_for_complete());
+  c->put();
 }
 
 TEST_F(TestInternal, AioDiscardRequestsLock) {
@@ -267,12 +273,17 @@ TEST_F(TestInternal, AioDiscardRequestsLock) {
   DummyContext *ctx = new DummyContext();
   librbd::AioCompletion *c =
     librbd::aio_create_completion_internal(ctx, librbd::rbd_ctx_cb);
-  ASSERT_EQ(0, aio_discard(ictx, 0, 256, c));
+  c->get();
+  aio_discard(ictx, 0, 256, c);
 
   bool is_owner;
   ASSERT_EQ(0, librbd::is_exclusive_lock_owner(ictx, &is_owner));
   ASSERT_FALSE(is_owner);
   ASSERT_FALSE(c->is_complete());
+
+  unlock_image();
+  ASSERT_EQ(0, c->wait_for_complete());
+  c->put();
 }
 
 TEST_F(TestInternal, CancelAsyncResize) {
@@ -353,4 +364,29 @@ TEST_F(TestInternal, MultipleResize) {
 
   ASSERT_EQ(0, librbd::get_size(ictx, &size));
   ASSERT_EQ(0U, size);
+}
+
+TEST_F(TestInternal, ShrinkFlushesCache) {
+  librbd::ImageCtx *ictx;
+  ASSERT_EQ(0, open_image(m_image_name, &ictx));
+
+  {
+    RWLock::WLocker owner_locker(ictx->owner_lock);
+    ASSERT_EQ(0, ictx->image_watcher->try_lock());
+  }
+
+  std::string buffer(4096, '1');
+  C_SaferCond cond_ctx;
+  librbd::AioCompletion *c =
+    librbd::aio_create_completion_internal(&cond_ctx, librbd::rbd_ctx_cb);
+  c->get();
+  aio_write(ictx, 0, buffer.size(), buffer.c_str(), c, 0);
+
+  librbd::NoOpProgressContext no_op;
+  ASSERT_EQ(0, librbd::resize(ictx, m_image_size >> 1, no_op));
+
+  ASSERT_TRUE(c->is_complete());
+  ASSERT_EQ(0, c->wait_for_complete());
+  ASSERT_EQ(0, cond_ctx.wait());
+  c->put();
 }

@@ -50,6 +50,7 @@ int ErasureCodeShec::create_ruleset(const string &name,
   if (ruleid < 0) {
     return ruleid;
   } else {
+    crush.set_rule_mask_max_size(ruleid, get_chunk_count());
     return crush.get_rule_mask_ruleset(ruleid);
   }
 }

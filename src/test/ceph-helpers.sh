@@ -973,6 +973,57 @@ function test_repair() {
 #######################################################################
 
 ##
+# Run the *command* and expect it to fail (i.e. return a non zero status).
+# The output (stderr and stdout) is stored in a temporary file in *dir*
+# and is expected to contain the string *expected*.
+#
+# Return 0 if the command failed and the string was found. Otherwise
+# return 1 and cat the full output of the command on stderr for debug.
+#
+# @param dir temporary directory to store the output
+# @param expected string to look for in the output
+# @param command ... the command and its arguments
+# @return 0 on success, 1 on error
+#
+
+function expect_failure() {
+    local dir=$1
+    shift
+    local expected="$1"
+    shift
+    local success
+
+    if "$@" > $dir/out 2>&1 ; then
+        success=true
+    else
+        success=false
+    fi
+
+    if $success || ! grep --quiet "$expected" $dir/out ; then
+        cat $dir/out >&2
+        return 1
+    else
+        return 0
+    fi
+}
+
+function test_expect_failure() {
+    local dir=$1
+
+    setup $dir || return 1
+    expect_failure $dir FAIL bash -c 'echo FAIL ; exit 1' || return 1
+    # the command did not fail
+    ! expect_failure $dir FAIL bash -c 'echo FAIL ; exit 0' > $dir/out || return 1
+    grep --quiet FAIL $dir/out || return 1
+    # the command failed but the output does not contain the expected string
+    ! expect_failure $dir FAIL bash -c 'echo UNEXPECTED ; exit 1' > $dir/out || return 1
+    ! grep --quiet FAIL $dir/out || return 1
+    teardown $dir || return 1
+}
+
+#######################################################################
+
+##
 # Call the **run** function (which must be defined by the caller) with
 # the **dir** argument followed by the caller argument list. The
 # **setup** function is called before the **run** function and the

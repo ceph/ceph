@@ -230,8 +230,8 @@ static bool rgw_find_host_in_domains(const string& host, string *domain, string 
     if (!str_ends_with(host, *iter, &pos))
       continue;
 
-    *domain = host.substr(pos);
     if (pos == 0) {
+      *domain = host;
       subdomain->clear();
     } else {
       if (host[pos - 1] != '.') {
@@ -359,8 +359,11 @@ void dump_bucket_from_state(struct req_state *s)
 {
   int expose_bucket = g_conf->rgw_expose_bucket;
   if (expose_bucket) {
-    if (!s->bucket_name_str.empty())
-      s->cio->print("Bucket: \"%s\"\r\n", s->bucket_name_str.c_str());
+    if (!s->bucket_name_str.empty()) {
+      string b;
+      url_encode(s->bucket_name_str, b);
+      s->cio->print("Bucket: %s\r\n", b.c_str());
+    }
   }
 }
 
@@ -492,15 +495,34 @@ void dump_start(struct req_state *s)
   }
 }
 
-void end_header(struct req_state *s, RGWOp *op, const char *content_type, const int64_t proposed_content_length)
+void dump_trans_id(req_state *s)
+{
+  if (s->prot_flags & RGW_REST_SWIFT) {
+    s->cio->print("X-Trans-Id: %s\r\n", s->trans_id.c_str());
+  }
+  else {
+    s->cio->print("x-amz-request-id: %s\r\n", s->trans_id.c_str());
+  }
+}
+
+void end_header(struct req_state *s, RGWOp *op, const char *content_type, const int64_t proposed_content_length,
+		bool force_content_type)
 {
   string ctype;
+
+  dump_trans_id(s);
 
   if (op) {
     dump_access_control(s, op);
   }
 
-  if (!content_type || s->err.is_err()) {
+  if (s->prot_flags & RGW_REST_SWIFT && !content_type) {
+    force_content_type = true;
+  }
+
+  /* do not send content type if content length is zero
+     and the content type was not set by the user */
+  if (force_content_type || (!content_type &&  s->formatter->get_len()  != 0) || s->err.is_err()){
     switch (s->format) {
     case RGW_FORMAT_XML:
       ctype = "application/xml";
@@ -530,9 +552,13 @@ void end_header(struct req_state *s, RGWOp *op, const char *content_type, const 
       dump_content_length(s, proposed_content_length);
     }
   }
-  int r = s->cio->print("Content-type: %s\r\n", content_type);
-  if (r < 0) {
-    ldout(s->cct, 0) << "ERROR: s->cio->print() returned err=" << r << dendl;
+
+  int r;
+  if (content_type) {
+      r = s->cio->print("Content-type: %s\r\n", content_type);
+      if (r < 0) {
+	ldout(s->cct, 0) << "ERROR: s->cio->print() returned err=" << r << dendl;
+      }
   }
   r = s->cio->complete_header();
   if (r < 0) {
@@ -1301,31 +1327,49 @@ RGWRESTMgr::~RGWRESTMgr()
   delete default_mgr;
 }
 
+static int64_t parse_content_length(const char *content_length)
+{
+  int64_t len = -1;
+
+  if (*content_length == '\0') {
+    len = 0;
+  } else {
+    string err;
+    len = strict_strtoll(content_length, 10, &err);
+    if (!err.empty()) {
+      len = -1;
+    }
+  }
+
+  return len;
+}
 int RGWREST::preprocess(struct req_state *s, RGWClientIO *cio)
 {
   req_info& info = s->info;
 
   s->cio = cio;
-  if (info.host) {
-    string h(s->info.host);
-
-    ldout(s->cct, 10) << "host=" << s->info.host << dendl;
+  if (info.host.size()) {
+    ldout(s->cct, 10) << "host=" << info.host << dendl;
     string domain;
     string subdomain;
-    bool in_hosted_domain = rgw_find_host_in_domains(h, &domain, &subdomain);
-    ldout(s->cct, 20) << "subdomain=" << subdomain << " domain=" << domain << " in_hosted_domain=" << in_hosted_domain << dendl;
+    bool in_hosted_domain = rgw_find_host_in_domains(info.host, &domain,
+						     &subdomain);
+    ldout(s->cct, 20) << "subdomain=" << subdomain << " domain=" << domain
+		      << " in_hosted_domain=" << in_hosted_domain << dendl;
 
     if (g_conf->rgw_resolve_cname && !in_hosted_domain) {
       string cname;
       bool found;
-      int r = rgw_resolver->resolve_cname(h, cname, &found);
+      int r = rgw_resolver->resolve_cname(info.host, cname, &found);
       if (r < 0) {
 	ldout(s->cct, 0) << "WARNING: rgw_resolver->resolve_cname() returned r=" << r << dendl;
       }
       if (found) {
-        ldout(s->cct, 5) << "resolved host cname " << h << " -> " << cname << dendl;
+        ldout(s->cct, 5) << "resolved host cname " << info.host << " -> "
+			 << cname << dendl;
         in_hosted_domain = rgw_find_host_in_domains(cname, &domain, &subdomain);
-        ldout(s->cct, 20) << "subdomain=" << subdomain << " domain=" << domain << " in_hosted_domain=" << in_hosted_domain << dendl;
+        ldout(s->cct, 20) << "subdomain=" << subdomain << " domain=" << domain
+			  << " in_hosted_domain=" << in_hosted_domain << dendl;
       }
     }
 
@@ -1348,7 +1392,58 @@ int RGWREST::preprocess(struct req_state *s, RGWClientIO *cio)
   }
 
   url_decode(s->info.request_uri, s->decoded_uri);
-  s->length = info.env->get("CONTENT_LENGTH");
+
+  /* FastCGI specification, section 6.3
+   * http://www.fastcgi.com/devkit/doc/fcgi-spec.html#S6.3
+   * ===
+   * The Authorizer application receives HTTP request information from the Web
+   * server on the FCGI_PARAMS stream, in the same format as a Responder. The
+   * Web server does not send CONTENT_LENGTH, PATH_INFO, PATH_TRANSLATED, and
+   * SCRIPT_NAME headers.
+   * ===
+   * Ergo if we are in Authorizer role, we MUST look at HTTP_CONTENT_LENGTH
+   * instead of CONTENT_LENGTH for the Content-Length.
+   *
+   * There is one slight wrinkle in this, and that's older versions of 
+   * nginx/lighttpd/apache setting BOTH headers. As a result, we have to check
+   * both headers and can't always simply pick A or B.
+   */
+  const char* content_length = info.env->get("CONTENT_LENGTH");
+  const char* http_content_length = info.env->get("HTTP_CONTENT_LENGTH");
+  if (!http_content_length != !content_length) {
+    /* Easy case: one or the other is missing */
+    s->length = (content_length ? content_length : http_content_length);
+  } else if (s->cct->_conf->rgw_content_length_compat && content_length && http_content_length) {
+    /* Hard case: Both are set, we have to disambiguate */
+    int64_t content_length_i, http_content_length_i;
+
+    content_length_i = parse_content_length(content_length);
+    http_content_length_i = parse_content_length(http_content_length);
+
+    // Now check them:
+    if (http_content_length_i < 0) {
+      // HTTP_CONTENT_LENGTH is invalid, ignore it
+    } else if (content_length_i < 0) {
+      // CONTENT_LENGTH is invalid, and HTTP_CONTENT_LENGTH is valid
+      // Swap entries
+      content_length = http_content_length;
+    } else {
+      // both CONTENT_LENGTH and HTTP_CONTENT_LENGTH are valid
+      // Let's pick the larger size
+      if (content_length_i < http_content_length_i) {
+	// prefer the larger value
+	content_length = http_content_length;
+      }
+    }
+    s->length = content_length;
+    // End of: else if (s->cct->_conf->rgw_content_length_compat && content_length &&
+    // http_content_length)
+  } else {
+    /* no content length was defined */
+    s->length = NULL;
+  }
+
+
   if (s->length) {
     if (*s->length == '\0') {
       s->content_length = 0;

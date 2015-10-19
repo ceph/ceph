@@ -15,6 +15,7 @@
 #include "test/librados_test_stub/TestMemRadosClient.h"
 #include "objclass/objclass.h"
 #include <boost/bind.hpp>
+#include <boost/shared_ptr.hpp>
 #include <deque>
 #include <list>
 #include <vector>
@@ -22,29 +23,39 @@
 
 #define dout_subsys ceph_subsys_rados
 
+namespace {
+
+static void DeallocateRadosClient(librados::TestRadosClient* client)
+{
+  client->put();
+}
+
+} // anonymous namespace
+
+
 static librados::TestClassHandler *get_class_handler() {
-  static librados::TestClassHandler *s_class_handler = NULL;
-  if (s_class_handler == NULL) {
-    s_class_handler = new librados::TestClassHandler();
+  static boost::shared_ptr<librados::TestClassHandler> s_class_handler;
+  if (!s_class_handler) {
+    s_class_handler.reset(new librados::TestClassHandler());
     s_class_handler->open_all_classes();
   }
-  return s_class_handler;
+  return s_class_handler.get();
 }
 
 static librados::TestRadosClient *get_rados_client() {
   // TODO: use factory to allow tests to swap out impl
-  static librados::TestRadosClient *s_rados_client = NULL;
-  if (s_rados_client == NULL) {
+  static boost::shared_ptr<librados::TestRadosClient> s_rados_client;
+  if (!s_rados_client) {
     CephInitParameters iparams(CEPH_ENTITY_TYPE_CLIENT);
     CephContext *cct = common_preinit(iparams, CODE_ENVIRONMENT_LIBRARY, 0);
     cct->_conf->parse_env();
     cct->_conf->apply_changes(NULL);
-    g_ceph_context = cct;
-    s_rados_client = new librados::TestMemRadosClient(cct);
+    s_rados_client.reset(new librados::TestMemRadosClient(cct),
+                         &DeallocateRadosClient);
     cct->put();
   }
   s_rados_client->get();
-  return s_rados_client;
+  return s_rados_client.get();
 }
 
 static void do_out_buffer(bufferlist& outbl, char **outbuf, size_t *outbuflen) {
@@ -100,6 +111,14 @@ extern "C" rados_config_t rados_cct(rados_t cluster)
   librados::TestRadosClient *client =
     reinterpret_cast<librados::TestRadosClient*>(cluster);
   return reinterpret_cast<rados_config_t>(client->cct());
+}
+
+extern "C" int rados_conf_set(rados_t cluster, const char *option,
+                              const char *value) {
+  librados::TestRadosClient *impl =
+    reinterpret_cast<librados::TestRadosClient*>(cluster);
+  CephContext *cct = impl->cct();
+  return cct->_conf->set_val(option, value);
 }
 
 extern "C" int rados_conf_parse_env(rados_t cluster, const char *var) {
@@ -185,6 +204,12 @@ extern "C" void rados_ioctx_destroy(rados_ioctx_t io) {
   librados::TestIoCtxImpl *ctx =
     reinterpret_cast<librados::TestIoCtxImpl*>(io);
   ctx->put();
+}
+
+extern "C" rados_t rados_ioctx_get_cluster(rados_ioctx_t io) {
+  librados::TestIoCtxImpl *ctx =
+    reinterpret_cast<librados::TestIoCtxImpl*>(io);
+  return reinterpret_cast<rados_t>(ctx->get_rados_client());
 }
 
 extern "C" int rados_mon_command(rados_t cluster, const char **cmd,
@@ -691,6 +716,31 @@ int Rados::blacklist_add(const std::string& client_address,
 			 uint32_t expire_seconds) {
   TestRadosClient *impl = reinterpret_cast<TestRadosClient*>(client);
   return impl->blacklist_add(client_address, expire_seconds);
+}
+
+config_t Rados::cct() {
+  TestRadosClient *impl = reinterpret_cast<TestRadosClient*>(client);
+  return reinterpret_cast<config_t>(impl->cct());
+}
+
+int Rados::conf_set(const char *option, const char *value) {
+  return rados_conf_set(reinterpret_cast<rados_t>(client), option, value);
+}
+
+int Rados::conf_get(const char *option, std::string &val) {
+  TestRadosClient *impl = reinterpret_cast<TestRadosClient*>(client);
+  CephContext *cct = impl->cct();
+
+  char *str = NULL;
+  int ret = cct->_conf->get_val(option, &str, -1);
+  if (ret != 0) {
+    free(str);
+    return ret;
+  }
+
+  val = str;
+  free(str);
+  return 0;
 }
 
 int Rados::conf_parse_env(const char *env) const {

@@ -330,7 +330,7 @@ private:
 
 public:
   ThreadPool(CephContext *cct_, string nm, int n, const char *option = NULL);
-  ~ThreadPool();
+  virtual ~ThreadPool();
 
   /// return number of threads currently running
   int get_num_threads() {
@@ -431,6 +431,38 @@ public:
   void finish(int) {
     wq->queue(c);
   }
+};
+
+class ContextWQ : public ThreadPool::WorkQueueVal<std::pair<Context *, int> > {
+public:
+  ContextWQ(const string &name, time_t ti, ThreadPool *tp)
+    : ThreadPool::WorkQueueVal<std::pair<Context *, int> >(name, ti, 0, tp) {}
+
+  void queue(Context *ctx, int result = 0) {
+    ThreadPool::WorkQueueVal<std::pair<Context *, int> >::queue(
+      std::make_pair(ctx, result));
+  }
+
+protected:
+  virtual void _enqueue(std::pair<Context *, int> item) {
+    _queue.push_back(item);
+  }
+  virtual void _enqueue_front(std::pair<Context *, int> item) {
+    _queue.push_front(item);
+  }
+  virtual bool _empty() {
+    return _queue.empty();
+  }
+  virtual std::pair<Context *, int> _dequeue() {
+    std::pair<Context *, int> item = _queue.front();
+    _queue.pop_front();
+    return item;
+  }
+  virtual void _process(std::pair<Context *, int> item) {
+    item.first->complete(item.second);
+  }
+private:
+  list<std::pair<Context *, int> > _queue;
 };
 
 class ShardedThreadPool {

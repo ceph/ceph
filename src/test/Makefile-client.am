@@ -300,15 +300,17 @@ check_PROGRAMS += unittest_rbd_replay
 
 librbd_test_la_SOURCES = \
 	test/librbd/test_fixture.cc \
+	test/librbd/test_support.cc \
 	test/librbd/test_librbd.cc \
 	test/librbd/test_ImageWatcher.cc \
 	test/librbd/test_internal.cc \
-	test/librbd/test_main.cc
+	test/librbd/test_ObjectMap.cc
 librbd_test_la_CXXFLAGS = $(UNITTEST_CXXFLAGS)
 noinst_LTLIBRARIES += librbd_test.la
 
-unittest_librbd_SOURCES =
-nodist_EXTRA_unittest_librbd_SOURCES = dummy.cc
+unittest_librbd_SOURCES = \
+        test/librbd/test_main.cc
+unittest_librbd_CXXFLAGS = $(UNITTEST_CXXFLAGS) -DTEST_LIBRBD_INTERNALS
 unittest_librbd_LDADD = \
 	librbd_test.la librbd_api.la librbd_internal.la $(LIBRBD_TYPES) \
 	libcls_rbd_client.la libcls_lock_client.la \
@@ -317,28 +319,37 @@ unittest_librbd_LDADD = \
 	$(CEPH_GLOBAL) $(RADOS_TEST_LDADD)
 check_PROGRAMS += unittest_librbd
 
-ceph_test_librbd_SOURCES =
-nodist_EXTRA_ceph_test_librbd_SOURCES = dummy.cc
+ceph_test_librbd_SOURCES = \
+        test/librbd/test_main.cc
+ceph_test_librbd_CXXFLAGS = $(UNITTEST_CXXFLAGS) -DTEST_LIBRBD_INTERNALS
 ceph_test_librbd_LDADD = \
 	librbd_test.la librbd_api.la librbd_internal.la $(LIBRBD_TYPES) \
 	libcls_rbd_client.la libcls_lock_client.la \
 	librados_api.la $(LIBRADOS_DEPS) $(UNITTEST_LDADD) \
 	$(CEPH_GLOBAL) $(RADOS_TEST_LDADD)
-ceph_test_librbd_CXXFLAGS = $(UNITTEST_CXXFLAGS)
 bin_DEBUGPROGRAMS += ceph_test_librbd
+
+ceph_test_librbd_api_SOURCES = \
+	test/librbd/test_support.cc \
+	test/librbd/test_librbd.cc \
+	test/librbd/test_main.cc
+ceph_test_librbd_api_CXXFLAGS = $(UNITTEST_CXXFLAGS)
+ceph_test_librbd_api_LDADD = \
+	$(LIBRBD) $(LIBRADOS) $(LIBCOMMON) $(UNITTEST_LDADD) $(RADOS_TEST_LDADD)
+bin_DEBUGPROGRAMS += ceph_test_librbd_api
 
 if WITH_LTTNG
 unittest_librbd_LDADD += $(LIBRBD_TP)
 ceph_test_librbd_LDADD += $(LIBRBD_TP)
+ceph_test_librbd_api_LDADD += $(LIBRBD_TP)
 endif
 
 if LINUX
-# Force use of C++ linker with dummy.cc - LIBKRBD is a C++ library
-ceph_test_librbd_fsx_SOURCES = test/librbd/fsx.c common/dummy.cc
+ceph_test_librbd_fsx_SOURCES = test/librbd/fsx.cc
 ceph_test_librbd_fsx_LDADD = \
 	$(LIBKRBD) $(LIBRBD) $(LIBRADOS) \
 	$(CRYPTO_LIBS) $(PTHREAD_LIBS) -luuid
-ceph_test_librbd_fsx_CFLAGS = ${AM_CFLAGS}
+ceph_test_librbd_fsx_CXXFLAGS = $(UNITTEST_CXXFLAGS)
 bin_DEBUGPROGRAMS += ceph_test_librbd_fsx
 endif
 endif # WITH_RBD

@@ -73,17 +73,17 @@ public:
   void clear_recovery_state();
   void on_flushed();
 
-  class RPCRecPred : public IsRecoverablePredicate {
+  class RPCRecPred : public IsPGRecoverablePredicate {
   public:
     bool operator()(const set<pg_shard_t> &have) const {
       return !have.empty();
     }
   };
-  IsRecoverablePredicate *get_is_recoverable_predicate() {
+  IsPGRecoverablePredicate *get_is_recoverable_predicate() {
     return new RPCRecPred;
   }
 
-  class RPCReadPred : public IsReadablePredicate {
+  class RPCReadPred : public IsPGReadablePredicate {
     pg_shard_t whoami;
   public:
     RPCReadPred(pg_shard_t whoami) : whoami(whoami) {}
@@ -91,7 +91,7 @@ public:
       return have.count(whoami);
     }
   };
-  IsReadablePredicate *get_is_readable_predicate() {
+  IsPGReadablePredicate *get_is_readable_predicate() {
     return new RPCReadPred(get_parent()->whoami_shard());
   }
 

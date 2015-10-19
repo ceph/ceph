@@ -186,3 +186,15 @@
    fun:main
 }
 
+# lttng-ust
+{
+   <insert_a_suppression_name_here>
+   Memcheck:Leak
+   fun:calloc
+   fun:_dl_allocate_tls
+   fun:pthread_create@@GLIBC_2.2.5
+   obj:/usr/*lib*/liblttng-ust.*
+   fun:call_init.part.0
+   fun:_dl_init
+   obj:*
+}

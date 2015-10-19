@@ -466,8 +466,12 @@ class Image(object):
             pool = create_string_buffer(size)
             name = create_string_buffer(size)
             snapname = create_string_buffer(size)
-            ret = self.librbd.rbd_get_parent_info(self.image, pool, len(pool),
-                name, len(name), snapname, len(snapname))
+            ret = self.librbd.rbd_get_parent_info(self.image, byref(pool),
+                                                  c_size_t(size),
+                                                  byref(name),
+                                                  c_size_t(size),
+                                                  byref(snapname),
+                                                  c_size_t(size))
             if ret == -errno.ERANGE:
                 size *= 2
 

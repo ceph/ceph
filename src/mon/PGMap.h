@@ -290,7 +290,7 @@ public:
   void dump_osd_blocked_by_stats(Formatter *f) const;
   void print_osd_blocked_by_stats(std::ostream *ss) const;
 
-  void get_filtered_pg_stats(string& state, int64_t poolid, int64_t osdid,
+  void get_filtered_pg_stats(const string& state, int64_t poolid, int64_t osdid,
                              bool primary, set<pg_t>& pgs);
   void recovery_summary(Formatter *f, list<string> *psl,
                         const pool_stat_t& delta_sum) const;

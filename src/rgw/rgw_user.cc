@@ -848,7 +848,7 @@ int RGWAccessKeyPool::generate_key(RGWUserAdminOpState& op_state, std::string *e
   } else if (gen_secret) {
     char secret_key_buf[SECRET_KEY_LEN + 1];
 
-    ret = gen_rand_base64(g_ceph_context, secret_key_buf, sizeof(secret_key_buf));
+    ret = gen_rand_alphanumeric_plain(g_ceph_context, secret_key_buf, sizeof(secret_key_buf));
     if (ret < 0) {
       set_err_msg(err_msg, "unable to generate secret key");
       return ret;
@@ -962,7 +962,7 @@ int RGWAccessKeyPool::modify_key(RGWUserAdminOpState& op_state, std::string *err
 
     int ret;
     int key_buf_size = sizeof(secret_key_buf);
-    ret  = gen_rand_base64(g_ceph_context, secret_key_buf, key_buf_size);
+    ret = gen_rand_alphanumeric_plain(g_ceph_context, secret_key_buf, key_buf_size);
     if (ret < 0) {
       set_err_msg(err_msg, "unable to generate secret key");
       return ret;
@@ -1767,7 +1767,13 @@ int RGWUser::execute_add(RGWUserAdminOpState& op_state, std::string *err_msg)
   if (!user_email.empty())
     user_info.user_email = user_email;
 
-  user_info.max_buckets = op_state.get_max_buckets();
+  CephContext *cct = store->ctx();
+  if (op_state.max_buckets_specified) {
+    user_info.max_buckets = op_state.get_max_buckets();
+  } else {
+    user_info.max_buckets = cct->_conf->rgw_user_max_buckets;
+  }
+
   user_info.suspended = op_state.get_suspension_status();
   user_info.system = op_state.system;
 
@@ -1973,13 +1979,8 @@ int RGWUser::execute_modify(RGWUserAdminOpState& op_state, std::string *err_msg)
   if (!display_name.empty())
     user_info.display_name = display_name;
 
-  // will be set to RGW_DEFAULT_MAX_BUCKETS by default
-  uint32_t max_buckets = op_state.get_max_buckets();
-
-  ldout(store->ctx(), 0) << "max_buckets=" << max_buckets << " specified=" << op_state.max_buckets_specified << dendl;
-
   if (op_state.max_buckets_specified)
-    user_info.max_buckets = max_buckets;
+    user_info.max_buckets = op_state.get_max_buckets();
 
   if (op_state.system_specified)
     user_info.system = op_state.system;

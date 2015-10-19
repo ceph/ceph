@@ -267,6 +267,12 @@ void SimpleThrottle::end_op(int r)
   m_cond.Signal();
 }
 
+bool SimpleThrottle::pending_error() const
+{
+  Mutex::Locker l(m_lock);
+  return (m_ret < 0);
+}
+
 int SimpleThrottle::wait_for_ret()
 {
   Mutex::Locker l(m_lock);

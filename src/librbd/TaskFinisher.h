@@ -35,6 +35,7 @@ public:
       delete m_safe_timer;
     }
 
+    m_finisher->wait_for_empty();
     m_finisher->stop();
     delete m_finisher;
   }

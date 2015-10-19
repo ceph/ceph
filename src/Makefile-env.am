@@ -35,6 +35,9 @@ check_PROGRAMS =
 # tests scripts will be appended to this
 check_SCRIPTS =
 
+# display the output of failed check_SCRIPTS after a failed make check
+export VERBOSE = true
+
 # python unit tests need to know where the scripts are located
 export PYTHONPATH=$(top_srcdir)/src/pybind
 
@@ -174,6 +177,10 @@ endif # WITH_LIBZFS
 if WITH_LIBROCKSDB
 LIBOS += libos_rocksdb.la
 endif # WITH_LIBROCKSDB
+
+if WITH_TCMALLOC_MINIMAL
+LIBPERFGLUE += -ltcmalloc_minimal
+endif # WITH_TCMALLOC_MINIMAL
 
 if WITH_TCMALLOC
 LIBPERFGLUE += -ltcmalloc

@@ -1,6 +1,7 @@
 
 #include "include/stringify.h"
 #include "CrushTester.h"
+#include "CrushTreeDumper.h"
 
 #include <algorithm>
 #include <stdlib.h>
@@ -357,9 +358,12 @@ void CrushTester::write_integer_indexed_scalar_data_string(vector<string> &dst, 
 }
 
 int CrushTester::test_with_crushtool(const string& crushtool,
-                                     int timeout)
+                                     int max_id,
+                                     int timeout,
+				     int ruleset)
 {
   string timeout_string = stringify(timeout);
+  string opt_max_id = stringify(max_id);
   vector<const char *> cmd_args;
   cmd_args.push_back("timeout");
   cmd_args.push_back(timeout_string.c_str());
@@ -367,6 +371,16 @@ int CrushTester::test_with_crushtool(const string& crushtool,
   cmd_args.push_back("-i");
   cmd_args.push_back("-");
   cmd_args.push_back("--test");
+  cmd_args.push_back("--check");
+  cmd_args.push_back(opt_max_id.c_str());
+  cmd_args.push_back("--min-x");
+  cmd_args.push_back("1");
+  cmd_args.push_back("--max-x");
+  cmd_args.push_back("50");
+  if (ruleset >= 0) {
+    cmd_args.push_back("--ruleset");
+    cmd_args.push_back(stringify(ruleset).c_str());
+  }
   cmd_args.push_back(NULL);
 
   int pipefds[2];
@@ -430,7 +444,59 @@ int CrushTester::test_with_crushtool(const string& crushtool,
   // something else entirely happened
   // log it and consider an invalid crush map
   err << "error running crushmap through crushtool: " << cpp_strerror(r);
-  return -r;
+  return -EINVAL;
+}
+
+namespace {
+  class BadCrushMap : public std::runtime_error {
+  public:
+    int item;
+    BadCrushMap(const char* msg, int id)
+      : std::runtime_error(msg), item(id) {}
+  };
+  // throws if any node in the crush fail to print
+  class CrushWalker : public CrushTreeDumper::Dumper<void> {
+    typedef void DumbFormatter;
+    typedef CrushTreeDumper::Dumper<DumbFormatter> Parent;
+    unsigned max_id;
+  public:
+    CrushWalker(const CrushWrapper *crush, unsigned max_id)
+      : Parent(crush), max_id(max_id) {}
+    void dump_item(const CrushTreeDumper::Item &qi, DumbFormatter *) {
+      int type = -1;
+      if (qi.is_bucket()) {
+	if (!crush->get_item_name(qi.id)) {
+	  throw BadCrushMap("unknown item name", qi.id);
+	}
+	type = crush->get_bucket_type(qi.id);
+      } else {
+	if (max_id > 0 && qi.id >= (int)max_id) {
+	  throw BadCrushMap("item id too large", qi.id);
+	}
+	type = 0;
+      }
+      if (!crush->get_type_name(type)) {
+	throw BadCrushMap("unknown type name", qi.id);
+      }
+    }
+  };
+}
+
+bool CrushTester::check_name_maps(unsigned max_id) const
+{
+  CrushWalker crush_walker(&crush, max_id);
+  try {
+    // walk through the crush, to see if its self-contained
+    crush_walker.dump(NULL);
+    // and see if the maps is also able to handle straying OSDs, whose id >= 0.
+    // "ceph osd tree" will try to print them, even they are not listed in the
+    // crush map.
+    crush_walker.dump_item(CrushTreeDumper::Item(0, 0, 0), NULL);
+  } catch (const BadCrushMap& e) {
+    err << e.what() << ": item#" << e.item << std::endl;
+    return false;
+  }
+  return true;
 }
 
 int CrushTester::test()
@@ -480,6 +546,10 @@ int CrushTester::test()
     if (!crush.rule_exists(r)) {
       if (output_statistics)
         err << "rule " << r << " dne" << std::endl;
+      continue;
+    }
+    if (ruleset >= 0 &&
+	crush.get_rule_mask_ruleset(r) != ruleset) {
       continue;
     }
     int minr = min_rep, maxr = max_rep;

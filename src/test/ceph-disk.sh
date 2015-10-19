@@ -167,6 +167,15 @@ function test_no_path() {
     ( unset PATH ; test_activate_dir ) || return 1
 }
 
+function test_zap() {
+    local osd_data=$DIR/dir
+    $mkdir -p $osd_data
+
+    ./ceph-disk $CEPH_DISK_ARGS zap $osd_data 2>&1 | grep 'not full block device' || return 1
+
+    $rm -fr $osd_data
+}
+
 # ceph-disk prepare returns immediately on success if the magic file
 # exists in the --osd-data directory.
 function test_activate_dir_magic() {
@@ -470,6 +479,7 @@ function run() {
     default_actions+="test_activate_dir_magic "
     default_actions+="test_activate_dir "
     default_actions+="test_keyring_path "
+    default_actions+="test_zap "
     local actions=${@:-$default_actions}
     for action in $actions  ; do
         setup

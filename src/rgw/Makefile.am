@@ -100,7 +100,7 @@ radosgw_CFLAGS = -I$(srcdir)/civetweb/include
 radosgw_LDADD = $(LIBRGW) $(LIBCIVETWEB) $(LIBRGW_DEPS) $(RESOLV_LIBS) $(CEPH_GLOBAL)
 bin_PROGRAMS += radosgw
 
-radosgw_admin_SOURCES = rgw/rgw_admin.cc
+radosgw_admin_SOURCES = rgw/rgw_admin.cc rgw/rgw_orphan.cc
 radosgw_admin_LDADD = $(LIBRGW) $(LIBRGW_DEPS) $(CEPH_GLOBAL)
 bin_PROGRAMS += radosgw-admin
 
@@ -141,6 +141,7 @@ noinst_HEADERS += \
 	rgw/rgw_metadata.h \
 	rgw/rgw_multi_del.h \
 	rgw/rgw_op.h \
+	rgw/rgw_orphan.h \
 	rgw/rgw_http_client.h \
 	rgw/rgw_swift.h \
 	rgw/rgw_swift_auth.h \

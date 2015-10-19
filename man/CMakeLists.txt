@@ -11,6 +11,7 @@ install(FILES
 	ceph-run.8
 	ceph.8
 	mount.ceph.8
+	ceph-create-keys.8
 	radosgw.8
 	radosgw-admin.8
 	ceph-authtool.8

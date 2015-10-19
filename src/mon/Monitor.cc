@@ -788,7 +788,7 @@ void Monitor::refresh_from_paxos(bool *need_bootstrap)
     paxos_service[i]->refresh(need_bootstrap);
   }
   for (int i = 0; i < PAXOS_NUM; ++i) {
-    paxos_service[i]->post_paxos_update();
+    paxos_service[i]->post_refresh();
   }
 }
 
@@ -2253,26 +2253,6 @@ health_status_t Monitor::get_health(list<string>& status,
 
   health_monitor->get_health(f, summary, (detailbl ? &detail : NULL));
 
-  if (f)
-    f->open_array_section("summary");
-  health_status_t overall = HEALTH_OK;
-  if (!summary.empty()) {
-    while (!summary.empty()) {
-      if (overall > summary.front().first)
-	overall = summary.front().first;
-      status.push_back(summary.front().second);
-      if (f) {
-        f->open_object_section("item");
-        f->dump_stream("severity") <<  summary.front().first;
-        f->dump_string("summary", summary.front().second);
-        f->close_section();
-      }
-      summary.pop_front();
-    }
-  }
-  if (f)
-    f->close_section();
-
   if (f) {
     f->open_object_section("timechecks");
     f->dump_unsigned("epoch", get_epoch());
@@ -2281,6 +2261,7 @@ health_status_t Monitor::get_health(list<string>& status,
       << ((timecheck_round%2) ? "on-going" : "finished");
   }
 
+  health_status_t overall = HEALTH_OK;
   if (!timecheck_skews.empty()) {
     list<string> warns;
     if (f)
@@ -2327,9 +2308,29 @@ health_status_t Monitor::get_health(list<string>& status,
           ss << ",";
       }
       status.push_back(ss.str());
+      summary.push_back(make_pair(HEALTH_WARN, "Monitor clock skew detected "));
     }
     if (f)
       f->close_section();
+  }
+  if (f)
+    f->close_section();
+
+  if (f)
+    f->open_array_section("summary");
+  if (!summary.empty()) {
+    while (!summary.empty()) {
+      if (overall > summary.front().first)
+	overall = summary.front().first;
+      status.push_back(summary.front().second);
+      if (f) {
+        f->open_object_section("item");
+        f->dump_stream("severity") <<  summary.front().first;
+        f->dump_string("summary", summary.front().second);
+        f->close_section();
+      }
+      summary.pop_front();
+    }
   }
   if (f)
     f->close_section();
@@ -3361,12 +3362,11 @@ void Monitor::_ms_dispatch(Message *m)
     dout(20) << "ms_dispatch existing session " << s << " for " << s->inst << dendl;
   }
 
-  if (s) {
-    if (s->auth_handler) {
-      s->entity_name = s->auth_handler->get_entity_name();
-    }
-    dout(20) << " caps " << s->caps.get_str() << dendl;
+  assert(s);
+  if (s->auth_handler) {
+    s->entity_name = s->auth_handler->get_entity_name();
   }
+  dout(20) << " caps " << s->caps.get_str() << dendl;
 
   if (is_synchronizing() && !src_is_mon) {
     waitlist_or_zap_client(m);
@@ -3374,11 +3374,7 @@ void Monitor::_ms_dispatch(Message *m)
   }
 
   dispatch(s, m, src_is_mon);
-
-  if (s) {
-    s->put();
-  }
-
+  s->put();
   return;
 }
 

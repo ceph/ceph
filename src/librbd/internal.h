@@ -76,6 +76,7 @@ namespace librbd {
   const std::string id_obj_name(const std::string &name);
   const std::string header_name(const std::string &image_id);
   const std::string old_header_name(const std::string &image_name);
+  std::string unique_lock_name(const std::string &name, void *address);
 
   int detect_format(librados::IoCtx &io_ctx, const std::string &name,
 		    bool *old_format, uint64_t *size);
@@ -123,7 +124,7 @@ namespace librbd {
   int add_snap(ImageCtx *ictx, const char *snap_name);
   int rm_snap(ImageCtx *ictx, const char *snap_name);
   int refresh_parent(ImageCtx *ictx);
-  int ictx_check(ImageCtx *ictx);
+  int ictx_check(ImageCtx *ictx, bool owner_locked=false);
   int ictx_refresh(ImageCtx *ictx);
   int copy(ImageCtx *ictx, IoCtx& dest_md_ctx, const char *destname,
 	   ProgressContext &prog_ctx);
@@ -197,14 +198,14 @@ namespace librbd {
   void async_resize_helper(ImageCtx *ictx, Context *ctx, uint64_t new_size,
                            ProgressContext& prog_ctx);
 
-  int aio_write(ImageCtx *ictx, uint64_t off, size_t len, const char *buf,
-		AioCompletion *c, int op_flags);
-  int aio_discard(ImageCtx *ictx, uint64_t off, uint64_t len, AioCompletion *c);
-  int aio_read(ImageCtx *ictx, uint64_t off, size_t len,
-	       char *buf, bufferlist *pbl, AioCompletion *c, int op_flags);
-  int aio_read(ImageCtx *ictx, const vector<pair<uint64_t,uint64_t> >& image_extents,
-	       char *buf, bufferlist *pbl, AioCompletion *c, int op_flags);
-  int aio_flush(ImageCtx *ictx, AioCompletion *c);
+  void aio_write(ImageCtx *ictx, uint64_t off, size_t len, const char *buf,
+		 AioCompletion *c, int op_flags);
+  void aio_discard(ImageCtx *ictx, uint64_t off, uint64_t len, AioCompletion *c);
+  void aio_read(ImageCtx *ictx, uint64_t off, size_t len,
+	        char *buf, bufferlist *pbl, AioCompletion *c, int op_flags);
+  void aio_read(ImageCtx *ictx, const vector<pair<uint64_t,uint64_t> >& image_extents,
+	        char *buf, bufferlist *pbl, AioCompletion *c, int op_flags);
+  void aio_flush(ImageCtx *ictx, AioCompletion *c);
   int flush(ImageCtx *ictx);
   int _flush(ImageCtx *ictx);
   int invalidate_cache(ImageCtx *ictx);

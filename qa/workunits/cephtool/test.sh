@@ -230,11 +230,51 @@ function test_mon_injectargs_SI()
   expect_config_value "mon.a" "mon_pg_warn_min_objects" 10240
   ceph tell mon.a injectargs '--mon_pg_warn_min_objects 1G'
   expect_config_value "mon.a" "mon_pg_warn_min_objects" 1073741824
-  # < /dev/null accounts for the fact that ceph will go in interactive mode
-  # because injectargs is discarded (actually saved for the benefit of 
-  # a tell command that never comes)
-  expect_false ceph injectargs mon.a '--mon_pg_warn_min_objects 10F' < /dev/null 2> /dev/null
+  expect_false ceph tell mon.a injectargs '--mon_pg_warn_min_objects 10F'
   $SUDO ceph daemon mon.a config set mon_pg_warn_min_objects $initial_value
+}
+
+function test_tiering_agent()
+{
+  local slow=slow_eviction
+  local fast=fast_eviction
+  ceph osd pool create $slow  1 1
+  ceph osd pool create $fast  1 1
+  ceph osd tier add $slow $fast
+  ceph osd tier cache-mode $fast writeback
+  ceph osd tier set-overlay $slow $fast
+  ceph osd pool set $fast hit_set_type bloom
+  rados -p $slow put obj1 /etc/group
+  ceph osd pool set $fast target_max_objects  1
+  ceph osd pool set $fast hit_set_count 1
+  ceph osd pool set $fast hit_set_period 5
+  # wait for the object to be evicted from the cache
+  local evicted
+  evicted=false
+  for i in 1 2 4 8 16 32 64 128 256 ; do
+      if ! rados -p $fast ls | grep obj1 ; then
+          evicted=true
+          break
+      fi
+      sleep $i
+  done
+  $evicted # assert
+  # the object is proxy read and promoted to the cache
+  rados -p $slow get obj1 /tmp/obj1
+  # wait for the promoted object to be evicted again
+  evicted=false
+  for i in 1 2 4 8 16 32 64 128 256 ; do
+      if ! rados -p $fast ls | grep obj1 ; then
+          evicted=true
+          break
+      fi
+      sleep $i
+  done
+  $evicted # assert
+  ceph osd tier remove-overlay $slow
+  ceph osd tier remove $slow $fast
+  ceph osd pool delete $fast $fast --yes-i-really-really-mean-it
+  ceph osd pool delete $slow $slow --yes-i-really-really-mean-it
 }
 
 function test_tiering()
@@ -314,6 +354,21 @@ function test_tiering()
 
   ceph osd pool delete cache cache --yes-i-really-really-mean-it
   ceph osd pool delete cache2 cache2 --yes-i-really-really-mean-it
+
+  # make sure we can't clobber snapshot state
+  ceph osd pool create snap_base 2
+  ceph osd pool create snap_cache 2
+  ceph osd pool mksnap snap_cache snapname
+  expect_false ceph osd tier add snap_base snap_cache
+  ceph osd pool delete snap_base snap_base --yes-i-really-really-mean-it
+  ceph osd pool delete snap_cache snap_cache --yes-i-really-really-mean-it
+
+  # make sure we can't create an ec pool tier
+  ceph osd pool create eccache 2 2 erasure
+  ceph osd pool create repbase 2
+  expect_false ceph osd tier add repbase eccache
+  ceph osd pool delete repbase repbase --yes-i-really-really-mean-it
+  ceph osd pool delete eccache eccache --yes-i-really-really-mean-it
 
   # convenient add-cache command
   ceph osd pool create cache3 2
@@ -433,6 +488,15 @@ function test_auth()
   diff authfile authfile2
   rm authfile authfile2
   ceph auth del client.xx
+  expect_false ceph auth get client.xx
+
+  # (almost) interactive mode
+  echo -e 'auth add client.xx mon allow osd "allow *"\n' | ceph
+  ceph auth get client.xx
+  # script mode
+  echo 'auth del client.xx' | ceph
+  expect_false ceph auth get client.xx
+
   #
   # get / set auid
   #
@@ -676,8 +740,9 @@ function test_mon_mds()
   fail_all_mds
 
   # Check for default crash_replay_interval set automatically in 'fs new'
-  ceph osd dump | grep fs_data > $TMPFILE
-  check_response "crash_replay_interval 45 "
+  #This may vary based on ceph.conf (e.g., it's 5 in teuthology runs)
+  #ceph osd dump | grep fs_data > $TMPFILE
+  #check_response "crash_replay_interval 45 "
 
   ceph mds compat show
   expect_false ceph mds deactivate 2
@@ -1087,7 +1152,7 @@ function test_mon_pg()
   ceph pg ls
   ceph pg ls 0
   ceph pg ls stale
-  ceph pg ls active stale
+  ceph pg ls active stale repair recovering
   ceph pg ls 0 active
   ceph pg ls 0 active stale
   ceph pg ls-by-primary osd.0
@@ -1418,6 +1483,7 @@ function test_mon_crushmap_validation()
 {
   local map=$TMPDIR/map
   ceph osd getcrushmap -o $map
+
   # crushtool validation timesout and is ignored
   cat > $TMPDIR/crushtool <<EOF
 #!/bin/sh
@@ -1427,7 +1493,19 @@ EOF
   chmod +x $TMPDIR/crushtool
   ceph tell mon.* injectargs --crushtool $TMPDIR/crushtool
   ceph osd setcrushmap -i $map 2>&1 | grep 'took too long'
+
+  # crushtool validation fails and is ignored
+  cat > $TMPDIR/crushtool <<EOF
+#!/bin/sh
+echo 'TEST FAIL' >&2
+exit 1 # failure
+EOF
+  chmod +x $TMPDIR/crushtool
+  ceph tell mon.* injectargs --crushtool $TMPDIR/crushtool
+  ceph osd setcrushmap -i $map 2>&1 | grep 'Failed crushmap test'
+
   ceph tell mon.* injectargs --crushtool crushtool
+
   # crushtool validation succeeds
   ceph osd setcrushmap -i $map
 }
@@ -1469,6 +1547,7 @@ MON_TESTS+=" mon_tell"
 MON_TESTS+=" mon_crushmap_validation"
 
 OSD_TESTS+=" osd_bench"
+OSD_TESTS+=" tiering_agent"
 
 MDS_TESTS+=" mds_tell"
 MDS_TESTS+=" mon_mds"

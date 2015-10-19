@@ -13,17 +13,22 @@ int RGWMongoose::write_data(const char *buf, int len)
 {
   if (!header_done) {
     header_data.append(buf, len);
-    return 0;
+    return len;
   }
   if (!sent_header) {
     data.append(buf, len);
-    return 0;
+    return len;
   }
-  return mg_write(conn, buf, len);
+  int r = mg_write(conn, buf, len);
+  if (r == 0) {
+    /* didn't send anything, error out */
+    return -EIO;
+  }
+  return r;
 }
 
 RGWMongoose::RGWMongoose(mg_connection *_conn, int _port) : conn(_conn), port(_port), header_done(false), sent_header(false), has_content_length(false),
-                                                 explicit_keepalive(false)
+                                                 explicit_keepalive(false), explicit_conn_close(false)
 {
 }
 
@@ -88,6 +93,7 @@ void RGWMongoose::init_env(CephContext *cct)
 
     if (strcasecmp(header->name, "connection") == 0) {
       explicit_keepalive = (strcasecmp(header->value, "keep-alive") == 0);
+      explicit_conn_close = (strcasecmp(header->value, "close") == 0);
     }
 
     int len = strlen(header->name) + 5; /* HTTP_ prepended */
@@ -137,6 +143,9 @@ int RGWMongoose::send_status(const char *status, const char *status_name)
   bl.append(header_data);
   header_data = bl;
 
+  int status_num = atoi(status);
+  mg_set_http_status(conn, status_num);
+
   return 0;
 }
 
@@ -147,6 +156,20 @@ int RGWMongoose::send_100_continue()
   return mg_write(conn, buf, sizeof(buf) - 1);
 }
 
+static void dump_date_header(bufferlist &out)
+{
+  char timestr[TIME_BUF_SIZE];
+  const time_t gtime = time(NULL);
+  struct tm result;
+  struct tm const * const tmp = gmtime_r(&gtime, &result);
+
+  if (tmp == NULL)
+    return;
+
+  if (strftime(timestr, sizeof(timestr), "Date: %a, %d %b %Y %H:%M:%S %Z\r\n", tmp))
+    out.append(timestr);
+}
+
 int RGWMongoose::complete_header()
 {
   header_done = true;
@@ -155,8 +178,12 @@ int RGWMongoose::complete_header()
     return 0;
   }
 
+  dump_date_header(header_data);
+
   if (explicit_keepalive)
     header_data.append("Connection: Keep-Alive\r\n");
+  else if (explicit_conn_close)
+    header_data.append("Connection: close\r\n");
 
   header_data.append("\r\n");
 

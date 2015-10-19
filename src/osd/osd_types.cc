@@ -770,7 +770,7 @@ std::string pg_state_string(int state)
   return ret;
 }
 
-int pg_string_state(std::string state)
+int pg_string_state(const std::string& state)
 {
   int type;
   if (state == "active")
@@ -793,16 +793,18 @@ int pg_string_state(std::string state)
     type = PG_STATE_INCONSISTENT;
   else if (state == "peering")
     type = PG_STATE_PEERING;
-  else if (state == "recoverying")
+  else if (state == "repair")
+    type = PG_STATE_REPAIR;
+  else if (state == "recovering")
     type = PG_STATE_RECOVERING;
   else if (state == "backfill_wait")
     type = PG_STATE_BACKFILL_WAIT;
   else if (state == "incomplete")
     type = PG_STATE_INCOMPLETE;
-  else if (state == "remapped")
-    type = PG_STATE_REMAPPED;
   else if (state == "stale")
     type = PG_STATE_STALE;
+  else if (state == "remapped")
+    type = PG_STATE_REMAPPED;
   else if (state == "deep_scrub")
     type = PG_STATE_DEEP_SCRUB;
   else if (state == "backfill")
@@ -929,6 +931,16 @@ void pg_pool_t::dump(Formatter *f) const
   f->dump_unsigned("expected_num_objects", expected_num_objects);
 }
 
+void pg_pool_t::convert_to_pg_shards(const vector<int> &from, set<pg_shard_t>* to) const {
+  for (size_t i = 0; i < from.size(); ++i) {
+    if (from[i] != CRUSH_ITEM_NONE) {
+      to->insert(
+        pg_shard_t(
+          from[i],
+          ec_pool() ? shard_id_t(i) : shard_id_t::NO_SHARD));
+    }
+  }
+}
 
 int pg_pool_t::calc_bits_of(int t)
 {
@@ -2545,6 +2557,8 @@ bool pg_interval_t::is_new_interval(
   int new_up_primary,
   const vector<int> &old_up,
   const vector<int> &new_up,
+  int old_size,
+  int new_size,
   int old_min_size,
   int new_min_size,
   unsigned old_pg_num,
@@ -2555,6 +2569,7 @@ bool pg_interval_t::is_new_interval(
     old_up_primary != new_up_primary ||
     new_up != old_up ||
     old_min_size != new_min_size ||
+    old_size != new_size ||
     pgid.is_split(old_pg_num, new_pg_num, 0);
 }
 
@@ -2579,6 +2594,8 @@ bool pg_interval_t::is_new_interval(
 		    new_up_primary,
 		    old_up,
 		    new_up,
+		    lastmap->get_pools().find(pgid.pool())->second.size,
+		    osdmap->get_pools().find(pgid.pool())->second.size,
 		    lastmap->get_pools().find(pgid.pool())->second.min_size,
 		    osdmap->get_pools().find(pgid.pool())->second.min_size,
 		    lastmap->get_pg_num(pgid.pool()),
@@ -2600,6 +2617,7 @@ bool pg_interval_t::check_new_interval(
   OSDMapRef osdmap,
   OSDMapRef lastmap,
   pg_t pgid,
+  IsPGRecoverablePredicate *could_have_gone_active,
   map<epoch_t, pg_interval_t> *past_intervals,
   std::ostream *out)
 {
@@ -2633,9 +2651,14 @@ bool pg_interval_t::check_new_interval(
       if (*p != CRUSH_ITEM_NONE)
 	++num_acting;
 
+    const pg_pool_t& old_pg_pool = lastmap->get_pools().find(pgid.pool())->second;
+    set<pg_shard_t> old_acting_shards;
+    old_pg_pool.convert_to_pg_shards(old_acting, &old_acting_shards);
+
     if (num_acting &&
 	i.primary != -1 &&
-	num_acting >= lastmap->get_pools().find(pgid.pool())->second.min_size) {
+	num_acting >= old_pg_pool.min_size &&
+        (*could_have_gone_active)(old_acting_shards)) {
       if (out)
 	*out << "generate_past_intervals " << i
 	     << ": not rw,"
@@ -3576,7 +3599,7 @@ void object_copy_data_t::encode(bufferlist& bl, uint64_t features) const
     return;
   }
 
-  ENCODE_START(6, 5, bl);
+  ENCODE_START(7, 5, bl);
   ::encode(size, bl);
   ::encode(mtime, bl);
   ::encode(attrs, bl);
@@ -3590,12 +3613,14 @@ void object_copy_data_t::encode(bufferlist& bl, uint64_t features) const
   ::encode(data_digest, bl);
   ::encode(omap_digest, bl);
   ::encode(reqids, bl);
+  ::encode(truncate_seq, bl);
+  ::encode(truncate_size, bl);
   ENCODE_FINISH(bl);
 }
 
 void object_copy_data_t::decode(bufferlist::iterator& bl)
 {
-  DECODE_START(6, bl);
+  DECODE_START(7, bl);
   if (struct_v < 5) {
     // old
     ::decode(size, bl);
@@ -3652,6 +3677,10 @@ void object_copy_data_t::decode(bufferlist::iterator& bl)
     }
     if (struct_v >= 6) {
       ::decode(reqids, bl);
+    }
+    if (struct_v >= 7) {
+      ::decode(truncate_seq, bl);
+      ::decode(truncate_size, bl);
     }
   }
   DECODE_FINISH(bl);
@@ -4082,6 +4111,25 @@ uint64_t SnapSet::get_clone_bytes(snapid_t clone) const
     size -= i.get_len();
   }
   return size;
+}
+
+void SnapSet::filter(const pg_pool_t &pinfo)
+{
+  vector<snapid_t> oldsnaps;
+  oldsnaps.swap(snaps);
+  for (vector<snapid_t>::const_iterator i = oldsnaps.begin();
+       i != oldsnaps.end();
+       ++i) {
+    if (!pinfo.is_removed_snap(*i))
+      snaps.push_back(*i);
+  }
+}
+
+SnapSet SnapSet::get_filtered(const pg_pool_t &pinfo) const
+{
+  SnapSet ss = *this;
+  ss.filter(pinfo);
+  return ss;
 }
 
 // -- watch_info_t --

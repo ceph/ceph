@@ -192,6 +192,9 @@ bool CrushWrapper::_maybe_remove_last_instance(CephContext *cct, int item, bool 
   if (_search_item_exists(item)) {
     return false;
   }
+  if (item < 0 && _bucket_is_in_use(cct, item)) {
+    return false;
+  }
 
   if (item < 0 && !unlink_only) {
     crush_bucket *t = get_bucket(item);
@@ -218,6 +221,9 @@ int CrushWrapper::remove_item(CephContext *cct, int item, bool unlink_only)
       ldout(cct, 1) << "remove_item bucket " << item << " has " << t->size
 		    << " items, not empty" << dendl;
       return -ENOTEMPTY;
+    }
+    if (_bucket_is_in_use(cct, item)) {
+      return -EBUSY;
     }
   }
 
@@ -258,6 +264,22 @@ bool CrushWrapper::_search_item_exists(int item) const
   return false;
 }
 
+bool CrushWrapper::_bucket_is_in_use(CephContext *cct, int item)
+{
+  for (unsigned i = 0; i < crush->max_rules; ++i) {
+    crush_rule *r = crush->rules[i];
+    if (!r)
+      continue;
+    for (unsigned j = 0; j < r->len; ++j) {
+      if (r->steps[j].op == CRUSH_RULE_TAKE &&
+	  r->steps[j].arg1 == item) {
+	return true;
+      }
+    }
+  }
+  return false;
+}
+
 int CrushWrapper::_remove_item_under(CephContext *cct, int item, int ancestor, bool unlink_only)
 {
   ldout(cct, 5) << "_remove_item_under " << item << " under " << ancestor
@@ -293,6 +315,11 @@ int CrushWrapper::remove_item_under(CephContext *cct, int item, int ancestor, bo
 {
   ldout(cct, 5) << "remove_item_under " << item << " under " << ancestor
 		<< (unlink_only ? " unlink_only":"") << dendl;
+
+  if (!unlink_only && _bucket_is_in_use(cct, item)) {
+    return -EBUSY;
+  }
+
   int ret = _remove_item_under(cct, item, ancestor, unlink_only);
   if (ret < 0)
     return ret;
@@ -805,7 +832,7 @@ int CrushWrapper::adjust_item_weight_in_loc(CephContext *cct, int id, int weight
 
 int CrushWrapper::adjust_subtree_weight(CephContext *cct, int id, int weight)
 {
-  ldout(cct, 5) << "adjust_item_weight " << id << " weight " << weight << dendl;
+  ldout(cct, 5) << __func__ << " " << id << " weight " << weight << dendl;
   crush_bucket *b = get_bucket(id);
   if (IS_ERR(b))
     return PTR_ERR(b);
@@ -815,16 +842,22 @@ int CrushWrapper::adjust_subtree_weight(CephContext *cct, int id, int weight)
   while (!q.empty()) {
     b = q.front();
     q.pop_front();
+    int local_changed = 0;
     for (unsigned i=0; i<b->size; ++i) {
       int n = b->items[i];
       if (n >= 0) {
 	crush_bucket_adjust_item_weight(crush, b, n, weight);
+	++changed;
+	++local_changed;
       } else {
 	crush_bucket *sub = get_bucket(n);
 	if (IS_ERR(sub))
 	  continue;
 	q.push_back(sub);
       }
+    }
+    if (local_changed) {
+      adjust_item_weight(cct, b->id, b->weight);
     }
   }
   return changed;
@@ -1407,6 +1440,56 @@ void CrushWrapper::dump(Formatter *f) const
   f->open_object_section("tunables");
   dump_tunables(f);
   f->close_section();
+}
+
+namespace {
+  // depth first walker
+  class TreeDumper {
+    typedef CrushTreeDumper::Item Item;
+    const CrushWrapper *crush;
+  public:
+    TreeDumper(const CrushWrapper *crush)
+      : crush(crush) {}
+
+    void dump(Formatter *f) {
+      set<int> roots;
+      crush->find_roots(roots);
+      for (set<int>::iterator root = roots.begin(); root != roots.end(); ++root) {
+	dump_item(Item(*root, 0, crush->get_bucket_weightf(*root)), f);
+      }
+    }
+
+  private:
+    void dump_item(const Item& qi, Formatter* f) {
+      if (qi.is_bucket()) {
+	f->open_object_section("bucket");
+	CrushTreeDumper::dump_item_fields(crush, qi, f);
+	dump_bucket_children(qi, f);
+	f->close_section();
+      } else {
+	f->open_object_section("device");
+	CrushTreeDumper::dump_item_fields(crush, qi, f);
+	f->close_section();
+      }
+    }
+
+    void dump_bucket_children(const Item& parent, Formatter* f) {
+      f->open_array_section("items");
+      const int max_pos = crush->get_bucket_size(parent.id);
+      for (int pos = 0; pos < max_pos; pos++) {
+	int id = crush->get_bucket_item(parent.id, pos);
+	float weight = crush->get_bucket_item_weightf(parent.id, pos);
+	dump_item(Item(id, parent.depth + 1, weight), f);
+      }
+      f->close_section();
+    }
+  };
+}
+
+void CrushWrapper::dump_tree(Formatter *f) const
+{
+  assert(f);
+  TreeDumper(this).dump(f);
 }
 
 void CrushWrapper::dump_tunables(Formatter *f) const

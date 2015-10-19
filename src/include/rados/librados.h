@@ -81,6 +81,7 @@ enum {
   // indicate read/write data will not accessed again (by *this* client)
   LIBRADOS_OP_FLAG_FADVISE_NOCACHE    = 0x40,
 };
+/** @endcond */
 
 #if __GNUC__ >= 4
   #define CEPH_RADOS_API  __attribute__ ((visibility ("default")))

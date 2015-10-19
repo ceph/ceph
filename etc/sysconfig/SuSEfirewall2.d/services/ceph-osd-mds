@@ -1,0 +1,5 @@
+## Name: Ceph OSD/MDS
+## Description: Open ports for Ceph OSDs and Metadata Servers (max: 166 per node)
+
+# space separated list of allowed TCP ports
+TCP="6800:7300"

@@ -148,7 +148,7 @@ md_config_t::md_config_t()
 #undef OPTION
 #undef SUBSYS
 #undef DEFAULT_SUBSYS
-  lock("md_config_t", true)
+  lock("md_config_t", true, false)
 {
   init_subsys();
 }
@@ -877,7 +877,7 @@ int md_config_t::set_val_raw(const char *val, const config_option *opt)
   switch (opt->type) {
     case OPT_INT: {
       std::string err;
-      int f = strict_sistrtoll(val, &err);
+      int f = strict_si_cast<int>(val, &err);
       if (!err.empty())
 	return -EINVAL;
       *(int*)opt->conf_ptr(this) = f;
@@ -885,7 +885,7 @@ int md_config_t::set_val_raw(const char *val, const config_option *opt)
     }
     case OPT_LONGLONG: {
       std::string err;
-      long long f = strict_sistrtoll(val, &err);
+      long long f = strict_si_cast<long long>(val, &err);
       if (!err.empty())
 	return -EINVAL;
       *(long long*)opt->conf_ptr(this) = f;
@@ -894,12 +894,22 @@ int md_config_t::set_val_raw(const char *val, const config_option *opt)
     case OPT_STR:
       *(std::string*)opt->conf_ptr(this) = val ? val : "";
       return 0;
-    case OPT_FLOAT:
-      *(float*)opt->conf_ptr(this) = atof(val);
+    case OPT_FLOAT: {
+      std::string err;
+      float f = strict_strtof(val, &err);
+      if (!err.empty())
+	return -EINVAL;
+      *(float*)opt->conf_ptr(this) = f;
       return 0;
-    case OPT_DOUBLE:
-      *(double*)opt->conf_ptr(this) = atof(val);
+    }
+    case OPT_DOUBLE: {
+      std::string err;
+      double f = strict_strtod(val, &err);
+      if (!err.empty())
+	return -EINVAL;
+      *(double*)opt->conf_ptr(this) = f;
       return 0;
+    }
     case OPT_BOOL:
       if (strcasecmp(val, "false") == 0)
 	*(bool*)opt->conf_ptr(this) = false;
@@ -915,7 +925,7 @@ int md_config_t::set_val_raw(const char *val, const config_option *opt)
       return 0;
     case OPT_U32: {
       std::string err;
-      int f = strict_sistrtoll(val, &err);
+      int f = strict_si_cast<int>(val, &err);
       if (!err.empty())
 	return -EINVAL;
       *(uint32_t*)opt->conf_ptr(this) = f;
@@ -923,7 +933,7 @@ int md_config_t::set_val_raw(const char *val, const config_option *opt)
     }
     case OPT_U64: {
       std::string err;
-      long long f = strict_sistrtoll(val, &err);
+      uint64_t f = strict_si_cast<uint64_t>(val, &err);
       if (!err.empty())
 	return -EINVAL;
       *(uint64_t*)opt->conf_ptr(this) = f;

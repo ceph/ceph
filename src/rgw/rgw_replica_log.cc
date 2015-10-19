@@ -37,7 +37,7 @@ RGWReplicaLogger::RGWReplicaLogger(RGWRados *_store) :
 
 int RGWReplicaLogger::open_ioctx(librados::IoCtx& ctx, const string& pool)
 {
-  int r = store->rados->ioctx_create(pool.c_str(), ctx);
+  int r = store->get_rados_handle()->ioctx_create(pool.c_str(), ctx);
   if (r == -ENOENT) {
     rgw_bucket p(pool.c_str());
     r = store->create_pool(p);
@@ -45,7 +45,7 @@ int RGWReplicaLogger::open_ioctx(librados::IoCtx& ctx, const string& pool)
       return r;
 
     // retry
-    r = store->rados->ioctx_create(pool.c_str(), ctx);
+    r = store->get_rados_handle()->ioctx_create(pool.c_str(), ctx);
   }
   if (r < 0) {
     lderr(cct) << "ERROR: could not open rados pool " << pool << dendl;

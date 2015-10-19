@@ -5,6 +5,9 @@
 #include <boost/algorithm/string/predicate.hpp>
 #include <dlfcn.h>
 #include <errno.h>
+#include "common/debug.h"
+
+#define dout_subsys ceph_subsys_rados
 
 namespace librados {
 
@@ -22,7 +25,7 @@ void TestClassHandler::open_class(const std::string& name,
                                   const std::string& path) {
   void *handle = dlopen(path.c_str(), RTLD_NOW);
   if (handle == NULL) {
-    std::cerr << "Failed to load class: " << dlerror() << std::endl;
+    derr << "Failed to load class: " << dlerror() << dendl;
     return;
   }
   m_class_handles.push_back(handle);

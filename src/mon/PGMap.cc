@@ -1426,7 +1426,7 @@ void PGMap::generate_test_instances(list<PGMap*>& o)
   }
 }
 
-void PGMap::get_filtered_pg_stats(string& state, int64_t poolid, int64_t osdid,
+void PGMap::get_filtered_pg_stats(const string& state, int64_t poolid, int64_t osdid,
                                   bool primary, set<pg_t>& pgs)
 {
   int type = 0;

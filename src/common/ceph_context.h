@@ -77,6 +77,9 @@ public:
   md_config_t *_conf;
   ceph::log::Log *_log;
 
+  /* init ceph::crypto */
+  void init_crypto();
+
   /* Start the Ceph Context's service thread */
   void start_service_thread();
 
@@ -139,6 +142,8 @@ private:
 
   uint32_t _module_type;
 
+  bool _crypto_inited;
+
   /* libcommon service thread.
    * SIGHUP wakes this thread, which then reopens logfiles */
   friend class CephContextServiceThread;
@@ -172,6 +177,8 @@ private:
   CephContextObs *_cct_obs;
   ceph_spinlock_t _feature_lock;
   std::set<std::string> _experimental_features;
+
+  md_config_obs_t *_lockdep_obs;
 
   friend class CephContextObs;
 };

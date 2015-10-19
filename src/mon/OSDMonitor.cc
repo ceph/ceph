@@ -70,6 +70,12 @@ static ostream& _prefix(std::ostream *_dout, Monitor *mon, OSDMap& osdmap) {
 		<< ").osd e" << osdmap.get_epoch() << " ";
 }
 
+OSDMonitor::OSDMonitor(Monitor *mn, Paxos *p, string service_name)
+  : PaxosService(mn, p, service_name),
+    inc_osd_cache(g_conf->mon_osd_cache_size),
+    full_osd_cache(g_conf->mon_osd_cache_size),
+    thrash_map(0), thrash_last_up_osd(-1) { }
+
 bool OSDMonitor::_have_pending_crush()
 {
   return pending_inc.crush.length();
@@ -1153,13 +1159,13 @@ bool OSDMonitor::preprocess_get_osdmap(MMonGetOSDMap *m)
   epoch_t last = osdmap.get_epoch();
   int max = g_conf->osd_map_message_max;
   for (epoch_t e = MAX(first, m->get_full_first());
-       e < MIN(last, m->get_full_last()) && max > 0;
+       e <= MIN(last, m->get_full_last()) && max > 0;
        ++e, --max) {
     int r = get_version_full(e, reply->maps[e]);
     assert(r >= 0);
   }
   for (epoch_t e = MAX(first, m->get_inc_first());
-       e < MIN(last, m->get_inc_last()) && max > 0;
+       e <= MIN(last, m->get_inc_last()) && max > 0;
        ++e, --max) {
     int r = get_version(e, reply->incremental_maps[e]);
     assert(r >= 0);
@@ -1614,7 +1620,27 @@ bool OSDMonitor::preprocess_boot(MOSDBoot *m)
             << " doesn't announce support -- ignore" << dendl;
     goto ignore;
   }
-  
+
+  // make sure upgrades stop at hammer
+  //  * OSD_PROXY_FEATURES is the last pre-hammer feature
+  //  * MON_METADATA is the first post-hammer feature
+  if (osdmap.get_num_up_osds() > 0) {
+    if ((m->osd_features & CEPH_FEATURE_MON_METADATA) &&
+	!(osdmap.get_up_osd_features() & CEPH_FEATURE_OSD_PROXY_FEATURES)) {
+      mon->clog->info() << "disallowing boot of post-hammer OSD "
+			<< m->get_orig_source_inst()
+			<< " because one or more up OSDs is pre-hammer\n";
+      goto ignore;
+    }
+    if (!(m->osd_features & CEPH_FEATURE_OSD_PROXY_FEATURES) &&
+	(osdmap.get_up_osd_features() & CEPH_FEATURE_MON_METADATA)) {
+      mon->clog->info() << "disallowing boot of pre-hammer OSD "
+			<< m->get_orig_source_inst()
+			<< " because all up OSDs are post-hammer\n";
+      goto ignore;
+    }
+  }
+
   // already booted?
   if (osdmap.is_up(from) &&
       osdmap.get_inst(from) == m->get_orig_source_inst()) {
@@ -2226,6 +2252,29 @@ void OSDMonitor::send_incremental(epoch_t first, MonSession *session,
   }
 }
 
+int OSDMonitor::get_version(version_t ver, bufferlist& bl)
+{
+    if (inc_osd_cache.lookup(ver, &bl)) {
+      return 0;
+    }
+    int ret = PaxosService::get_version(ver, bl);
+    if (!ret) {
+      inc_osd_cache.add(ver, bl);
+    }
+    return ret;
+}
+
+int OSDMonitor::get_version_full(version_t ver, bufferlist& bl)
+{
+    if (full_osd_cache.lookup(ver, &bl)) {
+      return 0;
+    }
+    int ret = PaxosService::get_version_full(ver, bl);
+    if (!ret) {
+      full_osd_cache.add(ver, bl);
+    }
+    return ret;
+}
 
 
 
@@ -2872,8 +2921,8 @@ bool OSDMonitor::preprocess_command(MMonCommand *m)
         << " pool '" << poolstr << "' (" << pool << ")"
         << " object '" << fullobjname << "' ->"
         << " pg " << pgid << " (" << mpgid << ")"
-        << " -> up (" << up << ", p" << up_p << ") acting ("
-        << acting << ", p" << acting_p << ")";
+        << " -> up (" << pg_vector_string(up) << ", p" << up_p << ") acting ("
+        << pg_vector_string(acting) << ", p" << acting_p << ")";
       rdata.append(ds);
     }
   } else if ((prefix == "osd scrub" ||
@@ -2998,8 +3047,6 @@ bool OSDMonitor::preprocess_command(MMonCommand *m)
   } else if (prefix == "osd crush get-tunable") {
     string tunable;
     cmd_getval(g_ceph_context, cmdmap, "tunable", tunable);
-    int value;
-    cmd_getval(g_ceph_context, cmdmap, "value", value);
     ostringstream rss;
     if (f)
       f->open_object_section("tunable");
@@ -3369,6 +3416,12 @@ stats_out:
     f->flush(rs);
     rs << "\n";
     rdata.append(rs.str());
+  } else if (prefix == "osd crush tree") {
+    boost::scoped_ptr<Formatter> f(Formatter::create(format, "json-pretty", "json-pretty"));
+    f->open_array_section("crush_map_roots");
+    osdmap.crush->dump_tree(f.get());
+    f->close_section();
+    f->flush(rdata);
   } else if (prefix == "osd erasure-code-profile ls") {
     const map<string,map<string,string> > &profiles =
       osdmap.get_erasure_code_profiles();
@@ -3558,7 +3611,7 @@ void OSDMonitor::get_pools_health(
       } else if (warn_threshold > 0 &&
 		 sum.num_bytes >= pool.quota_max_bytes*warn_threshold) {
         ss << "pool '" << pool_name
-           << "' has " << si_t(sum.num_bytes) << " objects"
+           << "' has " << si_t(sum.num_bytes) << " bytes"
            << " (max " << si_t(pool.quota_max_bytes) << ")";
         status = HEALTH_WARN;
       }
@@ -3870,6 +3923,7 @@ int OSDMonitor::prepare_pool_crush_ruleset(const unsigned pool_type,
 					   int *crush_ruleset,
 					   stringstream &ss)
 {
+
   if (*crush_ruleset < 0) {
     switch (pool_type) {
     case pg_pool_t::TYPE_REPLICATED:
@@ -3979,6 +4033,15 @@ int OSDMonitor::prepare_new_pool(string& name, uint64_t auid,
   int r;
   r = prepare_pool_crush_ruleset(pool_type, erasure_code_profile,
 				 crush_ruleset_name, &crush_ruleset, ss);
+  if (r)
+    return r;
+  CrushWrapper newcrush;
+  _get_pending_crush(newcrush);
+  CrushTester tester(newcrush, ss);
+  r = tester.test_with_crushtool(g_conf->crushtool.c_str(),
+				 osdmap.get_max_osd(),
+				 g_conf->mon_lease,
+				 crush_ruleset);
   if (r)
     return r;
   unsigned size, min_size;
@@ -4525,15 +4588,20 @@ bool OSDMonitor::prepare_command_impl(MMonCommand *m,
     // sanity check: test some inputs to make sure this map isn't totally broken
     dout(10) << " testing map" << dendl;
     stringstream ess;
+    // XXX: Use mon_lease as a timeout value for crushtool.
+    // If the crushtool consistently takes longer than 'mon_lease' seconds,
+    // then we would consistently trigger an election before the command
+    // finishes, having a flapping monitor unable to hold quorum.
     CrushTester tester(crush, ess);
     int r = tester.test_with_crushtool(g_conf->crushtool,
+				       osdmap.get_max_osd(),
 				       g_conf->mon_lease);
     if (r < 0) {
       if (r == -EINTR) {
 	ss << "(note: crushtool tests not run because they took too long) ";
       } else {
 	derr << "error on crush map: " << ess.str() << dendl;
-	ss << "Failed to parse crushmap: " << ess.str();
+	ss << "Failed crushmap test: " << ess.str();
 	err = r;
 	goto reply;
       }
@@ -5622,7 +5690,7 @@ bool OSDMonitor::prepare_command_impl(MMonCommand *m,
     }
     if (osdmap.exists(id)) {
       pending_inc.new_weight[id] = ww;
-      ss << "reweighted osd." << id << " to " << w << " (" << ios::hex << ww << ios::dec << ")";
+      ss << "reweighted osd." << id << " to " << w << " (" << std::hex << ww << std::dec << ")";
       getline(ss, rs);
       wait_for_finished_proposal(new Monitor::C_Command(mon, m, 0, rs,
 						get_last_committed() + 1));
@@ -6109,6 +6177,19 @@ done:
     if (tier_stats.stats.sum.num_objects != 0 &&
 	force_nonempty != "--force-nonempty") {
       ss << "tier pool '" << tierpoolstr << "' is not empty; --force-nonempty to force";
+      err = -ENOTEMPTY;
+      goto reply;
+    }
+    if (tp->ec_pool()) {
+      ss << "tier pool '" << tierpoolstr
+	 << "' is an ec pool, which cannot be a tier";
+      err = -ENOTSUP;
+      goto reply;
+    }
+    if ((!tp->removed_snaps.empty() || !tp->snaps.empty()) &&
+	((force_nonempty != "--force-nonempty") ||
+	 (!g_conf->mon_debug_unsafe_allow_tier_with_nonempty_snaps))) {
+      ss << "tier pool '" << tierpoolstr << "' has snapshot state; it cannot be added as a tier without breaking the pool";
       err = -ENOTEMPTY;
       goto reply;
     }

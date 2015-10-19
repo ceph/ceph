@@ -845,6 +845,12 @@ int RGWGetObj::handle_user_manifest(const char *prefix)
 
   s->obj_size = total_len;
 
+  if (!get_data) {
+    bufferlist bl;
+    send_response_data(bl, 0, 0);
+    return 0;
+  }
+
   r = iterate_user_manifest_parts(s->cct, store, ofs, end, bucket, obj_prefix, bucket_policy, NULL, get_obj_user_manifest_iterate_cb, (void *)this);
   if (r < 0)
     return r;
@@ -1399,10 +1405,11 @@ void RGWCreateBucket::execute()
     /* bucket already existed, might have raced with another bucket creation, or
      * might be partial bucket creation that never completed. Read existing bucket
      * info, verify that the reported bucket owner is the current user.
-     * If all is ok then update the user's list of buckets
+     * If all is ok then update the user's list of buckets.
+     * Otherwise inform client about a name conflict.
      */
     if (info.owner.compare(s->user.user_id) != 0) {
-      ret = -ERR_BUCKET_EXISTS;
+      ret = -EEXIST;
       return;
     }
     s->bucket = info.bucket;
@@ -1414,10 +1421,9 @@ void RGWCreateBucket::execute()
     if (ret < 0) {
       ldout(s->cct, 0) << "WARNING: failed to unlink bucket: ret=" << ret << dendl;
     }
-  }
-
-  if (ret == -EEXIST)
+  } else if (ret == -EEXIST || (ret == 0 && existed)) {
     ret = -ERR_BUCKET_EXISTS;
+  }
 }
 
 int RGWDeleteBucket::verify_permission()
@@ -2303,6 +2309,7 @@ int RGWCopyObj::verify_permission()
 
   if (src_bucket_name.compare(dest_bucket_name) == 0) { /* will only happen if s->local_source */
     dest_bucket_info = src_bucket_info;
+    dest_attrs = src_attrs;
   } else {
     ret = store->get_bucket_info(obj_ctx, dest_bucket_name, dest_bucket_info, NULL, &dest_attrs);
     if (ret < 0)

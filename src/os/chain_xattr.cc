@@ -138,6 +138,10 @@ int chain_getxattr(const char *fn, const char *name, void *val, size_t size)
     size -= chunk_size;
 
     r = sys_getxattr(fn, raw_name, (char *)val + pos, chunk_size);
+    if (i && r == -ENODATA) {
+      ret = pos;
+      break;
+    }
     if (r < 0) {
       ret = r;
       break;
@@ -201,6 +205,10 @@ int chain_fgetxattr(int fd, const char *name, void *val, size_t size)
     size -= chunk_size;
 
     r = sys_fgetxattr(fd, raw_name, (char *)val + pos, chunk_size);
+    if (i && r == -ENODATA) {
+      ret = pos;
+      break;
+    }
     if (r < 0) {
       ret = r;
       break;

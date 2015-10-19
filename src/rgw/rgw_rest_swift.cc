@@ -53,12 +53,16 @@ void RGWListBuckets_ObjStore_SWIFT::send_response_begin(bool has_buckets)
     ret = STATUS_NO_CONTENT;
     set_req_state_err(s, ret);
   }
-  dump_errno(s);
-  end_header(s, NULL);
+
+  if (!g_conf->rgw_swift_enforce_content_length) {
+    dump_errno(s);
+    end_header(s, NULL, NULL, NO_CONTENT_LENGTH, true);
+  }
 
   if (!ret) {
     dump_start(s);
-    s->formatter->open_array_section("account");
+    s->formatter->open_array_section_with_attrs("account",
+            FormatterAttrs("name", s->user.display_name.c_str(), NULL));
 
     sent_data = true;
   }
@@ -81,7 +85,9 @@ void RGWListBuckets_ObjStore_SWIFT::send_response_data(RGWUserBuckets& buckets)
       s->formatter->dump_int("bytes", obj.size);
     }
     s->formatter->close_section();
-    rgw_flush_formatter(s, s->formatter);
+    if (!g_conf->rgw_swift_enforce_content_length) {
+      rgw_flush_formatter(s, s->formatter);
+    }
   }
 }
 
@@ -89,6 +95,14 @@ void RGWListBuckets_ObjStore_SWIFT::send_response_end()
 {
   if (sent_data) {
     s->formatter->close_section();
+  }
+
+  if (g_conf->rgw_swift_enforce_content_length) {
+    dump_errno(s);
+    end_header(s, NULL, NULL, s->formatter->get_len(), true);
+  }
+
+  if (sent_data || g_conf->rgw_swift_enforce_content_length) {
     rgw_flush_formatter_and_reset(s, s->formatter);
   }
 }
@@ -119,13 +133,14 @@ int RGWListBucket_ObjStore_SWIFT::get_params()
     path = prefix;
     if (path.size() && path[path.size() - 1] != '/')
       path.append("/");
-  }
 
-  int len = prefix.size();
-  int delim_size = delimiter.size();
-  if (len >= delim_size) {
-    if (prefix.substr(len - delim_size).compare(delimiter) != 0)
-      prefix.append(delimiter);
+    int len = prefix.size();
+    int delim_size = delimiter.size();
+
+    if (len >= delim_size) {
+      if (prefix.substr(len - delim_size).compare(delimiter) != 0)
+        prefix.append(delimiter);
+    }
   }
 
   return 0;
@@ -294,7 +309,8 @@ void RGWStatAccount_ObjStore_SWIFT::send_response()
   set_req_state_err(s, ret);
   dump_errno(s);
 
-  end_header(s, NULL, NULL, 0);
+  end_header(s, NULL, NULL, 0,  true);
+
   dump_start(s);
 }
 
@@ -308,7 +324,7 @@ void RGWStatBucket_ObjStore_SWIFT::send_response()
   set_req_state_err(s, ret);
   dump_errno(s);
 
-  end_header(s, this);
+  end_header(s, this,NULL,0, true);
   dump_start(s);
 }
 
