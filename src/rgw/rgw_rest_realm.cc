@@ -1,6 +1,7 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
+#include "common/errno.h"
 #include "rgw_rest_realm.h"
 #include "rgw_rest_s3.h"
 #include "rgw_rest_config.h"
@@ -63,20 +64,109 @@ class RGWOp_Period_Post : public RGWOp_Period_Base {
 
 void RGWOp_Period_Post::execute()
 {
+  auto cct = store->ctx();
+
   // initialize the period without reading from rados
-  period.init(store->ctx(), store, false);
+  period.init(cct, store, false);
 
   // decode the period from input
-#define PERIOD_INPUT_MAX_LEN 4096
+#define PERIOD_MAX_LEN 4096
   bool empty;
-  http_ret = rgw_rest_get_json_input(store->ctx(), s, period,
-                                     PERIOD_INPUT_MAX_LEN, &empty);
+  http_ret = rgw_rest_get_json_input(cct, s, period, PERIOD_MAX_LEN, &empty);
   if (http_ret < 0) {
-    dout(5) << "failed to decode period" << dendl;
+    lderr(cct) << "failed to decode period" << dendl;
     return;
   }
 
-  period.store_info(false);
+  // require period.realm_id to match our realm
+  if (period.get_realm() != store->realm.get_id()) {
+    lderr(cct) << "period with realm id " << period.get_realm()
+        << " doesn't match current realm " << store->realm.get_id() << dendl;
+    http_ret = -EINVAL;
+    return;
+  }
+
+  // load the realm and current period from rados; there may be a more recent
+  // period that we haven't restarted with yet. we also don't want to modify
+  // the objects in use by RGWRados
+  RGWRealm realm(period.get_realm());
+  http_ret = realm.init(cct, store);
+  if (http_ret < 0) {
+    lderr(cct) << "failed to read current realm: "
+        << cpp_strerror(-http_ret) << dendl;
+    return;
+  }
+
+  RGWPeriod current_period;
+  http_ret = current_period.init(cct, store, realm.get_id());
+  if (http_ret < 0) {
+    lderr(cct) << "failed to read current period: "
+        << cpp_strerror(-http_ret) << dendl;
+    return;
+  }
+
+  // nobody is allowed to push to the master zone
+  if (period.get_master_zone() == store->get_zone_params().get_id()) {
+    ldout(cct, 10) << "master zone rejecting period id="
+        << period.get_id() << " epoch=" << period.get_epoch() << dendl;
+    http_ret = -EINVAL; // XXX: error code
+    return;
+  }
+
+  if (period.get_id() != current_period.get_id()) {
+    // new period must follow current period
+    if (period.get_predecessor() != current_period.get_id()) {
+      ldout(cct, 10) << "current period " << current_period.get_id()
+          << " is not period " << period.get_id() << "'s predecessor" << dendl;
+      // XXX: this indicates a race between successive period updates. we should
+      // fetch this new period's predecessors until we have a full history, then
+      // set the latest period as the realm's current_period
+      http_ret = -ENOENT; // XXX: error code
+      return;
+    }
+    // write the period to rados
+    http_ret = period.store_info(false);
+    if (http_ret < 0) {
+      lderr(cct) << "failed to store new period" << dendl;
+      return;
+    }
+    // set as current period
+    http_ret = realm.set_current_period(period.get_id()); // TODO: add sync status argument
+    if (http_ret < 0) {
+      lderr(cct) << "failed to update realm's current period" << dendl;
+      return;
+    }
+    ldout(cct, 4) << "current period " << current_period.get_id()
+        << " is period " << period.get_id() << "'s predecessor, "
+        "updating current period and notifying zone" << dendl;
+    // TODO: notify zone for dynamic reconfiguration
+    return;
+  }
+
+  if (period.get_epoch() <= current_period.get_epoch()) {
+    lderr(cct) << "period epoch " << period.get_epoch() << " is not newer "
+        "than current epoch " << current_period.get_epoch()
+        << ", discarding update" << dendl;
+    http_ret = -EEXIST; // XXX: error code
+    return;
+  }
+
+  // write the period to rados
+  http_ret = period.store_info(false);
+  if (http_ret < 0) {
+    lderr(cct) << "failed to store period " << period.get_id() << dendl;
+    return;
+  }
+  // set as latest epoch
+  http_ret = period.set_latest_epoch(period.get_epoch());
+  if (http_ret < 0) {
+    lderr(cct) << "failed to set latest epoch" << dendl;
+    return;
+  }
+  ldout(cct, 4) << "period epoch " << period.get_epoch()
+      << " is newer than current epoch " << current_period.get_epoch()
+      << ", updating latest epoch and notifying zone" << dendl;
+  // TODO: notify zone for dynamic reconfiguration
 }
 
 class RGWHandler_Period : public RGWHandler_Auth_S3 {
