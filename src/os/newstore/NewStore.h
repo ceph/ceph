@@ -788,7 +788,7 @@ private:
   int _omap_setkeys(TransContext *txc,
 		    CollectionRef& c,
 		    const ghobject_t& oid,
-		    const map<string,bufferlist>& m);
+		    bufferlist& bl);
   int _omap_setheader(TransContext *txc,
 		      CollectionRef& c,
 		      const ghobject_t& oid,
@@ -796,7 +796,7 @@ private:
   int _omap_rmkeys(TransContext *txc,
 		   CollectionRef& c,
 		   const ghobject_t& oid,
-		   const set<string>& m);
+		   bufferlist& bl);
   int _omap_rmkey_range(TransContext *txc,
 			CollectionRef& c,
 			const ghobject_t& oid,
