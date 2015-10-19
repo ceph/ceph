@@ -1175,73 +1175,29 @@ struct RGWPeriodConfig
 };
 WRITE_CLASS_ENCODER(RGWPeriodConfig)
 
-struct RGWRegionMap {
-  map<string, RGWZoneGroup> regions;
-  map<string, RGWZoneGroup> regions_by_api;
-
-  string master_region;
-
-  RGWQuotaInfo bucket_quota;
-  RGWQuotaInfo user_quota;
-
-  void encode(bufferlist& bl) const;
-  void decode(bufferlist::iterator& bl);
-
-  void dump(Formatter *f) const;
-  void decode_json(JSONObj *obj);
-};
-WRITE_CLASS_ENCODER(RGWRegionMap)
-
-class RGWRealm;
+/* for backward comaptability */
 struct RGWZoneGroupMap {
 
-  Mutex lock;
-  map<string, RGWRealm> realms;
-  map<string, RGWPeriodMap> periods;
+  map<string, RGWZoneGroup> zonegroups;
+  map<string, RGWZoneGroup> zonegroups_by_api;
+
+  string master_zonegroup;
+
   RGWQuotaInfo bucket_quota;
   RGWQuotaInfo user_quota;
 
-  RGWZoneGroupMap& operator=(const RGWZoneGroupMap& map) {
-    periods = map.periods;
-    bucket_quota = map.bucket_quota;
-    user_quota = map.user_quota;
-    return *this;
-  }
-
-  RGWZoneGroupMap() : lock("RGWZoneGroupMap"){}
+  /* constract the map */
+  int read(CephContext *cct, RGWRados *store);
 
   void encode(bufferlist& bl) const;
   void decode(bufferlist::iterator& bl);
 
-  void get_params(CephContext *cct, string& pool_name, string& oid);
-  int read(CephContext *cct, RGWRados *store);
-  int store(CephContext *cct, RGWRados *store);
-
-  int update(CephContext *cct, RGWRados *store,
-	     const RGWRealm& realm, const RGWZoneGroup& zonegroup);
-  int update(RGWRealm& realm);
-  int update(CephContext *cct, RGWRados *store,
-	     const string& period_id,
-	     const string& realm_id);
-  int update_master_zonegroup(const string& period_id,
-			      const string& master_zonegroup);
-  int get_master_zonegroup(const string& current_period,
-			   string& master_zonegroup);
-
-  int get_zonegroups(const string& current_period,
-		     map<string, RGWZoneGroup>& zonegroups);
-
-  int get_zonegroup(CephContext *cct, RGWRados *store,
-		    RGWZoneGroup& zonegroup,
-		    const string& zonegroup_id,
-		    const string& current_period = "");
-
-  bool is_single_zonegroup(CephContext *cct, RGWRados *store);
-  void clear_zonegroups();
   void dump(Formatter *f) const;
   void decode_json(JSONObj *obj);
 };
 WRITE_CLASS_ENCODER(RGWZoneGroupMap)
+
+class RGWRealm;
 
 struct objexp_hint_entry {
   string bucket_name;
