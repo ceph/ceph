@@ -519,12 +519,11 @@ def unlock_one(ctx, name, user, description=None):
         while proceed():
             try:
                 response = requests.put(uri, json.dumps(request))
-                success = response.ok
-                if success:
-                    break
+                break
             # Work around https://github.com/kennethreitz/requests/issues/2364
             except requests.exception.ConnectionError as e:
                 log.warn("Saw %s while unlocking; retrying...", str(e))
+    success = response.ok
     if success:
         log.info('unlocked %s', name)
     else:
@@ -592,7 +591,7 @@ def find_stale_locks(owner=None):
         return False
 
     # Which nodes are locked for jobs?
-    nodes = list_locks()
+    nodes = list_locks(locked=True)
     if owner is not None:
         nodes = [node for node in nodes if node['locked_by'] == owner]
     nodes = filter(might_be_stale, nodes)
