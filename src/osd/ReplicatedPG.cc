@@ -1538,6 +1538,10 @@ void ReplicatedPG::do_op(OpRequestRef op)
     return;
   }
 
+  if (m->get_flags() & CEPH_OSD_FLAG_IGNORE_CACHE) {
+    ctx->ignore_cache = true;
+  }
+
   if ((op->may_read()) && (obc->obs.oi.is_lost())) {
     // This object is lost. Reading from it returns an error.
     dout(20) << __func__ << ": object " << obc->obs.oi.soid
@@ -3992,7 +3996,7 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	// Cannot delete an object with watchers
 	result = -EBUSY;
       } else {
-	result = _delete_oid(ctx, false);
+	result = _delete_oid(ctx, ctx->ignore_cache);
       }
       break;
 
