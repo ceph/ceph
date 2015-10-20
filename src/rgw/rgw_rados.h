@@ -1321,7 +1321,7 @@ class RGWPeriod
   const string get_period_oid_prefix();
 
 public:
-  RGWPeriod() {};
+  RGWPeriod() : epoch(0) {}
 
   RGWPeriod(const string& period_id, epoch_t _epoch = 0)
     : id(period_id), epoch(_epoch) {}
