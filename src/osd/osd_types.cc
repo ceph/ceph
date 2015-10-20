@@ -2264,6 +2264,8 @@ bool pg_interval_t::is_new_interval(
   int new_up_primary,
   const vector<int> &old_up,
   const vector<int> &new_up,
+  int old_size,
+  int new_size,
   int old_min_size,
   int new_min_size,
   unsigned old_pg_num,
@@ -2274,6 +2276,7 @@ bool pg_interval_t::is_new_interval(
     old_up_primary != new_up_primary ||
     new_up != old_up ||
     old_min_size != new_min_size ||
+    old_size != new_size ||
     pgid.is_split(old_pg_num, new_pg_num, 0);
 }
 
@@ -2299,6 +2302,8 @@ bool pg_interval_t::is_new_interval(
 		    new_up_primary,
 		    old_up,
 		    new_up,
+		    lastmap->get_pools().find(pgid.pool())->second.size,
+		    osdmap->get_pools().find(pgid.pool())->second.size,
 		    lastmap->get_pools().find(pgid.pool())->second.min_size,
 		    osdmap->get_pools().find(pgid.pool())->second.min_size,
 		    lastmap->get_pg_num(pgid.pool()),

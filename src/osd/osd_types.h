@@ -1766,6 +1766,8 @@ struct pg_interval_t {
     int new_up_primary,
     const vector<int> &old_up,
     const vector<int> &new_up,
+    int old_size,
+    int new_size,
     int old_min_size,
     int new_min_size,
     unsigned old_pg_num,
