@@ -367,7 +367,7 @@ Once you set a bucket quota, you may enable it. For example::
 
 You may disable an enabled bucket quota. For example:: 
 
-	radosgw-admin quota-disable --quota-scope=bucket --uid=<uid>
+	radosgw-admin quota disable --quota-scope=bucket --uid=<uid>
 
 
 Get Quota Settings
