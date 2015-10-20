@@ -110,15 +110,14 @@ int RGWSimpleRadosReadAttrsCR::request_complete()
 
 int RGWAsyncPutSystemObj::_send_request()
 {
-  return store->put_system_obj(NULL, obj, bl.c_str(), bl.length(), exclusive,
-                               NULL, attrs, objv_tracker, mtime);
+  return store->put_system_obj_data(NULL, obj, bl, -1, exclusive);
 }
 
 RGWAsyncPutSystemObj::RGWAsyncPutSystemObj(RGWAioCompletionNotifier *cn, RGWRados *_store,
-                     RGWObjVersionTracker *_objv_tracker, rgw_obj& _obj, bool _exclusive,
-                     bufferlist& _bl, time_t _mtime) : RGWAsyncRadosRequest(cn), store(_store),
-                                                       objv_tracker(_objv_tracker), obj(_obj), exclusive(_exclusive),
-                                                       bl(_bl), mtime(_mtime)
+                     rgw_obj& _obj, bool _exclusive,
+                     bufferlist& _bl) : RGWAsyncRadosRequest(cn), store(_store),
+                                                       obj(_obj), exclusive(_exclusive),
+                                                       bl(_bl)
 {
 }
 
@@ -156,6 +155,7 @@ int RGWAsyncLockSystemObj::_send_request()
   utime_t duration(duration_secs, 0);
   l.set_duration(duration);
   l.set_cookie(cookie);
+  l.set_renew(true);
 
   return l.lock_exclusive(&ioctx, obj.get_object());
 }

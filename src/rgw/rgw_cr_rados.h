@@ -83,19 +83,16 @@ public:
 
 class RGWAsyncPutSystemObj : public RGWAsyncRadosRequest {
   RGWRados *store;
-  RGWObjVersionTracker *objv_tracker;
   rgw_obj obj;
   bool exclusive;
   bufferlist bl;
-  map<string, bufferlist> attrs;
-  time_t mtime;
 
 protected:
   int _send_request();
 public:
   RGWAsyncPutSystemObj(RGWAioCompletionNotifier *cn, RGWRados *_store,
-                       RGWObjVersionTracker *_objv_tracker, rgw_obj& _obj, bool _exclusive,
-                       bufferlist& _bl, time_t _mtime = 0);
+                       rgw_obj& _obj, bool _exclusive,
+                       bufferlist& _bl);
 };
 
 class RGWAsyncPutSystemObjAttrs : public RGWAsyncRadosRequest {
@@ -280,7 +277,7 @@ public:
   int send_request() {
     rgw_obj obj = rgw_obj(pool, oid);
     req = new RGWAsyncPutSystemObj(stack->create_completion_notifier(),
-			           store, NULL, obj, false, bl);
+			           store, obj, false, bl);
     async_rados->queue(req);
     return 0;
   }
