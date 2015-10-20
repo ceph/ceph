@@ -164,17 +164,28 @@ void LevelDBStore::LevelDBTransactionImpl::set(
   const bufferlist &to_set_bl)
 {
   string key = combine_strings(prefix, k);
-
+  size_t bllen = to_set_bl.length();
   // bufferlist::c_str() is non-constant, so we can't call c_str()
-  if (to_set_bl.is_contiguous() && to_set_bl.length() > 0) {
-    bat.Put(leveldb::Slice(key),
-	    leveldb::Slice(to_set_bl.buffers().front().c_str(),
-			   to_set_bl.length()));
+  if (to_set_bl.is_contiguous() && bllen > 0) {
+    // bufferlist contains just one ptr or they're contiguous
+    bat.Put(leveldb::Slice(key), leveldb::Slice(to_set_bl.buffers().front().c_str(), bllen));
+  } else if ((bllen <= 32 * 1024) && (bllen > 0)) {
+    // 2+ bufferptrs that are not contiguopus
+    // allocate buffer on stack and copy bl contents to that buffer
+    // make sure the buffer isn't too large or we might crash here...    
+    char* slicebuf = (char*) alloca(bllen);
+    leveldb::Slice newslice(slicebuf, bllen);
+    std::list<buffer::ptr>::const_iterator pb;
+    for (pb = to_set_bl.buffers().begin(); pb != to_set_bl.buffers().end(); ++pb) {
+      size_t ptrlen = (*pb).length();
+      memcpy((void*)slicebuf, (*pb).c_str(), ptrlen);
+      slicebuf += ptrlen;
+    } 
+    bat.Put(leveldb::Slice(key), newslice);
   } else {
-    // make a copy
+    // 2+ bufferptrs that are not contiguous, and enormous in size
     bufferlist val = to_set_bl;
-    bat.Put(leveldb::Slice(key),
-	    leveldb::Slice(val.c_str(), val.length()));
+    bat.Put(leveldb::Slice(key), leveldb::Slice(val.c_str(), val.length()));
   }
 }
 
