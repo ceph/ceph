@@ -519,10 +519,12 @@ def unlock_one(ctx, name, user, description=None):
         while proceed():
             try:
                 response = requests.put(uri, json.dumps(request))
+                success = response.ok
+                if success:
+                    break
             # Work around https://github.com/kennethreitz/requests/issues/2364
             except requests.exception.ConnectionError as e:
                 log.warn("Saw %s while unlocking; retrying...", str(e))
-    success = response.ok
     if success:
         log.info('unlocked %s', name)
     else:
