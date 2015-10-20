@@ -20,6 +20,8 @@ import ctypes
 import errno
 import sys
 
+from rados import cstr
+
 ANONYMOUS_AUID = 0xffffffffffffffff
 ADMIN_AUID = 0
 
@@ -200,23 +202,6 @@ def load_librbd():
         return CDLL('librbd.so.1')
     except OSError as e:
         raise EnvironmentError("Unable to load librbd: %s" % e)
-
-
-def cstr(val, encoding="utf-8"):
-    """
-    Create a C-style string from a Python string
-
-    :param str val: Python string
-    :rtype: c_char_p
-    """
-    if val is None:
-        return c_char_p(None)
-
-    if _python2 and isinstance(val, str):
-        # Don't encode str on Python 2, as it's already an 8-bit string
-        return c_char_p(val)
-    else:
-        return c_char_p(val.encode(encoding))
 
 
 class RBD(object):
