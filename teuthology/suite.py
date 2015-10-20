@@ -8,6 +8,7 @@ import logging
 import os
 import requests
 import pwd
+import re
 import subprocess
 import smtplib
 import socket
@@ -468,7 +469,13 @@ def github_branch_exists(project, branch, project_owner='ceph'):
     """
     Query GitHub to check the existence of a project's branch
     """
-    url_templ = 'https://github.com/{project_owner}/{project}/tree/{branch}'
+    if project == 'ceph-qa-suite':
+        base = config.get_ceph_qa_suite_git_url()
+    elif project == 'ceph':
+        base = config.get_ceph_git_url()
+    else:
+        base = 'https://github.com/{project_owner}/{project}'
+    url_templ = re.sub('\.git$', '', base) + '/tree/{branch}'
     url = url_templ.format(project_owner=project_owner, project=project,
                            branch=branch)
     resp = requests.head(url)
