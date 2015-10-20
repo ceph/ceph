@@ -7,6 +7,10 @@ import time
 import threading
 import json
 import errno
+import sys
+
+# Are we running Python 2.x
+_python2 = sys.hexversion < 0x03000000
 
 def test_rados_init_error():
     assert_raises(Error, Rados, conffile='', rados_id='admin',
@@ -126,6 +130,16 @@ class TestRados(object):
     def test_create(self):
         self.rados.create_pool('foo')
         self.rados.delete_pool('foo')
+
+    def test_create_utf8(self):
+        if _python2:
+            # Use encoded bytestring
+            poolname = b"\351\273\204"
+        else:
+            poolname = "\u9ec4"
+        self.rados.create_pool(poolname)
+        assert self.rados.pool_exists(u"\u9ec4")
+        self.rados.delete_pool(poolname)
 
     def test_create_auid(self):
         self.rados.create_pool('foo', 100)
