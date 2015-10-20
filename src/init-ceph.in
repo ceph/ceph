@@ -335,7 +335,8 @@ for name in $what; do
 	    [ -n "$max_open_files" ] && files="ulimit -n $max_open_files;"
 
 	    if [ -n "$SYSTEMD_RUN" ]; then
-		cmd="$SYSTEMD_RUN -r bash -c '$files $cmd --cluster $cluster --setuser ceph --setgroup ceph -f'"
+                time=`date +%s.%N` 
+		cmd="$SYSTEMD_RUN --unit=ceph-$name.$time -r bash -c '$files $cmd --cluster $cluster --setuser ceph --setgroup ceph -f'"
 	    else
 		cmd="$files $wrap $cmd --cluster $cluster --setuser ceph --setgroup ceph $runmode"
 	    fi
