@@ -27,6 +27,7 @@
 #include "mon/MonMap.h"
 #include "mds/MDSMap.h"
 #include "osd/OSDMap.h"
+#include "crush/CrushCompiler.h"
 
 namespace po = boost::program_options;
 using namespace std;
@@ -196,6 +197,8 @@ void usage(const char *n, po::options_description &d)
   << "  get osdmap [-- options]         get osdmap (version VER if specified)\n"
   << "                                  (default: last committed)\n"
   << "  get mdsmap [-- options]         get mdsmap (version VER if specified)\n"
+  << "                                  (default: last committed)\n"
+  << "  get crushmap [-- options]       get crushmap (version VER if specified)\n"
   << "                                  (default: last committed)\n"
   << "  dump-keys                       dumps store keys to FILE\n"
   << "                                  (default: stdout)\n"
@@ -593,7 +596,11 @@ int main(int argc, char **argv) {
     }
 
     if (v == 0) {
-      v = st.get(map_type, "last_committed");
+      if (map_type == "crushmap") {
+        v = st.get("osdmap", "last_committed");
+      } else {
+        v = st.get(map_type, "last_committed");
+      }
     }
 
     int fd = STDOUT_FILENO;
@@ -618,6 +625,12 @@ int main(int argc, char **argv) {
     r = 0;
     if (map_type == "osdmap") {
       r = st.get(map_type, st.combine_strings("full", v), bl);
+    } else if (map_type == "crushmap") {
+      bufferlist tmp;
+      r = st.get("osdmap", st.combine_strings("full", v), tmp);
+      OSDMap osdmap;
+      osdmap.decode(tmp);
+      osdmap.crush->encode(bl);
     } else {
       r = st.get(map_type, v, bl);
     }
@@ -642,9 +655,15 @@ int main(int argc, char **argv) {
         MDSMap mdsmap;
         mdsmap.decode(bl);
         mdsmap.print(ss);
+      } else if (map_type == "crushmap") {
+        CrushWrapper cw;
+        bufferlist::iterator it = bl.begin();
+        cw.decode(it);
+        CrushCompiler cc(cw, std::cerr, 0);
+        cc.decompile(ss);
       } else {
         std::cerr << "This type of readable map does not exist: " << map_type << std::endl
-                  << "You can only specify[osdmap|monmap|mdsmap]" << std::endl;
+                  << "You can only specify[osdmap|monmap|mdsmap|crushmap]" << std::endl;
       }
       out.append(ss);
       out.write_fd(fd);
