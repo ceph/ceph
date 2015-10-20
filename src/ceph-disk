@@ -1037,10 +1037,40 @@ def prepare_journal_dev(
     journal_dm_keypath,
     ):
 
+    reusing_partition = False
+
     if is_partition(journal):
         LOG.debug('Journal %s is a partition', journal)
         LOG.warning('OSD will not be hot-swappable if journal is not the same device as the osd data')
-        return (journal, None, None)
+        if get_partition_type(journal) == JOURNAL_UUID:
+            LOG.debug('Journal %s was previously prepared with ceph-disk. Reusing it.', journal)
+            reusing_partition = True
+            # Read and reuse the partition uuid from this journal's previous life.
+            # We reuse the uuid instead of changing it because udev does not reliably
+            # notice changes to an existing partition's GUID.
+            # See http://tracker.ceph.com/issues/10146
+            journal_uuid = get_partition_uuid(journal)
+            LOG.debug('Reusing journal with uuid %s', journal_uuid)
+        else:
+            LOG.warning('Journal %s was not prepared with ceph-disk. Symlinking directly.', journal)
+            return (journal, None, None)
+
+    journal_symlink = '/dev/disk/by-partuuid/{journal_uuid}'.format(
+        journal_uuid=journal_uuid,
+        )
+
+    journal_dmcrypt = None
+    if journal_dm_keypath:
+        journal_dmcrypt = journal_symlink
+        journal_symlink = '/dev/mapper/{uuid}'.format(uuid=journal_uuid)
+
+    if reusing_partition:
+        # confirm that the journal_symlink exists. It should since this was an active journal
+        # in the past. Continuing otherwise would be futile.
+        assert os.path.exists(journal_symlink)
+        return (journal_symlink, journal_dmcrypt, journal_uuid)
+
+    # From here on we are creating a new journal device, not reusing.
 
     ptype = JOURNAL_UUID
     if journal_dm_keypath:
@@ -1097,8 +1127,8 @@ def prepare_journal_dev(
                 '--mbrtogpt',
                 '--',
                 journal,
-            ],
-        )
+                ]
+            )
 
         update_partition('-a', journal, 'prepared')
 
@@ -1110,16 +1140,11 @@ def prepare_journal_dev(
                 ],
             )
 
-        journal_symlink = '/dev/disk/by-partuuid/{journal_uuid}'.format(
-            journal_uuid=journal_uuid,
-            )
-
-        journal_dmcrypt = None
-        if journal_dm_keypath:
-            journal_dmcrypt = journal_symlink
-            journal_symlink = '/dev/mapper/{uuid}'.format(uuid=journal_uuid)
-
         LOG.debug('Journal is GPT partition %s', journal_symlink)
+
+        # udev should have created the symlink by now. If not, abort.
+        assert os.path.exists(journal_symlink)
+
         return (journal_symlink, journal_dmcrypt, journal_uuid)
 
     except subprocess.CalledProcessError as e:
