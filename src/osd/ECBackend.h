@@ -494,6 +494,7 @@ public:
     ObjectStore::Transaction *t);
 
   bool scrub_supported() { return true; }
+  bool auto_repair_supported() const { return true; }
 
   void be_deep_scrub(
     const hobject_t &obj,
