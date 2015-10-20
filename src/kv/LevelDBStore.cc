@@ -164,7 +164,6 @@ void LevelDBStore::LevelDBTransactionImpl::set(
   const bufferlist &to_set_bl)
 {
   string key = combine_strings(prefix, k);
-  bat.Delete(leveldb::Slice(key));
 
   // bufferlist::c_str() is non-constant, so we can't call c_str()
   if (to_set_bl.is_contiguous() && to_set_bl.length() > 0) {
