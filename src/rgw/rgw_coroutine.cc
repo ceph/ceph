@@ -128,8 +128,8 @@ int RGWCoroutinesStack::operate(RGWCoroutinesEnv *_env)
   error_flag = op->is_error();
 
   if (op->is_done()) {
-    int op_retcode = op->get_ret_status();
-    r = unwind(r);
+    int op_retcode = r;
+    r = unwind(op_retcode);
     op->put();
     done_flag = (pos == ops.end());
     if (done_flag) {
