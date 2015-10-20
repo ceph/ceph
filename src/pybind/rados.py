@@ -29,7 +29,11 @@ LIBRADOS_OP_FLAG_FADVISE_DONTNEED = 0x20
 LIBRADOS_OP_FLAG_FADVISE_NOCACHE = 0x40
 
 
-if sys.hexversion < 0x03000000:
+# Are we running Python 2.x
+_python2 = sys.hexversion < 0x03000000
+
+
+if _python2:
     str_type = basestring
 else:
     str_type = str
@@ -279,7 +283,11 @@ def cstr(val, encoding="utf-8"):
     if val is None:
         return c_char_p(None)
 
-    return c_char_p(val.encode(encoding))
+    if _python2 and isinstance(val, str):
+        # Don't encode str on Python 2, as it's already an 8-bit string
+        return c_char_p(val)
+    else:
+        return c_char_p(val.encode(encoding))
 
 
 class Rados(object):
