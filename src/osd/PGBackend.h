@@ -548,6 +548,7 @@
      Context *on_complete, bool fast_read = false) = 0;
 
    virtual bool scrub_supported() { return false; }
+   virtual bool auto_repair_supported() const { return false; }
    void be_scan_list(
      ScrubMap &map, const vector<hobject_t> &ls, bool deep, uint32_t seed,
      ThreadPool::TPHandle &handle);
