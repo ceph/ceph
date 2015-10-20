@@ -591,7 +591,7 @@ def find_stale_locks(owner=None):
         return False
 
     # Which nodes are locked for jobs?
-    nodes = list_locks()
+    nodes = list_locks(locked=True)
     if owner is not None:
         nodes = [node for node in nodes if node['locked_by'] == owner]
     nodes = filter(might_be_stale, nodes)
