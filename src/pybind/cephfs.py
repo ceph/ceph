@@ -509,6 +509,19 @@ class LibCephFS(object):
                           st_atime=statbuf.st_atime, st_mtime=statbuf.st_mtime,
                           st_ctime=statbuf.st_ctime)
 
+    def symlink(self, existing, newname):
+        if not isinstance(existing, str):
+            raise TypeError('existing must be a string')
+        if not isinstance(newname, str):
+            raise TypeError('newname must be a string')
+        self.require_state("mounted")
+        ret = self.libcephfs.ceph_symlink(
+            self.cluster,
+            c_char_p(existing),
+            c_char_p(newname))
+        if ret < 0:
+            raise make_ex(ret, "error in symlink")
+
     def unlink(self, path):
         self.require_state("mounted")
         ret = self.libcephfs.ceph_unlink(
