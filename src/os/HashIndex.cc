@@ -653,6 +653,12 @@ int HashIndex::complete_merge(const vector<string> &path, subdir_info_s info) {
   r = get_info(dst, &dstinfo);
   if (r < 0)
     return r;
+  // Cancel merge if adopting these objects will cause an immediate
+  // split on its direct parent dirent.
+  subdir_info_s tmpinfo(dstinfo);
+  tmpinfo.objs += info.objs;
+  if (must_split(tmpinfo))
+    return end_split_or_merge(path);
   if (exists) {
     r = move_objects(path, dst);
     if (r < 0)
