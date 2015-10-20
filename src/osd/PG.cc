@@ -3851,6 +3851,7 @@ void PG::chunky_scrub(ThreadPool::TPHandle &handle)
           // list, and so forth.
 
           bool boundary_found = false;
+          bool no_more_objects = false;
           hobject_t start = scrubber.start;
           while (!boundary_found) {
             vector<hobject_t> objects;
@@ -3867,6 +3868,7 @@ void PG::chunky_scrub(ThreadPool::TPHandle &handle)
 
             // special case: reached end of file store, implicitly a boundary
             if (objects.empty()) {
+              no_more_objects = true;
               break;
             }
 
@@ -3883,6 +3885,12 @@ void PG::chunky_scrub(ThreadPool::TPHandle &handle)
             }
           }
 
+	  if (no_more_objects) { 
+	    // finish scrub ahead of time if no more objects is available.
+	    scrubber.state = PG::Scrubber::FINISH;
+	    break;
+	  }
+	  
 	  if (!_range_available_for_scrub(scrubber.start, candidate_end)) {
 	    // we'll be requeued by whatever made us unavailable for scrub
 	    dout(10) << __func__ << ": scrub blocked somewhere in range "
