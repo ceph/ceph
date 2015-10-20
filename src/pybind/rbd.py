@@ -9,10 +9,6 @@ Error codes from librbd are turned into exceptions that subclass
 (the base class of all rbd exceptions), :class:`PermissionError`
 and :class:`IOError`, in addition to those documented for the
 method.
-
-A number of methods have string arguments, which must not be unicode
-to interact correctly with librbd. If unicode is passed to these
-methods, a :class:`TypeError` will be raised.
 """
 # Copyright 2011 Josh Durgin
 from collections import Iterable
@@ -68,7 +64,11 @@ RBD_FEATURES_SINGLE_CLIENT = (RBD_FEATURE_EXCLUSIVE_LOCK |
 RBD_FLAG_OBJECT_MAP_INVALID = 1
 
 
-if sys.hexversion < 0x03000000:
+# Are we running Python 2.x
+_python2 = sys.hexversion < 0x03000000
+
+
+if _python2:
     str_type = basestring
 else:
     str_type = str
@@ -212,7 +212,11 @@ def cstr(val, encoding="utf-8"):
     if val is None:
         return c_char_p(None)
 
-    return c_char_p(val.encode(encoding))
+    if _python2 and isinstance(val, str):
+        # Don't encode str on Python 2, as it's already an 8-bit string
+        return c_char_p(val)
+    else:
+        return c_char_p(val.encode(encoding))
 
 
 class RBD(object):
