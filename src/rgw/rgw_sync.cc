@@ -421,23 +421,14 @@ public:
 	uint32_t lock_duration = 30;
 	call(new RGWSimpleRadosLockCR(async_rados, store, store->get_zone_params().log_pool, mdlog_sync_status_oid,
 			             lock_name, cookie, lock_duration));
-	if (retcode < 0) {
-	  ldout(cct, 0) << "ERROR: failed to take a lock on " << mdlog_sync_status_oid << dendl;
-	  return set_state(RGWCoroutine_Error, retcode);
-	}
+      }
+      if (retcode < 0) {
+        ldout(cct, 0) << "ERROR: failed to take a lock on " << mdlog_sync_status_oid << dendl;
+        return set_state(RGWCoroutine_Error, retcode);
       }
       yield {
         call(new RGWSimpleRadosWriteCR<rgw_meta_sync_info>(async_rados, store, store->get_zone_params().log_pool,
 				 mdlog_sync_status_oid, status));
-      }
-      yield { /* take lock again, we just recreated the object */
-	uint32_t lock_duration = 30;
-	call(new RGWSimpleRadosLockCR(async_rados, store, store->get_zone_params().log_pool, mdlog_sync_status_oid,
-			             lock_name, cookie, lock_duration));
-	if (retcode < 0) {
-	  ldout(cct, 0) << "ERROR: failed to take a lock on " << mdlog_sync_status_oid << dendl;
-	  return set_state(RGWCoroutine_Error, retcode);
-	}
       }
       /* fetch current position in logs */
       yield {
@@ -1138,17 +1129,28 @@ int RGWRemoteMetaLog::run_sync(int num_shards, rgw_meta_sync_status& sync_status
 
   RGWObjectCtx obj_ctx(store, NULL);
 
-  int r = run(new RGWReadSyncStatusCoroutine(async_rados, store, obj_ctx, &sync_status));
-  if (r < 0) {
-    ldout(store->ctx(), 0) << "ERROR: failed to fetch sync status" << dendl;
-    return r;
-  }
+  int r;
+  do {
+    r = run(new RGWReadSyncStatusCoroutine(async_rados, store, obj_ctx, &sync_status));
+    if (r < 0 && r != -ENOENT) {
+      ldout(store->ctx(), 0) << "ERROR: failed to fetch sync status r=" << r << dendl;
+      return r;
+    }
 
-  switch ((rgw_meta_sync_info::SyncState)sync_status.sync_info.state) {
-    case rgw_meta_sync_info::StateInit:
+    if (sync_status.sync_info.state == rgw_meta_sync_info::StateInit) {
       ldout(store->ctx(), 20) << __func__ << "(): init" << dendl;
       r = run(new RGWInitSyncStatusCoroutine(async_rados, store, &http_manager, obj_ctx, num_shards));
-      /* fall through */
+      if (r == -EBUSY) {
+        continue;
+      }
+      if (r < 0) {
+        ldout(store->ctx(), 0) << "ERROR: failed to init sync status" << dendl;
+        return r;
+      }
+    }
+  } while (sync_status.sync_info.state == rgw_meta_sync_info::StateInit);
+
+  switch ((rgw_meta_sync_info::SyncState)sync_status.sync_info.state) {
     case rgw_meta_sync_info::StateBuildingFullSyncMaps:
       ldout(store->ctx(), 20) << __func__ << "(): building full sync maps" << dendl;
       r = run(new RGWFetchAllMetaCR(store, &http_manager, async_rados, num_shards));
