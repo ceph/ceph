@@ -1038,6 +1038,8 @@ uint64_t OSDMap::get_features(int entity_type, uint64_t *pmask) const
     features |= CEPH_FEATURE_CRUSH_TUNABLES2;
   if (crush->has_nondefault_tunables3())
     features |= CEPH_FEATURE_CRUSH_TUNABLES3;
+  if (crush->has_nondefault_tunables4())
+    features |= CEPH_FEATURE_CRUSH_TUNABLES4;
   if (crush->has_v4_buckets())
     features |= CEPH_FEATURE_CRUSH_V4;
   mask |= CEPH_FEATURES_CRUSH;
@@ -1062,6 +1064,8 @@ uint64_t OSDMap::get_features(int entity_type, uint64_t *pmask) const
 	features |= CEPH_FEATURE_CRUSH_V2;
       if (crush->is_v3_rule(ruleid))
 	features |= CEPH_FEATURE_CRUSH_TUNABLES3;
+      if (crush->is_v5_rule(ruleid))
+	features |= CEPH_FEATURE_CRUSH_TUNABLES4;
     }
   }
   if (entity_type == CEPH_ENTITY_TYPE_OSD) {
