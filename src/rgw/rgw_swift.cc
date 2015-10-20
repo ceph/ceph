@@ -6,21 +6,18 @@
 #include <unistd.h>
 
 #include "common/ceph_json.h"
+#include "common/ceph_crypto_cms.h"
 #include "rgw_common.h"
 #include "rgw_swift.h"
 #include "rgw_swift_auth.h"
 #include "rgw_user.h"
 #include "rgw_http_client.h"
 #include "rgw_keystone.h"
+#include "rgw_cms.h"
 
 #include "include/str_list.h"
 
-#include "common/ceph_crypto_cms.h"
-#include "common/armor.h"
-
 #define dout_subsys ceph_subsys_rgw
-
-static list<string> roles_list;
 
 class RGWValidateSwiftToken : public RGWHTTPClient {
   struct rgw_swift_auth_info *info;
@@ -107,301 +104,11 @@ int RGWSwift::validate_token(const char *token, struct rgw_swift_auth_info *info
   return 0;
 }
 
-class RGWPostHTTPData : public RGWHTTPClient {
-  bufferlist *bl;
-  std::string post_data;
-  size_t post_data_index;
-public:
-  RGWPostHTTPData(CephContext *_cct, bufferlist *_bl) : RGWHTTPClient(_cct), bl(_bl), post_data_index(0) {}
-
-  void set_post_data(const std::string& _post_data) {
-    this->post_data = _post_data;
-  }
-
-  int send_data(void* ptr, size_t len) {
-    int length_to_copy = 0;
-    if (post_data_index < post_data.length()) {
-      length_to_copy = min(post_data.length() - post_data_index, len);
-      memcpy(ptr, post_data.data() + post_data_index, length_to_copy);
-      post_data_index += length_to_copy;
-    }
-    return length_to_copy;
-  }
-
-  int receive_data(void *ptr, size_t len) {
-    bl->append((char *)ptr, len);
-    return 0;
-  }
-
-  int receive_header(void *ptr, size_t len) {
-    return 0;
-  }
-};
-
-typedef RGWPostHTTPData RGWGetKeystoneAdminToken;
-typedef RGWPostHTTPData RGWGetRevokedTokens;
-
-class RGWValidateKeystoneToken : public RGWHTTPClient {
-  bufferlist *bl;
-public:
-  RGWValidateKeystoneToken(CephContext *_cct, bufferlist *_bl) : RGWHTTPClient(_cct), bl(_bl) {}
-
-  int receive_data(void *ptr, size_t len) {
-    bl->append((char *)ptr, len);
-    return 0;
-  }
-  int receive_header(void *ptr, size_t len) {
-    return 0;
-  }
-  int send_data(void *ptr, size_t len) {
-    return 0;
-  }
-
-};
-
-static RGWKeystoneTokenCache *keystone_token_cache = NULL;
-
-static int open_cms_envelope(CephContext *cct, string& src, string& dst)
-{
-#define BEGIN_CMS "-----BEGIN CMS-----"
-#define END_CMS "-----END CMS-----"
-
-  int start = src.find(BEGIN_CMS);
-  if (start < 0) {
-    ldout(cct, 0) << "failed to find " << BEGIN_CMS << " in response" << dendl;
-    return -EINVAL;
-  }
-  start += sizeof(BEGIN_CMS) - 1;
-
-  int end = src.find(END_CMS);
-  if (end < 0) {
-    ldout(cct, 0) << "failed to find " << END_CMS << " in response" << dendl;
-    return -EINVAL;
-  }
-
-  string s = src.substr(start, end - start);
-
-  int pos = 0;
-
-  do {
-    int next = s.find('\n', pos);
-    if (next < 0) {
-      dst.append(s.substr(pos));
-      break;
-    } else {
-      dst.append(s.substr(pos, next - pos));
-    }
-    pos = next + 1;
-  } while (pos < (int)s.size());
-
-  return 0;
-}
-
-static int decode_b64_cms(CephContext *cct, const string& signed_b64, bufferlist& bl)
-{
-  bufferptr signed_ber(signed_b64.size() * 2);
-  char *dest = signed_ber.c_str();
-  const char *src = signed_b64.c_str();
-  size_t len = signed_b64.size();
-  char buf[len + 1];
-  buf[len] = '\0';
-  for (size_t i = 0; i < len; i++, src++) {
-    if (*src != '-')
-      buf[i] = *src;
-    else
-      buf[i] = '/';
-  }
-  int ret = ceph_unarmor(dest, dest + signed_ber.length(), buf, buf + signed_b64.size());
-  if (ret < 0) {
-    ldout(cct, 0) << "ceph_unarmor() failed, ret=" << ret << dendl;
-    return ret;
-  }
-
-  bufferlist signed_ber_bl;
-  signed_ber_bl.append(signed_ber);
-
-  ret = ceph_decode_cms(cct, signed_ber_bl, bl);
-  if (ret < 0) {
-    ldout(cct, 0) << "ceph_decode_cms returned " << ret << dendl;
-    return ret;
-  }
-
-  return 0;
-}
-
-int	RGWSwift::get_keystone_url(std::string& url)
-{
-  bufferlist bl;
-  RGWGetRevokedTokens req(cct, &bl);
-
-  url = cct->_conf->rgw_keystone_url;
-  if (url.empty()) {
-    ldout(cct, 0) << "ERROR: keystone url is not configured" << dendl;
-    return -EINVAL;
-  }
-  if (url[url.size() - 1] != '/')
-    url.append("/");
-  return 0;
-}
-
-int	RGWSwift::get_keystone_admin_token(std::string& token)
-{
-  std::string token_url;
-
-  if (get_keystone_url(token_url) < 0)
-    return -EINVAL;
-  if (cct->_conf->rgw_keystone_admin_token.empty()) {
-    token_url.append("v2.0/tokens");
-    KeystoneToken t;
-    bufferlist token_bl;
-    RGWGetKeystoneAdminToken token_req(cct, &token_bl);
-    token_req.append_header("Content-Type", "application/json");
-    JSONFormatter jf;
-    jf.open_object_section("token_request");
-    jf.open_object_section("auth");
-    jf.open_object_section("passwordCredentials");
-    encode_json("username", cct->_conf->rgw_keystone_admin_user, &jf);
-    encode_json("password", cct->_conf->rgw_keystone_admin_password, &jf);
-    jf.close_section();
-    encode_json("tenantName", cct->_conf->rgw_keystone_admin_tenant, &jf);
-    jf.close_section();
-    jf.close_section();
-    std::stringstream ss;
-    jf.flush(ss);
-    token_req.set_post_data(ss.str());
-    token_req.set_send_length(ss.str().length());
-    int ret = token_req.process("POST", token_url.c_str());
-    if (ret < 0)
-      return ret;
-    if (t.parse(cct, token_bl) != 0)
-      return -EINVAL;
-    token = t.token.id;
-  } else {
-    token = cct->_conf->rgw_keystone_admin_token;
-  }
-  return 0; 
-}
-
-
-int RGWSwift::check_revoked()
-{
-  string url;
-  string token;
-
-  bufferlist bl;
-  RGWGetRevokedTokens req(cct, &bl);
-
-  if (get_keystone_admin_token(token) < 0)
-    return -EINVAL;
-  if (get_keystone_url(url) < 0)
-    return -EINVAL;
-  url.append("v2.0/tokens/revoked");
-  req.append_header("X-Auth-Token", token);
-  req.set_send_length(0);
-  int ret = req.process(url.c_str());
-  if (ret < 0)
-    return ret;
-
-  bl.append((char)0); // NULL terminate for debug output
-
-  ldout(cct, 10) << "request returned " << bl.c_str() << dendl;
-
-  JSONParser parser;
-
-  if (!parser.parse(bl.c_str(), bl.length())) {
-    ldout(cct, 0) << "malformed json" << dendl;
-    return -EINVAL;
-  }
-
-  JSONObjIter iter = parser.find_first("signed");
-  if (iter.end()) {
-    ldout(cct, 0) << "revoked tokens response is missing signed section" << dendl;
-    return -EINVAL;
-  }  
-
-  JSONObj *signed_obj = *iter;
-
-  string signed_str = signed_obj->get_data();
-
-  ldout(cct, 10) << "signed=" << signed_str << dendl;
-
-  string signed_b64;
-  ret = open_cms_envelope(cct, signed_str, signed_b64);
-  if (ret < 0)
-    return ret;
-
-  ldout(cct, 10) << "content=" << signed_b64 << dendl;
-  
-  bufferlist json;
-  ret = decode_b64_cms(cct, signed_b64, json);
-  if (ret < 0) {
-    return ret;
-  }
-
-  ldout(cct, 10) << "ceph_decode_cms: decoded: " << json.c_str() << dendl;
-
-  JSONParser list_parser;
-  if (!list_parser.parse(json.c_str(), json.length())) {
-    ldout(cct, 0) << "malformed json" << dendl;
-    return -EINVAL;
-  }
-
-  JSONObjIter revoked_iter = list_parser.find_first("revoked");
-  if (revoked_iter.end()) {
-    ldout(cct, 0) << "no revoked section in json" << dendl;
-    return -EINVAL;
-  }
-
-  JSONObj *revoked_obj = *revoked_iter;
-
-  JSONObjIter tokens_iter = revoked_obj->find_first();
-  for (; !tokens_iter.end(); ++tokens_iter) {
-    JSONObj *o = *tokens_iter;
-
-    JSONObj *token = o->find_obj("id");
-    if (!token) {
-      ldout(cct, 0) << "bad token in array, missing id" << dendl;
-      continue;
-    }
-
-    string token_id = token->get_data();
-    keystone_token_cache->invalidate(token_id);
-  }
-  
-  return 0;
-}
-
 static void rgw_set_keystone_token_auth_info(KeystoneToken& token, struct rgw_swift_auth_info *info)
 {
-  info->user = token.token.tenant.id;
-  info->display_name = token.token.tenant.name;
+  info->user = token.get_project_id();
+  info->display_name = token.get_project_name();
   info->status = 200;
-}
-
-int RGWSwift::parse_keystone_token_response(const string& token, bufferlist& bl, struct rgw_swift_auth_info *info, KeystoneToken& t)
-{
-  int ret = t.parse(cct, bl);
-  if (ret < 0)
-    return ret;
-
-  bool found = false;
-  list<string>::iterator iter;
-  for (iter = roles_list.begin(); iter != roles_list.end(); ++iter) {
-    const string& role = *iter;
-    if ((found=t.user.has_role(role))==true)
-      break;
-  }
-
-  if (!found) {
-    ldout(cct, 0) << "user does not hold a matching role; required roles: " << g_conf->rgw_keystone_accepted_roles << dendl;
-    return -EPERM;
-  }
-
-  ldout(cct, 0) << "validated token: " << t.token.tenant.name << ":" << t.user.name << " expires: " << t.token.expires << dendl;
-
-  rgw_set_keystone_token_auth_info(t, info);
-
-  return 0;
 }
 
 int RGWSwift::update_user_info(RGWRados *store, struct rgw_swift_auth_info *info, RGWUserInfo& user_info)
@@ -420,118 +127,17 @@ int RGWSwift::update_user_info(RGWRados *store, struct rgw_swift_auth_info *info
   return 0;
 }
 
-#define PKI_ANS1_PREFIX "MII"
-
-static bool is_pki_token(const string& token)
-{
-  return token.compare(0, sizeof(PKI_ANS1_PREFIX) - 1, PKI_ANS1_PREFIX) == 0;
-}
-
-static void get_token_id(const string& token, string& token_id)
-{
-  if (!is_pki_token(token)) {
-    token_id = token;
-    return;
-  }
-
-  unsigned char m[CEPH_CRYPTO_MD5_DIGESTSIZE];
-
-  MD5 hash;
-  hash.Update((const byte *)token.c_str(), token.size());
-  hash.Final(m);
-
-
-  char calc_md5[CEPH_CRYPTO_MD5_DIGESTSIZE * 2 + 1];
-  buf_to_hex(m, CEPH_CRYPTO_MD5_DIGESTSIZE, calc_md5);
-  token_id = calc_md5;
-}
-
-static bool decode_pki_token(CephContext *cct, const string& token, bufferlist& bl)
-{
-  if (!is_pki_token(token))
-    return false;
-
-  int ret = decode_b64_cms(cct, token, bl);
-  if (ret < 0)
-    return false;
-
-  ldout(cct, 20) << "successfully decoded pki token" << dendl;
-
-  return true;
-}
-
 int RGWSwift::validate_keystone_token(RGWRados *store, const string& token, struct rgw_swift_auth_info *info,
 				      RGWUserInfo& rgw_user)
 {
-  KeystoneToken t;
+  KeystoneToken t = KeystoneToken(g_conf->rgw_keystone_api_version);
 
-  string token_id;
-  get_token_id(token, token_id);
-
-  ldout(cct, 20) << "token_id=" << token_id << dendl;
-
-  /* check cache first */
-  if (keystone_token_cache->find(token_id, t)) {
-    rgw_set_keystone_token_auth_info(t, info);
-
-    ldout(cct, 20) << "cached token.tenant.id=" << t.token.tenant.id << dendl;
-
-    int ret = update_user_info(store, info, rgw_user);
-    if (ret < 0)
-      return ret;
-
-    return 0;
-  }
-
-  bufferlist bl;
-
-  /* check if that's a self signed token that we can decode */
-  if (!decode_pki_token(cct, token, bl)) {
-
-    /* can't decode, just go to the keystone server for validation */
-
-    RGWValidateKeystoneToken validate(cct, &bl);
-
-    string url = g_conf->rgw_keystone_url;
-    if (url.empty()) {
-      ldout(cct, 0) << "ERROR: keystone url is not configured" << dendl;
-      return -EINVAL;
-    }
-    if (url[url.size() - 1] != '/')
-      url.append("/");
-    std::string admin_token;
-    if (get_keystone_admin_token(admin_token) < 0)
-      return -EINVAL;
-    if (get_keystone_url(url) < 0)
-      return -EINVAL;
-
-    url.append("v2.0/tokens/");
-    url.append(token);
-
-    validate.append_header("X-Auth-Token", admin_token);
-
-    validate.set_send_length(0);
-
-    int ret = validate.process(url.c_str());
-    if (ret < 0)
-      return ret;
-  }
-
-  bl.append((char)0); // NULL terminate for debug output
-
-  ldout(cct, 20) << "received response: " << bl.c_str() << dendl;
-
-  int ret = parse_keystone_token_response(token, bl, info, t);
-  if (ret < 0)
+  int ret = keystone->validate_token(token, t);
+  if (ret < 0) {
     return ret;
-
-  if (t.expired()) {
-    ldout(cct, 0) << "got expired token: " << t.token.tenant.name << ":" << t.user.name << " expired: " << t.token.expires << dendl;
-    return -EPERM;
   }
 
-  keystone_token_cache->add(token_id, t);
-
+  rgw_set_keystone_token_auth_info(t, info);
   ret = update_user_info(store, info, rgw_user);
   if (ret < 0)
     return ret;
@@ -670,7 +276,7 @@ bool RGWSwift::do_verify_swift_token(RGWRados *store, req_state *s)
 
   int ret;
 
-  if (supports_keystone()) {
+  if (keystone->enabled()) {
     ret = validate_keystone_token(store, s->os_auth_token, &info, s->user);
     return (ret >= 0);
   }
@@ -701,82 +307,16 @@ bool RGWSwift::do_verify_swift_token(RGWRados *store, req_state *s)
   return true;
 }
 
-void RGWSwift::init()
-{
-  get_str_list(cct->_conf->rgw_keystone_accepted_roles, roles_list);
-  if (supports_keystone())
-      init_keystone();
-}
-
-
-void RGWSwift::init_keystone()
-{
-  keystone_token_cache = new RGWKeystoneTokenCache(cct, cct->_conf->rgw_keystone_token_cache_size);
-
-  keystone_revoke_thread = new KeystoneRevokeThread(cct, this);
-  keystone_revoke_thread->create();
-}
-
-
-void RGWSwift::finalize()
-{
-  if (supports_keystone())
-    finalize_keystone();
-}
-
-void RGWSwift::finalize_keystone()
-{
-  delete keystone_token_cache;
-  keystone_token_cache = NULL;
-
-  down_flag.set(1);
-  if (keystone_revoke_thread) {
-    keystone_revoke_thread->stop();
-    keystone_revoke_thread->join();
-  }
-  delete keystone_revoke_thread;
-  keystone_revoke_thread = NULL;
-}
-
+Keystone *rgw_keystone = NULL;
 RGWSwift *rgw_swift = NULL;
 
 void swift_init(CephContext *cct)
 {
-  rgw_swift = new RGWSwift(cct);
+  rgw_keystone = new Keystone(cct);
+  rgw_swift = new RGWSwift(cct, rgw_keystone);
 }
 
 void swift_finalize()
 {
-  delete rgw_swift;
+  delete rgw_keystone;
 }
-
-bool RGWSwift::going_down()
-{
-  return (down_flag.read() != 0);
-}
-
-void *RGWSwift::KeystoneRevokeThread::entry() {
-  do {
-    dout(2) << "keystone revoke thread: start" << dendl;
-    int r = swift->check_revoked();
-    if (r < 0) {
-      dout(0) << "ERROR: keystone revocation processing returned error r=" << r << dendl;
-    }
-
-    if (swift->going_down())
-      break;
-
-    lock.Lock();
-    cond.WaitInterval(cct, lock, utime_t(cct->_conf->rgw_keystone_revocation_interval, 0));
-    lock.Unlock();
-  } while (!swift->going_down());
-
-  return NULL;
-}
-
-void RGWSwift::KeystoneRevokeThread::stop()
-{
-  Mutex::Locker l(lock);
-  cond.Signal();
-}
-

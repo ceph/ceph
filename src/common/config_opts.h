@@ -1055,7 +1055,10 @@ OPTION(rgw_keystone_url, OPT_STR, "")  // url for keystone server
 OPTION(rgw_keystone_admin_token, OPT_STR, "")  // keystone admin token (shared secret)
 OPTION(rgw_keystone_admin_user, OPT_STR, "")  // keystone admin user name
 OPTION(rgw_keystone_admin_password, OPT_STR, "")  // keystone admin user password
-OPTION(rgw_keystone_admin_tenant, OPT_STR, "")  // keystone admin user tenant
+OPTION(rgw_keystone_admin_tenant, OPT_STR, "")  // keystone admin user tenant (for keystone v2.0)
+OPTION(rgw_keystone_admin_project, OPT_STR, "")  // keystone admin user project (for keystone v3)
+OPTION(rgw_keystone_admin_domain, OPT_STR, "")  // keystone admin user domain
+OPTION(rgw_keystone_api_version, OPT_STR, "2.0") // Version of Keystone API to use ("2.0" or "3")
 OPTION(rgw_keystone_accepted_roles, OPT_STR, "Member, admin")  // roles required to serve requests
 OPTION(rgw_keystone_token_cache_size, OPT_INT, 10000)  // max number of entries in keystone token cache
 OPTION(rgw_keystone_revocation_interval, OPT_INT, 15 * 60)  // seconds between tokens revocation check

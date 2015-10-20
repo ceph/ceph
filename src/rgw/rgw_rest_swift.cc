@@ -9,6 +9,7 @@
 #include "rgw_cors_swift.h"
 #include "rgw_formats.h"
 #include "rgw_client_io.h"
+#include "rgw_cms.h"
 
 #include <sstream>
 
