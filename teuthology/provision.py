@@ -391,9 +391,6 @@ def create_if_vm(ctx, machine_name, _downburst=None):
         return False
     os_type = get_distro(ctx)
     os_version = get_distro_version(ctx)
-    if status_info.get('machine_type') == 'openstack':
-        return ProvisionOpenStack(name=machine_name).create(
-            os_type, os_version)
 
     has_config = hasattr(ctx, 'config') and ctx.config is not None
     if has_config and 'downburst' in ctx.config:
