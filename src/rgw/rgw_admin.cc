@@ -2402,7 +2402,16 @@ int main(int argc, char **argv)
 	  return ret;
 	}
 
-	#warning need to implement for backward compatabilty
+	RGWPeriod period;
+	ret = period.init(g_ceph_context, store);
+	if (ret < 0) {
+	  cerr << "ERROR: failed to read current period info: " << cpp_strerror(-ret) << std::endl;
+	  return ret;
+	}
+
+	period.fork();
+	period.update(zonegroupmap);
+	period.store_info(false);
 
 	encode_json("zonegroup-map", zonegroupmap, formatter);
 	formatter->flush(cout);

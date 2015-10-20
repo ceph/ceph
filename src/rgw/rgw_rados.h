@@ -1350,6 +1350,8 @@ public:
     sync_status = _sync_status;
   }
 
+  void update(const RGWZoneGroupMap& map);
+
   int get_zonegroup(RGWZoneGroup& zonegroup,
 		    const string& zonegroup_id);
 
