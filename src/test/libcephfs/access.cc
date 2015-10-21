@@ -13,7 +13,9 @@
  */
 
 #include "gtest/gtest.h"
+#include "common/ceph_argparse.h"
 #include "include/buffer.h"
+#include "include/stringify.h"
 #include "include/cephfs/libcephfs.h"
 #include "include/rados/librados.h"
 #include <errno.h>
@@ -26,8 +28,6 @@
 #include <sys/uio.h>
 #include <iostream>
 #include <vector>
-#include "common/ceph_argparse.h"
-#include "include/stringify.h"
 #include "json_spirit/json_spirit.h"
 
 #ifdef __linux__

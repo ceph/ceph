@@ -358,13 +358,15 @@ enum {
 extern const char *ceph_mds_op_name(int op);
 
 
-#define CEPH_SETATTR_MODE   1
-#define CEPH_SETATTR_UID    2
-#define CEPH_SETATTR_GID    4
-#define CEPH_SETATTR_MTIME  8
-#define CEPH_SETATTR_ATIME 16
-#define CEPH_SETATTR_SIZE  32
-#define CEPH_SETATTR_CTIME 64
+#define CEPH_SETATTR_MODE	(1 << 0)
+#define CEPH_SETATTR_UID	(1 << 1)
+#define CEPH_SETATTR_GID	(1 << 2)
+#define CEPH_SETATTR_MTIME	(1 << 3)
+#define CEPH_SETATTR_ATIME	(1 << 4)
+#define CEPH_SETATTR_SIZE	(1 << 5)
+#define CEPH_SETATTR_CTIME	(1 << 6)
+#define CEPH_SETATTR_MTIME_NOW	(1 << 7)
+#define CEPH_SETATTR_ATIME_NOW	(1 << 8)
 
 /*
  * Ceph setxattr request flags.
