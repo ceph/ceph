@@ -18,6 +18,42 @@ DEFAULT_NUM_RBD = 1
 DEFAULT_IMAGE_URL = 'http://ceph.com/qa/ubuntu-12.04.qcow2'
 DEFAULT_MEM = 4096 # in megabytes
 
+def create_images(ctx, config, managers):
+    for client, client_config in config.iteritems():
+        num_rbd = client_config.get('num_rbd', 1)
+        clone = client_config.get('clone', False)
+        assert num_rbd > 0, 'at least one rbd device must be used'
+        for i in xrange(num_rbd):
+            create_config = {
+                client: {
+                    'image_name': '{client}.{num}'.format(client=client, num=i),
+                    'image_format': 2 if clone else 1,
+                    }
+                }
+            managers.append(
+                lambda create_config=create_config:
+                rbd.create_image(ctx=ctx, config=create_config)
+                )
+
+def create_clones(ctx, config, managers):
+    for client, client_config in config.iteritems():
+        num_rbd = client_config.get('num_rbd', 1)
+        clone = client_config.get('clone', False)
+        if clone:
+            for i in xrange(num_rbd):
+                create_config = {
+                    client: {
+                        'image_name':
+                        '{client}.{num}-clone'.format(client=client, num=i),
+                        'parent_name':
+                        '{client}.{num}'.format(client=client, num=i),
+                        }
+                    }
+                managers.append(
+                    lambda create_config=create_config:
+                    rbd.clone_image(ctx=ctx, config=create_config)
+                    )
+
 @contextlib.contextmanager
 def create_dirs(ctx, config):
     """
@@ -281,11 +317,14 @@ def run_qemu(ctx, config):
             else:
                 cachemode = 'writethrough'
 
+        clone = client_config.get('clone', False)
         for i in xrange(client_config.get('num_rbd', DEFAULT_NUM_RBD)):
+            suffix = '-clone' if clone else ''
             args.extend([
                 '-drive',
                 'file=rbd:rbd/{img}:id={id},format=raw,if=virtio,cache={cachemode}'.format(
-                    img='{client}.{num}'.format(client=client, num=i),
+                    img='{client}.{num}{suffix}'.format(client=client, num=i,
+                                                        suffix=suffix),
                     id=client[len('client.'):],
                     cachemode=cachemode,
                     ),
@@ -379,6 +418,15 @@ def task(ctx, config):
             client.0:
               test: http://ceph.com/qa/test.sh
               memory: 512 # megabytes
+
+    If you want to run a test against a cloned rbd image, set clone to true::
+
+        tasks:
+        - ceph:
+        - qemu:
+            client.0:
+              test: http://ceph.com/qa/test.sh
+              clone: true
     """
     assert isinstance(config, dict), \
            "task qemu only supports a dictionary for configuration"
@@ -386,27 +434,16 @@ def task(ctx, config):
     config = teuthology.replace_all_with_clients(ctx.cluster, config)
 
     managers = []
-    for client, client_config in config.iteritems():
-        num_rbd = client_config.get('num_rbd', 1)
-        assert num_rbd > 0, 'at least one rbd device must be used'
-        for i in xrange(num_rbd):
-            create_config = {
-                client: {
-                    'image_name':
-                    '{client}.{num}'.format(client=client, num=i),
-                    }
-                }
-            managers.append(
-                lambda create_config=create_config:
-                rbd.create_image(ctx=ctx, config=create_config)
-                )
-
+    create_images(ctx=ctx, config=config, managers=managers)
     managers.extend([
         lambda: create_dirs(ctx=ctx, config=config),
         lambda: generate_iso(ctx=ctx, config=config),
         lambda: download_image(ctx=ctx, config=config),
-        lambda: run_qemu(ctx=ctx, config=config),
         ])
+    create_clones(ctx=ctx, config=config, managers=managers)
+    managers.append(
+        lambda: run_qemu(ctx=ctx, config=config),
+        )
 
     with contextutil.nested(*managers):
         yield
