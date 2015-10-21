@@ -37,6 +37,7 @@
 #include <assert.h>
 #include <errno.h>
 #include <math.h>
+#include <fcntl.h>
 
 #include "include/intarith.h"
 #include "include/krbd.h"
