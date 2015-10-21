@@ -23,7 +23,6 @@ ceph: ceph.in ./ceph_ver.h Makefile
 	sed -ie "s|@PYTHON_EXECUTABLE@|/usr/bin/env python|" $@.tmp
 	grep CEPH_GIT_NICE_VER ./ceph_ver.h | cut -f 3 -d " " | sed s/\"//g | xargs -I "{}" sed -ie "s/@CEPH_GIT_NICE_VER@/{}/g" $@.tmp
 	grep CEPH_GIT_VER ./ceph_ver.h | cut -f 3 -d " " | sed s/\"//g | xargs -I "{}" sed -ie "s/@CEPH_GIT_VER@/{}/g" $@.tmp
-	cat $(srcdir)/$@.in >>$@.tmp
 	chmod a+x $@.tmp
 	chmod a-w $@.tmp
 	mv $@.tmp $@
