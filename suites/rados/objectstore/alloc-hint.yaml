@@ -15,3 +15,11 @@ tasks:
     clients:
       all:
         - rados/test_alloc_hint.sh
+openstack:
+  machine:
+    disk: 40 # GB
+    ram: 8000 # MB
+    cpus: 1
+  volumes: # attached to each instance
+    count: 3
+    size: 10 # GB
