@@ -186,7 +186,15 @@ public:
   }
 
   void wait_for_child();
+
+  virtual string to_str();
+
+  RGWCoroutinesStack *get_stack() const {
+    return stack;
+  }
 };
+
+ostream& operator<<(ostream& out, const RGWCoroutine& cr);
 
 #define yield_until_true(x)     \
 do {                            \

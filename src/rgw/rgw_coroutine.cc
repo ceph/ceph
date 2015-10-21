@@ -119,6 +119,7 @@ int RGWCoroutinesStack::operate(RGWCoroutinesEnv *_env)
 {
   env = _env;
   RGWCoroutine *op = *pos;
+  ldout(cct, 20) << *op << ": operate()" << dendl;
   op->stack = this;
   int r = op->operate();
   if (r < 0) {
@@ -478,6 +479,17 @@ void RGWCoroutine::wait_for_child()
     }
   }
   stack->set_wait_for_child(true);
+}
+
+string RGWCoroutine::to_str()
+{
+  return typeid(*this).name();
+}
+
+ostream& operator<<(ostream& out, const RGWCoroutine& cr)
+{
+  out << "cr:s=" << (void *)cr.get_stack() << ":op=" << (void *)&cr << ":" << typeid(cr).name();
+  return out;
 }
 
 bool RGWCoroutine::drain_children()
