@@ -394,14 +394,11 @@ def new_style_command(parsed_args, cmdargs, target, sigdict, inbuf, verbose):
             sig = cmd['sig']
             print '{0}: {1}'.format(cmdtag, concise_sig(sig))
 
-    got_command = False
-
-    if not got_command:
+    if True:
         if cmdargs:
             # Validate input args against list of sigs
             valid_dict = validate_command(sigdict, cmdargs, verbose)
             if valid_dict:
-                got_command = True
                 if parsed_args.output_format:
                     valid_dict['format'] = parsed_args.output_format
             else:
