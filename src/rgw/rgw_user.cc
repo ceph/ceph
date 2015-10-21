@@ -191,7 +191,7 @@ int rgw_store_user_info(RGWRados *store,
     if (old_info && old_info->swift_keys.count(siter->first) != 0)
       continue;
 
-    ret = rgw_put_system_obj(store, store->zone.user_swift_pool, k.id,
+    ret = rgw_put_system_obj(store, store->get_zone_params().user_swift_pool, k.id,
                              link_bl.c_str(), link_bl.length(), exclusive,
                              NULL, 0);
     if (ret < 0)
@@ -274,7 +274,7 @@ int rgw_get_user_info_by_uid(RGWRados *store,
   RGWUID user_id;
 
   RGWObjectCtx obj_ctx(store);
-  int ret = rgw_get_system_obj(store, obj_ctx, store->zone.user_uid_pool, uid, bl, objv_tracker, pmtime, pattrs, cache_info);
+  int ret = rgw_get_system_obj(store, obj_ctx, store->get_zone_params().user_uid_pool, uid, bl, objv_tracker, pmtime, pattrs, cache_info);
   if (ret < 0) {
     return ret;
   }
@@ -333,7 +333,7 @@ int rgw_get_user_attrs_by_uid(RGWRados *store,
                               RGWObjVersionTracker *objv_tracker)
 {
   RGWObjectCtx obj_ctx(store);
-  rgw_obj obj(store->zone.user_uid_pool, user_id);
+  rgw_obj obj(store->get_zone_params().user_uid_pool, user_id);
   RGWRados::SystemObject src(store, obj_ctx, obj);
   RGWRados::SystemObject::Read rop(&src);
 
@@ -343,7 +343,7 @@ int rgw_get_user_attrs_by_uid(RGWRados *store,
 
 int rgw_remove_key_index(RGWRados *store, RGWAccessKey& access_key)
 {
-  rgw_obj obj(store->zone.user_keys_pool, access_key.id);
+  rgw_obj obj(store->get_zone_params().user_keys_pool, access_key.id);
   int ret = store->delete_system_obj(obj);
   return ret;
 }
@@ -365,14 +365,14 @@ int rgw_remove_uid_index(RGWRados *store, string& uid)
 
 int rgw_remove_email_index(RGWRados *store, string& email)
 {
-  rgw_obj obj(store->zone.user_email_pool, email);
+  rgw_obj obj(store->get_zone_params().user_email_pool, email);
   int ret = store->delete_system_obj(obj);
   return ret;
 }
 
 int rgw_remove_swift_name_index(RGWRados *store, string& swift_name)
 {
-  rgw_obj obj(store->zone.user_swift_pool, swift_name);
+  rgw_obj obj(store->get_zone_params().user_swift_pool, swift_name);
   int ret = store->delete_system_obj(obj);
   return ret;
 }
@@ -433,7 +433,7 @@ int rgw_delete_user(RGWRados *store, RGWUserInfo& info, RGWObjVersionTracker& ob
     }
   }
 
-  rgw_obj email_obj(store->zone.user_email_pool, info.user_email);
+  rgw_obj email_obj(store->get_zone_params().user_email_pool, info.user_email);
   ldout(store->ctx(), 10) << "removing email index: " << info.user_email << dendl;
   ret = store->delete_system_obj(email_obj);
   if (ret < 0 && ret != -ENOENT) {
@@ -443,7 +443,7 @@ int rgw_delete_user(RGWRados *store, RGWUserInfo& info, RGWObjVersionTracker& ob
 
   string buckets_obj_id;
   rgw_get_buckets_obj(info.user_id, buckets_obj_id);
-  rgw_obj uid_bucks(store->zone.user_uid_pool, buckets_obj_id);
+  rgw_obj uid_bucks(store->get_zone_params().user_uid_pool, buckets_obj_id);
   ldout(store->ctx(), 10) << "removing user buckets index" << dendl;
   ret = store->delete_system_obj(uid_bucks);
   if (ret < 0 && ret != -ENOENT) {
@@ -451,7 +451,7 @@ int rgw_delete_user(RGWRados *store, RGWUserInfo& info, RGWObjVersionTracker& ob
     return ret;
   }
   
-  rgw_obj uid_obj(store->zone.user_uid_pool, info.user_id);
+  rgw_obj uid_obj(store->get_zone_params().user_uid_pool, info.user_id);
   ldout(store->ctx(), 10) << "removing user index: " << info.user_id << dendl;
   ret = store->meta_mgr->remove_entry(user_meta_handler, info.user_id, &objv_tracker);
   if (ret < 0 && ret != -ENOENT) {
@@ -2524,7 +2524,7 @@ public:
 
   void get_pool_and_oid(RGWRados *store, const string& key, rgw_bucket& bucket, string& oid) {
     oid = key;
-    bucket = store->zone.user_uid_pool;
+    bucket = store->get_zone_params().user_uid_pool;
   }
 
   int list_keys_init(RGWRados *store, void **phandle)
@@ -2549,7 +2549,7 @@ public:
 
     list<string> unfiltered_keys;
 
-    int ret = store->list_raw_objects(store->zone.user_uid_pool, no_filter,
+    int ret = store->list_raw_objects(store->get_zone_params().user_uid_pool, no_filter,
                                       max, info->ctx, unfiltered_keys, truncated);
     if (ret < 0)
       return ret;

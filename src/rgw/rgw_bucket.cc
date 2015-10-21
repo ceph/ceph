@@ -55,7 +55,7 @@ int rgw_read_user_buckets(RGWRados * store,
   string buckets_obj_id;
   rgw_get_buckets_obj(user_id, buckets_obj_id);
   bufferlist bl;
-  rgw_obj obj(store->zone.user_uid_pool, buckets_obj_id);
+  rgw_obj obj(store->get_zone_params().user_uid_pool, buckets_obj_id);
   bufferlist header;
   list<cls_user_bucket_entry> entries;
 
@@ -99,7 +99,7 @@ int rgw_bucket_sync_user_stats(RGWRados *store, const string& user_id, rgw_bucke
 {
   string buckets_obj_id;
   rgw_get_buckets_obj(user_id, buckets_obj_id);
-  rgw_obj obj(store->zone.user_uid_pool, buckets_obj_id);
+  rgw_obj obj(store->get_zone_params().user_uid_pool, buckets_obj_id);
 
   return store->cls_user_sync_bucket_stats(obj, bucket);
 }
@@ -156,7 +156,7 @@ int rgw_link_bucket(RGWRados *store, string user_id, rgw_bucket& bucket, time_t 
   string buckets_obj_id;
   rgw_get_buckets_obj(user_id, buckets_obj_id);
 
-  rgw_obj obj(store->zone.user_uid_pool, buckets_obj_id);
+  rgw_obj obj(store->get_zone_params().user_uid_pool, buckets_obj_id);
   ret = store->cls_user_add_bucket(obj, new_bucket);
   if (ret < 0) {
     ldout(store->ctx(), 0) << "ERROR: error adding bucket to directory: "
@@ -193,7 +193,7 @@ int rgw_unlink_bucket(RGWRados *store, string user_id, const string& bucket_name
 
   cls_user_bucket bucket;
   bucket.name = bucket_name;
-  rgw_obj obj(store->zone.user_uid_pool, buckets_obj_id);
+  rgw_obj obj(store->get_zone_params().user_uid_pool, buckets_obj_id);
   ret = store->cls_user_remove_bucket(obj, bucket);
   if (ret < 0) {
     ldout(store->ctx(), 0) << "ERROR: error removing bucket from directory: "
@@ -288,7 +288,7 @@ int rgw_bucket_set_attrs(RGWRados *store, RGWBucketInfo& bucket_info,
   }
   string oid;
   store->get_bucket_meta_oid(bucket, oid);
-  rgw_obj obj(store->zone.domain_root, oid);
+  rgw_obj obj(store->get_zone_params().domain_root, oid);
 
   string key;
   store->get_bucket_instance_entry(bucket, key); /* we want the bucket instance name without
@@ -1644,7 +1644,7 @@ public:
 
   void get_pool_and_oid(RGWRados *store, const string& key, rgw_bucket& bucket, string& oid) {
     oid = key;
-    bucket = store->zone.domain_root;
+    bucket = store->get_zone_params().domain_root;
   }
 
   int list_keys_init(RGWRados *store, void **phandle)
@@ -1669,7 +1669,7 @@ public:
 
     list<string> unfiltered_keys;
 
-    int ret = store->list_raw_objects(store->zone.domain_root, no_filter,
+    int ret = store->list_raw_objects(store->get_zone_params().domain_root, no_filter,
                                       max, info->ctx, unfiltered_keys, truncated);
     if (ret < 0 && ret != -ENOENT)
       return ret;
@@ -1793,7 +1793,7 @@ public:
 
   void get_pool_and_oid(RGWRados *store, const string& key, rgw_bucket& bucket, string& oid) {
     oid = RGW_BUCKET_INSTANCE_MD_PREFIX + key;
-    bucket = store->zone.domain_root;
+    bucket = store->get_zone_params().domain_root;
   }
 
   int list_keys_init(RGWRados *store, void **phandle)
@@ -1818,7 +1818,7 @@ public:
 
     list<string> unfiltered_keys;
 
-    int ret = store->list_raw_objects(store->zone.domain_root, no_filter,
+    int ret = store->list_raw_objects(store->get_zone_params().domain_root, no_filter,
                                       max, info->ctx, unfiltered_keys, truncated);
     if (ret < 0 && ret != -ENOENT)
       return ret;

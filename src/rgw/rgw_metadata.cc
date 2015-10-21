@@ -255,14 +255,14 @@ int RGWMetadataLog::lock_exclusive(int shard_id, utime_t& duration, string& zone
   string oid;
   get_shard_oid(shard_id, oid);
 
-  return store->lock_exclusive(store->zone.log_pool, oid, duration, zone_id, owner_id);
+  return store->lock_exclusive(store->get_zone_params().log_pool, oid, duration, zone_id, owner_id);
 }
 
 int RGWMetadataLog::unlock(int shard_id, string& zone_id, string& owner_id) {
   string oid;
   get_shard_oid(shard_id, oid);
 
-  return store->unlock(store->zone.log_pool, oid, zone_id, owner_id);
+  return store->unlock(store->get_zone_params().log_pool, oid, zone_id, owner_id);
 }
 
 void RGWMetadataLog::mark_modified(int shard_id)
@@ -685,7 +685,7 @@ int RGWMetadataManager::store_in_heap(RGWMetadataHandler *handler, const string&
     return -EINVAL;
   }
 
-  rgw_bucket heap_pool(store->zone.metadata_heap);
+  rgw_bucket heap_pool(store->get_zone_params().metadata_heap);
 
   RGWObjVersionTracker otracker;
   otracker.write_version = objv_tracker->write_version;
@@ -707,7 +707,7 @@ int RGWMetadataManager::remove_from_heap(RGWMetadataHandler *handler, const stri
     return -EINVAL;
   }
 
-  rgw_bucket heap_pool(store->zone.metadata_heap);
+  rgw_bucket heap_pool(store->get_zone_params().metadata_heap);
 
   string oid = heap_oid(handler, key, objv_tracker->write_version);
   rgw_obj obj(heap_pool, oid);

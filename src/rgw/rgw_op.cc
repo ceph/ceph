@@ -1385,7 +1385,7 @@ void RGWCreateBucket::execute()
   bufferlist aclbl;
   bufferlist corsbl;
   bool existed;
-  rgw_obj obj(store->zone.domain_root, s->bucket_name_str);
+  rgw_obj obj(store->get_zone_params().domain_root, s->bucket_name_str);
   obj_version objv, *pobjv = NULL;
 
   ret = get_params();
@@ -2277,7 +2277,7 @@ void RGWPutMetadataAccount::execute()
   /* Get the name of raw object which stores the metadata in its xattrs. */
   string buckets_obj_id;
   rgw_get_buckets_obj(s->user.user_id, buckets_obj_id);
-  obj = rgw_obj(store->zone.user_uid_pool, buckets_obj_id);
+  obj = rgw_obj(store->get_zone_params().user_uid_pool, buckets_obj_id);
 
   ret = get_params();
   if (ret < 0) {

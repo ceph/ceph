@@ -1707,6 +1707,7 @@ protected:
 
   RGWZoneGroup zonegroup;
   RGWZone zone_public_config; /* external zone params, e.g., entrypoints, log flags, etc. */  
+  RGWZoneParams zone_params; /* internal zone params, e.g., rados pools */
 
   RGWZoneGroup period_zonegroup;
   RGWZone period_zone; /* external zone params, e.g., entrypoints, log flags, etc. */  
@@ -1743,12 +1744,11 @@ public:
 
   RGWRealm realm;
   RGWPeriod current_period;
-  RGWZoneParams zone; /* internal zone params, e.g., rados pools */
   RGWRESTConn *rest_master_conn;
   map<string, RGWRESTConn *> zone_conn_map;
   map<string, RGWRESTConn *> zonegroup_conn_map;
 
-  RGWZoneParams& get_zone_params() { return zone; }
+  RGWZoneParams& get_zone_params() { return zone_params; }
   RGWZoneGroup& get_zonegroup() {
     if (has_period_zonegroup) {
       return period_zonegroup;
@@ -2652,12 +2652,12 @@ public:
 
   uint64_t instance_id();
   const string& zone_id() {
-    return zone.get_id();
+    return get_zone_params().get_id();
   }
   string unique_id(uint64_t unique_num) {
     char buf[32];
     snprintf(buf, sizeof(buf), ".%llu.%llu", (unsigned long long)instance_id(), (unsigned long long)unique_num);
-    string s = zone.get_id() + buf;
+    string s = get_zone_params().get_id() + buf;
     return s;
   }
 
@@ -2665,7 +2665,7 @@ public:
     char buf[16 + 2 + 1]; /* uint64_t needs 16, 2 hyphens add further 2 */
 
     snprintf(buf, sizeof(buf), "-%llx-", (unsigned long long)instance_id());
-    url_encode(string(buf) + zone.get_name(), trans_id_suffix);
+    url_encode(string(buf) + get_zone_params().get_name(), trans_id_suffix);
   }
 
   /* In order to preserve compability with Swift API, transaction ID
@@ -2691,7 +2691,7 @@ public:
   }
 
   void get_log_pool_name(string& name) {
-    name = zone.log_pool.name;
+    name = get_zone_params().log_pool.name;
   }
 
   bool need_to_log_data() {
