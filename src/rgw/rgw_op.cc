@@ -1017,8 +1017,11 @@ void RGWGetObj::execute()
     goto done_err;
   }
 
-done_err:
   send_response_data(bl, 0, 0);
+  return;
+
+done_err:
+  send_response_data_error();
 }
 
 int RGWGetObj::init_common()

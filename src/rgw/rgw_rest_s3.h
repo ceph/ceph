@@ -21,6 +21,7 @@ public:
   RGWGetObj_ObjStore_S3() {}
   ~RGWGetObj_ObjStore_S3() {}
 
+  int send_response_data_error();
   int send_response_data(bufferlist& bl, off_t ofs, off_t len);
 };
 
