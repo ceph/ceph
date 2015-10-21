@@ -3009,6 +3009,12 @@ int RGWRados::init_complete()
     }
   }
 
+  if (!has_period_zonegroup) {
+    if (zonegroup.is_master) {
+      rest_master_conn = new RGWRESTConn(cct, this, zonegroup.endpoints);
+    }
+  }
+
   init_unique_trans_id_deps();
 
   finisher = new Finisher(cct);
