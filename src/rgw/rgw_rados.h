@@ -2695,11 +2695,11 @@ public:
   }
 
   bool need_to_log_data() {
-    return zone_public_config.log_data;
+    return get_zone().log_data;
   }
 
   bool need_to_log_metadata() {
-    return zone_public_config.log_meta;
+    return get_zone().log_meta;
   }
 
   librados::Rados* get_rados_handle();
