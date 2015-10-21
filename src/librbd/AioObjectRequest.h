@@ -28,10 +28,9 @@ namespace librbd {
   class AioObjectRequest
   {
   public:
-    AioObjectRequest(ImageCtx *ictx, const std::string &oid,
-                     uint64_t objectno, uint64_t off, uint64_t len,
-                     librados::snap_t snap_id,
-                     Context *completion, bool hide_enoent);
+    AioObjectRequest(ImageCtx *ictx, const std::string &oid, uint64_t objectno,
+                     librados::snap_t snap_id, Context *completion,
+                     bool hide_enoent);
     virtual ~AioObjectRequest() {}
 
     virtual void add_copyup_ops(librados::ObjectWriteOperation *wr) {};
@@ -50,7 +49,7 @@ namespace librbd {
 
     ImageCtx *m_ictx;
     std::string m_oid;
-    uint64_t m_object_no, m_object_off, m_object_len;
+    uint64_t m_object_no;
     librados::snap_t m_snap_id;
     Context *m_completion;
     std::vector<std::pair<uint64_t,uint64_t> > m_parent_extents;
@@ -78,6 +77,8 @@ namespace librbd {
     friend class C_AioRead;
 
   private:
+    uint64_t m_object_off;
+    uint64_t m_object_len;
     vector<pair<uint64_t,uint64_t> > m_buffer_extents;
     bool m_tried_parent;
     bool m_sparse;
@@ -116,10 +117,20 @@ namespace librbd {
 
   class AbstractAioObjectWrite : public AioObjectRequest {
   public:
+    typedef std::vector<std::pair<uint64_t, uint64_t> > Extents;
+
     AbstractAioObjectWrite(ImageCtx *ictx, const std::string &oid,
                            uint64_t object_no, uint64_t object_off,
                            uint64_t len, const ::SnapContext &snapc,
-                           Context *completion, bool hide_enoent);
+		           Context *completion, bool hide_enoent)
+      : AbstractAioObjectWrite(ictx, oid, object_no,
+                               std::move(Extents{{object_off, len}}),
+                               snapc, completion, hide_enoent) {
+    }
+    AbstractAioObjectWrite(ImageCtx *ictx, const std::string &oid,
+                           uint64_t object_no, Extents &&object_extents,
+                           const ::SnapContext &snapc, Context *completion,
+                           bool hide_enoent);
 
     virtual void add_copyup_ops(librados::ObjectWriteOperation *wr)
     {
@@ -173,6 +184,7 @@ namespace librbd {
       LIBRBD_AIO_WRITE_ERROR
     };
 
+    Extents m_object_extents;
     write_state_d m_state;
     librados::ObjectWriteOperation m_write;
     uint64_t m_snap_seq;
@@ -198,17 +210,29 @@ namespace librbd {
 
   class AioObjectWrite : public AbstractAioObjectWrite {
   public:
+    typedef std::vector<std::pair<uint64_t, bufferlist> > OffsetBuffers;
+
+    AioObjectWrite(ImageCtx *ictx, const std::string &oid, uint64_t object_no,
+                   OffsetBuffers &&offset_buffers, const ::SnapContext &snapc,
+                   Context *completion)
+      : AbstractAioObjectWrite(ictx, oid, object_no,
+                               std::move(compute_object_extents(offset_buffers)),
+                               snapc, completion, false),
+        m_offset_buffers(std::move(offset_buffers)), m_op_flags(0) {
+    }
+
     AioObjectWrite(ImageCtx *ictx, const std::string &oid, uint64_t object_no,
                    uint64_t object_off, const ceph::bufferlist &data,
                    const ::SnapContext &snapc, Context *completion)
       : AbstractAioObjectWrite(ictx, oid, object_no, object_off, data.length(),
                                snapc, completion, false),
-	m_write_data(data), m_op_flags(0) {
+	m_offset_buffers({{object_off, data}}), m_op_flags(0) {
     }
 
     void set_op_flags(int op_flags) {
       m_op_flags = op_flags;
     }
+
   protected:
     virtual void add_write_ops(librados::ObjectWriteOperation *wr);
 
@@ -222,8 +246,17 @@ namespace librbd {
     virtual void send_write();
 
   private:
-    ceph::bufferlist m_write_data;
+    OffsetBuffers m_offset_buffers;
     int m_op_flags;
+
+    static Extents compute_object_extents(const OffsetBuffers &offset_buffers) {
+      Extents extents;
+      extents.reserve(offset_buffers.size());
+      for (auto &pair : offset_buffers) {
+        extents.push_back(std::make_pair(pair.first, pair.second.length()));
+      }
+      return extents;
+    }
   };
 
   class AioObjectRemove : public AbstractAioObjectWrite {
@@ -310,7 +343,7 @@ namespace librbd {
 
   protected:
     virtual void add_write_ops(librados::ObjectWriteOperation *wr) {
-      wr->truncate(m_object_off);
+      wr->truncate(m_object_extents.front().first);
     }
 
     virtual const char* get_write_type() const {
@@ -333,7 +366,8 @@ namespace librbd {
 
   protected:
     virtual void add_write_ops(librados::ObjectWriteOperation *wr) {
-      wr->zero(m_object_off, m_object_len);
+      const std::pair<uint64_t, uint64_t> &extent(m_object_extents.front());
+      wr->zero(extent.first, extent.second);
     }
 
     virtual const char* get_write_type() const {

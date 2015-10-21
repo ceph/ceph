@@ -19,6 +19,7 @@
 #include "librbd/ObjectMap.h"
 #include "librbd/Utils.h"
 
+#include <sstream>
 #include <boost/bind.hpp>
 #include <boost/optional.hpp>
 
@@ -28,14 +29,33 @@
 
 namespace librbd {
 
-  AioObjectRequest::AioObjectRequest(ImageCtx *ictx, const std::string &oid,
-			             uint64_t objectno, uint64_t off,
-                                     uint64_t len, librados::snap_t snap_id,
-                                     Context *completion, bool hide_enoent)
-    : m_ictx(ictx), m_oid(oid), m_object_no(objectno), m_object_off(off),
-      m_object_len(len), m_snap_id(snap_id), m_completion(completion),
-      m_hide_enoent(hide_enoent) {
+namespace {
 
+std::string format_extents(const AbstractAioObjectWrite::Extents &extents) {
+  std::stringstream ss;
+
+  ss << "[";
+  bool first = true;
+  for (auto &extent : extents) {
+    if (!first) {
+      ss << ", ";
+    }
+    first = false;
+
+    ss << extent.first << "~" << extent.second;
+  }
+  ss << "]";
+  return ss.str();
+}
+
+} // anonymous namespace
+
+  AioObjectRequest::AioObjectRequest(ImageCtx *ictx, const std::string &oid,
+                                     uint64_t objectno,
+                                     librados::snap_t snap_id,
+                                     Context *completion, bool hide_enoent)
+    : m_ictx(ictx), m_oid(oid), m_object_no(objectno), m_snap_id(snap_id),
+      m_completion(completion), m_hide_enoent(hide_enoent) {
     Striper::extent_to_file(m_ictx->cct, &m_ictx->layout, m_object_no,
                             0, m_ictx->layout.fl_object_size, m_parent_extents);
 
@@ -99,12 +119,11 @@ namespace librbd {
                                vector<pair<uint64_t,uint64_t> >& be,
                                librados::snap_t snap_id, bool sparse,
                                Context *completion, int op_flags)
-    : AioObjectRequest(ictx, oid, objectno, offset, len, snap_id, completion,
-                       false),
+    : AioObjectRequest(ictx, oid, objectno, snap_id, completion, false),
+      m_object_off(offset), m_object_len(len),
       m_buffer_extents(be), m_tried_parent(false), m_sparse(sparse),
       m_op_flags(op_flags), m_parent_completion(NULL),
       m_state(LIBRBD_AIO_READ_FLAT) {
-
     guard_read();
   }
 
@@ -290,16 +309,16 @@ namespace librbd {
   AbstractAioObjectWrite::AbstractAioObjectWrite(ImageCtx *ictx,
                                                  const std::string &oid,
                                                  uint64_t object_no,
-                                                 uint64_t object_off,
-                                                 uint64_t len,
+                                                 Extents &&object_extents,
                                                  const ::SnapContext &snapc,
                                                  Context *completion,
                                                  bool hide_enoent)
-    : AioObjectRequest(ictx, oid, object_no, object_off, len, CEPH_NOSNAP,
-                       completion, hide_enoent),
-      m_state(LIBRBD_AIO_WRITE_FLAT), m_snap_seq(snapc.seq.val)
+    : AioObjectRequest(ictx, oid, object_no, CEPH_NOSNAP, completion,
+                       hide_enoent),
+      m_object_extents(std::move(object_extents)),
+      m_state(LIBRBD_AIO_WRITE_FLAT), m_snap_seq(snapc.seq.val),
+      m_snaps(snapc.snaps.begin(), snapc.snaps.end())
   {
-    m_snaps.insert(m_snaps.end(), snapc.snaps.begin(), snapc.snaps.end());
   }
 
   void AbstractAioObjectWrite::guard_write()
@@ -313,8 +332,8 @@ namespace librbd {
 
   bool AbstractAioObjectWrite::should_complete(int r)
   {
-    ldout(m_ictx->cct, 20) << get_write_type() << " " << this << " " << m_oid
-                           << " " << m_object_off << "~" << m_object_len
+    ldout(m_ictx->cct, 20) << get_write_type() << " " << this << " "
+                           << m_oid << " " << format_extents(m_object_extents)
 			   << " should_complete: r = " << r << dendl;
 
     bool finished = true;
@@ -385,9 +404,9 @@ namespace librbd {
 
   void AbstractAioObjectWrite::send() {
     assert(m_ictx->owner_lock.is_locked());
-    ldout(m_ictx->cct, 20) << "send " << get_write_type() << " " << this <<" "
-                           << m_oid << " " << m_object_off << "~"
-                           << m_object_len << dendl;
+    ldout(m_ictx->cct, 20) << "send " << get_write_type() << " " << this << " "
+                           << m_oid << " " << format_extents(m_object_extents)
+                           << dendl;
     send_pre();
   }
 
@@ -407,7 +426,7 @@ namespace librbd {
         m_object_exist = m_ictx->object_map->object_may_exist(m_object_no);
 
         ldout(m_ictx->cct, 20) << "send_pre " << this << " " << m_oid << " "
-          		       << m_object_off << "~" << m_object_len << dendl;
+                               << format_extents(m_object_extents) << dendl;
         m_state = LIBRBD_AIO_WRITE_PRE;
 
         uint8_t new_state;
@@ -444,7 +463,7 @@ namespace librbd {
     assert(m_ictx->exclusive_lock->is_lock_owner());
 
     ldout(m_ictx->cct, 20) << "send_post " << this << " " << m_oid << " "
-			   << m_object_off << "~" << m_object_len << dendl;
+                           << format_extents(m_object_extents) << dendl;
     m_state = LIBRBD_AIO_WRITE_POST;
 
     RWLock::WLocker object_map_locker(m_ictx->object_map_lock);
@@ -464,8 +483,8 @@ namespace librbd {
 
   void AbstractAioObjectWrite::send_write() {
     ldout(m_ictx->cct, 20) << "send_write " << this << " " << m_oid << " "
-			   << m_object_off << "~" << m_object_len 
-                           << " object exist " << m_object_exist << dendl;
+                           << format_extents(m_object_extents) << " "
+                           << "object_exists " << m_object_exist << dendl;
 
     if (!m_object_exist && has_parent()) {
       m_state = LIBRBD_AIO_WRITE_GUARD;
@@ -478,7 +497,7 @@ namespace librbd {
   void AbstractAioObjectWrite::send_copyup()
   {
     ldout(m_ictx->cct, 20) << "send_copyup " << this << " " << m_oid << " "
-                           << m_object_off << "~" << m_object_len << dendl;
+                           << format_extents(m_object_extents) << dendl;
     m_state = LIBRBD_AIO_WRITE_COPYUP;
 
     m_ictx->copyup_list_lock.Lock();
@@ -515,6 +534,7 @@ namespace librbd {
     assert(r == 0);
     rados_completion->release();
   }
+
   void AbstractAioObjectWrite::handle_write_guard()
   {
     bool has_parent;
@@ -542,21 +562,31 @@ namespace librbd {
       wr->set_alloc_hint(m_ictx->get_object_size(), m_ictx->get_object_size());
     }
 
-    if (m_object_off == 0 && m_object_len == m_ictx->get_object_size()) {
-      wr->write_full(m_write_data);
-    } else {
-      wr->write(m_object_off, m_write_data);
+    for (auto &offset_bl : m_offset_buffers) {
+      if (offset_bl.first == 0 &&
+          offset_bl.second.length() == m_ictx->get_object_size()) {
+        wr->write_full(offset_bl.second);
+      } else {
+        wr->write(offset_bl.first, offset_bl.second);
+      }
     }
     wr->set_op_flags2(m_op_flags);
   }
 
   void AioObjectWrite::send_write() {
-    bool write_full = (m_object_off == 0 && m_object_len == m_ictx->get_object_size());
-    ldout(m_ictx->cct, 20) << "send_write " << this << " " << m_oid << " "
-			   << m_object_off << "~" << m_object_len
-                           << " object exist " << m_object_exist
-			   << " write_full " << write_full << dendl;
+    bool write_full = false;
+    for (auto &offset_buffer : m_offset_buffers) {
+      if (offset_buffer.first == 0 &&
+          offset_buffer.second.length() == m_ictx->get_object_size()) {
+        write_full = true;
+        break;
+      }
+    }
+
     if (write_full && !has_parent()) {
+      ldout(m_ictx->cct, 20) << "send_write " << this << " " << m_oid << " "
+                             << format_extents(m_object_extents) << " "
+			     << "write_full " << write_full << dendl;
       send_write_op(false);
     } else {
       AbstractAioObjectWrite::send_write();
@@ -571,8 +601,7 @@ namespace librbd {
     }
   }
   void AioObjectRemove::send_write() {
-    ldout(m_ictx->cct, 20) << "send_write " << this << " " << m_oid << " "
-			   << m_object_off << "~" << m_object_len << dendl;
+    ldout(m_ictx->cct, 20) << "send_write " << this << " " << m_oid << dendl;
     send_write_op(true);
   }
 }
