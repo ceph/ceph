@@ -1712,7 +1712,7 @@ void RGWCreateBucket::execute()
   bool existed;
   string bucket_name;
   rgw_make_bucket_entry_name(s->bucket_tenant, s->bucket_name, bucket_name);
-  rgw_obj obj(store->zone.domain_root, bucket_name);
+  rgw_obj obj(store->get_zone_params().domain_root, bucket_name);
   obj_version objv, *pobjv = NULL;
 
   op_ret = get_params();
@@ -4305,7 +4305,7 @@ bool RGWBulkDelete::Deleter::delete_single(const acct_path_t& path)
       goto delop_fail;
     }
 
-    if (!store->zonegroup.is_master) {
+    if (!store->get_zonegroup().is_master) {
       bufferlist in_data;
       JSONParser jp;
       ret = forward_request_to_master(s, &ot.read_version, store, in_data,
