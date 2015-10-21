@@ -454,10 +454,10 @@ public:
                    const string& start_marker, const string& end_marker);
   int get_info(int shard_id, RGWDataChangesLogInfo *info);
   int lock_exclusive(int shard_id, utime_t& duration, string& zone_id, string& owner_id) {
-    return store->lock_exclusive(store->zone.log_pool, oids[shard_id], duration, zone_id, owner_id);
+    return store->lock_exclusive(store->get_zone_params().log_pool, oids[shard_id], duration, zone_id, owner_id);
   }
   int unlock(int shard_id, string& zone_id, string& owner_id) {
-    return store->unlock(store->zone.log_pool, oids[shard_id], zone_id, owner_id);
+    return store->unlock(store->get_zone_params().log_pool, oids[shard_id], zone_id, owner_id);
   }
   struct LogMarker {
     int shard;

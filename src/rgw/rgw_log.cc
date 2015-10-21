@@ -349,11 +349,11 @@ int rgw_log_op(RGWRados *store, struct req_state *s, const string& op_name, OpsL
     string oid = render_log_object_name(s->cct->_conf->rgw_log_object_name, &bdt,
 				        s->bucket.bucket_id, entry.bucket);
 
-    rgw_obj obj(store->zone.log_pool, oid);
+    rgw_obj obj(store->get_zone_params().log_pool, oid);
 
     ret = store->append_async(obj, bl.length(), bl);
     if (ret == -ENOENT) {
-      ret = store->create_pool(store->zone.log_pool);
+      ret = store->create_pool(store->get_zone_params().log_pool);
       if (ret < 0)
         goto done;
       // retry
