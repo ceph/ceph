@@ -420,6 +420,10 @@ def new_style_command(parsed_args, cmdargs, target, sigdict, inbuf, verbose):
                     print >> sys.stderr, \
                             'error handling command target: {0}'.format(e)
                     continue
+                if len(cmdargs) and cmdargs[0] == 'tell':
+                    print >> sys.stderr, \
+                          'Can not use \'tell\' in interactive mode.'
+                    continue
                 valid_dict = validate_command(sigdict, cmdargs, verbose)
                 if valid_dict:
                     if parsed_args.output_format:
