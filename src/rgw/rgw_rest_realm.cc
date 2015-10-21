@@ -39,15 +39,17 @@ class RGWOp_Period_Get : public RGWOp_Period_Base {
 
 void RGWOp_Period_Get::execute()
 {
-  string period_id;
+  string realm_id, realm_name, period_id;
   epoch_t epoch = 0;
+  RESTArgs::get_string(s, "realm_id", realm_id, &realm_id);
+  RESTArgs::get_string(s, "realm_name", realm_name, &realm_name);
   RESTArgs::get_string(s, "period_id", period_id, &period_id);
   RESTArgs::get_uint32(s, "epoch", 0, &epoch);
 
   period.set_id(period_id);
   period.set_epoch(epoch);
 
-  http_ret = period.init(store->ctx(), store);
+  http_ret = period.init(store->ctx(), store, realm_id, realm_name);
   if (http_ret < 0)
     ldout(store->ctx(), 5) << "failed to read period" << dendl;
 }
