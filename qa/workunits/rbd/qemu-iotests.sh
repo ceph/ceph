@@ -24,14 +24,14 @@ done
 
 if [ "$iotests" = "qemu/tests/qemu-iotests" ]
 then
-    git clone git://apt-mirror.front.sepia.ceph.com/qemu.git
+    git clone https://github.com/qemu/qemu.git
     # use v2.2.0-rc3 (last released version that handles all the tests
     cd qemu
     git checkout 2528043f1f299e0e88cb026f1ca7c40bbb4e1f80
     cd ..
     testlist=$testlist' 032 033 055 077'
 else
-    git clone git://ceph.com/git/qemu-iotests.git
+    git clone git://git.ceph.com/qemu-iotests.git
 fi
 
 cd "$iotests"

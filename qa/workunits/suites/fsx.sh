@@ -2,7 +2,7 @@
 
 set -e
 
-git clone git://ceph.newdream.net/git/xfstests.git
+git clone git://git.ceph.com/xfstests.git
 make -C xfstests
 cp xfstests/ltp/fsx .
 
