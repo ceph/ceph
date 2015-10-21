@@ -1107,7 +1107,9 @@ struct RGWZoneGroup : public RGWSystemMetaObj {
     if (struct_v >= 2) {
       ::decode(hostnames, bl);
     }
-    ::decode(realm_id, bl);
+    if (struct_v >= 3) {
+      ::decode(realm_id, bl);
+    }
     DECODE_FINISH(bl);
   }
 
