@@ -79,6 +79,36 @@ int remove_object_map(ImageCtx *ictx) {
   }
   return 0;
 }
+int create_object_map(ImageCtx *ictx) {
+  assert(ictx->snap_lock.is_locked());
+  CephContext *cct = ictx->cct;
+
+  int r;
+  std::vector<uint64_t> snap_ids;
+  snap_ids.push_back(CEPH_NOSNAP);
+  for (std::map<snap_t, SnapInfo>::iterator it = ictx->snap_info.begin();
+       it != ictx->snap_info.end(); ++it) {
+    snap_ids.push_back(it->first);
+  }
+
+  for (std::vector<uint64_t>::iterator it = snap_ids.begin();
+    it != snap_ids.end(); ++it) {
+    librados::ObjectWriteOperation op;
+    std::string oid(ObjectMap::object_map_name(ictx->id, *it));
+    uint64_t snap_size = ictx->get_image_size(*it);
+    cls_client::object_map_resize(&op, Striper::get_num_objects(ictx->layout, snap_size),
+                                  OBJECT_NONEXISTENT);
+    r = ictx->md_ctx.operate(oid, &op);
+    if (r < 0) {
+      lderr(cct) << "failed to create object map " << oid << ": "
+                 << cpp_strerror(r) << dendl;
+      return r;
+    }
+  }
+
+  return 0;
+}
+
 
 int update_all_flags(ImageCtx *ictx, uint64_t flags, uint64_t mask) {
   assert(ictx->snap_lock.is_locked());
@@ -1615,6 +1645,14 @@ reprotect_and_return_err:
     if (r < 0) {
       lderr(cct) << "failed to update features: " << cpp_strerror(r)
                  << dendl;
+    }
+    if (((ictx->features & RBD_FEATURE_OBJECT_MAP) == 0) &&
+      ((features & RBD_FEATURE_OBJECT_MAP) != 0)) {
+      r = create_object_map(ictx);
+      if (r < 0) {
+        lderr(cct) << "failed to create object map" << dendl;
+        return r;
+      }
     }
 
     if (disable_flags != 0) {
