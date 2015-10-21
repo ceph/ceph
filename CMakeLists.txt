@@ -163,11 +163,19 @@ endif(${WITH_GPERFTOOLS})
 
 find_package(snappy REQUIRED)
 
-option(WITH_TCMALLOC "Use TCMalloc as Allocator" ON)
-if(${WITH_TCMALLOC})
-find_package(tcmalloc REQUIRED)
-set(HAVE_LIBTCMALLOC ${Tcmalloc_FOUND})
-endif(${WITH_TCMALLOC})
+IF(ALLOCATOR)
+  set(ALLOCATOR ${ALLOCATOR} CACHE STRING "memory allocator: jemalloc|tcmalloc|libc")
+ELSE()
+  if( "${CMAKE_MAJOR_VERSION}.${CMAKE_MINOR_VERSION}" VERSION_GREATER "2.6" )
+    #string for allocator below set to tcmalloc by default for now
+    #need to learn about jemalloc use in ceph
+    set(ALLOCATOR "tcmalloc" CACHE STRING
+      "specify the memory allocator to use: jemalloc|tcmalloc|libc")
+  else("${CMAKE_MAJOR_VERSION}.${CMAKE_MINOR_VERSION}" VERSION_GREATER "2.6" )
+    set(ALLOCATOR "libc" CACHE STRING
+      "specify the memory allocator to use: jemalloc|tcmalloc|libc")
+  endif( "${CMAKE_MAJOR_VERSION}.${CMAKE_MINOR_VERSION}" VERSION_GREATER "2.6" )
+ENDIF()
 
 find_package(keyutils REQUIRED)
 
