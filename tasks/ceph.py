@@ -461,8 +461,8 @@ def cluster(ctx, config):
         conf['global'] = {}
     conf['global']['fsid'] = fsid
 
-    log.info('Writing ceph.conf for FSID %s...' % fsid)
     conf_path = config.get('conf_path', DEFAULT_CONF_PATH)
+    log.info('Writing %s for FSID %s...' % (conf_path, fsid))
     write_conf(ctx, conf_path)
 
     log.info('Creating admin key on %s...' % firstmon)
