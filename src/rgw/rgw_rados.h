@@ -1815,6 +1815,7 @@ public:
   virtual int init_rados();
   int init_complete();
   int replace_region_with_zonegroup();
+  int convert_regionmap();
   virtual int initialize();
   virtual void finalize();
 
