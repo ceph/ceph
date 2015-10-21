@@ -2941,11 +2941,11 @@ int RGWRados::init_complete()
 
       for (iter = current_period.get_map().zonegroups.begin();
 	   iter != current_period.get_map().zonegroups.end(); ++iter){
-	const RGWZoneGroup& zonegroup = iter->second;
-	add_new_connection_to_map(zonegroup_conn_map, zonegroup, new RGWRESTConn(cct, this, zonegroup.endpoints));
+	const RGWZoneGroup& zg = iter->second;
+	add_new_connection_to_map(zonegroup_conn_map, zg, new RGWRESTConn(cct, this, zonegroup.endpoints));
 	if (!current_period.get_master_zonegroup().empty() &&
-	    zonegroup.get_id() == current_period.get_master_zonegroup()) {
-	  rest_master_conn = new RGWRESTConn(cct, this, zonegroup.endpoints);
+	    zg.get_id() == current_period.get_master_zonegroup()) {
+	  rest_master_conn = new RGWRESTConn(cct, this, zg.endpoints);
 	}
       }
     }
@@ -2994,7 +2994,7 @@ int RGWRados::init_complete()
   }
 
   map<string, RGWZone>::iterator ziter;
-  for (ziter = zonegroup.zones.begin(); ziter != zonegroup.zones.end(); ++ziter) {
+  for (ziter = get_zonegroup().zones.begin(); ziter != get_zonegroup().zones.end(); ++ziter) {
     const string& id = ziter->first;
     RGWZone& z = ziter->second;
     if (id != zone_id()) {
@@ -3040,7 +3040,7 @@ int RGWRados::init_complete()
 
   /* not point of running sync thread if there is a single zone or
      we don't have a master zone configured or there is no rest_master_conn */
-  if (zonegroup.zones.size() < 2 || zonegroup.master_zone.empty() || !rest_master_conn) {
+  if (get_zonegroup().zones.size() < 2 || get_zonegroup().master_zone.empty() || !rest_master_conn) {
     run_sync_thread = false;
   }
 
@@ -3072,7 +3072,7 @@ int RGWRados::init_complete()
   quota_handler = RGWQuotaHandler::generate_handler(this, quota_threads);
 
   bucket_index_max_shards = (cct->_conf->rgw_override_bucket_index_max_shards ? cct->_conf->rgw_override_bucket_index_max_shards :
-                             zone_public_config.bucket_index_max_shards);
+                             get_zone().bucket_index_max_shards);
   if (bucket_index_max_shards > MAX_BUCKET_INDEX_SHARDS_PRIME) {
     bucket_index_max_shards = MAX_BUCKET_INDEX_SHARDS_PRIME;
     ldout(cct, 1) << __func__ << " bucket index max shards is too large, reset to value: "
@@ -4455,7 +4455,7 @@ int RGWRados::set_bucket_location_by_rule(const string& location_rule, const std
   map<string, RGWZonePlacementInfo>::iterator piter = get_zone_params().placement_pools.find(location_rule);
   if (piter == get_zone_params().placement_pools.end()) {
     /* couldn't find, means we cannot really place data for this bucket in this zone */
-    if (zonegroup.equals(zonegroup_id)) {
+    if (get_zonegroup().equals(zonegroup_id)) {
       /* that's a configuration error, zone should have that rule, as we're within the requested
        * zonegroup */
       return -EINVAL;
@@ -5775,8 +5775,8 @@ int RGWRados::copy_obj(RGWObjectCtx& obj_ctx,
   append_rand_alpha(cct, dest_obj.get_object(), shadow_oid, 32);
   shadow_obj.init_ns(dest_obj.bucket, shadow_oid, shadow_ns);
 
-  remote_dest = !zonegroup.equals(dest_bucket_info.zonegroup);
-  remote_src = !zonegroup.equals(src_bucket_info.zonegroup);
+  remote_dest = !get_zonegroup().equals(dest_bucket_info.zonegroup);
+  remote_src = !get_zonegroup().equals(src_bucket_info.zonegroup);
 
   if (remote_src && remote_dest) {
     ldout(cct, 0) << "ERROR: can't copy object when both src and dest buckets are remote" << dendl;
@@ -6068,11 +6068,11 @@ int RGWRados::copy_obj_data(RGWObjectCtx& obj_ctx,
 
 bool RGWRados::is_meta_master()
 {
-  if (!zonegroup.is_master) {
+  if (!get_zonegroup().is_master) {
     return false;
   }
 
-  return (zonegroup.master_zone == zone_public_config.id);
+  return (get_zonegroup().master_zone == zone_public_config.id);
 }
 
 /**
@@ -6093,7 +6093,7 @@ bool RGWRados::is_syncing_bucket_meta(rgw_bucket& bucket)
   }
 
   /* zone is not master */
-  if (zonegroup.master_zone.compare(zone_public_config.id) != 0) {
+  if (get_zonegroup().master_zone.compare(zone_public_config.id) != 0) {
     return false;
   }
 
@@ -8405,7 +8405,7 @@ int RGWRados::bucket_index_link_olh(RGWObjState& olh_state, rgw_obj& obj_instanc
 
   cls_rgw_obj_key key(obj_instance.get_index_key_name(), obj_instance.get_instance());
   ret = cls_rgw_bucket_link_olh(bs.index_ctx, bs.bucket_obj, key, olh_state.olh_tag, delete_marker, op_tag, meta, olh_epoch,
-                                zone_public_config.log_data);
+                                get_zone().log_data);
   if (ret < 0) {
     return ret;
   }
@@ -8436,7 +8436,7 @@ int RGWRados::bucket_index_unlink_instance(rgw_obj& obj_instance, const string& 
   }
 
   cls_rgw_obj_key key(obj_instance.get_index_key_name(), obj_instance.get_instance());
-  ret = cls_rgw_bucket_unlink_instance(bs.index_ctx, bs.bucket_obj, key, op_tag, olh_epoch, zone_public_config.log_data);
+  ret = cls_rgw_bucket_unlink_instance(bs.index_ctx, bs.bucket_obj, key, op_tag, olh_epoch, get_zone().log_data);
   if (ret < 0) {
     return ret;
   }
@@ -9909,7 +9909,7 @@ int RGWRados::cls_obj_prepare_op(BucketShard& bs, RGWModifyOp op, string& tag,
 {
   ObjectWriteOperation o;
   cls_rgw_obj_key key(obj.get_index_key_name(), obj.get_instance());
-  cls_rgw_bucket_prepare_op(o, op, tag, key, obj.get_loc(), zone_public_config.log_data, bilog_flags);
+  cls_rgw_bucket_prepare_op(o, op, tag, key, obj.get_loc(), get_zone().log_data, bilog_flags);
   int r = bs.index_ctx.operate(bs.bucket_obj, &o);
   return r;
 }
@@ -9947,7 +9947,7 @@ int RGWRados::cls_obj_complete_op(BucketShard& bs, RGWModifyOp op, string& tag,
   ver.epoch = epoch;
   cls_rgw_obj_key key(ent.key.name, ent.key.instance);
   cls_rgw_bucket_complete_op(o, op, tag, ver, key, dir_meta, pro,
-                             zone_public_config.log_data, bilog_flags);
+                             get_zone().log_data, bilog_flags);
 
   AioCompletion *c = librados::Rados::aio_create_completion(NULL, NULL, NULL);
   int ret = bs.index_ctx.aio_operate(bs.bucket_obj, c, &o);
