@@ -1319,9 +1319,26 @@ string LFNIndex::get_full_path_subdir(const vector<string> &rel)
   return retval;
 }
 
+string LFNIndex::get_relative_path_subdir(const vector<string> &rel)
+{
+  string retval = ".";
+  for (vector<string>::const_iterator i = rel.begin();
+       i != rel.end();
+       ++i) {
+    retval += "/";
+    retval += mangle_path_component(*i);
+  }
+  return retval;
+}
+
 string LFNIndex::get_full_path(const vector<string> &rel, const string &name)
 {
   return get_full_path_subdir(rel) + "/" + name;
+}
+
+string LFNIndex::get_relative_path(const vector<string> &rel, const string &name)
+{
+  return get_relative_path_subdir(rel) + "/" + name;
 }
 
 string LFNIndex::mangle_path_component(const string &component)

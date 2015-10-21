@@ -543,11 +543,22 @@ private:
     const vector<string> &rel ///< [in] The subdir.
     ); ///< @return Full path to rel.
 
+  /// Get relative path the subdir
+  string get_relative_path_subdir(
+    const vector<string> &rel ///< [in] The subdir.
+    ); ///< @return relative path to rel.
+
   /// Get full path to object
   string get_full_path(
     const vector<string> &rel, ///< [in] Path to object.
     const string &name	       ///< [in] Filename of object.
     ); ///< @return Fullpath to object at name in rel.
+
+  /// Get relative path to object
+  string get_relative_path(
+    const vector<string> &rel, ///< [in] Path to object.
+    const string &name	       ///< [in] Filename of object.
+    ); ///< @return Relativepath to object at name in rel.
 
   /// Get mangled path component
   string mangle_path_component(
