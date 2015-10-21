@@ -2980,6 +2980,10 @@ int main(int argc, char **argv)
       info.request_uri = "/admin/realm/period";
 
       map<string, string> &params = info.args.get_params();
+      if (!realm_id.empty())
+        params["realm_id"] = realm_id;
+      if (!realm_name.empty())
+        params["realm_name"] = realm_name;
       if (!period_id.empty())
         params["period_id"] = period_id;
       if (!period_epoch.empty())
