@@ -74,31 +74,39 @@ const string PREFIX_OVERLAY = "V"; // u64 + offset -> value
 const string PREFIX_OMAP = "M"; // u64 + keyname -> value
 const string PREFIX_WAL = "L";  // write ahead log
 
+/*
+ * object name key structure
+ *
+ * 2 chars: shard (-- for none, or hex digit, so that we sort properly)
+ * encoded u64: poolid + 2^63 (so that it sorts properly)
+ * encoded u32: hash (bit reversed)
+ *
+ * 1 char: '.'
+ *
+ * escaped string: namespace
+ *
+ * 1 char: '<', '=', or '>'.  if =, then object key == object name, and
+ *         we are followed just by the key.  otherwise, we are followed by
+ *         the key and then the object name.
+ * escaped string: key
+ * escaped string: object name (unless '=' above)
+ *
+ * encoded u64: snap
+ * encoded u64: generation
+ */
 
 /*
- * key
+ * string encoding in the key
  *
  * The key string needs to lexicographically sort the same way that
  * ghobject_t does.  We do this by escaping anything <= to '%' with %
  * plus a 2 digit hex string, and anything >= '~' with ~ plus the two
  * hex digits.
  *
- * We use ! as a separator for strings; this works because it is < %
+ * We use ! as a terminator for strings; this works because it is < %
  * and will get escaped if it is present in the string.
  *
- * For the fixed length numeric fields, we just use hex and '.' as a
- * convenient visual separator.  Two oddities here:
- *
- *   1. for the -1 shard value we use --; it's the only negative value
- *      and it sorts < 0 that way.
- *
- *   2. for the pool value, we add 2^63 so that it sorts correctly
- *
- * We could do something much more compact here, but it would be less
- * readable by humans.  :/
  */
-
-const string KEY_SEP_S = "!";
 
 static void append_escaped(const string &in, string *out)
 {
@@ -114,6 +122,7 @@ static void append_escaped(const string &in, string *out)
       out->push_back(*i);
     }
   }
+  out->push_back('!');
 }
 
 static int decode_escaped(const char *p, string *out)
@@ -134,8 +143,136 @@ static int decode_escaped(const char *p, string *out)
   return p - orig_p;
 }
 
-// here is a sample (large) key
-// --.7fffffffffffffff.B9FA767A.!0aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa!0aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa!fffffffffffffffe.ffffffffffffffff
+// some things we encode in binary (as le32 or le64); print the
+// resulting key strings nicely
+string pretty_binary_string(const string& in)
+{
+  char buf[10];
+  string out;
+  out.reserve(in.length() * 3);
+  enum { NONE, HEX, STRING } mode = NONE;
+  unsigned from = 0, i;
+  for (i=0; i < in.length(); ++i) {
+    if ((in[i] < 32 || (unsigned char)in[i] > 126) ||
+	(mode == HEX && in.length() - i >= 4 &&
+	 ((in[i] < 32 || (unsigned char)in[i] > 126) ||
+	  (in[i+1] < 32 || (unsigned char)in[i+1] > 126) ||
+	  (in[i+2] < 32 || (unsigned char)in[i+2] > 126) ||
+	  (in[i+3] < 32 || (unsigned char)in[i+3] > 126)))) {
+      if (mode == STRING) {
+	out.append(in.substr(from, i - from));
+	out.push_back('\'');
+      }
+      if (mode != HEX) {
+	out.append("0x");
+	mode = HEX;
+      }
+      if (in.length() - i >= 4) {
+	// print a whole u32 at once
+	snprintf(buf, sizeof(buf), "%08x",
+		 (uint32_t)(((unsigned char)in[i] << 24) |
+			    ((unsigned char)in[i+1] << 16) |
+			    ((unsigned char)in[i+2] << 8) |
+			    ((unsigned char)in[i+3] << 0)));
+	i += 3;
+      } else {
+	snprintf(buf, sizeof(buf), "%02x", (int)(unsigned char)in[i]);
+      }
+      out.append(buf);
+    } else {
+      if (mode != STRING) {
+	out.push_back('\'');
+	mode = STRING;
+	from = i;
+      }
+    }
+  }
+  if (mode == STRING) {
+    out.append(in.substr(from, i - from));
+    out.push_back('\'');
+  }
+  return out;
+}
+
+static void _key_encode_shard(shard_id_t shard, string *key)
+{
+  // make field ordering match with ghobject_t compare operations
+  if (shard == shard_id_t::NO_SHARD) {
+    // otherwise ff will sort *after* 0, not before.
+    key->append("--");
+  } else {
+    char buf[32];
+    snprintf(buf, sizeof(buf), "%02x", (int)shard);
+    key->append(buf);
+  }
+}
+static const char *_key_decode_shard(const char *key, shard_id_t *pshard)
+{
+  if (key[0] == '-') {
+    *pshard = shard_id_t::NO_SHARD;
+  } else {
+    unsigned shard;
+    int r = sscanf(key, "%x", &shard);
+    if (r < 1)
+      return NULL;
+    *pshard = shard_id_t(shard);
+  }
+  return key + 2;
+}
+
+static void _key_encode_u32(uint32_t u, string *key)
+{
+  uint32_t bu;
+#ifdef CEPH_BIG_ENDIAN
+  bu = u;
+#elif defined(CEPH_LITTLE_ENDIAN)
+  bu = swab32(u);
+#else
+# error wtf
+#endif
+  key->append((char*)&bu, 4);
+}
+
+static const char *_key_decode_u32(const char *key, uint32_t *pu)
+{
+  uint32_t bu;
+  memcpy(&bu, key, 4);
+#ifdef CEPH_BIG_ENDIAN
+  *pu = bu;
+#elif defined(CEPH_LITTLE_ENDIAN)
+  *pu = swab32(bu);
+#else
+# error wtf
+#endif
+  return key + 4;
+}
+
+static void _key_encode_u64(uint64_t u, string *key)
+{
+  uint64_t bu;
+#ifdef CEPH_BIG_ENDIAN
+  bu = u;
+#elif defined(CEPH_LITTLE_ENDIAN)
+  bu = swab64(u);
+#else
+# error wtf
+#endif
+  key->append((char*)&bu, 8);
+}
+
+static const char *_key_decode_u64(const char *key, uint64_t *pu)
+{
+  uint64_t bu;
+  memcpy(&bu, key, 8);
+#ifdef CEPH_BIG_ENDIAN
+  *pu = bu;
+#elif defined(CEPH_LITTLE_ENDIAN)
+  *pu = swab64(bu);
+#else
+# error wtf
+#endif
+  return key + 8;
+}
 
 static void get_coll_key_range(const coll_t& cid, int bits,
 			       string *temp_start, string *temp_end,
@@ -148,56 +285,46 @@ static void get_coll_key_range(const coll_t& cid, int bits,
 
   spg_t pgid;
   if (cid.is_pg(&pgid)) {
-    char buf[PATH_MAX];
-
-    // make field ordering match with ghobject_t compare operations
-    if (pgid.shard == shard_id_t::NO_SHARD) {
-      // otherwise ff will sort *after* 0, not before.
-      *start = "--";
-    } else {
-      snprintf(buf, sizeof(buf), "%02x", (int)pgid.shard);
-      start->append(buf);
-    }
+    _key_encode_shard(pgid.shard, start);
     *end = *start;
     *temp_start = *start;
     *temp_end = *start;
 
-    snprintf(buf, sizeof(buf), ".%016llx.%08x.",
-	     (unsigned long long)(pgid.pool() + 0x8000000000000000ull),
-	     (unsigned)hobject_t::_reverse_bits(pgid.ps()));
-    start->append(buf);
-    snprintf(buf, sizeof(buf), ".%016llx.%08x.",
-	     (unsigned long long)((-2ll - pgid.pool()) + 0x8000000000000000ull),
-	     (unsigned)hobject_t::_reverse_bits(pgid.ps()));
-    temp_start->append(buf);
+    _key_encode_u64(pgid.pool() + 0x8000000000000000ull, start);
+    _key_encode_u64((-2ll - pgid.pool()) + 0x8000000000000000ull, temp_start);
+    _key_encode_u32(hobject_t::_reverse_bits(pgid.ps()), start);
+    _key_encode_u32(hobject_t::_reverse_bits(pgid.ps()), temp_start);
+    start->append(".");
+    temp_start->append(".");
 
-    uint64_t end_hash = hobject_t::_reverse_bits(pgid.ps());
-    end_hash += (1ull << (32-bits));
-    if (end_hash > 0xffffffff) {
-      snprintf(buf, sizeof(buf), ".%016llx.gggggggg.",
-	       (unsigned long long)(pgid.pool() + 0x8000000000000000ull));
-      end->append(buf);
-      snprintf(buf, sizeof(buf), ".%016llx.gggggggg.",
-	       (unsigned long long)((-2ll - pgid.pool()) + 0x8000000000000000ull));
-      temp_end->append(buf);
+    _key_encode_u64(pgid.pool() + 0x8000000000000000ull, end);
+    _key_encode_u64((-2ll - pgid.pool()) + 0x8000000000000000ull, temp_end);
+
+    uint64_t end_hash =
+      hobject_t::_reverse_bits(pgid.ps()) + (1ull << (32-bits));
+    if (end_hash <= 0xffffffffull) {
+      _key_encode_u32(end_hash, end);
+      _key_encode_u32(end_hash, temp_end);
+      end->append(".");
+      temp_end->append(".");
     } else {
-      snprintf(buf, sizeof(buf), ".%016llx.%08x.",
-	       (unsigned long long)(pgid.pool() + 0x8000000000000000ull),
-	       (unsigned)end_hash);
-      end->append(buf);
-      snprintf(buf, sizeof(buf), ".%016llx.%08x.",
-	       (unsigned long long)((-2ll - pgid.pool()) + 0x8000000000000000ull),
-	       (unsigned)end_hash);
-      temp_end->append(buf);
+      _key_encode_u32(0xffffffff, end);
+      _key_encode_u32(0xffffffff, temp_end);
+      end->append(":");
+      temp_end->append(":");
     }
-  } else if (cid.is_meta()) {
-    *start = "--.7fffffffffffffff.00000000.";
-    *end =   "--.7fffffffffffffff.gggggggg.";
+  } else {
+    _key_encode_shard(shard_id_t::NO_SHARD, start);
+    _key_encode_u64(-1ull + 0x8000000000000000ull, start);
+    *end = *start;
+    _key_encode_u32(0, start);
+    start->append(".");
+    _key_encode_u32(0xffffffff, end);
+    end->append(":");
+
     // no separate temp section
     *temp_start = *end;
     *temp_end = *end;
-  } else {
-    assert(0);
   }
 }
 
@@ -205,41 +332,39 @@ static int get_key_object(const string& key, ghobject_t *oid);
 
 static void get_object_key(const ghobject_t& oid, string *key)
 {
-  char buf[PATH_MAX];
-  char *t = buf;
-  char *end = t + sizeof(buf);
-
   key->clear();
 
-  // make field ordering match with ghobject_t compare operations
-  if (oid.shard_id == shard_id_t::NO_SHARD) {
-    // otherwise ff will sort *after* 0, not before.
-    *key = "--";
-  } else {
-    snprintf(buf, sizeof(buf), "%02x", (int)oid.shard_id);
-    key->append(buf);
-  }
-
-  t += snprintf(t, end - t, ".%016llx.%.*x.",
-		(unsigned long long)(oid.hobj.pool + 0x8000000000000000ull),
-		(int)(sizeof(oid.hobj.get_hash())*2),
-		(uint32_t)oid.hobj.get_bitwise_key_u32());
-  key->append(buf);
+  _key_encode_shard(oid.shard_id, key);
+  _key_encode_u64(oid.hobj.pool + 0x8000000000000000ull, key);
+  _key_encode_u32(oid.hobj.get_bitwise_key_u32(), key);
+  key->append(".");
 
   append_escaped(oid.hobj.nspace, key);
-  key->append(KEY_SEP_S);
 
-  append_escaped(oid.hobj.get_effective_key(), key);
-  key->append(KEY_SEP_S);
+  if (oid.hobj.get_key().length()) {
+    // is a key... could be < = or >.
+    // (ASCII chars < = and > sort in that order, yay)
+    if (oid.hobj.get_key() < oid.hobj.oid.name) {
+      key->append("<");
+      append_escaped(oid.hobj.get_key(), key);
+      append_escaped(oid.hobj.oid.name, key);
+    } else if (oid.hobj.get_key() > oid.hobj.oid.name) {
+      key->append(">");
+      append_escaped(oid.hobj.get_key(), key);
+      append_escaped(oid.hobj.oid.name, key);
+    } else {
+      // same as no key
+      key->append("=");
+      append_escaped(oid.hobj.oid.name, key);
+    }
+  } else {
+    // no key
+    key->append("=");
+    append_escaped(oid.hobj.oid.name, key);
+  }
 
-  append_escaped(oid.hobj.oid.name, key);
-  key->append(KEY_SEP_S);
-
-  t = buf;
-  t += snprintf(t, end - t, "%016llx.%016llx",
-		(long long unsigned)oid.hobj.snap,
-		(long long unsigned)oid.generation);
-  key->append(buf);
+  _key_encode_u64(oid.hobj.snap, key);
+  _key_encode_u64(oid.generation, key);
 
   // sanity check
   if (true) {
@@ -247,7 +372,7 @@ static void get_object_key(const ghobject_t& oid, string *key)
     int r = get_key_object(*key, &t);
     if (r || t != oid) {
       derr << "  r " << r << dendl;
-      derr << "key " << *key << dendl;
+      derr << "key " << pretty_binary_string(*key) << dendl;
       derr << "oid " << oid << dendl;
       derr << "  t " << t << dendl;
       assert(t == oid);
@@ -260,104 +385,108 @@ static int get_key_object(const string& key, ghobject_t *oid)
   int r;
   const char *p = key.c_str();
 
-  if (key[0] == '-') {
-    oid->shard_id = shard_id_t::NO_SHARD;
-  } else {
-    unsigned shard;
-    r = sscanf(p, "%x", &shard);
-    if (r < 1)
-      return -1;
-    oid->shard_id = shard_id_t(shard);
-  }
-  if (p[2] != '.' || p[19] != '.' || p[28] != '.')
+  p = _key_decode_shard(p, &oid->shard_id);
+  if (!p)
     return -2;
 
-  unsigned hash;
   uint64_t pool;
-  r = sscanf(p + 3, "%llx.%x", (unsigned long long*)&pool, &hash);
-  if (r < 2)
+  p = _key_decode_u64(p, &pool);
+  if (!p)
     return -3;
   oid->hobj.pool = pool - 0x8000000000000000;
+
+  unsigned hash;
+  p = _key_decode_u32(p, &hash);
+  if (!p)
+    return -4;
   oid->hobj.set_bitwise_key_u32(hash);
-  p += 3 + 2 + 16 + 8;
+  if (*p != '.')
+    return -5;
+  ++p;
 
   r = decode_escaped(p, &oid->hobj.nspace);
-  if (r < 0)
-    return -4;
-  p += r + 1;
-  string okey;
-  r = decode_escaped(p, &okey);
-  if (r < 0)
-    return -5;
-  p += r + 1;
-  r = decode_escaped(p, &oid->hobj.oid.name);
   if (r < 0)
     return -6;
   p += r + 1;
 
-  oid->hobj.set_key(okey);
-
-  r = sscanf(p, "%llx.%llx", (unsigned long long*)&oid->hobj.snap,
-	     (unsigned long long*)&oid->generation);
-  if (r < 2)
+  if (*p == '=') {
+    // no key
+    ++p;
+    r = decode_escaped(p, &oid->hobj.oid.name);
+    if (r < 0)
+      return -8;
+    p += r + 1;
+  } else if (*p == '<' || *p == '>') {
+    // key + name
+    ++p;
+    string okey;
+    r = decode_escaped(p, &okey);
+    if (r < 0)
+      return -8;
+    p += r + 1;
+    r = decode_escaped(p, &oid->hobj.oid.name);
+    if (r < 0)
+      return -9;
+    p += r + 1;
+  } else {
+    // malformed
     return -7;
+  }
+
+  p = _key_decode_u64(p, &oid->hobj.snap.val);
+  if (!p)
+    return -10;
+  p = _key_decode_u64(p, &oid->generation);
+  if (!p)
+    return -11;
   return 0;
 }
 
 
 void get_overlay_key(uint64_t nid, uint64_t offset, string *out)
 {
-  char buf[64];
-  // note: these don't have to sort by nid; no need to pad 0's
-  snprintf(buf, sizeof(buf), "%llx %016llx", (unsigned long long)nid,
-	   (unsigned long long)offset);
-  *out = buf;
+  _key_encode_u64(nid, out);
+  _key_encode_u64(offset, out);
 }
 
 // '-' < '.' < '~'
 void get_omap_header(uint64_t id, string *out)
 {
-  char buf[32];
-  snprintf(buf, sizeof(buf), "%016llx-", (unsigned long long)id);
-  *out = buf;
+  _key_encode_u64(id, out);
+  out->push_back('-');
 }
 
 // hmm, I don't think there's any need to escape the user key since we
 // have a clean prefix.
 void get_omap_key(uint64_t id, const string& key, string *out)
 {
-  char buf[32];
-  snprintf(buf, sizeof(buf), "%016llx.", (unsigned long long)id);
-  *out = buf;
+  _key_encode_u64(id, out);
+  out->push_back('.');
   out->append(key);
 }
 
 void rewrite_omap_key(uint64_t id, string old, string *out)
 {
-  char buf[32];
-  snprintf(buf, sizeof(buf), "%016llx", (unsigned long long)id);
-  *out = buf;
-  out->append(old.substr(16));
+  _key_encode_u64(id, out);
+  out->append(old.substr(out->length()));
 }
 
 void decode_omap_key(const string& key, string *user_key)
 {
-  *user_key = key.substr(17);
+  *user_key = key.substr(sizeof(uint64_t) + 1);
 }
 
 void get_omap_tail(uint64_t id, string *out)
 {
-  char buf[32];
-  snprintf(buf, sizeof(buf), "%016llx~", (unsigned long long)id);
-  *out = buf;
+  _key_encode_u64(id, out);
+  out->push_back('~');
 }
 
 void get_wal_key(uint64_t seq, string *out)
 {
-  char buf[32];
-  snprintf(buf, sizeof(buf), "%016llx", (unsigned long long)seq);
-  *out = buf;
+  _key_encode_u64(seq, out);
 }
+
 
 // Onode
 
@@ -548,7 +677,8 @@ NewStore::OnodeRef NewStore::Collection::get_onode(
   string key;
   get_object_key(oid, &key);
 
-  dout(20) << __func__ << " oid " << oid << " key '" << key << "'" << dendl;
+  dout(20) << __func__ << " oid " << oid << " key "
+	   << pretty_binary_string(key) << dendl;
 
   bufferlist v;
   int r = store->db->get(PREFIX_OBJ, key, &v);
@@ -1586,7 +1716,7 @@ int NewStore::collection_list(
   string temp_start_key, temp_end_key;
   string start_key, end_key;
   bool set_next = false;
-  const char *pend;
+  string pend;
   bool temp;
 
   ghobject_t static_next;
@@ -1597,8 +1727,11 @@ int NewStore::collection_list(
     goto out;
   get_coll_key_range(cid, c->cnode.bits, &temp_start_key, &temp_end_key,
 		     &start_key, &end_key);
-  dout(20) << __func__ << " range " << temp_start_key << " to "
-	   << temp_end_key << " and " << start_key << " to " << end_key
+  dout(20) << __func__
+	   << " range " << pretty_binary_string(temp_start_key)
+	   << " to " << pretty_binary_string(temp_end_key)
+	   << " and " << pretty_binary_string(start_key)
+	   << " to " << pretty_binary_string(end_key)
 	   << " start " << start << dendl;
   it = db->get_iterator(PREFIX_OBJ);
   if (start == ghobject_t()) {
@@ -1619,25 +1752,26 @@ int NewStore::collection_list(
     it->lower_bound(k);
   }
   if (end.hobj.is_max()) {
-    pend = temp ? temp_end_key.c_str() : end_key.c_str();
+    pend = temp ? temp_end_key : end_key;
   } else {
     get_object_key(end, &end_key);
     if (end.hobj.is_temp()) {
       if (temp)
-	pend = end_key.c_str();
+	pend = end_key;
       else
 	goto out;
     } else {
-      pend = temp ? temp_end_key.c_str() : end_key.c_str();
+      pend = temp ? temp_end_key : end_key;
     }
   }
-  dout(30) << __func__ << " pend " << pend << dendl;
+  dout(20) << __func__ << " pend " << pretty_binary_string(pend) << dendl;
   while (true) {
-    if (!it->valid() || strcmp(it->key().c_str(), pend) > 0) {
+    if (!it->valid() || it->key() > pend) {
       if (!it->valid())
 	dout(20) << __func__ << " iterator not valid (end of db?)" << dendl;
       else
-	dout(20) << __func__ << " key " << it->key() << " > " << end << dendl;
+	dout(20) << __func__ << " key " << pretty_binary_string(it->key())
+		 << " > " << end << dendl;
       if (temp) {
 	if (end.hobj.is_temp()) {
 	  break;
@@ -1645,13 +1779,13 @@ int NewStore::collection_list(
 	dout(30) << __func__ << " switch to non-temp namespace" << dendl;
 	temp = false;
 	it->upper_bound(start_key);
-	pend = end_key.c_str();
-	dout(30) << __func__ << " pend " << pend << dendl;
+	pend = end_key;
+	dout(30) << __func__ << " pend " << pretty_binary_string(pend) << dendl;
 	continue;
       }
       break;
     }
-    dout(20) << __func__ << " key " << it->key() << dendl;
+    dout(20) << __func__ << " key " << pretty_binary_string(it->key()) << dendl;
     ghobject_t oid;
     int r = get_key_object(it->key(), &oid);
     assert(r == 0);
@@ -1800,7 +1934,8 @@ int NewStore::omap_get(
       } else {
 	string user_key;
 	decode_omap_key(it->key(), &user_key);
-	dout(30) << __func__ << "  got " << it->key() << " -> " << user_key << dendl;
+	dout(30) << __func__ << "  got " << pretty_binary_string(it->key())
+		 << " -> " << user_key << dendl;
 	assert(it->key() < tail);
 	(*out)[user_key] = it->value();
       }
@@ -1885,7 +2020,8 @@ int NewStore::omap_get_keys(
       }
       string user_key;
       decode_omap_key(it->key(), &user_key);
-      dout(30) << __func__ << "  got " << it->key() << " -> " << user_key << dendl;
+      dout(30) << __func__ << "  got " << pretty_binary_string(it->key())
+	       << " -> " << user_key << dendl;
       assert(it->key() < tail);
       keys->insert(user_key);
       it->next();
@@ -1922,7 +2058,8 @@ int NewStore::omap_get_values(
     get_omap_key(o->onode.omap_head, *p, &key);
     bufferlist val;
     if (db->get(PREFIX_OMAP, key, &val) >= 0) {
-      dout(30) << __func__ << "  got " << key << " -> " << *p << dendl;
+      dout(30) << __func__ << "  got " << pretty_binary_string(key)
+	       << " -> " << *p << dendl;
       out->insert(make_pair(*p, val));
     }
   }
@@ -1957,10 +2094,12 @@ int NewStore::omap_check_keys(
     get_omap_key(o->onode.omap_head, *p, &key);
     bufferlist val;
     if (db->get(PREFIX_OMAP, key, &val) >= 0) {
-      dout(30) << __func__ << "  have " << key << " -> " << *p << dendl;
+      dout(30) << __func__ << "  have " << pretty_binary_string(key)
+	       << " -> " << *p << dendl;
       out->insert(*p);
     } else {
-      dout(30) << __func__ << "  miss " << key << " -> " << *p << dendl;
+      dout(30) << __func__ << "  miss " << pretty_binary_string(key)
+	       << " -> " << *p << dendl;
     }
   }
  out:
@@ -2336,6 +2475,7 @@ int NewStore::_txc_finalize(OpSequencer *osr, TransContext *txc)
        ++p) {
     bufferlist bl;
     ::encode((*p)->onode, bl);
+    dout(20) << " onode size is " << bl.length() << dendl;
     txc->t->set(PREFIX_OBJ, (*p)->key, bl);
 
     Mutex::Locker l((*p)->flush_lock);
@@ -4196,7 +4336,8 @@ int NewStore::_omap_setkeys(TransContext *txc,
     ::decode(value, p);
     string final_key;
     get_omap_key(o->onode.omap_head, key, &final_key);
-    dout(30) << __func__ << "  " << final_key << " <- " << value << dendl;
+    dout(30) << __func__ << "  " << pretty_binary_string(final_key)
+	     << " <- " << key << dendl;
     txc->t->set(PREFIX_OMAP, final_key, value);
   }
   r = 0;
@@ -4264,7 +4405,8 @@ int NewStore::_omap_rmkeys(TransContext *txc,
     ::decode(key, p);
     string final_key;
     get_omap_key(o->onode.omap_head, key, &final_key);
-    dout(30) << __func__ << "  rm " << final_key << " <- " << key << dendl;
+    dout(30) << __func__ << "  rm " << pretty_binary_string(final_key)
+	     << " <- " << key << dendl;
     txc->t->rmkey(PREFIX_OMAP, final_key);
   }
   r = 0;
@@ -4300,7 +4442,8 @@ int NewStore::_omap_rmkey_range(TransContext *txc,
   it->lower_bound(key_first);
   while (it->valid()) {
     if (it->key() >= key_last) {
-      dout(30) << __func__ << "  stop at " << key_last << dendl;
+      dout(30) << __func__ << "  stop at " << pretty_binary_string(key_last)
+	       << dendl;
       break;
     }
     txc->t->rmkey(PREFIX_OMAP, it->key());
@@ -4407,7 +4550,8 @@ int NewStore::_clone(TransContext *txc,
 	dout(30) << __func__ << "  reached tail" << dendl;
 	break;
       } else {
-	dout(30) << __func__ << "  got header/data " << it->key() << dendl;
+	dout(30) << __func__ << "  got header/data "
+		 << pretty_binary_string(it->key()) << dendl;
 	assert(it->key() < tail);
 	rewrite_omap_key(newo->onode.omap_head, it->key(), &key);
 	txc->t->set(PREFIX_OMAP, key, it->value());
