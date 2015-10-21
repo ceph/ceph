@@ -422,7 +422,7 @@ def new_style_command(parsed_args, cmdargs, target, sigdict, inbuf, verbose):
                 except Exception as e:
                     print >> sys.stderr, \
                             'error handling command target: {0}'.format(e)
-                    return 1, '', ''
+                    continue
                 valid_dict = validate_command(sigdict, cmdargs, verbose)
                 if valid_dict:
                     if parsed_args.output_format:
