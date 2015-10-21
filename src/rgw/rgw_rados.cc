@@ -813,9 +813,11 @@ const string RGWPeriod::get_period_oid_prefix()
 const string RGWPeriod::get_period_oid()
 {
   std::ostringstream oss;
-  oss << get_period_oid_prefix() << "." << epoch;
-
-  return oss.str();;
+  oss << get_period_oid_prefix();
+  // skip the epoch for the staging period
+  if (id != get_staging_id(realm_id))
+    oss << "." << epoch;
+  return oss.str();
 }
 
 int RGWPeriod::read_latest_epoch(RGWPeriodLatestEpochInfo& info)
@@ -964,9 +966,7 @@ int RGWPeriod::store_info(bool exclusive)
 
   rgw_bucket pool(pool_name.c_str());
 
-  std::ostringstream oss;
-  oss << get_info_oid_prefix() << id << "." << epoch;
-  string oid = oss.str();
+  string oid = get_period_oid();
   bufferlist bl;
   ::encode(*this, bl);
   return rgw_put_system_obj(store, pool, oid, bl.c_str(), bl.length(), exclusive, NULL, 0, NULL);
@@ -1056,7 +1056,6 @@ int RGWPeriod::update()
 void RGWPeriod::fork()
 {
   predecessor_uuid = id;
-  epoch = 1;
   id = get_staging_id(realm_id);
   period_map.reset();
 }
