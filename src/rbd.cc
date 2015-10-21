@@ -3265,12 +3265,6 @@ int main(int argc, const char **argv)
     }
   }
 
-  if (features != 0 && !format_specified) {
-    format = 2;
-    format_specified = true;
-  } else if (features == 0) {
-    features = g_conf->rbd_default_features;
-  }
   if (shared) {
     features &= ~(RBD_FEATURE_EXCLUSIVE_LOCK | RBD_FEATURE_OBJECT_MAP);
   }
@@ -3405,8 +3399,13 @@ if (!set_conf_param(v, p1, p2, p3)) { \
 
   /* get defaults from rbd_default_* options to keep behavior consistent with
      manual short-form options */
-  if (!format_specified)
-    format = g_conf->rbd_default_format;
+  if (features != 0 && !format_specified) {
+    format = 2;
+  } else if (features == 0) {
+    features = g_conf->rbd_default_features;
+    if (!format_specified)
+      format = g_conf->rbd_default_format;
+  }
   if (!order)
     order = g_conf->rbd_default_order;
   if (!stripe_unit)
@@ -3581,6 +3580,10 @@ if (!set_conf_param(v, p1, p2, p3)) { \
   if ((opt_cmd == OPT_CLONE) && size) {
     cerr << "rbd: clone must begin at size of parent" << std::endl;
     return EXIT_FAILURE;
+  }
+  if ((opt_cmd == OPT_CLONE) &&
+      ((features & RBD_FEATURE_LAYERING) != RBD_FEATURE_LAYERING)) {
+    features |= RBD_FEATURE_LAYERING;
   }
 
   if ((opt_cmd == OPT_RENAME) && (strcmp(poolname, dest_poolname) != 0)) {
