@@ -3563,6 +3563,8 @@ reprotect_and_return_err:
       return;
     }
 
+    RWLock::RLocker owner_locker(ictx->owner_lock);
+
     // readahead
     const md_config_t *conf = ictx->cct->_conf;
     if (ictx->object_cacher && conf->rbd_readahead_max_bytes > 0 &&
