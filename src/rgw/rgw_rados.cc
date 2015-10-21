@@ -343,7 +343,7 @@ int RGWSystemMetaObj::init(CephContext *_cct, RGWRados *_store, bool setup_obj, 
     }
   }
 
-  return read_info(id);
+  return read_info(id, old_format);
 }
 
 int RGWSystemMetaObj::read_default(RGWDefaultSystemMetaObjInfo& default_info, const string& oid)
@@ -2770,7 +2770,7 @@ int RGWRados::convert_regionmap()
   } else if (ret == -ENOENT) {
     return 0;
   }
-    
+
   try {
     bufferlist::iterator iter = bl.begin();
     ::decode(zonegroupmap, iter);
@@ -2782,6 +2782,7 @@ int RGWRados::convert_regionmap()
   for (map<string, RGWZoneGroup>::iterator iter = zonegroupmap.zonegroups.begin();
        iter != zonegroupmap.zonegroups.end(); ++iter) {
     RGWZoneGroup& zonegroup = iter->second;
+    ret = zonegroup.init(cct, this, false);
     ret = zonegroup.update();
     if (ret < 0 && ret != -ENOENT) {
       ldout(cct, 0) << "Error could not update zonegroup " << zonegroup.get_name() << ": " <<
@@ -2843,11 +2844,11 @@ int RGWRados::replace_region_with_zonegroup()
   {
     derr << "create zonegroup " << *iter << dendl;
     /* read region info default has no data */
-    if (*iter != default_zonegroup_name){    
+    if (*iter != default_zonegroup_name){
       RGWZoneGroup zonegroup(*iter);   
       int ret = zonegroup.init(cct, this, true, true);
       if (ret < 0) {
-	lderr(cct) << "failed init default zonegroup: ret "<< ret << " " << cpp_strerror(-ret) << dendl;
+	lderr(cct) << "failed init zonegroup: ret "<< ret << " " << cpp_strerror(-ret) << dendl;
 	return ret;
       }
       derr << "create zonegroup: store_info " << *iter << dendl;    
