@@ -2751,6 +2751,57 @@ static void add_new_connection_to_map(map<string, RGWRESTConn *> &zonegroup_conn
 }
 
 
+int RGWRados::convert_regionmap()
+{
+  RGWZoneGroupMap zonegroupmap;
+
+  string pool_name = cct->_conf->rgw_zone_root_pool;
+  if (pool_name.empty()) {
+    pool_name = RGW_DEFAULT_ZONE_ROOT_POOL;
+  }
+  string oid = region_map_oid; 
+
+  rgw_bucket pool(pool_name.c_str());
+  bufferlist bl;
+  RGWObjectCtx obj_ctx(this);
+  int ret = rgw_get_system_obj(this, obj_ctx, pool, oid, bl, NULL, NULL);
+  if (ret < 0 && ret != -ENOENT) {
+    return ret;
+  } else if (ret == -ENOENT) {
+    return 0;
+  }
+    
+  try {
+    bufferlist::iterator iter = bl.begin();
+    ::decode(zonegroupmap, iter);
+  } catch (buffer::error& err) {
+    derr << "error decoding regionmap from " << pool << ":" << oid << dendl;
+    return -EIO;
+  }
+  
+  for (map<string, RGWZoneGroup>::iterator iter = zonegroupmap.zonegroups.begin();
+       iter != zonegroupmap.zonegroups.end(); ++iter) {
+    RGWZoneGroup& zonegroup = iter->second;
+    ret = zonegroup.update();
+    if (ret < 0 && ret != -ENOENT) {
+      ldout(cct, 0) << "Error could not update zonegroup " << zonegroup.get_name() << ": " <<
+	cpp_strerror(-ret) << dendl;
+      return ret;
+    } else if (ret == -ENOENT) {
+      ret = zonegroup.create();
+      if (ret < 0) {
+	ldout(cct, 0) << "Error could not create " << zonegroup.get_name() << ": " <<
+	  cpp_strerror(-ret) << dendl;
+	return ret;
+      }
+    }
+  }
+
+  #warning need to update quota
+
+  return 0;
+}
+
 /** 
  * Replace all region configuration with zonegroup for
  * backward compatability
@@ -2849,6 +2900,12 @@ int RGWRados::init_complete()
   ret = replace_region_with_zonegroup();
   if (ret < 0) {
     lderr(cct) << "failed converting region to zonegroup : ret "<< ret << " " << cpp_strerror(-ret) << dendl;
+    return ret;
+  }
+
+  ret = convert_regionmap();
+  if (ret < 0) {
+    lderr(cct) << "failed converting regionmap: " << cpp_strerror(-ret) << dendl;
     return ret;
   }
   
