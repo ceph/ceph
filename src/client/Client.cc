@@ -4911,8 +4911,20 @@ int Client::may_setattr(Inode *in, struct stat *st, int mask, int uid, int gid)
   }
 
   if (mask & (CEPH_SETATTR_CTIME | CEPH_SETATTR_MTIME | CEPH_SETATTR_ATIME)) {
-    if (uid != 0 && (uid_t)uid != in->uid)
-      goto out;
+    if (uid != 0 && (uid_t)uid != in->uid) {
+      int check_mask = CEPH_SETATTR_CTIME;
+      if (!(mask & CEPH_SETATTR_MTIME_NOW))
+	check_mask |= CEPH_SETATTR_MTIME;
+      if (!(mask & CEPH_SETATTR_ATIME_NOW))
+	check_mask |= CEPH_SETATTR_ATIME;
+      if (check_mask & mask) {
+	goto out;
+      } else {
+	r = inode_permission(in, uid, groups, MAY_WRITE);
+	if (r < 0)
+	  goto out;
+      }
+    }
   }
   r = 0;
 out:
@@ -6301,6 +6313,10 @@ int Client::_setattr(Inode *in, struct stat *attr, int mask, int uid, int gid,
 
 int Client::_setattr(InodeRef &in, struct stat *attr, int mask)
 {
+  mask &= (CEPH_SETATTR_MODE | CEPH_SETATTR_UID |
+	   CEPH_SETATTR_GID | CEPH_SETATTR_MTIME |
+	   CEPH_SETATTR_ATIME | CEPH_SETATTR_SIZE |
+	   CEPH_SETATTR_CTIME);
   if (cct->_conf->client_permissions) {
     int r = may_setattr(in.get(), attr, mask);
     if (r < 0)
@@ -9365,6 +9381,8 @@ int Client::ll_setattr(Inode *in, struct stat *attr, int mask, int uid,
     if (res < 0)
       return res;
   }
+
+  mask &= ~(CEPH_SETATTR_MTIME_NOW | CEPH_SETATTR_ATIME_NOW);
 
   InodeRef target(in);
   int res = _setattr(in, attr, mask, uid, gid, &target);
