@@ -13,7 +13,7 @@ RGWRESTConn::RGWRESTConn(CephContext *_cct, RGWRados *store, const list<string>&
   for (i = 0, iter = remote_endpoints.begin(); iter != remote_endpoints.end(); ++iter, ++i) {
     endpoints[i] = *iter;
   }
-  key = store->zone.system_key;
+  key = store->get_zone_params().system_key;
   zone_group = store->get_zonegroup().get_id();
 }
 

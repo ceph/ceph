@@ -624,19 +624,10 @@ struct rgw_bucket {
 
   rgw_bucket() { }
   // cppcheck-suppress noExplicitConstructor
-  rgw_bucket(const cls_user_bucket& b) : tenant(b.tenant), name(b.name), data_pool(b.data_pool),
+  rgw_bucket(const cls_user_bucket& b) : name(b.name), data_pool(b.data_pool),
 					 data_extra_pool(b.data_extra_pool),
 					 index_pool(b.index_pool), marker(b.marker),
-					 bucket_id(b.bucket_id), oid(b.oid) {}
-  // cppcheck-suppress noExplicitConstructor
-  rgw_bucket(const cls_user_bucket& b) {
-    name = b.name;
-    data_pool = b.data_pool;
-    data_extra_pool = b.data_extra_pool;
-    index_pool = b.index_pool;
-    marker = b.marker;
-    bucket_id = b.bucket_id;
-  }
+					 bucket_id(b.bucket_id) {}
   rgw_bucket(const string& s) : name(s) {
     data_pool = index_pool = s;
     marker = "";
