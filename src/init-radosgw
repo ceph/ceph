@@ -104,7 +104,11 @@ case "$1" in
 	    elif [ -n "$SYSTEMD_RUN" ]; then
                 $SYSTEMD_RUN -r su "$user" -c "ulimit -n 32768; $RADOSGW -n $name"
             else
-		ulimit -n 32768
+                ulimit -n 32768
+                core_limit=`ceph-conf -n $name 'core file limit'`
+                if [ -z $core_limit ]
+                    DAEMON_COREFILE_LIMIT=$core_limit
+                fi
                 daemon --user="$user" "$RADOSGW -n $name"
             fi
         done
