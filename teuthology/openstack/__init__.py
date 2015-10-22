@@ -229,19 +229,36 @@ class OpenStack(object):
                     break
             return success
 
-    def exists(self, name_or_id):
+    @staticmethod
+    def show(name_or_id):
         """
-        Return true if the OpenStack name_or_id instance exists,
-        false otherwise.
+        Run "openstack server show -f json <name_or_id>" and return the result.
+
+        Does not handle exceptions.
         """
         try:
-            server = json.loads(
+            return json.loads(
                 misc.sh("openstack server show -f json %s" % name_or_id)
             )
         except CalledProcessError:
             return False
-        if (self.get_value(server, 'Name') == name_or_id or
-                self.get_value(server, 'ID') == name_or_id):
+
+    @classmethod
+    def exists(cls, name_or_id, server_info=None):
+        """
+        Return true if the OpenStack name_or_id instance exists,
+        false otherwise.
+
+        :param name_or_id:  The name or ID of the server to query
+        :param server_info: Optionally, use already-retrieved results of
+                            self.show()
+        """
+        if server_info is None:
+            server_info = cls.show(name_or_id)
+        if not server_info:
+            return False
+        if (cls.get_value(server_info, 'Name') == name_or_id or
+                cls.get_value(server_info, 'ID') == name_or_id):
             return True
         return False
 
@@ -269,6 +286,7 @@ class OpenStack(object):
         """
         return re.findall(network + '=([\d.]+)',
                           self.get_addresses(instance_id))[0]
+
 
 class TeuthologyOpenStack(OpenStack):
 
