@@ -627,6 +627,22 @@ EOF
 fi
 
 if [ "$start_mds" -eq 1 -a "$CEPH_NUM_MDS" -gt 0 ]; then
+    cmd="$CEPH_ADM osd pool create cephfs_data 8"
+    echo $cmd
+    $cmd
+
+    cmd="$CEPH_ADM osd pool create cephfs_metadata 8"
+    echo $cmd
+    $cmd
+
+    cmd="$CEPH_ADM fs new cephfs cephfs_metadata cephfs_data"
+    echo $cmd
+    $cmd
+
+    cmd="$CEPH_ADM mds set max_mds $CEPH_NUM_MDS"
+    echo $cmd
+    $cmd
+
     mds=0
     for name in a b c d e f g h i j k l m n o p
     do
@@ -657,17 +673,6 @@ EOF
 			mon 'allow *' osd 'allow *' mds 'allow'
 	    fi
 
-        cmd="$CEPH_ADM osd pool create cephfs_data 8"
-        echo $cmd
-        $cmd
-
-        cmd="$CEPH_ADM osd pool create cephfs_metadata 8"
-        echo $cmd
-        $cmd
-
-        cmd="$CEPH_ADM fs new cephfs cephfs_metadata cephfs_data"
-        echo $cmd
-        $cmd
 	fi
 	
 	run 'mds' $CEPH_BIN/ceph-mds -i $name $ARGS $CMDS_ARGS
@@ -682,9 +687,6 @@ EOF
 #$CEPH_BIN/ceph-mds -d $ARGS --mds_thrash_fragments 0 --mds_thrash_exports 0 #--debug_ms 20
 #$CEPH_ADM mds set max_mds 2
     done
-    cmd="$CEPH_ADM mds set max_mds $CEPH_NUM_MDS"
-    echo $cmd
-    $cmd
 fi
 
 if [ "$ec" -eq 1 ]; then
