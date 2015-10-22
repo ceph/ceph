@@ -2856,13 +2856,13 @@ int RGWRados::replace_region_with_zonegroup()
       derr << "create zonegroup: name " << *iter << dendl;
       ret = zonegroup.update();
       if (ret < 0 && ret != -EEXIST) {
-	lderr(cct) << "failed to store zonegroup " << *iter << ": ret "<< ret << " " << cpp_strerror(-ret)
+	lderr(cct) << "failed to update zonegroup " << *iter << ": ret "<< ret << " " << cpp_strerror(-ret)
 		   << dendl;
 	return ret;
       }
       ret = zonegroup.update_name();
       if (ret < 0 && ret != -EEXIST) {
-	lderr(cct) << "failed to store zonegroup " << *iter << ": ret "<< ret << " " << cpp_strerror(-ret)
+	lderr(cct) << "failed to update_name for zonegroup " << *iter << ": ret "<< ret << " " << cpp_strerror(-ret)
 		   << dendl;
 	return ret;
       }
@@ -2871,6 +2871,25 @@ int RGWRados::replace_region_with_zonegroup()
 	if (ret < 0) {
 	  lderr(cct) << "failed to set_as_default " << *iter << ": ret "<< ret << " " << cpp_strerror(-ret)
 		     << dendl;
+	  return ret;
+	}
+      }
+      for (map<string, RGWZone>::const_iterator iter = zonegroup.zones.begin(); iter != zonegroup.zones.end();
+	   iter ++) {
+	RGWZoneParams zoneparams(iter->first, iter->first);
+	ret = zoneparams.init(cct, this);
+	if (ret < 0) {
+	  lderr(cct) << "failed to init zoneparams  " << iter->first <<  ": " << cpp_strerror(-ret) << dendl;
+	  return ret;
+	}
+	ret = zoneparams.update();
+	if (ret < 0 && ret != -EEXIST) {
+	  lderr(cct) << "failed to update zoneparams " << iter->first <<  ": " << cpp_strerror(-ret) << dendl;
+	  return ret;
+	}
+	ret = zoneparams.update_name();
+	if (ret < 0 && ret != -EEXIST) {
+	  lderr(cct) << "failed to init zoneparams " << iter->first <<  ": " << cpp_strerror(-ret) << dendl;
 	  return ret;
 	}
       }
@@ -2883,7 +2902,6 @@ int RGWRados::replace_region_with_zonegroup()
       }
     }
   }
-
 
   if (!cct->_conf->rgw_region.empty() && cct->_conf->rgw_zonegroup.empty()) {
     ret = cct->_conf->set_val("rgw_zonegroup", cct->_conf->rgw_region.c_str());
