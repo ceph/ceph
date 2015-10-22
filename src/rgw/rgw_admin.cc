@@ -1259,8 +1259,8 @@ int do_check_object_locator(const string& bucket_name, bool fix, bool remove_bad
 }
 
 #define MAX_REST_RESPONSE (128 * 1024) // we expect a very small response
-int send_to_remote_gateway(const string& remote, req_info& info, JSONParser& p,
-                           bufferlist &in_data)
+static int send_to_remote_gateway(const string& remote, req_info& info,
+                                  bufferlist& in_data, JSONParser& parser)
 {
   bufferlist response;
   RGWRESTConn *conn;
@@ -1271,7 +1271,7 @@ int send_to_remote_gateway(const string& remote, req_info& info, JSONParser& p,
     }
     conn = store->rest_master_conn;
   } else {
-    map<string, RGWRESTConn *>::iterator iter = store->zonegroup_conn_map.find(remote);
+    auto iter = store->zonegroup_conn_map.find(remote);
     if (iter == store->zonegroup_conn_map.end()) {
       cerr << "could not find connection to: " << remote << std::endl;
       return -ENOENT;
@@ -1282,16 +1282,16 @@ int send_to_remote_gateway(const string& remote, req_info& info, JSONParser& p,
   if (ret < 0) {
     return ret;
   }
-  ret = p.parse(response.c_str(), response.length());
+  ret = parser.parse(response.c_str(), response.length());
   if (ret < 0) {
-    cout << "failed to parse response" << std::endl;
+    cerr << "failed to parse response" << std::endl;
     return ret;
   }
   return 0;
 }
 
-int send_to_url(const string& url, RGWAccessKey& key, req_info& info,
-                JSONParser& p, bufferlist &in_data)
+static int send_to_url(const string& url, RGWAccessKey& key, req_info& info,
+                       bufferlist& in_data, JSONParser& parser)
 {
   list<pair<string, string> > params;
   RGWRESTSimpleRequest req(g_ceph_context, url, NULL, &params);
@@ -1301,12 +1301,31 @@ int send_to_url(const string& url, RGWAccessKey& key, req_info& info,
   if (ret < 0) {
     return ret;
   }
-  ret = p.parse(response.c_str(), response.length());
+  ret = parser.parse(response.c_str(), response.length());
   if (ret < 0) {
     cout << "failed to parse response" << std::endl;
     return ret;
   }
   return 0;
+}
+
+static int send_to_remote_or_url(const string& remote, const string& url,
+                                 const string& access, const string& secret,
+                                 req_info& info, bufferlist& in_data,
+                                 JSONParser& parser)
+{
+  if (url.empty()) {
+    return send_to_remote_gateway(remote, info, in_data, parser);
+  }
+
+  if (access.empty() || secret.empty()) {
+    cerr << "An --access-key and --secret must be provided with --url." << std::endl;
+    return -EINVAL;
+  }
+  RGWAccessKey key;
+  key.id = access;
+  key.key = secret;
+  return send_to_url(url, key, info, in_data, parser);
 }
 
 static int init_bucket_for_sync(const string& bucket_name, string& bucket_id)
@@ -2989,22 +3008,10 @@ int main(int argc, char **argv)
       if (!period_epoch.empty())
         params["epoch"] = period_epoch;
 
-      int ret = 0;
-
       bufferlist bl;
       JSONParser p;
-      if (!url.empty()) {
-        if (access_key.empty() || secret_key.empty()) {
-          cerr << "An --access-key and --secret must be provided with --url." << std::endl;
-          return -EINVAL;
-        }
-        RGWAccessKey key;
-        key.id = access_key;
-        key.key = secret_key;
-        ret = send_to_url(url, key, info, p, bl);
-      } else {
-        ret = send_to_remote_gateway(remote, info, p, bl);
-      }
+      int ret = send_to_remote_or_url(remote, url, access_key, secret_key,
+                                      info, bl, p);
       if (ret < 0) {
         cerr << "request failed: " << cpp_strerror(-ret) << std::endl;
         return ret;
