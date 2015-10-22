@@ -358,6 +358,9 @@ class ProvisionOpenStack(OpenStack):
         if not self.exists(name_or_id):
             return True
         volumes = self.list_volumes(name_or_id)
+        for volume in volumes:
+            misc.sh("openstack server remove volume %s %s" %
+                    (name_or_id, volume))
         misc.sh("openstack server delete --wait " + name_or_id)
         for volume in volumes:
             misc.sh("openstack volume delete " + volume)
