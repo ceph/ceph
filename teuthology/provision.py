@@ -253,6 +253,7 @@ class ProvisionOpenStack(OpenStack):
                     raise e
                 misc.sh("openstack volume create -f json " +
                         config['openstack'].get('volume-create', '') + " " +
+                        " --property ownedby=" + config.openstack['ip'] +
                         " --size " + str(volumes['size']) + " " +
                         volume_name)
             with safe_while(sleep=2, tries=100,

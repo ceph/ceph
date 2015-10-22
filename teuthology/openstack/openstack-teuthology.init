@@ -75,6 +75,11 @@ case $1 in
                     while read uuid ; do
                     eval openstack server delete $uuid
                 done
+                openstack volume list --long -f json | \
+                    jq ".[] | select(.Properties | contains(\"ownedby='$ip'\")) | .ID" | \
+                    while read uuid ; do
+                    eval openstack volume delete $uuid
+                done
                 rm -fr /home/$user/src/* /tmp/stampsdir
                 ;;
         restart)
