@@ -262,7 +262,7 @@ class TeuthologyOpenStack(OpenStack):
     def __init__(self, args, config, argv):
         """
         args is of type argparse.Namespace as returned
-        when parsing argv and config is the job 
+        when parsing argv and config is the job
         configuration. The argv argument can be re-used
         to build the arguments list of teuthology-suite.
         """
@@ -595,7 +595,7 @@ openstack security group rule create --proto udp --dst-port 53 teuthology # dns
             " " + self.net() +
             " --key-name " + self.args.key_name +
             " --user-data " + user_data +
-            security_group + 
+            security_group +
             " --wait " + self.args.name +
             " -f json")
         instance_id = self.get_value(json.loads(instance), 'id')
