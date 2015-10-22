@@ -278,8 +278,10 @@ class ProvisionOpenStack(OpenStack):
         :param server_info: Optionally, use already-retrieved results of
                             self.show()
         """
-        if not server_info:
+        if server_info is None:
             server_info = self.show(name_or_id)
+        if not server_info:
+            return []
         volumes = self.get_value(server_info,
                                  'os-extended-volumes:volumes_attached')
         return [volume['id'] for volume in volumes ]
@@ -363,9 +365,15 @@ class ProvisionOpenStack(OpenStack):
         if not self.exists(name_or_id, server_info=server_info):
             return True
         volumes = self.list_volumes(name_or_id, server_info=server_info)
-        for volume in volumes:
-            misc.sh("openstack server remove volume %s %s" %
-                    (name_or_id, volume))
+        if self.get_value(server_info, 'status').lower() == 'error':
+            log.info(
+                "Instance %s is in an error state; skipping volume detachment",
+                name_or_id
+            )
+        else:
+            for volume in volumes:
+                misc.sh("openstack server remove volume %s %s" %
+                        (name_or_id, volume))
         misc.sh("openstack server delete " + name_or_id)
         for volume in volumes:
             misc.sh("openstack volume delete " + volume)
