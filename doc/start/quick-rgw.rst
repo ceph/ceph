@@ -12,7 +12,10 @@ data directory and create a gateway instance for you.
    ``7480``, or set the port to a preferred port (e.g., port ``80``) in your Ceph
    configuration file.
 
-To start a Ceph Object Gateway, follow this procedure:
+To start a Ceph Object Gateway, follow the steps below:
+
+Installing Ceph Object Gateway
+==============================
 
 #. Execute the pre-installation steps on your ``client-node``. If you intend to
    use Civetweb's default port ``7480``, you must open it using either
@@ -24,13 +27,19 @@ To start a Ceph Object Gateway, follow this procedure:
 
     ceph-deploy install --rgw <client-node> [<client-node> ...]
 
-#. From the working directory of your administration server, create an instance
-   of the Ceph Object Gateway on the ``client-node``. For example::
+Creating the Ceph Object Gateway Instance
+=========================================
+
+From the working directory of your administration server, create an instance of
+the Ceph Object Gateway on the ``client-node``. For example::
 
     ceph-deploy rgw create
 
-   Once the gateway is running, you should be able to access it on port
-   ``7480``. (e.g., ``http://client-node:7480``).
+Once the gateway is running, you should be able to access it on port ``7480``.
+(e.g., ``http://client-node:7480``).
+
+Configuring the Ceph Object Gateway Instance
+============================================
 
 #. To change the default port (e.g,. to port ``80``), modify your Ceph
    configuration file. Add a section entitled ``[client.rgw.<client-node>]``,
