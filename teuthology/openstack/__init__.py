@@ -71,10 +71,16 @@ class OpenStack(object):
     @staticmethod
     def get_value(result, field):
         """
-        Get the value of a field from a result returned by the openstack command
-        in json format.
+        Get the value of a field from a result returned by the openstack
+        command in json format.
+
+        :param result:  A list of dicts in a format similar to the output of
+                        'openstack server show'
+        :param field:   The name of the field whose value to retrieve. Case is
+                        ignored.
         """
-        return filter(lambda v: v['Field'] == field, result)[0]['Value']
+        filter_func = lambda v: v['Field'].lower() == field.lower()
+        return filter(filter_func, result)[0]['Value']
 
     def image_exists(self, image):
         """
