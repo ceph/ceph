@@ -42,13 +42,17 @@ inline int sync_filesystem(int fd)
     return 0;
 #endif
 
-#ifdef BTRFS_IOC_SYNC
-  if (::ioctl(fd, BTRFS_IOC_SYNC) == 0)
+#if defined(HAVE_SYS_SYNCFS) || defined(SYS_syncfs) || defined(__NR_syncfs)
+  else if (errno == ENOSYS) {
+    sync();
     return 0;
-#endif
-
+  } else {
+    return -errno;
+  }
+#else
   sync();
   return 0;
+#endif
 }
 
 #endif
