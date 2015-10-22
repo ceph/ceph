@@ -1409,6 +1409,9 @@ public:
   void fork();
   int update();
 
+  // commit a staging period; only for use on master zone
+  int commit(RGWRealm& realm, const RGWPeriod &current_period);
+
   void encode(bufferlist& bl) const {
     ENCODE_START(1, 1, bl);    
     ::encode(id, bl);
