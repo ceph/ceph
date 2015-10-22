@@ -1072,6 +1072,69 @@ void RGWPeriod::update(const RGWZoneGroupMap& map)
   period_map.master_zonegroup = map.master_zonegroup;
 }
 
+int RGWPeriod::commit(RGWRealm& realm, const RGWPeriod& current_period)
+{
+  // gateway must be in the master zone to commit
+  if (master_zone != store->get_zone_params().get_id()) {
+    lderr(cct) << "period commit sent to zone " << store->get_zone_params().get_id()
+        << ", not period's master zone " << master_zone << dendl;
+    return -EINVAL;
+  }
+  // period predecessor must match current period
+  if (predecessor_uuid != current_period.get_id()) {
+    lderr(cct) << "period predecessor " << predecessor_uuid
+        << " does not match current period " << current_period.get_id()
+        << dendl;
+    return -EINVAL;
+  }
+  // did the master zone change?
+  if (master_zone != current_period.get_master_zone()) {
+    // create with a new period id
+    int r = create(true);
+    if (r < 0) {
+      lderr(cct) << "failed to create new period: " << cpp_strerror(-r) << dendl;
+      return r;
+    }
+    // set as current period
+    r = realm.set_current_period(id); // TODO: add sync status argument
+    if (r < 0) {
+      lderr(cct) << "failed to update realm's current period: "
+          << cpp_strerror(-r) << dendl;
+      return r;
+    }
+    ldout(cct, 4) << "Promoted to master zone and committed new period "
+        << id << dendl;
+    // TODO: notify zone for dynamic reconfiguration
+    return 0;
+  }
+  // period must be based on predecessor's current epoch
+  if (epoch != current_period.get_epoch()) {
+    lderr(cct) << "period epoch " << epoch << " does not match "
+        "predecessor epoch " << current_period.get_epoch() << dendl;
+    return -EINVAL;
+  }
+  // set period as next epoch
+  set_id(current_period.get_id());
+  set_epoch(current_period.get_epoch() + 1);
+  set_predecessor(current_period.get_predecessor());
+  // write the period to rados
+  int r = store_info(false);
+  if (r < 0) {
+    lderr(cct) << "failed to store period: " << cpp_strerror(-r) << dendl;
+    return r;
+  }
+  // set as latest epoch
+  r = set_latest_epoch(epoch);
+  if (r < 0) {
+    lderr(cct) << "failed to set latest epoch: " << cpp_strerror(-r) << dendl;
+    return r;
+  }
+  ldout(cct, 4) << "Committed new epoch " << epoch
+      << " for period " << id << dendl;
+  // TODO: notify zone for dynamic reconfiguration
+  return 0;
+}
+
 int RGWZoneParams::create_default(bool old_format)
 {
   name = default_zone_name;
