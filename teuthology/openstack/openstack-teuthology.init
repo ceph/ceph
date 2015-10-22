@@ -80,6 +80,7 @@ case $1 in
                     while read uuid ; do
                     eval openstack volume delete $uuid
                 done
+                perl -pi -e 's/.*gitbuilder_host.*/gitbuilder_host: gitbuilder.ceph.com/' /home/$user/.teuthology.yaml
                 rm -fr /home/$user/src/* /tmp/stampsdir
                 ;;
         restart)
