@@ -44,7 +44,7 @@ class ObjecterWriteback : public WritebackHandler {
 
   virtual bool can_scattered_write() { return true; }
   virtual ceph_tid_t write(const object_t& oid, const object_locator_t& oloc,
-                           vector<pair<uint64_t, bufferlist> >& io_vec,
+                           vector<pair<uint64_t, bufferlist> >&& io_vec,
 			   const SnapContext& snapc, ceph::real_time mtime,
 			   uint64_t trunc_size, __u32 trunc_seq,
 			   Context *oncommit) {

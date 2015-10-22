@@ -977,7 +977,7 @@ void ObjectCacher::bh_write_scattered(list<BufferHead*>& blist)
   C_WriteCommit *oncommit = new C_WriteCommit(this, ob->oloc.pool, ob->get_soid(), ranges);
 
   ceph_tid_t tid = writeback_handler.write(ob->get_oid(), ob->get_oloc(),
-					   io_vec, snapc, last_write,
+					   std::move(io_vec), snapc, last_write,
 					   ob->truncate_size, ob->truncate_seq,
 					   oncommit);
   oncommit->tid = tid;
