@@ -9,7 +9,7 @@
 #include <errno.h>
 
 #if defined(__linux__)
-#include <limits.h>
+#include <linux/limits.h>
 #define CHAIN_XATTR_MAX_NAME_LEN ((XATTR_NAME_MAX + 1) / 2)
 #elif defined(__APPLE__)
 #include <sys/xattr.h>
