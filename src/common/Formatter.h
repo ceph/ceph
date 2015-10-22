@@ -133,7 +133,7 @@ namespace ceph {
   class XMLFormatter : public Formatter {
   public:
     static const char *XML_1_DTD;
-    XMLFormatter(bool pretty = false);
+    XMLFormatter(bool pretty = false, bool lowercased_underscored = false);
 
     void flush(std::ostream& os);
     void reset();
@@ -165,6 +165,7 @@ namespace ceph {
     std::stringstream m_ss, m_pending_string;
     std::deque<std::string> m_sections;
     bool m_pretty;
+    bool m_lowercased_underscored;
     std::string m_pending_string_name;
   };
 
