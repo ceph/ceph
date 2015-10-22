@@ -29,8 +29,63 @@ import tempfile
 
 import teuthology
 from teuthology import misc
-from teuthology.openstack import TeuthologyOpenStack
+from teuthology.openstack import TeuthologyOpenStack, OpenStack
 import scripts.openstack
+
+class TestOpenStack(object):
+
+    def test_interpret_hints(self):
+        defaults = {
+            'machine': {
+                'ram': 0,
+                'disk': 0,
+                'cpus': 0,
+            },
+            'volumes': {
+                'count': 0,
+                'size': 0,
+            },
+        }
+        expected_disk = 10 # first hint larger than the second
+        expected_ram = 20 # second hint larger than the first
+        expected_cpus = 0 # not set, hence zero by default
+        expected_count = 30 # second hint larger than the first
+        expected_size = 40 # does not exist in the first hint
+        hints = [
+            {
+                'machine': {
+                    'ram': 2,
+                    'disk': expected_disk,
+                },
+                'volumes': {
+                    'count': 9,
+                    'size': expected_size,
+                },
+            },
+            {
+                'machine': {
+                    'ram': expected_ram,
+                    'disk': 3,
+                },
+                'volumes': {
+                    'count': expected_count,
+                },
+            },
+        ]
+        hint = OpenStack().interpret_hints(defaults, hints)
+        assert hint == {
+            'machine': {
+                'ram': expected_ram,
+                'disk': expected_disk,
+                'cpus': expected_cpus,
+            },
+            'volumes': {
+                'count': expected_count,
+                'size': expected_size,
+            }
+        }
+        assert defaults == OpenStack().interpret_hints(defaults, None)
+
 
 class TestTeuthologyOpenStack(object):
 
