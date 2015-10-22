@@ -324,7 +324,7 @@ namespace librbd {
     tracepoint(librbd, clone2_enter, p_ioctx.get_pool_name().c_str(), p_ioctx.get_id(), p_name, p_snap_name, c_ioctx.get_pool_name().c_str(), c_ioctx.get_id(), c_name, features, stripe_unit, stripe_count);
     int r = librbd::clone(p_ioctx, p_name, p_snap_name, c_ioctx, c_name,
 			 features, c_order, stripe_unit, stripe_count);
-    tracepoint(librbd, clone_exit, r, *c_order);
+    tracepoint(librbd, clone2_exit, r, *c_order);
     return r;
   }
 
