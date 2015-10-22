@@ -73,7 +73,6 @@ void _usage()
   cerr << "  objects expire             run expired objects cleanup\n";
   cerr << "  period prepare             prepare a new period\n";
   cerr << "  period delete              delete a period\n";
-  cerr << "  period activate            activate a period \n";
   cerr << "  period get                 get period info\n";
   cerr << "  period get-current         get current period info\n";
   cerr << "  period pull                pull a period\n";
@@ -347,7 +346,6 @@ enum {
   OPT_PERIOD_DELETE,
   OPT_PERIOD_GET,
   OPT_PERIOD_GET_CURRENT,
-  OPT_PERIOD_ACTIVATE,
   OPT_PERIOD_PULL,
   OPT_PERIOD_PUSH,
   OPT_PERIOD_LIST,
@@ -521,8 +519,6 @@ static int get_cmd(const char *cmd, const char *prev_cmd, const char *prev_prev_
       return OPT_PERIOD_GET;
     if (strcmp(cmd, "get-current") == 0)
       return OPT_PERIOD_GET_CURRENT;
-    if (strcmp(cmd, "activate") == 0)
-      return OPT_PERIOD_ACTIVATE;
     if (strcmp(cmd, "pull") == 0)
       return OPT_PERIOD_PULL;
     if (strcmp(cmd, "push") == 0)
@@ -1904,8 +1900,7 @@ int main(int argc, char **argv)
 			 opt_cmd == OPT_ZONE_CREATE || opt_cmd == OPT_ZONE_DELETE ||
                          opt_cmd == OPT_ZONE_GET || opt_cmd == OPT_ZONE_SET || opt_cmd == OPT_ZONE_RENAME ||
                          opt_cmd == OPT_ZONE_LIST || opt_cmd == OPT_ZONE_MODIFY || opt_cmd == OPT_ZONE_DEFAULT ||
-			 opt_cmd == OPT_REALM_CREATE ||
-			 opt_cmd == OPT_PERIOD_PREPARE || opt_cmd == OPT_PERIOD_ACTIVATE ||
+			 opt_cmd == OPT_REALM_CREATE || opt_cmd == OPT_PERIOD_PREPARE ||
 			 opt_cmd == OPT_PERIOD_DELETE || opt_cmd == OPT_PERIOD_GET ||
 			 opt_cmd == OPT_PERIOD_GET_CURRENT || opt_cmd == OPT_PERIOD_LIST ||
 			 (opt_cmd == OPT_PERIOD_UPDATE && !commit) ||
@@ -2021,40 +2016,6 @@ int main(int argc, char **argv)
 	encode_json("current_period", current_id, formatter);
 	formatter->close_section();
 	formatter->flush(cout);
-      }
-      break;
-    case OPT_PERIOD_ACTIVATE:
-      {
-	if (period_id.empty()) {
-	  cerr << "Missing period id" << std::endl;
-	  return -EINVAL;
-	}
-	RGWRealm realm(realm_id, realm_name);
-	int ret = realm.init(g_ceph_context, store);
-	if (ret < 0 ) {
-	  cerr << "Error initializing realm " << cpp_strerror(-ret) << std::endl;
-	  return ret;
-	}
-	/* read latest sync data */
-	RGWMetaSyncStatusManager sync(store);
-
-	ret = sync.init();
-	if (ret < 0) {
-	  cerr << "ERROR: sync.init() returned ret=" << ret << std::endl;
-	  return -ret;
-	}
-
-	ret = sync.read_sync_status();
-	if (ret < 0) {
-	  cerr << "ERROR: sync.read_sync_status() returned ret=" << ret << std::endl;
-	  return -ret;
-	}
-
-	ret = realm.set_current_period(period_id, &sync.get_sync_status());
-	if (ret < 0 ) {
-	  cerr << "Error setting current period " << period_id << ":" << cpp_strerror(-ret) << std::endl;
-	  return ret;
-	}
       }
       break;
     case OPT_PERIOD_LIST:
