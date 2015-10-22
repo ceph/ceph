@@ -138,6 +138,14 @@ public:
       fullauth.index();
       fulldiv.index();
     }
+    void set_div_bounds(eversion_t head, eversion_t tail) {
+      fulldiv.tail = divinfo.log_tail = tail;
+      fulldiv.head = divinfo.last_update = head;
+    }
+    void set_auth_bounds(eversion_t head, eversion_t tail) {
+      fullauth.tail = authinfo.log_tail = tail;
+      fullauth.head = authinfo.last_update = head;
+    }
     const IndexedLog &get_fullauth() const { return fullauth; }
     const IndexedLog &get_fulldiv() const { return fulldiv; }
     const pg_info_t &get_authinfo() const { return authinfo; }
@@ -234,6 +242,8 @@ public:
 
     proc_replica_log(
       t, oinfo, olog, omissing, pg_shard_t(1, 0));
+
+    assert(oinfo.last_update >= log.tail);
 
     if (!tcase.base.empty()) {
       ASSERT_EQ(tcase.base.rbegin()->version, oinfo.last_update);
@@ -1270,8 +1280,8 @@ TEST_F(PGLogTest, proc_replica_log) {
     pg_shard_t from;
 
     eversion_t last_update(1, 1);
-    oinfo.last_update = last_update;
-    eversion_t last_complete(2, 1);
+    log.head = olog.head = oinfo.last_update = last_update;
+    eversion_t last_complete(1, 1);
     oinfo.last_complete = last_complete;
 
     EXPECT_TRUE(t.empty());
@@ -1470,12 +1480,12 @@ TEST_F(PGLogTest, proc_replica_log) {
   }
 
   /*        +--------------------------+
-            |  log              olog   |
+            |  olog              log   |
             +--------+-------+---------+
             |        |object |         |
             |version | hash  | version |
             |        |       |         |
-       tail > (1,1)  |  x5   |  (1,1)  < tail
+       tail > (1,1)  |  x9   |  (1,1)  < tail
             |        |       |         |
             |        |       |         |
             | (1,2)  |  x3   |  (1,2)  |
@@ -1503,34 +1513,38 @@ TEST_F(PGLogTest, proc_replica_log) {
     pg_shard_t from;
 
     eversion_t last_update(1, 2);
+    hobject_t divergent_object;
+    divergent_object.hash = 0x9;
 
     {
       pg_log_entry_t e;
       e.mod_desc.mark_unrollbackable();
 
       e.version = eversion_t(1, 1);
-      e.soid.hash = 0x5;
+      e.soid = divergent_object;
       log.tail = e.version;
       log.log.push_back(e);
       e.version = last_update;
       e.soid.hash = 0x3;
       log.log.push_back(e);
-      e.version = eversion_t(1,3);
-      e.soid.hash = 0x9;
+      e.version = eversion_t(2, 3);
+      e.prior_version = eversion_t(1, 1);
+      e.soid = divergent_object;
       e.op = pg_log_entry_t::DELETE;
       log.log.push_back(e);
       log.head = e.version;
       log.index();
 
       e.version = eversion_t(1, 1);
-      e.soid.hash = 0x5;
+      e.soid = divergent_object;
       olog.tail = e.version;
       olog.log.push_back(e);
       e.version = last_update;
       e.soid.hash = 0x3;
       olog.log.push_back(e);
-      e.version = eversion_t(2, 3);
-      e.soid.hash = 0x9;
+      e.version = eversion_t(1, 3);
+      e.prior_version = eversion_t(1, 1);
+      e.soid = divergent_object;
       e.op = pg_log_entry_t::DELETE;
       olog.log.push_back(e);
       olog.head = e.version;
@@ -1547,28 +1561,30 @@ TEST_F(PGLogTest, proc_replica_log) {
     proc_replica_log(t, oinfo, olog, omissing, from);
 
     EXPECT_TRUE(t.empty());
-    EXPECT_FALSE(omissing.have_missing());
+    EXPECT_TRUE(omissing.have_missing());
+    EXPECT_TRUE(omissing.is_missing(divergent_object));
+    EXPECT_EQ(omissing.missing[divergent_object].have, eversion_t(0, 0));
+    EXPECT_EQ(omissing.missing[divergent_object].need, eversion_t(1, 1));
     EXPECT_EQ(last_update, oinfo.last_update);
-    EXPECT_EQ(last_update, oinfo.last_complete);
   }
 
   /*        +--------------------------+
-            |  log              olog   |
+            |  olog              log   |
             +--------+-------+---------+
             |        |object |         |
             |version | hash  | version |
             |        |       |         |
-       tail > (1,1)  |  x5   |  (1,1)  < tail
+       tail > (1,1)  |  x9   |  (1,1)  < tail
             |        |       |         |
             |        |       |         |
             | (1,2)  |  x3   |  (1,2)  |
             |        |       |         |
             |        |       |         |
        head > (1,3)  |  x9   |         |
-            | DELETE |       |         |
+            | MODIFY |       |         |
             |        |       |         |
             |        |  x9   |  (2,3)  < head
-            |        |       |  MODIFY |
+            |        |       |  DELETE |
             |        |       |         |
             +--------+-------+---------+
 
@@ -1593,28 +1609,30 @@ TEST_F(PGLogTest, proc_replica_log) {
       e.mod_desc.mark_unrollbackable();
 
       e.version = eversion_t(1, 1);
-      e.soid.hash = 0x5;
+      e.soid = divergent_object;
       log.tail = e.version;
       log.log.push_back(e);
       e.version = last_update;
       e.soid.hash = 0x3;
       log.log.push_back(e);
-      e.version = eversion_t(1, 3);
-      e.soid.hash = 0x9;
+      e.version = eversion_t(2, 3);
+      e.prior_version = eversion_t(1, 1);
+      e.soid = divergent_object;
       e.op = pg_log_entry_t::DELETE;
       log.log.push_back(e);
       log.head = e.version;
       log.index();
 
       e.version = eversion_t(1, 1);
-      e.soid.hash = 0x5;
+      e.soid = divergent_object;
       olog.tail = e.version;
       olog.log.push_back(e);
       e.version = last_update;
       e.soid.hash = 0x3;
       olog.log.push_back(e);
-      e.version = eversion_t(2, 3);
-      e.soid.hash = 0x9;
+      e.version = eversion_t(1, 3);
+      e.prior_version = eversion_t(1, 1);
+      e.soid = divergent_object;
       divergent_object = e.soid;
       omissing.add(divergent_object, e.version, eversion_t());
       e.op = pg_log_entry_t::MODIFY;
@@ -1628,16 +1646,18 @@ TEST_F(PGLogTest, proc_replica_log) {
     EXPECT_TRUE(t.empty());
     EXPECT_TRUE(omissing.have_missing());
     EXPECT_TRUE(omissing.is_missing(divergent_object));
-    EXPECT_EQ(eversion_t(2, 3), omissing.missing[divergent_object].need);
+    EXPECT_EQ(eversion_t(1, 3), omissing.missing[divergent_object].need);
     EXPECT_EQ(olog.head, oinfo.last_update);
     EXPECT_EQ(olog.head, oinfo.last_complete);
 
     proc_replica_log(t, oinfo, olog, omissing, from);
 
     EXPECT_TRUE(t.empty());
-    EXPECT_FALSE(omissing.have_missing());
+    EXPECT_TRUE(omissing.have_missing());
+    EXPECT_TRUE(omissing.is_missing(divergent_object));
+    EXPECT_EQ(omissing.missing[divergent_object].have, eversion_t(0, 0));
+    EXPECT_EQ(omissing.missing[divergent_object].need, eversion_t(1, 1));
     EXPECT_EQ(last_update, oinfo.last_update);
-    EXPECT_EQ(last_update, oinfo.last_complete);
   }
 
   /*        +--------------------------+
@@ -1859,6 +1879,20 @@ TEST_F(PGLogTest, merge_log_prior_version_have) {
   t.init.add(mk_obj(1), mk_evt(10, 101), mk_evt(10, 100));
 
   t.setup();
+  run_test_case(t);
+}
+
+TEST_F(PGLogTest, merge_log_split_missing_entries_at_head) {
+  TestCase t;
+  t.auth.push_back(mk_ple_mod_rb(mk_obj(1), mk_evt(10, 100), mk_evt(8, 70)));
+  t.auth.push_back(mk_ple_mod_rb(mk_obj(1), mk_evt(15, 150), mk_evt(10, 100)));
+
+  t.div.push_back(mk_ple_mod(mk_obj(1), mk_evt(8, 70), mk_evt(8, 65)));
+
+  t.setup();
+  t.set_div_bounds(mk_evt(9, 79), mk_evt(8, 69));
+  t.set_auth_bounds(mk_evt(10, 160), mk_evt(9, 77));
+  t.final.add(mk_obj(1), mk_evt(15, 150), mk_evt(8, 70));
   run_test_case(t);
 }
 
