@@ -1176,7 +1176,9 @@ const string& RGWZoneParams::get_predefined_name(CephContext *cct) {
 
 int RGWZoneParams::init(CephContext *cct, RGWRados *store, bool setup_obj, bool old_format)
 {
-  name = cct->_conf->rgw_zone;
+  if (name.empty()) {
+    name = cct->_conf->rgw_zone;
+  }
 
   int ret = RGWSystemMetaObj::init(cct, store, setup_obj, old_format);
   if (ret < 0) {
@@ -2845,14 +2847,20 @@ int RGWRados::replace_region_with_zonegroup()
     derr << "create zonegroup " << *iter << dendl;
     /* read region info default has no data */
     if (*iter != default_zonegroup_name){
-      RGWZoneGroup zonegroup(*iter);   
+      RGWZoneGroup zonegroup(*iter);
       int ret = zonegroup.init(cct, this, true, true);
       if (ret < 0) {
 	lderr(cct) << "failed init zonegroup: ret "<< ret << " " << cpp_strerror(-ret) << dendl;
 	return ret;
       }
-      derr << "create zonegroup: store_info " << *iter << dendl;    
+      derr << "create zonegroup: name " << *iter << dendl;
       ret = zonegroup.update();
+      if (ret < 0 && ret != -EEXIST) {
+	lderr(cct) << "failed to store zonegroup " << *iter << ": ret "<< ret << " " << cpp_strerror(-ret)
+		   << dendl;
+	return ret;
+      }
+      ret = zonegroup.update_name();
       if (ret < 0 && ret != -EEXIST) {
 	lderr(cct) << "failed to store zonegroup " << *iter << ": ret "<< ret << " " << cpp_strerror(-ret)
 		   << dendl;
@@ -2873,8 +2881,6 @@ int RGWRados::replace_region_with_zonegroup()
 		   << dendl;
 	return ret;
       }
-      lderr(cct) << "delete region " << *iter << ": ret "<< ret << " " << cpp_strerror(-ret)
-		   << dendl;
     }
   }
 
@@ -2957,6 +2963,8 @@ int RGWRados::init_complete()
       lderr(cct) << "failed reading zonegroup info: ret "<< ret << " " << cpp_strerror(-ret) << dendl;
       return ret;
     } else if (ret == -ENOENT) {
+      derr << "zonegroup create_default " << dendl;
+
       ret = zonegroup.create_default();
       if (ret < 0) {
 	lderr(cct) << "failure in zonegroup create_default: ret "<< ret << " " << cpp_strerror(-ret)
