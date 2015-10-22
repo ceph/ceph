@@ -53,7 +53,7 @@ Major Changes from Hammer
     experimental. SHEC trades some additional storage space for faster
     repair.
   * There is now a unified queue (and thus prioritization) of client
-    IO, recovery, scrubbing, and snapshot trimming.
+    IO, scrubbing, and snapshot trimming.
   * There have been many improvements to low-level repair tooling
     (ceph-objectstore-tool).
   * The internal ObjectStore API has been significantly cleaned up in order
