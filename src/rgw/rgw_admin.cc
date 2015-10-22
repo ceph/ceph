@@ -2579,16 +2579,8 @@ int main(int argc, char **argv)
       break;
     case OPT_ZONE_GET:
       {
-	RGWZoneGroup zonegroup(zonegroup_id, zonegroup_name);
-	int ret;
-	if (!zonegroup_id.empty() || !zonegroup_name.empty()) {
-	  ret = zonegroup.init(g_ceph_context, store);
-	  if (ret < 0) {
-	    cerr << "WARNING: failed to initialize zonegroup" << std::endl;
-	  }
-	}
-	RGWZoneParams zone;
-	ret = zone.init(g_ceph_context, store);
+	RGWZoneParams zone(zone_id, zone_name);
+	int ret = zone.init(g_ceph_context, store);
 	if (ret < 0) {
 	  cerr << "unable to initialize zone: " << cpp_strerror(-ret) << std::endl;
 	  return -ret;
