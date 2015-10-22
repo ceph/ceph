@@ -791,6 +791,7 @@ public:
   int delete_obj(bool old_format = false);
   int rename(const string& new_name);
   int update() { return store_info(false);}
+  int update_name() { return store_name(false);}
   int read();
   int write(bool exclusive);
 
