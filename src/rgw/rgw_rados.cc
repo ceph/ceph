@@ -2973,6 +2973,9 @@ int RGWRados::init_complete()
   }
 
   if (!has_period_zone) {
+    if (cct->_conf->rgw_zone.empty()) {
+      zone_params.set_name(default_zone_name);
+    }
     ret = zone_params.init(cct, this);
     if (ret < 0 && ret != -ENOENT) {
       lderr(cct) << "failed reading zone info: ret "<< ret << " " << cpp_strerror(-ret) << dendl;
