@@ -31,6 +31,8 @@ import subprocess
 import tempfile
 import teuthology
 
+from subprocess import CalledProcessError
+
 from teuthology.contextutil import safe_while
 from teuthology.config import config as teuth_config
 from teuthology.orchestra import connection
@@ -226,10 +228,15 @@ class OpenStack(object):
         Return true if the OpenStack name_or_id instance exists,
         false otherwise.
         """
-        servers = json.loads(misc.sh("openstack server list -f json"))
-        for server in servers:
-            if (server['ID'] == name_or_id or server['Name'] == name_or_id):
-                return True
+        try:
+            server = json.loads(
+                misc.sh("openstack server show -f json %s" % id)
+            )
+        except CalledProcessError:
+            return False
+        if (self.get_value(server, 'Name') == name_or_id or
+                self.get_value(server, 'ID') == name_or_id):
+            return True
         return False
 
     @staticmethod
