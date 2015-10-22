@@ -3726,6 +3726,145 @@ error:
 
 }
 
+
+bool RGWBulkDelete::Deleter::verify_permission(RGWBucketInfo& binfo,
+                                               map<string, bufferlist>& battrs,
+                                               ACLOwner& bucket_owner /* out */)
+{
+  int ret = 0;
+
+  RGWAccessControlPolicy bacl(store->ctx());
+  rgw_obj_key no_obj;
+  ret = read_policy(store, s, binfo, battrs, &bacl, binfo.bucket, no_obj);
+  if (ret < 0) {
+    return false;
+  }
+
+  bucket_owner = bacl.get_owner();
+
+  return verify_bucket_permission(s, &bacl, RGW_PERM_WRITE);
+}
+
+bool RGWBulkDelete::Deleter::delete_single(const acct_path_t& path)
+{
+  int ret = 0;
+
+  auto& obj_ctx = *static_cast<RGWObjectCtx *>(s->obj_ctx);
+  RGWBucketInfo binfo;
+  map<string, bufferlist> battrs;
+  ret = store->get_bucket_info(obj_ctx, path.bucket_name, binfo, NULL, &battrs);
+  if (ret < 0) {
+    goto binfo_fail;
+  }
+
+  /* We do need a new scope due to goto. */
+  {
+    rgw_obj obj(binfo.bucket, path.obj_key);
+    obj_ctx.set_atomic(obj);
+
+    RGWRados::Object del_target(store, binfo, obj_ctx, obj);
+    RGWRados::Object::Delete del_op(&del_target);
+
+    ACLOwner owner;
+    if (!verify_permission(binfo, battrs, obj, owner)) {
+      ret = -EACCES;
+      goto auth_fail;
+    }
+
+    del_op.params.bucket_owner = binfo.owner;
+    del_op.params.versioning_status = binfo.versioning_status();
+    del_op.params.obj_owner = owner;
+
+    ret = del_op.delete_obj();
+    if (ret < 0) {
+      goto delop_fail;
+    }
+  }
+
+  num_deleted++;
+  return true;
+
+
+binfo_fail:
+    if (-ENOENT == ret) {
+      ldout(store->ctx(), 20) << "cannot find bucket = " << path.bucket_name << dendl;
+      num_unfound++;
+    } else {
+      ldout(store->ctx(), 20) << "cannot get bucket info, ret = " << ret << dendl;
+
+      fail_desc_t failed_item = {
+        .err  = ret,
+        .path = path
+      };
+      failures.push_back(failed_item);
+    }
+    return false;
+
+auth_fail:
+    ldout(store->ctx(), 20) << "wrong auth for " << path << dendl;
+    {
+      fail_desc_t failed_item = {
+        .err  = ret,
+        .path = path
+      };
+      failures.push_back(failed_item);
+    }
+    return false;
+
+delop_fail:
+    if (-ENOENT == ret) {
+      ldout(store->ctx(), 20) << "cannot find the object" << dendl;
+      num_unfound++;
+    } else {
+      fail_desc_t failed_item = {
+        .err  = ret,
+        .path = path
+      };
+      failures.push_back(failed_item);
+    }
+    return false;
+}
+
+bool RGWBulkDelete::Deleter::delete_chunk(const std::list<acct_path_t>& paths)
+{
+  ldout(store->ctx(), 20) << "in delete_chunk" << dendl;
+  for (auto path : paths) {
+    ldout(store->ctx(), 20) << "bulk deleting path: " << path << dendl;
+    delete_single(path);
+  }
+
+  return true;
+}
+
+int RGWBulkDelete::verify_permission()
+{
+  return 0;
+}
+
+void RGWBulkDelete::pre_exec()
+{
+  rgw_bucket_object_pre_exec(s);
+}
+
+void RGWBulkDelete::execute()
+{
+  deleter = std::unique_ptr<Deleter>(new Deleter(store, s));
+
+  bool is_truncated = false;
+  do {
+    list<RGWBulkDelete::acct_path_t> items;
+
+    int ret = get_data(items, &is_truncated);
+    if (ret < 0) {
+      return;
+    }
+
+    ret = deleter->delete_chunk(items);
+  } while (!ret && is_truncated);
+
+  return;
+}
+
 RGWHandler::~RGWHandler()
 {
 }

@@ -933,6 +933,71 @@ void RGWOptionsCORS_ObjStore_SWIFT::send_response()
   end_header(s, NULL);
 }
 
+int RGWBulkDelete_ObjStore_SWIFT::get_data(list<RGWBulkDelete::acct_path_t>& items,
+                                           bool * const is_truncated)
+{
+  const size_t MAX_LINE_SIZE = 2048;
+
+  RGWClientIOStreamBuf ciosb(*s->cio, (size_t)s->cct->_conf->rgw_max_chunk_size);
+  istream cioin(&ciosb);
+
+  char buf[MAX_LINE_SIZE];
+  while (cioin.getline(buf, sizeof(buf))) {
+    string path_str(buf);
+
+    ldout(s->cct, 20) << "extracted Bulk Delete entry: " << path_str << dendl;
+
+    const size_t sep_pos = path_str.find('/', 1 /* skip first slash */);
+    if (string::npos == sep_pos) {
+      ldout(s->cct, 20) << "wrongly formatted item: " << path_str << dendl;
+      continue;
+    }
+
+    RGWBulkDelete::acct_path_t path;
+    path.bucket_name = path_str.substr(1, sep_pos - 1);
+    path.obj_key     = path_str.substr(sep_pos + 1);
+
+    items.push_back(path);
+  }
+
+  *is_truncated = false;
+  return 0;
+}
+
+void RGWBulkDelete_ObjStore_SWIFT::send_response()
+{
+  set_req_state_err(s, ret);
+  dump_errno(s);
+  end_header(s, NULL);
+
+  s->formatter->open_object_section("delete");
+
+  s->formatter->dump_int("Number Deleted", deleter->get_num_deleted());
+  s->formatter->dump_int("Number Not Found", deleter->get_num_unfound());
+  s->formatter->dump_string("Response Body", "");
+  s->formatter->dump_string("Response Status", "200 OK");
+  s->formatter->open_array_section("Errors");
+  for (const auto fail_desc : deleter->get_failures()) {
+    rgw_err err;
+    set_req_state_err(err, fail_desc.err, s->prot_flags);
+    string status;
+    dump_errno(err, status);
+
+    stringstream ss_name;
+    ss_name << fail_desc.path;
+
+    s->formatter->open_array_section("object");
+    s->formatter->dump_string("Name", ss_name.str());
+    s->formatter->dump_string("Status", status);
+    s->formatter->close_section();
+  }
+  s->formatter->close_section();
+
+  s->formatter->close_section();
+
+  rgw_flush_formatter_and_reset(s, s->formatter);
+}
+
 RGWOp *RGWHandler_ObjStore_Service_SWIFT::op_get()
 {
   return new RGWListBuckets_ObjStore_SWIFT;
@@ -945,7 +1010,18 @@ RGWOp *RGWHandler_ObjStore_Service_SWIFT::op_head()
 
 RGWOp *RGWHandler_ObjStore_Service_SWIFT::op_post()
 {
+  if (s->info.args.exists("bulk-delete")) {
+    return new RGWBulkDelete_ObjStore_SWIFT;
+  }
   return new RGWPutMetadataAccount_ObjStore_SWIFT;
+}
+
+RGWOp *RGWHandler_ObjStore_Service_SWIFT::op_delete()
+{
+  if (s->info.args.exists("bulk-delete")) {
+    return new RGWBulkDelete_ObjStore_SWIFT;
+  }
+  return NULL;
 }
 
 RGWOp *RGWHandler_ObjStore_Bucket_SWIFT::get_obj_op(bool get_data)

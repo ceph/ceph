@@ -270,6 +270,12 @@ public:
   int get_params();
 };
 
+class RGWBulkDelete_ObjStore : public RGWBulkDelete {
+public:
+  RGWBulkDelete_ObjStore() {}
+  ~RGWBulkDelete_ObjStore() {}
+};
+
 class RGWDeleteMultiObj_ObjStore : public RGWDeleteMultiObj {
 public:
   RGWDeleteMultiObj_ObjStore() {}
@@ -367,9 +373,12 @@ public:
 
 static const int64_t NO_CONTENT_LENGTH = -1;
 
+extern void set_req_state_err(struct rgw_err &err, int err_no, int prot_flags);
 extern void set_req_state_err(struct req_state *s, int err_no);
+extern void dump_errno(int http_ret, string& out);
+extern void dump_errno(const struct rgw_err &err, string& out);
 extern void dump_errno(struct req_state *s);
-extern void dump_errno(struct req_state *s, int ret);
+extern void dump_errno(struct req_state *s, int http_ret);
 extern void end_header(struct req_state *s,
                        RGWOp *op = NULL,
                        const char *content_type = NULL,
