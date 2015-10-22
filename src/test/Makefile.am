@@ -414,6 +414,11 @@ unittest_async_compressor_CXXFLAGS = $(UNITTEST_CXXFLAGS)
 unittest_async_compressor_LDADD = $(UNITTEST_LDADD) $(CEPH_GLOBAL) $(LIBCOMPRESSOR)
 check_PROGRAMS += unittest_async_compressor
 
+unittest_slab_pool_SOURCES = test/msgr/test_slab_pool.cc
+unittest_slab_pool_CXXFLAGS = $(UNITTEST_CXXFLAGS)
+unittest_slab_pool_LDADD = $(UNITTEST_LDADD) $(CEPH_GLOBAL)
+check_PROGRAMS += unittest_slab_pool
+
 check_SCRIPTS += test/pybind/test_ceph_argparse.py
 check_SCRIPTS += test/pybind/test_ceph_daemon.py
 
