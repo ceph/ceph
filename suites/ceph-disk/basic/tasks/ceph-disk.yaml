@@ -4,13 +4,13 @@ roles:
 - - osd.0
   - osd.1
 openstack:
-  machine:
-    disk: 20 # GB
-    ram: 2000 # MB
-    cpus: 1
-  volumes: # attached to each instance
-    count: 3
-    size: 10 # GB
+  - machine:
+      disk: 20 # GB
+      ram: 2000 # MB
+      cpus: 1
+    volumes: # attached to each instance
+      count: 3
+      size: 10 # GB
 tasks:
 - install:
 - ceph:
