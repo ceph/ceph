@@ -22,7 +22,7 @@ Linux Kernel
 
   These are considered pretty old, but if you must:
 
-  - 3.10.* or earlier
+  - 3.10.*
 
   Firefly (CRUSH_TUNABLES3) tunables are supported starting with 3.15.
   See `CRUSH Tunables`_ for more details.
@@ -100,9 +100,6 @@ Firefly (0.80)
 +----------+----------+--------------------+--------------+---------+------------+
 | Ubuntu   | 14.04    | Trusty Tahr        | linux-3.13.0 |         | B, I, C    |
 +----------+----------+--------------------+--------------+---------+------------+
-
-**NOTE**: Ceph also supports ``Quantal``, ``Raring`` and ``Saucy``. However, we 
-recommend using LTS releases.
 
 Notes
 -----
