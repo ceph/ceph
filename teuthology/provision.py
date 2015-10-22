@@ -361,7 +361,7 @@ class ProvisionOpenStack(OpenStack):
         for volume in volumes:
             misc.sh("openstack server remove volume %s %s" %
                     (name_or_id, volume))
-        misc.sh("openstack server delete --wait " + name_or_id)
+        misc.sh("openstack server delete " + name_or_id)
         for volume in volumes:
             misc.sh("openstack volume delete " + volume)
         return True

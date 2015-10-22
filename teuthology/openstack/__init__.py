@@ -230,7 +230,7 @@ class OpenStack(object):
         """
         try:
             server = json.loads(
-                misc.sh("openstack server show -f json %s" % id)
+                misc.sh("openstack server show -f json %s" % name_or_id)
             )
         except CalledProcessError:
             return False
