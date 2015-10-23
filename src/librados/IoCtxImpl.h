@@ -18,6 +18,7 @@
 #include "common/Cond.h"
 #include "common/Mutex.h"
 #include "common/snap_types.h"
+#include "common/zipkin_trace.h"
 #include "include/atomic.h"
 #include "include/types.h"
 #include "include/rados/librados.h"
@@ -188,14 +189,17 @@ struct librados::IoCtxImpl {
   };
 
   int aio_read(const object_t oid, AioCompletionImpl *c,
-	       bufferlist *pbl, size_t len, uint64_t off, uint64_t snapid);
+	       bufferlist *pbl, size_t len, uint64_t off, uint64_t snapid,
+	       const blkin_trace_info *info = nullptr);
   int aio_read(object_t oid, AioCompletionImpl *c,
-	       char *buf, size_t len, uint64_t off, uint64_t snapid);
+	       char *buf, size_t len, uint64_t off, uint64_t snapid,
+	       const blkin_trace_info *info = nullptr);
   int aio_sparse_read(const object_t oid, AioCompletionImpl *c,
 		      std::map<uint64_t,uint64_t> *m, bufferlist *data_bl,
 		      size_t len, uint64_t off, uint64_t snapid);
   int aio_write(const object_t &oid, AioCompletionImpl *c,
-		const bufferlist& bl, size_t len, uint64_t off);
+		const bufferlist& bl, size_t len, uint64_t off,
+		const blkin_trace_info *info = nullptr);
   int aio_append(const object_t &oid, AioCompletionImpl *c,
 		 const bufferlist& bl, size_t len);
   int aio_write_full(const object_t &oid, AioCompletionImpl *c,
