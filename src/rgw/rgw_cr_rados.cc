@@ -497,3 +497,35 @@ int RGWAsyncRemoveObj::_send_request()
   }
   return ret;
 }
+
+int RGWContinuousLeaseCR::operate()
+{
+  reenter(this) {
+    while (!going_down.read()) {
+      yield {
+        int r = call(new RGWSimpleRadosLockCR(async_rados, store, pool, oid, lock_name, cookie, interval));
+        if (r < 0) {
+          ldout(store->ctx(), 0) << *this << ": ERROR: failed to call RGWSimpleRadosLockCR()" << dendl;
+          return set_state(RGWCoroutine_Error, r);
+        }
+      }
+      if (retcode < 0) {
+        set_locked(false);
+        ldout(store->ctx(), 20) << *this << ": couldn't lock " << pool.name << ":" << oid << ":" << lock_name << ": retcode=" << retcode << dendl;
+        return set_state(RGWCoroutine_Error, retcode);
+      }
+      set_locked(true);
+      yield wait(utime_t(interval / 2, 0));
+    }
+    set_locked(false); /* moot at this point anyway */
+    yield {
+      int r = call(new RGWSimpleRadosUnlockCR(async_rados, store, pool, oid, lock_name, cookie));
+      if (r < 0) {
+        ldout(store->ctx(), 0) << *this << ": ERROR: failed to call RGWSimpleRadosUnlockCR()" << dendl;
+        return set_state(RGWCoroutine_Error, r);
+      }
+    }
+    return set_state(RGWCoroutine_Done);
+  }
+  return 0;
+}

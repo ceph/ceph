@@ -178,7 +178,7 @@ public:
   bool collect(int *ret); /* returns true if needs to be called again */
 
   int wait(const utime_t& interval);
-  bool drain_children(); /* returns true if needed to be called again */
+  bool drain_children(int num_cr_left); /* returns true if needed to be called again */
   void wakeup();
 
   size_t num_spawned() {
@@ -205,7 +205,10 @@ do {                            \
 } while (0)
 
 #define drain_all() \
-  yield_until_true(drain_children())
+  yield_until_true(drain_children(0))
+
+#define drain_all_but(n) \
+  yield_until_true(drain_children(n))
 
 template <class T>
 class RGWConsumerCR : public RGWCoroutine {
