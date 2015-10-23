@@ -57,6 +57,7 @@ enum {
 class Worker : public Thread {
   static const uint64_t InitEventNumber = 5000;
   static const uint64_t EventMaxWaitUs = 30000000;
+  static const uint64_t MaxSlabObjectLowBound = 1 << 20;
   CephContext *cct;
   WorkerPool *pool;
   bool done;
@@ -66,13 +67,15 @@ class Worker : public Thread {
  public:
   SlabAllocator *slab;
   EventCenter center;
-  Worker(CephContext *c, WorkerPool *p, int i)
+  Worker(CephContext *c, WorkerPool *p, int i, uint64_t resident)
     : cct(c), pool(p), done(false), id(i), perf_logger(NULL),
       slab(NULL), center(c) {
     center.init(InitEventNumber);
     char name[128];
     sprintf(name, "AsyncMessenger::Worker-%d", id);
-    slab = new SlabAllocator(c, name, 2, 1 << 30, 4 << 10);
+    slab = new SlabAllocator(c, name, cct->_conf->ms_async_slab_grow_factor,
+                             resident,
+                             MAX(cct->_conf->ms_async_slab_max_unit_size, MaxSlabObjectLowBound));
     // initialize perf_logger
     PerfCountersBuilder plb(cct, name, l_msgr_first, l_msgr_last);
 

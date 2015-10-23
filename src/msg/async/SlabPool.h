@@ -171,11 +171,11 @@ class SlabAllocator {
   std::vector<SlabClass> slab_classes;
   std::vector<SlabPageDesc*> slab_pages_vector;
   uint64_t max_object_size;
-  uint64_t available_slab_pages;
+  uint64_t resident_slab_pages;
   PerfCounters *logger;
 
  private:
-  void initialize_slab_allocator(double growth_factor, uint64_t limit) {
+  void initialize_slab_allocator(double growth_factor) {
     const size_t initial_size = CEPH_PAGE_SIZE;
     size_t size = initial_size; // initial object size
     uint8_t slab_class_id = 0U;
@@ -191,13 +191,13 @@ class SlabAllocator {
     slab_class_sizes.push_back(max_object_size);
     slab_classes.push_back(SlabClass(max_object_size, slab_class_id));
 
-    // If slab limit is zero, enable reclaimer.
-    slab_pages_vector.reserve(available_slab_pages);
+    slab_pages_vector.reserve(resident_slab_pages*2);
   }
 
   SlabClass* get_slab_class(const size_t size) {
       // given a size, find slab class with binary search.
-      std::vector<size_t>::iterator i = std::lower_bound(slab_class_sizes.begin(), slab_class_sizes.end(), size);
+      std::vector<size_t>::iterator i = std::lower_bound(
+          slab_class_sizes.begin(), slab_class_sizes.end(), size);
       if (i == slab_class_sizes.end())
           return NULL;
       return &slab_classes[std::distance(slab_class_sizes.begin(), i)];
@@ -209,8 +209,9 @@ class SlabAllocator {
   }
 
  public:
-  SlabAllocator(CephContext *cct, const std::string& n, double growth_factor, uint64_t limit, uint64_t max_obj_size)
-      : max_object_size(max_obj_size), available_slab_pages(limit / max_obj_size), logger(NULL) {
+  SlabAllocator(CephContext *cct, const std::string& n, double growth_factor,
+                uint64_t resident, uint64_t max_obj_size)
+      : max_object_size(max_obj_size), resident_slab_pages(resident / max_obj_size), logger(NULL) {
     if (cct && cct->_conf->slab_perf_counter) {
       PerfCountersBuilder b(cct, string("slab-") + n, l_slabpool_first, l_slabpool_last);
       b.add_u64_counter(l_slabpool_alloc, "alloc_calls", "Allocation request number");
@@ -244,22 +245,16 @@ class SlabAllocator {
     if (!slab_class->empty()) {
       *data = slab_class->create(idx);
     } else {
-      if (available_slab_pages > 0) {
-        size_t index_to_insert = slab_pages_vector.size();
-        SlabPageDesc *desc;
-        r = slab_class->create_from_new_page(max_object_size, index_to_insert, &desc, data);
-        if (r < 0)
-          return r;
-        *idx = index_to_insert;
-        slab_pages_vector.push_back(desc);
-        if (available_slab_pages > 0)
-          --available_slab_pages;
-        if (logger) {
-          logger->inc(l_slabpool_available_bytes, max_object_size);
-          logger->inc(l_slabpool_total_bytes, max_object_size);
-        }
-      } else {
-        r = -ENOMEM;
+      size_t index_to_insert = slab_pages_vector.size();
+      SlabPageDesc *desc;
+      r = slab_class->create_from_new_page(max_object_size, index_to_insert, &desc, data);
+      if (r < 0)
+        return r;
+      *idx = index_to_insert;
+      slab_pages_vector.push_back(desc);
+      if (logger) {
+        logger->inc(l_slabpool_available_bytes, max_object_size);
+        logger->inc(l_slabpool_total_bytes, max_object_size);
       }
     }
     if (logger) {

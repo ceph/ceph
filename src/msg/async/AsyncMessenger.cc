@@ -322,8 +322,9 @@ WorkerPool::WorkerPool(CephContext *c): cct(c), seq(0), started(false),
                                         barrier_count(0)
 {
   assert(cct->_conf->ms_async_op_threads > 0);
+  uint64_t resident = cct->_conf->ms_async_slab_pool_resident_bytes;
   for (int i = 0; i < cct->_conf->ms_async_op_threads; ++i) {
-    Worker *w = new Worker(cct, this, i);
+    Worker *w = new Worker(cct, this, i, resident);
     workers.push_back(w);
   }
   vector<string> corestrs;
