@@ -34,7 +34,9 @@ namespace {
   struct rgw_fs *fs = nullptr;
   typedef std::tuple<string,uint64_t, struct rgw_file_handle*> fid_type; //in c++2014 can alias...
   std::vector<fid_type> fids1;
-  std::vector<fid_type> fids2;
+
+  bool do_create = false;
+  string bucket_name = "sorry_dave";
 
   struct {
     int argc;
@@ -56,14 +58,16 @@ TEST(LibRGW, MOUNT) {
 }
 
 TEST(LibRGW, CREATE_BUCKET) {
-  struct stat st;
-  struct rgw_file_handle fh;
-  int ret = rgw_mkdir(fs, &fs->root_fh, "sorry_dave", 755, &st, &fh);
-  ASSERT_EQ(ret, 0);
+  if (do_create) {
+    struct stat st;
+    struct rgw_file_handle fh;
+    int ret = rgw_mkdir(fs, &fs->root_fh, bucket_name.c_str(), 755, &st, &fh);
+    ASSERT_EQ(ret, 0);
+  }
 }
 
 TEST(LibRGW, DELETE_BUCKET) {
-  int ret = rgw_unlink(fs, &fs->root_fh, "sorry_dave");
+  int ret = rgw_unlink(fs, &fs->root_fh, bucket_name.c_str());
   ASSERT_EQ(ret, 0);
 }
 
@@ -92,55 +96,9 @@ TEST(LibRGW, LIST_BUCKETS) {
   ASSERT_EQ(ret, 0);
 }
 
-extern "C" {
-  static bool r2_cb(const char* name, void *arg, uint64_t offset) {
-    // don't need arg--it would point to fids2
-    fids2.push_back(fid_type(name, offset, nullptr));
-    return true; /* XXX ? */
-  }
-}
-
-TEST(LibRGW, LOOKUP_BUCKETS) {
-  using std::get;
-
-  if (! fs)
-    return;
-
-  int ret = 0;
-  for (auto& fid : fids1) {
-    struct rgw_file_handle *rgw_fh = new rgw_file_handle();
-    ret = rgw_lookup(fs, &fs->root_fh, get<0>(fid).c_str(), rgw_fh);
-    ASSERT_EQ(ret, 0);
-    get<2>(fid) = rgw_fh;
-    ASSERT_NE(get<2>(fid), nullptr);
-  }
-}
-
-TEST(LibRGW, LIST_OBJECTS) {
-  /* list objects via readdir, bucketwise */
-  using std::get;
-
-  if (! fs)
-    return;
-
-  for (auto& fid : fids1) {
-    ldout(g_ceph_context, 0) << __func__ << " readdir on bucket " << get<0>(fid)
-		     << dendl;
-    bool eof = false;
-    uint64_t offset = 0;
-    int ret = rgw_readdir(fs, get<2>(fid), &offset, r2_cb, &fids2,
-			  &eof);
-    for (auto& fid2 : fids2) {
-      std::cout << "fname: " << get<0>(fid2) << " fid: " << get<1>(fid2)
-		<< std::endl;
-    }
-    ASSERT_EQ(ret, 0);
-  }
-}
-
 TEST(LibRGW, CLEANUP) {
   using std::get;
-  for (auto& fids : { fids1, fids2 }) {
+  for (auto& fids : { fids1 }) {
     for (auto& fid : fids) {
       delete get<2>(fid);
     }
