@@ -382,17 +382,23 @@ int RGWPostObj_STS::get_policy()
 }
 #endif
 
+#if 0
 class RGWGetPost_STS : public RGWOp {
 protected:
   bool get_flag;
 public:
   RGWGetPost_STS(bool _gf) : get_flag(_gf) {}
 };
+#endif
 
 RGWOp *RGWHandler_STS::get_obj_op(bool get_data)
 {
+#if 0
   RGWGetPost_STS *get_obj_op = new RGWGetPost_STS(get_data);
   return get_obj_op;
+#else
+  return NULL;
+#endif
 }
 
 RGWOp *RGWHandler_STS::op_get()
