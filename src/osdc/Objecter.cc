@@ -3090,6 +3090,7 @@ MOSDOp *Objecter::_prepare_osd_op(Op *op)
   m->ops = op->ops;
   m->set_mtime(op->mtime);
   m->set_retry_attempt(op->attempts++);
+  m->trace = op->trace;
 
   if (op->priority)
     m->set_priority(op->priority);
