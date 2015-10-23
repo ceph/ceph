@@ -32,8 +32,6 @@ namespace {
   string access_key("");
   string secret_key("");
   struct rgw_fs *fs = nullptr;
-  typedef std::tuple<string,uint64_t, struct rgw_file_handle*> fid_type; //in c++2014 can alias...
-  std::vector<fid_type> fids1;
 
   bool do_create = false;
   string bucket_name = "sorry_dave";
@@ -71,38 +69,8 @@ TEST(LibRGW, DELETE_BUCKET) {
   ASSERT_EQ(ret, 0);
 }
 
-extern "C" {
-  static bool r1_cb(const char* name, void *arg, uint64_t offset) {
-    // don't need arg--it would point to fids1
-    fids1.push_back(fid_type(name, offset, nullptr /* handle */));
-    return true; /* XXX ? */
-  }
-}
-
-TEST(LibRGW, LIST_BUCKETS) {
-  /* list buckets via readdir in fs root */
-  using std::get;
-
-  if (! fs)
-    return;
-
-  bool eof = false;
-  uint64_t offset = 0;
-  int ret = rgw_readdir(fs, &fs->root_fh, &offset, r1_cb, &fids1, &eof);
-  for (auto& fid : fids1) {
-    std::cout << "fname: " << get<0>(fid) << " fid: " << get<1>(fid)
-	      << std::endl;
-  }
-  ASSERT_EQ(ret, 0);
-}
-
 TEST(LibRGW, CLEANUP) {
-  using std::get;
-  for (auto& fids : { fids1 }) {
-    for (auto& fid : fids) {
-      delete get<2>(fid);
-    }
-  }
+  // do nothing
 }
 
 TEST(LibRGW, UMOUNT) {
@@ -150,6 +118,13 @@ int main(int argc, char *argv[])
     else {
       ++arg_iter;
     }
+  }
+
+  /* dont accidentally run as anonymous */
+  if ((access_key == "") ||
+      (secret_key == "")) {
+    std::cout << argv[0] << " no AWS credentials, exiting" << std::endl;
+    return EPERM;
   }
 
   saved_args.argc = argc;
