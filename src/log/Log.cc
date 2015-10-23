@@ -34,6 +34,56 @@ static void log_on_exit(void *p)
   delete (Log **)p;// Delete allocated pointer (not Log object, the pointer only!)
 }
 
+class DateCache
+{
+public:
+  DateCache (size_t size)
+  {
+    char buf[1];
+    m_date_size = utime_t::snprintf (buf, 1, 0);
+    m_cache_size = size;
+    m_date_val = new time_t[m_cache_size];
+    m_date_formatted = new char*[m_cache_size];
+    for (size_t i = 0; i < m_cache_size; i++) {
+      m_date_val[i] = 0;
+      m_date_formatted[i] = new char[m_date_size + 7 + 1];
+      utime_t::snprintf (m_date_formatted[i], m_date_size + 1, 0);
+    }
+  }
+  ~DateCache ()
+  {
+    for (size_t i = 0; i < m_cache_size; i++)
+      free (m_date_formatted[i]);
+    free (m_date_val);
+    free (m_date_formatted);
+  }
+  int
+  snprintf (char* str, size_t size, const utime_t& t)
+  {
+    time_t sec = t.sec ();
+    size_t pos = sec % m_cache_size;
+
+    if (m_date_val[pos] != sec) {
+      utime_t::snprintf (m_date_formatted[pos], m_date_size + 1, sec);
+      m_date_val[pos] = sec;
+    }
+    long usec = t.nsec () / 1000;
+    ::snprintf (m_date_formatted[pos] + m_date_size, 7 + 1, ".%06ld", usec);
+    if (m_date_size + 7 + 1 < size)
+      memcpy (str, m_date_formatted[pos], m_date_size + 7 + 1);
+    else {
+      memcpy (str, m_date_formatted[pos], size - 2);
+      str[size - 1] = 0;
+    }
+    return m_date_size + 7;
+  }
+private:
+  size_t m_date_size;
+  size_t m_cache_size;
+  time_t* m_date_val;
+  char** m_date_formatted;
+};
+
 Log::Log(SubsystemMap *s)
   : m_indirect_this(NULL),
     m_subs(s),
@@ -46,7 +96,8 @@ Log::Log(SubsystemMap *s)
     m_stop(false),
     m_max_new(DEFAULT_MAX_NEW),
     m_max_recent(DEFAULT_MAX_RECENT),
-    m_inject_segv(false)
+    m_inject_segv(false),
+    m_date_cache(new DateCache(4))
 {
   int ret;
 
@@ -77,7 +128,7 @@ Log::~Log()
   assert(!is_started());
   if (m_fd >= 0)
     VOID_TEMP_FAILURE_RETRY(::close(m_fd));
-
+  delete m_date_cache;
   pthread_mutex_destroy(&m_queue_mutex);
   pthread_mutex_destroy(&m_flush_mutex);
   pthread_cond_destroy(&m_cond_loggers);
@@ -209,7 +260,6 @@ void Log::flush()
 void Log::_flush(EntryQueue *t, EntryQueue *requeue, bool crash)
 {
   Entry *e;
-  char buf[80];
   while ((e = t->dequeue()) != NULL) {
     unsigned sub = e->m_subsys;
 
@@ -219,33 +269,32 @@ void Log::_flush(EntryQueue *t, EntryQueue *requeue, bool crash)
     bool do_stderr = m_stderr_crash >= e->m_prio && should_log;
 
     if (do_fd || do_syslog || do_stderr) {
-      int buflen = 0;
+      size_t buflen = 0;
+      char buf[80 + e->size()];
 
       if (crash)
-	buflen += snprintf(buf, sizeof(buf), "%6d> ", -t->m_len);
-      buflen += e->m_stamp.sprintf(buf + buflen, sizeof(buf)-buflen);
+        buflen += snprintf(buf, sizeof(buf), "%6d> ", -t->m_len);
+      buflen += m_date_cache->snprintf(buf + buflen, sizeof(buf)-buflen, e->m_stamp);
       buflen += snprintf(buf + buflen, sizeof(buf)-buflen, " %lx %2d ",
 			(unsigned long)e->m_thread, e->m_prio);
 
-      // FIXME: this is slow
-      string s = e->get_str();
-
-      if (do_fd) {
-	int r = safe_write(m_fd, buf, buflen);
-	if (r >= 0)
-	  r = safe_write(m_fd, s.data(), s.size());
-	if (r >= 0)
-	  r = write(m_fd, "\n", 1);
-	if (r < 0)
-	  cerr << "problem writing to " << m_log_file << ": " << cpp_strerror(r) << std::endl;
-      }
+      buflen += e->snprintf(buf + buflen, sizeof(buf) - buflen - 1 );
+      if(buflen > sizeof(buf) - 1 ) //paranoid check, buf was declared to hold everything
+        buflen = sizeof(buf) - 1;
 
       if (do_syslog) {
-	syslog(LOG_USER, "%s%s", buf, s.c_str());
+        syslog(LOG_USER, "%s", buf);
       }
 
       if (do_stderr) {
-	cerr << buf << s << std::endl;
+        cerr << buf << std::endl;
+      }
+      if (do_fd) {
+        buf[buflen-1]='\n';
+        buf[buflen]='\0';
+        int r=safe_write(m_fd, buf, buflen+1);
+        if (r < 0)
+          cerr << "problem writing to " << m_log_file << ": " << cpp_strerror(r) << std::endl;
       }
     }
 
