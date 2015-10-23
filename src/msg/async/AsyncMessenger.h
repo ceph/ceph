@@ -32,10 +32,8 @@ using namespace std;
 #include "common/Thread.h"
 #include "common/Throttle.h"
 
-#include "msg/SimplePolicyMessenger.h"
-#include "include/assert.h"
-#include "AsyncConnection.h"
 #include "Event.h"
+#include "SlabPool.h"
 
 
 class AsyncMessenger;
@@ -61,11 +59,13 @@ class Worker : public Thread {
   bool done;
   int id;
   PerfCounters *perf_logger;
+  SlabPool *slab;
 
  public:
   EventCenter center;
   Worker(CephContext *c, WorkerPool *p, int i)
-    : cct(c), pool(p), done(false), id(i), perf_logger(NULL), center(c) {
+    : cct(c), pool(p), done(false), id(i), perf_logger(NULL),
+      slab(new SlabAllocator(2, 1 << 30, 4 << 10)), center(c) {
     center.init(InitEventNumber);
     char name[128];
     sprintf(name, "AsyncMessenger::Worker-%d", id);
@@ -251,7 +251,7 @@ public:
   Connection *create_anon_connection() {
     Mutex::Locker l(lock);
     Worker *w = pool->get_worker();
-    return new AsyncConnection(cct, this, &w->center, w->get_perf_counter());
+    return new AsyncConnection(cct, this, &w->center, w->slab, w->get_perf_counter());
   }
 
   /**

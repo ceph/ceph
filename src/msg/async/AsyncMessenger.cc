@@ -395,7 +395,7 @@ AsyncMessenger::AsyncMessenger(CephContext *cct, entity_name_t name,
   ceph_spin_init(&global_seq_lock);
   cct->lookup_or_create_singleton_object<WorkerPool>(pool, WorkerPool::name);
   Worker *w = pool->get_worker();
-  local_connection = new AsyncConnection(cct, this, &w->center, w->get_perf_counter());
+  local_connection = new AsyncConnection(cct, this, &w->center, w->slab, w->get_perf_counter());
   local_features = features;
   init_local_connection();
 }
@@ -522,7 +522,7 @@ AsyncConnectionRef AsyncMessenger::add_accept(int sd)
 {
   lock.Lock();
   Worker *w = pool->get_worker();
-  AsyncConnectionRef conn = new AsyncConnection(cct, this, &w->center, w->get_perf_counter());
+  AsyncConnectionRef conn = new AsyncConnection(cct, this, &w->center, w->slab, w->get_perf_counter());
   conn->accept(sd);
   accepting_conns.insert(conn);
   lock.Unlock();
@@ -539,7 +539,7 @@ AsyncConnectionRef AsyncMessenger::create_connect(const entity_addr_t& addr, int
 
   // create connection
   Worker *w = pool->get_worker();
-  AsyncConnectionRef conn = new AsyncConnection(cct, this, &w->center, w->get_perf_counter());
+  AsyncConnectionRef conn = new AsyncConnection(cct, this, &w->center, w->slab, w->get_perf_counter());
   conn->connect(addr, type);
   assert(!conns.count(addr));
   conns[addr] = conn;

@@ -32,6 +32,7 @@ using namespace std;
 
 #include "Event.h"
 #include "net_handler.h"
+#include "SlabPool.h"
 
 class AsyncMessenger;
 
@@ -114,7 +115,7 @@ class AsyncConnection : public Connection {
   }
 
  public:
-  AsyncConnection(CephContext *cct, AsyncMessenger *m, EventCenter *c, PerfCounters *p);
+  AsyncConnection(CephContext *cct, AsyncMessenger *m, EventCenter *c, SlabPool *p, PerfCounters *pc);
   ~AsyncConnection();
 
   ostream& _conn_prefix(std::ostream *_dout);
@@ -216,6 +217,7 @@ class AsyncConnection : public Connection {
   }
 
   AsyncMessenger *async_msgr;
+  SlabPool *slab;
   PerfCounters *logger;
   int global_seq;
   __u32 connect_seq, peer_global_seq;

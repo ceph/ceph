@@ -134,7 +134,7 @@ class SlabClass {
       desc = new SlabPageDesc(slab_page, objects, _size, slab_class_id, slab_page_index);
     } catch (const std::bad_alloc& e) {
       ::free(slab_page);
-      throw std::bad_alloc{};
+      return -ENOMEM;
     }
 
     free_slab_pages.push_front(*desc);
