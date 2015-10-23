@@ -729,4 +729,51 @@ public:
   }
 };
 
+class RGWContinuousLeaseCR : public RGWCoroutine {
+  RGWAsyncRadosProcessor *async_rados;
+  RGWRados *store;
+
+  rgw_bucket pool;
+  string oid;
+
+  string lock_name;
+  string cookie;
+
+  int interval;
+
+  Mutex lock;
+  atomic_t going_down;
+  bool locked;
+
+public:
+  RGWContinuousLeaseCR(RGWAsyncRadosProcessor *_async_rados, RGWRados *_store, rgw_bucket& _pool, const string& _oid,
+                       const string& _lock_name, int _interval) : RGWCoroutine(_store->ctx()), async_rados(_async_rados), store(_store),
+                                        pool(_pool), oid(_oid), lock_name(_lock_name), interval(_interval),
+                                        lock("RGWContimuousLeaseCR"), locked(false) {
+#define COOKIE_LEN 16
+    char buf[COOKIE_LEN + 1];
+
+    gen_rand_alphanumeric(cct, buf, sizeof(buf) - 1);
+    cookie = buf;
+  }
+
+  int operate();
+
+  bool is_locked() {
+    Mutex::Locker l(lock);
+    return locked;
+  }
+
+  void set_locked(bool status) {
+    Mutex::Locker l(lock);
+    locked = status;
+  }
+
+  void go_down() {
+    going_down.set(1);
+    wakeup();
+  }
+};
+
+
 #endif
