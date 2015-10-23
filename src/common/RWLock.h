@@ -23,7 +23,7 @@
 #include "lockdep.h"
 #include "include/atomic.h"
 
-class RWLock
+class RWLock final
 {
   mutable pthread_rwlock_t L;
   std::string name;
@@ -34,11 +34,23 @@ class RWLock
   std::string unique_name(const char* name) const;
 
 public:
-  RWLock(const RWLock& other);
-  const RWLock& operator=(const RWLock& other);
+  RWLock(const RWLock& other) = delete;
+  const RWLock& operator=(const RWLock& other) = delete;
 
-  RWLock(const std::string &n, bool track_lock=true) : name(n), id(-1), nrlock(0), nwlock(0), track(track_lock) {
-    pthread_rwlock_init(&L, NULL);
+  RWLock(const std::string &n, bool track_lock=true, bool prioritize_write=false)
+    : name(n), id(-1), nrlock(0), nwlock(0), track(track_lock) {
+    if (prioritize_write) {
+      pthread_rwlockattr_t attr;
+      pthread_rwlockattr_init(&attr);
+      // PTHREAD_RWLOCK_PREFER_WRITER_NONRECURSIVE_NP
+      //   Setting the lock kind to this avoids writer starvation as long as
+      //   long as any read locking is not done in a recursive fashion.
+      pthread_rwlockattr_setkind_np(&attr,
+          PTHREAD_RWLOCK_PREFER_WRITER_NONRECURSIVE_NP);
+      pthread_rwlock_init(&L, &attr);
+    } else {
+      pthread_rwlock_init(&L, NULL);
+    }
     if (g_lockdep) id = lockdep_register(name.c_str());
   }
 
@@ -51,7 +63,7 @@ public:
     assert(track);
     return (nwlock.read() > 0);
   }
-  virtual ~RWLock() {
+  ~RWLock() {
     // The following check is racy but we are about to destroy
     // the object and we assume that there are no other users.
     if (track)
@@ -236,4 +248,4 @@ public:
   };
 };
 
-#endif // !_Mutex_Posix_
+#endif // !CEPH_RWLock_Posix__H
