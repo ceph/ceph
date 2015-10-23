@@ -1311,7 +1311,6 @@ def sh(command):
         output = subprocess.check_output(command, stderr=subprocess.STDOUT,
                                          shell=True)
     except subprocess.CalledProcessError as e:
-        log.exception(command + " error " + str(e.output))
         raise e
     if output.strip():
         log.debug(command + " output " + str(output))
