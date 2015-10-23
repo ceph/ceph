@@ -1313,5 +1313,6 @@ def sh(command):
     except subprocess.CalledProcessError as e:
         log.exception(command + " error " + str(e.output))
         raise e
-    log.debug(command + " output " + str(output))
+    if output.strip():
+        log.debug(command + " output " + str(output))
     return output.decode('utf-8')
