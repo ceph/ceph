@@ -119,8 +119,8 @@ int RGWCoroutinesStack::operate(RGWCoroutinesEnv *_env)
 {
   env = _env;
   RGWCoroutine *op = *pos;
-  ldout(cct, 20) << *op << ": operate()" << dendl;
   op->stack = this;
+  ldout(cct, 20) << *op << ": operate()" << dendl;
   int r = op->operate();
   if (r < 0) {
     ldout(cct, 0) << "ERROR: op->operate() returned r=" << r << dendl;
@@ -492,11 +492,11 @@ ostream& operator<<(ostream& out, const RGWCoroutine& cr)
   return out;
 }
 
-bool RGWCoroutine::drain_children()
+bool RGWCoroutine::drain_children(int num_cr_left)
 {
   bool done = false;
   reenter(&drain_cr) {
-    while (num_spawned() > 0) {
+    while (num_spawned() > num_cr_left) {
       yield wait_for_child();
       int ret;
       while (collect(&ret)) {
