@@ -2466,6 +2466,7 @@ protected:
 
 std::string LibRadosTwoPoolsECPP::cache_pool_name;
 
+
 TEST_F(LibRadosTierECPP, Dirty) {
   {
     ObjectWriteOperation op;
@@ -4444,6 +4445,365 @@ TEST_F(LibRadosTwoPoolsECPP, ProxyRead) {
     NObjectIterator it = cache_ioctx.nobjects_begin();
     ASSERT_TRUE(it == cache_ioctx.nobjects_end());
     sleep(1);
+  }
+
+  // tear down tiers
+  ASSERT_EQ(0, cluster.mon_command(
+    "{\"prefix\": \"osd tier remove-overlay\", \"pool\": \"" + pool_name +
+    "\"}",
+    inbl, NULL, NULL));
+  ASSERT_EQ(0, cluster.mon_command(
+    "{\"prefix\": \"osd tier remove\", \"pool\": \"" + pool_name +
+    "\", \"tierpool\": \"" + cache_pool_name + "\"}",
+    inbl, NULL, NULL));
+
+  // wait for maps to settle before next test
+  cluster.wait_for_latest_osdmap();
+}
+
+// To verify to partial chunk read for ec pool
+class LibRadosTwoPoolsECPPDirectFastRead : public RadosTestECPP
+{
+public:
+  LibRadosTwoPoolsECPPDirectFastRead() {};
+  virtual ~LibRadosTwoPoolsECPPDirectFastRead() {};
+protected:
+  static void SetUpTestCase() {
+    pool_name = get_temp_pool_name();
+    ASSERT_EQ("", create_one_ec_pool_pp(pool_name, s_cluster));
+    cache_pool_name = get_temp_pool_name();
+    ASSERT_EQ(0, s_cluster.pool_create(cache_pool_name.c_str()));
+  }
+  static void TearDownTestCase() {
+    ASSERT_EQ(0, s_cluster.pool_delete(cache_pool_name.c_str()));
+    ASSERT_EQ(0, destroy_one_ec_pool_pp(pool_name, s_cluster));
+  }
+  static std::string cache_pool_name;
+
+  virtual void SetUp() {
+    RadosTestECPP::SetUp();
+    ASSERT_EQ(0, cluster.ioctx_create(cache_pool_name.c_str(), cache_ioctx));
+    cache_ioctx.set_namespace(nspace);
+  }
+  virtual void TearDown() {
+    // flush + evict cache
+    flush_evict_all(cluster, cache_ioctx);
+
+    bufferlist inbl;
+    // tear down tiers
+    ASSERT_EQ(0, cluster.mon_command(
+      "{\"prefix\": \"osd tier remove-overlay\", \"pool\": \"" + pool_name +
+      "\"}",
+      inbl, NULL, NULL));
+    ASSERT_EQ(0, cluster.mon_command(
+      "{\"prefix\": \"osd tier remove\", \"pool\": \"" + pool_name +
+      "\", \"tierpool\": \"" + cache_pool_name + "\"}",
+    inbl, NULL, NULL));
+
+    // wait for maps to settle before next test
+    cluster.wait_for_latest_osdmap();
+
+    RadosTestECPP::TearDown();
+
+    cleanup_default_namespace(cache_ioctx);
+    cleanup_namespace(cache_ioctx, nspace);
+
+    cache_ioctx.close();
+  }
+
+  librados::IoCtx cache_ioctx;
+};
+
+std::string LibRadosTwoPoolsECPPDirectFastRead::cache_pool_name;
+
+
+TEST_F(LibRadosTwoPoolsECPPDirectFastRead, ProxyRead) { // the object size > stripe_width
+  // create object
+  const uint64_t stripe_width = 4096; // default value
+  const uint64_t chunk_size = 2048; // default value
+
+  bufferlist origin;
+  for(int i = 0; i < 102433; i++) {
+    origin.append((char)(rand() % 256));
+  }
+  ObjectWriteOperation op;
+  op.write_full(origin);
+  ASSERT_EQ(0, ioctx.operate("foo", &op));
+
+  // configure cache
+  bufferlist inbl;
+  ASSERT_EQ(0, cluster.mon_command(
+    "{\"prefix\": \"osd tier add\", \"pool\": \"" + pool_name +
+    "\", \"tierpool\": \"" + cache_pool_name +
+    "\", \"force_nonempty\": \"--force-nonempty\" }",
+    inbl, NULL, NULL));
+  ASSERT_EQ(0, cluster.mon_command(
+    "{\"prefix\": \"osd tier set-overlay\", \"pool\": \"" + pool_name +
+    "\", \"overlaypool\": \"" + cache_pool_name + "\"}",
+    inbl, NULL, NULL));
+  ASSERT_EQ(0, cluster.mon_command(
+    "{\"prefix\": \"osd tier cache-mode\", \"pool\": \"" + cache_pool_name +
+    "\", \"mode\": \"readproxy\"}",
+    inbl, NULL, NULL));
+
+  // wait for maps to settle
+  cluster.wait_for_latest_osdmap();
+
+  // read the first chunk and verify the object
+  {
+    bufferlist bl;
+    ASSERT_EQ(1, ioctx.read("foo", bl, 1, 0));
+    ASSERT_EQ(origin[0], bl[0]);
+  }
+
+  // read the first chunk and verify the object
+  {
+    bufferlist bl;
+    bufferlist ol;
+    uint64_t offset = 1;
+    uint64_t len = chunk_size - 1;
+    ol.substr_of(origin, offset, len);
+    ASSERT_EQ(len, ioctx.read("foo", bl, len, offset));
+    ASSERT_TRUE(ol==bl);
+  }
+
+  // read the second chunk and verify the object
+  {
+    bufferlist bl;
+    bufferlist ol;
+    uint64_t offset = stripe_width + chunk_size * 3;
+    uint64_t len = chunk_size;
+    ol.substr_of(origin, offset, len);
+    ASSERT_EQ(len, ioctx.read("foo", bl, len, offset));
+    ASSERT_TRUE(ol==bl);
+  }
+
+  // read the second chunk and verify the object
+  {
+    bufferlist bl;
+    bufferlist ol;
+    uint64_t offset = stripe_width + chunk_size + chunk_size/2 - 1;
+    uint64_t len = chunk_size;
+    ol.substr_of(origin, offset, len);
+    ASSERT_EQ(len, ioctx.read("foo", bl, len, offset));
+    ASSERT_TRUE(ol==bl);
+  }
+
+  // read the second chunk and verify the object
+  {
+    bufferlist bl;
+    bufferlist ol;
+    uint64_t offset = stripe_width + chunk_size + chunk_size/2 - 1;
+    uint64_t len = stripe_width;
+    ol.substr_of(origin, offset, len);
+    ASSERT_EQ(len, ioctx.read("foo", bl, len, offset));
+    ASSERT_TRUE(ol==bl);
+  }
+
+  // read the first chunk and second chunk and verify the object
+  {
+    bufferlist bl;
+    bufferlist ol;
+    uint64_t offset = stripe_width + 1;
+    uint64_t len = stripe_width - 1;
+    ol.substr_of(origin, offset, len);
+    ASSERT_EQ(len, ioctx.read("foo", bl, len, offset));
+    ASSERT_TRUE(ol==bl);
+  }
+
+  // read the second chunk and first chunk and verify the object
+  {
+    bufferlist bl;
+    bufferlist ol;
+    uint64_t offset = stripe_width + chunk_size + 2;
+    uint64_t len = stripe_width - 1;
+    ol.substr_of(origin, offset, len);
+    ASSERT_EQ(len, ioctx.read("foo", bl, len, offset));
+    ASSERT_TRUE(ol==bl);
+  }
+
+  // read the object, offset + len == object size
+  {
+    bufferlist bl;
+    bufferlist ol;
+    uint64_t offset = stripe_width + chunk_size + 2;
+    uint64_t len = origin.length() - offset;
+    ol.substr_of(origin, offset, len);
+    ASSERT_EQ(len, ioctx.read("foo", bl, len, offset));
+    ASSERT_TRUE(ol==bl);
+  }
+
+  // read the object, offset + len > object size
+  {
+    bufferlist bl;
+    bufferlist ol;
+    uint64_t offset = stripe_width + chunk_size + 2;
+    uint64_t len = origin.length() - offset + 20;
+    ol.substr_of(origin, offset, MIN(len, origin.length() - offset));
+    ASSERT_EQ(origin.length() - offset, ioctx.read("foo", bl, len, offset));
+    ASSERT_TRUE(ol==bl);
+  }
+
+  // Verify 10 times the object is NOT present in the cache tier
+  uint32_t i = 0;
+  while (i++ < 10) {
+    NObjectIterator it = cache_ioctx.nobjects_begin();
+    ASSERT_TRUE(it == cache_ioctx.nobjects_end());
+    sleep(1);
+  }
+
+  // tear down tiers
+  ASSERT_EQ(0, cluster.mon_command(
+    "{\"prefix\": \"osd tier remove-overlay\", \"pool\": \"" + pool_name +
+    "\"}",
+    inbl, NULL, NULL));
+  ASSERT_EQ(0, cluster.mon_command(
+    "{\"prefix\": \"osd tier remove\", \"pool\": \"" + pool_name +
+    "\", \"tierpool\": \"" + cache_pool_name + "\"}",
+    inbl, NULL, NULL));
+
+  // wait for maps to settle before next test
+  cluster.wait_for_latest_osdmap();
+}
+
+TEST_F(LibRadosTwoPoolsECPPDirectFastRead, ProxyRead1) { // the object size < chunk_size
+  // create object
+  const uint64_t chunk_size = 2048; // default value
+
+  bufferlist origin;
+  for(int i = 0; i < 432; i++) {
+    origin.append((char)(rand() % 256));
+  }
+  ObjectWriteOperation op;
+  op.write_full(origin);
+  ASSERT_EQ(0, ioctx.operate("foo", &op));
+
+  // configure cache
+  bufferlist inbl;
+  ASSERT_EQ(0, cluster.mon_command(
+    "{\"prefix\": \"osd tier add\", \"pool\": \"" + pool_name +
+    "\", \"tierpool\": \"" + cache_pool_name +
+    "\", \"force_nonempty\": \"--force-nonempty\" }",
+    inbl, NULL, NULL));
+  ASSERT_EQ(0, cluster.mon_command(
+    "{\"prefix\": \"osd tier set-overlay\", \"pool\": \"" + pool_name +
+    "\", \"overlaypool\": \"" + cache_pool_name + "\"}",
+    inbl, NULL, NULL));
+  ASSERT_EQ(0, cluster.mon_command(
+    "{\"prefix\": \"osd tier cache-mode\", \"pool\": \"" + cache_pool_name +
+    "\", \"mode\": \"readproxy\"}",
+    inbl, NULL, NULL));
+
+  // wait for maps to settle
+  cluster.wait_for_latest_osdmap();
+
+  // read the first chunk and verify the object
+  {
+    bufferlist bl;
+    ASSERT_EQ(1, ioctx.read("foo", bl, 1, 0));
+    ASSERT_EQ(origin[0], bl[0]);
+  }
+
+  // read the first chunk and verify the object
+  {
+    bufferlist bl;
+    bufferlist ol;
+    uint64_t offset = 1;
+    uint64_t len = chunk_size - 1;
+    ol.substr_of(origin, offset, MIN(len, origin.length() - offset));
+    ASSERT_EQ(MIN(len, origin.length() - offset), ioctx.read("foo", bl, len, offset));
+    ASSERT_TRUE(ol==bl);
+  }
+
+  // the offset > object size
+  {
+    bufferlist bl;
+    bufferlist ol;
+    uint64_t offset = chunk_size;
+    uint64_t len = 1;
+    ASSERT_TRUE(ioctx.read("foo", bl, len, offset) == 0);
+  }
+
+  // tear down tiers
+  ASSERT_EQ(0, cluster.mon_command(
+    "{\"prefix\": \"osd tier remove-overlay\", \"pool\": \"" + pool_name +
+    "\"}",
+    inbl, NULL, NULL));
+  ASSERT_EQ(0, cluster.mon_command(
+    "{\"prefix\": \"osd tier remove\", \"pool\": \"" + pool_name +
+    "\", \"tierpool\": \"" + cache_pool_name + "\"}",
+    inbl, NULL, NULL));
+
+  // wait for maps to settle before next test
+  cluster.wait_for_latest_osdmap();
+}
+
+TEST_F(LibRadosTwoPoolsECPPDirectFastRead, ProxyRead2) { // the object size == chunk_size
+  // create object
+  const uint64_t chunk_size = 2048; // default value
+
+  bufferlist origin;
+  for(int i = 0; i < chunk_size; i++) {
+    origin.append((char)(rand() % 256));
+  }
+  ObjectWriteOperation op;
+  op.write_full(origin);
+  ASSERT_EQ(0, ioctx.operate("foo", &op));
+
+  // configure cache
+  bufferlist inbl;
+  ASSERT_EQ(0, cluster.mon_command(
+    "{\"prefix\": \"osd tier add\", \"pool\": \"" + pool_name +
+    "\", \"tierpool\": \"" + cache_pool_name +
+    "\", \"force_nonempty\": \"--force-nonempty\" }",
+    inbl, NULL, NULL));
+  ASSERT_EQ(0, cluster.mon_command(
+    "{\"prefix\": \"osd tier set-overlay\", \"pool\": \"" + pool_name +
+    "\", \"overlaypool\": \"" + cache_pool_name + "\"}",
+    inbl, NULL, NULL));
+  ASSERT_EQ(0, cluster.mon_command(
+    "{\"prefix\": \"osd tier cache-mode\", \"pool\": \"" + cache_pool_name +
+    "\", \"mode\": \"readproxy\"}",
+    inbl, NULL, NULL));
+
+  // wait for maps to settle
+  cluster.wait_for_latest_osdmap();
+
+  // read the first chunk and verify the object
+  {
+    bufferlist bl;
+    ASSERT_EQ(1, ioctx.read("foo", bl, 1, 0));
+    ASSERT_EQ(origin[0], bl[0]);
+  }
+
+  // read the first chunk and verify the object
+  {
+    bufferlist bl;
+    bufferlist ol;
+    uint64_t offset = 1;
+    uint64_t len = chunk_size - 1;
+    ol.substr_of(origin, offset, MIN(len, origin.length() - offset));
+    ASSERT_EQ(MIN(len, origin.length() - offset), ioctx.read("foo", bl, len, offset));
+    ASSERT_TRUE(ol==bl);
+  }
+
+  // the offset >= object size
+  {
+    bufferlist bl;
+    bufferlist ol;
+    uint64_t offset = chunk_size;
+    uint64_t len = 1;
+    ASSERT_TRUE(ioctx.read("foo", bl, len, offset) == 0);
+    ASSERT_EQ(0, bl.length());
+  }
+
+  // the offset >= object size
+  {
+    bufferlist bl;
+    bufferlist ol;
+    uint64_t offset = chunk_size;
+    ASSERT_TRUE(ioctx.read("foo", bl, 0, offset) == 0);
+    ASSERT_EQ(0, bl.length());
   }
 
   // tear down tiers

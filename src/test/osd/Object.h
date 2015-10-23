@@ -357,7 +357,7 @@ public:
 
   // takes ownership of gen
   void update(ContentsGenerator *gen, const ContDesc &next);
-  bool check(bufferlist &to_check);
+  bool check(bufferlist &to_check, uint64_t offset, uint64_t len);
   bool check_sparse(const std::map<uint64_t, uint64_t>& extends,
 		    bufferlist &to_check);
   const ContDesc &most_recent();
