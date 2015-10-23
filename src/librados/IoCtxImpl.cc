@@ -816,7 +816,7 @@ int librados::IoCtxImpl::aio_operate(const object_t& oid,
 
 int librados::IoCtxImpl::aio_read(const object_t oid, AioCompletionImpl *c,
 				  bufferlist *pbl, size_t len, uint64_t off,
-				  uint64_t snapid)
+				  uint64_t snapid, const blkin_trace_info *info)
 {
   FUNCTRACE();
   if (len > (size_t) INT_MAX)
@@ -832,17 +832,21 @@ int librados::IoCtxImpl::aio_read(const object_t oid, AioCompletionImpl *c,
   c->io = this;
   c->blp = pbl;
 
+  ZTracer::Trace trace;
+  if (info)
+    trace.init("rados read", &objecter->trace_endpoint, info);
+
   Objecter::Op *o = objecter->prepare_read_op(
     oid, oloc,
     off, len, snapid, pbl, 0,
-    oncomplete, &c->objver);
+    oncomplete, &c->objver, nullptr, 0, &trace);
   objecter->op_submit(o, &c->tid);
   return 0;
 }
 
 int librados::IoCtxImpl::aio_read(const object_t oid, AioCompletionImpl *c,
 				  char *buf, size_t len, uint64_t off,
-				  uint64_t snapid)
+				  uint64_t snapid, const blkin_trace_info *info)
 {
   FUNCTRACE();
   if (len > (size_t) INT_MAX)
@@ -861,10 +865,14 @@ int librados::IoCtxImpl::aio_read(const object_t oid, AioCompletionImpl *c,
   c->blp = &c->bl;
   c->out_buf = buf;
 
+  ZTracer::Trace trace;
+  if (info)
+    trace.init("rados read", &objecter->trace_endpoint, info);
+
   Objecter::Op *o = objecter->prepare_read_op(
     oid, oloc,
     off, len, snapid, &c->bl, 0,
-    oncomplete, &c->objver);
+    oncomplete, &c->objver, nullptr, 0, &trace);
   objecter->op_submit(o, &c->tid);
   return 0;
 }
@@ -959,7 +967,7 @@ int librados::IoCtxImpl::aio_cmpext(const object_t& oid,
 
 int librados::IoCtxImpl::aio_write(const object_t &oid, AioCompletionImpl *c,
 				   const bufferlist& bl, size_t len,
-				   uint64_t off)
+				   uint64_t off, const blkin_trace_info *info)
 {
   FUNCTRACE();
   auto ut = ceph::real_clock::now();
@@ -977,13 +985,17 @@ int librados::IoCtxImpl::aio_write(const object_t &oid, AioCompletionImpl *c,
 #if defined(WITH_LTTNG) && defined(WITH_EVENTTRACE)
   ((C_aio_Complete *) oncomplete)->oid = oid;
 #endif
+  ZTracer::Trace trace;
+  if (info)
+    trace.init("rados write", &objecter->trace_endpoint, info);
+
   c->io = this;
   queue_aio_write(c);
 
   Objecter::Op *o = objecter->prepare_write_op(
     oid, oloc,
     off, len, snapc, bl, ut, 0,
-    oncomplete, &c->objver);
+    oncomplete, &c->objver, nullptr, 0, &trace);
   objecter->op_submit(o, &c->tid);
 
   return 0;
