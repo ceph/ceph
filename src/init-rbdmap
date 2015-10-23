@@ -20,7 +20,9 @@
 
 RBDMAPFILE="/etc/ceph/rbdmap"
 
-. /lib/lsb/init-functions
+if [ -e /lib/lsb/init-functions ]; then
+    . /lib/lsb/init-functions
+fi
 
 do_map() {
 	if [ ! -f "$RBDMAPFILE" ]; then
