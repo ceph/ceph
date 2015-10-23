@@ -2695,8 +2695,8 @@ int RGW_Auth_S3::authorize_v4(RGWRados *store, struct req_state *s)
     }
     const char *t = s->info.env->get(token_env.c_str());
     if (!t) {
-      dout(10) << "error getting env var" << dendl;
-      return -EINVAL;
+      dout(10) << "warning env var not available" << dendl;
+      continue;
     }
     if (token_env == "HTTP_CONTENT_MD5") {
       for (const char *p = t; *p; p++) {
