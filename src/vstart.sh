@@ -639,10 +639,6 @@ if [ "$start_mds" -eq 1 -a "$CEPH_NUM_MDS" -gt 0 ]; then
     echo $cmd
     $cmd
 
-    cmd="$CEPH_ADM mds set max_mds $CEPH_NUM_MDS"
-    echo $cmd
-    $cmd
-
     mds=0
     for name in a b c d e f g h i j k l m n o p
     do
