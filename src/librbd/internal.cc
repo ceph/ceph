@@ -33,6 +33,7 @@
 
 #include <boost/bind.hpp>
 #include <boost/scope_exit.hpp>
+#include <boost/variant.hpp>
 #include "include/assert.h"
 
 #define dout_subsys ceph_subsys_rbd
@@ -440,6 +441,156 @@ int invoke_async_request(ImageCtx *ictx, const std::string& request_type,
     ::encode(c, cmdbl);
     ::encode(imgname, cmdbl);
     return io_ctx.tmap_update(RBD_DIRECTORY, cmdbl);
+  }
+
+  typedef boost::variant<std::string,uint64_t> image_option_value_t;
+  typedef std::map<int,image_option_value_t> image_options_t;
+  typedef std::shared_ptr<image_options_t> image_options_ref;
+
+  enum image_option_type_t {
+    STR,
+    UINT64,
+  };
+
+  const std::map<int, image_option_type_t> IMAGE_OPTIONS_TYPE_MAPPING = {
+    {RBD_IMAGE_OPTION_FORMAT, UINT64},
+    {RBD_IMAGE_OPTION_FEATURES, UINT64},
+    {RBD_IMAGE_OPTION_ORDER, UINT64},
+    {RBD_IMAGE_OPTION_STRIPE_UNIT, UINT64},
+    {RBD_IMAGE_OPTION_STRIPE_COUNT, UINT64},
+  };
+
+  void image_options_create(rbd_image_options_t* opts)
+  {
+    image_options_ref* opts_ = new image_options_ref(new image_options_t());
+
+    *opts = static_cast<rbd_image_options_t>(opts_);
+  }
+
+  void image_options_create_ref(rbd_image_options_t* opts,
+				rbd_image_options_t orig)
+  {
+    image_options_ref* orig_ = static_cast<image_options_ref*>(orig);
+    image_options_ref* opts_ = new image_options_ref(*orig_);
+
+    *opts = static_cast<rbd_image_options_t>(opts_);
+  }
+
+  void image_options_destroy(rbd_image_options_t opts)
+  {
+    image_options_ref* opts_ = static_cast<image_options_ref*>(opts);
+
+    delete opts_;
+  }
+
+  int image_options_set(rbd_image_options_t opts, int optname,
+			const std::string& optval)
+  {
+    image_options_ref* opts_ = static_cast<image_options_ref*>(opts);
+
+    std::map<int, image_option_type_t>::const_iterator i =
+      IMAGE_OPTIONS_TYPE_MAPPING.find(optname);
+
+    if (i == IMAGE_OPTIONS_TYPE_MAPPING.end() || i->second != STR) {
+      return -EINVAL;
+    }
+
+    (*opts_->get())[optname] = optval;
+    return 0;
+  }
+
+  int image_options_set(rbd_image_options_t opts, int optname, uint64_t optval)
+  {
+    image_options_ref* opts_ = static_cast<image_options_ref*>(opts);
+
+    std::map<int, image_option_type_t>::const_iterator i =
+      IMAGE_OPTIONS_TYPE_MAPPING.find(optname);
+
+    if (i == IMAGE_OPTIONS_TYPE_MAPPING.end() || i->second != UINT64) {
+      return -EINVAL;
+    }
+
+    (*opts_->get())[optname] = optval;
+    return 0;
+  }
+
+  int image_options_get(rbd_image_options_t opts, int optname,
+			std::string* optval)
+  {
+    image_options_ref* opts_ = static_cast<image_options_ref*>(opts);
+
+    std::map<int, image_option_type_t>::const_iterator i =
+      IMAGE_OPTIONS_TYPE_MAPPING.find(optname);
+
+    if (i == IMAGE_OPTIONS_TYPE_MAPPING.end() || i->second != STR) {
+      return -EINVAL;
+    }
+
+    image_options_t::const_iterator j = (*opts_)->find(optname);
+
+    if (j == (*opts_)->end()) {
+      return -ENOENT;
+    }
+
+    *optval = boost::get<std::string>(j->second);
+    return 0;
+  }
+
+  int image_options_get(rbd_image_options_t opts, int optname, uint64_t* optval)
+  {
+    image_options_ref* opts_ = static_cast<image_options_ref*>(opts);
+
+    std::map<int, image_option_type_t>::const_iterator i =
+      IMAGE_OPTIONS_TYPE_MAPPING.find(optname);
+
+    if (i == IMAGE_OPTIONS_TYPE_MAPPING.end() || i->second != UINT64) {
+      return -EINVAL;
+    }
+
+    image_options_t::const_iterator j = (*opts_)->find(optname);
+
+    if (j == (*opts_)->end()) {
+      return -ENOENT;
+    }
+
+    *optval = boost::get<uint64_t>(j->second);
+    return 0;
+  }
+
+  int image_options_unset(rbd_image_options_t opts, int optname)
+  {
+    image_options_ref* opts_ = static_cast<image_options_ref*>(opts);
+
+    std::map<int, image_option_type_t>::const_iterator i =
+      IMAGE_OPTIONS_TYPE_MAPPING.find(optname);
+
+    if (i == IMAGE_OPTIONS_TYPE_MAPPING.end()) {
+      assert((*opts_)->find(optname) == (*opts_)->end());
+      return -EINVAL;
+    }
+
+    image_options_t::const_iterator j = (*opts_)->find(optname);
+
+    if (j == (*opts_)->end()) {
+      return -ENOENT;
+    }
+
+    (*opts_)->erase(j);
+    return 0;
+  }
+
+  void image_options_clear(rbd_image_options_t opts)
+  {
+    image_options_ref* opts_ = static_cast<image_options_ref*>(opts);
+
+    (*opts_)->clear();
+  }
+
+  bool image_options_is_empty(rbd_image_options_t opts)
+  {
+    image_options_ref* opts_ = static_cast<image_options_ref*>(opts);
+
+    return (*opts_)->empty();
   }
 
   void rollback_object(ImageCtx *ictx, uint64_t snap_id, const string& oid,
@@ -1229,14 +1380,58 @@ reprotect_and_return_err:
     if (!order)
       return -EINVAL;
 
+    uint64_t order_ = *order;
+    uint64_t format = old_format ? 1 : 2;
+    ImageOptions opts;
+    int r;
+
+    r = opts.set(RBD_IMAGE_OPTION_FORMAT, format);
+    assert(r == 0);
+    r = opts.set(RBD_IMAGE_OPTION_FEATURES, features);
+    assert(r == 0);
+    r = opts.set(RBD_IMAGE_OPTION_ORDER, order_);
+    assert(r == 0);
+    r = opts.set(RBD_IMAGE_OPTION_STRIPE_UNIT, stripe_unit);
+    assert(r == 0);
+    r = opts.set(RBD_IMAGE_OPTION_STRIPE_COUNT, stripe_count);
+    assert(r == 0);
+
+    r = create(io_ctx, imgname, size, opts);
+
+    int r1 = opts.get(RBD_IMAGE_OPTION_ORDER, &order_);
+    assert(r1 == 0);
+    *order = order_;
+
+    return r;
+  }
+
+  int create(IoCtx& io_ctx, const char *imgname, uint64_t size,
+	     ImageOptions& opts)
+  {
     CephContext *cct = (CephContext *)io_ctx.cct();
+
+    uint64_t format = cct->_conf->rbd_default_format;
+    opts.get(RBD_IMAGE_OPTION_FORMAT, &format);
+    bool old_format = format == 1;
+
+    uint64_t features;
+    if (opts.get(RBD_IMAGE_OPTION_FEATURES, &features) != 0) {
+      features = old_format ? 0 : cct->_conf->rbd_default_features;
+    }
+    uint64_t stripe_unit = 0;
+    uint64_t stripe_count = 0;
+    opts.get(RBD_IMAGE_OPTION_STRIPE_UNIT, &stripe_unit);
+    opts.get(RBD_IMAGE_OPTION_STRIPE_COUNT, &stripe_count);
+
+    uint64_t order = 0;
+    opts.get(RBD_IMAGE_OPTION_ORDER, &order);
+
     ldout(cct, 20) << "create " << &io_ctx << " name = " << imgname
 		   << " size = " << size << " old_format = " << old_format
-		   << " features = " << features << " order = " << *order
+		   << " features = " << features << " order = " << order
 		   << " stripe_unit = " << stripe_unit
 		   << " stripe_count = " << stripe_count
 		   << dendl;
-
 
     if (features & ~RBD_FEATURES_ALL) {
       lderr(cct) << "librbd does not support requested features." << dendl;
@@ -1254,12 +1449,12 @@ reprotect_and_return_err:
       return -EEXIST;
     }
 
-    if (!*order)
-      *order = cct->_conf->rbd_default_order;
-    if (!*order)
-      *order = RBD_DEFAULT_OBJ_ORDER;
+    if (!order)
+      order = cct->_conf->rbd_default_order;
+    if (!order)
+      order = RBD_DEFAULT_OBJ_ORDER;
 
-    if (*order > 25 || *order < 12) {
+    if (order > 25 || order < 12) {
       lderr(cct) << "order must be in the range [12, 25]" << dendl;
       return -EDOM;
     }
@@ -1275,7 +1470,7 @@ reprotect_and_return_err:
     }
 
     // normalize for default striping
-    if (stripe_unit == (1ull << *order) && stripe_count == 1) {
+    if (stripe_unit == (1ull << order) && stripe_count == 1) {
       stripe_unit = 0;
       stripe_count = 0;
     }
@@ -1289,21 +1484,43 @@ reprotect_and_return_err:
       return -EINVAL;
 
     if (old_format) {
-      if (stripe_unit && stripe_unit != (1ull << *order))
+      if (stripe_unit && stripe_unit != (1ull << order))
 	return -EINVAL;
       if (stripe_count && stripe_count != 1)
 	return -EINVAL;
 
-      return create_v1(io_ctx, imgname, bid, size, *order);
+      r = create_v1(io_ctx, imgname, bid, size, order);
     } else {
-      return create_v2(io_ctx, imgname, bid, size, *order, features,
-		       stripe_unit, stripe_count);
+      r = create_v2(io_ctx, imgname, bid, size, order, features, stripe_unit,
+		    stripe_count);
     }
+
+    int r1 = opts.set(RBD_IMAGE_OPTION_ORDER, order);
+    assert(r1 == 0);
+
+    return r;
   }
 
   /*
    * Parent may be in different pool, hence different IoCtx
    */
+  int clone(IoCtx& p_ioctx, const char *p_name, const char *p_snap_name,
+	    IoCtx& c_ioctx, const char *c_name, ImageOptions& c_opts)
+  {
+    int order = 0;
+    uint64_t features = 0;
+    uint64_t stripe_unit = 0;
+    uint64_t stripe_count = 0;
+    c_opts.get(RBD_IMAGE_OPTION_FEATURES, &features);
+    c_opts.get(RBD_IMAGE_OPTION_STRIPE_UNIT, &stripe_unit);
+    c_opts.get(RBD_IMAGE_OPTION_STRIPE_COUNT, &stripe_count);
+
+    int r = clone(p_ioctx, p_name, p_snap_name, c_ioctx, c_name, features,
+		  &order, stripe_unit, stripe_count);
+    c_opts.set(RBD_IMAGE_OPTION_ORDER, static_cast<uint64_t>(order));
+    return r;
+  }
+
   int clone(IoCtx& p_ioctx, const char *p_name, const char *p_snap_name,
 	    IoCtx& c_ioctx, const char *c_name,
 	    uint64_t features, int *c_order,
@@ -2614,25 +2831,40 @@ reprotect_and_return_err:
   }
 
   int copy(ImageCtx *src, IoCtx& dest_md_ctx, const char *destname,
-	   ProgressContext &prog_ctx)
+	   ImageOptions& opts, ProgressContext &prog_ctx)
   {
     CephContext *cct = (CephContext *)dest_md_ctx.cct();
     ldout(cct, 20) << "copy " << src->name
 		   << (src->snap_name.length() ? "@" + src->snap_name : "")
 		   << " -> " << destname << dendl;
-    int order = src->order;
 
     src->snap_lock.get_read();
-    uint64_t src_features = src->features;
+    uint64_t features = src->features;
     uint64_t src_size = src->get_image_size(src->snap_id);
     src->snap_lock.put_read();
+    uint64_t stripe_unit = src->stripe_unit;
+    uint64_t stripe_count = src->stripe_count;
+    opts.get(RBD_IMAGE_OPTION_FEATURES, &features);
+    opts.get(RBD_IMAGE_OPTION_STRIPE_UNIT, &stripe_unit);
+    opts.get(RBD_IMAGE_OPTION_STRIPE_COUNT, &stripe_count);
+    int order = src->order;
+    uint64_t opt_order = 0;
+    if (opts.get(RBD_IMAGE_OPTION_ORDER, &opt_order)) {
+      order = opt_order;
+    }
+
+    if (features & ~RBD_FEATURES_ALL) {
+      lderr(cct) << "librbd does not support requested features" << dendl;
+      return -ENOSYS;
+    }
 
     int r = create(dest_md_ctx, destname, src_size, src->old_format,
-		   src_features, &order, src->stripe_unit, src->stripe_count);
+		   features, &order, stripe_unit, stripe_count);
     if (r < 0) {
       lderr(cct) << "header creation failed" << dendl;
       return r;
     }
+    opts.set(RBD_IMAGE_OPTION_ORDER, static_cast<uint64_t>(order));
 
     ImageCtx *dest = new librbd::ImageCtx(destname, "", NULL,
 					  dest_md_ctx, false);

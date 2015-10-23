@@ -29,6 +29,7 @@ namespace librbd {
   using librados::IoCtx;
 
   class Image;
+  class ImageOptions;
   typedef void *image_ctx_t;
   typedef void *completion_t;
   typedef void (*callback_t)(completion_t cb, void *arg);
@@ -86,12 +87,16 @@ public:
   int create3(IoCtx& io_ctx, const char *name, uint64_t size,
 	      uint64_t features, int *order,
 	      uint64_t stripe_unit, uint64_t stripe_count);
+  int create4(IoCtx& io_ctx, const char *name, uint64_t size,
+	      ImageOptions& opts);
   int clone(IoCtx& p_ioctx, const char *p_name, const char *p_snapname,
 	       IoCtx& c_ioctx, const char *c_name, uint64_t features,
 	       int *c_order);
   int clone2(IoCtx& p_ioctx, const char *p_name, const char *p_snapname,
 	     IoCtx& c_ioctx, const char *c_name, uint64_t features,
 	     int *c_order, uint64_t stripe_unit, int stripe_count);
+  int clone3(IoCtx& p_ioctx, const char *p_name, const char *p_snapname,
+	     IoCtx& c_ioctx, const char *c_name, ImageOptions& opts);
   int remove(IoCtx& io_ctx, const char *name);
   int remove_with_progress(IoCtx& io_ctx, const char *name, ProgressContext& pctx);
   int rename(IoCtx& src_io_ctx, const char *srcname, const char *destname);
@@ -100,6 +105,27 @@ private:
   /* We don't allow assignment or copying */
   RBD(const RBD& rhs);
   const RBD& operator=(const RBD& rhs);
+};
+
+class CEPH_RBD_API ImageOptions {
+public:
+  ImageOptions();
+  ImageOptions(rbd_image_options_t opts);
+  ~ImageOptions();
+
+  int set(int optname, const std::string& optval);
+  int set(int optname, uint64_t optval);
+  int get(int optname, std::string* optval) const;
+  int get(int optname, uint64_t* optval) const;
+  int unset(int optname);
+  void clear();
+  bool empty() const;
+
+private:
+  friend class RBD;
+  friend class Image;
+
+  rbd_image_options_t opts;
 };
 
 class CEPH_RBD_API Image
@@ -130,9 +156,12 @@ public:
 
   int copy(IoCtx& dest_io_ctx, const char *destname);
   int copy2(Image& dest);
+  int copy3(IoCtx& dest_io_ctx, const char *destname, ImageOptions& opts);
   int copy_with_progress(IoCtx& dest_io_ctx, const char *destname,
 			 ProgressContext &prog_ctx);
   int copy_with_progress2(Image& dest, ProgressContext &prog_ctx);
+  int copy_with_progress3(IoCtx& dest_io_ctx, const char *destname,
+			  ImageOptions& opts, ProgressContext &prog_ctx);
 
   /* striping */
   uint64_t get_stripe_unit() const;
