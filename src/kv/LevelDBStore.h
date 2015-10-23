@@ -205,6 +205,10 @@ public:
     std::map<string, bufferlist> *out
     );
 
+  int get(const string &prefix, 
+    const string &key,   
+    bufferlist *value);
+      
   class LevelDBWholeSpaceIteratorImpl :
     public KeyValueDB::WholeSpaceIteratorImpl {
   protected:
