@@ -140,6 +140,7 @@ private:
 public:
   class xio_mempool;
   class xio_msg_buffer;
+  class SlabAllocator;
 
   /*
    * named constructors 
@@ -154,6 +155,7 @@ public:
   static raw* create_page_aligned(unsigned len);
   static raw* create_zero_copy(unsigned len, int fd, int64_t *offset);
   static raw* create_unshareable(unsigned len);
+  static raw* create_slab(SlabAllocator *slab, unsigned len);
 
 #if defined(HAVE_XIO)
   static raw* create_msg(unsigned len, char *buf, XioDispatchHook *m_hook);
