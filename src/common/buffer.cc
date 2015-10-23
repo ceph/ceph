@@ -562,7 +562,7 @@ static simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZER;
     uint32_t index;
 
   public:
-    raw_slab(SlabAllocator *slab, unsigned l) : raw(NULL, l) {
+    raw_slab(SlabAllocator *slab, unsigned l) : raw(NULL, l), slab(NULL), index(0) {
       if (slab->create(len, &index, (void**)&data) < 0) {
         throw bad_alloc();
       }

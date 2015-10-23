@@ -32,6 +32,9 @@ using namespace std;
 #include "common/Thread.h"
 #include "common/Throttle.h"
 
+#include "msg/SimplePolicyMessenger.h"
+#include "include/assert.h"
+#include "AsyncConnection.h"
 #include "Event.h"
 #include "SlabPool.h"
 
@@ -59,9 +62,9 @@ class Worker : public Thread {
   bool done;
   int id;
   PerfCounters *perf_logger;
-  SlabPool *slab;
 
  public:
+  SlabPool *slab;
   EventCenter center;
   Worker(CephContext *c, WorkerPool *p, int i)
     : cct(c), pool(p), done(false), id(i), perf_logger(NULL),

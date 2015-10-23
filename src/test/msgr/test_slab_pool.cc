@@ -15,21 +15,26 @@
  */
 #include <iostream>
 #include <assert.h>
+#include <map>
+
+#include "include/Context.h"
+#include "global/global_init.h"
+#include "common/ceph_argparse.h"
 #include "msg/async/SlabPool.h"
 
 #include <gtest/gtest.h>
 
 static const size_t max_object_size = 1024*1024;
 
-static void free_vector(slab_allocator &slab, std::map<uint32_t, void*> &items) {
+static void free_map(SlabAllocator &slab, std::map<uint32_t, void*> &items) {
   for (std::map<uint32_t, void*>::iterator it = items.begin();
-       it != items.end(); ++it {
+       it != items.end(); ++it) {
     slab.free(it->first, it->second);
   }
 }
 
 static void test_allocation_1(const double growth_factor, const unsigned slab_limit_size) {
-    slab_allocator slab(growth_factor, slab_limit_size, max_object_size);
+    SlabAllocator slab(growth_factor, slab_limit_size, max_object_size);
     size_t size = max_object_size;
 
     slab.print_slab_classes();
@@ -45,11 +50,11 @@ static void test_allocation_1(const double growth_factor, const unsigned slab_li
         datas[idx] = data;
     }
     assert(slab.create(size, &idx, &data) < 0);
-    free_vector(slab, datas);
+    free_map(slab, datas);
 }
 
 static void test_allocation_2(const double growth_factor, const unsigned slab_limit_size) {
-    slab_allocator slab(growth_factor, slab_limit_size, max_object_size);
+    SlabAllocator slab(growth_factor, slab_limit_size, max_object_size);
     size_t size = 1024;
 
     std::map<uint32_t, void*> datas;
@@ -70,7 +75,7 @@ static void test_allocation_2(const double growth_factor, const unsigned slab_li
     size_t per_slab_page = max_object_size / class_size;
     unsigned available_slab_pages = slab_limit_size / max_object_size;
     assert(allocations == (per_slab_page * available_slab_pages));
-    free_vector(slab, datas);
+    free_map(slab, datas);
 }
 
 TEST(SlabPool, test_allocation) {
@@ -79,7 +84,7 @@ TEST(SlabPool, test_allocation) {
 }
 
 int main(int argc, char **argv) {
-  vector<const char*> args;
+  std::vector<const char*> args;
   argv_to_vec(argc, (const char **)argv, args);
 
   global_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT, CODE_ENVIRONMENT_UTILITY, 0);
@@ -95,4 +100,4 @@ int main(int argc, char **argv) {
  *    ./unittest_slab_pool
  *
  * End:
- *
+ */

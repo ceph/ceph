@@ -19,6 +19,7 @@
 
 #include <vector>
 #include <list>
+#include <limits>
 
 #include "include/page.h"
 #include "include/error.h"
@@ -137,7 +138,8 @@ class SlabClass {
       return -ENOMEM;
     }
 
-    free_slab_pages.push_front(*desc);
+    if (!(*desc)->empty())
+      free_slab_pages.push_front(*desc);
     // first object from the allocated slab page is returned.
     return 0;
   }
@@ -166,7 +168,7 @@ class SlabAllocator {
     uint8_t slab_class_id = 0U;
 
     while (max_object_size / size > 1) {
-      size = (size + CEPH_PAGE_SIZE - 1) & ~(size - 1);
+      size = (size + CEPH_PAGE_SIZE - 1) & ~(CEPH_PAGE_SIZE - 1);
       slab_class_sizes.push_back(size);
       slab_classes.push_back(SlabClass(size, slab_class_id));
       size *= growth_factor;
