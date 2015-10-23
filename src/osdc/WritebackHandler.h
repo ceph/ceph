@@ -30,24 +30,13 @@ class WritebackHandler {
   virtual bool may_copy_on_write(const object_t& oid, uint64_t read_off,
 				 uint64_t read_len, snapid_t snapid) = 0;
   virtual ceph_tid_t write(const object_t& oid, const object_locator_t& oloc,
-			   uint64_t off, uint64_t len,
-			   const SnapContext& snapc,
-			   const bufferlist &bl, ceph::real_time mtime,
-			   uint64_t trunc_size, __u32 trunc_seq,
-                           ceph_tid_t journal_tid, Context *oncommit) = 0;
-
-  virtual void overwrite_extent(const object_t& oid, uint64_t off, uint64_t len,
-                                ceph_tid_t journal_tid) {}
-
-  virtual bool can_scattered_write() { return false; }
-  virtual ceph_tid_t write(const object_t& oid, const object_locator_t& oloc,
 			   vector<pair<uint64_t, bufferlist> >&& io_vec,
 			   const SnapContext& snapc, ceph::real_time mtime,
 			   uint64_t trunc_size, __u32 trunc_seq,
-			   Context *oncommit) {
-    assert(false);
-    return 0;
-  }
+			   Context *oncommit) = 0;
+
+  virtual void overwrite_extent(const object_t& oid, uint64_t off, uint64_t len,
+                                ceph_tid_t journal_tid) {}
 
   virtual void get_client_lock() {}
   virtual void put_client_lock() {}
