@@ -58,7 +58,7 @@ check_package_signatures: false
 queue_port: 11300
 queue_host: localhost
 lab_domain: $labdomain
-max_job_time: 14400 # 4 hours
+max_job_time: 21600 # 6 hours
 teuthology_path: .
 openstack:
   clone: git clone http://github.com/ceph/teuthology
