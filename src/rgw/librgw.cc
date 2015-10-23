@@ -158,14 +158,16 @@ int RGWLibProcess::process_request(RGWLibRequest* req, RGWLibIO* io)
 
   RGWEnv& rgw_env = io->get_env();
 
-  /* XXX derp derp derp
-   *
+  /* XXX
    * until major refactoring of req_state and req_info, we need
    * to build their RGWEnv boilerplate from the RGWLibRequest,
    * pre-staging any strings (HTTP_HOST) that provoke a crash when
    * not found
    */
-  rgw_env.set("HTTP_HOST", "10.1.1.220" /* XXXX: fix me */);
+
+  /* XXX for now, use "";  could be a legit hostname, or, in future,
+   * perhaps a tenant (Yehuda) */
+  rgw_env.set("HTTP_HOST", "");
 
   /* XXX and -then- bloat up req_state with string copies from it */
   struct req_state rstate(req->cct, &rgw_env, req->get_user());
