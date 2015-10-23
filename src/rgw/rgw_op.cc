@@ -6,6 +6,8 @@
 
 #include <sstream>
 
+#include <boost/bind.hpp>
+
 #include "common/Clock.h"
 #include "common/armor.h"
 #include "common/mime.h"
@@ -656,6 +658,15 @@ bool RGWOp::generate_cors_headers(string& origin, string& method, string& header
   get_cors_response_headers(rule, req_hdrs, headers, exp_headers, max_age);
 
   return true;
+}
+
+/**
+ * Return a callable that can invoke dump_access_control().
+ */
+
+boost::function<void()> RGWOp::dump_access_control_f()
+{
+  return boost::bind(dump_access_control, s, this);
 }
 
 int RGWGetObj::read_user_manifest_part(rgw_bucket& bucket,

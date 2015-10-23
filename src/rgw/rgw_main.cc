@@ -298,7 +298,7 @@ int main(int argc, const char **argv)
   }
   r = rgw_perf_start(g_ceph_context);
 
-  rgw_rest_init(g_ceph_context, store, store->get_zonegroup());
+  rgw_rest_init(g_ceph_context, store->region.hostnames, store->get_zonegroup());
 
   mutex.Lock();
   init_timer.cancel_all_events();

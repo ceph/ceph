@@ -98,20 +98,20 @@ int process_request(RGWRados* store, RGWREST* rest, RGWRequest* req,
   ret = handler->postauth_init();
   if (ret < 0) {
     dout(10) << "failed to run post-auth init" << dendl;
-    abort_early(s, op, ret, handler);
+    abort_early(s, op->dump_access_control_f(), ret, handler);
     goto done;
   }
 
   if (s->user->suspended) {
     dout(10) << "user is suspended, uid=" << s->user->user_id << dendl;
-    abort_early(s, op, -ERR_USER_SUSPENDED, handler);
+    abort_early(s, op->dump_access_control_f(), -ERR_USER_SUSPENDED, handler);
     goto done;
   }
 
   req->log(s, "init permissions");
   ret = handler->init_permissions(op);
   if (ret < 0) {
-    abort_early(s, op, ret, handler);
+    abort_early(s, op->dump_access_control_f(), ret, handler);
     goto done;
   }
 
@@ -122,7 +122,7 @@ int process_request(RGWRados* store, RGWREST* rest, RGWRequest* req,
   req->log(s, "recalculating target");
   ret = handler->retarget(op, &op);
   if (ret < 0) {
-    abort_early(s, op, ret, handler);
+    abort_early(s, op->dump_access_control_f(), ret, handler);
     goto done;
   }
   req->op = op;
@@ -130,21 +130,21 @@ int process_request(RGWRados* store, RGWREST* rest, RGWRequest* req,
   req->log(s, "reading permissions");
   ret = handler->read_permissions(op);
   if (ret < 0) {
-    abort_early(s, op, ret, handler);
+    abort_early(s, op->dump_access_control_f(), ret, handler);
     goto done;
   }
 
   req->log(s, "init op");
   ret = op->init_processing();
   if (ret < 0) {
-    abort_early(s, op, ret, handler);
+    abort_early(s, op->dump_access_control_f(), ret, handler);
     goto done;
   }
 
   req->log(s, "verifying op mask");
   ret = op->verify_op_mask();
   if (ret < 0) {
-    abort_early(s, op, ret, handler);
+    abort_early(s, op->dump_access_control_f(), ret, handler);
     goto done;
   }
 
@@ -154,7 +154,7 @@ int process_request(RGWRados* store, RGWREST* rest, RGWRequest* req,
     if (s->system_request) {
       dout(2) << "overriding permissions due to system operation" << dendl;
     } else {
-      abort_early(s, op, ret, handler);
+      abort_early(s, op->dump_access_control_f(), ret, handler);
       goto done;
     }
   }
@@ -162,7 +162,7 @@ int process_request(RGWRados* store, RGWREST* rest, RGWRequest* req,
   req->log(s, "verifying op params");
   ret = op->verify_params();
   if (ret < 0) {
-    abort_early(s, op, ret, handler);
+    abort_early(s, op->dump_access_control_f(), ret, handler);
     goto done;
   }
 

@@ -382,21 +382,22 @@ int RGWPostObj_STS::get_policy()
 }
 #endif
 
-#if 0
+class RGWGetPost_STS : public RGWOp {
+protected:
+  bool get_flag;
+public:
+  RGWGetPost_STS(bool _gf) : get_flag(_gf) {}
+};
+
 RGWOp *RGWHandler_STS::get_obj_op(bool get_data)
 {
-  RGWGetObj_STS *get_obj_op = new RGWGetObj_STS(get_data);
+  RGWGetPost_STS *get_obj_op = new RGWGetPost_STS(get_data);
   return get_obj_op;
 }
-#endif
 
 RGWOp *RGWHandler_STS::op_get()
 {
-#if 0
   return get_obj_op(true);
-#endif
-// XX something here
-  return NULL;
 }
 
 RGWOp *RGWHandler_STS::op_head()
@@ -416,12 +417,7 @@ RGWOp *RGWHandler_STS::op_delete()
 
 RGWOp *RGWHandler_STS::op_post()
 {
-#if 0
   return get_obj_op(false);
-#endif
-// XX something here
-
-  return NULL;
 }
 
 RGWOp *RGWHandler_STS::op_options()

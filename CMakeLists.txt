@@ -259,6 +259,9 @@ endif(WITH_XIO)
 #option for RGW
 option(WITH_RADOSGW "Rados Gateway is enabled" ON)
 
+#option for STS
+option(WITH_RGW_STS "Rados Secure Token Service is enabled" ON)
+
 #option for CephFS
 option(WITH_CEPHFS "CephFS is enabled" ON)
 

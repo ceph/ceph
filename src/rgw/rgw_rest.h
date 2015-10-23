@@ -132,7 +132,7 @@ public:
 
 class RGWRESTFlusher : public RGWFormatterFlusher {
   struct req_state *s;
-  RGWOp *op;
+  boost::function<void()> op;
 protected:
   virtual void do_flush();
   virtual void do_start(int ret);
@@ -141,7 +141,7 @@ public:
     RGWFormatterFlusher(_s->formatter), s(_s), op(_op) {}
   RGWRESTFlusher() : RGWFormatterFlusher(NULL), s(NULL), op(NULL) {}
 
-  void init(struct req_state *_s, RGWOp *_op) {
+  void init(struct req_state *_s, boost::function<void()> _op) {
     s = _s;
     op = _op;
     set_formatter(s->formatter);
@@ -357,7 +357,7 @@ public:
   virtual void init(RGWRados *store, struct req_state *s,
 		    RGWHandler *dialect_handler) {
     RGWOp::init(store, s, dialect_handler);
-    flusher.init(s, this);
+    flusher.init(s, dump_access_control_f());
   }
   virtual void send_response();
   virtual int check_caps(RGWUserCaps& caps)

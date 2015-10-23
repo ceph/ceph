@@ -156,6 +156,7 @@ SUBSYS(rocksdb, 4, 5)
 SUBSYS(leveldb, 4, 5)
 SUBSYS(kinetic, 1, 5)
 SUBSYS(fuse, 1, 5)
+SUBSYS(sts, 1, 5)
 
 OPTION(key, OPT_STR, "")
 OPTION(keyfile, OPT_STR, "")
@@ -1364,3 +1365,18 @@ OPTION(throttler_perf_counter, OPT_BOOL, true) // enable/disable throttler perf 
 OPTION(internal_safe_to_start_threads, OPT_BOOL, false)
 
 OPTION(debug_deliberately_leak_memory, OPT_BOOL, false)
+OPTION(sts_enable_apis, OPT_STR, "sts")
+OPTION(sts_socket_path, OPT_STR, "")   // path to unix domain socket, if not specified, rgw will not run as external fcgi
+OPTION(sts_host, OPT_STR, "")  // host for radosgw, can be an IP, default is 0.0.0.0
+OPTION(sts_port, OPT_STR, "")  // port to listen, format as "8080" "5000", if not specified, rgw will not run external fcgi
+OPTION(sts_dns_name, OPT_STR, "")
+OPTION(sts_content_length_compat, OPT_BOOL, false) // Check both HTTP_CONTENT_LENGTH and CONTENT_LENGTH in fcgi env
+OPTION(sts_script_uri, OPT_STR, "") // alternative value for SCRIPT_URI if not set in request
+OPTION(sts_request_uri, OPT_STR,  "") // alternative value for REQUEST_URI if not set in request
+OPTION(sts_print_continue, OPT_BOOL, true)  // enable if 100-Continue works
+OPTION(sts_remote_addr_param, OPT_STR, "REMOTE_ADDR")  // e.g. X-Forwarded-For, if you have a reverse proxy
+OPTION(sts_thread_pool_size, OPT_INT, 100)
+OPTION(sts_init_timeout, OPT_INT, 300) // time in seconds
+OPTION(sts_mime_types_file, OPT_STR, "/etc/mime.types")
+OPTION(sts_resolve_cname, OPT_BOOL, false)  // should rgw try to resolve hostname as a dns cname record
+OPTION(sts_frontends, OPT_STR, "civetweb, civetweb port=8080") // rgw front ends
