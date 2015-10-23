@@ -35,6 +35,8 @@ namespace {
 
   bool do_create = false;
   bool do_delete = false;
+  bool do_multi = false;
+  int multi_cnt = 10;
 
   string bucket_name = "sorry_dave";
 
@@ -70,6 +72,32 @@ TEST(LibRGW, DELETE_BUCKET) {
   if (do_delete) {
     int ret = rgw_unlink(fs, &fs->root_fh, bucket_name.c_str());
     ASSERT_EQ(ret, 0);
+  }
+}
+
+TEST(LibRGW, CREATE_BUCKET_MULTI) {
+  if (do_multi) {
+    int ret;
+    struct stat st;
+    struct rgw_file_handle fh;
+    for (int ix = 0; ix < multi_cnt; ++ix) {
+      string bn = bucket_name;
+      bn += to_string(ix);
+      ret = rgw_mkdir(fs, &fs->root_fh, bn.c_str(), 755, &st, &fh);
+      ASSERT_EQ(ret, 0);
+      std::cout << "created: " << bn << std::endl;
+    }
+  }
+}
+
+TEST(LibRGW, DELETE_BUCKET_MULTI) {
+  if (do_multi) {
+    for (int ix = 0; ix < multi_cnt; ++ix) {
+      string bn = bucket_name;
+      bn += to_string(ix);
+      int ret = rgw_unlink(fs, &fs->root_fh, bn.c_str());
+      ASSERT_EQ(ret, 0);
+    }
   }
 }
 
@@ -118,12 +146,18 @@ int main(int argc, char *argv[])
     } else if (ceph_argparse_witharg(args, arg_iter, &val, "--uid",
 				     (char*) nullptr)) {
       uid = val;
+    } else if (ceph_argparse_witharg(args, arg_iter, &val, "--bn",
+				     (char*) nullptr)) {
+      bucket_name = val;
     } else if (ceph_argparse_flag(args, arg_iter, "--create",
 					    (char*) nullptr)) {
       do_create = true;
     } else if (ceph_argparse_flag(args, arg_iter, "--delete",
 					    (char*) nullptr)) {
       do_delete = true;
+    } else if (ceph_argparse_flag(args, arg_iter, "--multi",
+					    (char*) nullptr)) {
+      do_multi = true;
     } else {
       ++arg_iter;
     }
