@@ -235,14 +235,10 @@ class ProvisionOpenStack(OpenStack):
             lab_domain=config.lab_domain)
         open(self.user_data, 'w').write(user_data)
 
-    def attach_volumes(self, name, hint):
+    def attach_volumes(self, name, volumes):
         """
         Create and attach volumes to the named OpenStack instance.
         """
-        if hint:
-            volumes = hint['volumes']
-        else:
-            volumes = config['openstack']['volumes']
         for i in range(volumes['count']):
             volume_name = name + '-' + str(i)
             try:
@@ -295,17 +291,17 @@ class ProvisionOpenStack(OpenStack):
         described in resources_hint.
         """
         log.debug('ProvisionOpenStack:create')
+        resources_hint = self.interpret_hints({
+            'machine': config['openstack']['machine'],
+            'volumes': config['openstack']['volumes'],
+        }, resources_hint)
         self.init_user_data(os_type, os_version)
         image = self.image(os_type, os_version)
         if 'network' in config['openstack']:
             net = "--nic net-id=" + str(self.net_id(config['openstack']['network']))
         else:
             net = ''
-        if resources_hint:
-            flavor_hint = resources_hint['machine']
-        else:
-            flavor_hint = config['openstack']['machine']
-        flavor = self.flavor(flavor_hint,
+        flavor = self.flavor(resources_hint['machine'],
                              config['openstack'].get('flavor-select-regexp'))
         misc.sh("openstack server create" +
                 " " + config['openstack'].get('server-create', '') +
@@ -341,7 +337,7 @@ class ProvisionOpenStack(OpenStack):
                 time.sleep(15)
                 if not self.cloud_init_wait(fqdn):
                     raise ValueError('clound_init_wait failed for ' + fqdn)
-                self.attach_volumes(name, resources_hint)
+                self.attach_volumes(name, resources_hint['volumes'])
                 fqdns.append(fqdn)
         except Exception as e:
             log.exception(str(e))

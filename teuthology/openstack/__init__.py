@@ -21,6 +21,7 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 # THE SOFTWARE.
 #
+import copy
 import json
 import logging
 import os
@@ -30,6 +31,7 @@ import socket
 import subprocess
 import tempfile
 import teuthology
+import types
 
 from teuthology.contextutil import safe_while
 from teuthology.config import config as teuth_config
@@ -148,6 +150,26 @@ class OpenStack(object):
         sorted_flavor = sorted(found, cmp=sort_flavor)
         log.debug("sorted flavor = " + str(sorted_flavor))
         return sorted_flavor[0]['Name']
+
+    def interpret_hints(self, defaults, hints):
+        """
+        Return a hint hash which is the interpretation of a list of hints
+        """
+        result = copy.deepcopy(defaults)
+        if not hints:
+            return result
+        if type(hints) is types.DictType:
+            hints = [hints]
+            # TODO: raise after converting all ceph-qa-suite to only use arrays (oct 2015)
+            # raise Exception("openstack: " + str(hints) + " must be an array, not a dict")
+        for hint in hints:
+            for resource in ('machine', 'volumes'):
+                if resource in hint:
+                    new = hint[resource]
+                    current = result[resource]
+                    for key, value in hint[resource].iteritems():
+                        current[key] = max(current[key], new[key])
+        return result
 
     def cloud_init_wait(self, name_or_ip):
         """

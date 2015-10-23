@@ -487,6 +487,84 @@ test. Login wih the ssh access displayed at the end of the
     ...
     ========= 1 passed in 204.35 seconds =========
 
+Defining instances flavor and volumes
+-------------------------------------
+
+Each target (i.e. a virtual machine or instance in the OpenStack
+parlance) created by the OpenStack backend are exactly the same. By
+default they have at least 8GB RAM, 20GB disk, 1 cpus and no disk
+attached. It is equivalent to having the following in the
+`~/.teuthology.yaml <https://github.com/ceph/teuthology/blob/master/docs/siteconfig.rst>`_ file::
+
+    openstack:
+      ...
+      machine:
+        disk: 20 # GB
+        ram: 8000 # MB
+        cpus: 1
+      volumes:
+        count: 0
+        size: 1 # GB
+
+If a job needs more RAM or disk etc. the following can be included in
+an existing facet (yaml file in the teuthology parlance)::
+
+    openstack:
+      - machine:
+          disk: 100 # GB
+        volumes:
+          count: 4
+          size: 10 # GB
+
+Teuthology interprets this as the minimimum requirements, on top of
+the defaults found in the ``~/.teuthology.yaml`` file and the job will
+be given instances with at least 100GB root disk, 8GB RAM, 1 cpus and
+four 10GB volumes attached. The highest value wins: if the job claims
+to need 4GB RAM and the defaults are 8GB RAM, the targets will all
+have 8GB RAM.
+
+Note the dash before the ``machine`` key: the ``openstack`` element is
+an array with one value. If the dash is missing, it is a dictionary instead.
+It matters because there can be multiple entries per job such as::
+
+    openstack:
+      - machine:
+          disk: 40 # GB
+          ram: 8000 # MB
+
+    openstack:
+      - machine:
+          ram: 32000 # MB
+
+    openstack:
+      - volumes: # attached to each instance
+          count: 3
+          size: 200 # GB
+
+When a job is composed with these, theuthology aggregates them as::
+
+    openstack:
+      - machine:
+          disk: 40 # GB
+          ram: 8000 # MB
+      - machine:
+          ram: 32000 # MB
+      - volumes: # attached to each instance
+          count: 3
+          size: 200 # GB
+
+i.e. all entries are grouped in a list in the same fashion ``tasks`` are.
+The resource requirement is the maximum of the resources found in each
+element (including the default values). In the example above it is equivalent to::
+
+    openstack:
+      machine:
+        disk: 40 # GB
+        ram: 32000 # MB
+      volumes: # attached to each instance
+        count: 3
+        size: 200 # GB
+
 VIRTUAL MACHINE SUPPORT
 =======================
 
