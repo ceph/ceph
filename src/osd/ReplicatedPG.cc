@@ -3285,7 +3285,6 @@ void ReplicatedPG::snap_trimmer(epoch_t queued)
   snap_trim_queued = false;
   dout(10) << "snap_trimmer entry" << dendl;
   if (is_primary()) {
-    entity_inst_t nobody;
     if (scrubber.active) {
       dout(10) << " scrubbing, will requeue snap_trimmer after" << dendl;
       scrubber.queue_snap_trim = true;
@@ -8205,7 +8204,6 @@ void ReplicatedPG::handle_watch_timeout(WatchRef watch)
     OpContext::watch_disconnect_t(watch->get_cookie(), watch->get_entity(), true));
 
 
-  entity_inst_t nobody;
   PGBackend::PGTransaction *t = ctx->op_t;
   ctx->log.push_back(pg_log_entry_t(pg_log_entry_t::MODIFY, obc->obs.oi.soid,
 				    ctx->at_version,
