@@ -160,8 +160,8 @@ class TeuthologyConfig(YamlConfig):
                 'cpus': 1,
             },
             'volumes': {
-                'count': 3,
-                'size': 10,
+                'count': 0,
+                'size': 1,
             },
         },
     }
