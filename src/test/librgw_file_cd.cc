@@ -34,6 +34,8 @@ namespace {
   struct rgw_fs *fs = nullptr;
 
   bool do_create = false;
+  bool do_delete = false;
+
   string bucket_name = "sorry_dave";
 
   struct {
@@ -65,8 +67,10 @@ TEST(LibRGW, CREATE_BUCKET) {
 }
 
 TEST(LibRGW, DELETE_BUCKET) {
-  int ret = rgw_unlink(fs, &fs->root_fh, bucket_name.c_str());
-  ASSERT_EQ(ret, 0);
+  if (do_delete) {
+    int ret = rgw_unlink(fs, &fs->root_fh, bucket_name.c_str());
+    ASSERT_EQ(ret, 0);
+  }
 }
 
 TEST(LibRGW, CLEANUP) {
@@ -106,16 +110,21 @@ int main(int argc, char *argv[])
 
   for (auto arg_iter = args.begin(); arg_iter != args.end();) {
     if (ceph_argparse_witharg(args, arg_iter, &val, "--access",
-			      (char*) NULL)) {
+			      (char*) nullptr)) {
       access_key = val;
     } else if (ceph_argparse_witharg(args, arg_iter, &val, "--secret",
-				     (char*) NULL)) {
+				     (char*) nullptr)) {
       secret_key = val;
     } else if (ceph_argparse_witharg(args, arg_iter, &val, "--uid",
-				     (char*) NULL)) {
+				     (char*) nullptr)) {
       uid = val;
-    }
-    else {
+    } else if (ceph_argparse_flag(args, arg_iter, "--create",
+					    (char*) nullptr)) {
+      do_create = true;
+    } else if (ceph_argparse_flag(args, arg_iter, "--delete",
+					    (char*) nullptr)) {
+      do_delete = true;
+    } else {
       ++arg_iter;
     }
   }
