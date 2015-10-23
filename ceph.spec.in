@@ -227,9 +227,6 @@ Requires:	python-requests
 %if 0%{?_with_systemd}
 %{?systemd_requires}
 %endif
-%if 0%{?rhel} || 0%{?fedora}
-Requires:	redhat-lsb-core
-%endif
 %if 0%{?suse_version}
 Requires(pre):	pwdutils
 %endif
