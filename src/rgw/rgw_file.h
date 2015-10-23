@@ -50,6 +50,10 @@ public:
   struct rgw_fs* get_fs() { return &fs; }
   RGWUserInfo* get_user() { return &user; }
 
+  bool is_root(struct rgw_fs* _fs) {
+    return (&fs == _fs);
+  }
+
 }; /* RGWLibFS */
 
 /*
@@ -275,6 +279,9 @@ public:
 
     return 0;
   }
+
+  virtual void send_response() {}
+
 }; /* RGWDeleteBucketRequest */
 
 #endif /* RGW_FILE_H */
