@@ -34,7 +34,7 @@ static void free_map(SlabAllocator &slab, std::map<uint32_t, void*> &items) {
 }
 
 static void test_allocation_1(const double growth_factor, const unsigned slab_limit_size) {
-    SlabAllocator slab(growth_factor, slab_limit_size, max_object_size);
+    SlabAllocator slab(NULL, "", growth_factor, slab_limit_size, max_object_size);
     size_t size = max_object_size;
 
     slab.print_slab_classes();
@@ -54,7 +54,7 @@ static void test_allocation_1(const double growth_factor, const unsigned slab_li
 }
 
 static void test_allocation_2(const double growth_factor, const unsigned slab_limit_size) {
-    SlabAllocator slab(growth_factor, slab_limit_size, max_object_size);
+    SlabAllocator slab(NULL, "", growth_factor, slab_limit_size, max_object_size);
     size_t size = 1024;
 
     std::map<uint32_t, void*> datas;

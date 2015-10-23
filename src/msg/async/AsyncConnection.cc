@@ -168,9 +168,11 @@ static void alloc_aligned_buffer(SlabAllocator *slab, bufferlist& data, unsigned
     data.push_back(bp);
     left -= middle;
   }
-  if (left) {
-    bufferptr bp = buffer::create_slab(slab, left);
+  while (left > 0) {
+    uint64_t size = MIN(slab->max_size(), left);
+    bufferptr bp = buffer::create_slab(slab, size);
     data.push_back(bp);
+    left -= size;
   }
 }
 

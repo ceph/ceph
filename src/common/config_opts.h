@@ -1146,6 +1146,7 @@ OPTION(rgw_objexp_chunk_size, OPT_U32, 100) // maximum number of entries in a si
 
 OPTION(mutex_perf_counter, OPT_BOOL, false) // enable/disable mutex perf counter
 OPTION(throttler_perf_counter, OPT_BOOL, true) // enable/disable throttler perf counter
+OPTION(slab_perf_counter, OPT_BOOL, true) // enable/disable throttler perf counter
 
 // This will be set to true when it is safe to start threads.
 // Once it is true, it will never change.
