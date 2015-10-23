@@ -28,7 +28,7 @@
 #if defined(HAVE_XIO)
 #include "msg/xio/XioMsg.h"
 #endif
-#include "msg/async/SlabAllocator.h"
+#include "msg/async/SlabPool.h"
 
 #include <errno.h>
 #include <fstream>
@@ -563,7 +563,7 @@ static simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZER;
 
   public:
     raw_slab(SlabAllocator *slab, unsigned l) : raw(NULL, l) {
-      if (slab->create(len, &index, &data) < 0) {
+      if (slab->create(len, &index, (void**)&data) < 0) {
         throw bad_alloc();
       }
     }
@@ -678,8 +678,8 @@ static simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZER;
     return new raw_unshareable(len);
   }
 
-  buffer::raw* buffer::create_unshareable(SlabAllocator *slab, unsigned len) {
-    return new raw_slab(len);
+  buffer::raw* buffer::create_slab(SlabAllocator *slab, unsigned len) {
+    return new raw_slab(slab, len);
   }
 
   buffer::ptr::ptr(raw *r) : _raw(r), _off(0), _len(r->len)   // no lock needed; this is an unref raw.
