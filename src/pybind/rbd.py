@@ -65,6 +65,12 @@ RBD_FEATURES_SINGLE_CLIENT = (RBD_FEATURE_EXCLUSIVE_LOCK |
 
 RBD_FLAG_OBJECT_MAP_INVALID = 1
 
+RBD_IMAGE_OPTION_FORMAT = 0
+RBD_IMAGE_OPTION_FEATURES = 1
+RBD_IMAGE_OPTION_ORDER = 2
+RBD_IMAGE_OPTION_STRIPE_UNIT = 3
+RBD_IMAGE_OPTION_STRIPE_COUNT = 4
+
 
 class Error(Exception):
     pass
@@ -257,11 +263,37 @@ class RBD(object):
             if not hasattr(self.librbd, 'rbd_create2'):
                 raise FunctionNotSupported('installed version of librbd does'
                                            ' not support format 2 images')
+            has_create4 = hasattr(self.librbd, 'rbd_create4')
             has_create3 = hasattr(self.librbd, 'rbd_create3')
             if (stripe_unit != 0 or stripe_count != 0) and not has_create3:
                 raise FunctionNotSupported('installed version of librbd does'
                                            ' not support stripe unit or count')
-            if has_create3:
+            if has_create4:
+                format = old_format and 1 or 2
+                opts = c_void_p()
+                self.librbd.rbd_image_options_create(byref(opts))
+                self.librbd.rbd_image_options_set_uint64(opts,
+                                                         RBD_IMAGE_OPTION_FORMAT,
+                                                         c_uint64(format))
+                self.librbd.rbd_image_options_set_uint64(opts,
+                                                         RBD_IMAGE_OPTION_FEATURES,
+                                                         c_uint64(features))
+                self.librbd.rbd_image_options_set_uint64(opts,
+                                                         RBD_IMAGE_OPTION_ORDER,
+                                                         c_uint64(order))
+                self.librbd.rbd_image_options_set_uint64(opts,
+                                                         RBD_IMAGE_OPTION_STRIPE_UNIT,
+                                                         c_uint64(stripe_unit))
+                self.librbd.rbd_image_options_set_uint64(opts,
+                                                         RBD_IMAGE_OPTION_STRIPE_COUNT,
+                                                         c_uint64(stripe_count))
+                ret = self.librbd.rbd_create4(ioctx.io, c_char_p(name),
+                                              c_uint64(size), opts)
+                self.librbd.rbd_image_options_get_uint64(opts,
+                                                         RBD_IMAGE_OPTION_ORDER,
+                                                         byref(c_uint64(order)))
+                self.librbd.rbd_image_options_destroy(opts)
+            elif has_create3:
                 ret = self.librbd.rbd_create3(ioctx.io, c_char_p(name),
                                               c_uint64(size),
                                               c_uint64(features),
@@ -277,7 +309,7 @@ class RBD(object):
             raise make_ex(ret, 'error creating image')
 
     def clone(self, p_ioctx, p_name, p_snapname, c_ioctx, c_name,
-              features=0, order=None):
+              features=0, order=None, stripe_unit=0, stripe_count=0):
         """
         Clone a parent rbd snapshot into a COW sparse child.
 
@@ -295,6 +327,10 @@ class RBD(object):
         :type features: int
         :param order: the image is split into (2**order) byte objects
         :type order: int
+        :param stripe_unit: stripe unit in bytes (default 0 for object size)
+        :type stripe_unit: int
+        :param stripe_count: objects to stripe over before looping
+        :type stripe_count: int
         :raises: :class:`TypeError`
         :raises: :class:`InvalidArgument`
         :raises: :class:`ImageExists`
@@ -308,11 +344,39 @@ class RBD(object):
         if not isinstance(c_name, str):
             raise TypeError('child name must be a string')
 
-        ret = self.librbd.rbd_clone(p_ioctx.io, c_char_p(p_name),
-                                    c_char_p(p_snapname),
-                                    c_ioctx.io, c_char_p(c_name),
-                                    c_uint64(features),
-                                    byref(c_int(order)))
+        has_clone3 = hasattr(self.librbd, 'rbd_clone3')
+        if (stripe_unit != 0 or stripe_count != 0) and not has_clone3:
+            raise FunctionNotSupported('installed version of librbd does'
+                                       ' not support stripe unit or count')
+        if has_clone3:
+            opts = c_void_p()
+            self.librbd.rbd_image_options_create(byref(opts))
+            self.librbd.rbd_image_options_set_uint64(opts,
+                                                     RBD_IMAGE_OPTION_FEATURES,
+                                                     c_uint64(features))
+            self.librbd.rbd_image_options_set_uint64(opts,
+                                                     RBD_IMAGE_OPTION_ORDER,
+                                                     c_uint64(order))
+            self.librbd.rbd_image_options_set_uint64(opts,
+                                                     RBD_IMAGE_OPTION_STRIPE_UNIT,
+                                                     c_uint64(stripe_unit))
+            self.librbd.rbd_image_options_set_uint64(opts,
+                                                     RBD_IMAGE_OPTION_STRIPE_COUNT,
+                                                     c_uint64(stripe_count))
+            ret = self.librbd.rbd_clone3(p_ioctx.io, c_char_p(p_name),
+                                         c_char_p(p_snapname),
+                                         c_ioctx.io, c_char_p(c_name),
+                                         opts)
+            self.librbd.rbd_image_options_get_uint64(opts,
+                                                     RBD_IMAGE_OPTION_ORDER,
+                                                     byref(c_uint64(order)))
+            self.librbd.rbd_image_options_destroy(opts)
+        else:
+            ret = self.librbd.rbd_clone(p_ioctx.io, c_char_p(p_name),
+                                        c_char_p(p_snapname),
+                                        c_ioctx.io, c_char_p(c_name),
+                                        c_uint64(features),
+                                        byref(c_int(order)))
         if ret < 0:
             raise make_ex(ret, 'error creating clone')
 
@@ -632,7 +696,8 @@ class Image(object):
             raise make_ex(ret, 'error getting lock status for image' % (self.name))
         return owner.value == 1
 
-    def copy(self, dest_ioctx, dest_name):
+    def copy(self, dest_ioctx, dest_name, features=0, order=None, stripe_unit=0,
+             stripe_count=0):
         """
         Copy the image to another location.
 
@@ -640,11 +705,51 @@ class Image(object):
         :type dest_ioctx: :class:`rados.Ioctx`
         :param dest_name: the name of the copy
         :type dest_name: str
+        :param features: bitmask of features to enable; if set, must include layering
+        :type features: int
+        :param order: the image is split into (2**order) byte objects
+        :type order: int
+        :param stripe_unit: stripe unit in bytes (default 0 for object size)
+        :type stripe_unit: int
+        :param stripe_count: objects to stripe over before looping
+        :type stripe_count: int
+        :raises: :class:`TypeError`
+        :raises: :class:`InvalidArgument`
         :raises: :class:`ImageExists`
+        :raises: :class:`FunctionNotSupported`
+        :raises: :class:`ArgumentOutOfRange`
         """
+        if order is None:
+            order = 0
         if not isinstance(dest_name, str):
             raise TypeError('dest_name must be a string')
-        ret = self.librbd.rbd_copy(self.image, dest_ioctx.io, c_char_p(dest_name))
+        has_copy3 = hasattr(self.librbd, 'rbd_copy3')
+        if (stripe_unit != 0 or stripe_count != 0) and not has_copy3:
+            raise FunctionNotSupported('installed version of librbd does'
+                                       ' not support stripe unit or count')
+        if has_copy3:
+            opts = c_void_p()
+            self.librbd.rbd_image_options_create(byref(opts))
+            self.librbd.rbd_image_options_set_uint64(opts,
+                                                     RBD_IMAGE_OPTION_FEATURES,
+                                                     c_uint64(features))
+            self.librbd.rbd_image_options_set_uint64(opts,
+                                                     RBD_IMAGE_OPTION_ORDER,
+                                                     c_uint64(order))
+            self.librbd.rbd_image_options_set_uint64(opts,
+                                                     RBD_IMAGE_OPTION_STRIPE_UNIT,
+                                                     c_uint64(stripe_unit))
+            self.librbd.rbd_image_options_set_uint64(opts,
+                                                     RBD_IMAGE_OPTION_STRIPE_COUNT,
+                                                     c_uint64(stripe_count))
+            ret = self.librbd.rbd_copy3(self.image, dest_ioctx.io,
+                                        c_char_p(dest_name), opts)
+            self.librbd.rbd_image_options_get_uint64(opts,
+                                                     RBD_IMAGE_OPTION_ORDER,
+                                                     byref(c_uint64(order)))
+            self.librbd.rbd_image_options_destroy(opts)
+        else:
+            ret = self.librbd.rbd_copy(self.image, dest_ioctx.io, c_char_p(dest_name))
         if ret < 0:
             raise make_ex(ret, 'error copying image %s to %s' % (self.name, dest_name))
 
