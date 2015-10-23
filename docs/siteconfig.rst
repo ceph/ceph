@@ -185,7 +185,7 @@ Here is a sample configuration with many of the options set and documented::
 
         # The number of volumes
         #
-        count: 3
+        count: 0
         
         # The size of each volume, in GB
         #
