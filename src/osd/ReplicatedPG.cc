@@ -6289,8 +6289,6 @@ void ReplicatedPG::process_copy_chunk(hobject_t oid, ceph_tid_t tid, int r)
   cop->results.final_tx = pgbackend->get_transaction();
   _build_finish_copy_transaction(cop, cop->results.final_tx);
 
-  derr << __func__ << " got truncate_seq " << cop->results.truncate_seq
-       << " " << cop->results.truncate_size << dendl;
   // verify digests?
   dout(20) << __func__ << std::hex
 	   << " got digest: rx data 0x" << cop->results.data_digest
