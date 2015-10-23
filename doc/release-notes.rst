@@ -777,10 +777,29 @@ Notable Changes
 * rocksdb: update to latest (Xiaoxi Chen)
 * rpm: loosen ceph-test dependencies (Ken Dreyer)
 
+v0.94.5 Hammer (draft)
+======================
+
+This Hammer point release...
+
+All v0.94.x Hammer users are strongly encouraged to upgrade.
+
+Notable Changes
+---------------
+* librbd: potential assertion failure during cache read (`issue#13559 <http://tracker.ceph.com/issues/13559>`_, `pr#6348 <http://github.com/ceph/ceph/pull/6348>`_, Jason Dillaman)
+* osd: osd/ReplicatedPG: remove stray debug line (`issue#13455 <http://tracker.ceph.com/issues/13455>`_, `pr#6362 <http://github.com/ceph/ceph/pull/6362>`_, Sage Weil)
+* tests: qemu workunit refers to apt-mirror.front.sepia.ceph.com (`issue#13420 <http://tracker.ceph.com/issues/13420>`_, `pr#6330 <http://github.com/ceph/ceph/pull/6330>`_, Yuan Zhou)
+
+--- > in text mode:
+
+* librbd: potential assertion failure during cache read (#13559, Jason Dillaman)
+* osd: osd/ReplicatedPG: remove stray debug line (#13455, Sage Weil)
+* tests: qemu workunit refers to apt-mirror.front.sepia.ceph.com (#13420, Yuan Zhou)
+
 v0.94.4 Hammer
 ==============
 
-This Hammer point fixes several important bugs in Hammer, as well as
+This Hammer point release fixes several important bugs in Hammer, as well as
 fixing interoperability issues that are required before an upgrade to
 Infernalis. That is, all users of earlier version of Hammer or any
 version of Firefly will first need to upgrade to hammer v0.94.4 or
