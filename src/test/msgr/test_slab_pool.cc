@@ -15,6 +15,7 @@
  */
 #include <iostream>
 #include <assert.h>
+#include <stdlib.h>
 #include <map>
 
 #include "include/Context.h"
@@ -33,54 +34,44 @@ static void free_map(SlabAllocator &slab, std::map<uint32_t, void*> &items) {
   }
 }
 
-static void test_allocation_1(const double growth_factor, const unsigned slab_limit_size) {
-    SlabAllocator slab(NULL, "", growth_factor, slab_limit_size, max_object_size);
-    size_t size = max_object_size;
-
-    slab.print_slab_classes();
-
-    std::map<uint32_t, void*> datas;
-
-    assert(slab_limit_size % size == 0);
-    uint32_t idx;
-    void *data;
-    for (unsigned i = 0u; i < (slab_limit_size / size); i++) {
-        int r = slab.create(size, &idx, &data);
-        assert(r == 0);
-        datas[idx] = data;
-    }
-    assert(slab.create(size, &idx, &data) < 0);
-    free_map(slab, datas);
-}
-
-static void test_allocation_2(const double growth_factor, const unsigned slab_limit_size) {
-    SlabAllocator slab(NULL, "", growth_factor, slab_limit_size, max_object_size);
-    size_t size = 1024;
-
-    std::map<uint32_t, void*> datas;
-
-    size_t allocations = 0u;
-    uint32_t idx;
-    void *data;
-    for (;;) {
-      int r = slab.create(size, &idx, &data);
-      if (r < 0) {
-        break;
-      }
-      datas[idx] = data;
-      allocations++;
-    }
-
-    size_t class_size = slab.class_size(size);
-    size_t per_slab_page = max_object_size / class_size;
-    unsigned available_slab_pages = slab_limit_size / max_object_size;
-    assert(allocations == (per_slab_page * available_slab_pages));
-    free_map(slab, datas);
-}
-
 TEST(SlabPool, test_allocation) {
-  test_allocation_1(1.25, 5*1024*1024);
-  test_allocation_2(1.07, 5*1024*1024); // 1.07 is the growth factor used by facebook.
+  uint64_t resident = 1024*1024*30;
+  SlabAllocator slab(NULL, "", 1.25, resident, 1*1024*1024);
+  size_t size = max_object_size;
+
+  slab.print_slab_classes();
+
+  std::map<uint32_t, void*> datas;
+
+  assert(resident % size == 0);
+  uint32_t idx;
+  void *data;
+  for (unsigned i = 0u; i < (resident / size); i++) {
+    int r = slab.create(size, &idx, &data);
+    ASSERT_EQ(r, 0);
+    datas[idx] = data;
+  }
+  free_map(slab, datas);
+}
+
+TEST(SlabPool, test_reclaim) {
+  uint64_t resident = 1024*1024*30;
+  SlabAllocator slab(NULL, "", 2, resident, 1024*1024*4);
+  uint32_t idx;
+  void *data;
+  std::map<uint32_t, void*> datas;
+  for (size_t i = 0; i < 2*resident;) {
+    size_t size = rand() % slab.max_size();
+    int r = slab.create(size, &idx, &data);
+    ASSERT_EQ(r, 0);
+    datas[idx] = data;
+    i += size;
+  }
+
+  free_map(slab, datas);
+  ASSERT_TRUE(slab.size() > resident);
+  while (!slab.reclaim());
+  ASSERT_TRUE(slab.size() <= resident);
 }
 
 int main(int argc, char **argv) {

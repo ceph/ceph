@@ -115,7 +115,7 @@ class SlabClass {
 
  public:
   SlabClass(size_t obj_size, uint8_t id)
-    : obj_size(obj_size), class_id(class_id) {}
+    : obj_size(obj_size), class_id(id) {}
   ~SlabClass() {
     free_slab_pages.clear();
   }
@@ -216,15 +216,14 @@ class SlabAllocator {
   void initialize_slab_allocator(double growth_factor) {
     const size_t initial_size = CEPH_PAGE_SIZE;
     size_t size = initial_size; // initial object size
-    // 0 is not slab class id, reverse for init slab class history value
-    uint8_t slab_class_id = 1U;
+    uint8_t slab_class_id = 0U;
 
     while (max_object_size / size > 1) {
       size = (size + CEPH_PAGE_SIZE - 1) & ~(CEPH_PAGE_SIZE - 1);
       slab_class_sizes.push_back(size);
       slab_classes.push_back(SlabClass(size, slab_class_id));
       size *= growth_factor;
-      assert(slab_class_id < std::numeric_limits<uint8_t>::max());
+      assert(slab_class_id < std::numeric_limits<uint8_t>::max() - 1);
       slab_class_id++;
     }
     slab_class_sizes.push_back(max_object_size);
@@ -233,7 +232,7 @@ class SlabAllocator {
     slab_pages_vector.reserve(resident_slab_pages*2);
 
     slab_alloc_dist.reserve(slab_classes.size());
-    alloc_slab_class_history.resize(AllocHistoryNumber, 0);
+    alloc_slab_class_history.resize(AllocHistoryNumber, std::numeric_limits<uint8_t>::max());
   }
 
   SlabClass* get_slab_class(const size_t size) {
@@ -246,7 +245,7 @@ class SlabAllocator {
   }
 
   SlabClass* get_slab_class(const uint8_t slab_class_id) {
-      assert(slab_class_id < slab_classes.size());
+      assert(slab_class_id <= slab_classes.size());
       return &slab_classes[slab_class_id];
   }
 
@@ -313,7 +312,7 @@ class SlabAllocator {
       logger->inc(l_slabpool_alloc);
     }
     uint8_t evict_slab_class_id = alloc_slab_class_history[history_index];
-    if (evict_slab_class_id)
+    if (evict_slab_class_id < std::numeric_limits<uint8_t>::max())
       --slab_alloc_dist[evict_slab_class_id];
     ++slab_alloc_dist[slab_class->slab_class_id()];
     alloc_slab_class_history[history_index++] = slab_class->slab_class_id();
@@ -335,6 +334,10 @@ class SlabAllocator {
         logger->inc(l_slabpool_available_bytes, slab_class->object_size());
       }
     }
+  }
+
+  uint64_t size() const {
+    return (slab_pages_vector.size() - recycle_indexs.size()) * max_object_size;
   }
 
   uint64_t max_size() const {
@@ -367,19 +370,26 @@ class SlabAllocator {
    * caller we need to reclaim continuously
    */
   bool reclaim() {
-    if (slab_pages_vector.size() <= resident_slab_pages) {
+    if ((slab_pages_vector.size() - recycle_indexs.size()) <= resident_slab_pages) {
       return true;
     }
-    uint64_t resident_slab_pages = double(slab_alloc_dist[last_reclaim_slab_class_id]) / AllocHistoryNumber * resident_slab_pages;
-    if (slab_classes[last_reclaim_slab_class_id++].size() > resident_slab_pages) {
+    uint64_t limit = double(slab_alloc_dist[last_reclaim_slab_class_id]) / AllocHistoryNumber * resident_slab_pages;
+    if (slab_classes[last_reclaim_slab_class_id++].size() > limit) {
       SlabPageDesc *page = slab_classes[last_reclaim_slab_class_id++].reclaim_one();
       if (page) {
-        recycle_indexs.push_back(page->index());
-        slab_pages_vector[page->index()] = NULL;
+        if (page->index() == slab_pages_vector.size() - 1) {
+          slab_pages_vector.pop_back();
+        } else {
+          recycle_indexs.push_back(page->index());
+          slab_pages_vector[page->index()] = NULL;
+        }
         delete page;
         if (logger)
           logger->inc(l_slabpool_reclaim_success);
       }
+    }
+    if (last_reclaim_slab_class_id >= slab_classes.size()) {
+      last_reclaim_slab_class_id = 0;
     }
     if (logger)
       logger->inc(l_slabpool_reclaim);
