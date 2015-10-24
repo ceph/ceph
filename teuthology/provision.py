@@ -266,16 +266,22 @@ class ProvisionOpenStack(OpenStack):
             misc.sh("openstack server add volume " +
                     name + " " + volume_name)
 
-    def list_volumes(self, name_or_id):
+    def list_volumes(self, name_or_id, server_info=None):
         """
         Return the uuid of the volumes attached to the name_or_id
         OpenStack instance.
+
+        :param name_or_id:  The name or ID of the server to query
+        :param server_info: Optionally, use already-retrieved results of
+                            self.show()
         """
-        instance = misc.sh("openstack server show -f json " +
-                           name_or_id)
-        volumes = self.get_value(json.loads(instance),
+        if server_info is None:
+            server_info = self.show(name_or_id)
+        if not server_info:
+            return []
+        volumes = self.get_value(server_info,
                                  'os-extended-volumes:volumes_attached')
-        return [ volume['id'] for volume in volumes ]
+        return [volume['id'] for volume in volumes ]
 
     @staticmethod
     def ip2name(prefix, ip):
@@ -352,10 +358,20 @@ class ProvisionOpenStack(OpenStack):
         Delete the name_or_id OpenStack instance.
         """
         log.debug('ProvisionOpenStack:destroy ' + name_or_id)
-        if not self.exists(name_or_id):
+        server_info = self.show(name_or_id)
+        if not self.exists(name_or_id, server_info=server_info):
             return True
-        volumes = self.list_volumes(name_or_id)
-        misc.sh("openstack server delete --wait " + name_or_id)
+        volumes = self.list_volumes(name_or_id, server_info=server_info)
+        if self.get_value(server_info, 'status').lower() == 'error':
+            log.info(
+                "Instance %s is in an error state; skipping volume detachment",
+                name_or_id
+            )
+        else:
+            for volume in volumes:
+                misc.sh("openstack server remove volume %s %s" %
+                        (name_or_id, volume))
+        misc.sh("openstack server delete " + name_or_id)
         for volume in volumes:
             misc.sh("openstack volume delete " + volume)
         return True

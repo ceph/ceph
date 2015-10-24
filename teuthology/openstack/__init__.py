@@ -33,6 +33,8 @@ import tempfile
 import teuthology
 import types
 
+from subprocess import CalledProcessError
+
 from teuthology.contextutil import safe_while
 from teuthology.config import config as teuth_config
 from teuthology.orchestra import connection
@@ -71,10 +73,16 @@ class OpenStack(object):
     @staticmethod
     def get_value(result, field):
         """
-        Get the value of a field from a result returned by the openstack command
-        in json format.
+        Get the value of a field from a result returned by the openstack
+        command in json format.
+
+        :param result:  A list of dicts in a format similar to the output of
+                        'openstack server show'
+        :param field:   The name of the field whose value to retrieve. Case is
+                        ignored.
         """
-        return filter(lambda v: v['Field'] == field, result)[0]['Value']
+        filter_func = lambda v: v['Field'].lower() == field.lower()
+        return filter(filter_func, result)[0]['Value']
 
     def image_exists(self, image):
         """
@@ -243,15 +251,37 @@ class OpenStack(object):
                     break
             return success
 
-    def exists(self, name_or_id):
+    @staticmethod
+    def show(name_or_id):
+        """
+        Run "openstack server show -f json <name_or_id>" and return the result.
+
+        Does not handle exceptions.
+        """
+        try:
+            return json.loads(
+                misc.sh("openstack server show -f json %s" % name_or_id)
+            )
+        except CalledProcessError:
+            return False
+
+    @classmethod
+    def exists(cls, name_or_id, server_info=None):
         """
         Return true if the OpenStack name_or_id instance exists,
         false otherwise.
+
+        :param name_or_id:  The name or ID of the server to query
+        :param server_info: Optionally, use already-retrieved results of
+                            self.show()
         """
-        servers = json.loads(misc.sh("openstack server list -f json"))
-        for server in servers:
-            if (server['ID'] == name_or_id or server['Name'] == name_or_id):
-                return True
+        if server_info is None:
+            server_info = cls.show(name_or_id)
+        if not server_info:
+            return False
+        if (cls.get_value(server_info, 'Name') == name_or_id or
+                cls.get_value(server_info, 'ID') == name_or_id):
+            return True
         return False
 
     @staticmethod
@@ -279,12 +309,13 @@ class OpenStack(object):
         return re.findall(network + '=([\d.]+)',
                           self.get_addresses(instance_id))[0]
 
+
 class TeuthologyOpenStack(OpenStack):
 
     def __init__(self, args, config, argv):
         """
         args is of type argparse.Namespace as returned
-        when parsing argv and config is the job 
+        when parsing argv and config is the job
         configuration. The argv argument can be re-used
         to build the arguments list of teuthology-suite.
         """
@@ -617,7 +648,7 @@ openstack security group rule create --proto udp --dst-port 53 teuthology # dns
             " " + self.net() +
             " --key-name " + self.args.key_name +
             " --user-data " + user_data +
-            security_group + 
+            security_group +
             " --wait " + self.args.name +
             " -f json")
         instance_id = self.get_value(json.loads(instance), 'id')

@@ -1307,11 +1307,18 @@ def sh(command):
     """
     log.debug(command)
     output = ''
-    try:
-        output = subprocess.check_output(command, stderr=subprocess.STDOUT,
-                                         shell=True)
-    except subprocess.CalledProcessError as e:
-        log.exception(command + " error " + str(e.output))
-        raise e
-    log.debug(command + " output " + str(output))
+    proc = subprocess.Popen(
+        args=command,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        shell=True)
+    output = proc.communicate()[0]
+    if output.strip():
+        log.debug(command + " output " + str(output))
+    if proc.returncode != 0:
+        raise subprocess.CalledProcessError(
+            returncode=proc.returncode,
+            cmd=command,
+            output=output,
+        )
     return output.decode('utf-8')
