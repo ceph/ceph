@@ -11247,7 +11247,8 @@ static bool doing_clones(const boost::optional<SnapSet> &snapset,
     return snapset && curclone != snapset.get().clones.rend();
 }
 
-void ReplicatedPG::log_missing(const boost::optional<hobject_t> &head,
+void ReplicatedPG::log_missing(unsigned missing,
+			const boost::optional<hobject_t> &head,
 			LogChannelRef clog,
 			const spg_t &pgid,
 			const char *func,
@@ -11257,30 +11258,30 @@ void ReplicatedPG::log_missing(const boost::optional<hobject_t> &head,
   assert(head);
   if (allow_incomplete_clones) {
     dout(20) << func << " " << mode << " " << pgid << " " << head.get()
-               << " skipped some clones in cache tier" << dendl;
+               << " skipped " << missing << " clone(s) in cache tier" << dendl;
   } else {
     clog->info() << mode << " " << pgid << " " << head.get()
-		       << " missing clones";
+		       << " " << missing << " missing clone(s)";
   }
 }
 
-void ReplicatedPG::process_clones_to(const boost::optional<hobject_t> &head,
+unsigned ReplicatedPG::process_clones_to(const boost::optional<hobject_t> &head,
   const boost::optional<SnapSet> &snapset,
   LogChannelRef clog,
   const spg_t &pgid,
   const char *mode,
-  bool &missing,
   bool allow_incomplete_clones,
   snapid_t target,
   vector<snapid_t>::reverse_iterator *curclone)
 {
   assert(head);
   assert(snapset);
+  unsigned missing = 0;
 
   // NOTE: clones are in descending order, thus **curclone > target test here
   hobject_t next_clone(head.get());
   while(doing_clones(snapset, *curclone) && **curclone > target) {
-    missing = true;
+    ++missing;
     // it is okay to be missing one or more clones in a cache tier.
     // skip higher-numbered clones in the list.
     if (!allow_incomplete_clones) {
@@ -11292,6 +11293,7 @@ void ReplicatedPG::process_clones_to(const boost::optional<hobject_t> &head,
     // Clones are descending
     ++(*curclone);
   }
+  return missing;
 }
 
 /*
@@ -11423,8 +11425,8 @@ void ReplicatedPG::_scrub(
 
       // Log any clones we were expecting to be there up to target
       // This will set missing, but will be a no-op if snap.soid == *curclone.
-      process_clones_to(head, snapset, osd->clog, info.pgid, mode,
-		        missing, pool.info.allow_incomplete_clones(), target, &curclone);
+      missing += process_clones_to(head, snapset, osd->clog, info.pgid, mode,
+		        pool.info.allow_incomplete_clones(), target, &curclone);
     }
     bool expected;
     // Check doing_clones() again in case we ran process_clones_to()
@@ -11450,7 +11452,7 @@ void ReplicatedPG::_scrub(
     if (soid.has_snapset()) {
 
       if (missing) {
-	log_missing(head, osd->clog, info.pgid, __func__, mode,
+	log_missing(missing, head, osd->clog, info.pgid, __func__, mode,
 		    pool.info.allow_incomplete_clones());
       }
 
@@ -11567,14 +11569,14 @@ void ReplicatedPG::_scrub(
     dout(10) << __func__ << " " << mode << " " << info.pgid
 	     << " No more objects while processing " << head.get() << dendl;
 
-    process_clones_to(head, snapset, osd->clog, info.pgid, mode,
-		      missing, pool.info.allow_incomplete_clones(), all_clones, &curclone);
+    missing += process_clones_to(head, snapset, osd->clog, info.pgid, mode,
+		      pool.info.allow_incomplete_clones(), all_clones, &curclone);
 
   }
   // There could be missing found by the test above or even
   // before dropping out of the loop for the last head.
   if (missing) {
-    log_missing(head, osd->clog, info.pgid, __func__,
+    log_missing(missing, head, osd->clog, info.pgid, __func__,
 		mode, pool.info.allow_incomplete_clones());
   }
 
