@@ -22,6 +22,7 @@
 #include <limits>
 
 #include "include/Context.h"
+#include "include/Spinlock.h"
 #include "include/error.h"
 #include "include/page.h"
 #include "common/perf_counters.h"
@@ -191,6 +192,8 @@ class SlabClass {
   }
 };
 
+// Note: It's not a thread-safe structure, we only allow free can be called by
+// other threads
 class SlabAllocator {
  private:
   std::vector<size_t> slab_class_sizes;
@@ -374,8 +377,8 @@ class SlabAllocator {
       return true;
     }
     uint64_t limit = double(slab_alloc_dist[last_reclaim_slab_class_id]) / AllocHistoryNumber * resident_slab_pages;
-    if (slab_classes[last_reclaim_slab_class_id++].size() > limit) {
-      SlabPageDesc *page = slab_classes[last_reclaim_slab_class_id++].reclaim_one();
+    if (slab_classes[last_reclaim_slab_class_id].size() > limit) {
+      SlabPageDesc *page = slab_classes[last_reclaim_slab_class_id].reclaim_one();
       if (page) {
         if (page->index() == slab_pages_vector.size() - 1) {
           slab_pages_vector.pop_back();
@@ -388,9 +391,8 @@ class SlabAllocator {
           logger->inc(l_slabpool_reclaim_success);
       }
     }
-    if (last_reclaim_slab_class_id >= slab_classes.size()) {
+    if (++last_reclaim_slab_class_id >= slab_classes.size())
       last_reclaim_slab_class_id = 0;
-    }
     if (logger)
       logger->inc(l_slabpool_reclaim);
     return false;

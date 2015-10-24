@@ -298,14 +298,24 @@ void *Worker::entry()
   }
 
   center.set_owner(pthread_self());
+  bool cold = false;
+  int r = 0;
   while (!done) {
-    ldout(cct, 20) << __func__ << " calling event process" << dendl;
-
-    int r = center.process_events(EventMaxWaitUs);
+    ldout(cct, 30) << __func__ << " calling event process" << dendl;
+    if (cold) {
+      r = center.process_events(EventMaxWaitUs);
+    } else {
+      r = center.process_events(EventMinWaitUs);
+    }
     if (r < 0) {
-      ldout(cct, 20) << __func__ << " process events failed: "
-          << cpp_strerror(errno) << dendl;
+      lderr(cct) << __func__ << " process events failed: "
+                 << cpp_strerror(errno) << dendl;
       // TODO do something?
+      continue;
+    }
+    if (r == 0) {
+      // No memory need to reclaim
+      cold = slab->reclaim();
     }
   }
 

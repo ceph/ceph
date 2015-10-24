@@ -56,7 +56,8 @@ enum {
 
 class Worker : public Thread {
   static const uint64_t InitEventNumber = 5000;
-  static const uint64_t EventMaxWaitUs = 30000000;
+  static const uint64_t EventMinWaitUs = 30 * 1000;
+  static const uint64_t EventMaxWaitUs = 30 * 1000 * 1000;
   static const uint64_t MaxSlabObjectLowBound = 1 << 20;
   CephContext *cct;
   WorkerPool *pool;
