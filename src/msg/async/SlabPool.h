@@ -192,8 +192,7 @@ class SlabClass {
   }
 };
 
-// Note: It's not a thread-safe structure, we only allow free can be called by
-// other threads
+// Note: It's not a thread-safe structure
 class SlabAllocator {
  private:
   std::vector<size_t> slab_class_sizes;
@@ -202,6 +201,8 @@ class SlabAllocator {
   uint64_t max_object_size;
   uint64_t resident_slab_pages;
 
+  Spinlock pending_frees_lock;
+  std::vector<std::pair<uint32_t, void*> > pending_frees;
   std::vector<uint32_t> recycle_indexs;
   // slab_alloc_dist used to track the alloc size distribution,
   // alloc_slab_class_history records the alloc class owner within AllocHistoryNumber, it's a loopback history
@@ -215,6 +216,7 @@ class SlabAllocator {
   // we use this special value avoid history_index reset to 0 when hitting the
   // max tracked history number
   static const int AllocHistoryNumber = 1 << 16;
+  static const int HeavyFreeItems = 100;
  private:
   void initialize_slab_allocator(double growth_factor) {
     const size_t initial_size = CEPH_PAGE_SIZE;
@@ -250,6 +252,28 @@ class SlabAllocator {
   SlabClass* get_slab_class(const uint8_t slab_class_id) {
       assert(slab_class_id <= slab_classes.size());
       return &slab_classes[slab_class_id];
+  }
+
+  size_t actual_free() {
+    std::vector<pair<uint32_t, void*> > freeing;
+    pending_free_lock.lock();
+    freeing.swap(pending_frees);
+    pending_free_lock.unlock();
+
+    size_t bytes = 0;
+    for (std::vector<pair<uint32_t, void*> >::iterator it = freeing.begin();
+        it != freeing.end(); ++it) {
+      SlabPageDesc *desc = slab_pages_vector[it->first];
+      assert(desc && desc->magic() == SLAB_MAGIC_NUMBER);
+      SlabClass* slab_class = get_slab_class(desc->slab_class_id());
+      slab_class->free(data, desc);
+      bytes += slab_class->object_size();
+    }
+    if (logger) {
+      logger->inc(l_slabpool_free, freeing.size());
+      logger->inc(l_slabpool_available_bytes, bytes);
+    }
+    return freeing.size();
   }
 
  public:
@@ -328,14 +352,9 @@ class SlabAllocator {
    */
   void free(uint32_t slab_page_id, void *data) {
     if (data) {
-      SlabPageDesc *desc = slab_pages_vector[slab_page_id];
-      assert(desc && desc->magic() == SLAB_MAGIC_NUMBER);
-      SlabClass* slab_class = get_slab_class(desc->slab_class_id());
-      slab_class->free(data, desc);
-      if (logger) {
-        logger->inc(l_slabpool_free);
-        logger->inc(l_slabpool_available_bytes, slab_class->object_size());
-      }
+      pending_free_lock.lock();
+      pending_frees.push_back(std::make_pair(slab_page_id, data));
+      pending_free_lock.unlock();
     }
   }
 
@@ -373,9 +392,12 @@ class SlabAllocator {
    * caller we need to reclaim continuously
    */
   bool reclaim() {
-    if ((slab_pages_vector.size() - recycle_indexs.size()) <= resident_slab_pages) {
+    size_t freed = actual_free();
+    if (freed > HeavyFreeItems)
       return true;
-    }
+
+    if ((slab_pages_vector.size() - recycle_indexs.size()) <= resident_slab_pages)
+      return true;
     uint64_t limit = double(slab_alloc_dist[last_reclaim_slab_class_id]) / AllocHistoryNumber * resident_slab_pages;
     if (slab_classes[last_reclaim_slab_class_id].size() > limit) {
       SlabPageDesc *page = slab_classes[last_reclaim_slab_class_id].reclaim_one();
