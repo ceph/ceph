@@ -266,8 +266,6 @@ int librados::RadosClient::connect()
 
   lock.Unlock();
 
-  cct->_conf->call_all_observers();
-
   ldout(cct, 1) << "init done" << dendl;
   err = 0;
 
