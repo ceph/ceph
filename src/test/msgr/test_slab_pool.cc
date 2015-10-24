@@ -16,14 +16,18 @@
 #include <iostream>
 #include <assert.h>
 #include <stdlib.h>
+#include <time.h>
 #include <map>
 
 #include "include/Context.h"
 #include "global/global_init.h"
 #include "common/ceph_argparse.h"
 #include "msg/async/SlabPool.h"
+#include <boost/random/uniform_int.hpp>
 
 #include <gtest/gtest.h>
+
+typedef boost::mt11213b gen_type;
 
 static const size_t max_object_size = 1024*1024;
 
@@ -72,6 +76,61 @@ TEST(SlabPool, test_reclaim) {
   ASSERT_TRUE(slab.size() > resident);
   while (!slab.reclaim());
   ASSERT_TRUE(slab.size() <= resident);
+}
+
+class Worker : public Thread {
+  bool stop;
+  SlabAllocator *slab;
+  gen_type *rng;
+  map<uint32_t, void*> data;
+  uint64_t count;
+
+ public:
+  Worker(SlabAllocator *slab, gen_type *r, uint64_t c): stop(false), slab(slab), rng(r), count(c) {}
+  void *entry() {
+    while (--count) {
+      if (rand() % 2 && data.size() < 30) {
+        boost::uniform_int<> choose(0, slab->max_size());
+        uint64_t size = choose(*rng);
+        uint32_t idx;
+        void *d;
+        int r = slab->create(size, &idx, &d);
+        assert(r == 0);
+        data[idx] = d;
+      } else {
+        boost::uniform_int<> choose(0, data.size() - 1);
+        int index = choose(*rng);
+        map<uint32_t, void*>::iterator it = data.begin();
+        for ( ; index > 0; --index, ++it) ;
+        slab->free(it->first, it->second);
+        data.erase(it);
+      }
+    }
+  }
+};
+
+TEST(SlabPool, test_reclaim) {
+  gen_type rng(time(NULL));
+  std::vector<Worker*> workers;
+  SlabAllocator slab(NULL, "", 2, 1024*1024*100, 4*1024*1024, 100000);
+  for (int i = 0; i < 10; ++i) {
+    Worker *w = new Worker(&slab, &rng)
+    w->create();
+    workers.push_back(w);
+  }
+  size_t freed = 0;
+  uint64_t passed_time = 0;
+  struct timespec spec;
+  spec.tv_sec = 0;
+  spec.tv_nsec = 1000*1000*10;
+  int i = 0;
+  do {
+    nanosleep(&spec);
+    if (i % 10000) {
+      std::cerr << "reclaim" << std::endl;
+    }
+    i++;
+  } while (slab.reclaim());
 }
 
 int main(int argc, char **argv) {
