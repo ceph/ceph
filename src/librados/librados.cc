@@ -513,6 +513,18 @@ void librados::ObjectWriteOperation::set_alloc_hint(
   o->set_alloc_hint(expected_object_size, expected_write_size);
 }
 
+void librados::ObjectWriteOperation::cache_pin()
+{
+  ::ObjectOperation *o = (::ObjectOperation *)impl;
+  o->cache_pin();
+}
+
+void librados::ObjectWriteOperation::cache_unpin()
+{
+  ::ObjectOperation *o = (::ObjectOperation *)impl;
+  o->cache_unpin();
+}
+
 librados::WatchCtx::
 ~WatchCtx()
 {
@@ -1859,6 +1871,18 @@ void librados::IoCtx::set_assert_src_version(const std::string& oid, uint64_t ve
 {
   object_t obj(oid);
   io_ctx_impl->set_assert_src_version(obj, ver);
+}
+
+int librados::IoCtx::cache_pin(const string& oid)
+{
+  object_t obj(oid);
+  return io_ctx_impl->cache_pin(obj);
+}
+
+int librados::IoCtx::cache_unpin(const string& oid)
+{
+  object_t obj(oid);
+  return io_ctx_impl->cache_unpin(obj);
 }
 
 void librados::IoCtx::locator_set_key(const string& key)
@@ -4799,6 +4823,26 @@ extern "C" int rados_aio_read_op_operate(rados_read_op_t read_op,
   int retval = ctx->aio_operate_read(obj, (::ObjectOperation *)read_op,
 				     c, translate_flags(flags), NULL);
   tracepoint(librados, rados_aio_read_op_operate_exit, retval);
+  return retval;
+}
+
+extern "C" int rados_cache_pin(rados_ioctx_t io, const char *o)
+{
+  tracepoint(librados, rados_cache_pin_enter, io, o);
+  librados::IoCtxImpl *ctx = (librados::IoCtxImpl *)io;
+  object_t oid(o);
+  int retval = ctx->cache_pin(oid);
+  tracepoint(librados, rados_cache_pin_exit, retval);
+  return retval;
+}
+
+extern "C" int rados_cache_unpin(rados_ioctx_t io, const char *o)
+{
+  tracepoint(librados, rados_cache_unpin_enter, io, o);
+  librados::IoCtxImpl *ctx = (librados::IoCtxImpl *)io;
+  object_t oid(o);
+  int retval = ctx->cache_unpin(oid);
+  tracepoint(librados, rados_cache_unpin_exit, retval);
   return retval;
 }
 
