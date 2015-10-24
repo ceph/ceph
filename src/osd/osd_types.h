@@ -1358,6 +1358,7 @@ struct object_stat_sum_t {
   int32_t num_flush_mode_low;   // 1 when in low flush mode, otherwise 0
   int32_t num_evict_mode_some;  // 1 when in evict some mode, otherwise 0
   int32_t num_evict_mode_full;  // 1 when in evict full mode, otherwise 0
+  int64_t num_objects_pinned;
 
   object_stat_sum_t()
     : num_bytes(0),
@@ -1382,7 +1383,8 @@ struct object_stat_sum_t {
       num_evict_kb(0),
       num_promote(0),
       num_flush_mode_high(0), num_flush_mode_low(0),
-      num_evict_mode_some(0), num_evict_mode_full(0)
+      num_evict_mode_some(0), num_evict_mode_full(0),
+      num_objects_pinned(0)
   {}
 
   void floor(int64_t f) {
@@ -1419,6 +1421,7 @@ struct object_stat_sum_t {
     FLOOR(num_flush_mode_low);
     FLOOR(num_evict_mode_some);
     FLOOR(num_evict_mode_full);
+    FLOOR(num_objects_pinned);
 #undef FLOOR
   }
 
@@ -1463,6 +1466,7 @@ struct object_stat_sum_t {
     SPLIT(num_flush_mode_low);
     SPLIT(num_evict_mode_some);
     SPLIT(num_evict_mode_full);
+    SPLIT(num_objects_pinned);
 #undef SPLIT
   }
 
@@ -1596,6 +1600,7 @@ struct pg_stat_t {
   bool omap_stats_invalid;
   bool hitset_stats_invalid;
   bool hitset_bytes_stats_invalid;
+  bool pin_stats_invalid;
 
   /// up, acting primaries
   int32_t up_primary;
@@ -1614,6 +1619,7 @@ struct pg_stat_t {
       omap_stats_invalid(false),
       hitset_stats_invalid(false),
       hitset_bytes_stats_invalid(false),
+      pin_stats_invalid(false),
       up_primary(-1),
       acting_primary(-1)
   { }
@@ -3012,6 +3018,7 @@ struct object_info_t {
     FLAG_OMAP     = 1 << 3,  // has (or may have) some/any omap data
     FLAG_DATA_DIGEST = 1 << 4,  // has data crc
     FLAG_OMAP_DIGEST = 1 << 5,  // has omap crc
+    FLAG_CACHE_PIN = 1 << 6,    // pin the object in cache tier
     // ...
     FLAG_USES_TMAP = 1<<8,  // deprecated; no longer used.
   } flag_t;
@@ -3034,6 +3041,8 @@ struct object_info_t {
       s += "|data_digest";
     if (flags & FLAG_OMAP_DIGEST)
       s += "|omap_digest";
+    if (flags & FLAG_CACHE_PIN)
+      s += "|cache_pin";
     if (s.length())
       return s.substr(1);
     return s;
@@ -3083,6 +3092,9 @@ struct object_info_t {
   }
   bool is_omap_digest() const {
     return test_flag(FLAG_OMAP_DIGEST);
+  }
+  bool is_cache_pinned() const {
+    return test_flag(FLAG_CACHE_PIN);
   }
 
   void set_data_digest(__u32 d) {
