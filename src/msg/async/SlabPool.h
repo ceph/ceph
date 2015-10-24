@@ -35,10 +35,9 @@ class SlabAllocator;
 enum {
   l_slabpool_first = 93000,
   l_slabpool_alloc,
-  l_slabpool_alloc_miss,
+  l_slabpool_alloc_new_page,
   l_slabpool_free,
   l_slabpool_reclaim,
-  l_slabpool_reclaim_success,
   l_slabpool_total_bytes,
   l_slabpool_available_bytes,
   l_slabpool_last,
@@ -201,7 +200,7 @@ class SlabAllocator {
   uint64_t max_object_size;
   uint64_t resident_slab_pages;
 
-  Spinlock pending_frees_lock;
+  Spinlock pending_free_lock;
   std::vector<std::pair<uint32_t, void*> > pending_frees;
   std::vector<uint32_t> recycle_indexs;
   // slab_alloc_dist used to track the alloc size distribution,
@@ -266,7 +265,7 @@ class SlabAllocator {
       SlabPageDesc *desc = slab_pages_vector[it->first];
       assert(desc && desc->magic() == SLAB_MAGIC_NUMBER);
       SlabClass* slab_class = get_slab_class(desc->slab_class_id());
-      slab_class->free(data, desc);
+      slab_class->free(it->second, desc);
       bytes += slab_class->object_size();
     }
     if (logger) {
@@ -284,10 +283,9 @@ class SlabAllocator {
     if (cct && cct->_conf->slab_perf_counter) {
       PerfCountersBuilder b(cct, string("slab-") + n, l_slabpool_first, l_slabpool_last);
       b.add_u64_counter(l_slabpool_alloc, "alloc_calls", "The number of allocation request number");
-      b.add_u64_counter(l_slabpool_alloc_miss, "alloc_call_miss", "The number of allocation request to system");
+      b.add_u64_counter(l_slabpool_alloc_new_page, "alloc_call_new_page", "The number of allocation request to system");
       b.add_u64_counter(l_slabpool_free, "free_calls", "Free request number");
       b.add_u64_counter(l_slabpool_reclaim, "relaim_calls", "Reclaim request number");
-      b.add_u64_counter(l_slabpool_reclaim_success, "relaim_success_calls", "Reclaim successfully request number");
       b.add_u64_counter(l_slabpool_total_bytes, "total_bytes", "Total memory bytes in pool");
       b.add_u64_counter(l_slabpool_available_bytes, "available_bytes", "Available memory bytes in pool");
 
@@ -327,9 +325,12 @@ class SlabAllocator {
       if (r < 0)
         return r;
       *idx = index_to_insert;
-      slab_pages_vector.push_back(desc);
+      if (index_to_insert == slab_pages_vector.size())
+        slab_pages_vector.push_back(desc);
+      else
+        slab_pages_vector[index_to_insert] = desc;
       if (logger) {
-        logger->inc(l_slabpool_alloc_miss);
+        logger->inc(l_slabpool_alloc_new_page);
         logger->inc(l_slabpool_available_bytes, max_object_size);
         logger->inc(l_slabpool_total_bytes, max_object_size);
       }
@@ -394,7 +395,7 @@ class SlabAllocator {
   bool reclaim() {
     size_t freed = actual_free();
     if (freed > HeavyFreeItems)
-      return true;
+      return false;
 
     if ((slab_pages_vector.size() - recycle_indexs.size()) <= resident_slab_pages)
       return true;
@@ -409,8 +410,6 @@ class SlabAllocator {
           slab_pages_vector[page->index()] = NULL;
         }
         delete page;
-        if (logger)
-          logger->inc(l_slabpool_reclaim_success);
       }
     }
     if (++last_reclaim_slab_class_id >= slab_classes.size())

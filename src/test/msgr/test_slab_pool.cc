@@ -20,6 +20,8 @@
 #include <map>
 
 #include "include/Context.h"
+#include "common/Cycles.h"
+#include "common/Cond.h"
 #include "global/global_init.h"
 #include "common/ceph_argparse.h"
 #include "msg/async/SlabPool.h"
@@ -79,58 +81,83 @@ TEST(SlabPool, test_reclaim) {
 }
 
 class Worker : public Thread {
-  bool stop;
+  bool done;
   SlabAllocator *slab;
   gen_type *rng;
   map<uint32_t, void*> data;
-  uint64_t count;
+  Mutex lock;
+  Cond cond;
 
  public:
-  Worker(SlabAllocator *slab, gen_type *r, uint64_t c): stop(false), slab(slab), rng(r), count(c) {}
+  Worker(SlabAllocator *slab, gen_type *r): done(false), slab(slab), rng(r), lock("lock") {}
+  void post_data(uint32_t index, void *d) {
+    Mutex::Locker l(lock);
+    data[index] = d;
+    cond.Signal();
+  }
   void *entry() {
-    while (--count) {
-      if (rand() % 2 && data.size() < 30) {
-        boost::uniform_int<> choose(0, slab->max_size());
-        uint64_t size = choose(*rng);
-        uint32_t idx;
-        void *d;
-        int r = slab->create(size, &idx, &d);
-        assert(r == 0);
-        data[idx] = d;
-      } else {
+    while (!done) {
+      struct timespec spec;
+      spec.tv_sec = 0;
+      spec.tv_nsec = 1000*1000*1;
+      nanosleep(&spec, NULL);
+
+      if (data.size()) {
         boost::uniform_int<> choose(0, data.size() - 1);
         int index = choose(*rng);
         map<uint32_t, void*>::iterator it = data.begin();
         for ( ; index > 0; --index, ++it) ;
         slab->free(it->first, it->second);
         data.erase(it);
+      } else {
+        Mutex::Locker l(lock);
+        cond.Wait(lock);
       }
     }
+    free_map(*slab, data);
+    return 0;
+  }
+  void stop() {
+    Mutex::Locker l(lock);
+    done = true;
+    cond.Signal();
   }
 };
 
-TEST(SlabPool, test_reclaim) {
+TEST(SlabPool, test_concurrency) {
   gen_type rng(time(NULL));
   std::vector<Worker*> workers;
-  SlabAllocator slab(NULL, "", 2, 1024*1024*100, 4*1024*1024, 100000);
+  SlabAllocator slab(NULL, "", 2, 1024*1024, 4*1024*1024);
   for (int i = 0; i < 10; ++i) {
-    Worker *w = new Worker(&slab, &rng)
+    Worker *w = new Worker(&slab, &rng);
     w->create();
     workers.push_back(w);
   }
-  size_t freed = 0;
-  uint64_t passed_time = 0;
+  for (int i = 0; i < 100000; ++i) {
+    boost::uniform_int<> choose(0, slab.max_size());
+    uint64_t size = choose(rng);
+    uint32_t idx;
+    void *d;
+    int r = slab.create(size, &idx, &d);
+    ASSERT_EQ(r, 0);
+    workers[i%workers.size()]->post_data(idx, d);
+    if (i % 1000 == 0) {
+      uint64_t end, start = Cycles::rdtsc();
+      ASSERT_FALSE(slab.reclaim());
+      end = Cycles::rdtsc();
+      std::cerr << "reclaim 1000 items consumes " << Cycles::to_microseconds(end - start) << " us" << std::endl;
+    }
+  }
+  for (int i = 0; i < 10; ++i) {
+    workers[i]->stop();
+  }
+
   struct timespec spec;
   spec.tv_sec = 0;
   spec.tv_nsec = 1000*1000*10;
-  int i = 0;
-  do {
-    nanosleep(&spec);
-    if (i % 10000) {
-      std::cerr << "reclaim" << std::endl;
-    }
-    i++;
-  } while (slab.reclaim());
+  while (slab.reclaim()) {
+    nanosleep(&spec, NULL);
+  }
 }
 
 int main(int argc, char **argv) {
