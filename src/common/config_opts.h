@@ -185,7 +185,7 @@ OPTION(ms_async_affinity_cores, OPT_STR, "")
 // each worker memory bytes will be "ms_async_slab_pool_resident_bytes/ms_async_op_threads"
 OPTION(ms_async_slab_pool_resident_bytes, OPT_U64, 100ul << 20)
 OPTION(ms_async_slab_grow_factor, OPT_FLOAT, 2)
-OPTION(ms_async_slab_max_unit_size, OPT_FLOAT, 4 << 20)
+OPTION(ms_async_slab_unit_size, OPT_FLOAT, 4 << 20)
 
 OPTION(inject_early_sigterm, OPT_BOOL, false)
 

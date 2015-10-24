@@ -76,7 +76,7 @@ class Worker : public Thread {
     sprintf(name, "AsyncMessenger::Worker-%d", id);
     slab = new SlabAllocator(c, name, cct->_conf->ms_async_slab_grow_factor,
                              resident,
-                             MAX(cct->_conf->ms_async_slab_max_unit_size, MaxSlabObjectLowBound));
+                             MAX(cct->_conf->ms_async_slab_unit_size, MaxSlabObjectLowBound));
     // initialize perf_logger
     PerfCountersBuilder plb(cct, name, l_msgr_first, l_msgr_last);
 
@@ -95,6 +95,8 @@ class Worker : public Thread {
       cct->get_perfcounters_collection()->remove(perf_logger);
       delete perf_logger;
     }
+    if (slab)
+      slab->release();
   }
   void *entry();
   void stop();

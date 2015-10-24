@@ -203,11 +203,14 @@ class SlabAllocator {
   Spinlock pending_free_lock;
   std::vector<std::pair<uint32_t, void*> > pending_frees;
   std::vector<uint32_t> recycle_indexs;
+  uint32_t inflight;
   // slab_alloc_dist used to track the alloc size distribution,
   // alloc_slab_class_history records the alloc class owner within AllocHistoryNumber, it's a loopback history
   // history_index indicated the earliest alloc_slab_class_history index
   uint16_t history_index;
   uint8_t last_reclaim_slab_class_id;
+  bool shutdown;
+
   std::vector<uint16_t> slab_alloc_dist;
   std::vector<uint8_t> alloc_slab_class_history;
   PerfCounters *logger;
@@ -235,7 +238,7 @@ class SlabAllocator {
 
     slab_pages_vector.reserve(resident_slab_pages*2);
 
-    slab_alloc_dist.reserve(slab_classes.size());
+    slab_alloc_dist.resize(slab_classes.size(), 0);
     alloc_slab_class_history.resize(AllocHistoryNumber, std::numeric_limits<uint8_t>::max());
   }
 
@@ -253,12 +256,7 @@ class SlabAllocator {
       return &slab_classes[slab_class_id];
   }
 
-  size_t actual_free() {
-    std::vector<pair<uint32_t, void*> > freeing;
-    pending_free_lock.lock();
-    freeing.swap(pending_frees);
-    pending_free_lock.unlock();
-
+  size_t actual_free(std::vector<pair<uint32_t, void*> > &freeing) {
     size_t bytes = 0;
     for (std::vector<pair<uint32_t, void*> >::iterator it = freeing.begin();
         it != freeing.end(); ++it) {
@@ -268,6 +266,7 @@ class SlabAllocator {
       slab_class->free(it->second, desc);
       bytes += slab_class->object_size();
     }
+    inflight -= freeing.size();
     if (logger) {
       logger->inc(l_slabpool_free, freeing.size());
       logger->inc(l_slabpool_available_bytes, bytes);
@@ -279,7 +278,7 @@ class SlabAllocator {
   SlabAllocator(CephContext *cct, const std::string& n, double growth_factor,
                 uint64_t resident, uint64_t max_obj_size)
       : max_object_size(max_obj_size), resident_slab_pages(resident / max_obj_size),
-        history_index(0), last_reclaim_slab_class_id(1), logger(NULL) {
+        inflight(0), history_index(0), last_reclaim_slab_class_id(1), shutdown(false), logger(NULL) {
     if (cct && cct->_conf->slab_perf_counter) {
       PerfCountersBuilder b(cct, string("slab-") + n, l_slabpool_first, l_slabpool_last);
       b.add_u64_counter(l_slabpool_alloc, "alloc_calls", "The number of allocation request number");
@@ -296,13 +295,27 @@ class SlabAllocator {
   }
 
   ~SlabAllocator() {
+    assert(shutdown);
+    assert(!inflight);
     for (std::vector<SlabPageDesc*>::iterator it = slab_pages_vector.begin();
          it != slab_pages_vector.end(); ++it) {
       if (*it == NULL) {
         continue;
       }
+      assert((*it)->can_reclaim());
       delete *it;
     }
+  }
+
+  void release() {
+    pending_free_lock.lock();
+    shutdown = true;
+    actual_free(pending_frees);
+    pending_frees.clear();
+    size_t left = inflight;
+    pending_free_lock.unlock();
+    if (!left)
+      delete this;
   }
 
   int create(const size_t size, uint32_t *idx, void **data) {
@@ -335,6 +348,7 @@ class SlabAllocator {
         logger->inc(l_slabpool_total_bytes, max_object_size);
       }
     }
+    ++inflight;
     if (logger) {
       logger->dec(l_slabpool_available_bytes, size);
       logger->inc(l_slabpool_alloc);
@@ -355,7 +369,10 @@ class SlabAllocator {
     if (data) {
       pending_free_lock.lock();
       pending_frees.push_back(std::make_pair(slab_page_id, data));
+      bool s = shutdown;
       pending_free_lock.unlock();
+      if (s)
+        release();
     }
   }
 
@@ -393,7 +410,17 @@ class SlabAllocator {
    * caller we need to reclaim continuously
    */
   bool reclaim() {
-    size_t freed = actual_free();
+    size_t freed = 0;
+    pending_free_lock.lock();
+    if (!pending_frees.empty()) {
+      std::vector<pair<uint32_t, void*> > freeing(pending_frees.size());
+      freeing.swap(pending_frees);
+      pending_free_lock.unlock();
+      freed = actual_free(freeing);
+    } else {
+      pending_free_lock.unlock();
+    }
+    // Stuck into reclaim too much time, we need to escape here
     if (freed > HeavyFreeItems)
       return false;
 

@@ -33,19 +33,19 @@ typedef boost::mt11213b gen_type;
 
 static const size_t max_object_size = 1024*1024;
 
-static void free_map(SlabAllocator &slab, std::map<uint32_t, void*> &items) {
+static void free_map(SlabAllocator *slab, std::map<uint32_t, void*> &items) {
   for (std::map<uint32_t, void*>::iterator it = items.begin();
        it != items.end(); ++it) {
-    slab.free(it->first, it->second);
+    slab->free(it->first, it->second);
   }
 }
 
 TEST(SlabPool, test_allocation) {
   uint64_t resident = 1024*1024*30;
-  SlabAllocator slab(NULL, "", 1.25, resident, 1*1024*1024);
+  SlabAllocator *slab = new SlabAllocator(NULL, "", 1.25, resident, 1*1024*1024);
   size_t size = max_object_size;
 
-  slab.print_slab_classes();
+  slab->print_slab_classes();
 
   std::map<uint32_t, void*> datas;
 
@@ -53,31 +53,33 @@ TEST(SlabPool, test_allocation) {
   uint32_t idx;
   void *data;
   for (unsigned i = 0u; i < (resident / size); i++) {
-    int r = slab.create(size, &idx, &data);
+    int r = slab->create(size, &idx, &data);
     ASSERT_EQ(r, 0);
     datas[idx] = data;
   }
   free_map(slab, datas);
+  slab->release();
 }
 
 TEST(SlabPool, test_reclaim) {
   uint64_t resident = 1024*1024*30;
-  SlabAllocator slab(NULL, "", 2, resident, 1024*1024*4);
+  SlabAllocator *slab = new SlabAllocator(NULL, "", 2, resident, 1024*1024*4);
   uint32_t idx;
   void *data;
   std::map<uint32_t, void*> datas;
   for (size_t i = 0; i < 2*resident;) {
-    size_t size = rand() % slab.max_size();
-    int r = slab.create(size, &idx, &data);
+    size_t size = rand() % slab->max_size();
+    int r = slab->create(size, &idx, &data);
     ASSERT_EQ(r, 0);
     datas[idx] = data;
     i += size;
   }
 
   free_map(slab, datas);
-  ASSERT_TRUE(slab.size() > resident);
-  while (!slab.reclaim());
-  ASSERT_TRUE(slab.size() <= resident);
+  ASSERT_TRUE(slab->size() > resident);
+  while (!slab->reclaim());
+  ASSERT_TRUE(slab->size() <= resident);
+  slab->release();
 }
 
 class Worker : public Thread {
@@ -102,6 +104,7 @@ class Worker : public Thread {
       spec.tv_nsec = 1000*1000*1;
       nanosleep(&spec, NULL);
 
+      Mutex::Locker l(lock);
       if (data.size()) {
         boost::uniform_int<> choose(0, data.size() - 1);
         int index = choose(*rng);
@@ -110,11 +113,10 @@ class Worker : public Thread {
         slab->free(it->first, it->second);
         data.erase(it);
       } else {
-        Mutex::Locker l(lock);
         cond.Wait(lock);
       }
     }
-    free_map(*slab, data);
+    free_map(slab, data);
     return 0;
   }
   void stop() {
@@ -125,39 +127,42 @@ class Worker : public Thread {
 };
 
 TEST(SlabPool, test_concurrency) {
+  int threads = 10;
   gen_type rng(time(NULL));
   std::vector<Worker*> workers;
-  SlabAllocator slab(NULL, "", 2, 1024*1024, 4*1024*1024);
-  for (int i = 0; i < 10; ++i) {
-    Worker *w = new Worker(&slab, &rng);
+  SlabAllocator *slab = new SlabAllocator(NULL, "", 2, 1024*1024, 4*1024*1024);
+  for (int i = 0; i < threads; ++i) {
+    Worker *w = new Worker(slab, &rng);
     w->create();
     workers.push_back(w);
   }
   for (int i = 0; i < 100000; ++i) {
-    boost::uniform_int<> choose(0, slab.max_size());
+    boost::uniform_int<> choose(0, slab->max_size());
     uint64_t size = choose(rng);
     uint32_t idx;
     void *d;
-    int r = slab.create(size, &idx, &d);
+    int r = slab->create(size, &idx, &d);
     ASSERT_EQ(r, 0);
     workers[i%workers.size()]->post_data(idx, d);
     if (i % 1000 == 0) {
       uint64_t end, start = Cycles::rdtsc();
-      ASSERT_FALSE(slab.reclaim());
+      ASSERT_FALSE(slab->reclaim());
       end = Cycles::rdtsc();
       std::cerr << "reclaim 1000 items consumes " << Cycles::to_microseconds(end - start) << " us" << std::endl;
     }
   }
-  for (int i = 0; i < 10; ++i) {
+  for (int i = 0; i < threads; ++i) {
     workers[i]->stop();
+    workers[i]->join();
   }
 
   struct timespec spec;
   spec.tv_sec = 0;
   spec.tv_nsec = 1000*1000*10;
-  while (slab.reclaim()) {
+  while (slab->reclaim()) {
     nanosleep(&spec, NULL);
   }
+  slab->release();
 }
 
 int main(int argc, char **argv) {
