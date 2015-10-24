@@ -1493,18 +1493,18 @@ private:
   hobject_t generate_temp_object();  ///< generate a new temp object name
   /// generate a new temp object name (for recovery)
   hobject_t get_temp_recovery_object(eversion_t version, snapid_t snap);
-  void log_missing(const boost::optional<hobject_t> &head,
+  void log_missing(unsigned missing,
+			const boost::optional<hobject_t> &head,
 			LogChannelRef clog,
 			const spg_t &pgid,
 			const char *func,
 			const char *mode,
 			bool allow_incomplete_clones);
-  void process_clones_to(const boost::optional<hobject_t> &head,
+  unsigned process_clones_to(const boost::optional<hobject_t> &head,
     const boost::optional<SnapSet> &snapset,
     LogChannelRef clog,
     const spg_t &pgid,
     const char *mode,
-    bool &missing,
     bool allow_incomplete_clones,
     snapid_t target,
     vector<snapid_t>::reverse_iterator *curclone);
