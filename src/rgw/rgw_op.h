@@ -1136,6 +1136,8 @@ public:
   };
   /* End of Deleter subclass */
 
+  static const size_t MAX_CHUNK_ENTRIES = 1024;
+
 protected:
   int ret;
   std::unique_ptr<Deleter> deleter;
