@@ -728,9 +728,11 @@ bool verify_requester_payer_permission(struct req_state *s)
   return false;
 }
 
-bool verify_bucket_permission(struct req_state *s, int perm)
+bool verify_bucket_permission(struct req_state * const s,
+                              RGWAccessControlPolicy * const bucket_acl,
+                              const int perm)
 {
-  if (!s->bucket_acl)
+  if (!bucket_acl)
     return false;
 
   if ((perm & (int)s->perm_mask) != perm)
@@ -739,21 +741,33 @@ bool verify_bucket_permission(struct req_state *s, int perm)
   if (!verify_requester_payer_permission(s))
     return false;
 
-  return s->bucket_acl->verify_permission(s->user.user_id, perm, perm);
+  return bucket_acl->verify_permission(s->user.user_id, perm, perm);
 }
 
-static inline bool check_deferred_bucket_acl(struct req_state *s, uint8_t deferred_check, int perm)
+bool verify_bucket_permission(struct req_state * const s, const int perm)
 {
-  return (s->defer_to_bucket_acls == deferred_check && verify_bucket_permission(s, perm));
+  return verify_bucket_permission(s, s->bucket_acl, perm);
 }
 
-bool verify_object_permission(struct req_state *s, RGWAccessControlPolicy *bucket_acl, RGWAccessControlPolicy *object_acl, int perm)
+static inline bool check_deferred_bucket_acl(struct req_state * const s,
+                                             RGWAccessControlPolicy * const bucket_acl,
+                                             const uint8_t deferred_check,
+                                             const int perm)
 {
   if (!verify_requester_payer_permission(s))
     return false;
 
-  if (check_deferred_bucket_acl(s, RGW_DEFER_TO_BUCKET_ACLS_RECURSE, perm) ||
-      check_deferred_bucket_acl(s, RGW_DEFER_TO_BUCKET_ACLS_FULL_CONTROL, RGW_PERM_FULL_CONTROL)) {
+  return (s->defer_to_bucket_acls == deferred_check \
+              && verify_bucket_permission(s, bucket_acl, perm));
+}
+
+bool verify_object_permission(struct req_state * const s,
+                              RGWAccessControlPolicy * const bucket_acl,
+                              RGWAccessControlPolicy * const object_acl,
+                              const int perm)
+{
+  if (check_deferred_bucket_acl(s, bucket_acl, RGW_DEFER_TO_BUCKET_ACLS_RECURSE, perm) ||
+      check_deferred_bucket_acl(s, bucket_acl, RGW_DEFER_TO_BUCKET_ACLS_FULL_CONTROL, RGW_PERM_FULL_CONTROL)) {
     return true;
   }
 
