@@ -130,14 +130,20 @@ int rgw_rename(struct rgw_fs *rgw_fs,
   remove file or directory
 */
 int rgw_unlink(struct rgw_fs *rgw_fs,
-	       const struct rgw_file_handle *parent_handle, const char* path);
+	       const struct rgw_file_handle *parent_fh, const char* path);
 
 /*
   lookup a directory or file
 */
 int rgw_lookup(struct rgw_fs *rgw_fs,
-	       const struct rgw_file_handle *parent_handle, const char *path,
-	       struct rgw_file_handle *handle);
+	      const struct rgw_file_handle *parent_fh, const char *path,
+	      struct rgw_file_handle **fh, uint32_t flags);
+
+/*
+ * release file handle
+ */
+int rgw_fh_rele(struct rgw_fs *rgw_fs, struct rgw_file_handle *fh,
+		uint32_t flags);
 
 /*
   read  directory content
@@ -145,7 +151,7 @@ int rgw_lookup(struct rgw_fs *rgw_fs,
 typedef bool (*rgw_readdir_cb)(const char *name, void *arg, uint64_t offset);
 
 int rgw_readdir(struct rgw_fs *rgw_fs,
-		const struct rgw_file_handle *parent_handle, uint64_t *offset,
+		const struct rgw_file_handle *parent_fh, uint64_t *offset,
 		rgw_readdir_cb rcb, void *cb_arg, bool *eof);
 
 /* XXX (get|set)attr mask bits */
@@ -161,51 +167,67 @@ int rgw_readdir(struct rgw_fs *rgw_fs,
    get unix attributes for object
 */
 int rgw_getattr(struct rgw_fs *rgw_fs,
-		const struct rgw_file_handle *handle, struct stat *st);
+		struct rgw_file_handle *handle, struct stat *st);
 
 /*
    set unix attributes for object
 */
 int rgw_setattr(struct rgw_fs *rgw_fs,
-		const struct rgw_file_handle *handle, struct stat *st,
+		struct rgw_file_handle *handle, struct stat *st,
 		uint32_t mask);
 
 /*
    truncate file
 */
 int rgw_truncate(struct rgw_fs *rgw_fs,
-		 const struct rgw_file_handle *handle, uint64_t size);
+		 struct rgw_file_handle *handle, uint64_t size);
 
 /*
    open file
 */
-int rgw_open(struct rgw_fs *rgw_fs,
-	     const struct rgw_file_handle *handle, uint32_t flags);
+int rgw_open(struct rgw_fs *rgw_fs, struct rgw_file_handle *fh,
+	    uint32_t flags);
 
 /*
    close file
 */
-int rgw_close(struct rgw_fs *rgw_fs,
-	      const struct rgw_file_handle *handle, uint32_t flags);
+
+#define RGW_CLOSE_FLAG_NONE 0x0000
+#define RGW_CLOSE_FLAG_RELE 0x0001
+
+int rgw_close(struct rgw_fs *rgw_fs, struct rgw_file_handle *fh,
+	      uint32_t flags);
 
 /*
    read data from file
 */
 int rgw_read(struct rgw_fs *rgw_fs,
-	     const struct rgw_file_handle *handle, uint64_t offset,
+	     struct rgw_file_handle *fh, uint64_t offset,
 	     size_t length, void *buffer);
+
+/* XXX add release fn and UIO type */
+int rgw_readv(struct rgw_fs *rgw_fs,
+	      struct rgw_file_handle *fh, uint64_t offset,
+	      size_t length, void *buffer);
 
 /*
    write data to file
 */
 int rgw_write(struct rgw_fs *rgw_fs,
-	      const struct rgw_file_handle *handle, uint64_t offset,
+	      struct rgw_file_handle *fh, uint64_t offset,
 	      size_t length, void *buffer);
+
+/* XXX add release fn and UIO type */
+
+int rgw_writev(struct rgw_fs *rgw_fs,
+	      const struct rgw_file_handle *fh, uint64_t offset,
+	      size_t length, void *buffer);
+
 
 /*
    sync written data
 */
-int rgw_fsync(struct rgw_fs *rgw_fs, const struct rgw_file_handle *handle);
+int rgw_fsync(struct rgw_fs *rgw_fs, struct rgw_file_handle *fh);
 
 int set_user_permissions(const char *uid);
 

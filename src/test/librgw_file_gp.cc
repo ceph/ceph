@@ -32,9 +32,15 @@ namespace {
   string access_key("");
   string secret_key("");
   struct rgw_fs *fs = nullptr;
-  typedef std::tuple<string,uint64_t, struct rgw_file_handle*> fid_type; //in c++2014 can alias...
-  std::vector<fid_type> fids1;
-  std::vector<fid_type> fids2;
+
+  bool do_put = false;
+  bool do_get = false;
+  bool do_delete = false;
+
+  string bucket_name = "sorry_dave";
+  string object_name = "jocaml";
+
+  struct rgw_file_handle *fh = nullptr;
 
   struct {
     int argc;
@@ -55,98 +61,31 @@ TEST(LibRGW, MOUNT) {
   ASSERT_NE(fs, nullptr);
 }
 
-TEST(LibRGW, CREATE_BUCKET) {
-  struct stat st;
-  struct rgw_file_handle fh;
-  int ret = rgw_mkdir(fs, &fs->root_fh, "sorry_dave", 755, &st, &fh);
+TEST(LibRGW, OBJ_OPEN) {
+  int ret = rgw_lookup(fs, &fs->root_fh, bucket_name.c_str(), &fh,
+		      0 /* flags */);
+  ASSERT_EQ(ret, 0);
+  ret = rgw_open(fs, fh, 0 /* flags */);
   ASSERT_EQ(ret, 0);
 }
 
-TEST(LibRGW, DELETE_BUCKET) {
-  int ret = rgw_unlink(fs, &fs->root_fh, "sorry_dave");
-  ASSERT_EQ(ret, 0);
-}
-
-extern "C" {
-  static bool r1_cb(const char* name, void *arg, uint64_t offset) {
-    // don't need arg--it would point to fids1
-    fids1.push_back(fid_type(name, offset, nullptr /* handle */));
-    return true; /* XXX ? */
-  }
-}
-
-TEST(LibRGW, LIST_BUCKETS) {
-  /* list buckets via readdir in fs root */
-  using std::get;
-
-  if (! fs)
-    return;
-
-  bool eof = false;
-  uint64_t offset = 0;
-  int ret = rgw_readdir(fs, &fs->root_fh, &offset, r1_cb, &fids1, &eof);
-  for (auto& fid : fids1) {
-    std::cout << "fname: " << get<0>(fid) << " fid: " << get<1>(fid)
-	      << std::endl;
-  }
-  ASSERT_EQ(ret, 0);
-}
-
-extern "C" {
-  static bool r2_cb(const char* name, void *arg, uint64_t offset) {
-    // don't need arg--it would point to fids2
-    fids2.push_back(fid_type(name, offset, nullptr));
-    return true; /* XXX ? */
-  }
-}
-
-TEST(LibRGW, LOOKUP_BUCKETS) {
-  using std::get;
-
-  if (! fs)
-    return;
-
-  int ret = 0;
-  for (auto& fid : fids1) {
-    struct rgw_file_handle *rgw_fh;
-    ret = rgw_lookup(fs, &fs->root_fh, get<0>(fid).c_str(), &rgw_fh,
-		    0 /* flags */);
-    ASSERT_EQ(ret, 0);
-    get<2>(fid) = rgw_fh;
-    ASSERT_NE(get<2>(fid), nullptr);
-  }
-}
-
-TEST(LibRGW, LIST_OBJECTS) {
-  /* list objects via readdir, bucketwise */
-  using std::get;
-
-  if (! fs)
-    return;
-
-  for (auto& fid : fids1) {
-    ldout(g_ceph_context, 0) << __func__ << " readdir on bucket " << get<0>(fid)
-		     << dendl;
-    bool eof = false;
-    uint64_t offset = 0;
-    int ret = rgw_readdir(fs, get<2>(fid), &offset, r2_cb, &fids2,
-			  &eof);
-    for (auto& fid2 : fids2) {
-      std::cout << "fname: " << get<0>(fid2) << " fid: " << get<1>(fid2)
-		<< std::endl;
-    }
+TEST(LibRGW, PUT_OBJECT) {
+  if (do_put) {
+    string data = "hi mom"; // fix this
+    int ret = rgw_write(fs, fh, 0, data.length(), (void*) data.c_str());
     ASSERT_EQ(ret, 0);
   }
+}
+
+TEST(LibRGW, GET_OBJECT) {
+  /* XXX soon */
 }
 
 TEST(LibRGW, CLEANUP) {
-  int ret = 0;
-  using std::get;
-  for (auto& fids : { fids1, fids2 }) {
-    for (auto& fid : fids) {
-      ret = rgw_fh_rele(fs, get<2>(fid), 0 /* flags */);
-    }
-  }
+  int ret = rgw_close(fs, fh, 0 /* flags */);
+  ASSERT_EQ(ret, 0);
+  ret = rgw_fh_rele(fs, fh, 0 /* flags */);
+  ASSERT_EQ(ret, 0);
 }
 
 TEST(LibRGW, UMOUNT) {
@@ -182,16 +121,24 @@ int main(int argc, char *argv[])
 
   for (auto arg_iter = args.begin(); arg_iter != args.end();) {
     if (ceph_argparse_witharg(args, arg_iter, &val, "--access",
-			      (char*) NULL)) {
+			      (char*) nullptr)) {
       access_key = val;
     } else if (ceph_argparse_witharg(args, arg_iter, &val, "--secret",
-				     (char*) NULL)) {
+				     (char*) nullptr)) {
       secret_key = val;
     } else if (ceph_argparse_witharg(args, arg_iter, &val, "--uid",
-				     (char*) NULL)) {
+				     (char*) nullptr)) {
       uid = val;
-    }
-    else {
+    } else if (ceph_argparse_witharg(args, arg_iter, &val, "--bn",
+				     (char*) nullptr)) {
+      bucket_name = val;
+    } else if (ceph_argparse_flag(args, arg_iter, "--get",
+					    (char*) nullptr)) {
+      do_get = true;
+    } else if (ceph_argparse_flag(args, arg_iter, "--put",
+					    (char*) nullptr)) {
+      do_put = true;
+    } else {
       ++arg_iter;
     }
   }

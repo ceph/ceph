@@ -11,13 +11,33 @@
 class RGWFileHandle
 {
   struct rgw_file_handle fh;
+  uint32_t flags;
 public:
+  static constexpr uint32_t FLAG_NONE = 0;
+  static constexpr uint32_t FLAG_OPEN = 1;
+  
   RGWFileHandle() {
     fh.fh_private = this;
   }
 
+  bool is_open() { return flags & FLAG_OPEN; }
+
+  void open() { flags |= FLAG_OPEN; }
+
+  void close() { flags &= ~FLAG_OPEN; }
+
+  void rele() {
+    /* XXX intrusive refcnt */
+    assert(! is_open());
+    delete this;
+  }
+
   struct rgw_file_handle* get_fh() { return &fh; }
 }; /* RGWFileHandle */
+
+static inline RGWFileHandle* get_rgwfh(struct rgw_file_handle* fh) {
+  return static_cast<RGWFileHandle*>(fh->fh_private);
+}
 
 class RGWLibFS
 {
@@ -283,5 +303,61 @@ public:
   virtual void send_response() {}
 
 }; /* RGWDeleteBucketRequest */
+
+/*
+  put object
+*/
+
+class RGWPutObjRequest : public RGWLibRequest,
+			 public RGWPutObj_OS_Lib /* RGWOp */
+{
+public:
+  std::string& bucket_name;
+  std::string& obj_name;
+  buffer::list& bl; /* XXX */
+
+  RGWPutObjRequest(CephContext* _cct, RGWUserInfo *_user,
+		  std::string& _bname, std::string& _oname,
+		  buffer::list& _bl)
+    : RGWLibRequest(_cct, _user), bucket_name(_bname), obj_name(_oname),
+      bl(_bl) {
+    magic = 75;
+    op = this;
+  }
+
+  virtual bool only_bucket() { return false; }
+
+  virtual int op_init() {
+    // assign store, s, and dialect_handler
+    RGWObjectCtx* rados_ctx
+      = static_cast<RGWObjectCtx*>(get_state()->obj_ctx);
+    // framework promises to call op_init after parent init
+    assert(rados_ctx);
+    RGWOp::init(rados_ctx->store, get_state(), this);
+    op = this; // assign self as op: REQUIRED
+    return 0;
+  }
+
+  virtual int header_init() {
+
+    struct req_state* s = get_state();
+    s->info.method = "PUT";
+    s->op = OP_PUT;
+
+    /* XXX derp derp derp */
+    string uri = "/" + bucket_name + "/" + obj_name;
+    s->relative_uri = uri;
+    s->info.request_uri = uri; // XXX
+    s->info.effective_uri = uri;
+    s->info.request_params = "";
+    s->info.domain = ""; /* XXX ? */
+
+    // woo
+    s->user = user;
+
+    return 0;
+  }
+}; /* RGWPubObjRequest */
+
 
 #endif /* RGW_FILE_H */

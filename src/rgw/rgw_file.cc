@@ -219,13 +219,13 @@ int rgw_unlink(struct rgw_fs *rgw_fs, const struct rgw_file_handle* parent,
   lookup a directory or file
 */
 int rgw_lookup(struct rgw_fs *rgw_fs,
-	       const struct rgw_file_handle *parent_handle, const char* path,
-	       struct rgw_file_handle *handle)
+	      const struct rgw_file_handle *parent_fh, const char* path,
+	      struct rgw_file_handle **fh, uint32_t flags)
 {
   string uri;
   int rc;
 
-  rc = librgw.get_uri(parent_handle->handle, uri);
+  rc = librgw.get_uri(parent_fh->handle, uri);
   if (rc < 0 ) { /* invalid parent */
     return rc;
   }
@@ -243,8 +243,25 @@ int rgw_lookup(struct rgw_fs *rgw_fs,
   uri += "/";
   uri += path;
 
+  RGWFileHandle* rgw_fh = new RGWFileHandle();
+  struct rgw_file_handle *rfh = rgw_fh->get_fh();
+
   /* find or create a handle for the object or bucket */
-  handle->handle = librgw.get_handle(uri);
+  rfh->handle = librgw.get_handle(uri);
+  *fh = rfh;
+
+  return 0;
+} /* rgw_lookup */
+
+/*
+ * release file handle
+ */
+int rgw_fh_rele(struct rgw_fs *rgw_fs, struct rgw_file_handle *fh,
+		uint32_t flags)
+{
+  RGWFileHandle* rgw_fh = get_rgwfh(fh);
+  rgw_fh->rele();
+
   return 0;
 }
 
@@ -252,12 +269,12 @@ int rgw_lookup(struct rgw_fs *rgw_fs,
    get unix attributes for object
 */
 int rgw_getattr(struct rgw_fs *rgw_fs,
-		const struct rgw_file_handle *handle, struct stat *st)
+		struct rgw_file_handle *fh, struct stat *st)
 {
   string uri;
   int rc;
 
-  rc = librgw.get_uri(handle->handle, uri);
+  rc = librgw.get_uri(fh->handle, uri);
   if (rc < 0 ) { /* invalid parent */
     return rc;
   }
@@ -269,7 +286,7 @@ int rgw_getattr(struct rgw_fs *rgw_fs,
   set unix attributes for object
 */
 int rgw_setattr(struct rgw_fs *rgw_fs,
-		const struct rgw_file_handle *handle, struct stat *st,
+		struct rgw_file_handle *fh, struct stat *st,
 		uint32_t mask)
 {
   /* XXX no-op */
@@ -280,7 +297,7 @@ int rgw_setattr(struct rgw_fs *rgw_fs,
    truncate file
 */
 int rgw_truncate(struct rgw_fs *rgw_fs,
-		 const struct rgw_file_handle *handle, uint64_t size)
+		 struct rgw_file_handle *fh, uint64_t size)
 {
   return 0;
 }
@@ -289,8 +306,11 @@ int rgw_truncate(struct rgw_fs *rgw_fs,
    open file
 */
 int rgw_open(struct rgw_fs *rgw_fs,
-	     const struct rgw_file_handle *handle, uint32_t flags)
+	     struct rgw_file_handle *fh, uint32_t flags)
 {
+  RGWFileHandle* rgw_fh = get_rgwfh(fh);
+  rgw_fh->open(/* XXX */);
+
   return 0;
 }
 
@@ -298,19 +318,25 @@ int rgw_open(struct rgw_fs *rgw_fs,
    close file
 */
 int rgw_close(struct rgw_fs *rgw_fs,
-	      const struct rgw_file_handle *handle, uint32_t flags)
+	      struct rgw_file_handle *fh, uint32_t flags)
 {
+  RGWFileHandle* rgw_fh = get_rgwfh(fh);
+  rgw_fh->close(/* XXX */);
+
+  if (flags & RGW_CLOSE_FLAG_RELE)
+    rgw_fh->rele();
+
   return 0;
 }
 
 int rgw_readdir(struct rgw_fs *rgw_fs,
-		const struct rgw_file_handle *parent_handle, uint64_t *offset,
+		const struct rgw_file_handle *parent_fh, uint64_t *offset,
 		rgw_readdir_cb rcb, void *cb_arg, bool *eof)
 {
   int rc;
   string uri;
 
-  rc = librgw.get_uri(parent_handle->handle, uri);
+  rc = librgw.get_uri(parent_fh->handle, uri);
   if (rc < 0 ) { /* invalid parent */
     return rc;
   }
@@ -347,7 +373,7 @@ int rgw_readdir(struct rgw_fs *rgw_fs,
    read data from file
 */
 int rgw_read(struct rgw_fs *rgw_fs,
-	     const struct rgw_file_handle *handle, uint64_t offset,
+	     struct rgw_file_handle *fh, uint64_t offset,
 	     size_t length, void *buffer)
 {
   return 0;
@@ -357,16 +383,18 @@ int rgw_read(struct rgw_fs *rgw_fs,
    write data to file
 */
 int rgw_write(struct rgw_fs *rgw_fs,
-	      const struct rgw_file_handle *handle, uint64_t offset,
+	      struct rgw_file_handle *fh, uint64_t offset,
 	      size_t length, void *buffer)
 {
+  RGWFileHandle* rgw_fh = get_rgwfh(fh);
+
   return 0;
 }
 
 /*
    sync written data
 */
-int rgw_fsync(struct rgw_fs *rgw_fs, const struct rgw_file_handle *handle)
+int rgw_fsync(struct rgw_fs *rgw_fs, struct rgw_file_handle *handle)
 {
   return 0;
 }

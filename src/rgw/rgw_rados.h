@@ -2418,7 +2418,7 @@ public:
     RWLock::WLocker wl(lock);
     entries.clear();
   }
-};
+}; /* RGWChainedCacheImpl */
 
 class RGWPutObjProcessor
 {
@@ -2449,7 +2449,7 @@ public:
                        const char *if_match = NULL, const char *if_nomatch = NULL);
 
   CephContext *ctx();
-};
+}; /* RGWPutObjProcessor */
 
 struct put_obj_aio_info {
   void *handle;
@@ -2483,7 +2483,7 @@ public:
 
   RGWPutObjProcessor_Aio(RGWObjectCtx& obj_ctx, RGWBucketInfo& bucket_info) : RGWPutObjProcessor(obj_ctx, bucket_info), max_chunks(RGW_MAX_PENDING_CHUNKS), obj_len(0) {}
   virtual ~RGWPutObjProcessor_Aio();
-};
+}; /* RGWPutObjProcessor_Aio */
 
 class RGWPutObjProcessor_Atomic : public RGWPutObjProcessor_Aio
 {
@@ -2558,6 +2558,6 @@ public:
   void set_version_id(const string& vid) {
     version_id = vid;
   }
-};
+}; /* RGWPutObjProcessor_Atomic */
 
 #endif
