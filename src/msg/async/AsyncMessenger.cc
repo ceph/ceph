@@ -304,6 +304,7 @@ void *Worker::entry()
     ldout(cct, 30) << __func__ << " calling event process" << dendl;
     if (cold) {
       r = center.process_events(EventMaxWaitUs);
+      cold = false;
     } else {
       r = center.process_events(EventMinWaitUs);
     }

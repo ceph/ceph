@@ -654,7 +654,7 @@ void AsyncConnection::process()
       case STATE_OPEN_MESSAGE_READ_FRONT:
         {
           if (current_header.front_len) {
-            if (front.empty()) {
+            if (!front.length()) {
               try {
                 alloc_slab_buffer(slab, front, current_header.front_len);
               } catch (buffer::bad_alloc &e) {
@@ -680,7 +680,7 @@ void AsyncConnection::process()
       case STATE_OPEN_MESSAGE_READ_MIDDLE:
         {
           if (current_header.middle_len) {
-            if (middle.empty()) {
+            if (!middle.length()) {
               try {
                 alloc_slab_buffer(slab, middle, current_header.middle_len);
               } catch (buffer::bad_alloc &e) {
