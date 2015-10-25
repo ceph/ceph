@@ -8545,7 +8545,7 @@ ObjectContextRef ReplicatedPG::get_object_context(const hobject_t& soid,
 	// new object.
 	object_info_t oi(soid);
 	SnapSetContext *ssc = get_snapset_context(
-	  soid, true, 0);
+	  soid, true, 0, false);
 	obc = create_object_context(oi, ssc);
 	dout(10) << __func__ << ": " << obc << " " << soid
 		 << " " << obc->rwstate
@@ -8642,9 +8642,6 @@ int ReplicatedPG::find_object_context(const hobject_t& oid,
        << " oi=" << obc->obs.oi
        << dendl;
     *pobc = obc;
-
-    if (can_create && !obc->ssc)
-      obc->ssc = get_snapset_context(oid, true);
 
     return 0;
   }
@@ -8927,7 +8924,8 @@ SnapSetContext *ReplicatedPG::create_snapset_context(const hobject_t& oid)
 SnapSetContext *ReplicatedPG::get_snapset_context(
   const hobject_t& oid,
   bool can_create,
-  map<string, bufferlist> *attrs)
+  map<string, bufferlist> *attrs,
+  bool oid_existed)
 {
   Mutex::Locker l(snapset_contexts_lock);
   SnapSetContext *ssc;
@@ -8942,9 +8940,12 @@ SnapSetContext *ReplicatedPG::get_snapset_context(
   } else {
     bufferlist bv;
     if (!attrs) {
-      int r = pgbackend->objects_get_attr(oid.get_head(), SS_ATTR, &bv);
+      int r = -ENOENT;
+      if (!(oid.is_head() && !oid_existed))
+	r = pgbackend->objects_get_attr(oid.get_head(), SS_ATTR, &bv);
       if (r < 0) {
 	// try _snapset
+      if (!(oid.is_snapdir() && !oid_existed))
 	r = pgbackend->objects_get_attr(oid.get_snapdir(), SS_ATTR, &bv);
 	if (r < 0 && !can_create)
 	  return NULL;
