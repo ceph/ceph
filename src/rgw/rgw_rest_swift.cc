@@ -977,22 +977,49 @@ void RGWBulkDelete_ObjStore_SWIFT::send_response()
 
   s->formatter->open_object_section("delete");
 
-  s->formatter->dump_int("Number Deleted", deleter->get_num_deleted());
-  s->formatter->dump_int("Number Not Found", deleter->get_num_unfound());
-  s->formatter->dump_string("Response Body", "");
-  s->formatter->dump_string("Response Status", "200 OK");
+  const auto num_deleted = deleter->get_num_deleted();
+  const auto num_unfound = deleter->get_num_unfound();
+  const auto& failures = deleter->get_failures();
+
+  string resp_status;
+  string resp_body;
+
+  if (!failures.empty()) {
+    int reason = ERR_INVALID_REQUEST;
+    for (const auto fail_desc : failures) {
+      if (-ENOENT != fail_desc.err && -EACCES != fail_desc.err) {
+        reason = fail_desc.err;
+      }
+    }
+
+    rgw_err err;
+    set_req_state_err(err, reason, s->prot_flags);
+    dump_errno(err, resp_status);
+  } else if (0 == num_deleted && 0 == num_unfound) {
+    /* 400 Bad Request */
+    dump_errno(400, resp_status);
+    resp_body = "Invalid bulk delete.";
+  } else {
+    /* 200 OK */
+    dump_errno(200, resp_status);
+  }
+
+  s->formatter->dump_int("Number Deleted", num_deleted);
+  s->formatter->dump_int("Number Not Found", num_unfound);
+  s->formatter->dump_string("Response Body", resp_body);
+  s->formatter->dump_string("Response Status", resp_status);
   s->formatter->open_array_section("Errors");
-  for (const auto fail_desc : deleter->get_failures()) {
+  for (const auto fail_desc : failures) {
+    s->formatter->open_array_section("object");
+
+    stringstream ss_name;
+    ss_name << fail_desc.path;
+    s->formatter->dump_string("Name", ss_name.str());
+
     rgw_err err;
     set_req_state_err(err, fail_desc.err, s->prot_flags);
     string status;
     dump_errno(err, status);
-
-    stringstream ss_name;
-    ss_name << fail_desc.path;
-
-    s->formatter->open_array_section("object");
-    s->formatter->dump_string("Name", ss_name.str());
     s->formatter->dump_string("Status", status);
     s->formatter->close_section();
   }
