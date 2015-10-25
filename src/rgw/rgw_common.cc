@@ -829,7 +829,7 @@ static char hex_to_num(char c)
   return hex_table.to_num(c);
 }
 
-bool url_decode(string& src_str, string& dest_str, bool in_query)
+bool url_decode(const string& src_str, string& dest_str, bool in_query)
 {
   const char *src = src_str.c_str();
   char dest[src_str.size() + 1];

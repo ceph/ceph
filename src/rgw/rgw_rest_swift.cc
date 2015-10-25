@@ -947,20 +947,36 @@ int RGWBulkDelete_ObjStore_SWIFT::get_data(list<RGWBulkDelete::acct_path_t>& ite
 
     ldout(s->cct, 20) << "extracted Bulk Delete entry: " << path_str << dendl;
 
-    const size_t sep_pos = path_str.find('/', 1 /* skip first slash */);
-    if (string::npos == sep_pos) {
-      ldout(s->cct, 20) << "wrongly formatted item: " << path_str << dendl;
-      continue;
+    RGWBulkDelete::acct_path_t path;
+
+    /* We need to skip all slashes at the beginning in order to preserve
+     * compliance with Swift. */
+    const size_t start_pos = path_str.find_first_not_of('/');
+
+    if (string::npos != start_pos) {
+      /* Seperator is the first slash after the leading ones. */
+      const size_t sep_pos = path_str.find('/', start_pos);
+
+      if (string::npos != sep_pos) {
+        string bucket_name;
+        url_decode(path_str.substr(start_pos, sep_pos - start_pos), bucket_name);
+
+        string obj_name;
+        url_decode(path_str.substr(sep_pos + 1), obj_name);
+
+        path.bucket_name = bucket_name;
+        path.obj_key = obj_name;
+      } else {
+        /* It's guaranteed here that bucket name is at least one character
+         * long and is different than slash. */
+        url_decode(path_str.substr(start_pos), path.bucket_name);
+      }
+
+      items.push_back(path);
     }
 
-    RGWBulkDelete::acct_path_t path;
-    path.bucket_name = path_str.substr(1, sep_pos - 1);
-    path.obj_key     = path_str.substr(sep_pos + 1);
-
-    items.push_back(path);
-
     if (items.size() == MAX_CHUNK_ENTRIES) {
-      is_truncated = true;
+      *is_truncated = true;
       return 0;
     }
   }
