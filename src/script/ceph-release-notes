@@ -74,13 +74,14 @@ def get_original_issue(issue, verbose):
 def make_release_notes(gh, repo, ref, plaintext, verbose):
 
     issue2prs = {}
+    pr2issues = {}
+    pr2info = {}
 
     for commit in repo.iter_commits(ref):
         merge = merge_re.match(commit.summary)
         if merge:
             number = merge.group(1)
             pr = gh.repos("ceph")("ceph").pulls(number).get()
-            # We are not handling multiple issues here yet
             if pr['body']:
                 issues = fixes_re.findall(pr['body']) + tracker_re.findall(pr['body'])
 
@@ -88,18 +89,27 @@ def make_release_notes(gh, repo, ref, plaintext, verbose):
                 print ("ERROR: http://github.com/ceph/ceph/pull/" + str(number) + " has no associated issue")
                 continue    
             
+            authors = {}
+            for c in repo.iter_commits("{sha1}^1..{sha1}^2".format(sha1=commit.hexsha)):
+                for author in re.findall("Signed-off-by:\s*(.*?)\s*<", c.message):
+                    authors[author] = 1
+            if authors:
+                author = ", ".join(authors.keys())
+            else:
+                author = commit.parents[-1].author.name
+
+            title = pr['title']
+
+            title_re = '^(cli|common|mon|osd|fs|librbd|rbd|fs|mds|objecter|rgw|build/ops|tests|tools|doc|crush|librados):'
+            if not re.match(title_re, title):
+                print ("ERROR: http://github.com/ceph/ceph/pull/" + str(number) + " title " + title + " does not match " + title_re)
+
+            pr2info[number] = (author, title)
+
             for issue in issues:
                 issue = get_original_issue(issue, verbose)
-
-                title = pr['title']
-
-                title_re = '^(cli|common|mon|osd|fs|librbd|rbd|fs|mds|objecter|rgw|build/ops|tests|tools|doc|crush|librados):'
-                if not re.match(title_re, title):
-                    print ("ERROR: http://github.com/ceph/ceph/pull/" + str(number) + " title " + title + " does not match " + title_re)
-                # Big assumption, do a sanity check in the end, we are
-                # getting the author of final merge commit
-                author = commit.parents[-1].author.name
-                issue2prs.setdefault(issue, []).append((author, title, number))
+                issue2prs.setdefault(issue, []).append(number)
+                pr2issues.setdefault(number, []).append(issue)
                 sys.stdout.write('.')
 
     print (" done collecting merges.")
@@ -107,11 +117,17 @@ def make_release_notes(gh, repo, ref, plaintext, verbose):
     for (issue, prs) in issue2prs.iteritems():
         if len(prs) > 1:
             print (">>>>>>> " + str(len(prs)) + " pr for issue " + issue)
-        for (author, title, number) in prs:
-            if plaintext:
-                print (u"* {title} (#{issue}, {author})".format(title=title, issue=issue, author=author))
-            else:
-                print (u"* {title} (`issue#{issue} <http://tracker.ceph.com/issues/{issue}>`_, `pr#{number} <http://github.com/ceph/ceph/pull/{number}>`_, {author})".format(title=title, issue=issue, author=author, number=number))
+
+    for (pr, (author, title)) in sorted(pr2info.iteritems(), key=lambda (k,v): v[1]):
+        if plaintext:
+            issues = map(lambda issue: '#' + str(issue), pr2issues[pr])
+        else:
+            issues = map(lambda issue: '`issue#{issue} <http://tracker.ceph.com/issues/{issue}>`_'.format(issue=issue), pr2issues[pr])
+        issues = ", ".join(issues)
+        if plaintext:
+            print (u"* {title} ({issues}, {author})".format(title=title, issues=issues, author=author))
+        else:
+            print (u"* {title} ({issues}, `pr#{pr} <http://github.com/ceph/ceph/pull/{pr}>`_, {author})".format(title=title, issues=issues, author=author, pr=pr))
 
 
 if __name__ == "__main__":
