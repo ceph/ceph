@@ -65,4 +65,15 @@ public:
   ~RGWDeleteBucket_OS_Lib() {}
 }; /* RGWCreateBucket_OS_Lib */
 
+class RGWPutObj_OS_Lib : public RGWPutObj
+{
+public:
+  RGWPutObj_OS_Lib() {}
+  ~RGWPutObj_OS_Lib() {}
+
+  virtual int verify_params();
+  virtual int get_params();
+
+}; /* RGWPutObj_OS_Lib */
+
 #endif /* RGW_OS_LIB_H */
