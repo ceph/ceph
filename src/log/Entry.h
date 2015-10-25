@@ -48,6 +48,16 @@ struct Entry {
   std::string get_str() const {
     return m_streambuf.get_str();
   }
+
+  // returns current size of content
+  size_t size() const {
+    return m_streambuf.size();
+  }
+
+  // extracts up to avail chars of content
+  int snprintf(char* dst, size_t avail) const {
+    return m_streambuf.snprintf(dst, avail);
+  }
 };
 
 }
