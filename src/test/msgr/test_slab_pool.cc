@@ -142,6 +142,7 @@ TEST(SlabPool, test_concurrency) {
     uint32_t idx;
     void *d;
     int r = slab->create(size, &idx, &d);
+    ASSERT_TRUE(d != NULL);
     ASSERT_EQ(r, 0);
     workers[i%workers.size()]->post_data(idx, d);
     if (i % 1000 == 0) {

@@ -413,7 +413,8 @@ class SlabAllocator {
     size_t freed = 0;
     pending_free_lock.lock();
     if (!pending_frees.empty()) {
-      std::vector<pair<uint32_t, void*> > freeing(pending_frees.size());
+      std::vector<pair<uint32_t, void*> > freeing;
+      freeing.reserve(pending_frees.size());
       freeing.swap(pending_frees);
       pending_free_lock.unlock();
       freed = actual_free(freeing);
