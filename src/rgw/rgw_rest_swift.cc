@@ -952,20 +952,26 @@ int RGWBulkDelete_ObjStore_SWIFT::get_data(list<RGWBulkDelete::acct_path_t>& ite
 
     ldout(s->cct, 20) << "extracted Bulk Delete entry: " << path_str << dendl;
 
+    RGWBulkDelete::acct_path_t path;
+
     const size_t sep_pos = path_str.find('/');
     if (string::npos == sep_pos) {
-      ldout(s->cct, 20) << "wrongly formatted item: " << path_str << dendl;
-      continue;
-    }
+      url_decode(path_str, path.bucket_name);
+    } else {
+      string bucket_name;
+      url_decode(path_str.substr(0, sep_pos), bucket_name);
 
-    RGWBulkDelete::acct_path_t path;
-    path.bucket_name = path_str.substr(0, sep_pos);
-    path.obj_key     = path_str.substr(sep_pos + 1);
+      string obj_name;
+      url_decode(path_str.substr(sep_pos + 1), obj_name);
+
+      path.bucket_name = bucket_name;
+      path.obj_key = obj_name;
+    }
 
     items.push_back(path);
 
     if (items.size() == MAX_CHUNK_ENTRIES) {
-      is_truncated = true;
+      *is_truncated = true;
       return 0;
     }
   }
