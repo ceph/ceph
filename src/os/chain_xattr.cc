@@ -256,7 +256,7 @@ static int get_xattr_block_size(size_t size)
   return CHAIN_XATTR_MAX_BLOCK_LEN;
 }
 
-int chain_setxattr(const char *fn, const char *name, const void *val, size_t size)
+int chain_setxattr(const char *fn, const char *name, const void *val, size_t size, bool onechunk)
 {
   int i = 0, pos = 0;
   char raw_name[CHAIN_XATTR_MAX_NAME_LEN * 2 + 16];
@@ -278,7 +278,7 @@ int chain_setxattr(const char *fn, const char *name, const void *val, size_t siz
     i++;
   } while (size);
 
-  if (ret >= 0 ) {
+  if (ret >= 0 && !onechunk) {
     int r;
     do {
       get_raw_xattr_name(name, i, raw_name, sizeof(raw_name));
@@ -292,7 +292,7 @@ int chain_setxattr(const char *fn, const char *name, const void *val, size_t siz
   return ret;
 }
 
-int chain_fsetxattr(int fd, const char *name, const void *val, size_t size)
+int chain_fsetxattr(int fd, const char *name, const void *val, size_t size, bool onechunk)
 {
   int i = 0, pos = 0;
   char raw_name[CHAIN_XATTR_MAX_NAME_LEN * 2 + 16];
@@ -314,7 +314,7 @@ int chain_fsetxattr(int fd, const char *name, const void *val, size_t size)
     i++;
   } while (size);
 
-  if (ret >= 0) {
+  if (ret >= 0 && !onechunk) {
     int r;
     do {
       get_raw_xattr_name(name, i, raw_name, sizeof(raw_name));
