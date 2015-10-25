@@ -150,6 +150,16 @@ class C_clean_handler : public EventCallback {
   }
 };
 
+static void alloc_slab_buffer(SlabAllocator *slab, bufferlist& data, unsigned len)
+{
+  while (len > 0) {
+    uint64_t size = MIN(slab->max_size(), len);
+    bufferptr bp = buffer::create_slab(slab, size);
+    data.push_back(bp);
+    len -= size;
+  }
+}
+
 static void alloc_aligned_buffer(SlabAllocator *slab, bufferlist& data, unsigned len, unsigned off)
 {
   // create a buffer to read into that matches the data alignment
@@ -168,12 +178,7 @@ static void alloc_aligned_buffer(SlabAllocator *slab, bufferlist& data, unsigned
     data.push_back(bp);
     left -= middle;
   }
-  while (left > 0) {
-    uint64_t size = MIN(slab->max_size(), left);
-    bufferptr bp = buffer::create_slab(slab, size);
-    data.push_back(bp);
-    left -= size;
-  }
+  alloc_slab_buffer(slab, data, left);
 }
 
 AsyncConnection::AsyncConnection(CephContext *cct, AsyncMessenger *m, EventCenter *c, SlabAllocator *p, PerfCounters *pc)
@@ -641,16 +646,6 @@ void AsyncConnection::process()
             }
           }
 
-          bufferptr nondata_buf;
-          try {
-            nondata_buf = buffer::create_slab(slab, current_header.front_len + current_header.middle_len);
-          } catch (buffer::bad_alloc &e) {
-            lderr(async_msgr->cct) << __func__ << " can't alloc data buffer(len="
-                                   << current_header.front_len + current_header.middle_len << ")" << dendl;
-            goto fail;
-          }
-          front.append(nondata_buf, 0, current_header.front_len);
-          middle.append(nondata_buf, current_header.front_len, current_header.middle_len);
           throttle_stamp = ceph_clock_now(msgr->cct);
           state = STATE_OPEN_MESSAGE_READ_FRONT;
           break;
@@ -659,6 +654,15 @@ void AsyncConnection::process()
       case STATE_OPEN_MESSAGE_READ_FRONT:
         {
           if (current_header.front_len) {
+            if (front.empty()) {
+              try {
+                alloc_slab_buffer(slab, front, current_header.front_len);
+              } catch (buffer::bad_alloc &e) {
+                lderr(async_msgr->cct) << __func__ << " can't alloc header buffer(len="
+                                       << current_header.front_len << ")" << dendl;
+                goto fail;
+              }
+            }
             r = read_until(current_header.front_len, front.c_str());
             if (r < 0) {
               ldout(async_msgr->cct, 1) << __func__ << " read message front failed" << dendl;
@@ -676,6 +680,15 @@ void AsyncConnection::process()
       case STATE_OPEN_MESSAGE_READ_MIDDLE:
         {
           if (current_header.middle_len) {
+            if (middle.empty()) {
+              try {
+                alloc_slab_buffer(slab, middle, current_header.middle_len);
+              } catch (buffer::bad_alloc &e) {
+                lderr(async_msgr->cct) << __func__ << " can't alloc header buffer(len="
+                                       << current_header.middle_len << ")" << dendl;
+                goto fail;
+              }
+            }
             r = read_until(current_header.middle_len, middle.c_str());
             if (r < 0) {
               ldout(async_msgr->cct, 1) << __func__ << " read message middle failed" << dendl;
