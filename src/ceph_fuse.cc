@@ -99,13 +99,12 @@ int main(int argc, const char **argv, const char *envp[]) {
   }
 
   if (childpid == 0) {
+    if (restart_log)
+      g_ceph_context->_log->start();
     common_init_finish(g_ceph_context);
 
     //cout << "child, mounting" << std::endl;
     ::close(fd[0]);
-
-    if (restart_log)
-      g_ceph_context->_log->start();
 
     class RemountTest : public Thread {
     public:
