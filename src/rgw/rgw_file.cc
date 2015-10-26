@@ -49,7 +49,7 @@ extern "C" {
     return -EINVAL;
   }
 
-  struct rgw_fs *fs = new_fs->get_fs();;
+  struct rgw_fs *fs = new_fs->get_fs();
   fs->rgw = rgw;
 
   /* XXX we no longer assume "/" is unique, but we aren't tracking the

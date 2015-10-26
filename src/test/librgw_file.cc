@@ -57,13 +57,13 @@ TEST(LibRGW, MOUNT) {
 
 TEST(LibRGW, CREATE_BUCKET) {
   struct stat st;
-  struct rgw_file_handle fh;
-  int ret = rgw_mkdir(fs, &fs->root_fh, "sorry_dave", 755, &st, &fh);
+  struct rgw_file_handle* fh;
+  int ret = rgw_mkdir(fs, fs->root_fh, "sorry_dave", 755, &st, fh);
   ASSERT_EQ(ret, 0);
 }
 
 TEST(LibRGW, DELETE_BUCKET) {
-  int ret = rgw_unlink(fs, &fs->root_fh, "sorry_dave");
+  int ret = rgw_unlink(fs, fs->root_fh, "sorry_dave");
   ASSERT_EQ(ret, 0);
 }
 
@@ -84,7 +84,7 @@ TEST(LibRGW, LIST_BUCKETS) {
 
   bool eof = false;
   uint64_t offset = 0;
-  int ret = rgw_readdir(fs, &fs->root_fh, &offset, r1_cb, &fids1, &eof);
+  int ret = rgw_readdir(fs, fs->root_fh, &offset, r1_cb, &fids1, &eof);
   for (auto& fid : fids1) {
     std::cout << "fname: " << get<0>(fid) << " fid: " << get<1>(fid)
 	      << std::endl;
@@ -109,7 +109,7 @@ TEST(LibRGW, LOOKUP_BUCKETS) {
   int ret = 0;
   for (auto& fid : fids1) {
     struct rgw_file_handle *rgw_fh;
-    ret = rgw_lookup(fs, &fs->root_fh, get<0>(fid).c_str(), &rgw_fh,
+    ret = rgw_lookup(fs, fs->root_fh, get<0>(fid).c_str(), &rgw_fh,
 		    0 /* flags */);
     ASSERT_EQ(ret, 0);
     get<2>(fid) = rgw_fh;
