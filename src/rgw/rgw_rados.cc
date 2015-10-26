@@ -2882,6 +2882,7 @@ int RGWRados::replace_region_with_zonegroup()
 	  lderr(cct) << "failed to init zoneparams  " << iter->first <<  ": " << cpp_strerror(-ret) << dendl;
 	  return ret;
 	}
+	zonegroup.realm_id = realm.get_id();
 	ret = zoneparams.update();
 	if (ret < 0 && ret != -EEXIST) {
 	  lderr(cct) << "failed to update zoneparams " << iter->first <<  ": " << cpp_strerror(-ret) << dendl;
