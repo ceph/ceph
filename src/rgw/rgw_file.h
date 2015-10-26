@@ -8,31 +8,77 @@
 
 /* internal header */
 
+#include <atomic>
+#include <boost/intrusive_ptr.hpp>
+#include "xxhash.h"
+#include "include/buffer.h"
+
+class RGWFileHandle;
+typedef boost::intrusive_ptr<RGWFileHandle> RGWFHRef;
+
 class RGWFileHandle
 {
   struct rgw_file_handle fh;
+  mutable std::atomic<uint64_t> refcnt;
+  RGWFHRef parent;
+  const static string root_name;
+  string name; /* XXX file or bucket name */
   uint32_t flags;
+
 public:
-  static constexpr uint32_t FLAG_NONE = 0;
-  static constexpr uint32_t FLAG_OPEN = 1;
+  static constexpr uint32_t FLAG_NONE = 0x0000;
+  static constexpr uint32_t FLAG_OPEN = 0x0001;
+  static constexpr uint32_t FLAG_ROOT = 0x0002;
   
-  RGWFileHandle() {
+  RGWFileHandle(RGWFileHandle* _parent, const char* _name)
+    : parent(_parent), name(_name), flags(FLAG_NONE) {
+    fh.fh_type = parent->is_root() ? RGW_FS_TYPE_DIRECTORY : RGW_FS_TYPE_FILE;
     fh.fh_private = this;
-  }
-
-  bool is_open() { return flags & FLAG_OPEN; }
-
-  void open() { flags |= FLAG_OPEN; }
-
-  void close() { flags &= ~FLAG_OPEN; }
-
-  void rele() {
-    /* XXX intrusive refcnt */
-    assert(! is_open());
-    delete this;
+    /* content-addressable hash */
+    fh.fh_hk.bucket = (parent) ? parent->get_fh()->fh_hk.object : 0;
+    fh.fh_hk.object = XXH64(name.c_str(), name.length(), 8675309 /* XXX */);
   }
 
   struct rgw_file_handle* get_fh() { return &fh; }
+
+  const std::string& bucket_name() {
+    if (is_root())
+      return root_name;
+    if (is_object()) {
+      return parent->object_name();
+    }
+    return name;
+  }
+
+  const std::string& object_name() { return name; }
+
+  bool is_open() { return flags & FLAG_OPEN; }
+  bool is_root() { return flags & FLAG_ROOT; }
+  bool is_bucket() { return (fh.fh_type == RGW_FS_TYPE_DIRECTORY); }
+  bool is_object() { return (fh.fh_type == RGW_FS_TYPE_FILE); }
+
+  void open() {
+    flags |= FLAG_OPEN;
+  }
+
+  void close() {
+    flags &= ~FLAG_OPEN;
+  }
+
+  friend void intrusive_ptr_add_ref(const RGWFileHandle* fh) {
+    fh->refcnt.fetch_add(1, std::memory_order_relaxed);
+  }
+
+  friend void intrusive_ptr_release(const RGWFileHandle* fh) {
+    if (fh->refcnt.fetch_sub(1, std::memory_order_release) == 1) {
+      std::atomic_thread_fence(std::memory_order_acquire);
+      delete fh;
+    }
+  }
+
+  inline void rele() {
+    intrusive_ptr_release(this);
+  }
 }; /* RGWFileHandle */
 
 static inline RGWFileHandle* get_rgwfh(struct rgw_file_handle* fh) {
@@ -312,12 +358,12 @@ class RGWPutObjRequest : public RGWLibRequest,
 			 public RGWPutObj_OS_Lib /* RGWOp */
 {
 public:
-  std::string& bucket_name;
-  std::string& obj_name;
+  const std::string& bucket_name;
+  const std::string& obj_name;
   buffer::list& bl; /* XXX */
 
   RGWPutObjRequest(CephContext* _cct, RGWUserInfo *_user,
-		  std::string& _bname, std::string& _oname,
+		  const std::string& _bname, const std::string& _oname,
 		  buffer::list& _bl)
     : RGWLibRequest(_cct, _user), bucket_name(_bname), obj_name(_oname),
       bl(_bl) {
@@ -357,7 +403,21 @@ public:
 
     return 0;
   }
-}; /* RGWPubObjRequest */
 
+  virtual int get_data(buffer::list& _bl) {
+    /* XXX for now, use sharing semantics */
+    _bl = bl;
+    return _bl.length();
+  }
+
+  virtual void send_response() {}
+
+  virtual int verify_params() {
+    if (bl.length() > cct->_conf->rgw_max_put_size)
+      return -ERR_TOO_LARGE;
+    return 0;
+  }
+
+}; /* RGWPubObjRequest */
 
 #endif /* RGW_FILE_H */
