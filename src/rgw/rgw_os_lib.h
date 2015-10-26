@@ -71,7 +71,6 @@ public:
   RGWPutObj_OS_Lib() {}
   ~RGWPutObj_OS_Lib() {}
 
-  virtual int verify_params();
   virtual int get_params();
 
 }; /* RGWPutObj_OS_Lib */
