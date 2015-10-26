@@ -6,7 +6,8 @@
 
 template<typename T>
 inline std::string stringify(const T& a) {
-  std::ostringstream ss;
+  static __thread std::ostringstream ss;
+  ss.str("");
   ss << a;
   return ss.str();
 }
