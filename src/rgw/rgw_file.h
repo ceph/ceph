@@ -115,6 +115,7 @@ public:
     : root_fh(this, nullptr, RGWFileHandle::root_name.c_str()), uid(_uid),
       key(_user_id, _key) {
     fs.fs_private = this;
+    fs.root_fh = root_fh.get_fh(); /* expose public root fh */
   }
 
   int authorize(RGWRados* store) {
