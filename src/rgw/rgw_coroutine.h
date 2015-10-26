@@ -147,6 +147,14 @@ protected:
     state = s;
     return ret;
   }
+  int set_cr_error(int ret) {
+    state = RGWCoroutine_Error;
+    return ret;
+  }
+  int set_cr_done() {
+    state = RGWCoroutine_Done;
+    return 0;
+  }
   void set_io_blocked(bool flag);
   void set_sleeping(bool flag);
   int io_block(int ret);
