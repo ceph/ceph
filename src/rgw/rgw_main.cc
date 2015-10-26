@@ -919,12 +919,14 @@ public:
 
     pprocess = pp;
 
-    string uid;
-    conf->get_val("uid", "", &uid);
-    if (uid.empty()) {
+    string uid_str;
+    conf->get_val("uid", "", &uid_str);
+    if (uid_str.empty()) {
       derr << "ERROR: uid param must be specified for loadgen frontend" << dendl;
       return EINVAL;
     }
+
+    rgw_user uid(uid_str);
 
     RGWUserInfo user_info;
     int ret = rgw_get_user_info_by_uid(env.store, uid, user_info, NULL);

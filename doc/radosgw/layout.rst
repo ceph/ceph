@@ -34,7 +34,7 @@ $ radosgw-admin metadata list user
 
 $ radosgw-admin metadata get bucket:<bucket>
 $ radosgw-admin metadata get bucket.instance:<bucket>:<bucket_id>
-$ radosgw-admin metadata get user:<user>   # or set
+$ radosgw-admin metadata get user:<user>   # get or set
 
 user: Holds user information
 bucket: Holds a mapping between bucket name and bucket instance id
@@ -149,7 +149,7 @@ Known pools:
 
 .rgw
   <bucket>
-  .bucket.meta.<bucket>:<marker>
+  .bucket.meta.<bucket>:<marker>   # see put_bucket_instance_info()
 
 .rgw.gc
   gc.<N>
@@ -176,3 +176,6 @@ Known pools:
   <marker>_<key>
 
 An example of a marker would be "default.16004.1" or "default.7593.4".
+The current format is "<zone>.<instance_id>.<bucket_id>". But once
+generated, a marker is not parsed again, so its format may change
+freely in the future.
