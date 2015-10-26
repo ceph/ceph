@@ -429,6 +429,8 @@ void Objecter::shutdown()
   }
 
   assert(tick_event == NULL);
+
+  cct->_conf->remove_observer(this);
 }
 
 void Objecter::_send_linger(LingerOp *info)
