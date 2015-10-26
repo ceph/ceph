@@ -15,9 +15,10 @@
 #define CEPH_RGW_REST_CONFIG_H
 
 class RGWOp_ZoneGroupMap_Get : public RGWRESTOp {
-  RGWZoneGroupMap zone_group_map;
+  RGWZoneGroupMap zonegroup_map;
+  bool old_format;
 public:
-  RGWOp_ZoneGroupMap_Get() {}
+  RGWOp_ZoneGroupMap_Get(bool _old_format):old_format(old_format) {}
   ~RGWOp_ZoneGroupMap_Get() {}
 
   int verify_permission() {
@@ -26,7 +27,11 @@ public:
   void execute();
   virtual void send_response();
   virtual const string name() {
-    return "get_region_map";
+    if (old_format) {
+      return "get_region_map";
+    } else {
+      return "get_zonegroup_map";
+    }
   }
 };
 

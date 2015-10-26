@@ -1243,7 +1243,6 @@ int RGWPeriodMap::update(const RGWZoneGroup& zonegroup)
   return 0;
 }
 
-
 int RGWZoneGroupMap::read(CephContext *cct, RGWRados *store) {
 
   RGWPeriod period;
@@ -1261,7 +1260,27 @@ int RGWZoneGroupMap::read(CephContext *cct, RGWRados *store) {
 
   return 0;
 }
-  
+
+void RGWRegionMap::encode(bufferlist& bl) const {
+  ENCODE_START( 3, 1, bl);
+  ::encode(regions, bl);
+  ::encode(master_region, bl);
+  ::encode(bucket_quota, bl);
+  ::encode(user_quota, bl);
+  ENCODE_FINISH(bl);
+}
+
+void RGWRegionMap::decode(bufferlist::iterator& bl) {
+  DECODE_START(3, bl);
+  ::decode(regions, bl);
+  ::decode(master_region, bl);
+  if (struct_v >= 2)
+    ::decode(bucket_quota, bl);
+  if (struct_v >= 3)
+    ::decode(user_quota, bl);
+  DECODE_FINISH(bl);
+}
+
 void RGWZoneGroupMap::encode(bufferlist& bl) const {
   ENCODE_START( 3, 1, bl);
   ::encode(zonegroups, bl);
@@ -2812,6 +2831,7 @@ int RGWRados::convert_regionmap()
  */
 int RGWRados::replace_region_with_zonegroup()
 {
+ 
   /* copy default region */
   /* convert default region to default zonegroup */
   string default_oid = cct->_conf->rgw_default_region_info_oid;
@@ -2839,7 +2859,6 @@ int RGWRados::replace_region_with_zonegroup()
     lderr(cct) << "failed to list regions: ret "<< ret << " " << cpp_strerror(-ret) << dendl;
     return ret;
   }
-
   list<string>::iterator iter;
   /* create zonegroups */
   for (iter = regions.begin(); iter != regions.end(); ++iter)

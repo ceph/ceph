@@ -1179,6 +1179,23 @@ struct RGWPeriodConfig
 WRITE_CLASS_ENCODER(RGWPeriodConfig)
 
 /* for backward comaptability */
+struct RGWRegionMap {
+
+  map<string, RGWZoneGroup> regions;
+
+  string master_region;
+
+  RGWQuotaInfo bucket_quota;
+  RGWQuotaInfo user_quota;
+
+  void encode(bufferlist& bl) const;
+  void decode(bufferlist::iterator& bl);
+
+  void dump(Formatter *f) const;
+  void decode_json(JSONObj *obj);
+};
+WRITE_CLASS_ENCODER(RGWRegionMap)
+
 struct RGWZoneGroupMap {
 
   map<string, RGWZoneGroup> zonegroups;
