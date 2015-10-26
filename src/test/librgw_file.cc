@@ -55,18 +55,6 @@ TEST(LibRGW, MOUNT) {
   ASSERT_NE(fs, nullptr);
 }
 
-TEST(LibRGW, CREATE_BUCKET) {
-  struct stat st;
-  struct rgw_file_handle* fh;
-  int ret = rgw_mkdir(fs, fs->root_fh, "sorry_dave", 755, &st, fh);
-  ASSERT_EQ(ret, 0);
-}
-
-TEST(LibRGW, DELETE_BUCKET) {
-  int ret = rgw_unlink(fs, fs->root_fh, "sorry_dave");
-  ASSERT_EQ(ret, 0);
-}
-
 extern "C" {
   static bool r1_cb(const char* name, void *arg, uint64_t offset) {
     // don't need arg--it would point to fids1
