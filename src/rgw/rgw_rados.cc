@@ -2893,6 +2893,15 @@ int RGWRados::replace_region_with_zonegroup()
 	  return ret;
 	}
       }
+
+      if (!current_period.get_id().empty()) {
+	ret = current_period.add_zonegroup(zonegroup);
+	if (ret < 0) {
+	  lderr(cct) << "failed to add zonegroup to current_period: " << cpp_strerror(-ret) << dendl;
+	  return ret;
+	}
+      }
+
       derr << "delete region " << *iter << dendl;
       ret = zonegroup.delete_obj(true);
       if (ret < 0 && ret != -ENOENT) {
@@ -2920,7 +2929,17 @@ int RGWRados::replace_region_with_zonegroup()
  */
 int RGWRados::init_complete()
 {
-  int ret;
+  int ret = realm.init(cct, this);
+  if (ret < 0 && ret != -ENOENT) {
+    lderr(cct) << "failed reading realm info: ret "<< ret << " " << cpp_strerror(-ret) << dendl;
+    return ret;
+  } else {
+    ret = current_period.init(cct, this, realm.get_id(), realm.get_name());
+    if (ret < 0 && ret != -ENOENT) {
+      lderr(cct) << "failed reading current period info: " << " " << cpp_strerror(-ret) << dendl;
+      return ret;
+    }
+  }
 
   ret = replace_region_with_zonegroup();
   if (ret < 0) {
@@ -2933,44 +2952,34 @@ int RGWRados::init_complete()
     lderr(cct) << "failed converting regionmap: " << cpp_strerror(-ret) << dendl;
     return ret;
   }
-  
-  ret = realm.init(cct, this);
-  if (ret < 0 && ret != -ENOENT) {
-    lderr(cct) << "failed reading realm info: ret "<< ret << " " << cpp_strerror(-ret) << dendl;
-    return ret;
-  } else {
-    ret = current_period.init(cct, this, realm.get_id(), realm.get_name());
-    if (ret < 0 && ret != -ENOENT) {
-      lderr(cct) << "failed reading current period info: " << " " << cpp_strerror(-ret) << dendl;
-      return ret;
-    } else {
-      map<string, RGWZoneGroup>::const_iterator iter =
-	current_period.get_map().zonegroups.find(zonegroup.get_predefined_name(cct));
-      if (iter != current_period.get_map().zonegroups.end()) {
-	period_zonegroup = iter->second;
-	has_period_zonegroup = true;
-	map<string, RGWZone>::iterator zone_iter =
-	  period_zonegroup.zones.find(zone_params.get_predefined_name(cct));
-	if (zone_iter != zonegroup.zones.end()) {
-	  period_zone = zone_iter->second;
-	  has_period_zone = true;
-	} else {
-	  lderr(cct) << "Cannot find zone " << zone_params.get_predefined_name(cct) <<
-	    " in current period using local" << dendl;
-	}
+
+  if (!current_period.get_id().empty()) {
+    map<string, RGWZoneGroup>::const_iterator iter =
+      current_period.get_map().zonegroups.find(zonegroup.get_predefined_name(cct));
+    if (iter != current_period.get_map().zonegroups.end()) {
+      period_zonegroup = iter->second;
+      has_period_zonegroup = true;
+      map<string, RGWZone>::iterator zone_iter =
+	period_zonegroup.zones.find(zone_params.get_predefined_name(cct));
+      if (zone_iter != zonegroup.zones.end()) {
+	period_zone = zone_iter->second;
+	has_period_zone = true;
       } else {
-	lderr(cct) << "Cannot find zonegroup" << zonegroup.get_predefined_name(cct) <<
+	lderr(cct) << "Cannot find zone " << zone_params.get_predefined_name(cct) <<
 	  " in current period using local" << dendl;
       }
+    } else {
+      lderr(cct) << "Cannot find zonegroup" << zonegroup.get_predefined_name(cct) <<
+	" in current period using local" << dendl;
+    }
 
-      for (iter = current_period.get_map().zonegroups.begin();
-	   iter != current_period.get_map().zonegroups.end(); ++iter){
-	const RGWZoneGroup& zg = iter->second;
-	add_new_connection_to_map(zonegroup_conn_map, zg, new RGWRESTConn(cct, this, zonegroup.endpoints));
-	if (!current_period.get_master_zonegroup().empty() &&
-	    zg.get_id() == current_period.get_master_zonegroup()) {
-	  rest_master_conn = new RGWRESTConn(cct, this, zg.endpoints);
-	}
+    for (iter = current_period.get_map().zonegroups.begin();
+	 iter != current_period.get_map().zonegroups.end(); ++iter){
+      const RGWZoneGroup& zg = iter->second;
+      add_new_connection_to_map(zonegroup_conn_map, zg, new RGWRESTConn(cct, this, zonegroup.endpoints));
+      if (!current_period.get_master_zonegroup().empty() &&
+	  zg.get_id() == current_period.get_master_zonegroup()) {
+	rest_master_conn = new RGWRESTConn(cct, this, zg.endpoints);
       }
     }
   }
