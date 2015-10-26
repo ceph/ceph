@@ -23,7 +23,7 @@ class RGWFileHandle
   struct rgw_file_handle fh;
   mutable std::atomic<uint64_t> refcnt;
   RGWFHRef parent;
-  string name; /* XXX file or bucket name */
+  const string name; /* XXX file or bucket name */
   uint32_t flags;
 
 public:
