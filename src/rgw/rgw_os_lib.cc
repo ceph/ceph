@@ -136,3 +136,13 @@ void RGWCreateBucket_OS_Lib::send_response()
 {
   /* TODO: something (maybe) */
 }
+
+int RGWPutObj_OS_Lib::get_params()
+{
+  RGWAccessControlPolicy_S3 s3policy(s->cct);
+
+  /* we don't have (any) headers, so just create canned ACLs */
+  int ret = s3policy.create_canned(s->owner, s->bucket_owner, s->canned_acl);
+  policy = s3policy;
+  return ret;
+}

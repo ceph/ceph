@@ -38,13 +38,13 @@ enum rgw_fh_type {
  */
 struct rgw_file_handle
 {
+  /* content-addressable hash */
+  struct {
+    uint64_t bucket;
+    uint64_t object;
+  } fh_hk;
   uint64_t handle; // XXX deprecating
   void *fh_private; /* librgw private data */
-  /* opaque content-addressable name */
-  struct {
-    void *data;
-    uint16_t len;
-  } fh_name;
   /* object type */
   enum rgw_fh_type fh_type;
 };
@@ -136,7 +136,7 @@ int rgw_unlink(struct rgw_fs *rgw_fs,
   lookup a directory or file
 */
 int rgw_lookup(struct rgw_fs *rgw_fs,
-	      const struct rgw_file_handle *parent_fh, const char *path,
+	      struct rgw_file_handle *parent_fh, const char *path,
 	      struct rgw_file_handle **fh, uint32_t flags);
 
 /*

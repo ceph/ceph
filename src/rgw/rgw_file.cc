@@ -38,6 +38,8 @@ bool is_bucket(const string& uri)
   return (pos < 0);
 }
 
+const string RGWFileHandle::root_name = "/";
+
 /*
   get generate rgw_file_handle
 */
@@ -219,7 +221,7 @@ int rgw_unlink(struct rgw_fs *rgw_fs, const struct rgw_file_handle* parent,
   lookup a directory or file
 */
 int rgw_lookup(struct rgw_fs *rgw_fs,
-	      const struct rgw_file_handle *parent_fh, const char* path,
+	      struct rgw_file_handle *parent_fh, const char* path,
 	      struct rgw_file_handle **fh, uint32_t flags)
 {
   string uri;
@@ -243,7 +245,8 @@ int rgw_lookup(struct rgw_fs *rgw_fs,
   uri += "/";
   uri += path;
 
-  RGWFileHandle* rgw_fh = new RGWFileHandle();
+  RGWFileHandle* parent = get_rgwfh(parent_fh);
+  RGWFileHandle* rgw_fh = new RGWFileHandle(parent, path);
   struct rgw_file_handle *rfh = rgw_fh->get_fh();
 
   /* find or create a handle for the object or bucket */
@@ -386,9 +389,24 @@ int rgw_write(struct rgw_fs *rgw_fs,
 	      struct rgw_file_handle *fh, uint64_t offset,
 	      size_t length, void *buffer)
 {
+  CephContext* cct = static_cast<CephContext*>(rgw_fs->rgw);
+  RGWLibFS *fs = static_cast<RGWLibFS*>(rgw_fs->fs_private);
   RGWFileHandle* rgw_fh = get_rgwfh(fh);
 
-  return 0;
+  if (! rgw_fh->is_object())
+    return EINVAL;
+
+  /* XXXX testing only */
+  buffer::list bl;
+  bl.push_back(
+    buffer::create_static(length /* XXX size */, static_cast<char*>(buffer)));
+
+  /* XXX */
+  RGWPutObjRequest req(cct, fs->get_user(), rgw_fh->bucket_name(),
+		      rgw_fh->object_name(), bl);
+  int rc = librgw.get_fe()->execute_req(&req);
+
+  return rc;
 }
 
 /*
