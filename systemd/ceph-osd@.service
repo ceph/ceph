@@ -2,7 +2,7 @@
 Description=Ceph object storage daemon
 After=network-online.target local-fs.target
 Wants=network-online.target local-fs.target
-PartOf=ceph.target
+PartOf=ceph-osd.target
 
 [Service]
 LimitNOFILE=1048576
@@ -14,4 +14,4 @@ ExecStartPre=/usr/libexec/ceph/ceph-osd-prestart.sh --cluster ${CLUSTER} --id %i
 ExecReload=/bin/kill -HUP $MAINPID
 
 [Install]
-WantedBy=ceph.target
+WantedBy=ceph-osd.target
