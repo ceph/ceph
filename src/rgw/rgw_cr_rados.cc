@@ -500,6 +500,9 @@ int RGWAsyncRemoveObj::_send_request()
 
 int RGWContinuousLeaseCR::operate()
 {
+  if (aborted) {
+    return set_cr_done();
+  }
   reenter(this) {
     while (!going_down.read()) {
       yield {
