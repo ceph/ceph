@@ -745,11 +745,13 @@ class RGWContinuousLeaseCR : public RGWCoroutine {
   atomic_t going_down;
   bool locked;
 
+  RGWCoroutine *caller;
+
 public:
   RGWContinuousLeaseCR(RGWAsyncRadosProcessor *_async_rados, RGWRados *_store, rgw_bucket& _pool, const string& _oid,
-                       const string& _lock_name, int _interval) : RGWCoroutine(_store->ctx()), async_rados(_async_rados), store(_store),
+                       const string& _lock_name, int _interval, RGWCoroutine *_caller) : RGWCoroutine(_store->ctx()), async_rados(_async_rados), store(_store),
                                         pool(_pool), oid(_oid), lock_name(_lock_name), interval(_interval),
-                                        lock("RGWContimuousLeaseCR"), locked(false) {
+                                        lock("RGWContimuousLeaseCR"), locked(false), caller(_caller) {
 #define COOKIE_LEN 16
     char buf[COOKIE_LEN + 1];
 

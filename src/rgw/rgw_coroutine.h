@@ -156,8 +156,7 @@ protected:
     return 0;
   }
   void set_io_blocked(bool flag);
-  void set_sleeping(bool flag);
-  int io_block(int ret);
+  int io_block(int ret = 0);
 
 public:
   RGWCoroutine(CephContext *_cct) : _yield_ret(false), cct(_cct), stack(NULL), retcode(0), state(RGWCoroutine_Run) {}
@@ -188,6 +187,7 @@ public:
   int wait(const utime_t& interval);
   bool drain_children(int num_cr_left); /* returns true if needed to be called again */
   void wakeup();
+  void set_sleeping(bool flag); /* put in sleep, or wakeup from sleep */
 
   size_t num_spawned() {
     return spawned.entries.size();
