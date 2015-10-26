@@ -189,7 +189,6 @@ add_library(crush STATIC ${crush_srcs})
 
 add_subdirectory(json_spirit)
 
-add_subdirectory(xxHash/cmake_unofficial)
 include_directories("${CMAKE_SOURCE_DIR}/src/xxHash")
 
 set(xio_common_srcs)
@@ -239,6 +238,7 @@ set(libcommon_files
   common/crc32c_intel_baseline.c
   common/crc32c_intel_fast.c
   ${yasm_srcs}
+  xxHash/xxhash.c
   common/assert.cc
   common/run_cmd.cc
   common/WorkQueue.cc
