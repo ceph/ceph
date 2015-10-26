@@ -884,7 +884,7 @@ void RGWGetObj::execute()
     if (ret < 0) {
       ldout(s->cct, 0) << "ERROR: failed to handle user manifest ret=" << ret << dendl;
     }
-    return;
+    goto done_err;
   }
 
   ofs = new_ofs;
@@ -904,8 +904,6 @@ void RGWGetObj::execute()
   if (ret < 0) {
     goto done_err;
   }
-
-  store->finish_get_obj(&handle);
 
 done_err:
   send_response_data(bl, 0, 0);
