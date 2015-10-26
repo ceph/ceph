@@ -605,15 +605,6 @@ EXTRA_DIST += \
   rocksdb/tools/ldb_test.py \
   rocksdb/tools/ldb_tool.cc \
   rocksdb/tools/pflag \
-  rocksdb/tools/rdb/API.md \
-  rocksdb/tools/rdb/binding.gyp \
-  rocksdb/tools/rdb/db_wrapper.cc \
-  rocksdb/tools/rdb/db_wrapper.h \
-  rocksdb/tools/rdb/.gitignore \
-  rocksdb/tools/rdb/rdb \
-  rocksdb/tools/rdb/rdb.cc \
-  rocksdb/tools/rdb/README.md \
-  rocksdb/tools/rdb/unit_test.js \
   rocksdb/tools/reduce_levels_test.cc \
   rocksdb/tools/regression_test.sh \
   rocksdb/tools/rocksdb_dump_test.sh \
