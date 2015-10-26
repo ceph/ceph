@@ -137,7 +137,7 @@ TEST(LibRGW, MOUNT) {
 }
 
 TEST(LibRGW, OBJ_OPEN) {
-  int ret = rgw_lookup(fs, &fs->root_fh, bucket_name.c_str(), &fh,
+  int ret = rgw_lookup(fs, fs->root_fh, bucket_name.c_str(), &fh,
 		      0 /* flags */);
   ASSERT_EQ(ret, 0);
   ret = rgw_open(fs, fh, 0 /* flags */);

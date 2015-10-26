@@ -52,7 +52,7 @@ struct rgw_fs
 {
   librgw_t rgw;
   void *fs_private;
-  struct rgw_file_handle root_fh;
+  struct rgw_file_handle* root_fh;
 };
 
 

@@ -63,14 +63,14 @@ TEST(LibRGW, CREATE_BUCKET) {
   if (do_create) {
     struct stat st;
     struct rgw_file_handle fh;
-    int ret = rgw_mkdir(fs, &fs->root_fh, bucket_name.c_str(), 755, &st, &fh);
+    int ret = rgw_mkdir(fs, fs->root_fh, bucket_name.c_str(), 755, &st, &fh);
     ASSERT_EQ(ret, 0);
   }
 }
 
 TEST(LibRGW, DELETE_BUCKET) {
   if (do_delete) {
-    int ret = rgw_unlink(fs, &fs->root_fh, bucket_name.c_str());
+    int ret = rgw_unlink(fs, fs->root_fh, bucket_name.c_str());
     ASSERT_EQ(ret, 0);
   }
 }
@@ -83,7 +83,7 @@ TEST(LibRGW, CREATE_BUCKET_MULTI) {
     for (int ix = 0; ix < multi_cnt; ++ix) {
       string bn = bucket_name;
       bn += to_string(ix);
-      ret = rgw_mkdir(fs, &fs->root_fh, bn.c_str(), 755, &st, &fh);
+      ret = rgw_mkdir(fs, fs->root_fh, bn.c_str(), 755, &st, &fh);
       ASSERT_EQ(ret, 0);
       std::cout << "created: " << bn << std::endl;
     }
@@ -95,7 +95,7 @@ TEST(LibRGW, DELETE_BUCKET_MULTI) {
     for (int ix = 0; ix < multi_cnt; ++ix) {
       string bn = bucket_name;
       bn += to_string(ix);
-      int ret = rgw_unlink(fs, &fs->root_fh, bn.c_str());
+      int ret = rgw_unlink(fs, fs->root_fh, bn.c_str());
       ASSERT_EQ(ret, 0);
     }
   }
