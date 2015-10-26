@@ -515,15 +515,6 @@ EXTRA_DIST += \
   rocksdb/tools/dbench_monitor \
   rocksdb/tools/ldb.cc \
   rocksdb/tools/pflag \
-  rocksdb/tools/rdb/.gitignore \
-  rocksdb/tools/rdb/API.md \
-  rocksdb/tools/rdb/README.md \
-  rocksdb/tools/rdb/binding.gyp \
-  rocksdb/tools/rdb/db_wrapper.cc \
-  rocksdb/tools/rdb/db_wrapper.h \
-  rocksdb/tools/rdb/rdb \
-  rocksdb/tools/rdb/rdb.cc \
-  rocksdb/tools/rdb/unit_test.js \
   rocksdb/tools/sst_dump.cc \
   rocksdb/tools/dump/db_dump_tool.cc \
   rocksdb/tools/dump/rocksdb_dump.cc \
