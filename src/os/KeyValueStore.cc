@@ -2888,7 +2888,7 @@ const char** KeyValueStore::get_tracked_conf_keys() const
   static const char* KEYS[] = {
     "keyvaluestore_queue_max_ops",
     "keyvaluestore_queue_max_bytes",
-    "keyvaluestore_strip_size",
+    "keyvaluestore_default_strip_size",
     "keyvaluestore_dump_file",
     NULL
   };
