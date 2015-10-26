@@ -18,7 +18,7 @@ class RGWOp_ZoneGroupMap_Get : public RGWRESTOp {
   RGWZoneGroupMap zonegroup_map;
   bool old_format;
 public:
-  RGWOp_ZoneGroupMap_Get(bool _old_format):old_format(old_format) {}
+  RGWOp_ZoneGroupMap_Get(bool _old_format):old_format(_old_format) {}
   ~RGWOp_ZoneGroupMap_Get() {}
 
   int verify_permission() {

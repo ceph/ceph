@@ -1243,7 +1243,8 @@ int RGWPeriodMap::update(const RGWZoneGroup& zonegroup)
   return 0;
 }
 
-int RGWZoneGroupMap::read(CephContext *cct, RGWRados *store) {
+int RGWZoneGroupMap::read(CephContext *cct, RGWRados *store)
+{
 
   RGWPeriod period;
   int ret = period.init(cct, store);
@@ -2873,6 +2874,7 @@ int RGWRados::replace_region_with_zonegroup()
 	lderr(cct) << "failed init zonegroup: ret "<< ret << " " << cpp_strerror(-ret) << dendl;
 	return ret;
       }
+      zonegroup.realm_id = realm.get_id();
       derr << "create zonegroup: name " << *iter << dendl;
       ret = zonegroup.update();
       if (ret < 0 && ret != -EEXIST) {
@@ -2959,7 +2961,7 @@ int RGWRados::init_complete()
   if (ret < 0 && ret != -ENOENT) {
     lderr(cct) << "failed reading realm info: ret "<< ret << " " << cpp_strerror(-ret) << dendl;
     return ret;
-  } else {
+  } else if (ret != -ENOENT) {
     ret = current_period.init(cct, this, realm.get_id(), realm.get_name());
     if (ret < 0 && ret != -ENOENT) {
       lderr(cct) << "failed reading current period info: " << " " << cpp_strerror(-ret) << dendl;
@@ -2995,7 +2997,7 @@ int RGWRados::init_complete()
 	  " in current period using local" << dendl;
       }
     } else {
-      lderr(cct) << "Cannot find zonegroup" << zonegroup.get_predefined_name(cct) <<
+      lderr(cct) << "Cannot find zonegroup " << zonegroup.get_predefined_name(cct) <<
 	" in current period using local" << dendl;
     }
 
