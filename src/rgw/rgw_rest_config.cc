@@ -96,9 +96,6 @@ RGWOp* RGWHandler_Config::op_get() {
   bool exists;
   string type = s->info.args.get("type", &exists);
 
-  if (!exists) {
-    return NULL;
-  }
   if (type.compare("period") == 0) {
     return new RGWOp_Period_Get;
   } else {
@@ -110,10 +107,6 @@ RGWOp* RGWHandler_Config::op_get() {
 RGWOp* RGWHandler_Config::op_post() {
   bool exists;
   string type = s->info.args.get("type", &exists);
-
-  if (!exists) {
-    return NULL;
-  }
 
   if (type.compare("period") == 0) {
     return new RGWOp_Period_Post;
