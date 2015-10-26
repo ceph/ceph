@@ -390,37 +390,6 @@ int RGWLib::stop()
   return 0;
 } /* RGWLib::stop() */
 
-int RGWLib::get_uri(const uint64_t handle, string& uri)
-{
-  ceph::unordered_map<uint64_t, string>::iterator i = handles_map.find(handle);
-  if (i != handles_map.end()) {
-    uri =  i->second;
-    return 0;
-  }
-  return -1;
-}
-
-uint64_t RGWLib::get_handle(const string& uri)
-{
-  ceph::unordered_map<string, uint64_t>::iterator i =
-    allocated_objects_handles.find(uri);
-  if (i != allocated_objects_handles.end()) {
-    return i->second;
-  }
-
-  allocated_objects_handles[uri] = last_allocated_handle.inc();
-  handles_map[last_allocated_handle.read()] = uri;
-
-  return last_allocated_handle.read();
-}
-
-int RGWLib::check_handle(uint64_t handle)
-{
-  ceph::unordered_map<uint64_t, string>::const_iterator i =
-    handles_map.find(handle);
-  return (i != handles_map.end());
-}
-
 int RGWLibIO::set_uid(RGWRados *store, const rgw_user& uid)
 {
   int ret = rgw_get_user_info_by_uid(store, uid, user_info, NULL);
