@@ -272,7 +272,7 @@ public:
     int ret = mdlog->get_info_async(shard_id, shard_info, stack->get_completion_mgr(), (void *)stack, &req_ret);
     if (ret < 0) {
       ldout(store->ctx(), 0) << "ERROR: mdlog->get_info_async() returned ret=" << ret << dendl;
-      return set_state(RGWCoroutine_Error, ret);
+      return set_cr_error(ret);
     }
 
     return 0;
@@ -396,7 +396,7 @@ public:
           ldout(store->ctx(), 0) << "ERROR: failed to read from " << p << dendl;
           log_error() << "failed to send http operation: " << http_op->to_str() << " ret=" << ret << std::endl;
           http_op->put();
-          return set_state(RGWCoroutine_Error, ret);
+          return set_cr_error(ret);
         }
 
         return io_block(0);
@@ -404,9 +404,9 @@ public:
       yield {
         int ret = http_op->wait(shard_info);
         if (ret < 0) {
-          return set_state(RGWCoroutine_Error, ret);
+          return set_cr_error(ret);
         }
-        return set_state(RGWCoroutine_Done, 0);
+        return set_cr_done();
       }
     }
     return 0;
@@ -450,7 +450,7 @@ public:
       while (!lease_cr->is_locked()) {
         if (lease_cr->is_done()) {
           ldout(cct, 0) << "ERROR: lease cr failed, done early " << dendl;
-          return set_state(RGWCoroutine_Error, lease_cr->get_ret_status());
+          return set_cr_error(lease_cr->get_ret_status());
         }
         yield;
       }
@@ -487,7 +487,7 @@ public:
 	}
         yield;
       }
-      return set_state(RGWCoroutine_Done);
+      return set_cr_done();
     }
     return 0;
   }
@@ -602,7 +602,7 @@ public:
       while (!lease_cr->is_locked()) {
         if (lease_cr->is_done()) {
           ldout(cct, 0) << "ERROR: lease cr failed, done early " << dendl;
-          return set_state(RGWCoroutine_Error, lease_cr->get_ret_status());
+          return set_cr_error(lease_cr->get_ret_status());
         }
         yield;
       }
@@ -656,9 +656,9 @@ public:
         yield;
       }
       if (lost_lock) {
-        yield return set_state(RGWCoroutine_Error, -EBUSY);
+        yield return set_cr_error(-EBUSY);
       }
-      yield return set_state(RGWCoroutine_Done);
+      yield return set_cr_done();
     }
     return 0;
   }
@@ -712,7 +712,7 @@ public:
           ldout(store->ctx(), 0) << "ERROR: failed to fetch mdlog data" << dendl;
           log_error() << "failed to send http operation: " << http_op->to_str() << " ret=" << ret << std::endl;
           http_op->put();
-          return set_state(RGWCoroutine_Error, ret);
+          return set_cr_error(ret);
         }
 
         return io_block(0);
@@ -720,9 +720,9 @@ public:
       yield {
         int ret = http_op->wait_bl(pbl);
         if (ret < 0) {
-          return set_state(RGWCoroutine_Error, ret);
+          return set_cr_error(ret);
         }
-        return set_state(RGWCoroutine_Done, 0);
+        return set_cr_done();
       }
     }
     return 0;
@@ -849,7 +849,7 @@ public:
       if (sync_status < 0) {
 #warning failed syncing, a metadata entry, need to log
 #warning also need to handle errors differently here, depending on error (transient / permanent)
-        return set_state(RGWCoroutine_Error, sync_status);
+        return set_cr_error(sync_status);
       }
 
       yield call(new RGWMetaStoreEntryCR(async_rados, store, raw_key, md_bl));
@@ -860,16 +860,16 @@ public:
         int ret = call(marker_tracker->finish(entry_marker));
         if (ret < 0) {
           ldout(store->ctx(), 0) << "ERROR: marker_tracker->finish(" << entry_marker << ") returned ret=" << ret << dendl;
-          return set_state(RGWCoroutine_Error, sync_status);
+          return set_cr_error(sync_status);
         }
       }
       if (sync_status == 0) {
         sync_status = retcode;
       }
       if (sync_status < 0) {
-        return set_state(RGWCoroutine_Error, retcode);
+        return set_cr_error(retcode);
       }
-      return set_state(RGWCoroutine_Done, 0);
+      return set_cr_done();
     }
     return 0;
   }
@@ -1032,7 +1032,7 @@ public:
       while (!lease_cr->is_locked()) {
         if (lease_cr->is_done()) {
           ldout(cct, 0) << "ERROR: lease cr failed, done early " << dendl;
-          return set_state(RGWCoroutine_Error, lease_cr->get_ret_status());
+          return set_cr_error(lease_cr->get_ret_status());
         }
         yield;
       }
@@ -1049,7 +1049,7 @@ public:
         yield return call(new RGWRadosGetOmapKeysCR(store, pool, oid, sync_marker.marker, &entries, max_entries));
         if (retcode < 0) {
           ldout(store->ctx(), 0) << "ERROR: " << __func__ << "(): RGWRadosGetOmapKeysCR() returned ret=" << retcode << dendl;
-          return set_state(RGWCoroutine_Error, retcode);
+          return set_cr_error(retcode);
         }
         iter = entries.begin();
         for (; iter != entries.end(); ++iter) {
@@ -1058,7 +1058,7 @@ public:
             // fetch remote and write locally
           yield spawn(new RGWMetaSyncSingleEntryCR(store, http_manager, async_rados, iter->first, iter->first, marker_tracker), false);
           if (retcode < 0) {
-            return set_state(RGWCoroutine_Error, retcode);
+            return set_cr_error(retcode);
           }
           sync_marker.marker = iter->first;
         }
@@ -1077,7 +1077,7 @@ public:
         }
         if (retcode < 0) {
           ldout(store->ctx(), 0) << "ERROR: failed to set sync marker: retcode=" << retcode << dendl;
-          return set_state(RGWCoroutine_Error, retcode);
+          return set_cr_error(retcode);
         }
       }
 
@@ -1087,7 +1087,7 @@ public:
       lease_cr = NULL;
 
       if (lost_lock) {
-        yield return -EBUSY;
+        return set_cr_error(-EBUSY);
       }
     }
     return 0;
@@ -1113,7 +1113,7 @@ public:
       while (!lease_cr->is_locked()) {
         if (lease_cr->is_done()) {
           ldout(cct, 0) << "ERROR: lease cr failed, done early " << dendl;
-          return set_state(RGWCoroutine_Error, lease_cr->get_ret_status());
+          return set_cr_error(lease_cr->get_ret_status());
         }
         yield backoff.backoff(this);
       }
@@ -1144,7 +1144,7 @@ public:
             raw_key = log_iter->section + ":" + log_iter->name;
             yield spawn(new RGWMetaSyncSingleEntryCR(store, http_manager, async_rados, raw_key, log_iter->id, marker_tracker), false);
             if (retcode < 0) {
-              return set_state(RGWCoroutine_Error, retcode);
+              return set_cr_error(retcode);
           }
 	  }
 	}
@@ -1203,7 +1203,7 @@ public:
           spawn(shard_cr, true);
         }
       }
-      yield return set_state(RGWCoroutine_Done);
+      yield return set_cr_done();
     }
     return 0;
   }
@@ -1412,7 +1412,7 @@ int RGWCloneMetaLogCoroutine::state_read_shard_status()
   int ret = mdlog->get_info_async(shard_id, &shard_info, stack->get_completion_mgr(), (void *)stack, &req_ret);
   if (ret < 0) {
     ldout(store->ctx(), 0) << "ERROR: mdlog->get_info_async() returned ret=" << ret << dendl;
-    return set_state(RGWCoroutine_Error, ret);
+    return set_cr_error(ret);
   }
 
   return io_block(0);
@@ -1467,7 +1467,7 @@ int RGWCloneMetaLogCoroutine::state_receive_rest_response()
     error_stream << "http operation failed: " << http_op->to_str() << " status=" << http_op->get_http_status() << std::endl;
     ldout(store->ctx(), 0) << "ERROR: failed to wait for op, ret=" << ret << dendl;
     http_op->put();
-    return set_state(RGWCoroutine_Error, ret);
+    return set_cr_error(ret);
   }
   http_op->put();
 
@@ -1476,7 +1476,7 @@ int RGWCloneMetaLogCoroutine::state_receive_rest_response()
   truncated = ((int)data.entries.size() == max_entries);
 
   if (data.entries.empty()) {
-    return set_state(RGWCoroutine_Done);
+    return set_cr_done();
   }
 
   if (new_marker) {
@@ -1515,14 +1515,14 @@ int RGWCloneMetaLogCoroutine::state_store_mdlog_entries()
   if (ret < 0) {
     cn->put();
     ldout(store->ctx(), 10) << "failed to store md log entries shard_id=" << shard_id << " ret=" << ret << dendl;
-    return set_state(RGWCoroutine_Error, ret);
+    return set_cr_error(ret);
   }
   return io_block(0);
 }
 
 int RGWCloneMetaLogCoroutine::state_store_mdlog_entries_complete()
 {
-  return set_state(RGWCoroutine_Done);
+  return set_cr_done();
 }
 
 
