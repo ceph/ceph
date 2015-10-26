@@ -239,8 +239,7 @@ void Log::_flush(EntryQueue *t, EntryQueue *requeue, bool crash)
         cerr << buf << std::endl;
       }
       if (do_fd) {
-        buf[buflen-1]='\n';
-        buf[buflen]='\0';
+        buf[buflen]='\n';
         int r=safe_write(m_fd, buf, buflen+1);
         if (r < 0)
           cerr << "problem writing to " << m_log_file << ": " << cpp_strerror(r) << std::endl;
