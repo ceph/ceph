@@ -189,6 +189,9 @@ add_library(crush STATIC ${crush_srcs})
 
 add_subdirectory(json_spirit)
 
+add_subdirectory(xxHash/cmake_unofficial)
+include_directories("${CMAKE_SOURCE_DIR}/src/xxHash")
+
 set(xio_common_srcs)
 if(HAVE_XIO)
   list(APPEND xio_common_srcs
