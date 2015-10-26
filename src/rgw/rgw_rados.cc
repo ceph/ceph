@@ -2859,6 +2859,7 @@ int RGWRados::replace_region_with_zonegroup()
     lderr(cct) << "failed to list regions: ret "<< ret << " " << cpp_strerror(-ret) << dendl;
     return ret;
   }
+
   list<string>::iterator iter;
   /* create zonegroups */
   for (iter = regions.begin(); iter != regions.end(); ++iter)
@@ -2918,6 +2919,11 @@ int RGWRados::replace_region_with_zonegroup()
 	ret = current_period.add_zonegroup(zonegroup);
 	if (ret < 0) {
 	  lderr(cct) << "failed to add zonegroup to current_period: " << cpp_strerror(-ret) << dendl;
+	  return ret;
+	}
+	ret = current_period.update();
+	if (ret < 0) {
+	  lderr(cct) << "failed to update current_period: " << cpp_strerror(-ret) << dendl;
 	  return ret;
 	}
       }
