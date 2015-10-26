@@ -22,6 +22,26 @@ class RGWMetaSyncStatusManager;
 class RGWMetaSyncCR;
 class RGWRESTConn;
 
+
+#define DEFAULT_BACKOFF_MAX 30
+
+class RGWSyncBackoff {
+  int cur_wait;
+  int max_secs;
+
+  void update_wait_time();
+public:
+  RGWSyncBackoff(int _max_secs = DEFAULT_BACKOFF_MAX) : cur_wait(0), max_secs(_max_secs) {}
+
+  void backoff_sleep();
+  void reset() {
+    cur_wait = 0;
+  }
+
+  void backoff(RGWCoroutine *op);
+};
+
+
 class RGWRemoteMetaLog : public RGWCoroutinesManager {
   RGWRados *store;
   RGWRESTConn *conn;
@@ -31,6 +51,8 @@ class RGWRemoteMetaLog : public RGWCoroutinesManager {
   RGWMetaSyncStatusManager *status_manager;
 
   RGWMetaSyncCR *meta_sync_cr;
+
+  RGWSyncBackoff backoff;
 
 public:
   RGWRemoteMetaLog(RGWRados *_store, RGWMetaSyncStatusManager *_sm) : RGWCoroutinesManager(_store->ctx()), store(_store),
