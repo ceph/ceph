@@ -26,6 +26,30 @@ static string mdlog_sync_status_oid = "mdlog.sync-status";
 static string mdlog_sync_status_shard_prefix = "mdlog.sync-status.shard";
 static string mdlog_sync_full_sync_index_prefix = "meta.full-sync.index";
 
+void RGWSyncBackoff::update_wait_time()
+{
+  if (cur_wait == 0) {
+    cur_wait = 1;
+  } else {
+    cur_wait = (cur_wait << 1);
+  }
+  if (cur_wait >= max_secs) {
+    cur_wait = max_secs;
+  }
+}
+
+void RGWSyncBackoff::backoff_sleep()
+{
+  update_wait_time();
+  sleep(cur_wait);
+}
+
+void RGWSyncBackoff::backoff(RGWCoroutine *op)
+{
+  update_wait_time();
+  op->wait(utime_t(cur_wait, 0));
+}
+
 void rgw_mdlog_info::decode_json(JSONObj *obj) {
   JSONDecoder::decode_json("num_objects", num_shards, obj);
 }
@@ -416,7 +440,7 @@ public:
     int ret;
     reenter(this) {
       yield {
-	uint32_t lock_duration = 30;
+	uint32_t lock_duration = cct->_conf->rgw_sync_lease_period;
         string lock_name = "sync_lock";
 	lease_cr = new RGWContinuousLeaseCR(async_rados, store, store->get_zone_params().log_pool, mdlog_sync_status_oid,
                                             lock_name, lock_duration);
@@ -568,7 +592,7 @@ public:
 
     reenter(this) {
       yield {
-        uint32_t lock_duration = 30;
+	uint32_t lock_duration = cct->_conf->rgw_sync_lease_period;
         string lock_name = "sync_lock";
 	lease_cr = new RGWContinuousLeaseCR(async_rados, store, store->get_zone_params().log_pool, mdlog_sync_status_oid,
                                             lock_name, lock_duration);
@@ -929,6 +953,8 @@ class RGWMetaSyncShardCR : public RGWCoroutine {
   RGWContinuousLeaseCR *lease_cr;
   bool lost_lock;
 
+  RGWSyncBackoff backoff;
+
 
 public:
   RGWMetaSyncShardCR(RGWRados *_store, RGWHTTPManager *_mgr, RGWAsyncRadosProcessor *_async_rados,
@@ -956,38 +982,42 @@ public:
   }
 
   int operate() {
-    int r;
-    while (true) {
-      switch (sync_marker.state) {
-      case rgw_meta_sync_marker::FullSync:
-         r  = full_sync();
-         if (r < 0) {
-           ldout(store->ctx(), 10) << "sync: full_sync: shard_id=" << shard_id << " r=" << r << dendl;
-         }
-         return 0;
-      case rgw_meta_sync_marker::IncrementalSync:
-         r  = incremental_sync();
-         if (r < 0) {
-           ldout(store->ctx(), 10) << "sync: full_sync: shard_id=" << shard_id << " r=" << r << dendl;
-         }
-         return 0;
-      default:
-        return set_state(RGWCoroutine_Error, -EIO);
+    reenter(this) {
+      int r;
+      while (true) {
+        if (sync_marker.state == rgw_meta_sync_marker::FullSync) {
+          r  = full_sync();
+          if (r < 0) {
+            ldout(store->ctx(), 10) << "sync: full_sync: shard_id=" << shard_id << " r=" << r << dendl;
+            backoff.backoff(this);
+          } else {
+            backoff.reset();
+          }
+          yield;
+        }
+        if (sync_marker.state == rgw_meta_sync_marker::IncrementalSync) {
+          r  = incremental_sync();
+          if (r < 0) {
+            ldout(store->ctx(), 10) << "sync: full_sync: shard_id=" << shard_id << " r=" << r << dendl;
+            backoff.backoff(this);
+          } else {
+            backoff.reset();
+          }
+          yield;
+        }
       }
     }
     return 0;
   }
 
   int full_sync() {
-    int ret;
-
 #define OMAP_GET_MAX_ENTRIES 100
     int max_entries = OMAP_GET_MAX_ENTRIES;
     reenter(&full_cr) {
       oid = full_sync_index_shard_oid(shard_id);
       /* grab lock */
       yield {
-        uint32_t lock_duration = 30;
+	uint32_t lock_duration = cct->_conf->rgw_sync_lease_period;
         string lock_name = "sync_lock";
         if (lease_cr) {
           lease_cr->put();
@@ -1057,7 +1087,7 @@ public:
       lease_cr = NULL;
 
       if (lost_lock) {
-        return -EBUSY;
+        yield return -EBUSY;
       }
     }
     return 0;
@@ -1068,7 +1098,7 @@ public:
     reenter(&incremental_cr) {
       /* grab lock */
       yield {
-        uint32_t lock_duration = 30;
+	uint32_t lock_duration = cct->_conf->rgw_sync_lease_period;
         string lock_name = "sync_lock";
         if (lease_cr) {
           lease_cr->put();
@@ -1085,8 +1115,9 @@ public:
           ldout(cct, 0) << "ERROR: lease cr failed, done early " << dendl;
           return set_state(RGWCoroutine_Error, lease_cr->get_ret_status());
         }
-        yield;
+        yield backoff.backoff(this);
       }
+      backoff.reset();
       mdlog_marker = sync_marker.marker;
       set_marker_tracker(new RGWMetaSyncShardMarkerTrack(store, http_manager, async_rados,
                                                          RGWMetaSyncStatusManager::shard_obj_name(shard_id),
@@ -1266,8 +1297,10 @@ int RGWRemoteMetaLog::run_sync(int num_shards, rgw_meta_sync_status& sync_status
       ldout(store->ctx(), 20) << __func__ << "(): init" << dendl;
       r = run(new RGWInitSyncStatusCoroutine(async_rados, store, &http_manager, obj_ctx, num_shards));
       if (r == -EBUSY) {
+        backoff.backoff_sleep();
         continue;
       }
+      backoff.reset();
       if (r < 0) {
         ldout(store->ctx(), 0) << "ERROR: failed to init sync status r=" << r << dendl;
         return r;
@@ -1287,8 +1320,10 @@ int RGWRemoteMetaLog::run_sync(int num_shards, rgw_meta_sync_status& sync_status
         ldout(store->ctx(), 20) << __func__ << "(): building full sync maps" << dendl;
         r = run(new RGWFetchAllMetaCR(store, &http_manager, async_rados, num_shards));
         if (r == -EBUSY) {
+          backoff.backoff_sleep();
           continue;
         }
+        backoff.reset();
         if (r < 0) {
           ldout(store->ctx(), 0) << "ERROR: failed to fetch all metadata keys" << dendl;
           return r;
