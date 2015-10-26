@@ -509,6 +509,7 @@ int RGWContinuousLeaseCR::operate()
           return set_state(RGWCoroutine_Error, r);
         }
       }
+      caller->set_sleeping(false); /* will only be relevant when we return, that's why we can do it early */
       if (retcode < 0) {
         set_locked(false);
         ldout(store->ctx(), 20) << *this << ": couldn't lock " << pool.name << ":" << oid << ":" << lock_name << ": retcode=" << retcode << dendl;

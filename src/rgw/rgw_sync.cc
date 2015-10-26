@@ -443,7 +443,7 @@ public:
 	uint32_t lock_duration = cct->_conf->rgw_sync_lease_period;
         string lock_name = "sync_lock";
 	lease_cr = new RGWContinuousLeaseCR(async_rados, store, store->get_zone_params().log_pool, mdlog_sync_status_oid,
-                                            lock_name, lock_duration);
+                                            lock_name, lock_duration, this);
         lease_cr->get();
         spawn(lease_cr, false);
       }
@@ -452,7 +452,8 @@ public:
           ldout(cct, 0) << "ERROR: lease cr failed, done early " << dendl;
           return set_cr_error(lease_cr->get_ret_status());
         }
-        yield;
+        set_sleeping(true);
+        yield return 0;
       }
       yield {
         call(new RGWSimpleRadosWriteCR<rgw_meta_sync_info>(async_rados, store, store->get_zone_params().log_pool,
@@ -595,7 +596,7 @@ public:
 	uint32_t lock_duration = cct->_conf->rgw_sync_lease_period;
         string lock_name = "sync_lock";
 	lease_cr = new RGWContinuousLeaseCR(async_rados, store, store->get_zone_params().log_pool, mdlog_sync_status_oid,
-                                            lock_name, lock_duration);
+                                            lock_name, lock_duration, this);
         lease_cr->get();
         spawn(lease_cr, false);
       }
@@ -604,7 +605,8 @@ public:
           ldout(cct, 0) << "ERROR: lease cr failed, done early " << dendl;
           return set_cr_error(lease_cr->get_ret_status());
         }
-        yield;
+        set_sleeping(true);
+        yield return 0;
       }
       entries_index = new RGWShardedOmapCRManager(async_rados, store, this, num_shards,
 						  store->get_zone_params().log_pool, mdlog_sync_full_sync_index_prefix);
@@ -953,9 +955,6 @@ class RGWMetaSyncShardCR : public RGWCoroutine {
   RGWContinuousLeaseCR *lease_cr;
   bool lost_lock;
 
-  RGWSyncBackoff backoff;
-
-
 public:
   RGWMetaSyncShardCR(RGWRados *_store, RGWHTTPManager *_mgr, RGWAsyncRadosProcessor *_async_rados,
 		     rgw_bucket& _pool,
@@ -982,31 +981,26 @@ public:
   }
 
   int operate() {
-    reenter(this) {
-      int r;
-      while (true) {
-        if (sync_marker.state == rgw_meta_sync_marker::FullSync) {
-          r  = full_sync();
-          if (r < 0) {
-            ldout(store->ctx(), 10) << "sync: full_sync: shard_id=" << shard_id << " r=" << r << dendl;
-            backoff.backoff(this);
-          } else {
-            backoff.reset();
-          }
-          yield;
+    int r;
+    while (true) {
+      switch (sync_marker.state) {
+      case rgw_meta_sync_marker::FullSync:
+        r  = full_sync();
+        if (r < 0) {
+          ldout(store->ctx(), 10) << "sync: full_sync: shard_id=" << shard_id << " r=" << r << dendl;
+          return set_cr_error(r);
         }
-        if (sync_marker.state == rgw_meta_sync_marker::IncrementalSync) {
-          r  = incremental_sync();
-          if (r < 0) {
-            ldout(store->ctx(), 10) << "sync: full_sync: shard_id=" << shard_id << " r=" << r << dendl;
-            backoff.backoff(this);
-          } else {
-            backoff.reset();
-          }
-          yield;
+        return 0;
+      case rgw_meta_sync_marker::IncrementalSync:
+        r  = incremental_sync();
+        if (r < 0) {
+          ldout(store->ctx(), 10) << "sync: incremental_sync: shard_id=" << shard_id << " r=" << r << dendl;
+          return set_cr_error(r);
         }
+        return 0;
       }
     }
+    /* unreachable */
     return 0;
   }
 
@@ -1024,7 +1018,7 @@ public:
         }
 	lease_cr = new RGWContinuousLeaseCR(async_rados, store, store->get_zone_params().log_pool,
                                             RGWMetaSyncStatusManager::shard_obj_name(shard_id),
-                                            lock_name, lock_duration);
+                                            lock_name, lock_duration, this);
         lease_cr->get();
         spawn(lease_cr, false);
         lost_lock = false;
@@ -1032,9 +1026,10 @@ public:
       while (!lease_cr->is_locked()) {
         if (lease_cr->is_done()) {
           ldout(cct, 0) << "ERROR: lease cr failed, done early " << dendl;
-          return set_cr_error(lease_cr->get_ret_status());
+          return lease_cr->get_ret_status();
         }
-        yield;
+        set_sleeping(true);
+        yield return 0;
       }
       /* prepare marker tracker */
       set_marker_tracker(new RGWMetaSyncShardMarkerTrack(store, http_manager, async_rados,
@@ -1049,7 +1044,7 @@ public:
         yield return call(new RGWRadosGetOmapKeysCR(store, pool, oid, sync_marker.marker, &entries, max_entries));
         if (retcode < 0) {
           ldout(store->ctx(), 0) << "ERROR: " << __func__ << "(): RGWRadosGetOmapKeysCR() returned ret=" << retcode << dendl;
-          return set_cr_error(retcode);
+          return retcode;
         }
         iter = entries.begin();
         for (; iter != entries.end(); ++iter) {
@@ -1058,7 +1053,7 @@ public:
             // fetch remote and write locally
           yield spawn(new RGWMetaSyncSingleEntryCR(store, http_manager, async_rados, iter->first, iter->first, marker_tracker), false);
           if (retcode < 0) {
-            return set_cr_error(retcode);
+            return retcode;
           }
           sync_marker.marker = iter->first;
         }
@@ -1077,9 +1072,14 @@ public:
         }
         if (retcode < 0) {
           ldout(store->ctx(), 0) << "ERROR: failed to set sync marker: retcode=" << retcode << dendl;
-          return set_cr_error(retcode);
+          return retcode;
         }
       }
+
+      /* 
+       * if we reached here, it means that lost_lock is true, otherwise the state
+       * change in the previous block will prevent us from reaching here
+       */
 
       yield lease_cr->go_down();
 
@@ -1087,7 +1087,7 @@ public:
       lease_cr = NULL;
 
       if (lost_lock) {
-        return set_cr_error(-EBUSY);
+        return -EBUSY;
       }
     }
     return 0;
@@ -1097,27 +1097,29 @@ public:
   int incremental_sync() {
     reenter(&incremental_cr) {
       /* grab lock */
-      yield {
-	uint32_t lock_duration = cct->_conf->rgw_sync_lease_period;
-        string lock_name = "sync_lock";
-        if (lease_cr) {
-          lease_cr->put();
+      if (!lease_cr) { /* could have had  a lease_cr lock from previous state */
+        yield {
+          uint32_t lock_duration = cct->_conf->rgw_sync_lease_period;
+          string lock_name = "sync_lock";
+          if (lease_cr) {
+            lease_cr->put();
+          }
+          lease_cr = new RGWContinuousLeaseCR(async_rados, store, store->get_zone_params().log_pool,
+                                              RGWMetaSyncStatusManager::shard_obj_name(shard_id),
+                                              lock_name, lock_duration, this);
+          lease_cr->get();
+          spawn(lease_cr, false);
+          lost_lock = false;
         }
-	lease_cr = new RGWContinuousLeaseCR(async_rados, store, store->get_zone_params().log_pool,
-                                            RGWMetaSyncStatusManager::shard_obj_name(shard_id),
-                                            lock_name, lock_duration);
-        lease_cr->get();
-        spawn(lease_cr, false);
-        lost_lock = false;
-      }
-      while (!lease_cr->is_locked()) {
-        if (lease_cr->is_done()) {
-          ldout(cct, 0) << "ERROR: lease cr failed, done early " << dendl;
-          return set_cr_error(lease_cr->get_ret_status());
+        while (!lease_cr->is_locked()) {
+          if (lease_cr->is_done()) {
+            ldout(cct, 0) << "ERROR: lease cr failed, done early " << dendl;
+            return lease_cr->get_ret_status();
+          }
+          set_sleeping(true);
+          yield return 0;
         }
-        yield backoff.backoff(this);
       }
-      backoff.reset();
       mdlog_marker = sync_marker.marker;
       set_marker_tracker(new RGWMetaSyncShardMarkerTrack(store, http_manager, async_rados,
                                                          RGWMetaSyncStatusManager::shard_obj_name(shard_id),
@@ -1144,7 +1146,7 @@ public:
             raw_key = log_iter->section + ":" + log_iter->name;
             yield spawn(new RGWMetaSyncSingleEntryCR(store, http_manager, async_rados, raw_key, log_iter->id, marker_tracker), false);
             if (retcode < 0) {
-              return set_cr_error(retcode);
+              return retcode;
           }
 	  }
 	}
