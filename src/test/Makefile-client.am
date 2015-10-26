@@ -338,11 +338,14 @@ ceph_test_librbd_api_LDADD = \
 	$(LIBRBD) $(LIBRADOS) $(LIBCOMMON) $(UNITTEST_LDADD) $(RADOS_TEST_LDADD)
 bin_DEBUGPROGRAMS += ceph_test_librbd_api
 
-if WITH_LTTNG
-unittest_librbd_LDADD += $(LIBRBD_TP)
-ceph_test_librbd_LDADD += $(LIBRBD_TP)
-ceph_test_librbd_api_LDADD += $(LIBRBD_TP)
-endif
+noinst_HEADERS += \
+	test/librbd/test_fixture.h \
+	test/librbd/test_mock_fixture.h \
+	test/librbd/test_support.h \
+	test/librbd/mock/MockContextWQ.h \
+	test/librbd/mock/MockImageCtx.h \
+	test/librbd/mock/MockImageWatcher.h \
+	test/librbd/mock/MockObjectMap.h
 
 if LINUX
 ceph_test_librbd_fsx_SOURCES = test/librbd/fsx.cc
