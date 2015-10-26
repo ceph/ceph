@@ -164,15 +164,15 @@ err_strings[10]="log_channel[(]cluster[)] log [[]ERR[]] : scrub 1.0 1/5c889059/o
 err_strings[11]="log_channel[(]cluster[)] log [[]ERR[]] : scrub 1.0 1/61f68bb1/obj3/head on disk size [(]3840[)] does not match object info size [(]768[)] adjusted for ondisk to [(]768[)]"
 err_strings[12]="log_channel[(]cluster[)] log [[]ERR[]] : scrub 1.0 1/83425cc4/obj6/1 is an unexpected clone"
 err_strings[13]="log_channel[(]cluster[)] log [[]ERR[]] : scrub 1.0 1/3f1ee208/obj2/snapdir no 'snapset' attr"
-err_strings[14]="log_channel[(]cluster[)] log [[]ERR[]] : scrub 1.0 1/3f1ee208/obj2/7 is an unexpected clone"
-err_strings[15]="log_channel[(]cluster[)] log [[]ERR[]] : scrub 1.0 1/3f1ee208/obj2/4 is an unexpected clone"
+err_strings[14]="log_channel[(]cluster[)] log [[]INF[]] : scrub 1.0 1/3f1ee208/obj2/7 clone ignored due to missing snapset"
+err_strings[15]="log_channel[(]cluster[)] log [[]INF[]] : scrub 1.0 1/3f1ee208/obj2/4 clone ignored due to missing snapset"
 err_strings[16]="log_channel[(]cluster[)] log [[]ERR[]] : scrub 1.0 1/a8759770/obj4/snapdir expected clone 1/a8759770/obj4/7"
 err_strings[17]="log_channel[(]cluster[)] log [[]INF[]] : scrub 1.0 1/a8759770/obj4/snapdir 1 missing clone[(]s[)]"
 err_strings[18]="log_channel[(]cluster[)] log [[]ERR[]] : scrub 1.0 1/6cf8deff/obj1/1 is an unexpected clone"
 err_strings[19]="log_channel[(]cluster[)] log [[]ERR[]] : scrub 1.0 1/e478ac7f/obj9/1 is missing in clone_size"
 err_strings[20]="log_channel[(]cluster[)] log [[]ERR[]] : scrub 1.0 1/29547577/obj11/1 is an unexpected clone"
 err_strings[21]="log_channel[(]cluster[)] log [[]ERR[]] : scrub 1.0 1/94122507/obj14/1 size 1032 != clone_size 1033"
-err_strings[22]="log_channel[(]cluster[)] log [[]ERR[]] : 1.0 scrub 21 errors"
+err_strings[22]="log_channel[(]cluster[)] log [[]ERR[]] : 1.0 scrub 19 errors"
 
 for i in `seq 0 ${#err_strings[@]}`
 do
