@@ -11442,6 +11442,13 @@ void ReplicatedPG::_scrub(
       expected = soid.has_snapset();
     }
     if (!expected) {
+      // If we couldn't read the head's snapset, then just ignore clones and
+      // don't count as an error.
+      if (head && !snapset) {
+	osd->clog->info() << mode << " " << info.pgid << " " << soid
+			  << " clone ignored due to missing snapset";
+	continue;
+      }
       osd->clog->error() << mode << " " << info.pgid << " " << soid
 			   << " is an unexpected clone";
       ++scrubber.shallow_errors;
