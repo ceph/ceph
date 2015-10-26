@@ -13,7 +13,9 @@
 #include "xxhash.h"
 #include "include/buffer.h"
 
+class RGWLibFS;
 class RGWFileHandle;
+
 typedef boost::intrusive_ptr<RGWFileHandle> RGWFHRef;
 
 class RGWFileHandle
@@ -21,22 +23,33 @@ class RGWFileHandle
   struct rgw_file_handle fh;
   mutable std::atomic<uint64_t> refcnt;
   RGWFHRef parent;
-  const static string root_name;
   string name; /* XXX file or bucket name */
   uint32_t flags;
 
 public:
+  const static string root_name;
+
   static constexpr uint32_t FLAG_NONE = 0x0000;
   static constexpr uint32_t FLAG_OPEN = 0x0001;
   static constexpr uint32_t FLAG_ROOT = 0x0002;
   
-  RGWFileHandle(RGWFileHandle* _parent, const char* _name)
+  RGWFileHandle(RGWLibFS* fs, RGWFileHandle* _parent, const char* _name)
     : parent(_parent), name(_name), flags(FLAG_NONE) {
-    fh.fh_type = parent->is_root() ? RGW_FS_TYPE_DIRECTORY : RGW_FS_TYPE_FILE;
-    fh.fh_private = this;
-    /* content-addressable hash */
-    fh.fh_hk.bucket = (parent) ? parent->get_fh()->fh_hk.object : 0;
+    if (parent) {
+      fh.fh_type = parent->is_root() ?
+	RGW_FS_TYPE_DIRECTORY : RGW_FS_TYPE_FILE;
+      /* content-addressable hash (bucket part) */
+      fh.fh_hk.bucket = parent->get_fh()->fh_hk.object;
+    } else {
+      /* root */
+      fh.fh_type = RGW_FS_TYPE_DIRECTORY;
+      /* XXX give root buckets a locally-unique bucket hash part */
+      fh.fh_hk.bucket = XXH64(reinterpret_cast<char*>(fs), 8, 8675309);
+      flags |= FLAG_ROOT;
+    }
+    /* content-addressable hash (object part) */
     fh.fh_hk.object = XXH64(name.c_str(), name.length(), 8675309 /* XXX */);
+    fh.fh_private = this;
   }
 
   struct rgw_file_handle* get_fh() { return &fh; }
@@ -52,10 +65,10 @@ public:
 
   const std::string& object_name() { return name; }
 
-  bool is_open() { return flags & FLAG_OPEN; }
-  bool is_root() { return flags & FLAG_ROOT; }
-  bool is_bucket() { return (fh.fh_type == RGW_FS_TYPE_DIRECTORY); }
-  bool is_object() { return (fh.fh_type == RGW_FS_TYPE_FILE); }
+  bool is_open() const { return flags & FLAG_OPEN; }
+  bool is_root() const { return flags & FLAG_ROOT; }
+  bool is_bucket() const { return (fh.fh_type == RGW_FS_TYPE_DIRECTORY); }
+  bool is_object() const { return (fh.fh_type == RGW_FS_TYPE_FILE); }
 
   void open() {
     flags |= FLAG_OPEN;
@@ -72,7 +85,9 @@ public:
   friend void intrusive_ptr_release(const RGWFileHandle* fh) {
     if (fh->refcnt.fetch_sub(1, std::memory_order_release) == 1) {
       std::atomic_thread_fence(std::memory_order_acquire);
-      delete fh;
+      /* root handles are expanded in RGWLibFS */
+      if (! const_cast<RGWFileHandle*>(fh)->is_root())
+	delete fh;
     }
   }
 
@@ -88,6 +103,7 @@ static inline RGWFileHandle* get_rgwfh(struct rgw_file_handle* fh) {
 class RGWLibFS
 {
   struct rgw_fs fs;
+  RGWFileHandle root_fh;
 
   std::string uid; // should match user.user_id, iiuc
 
@@ -96,7 +112,8 @@ class RGWLibFS
 
 public:
   RGWLibFS(const char *_uid, const char *_user_id, const char* _key)
-    : uid(_uid), key(_user_id, _key) {
+    : root_fh(this, nullptr, RGWFileHandle::root_name.c_str()), uid(_uid),
+      key(_user_id, _key) {
     fs.fs_private = this;
   }
 

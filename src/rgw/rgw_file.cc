@@ -26,36 +26,7 @@
 
 extern RGWLib librgw;
 
-bool is_root(const string& uri)
-{
-  return (uri == "");
-}
-
-bool is_bucket(const string& uri)
-{
-  /* XXX */
-  int pos = uri.find('/');
-  return (pos < 0);
-}
-
 const string RGWFileHandle::root_name = "/";
-
-/*
-  get generate rgw_file_handle
-*/
-int rgw_get_handle(const char* uri, struct rgw_file_handle* handle)
-{
-  handle->handle = librgw.get_handle(uri);
-  return 0;
-}
-
-/*
-  check rgw_file_handle
-*/
-int rgw_check_handle(const struct rgw_file_handle* handle)
-{
-  return librgw.check_handle(handle->handle);
-}
 
 /* librgw */
 extern "C" {
@@ -81,12 +52,8 @@ extern "C" {
   struct rgw_fs *fs = new_fs->get_fs();;
   fs->rgw = rgw;
 
-  /* stash the root */
-  rc = rgw_get_handle("", &fs->root_fh);
-  if (rc != 0) {
-    delete new_fs;
-    return -EINVAL;
-  }
+  /* XXX we no longer assume "/" is unique, but we aren't tracking the
+   * roots atm */
 
   *rgw_fs = fs;
 
@@ -107,7 +74,7 @@ int rgw_umount(struct rgw_fs *rgw_fs)
   get filesystem attributes
 */
 int rgw_statfs(struct rgw_fs *rgw_fs,
-	       const struct rgw_file_handle *parent_handle,
+	       struct rgw_file_handle *parent_fh,
 	       struct rgw_statvfs *vfs_st)
 {
   memset(vfs_st, 0, sizeof(struct rgw_statvfs));
@@ -118,51 +85,41 @@ int rgw_statfs(struct rgw_fs *rgw_fs,
   generic create
 */
 int rgw_create(struct rgw_fs *rgw_fs,
-	       const struct rgw_file_handle *parent_handle,
+	       struct rgw_file_handle *parent_fh,
 	       const char *name, mode_t mode, struct stat *st,
 	       struct rgw_file_handle *handle)
 {
-  string uri;
-  int rc;
-
-  rc = librgw.get_uri(parent_handle->handle, uri);
-  if (rc < 0 ) { /* invalid parent */
-    return rc;
-  }
-
-  uri += "\\";
-  uri += name;
-
-  /* TODO: implement */
-
-  return rgw_get_handle(uri.c_str(), handle);
+  return 0;
 }
 
 /*
   create a new directory
 */
 int rgw_mkdir(struct rgw_fs *rgw_fs,
-	      const struct rgw_file_handle *parent_handle,
+	      struct rgw_file_handle *parent_fh,
 	      const char *name, mode_t mode, struct stat *st,
 	      struct rgw_file_handle *handle)
 {
   int rc;
-  string uri;
 
-  rc = librgw.get_uri(parent_handle->handle, uri);
-  if (rc < 0 ) { /* invalid parent */
-    return rc;
-  }
+  /* XXXX remove uri, deal with bucket names */
+  string uri;
 
   RGWLibFS *fs = static_cast<RGWLibFS*>(rgw_fs->fs_private);
   CephContext* cct = static_cast<CephContext*>(rgw_fs->rgw);
 
-  /* cannot create a bucket in a bucket */
-  if (! is_root(uri)) {
+  RGWFileHandle* parent = get_rgwfh(parent_fh);
+  if (! parent) {
+    /* bad parent */
     return EINVAL;
   }
 
-  // fix this
+  if (! parent->is_root()) {
+    /* cannot create a bucket in a bucket */
+    return ENOTDIR;
+  }
+
+  // XXXX fix this
   uri += "/";
   uri += name;
   RGWCreateBucketRequest req(cct, fs->get_user(), uri);
@@ -175,8 +132,8 @@ int rgw_mkdir(struct rgw_fs *rgw_fs,
   rename object
 */
 int rgw_rename(struct rgw_fs *rgw_fs,
-	       const struct rgw_file_handle *olddir, const char* old_name,
-	       const struct rgw_file_handle *newdir, const char* new_name)
+	       struct rgw_file_handle *olddir, const char* old_name,
+	       struct rgw_file_handle *newdir, const char* new_name)
 {
   /* -ENOTSUP */
   return -EINVAL;
@@ -185,9 +142,10 @@ int rgw_rename(struct rgw_fs *rgw_fs,
 /*
   remove file or directory
 */
-int rgw_unlink(struct rgw_fs *rgw_fs, const struct rgw_file_handle* parent,
+int rgw_unlink(struct rgw_fs *rgw_fs, struct rgw_file_handle* parent,
 	      const char* path)
 {
+  /* XXXX remove uri and deal with bucket and object names */
   string uri;
   int rc = 0;
 
@@ -204,11 +162,6 @@ int rgw_unlink(struct rgw_fs *rgw_fs, const struct rgw_file_handle* parent,
     /*
      * object
      */
-      rc = librgw.get_uri(parent->handle, uri);
-      if (rc < 0 ) { /* invalid parent */
-	return rc;
-      }
-      uri += path;
       /* TODO: implement
        * RGWDeleteObjectRequest req(cct, fs->get_user(), uri);
       */
@@ -224,33 +177,21 @@ int rgw_lookup(struct rgw_fs *rgw_fs,
 	      struct rgw_file_handle *parent_fh, const char* path,
 	      struct rgw_file_handle **fh, uint32_t flags)
 {
-  string uri;
-  int rc;
-
-  rc = librgw.get_uri(parent_fh->handle, uri);
-  if (rc < 0 ) { /* invalid parent */
-    return rc;
-  }
-
-  #warning get_bucket and ?get_object? unimplemented
-  /* TODO: implement */
-  if (is_root(uri)) {
-    //librgw.get_bucket(uri);
-  } else if (0 /* is_bucket(uri) */) {
-    /* get the object */
-  } else { /* parent cannot be an object */
-    return -1;
-  }
-
-  uri += "/";
-  uri += path;
+  RGWLibFS *fs = static_cast<RGWLibFS*>(rgw_fs->fs_private);
 
   RGWFileHandle* parent = get_rgwfh(parent_fh);
-  RGWFileHandle* rgw_fh = new RGWFileHandle(parent, path);
-  struct rgw_file_handle *rfh = rgw_fh->get_fh();
+  if (! parent) {
+    /* bad parent */
+    return EINVAL;
+  }
 
-  /* find or create a handle for the object or bucket */
-  rfh->handle = librgw.get_handle(uri);
+  RGWFileHandle* rgw_fh = new RGWFileHandle(fs, parent, path);
+  if (! rgw_fh) {
+    /* not found */
+    return ENOENT;
+  }
+
+  struct rgw_file_handle *rfh = rgw_fh->get_fh();
   *fh = rfh;
 
   return 0;
@@ -274,14 +215,6 @@ int rgw_fh_rele(struct rgw_fs *rgw_fs, struct rgw_file_handle *fh,
 int rgw_getattr(struct rgw_fs *rgw_fs,
 		struct rgw_file_handle *fh, struct stat *st)
 {
-  string uri;
-  int rc;
-
-  rc = librgw.get_uri(fh->handle, uri);
-  if (rc < 0 ) { /* invalid parent */
-    return rc;
-  }
-
   return 0;
 }
 
@@ -333,16 +266,13 @@ int rgw_close(struct rgw_fs *rgw_fs,
 }
 
 int rgw_readdir(struct rgw_fs *rgw_fs,
-		const struct rgw_file_handle *parent_fh, uint64_t *offset,
+		struct rgw_file_handle *parent_fh, uint64_t *offset,
 		rgw_readdir_cb rcb, void *cb_arg, bool *eof)
 {
   int rc;
-  string uri;
 
-  rc = librgw.get_uri(parent_fh->handle, uri);
-  if (rc < 0 ) { /* invalid parent */
-    return rc;
-  }
+  /* XXXX remove uri, deal with bucket and object names */
+  string uri;
 
   RGWLibFS *fs = static_cast<RGWLibFS*>(rgw_fs->fs_private);
   CephContext* cct = static_cast<CephContext*>(rgw_fs->rgw);
@@ -352,8 +282,13 @@ int rgw_readdir(struct rgw_fs *rgw_fs,
    * deal with authorization
    * consider non-default tenancy/user and bucket layouts
    */
-  if (is_root(uri)) {
-    /* for now, root always contains one user's bucket namespace */
+  RGWFileHandle* parent = get_rgwfh(parent_fh);
+  if (! parent) {
+    /* bad parent */
+    return EINVAL;
+  }
+
+  if (parent->is_root()) {
     RGWListBucketsRequest req(cct, fs->get_user(), rcb, cb_arg, offset);
     rc = librgw.get_fe()->execute_req(&req);
   } else {

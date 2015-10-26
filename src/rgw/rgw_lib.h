@@ -24,9 +24,7 @@ class RGWLib {
   RGWREST rest; // XXX needed for RGWProcessEnv
   RGWProcessEnv env;
   RGWRados* store;
-  ceph::unordered_map<string, uint64_t> allocated_objects_handles;
-  ceph::unordered_map<uint64_t, string> handles_map;
-  atomic64_t last_allocated_handle;
+
 public:
   RGWLib() {}
   ~RGWLib() {}
@@ -38,15 +36,6 @@ public:
   int init();
   int init(vector<const char *>& args);
   int stop();
-
-  /* generate dynamic handle currently unique per librgw object */
-  uint64_t get_handle(const string& url);
-
-  /* look for a matching handle (by number) */
-  int check_handle(uint64_t handle);
-
-  /* return the saved uri corresponding to handle */
-  int get_uri(const uint64_t handle, string &uri);
 };
 
 /* request interface */
