@@ -138,7 +138,7 @@ public:
           ldout(store->ctx(), 0) << "ERROR: failed to read from " << p << dendl;
           log_error() << "failed to send http operation: " << http_op->to_str() << " ret=" << ret << std::endl;
           http_op->put();
-          return set_state(RGWCoroutine_Error, ret);
+          return set_cr_error(ret);
         }
 
         return io_block(0);
@@ -146,9 +146,9 @@ public:
       yield {
         int ret = http_op->wait(shard_info);
         if (ret < 0) {
-          return set_state(RGWCoroutine_Error, ret);
+          return set_cr_error(ret);
         }
-        return set_state(RGWCoroutine_Done, 0);
+        return set_cr_done();
       }
     }
     return 0;
@@ -218,7 +218,7 @@ public:
           ldout(store->ctx(), 0) << "ERROR: failed to read from " << p << dendl;
           log_error() << "failed to send http operation: " << http_op->to_str() << " ret=" << ret << std::endl;
           http_op->put();
-          return set_state(RGWCoroutine_Error, ret);
+          return set_cr_error(ret);
         }
 
         return io_block(0);
@@ -226,13 +226,13 @@ public:
       yield {
         int ret = http_op->wait(&response);
         if (ret < 0) {
-          return set_state(RGWCoroutine_Error, ret);
+          return set_cr_error(ret);
         }
         entries->clear();
         entries->swap(response.entries);
         *pmarker = response.marker;
         *truncated = response.truncated;
-        return set_state(RGWCoroutine_Done, 0);
+        return set_cr_done();
       }
     }
     return 0;
@@ -278,7 +278,7 @@ public:
 			             lock_name, cookie, lock_duration));
 	if (retcode < 0) {
 	  ldout(cct, 0) << "ERROR: failed to take a lock on " << sync_status_oid << dendl;
-	  return set_state(RGWCoroutine_Error, retcode);
+	  return set_cr_error(retcode);
 	}
       }
       yield {
@@ -291,7 +291,7 @@ public:
 			             lock_name, cookie, lock_duration));
 	if (retcode < 0) {
 	  ldout(cct, 0) << "ERROR: failed to take a lock on " << sync_status_oid << dendl;
-	  return set_state(RGWCoroutine_Error, retcode);
+	  return set_cr_error(retcode);
 	}
       }
       /* fetch current position in logs */
@@ -329,7 +329,7 @@ public:
 	}
         yield;
       }
-      return set_state(RGWCoroutine_Done);
+      return set_cr_done();
     }
     return 0;
   }
@@ -570,7 +570,7 @@ public:
 	}
         yield;
       }
-      yield return set_state(RGWCoroutine_Done);
+      yield return set_cr_done();
     }
     return 0;
   }
@@ -735,13 +735,13 @@ public:
           int shard_id;
           int ret = parse_bucket_shard(store->ctx(), raw_key, &bucket_name, &bucket_instance, &shard_id);
           if (ret < 0) {
-            return set_state(RGWCoroutine_Error, -EIO);
+            return set_cr_error(-EIO);
           }
           marker_tracker->reset_need_retry(raw_key);
           ret = call(new RGWRunBucketSyncCoroutine(http_manager, async_rados, conn, store, source_zone, bucket_name, bucket_instance, shard_id));
           if (ret < 0) {
 #warning failed syncing bucket, need to log
-            return set_state(RGWCoroutine_Error, sync_status);
+            return set_cr_error(sync_status);
           }
         }
       } while (marker_tracker->need_retry(raw_key));
@@ -754,7 +754,7 @@ public:
           int ret = call(marker_tracker->finish(entry_marker));
           if (ret < 0) {
             ldout(store->ctx(), 0) << "ERROR: marker_tracker->finish(" << entry_marker << ") returned ret=" << ret << dendl;
-            return set_state(RGWCoroutine_Error, sync_status);
+            return set_cr_error(sync_status);
           }
         }
       }
@@ -762,9 +762,9 @@ public:
         sync_status = retcode;
       }
       if (sync_status < 0) {
-        return set_state(RGWCoroutine_Error, retcode);
+        return set_cr_error(retcode);
       }
-      return set_state(RGWCoroutine_Done, 0);
+      return set_cr_done();
     }
     return 0;
   }
@@ -846,7 +846,7 @@ public:
         return incremental_sync();
         break;
       default:
-        return set_state(RGWCoroutine_Error, -EIO);
+        return set_cr_error(-EIO);
       }
     }
     return 0;
@@ -864,7 +864,7 @@ public:
         yield return call(new RGWRadosGetOmapKeysCR(store, pool, oid, sync_marker.marker, &entries, max_entries));
         if (retcode < 0) {
           ldout(store->ctx(), 0) << "ERROR: " << __func__ << "(): RGWRadosGetOmapKeysCR() returned ret=" << retcode << dendl;
-          return set_state(RGWCoroutine_Error, retcode);
+          return set_cr_error(retcode);
         }
         iter = entries.begin();
         for (; iter != entries.end(); ++iter) {
@@ -873,7 +873,7 @@ public:
             // fetch remote and write locally
           yield spawn(new RGWDataSyncSingleEntryCR(store, http_manager, async_rados, conn, source_zone, iter->first, iter->first, marker_tracker), false);
           if (retcode < 0) {
-            return set_state(RGWCoroutine_Error, retcode);
+            return set_cr_error(retcode);
           }
           sync_marker.marker = iter->first;
         }
@@ -891,7 +891,7 @@ public:
       }
       if (retcode < 0) {
         ldout(store->ctx(), 0) << "ERROR: failed to set sync marker: retcode=" << retcode << dendl;
-        return set_state(RGWCoroutine_Error, retcode);
+        return set_cr_error(retcode);
       }
     }
     return 0;
@@ -921,12 +921,12 @@ public:
           int ret = call(new RGWReadRemoteDataLogShardInfoCR(store, http_manager, async_rados, shard_id, &shard_info));
           if (ret < 0) {
             ldout(store->ctx(), 0) << "ERROR: failed to call RGWReadRemoteDataLogShardInfoCR() ret=" << ret << dendl;
-            return set_state(RGWCoroutine_Error, ret);
+            return set_cr_error(ret);
           }
         }
         if (retcode < 0) {
           ldout(store->ctx(), 0) << "ERROR: failed to fetch remote data log info: ret=" << retcode << dendl;
-          return set_state(RGWCoroutine_Error, retcode);
+          return set_cr_error(retcode);
         }
         datalog_marker = shard_info.marker;
 #define INCREMENTAL_MAX_ENTRIES 100
@@ -942,7 +942,7 @@ public:
             marker_tracker->start(log_iter->log_id);
             yield spawn(new RGWDataSyncSingleEntryCR(store, http_manager, async_rados, conn, source_zone, log_iter->entry.key, log_iter->log_id, marker_tracker), false);
             if (retcode < 0) {
-              return set_state(RGWCoroutine_Error, retcode);
+              return set_cr_error(retcode);
             }
 	  }
 	}
@@ -994,13 +994,13 @@ public:
         r = call(new RGWReadDataSyncStatusCoroutine(async_rados, store, obj_ctx, source_zone, &sync_status));
         if (r < 0) {
           ldout(store->ctx(), 0) << "ERROR: failed to call RGWReadDataSyncStatusCoroutine r=" << r << dendl;
-          return set_state(RGWCoroutine_Error, r);
+          return set_cr_error(r);
         }
       }
 
       if (retcode < 0) {
         ldout(store->ctx(), 0) << "ERROR: failed to fetch sync status, retcode=" << retcode << dendl;
-        return set_state(RGWCoroutine_Error, retcode);
+        return set_cr_error(retcode);
       }
 
       yield {
@@ -1010,7 +1010,7 @@ public:
           r = call(new RGWInitDataSyncStatusCoroutine(async_rados, store, http_manager, obj_ctx, source_zone, sync_status.sync_info.num_shards));
           if (r < 0) {
             ldout(store->ctx(), 0) << "ERROR: failed to call RGWReadDataSyncStatusCoroutine r=" << r << dendl;
-            return  set_state(RGWCoroutine_Error, r);
+            return  set_cr_error(r);
           }
           sync_status.sync_info.state = rgw_data_sync_info::StateBuildingFullSyncMaps;
           /* update new state */
@@ -1026,7 +1026,7 @@ public:
 
       if (retcode < 0) {
         ldout(store->ctx(), 0) << "ERROR: failed to init sync, retcode=" << retcode << dendl;
-        return set_state(RGWCoroutine_Error, retcode);
+        return set_cr_error(retcode);
       }
 
       if  ((rgw_data_sync_info::SyncState)sync_status.sync_info.state == rgw_data_sync_info::StateBuildingFullSyncMaps) {
@@ -1036,7 +1036,7 @@ public:
           r = call(new RGWListBucketIndexesCR(store, http_manager, async_rados, conn, source_zone, sync_status.sync_info.num_shards));
           if (r < 0) {
             ldout(store->ctx(), 0) << "ERROR: failed to call RGWListBucketIndexesCR r=" << r << dendl;
-            return set_state(RGWCoroutine_Error, r);
+            return set_cr_error(r);
           }
         }
         sync_status.sync_info.state = rgw_data_sync_info::StateSync;
@@ -1065,7 +1065,7 @@ public:
         }
       }
 
-      return set_state(RGWCoroutine_Done, 0);
+      return set_cr_done();
     }
     return 0;
   }
@@ -1244,13 +1244,13 @@ public:
         string p = "/admin/log/";
         ret = call(new RGWReadRESTResourceCR<bucket_index_marker_info>(store->ctx(), conn, http_manager, p, pairs, info));
         if (ret < 0) {
-          return set_state(RGWCoroutine_Error, ret);
+          return set_cr_error(ret);
         }
       }
       if (retcode < 0) {
-        return set_state(RGWCoroutine_Error, retcode);
+        return set_cr_error(retcode);
       }
-      return set_state(RGWCoroutine_Done, 0);
+      return set_cr_done();
     }
     return 0;
   }
@@ -1314,7 +1314,7 @@ public:
 			             lock_name, cookie, lock_duration));
 	if (retcode < 0) {
 	  ldout(cct, 0) << "ERROR: failed to take a lock on " << sync_status_oid << dendl;
-	  return set_state(RGWCoroutine_Error, retcode);
+	  return set_cr_error(retcode);
 	}
       }
       yield {
@@ -1327,7 +1327,7 @@ public:
 			             lock_name, cookie, lock_duration));
 	if (retcode < 0) {
 	  ldout(cct, 0) << "ERROR: failed to take a lock on " << sync_status_oid << dendl;
-	  return set_state(RGWCoroutine_Error, retcode);
+	  return set_cr_error(retcode);
 	}
       }
       /* fetch current position in logs */
@@ -1335,12 +1335,12 @@ public:
         ret = call(new RGWReadRemoteBucketIndexLogInfoCR(store, http_manager, async_rados, conn, bucket_name, bucket_id, shard_id, &info));
         if (ret < 0) {
 	  ldout(cct, 0) << "ERROR: failed to fetch bucket index status" << dendl;
-          return set_state(RGWCoroutine_Error, ret);
+          return set_cr_error(ret);
         }
       }
       if (retcode < 0 && retcode != -ENOENT) {
         ldout(cct, 0) << "ERROR: failed to fetch bucket index status" << dendl;
-        return set_state(RGWCoroutine_Error, retcode);
+        return set_cr_error(retcode);
       }
       yield {
 	status.state = rgw_bucket_shard_sync_info::StateFullSync;
@@ -1354,7 +1354,7 @@ public:
 	call(new RGWSimpleRadosUnlockCR(async_rados, store, store->get_zone_params().log_pool, sync_status_oid,
 			             lock_name, cookie));
       }
-      return set_state(RGWCoroutine_Done);
+      return set_cr_done();
     }
     return 0;
   }
@@ -1443,19 +1443,19 @@ int RGWReadBucketSyncStatusCoroutine::operate()
                                                    &attrs));
       if (ret < 0) {
         ldout(store->ctx(), 0) << "ERROR: failed to call new RGWSimpleRadosReadAttrsCR() ret=" << ret << dendl;
-        return set_state(RGWCoroutine_Error, ret);
+        return set_cr_error(ret);
       }
     }
     if (retcode == -ENOENT) {
       *status = rgw_bucket_shard_sync_info();
-      return set_state(RGWCoroutine_Done, 0);
+      return set_cr_done();
     }
     if (retcode < 0) {
       ldout(store->ctx(), 0) << "ERROR: failed to call fetch bucket shard info oid=" << oid << " ret=" << retcode << dendl;
-      return set_state(RGWCoroutine_Error, retcode);
+      return set_cr_error(retcode);
     }
     status->decode_from_attrs(store->ctx(), attrs);
-    return set_state(RGWCoroutine_Done, 0);
+    return set_cr_done();
   }
   return 0;
 }
@@ -1592,13 +1592,13 @@ public:
         string p = string("/") + bucket_name;
         ret = call(new RGWReadRESTResourceCR<bucket_list_result>(store->ctx(), conn, http_manager, p, pairs, result));
         if (ret < 0) {
-          return set_state(RGWCoroutine_Error, ret);
+          return set_cr_error(ret);
         }
       }
       if (retcode < 0) {
-        return set_state(RGWCoroutine_Error, retcode);
+        return set_cr_error(retcode);
       }
-      return set_state(RGWCoroutine_Done, 0);
+      return set_cr_done();
     }
     return 0;
   }
@@ -1652,13 +1652,13 @@ public:
 
         ret = call(new RGWReadRESTResourceCR<list<rgw_bi_log_entry> >(store->ctx(), conn, http_manager, "/admin/log", pairs, result));
         if (ret < 0) {
-          return set_state(RGWCoroutine_Error, ret);
+          return set_cr_error(ret);
         }
       }
       if (retcode < 0) {
-        return set_state(RGWCoroutine_Error, retcode);
+        return set_cr_error(retcode);
       }
-      return set_state(RGWCoroutine_Done, 0);
+      return set_cr_done();
     }
     return 0;
   }
@@ -1770,7 +1770,7 @@ public:
             op == CLS_RGW_OP_LINK_OLH) {
           if (op == CLS_RGW_OP_ADD && !key.instance.empty()) {
             ldout(store->ctx(), 10) << "bucket skipping sync obj: " << source_zone << "/" << bucket_info->bucket << "/" << key << "[" << versioned_epoch << "]: versioned object will be synced on link_olh" << dendl;
-            return set_state(RGWCoroutine_Done, 0);
+            return set_cr_done();
 
           }
           ldout(store->ctx(), 5) << "bucket sync: sync obj: " << source_zone << "/" << bucket_info->bucket << "/" << key << "[" << versioned_epoch << "]" << dendl;
@@ -1779,13 +1779,13 @@ public:
                                            true));
           if (r < 0) {
             ldout(store->ctx(), 0) << "ERROR: failed to call RGWFetchRemoteObjCR()" << dendl;
-            return set_state(RGWCoroutine_Error, r);
+            return set_cr_error(r);
           }
         } else if (op == CLS_RGW_OP_DEL) {
           r = call(new RGWRemoveObjCR(async_rados, store, source_zone, *bucket_info, key, versioned_epoch, &timestamp));
           if (r < 0) {
             ldout(store->ctx(), 0) << "ERROR: failed to call RGWRemoveObjCR()" << dendl;
-            return set_state(RGWCoroutine_Error, r);
+            return set_cr_error(r);
           }
         }
       }
@@ -1799,16 +1799,16 @@ public:
         int ret = call(marker_tracker->finish(entry_marker));
         if (ret < 0) {
           ldout(store->ctx(), 0) << "ERROR: marker_tracker->finish(" << entry_marker << ") returned ret=" << ret << dendl;
-          return set_state(RGWCoroutine_Error, sync_status);
+          return set_cr_error(sync_status);
         }
       }
       if (sync_status == 0) {
         sync_status = retcode;
       }
       if (sync_status < 0) {
-        return set_state(RGWCoroutine_Error, sync_status);
+        return set_cr_error(sync_status);
       }
-      return set_state(RGWCoroutine_Done, 0);
+      return set_cr_done();
     }
     return 0;
   }
@@ -1873,7 +1873,7 @@ int RGWBucketShardFullSyncCR::operate()
         }
       }
       if (retcode < 0 && retcode != -ENOENT) {
-        return set_state(RGWCoroutine_Error, retcode);
+        return set_cr_error(retcode);
       }
       entries_iter = list_result.entries.begin();
       for (; entries_iter != list_result.entries.end(); ++entries_iter) {
@@ -1910,15 +1910,15 @@ int RGWBucketShardFullSyncCR::operate()
                                                     oid, attrs));
       if (ret < 0) {
         ldout(store->ctx(), 0) << "ERROR: failed to call RGWSimpleRadosWriteAttrsCR() oid=" << oid << dendl;
-        return set_state(RGWCoroutine_Error, ret);
+        return set_cr_error(ret);
       }
     }
     if (retcode < 0) {
       ldout(store->ctx(), 0) << "ERROR: failed to set sync state on bucket " << bucket_name << ":" << bucket_id << ":" << shard_id
         << " retcode=" << retcode << dendl;
-      return set_state(RGWCoroutine_Error, retcode);
+      return set_cr_error(retcode);
     }
-    return set_state(RGWCoroutine_Done, 0);
+    return set_cr_done();
   }
   return 0;
 }
@@ -1980,7 +1980,7 @@ int RGWBucketShardIncrementalSyncCR::operate()
       if (retcode < 0 && retcode != -ENOENT) {
         /* wait for all operations to complete */
         drain_all();
-        return set_state(RGWCoroutine_Error, retcode);
+        return set_cr_error(retcode);
       }
       entries_iter = list_result.begin();
       for (; entries_iter != list_result.end(); ++entries_iter) {
@@ -2013,7 +2013,7 @@ int RGWBucketShardIncrementalSyncCR::operate()
 
     /* wait for all operations to complete */
     drain_all();
-    return set_state(RGWCoroutine_Done, 0);
+    return set_cr_done();
   }
   return 0;
 }
@@ -2031,7 +2031,7 @@ int RGWRunBucketSyncCoroutine::operate()
 
     if (retcode < 0 && retcode != -ENOENT) {
       ldout(store->ctx(), 0) << "ERROR: failed to read sync status for bucket=" << bucket_name << " bucket_id=" << bucket_id << " shard_id=" << shard_id << dendl;
-      return set_state(RGWCoroutine_Error, retcode);
+      return set_cr_error(retcode);
     }
 
     ldout(store->ctx(), 20) << __func__ << "(): sync status for bucket " << bucket_name << ":" << bucket_id << ":" << shard_id << ": " << sync_status.state << dendl;
@@ -2046,7 +2046,7 @@ int RGWRunBucketSyncCoroutine::operate()
 
     if (retcode < 0) {
       ldout(store->ctx(), 0) << "ERROR: failed to retrieve bucket info for bucket=" << bucket_name << " bucket_id=" << bucket_id << dendl;
-      return set_state(RGWCoroutine_Error, retcode);
+      return set_cr_error(retcode);
     }
 
     yield {
@@ -2063,7 +2063,7 @@ int RGWRunBucketSyncCoroutine::operate()
 
     if (retcode < 0) {
       ldout(store->ctx(), 0) << "ERROR: init sync on " << bucket_name << " bucket_id=" << bucket_id << " shard_id=" << shard_id << " failed, retcode=" << retcode << dendl;
-      return set_state(RGWCoroutine_Error, retcode);
+      return set_cr_error(retcode);
     }
     yield {
       if ((rgw_bucket_shard_sync_info::SyncState)sync_status.state == rgw_bucket_shard_sync_info::StateFullSync) {
@@ -2080,7 +2080,7 @@ int RGWRunBucketSyncCoroutine::operate()
 
     if (retcode < 0) {
       ldout(store->ctx(), 0) << "ERROR: full sync on " << bucket_name << " bucket_id=" << bucket_id << " shard_id=" << shard_id << " failed, retcode=" << retcode << dendl;
-      return set_state(RGWCoroutine_Error, retcode);
+      return set_cr_error(retcode);
     }
 
     yield {
@@ -2097,10 +2097,10 @@ int RGWRunBucketSyncCoroutine::operate()
 
     if (retcode < 0) {
       ldout(store->ctx(), 0) << "ERROR: incremental sync on " << bucket_name << " bucket_id=" << bucket_id << " shard_id=" << shard_id << " failed, retcode=" << retcode << dendl;
-      return set_state(RGWCoroutine_Error, retcode);
+      return set_cr_error(retcode);
     }
 
-    return set_state(RGWCoroutine_Done, 0);
+    return set_cr_done();
   }
 
   return 0;
