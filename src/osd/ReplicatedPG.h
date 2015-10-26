@@ -1434,7 +1434,7 @@ private:
     const spg_t &pgid,
     const char *mode,
     bool allow_incomplete_clones,
-    snapid_t target,
+    boost::optional<snapid_t> target,
     vector<snapid_t>::reverse_iterator *curclone);
 
 public:

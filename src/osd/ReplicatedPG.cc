@@ -11271,7 +11271,7 @@ unsigned ReplicatedPG::process_clones_to(const boost::optional<hobject_t> &head,
   const spg_t &pgid,
   const char *mode,
   bool allow_incomplete_clones,
-  snapid_t target,
+  boost::optional<snapid_t> target,
   vector<snapid_t>::reverse_iterator *curclone)
 {
   assert(head);
@@ -11280,7 +11280,7 @@ unsigned ReplicatedPG::process_clones_to(const boost::optional<hobject_t> &head,
 
   // NOTE: clones are in descending order, thus **curclone > target test here
   hobject_t next_clone(head.get());
-  while(doing_clones(snapset, *curclone) && **curclone > target) {
+  while(doing_clones(snapset, *curclone) && (!target || **curclone > *target)) {
     ++missing;
     // it is okay to be missing one or more clones in a cache tier.
     // skip higher-numbered clones in the list.
@@ -11331,7 +11331,7 @@ void ReplicatedPG::_scrub(
   bool repair = state_test(PG_STATE_REPAIR);
   bool deep_scrub = state_test(PG_STATE_DEEP_SCRUB);
   const char *mode = (repair ? "repair": (deep_scrub ? "deep-scrub" : "scrub"));
-  const snapid_t all_clones = 0;
+  boost::optional<snapid_t> all_clones;   // Unspecified snapid_t or boost::none
 
   // traverse in reverse order.
   boost::optional<hobject_t> head;
@@ -11410,7 +11410,7 @@ void ReplicatedPG::_scrub(
 
     // Check for any problems while processing clones
     if (doing_clones(snapset, curclone)) {
-      snapid_t target;
+      boost::optional<snapid_t> target;
       // Expecting an object with snap for current head
       if (soid.has_snapset() || soid.get_head() != head->get_head()) {
 
