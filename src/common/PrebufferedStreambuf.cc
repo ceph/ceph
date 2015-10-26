@@ -67,29 +67,29 @@ size_t PrebufferedStreambuf::size() const
   if(m_overflow.size() == 0) {
     return this->pptr() - m_buf;
   } else {
-    return m_buf_len + m_overflow.size();
+    return m_buf_len + this->pptr() - &m_overflow[0];
   }
 }
 
 // extracts up to avail chars of content
 int PrebufferedStreambuf::snprintf(char* dst, size_t avail) const
 {
-  size_t o_size=m_overflow.size();
+  size_t o_size = m_overflow.size();
   size_t len_a;
   size_t len_b;
   if(o_size>0){
     len_a = m_buf_len;
-    len_b = o_size;
+    len_b = this->pptr() - &m_overflow[0];
   } else {
     len_a = this->pptr() - m_buf;
     len_b = 0;
   }
-  if(avail > len_a + len_b ) {
+  if(avail > len_a + len_b) {
     memcpy(dst, m_buf, len_a);
     memcpy(dst + m_buf_len, m_overflow.c_str(), len_b);
     dst[len_a + len_b] = 0;
   } else {
-    if(avail > len_a ) {
+    if(avail > len_a) {
       memcpy(dst, m_buf, len_a);
       memcpy(dst + m_buf_len, m_overflow.c_str(), avail - len_a - 1);
       dst[avail - 1] = 0;

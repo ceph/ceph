@@ -274,13 +274,15 @@ void Log::_flush(EntryQueue *t, EntryQueue *requeue, bool crash)
 
       if (crash)
         buflen += snprintf(buf, sizeof(buf), "%6d> ", -t->m_len);
-      buflen += m_date_cache->snprintf(buf + buflen, sizeof(buf)-buflen, e->m_stamp);
+      buflen += m_date_cache->snprintf(buf + buflen, sizeof(buf) - buflen, e->m_stamp);
       buflen += snprintf(buf + buflen, sizeof(buf)-buflen, " %lx %2d ",
 			(unsigned long)e->m_thread, e->m_prio);
 
-      buflen += e->snprintf(buf + buflen, sizeof(buf) - buflen - 1 );
-      if(buflen > sizeof(buf) - 1 ) //paranoid check, buf was declared to hold everything
+      buflen += e->snprintf(buf + buflen, sizeof(buf) - buflen - 1);
+      if(buflen > sizeof(buf) - 1) { //paranoid check, buf was declared to hold everything
         buflen = sizeof(buf) - 1;
+        buf[buflen] = 0;
+      }
 
       if (do_syslog) {
         syslog(LOG_USER, "%s", buf);
@@ -290,9 +292,8 @@ void Log::_flush(EntryQueue *t, EntryQueue *requeue, bool crash)
         cerr << buf << std::endl;
       }
       if (do_fd) {
-        buf[buflen-1]='\n';
-        buf[buflen]='\0';
-        int r=safe_write(m_fd, buf, buflen+1);
+        buf[buflen] = '\n';
+        int r = safe_write(m_fd, buf, buflen+1);
         if (r < 0)
           cerr << "problem writing to " << m_log_file << ": " << cpp_strerror(r) << std::endl;
       }
