@@ -2772,7 +2772,6 @@ static void add_new_connection_to_map(map<string, RGWRESTConn *> &zonegroup_conn
   zonegroup_conn_map[zonegroup.get_id()] = new_connection;
 }
 
-
 int RGWRados::convert_regionmap()
 {
   RGWZoneGroupMap zonegroupmap;
@@ -2832,7 +2831,14 @@ int RGWRados::convert_regionmap()
  */
 int RGWRados::replace_region_with_zonegroup()
 {
- 
+  if (!cct->_conf->rgw_region.empty() && cct->_conf->rgw_zonegroup.empty()) {
+    int ret = cct->_conf->set_val("rgw_zonegroup", cct->_conf->rgw_region.c_str());
+    if (ret < 0) {
+      lderr(cct) << "failed to set rgw_zonegroup to " << cct->_conf->rgw_region << dendl;
+      return ret;
+    }
+  }
+
   /* copy default region */
   /* convert default region to default zonegroup */
   string default_oid = cct->_conf->rgw_default_region_info_oid;
@@ -2852,13 +2858,71 @@ int RGWRados::replace_region_with_zonegroup()
     lderr(cct) << "failed reading old default region: ret "<< ret << " " << cpp_strerror(-ret) << dendl;
     return ret;
   }
-  
+
   /* convert regions to zonegroups */
   list<string> regions;
   ret = list_regions(regions);
   if (ret < 0 && ret != -ENOENT) {
     lderr(cct) << "failed to list regions: ret "<< ret << " " << cpp_strerror(-ret) << dendl;
     return ret;
+  } else if (ret == -ENOENT || regions.empty()) {
+    return 0;
+  }
+
+  string master_region, master_zone;
+  for (list<string>::iterator iter = regions.begin(); iter != regions.end(); ++iter) {
+    if (*iter != default_zonegroup_name){
+      RGWZoneGroup region(*iter);
+      int ret = region.init(cct, this, true, true);
+      if (ret < 0) {
+	  lderr(cct) << "failed init region "<< *iter << ": " << cpp_strerror(-ret) << dendl;
+	  return ret;
+      }
+      if (region.is_master) {
+	master_region = region.get_id();
+	master_zone = region.master_zone;
+      }
+    }
+  }
+
+  /* create realm if there is none.
+     The realm name will be the region and zone concatenated
+     realm id will be mds of its name */
+  if (realm.get_id().empty() && !master_region.empty() && !master_zone.empty()) {
+    string new_realm_name = master_region + "." + master_zone;
+    unsigned char md5[CEPH_CRYPTO_MD5_DIGESTSIZE];
+    char md5_str[CEPH_CRYPTO_MD5_DIGESTSIZE * 2 + 1];
+    MD5 hash;
+    hash.Update((const byte *)new_realm_name.c_str(), new_realm_name.length());
+    hash.Final(md5);
+    buf_to_hex(md5, CEPH_CRYPTO_MD5_DIGESTSIZE, md5_str);
+    string new_realm_id(md5_str);
+    RGWRealm new_realm(new_realm_id,new_realm_name);
+    ret = new_realm.init(cct, this, false);
+    if (ret < 0) {
+      lderr(cct) << "Error initing new realm: " << cpp_strerror(-ret)  << dendl;
+      return ret;
+    }
+    ret = new_realm.create();
+    if (ret < 0 && ret != -EEXIST) {
+      lderr(cct) << "Error creating new realm: " << cpp_strerror(-ret)  << dendl;
+      return ret;
+    }
+    ret = new_realm.set_as_default();
+    if (ret < 0) {
+      lderr(cct) << "Error setting realm as default: " << cpp_strerror(-ret)  << dendl;
+      return ret;
+    }
+    ret = realm.init(cct, this);
+    if (ret < 0) {
+      lderr(cct) << "Error initing realm: " << cpp_strerror(-ret)  << dendl;
+      return ret;
+    }
+    ret = current_period.init(cct, this, realm.get_id(), realm.get_name());
+    if (ret < 0) {
+      lderr(cct) << "Error initing current period: " << cpp_strerror(-ret)  << dendl;
+      return ret;
+    }
   }
 
   list<string>::iterator iter;
@@ -2937,14 +3001,6 @@ int RGWRados::replace_region_with_zonegroup()
 		   << dendl;
 	return ret;
       }
-    }
-  }
-
-  if (!cct->_conf->rgw_region.empty() && cct->_conf->rgw_zonegroup.empty()) {
-    ret = cct->_conf->set_val("rgw_zonegroup", cct->_conf->rgw_region.c_str());
-    if (ret < 0) {
-      lderr(cct) << "failed to set rgw_zonegroup to " << cct->_conf->rgw_region << dendl;
-      return ret;
     }
   }
 
