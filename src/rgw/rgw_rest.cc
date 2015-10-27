@@ -520,6 +520,12 @@ void end_header(struct req_state *s, RGWOp *op, const char *content_type, const 
 
   dump_trans_id(s);
 
+  if ((!s->err.is_err()) &&
+      (s->bucket_info.owner != s->user.user_id) &&
+      (s->bucket_info.requester_pays)) {
+    s->cio->print("x-amz-request-charged: requester\r\n");
+  }
+
   if (op) {
     dump_access_control(s, op);
   }
