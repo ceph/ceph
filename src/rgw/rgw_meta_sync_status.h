@@ -40,14 +40,18 @@ struct rgw_meta_sync_marker {
   uint16_t state;
   string marker;
   string next_step_marker;
+  uint64_t total_entries;
+  uint64_t pos;
 
-  rgw_meta_sync_marker() : state(FullSync) {}
+  rgw_meta_sync_marker() : state(FullSync), total_entries(0), pos(0) {}
 
   void encode(bufferlist& bl) const {
     ENCODE_START(1, 1, bl);
     ::encode(state, bl);
     ::encode(marker, bl);
     ::encode(next_step_marker, bl);
+    ::encode(total_entries, bl);
+    ::encode(pos, bl);
     ENCODE_FINISH(bl);
   }
 
@@ -56,6 +60,8 @@ struct rgw_meta_sync_marker {
     ::decode(state, bl);
     ::decode(marker, bl);
     ::decode(next_step_marker, bl);
+    ::decode(total_entries, bl);
+    ::decode(pos, bl);
      DECODE_FINISH(bl);
   }
 

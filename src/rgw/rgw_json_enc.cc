@@ -1065,6 +1065,8 @@ void rgw_meta_sync_marker::decode_json(JSONObj *obj)
   state = s;
   JSONDecoder::decode_json("marker", marker, obj);
   JSONDecoder::decode_json("next_step_marker", next_step_marker, obj);
+  JSONDecoder::decode_json("total_entries", total_entries, obj);
+  JSONDecoder::decode_json("pos", pos, obj);
 }
 
 void rgw_meta_sync_marker::dump(Formatter *f) const
@@ -1072,6 +1074,8 @@ void rgw_meta_sync_marker::dump(Formatter *f) const
   encode_json("state", (int)state, f);
   encode_json("marker", marker, f);
   encode_json("next_step_marker", next_step_marker, f);
+  encode_json("total_entries", total_entries, f);
+  encode_json("pos", pos, f);
 }
 
 void rgw_meta_sync_status::decode_json(JSONObj *obj)

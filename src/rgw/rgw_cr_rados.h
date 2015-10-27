@@ -430,12 +430,18 @@ class RGWOmapAppend : public RGWConsumerCR<string> {
   list<string> pending_entries;
 
   map<string, bufferlist> entries;
+
+  uint64_t total_entries;
 public:
   RGWOmapAppend(RGWAsyncRadosProcessor *_async_rados, RGWRados *_store, rgw_bucket& _pool, const string& _oid);
   int operate();
   void flush_pending();
   void append(const string& s);
   void finish();
+
+  uint64_t get_total_entries() {
+    return total_entries;
+  }
 };
 
 class RGWAsyncWait : public RGWAsyncRadosRequest {
@@ -524,6 +530,10 @@ public:
     for (vector<RGWOmapAppend *>::iterator iter = shards.begin(); iter != shards.end(); ++iter) {
       (*iter)->finish();
     }
+  }
+
+  uint64_t get_total_entries(int shard_id) {
+    return shards[shard_id]->get_total_entries();
   }
 };
 
