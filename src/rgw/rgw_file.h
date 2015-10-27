@@ -389,7 +389,7 @@ public:
     op = this;
   }
 
-  virtual bool only_bucket() { return false; }
+  virtual bool only_bucket() { return true; }
 
   virtual int op_init() {
     // assign store, s, and dialect_handler
@@ -424,7 +424,8 @@ public:
 
   virtual int get_data(buffer::list& _bl) {
     /* XXX for now, use sharing semantics */
-    _bl = bl;
+    _bl.claim(bl);
+    _bl.hexdump(cout);
     return _bl.length();
   }
 
