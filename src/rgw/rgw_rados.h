@@ -1251,6 +1251,8 @@ class RGWRealm : public RGWSystemMetaObj
   map<string, RGWZoneGroup> zonegroups;
   string current_period;
 
+  int create_control();
+  int delete_control();
 public:
   RGWRealm() {}
   RGWRealm(const string& _id, const string& _name = "") : RGWSystemMetaObj(_id, _name) {}
@@ -1276,6 +1278,7 @@ public:
   }
 
   int create(bool exclusive = true);
+  int delete_obj();
   const string& get_pool_name(CephContext *cct);
   const string& get_default_oid(bool old_format = false);
   const string& get_names_oid_prefix();
@@ -1289,6 +1292,9 @@ public:
     return current_period;
   }
   int set_current_period(const string& period_id, const rgw_meta_sync_status* sync_status = NULL);
+
+  string get_control_oid();
+  int notify_zone();
 };
 WRITE_CLASS_ENCODER(RGWRealm)
 
@@ -1332,30 +1338,35 @@ class RGWPeriod
   int read_info();
   int read_latest_epoch(RGWPeriodLatestEpochInfo& epoch_info);
   int use_latest_epoch();
-  int set_latest_epoch(const epoch_t& epoch);
   int use_current_period();
 
   const string get_period_oid();
   const string get_period_oid_prefix();
 
 public:
-  RGWPeriod(): epoch(0) {};
+  RGWPeriod() : epoch(0) {}
 
   RGWPeriod(const string& period_id, epoch_t _epoch = 0)
     : id(period_id), epoch(_epoch) {}
 
-  const string& get_id() { return id;}
-  epoch_t get_epoch() { return epoch;}
-  const string& get_predecessor() { return predecessor_uuid;}
-  const string& get_master_zone() { return master_zone;}
-  const string& get_master_zonegroup() { return master_zonegroup;}
-  const string& get_realm() { return realm_id;}
-  const RGWPeriodMap& get_map() { return period_map;}
-  const RGWPeriodConfig& get_config() { return period_config;}
-  const rgw_meta_sync_status& get_sync_status() { return sync_status;}
+  const string& get_id() const { return id; }
+  epoch_t get_epoch() const { return epoch; }
+  const string& get_predecessor() const { return predecessor_uuid; }
+  const string& get_master_zone() const { return master_zone; }
+  const string& get_master_zonegroup() const { return master_zonegroup; }
+  const string& get_realm() const { return realm_id; }
+  const RGWPeriodMap& get_map() const { return period_map; }
+  const RGWPeriodConfig& get_config() const { return period_config; }
+  const rgw_meta_sync_status& get_sync_status() const { return sync_status; }
   const string& get_pool_name(CephContext *cct);
   const string& get_latest_epoch_oid();
   const string& get_info_oid_prefix();
+
+  void set_id(const string& id) {
+    this->id = id;
+    period_map.id = id;
+  }
+  void set_epoch(epoch_t epoch) { this->epoch = epoch; }
 
   void set_predecessor(const string& predecessor)
   {
@@ -1378,6 +1389,8 @@ public:
   bool is_single_zonegroup(CephContext *cct, RGWRados *store);
 
   int get_latest_epoch(epoch_t& epoch);
+  int set_latest_epoch(epoch_t epoch);
+
   int init(CephContext *_cct, RGWRados *_store, const string &period_realm_id, const string &period_realm_name = "",
 	   bool setup_obj = true);
   int init(CephContext *_cct, RGWRados *_store, bool setup_obj = true);  
@@ -1390,6 +1403,9 @@ public:
 
   void fork();
   int update();
+
+  // commit a staging period; only for use on master zone
+  int commit(RGWRealm& realm, const RGWPeriod &current_period);
 
   void encode(bufferlist& bl) const {
     ENCODE_START(1, 1, bl);    

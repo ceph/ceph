@@ -38,6 +38,7 @@
 #include "rgw_acl.h"
 #include "rgw_user.h"
 #include "rgw_op.h"
+#include "rgw_realm_watcher.h"
 #include "rgw_rest.h"
 #include "rgw_rest_s3.h"
 #include "rgw_rest_swift.h"
@@ -253,6 +254,15 @@ public:
   virtual ~RGWProcess() {}
   virtual void run() = 0;
   virtual void handle_request(RGWRequest *req) = 0;
+
+  void pause() {
+    m_tp.pause();
+  }
+
+  void unpause_with_new_config(RGWRados *store) {
+    this->store = store;
+    m_tp.unpause();
+  }
 
   void close_fd() {
     if (sock_fd >= 0) {
@@ -706,24 +716,36 @@ void RGWLoadGenProcess::handle_request(RGWRequest *r)
   delete req;
 }
 
+struct RGWMongooseEnv : public RGWProcessEnv {
+  // every request holds a read lock, so we need to prioritize write locks to
+  // avoid starving pause_for_new_config()
+  static constexpr bool prioritize_write = true;
+  RWLock mutex;
+  RGWMongooseEnv(const RGWProcessEnv &env)
+    : RGWProcessEnv(env),
+      mutex("RGWMongooseFrontend", false, prioritize_write) {}
+};
 
 static int civetweb_callback(struct mg_connection *conn) {
   struct mg_request_info *req_info = mg_get_request_info(conn);
-  RGWProcessEnv *pe = static_cast<RGWProcessEnv *>(req_info->user_data);
+  RGWMongooseEnv *pe = static_cast<RGWMongooseEnv *>(req_info->user_data);
   RGWRados *store = pe->store;
   RGWREST *rest = pe->rest;
   OpsLogSocket *olog = pe->olog;
 
-  RGWRequest *req = new RGWRequest(store->get_new_req_id());
+  RGWRequest req(store->get_new_req_id());
   RGWMongoose client_io(conn, pe->port);
 
-  int ret = process_request(store, rest, req, &client_io, olog);
-  if (ret < 0) {
-    /* we don't really care about return code */
-    dout(20) << "process_request() returned " << ret << dendl;
-  }
+  {
+    // hold a read lock over access to pe->store for reconfiguration
+    RWLock::RLocker lock(pe->mutex);
 
-  delete req;
+    int ret = process_request(pe->store, rest, &req, &client_io, olog);
+    if (ret < 0) {
+      /* we don't really care about return code */
+      dout(20) << "process_request() returned " << ret << dendl;
+    }
+  }
 
 // Mark as processed
   return 1;
@@ -850,6 +872,9 @@ public:
   virtual int run() = 0;
   virtual void stop() = 0;
   virtual void join() = 0;
+
+  virtual void pause_for_new_config() = 0;
+  virtual void unpause_with_new_config(RGWRados *store) = 0;
 };
 
 class RGWProcessControlThread : public Thread {
@@ -893,6 +918,15 @@ public:
 
   void join() {
     thread->join();
+  }
+
+  void pause_for_new_config() override {
+    pprocess->pause();
+  }
+
+  void unpause_with_new_config(RGWRados *store) override {
+    env.store = store;
+    pprocess->unpause_with_new_config(store);
   }
 };
 
@@ -946,7 +980,7 @@ public:
 class RGWMongooseFrontend : public RGWFrontend {
   RGWFrontendConfig *conf;
   struct mg_context *ctx;
-  RGWProcessEnv env;
+  RGWMongooseEnv env;
 
   void set_conf_default(map<string, string>& m, const string& key, const string& def_val) {
     if (m.find(key) == m.end()) {
@@ -1005,6 +1039,34 @@ public:
   }
 
   void join() {
+  }
+
+  void pause_for_new_config() override {
+    // block callbacks until unpause
+    env.mutex.get_write();
+  }
+
+  void unpause_with_new_config(RGWRados *store) override {
+    env.store = store;
+    // unpause callbacks
+    env.mutex.put_write();
+  }
+};
+
+// FrontendPauser implementation for RGWRealmWatcher
+class RGWFrontendPauser : public RGWRealmWatcher::FrontendPauser {
+  std::list<RGWFrontend*> &frontends;
+ public:
+  RGWFrontendPauser(std::list<RGWFrontend*> &frontends)
+    : frontends(frontends) {}
+
+  void pause() override {
+    for (auto frontend : frontends)
+      frontend->pause_for_new_config();
+  }
+  void resume(RGWRados *store) {
+    for (auto frontend : frontends)
+      frontend->unpause_with_new_config(store);
   }
 };
 
@@ -1217,6 +1279,10 @@ int main(int argc, const char **argv)
 
     fes.push_back(fe);
   }
+
+  // add a watcher to respond to realm configuration changes
+  RGWFrontendPauser pauser(fes);
+  RGWRealmWatcher realm_watcher(g_ceph_context, store, &pauser);
 
   wait_shutdown();
 

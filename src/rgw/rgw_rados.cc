@@ -655,6 +655,11 @@ int RGWRealm::create(bool exclusive)
     ldout(cct, 0) << "ERROR creating new realm object " << name << ": " << cpp_strerror(-ret) << dendl;
     return ret;
   }
+  // create the control object for watch/notify
+  ret = create_control();
+  if (ret < 0) {
+    return ret;
+  }
   /* create new period for the realm */
   RGWPeriod period;
   ret = period.init(cct, store, id, name, false);
@@ -679,6 +684,32 @@ int RGWRealm::create(bool exclusive)
   }
 
   return 0;
+}
+
+int RGWRealm::delete_obj()
+{
+  int ret = RGWSystemMetaObj::delete_obj();
+  if (ret < 0) {
+    return ret;
+  }
+  return delete_control();
+}
+
+int RGWRealm::create_control()
+{
+  auto pool_name = get_pool_name(cct);
+  auto pool = rgw_bucket{pool_name.c_str()};
+  auto oid = get_control_oid();
+  return rgw_put_system_obj(store, pool, oid, nullptr, 0, true,
+                            nullptr, 0, nullptr);
+}
+
+int RGWRealm::delete_control()
+{
+  auto pool_name = get_pool_name(cct);
+  auto pool = rgw_bucket{pool_name.c_str()};
+  auto obj = rgw_obj{pool, get_control_oid()};
+  return store->delete_system_obj(obj);
 }
 
 const string& RGWRealm::get_pool_name(CephContext *cct)
@@ -727,6 +758,32 @@ int RGWRealm::set_current_period(const string& period_id, const rgw_meta_sync_st
   current_period = period_id;
   return update();
 }
+
+string RGWRealm::get_control_oid()
+{
+  return get_info_oid_prefix() + id + ".control";
+}
+
+int RGWRealm::notify_zone()
+{
+  // open a context on the realm's pool
+  auto pool = get_pool_name(cct);
+  librados::IoCtx ctx;
+  int r = store->get_rados_handle()->ioctx_create(pool.c_str(), ctx);
+  if (r < 0) {
+    lderr(cct) << "Failed to open pool " << pool << dendl;
+    return r;
+  }
+  // send a notify on the realm object
+  bufferlist bl;
+  r = ctx.notify2(get_control_oid(), bl, 0, nullptr);
+  if (r < 0) {
+    lderr(cct) << "Realm notify failed with " << r << dendl;
+    return r;
+  }
+  return 0;
+}
+
 
 int RGWPeriod::init(CephContext *_cct, RGWRados *_store, const string& period_realm_id,
 		    const string& period_realm_name, bool setup_obj)
@@ -813,9 +870,11 @@ const string RGWPeriod::get_period_oid_prefix()
 const string RGWPeriod::get_period_oid()
 {
   std::ostringstream oss;
-  oss << get_period_oid_prefix() << "." << epoch;
-
-  return oss.str();;
+  oss << get_period_oid_prefix();
+  // skip the epoch for the staging period
+  if (id != get_staging_id(realm_id))
+    oss << "." << epoch;
+  return oss.str();
 }
 
 int RGWPeriod::read_latest_epoch(RGWPeriodLatestEpochInfo& info)
@@ -869,7 +928,7 @@ int RGWPeriod::use_latest_epoch()
   return 0;
 }
 
-int RGWPeriod::set_latest_epoch(const epoch_t& epoch)
+int RGWPeriod::set_latest_epoch(epoch_t epoch)
 {
   string pool_name = get_pool_name(cct);
   string oid = get_period_oid_prefix() + get_latest_epoch_oid();
@@ -887,9 +946,8 @@ int RGWPeriod::set_latest_epoch(const epoch_t& epoch)
     return ret;
 
   return 0;
-
-
 }
+
 int RGWPeriod::delete_obj()
 {
   string pool_name = get_pool_name(cct);
@@ -964,9 +1022,7 @@ int RGWPeriod::store_info(bool exclusive)
 
   rgw_bucket pool(pool_name.c_str());
 
-  std::ostringstream oss;
-  oss << get_info_oid_prefix() << id << "." << epoch;
-  string oid = oss.str();
+  string oid = get_period_oid();
   bufferlist bl;
   ::encode(*this, bl);
   return rgw_put_system_obj(store, pool, oid, bl.c_str(), bl.length(), exclusive, NULL, 0, NULL);
@@ -1056,7 +1112,6 @@ int RGWPeriod::update()
 void RGWPeriod::fork()
 {
   predecessor_uuid = id;
-  epoch = 1;
   id = get_staging_id(realm_id);
   period_map.reset();
 }
@@ -1072,6 +1127,69 @@ void RGWPeriod::update(const RGWZoneGroupMap& map)
   period_config.bucket_quota = map.bucket_quota;
   period_config.user_quota = map.user_quota;
   period_map.master_zonegroup = map.master_zonegroup;
+}
+
+int RGWPeriod::commit(RGWRealm& realm, const RGWPeriod& current_period)
+{
+  // gateway must be in the master zone to commit
+  if (master_zone != store->get_zone_params().get_id()) {
+    lderr(cct) << "period commit sent to zone " << store->get_zone_params().get_id()
+        << ", not period's master zone " << master_zone << dendl;
+    return -EINVAL;
+  }
+  // period predecessor must match current period
+  if (predecessor_uuid != current_period.get_id()) {
+    lderr(cct) << "period predecessor " << predecessor_uuid
+        << " does not match current period " << current_period.get_id()
+        << dendl;
+    return -EINVAL;
+  }
+  // did the master zone change?
+  if (master_zone != current_period.get_master_zone()) {
+    // create with a new period id
+    int r = create(true);
+    if (r < 0) {
+      lderr(cct) << "failed to create new period: " << cpp_strerror(-r) << dendl;
+      return r;
+    }
+    // set as current period
+    r = realm.set_current_period(id); // TODO: add sync status argument
+    if (r < 0) {
+      lderr(cct) << "failed to update realm's current period: "
+          << cpp_strerror(-r) << dendl;
+      return r;
+    }
+    ldout(cct, 4) << "Promoted to master zone and committed new period "
+        << id << dendl;
+    realm.notify_zone();
+    return 0;
+  }
+  // period must be based on predecessor's current epoch
+  if (epoch != current_period.get_epoch()) {
+    lderr(cct) << "period epoch " << epoch << " does not match "
+        "predecessor epoch " << current_period.get_epoch() << dendl;
+    return -EINVAL;
+  }
+  // set period as next epoch
+  set_id(current_period.get_id());
+  set_epoch(current_period.get_epoch() + 1);
+  set_predecessor(current_period.get_predecessor());
+  // write the period to rados
+  int r = store_info(false);
+  if (r < 0) {
+    lderr(cct) << "failed to store period: " << cpp_strerror(-r) << dendl;
+    return r;
+  }
+  // set as latest epoch
+  r = set_latest_epoch(epoch);
+  if (r < 0) {
+    lderr(cct) << "failed to set latest epoch: " << cpp_strerror(-r) << dendl;
+    return r;
+  }
+  ldout(cct, 4) << "Committed new epoch " << epoch
+      << " for period " << id << dendl;
+  realm.notify_zone();
+  return 0;
 }
 
 int RGWZoneParams::create_default(bool old_format)
@@ -3045,7 +3163,7 @@ int RGWRados::init_complete()
       has_period_zonegroup = true;
       map<string, RGWZone>::iterator zone_iter =
 	period_zonegroup.zones.find(zone_params.get_predefined_name(cct));
-      if (zone_iter != zonegroup.zones.end()) {
+      if (zone_iter != period_zonegroup.zones.end()) {
 	period_zone = zone_iter->second;
 	has_period_zone = true;
       } else {

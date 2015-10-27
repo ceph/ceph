@@ -56,7 +56,7 @@ class RGWRemoteMetaLog : public RGWCoroutinesManager {
 
 public:
   RGWRemoteMetaLog(RGWRados *_store, RGWMetaSyncStatusManager *_sm) : RGWCoroutinesManager(_store->ctx()), store(_store),
-                                       conn(NULL),
+                                       conn(NULL), async_rados(nullptr),
                                        http_manager(store->ctx(), &completion_mgr),
                                        status_manager(_sm), meta_sync_cr(NULL) {}
 

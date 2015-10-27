@@ -73,12 +73,13 @@ void _usage()
   cerr << "  objects expire             run expired objects cleanup\n";
   cerr << "  period prepare             prepare a new period\n";
   cerr << "  period delete              delete a period\n";
-  cerr << "  period activate            activate a period \n";
   cerr << "  period get                 get period info\n";
   cerr << "  period get-current         get current period info\n";
   cerr << "  period pull                pull a period\n";
   cerr << "  period push                push a period\n";
   cerr << "  period list                list all periods\n";
+  cerr << "  period update              update the staging period\n";
+  cerr << "  period commit              commit the staging period\n";
   cerr << "  quota set                  set quota params\n";
   cerr << "  quota enable               enable quota\n";
   cerr << "  quota disable              disable quota\n";
@@ -92,6 +93,7 @@ void _usage()
   cerr << "  realm rename               rename a realm\n";
   cerr << "  realm set                  set realm info (requires infile)\n";
   cerr << "  realm default              set realm as default\n";
+  cerr << "  realm pull                 pull a realm and its current period\n";
   cerr << "  zonegroup add              add a zone to a zonegroup\n";
   cerr << "  zonegroup create           create a new zone group info\n";
   cerr << "  zonegroup default          set default zone group\n";
@@ -173,6 +175,7 @@ void _usage()
   cerr << "   --parent=<id>             parent period id\n";
   cerr << "   --period=<id>             period id\n";
   cerr << "   --epoch=<number>          period epoch\n";
+  cerr << "   --commit                  commit the period during 'period update'\n";
   cerr << "   --master                  set as master\n";
   cerr << "   --master-url              master url\n";
   cerr << "   --master-zonegroup=<id>   master zonegroup id\n";
@@ -338,15 +341,16 @@ enum {
   OPT_REALM_RENAME,
   OPT_REALM_SET,
   OPT_REALM_DEFAULT,
+  OPT_REALM_PULL,
   OPT_PERIOD_PREPARE,
   OPT_PERIOD_DELETE,
   OPT_PERIOD_GET,
   OPT_PERIOD_GET_CURRENT,
-  OPT_PERIOD_ACTIVATE,
   OPT_PERIOD_PULL,
   OPT_PERIOD_PUSH,
   OPT_PERIOD_LIST,
   OPT_PERIOD_UPDATE,
+  OPT_PERIOD_COMMIT,
 };
 
 static int get_cmd(const char *cmd, const char *prev_cmd, const char *prev_prev_cmd, bool *need_more)
@@ -515,8 +519,6 @@ static int get_cmd(const char *cmd, const char *prev_cmd, const char *prev_prev_
       return OPT_PERIOD_GET;
     if (strcmp(cmd, "get-current") == 0)
       return OPT_PERIOD_GET_CURRENT;
-    if (strcmp(cmd, "activate") == 0)
-      return OPT_PERIOD_ACTIVATE;
     if (strcmp(cmd, "pull") == 0)
       return OPT_PERIOD_PULL;
     if (strcmp(cmd, "push") == 0)
@@ -525,6 +527,8 @@ static int get_cmd(const char *cmd, const char *prev_cmd, const char *prev_prev_
       return OPT_PERIOD_LIST;
     if (strcmp(cmd, "update") == 0)
       return OPT_PERIOD_UPDATE;
+    if (strcmp(cmd, "commit") == 0)
+      return OPT_PERIOD_COMMIT;
   } else if (strcmp(prev_cmd, "realm") == 0) {
     if (strcmp(cmd, "create") == 0)
       return OPT_REALM_CREATE;
@@ -546,6 +550,8 @@ static int get_cmd(const char *cmd, const char *prev_cmd, const char *prev_prev_
       return OPT_REALM_SET;
     if (strcmp(cmd, "default") == 0)
       return OPT_REALM_DEFAULT;
+    if (strcmp(cmd, "pull") == 0)
+      return OPT_REALM_PULL;
   } else if (strcmp(prev_cmd, "zonegroup") == 0) {
     if (strcmp(cmd, "add") == 0)
       return OPT_ZONEGROUP_ADD;
@@ -1258,8 +1264,8 @@ int do_check_object_locator(const string& bucket_name, bool fix, bool remove_bad
 }
 
 #define MAX_REST_RESPONSE (128 * 1024) // we expect a very small response
-int send_to_remote_gateway(const string& remote, req_info& info, JSONParser& p,
-                           bufferlist &in_data)
+static int send_to_remote_gateway(const string& remote, req_info& info,
+                                  bufferlist& in_data, JSONParser& parser)
 {
   bufferlist response;
   RGWRESTConn *conn;
@@ -1270,7 +1276,7 @@ int send_to_remote_gateway(const string& remote, req_info& info, JSONParser& p,
     }
     conn = store->rest_master_conn;
   } else {
-    map<string, RGWRESTConn *>::iterator iter = store->zonegroup_conn_map.find(remote);
+    auto iter = store->zonegroup_conn_map.find(remote);
     if (iter == store->zonegroup_conn_map.end()) {
       cerr << "could not find connection to: " << remote << std::endl;
       return -ENOENT;
@@ -1281,16 +1287,16 @@ int send_to_remote_gateway(const string& remote, req_info& info, JSONParser& p,
   if (ret < 0) {
     return ret;
   }
-  ret = p.parse(response.c_str(), response.length());
+  ret = parser.parse(response.c_str(), response.length());
   if (ret < 0) {
-    cout << "failed to parse response" << std::endl;
+    cerr << "failed to parse response" << std::endl;
     return ret;
   }
   return 0;
 }
 
-int send_to_url(const string& url, RGWAccessKey& key, req_info& info,
-                JSONParser& p, bufferlist &in_data)
+static int send_to_url(const string& url, RGWAccessKey& key, req_info& info,
+                       bufferlist& in_data, JSONParser& parser)
 {
   list<pair<string, string> > params;
   RGWRESTSimpleRequest req(g_ceph_context, url, NULL, &params);
@@ -1300,11 +1306,143 @@ int send_to_url(const string& url, RGWAccessKey& key, req_info& info,
   if (ret < 0) {
     return ret;
   }
-  ret = p.parse(response.c_str(), response.length());
+  ret = parser.parse(response.c_str(), response.length());
   if (ret < 0) {
     cout << "failed to parse response" << std::endl;
     return ret;
   }
+  return 0;
+}
+
+static int send_to_remote_or_url(const string& remote, const string& url,
+                                 const string& access, const string& secret,
+                                 req_info& info, bufferlist& in_data,
+                                 JSONParser& parser)
+{
+  if (url.empty()) {
+    return send_to_remote_gateway(remote, info, in_data, parser);
+  }
+
+  if (access.empty() || secret.empty()) {
+    cerr << "An --access-key and --secret must be provided with --url." << std::endl;
+    return -EINVAL;
+  }
+  RGWAccessKey key;
+  key.id = access;
+  key.key = secret;
+  return send_to_url(url, key, info, in_data, parser);
+}
+
+static int commit_period(RGWRealm& realm, RGWPeriod& period,
+                         const string& remote, const string& url,
+                         const string& access, const string& secret)
+{
+  // are we the period's master zone?
+  if (store->get_zone_params().get_id() == period.get_master_zone()) {
+    // read the current period
+    RGWPeriod current_period;
+    int ret = current_period.init(g_ceph_context, store, realm.get_id());
+    if (ret < 0) {
+      cerr << "Error initializing current period: "
+          << cpp_strerror(-ret) << std::endl;
+      return ret;
+    }
+    // the master zone can commit locally
+    ret = period.commit(realm, current_period);
+    if (ret < 0) {
+      cerr << "failed to commit period: " << cpp_strerror(-ret) << std::endl;
+    }
+    return ret;
+  }
+
+  // push period to the master with an empty period id
+  period.set_id("");
+
+  RGWEnv env;
+  req_info info(g_ceph_context, &env);
+  info.method = "POST";
+  info.request_uri = "/admin/realm/period";
+
+  // json format into a bufferlist
+  JSONFormatter jf(false);
+  encode_json("period", period, &jf);
+  bufferlist bl;
+  jf.flush(bl);
+
+  JSONParser p;
+  int ret = send_to_remote_or_url(remote, url, access, secret, info, bl, p);
+  if (ret < 0) {
+    cerr << "request failed: " << cpp_strerror(-ret) << std::endl;
+    return ret;
+  }
+
+  // decode the response and store it back
+  try {
+    decode_json_obj(period, &p);
+  } catch (JSONDecoder::err& e) {
+    cout << "failed to decode JSON input: " << e.message << std::endl;
+    return -EINVAL;
+  }
+  if (period.get_id().empty()) {
+    cerr << "Period commit got back an empty period id" << std::endl;
+    return -EINVAL;
+  }
+  // the master zone gave us back the period that it committed, so it's
+  // safe to save it as our latest epoch
+  ret = period.store_info(false);
+  if (ret < 0) {
+    cerr << "Error storing committed period " << period.get_id() << ": "
+        << cpp_strerror(ret) << std::endl;
+    return ret;
+  }
+  ret = period.set_latest_epoch(period.get_epoch());
+  if (ret < 0) {
+    cerr << "Error updating period epoch: " << cpp_strerror(ret) << std::endl;
+    return ret;
+  }
+  realm.notify_zone();
+  return ret;
+}
+
+static int update_period(const string& realm_id, const string& realm_name,
+                         const string& period_id, const string& period_epoch,
+                         bool commit, const string& remote, const string& url,
+                         const string& access, const string& secret,
+                         Formatter *formatter)
+{
+  RGWRealm realm(realm_id, realm_name);
+  int ret = realm.init(g_ceph_context, store);
+  if (ret < 0 ) {
+    cerr << "Error initializing realm " << cpp_strerror(-ret) << std::endl;
+    return ret;
+  }
+  epoch_t epoch = 0;
+  if (!period_epoch.empty()) {
+    epoch = atoi(period_epoch.c_str());
+  }
+  RGWPeriod period(period_id, epoch);
+  ret = period.init(g_ceph_context, store, realm.get_id());
+  if (ret < 0) {
+    cerr << "period init failed: " << cpp_strerror(-ret) << std::endl;
+    return ret;
+  }
+  period.fork();
+  period.update();
+  ret = period.store_info(false);
+  if (ret < 0) {
+    cerr << "failed to store period: " << cpp_strerror(-ret) << std::endl;
+    return ret;
+  }
+  if (commit) {
+    ret = commit_period(realm, period, remote, url, access, secret);
+    if (ret < 0) {
+      cerr << "failed to commit period: " << cpp_strerror(-ret) << std::endl;
+      return ret;
+    }
+  }
+  encode_json("period", period, formatter);
+  formatter->flush(cout);
+  cout << std::endl;
   return 0;
 }
 
@@ -1358,6 +1496,7 @@ int main(int argc, char **argv)
   int read_only_int;
   bool read_only = false;
   int is_read_only_set = false;
+  int commit = false;
   int staging = false;
   int key_type = KEY_TYPE_UNDEFINED;
   rgw_bucket bucket;
@@ -1500,6 +1639,8 @@ int main(int argc, char **argv)
     } else if (ceph_argparse_binary_flag(args, i, &system, NULL, "--system", (char*)NULL)) {
       system_specified = true;
     } else if (ceph_argparse_binary_flag(args, i, &staging, NULL, "--staging", (char*)NULL)) {
+      // do nothing
+    } else if (ceph_argparse_binary_flag(args, i, &commit, NULL, "--commit", (char*)NULL)) {
       // do nothing
     } else if (ceph_argparse_witharg(args, i, &tmp, errs, "-a", "--auth-uid", (char*)NULL)) {
       if (!errs.str().empty()) {
@@ -1759,11 +1900,10 @@ int main(int argc, char **argv)
 			 opt_cmd == OPT_ZONE_CREATE || opt_cmd == OPT_ZONE_DELETE ||
                          opt_cmd == OPT_ZONE_GET || opt_cmd == OPT_ZONE_SET || opt_cmd == OPT_ZONE_RENAME ||
                          opt_cmd == OPT_ZONE_LIST || opt_cmd == OPT_ZONE_MODIFY || opt_cmd == OPT_ZONE_DEFAULT ||
-			 opt_cmd == OPT_REALM_CREATE ||
-			 opt_cmd == OPT_PERIOD_PREPARE || opt_cmd == OPT_PERIOD_ACTIVATE ||
+			 opt_cmd == OPT_REALM_CREATE || opt_cmd == OPT_PERIOD_PREPARE ||
 			 opt_cmd == OPT_PERIOD_DELETE || opt_cmd == OPT_PERIOD_GET ||
 			 opt_cmd == OPT_PERIOD_GET_CURRENT || opt_cmd == OPT_PERIOD_LIST ||
-			 opt_cmd == OPT_PERIOD_UPDATE ||
+			 (opt_cmd == OPT_PERIOD_UPDATE && !commit) ||
 			 opt_cmd == OPT_REALM_DELETE || opt_cmd == OPT_REALM_GET || opt_cmd == OPT_REALM_LIST ||
 			 opt_cmd == OPT_REALM_LIST_PERIODS ||
 			 opt_cmd == OPT_REALM_GET_DEFAULT || opt_cmd == OPT_REALM_REMOVE ||
@@ -1843,7 +1983,9 @@ int main(int argc, char **argv)
             cerr << "Error initializing realm " << cpp_strerror(-ret) << std::endl;
             return ret;
           }
-          period_id = RGWPeriod::get_staging_id(realm.get_id());
+          realm_id = realm.get_id();
+          realm_name = realm.get_name();
+          period_id = RGWPeriod::get_staging_id(realm_id);
           epoch = 1;
         }
 	RGWPeriod period(period_id, epoch);
@@ -1876,40 +2018,6 @@ int main(int argc, char **argv)
 	formatter->flush(cout);
       }
       break;
-    case OPT_PERIOD_ACTIVATE:
-      {
-	if (period_id.empty()) {
-	  cerr << "Missing period id" << std::endl;
-	  return -EINVAL;
-	}
-	RGWRealm realm(realm_id, realm_name);
-	int ret = realm.init(g_ceph_context, store);
-	if (ret < 0 ) {
-	  cerr << "Error initializing realm " << cpp_strerror(-ret) << std::endl;
-	  return ret;
-	}
-	/* read latest sync data */
-	RGWMetaSyncStatusManager sync(store);
-
-	ret = sync.init();
-	if (ret < 0) {
-	  cerr << "ERROR: sync.init() returned ret=" << ret << std::endl;
-	  return -ret;
-	}
-
-	ret = sync.read_sync_status();
-	if (ret < 0) {
-	  cerr << "ERROR: sync.read_sync_status() returned ret=" << ret << std::endl;
-	  return -ret;
-	}
-
-	ret = realm.set_current_period(period_id, &sync.get_sync_status());
-	if (ret < 0 ) {
-	  cerr << "Error setting current period " << period_id << ":" << cpp_strerror(-ret) << std::endl;
-	  return ret;
-	}
-      }
-      break;
     case OPT_PERIOD_LIST:
       {
 	list<string> periods;
@@ -1927,25 +2035,13 @@ int main(int argc, char **argv)
       break;
     case OPT_PERIOD_UPDATE:
       {
-	RGWRealm realm(realm_id, realm_name);
-	int ret = realm.init(g_ceph_context, store);
-	if (ret < 0 ) {
-	  cerr << "Error initializing realm " << cpp_strerror(-ret) << std::endl;
+        int ret = update_period(realm_id, realm_name, period_id, period_epoch,
+                                commit, remote, url, access_key, secret_key,
+                                formatter);
+	if (ret < 0) {
+          cerr << "period update failed: " << cpp_strerror(-ret) << std::endl;
 	  return ret;
 	}
-	epoch_t epoch = 0;
-	if (!period_epoch.empty()) {
-	  epoch = atoi(period_epoch.c_str());
-	}
-        RGWPeriod period(period_id, epoch);
-	ret = period.init(g_ceph_context, store);
-	if (ret < 0) {
-	  cerr << "period init failed: " << cpp_strerror(-ret) << std::endl;
-	  return -ret;
-	}
-        period.fork();
-        period.update();
-        period.store_info(false);
       }
       break;
     case OPT_REALM_CREATE:
@@ -2937,6 +3033,48 @@ int main(int argc, char **argv)
       cerr << "could not remove key: " << err_msg << std::endl;
       return -ret;
     }
+  case OPT_REALM_PULL:
+    {
+      RGWEnv env;
+      req_info info(g_ceph_context, &env);
+      info.method = "GET";
+      info.request_uri = "/admin/realm";
+
+      map<string, string> &params = info.args.get_params();
+      if (!realm_id.empty())
+        params["id"] = realm_id;
+      if (!realm_name.empty())
+        params["name"] = realm_name;
+
+      bufferlist bl;
+      JSONParser p;
+      int ret = send_to_remote_or_url(remote, url, access_key, secret_key,
+                                      info, bl, p);
+      if (ret < 0) {
+        cerr << "request failed: " << cpp_strerror(-ret) << std::endl;
+        return ret;
+      }
+      RGWRealm realm;
+      realm.init(g_ceph_context, store, false);
+      try {
+        decode_json_obj(realm, &p);
+      } catch (JSONDecoder::err& e) {
+        cout << "failed to decode JSON response: " << e.message << std::endl;
+        return -EINVAL;
+      }
+      ret = realm.create(false);
+      if (ret < 0) {
+        cerr << "Error storing realm " << realm.get_id() << ": "
+            << cpp_strerror(ret) << std::endl;
+        return ret;
+      }
+
+      encode_json("realm", realm, formatter);
+      formatter->flush(cout);
+      cout << std::endl;
+    }
+    return 0;
+
   case OPT_PERIOD_PUSH:
     {
       RGWEnv env;
@@ -2964,7 +3102,7 @@ int main(int argc, char **argv)
       jf.flush(bl);
 
       JSONParser p;
-      ret = send_to_remote_gateway(url, info, p, bl);
+      ret = send_to_remote_gateway(url, info, bl, p);
       if (ret < 0) {
         cerr << "request failed: " << cpp_strerror(-ret) << std::endl;
         return ret;
@@ -2979,27 +3117,19 @@ int main(int argc, char **argv)
       info.request_uri = "/admin/realm/period";
 
       map<string, string> &params = info.args.get_params();
+      if (!realm_id.empty())
+        params["realm_id"] = realm_id;
+      if (!realm_name.empty())
+        params["realm_name"] = realm_name;
       if (!period_id.empty())
         params["period_id"] = period_id;
       if (!period_epoch.empty())
         params["epoch"] = period_epoch;
 
-      int ret = 0;
-
       bufferlist bl;
       JSONParser p;
-      if (!url.empty()) {
-        if (access_key.empty() || secret_key.empty()) {
-          cerr << "An --access-key and --secret must be provided with --url." << std::endl;
-          return -EINVAL;
-        }
-        RGWAccessKey key;
-        key.id = access_key;
-        key.key = secret_key;
-        ret = send_to_url(url, key, info, p, bl);
-      } else {
-        ret = send_to_remote_gateway(remote, info, p, bl);
-      }
+      int ret = send_to_remote_or_url(remote, url, access_key, secret_key,
+                                      info, bl, p);
       if (ret < 0) {
         cerr << "request failed: " << cpp_strerror(-ret) << std::endl;
         return ret;
@@ -3026,6 +3156,44 @@ int main(int argc, char **argv)
       cout << std::endl;
     }
     return 0;
+  case OPT_PERIOD_UPDATE:
+    {
+      int ret = update_period(realm_id, realm_name, period_id, period_epoch,
+                              commit, remote, url, access_key, secret_key,
+                              formatter);
+      if (ret < 0) {
+        cerr << "period update failed: " << cpp_strerror(-ret) << std::endl;
+        return ret;
+      }
+    }
+    return 0;
+  case OPT_PERIOD_COMMIT:
+    {
+      // read realm and staging period
+      RGWRealm realm(realm_id, realm_name);
+      int ret = realm.init(g_ceph_context, store);
+      if (ret < 0) {
+        cerr << "Error initializing realm: " << cpp_strerror(-ret) << std::endl;
+        return ret;
+      }
+      RGWPeriod period(RGWPeriod::get_staging_id(realm.get_id()), 1);
+      ret = period.init(g_ceph_context, store, realm.get_id());
+      if (ret < 0) {
+        cerr << "period init failed: " << cpp_strerror(-ret) << std::endl;
+        return ret;
+      }
+      ret = commit_period(realm, period, remote, url, access_key, secret_key);
+      if (ret < 0) {
+        cerr << "failed to commit period: " << cpp_strerror(-ret) << std::endl;
+        return ret;
+      }
+
+      encode_json("period", period, formatter);
+      formatter->flush(cout);
+      cout << std::endl;
+    }
+    return 0;
+
   default:
     output_user_info = false;
   }
