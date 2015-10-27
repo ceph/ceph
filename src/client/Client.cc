@@ -8090,6 +8090,15 @@ int Client::_fsync(Inode *in, bool syncdataonly)
       flushed_metadata = true;
   } else ldout(cct, 10) << "no metadata needs to commit" << dendl;
 
+  if (!syncdataonly && !in->unsafe_ops.empty()) {
+    MetaRequest *req = in->unsafe_ops.back();
+    ldout(cct, 15) << "waiting on unsafe requests, last tid " << req->get_tid() <<  dendl;
+
+    req->get();
+    wait_on_list(req->waitfor_safe);
+    put_request(req);
+  }
+
   if (object_cacher_completion) { // wait on a real reply instead of guessing
     client_lock.Unlock();
     lock.Lock();
@@ -8106,21 +8115,6 @@ int Client::_fsync(Inode *in, bool syncdataonly)
 		     << " uncommitted, waiting" << dendl;
       wait_on_list(in->waitfor_commit);
     }
-  }
-
-  if (!in->unsafe_ops.empty()) {
-    MetaRequest *req = in->unsafe_ops.back();
-    uint64_t last_tid = req->get_tid();
-    ldout(cct, 15) << "waiting on unsafe requests, last tid " << last_tid <<  dendl;
-
-    do {
-      req->get();
-      wait_on_list(req->waitfor_safe);
-      put_request(req);
-      if (in->unsafe_ops.empty())
-	break;
-      req = in->unsafe_ops.front();
-    } while (req->tid < last_tid);
   }
 
   if (!r) {
