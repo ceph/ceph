@@ -2087,7 +2087,6 @@ ReplicatedPG::cache_result_t ReplicatedPG::maybe_handle_cache_detail(
 	  do_cache_redirect(op);
 	  return cache_result_t::HANDLED_REDIRECT;
 	}
-	assert(0 == "unreachable");
       }
       dout(20) << __func__ << " cache pool full, waiting" << dendl;
       block_write_on_full_cache(missing_oid, op);
