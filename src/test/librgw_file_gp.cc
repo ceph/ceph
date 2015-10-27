@@ -37,6 +37,7 @@ namespace {
   string secret_key("");
   struct rgw_fs *fs = nullptr;
 
+  bool do_pre_list = false;
   bool do_put = false;
   bool do_get = false;
   bool do_delete = false;
@@ -45,7 +46,10 @@ namespace {
   string object_name = "jocaml";
 
   struct rgw_file_handle *bucket_fh = nullptr;
-    struct rgw_file_handle *object_fh = nullptr;
+  struct rgw_file_handle *object_fh = nullptr;
+
+  typedef std::tuple<string,uint64_t, struct rgw_file_handle*> fid_type;
+  std::vector<fid_type> fids;
 
   std::uniform_int_distribution<uint8_t> uint_dist;
   std::mt19937 rng;
@@ -137,14 +141,47 @@ TEST(LibRGW, MOUNT) {
   ASSERT_NE(fs, nullptr);
 }
 
-TEST(LibRGW, OBJ_OPEN) {
+TEST(LibRGW, LOOKUP_BUCKET) {
   int ret = rgw_lookup(fs, fs->root_fh, bucket_name.c_str(), &bucket_fh,
 		      0 /* flags */);
   ASSERT_EQ(ret, 0);
-  ret = rgw_lookup(fs, bucket_fh, object_name.c_str(), &object_fh,
-		  0 /* flags */);
+}
+
+extern "C" {
+  static bool r2_cb(const char* name, void *arg, uint64_t offset) {
+    // don't need arg--it would point to fids
+    fids.push_back(fid_type(name, offset, nullptr));
+    return true; /* XXX ? */
+  }
+}
+
+TEST(LibRGW, LIST_OBJECTS) {
+  if (do_pre_list) {
+    /* list objects via readdir, bucketwise */
+    using std::get;
+
+    ldout(g_ceph_context, 0) << __func__ << " readdir on bucket "
+			     << bucket_name << dendl;
+    bool eof = false;
+    uint64_t offset = 0;
+    int ret = rgw_readdir(fs, bucket_fh, &offset, r2_cb, &fids,
+			  &eof);
+    for (auto& fid : fids) {
+      std::cout << "fname: " << get<0>(fid) << " fid: " << get<1>(fid)
+		<< std::endl;
+    }
+    ASSERT_EQ(ret, 0);
+  }
+}
+
+TEST(LibRGW, LOOKUP_OBJECT) {
+  int ret = rgw_lookup(fs, bucket_fh, object_name.c_str(), &object_fh,
+		      0 /* flags */);
   ASSERT_EQ(ret, 0);
-  ret = rgw_open(fs, object_fh, 0 /* flags */);
+}
+
+TEST(LibRGW, OBJ_OPEN) {
+  int ret = rgw_open(fs, object_fh, 0 /* flags */);
   ASSERT_EQ(ret, 0);
 }
 
@@ -219,6 +256,9 @@ int main(int argc, char *argv[])
     } else if (ceph_argparse_flag(args, arg_iter, "--put",
 					    (char*) nullptr)) {
       do_put = true;
+    } else if (ceph_argparse_flag(args, arg_iter, "--prelist",
+					    (char*) nullptr)) {
+      do_pre_list = true;
     } else {
       ++arg_iter;
     }
