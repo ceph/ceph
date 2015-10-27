@@ -120,6 +120,9 @@ AM_COMMON_CFLAGS = \
 if !CLANG
 	AM_COMMON_CFLAGS += -rdynamic
 endif
+if SOLARIS
+	AM_COMMON_CFLAGS += -Wno-unused-local-typedefs
+endif
 
 AM_CFLAGS = $(AM_COMMON_CFLAGS) $(HARDENING_CFLAGS)
 AM_CPPFLAGS = $(AM_COMMON_CPPFLAGS)
@@ -131,6 +134,11 @@ AM_CXXFLAGS = \
 	-Wno-invalid-offsetof $(HARDENING_CFLAGS)
 if !CLANG
 	AM_CXXFLAGS += -Wstrict-null-sentinel
+endif
+
+# solaris harding
+if SOLARIS
+	AM_CXXFLAGS += -lssp_nonshared
 endif
 
 # note: this is position dependant, it affects the -l options that

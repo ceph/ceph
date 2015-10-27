@@ -83,6 +83,11 @@ typedef off_t loff_t;
 typedef off_t off64_t;
 #endif
 
+#ifdef __sun
+typedef off_t loff_t;
+#endif
+
+
 // -- io helpers --
 
 template<class A, class B>
