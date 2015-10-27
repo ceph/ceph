@@ -2091,7 +2091,8 @@ int Pipe::read_message(Message **pm, AuthSessionHandler* auth_handler)
 
   ldout(msgr->cct,20) << "reader got " << front.length() << " + " << middle.length() << " + " << data.length()
 	   << " byte message" << dendl;
-  message = decode_message(msgr->cct, msgr->crcflags, header, footer, front, middle, data);
+  message = decode_message(msgr->cct, msgr->crcflags, header, footer,
+                           front, middle, data, connection_state.get());
   if (!message) {
     ret = -EINVAL;
     goto out_dethrottle;
