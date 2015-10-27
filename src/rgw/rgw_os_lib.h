@@ -75,4 +75,16 @@ public:
 
 }; /* RGWPutObj_OS_Lib */
 
+class RGWGetObj_OS_Lib : public RGWGetObj
+{
+public:
+  RGWGetObj_OS_Lib() {}
+}; /* RGWGetObj_OS_Lib */
+
+class RGWDeleteObj_OS_Lib : public RGWDeleteObj {
+public:
+  RGWDeleteObj_OS_Lib() {}
+  ~RGWDeleteObj_OS_Lib() {}
+}; /* RGWDeleteObj_OS_Lib */
+
 #endif /* RGW_OS_LIB_H */
