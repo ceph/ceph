@@ -416,6 +416,9 @@ public:
     s->info.request_params = "";
     s->info.domain = ""; /* XXX ? */
 
+    /* XXX required in RGWOp::execute() */
+    s->content_length = bl.length();
+
     // woo
     s->user = user;
 
@@ -425,7 +428,6 @@ public:
   virtual int get_data(buffer::list& _bl) {
     /* XXX for now, use sharing semantics */
     _bl.claim(bl);
-    _bl.hexdump(cout);
     return _bl.length();
   }
 
