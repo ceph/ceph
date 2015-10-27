@@ -137,7 +137,7 @@ RGWAsyncPutSystemObjAttrs::RGWAsyncPutSystemObjAttrs(RGWAioCompletionNotifier *c
 
 RGWOmapAppend::RGWOmapAppend(RGWAsyncRadosProcessor *_async_rados, RGWRados *_store, rgw_bucket& _pool, const string& _oid)
                       : RGWConsumerCR<string>(_store->ctx()), async_rados(_async_rados),
-                        store(_store), pool(_pool), oid(_oid), going_down(false), num_pending_entries(0)
+                        store(_store), pool(_pool), oid(_oid), going_down(false), num_pending_entries(0), total_entries(0)
 {
 }
 
@@ -365,6 +365,7 @@ void RGWOmapAppend::flush_pending() {
 }
 
 void RGWOmapAppend::append(const string& s) {
+  ++total_entries;
   pending_entries.push_back(s);
   if (++num_pending_entries >= OMAP_APPEND_MAX_ENTRIES) {
     flush_pending();
