@@ -33,6 +33,7 @@ function get_ceph() {
 
     test -d ceph || git clone ${git_ceph_url}
     cd ceph
+    git fetch --tags http://github.com/ceph/ceph
     git checkout ${sha1}
 }
 
