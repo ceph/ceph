@@ -181,7 +181,7 @@ static int decode_policy(CephContext *cct, bufferlist& bl, RGWAccessControlPolic
   }
   if (cct->_conf->subsys.should_gather(ceph_subsys_rgw, 15)) {
     RGWAccessControlPolicy_S3 *s3policy = static_cast<RGWAccessControlPolicy_S3 *>(policy);
-    ldout(cct, 15) << "Read AccessControlPolicy";
+    ldout(cct, 15) << __func__ << " Read AccessControlPolicy";
     s3policy->to_xml(*_dout);
     *_dout << dendl;
   }
