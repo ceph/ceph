@@ -23,7 +23,7 @@ export CEPH_CONF=/dev/null
 unset CEPH_ARGS
 MON_ID=a
 MON_DIR=$DIR/$MON_ID
-CEPH_MON=127.0.0.1:7110
+CEPH_MON=127.0.0.1:7110 # git grep '\<7110\>' : there must be only one
 TIMEOUT=360
 
 function setup() {
