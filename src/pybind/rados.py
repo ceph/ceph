@@ -278,6 +278,7 @@ def cstr(val, encoding="utf-8"):
     Create a C-style string from a Python string
 
     :param str val: Python string
+    :param encoding: Encoding to use
     :rtype: c_char_p
     """
     if val is None:
@@ -288,6 +289,24 @@ def cstr(val, encoding="utf-8"):
         return c_char_p(val)
     else:
         return c_char_p(val.encode(encoding))
+
+
+def decode_cstr(addr, size=-1, encoding="utf-8"):
+    """
+    Decode a C-style string into a Python string.
+
+    Return None if a the C string is a NULL pointer.
+
+    :param c_char_p addr: C-style string
+    :param int: String size (assume NUL-terminated if size is -1)
+    :param encoding: Encoding to use
+    :rtype: str or None
+    """
+    if not addr:
+        # NULL pointer
+        return None
+
+    return ctypes.string_at(addr, size).decode(encoding)
 
 
 class Rados(object):
@@ -411,7 +430,7 @@ Rados object in state %s." % self.state)
         # cretargs was allocated with fixed length; collapse return
         # list to eliminate any missing args
 
-        retargs = [a for a in cretargs if a is not None]
+        retargs = [decode_cstr(a) for a in cretargs if a is not None]
         self.parsed_args = args
         return retargs
 
@@ -447,7 +466,7 @@ Rados object in state %s." % self.state)
                                 (self.cluster, cstr(option), ret_buf,
                                 c_size_t(length)))
             if (ret == 0):
-                return ret_buf.value.decode("utf-8")
+                return decode_cstr(ret_buf)
             elif (ret == -errno.ENAMETOOLONG):
                 length = length * 2
             elif (ret == -errno.ENOENT):
@@ -501,7 +520,7 @@ Rados object in state %s." % self.state)
 
         if ret != 0:
             raise make_ex(ret, "error calling ping_monitor")
-        return my_outstr
+        return decode_cstr(my_outstr)
 
     def connect(self, timeout=0):
         """
@@ -704,7 +723,7 @@ Rados object in state %s." % self.state)
             else:
                 break
 
-        return [name for name in c_names.raw.decode("utf-8").split('\0') if len(name) > 0]
+        return [decode_cstr(name) for name in c_names.raw.split(b'\0') if len(name) > 0]
 
     def get_fsid(self):
         """
@@ -771,7 +790,7 @@ Rados object in state %s." % self.state)
 
         # copy returned memory (ctypes makes a copy, not a reference)
         my_outbuf = outbufp.contents[:(outbuflen.value)]
-        my_outs = outsp.contents[:(outslen.value)]
+        my_outs = decode_cstr(outsp.contents, outslen.value)
 
         # free callee's allocations
         if outbuflen.value:
@@ -800,7 +819,7 @@ Rados object in state %s." % self.state)
 
         # copy returned memory (ctypes makes a copy, not a reference)
         my_outbuf = outbufp.contents[:(outbuflen.value)]
-        my_outs = outsp.contents[:(outslen.value)]
+        my_outs = decode_cstr(outsp.contents, outslen.value)
 
         # free callee's allocations
         if outbuflen.value:
@@ -829,7 +848,7 @@ Rados object in state %s." % self.state)
 
         # copy returned memory (ctypes makes a copy, not a reference)
         my_outbuf = outbufp.contents[:(outbuflen.value)]
-        my_outs = outsp.contents[:(outslen.value)]
+        my_outs = decode_cstr(outsp.contents, outslen.value)
 
         # free callee's allocations
         if outbuflen.value:
@@ -888,7 +907,7 @@ class OmapIterator(Iterator):
             raise make_ex(ret, "error iterating over the omap")
         if key_.value is None:
             raise StopIteration()
-        key = key_.value.decode("utf-8")
+        key = decode_cstr(key_)
         val = None
         if val_.value is not None:
             val = ctypes.string_at(val_, len_)
@@ -930,9 +949,9 @@ class ObjectIterator(Iterator):
         if ret < 0:
             raise StopIteration()
 
-        key = None if key_.value is None else key_.value.decode("utf-8")
-        locator = None if locator_.value is None else locator_.value.decode("utf-8")
-        nspace = None if nspace_.value is None else nspace_.value.decode("utf-8")
+        key = decode_cstr(key_)
+        locator = decode_cstr(locator_)
+        nspace = decode_cstr(nspace_)
         return Object(self.ioctx, key, locator, nspace)
 
     def __del__(self):
@@ -969,7 +988,7 @@ class XattrIterator(Iterator):
 in '%s'" % self.oid)
         if name_.value is None:
             raise StopIteration()
-        name = ctypes.string_at(name_).decode("utf-8")
+        name = decode_cstr(name_)
         val = ctypes.string_at(val_, len_)
         return (name, val)
 
@@ -1025,7 +1044,7 @@ ioctx '%s'" % self.ioctx.name)
             elif (ret != -errno.ERANGE):
                 raise make_ex(ret, "rados_snap_get_name error")
             name_len = name_len * 2
-        snap = Snap(self.ioctx, name.value.decode("utf-8"), snap_id)
+        snap = Snap(self.ioctx, decode_cstr(name), snap_id)
         self.cur_snap = self.cur_snap + 1
         return snap
 

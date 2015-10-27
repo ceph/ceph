@@ -20,7 +20,7 @@ import ctypes
 import errno
 import sys
 
-from rados import cstr
+from rados import cstr, decode_cstr
 
 ANONYMOUS_AUID = 0xffffffffffffffff
 ADMIN_AUID = 0
@@ -343,7 +343,7 @@ class RBD(object):
             elif ret != -errno.ERANGE:
                 raise make_ex(ret, 'error listing images')
 
-        return [name for name in c_names.raw.decode("utf-8").split('\0') if len(name) > 0]
+        return [decode_cstr(name) for name in c_names.raw.split(b'\0') if len(name) > 0]
 
     def remove(self, ioctx, name):
         """
@@ -1025,7 +1025,7 @@ written." % (self.name, ret, length))
         cookies = [cookie.decode("utf-8") for cookie in c_cookies.raw[:cookies_size.value - 1].split(b'\0')]
         addrs = [addr.decode("utf-8") for addr in c_addrs.raw[:addrs_size.value - 1].split(b'\0')]
         return {
-            'tag'       : c_tag.value.decode("utf-8"),
+            'tag'       : decode_cstr(c_tag),
             'exclusive' : exclusive.value == 1,
             'lockers'   : list(zip(clients, cookies, addrs)),
             }
@@ -1125,7 +1125,7 @@ class SnapIterator(Iterable):
             yield {
                 'id'   : self.snaps[i].id,
                 'size' : self.snaps[i].size,
-                'name' : self.snaps[i].name.decode("utf-8"),
+                'name' : decode_cstr(self.snaps[i].name),
                 }
 
     def __del__(self):

@@ -660,6 +660,6 @@ class TestCommand(object):
                                                timeout=30)
         eq(ret, 0)
         assert len(err) > 0
-        out = json.loads(err.decode("utf-8"))
+        out = json.loads(err)
         eq(out['blocksize'], cmd['size'])
         eq(out['bytes_written'], cmd['count'])
