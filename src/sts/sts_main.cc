@@ -862,6 +862,7 @@ int main(int argc, const char **argv)
 
   STSStore *store = new STSStore();
   rgw_rest_init(g_ceph_context, store->hostnames);
+  r = rgw_perf_start(g_ceph_context);
 
   mutex.Lock();
   init_timer.cancel_all_events();
@@ -882,8 +883,19 @@ int main(int argc, const char **argv)
     apis_map[*li] = true;
   }
 
-  if (apis_map.count("sts") > 0)
-    rest.register_default_mgr(set_logging(new RGWRESTMgr_STS));
+/* XXX todo: check: radosgw - does it work if only "s3" is regsitered?
+* It "shouldn't" even though maybe it should.
+* that's because RGWRESTMgr::get_resource_mgr()
+* checks resources_by_size.empty()
+* and does NOT return default_mgr if resources_by_size == 0
+* and "s3" doesn't register any resources; only
+* "swift", "admin", "swift_auth" do that. 
+*/
+  if (apis_map.count("sts") > 0) {
+    RGWRESTMgr *mgr = set_logging(new RGWRESTMgr_STS);
+    rest.register_default_mgr(mgr);
+    rest.register_resource("stupid", mgr);
+  }
 
   r = signal_fd_init();
   if (r < 0) {

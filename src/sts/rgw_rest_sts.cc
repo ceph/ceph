@@ -382,23 +382,31 @@ int RGWPostObj_STS::get_policy()
 }
 #endif
 
-#if 0
 class RGWGetPost_STS : public RGWOp {
 protected:
   bool get_flag;
 public:
   RGWGetPost_STS(bool _gf) : get_flag(_gf) {}
+  virtual int verify_permission();
+  virtual void execute();
+  virtual const string name() { return get_flag ? "get_sts" : "post_sts"; }
 };
-#endif
+
+int RGWGetPost_STS::verify_permission()
+{
+	// XXX doubt it's this simple.
+	return 0;
+}
+
+void RGWGetPost_STS::execute()
+{
+	// XXX something!
+}
 
 RGWOp *RGWHandler_STS::get_obj_op(bool get_data)
 {
-#if 0
   RGWGetPost_STS *get_obj_op = new RGWGetPost_STS(get_data);
   return get_obj_op;
-#else
-  return NULL;
-#endif
 }
 
 RGWOp *RGWHandler_STS::op_get()
@@ -477,11 +485,7 @@ int RGWHandler_STS::init(RGWRados *store, struct req_state *s, RGWClientIO *cio)
 
   s->dialect = "sts";
 
-#if 0
-  return RGWHandler_ObjStore::init(store, s, cio);
-#else
-  return 0;
-#endif
+  return RGWHandler::init(store, s, cio);
 }
 
 
@@ -740,7 +744,8 @@ int RGWHandler_STS::authorize()
 
   return  0;
 #else
-  return -EPERM;
+// XXX do something smarter here...
+  return 0 * -EPERM;
 #endif
 }
 
