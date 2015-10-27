@@ -27,7 +27,7 @@
 #include <vector>
 #include <map>
 
-#if defined(DARWIN) || defined(__FreeBSD__)
+#if defined(DARWIN) || defined(__FreeBSD__) || defined(__sun)
 #include <sys/statvfs.h>
 #else
 #include <sys/vfs.h>    /* or <sys/statfs.h> */
