@@ -258,7 +258,7 @@ Message *decode_message(CephContext *cct, int crcflags,
 			ceph_msg_header& header,
 			ceph_msg_footer& footer,
 			bufferlist& front, bufferlist& middle,
-			bufferlist& data)
+			bufferlist& data, Connection* conn)
 {
   // verify crc
   if (crcflags & MSG_CRC_HEADER) {
@@ -752,6 +752,7 @@ Message *decode_message(CephContext *cct, int crcflags,
     return 0;
   }
 
+  m->set_connection(conn);
   m->set_header(header);
   m->set_footer(footer);
   m->set_payload(front);
@@ -830,6 +831,6 @@ Message *decode_message(CephContext *cct, int crcflags, bufferlist::iterator& p)
   ::decode(fr, p);
   ::decode(mi, p);
   ::decode(da, p);
-  return decode_message(cct, crcflags, h, f, fr, mi, da);
+  return decode_message(cct, crcflags, h, f, fr, mi, da, nullptr);
 }
 
