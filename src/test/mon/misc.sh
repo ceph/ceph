@@ -21,7 +21,7 @@ function run() {
     local dir=$1
     shift
 
-    export CEPH_MON="127.0.0.1:7102"
+    export CEPH_MON="127.0.0.1:7102" # git grep '\<7102\>' : there must be only one
     export CEPH_ARGS
     CEPH_ARGS+="--fsid=$(uuidgen) --auth-supported=none "
     CEPH_ARGS+="--mon-host=$CEPH_MON "
@@ -89,8 +89,8 @@ function TEST_mon_add_to_single_mon() {
     local dir=$1
 
     fsid=$(uuidgen)
-    MONA=127.0.0.1:7117
-    MONB=127.0.0.1:7118
+    MONA=127.0.0.1:7117 # git grep '\<7117\>' : there must be only one
+    MONB=127.0.0.1:7118 # git grep '\<7118\>' : there must be only one
     CEPH_ARGS_orig=$CEPH_ARGS
     CEPH_ARGS="--fsid=$fsid --auth-supported=none "
     CEPH_ARGS+="--mon-initial-members=a "
