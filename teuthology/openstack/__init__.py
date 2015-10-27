@@ -359,8 +359,8 @@ class TeuthologyOpenStack(OpenStack):
         else:
             upload = ''
         log.info("""
-web interface: http://{ip}:8081/
-ssh access   : ssh {identity}{username}@{ip} # logs in /usr/share/nginx/html
+pulpito web interface: http://{ip}:8081/
+ssh access           : ssh {identity}{username}@{ip} # logs in /usr/share/nginx/html
 {upload}""".format(ip=ip,
                    username=self.username,
                    identity=identity,
