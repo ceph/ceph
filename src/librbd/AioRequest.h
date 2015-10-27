@@ -128,7 +128,6 @@ namespace librbd {
     virtual bool should_complete(int r);
     virtual void send();
 
-  private:
     /**
      * Writes go through the following state machine to deal with
      * layering and the object map:
@@ -163,6 +162,7 @@ namespace librbd {
      * The write starts in _WRITE_GUARD or _FLAT depending on whether or not
      * there is a parent overlap.
      */
+  protected:
     enum write_state_d {
       LIBRBD_AIO_WRITE_GUARD,
       LIBRBD_AIO_WRITE_COPYUP,
@@ -172,11 +172,11 @@ namespace librbd {
       LIBRBD_AIO_WRITE_ERROR
     };
 
-  protected:
     write_state_d m_state;
     librados::ObjectWriteOperation m_write;
     uint64_t m_snap_seq;
     std::vector<librados::snap_t> m_snaps;
+    bool m_object_exist;
 
     virtual void add_write_ops(librados::ObjectWriteOperation *wr) = 0;
     virtual const char* get_write_type() const = 0;
@@ -185,11 +185,13 @@ namespace librbd {
     virtual bool post_object_map_update() {
       return false;
     }
+    virtual void send_write();
+    virtual void send_write_op(bool write_guard);
+    virtual void handle_write_guard();
 
   private:
     void send_pre();
     bool send_post();
-    void send_write();
     void send_copyup();
   };
 
@@ -264,6 +266,7 @@ namespace librbd {
     }
 
     virtual void guard_write();
+    virtual void send_write();
 
   private:
     uint8_t m_object_state;
