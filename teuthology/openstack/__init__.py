@@ -70,6 +70,19 @@ class OpenStack(object):
         self.up_string = "UNKNOWN"
         self.teuthology_suite = 'teuthology-suite'
 
+    def set_provider(self):
+        if 'OS_AUTH_URL' not in os.environ:
+            raise Exception('no OS_AUTH_URL environment variable')
+        providers = (('cloud.ovh.net', 'ovh'),
+                     ('entercloudsuite.com', 'entercloudsuite'),
+                     ('rackspacecloud.com', 'rackspace'))
+        self.provider = None
+        for (pattern, provider) in providers:
+            if pattern in os.environ['OS_AUTH_URL']:
+                self.provider = provider
+                break
+        return self.provider
+
     @staticmethod
     def get_value(result, field):
         """
@@ -443,16 +456,7 @@ ssh access   : ssh {identity}{username}@{ip} # logs in /usr/share/nginx/html
         except subprocess.CalledProcessError:
             log.exception("openstack server list")
             raise Exception("verify openrc.sh has been sourced")
-        if 'OS_AUTH_URL' not in os.environ:
-            raise Exception('no OS_AUTH_URL environment variable')
-        providers = (('cloud.ovh.net', 'ovh'),
-                     ('entercloudsuite.com', 'entercloudsuite'),
-                     ('rackspacecloud.com', 'rackspace'))
-        self.provider = None
-        for (pattern, provider) in providers:
-            if pattern in os.environ['OS_AUTH_URL']:
-                self.provider = provider
-                break
+        self.set_provider()
 
     def flavor(self):
         """
