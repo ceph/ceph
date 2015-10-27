@@ -271,9 +271,6 @@ int rgw_readdir(struct rgw_fs *rgw_fs,
 {
   int rc;
 
-  /* XXXX remove uri, deal with bucket and object names */
-  string uri;
-
   RGWLibFS *fs = static_cast<RGWLibFS*>(rgw_fs->fs_private);
   CephContext* cct = static_cast<CephContext*>(rgw_fs->rgw);
 
@@ -295,7 +292,8 @@ int rgw_readdir(struct rgw_fs *rgw_fs,
     /*
      * bucket?
      */
-    uri += "/";
+    /* XXXX remove uri, deal with bucket and object names */
+    string uri = "/" + parent->bucket_name() + "/";
     RGWListBucketRequest req(cct, fs->get_user(), uri, rcb, cb_arg, offset);
     rc = librgw.get_fe()->execute_req(&req);
 
