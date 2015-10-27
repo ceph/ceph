@@ -428,6 +428,7 @@ ssh access           : ssh {identity}{username}@{ip} # logs in /usr/share/nginx/
         client_args = {
             'user_at_host': '@'.join((self.username, ip)),
             'retry': False,
+            'timeout': 240,
         }
         if self.key_filename:
             log.debug("ssh overriding key with " + self.key_filename)
@@ -438,11 +439,11 @@ ssh access           : ssh {identity}{username}@{ip} # logs in /usr/share/nginx/
         out = ''
         try:
             out = stdout.read()
-            log.debug('teardown stdout ' + command + ' ' + out)
+            log.debug('ssh stdout ' + command + ' ' + out)
         except Exception:
-            log.exception('teardown ' + command + ' failed')
+            log.exception('ssh ' + command + ' failed')
         err = stderr.read()
-        log.debug('teardown stderr ' + command + ' ' + err)
+        log.debug('ssh stderr ' + command + ' ' + err)
         return out + ' ' + err
 
     def verify_openstack(self):
