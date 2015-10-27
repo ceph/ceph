@@ -2570,6 +2570,30 @@ void Client::resend_unsafe_requests(MetaSession *session)
   }
 }
 
+void Client::wait_unsafe_requests()
+{
+  list<MetaRequest*> last_unsafe_reqs;
+  for (map<mds_rank_t,MetaSession*>::iterator p = mds_sessions.begin();
+       p != mds_sessions.end();
+       ++p) {
+    MetaSession *s = p->second;
+    if (!s->unsafe_requests.empty()) {
+      MetaRequest *req = s->unsafe_requests.back();
+      req->get();
+      last_unsafe_reqs.push_back(req);
+    }
+  }
+
+  for (list<MetaRequest*>::iterator p = last_unsafe_reqs.begin();
+       p != last_unsafe_reqs.end();
+       ++p) {
+    MetaRequest *req = *p;
+    if (req->unsafe_item.is_on_list())
+      wait_on_list(req->waitfor_safe);
+    put_request(req);
+  }
+}
+
 void Client::kick_requests_closed(MetaSession *session)
 {
   ldout(cct, 10) << "kick_requests_closed for mds." << session->mds_num << dendl;
@@ -8068,11 +8092,11 @@ int Client::fsync(int fd, bool syncdataonly)
 int Client::_fsync(Inode *in, bool syncdataonly)
 {
   int r = 0;
-  bool flushed_metadata = false;
   Mutex lock("Client::_fsync::lock");
   Cond cond;
   bool done = false;
   C_SafeCond *object_cacher_completion = NULL;
+  ceph_tid_t flush_tid = 0;
   InodeRef tmp_ref;
 
   ldout(cct, 3) << "_fsync on " << *in << " " << (syncdataonly ? "(dataonly)":"(data+metadata)") << dendl;
@@ -8087,7 +8111,7 @@ int Client::_fsync(Inode *in, bool syncdataonly)
   if (!syncdataonly && (in->dirty_caps & ~CEPH_CAP_ANY_FILE_WR)) {
     check_caps(in, true);
     if (in->flushing_caps)
-      flushed_metadata = true;
+      flush_tid = last_flush_tid;
   } else ldout(cct, 10) << "no metadata needs to commit" << dendl;
 
   if (!syncdataonly && !in->unsafe_ops.empty()) {
@@ -8118,8 +8142,8 @@ int Client::_fsync(Inode *in, bool syncdataonly)
   }
 
   if (!r) {
-    if (flushed_metadata)
-      wait_sync_caps(in, last_flush_tid);
+    if (flush_tid > 0)
+      wait_sync_caps(in, flush_tid);
 
     ldout(cct, 10) << "ino " << in->ino << " has no uncommitted writes" << dendl;
   } else {
@@ -8616,12 +8640,14 @@ int Client::_sync_fs()
 {
   ldout(cct, 10) << "_sync_fs" << dendl;
 
-  // wait for unsafe mds requests
-  // FIXME
-  
   // flush caps
   flush_caps();
-  wait_sync_caps(last_flush_tid);
+  ceph_tid_t flush_tid = last_flush_tid;
+
+  // wait for unsafe mds requests
+  wait_unsafe_requests();
+
+  wait_sync_caps(flush_tid);
 
   // flush file data
   // FIXME
