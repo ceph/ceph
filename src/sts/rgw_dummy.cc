@@ -212,3 +212,16 @@ bool RGWAccessControlPolicy::verify_permission(string& uid, int user_perm_mask, 
 
   return (perm == acl_perm);
 }
+
+int RGWOp::init_quota()
+{
+	/* if (s->system_request) */
+  return 0;
+}
+
+int RGWOp::verify_op_mask()
+{
+//	can look at:	op_mask & s->user.op_mask
+//	and return -EPERM	if not accepted.
+	return 0;
+}
