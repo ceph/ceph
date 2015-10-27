@@ -174,7 +174,7 @@ int rgw_truncate(struct rgw_fs *rgw_fs,
 /*
    open file
 */
-int rgw_open(struct rgw_fs *rgw_fs, struct rgw_file_handle *fh,
+int rgw_open(struct rgw_fs *rgw_fs, struct rgw_file_handle *parent_fh,
 	    uint32_t flags);
 
 /*

@@ -44,7 +44,8 @@ namespace {
   string bucket_name = "sorry_dave";
   string object_name = "jocaml";
 
-  struct rgw_file_handle *fh = nullptr;
+  struct rgw_file_handle *bucket_fh = nullptr;
+    struct rgw_file_handle *object_fh = nullptr;
 
   std::uniform_int_distribution<uint8_t> uint_dist;
   std::mt19937 rng;
@@ -137,17 +138,20 @@ TEST(LibRGW, MOUNT) {
 }
 
 TEST(LibRGW, OBJ_OPEN) {
-  int ret = rgw_lookup(fs, fs->root_fh, bucket_name.c_str(), &fh,
+  int ret = rgw_lookup(fs, fs->root_fh, bucket_name.c_str(), &bucket_fh,
 		      0 /* flags */);
   ASSERT_EQ(ret, 0);
-  ret = rgw_open(fs, fh, 0 /* flags */);
+  ret = rgw_lookup(fs, bucket_fh, object_name.c_str(), &object_fh,
+		  0 /* flags */);
+  ASSERT_EQ(ret, 0);
+  ret = rgw_open(fs, object_fh, 0 /* flags */);
   ASSERT_EQ(ret, 0);
 }
 
 TEST(LibRGW, PUT_OBJECT) {
   if (do_put) {
     string data = "hi mom"; // fix this
-    int ret = rgw_write(fs, fh, 0, data.length(), (void*) data.c_str());
+    int ret = rgw_write(fs, object_fh, 0, data.length(), (void*) data.c_str());
     ASSERT_EQ(ret, 0);
   }
 }
@@ -157,9 +161,11 @@ TEST(LibRGW, GET_OBJECT) {
 }
 
 TEST(LibRGW, CLEANUP) {
-  int ret = rgw_close(fs, fh, 0 /* flags */);
+  int ret = rgw_close(fs, object_fh, 0 /* flags */);
   ASSERT_EQ(ret, 0);
-  ret = rgw_fh_rele(fs, fh, 0 /* flags */);
+  ret = rgw_fh_rele(fs, object_fh, 0 /* flags */);
+  ASSERT_EQ(ret, 0);
+  ret = rgw_fh_rele(fs, bucket_fh, 0 /* flags */);
   ASSERT_EQ(ret, 0);
 }
 
