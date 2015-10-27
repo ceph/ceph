@@ -282,4 +282,7 @@
 /* Define if you have spdk */
 #cmakedefine HAVE_SPDK 1
 
+/* Defined if curl has curl_multi_wait */
+#cmakedefine HAVE_CURL_MULTI_WAIT
+
 #endif /* CONFIG_H */

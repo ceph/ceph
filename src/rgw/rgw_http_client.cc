@@ -257,7 +257,7 @@ RGWHTTPClient::~RGWHTTPClient()
 }
 
 
-#if HAVE_CURL_MULTI_WAIT
+#ifdef HAVE_CURL_MULTI_WAIT
 
 static int do_curl_wait(CephContext *cct, CURLM *handle, int signal_fd)
 {

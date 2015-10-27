@@ -47,6 +47,7 @@ link_directories(
 include(CheckIncludeFiles)
 include(CheckIncludeFileCXX)
 include(CheckFunctionExists)
+include(CheckLibraryExists)
 
 CHECK_FUNCTION_EXISTS(fallocate CEPH_HAVE_FALLOCATE)
 CHECK_FUNCTION_EXISTS(posix_fadvise HAVE_POSIX_FADVISE)
@@ -155,6 +156,8 @@ if(WITH_SPDK)
   find_package(dpdk REQUIRED)
   set(HAVE_SPDK TRUE)
 endif(WITH_SPDK)
+
+CHECK_LIBRARY_EXISTS (curl curl_multi_wait "" HAVE_CURL_MULTI_WAIT)
 
 find_package(blkid REQUIRED)
 set(HAVE_LIBBLKID ${BLKID_FOUND})
