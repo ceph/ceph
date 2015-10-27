@@ -549,12 +549,15 @@ class RGWFetchAllMetaCR : public RGWCoroutine {
   RGWContinuousLeaseCR *lease_cr;
   bool lost_lock;
 
+  map<uint32_t, rgw_meta_sync_marker>& markers;
+
 public:
-  RGWFetchAllMetaCR(RGWRados *_store, RGWHTTPManager *_mgr, RGWAsyncRadosProcessor *_async_rados, int _num_shards) : RGWCoroutine(_store->ctx()), store(_store),
+  RGWFetchAllMetaCR(RGWRados *_store, RGWHTTPManager *_mgr, RGWAsyncRadosProcessor *_async_rados, int _num_shards,
+                    map<uint32_t, rgw_meta_sync_marker>& _markers) : RGWCoroutine(_store->ctx()), store(_store),
                                                       http_manager(_mgr),
 						      async_rados(_async_rados),
 						      num_shards(_num_shards),
-						      req_ret(0), entries_index(NULL), lease_cr(NULL), lost_lock(false) {
+						      req_ret(0), entries_index(NULL), lease_cr(NULL), lost_lock(false), markers(_markers) {
   }
 
   ~RGWFetchAllMetaCR() {
@@ -646,6 +649,14 @@ public:
 	}
       }
       yield entries_index->finish();
+
+      for (map<uint32_t, rgw_meta_sync_marker>::iterator iter = markers.begin(); iter != markers.end(); ++iter) {
+        int shard_id = (int)iter->first;
+        rgw_meta_sync_marker& marker = iter->second;
+        marker.total_entries = entries_index->get_total_entries(shard_id);
+        spawn(new RGWSimpleRadosWriteCR<rgw_meta_sync_marker>(async_rados, store, store->get_zone_params().log_pool,
+                                                              RGWMetaSyncStatusManager::shard_obj_name(shard_id), marker), true);
+      }
 
       drain_all_but(1); /* the lease cr still needs to run */
 
@@ -1385,7 +1396,7 @@ int RGWRemoteMetaLog::run_sync(int num_shards, rgw_meta_sync_status& sync_status
     switch ((rgw_meta_sync_info::SyncState)sync_status.sync_info.state) {
       case rgw_meta_sync_info::StateBuildingFullSyncMaps:
         ldout(store->ctx(), 20) << __func__ << "(): building full sync maps" << dendl;
-        r = run(new RGWFetchAllMetaCR(store, &http_manager, async_rados, num_shards));
+        r = run(new RGWFetchAllMetaCR(store, &http_manager, async_rados, num_shards, sync_status.sync_markers));
         if (r == -EBUSY) {
           backoff.backoff_sleep();
           continue;
