@@ -139,7 +139,7 @@ openstack keypair delete {key_name} || true
         """.format(key_name=self.key_name,
                    name=self.name))
 
-    def test_create(self, capsys):
+    def test_create(self, caplog):
         teuthology_argv = [
             '--suite', 'upgrade/hammer',
             '--dry-run',
@@ -176,8 +176,7 @@ openstack keypair delete {key_name} || true
         assert "clone=git clone" in variables
         assert os.environ['OS_AUTH_URL'] in variables
 
-        out, err = capsys.readouterr()
-        assert " ".join(teuthology_argv) in out
+        assert " ".join(teuthology_argv) in caplog.text()
 
         if self.can_create_floating_ips:
             ip = teuthology.get_floating_ip(self.name)
