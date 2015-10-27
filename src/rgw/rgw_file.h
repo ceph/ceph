@@ -497,4 +497,59 @@ public:
 
 }; /* RGWGetObjRequest */
 
+/*
+  delete object
+*/
+
+class RGWDeleteObjRequest : public RGWLibRequest,
+			    public RGWDeleteObj_OS_Lib /* RGWOp */
+{
+public:
+  const std::string& bucket_name;
+  const std::string& obj_name;
+
+  RGWDeleteObjRequest(CephContext* _cct, RGWUserInfo *_user,
+		      const std::string& _bname, const std::string& _oname)
+    : RGWLibRequest(_cct, _user), bucket_name(_bname), obj_name(_oname) {
+    magic = 77;
+    op = this;
+  }
+
+  virtual bool only_bucket() { return true; }
+
+  virtual int op_init() {
+    // assign store, s, and dialect_handler
+    RGWObjectCtx* rados_ctx
+      = static_cast<RGWObjectCtx*>(get_state()->obj_ctx);
+    // framework promises to call op_init after parent init
+    assert(rados_ctx);
+    RGWOp::init(rados_ctx->store, get_state(), this);
+    op = this; // assign self as op: REQUIRED
+    return 0;
+  }
+
+  virtual int header_init() {
+
+    struct req_state* s = get_state();
+    s->info.method = "DELETE";
+    s->op = OP_DELETE;
+
+    /* XXX derp derp derp */
+    string uri = "/" + bucket_name + "/" + obj_name;
+    s->relative_uri = uri;
+    s->info.request_uri = uri; // XXX
+    s->info.effective_uri = uri;
+    s->info.request_params = "";
+    s->info.domain = ""; /* XXX ? */
+
+    // woo
+    s->user = user;
+
+    return 0;
+  }
+
+  virtual void send_response() {}
+
+}; /* RGWDeleteObjRequest */
+
 #endif /* RGW_FILE_H */
