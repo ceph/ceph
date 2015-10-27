@@ -439,6 +439,62 @@ public:
     return 0;
   }
 
-}; /* RGWPubObjRequest */
+}; /* RGWPutObjRequest */
+
+/*
+  get object
+*/
+
+class RGWGetObjRequest : public RGWLibRequest,
+			 public RGWGetObj_OS_Lib /* RGWOp */
+{
+public:
+  const std::string& bucket_name;
+  const std::string& obj_name;
+  buffer::list bl;
+
+  RGWGetObjRequest(CephContext* _cct, RGWUserInfo *_user,
+		  const std::string& _bname, const std::string& _oname)
+    : RGWLibRequest(_cct, _user), bucket_name(_bname), obj_name(_oname) {
+    magic = 76;
+    op = this;
+  }
+
+  buffer::list& get_bl() { return bl; }
+
+  virtual bool only_bucket() { return false; }
+
+  virtual int op_init() {
+    // assign store, s, and dialect_handler
+    RGWObjectCtx* rados_ctx
+      = static_cast<RGWObjectCtx*>(get_state()->obj_ctx);
+    // framework promises to call op_init after parent init
+    assert(rados_ctx);
+    RGWOp::init(rados_ctx->store, get_state(), this);
+    op = this; // assign self as op: REQUIRED
+    return 0;
+  }
+
+  virtual int header_init() {
+
+    struct req_state* s = get_state();
+    s->info.method = "GET";
+    s->op = OP_GET;
+
+    /* XXX derp derp derp */
+    string uri = "/" + bucket_name + "/" + obj_name;
+    s->relative_uri = uri;
+    s->info.request_uri = uri; // XXX
+    s->info.effective_uri = uri;
+    s->info.request_params = "";
+    s->info.domain = ""; /* XXX ? */
+
+    // woo
+    s->user = user;
+
+    return 0;
+  }
+
+}; /* RGWGetObjRequest */
 
 #endif /* RGW_FILE_H */
