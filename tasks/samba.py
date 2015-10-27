@@ -161,7 +161,7 @@ def task(ctx, config):
         smbd_cmd = [
                 'sudo',
                 'daemon-helper',
-                'kill',
+                'term',
                 'nostdin',
                 '/usr/local/samba/sbin/smbd',
                 '-F',
@@ -227,6 +227,7 @@ def task(ctx, config):
                         'lsof',
                         backend,
                         ],
+                    check_status=False
                     )
                 remote.run(
                     args=[
@@ -235,6 +236,7 @@ def task(ctx, config):
                         '-M',
                         backend,
                         ],
+                    check_status=False
                     )
             except Exception:
                 log.exception("Saw exception")
