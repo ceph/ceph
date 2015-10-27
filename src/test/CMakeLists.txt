@@ -370,6 +370,9 @@ add_dependencies(check rados_striper)
 add_test(NAME osd_bench COMMAND bash ${CMAKE_SOURCE_DIR}/src/test/osd/osd-bench.sh)
 add_dependencies(check osd_bench)
 
+add_test(NAME osd_reactivate COMMAND bash ${CMAKE_SOURCE_DIR}/src/test/osd/osd-reactivate.sh)
+add_dependencies(check osd_reactivate)
+
 add_test(NAME test_erasure_code COMMAND bash ${CMAKE_SOURCE_DIR}/src/test/erasure-code/test-erasure-code.sh)
 add_dependencies(check test_erasure_code)
 
