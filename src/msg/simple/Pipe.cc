@@ -935,7 +935,12 @@ int Pipe::connect()
 
   // identify peer
   {
+#if defined(__linux__) || defined(DARWIN) || defined(__FreeBSD__)
     bufferptr p(sizeof(paddr) * 2);
+#else
+    int wirelen = sizeof(__u32) * 2 + sizeof(ceph_sockaddr_storage);
+    bufferptr p(wirelen * 2);
+#endif
     addrbl.push_back(p);
   }
   if (tcp_read(addrbl.c_str(), addrbl.length()) < 0) {
