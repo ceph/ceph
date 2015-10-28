@@ -309,10 +309,40 @@ int rgw_readdir(struct rgw_fs *rgw_fs,
    read data from file
 */
 int rgw_read(struct rgw_fs *rgw_fs,
-	     struct rgw_file_handle *fh, uint64_t offset,
-	     size_t length, void *buffer)
+	    struct rgw_file_handle *fh, uint64_t offset,
+	    size_t length, size_t *bytes_read, void *buffer)
 {
-  return 0;
+  CephContext* cct = static_cast<CephContext*>(rgw_fs->rgw);
+  RGWLibFS *fs = static_cast<RGWLibFS*>(rgw_fs->fs_private);
+  RGWFileHandle* rgw_fh = get_rgwfh(fh);
+
+  if (! rgw_fh->is_object())
+    return EINVAL;
+
+  size_t nread = 0;
+
+  /* XXX testing only */
+  buffer::list bl;
+  RGWGetObjRequest req(cct, fs->get_user(), rgw_fh->bucket_name(),
+		      rgw_fh->object_name(), offset, length, bl);
+
+  int rc = librgw.get_fe()->execute_req(&req);
+
+  if (! rc) {
+    uint64_t off = 0;
+    for (auto& bp : bl.buffers()) {
+      size_t bytes = std::min(length, size_t(bp.length()));
+      memcpy(static_cast<char*>(buffer)+off, bp.c_str(), bytes);
+      nread += bytes;
+      off += bytes;
+      if (off >= length)
+	break;
+    }
+  }
+
+  *bytes_read = nread;
+
+  return rc;
 }
 
 /*
