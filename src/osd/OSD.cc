@@ -7848,11 +7848,11 @@ void OSD::check_replay_queue()
       PG *pg = _lookup_lock_pg_with_map_lock_held(pgid);
       pg_map_lock.unlock();
       dout(10) << "check_replay_queue " << *pg << dendl;
-      if (pg->is_active() &&
-          pg->is_replay() &&
+      if ((pg->is_active() || pg->is_activating()) &&
+	  pg->is_replay() &&
           pg->is_primary() &&
           pg->replay_until == p->second) {
-        pg->replay_queued_ops();
+	pg->replay_queued_ops();
       }
       pg->unlock();
     } else {
