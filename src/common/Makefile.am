@@ -84,6 +84,11 @@ libcommon_internal_la_SOURCES += \
 	common/linux_version.c 
 endif
 
+if SOLARIS
+libcommon_internal_la_SOURCES += \
+        common/solaris_errno.cc
+endif
+
 if WITH_RBD
 if LINUX
 libcommon_internal_la_SOURCES += \
