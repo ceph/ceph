@@ -177,6 +177,7 @@ public:
   int get_data_cb(bufferlist& bl, off_t ofs, off_t len);
 
   virtual int get_params() = 0;
+  virtual int send_response_data_error() = 0;
   virtual int send_response_data(bufferlist& bl, off_t ofs, off_t len) = 0;
 
   virtual const string name() { return "get_obj"; }

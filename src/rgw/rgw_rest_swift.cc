@@ -849,6 +849,12 @@ int RGWGetObj_ObjStore_SWIFT::get_params()
   return RGWGetObj_ObjStore::get_params();
 }
 
+int RGWGetObj_ObjStore_SWIFT::send_response_data_error()
+{
+  bufferlist bl;
+  return send_response_data(bl, 0, 0);
+}
+
 int RGWGetObj_ObjStore_SWIFT::send_response_data(bufferlist& bl, off_t bl_ofs, off_t bl_len)
 {
   string content_type;
