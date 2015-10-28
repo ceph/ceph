@@ -4492,7 +4492,6 @@ bool FileStore::collection_empty(coll_t c)
   RWLock::RLocker l((index.index)->access_lock);
 
   vector<ghobject_t> ls;
-  collection_list_handle_t handle;
   r = index->collection_list_partial(ghobject_t(), ghobject_t::get_max(), true,
 				     1, &ls, NULL);
   if (r < 0) {
