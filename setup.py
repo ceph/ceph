@@ -32,7 +32,7 @@ setup(
         'Topic :: System :: Filesystems',
     ],
     install_requires=['setuptools < 18.6',
-                      'gevent == 0.13.6',  # 0.14 switches to libev, that means bootstrap needs to change too
+                      'gevent',
                       'MySQL-python == 1.2.3',
                       'PyYAML',
                       'argparse >= 1.2.1',
