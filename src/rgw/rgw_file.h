@@ -451,13 +451,21 @@ class RGWGetObjRequest : public RGWLibRequest,
 public:
   const std::string& bucket_name;
   const std::string& obj_name;
-  buffer::list bl;
+  buffer::list& bl;
 
   RGWGetObjRequest(CephContext* _cct, RGWUserInfo *_user,
-		  const std::string& _bname, const std::string& _oname)
-    : RGWLibRequest(_cct, _user), bucket_name(_bname), obj_name(_oname) {
+		  const std::string& _bname, const std::string& _oname,
+		  uint64_t off, uint64_t len, buffer::list& _bl)
+    : RGWLibRequest(_cct, _user), bucket_name(_bname), obj_name(_oname),
+      bl(_bl) {
     magic = 76;
     op = this;
+
+    /* fixup RGWGetObj (already know range parameters) */
+    RGWGetObj::range_parsed = true;
+    RGWGetObj::partial_content = true;
+    RGWGetObj::ofs = off;
+    RGWGetObj::end = off + len;
   }
 
   buffer::list& get_bl() { return bl; }
@@ -492,6 +500,23 @@ public:
     // woo
     s->user = user;
 
+    return 0;
+  }
+
+  virtual int get_params() {
+    return 0;
+  }
+
+  virtual int send_response_data(ceph::buffer::list& _bl, off_t s_off,
+				off_t e_off) {
+    /* XXX deal with offsets */
+    bl.claim_append(_bl);
+    return 0;
+  }
+
+  virtual int send_response_data_error() {
+    /* S3 implementation just sends nothing--there is no side effect
+     * to simulate here */
     return 0;
   }
 
