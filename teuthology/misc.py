@@ -1299,7 +1299,7 @@ def is_in_dict(searchkey, searchval, d):
         return searchval == val
 
 
-def sh(command):
+def sh(command, log_limit=128):
     """
     Run the shell command and return the output in ascii (stderr and
     stdout).  If the command fails, raise an exception. The command
@@ -1314,8 +1314,14 @@ def sh(command):
         shell=True)
     output = proc.communicate()[0]
     if output.strip():
-        log.debug(command + " output " + str(output))
+        if len(output) > log_limit:
+            log.debug(command + " output " + str(output)[:log_limit] +
+                      "... (truncated to the first " + str(log_limit) +
+                      " characters)")
+        else:
+            log.debug(command + " output " + str(output))
     if proc.returncode != 0:
+        log.debug(command + " failed with " + str(output))
         raise subprocess.CalledProcessError(
             returncode=proc.returncode,
             cmd=command,

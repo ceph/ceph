@@ -11,6 +11,20 @@ import pytest
 class FakeRemote(object):
     pass
 
+def test_sh_normal(caplog):
+    assert misc.sh("echo ABC") == "ABC\n"
+    assert "truncated" not in caplog.text()
+
+def test_sh_truncate(caplog):
+    assert misc.sh("echo -n AB ; echo C", 2) == "ABC\n"
+    assert "truncated" in caplog.text()
+    assert "ABC" not in caplog.text()
+
+def test_sh_fail(caplog):
+    with pytest.raises(Exception) as excinfo:
+        misc.sh("echo -n AB ; echo C ; exit 111", 2) == "ABC\n"
+    assert excinfo.value.returncode == 111
+    assert "failed with ABC" in caplog.text()
 
 def test_wait_until_osds_up():
     ctx = argparse.Namespace()
