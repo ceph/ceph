@@ -859,7 +859,7 @@ int RGWPutObj_ObjStore::get_data(bufferlist& bl)
     bufferptr bp(cl);
 
     int read_len; /* cio->read() expects int * */
-    int r = s->cio->read(bp.c_str(), cl, &read_len);
+    int r = s->cio->read(bp.c_str(), cl, &read_len, true);
     len = read_len;
     if (r < 0)
       return r;

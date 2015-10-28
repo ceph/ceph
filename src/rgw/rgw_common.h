@@ -150,6 +150,7 @@ using ceph::crypto::MD5;
 #define ERR_INVALID_ACCESS_KEY   2028
 #define ERR_MALFORMED_XML        2029
 #define ERR_USER_EXIST           2030
+#define ERR_AMZ_CONTENT_SHA256_MISMATCH 2031
 #define ERR_USER_SUSPENDED       2100
 #define ERR_INTERNAL_ERROR       2200
 #define ERR_NOT_IMPLEMENTED      2201
@@ -1063,6 +1064,21 @@ struct req_state {
    string swift_user;
    string swift_groups;
 
+   /* aws4 auth support */
+   bool   aws4_auth_complete;
+   string aws4_auth_date;
+   string aws4_auth_credential;
+   string aws4_auth_signedheaders;
+   string aws4_auth_signed_hdrs;
+   string aws4_auth_access_key_id;
+   string aws4_auth_credential_scope;
+   string aws4_auth_canonical_uri;
+   string aws4_auth_canonical_qs;
+   string aws4_auth_canonical_hdrs;
+   string aws4_auth_signature;
+   string aws4_auth_new_signature;
+   string aws4_auth_payload_hash;
+
    utime_t time;
 
    void *obj_ctx;
@@ -1635,11 +1651,20 @@ extern bool verify_object_permission(struct req_state *s, int perm);
 /** Convert an input URL into a sane object name
  * by converting %-escaped strings into characters, etc*/
 extern bool url_decode(string& src_str, string& dest_str, bool in_query = false);
-extern void url_encode(const string& src, string& dst);
+extern void url_encode(const string& src, string& dst, bool in_query = false);
 
+/* destination should be CEPH_CRYPTO_HMACSHA1_DIGESTSIZE bytes long */
 extern void calc_hmac_sha1(const char *key, int key_len,
                           const char *msg, int msg_len, char *dest);
-/* destination should be CEPH_CRYPTO_HMACSHA1_DIGESTSIZE bytes long */
+/* destination should be CEPH_CRYPTO_HMACSHA256_DIGESTSIZE bytes long */
+extern void calc_hmac_sha256(const char *key, int key_len, const char *msg, int msg_len, char *dest);
+extern void calc_hash_sha256(const char *msg, int len, string& dest);
+extern void calc_hash_sha256(const string& msg, string& dest);
+
+using ceph::crypto::SHA256;
+extern SHA256* calc_hash_sha256_open_stream();
+extern void    calc_hash_sha256_update_stream(SHA256 *hash, const char *msg, int len);
+extern string  calc_hash_sha256_close_stream(SHA256* hash);
 
 extern int rgw_parse_op_type_list(const string& str, uint32_t *perm);
 

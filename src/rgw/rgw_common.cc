@@ -157,6 +157,7 @@ req_state::req_state(CephContext *_cct, class RGWEnv *e) : cct(_cct), cio(NULL),
   bucket_acl = NULL;
   object_acl = NULL;
   expect_cont = false;
+  aws4_auth_complete = false;
 
   header_ended = false;
   obj_size = 0;
@@ -418,6 +419,64 @@ void calc_hmac_sha1(const char *key, int key_len,
   HMACSHA1 hmac((const unsigned char *)key, key_len);
   hmac.Update((const unsigned char *)msg, msg_len);
   hmac.Final((unsigned char *)dest);
+}
+
+/*
+ * calculate the sha256 value of a given msg and key
+ */
+void calc_hmac_sha256(const char *key, int key_len,
+                      const char *msg, int msg_len, char *dest)
+{
+  char hash_sha256[CEPH_CRYPTO_HMACSHA256_DIGESTSIZE];
+
+  HMACSHA256 hmac((const unsigned char *)key, key_len);
+  hmac.Update((const unsigned char *)msg, msg_len);
+  hmac.Final((unsigned char *)hash_sha256);
+
+  memcpy(dest, hash_sha256, CEPH_CRYPTO_HMACSHA256_DIGESTSIZE);
+}
+
+/*
+ * calculate the sha256 hash value of a given msg
+ */
+void calc_hash_sha256(const char *msg, int len, string& dest)
+{
+  char hash_sha256[CEPH_CRYPTO_HMACSHA256_DIGESTSIZE];
+
+  SHA256 hash;
+  hash.Update((const unsigned char *)msg, len);
+  hash.Final((unsigned char *)hash_sha256);
+
+  char hex_str[(CEPH_CRYPTO_SHA256_DIGESTSIZE * 2) + 1];
+  buf_to_hex((unsigned char *)hash_sha256, CEPH_CRYPTO_SHA256_DIGESTSIZE, hex_str);
+
+  dest = std::string(hex_str);
+}
+
+using ceph::crypto::SHA256;
+
+SHA256* calc_hash_sha256_open_stream()
+{
+  return new SHA256;
+}
+
+void calc_hash_sha256_update_stream(SHA256 *hash, const char *msg, int len)
+{
+  hash->Update((const unsigned char *)msg, len);
+}
+
+string calc_hash_sha256_close_stream(SHA256* hash)
+{
+  char hash_sha256[CEPH_CRYPTO_HMACSHA256_DIGESTSIZE];
+
+  hash->Final((unsigned char *)hash_sha256);
+
+  char hex_str[(CEPH_CRYPTO_SHA256_DIGESTSIZE * 2) + 1];
+  buf_to_hex((unsigned char *)hash_sha256, CEPH_CRYPTO_SHA256_DIGESTSIZE, hex_str);
+
+  delete hash;
+
+  return std::string(hex_str);
 }
 
 int gen_rand_base64(CephContext *cct, char *dest, int size) /* size should be the required string size + 1 */
@@ -862,16 +921,23 @@ static bool char_needs_url_encoding(char c)
   return false;
 }
 
-void url_encode(const string& src, string& dst)
+void url_encode(const string& src, string& dst, bool in_query)
 {
   const char *p = src.c_str();
   for (unsigned i = 0; i < src.size(); i++, p++) {
-    if (char_needs_url_encoding(*p)) {
-      escape_char(*p, dst);
-      continue;
-    }
+    if (*p == '%' && in_query && (i + 2) < src.size()) {
+      /* keep %AB as it is */
+      dst.append(p, 3);
+      i += 2;
+      p += 2;
+    } else {
+      if (char_needs_url_encoding(*p)) {
+	escape_char(*p, dst);
+	continue;
+      }
 
-    dst.append(p, 1);
+      dst.append(p, 1);
+    }
   }
 }
 
