@@ -34,9 +34,8 @@
 struct ceph_mount_info
 {
 public:
-  ceph_mount_info(uint64_t msgr_nonce_, CephContext *cct_)
-    : msgr_nonce(msgr_nonce_),
-      mounted(false),
+  ceph_mount_info(CephContext *cct_)
+    : mounted(false),
       inited(false),
       client(NULL),
       monclient(NULL),
@@ -77,7 +76,7 @@ public:
       goto fail;
 
     //network connection
-    messenger = Messenger::create(cct, cct->_conf->ms_type, entity_name_t::CLIENT(), "client", msgr_nonce);
+    messenger = Messenger::create_client_messenger(cct, "client");
 
     //at last the client
     ret = -CEPHFS_ERROR_NEW_CLIENT; //defined in libcephfs.h;
@@ -233,7 +232,6 @@ public:
   }
 
 private:
-  uint64_t msgr_nonce;
   bool mounted;
   bool inited;
   Client *client;
@@ -288,14 +286,7 @@ extern "C" const char *ceph_version(int *pmajor, int *pminor, int *ppatch)
 
 extern "C" int ceph_create_with_context(struct ceph_mount_info **cmount, CephContext *cct)
 {
-  uint64_t nonce = 0;
-
-  // 6 bytes of random and 2 bytes of pid
-  get_random_bytes((char*)&nonce, sizeof(nonce));
-  nonce &= ~0xffff;
-  nonce |= (uint64_t)getpid();
-
-  *cmount = new struct ceph_mount_info(nonce, cct);
+  *cmount = new struct ceph_mount_info(cct);
   return 0;
 }
 
