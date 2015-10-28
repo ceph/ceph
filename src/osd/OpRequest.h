@@ -32,7 +32,7 @@
 struct osd_reqid_t {
   entity_name_t name; // who
   ceph_tid_t         tid;
-  int32_t       inc;  // incarnation
+  uint32_t       inc;  // incarnation
 
   osd_reqid_t()
     : tid(0), inc(0) {}
