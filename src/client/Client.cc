@@ -8640,6 +8640,15 @@ int Client::_sync_fs()
 {
   ldout(cct, 10) << "_sync_fs" << dendl;
 
+  // flush file data
+  Mutex lock("Client::_fsync::lock");
+  Cond cond;
+  bool flush_done = false;
+  if (cct->_conf->client_oc)
+    objectcacher->flush_all(new C_SafeCond(&lock, &cond, &flush_done));
+  else
+    flush_done = true;
+
   // flush caps
   flush_caps();
   ceph_tid_t flush_tid = last_flush_tid;
@@ -8649,8 +8658,15 @@ int Client::_sync_fs()
 
   wait_sync_caps(flush_tid);
 
-  // flush file data
-  // FIXME
+  if (!flush_done) {
+    client_lock.Unlock();
+    lock.Lock();
+    ldout(cct, 15) << "waiting on data to flush" << dendl;
+    while (!flush_done)
+      cond.Wait(lock);
+    lock.Unlock();
+    client_lock.Lock();
+  }
 
   return 0;
 }
