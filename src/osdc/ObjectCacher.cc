@@ -1825,17 +1825,46 @@ bool ObjectCacher::flush_set(ObjectSet *oset, Context *onfinish)
   C_GatherBuilder gather(cct);
   set<Object*> waitfor_commit;
 
-  set<BufferHead*, BufferHead::ptr_lt>::iterator next, it;
-  next = it = dirty_or_tx_bh.begin();
-  while (it != dirty_or_tx_bh.end()) {
-    ++next;
-    BufferHead *bh = *it;
-    waitfor_commit.insert(bh->ob);
+  set<BufferHead*, BufferHead::ptr_lt>::iterator it, p, q;
 
+  // Buffer heads in dirty_or_tx_bh are sorted in ObjectSet/Object/offset
+  // order. But items in oset->objects are not sorted. So the iterator can
+  // point to any buffer head in the ObjectSet
+  BufferHead key(*oset->objects.begin());
+  it = dirty_or_tx_bh.lower_bound(&key);
+  p = q = it;
+
+  bool backwards = true;
+  if (it != dirty_or_tx_bh.begin())
+    --it;
+  else
+    backwards = false;
+
+  for (; p != dirty_or_tx_bh.end(); p = q) {
+    ++q;
+    BufferHead *bh = *p;
+    if (bh->ob->oset != oset)
+      break;
+    waitfor_commit.insert(bh->ob);
     if (bh->is_dirty())
       bh_write(bh);
+  }
 
-    it = next;
+  if (backwards) {
+    for(p = q = it; true; p = q) {
+      if (q != dirty_or_tx_bh.begin())
+	--q;
+      else
+	backwards = false;
+      BufferHead *bh = *p;
+      if (bh->ob->oset != oset)
+	break;
+      waitfor_commit.insert(bh->ob);
+      if (bh->is_dirty())
+	bh_write(bh);
+      if (!backwards)
+	break;
+    }
   }
 
   for (set<Object*>::iterator i = waitfor_commit.begin();
