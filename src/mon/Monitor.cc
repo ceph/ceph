@@ -1812,6 +1812,7 @@ void Monitor::win_standalone_election()
 
   // bump election epoch, in case the previous epoch included other
   // monitors; we need to be able to make the distinction.
+  elector.init();
   elector.advance_epoch();
 
   rank = monmap->get_rank(name);
@@ -1822,7 +1823,7 @@ void Monitor::win_standalone_election()
   const MonCommand *my_cmds;
   int cmdsize;
   get_locally_supported_monitor_commands(&my_cmds, &cmdsize);
-  win_election(1, q, CEPH_FEATURES_ALL, my_cmds, cmdsize, NULL);
+  win_election(elector.get_epoch(), q, CEPH_FEATURES_ALL, my_cmds, cmdsize, NULL);
 }
 
 const utime_t& Monitor::get_leader_since() const
