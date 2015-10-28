@@ -56,6 +56,7 @@ results_server: http://localhost:8080/
 gitbuilder_host: gitbuilder.ceph.com
 check_package_signatures: false
 queue_port: 11300
+suite_verify_ceph_hash: false
 queue_host: localhost
 lab_domain: $labdomain
 max_job_time: 21600 # 6 hours
