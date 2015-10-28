@@ -14,6 +14,42 @@
 
 void rgw_get_errno_sts(rgw_http_errors *e, int err_no);
 
+// if you change tsErrorType or tsErrorCode,
+//	please change error_types[] and error_codes[] in
+//	rgw_rest_sts.cc too!
+enum tsErrorType {
+  Unknown = 0, Sender, Receiver,
+};
+enum tsErrorCode {
+  AccessDenied = 0, IDPRejectedClaim, InvalidAccessKeyId,
+  InvalidAction, InvalidClientTokenId, MalformedInput,
+  MissingAuthenticationToken,
+};
+
+extern string error_types[];
+extern string error_codes[];
+
+class tsError {
+public:
+  tsErrorType type;
+  tsErrorCode code;
+  string message;
+
+  tsError(tsErrorType _t, tsErrorCode _c, string _m) : type(_t), code(_c),
+	message(_m) { }
+};
+
+class tsErrorResponse {
+public:
+  tsError error;
+  uuid_d request_id;
+  tsErrorResponse(tsErrorType _t, tsErrorCode _c, string _m)
+    : error(_t, _c, _m) {
+    request_id.generate_random();
+  }
+  void dump(Formatter *f);
+};
+
 #if 0
 struct post_part_field {
   string val;

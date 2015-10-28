@@ -23,6 +23,15 @@
 
 using namespace ceph::crypto;
 
+// indexed by tsErrorType
+string error_types[] = {"Unknown", "Sender", "Receiver"};
+// indexed by tsErrorCode
+string error_codes[] = {
+  "AccessDenied", "IDPRejectedClaim", "InvalidAccessKeyId",
+  "InvalidAction", "InvalidClientTokenId", "MalformedInput",
+  "MissingAuthenticationToken",
+};
+
 void rgw_get_errno_sts(rgw_http_errors *e , int err_no)
 {
   const struct rgw_http_errors *r;
@@ -35,6 +44,24 @@ void rgw_get_errno_sts(rgw_http_errors *e , int err_no)
     e->http_ret = 500;
     e->s3_code = "UnknownError";
   }
+}
+
+void tsErrorResponse::dump(Formatter *f)
+{
+  char encoded_uuid[38];
+
+  request_id.print(encoded_uuid);
+  encoded_uuid[37] = 0;
+
+  f->open_object_section_in_ns("ErrorResponse",
+			"http://s3.amazonaws.com/doc/2011-06-15/");
+    f->open_object_section("Error");
+      f->dump_string("Type", error_types[error.type]);
+      f->dump_string("Code", error_codes[error.code]);
+      f->dump_string("Message", error.message);
+    f->close_section();
+    f->dump_string("RequestId", encoded_uuid);
+  f->close_section();
 }
 
 #if 0
@@ -400,7 +427,14 @@ int RGWGetPost_STS::verify_permission()
 
 void RGWGetPost_STS::execute()
 {
-	// XXX something!
+  int ret = 0;
+  s->formatter = new XMLFormatter(false);
+  tsErrorResponse err(Unknown, InvalidAction, "Why I don't know");
+  set_req_state_err(s, ret);
+  dump_errno(s);
+  end_header(s, dump_access_control_f(), "application/xml");
+  err.dump(s->formatter);
+  rgw_flush_formatter_and_reset(s, s->formatter);
 }
 
 RGWOp *RGWHandler_STS::get_obj_op(bool get_data)
