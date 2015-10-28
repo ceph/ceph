@@ -175,14 +175,18 @@ TEST(LibRGW, LIST_OBJECTS) {
 }
 
 TEST(LibRGW, LOOKUP_OBJECT) {
-  int ret = rgw_lookup(fs, bucket_fh, object_name.c_str(), &object_fh,
-		      0 /* flags */);
-  ASSERT_EQ(ret, 0);
+  if (do_get || do_put) {
+    int ret = rgw_lookup(fs, bucket_fh, object_name.c_str(), &object_fh,
+			0 /* flags */);
+    ASSERT_EQ(ret, 0);
+  }
 }
 
 TEST(LibRGW, OBJ_OPEN) {
-  int ret = rgw_open(fs, object_fh, 0 /* flags */);
-  ASSERT_EQ(ret, 0);
+  if (do_get || do_put) {
+    int ret = rgw_open(fs, object_fh, 0 /* flags */);
+    ASSERT_EQ(ret, 0);
+  }
 }
 
 TEST(LibRGW, PUT_OBJECT) {
@@ -194,7 +198,23 @@ TEST(LibRGW, PUT_OBJECT) {
 }
 
 TEST(LibRGW, GET_OBJECT) {
-  /* XXX soon */
+  if (do_get) {
+    char sbuf[512];
+    memset(sbuf, 0, 512);
+    uint64_t nread;
+    int ret = rgw_read(fs, object_fh, 0 /* off */, 512 /* len */, &nread, sbuf);
+    ASSERT_EQ(ret, 0);
+    buffer::list bl;
+    bl.push_back(buffer::create_static(nread, sbuf));
+    bl.hexdump(std::cout);
+  }
+}
+
+TEST(LibRGW, DELETE_OBJECT) {
+  if (do_delete) {
+    int ret = rgw_unlink(fs, bucket_fh, object_name.c_str());
+    ASSERT_EQ(ret, 0);
+  }
 }
 
 TEST(LibRGW, CLEANUP) {
@@ -256,6 +276,9 @@ int main(int argc, char *argv[])
     } else if (ceph_argparse_flag(args, arg_iter, "--put",
 					    (char*) nullptr)) {
       do_put = true;
+    } else if (ceph_argparse_flag(args, arg_iter, "--delete",
+					    (char*) nullptr)) {
+      do_delete = true;
     } else if (ceph_argparse_flag(args, arg_iter, "--prelist",
 					    (char*) nullptr)) {
       do_pre_list = true;

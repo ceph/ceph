@@ -191,8 +191,8 @@ int rgw_close(struct rgw_fs *rgw_fs, struct rgw_file_handle *fh,
    read data from file
 */
 int rgw_read(struct rgw_fs *rgw_fs,
-	     struct rgw_file_handle *fh, uint64_t offset,
-	     size_t length, void *buffer);
+	    struct rgw_file_handle *fh, uint64_t offset,
+	    size_t length, size_t *bytes_read, void *buffer);
 
 /* XXX add release fn and UIO type */
 int rgw_readv(struct rgw_fs *rgw_fs,
