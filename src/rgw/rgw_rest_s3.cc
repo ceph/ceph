@@ -2378,7 +2378,7 @@ int RGW_Auth_S3::authorize_aws4_auth_complete(RGWRados *store, struct req_state 
   return authorize_v4_complete(store, s, "", false);
 }
 
-int RGW_Auth_S3::authorize_v4_complete(RGWRados *store, struct req_state *s, string request_payload, bool unsigned_payload)
+int RGW_Auth_S3::authorize_v4_complete(RGWRados *store, struct req_state *s, const string& request_payload, bool unsigned_payload)
 {
   size_t pos;
 
@@ -2387,17 +2387,17 @@ int RGW_Auth_S3::authorize_v4_complete(RGWRados *store, struct req_state *s, str
   string canonical_req;
   string canonical_req_hash;
 
-  rgw_create_s3_v4_canonical_request(s, s->aws4_auth_canonical_uri, s->aws4_auth_canonical_qs,
-      s->aws4_auth_canonical_hdrs, s->aws4_auth_signed_hdrs, request_payload, unsigned_payload,
+  rgw_create_s3_v4_canonical_request(s, s->aws4_auth->canonical_uri, s->aws4_auth->canonical_qs,
+      s->aws4_auth->canonical_hdrs, s->aws4_auth->signed_hdrs, request_payload, unsigned_payload,
       canonical_req, canonical_req_hash);
 
   /* Validate x-amz-sha256 */
 
-  if (s->aws4_auth_complete) {
+  if (s->aws4_auth_needs_complete) {
     const char *expected_request_payload_hash = s->info.env->get("HTTP_X_AMZ_CONTENT_SHA256");
     if (expected_request_payload_hash &&
-	s->aws4_auth_payload_hash.compare(expected_request_payload_hash) != 0) {
-      dout(10) << "ERROR: x-amz-content-sha256 does not match" << dendl;
+	s->aws4_auth->payload_hash.compare(expected_request_payload_hash) != 0) {
+      ldout(s->cct, 10) << "ERROR: x-amz-content-sha256 does not match" << dendl;
       return -ERR_AMZ_CONTENT_SHA256_MISMATCH;
     }
   }
@@ -2410,7 +2410,7 @@ int RGW_Auth_S3::authorize_v4_complete(RGWRados *store, struct req_state *s, str
 
   string string_to_sign;
 
-  rgw_create_s3_v4_string_to_sign("AWS4-HMAC-SHA256", s->aws4_auth_date, s->aws4_auth_credential_scope,
+  rgw_create_s3_v4_string_to_sign(s->cct, "AWS4-HMAC-SHA256", s->aws4_auth->date, s->aws4_auth->credential_scope,
       canonical_req_hash, string_to_sign);
 
   /*
@@ -2419,7 +2419,7 @@ int RGW_Auth_S3::authorize_v4_complete(RGWRados *store, struct req_state *s, str
    * http://docs.aws.amazon.com/general/latest/gr/sigv4-calculate-signature.html
    */
 
-  string cs_aux = s->aws4_auth_credential_scope;
+  string cs_aux = s->aws4_auth->credential_scope;
 
   string date_cs = cs_aux;
   pos = date_cs.find("/");
@@ -2435,13 +2435,13 @@ int RGW_Auth_S3::authorize_v4_complete(RGWRados *store, struct req_state *s, str
   pos = service_cs.find("/");
   service_cs = service_cs.substr(0, pos);
 
-  int err = rgw_calculate_s3_v4_aws_signature(s, s->aws4_auth_access_key_id, date_cs,
-      region_cs, service_cs, string_to_sign, s->aws4_auth_new_signature);
+  int err = rgw_calculate_s3_v4_aws_signature(s, s->aws4_auth->access_key_id, date_cs,
+      region_cs, service_cs, string_to_sign, s->aws4_auth->new_signature);
 
-  dout(10) << "----------------------------- Verifying signatures" << dendl;
-  dout(10) << "Signature     = " << s->aws4_auth_signature << dendl;
-  dout(10) << "New Signature = " << s->aws4_auth_new_signature << dendl;
-  dout(10) << "-----------------------------" << dendl;
+  ldout(s->cct, 10) << "----------------------------- Verifying signatures" << dendl;
+  ldout(s->cct, 10) << "Signature     = " << s->aws4_auth->signature << dendl;
+  ldout(s->cct, 10) << "New Signature = " << s->aws4_auth->new_signature << dendl;
+  ldout(s->cct, 10) << "-----------------------------" << dendl;
 
   if (err) {
     return err;
@@ -2470,6 +2470,8 @@ int RGW_Auth_S3::authorize_v4(RGWRados *store, struct req_state *s)
 
   string algorithm = "AWS4-HMAC-SHA256";
 
+  s->aws4_auth = new rgw_aws4_auth;
+
   if ((!s->http_auth) || !(*s->http_auth)) {
 
     /* auth ships with req params ... */
@@ -2477,21 +2479,21 @@ int RGW_Auth_S3::authorize_v4(RGWRados *store, struct req_state *s)
     /* look for required params */
 
     using_qs = true;
-    s->aws4_auth_credential = s->info.args.get("X-Amz-Credential");
-    if (s->aws4_auth_credential.size() == 0) {
+    s->aws4_auth->credential = s->info.args.get("X-Amz-Credential");
+    if (s->aws4_auth->credential.size() == 0) {
       return -EPERM;
     }
-    s->aws4_auth_date = s->info.args.get("X-Amz-Date");
-    if (s->aws4_auth_date.size() == 0) {
+    s->aws4_auth->date = s->info.args.get("X-Amz-Date");
+    if (s->aws4_auth->date.size() == 0) {
       return -EPERM;
     }
-    s->aws4_auth_signedheaders = s->info.args.get("X-Amz-SignedHeaders");
-    if (s->aws4_auth_signedheaders.size() == 0) {
+    s->aws4_auth->signedheaders = s->info.args.get("X-Amz-SignedHeaders");
+    if (s->aws4_auth->signedheaders.size() == 0) {
       return -EPERM;
     }
 
-    s->aws4_auth_signature = s->info.args.get("X-Amz-Signature");
-    if (s->aws4_auth_signature.size() == 0) {
+    s->aws4_auth->signature = s->info.args.get("X-Amz-Signature");
+    if (s->aws4_auth->signature.size() == 0) {
       return -EPERM;
     }
 
@@ -2502,83 +2504,83 @@ int RGW_Auth_S3::authorize_v4(RGWRados *store, struct req_state *s)
     /* ------------------------- handle Credential header */
 
     using_qs = false;
-    s->aws4_auth_credential = s->http_auth;
+    s->aws4_auth->credential = s->http_auth;
 
-    s->aws4_auth_credential = s->aws4_auth_credential.substr(17, s->aws4_auth_credential.length());
+    s->aws4_auth->credential = s->aws4_auth->credential.substr(17, s->aws4_auth->credential.length());
 
-    pos = s->aws4_auth_credential.find("Credential");
+    pos = s->aws4_auth->credential.find("Credential");
     if (pos == std::string::npos) {
       return -EINVAL;
     }
 
-    s->aws4_auth_credential = s->aws4_auth_credential.substr(pos, s->aws4_auth_credential.find(","));
+    s->aws4_auth->credential = s->aws4_auth->credential.substr(pos, s->aws4_auth->credential.find(","));
 
-    s->aws4_auth_credential = s->aws4_auth_credential.substr(pos + 1, s->aws4_auth_credential.length());
+    s->aws4_auth->credential = s->aws4_auth->credential.substr(pos + 1, s->aws4_auth->credential.length());
 
-    pos = s->aws4_auth_credential.find("=");
+    pos = s->aws4_auth->credential.find("=");
 
-    s->aws4_auth_credential = s->aws4_auth_credential.substr(pos + 1, s->aws4_auth_credential.length());
+    s->aws4_auth->credential = s->aws4_auth->credential.substr(pos + 1, s->aws4_auth->credential.length());
 
     /* ------------------------- handle SignedHeaders header */
 
-    s->aws4_auth_signedheaders = s->http_auth;
+    s->aws4_auth->signedheaders = s->http_auth;
 
-    s->aws4_auth_signedheaders = s->aws4_auth_signedheaders.substr(17, s->aws4_auth_signedheaders.length());
+    s->aws4_auth->signedheaders = s->aws4_auth->signedheaders.substr(17, s->aws4_auth->signedheaders.length());
 
-    pos = s->aws4_auth_signedheaders.find("SignedHeaders");
+    pos = s->aws4_auth->signedheaders.find("SignedHeaders");
     if (pos == std::string::npos) {
       return -EINVAL;
     }
 
-    s->aws4_auth_signedheaders = s->aws4_auth_signedheaders.substr(pos, s->aws4_auth_signedheaders.length());
+    s->aws4_auth->signedheaders = s->aws4_auth->signedheaders.substr(pos, s->aws4_auth->signedheaders.length());
 
-    pos = s->aws4_auth_signedheaders.find(",");
+    pos = s->aws4_auth->signedheaders.find(",");
     if (pos == std::string::npos) {
       return -EINVAL;
     }
 
-    s->aws4_auth_signedheaders = s->aws4_auth_signedheaders.substr(0, pos);
+    s->aws4_auth->signedheaders = s->aws4_auth->signedheaders.substr(0, pos);
 
-    pos = s->aws4_auth_signedheaders.find("=");
+    pos = s->aws4_auth->signedheaders.find("=");
     if (pos == std::string::npos) {
       return -EINVAL;
     }
 
-    s->aws4_auth_signedheaders = s->aws4_auth_signedheaders.substr(pos + 1, s->aws4_auth_signedheaders.length());
+    s->aws4_auth->signedheaders = s->aws4_auth->signedheaders.substr(pos + 1, s->aws4_auth->signedheaders.length());
 
     /* host;user-agent;x-amz-content-sha256;x-amz-date */
-    dout(10) << "v4 signedheaders format = " << s->aws4_auth_signedheaders << dendl;
+    dout(10) << "v4 signedheaders format = " << s->aws4_auth->signedheaders << dendl;
 
     /* ------------------------- handle Signature header */
 
-    s->aws4_auth_signature = s->http_auth;
+    s->aws4_auth->signature = s->http_auth;
 
-    s->aws4_auth_signature = s->aws4_auth_signature.substr(17, s->aws4_auth_signature.length());
+    s->aws4_auth->signature = s->aws4_auth->signature.substr(17, s->aws4_auth->signature.length());
 
-    pos = s->aws4_auth_signature.find("Signature");
+    pos = s->aws4_auth->signature.find("Signature");
     if (pos == std::string::npos) {
       return -EINVAL;
     }
 
-    s->aws4_auth_signature = s->aws4_auth_signature.substr(pos, s->aws4_auth_signature.length());
+    s->aws4_auth->signature = s->aws4_auth->signature.substr(pos, s->aws4_auth->signature.length());
 
-    pos = s->aws4_auth_signature.find("=");
+    pos = s->aws4_auth->signature.find("=");
     if (pos == std::string::npos) {
       return -EINVAL;
     }
 
-    s->aws4_auth_signature = s->aws4_auth_signature.substr(pos + 1, s->aws4_auth_signature.length());
+    s->aws4_auth->signature = s->aws4_auth->signature.substr(pos + 1, s->aws4_auth->signature.length());
 
     /* sig hex str */
-    dout(10) << "v4 signature format = " << s->aws4_auth_signature << dendl;
+    dout(10) << "v4 signature format = " << s->aws4_auth->signature << dendl;
 
     /* ------------------------- handle x-amz-date header */
 
     /* grab date */
 
     const char *d = s->info.env->get("HTTP_X_AMZ_DATE");
-    s->aws4_auth_date = d ? d : "";
-    if (s->aws4_auth_date.empty()) {
+    s->aws4_auth->date = d ? d : "";
+    if (s->aws4_auth->date.empty()) {
       dout(10) << "error reading date via http_x_amz_date" << dendl;
       return -EINVAL;
     }
@@ -2586,34 +2588,34 @@ int RGW_Auth_S3::authorize_v4(RGWRados *store, struct req_state *s)
   }
 
   /* AKIAIVKTAZLOCF43WNQD/AAAAMMDD/region/host/aws4_request */
-  dout(10) << "v4 credential format = " << s->aws4_auth_credential << dendl;
+  dout(10) << "v4 credential format = " << s->aws4_auth->credential << dendl;
 
-  if (std::count(s->aws4_auth_credential.begin(), s->aws4_auth_credential.end(), '/') != 4) {
+  if (std::count(s->aws4_auth->credential.begin(), s->aws4_auth->credential.end(), '/') != 4) {
     return -EINVAL;
   }
 
   /* credential must end with 'aws4_request' */
-  if (s->aws4_auth_credential.find("aws4_request") == std::string::npos) {
+  if (s->aws4_auth->credential.find("aws4_request") == std::string::npos) {
     return -EINVAL;
   }
 
   /* grab access key id */
 
-  pos = s->aws4_auth_credential.find("/");
-  s->aws4_auth_access_key_id = s->aws4_auth_credential.substr(0, pos);
+  pos = s->aws4_auth->credential.find("/");
+  s->aws4_auth->access_key_id = s->aws4_auth->credential.substr(0, pos);
 
-  dout(10) << "access key id = " << s->aws4_auth_access_key_id << dendl;
+  dout(10) << "access key id = " << s->aws4_auth->access_key_id << dendl;
 
   /* grab credential scope */
 
-  s->aws4_auth_credential_scope = s->aws4_auth_credential.substr(pos + 1, s->aws4_auth_credential.length());
+  s->aws4_auth->credential_scope = s->aws4_auth->credential.substr(pos + 1, s->aws4_auth->credential.length());
 
-  dout(10) << "credential scope = " << s->aws4_auth_credential_scope << dendl;
+  dout(10) << "credential scope = " << s->aws4_auth->credential_scope << dendl;
 
   /* grab user information */
 
-  if (rgw_get_user_info_by_access_key(store, s->aws4_auth_access_key_id, s->user) < 0) {
-    dout(10) << "error reading user info, uid=" << s->aws4_auth_access_key_id
+  if (rgw_get_user_info_by_access_key(store, s->aws4_auth->access_key_id, s->user) < 0) {
+    dout(10) << "error reading user info, uid=" << s->aws4_auth->access_key_id
               << " can't authenticate" << dendl;
     return -ERR_INVALID_ACCESS_KEY;
   }
@@ -2630,23 +2632,23 @@ int RGW_Auth_S3::authorize_v4(RGWRados *store, struct req_state *s)
    * that SigV4 typically does. this code follows the same approach that boto library
    * see auth.py:canonical_uri(...) */
 
-  s->aws4_auth_canonical_uri = s->info.request_uri;
+  s->aws4_auth->canonical_uri = s->info.request_uri;
 
-  if (s->aws4_auth_canonical_uri.empty()) {
-    s->aws4_auth_canonical_uri = "/";
+  if (s->aws4_auth->canonical_uri.empty()) {
+    s->aws4_auth->canonical_uri = "/";
   }
 
   /* craft canonical query string */
 
-  s->aws4_auth_canonical_qs = s->info.request_params;
+  s->aws4_auth->canonical_qs = s->info.request_params;
 
-  if (!s->aws4_auth_canonical_qs.empty()) {
+  if (!s->aws4_auth->canonical_qs.empty()) {
 
     /* handle case when query string exists. Step 3 in
      * http://docs.aws.amazon.com/general/latest/gr/sigv4-create-canonical-request.html */
 
     map<string, string> canonical_qs_map;
-    istringstream cqs(s->aws4_auth_canonical_qs);
+    istringstream cqs(s->aws4_auth->canonical_qs);
     string keyval;
 
     while (getline(cqs, keyval, '&')) {
@@ -2662,16 +2664,16 @@ int RGW_Auth_S3::authorize_v4(RGWRados *store, struct req_state *s)
       }
     }
 
-    s->aws4_auth_canonical_qs = "";
+    s->aws4_auth->canonical_qs = "";
 
     map<string, string>::iterator last = canonical_qs_map.end();
     --last;
 
     for (map<string, string>::iterator it = canonical_qs_map.begin();
         it != canonical_qs_map.end(); ++it) {
-      s->aws4_auth_canonical_qs.append(it->first + "=" + it->second);
+      s->aws4_auth->canonical_qs.append(it->first + "=" + it->second);
       if (it != last) {
-        s->aws4_auth_canonical_qs.append("&");
+        s->aws4_auth->canonical_qs.append("&");
       }
     }
 
@@ -2680,7 +2682,7 @@ int RGW_Auth_S3::authorize_v4(RGWRados *store, struct req_state *s)
   /* craft canonical headers */
 
   map<string, string> canonical_hdrs_map;
-  istringstream sh(s->aws4_auth_signedheaders);
+  istringstream sh(s->aws4_auth->signedheaders);
   string token;
 
   while (getline(sh, token, ';')) {
@@ -2712,14 +2714,14 @@ int RGW_Auth_S3::authorize_v4(RGWRados *store, struct req_state *s)
 
   for (map<string, string>::iterator it = canonical_hdrs_map.begin();
       it != canonical_hdrs_map.end(); ++it) {
-    s->aws4_auth_canonical_hdrs.append(it->first + ":" + it->second + "\n");
+    s->aws4_auth->canonical_hdrs.append(it->first + ":" + it->second + "\n");
   }
 
-  dout(10) << "canonical headers format = " << s->aws4_auth_canonical_hdrs << dendl;
+  dout(10) << "canonical headers format = " << s->aws4_auth->canonical_hdrs << dendl;
 
   /* craft signed headers */
 
-  s->aws4_auth_signed_hdrs = s->aws4_auth_signedheaders;
+  s->aws4_auth->signed_hdrs = s->aws4_auth->signedheaders;
 
   /* handle request payload */
 
@@ -2729,7 +2731,7 @@ int RGW_Auth_S3::authorize_v4(RGWRados *store, struct req_state *s)
    *  Content-Length or Transfer-Encoding header field in the request's message-headers."
    */
 
-  s->aws4_auth_payload_hash = "";
+  s->aws4_auth->payload_hash = "";
 
   string request_payload;
 
@@ -2751,7 +2753,7 @@ int RGW_Auth_S3::authorize_v4(RGWRados *store, struct req_state *s)
 
     /* verify signature */
 
-    if (s->aws4_auth_signature != s->aws4_auth_new_signature) {
+    if (s->aws4_auth->signature != s->aws4_auth->new_signature) {
       return -ERR_SIGNATURE_NO_MATCH;
     }
 
@@ -2761,19 +2763,19 @@ int RGW_Auth_S3::authorize_v4(RGWRados *store, struct req_state *s)
 
     /* aws4 auth completed */
 
-    s->aws4_auth_complete = false;
+    s->aws4_auth_needs_complete = false;
 
   } else {
 
     /* aws4 auth not completed... delay aws4 auth */
 
-    s->aws4_auth_complete = true;
+    s->aws4_auth_needs_complete = true;
 
     dout(10) << "body content detected... delaying v4 auth" << dendl;
 
   }
 
-  map<string, RGWAccessKey>::iterator iter = s->user.access_keys.find(s->aws4_auth_access_key_id);
+  map<string, RGWAccessKey>::iterator iter = s->user.access_keys.find(s->aws4_auth->access_key_id);
   if (iter == s->user.access_keys.end()) {
     dout(0) << "ERROR: access key not encoded in user info" << dendl;
     return -EPERM;

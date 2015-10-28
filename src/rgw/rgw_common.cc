@@ -157,7 +157,7 @@ req_state::req_state(CephContext *_cct, class RGWEnv *e) : cct(_cct), cio(NULL),
   bucket_acl = NULL;
   object_acl = NULL;
   expect_cont = false;
-  aws4_auth_complete = false;
+  aws4_auth_needs_complete = false;
 
   header_ended = false;
   obj_size = 0;
@@ -176,6 +176,8 @@ req_state::req_state(CephContext *_cct, class RGWEnv *e) : cct(_cct), cio(NULL),
   http_auth = NULL;
   local_source = false;
 
+  aws4_auth = NULL;
+
   obj_ctx = NULL;
 }
 
@@ -183,6 +185,7 @@ req_state::~req_state() {
   delete formatter;
   delete bucket_acl;
   delete object_acl;
+  delete aws4_auth;
 }
 
 struct str_len {
@@ -465,8 +468,12 @@ void calc_hash_sha256_update_stream(SHA256 *hash, const char *msg, int len)
   hash->Update((const unsigned char *)msg, len);
 }
 
-string calc_hash_sha256_close_stream(SHA256* hash)
+string calc_hash_sha256_close_stream(SHA256 **phash)
 {
+  SHA256 *hash = *phash;
+  if (!hash) {
+    hash = calc_hash_sha256_open_stream();
+  }
   char hash_sha256[CEPH_CRYPTO_HMACSHA256_DIGESTSIZE];
 
   hash->Final((unsigned char *)hash_sha256);
@@ -475,7 +482,8 @@ string calc_hash_sha256_close_stream(SHA256* hash)
   buf_to_hex((unsigned char *)hash_sha256, CEPH_CRYPTO_SHA256_DIGESTSIZE, hex_str);
 
   delete hash;
-
+  *phash = NULL;
+  
   return std::string(hex_str);
 }
 

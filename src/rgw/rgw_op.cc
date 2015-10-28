@@ -1952,7 +1952,7 @@ void RGWPutObj::execute()
   s->obj_size = ofs;
   perfcounter->inc(l_rgw_put_b, s->obj_size);
 
-  if (s->aws4_auth_complete) {
+  if (s->aws4_auth_needs_complete) {
 
     /* complete aws4 auth */
 
@@ -1961,11 +1961,11 @@ void RGWPutObj::execute()
       goto done;
     }
 
-    s->aws4_auth_complete = false;
+    s->aws4_auth_needs_complete = false;
 
     /* verify signature */
 
-    if (s->aws4_auth_signature != s->aws4_auth_new_signature) {
+    if (s->aws4_auth->signature != s->aws4_auth->new_signature) {
       ret = -ERR_SIGNATURE_NO_MATCH;
       ldout(s->cct, 20) << "delayed aws4 auth failed" << dendl;
       goto done;

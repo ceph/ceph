@@ -267,16 +267,16 @@ void rgw_create_s3_v4_canonical_request(struct req_state *s, const string& canon
   if (unsigned_payload) {
     request_payload_hash = "UNSIGNED-PAYLOAD";
   } else {
-    if (s->aws4_auth_complete) {
+    if (s->aws4_auth_needs_complete) {
       request_payload_hash = s->cio->grab_aws4_sha256_hash();
     } else {
       rgw_hash_s3_string_sha256(request_payload.c_str(), request_payload.size(), request_payload_hash);
     }
   }
 
-  s->aws4_auth_payload_hash = request_payload_hash;
+  s->aws4_auth->payload_hash = request_payload_hash;
 
-  dout(10) << "payload request hash = " << request_payload_hash << dendl;
+  ldout(s->cct, 10) << "payload request hash = " << request_payload_hash << dendl;
 
   rgw_assemble_s3_v4_canonical_request(s->info.method, canonical_uri.c_str(),
       canonical_qs.c_str(), canonical_hdrs.c_str(), signed_hdrs.c_str(),
@@ -284,8 +284,8 @@ void rgw_create_s3_v4_canonical_request(struct req_state *s, const string& canon
 
   rgw_hash_s3_string_sha256(canonical_req.c_str(), canonical_req.size(), canonical_req_hash);
 
-  dout(10) << "canonical request = " << canonical_req << dendl;
-  dout(10) << "canonical request hash = " << canonical_req_hash << dendl;
+  ldout(s->cct, 10) << "canonical request = " << canonical_req << dendl;
+  ldout(s->cct, 10) << "canonical request hash = " << canonical_req_hash << dendl;
 }
 
 /*
@@ -317,14 +317,14 @@ void rgw_assemble_s3_v4_string_to_sign(const char *algorithm, const char *reques
 /*
  * create string to sign for signature version 4
  */
-void rgw_create_s3_v4_string_to_sign(const string& algorithm, const string& request_date,
+void rgw_create_s3_v4_string_to_sign(CephContext *cct, const string& algorithm, const string& request_date,
                                      const string& credential_scope, const string& hashed_qr,
                                      string& string_to_sign) {
 
   rgw_assemble_s3_v4_string_to_sign(algorithm.c_str(), request_date.c_str(),
       credential_scope.c_str(), hashed_qr.c_str(), string_to_sign);
 
-  dout(10) << "string to sign = " << string_to_sign << dendl;
+  ldout(cct, 10) << "string to sign = " << string_to_sign << dendl;
 }
 
 /*
@@ -336,7 +336,7 @@ int rgw_calculate_s3_v4_aws_signature(struct req_state *s,
 
   map<string, RGWAccessKey>::iterator iter = s->user.access_keys.find(access_key_id);
   if (iter == s->user.access_keys.end()) {
-    dout(10) << "ERROR: access key not encoded in user info" << dendl;
+    ldout(s->cct, 10) << "ERROR: access key not encoded in user info" << dendl;
     return -EPERM;
   }
 
@@ -363,7 +363,7 @@ int rgw_calculate_s3_v4_aws_signature(struct req_state *s,
   char aux[CEPH_CRYPTO_HMACSHA256_DIGESTSIZE * 2 + 1];
   buf_to_hex((unsigned char *) date_k, CEPH_CRYPTO_HMACSHA256_DIGESTSIZE, aux);
 
-  dout(10) << "date_k        = " << string(aux) << dendl;
+  ldout(s->cct, 10) << "date_k        = " << string(aux) << dendl;
 
   /* region */
 
@@ -372,7 +372,7 @@ int rgw_calculate_s3_v4_aws_signature(struct req_state *s,
 
   buf_to_hex((unsigned char *) region_k, CEPH_CRYPTO_HMACSHA256_DIGESTSIZE, aux);
 
-  dout(10) << "region_k      = " << string(aux) << dendl;
+  ldout(s->cct, 10) << "region_k      = " << string(aux) << dendl;
 
   /* service */
 
@@ -381,7 +381,7 @@ int rgw_calculate_s3_v4_aws_signature(struct req_state *s,
 
   buf_to_hex((unsigned char *) service_k, CEPH_CRYPTO_HMACSHA256_DIGESTSIZE, aux);
 
-  dout(10) << "service_k     = " << string(aux) << dendl;
+  ldout(s->cct, 10) << "service_k     = " << string(aux) << dendl;
 
   /* aws4_request */
 
@@ -390,7 +390,7 @@ int rgw_calculate_s3_v4_aws_signature(struct req_state *s,
 
   buf_to_hex((unsigned char *) signing_k, CEPH_CRYPTO_HMACSHA256_DIGESTSIZE, aux);
 
-  dout(10) << "signing_k     = " << string(aux) << dendl;
+  ldout(s->cct, 10) << "signing_k     = " << string(aux) << dendl;
 
   /* new signature */
 
@@ -399,11 +399,11 @@ int rgw_calculate_s3_v4_aws_signature(struct req_state *s,
 
   buf_to_hex((unsigned char *) signature_k, CEPH_CRYPTO_HMACSHA256_DIGESTSIZE, aux);
 
-  dout(10) << "signature_k   = " << string(aux) << dendl;
+  ldout(s->cct, 10) << "signature_k   = " << string(aux) << dendl;
 
   signature = string(aux);
 
-  dout(10) << "new signature = " << signature << dendl;
+  ldout(s->cct, 10) << "new signature = " << signature << dendl;
 
   return 0;
 }

@@ -27,9 +27,7 @@ protected:
 
 public:
   virtual ~RGWClientIO() {}
-  RGWClientIO() : account(false), bytes_sent(0), bytes_received(0) {
-    sha256_hash = calc_hash_sha256_open_stream();
-  }
+  RGWClientIO() : account(false), bytes_sent(0), bytes_received(0), sha256_hash(NULL) {}
 
   void init(CephContext *cct);
   int print(const char *format, ...);

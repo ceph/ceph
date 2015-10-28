@@ -1006,6 +1006,21 @@ inline ostream& operator<<(ostream& out, const rgw_obj_key &o) {
   }
 }
 
+struct rgw_aws4_auth {
+  string date;
+  string credential;
+  string signedheaders;
+  string signed_hdrs;
+  string access_key_id;
+  string credential_scope;
+  string canonical_uri;
+  string canonical_qs;
+  string canonical_hdrs;
+  string signature;
+  string new_signature;
+  string payload_hash;
+};
+
 /** Store all the state necessary to complete and respond to an HTTP request*/
 struct req_state {
    CephContext *cct;
@@ -1065,19 +1080,9 @@ struct req_state {
    string swift_groups;
 
    /* aws4 auth support */
-   bool   aws4_auth_complete;
-   string aws4_auth_date;
-   string aws4_auth_credential;
-   string aws4_auth_signedheaders;
-   string aws4_auth_signed_hdrs;
-   string aws4_auth_access_key_id;
-   string aws4_auth_credential_scope;
-   string aws4_auth_canonical_uri;
-   string aws4_auth_canonical_qs;
-   string aws4_auth_canonical_hdrs;
-   string aws4_auth_signature;
-   string aws4_auth_new_signature;
-   string aws4_auth_payload_hash;
+   bool   aws4_auth_needs_complete;
+
+   rgw_aws4_auth *aws4_auth;
 
    utime_t time;
 
@@ -1664,7 +1669,7 @@ extern void calc_hash_sha256(const string& msg, string& dest);
 using ceph::crypto::SHA256;
 extern SHA256* calc_hash_sha256_open_stream();
 extern void    calc_hash_sha256_update_stream(SHA256 *hash, const char *msg, int len);
-extern string  calc_hash_sha256_close_stream(SHA256* hash);
+extern string  calc_hash_sha256_close_stream(SHA256 **hash);
 
 extern int rgw_parse_op_type_list(const string& str, uint32_t *perm);
 
