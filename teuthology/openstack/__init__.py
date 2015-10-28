@@ -199,7 +199,7 @@ class OpenStack(object):
         log.debug('cloud_init_wait ' + name_or_ip)
         client_args = {
             'user_at_host': '@'.join((self.username, name_or_ip)),
-            'timeout': 10,
+            'timeout': 240,
             'retry': False,
         }
         if self.key_filename:
