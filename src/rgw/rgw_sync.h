@@ -41,6 +41,16 @@ public:
   void backoff(RGWCoroutine *op);
 };
 
+struct RGWMetaSyncEnv {
+  CephContext *cct;
+  RGWRados *store;
+  RGWRESTConn *conn;
+  RGWAsyncRadosProcessor *async_rados;
+  RGWHTTPManager *http_manager;
+
+  RGWMetaSyncEnv() : cct(NULL), store(NULL), conn(NULL), async_rados(NULL), http_manager(NULL) {}
+};
+
 
 class RGWRemoteMetaLog : public RGWCoroutinesManager {
   RGWRados *store;
@@ -53,6 +63,14 @@ class RGWRemoteMetaLog : public RGWCoroutinesManager {
   RGWMetaSyncCR *meta_sync_cr;
 
   RGWSyncBackoff backoff;
+
+  void init_sync_env(RGWMetaSyncEnv *env) {
+    env->cct = store->ctx();
+    env->store = store;
+    env->conn = conn;
+    env->async_rados = async_rados;
+    env->http_manager = &http_manager;
+  }
 
 public:
   RGWRemoteMetaLog(RGWRados *_store, RGWMetaSyncStatusManager *_sm) : RGWCoroutinesManager(_store->ctx()), store(_store),
@@ -119,6 +137,7 @@ public:
   rgw_meta_sync_status& get_sync_status() { return sync_status; }
 
   static string shard_obj_name(int shard_id);
+  static string status_oid();
 
   int read_sync_status() { return master_log.read_sync_status(&sync_status); }
   int init_sync_status() { return master_log.init_sync_status(num_shards); }
