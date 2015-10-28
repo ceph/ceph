@@ -2501,28 +2501,31 @@ struct pg_log_entry_t {
 
   // describes state for a locally-rollbackable entry
   ObjectModDesc mod_desc;
-  bufferlist snaps;   // only for clone entries
   hobject_t  soid;
   osd_reqid_t reqid;  // caller+tid to uniquely identify request
   vector<pair<osd_reqid_t, version_t> > extra_reqids;
   eversion_t version, prior_version, reverting_to;
+
   version_t user_version; // the user version for this entry
   utime_t     mtime;  // this is the _user_ mtime, mind you
+  bufferlist* snaps;   // only for clone entries
 
   __s32      op;
   bool invalid_hash; // only when decoding sobject_t based entries
   bool invalid_pool; // only when decoding pool-less hobject based entries
 
+  pg_log_entry_t(const pg_log_entry_t& other);
   pg_log_entry_t()
-   : user_version(0), op(0),
+   : user_version(0), snaps(NULL), op(0),
      invalid_hash(false), invalid_pool(false) {}
   pg_log_entry_t(int _op, const hobject_t& _soid,
                 const eversion_t& v, const eversion_t& pv,
                 version_t uv,
                 const osd_reqid_t& rid, const utime_t& mt)
    : soid(_soid), reqid(rid), version(v), prior_version(pv), user_version(uv),
-     mtime(mt), op(_op), invalid_hash(false), invalid_pool(false)
+     mtime(mt), snaps(NULL), op(_op), invalid_hash(false), invalid_pool(false)
      {}
+  ~pg_log_entry_t() { if (snaps) delete snaps; }
       
   bool is_clone() const { return op == CLONE; }
   bool is_modify() const { return op == MODIFY; }

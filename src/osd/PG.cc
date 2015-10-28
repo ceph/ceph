@@ -3148,15 +3148,15 @@ void PG::update_snap_map(
 	  &_t);
 	assert(r == 0);
       } else {
-	assert(i->snaps.length() > 0);
-	vector<snapid_t> snaps;
-	bufferlist snapbl = i->snaps;
-	bufferlist::iterator p = snapbl.begin();
-	try {
-	  ::decode(snaps, p);
-	} catch (...) {
-	  snaps.clear();
-	}
+	      assert(i->snaps && i->snaps->length() > 0);
+        vector<snapid_t> snaps;
+        bufferlist *snapbl = i->snaps;
+        bufferlist::iterator p = snapbl->begin();
+        try {
+           ::decode(snaps, p);
+        } catch (...) {
+           snaps.clear();
+        }
 	set<snapid_t> _snaps(snaps.begin(), snaps.end());
 
 	if (i->is_clone() || i->is_promote()) {

@@ -3333,6 +3333,27 @@ void ObjectModDesc::decode(bufferlist::iterator &_bl)
 
 // -- pg_log_entry_t --
 
+pg_log_entry_t::pg_log_entry_t(const pg_log_entry_t& other) {
+  mod_desc = other.mod_desc;
+  soid = other.soid;
+  reqid = other.reqid;
+  extra_reqids = other.extra_reqids;
+  version = other.version;
+  prior_version = other.prior_version;
+  reverting_to = other.reverting_to;
+  user_version = other.user_version;
+  mtime = other.mtime;
+  if (other.snaps && other.snaps->length() > 0) {
+    snaps = new bufferlist();
+    *snaps = *other.snaps;
+  } else {
+    snaps = NULL;
+  }
+  op = other.op;
+  invalid_hash = other.invalid_hash;
+  invalid_pool = other.invalid_pool;
+}
+
 string pg_log_entry_t::get_key_name() const
 {
   return version.get_key_name();
@@ -3382,7 +3403,16 @@ void pg_log_entry_t::encode(bufferlist &bl) const
   ::encode(mtime, bl);
   if (op == LOST_REVERT)
     ::encode(prior_version, bl);
-  ::encode(snaps, bl);
+  if (snaps && snaps->length()) {
+    ::encode(*snaps, bl);  
+  } else {
+    // we're about to write just 0 anyway, so encode
+    // __u32 instead of creating a dummy, empty
+    // bufferlist, then encoding that.
+    __u32 n = 0;
+    ::encode(n, bl);
+  }
+  
   ::encode(user_version, bl);
   ::encode(mod_desc, bl);
   ::encode(extra_reqids, bl);
@@ -3426,7 +3456,16 @@ void pg_log_entry_t::decode(bufferlist::iterator &bl)
   }
   if (struct_v >= 7 ||  // for v >= 7, this is for all ops.
       op == CLONE) {    // for v < 7, it's only present for CLONE.
-    ::decode(snaps, bl);
+    if (!snaps) {
+      snaps = new bufferlist();
+    } else {
+      snaps->clear();
+    }
+    ::decode(*snaps, bl);
+    if (!snaps->length()) {
+      delete snaps;
+      snaps = NULL;
+    }
   }
 
   if (struct_v >= 8)
@@ -3463,10 +3502,10 @@ void pg_log_entry_t::dump(Formatter *f) const
   }
   f->close_section();
   f->dump_stream("mtime") << mtime;
-  if (snaps.length() > 0) {
+  if (snaps && snaps->length() > 0) {
     vector<snapid_t> v;
-    bufferlist c = snaps;
-    bufferlist::iterator p = c.begin();
+    bufferlist *c = snaps;
+    bufferlist::iterator p = c->begin();
     try {
       ::decode(v, p);
     } catch (...) {
@@ -3497,10 +3536,10 @@ ostream& operator<<(ostream& out, const pg_log_entry_t& e)
 {
   out << e.version << " (" << e.prior_version << ") "
       << e.get_op_name() << ' ' << e.soid << " by " << e.reqid << " " << e.mtime;
-  if (e.snaps.length()) {
+  if (e.snaps && e.snaps->length()) {
     vector<snapid_t> snaps;
-    bufferlist c = e.snaps;
-    bufferlist::iterator p = c.begin();
+    bufferlist *c = e.snaps;
+    bufferlist::iterator p = c->begin();
     try {
       ::decode(snaps, p);
     } catch (...) {
