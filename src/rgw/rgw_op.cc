@@ -2324,7 +2324,7 @@ void RGWPutObj::execute()
 
   perfcounter->inc(l_rgw_put_b, s->obj_size);
 
-  if (s->aws4_auth_complete) {
+  if (s->aws4_auth_needs_complete) {
 
     /* complete aws4 auth */
 
@@ -2333,7 +2333,7 @@ void RGWPutObj::execute()
       goto done;
     }
 
-    s->aws4_auth_complete = false;
+    s->aws4_auth_needs_complete = false;
 
     /* verify signature */
 

@@ -391,7 +391,7 @@ private:
   static int authorize_v2(RGWRados *store, struct req_state *s);
   static int authorize_v4(RGWRados *store, struct req_state *s);
   static int authorize_v4_complete(RGWRados *store, struct req_state *s,
-                                   string request_payload, bool unsigned_payload);
+                                   const string& request_payload, bool unsigned_payload);
 
 };
 
