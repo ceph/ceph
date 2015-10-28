@@ -185,6 +185,7 @@ noinst_HEADERS += \
 	rgw/rgw_rest_opstate.h \
 	rgw/rgw_rest_replica_log.h \
 	rgw/rgw_rest_config.h \
+	rgw/rgw_rest_realm.h \
 	rgw/rgw_sync.h \
 	rgw/rgw_data_sync.h \
 	rgw/rgw_usage.h \
