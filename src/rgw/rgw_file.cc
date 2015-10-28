@@ -145,16 +145,14 @@ int rgw_rename(struct rgw_fs *rgw_fs,
 int rgw_unlink(struct rgw_fs *rgw_fs, struct rgw_file_handle* parent,
 	      const char* path)
 {
-  /* XXXX remove uri and deal with bucket and object names */
-  string uri;
   int rc = 0;
 
   RGWLibFS *fs = static_cast<RGWLibFS*>(rgw_fs->fs_private);
   CephContext* cct = static_cast<CephContext*>(rgw_fs->rgw);
 
   if (fs->is_root(rgw_fs)) {
-    /* for now, root always contains one user's bucket namespace */
-    uri = "/";
+    /* XXXX remove uri and deal with bucket and object names */
+    string uri = "/";
     uri += path;
     RGWDeleteBucketRequest req(cct, fs->get_user(), uri);
     rc = librgw.get_fe()->execute_req(&req);
@@ -162,9 +160,8 @@ int rgw_unlink(struct rgw_fs *rgw_fs, struct rgw_file_handle* parent,
     /*
      * object
      */
-      /* TODO: implement
-       * RGWDeleteObjectRequest req(cct, fs->get_user(), uri);
-      */
+    RGWDeleteObjRequest req(cct, fs->get_user(), "/", path);
+    rc = librgw.get_fe()->execute_req(&req);
   }
 
   return rc;
