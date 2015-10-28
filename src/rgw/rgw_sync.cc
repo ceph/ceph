@@ -215,13 +215,15 @@ int RGWMetaSyncStatusManager::init()
     return r;
   }
 
-  global_status_obj = rgw_obj(store->get_zone_params().log_pool, status_oid());
-
   r = master_log.init();
   if (r < 0) {
     lderr(store->ctx()) << "ERROR: failed to init remote log, r=" << r << dendl;
     return r;
   }
+
+  RGWMetaSyncEnv& sync_env = master_log.get_sync_env();
+
+  global_status_obj = rgw_obj(store->get_zone_params().log_pool, sync_env.status_oid());
 
   rgw_mdlog_info mdlog_info;
   r = master_log.read_log_info(&mdlog_info);
@@ -233,7 +235,7 @@ int RGWMetaSyncStatusManager::init()
   num_shards = mdlog_info.num_shards;
 
   for (int i = 0; i < num_shards; i++) {
-    shard_objs[i] = rgw_obj(store->get_zone_params().log_pool, shard_obj_name(i));
+    shard_objs[i] = rgw_obj(store->get_zone_params().log_pool, sync_env.shard_obj_name(i));
   }
 
   RWLock::WLocker wl(ts_to_shard_lock);
@@ -247,12 +249,12 @@ int RGWMetaSyncStatusManager::init()
   return 0;
 }
 
-string RGWMetaSyncStatusManager::status_oid()
+string RGWMetaSyncEnv::status_oid()
 {
   return mdlog_sync_status_oid;
 }
 
-string RGWMetaSyncStatusManager::shard_obj_name(int shard_id)
+string RGWMetaSyncEnv::shard_obj_name(int shard_id)
 {
   char buf[mdlog_sync_status_shard_prefix.size() + 16];
   snprintf(buf, sizeof(buf), "%s.%d", mdlog_sync_status_shard_prefix.c_str(), shard_id);
@@ -443,7 +445,7 @@ public:
 	uint32_t lock_duration = cct->_conf->rgw_sync_lease_period;
         string lock_name = "sync_lock";
         RGWRados *store = sync_env->store;
-	lease_cr = new RGWContinuousLeaseCR(sync_env->async_rados, store, store->get_zone_params().log_pool, mdlog_sync_status_oid,
+	lease_cr = new RGWContinuousLeaseCR(sync_env->async_rados, store, store->get_zone_params().log_pool, sync_env->status_oid(),
                                             lock_name, lock_duration, this);
         lease_cr->get();
         spawn(lease_cr, false);
@@ -459,7 +461,7 @@ public:
       yield {
         RGWRados *store = sync_env->store;
         call(new RGWSimpleRadosWriteCR<rgw_meta_sync_info>(sync_env->async_rados, store, store->get_zone_params().log_pool,
-				 mdlog_sync_status_oid, status));
+				 sync_env->status_oid(), status));
       }
       /* fetch current position in logs */
       yield {
@@ -476,14 +478,14 @@ public:
 	  marker.next_step_marker = shards_info[i].marker;
           RGWRados *store = sync_env->store;
           spawn(new RGWSimpleRadosWriteCR<rgw_meta_sync_marker>(sync_env->async_rados, store, store->get_zone_params().log_pool,
-				                          RGWMetaSyncStatusManager::shard_obj_name(i), marker), true);
+				                          sync_env->shard_obj_name(i), marker), true);
         }
       }
       yield {
 	status.state = rgw_meta_sync_info::StateBuildingFullSyncMaps;
         RGWRados *store = sync_env->store;
         call(new RGWSimpleRadosWriteCR<rgw_meta_sync_info>(sync_env->async_rados, store, store->get_zone_params().log_pool,
-				 mdlog_sync_status_oid, status));
+				 sync_env->status_oid(), status));
       }
       yield lease_cr->go_down();
       while (collect(&ret)) {
@@ -509,7 +511,7 @@ public:
 		      RGWObjectCtx& _obj_ctx,
 		      rgw_meta_sync_status *_status) : RGWSimpleRadosReadCR(_sync_env->async_rados, _sync_env->store, _obj_ctx,
 									    _sync_env->store->get_zone_params().log_pool,
-									    mdlog_sync_status_oid,
+									    _sync_env->status_oid(),
 									    &_status->sync_info),
                                                                             sync_env(_sync_env),
                                                                             obj_ctx(_obj_ctx),
@@ -528,7 +530,7 @@ int RGWReadSyncStatusCoroutine::handle_data(rgw_meta_sync_info& data)
   map<uint32_t, rgw_meta_sync_marker>& markers = sync_status->sync_markers;
   for (int i = 0; i < (int)data.num_shards; i++) {
     spawn(new RGWSimpleRadosReadCR<rgw_meta_sync_marker>(sync_env->async_rados, store, obj_ctx, store->get_zone_params().log_pool,
-				                    RGWMetaSyncStatusManager::shard_obj_name(i), &markers[i]), true);
+				                    sync_env->shard_obj_name(i), &markers[i]), true);
   }
   return 0;
 }
@@ -598,7 +600,7 @@ public:
       yield {
 	uint32_t lock_duration = cct->_conf->rgw_sync_lease_period;
         string lock_name = "sync_lock";
-	lease_cr = new RGWContinuousLeaseCR(sync_env->async_rados, sync_env->store, sync_env->store->get_zone_params().log_pool, mdlog_sync_status_oid,
+	lease_cr = new RGWContinuousLeaseCR(sync_env->async_rados, sync_env->store, sync_env->store->get_zone_params().log_pool, sync_env->status_oid(),
                                             lock_name, lock_duration, this);
         lease_cr->get();
         spawn(lease_cr, false);
@@ -655,7 +657,7 @@ public:
         rgw_meta_sync_marker& marker = iter->second;
         marker.total_entries = entries_index->get_total_entries(shard_id);
         spawn(new RGWSimpleRadosWriteCR<rgw_meta_sync_marker>(sync_env->async_rados, sync_env->store, sync_env->store->get_zone_params().log_pool,
-                                                              RGWMetaSyncStatusManager::shard_obj_name(shard_id), marker), true);
+                                                              sync_env->shard_obj_name(shard_id), marker), true);
       }
 
       drain_all_but(1); /* the lease cr still needs to run */
@@ -1021,7 +1023,7 @@ public:
         }
         RGWRados *store = sync_env->store;
 	lease_cr = new RGWContinuousLeaseCR(sync_env->async_rados, store, store->get_zone_params().log_pool,
-                                            RGWMetaSyncStatusManager::shard_obj_name(shard_id),
+                                            sync_env->shard_obj_name(shard_id),
                                             lock_name, lock_duration, this);
         lease_cr->get();
         spawn(lease_cr, false);
@@ -1042,7 +1044,7 @@ public:
 
       /* prepare marker tracker */
       set_marker_tracker(new RGWMetaSyncShardMarkerTrack(sync_env,
-                                                         RGWMetaSyncStatusManager::shard_obj_name(shard_id),
+                                                         sync_env->shard_obj_name(shard_id),
                                                          sync_marker));
       /* sync! */
       do {
@@ -1078,7 +1080,7 @@ public:
           sync_marker.next_step_marker.clear();
           RGWRados *store = sync_env->store;
           call(new RGWSimpleRadosWriteCR<rgw_meta_sync_marker>(sync_env->async_rados, store, store->get_zone_params().log_pool,
-                                                               RGWMetaSyncStatusManager::shard_obj_name(shard_id), sync_marker));
+                                                               sync_env->shard_obj_name(shard_id), sync_marker));
         }
         if (retcode < 0) {
           ldout(sync_env->cct, 0) << "ERROR: failed to set sync marker: retcode=" << retcode << dendl;
@@ -1115,7 +1117,7 @@ public:
           string lock_name = "sync_lock";
           RGWRados *store = sync_env->store;
           lease_cr = new RGWContinuousLeaseCR(sync_env->async_rados, store, store->get_zone_params().log_pool,
-                                              RGWMetaSyncStatusManager::shard_obj_name(shard_id),
+                                              sync_env->shard_obj_name(shard_id),
                                               lock_name, lock_duration, this);
           lease_cr->get();
           spawn(lease_cr, false);
@@ -1134,7 +1136,7 @@ public:
       }
       mdlog_marker = sync_marker.marker;
       set_marker_tracker(new RGWMetaSyncShardMarkerTrack(sync_env,
-                                                         RGWMetaSyncStatusManager::shard_obj_name(shard_id),
+                                                         sync_env->shard_obj_name(shard_id),
                                                          sync_marker));
       /* inc sync */
       do {
@@ -1222,7 +1224,7 @@ public:
         yield {
           RGWRados *store = sync_env->store;
           call(new RGWSimpleRadosReadCR<rgw_meta_sync_marker>(sync_env->async_rados, store, obj_ctx, store->get_zone_params().log_pool,
-                                                               RGWMetaSyncStatusManager::shard_obj_name(shard_id), &sync_marker));
+                                                               sync_env->shard_obj_name(shard_id), &sync_marker));
         }
         if (retcode < 0) {
           ldout(sync_env->cct, 0) << "ERROR: failed to read sync state for metadata shard id=" << shard_id << " retcode=" << retcode << dendl;
@@ -1280,10 +1282,6 @@ public:
 
 int RGWRemoteMetaLog::clone_shards(int num_shards, vector<string>& clone_markers)
 {
-  RGWMetaSyncEnv sync_env;
-
-  init_sync_env(&sync_env);
-
   list<RGWCoroutinesStack *> stacks;
   for (int i = 0; i < (int)num_shards; i++) {
     RGWCoroutinesStack *stack = new RGWCoroutinesStack(store->ctx(), this);
@@ -1301,10 +1299,6 @@ int RGWRemoteMetaLog::clone_shards(int num_shards, vector<string>& clone_markers
 
 int RGWRemoteMetaLog::fetch(int num_shards, vector<string>& clone_markers)
 {
-  RGWMetaSyncEnv sync_env;
-
-  init_sync_env(&sync_env);
-
   list<RGWCoroutinesStack *> stacks;
   for (int i = 0; i < (int)num_shards; i++) {
     RGWCoroutinesStack *stack = new RGWCoroutinesStack(store->ctx(), this);
@@ -1326,10 +1320,6 @@ int RGWRemoteMetaLog::read_sync_status(rgw_meta_sync_status *sync_status)
     return 0;
   }
 
-  RGWMetaSyncEnv sync_env;
-
-  init_sync_env(&sync_env);
-
   RGWObjectCtx obj_ctx(store, NULL);
   return run(new RGWReadSyncStatusCoroutine(&sync_env, obj_ctx, sync_status));
 }
@@ -1340,10 +1330,6 @@ int RGWRemoteMetaLog::init_sync_status(int num_shards)
     return 0;
   }
 
-  RGWMetaSyncEnv sync_env;
-
-  init_sync_env(&sync_env);
-
   RGWObjectCtx obj_ctx(store, NULL);
   return run(new RGWInitSyncStatusCoroutine(&sync_env, obj_ctx, num_shards));
 }
@@ -1351,7 +1337,7 @@ int RGWRemoteMetaLog::init_sync_status(int num_shards)
 int RGWRemoteMetaLog::set_sync_info(const rgw_meta_sync_info& sync_info)
 {
   return run(new RGWSimpleRadosWriteCR<rgw_meta_sync_info>(async_rados, store, store->get_zone_params().log_pool,
-				 status_manager->status_oid(), sync_info));
+				 sync_env.status_oid(), sync_info));
 }
 
 int RGWRemoteMetaLog::run_sync(int num_shards, rgw_meta_sync_status& sync_status)
@@ -1359,10 +1345,6 @@ int RGWRemoteMetaLog::run_sync(int num_shards, rgw_meta_sync_status& sync_status
   if (store->is_meta_master()) {
     return 0;
   }
-
-  RGWMetaSyncEnv sync_env;
-
-  init_sync_env(&sync_env);
 
   RGWObjectCtx obj_ctx(store, NULL);
 

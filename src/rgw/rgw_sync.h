@@ -49,6 +49,9 @@ struct RGWMetaSyncEnv {
   RGWHTTPManager *http_manager;
 
   RGWMetaSyncEnv() : cct(NULL), store(NULL), conn(NULL), async_rados(NULL), http_manager(NULL) {}
+
+  string shard_obj_name(int shard_id);
+  string status_oid();
 };
 
 
@@ -63,6 +66,8 @@ class RGWRemoteMetaLog : public RGWCoroutinesManager {
   RGWMetaSyncCR *meta_sync_cr;
 
   RGWSyncBackoff backoff;
+
+  RGWMetaSyncEnv sync_env;
 
   void init_sync_env(RGWMetaSyncEnv *env) {
     env->cct = store->ctx();
@@ -93,6 +98,10 @@ public:
   int run_sync(int num_shards, rgw_meta_sync_status& sync_status);
 
   void wakeup(int shard_id);
+
+  RGWMetaSyncEnv& get_sync_env() {
+    return sync_env;
+  }
 };
 
 class RGWMetaSyncStatusManager {
@@ -135,9 +144,6 @@ public:
   void finish();
 
   rgw_meta_sync_status& get_sync_status() { return sync_status; }
-
-  static string shard_obj_name(int shard_id);
-  static string status_oid();
 
   int read_sync_status() { return master_log.read_sync_status(&sync_status); }
   int init_sync_status() { return master_log.init_sync_status(num_shards); }
