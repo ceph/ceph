@@ -588,7 +588,7 @@ void dump_trans_id(req_state *s)
   if (s->prot_flags & RGW_REST_SWIFT) {
     STREAM_IO(s)->print("X-Trans-Id: %s\r\n", s->trans_id.c_str());
   }
-  else {
+  else if (s->trans_id.length()) {
     STREAM_IO(s)->print("x-amz-request-id: %s\r\n", s->trans_id.c_str());
   }
 }
