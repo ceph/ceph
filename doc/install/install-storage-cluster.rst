@@ -47,7 +47,7 @@ To install Ceph with RPMs, execute the following steps:
 	priority=2
 	gpgcheck=1
 	type=rpm-md
-	gpgkey=https://ceph.com/git/?p=ceph.git;a=blob_plain;f=keys/release.asc
+	gpgkey=https://download.ceph.com/keys/release.asc
 
 	[ceph-noarch]
 	name=Ceph noarch packages
@@ -56,7 +56,7 @@ To install Ceph with RPMs, execute the following steps:
 	priority=2
 	gpgcheck=1
 	type=rpm-md
-	gpgkey=https://ceph.com/git/?p=ceph.git;a=blob_plain;f=keys/release.asc
+	gpgkey=https://download.ceph.com/keys/release.asc
 
 	[ceph-source]
 	name=Ceph source packages
@@ -65,7 +65,7 @@ To install Ceph with RPMs, execute the following steps:
 	priority=2
 	gpgcheck=1
 	type=rpm-md
-	gpgkey=https://ceph.com/git/?p=ceph.git;a=blob_plain;f=keys/release.asc
+	gpgkey=https://download.ceph.com/keys/release.asc
 
 
 #. Install pre-requisite packages::  

@@ -275,7 +275,7 @@ Then add a new ``ceph.repo`` repository entry with the following contents.
 	enabled=1
 	gpgcheck=1
 	type=rpm-md
-	gpgkey=https://ceph.com/git/?p=ceph.git;a=blob_plain;f=keys/release.asc	
+	gpgkey=https://download.ceph.com/keys/release.asc
 
 
 .. note:: Ensure you use the correct URL for your distribution. Check the
@@ -313,7 +313,7 @@ replace ``{distro}`` with your distribution (e.g., ``el6``, ``rhel6``, etc).
 	enabled=1
 	gpgcheck=1
 	type=rpm-md
-	gpgkey=https://ceph.com/git/?p=ceph.git;a=blob_plain;f=keys/release.asc	
+	gpgkey=https://download.ceph.com/keys/release.asc
 
 
 .. note:: Ensure you use the correct URL for your distribution. Check the
@@ -439,7 +439,7 @@ replace ``{distro}`` with your distribution (e.g., ``el6``, ``rhel6``,
 	enabled=1
 	gpgcheck=1
 	type=rpm-md
-	gpgkey=https://ceph.com/git/?p=ceph.git;a=blob_plain;f=keys/release.asc	
+	gpgkey=https://download.ceph.com/keys/release.asc
 
 
 Upgrade daemons in the following order:
@@ -512,7 +512,7 @@ replace ``{distro}`` with your distribution (e.g., ``el6``, ``rhel6``,
 	enabled=1
 	gpgcheck=1
 	type=rpm-md
-	gpgkey=https://ceph.com/git/?p=ceph.git;a=blob_plain;f=keys/release.asc	
+	gpgkey=https://download.ceph.com/keys/release.asc
 
 
 .. note:: Ensure you use the correct URL for your distribution. Check the
