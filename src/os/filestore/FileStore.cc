@@ -591,8 +591,12 @@ FileStore::FileStore(const std::string &base, const std::string &jdev, osflagbit
   current_op_seq_fn = sss.str();
 
   ostringstream omss;
-  omss << basedir << "/current/omap";
-  omap_dir = omss.str();
+  if (g_conf->filestore_omap_backend_path != "") {
+      omap_dir = g_conf->filestore_omap_backend_path;
+  } else {
+      omss << basedir << "/current/omap";
+      omap_dir = omss.str();
+  }
 
   // initialize logger
   PerfCountersBuilder plb(g_ceph_context, internal_name, l_os_first, l_os_last);
