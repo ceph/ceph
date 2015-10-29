@@ -2729,7 +2729,7 @@ int KeyValueStore::_omap_rmkeyrange(coll_t cid, const ghobject_t &hoid,
       return -ENOENT;
 
     for (iter->lower_bound(first); iter->valid() && iter->key() < last;
-         iter->next()) {
+         iter->next(false)) {
       keys.insert(iter->key());
     }
   }
