@@ -26,8 +26,8 @@
 /**
  * Manages queue for normal and strict priority items
  *
- * On dequeue, the queue will select the lowest priority queue
- * such that the q has bucket > cost of front queue item.
+ * On dequeue, the queue will select the highest priority queue
+ * such that the q has bucket >= cost of front queue item.
  *
  * If there is no such queue, we choose the next queue item for
  * the highest priority queue.
