@@ -140,15 +140,6 @@ int RGWLibProcess::process_request(RGWLibRequest* req, RGWLibIO* io)
 	  << " starting new request req=" << hex << req << dec
 	  << " ======" << dendl;
 
-  dout(15) << "foobar1 dout dout_subsys=" << dout_subsys
-	   << dendl;
-  if (g_ceph_context->_conf->subsys.should_gather(ceph_subsys_rgw, 15)) {
-    dout(15) << "foobar2 in should-gather(ceph_subsys_rgw, 15)"
-	     << dendl;
-  }
-  dout(15) << "foobar3 dout dout_subsys=" << dout_subsys
-	   << dendl;
-
   /*
    * invariant: valid requests are derived from RGWOp--well-formed
    * requests should have assigned RGWRequest::op in their descendant
