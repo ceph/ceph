@@ -3773,6 +3773,13 @@ void Objecter::handle_pool_op_reply(MPoolOpReply *m)
         ldout(cct, 20) << "waiting for client to reach epoch " << m->epoch << " before calling back" << dendl;
         _wait_for_new_map(op->onfinish, m->epoch, m->replyCode);
       }
+      else {
+	// map epoch changed, probalbly because a MOSDMap message
+	// sneaked in. Do caller-specified callback now or else
+	// we lost it forever.
+	if (op->onfinish)
+	  op->onfinish->complete(m->replyCode);	
+      }
     }
     else {
       op->onfinish->complete(m->replyCode);
