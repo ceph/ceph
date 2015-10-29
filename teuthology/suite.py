@@ -465,9 +465,9 @@ def package_version_for_hash(hash, kernel_flavor='basic',
         return resp.text.strip()
 
 
-def github_branch_exists(project, branch, project_owner='ceph'):
+def build_git_url(project, project_owner='ceph'):
     """
-    Query GitHub to check the existence of a project's branch
+    Return the git URL to clone the project
     """
     if project == 'ceph-qa-suite':
         base = config.get_ceph_qa_suite_git_url()
@@ -475,9 +475,14 @@ def github_branch_exists(project, branch, project_owner='ceph'):
         base = config.get_ceph_git_url()
     else:
         base = 'https://github.com/{project_owner}/{project}'
-    url_templ = re.sub('\.git$', '', base) + '/tree/{branch}'
-    url = url_templ.format(project_owner=project_owner, project=project,
-                           branch=branch)
+    url_templ = re.sub('\.git$', '', base)
+    return url_templ.format(project_owner=project_owner, project=project)
+
+def github_branch_exists(project, branch, project_owner='ceph'):
+    """
+    Query GitHub to check the existence of a project's branch
+    """
+    url = build_git_url(project, project_owner) + '/tree/' + branch
     resp = requests.head(url)
     return resp.ok
 

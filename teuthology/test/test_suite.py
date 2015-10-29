@@ -139,6 +139,22 @@ class TestSuiteOffline(object):
         result = suite.combine_path("/path/to/left", None)
         assert result == "/path/to/left"
 
+    def test_build_git_url_github(self):
+        assert 'project' in suite.build_git_url('project')
+        owner = 'OWNER'
+        assert owner in suite.build_git_url('project', project_owner=owner)
+
+    @patch('teuthology.config.TeuthologyConfig.get_ceph_qa_suite_git_url')
+    def test_build_git_url_ceph_qa_suite_custom(self, m_get_ceph_qa_suite_git_url):
+        url = 'http://foo.com/some'
+        m_get_ceph_qa_suite_git_url.return_value = url + '.git'
+        assert url == suite.build_git_url('ceph-qa-suite')
+
+    @patch('teuthology.config.TeuthologyConfig.get_ceph_git_url')
+    def test_build_git_url_ceph_custom(self, m_get_ceph_git_url):
+        url = 'http://foo.com/some'
+        m_get_ceph_git_url.return_value = url + '.git'
+        assert url == suite.build_git_url('ceph')
 
 class TestFlavor(object):
     def test_get_install_task_flavor_bare(self):
@@ -704,6 +720,9 @@ class TestBuildMatrix(object):
         assert fragments[0] == 'thrash/ceph/base.yaml'
         assert fragments[1] == 'thrash/ceph-thrash/default.yaml'
 
+def test_github_branch_exists():
+    assert False == suite.github_branch_exists('ceph', 'nobranchnowaycanthappen')
+    assert True == suite.github_branch_exists('ceph', 'master')
 
 class TestSuiteMain(object):
 
