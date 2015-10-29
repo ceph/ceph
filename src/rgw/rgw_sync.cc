@@ -546,6 +546,7 @@ class RGWFetchAllMetaCR : public RGWCoroutine {
   list<string> sections;
   list<string>::iterator sections_iter;
   list<string> result;
+  list<string>::iterator iter;
 
   RGWShardedOmapCRManager *entries_index;
 
@@ -633,12 +634,13 @@ public:
 	  call(new RGWReadRESTResourceCR<list<string> >(cct, conn, sync_env->http_manager,
 				       entrypoint, NULL, &result));
 	}
-	yield {
-	  if (get_ret_status() < 0) {
-            ldout(cct, 0) << "ERROR: failed to fetch metadata section: " << *sections_iter << dendl;
-	    return set_state(RGWCoroutine_Error);
-	  }
-	  for (list<string>::iterator iter = result.begin(); iter != result.end(); ++iter) {
+        if (get_ret_status() < 0) {
+          ldout(cct, 0) << "ERROR: failed to fetch metadata section: " << *sections_iter << dendl;
+          return set_state(RGWCoroutine_Error);
+        }
+        iter = result.begin();
+        for (list<string>::iterator iter = result.begin(); iter != result.end(); ++iter) {
+          yield {
             if (!lease_cr->is_locked()) {
               lost_lock = true;
               break;
