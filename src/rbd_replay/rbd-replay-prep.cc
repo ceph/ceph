@@ -153,7 +153,7 @@ public:
 	  usage_exit(args[0], "--window requires an argument");
 	}
 	m_window = (uint64_t)(1e9 * atof(args[++i].c_str()));
-      } else if (arg.find("--window=") == 0) {
+      } else if (arg.compare(0, 9, "--window=") == 0) {
 	m_window = (uint64_t)(1e9 * atof(arg.c_str() + sizeof("--window=")));
       } else if (arg == "--anonymize") {
 	m_anonymize = true;
@@ -162,7 +162,7 @@ public:
       } else if (arg == "-h" || arg == "--help") {
 	usage(args[0]);
 	exit(0);
-      } else if (arg.find("-") == 0) {
+      } else if (arg.compare(0, 1, "-") == 0) {
 	usage_exit(args[0], "Unrecognized argument: " + arg);
       } else if (!got_input) {
 	input_file_name = arg;
