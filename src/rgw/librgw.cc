@@ -140,6 +140,15 @@ int RGWLibProcess::process_request(RGWLibRequest* req, RGWLibIO* io)
 	  << " starting new request req=" << hex << req << dec
 	  << " ======" << dendl;
 
+  dout(15) << "foobar1 dout dout_subsys=" << dout_subsys
+	   << dendl;
+  if (g_ceph_context->_conf->subsys.should_gather(ceph_subsys_rgw, 15)) {
+    dout(15) << "foobar2 in should-gather(ceph_subsys_rgw, 15)"
+	     << dendl;
+  }
+  dout(15) << "foobar3 dout dout_subsys=" << dout_subsys
+	   << dendl;
+
   /*
    * invariant: valid requests are derived from RGWOp--well-formed
    * requests should have assigned RGWRequest::op in their descendant
@@ -285,15 +294,17 @@ int RGWLib::init()
 int RGWLib::init(vector<const char*>& args)
 {
   int r = 0;
+
   /* alternative default for module */
   vector<const char *> def_args;
   def_args.push_back("--debug-rgw=1/5");
   def_args.push_back("--keyring=$rgw_data/keyring");
   def_args.push_back("--log-file=/var/log/radosgw/$cluster-$name.log");
 
-  global_init(&def_args, args, CEPH_ENTITY_TYPE_CLIENT,
-	      CODE_ENVIRONMENT_DAEMON,
-	      CINIT_FLAG_UNPRIVILEGED_DAEMON_DEFAULTS);
+  global_init(&def_args, args,
+    CEPH_ENTITY_TYPE_CLIENT,
+    CODE_ENVIRONMENT_DAEMON,
+    CINIT_FLAG_UNPRIVILEGED_DAEMON_DEFAULTS);
 
   Mutex mutex("main");
   SafeTimer init_timer(g_ceph_context, mutex);
@@ -446,21 +457,8 @@ int librgw_init()
   return rgwlib.init();
 }
 
-int librgw_create(librgw_t* rgw, const char* const id, int argc, char **argv)
+int librgw_create(librgw_t* rgw, int argc, char **argv)
 {
-  CephInitParameters iparams(CEPH_ENTITY_TYPE_CLIENT);
-  if (id) {
-    iparams.name.set(CEPH_ENTITY_TYPE_CLIENT, id);
-  }
-
-  CephContext* cct = common_preinit(iparams, CODE_ENVIRONMENT_LIBRARY, 0);
-  cct->_conf->set_val("log_to_stderr", "false"); // quiet by default
-  cct->_conf->set_val("err_to_stderr", "true"); // quiet by default
-  cct->_conf->parse_env(); // environment variables override
-  cct->_conf->apply_changes(NULL);
-  common_init_finish(cct);
-
-  /* assign ref'd cct as g_ceph_context if none exists */
   if (! g_ceph_context) {
     std::lock_guard<std::mutex> lg(librgw_mtx);
     if (! g_ceph_context) {
@@ -470,7 +468,8 @@ int librgw_create(librgw_t* rgw, const char* const id, int argc, char **argv)
     }
   }
 
-  *rgw = cct;
+  *rgw = g_ceph_context->get();
+
   return 0;
 }
 
