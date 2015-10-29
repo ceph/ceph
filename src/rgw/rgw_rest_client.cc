@@ -624,7 +624,7 @@ int RGWRESTStreamRWRequest::get_resource(RGWAccessKey& key, map<string, string>&
   if (!mgr) {
     r = pmanager->complete_requests();
     if (r < 0)
-      return ret;
+      return r;
   }
 
   return 0;

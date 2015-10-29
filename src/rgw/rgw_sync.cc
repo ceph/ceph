@@ -225,16 +225,13 @@ int RGWMetaSyncStatusManager::init()
 
   RGWMetaSyncEnv& sync_env = master_log.get_sync_env();
 
-  global_status_obj = rgw_obj(store->get_zone_params().log_pool, sync_env.status_oid());
-
-  rgw_mdlog_info mdlog_info;
-  r = master_log.read_log_info(&mdlog_info);
-  if (r < 0) {
-    lderr(store->ctx()) << "ERROR: master.read_log_info() returned r=" << r << dendl;
+  r = read_sync_status();
+  if (r < 0 && r != -ENOENT) {
+    lderr(store->ctx()) << "ERROR: failed to read sync status, r=" << r << dendl;
     return r;
   }
 
-  num_shards = mdlog_info.num_shards;
+  num_shards = sync_status.sync_info.num_shards;
 
   for (int i = 0; i < num_shards; i++) {
     shard_objs[i] = rgw_obj(store->get_zone_params().log_pool, sync_env.shard_obj_name(i));
@@ -492,7 +489,7 @@ public:
       yield lease_cr->go_down();
       while (collect(&ret)) {
 	if (ret < 0) {
-	  return set_state(RGWCoroutine_Error);
+	  return set_cr_error(ret);
 	}
         yield;
       }
@@ -626,7 +623,9 @@ public:
       }
       if (get_ret_status() < 0) {
         ldout(cct, 0) << "ERROR: failed to fetch metadata sections" << dendl;
-	return set_state(RGWCoroutine_Error);
+        yield lease_cr->go_down();
+        drain_all();
+	return set_cr_error(get_ret_status());
       }
       rearrange_sections();
       sections_iter = sections.begin();
@@ -639,7 +638,9 @@ public:
 	}
         if (get_ret_status() < 0) {
           ldout(cct, 0) << "ERROR: failed to fetch metadata section: " << *sections_iter << dendl;
-          return set_state(RGWCoroutine_Error);
+          yield lease_cr->go_down();
+          drain_all();
+          return set_cr_error(get_ret_status());
         }
         iter = result.begin();
         for (; iter != result.end(); ++iter) {
@@ -678,7 +679,7 @@ public:
       int ret;
       while (collect(&ret)) {
 	if (ret < 0) {
-	  return set_state(RGWCoroutine_Error);
+	  return set_cr_error(ret);
 	}
         yield;
       }
@@ -849,33 +850,49 @@ class RGWMetaSyncSingleEntryCR : public RGWCoroutine {
 
   RGWMetaSyncShardMarkerTrack *marker_tracker;
 
+  int tries;
+
 public:
   RGWMetaSyncSingleEntryCR(RGWMetaSyncEnv *_sync_env,
 		           const string& _raw_key, const string& _entry_marker, RGWMetaSyncShardMarkerTrack *_marker_tracker) : RGWCoroutine(_sync_env->cct),
                                                       sync_env(_sync_env),
 						      raw_key(_raw_key), entry_marker(_entry_marker),
                                                       pos(0), sync_status(0),
-                                                      marker_tracker(_marker_tracker) {
+                                                      marker_tracker(_marker_tracker), tries(0) {
   }
 
   int operate() {
     reenter(this) {
-      yield {
-        pos = raw_key.find(':');
-        section = raw_key.substr(0, pos);
-        key = raw_key.substr(pos + 1);
-        sync_status = call(new RGWReadRemoteMetadataCR(sync_env, section, key, &md_bl));
+#define NUM_TRANSIENT_ERROR_RETRIES 10
+      for (tries = 0; tries < NUM_TRANSIENT_ERROR_RETRIES; tries++) {
+        yield {
+          pos = raw_key.find(':');
+          section = raw_key.substr(0, pos);
+          key = raw_key.substr(pos + 1);
+          sync_status = call(new RGWReadRemoteMetadataCR(sync_env, section, key, &md_bl));
+        }
+
+        if (sync_status == -ENOENT) {
+#warning remove entry from local
+          return set_cr_done();
+        }
+
+        if (sync_status == -EAGAIN) {
+          continue;
+        }
+
+        break;
       }
 
       if (sync_status < 0) {
-#warning failed syncing, a metadata entry, need to log
-#warning also need to handle errors differently here, depending on error (transient / permanent)
+        log_error() << "failed to send read remote metadata entry: section=" << section << " key=" << key << " status=" << sync_status << std::endl;
         return set_cr_error(sync_status);
       }
 
       yield call(new RGWMetaStoreEntryCR(sync_env, raw_key, md_bl));
 
       sync_status = retcode;
+
       yield {
         /* update marker */
         int ret = call(marker_tracker->finish(entry_marker));
@@ -1344,6 +1361,16 @@ int RGWRemoteMetaLog::init_sync_status(int num_shards)
     return 0;
   }
 
+  if (!num_shards) {
+    rgw_mdlog_info mdlog_info;
+    int r = read_log_info(&mdlog_info);
+    if (r < 0) {
+      lderr(store->ctx()) << "ERROR: fail to fetch master log info (r=" << r << ")" << dendl;
+      return r;
+    }
+    num_shards = mdlog_info.num_shards;
+  }
+
   RGWObjectCtx obj_ctx(store, NULL);
   return run(new RGWInitSyncStatusCoroutine(&sync_env, obj_ctx, num_shards));
 }
@@ -1362,7 +1389,20 @@ int RGWRemoteMetaLog::run_sync(int num_shards, rgw_meta_sync_status& sync_status
 
   RGWObjectCtx obj_ctx(store, NULL);
 
-  int r;
+  rgw_mdlog_info mdlog_info;
+  int r = read_log_info(&mdlog_info);
+  if (r < 0) {
+    lderr(store->ctx()) << "ERROR: fail to fetch master log info (r=" << r << ")" << dendl;
+    return r;
+  }
+
+  if (!num_shards) {
+    num_shards = mdlog_info.num_shards;
+  } else if ((uint32_t)num_shards != mdlog_info.num_shards) {
+    lderr(store->ctx()) << "ERROR: can't sync, mismatch between num shards, master num_shards=" << mdlog_info.num_shards << " local num_shards=" << num_shards << dendl;
+    return r;
+  }
+
   do {
     r = run(new RGWReadSyncStatusCoroutine(&sync_env, obj_ctx, &sync_status));
     if (r < 0 && r != -ENOENT) {
@@ -1396,7 +1436,7 @@ int RGWRemoteMetaLog::run_sync(int num_shards, rgw_meta_sync_status& sync_status
       case rgw_meta_sync_info::StateBuildingFullSyncMaps:
         ldout(store->ctx(), 20) << __func__ << "(): building full sync maps" << dendl;
         r = run(new RGWFetchAllMetaCR(&sync_env, num_shards, sync_status.sync_markers));
-        if (r == -EBUSY) {
+        if (r == -EBUSY || r == -EAGAIN) {
           backoff.backoff_sleep();
           continue;
         }
