@@ -216,12 +216,12 @@ def create_initial_config(suite, suite_branch, ceph_branch, teuthology_branch,
     log.info("ceph version: {ver}".format(ver=ceph_version))
 
     if teuthology_branch and teuthology_branch != 'master':
-        if not github_branch_exists('teuthology', teuthology_branch):
+        if not git_branch_exists('teuthology', teuthology_branch):
             exc = BranchNotFoundError(teuthology_branch, 'teuthology.git')
             schedule_fail(message=str(exc), name=name)
     elif not teuthology_branch:
         # Decide what branch of teuthology to use
-        if github_branch_exists('teuthology', ceph_branch):
+        if git_branch_exists('teuthology', ceph_branch):
             teuthology_branch = ceph_branch
         else:
             log.info("branch {0} not in teuthology.git; will use master for"
@@ -230,12 +230,12 @@ def create_initial_config(suite, suite_branch, ceph_branch, teuthology_branch,
     log.info("teuthology branch: %s", teuthology_branch)
 
     if suite_branch and suite_branch != 'master':
-        if not github_branch_exists('ceph-qa-suite', suite_branch):
+        if not git_branch_exists('ceph-qa-suite', suite_branch):
             exc = BranchNotFoundError(suite_branch, 'ceph-qa-suite.git')
             schedule_fail(message=str(exc), name=name)
     elif not suite_branch:
         # Decide what branch of ceph-qa-suite to use
-        if github_branch_exists('ceph-qa-suite', ceph_branch):
+        if git_branch_exists('ceph-qa-suite', ceph_branch):
             suite_branch = ceph_branch
         else:
             log.info("branch {0} not in ceph-qa-suite.git; will use master for"
@@ -486,14 +486,11 @@ def build_git_url(project, project_owner='ceph'):
     url_templ = re.sub('\.git$', '', base)
     return url_templ.format(project_owner=project_owner, project=project)
 
-def github_branch_exists(project, branch, project_owner='ceph'):
+def git_branch_exists(project, branch, project_owner='ceph'):
     """
-    Query GitHub to check the existence of a project's branch
+    Query the git repository to check the existence of a project's branch
     """
-    url = build_git_url(project, project_owner) + '/tree/' + branch
-    resp = requests.head(url)
-    return resp.ok
-
+    return git_ls_remote(project, branch, project_owner) != None
 
 def get_branch_info(project, branch, project_owner='ceph'):
     """

@@ -746,9 +746,12 @@ class TestBuildMatrix(object):
         assert fragments[0] == 'thrash/ceph/base.yaml'
         assert fragments[1] == 'thrash/ceph-thrash/default.yaml'
 
-def test_github_branch_exists():
-    assert False == suite.github_branch_exists('ceph', 'nobranchnowaycanthappen')
-    assert True == suite.github_branch_exists('ceph', 'master')
+@patch('subprocess.check_output')
+def test_git_branch_exists(m_check_output):
+    m_check_output.return_value = ''
+    assert False == suite.git_branch_exists('ceph', 'nobranchnowaycanthappen')
+    m_check_output.return_value = 'HHH branch'
+    assert True == suite.git_branch_exists('ceph', 'master')
 
 class TestSuiteMain(object):
 
