@@ -364,18 +364,23 @@ void RGWOmapAppend::flush_pending() {
   num_pending_entries = 0;
 }
 
-void RGWOmapAppend::append(const string& s) {
+bool RGWOmapAppend::append(const string& s) {
+  if (is_done()) {
+    return false;
+  }
   ++total_entries;
   pending_entries.push_back(s);
   if (++num_pending_entries >= OMAP_APPEND_MAX_ENTRIES) {
     flush_pending();
   }
+  return true;
 }
 
-void RGWOmapAppend::finish() {
+bool RGWOmapAppend::finish() {
   going_down = true;
   flush_pending();
   set_sleeping(false);
+  return (!is_done());
 }
 
 int RGWAsyncGetBucketInstanceInfo::_send_request()
