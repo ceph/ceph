@@ -43,7 +43,7 @@ namespace {
 }
 
 TEST(LibRGW, INIT) {
-  int ret = librgw_create(&rgw, nullptr, saved_args.argc, saved_args.argv);
+  int ret = librgw_create(&rgw, saved_args.argc, saved_args.argv);
   ASSERT_EQ(ret, 0);
   ASSERT_NE(rgw, nullptr);
 }
