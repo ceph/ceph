@@ -571,7 +571,7 @@ void *RGWHTTPManager::reqs_thread_entry()
 	curl_easy_getinfo(e, CURLINFO_RESPONSE_CODE, (void **)&http_status);
 
 	int status = rgw_http_error_to_errno(http_status);
-        if (result != CURLE_OK && status == 0) {
+        if (result != CURLE_OK && http_status == 0) {
           status = -EAGAIN;
         }
         int id = req_data->id;
