@@ -214,7 +214,7 @@ class Filesystem(object):
         status = self.mon_manager.get_mds_status_all()
         result = []
         for mds_status in sorted(status['info'].values(), lambda a, b: cmp(a['rank'], b['rank'])):
-            if mds_status['state'] == 'up:active':
+            if mds_status['state'] == state:
                 result.append(mds_status['name'])
 
         return result
