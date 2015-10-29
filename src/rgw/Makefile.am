@@ -135,7 +135,7 @@ LIBCIVETWEB_DEPS += -lssl -lcrypto
 noinst_LTLIBRARIES += libcivetweb.la
 
 radosgw_SOURCES = \
-	rgw/rgw_fcgi_process.cc \
+    rgw/rgw_fcgi_process.cc \
 	rgw/rgw_loadgen_process.cc \
 	rgw/rgw_civetweb.cc \
 	rgw/rgw_civetweb_frontend.cc \
