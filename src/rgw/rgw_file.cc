@@ -347,7 +347,7 @@ int rgw_read(struct rgw_fs *rgw_fs,
 */
 int rgw_write(struct rgw_fs *rgw_fs,
 	      struct rgw_file_handle *fh, uint64_t offset,
-	      size_t length, void *buffer)
+	      size_t length, size_t *bytes_written, void *buffer)
 {
   CephContext* cct = static_cast<CephContext*>(rgw_fs->rgw);
   RGWLibFS *fs = static_cast<RGWLibFS*>(rgw_fs->fs_private);
@@ -364,7 +364,10 @@ int rgw_write(struct rgw_fs *rgw_fs,
   /* XXX */
   RGWPutObjRequest req(cct, fs->get_user(), rgw_fh->bucket_name(),
 		      rgw_fh->object_name(), bl);
+
   int rc = librgw.get_fe()->execute_req(&req);
+
+  *bytes_written = (rc == 0) ? req.bytes_written : 0;
 
   return rc;
 }
