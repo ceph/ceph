@@ -70,7 +70,7 @@ TEST_F(PrioritizedQueueTest, strict_pq) {
   }
 }
 
-TEST_F(PrioritizedQueueTest, lowest_among_eligible_otherwise_highest) {
+TEST_F(PrioritizedQueueTest, highest_among_eligible_otherwise_highest_remaining) {
   // to minimize the effect of `distribute_tokens()`
   // all eligible items will be assigned with cost of min_cost
   const unsigned min_cost = 0;
@@ -78,49 +78,54 @@ TEST_F(PrioritizedQueueTest, lowest_among_eligible_otherwise_highest) {
   PQ pq(max_tokens_per_subqueue, min_cost);
 
 #define ITEM_TO_COST(item_) (item_ % 5 ? min_cost : max_tokens_per_subqueue)
-  unsigned num_low_cost = 0, num_high_cost = 0;
+  unsigned num_token_queue = 0, num_nontoken_queue = 0;
   for (int i = 0; i < item_size; i++) {
     const Item& item = items[i];
     unsigned cost = ITEM_TO_COST(item);
     unsigned priority = item;
     if (cost == min_cost) {
-      num_low_cost++;
+      num_token_queue++;
     } else {
-      num_high_cost++;
+      num_nontoken_queue++;
     }
     pq.enqueue(Klass(0), priority, cost, item);
   }
   // the token in all buckets is 0 at the beginning, so dequeue() should pick
   // the first one with the highest priority.
-  unsigned highest_priority;
+  unsigned highest_token_priority;
+  unsigned highest_nontoken_priority;
   {
     Item item = pq.dequeue();
     unsigned cost = ITEM_TO_COST(item);
     unsigned priority = item;
     if (cost == min_cost) {
-      num_low_cost--;
+      num_token_queue--;
     } else {
-      num_high_cost--;
+      num_nontoken_queue--;
     }
     EXPECT_EQ(item_size - 1u, priority);
-    highest_priority = priority;
+    highest_token_priority = priority;
+    highest_nontoken_priority = priority;
   }
-  unsigned lowest_priority = 0;
-  for (unsigned i = 0; i < num_low_cost; i++) {
+  // check that the token queue is dequeued highest->lowest
+  for (unsigned i = 0; i < num_token_queue; i++) {
     Item item = pq.dequeue();
     unsigned cost = ITEM_TO_COST(item);
     unsigned priority = item;
     EXPECT_EQ(min_cost, cost);
-    EXPECT_GT(priority, lowest_priority);
-    lowest_priority = priority;
+    EXPECT_LT(priority, highest_token_priority);
+    EXPECT_NE(priority % 5, 0u);
+    highest_token_priority = priority;
   }
-  for (unsigned i = 0; i < num_high_cost; i++) {
+  // check that the non-token queue is dequeued highest->lowest
+  for (unsigned i = 0; i < num_nontoken_queue; i++) {
     Item item = pq.dequeue();
     unsigned cost = ITEM_TO_COST(item);
     unsigned priority = item;
     EXPECT_EQ(max_tokens_per_subqueue, cost);
-    EXPECT_LT(priority, highest_priority);
-    highest_priority = priority;
+    EXPECT_LT(priority, highest_nontoken_priority);
+    EXPECT_EQ(priority % 5, 0u);
+    highest_nontoken_priority = priority;
   }
 #undef ITEM_TO_COST
 }
