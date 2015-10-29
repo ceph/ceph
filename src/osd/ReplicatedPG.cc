@@ -5287,7 +5287,7 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	  iter->upper_bound(start_after);
 	  for (uint64_t i = 0;
 	       i < max_return && iter->valid();
-	       ++i, iter->next()) {
+	       ++i, iter->next(false)) {
 	    out_set.insert(iter->key());
 	  }
 	} // else return empty out_set
@@ -5329,7 +5329,7 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	  for (uint64_t i = 0;
 	       i < max_return && iter->valid() &&
 		 iter->key().substr(0, filter_prefix.size()) == filter_prefix;
-	       ++i, iter->next()) {
+	       ++i, iter->next(false)) {
 	    dout(20) << "Found key " << iter->key() << dendl;
 	    out_set.insert(make_pair(iter->key(), iter->value()));
 	  }
@@ -6728,7 +6728,7 @@ int ReplicatedPG::fill_in_copy_get(
 	osd->store->get_omap_iterator(coll, ghobject_t(oi.soid));
       assert(iter);
       iter->upper_bound(cursor.omap_offset);
-      for (; iter->valid(); iter->next()) {
+      for (; iter->valid(); iter->next(false)) {
 	++omap_keys;
 	::encode(iter->key(), omap_data);
 	::encode(iter->value(), omap_data);
