@@ -110,10 +110,6 @@ class RGWMetaSyncStatusManager {
 
   RGWRemoteMetaLog master_log;
 
-  string global_status_oid;
-  string shard_status_oid_prefix;
-  rgw_obj global_status_obj;
-
   rgw_meta_sync_status sync_status;
   map<int, rgw_obj> shard_objs;
 
