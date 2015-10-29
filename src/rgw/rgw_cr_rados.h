@@ -436,8 +436,8 @@ public:
   RGWOmapAppend(RGWAsyncRadosProcessor *_async_rados, RGWRados *_store, rgw_bucket& _pool, const string& _oid);
   int operate();
   void flush_pending();
-  void append(const string& s);
-  void finish();
+  bool append(const string& s);
+  bool finish();
 
   uint64_t get_total_entries() {
     return total_entries;
@@ -518,18 +518,28 @@ public:
       char buf[oid_prefix.size() + 16];
       snprintf(buf, sizeof(buf), "%s.%d", oid_prefix.c_str(), i);
       RGWOmapAppend *shard = new RGWOmapAppend(async_rados, store, pool, buf);
+      shard->get();
       shards.push_back(shard);
       op->spawn(shard, false);
     }
   }
-  void append(const string& entry) {
-    int shard_id = store->key_to_shard_id(entry, shards.size());
-    shards[shard_id]->append(entry);
-  }
-  void finish() {
-    for (vector<RGWOmapAppend *>::iterator iter = shards.begin(); iter != shards.end(); ++iter) {
-      (*iter)->finish();
+
+  ~RGWShardedOmapCRManager() {
+    for (auto shard : shards) {
+      shard->put();
     }
+  }
+
+  bool append(const string& entry) {
+    int shard_id = store->key_to_shard_id(entry, shards.size());
+    return shards[shard_id]->append(entry);
+  }
+  bool finish() {
+    bool success = true;
+    for (vector<RGWOmapAppend *>::iterator iter = shards.begin(); iter != shards.end(); ++iter) {
+      success &= (*iter)->finish();
+    }
+    return success;
   }
 
   uint64_t get_total_entries(int shard_id) {

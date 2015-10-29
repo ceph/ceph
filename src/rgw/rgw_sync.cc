@@ -554,6 +554,7 @@ class RGWFetchAllMetaCR : public RGWCoroutine {
 
   RGWContinuousLeaseCR *lease_cr;
   bool lost_lock;
+  bool failed;
 
   map<uint32_t, rgw_meta_sync_marker>& markers;
 
@@ -561,7 +562,7 @@ public:
   RGWFetchAllMetaCR(RGWMetaSyncEnv *_sync_env, int _num_shards,
                     map<uint32_t, rgw_meta_sync_marker>& _markers) : RGWCoroutine(_sync_env->cct), sync_env(_sync_env),
 						      num_shards(_num_shards),
-						      req_ret(0), entries_index(NULL), lease_cr(NULL), lost_lock(false), markers(_markers) {
+						      req_ret(0), entries_index(NULL), lease_cr(NULL), lost_lock(false), failed(false), markers(_markers) {
   }
 
   ~RGWFetchAllMetaCR() {
@@ -641,7 +642,7 @@ public:
           return set_state(RGWCoroutine_Error);
         }
         iter = result.begin();
-        for (list<string>::iterator iter = result.begin(); iter != result.end(); ++iter) {
+        for (; iter != result.end(); ++iter) {
           yield {
             if (!lease_cr->is_locked()) {
               lost_lock = true;
@@ -649,19 +650,25 @@ public:
             }
 	    ldout(cct, 20) << "list metadata: section=" << *sections_iter << " key=" << *iter << dendl;
 	    string s = *sections_iter + ":" + *iter;
-	    entries_index->append(s);
-#warning error handling of shards
+	    if (!entries_index->append(s)) {
+              break;
+            }
 	  }
 	}
       }
-      yield entries_index->finish();
-
-      for (map<uint32_t, rgw_meta_sync_marker>::iterator iter = markers.begin(); iter != markers.end(); ++iter) {
-        int shard_id = (int)iter->first;
-        rgw_meta_sync_marker& marker = iter->second;
-        marker.total_entries = entries_index->get_total_entries(shard_id);
-        spawn(new RGWSimpleRadosWriteCR<rgw_meta_sync_marker>(sync_env->async_rados, sync_env->store, sync_env->store->get_zone_params().log_pool,
-                                                              sync_env->shard_obj_name(shard_id), marker), true);
+      yield {
+        if (!entries_index->finish()) {
+          failed = true;
+        }
+      }
+      if (!failed) {
+        for (map<uint32_t, rgw_meta_sync_marker>::iterator iter = markers.begin(); iter != markers.end(); ++iter) {
+          int shard_id = (int)iter->first;
+          rgw_meta_sync_marker& marker = iter->second;
+          marker.total_entries = entries_index->get_total_entries(shard_id);
+          spawn(new RGWSimpleRadosWriteCR<rgw_meta_sync_marker>(sync_env->async_rados, sync_env->store, sync_env->store->get_zone_params().log_pool,
+                                                                sync_env->shard_obj_name(shard_id), marker), true);
+        }
       }
 
       drain_all_but(1); /* the lease cr still needs to run */
@@ -674,6 +681,9 @@ public:
 	  return set_state(RGWCoroutine_Error);
 	}
         yield;
+      }
+      if (failed) {
+        yield return set_cr_error(-EIO);
       }
       if (lost_lock) {
         yield return set_cr_error(-EBUSY);
