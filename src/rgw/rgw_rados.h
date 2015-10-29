@@ -1291,7 +1291,7 @@ public:
   const string& get_current_period() const {
     return current_period;
   }
-  int set_current_period(const string& period_id, const rgw_meta_sync_status* sync_status = NULL);
+  int set_current_period(const string& period_id);
 
   string get_control_oid();
   int notify_zone();
@@ -1342,6 +1342,9 @@ class RGWPeriod
 
   const string get_period_oid();
   const string get_period_oid_prefix();
+
+  // gather the metadata sync status for each shard; only for use on master zone
+  int update_sync_status();
 
 public:
   RGWPeriod() : epoch(0) {}
