@@ -117,6 +117,8 @@ int RGWRemoteMetaLog::init()
     return ret;
   }
 
+  init_sync_env(&sync_env);
+
   return 0;
 }
 
