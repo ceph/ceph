@@ -1317,6 +1317,8 @@ int Objecter::pool_snap_list(int64_t poolid, vector<uint64_t> *snaps)
   RWLock::RLocker rl(rwlock);
 
   const pg_pool_t *pi = osdmap->get_pg_pool(poolid);
+  if (!pi)
+    return -ENOENT;
   for (map<snapid_t,pool_snap_info_t>::const_iterator p = pi->snaps.begin();
        p != pi->snaps.end();
        ++p) {
