@@ -25,7 +25,7 @@ if(no_yasm)
 else(no_yasm)
   message(STATUS " we have a modern and working yasm")
   execute_process(
-    COMMAND "arch"
+    COMMAND uname -m
     OUTPUT_VARIABLE arch
     OUTPUT_STRIP_TRAILING_WHITESPACE)
   if(arch STREQUAL "x86_64")
