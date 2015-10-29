@@ -463,6 +463,7 @@ public:
 
     /* fixup RGWGetObj (already know range parameters) */
     RGWGetObj::range_parsed = true;
+    RGWGetObj::get_data = true; // XXX
     RGWGetObj::partial_content = true;
     RGWGetObj::ofs = off;
     RGWGetObj::end = off + len;
