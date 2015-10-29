@@ -242,6 +242,7 @@ int JournalPlayer::process_prefetch() {
       }
 
       ldout(m_cct, 20) << "skipping committed entry: " << entry << dendl;
+      m_journal_metadata->reserve_tid(entry.get_tag(), entry.get_tid());
       object_player->pop_front();
     }
 
