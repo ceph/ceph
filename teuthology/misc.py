@@ -1313,14 +1313,15 @@ def sh(command, log_limit=128):
         stderr=subprocess.STDOUT,
         shell=True)
     output = proc.communicate()[0]
-    if output.strip():
-        if len(output) > log_limit:
-            log.debug(command + " output " + str(output)[:log_limit] +
-                      "... (truncated to the first " + str(log_limit) +
-                      " characters)")
-        else:
-            log.debug(command + " output " + str(output))
-    if proc.returncode != 0:
+    if proc.returncode == 0:
+        if output.strip():
+            if len(output) > log_limit:
+                log.debug(command + " output " + str(output)[:log_limit] +
+                          "... (truncated to the first " + str(log_limit) +
+                          " characters)")
+            else:
+                log.debug(command + " output " + str(output))
+    else:
         log.debug(command + " failed with " + str(output))
         raise subprocess.CalledProcessError(
             returncode=proc.returncode,
