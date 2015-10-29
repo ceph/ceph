@@ -464,6 +464,14 @@ def package_version_for_hash(hash, kernel_flavor='basic',
     if resp.ok:
         return resp.text.strip()
 
+def git_ls_remote(project, branch, project_owner='ceph'):
+    ls_remote = subprocess.check_output(
+        "git ls-remote " + build_git_url(project, project_owner) + " " +
+        branch, shell=True).split()
+    if ls_remote:
+        return ls_remote[0]
+    else:
+        return None
 
 def build_git_url(project, project_owner='ceph'):
     """

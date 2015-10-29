@@ -7,6 +7,26 @@ from teuthology import suite
 from scripts.suite import main
 from teuthology.config import config
 
+import os
+import pytest
+import tempfile
+
+@pytest.fixture
+def git_repository(request):
+    d = tempfile.mkdtemp()
+    os.system("""
+    cd {d}
+    git init
+    touch A
+    git config user.email 'you@example.com'
+    git config user.name 'Your Name'
+    git add A
+    git commit -m 'A' A
+    """.format(d=d))
+    def fin():
+        os.system("rm -fr " + d)
+    request.addfinalizer(fin)
+    return d
 
 class TestSuiteOffline(object):
     def test_name_timestamp_passed(self):
@@ -155,6 +175,12 @@ class TestSuiteOffline(object):
         url = 'http://foo.com/some'
         m_get_ceph_git_url.return_value = url + '.git'
         assert url == suite.build_git_url('ceph')
+
+    @patch('teuthology.config.TeuthologyConfig.get_ceph_git_url')
+    def test_git_ls_remote(self, m_get_ceph_git_url, git_repository):
+        m_get_ceph_git_url.return_value = git_repository
+        assert None == suite.git_ls_remote('ceph', 'nobranch')
+        assert suite.git_ls_remote('ceph', 'master') is not None
 
 class TestFlavor(object):
     def test_get_install_task_flavor_bare(self):
