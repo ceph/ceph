@@ -26,8 +26,8 @@
 /**
  * Manages queue for normal and strict priority items
  *
- * On dequeue, the queue will select the lowest priority queue
- * such that the q has bucket > cost of front queue item.
+ * On dequeue, the queue will select the highest priority queue
+ * such that the q has bucket >= cost of front queue item.
  *
  * If there is no such queue, we choose the next queue item for
  * the highest priority queue.
@@ -349,11 +349,11 @@ public:
     // if there are multiple buckets/subqueues with sufficient tokens,
     // we behave like a strict priority queue among all subqueues that
     // are eligible to run.
-    for (typename SubQueues::iterator i = queue.begin();
-	 i != queue.end();
+    for (typename SubQueues::reverse_iterator i = queue.rbegin();
+	 i != queue.rend();
 	 ++i) {
       assert(!(i->second.empty()));
-      if (i->second.front().first < i->second.num_tokens()) {
+      if (i->second.front().first <= i->second.num_tokens()) {
 	T ret = i->second.front().second;
 	unsigned cost = i->second.front().first;
 	i->second.take_tokens(cost);
