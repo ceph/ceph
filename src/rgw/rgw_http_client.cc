@@ -447,12 +447,12 @@ int RGWHTTPManager::process_requests(bool wait_for_data, bool *done)
     }
 
     mstatus = curl_multi_perform((CURLM *)multi_handle, &still_running);
-    dout(20) << "curl_multi_perform returned: " << mstatus << dendl;
     switch (mstatus) {
       case CURLM_OK:
       case CURLM_CALL_MULTI_PERFORM:
         break;
       default:
+        dout(20) << "curl_multi_perform returned: " << mstatus << dendl;
         return -EINVAL;
     }
     int msgs_left;
