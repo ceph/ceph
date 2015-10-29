@@ -99,7 +99,7 @@ public:
       return reqid;
     } else {
       if (!final_decode_needed)
-	assert(reqid.inc == client_inc);  // decode() should have done this
+	assert(reqid.inc == (int32_t)client_inc);  // decode() should have done this
       return osd_reqid_t(get_orig_source(),
                          reqid.inc,
 			 header.tid);
