@@ -379,12 +379,13 @@ public:
   const std::string& bucket_name;
   const std::string& obj_name;
   buffer::list& bl; /* XXX */
+  size_t bytes_written;
 
   RGWPutObjRequest(CephContext* _cct, RGWUserInfo *_user,
 		  const std::string& _bname, const std::string& _oname,
 		  buffer::list& _bl)
     : RGWLibRequest(_cct, _user), bucket_name(_bname), obj_name(_oname),
-      bl(_bl) {
+      bl(_bl), bytes_written(0) {
     magic = 75;
     op = this;
   }
@@ -428,7 +429,9 @@ public:
   virtual int get_data(buffer::list& _bl) {
     /* XXX for now, use sharing semantics */
     _bl.claim(bl);
-    return _bl.length();
+    uint32_t len = _bl.length();
+    bytes_written += len;
+    return len;
   }
 
   virtual void send_response() {}

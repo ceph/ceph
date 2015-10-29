@@ -39,6 +39,7 @@ namespace {
 
   bool do_pre_list = false;
   bool do_put = false;
+  bool do_bulk = false;
   bool do_get = false;
   bool do_delete = false;
 
@@ -116,7 +117,7 @@ namespace {
     }
 
     ~ZPageSet() {
-      for (int ix = 0; ix < pages.size(); ++ix)
+      for (unsigned int ix = 0; ix < pages.size(); ++ix)
 	delete pages[ix];
       free(iovs);
     }
@@ -175,7 +176,7 @@ TEST(LibRGW, LIST_OBJECTS) {
 }
 
 TEST(LibRGW, LOOKUP_OBJECT) {
-  if (do_get || do_put) {
+  if (do_get || do_put || do_bulk) {
     int ret = rgw_lookup(fs, bucket_fh, object_name.c_str(), &object_fh,
 			0 /* flags */);
     ASSERT_EQ(ret, 0);
@@ -191,9 +192,12 @@ TEST(LibRGW, OBJ_OPEN) {
 
 TEST(LibRGW, PUT_OBJECT) {
   if (do_put) {
+    size_t nbytes;
     string data = "hi mom"; // fix this
-    int ret = rgw_write(fs, object_fh, 0, data.length(), (void*) data.c_str());
+    int ret = rgw_write(fs, object_fh, 0, data.length(), &nbytes,
+			(void*) data.c_str());
     ASSERT_EQ(ret, 0);
+    ASSERT_EQ(nbytes, data.length());
   }
 }
 
@@ -207,6 +211,25 @@ TEST(LibRGW, GET_OBJECT) {
     buffer::list bl;
     bl.push_back(buffer::create_static(nread, sbuf));
     bl.hexdump(std::cout);
+  }
+}
+
+TEST(LibRGW, WRITE_READ_VERIFY)
+{
+  if (do_bulk) {
+    const int iovcnt = 16;
+    ZPageSet zp_set1{iovcnt}; // 1M random data in 16 64K pages
+    struct iovec *iovs = zp_set1.get_iovs();
+
+    /* read after write POSIX-style */
+    size_t nbytes, off = 0;
+    for (int ix = 0; ix < 16; ++ix, off += 65536) {
+      struct iovec *iov = &iovs[ix];
+      int ret = rgw_write(fs, object_fh, off, 65536, &nbytes, iov->iov_base);
+      ASSERT_EQ(ret, 0);
+      ASSERT_EQ(nbytes, size_t(65536));
+    }
+    zp_set1.reset_iovs();
   }
 }
 
@@ -276,6 +299,9 @@ int main(int argc, char *argv[])
     } else if (ceph_argparse_flag(args, arg_iter, "--put",
 					    (char*) nullptr)) {
       do_put = true;
+    } else if (ceph_argparse_flag(args, arg_iter, "--bulk",
+					    (char*) nullptr)) {
+      do_bulk = true;
     } else if (ceph_argparse_flag(args, arg_iter, "--delete",
 					    (char*) nullptr)) {
       do_delete = true;
