@@ -496,6 +496,14 @@ int ImageWatcher::notify_snap_create(const std::string &snap_name) {
   return notify_lock_owner(bl);
 }
 
+void ImageWatcher::notify_rollback_complete()
+{
+  bufferlist bl;
+  ::encode(NotifyMessage(RollbackCompletePayload()), bl);
+
+  m_image_ctx.md_ctx.notify2(m_image_ctx.header_oid, bl, NOTIFY_TIMEOUT, NULL);
+}
+
 int ImageWatcher::notify_snap_remove(const std::string &snap_name) {
   assert(m_image_ctx.owner_lock.is_locked());
   assert(!is_lock_owner());
@@ -956,6 +964,15 @@ void ImageWatcher::handle_payload(const SnapCreatePayload &payload,
 
     ::encode(ResponseMessage(r), *out);
   }
+}
+
+void ImageWatcher::handle_payload(const RollbackCompletePayload &payload,
+				  bufferlist *out) {
+  
+  ldout(m_image_ctx.cct, 10) << "remote snap_rollback" << dendl;
+
+  m_image_ctx.flush_async_operations();
+  m_image_ctx.invalidate_cache();
 }
 
 void ImageWatcher::handle_payload(const SnapRemovePayload &payload,

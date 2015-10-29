@@ -2431,6 +2431,7 @@ reprotect_and_return_err:
       return r;
     }
 
+    ictx->image_watcher->notify_rollback_complete();
     notify_change(ictx->md_ctx, ictx->header_oid, ictx);
 
     ictx->perfcounter->inc(l_librbd_snap_rollback);

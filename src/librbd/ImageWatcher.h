@@ -50,6 +50,7 @@ namespace librbd {
     int notify_resize(uint64_t request_id, uint64_t size,
 		      ProgressContext &prog_ctx);
     int notify_snap_create(const std::string &snap_name);
+    void notify_rollback_complete();
     int notify_snap_remove(const std::string &snap_name);
     int notify_rebuild_object_map(uint64_t request_id,
                                   ProgressContext &prog_ctx);
@@ -268,6 +269,8 @@ namespace librbd {
     void handle_payload(const WatchNotify::ResizePayload& payload,
 		        bufferlist *out);
     void handle_payload(const WatchNotify::SnapCreatePayload& payload,
+		        bufferlist *out);
+    void handle_payload(const WatchNotify::RollbackCompletePayload& payload,
 		        bufferlist *out);
     void handle_payload(const WatchNotify::SnapRemovePayload& payload,
 		        bufferlist *out);
