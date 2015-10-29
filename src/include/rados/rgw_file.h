@@ -204,7 +204,7 @@ int rgw_readv(struct rgw_fs *rgw_fs,
 */
 int rgw_write(struct rgw_fs *rgw_fs,
 	      struct rgw_file_handle *fh, uint64_t offset,
-	      size_t length, void *buffer);
+	      size_t length, size_t *bytes_written, void *buffer);
 
 /* XXX add release fn and UIO type */
 
