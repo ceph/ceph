@@ -23,6 +23,7 @@ libos_a_SOURCES = \
 	os/KeyValueStore.cc \
 	os/ObjectStore.cc \
 	os/WBThrottle.cc \
+	os/OmniKVStore.cc \
 	common/TrackedOp.cc
 
 if LINUX
@@ -74,6 +75,7 @@ noinst_HEADERS += \
 	os/JournalingObjectStore.h \
 	os/KeyValueDB.h \
 	os/LevelDBStore.h \
+	os/OmniKVStore.h \
 	os/LFNIndex.h \
 	os/MemStore.h \
 	os/KeyValueStore.h \

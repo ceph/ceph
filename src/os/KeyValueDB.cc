@@ -3,6 +3,7 @@
 
 #include "KeyValueDB.h"
 #include "LevelDBStore.h"
+#include "OmniKVStore.h"
 #ifdef HAVE_LIBROCKSDB
 #include "RocksDBStore.h"
 #endif
@@ -16,6 +17,11 @@ KeyValueDB *KeyValueDB::create(CephContext *cct, const string& type,
   if (type == "leveldb") {
     return new LevelDBStore(cct, dir);
   }
+
+  if (type == "omnikvs") {
+	return new OmniKVStore(cct);
+  }
+  	
 #ifdef HAVE_KINETIC
   if (type == "kinetic" &&
       cct->check_experimental_feature_enabled("kinetic")) {
@@ -36,6 +42,11 @@ int KeyValueDB::test_init(const string& type, const string& dir)
   if (type == "leveldb") {
     return LevelDBStore::_test_init(dir);
   }
+
+  if (type == "omnikvs") {
+    return LevelDBStore::_test_init(dir);
+  }
+  
 #ifdef HAVE_KINETIC
   if (type == "kinetic") {
     return KineticStore::_test_init(g_ceph_context);
