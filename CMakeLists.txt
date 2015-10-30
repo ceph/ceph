@@ -163,19 +163,27 @@ endif(${WITH_GPERFTOOLS})
 
 find_package(snappy REQUIRED)
 
-IF(ALLOCATOR)
-  set(ALLOCATOR ${ALLOCATOR} CACHE STRING "memory allocator: jemalloc|tcmalloc|libc")
-ELSE()
-  if( "${CMAKE_MAJOR_VERSION}.${CMAKE_MINOR_VERSION}" VERSION_GREATER "2.6" )
-    #string for allocator below set to tcmalloc by default for now
-    #need to learn about jemalloc use in ceph
-    set(ALLOCATOR "tcmalloc" CACHE STRING
-      "specify the memory allocator to use: jemalloc|tcmalloc|libc")
-  else("${CMAKE_MAJOR_VERSION}.${CMAKE_MINOR_VERSION}" VERSION_GREATER "2.6" )
-    set(ALLOCATOR "libc" CACHE STRING
-      "specify the memory allocator to use: jemalloc|tcmalloc|libc")
-  endif( "${CMAKE_MAJOR_VERSION}.${CMAKE_MINOR_VERSION}" VERSION_GREATER "2.6" )
-ENDIF()
+#if allocator is set on command line make sure  
+if(ALLOCATOR)
+  if(${ALLOCATOR} STREQUAL "tcmalloc")
+    find_package(tcmalloc)
+    if(NOT Tcmalloc_FOUND)
+      message(FATAL_ERROR "FATAL ERROR: tcmalloc specified but not found")
+    endif(NOT Tcmalloc_FOUND)
+  elseif(${ALLOCATOR} STREQUAL "jemalloc")
+    find_package(JeMalloc)
+    if(NOT JEMALLOC_FOUND)
+      message(FATAL_ERROR "FATAL ERROR: jemalloc specified but not found")
+    endif(NOT JEMALLOC_FOUND)
+  endif()
+else(ALLOCATOR)
+  find_package(tcmalloc)
+  find_package(JeMalloc)
+  if(NOT Tcmalloc_FOUND AND NOT JEMALLOC_FOUND)
+    message(WARNING "tcmalloc and jemalloc not found, falling back to libc")
+    set(ALLOCATOR "libc")
+  endif(NOT Tcmalloc_FOUND AND NOT JEMALLOC_FOUND)
+endif(ALLOCATOR)
 
 find_package(keyutils REQUIRED)
 

@@ -122,32 +122,16 @@ if(HAVE_XIO)
 endif(HAVE_XIO)
 
 # sort out which allocator to use
-if(${ALLOCATOR} STREQUAL "tcmalloc")
-  find_package(tcmalloc)
-  set(HAVE_LIBTCMALLOC ${Tcmalloc_FOUND})
-  if(Tcmalloc_FOUND)
-    set(ALLOC_LIBS tcmalloc)
-    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fno-builtin-malloc -fno-builtin-calloc -fno-builtin-realloc -fno-builtin-free")
-    set(TCMALLOC_srcs perfglue/heap_profiler.cc)
-  else(Tcmalloc_FOUND)
-    message(WARNING "tcmalloc not found, falling back to libc")
-    set(TCMALLOC_srcs perfglue/disabled_heap_profiler.cc)
-    set(ALLOCATOR "libc")
-  endif(Tcmalloc_FOUND)
-elseif(${ALLOCATOR} STREQUAL "jemalloc")
-  find_package(JeMalloc)
-  if(JEMALLOC_FOUND)
-    set(ALLOC_LIBS jemalloc)
-    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fno-builtin-malloc -fno-builtin-calloc -fno-builtin-realloc -fno-builtin-free")
-  else(JEMALLOC_FOUND)
-    message(WARNING "jemalloc not found, falling back to libc")
-    set(ALLOCATOR "libc")
-  endif(JEMALLOC_FOUND)
+if(Tcmalloc_FOUND)
+  set(HAVE_LIBTCMALLOC 1)
+  set(ALLOC_LIBS tcmalloc)
+  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fno-builtin-malloc -fno-builtin-calloc -fno-builtin-realloc -fno-builtin-free")
+  set(TCMALLOC_srcs perfglue/heap_profiler.cc)
+elseif(NOT Tcmalloc_FOUND AND JEMALLOC_FOUND)
+  set(ALLOC_LIBS jemalloc)
+  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fno-builtin-malloc -fno-builtin-calloc -fno-builtin-realloc -fno-builtin-free")
   set(TCMALLOC_srcs perfglue/disabled_heap_profiler.cc)
-else()
-  if(NOT ${ALLOCATOR} STREQUAL "libc")
-    message(SEND_ERROR "${ALLOCATOR} is not a valid option. Valid allocators are: jemalloc|tcmalloc|libc")
-  endif()
+elseif(${ALLOCATOR} STREQUAL "libc")
   set(TCMALLOC_srcs perfglue/disabled_heap_profiler.cc)
 endif()
 
@@ -156,8 +140,6 @@ set(heap_profiler_files ${TCMALLOC_srcs})
 add_library(heap_profiler_objs OBJECT ${heap_profiler_files})
 
 set(LIBEDIT_LIBS edit)
-
-#do rocksdb here
 
 # Common infrastructure
 configure_file(
@@ -601,6 +583,37 @@ target_link_libraries(ceph-mon mon ${Boost_THREAD_LIBRARY} common os global ${EX
   ${CMAKE_DL_LIBS} ${ALLOC_LIBS})
 install(TARGETS ceph-mon DESTINATION bin)
 
+#external project rocksdb
+#For now only building rocksdb statically
+option(WITH_LIBROCKSDB ON)
+if(NOT JEMALLOC_FOUND)
+  option(WITH_SLIBROCKSDB ON)
+endif(NOT JEMALLOC_FOUND)
+
+include(ExternalProject)
+ExternalProject_Add(rocksdb
+  SOURCE_DIR ${CMAKE_SOURCE_DIR}/src/rocksdb
+  CONFIGURE_COMMAND autoreconf -fvi && ./configure
+  BINARY_DIR ${CMAKE_SOURCE_DIR}/src/rocksdb 
+  BUILD_COMMAND make
+  INSTALL_COMMAND make install 
+)
+
+if(WITH_SLIBROCKSDB)
+  add_library(librocksdb STATIC IMPORTED)
+  set_property(TARGET librocksdb PROPERTY IMPORTED_LOCATION ${CMAKE_SOURCE_DIR}/src/rocksdb/librocksdb.la)
+  add_dependencies(librocksdb rocksdb)
+endif(WITH_SLIBROCKSDB)
+
+if(WITH_LIBROCKSDB)
+  add_library(os_rocksdb STATIC os/RocksDBStore.cc)
+  target_link_libraries(os_rocksdb librocksdb)
+  target_include_directories(os_rocksdb ${CMAKE_SOURCE_DIR}/src/rocksdb/include)
+  #LIBROCKSDB_CFLAGS mentioned in os/Makefile.am is from rocksdb/Makefile.am?
+  set(LIBROCKSDB_CFLAGS "-fno-builtin-memcmp -std=gnu++11")
+  set_target_properties(os_rocksdb PROPERTIES COMPILE_FLAGS ${CMAKE_CXX_FLAGS} ${LIBROCKSDB_CFLAGS})
+endif(WITH_LIBROCKSDB)
+
 # OSD
 if(${HAVE_XFS})
   set(libos_xfs_srcs
@@ -644,6 +657,9 @@ endif(${HAVE_LIBAIO})
 if(${WITH_LTTNG})
   target_link_libraries(os libos_tp)
 endif(${WITH_LTTNG})
+if(${WITH_LIBROCKSDB})
+  target_link_libraries(os os_rocksdb)
+endif(${WITH_LIBROCKSDB})
 target_link_libraries(os leveldb snappy)
 
 set(cls_references_files objclass/class_api.cc)
