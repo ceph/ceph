@@ -80,7 +80,7 @@ When upgrading from Argonaut to Bobtail, you need to be aware of several things:
 Ensure that you update package repository paths. For example:: 
 
 	sudo rm /etc/apt/sources.list.d/ceph.list
-	echo deb http://ceph.com/debian-bobtail/ $(lsb_release -sc) main | sudo tee /etc/apt/sources.list.d/ceph.list
+	echo deb http://download.ceph.com/debian-bobtail/ $(lsb_release -sc) main | sudo tee /etc/apt/sources.list.d/ceph.list
 
 See the following sections for additional details.
 
@@ -162,7 +162,7 @@ Argonaut to Cuttlefish without the intermediate upgrade to Bobtail.
 For example:: 
 
 	sudo rm /etc/apt/sources.list.d/ceph.list
-	echo deb http://ceph.com/debian-bobtail/ $(lsb_release -sc) main | sudo tee /etc/apt/sources.list.d/ceph.list
+	echo deb http://download.ceph.com/debian-bobtail/ $(lsb_release -sc) main | sudo tee /etc/apt/sources.list.d/ceph.list
 
 We recommend upgrading all monitors to Bobtail before proceeding with the
 upgrade of the monitors to Cuttlefish. A mixture of Bobtail and Argonaut
@@ -186,7 +186,7 @@ replace the reference to the Bobtail repository with a reference to
 the Cuttlefish repository. For example::
 
 	sudo rm /etc/apt/sources.list.d/ceph.list
-	echo deb http://ceph.com/debian-cuttlefish/ $(lsb_release -sc) main | sudo tee /etc/apt/sources.list.d/ceph.list
+	echo deb http://download.ceph.com/debian-cuttlefish/ $(lsb_release -sc) main | sudo tee /etc/apt/sources.list.d/ceph.list
 
 See `Upgrading Monitors`_ for details.
 
@@ -210,7 +210,7 @@ Replace any ``apt`` reference to older repositories with a reference to the
 Cuttlefish repository. For example:: 
 
 	sudo rm /etc/apt/sources.list.d/ceph.list
-	echo deb http://ceph.com/debian-cuttlefish/ $(lsb_release -sc) main | sudo tee /etc/apt/sources.list.d/ceph.list
+	echo deb http://download.ceph.com/debian-cuttlefish/ $(lsb_release -sc) main | sudo tee /etc/apt/sources.list.d/ceph.list
 
 
 Monitor
@@ -259,7 +259,7 @@ Replace any reference to older repositories with a reference to the
 Dumpling repository. For example, with ``apt`` perform the following:: 
 
 	sudo rm /etc/apt/sources.list.d/ceph.list
-	echo deb http://ceph.com/debian-dumpling/ $(lsb_release -sc) main | sudo tee /etc/apt/sources.list.d/ceph.list
+	echo deb http://download.ceph.com/debian-dumpling/ $(lsb_release -sc) main | sudo tee /etc/apt/sources.list.d/ceph.list
 
 With CentOS/Red Hat distributions, remove the old repository. :: 
 
@@ -296,7 +296,7 @@ Replace any reference to older repositories with a reference to the
 Emperor repository. For example, with ``apt`` perform the following:: 
 
 	sudo rm /etc/apt/sources.list.d/ceph.list
-	echo deb http://ceph.com/debian-emperor/ $(lsb_release -sc) main | sudo tee /etc/apt/sources.list.d/ceph.list
+	echo deb http://download.ceph.com/debian-emperor/ $(lsb_release -sc) main | sudo tee /etc/apt/sources.list.d/ceph.list
 
 With CentOS/Red Hat distributions, remove the old repository. :: 
 
@@ -421,7 +421,7 @@ Replace any reference to older repositories with a reference to the
 Firely repository. For example, with ``apt`` perform the following:: 
 
 	sudo rm /etc/apt/sources.list.d/ceph.list
-	echo deb http://ceph.com/debian-firefly/ $(lsb_release -sc) main | sudo tee /etc/apt/sources.list.d/ceph.list
+	echo deb http://download.ceph.com/debian-firefly/ $(lsb_release -sc) main | sudo tee /etc/apt/sources.list.d/ceph.list
 
 With CentOS/Red Hat distributions, remove the old repository. :: 
 
@@ -494,7 +494,7 @@ Replace any reference to older repositories with a reference to the
 Firefly repository. For example, with ``apt`` perform the following:: 
 
 	sudo rm /etc/apt/sources.list.d/ceph.list
-	echo deb http://ceph.com/debian-firefly/ $(lsb_release -sc) main | sudo tee /etc/apt/sources.list.d/ceph.list
+	echo deb http://download.ceph.com/debian-firefly/ $(lsb_release -sc) main | sudo tee /etc/apt/sources.list.d/ceph.list
 
 With CentOS/Red Hat distributions, remove the old repository. :: 
 
