@@ -169,7 +169,7 @@ Yellowdog Updater, Modified (YUM), you must add Ceph repositories.
 
 You may find releases for Debian/Ubuntu (installed with APT) at:: 
 
-	http://ceph.com/debian-{release-name}
+	http://download.ceph.com/debian-{release-name}
 
 You may find releases for CentOS/RHEL and others (installed with YUM) at:: 
 
@@ -210,23 +210,23 @@ Add a Ceph package repository to your system's list of APT sources. For newer
 versions of Debian/Ubuntu, call ``lsb_release -sc`` on the command line to 
 get the short codename, and replace ``{codename}`` in the following command. :: 
 
-	sudo apt-add-repository 'deb http://ceph.com/debian-firefly/ {codename} main'
+	sudo apt-add-repository 'deb http://download.ceph.com/debian-firefly/ {codename} main'
 
 For early Linux distributions, you may execute the following command:: 
 
-	echo deb http://ceph.com/debian-firefly/ $(lsb_release -sc) main | sudo tee /etc/apt/sources.list.d/ceph.list
+	echo deb http://download.ceph.com/debian-firefly/ $(lsb_release -sc) main | sudo tee /etc/apt/sources.list.d/ceph.list
 
 For earlier Ceph releases, replace ``{release-name}`` with the name  with the
 name of the Ceph release. You may call ``lsb_release -sc`` on the command  line
 to get the short codename, and replace ``{codename}`` in the following command.
 ::
 
-	sudo apt-add-repository 'deb http://ceph.com/debian-{release-name}/ {codename} main'
+	sudo apt-add-repository 'deb http://download.ceph.com/debian-{release-name}/ {codename} main'
 
 For older Linux distributions, replace ``{release-name}`` with the name of the
 release:: 
 
-	echo deb http://ceph.com/debian-{release-name}/ $(lsb_release -sc) main | sudo tee /etc/apt/sources.list.d/ceph.list
+	echo deb http://download.ceph.com/debian-{release-name}/ $(lsb_release -sc) main | sudo tee /etc/apt/sources.list.d/ceph.list
 
 Ceph on ARM processors requires Google's memory profiling tools (``google-perftools``).
 The Ceph repository should have a copy at
@@ -239,7 +239,7 @@ For development release packages, add our package repository to your system's
 list of APT sources.  See `the testing Debian repository`_ for a complete list
 of Debian and Ubuntu releases supported. ::
 
-	echo deb http://ceph.com/debian-testing/ $(lsb_release -sc) main | sudo tee /etc/apt/sources.list.d/ceph.list
+	echo deb http://download.ceph.com/debian-testing/ $(lsb_release -sc) main | sudo tee /etc/apt/sources.list.d/ceph.list
 
 
 RPM Packages
@@ -481,7 +481,7 @@ your Linux distribution codename. Replace ``{arch}`` with the CPU architecture.
 
 ::
 
-	wget -q http://ceph.com/debian-{release}/pool/main/c/ceph/ceph_{version}{distro}_{arch}.deb
+	wget -q http://download.ceph.com/debian-{release}/pool/main/c/ceph/ceph_{version}{distro}_{arch}.deb
 
 
 RPM Packages
@@ -528,5 +528,5 @@ line to get the short codename. ::
 
 
 .. _Install Ceph Object Storage: ../install-storage-cluster
-.. _the testing Debian repository: http://ceph.com/debian-testing/dists
+.. _the testing Debian repository: http://download.ceph.com/debian-testing/dists
 .. _the gitbuilder page: http://gitbuilder.ceph.com
