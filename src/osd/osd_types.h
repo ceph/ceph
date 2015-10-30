@@ -3566,15 +3566,15 @@ WRITE_CLASS_ENCODER(ObjectRecoveryInfo)
 ostream& operator<<(ostream& out, const ObjectRecoveryInfo &inf);
 
 struct ObjectRecoveryProgress {
-  bool first;
   uint64_t data_recovered_to;
-  bool data_complete;
   string omap_recovered_to;
+  bool first;
+  bool data_complete;
   bool omap_complete;
 
   ObjectRecoveryProgress()
-    : first(true),
-      data_recovered_to(0),
+    : data_recovered_to(0),
+      first(true),
       data_complete(false), omap_complete(false) { }
 
   bool is_complete(const ObjectRecoveryInfo& info) const {
