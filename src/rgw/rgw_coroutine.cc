@@ -241,6 +241,7 @@ bool RGWCoroutinesStack::collect(RGWCoroutine *op, int *ret) /* returns true if 
     RGWCoroutinesStack *stack = *iter;
     if (!stack->is_done()) {
       new_list.push_back(stack);
+      ldout(cct, 20) << "collect(): s=" << (void *)this << " stack=" << (void *)stack << " is still running" << dendl;
       continue;
     }
     int r = stack->get_ret_status();
@@ -248,6 +249,7 @@ bool RGWCoroutinesStack::collect(RGWCoroutine *op, int *ret) /* returns true if 
       *ret = r;
     }
 
+    ldout(cct, 20) << "collect(): s=" << (void *)this << " stack=" << (void *)stack << " is complete" << dendl;
     stack->put();
   }
 
@@ -259,7 +261,6 @@ bool RGWCoroutinesStack::collect_next(RGWCoroutine *op, int *ret, RGWCoroutinesS
 {
   rgw_spawned_stacks *s = (op ? &op->spawned : &spawned);
   *ret = 0;
-  vector<RGWCoroutinesStack *> new_list;
 
   if (collected_stack) {
     *collected_stack = NULL;
@@ -277,9 +278,8 @@ bool RGWCoroutinesStack::collect_next(RGWCoroutine *op, int *ret, RGWCoroutinesS
 
     if (collected_stack) {
       *collected_stack = stack;
-    } else {
-      stack->put();
     }
+    stack->put();
 
     s->entries.erase(iter);
     return true;
