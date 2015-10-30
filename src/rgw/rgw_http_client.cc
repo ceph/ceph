@@ -167,6 +167,10 @@ struct rgw_http_req_data : public RefCountedObject {
     return done.read() != 0;
   }
 
+  int get_retcode() {
+    Mutex::Locker l(lock);
+    return ret;
+  }
 };
 
 string RGWHTTPClient::to_str()
@@ -174,6 +178,15 @@ string RGWHTTPClient::to_str()
   string method_str = (last_method.empty() ? "<no-method>" : last_method);
   string url_str = (last_url.empty() ? "<no-url>" : last_url);
   return method_str + " " + url_str;
+}
+
+int RGWHTTPClient::get_req_retcode()
+{
+  if (!req_data) {
+    return -EINVAL;
+  }
+
+  return req_data->get_retcode();
 }
 
 int RGWHTTPClient::init_request(const char *method, const char *url, rgw_http_req_data *_req_data)

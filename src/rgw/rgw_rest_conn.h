@@ -177,6 +177,12 @@ public:
   }
 
   int wait_bl(bufferlist *pbl) {
+    int ret = req.wait();
+    put();
+    if (ret < 0) {
+      return ret;
+    }
+
     if (req.get_status() < 0) {
       return req.get_status();
     }
