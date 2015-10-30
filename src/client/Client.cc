@@ -2487,14 +2487,16 @@ void Client::send_reconnect(MetaSession *session)
       bufferlist flockbl;
       _encode_filelocks(in, flockbl);
 
-      in->caps[mds]->seq = 0;  // reset seq.
-      in->caps[mds]->issue_seq = 0;  // reset seq.
-      in->caps[mds]->mseq = 0;  // reset seq.
+      Cap *cap = in->caps[mds];
+      cap->seq = 0;  // reset seq.
+      cap->issue_seq = 0;  // reset seq.
+      cap->mseq = 0;  // reset seq.
+      cap->issued = cap->implemented;
       m->add_cap(p->first.ino, 
-		 in->caps[mds]->cap_id,
+		 cap->cap_id,
 		 path.get_ino(), path.get_path(),   // ino
 		 in->caps_wanted(), // wanted
-		 in->caps[mds]->issued,     // issued
+		 cap->issued,     // issued
 		 in->snaprealm->ino,
 		 flockbl);
 
