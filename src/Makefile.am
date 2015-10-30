@@ -106,6 +106,7 @@ EXTRA_DIST += \
 	mount.fuse.ceph \
 	rbd-replay-many \
 	rbdmap \
+	etc-rbdmap \
 	yasm-wrapper
 
 EXTRA_DIST += \
