@@ -219,6 +219,7 @@ namespace librbd {
     virtual void pre_object_map_update(uint8_t *new_state) {
       *new_state = OBJECT_EXISTS;
     }
+    virtual void send_write();
 
   private:
     ceph::bufferlist m_write_data;
