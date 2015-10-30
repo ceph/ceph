@@ -11,7 +11,7 @@
 #include "common/Mutex.h"
 #include "librbd/JournalTypes.h"
 #include <boost/variant.hpp>
-#include <set>
+#include <map>
 
 namespace librbd {
 
@@ -23,22 +23,23 @@ public:
   JournalReplay(ImageCtx &image_ctx);
   ~JournalReplay();
 
-  int process(bufferlist::iterator it);
+  int process(bufferlist::iterator it, Context *on_safe = NULL);
   int flush();
 
 private:
-  typedef std::set<AioCompletion *> AioCompletions;
+  typedef std::map<AioCompletion*,Context*> AioCompletions;
 
   struct EventVisitor : public boost::static_visitor<void> {
     JournalReplay *journal_replay;
+    Context *on_safe;
 
-    EventVisitor(JournalReplay *_journal_replay)
-      : journal_replay(_journal_replay) {
+    EventVisitor(JournalReplay *_journal_replay, Context *_on_safe)
+      : journal_replay(_journal_replay), on_safe(_on_safe) {
     }
 
     template <typename Event>
     inline void operator()(const Event &event) const {
-      journal_replay->handle_event(event);
+      journal_replay->handle_event(event, on_safe);
     }
   };
 
@@ -50,22 +51,22 @@ private:
   AioCompletions m_aio_completions;
   int m_ret_val;
 
-  void handle_event(const journal::AioDiscardEvent &event);
-  void handle_event(const journal::AioWriteEvent &event);
-  void handle_event(const journal::AioFlushEvent &event);
-  void handle_event(const journal::OpFinishEvent &event);
-  void handle_event(const journal::SnapCreateEvent &event);
-  void handle_event(const journal::SnapRemoveEvent &event);
-  void handle_event(const journal::SnapRenameEvent &event);
-  void handle_event(const journal::SnapProtectEvent &event);
-  void handle_event(const journal::SnapUnprotectEvent &event);
-  void handle_event(const journal::SnapRollbackEvent &event);
-  void handle_event(const journal::RenameEvent &event);
-  void handle_event(const journal::ResizeEvent &event);
-  void handle_event(const journal::FlattenEvent &event);
-  void handle_event(const journal::UnknownEvent &event);
+  void handle_event(const journal::AioDiscardEvent &event, Context *on_safe);
+  void handle_event(const journal::AioWriteEvent &event, Context *on_safe);
+  void handle_event(const journal::AioFlushEvent &event, Context *on_safe);
+  void handle_event(const journal::OpFinishEvent &event, Context *on_safe);
+  void handle_event(const journal::SnapCreateEvent &event, Context *on_safe);
+  void handle_event(const journal::SnapRemoveEvent &event, Context *on_safe);
+  void handle_event(const journal::SnapRenameEvent &event, Context *on_safe);
+  void handle_event(const journal::SnapProtectEvent &event, Context *on_safe);
+  void handle_event(const journal::SnapUnprotectEvent &event, Context *on_safe);
+  void handle_event(const journal::SnapRollbackEvent &event, Context *on_safe);
+  void handle_event(const journal::RenameEvent &event, Context *on_safe);
+  void handle_event(const journal::ResizeEvent &event, Context *on_safe);
+  void handle_event(const journal::FlattenEvent &event, Context *on_safe);
+  void handle_event(const journal::UnknownEvent &event, Context *on_safe);
 
-  AioCompletion *create_aio_completion();
+  AioCompletion *create_aio_completion(Context *on_safe);
   void handle_aio_completion(AioCompletion *aio_comp);
 
   static void aio_completion_callback(completion_t cb, void *arg);
