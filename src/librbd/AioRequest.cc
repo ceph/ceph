@@ -530,6 +530,18 @@ namespace librbd {
     }
     wr->set_op_flags2(m_op_flags);
   }
+  void AioWrite::send_write() {
+    bool write_full = (m_object_off == 0 && m_object_len == m_ictx->get_object_size());
+    ldout(m_ictx->cct, 20) << "send_write " << this << " " << m_oid << " "
+			   << m_object_off << "~" << m_object_len
+                           << " object exist " << m_object_exist
+			   << " write_full " << write_full << dendl;
+    if (write_full) {
+      send_write_op(false);
+    } else {
+      AbstractWrite::send_write();
+    }
+  }
 
   void AioRemove::guard_write() {
     // do nothing to disable write guard only if deep-copyup not required
