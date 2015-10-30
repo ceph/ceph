@@ -183,6 +183,7 @@ public:
   int call(RGWCoroutine *op); /* call at the same stack we're in */
   void spawn(RGWCoroutine *op, bool wait); /* execute on a different stack */
   bool collect(int *ret); /* returns true if needs to be called again */
+  bool collect_next(int *ret, RGWCoroutinesStack **collected_stack = NULL); /* returns true if found a stack to collect */
 
   int wait(const utime_t& interval);
   bool drain_children(int num_cr_left); /* returns true if needed to be called again */
@@ -282,6 +283,7 @@ protected:
 
   void spawn(RGWCoroutine *source_op, RGWCoroutine *next_op, bool wait);
   bool collect(RGWCoroutine *op, int *ret); /* returns true if needs to be called again */
+  bool collect_next(RGWCoroutine *op, int *ret, RGWCoroutinesStack **collected_stack); /* returns true if found a stack to collect */
 public:
   RGWCoroutinesStack(CephContext *_cct, RGWCoroutinesManager *_ops_mgr, RGWCoroutine *start = NULL);
 
