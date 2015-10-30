@@ -166,10 +166,10 @@ int RGWCoroutinesStack::call(RGWCoroutine *next_op, int ret) {
   return ret;
 }
 
-void RGWCoroutinesStack::spawn(RGWCoroutine *source_op, RGWCoroutine *op, bool wait)
+RGWCoroutinesStack *RGWCoroutinesStack::spawn(RGWCoroutine *source_op, RGWCoroutine *op, bool wait)
 {
   if (!op) {
-    return;
+    return NULL;
   }
   op->get();
 
@@ -188,11 +188,13 @@ void RGWCoroutinesStack::spawn(RGWCoroutine *source_op, RGWCoroutine *op, bool w
   if (wait) {
     set_blocked_by(stack);
   }
+
+  return stack;
 }
 
-void RGWCoroutinesStack::spawn(RGWCoroutine *op, bool wait)
+RGWCoroutinesStack *RGWCoroutinesStack::spawn(RGWCoroutine *op, bool wait)
 {
-  spawn(NULL, op, wait);
+  return spawn(NULL, op, wait);
 }
 
 int RGWCoroutinesStack::wait(const utime_t& interval)
@@ -485,9 +487,9 @@ int RGWCoroutine::call(RGWCoroutine *op)
   return 0;
 }
 
-void RGWCoroutine::spawn(RGWCoroutine *op, bool wait)
+RGWCoroutinesStack *RGWCoroutine::spawn(RGWCoroutine *op, bool wait)
 {
-  stack->spawn(this, op, wait);
+  return stack->spawn(this, op, wait);
 }
 
 bool RGWCoroutine::collect(int *ret) /* returns true if needs to be called again */
