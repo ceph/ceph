@@ -22,6 +22,12 @@
 
 #include "rgw_file.h"
 
+/* XXX
+ * ASSERT_H somehow not defined after all the above (which bring
+ * in common/debug.h [e.g., dout])
+ */
+#include "include/assert.h"
+
 #define dout_subsys ceph_subsys_rgw
 
 extern RGWLib librgw;
@@ -409,6 +415,8 @@ int rgw_readv(struct rgw_fs *rgw_fs,
 
   if (! rgw_fh->is_object())
     return EINVAL;
+
+  dout(15) << "test dout" << dendl;
 
   buffer::list bl;
   RGWGetObjRequest req(cct, fs->get_user(), rgw_fh->bucket_name(),

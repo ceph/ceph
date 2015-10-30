@@ -215,7 +215,9 @@ TEST(LibRGW, GET_OBJECT) {
     ASSERT_EQ(ret, 0);
     buffer::list bl;
     bl.push_back(buffer::create_static(nread, sbuf));
-    bl.hexdump(std::cout);
+    dout(15) << "";
+    bl.hexdump(*_dout);
+    *_dout << dendl;
   }
 }
 
@@ -291,7 +293,11 @@ TEST(LibRGW, READV)
 	buffer::create_static(vio->vio_len,
 			      static_cast<char*>(vio->vio_base)));
     }
-    bl.hexdump(std::cout);
+
+    dout(15) << "";
+    bl.hexdump(*_dout);
+    *_dout << dendl;
+
     // release resources
     ASSERT_NE(uio->uio_rele, nullptr);
     if (uio->uio_rele) {
