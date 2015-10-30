@@ -2052,6 +2052,7 @@ void pg_stat_t::encode(bufferlist &bl) const
 
 void pg_stat_t::decode(bufferlist::iterator &bl)
 {
+  bool tmp;
   DECODE_START_LEGACY_COMPAT_LEN(22, 8, 8, bl);
   ::decode(version, bl);
   ::decode(reported_seq, bl);
@@ -2119,8 +2120,9 @@ void pg_stat_t::decode(bufferlist::iterator &bl)
   }
   if (struct_v < 11) {
     stats_invalid = false;
-  } else {
-    ::decode(stats_invalid, bl);
+  } else {    
+    ::decode(tmp, bl);
+    stats_invalid = tmp;
   }
   if (struct_v >= 12) {
     ::decode(last_clean_scrub_stamp, bl);
@@ -2133,7 +2135,8 @@ void pg_stat_t::decode(bufferlist::iterator &bl)
     last_became_active = last_active;
   }
   if (struct_v >= 14) {
-    ::decode(dirty_stats_invalid, bl);
+    ::decode(tmp, bl);
+    dirty_stats_invalid = tmp;
   } else {
     // if we are decoding an old encoding of this object, then the
     // encoder may not have supported num_objects_dirty accounting.
@@ -2147,14 +2150,16 @@ void pg_stat_t::decode(bufferlist::iterator &bl)
     acting_primary = acting.size() ? acting[0] : -1;
   }
   if (struct_v >= 16) {
-    ::decode(omap_stats_invalid, bl);
+    ::decode(tmp, bl);
+    omap_stats_invalid = tmp;
   } else {
     // if we are decoding an old encoding of this object, then the
     // encoder may not have supported num_objects_omap accounting.
     omap_stats_invalid = true;
   }
   if (struct_v >= 17) {
-    ::decode(hitset_stats_invalid, bl);
+    ::decode(tmp, bl);
+    hitset_stats_invalid = tmp;
   } else {
     // if we are decoding an old encoding of this object, then the
     // encoder may not have supported num_objects_hit_set_archive accounting.
@@ -2173,7 +2178,8 @@ void pg_stat_t::decode(bufferlist::iterator &bl)
     last_fullsized = utime_t();
   }
   if (struct_v >= 20) {
-    ::decode(hitset_bytes_stats_invalid, bl);
+    ::decode(tmp, bl);
+    hitset_bytes_stats_invalid = tmp;
   } else {
     // if we are decoding an old encoding of this object, then the
     // encoder may not have supported num_bytes_hit_set_archive accounting.
@@ -2187,7 +2193,8 @@ void pg_stat_t::decode(bufferlist::iterator &bl)
     last_became_peered = last_became_active;
   }
   if (struct_v >= 22) {
-    ::decode(pin_stats_invalid, bl);
+    ::decode(tmp, bl);
+    pin_stats_invalid = tmp;
   } else {
     // if we are decoding an old encoding of this object, then the
     // encoder may not have supported num_objects_pinned accounting.
