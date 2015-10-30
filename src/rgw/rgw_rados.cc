@@ -792,6 +792,10 @@ int RGWRealm::notify_zone()
   return 0;
 }
 
+int RGWRealm::notify_new_period(const RGWPeriod& period)
+{
+  return notify_zone();
+}
 
 int RGWPeriod::init(CephContext *_cct, RGWRados *_store, const string& period_realm_id,
 		    const string& period_realm_name, bool setup_obj)
@@ -1209,7 +1213,7 @@ int RGWPeriod::commit(RGWRealm& realm, const RGWPeriod& current_period)
     }
     ldout(cct, 4) << "Promoted to master zone and committed new period "
         << id << dendl;
-    realm.notify_zone();
+    realm.notify_new_period(*this);
     return 0;
   }
   // period must be based on predecessor's current epoch
@@ -1236,7 +1240,7 @@ int RGWPeriod::commit(RGWRealm& realm, const RGWPeriod& current_period)
   }
   ldout(cct, 4) << "Committed new epoch " << epoch
       << " for period " << id << dendl;
-  realm.notify_zone();
+  realm.notify_new_period(*this);
   return 0;
 }
 
