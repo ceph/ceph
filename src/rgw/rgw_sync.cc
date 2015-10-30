@@ -973,6 +973,7 @@ class RGWMetaSyncShardCR : public RGWCoroutine {
 
   uint32_t shard_id;
   rgw_meta_sync_marker sync_marker;
+  string marker;
 
   map<string, bufferlist> entries;
   map<string, bufferlist>::iterator iter;
@@ -999,6 +1000,11 @@ class RGWMetaSyncShardCR : public RGWCoroutine {
 
   bool *reset_backoff;
 
+  map<RGWCoroutinesStack *, string> stack_to_pos;
+  map<string, string> pos_to_prev;
+
+  bool can_adjust_marker;
+
 public:
   RGWMetaSyncShardCR(RGWMetaSyncEnv *_sync_env,
 		     rgw_bucket& _pool,
@@ -1008,7 +1014,7 @@ public:
 						      shard_id(_shard_id),
 						      sync_marker(_marker),
                                                       marker_tracker(NULL), truncated(false), inc_lock("RGWMetaSyncShardCR::inc_lock"),
-                                                      lease_cr(NULL), lost_lock(false), reset_backoff(_reset_backoff) {
+                                                      lease_cr(NULL), lost_lock(false), reset_backoff(_reset_backoff), can_adjust_marker(false) {
     *reset_backoff = false;
   }
 
@@ -1054,6 +1060,7 @@ public:
     int max_entries = OMAP_GET_MAX_ENTRIES;
     reenter(&full_cr) {
       oid = full_sync_index_shard_oid(shard_id);
+      can_adjust_marker = true;
       /* grab lock */
       yield {
 	uint32_t lock_duration = cct->_conf->rgw_sync_lease_period;
@@ -1086,13 +1093,15 @@ public:
       set_marker_tracker(new RGWMetaSyncShardMarkerTrack(sync_env,
                                                          sync_env->shard_obj_name(shard_id),
                                                          sync_marker));
+
+      marker = sync_marker.marker;
       /* sync! */
       do {
         if (!lease_cr->is_locked()) {
           lost_lock = true;
           break;
         }
-        yield return call(new RGWRadosGetOmapKeysCR(sync_env->store, pool, oid, sync_marker.marker, &entries, max_entries));
+        yield return call(new RGWRadosGetOmapKeysCR(sync_env->store, pool, oid, marker, &entries, max_entries));
         if (retcode < 0) {
           ldout(sync_env->cct, 0) << "ERROR: " << __func__ << "(): RGWRadosGetOmapKeysCR() returned ret=" << retcode << dendl;
           return retcode;
@@ -1102,23 +1111,79 @@ public:
           ldout(sync_env->cct, 20) << __func__ << ": full sync: " << iter->first << dendl;
           marker_tracker->start(iter->first);
             // fetch remote and write locally
-          yield spawn(new RGWMetaSyncSingleEntryCR(sync_env, iter->first, iter->first, marker_tracker), false);
-          if (retcode < 0) {
-            return retcode;
+          yield {
+            RGWCoroutinesStack *stack = spawn(new RGWMetaSyncSingleEntryCR(sync_env, iter->first, iter->first, marker_tracker), false);
+            if (retcode < 0) {
+              return retcode;
+            }
+            assert(stack);
+            stack->get();
+
+            stack_to_pos[stack] = iter->first;
+            pos_to_prev[iter->first] = marker;
           }
-          sync_marker.marker = iter->first;
+          marker = iter->first;
         }
-      } while ((int)entries.size() == max_entries);
+        RGWCoroutinesStack *child;
+        int child_ret;
+        while (collect_next(&child_ret, &child)) {
+          map<RGWCoroutinesStack *, string>::iterator iter = stack_to_pos.find(child);
+          if (iter == stack_to_pos.end()) {
+            /* some other stack that we don't care about */
+            continue;
+          }
+
+          string& pos = iter->second;
+
+          if (child_ret < 0) {
+            ldout(sync_env->cct, 0) << *this << ": child operation stack=" << child << " entry=" << pos << " returned " << child_ret << dendl;
+          }
+
+          map<string, string>::iterator prev_iter = pos_to_prev.find(pos);
+          assert(prev_iter != pos_to_prev.end());
+
+          /*
+           * we should get -EAGAIN for transient errors, for which we want to retry, so we don't
+           * update the marker and abort. We'll get called again for these. Permanent errors will be
+           * handled by marking the entry at the error log shard, so that we retry on it separately
+           */
+          if (child_ret == -EAGAIN) {
+            can_adjust_marker = false;
+          }
+
+          if (pos_to_prev.size() == 1) {
+            if (can_adjust_marker) {
+              sync_marker.marker = pos;
+            }
+            pos_to_prev.erase(prev_iter);
+          } else {
+            assert(pos_to_prev.size() > 1);
+            pos_to_prev.erase(prev_iter);
+            prev_iter = pos_to_prev.begin();
+            if (can_adjust_marker) {
+              sync_marker.marker = prev_iter->second;
+            }
+          }
+
+          ldout(sync_env->cct, 0) << *this << ": adjusting marker pos=" << sync_marker.marker << dendl;
+          stack_to_pos.erase(iter);
+
+          child->put();
+        }
+      } while ((int)entries.size() == max_entries && can_adjust_marker);
 
       drain_all_but(1);
 
       if (!lost_lock) {
         yield {
           /* update marker to reflect we're done with full sync */
-          sync_marker.state = rgw_meta_sync_marker::IncrementalSync;
-          sync_marker.marker = sync_marker.next_step_marker;
-          sync_marker.next_step_marker.clear();
+          if (can_adjust_marker) {
+            sync_marker.state = rgw_meta_sync_marker::IncrementalSync;
+            sync_marker.marker = sync_marker.next_step_marker;
+            sync_marker.next_step_marker.clear();
+          }
           RGWRados *store = sync_env->store;
+          ldout(sync_env->cct, 0) << *this << ": saving marker pos=" << sync_marker.marker << dendl;
           call(new RGWSimpleRadosWriteCR<rgw_meta_sync_marker>(sync_env->async_rados, store, store->get_zone_params().log_pool,
                                                                sync_env->shard_obj_name(shard_id), sync_marker));
         }
@@ -1139,6 +1204,10 @@ public:
       lease_cr = NULL;
 
       drain_all();
+
+      if (!can_adjust_marker) {
+        return -EAGAIN;
+      }
 
       if (lost_lock) {
         return -EBUSY;
@@ -1253,7 +1322,7 @@ public:
         yield {
           call(new RGWMetaSyncShardCR(sync_env, pool, shard_id, sync_marker, &reset_backoff));
         }
-        if (retcode < 0 && retcode != -EBUSY) {
+        if (retcode < 0 && retcode != -EBUSY && retcode != -EAGAIN) {
           ldout(sync_env->cct, 0) << "ERROR: RGWMetaSyncShardCR() returned " << retcode << dendl;
           return set_cr_error(retcode);
         }
