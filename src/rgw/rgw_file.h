@@ -13,6 +13,13 @@
 #include "xxhash.h"
 #include "include/buffer.h"
 
+/* XXX
+ * ASSERT_H somehow not defined after all the above (which bring
+ * in common/debug.h [e.g., dout])
+ */
+#include "include/assert.h"
+
+
 class RGWLibFS;
 class RGWFileHandle;
 
@@ -455,6 +462,7 @@ public:
   const std::string& bucket_name;
   const std::string& obj_name;
   buffer::list& bl;
+  bool do_hexdump = false;
 
   RGWGetObjRequest(CephContext* _cct, RGWUserInfo *_user,
 		  const std::string& _bname, const std::string& _oname,
@@ -514,6 +522,13 @@ public:
   virtual int send_response_data(ceph::buffer::list& _bl, off_t s_off,
 				off_t e_off) {
     /* XXX deal with offsets */
+    if (do_hexdump) {
+      dout(15) << __func__ << " s_off " << s_off
+	       << " e_off " << e_off << " len " << _bl.length()
+	       << " ";
+      _bl.hexdump(*_dout);
+      *_dout << dendl;
+    }
     bl.claim_append(_bl);
     return 0;
   }
