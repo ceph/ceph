@@ -1055,6 +1055,56 @@ public:
     return 0;
   }
 
+  void collect_children()
+  {
+    int child_ret;
+    RGWCoroutinesStack *child;
+    while (collect_next(&child_ret, &child)) {
+      map<RGWCoroutinesStack *, string>::iterator iter = stack_to_pos.find(child);
+      if (iter == stack_to_pos.end()) {
+        /* some other stack that we don't care about */
+        continue;
+      }
+
+      string& pos = iter->second;
+
+      if (child_ret < 0) {
+        ldout(sync_env->cct, 0) << *this << ": child operation stack=" << child << " entry=" << pos << " returned " << child_ret << dendl;
+      }
+
+      map<string, string>::iterator prev_iter = pos_to_prev.find(pos);
+      assert(prev_iter != pos_to_prev.end());
+
+      /*
+       * we should get -EAGAIN for transient errors, for which we want to retry, so we don't
+       * update the marker and abort. We'll get called again for these. Permanent errors will be
+       * handled by marking the entry at the error log shard, so that we retry on it separately
+       */
+      if (child_ret == -EAGAIN) {
+        can_adjust_marker = false;
+      }
+
+      if (pos_to_prev.size() == 1) {
+        if (can_adjust_marker) {
+          sync_marker.marker = pos;
+        }
+        pos_to_prev.erase(prev_iter);
+      } else {
+        assert(pos_to_prev.size() > 1);
+        pos_to_prev.erase(prev_iter);
+        prev_iter = pos_to_prev.begin();
+        if (can_adjust_marker) {
+          sync_marker.marker = prev_iter->second;
+        }
+      }
+
+      ldout(sync_env->cct, 0) << *this << ": adjusting marker pos=" << sync_marker.marker << dendl;
+      stack_to_pos.erase(iter);
+
+      child->put();
+    }
+  }
+
   int full_sync() {
 #define OMAP_GET_MAX_ENTRIES 100
     int max_entries = OMAP_GET_MAX_ENTRIES;
@@ -1124,55 +1174,13 @@ public:
           }
           marker = iter->first;
         }
-        RGWCoroutinesStack *child;
-        int child_ret;
-        while (collect_next(&child_ret, &child)) {
-          map<RGWCoroutinesStack *, string>::iterator iter = stack_to_pos.find(child);
-          if (iter == stack_to_pos.end()) {
-            /* some other stack that we don't care about */
-            continue;
-          }
-
-          string& pos = iter->second;
-
-          if (child_ret < 0) {
-            ldout(sync_env->cct, 0) << *this << ": child operation stack=" << child << " entry=" << pos << " returned " << child_ret << dendl;
-          }
-
-          map<string, string>::iterator prev_iter = pos_to_prev.find(pos);
-          assert(prev_iter != pos_to_prev.end());
-
-          /*
-           * we should get -EAGAIN for transient errors, for which we want to retry, so we don't
-           * update the marker and abort. We'll get called again for these. Permanent errors will be
-           * handled by marking the entry at the error log shard, so that we retry on it separately
-           */
-          if (child_ret == -EAGAIN) {
-            can_adjust_marker = false;
-          }
-
-          if (pos_to_prev.size() == 1) {
-            if (can_adjust_marker) {
-              sync_marker.marker = pos;
-            }
-            pos_to_prev.erase(prev_iter);
-          } else {
-            assert(pos_to_prev.size() > 1);
-            pos_to_prev.erase(prev_iter);
-            prev_iter = pos_to_prev.begin();
-            if (can_adjust_marker) {
-              sync_marker.marker = prev_iter->second;
-            }
-          }
-
-          ldout(sync_env->cct, 0) << *this << ": adjusting marker pos=" << sync_marker.marker << dendl;
-          stack_to_pos.erase(iter);
-
-          child->put();
-        }
+        collect_children();
       } while ((int)entries.size() == max_entries && can_adjust_marker);
 
-      drain_all_but(1);
+      while (num_spawned() > 1) {
+        yield wait_for_child();
+        collect_children();
+      }
 
       if (!lost_lock) {
         yield {
