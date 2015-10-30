@@ -173,7 +173,7 @@ You may find releases for Debian/Ubuntu (installed with APT) at::
 
 You may find releases for CentOS/RHEL and others (installed with YUM) at:: 
 
-	http://ceph.com/rpm-{release-name}
+	http://download.ceph.com/rpm-{release-name}
 
 The major releases of Ceph include:
 
@@ -249,14 +249,14 @@ For major releases, you may add a Ceph entry to the ``/etc/yum.repos.d``
 directory. Create a ``ceph.repo`` file. In the example below, replace
 ``{ceph-release}`` with  a major release of Ceph (e.g., ``dumpling``,
 ``emperor``, etc.) and ``{distro}`` with your Linux distribution (e.g., ``el6``,
-``rhel6``, etc.).  You may view http://ceph.com/rpm-{ceph-release}/ directory to
+``rhel6``, etc.).  You may view http://download.ceph.com/rpm-{ceph-release}/ directory to
 see which  distributions Ceph supports. Some Ceph packages (e.g., EPEL) must
 take priority over standard packages, so you must ensure that you set
 ``priority=2``. ::
 
 	[ceph]
 	name=Ceph packages for $basearch
-	baseurl=http://ceph.com/rpm-{ceph-release}/{distro}/$basearch
+	baseurl=http://download.ceph.com/rpm-{ceph-release}/{distro}/$basearch
 	enabled=1
 	priority=2
 	gpgcheck=1
@@ -265,7 +265,7 @@ take priority over standard packages, so you must ensure that you set
 
 	[ceph-noarch]
 	name=Ceph noarch packages
-	baseurl=http://ceph.com/rpm-{ceph-release}/{distro}/noarch
+	baseurl=http://download.ceph.com/rpm-{ceph-release}/{distro}/noarch
 	enabled=1
 	priority=2
 	gpgcheck=1
@@ -274,7 +274,7 @@ take priority over standard packages, so you must ensure that you set
 
 	[ceph-source]
 	name=Ceph source packages
-	baseurl=http://ceph.com/rpm-{ceph-release}/{distro}/SRPMS
+	baseurl=http://download.ceph.com/rpm-{ceph-release}/{distro}/SRPMS
 	enabled=0
 	priority=2
 	gpgcheck=1
@@ -287,7 +287,7 @@ for development releases instead. ::
 
 	[ceph]
 	name=Ceph packages for $basearch/$releasever
-	baseurl=http://ceph.com/rpm-testing/{distro}/$basearch
+	baseurl=http://download.ceph.com/rpm-testing/{distro}/$basearch
 	enabled=1
 	priority=2
 	gpgcheck=1
@@ -296,7 +296,7 @@ for development releases instead. ::
 
 	[ceph-noarch]
 	name=Ceph noarch packages
-	baseurl=http://ceph.com/rpm-testing/{distro}/noarch
+	baseurl=http://download.ceph.com/rpm-testing/{distro}/noarch
 	enabled=1
 	priority=2
 	gpgcheck=1
@@ -305,7 +305,7 @@ for development releases instead. ::
 
 	[ceph-source]
 	name=Ceph source packages
-	baseurl=http://ceph.com/rpm-testing/{distro}/SRPMS
+	baseurl=http://download.ceph.com/rpm-testing/{distro}/SRPMS
 	enabled=0
 	priority=2
 	gpgcheck=1
@@ -323,11 +323,11 @@ The repository package installs the repository details on your local system for
 use with ``yum`` or ``up2date``. Replace ``{distro}`` with your Linux distribution, 
 and ``{release}`` with the specific release of Ceph::
 
-    su -c 'rpm -Uvh http://ceph.com/rpms/{distro}/x86_64/ceph-{release}.el6.noarch.rpm'
+    su -c 'rpm -Uvh http://download.ceph.com/rpms/{distro}/x86_64/ceph-{release}.el6.noarch.rpm'
 
 You can download the RPMs directly from::
 
-     http://ceph.com/rpm-testing
+     http://download.ceph.com/rpm-testing
 
 
 Add Ceph Development
@@ -507,22 +507,22 @@ platforms. The repository package installs the repository details on your local
 system for use with ``yum`` or ``up2date``. Replace ``{distro}`` with your
 distribution. ::
 
-    su -c 'rpm -Uvh http://ceph.com/rpm-firefly/{distro}/noarch/ceph-{version}.{distro}.noarch.rpm'
+    su -c 'rpm -Uvh http://download.ceph.com/rpm-firefly/{distro}/noarch/ceph-{version}.{distro}.noarch.rpm'
 
 For example, for CentOS 6  (``el6``)::
 
-    su -c 'rpm -Uvh http://ceph.com/rpm-firefly/el6/noarch/ceph-release-1-0.el6.noarch.rpm'
+    su -c 'rpm -Uvh http://download.ceph.com/rpm-firefly/el6/noarch/ceph-release-1-0.el6.noarch.rpm'
 
 You can download the RPMs directly from::
 
-	http://ceph.com/rpm-firefly
+	http://download.ceph.com/rpm-firefly
 
 
 For earlier Ceph releases, replace ``{release-name}`` with the name 
 with the name of the Ceph release. You may call ``lsb_release -sc`` on the command 
 line to get the short codename. ::
 
-	su -c 'rpm -Uvh http://ceph.com/rpm-{release-name}/{distro}/noarch/ceph-{version}.{distro}.noarch.rpm'
+	su -c 'rpm -Uvh http://download.ceph.com/rpm-{release-name}/{distro}/noarch/ceph-{version}.{distro}.noarch.rpm'
 
 
 
