@@ -5252,7 +5252,11 @@ void MDCache::choose_lock_states_and_reconnect_caps()
     if (in->is_auth() && !in->is_base() && in->inode.is_dirty_rstat())
       in->mark_dirty_rstat();
 
-    in->choose_lock_states();
+    int dirty_caps = 0;
+    map<inodeno_t, int>::iterator it = cap_imports_dirty.find(in->ino());
+    if (it != cap_imports_dirty.end())
+      dirty_caps = it->second;
+    in->choose_lock_states(dirty_caps);
     dout(15) << " chose lock states on " << *in << dendl;
 
     SnapRealm *realm = in->find_snaprealm();
@@ -5398,6 +5402,7 @@ void MDCache::export_remaining_imported_caps()
   }
 
   cap_imports.clear();
+  cap_imports_dirty.clear();
 
   if (warn_str.peek() != EOF) {
     mds->clog->warn() << "failed to reconnect caps for missing inodes:" << "\n";
@@ -5420,7 +5425,11 @@ void MDCache::try_reconnect_cap(CInode *in, Session *session)
     if (in->is_replicated()) {
       mds->locker->try_eval(in, CEPH_CAP_LOCKS);
     } else {
-      in->choose_lock_states();
+      int dirty_caps = 0;
+      map<inodeno_t, int>::iterator it = cap_imports_dirty.find(in->ino());
+      if (it != cap_imports_dirty.end())
+	dirty_caps = it->second;
+      in->choose_lock_states(dirty_caps);
       dout(15) << " chose lock states on " << *in << dendl;
     }
   }

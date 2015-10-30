@@ -2458,6 +2458,7 @@ bool Locker::should_defer_client_cap_frozen(CInode *in)
  */
 void Locker::handle_client_caps(MClientCaps *m)
 {
+  Session *session = static_cast<Session *>(m->get_connection()->get_priv());
   client_t client = m->get_source().num();
 
   snapid_t follows = m->get_snap_follows();
@@ -2466,6 +2467,11 @@ void Locker::handle_client_caps(MClientCaps *m)
 	  << " op " << ceph_cap_op_name(m->get_op()) << dendl;
 
   if (!mds->is_clientreplay() && !mds->is_active() && !mds->is_stopping()) {
+    if (mds->is_reconnect() &&
+	m->get_dirty() && m->get_client_tid() > 0 &&
+	session->have_completed_flush(m->get_client_tid())) {
+      mdcache->set_reconnect_dirty_caps(m->get_ino(), m->get_dirty());
+    }
     mds->wait_for_replay(new C_MDS_RetryMessage(mds, m));
     return;
   }
