@@ -253,6 +253,39 @@ bool RGWCoroutinesStack::collect(RGWCoroutine *op, int *ret) /* returns true if 
   return false;
 }
 
+bool RGWCoroutinesStack::collect_next(RGWCoroutine *op, int *ret, RGWCoroutinesStack **collected_stack) /* returns true if found a stack to collect */
+{
+  rgw_spawned_stacks *s = (op ? &op->spawned : &spawned);
+  *ret = 0;
+  vector<RGWCoroutinesStack *> new_list;
+
+  if (collected_stack) {
+    *collected_stack = NULL;
+  }
+
+  for (vector<RGWCoroutinesStack *>::iterator iter = s->entries.begin(); iter != s->entries.end(); ++iter) {
+    RGWCoroutinesStack *stack = *iter;
+    if (!stack->is_done()) {
+      continue;
+    }
+    int r = stack->get_ret_status();
+    if (r < 0) {
+      *ret = r;
+    }
+
+    if (collected_stack) {
+      *collected_stack = stack;
+    } else {
+      stack->put();
+    }
+
+    s->entries.erase(iter);
+    return true;
+  }
+
+  return false;
+}
+
 bool RGWCoroutinesStack::collect(int *ret) /* returns true if needs to be called again */
 {
   return collect(NULL, ret);
@@ -462,6 +495,11 @@ bool RGWCoroutine::collect(int *ret) /* returns true if needs to be called again
   return stack->collect(this, ret);
 }
 
+bool RGWCoroutine::collect_next(int *ret, RGWCoroutinesStack **collected_stack) /* returns true if found a stack to collect */
+{
+  return stack->collect_next(this, ret, collected_stack);
+}
+
 int RGWCoroutine::wait(const utime_t& interval)
 {
   return stack->wait(interval);
@@ -496,7 +534,7 @@ bool RGWCoroutine::drain_children(int num_cr_left)
 {
   bool done = false;
   reenter(&drain_cr) {
-    while (num_spawned() > num_cr_left) {
+    while (num_spawned() > (size_t)num_cr_left) {
       yield wait_for_child();
       int ret;
       while (collect(&ret)) {
