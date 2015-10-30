@@ -1581,7 +1581,6 @@ struct pg_stat_t {
   utime_t last_clean_scrub_stamp;
 
   object_stat_collection_t stats;
-  bool stats_invalid;
 
   int64_t log_size;
   int64_t ondisk_log_size;    // >= active_log_size
@@ -1594,17 +1593,18 @@ struct pg_stat_t {
   utime_t last_became_active;
   utime_t last_became_peered;
 
-  /// true if num_objects_dirty is not accurate (because it was not
-  /// maintained starting from pool creation)
-  bool dirty_stats_invalid;
-  bool omap_stats_invalid;
-  bool hitset_stats_invalid;
-  bool hitset_bytes_stats_invalid;
-  bool pin_stats_invalid;
-
   /// up, acting primaries
   int32_t up_primary;
   int32_t acting_primary;
+
+  bool stats_invalid:1;
+  /// true if num_objects_dirty is not accurate (because it was not
+  /// maintained starting from pool creation)
+  bool dirty_stats_invalid:1;
+  bool omap_stats_invalid:1;
+  bool hitset_stats_invalid:1;
+  bool hitset_bytes_stats_invalid:1;
+  bool pin_stats_invalid:1;
 
   pg_stat_t()
     : reported_seq(0),
@@ -1612,16 +1612,16 @@ struct pg_stat_t {
       state(0),
       created(0), last_epoch_clean(0),
       parent_split_bits(0),
-      stats_invalid(false),
       log_size(0), ondisk_log_size(0),
       mapping_epoch(0),
+      up_primary(-1),
+      acting_primary(-1),
+      stats_invalid(false),
       dirty_stats_invalid(false),
       omap_stats_invalid(false),
       hitset_stats_invalid(false),
       hitset_bytes_stats_invalid(false),
-      pin_stats_invalid(false),
-      up_primary(-1),
-      acting_primary(-1)
+      pin_stats_invalid(false)
   { }
 
   epoch_t get_effective_last_epoch_clean() const {
