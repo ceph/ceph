@@ -2644,9 +2644,9 @@ void CInode::choose_lock_state(SimpleLock *lock, int allissued)
   }
 }
  
-void CInode::choose_lock_states()
+void CInode::choose_lock_states(int dirty_caps)
 {
-  int issued = get_caps_issued();
+  int issued = get_caps_issued() | dirty_caps;
   if (is_auth() && (issued & (CEPH_CAP_ANY_EXCL|CEPH_CAP_ANY_WR)) &&
       choose_ideal_loner() >= 0)
     try_set_loner();
