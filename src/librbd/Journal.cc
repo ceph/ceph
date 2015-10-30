@@ -34,6 +34,20 @@ struct C_DestroyJournaler : public Context {
   }
 };
 
+struct C_ReplayCommitted : public Context {
+  ::journal::Journaler *journaler;
+  ::journal::ReplayEntry *replay_entry;
+
+  C_ReplayCommitted(::journal::Journaler *_journaler,
+		    ::journal::ReplayEntry *_replay_entry) :
+    journaler(_journaler), replay_entry(_replay_entry) {
+  }
+  virtual void finish(int r) {
+    journaler->committed(*replay_entry);
+    delete replay_entry;
+  }
+};
+
 struct SetOpRequestTid : public boost::static_visitor<void> {
   uint64_t tid;
 
@@ -528,15 +542,17 @@ void Journal::handle_replay_ready() {
       return;
     }
 
-    ::journal::ReplayEntry replay_entry;
-    if (!m_journaler->try_pop_front(&replay_entry)) {
+    ::journal::ReplayEntry *replay_entry = new ::journal::ReplayEntry();
+    if (!m_journaler->try_pop_front(replay_entry)) {
+      delete replay_entry;
       return;
     }
 
     m_lock.Unlock();
-    bufferlist data = replay_entry.get_data();
+    bufferlist data = replay_entry->get_data();
     bufferlist::iterator it = data.begin();
-    int r = m_journal_replay->process(it);
+    int r = m_journal_replay->process(it, new C_ReplayCommitted(m_journaler,
+								replay_entry));
     m_lock.Lock();
 
     if (r < 0) {
