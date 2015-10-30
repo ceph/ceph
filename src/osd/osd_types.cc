@@ -5094,11 +5094,14 @@ void ScrubMap::object::decode(bufferlist::iterator& bl)
 {
   DECODE_START_LEGACY_COMPAT_LEN(5, 2, 2, bl);
   ::decode(size, bl);
-  ::decode(negative, bl);
+  bool tmp;
+  ::decode(tmp, bl);
+  negative = tmp;
   ::decode(attrs, bl);
   if (struct_v >= 3) {
     ::decode(digest, bl);
-    ::decode(digest_present, bl);
+    ::decode(tmp, bl);
+    digest_present = tmp;
   }
   if (struct_v >= 4) {
     ::decode(nlinks, bl);
@@ -5110,10 +5113,12 @@ void ScrubMap::object::decode(bufferlist::iterator& bl)
   }
   if (struct_v >= 5) {
     ::decode(omap_digest, bl);
-    ::decode(omap_digest_present, bl);
+    ::decode(tmp, bl);
+    omap_digest_present = tmp;
   }
   if (struct_v >= 6) {
-    ::decode(read_error, bl);
+    ::decode(tmp, bl);
+    read_error = tmp;
   }
   DECODE_FINISH(bl);
 }
