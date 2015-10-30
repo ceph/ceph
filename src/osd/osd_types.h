@@ -3654,21 +3654,21 @@ ostream& operator<<(ostream& out, const PushOp &op);
  */
 struct ScrubMap {
   struct object {
-    uint64_t size;
-    bool negative;
     map<string,bufferptr> attrs;
-    __u32 digest;              ///< data crc32c
-    bool digest_present;
-    uint32_t nlinks;
     set<snapid_t> snapcolls;
+    uint64_t size;
     __u32 omap_digest;         ///< omap crc32c
-    bool omap_digest_present;
-    bool read_error;
+    __u32 digest;              ///< data crc32c
+    uint32_t nlinks;
+    bool negative:1;
+    bool digest_present:1;
+    bool omap_digest_present:1;
+    bool read_error:1;
 
     object() :
       // Init invalid size so it won't match if we get a stat EIO error
-      size(-1), negative(false), digest(0), digest_present(false),
-      nlinks(0), omap_digest(0), omap_digest_present(false),
+      size(-1), omap_digest(0), digest(0), nlinks(0), 
+      negative(false), digest_present(false), omap_digest_present(false), 
       read_error(false) {}
 
     void encode(bufferlist& bl) const;
