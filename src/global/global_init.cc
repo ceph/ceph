@@ -281,6 +281,11 @@ int global_init_prefork(CephContext *cct, int flags)
 
 void global_init_daemonize(CephContext *cct, int flags)
 {
+  
+  if (test_pidFile_in_use(g_conf) < 0){
+     exit(1);
+  } 
+  
   if (global_init_prefork(cct, flags) < 0)
     return;
 
