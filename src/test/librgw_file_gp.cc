@@ -319,8 +319,7 @@ TEST(LibRGW, READV)
     uio->uio_resid = UINT64_MAX;
     int ret = rgw_readv(fs, object_fh, uio);
     ASSERT_EQ(ret, 0);
-    //buffer::list bl;
-    buffer::list& bl = *(new buffer::list());
+    buffer::list bl;
     for (unsigned int ix = 0; ix < uio->uio_cnt; ++ix) {
       rgw_vio *vio = &(uio->uio_vio[ix]);
       bl.push_back(
