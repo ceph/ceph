@@ -42,6 +42,7 @@ namespace {
   bool do_bulk = false;
   bool do_writev = false;
   bool do_readv = false;
+  bool do_verify = false;
   bool do_get = false;
   bool do_delete = false;
   bool do_hexdump = false;
@@ -60,6 +61,7 @@ namespace {
 
   constexpr int iovcnt = 16;
   constexpr int page_size = 65536;
+  constexpr int seed = 8675309;
 
   struct ZPage
   {
@@ -80,7 +82,7 @@ namespace {
 	for (int data_ix = 0; data_ix < page_size; ++data_ix) {
 	  p->data[data_ix] = uint_dist(rng);
 	} // data_ix
-	p->cksum = XXH64(p->data, page_size, 8675309);
+	p->cksum = XXH64(p->data, page_size, seed);
 	pages.emplace_back(p);
 	// and iovs
 	struct iovec* iov = &iovs[page_ix];
@@ -104,11 +106,39 @@ namespace {
       return true;
     }
 
+    bool operator==(const rgw_uio* uio) {
+      uint64_t cksum;
+      int vix = 0, off = 0;
+      rgw_vio* vio = &uio->uio_vio[vix];
+      int vio_len = vio->vio_len;
+      char *data;
+
+      for (int ix = 0; ix < iovcnt; ++ix) {
+	ZPage* p1 = pages[ix];
+	data = static_cast<char*>(vio->vio_base) + off;
+	cksum = XXH64(data, page_size, seed);
+
+	if (p1->cksum != cksum) {
+	  int r = memcmp(data, p1->data, page_size);
+	  std::cout << "problem at ix " << ix << " r " << r<< std::endl;
+	  return false;
+	}
+
+	off += page_size;
+	if (off >= vio_len) {
+	  vio = &uio->uio_vio[++vix];
+	  vio_len = vio->vio_len;
+	  off = 0;
+	}
+      }
+      return true;
+    }
+    
     void cksum() {
       int n = size();
       for (int page_ix = 0; page_ix < n; ++page_ix) {
 	ZPage* p = pages[page_ix];
-	p->cksum = XXH64(p->data, page_size, 8675309);
+	p->cksum = XXH64(p->data, page_size, seed);
       }
     }
 
@@ -128,7 +158,10 @@ namespace {
       free(iovs);
     }
   }; /* ZPageSet */
-  
+
+  rgw_uio uio[1];
+  ZPageSet zp_set1{iovcnt}; // 1M random data in 16 64K pages
+
   struct {
     int argc;
     char **argv;
@@ -182,7 +215,7 @@ TEST(LibRGW, LIST_OBJECTS) {
 }
 
 TEST(LibRGW, LOOKUP_OBJECT) {
-  if (do_get || do_put || do_bulk) {
+  if (do_get || do_put || do_bulk || do_readv || do_writev) {
     int ret = rgw_lookup(fs, bucket_fh, object_name.c_str(), &object_fh,
 			0 /* flags */);
     ASSERT_EQ(ret, 0);
@@ -190,7 +223,7 @@ TEST(LibRGW, LOOKUP_OBJECT) {
 }
 
 TEST(LibRGW, OBJ_OPEN) {
-  if (do_get || do_put) {
+  if (do_get || do_put || do_readv || do_writev) {
     int ret = rgw_open(fs, object_fh, 0 /* flags */);
     ASSERT_EQ(ret, 0);
   }
@@ -257,9 +290,8 @@ TEST(LibRGW, WRITE_READ_VERIFY)
 
 TEST(LibRGW, WRITEV)
 {
-  if (do_writev && do_put) {
+  if (do_writev) {
     rgw_uio* uio;
-    ZPageSet zp_set1{iovcnt}; // 1M random data in 16 64K pages
     struct iovec *iovs = zp_set1.get_iovs();
     alloca_uio();
     ASSERT_NE(uio, nullptr);
@@ -276,14 +308,12 @@ TEST(LibRGW, WRITEV)
 
     int ret = rgw_writev(fs, object_fh, uio);
     ASSERT_EQ(ret, 0);
-    //zp_set1.reset_iovs();
   }
 }
 
 TEST(LibRGW, READV)
 {
-  if (do_readv && do_get) {
-    rgw_uio uio[1];
+  if (do_readv) {
     memset(uio, 0, sizeof(rgw_uio));
     uio->uio_offset = 0; // ok, it was already 0
     uio->uio_resid = UINT64_MAX;
@@ -298,6 +328,7 @@ TEST(LibRGW, READV)
 			      static_cast<char*>(vio->vio_base)));
     }
 
+    /* length check */
     ASSERT_EQ(uint32_t{bl.length()}, uint32_t{iovcnt*page_size});
 
     if (do_hexdump) {
@@ -305,12 +336,14 @@ TEST(LibRGW, READV)
       bl.hexdump(*_dout);
       *_dout << dendl;
     }
+  }
+}
 
-    // release resources
-    ASSERT_NE(uio->uio_rele, nullptr);
-    if (uio->uio_rele) {
-      uio->uio_rele(uio, RGW_UIO_NONE);
-    }
+TEST(LibRGW, READV_AFTER_WRITEV)
+{
+  /* checksum data */
+  if (do_readv && do_writev && do_verify) {
+    ASSERT_TRUE(zp_set1 == uio);
   }
 }
 
@@ -322,6 +355,13 @@ TEST(LibRGW, DELETE_OBJECT) {
 }
 
 TEST(LibRGW, CLEANUP) {
+  if (do_readv) {
+    // release resources
+    ASSERT_NE(uio->uio_rele, nullptr);
+    if (uio->uio_rele) {
+      uio->uio_rele(uio, RGW_UIO_NONE);
+    }
+  }
   int ret = rgw_close(fs, object_fh, 0 /* flags */);
   ASSERT_EQ(ret, 0);
   ret = rgw_fh_rele(fs, object_fh, 0 /* flags */);
@@ -389,6 +429,9 @@ int main(int argc, char *argv[])
     } else if (ceph_argparse_flag(args, arg_iter, "--readv",
 					    (char*) nullptr)) {
       do_readv = true;
+    } else if (ceph_argparse_flag(args, arg_iter, "--verify",
+					    (char*) nullptr)) {
+      do_verify = true;
     } else if (ceph_argparse_flag(args, arg_iter, "--delete",
 					    (char*) nullptr)) {
       do_delete = true;
