@@ -45,6 +45,10 @@ restorecon -R /var/log/ceph > /dev/null 2>&1;
 %global _with_systemd 1
 %endif
 
+# LTTng-UST enabled on Fedora, RHEL 6, and SLES 12
+%if 0%{?fedora} || 0%{?rhel} == 6 || 0%{?suse_version} == 1315
+%global _with_lttng 1
+%endif
 
 #################################################################################
 # common
@@ -176,13 +180,15 @@ BuildRequires:  boost-random
 BuildRequires:	python-argparse
 %endif
 # lttng and babeltrace for rbd-replay-prep
-%if 0%{?fedora} || 0%{?rhel} == 6
+%if 0%{?_with_lttng}
+%if 0%{?fedora} || 0%{?rhel}
 BuildRequires:	lttng-ust-devel
 BuildRequires:	libbabeltrace-devel
 %endif
-%if 0%{?suse_version} == 1315
+%if 0%{?suse_version}
 BuildRequires:	lttng-ust-devel
 BuildRequires:  babeltrace-devel
+%endif
 %endif
 # expat and fastcgi for RGW
 %if 0%{?suse_version}
@@ -200,7 +206,6 @@ BuildRequires:	python-sphinx10
 %if 0%{?fedora} || 0%{?suse_version} || 0%{?rhel} >= 7
 BuildRequires:	python-sphinx
 %endif
-
 
 %description
 Ceph is a massively scalable, open-source, distributed storage system that runs
@@ -810,6 +815,10 @@ rm -rf $RPM_BUILD_ROOT
 %{_libdir}/rados-classes/libcls_version.so*
 %dir %{_libdir}/ceph/erasure-code
 %{_libdir}/ceph/erasure-code/libec_*.so*
+%if 0%{?_with_lttng}
+%{_libdir}/libos_tp.so*
+%{_libdir}/libosd_tp.so*
+%endif
 %{_udevrulesdir}/60-ceph-partuuid-workaround.rules
 %{_udevrulesdir}/95-ceph-osd.rules
 %config %{_sysconfdir}/bash_completion.d/ceph
@@ -866,7 +875,7 @@ rm -rf $RPM_BUILD_ROOT
 %{_bindir}/rbd
 %{_bindir}/rbd-replay
 %{_bindir}/rbd-replay-many
-%if 0%{?fedora} || 0%{?rhel} == 6 || 0%{?suse_version} == 1315
+%if 0%{?_with_lttng}
 %{_bindir}/rbd-replay-prep
 %endif
 %{_bindir}/ceph-post-file
@@ -921,7 +930,7 @@ exit 0
 
 %post -n ceph-common
 %if 0%{?_with_systemd}
-systemd-tmpfiles --create
+systemd-tmpfiles --create --prefix=/run/ceph
 %endif
 
 %postun -n ceph-common
@@ -1022,6 +1031,9 @@ fi
 %files -n librados2
 %defattr(-,root,root,-)
 %{_libdir}/librados.so.*
+%if 0%{?_with_lttng}
+%{_libdir}/librados_tp.so.*
+%endif
 
 %post -n librados2
 /sbin/ldconfig
@@ -1042,6 +1054,9 @@ fi
 %{_includedir}/rados/rados_types.hpp
 %{_includedir}/rados/memory.h
 %{_libdir}/librados.so
+%if 0%{?_with_lttng}
+%{_libdir}/librados_tp.so
+%endif
 
 #################################################################################
 %files -n python-rados
@@ -1071,6 +1086,9 @@ fi
 %files -n librbd1
 %defattr(-,root,root,-)
 %{_libdir}/librbd.so.*
+%if 0%{?_with_lttng}
+%{_libdir}/librbd_tp.so.*
+%endif
 
 %post -n librbd1
 /sbin/ldconfig
@@ -1088,6 +1106,9 @@ ln -sf %{_libdir}/librbd.so.1 /usr/lib64/qemu/librbd.so.1
 %{_includedir}/rbd/librbd.hpp
 %{_includedir}/rbd/features.h
 %{_libdir}/librbd.so
+%if 0%{?_with_lttng}
+%{_libdir}/librbd_tp.so
+%endif
 
 #################################################################################
 %files -n python-rbd
@@ -1284,12 +1305,12 @@ exit 0
 %files libs-compat
 # We need an empty %%files list for ceph-libs-compat, to tell rpmbuild to actually
 # build this meta package.
+%endif
 
 #################################################################################
 %files devel-compat
 # We need an empty %%files list for ceph-devel-compat, to tell rpmbuild to
 # actually build this meta package.
-%endif
 
 #################################################################################
 %files -n python-ceph-compat

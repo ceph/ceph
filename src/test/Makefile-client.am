@@ -283,6 +283,8 @@ librados_test_stub_la_SOURCES = \
 	test/librados_test_stub/TestWatchNotify.cc
 noinst_HEADERS += \
 	test/librados_test_stub/LibradosTestStub.h \
+	test/librados_test_stub/MockTestMemIoCtxImpl.h \
+	test/librados_test_stub/MockTestMemRadosClient.h \
 	test/librados_test_stub/TestClassHandler.h \
 	test/librados_test_stub/TestRadosClient.h \
 	test/librados_test_stub/TestMemRadosClient.h \
@@ -361,12 +363,6 @@ noinst_HEADERS += \
 	test/librbd/mock/MockImageCtx.h \
 	test/librbd/mock/MockImageWatcher.h \
 	test/librbd/mock/MockObjectMap.h
-
-if WITH_LTTNG
-unittest_librbd_LDADD += $(LIBRBD_TP)
-ceph_test_librbd_LDADD += $(LIBRBD_TP)
-ceph_test_librbd_api_LDADD += $(LIBRBD_TP)
-endif
 
 if LINUX
 ceph_test_librbd_fsx_SOURCES = test/librbd/fsx.cc

@@ -135,7 +135,11 @@
 #include "common/config.h"
 
 #ifdef WITH_LTTNG
+#define TRACEPOINT_DEFINE
+#define TRACEPOINT_PROBE_DYNAMIC_LINKAGE
 #include "tracing/osd.h"
+#undef TRACEPOINT_PROBE_DYNAMIC_LINKAGE
+#undef TRACEPOINT_DEFINE
 #else
 #define tracepoint(...)
 #endif
@@ -2827,30 +2831,23 @@ void OSD::load_pgs()
     derr << "failed to list pgs: " << cpp_strerror(-r) << dendl;
   }
 
-  set<spg_t> pgs;
+  bool has_upgraded = false;
+
   for (vector<coll_t>::iterator it = ls.begin();
        it != ls.end();
        ++it) {
     spg_t pgid;
-    if (it->is_temp(&pgid) ||
-	it->is_removal(&pgid) ||
-	(it->is_pg(&pgid) && PG::_has_removal_flag(store, pgid))) {
+    if (it->is_temp(&pgid) || it->is_removal(&pgid) ||
+        (it->is_pg(&pgid) && PG::_has_removal_flag(store, pgid))) {
       dout(10) << "load_pgs " << *it << " clearing temp" << dendl;
       recursive_remove_collection(store, pgid, *it);
       continue;
     }
 
-    if (it->is_pg(&pgid)) {
-      pgs.insert(pgid);
+    if (!it->is_pg(&pgid)) {
+      dout(10) << "load_pgs ignoring unrecognized " << *it << dendl;
       continue;
     }
-
-    dout(10) << "load_pgs ignoring unrecognized " << *it << dendl;
-  }
-
-  bool has_upgraded = false;
-  for (set<spg_t>::iterator i = pgs.begin(); i != pgs.end(); ++i) {
-    spg_t pgid(*i);
 
     if (pgid.preferred() >= 0) {
       dout(10) << __func__ << ": skipping localized PG " << pgid << dendl;
@@ -3070,6 +3067,8 @@ void OSD::build_past_intervals_parallel()
 		 << " " << debug.str() << dendl;
 	p.old_up = up;
 	p.old_acting = acting;
+	p.primary = primary;
+	p.up_primary = up_primary;
 	p.same_interval_since = cur_epoch;
       }
     }
@@ -4223,7 +4222,7 @@ bool remove_dir(
 {
   vector<ghobject_t> olist;
   int64_t num = 0;
-  ObjectStore::Transaction *t = new ObjectStore::Transaction;
+  ObjectStore::Transaction t;
   ghobject_t next;
   handle.reset_tp_timeout();
   store->collection_list(
@@ -4239,38 +4238,36 @@ bool remove_dir(
        ++i, ++num) {
     if (i->is_pgmeta())
       continue;
-    OSDriver::OSTransaction _t(osdriver->get_transaction(t));
+    OSDriver::OSTransaction _t(osdriver->get_transaction(&t));
     int r = mapper->remove_oid(i->hobj, &_t);
     if (r != 0 && r != -ENOENT) {
       assert(0);
     }
-    t->remove(coll, *i);
+    t.remove(coll, *i);
     if (num >= cct->_conf->osd_target_transaction_size) {
       C_SaferCond waiter;
-      store->queue_transaction(osr, t, &waiter);
+      store->queue_transaction(osr, &t, &waiter);
       bool cont = dstate->pause_clearing();
       handle.suspend_tp_timeout();
       waiter.wait();
       handle.reset_tp_timeout();
       if (cont)
         cont = dstate->resume_clearing();
-      delete t;
       if (!cont)
 	return false;
-      t = new ObjectStore::Transaction;
+      t = ObjectStore::Transaction();
       num = 0;
     }
   }
 
   C_SaferCond waiter;
-  store->queue_transaction(osr, t, &waiter);
+  store->queue_transaction(osr, &t, &waiter);
   bool cont = dstate->pause_clearing();
   handle.suspend_tp_timeout();
   waiter.wait();
   handle.reset_tp_timeout();
   if (cont)
     cont = dstate->resume_clearing();
-  delete t;
   // whether there are more objects to remove in the collection
   *finished = next.is_max();
   return cont;
@@ -8783,6 +8780,12 @@ int OSD::init_op_flags(OpRequestRef& op)
         op->set_skip_promote();
       }
       break;
+
+    // force promotion when pin an object in cache tier
+    case CEPH_OSD_OP_CACHE_PIN:
+      op->set_promote();
+      break;
+
     default:
       break;
     }

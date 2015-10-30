@@ -3337,3 +3337,39 @@ TRACEPOINT_EVENT(librados, rados_aio_read_op_operate_exit,
         ctf_integer(int, retval, retval)
     )
 )
+
+TRACEPOINT_EVENT(librados, rados_cache_pin_enter,
+    TP_ARGS(
+        rados_ioctx_t, io,
+	const char*, o),
+    TP_FIELDS(
+        ctf_integer_hex(rados_ioctx_t, io, io)
+        ceph_ctf_string(o, o)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_cache_pin_exit,
+    TP_ARGS(
+        int, retval),
+    TP_FIELDS(
+        ctf_integer(int, retval, retval)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_cache_unpin_enter,
+    TP_ARGS(
+        rados_ioctx_t, io,
+	const char*, o),
+    TP_FIELDS(
+        ctf_integer_hex(rados_ioctx_t, io, io)
+        ceph_ctf_string(o, o)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_cache_unpin_exit,
+    TP_ARGS(
+        int, retval),
+    TP_FIELDS(
+        ctf_integer(int, retval, retval)
+    )
+)

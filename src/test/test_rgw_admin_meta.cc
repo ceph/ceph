@@ -321,9 +321,7 @@ int run_rgw_admin(string& cmd, string& resp) {
       argv[loop++] = (char *)(*it).c_str();
     }
     argv[loop] = NULL;
-    close(1);
-    stdout = fopen(RGW_ADMIN_RESP_PATH, "w+");
-    if (!stdout) {
+    if (!freopen(RGW_ADMIN_RESP_PATH, "w+", stdout)) {
       cout << "Unable to open stdout file" << std::endl;
     }
     execv((g_test->get_rgw_admin_path()).c_str(), argv); 

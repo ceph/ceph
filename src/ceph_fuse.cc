@@ -34,10 +34,6 @@ using namespace std;
 #include "global/global_init.h"
 #include "common/safe_io.h"
        
-#if !defined(DARWIN) && !defined(__FreeBSD__)
-#include <envz.h>
-#endif // DARWIN
-
 #include <sys/types.h>
 #include <fcntl.h>
 
@@ -103,13 +99,12 @@ int main(int argc, const char **argv, const char *envp[]) {
   }
 
   if (childpid == 0) {
+    if (restart_log)
+      g_ceph_context->_log->start();
     common_init_finish(g_ceph_context);
 
     //cout << "child, mounting" << std::endl;
     ::close(fd[0]);
-
-    if (restart_log)
-      g_ceph_context->_log->start();
 
     class RemountTest : public Thread {
     public:
