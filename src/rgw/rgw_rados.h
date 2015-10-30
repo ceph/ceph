@@ -1273,6 +1273,8 @@ struct objexp_hint_entry {
 };
 WRITE_CLASS_ENCODER(objexp_hint_entry)
 
+class RGWPeriod;
+
 class RGWRealm : public RGWSystemMetaObj
 {
   string master_zonegroup;
@@ -1322,7 +1324,10 @@ public:
   int set_current_period(const string& period_id);
 
   string get_control_oid();
+  /// send a notify on the realm control object
   int notify_zone();
+  /// notify the zone of a new period
+  int notify_new_period(const RGWPeriod& period);
 };
 WRITE_CLASS_ENCODER(RGWRealm)
 
