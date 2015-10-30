@@ -22,12 +22,6 @@
 
 #include "rgw_file.h"
 
-/* XXX
- * ASSERT_H somehow not defined after all the above (which bring
- * in common/debug.h [e.g., dout])
- */
-#include "include/assert.h"
-
 #define dout_subsys ceph_subsys_rgw
 
 extern RGWLib librgw;
@@ -422,6 +416,7 @@ int rgw_readv(struct rgw_fs *rgw_fs,
   RGWGetObjRequest req(cct, fs->get_user(), rgw_fh->bucket_name(),
 		      rgw_fh->object_name(), uio->uio_offset, uio->uio_resid,
 		      bl);
+  req.do_hexdump = false;
 
   int rc = librgw.get_fe()->execute_req(&req);
 
