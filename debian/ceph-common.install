@@ -9,6 +9,7 @@ usr/bin/ceph-syn
 usr/bin/ceph-crush-location
 usr/bin/rados
 usr/bin/rbd
+usr/bin/rbdmap
 usr/bin/rbd-replay*
 usr/bin/ceph-post-file
 usr/bin/ceph-brag
