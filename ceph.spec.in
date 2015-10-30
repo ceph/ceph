@@ -607,7 +607,7 @@ make %{?_smp_mflags} check-local
 make DESTDIR=$RPM_BUILD_ROOT install
 find $RPM_BUILD_ROOT -type f -name "*.la" -exec rm -f {} ';'
 find $RPM_BUILD_ROOT -type f -name "*.a" -exec rm -f {} ';'
-install -D src/rbdmap $RPM_BUILD_ROOT%{_sysconfdir}/ceph/rbdmap
+install -D src/etc-rbdmap $RPM_BUILD_ROOT%{_sysconfdir}/ceph/rbdmap
 install -D src/init-rbdmap $RPM_BUILD_ROOT%{_initrddir}/rbdmap
 %if 0%{?fedora} || 0%{?rhel}
 install -m 0644 -D etc/sysconfig/ceph $RPM_BUILD_ROOT%{_sysconfdir}/sysconfig/ceph
@@ -872,6 +872,7 @@ rm -rf $RPM_BUILD_ROOT
 %{_bindir}/rbd
 %{_bindir}/rbd-replay
 %{_bindir}/rbd-replay-many
+%{_bindir}/rbdmap
 %if 0%{?_with_lttng}
 %{_bindir}/rbd-replay-prep
 %endif
