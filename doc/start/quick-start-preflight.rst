@@ -6,12 +6,12 @@
 
 Thank you for trying Ceph! We recommend setting up a ``ceph-deploy`` admin
 :term:`node` and a 3-node :term:`Ceph Storage Cluster` to explore the basics of
-Ceph. This **Preflight Checklist** will help you prepare a ``ceph-deploy`` 
-admin node and three Ceph Nodes (or virtual machines) that will host your Ceph 
-Storage Cluster. Before proceeding any further, see `OS Recommendations`_ to 
-verify that you have a supported distribution and version of Linux. When 
-you use a single Linux distribution and version across the cluster, it will 
-make it easier for you to troubleshoot issues that arise in production. 
+Ceph. This **Preflight Checklist** will help you prepare a ``ceph-deploy``
+admin node and three Ceph Nodes (or virtual machines) that will host your Ceph
+Storage Cluster. Before proceeding any further, see `OS Recommendations`_ to
+verify that you have a supported distribution and version of Linux. When
+you use a single Linux distribution and version across the cluster, it will
+make it easier for you to troubleshoot issues that arise in production.
 
 In the descriptions below, :term:`Node` refers to a single machine.
 
@@ -38,7 +38,7 @@ For Debian and Ubuntu distributions, perform the following steps:
    ``emperor``, ``firefly``, etc.).
    For example::
 
-	echo deb http://ceph.com/debian-{ceph-stable-release}/ $(lsb_release -sc) main | sudo tee /etc/apt/sources.list.d/ceph.list
+	echo deb http://download.ceph.com/debian-{ceph-stable-release}/ $(lsb_release -sc) main | sudo tee /etc/apt/sources.list.d/ceph.list
 
 #. Update your repository and install ``ceph-deploy``::
 
@@ -62,15 +62,15 @@ following steps:
 
    Paste the following example code. Replace ``{ceph-release}`` with
    the recent major release of Ceph (e.g., ``firefly``). Replace ``{distro}``
-   with your Linux distribution (e.g., ``el6`` for CentOS 6, 
+   with your Linux distribution (e.g., ``el6`` for CentOS 6,
    ``el7`` for CentOS 7, ``rhel6`` for
    Red Hat 6.5, ``rhel7`` for Red Hat 7, and ``fc19`` or ``fc20`` for Fedora 19
-   or Fedora 20. Finally, save the contents to the 
+   or Fedora 20. Finally, save the contents to the
    ``/etc/yum.repos.d/ceph.repo`` file. ::
 
 	[ceph-noarch]
 	name=Ceph noarch packages
-	baseurl=http://ceph.com/rpm-{ceph-release}/{distro}/noarch
+	baseurl=http://download.ceph.com/rpm-{ceph-release}/{distro}/noarch
 	enabled=1
 	gpgcheck=1
 	type=rpm-md
@@ -89,7 +89,7 @@ following steps:
 Ceph Node Setup
 ===============
 
-The admin node must be have password-less SSH access to Ceph nodes. 
+The admin node must be have password-less SSH access to Ceph nodes.
 When ceph-deploy logs in to a Ceph node as a user, that particular
 user must have passwordless ``sudo`` privileges.
 
@@ -100,7 +100,7 @@ Install NTP
 We recommend installing NTP on Ceph nodes (especially on Ceph Monitor nodes) to
 prevent issues arising from clock drift. See `Clock`_ for details.
 
-On CentOS / RHEL, execute:: 
+On CentOS / RHEL, execute::
 
 	sudo yum install ntp ntpdate ntp-doc
 
@@ -108,7 +108,7 @@ On Debian / Ubuntu, execute::
 
 	sudo apt-get install ntp
 
-Ensure that you enable the NTP service. Ensure that each Ceph Node uses the 
+Ensure that you enable the NTP service. Ensure that each Ceph Node uses the
 same NTP time server. See `NTP`_ for details.
 
 
@@ -134,7 +134,7 @@ Create a Ceph Deploy User
 
 The ``ceph-deploy`` utility must login to a Ceph node as a user
 that has passwordless ``sudo`` privileges, because it needs to install
-software and configuration files without prompting for passwords. 
+software and configuration files without prompting for passwords.
 
 Recent versions of ``ceph-deploy`` support a ``--username`` option so you can
 specify any user that has password-less ``sudo`` (including ``root``, although
@@ -179,7 +179,7 @@ monitors.
    ``root`` user. Leave the passphrase empty::
 
 	ssh-keygen
-	
+
 	Generating public/private key pair.
 	Enter file in which to save the key (/ceph-admin/.ssh/id_rsa):
 	Enter passphrase (empty for no passphrase):
@@ -194,9 +194,9 @@ monitors.
 	ssh-copy-id {username}@node2
 	ssh-copy-id {username}@node3
 
-#. (Recommended) Modify the ``~/.ssh/config`` file of your ``ceph-deploy`` 
-   admin node so that ``ceph-deploy`` can log in to Ceph nodes as the user you 
-   created without requiring you to specify ``--username {username}`` each 
+#. (Recommended) Modify the ``~/.ssh/config`` file of your ``ceph-deploy``
+   admin node so that ``ceph-deploy`` can log in to Ceph nodes as the user you
+   created without requiring you to specify ``--username {username}`` each
    time you execute ``ceph-deploy``. This has the added benefit of streamlining
    ``ssh`` and ``scp`` usage. Replace ``{username}`` with the user name you
    created::
@@ -232,10 +232,10 @@ Ensure Connectivity
 
 Ensure connectivity using ``ping`` with short hostnames (``hostname -s``).
 Address hostname resolution issues as necessary.
-   
+
 .. note:: Hostnames should resolve to a network IP address, not to the
    loopback IP address (e.g., hostnames should resolve to an IP address other
-   than ``127.0.0.1``). If you use your admin node as a Ceph node, you 
+   than ``127.0.0.1``). If you use your admin node as a Ceph node, you
    should also ensure that it resolves to its hostname and IP address
    (i.e., not its loopback IP address).
 
