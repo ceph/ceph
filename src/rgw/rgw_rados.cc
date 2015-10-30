@@ -1136,14 +1136,14 @@ int RGWPeriod::update_sync_status()
   }
 
   auto mdlog = store->meta_mgr->get_log();
+  const auto num_shards = cct->_conf->rgw_md_log_max_shards;
 
-  rgw_meta_sync_status status;
-  // XXX: status.state = StateInit?
-  status.sync_info.num_shards = cct->_conf->rgw_md_log_max_shards;
+  std::vector<std::string> markers;
+  markers.reserve(num_shards);
 
   // gather the markers for each shard
   // TODO: use coroutines to read them in parallel
-  for (uint32_t i = 0; i < status.sync_info.num_shards; i++) {
+  for (int i = 0; i < num_shards; i++) {
     RGWMetadataLogInfo info;
     int r = mdlog->get_info(i, &info);
     if (r < 0) {
@@ -1151,15 +1151,11 @@ int RGWPeriod::update_sync_status()
           << ": " << cpp_strerror(-r) << dendl;
       return r;
     }
-    rgw_meta_sync_marker marker;
-    // XXX: marker.state = FullSync?
-    std::swap(marker.marker, info.marker);
-    // XXX: marker.next_step_marker = ?
-    ldout(cct, 15) << "got shard " << i << " marker " << marker.marker << dendl;
-    status.sync_markers.emplace(i, std::move(marker));
+    ldout(cct, 15) << "got shard " << i << " marker " << info.marker << dendl;
+    markers.emplace_back(std::move(info.marker));
   }
 
-  sync_status = std::move(status);
+  std::swap(sync_status, markers);
   return 0;
 }
 
