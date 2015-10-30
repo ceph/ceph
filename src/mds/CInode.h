@@ -812,7 +812,7 @@ public:
 
   // choose new lock state during recovery, based on issued caps
   void choose_lock_state(SimpleLock *lock, int allissued);
-  void choose_lock_states();
+  void choose_lock_states(int dirty_caps);
 
   int count_nonstale_caps() {
     int n = 0;
