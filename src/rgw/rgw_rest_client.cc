@@ -13,6 +13,15 @@
 
 #define dout_subsys ceph_subsys_rgw
 
+int RGWRESTSimpleRequest::get_status()
+{
+  int retcode = get_req_retcode();
+  if (retcode < 0) {
+    return retcode;
+  }
+  return status;
+}
+
 int RGWRESTSimpleRequest::receive_header(void *ptr, size_t len)
 {
   char line[len + 1];

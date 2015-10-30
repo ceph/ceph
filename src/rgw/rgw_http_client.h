@@ -64,6 +64,8 @@ public:
   rgw_http_req_data *get_req_data() { return req_data; }
 
   string to_str();
+
+  int get_req_retcode();
 };
 
 class RGWCompletionManager;
