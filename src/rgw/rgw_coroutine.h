@@ -214,9 +214,11 @@ do {                            \
 } while (0)
 
 #define drain_all() \
+  drain_cr = boost::asio::coroutine(); \
   yield_until_true(drain_children(0))
 
 #define drain_all_but(n) \
+  drain_cr = boost::asio::coroutine(); \
   yield_until_true(drain_children(n))
 
 template <class T>
