@@ -44,6 +44,7 @@ namespace {
   bool do_readv = false;
   bool do_get = false;
   bool do_delete = false;
+  bool do_hexdump = false;
 
   string bucket_name = "sorry_dave";
   string object_name = "jocaml";
@@ -215,9 +216,11 @@ TEST(LibRGW, GET_OBJECT) {
     ASSERT_EQ(ret, 0);
     buffer::list bl;
     bl.push_back(buffer::create_static(nread, sbuf));
-    dout(15) << "";
-    bl.hexdump(*_dout);
-    *_dout << dendl;
+    if (do_hexdump) {
+      dout(15) << "";
+      bl.hexdump(*_dout);
+      *_dout << dendl;
+    }
   }
 }
 
@@ -283,6 +286,7 @@ TEST(LibRGW, READV)
     rgw_uio uio[1];
     memset(uio, 0, sizeof(rgw_uio));
     uio->uio_offset = 0; // ok, it was already 0
+    uio->uio_resid = UINT64_MAX;
     int ret = rgw_readv(fs, object_fh, uio);
     ASSERT_EQ(ret, 0);
     //buffer::list bl;
@@ -294,9 +298,13 @@ TEST(LibRGW, READV)
 			      static_cast<char*>(vio->vio_base)));
     }
 
-    dout(15) << "";
-    bl.hexdump(*_dout);
-    *_dout << dendl;
+    ASSERT_EQ(uint32_t{bl.length()}, uint32_t{iovcnt*page_size});
+
+    if (do_hexdump) {
+      dout(15) << "";
+      bl.hexdump(*_dout);
+      *_dout << dendl;
+    }
 
     // release resources
     ASSERT_NE(uio->uio_rele, nullptr);
@@ -387,6 +395,9 @@ int main(int argc, char *argv[])
     } else if (ceph_argparse_flag(args, arg_iter, "--prelist",
 					    (char*) nullptr)) {
       do_pre_list = true;
+    } else if (ceph_argparse_flag(args, arg_iter, "--hexdump",
+					    (char*) nullptr)) {
+      do_hexdump = true;
     } else {
       ++arg_iter;
     }
