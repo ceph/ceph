@@ -362,18 +362,13 @@ class ProvisionOpenStack(OpenStack):
         if not self.exists(name_or_id, server_info=server_info):
             return True
         volumes = self.list_volumes(name_or_id, server_info=server_info)
-        if self.get_value(server_info, 'status').lower() == 'error':
-            log.info(
-                "Instance %s is in an error state; skipping volume detachment",
-                name_or_id
-            )
-        else:
-            for volume in volumes:
-                misc.sh("openstack server remove volume %s %s" %
-                        (name_or_id, volume))
-        misc.sh("openstack server delete " + name_or_id)
+        server_id = self.get_value(server_info, 'ID')
+        misc.sh("openstack server set --name REMOVE-ME-" + name_or_id +
+                " " + server_id)
+        misc.sh("openstack server delete --wait " + server_id + " || true")
         for volume in volumes:
-            misc.sh("openstack volume delete " + volume)
+            misc.sh("openstack volume set --name REMOVE-ME " + volume)
+            misc.sh("openstack volume delete " + volume + " || true")
         return True
 
 
