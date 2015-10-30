@@ -143,7 +143,7 @@ private:
   uint64_t m_snap_id;
   bool m_enabled;
 
-  void invalidate(uint64_t snap_id);
+  void invalidate(uint64_t snap_id, bool force);
   void resize(uint64_t num_objs, uint8_t default_state);
 };
 

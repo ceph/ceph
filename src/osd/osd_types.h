@@ -1129,10 +1129,6 @@ public:
                                  ///< user does not specify any expected value
   bool fast_read;            ///< whether turn on fast read on the pool or not
 
-  double scrub_min_interval;  //< scrub min interval
-  double scrub_max_interval;  //< scrub max interval
-  double deep_scrub_interval; //< deep-scrub interval
-
   pg_pool_t()
     : flags(0), type(0), size(0), min_size(0),
       crush_ruleset(0), object_hash(0),
@@ -1160,10 +1156,7 @@ public:
       min_write_recency_for_promote(0),
       stripe_width(0),
       expected_num_objects(0),
-      fast_read(false),
-      scrub_min_interval(0),
-      scrub_max_interval(0),
-      deep_scrub_interval(0)
+      fast_read(false)
   { }
 
   void dump(Formatter *f) const;
@@ -1755,8 +1748,6 @@ WRITE_CLASS_ENCODER(pg_hit_set_info_t)
  */
 struct pg_hit_set_history_t {
   eversion_t current_last_update;  ///< last version inserted into current set
-  utime_t current_last_stamp;      ///< timestamp of last insert
-  pg_hit_set_info_t current_info;  ///< metadata about the current set
   list<pg_hit_set_info_t> history; ///< archived sets, sorted oldest -> newest
 
   void encode(bufferlist &bl) const;
@@ -2990,12 +2981,15 @@ static inline ostream& operator<<(ostream& out, const watch_info_t& w) {
 
 struct notify_info_t {
   uint64_t cookie;
+  uint64_t notify_id;
   uint32_t timeout;
   bufferlist bl;
 };
 
 static inline ostream& operator<<(ostream& out, const notify_info_t& n) {
-  return out << "notify(cookie " << n.cookie << " " << n.timeout << "s)";
+  return out << "notify(cookie " << n.cookie
+	     << " notify" << n.notify_id
+	     << " " << n.timeout << "s)";
 }
 
 

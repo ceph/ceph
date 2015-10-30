@@ -453,6 +453,16 @@ void ReplicatedPG::wait_for_degraded_object(const hobject_t& soid, OpRequestRef 
   op->mark_delayed("waiting for degraded object");
 }
 
+void ReplicatedPG::block_write_on_full_cache(
+  const hobject_t& _oid, OpRequestRef op)
+{
+  const hobject_t oid = _oid.get_head();
+  dout(20) << __func__ << ": blocking object " << oid
+	   << " on full cache" << dendl;
+  objects_blocked_on_cache_full.insert(oid);
+  waiting_for_cache_not_full.push_back(op);
+}
+
 void ReplicatedPG::block_write_on_snap_rollback(
   const hobject_t& oid, ObjectContextRef obc, OpRequestRef op)
 {
@@ -1208,9 +1218,7 @@ void ReplicatedPG::do_pg_op(OpRequestRef op)
 	     p != info.hit_set.history.end();
 	     ++p)
 	  ls.push_back(make_pair(p->begin, p->end));
-	if (info.hit_set.current_info.begin)
-	  ls.push_back(make_pair(info.hit_set.current_info.begin, utime_t()));
-	else if (hit_set)
+	if (hit_set)
 	  ls.push_back(make_pair(hit_set_start_stamp, utime_t()));
 	::encode(ls, osd_op.outdata);
       }
@@ -1219,9 +1227,7 @@ void ReplicatedPG::do_pg_op(OpRequestRef op)
     case CEPH_OSD_OP_PG_HITSET_GET:
       {
 	utime_t stamp(osd_op.op.hit_set_get.stamp);
-	if ((info.hit_set.current_info.begin &&
-	     stamp >= info.hit_set.current_info.begin) ||
-	    stamp >= hit_set_start_stamp) {
+	if (hit_set_start_stamp && stamp >= hit_set_start_stamp) {
 	  // read the current in-memory HitSet, not the version we've
 	  // checkpointed.
 	  if (!hit_set) {
@@ -1345,10 +1351,6 @@ void ReplicatedPG::do_request(
   OpRequestRef& op,
   ThreadPool::TPHandle &handle)
 {
-  if (!op_has_sufficient_caps(op)) {
-    osd->reply_op_error(op, -EPERM);
-    return;
-  }
   assert(!op_must_wait_for_map(get_osdmap()->get_epoch(), op));
   if (can_discard_request(op)) {
     return;
@@ -1482,6 +1484,18 @@ void ReplicatedPG::do_op(OpRequestRef& op)
 {
   MOSDOp *m = static_cast<MOSDOp*>(op->get_req());
   assert(m->get_type() == CEPH_MSG_OSD_OP);
+
+  m->finish_decode();
+  m->clear_payload();
+
+  if (op->rmw_flags == 0) {
+    int r = osd->osd->init_op_flags(op);
+    if (r) {
+      osd->reply_op_error(op, r);
+      return;
+    }
+  }
+
   if (op->includes_pg_op()) {
     if (pg_op_must_wait(m)) {
       wait_for_all_missing(op);
@@ -1490,6 +1504,22 @@ void ReplicatedPG::do_op(OpRequestRef& op)
     return do_pg_op(op);
   }
 
+  if (!op_has_sufficient_caps(op)) {
+    osd->reply_op_error(op, -EPERM);
+    return;
+  }
+
+  // object name too long?
+  unsigned max_name_len = MIN(g_conf->osd_max_object_name_len,
+                              osd->osd->store->get_max_object_name_length());
+  if (m->get_oid().name.size() > max_name_len) {
+    dout(4) << "do_op '" << m->get_oid().name << "' is longer than "
+            << max_name_len << " bytes" << dendl;
+    osd->reply_op_error(op, -ENAMETOOLONG);
+    return;
+  }
+
+  // blacklisted?
   if (get_osdmap()->is_blacklisted(m->get_source_addr())) {
     dout(10) << "do_op " << m->get_source_addr() << " is blacklisted" << dendl;
     osd->reply_op_error(op, -EBLACKLISTED);
@@ -1509,10 +1539,35 @@ void ReplicatedPG::do_op(OpRequestRef& op)
 	     << *m << dendl;
     return;
   }
-  if (osd->check_failsafe_full()) {
+  if (!m->get_source().is_mds() && osd->check_failsafe_full()) {
     dout(10) << __func__ << " fail-safe full check failed, dropping request"
 	     << dendl;
     return;
+  }
+  int64_t poolid = get_pgid().pool();
+  if (op->may_write()) {
+
+    const pg_pool_t *pi = get_osdmap()->get_pg_pool(poolid);
+    if (!pi) {
+      return;
+    }
+
+    // invalid?
+    if (m->get_snapid() != CEPH_NOSNAP) {
+      osd->reply_op_error(op, -EINVAL);
+      return;
+    }
+
+    // too big?
+    if (cct->_conf->osd_max_write_size &&
+        m->get_data_len() > cct->_conf->osd_max_write_size << 20) {
+      // journal can't hold commit!
+      derr << "do_op msg data len " << m->get_data_len()
+           << " > osd_max_write_size " << (cct->_conf->osd_max_write_size << 20)
+           << " on " << *m << dendl;
+      osd->reply_op_error(op, -OSD_WRITETOOBIG);
+      return;
+    }
   }
 
   // order this op as a write?
@@ -1570,6 +1625,10 @@ void ReplicatedPG::do_op(OpRequestRef& op)
     wait_for_blocked_object(
       blocked_snap_promote_iter->second->obs.oi.soid,
       op);
+    return;
+  }
+  if (write_ordered && objects_blocked_on_cache_full.count(head)) {
+    block_write_on_full_cache(head, op);
     return;
   }
 
@@ -1706,8 +1765,13 @@ void ReplicatedPG::do_op(OpRequestRef& op)
       return;
   }
 
-  if (!(m->has_flag(CEPH_OSD_FLAG_IGNORE_CACHE)) &&
-      maybe_handle_cache(op, write_ordered, obc, r, missing_oid, false, in_hit_set))
+  if (maybe_handle_cache(op,
+			 write_ordered,
+			 obc,
+			 r,
+			 missing_oid,
+			 false,
+			 in_hit_set))
     return;
 
   if (r && (r != -ENOENT || !obc)) {
@@ -1936,16 +2000,28 @@ void ReplicatedPG::do_op(OpRequestRef& op)
   execute_ctx(ctx);
 }
 
-bool ReplicatedPG::maybe_handle_cache(OpRequestRef op,
-				      bool write_ordered,
-				      ObjectContextRef obc,
-                                      int r, const hobject_t& missing_oid,
-				      bool must_promote,
-				      bool in_hit_set)
+ReplicatedPG::cache_result_t ReplicatedPG::maybe_handle_cache_detail(
+  OpRequestRef op,
+  bool write_ordered,
+  ObjectContextRef obc,
+  int r, hobject_t missing_oid,
+  bool must_promote,
+  bool in_hit_set,
+  ObjectContextRef *promote_obc)
 {
+  if (op &&
+      op->get_req() &&
+      op->get_req()->get_type() == CEPH_MSG_OSD_OP &&
+      (static_cast<MOSDOp *>(op->get_req())->get_flags() &
+       CEPH_OSD_FLAG_IGNORE_CACHE)) {
+    dout(20) << __func__ << ": ignoring cache due to flag" << dendl;
+    return cache_result_t::NOOP;
+  }
   // return quickly if caching is not enabled
   if (pool.info.cache_mode == pg_pool_t::CACHEMODE_NONE)
-    return false;
+    return cache_result_t::NOOP;
+
+  must_promote = must_promote || op->need_promote();
 
   if (obc)
     dout(25) << __func__ << " " << obc->obs.oi << " "
@@ -1965,29 +2041,28 @@ bool ReplicatedPG::maybe_handle_cache(OpRequestRef op,
   if (obc.get() && obc->is_blocked() && write_ordered) {
     // we're already doing something with this object
     dout(20) << __func__ << " blocked on " << obc->obs.oi.soid << dendl;
-    return false;
+    return cache_result_t::NOOP;
   }
 
   if (r == -ENOENT && missing_oid == hobject_t()) {
     // we know this object is logically absent (e.g., an undefined clone)
-    return false;
+    return cache_result_t::NOOP;
   }
 
   if (obc.get() && obc->obs.exists) {
     osd->logger->inc(l_osd_op_cache_hit);
-    return false;
+    return cache_result_t::NOOP;
   }
-  
+
+  if (missing_oid == hobject_t() && obc.get()) {
+    missing_oid = obc->obs.oi.soid;
+  }
+
   MOSDOp *m = static_cast<MOSDOp*>(op->get_req());
   const object_locator_t& oloc = m->get_object_locator();
 
-  if (must_promote || op->need_promote()) {
-    promote_object(obc, missing_oid, oloc, op);
-    return true;
-  }
-
   if (op->need_skip_handle_cache()) {
-    return false;
+    return cache_result_t::NOOP;
   }
 
   // older versions do not proxy the feature bits.
@@ -2001,51 +2076,61 @@ bool ReplicatedPG::maybe_handle_cache(OpRequestRef op,
   case pg_pool_t::CACHEMODE_WRITEBACK:
     if (agent_state &&
 	agent_state->evict_mode == TierAgentState::EVICT_MODE_FULL) {
-      if (!op->may_write() && !op->may_cache() && !write_ordered) {
+      if (!op->may_write() && !op->may_cache() &&
+	  !write_ordered && !must_promote) {
 	if (can_proxy_read) {
 	  dout(20) << __func__ << " cache pool full, proxying read" << dendl;
 	  do_proxy_read(op);
+	  return cache_result_t::HANDLED_PROXY;
 	} else {
 	  dout(20) << __func__ << " cache pool full, redirect read" << dendl;
 	  do_cache_redirect(op);
+	  return cache_result_t::HANDLED_REDIRECT;
 	}
-	return true;
+	assert(0 == "unreachable");
       }
       dout(20) << __func__ << " cache pool full, waiting" << dendl;
-      waiting_for_cache_not_full.push_back(op);
-      return true;
+      block_write_on_full_cache(missing_oid, op);
+      return cache_result_t::BLOCKED_FULL;
     }
 
     if (!hit_set) {
-      promote_object(obc, missing_oid, oloc, op);
-      return true;
+      promote_object(obc, missing_oid, oloc, op, promote_obc);
+      return cache_result_t::BLOCKED_PROMOTE;
     } else if (op->may_write() || op->may_cache()) {
-      if (can_proxy_write) {
+      if (can_proxy_write && !must_promote) {
         do_proxy_write(op, missing_oid);
       } else {
 	// promote if can't proxy the write
-	promote_object(obc, missing_oid, oloc, op);
-	return true;
+	promote_object(obc, missing_oid, oloc, op, promote_obc);
+	return cache_result_t::BLOCKED_PROMOTE;
       }
 
       // Promote too?
       if (!op->need_skip_promote()) {
         maybe_promote(obc, missing_oid, oloc, in_hit_set,
 	              pool.info.min_write_recency_for_promote,
-		      OpRequestRef());
+		      OpRequestRef(),
+		      promote_obc);
       }
+      return cache_result_t::HANDLED_PROXY;
     } else {
-      if (can_proxy_read)
+      bool did_proxy_read = false;
+      if (can_proxy_read && !must_promote) {
         do_proxy_read(op);
-      else
+	did_proxy_read = true;
+      } else {
         promote_op = op;   // for non-proxy case promote_object needs this
+      }
 
       // Avoid duplicate promotion
       if (obc.get() && obc->is_blocked()) {
-	if (!can_proxy_read) {
+	if (!did_proxy_read) {
 	  wait_for_blocked_object(obc->obs.oi.soid, op);
 	}
-        return true;
+	if (promote_obc)
+	  *promote_obc = obc;
+        return cache_result_t::BLOCKED_PROMOTE;
       }
 
       // Promote too?
@@ -2053,32 +2138,39 @@ bool ReplicatedPG::maybe_handle_cache(OpRequestRef op,
       if (!op->need_skip_promote()) {
         promoted = maybe_promote(obc, missing_oid, oloc, in_hit_set,
                                  pool.info.min_read_recency_for_promote,
-                                 promote_op);
+                                 promote_op, promote_obc);
       }
-      if (!promoted && !can_proxy_read) {
+      if (!promoted && !did_proxy_read) {
 	// redirect the op if it's not proxied and not promoting
 	do_cache_redirect(op);
+	return cache_result_t::HANDLED_REDIRECT;
+      } else if (did_proxy_read) {
+	return cache_result_t::HANDLED_PROXY;
+      } else {
+	assert(promoted);
+	return cache_result_t::BLOCKED_PROMOTE;
       }
     }
-    return true;
+    assert(0 == "unreachable");
+    return cache_result_t::NOOP;
 
   case pg_pool_t::CACHEMODE_FORWARD:
     do_cache_redirect(op);
-    return true;
+    return cache_result_t::HANDLED_REDIRECT;
 
   case pg_pool_t::CACHEMODE_READONLY:
     // TODO: clean this case up
     if (!obc.get() && r == -ENOENT) {
       // we don't have the object and op's a read
-      promote_object(obc, missing_oid, oloc, op);
-      return true;
+      promote_object(obc, missing_oid, oloc, op, promote_obc);
+      return cache_result_t::BLOCKED_PROMOTE;
     }
     if (!r) { // it must be a write
       do_cache_redirect(op);
-      return true;
+      return cache_result_t::HANDLED_REDIRECT;
     }
     // crap, there was a failure of some kind
-    return false;
+    return cache_result_t::NOOP;
 
   case pg_pool_t::CACHEMODE_READFORWARD:
     // Do writeback to the cache tier for writes
@@ -2086,16 +2178,16 @@ bool ReplicatedPG::maybe_handle_cache(OpRequestRef op,
       if (agent_state &&
 	  agent_state->evict_mode == TierAgentState::EVICT_MODE_FULL) {
 	dout(20) << __func__ << " cache pool full, waiting" << dendl;
-	waiting_for_cache_not_full.push_back(op);
-	return true;
+	block_write_on_full_cache(missing_oid, op);
+	return cache_result_t::BLOCKED_FULL;
       }
-      promote_object(obc, missing_oid, oloc, op);
-      return true;
+      promote_object(obc, missing_oid, oloc, op, promote_obc);
+      return cache_result_t::BLOCKED_PROMOTE;
     }
 
     // If it is a read, we can read, we need to forward it
     do_cache_redirect(op);
-    return true;
+    return cache_result_t::HANDLED_REDIRECT;
 
   case pg_pool_t::CACHEMODE_READPROXY:
     // Do writeback to the cache tier for writes
@@ -2103,21 +2195,21 @@ bool ReplicatedPG::maybe_handle_cache(OpRequestRef op,
       if (agent_state &&
 	  agent_state->evict_mode == TierAgentState::EVICT_MODE_FULL) {
 	dout(20) << __func__ << " cache pool full, waiting" << dendl;
-	waiting_for_cache_not_full.push_back(op);
-	return true;
+	block_write_on_full_cache(missing_oid, op);
+	return cache_result_t::BLOCKED_FULL;
       }
-      promote_object(obc, missing_oid, oloc, op);
-      return true;
+      promote_object(obc, missing_oid, oloc, op, promote_obc);
+      return cache_result_t::BLOCKED_PROMOTE;
     }
 
     // If it is a read, we can read, we need to proxy it
     do_proxy_read(op);
-    return true;
+    return cache_result_t::HANDLED_PROXY;
 
   default:
     assert(0 == "unrecognized cache_mode");
   }
-  return false;
+  return cache_result_t::NOOP;
 }
 
 bool ReplicatedPG::maybe_promote(ObjectContextRef obc,
@@ -2125,19 +2217,20 @@ bool ReplicatedPG::maybe_promote(ObjectContextRef obc,
 				 const object_locator_t& oloc,
 				 bool in_hit_set,
 				 uint32_t recency,
-				 OpRequestRef promote_op)
+				 OpRequestRef promote_op,
+				 ObjectContextRef *promote_obc)
 {
   dout(20) << __func__ << " missing_oid " << missing_oid
 	   << "  in_hit_set " << in_hit_set << dendl;
 
   switch (recency) {
   case 0:
-    promote_object(obc, missing_oid, oloc, promote_op);
+    promote_object(obc, missing_oid, oloc, promote_op, promote_obc);
     break;
   case 1:
     // Check if in the current hit set
     if (in_hit_set) {
-      promote_object(obc, missing_oid, oloc, promote_op);
+      promote_object(obc, missing_oid, oloc, promote_op, promote_obc);
     } else {
       // not promoting
       return false;
@@ -2234,6 +2327,16 @@ void ReplicatedPG::do_proxy_read(OpRequestRef op)
 		 m->get_object_locator().get_pool(),
 		 m->get_object_locator().nspace);
   unsigned flags = CEPH_OSD_FLAG_IGNORE_CACHE | CEPH_OSD_FLAG_IGNORE_OVERLAY;
+
+  // pass through some original flags that make sense.
+  //  - leave out redirection and balancing flags since we are
+  //    already proxying through the primary
+  //  - leave off read/write/exec flags that are derived from the op
+  flags |= m->get_flags() & (CEPH_OSD_FLAG_RWORDERED |
+			     CEPH_OSD_FLAG_ORDERSNAP |
+			     CEPH_OSD_FLAG_ENFORCE_SNAPC |
+			     CEPH_OSD_FLAG_MAP_SNAP_CLONE);
+
   dout(10) << __func__ << " Start proxy read for " << *m << dendl;
 
   ProxyReadOpRef prdop(new ProxyReadOp(op, soid, m->ops));
@@ -2550,7 +2653,8 @@ public:
 void ReplicatedPG::promote_object(ObjectContextRef obc,
 				  const hobject_t& missing_oid,
 				  const object_locator_t& oloc,
-				  OpRequestRef op)
+				  OpRequestRef op,
+				  ObjectContextRef *promote_obc)
 {
   hobject_t hoid = obc ? obc->obs.oi.soid : missing_oid;
   assert(hoid != hobject_t());
@@ -2571,6 +2675,8 @@ void ReplicatedPG::promote_object(ObjectContextRef obc,
     assert(missing_oid != hobject_t());
     obc = get_object_context(missing_oid, true);
   }
+  if (promote_obc)
+    *promote_obc = obc;
 
   /*
    * Before promote complete, if there are  proxy-reads for the object,
@@ -3749,6 +3855,7 @@ bool ReplicatedPG::maybe_create_new_object(OpContext *ctx)
     dout(10) << __func__ << " clearing whiteout on " << obs.oi.soid << dendl;
     ctx->new_obs.oi.clear_flag(object_info_t::FLAG_WHITEOUT);
     --ctx->delta_stats.num_whiteouts;
+    return true;
   }
   return false;
 }
@@ -4531,9 +4638,13 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 
 	notify_info_t n;
 	n.timeout = timeout;
+	n.notify_id = osd->get_next_id(get_osdmap()->get_epoch());
 	n.cookie = op.watch.cookie;
         n.bl = bl;
 	ctx->notifies.push_back(n);
+
+	// return our unique notify id to the client
+	::encode(n.notify_id, osd_op.outdata);
       }
       break;
 
@@ -5701,16 +5812,33 @@ int ReplicatedPG::_rollback_to(OpContext *ctx, ceph_osd_op& op)
     block_write_on_degraded_snap(missing_oid, ctx->op);
     return ret;
   }
-  if (maybe_handle_cache(ctx->op, true, rollback_to, ret, missing_oid, true)) {
-    // promoting the rollback src, presumably
-    if (!rollback_to) {
-      // the obc must be cached now for the promotion to be happening
-      rollback_to = get_object_context(missing_oid, false);
-      assert(rollback_to);
+  {
+    ObjectContextRef promote_obc;
+    switch (
+      maybe_handle_cache_detail(
+	ctx->op,
+	true,
+	rollback_to,
+	ret,
+	missing_oid,
+	true,
+	false,
+	&promote_obc)) {
+    case cache_result_t::NOOP:
+      break;
+    case cache_result_t::BLOCKED_PROMOTE:
+      assert(promote_obc);
+      block_write_on_snap_rollback(soid, promote_obc, ctx->op);
+      return -EAGAIN;
+    case cache_result_t::BLOCKED_FULL:
+      block_write_on_full_cache(soid, ctx->op);
+      return -EAGAIN;
+    default:
+      assert(0 == "must promote was set, other values are not valid");
+      return -EAGAIN;
     }
-    block_write_on_snap_rollback(soid, rollback_to, ctx->op);
-    return -EAGAIN;
   }
+
   if (ret == -ENOENT || (rollback_to && rollback_to->obs.oi.is_whiteout())) {
     // there's no snapshot here, or there's no object.
     // if there's no snapshot, we delete the object; otherwise, do nothing.
@@ -6062,7 +6190,7 @@ void ReplicatedPG::do_osd_op_effects(OpContext *ctx, const ConnectionRef& conn)
 	p->bl,
 	p->timeout,
 	p->cookie,
-	osd->get_next_id(get_osdmap()->get_epoch()),
+	p->notify_id,
 	ctx->obc->obs.oi.user_version,
 	osd));
     for (map<pair<uint64_t, entity_name_t>, WatchRef>::iterator i =
@@ -6153,7 +6281,7 @@ int ReplicatedPG::prepare_transaction(OpContext *ctx)
     } else if (m->has_flag(CEPH_OSD_FLAG_FULL_TRY)) {
       // they tried, they failed.
       dout(20) << __func__ << " full, replying to FULL_TRY op" << dendl;
-      return -ENOSPC;
+      return pool.info.has_flag(pg_pool_t::FLAG_FULL) ? -EDQUOT : -ENOSPC;
     } else {
       // drop request
       dout(20) << __func__ << " full, dropping request (bad client)" << dendl;
@@ -9486,6 +9614,7 @@ void ReplicatedPG::on_change(ObjectStore::Transaction *t)
     waiting_for_cache_not_full.clear();
     waiting_for_all_missing.clear();
   }
+  objects_blocked_on_cache_full.clear();
 
 
   for (list<pair<OpRequestRef, OpContext*> >::iterator i =
@@ -9541,6 +9670,7 @@ void ReplicatedPG::on_pool_change()
     dout(10) << __func__ << " requeuing full waiters (not in writeback) "
 	     << dendl;
     requeue_ops(waiting_for_cache_not_full);
+    objects_blocked_on_cache_full.clear();
   }
   hit_set_setup();
   agent_setup();
@@ -10785,15 +10915,19 @@ void ReplicatedPG::hit_set_clear()
 void ReplicatedPG::hit_set_setup()
 {
   if (!is_active() ||
-      !is_primary() ||
-      !pool.info.hit_set_count ||
-      !pool.info.hit_set_period ||
-      pool.info.hit_set_params.get_type() == HitSet::TYPE_NONE) {
+      !is_primary()) {
     hit_set_clear();
+    return;
+  }
+
+  if (is_active() && is_primary() &&
+      (!pool.info.hit_set_count ||
+       !pool.info.hit_set_period ||
+       pool.info.hit_set_params.get_type() == HitSet::TYPE_NONE)) {
+    hit_set_clear();
+
     // only primary is allowed to remove all the hit set objects
-    if (is_primary() && is_peered()) {
-      hit_set_remove_all();
-    }
+    hit_set_remove_all();
     return;
   }
 
@@ -10950,14 +11084,6 @@ void ReplicatedPG::hit_set_persist()
       return;
   }
 
-  utime_t start = info.hit_set.current_info.begin;
-  if (!start)
-     start = hit_set_start_stamp;
-  oid = get_hit_set_archive_object(start, now, pool.info.use_gmt_hitset);
-  // If the current object is degraded we skip this persist request
-  if (scrubber.write_blocked_by_scrub(oid, get_sort_bitwise()))
-    return;
-
   // If backfill is in progress and we could possibly overlap with the
   // hit_set_* objects, back off.  Since these all have
   // hobject_t::hash set to pgid.ps(), and those sort first, we can
@@ -10978,16 +11104,25 @@ void ReplicatedPG::hit_set_persist()
     }
   }
 
-  if (!info.hit_set.current_info.begin)
-    info.hit_set.current_info.begin = hit_set_start_stamp;
+
+  pg_hit_set_info_t new_hset = pg_hit_set_info_t(pool.info.use_gmt_hitset);
+  new_hset.begin = hit_set_start_stamp;
+  new_hset.end = now;
+  oid = get_hit_set_archive_object(
+    new_hset.begin,
+    new_hset.end,
+    new_hset.using_gmt);
+
+  // If the current object is degraded we skip this persist request
+  if (scrubber.write_blocked_by_scrub(oid, get_sort_bitwise()))
+    return;
 
   hit_set->seal();
   ::encode(*hit_set, bl);
-  info.hit_set.current_info.end = now;
   dout(20) << __func__ << " archive " << oid << dendl;
 
   if (agent_state) {
-    agent_state->add_hit_set(info.hit_set.current_info.begin, hit_set);
+    agent_state->add_hit_set(new_hset.begin, hit_set);
     uint32_t size = agent_state->hit_set_map.size();
     if (size >= pool.info.hit_set_count) {
       size = pool.info.hit_set_count > 0 ? pool.info.hit_set_count - 1: 0;
@@ -10996,8 +11131,8 @@ void ReplicatedPG::hit_set_persist()
   }
 
   // hold a ref until it is flushed to disk
-  hit_set_flushing[info.hit_set.current_info.begin] = hit_set;
-  flush_time = info.hit_set.current_info.begin;
+  hit_set_flushing[new_hset.begin] = hit_set;
+  flush_time = new_hset.begin;
 
   ObjectContextRef obc = get_object_context(oid, true);
   repop = simple_repop_create(obc);
@@ -11008,14 +11143,11 @@ void ReplicatedPG::hit_set_persist()
   ctx->updated_hset_history = info.hit_set;
   pg_hit_set_history_t &updated_hit_set_hist = *(ctx->updated_hset_history);
 
-
   updated_hit_set_hist.current_last_update = info.last_update;
-  updated_hit_set_hist.current_info.version = ctx->at_version;
+  new_hset.version = ctx->at_version;
 
-  updated_hit_set_hist.history.push_back(updated_hit_set_hist.current_info);
+  updated_hit_set_hist.history.push_back(new_hset);
   hit_set_create();
-  updated_hit_set_hist.current_info = pg_hit_set_info_t(pool.info.use_gmt_hitset);
-  updated_hit_set_hist.current_last_stamp = utime_t();
 
   // fabricate an object_info_t and SnapSet
   obc->obs.oi.version = ctx->at_version;
@@ -11774,6 +11906,7 @@ bool ReplicatedPG::agent_choose_mode(bool restart, OpRequestRef op)
 	requeue_op(op);
       requeue_ops(waiting_for_active);
       requeue_ops(waiting_for_cache_not_full);
+      objects_blocked_on_cache_full.clear();
       requeued = true;
     }
     if (evict_mode == TierAgentState::EVICT_MODE_SOME) {

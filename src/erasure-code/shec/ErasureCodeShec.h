@@ -124,12 +124,7 @@ public:
 private:
   virtual int parse(const ErasureCodeProfile &profile) = 0;
 
-  virtual double shec_calc_recovery_efficiency1(int k, int m1, int m2, int c1, int c2)
-  // http://tracker.ceph.com/issues/12936 shec fails i386 make check
-#if defined(__i386__) && defined(__GNUC__)
-    __attribute__((optimize(0)))
-#endif    
-    ;
+  virtual double shec_calc_recovery_efficiency1(int k, int m1, int m2, int c1, int c2);
   virtual int shec_make_decoding_matrix(bool prepare,
                                         int *want, int *avails,
                                         int *decoding_matrix,

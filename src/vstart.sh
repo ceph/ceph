@@ -450,6 +450,8 @@ $CMDSDEBUG
         mds debug auth pins = true
         mds debug subtrees = true
         mds data = $CEPH_DEV_DIR/mds.\$id
+        mds root ino uid = `id -u`
+        mds root ino gid = `id -g`
 $extra_conf
 [osd]
 $DAEMONOPTS

@@ -164,12 +164,20 @@ class interval_set {
     return typename interval_set<T>::iterator(m.begin());
   }
 
+  typename interval_set<T>::iterator lower_bound(T start) {
+    return typename interval_set<T>::iterator(find_inc_m(start));
+  }
+
   typename interval_set<T>::iterator end() {
     return typename interval_set<T>::iterator(m.end());
   }
 
   typename interval_set<T>::const_iterator begin() const {
     return typename interval_set<T>::const_iterator(m.begin());
+  }
+
+  typename interval_set<T>::const_iterator lower_bound(T start) const {
+    return typename interval_set<T>::const_iterator(find_inc(start));
   }
 
   typename interval_set<T>::const_iterator end() const {

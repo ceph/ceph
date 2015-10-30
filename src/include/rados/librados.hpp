@@ -265,6 +265,10 @@ namespace librados
     OPERATION_IGNORE_CACHE       = LIBRADOS_OPERATION_IGNORE_CACHE,
     OPERATION_SKIPRWLOCKS        = LIBRADOS_OPERATION_SKIPRWLOCKS,
     OPERATION_IGNORE_OVERLAY     = LIBRADOS_OPERATION_IGNORE_OVERLAY,
+    // send requests to cluster despite the cluster or pool being
+    // marked full; ops will either succeed (e.g., delete) or return
+    // EDQUOT or ENOSPC
+    OPERATION_FULL_TRY           = LIBRADOS_OPERATION_FULL_TRY,
   };
 
   /*

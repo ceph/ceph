@@ -74,9 +74,8 @@ public:
   void finalize();
 
   uint64_t fino_snap(uint64_t fino);
-  vinodeno_t fino_vino(inodeno_t fino);
   uint64_t make_fake_ino(inodeno_t ino, snapid_t snapid);
-  Inode * iget(inodeno_t fino);
+  Inode * iget(fuse_ino_t fino);
   void iput(Inode *in);
 
   int fd_on_success;
@@ -1011,27 +1010,27 @@ int CephFuse::Handle::loop()
 
 uint64_t CephFuse::Handle::fino_snap(uint64_t fino)
 {
-  Mutex::Locker l(stag_lock);
-  uint64_t stag = FINO_STAG(fino);
-  assert(stag_snap_map.count(stag));
-  return stag_snap_map[stag];
-}
-
-vinodeno_t CephFuse::Handle::fino_vino(inodeno_t fino)
-{
-  if (fino.val == 1) {
-    fino = inodeno_t(client->get_root_ino());
+  if (client->use_faked_inos()) {
+    vinodeno_t vino  = client->map_faked_ino(fino);
+    return vino.snapid;
+  } else {
+    Mutex::Locker l(stag_lock);
+    uint64_t stag = FINO_STAG(fino);
+    assert(stag_snap_map.count(stag));
+    return stag_snap_map[stag];
   }
-  vinodeno_t vino(FINO_INO(fino), fino_snap(fino));
-  //cout << "fino_vino " << fino << " -> " << vino << std::endl;
-  return vino;
 }
 
-Inode * CephFuse::Handle::iget(inodeno_t fino)
+Inode * CephFuse::Handle::iget(fuse_ino_t fino)
 {
-  Inode *in =
-    client->ll_get_inode(fino_vino(fino));
-  return in;
+  if (client->use_faked_inos()) {
+    return client->ll_get_inode((ino_t)fino);
+  } else {
+    if (fino == 1)
+      fino = inodeno_t(client->get_root_ino());
+    vinodeno_t vino(FINO_INO(fino), fino_snap(fino));
+    return client->ll_get_inode(vino);
+  }
 }
 
 void CephFuse::Handle::iput(Inode *in)
@@ -1041,17 +1040,22 @@ void CephFuse::Handle::iput(Inode *in)
 
 uint64_t CephFuse::Handle::make_fake_ino(inodeno_t ino, snapid_t snapid)
 {
-  Mutex::Locker l(stag_lock);
-  uint64_t stag;
-  if (snap_stag_map.count(snapid) == 0) {
-    stag = ++last_stag;
-    snap_stag_map[snapid] = stag;
-    stag_snap_map[stag] = snapid;
-  } else
-    stag = snap_stag_map[snapid];
-  inodeno_t fino = MAKE_FINO(ino, stag);
-  //cout << "make_fake_ino " << ino << "." << snapid << " -> " << fino << std::endl;
-  return fino;
+  if (client->use_faked_inos()) {
+    // already faked by libcephfs
+    return ino;
+  } else {
+    Mutex::Locker l(stag_lock);
+    uint64_t stag;
+    if (snap_stag_map.count(snapid) == 0) {
+      stag = ++last_stag;
+      snap_stag_map[snapid] = stag;
+      stag_snap_map[stag] = snapid;
+    } else
+      stag = snap_stag_map[snapid];
+    inodeno_t fino = MAKE_FINO(ino, stag);
+    //cout << "make_fake_ino " << ino << "." << snapid << " -> " << fino << std::endl;
+    return fino;
+  }
 }
 
 CephFuse::CephFuse(Client *c, int fd) : _handle(new CephFuse::Handle(c, fd))

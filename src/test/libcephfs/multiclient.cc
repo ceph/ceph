@@ -25,13 +25,13 @@
 TEST(LibCephFS, MulticlientSimple) {
   struct ceph_mount_info *ca, *cb;
   ASSERT_EQ(ceph_create(&ca, NULL), 0);
-  ASSERT_EQ(0, ceph_conf_parse_env(ca, NULL));
   ASSERT_EQ(ceph_conf_read_file(ca, NULL), 0);
+  ASSERT_EQ(0, ceph_conf_parse_env(ca, NULL));
   ASSERT_EQ(ceph_mount(ca, NULL), 0);
 
   ASSERT_EQ(ceph_create(&cb, NULL), 0);
-  ASSERT_EQ(0, ceph_conf_parse_env(cb, NULL));
   ASSERT_EQ(ceph_conf_read_file(cb, NULL), 0);
+  ASSERT_EQ(0, ceph_conf_parse_env(cb, NULL));
   ASSERT_EQ(ceph_mount(cb, NULL), 0);
 
   char name[20];
@@ -65,13 +65,13 @@ TEST(LibCephFS, MulticlientSimple) {
 TEST(LibCephFS, MulticlientHoleEOF) {
   struct ceph_mount_info *ca, *cb;
   ASSERT_EQ(ceph_create(&ca, NULL), 0);
-  ASSERT_EQ(0, ceph_conf_parse_env(ca, NULL));
   ASSERT_EQ(ceph_conf_read_file(ca, NULL), 0);
+  ASSERT_EQ(0, ceph_conf_parse_env(ca, NULL));
   ASSERT_EQ(ceph_mount(ca, NULL), 0);
 
   ASSERT_EQ(ceph_create(&cb, NULL), 0);
-  ASSERT_EQ(0, ceph_conf_parse_env(cb, NULL));
   ASSERT_EQ(ceph_conf_read_file(cb, NULL), 0);
+  ASSERT_EQ(0, ceph_conf_parse_env(cb, NULL));
   ASSERT_EQ(ceph_mount(cb, NULL), 0);
 
   char name[20];

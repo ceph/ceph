@@ -150,7 +150,7 @@ endif
 core-daemons: ceph-mon ceph-osd ceph-mds radosgw
 admin-tools: monmaptool osdmaptool crushtool ceph-authtool
 base: core-daemons admin-tools \
-	cephfs ceph-syn ceph-conf \
+	cephfs ceph-fuse ceph-syn ceph-conf \
 	rados radosgw-admin librados-config \
 	init-ceph ceph-post-file \
 	ceph
