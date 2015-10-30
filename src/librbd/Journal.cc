@@ -55,6 +55,19 @@ struct SetOpRequestTid : public boost::static_visitor<void> {
   }
 };
 
+struct C_ReplayCommitted : public Context {
+  ::journal::Journaler *journaler;
+  ::journal::ReplayEntry replay_entry;
+
+  C_ReplayCommitted(::journal::Journaler *journaler,
+		    ::journal::ReplayEntry &&replay_entry) :
+    journaler(journaler), replay_entry(std::move(replay_entry)) {
+  }
+  virtual void finish(int r) {
+    journaler->committed(replay_entry);
+  }
+};
+
 } // anonymous namespace
 
 Journal::Journal(ImageCtx &image_ctx)
@@ -547,7 +560,8 @@ void Journal::handle_replay_ready() {
     m_lock.Unlock();
     bufferlist data = replay_entry.get_data();
     bufferlist::iterator it = data.begin();
-    int r = m_journal_replay->process(it);
+    int r = m_journal_replay->process(it, new C_ReplayCommitted(m_journaler,
+								std::move(replay_entry)));
     m_lock.Lock();
 
     if (r < 0) {
