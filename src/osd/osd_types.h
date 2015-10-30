@@ -3156,18 +3156,16 @@ struct ObjectState {
     : oi(oi_), exists(exists_) {}
 };
 
-
 struct SnapSetContext {
   hobject_t oid;
-  int ref;
-  bool registered;
   SnapSet snapset;
-  bool exists;
+  int ref;
+  bool registered : 1;
+  bool exists : 1;
 
   SnapSetContext(const hobject_t& o) :
     oid(o), ref(0), registered(false), exists(true) { }
 };
-
 
 /*
   * keep tabs on object modifications that are in flight.
