@@ -492,6 +492,7 @@ protected:
 
   map<inodeno_t,map<client_t,map<mds_rank_t,ceph_mds_cap_reconnect> > > cap_imports;  // ino -> client -> frommds -> capex
   map<inodeno_t,filepath> cap_import_paths;
+  map<inodeno_t,int> cap_imports_dirty;
   set<inodeno_t> cap_imports_missing;
   int cap_imports_num_opening;
   
@@ -548,6 +549,9 @@ public:
     assert(cap_imports[ino].size() == 1);
     assert(cap_imports[ino][client].size() == 1);
     cap_imports.erase(ino);
+  }
+  void set_reconnect_dirty_caps(inodeno_t ino, int dirty) {
+    cap_imports_dirty[ino] |= dirty;
   }
 
   // [reconnect/rejoin caps]
