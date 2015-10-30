@@ -483,5 +483,5 @@ line to get the short codename. ::
 
 
 .. _Install Ceph Object Storage: ../install-storage-cluster
-.. _the testing Debian repository: http://ceph.com/debian-testing/dists
+.. _the testing Debian repository: http://download.ceph.com/debian-testing/dists
 .. _the gitbuilder page: http://gitbuilder.ceph.com
