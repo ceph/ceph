@@ -271,7 +271,7 @@ Then add a new ``ceph.repo`` repository entry with the following contents.
 
 	[ceph]
 	name=Ceph Packages and Backports $basearch
-	baseurl=http://ceph.com/rpm/el6/$basearch
+	baseurl=http://download.ceph.com/rpm/el6/$basearch
 	enabled=1
 	gpgcheck=1
 	type=rpm-md
@@ -279,7 +279,7 @@ Then add a new ``ceph.repo`` repository entry with the following contents.
 
 
 .. note:: Ensure you use the correct URL for your distribution. Check the
-   http://ceph.com/rpm directory for your distribution. 
+   http://download.ceph.com/rpm directory for your distribution. 
 
 .. note:: Since you can upgrade using ``ceph-deploy`` you will only need to add
    the repository on Ceph Client nodes where you use the ``ceph`` command line 
@@ -309,7 +309,7 @@ replace ``{distro}`` with your distribution (e.g., ``el6``, ``rhel6``, etc).
 
 	[ceph]
 	name=Ceph Packages and Backports $basearch
-	baseurl=http://ceph.com/rpm-emperor/{distro}/$basearch
+	baseurl=http://download.ceph.com/rpm-emperor/{distro}/$basearch
 	enabled=1
 	gpgcheck=1
 	type=rpm-md
@@ -317,7 +317,7 @@ replace ``{distro}`` with your distribution (e.g., ``el6``, ``rhel6``, etc).
 
 
 .. note:: Ensure you use the correct URL for your distribution. Check the
-   http://ceph.com/rpm directory for your distribution. 
+   http://download.ceph.com/rpm directory for your distribution. 
 
 .. note:: Since you can upgrade using ``ceph-deploy`` you will only need to add
    the repository on Ceph Client nodes where you use the ``ceph`` command line 
@@ -435,7 +435,7 @@ replace ``{distro}`` with your distribution (e.g., ``el6``, ``rhel6``,
 
 	[ceph]
 	name=Ceph Packages and Backports $basearch
-	baseurl=http://ceph.com/rpm-firefly/{distro}/$basearch
+	baseurl=http://download.ceph.com/rpm-firefly/{distro}/$basearch
 	enabled=1
 	gpgcheck=1
 	type=rpm-md
@@ -508,7 +508,7 @@ replace ``{distro}`` with your distribution (e.g., ``el6``, ``rhel6``,
 
 	[ceph]
 	name=Ceph Packages and Backports $basearch
-	baseurl=http://ceph.com/rpm/{distro}/$basearch
+	baseurl=http://download.ceph.com/rpm/{distro}/$basearch
 	enabled=1
 	gpgcheck=1
 	type=rpm-md
@@ -516,7 +516,7 @@ replace ``{distro}`` with your distribution (e.g., ``el6``, ``rhel6``,
 
 
 .. note:: Ensure you use the correct URL for your distribution. Check the
-   http://ceph.com/rpm directory for your distribution. 
+   http://download.ceph.com/rpm directory for your distribution. 
 
 .. note:: Since you can upgrade using ``ceph-deploy`` you will only need to add
    the repository on Ceph Client nodes where you use the ``ceph`` command line 

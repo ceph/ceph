@@ -70,7 +70,7 @@ following steps:
 
 	[ceph-noarch]
 	name=Ceph noarch packages
-	baseurl=http://ceph.com/rpm-{ceph-release}/{distro}/noarch
+	baseurl=http://download.ceph.com/rpm-{ceph-release}/{distro}/noarch
 	enabled=1
 	gpgcheck=1
 	type=rpm-md
