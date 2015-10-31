@@ -130,10 +130,13 @@ TEST(LibRGW, LIST_OBJECTS) {
 TEST(LibRGW, CLEANUP) {
   int ret = 0;
   using std::get;
+  struct rgw_file_handle *rgw_fh;
+  /* release file handles */
   for (auto& fids : { fids1, fids2 }) {
     for (auto& fid : fids) {
-      /* XXX readdir only looked up their names (atm), don't try to rele() */
-      //ret = rgw_fh_rele(fs, get<2>(fid), 0 /* flags */);
+      rgw_fh = get<2>(fid);
+      if (rgw_fh)
+	ret = rgw_fh_rele(fs, rgw_fh, 0 /* flags */);
     }
   }
 }
