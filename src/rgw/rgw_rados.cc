@@ -2659,16 +2659,23 @@ public:
 class RGWDataSyncProcessorThread : public RGWSyncProcessorThread
 {
   RGWDataSyncStatusManager sync;
+  bool initialized;
 
   uint64_t interval_msec() {
-    return 0; /* no interval associated, it'll run once until stopped */
+    if (initialized) {
+      return 0; /* no interval associated, it'll run once until stopped */
+    } else {
+#define DATA_SYNC_INIT_WAIT_SEC 20
+      return DATA_SYNC_INIT_WAIT_SEC;
+    }
   }
   void stop_process() {
     sync.stop();
   }
 public:
   RGWDataSyncProcessorThread(RGWRados *_store, const string& _source_zone) :  RGWSyncProcessorThread(_store),
-                                                                              sync(_store, _source_zone) {}
+                                                                              sync(_store, _source_zone),
+                                                                              initialized(false) {}
 
   void wakeup_sync_shards(map<int, set<string> >& shard_ids) {
     for (map<int, set<string> >::iterator iter = shard_ids.begin(); iter != shard_ids.end(); ++iter) {
@@ -2677,15 +2684,19 @@ public:
   }
 
   int init() {
-    int ret = sync.init();
-    if (ret < 0) {
-      ldout(store->ctx(), 0) << "ERROR: sync.init() returned " << ret << dendl;
-      return ret;
-    }
     return 0;
   }
 
   int process() {
+    while (!going_down()) {
+      int ret = sync.init();
+      if (ret >= 0) {
+        initialized = true;
+        break;
+      }
+      /* we'll be back! */
+      return 0;
+    }
     sync.run();
     return 0;
   }
