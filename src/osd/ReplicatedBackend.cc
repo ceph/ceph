@@ -589,8 +589,6 @@ void ReplicatedBackend::submit_transaction(
     &op,
     op_t);
 
-  ObjectStore::Transaction *local_t = new ObjectStore::Transaction;
-  local_t->set_use_tbl(op_t->get_use_tbl());
   if (!(t->get_temp_added().empty())) {
     add_temp_objs(t->get_temp_added());
   }
@@ -602,7 +600,7 @@ void ReplicatedBackend::submit_transaction(
     trim_to,
     trim_rollback_to,
     true,
-    local_t);
+    op_t);
   
   op_t->register_on_applied_sync(on_local_applied_sync);
   op_t->register_on_applied(
@@ -610,14 +608,11 @@ void ReplicatedBackend::submit_transaction(
       new C_OSD_OnOpApplied(this, &op)));
   op_t->register_on_applied(
     new ObjectStore::C_DeleteTransaction(op_t));
-  op_t->register_on_applied(
-    new ObjectStore::C_DeleteTransaction(local_t));
   op_t->register_on_commit(
     parent->bless_context(
       new C_OSD_OnOpCommit(this, &op)));
 
   list<ObjectStore::Transaction*> tls;
-  tls.push_back(local_t);
   tls.push_back(op_t);
   parent->queue_transactions(tls, op.op);
   delete t;
