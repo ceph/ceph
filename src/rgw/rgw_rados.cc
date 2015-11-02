@@ -2666,7 +2666,7 @@ class RGWDataSyncProcessorThread : public RGWSyncProcessorThread
       return 0; /* no interval associated, it'll run once until stopped */
     } else {
 #define DATA_SYNC_INIT_WAIT_SEC 20
-      return DATA_SYNC_INIT_WAIT_SEC;
+      return DATA_SYNC_INIT_WAIT_SEC * 1000;
     }
   }
   void stop_process() {
