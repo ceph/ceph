@@ -460,7 +460,6 @@ protected:
   map<inodeno_t,mds_rank_t> cap_export_targets; // ino -> auth mds
 
   map<inodeno_t,map<client_t,map<mds_rank_t,ceph_mds_cap_reconnect> > > cap_imports;  // ino -> client -> frommds -> capex
-  map<inodeno_t,filepath> cap_import_paths;
   map<inodeno_t,int> cap_imports_dirty;
   set<inodeno_t> cap_imports_missing;
   int cap_imports_num_opening;
@@ -502,7 +501,6 @@ public:
   void rejoin_recovered_caps(inodeno_t ino, client_t client, cap_reconnect_t& icr, 
 			     mds_rank_t frommds=MDS_RANK_NONE) {
     cap_imports[ino][client][frommds] = icr.capinfo;
-    cap_import_paths[ino] = filepath(icr.path, (uint64_t)icr.capinfo.pathbase);
   }
   ceph_mds_cap_reconnect *get_replay_cap_reconnect(inodeno_t ino, client_t client) {
     if (cap_imports.count(ino) &&
