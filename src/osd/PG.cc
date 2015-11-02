@@ -2847,7 +2847,10 @@ int PG::peek_map_epoch(ObjectStore *store,
     values.clear();
     keys.insert(ek);
     store->omap_get_values(coll_t::meta(), legacy_infos_oid, keys, &values);
-    assert(values.size() == 1);
+    if (values.size() < 1) {
+      // probably bug 10617; see OSD::load_pgs()
+      return -1;
+    }
     bufferlist::iterator p = values[ek].begin();
     ::decode(cur_epoch, p);
   } else {
