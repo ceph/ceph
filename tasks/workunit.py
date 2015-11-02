@@ -13,7 +13,7 @@ log = logging.getLogger(__name__)
 
 
 CLIENT_PREFIX = 'client.'
-        
+
 
 def task(ctx, config):
     """
@@ -336,7 +336,7 @@ def _run_tests(ctx, refspec, role, tests, env, subdir=None, timeout=None):
                     run.Raw('TESTDIR="{tdir}"'.format(tdir=testdir)),
                     run.Raw('CEPH_ID="{id}"'.format(id=id_)),
                     run.Raw('PATH=$PATH:/usr/sbin')
-                    ]
+                ]
                 if env is not None:
                     for var, val in env.iteritems():
                         quoted_val = pipes.quote(val)
