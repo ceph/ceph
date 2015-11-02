@@ -7,6 +7,26 @@ from teuthology import suite
 from scripts.suite import main
 from teuthology.config import config
 
+import os
+import pytest
+import tempfile
+
+@pytest.fixture
+def git_repository(request):
+    d = tempfile.mkdtemp()
+    os.system("""
+    cd {d}
+    git init
+    touch A
+    git config user.email 'you@example.com'
+    git config user.name 'Your Name'
+    git add A
+    git commit -m 'A' A
+    """.format(d=d))
+    def fin():
+        os.system("rm -fr " + d)
+    request.addfinalizer(fin)
+    return d
 
 class TestSuiteOffline(object):
     def test_name_timestamp_passed(self):
@@ -139,6 +159,28 @@ class TestSuiteOffline(object):
         result = suite.combine_path("/path/to/left", None)
         assert result == "/path/to/left"
 
+    def test_build_git_url_github(self):
+        assert 'project' in suite.build_git_url('project')
+        owner = 'OWNER'
+        assert owner in suite.build_git_url('project', project_owner=owner)
+
+    @patch('teuthology.config.TeuthologyConfig.get_ceph_qa_suite_git_url')
+    def test_build_git_url_ceph_qa_suite_custom(self, m_get_ceph_qa_suite_git_url):
+        url = 'http://foo.com/some'
+        m_get_ceph_qa_suite_git_url.return_value = url + '.git'
+        assert url == suite.build_git_url('ceph-qa-suite')
+
+    @patch('teuthology.config.TeuthologyConfig.get_ceph_git_url')
+    def test_build_git_url_ceph_custom(self, m_get_ceph_git_url):
+        url = 'http://foo.com/some'
+        m_get_ceph_git_url.return_value = url + '.git'
+        assert url == suite.build_git_url('ceph')
+
+    @patch('teuthology.config.TeuthologyConfig.get_ceph_git_url')
+    def test_git_ls_remote(self, m_get_ceph_git_url, git_repository):
+        m_get_ceph_git_url.return_value = git_repository
+        assert None == suite.git_ls_remote('ceph', 'nobranch')
+        assert suite.git_ls_remote('ceph', 'master') is not None
 
 class TestFlavor(object):
     def test_get_install_task_flavor_bare(self):
@@ -704,6 +746,12 @@ class TestBuildMatrix(object):
         assert fragments[0] == 'thrash/ceph/base.yaml'
         assert fragments[1] == 'thrash/ceph-thrash/default.yaml'
 
+@patch('subprocess.check_output')
+def test_git_branch_exists(m_check_output):
+    m_check_output.return_value = ''
+    assert False == suite.git_branch_exists('ceph', 'nobranchnowaycanthappen')
+    m_check_output.return_value = 'HHH branch'
+    assert True == suite.git_branch_exists('ceph', 'master')
 
 class TestSuiteMain(object):
 
@@ -734,9 +782,40 @@ class TestSuiteMain(object):
                 fetch_repos=DEFAULT,
                 teuthology_schedule=DEFAULT,
                 sleep=DEFAULT,
+                get_arch=lambda x: 'x86_64',
+                git_ls_remote=lambda *args: '1234',
+                get_hash=DEFAULT,
+                package_version_for_hash=lambda *args: 'fake-9.5',
                 ) as m:
+            config.suite_verify_ceph_hash = True
+            m['get_hash'].return_value = '12345'
             main(['--suite', suite_name,
                   '--suite-dir', 'teuthology/test',
                   '--throttle', throttle,
                   '--machine-type', machine_type])
             m['sleep'].assert_called_with(int(throttle))
+            m['get_hash'].assert_called_with('ceph', 'master', 'basic',
+                                             machine_type, None)
+
+    def test_schedule_suite_noverify(self):
+        suite_name = 'noop'
+        throttle = '3'
+        machine_type = 'burnupi'
+
+        with patch.multiple(
+                suite,
+                fetch_repos=DEFAULT,
+                teuthology_schedule=DEFAULT,
+                sleep=DEFAULT,
+                get_arch=lambda x: 'x86_64',
+                git_ls_remote=lambda *args: '1234',
+                get_hash=DEFAULT,
+                package_version_for_hash=lambda *args: 'fake-9.5',
+                ) as m:
+            config.suite_verify_ceph_hash = False
+            main(['--suite', suite_name,
+                  '--suite-dir', 'teuthology/test',
+                  '--throttle', throttle,
+                  '--machine-type', machine_type])
+            m['sleep'].assert_called_with(int(throttle))
+            m['get_hash'].assert_not_called()
