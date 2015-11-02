@@ -608,7 +608,6 @@ make DESTDIR=$RPM_BUILD_ROOT install
 find $RPM_BUILD_ROOT -type f -name "*.la" -exec rm -f {} ';'
 find $RPM_BUILD_ROOT -type f -name "*.a" -exec rm -f {} ';'
 install -D src/etc-rbdmap $RPM_BUILD_ROOT%{_sysconfdir}/ceph/rbdmap
-install -D src/init-rbdmap $RPM_BUILD_ROOT%{_initrddir}/rbdmap
 %if 0%{?fedora} || 0%{?rhel}
 install -m 0644 -D etc/sysconfig/ceph $RPM_BUILD_ROOT%{_sysconfdir}/sysconfig/ceph
 %endif
@@ -617,6 +616,7 @@ install -m 0644 -D etc/sysconfig/ceph $RPM_BUILD_ROOT%{_localstatedir}/adm/fillu
 %endif
 %if 0%{?_with_systemd}
   install -m 0644 -D systemd/ceph.tmpfiles.d $RPM_BUILD_ROOT%{_tmpfilesdir}/ceph-common.conf
+  install -m 0644 -D systemd/rbdmap.service $RPM_BUILD_ROOT%{_unitdir}/rbdmap.service
   install -m 0644 -D systemd/ceph-osd@.service $RPM_BUILD_ROOT%{_unitdir}/ceph-osd@.service
   install -m 0644 -D systemd/ceph-mon@.service $RPM_BUILD_ROOT%{_unitdir}/ceph-mon@.service
   install -m 0644 -D systemd/ceph-create-keys@.service $RPM_BUILD_ROOT%{_unitdir}/ceph-create-keys@.service
@@ -626,6 +626,7 @@ install -m 0644 -D etc/sysconfig/ceph $RPM_BUILD_ROOT%{_localstatedir}/adm/fillu
   install -m 0644 -D systemd/ceph-disk@.service $RPM_BUILD_ROOT%{_unitdir}/ceph-disk@.service
   install -m 0755 -D systemd/ceph $RPM_BUILD_ROOT%{_sbindir}/rcceph
 %else
+  install -D src/init-rbdmap $RPM_BUILD_ROOT%{_initrddir}/rbdmap
   install -D src/init-ceph $RPM_BUILD_ROOT%{_initrddir}/ceph
   install -D src/init-radosgw $RPM_BUILD_ROOT%{_initrddir}/ceph-radosgw
   ln -sf ../../etc/init.d/ceph %{buildroot}/%{_sbindir}/rcceph
