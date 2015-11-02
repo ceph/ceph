@@ -25,4 +25,7 @@ int pidfile_write(const md_config_t *conf);
 // This is safe to call in a signal handler context.
 int pidfile_remove(void);
 
+//protect pid-file from deleting by multiple startup
+int test_pidFile_in_use(const md_config_t *conf);
+
 #endif
