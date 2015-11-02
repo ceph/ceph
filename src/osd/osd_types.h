@@ -3191,17 +3191,32 @@ public:
   Cond cond;
   int unstable_writes, readers, writers_waiting, readers_waiting;
 
-  /// in-progress copyfrom ops for this object
-  bool blocked;
 
   // set if writes for this object are blocked on another objects recovery
   ObjectContextRef blocked_by;      // object blocking our writes
   set<ObjectContextRef> blocking;   // objects whose writes we block
-  bool requeue_scrub_on_unblock;    // true if we need to requeue scrub on unblock
 
   // any entity in obs.oi.watchers MUST be in either watchers or unconnected_watchers.
   map<pair<uint64_t, entity_name_t>, WatchRef> watchers;
 
+  // attr cache
+  map<string, bufferlist> attr_cache;
+
+  void fill_in_setattrs(const set<string> &changing, ObjectModDesc *mod) {
+    map<string, boost::optional<bufferlist> > to_set;
+    for (set<string>::const_iterator i = changing.begin();
+	 i != changing.end();
+	 ++i) {
+      map<string, bufferlist>::iterator iter = attr_cache.find(*i);
+      if (iter != attr_cache.end()) {
+	to_set[*i] = iter->second;
+      } else {
+	to_set[*i];
+      }
+    }
+    mod->setattrs(to_set);
+  }
+  
   struct RWState {
     enum State {
       RWNONE,
@@ -3222,19 +3237,18 @@ public:
       return get_state_name(state);
     }
 
-    State state;                 ///< rw state
-    uint64_t count;              ///< number of readers or writers
     list<OpRequestRef> waiters;  ///< ops waiting on state change
+    int count;              ///< number of readers or writers
 
+    State state:4;               ///< rw state
     /// if set, restart backfill when we can get a read lock
-    bool recovery_read_marker;
-
+    bool recovery_read_marker:1;
     /// if set, requeue snaptrim on lock release
-    bool snaptrimmer_write_marker;
+    bool snaptrimmer_write_marker:1;
 
     RWState()
-      : state(RWNONE),
-	count(0),
+      : count(0),
+	state(RWNONE),
 	recovery_read_marker(false),
 	snaptrimmer_write_marker(false)
     {}
@@ -3499,23 +3513,10 @@ public:
     lock.Unlock();
   }
 
-  // attr cache
-  map<string, bufferlist> attr_cache;
+  /// in-progress copyfrom ops for this object
+  bool blocked:1;
+  bool requeue_scrub_on_unblock:1;    // true if we need to requeue scrub on unblock
 
-  void fill_in_setattrs(const set<string> &changing, ObjectModDesc *mod) {
-    map<string, boost::optional<bufferlist> > to_set;
-    for (set<string>::const_iterator i = changing.begin();
-	 i != changing.end();
-	 ++i) {
-      map<string, bufferlist>::iterator iter = attr_cache.find(*i);
-      if (iter != attr_cache.end()) {
-	to_set[*i] = iter->second;
-      } else {
-	to_set[*i];
-      }
-    }
-    mod->setattrs(to_set);
-  }
 };
 
 inline ostream& operator<<(ostream& out, const ObjectState& obs)
