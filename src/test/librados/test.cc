@@ -117,6 +117,14 @@ std::string create_one_ec_pool_pp(const std::string &pool_name, Rados &cluster)
   if (err.length())
     return err;
 
+  int ret = destroy_ec_profile_pp(cluster);
+  if (ret) {
+    cluster.shutdown();
+    std::ostringstream oss;
+    oss << "rados_mon_command erasure-code-profile rm testprofile failed with error " << ret;
+    return oss.str();
+  }
+
   bufferlist inbl;
   ret = cluster.mon_command(
     "{\"prefix\": \"osd erasure-code-profile set\", \"name\": \"testprofile\", \"profile\": [ \"k=2\", \"m=1\", \"ruleset-failure-domain=osd\"]}",
