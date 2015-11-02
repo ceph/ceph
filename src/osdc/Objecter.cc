@@ -2669,10 +2669,7 @@ int Objecter::_calc_target(op_target_t *t, epoch_t *last_force_resend,  bool any
 int Objecter::_map_session(op_target_t *target, OSDSession **s,
 			   RWLock::Context& lc)
 {
-  int r = _calc_target(target);
-  if (r < 0) {
-    return r;
-  }
+  _calc_target(target);
   return _get_session(target->osd, s, lc);
 }
 
