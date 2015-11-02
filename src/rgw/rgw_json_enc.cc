@@ -809,7 +809,7 @@ static void decode_placement_targets(map<string, RGWZoneGroupPlacementTarget>& t
 void RGWZoneGroup::decode_json(JSONObj *obj)
 {
   RGWSystemMetaObj::decode_json(obj);
-  if (!id.empty()) {
+  if (id.empty()) {
     derr << "old format " << dendl;
     JSONDecoder::decode_json("name", name, obj);
     id = name;
