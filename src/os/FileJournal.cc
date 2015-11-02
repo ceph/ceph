@@ -296,7 +296,7 @@ int FileJournal::_open_file(int64_t oldsize, blksize_t blksize,
     char *buf;
     ret = ::posix_memalign((void **)&buf, block_size, write_size);
     if (ret != 0) {
-      return ret;
+      return -ret;
     }
     memset(static_cast<void*>(buf), 0, write_size);
     uint64_t i = 0;
@@ -633,7 +633,8 @@ int FileJournal::_fdump(Formatter &f, bool simple)
 
     if (!pos) {
       dout(2) << "_dump -- not readable" << dendl;
-      return false;
+      err = -EINVAL;
+      break;
     }
     stringstream ss;
     read_entry_result result = do_read_entry(
@@ -647,7 +648,7 @@ int FileJournal::_fdump(Formatter &f, bool simple)
         dout(2) << "Unable to read past sequence " << seq
 	    << " but header indicates the journal has committed up through "
 	    << header.committed_up_to << ", journal is corrupt" << dendl;
-        err = EINVAL;
+        err = -EINVAL;
       }
       dout(25) << ss.str() << dendl;
       dout(25) << "No further valid entries found, journal is most likely valid"
