@@ -353,6 +353,10 @@ int RGWRemoteDataLog::read_log_info(rgw_datalog_info *log_info)
 
 int RGWRemoteDataLog::init(const string& _source_zone, RGWRESTConn *_conn)
 {
+  if (initialized) {
+    return 0;
+  }
+
   CephContext *cct = store->ctx();
   async_rados = new RGWAsyncRadosProcessor(store, cct->_conf->rgw_num_async_rados_threads);
   async_rados->start();
@@ -362,9 +366,14 @@ int RGWRemoteDataLog::init(const string& _source_zone, RGWRESTConn *_conn)
 
   int ret = http_manager.set_threaded();
   if (ret < 0) {
+    async_rados->stop();
+    delete async_rados;
+    async_rados = NULL;
     ldout(store->ctx(), 0) << "failed in http_manager.set_threaded() ret=" << ret << dendl;
     return ret;
   }
+
+  initialized = true;
 
   return 0;
 }
