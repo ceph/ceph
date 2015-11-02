@@ -2694,15 +2694,15 @@ WRITE_CLASS_ENCODER(pg_ls_response_t)
  * object_copy_cursor_t
  */
 struct object_copy_cursor_t {
-  bool attr_complete;
   uint64_t data_offset;
-  bool data_complete;
   string omap_offset;
+  bool attr_complete;
+  bool data_complete;
   bool omap_complete;
 
   object_copy_cursor_t()
-    : attr_complete(false),
-      data_offset(0),
+    : data_offset(0),
+      attr_complete(false),
       data_complete(false),
       omap_complete(false)
   {}
