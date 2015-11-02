@@ -1089,7 +1089,7 @@ int RGWPeriod::update()
     return ret;
   }
 
-  for (auto iter : zonegroups) {
+  for (auto& iter : zonegroups) {
     RGWZoneGroup zg(string(), iter);
     ret = zg.init(cct, store);
     if (ret < 0) {
@@ -1098,7 +1098,7 @@ int RGWPeriod::update()
     }
 
     if (zg.realm_id != realm_id) {
-      ldout(cct, 20) << "skippinh zonegroup " << zg.get_name() << ", not on our realm" << dendl;
+      ldout(cct, 20) << "skipping zonegroup " << zg.get_name() << ", not on our realm" << dendl;
       continue;
     }
     
