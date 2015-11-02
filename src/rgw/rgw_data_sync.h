@@ -141,11 +141,14 @@ class RGWRemoteDataLog : public RGWCoroutinesManager {
   RWLock lock;
   RGWDataSyncCR *data_sync_cr;
 
+  bool initialized;
+
 public:
   RGWRemoteDataLog(RGWRados *_store, RGWDataSyncStatusManager *_sm) : RGWCoroutinesManager(_store->ctx()), store(_store),
                                        conn(NULL),
                                        http_manager(store->ctx(), &completion_mgr),
-                                       status_manager(_sm), lock("RGWRemoteDataLog::lock"), data_sync_cr(NULL) {}
+                                       status_manager(_sm), lock("RGWRemoteDataLog::lock"), data_sync_cr(NULL),
+                                       initialized(false) {}
 
   int init(const string& _source_zone, RGWRESTConn *_conn);
   void finish();
