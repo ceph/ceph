@@ -787,13 +787,20 @@ class TestSuiteMain(object):
                 get_hash=DEFAULT,
                 package_version_for_hash=lambda *args: 'fake-9.5',
                 ) as m:
-            config.suite_verify_ceph_hash = False
+            config.suite_verify_ceph_hash = True
+            m['get_hash'].return_value = '12345'
             main(['--suite', suite_name,
                   '--suite-dir', 'teuthology/test',
                   '--throttle', throttle,
                   '--machine-type', machine_type])
             m['sleep'].assert_called_with(int(throttle))
-            m['get_hash'].assert_not_called()
+            m['get_hash'].assert_called_with('ceph', 'master', 'basic',
+                                             machine_type, None)
+
+    def test_schedule_suite_noverify(self):
+        suite_name = 'noop'
+        throttle = '3'
+        machine_type = 'burnupi'
 
         with patch.multiple(
                 suite,
@@ -805,11 +812,10 @@ class TestSuiteMain(object):
                 get_hash=DEFAULT,
                 package_version_for_hash=lambda *args: 'fake-9.5',
                 ) as m:
-            config.suite_verify_ceph_hash = True
-            m['get_hash'].return_value = '12345'
+            config.suite_verify_ceph_hash = False
             main(['--suite', suite_name,
                   '--suite-dir', 'teuthology/test',
                   '--throttle', throttle,
                   '--machine-type', machine_type])
             m['sleep'].assert_called_with(int(throttle))
-            m['get_hash'].assert_called()
+            m['get_hash'].assert_not_called()
