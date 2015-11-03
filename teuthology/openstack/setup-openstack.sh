@@ -528,7 +528,7 @@ function main() {
 
     local provider=$(verify_openstack)
 
-    eval local default_subnet=$(neutron subnet-list -f json | jq '.[0].cidr')
+    eval local default_subnet=$(neutron subnet-list -f json -c cidr -c ip_version | jq '.[] | select(.ip_version == 4) | .cidr')
     if test -z "$default_subnet" ; then
         default_subnet=$(nova tenant-network-list | grep / | cut -f6 -d' ' | head -1)
     fi
