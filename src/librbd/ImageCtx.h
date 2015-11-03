@@ -41,6 +41,7 @@ namespace librbd {
   template <typename ImageCtxT> class AsyncRequest;
   class AsyncResizeRequest;
   class CopyupRequest;
+  class LibrbdAdminSocketHook;
   class ImageWatcher;
 
   struct ImageCtx {
@@ -158,6 +159,9 @@ namespace librbd {
     uint32_t blacklist_expire_seconds;
     uint32_t request_timed_out_seconds;
     bool enable_alloc_hint;
+
+    LibrbdAdminSocketHook *asok_hook;
+
     static bool _filter_metadata_confs(const string &prefix, std::map<string, bool> &configs,
                                        map<string, bufferlist> &pairs, map<string, bufferlist> *res);
 
