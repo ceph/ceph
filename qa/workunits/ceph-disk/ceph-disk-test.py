@@ -221,25 +221,18 @@ class TestCephDisk(object):
         c.sh("ceph-disk deactivate " + partition['path'])
         c.sh("ceph-disk destroy " + partition['path'] + " --zap")
 
-    def test_activate_dmcrypt_plain(self):
+    def test_deactivate_reactivate_dmcrypt_plain(self):
         c = CephDisk()
         c.conf['global']['osd dmcrypt type'] = 'plain'
         c.save_conf()
-
-    def test_deactivate_reactivate_dmcrypt_plain(self):
-        CephDisk.augtool("set /files/etc/ceph/ceph.conf/global/osd_dmcrypt_type plain")
-        self.activate_dmcrypt('plain')
+        self.activate_reactivate_dmcrypt('plain')
         c.save_conf()
 
-    def test_activate_dmcrypt_luks(self):
-        c = CephDisk()
-        self.activate_dmcrypt('luks')
-
     def test_deactivate_reactivate_dmcrypt_luks(self):
-        CephDisk.augtool("rm /files/etc/ceph/ceph.conf/global/osd_dmcrypt_type")
-        self.activate_dmcrypt('luks')
+        c = CephDisk()
+        self.activate_reactivate_dmcrypt('luks')
 
-    def activate_dmcrypt(self, type):
+    def activate_reactivate_dmcrypt(self, type):
         c = CephDisk()
         have_journal = True
         disk = c.unused_disks()[0]
@@ -264,12 +257,14 @@ class TestCephDisk(object):
 
 
     def test_activate_dmcrypt_plain(self):
-        CephDisk.augtool("set /files/etc/ceph/ceph.conf/global/osd_dmcrypt_type plain")
+        c = CephDisk()
+        c.conf['global']['osd dmcrypt type'] = 'plain'
+        c.save_conf()
         self.activate_dmcrypt('plain')
-        CephDisk.augtool("rm /files/etc/ceph/ceph.conf/global/osd_dmcrypt_type")
+        c.save_conf()
 
     def test_activate_dmcrypt_luks(self):
-        CephDisk.augtool("rm /files/etc/ceph/ceph.conf/global/osd_dmcrypt_type")
+        c = CephDisk()
         self.activate_dmcrypt('luks')
 
     def activate_dmcrypt(self, type):
@@ -279,7 +274,7 @@ class TestCephDisk(object):
         osd_uuid = str(uuid.uuid1())
         journal_uuid = str(uuid.uuid1())
         c.sh("ceph-disk zap " + disk)
-        c.sh("ceph-disk -v prepare " +
+        c.sh("ceph-disk --verbose prepare " +
              " --osd-uuid " + osd_uuid +
              " --journal-uuid " + journal_uuid +
              " --dmcrypt " +
@@ -306,7 +301,6 @@ class TestCephDisk(object):
         assert 'journal_dev' not in partition
         c.helper("pool_read_write")
         c.destroy_osd(osd_uuid)
-        c.sh("ceph-disk zap " + disk)
         c.save_conf()
 
     def test_activate_with_journal(self):
