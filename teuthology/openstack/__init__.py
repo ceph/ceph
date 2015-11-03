@@ -313,14 +313,44 @@ class OpenStack(object):
                 if found:
                     return addresses
 
+    @staticmethod
+    def get_ip_neutron(instance_id):
+        subnets = json.loads(misc.sh("neutron subnet-list -f json -c id -c ip_version"))
+        subnet_id = None
+        for subnet in subnets:
+            if subnet['ip_version'] == 4:
+                subnet_id = subnet['id']
+                break
+        if not subnet_id:
+            raise Exception("no subnet with ip_version == 4")
+        ports = json.loads(misc.sh("neutron port-list -f json -c fixed_ips -c device_id"))
+        fixed_ips = None
+        for port in ports:
+            if port['device_id'] == instance_id:
+                fixed_ips = port['fixed_ips'].split("\n")
+                break
+        if not fixed_ips:
+            raise Exception("no fixed ip record found")
+        ip = None
+        for fixed_ip in fixed_ips:
+            record = json.loads(fixed_ip)
+            if record['subnet_id'] == subnet_id:
+                ip = record['ip_address']
+                break
+        if not ip:
+            raise Exception("no ip")
+        return ip
+
     def get_ip(self, instance_id, network):
         """
-        Return the private IP of the OpenStack instance_id. The network,
-        if not the empty string, disambiguate multiple networks attached
-        to the instance.
+        Return the private IP of the OpenStack instance_id.
         """
-        return re.findall(network + '=([\d.]+)',
-                          self.get_addresses(instance_id))[0]
+        try:
+            return self.get_ip_neutron(instance_id)
+        except Exception as e:
+            log.debug("ignoring get_ip_neutron exception " + str(e))
+            return re.findall(network + '=([\d.]+)',
+                              self.get_addresses(instance_id))[0]
 
 
 class TeuthologyOpenStack(OpenStack):

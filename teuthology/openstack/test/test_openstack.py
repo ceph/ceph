@@ -26,6 +26,7 @@ import logging
 import os
 import pytest
 import tempfile
+from mock import patch
 
 import teuthology
 from teuthology import misc
@@ -94,6 +95,49 @@ class TestOpenStack(object):
             os.environ['OS_AUTH_URL'] = auth
         else:
             del os.environ['OS_AUTH_URL']
+
+    def test_get_ip_neutron(self):
+        instance_id = '8e1fd70a-3065-46f8-9c30-84dc028c1834'
+        ip = '10.10.10.4'
+        def sh(cmd):
+            if 'neutron subnet-list' in cmd:
+                return """
+[
+  {
+    "ip_version": 6,
+    "id": "c45b9661-b2ba-4817-9e3a-f8f63bf32989"
+  },
+  {
+    "ip_version": 4,
+    "id": "e03a3dbc-afc8-4b52-952e-7bf755397b50"
+  }
+]
+                """
+            elif 'neutron port-list' in cmd:
+                return ("""
+[
+  {
+    "device_id": "915504ad-368b-4cce-be7c-4f8a83902e28",
+    "fixed_ips": "{\\"subnet_id\\": \\"e03a3dbc-afc8-4b52-952e-7bf755397b50\\", \\"ip_address\\": \\"10.10.10.1\\"}\\n{\\"subnet_id\\": \\"c45b9661-b2ba-4817-9e3a-f8f63bf32989\\", \\"ip_address\\": \\"2607:f298:6050:9afc::1\\"}"
+  },
+  {
+    "device_id": "{instance_id}",
+    "fixed_ips": "{\\"subnet_id\\": \\"e03a3dbc-afc8-4b52-952e-7bf755397b50\\", \\"ip_address\\": \\"{ip}\\"}\\n{\\"subnet_id\\": \\"c45b9661-b2ba-4817-9e3a-f8f63bf32989\\", \\"ip_address\\": \\"2607:f298:6050:9afc:f816:3eff:fe07:76c1\\"}"
+  },
+  {
+    "device_id": "17e4a968-4caa-4cee-8e4b-f950683a02bd",
+    "fixed_ips": "{\\"subnet_id\\": \\"e03a3dbc-afc8-4b52-952e-7bf755397b50\\", \\"ip_address\\": \\"10.10.10.5\\"}\\n{\\"subnet_id\\": \\"c45b9661-b2ba-4817-9e3a-f8f63bf32989\\", \\"ip_address\\": \\"2607:f298:6050:9afc:f816:3eff:fe9c:37f0\\"}"
+  }
+]
+                """.replace('{instance_id}', instance_id).
+                        replace('{ip}', ip))
+            else:
+                raise Exception("unexpected " + cmd)
+        with patch.multiple(
+                misc,
+                sh=sh,
+        ):
+            assert ip == OpenStack.get_ip_neutron(instance_id)
 
 class TestTeuthologyOpenStack(object):
 
