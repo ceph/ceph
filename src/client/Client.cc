@@ -5035,17 +5035,21 @@ int Client::mount(const std::string &mount_root, bool require_mds)
   ldout(cct, 2) << "mounted: have mdsmap " << mdsmap->get_epoch() << dendl;
   if (require_mds) {
     while (1) {
-      if (mdsmap->cluster_unavailable()) {
-        // If the cluster is stuck unavailable, error out
+      auto availability = mdsmap->is_cluster_available();
+      if (availability == MDSMap::STUCK_UNAVAILABLE) {
+        // Error out
         ldout(cct, 10) << "mds cluster unavailable: epoch=" << mdsmap->get_epoch() << dendl;
         return CEPH_FUSE_NO_MDS_UP;
-      } else if (mdsmap->get_num_mds(CEPH_MDS_STATE_ACTIVE) > 0) {
-        // If somebody is active, continue to mount
+      } else if (availability == MDSMap::AVAILABLE) {
+        // Continue to mount
         break;
-      } else {
+      } else if (availability == MDSMap::TRANSIENT_UNAVAILABLE) {
         // Else, wait.  MDSMonitor will update the map to bring
         // us to a conclusion eventually.
         wait_on_list(waiting_for_mdsmap);
+      } else {
+        // Unexpected value!
+        assert(0);
       }
     }
   }
