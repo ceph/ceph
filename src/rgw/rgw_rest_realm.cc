@@ -26,15 +26,13 @@ class RGWOp_Period_Base : public RGWRESTOp {
 // reply with the period object on success
 void RGWOp_Period_Base::send_response()
 {
-  s->err.message = error_stream.str();
-
-  set_req_state_err(s, http_ret);
+  s->set_req_state_err(http_ret, error_stream.str());
   dump_errno(s);
 
   if (http_ret < 0) {
-    if (!s->err.message.empty()) {
+    if (!s->err->message.empty()) {
       ldout(s->cct, 4) << "Request failed with " << http_ret
-          << ": " << s->err.message << dendl;
+          << ": " << s->err->message << dendl;
     }
     end_header(s);
     return;
@@ -265,7 +263,7 @@ void RGWOp_Realm_Get::execute()
 
 void RGWOp_Realm_Get::send_response()
 {
-  set_req_state_err(s, http_ret);
+  s->set_req_state_err(http_ret);
   dump_errno(s);
 
   if (http_ret < 0) {

@@ -22,6 +22,7 @@
 
 #include <boost/optional.hpp>
 #include <boost/utility/in_place_factory.hpp>
+#include <boost/function.hpp>
 
 #include "common/armor.h"
 #include "common/mime.h"
@@ -172,6 +173,8 @@ public:
   virtual uint32_t op_mask() { return 0; }
 
   virtual int error_handler(int err_no, string *error_content);
+
+  boost::function<void()> dump_access_control_f();
 };
 
 class RGWGetObj : public RGWOp {

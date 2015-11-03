@@ -541,7 +541,6 @@ int RGWAsyncFetchRemoteObj::_send_request()
                        &key.instance, /* string *version_id, */
                        NULL, /* string *ptag, */
                        NULL, /* string *petag, */
-                       NULL, /* struct rgw_err *err, */
                        NULL, /* void (*progress_cb)(off_t, void *), */
                        NULL); /* void *progress_data*); */
 
