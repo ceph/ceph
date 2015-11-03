@@ -349,7 +349,7 @@ function subnet_names_and_ips() {
     local subnet=$1
     python -c 'import netaddr; print "\n".join([str(i) for i in netaddr.IPNetwork("'$subnet'")])' |
     sed -e 's/\./ /g' | while read a b c d ; do
-        printf "target%03d%03d " $c $d
+        printf "target%03d%03d%03d%03d " $a $b $c $d
         echo $a.$b.$c.$d
     done
 }
