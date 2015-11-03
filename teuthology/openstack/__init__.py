@@ -75,7 +75,8 @@ class OpenStack(object):
             raise Exception('no OS_AUTH_URL environment variable')
         providers = (('cloud.ovh.net', 'ovh'),
                      ('entercloudsuite.com', 'entercloudsuite'),
-                     ('rackspacecloud.com', 'rackspace'))
+                     ('rackspacecloud.com', 'rackspace'),
+                     ('dream.io', 'dreamhost'))
         self.provider = None
         for (pattern, provider) in providers:
             if pattern in os.environ['OS_AUTH_URL']:
