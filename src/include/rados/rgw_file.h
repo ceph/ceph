@@ -36,13 +36,17 @@ enum rgw_fh_type {
 /*
  * dynamic allocated handle to support nfs handle
  */
+
+/* content-addressable hash */
+struct rgw_fh_hk {
+  uint64_t bucket;
+  uint64_t object;
+};
+
 struct rgw_file_handle
 {
   /* content-addressable hash */
-  struct {
-    uint64_t bucket;
-    uint64_t object;
-  } fh_hk;
+  struct rgw_fh_hk fh_hk;
   void *fh_private; /* librgw private data */
   /* object type */
   enum rgw_fh_type fh_type;
