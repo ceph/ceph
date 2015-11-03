@@ -584,35 +584,31 @@ target_link_libraries(ceph-mon mon ${Boost_THREAD_LIBRARY} common os global ${EX
 install(TARGETS ceph-mon DESTINATION bin)
 
 #external project rocksdb
-#For now only building rocksdb statically
-option(WITH_LIBROCKSDB ON)
-if(NOT JEMALLOC_FOUND)
-  option(WITH_SLIBROCKSDB ON)
-endif(NOT JEMALLOC_FOUND)
-
 include(ExternalProject)
 ExternalProject_Add(rocksdb
   SOURCE_DIR ${CMAKE_SOURCE_DIR}/src/rocksdb
   CONFIGURE_COMMAND autoreconf -fvi && ./configure
   BINARY_DIR ${CMAKE_SOURCE_DIR}/src/rocksdb 
-  BUILD_COMMAND make
+  BUILD_COMMAND make VERBOSE=1
   INSTALL_COMMAND make install 
 )
 
-if(WITH_SLIBROCKSDB)
-  add_library(librocksdb STATIC IMPORTED)
-  set_property(TARGET librocksdb PROPERTY IMPORTED_LOCATION ${CMAKE_SOURCE_DIR}/src/rocksdb/librocksdb.la)
-  add_dependencies(librocksdb rocksdb)
-endif(WITH_SLIBROCKSDB)
+#For now only building rocksdb statically
+add_library(librocksdb STATIC IMPORTED)
+find_package(ZLIB REQUIRED)
+find_package(BZip2 REQUIRED)
+set_property(TARGET librocksdb PROPERTY IMPORTED_LOCATION ${CMAKE_SOURCE_DIR}/src/rocksdb/.libs/librocksdb.a) 
+set_property(TARGET librocksdb PROPERTY INTERFACE_LINK_LIBRARIES z bz2 snappy)
+add_dependencies(librocksdb rocksdb)
 
-if(WITH_LIBROCKSDB)
-  add_library(os_rocksdb STATIC os/RocksDBStore.cc)
-  target_link_libraries(os_rocksdb librocksdb)
-  target_include_directories(os_rocksdb ${CMAKE_SOURCE_DIR}/src/rocksdb/include)
-  #LIBROCKSDB_CFLAGS mentioned in os/Makefile.am is from rocksdb/Makefile.am?
-  set(LIBROCKSDB_CFLAGS "-fno-builtin-memcmp -std=gnu++11")
-  set_target_properties(os_rocksdb PROPERTIES COMPILE_FLAGS ${CMAKE_CXX_FLAGS} ${LIBROCKSDB_CFLAGS})
-endif(WITH_LIBROCKSDB)
+set(HAVE_LIBROCKSDB 1)
+
+add_library(os_rocksdb STATIC os/RocksDBStore.cc)
+add_dependencies(os_rocksdb librocksdb)
+target_link_libraries(os_rocksdb librocksdb)
+target_include_directories(os_rocksdb PUBLIC ${CMAKE_SOURCE_DIR}/src/rocksdb/include)
+set(LIBROCKSDB_CFLAGS "${CMAKE_CXX_FLAGS} -fno-builtin-memcmp -std=gnu++11")
+set_target_properties(os_rocksdb PROPERTIES COMPILE_FLAGS ${LIBROCKSDB_CFLAGS})
 
 # OSD
 if(${HAVE_XFS})
@@ -657,10 +653,7 @@ endif(${HAVE_LIBAIO})
 if(${WITH_LTTNG})
   target_link_libraries(os libos_tp)
 endif(${WITH_LTTNG})
-if(${WITH_LIBROCKSDB})
-  target_link_libraries(os os_rocksdb)
-endif(${WITH_LIBROCKSDB})
-target_link_libraries(os leveldb snappy)
+target_link_libraries(os leveldb snappy os_rocksdb)
 
 set(cls_references_files objclass/class_api.cc)
 add_library(cls_references_objs OBJECT ${cls_references_files})

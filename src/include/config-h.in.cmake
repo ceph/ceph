@@ -235,6 +235,9 @@
 /* Defined if LTTNG */
 #cmakedefine WITH_LTTNG
 
+/* Defined if you have librocksdb enabled */
+#cmakedefine HAVE_LIBROCKSDB
+
 /* Defined if new gperftools */
 #cmakedefine HAVE_GPERFTOOLS_HEAP_PROFILER_H
 #cmakedefine HAVE_GPERFTOOLS_MALLOC_EXTENSION_H

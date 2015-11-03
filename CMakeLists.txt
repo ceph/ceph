@@ -216,7 +216,8 @@ endif(CRYPTOPP_FOUND)
 
 option(WITH_XIO "Enable XIO messaging" ON)
 if(WITH_XIO)
-find_package(xio)
+  #should be required but Melanox OFED drivers arent supported on fedora 22
+  find_package(xio)
 set(HAVE_XIO ${Xio_FOUND})
 endif(WITH_XIO)
 
