@@ -500,7 +500,12 @@ ssh access           : ssh {identity}{username}@{ip} # logs in /usr/share/nginx/
         and a few other values are substituted.
         """
         path = tempfile.mktemp()
-        template = open(self.user_data).read()
+        if self.user_data.startswith('/'):
+            user_data = self.user_data
+        else:
+            user_data = os.path.join(os.path.dirname(__file__),
+                                     '../..', self.user_data)
+        template = open(user_data).read()
         openrc = ''
         for (var, value) in os.environ.iteritems():
             if var.startswith('OS_'):
