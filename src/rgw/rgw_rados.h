@@ -1747,6 +1747,8 @@ protected:
   RGWZone period_zone; /* external zone params, e.g., entrypoints, log flags, etc. */  
   bool has_period_zonegroup;
   bool has_period_zone;
+
+  RGWPeriod current_period;
 public:
   RGWRados() : max_req_id(0), lock("rados_timer_lock"), watchers_lock("watchers_lock"), timer(NULL),
                gc(NULL), obj_expirer(NULL), use_gc_thread(false), quota_threads(false),
@@ -1777,10 +1779,20 @@ public:
   }
 
   RGWRealm realm;
-  RGWPeriod current_period;
+
   RGWRESTConn *rest_master_conn;
   map<string, RGWRESTConn *> zone_conn_map;
   map<string, RGWRESTConn *> zonegroup_conn_map;
+
+  int get_zonegroup(const string& id, RGWZoneGroup& zonegroup) {
+    int ret = 0;
+    if (id == get_zonegroup().get_id()) {
+      zonegroup = get_zonegroup();
+    } else if (!current_period.get_id().empty()) {
+      ret = current_period.get_zonegroup(zonegroup, zonegroup_id);
+    }
+    return ret;
+  }
 
   RGWZoneParams& get_zone_params() { return zone_params; }
   RGWZoneGroup& get_zonegroup() {

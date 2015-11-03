@@ -137,6 +137,7 @@ const string& RGWZoneGroup::get_pool_name(CephContext *cct_)
 int RGWZoneGroup::create_default(bool old_format)
 {
   name = default_zonegroup_name;
+  is_master = true;
 
   RGWZoneGroupPlacementTarget placement_target;
   placement_target.name = "default-placement";
@@ -1205,6 +1206,7 @@ int RGWZoneParams::create_default(bool old_format)
     name = id;
   }
 
+  r = set_as_default();
   return r;
 }
 
@@ -3231,13 +3233,14 @@ int RGWRados::init_complete()
 	return ret;
       }
     }
+    ldout(cct, 20) << "zonegroup " << zonegroup.get_name() << dendl;
     if (zonegroup.is_master) {
       rest_master_conn = new RGWRESTConn(cct, this, zonegroup.endpoints);
     }
   }
 
   if (!has_period_zone) {
-    ldout(cct, 10) << " cannot find current period zonegroup using local zonegroup" << dendl;
+    ldout(cct, 10) << "Cannot find current period zone using local zone" << dendl;
     if (creating_defaults && cct->_conf->rgw_zone.empty()) {
       zone_params.set_name(default_zone_name);
     }
@@ -3249,6 +3252,7 @@ int RGWRados::init_complete()
     map<string, RGWZone>::iterator zone_iter = zonegroup.zones.find(zone_params.get_id());
     if (zone_iter != zonegroup.zones.end()) {
       zone_public_config = zone_iter->second;
+      ldout(cct, 20) << "zone " << zone_params.get_name() << dendl;
     } else {
       lderr(cct) << "Cannot find zone " << zone_params.get_name() << dendl;
       return -EINVAL;
@@ -4665,17 +4669,15 @@ int RGWRados::create_bucket(RGWUserInfo& owner, rgw_bucket& bucket,
   return -ENOENT;
 }
 
-int RGWRados::select_new_bucket_location(RGWUserInfo& user_info, const string& zonegroup_name, const string& request_rule,
+int RGWRados::select_new_bucket_location(RGWUserInfo& user_info, const string& zonegroup_id, const string& request_rule,
                                          const string& bucket_name, rgw_bucket& bucket, string *pselected_rule)
 {
   /* first check that rule exists within the specific zonegroup */
   RGWZoneGroup zonegroup;
-  if (!current_period.get_id().empty()) {
-    int ret = current_period.get_zonegroup(zonegroup, zonegroup_name);
-    if (ret < 0) {
-      ldout(cct, 0) << "could not find zonegroup " << zonegroup_name << " in zonegroup map" << dendl;
-      return ret;
-    }
+  int ret = get_zonegroup(zonegroup_id, zonegroup);
+  if (ret < 0) {
+    ldout(cct, 0) << "could not find zonegroup " << zonegroup_id << " in current period" << dendl;
+    return ret;
   }
 
   /* now check that tag exists within zonegroup */
