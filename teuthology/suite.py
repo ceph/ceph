@@ -248,11 +248,16 @@ def create_initial_config(suite, suite_branch, ceph_branch, teuthology_branch,
             log.info("branch {0} not in ceph-qa-suite.git; will use master for"
                      " ceph-qa-suite".format(ceph_branch))
             suite_branch = 'master'
-    log.info("ceph-qa-suite branch: %s", suite_branch)
+    suite_hash = git_ls_remote('ceph-qa-suite', suite_branch)
+    if not suite_hash:
+        exc = BranchNotFoundError(suite_branch, 'ceph-qa-suite.git')
+        schedule_fail(message=str(exc), name=name)
+    log.info("ceph-qa-suite branch: %s %s", suite_branch, suite_hash)
 
     config_input = dict(
         suite=suite,
         suite_branch=suite_branch,
+        suite_hash=suite_hash,
         ceph_branch=ceph_branch,
         ceph_hash=ceph_hash,
         teuthology_branch=teuthology_branch,
@@ -1097,6 +1102,7 @@ dict_templ = {
     },
     'suite': Placeholder('suite'),
     'suite_branch': Placeholder('suite_branch'),
+    'suite_sha1': Placeholder('suite_hash'),
     'tasks': [
         {'ansible.cephlab': None},
         {'clock.check': None}

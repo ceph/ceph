@@ -54,9 +54,11 @@ class TestSuiteOffline(object):
                                         'basic') == ref_url
 
     def test_substitute_placeholders(self):
+        suite_hash = 'suite_hash'
         input_dict = dict(
             suite='suite',
             suite_branch='suite_branch',
+            suite_hash=suite_hash,
             ceph_branch='ceph_branch',
             ceph_hash='ceph_hash',
             teuthology_branch='teuthology_branch',
@@ -68,6 +70,7 @@ class TestSuiteOffline(object):
         output_dict = suite.substitute_placeholders(suite.dict_templ,
                                                     input_dict)
         assert output_dict['suite'] == 'suite'
+        assert output_dict['suite_sha1'] == suite_hash
         assert isinstance(suite.dict_templ['suite'], suite.Placeholder)
         assert isinstance(
             suite.dict_templ['overrides']['admin_socket']['branch'],
@@ -77,6 +80,7 @@ class TestSuiteOffline(object):
         input_dict = dict(
             suite='suite',
             suite_branch='suite_branch',
+            suite_hash='suite_hash',
             ceph_branch='ceph_branch',
             ceph_hash='ceph_hash',
             teuthology_branch='teuthology_branch',
