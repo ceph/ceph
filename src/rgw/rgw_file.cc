@@ -24,9 +24,13 @@
 
 #define dout_subsys ceph_subsys_rgw
 
+using namespace rgw;
+
 extern RGWLib librgw;
 
 const string RGWFileHandle::root_name = "/";
+
+atomic<uint32_t> RGWLibFS::fs_inst;
 
 /* librgw */
 extern "C" {
@@ -182,7 +186,7 @@ int rgw_lookup(struct rgw_fs *rgw_fs,
     return EINVAL;
   }
 
-  RGWFileHandle* rgw_fh = new RGWFileHandle(fs, parent, path);
+  RGWFileHandle* rgw_fh = fs->lookup_fh(parent, path);
   if (! rgw_fh) {
     /* not found */
     return ENOENT;
