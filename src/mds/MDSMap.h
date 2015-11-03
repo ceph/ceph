@@ -459,12 +459,30 @@ public:
   void get_health(list<pair<health_status_t,std::string> >& summary,
 		  list<pair<health_status_t,std::string> > *detail) const;
 
+  typedef enum
+  {
+    AVAILABLE = 0,
+    TRANSIENT_UNAVAILABLE = 1,
+    STUCK_UNAVAILABLE = 2
+
+  } availability_t;
+
   /**
-   * If any of the ranks are stuck unavailable, return true.  This is a
+   * Return indication of whether cluster is available.  This is a
    * heuristic for clients to see if they should bother waiting to talk to
    * MDSs, or whether they should error out at startup/mount.
+   *
+   * A TRANSIENT_UNAVAILABLE result indicates that the cluster is in a
+   * transition state like replaying, or is potentially about the fail over.
+   * Clients should wait for an updated map before making a final decision
+   * about whether the filesystem is mountable.
+   *
+   * A STUCK_UNAVAILABLE result indicates that we can't see a way that
+   * the cluster is about to recover on its own, so it'll probably require
+   * administrator intervention: clients should probaly not bother trying
+   * to mount.
    */
-  bool cluster_unavailable() const;
+  availability_t is_cluster_available() const;
 
   // mds states
   bool is_down(mds_rank_t m) const { return up.count(m) == 0; }
