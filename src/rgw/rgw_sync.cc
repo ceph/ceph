@@ -1281,6 +1281,8 @@ public:
 	}
         if (retcode < 0) {
           ldout(sync_env->cct, 10) << *this << ": failed to fetch more log entries, retcode=" << retcode << dendl;
+          yield lease_cr->go_down();
+          drain_all();
           return retcode;
         }
 	ldout(sync_env->cct, 20) << __func__ << ":" << __LINE__ << ": shard_id=" << shard_id << " mdlog_marker=" << mdlog_marker << " sync_marker.marker=" << sync_marker.marker << dendl;
@@ -1293,9 +1295,6 @@ public:
             raw_key = log_iter->section + ":" + log_iter->name;
             yield {
               RGWCoroutinesStack *stack = spawn(new RGWMetaSyncSingleEntryCR(sync_env, raw_key, log_iter->id, marker_tracker), false);
-              if (retcode < 0) {
-                return retcode;
-              }
               assert(stack);
               stack->get();
 
