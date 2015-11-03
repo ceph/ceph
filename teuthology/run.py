@@ -202,9 +202,9 @@ def get_initial_tasks(lock, config, machine_type):
 
     init_tasks.extend([
         {'internal.base': None},
+        {'internal.archive_upload': None},
         {'internal.archive': None},
         {'internal.coredump': None},
-        {'internal.archive_upload': None},
         {'internal.sudo': None},
         {'internal.syslog': None},
         {'internal.timer': None},
