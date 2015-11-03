@@ -183,7 +183,7 @@ done:
     rgw_log_op(store, s, (op ? op->name() : "unknown"), olog);
   }
 
-  int http_ret = s->err.http_ret;
+  int http_ret = s->err.http_ret_E;
   int op_ret = 0;
   if (op) {
     op_ret = op->get_ret();
@@ -202,5 +202,5 @@ done:
 	  << " ======"
 	  << dendl;
 
-  return (ret < 0 ? ret : s->err.ret);
+  return (ret < 0 ? ret : s->err.ret_E);
 } /* process_request */

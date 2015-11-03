@@ -304,7 +304,7 @@ int rgw_log_op(RGWRados *store, struct req_state *s, const string& op_name, OpsL
     ldout(s->cct, 5) << "nothing to log for operation" << dendl;
     return -EINVAL;
   }
-  if (s->err.ret == -ERR_NO_SUCH_BUCKET) {
+  if (s->err.ret_E == -ERR_NO_SUCH_BUCKET) {
     if (!s->cct->_conf->rgw_log_nonexistent_bucket) {
       ldout(s->cct, 5) << "bucket " << s->bucket << " doesn't exist, not logging" << dendl;
       return 0;
@@ -350,14 +350,14 @@ int rgw_log_op(RGWRados *store, struct req_state *s, const string& op_name, OpsL
   entry.total_time = ceph_clock_now(s->cct) - s->time;
   entry.bytes_sent = bytes_sent;
   entry.bytes_received = bytes_received;
-  if (s->err.http_ret) {
+  if (s->err.http_ret_E) {
     char buf[16];
-    snprintf(buf, sizeof(buf), "%d", s->err.http_ret);
+    snprintf(buf, sizeof(buf), "%d", s->err.http_ret_E);
     entry.http_status = buf;
   } else
     entry.http_status = "200"; // default
 
-  entry.error_code = s->err.s3_code;
+  entry.error_code = s->err.s3_code_E;
   entry.bucket_id = bucket_id;
 
   bufferlist bl;

@@ -514,7 +514,7 @@ done:
     dout(0) << "ERROR: client_io->complete_request() returned " << r << dendl;
   }
 
-  int http_ret = s->err.http_ret;
+  int http_ret = s->err.http_ret_E;
 
   req->log_format(s, "http status=%d", http_ret);
 
@@ -524,7 +524,7 @@ done:
 
   dout(1) << "====== req done req=" << hex << req << dec << " http_status=" << http_ret << " ======" << dendl;
 
-  return (ret < 0 ? ret : s->err.ret);
+  return (ret < 0 ? ret : s->err.ret_E);
 }
 
 void STSFCGXProcess::handle_request(STSRequest *r)
