@@ -4652,10 +4652,12 @@ int RGWRados::select_new_bucket_location(RGWUserInfo& user_info, const string& z
 {
   /* first check that rule exists within the specific zonegroup */
   RGWZoneGroup zonegroup;
-  int ret = current_period.get_zonegroup(zonegroup, zonegroup_name);
-  if (ret < 0) {
-    ldout(cct, 0) << "could not find zonegroup " << zonegroup_name << " in zonegroup map" << dendl;
-    return ret;
+  if (!current_period.get_id().empty()) {
+    int ret = current_period.get_zonegroup(zonegroup, zonegroup_name);
+    if (ret < 0) {
+      ldout(cct, 0) << "could not find zonegroup " << zonegroup_name << " in zonegroup map" << dendl;
+      return ret;
+    }
   }
 
   /* now check that tag exists within zonegroup */
