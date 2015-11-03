@@ -24,48 +24,35 @@ class TestMDSAutoRepair(CephFSTestCase):
         MDS should verify/fix backtrace on fetch dirfrag
         """
 
-        # trim log segment as fast as possible
-        self.set_conf('mds', 'mds cache size', 100)
-        self.set_conf('mds', 'mds verify backtrace', 1)
-        self.fs.mds_fail_restart()
-        self.fs.wait_for_daemons()
-
-        create_script = "mkdir {0}; for i in `seq 0 500`; do touch {0}/file$i; done"
-        # create main test directory
-        self.mount_a.run_shell(["sudo", "bash", "-c", create_script.format("testdir1")])
-
-        # create more files in another directory. make sure MDS trim dentries in testdir1
-        self.mount_a.run_shell(["sudo", "bash", "-c", create_script.format("testdir2")])
+        self.mount_a.run_shell(["sudo", "mkdir", "testdir1"])
+        self.mount_a.run_shell(["sudo", "touch", "testdir1/testfile"])
+        dir_objname = "{:x}.00000000".format(self.mount_a.path_to_ino("testdir1"))
 
         # drop inodes caps
         self.mount_a.umount_wait()
 
-        # flush journal entries to dirfrag objects
+        # flush journal entries to dirfrag objects, and expire journal
         self.fs.mds_asok(['flush', 'journal'])
 
-        self.mount_a.mount()
-        self.mount_a.wait_until_mounted()
-
-        # wait MDS to trim dentries in testdir1. 60 seconds should be long enough.
-        time.sleep(60)
+        # Restart the MDS to drop the metadata cache (because we expired the journal,
+        # nothing gets replayed into cache on restart)
+        self.fs.mds_stop()
+        self.fs.mds_fail_restart()
+        self.fs.wait_for_daemons()
 
         # remove testdir1's backtrace
-        proc = self.mount_a.run_shell(["sudo", "ls", "-id", "testdir1"])
-        self.assertEqual(proc.exitstatus, 0)
-        objname = "{:x}.00000000".format(long(proc.stdout.getvalue().split()[0]))
-        self.fs.rados(["rmxattr", objname, "parent"])
+        self.fs.rados(["rmxattr", dir_objname, "parent"])
 
         # readdir (fetch dirfrag) should fix testdir1's backtrace
+        self.mount_a.mount()
+        self.mount_a.wait_until_mounted()
         self.mount_a.run_shell(["sudo", "ls", "testdir1"])
-
-        # add more entries to journal
-        self.mount_a.run_shell(["sudo", "rm", "-rf", " testdir2"])
 
         # flush journal entries to dirfrag objects
         self.fs.mds_asok(['flush', 'journal'])
 
         # check if backtrace exists
-        self.fs.rados(["getxattr", objname, "parent"])
+        self.fs.rados(["getxattr", dir_objname, "parent"])
 
     def test_mds_readonly(self):
         """
