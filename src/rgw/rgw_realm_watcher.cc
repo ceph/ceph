@@ -54,6 +54,8 @@ RGWRealmWatcher::RGWRealmWatcher(CephContext *cct, RGWRados *&store,
 RGWRealmWatcher::~RGWRealmWatcher()
 {
   watch_stop();
+
+  Mutex::Locker lock(mutex);
   timer.shutdown();
 }
 
