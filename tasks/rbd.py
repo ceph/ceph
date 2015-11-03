@@ -69,7 +69,7 @@ def create_image(ctx, config):
         # omit format option if using the default (format 1)
         # since old versions of don't support it
         if int(fmt) != 1:
-            args += ['--format', str(fmt)]
+            args += ['--image-format', str(fmt)]
         remote.run(args=args)
     try:
         yield
@@ -91,6 +91,79 @@ def create_image(ctx, config):
                     name,
                     ],
                 )
+
+@contextlib.contextmanager
+def clone_image(ctx, config):
+    """
+    Clones a parent imag
+
+    For example::
+
+        tasks:
+        - ceph:
+        - rbd.clone_image:
+            client.0:
+                parent_name: testimage
+                image_name: cloneimage
+    """
+    assert isinstance(config, dict) or isinstance(config, list), \
+        "task clone_image only supports a list or dictionary for configuration"
+
+    if isinstance(config, dict):
+        images = config.items()
+    else:
+        images = [(role, None) for role in config]
+
+    testdir = teuthology.get_testdir(ctx)
+    for role, properties in images:
+        if properties is None:
+            properties = {}
+
+        name = properties.get('image_name', default_image_name(role))
+        parent_name = properties.get('parent_name')
+        assert parent_name is not None, \
+            "parent_name is required"
+        parent_spec = '{name}@{snap}'.format(name=parent_name, snap=name)
+
+        (remote,) = ctx.cluster.only(role).remotes.keys()
+        log.info('Clone image {parent} to {child}'.format(parent=parent_name,
+                                                          child=name))
+        for cmd in [('snap', 'create', parent_spec),
+                    ('snap', 'protect', parent_spec),
+                    ('clone', parent_spec, name)]:
+            args = [
+                    'adjust-ulimits',
+                    'ceph-coverage'.format(tdir=testdir),
+                    '{tdir}/archive/coverage'.format(tdir=testdir),
+                    'rbd', '-p', 'rbd'
+                    ]
+            args.extend(cmd)
+            remote.run(args=args)
+
+    try:
+        yield
+    finally:
+        log.info('Deleting rbd clones...')
+        for role, properties in images:
+            if properties is None:
+                properties = {}
+            name = properties.get('image_name', default_image_name(role))
+            parent_name = properties.get('parent_name')
+            parent_spec = '{name}@{snap}'.format(name=parent_name, snap=name)
+
+            (remote,) = ctx.cluster.only(role).remotes.keys()
+
+            for cmd in [('rm', name),
+                        ('snap', 'unprotect', parent_spec),
+                        ('snap', 'rm', parent_spec)]:
+                args = [
+                        'adjust-ulimits',
+                        'ceph-coverage'.format(tdir=testdir),
+                        '{tdir}/archive/coverage'.format(tdir=testdir),
+                        'rbd', '-p', 'rbd'
+                        ]
+                args.extend(cmd)
+                remote.run(args=args)
 
 @contextlib.contextmanager
 def modprobe(ctx, config):

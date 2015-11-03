@@ -1,6 +1,7 @@
 tasks:
 - qemu:
     all:
+      clone: true
       type: block
       num_rbd: 2
       test: http://git.ceph.com/?p=ceph.git;a=blob_plain;f=qa/run_xfstests_qemu.sh
