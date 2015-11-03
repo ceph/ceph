@@ -11,6 +11,7 @@
 #include "rgw_op.h"
 #include "rgw_rest.h"
 #include "rgw_swift_auth.h"
+#include "rgw_http_errors.h"
 
 #include <boost/utility/string_ref.hpp>
 

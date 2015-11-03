@@ -20,6 +20,7 @@
 #include "rgw_client_io.h"
 #include "rgw_sync.h"
 #include "rgw_data_sync.h"
+#include "rgw_common.h"
 #include "common/errno.h"
 #include "include/assert.h"
 
@@ -108,7 +109,7 @@ void RGWOp_MDLog_List::execute() {
 }
 
 void RGWOp_MDLog_List::send_response() {
-  set_req_state_err(s, http_ret);
+  s->set_req_state_err(http_ret);
   dump_errno(s);
   end_header(s);
 
@@ -139,7 +140,7 @@ void RGWOp_MDLog_Info::execute() {
 }
 
 void RGWOp_MDLog_Info::send_response() {
-  set_req_state_err(s, http_ret);
+  s->set_req_state_err(http_ret);
   dump_errno(s);
   end_header(s);
 
@@ -181,7 +182,7 @@ void RGWOp_MDLog_ShardInfo::execute() {
 }
 
 void RGWOp_MDLog_ShardInfo::send_response() {
-  set_req_state_err(s, http_ret);
+  s->set_req_state_err(http_ret);
   dump_errno(s);
   end_header(s);
 
@@ -434,7 +435,7 @@ void RGWOp_BILog_List::send_response() {
   if (sent_header)
     return;
 
-  set_req_state_err(s, http_ret);
+  s->set_req_state_err(http_ret);
   dump_errno(s);
   end_header(s);
 
@@ -504,7 +505,7 @@ void RGWOp_BILog_Info::execute() {
 }
 
 void RGWOp_BILog_Info::send_response() {
-  set_req_state_err(s, http_ret);
+  s->set_req_state_err(http_ret);
   dump_errno(s);
   end_header(s);
 
@@ -620,7 +621,7 @@ void RGWOp_DATALog_List::execute() {
 }
 
 void RGWOp_DATALog_List::send_response() {
-  set_req_state_err(s, http_ret);
+  s->set_req_state_err(http_ret);
   dump_errno(s);
   end_header(s);
 
@@ -655,7 +656,7 @@ void RGWOp_DATALog_Info::execute() {
 }
 
 void RGWOp_DATALog_Info::send_response() {
-  set_req_state_err(s, http_ret);
+  s->set_req_state_err(http_ret);
   dump_errno(s);
   end_header(s);
 
@@ -680,7 +681,7 @@ void RGWOp_DATALog_ShardInfo::execute() {
 }
 
 void RGWOp_DATALog_ShardInfo::send_response() {
-  set_req_state_err(s, http_ret);
+  s->set_req_state_err(http_ret);
   dump_errno(s);
   end_header(s);
 
@@ -868,7 +869,7 @@ void RGWOp_MDLog_Status::execute()
 
 void RGWOp_MDLog_Status::send_response()
 {
-  set_req_state_err(s, http_ret);
+  s->set_req_state_err(http_ret);
   dump_errno(s);
   end_header(s);
 
@@ -907,7 +908,7 @@ void RGWOp_DATALog_Status::execute()
 
 void RGWOp_DATALog_Status::send_response()
 {
-  set_req_state_err(s, http_ret);
+  s->set_req_state_err(http_ret);
   dump_errno(s);
   end_header(s);
 
