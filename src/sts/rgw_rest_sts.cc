@@ -98,7 +98,7 @@ public:
 void RGWAssumeRole_STS::send_response()
 {
   if (ret)
-    set_req_state_err(s, ret);
+    s->set_req_state_err(ret);
   dump_errno(s);
   dump_start(s);
   end_header(s, NULL, "application/xml");
@@ -430,7 +430,7 @@ void RGWGetPost_STS::execute()
   int ret = 0;
   s->formatter = new XMLFormatter(false);
   tsErrorResponse err(Unknown, InvalidAction, "Why I don't know");
-  set_req_state_err(s, ret);
+  s->set_req_state_err(ret);
   dump_errno(s);
   end_header(s, dump_access_control_f(), "application/xml");
   err.dump(s->formatter);
