@@ -35,7 +35,6 @@ import time
 import shlex
 import pwd
 import grp
-import syslog
 
 """
 Prepare:
@@ -67,13 +66,14 @@ Deactivate:
  - remove 'ready', 'active', and INIT-specific files
  - create deactive flag
  - umount device and remove mount point
+ - if the partition type is dmcrypt, remove the data dmcrypt map.
 
 Destroy:
  - check partition type (support dmcrypt, mpath, normal)
  - remove OSD from CRUSH map
  - remove OSD cephx key
  - deallocate OSD ID
- - if the partition type is dmcrypt, remove the dmcrypt map.
+ - if the partition type is dmcrypt, remove the journal dmcrypt map.
  - destroy data (with --zap option)
 
 We rely on /dev/disk/by-partuuid to find partitions by their UUID;
@@ -818,29 +818,6 @@ def check_osd_magic(path):
         raise BadMagicError(path)
 
 
-def convert_osd_id(cluster, osd_id):
-    """
-    Convert the OSD id to OS device (ex. sdx)
-    """
-    mountsp_name = '%s-%s' % (cluster, osd_id)
-
-    # mount_info's first fields means `device`, Second means `mount point`
-    mount_info = []
-    try:
-        proc_mounts = open('/proc/mounts', 'rb')
-        if proc_mounts:
-            for line in proc_mounts:
-                if mountsp_name in line:
-                    fields = line.split()
-                    mount_info.append(fields[0])
-                    mount_info.append(fields[1])
-    except:
-        raise Error('Open/Read file Error.')
-    if not mount_info:
-        raise Error('Can not find mount point by osd-id')
-    return mount_info
-
-
 def check_osd_id(osd_id):
     """
     Ensures osd id is numeric.
@@ -878,31 +855,6 @@ def allocate_osd_id(
     osd_id = must_be_one_line(osd_id)
     check_osd_id(osd_id)
     return osd_id
-
-
-def get_osd_id_journal_dm(dev, dmcrypt=False):
-    """
-    Try to mount to tmp.directory and get osd_id.
-
-    :return: osd_id/-1
-    """
-    dm_journal = ''
-    osd_id = -1
-    try:
-        fs_type = get_dev_fs(dev)
-        if fs_type != None:
-            tpath = mount(dev=dev, fstype=fs_type, options='')
-            if tpath:
-                try:
-                    journal_path_dm = os.path.join(tpath, 'journal_dmcrypt')
-                    if dmcrypt and os.path.islink(journal_path_dm):
-                        dm_journal = os.path.realpath(journal_path_dm)
-                    osd_id = get_osd_id(tpath)
-                finally:
-                    unmount(tpath)
-        return osd_id, dm_journal
-    except:
-        raise MountError
 
 
 def get_osd_id(path):
@@ -1026,28 +978,6 @@ def get_fsid(cluster):
     if fsid is None:
         raise Error('getting cluster uuid from configuration failed')
     return fsid.lower()
-
-
-def get_dmcrypt_status(_uuid):
-    """
-    Get status on dm-crypt device.
-
-    :return: the dm-crypt device status, True: active, False: inactive
-    """
-    try:
-        out, ret = command(
-                [
-                    '/sbin/cryptsetup',
-                    'status',
-                    _uuid,
-                    ],
-                )
-    except:
-        raise Error('Get dmcrypt status fail!')
-    if 'inactive' in out:
-        return False
-    else:
-        return True
 
 
 def get_dmcrypt_key_path(
@@ -2220,18 +2150,13 @@ def stop_daemon(
                 [
                     '/sbin/initctl',
                     'stop',
-                    # I remove --no-wait parameter because we must guarantee
-                    # this service stop.
                     'ceph-osd',
                     'cluster={cluster}'.format(cluster=cluster),
                     'id={osd_id}'.format(osd_id=osd_id),
                     ],
                 )
         elif os.path.exists(os.path.join(path, 'sysvinit')):
-            if os.path.exists('/usr/sbin/service'):
-                svc = '/usr/sbin/service'
-            else:
-                svc = '/sbin/service'
+            svc = which('service')
             command_check_call(
                 [
                     svc,
@@ -2273,7 +2198,7 @@ def detect_fstype(
             # we don't want stale cached results
             '-p',
             '-s', 'TYPE',
-            '-o' 'value',
+            '-o', 'value',
             '--',
             dev,
             ],
@@ -2292,33 +2217,28 @@ def mount_activate(
     ):
 
     if dmcrypt:
-        # dev corresponds to a dmcrypt cyphertext device - map it before
-        # proceeding.
-        rawdev = dev
-        ptype = get_partition_type(rawdev)
-        if ptype in [DMCRYPT_OSD_UUID]:
-            luks = False
-            cryptsetup_parameters = ['--key-size', '256']
-        elif ptype in [DMCRYPT_LUKS_OSD_UUID]:
-            luks = True
-            cryptsetup_parameters = []
-        else:
-            raise Error('activate --dmcrypt called for invalid dev %s' % (dev))
-        part_uuid = get_partition_uuid(rawdev)
-        dmcrypt_key_path = get_dmcrypt_key_path(part_uuid, dmcrypt_key_dir, luks)
-        # if osd is deactive, we do not remove dmcrypt map.
-        # return the dm path and do not map when the osd is still mapped (avoid fail).
-        if not get_dmcrypt_status(part_uuid):
+            # dev corresponds to a dmcrypt cyphertext device - map it before
+            # proceeding.
+            rawdev = dev
+            ptype = get_partition_type(rawdev)
+            if ptype in [DMCRYPT_OSD_UUID]:
+                luks = False
+                cryptsetup_parameters = ['--key-size', '256']
+            elif ptype in [DMCRYPT_LUKS_OSD_UUID]:
+                luks = True
+                cryptsetup_parameters = []
+            else:
+                raise Error('activate --dmcrypt called for invalid dev %s' % (dev))
+            part_uuid = get_partition_uuid(rawdev)
+            dmcrypt_key_path = get_dmcrypt_key_path(part_uuid, dmcrypt_key_dir, luks)
             dev = dmcrypt_map(
-                rawdev=rawdev,
-                keypath=dmcrypt_key_path,
-                _uuid=part_uuid,
-                cryptsetup_parameters=cryptsetup_parameters,
-                luks=luks,
-                format_dev=False,
-                )
-        else:
-            dev = '/dev/mapper/' + part_uuid
+                    rawdev=rawdev,
+                    keypath=dmcrypt_key_path,
+                    _uuid=part_uuid,
+                    cryptsetup_parameters=cryptsetup_parameters,
+                    luks=luks,
+                    format_dev=False,
+                    )
 
     try:
         fstype = detect_fstype(dev=dev)
@@ -2359,44 +2279,17 @@ def mount_activate(
         # logging to syslog will help us easy to know udev triggered failure
         if not reactivate:
             unmount(path)
-            syslog.syslog(syslog.LOG_ERR, 'OSD deactivated! reactivate with: --reactivate')
+            # we need to unmap again because dmcrypt map will create again
+            # on bootup stage (due to deactivate)
+            if '/dev/mapper/' in dev:
+                part_uuid = dev.replace('/dev/mapper/', '')
+                dmcrypt_unmap(part_uuid)
+            LOG.info('OSD deactivated! reactivate with: --reactivate')
             raise Error('OSD deactivated! reactivate with: --reactivate')
         # flag to activate a deactive osd.
         deactive = True
     else:
         deactive = False
-
-    journal_dev = os.path.realpath(os.path.join(path,'journal'))
-    try:
-        if get_ceph_user() == 'ceph':
-            command(
-                [
-                'chown', '-R', 'ceph:ceph',
-                journal_dev,
-                ],
-            )
-            command(
-                [
-                'chmod', '660',
-                journal_dev,
-                ]
-            )
-        if dmcrypt:
-            journal_dev_dmcrypt = os.path.realpath(os.path.join(path,'journal_dmcrypt'))
-            command(
-                [
-                'chown', '-R', 'ceph:ceph',
-                journal_dev_dmcrypt,
-                ],
-            )
-            command(
-                [
-                'chmod', '660',
-                journal_dev_dmcrypt,
-                ]
-            )
-    except OSError:
-        pass
 
     osd_id = None
     cluster = None
@@ -2410,7 +2303,7 @@ def mount_activate(
                 os.remove(os.path.join(path, 'deactive'))
                 LOG.info('Remove `deactive` file.')
             except OSError:
-                pass
+                raise Error('Cannot remove `deactive` file!')
 
         # check if the disk is already active, or if something else is already
         # mounted there
@@ -2679,14 +2572,14 @@ def main_activate(args):
 ###########################
 
 def _mark_osd_out(cluster, osd_id):
-    LOG.info('Prepare to mark osd.%s out...', osd_id)
+    LOG.info('Prepare to mark osd.%d out...', osd_id)
     try:
         out, ret = command(
                 [
                     'ceph',
                     'osd',
                     'out',
-                    'osd.%s' % osd_id,
+                    'osd.%d' % osd_id,
                     ],
                 )
     except:
@@ -2704,21 +2597,18 @@ def _check_osd_status(cluster, osd_id):
     LOG.info("Checking osd id: %s ..." % osd_id)
     found = False
     status_code = 0
-    try:
-        out, ret = command(
-                [
-                    'ceph',
-                    'osd',
-                    'dump',
-                    '--cluster={cluster}'.format(
-                        cluster=cluster,
-                        ),
-                    '--format',
-                    'json',
-                    ],
-                )
-    except subprocess.CalledProcessError as e:
-        raise Error(e)
+    out, ret = command(
+            [
+                'ceph',
+                'osd',
+                'dump',
+                '--cluster={cluster}'.format(
+                    cluster=cluster,
+                    ),
+                '--format',
+                'json',
+                ],
+            )
     out_json = json.loads(out)
     for item in out_json[u'osds']:
         if item.get(u'osd') == int(osd_id):
@@ -2741,7 +2631,7 @@ def _remove_osd_directory_files(mounted_path, cluster):
             os.remove(os.path.join(mounted_path, 'ready'))
             LOG.info('Remove `ready` file.')
         except OSError:
-            pass
+            raise Error('Could not remove `ready` file!')
     else:
         LOG.info('`ready` file is already removed.')
 
@@ -2750,7 +2640,7 @@ def _remove_osd_directory_files(mounted_path, cluster):
             os.remove(os.path.join(mounted_path, 'active'))
             LOG.info('Remove `active` file.')
         except OSError:
-            pass
+            raise Error('Could not remove `active` file!')
     else:
         LOG.info('`active` file is already removed.')
 
@@ -2768,42 +2658,49 @@ def _remove_osd_directory_files(mounted_path, cluster):
         LOG.info('Remove `%s` file.', init)
         return
     except OSError:
-        pass
+        raise Error('Could not remove %s (init) file!' % init)
 
 
 def main_deactivate(args):
-    mount_info = []
-    if args.deactivate_by_id:
-        osd_id = args.deactivate_by_id
-    else:
-       if not os.path.exists(args.path):
-           raise Error('%s does not exist' % args.path)
-       else:
-           # check dmcrypt first.
-           part_type = get_partition_type(args.path)
-           if part_type == DMCRYPT_OSD_UUID or \
-              part_type == DMCRYPT_LUKS_OSD_UUID:
-              part_uuid = get_partition_uuid(args.path)
-              dev_path = '/dev/mapper/' + part_uuid
-           else:
-               # other cases will return args.path
-               dev_path = args.path
-           mounted_path = is_mounted(dev_path)
-           if mounted_path is None:
-               raise Error('%s is not mounted' % dev_path)
-           osd_id = get_osd_id(mounted_path)
-           mount_info.append(dev_path)
-           mount_info.append(mounted_path)
+    osd_id = args.deactivate_by_id
+    path = args.path
+    target_dev = None
+    dmcrypt = False
+    devices = list_devices([])
+
+    # list all devices and found we need
+    for device in devices:
+        if 'partitions' in device:
+            for dev_part in device.get('partitions'):
+                if osd_id and \
+                   'whoami' in dev_part and \
+                   dev_part['whoami'] == osd_id:
+                    target_dev = dev_part
+                elif path and \
+                   'path' in dev_part and \
+                   dev_part['path'] == path:
+                    target_dev = dev_part
+    if not target_dev:
+        raise Error('Cannot find any match device!!')
+
+    # set up all we need variable
+    osd_id = target_dev['whoami']
+    part_type = target_dev['ptype']
+    mounted_path = target_dev['mount']
+    part_uuid = target_dev['uuid']
+    if part_type == DMCRYPT_OSD_UUID or \
+       part_type == DMCRYPT_LUKS_OSD_UUID:
+        dmcrypt = True
 
     # Do not do anything if osd is already down.
     status_code = _check_osd_status(args.cluster, osd_id)
     if status_code == OSD_STATUS_IN_UP:
         if args.mark_out is True:
-            _mark_osd_out(args.cluster, osd_id)
+            _mark_osd_out(args.cluster, int(osd_id))
         stop_daemon(args.cluster, osd_id)
     elif status_code == OSD_STATUS_IN_DOWN:
         if args.mark_out is True:
-            _mark_osd_out(args.cluster, osd_id)
+            _mark_osd_out(args.cluster, int(osd_id))
         LOG.info("OSD already out/down. Do not do anything now.")
         return
     elif status_code == OSD_STATUS_OUT_UP:
@@ -2812,21 +2709,19 @@ def main_deactivate(args):
         LOG.info("OSD already out/down. Do not do anything now.")
         return
 
-    # GET the mounted device and mount point.
-    # If we already get mount_info (with specific parameter), pass this stage
-    if not mount_info:
-        mount_info = convert_osd_id(args.cluster, osd_id)
-
     # remove 'ready', 'active', and INIT-specific files.
-    _remove_osd_directory_files(mount_info[1], args.cluster)
+    _remove_osd_directory_files(mounted_path, args.cluster)
 
     # Write deactivate to osd directory!
-    with file(os.path.join(mount_info[1], 'deactive'), 'w'):
-        path_set_context(os.path.join(mount_info[1], 'deactive'))
-        pass
+    with open(os.path.join(mounted_path, 'deactive'), 'w'):
+        path_set_context(os.path.join(mounted_path, 'deactive'))
 
-    unmount(mount_info[1])
-    LOG.info("Umount `%s` successfully.", mount_info[1])
+    unmount(mounted_path)
+    LOG.info("Umount `%s` successfully.", mounted_path)
+
+    # we remove the crypt map and device mapper (if dmcrypt is True)
+    if dmcrypt:
+        dmcrypt_unmap(part_uuid)
 
     return
 
@@ -2876,81 +2771,79 @@ def _deallocate_osd_id(cluster, osd_id):
         raise Error(e)
 
 def main_destroy(args):
+    osd_id = args.destroy_by_id
+    path = args.path
+    dmcrypt_key_dir = args.dmcrypt_key_dir
     dmcrypt = False
-    mount_info = []
-    # get everything we need when we start destroy.
-    if args.destroy_by_id:
-        osd_id = args.destroy_by_id
-        # try to find osd data device.
-        partmap = list_all_partitions(None)
-        # list all partition which have the partition name with
-        # deactive flag
-        devtocheck = []
-        found = False
-        for base, parts in sorted(partmap.iteritems()):
-            if not parts:
-                continue
-            for p in parts:
-                (dev, p_num) = split_dev_base_partnum(os.path.join("/dev", p))
-                LOG.debug("device: %s, p_num: %s" % (dev, p_num))
-                devtocheck.append(os.path.join("/dev", p))
+    target_dev = None
 
-        # check all above device's osd_id
-        # if the osd_id is correct, zap it.
-        for item in devtocheck:
-            try:
-                # one more try to check dmcrypt, or raise mounterror
-                # Do nothing when we get some specific part_type
-                # that because in some situation we can not update
-                # partition table immediately
-                dmcrypt = False
-                part_type = get_partition_type(item)
-                if part_type == DMCRYPT_OSD_UUID or \
-                   part_type == DMCRYPT_LUKS_OSD_UUID:
-                    dmcrypt = True
-                    part_uuid_journal = ''
-                    part_uuid = get_partition_uuid(item)
-                    dev_path = '/dev/mapper/' + part_uuid
-                    whoami, dm_journal = get_osd_id_journal_dm(dev_path, dmcrypt)
-                    part_uuid_journal = get_partition_uuid(dm_journal)
-                elif part_type == OSD_UUID or \
-                     part_type == MPATH_OSD_UUID:
-                    whoami, dm_journal = get_osd_id_journal_dm(item, dmcrypt)
-                else:
+    if path and not is_partition(path):
+        raise Error("It should input the partition dev!!")
+
+    devices = list_devices([])
+    for device in devices:
+        if 'partitions' in device:
+            for dev_part in device.get('partitions'):
+                """
+                re-map the unmapped device for check device information
+                we need more overhead if user pass the osd_id
+
+                the reason is we must re-map the dmcrypt map that we can
+                confirm the osd_id match with whoami
+                """
+                if path and 'path' in dev_part and \
+                   dev_part['path'] != path:
                     continue
-            except:
-                # other cases will return MountError
-                raise MountError
-            # break when we found the target osd_id.
-            # that can avoid handle the redundant checking
-            if whoami == osd_id:
-                found = True
-                (base_dev, part_num) = split_dev_base_partnum(item)
-                break
-        if not found:
-            raise Error('Could not find the partition of osd.%s!' % osd_id)
+                elif osd_id and 'whoami' in dev_part and \
+                     dev_part['whoami'] != osd_id:
+                    continue
+                elif path and dev_part['path'] == path and \
+                   not dev_part['dmcrypt']:
+                    target_dev = dev_part
+                    break
+                elif osd_id and 'whoami' in dev_part and \
+                     dev_part['whoami'] == osd_id and not dev_part['dmcrypt']:
+                    target_dev = dev_part
+                    break
+                elif dev_part['dmcrypt'] and \
+                     not dev_part['dmcrypt']['holders']:
+                    rawdev = dev_part['path']
+                    ptype = dev_part['ptype']
+                    if ptype in [DMCRYPT_OSD_UUID]:
+                        luks = False
+                        cryptsetup_parameters = ['--key-size', '256']
+                    elif ptype in [DMCRYPT_LUKS_OSD_UUID]:
+                        luks = True
+                        cryptsetup_parameters = []
+                    else:
+                        raise Error('Cannot identify the device partiton type!!!')
+                    part_uuid = dev_part['uuid']
+                    dmcrypt_key_path = get_dmcrypt_key_path(part_uuid, dmcrypt_key_dir, luks)
+                    dev_path = dmcrypt_map(
+                            rawdev=rawdev,
+                            keypath=dmcrypt_key_path,
+                            _uuid=part_uuid,
+                            cryptsetup_parameters=cryptsetup_parameters,
+                            luks=luks,
+                            format_dev=False,
+                            )
+                    devices = list_devices([rawdev])
+                    for dev in devices:
+                        if (path and 'path' in dev and dev['path'] == path) or \
+                           (osd_id and 'whoami' in dev and dev['whoami'] == osd_id):
+                            dmcrypt = True
+                            target_dev = dev
+                            break
+                    dmcrypt_unmap(part_uuid)
+    if not target_dev:
+        raise Error('Cannot find any match device!!')
+    osd_id = target_dev['whoami']
+    dev_path = target_dev['path']
+    journal_part_uuid = target_dev['journal_uuid']
+    if target_dev['ptype'] == MPATH_OSD_UUID:
+        base_dev = get_partition_base_mpath(dev_path)
     else:
-       if not os.path.exists(args.path):
-           raise Error('%s does not exist' % args.path)
-       else:
-           # check dmcrypt first.
-           part_type = get_partition_type(args.path)
-           if part_type == DMCRYPT_OSD_UUID or \
-              part_type == DMCRYPT_LUKS_OSD_UUID:
-              dmcrypt = True
-              part_uuid_journal = ''
-              part_uuid = get_partition_uuid(args.path)
-              dev_path = '/dev/mapper/' + part_uuid
-           else:
-               # other cases will return args.path
-               dev_path = args.path
-           # mount point is removed, try to mount to tmp.folder
-           osd_id, dm_journal = get_osd_id_journal_dm(dev_path, dmcrypt)
-           if dm_journal:
-               part_uuid_journal = get_partition_uuid(dm_journal)
-           base_dev = get_partition_base(args.path)
-           mount_info.append(args.path)
-
+        base_dev = get_partition_base(dev_path)
 
     # Before osd deactivate, we cannot destroy it
     status_code = _check_osd_status(args.cluster, osd_id)
@@ -2970,12 +2863,8 @@ def main_destroy(args):
 
     # we remove the crypt map and device mapper (if dmcrypt is True)
     if dmcrypt:
-        dmcrypt_unmap(part_uuid)
-        if part_uuid_journal:
-            try:
-                dmcrypt_unmap(part_uuid_journal)
-            except:
-                pass
+        if journal_part_uuid:
+            dmcrypt_unmap(journal_part_uuid)
 
     # Check zap flag. If we found zap flag, we need to find device for
     # destroy this osd data.
@@ -4083,6 +3972,12 @@ def make_destroy_parser(subparsers):
         '--destroy-by-id',
         metavar='<id>',
         help='ID of OSD to destroy'
+        )
+    destroy_parser.add_argument(
+        '--dmcrypt-key-dir',
+        metavar='KEYDIR',
+        default='/etc/ceph/dmcrypt-keys',
+        help='directory where dm-crypt keys are stored (If you don\'t know how it work, dont use it. we have default value)',
         )
     destroy_parser.add_argument(
         '--zap',
