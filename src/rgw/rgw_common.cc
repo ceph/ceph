@@ -9,6 +9,7 @@
 #include "rgw_common.h"
 #include "rgw_acl.h"
 #include "rgw_string.h"
+#include "rgw_http_errors.h"
 
 #include "common/ceph_crypto.h"
 #include "common/armor.h"
@@ -73,28 +74,28 @@ rgw_err()
 
 rgw_err::
 rgw_err(int http, const std::string& s3)
-    : http_ret(http), ret(0), s3_code(s3)
+    : http_ret_E(http), ret_E(0), s3_code_E(s3)
 {
 }
 
 void rgw_err::
 clear()
 {
-  http_ret = 200;
-  ret = 0;
-  s3_code.clear();
+  http_ret_E = 200;
+  ret_E = 0;
+  s3_code_E.clear();
 }
 
 bool rgw_err::
 is_clear() const
 {
-  return (http_ret == 200);
+  return (http_ret_E == 200);
 }
 
 bool rgw_err::
 is_err() const
 {
-  return !(http_ret >= 200 && http_ret <= 399);
+  return !(http_ret_E >= 200 && http_ret_E <= 399);
 }
 
 static bool starts_with(const string& s, const string& prefix) {
@@ -225,6 +226,43 @@ req_state::~req_state() {
   delete aws4_auth;
 }
 
+void req_state::set_req_state_err(int err_no)
+{
+  const struct rgw_http_errors *r;
+
+  if (err_no < 0)
+    err_no = -err_no;
+  err.ret_E = -err_no;
+  if (prot_flags & RGW_REST_SWIFT) {
+    r = search_err(err_no, RGW_HTTP_SWIFT_ERRORS, ARRAY_LEN(RGW_HTTP_SWIFT_ERRORS));
+    if (r) {
+      if (prot_flags & RGW_REST_WEBSITE && err_no == ERR_WEBSITE_REDIRECT && err.is_clear()) {
+        // http_ret was custom set, so don't change it!
+      } else {
+        err.http_ret_E = r->http_ret;
+      }
+      err.s3_code_E = r->s3_code;
+      return;
+    }
+  }
+  r = search_err(err_no, RGW_HTTP_ERRORS, ARRAY_LEN(RGW_HTTP_ERRORS));
+  if (r) {
+    err.http_ret_E = r->http_ret;
+    err.s3_code_E = r->s3_code;
+    return;
+  }
+  dout(0) << "WARNING: set_req_state_err err_no=" << err_no << " resorting to 500" << dendl;
+
+  err.http_ret_E = 500;
+  err.s3_code_E = "UnknownError";
+}
+
+void req_state::set_req_state_err(int err_no, const string &err_msg)
+{
+   err.message_E = err_msg;
+   set_req_state_err(err_no);
+}
+
 struct str_len {
   const char *str;
   int len;
@@ -296,7 +334,7 @@ void req_info::init_meta_info(bool *found_bad_meta)
 
 std::ostream& operator<<(std::ostream& oss, const rgw_err &err)
 {
-  oss << "rgw_err(http_ret=" << err.http_ret << ", s3='" << err.s3_code << "') ";
+  oss << "rgw_err(http_ret=" << err.http_ret_E << ", s3='" << err.s3_code_E << "') ";
   return oss;
 }
 

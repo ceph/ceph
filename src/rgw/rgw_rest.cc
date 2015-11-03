@@ -17,8 +17,7 @@
 #include "rgw_rest_s3.h"
 #include "rgw_swift_auth.h"
 #include "rgw_cors_s3.h"
-#include "rgw_http_errors.h"
-#include "rgw_lib.h"
+// #include "rgw_lib.h"	// XXX mdw is this necessary?
 
 #include "rgw_client_io.h"
 #include "rgw_resolve.h"
@@ -309,59 +308,6 @@ void rgw_flush_formatter(struct req_state *s, Formatter *formatter)
   }
 }
 
-void set_req_state_err(struct rgw_err& err,     /* out */
-                       int err_no,              /* in  */
-                       const int prot_flags)    /* in  */
-{
-  const struct rgw_http_errors *r;
-
-  if (err_no < 0)
-    err_no = -err_no;
-  err.ret = -err_no;
-  if (prot_flags & RGW_REST_SWIFT) {
-    r = search_err(err_no, RGW_HTTP_SWIFT_ERRORS,
-		   ARRAY_LEN(RGW_HTTP_SWIFT_ERRORS));
-    if (r) {
-      err.http_ret = r->http_ret;
-      err.s3_code = r->s3_code;
-      return;
-    }
-  }
-
-  r = search_err(err_no, RGW_HTTP_ERRORS, ARRAY_LEN(RGW_HTTP_ERRORS));
-  if (r) {
-    if (prot_flags & RGW_REST_WEBSITE && err_no == ERR_WEBSITE_REDIRECT && err.is_clear()) {
-      // http_ret was custom set, so don't change it!
-    } else {
-      err.http_ret = r->http_ret;
-    }
-    err.s3_code = r->s3_code;
-    return;
-  }
-  dout(0) << "WARNING: set_req_state_err err_no=" << err_no
-	  << " resorting to 500" << dendl;
-
-  err.http_ret = 500;
-  err.s3_code = "UnknownError";
-}
-
-void set_req_state_err(struct req_state * const s, const int err_no)
-{
-  if (s) {
-    set_req_state_err(s->err, err_no, s->prot_flags);
-  }
-}
-
-void dump_errno(int http_ret, string& out) {
-  stringstream ss;
-
-  ss <<  http_ret << " " << http_status_names[http_ret];
-  out = ss.str();
-}
-
-void dump_errno(const struct rgw_err &err, string& out) {
-  dump_errno(err.http_ret, out);
-}
 
 void dump_errno(struct req_state *s)
 {
@@ -491,6 +437,46 @@ void dump_trans_id(req_state *s)
   }
 }
 
+class s3Error {
+private:
+  const string &s3_code;
+  const string &s3_message;
+  const string &bucket_name;
+  const string &trans_id;
+public:
+  s3Error(const rgw_err &e, const struct req_state *s)
+	: s3_code(s->err.s3_code_E), s3_message(s->err.message_E),
+	bucket_name(s->bucket_name), trans_id(s->trans_id) {}
+  void dump(Formatter *f);
+};
+
+void s3Error::dump(Formatter *f)
+{
+  f->open_object_section("Error");
+  if (!s3_code.empty())
+    f->dump_string("Code", s3_code);
+  if (!s3_message.empty())
+    f->dump_string("Message", s3_message);
+  f->close_section();
+
+  if (typeid(f) != typeid(HTMLFormatter)) {
+    f->open_object_section("Error");
+  }
+  if (!s3_code.empty())
+    f->dump_string("Code", s3_code);
+  if (!s3_message.empty())
+    f->dump_string("Message", s3_message);
+  if (!s->bucket_name.empty()) // TODO: connect to expose_bucket
+    f->dump_string("BucketName", s->bucket_name);
+  if (!s->trans_id.empty()) // TODO: connect to expose_bucket or another toggle
+    f->dump_string("RequestId", s->trans_id);
+  f->dump_string("HostId", s->host_id);
+  if (typeid(f) != typeid(HTMLFormatter)) {
+    f->close_section();
+  }
+  f->output_footer();
+}
+
 void end_header(struct req_state* s, RGWOp* op, const char *content_type,
 		const int64_t proposed_content_length, bool force_content_type,
 		bool force_no_error)
@@ -535,24 +521,11 @@ void end_header(struct req_state* s, RGWOp* op, const char *content_type,
       ctype.append("; charset=utf-8");
     content_type = ctype.c_str();
   }
-  if (!force_no_error && s->err.is_err()) {
+  if (!force_no_error && s->is_err()) {
     dump_start(s);
-    if (s->format != RGW_FORMAT_HTML) {
-      s->formatter->open_object_section("Error");
-    }
-    if (!s->err.s3_code.empty())
-      s->formatter->dump_string("Code", s->err.s3_code);
-    if (!s->err.message.empty())
-      s->formatter->dump_string("Message", s->err.message);
-    if (!s->bucket_name.empty()) // TODO: connect to expose_bucket
-      s->formatter->dump_string("BucketName", s->bucket_name);
-    if (!s->trans_id.empty()) // TODO: connect to expose_bucket or another toggle
-      s->formatter->dump_string("RequestId", s->trans_id);
-    s->formatter->dump_string("HostId", s->host_id);
-    if (s->format != RGW_FORMAT_HTML) {
-      s->formatter->close_section();
-    }
-    s->formatter->output_footer();
+    s->err->dump(s->formatter);
+//    s3Error errobj(s);
+//    errobj.dump(s->formatter);
     dump_content_length(s, s->formatter->get_len());
   } else {
     if (proposed_content_length != NO_CONTENT_LENGTH) {
@@ -601,7 +574,7 @@ void abort_early(struct req_state *s, boost::function<void()> dump_more, int err
 		      << " new_err_no=" << new_err_no << dendl;
     err_no = new_err_no;
   }
-  set_req_state_err(s, err_no);
+  s->set_req_state_err(err_no);
   dump_errno(s);
   dump_bucket_from_state(s);
   if (err_no == -ERR_PERMANENT_REDIRECT || err_no == -ERR_WEBSITE_REDIRECT) {
@@ -850,7 +823,7 @@ int RESTArgs::get_bool(struct req_state *s, const string& name, bool def_val, bo
 
 void RGWRESTFlusher::do_start(int ret)
 {
-  set_req_state_err(s, ret); /* no going back from here */
+  s->set_req_state_err(ret); /* no going back from here */
   dump_errno(s);
   dump_start(s);
   end_header(s, op);

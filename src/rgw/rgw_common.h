@@ -252,10 +252,10 @@ struct rgw_err {
   bool is_err() const;
   friend std::ostream& operator<<(std::ostream& oss, const rgw_err &err);
 
-  int http_ret;
-  int ret;
-  std::string s3_code;
-  std::string message;
+  int http_ret_E;
+  int ret_E;
+  std::string s3_code_E;
+  std::string message_E;
 };
 
 /* Helper class used for RGWHTTPArgs parsing */
@@ -1257,6 +1257,9 @@ struct req_state {
 
   req_state(CephContext* _cct, RGWEnv* e, RGWUserInfo* u);
   ~req_state();
+
+  void set_req_state_err(int err_no);
+  void set_req_state_err(int err_no, const string &err_msg);
 };
 
 /** Store basic data on an object */
