@@ -4984,13 +4984,6 @@ int FileStore::_destroy_collection(coll_t c)
     RWLock::WLocker l((from.index)->access_lock);
 
     r = from->prep_delete();
-    if (r < 0)
-      goto out;
-  }
-  r = ::rmdir(fn);
-  if (r < 0) {
-    r = -errno;
-    goto out;
   }
 
  out:
