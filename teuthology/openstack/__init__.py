@@ -128,12 +128,20 @@ class OpenStack(object):
 
     def image_create(self, name):
         """
-        Upload an image into OpenStack with glance. The image has to be qcow2.
+        Upload an image into OpenStack with glance.
         """
         misc.sh("wget -c -O " + name + ".qcow2 " + self.image2url[name])
+        self.set_provider()
+        if self.provider == 'dreamhost':
+            image = name + ".raw"
+            disk_format = 'raw'
+            misc.sh("qemu-img convert " + name + ".qcow2 " + image)
+        else:
+            image = name + ".qcow2"
+            disk_format = 'qcow2'
         misc.sh("glance image-create --property ownedby=teuthology " +
-                " --disk-format=qcow2 --container-format=bare " +
-                " --file " + name + ".qcow2 --name " + self.image_name(name))
+                " --disk-format=" + disk_format + " --container-format=bare " +
+                " --file " + image + " --name " + self.image_name(name))
 
     def image(self, os_type, os_version):
         """
