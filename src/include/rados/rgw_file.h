@@ -86,7 +86,7 @@ int rgw_lookup(struct rgw_fs *rgw_fs,
 /*
   lookup object by handle (NFS style)
 */
-int rgw_lookup_handle(struct rgw_fs *rgw_fs, struct rgw_fh_hk fh_hk,
+int rgw_lookup_handle(struct rgw_fs *rgw_fs, struct rgw_fh_hk *fh_hk,
 		      struct rgw_file_handle **fh, uint32_t flags);
 
 /*
