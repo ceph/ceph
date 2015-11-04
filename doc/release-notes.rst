@@ -236,9 +236,8 @@ Notable Changes since Hammer
 * ceph-disk: improve parted output parsing (#10983 Loic Dachary)
 * ceph-disk: install pip > 6.1 (#11952 Loic Dachary)
 * ceph-disk: make suppression work for activate-all and activate-journal (Dan van der Ster)
-* ceph-disk: many fixes (Loic Dachary)
-* ceph-disk: misc fixes (Alfredo Deza)
-* ceph-disk: misc fixes to respect init system (Loic Dachary, Owen Synge)
+* ceph-disk: many fixes (Loic Dachary, Alfredo Deza)
+* ceph-disk: fixes to respect init system (Loic Dachary, Owen Synge)
 * ceph-disk: pass --cluster arg on prepare subcommand (Kefu Chai)
 * ceph-disk: support for multipath devices (Loic Dachary)
 * ceph-disk: support NVMe device partitions (#11612 Ilja Slepnev)
@@ -254,9 +253,7 @@ Notable Changes since Hammer
 * ceph: improve error output for 'tell' (#11101 Kefu Chai)
 * ceph-monstore-tool: fix store-copy (Huangjun)
 * ceph: new 'ceph daemonperf' command (John Spray, Mykola Golub)
-* ceph-objectstore-tool: many improvements (David Zafman)
-* ceph-objectstore-tool: many many changes (David Zafman)
-* ceph-objectstore-tool: misc improvements (David Zafman)
+* ceph-objectstore-tool: many many improvements (David Zafman)
 * ceph-objectstore-tool: refactoring and cleanup (John Spray)
 * ceph-post-file: misc fixes (Joey McDonald, Sage Weil)
 * ceph_test_rados: test pipelined reads (Zhiqiang Wang)
@@ -289,7 +286,7 @@ Notable Changes since Hammer
 * crush: fix subtree base weight on adjust_subtree_weight (#11855 Sage Weil)
 * crush: respect default replicated ruleset config on map creation (Ilya Dryomov)
 * crushtool: fix order of operations, usage (Sage Weil)
-* crypo: fix NSS leak (Jason Dillaman)
+* crypto: fix NSS leak (Jason Dillaman)
 * crypto: fix unbalanced init/shutdown (#12598 Zheng Yan)
 * deb: fix rest-bench-dbg and ceph-test-dbg dependendies (Ken Dreyer)
 * debian: minor package reorg (Ken Dreyer)
@@ -301,9 +298,7 @@ Notable Changes since Hammer
 * doc: fix sphinx issues (Kefu Chai)
 * doc: man page updates (Kefu Chai)
 * doc: mds data structure docs (Yan, Zheng)
-* doc: misc updates (#11396 Nilamdyuti, Fracois Lafont, Ken Dreyer, Kefu Chai)
-* doc: misc updates (Kefu Chai, Owen Synge, Gael Fenet-Garde, Loic Dachary, Yannick Atchy-Dalama, Jiaying Ren, Kevin Caradant, Robert Maxime, Nicolas Yong, Germain Chipaux, Arthur Gorjux, Gabriel Sentucq, Clement Lebrun, Jean-Remi Deveaux, Clair Massot, Robin Tang, Thomas Laumondais, Jordan Dorne, Yuan Zhou, Valentin Thomas, Pierre Chaumont, Benjamin Troquereau, Benjamin Sesia, Vikhyat Umrao)
-* doc: misc updates (Nilamdyuti Goswami, Vartika Rai, Florian Haas, Loic Dachary, Simon Guinot, Andy Allan, Alistair Israel, Ken Dreyer, Robin Rehu, Lee Revell, Florian Marsylle, Thomas Johnson, Bosse Klykken, Travis Rhoden, Ian Kelling)
+* doc: misc updates (Fracois Lafont, Ken Dreyer, Kefu Chai, Owen Synge, Gael Fenet-Garde, Loic Dachary, Yannick Atchy-Dalama, Jiaying Ren, Kevin Caradant, Robert Maxime, Nicolas Yong, Germain Chipaux, Arthur Gorjux, Gabriel Sentucq, Clement Lebrun, Jean-Remi Deveaux, Clair Massot, Robin Tang, Thomas Laumondais, Jordan Dorne, Yuan Zhou, Valentin Thomas, Pierre Chaumont, Benjamin Troquereau, Benjamin Sesia, Vikhyat Umrao, Nilamdyuti Goswami, Vartika Rai, Florian Haas, Loic Dachary, Simon Guinot, Andy Allan, Alistair Israel, Ken Dreyer, Robin Rehu, Lee Revell, Florian Marsylle, Thomas Johnson, Bosse Klykken, Travis Rhoden, Ian Kelling)
 * doc: swift tempurls (#10184 Abhishek Lekshmanan)
 * doc: switch doxygen integration back to breathe (#6115 Kefu Chai)
 * doc: update release schedule docs (Loic Dachary)
@@ -314,7 +309,6 @@ Notable Changes since Hammer
 * gmock: switch to submodule (Danny Al-Gaaf, Loic Dachary)
 * hadoop: add terasort test (Noah Watkins)
 * init-radosgw: merge with sysv version; fix enumeration (Sage Weil)
-* init-radosgw: run radosgw as root (#11453 Ken Dreyer)
 * java: fix libcephfs bindings (Noah Watkins)
 * libcephfs: add pread, pwrite (Jevon Qiao)
 * libcephfs,ceph-fuse: cache cleanup (Zheng Yan)
@@ -384,10 +378,10 @@ Notable Changes since Hammer
 * mds: fix shutdown (John Spray)
 * mds: fix shutdown with strays (#10744 John Spray)
 * mds: fix SnapServer crash on deleted pool (John Spray)
-* mds: fix snapshot fixes (Yan, Zheng)
-* mds: fix stra reintegration (Yan, Zheng)
+* mds: fix snapshot bugs (Yan, Zheng)
+* mds: fix stray reintegration (Yan, Zheng)
 * mds: fix stray handling (John Spray)
-* mds: fix suicide beason (John Spray)
+* mds: fix suicide beacon (John Spray)
 * mds: flush immediately in do_open_truncate (#11011 John Spray)
 * mds: handle misc corruption issues (John Spray)
 * mds: improve dump methods (John Spray)
@@ -409,7 +403,6 @@ Notable Changes since Hammer
 * mds: tolerate clock jumping backwards (#11053 Yan, Zheng)
 * mds: warn when clients fail to advance oldest_client_tid (#10657 Yan, Zheng)
 * misc cleanups and fixes (Danny Al-Gaaf)
-* misc coverity fixes (Danny Al-Gaaf)
 * misc coverity fixes (Danny Al-Gaaf)
 * misc performance and cleanup (Nathan Cutler, Xinxin Shu)
 * mon: add cache over MonitorDBStore (Kefu Chai)
@@ -452,21 +445,17 @@ Notable Changes since Hammer
 * mon: streamline session handling, fix memory leaks (Sage Weil)
 * mon: upgrades must pass through hammer (Sage Weil)
 * mon: warn on bogus cache tier config (Jianpeng Ma)
-* msg/async: many fixes (Haomai Wang)
-* msg/async: misc bug fixes and updates (Haomai Wang)
 * msgr: add ceph_perf_msgr tool (Hoamai Wang)
 * msgr: async: fix seq handling (Haomai Wang)
 * msgr: async: many many fixes (Haomai Wang)
-* msgr: async: misc fixes (Haomai Wang)
 * msgr: simple: fix clear_pipe (#11381 Haomai Wang)
+* msgr: simple: fix connect_seq assert (Haomai Wang)
 * msgr: xio: fastpath improvements (Raju Kurunkad)
 * msgr: xio: fix ip and nonce (Raju Kurunkad)
 * msgr: xio: improve lane assignment (Vu Pham)
-* msgr: xio: misc fixes (Vu Pham, Cosey Bodley)
 * msgr: xio: sync with accellio v1.4 (Vu Pham)
-* msg/simple: fix connect_seq assert (Haomai Wang)
+* msgr: xio: misc fixes (#10735 Matt Benjamin, Kefu Chai, Danny Al-Gaaf, Raju Kurunkad, Vu Pham, Casey Bodley)
 * msg: unit tests (Haomai Wang)
-* msg/xio: misc fixes (#10735 Matt Benjamin, Kefu Chai, Danny Al-Gaaf, Raju Kurunkad, Vu Pham)
 * objectcacher: misc bug fixes (Jianpeng Ma)
 * osd: add latency perf counters for tier operations (Xinze Chi)
 * osd: add misc perfcounters (Xinze Chi)
@@ -480,7 +469,6 @@ Notable Changes since Hammer
 * osd: check scrub state when handling map (Jianpeng Ma)
 * osd: clean up some constness, privateness (Kefu Chai)
 * osd: clean up temp object if promotion fails (Jianpeng Ma)
-* osdc/Objecter: allow per-pool calls to op_cancel_writes (John Spray)
 * osd: configure promotion based on write recency (Zhiqiang Wang)
 * osd: constrain collections to meta and PGs (normal and temp) (Sage Weil)
 * osd: don't send dup MMonGetOSDMap requests (Sage Weil, Kefu Chai)
@@ -544,6 +532,7 @@ Notable Changes since Hammer
 * osd: use SEEK_HOLE / SEEK_DATA for sparse copy (Xinxin Shu)
 * osd: WBThrottle cleanups (Jianpeng Ma)
 * osd: write journal header on clean shutdown (Xinze Chi)
+* osdc/Objecter: allow per-pool calls to op_cancel_writes (John Spray)
 * os/filestore: enlarge getxattr buffer size (Jianpeng Ma)
 * pybind: pep8 cleanups (Danny Al-Gaaf)
 * pycephfs: many fixes for bindings (Haomai Wang)
@@ -561,7 +550,7 @@ Notable Changes since Hammer
 * rados: improve bench buffer handling, performance (Piotr Dalek)
 * rados: misc bench fixes (Dmitry Yatsushkevich)
 * rados: new pool import implementation (John Spray)
-* rados: translate erno to string in CLI (#10877 Kefu Chai)
+* rados: translate errno to string in CLI (#10877 Kefu Chai)
 * rbd: accept map options config option (Ilya Dryomov)
 * rbd: add disk usage tool (#7746 Jason Dillaman)
 * rbd: allow unmapping by spec (Ilya Dryomov)
@@ -583,17 +572,17 @@ Notable Changes since Hammer
 * rgw: add stats to headers for account GET (#10684 Yuan Zhou)
 * rgw: add Trasnaction-Id to response (Abhishek Dixit)
 * rgw: add X-Timestamp for Swift containers (#10938 Radoslaw Zarzynski)
-* rgw: alwasy check if token is expired (#11367 Anton Aksola, Riku Lehto)
+* rgw: always check if token is expired (#11367 Anton Aksola, Riku Lehto)
 * rgw: conversion tool to repair broken multipart objects (#12079 Yehuda Sadeh)
 * rgw: document layout of pools and objects (Pete Zaitcev)
 * rgw: do not enclose bucket header in quotes (#11860 Wido den Hollander)
-* rgw: do not prefecth data for HEAD requests (Guang Yang)
+* rgw: do not prefetch data for HEAD requests (Guang Yang)
 * rgw: do not preserve ACLs when copying object (#12370 Yehuda Sadeh)
 * rgw: do not set content-type if length is 0 (#11091 Orit Wasserman)
 * rgw: don't clobber bucket/object owner when setting ACLs (#10978 Yehuda Sadeh)
 * rgw: don't use end_marker for namespaced object listing (#11437 Yehuda Sadeh)
 * rgw: don't use rgw_socket_path if frontend is configured (#11160 Yehuda Sadeh)
-* rgw: enforce Content-Lenth for POST on Swift cont/obj (#10661 Radoslaw Zarzynski)
+* rgw: enforce Content-Length for POST on Swift cont/obj (#10661 Radoslaw Zarzynski)
 * rgw: error out if frontend did not send all data (#11851 Yehuda Sadeh)
 * rgw: expose the number of unhealthy workers through admin socket (Guang Yang)
 * rgw: fail if parts not specified on multipart upload (#11435 Yehuda Sadeh)
@@ -638,7 +627,7 @@ Notable Changes since Hammer
 * rgw: remove meta file after deleting bucket (#11149 Orit Wasserman)
 * rgw: remove trailing :port from HTTP_HOST header (Sage Weil)
 * rgw: return 412 on bad limit when listing buckets (#11613 Yehuda Sadeh)
-* rgw: rework X-Trans-Id header to be conform with Swift API (Radoslaw Rzarzynski)
+* rgw: rework X-Trans-Id header to conform with Swift API (Radoslaw Rzarzynski)
 * rgw: s3 encoding-type for get bucket (Jeff Weber)
 * rgw: send ETag, Last-Modified for swift (#11087 Radoslaw Zarzynski)
 * rgw: set content length on container GET, PUT, DELETE, HEAD (#10971, #11036 Radoslaw Zarzynski)
@@ -669,9 +658,9 @@ Notable Changes since Hammer
 * rpm: loosen ceph-test dependencies (Ken Dreyer)
 * rpm: many spec file fixes (Owen Synge, Ken Dreyer)
 * rpm: misc fixes (Boris Ranto, Owen Synge, Ken Dreyer, Ira Cooper)
-* rpm: misc systemd and suse fixes (Owen Synge, Nathan Cutler)
+* rpm: misc systemd and SUSE fixes (Owen Synge, Nathan Cutler)
 * selinux policy (Boris Ranto, Milan Broz)
-* systemd: logrotate fixes (Tim Seron, Lars Marowsky-Bree, Nathan Cutler)
+* systemd: logrotate fixes (Tim Serong, Lars Marowsky-Bree, Nathan Cutler)
 * systemd: many fixes (Sage Weil, Owen Synge, Boris Ranto, Dan van der Ster)
 * systemd: run daemons as user ceph
 * sysvinit compat: misc fixes (Owen Synge)
@@ -724,7 +713,7 @@ Major Changes from Hammer
 
   * Ceph daemons are now managed via systemd (with the exception of
     Ubuntu Trusty, which still uses upstart).
-  * Ceph daemons run as 'ceph' user instead root.
+  * Ceph daemons run as 'ceph' user instead of root.
   * On Red Hat distros, there is also an SELinux policy.
 
 - *RADOS*:
@@ -780,7 +769,7 @@ Distro compatibility
 We have decided to drop support for many older distributions so that we can
 move to a newer compiler toolchain (e.g., C++11).  Although it is still possible
 to build Ceph on older distributions by installing backported development tools,
-we are not building and publishing release packages for ceph.com.
+we are not building and publishing release packages for them on ceph.com.
 
 In particular,
 
@@ -827,9 +816,9 @@ Upgrading from Hammer
   the ceph user will currently get a dynamically assigned UID when the
   user is created.
 
-  If your systems already have a ceph user, upgrading the package will cause
-  problems.  We suggest you first remove or rename the existing 'ceph' user
-  before upgrading.
+  If your systems already have a ceph user, the package upgrade
+  process will usually fail with an error.  We suggest you first
+  remove or rename the existing 'ceph' user and then upgrade.
 
   When upgrading, administrators have two options:
 
@@ -970,18 +959,16 @@ Upgrading
   longer returns the number of bytes read upon success.  Instead, it returns 0
   upon success and a negative value upon failure.
 
-* 'ceph scrub', 'ceph compact' and 'ceph sync force are now DEPRECATED.  Users
+* 'ceph scrub', 'ceph compact' and 'ceph sync force' are now deprecated.  Users
   should instead use 'ceph mon scrub', 'ceph mon compact' and
   'ceph mon sync force'.
 
-* 'ceph mon_metadata' should now be used as 'ceph mon metadata'. There is no
-  need to deprecate this command (same major release since it was first
-  introduced).
+* 'ceph mon_metadata' should now be used as 'ceph mon metadata'.
 
 * The `--dump-json` option of "osdmaptool" is replaced by `--dump json`.
 
-* The commands of "pg ls-by-{pool,primary,osd}" and "pg ls" now take "recovering"
-  instead of "recovery", to include the recovering pgs in the listed pgs.
+* The commands of 'pg ls-by-{pool,primary,osd}' and 'pg ls' now take 'recovering'
+  instead of 'recovery' to include the recovering pgs in the listed pgs.
 
 
 Notable Changes
@@ -1107,7 +1094,7 @@ Notable Changes
 * build: install-deps: misc fixes (Loic Dachary)
 * build: make_dist_tarball.sh (Sage Weil)
 * ceph-detect-init: added Linux Mint (Michal Jarzabek)
-* ceph-detect-init: robust init system detection (Owen Synge)
+* ceph-detect-init: robust init system detection (Owen Synge, Loic Dachary)
 * ceph-disk: ensure 'zap' only operates on a full disk (#11272 Loic Dachary)
 * ceph-disk: misc fixes to respect init system (Loic Dachary, Owen Synge)
 * ceph-disk: support NVMe device partitions (#11612 Ilja Slepnev)
