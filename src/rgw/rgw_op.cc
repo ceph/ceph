@@ -226,7 +226,6 @@ static int get_obj_attrs(RGWRados *store, struct req_state *s, rgw_obj& obj, map
   RGWRados::Object::Read read_op(&op_target);
 
   read_op.params.attrs = &attrs;
-//  read_op.params.perr = &s->err;
 
   return read_op.prepare(NULL, NULL);
 }
@@ -700,7 +699,6 @@ int RGWGetObj::read_user_manifest_part(rgw_bucket& bucket,
   read_op.conds.if_match = ent.etag.c_str();
   read_op.params.attrs = &attrs;
   read_op.params.obj_size = &obj_size;
-//  read_op.params.perr = &s->err;
 
   op_ret = read_op.prepare(&cur_ofs, &cur_end);
   if (op_ret < 0)
@@ -1221,7 +1219,6 @@ void RGWGetObj::execute()
   read_op.params.lastmod = &lastmod;
   read_op.params.read_size = &total_len;
   read_op.params.obj_size = &s->obj_size;
-//  read_op.params.perr = &s->err;
 
   op_ret = read_op.prepare(&new_ofs, &new_end);
   if (op_ret < 0)

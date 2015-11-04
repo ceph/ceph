@@ -2080,7 +2080,7 @@ public:
         uint64_t *obj_size;
         map<string, bufferlist> *attrs;
 
-        StatParams() : lastmod(NULL), obj_size(NULL), attrs(NULL)/* , perr(NULL)*/ {}
+        StatParams() : lastmod(NULL), obj_size(NULL), attrs(NULL) {}
       } stat_params;
 
       struct ReadParams {
@@ -2189,7 +2189,7 @@ public:
         uint64_t *obj_size;
         map<string, bufferlist> *attrs;
 
-        Params() : lastmod(NULL), read_size(NULL), obj_size(NULL), attrs(NULL)/* , perr(NULL)*/ {}
+        Params() : lastmod(NULL), read_size(NULL), obj_size(NULL), attrs(NULL) {}
       } params;
 
       explicit Read(RGWRados::Object *_source) : source(_source) {}
