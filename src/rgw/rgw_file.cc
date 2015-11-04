@@ -201,12 +201,12 @@ int rgw_lookup(struct rgw_fs *rgw_fs,
 /*
   lookup object by handle (NFS style)
 */
-int rgw_lookup_handle(struct rgw_fs *rgw_fs, struct rgw_fh_hk fh_hk,
+int rgw_lookup_handle(struct rgw_fs *rgw_fs, struct rgw_fh_hk *fh_hk,
 		      struct rgw_file_handle **fh, uint32_t flags)
 {
   RGWLibFS *fs = static_cast<RGWLibFS*>(rgw_fs->fs_private);
 
-  RGWFileHandle* rgw_fh = fs->lookup_handle(fh_hk);
+  RGWFileHandle* rgw_fh = fs->lookup_handle(*fh_hk);
   if (! rgw_fh) {
     /* not found */
     return ENOENT;
