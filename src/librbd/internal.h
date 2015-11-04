@@ -42,6 +42,8 @@ enum {
   l_librbd_readahead,
   l_librbd_readahead_bytes,
 
+  l_librbd_invalidate_cache,
+
   l_librbd_last,
 };
 
