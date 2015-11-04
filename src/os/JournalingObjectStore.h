@@ -58,7 +58,6 @@ protected:
     Mutex com_lock;
     map<version_t, vector<Context*> > commit_waiters;
     uint64_t committing_seq, committed_seq;
-    set<uint64_t>   applying_seq_set;
 
   public:
     ApplyManager(Journal *&j, Finisher &f) :
@@ -66,7 +65,7 @@ protected:
       apply_lock("JOS::ApplyManager::apply_lock", false, true, false, g_ceph_context),
       blocked(false),
       open_ops(0),
-      max_applied_seq(1),
+      max_applied_seq(0),
       com_lock("JOS::ApplyManager::com_lock", false, true, false, g_ceph_context),
       committing_seq(0), committed_seq(0) {}
     void reset() {

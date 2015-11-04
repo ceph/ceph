@@ -128,8 +128,6 @@ uint64_t JournalingObjectStore::ApplyManager::op_apply_start(uint64_t op)
   assert(!blocked);
   assert(op > committed_seq);
   open_ops++;
-  applying_seq_set.insert(op);
-
   return op;
 }
 
@@ -147,8 +145,7 @@ void JournalingObjectStore::ApplyManager::op_apply_finish(uint64_t op)
   if (blocked) {
     blocked_cond.Signal();
   }
-  
-  applying_seq_set.erase(op);
+
   // there can be multiple applies in flight; track the max value we
   // note.  note that we can't _read_ this value and learn anything
   // meaningful unless/until we've quiesced all in-flight applies.
@@ -196,7 +193,6 @@ bool JournalingObjectStore::ApplyManager::commit_start()
     dout(10) << "commit_start max_applied_seq " << max_applied_seq
 	     << ", open_ops " << open_ops
 	     << dendl;
-  /*
     blocked = true;
     while (open_ops > 0) {
       dout(10) << "commit_start waiting for " << open_ops << " open ops to drain" << dendl;
@@ -218,18 +214,9 @@ bool JournalingObjectStore::ApplyManager::commit_start()
       dout(10) << "commit_start committing " << committing_seq
 	       << ", still blocked" << dendl;
     }
-  */
-  
-   set<uint64_t>::iterator it = applying_seq_set.begin();
-   if(it== applying_seq_set.end())
-        _committing_seq = committing_seq = max_applied_seq; //init set 1
-   else
-       _committing_seq = committing_seq = *it;
-
-   dout(10) << "commit_start committing " << committing_seq
-               << ", still blocked" << dendl;
-   ret = true;
   }
+  ret = true;
+
  out:
   if (journal)
     journal->commit_start(_committing_seq);  // tell the journal too
