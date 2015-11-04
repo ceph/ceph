@@ -61,6 +61,11 @@ rbd_SOURCES = rbd.cc
 rbd_LDADD = $(LIBKRBD) $(LIBRBD) $(LIBRADOS) $(CEPH_GLOBAL)
 if LINUX
 bin_PROGRAMS += rbd
+
+rbd_use_SOURCES = rbd-use.cc
+rbd_use_LDADD = $(LIBRBD) $(LIBRADOS) $(CEPH_GLOBAL)
+bin_PROGRAMS += rbd-use
+
 endif # LINUX
 
 endif # WITH_RBD
