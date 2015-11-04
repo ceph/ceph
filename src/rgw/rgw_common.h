@@ -1046,6 +1046,7 @@ struct req_state {
    ACLOwner bucket_owner;
    ACLOwner owner;
 
+   string zonegroup_name;
    string zonegroup_endpoint;
    string bucket_instance_id;
    int bucket_instance_shard_id;

@@ -2688,7 +2688,6 @@ public:
     while (!going_down()) {
       int ret = sync.init();
       if (ret >= 0) {
-        initialized = true;
         break;
       }
       /* we'll be back! */

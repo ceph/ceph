@@ -434,7 +434,7 @@ void RGWGetBucketLocation_ObjStore_S3::send_response()
   string api_name;
 
   RGWZoneGroup zonegroup;
-  int ret = store->current_period.get_zonegroup(zonegroup, zonegroup_id);  
+  int ret = store->get_zonegroup(zonegroup_id, zonegroup);  
   if (!ret) {
     api_name = zonegroup.api_name;
   } else  {
