@@ -8,8 +8,8 @@ optional arguments:
   -v, --verbose      be more verbose
   --dry-run          Instead of sending the email, just print it
   --email EMAIL      address to email test failures to
-  --timeout TIMEOUT  how many seconds to wait for all tests to finish (default
-                     no wait)
+  --timeout TIMEOUT  how many seconds to wait for all tests to finish
+                     [default: 0]
   --archive-dir DIR  path under which results for the suite are stored
   --name NAME        name of the suite
 """
