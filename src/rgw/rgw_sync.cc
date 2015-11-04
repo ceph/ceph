@@ -540,7 +540,7 @@ class RGWFetchAllMetaCR : public RGWCoroutine {
   int num_shards;
 
 
-  int req_ret;
+  int ret_status;
 
   list<string> sections;
   list<string>::iterator sections_iter;
@@ -559,7 +559,7 @@ public:
   RGWFetchAllMetaCR(RGWMetaSyncEnv *_sync_env, int _num_shards,
                     map<uint32_t, rgw_meta_sync_marker>& _markers) : RGWCoroutine(_sync_env->cct), sync_env(_sync_env),
 						      num_shards(_num_shards),
-						      req_ret(0), entries_index(NULL), lease_cr(NULL), lost_lock(false), failed(false), markers(_markers) {
+						      ret_status(0), entries_index(NULL), lease_cr(NULL), lost_lock(false), failed(false), markers(_markers) {
   }
 
   ~RGWFetchAllMetaCR() {
@@ -644,6 +644,8 @@ public:
         }
         iter = result.begin();
         for (; iter != result.end(); ++iter) {
+          RGWRados *store;
+          int ret;
           yield {
             if (!lease_cr->is_locked()) {
               lost_lock = true;
@@ -651,7 +653,15 @@ public:
             }
 	    ldout(cct, 20) << "list metadata: section=" << *sections_iter << " key=" << *iter << dendl;
 	    string s = *sections_iter + ":" + *iter;
-	    if (!entries_index->append(s)) {
+            int shard_id;
+            store = sync_env->store;
+            ret = store->meta_mgr->get_log_shard_id(*sections_iter, *iter, &shard_id);
+            if (ret < 0) {
+              ldout(cct, 0) << "ERROR: could not determine shard id for " << *sections_iter << ":" << *iter << dendl;
+              ret_status = ret;
+              break;
+            }
+	    if (!entries_index->append(s, shard_id)) {
               break;
             }
 	  }
@@ -689,6 +699,11 @@ public:
       if (lost_lock) {
         yield return set_cr_error(-EBUSY);
       }
+
+      if (ret_status < 0) {
+        yield return set_cr_error(ret_status);
+      }
+
       yield return set_cr_done();
     }
     return 0;

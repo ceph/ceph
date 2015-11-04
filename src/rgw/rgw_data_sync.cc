@@ -564,10 +564,10 @@ public:
             char buf[16];
             snprintf(buf, sizeof(buf), ":%d", i);
             s = key + buf;
-            yield entries_index->append(s);
+            yield entries_index->append(s, store->data_log->get_log_shard_id(meta_info.data.get_bucket_info().bucket, i));
           }
         } else {
-          yield entries_index->append(key);
+          yield entries_index->append(key, store->data_log->get_log_shard_id(meta_info.data.get_bucket_info().bucket, -1));
         }
       }
 

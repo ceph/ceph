@@ -142,6 +142,7 @@ public:
   RGWMetadataLog(CephContext *_cct, RGWRados *_store) : cct(_cct), store(_store), prefix(META_LOG_OBJ_PREFIX), lock("RGWMetaLog::lock") {}
 
   int add_entry(RGWRados *store, RGWMetadataHandler *handler, const string& section, const string& key, bufferlist& bl);
+  int get_log_shard_id(RGWRados *store, RGWMetadataHandler *handler, const string& section, const string& key);
   int store_entries_in_shard(RGWRados *store, list<cls_log_entry>& entries, int shard_id, librados::AioCompletion *completion);
 
   struct LogListCtx {
@@ -223,7 +224,7 @@ public:
 
   int register_handler(RGWMetadataHandler *handler);
 
-  RGWMetadataHandler *get_handler(const char *type);
+  RGWMetadataHandler *get_handler(const string& type);
 
   int store_md_log_entries(list<cls_log_entry>& entries, int shard_id, librados::AioCompletion *completion);
 
@@ -247,6 +248,17 @@ public:
   int unlock(string& metadata_key, string& owner_id);
 
   RGWMetadataLog *get_log() { return md_log; }
+
+  int get_log_shard_id(const string& section, const string& key, int *shard_id) {
+    RGWMetadataHandler *handler = get_handler(section);
+    if (!handler) {
+      return -EINVAL;
+    }
+
+    *shard_id = md_log->get_log_shard_id(store, handler, section, key);
+
+    return 0;
+  }
 };
 
 #endif

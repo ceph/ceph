@@ -1263,6 +1263,12 @@ void RGWDataChangesLog::update_renewed(rgw_bucket_shard& bs, utime_t& expiration
   status->cur_expiration = expiration;
 }
 
+int RGWDataChangesLog::get_log_shard_id(rgw_bucket& bucket, int shard_id) {
+  rgw_bucket_shard bs(bucket, shard_id);
+
+  return choose_oid(bs);
+}
+
 int RGWDataChangesLog::add_entry(rgw_bucket& bucket, int shard_id) {
   if (!store->need_to_log_data())
     return 0;
