@@ -664,9 +664,14 @@ class RGWQuotaHandlerImpl : public RGWQuotaHandler {
   RGWRados *store;
   RGWBucketStatsCache bucket_stats_cache;
   RGWUserStatsCache user_stats_cache;
+  RGWQuotaInfo def_bucket_quota;
+  RGWQuotaInfo def_user_quota;
 
   int check_quota(const char *entity, RGWQuotaInfo& quota, RGWStorageStats& stats,
                   uint64_t num_objs, uint64_t size_kb) {
+    if (!quota.enabled)
+      return 0;
+
     ldout(store->ctx(), 20) << entity << " quota: max_objects=" << quota.max_objects
                             << " max_size_kb=" << quota.max_size_kb << dendl;
 
@@ -687,12 +692,29 @@ class RGWQuotaHandlerImpl : public RGWQuotaHandler {
     return 0;
   }
 public:
-  RGWQuotaHandlerImpl(RGWRados *_store, bool quota_threads) : store(_store), bucket_stats_cache(_store), user_stats_cache(_store, quota_threads) {}
+  RGWQuotaHandlerImpl(RGWRados *_store, bool quota_threads) : store(_store), bucket_stats_cache(_store), user_stats_cache(_store, quota_threads) {
+    if (store->ctx()->_conf->rgw_bucket_default_quota_max_objects >= 0) {
+      def_bucket_quota.max_objects = store->ctx()->_conf->rgw_bucket_default_quota_max_objects;
+      def_bucket_quota.enabled = true;
+    }
+    if (store->ctx()->_conf->rgw_bucket_default_quota_max_size >= 0) {
+      def_bucket_quota.max_size_kb = store->ctx()->_conf->rgw_bucket_default_quota_max_size;
+      def_bucket_quota.enabled = true;
+    }
+    if (store->ctx()->_conf->rgw_user_default_quota_max_objects >= 0) {
+      def_user_quota.max_objects = store->ctx()->_conf->rgw_user_default_quota_max_objects;
+      def_user_quota.enabled = true;
+    }
+    if (store->ctx()->_conf->rgw_user_default_quota_max_size >= 0) {
+      def_user_quota.max_size_kb = store->ctx()->_conf->rgw_user_default_quota_max_size;
+      def_user_quota.enabled = true;
+    }
+  }
   virtual int check_quota(const string& user, rgw_bucket& bucket,
                           RGWQuotaInfo& user_quota, RGWQuotaInfo& bucket_quota,
 			  uint64_t num_objs, uint64_t size) {
 
-    if (!bucket_quota.enabled && !user_quota.enabled)
+    if (!bucket_quota.enabled && !user_quota.enabled && !def_bucket_quota.enabled && !def_user_quota.enabled)
       return 0;
 
     uint64_t size_kb = rgw_rounded_objsize_kb(size);
@@ -715,16 +737,28 @@ public:
         return ret;
     }
 
-    if (user_quota.enabled) {
+    if (def_bucket_quota.enabled) {
+      ret = check_quota("def_bucket", def_bucket_quota, bucket_stats, num_objs, size_kb);
+      if (ret < 0)
+        return ret;
+    }
+
+    if (user_quota.enabled || def_user_quota.enabled) {
       RGWStorageStats user_stats;
 
       ret = user_stats_cache.get_stats(user, bucket, user_stats, user_quota);
       if (ret < 0)
         return ret;
 
-      ret = check_quota("user", user_quota, user_stats, num_objs, size_kb);
-      if (ret < 0)
-        return ret;
+      if (user_quota.enabled) {
+	ret = check_quota("user", user_quota, user_stats, num_objs, size_kb);
+	if (ret < 0)
+	  return ret;
+      } else if (def_user_quota.enabled) {
+        ret = check_quota("def_user", def_user_quota, user_stats, num_objs, size_kb);
+        if (ret < 0)
+          return ret;
+      }
     }
 
     return 0;
