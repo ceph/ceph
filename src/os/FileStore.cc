@@ -4985,6 +4985,9 @@ int FileStore::_destroy_collection(coll_t c)
 
     r = from->prep_delete();
   }
+  //collection directory remove, the Index alse free.
+  if (r >= 0)
+    index_manager.remove_index(c);
 
  out:
   // destroy parallel temp collection, too

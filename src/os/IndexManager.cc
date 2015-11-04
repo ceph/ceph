@@ -134,3 +134,12 @@ int IndexManager::get_index(coll_t c, const string& baseDir, Index *index) {
   }
   return 0;
 }
+
+void IndexManager::remove_index(coll_t c) {
+  Mutex::Locker l(lock);
+  ceph::unordered_map<coll_t, CollectionIndex* > ::iterator it = col_indices.find(c);
+  if (it != col_indices.end()) {
+    delete it->second;
+    col_indices.erase(it);
+  }
+}
