@@ -54,17 +54,20 @@ class RGWPostRESTResourceCR : public RGWSimpleCoroutine {
   RGWRESTConn *conn;
   RGWHTTPManager *http_manager;
   string path;
-  rgw_http_param_pair *params;
+  param_list_t params;
   T *result;
   S input;
 
   RGWRESTPostResource *http_op;
 
 public:
-  RGWPostRESTResourceCR(CephContext *_cct, RGWRESTConn *_conn, RGWHTTPManager *_http_manager,
-			const string& _path, rgw_http_param_pair *_params, S& _input,
-			T *_result) : RGWSimpleCoroutine(_cct), conn(_conn), http_manager(_http_manager),
-                                      path(_path), params(_params), result(_result), input(_input), http_op(NULL) {}
+  RGWPostRESTResourceCR(CephContext *_cct, RGWRESTConn *_conn,
+                        RGWHTTPManager *_http_manager, const string& _path,
+                        rgw_http_param_pair *_params, S& _input, T *_result)
+    : RGWSimpleCoroutine(_cct), conn(_conn), http_manager(_http_manager),
+      path(_path), params(make_param_list(_params)), result(_result),
+      input(_input), http_op(NULL)
+  {}
 
   int send_request() {
     http_op = new RGWRESTPostResource(conn, path, params, NULL, http_manager);

@@ -264,10 +264,18 @@ class RGWRESTPostResource : public RefCountedObject {
   RGWHTTPManager *mgr;
   RGWRESTStreamRWRequest req;
 
+  void init_common(param_list_t *extra_headers);
+
 public:
   RGWRESTPostResource(RGWRESTConn *_conn,
 		      const string& _resource,
 		      const rgw_http_param_pair *pp,
+		      param_list_t *extra_headers,
+		      RGWHTTPManager *_mgr);
+
+  RGWRESTPostResource(RGWRESTConn *_conn,
+		      const string& _resource,
+		      param_list_t& params,
 		      param_list_t *extra_headers,
 		      RGWHTTPManager *_mgr);
 
