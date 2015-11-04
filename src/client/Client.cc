@@ -122,7 +122,9 @@ using namespace std;
 #define O_RSYNC 0x0
 #endif
 
-
+#ifndef O_DIRECT
+#define O_DIRECT 0x0
+#endif
 
 void client_flush_set_callback(void *p, ObjectCacher::ObjectSet *oset)
 {
@@ -7416,6 +7418,9 @@ retry:
   if (r < 0)
     return r;
 
+  if (f->flags & O_DIRECT)
+    have &= ~CEPH_CAP_FILE_CACHE;
+
   Mutex uninline_flock("Clinet::_read_uninline_data flock");
   Cond uninline_cond;
   bool uninline_done = false;
@@ -7461,6 +7466,9 @@ retry:
     if (r < 0)
       goto done;
   } else {
+    if (f->flags & O_DIRECT)
+      _flush_range(in, offset, size);
+
     bool checkeof = false;
     r = _read_sync(f, offset, size, bl, &checkeof);
     if (r < 0)
@@ -7842,6 +7850,9 @@ int Client::_write(Fh *f, int64_t offset, uint64_t size, const char *buf,
   if (r < 0)
     return r;
 
+  if (f->flags & O_DIRECT)
+    have &= ~CEPH_CAP_FILE_BUFFER;
+
   ldout(cct, 10) << " snaprealm " << *in->snaprealm << dendl;
 
   Mutex uninline_flock("Clinet::_write_uninline_data flock");
@@ -7903,6 +7914,9 @@ int Client::_write(Fh *f, int64_t offset, uint64_t size, const char *buf,
       _flush_range(in, offset, size);
     }
   } else {
+    if (f->flags & O_DIRECT)
+      _flush_range(in, offset, size);
+
     // simple, non-atomic sync write
     Mutex flock("Client::_write flock");
     Cond cond;
