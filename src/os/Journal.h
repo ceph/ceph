@@ -12,7 +12,6 @@
  * 
  */
 
-
 #ifndef CEPH_JOURNAL_H
 #define CEPH_JOURNAL_H
 
