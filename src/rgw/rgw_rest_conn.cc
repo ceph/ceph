@@ -263,6 +263,22 @@ RGWRESTPostResource::RGWRESTPostResource(RGWRESTConn *_conn,
     params(make_param_list(pp)), cb(bl), mgr(_mgr),
     req(cct, "POST", conn->get_url(), &cb, NULL, NULL)
 {
+  init_common(extra_headers);
+}
+
+RGWRESTPostResource::RGWRESTPostResource(RGWRESTConn *_conn,
+                                         const string& _resource,
+		                         param_list_t& params,
+                                         param_list_t *extra_headers,
+                                         RGWHTTPManager *_mgr)
+  : cct(_conn->get_ctx()), conn(_conn), resource(_resource), params(params),
+    cb(bl), mgr(_mgr), req(cct, "POST", conn->get_url(), &cb, NULL, NULL)
+{
+  init_common(extra_headers);
+}
+
+void RGWRESTPostResource::init_common(param_list_t *extra_headers)
+{
   params.push_back(param_pair_t(RGW_SYS_PARAM_PREFIX "zonegroup", conn->get_zonegroup()));
 
   if (extra_headers) {
