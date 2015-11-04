@@ -10,11 +10,12 @@ from textwrap import fill
 import teuthology
 from teuthology.config import config
 from teuthology import misc
-from teuthology import ls
 from .job_status import get_status
-from .report import ResultsSerializer
+from .report import ResultsReporter
 
 log = logging.getLogger(__name__)
+
+UNFINISHED_STATUSES = ('queued', 'running', 'waiting')
 
 
 def main(args):
@@ -36,21 +37,26 @@ def main(args):
 
 
 def results(archive_dir, name, email, timeout, dry_run):
-    archive_base = os.path.split(archive_dir)[0]
-    serializer = ResultsSerializer(archive_base)
     starttime = time.time()
 
     if timeout:
         log.info('Waiting up to %d seconds for tests to finish...', timeout)
-    while serializer.running_jobs_for_run(name) and timeout > 0:
+
+    reporter = ResultsReporter()
+    while timeout > 0:
         if time.time() - starttime > timeout:
             log.warn('test(s) did not finish before timeout of %d seconds',
                      timeout)
             break
+        jobs = reporter.get_jobs(name, fields=['job_id', 'status'])
+        unfinished_jobs = [job for job in jobs if job['status'] in
+                           UNFINISHED_STATUSES]
+        if not unfinished_jobs:
+            log.info('Tests finished! gathering results...')
+            break
         time.sleep(10)
-    log.info('Tests finished! gathering results...')
 
-    (subject, body) = build_email_body(name, archive_dir)
+    (subject, body) = build_email_body(name)
 
     try:
         if email and dry_run:
@@ -108,61 +114,53 @@ def email_results(subject, from_, to, body):
     smtp.quit()
 
 
-def build_email_body(name, archive_dir):
+def build_email_body(name, _reporter=None):
     failed = {}
     hung = {}
     passed = {}
+    reporter = _reporter or ResultsReporter()
+    fields = ('job_id', 'status', 'description', 'duration', 'failure_reason',
+              'sentry_event', 'log_href')
+    jobs = reporter.get_jobs(name, fields=fields)
+    jobs.sort(key=lambda job: job['job_id'])
 
-    for job in ls.get_jobs(archive_dir):
-        job_dir = os.path.join(archive_dir, job)
-        summary_file = os.path.join(job_dir, 'summary.yaml')
+    for job in jobs:
+        job_id = job['job_id']
+        description = job['description']
+        duration = int(job['duration'] or 0)
 
         # Every job gets a link to e.g. pulpito's pages
-        info_url = misc.get_results_url(name, job)
+        info_url = misc.get_results_url(name, job_id)
         if info_url:
             info_line = email_templates['info_url_templ'].format(info=info_url)
         else:
             info_line = ''
 
-        # Unfinished jobs will have no summary.yaml
-        if not os.path.exists(summary_file):
-            info_file = os.path.join(job_dir, 'info.yaml')
+        # Unfinished jobs are 'hung' FIXME
+        if job['status'] in UNFINISHED_STATUSES:
 
-            desc = ''
-            if os.path.exists(info_file):
-                with file(info_file) as f:
-                    info = yaml.safe_load(f)
-                    desc = info['description']
-
-            hung[job] = email_templates['hung_templ'].format(
-                job_id=job,
-                desc=desc,
+            hung[job_id] = email_templates['hung_templ'].format(
+                job_id=job_id,
+                desc=description,
                 info_line=info_line,
             )
             continue
 
-        with file(summary_file) as f:
-            summary = yaml.safe_load(f)
-
-        if get_status(summary) == 'pass':
-            passed[job] = email_templates['pass_templ'].format(
-                job_id=job,
-                desc=summary.get('description'),
-                time=int(summary.get('duration', 0)),
+        if job['status'] == 'pass':
+            passed[job_id] = email_templates['pass_templ'].format(
+                job_id=job_id,
+                desc=description,
+                time=duration,
                 info_line=info_line,
             )
         else:
-            log = misc.get_http_log_path(archive_dir, job)
+            log_dir_url = job['log_href'].rstrip('teuthology.yaml')
             if log:
-                log_line = email_templates['fail_log_templ'].format(log=log)
+                log_line = email_templates['fail_log_templ'].format(
+                    log=log_dir_url)
             else:
                 log_line = ''
-            # Transitioning from sentry_events -> sentry_event
-            sentry_events = summary.get('sentry_events')
-            if sentry_events:
-                sentry_event = sentry_events[0]
-            else:
-                sentry_event = summary.get('sentry_event', '')
+            sentry_event = job.get('sentry_event')
             if sentry_event:
                 sentry_line = email_templates['fail_sentry_templ'].format(
                     sentry_event=sentry_event)
@@ -173,13 +171,13 @@ def build_email_body(name, archive_dir):
             # string into multiple lines of a maximum width as specified. We
             # want 75 characters here so that when we indent by 4 on the next
             # line, we have 79-character exception paragraphs.
-            reason = fill(summary.get('failure_reason'), 75)
+            reason = fill(job['failure_reason'] or '', 75)
             reason = '\n'.join(('    ') + line for line in reason.splitlines())
 
-            failed[job] = email_templates['fail_templ'].format(
-                job_id=job,
-                desc=summary.get('description'),
-                time=int(summary.get('duration', 0)),
+            failed[job_id] = email_templates['fail_templ'].format(
+                job_id=job_id,
+                desc=description,
+                time=duration,
                 reason=reason,
                 info_line=info_line,
                 log_line=log_line,
@@ -217,10 +215,15 @@ def build_email_body(name, archive_dir):
             jobs=''.join(passed.values()),
         )
 
+    if config.archive_server:
+        log_root = os.path.join(config.archive_server, name, '')
+    else:
+        log_root = None
+
     body = email_templates['body_templ'].format(
         name=name,
         info_root=misc.get_results_url(name),
-        log_root=misc.get_http_log_path(archive_dir),
+        log_root=log_root,
         fail_count=len(failed),
         hung_count=len(hung),
         pass_count=len(passed),
