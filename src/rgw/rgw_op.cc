@@ -409,8 +409,11 @@ static int rgw_build_policies(RGWRados *store, struct req_state *s, bool only_bu
 
     RGWZoneGroup zonegroup;
     ret = store->get_zonegroup(s->bucket_info.zonegroup, zonegroup);
-    if (!ret && !zonegroup.endpoints.empty()) {
-      s->zonegroup_endpoint = zonegroup.endpoints.front();
+    if (!ret) {
+      if (!zonegroup.endpoints.empty()) {
+	s->zonegroup_endpoint = zonegroup.endpoints.front();
+      }
+      s->zonegroup_name = zonegroup.get_name();
     }
 
     if (s->bucket_exists && !store->get_zonegroup().equals(s->bucket_info.zonegroup)) {

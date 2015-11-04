@@ -425,7 +425,7 @@ void RGWGetBucketLocation_ObjStore_S3::send_response()
   dump_start(s);
 
   string location_constraint(s->bucket_info.zonegroup);
-  if (s->bucket_info.zonegroup == "default")
+  if (s->zonegroup_name  == "default")
     location_constraint.clear();
 
   s->formatter->dump_format_ns("LocationConstraint",
