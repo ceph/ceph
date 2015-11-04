@@ -47,6 +47,8 @@ namespace {
   bool do_delete = false;
   bool do_hexdump = false;
 
+  bool object_open = false;
+
   string bucket_name = "sorry_dave";
   string object_name = "jocaml";
 
@@ -226,6 +228,7 @@ TEST(LibRGW, OBJ_OPEN) {
   if (do_get || do_put || do_readv || do_writev) {
     int ret = rgw_open(fs, object_fh, 0 /* flags */);
     ASSERT_EQ(ret, 0);
+    object_open = true;
   }
 }
 
@@ -361,10 +364,15 @@ TEST(LibRGW, CLEANUP) {
       uio->uio_rele(uio, RGW_UIO_NONE);
     }
   }
-  int ret = rgw_close(fs, object_fh, 0 /* flags */);
-  ASSERT_EQ(ret, 0);
-  ret = rgw_fh_rele(fs, object_fh, 0 /* flags */);
-  ASSERT_EQ(ret, 0);
+  int ret;
+  if (object_open) {
+    ret = rgw_close(fs, object_fh, 0 /* flags */);
+    ASSERT_EQ(ret, 0);
+  }
+  if (object_fh) {
+    ret = rgw_fh_rele(fs, object_fh, 0 /* flags */);
+    ASSERT_EQ(ret, 0);
+  }
   ret = rgw_fh_rele(fs, bucket_fh, 0 /* flags */);
   ASSERT_EQ(ret, 0);
 }
