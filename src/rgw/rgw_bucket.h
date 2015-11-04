@@ -442,6 +442,7 @@ public:
 
   int choose_oid(const rgw_bucket_shard& bs);
   int add_entry(rgw_bucket& bucket, int shard_id);
+  int get_log_shard_id(rgw_bucket& bucket, int shard_id);
   int renew_entries();
   int list_entries(int shard, utime_t& start_time, utime_t& end_time, int max_entries,
 		   list<rgw_data_change_log_entry>& entries,
