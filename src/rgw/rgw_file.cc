@@ -172,7 +172,7 @@ int rgw_unlink(struct rgw_fs *rgw_fs, struct rgw_file_handle* parent,
 }
 
 /*
-  lookup a directory or file
+  lookup object by name (POSIX style)
 */
 int rgw_lookup(struct rgw_fs *rgw_fs,
 	      struct rgw_file_handle *parent_fh, const char* path,
@@ -197,6 +197,26 @@ int rgw_lookup(struct rgw_fs *rgw_fs,
 
   return 0;
 } /* rgw_lookup */
+
+/*
+  lookup object by handle (NFS style)
+*/
+int rgw_lookup_handle(struct rgw_fs *rgw_fs, struct rgw_fh_hk fh_hk,
+		      struct rgw_file_handle **fh, uint32_t flags)
+{
+  RGWLibFS *fs = static_cast<RGWLibFS*>(rgw_fs->fs_private);
+
+  RGWFileHandle* rgw_fh = fs->lookup_handle(fh_hk);
+  if (! rgw_fh) {
+    /* not found */
+    return ENOENT;
+  }
+
+  struct rgw_file_handle *rfh = rgw_fh->get_fh();
+  *fh = rfh;
+
+  return 0;
+}
 
 /*
  * release file handle
