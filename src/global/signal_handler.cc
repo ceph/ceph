@@ -42,7 +42,7 @@ void install_sighandler(int signum, signal_handler_t handler, int flags)
     char buf[1024];
     snprintf(buf, sizeof(buf), "install_sighandler: sigaction returned "
 	    "%d when trying to install a signal handler for %s\n",
-	     ret, sys_siglist[signum]);
+	     ret, sig_str(signum));
     dout_emergency(buf);
     exit(1);
   }
@@ -80,7 +80,7 @@ static void handle_fatal_signal(int signum)
   // presumably dump core-- will handle it.
   char buf[1024];
   snprintf(buf, sizeof(buf), "*** Caught signal (%s) **\n "
-	    "in thread %llx\n", sys_siglist[signum], (unsigned long long)pthread_self());
+	    "in thread %llx\n", sig_str(signum), (unsigned long long)pthread_self());
   dout_emergency(buf);
   pidfile_remove();
 

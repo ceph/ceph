@@ -1057,6 +1057,9 @@ AC_CHECK_FUNC([pthread_spin_init],
 LIBS="$saved_LIBS"
 CFLAGS="$saved_CFLAGS"
 
+
+AC_CHECK_DECL([sys_siglist],[AC_DEFINE(HAVE_SYS_SIGLIST, 1, [Define if you have sys_siglist])],[], [#include <signal.h> #include <string.h>])
+
 AC_CHECK_TYPES([int8_t, uint8_t, int16_t, uint16_t, int32_t, uint32_t,
   int64_t, uint64_t])
 
