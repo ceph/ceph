@@ -241,7 +241,7 @@ struct rgw_uio {
 typedef struct rgw_uio rgw_uio;
 
 int rgw_readv(struct rgw_fs *rgw_fs,
-	      rgw_file_handle *fh, rgw_uio *uio);
+	      struct rgw_file_handle *fh, rgw_uio *uio);
   
 int rgw_writev(struct rgw_fs *rgw_fs,
 	      struct rgw_file_handle *fh, rgw_uio *uio);
