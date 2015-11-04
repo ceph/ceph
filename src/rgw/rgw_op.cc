@@ -1547,6 +1547,11 @@ void RGWStatBucket::pre_exec()
 
 void RGWStatBucket::execute()
 {
+  if (!s->bucket_exists) {
+    op_ret = -ERR_NO_SUCH_BUCKET;
+    return;
+  }
+
   RGWUserBuckets buckets;
   bucket.bucket = s->bucket;
   buckets.add(bucket);
@@ -1599,6 +1604,11 @@ void RGWListBucket::pre_exec()
 
 void RGWListBucket::execute()
 {
+  if (!s->bucket_exists) {
+    op_ret = -ERR_NO_SUCH_BUCKET;
+    return;
+  }
+
   op_ret = get_params();
   if (op_ret < 0)
     return;
@@ -1865,6 +1875,11 @@ void RGWDeleteBucket::execute()
   if (s->bucket_name.empty())
     return;
 
+  if (!s->bucket_exists) {
+    ldout(s->cct, 0) << "ERROR: bucket " << s->bucket_name << " not found" << dendl;
+    op_ret = -ERR_NO_SUCH_BUCKET;
+    return;
+  }
   RGWObjVersionTracker ot;
   ot.read_version = s->bucket_info.ep_objv;
 
@@ -2201,6 +2216,11 @@ void RGWPutObj::execute()
   op_ret = -EINVAL;
   if (s->object.empty()) {
     goto done;
+  }
+
+  if (!s->bucket_exists) {
+    op_ret = -ERR_NO_SUCH_BUCKET;
+    return;
   }
 
   op_ret = get_params();
@@ -2867,6 +2887,11 @@ void RGWDeleteObj::pre_exec()
 
 void RGWDeleteObj::execute()
 {
+  if (!s->bucket_exists) {
+    op_ret = -ERR_NO_SUCH_BUCKET;
+    return;
+  }
+
   op_ret = get_params();
   if (op_ret < 0) {
     return;
