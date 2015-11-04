@@ -2055,24 +2055,18 @@ int RGWPutObjProcessor_Multipart::do_complete(string& etag, time_t *mtime, time_
 }
 
 
-RGWPutObjProcessor *RGWPutObj::select_processor(RGWObjectCtx& obj_ctx, bool *is_multipart)
+RGWPutObjProcessor *RGWPutObj::select_processor(RGWObjectCtx& obj_ctx, bool is_multipart)
 {
   RGWPutObjProcessor *processor;
 
-  bool multipart = s->info.args.exists("uploadId");
-
   uint64_t part_size = s->cct->_conf->rgw_obj_stripe_size;
 
-  if (!multipart) {
+  if (!is_multipart) {
     processor = new RGWPutObjProcessor_Atomic(obj_ctx, s->bucket_info, s->bucket, s->object.name, part_size, s->req_id, s->bucket_info.versioning_enabled());
     (static_cast<RGWPutObjProcessor_Atomic *>(processor))->set_olh_epoch(olh_epoch);
     (static_cast<RGWPutObjProcessor_Atomic *>(processor))->set_version_id(version_id);
   } else {
     processor = new RGWPutObjProcessor_Multipart(obj_ctx, s->bucket_info, part_size, s);
-  }
-
-  if (is_multipart) {
-    *is_multipart = multipart;
   }
 
   return processor;
@@ -2225,10 +2219,11 @@ void RGWPutObj::execute()
     ldout(s->cct, 15) << "supplied_md5=" << supplied_md5 << dendl;
   }
 
+  multipart = s->info.args.exists("uploadId");
   if (!chunked_upload) { /* with chunked upload we don't know how big is the upload.
                             we also check sizes at the end anyway */
     op_ret = store->check_quota(s->bucket_owner.get_id(), s->bucket,
-				user_quota, bucket_quota, s->content_length);
+                             user_quota, bucket_quota, multipart?0:1, s->content_length);
     if (op_ret < 0) {
       ldout(s->cct, 20) << "check_quota() returned ret=" << op_ret << dendl;
       goto done;
@@ -2240,7 +2235,7 @@ void RGWPutObj::execute()
     supplied_md5[sizeof(supplied_md5) - 1] = '\0';
   }
 
-  processor = select_processor(*static_cast<RGWObjectCtx *>(s->obj_ctx), &multipart);
+  processor = select_processor(*static_cast<RGWObjectCtx *>(s->obj_ctx), multipart);
 
   op_ret = processor->prepare(store, NULL);
   if (op_ret < 0) {
@@ -2287,7 +2282,7 @@ void RGWPutObj::execute()
       /* restart processing with different oid suffix */
 
       dispose_processor(processor);
-      processor = select_processor(*static_cast<RGWObjectCtx *>(s->obj_ctx), &multipart);
+      processor = select_processor(*static_cast<RGWObjectCtx *>(s->obj_ctx), multipart);
 
       string oid_rand;
       char buf[33];
@@ -2319,10 +2314,9 @@ void RGWPutObj::execute()
   perfcounter->inc(l_rgw_put_b, s->obj_size);
 
   op_ret = store->check_quota(s->bucket_owner.get_id(), s->bucket,
-			      user_quota, bucket_quota, s->obj_size);
+                           user_quota, bucket_quota, multipart?0:1, s->obj_size);
   if (op_ret < 0) {
-    ldout(s->cct, 20) << "second check_quota() returned ret=" << op_ret
-		      << dendl;
+    ldout(s->cct, 20) << "second check_quota() returned ret=" << op_ret << dendl;
     goto done;
   }
 
@@ -2448,7 +2442,7 @@ void RGWPostObj::execute()
   }
 
   op_ret = store->check_quota(s->bucket_owner.get_id(), s->bucket,
-			      user_quota, bucket_quota, s->content_length);
+                           user_quota, bucket_quota, 1, s->content_length);
   if (op_ret < 0) {
     goto done;
   }
@@ -2489,7 +2483,7 @@ void RGWPostObj::execute()
   s->obj_size = ofs;
 
   op_ret = store->check_quota(s->bucket_owner.get_id(), s->bucket,
-			      user_quota, bucket_quota, s->obj_size);
+                           user_quota, bucket_quota, 1, s->obj_size);
   if (op_ret < 0) {
     goto done;
   }
@@ -3561,6 +3555,11 @@ void RGWInitMultipart::execute()
     obj_op.meta.owner = s->owner.get_id();
     obj_op.meta.category = RGW_OBJ_CATEGORY_MULTIMETA;
     obj_op.meta.flags = PUT_OBJ_CREATE_EXCL;
+
+    op_ret = store->check_quota(s->bucket_owner.get_id(), s->bucket,
+                             user_quota, bucket_quota, 1, s->content_length);
+    if (op_ret == -ERR_QUOTA_EXCEEDED) 
+      return;
 
     op_ret = obj_op.write_meta(0, attrs);
   } while (op_ret == -EEXIST);

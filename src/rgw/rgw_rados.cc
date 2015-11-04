@@ -8866,9 +8866,10 @@ int RGWRados::cls_user_remove_bucket(rgw_obj& obj, const cls_user_bucket& bucket
 }
 
 int RGWRados::check_quota(const rgw_user& bucket_owner, rgw_bucket& bucket,
-                          RGWQuotaInfo& user_quota, RGWQuotaInfo& bucket_quota, uint64_t obj_size)
+                          RGWQuotaInfo& user_quota, RGWQuotaInfo& bucket_quota,
+                          uint64_t num_objs, uint64_t obj_size)
 {
-  return quota_handler->check_quota(bucket_owner, bucket, user_quota, bucket_quota, 1, obj_size);
+  return quota_handler->check_quota(bucket_owner, bucket, user_quota, bucket_quota, num_objs, obj_size);
 }
 
 void RGWRados::get_bucket_index_objects(const string& bucket_oid_base,

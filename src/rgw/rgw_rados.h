@@ -2217,7 +2217,7 @@ public:
   int cls_user_remove_bucket(rgw_obj& obj, const cls_user_bucket& bucket);
 
   int check_quota(const rgw_user& bucket_owner, rgw_bucket& bucket,
-                  RGWQuotaInfo& user_quota, RGWQuotaInfo& bucket_quota, uint64_t obj_size);
+                  RGWQuotaInfo& user_quota, RGWQuotaInfo& bucket_quota, uint64_t num_objs, uint64_t obj_size);
 
   string unique_id(uint64_t unique_num) {
     char buf[32];
