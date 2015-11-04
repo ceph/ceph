@@ -171,10 +171,7 @@ int RGWRESTConn::get_resource(const string& resource,
   list<pair<string, string> > params;
 
   if (extra_params) {
-    list<pair<string, string> >::iterator iter = extra_params->begin();
-    for (; iter != extra_params->end(); ++iter) {
-      params.push_back(*iter);
-    }
+    params.insert(params.end(), extra_params->begin(), extra_params->end());
   }
 
   params.push_back(pair<string, string>(RGW_SYS_PARAM_PREFIX "zonegroup", zone_group));
@@ -185,10 +182,7 @@ int RGWRESTConn::get_resource(const string& resource,
 
   map<string, string> headers;
   if (extra_headers) {
-    for (map<string, string>::iterator iter = extra_headers->begin();
-	 iter != extra_headers->end(); ++iter) {
-      headers[iter->first] = iter->second;
-    }
+    headers.insert(extra_params->begin(), extra_params->end());
   }
 
   ret = req.get_resource(key, headers, resource, mgr);
@@ -221,11 +215,10 @@ RGWRESTReadResource::RGWRESTReadResource(RGWRESTConn *_conn,
                                          const string& _resource,
 		                         list<pair<string, string> >& _params,
                                          list<pair<string, string> > *extra_headers,
-                                         RGWHTTPManager *_mgr) : cct(_conn->get_ctx()), conn(_conn), resource(_resource), cb(bl),
-                                                                 mgr(_mgr), req(cct, conn->get_url(), &cb, NULL, NULL) {
-  for (list<pair<string, string> >::iterator iter = _params.begin(); iter != _params.end(); ++iter) {
-    params.push_back(*iter);
-  }
+                                         RGWHTTPManager *_mgr)
+  : cct(_conn->get_ctx()), conn(_conn), resource(_resource), params(_params),
+    cb(bl), mgr(_mgr), req(cct, conn->get_url(), &cb, NULL, NULL)
+{
   init_common(extra_headers);
 }
 
@@ -234,10 +227,7 @@ void RGWRESTReadResource::init_common(list<pair<string, string> > *extra_headers
   params.push_back(pair<string, string>(RGW_SYS_PARAM_PREFIX "zonegroup", conn->get_zonegroup()));
 
   if (extra_headers) {
-    for (list<pair<string, string> >::iterator iter = extra_headers->begin();
-      iter != extra_headers->end(); ++iter) {
-      headers[iter->first] = iter->second;
-    }
+    headers.insert(extra_headers->begin(), extra_headers->end());
   }
 
   req.set_params(&params);
@@ -285,10 +275,7 @@ RGWRESTPostResource::RGWRESTPostResource(RGWRESTConn *_conn,
   params.push_back(pair<string, string>(RGW_SYS_PARAM_PREFIX "zonegroup", conn->get_zonegroup()));
 
   if (extra_headers) {
-    for (list<pair<string, string> >::iterator iter = extra_headers->begin();
-      iter != extra_headers->end(); ++iter) {
-      headers[iter->first] = iter->second;
-    }
+    headers.insert(extra_headers->begin(), extra_headers->end());
   }
 
   req.set_params(&params);
