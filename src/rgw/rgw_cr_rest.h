@@ -9,27 +9,22 @@ class RGWReadRESTResourceCR : public RGWSimpleCoroutine {
   RGWRESTConn *conn;
   RGWHTTPManager *http_manager;
   string path;
-  param_list_t param_list;
+  param_list_t params;
   T *result;
 
   RGWRESTReadResource *http_op;
 
 public:
-  RGWReadRESTResourceCR(CephContext *_cct, RGWRESTConn *_conn, RGWHTTPManager *_http_manager,
-			const string& _path, rgw_http_param_pair *params,
-			T *_result) : RGWSimpleCoroutine(_cct), conn(_conn), http_manager(_http_manager),
-                                      path(_path), result(_result), http_op(NULL) {
-     rgw_http_param_pair *pp = params;
-     while (pp && pp->key) {
-      string k = pp->key;
-      string v = (pp->val ? pp->val : "");
-      params_list.push_back(make_pair(k, v));
-      ++pp;
-    }
-  }
+  RGWReadRESTResourceCR(CephContext *_cct, RGWRESTConn *_conn,
+                        RGWHTTPManager *_http_manager, const string& _path,
+                        rgw_http_param_pair *params, T *_result)
+    : RGWSimpleCoroutine(_cct), conn(_conn), http_manager(_http_manager),
+      path(_path), params(make_param_list(params)), result(_result),
+      http_op(NULL)
+  {}
 
   int send_request() {
-    http_op = new RGWRESTReadResource(conn, path, params_list, NULL, http_manager);
+    http_op = new RGWRESTReadResource(conn, path, params, NULL, http_manager);
 
     http_op->set_user_info((void *)stack);
 
