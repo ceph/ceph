@@ -617,7 +617,7 @@ public:
                                                                 marker_oid(_marker_oid),
                                                                 sync_marker(_marker) {}
 
-  RGWCoroutine *store_marker(const string& new_marker) {
+  RGWCoroutine *store_marker(const string& new_marker, uint64_t index_pos) {
     sync_marker.marker = new_marker;
 
     ldout(store->ctx(), 20) << __func__ << "(): updating marker marker_oid=" << marker_oid << " marker=" << new_marker << dendl;
@@ -817,6 +817,8 @@ class RGWDataSyncShardCR : public RGWCoroutine {
 
   set<string>::iterator modified_iter;
 
+  int total_entries;
+
 
 public:
   RGWDataSyncShardCR(RGWRados *_store, RGWHTTPManager *_mgr, RGWAsyncRadosProcessor *_async_rados,
@@ -829,7 +831,8 @@ public:
                                                       source_zone(_source_zone),
 						      shard_id(_shard_id),
 						      sync_marker(_marker),
-                                                      marker_tracker(NULL), truncated(false), inc_lock("RGWDataSyncShardCR::inc_lock") {
+                                                      marker_tracker(NULL), truncated(false), inc_lock("RGWDataSyncShardCR::inc_lock"),
+                                                      total_entries(0) {
   }
 
   ~RGWDataSyncShardCR() {
@@ -869,6 +872,7 @@ public:
       set_marker_tracker(new RGWDataSyncShardMarkerTrack(store, http_manager, async_rados,
                                                          RGWDataSyncStatusManager::shard_obj_name(source_zone, shard_id),
                                                          sync_marker));
+      total_entries = sync_marker.pos;
       do {
         yield return call(new RGWRadosGetOmapKeysCR(store, pool, oid, sync_marker.marker, &entries, max_entries));
         if (retcode < 0) {
@@ -878,7 +882,8 @@ public:
         iter = entries.begin();
         for (; iter != entries.end(); ++iter) {
           ldout(store->ctx(), 20) << __func__ << ": full sync: " << iter->first << dendl;
-          marker_tracker->start(iter->first);
+          marker_tracker->start(iter->first, total_entries);
+          total_entries++;
             // fetch remote and write locally
           yield spawn(new RGWDataSyncSingleEntryCR(store, http_manager, async_rados, conn, source_zone, iter->first, iter->first, marker_tracker), false);
           if (retcode < 0) {
@@ -948,7 +953,7 @@ public:
               ldout(store->ctx(), 20) << __func__ << ": skipping sync of entry: " << log_iter->log_id << ":" << log_iter->entry.key << " sync already in progress for bucket shard" << dendl;
               continue;
             }
-            marker_tracker->start(log_iter->log_id);
+            marker_tracker->start(log_iter->log_id, 0);
             yield spawn(new RGWDataSyncSingleEntryCR(store, http_manager, async_rados, conn, source_zone, log_iter->entry.key, log_iter->log_id, marker_tracker), false);
             if (retcode < 0) {
               return set_cr_error(retcode);
@@ -1692,8 +1697,9 @@ public:
                                                                 marker_oid(_marker_oid),
                                                                 sync_marker(_marker) {}
 
-  RGWCoroutine *store_marker(const rgw_obj_key& new_marker) {
+  RGWCoroutine *store_marker(const rgw_obj_key& new_marker, uint64_t index_pos) {
     sync_marker.position = new_marker;
+    sync_marker.count = index_pos;
 
     map<string, bufferlist> attrs;
     sync_marker.encode_attr(attrs);
@@ -1721,7 +1727,7 @@ public:
                                                                 marker_oid(_marker_oid),
                                                                 sync_marker(_marker) {}
 
-  RGWCoroutine *store_marker(const string& new_marker) {
+  RGWCoroutine *store_marker(const string& new_marker, uint64_t index_pos) {
     sync_marker.position = new_marker;
 
     map<string, bufferlist> attrs;
@@ -1842,6 +1848,8 @@ class RGWBucketShardFullSyncCR : public RGWCoroutine {
   int spawn_window;
   rgw_obj_key list_marker;
 
+  int total_entries;
+
 public:
   RGWBucketShardFullSyncCR(RGWHTTPManager *_mgr, RGWAsyncRadosProcessor *_async_rados,
                            RGWRESTConn *_conn, RGWRados *_store,
@@ -1855,7 +1863,7 @@ public:
 									    bucket_id(_bucket_id), shard_id(_shard_id),
                                                                             bucket_info(_bucket_info),
                                                                             full_marker(_full_marker), marker_tracker(NULL),
-                                                                            spawn_window(BUCKET_SYNC_SPAWN_WINDOW) {}
+                                                                            spawn_window(BUCKET_SYNC_SPAWN_WINDOW), total_entries(0) {}
 
   ~RGWBucketShardFullSyncCR() {
     delete marker_tracker;
@@ -1871,6 +1879,8 @@ int RGWBucketShardFullSyncCR::operate()
     marker_tracker = new RGWBucketFullSyncShardMarkerTrack(store, async_rados, 
                                                            RGWBucketSyncStatusManager::status_oid(source_zone, bucket_name, bucket_id, shard_id),
                                                            full_marker);
+
+    total_entries = full_marker.count;
     do {
       yield {
         ldout(store->ctx(), 20) << __func__ << "(): listing bucket for full sync" << dendl;
@@ -1889,7 +1899,8 @@ int RGWBucketShardFullSyncCR::operate()
         ldout(store->ctx(), 20) << "[full sync] syncing object: " << bucket_name << ":" << bucket_id << ":" << shard_id << "/" << entries_iter->key << dendl;
         yield {
           bucket_list_entry& entry = *entries_iter;
-          marker_tracker->start(entry.key);
+          marker_tracker->start(entry.key, total_entries);
+          total_entries++;
           list_marker = entry.key;
           spawn(new RGWBucketSyncSingleEntryCR<rgw_obj_key>(store, async_rados, source_zone, bucket_info, shard_id,
                                                entry.key, entry.versioned_epoch, entry.mtime, CLS_RGW_OP_ADD, entry.key, marker_tracker), false);
@@ -1997,7 +2008,7 @@ int RGWBucketShardIncrementalSyncCR::operate()
           rgw_obj_key key(entries_iter->object, entries_iter->instance);
           ldout(store->ctx(), 20) << "[inc sync] syncing object: " << bucket_name << ":" << bucket_id << ":" << shard_id << "/" << key << dendl;
           rgw_bi_log_entry& entry = *entries_iter;
-          marker_tracker->start(entry.id);
+          marker_tracker->start(entry.id, 0);
           inc_marker.position = entry.id;
           uint64_t versioned_epoch = 0;
           if (entry.ver.pool < 0) {

@@ -530,8 +530,7 @@ public:
     }
   }
 
-  bool append(const string& entry) {
-    int shard_id = store->key_to_shard_id(entry, shards.size());
+  bool append(const string& entry, int shard_id) {
     return shards[shard_id]->append(entry);
   }
   bool finish() {
