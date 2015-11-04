@@ -839,8 +839,9 @@ public:
                                                                 marker_oid(_marker_oid),
                                                                 sync_marker(_marker) {}
 
-  RGWCoroutine *store_marker(const string& new_marker) {
+  RGWCoroutine *store_marker(const string& new_marker, uint64_t index_pos) {
     sync_marker.marker = new_marker;
+    sync_marker.pos = index_pos;
 
     ldout(sync_env->cct, 20) << __func__ << "(): updating marker marker_oid=" << marker_oid << " marker=" << new_marker << dendl;
     RGWRados *store = sync_env->store;
@@ -1022,6 +1023,8 @@ class RGWMetaSyncShardCR : public RGWCoroutine {
 
   bool can_adjust_marker;
 
+  int total_entries;
+
 public:
   RGWMetaSyncShardCR(RGWMetaSyncEnv *_sync_env,
 		     rgw_bucket& _pool,
@@ -1031,7 +1034,8 @@ public:
 						      shard_id(_shard_id),
 						      sync_marker(_marker),
                                                       marker_tracker(NULL), truncated(false), inc_lock("RGWMetaSyncShardCR::inc_lock"),
-                                                      lease_cr(NULL), lost_lock(false), reset_backoff(_reset_backoff), can_adjust_marker(false) {
+                                                      lease_cr(NULL), lost_lock(false), reset_backoff(_reset_backoff), can_adjust_marker(false),
+                                                      total_entries(0) {
     *reset_backoff = false;
   }
 
@@ -1162,6 +1166,9 @@ public:
                                                          sync_marker));
 
       marker = sync_marker.marker;
+
+      total_entries = sync_marker.pos;
+
       /* sync! */
       do {
         if (!lease_cr->is_locked()) {
@@ -1176,7 +1183,9 @@ public:
         iter = entries.begin();
         for (; iter != entries.end(); ++iter) {
           ldout(sync_env->cct, 20) << __func__ << ": full sync: " << iter->first << dendl;
-          marker_tracker->start(iter->first);
+          marker_tracker->start(iter->first, total_entries);
+
+          total_entries++;
             // fetch remote and write locally
           yield {
             RGWCoroutinesStack *stack = spawn(new RGWMetaSyncSingleEntryCR(sync_env, iter->first, iter->first, marker_tracker), false);
@@ -1306,7 +1315,7 @@ public:
           yield call(new RGWReadMDLogEntriesCR(sync_env, shard_id, &max_marker, INCREMENTAL_MAX_ENTRIES, &log_entries, &truncated));
           for (log_iter = log_entries.begin(); log_iter != log_entries.end(); ++log_iter) {
             ldout(sync_env->cct, 20) << __func__ << ":" << __LINE__ << ": shard_id=" << shard_id << " log_entry: " << log_iter->id << ":" << log_iter->section << ":" << log_iter->name << ":" << log_iter->timestamp << dendl;
-            marker_tracker->start(log_iter->id);
+            marker_tracker->start(log_iter->id, 0);
             raw_key = log_iter->section + ":" + log_iter->name;
             yield {
               RGWCoroutinesStack *stack = spawn(new RGWMetaSyncSingleEntryCR(sync_env, raw_key, log_iter->id, marker_tracker), false);
