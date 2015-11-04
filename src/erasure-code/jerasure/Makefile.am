@@ -48,7 +48,7 @@ libec_jerasure_generic_la_CXXFLAGS= ${AM_CXXFLAGS} \
 	-I$(srcdir)/erasure-code/jerasure/gf-complete/include \
 	-I$(srcdir)/erasure-code/jerasure/jerasure/include
 libec_jerasure_generic_la_LIBADD = $(LIBCRUSH) $(PTHREAD_LIBS) $(EXTRALIBS)
-libec_jerasure_generic_la_LDFLAGS = ${AM_LDFLAGS} -version-info 2:0:0
+libec_jerasure_generic_la_LDFLAGS = ${AM_LDFLAGS} -module -avoid-version -shared
 if LINUX
 libec_jerasure_generic_la_LDFLAGS += -export-symbols-regex '.*__erasure_code_.*'
 endif
@@ -70,7 +70,7 @@ libec_jerasure_neon_la_CXXFLAGS= ${AM_CXXFLAGS} \
 	-I$(srcdir)/erasure-code/jerasure/gf-complete/include \
 	-I$(srcdir)/erasure-code/jerasure/jerasure/include
 libec_jerasure_neon_la_LIBADD = $(LIBCRUSH) $(PTHREAD_LIBS) $(EXTRALIBS)
-libec_jerasure_neon_la_LDFLAGS = ${AM_LDFLAGS} -version-info 2:0:0
+libec_jerasure_neon_la_LDFLAGS = ${AM_LDFLAGS} -module -avoid-version -shared
 if LINUX
 libec_jerasure_neon_la_LDFLAGS += -export-symbols-regex '.*__erasure_code_.*'
 endif
@@ -95,7 +95,7 @@ libec_jerasure_sse3_la_CXXFLAGS= ${AM_CXXFLAGS} \
 	-I$(srcdir)/erasure-code/jerasure/gf-complete/include \
 	-I$(srcdir)/erasure-code/jerasure/jerasure/include
 libec_jerasure_sse3_la_LIBADD = $(LIBCRUSH) $(PTHREAD_LIBS) $(EXTRALIBS)
-libec_jerasure_sse3_la_LDFLAGS = ${AM_LDFLAGS} -version-info 2:0:0
+libec_jerasure_sse3_la_LDFLAGS = ${AM_LDFLAGS} -module -avoid-version -shared
 if LINUX
 libec_jerasure_sse3_la_LDFLAGS += -export-symbols-regex '.*__erasure_code_.*'
 endif
@@ -124,7 +124,7 @@ libec_jerasure_sse4_la_CXXFLAGS= ${AM_CXXFLAGS} \
 	-I$(srcdir)/erasure-code/jerasure/gf-complete/include \
 	-I$(srcdir)/erasure-code/jerasure/jerasure/include
 libec_jerasure_sse4_la_LIBADD = $(LIBCRUSH) $(PTHREAD_LIBS) $(EXTRALIBS)
-libec_jerasure_sse4_la_LDFLAGS = ${AM_LDFLAGS} -version-info 2:0:0
+libec_jerasure_sse4_la_LDFLAGS = ${AM_LDFLAGS} -module -avoid-version -shared
 if LINUX
 libec_jerasure_sse4_la_LDFLAGS += -export-symbols-regex '.*__erasure_code_.*'
 endif
@@ -138,7 +138,7 @@ libec_jerasure_la_SOURCES = \
 libec_jerasure_la_CFLAGS = ${AM_CFLAGS}
 libec_jerasure_la_CXXFLAGS= ${AM_CXXFLAGS}
 libec_jerasure_la_LIBADD = $(LIBCRUSH) $(PTHREAD_LIBS) $(EXTRALIBS)
-libec_jerasure_la_LDFLAGS = ${AM_LDFLAGS} -version-info 2:0:0
+libec_jerasure_la_LDFLAGS = ${AM_LDFLAGS} -module -avoid-version -shared
 if LINUX
 libec_jerasure_la_LDFLAGS += -export-symbols-regex '.*__erasure_code_.*'
 endif
