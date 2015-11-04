@@ -55,7 +55,7 @@ radoslib_LTLIBRARIES += libcls_replica_log.la
 
 libcls_user_la_SOURCES = cls/user/cls_user.cc
 libcls_user_la_LIBADD = $(PTHREAD_LIBS) $(EXTRALIBS)
-libcls_user_la_LDFLAGS = ${AM_LDFLAGS} -version-info 1:0:0 -export-symbols-regex '.*__cls_.*'
+libcls_user_la_LDFLAGS = ${AM_LDFLAGS} -module -avoid-version -shared -export-symbols-regex '.*__cls_.*'
 radoslib_LTLIBRARIES += libcls_user.la
 
 libcls_rgw_la_SOURCES = \
