@@ -1,0 +1,130 @@
+overrides:
+  ceph:
+    conf:
+      mon:
+        debug mon: 20
+        debug ms: 1
+        debug paxos: 20
+        mon warn on legacy crush tunables: false
+        mon min osdmap epochs: 3
+      osd:
+        osd map cache size: 2
+        osd map max advance: 1
+        debug filestore: 20
+        debug journal: 20
+        debug ms: 1
+        debug osd: 20
+    log-whitelist:
+    - osd_map_cache_size
+    - slow request
+    - scrub mismatch
+    - ScrubResult
+    - failed to encode
+roles:
+- - mon.a
+  - mds.a
+  - osd.0
+  - osd.1
+  - mon.b
+  - mon.c
+  - osd.2
+  - client.0
+tasks:
+- install:
+    tag: v0.67.10
+- print: '**** done installing dumpling'
+- ceph:
+    fs: xfs
+- print: '**** done ceph'
+- full_sequential:
+  - ceph_manager.create_pool:
+      args:
+      - newpool
+      kwargs:
+        pg_num: 32
+  - sleep:
+      duration: 30
+  - ceph_manager.wait_for_clean: null
+  - ceph_manager.kill_osd:
+      kwargs:
+        osd: 0
+  - ceph_manager.kill_osd:
+      kwargs:
+        osd: 1
+  - ceph_manager.kill_osd:
+      kwargs:
+        osd: 2
+  - print: '**** done killing osds'
+  - loop:
+      body:
+      - ceph_manager.set_pool_property:
+          args:
+          - newpool
+          - min_size
+          - 2
+      - ceph_manager.set_pool_property:
+          args:
+          - newpool
+          - min_size
+          - 1
+      count: 10
+  - install.upgrade:
+      mon.a:
+        branch: firefly
+  - print: '**** done upgrading to firefly'
+  - ceph.restart:
+    - mon.a
+    - mon.b
+    - mon.c
+  - print: '**** done upgrading restarting mons'
+  - loop:
+      body:
+      - ceph_manager.set_pool_property:
+          args:
+          - newpool
+          - min_size
+          - 2
+      - ceph_manager.set_pool_property:
+          args:
+          - newpool
+          - min_size
+          - 1
+      count: 10
+  - sleep:
+      duration: 10
+  - install.upgrade:
+      mon.a: null
+  - print: '**** done upgrading to branch'
+  - ceph.restart:
+    - mon.a
+    - mon.b
+    - mon.c
+  - loop:
+      body:
+      - ceph_manager.set_pool_property:
+          args:
+          - newpool
+          - min_size
+          - 2
+      - ceph_manager.set_pool_property:
+          args:
+          - newpool
+          - min_size
+          - 1
+      count: 10
+  - sleep:
+      duration: 10
+  - print: '**** about to start osds'
+  - ceph_manager.revive_osd:
+      kwargs:
+        osd: 0
+  - ceph_manager.revive_osd:
+      kwargs:
+        osd: 1
+  - ceph_manager.revive_osd:
+      kwargs:
+        osd: 2
+  - sleep:
+      duration: 30
+  - ceph_manager.wait_for_clean: null
+  - print: '**** done!'
