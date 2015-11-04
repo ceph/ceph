@@ -478,6 +478,41 @@ TEST(LibRadosAio, RoundTripPP3)
   destroy_one_pool_pp(pool_name, cluster);
 }
 
+TEST(LibRadosAio, RoundTripSparseReadPP) {
+  AioTestDataPP test_data;
+  ASSERT_EQ("", test_data.init());
+  AioCompletion *my_completion = test_data.m_cluster.aio_create_completion(
+	  (void*)&test_data, set_completion_completePP, set_completion_safePP);
+  AioCompletion *my_completion_null = NULL;
+  ASSERT_NE(my_completion, my_completion_null);
+  char buf[128];
+  memset(buf, 0xcc, sizeof(buf));
+  bufferlist bl1;
+  bl1.append(buf, sizeof(buf));
+  ASSERT_EQ(0, test_data.m_ioctx.aio_write("foo", my_completion,
+					   bl1, sizeof(buf), 0));
+  {
+    TestAlarm alarm;
+    sem_wait(&test_data.m_sem);
+    sem_wait(&test_data.m_sem);
+  }
+  ASSERT_EQ(0, my_completion->get_return_value());
+  std::map<uint64_t, uint64_t> extents;
+  bufferlist bl2;
+  AioCompletion *my_completion2 = test_data.m_cluster.aio_create_completion(
+	  (void*)&test_data, set_completion_completePP, set_completion_safePP);
+  ASSERT_NE(my_completion2, my_completion_null);
+  ASSERT_EQ(0, test_data.m_ioctx.aio_sparse_read("foo",
+			      my_completion2, &extents, &bl2, sizeof(buf), 0));
+  {
+    TestAlarm alarm;
+    ASSERT_EQ(0, my_completion2->wait_for_complete());
+  }
+  ASSERT_EQ(0, my_completion2->get_return_value());
+  assert_eq_sparse(bl1, extents, bl2);
+  delete my_completion;
+  delete my_completion2;
+}
 
 TEST(LibRadosAio, RoundTripAppend) {
   AioTestData test_data;
@@ -2076,6 +2111,42 @@ TEST(LibRadosAioEC, RoundTripPP3)
   destroy_one_pool_pp(pool_name, cluster);
 }
 
+TEST(LibRadosAioEC, RoundTripSparseReadPP) {
+  AioTestDataECPP test_data;
+  ASSERT_EQ("", test_data.init());
+  AioCompletion *my_completion = test_data.m_cluster.aio_create_completion(
+	  (void*)&test_data, set_completion_completeECPP, set_completion_safeECPP);
+  AioCompletion *my_completion_null = NULL;
+  ASSERT_NE(my_completion, my_completion_null);
+  char buf[128];
+  memset(buf, 0xcc, sizeof(buf));
+  bufferlist bl1;
+  bl1.append(buf, sizeof(buf));
+  ASSERT_EQ(0, test_data.m_ioctx.aio_write("foo", my_completion,
+					   bl1, sizeof(buf), 0));
+  {
+    TestAlarm alarm;
+    sem_wait(&test_data.m_sem);
+    sem_wait(&test_data.m_sem);
+  }
+  ASSERT_EQ(0, my_completion->get_return_value());
+
+  map<uint64_t, uint64_t> extents;
+  bufferlist bl2;
+  AioCompletion *my_completion2 = test_data.m_cluster.aio_create_completion(
+	  (void*)&test_data, set_completion_completeECPP, set_completion_safeECPP);
+  ASSERT_NE(my_completion2, my_completion_null);
+  ASSERT_EQ(0, test_data.m_ioctx.aio_sparse_read("foo",
+			      my_completion2, &extents, &bl2, sizeof(buf), 0));
+  {
+    TestAlarm alarm;
+    ASSERT_EQ(0, my_completion2->wait_for_complete());
+  }
+  ASSERT_EQ(0, my_completion2->get_return_value());
+  assert_eq_sparse(bl1, extents, bl2);
+  delete my_completion;
+  delete my_completion2;
+}
 
 TEST(LibRadosAioEC, RoundTripAppend) {
   AioTestDataEC test_data;
