@@ -294,6 +294,7 @@ public:
     plb.add_u64_counter(l_librbd_resize, "resize", "Resizes");
     plb.add_u64_counter(l_librbd_readahead, "readahead", "Read ahead");
     plb.add_u64_counter(l_librbd_readahead_bytes, "readahead_bytes", "Data size in read ahead");
+    plb.add_u64_counter(l_librbd_invalidate_cache, "invalidate_cache", "Cache invalidates");
 
     perfcounter = plb.create_perf_counters();
     cct->get_perfcounters_collection()->add(perfcounter);
