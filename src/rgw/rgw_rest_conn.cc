@@ -198,14 +198,11 @@ RGWRESTReadResource::RGWRESTReadResource(RGWRESTConn *_conn,
                                          const string& _resource,
 		                         const rgw_http_param_pair *pp,
                                          param_list_t *extra_headers,
-                                         RGWHTTPManager *_mgr) : cct(_conn->get_ctx()), conn(_conn), resource(_resource), cb(bl),
-                                                                 mgr(_mgr), req(cct, conn->get_url(), &cb, NULL, NULL) {
-  while (pp && pp->key) {
-    string k = pp->key;
-    string v = (pp->val ? pp->val : "");
-    params.push_back(make_pair(k, v));
-    ++pp;
-  }
+                                         RGWHTTPManager *_mgr)
+  : cct(_conn->get_ctx()), conn(_conn), resource(_resource),
+    params(make_param_list(pp)), cb(bl), mgr(_mgr),
+    req(cct, conn->get_url(), &cb, NULL, NULL)
+{
   init_common(extra_headers);
 }
 
@@ -261,15 +258,11 @@ RGWRESTPostResource::RGWRESTPostResource(RGWRESTConn *_conn,
                                          const string& _resource,
 		                         const rgw_http_param_pair *pp,
                                          param_list_t *extra_headers,
-                                         RGWHTTPManager *_mgr) : cct(_conn->get_ctx()), conn(_conn), resource(_resource), cb(bl),
-                                                                 mgr(_mgr), req(cct, "POST", conn->get_url(), &cb, NULL, NULL) {
-  while (pp && pp->key) {
-    string k = pp->key;
-    string v = (pp->val ? pp->val : "");
-    params.push_back(make_pair(k, v));
-    ++pp;
-  }
-
+                                         RGWHTTPManager *_mgr)
+  : cct(_conn->get_ctx()), conn(_conn), resource(_resource),
+    params(make_param_list(pp)), cb(bl), mgr(_mgr),
+    req(cct, "POST", conn->get_url(), &cb, NULL, NULL)
+{
   params.push_back(param_pair_t(RGW_SYS_PARAM_PREFIX "zonegroup", conn->get_zonegroup()));
 
   if (extra_headers) {

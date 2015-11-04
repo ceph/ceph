@@ -40,6 +40,19 @@ using param_pair_t = pair<string, string>;
 // TODO: consider vector instead of list
 using param_list_t = std::list<param_pair_t>;
 
+// copy a null-terminated rgw_http_param_pair list into a list of string pairs
+inline param_list_t make_param_list(const rgw_http_param_pair* pp)
+{
+  param_list_t params;
+  while (pp && pp->key) {
+    string k = pp->key;
+    string v = (pp->val ? pp->val : "");
+    params.emplace_back(make_pair(std::move(k), std::move(v)));
+    ++pp;
+  }
+  return params;
+}
+
 class RGWRESTConn
 {
   CephContext *cct;
@@ -109,15 +122,7 @@ int RGWRESTConn::get_json_resource(const string& resource, param_list_t *params,
 template<class T>
 int RGWRESTConn::get_json_resource(const string& resource,  const rgw_http_param_pair *pp, T& t)
 {
-  param_list_t params;
-
-  while (pp && pp->key) {
-    string k = pp->key;
-    string v = (pp->val ? pp->val : "");
-    params.push_back(make_pair(k, v));
-    ++pp;
-  }
-
+  param_list_t params = make_param_list(pp);
   return get_json_resource(resource, &params, t);
 }
 
