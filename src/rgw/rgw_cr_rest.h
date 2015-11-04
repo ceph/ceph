@@ -4,14 +4,12 @@
 #include "rgw_coroutine.h"
 #include "rgw_rest_conn.h"
 
-#include <list>
-
 template <class T>
 class RGWReadRESTResourceCR : public RGWSimpleCoroutine {
   RGWRESTConn *conn;
   RGWHTTPManager *http_manager;
   string path;
-  std::list<pair<string, string> > params_list;
+  param_list_t param_list;
   T *result;
 
   RGWRESTReadResource *http_op;
