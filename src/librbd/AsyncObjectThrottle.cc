@@ -3,6 +3,7 @@
 #include "librbd/AsyncObjectThrottle.h"
 #include "include/rbd/librbd.hpp"
 #include "common/RWLock.h"
+#include "common/WorkQueue.h"
 #include "librbd/AsyncRequest.h"
 #include "librbd/ImageCtx.h"
 #include "librbd/internal.h"
@@ -10,17 +11,11 @@
 namespace librbd
 {
 
-void C_AsyncObjectThrottle::finish(int r) {
-  RWLock::RLocker l(m_image_ctx.owner_lock);
-  m_finisher.finish_op(r);
-}
-
-AsyncObjectThrottle::AsyncObjectThrottle(const AsyncRequest* async_request,
-                                         ImageCtx &image_ctx,
-                                         const ContextFactory& context_factory,
-				 	 Context *ctx, ProgressContext *prog_ctx,
-					 uint64_t object_no,
-					 uint64_t end_object_no)
+template <typename T>
+AsyncObjectThrottle<T>::AsyncObjectThrottle(
+    const AsyncRequest<T>* async_request, T &image_ctx,
+    const ContextFactory& context_factory, Context *ctx,
+    ProgressContext *prog_ctx, uint64_t object_no, uint64_t end_object_no)
   : m_lock(unique_lock_name("librbd::AsyncThrottle::m_lock", this)),
     m_async_request(async_request), m_image_ctx(image_ctx),
     m_context_factory(context_factory), m_ctx(ctx), m_prog_ctx(prog_ctx),
@@ -29,7 +24,8 @@ AsyncObjectThrottle::AsyncObjectThrottle(const AsyncRequest* async_request,
 {
 }
 
-void AsyncObjectThrottle::start_ops(uint64_t max_concurrent) {
+template <typename T>
+void AsyncObjectThrottle<T>::start_ops(uint64_t max_concurrent) {
   assert(m_image_ctx.owner_lock.is_locked());
   bool complete;
   {
@@ -48,11 +44,12 @@ void AsyncObjectThrottle::start_ops(uint64_t max_concurrent) {
   }
 }
 
-void AsyncObjectThrottle::finish_op(int r) {
+template <typename T>
+void AsyncObjectThrottle<T>::finish_op(int r) {
   assert(m_image_ctx.owner_lock.is_locked());
   bool complete;
   {
-    Mutex::Locker l(m_lock);
+    Mutex::Locker locker(m_lock);
     --m_current_ops;
     if (r < 0 && r != -ENOENT && m_ret == 0) {
       m_ret = r;
@@ -67,7 +64,8 @@ void AsyncObjectThrottle::finish_op(int r) {
   }
 }
 
-void AsyncObjectThrottle::start_next_op() {
+template <typename T>
+void AsyncObjectThrottle<T>::start_next_op() {
   bool done = false;
   while (!done) {
     if (m_async_request != NULL && m_async_request->is_canceled() &&
@@ -80,7 +78,7 @@ void AsyncObjectThrottle::start_next_op() {
     }
 
     uint64_t ono = m_object_no++;
-    C_AsyncObjectThrottle *ctx = m_context_factory(*this, ono);
+    C_AsyncObjectThrottle<T> *ctx = m_context_factory(*this, ono);
 
     int r = ctx->send();
     if (r < 0) {
@@ -101,3 +99,5 @@ void AsyncObjectThrottle::start_next_op() {
 }
 
 } // namespace librbd
+
+template class librbd::AsyncObjectThrottle<librbd::ImageCtx>;

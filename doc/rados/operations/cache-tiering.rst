@@ -174,9 +174,7 @@ For example::
 	ceph osd pool set hot-storage hit_set_type bloom
 
 The ``hit_set_count`` and ``hit_set_period`` define how much time each HitSet
-should cover, and how many such HitSets to store. Currently there is minimal
-benefit for ``hit_set_count`` > 1 since the agent does not yet act intelligently
-on that information. ::
+should cover, and how many such HitSets to store. ::
 
 	ceph osd pool set {cachepool} hit_set_count 1
 	ceph osd pool set {cachepool} hit_set_period 3600
@@ -186,9 +184,25 @@ Binning accesses over time allows Ceph to determine whether a Ceph client
 accessed an object at least once, or more than once over a time period 
 ("age" vs "temperature").
 
-.. note:: The longer the period and the higher the count, the more RAM the
-   ``ceph-osd`` daemon consumes.  In particular, when the agent is active to 
-   flush or evict cache objects, all ``hit_set_count`` HitSets are loaded 
+The ``min_read_recency_for_promote`` defines how many HitSets to check for the
+existence of an object when handling a read operation. The checking result is
+used to decide whether to promote the object asynchronously. Its value should be
+between 0 and ``hit_set_count``. If it's set to 0, the object is always promoted.
+If it's set to 1, the current HitSet is checked. And if this object is in the
+current HitSet, it's promoted. Otherwise not. For the other values, the exact
+number of archive HitSets are checked. The object is promoted if the object is
+found in any of the most recent ``min_read_recency_for_promote`` HitSets.
+
+A similar parameter can be set for the write operation, which is
+``min_write_recency_for_promote``. ::
+
+	ceph osd pool set {cachepool} min_read_recency_for_promote 1
+	ceph osd pool set {cachepool} min_write_recency_for_promote 1
+
+.. note:: The longer the period and the higher the
+   ``min_read_recency_for_promote``/``min_write_recency_for_promote``, the more
+   RAM the ``ceph-osd`` daemon consumes. In particular, when the agent is active
+   to flush or evict cache objects, all ``hit_set_count`` HitSets are loaded
    into RAM.
 
 

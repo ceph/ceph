@@ -35,6 +35,10 @@
 #include "common/blkdev.h"
 #include "common/linux_version.h"
 
+#if defined(__FreeBSD__)
+#define O_DSYNC O_SYNC
+#endif
+
 #define dout_subsys ceph_subsys_journal
 #undef dout_prefix
 #define dout_prefix *_dout << "journal "
@@ -292,18 +296,18 @@ int FileJournal::_open_file(int64_t oldsize, blksize_t blksize,
     char *buf;
     ret = ::posix_memalign((void **)&buf, block_size, write_size);
     if (ret != 0) {
-      return ret;
+      return -ret;
     }
     memset(static_cast<void*>(buf), 0, write_size);
     uint64_t i = 0;
-    for (; (i + write_size) <= (unsigned)max_size; i += write_size) {
+    for (; (i + write_size) <= (uint64_t)max_size; i += write_size) {
       ret = ::pwrite(fd, static_cast<void*>(buf), write_size, i);
       if (ret < 0) {
 	free(buf);
 	return -errno;
       }
     }
-    if (i < (unsigned)max_size) {
+    if (i < (uint64_t)max_size) {
       ret = ::pwrite(fd, static_cast<void*>(buf), max_size - i, i);
       if (ret < 0) {
 	free(buf);
@@ -629,7 +633,8 @@ int FileJournal::_fdump(Formatter &f, bool simple)
 
     if (!pos) {
       dout(2) << "_dump -- not readable" << dendl;
-      return false;
+      err = -EINVAL;
+      break;
     }
     stringstream ss;
     read_entry_result result = do_read_entry(
@@ -643,7 +648,7 @@ int FileJournal::_fdump(Formatter &f, bool simple)
         dout(2) << "Unable to read past sequence " << seq
 	    << " but header indicates the journal has committed up through "
 	    << header.committed_up_to << ", journal is corrupt" << dendl;
-        err = EINVAL;
+        err = -EINVAL;
       }
       dout(25) << ss.str() << dendl;
       dout(25) << "No further valid entries found, journal is most likely valid"
@@ -661,12 +666,11 @@ int FileJournal::_fdump(Formatter &f, bool simple)
       bufferlist::iterator p = bl.begin();
       int trans_num = 0;
       while (!p.end()) {
-        ObjectStore::Transaction *t = new ObjectStore::Transaction(p);
+        ObjectStore::Transaction t(p);
         f.open_object_section("transaction");
         f.dump_unsigned("trans_num", trans_num);
-        t->dump(&f);
+        t.dump(&f);
         f.close_section();
-        delete t;
         trans_num++;
       }
       f.close_section();

@@ -114,7 +114,7 @@ void usage(ostream& out)
 "   setomapheader <obj-name> <val>\n"
 "   tmap-to-omap <obj-name>          convert tmap keys/values to omap\n"
 "   watch <obj-name>                 add watcher on this object\n"
-"   notify <obj-name> <message>      notify wather of this object with message\n"
+"   notify <obj-name> <message>      notify watcher of this object with message\n"
 "   listwatchers <obj-name>          list the watchers of this object\n"
 "   set-alloc-hint <obj-name> <expected-object-size> <expected-write-size>\n"
 "                                    set allocation hint for an object\n"
@@ -305,7 +305,7 @@ static int do_copy(IoCtx& io_ctx, const char *objname,
   __le32 src_fadvise_flags = LIBRADOS_OP_FLAG_FADVISE_SEQUENTIAL | LIBRADOS_OP_FLAG_FADVISE_NOCACHE;
   __le32 dest_fadvise_flags = LIBRADOS_OP_FLAG_FADVISE_SEQUENTIAL | LIBRADOS_OP_FLAG_FADVISE_DONTNEED;
   ObjectWriteOperation op;
-  op.copy_from(objname, io_ctx, 0, src_fadvise_flags);
+  op.copy_from2(objname, io_ctx, 0, src_fadvise_flags);
   op.set_op_flags2(dest_fadvise_flags);
 
   return target_ctx.operate(target_obj, &op);
@@ -1208,6 +1208,7 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
 
   Formatter *formatter = NULL;
   bool pretty_format = false;
+  const char *output = NULL;
 
   Rados rados;
   IoCtx io_ctx;
@@ -1359,6 +1360,10 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
   i = opts.find("no-verify");
   if (i != opts.end()) {
     no_verify = true;
+  }
+  i = opts.find("output");
+  if (i != opts.end()) {
+    output = i->second.c_str();
   }
 
 
@@ -2406,12 +2411,29 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
       ret = -EINVAL;
       goto out;
     }
+    if (!formatter && output) {
+      cerr << "-o|--output option can be used only with '--format' option"
+           << std::endl;
+      ret = -EINVAL;
+      goto out;
+    }
     RadosBencher bencher(g_ceph_context, rados, io_ctx);
     bencher.set_show_time(show_time);
+    ostream *outstream = NULL;
+    if (formatter) {
+      bencher.set_formatter(formatter);
+      if (output)
+        outstream = new ofstream(output);
+      else
+        outstream = &cout;
+      bencher.set_outstream(*outstream);
+    }
     ret = bencher.aio_bench(operation, seconds,
 			    concurrent_ios, op_size, cleanup, run_name, no_verify);
     if (ret != 0)
       cerr << "error during benchmark: " << ret << std::endl;
+    if (formatter && output)
+      delete outstream;
   }
   else if (strcmp(nargs[0], "cleanup") == 0) {
     if (!pool_name)
@@ -2926,6 +2948,8 @@ int main(int argc, const char **argv)
       opts["all"] = "true";
     } else if (ceph_argparse_flag(args, i, "--default", (char*)NULL)) {
       opts["default"] = "true";
+    } else if (ceph_argparse_witharg(args, i, &val, "-o", "--output", (char*)NULL)) {
+      opts["output"] = val;
     } else {
       if (val[0] == '-')
         usage_exit();

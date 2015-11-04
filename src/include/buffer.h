@@ -43,6 +43,7 @@
 #include <vector>
 #include <string>
 #include <exception>
+#include <type_traits>
 
 #include "page.h"
 #include "crc32c.h"
@@ -75,27 +76,19 @@ class CEPH_BUFFER_API buffer {
 
 public:
   struct error : public std::exception{
-    const char *what() const throw () {
-      return "buffer::exception";
-    }
+    const char *what() const throw ();
   };
   struct bad_alloc : public error {
-    const char *what() const throw () {
-      return "buffer::bad_alloc";
-    }
+    const char *what() const throw ();
   };
   struct end_of_buffer : public error {
-    const char *what() const throw () {
-      return "buffer::end_of_buffer";
-    }
+    const char *what() const throw ();
   };
   struct malformed_input : public error {
     explicit malformed_input(const std::string& w) {
       snprintf(buf, sizeof(buf), "buffer::malformed_input: %s", w.c_str());
     }
-    const char *what() const throw () {
-      return buf;
-    }
+    const char *what() const throw ();
   private:
     char buf[256];
   };
@@ -245,9 +238,12 @@ public:
 
     unsigned append(char c);
     unsigned append(const char *p, unsigned l);
-    void copy_in(unsigned o, unsigned l, const char *src, bool crc_reset = true);
-    void zero(bool crc_reset = true);
-    void zero(unsigned o, unsigned l, bool crc_reset = true);
+    void copy_in(unsigned o, unsigned l, const char *src);
+    void copy_in(unsigned o, unsigned l, const char *src, bool crc_reset);
+    void zero();
+    void zero(bool crc_reset);
+    void zero(unsigned o, unsigned l);
+    void zero(unsigned o, unsigned l, bool crc_reset);
 
   };
 
@@ -264,23 +260,34 @@ public:
     unsigned _memcopy_count; //the total of memcopy using rebuild().
     ptr append_buffer;  // where i put small appends.
 
-  public:
-    class CEPH_BUFFER_API iterator {
-      list *bl;
-      std::list<ptr> *ls; // meh.. just here to avoid an extra pointer dereference..
-      unsigned off;  // in bl
-      std::list<ptr>::iterator p;
-      unsigned p_off; // in *p
+    template <bool is_const>
+    class iterator_impl: public std::iterator<std::forward_iterator_tag, char> {
+    protected:
+      typedef typename std::conditional<is_const,
+					const list,
+					list>::type bl_t;
+      typedef typename std::conditional<is_const,
+					const std::list<ptr>,
+					std::list<ptr> >::type list_t;
+      typedef typename std::conditional<is_const,
+					typename std::list<ptr>::const_iterator,
+					typename std::list<ptr>::iterator>::type list_iter_t;
+      bl_t* bl;
+      list_t* ls;  // meh.. just here to avoid an extra pointer dereference..
+      unsigned off; // in bl
+      list_iter_t p;
+      unsigned p_off;   // in *p
+
     public:
       // constructor.  position.
-      iterator() :
-	bl(0), ls(0), off(0), p_off(0) {}
-      iterator(list *l, unsigned o=0) : 
-	bl(l), ls(&bl->_buffers), off(0), p(ls->begin()), p_off(0) {
+      iterator_impl()
+	: bl(0), ls(0), off(0), p_off(0) {}
+      iterator_impl(bl_t *l, unsigned o=0)
+	: bl(l), ls(&bl->_buffers), off(0), p(ls->begin()), p_off(0) {
 	advance(o);
       }
-      iterator(list *l, unsigned o, std::list<ptr>::iterator ip, unsigned po) : 
-	bl(l), ls(&bl->_buffers), off(o), p(ip), p_off(po) { }
+      iterator_impl(bl_t *l, unsigned o, list_iter_t ip, unsigned po)
+	: bl(l), ls(&bl->_buffers), off(o), p(ip), p_off(po) {}
 
       /// get current iterator offset in buffer::list
       unsigned get_off() const { return off; }
@@ -296,11 +303,12 @@ public:
 
       void advance(int o);
       void seek(unsigned o);
-      char operator*();
-      iterator& operator++();
-      ptr get_current_ptr();
+      bool operator!=(const iterator_impl& rhs) const;
+      char operator*() const;
+      iterator_impl& operator++();
+      ptr get_current_ptr() const;
 
-      list& get_bl() { return *bl; }
+      bl_t& get_bl() { return *bl; }
 
       // copy data out.
       // note that these all _append_ to dest!
@@ -309,11 +317,36 @@ public:
       void copy(unsigned len, list &dest);
       void copy(unsigned len, std::string &dest);
       void copy_all(list &dest);
+    };
+
+  public:
+    typedef iterator_impl<true> const_iterator;
+
+    class CEPH_BUFFER_API iterator : public iterator_impl<false> {
+    public:
+      iterator(): iterator_impl() {}
+      iterator(bl_t *l, unsigned o=0) :
+	iterator_impl(l, o) {}
+      iterator(bl_t *l, unsigned o, list_iter_t ip, unsigned po) :
+	iterator_impl(l, o, ip, po) {}
+
+      void advance(int o);
+      void seek(unsigned o);
+      char operator*();
+      iterator& operator++();
+      ptr get_current_ptr();
+
+      // copy data out
+      void copy(unsigned len, char *dest);
+      void copy(unsigned len, ptr &dest);
+      void copy(unsigned len, list &dest);
+      void copy(unsigned len, std::string &dest);
+      void copy_all(list &dest);
 
       // copy data in
-      void copy_in(unsigned len, const char *src, bool crc_reset = true);
+      void copy_in(unsigned len, const char *src);
+      void copy_in(unsigned len, const char *src, bool crc_reset);
       void copy_in(unsigned len, const list& otherl);
-
     };
 
   private:
@@ -332,6 +365,7 @@ public:
 			      _memcopy_count(other._memcopy_count), last_p(this) {
       make_shareable();
     }
+    list(list&& other);
     list& operator= (const list& other) {
       if (this != &other) {
         _buffers = other._buffers;
@@ -357,7 +391,9 @@ public:
 #endif
       return _len;
     }
+
     bool contents_equal(buffer::list& other);
+    bool contents_equal(const buffer::list& other) const;
 
     bool can_zero_copy() const;
     bool is_aligned(unsigned align) const;
@@ -441,12 +477,20 @@ public:
       return iterator(this, _len, _buffers.end(), 0);
     }
 
+    const_iterator begin() const {
+      return const_iterator(this, 0);
+    }
+    const_iterator end() const {
+      return const_iterator(this, _len, _buffers.end(), 0);
+    }
+
     // crope lookalikes.
     // **** WARNING: this are horribly inefficient for large bufferlists. ****
     void copy(unsigned off, unsigned len, char *dest) const;
     void copy(unsigned off, unsigned len, list &dest) const;
     void copy(unsigned off, unsigned len, std::string& dest) const;
-    void copy_in(unsigned off, unsigned len, const char *src, bool crc_reset = true);
+    void copy_in(unsigned off, unsigned len, const char *src);
+    void copy_in(unsigned off, unsigned len, const char *src, bool crc_reset);
     void copy_in(unsigned off, unsigned len, const list& src);
 
     void append(char c);

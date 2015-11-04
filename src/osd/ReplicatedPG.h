@@ -95,6 +95,8 @@ public:
     uint32_t source_data_digest, source_omap_digest;
     uint32_t data_digest, omap_digest;
     vector<pair<osd_reqid_t, version_t> > reqids; // [(reqid, user_version)]
+    uint64_t truncate_seq;
+    uint64_t truncate_size;
     bool is_data_digest() {
       return flags & object_copy_data_t::FLAG_DATA_DIGEST;
     }
@@ -108,7 +110,8 @@ public:
 	has_omap(false),
 	flags(0),
 	source_data_digest(-1), source_omap_digest(-1),
-	data_digest(-1), omap_digest(-1)
+	data_digest(-1), omap_digest(-1),
+	truncate_seq(0), truncate_size(0)
     {}
   };
 
@@ -221,7 +224,7 @@ public:
     bool sent_ack;
     utime_t mtime;
     bool canceled;
-    osd_reqid_t &reqid;
+    osd_reqid_t reqid;
 
     ProxyWriteOp(OpRequestRef _op, hobject_t oid, vector<OSDOp>& _ops, osd_reqid_t _reqid)
       : ctx(NULL), op(_op), soid(oid),
@@ -909,7 +912,7 @@ protected:
   void hit_set_persist();   ///< persist hit info
   bool hit_set_apply_log(); ///< apply log entries to update in-memory HitSet
   void hit_set_trim(RepGather *repop, unsigned max); ///< discard old HitSets
-  void hit_set_in_memory_trim();                     ///< discard old in memory HitSets
+  void hit_set_in_memory_trim(uint32_t max_in_memory); ///< discard old in memory HitSets
   void hit_set_remove_all();
 
   hobject_t get_hit_set_current_object(utime_t stamp);
@@ -921,6 +924,7 @@ protected:
   boost::scoped_ptr<TierAgentState> agent_state;
 
   friend struct C_AgentFlushStartStop;
+  friend struct C_AgentEvictStartStop;
   friend struct C_HitSetFlushing;
 
   void agent_setup();       ///< initialize agent state
@@ -1035,7 +1039,8 @@ protected:
   SnapSetContext *get_snapset_context(
     const hobject_t& oid,
     bool can_create,
-    map<string, bufferlist> *attrs = 0
+    map<string, bufferlist> *attrs = 0,
+    bool oid_existed = true //indicate this oid whether exsited in backend
     );
   void register_snapset_context(SnapSetContext *ssc) {
     Mutex::Locker l(snapset_contexts_lock);
@@ -1157,6 +1162,8 @@ protected:
   void reply_ctx(OpContext *ctx, int err, eversion_t v, version_t uv);
   void make_writeable(OpContext *ctx);
   void log_op_stats(OpContext *ctx);
+  void apply_ctx_stats(OpContext *ctx,
+		       bool scrub_ok=false); ///< true if we should skip scrub stat update
 
   void write_update_size_and_usage(object_stat_sum_t& stats, object_info_t& oi,
 				   interval_set<uint64_t>& modified, uint64_t offset,
@@ -1164,16 +1171,42 @@ protected:
 				   bool force_changesize=false);
   void add_interval_usage(interval_set<uint64_t>& s, object_stat_sum_t& st);
 
+
+  enum class cache_result_t {
+    NOOP,
+    BLOCKED_FULL,
+    BLOCKED_PROMOTE,
+    HANDLED_PROXY,
+    HANDLED_REDIRECT,
+  };
+  cache_result_t maybe_handle_cache_detail(OpRequestRef op,
+					   bool write_ordered,
+					   ObjectContextRef obc, int r,
+					   hobject_t missing_oid,
+					   bool must_promote,
+					   bool in_hit_set,
+					   ObjectContextRef *promote_obc);
   /**
    * This helper function is called from do_op if the ObjectContext lookup fails.
    * @returns true if the caching code is handling the Op, false otherwise.
    */
-  inline bool maybe_handle_cache(OpRequestRef op,
-				 bool write_ordered,
-				 ObjectContextRef obc, int r,
-				 const hobject_t& missing_oid,
-				 bool must_promote,
-				 bool in_hit_set = false);
+  bool maybe_handle_cache(OpRequestRef op,
+			  bool write_ordered,
+			  ObjectContextRef obc, int r,
+			  const hobject_t& missing_oid,
+			  bool must_promote,
+			  bool in_hit_set = false) {
+    return cache_result_t::NOOP != maybe_handle_cache_detail(
+      op,
+      write_ordered,
+      obc,
+      r,
+      missing_oid,
+      must_promote,
+      in_hit_set,
+      nullptr);
+  }
+
   /**
    * This helper function checks if a promotion is needed.
    */
@@ -1182,7 +1215,8 @@ protected:
 		     const object_locator_t& oloc,
 		     bool in_hit_set,
 		     uint32_t recency,
-		     OpRequestRef promote_op);
+		     OpRequestRef promote_op,
+		     ObjectContextRef *promote_obc = nullptr);
   /**
    * This helper function tells the client to redirect their request elsewhere.
    */
@@ -1193,10 +1227,13 @@ protected:
    * this is a noop.  If a future user wants to be able to distinguish
    * these cases, a return value should be added.
    */
-  void promote_object(ObjectContextRef obc,            ///< [optional] obc
-		      const hobject_t& missing_object, ///< oid (if !obc)
-		      const object_locator_t& oloc,    ///< locator for obc|oid
-		      OpRequestRef op);                ///< [optional] client op
+  void promote_object(
+    ObjectContextRef obc,            ///< [optional] obc
+    const hobject_t& missing_object, ///< oid (if !obc)
+    const object_locator_t& oloc,    ///< locator for obc|oid
+    OpRequestRef op,                 ///< [optional] client op
+    ObjectContextRef *promote_obc = nullptr ///< [optional] new obc for object
+    );
 
   int prepare_transaction(OpContext *ctx);
   list<pair<OpRequestRef, OpContext*> > in_progress_async_reads;
@@ -1456,6 +1493,22 @@ private:
   hobject_t generate_temp_object();  ///< generate a new temp object name
   /// generate a new temp object name (for recovery)
   hobject_t get_temp_recovery_object(eversion_t version, snapid_t snap);
+  void log_missing(unsigned missing,
+			const boost::optional<hobject_t> &head,
+			LogChannelRef clog,
+			const spg_t &pgid,
+			const char *func,
+			const char *mode,
+			bool allow_incomplete_clones);
+  unsigned process_clones_to(const boost::optional<hobject_t> &head,
+    const boost::optional<SnapSet> &snapset,
+    LogChannelRef clog,
+    const spg_t &pgid,
+    const char *mode,
+    bool allow_incomplete_clones,
+    boost::optional<snapid_t> target,
+    vector<snapid_t>::reverse_iterator *curclone);
+
 public:
   coll_t get_coll() {
     return coll;
@@ -1546,6 +1599,8 @@ public:
   bool is_degraded_or_backfilling_object(const hobject_t& oid);
   void wait_for_degraded_object(const hobject_t& oid, OpRequestRef op);
 
+  void block_write_on_full_cache(
+    const hobject_t& oid, OpRequestRef op);
   void block_write_on_snap_rollback(
     const hobject_t& oid, ObjectContextRef obc, OpRequestRef op);
   void block_write_on_degraded_snap(const hobject_t& oid, OpRequestRef op);
@@ -1581,6 +1636,11 @@ public:
     PGBackend::PGTransaction *t,
     const string &key,
     bufferlist &val);
+  void setattrs_maybe_cache(
+    ObjectContextRef obc,
+    OpContext *op,
+    PGBackend::PGTransaction *t,
+    map<string, bufferlist> &attrs);
   void rmattr_maybe_cache(
     ObjectContextRef obc,
     OpContext *op,

@@ -847,6 +847,7 @@ void PGMonitor::_updated_stats(MonOpRequestRef op, MonOpRequestRef ack_op)
   op->mark_pgmon_event(__func__);
   ack_op->mark_pgmon_event(__func__);
   MPGStats *ack = static_cast<MPGStats*>(ack_op->get_req());
+  ack->get();  // MonOpRequestRef owns one ref; give the other to send_reply.
   dout(7) << "_updated_stats for "
           << op->get_req()->get_orig_source_inst() << dendl;
   mon->send_reply(op, ack);
@@ -1086,13 +1087,12 @@ bool PGMonitor::register_new_pgs()
     }
   }
 
+  // we don't want to redo this work if we can avoid it.
+  pending_inc.pg_scan = epoch;
+
   dout(10) << "register_new_pgs registered " << created << " new pgs, removed "
 	   << removed << " uncreated pgs" << dendl;
-  if (created || removed) {
-    pending_inc.pg_scan = epoch;
-    return true;
-  }
-  return false;
+  return (created || removed);
 }
 
 void PGMonitor::map_pg_creates()
@@ -1258,7 +1258,7 @@ inline string percentify(const float& a) {
 //void PGMonitor::dump_object_stat_sum(stringstream& ss, Formatter *f,
 void PGMonitor::dump_object_stat_sum(TextTable &tbl, Formatter *f,
 				     object_stat_sum_t &sum, uint64_t avail,
-				     bool verbose)
+				     bool verbose) const
 {
   if (f) {
     f->dump_int("kb_used", SHIFT_ROUND_UP(sum.num_bytes, 10));
@@ -1289,7 +1289,7 @@ void PGMonitor::dump_object_stat_sum(TextTable &tbl, Formatter *f,
   }
 }
 
-int64_t PGMonitor::get_rule_avail(OSDMap& osdmap, int ruleno)
+int64_t PGMonitor::get_rule_avail(OSDMap& osdmap, int ruleno) const
 {
   map<int,float> wm;
   int r = osdmap.crush->get_rule_weight_osd_map(ruleno, &wm);
@@ -1412,7 +1412,7 @@ void PGMonitor::dump_pool_stats(stringstream &ss, Formatter *f, bool verbose)
   }
 }
 
-void PGMonitor::dump_fs_stats(stringstream &ss, Formatter *f, bool verbose)
+void PGMonitor::dump_fs_stats(stringstream &ss, Formatter *f, bool verbose) const
 {
   if (f) {
     f->open_object_section("stats");
@@ -1452,7 +1452,7 @@ void PGMonitor::dump_fs_stats(stringstream &ss, Formatter *f, bool verbose)
 }
 
 
-void PGMonitor::dump_info(Formatter *f)
+void PGMonitor::dump_info(Formatter *f) const
 {
   f->open_object_section("pgmap");
   pg_map.dump(f);
@@ -2122,7 +2122,7 @@ void PGMonitor::get_health(list<pair<health_status_t,string> >& summary,
     uint64_t ratio = p->second.cache_target_full_ratio_micro +
       ((1000000 - p->second.cache_target_full_ratio_micro) *
        g_conf->mon_cache_target_full_warn_ratio);
-    if (p->second.target_max_objects && (uint64_t)st.stats.sum.num_objects >
+    if (p->second.target_max_objects && (uint64_t)(st.stats.sum.num_objects - st.stats.sum.num_objects_hit_set_archive) >
 	p->second.target_max_objects * (ratio / 1000000.0)) {
       nearfull = true;
       if (detail) {
@@ -2134,7 +2134,7 @@ void PGMonitor::get_health(list<pair<health_status_t,string> >& summary,
 	detail->push_back(make_pair(HEALTH_WARN, ss.str()));
       }
     }
-    if (p->second.target_max_bytes && (uint64_t)st.stats.sum.num_bytes >
+    if (p->second.target_max_bytes && (uint64_t)(st.stats.sum.num_bytes - st.stats.sum.num_bytes_hit_set_archive) >
 	p->second.target_max_bytes * (ratio / 1000000.0)) {
       nearfull = true;
       if (detail) {

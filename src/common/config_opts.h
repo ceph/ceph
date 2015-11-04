@@ -134,6 +134,7 @@ SUBSYS(throttle, 1, 1)
 SUBSYS(refs, 0, 0)
 SUBSYS(xio, 1, 5)
 SUBSYS(compressor, 1, 5)
+SUBSYS(newstore, 1, 5)
 
 OPTION(key, OPT_STR, "")
 OPTION(keyfile, OPT_STR, "")
@@ -212,14 +213,16 @@ OPTION(mon_osd_allow_primary_temp, OPT_BOOL, false)  // allow primary_temp to be
 OPTION(mon_osd_allow_primary_affinity, OPT_BOOL, false)  // allow primary_affinity to be set in the osdmap
 OPTION(mon_osd_prime_pg_temp, OPT_BOOL, false)  // prime osdmap with pg mapping changes
 OPTION(mon_osd_prime_pg_temp_max_time, OPT_FLOAT, .5)  // max time to spend priming
+OPTION(mon_osd_pool_ec_fast_read, OPT_BOOL, false) // whether turn on fast read on the pool or not
 OPTION(mon_stat_smooth_intervals, OPT_INT, 2)  // smooth stats over last N PGMap maps
 OPTION(mon_lease, OPT_FLOAT, 5)       // lease interval
-OPTION(mon_lease_renew_interval, OPT_FLOAT, 3) // on leader, to renew the lease
-OPTION(mon_lease_ack_timeout, OPT_FLOAT, 10.0) // on leader, if lease isn't acked by all peons
+OPTION(mon_lease_renew_interval_factor, OPT_FLOAT, .6) // on leader, to renew the lease
+OPTION(mon_lease_ack_timeout_factor, OPT_FLOAT, 2.0) // on leader, if lease isn't acked by all peons
+OPTION(mon_accept_timeout_factor, OPT_FLOAT, 2.0)    // on leader, if paxos update isn't accepted
+
 OPTION(mon_clock_drift_allowed, OPT_FLOAT, .050) // allowed clock drift between monitors
 OPTION(mon_clock_drift_warn_backoff, OPT_FLOAT, 5) // exponential backoff for clock drift warnings
 OPTION(mon_timecheck_interval, OPT_FLOAT, 300.0) // on leader, timecheck (clock drift check) interval (seconds)
-OPTION(mon_accept_timeout, OPT_FLOAT, 10.0)    // on leader, if paxos update isn't accepted
 OPTION(mon_pg_create_interval, OPT_FLOAT, 30.0) // no more than every 30s
 OPTION(mon_pg_stuck_threshold, OPT_INT, 300) // number of seconds after which pgs can be considered inactive, unclean, or stale (see doc/control.rst under dump_stuck for more info)
 OPTION(mon_pg_warn_min_per_osd, OPT_INT, 30)  // min # pgs per (in) osd before we warn the admin
@@ -281,6 +284,7 @@ OPTION(mon_debug_deprecated_as_obsolete, OPT_BOOL, false) // consider deprecated
 
 // dump transactions
 OPTION(mon_debug_dump_transactions, OPT_BOOL, false)
+OPTION(mon_debug_dump_json, OPT_BOOL, false)
 OPTION(mon_debug_dump_location, OPT_STR, "/var/log/ceph/$cluster-$name.tdump")
 OPTION(mon_inject_transaction_delay_max, OPT_DOUBLE, 10.0)      // seconds
 OPTION(mon_inject_transaction_delay_probability, OPT_DOUBLE, 0) // range [0, 1]
@@ -335,6 +339,8 @@ OPTION(client_readahead_max_bytes, OPT_LONGLONG, 0)  //8 * 1024*1024
 OPTION(client_readahead_max_periods, OPT_LONGLONG, 4)  // as multiple of file layout period (object size * num stripes)
 OPTION(client_snapdir, OPT_STR, ".snap")
 OPTION(client_mountpoint, OPT_STR, "/")
+OPTION(client_mount_uid, OPT_INT, -1)
+OPTION(client_mount_gid, OPT_INT, -1)
 OPTION(client_notify_timeout, OPT_INT, 10) // in seconds
 OPTION(osd_client_watch_timeout, OPT_INT, 30) // in seconds
 OPTION(client_caps_release_delay, OPT_INT, 5) // in seconds
@@ -350,6 +356,7 @@ OPTION(client_debug_inject_tick_delay, OPT_INT, 0) // delay the client tick for 
 OPTION(client_max_inline_size, OPT_U64, 4096)
 OPTION(client_inject_release_failure, OPT_BOOL, false)  // synthetic client bug for testing
 OPTION(client_inject_fixed_oldest_tid, OPT_BOOL, false)  // synthetic client bug for testing
+
 // note: the max amount of "in flight" dirty data is roughly (max - target)
 OPTION(fuse_use_invalidate_cb, OPT_BOOL, false) // use fuse 2.8+ invalidate callback to keep page cache consistent
 OPTION(fuse_allow_other, OPT_BOOL, true)
@@ -358,9 +365,12 @@ OPTION(fuse_big_writes, OPT_BOOL, true)
 OPTION(fuse_atomic_o_trunc, OPT_BOOL, true)
 OPTION(fuse_debug, OPT_BOOL, false)
 OPTION(fuse_multithreaded, OPT_BOOL, true)
+OPTION(fuse_require_active_mds, OPT_BOOL, true) // if ceph_fuse requires active mds server
+
 OPTION(client_try_dentry_invalidate, OPT_BOOL, true) // the client should try to use dentry invaldation instead of remounting, on kernels it believes that will work for
 OPTION(client_die_on_failed_remount, OPT_BOOL, true)
 OPTION(client_check_pool_perm, OPT_BOOL, true)
+OPTION(client_use_faked_inos, OPT_BOOL, false)
 
 OPTION(crush_location, OPT_STR, "")       // whitespace-separated list of key=value pairs describing crush location
 
@@ -481,6 +491,7 @@ OPTION(mds_snap_max_uid, OPT_U32, 65536) // The maximum UID allowed to create a 
 OPTION(mds_snap_rstat, OPT_BOOL, false) // enable/disbale nested stat for snapshot
 OPTION(mds_verify_backtrace, OPT_U32, 1)
 // detect clients which aren't trimming completed requests
+OPTION(mds_max_completed_flushes, OPT_U32, 100000)
 OPTION(mds_max_completed_requests, OPT_U32, 100000)
 
 OPTION(mds_action_on_write_error, OPT_U32, 1) // 0: ignore; 1: force readonly; 2: crash
@@ -588,8 +599,8 @@ OPTION(osd_tier_default_cache_min_read_recency_for_promote, OPT_INT, 1) // numbe
 OPTION(osd_tier_default_cache_min_write_recency_for_promote, OPT_INT, 1) // number of recent HitSets the object must appear in to be promoted (on write)
 
 OPTION(osd_map_dedup, OPT_BOOL, true)
-OPTION(osd_map_max_advance, OPT_INT, 200) // make this < cache_size!
-OPTION(osd_map_cache_size, OPT_INT, 500)
+OPTION(osd_map_max_advance, OPT_INT, 150) // make this < cache_size!
+OPTION(osd_map_cache_size, OPT_INT, 200)
 OPTION(osd_map_message_max, OPT_INT, 100)  // max maps per MOSDMap message
 OPTION(osd_map_share_max_epochs, OPT_INT, 100)  // cap on # of inc maps we send to peers, clients
 OPTION(osd_inject_bad_map_crc_probability, OPT_FLOAT, 0)
@@ -606,7 +617,10 @@ OPTION(osd_recover_clone_overlap, OPT_BOOL, true)   // preserve clone_overlap du
 OPTION(osd_op_num_threads_per_shard, OPT_INT, 2)
 OPTION(osd_op_num_shards, OPT_INT, 5)
 
-OPTION(osd_read_eio_on_bad_digest, OPT_BOOL, true) // return EIO if object digest is bad
+// Set to true for testing.  Users should NOT set this.
+// If set to true even after reading enough shards to
+// decode the object, any error will be reported.
+OPTION(osd_read_ec_check_for_errors, OPT_BOOL, false) // return error if any ec shard has an error
 
 // Only use clone_overlap for recovery if there are fewer than
 // osd_recover_clone_overlap_limit entries in the overlap set
@@ -665,6 +679,8 @@ OPTION(osd_scrub_interval_randomize_ratio, OPT_FLOAT, 0.5) // randomize the sche
 OPTION(osd_scrub_chunk_min, OPT_INT, 5)
 OPTION(osd_scrub_chunk_max, OPT_INT, 25)
 OPTION(osd_scrub_sleep, OPT_FLOAT, 0)   // sleep between [deep]scrub ops
+OPTION(osd_scrub_auto_repair, OPT_BOOL, false)   // whether auto-repair inconsistencies upon deep-scrubbing
+OPTION(osd_scrub_auto_repair_num_errors, OPT_U32, 5)   // only auto-repair when number of errors is below this threshold
 OPTION(osd_deep_scrub_interval, OPT_FLOAT, 60*60*24*7) // once a week
 OPTION(osd_deep_scrub_stride, OPT_INT, 524288)
 OPTION(osd_deep_scrub_update_digest_min_age, OPT_INT, 2*60*60)   // objects must be this old (seconds) before we update the whole-object digest on scrub
@@ -678,7 +694,7 @@ OPTION(osd_default_notify_timeout, OPT_U32, 30) // default notify timeout in sec
 OPTION(osd_kill_backfill_at, OPT_INT, 0)
 
 // Bounds how infrequently a new map epoch will be persisted for a pg
-OPTION(osd_pg_epoch_persisted_max_stale, OPT_U32, 200)
+OPTION(osd_pg_epoch_persisted_max_stale, OPT_U32, 150) // make this < map_cache_size!
 
 OPTION(osd_min_pg_log_entries, OPT_U32, 3000)  // number of entries to keep in the pg log when trimming it
 OPTION(osd_max_pg_log_entries, OPT_U32, 10000) // max entries, say when degraded, before we trim
@@ -710,6 +726,7 @@ OPTION(osd_failsafe_full_ratio, OPT_FLOAT, .97) // what % full makes an OSD "ful
 OPTION(osd_failsafe_nearfull_ratio, OPT_FLOAT, .90) // what % full makes an OSD near full (failsafe)
 
 OPTION(osd_pg_object_context_cache_count, OPT_INT, 64)
+OPTION(osd_tracing, OPT_BOOL, false) // true if LTTng-UST tracepoints should be enabled
 
 // determines whether PGLog::check() compares written out log to stored log
 OPTION(osd_debug_pg_log_writeout, OPT_BOOL, false)
@@ -776,6 +793,7 @@ OPTION(osd_max_attr_name_len, OPT_U32, 100)    // max rados attr name len; canno
 OPTION(osd_max_attr_size, OPT_U64, 0)
 
 OPTION(osd_objectstore, OPT_STR, "filestore")  // ObjectStore backend type
+OPTION(osd_objectstore_tracing, OPT_BOOL, false) // true if LTTng-UST tracepoints should be enabled
 // Override maintaining compatibility with older OSDs
 // Set to true for testing.  Users should NOT set this.
 OPTION(osd_debug_override_acting_compat, OPT_BOOL, false)
@@ -786,6 +804,38 @@ OPTION(osd_bench_max_block_size, OPT_U64, 64 << 20) // cap the block size at 64M
 OPTION(osd_bench_duration, OPT_U32, 30) // duration of 'osd bench', capped at 30s to avoid triggering timeouts
 
 OPTION(memstore_device_bytes, OPT_U64, 1024*1024*1024)
+OPTION(memstore_page_set, OPT_BOOL, true)
+OPTION(memstore_page_size, OPT_U64, 64 << 10)
+
+OPTION(newstore_max_dir_size, OPT_U32, 1000000)
+OPTION(newstore_onode_map_size, OPT_U32, 1024)   // onodes per collection
+OPTION(newstore_backend, OPT_STR, "rocksdb")
+OPTION(newstore_backend_options, OPT_STR, "")
+OPTION(newstore_fail_eio, OPT_BOOL, true)
+OPTION(newstore_sync_io, OPT_BOOL, false)  // perform initial io synchronously
+OPTION(newstore_sync_transaction, OPT_BOOL, false)  // perform kv txn synchronously
+OPTION(newstore_sync_submit_transaction, OPT_BOOL, false)
+OPTION(newstore_sync_wal_apply, OPT_BOOL, true)     // perform initial wal work synchronously (possibly in combination with aio so we only *queue* ios)
+OPTION(newstore_fsync_threads, OPT_INT, 16)  // num threads calling fsync
+OPTION(newstore_fsync_thread_timeout, OPT_INT, 30) // thread timeout value
+OPTION(newstore_fsync_thread_suicide_timeout, OPT_INT, 120) // suicide timeout value
+OPTION(newstore_wal_threads, OPT_INT, 4)
+OPTION(newstore_wal_thread_timeout, OPT_INT, 30)
+OPTION(newstore_wal_thread_suicide_timeout, OPT_INT, 120)
+OPTION(newstore_max_ops, OPT_U64, 512)
+OPTION(newstore_max_bytes, OPT_U64, 64*1024*1024)
+OPTION(newstore_wal_max_ops, OPT_U64, 512)
+OPTION(newstore_wal_max_bytes, OPT_U64, 128*1024*1024)
+OPTION(newstore_fid_prealloc, OPT_INT, 1024)
+OPTION(newstore_nid_prealloc, OPT_INT, 1024)
+OPTION(newstore_overlay_max_length, OPT_INT, 65536)
+OPTION(newstore_overlay_max, OPT_INT, 32)
+OPTION(newstore_open_by_handle, OPT_BOOL, true)
+OPTION(newstore_o_direct, OPT_BOOL, true)
+OPTION(newstore_db_path, OPT_STR, "")
+OPTION(newstore_aio, OPT_BOOL, true)
+OPTION(newstore_aio_poll_ms, OPT_INT, 250)  // milliseconds
+OPTION(newstore_aio_max_queue_depth, OPT_INT, 4096)
 
 OPTION(filestore_omap_backend, OPT_STR, "leveldb")
 
@@ -906,6 +956,7 @@ OPTION(journal_discard, OPT_BOOL, false) //using ssd disk as journal, whether su
 
 OPTION(rados_mon_op_timeout, OPT_DOUBLE, 0) // how many seconds to wait for a response from the monitor before returning an error from a rados operation. 0 means on limit.
 OPTION(rados_osd_op_timeout, OPT_DOUBLE, 0) // how many seconds to wait for a response from osds before returning an error from a rados operation. 0 means no limit.
+OPTION(rados_tracing, OPT_BOOL, false) // true if LTTng-UST tracepoints should be enabled
 
 OPTION(rbd_op_threads, OPT_INT, 1)
 OPTION(rbd_op_thread_timeout, OPT_INT, 60)
@@ -932,6 +983,7 @@ OPTION(rbd_blacklist_expire_seconds, OPT_INT, 0) // number of seconds to blackli
 OPTION(rbd_request_timed_out_seconds, OPT_INT, 30) // number of seconds before maint request times out
 OPTION(rbd_skip_partial_discard, OPT_BOOL, false) // when trying to discard a range inside an object, set to true to skip zeroing the range.
 OPTION(rbd_enable_alloc_hint, OPT_BOOL, true) // when writing a object, it will issue a hint to osd backend to indicate the expected size object need
+OPTION(rbd_tracing, OPT_BOOL, false) // true if LTTng-UST tracepoints should be enabled
 
 /*
  * The following options change the behavior for librbd's image creation methods that
@@ -1090,6 +1142,12 @@ OPTION(rgw_multipart_min_part_size, OPT_INT, 5 * 1024 * 1024) // min size for ea
 OPTION(rgw_multipart_part_upload_limit, OPT_INT, 10000) // parts limit in multipart upload
 
 OPTION(rgw_olh_pending_timeout_sec, OPT_INT, 3600) // time until we retire a pending olh change
+OPTION(rgw_user_max_buckets, OPT_U32, 1000) // global option to set max buckets count for all user
+
+OPTION(rgw_objexp_gc_interval, OPT_U32, 60 * 10) // maximum time between round of expired objects garbage collecting
+OPTION(rgw_objexp_time_step, OPT_U32, 4096) // number of seconds for rounding the timestamps
+OPTION(rgw_objexp_hints_num_shards, OPT_U32, 127) // maximum number of parts in which the hint index is stored in
+OPTION(rgw_objexp_chunk_size, OPT_U32, 100) // maximum number of entries in a single operation when processing objexp data
 
 OPTION(mutex_perf_counter, OPT_BOOL, false) // enable/disable mutex perf counter
 OPTION(throttler_perf_counter, OPT_BOOL, true) // enable/disable throttler perf counter
@@ -1097,3 +1155,5 @@ OPTION(throttler_perf_counter, OPT_BOOL, true) // enable/disable throttler perf 
 // This will be set to true when it is safe to start threads.
 // Once it is true, it will never change.
 OPTION(internal_safe_to_start_threads, OPT_BOOL, false)
+
+OPTION(debug_deliberately_leak_memory, OPT_BOOL, false)

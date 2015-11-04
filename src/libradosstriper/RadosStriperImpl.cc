@@ -463,10 +463,10 @@ int libradosstriper::RadosStriperImpl::aio_read(const std::string& soid,
   
   // create a completion object and transfer ownership of extents and resultbl
   vector<bufferlist> *resultbl = new vector<bufferlist>(extents->size());
-  c->is_read = true;
-  c->io = m_ioCtxImpl;
   ReadCompletionData *cdata = new ReadCompletionData(this, soid, lockCookie, c,
 						     bl, extents, resultbl);
+  c->is_read = true;
+  c->io = m_ioCtxImpl;
   libradosstriper::MultiAioCompletionImpl *nc = new libradosstriper::MultiAioCompletionImpl;
   nc->set_complete_callback(cdata, striper_read_aio_req_complete);
   // go through the extents

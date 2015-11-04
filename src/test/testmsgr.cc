@@ -28,10 +28,6 @@ using namespace std;
 #include "global/global_init.h"
 #include "common/ceph_argparse.h"
 
-#ifndef DARWIN
-#include <envz.h>
-#endif // DARWIN
-
 #include <sys/types.h>
 #include <fcntl.h>
 

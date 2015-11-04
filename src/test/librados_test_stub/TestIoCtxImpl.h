@@ -34,9 +34,11 @@ private:
 
 class TestIoCtxImpl {
 public:
+  typedef boost::function<int(TestIoCtxImpl *, const std::string &)> Operation;
+
 
   TestIoCtxImpl();
-  explicit TestIoCtxImpl(TestRadosClient &client, int64_t m_pool_id,
+  explicit TestIoCtxImpl(TestRadosClient *client, int64_t m_pool_id,
                          const std::string& pool_name);
 
   TestRadosClient *get_rados_client() {
@@ -45,6 +47,10 @@ public:
 
   void get();
   void put();
+
+  inline int64_t get_pool_id() const {
+    return m_pool_id;
+  }
 
   virtual TestIoCtxImpl *clone() = 0;
 
@@ -56,6 +62,9 @@ public:
     return m_snap_seq;
   }
 
+  inline void set_snap_context(const SnapContext& snapc) {
+    m_snapc = snapc;
+  }
   const SnapContext &get_snap_context() const {
     return m_snapc;
   }
@@ -73,7 +82,7 @@ public:
   virtual int assert_exists(const std::string &oid) = 0;
 
   virtual int create(const std::string& oid, bool exclusive) = 0;
-  virtual int exec(const std::string& oid, TestClassHandler &handler,
+  virtual int exec(const std::string& oid, TestClassHandler *handler,
                    const char *cls, const char *method,
                    bufferlist& inbl, bufferlist* outbl,
                    const SnapContext &snapc);
@@ -128,6 +137,9 @@ public:
   virtual int xattr_set(const std::string& oid, const std::string &name,
                         bufferlist& bl) = 0;
   virtual int zero(const std::string& oid, uint64_t off, uint64_t len) = 0;
+
+  int execute_operation(const std::string& oid,
+                        const Operation &operation);
 
 protected:
   TestIoCtxImpl(const TestIoCtxImpl& rhs);

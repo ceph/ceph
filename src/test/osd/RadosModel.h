@@ -992,6 +992,8 @@ public:
 
   vector<bufferlist> results;
   vector<int> retvals;
+  vector<std::map<uint64_t, uint64_t>> extent_results;
+  vector<bool> is_sparse_read;
   uint64_t waiting_on;
 
   map<string, bufferlist> attrs;
@@ -1016,10 +1018,32 @@ public:
       balance_reads(balance_reads),
       results(3),
       retvals(3),
+      extent_results(3),
+      is_sparse_read(3, false),
       waiting_on(0),
       attrretval(0)
   {}
-		
+
+  void _do_read(librados::ObjectReadOperation& read_op, int index) {
+    uint64_t len = 0;
+    if (old_value.has_contents())
+      len = old_value.most_recent_gen()->get_length(old_value.most_recent());
+    if (rand() % 2) {
+      is_sparse_read[index] = false;
+      read_op.read(0,
+		   len,
+		   &results[index],
+		   &retvals[index]);
+    } else {
+      is_sparse_read[index] = true;
+      read_op.sparse_read(0,
+			  len,
+			  &extent_results[index],
+			  &results[index],
+			  &retvals[index]);
+    }
+  }
+
   void _begin()
   {
     context->state_lock.Lock();
@@ -1065,13 +1089,7 @@ public:
     if (snap >= 0) {
       context->io_ctx.snap_set_read(context->snaps[snap]);
     }
-
-    op.read(0,
-	    !old_value.has_contents() ? 0 :
-	    old_value.most_recent_gen()->get_length(old_value.most_recent()),
-	    &results[0],
-	    &retvals[0]);
-
+    _do_read(op, 0);
     for (map<string, ContDesc>::iterator i = old_value.attrs.begin();
 	 i != old_value.attrs.end();
 	 ++i) {
@@ -1103,12 +1121,7 @@ public:
     // OSD's read behavior in some scenarios
     for (uint32_t i = 1; i < 3; ++i) {
       librados::ObjectReadOperation pipeline_op;
-
-      pipeline_op.read(0,
-                       !old_value.has_contents() ? 0 :
-                       old_value.most_recent_gen()->get_length(old_value.most_recent()),
-                       &results[i],
-                       &retvals[i]);
+      _do_read(pipeline_op, i);
       assert(!context->io_ctx.aio_operate(context->prefix+oid, completions[i], &pipeline_op, 0));
       waiting_on++;
     }
@@ -1182,11 +1195,17 @@ public:
 	       << ", expected " << old_value.most_recent() << std::endl;
 	  context->errors++;
 	}
-        for (vector<bufferlist>::iterator it = results.begin();
-             it != results.end(); ++it) {
-	  if (!old_value.check(*it)) {
-	    cerr << num << ": oid " << oid << " contents " << to_check << " corrupt" << std::endl;
-	    context->errors++;
+        for (unsigned i = 0; i < results.size(); i++) {
+	  if (is_sparse_read[i]) {
+	    if (!old_value.check_sparse(extent_results[i], results[i])) {
+	      cerr << num << ": oid " << oid << " contents " << to_check << " corrupt" << std::endl;
+	      context->errors++;
+	    }
+	  } else {
+	    if (!old_value.check(results[i])) {
+	      cerr << num << ": oid " << oid << " contents " << to_check << " corrupt" << std::endl;
+	      context->errors++;
+	    }
 	  }
 	}
 	if (context->errors) assert(0);
@@ -1638,7 +1657,7 @@ public:
     }
 
     string src = context->prefix+oid_src;
-    op.copy_from(src.c_str(), context->io_ctx, src_value.version, 0);
+    op.copy_from(src.c_str(), context->io_ctx, src_value.version);
 
     pair<TestOp*, TestOp::CallbackInfo*> *cb_arg =
       new pair<TestOp*, TestOp::CallbackInfo*>(this,

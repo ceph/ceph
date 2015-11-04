@@ -120,6 +120,10 @@ enum {
   LIBRADOS_OPERATION_IGNORE_CACHE       = 8,
   LIBRADOS_OPERATION_SKIPRWLOCKS        = 16,
   LIBRADOS_OPERATION_IGNORE_OVERLAY     = 32,
+  /* send requests to cluster despite the cluster or pool being marked
+     full; ops will either succeed (e.g., delete) or return EDQUOT or
+     ENOSPC. */
+  LIBRADOS_OPERATION_FULL_TRY           = 64,
 };
 /** @} */
 
@@ -2131,6 +2135,29 @@ CEPH_RADOS_API int rados_notify_ack(rados_ioctx_t io, const char *o,
 CEPH_RADOS_API int rados_watch_flush(rados_t cluster);
 
 /** @} Watch/Notify */
+
+/**
+ * Pin an object in the cache tier
+ *
+ * When an object is pinned in the cache tier, it stays in the cache
+ * tier, and won't be flushed out.
+ *
+ * @param io the pool the object is in
+ * @param o the object id
+ * @returns 0 on success, negative error code on failure
+ */
+CEPH_RADOS_API int rados_cache_pin(rados_ioctx_t io, const char *o);
+
+/**
+ * Unpin an object in the cache tier
+ *
+ * After an object is unpinned in the cache tier, it can be flushed out
+ *
+ * @param io the pool the object is in
+ * @param o the object id
+ * @returns 0 on success, negative error code on failure
+ */
+CEPH_RADOS_API int rados_cache_unpin(rados_ioctx_t io, const char *o);
 
 /**
  * @name Hints

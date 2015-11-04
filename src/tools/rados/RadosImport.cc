@@ -110,8 +110,10 @@ int RadosImport::import(librados::IoCtx &io_ctx, bool no_overwrite)
   }
 #endif
 
+#if defined(__linux__)
   if (file_fd != STDIN_FILENO)
     posix_fadvise(file_fd, 0, 0, POSIX_FADV_SEQUENTIAL);
+#endif
 
   bool done = false;
   bool found_metadata = false;
@@ -152,8 +154,10 @@ int RadosImport::import(librados::IoCtx &io_ctx, bool no_overwrite)
     cerr << "Missing metadata section!" << std::endl;
   }
 
+#if defined(__linux__)
   if (file_fd != STDIN_FILENO)
     posix_fadvise(file_fd, 0, 0, POSIX_FADV_DONTNEED);
+#endif
   return 0;
 }
 
@@ -313,7 +317,9 @@ int RadosImport::get_object_rados(librados::IoCtx &ioctx, bufferlist &bl, bool n
         break;
       for (std::map<string,bufferlist>::iterator i = as.data.begin();
           i != as.data.end(); ++i) {
-        if (i->first == "_" || i->first == "snapset")
+	// The user xattrs that we want all begin with "_" with length > 1.
+        // Drop key "_" and all attributes that do not start with '_'
+        if (i->first == "_" || i->first[0] != '_')
           continue;
         ret = ioctx.setxattr(ob.hoid.hobj.oid.name, i->first.substr(1).c_str(), i->second);
         if (ret) {

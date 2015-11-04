@@ -34,10 +34,6 @@ using namespace std;
 #include "global/global_init.h"
 #include "common/safe_io.h"
        
-#ifndef DARWIN
-#include <envz.h>
-#endif // DARWIN
-
 #include <sys/types.h>
 #include <fcntl.h>
 
@@ -103,13 +99,12 @@ int main(int argc, const char **argv, const char *envp[]) {
   }
 
   if (childpid == 0) {
+    if (restart_log)
+      g_ceph_context->_log->start();
     common_init_finish(g_ceph_context);
 
     //cout << "child, mounting" << std::endl;
     ::close(fd[0]);
-
-    if (restart_log)
-      g_ceph_context->_log->start();
 
     class RemountTest : public Thread {
     public:
@@ -122,6 +117,7 @@ int main(int argc, const char **argv, const char *envp[]) {
       }
       virtual ~RemountTest() {}
       virtual void *entry() {
+#if defined(__linux__)
 	int ver = get_linux_version();
 	assert(ver != 0);
 	bool can_invalidate_dentries = g_conf->client_try_dentry_invalidate &&
@@ -151,6 +147,9 @@ int main(int argc, const char **argv, const char *envp[]) {
 	  }
 	}
 	return reinterpret_cast<void*>(tr);
+#else
+	return reinterpret_cast<void*>(0);
+#endif
       }
     } tester;
 
@@ -168,9 +167,7 @@ int main(int argc, const char **argv, const char *envp[]) {
       goto out_mc_start_failed;
 
     // start up network
-    messenger = Messenger::create(g_ceph_context, g_conf->ms_type,
-				  entity_name_t::CLIENT(), "client",
-				  getpid());
+    messenger = Messenger::create_client_messenger(g_ceph_context, "client");
     messenger->set_default_policy(Messenger::Policy::lossy_client(0, 0));
     messenger->set_policy(entity_name_t::TYPE_MDS,
 			  Messenger::Policy::lossless_client(0, 0));
@@ -206,8 +203,10 @@ int main(int argc, const char **argv, const char *envp[]) {
 
     // start up fuse
     // use my argc, argv (make sure you pass a mount point!)
-    r = client->mount(g_conf->client_mountpoint.c_str());
+    r = client->mount(g_conf->client_mountpoint.c_str(), g_ceph_context->_conf->fuse_require_active_mds);
     if (r < 0) {
+      if (r == CEPH_FUSE_NO_MDS_UP)
+        cerr << "ceph-fuse[" << getpid() << "]: probably no MDS server is up?" << std::endl;
       cerr << "ceph-fuse[" << getpid() << "]: ceph mount failed with " << cpp_strerror(-r) << std::endl;
       goto out_shutdown;
     }

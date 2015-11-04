@@ -8,7 +8,16 @@
 
 #include <errno.h>
 
+#if defined(__linux__)
+#include <linux/limits.h>
+#define CHAIN_XATTR_MAX_NAME_LEN ((XATTR_NAME_MAX + 1) / 2)
+#elif defined(__APPLE__)
+#include <sys/xattr.h>
+#define CHAIN_XATTR_MAX_NAME_LEN ((XATTR_MAXNAMELEN + 1) / 2)
+#else
 #define CHAIN_XATTR_MAX_NAME_LEN  128
+#endif
+
 #define CHAIN_XATTR_MAX_BLOCK_LEN 2048
 
 /*
@@ -69,8 +78,8 @@ static inline int sys_fremovexattr(int fd, const char *name)
 
 int chain_getxattr(const char *fn, const char *name, void *val, size_t size);
 int chain_fgetxattr(int fd, const char *name, void *val, size_t size);
-int chain_setxattr(const char *fn, const char *name, const void *val, size_t size);
-int chain_fsetxattr(int fd, const char *name, const void *val, size_t size);
+int chain_setxattr(const char *fn, const char *name, const void *val, size_t size, bool onechunk=false);
+int chain_fsetxattr(int fd, const char *name, const void *val, size_t size, bool onechunk=false);
 int chain_listxattr(const char *fn, char *names, size_t len);
 int chain_flistxattr(int fd, char *names, size_t len);
 int chain_removexattr(const char *fn, const char *name);

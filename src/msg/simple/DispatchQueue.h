@@ -180,6 +180,7 @@ class DispatchQueue {
   void fast_preprocess(Message *m);
   void enqueue(Message *m, int priority, uint64_t id);
   void discard_queue(uint64_t id);
+  void discard_local();
   uint64_t get_id() {
     Mutex::Locker l(lock);
     return next_pipe_id++;

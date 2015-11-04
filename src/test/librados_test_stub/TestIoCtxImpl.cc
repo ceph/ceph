@@ -18,9 +18,9 @@ TestIoCtxImpl::TestIoCtxImpl() : m_client(NULL) {
   get();
 }
 
-TestIoCtxImpl::TestIoCtxImpl(TestRadosClient &client, int64_t pool_id,
+TestIoCtxImpl::TestIoCtxImpl(TestRadosClient *client, int64_t pool_id,
                              const std::string& pool_name)
-  : m_client(&client), m_pool_id(pool_id), m_pool_name(pool_name),
+  : m_client(client), m_pool_id(pool_id), m_pool_name(pool_name),
     m_snap_seq(CEPH_NOSNAP)
 {
   m_client->get();
@@ -97,7 +97,7 @@ int TestIoCtxImpl::aio_operate(const std::string& oid, TestObjectOperationImpl &
   ops.get();
   m_client->add_aio_operation(oid, true, boost::bind(
     &TestIoCtxImpl::execute_aio_operations, this, oid, &ops,
-    reinterpret_cast<bufferlist*>(NULL),
+    reinterpret_cast<bufferlist*>(0),
     snap_context != NULL ? *snap_context : m_snapc), c);
   return 0;
 }
@@ -113,17 +113,17 @@ int TestIoCtxImpl::aio_operate_read(const std::string& oid,
   return 0;
 }
 
-int TestIoCtxImpl::exec(const std::string& oid, TestClassHandler &handler,
+int TestIoCtxImpl::exec(const std::string& oid, TestClassHandler *handler,
                         const char *cls, const char *method,
                         bufferlist& inbl, bufferlist* outbl,
                         const SnapContext &snapc) {
-  cls_method_cxx_call_t call = handler.get_method(cls, method);
+  cls_method_cxx_call_t call = handler->get_method(cls, method);
   if (call == NULL) {
     return -ENOSYS;
   }
 
   return (*call)(reinterpret_cast<cls_method_context_t>(
-    handler.get_method_context(this, oid, snapc).get()), &inbl, outbl);
+    handler->get_method_context(this, oid, snapc).get()), &inbl, outbl);
 }
 
 int TestIoCtxImpl::list_watchers(const std::string& o,
@@ -148,7 +148,7 @@ int TestIoCtxImpl::operate(const std::string& oid, TestObjectOperationImpl &ops)
   ops.get();
   m_client->add_aio_operation(oid, false, boost::bind(
     &TestIoCtxImpl::execute_aio_operations, this, oid, &ops,
-    reinterpret_cast<bufferlist*>(NULL), m_snapc), comp);
+    reinterpret_cast<bufferlist*>(0), m_snapc), comp);
 
   comp->wait_for_safe();
   int ret = comp->get_return_value();
@@ -251,10 +251,17 @@ int TestIoCtxImpl::watch(const std::string& o, uint64_t *handle,
                                             ctx2);
 }
 
+int TestIoCtxImpl::execute_operation(const std::string& oid,
+                                     const Operation &operation) {
+  TestRadosClient::Transaction transaction(m_client, oid);
+  return operation(this, oid);
+}
+
 int TestIoCtxImpl::execute_aio_operations(const std::string& oid,
                                           TestObjectOperationImpl *ops,
                                           bufferlist *pbl,
                                           const SnapContext &snapc) {
+  TestRadosClient::Transaction transaction(m_client, oid);
   int ret = 0;
   for (ObjectOperations::iterator it = ops->ops.begin();
        it != ops->ops.end(); ++it) {

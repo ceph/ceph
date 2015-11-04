@@ -120,6 +120,18 @@ static simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZER;
     return 65536;
   }
 
+  const char * buffer::error::what() const throw () {
+    return "buffer::exception";
+  }
+  const char * buffer::bad_alloc::what() const throw () {
+    return "buffer::bad_alloc";
+  }
+  const char * buffer::end_of_buffer::what() const throw () {
+    return "buffer::end_of_buffer";
+  }
+  const char * buffer::malformed_input::what() const throw () {
+    return buf;
+  }
   buffer::error_code::error_code(int error) :
     buffer::malformed_input(cpp_strerror(error).c_str()), code(error) {}
 
@@ -831,7 +843,12 @@ static simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZER;
     _len += l;
     return _len + _off;
   }
-    
+
+  void buffer::ptr::copy_in(unsigned o, unsigned l, const char *src)
+  {
+    copy_in(o, l, src, true);
+  }
+
   void buffer::ptr::copy_in(unsigned o, unsigned l, const char *src, bool crc_reset)
   {
     assert(_raw);
@@ -843,11 +860,21 @@ static simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZER;
     maybe_inline_memcpy(dest, src, l, 64);
   }
 
+  void buffer::ptr::zero()
+  {
+    zero(true);
+  }
+
   void buffer::ptr::zero(bool crc_reset)
   {
     if (crc_reset)
         _raw->invalidate_crc();
     memset(c_str(), 0, _len);
+  }
+
+  void buffer::ptr::zero(unsigned o, unsigned l)
+  {
+    zero(o, l, true);
   }
 
   void buffer::ptr::zero(unsigned o, unsigned l, bool crc_reset)
@@ -881,7 +908,8 @@ static simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZER;
     return *this;
     }*/
 
-  void buffer::list::iterator::advance(int o)
+  template<bool is_const>
+  void buffer::list::iterator_impl<is_const>::advance(int o)
   {
     //cout << this << " advance " << o << " from " << off << " (p_off " << p_off << " in " << p->length() << ")" << std::endl;
     if (o > 0) {
@@ -919,22 +947,31 @@ static simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZER;
     }
   }
 
-  void buffer::list::iterator::seek(unsigned o)
+  template<bool is_const>
+  void buffer::list::iterator_impl<is_const>::seek(unsigned o)
   {
-    //cout << this << " seek " << o << std::endl;
     p = ls->begin();
     off = p_off = 0;
     advance(o);
   }
 
-  char buffer::list::iterator::operator*()
+  template<bool is_const>
+  bool buffer::list::iterator_impl<is_const>::operator!=(const buffer::list::iterator_impl<is_const>& rhs) const
+  {
+    return bl == rhs.bl && off == rhs.off;
+  }
+
+  template<bool is_const>
+  char buffer::list::iterator_impl<is_const>::operator*() const
   {
     if (p == ls->end())
       throw end_of_buffer();
     return (*p)[p_off];
   }
-  
-  buffer::list::iterator& buffer::list::iterator::operator++()
+
+  template<bool is_const>
+  buffer::list::iterator_impl<is_const>&
+  buffer::list::iterator_impl<is_const>::operator++()
   {
     if (p == ls->end())
       throw end_of_buffer();
@@ -942,24 +979,25 @@ static simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZER;
     return *this;
   }
 
-  buffer::ptr buffer::list::iterator::get_current_ptr()
+  template<bool is_const>
+  buffer::ptr buffer::list::iterator_impl<is_const>::get_current_ptr() const
   {
     if (p == ls->end())
       throw end_of_buffer();
     return ptr(*p, p_off, p->length() - p_off);
   }
-  
+
   // copy data out.
   // note that these all _append_ to dest!
-  
-  void buffer::list::iterator::copy(unsigned len, char *dest)
+  template<bool is_const>
+  void buffer::list::iterator_impl<is_const>::copy(unsigned len, char *dest)
   {
     if (p == ls->end()) seek(off);
     while (len > 0) {
       if (p == ls->end())
 	throw end_of_buffer();
-      assert(p->length() > 0); 
-      
+      assert(p->length() > 0);
+
       unsigned howmuch = p->length() - p_off;
       if (len < howmuch) howmuch = len;
       p->copy_out(p_off, howmuch, dest);
@@ -969,39 +1007,42 @@ static simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZER;
       advance(howmuch);
     }
   }
-  
-  void buffer::list::iterator::copy(unsigned len, ptr &dest)
+
+  template<bool is_const>
+  void buffer::list::iterator_impl<is_const>::copy(unsigned len, ptr &dest)
   {
     dest = create(len);
     copy(len, dest.c_str());
   }
 
-  void buffer::list::iterator::copy(unsigned len, list &dest)
+  template<bool is_const>
+  void buffer::list::iterator_impl<is_const>::copy(unsigned len, list &dest)
   {
     if (p == ls->end())
       seek(off);
     while (len > 0) {
       if (p == ls->end())
 	throw end_of_buffer();
-      
+
       unsigned howmuch = p->length() - p_off;
       if (len < howmuch)
 	howmuch = len;
       dest.append(*p, p_off, howmuch);
-      
+
       len -= howmuch;
       advance(howmuch);
     }
   }
 
-  void buffer::list::iterator::copy(unsigned len, std::string &dest)
+  template<bool is_const>
+  void buffer::list::iterator_impl<is_const>::copy(unsigned len, std::string &dest)
   {
     if (p == ls->end())
       seek(off);
     while (len > 0) {
       if (p == ls->end())
 	throw end_of_buffer();
-      
+
       unsigned howmuch = p->length() - p_off;
       const char *c_str = p->c_str();
       if (len < howmuch)
@@ -1013,7 +1054,8 @@ static simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZER;
     }
   }
 
-  void buffer::list::iterator::copy_all(list &dest)
+  template<bool is_const>
+  void buffer::list::iterator_impl<is_const>::copy_all(list &dest)
   {
     if (p == ls->end())
       seek(off);
@@ -1021,17 +1063,84 @@ static simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZER;
       if (p == ls->end())
 	return;
       assert(p->length() > 0);
-      
+
       unsigned howmuch = p->length() - p_off;
       const char *c_str = p->c_str();
       dest.append(c_str + p_off, howmuch);
-      
+
       advance(howmuch);
     }
   }
-  
-  // copy data in
 
+  // explicitly instantiate only the iterator types we need, so we can hide the
+  // details in this compilation unit without introducing unnecessary link time
+  // dependencies.
+  template class buffer::list::iterator_impl<true>;
+  template class buffer::list::iterator_impl<false>;
+
+  void buffer::list::iterator::advance(int o)
+  {
+    buffer::list::iterator_impl<false>::advance(o);
+  }
+
+  void buffer::list::iterator::seek(unsigned o)
+  {
+    buffer::list::iterator_impl<false>::seek(o);
+  }
+
+  char buffer::list::iterator::operator*()
+  {
+    if (p == ls->end()) {
+      throw end_of_buffer();
+    }
+    return (*p)[p_off];
+  }
+
+  buffer::list::iterator& buffer::list::iterator::operator++()
+  {
+    buffer::list::iterator_impl<false>::operator++();
+    return *this;
+  }
+
+  buffer::ptr buffer::list::iterator::get_current_ptr()
+  {
+    if (p == ls->end()) {
+      throw end_of_buffer();
+    }
+    return ptr(*p, p_off, p->length() - p_off);
+  }
+
+  void buffer::list::iterator::copy(unsigned len, char *dest)
+  {
+    return buffer::list::iterator_impl<false>::copy(len, dest);
+  }
+
+  void buffer::list::iterator::copy(unsigned len, ptr &dest)
+  {
+    buffer::list::iterator_impl<false>::copy(len, dest);
+  }
+
+  void buffer::list::iterator::copy(unsigned len, list &dest)
+  {
+    buffer::list::iterator_impl<false>::copy(len, dest);
+  }
+
+  void buffer::list::iterator::copy(unsigned len, std::string &dest)
+  {
+    buffer::list::iterator_impl<false>::copy(len, dest);
+  }
+
+  void buffer::list::iterator::copy_all(list &dest)
+  {
+    buffer::list::iterator_impl<false>::copy_all(dest);
+  }
+
+  void buffer::list::iterator::copy_in(unsigned len, const char *src)
+  {
+    copy_in(len, src, true);
+  }
+
+  // copy data in
   void buffer::list::iterator::copy_in(unsigned len, const char *src, bool crc_reset)
   {
     // copy
@@ -1073,6 +1182,15 @@ static simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZER;
 
   // -- buffer::list --
 
+  buffer::list::list(list&& other)
+    : _buffers(std::move(other._buffers)),
+      _len(other._len),
+      _memcopy_count(other._memcopy_count),
+      last_p(this) {
+    append_buffer.swap(other.append_buffer);
+    other.clear();
+  }
+
   void buffer::list::swap(list& other)
   {
     std::swap(_len, other._len);
@@ -1084,7 +1202,12 @@ static simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZER;
     other.last_p = other.begin();
   }
 
-  bool buffer::list::contents_equal(ceph::buffer::list& other)
+  bool buffer::list::contents_equal(buffer::list& other)
+  {
+    return static_cast<const buffer::list*>(this)->contents_equal(other);
+  }
+
+  bool buffer::list::contents_equal(const ceph::buffer::list& other) const
   {
     if (length() != other.length())
       return false;
@@ -1117,8 +1240,8 @@ static simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZER;
 
     // byte-wise comparison
     if (false) {
-      bufferlist::iterator me = begin();
-      bufferlist::iterator him = other.begin();
+      bufferlist::const_iterator me = begin();
+      bufferlist::const_iterator him = other.begin();
       while (!me.end()) {
 	if (*me != *him)
 	  return false;
@@ -1362,6 +1485,11 @@ static simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZER;
     return last_p.copy(len, dest);
   }
     
+  void buffer::list::copy_in(unsigned off, unsigned len, const char *src)
+  {
+    copy_in(off, len, src, true);
+  }
+
   void buffer::list::copy_in(unsigned off, unsigned len, const char *src, bool crc_reset)
   {
     if (off + len > length())

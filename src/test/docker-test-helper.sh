@@ -107,10 +107,6 @@ function run_in_docker() {
     shift
     local ref=$1
     shift
-    local dev=$1
-    shift
-    local user=$1
-    shift
     local opts="$1"
     shift
     local script=$1
@@ -123,24 +119,15 @@ function run_in_docker() {
     local ccache
     mkdir -p $HOME/.ccache
     ccache="--volume $HOME/.ccache:$HOME/.ccache"
-    if $dev ; then
-        dev="--volume /dev:/dev"
-    else
-        dev=
-    fi
-    if test $user != root ; then
-        user="--user $user"
-    else
-        user=
-    fi
+    user="--user $USER"
     local cmd="docker run $opts --rm --name $image --privileged $ccache"
     cmd+=" --volume $downstream:$downstream"
     cmd+=" --volume $upstream:$upstream"
     local status=0
     if test "$script" = "SHELL" ; then
-        $cmd --tty --interactive --workdir $downstream $user $dev $image bash
+        $cmd --tty --interactive --workdir $downstream $user $image bash
     else
-        if ! $cmd --workdir $downstream $user $dev $image "$@" ; then
+        if ! $cmd --workdir $downstream $user $image "$@" ; then
             status=1
         fi
     fi
@@ -175,8 +162,6 @@ $0 [options] command args ...
    [--shell]              run an interactive shell in the container
    [--remove-all]         remove the container and the image for the specified types+versions
 
-   [--dev]                run the container with --volume /dev:/dev
-   [--user name]          execute the command as user 'name' (defaults to $USER)
    [--opts options]       run the contain with 'options'
 
 docker-test.sh must be run from a Ceph clone and it will run the
@@ -244,9 +229,6 @@ docker-test.sh --os-type centos --os-version 7 -- make check
 Run make check on a giant
 docker-test.sh --ref giant -- make check
 
-Run a test as root with access to the host /dev for losetup to work
-docker-test.sh --user root --dev -- make TESTS=test/ceph-disk-root.sh check
-
 Run an interactive shell and set resolv.conf to use 172.17.42.1
 docker-test.sh --opts --dns=172.17.42.1 --shell
 
@@ -262,7 +244,7 @@ function main_docker() {
     fi
 
     local temp
-    temp=$(getopt -o scdht:v:u:o:a:r: --long remove-all,verbose,shell,dev,help,os-type:,os-version:,user:,opts:,all:,ref: -n $0 -- "$@") || return 1
+    temp=$(getopt -o scht:v:o:a:r: --long remove-all,verbose,shell,help,os-type:,os-version:,opts:,all:,ref: -n $0 -- "$@") || return 1
 
     eval set -- "$temp"
 
@@ -271,8 +253,6 @@ function main_docker() {
     local all
     local remove=false
     local shell=false
-    local dev=false
-    local user=$USER
     local opts
     local ref=$(git rev-parse HEAD)
 
@@ -291,10 +271,6 @@ function main_docker() {
                 shell=true
                 shift
                 ;;
-            -d|--dev)
-                dev=true
-                shift
-                ;;
 	    -h|--help)
                 usage
                 return 0
@@ -305,10 +281,6 @@ function main_docker() {
                 ;;
 	    -v|--os-version) 
                 os_version=$2
-                shift 2
-                ;;
-	    -u|--user) 
-                user="$2"
                 shift 2
                 ;;
 	    -o|--opts) 
@@ -346,9 +318,9 @@ function main_docker() {
             if $remove ; then
                 remove_all $os_type $os_version || return 1
             elif $shell ; then
-                run_in_docker $os_type $os_version $ref $dev $user "$opts" SHELL || return 1
+                run_in_docker $os_type $os_version $ref "$opts" SHELL || return 1
             else
-                run_in_docker $os_type $os_version $ref $dev $user "$opts" "$@" || return 1
+                run_in_docker $os_type $os_version $ref "$opts" "$@" || return 1
             fi
         done
     done

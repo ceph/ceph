@@ -1,14 +1,13 @@
-libos_types_la_SOURCES = \
+libos_types_a_SOURCES = \
 	os/Transaction.cc
-libos_types_la_CXXFLAGS = ${AM_CXXFLAGS}
-noinst_LTLIBRARIES += libos_types.la
+libos_types_a_CXXFLAGS = ${AM_CXXFLAGS}
+noinst_LIBRARIES += libos_types.a
 
 if ENABLE_SERVER
 
-libos_la_SOURCES = \
+libos_a_SOURCES = \
 	os/chain_xattr.cc \
 	os/fs/FS.cc \
-	os/fs/XFS.cc \
 	os/DBObjectMap.cc \
 	os/GenericObjectMap.cc \
 	os/FileJournal.cc \
@@ -27,28 +26,38 @@ libos_la_SOURCES = \
 	common/TrackedOp.cc
 
 if LINUX
-libos_la_SOURCES += os/BtrfsFileStoreBackend.cc
+libos_a_SOURCES += os/BtrfsFileStoreBackend.cc
+endif
+
+if WITH_LIBAIO
+libos_types_a_SOURCES += os/newstore/newstore_types.cc
+libos_a_SOURCES += os/newstore/NewStore.cc
 endif
 
 if WITH_LIBXFS
-libos_la_SOURCES += os/XfsFileStoreBackend.cc
+libos_a_SOURCES += \
+    os/fs/XFS.cc \
+    os/XfsFileStoreBackend.cc
 endif
 
 if WITH_LIBZFS
-libos_la_SOURCES += os/ZFSFileStoreBackend.cc
+libos_a_SOURCES += os/ZFSFileStoreBackend.cc
 endif
 
-libos_la_CXXFLAGS = ${AM_CXXFLAGS}
-libos_la_LIBADD = $(LIBOS_TYPES)
+libos_a_CXXFLAGS = ${AM_CXXFLAGS} -I rocksdb/include
+libos_a_LIBADD = libos_types.a
+
 if WITH_LTTNG
-libos_la_LIBADD += $(LIBOS_TP)
+libos_a_LIBADD += $(LIBOS_TP)
 endif
 
-noinst_LTLIBRARIES += libos.la
+noinst_LIBRARIES += libos.a
 
 noinst_HEADERS += \
 	os/btrfs_ioctl.h \
 	os/chain_xattr.h \
+	os/newstore/newstore_types.h \
+	os/newstore/NewStore.h \
 	os/BtrfsFileStoreBackend.h \
 	os/CollectionIndex.h \
 	os/DBObjectMap.h \
@@ -70,25 +79,30 @@ noinst_HEADERS += \
 	os/KeyValueStore.h \
 	os/ObjectMap.h \
 	os/ObjectStore.h \
+	os/PageSet.h \
 	os/SequencerPosition.h \
 	os/WBThrottle.h \
 	os/XfsFileStoreBackend.h \
 	os/ZFSFileStoreBackend.h
 
 if WITH_SLIBROCKSDB
-libos_rocksdb_la_SOURCES = os/RocksDBStore.cc
-libos_rocksdb_la_CXXFLAGS = ${AM_CXXFLAGS} ${LIBROCKSDB_CFLAGS} -std=gnu++11 -I rocksdb/include
-libos_rocksdb_la_LIBADD = rocksdb/librocksdb.la
-noinst_LTLIBRARIES += libos_rocksdb.la
+# build rocksdb with its own makefile
+# for some stupid reason this needs -fPIC...
+# PORTABLE=1 fixes the aarch64 build (-march=native doesn't work there)
+rocksdb/librocksdb.a:
+	cd rocksdb && EXTRA_CXXFLAGS=-fPIC PORTABLE=1 make -j$(shell nproc) static_lib
+libos_a_CXXFLAGS +=  -I rocksdb/include -fPIC
+libos_a_SOURCES += os/RocksDBStore.cc
+libos_a_LIBADD += rocksdb/librocksdb.a
 noinst_HEADERS += os/RocksDBStore.h
 endif
+
 if WITH_DLIBROCKSDB
-libos_rocksdb_la_SOURCES = os/RocksDBStore.cc
-libos_rocksdb_la_CXXFLAGS = ${AM_CXXFLAGS} ${LIBROCKSDB_CFLAGS} -std=gnu++11
-libos_rocksdb_la_LIBADD = -lrocksdb
-noinst_LTLIBRARIES += libos_rocksdb.la
+libos_a_SOURCES += os/RocksDBStore.cc
+libos_a_LIBADD += -lrocksdb
 noinst_HEADERS += os/RocksDBStore.h
 endif
+
 if WITH_LIBZFS
 libos_zfs_a_SOURCES = os/ZFS.cc
 libos_zfs_a_CXXFLAGS = ${AM_CXXFLAGS} ${LIBZFS_CFLAGS}
@@ -97,9 +111,9 @@ noinst_HEADERS += os/ZFS.h
 endif
 
 if WITH_KINETIC
-libos_la_SOURCES += os/KineticStore.cc
-libos_la_CXXFLAGS += -std=gnu++11
-libos_la_LIBADD += -lkinetic_client -lprotobuf -lglog -lgflags libcrypto.a
+libos_a_SOURCES += os/KineticStore.cc
+libos_a_CXXFLAGS += -std=gnu++11
+libos_a_LIBADD += -lkinetic_client -lprotobuf -lglog -lgflags libcrypto.a
 noinst_HEADERS += os/KineticStore.h
 endif
 

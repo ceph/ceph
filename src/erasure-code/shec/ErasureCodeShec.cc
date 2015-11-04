@@ -501,7 +501,8 @@ int* ErasureCodeShec::shec_reedsolomon_coding_matrix(int is_single)
         if (true) {
           double r_e1;
           r_e1 = shec_calc_recovery_efficiency1(k, m1, m2, c1, c2);
-          if (r_e1 < min_r_e1){
+          if (min_r_e1 - r_e1 > std::numeric_limits<double>::epsilon() &&
+	      r_e1 < min_r_e1) {
             min_r_e1 = r_e1;
             c1_best = c1;
             m1_best = m1;
@@ -560,6 +561,14 @@ int ErasureCodeShec::shec_make_decoding_matrix(bool prepare, int *want_, int *av
         }
       }
     }
+  }
+
+  if (tcache.getDecodingTableFromCache(decoding_matrix,
+                                       dm_row, dm_column, minimum,
+                                       technique,
+                                       k, m, c, w,
+                                       want, avails)) {
+    return 0;
   }
 
   for (unsigned long long pp = 0; pp < (1ull << m); ++pp) {
@@ -754,6 +763,9 @@ int ErasureCodeShec::shec_make_decoding_matrix(bool prepare, int *want_, int *av
   }
 
   int ret = jerasure_invert_matrix(tmpmat, decoding_matrix, mindup, w);
+
+  tcache.putDecodingTableToCache(decoding_matrix, dm_row, dm_column, minimum, technique,
+                                 k, m, c, w, want, avails);
 
   return ret;
 }

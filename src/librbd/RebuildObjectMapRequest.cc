@@ -22,9 +22,9 @@ namespace librbd {
 
 namespace {
 
-class C_VerifyObject : public C_AsyncObjectThrottle {
+class C_VerifyObject : public C_AsyncObjectThrottle<> {
 public:
-  C_VerifyObject(AsyncObjectThrottle &throttle, ImageCtx *image_ctx,
+  C_VerifyObject(AsyncObjectThrottle<> &throttle, ImageCtx *image_ctx,
                  uint64_t snap_id, uint64_t object_no)
     : C_AsyncObjectThrottle(throttle, *image_ctx), m_snap_id(snap_id),
       m_object_no(object_no), m_oid(m_image_ctx.get_object_name(m_object_no))
@@ -228,9 +228,10 @@ void RebuildObjectMapRequest::send_resize_object_map() {
   CephContext *cct = m_image_ctx.cct;
 
   uint64_t num_objects;
+  uint64_t size;
   {
     RWLock::RLocker l(m_image_ctx.snap_lock);
-    uint64_t size = get_image_size();
+    size = get_image_size();
     num_objects = Striper::get_num_objects(m_image_ctx.layout, size);
   }
 
@@ -245,7 +246,7 @@ void RebuildObjectMapRequest::send_resize_object_map() {
   // should have been canceled prior to releasing lock
   assert(!m_image_ctx.image_watcher->is_lock_supported() ||
          m_image_ctx.image_watcher->is_lock_owner());
-  m_image_ctx.object_map.aio_resize(num_objects, OBJECT_NONEXISTENT,
+  m_image_ctx.object_map.aio_resize(size, OBJECT_NONEXISTENT,
                                     create_callback_context());
 }
 
@@ -296,10 +297,10 @@ void RebuildObjectMapRequest::send_verify_objects() {
   m_state = STATE_VERIFY_OBJECTS;
   ldout(cct, 5) << this << " send_verify_objects" << dendl;
 
-  AsyncObjectThrottle::ContextFactory context_factory(
+  AsyncObjectThrottle<>::ContextFactory context_factory(
     boost::lambda::bind(boost::lambda::new_ptr<C_VerifyObject>(),
       boost::lambda::_1, &m_image_ctx, snap_id, boost::lambda::_2));
-  AsyncObjectThrottle *throttle = new AsyncObjectThrottle(
+  AsyncObjectThrottle<> *throttle = new AsyncObjectThrottle<>(
     this, m_image_ctx, context_factory, create_callback_context(), &m_prog_ctx,
     0, num_objects);
   throttle->start_ops(cct->_conf->rbd_concurrent_management_ops);

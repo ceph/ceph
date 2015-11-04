@@ -1,6 +1,7 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
+#include "test/librados_test_stub/LibradosTestStub.h"
 #include "include/rados/librados.hpp"
 #include "common/ceph_argparse.h"
 #include "common/common_init.h"
@@ -20,20 +21,13 @@
 #include <list>
 #include <vector>
 #include "include/assert.h"
+#include "include/compat.h"
 
 #define dout_subsys ceph_subsys_rados
 
 namespace {
 
-static void DeallocateRadosClient(librados::TestRadosClient* client)
-{
-  client->put();
-}
-
-} // anonymous namespace
-
-
-static librados::TestClassHandler *get_class_handler() {
+librados::TestClassHandler *get_class_handler() {
   static boost::shared_ptr<librados::TestClassHandler> s_class_handler;
   if (!s_class_handler) {
     s_class_handler.reset(new librados::TestClassHandler());
@@ -42,49 +36,67 @@ static librados::TestClassHandler *get_class_handler() {
   return s_class_handler.get();
 }
 
-static librados::TestRadosClient *get_rados_client() {
+void do_out_buffer(bufferlist& outbl, char **outbuf, size_t *outbuflen) {
+  if (outbuf) {
+    if (outbl.length() > 0) {
+      *outbuf = (char *)malloc(outbl.length());
+      memcpy(*outbuf, outbl.c_str(), outbl.length());
+    } else {
+      *outbuf = NULL;
+    }
+  }
+  if (outbuflen) {
+    *outbuflen = outbl.length();
+  }
+}
+
+void do_out_buffer(string& outbl, char **outbuf, size_t *outbuflen) {
+  if (outbuf) {
+    if (outbl.length() > 0) {
+      *outbuf = (char *)malloc(outbl.length());
+      memcpy(*outbuf, outbl.c_str(), outbl.length());
+    } else {
+      *outbuf = NULL;
+    }
+  }
+  if (outbuflen) {
+    *outbuflen = outbl.length();
+  }
+}
+
+} // anonymous namespace
+
+namespace librados_test_stub {
+
+TestRadosClientPtr *rados_client() {
+  // force proper destruction order by delaying construction
+  static TestRadosClientPtr s_rados_client;
+  return &s_rados_client;
+}
+
+void set_rados_client(
+    const boost::shared_ptr<librados::TestRadosClient> &new_client) {
+  assert(new_client.get() != nullptr);
+  *rados_client() = new_client;
+}
+
+TestRadosClientPtr get_rados_client() {
   // TODO: use factory to allow tests to swap out impl
-  static boost::shared_ptr<librados::TestRadosClient> s_rados_client;
-  if (!s_rados_client) {
+  TestRadosClientPtr *client = rados_client();
+  if (client->get() == nullptr) {
     CephInitParameters iparams(CEPH_ENTITY_TYPE_CLIENT);
     CephContext *cct = common_preinit(iparams, CODE_ENVIRONMENT_LIBRARY, 0);
     cct->_conf->parse_env();
     cct->_conf->apply_changes(NULL);
-    s_rados_client.reset(new librados::TestMemRadosClient(cct),
-                         &DeallocateRadosClient);
+    client->reset(new librados::TestMemRadosClient(cct),
+                  &librados::TestRadosClient::Deallocate);
     cct->put();
   }
-  s_rados_client->get();
-  return s_rados_client.get();
+  (*client)->get();
+  return *client;
 }
 
-static void do_out_buffer(bufferlist& outbl, char **outbuf, size_t *outbuflen) {
-  if (outbuf) {
-    if (outbl.length() > 0) {
-      *outbuf = (char *)malloc(outbl.length());
-      memcpy(*outbuf, outbl.c_str(), outbl.length());
-    } else {
-      *outbuf = NULL;
-    }
-  }
-  if (outbuflen) {
-    *outbuflen = outbl.length();
-  }
-}
-
-static void do_out_buffer(string& outbl, char **outbuf, size_t *outbuflen) {
-  if (outbuf) {
-    if (outbl.length() > 0) {
-      *outbuf = (char *)malloc(outbl.length());
-      memcpy(*outbuf, outbl.c_str(), outbl.length());
-    } else {
-      *outbuf = NULL;
-    }
-  }
-  if (outbuflen) {
-    *outbuflen = outbl.length();
-  }
-}
+} // namespace librados_test_stub
 
 extern "C" int rados_aio_create_completion(void *cb_arg,
                                            rados_callback_t cb_complete,
@@ -158,7 +170,7 @@ extern "C" int rados_connect(rados_t cluster) {
 }
 
 extern "C" int rados_create(rados_t *cluster, const char * const id) {
-  *cluster = get_rados_client();
+  *cluster = librados_test_stub::get_rados_client().get();
   return 0;
 }
 
@@ -397,7 +409,8 @@ void IoCtx::close() {
 
 int IoCtx::create(const std::string& oid, bool exclusive) {
   TestIoCtxImpl *ctx = reinterpret_cast<TestIoCtxImpl*>(io_ctx_impl);
-  return ctx->create(oid, exclusive);
+  return ctx->execute_operation(
+    oid, boost::bind(&TestIoCtxImpl::create, _1, _2, exclusive));
 }
 
 void IoCtx::dup(const IoCtx& rhs) {
@@ -409,8 +422,9 @@ void IoCtx::dup(const IoCtx& rhs) {
 int IoCtx::exec(const std::string& oid, const char *cls, const char *method,
                 bufferlist& inbl, bufferlist& outbl) {
   TestIoCtxImpl *ctx = reinterpret_cast<TestIoCtxImpl*>(io_ctx_impl);
-  return ctx->exec(oid, *get_class_handler(), cls, method, inbl, &outbl,
-                   ctx->get_snap_context());
+  return ctx->execute_operation(
+    oid, boost::bind(&TestIoCtxImpl::exec, _1, _2, get_class_handler(), cls,
+                     method, inbl, &outbl, ctx->get_snap_context()));
 }
 
 void IoCtx::from_rados_ioctx_t(rados_ioctx_t p, IoCtx &io) {
@@ -443,13 +457,15 @@ std::string IoCtx::get_pool_name() {
 
 int IoCtx::list_snaps(const std::string& o, snap_set_t *out_snaps) {
   TestIoCtxImpl *ctx = reinterpret_cast<TestIoCtxImpl*>(io_ctx_impl);
-  return ctx->list_snaps(o, out_snaps);
+  return ctx->execute_operation(
+    o, boost::bind(&TestIoCtxImpl::list_snaps, _1, _2, out_snaps));
 }
 
 int IoCtx::list_watchers(const std::string& o,
                          std::list<obj_watch_t> *out_watchers) {
   TestIoCtxImpl *ctx = reinterpret_cast<TestIoCtxImpl*>(io_ctx_impl);
-  return ctx->list_watchers(o, out_watchers);
+  return ctx->execute_operation(
+    o, boost::bind(&TestIoCtxImpl::list_watchers, _1, _2, out_watchers));
 }
 
 int IoCtx::notify(const std::string& o, uint64_t ver, bufferlist& bl) {
@@ -474,7 +490,9 @@ int IoCtx::omap_get_vals(const std::string& oid,
                          uint64_t max_return,
                          std::map<std::string, bufferlist> *out_vals) {
   TestIoCtxImpl *ctx = reinterpret_cast<TestIoCtxImpl*>(io_ctx_impl);
-  return ctx->omap_get_vals(oid, start_after, "", max_return, out_vals);
+  return ctx->execute_operation(
+    oid, boost::bind(&TestIoCtxImpl::omap_get_vals, _1, _2, start_after, "",
+                     max_return, out_vals));
 }
 
 int IoCtx::operate(const std::string& oid, ObjectWriteOperation *op) {
@@ -493,11 +511,14 @@ int IoCtx::operate(const std::string& oid, ObjectReadOperation *op,
 int IoCtx::read(const std::string& oid, bufferlist& bl, size_t len,
                 uint64_t off) {
   TestIoCtxImpl *ctx = reinterpret_cast<TestIoCtxImpl*>(io_ctx_impl);
-  return ctx->read(oid, len, off, &bl);
+  return ctx->execute_operation(
+    oid, boost::bind(&TestIoCtxImpl::read, _1, _2, len, off, &bl));
 }
 
 int IoCtx::remove(const std::string& oid) {
   TestIoCtxImpl *ctx = reinterpret_cast<TestIoCtxImpl*>(io_ctx_impl);
+  return ctx->execute_operation(
+    oid, boost::bind(&TestIoCtxImpl::remove, _1, _2));
   return ctx->remove(oid);
 }
 
@@ -530,12 +551,14 @@ void IoCtx::snap_set_read(snap_t seq) {
 
 int IoCtx::stat(const std::string& oid, uint64_t *psize, time_t *pmtime) {
   TestIoCtxImpl *ctx = reinterpret_cast<TestIoCtxImpl*>(io_ctx_impl);
-  return ctx->stat(oid, psize, pmtime);;
+  return ctx->execute_operation(
+    oid, boost::bind(&TestIoCtxImpl::stat, _1, _2, psize, pmtime));
 }
 
 int IoCtx::tmap_update(const std::string& oid, bufferlist& cmdbl) {
   TestIoCtxImpl *ctx = reinterpret_cast<TestIoCtxImpl*>(io_ctx_impl);
-  return ctx->tmap_update(oid, cmdbl);
+  return ctx->execute_operation(
+    oid, boost::bind(&TestIoCtxImpl::tmap_update, _1, _2, cmdbl));
 }
 
 int IoCtx::unwatch2(uint64_t handle) {
@@ -563,12 +586,16 @@ int IoCtx::watch2(const std::string& o, uint64_t *handle,
 int IoCtx::write(const std::string& oid, bufferlist& bl, size_t len,
                  uint64_t off) {
   TestIoCtxImpl *ctx = reinterpret_cast<TestIoCtxImpl*>(io_ctx_impl);
-  return ctx->write(oid, bl, len, off, ctx->get_snap_context());
+  return ctx->execute_operation(
+    oid, boost::bind(&TestIoCtxImpl::write, _1, _2, bl, len, off,
+                     ctx->get_snap_context()));
 }
 
 int IoCtx::write_full(const std::string& oid, bufferlist& bl) {
   TestIoCtxImpl *ctx = reinterpret_cast<TestIoCtxImpl*>(io_ctx_impl);
-  return ctx->write_full(oid, bl, ctx->get_snap_context());
+  return ctx->execute_operation(
+    oid, boost::bind(&TestIoCtxImpl::write_full, _1, _2, bl,
+                     ctx->get_snap_context()));
 }
 
 static int save_operation_result(int result, int *pval) {
@@ -601,8 +628,7 @@ void ObjectOperation::exec(const char *cls, const char *method,
                            bufferlist& inbl) {
   TestObjectOperationImpl *o = reinterpret_cast<TestObjectOperationImpl*>(impl);
   o->ops.push_back(boost::bind(&TestIoCtxImpl::exec, _1, _2,
-			       boost::ref(*get_class_handler()),
-			       cls, method, inbl, _3, _4));
+			       get_class_handler(), cls, method, inbl, _3, _4));
 }
 
 void ObjectOperation::set_op_flags2(int flags) {

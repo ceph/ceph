@@ -80,7 +80,11 @@ using ceph::crypto::SHA1;
 #include "common/blkdev.h"
 
 #ifdef WITH_LTTNG
+#define TRACEPOINT_DEFINE
+#define TRACEPOINT_PROBE_DYNAMIC_LINKAGE
 #include "tracing/objectstore.h"
+#undef TRACEPOINT_PROBE_DYNAMIC_LINKAGE
+#undef TRACEPOINT_DEFINE
 #else
 #define tracepoint(...)
 #endif
@@ -297,7 +301,7 @@ int FileStore::lfn_open(coll_t cid,
       goto fail;
     }
     r = chain_fsetxattr(fd, XATTR_SPILL_OUT_NAME,
-                        XATTR_NO_SPILL_OUT, sizeof(XATTR_NO_SPILL_OUT));
+                        XATTR_NO_SPILL_OUT, sizeof(XATTR_NO_SPILL_OUT), true);
     if (r < 0) {
       VOID_TEMP_FAILURE_RETRY(::close(fd));
       derr << "error setting spillout xattr for oid " << oid << " (" << (*path)->path()
@@ -526,7 +530,6 @@ FileStore::FileStore(const std::string &base, const std::string &jdev, osflagbit
   stop(false), sync_thread(this),
   fdcache(g_ceph_context),
   wbthrottle(g_ceph_context),
-  default_osr("default"),
   throttle_ops(g_ceph_context, "filestore_ops",g_conf->filestore_queue_max_ops),
   throttle_bytes(g_ceph_context, "filestore_bytes",g_conf->filestore_queue_max_bytes),
   op_finisher(g_ceph_context),
@@ -1933,16 +1936,16 @@ int FileStore::queue_transactions(Sequencer *posr, list<Transaction*> &tls,
 
   // set up the sequencer
   OpSequencer *osr;
-  if (!posr)
-    posr = &default_osr;
+  assert(posr);
   if (posr->p) {
     osr = static_cast<OpSequencer *>(posr->p.get());
-    dout(5) << "queue_transactions existing " << *osr << "/" << osr->parent << dendl; //<< " w/ q " << osr->q << dendl;
+    dout(5) << "queue_transactions existing " << osr << " " << *osr << dendl;
   } else {
     osr = new OpSequencer;
+    osr->set_cct(g_ceph_context);
     osr->parent = posr;
     posr->p = osr;
-    dout(5) << "queue_transactions new " << *osr << "/" << osr->parent << dendl;
+    dout(5) << "queue_transactions new " << osr << " " << *osr << dendl;
   }
 
   // used to include osr information in tracepoints during transaction apply
@@ -2111,7 +2114,7 @@ void FileStore::_set_global_replay_guard(coll_t cid,
   // then record that we did it
   bufferlist v;
   ::encode(spos, v);
-  int r = chain_fsetxattr(fd, GLOBAL_REPLAY_GUARD_XATTR, v.c_str(), v.length());
+  int r = chain_fsetxattr(fd, GLOBAL_REPLAY_GUARD_XATTR, v.c_str(), v.length(), true);
   if (r < 0) {
     derr << __func__ << ": fsetxattr " << GLOBAL_REPLAY_GUARD_XATTR
 	 << " got " << cpp_strerror(r) << dendl;
@@ -2174,7 +2177,7 @@ void FileStore::_set_replay_guard(coll_t cid,
     assert(0 == "_set_replay_guard failed");
   }
   _set_replay_guard(fd, spos, 0, in_progress);
-  ::close(fd);
+  VOID_TEMP_FAILURE_RETRY(::close(fd));
 } 
 
 
@@ -2204,7 +2207,7 @@ void FileStore::_set_replay_guard(int fd,
   bufferlist v(40);
   ::encode(spos, v);
   ::encode(in_progress, v);
-  int r = chain_fsetxattr(fd, REPLAY_GUARD_XATTR, v.c_str(), v.length());
+  int r = chain_fsetxattr(fd, REPLAY_GUARD_XATTR, v.c_str(), v.length(), true);
   if (r < 0) {
     derr << "fsetxattr " << REPLAY_GUARD_XATTR << " got " << cpp_strerror(r) << dendl;
     assert(0 == "fsetxattr failed");
@@ -2230,7 +2233,7 @@ void FileStore::_close_replay_guard(coll_t cid,
     assert(0 == "_close_replay_guard failed");
   }
   _close_replay_guard(fd, spos);
-  ::close(fd);
+  VOID_TEMP_FAILURE_RETRY(::close(fd));
 } 
 
 void FileStore::_close_replay_guard(int fd, const SequencerPosition& spos)
@@ -2247,7 +2250,7 @@ void FileStore::_close_replay_guard(int fd, const SequencerPosition& spos)
   ::encode(spos, v);
   bool in_progress = false;
   ::encode(in_progress, v);
-  int r = chain_fsetxattr(fd, REPLAY_GUARD_XATTR, v.c_str(), v.length());
+  int r = chain_fsetxattr(fd, REPLAY_GUARD_XATTR, v.c_str(), v.length(), true);
   if (r < 0) {
     derr << "fsetxattr " << REPLAY_GUARD_XATTR << " got " << cpp_strerror(r) << dendl;
     assert(0 == "fsetxattr failed");
@@ -3303,10 +3306,10 @@ int FileStore::_clone(coll_t cid, const ghobject_t& oldoid, const ghobject_t& ne
     r = chain_fgetxattr(**o, XATTR_SPILL_OUT_NAME, buf, sizeof(buf));
     if (r >= 0 && !strncmp(buf, XATTR_NO_SPILL_OUT, sizeof(XATTR_NO_SPILL_OUT))) {
       r = chain_fsetxattr(**n, XATTR_SPILL_OUT_NAME, XATTR_NO_SPILL_OUT,
-                          sizeof(XATTR_NO_SPILL_OUT));
+                          sizeof(XATTR_NO_SPILL_OUT), true);
     } else {
       r = chain_fsetxattr(**n, XATTR_SPILL_OUT_NAME, XATTR_SPILL_OUT,
-                          sizeof(XATTR_SPILL_OUT));
+                          sizeof(XATTR_SPILL_OUT), true);
     }
     if (r < 0)
       goto out3;
@@ -3903,6 +3906,7 @@ int FileStore::_fgetattrs(int fd, map<string,bufferptr>& aset)
     dout(10) << " -ERANGE, got " << len << dendl;
     if (len < 0) {
       assert(!m_filestore_fail_eio || len != -EIO);
+      delete[] names2;
       return len;
     }
     name = names2;
@@ -3921,8 +3925,10 @@ int FileStore::_fgetattrs(int fd, map<string,bufferptr>& aset)
       if (*name) {
         dout(20) << "fgetattrs " << fd << " getting '" << name << "'" << dendl;
         int r = _fgetattr(fd, attrname, aset[name]);
-        if (r < 0)
+        if (r < 0) {
+	  delete[] names2;
 	  return r;
+        }
       }
     }
     name += strlen(name) + 1;
@@ -4489,7 +4495,6 @@ bool FileStore::collection_empty(coll_t c)
   RWLock::RLocker l((index.index)->access_lock);
 
   vector<ghobject_t> ls;
-  collection_list_handle_t handle;
   r = index->collection_list_partial(ghobject_t(), ghobject_t::get_max(), true,
 				     1, &ls, NULL);
   if (r < 0) {

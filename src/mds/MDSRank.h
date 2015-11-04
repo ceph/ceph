@@ -119,7 +119,7 @@ class MDSRank {
 
     // Incarnation as seen in MDSMap at the point where a rank is
     // assigned.
-    const int incarnation;
+    int incarnation;
 
   public:
     mds_rank_t get_nodeid() const { return whoami; }
@@ -176,21 +176,21 @@ class MDSRank {
     MDSMap::DaemonState get_state() const { return state; } 
     MDSMap::DaemonState get_want_state() const { return beacon.get_want_state(); } 
 
-    bool is_creating() { return state == MDSMap::STATE_CREATING; }
-    bool is_starting() { return state == MDSMap::STATE_STARTING; }
-    bool is_standby()  { return state == MDSMap::STATE_STANDBY; }
-    bool is_replay()   { return state == MDSMap::STATE_REPLAY; }
-    bool is_standby_replay() { return state == MDSMap::STATE_STANDBY_REPLAY; }
-    bool is_resolve()  { return state == MDSMap::STATE_RESOLVE; }
-    bool is_reconnect() { return state == MDSMap::STATE_RECONNECT; }
-    bool is_rejoin()   { return state == MDSMap::STATE_REJOIN; }
-    bool is_clientreplay()   { return state == MDSMap::STATE_CLIENTREPLAY; }
-    bool is_active()   { return state == MDSMap::STATE_ACTIVE; }
-    bool is_stopping() { return state == MDSMap::STATE_STOPPING; }
-    bool is_oneshot_replay()   { return state == MDSMap::STATE_ONESHOT_REPLAY; }
-    bool is_any_replay() { return (is_replay() || is_standby_replay() ||
+    bool is_creating() const { return state == MDSMap::STATE_CREATING; }
+    bool is_starting() const { return state == MDSMap::STATE_STARTING; }
+    bool is_standby() const { return state == MDSMap::STATE_STANDBY; }
+    bool is_replay() const { return state == MDSMap::STATE_REPLAY; }
+    bool is_standby_replay() const { return state == MDSMap::STATE_STANDBY_REPLAY; }
+    bool is_resolve() const { return state == MDSMap::STATE_RESOLVE; }
+    bool is_reconnect() const { return state == MDSMap::STATE_RECONNECT; }
+    bool is_rejoin() const { return state == MDSMap::STATE_REJOIN; }
+    bool is_clientreplay() const { return state == MDSMap::STATE_CLIENTREPLAY; }
+    bool is_active() const { return state == MDSMap::STATE_ACTIVE; }
+    bool is_stopping() const { return state == MDSMap::STATE_STOPPING; }
+    bool is_oneshot_replay() const { return state == MDSMap::STATE_ONESHOT_REPLAY; }
+    bool is_any_replay() const { return (is_replay() || is_standby_replay() ||
         is_oneshot_replay()); }
-    bool is_stopped()  { return mdsmap->is_stopped(whoami); }
+    bool is_stopped() const { return mdsmap->is_stopped(whoami); }
 
     void handle_write_error(int err);
 
@@ -265,7 +265,6 @@ class MDSRank {
 
     MDSRank(
         mds_rank_t whoami_,
-        int incarnation_,
         Mutex &mds_lock_,
         LogChannelRef &clog_,
         SafeTimer &timer_,
@@ -491,12 +490,23 @@ public:
   void update_log_config();
   bool handle_command_legacy(std::vector<std::string> args);
 
+  bool handle_command(
+    const cmdmap_t &cmdmap,
+    bufferlist const &inbl,
+    int *r,
+    std::stringstream *ds,
+    std::stringstream *ss);
+
+  void dump_sessions(
+      const SessionFilter &filter, Formatter *f) const;
+  std::vector<entity_name_t> evict_sessions(
+      const SessionFilter &filter);
+
   // Call into me from MDS::ms_dispatch
   bool ms_dispatch(Message *m);
 
   MDSRankDispatcher(
       mds_rank_t whoami_,
-      int incarnation_,
       Mutex &mds_lock_,
       LogChannelRef &clog_,
       SafeTimer &timer_,

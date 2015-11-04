@@ -1,7 +1,7 @@
 include Makefile-env.am
 
-SUBDIRS += ocf java tracing
-DIST_SUBDIRS += gmock ocf java tracing
+SUBDIRS += ocf java
+DIST_SUBDIRS += gmock ocf java
 
 if NO_GIT_VERSION
 export NO_VERSION="yes"
@@ -40,6 +40,7 @@ include test/Makefile.am
 include tools/Makefile.am
 include Makefile-rocksdb.am
 include compressor/Makefile.am
+include tracing/Makefile.am
 
 
 # shell scripts
@@ -81,6 +82,7 @@ EXTRA_DIST += \
 	$(srcdir)/ceph-rbdnamer \
 	$(srcdir)/tools/ceph-monstore-update-crush.sh \
 	$(srcdir)/upstart/ceph-all.conf \
+	$(srcdir)/upstart/ceph-disk.conf \
 	$(srcdir)/upstart/ceph-mon.conf \
 	$(srcdir)/upstart/ceph-mon-all.conf \
 	$(srcdir)/upstart/ceph-mon-all-starter.conf \
@@ -149,7 +151,7 @@ endif
 core-daemons: ceph-mon ceph-osd ceph-mds radosgw
 admin-tools: monmaptool osdmaptool crushtool ceph-authtool
 base: core-daemons admin-tools \
-	cephfs ceph-syn ceph-conf \
+	cephfs ceph-fuse ceph-syn ceph-conf \
 	rados radosgw-admin librados-config \
 	init-ceph ceph-post-file \
 	ceph

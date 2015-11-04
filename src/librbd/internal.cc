@@ -1164,8 +1164,8 @@ reprotect_and_return_err:
     if (!*order)
       *order = RBD_DEFAULT_OBJ_ORDER;
 
-    if (*order > 64 || *order < 12) {
-      lderr(cct) << "order must be in the range [12, 64]" << dendl;
+    if (*order > 25 || *order < 12) {
+      lderr(cct) << "order must be in the range [12, 25]" << dendl;
       return -EDOM;
     }
 
@@ -3391,7 +3391,7 @@ reprotect_and_return_err:
     c->add_request();
     ictx->flush_async_operations(flush_ctx);
 
-    c->init_time(ictx, AIO_TYPE_FLUSH);
+    c->start_op(ictx, AIO_TYPE_FLUSH);
     C_AioWrite *req_comp = new C_AioWrite(cct, c);
     c->add_request();
     if (ictx->object_cacher) {
@@ -3498,8 +3498,7 @@ reprotect_and_return_err:
       }
 
       snapc = ictx->snapc;
-
-      c->init_time(ictx, AIO_TYPE_WRITE);
+      c->start_op(ictx, AIO_TYPE_WRITE);
     }
 
     if (ictx->image_watcher->is_lock_supported() &&
@@ -3638,8 +3637,7 @@ reprotect_and_return_err:
 
       // TODO: check for snap
       snapc = ictx->snapc;
-
-      c->init_time(ictx, AIO_TYPE_DISCARD);
+      c->start_op(ictx, AIO_TYPE_DISCARD);
     }
 
     if (ictx->image_watcher->is_lock_supported() &&
@@ -3813,8 +3811,7 @@ reprotect_and_return_err:
 			         p->first, len, 0, object_extents, buffer_ofs);
         buffer_ofs += len;
       }
-
-      c->init_time(ictx, AIO_TYPE_READ);
+      c->start_op(ictx, AIO_TYPE_READ);
     }
 
     c->read_buf = buf;

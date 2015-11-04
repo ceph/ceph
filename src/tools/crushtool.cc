@@ -170,7 +170,7 @@ void usage()
   cout << "                         show location for given device id\n";
   cout << "   -i mapfn --test       test a range of inputs on the map\n";
   cout << "      [--min-x x] [--max-x x] [--x x]\n";
-  cout << "      [--min-rule r] [--max-rule r] [--rule r]\n";
+  cout << "      [--min-rule r] [--max-rule r] [--rule r] [--ruleset rs]\n";
   cout << "      [--num-rep n]\n";
   cout << "      [--batches b]      split the CRUSH mapping into b > 1 rounds\n";
   cout << "      [--weight|-w devno weight]\n";
@@ -465,6 +465,12 @@ int main(int argc, const char **argv)
 	exit(EXIT_FAILURE);
       }
       tester.set_rule(x);
+    } else if (ceph_argparse_witharg(args, i, &x, err, "--ruleset", (char*)NULL)) {
+      if (!err.str().empty()) {
+	cerr << err.str() << std::endl;
+	exit(EXIT_FAILURE);
+      }
+      tester.set_ruleset(x);
     } else if (ceph_argparse_witharg(args, i, &x, err, "--batches", (char*)NULL)) {
       if (!err.str().empty()) {
 	cerr << err.str() << std::endl;

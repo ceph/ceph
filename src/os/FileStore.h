@@ -141,7 +141,10 @@ private:
   int init_index(coll_t c);
 
   void _kludge_temp_object_collection(coll_t& cid, const ghobject_t& oid) {
-    if (oid.hobj.pool < -1 && !cid.is_temp())
+    // - normal temp case: cid is pg, object is temp (pool < -1)
+    // - hammer temp case: cid is pg (or already temp), object pool is -1
+    if (cid.is_pg() && (oid.hobj.pool < -1 ||
+			oid.hobj.pool == -1))
       cid = cid.get_temp();
   }
   void init_temp_collections();
@@ -263,6 +266,7 @@ private:
       q.push_back(o);
     }
     Op *peek_queue() {
+      Mutex::Locker l(qlock);
       assert(apply_lock.is_locked());
       return q.front();
     }
@@ -329,7 +333,6 @@ private:
   FDCache fdcache;
   WBThrottle wbthrottle;
 
-  Sequencer default_osr;
   deque<OpSequencer*> op_queue;
   Throttle throttle_ops, throttle_bytes;
   Finisher op_finisher;

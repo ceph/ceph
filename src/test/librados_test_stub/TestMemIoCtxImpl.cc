@@ -7,6 +7,7 @@
 #include <boost/algorithm/string/predicate.hpp>
 #include <boost/bind.hpp>
 #include <errno.h>
+#include <include/compat.h>
 
 static void to_vector(const interval_set<uint64_t> &set,
                       std::vector<std::pair<uint64_t, uint64_t> > *vec) {
@@ -23,14 +24,21 @@ TestMemIoCtxImpl::TestMemIoCtxImpl() {
 }
 
 TestMemIoCtxImpl::TestMemIoCtxImpl(const TestMemIoCtxImpl& rhs)
-  : TestIoCtxImpl(rhs), m_client(rhs.m_client), m_pool(rhs.m_pool) {
-  }
+    : TestIoCtxImpl(rhs), m_client(rhs.m_client), m_pool(rhs.m_pool) {
+  m_pool->get();
+}
 
-TestMemIoCtxImpl::TestMemIoCtxImpl(TestMemRadosClient &client, int64_t pool_id,
+TestMemIoCtxImpl::TestMemIoCtxImpl(TestMemRadosClient *client, int64_t pool_id,
                                    const std::string& pool_name,
                                    TestMemRadosClient::Pool *pool)
-  : TestIoCtxImpl(client, pool_id, pool_name), m_client(&client), m_pool(pool) {
-  }
+    : TestIoCtxImpl(client, pool_id, pool_name), m_client(client),
+      m_pool(pool) {
+  m_pool->get();
+}
+
+TestMemIoCtxImpl::~TestMemIoCtxImpl() {
+  m_pool->put();
+}
 
 TestIoCtxImpl *TestMemIoCtxImpl::clone() {
   return new TestMemIoCtxImpl(*this);
