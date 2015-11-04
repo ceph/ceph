@@ -3,7 +3,7 @@ D=/tmp/stampsdir
 VPATH=${D}
 
 define get_ip
-$$(openstack server show -f json $(1) | jq '.[] | select(.Field == "addresses") | .Value' | perl -pe 's/.*?=([\d\.]+).*/$$1/')
+$$(openstack server show -f json $(1) | jq '.[] | select(.Field == "addresses") | .Value' | perl -pe 's/([\da-f]*:){7}[\da-f]*, //; s/.*?=([\d\.]+).*/$$1/')
 endef
 
 MY_IP=$(shell hostname -I | cut -f1 -d' ')
