@@ -67,9 +67,9 @@ public:
 
   bool is_spawned() const { return pid > 0; }
 
-  int stdin() const;
-  int stdout() const;
-  int stderr() const;
+  int stdin_fd() const;
+  int stdout_fd() const;
+  int stderr_fd() const;
 
   void close_stdin();
   void close_stdout();
@@ -152,21 +152,21 @@ void SubProcess::add_cmd_arg(const char *arg) {
   cmd_args.push_back(arg);
 }
 
-int SubProcess::stdin() const {
+int SubProcess::stdin_fd() const {
   assert(is_spawned());
   assert(pipe_stdin);
 
   return stdin_pipe_out_fd;
 }
 
-int SubProcess::stdout() const {
+int SubProcess::stdout_fd() const {
   assert(is_spawned());
   assert(pipe_stdout);
 
   return stdout_pipe_in_fd;
 }
 
-int SubProcess::stderr() const {
+int SubProcess::stderr_fd() const {
   assert(is_spawned());
   assert(pipe_stderr);
 
