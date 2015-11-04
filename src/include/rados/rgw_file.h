@@ -77,6 +77,25 @@ struct rgw_statvfs {
 };
 
 /*
+  lookup object by name (POSIX style)
+*/
+int rgw_lookup(struct rgw_fs *rgw_fs,
+	      struct rgw_file_handle *parent_fh, const char *path,
+	      struct rgw_file_handle **fh, uint32_t flags);
+
+/*
+  lookup object by handle (NFS style)
+*/
+int rgw_lookup_handle(struct rgw_fs *rgw_fs, struct rgw_fh_hk fh_hk,
+		      struct rgw_file_handle **fh, uint32_t flags);
+
+/*
+ * release file handle
+ */
+int rgw_fh_rele(struct rgw_fs *rgw_fs, struct rgw_file_handle *fh,
+		uint32_t flags);
+
+/*
  attach rgw namespace
 */
 int rgw_mount(librgw_t rgw, const char *uid, const char *key,
@@ -126,20 +145,7 @@ int rgw_unlink(struct rgw_fs *rgw_fs,
 	       struct rgw_file_handle *parent_fh, const char* path);
 
 /*
-  lookup a directory or file
-*/
-int rgw_lookup(struct rgw_fs *rgw_fs,
-	      struct rgw_file_handle *parent_fh, const char *path,
-	      struct rgw_file_handle **fh, uint32_t flags);
-
-/*
- * release file handle
- */
-int rgw_fh_rele(struct rgw_fs *rgw_fs, struct rgw_file_handle *fh,
-		uint32_t flags);
-
-/*
-  read  directory content
+    read  directory content
 */
 typedef bool (*rgw_readdir_cb)(const char *name, void *arg, uint64_t offset);
 
@@ -187,7 +193,7 @@ int rgw_open(struct rgw_fs *rgw_fs, struct rgw_file_handle *parent_fh,
 
 #define RGW_CLOSE_FLAG_NONE 0x0000
 #define RGW_CLOSE_FLAG_RELE 0x0001
-
+  
 int rgw_close(struct rgw_fs *rgw_fs, struct rgw_file_handle *fh,
 	      uint32_t flags);
 
@@ -197,7 +203,7 @@ int rgw_close(struct rgw_fs *rgw_fs, struct rgw_file_handle *fh,
 int rgw_read(struct rgw_fs *rgw_fs,
 	    struct rgw_file_handle *fh, uint64_t offset,
 	    size_t length, size_t *bytes_read, void *buffer);
-
+  
 /*
    write data to file
 */

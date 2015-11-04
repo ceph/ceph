@@ -313,6 +313,35 @@ namespace rgw {
       return fh;
     }
 
+    /* find or create an RGWFileHandle */
+    RGWFileHandle* lookup_handle(struct rgw_fh_hk fh_hk) {
+
+      RGWFileHandle::FHCache::Latch lat;
+      fh_key fhk(fh_hk);
+
+      RGWFileHandle* fh =
+	fh_cache.find_latch(fhk.fh_hk.object /* partition selector*/,
+			    fhk /* key */, lat /* serializer */,
+			    RGWFileHandle::FHCache::FLAG_LOCK);
+      /* LATCHED */
+      if (! fh) {
+	lsubdout(get_context(), rgw, 0)
+	  << __func__ << " handle lookup failed <"
+	  << fhk.fh_hk.bucket << "," << fhk.fh_hk.object << ">"
+	  << "(need persistent handles)"
+	  << dendl;
+	goto out;
+      }
+      intrusive_ptr_add_ref(fh); /* call path/handle ref */
+    out:
+      lat.lock->unlock(); /* !LATCHED */
+      return fh;
+    }
+
+    CephContext* get_context() {
+      return static_cast<CephContext*>(get_fs()->fs_private);
+    }
+
     struct rgw_fs* get_fs() { return &fs; }
 
     RGWUserInfo* get_user() { return &user; }
