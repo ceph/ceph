@@ -466,7 +466,7 @@ static constexpr int64_t NO_CONTENT_LENGTH = -1;
 extern void dump_errno(int http_ret, string& out);
 extern void dump_errno(const struct rgw_err &err, string& out);
 extern void dump_errno(struct req_state *s);
-extern void dump_errno(struct req_state *s, int http_ret);
+// XXX kill or keep? extern void dump_errno(struct req_state *s, int http_ret);
 extern void end_header(struct req_state *s,
                        RGWOp* op = nullptr,
                        const char *content_type = nullptr,

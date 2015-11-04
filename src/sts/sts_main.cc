@@ -429,6 +429,8 @@ static int process_request(STSStore *store, RGWREST *rest, STSRequest *req, RGWC
 
   struct req_state *s = &rstate;
 
+  s->err = new sts_err();
+
 //  s->req_id = store->unique_id(req->id);
 //  s->trans_id = store->unique_trans_id(req->id);
 
@@ -514,7 +516,7 @@ done:
     dout(0) << "ERROR: client_io->complete_request() returned " << r << dendl;
   }
 
-  int http_ret = s->err.http_ret_E;
+  int http_ret = s->err->http_ret_E;
 
   req->log_format(s, "http status=%d", http_ret);
 
@@ -524,7 +526,7 @@ done:
 
   dout(1) << "====== req done req=" << hex << req << dec << " http_status=" << http_ret << " ======" << dendl;
 
-  return (ret < 0 ? ret : s->err.ret_E);
+  return (ret < 0 ? ret : s->err->ret_E);
 }
 
 void STSFCGXProcess::handle_request(STSRequest *r)
@@ -892,9 +894,8 @@ int main(int argc, const char **argv)
 * "swift", "admin", "swift_auth" do that. 
 */
   if (apis_map.count("sts") > 0) {
-    RGWRESTMgr *mgr = set_logging(new RGWRESTMgr_STS);
-    rest.register_default_mgr(mgr);
-    rest.register_resource("stupid", mgr);
+    rest.register_default_mgr(set_logging(new RGWRESTMgr_STS));
+    rest.register_resource("stupid", set_logging(new RGWRESTMgr_STS));
   }
 
   r = signal_fd_init();

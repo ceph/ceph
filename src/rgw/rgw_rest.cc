@@ -311,7 +311,7 @@ void rgw_flush_formatter(struct req_state *s, Formatter *formatter)
 
 void dump_errno(struct req_state *s)
 {
-  dump_status(s, s->err.http_ret, http_status_names[s->err.http_ret]);
+  dump_status(s, s->err->http_ret_E, http_status_names[s->err->http_ret_E]);
 }
 
 void dump_errno(struct req_state *s, int http_ret)
@@ -437,46 +437,6 @@ void dump_trans_id(req_state *s)
   }
 }
 
-class s3Error {
-private:
-  const string &s3_code;
-  const string &s3_message;
-  const string &bucket_name;
-  const string &trans_id;
-public:
-  s3Error(const rgw_err &e, const struct req_state *s)
-	: s3_code(s->err.s3_code_E), s3_message(s->err.message_E),
-	bucket_name(s->bucket_name), trans_id(s->trans_id) {}
-  void dump(Formatter *f);
-};
-
-void s3Error::dump(Formatter *f)
-{
-  f->open_object_section("Error");
-  if (!s3_code.empty())
-    f->dump_string("Code", s3_code);
-  if (!s3_message.empty())
-    f->dump_string("Message", s3_message);
-  f->close_section();
-
-  if (typeid(f) != typeid(HTMLFormatter)) {
-    f->open_object_section("Error");
-  }
-  if (!s3_code.empty())
-    f->dump_string("Code", s3_code);
-  if (!s3_message.empty())
-    f->dump_string("Message", s3_message);
-  if (!s->bucket_name.empty()) // TODO: connect to expose_bucket
-    f->dump_string("BucketName", s->bucket_name);
-  if (!s->trans_id.empty()) // TODO: connect to expose_bucket or another toggle
-    f->dump_string("RequestId", s->trans_id);
-  f->dump_string("HostId", s->host_id);
-  if (typeid(f) != typeid(HTMLFormatter)) {
-    f->close_section();
-  }
-  f->output_footer();
-}
-
 void end_header(struct req_state* s, RGWOp* op, const char *content_type,
 		const int64_t proposed_content_length, bool force_content_type,
 		bool force_no_error)
@@ -485,7 +445,7 @@ void end_header(struct req_state* s, RGWOp* op, const char *content_type,
 
   dump_trans_id(s);
 
-  if ((!s->err.is_err()) &&
+  if ((!s->is_err()) &&
       (s->bucket_info.owner != s->user->user_id) &&
       (s->bucket_info.requester_pays)) {
     STREAM_IO(s)->print("x-amz-request-charged: requester\r\n");
@@ -502,7 +462,7 @@ void end_header(struct req_state* s, RGWOp* op, const char *content_type,
   /* do not send content type if content length is zero
      and the content type was not set by the user */
   if (force_content_type ||
-      (!content_type &&  s->formatter->get_len()  != 0) || s->err.is_err()){
+      (!content_type &&  s->formatter->get_len()  != 0) || s->is_err()){
     switch (s->format) {
     case RGW_FORMAT_XML:
       ctype = "application/xml";
@@ -524,8 +484,6 @@ void end_header(struct req_state* s, RGWOp* op, const char *content_type,
   if (!force_no_error && s->is_err()) {
     dump_start(s);
     s->err->dump(s->formatter);
-//    s3Error errobj(s);
-//    errobj.dump(s->formatter);
     dump_content_length(s, s->formatter->get_len());
   } else {
     if (proposed_content_length != NO_CONTENT_LENGTH) {

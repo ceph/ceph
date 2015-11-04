@@ -763,7 +763,7 @@ void RGWPutMetadataObject_ObjStore_SWIFT::send_response()
     op_ret = STATUS_ACCEPTED;
   }
   s->set_req_state_err(op_ret);
-  if (!s->err.is_err()) {
+  if (!s->is_err()) {
     dump_content_length(s, 0);
   }
   dump_errno(s);
@@ -1063,7 +1063,7 @@ int RGWGetObj_ObjStore_SWIFT::send_response_data(bufferlist& bl,
   s->set_req_state_err((partial_content && !op_ret) ? STATUS_PARTIAL_CONTENT
 		    : op_ret);
   dump_errno(s);
-  if (s->err.is_err()) {
+  if (s->is_err()) {
     end_header(s, NULL);
     return 0;
   }

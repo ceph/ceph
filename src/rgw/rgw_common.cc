@@ -29,6 +29,61 @@ PerfCounters *perfcounter = NULL;
 
 const uint32_t RGWBucketInfo::NUM_SHARDS_BLIND_BUCKET(UINT32_MAX);
 
+rgw_http_errors rgw_http_s3_errors({
+    { 0, {200, "" }},
+    { STATUS_CREATED, {201, "Created" }},
+    { STATUS_ACCEPTED, {202, "Accepted" }},
+    { STATUS_NO_CONTENT, {204, "NoContent" }},
+    { STATUS_PARTIAL_CONTENT, {206, "" }},
+    { ERR_PERMANENT_REDIRECT, {301, "PermanentRedirect" }},
+    { STATUS_REDIRECT, {303, "" }},
+    { ERR_NOT_MODIFIED, {304, "NotModified" }},
+    { EINVAL, {400, "InvalidArgument" }},
+    { ERR_INVALID_REQUEST, {400, "InvalidRequest" }},
+    { ERR_INVALID_DIGEST, {400, "InvalidDigest" }},
+    { ERR_BAD_DIGEST, {400, "BadDigest" }},
+    { ERR_INVALID_BUCKET_NAME, {400, "InvalidBucketName" }},
+    { ERR_INVALID_OBJECT_NAME, {400, "InvalidObjectName" }},
+    { ERR_UNRESOLVABLE_EMAIL, {400, "UnresolvableGrantByEmailAddress" }},
+    { ERR_INVALID_PART, {400, "InvalidPart" }},
+    { ERR_INVALID_PART_ORDER, {400, "InvalidPartOrder" }},
+    { ERR_REQUEST_TIMEOUT, {400, "RequestTimeout" }},
+    { ERR_TOO_LARGE, {400, "EntityTooLarge" }},
+    { ERR_TOO_SMALL, {400, "EntityTooSmall" }},
+    { ERR_TOO_MANY_BUCKETS, {400, "TooManyBuckets" }},
+    { ERR_MALFORMED_XML, {400, "MalformedXML" }},
+    { ERR_LENGTH_REQUIRED, {411, "MissingContentLength" }},
+    { EACCES, {403, "AccessDenied" }},
+    { EPERM, {403, "AccessDenied" }},
+    { ERR_SIGNATURE_NO_MATCH, {403, "SignatureDoesNotMatch" }},
+    { ERR_INVALID_ACCESS_KEY, {403, "InvalidAccessKeyId" }},
+    { ERR_USER_SUSPENDED, {403, "UserSuspended" }},
+    { ERR_REQUEST_TIME_SKEWED, {403, "RequestTimeTooSkewed" }},
+    { ERR_QUOTA_EXCEEDED, {403, "QuotaExceeded" }},
+    { ENOENT, {404, "NoSuchKey" }},
+    { ERR_NO_SUCH_BUCKET, {404, "NoSuchBucket" }},
+    { ERR_NO_SUCH_UPLOAD, {404, "NoSuchUpload" }},
+    { ERR_NOT_FOUND, {404, "Not Found"}},
+    { ERR_METHOD_NOT_ALLOWED, {405, "MethodNotAllowed" }},
+    { ETIMEDOUT, {408, "RequestTimeout" }},
+    { EEXIST, {409, "BucketAlreadyExists" }},
+    { ENOTEMPTY, {409, "BucketNotEmpty" }},
+    { ERR_PRECONDITION_FAILED, {412, "PreconditionFailed" }},
+    { ERANGE, {416, "InvalidRange" }},
+    { ERR_UNPROCESSABLE_ENTITY, {422, "UnprocessableEntity" }},
+    { ERR_LOCKED, {423, "Locked" }},
+    { ERR_INTERNAL_ERROR, {500, "InternalError" }},
+    { ERR_NOT_IMPLEMENTED, {501, "NotImplemented" }},
+});
+
+rgw_http_errors rgw_http_swift_errors({
+    { EACCES, {401, "AccessDenied" }},
+    { EPERM, {401, "AccessDenied" }},
+    { ERR_USER_SUSPENDED, {401, "UserSuspended" }},
+    { ERR_INVALID_UTF8, {412, "Invalid UTF8" }},
+    { ERR_BAD_URL, {412, "Bad URL" }},
+});
+
 int rgw_perf_start(CephContext *cct)
 {
   PerfCountersBuilder plb(cct, cct->_conf->name.to_str(), l_rgw_first, l_rgw_last);
@@ -183,7 +238,7 @@ void req_info::rebuild_from(req_info& src)
 
 
 req_state::req_state(CephContext* _cct, RGWEnv* e, RGWUserInfo* u)
-  : cct(_cct), cio(NULL), op(OP_UNKNOWN), user(u), has_acl_header(false),
+  : cct(_cct), cio(NULL), op(OP_UNKNOWN), err(0), user(u), has_acl_header(false),
     os_auth_token(NULL), info(_cct, e)
 {
   enable_ops_log = e->conf->enable_ops_log;
@@ -221,6 +276,7 @@ req_state::req_state(CephContext* _cct, RGWEnv* e, RGWUserInfo* u)
 
 req_state::~req_state() {
   delete formatter;
+  delete err;
   delete bucket_acl;
   delete object_acl;
   delete aws4_auth;
@@ -228,39 +284,41 @@ req_state::~req_state() {
 
 void req_state::set_req_state_err(int err_no)
 {
-  const struct rgw_http_errors *r;
+  rgw_http_errors::const_iterator r;
+
+  if (!err) err = new rgw_err();
 
   if (err_no < 0)
     err_no = -err_no;
-  err.ret_E = -err_no;
+  err->ret_E = -err_no;
   if (prot_flags & RGW_REST_SWIFT) {
-    r = search_err(err_no, RGW_HTTP_SWIFT_ERRORS, ARRAY_LEN(RGW_HTTP_SWIFT_ERRORS));
-    if (r) {
+    r = rgw_http_swift_errors.find(err_no);
+    if (r != rgw_http_swift_errors.end()) {
       if (prot_flags & RGW_REST_WEBSITE && err_no == ERR_WEBSITE_REDIRECT && err.is_clear()) {
         // http_ret was custom set, so don't change it!
       } else {
-        err.http_ret_E = r->http_ret;
+        err.http_ret_E = r->second.first;
       }
-      err.s3_code_E = r->s3_code;
+      err->s3_code_E = r->second.second;
       return;
     }
   }
-  r = search_err(err_no, RGW_HTTP_ERRORS, ARRAY_LEN(RGW_HTTP_ERRORS));
-  if (r) {
-    err.http_ret_E = r->http_ret;
-    err.s3_code_E = r->s3_code;
+  r = rgw_http_s3_errors.find(err_no);
+  if (r != rgw_http_s3_errors.end()) {
+    err->http_ret_E = r->second.first;
+    err->s3_code_E = r->second.second;
     return;
   }
   dout(0) << "WARNING: set_req_state_err err_no=" << err_no << " resorting to 500" << dendl;
 
-  err.http_ret_E = 500;
-  err.s3_code_E = "UnknownError";
+  err->http_ret_E = 500;
+  err->s3_code_E = "UnknownError";
 }
 
 void req_state::set_req_state_err(int err_no, const string &err_msg)
 {
-   err.message_E = err_msg;
    set_req_state_err(err_no);
+   err->message_E = err_msg;
 }
 
 struct str_len {
@@ -336,6 +394,16 @@ std::ostream& operator<<(std::ostream& oss, const rgw_err &err)
 {
   oss << "rgw_err(http_ret=" << err.http_ret_E << ", s3='" << err.s3_code_E << "') ";
   return oss;
+}
+
+void rgw_err::dump(Formatter *f) const
+{
+  f->open_object_section("Error");
+  if (!s3_code_E.empty())
+    f->dump_string("Code", s3_code_E);
+  if (!message_E.empty())
+    f->dump_string("Message", message_E);
+  f->close_section();
 }
 
 string rgw_string_unquote(const string& s)

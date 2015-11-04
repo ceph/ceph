@@ -201,8 +201,8 @@ static void log_usage(struct req_state *s, const string& op_name)
       user = s->user->user_id;
   }
 
-  bool error = s->err.is_err();
-  if (error && s->err.http_ret == 404) {
+  bool error = s->err->is_err();
+  if (error && s->err->http_ret_E == 404) {
     bucket_name = "-"; /* bucket not found, use the invalid '-' as bucket name */
   }
 
@@ -216,7 +216,7 @@ static void log_usage(struct req_state *s, const string& op_name)
   rgw_usage_data data(bytes_sent, bytes_received);
 
   data.ops = 1;
-  if (!error)
+  if (!s->is_err())
     data.successful_ops = 1;
 
   entry.add(op_name, data);
@@ -294,6 +294,8 @@ int rgw_log_op(RGWRados *store, struct req_state *s, const string& op_name, OpsL
   struct rgw_log_entry entry;
   string bucket_id;
 
+  if (!s->err) s->err = new rgw_err();
+
   if (s->enable_usage_log)
     log_usage(s, op_name);
 
@@ -304,7 +306,7 @@ int rgw_log_op(RGWRados *store, struct req_state *s, const string& op_name, OpsL
     ldout(s->cct, 5) << "nothing to log for operation" << dendl;
     return -EINVAL;
   }
-  if (s->err.ret_E == -ERR_NO_SUCH_BUCKET) {
+  if (s->err->ret_E == -ERR_NO_SUCH_BUCKET) {
     if (!s->cct->_conf->rgw_log_nonexistent_bucket) {
       ldout(s->cct, 5) << "bucket " << s->bucket << " doesn't exist, not logging" << dendl;
       return 0;
@@ -350,14 +352,14 @@ int rgw_log_op(RGWRados *store, struct req_state *s, const string& op_name, OpsL
   entry.total_time = ceph_clock_now(s->cct) - s->time;
   entry.bytes_sent = bytes_sent;
   entry.bytes_received = bytes_received;
-  if (s->err.http_ret_E) {
+  if (s->err->http_ret_E) {
     char buf[16];
-    snprintf(buf, sizeof(buf), "%d", s->err.http_ret_E);
+    snprintf(buf, sizeof(buf), "%d", s->err->http_ret_E);
     entry.http_status = buf;
   } else
     entry.http_status = "200"; // default
 
-  entry.error_code = s->err.s3_code_E;
+  entry.error_code = s->err->s3_code_E;
   entry.bucket_id = bucket_id;
 
   bufferlist bl;

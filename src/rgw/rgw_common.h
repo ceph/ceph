@@ -181,6 +181,15 @@ using ceph::crypto::MD5;
 #define ERR_INTERNAL_ERROR       2200
 #define ERR_NOT_IMPLEMENTED      2201
 
+// sts
+
+#define ERR_IDP_REJECTED_CLAIM	3001
+#define ERR_UNKNOWN_ERROR	3002
+#define ERR_INVALID_ACTION	3003
+#define ERR_INVALID_TOKEN	3004
+#define ERR_MALFORMED_INPUT	3005
+#define ERR_MISSING_AUTH	3006
+
 #ifndef UINT32_MAX
 #define UINT32_MAX (0xffffffffu)
 #endif
@@ -247,10 +256,12 @@ enum RGWObjCategory {
 struct rgw_err {
   rgw_err();
   rgw_err(int http, const std::string &s3);
+  virtual ~rgw_err() { };
   void clear();
   bool is_clear() const;
   bool is_err() const;
   friend std::ostream& operator<<(std::ostream& oss, const rgw_err &err);
+  virtual void dump(Formatter *f) const;
 
   int http_ret_E;
   int ret_E;
@@ -1180,7 +1191,7 @@ struct req_state {
   const char *length;
   int64_t content_length;
   map<string, string> generic_attrs;
-  struct rgw_err err;
+  rgw_err *err;
   bool expect_cont;
   bool header_ended;
   uint64_t obj_size;
@@ -1260,6 +1271,7 @@ struct req_state {
 
   void set_req_state_err(int err_no);
   void set_req_state_err(int err_no, const string &err_msg);
+  bool is_err() const { return err && err->is_err(); }
 };
 
 /** Store basic data on an object */

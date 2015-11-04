@@ -50,14 +50,13 @@ void dump_bucket(struct req_state *s, RGWBucketEnt& obj)
   s->formatter->close_section();
 }
 
-void rgw_get_errno_s3(rgw_http_errors *e , int err_no)
+void rgw_get_errno_s3(rgw_http_error *e , int err_no)
 {
-  const struct rgw_http_errors *r;
-  r = search_err(err_no, RGW_HTTP_ERRORS, ARRAY_LEN(RGW_HTTP_ERRORS));
+  rgw_http_errors::const_iterator r = rgw_http_s3_errors.find(err_no);
 
-  if (r) {
-    e->http_ret = r->http_ret;
-    e->s3_code = r->s3_code;
+  if (r != rgw_http_s3_errors.end()) {
+    e->http_ret = r->second.first;
+    e->s3_code = r->second.second;
   } else {
     e->http_ret = 500;
     e->s3_code = "UnknownError";
@@ -85,7 +84,7 @@ int RGWGetObj_ObjStore_S3Website::send_response_data(bufferlist& bl, off_t bl_of
   if (iter != attrs.end()) {
     bufferlist &bl = iter->second;
     s->redirect = string(bl.c_str(), bl.length());
-    s->err.http_ret = 301;
+    s->err->http_ret_E = 301;
     ldout(s->cct, 20) << __CEPH_ASSERT_FUNCTION << " redirectng per x-amz-website-redirect-location=" << s->redirect << dendl;
     op_ret = -ERR_WEBSITE_REDIRECT;
     return op_ret;
@@ -338,7 +337,7 @@ static void dump_usage_categories_info(Formatter *formatter, const rgw_usage_log
 void RGWGetUsage_ObjStore_S3::send_response()
 {
   if (op_ret < 0)
-    set_req_state_err(s, op_ret);
+    s->set_req_state_err(op_ret);
   dump_errno(s);
 
   end_header(s, dump_access_control_f(), "application/xml");
@@ -1804,7 +1803,7 @@ done:
     s->formatter->dump_string("Key", s->object.name);
     s->formatter->close_section();
   }
-  s->err.message = err_msg;
+  s->err->message_E = err_msg;
   s->set_req_state_err(op_ret);
   dump_errno(s);
   if (op_ret >= 0) {
@@ -2517,7 +2516,7 @@ void RGWDeleteMultiObj_ObjStore_S3::send_partial_response(rgw_obj_key& key,
       }
       s->formatter->close_section();
     } else if (op_ret < 0) {
-      struct rgw_http_errors r;
+      struct rgw_http_error r;
       int err_no;
 
       s->formatter->open_object_section("Error");
@@ -3823,7 +3822,7 @@ int RGWHandler_REST_S3Website::retarget(RGWOp* op, RGWOp** new_op) {
 		    &redirect_code);
     // APply a custom HTTP response code
     if (redirect_code > 0)
-      s->err.http_ret = redirect_code; // Apply a custom HTTP response code
+      s->err->http_ret_E = redirect_code; // Apply a custom HTTP response code
     ldout(s->cct, 10) << "retarget redirect code=" << redirect_code
 		      << " proto+host:" << protocol << "://" << hostname
 		      << " -> " << s->redirect << dendl;
@@ -3911,7 +3910,7 @@ int RGWHandler_REST_S3Website::error_handler(int err_no,
 		    &redirect_code);
     // Apply a custom HTTP response code
     if (redirect_code > 0)
-      s->err.http_ret = redirect_code; // Apply a custom HTTP response code
+      s->err->http_ret_E = redirect_code; // Apply a custom HTTP response code
     ldout(s->cct, 10) << "error handler redirect code=" << redirect_code
 		      << " proto+host:" << protocol << "://" << hostname
 		      << " -> " << s->redirect << dendl;

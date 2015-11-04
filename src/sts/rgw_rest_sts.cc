@@ -32,20 +32,6 @@ string error_codes[] = {
   "MissingAuthenticationToken",
 };
 
-void rgw_get_errno_sts(rgw_http_errors *e , int err_no)
-{
-  const struct rgw_http_errors *r;
-  r = search_err(err_no, RGW_HTTP_ERRORS, ARRAY_LEN(RGW_HTTP_ERRORS));
-
-  if (r) {
-    e->http_ret = r->http_ret;
-    e->s3_code = r->s3_code;
-  } else {
-    e->http_ret = 500;
-    e->s3_code = "UnknownError";
-  }
-}
-
 void tsErrorResponse::dump(Formatter *f)
 {
   char encoded_uuid[38];
@@ -59,6 +45,32 @@ void tsErrorResponse::dump(Formatter *f)
       f->dump_string("Type", error_types[error.type]);
       f->dump_string("Code", error_codes[error.code]);
       f->dump_string("Message", error.message);
+    f->close_section();
+    f->dump_string("RequestId", encoded_uuid);
+  f->close_section();
+}
+
+sts_err::sts_err() : type(Unknown)
+{
+  request_id.generate_random();
+}
+
+
+void sts_err::dump(Formatter *f) const
+{
+  char encoded_uuid[38];
+
+  request_id.print(encoded_uuid);
+  encoded_uuid[37] = 0;
+
+  f->open_object_section_in_ns("ErrorResponse",
+			"http://s3.amazonaws.com/doc/2011-06-15/");
+    f->open_object_section("Error");
+      f->dump_string("Type", error_types[type]);
+      if (!s3_code_E.empty())
+        f->dump_string("Code", s3_code_E);
+      if (!message_E.empty())
+        f->dump_string("Message", message_E);
     f->close_section();
     f->dump_string("RequestId", encoded_uuid);
   f->close_section();
@@ -427,14 +439,14 @@ int RGWGetPost_STS::verify_permission()
 
 void RGWGetPost_STS::execute()
 {
-  int ret = 0;
+  int ret = EPERM;
   s->formatter = new XMLFormatter(false);
-  tsErrorResponse err(Unknown, InvalidAction, "Why I don't know");
-  s->set_req_state_err(ret);
+//  tsErrorResponse err(Unknown, InvalidAction, "Why I don't know"); MAKE RESPONSE
+  s->set_req_state_err(ret, "Why I don't know");
   dump_errno(s);
   end_header(s, dump_access_control_f(), "application/xml");
-  err.dump(s->formatter);
-  rgw_flush_formatter_and_reset(s, s->formatter);
+//  err.dump(s->formatter);						DUMP RESPONSE
+//  rgw_flush_formatter_and_reset(s, s->formatter);			DUMP RESPONSE
 }
 
 RGWOp *RGWHandler_STS::get_obj_op(bool get_data)

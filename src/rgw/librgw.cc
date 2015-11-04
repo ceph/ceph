@@ -280,7 +280,7 @@ namespace rgw {
       rgw_log_op(store, s, (op ? op->name() : "unknown"), olog);
     }
 
-    int http_ret = s->err.http_ret;
+    int http_ret = s->err->http_ret_E;
 
     req->log_format(s, "http status=%d", http_ret);
 
@@ -289,7 +289,7 @@ namespace rgw {
 	    << http_ret
 	    << " ======" << dendl;
 
-    return (ret < 0 ? ret : s->err.ret);
+    return (ret < 0 ? ret : s->err->ret_E);
   } /* process_request */
 
   int RGWLibProcess::start_request(RGWLibContinuedReq* req)
@@ -374,7 +374,7 @@ namespace rgw {
     req->exec_start();
 
   done:
-    return (ret < 0 ? ret : s->err.ret);
+    return (ret < 0 ? ret : s->err->ret_E);
   }
 
   int RGWLibProcess::finish_request(RGWLibContinuedReq* req)

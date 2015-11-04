@@ -26,6 +26,14 @@ enum tsErrorCode {
   MissingAuthenticationToken,
 };
 
+struct sts_err : public rgw_err {
+  tsErrorType type;
+  uuid_d request_id;
+  sts_err();
+  virtual ~sts_err() { };
+  virtual void dump(Formatter *f) const;
+};
+
 extern string error_types[];
 extern string error_codes[];
 
