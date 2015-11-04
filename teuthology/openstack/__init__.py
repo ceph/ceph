@@ -205,7 +205,7 @@ class OpenStack(object):
         if self.key_filename:
             log.debug("using key " + self.key_filename)
             client_args['key_filename'] = self.key_filename
-        with safe_while(sleep=2, tries=600,
+        with safe_while(sleep=30, tries=100,
                         action="cloud_init_wait " + name_or_ip) as proceed:
             success = False
             # CentOS 6.6 logs in /var/log/clout-init-output.log
