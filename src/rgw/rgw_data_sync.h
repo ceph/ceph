@@ -71,6 +71,7 @@ struct rgw_data_sync_marker {
   uint16_t state;
   string marker;
   string next_step_marker;
+  uint64_t pos;
 
   rgw_data_sync_marker() : state(FullSync) {}
 
@@ -79,6 +80,7 @@ struct rgw_data_sync_marker {
     ::encode(state, bl);
     ::encode(marker, bl);
     ::encode(next_step_marker, bl);
+    ::encode(pos, bl);
     ENCODE_FINISH(bl);
   }
 
@@ -87,6 +89,7 @@ struct rgw_data_sync_marker {
     ::decode(state, bl);
     ::decode(marker, bl);
     ::decode(next_step_marker, bl);
+    ::decode(pos, bl);
      DECODE_FINISH(bl);
   }
 
@@ -94,6 +97,7 @@ struct rgw_data_sync_marker {
     encode_json("state", (int)state, f);
     encode_json("marker", marker, f);
     encode_json("next_step_marker", next_step_marker, f);
+    encode_json("pos", pos, f);
   }
 };
 WRITE_CLASS_ENCODER(rgw_data_sync_marker)
@@ -208,6 +212,7 @@ class RGWBucketSyncCR;
 
 struct rgw_bucket_shard_full_sync_marker {
   rgw_obj_key position;
+  uint64_t count;
 
   rgw_bucket_shard_full_sync_marker() {}
 
@@ -216,17 +221,20 @@ struct rgw_bucket_shard_full_sync_marker {
   void encode(bufferlist& bl) const {
     ENCODE_START(1, 1, bl);
     ::encode(position, bl);
+    ::encode(count, bl);
     ENCODE_FINISH(bl);
   }
 
   void decode(bufferlist::iterator& bl) {
      DECODE_START(1, bl);
     ::decode(position, bl);
+    ::decode(count, bl);
      DECODE_FINISH(bl);
   }
 
   void dump(Formatter *f) const {
     encode_json("position", position, f);
+    encode_json("count", count, f);
   }
 };
 WRITE_CLASS_ENCODER(rgw_bucket_shard_full_sync_marker)
