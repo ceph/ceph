@@ -22,7 +22,6 @@ libosd_a_SOURCES = \
 	osd/Watch.cc \
 	osd/ClassHandler.cc \
 	osd/OpRequest.cc \
-	common/TrackedOp.cc \
 	osd/SnapMapper.cc \
 	objclass/class_api.cc
 

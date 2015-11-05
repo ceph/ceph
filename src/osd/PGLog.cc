@@ -887,7 +887,7 @@ void PGLog::read_log(ObjectStore *store, coll_t pg_coll,
   log.rollback_info_trimmed_to = eversion_t();
   ObjectMap::ObjectMapIterator p = store->get_omap_iterator(log_coll, log_oid);
   if (p) {
-    for (p->seek_to_first(); p->valid() ; p->next()) {
+    for (p->seek_to_first(); p->valid() ; p->next(false)) {
       // non-log pgmeta_oid keys are prefixed with _; skip those
       if (p->key()[0] == '_')
 	continue;

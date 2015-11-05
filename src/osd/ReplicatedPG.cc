@@ -5365,7 +5365,7 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	  iter->upper_bound(start_after);
 	  for (uint64_t i = 0;
 	       i < max_return && iter->valid();
-	       ++i, iter->next()) {
+	       ++i, iter->next(false)) {
 	    out_set.insert(iter->key());
 	  }
 	} // else return empty out_set
@@ -5407,7 +5407,7 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	  for (uint64_t i = 0;
 	       i < max_return && iter->valid() &&
 		 iter->key().substr(0, filter_prefix.size()) == filter_prefix;
-	       ++i, iter->next()) {
+	       ++i, iter->next(false)) {
 	    dout(20) << "Found key " << iter->key() << dendl;
 	    out_set.insert(make_pair(iter->key(), iter->value()));
 	  }
@@ -5542,23 +5542,28 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	if (maybe_create_new_object(ctx)) {
 	  t->touch(soid);
 	}
-	map<string, bufferlist> to_set;
+	bufferlist to_set_bl;
 	try {
-	  ::decode(to_set, bp);
+	  decode_str_str_map_to_bl(bp, &to_set_bl);
 	}
 	catch (buffer::error& e) {
 	  result = -EINVAL;
 	  tracepoint(osd, do_osd_op_pre_omapsetvals, soid.oid.name.c_str(), soid.snap.val, "???");
 	  goto fail;
 	}
-	tracepoint(osd, do_osd_op_pre_omapsetvals, soid.oid.name.c_str(), soid.snap.val, list_keys(to_set).c_str());
-	dout(20) << "setting vals: " << dendl;
-	for (map<string, bufferlist>::iterator i = to_set.begin();
-	     i != to_set.end();
-	     ++i) {
-	  dout(20) << "\t" << i->first << dendl;
+	tracepoint(osd, do_osd_op_pre_omapsetvals, soid.oid.name.c_str(), soid.snap.val);
+	if (g_ceph_context->_conf->subsys.should_gather(dout_subsys, 20)) {
+	  dout(20) << "setting vals: " << dendl;
+	  map<string,bufferlist> to_set;
+	  bufferlist::iterator pt = to_set_bl.begin();
+	  ::decode(to_set, pt);
+	  for (map<string, bufferlist>::iterator i = to_set.begin();
+	       i != to_set.end();
+	       ++i) {
+	    dout(20) << "\t" << i->first << dendl;
+	  }
 	}
-	t->omap_setkeys(soid, to_set);
+	t->omap_setkeys(soid, to_set_bl);
 	ctx->delta_stats.num_wr++;
       }
       obs.oi.set_flag(object_info_t::FLAG_OMAP);
@@ -5620,17 +5625,17 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	  break;
 	}
 	t->touch(soid);
-	set<string> to_rm;
+	bufferlist to_rm_bl;
 	try {
-	  ::decode(to_rm, bp);
+	  decode_str_set_to_bl(bp, &to_rm_bl);
 	}
 	catch (buffer::error& e) {
 	  result = -EINVAL;
 	  tracepoint(osd, do_osd_op_pre_omaprmkeys, soid.oid.name.c_str(), soid.snap.val, "???");
 	  goto fail;
 	}
-	tracepoint(osd, do_osd_op_pre_omaprmkeys, soid.oid.name.c_str(), soid.snap.val, list_entries(to_rm).c_str());
-	t->omap_rmkeys(soid, to_rm);
+	tracepoint(osd, do_osd_op_pre_omaprmkeys, soid.oid.name.c_str(), soid.snap.val);
+	t->omap_rmkeys(soid, to_rm_bl);
 	ctx->delta_stats.num_wr++;
       }
       obs.oi.set_flag(object_info_t::FLAG_OMAP);
@@ -6803,7 +6808,7 @@ int ReplicatedPG::fill_in_copy_get(
 	osd->store->get_omap_iterator(coll, ghobject_t(oi.soid));
       assert(iter);
       iter->upper_bound(cursor.omap_offset);
-      for (; iter->valid(); iter->next()) {
+      for (; iter->valid(); iter->next(false)) {
 	++omap_keys;
 	::encode(iter->key(), omap_data);
 	::encode(iter->value(), omap_data);

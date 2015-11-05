@@ -17,6 +17,7 @@
 #include "common/dout.h"
 #include "include/assert.h"
 #include "common/Formatter.h"
+#include "common/Cond.h"
 
 #include "common/ceph_context.h"
 class PerfCounters;
@@ -160,6 +161,11 @@ public:
     const std::set<string> &key,
     std::map<string, bufferlist> *out
     );
+  int get(
+    const string &prefix,
+    const string &key,
+    bufferlist *out
+    );
 
   class RocksDBWholeSpaceIteratorImpl :
     public KeyValueDB::WholeSpaceIteratorImpl {
@@ -182,6 +188,7 @@ public:
     int prev();
     string key();
     pair<string,string> raw_key();
+    bool raw_key_is_prefixed(const string &prefix);
     bufferlist value();
     int status();
   };

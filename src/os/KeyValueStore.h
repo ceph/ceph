@@ -36,7 +36,7 @@ using namespace std;
 
 #include "common/Mutex.h"
 #include "GenericObjectMap.h"
-#include "KeyValueDB.h"
+#include "kv/KeyValueDB.h"
 #include "common/random_cache.hpp"
 
 #include "include/uuid.h"
