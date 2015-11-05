@@ -175,7 +175,7 @@ def format_job(run_name, job):
     job_id = job['job_id']
     status = job['status']
     description = job['description']
-    duration = int(job['duration'] or 0)
+    duration = seconds_to_hms(int(job['duration'] or 0))
 
     # Every job gets a link to e.g. pulpito's pages
     info_url = misc.get_results_url(run_name, job_id)
@@ -239,6 +239,12 @@ def format_job(run_name, job):
         return email_templates['fail_templ'].format(**format_args)
 
 
+def seconds_to_hms(seconds):
+    (minutes, seconds) = divmod(seconds, 60)
+    (hours, minutes) = divmod(minutes, 60)
+    return "%02d:%02d:%02d" % (hours, minutes, seconds)
+
+
 email_templates = {
     'body_templ': dedent("""\
         Test Run: {name}
@@ -262,7 +268,7 @@ email_templates = {
     'fail_templ': dedent("""\
         [{job_id}]  {desc}
         -----------------------------------------------------------------
-        time:   {time}s{info_line}{log_line}{sentry_line}{reason_lines}
+        time:   {time}{info_line}{log_line}{sentry_line}{reason_lines}
 
         """),
     'info_url_templ': "\ninfo:   {info}",
@@ -274,7 +280,7 @@ email_templates = {
         """),
     'pass_templ': dedent("""\
         [{job_id}] {desc}
-        time:   {time}s{info_line}
+        time:   {time}{info_line}
 
         """),
 }

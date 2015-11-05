@@ -88,7 +88,7 @@ class TestResultsEmail(object):
     =================================================================
     [88979]  description for job with name test_name
     -----------------------------------------------------------------
-    time:   35190s
+    time:   09:46:30
     info:   http://example.com/test_name/88979/
     log:    http://qa-proxy.ceph.com/teuthology/test_name/88979/
 
@@ -100,7 +100,7 @@ class TestResultsEmail(object):
     =================================================================
     [69152]  description for job with name test_name
     -----------------------------------------------------------------
-    time:   5225s
+    time:   01:27:05
     info:   http://example.com/test_name/69152/
     log:    http://qa-proxy.ceph.com/teuthology/test_name/69152/
 
@@ -126,7 +126,7 @@ class TestResultsEmail(object):
     Pass
     =================================================================
     [68369] description for job with name test_name
-    time:   33771s
+    time:   09:22:51
     info:   http://example.com/test_name/68369/
     """).strip(),
     }
