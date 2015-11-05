@@ -71,15 +71,17 @@ struct rgw_data_sync_marker {
   uint16_t state;
   string marker;
   string next_step_marker;
+  uint64_t total_entries;
   uint64_t pos;
 
-  rgw_data_sync_marker() : state(FullSync) {}
+  rgw_data_sync_marker() : state(FullSync), total_entries(0), pos(0) {}
 
   void encode(bufferlist& bl) const {
     ENCODE_START(1, 1, bl);
     ::encode(state, bl);
     ::encode(marker, bl);
     ::encode(next_step_marker, bl);
+    ::encode(total_entries, bl);
     ::encode(pos, bl);
     ENCODE_FINISH(bl);
   }
@@ -89,6 +91,7 @@ struct rgw_data_sync_marker {
     ::decode(state, bl);
     ::decode(marker, bl);
     ::decode(next_step_marker, bl);
+    ::decode(total_entries, bl);
     ::decode(pos, bl);
      DECODE_FINISH(bl);
   }
@@ -97,6 +100,7 @@ struct rgw_data_sync_marker {
     encode_json("state", (int)state, f);
     encode_json("marker", marker, f);
     encode_json("next_step_marker", next_step_marker, f);
+    encode_json("total_entries", total_entries, f);
     encode_json("pos", pos, f);
   }
 };
