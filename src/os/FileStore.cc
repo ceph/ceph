@@ -347,7 +347,7 @@ int FileStore::lfn_link(coll_t c, coll_t newcid, const ghobject_t& o, const ghob
   int exist;
   int r;
   bool index_same = false;
-  if (c < newcid) {
+  if (c != newcid) {
     r = get_index(newcid, &index_new);
     if (r < 0)
       return r;
@@ -360,15 +360,7 @@ int FileStore::lfn_link(coll_t c, coll_t newcid, const ghobject_t& o, const ghob
       return r;
     index_new = index_old;
     index_same = true;
-  } else {
-    r = get_index(c, &index_old);
-    if (r < 0)
-      return r;
-    r = get_index(newcid, &index_new);
-    if (r < 0)
-      return r;
   }
-
   assert(NULL != index_old.index);
   assert(NULL != index_new.index);
 
