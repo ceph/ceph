@@ -2126,9 +2126,6 @@ void FileStore::_set_global_replay_guard(coll_t cid,
 int FileStore::_check_global_replay_guard(coll_t cid,
 					  const SequencerPosition& spos)
 {
-  if (!replaying || backend->can_checkpoint())
-    return 1;
-
   char fn[PATH_MAX];
   get_cdir(cid, fn, sizeof(fn));
   int fd = ::open(fn, O_RDONLY);
