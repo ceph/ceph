@@ -288,6 +288,7 @@ public:
     plb.add_u64_counter(l_librbd_snap_create, "snap_create", "Snap creations");
     plb.add_u64_counter(l_librbd_snap_remove, "snap_remove", "Snap removals");
     plb.add_u64_counter(l_librbd_snap_rollback, "snap_rollback", "Snap rollbacks");
+    plb.add_u64_counter(l_librbd_snap_rename, "snap_rename", "Snap rename");
     plb.add_u64_counter(l_librbd_notify, "notify", "Updated header notifications");
     plb.add_u64_counter(l_librbd_resize, "resize", "Resizes");
     plb.add_u64_counter(l_librbd_readahead, "readahead", "Read ahead");
