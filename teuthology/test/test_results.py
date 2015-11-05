@@ -1,41 +1,49 @@
-import os
 import textwrap
 from ..config import config
 from .. import results
-from .fake_archive import FakeArchive
+
+from teuthology import report
+
+from mock import patch, DEFAULT
 
 
 class TestResultsEmail(object):
     reference = {
         'run_name': 'test_name',
         'jobs': [
-            {'info': {'description': 'description for job with name test_name',
-                      'job_id': 30481,
-                      'name': 'test_name',
-                      'owner': 'job@owner',
-                      'pid': 80399},
-             'job_id': 30481},
-            {'info': {'description': 'description for job with name test_name',
-                      'job_id': 88979,
-                      'name': 'test_name',
-                      'owner': 'job@owner',
-                      'pid': 3903},
-                'job_id': 88979,
-                'summary': {
-                    'description': 'description for job with name test_name',
-                    'duration': 35190, 'failure_reason': 'Failure reason!',
-                    'owner': 'job@owner',
-                    'success': False}},
-            {'info': {'description': 'description for job with name test_name',
-                      'job_id': 68369,
-                      'name': 'test_name',
-                      'owner': 'job@owner',
-                      'pid': 38524},
+            # Hung
+            {'description': 'description for job with name test_name',
+             'job_id': 30481,
+             'name': 'test_name',
+             'log_href': 'http://qa-proxy.ceph.com/teuthology/test_name/30481/teuthology.log',  # noqa
+             'owner': 'job@owner',
+             'pid': 80399,
+             'duration': None,
+             'status': 'running',
+             },
+            # Failed
+            {'description': 'description for job with name test_name',
+             'job_id': 88979,
+             'name': 'test_name',
+             'log_href': 'http://qa-proxy.ceph.com/teuthology/test_name/88979/teuthology.log',  # noqa
+             'owner': 'job@owner',
+             'pid': 3903,
+             'duration': 35190,
+             'success': False,
+             'status': 'fail',
+             'failure_reason': 'Failure reason!',
+             },
+            # Passed
+            {'description': 'description for job with name test_name',
              'job_id': 68369,
-             'summary': {
-                 'description': 'description for job with name test_name',
-                 'duration': 33771, 'owner': 'job@owner', 'success':
-                 True}},
+             'name': 'test_name',
+             'log_href': 'http://qa-proxy.ceph.com/teuthology/test_name/68369/teuthology.log',  # noqa
+             'owner': 'job@owner',
+             'pid': 38524,
+             'duration': 33771,
+             'success': True,
+             'status': 'pass',
+             },
         ],
         'subject': '1 failed, 1 hung, 1 passed in test_name',
         'body': textwrap.dedent("""
@@ -74,19 +82,16 @@ class TestResultsEmail(object):
     def setup(self):
         config.results_ui_server = "http://example.com/"
         config.archive_server = "http://qa-proxy.ceph.com/teuthology/"
-        self.archive = FakeArchive()
-        self.archive.setup()
-        self.archive_base = self.archive.archive_base
-
-    def teardown(self):
-        self.archive.teardown()
 
     def test_build_email_body(self):
         run_name = self.reference['run_name']
-        run_dir = os.path.join(self.archive_base, run_name)
-        self.archive.populate_archive(run_name, self.reference['jobs'])
-        (subject, body) = results.build_email_body(
-            run_name,
-            run_dir)
+        with patch.multiple(
+                report,
+                ResultsReporter=DEFAULT,
+                ):
+            reporter = report.ResultsReporter()
+            reporter.get_jobs.return_value = self.reference['jobs']
+            (subject, body) = results.build_email_body(
+                run_name, _reporter=reporter)
         assert subject == self.reference['subject']
         assert body == self.reference['body']
