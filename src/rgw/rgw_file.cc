@@ -91,9 +91,9 @@ int rgw_statfs(struct rgw_fs *rgw_fs,
 int rgw_create(struct rgw_fs *rgw_fs,
 	       struct rgw_file_handle *parent_fh,
 	       const char *name, mode_t mode, struct stat *st,
-	       struct rgw_file_handle *handle)
+	       struct rgw_file_handle **fh)
 {
-  return 0;
+  return EINVAL;
 }
 
 /*
@@ -102,7 +102,7 @@ int rgw_create(struct rgw_fs *rgw_fs,
 int rgw_mkdir(struct rgw_fs *rgw_fs,
 	      struct rgw_file_handle *parent_fh,
 	      const char *name, mode_t mode, struct stat *st,
-	      struct rgw_file_handle *handle)
+	      struct rgw_file_handle **fh)
 {
   int rc;
 
@@ -128,6 +128,12 @@ int rgw_mkdir(struct rgw_fs *rgw_fs,
   uri += name;
   RGWCreateBucketRequest req(cct, fs->get_user(), uri);
   rc = librgw.get_fe()->execute_req(&req);
+
+  /* XXX: atomicity */
+  RGWFileHandle* rgw_fh = fs->lookup_fh(parent, name);
+
+  struct rgw_file_handle *rfh = rgw_fh->get_fh();
+  *fh = rfh;
 
   return rc;
 }
