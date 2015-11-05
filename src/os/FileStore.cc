@@ -373,34 +373,46 @@ int FileStore::lfn_link(coll_t c, coll_t newcid, const ghobject_t& o, const ghob
   assert(NULL != index_new.index);
 
   if (!index_same) {
-
-    RWLock::RLocker l1((index_old.index)->access_lock);
+    //avoid deadlock:first get lock of small collection
+    if (c < newcid) {
+      (index_old.index)->access_lock.get_read();
+      (index_new.index)->access_lock.get_write();
+    } else {
+      (index_new.index)->access_lock.get_write();
+      (index_old.index)->access_lock.get_read();
+    }
 
     r = index_old->lookup(o, &path_old, &exist);
     if (r < 0) {
       assert(!m_filestore_fail_eio || r != -EIO);
-      return r;
+      goto free_lock;
     }
-    if (!exist)
-      return -ENOENT;
-  
-    RWLock::WLocker l2((index_new.index)->access_lock);
+    if (!exist) {
+      r = -ENOENT;
+      goto free_lock;
+    }
 
     r = index_new->lookup(newoid, &path_new, &exist);
     if (r < 0) {
       assert(!m_filestore_fail_eio || r != -EIO);
-      return r;
+      goto free_lock;
     }
-    if (exist)
-      return -EEXIST;
+    if (exist) {
+      r = -EEXIST;
+      goto free_lock;
+    }
 
     dout(25) << "lfn_link path_old: " << path_old << dendl;
     dout(25) << "lfn_link path_new: " << path_new << dendl;
     r = ::link(path_old->path(), path_new->path());
     if (r < 0)
-      return -errno;
+      goto free_lock;
 
     r = index_new->created(newoid, path_new->path());
+
+free_lock:
+    (index_old.index)->access_lock.put_read();
+    (index_new.index)->access_lock.put_write();
     if (r < 0) {
       assert(!m_filestore_fail_eio || r != -EIO);
       return r;
