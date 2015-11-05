@@ -63,7 +63,7 @@
 #include "include/rados/rados_types.hpp"
 
 #ifdef WITH_LTTNG
-#include "tracing/osd.h" // ??
+#include "tracing/osd.h"
 #else
 #define tracepoint(...)
 #endif
