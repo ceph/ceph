@@ -71,7 +71,7 @@ class TestResultsEmail(object):
              'status': 'pass',
              },
         ],
-        'subject': '1 failed, 1 dead, 1 running, 1 waiting, 1 queued, 1 passed in test_name',  # noqa
+        'subject': '1 fail, 1 dead, 1 running, 1 waiting, 1 queued, 1 pass in test_name',  # noqa
         'body': textwrap.dedent("""
     Test Run: test_name
     =================================================================
@@ -84,7 +84,7 @@ class TestResultsEmail(object):
     queued:  1
     passed:  1
 
-    Failed
+    Fail
     =================================================================
     [88979]  description for job with name test_name
     -----------------------------------------------------------------
@@ -123,7 +123,7 @@ class TestResultsEmail(object):
     [79063] description for job with name test_name
     info:   http://example.com/test_name/79063/
 
-    Passed
+    Pass
     =================================================================
     [68369] description for job with name test_name
     time:   33771s
