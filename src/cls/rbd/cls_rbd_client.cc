@@ -392,6 +392,23 @@ namespace librbd {
       return ioctx->exec(oid, "rbd", "snapshot_remove", bl, bl2);
     }
 
+    int snapshot_rename(librados::IoCtx *ioctx, const std::string &oid,
+			 snapid_t src_snap_id,
+		         const std::string &dst_name)
+    {
+      librados::ObjectWriteOperation op;
+      snapshot_rename(&op, src_snap_id, dst_name);
+      return ioctx->operate(oid, &op);
+    }
+    void snapshot_rename(librados::ObjectWriteOperation *op,
+			 snapid_t src_snap_id,
+		         const std::string &dst_name)
+    {
+      bufferlist bl;
+      ::encode(src_snap_id, bl);
+      ::encode(dst_name, bl);
+      op->exec("rbd", "snapshot_rename", bl);
+    }
     int get_snapcontext(librados::IoCtx *ioctx, const std::string &oid,
 			::SnapContext *snapc)
     {
@@ -484,6 +501,16 @@ namespace librbd {
       return ioctx->exec(oid, "rbd", "snap_add", bl, bl2);
     }
 
+    int old_snapshot_rename(librados::IoCtx *ioctx, const std::string &oid,
+			    snapid_t src_snap_id ,
+			    const std::string &dst_name)
+    {
+      bufferlist bl, bl2;
+      ::encode(src_snap_id, bl);
+      ::encode(dst_name, bl);
+
+      return ioctx->exec(oid, "rbd", "snap_rename", bl, bl2);
+    }
     int old_snapshot_remove(librados::IoCtx *ioctx, const std::string &oid,
 			    const std::string &snap_name)
     {

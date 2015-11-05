@@ -63,6 +63,7 @@ using ::librbd::cls_client::metadata_set;
 using ::librbd::cls_client::metadata_remove;
 using ::librbd::cls_client::metadata_list;
 using ::librbd::cls_client::metadata_get;
+using ::librbd::cls_client::snapshot_rename;
 
 static char *random_buf(size_t len)
 {
@@ -781,6 +782,14 @@ TEST_F(TestClsRbd, snapshots)
   ASSERT_EQ("snap1", snap_names[1]);
   ASSERT_EQ(10u, snap_sizes[1]);
 
+  ASSERT_EQ(0, snapshot_rename(&ioctx, oid, 1, "snap1-rename"));
+  ASSERT_EQ(0, snapshot_list(&ioctx, oid, snapc.snaps, &snap_names,
+			     &snap_sizes, &parents, &protection_status));
+  ASSERT_EQ(2u, snap_names.size());
+  ASSERT_EQ("snap2", snap_names[0]);
+  ASSERT_EQ(10u, snap_sizes[0]);
+  ASSERT_EQ("snap1-rename", snap_names[1]);
+  ASSERT_EQ(10u, snap_sizes[1]);
   ASSERT_EQ(0, snapshot_remove(&ioctx, oid, 0));
   ASSERT_EQ(0, get_snapcontext(&ioctx, oid, &snapc));
   ASSERT_EQ(1u, snapc.snaps.size());

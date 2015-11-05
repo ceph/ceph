@@ -85,6 +85,7 @@ cls_method_handle_t h_get_object_prefix;
 cls_method_handle_t h_get_snapshot_name;
 cls_method_handle_t h_snapshot_add;
 cls_method_handle_t h_snapshot_remove;
+cls_method_handle_t h_snapshot_rename;
 cls_method_handle_t h_get_all_features;
 cls_method_handle_t h_copyup;
 cls_method_handle_t h_get_id;
@@ -108,6 +109,7 @@ cls_method_handle_t h_metadata_get;
 cls_method_handle_t h_old_snapshots_list;
 cls_method_handle_t h_old_snapshot_add;
 cls_method_handle_t h_old_snapshot_remove;
+cls_method_handle_t h_old_snapshot_rename;
 
 #define RBD_MAX_KEYS_READ 64
 #define RBD_SNAP_KEY_PREFIX "snapshot_"
@@ -1560,6 +1562,83 @@ int snapshot_add(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
   return 0;
 }
 
+
+/**
+ * rename snapshot .
+ *
+ * Input:
+ * @param src_snap_id old snap id of the snapshot (snapid_t)
+ * @param dst_snap_name new name of the snapshot (string)
+ *
+ * Output:
+ * @returns 0 on success, negative error code on failure.
+ */
+int snapshot_rename(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
+{
+  bufferlist snap_namebl, snap_idbl;
+  snapid_t src_snap_id;
+  string src_snap_key,dst_snap_name;
+  cls_rbd_snap snap_meta;
+  int r;
+
+  try {
+    bufferlist::iterator iter = in->begin();
+    ::decode(src_snap_id, iter);
+    ::decode(dst_snap_name, iter);
+  } catch (const buffer::error &err) {
+    return -EINVAL;
+  }
+  
+  CLS_LOG(20, "snapshot_rename id=%llu dst_name=%s", (unsigned long long)src_snap_id.val,
+	 dst_snap_name.c_str());
+
+  int max_read = RBD_MAX_KEYS_READ;
+  string last_read = RBD_SNAP_KEY_PREFIX;
+  do {
+    map<string, bufferlist> vals;
+    r = cls_cxx_map_get_vals(hctx, last_read, RBD_SNAP_KEY_PREFIX,
+			     max_read, &vals);
+    if (r < 0)
+      return r;
+
+    for (map<string, bufferlist>::iterator it = vals.begin();
+	 it != vals.end(); ++it) {
+      bufferlist::iterator iter = it->second.begin();
+      try {
+	::decode(snap_meta, iter);
+      } catch (const buffer::error &err) {
+	CLS_ERR("error decoding snapshot metadata for snap : %s",
+	        dst_snap_name.c_str());
+	return -EIO;
+      }
+      if (dst_snap_name == snap_meta.name) {
+	CLS_LOG(20, "snap_name %s  matches existing snap with snap id = %llu ",
+		dst_snap_name.c_str(), (unsigned long long)snap_meta.id.val);
+        return -EEXIST;
+      }
+    }
+    if (!vals.empty())
+      last_read = vals.rbegin()->first;
+  } while (r == RBD_MAX_KEYS_READ);
+
+  key_from_snap_id(src_snap_id, &src_snap_key);
+  r = read_key(hctx, src_snap_key, &snap_meta); 
+  if (r == -ENOENT) {
+    CLS_LOG(20, "cannot find existing snap with snap id = %llu ", (unsigned long long)src_snap_id);
+    return r;
+  }
+  snap_meta.name = dst_snap_name;
+  bufferlist snap_metabl;
+  ::encode(snap_meta, snap_metabl);
+
+  r = cls_cxx_map_set_val(hctx, src_snap_key, &snap_metabl);
+  if (r < 0) {
+    CLS_ERR("error writing snapshot metadata: %d", r);
+    return r;
+  }
+
+  return 0;
+}
 /**
  * Removes a snapshot from an rbd header.
  *
@@ -2721,6 +2800,102 @@ int old_snapshot_remove(cls_method_context_t hctx, bufferlist *in, bufferlist *o
   return 0;
 }
 
+/**
+ * rename snapshot of old format.
+ *
+ * Input:
+ * @param src_snap_id old snap id of the snapshot (snapid_t)
+ * @param dst_snap_name new name of the snapshot (string)
+ *
+ * Output:
+ * @returns 0 on success, negative error code on failure.
+*/
+int old_snapshot_rename(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
+{
+  bufferlist bl;
+  struct rbd_obj_header_ondisk *header;
+  bufferlist newbl;
+  bufferptr header_bp(sizeof(*header));
+  snapid_t src_snap_id;
+  const char *dst_snap_name;
+  string dst;
+
+  int rc = snap_read_header(hctx, bl);
+  if (rc < 0)
+    return rc;
+
+  header = (struct rbd_obj_header_ondisk *)bl.c_str();
+
+  int snaps_id_ofs = sizeof(*header);
+  int names_ofs = snaps_id_ofs + sizeof(rbd_obj_snap_ondisk) * header->snap_count;
+  const char *snap_names = ((char *)header) + names_ofs;
+  const char *orig_names = snap_names;
+  const char *end = snap_names + header->snap_names_len;
+  bufferlist::iterator iter = in->begin();
+  unsigned i;
+  bool found = false;
+
+  try {
+    ::decode(src_snap_id, iter);
+    ::decode(dst, iter);
+  } catch (const buffer::error &err) {
+    return -EINVAL;
+  }
+  dst_snap_name = dst.c_str();
+
+  const char *cur_snap_name;
+  for (cur_snap_name = snap_names; cur_snap_name < end; 
+    cur_snap_name += strlen(cur_snap_name) + 1) {
+    if (strcmp(cur_snap_name, dst_snap_name) == 0)
+      return -EEXIST;
+  }
+  if (cur_snap_name > end)
+    return -EIO;
+  for (i = 0; i < header->snap_count; i++) {
+    if (src_snap_id == header->snaps[i].id) {
+      found = true;
+      break;
+    }
+    snap_names += strlen(snap_names) + 1;
+  }
+  if (!found) {
+    CLS_ERR("couldn't find snap %llu\n", (unsigned long long)src_snap_id.val);
+    return -ENOENT;
+  }
+  
+  CLS_LOG(20, "rename snap with snap id %llu to dest name %s", (unsigned long long)src_snap_id.val, dst_snap_name);
+  header->snap_names_len  = header->snap_names_len - strlen(snap_names) + dst.length();
+
+  bufferptr new_names_bp(header->snap_names_len);
+  bufferptr new_snaps_bp(sizeof(header->snaps[0]) * header->snap_count);
+
+  if (header->snap_count) {
+    int names_len = 0;
+    CLS_LOG(20, "i=%d\n", i);
+    if (i > 0) {
+      names_len =  snap_names - orig_names;
+      memcpy(new_names_bp.c_str(), orig_names, names_len);
+    }
+    strcpy(new_names_bp.c_str() + names_len, dst_snap_name);
+    names_len += strlen(dst_snap_name) + 1;
+    snap_names += strlen(snap_names) + 1;
+    if (i < header->snap_count) {
+      memcpy(new_names_bp.c_str() + names_len, snap_names , end - snap_names);
+    }
+    memcpy(new_snaps_bp.c_str(), header->snaps, sizeof(header->snaps[0]) * header->snap_count);
+  }
+
+  memcpy(header_bp.c_str(), header, sizeof(*header));
+  newbl.push_back(header_bp);
+  newbl.push_back(new_snaps_bp);
+  newbl.push_back(new_names_bp);
+
+  rc = cls_cxx_write_full(hctx, &newbl);
+  if (rc < 0)
+    return rc;
+
+  return 0;
+}
 
 void __cls_init()
 {
@@ -2757,6 +2932,9 @@ void __cls_init()
   cls_register_cxx_method(h_class, "snapshot_remove",
 			  CLS_METHOD_RD | CLS_METHOD_WR,
 			  snapshot_remove, &h_snapshot_remove);
+  cls_register_cxx_method(h_class, "snapshot_rename",
+			  CLS_METHOD_RD | CLS_METHOD_WR,
+			  snapshot_rename, &h_snapshot_rename);
   cls_register_cxx_method(h_class, "get_all_features",
 			  CLS_METHOD_RD,
 			  get_all_features, &h_get_all_features);
@@ -2872,6 +3050,9 @@ void __cls_init()
   cls_register_cxx_method(h_class, "snap_remove",
 			  CLS_METHOD_RD | CLS_METHOD_WR,
 			  old_snapshot_remove, &h_old_snapshot_remove);
+  cls_register_cxx_method(h_class, "snap_rename",
+			  CLS_METHOD_RD | CLS_METHOD_WR,
+			  old_snapshot_rename, &h_old_snapshot_rename);
 
   return;
 }
