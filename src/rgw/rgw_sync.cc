@@ -1183,9 +1183,9 @@ public:
         iter = entries.begin();
         for (; iter != entries.end(); ++iter) {
           ldout(sync_env->cct, 20) << __func__ << ": full sync: " << iter->first << dendl;
+          total_entries++;
           marker_tracker->start(iter->first, total_entries);
 
-          total_entries++;
             // fetch remote and write locally
           yield {
             RGWCoroutinesStack *stack = spawn(new RGWMetaSyncSingleEntryCR(sync_env, iter->first, iter->first, marker_tracker), false);
