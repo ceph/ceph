@@ -14,11 +14,7 @@
 #include "osd/osd_types.h"
 
 #ifdef WITH_LTTNG
-#define TRACEPOINT_DEFINE
-#define TRACEPOINT_PROBE_DYNAMIC_LINKAGE
 #include "tracing/oprequest.h"
-#undef TRACEPOINT_PROBE_DYNAMIC_LINKAGE
-#undef TRACEPOINT_DEFINE
 #else
 #define tracepoint(...)
 #endif

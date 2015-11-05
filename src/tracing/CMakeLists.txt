@@ -5,11 +5,16 @@ add_custom_command(OUTPUT
   ${CMAKE_SOURCE_DIR}/src/tracing/oprequest.c
   ${CMAKE_SOURCE_DIR}/src/tracing/librbd.c
   ${CMAKE_SOURCE_DIR}/src/tracing/objectstore.c
+  DEPENDS 
+  ${CMAKE_SOURCE_DIR}/src/tracing/librados.tp 
+  ${CMAKE_SOURCE_DIR}/src/tracing/librbd.tp 
+  ${CMAKE_SOURCE_DIR}/src/tracing/objectstore.tp 
+  ${CMAKE_SOURCE_DIR}/src/tracing/oprequest.tp
+  ${CMAKE_SOURCE_DIR}/src/tracing/osd.tp
+  ${CMAKE_SOURCE_DIR}/src/tracing/pg.tp
   COMMAND 
   lttng-gen-tp tracing/librados.tp -o tracing/librados.h -o tracing/librados.c && 
   lttng-gen-tp tracing/librbd.tp -o tracing/librbd.h -o tracing/librbd.c && 
-  lttng-gen-tp tracing/objectstore.tp -o tracing/objectstore.h -o tracing/objectstore.c && 
-  lttng-gen-tp tracing/objectstore.tp -o tracing/objectstore.h -o tracing/objectstore.c && 
   lttng-gen-tp tracing/objectstore.tp -o tracing/objectstore.h -o tracing/objectstore.c && 
   lttng-gen-tp tracing/oprequest.tp -o tracing/oprequest.h -o tracing/oprequest.c &&
   lttng-gen-tp tracing/osd.tp -o tracing/osd.h -o tracing/osd.c &&
