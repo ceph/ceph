@@ -183,8 +183,10 @@ int CephxServiceHandler::handle_request(bufferlist::iterator& indata, bufferlist
     {
       ldout(cct, 10) << "handle_request getting rotating secret for " << entity_name << dendl;
       build_cephx_response_header(cephx_header.request_type, 0, result_bl);
-      key_server->get_rotating_encrypted(entity_name, result_bl);
-      ret = 0;
+      if (!key_server->get_rotating_encrypted(entity_name, result_bl)) {
+        ret = -EPERM;
+        break;
+      }
     }
     break;
 
