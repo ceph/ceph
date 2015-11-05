@@ -2657,10 +2657,7 @@ int RGW_Auth_S3::authorize_v4(RGWRados *store, struct req_state *s)
       getline(kv, key, '=');
       getline(kv, val, '=');
       if (!using_qs || key != "X-Amz-Signature") {
-	string key_enc, val_enc;
-	url_encode(key, key_enc);
-	url_encode(val, val_enc);
-	canonical_qs_map[key_enc] = val_enc;
+	canonical_qs_map[key] = val;
       }
     }
 
