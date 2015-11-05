@@ -1,20 +1,20 @@
 import os
 import sys
 import time
-import yaml
 import logging
 import subprocess
+from collections import OrderedDict
 from textwrap import dedent
 from textwrap import fill
 
 import teuthology
 from teuthology.config import config
 from teuthology import misc
-from teuthology import ls
-from .job_status import get_status
-from .report import ResultsSerializer
+from .report import ResultsReporter
 
 log = logging.getLogger(__name__)
+
+UNFINISHED_STATUSES = ('queued', 'running', 'waiting')
 
 
 def main(args):
@@ -36,21 +36,26 @@ def main(args):
 
 
 def results(archive_dir, name, email, timeout, dry_run):
-    archive_base = os.path.split(archive_dir)[0]
-    serializer = ResultsSerializer(archive_base)
     starttime = time.time()
 
     if timeout:
         log.info('Waiting up to %d seconds for tests to finish...', timeout)
-    while serializer.running_jobs_for_run(name) and timeout > 0:
+
+    reporter = ResultsReporter()
+    while timeout > 0:
         if time.time() - starttime > timeout:
             log.warn('test(s) did not finish before timeout of %d seconds',
                      timeout)
             break
-        time.sleep(10)
-    log.info('Tests finished! gathering results...')
+        jobs = reporter.get_jobs(name, fields=['job_id', 'status'])
+        unfinished_jobs = [job for job in jobs if job['status'] in
+                           UNFINISHED_STATUSES]
+        if not unfinished_jobs:
+            log.info('Tests finished! gathering results...')
+            break
+        time.sleep(60)
 
-    (subject, body) = build_email_body(name, archive_dir)
+    (subject, body) = build_email_body(name)
 
     try:
         if email and dry_run:
@@ -108,143 +113,155 @@ def email_results(subject, from_, to, body):
     smtp.quit()
 
 
-def build_email_body(name, archive_dir):
-    failed = {}
-    hung = {}
-    passed = {}
+def build_email_body(name, _reporter=None):
+    stanzas = OrderedDict([
+        ('fail', dict()),
+        ('dead', dict()),
+        ('running', dict()),
+        ('waiting', dict()),
+        ('queued', dict()),
+        ('pass', dict()),
+    ])
+    reporter = _reporter or ResultsReporter()
+    fields = ('job_id', 'status', 'description', 'duration', 'failure_reason',
+              'sentry_event', 'log_href')
+    jobs = reporter.get_jobs(name, fields=fields)
+    jobs.sort(key=lambda job: job['job_id'])
 
-    for job in ls.get_jobs(archive_dir):
-        job_dir = os.path.join(archive_dir, job)
-        summary_file = os.path.join(job_dir, 'summary.yaml')
+    for job in jobs:
+        job_stanza = format_job(name, job)
+        stanzas[job['status']][job['job_id']] = job_stanza
 
-        # Every job gets a link to e.g. pulpito's pages
-        info_url = misc.get_results_url(name, job)
-        if info_url:
-            info_line = email_templates['info_url_templ'].format(info=info_url)
-        else:
-            info_line = ''
-
-        # Unfinished jobs will have no summary.yaml
-        if not os.path.exists(summary_file):
-            info_file = os.path.join(job_dir, 'info.yaml')
-
-            desc = ''
-            if os.path.exists(info_file):
-                with file(info_file) as f:
-                    info = yaml.safe_load(f)
-                    desc = info['description']
-
-            hung[job] = email_templates['hung_templ'].format(
-                job_id=job,
-                desc=desc,
-                info_line=info_line,
+    sections = OrderedDict.fromkeys(stanzas.keys(), '')
+    subject_fragments = []
+    for status in sections.keys():
+        stanza = stanzas[status]
+        if stanza:
+            subject_fragments.append('%s %s' % (len(stanza), status))
+            sections[status] = email_templates['sect_templ'].format(
+                title=status.title(),
+                jobs=''.join(stanza.values()),
             )
-            continue
+    subject = ', '.join(subject_fragments) + ' '
 
-        with file(summary_file) as f:
-            summary = yaml.safe_load(f)
-
-        if get_status(summary) == 'pass':
-            passed[job] = email_templates['pass_templ'].format(
-                job_id=job,
-                desc=summary.get('description'),
-                time=int(summary.get('duration', 0)),
-                info_line=info_line,
-            )
-        else:
-            log = misc.get_http_log_path(archive_dir, job)
-            if log:
-                log_line = email_templates['fail_log_templ'].format(log=log)
-            else:
-                log_line = ''
-            # Transitioning from sentry_events -> sentry_event
-            sentry_events = summary.get('sentry_events')
-            if sentry_events:
-                sentry_event = sentry_events[0]
-            else:
-                sentry_event = summary.get('sentry_event', '')
-            if sentry_event:
-                sentry_line = email_templates['fail_sentry_templ'].format(
-                    sentry_event=sentry_event)
-            else:
-                sentry_line = ''
-
-            # 'fill' is from the textwrap module and it collapses a given
-            # string into multiple lines of a maximum width as specified. We
-            # want 75 characters here so that when we indent by 4 on the next
-            # line, we have 79-character exception paragraphs.
-            reason = fill(summary.get('failure_reason'), 75)
-            reason = '\n'.join(('    ') + line for line in reason.splitlines())
-
-            failed[job] = email_templates['fail_templ'].format(
-                job_id=job,
-                desc=summary.get('description'),
-                time=int(summary.get('duration', 0)),
-                reason=reason,
-                info_line=info_line,
-                log_line=log_line,
-                sentry_line=sentry_line,
-            )
-
-    maybe_comma = lambda s: ', ' if s else ' '
-
-    subject = ''
-    fail_sect = ''
-    hung_sect = ''
-    pass_sect = ''
-    if failed:
-        subject += '{num_failed} failed{sep}'.format(
-            num_failed=len(failed),
-            sep=maybe_comma(hung or passed)
-        )
-        fail_sect = email_templates['sect_templ'].format(
-            title='Failed',
-            jobs=''.join(failed.values())
-        )
-    if hung:
-        subject += '{num_hung} hung{sep}'.format(
-            num_hung=len(hung),
-            sep=maybe_comma(passed),
-        )
-        hung_sect = email_templates['sect_templ'].format(
-            title='Hung',
-            jobs=''.join(hung.values()),
-        )
-    if passed:
-        subject += '%s passed ' % len(passed)
-        pass_sect = email_templates['sect_templ'].format(
-            title='Passed',
-            jobs=''.join(passed.values()),
-        )
+    if config.archive_server:
+        log_root = os.path.join(config.archive_server, name, '')
+    else:
+        log_root = None
 
     body = email_templates['body_templ'].format(
         name=name,
         info_root=misc.get_results_url(name),
-        log_root=misc.get_http_log_path(archive_dir),
-        fail_count=len(failed),
-        hung_count=len(hung),
-        pass_count=len(passed),
-        fail_sect=fail_sect,
-        hung_sect=hung_sect,
-        pass_sect=pass_sect,
+        log_root=log_root,
+        fail_count=len(stanzas['fail']),
+        dead_count=len(stanzas['dead']),
+        running_count=len(stanzas['running']),
+        waiting_count=len(stanzas['waiting']),
+        queued_count=len(stanzas['queued']),
+        pass_count=len(stanzas['pass']),
+        fail_sect=sections['fail'],
+        dead_sect=sections['dead'],
+        running_sect=sections['running'],
+        waiting_sect=sections['waiting'],
+        queued_sect=sections['queued'],
+        pass_sect=sections['pass'],
     )
 
     subject += 'in {suite}'.format(suite=name)
     return (subject.strip(), body.strip())
 
+
+def format_job(run_name, job):
+    job_id = job['job_id']
+    status = job['status']
+    description = job['description']
+    duration = seconds_to_hms(int(job['duration'] or 0))
+
+    # Every job gets a link to e.g. pulpito's pages
+    info_url = misc.get_results_url(run_name, job_id)
+    if info_url:
+        info_line = email_templates['info_url_templ'].format(info=info_url)
+    else:
+        info_line = ''
+
+    if status in UNFINISHED_STATUSES:
+        format_args = dict(
+            job_id=job_id,
+            desc=description,
+            time=duration,
+            info_line=info_line,
+        )
+        return email_templates['running_templ'].format(**format_args)
+
+    if status == 'pass':
+        return email_templates['pass_templ'].format(
+            job_id=job_id,
+            desc=description,
+            time=duration,
+            info_line=info_line,
+        )
+    else:
+        log_dir_url = job['log_href'].rstrip('teuthology.yaml')
+        if log_dir_url:
+            log_line = email_templates['fail_log_templ'].format(
+                log=log_dir_url)
+        else:
+            log_line = ''
+        sentry_event = job.get('sentry_event')
+        if sentry_event:
+            sentry_line = email_templates['fail_sentry_templ'].format(
+                sentry_event=sentry_event)
+        else:
+            sentry_line = ''
+
+        if job['failure_reason']:
+            # 'fill' is from the textwrap module and it collapses a given
+            # string into multiple lines of a maximum width as specified.
+            # We want 75 characters here so that when we indent by 4 on the
+            # next line, we have 79-character exception paragraphs.
+            reason = fill(job['failure_reason'] or '', 75)
+            reason = \
+                '\n'.join(('    ') + line for line in reason.splitlines())
+            reason_lines = email_templates['fail_reason_templ'].format(
+                reason=reason).rstrip()
+        else:
+            reason_lines = ''
+
+        format_args = dict(
+            job_id=job_id,
+            desc=description,
+            time=duration,
+            info_line=info_line,
+            log_line=log_line,
+            sentry_line=sentry_line,
+            reason_lines=reason_lines,
+        )
+        return email_templates['fail_templ'].format(**format_args)
+
+
+def seconds_to_hms(seconds):
+    (minutes, seconds) = divmod(seconds, 60)
+    (hours, minutes) = divmod(minutes, 60)
+    return "%02d:%02d:%02d" % (hours, minutes, seconds)
+
+
 email_templates = {
     'body_templ': dedent("""\
         Test Run: {name}
         =================================================================
-        info:   {info_root}
-        logs:   {log_root}
-        failed: {fail_count}
-        hung:   {hung_count}
-        passed: {pass_count}
+        info:    {info_root}
+        logs:    {log_root}
+        failed:  {fail_count}
+        dead:    {dead_count}
+        running: {running_count}
+        waiting: {waiting_count}
+        queued:  {queued_count}
+        passed:  {pass_count}
 
-        {fail_sect}{hung_sect}{pass_sect}
+        {fail_sect}{dead_sect}{running_sect}{waiting_sect}{queued_sect}{pass_sect}
         """),
     'sect_templ': dedent("""\
+
         {title}
         =================================================================
         {jobs}
@@ -252,20 +269,20 @@ email_templates = {
     'fail_templ': dedent("""\
         [{job_id}]  {desc}
         -----------------------------------------------------------------
-        time:   {time}s{info_line}{log_line}{sentry_line}
-
-        {reason}
+        time:   {time}{info_line}{log_line}{sentry_line}{reason_lines}
 
         """),
     'info_url_templ': "\ninfo:   {info}",
     'fail_log_templ': "\nlog:    {log}",
     'fail_sentry_templ': "\nsentry: {sentry_event}",
-    'hung_templ': dedent("""\
+    'fail_reason_templ': "\n\n{reason}\n",
+    'running_templ': dedent("""\
         [{job_id}] {desc}{info_line}
+
         """),
     'pass_templ': dedent("""\
         [{job_id}] {desc}
-        time:   {time}s{info_line}
+        time:   {time}{info_line}
 
         """),
 }
