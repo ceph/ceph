@@ -121,7 +121,7 @@ int rgw_statfs(struct rgw_fs *rgw_fs,
 int rgw_create(struct rgw_fs *rgw_fs,
 	       struct rgw_file_handle *parent_fh,
 	       const char *name, mode_t mode, struct stat *st,
-	       struct rgw_file_handle *fh);
+	       struct rgw_file_handle **fh);
 
 /*
   create a new directory
@@ -129,7 +129,7 @@ int rgw_create(struct rgw_fs *rgw_fs,
 int rgw_mkdir(struct rgw_fs *rgw_fs,
 	      struct rgw_file_handle *parent_fh,
 	      const char *name, mode_t mode, struct stat *st,
-	      struct rgw_file_handle *fh);
+	      struct rgw_file_handle **fh);
 
 /*
   rename object
