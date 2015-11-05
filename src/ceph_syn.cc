@@ -31,10 +31,6 @@ using namespace std;
 #include "common/ceph_argparse.h"
 #include "common/pick_address.h"
 
-#if !defined(DARWIN) && !defined(__FreeBSD__)
-#include <envz.h>
-#endif // DARWIN || __FreeBSD__
-
 #include <sys/types.h>
 #include <fcntl.h>
 

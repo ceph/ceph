@@ -135,6 +135,7 @@ protected:
   bool get_data;
   bool partial_content;
   bool range_parsed;
+  bool skip_manifest;
   rgw_obj obj;
   utime_t gc_invalidate_time;
 
@@ -158,6 +159,7 @@ public:
     get_data = false;
     partial_content = false;
     range_parsed = false;
+    skip_manifest = false;
     ret = 0;
  }
 
@@ -175,6 +177,7 @@ public:
   int get_data_cb(bufferlist& bl, off_t ofs, off_t len);
 
   virtual int get_params() = 0;
+  virtual int send_response_data_error() = 0;
   virtual int send_response_data(bufferlist& bl, off_t ofs, off_t len) = 0;
 
   virtual const string name() { return "get_obj"; }

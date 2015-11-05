@@ -76,8 +76,10 @@ libcommon_internal_la_SOURCES = \
 	common/ContextCompletion.cc \
 	common/TracepointProvider.cc
 
+if WITH_RBD
 libcommon_internal_la_SOURCES += \
 	common/blkdev.cc
+endif
 
 if ENABLE_XIO
 libcommon_internal_la_SOURCES += \

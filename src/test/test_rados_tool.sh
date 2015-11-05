@@ -38,6 +38,12 @@ run_expect_succ() {
     [ $? -ne 0 ] && die "expected success, but got failure! cmd: $@"
 }
 
+run_expect_nosignal() {
+    echo "RUN_EXPECT_NOSIGNAL: " "$@"
+    do_run "$@"
+    [ $? -ge 128 ] && die "expected succes or fail, but got signal! cmd: $@"
+}
+
 run() {
     echo "RUN: " $@
     do_run "$@"
@@ -224,7 +230,27 @@ run_expect_fail "$RADOS_TOOL" --pool "$POOL" bench 1 write --output "$TDIR/bench
 run_expect_succ "$RADOS_TOOL" --pool "$POOL" bench 5 write --format json --no-cleanup
 run_expect_succ "$RADOS_TOOL" --pool "$POOL" bench 1 rand --format json
 run_expect_succ "$RADOS_TOOL" --pool "$POOL" bench 1 seq --format json
+run_expect_succ "$RADOS_TOOL" --pool "$POOL" bench 5 write --write-omap
+run_expect_succ "$RADOS_TOOL" --pool "$POOL" bench 5 write --write-object
+run_expect_succ "$RADOS_TOOL" --pool "$POOL" bench 5 write --write-xattr
+run_expect_succ "$RADOS_TOOL" --pool "$POOL" bench 5 write --write-xattr --write-object
+run_expect_succ "$RADOS_TOOL" --pool "$POOL" bench 5 write --write-xattr --write-omap
+run_expect_succ "$RADOS_TOOL" --pool "$POOL" bench 5 write --write-omap --write-object
+run_expect_succ "$RADOS_TOOL" --pool "$POOL" bench 5 write --write-xattr --write-omap --write-object
+run_expect_fail "$RADOS_TOOL" --pool "$POOL" bench 5 read --write-omap
+run_expect_fail "$RADOS_TOOL" --pool "$POOL" bench 5 read --write-object
+run_expect_fail "$RADOS_TOOL" --pool "$POOL" bench 5 read --write-xattr
+run_expect_fail "$RADOS_TOOL" --pool "$POOL" bench 5 read --write-xattr --write-object
+run_expect_fail "$RADOS_TOOL" --pool "$POOL" bench 5 read --write-xattr --write-omap
+run_expect_fail "$RADOS_TOOL" --pool "$POOL" bench 5 read --write-omap --write-object
+run_expect_fail "$RADOS_TOOL" --pool "$POOL" bench 5 read --write-xattr --write-omap --write-object
 
+for i in $("$RADOS_TOOL" --pool "$POOL" ls | grep "benchmark_data"); do
+    "$RADOS_TOOL" --pool "$POOL" truncate $i 0
+done
+
+run_expect_nosignal "$RADOS_TOOL" --pool "$POOL" bench 1 rand
+run_expect_nosignal "$RADOS_TOOL" --pool "$POOL" bench 1 seq
 
 echo "SUCCESS!"
 exit 0

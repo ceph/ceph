@@ -1,0 +1,16 @@
+[Unit]
+Description=Map RBD devices
+
+# According to:
+#   http://www.freedesktop.org/wiki/Software/systemd/NetworkTarget
+# these can be removed once ceph-mon will dynamically change network
+# configuration.
+After=network-online.target local-fs.target
+Wants=network-online.target local-fs.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/bin/rbdmap map
+ExecReload=/usr/bin/rbdmap map
+ExecStop=/usr/bin/rbdmap unmap
