@@ -11,15 +11,32 @@ class TestResultsEmail(object):
     reference = {
         'run_name': 'test_name',
         'jobs': [
-            # Hung
+            # Running
             {'description': 'description for job with name test_name',
              'job_id': 30481,
              'name': 'test_name',
              'log_href': 'http://qa-proxy.ceph.com/teuthology/test_name/30481/teuthology.log',  # noqa
              'owner': 'job@owner',
-             'pid': 80399,
              'duration': None,
              'status': 'running',
+             },
+            # Waiting
+            {'description': 'description for job with name test_name',
+             'job_id': 62965,
+             'name': 'test_name',
+             'log_href': 'http://qa-proxy.ceph.com/teuthology/test_name/30481/teuthology.log',  # noqa
+             'owner': 'job@owner',
+             'duration': None,
+             'status': 'waiting',
+             },
+            # Queued
+            {'description': 'description for job with name test_name',
+             'job_id': 79063,
+             'name': 'test_name',
+             'log_href': 'http://qa-proxy.ceph.com/teuthology/test_name/30481/teuthology.log',  # noqa
+             'owner': 'job@owner',
+             'duration': None,
+             'status': 'queued',
              },
             # Failed
             {'description': 'description for job with name test_name',
@@ -27,11 +44,21 @@ class TestResultsEmail(object):
              'name': 'test_name',
              'log_href': 'http://qa-proxy.ceph.com/teuthology/test_name/88979/teuthology.log',  # noqa
              'owner': 'job@owner',
-             'pid': 3903,
              'duration': 35190,
              'success': False,
              'status': 'fail',
              'failure_reason': 'Failure reason!',
+             },
+            # Dead
+            {'description': 'description for job with name test_name',
+             'job_id': 69152,
+             'name': 'test_name',
+             'log_href': 'http://qa-proxy.ceph.com/teuthology/test_name/69152/teuthology.log',  # noqa
+             'owner': 'job@owner',
+             'duration': 5225,
+             'success': False,
+             'status': 'dead',
+             'failure_reason': 'Dead reason!',
              },
             # Passed
             {'description': 'description for job with name test_name',
@@ -39,21 +66,23 @@ class TestResultsEmail(object):
              'name': 'test_name',
              'log_href': 'http://qa-proxy.ceph.com/teuthology/test_name/68369/teuthology.log',  # noqa
              'owner': 'job@owner',
-             'pid': 38524,
              'duration': 33771,
              'success': True,
              'status': 'pass',
              },
         ],
-        'subject': '1 failed, 1 hung, 1 passed in test_name',
+        'subject': '1 failed, 1 dead, 1 running, 1 waiting, 1 queued, 1 passed in test_name',  # noqa
         'body': textwrap.dedent("""
     Test Run: test_name
     =================================================================
-    info:   http://example.com/test_name/
-    logs:   http://qa-proxy.ceph.com/teuthology/test_name/
-    failed: 1
-    hung:   1
-    passed: 1
+    info:    http://example.com/test_name/
+    logs:    http://qa-proxy.ceph.com/teuthology/test_name/
+    failed:  1
+    dead:    1
+    running: 1
+    waiting: 1
+    queued:  1
+    passed:  1
 
     Failed
     =================================================================
@@ -66,10 +95,33 @@ class TestResultsEmail(object):
         Failure reason!
 
 
-    Hung
+
+    Dead
+    =================================================================
+    [69152]  description for job with name test_name
+    -----------------------------------------------------------------
+    time:   5225s
+    info:   http://example.com/test_name/69152/
+    log:    http://qa-proxy.ceph.com/teuthology/test_name/69152/
+
+        Dead reason!
+
+
+
+    Running
     =================================================================
     [30481] description for job with name test_name
     info:   http://example.com/test_name/30481/
+
+    Waiting
+    =================================================================
+    [62965] description for job with name test_name
+    info:   http://example.com/test_name/62965/
+
+    Queued
+    =================================================================
+    [79063] description for job with name test_name
+    info:   http://example.com/test_name/79063/
 
     Passed
     =================================================================

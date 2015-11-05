@@ -1,7 +1,6 @@
 import os
 import sys
 import time
-import yaml
 import logging
 import subprocess
 from textwrap import dedent
@@ -10,7 +9,6 @@ from textwrap import fill
 import teuthology
 from teuthology.config import config
 from teuthology import misc
-from .job_status import get_status
 from .report import ResultsReporter
 
 log = logging.getLogger(__name__)
@@ -116,7 +114,10 @@ def email_results(subject, from_, to, body):
 
 def build_email_body(name, _reporter=None):
     failed = {}
-    hung = {}
+    dead = {}
+    running = {}
+    waiting = {}
+    queued = {}
     passed = {}
     reporter = _reporter or ResultsReporter()
     fields = ('job_id', 'status', 'description', 'duration', 'failure_reason',
@@ -126,6 +127,7 @@ def build_email_body(name, _reporter=None):
 
     for job in jobs:
         job_id = job['job_id']
+        status = job['status']
         description = job['description']
         duration = int(job['duration'] or 0)
 
@@ -136,17 +138,25 @@ def build_email_body(name, _reporter=None):
         else:
             info_line = ''
 
-        # Unfinished jobs are 'hung' FIXME
-        if job['status'] in UNFINISHED_STATUSES:
-
-            hung[job_id] = email_templates['hung_templ'].format(
+        if status in UNFINISHED_STATUSES:
+            format_args = dict(
                 job_id=job_id,
                 desc=description,
+                time=duration,
                 info_line=info_line,
             )
+            if status == 'running':
+                running[job_id] = email_templates['running_templ'].format(
+                    **format_args)
+            elif status == 'waiting':
+                waiting[job_id] = email_templates['running_templ'].format(
+                    **format_args)
+            elif status == 'queued':
+                queued[job_id] = email_templates['running_templ'].format(
+                    **format_args)
             continue
 
-        if job['status'] == 'pass':
+        if status == 'pass':
             passed[job_id] = email_templates['pass_templ'].format(
                 job_id=job_id,
                 desc=description,
@@ -155,7 +165,7 @@ def build_email_body(name, _reporter=None):
             )
         else:
             log_dir_url = job['log_href'].rstrip('teuthology.yaml')
-            if log:
+            if log_dir_url:
                 log_line = email_templates['fail_log_templ'].format(
                     log=log_dir_url)
             else:
@@ -167,46 +177,88 @@ def build_email_body(name, _reporter=None):
             else:
                 sentry_line = ''
 
-            # 'fill' is from the textwrap module and it collapses a given
-            # string into multiple lines of a maximum width as specified. We
-            # want 75 characters here so that when we indent by 4 on the next
-            # line, we have 79-character exception paragraphs.
-            reason = fill(job['failure_reason'] or '', 75)
-            reason = '\n'.join(('    ') + line for line in reason.splitlines())
+            if job['failure_reason']:
+                # 'fill' is from the textwrap module and it collapses a given
+                # string into multiple lines of a maximum width as specified.
+                # We want 75 characters here so that when we indent by 4 on the
+                # next line, we have 79-character exception paragraphs.
+                reason = fill(job['failure_reason'] or '', 75)
+                reason = \
+                    '\n'.join(('    ') + line for line in reason.splitlines())
+                reason_lines = email_templates['fail_reason_templ'].format(
+                    reason=reason)
+            else:
+                reason_lines = ''
 
-            failed[job_id] = email_templates['fail_templ'].format(
+            format_args = dict(
                 job_id=job_id,
                 desc=description,
                 time=duration,
-                reason=reason,
                 info_line=info_line,
                 log_line=log_line,
                 sentry_line=sentry_line,
+                reason_lines=reason_lines,
             )
+            if status == 'fail':
+                failed[job_id] = email_templates['fail_templ'].format(
+                    **format_args)
+            elif status == 'dead':
+                dead[job_id] = email_templates['fail_templ'].format(
+                    **format_args)
 
     maybe_comma = lambda s: ', ' if s else ' '
 
     subject = ''
     fail_sect = ''
-    hung_sect = ''
+    dead_sect = ''
+    running_sect = ''
+    waiting_sect = ''
+    queued_sect = ''
     pass_sect = ''
     if failed:
         subject += '{num_failed} failed{sep}'.format(
             num_failed=len(failed),
-            sep=maybe_comma(hung or passed)
+            sep=maybe_comma(dead or running or waiting or queued or passed)
         )
         fail_sect = email_templates['sect_templ'].format(
             title='Failed',
             jobs=''.join(failed.values())
         )
-    if hung:
-        subject += '{num_hung} hung{sep}'.format(
-            num_hung=len(hung),
-            sep=maybe_comma(passed),
+    if dead:
+        subject += '{num_dead} dead{sep}'.format(
+            num_dead=len(dead),
+            sep=maybe_comma(running or waiting or queued or passed)
         )
-        hung_sect = email_templates['sect_templ'].format(
-            title='Hung',
-            jobs=''.join(hung.values()),
+        dead_sect = email_templates['sect_templ'].format(
+            title='Dead',
+            jobs=''.join(dead.values()),
+        )
+    if running:
+        subject += '{num_running} running{sep}'.format(
+            num_running=len(running),
+            sep=maybe_comma(waiting or queued or passed)
+        )
+        running_sect = email_templates['sect_templ'].format(
+            title='Running',
+            jobs=''.join(running.values()),
+        )
+    if waiting:
+        subject += '{num_waiting} waiting{sep}'.format(
+            num_waiting=len(waiting),
+            sep=maybe_comma(running or waiting or queued or passed)
+        )
+        waiting_sect = email_templates['sect_templ'].format(
+            title='Waiting',
+            jobs=''.join(waiting.values()),
+        )
+    if queued:
+        subject += '{num_queued} queued{sep}'.format(
+            num_queued=len(queued),
+            sep=maybe_comma(running or waiting or queued or passed)
+        )
+        queued_sect = email_templates['sect_templ'].format(
+            title='Queued',
+            jobs=''.join(queued.values()),
         )
     if passed:
         subject += '%s passed ' % len(passed)
@@ -225,10 +277,16 @@ def build_email_body(name, _reporter=None):
         info_root=misc.get_results_url(name),
         log_root=log_root,
         fail_count=len(failed),
-        hung_count=len(hung),
+        dead_count=len(dead),
+        running_count=len(running),
+        waiting_count=len(waiting),
+        queued_count=len(queued),
         pass_count=len(passed),
         fail_sect=fail_sect,
-        hung_sect=hung_sect,
+        dead_sect=dead_sect,
+        running_sect=running_sect,
+        waiting_sect=waiting_sect,
+        queued_sect=queued_sect,
         pass_sect=pass_sect,
     )
 
@@ -239,13 +297,16 @@ email_templates = {
     'body_templ': dedent("""\
         Test Run: {name}
         =================================================================
-        info:   {info_root}
-        logs:   {log_root}
-        failed: {fail_count}
-        hung:   {hung_count}
-        passed: {pass_count}
+        info:    {info_root}
+        logs:    {log_root}
+        failed:  {fail_count}
+        dead:    {dead_count}
+        running: {running_count}
+        waiting: {waiting_count}
+        queued:  {queued_count}
+        passed:  {pass_count}
 
-        {fail_sect}{hung_sect}{pass_sect}
+        {fail_sect}{dead_sect}{running_sect}{waiting_sect}{queued_sect}{pass_sect}
         """),
     'sect_templ': dedent("""\
         {title}
@@ -255,15 +316,14 @@ email_templates = {
     'fail_templ': dedent("""\
         [{job_id}]  {desc}
         -----------------------------------------------------------------
-        time:   {time}s{info_line}{log_line}{sentry_line}
-
-        {reason}
+        time:   {time}s{info_line}{log_line}{sentry_line}{reason_lines}
 
         """),
     'info_url_templ': "\ninfo:   {info}",
     'fail_log_templ': "\nlog:    {log}",
     'fail_sentry_templ': "\nsentry: {sentry_event}",
-    'hung_templ': dedent("""\
+    'fail_reason_templ': "\n\n{reason}\n",
+    'running_templ': dedent("""\
         [{job_id}] {desc}{info_line}
         """),
     'pass_templ': dedent("""\
