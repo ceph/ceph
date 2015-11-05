@@ -679,7 +679,8 @@ static int do_show_info(const char *imgname, librbd::Image& image,
   if (f) {
     f->close_section();
     f->flush(cout);
-  }
+    cout << std::endl;
+  } 
 
   return 0;
 }
