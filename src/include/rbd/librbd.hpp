@@ -165,6 +165,7 @@ public:
   int snap_unprotect(const char *snap_name);
   int snap_is_protected(const char *snap_name, bool *is_protected);
   int snap_set(const char *snap_name);
+  int snap_rename(const char *srcname, const char *dstname);
 
   /* I/O */
   ssize_t read(uint64_t ofs, size_t len, ceph::bufferlist& bl);

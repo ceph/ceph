@@ -34,6 +34,7 @@ enum {
   l_librbd_snap_create,
   l_librbd_snap_remove,
   l_librbd_snap_rollback,
+  l_librbd_snap_rename,
 
   l_librbd_notify,
   l_librbd_resize,
@@ -110,12 +111,16 @@ namespace librbd {
 		    ProgressContext& prog_ctx);
   int snap_remove(ImageCtx *ictx, const char *snap_name);
   int snap_remove_helper(ImageCtx *ictx, Context* ctx, const char *snap_name);
+  int snap_rename_helper(ImageCtx *ictx, Context* ctx, const uint64_t src_snap_id,
+			 const char *dst_name);
+  int snap_rename(ImageCtx *ictx, const char *srcname, const char *dstname);
   int snap_protect(ImageCtx *ictx, const char *snap_name);
   int snap_unprotect(ImageCtx *ictx, const char *snap_name);
   int snap_is_protected(ImageCtx *ictx, const char *snap_name,
 			bool *is_protected);
   int add_snap(ImageCtx *ictx, const char *snap_name);
   int rm_snap(ImageCtx *ictx, const char *snap_name, uint64_t snap_id);
+  int rename_snap(ImageCtx *ictx, uint64_t src_snap_id, const char *dst_name);
   int refresh_parent(ImageCtx *ictx);
   int ictx_check(ImageCtx *ictx, bool owner_locked=false);
   int ictx_refresh(ImageCtx *ictx);
