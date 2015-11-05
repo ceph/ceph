@@ -217,7 +217,6 @@ bool JournalingObjectStore::ApplyManager::commit_start()
        		dout(10) << "commit_start committing from head: " << committing_seq 
 			 << ",current applying_seq_set size:"<< applying_seq_set.size()
 			<< ", still blocked" << dendl;
-		assert(applying_seq_set.size() == open_ops);
       }
       
       if(committing_seq == committed_seq){
