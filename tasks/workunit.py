@@ -5,11 +5,14 @@ import logging
 import pipes
 import os
 
-from teuthology import misc as teuthology
+from teuthology import misc
+from teuthology.orchestra.run import CommandFailedError
 from teuthology.parallel import parallel
 from teuthology.orchestra import run
 
 log = logging.getLogger(__name__)
+
+CLIENT_PREFIX = 'client.'
 
 
 def task(ctx, config):
@@ -63,7 +66,7 @@ def task(ctx, config):
         'configuration must contain a dictionary of clients'
 
     overrides = ctx.config.get('overrides', {})
-    teuthology.deep_merge(config, overrides.get('workunit', {}))
+    misc.deep_merge(config, overrides.get('workunit', {}))
 
     refspec = config.get('branch')
     if refspec is None:
@@ -77,46 +80,42 @@ def task(ctx, config):
 
     log.info('Pulling workunits from ref %s', refspec)
 
-    created_dir_dict = {}
+    created_mountpoint = {}
 
     if config.get('env') is not None:
         assert isinstance(config['env'], dict), 'env must be a dictionary'
     clients = config['clients']
+
+    # Create scratch dirs for any non-all workunits
     log.info('Making a separate scratch dir for every client...')
     for role in clients.iterkeys():
         assert isinstance(role, basestring)
         if role == "all":
             continue
-        PREFIX = 'client.'
-        assert role.startswith(PREFIX)
-        created_mnt_dir = _make_scratch_dir(ctx, role, config.get('subdir'))
-        created_dir_dict[role] = created_mnt_dir
 
-    all_spec = False #is there an all grouping?
+        assert role.startswith(CLIENT_PREFIX)
+        created_mnt_dir = _make_scratch_dir(ctx, role, config.get('subdir'))
+        created_mountpoint[role] = created_mnt_dir
+
+    # Execute any non-all workunits
     with parallel() as p:
         for role, tests in clients.iteritems():
             if role != "all":
                 p.spawn(_run_tests, ctx, refspec, role, tests,
                         config.get('env'), timeout=timeout)
-            else:
-                all_spec = True
 
-    if all_spec:
+    # Clean up dirs from any non-all workunits
+    for role, created in created_mountpoint.items():
+        _delete_dir(ctx, role, created)
+
+    # Execute any 'all' workunits
+    if 'all' in clients:
         all_tasks = clients["all"]
         _spawn_on_all_clients(ctx, refspec, all_tasks, config.get('env'),
                               config.get('subdir'), timeout=timeout)
 
-    for role in clients.iterkeys():
-        assert isinstance(role, basestring)
-        if role == "all":
-            continue
-        PREFIX = 'client.'
-        assert role.startswith(PREFIX)
-        if created_dir_dict[role]:
-            _delete_dir(ctx, role)
 
-
-def _delete_dir(ctx, role):
+def _delete_dir(ctx, role, created_mountpoint):
     """
     Delete file used by this role, and delete the directory that this
     role appeared in.
@@ -124,37 +123,36 @@ def _delete_dir(ctx, role):
     :param ctx: Context
     :param role: "role.#" where # is used for the role id.
     """
-    PREFIX = 'client.'
-    testdir = teuthology.get_testdir(ctx)
-    id_ = role[len(PREFIX):]
+    testdir = misc.get_testdir(ctx)
+    id_ = role[len(CLIENT_PREFIX):]
     (remote,) = ctx.cluster.only(role).remotes.iterkeys()
     mnt = os.path.join(testdir, 'mnt.{id}'.format(id=id_))
     # Is there any reason why this is not: join(mnt, role) ?
     client = os.path.join(mnt, 'client.{id}'.format(id=id_))
-    try:
-        remote.run(
-            args=[
-                'rm',
-                '-rf',
-                '--',
-                client,
-                ],
-            )
-        log.info("Deleted dir {dir}".format(dir=client))
-    except Exception:
-        log.exception("Caught an exception deleting dir {dir}".format(dir=client))
 
-    try:
+    # Remove the directory inside the mount where the workunit ran
+    remote.run(
+        args=[
+            'sudo',
+            'rm',
+            '-rf',
+            '--',
+            client,
+        ],
+    )
+    log.info("Deleted dir {dir}".format(dir=client))
+
+    # If the mount was an artificially created dir, delete that too
+    if created_mountpoint:
         remote.run(
             args=[
                 'rmdir',
                 '--',
                 mnt,
-                ],
-            )
-        log.info("Deleted dir {dir}".format(dir=mnt))
-    except Exception:
-        log.exception("Caught an exception deleting dir {dir}".format(dir=mnt))
+            ],
+        )
+        log.info("Deleted artificial mount point {dir}".format(dir=client))
+
 
 def _make_scratch_dir(ctx, role, subdir):
     """
@@ -165,13 +163,12 @@ def _make_scratch_dir(ctx, role, subdir):
     :param role: "role.#" where # is used for the role id.
     :param subdir: use this subdir (False if not used)
     """
-    retVal = False
-    PREFIX = 'client.'
-    id_ = role[len(PREFIX):]
+    created_mountpoint = False
+    id_ = role[len(CLIENT_PREFIX):]
     log.debug("getting remote for {id} role {role_}".format(id=id_, role_=role))
     (remote,) = ctx.cluster.only(role).remotes.iterkeys()
     dir_owner = remote.user
-    mnt = os.path.join(teuthology.get_testdir(ctx), 'mnt.{id}'.format(id=id_))
+    mnt = os.path.join(misc.get_testdir(ctx), 'mnt.{id}'.format(id=id_))
     # if neither kclient nor ceph-fuse are required for a workunit,
     # mnt may not exist. Stat and create the directory if it doesn't.
     try:
@@ -180,22 +177,24 @@ def _make_scratch_dir(ctx, role, subdir):
                 'stat',
                 '--',
                 mnt,
-                ],
-            )
+            ],
+        )
         log.info('Did not need to create dir {dir}'.format(dir=mnt))
-    except Exception:
+    except CommandFailedError:
         remote.run(
             args=[
                 'mkdir',
                 '--',
                 mnt,
-                ],
-            )
+            ],
+        )
         log.info('Created dir {dir}'.format(dir=mnt))
-        retVal = True
+        created_mountpoint = True
 
-    if not subdir: subdir = 'client.{id}'.format(id=id_)
-    if retVal:
+    if not subdir:
+        subdir = 'client.{id}'.format(id=id_)
+
+    if created_mountpoint:
         remote.run(
             args=[
                 'cd',
@@ -205,8 +204,8 @@ def _make_scratch_dir(ctx, role, subdir):
                 'mkdir',
                 '--',
                 subdir,
-                ],
-            )
+            ],
+        )
     else:
         remote.run(
             args=[
@@ -224,10 +223,10 @@ def _make_scratch_dir(ctx, role, subdir):
                 '--owner={user}'.format(user=dir_owner),
                 '--',
                 subdir,
-                ],
-            )
+            ],
+        )
 
-    return retVal
+    return created_mountpoint
 
 
 def _spawn_on_all_clients(ctx, refspec, tests, env, subdir, timeout=None):
@@ -237,12 +236,14 @@ def _spawn_on_all_clients(ctx, refspec, tests, env, subdir, timeout=None):
 
     See run_tests() for parameter documentation.
     """
-    client_generator = teuthology.all_roles_of_type(ctx.cluster, 'client')
+    client_generator = misc.all_roles_of_type(ctx.cluster, 'client')
     client_remotes = list()
+
+    created_mountpoint = {}
     for client in client_generator:
         (client_remote,) = ctx.cluster.only('client.{id}'.format(id=client)).remotes.iterkeys()
         client_remotes.append((client_remote, 'client.{id}'.format(id=client)))
-        _make_scratch_dir(ctx, "client.{id}".format(id=client), subdir)
+        created_mountpoint[client] = _make_scratch_dir(ctx, "client.{id}".format(id=client), subdir)
 
     for unit in tests:
         with parallel() as p:
@@ -251,9 +252,9 @@ def _spawn_on_all_clients(ctx, refspec, tests, env, subdir, timeout=None):
                         timeout=timeout)
 
     # cleanup the generated client directories
-    client_generator = teuthology.all_roles_of_type(ctx.cluster, 'client')
+    client_generator = misc.all_roles_of_type(ctx.cluster, 'client')
     for client in client_generator:
-        _delete_dir(ctx, 'client.{id}'.format(id=client))
+        _delete_dir(ctx, 'client.{id}'.format(id=client), created_mountpoint[client])
 
 
 def _run_tests(ctx, refspec, role, tests, env, subdir=None, timeout=None):
@@ -274,11 +275,10 @@ def _run_tests(ctx, refspec, role, tests, env, subdir=None, timeout=None):
                     hours, or 'd' for days. If '0' or anything that evaluates
                     to False is passed, the 'timeout' command is not used.
     """
-    testdir = teuthology.get_testdir(ctx)
+    testdir = misc.get_testdir(ctx)
     assert isinstance(role, basestring)
-    PREFIX = 'client.'
-    assert role.startswith(PREFIX)
-    id_ = role[len(PREFIX):]
+    assert role.startswith(CLIENT_PREFIX)
+    id_ = role[len(CLIENT_PREFIX):]
     (remote,) = ctx.cluster.only(role).remotes.iterkeys()
     mnt = os.path.join(testdir, 'mnt.{id}'.format(id=id_))
     # subdir so we can remove and recreate this a lot without sudo
@@ -308,13 +308,13 @@ def _run_tests(ctx, refspec, role, tests, env, subdir=None, timeout=None):
             'if', 'test', '-e', 'Makefile', run.Raw(';'), 'then', 'make', run.Raw(';'), 'fi',
             run.Raw('&&'),
             'find', '-executable', '-type', 'f', '-printf', r'%P\0'.format(srcdir=srcdir),
-            run.Raw('>{tdir}/workunits.list'.format(tdir=testdir)),
-            ],
-        )
+            run.Raw('>{tdir}/workunits.list.{role}'.format(tdir=testdir, role=role)),
+        ],
+    )
 
-    workunits = sorted(teuthology.get_file(
-                            remote,
-                            '{tdir}/workunits.list'.format(tdir=testdir)).split('\0'))
+    workunits = sorted(misc.get_file(
+        remote,
+        '{tdir}/workunits.list.{role}'.format(tdir=testdir, role=role)).split('\0'))
     assert workunits
 
     try:
@@ -337,7 +337,7 @@ def _run_tests(ctx, refspec, role, tests, env, subdir=None, timeout=None):
                     run.Raw('TESTDIR="{tdir}"'.format(tdir=testdir)),
                     run.Raw('CEPH_ID="{id}"'.format(id=id_)),
                     run.Raw('PATH=$PATH:/usr/sbin')
-                    ]
+                ]
                 if env is not None:
                     for var, val in env.iteritems():
                         quoted_val = pipes.quote(val)
@@ -353,8 +353,8 @@ def _run_tests(ctx, refspec, role, tests, env, subdir=None, timeout=None):
                     '{srcdir}/{workunit}'.format(
                         srcdir=srcdir,
                         workunit=workunit,
-                        ),
-                    ])
+                    ),
+                ])
                 remote.run(
                     logger=log.getChild(role),
                     args=args,
@@ -363,12 +363,12 @@ def _run_tests(ctx, refspec, role, tests, env, subdir=None, timeout=None):
                 remote.run(
                     logger=log.getChild(role),
                     args=['sudo', 'rm', '-rf', '--', scratch_tmp],
-                    )
+                )
     finally:
-        log.info('Stopping %s on %s...', spec, role)
+        log.info('Stopping %s on %s...', tests, role)
         remote.run(
             logger=log.getChild(role),
             args=[
-                'rm', '-rf', '--', '{tdir}/workunits.list'.format(tdir=testdir), srcdir,
-                ],
-            )
+                'rm', '-rf', '--', '{tdir}/workunits.list.{role}'.format(tdir=testdir, role=role), srcdir,
+            ],
+        )
