@@ -125,3 +125,6 @@ if (WITH_CEPHFS)
   add_library(cls_cephfs_client
     cephfs/cls_cephfs_client.cc)
 endif (WITH_CEPHFS)
+
+add_library(cls_numops_client STATIC numops/cls_numops_client.cc)
+

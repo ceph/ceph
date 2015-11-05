@@ -307,6 +307,8 @@ set(libcommon_files
   common/pick_address.cc
   common/address_helper.cc
   common/linux_version.c
+  common/TracepointProvider.cc
+  common/Cycles.cc
   osdc/Striper.cc
   osdc/Objecter.cc
   ${arch_files}
@@ -413,6 +415,9 @@ if(${ENABLE_SHARED})
   set_target_properties(librados PROPERTIES OUTPUT_NAME rados VERSION 2.0.0
     SOVERSION 2)
 endif(${ENABLE_SHARED})
+
+add_library(librados_api STATIC common/buffer.cc librados/librados.cc)
+
 install(FILES include/rados/librados.h
   include/rados/rados_types.h
   include/rados/rados_types.hpp
@@ -423,12 +428,19 @@ install(FILES include/rados/librados.h
   DESTINATION include/rados)
 install(TARGETS librados DESTINATION lib)
 
-set(libradosstriper_srcs
-  libradosstriper/libradosstriper.cc
-  libradosstriper/RadosStriperImpl.cc
-  libradosstriper/MultiAioCompletionImpl.cc)
-add_library(libradosstriper ${libradosstriper_srcs})
-target_link_libraries(libradosstriper librados cls_lock_client)
+add_subdirectory(libradosstriper)
+
+add_executable(ceph_scratchtool tools/scratchtool.c)
+target_link_libraries(ceph_scratchtool librados global)
+install(TARGETS ceph_scratchtool DESTINATION bin/debug)
+
+add_executable(ceph_scratchtoolpp tools/scratchtoolpp.cc)
+target_link_libraries(ceph_scratchtoolpp librados global)
+install(TARGETS ceph_scratchtoolpp DESTINATION bin/debug)
+
+add_executable(ceph_radosacl tools/radosacl.cc)
+target_link_libraries(ceph_radosacl librados global)
+install(TARGETS ceph_radosacl DESTINATION bin/debug)
 
 set(rados_srcs
   tools/rados/rados.cc
@@ -796,8 +808,14 @@ install(TARGETS monmaptool DESTINATION bin)
 set(osdomaptool_srcs
   tools/osdmaptool.cc)
 add_executable(osdmaptool ${osdomaptool_srcs})
-target_link_libraries(osdmaptool global ${CMAKE_DL_LIBS})
+target_link_libraries(osdmaptool global)
 install(TARGETS osdmaptool DESTINATION bin)
+
+set(ceph_psim_srcs
+  tools/psim.cc)
+add_executable(ceph_psim ${ceph_psim_srcs})
+target_link_libraries(ceph_psim global)
+install(TARGETS ceph_psim DESTINATION bin)
 
 set(ceph_authtool_srcs
   tools/ceph_authtool.cc)
@@ -912,6 +930,10 @@ set(journal_srcs
   journal/ObjectRecorder.cc
   journal/Utils.cc)
 add_library(journal ${journal_srcs})
+
+add_executable(ceph_client_debug tools/ceph-client-debug.cc)
+target_link_libraries(ceph_client_debug cephfs librados global common)
+install(TARGETS ceph_client_debug DESTINATION bin/debug)
 
 if(${WITH_RBD})
   set(librbd_srcs
