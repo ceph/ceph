@@ -53,7 +53,7 @@ def results(archive_dir, name, email, timeout, dry_run):
         if not unfinished_jobs:
             log.info('Tests finished! gathering results...')
             break
-        time.sleep(10)
+        time.sleep(60)
 
     (subject, body) = build_email_body(name)
 
