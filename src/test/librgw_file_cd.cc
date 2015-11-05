@@ -62,7 +62,7 @@ TEST(LibRGW, MOUNT) {
 TEST(LibRGW, CREATE_BUCKET) {
   if (do_create) {
     struct stat st;
-    struct rgw_file_handle fh;
+    struct rgw_file_handle *fh;
     int ret = rgw_mkdir(fs, fs->root_fh, bucket_name.c_str(), 755, &st, &fh);
     ASSERT_EQ(ret, 0);
   }
@@ -79,7 +79,7 @@ TEST(LibRGW, CREATE_BUCKET_MULTI) {
   if (do_multi) {
     int ret;
     struct stat st;
-    struct rgw_file_handle fh;
+    struct rgw_file_handle *fh;
     for (int ix = 0; ix < multi_cnt; ++ix) {
       string bn = bucket_name;
       bn += to_string(ix);
