@@ -103,6 +103,10 @@ void add_image_option(po::options_description *opt,
 
 void add_snap_option(po::options_description *opt,
                       ArgumentModifier modifier) {
+  if (modifier == ARGUMENT_MODIFIER_DEST) {
+    return;
+  }
+
   std::string name = SNAPSHOT_NAME;
   std::string description = "snapshot name";
   switch (modifier) {

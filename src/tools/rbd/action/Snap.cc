@@ -409,6 +409,62 @@ int execute_unprotect(const po::variables_map &vm) {
   return 0;
 }
 
+void get_rename_arguments(po::options_description *positional,
+                          po::options_description *options) {
+  at::add_snap_spec_options(positional, options, at::ARGUMENT_MODIFIER_SOURCE);
+  at::add_snap_spec_options(positional, options, at::ARGUMENT_MODIFIER_DEST);
+}
+
+int execute_rename(const po::variables_map &vm) {
+  size_t arg_index = 0;
+  std::string pool_name;
+  std::string image_name;
+  std::string src_snap_name;
+  int r = utils::get_pool_image_snapshot_names(
+    vm, at::ARGUMENT_MODIFIER_SOURCE, &arg_index, &pool_name, &image_name,
+    &src_snap_name, utils::SNAPSHOT_PRESENCE_REQUIRED);
+  if (r < 0) {
+    return -r;
+  }
+
+  std::string dest_pool_name(pool_name);
+  std::string dest_image_name;
+  std::string dest_snap_name;
+  r = utils::get_pool_image_snapshot_names(
+    vm, at::ARGUMENT_MODIFIER_DEST, &arg_index, &dest_pool_name,
+    &dest_image_name, &dest_snap_name, utils::SNAPSHOT_PRESENCE_REQUIRED);
+  if (r < 0) {
+    return -r;
+  }
+
+  if (pool_name != dest_pool_name) {
+    std::cerr << "rbd: source and destination pool must be the same"
+              << std::endl;
+    return -EINVAL;
+  } else if (image_name != dest_image_name) {
+    std::cerr << "rbd: source and destination image name must be the same"
+              << std::endl;
+    return -EINVAL;
+  }
+
+  librados::Rados rados;
+  librados::IoCtx io_ctx;
+  librbd::Image image;
+  r = utils::init_and_open_image(pool_name, image_name, "", false, &rados,
+                                 &io_ctx, &image);
+  if (r < 0) {
+    return r;
+  }
+
+  r = image.snap_rename(src_snap_name.c_str(), dest_snap_name.c_str());
+  if (r < 0) {
+    std::cerr << "rbd: renaming snap failed: " << cpp_strerror(r)
+              << std::endl;
+    return r;
+  }
+  return 0;
+}
+
 Shell::Action action_list(
   {"snap", "ls"}, {}, "Dump list of image snapshots.", "",
   &get_list_arguments, &execute_list);
@@ -430,6 +486,9 @@ Shell::Action action_protect(
 Shell::Action action_unprotect(
   {"snap", "unprotect"}, {}, "Allow a snapshot to be deleted.", "",
   &get_unprotect_arguments, &execute_unprotect);
+Shell::Action action_rename(
+  {"snap", "rename"}, {}, "Rename a snapshot.", "",
+  &get_rename_arguments, &execute_rename);
 
 } // namespace snap
 } // namespace action
