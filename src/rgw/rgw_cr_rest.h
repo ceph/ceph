@@ -1,6 +1,9 @@
 #ifndef CEPH_RGW_CR_REST_H
 #define CEPH_RGW_CR_REST_H
 
+#include <boost/intrusive_ptr.hpp>
+#include "include/assert.h" // boost header clobbers our assert.h
+
 #include "rgw_coroutine.h"
 #include "rgw_rest_conn.h"
 
@@ -12,39 +15,40 @@ class RGWReadRESTResourceCR : public RGWSimpleCoroutine {
   param_list_t params;
   T *result;
 
-  RGWRESTReadResource *http_op;
+  boost::intrusive_ptr<RGWRESTReadResource> http_op;
 
 public:
   RGWReadRESTResourceCR(CephContext *_cct, RGWRESTConn *_conn,
                         RGWHTTPManager *_http_manager, const string& _path,
                         rgw_http_param_pair *params, T *_result)
     : RGWSimpleCoroutine(_cct), conn(_conn), http_manager(_http_manager),
-      path(_path), params(make_param_list(params)), result(_result),
-      http_op(NULL)
+      path(_path), params(make_param_list(params)), result(_result)
   {}
 
   int send_request() {
-    http_op = new RGWRESTReadResource(conn, path, params, NULL, http_manager);
+    auto op = boost::intrusive_ptr<RGWRESTReadResource>(
+        new RGWRESTReadResource(conn, path, params, NULL, http_manager));
 
-    http_op->set_user_info((void *)stack);
+    op->set_user_info((void *)stack);
 
-    int ret = http_op->aio_read();
+    int ret = op->aio_read();
     if (ret < 0) {
-      log_error() << "failed to send http operation: " << http_op->to_str() << " ret=" << ret << std::endl;
-      http_op->put();
+      log_error() << "failed to send http operation: " << op->to_str()
+          << " ret=" << ret << std::endl;
       return ret;
     }
+    std::swap(http_op, op); // store reference in http_op on success
     return 0;
   }
 
   int request_complete() {
     int ret = http_op->wait(result);
+    auto op = std::move(http_op); // release ref on return
     if (ret < 0) {
-      error_stream << "http operation failed: " << http_op->to_str() << " status=" << http_op->get_http_status() << std::endl;
-      http_op->put();
+      error_stream << "http operation failed: " << op->to_str()
+          << " status=" << op->get_http_status() << std::endl;
       return ret;
     }
-    http_op->put();
     return 0;
   }
 };
@@ -58,7 +62,7 @@ class RGWPostRESTResourceCR : public RGWSimpleCoroutine {
   T *result;
   S input;
 
-  RGWRESTPostResource *http_op;
+  boost::intrusive_ptr<RGWRESTPostResource> http_op;
 
 public:
   RGWPostRESTResourceCR(CephContext *_cct, RGWRESTConn *_conn,
@@ -66,13 +70,14 @@ public:
                         rgw_http_param_pair *_params, S& _input, T *_result)
     : RGWSimpleCoroutine(_cct), conn(_conn), http_manager(_http_manager),
       path(_path), params(make_param_list(_params)), result(_result),
-      input(_input), http_op(NULL)
+      input(_input)
   {}
 
   int send_request() {
-    http_op = new RGWRESTPostResource(conn, path, params, NULL, http_manager);
+    auto op = boost::intrusive_ptr<RGWRESTPostResource>(
+        new RGWRESTPostResource(conn, path, params, NULL, http_manager));
 
-    http_op->set_user_info((void *)stack);
+    op->set_user_info((void *)stack);
 
     JSONFormatter jf;
     encode_json("data", input, &jf);
@@ -81,12 +86,12 @@ public:
     bufferlist bl;
     bl.append(ss.str());
 
-    int ret = http_op->aio_send(bl);
+    int ret = op->aio_send(bl);
     if (ret < 0) {
       lsubdout(cct, rgw, 0) << "ERROR: failed to send post request" << dendl;
-      http_op->put();
       return ret;
     }
+    std::swap(http_op, op); // store reference in http_op on success
     return 0;
   }
 
@@ -98,10 +103,12 @@ public:
       bufferlist bl;
       ret = http_op->wait_bl(&bl);
     }
-    http_op->put();
+    auto op = std::move(http_op); // release ref on return
     if (ret < 0) {
-      error_stream << "http operation failed: " << http_op->to_str() << " status=" << http_op->get_http_status() << std::endl;
-      lsubdout(cct, rgw, 0) << "ERROR: failed to wait for op, ret=" << ret << ": " << http_op->to_str() << dendl;
+      error_stream << "http operation failed: " << op->to_str()
+          << " status=" << op->get_http_status() << std::endl;
+      lsubdout(cct, rgw, 0) << "ERROR: failed to wait for op, ret=" << ret
+          << ": " << op->to_str() << dendl;
       return ret;
     }
     return 0;
