@@ -1206,7 +1206,7 @@ int librados::IoCtx::rmxattr(const std::string& oid, const char *name)
 int librados::IoCtx::stat(const std::string& oid, uint64_t *psize, time_t *pmtime)
 {
   object_t obj(oid);
-  return io_ctx_impl->stat(oid, psize, pmtime);
+  return io_ctx_impl->stat(obj, psize, pmtime);
 }
 
 int librados::IoCtx::exec(const std::string& oid, const char *cls, const char *method,
