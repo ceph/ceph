@@ -22,6 +22,7 @@
 #include "rgw_metadata.h"
 #include "rgw_bucket.h"
 #include "rgw_rest_conn.h"
+#include "rgw_cr_rest.h"
 
 #include "cls/rgw/cls_rgw_ops.h"
 #include "cls/rgw/cls_rgw_types.h"
@@ -2329,62 +2330,6 @@ void RGWObjectCtx::set_prefetch_data(rgw_obj& obj) {
     objs_state[new_obj].prefetch_data = true;
   }
 }
-
-template <class S, class T>
-class RGWPostRESTResourceCR : public RGWSimpleCoroutine {
-  RGWRESTConn *conn;
-  RGWHTTPManager *http_manager;
-  string path;
-  rgw_http_param_pair *params;
-  T *result;
-  S input;
-
-  RGWRESTPostResource *http_op;
-
-public:
-  RGWPostRESTResourceCR(CephContext *_cct, RGWRESTConn *_conn, RGWHTTPManager *_http_manager,
-			const string& _path, rgw_http_param_pair *_params, S& _input,
-			T *_result) : RGWSimpleCoroutine(_cct), conn(_conn), http_manager(_http_manager),
-                                      path(_path), params(_params), result(_result), input(_input), http_op(NULL) {}
-
-  int send_request() {
-    http_op = new RGWRESTPostResource(conn, path, params, NULL, http_manager);
-
-    http_op->set_user_info((void *)stack);
-
-    JSONFormatter jf;
-    encode_json("data", input, &jf);
-    std::stringstream ss;
-    jf.flush(ss);
-    bufferlist bl;
-    bl.append(ss.str());
-
-    int ret = http_op->aio_send(bl);
-    if (ret < 0) {
-      ldout(cct, 0) << "ERROR: failed to send post request" << dendl;
-      http_op->put();
-      return ret;
-    }
-    return 0;
-  }
-
-  int request_complete() {
-    int ret;
-    if (result) {
-      ret = http_op->wait(result);
-    } else {
-      bufferlist bl;
-      ret = http_op->wait_bl(&bl);
-    }
-    http_op->put();
-    if (ret < 0) {
-      error_stream << "http operation failed: " << http_op->to_str() << " status=" << http_op->get_http_status() << std::endl;
-      ldout(cct, 0) << "ERROR: failed to wait for op, ret=" << ret << ": " << http_op->to_str() << dendl;
-      return ret;
-    }
-    return 0;
-  }
-};
 
 class RGWMetaNotifierManager : public RGWCoroutinesManager {
   RGWRados *store;

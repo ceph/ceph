@@ -6,13 +6,11 @@
 
 #define dout_subsys ceph_subsys_rgw
 
-RGWRESTConn::RGWRESTConn(CephContext *_cct, RGWRados *store, const list<string>& remote_endpoints) : cct(_cct)
+RGWRESTConn::RGWRESTConn(CephContext *_cct, RGWRados *store,
+                         const list<string>& remote_endpoints)
+  : cct(_cct),
+    endpoints(remote_endpoints.begin(), remote_endpoints.end())
 {
-  list<string>::const_iterator iter;
-  int i;
-  for (i = 0, iter = remote_endpoints.begin(); iter != remote_endpoints.end(); ++iter, ++i) {
-    endpoints[i] = *iter;
-  }
   key = store->get_zone_params().system_key;
   zone_group = store->get_zonegroup().get_id();
 }
@@ -50,15 +48,15 @@ int RGWRESTConn::forward(const string& uid, req_info& info, obj_version *objv, s
   int ret = get_url(url);
   if (ret < 0)
     return ret;
-  list<pair<string, string> > params;
+  param_list_t params;
   if (!uid.empty())
-    params.push_back(pair<string, string>(RGW_SYS_PARAM_PREFIX "uid", uid));
-  params.push_back(pair<string, string>(RGW_SYS_PARAM_PREFIX "region", zone_group));
+    params.push_back(param_pair_t(RGW_SYS_PARAM_PREFIX "uid", uid));
+  params.push_back(param_pair_t(RGW_SYS_PARAM_PREFIX "region", zone_group));
   if (objv) {
-    params.push_back(pair<string, string>(RGW_SYS_PARAM_PREFIX "tag", objv->tag));
+    params.push_back(param_pair_t(RGW_SYS_PARAM_PREFIX "tag", objv->tag));
     char buf[16];
     snprintf(buf, sizeof(buf), "%lld", (long long)objv->ver);
-    params.push_back(pair<string, string>(RGW_SYS_PARAM_PREFIX "ver", buf));
+    params.push_back(param_pair_t(RGW_SYS_PARAM_PREFIX "ver", buf));
   }
   RGWRESTSimpleRequest req(cct, url, NULL, &params);
   return req.forward_request(key, info, max_response, inbl, outbl);
@@ -78,9 +76,9 @@ int RGWRESTConn::put_obj_init(const string& uid, rgw_obj& obj, uint64_t obj_size
   if (ret < 0)
     return ret;
 
-  list<pair<string, string> > params;
-  params.push_back(pair<string, string>(RGW_SYS_PARAM_PREFIX "uid", uid));
-  params.push_back(pair<string, string>(RGW_SYS_PARAM_PREFIX "region", zone_group));
+  param_list_t params;
+  params.push_back(param_pair_t(RGW_SYS_PARAM_PREFIX "uid", uid));
+  params.push_back(param_pair_t(RGW_SYS_PARAM_PREFIX "region", zone_group));
   *req = new RGWRESTStreamWriteRequest(cct, url, NULL, &params);
   return (*req)->put_obj_init(key, obj, obj_size, attrs);
 }
@@ -114,17 +112,17 @@ int RGWRESTConn::get_obj(const string& uid, req_info *info /* optional */, rgw_o
   if (ret < 0)
     return ret;
 
-  list<pair<string, string> > params;
+  param_list_t params;
   if (!uid.empty()) {
-    params.push_back(pair<string, string>(RGW_SYS_PARAM_PREFIX "uid", uid));
+    params.push_back(param_pair_t(RGW_SYS_PARAM_PREFIX "uid", uid));
   }
-  params.push_back(pair<string, string>(RGW_SYS_PARAM_PREFIX "region", zone_group));
+  params.push_back(param_pair_t(RGW_SYS_PARAM_PREFIX "region", zone_group));
   if (prepend_metadata) {
-    params.push_back(pair<string, string>(RGW_SYS_PARAM_PREFIX "prepend-metadata", zone_group));
+    params.push_back(param_pair_t(RGW_SYS_PARAM_PREFIX "prepend-metadata", zone_group));
   }
   if (!obj.get_instance().empty()) {
     const string& instance = obj.get_instance();
-    params.push_back(pair<string, string>("versionId", instance));
+    params.push_back(param_pair_t("versionId", instance));
   }
   *req = new RGWRESTStreamReadRequest(cct, url, cb, NULL, &params);
   map<string, string> extra_headers;
@@ -158,7 +156,7 @@ int RGWRESTConn::complete_request(RGWRESTStreamReadRequest *req, string& etag, t
 }
 
 int RGWRESTConn::get_resource(const string& resource,
-		     list<pair<string, string> > *extra_params,
+		     param_list_t *extra_params,
 		     map<string, string> *extra_headers,
 		     bufferlist& bl,
 		     RGWHTTPManager *mgr)
@@ -168,16 +166,13 @@ int RGWRESTConn::get_resource(const string& resource,
   if (ret < 0)
     return ret;
 
-  list<pair<string, string> > params;
+  param_list_t params;
 
   if (extra_params) {
-    list<pair<string, string> >::iterator iter = extra_params->begin();
-    for (; iter != extra_params->end(); ++iter) {
-      params.push_back(*iter);
-    }
+    params.insert(params.end(), extra_params->begin(), extra_params->end());
   }
 
-  params.push_back(pair<string, string>(RGW_SYS_PARAM_PREFIX "zonegroup", zone_group));
+  params.push_back(param_pair_t(RGW_SYS_PARAM_PREFIX "zonegroup", zone_group));
 
   RGWStreamIntoBufferlist cb(bl);
 
@@ -185,10 +180,7 @@ int RGWRESTConn::get_resource(const string& resource,
 
   map<string, string> headers;
   if (extra_headers) {
-    for (map<string, string>::iterator iter = extra_headers->begin();
-	 iter != extra_headers->end(); ++iter) {
-      headers[iter->first] = iter->second;
-    }
+    headers.insert(extra_params->begin(), extra_params->end());
   }
 
   ret = req.get_resource(key, headers, resource, mgr);
@@ -205,39 +197,32 @@ int RGWRESTConn::get_resource(const string& resource,
 RGWRESTReadResource::RGWRESTReadResource(RGWRESTConn *_conn,
                                          const string& _resource,
 		                         const rgw_http_param_pair *pp,
-                                         list<pair<string, string> > *extra_headers,
-                                         RGWHTTPManager *_mgr) : cct(_conn->get_ctx()), conn(_conn), resource(_resource), cb(bl),
-                                                                 mgr(_mgr), req(cct, conn->get_url(), &cb, NULL, NULL) {
-  while (pp && pp->key) {
-    string k = pp->key;
-    string v = (pp->val ? pp->val : "");
-    params.push_back(make_pair(k, v));
-    ++pp;
-  }
+                                         param_list_t *extra_headers,
+                                         RGWHTTPManager *_mgr)
+  : cct(_conn->get_ctx()), conn(_conn), resource(_resource),
+    params(make_param_list(pp)), cb(bl), mgr(_mgr),
+    req(cct, conn->get_url(), &cb, NULL, NULL)
+{
   init_common(extra_headers);
 }
 
 RGWRESTReadResource::RGWRESTReadResource(RGWRESTConn *_conn,
                                          const string& _resource,
-		                         list<pair<string, string> >& _params,
-                                         list<pair<string, string> > *extra_headers,
-                                         RGWHTTPManager *_mgr) : cct(_conn->get_ctx()), conn(_conn), resource(_resource), cb(bl),
-                                                                 mgr(_mgr), req(cct, conn->get_url(), &cb, NULL, NULL) {
-  for (list<pair<string, string> >::iterator iter = _params.begin(); iter != _params.end(); ++iter) {
-    params.push_back(*iter);
-  }
+		                         param_list_t& _params,
+                                         param_list_t *extra_headers,
+                                         RGWHTTPManager *_mgr)
+  : cct(_conn->get_ctx()), conn(_conn), resource(_resource), params(_params),
+    cb(bl), mgr(_mgr), req(cct, conn->get_url(), &cb, NULL, NULL)
+{
   init_common(extra_headers);
 }
 
-void RGWRESTReadResource::init_common(list<pair<string, string> > *extra_headers)
+void RGWRESTReadResource::init_common(param_list_t *extra_headers)
 {
-  params.push_back(pair<string, string>(RGW_SYS_PARAM_PREFIX "zonegroup", conn->get_zonegroup()));
+  params.push_back(param_pair_t(RGW_SYS_PARAM_PREFIX "zonegroup", conn->get_zonegroup()));
 
   if (extra_headers) {
-    for (list<pair<string, string> >::iterator iter = extra_headers->begin();
-      iter != extra_headers->end(); ++iter) {
-      headers[iter->first] = iter->second;
-    }
+    headers.insert(extra_headers->begin(), extra_headers->end());
   }
 
   req.set_params(&params);
@@ -272,23 +257,32 @@ int RGWRESTReadResource::aio_read()
 RGWRESTPostResource::RGWRESTPostResource(RGWRESTConn *_conn,
                                          const string& _resource,
 		                         const rgw_http_param_pair *pp,
-                                         list<pair<string, string> > *extra_headers,
-                                         RGWHTTPManager *_mgr) : cct(_conn->get_ctx()), conn(_conn), resource(_resource), cb(bl),
-                                                                 mgr(_mgr), req(cct, "POST", conn->get_url(), &cb, NULL, NULL) {
-  while (pp && pp->key) {
-    string k = pp->key;
-    string v = (pp->val ? pp->val : "");
-    params.push_back(make_pair(k, v));
-    ++pp;
-  }
+                                         param_list_t *extra_headers,
+                                         RGWHTTPManager *_mgr)
+  : cct(_conn->get_ctx()), conn(_conn), resource(_resource),
+    params(make_param_list(pp)), cb(bl), mgr(_mgr),
+    req(cct, "POST", conn->get_url(), &cb, NULL, NULL)
+{
+  init_common(extra_headers);
+}
 
-  params.push_back(pair<string, string>(RGW_SYS_PARAM_PREFIX "zonegroup", conn->get_zonegroup()));
+RGWRESTPostResource::RGWRESTPostResource(RGWRESTConn *_conn,
+                                         const string& _resource,
+		                         param_list_t& params,
+                                         param_list_t *extra_headers,
+                                         RGWHTTPManager *_mgr)
+  : cct(_conn->get_ctx()), conn(_conn), resource(_resource), params(params),
+    cb(bl), mgr(_mgr), req(cct, "POST", conn->get_url(), &cb, NULL, NULL)
+{
+  init_common(extra_headers);
+}
+
+void RGWRESTPostResource::init_common(param_list_t *extra_headers)
+{
+  params.push_back(param_pair_t(RGW_SYS_PARAM_PREFIX "zonegroup", conn->get_zonegroup()));
 
   if (extra_headers) {
-    for (list<pair<string, string> >::iterator iter = extra_headers->begin();
-      iter != extra_headers->end(); ++iter) {
-      headers[iter->first] = iter->second;
-    }
+    headers.insert(extra_headers->begin(), extra_headers->end());
   }
 
   req.set_params(&params);
