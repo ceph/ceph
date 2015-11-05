@@ -223,7 +223,7 @@ def format_job(run_name, job):
             reason = \
                 '\n'.join(('    ') + line for line in reason.splitlines())
             reason_lines = email_templates['fail_reason_templ'].format(
-                reason=reason)
+                reason=reason).rstrip()
         else:
             reason_lines = ''
 
@@ -261,6 +261,7 @@ email_templates = {
         {fail_sect}{dead_sect}{running_sect}{waiting_sect}{queued_sect}{pass_sect}
         """),
     'sect_templ': dedent("""\
+
         {title}
         =================================================================
         {jobs}
@@ -277,6 +278,7 @@ email_templates = {
     'fail_reason_templ': "\n\n{reason}\n",
     'running_templ': dedent("""\
         [{job_id}] {desc}{info_line}
+
         """),
     'pass_templ': dedent("""\
         [{job_id}] {desc}

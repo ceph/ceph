@@ -84,6 +84,7 @@ class TestResultsEmail(object):
     queued:  1
     passed:  1
 
+
     Fail
     =================================================================
     [88979]  description for job with name test_name
@@ -113,15 +114,21 @@ class TestResultsEmail(object):
     [30481] description for job with name test_name
     info:   http://example.com/test_name/30481/
 
+
+
     Waiting
     =================================================================
     [62965] description for job with name test_name
     info:   http://example.com/test_name/62965/
 
+
+
     Queued
     =================================================================
     [79063] description for job with name test_name
     info:   http://example.com/test_name/79063/
+
+
 
     Pass
     =================================================================
