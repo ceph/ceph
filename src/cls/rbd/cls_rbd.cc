@@ -2278,6 +2278,7 @@ int object_map_update(cls_method_context_t hctx, bufferlist *in, bufferlist *out
     ::decode(new_object_state, iter);
     ::decode(current_object_state, iter);
   } catch (const buffer::error &err) {
+    CLS_ERR("failed to decode message");
     return -EINVAL;
   }
 
@@ -2291,6 +2292,7 @@ int object_map_update(cls_method_context_t hctx, bufferlist *in, bufferlist *out
   bufferlist header_bl;
   r = cls_cxx_read(hctx, 0, object_map.get_header_length(), &header_bl);
   if (r < 0) {
+    CLS_ERR("object map header read failed");
     return r;
   }
 
@@ -2326,6 +2328,7 @@ int object_map_update(cls_method_context_t hctx, bufferlist *in, bufferlist *out
   r = cls_cxx_read(hctx, object_map.get_header_length() + byte_offset,
 		   byte_length, &data_bl); 
   if (r < 0) {
+    CLS_ERR("object map data read failed");
     return r;
   }
 
@@ -2364,8 +2367,15 @@ int object_map_update(cls_method_context_t hctx, bufferlist *in, bufferlist *out
     object_map.encode_footer(footer_bl);
     r = cls_cxx_write(hctx, object_map.get_footer_offset(), footer_bl.length(),
 		      &footer_bl);
+  } else {
+    CLS_LOG(20, "object_map_update: no update necessary");
   }
-  return r;
+
+  if (r < 0) {
+    return r;
+  }
+
+  return 0;
 }
 
 /**
