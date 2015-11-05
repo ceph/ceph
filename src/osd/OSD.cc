@@ -480,11 +480,15 @@ void OSDService::init()
   reserver_finisher.start();
   objecter_finisher.start();
   objecter->set_client_incarnation(0);
-  objecter->start();
   watch_timer.init();
   agent_timer.init();
 
   agent_thread.create();
+}
+
+void OSDService::final_init()
+{
+  objecter->start();
 }
 
 void OSDService::activate_map()
@@ -1807,13 +1811,6 @@ int OSD::init()
     goto out;
   }
 
-  if (!superblock.compat_features.incompat.contains(CEPH_OSD_FEATURE_INCOMPAT_PGMETA)) {
-    derr << "OSD store does not have PGMETA feature." << dendl;
-    derr << "You must first upgrade to hammer." << dendl;
-    r = -EINVAL;
-    goto out;
-  }
-
   if (osd_compat.compare(superblock.compat_features) < 0) {
     derr << "The disk uses features unsupported by the executable." << dendl;
     derr << " ondisk features " << superblock.compat_features << dendl;
@@ -1958,6 +1955,10 @@ int OSD::init()
   if (is_stopping())
     return 0;
 
+  // start objecter *after* we have authenticated, so that we don't ignore
+  // the OSDMaps it requests.
+  service.final_init();
+
   check_config();
 
   dout(10) << "ensuring pgs have consumed prior maps" << dendl;
@@ -1966,6 +1967,9 @@ int OSD::init()
 
   dout(0) << "done with init, starting boot process" << dendl;
   set_state(STATE_BOOTING);
+
+  // we don't need to ask for an osdmap here; objecter will
+
   start_boot();
 
   return 0;
