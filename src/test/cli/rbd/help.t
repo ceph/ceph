@@ -41,6 +41,7 @@
       snap protect          Prevent a snapshot from being deleted.
       snap purge            Deletes all snapshots.
       snap remove (snap rm) Deletes a snapshot.
+      snap rename           Rename a snapshot.
       snap rollback         Rollback image to snapshot.
       snap unprotect        Allow a snapshot to be deleted.
       status                Show the status of this image.
@@ -52,9 +53,10 @@
     --cluster arg         cluster name
     -i [ --id ] arg       client id (without 'client.' prefix)
     -n [ --name ] arg     client name
+    -m [ --mon_host ] arg monitor host
     --secret arg          path to secret key (deprecated)
-    --keyfile arg         path to secret key
-    --keyring arg         path to keyring
+    -K [ --keyfile ] arg  path to secret key
+    -k [ --keyring ] arg  path to keyring
   
   See 'rbd help <command>' for help on a specific command.
   $ while read -r line; do echo rbd help $line ; rbd help $line; done <<< "$(rbd help | grep '^    [a-z]' | sed 's/^    \([a-z -]*[a-z]\).*/\1/g')"
@@ -703,6 +705,26 @@
     -p [ --pool ] arg    pool name
     --image arg          image name
     --snap arg           snapshot name
+  
+  rbd help snap rename
+  usage: rbd snap rename [--pool <pool>] [--image <image>] [--snap <snap>] 
+                         [--dest-pool <dest-pool>] [--dest <dest>] 
+                         <source-snap-spec> <dest-snap-spec> 
+  
+  Rename a snapshot.
+  
+  Positional arguments
+    <source-snap-spec>   source snapshot specification
+                         (example: [<pool-name>/]<image-name>@<snapshot-name>)
+    <dest-snap-spec>     destination snapshot specification
+                         (example: [<pool-name>/]<image-name>@<snapshot-name>)
+  
+  Optional arguments
+    -p [ --pool ] arg    source pool name
+    --image arg          source image name
+    --snap arg           source snapshot name
+    --dest-pool arg      destination pool name
+    --dest arg           destination image name
   
   rbd help snap rollback
   usage: rbd snap rollback [--pool <pool>] [--image <image>] [--snap <snap>] 
