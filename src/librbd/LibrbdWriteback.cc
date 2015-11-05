@@ -45,15 +45,18 @@ namespace librbd {
    * @param c context to finish
    * @param l mutex to lock
    */
-  class C_Request : public Context {
+  class C_ReadRequest : public Context {
   public:
-    C_Request(CephContext *cct, Context *c, Mutex *l)
-      : m_cct(cct), m_ctx(c), m_lock(l) {}
-    virtual ~C_Request() {}
+    C_ReadRequest(CephContext *cct, Context *c, RWLock *owner_lock,
+                  Mutex *cache_lock)
+      : m_cct(cct), m_ctx(c), m_owner_lock(owner_lock),
+        m_cache_lock(cache_lock) {
+    }
     virtual void finish(int r) {
       ldout(m_cct, 20) << "aio_cb completing " << dendl;
       {
-	Mutex::Locker l(*m_lock);
+        RWLock::RLocker owner_locker(*m_owner_lock);
+        Mutex::Locker cache_locker(*m_cache_lock);
 	m_ctx->complete(r);
       }
       ldout(m_cct, 20) << "aio_cb finished" << dendl;
@@ -61,7 +64,8 @@ namespace librbd {
   private:
     CephContext *m_cct;
     Context *m_ctx;
-    Mutex *m_lock;
+    RWLock *m_owner_lock;
+    Mutex *m_cache_lock;
   };
 
   class C_OrderedWrite : public Context {
@@ -105,7 +109,8 @@ namespace librbd {
 			     __u32 trunc_seq, int op_flags, Context *onfinish)
   {
     // on completion, take the mutex and then call onfinish.
-    Context *req = new C_Request(m_ictx->cct, onfinish, &m_lock);
+    Context *req = new C_ReadRequest(m_ictx->cct, onfinish, &m_ictx->owner_lock,
+                                     &m_lock);
 
     {
       if (!m_ictx->object_map.object_may_exist(object_no)) {

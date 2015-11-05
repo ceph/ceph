@@ -18,14 +18,15 @@
 # Description:       Ceph RBD Mapping
 ### END INIT INFO
 
-DESC="RBD Mapping:"
 RBDMAPFILE="/etc/ceph/rbdmap"
 
-. /lib/lsb/init-functions
+if [ -e /lib/lsb/init-functions ]; then
+    . /lib/lsb/init-functions
+fi
 
 do_map() {
 	if [ ! -f "$RBDMAPFILE" ]; then
-		log_warning_msg "$DESC : No $RBDMAPFILE found."
+		logger -p "daemon.warning" -t init-rbdmap "No $RBDMAPFILE found."
 		exit 0
 	fi
 
@@ -42,10 +43,9 @@ do_map() {
 			DEV=rbd/$DEV
 			;;
 		esac
-		log_action_begin_msg "${DESC} '${DEV}'"
+		logger -p "daemon.debug" -t init-rbdmap "Mapping '${DEV}'"
 		newrbd=""
 		MAP_RV=""
-		RET_OP=0
 		OIFS=$IFS
 		IFS=','
 		CMDPARAMS=""
@@ -53,27 +53,30 @@ do_map() {
 			CMDPARAMS="$CMDPARAMS --$(echo $PARAM | tr '=' ' ')"
 		done
 		IFS=$OIFS
-		if [ ! -b /dev/rbd/$DEV ]; then
-			MAP_RV=$(rbd map $DEV $CMDPARAMS 2>&1)
+		if [ -b /dev/rbd/$DEV ]; then
+			MAP_RV="$(readlink -f /dev/rbd/$DEV)"
+		else
+			MAP_RV="$(rbd map $DEV $CMDPARAMS 2>&1)"
 			if [ $? -eq 0 ]; then
 			    newrbd="yes"
 			else
 			    RET=$((${RET}+$?))
-			    RET_OP=1
+			    logger -p "daemon.warning" -t init-rbdmap "Failed to map '${DEV}"
+			    continue
 			fi
 		fi
-		log_action_end_msg ${RET_OP} "${MAP_RV}"
+		logger -p "daemon.debug" -t init-rbdmap "Mapped '${DEV}' to '${MAP_RV}'"
 
 		if [ "$newrbd" ]; then
 			## Mount new rbd
 			MNT_RV=""
 			mount --fake /dev/rbd/$DEV >>/dev/null 2>&1 \
 			&& MNT_RV=$(mount -vn /dev/rbd/$DEV 2>&1)
-			[ -n "${MNT_RV}" ] && log_action_msg "mount: ${MNT_RV}"
+			[ -n "${MNT_RV}" ] && logger -p "daemon.debug" -t init-rbdmap "Mounted '${MAP_RV}' to '${MNT_RV}'"
 
 			## post-mapping
 			if [ -x "/etc/ceph/rbd.d/${DEV}" ]; then
-			    log_action_msg "RBD Running post-map hook '/etc/ceph/rbd.d/${DEV}'"
+			    logger -p "daemon.debug" -t init-rbdmap "Running post-map hook '/etc/ceph/rbd.d/${DEV}'"
 			    /etc/ceph/rbd.d/${DEV} map "/dev/rbd/${DEV}"
 			fi
 		fi
@@ -92,35 +95,32 @@ do_unmap() {
 			    LL="${L##/dev/rbd/}"
 			    if [ "$(readlink -f $L)" = "${DEV}" ] \
 			    && [ -x "/etc/ceph/rbd.d/${LL}" ]; then
-			        log_action_msg "RBD pre-unmap:  '${DEV}' hook '/etc/ceph/rbd.d/${LL}'"
+			        logger -p "daemon.debug" -t init-rbdmap "Running pre-unmap hook for '${DEV}': '/etc/ceph/rbd.d/${LL}'"
 			        /etc/ceph/rbd.d/${LL} unmap "$L"
 			        break
 			    fi
 			done
 
-			log_action_begin_msg "RBD un-mapping: '${DEV}'"
-			UMNT_RV=""
-			UMAP_RV=""
-			RET_OP=0
+			logger -p "daemon.debug" -t init-rbdmap "Unmapping '${DEV}'"
 			MNT=$(findmnt --mtab --source ${DEV} --noheadings | awk '{print $1'})
 			if [ -n "${MNT}" ]; then
-			    log_action_cont_msg "un-mounting '${MNT}'"
-			    UMNT_RV=$(umount "${MNT}" 2>&1)
+			    logger -p "daemon.debug" -t init-rbdmap "Unmounting '${MNT}'"
+			    umount "${MNT}" >>/dev/null 2>&1
 			fi
 			if mountpoint -q "${MNT}"; then
 			    ## Un-mounting failed.
-			    RET_OP=1
+			    logger -p "daemon.warning" -t init-rbdmap "Failed to unmount '${MNT}'"
 			    RET=$((${RET}+1))
-			else
-			    ## Un-mapping.
-			    UMAP_RV=$(rbd unmap $DEV 2>&1)
-			    if [ $? -ne 0 ]; then
-			        RET=$((${RET}+$?))
-			        RET_OP=1
-			    fi
+			    continue
 			fi
-			log_action_end_msg ${RET_OP} "${UMAP_RV}"
-			[ -n "${UMNT_RV}" ] && log_action_msg "${UMNT_RV}"
+			## Un-mapping.
+			rbd unmap $DEV >>/dev/null 2>&1
+			if [ $? -ne 0 ]; then
+			    logger -p "daemon.warning" -t init-rbdmap "Failed to unmap '${MNT}'"
+			    RET=$((${RET}+$?))
+			    continue
+			fi
+			logger -p "daemon.debug" -t init-rbdmap "Unmapped '${DEV}'"
 		done
 	fi
 	exit ${RET}
@@ -150,7 +150,7 @@ case "$1" in
 	;;
 
   *)
-	log_success_msg "Usage: rbdmap {start|stop|restart|force-reload|reload|status}"
+	echo "Usage: rbdmap {start|stop|restart|force-reload|reload|status}"
 	exit 1
 	;;
 esac
