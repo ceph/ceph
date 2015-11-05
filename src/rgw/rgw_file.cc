@@ -81,7 +81,21 @@ int rgw_statfs(struct rgw_fs *rgw_fs,
 	       struct rgw_file_handle *parent_fh,
 	       struct rgw_statvfs *vfs_st)
 {
-  memset(vfs_st, 0, sizeof(struct rgw_statvfs));
+  RGWLibFS *fs = static_cast<RGWLibFS*>(rgw_fs->fs_private);
+
+  /* XXX for now, just publish a huge capacity and
+   * limited utiliztion */
+  vfs_st->f_bsize = 1024*1024 /* 1M */;
+  vfs_st->f_frsize = 1024;    /* minimal allocation unit (who cares) */
+  vfs_st->f_blocks = UINT64_MAX;
+  vfs_st->f_bfree = UINT64_MAX;
+  vfs_st->f_bavail = UINT64_MAX;
+  vfs_st->f_files = 1024; /* object count, do we have an est? */
+  vfs_st->f_ffree = UINT64_MAX;
+  vfs_st->f_fsid[0] = fs->get_inst();
+  vfs_st->f_fsid[1] = fs->get_inst();
+  vfs_st->f_flag = 0;
+  vfs_st->f_namemax = 4096;
   return 0;
 }
 

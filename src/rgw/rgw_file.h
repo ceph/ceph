@@ -344,6 +344,8 @@ namespace rgw {
 
     struct rgw_fs* get_fs() { return &fs; }
 
+    uint32_t get_inst() { return fs_inst; }
+
     RGWUserInfo* get_user() { return &user; }
 
     bool is_root(struct rgw_fs* _fs) {
