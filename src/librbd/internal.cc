@@ -2882,7 +2882,7 @@ reprotect_and_return_err:
 	lderr(cct) << "image has no parent" << dendl;
 	return -EINVAL;
       }
-      if (ictx->snap_id != CEPH_NOSNAP || ictx->read_only) {
+      if (ictx->snap_id != CEPH_NOSNAP) {
 	lderr(cct) << "snapshots cannot be flattened" << dendl;
 	return -EROFS;
       }
