@@ -262,7 +262,9 @@ struct rgw_err {
   bool is_err() const;
   friend std::ostream& operator<<(std::ostream& oss, const rgw_err &err);
   virtual void dump(Formatter *f) const;
+  virtual bool set_rgw_err(int);
 
+  bool is_website_redirect;
   int http_ret_E;
   int ret_E;
   std::string s3_code_E;

@@ -36,6 +36,7 @@ rgw_http_errors rgw_http_s3_errors({
     { STATUS_NO_CONTENT, {204, "NoContent" }},
     { STATUS_PARTIAL_CONTENT, {206, "" }},
     { ERR_PERMANENT_REDIRECT, {301, "PermanentRedirect" }},
+    { ERR_WEBSITE_REDIRECT, {301, "WebsiteRedirect" }},
     { STATUS_REDIRECT, {303, "" }},
     { ERR_NOT_MODIFIED, {304, "NotModified" }},
     { EINVAL, {400, "InvalidArgument" }},
@@ -129,7 +130,7 @@ rgw_err()
 
 rgw_err::
 rgw_err(int http, const std::string& s3)
-    : http_ret_E(http), ret_E(0), s3_code_E(s3)
+    : is_website_redirect(false), http_ret_E(http), ret_E(0), s3_code_E(s3)
 {
 }
 
@@ -284,31 +285,16 @@ req_state::~req_state() {
 
 void req_state::set_req_state_err(int err_no)
 {
-  rgw_http_errors::const_iterator r;
-
   if (!err) err = new rgw_err();
 
   if (err_no < 0)
     err_no = -err_no;
+
   err->ret_E = -err_no;
-  if (prot_flags & RGW_REST_SWIFT) {
-    r = rgw_http_swift_errors.find(err_no);
-    if (r != rgw_http_swift_errors.end()) {
-      if (prot_flags & RGW_REST_WEBSITE && err_no == ERR_WEBSITE_REDIRECT && err.is_clear()) {
-        // http_ret was custom set, so don't change it!
-      } else {
-        err.http_ret_E = r->second.first;
-      }
-      err->s3_code_E = r->second.second;
-      return;
-    }
-  }
-  r = rgw_http_s3_errors.find(err_no);
-  if (r != rgw_http_s3_errors.end()) {
-    err->http_ret_E = r->second.first;
-    err->s3_code_E = r->second.second;
+  is_website_redirect ||= (prot_flags & RGW_REST_WEBSITE)
+		&& err_no == ERR_WEBSITE_REDIRECT && err->is_clear();
+  if (err->set_rgw_err(err_no))
     return;
-  }
   dout(0) << "WARNING: set_req_state_err err_no=" << err_no << " resorting to 500" << dendl;
 
   err->http_ret_E = 500;
@@ -404,6 +390,20 @@ void rgw_err::dump(Formatter *f) const
   if (!message_E.empty())
     f->dump_string("Message", message_E);
   f->close_section();
+}
+
+bool rgw_err::set_rgw_err(int err_no)
+{
+  rgw_http_errors::const_iterator r;
+
+  r = rgw_http_s3_errors.find(err_no);
+  if (r != rgw_http_s3_errors.end()) {
+    if (!is_website_redirect)
+      http_ret_E = r->second.first;
+    s3_code_E = r->second.second;
+    return true;
+  }
+  return false;
 }
 
 string rgw_string_unquote(const string& s)

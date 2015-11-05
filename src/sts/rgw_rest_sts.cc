@@ -50,6 +50,15 @@ void tsErrorResponse::dump(Formatter *f)
   f->close_section();
 }
 
+rgw_http_errors rgw_http_sts_errors({
+    { ERR_IDP_REJECTED_CLAIM, {403, "IDPRejectedClaim" }},
+    { ERR_UNKNOWN_ERROR, {500, "Unknown" }},
+    { ERR_INVALID_ACTION, {400, "InvalidAction" }},
+    { ERR_INVALID_TOKEN, {403, "InvalidClientTokenId" }},
+    { ERR_MALFORMED_INPUT, {400, "MalformedInput" }},
+    { ERR_MISSING_AUTH, {403, "MissingAuthenticationToken" }},
+});
+
 sts_err::sts_err() : type(Unknown)
 {
   request_id.generate_random();
@@ -74,6 +83,18 @@ void sts_err::dump(Formatter *f) const
     f->close_section();
     f->dump_string("RequestId", encoded_uuid);
   f->close_section();
+}
+
+bool sts_err::set_rgw_err(int err_no) {
+  rgw_http_errors::const_iterator r;
+
+  r = rgw_http_sts_errors.find(err_no);
+  if (r != rgw_http_sts_errors.end()) {
+    http_ret_E = r->second.first;
+    s3_code_E = r->second.second;
+    return true;
+  }
+  return rgw_err::set_rgw_err(err_no);
 }
 
 #if 0
@@ -439,7 +460,7 @@ int RGWGetPost_STS::verify_permission()
 
 void RGWGetPost_STS::execute()
 {
-  int ret = EPERM;
+  int ret = ERR_INVALID_ACTION;
   s->formatter = new XMLFormatter(false);
 //  tsErrorResponse err(Unknown, InvalidAction, "Why I don't know"); MAKE RESPONSE
   s->set_req_state_err(ret, "Why I don't know");

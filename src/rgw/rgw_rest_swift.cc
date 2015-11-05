@@ -1452,11 +1452,27 @@ static void next_tok(string& str, string& tok, char delim)
   }
 }
 
+struct swift_err : public rgw_err {
+  virtual bool set_rgw_err(int err_no) {
+    rgw_http_errors::const_iterator r;
+
+    r = rgw_http_swift_errors.find(err_no);
+    if (r != rgw_http_swift_errors.end()) {
+      http_ret_E = r->second.first;
+      s3_code_E = r->second.second;
+      return true;
+    }
+    return rgw_err::set_rgw_err(err_no);
+  }
+};
+
 int RGWHandler_REST_SWIFT::init_from_header(struct req_state *s)
 {
   string req;
   string first;
 
+  assert(!s->err);
+  s->err = new swift_err();
   s->prot_flags |= RGW_REST_SWIFT;
 
   const char *req_name = s->decoded_uri.c_str();

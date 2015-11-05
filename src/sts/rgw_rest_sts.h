@@ -32,6 +32,7 @@ struct sts_err : public rgw_err {
   sts_err();
   virtual ~sts_err() { };
   virtual void dump(Formatter *f) const;
+  virtual bool set_rgw_err(int);
 };
 
 extern string error_types[];
