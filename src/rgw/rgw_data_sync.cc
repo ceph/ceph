@@ -494,6 +494,7 @@ class RGWListBucketIndexesCR : public RGWCoroutine {
 
   RGWRESTConn *conn;
   string source_zone;
+  rgw_data_sync_status *sync_status;
   int num_shards;
 
   int req_ret;
@@ -511,16 +512,21 @@ class RGWListBucketIndexesCR : public RGWCoroutine {
   string s;
   int i;
 
+  bool failed;
+
 public:
   RGWListBucketIndexesCR(RGWRados *_store, RGWHTTPManager *_mgr, RGWAsyncRadosProcessor *_async_rados,
                          RGWRESTConn *_conn,
-                         const string& _source_zone, int _num_shards) : RGWCoroutine(_store->ctx()), store(_store),
+                         const string& _source_zone,
+                         rgw_data_sync_status *_sync_status) : RGWCoroutine(_store->ctx()), store(_store),
                                                       http_manager(_mgr),
 						      async_rados(_async_rados),
-						      conn(_conn), source_zone(_source_zone), num_shards(_num_shards),
-						      req_ret(0), entries_index(NULL), i(0) {
+						      conn(_conn), source_zone(_source_zone),
+                                                      sync_status(_sync_status),
+						      req_ret(0), entries_index(NULL), i(0), failed(false) {
     oid_prefix = datalog_sync_full_sync_index_prefix + "." + source_zone; 
     path = "/admin/metadata/bucket.instance";
+    num_shards = sync_status->sync_info.num_shards;
   }
   ~RGWListBucketIndexesCR() {
     delete entries_index;
@@ -570,8 +576,20 @@ public:
           yield entries_index->append(key, store->data_log->get_log_shard_id(meta_info.data.get_bucket_info().bucket, -1));
         }
       }
-
-      yield entries_index->finish();
+      yield {
+        if (!entries_index->finish()) {
+          failed = true;
+        }
+      }
+      if (!failed) {
+        for (map<uint32_t, rgw_data_sync_marker>::iterator iter = sync_status->sync_markers.begin(); iter != sync_status->sync_markers.end(); ++iter) {
+          int shard_id = (int)iter->first;
+          rgw_data_sync_marker& marker = iter->second;
+          marker.total_entries = entries_index->get_total_entries(shard_id);
+          spawn(new RGWSimpleRadosWriteCR<rgw_data_sync_marker>(async_rados, store, store->get_zone_params().log_pool,
+                                                                RGWDataSyncStatusManager::shard_obj_name(source_zone, shard_id), marker), true);
+        }
+      }
       int ret;
       while (collect(&ret)) {
 	if (ret < 0) {
@@ -619,6 +637,7 @@ public:
 
   RGWCoroutine *store_marker(const string& new_marker, uint64_t index_pos) {
     sync_marker.marker = new_marker;
+    sync_marker.pos = index_pos;
 
     ldout(store->ctx(), 20) << __func__ << "(): updating marker marker_oid=" << marker_oid << " marker=" << new_marker << dendl;
     return new RGWSimpleRadosWriteCR<rgw_data_sync_marker>(async_rados, store, store->get_zone_params().log_pool,
@@ -882,8 +901,8 @@ public:
         iter = entries.begin();
         for (; iter != entries.end(); ++iter) {
           ldout(store->ctx(), 20) << __func__ << ": full sync: " << iter->first << dendl;
-          marker_tracker->start(iter->first, total_entries);
           total_entries++;
+          marker_tracker->start(iter->first, total_entries);
             // fetch remote and write locally
           yield spawn(new RGWDataSyncSingleEntryCR(store, http_manager, async_rados, conn, source_zone, iter->first, iter->first, marker_tracker), false);
           if (retcode < 0) {
@@ -1047,7 +1066,7 @@ public:
         /* state: building full sync maps */
         yield {
           ldout(store->ctx(), 20) << __func__ << "(): building full sync maps" << dendl;
-          r = call(new RGWListBucketIndexesCR(store, http_manager, async_rados, conn, source_zone, sync_status.sync_info.num_shards));
+          r = call(new RGWListBucketIndexesCR(store, http_manager, async_rados, conn, source_zone, &sync_status));
           if (r < 0) {
             ldout(store->ctx(), 0) << "ERROR: failed to call RGWListBucketIndexesCR r=" << r << dendl;
             return set_cr_error(r);
@@ -1899,8 +1918,8 @@ int RGWBucketShardFullSyncCR::operate()
         ldout(store->ctx(), 20) << "[full sync] syncing object: " << bucket_name << ":" << bucket_id << ":" << shard_id << "/" << entries_iter->key << dendl;
         yield {
           bucket_list_entry& entry = *entries_iter;
-          marker_tracker->start(entry.key, total_entries);
           total_entries++;
+          marker_tracker->start(entry.key, total_entries);
           list_marker = entry.key;
           spawn(new RGWBucketSyncSingleEntryCR<rgw_obj_key>(store, async_rados, source_zone, bucket_info, shard_id,
                                                entry.key, entry.versioned_epoch, entry.mtime, CLS_RGW_OP_ADD, entry.key, marker_tracker), false);

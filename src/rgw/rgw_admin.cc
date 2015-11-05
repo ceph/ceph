@@ -4227,7 +4227,27 @@ next:
 
     rgw_meta_sync_status& sync_status = sync.get_sync_status();
 
+    formatter->open_object_section("summary");
     encode_json("sync_status", sync_status, formatter);
+
+    uint64_t full_total = 0;
+    uint64_t full_complete = 0;
+
+    for (auto marker_iter : sync_status.sync_markers) {
+      full_total += marker_iter.second.total_entries;
+      if (marker_iter.second.state == rgw_meta_sync_marker::SyncState::FullSync) {
+        full_complete += marker_iter.second.pos;
+      } else {
+        full_complete += marker_iter.second.total_entries;
+      }
+    }
+
+    formatter->open_object_section("full_sync");
+    encode_json("total", full_total, formatter);
+    encode_json("complete", full_complete, formatter);
+    formatter->close_section();
+    formatter->close_section();
+
     formatter->flush(cout);
 
   }
@@ -4286,7 +4306,27 @@ next:
 
     rgw_data_sync_status& sync_status = sync.get_sync_status();
 
+    formatter->open_object_section("summary");
     encode_json("sync_status", sync_status, formatter);
+
+    uint64_t full_total = 0;
+    uint64_t full_complete = 0;
+
+    for (auto marker_iter : sync_status.sync_markers) {
+      full_total += marker_iter.second.total_entries;
+      if (marker_iter.second.state == rgw_meta_sync_marker::SyncState::FullSync) {
+        full_complete += marker_iter.second.pos;
+      } else {
+        full_complete += marker_iter.second.total_entries;
+      }
+    }
+
+    formatter->open_object_section("full_sync");
+    encode_json("total", full_total, formatter);
+    encode_json("complete", full_complete, formatter);
+    formatter->close_section();
+    formatter->close_section();
+
     formatter->flush(cout);
   }
 
