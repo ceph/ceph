@@ -3213,3 +3213,55 @@ TEST_F(TestLibRBD, ExclusiveLockTransition)
   ASSERT_PASSED(validate_object_map, image2);
   ASSERT_PASSED(validate_object_map, image3);
 }
+
+TEST_F(TestLibRBD, CacheMayCopyOnWrite) {
+  REQUIRE_FEATURE(RBD_FEATURE_LAYERING);
+
+  librados::IoCtx ioctx;
+  ASSERT_EQ(0, _rados.ioctx_create(m_pool_name.c_str(), ioctx));
+
+  librbd::RBD rbd;
+  std::string name = get_temp_image_name();
+
+  uint64_t size = 1 << 18;
+  int order = 12;
+  ASSERT_EQ(0, create_image_pp(rbd, ioctx, name.c_str(), size, &order));
+
+  librbd::Image image;
+  ASSERT_EQ(0, rbd.open(ioctx, image, name.c_str(), NULL));
+  ASSERT_EQ(0, image.snap_create("one"));
+  ASSERT_EQ(0, image.snap_protect("one"));
+
+  std::string clone_name = this->get_temp_image_name();
+  ASSERT_EQ(0, rbd.clone(ioctx, name.c_str(), "one", ioctx, clone_name.c_str(),
+                         RBD_FEATURE_LAYERING, &order));
+
+  librbd::Image clone;
+  ASSERT_EQ(0, rbd.open(ioctx, clone, clone_name.c_str(), NULL));
+  ASSERT_EQ(0, clone.flush());
+
+  bufferlist expect_bl;
+  expect_bl.append(std::string(1024, '\0'));
+
+  // test double read path
+  bufferlist read_bl;
+  uint64_t offset = 0;
+  ASSERT_EQ(1024, clone.read(offset + 2048, 1024, read_bl));
+  ASSERT_TRUE(expect_bl.contents_equal(read_bl));
+
+  bufferlist write_bl;
+  write_bl.append(std::string(1024, '1'));
+  ASSERT_EQ(1024, clone.write(offset, write_bl.length(), write_bl));
+
+  read_bl.clear();
+  ASSERT_EQ(1024, clone.read(offset + 2048, 1024, read_bl));
+  ASSERT_TRUE(expect_bl.contents_equal(read_bl));
+
+  // test read retry path
+  offset = 1 << order;
+  ASSERT_EQ(1024, clone.write(offset, write_bl.length(), write_bl));
+
+  read_bl.clear();
+  ASSERT_EQ(1024, clone.read(offset + 2048, 1024, read_bl));
+  ASSERT_TRUE(expect_bl.contents_equal(read_bl));
+}

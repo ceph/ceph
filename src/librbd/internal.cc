@@ -3778,6 +3778,8 @@ reprotect_and_return_err:
       return;
     }
 
+    RWLock::RLocker owner_locker(ictx->owner_lock);
+
     // readahead
     if (ictx->object_cacher && ictx->readahead_max_bytes > 0 &&
 	!(op_flags & LIBRADOS_OP_FLAG_FADVISE_RANDOM)) {
