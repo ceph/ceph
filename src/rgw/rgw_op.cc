@@ -2431,7 +2431,16 @@ void RGWDeleteObj::execute()
 {
   ret = -EINVAL;
   rgw_obj obj(s->bucket, s->object);
+  map<string, bufferlist> orig_attrs;
+
   if (!s->object.empty()) {
+    if (need_object_expiration()) {
+      /* check if obj exists, read orig attrs */
+      ret = get_obj_attrs(store, s, obj, orig_attrs);
+      if (ret < 0) {
+        return;
+      }
+    }
     RGWObjectCtx *obj_ctx = static_cast<RGWObjectCtx *>(s->obj_ctx);
 
     obj_ctx->set_atomic(obj);
@@ -2451,6 +2460,13 @@ void RGWDeleteObj::execute()
     if (ret >= 0) {
       delete_marker = del_op.result.delete_marker;
       version_id = del_op.result.version_id;
+    }
+
+    /* Check whether the object has expired. Swift API documentation
+     * stands that we should return 404 Not Found in such case. */
+    if (need_object_expiration() && object_is_expired(orig_attrs)) {
+      ret = -ENOENT;
+      return;
     }
   }
 }

@@ -628,6 +628,7 @@ public:
   virtual const string name() { return "delete_obj"; }
   virtual RGWOpType get_type() { return RGW_OP_DELETE_OBJ; }
   virtual uint32_t op_mask() { return RGW_OP_TYPE_DELETE; }
+  virtual bool need_object_expiration() { return false; }
 };
 
 class RGWCopyObj : public RGWOp {
