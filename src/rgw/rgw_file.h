@@ -288,7 +288,7 @@ namespace rgw {
 	if (user.suspended)
 	  return -ERR_USER_SUSPENDED;
       }
-      return 0;
+      return ret;
     }
 
     /* find or create an RGWFileHandle */
