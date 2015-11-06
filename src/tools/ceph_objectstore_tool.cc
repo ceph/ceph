@@ -1137,6 +1137,8 @@ int set_inc_osdmap(ObjectStore *store, epoch_t e, bufferlist& bl, bool force) {
     }
     cout << "Creating a new epoch." << std::endl;
   }
+  if (dry_run)
+    return 0;
   ObjectStore::Transaction t;
   t.write(coll_t::meta(), inc_oid, 0, bl.length(), bl);
   t.truncate(coll_t::meta(), inc_oid, bl.length());
@@ -1181,6 +1183,8 @@ int set_osdmap(ObjectStore *store, epoch_t e, bufferlist& bl, bool force) {
     }
     cout << "Creating a new epoch." << std::endl;
   }
+  if (dry_run)
+    return 0;
   ObjectStore::Transaction t;
   t.write(coll_t::meta(), full_oid, 0, bl.length(), bl);
   t.truncate(coll_t::meta(), full_oid, bl.length());
@@ -2486,6 +2490,9 @@ int do_set_attr(ObjectStore *store, coll_t coll, ghobject_t &ghobj, string key, 
   if (ret < 0)
     return ret;
 
+  if (dry_run)
+    return 0;
+
   t->touch(coll, ghobj);
 
   t->setattr(coll, ghobj, key,  bl);
@@ -2501,6 +2508,9 @@ int do_rm_attr(ObjectStore *store, coll_t coll, ghobject_t &ghobj, string key)
 
   if (debug)
     cerr << "Rmattr " << ghobj << std::endl;
+
+  if (dry_run)
+    return 0;
 
   t->rmattr(coll, ghobj, key);
 
@@ -2555,6 +2565,9 @@ int do_set_omap(ObjectStore *store, coll_t coll, ghobject_t &ghobj, string key, 
 
   attrset.insert(pair<string, bufferlist>(key, valbl));
 
+  if (dry_run)
+    return 0;
+
   t->touch(coll, ghobj);
 
   t->omap_setkeys(coll, ghobj, attrset);
@@ -2573,6 +2586,9 @@ int do_rm_omap(ObjectStore *store, coll_t coll, ghobject_t &ghobj, string key)
 
   if (debug)
     cerr << "Rm_omap " << ghobj << std::endl;
+
+  if (dry_run)
+    return 0;
 
   t->omap_rmkeys(coll, ghobj, keys);
 
@@ -2612,6 +2628,9 @@ int do_set_omaphdr(ObjectStore *store, coll_t coll, ghobject_t &ghobj, int fd)
   int ret = get_fd_data(fd, hdrbl);
   if (ret)
     return ret;
+
+  if (dry_run)
+    return 0;
 
   t->touch(coll, ghobj);
 
@@ -2958,6 +2977,9 @@ int remove_clone(ObjectStore *store, coll_t coll, ghobject_t &ghobj, snapid_t cl
   if (ret) return ret;
   ret = remove_from(snapset.clone_size, "clone_size", cloneid, force);
   if (ret) return ret;
+
+  if (dry_run)
+    return 0;
 
   bufferlist bl;
   ::encode(snapset, bl);
@@ -4049,6 +4071,10 @@ int main(int argc, char **argv)
       cout << "Remove past-intervals " << past_intervals << std::endl;
 
       past_intervals.clear();
+      if (dry_run) {
+        ret = 0;
+        goto out;
+      }
       ret = write_info(*t, map_epoch, info, past_intervals);
 
       if (ret == 0) {
@@ -4076,11 +4102,13 @@ int main(int argc, char **argv)
       info.history.last_epoch_clean = superblock.current_epoch;
       past_intervals.clear();
 
-      ret = write_info(*t, map_epoch, info, past_intervals);
-      if (ret == 0) {
+      if (!dry_run) {
+	ret = write_info(*t, map_epoch, info, past_intervals);
+	if (ret != 0)
+	  goto out;
 	fs->apply_transaction(*t);
-	cout << "Marking complete succeeded" << std::endl;
       }
+      cout << "Marking complete succeeded" << std::endl;
     } else {
       assert(!"Should have already checked for valid --op");
     }
