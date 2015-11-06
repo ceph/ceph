@@ -9,8 +9,8 @@ Timeline
 |                            |`Dumpling`_|`Emperor`_ |`Firefly`_ |`Giant`_   |`Hammer`_  |`Infernalis`_ |
 |                            |LTS        |Stable     |LTS        |Stable     |LTS        |Stable        |
 +----------------------------+-----------+-----------+-----------+-----------+-----------+--------------+
-|     First release          | August    | November  | May       | October   | April     | November      |
-|                            | 2013      | 2013      | 2014      | 2014      | 2015      | 2014         |
+|     First release          | August    | November  | May       | October   | April     | November     |
+|                            | 2013      | 2013      | 2014      | 2014      | 2015      | 2015         |
 +----------------------------+-----------+-----------+-----------+-----------+-----------+--------------+
 |  Estimated retirement      | March     |           | January   |           | November  |              |
 |                            | 2015      |           | 2016      |           | 2016      |              |
