@@ -32,7 +32,7 @@ struct EntryPosition {
 
   void encode(bufferlist& bl) const;
   void decode(bufferlist::iterator& iter);
-  void dump(Formatter *f);
+  void dump(Formatter *f) const;
 
   static void generate_test_instances(std::list<EntryPosition *> &o);
 };
@@ -53,13 +53,12 @@ struct ObjectSetPosition {
     return (*this == rhs || *this < rhs);
   }
   inline bool operator==(const ObjectSetPosition &rhs) const {
-    return (object_number == rhs.object_number &&
-            entry_positions == rhs.entry_positions);
+    return (entry_positions == rhs.entry_positions);
   }
 
   void encode(bufferlist& bl) const;
   void decode(bufferlist::iterator& iter);
-  void dump(Formatter *f);
+  void dump(Formatter *f) const;
 
   static void generate_test_instances(std::list<ObjectSetPosition *> &o);
 };
@@ -84,7 +83,7 @@ struct Client {
 
   void encode(bufferlist& bl) const;
   void decode(bufferlist::iterator& iter);
-  void dump(Formatter *f);
+  void dump(Formatter *f) const;
 
   static void generate_test_instances(std::list<Client *> &o);
 };
@@ -97,6 +96,8 @@ std::ostream &operator<<(std::ostream &os,
                          const EntryPosition &entry_position);
 std::ostream &operator<<(std::ostream &os,
                          const ObjectSetPosition &object_set_position);
+std::ostream &operator<<(std::ostream &os,
+			 const Client &client);
 
 } // namespace journal
 } // namespace cls

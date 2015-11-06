@@ -13,7 +13,7 @@ class ProgressContext;
 
 namespace operation {
 
-class TrimRequest : public AsyncRequest
+class TrimRequest : public AsyncRequest<>
 {
 public:
   TrimRequest(ImageCtx &image_ctx, Context *on_finish,

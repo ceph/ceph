@@ -33,3 +33,10 @@ ELSE (FCGI_FOUND)
       MESSAGE(FATAL_ERROR "Could not find FCGI")
    ENDIF (FCGI_FIND_REQUIRED)
 ENDIF (FCGI_FOUND)
+
+# handle the QUIETLY and REQUIRED arguments and set UUID_FOUND to TRUE if
+# all listed variables are TRUE
+include(FindPackageHandleStandardArgs)
+find_package_handle_standard_args(fcgi DEFAULT_MSG FCGI_LIBRARY FCGI_INCLUDE_DIR)
+
+mark_as_advanced(UUID_LIBRARIES UUID_INCLUDE_DIR)

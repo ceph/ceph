@@ -146,7 +146,7 @@ their own address).  For example::
 When these daemons are started, they will know their own address, but
 not their peers.  They can learn those addresses via the admin socket::
 
-     ceph --admin-daemon /var/run/ceph/mon.<id>.asok add_bootstrap_peer_hint <peer ip>
+     ceph daemon mon.<id> add_bootstrap_peer_hint <peer ip>
 
 Once they learn enough of their peers from the initial member set,
 they will be able to create the cluster.
@@ -174,7 +174,7 @@ example::
 
 Once the daemon starts, you can give it one or more peer addresses to join with::
 
-     ceph --admin-daemon /var/run/ceph/mon.<id>.asok add_bootstrap_peer_hint <peer ip>
+     ceph daemon mon.<id> add_bootstrap_peer_hint <peer ip>
 
 This monitor will never participate in cluster creation; it can only join an existing
 cluster.

@@ -12,7 +12,9 @@
  * 
  */
 
+#include <sys/types.h>
 #include <sys/socket.h>
+#include <netinet/in.h>
 #include <netinet/ip.h>
 #include <netinet/tcp.h>
 #include <sys/uio.h>
@@ -897,6 +899,9 @@ int Pipe::connect()
   }
 
   recv_reset();
+
+  set_socket_options();
+
   // connect!
   ldout(msgr->cct,10) << "connecting to " << peer_addr << dendl;
   rc = ::connect(sd, (sockaddr*)&peer_addr.addr, peer_addr.addr_size());
@@ -905,8 +910,6 @@ int Pipe::connect()
 	     << ", " << cpp_strerror(errno) << dendl;
     goto fail;
   }
-
-  set_socket_options();
 
   // verify banner
   // FIXME: this should be non-blocking, or in some other way verify the banner as we get it.

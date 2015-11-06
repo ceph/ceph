@@ -15,7 +15,7 @@ class ImageCtx;
 
 namespace object_map {
 
-class InvalidateRequest : public AsyncRequest {
+  class InvalidateRequest : public AsyncRequest<> {
 public:
   InvalidateRequest(ImageCtx &image_ctx, uint64_t snap_id, Context *on_finish)
     : AsyncRequest(image_ctx, on_finish), m_snap_id(snap_id) {

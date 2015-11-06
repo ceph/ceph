@@ -753,7 +753,7 @@ void EMetaBlob::dirlump::generate_test_instances(list<dirlump*>& ls)
  */
 void EMetaBlob::encode(bufferlist& bl) const
 {
-  ENCODE_START(7, 5, bl);
+  ENCODE_START(8, 5, bl);
   ::encode(lump_order, bl);
   ::encode(lump_map, bl);
   ::encode(roots, bl);
@@ -778,6 +778,7 @@ void EMetaBlob::encode(bufferlist& bl) const
     ::encode(i, bl);
     ::encode(b, bl);
   }
+  ::encode(client_flushes, bl);
   ENCODE_FINISH(bl);
 }
 void EMetaBlob::decode(bufferlist::iterator &bl)
@@ -826,6 +827,9 @@ void EMetaBlob::decode(bufferlist::iterator &bl)
     bool b;
     ::decode(i, bl);
     ::decode(b, bl);
+  }
+  if (struct_v >= 8) {
+    ::decode(client_flushes, bl);
   }
   DECODE_FINISH(bl);
 }
@@ -1603,6 +1607,21 @@ void EMetaBlob::replay(MDSRank *mds, LogSegment *logseg, MDSlaveUpdate *slaveup)
 	session->add_completed_request(p->first.tid, created);
 	if (p->second)
 	  session->trim_completed_requests(p->second);
+      }
+    }
+  }
+
+  // client flushes
+  for (list<pair<metareqid_t, uint64_t> >::iterator p = client_flushes.begin();
+       p != client_flushes.end();
+       ++p) {
+    if (p->first.name.is_client()) {
+      dout(10) << "EMetaBlob.replay flush " << p->first << " trim_to " << p->second << dendl;
+      Session *session = mds->sessionmap.get_session(p->first.name);
+      if (session) {
+	session->add_completed_flush(p->first.tid);
+	if (p->second)
+	  session->trim_completed_flushes(p->second);
       }
     }
   }

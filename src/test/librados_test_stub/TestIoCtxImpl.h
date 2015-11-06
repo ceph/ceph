@@ -37,7 +37,7 @@ class TestIoCtxImpl {
 public:
 
   TestIoCtxImpl();
-  explicit TestIoCtxImpl(TestRadosClient &client, int64_t m_pool_id,
+  explicit TestIoCtxImpl(TestRadosClient *client, int64_t m_pool_id,
                          const std::string& pool_name);
 
   TestRadosClient *get_rados_client() {
@@ -46,6 +46,10 @@ public:
 
   void get();
   void put();
+
+  inline int64_t get_pool_id() const {
+    return m_pool_id;
+  }
 
   virtual TestIoCtxImpl *clone() = 0;
 
@@ -57,6 +61,9 @@ public:
     return m_snap_seq;
   }
 
+  inline void set_snap_context(const SnapContext& snapc) {
+    m_snapc = snapc;
+  }
   const SnapContext &get_snap_context() const {
     return m_snapc;
   }
@@ -78,7 +85,7 @@ public:
   virtual int assert_exists(const std::string &oid) = 0;
 
   virtual int create(const std::string& oid, bool exclusive) = 0;
-  virtual int exec(const std::string& oid, TestClassHandler &handler,
+  virtual int exec(const std::string& oid, TestClassHandler *handler,
                    const char *cls, const char *method,
                    bufferlist& inbl, bufferlist* outbl,
                    const SnapContext &snapc);

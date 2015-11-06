@@ -100,7 +100,7 @@ case "$1" in
 
             echo "Starting $name..."
 	    if [ $DEBIAN -eq 1 ]; then
-		start-stop-daemon --start -u $user -x $RADOSGW -- -n $name
+		start-stop-daemon --start -u $user -x $RADOSGW -p /var/run/ceph/client-$name.pid -- -n $name
 	    elif [ -n "$SYSTEMD_RUN" ]; then
                 $SYSTEMD_RUN -r su "$user" -c "ulimit -n 32768; $RADOSGW -n $name"
             else

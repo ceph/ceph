@@ -95,6 +95,8 @@ public:
     uint32_t source_data_digest, source_omap_digest;
     uint32_t data_digest, omap_digest;
     vector<pair<osd_reqid_t, version_t> > reqids; // [(reqid, user_version)]
+    uint64_t truncate_seq;
+    uint64_t truncate_size;
     bool is_data_digest() {
       return flags & object_copy_data_t::FLAG_DATA_DIGEST;
     }
@@ -108,7 +110,8 @@ public:
 	has_omap(false),
 	flags(0),
 	source_data_digest(-1), source_omap_digest(-1),
-	data_digest(-1), omap_digest(-1)
+	data_digest(-1), omap_digest(-1),
+	truncate_seq(0), truncate_size(0)
     {}
   };
 
@@ -221,7 +224,7 @@ public:
     bool sent_ack;
     utime_t mtime;
     bool canceled;
-    osd_reqid_t &reqid;
+    osd_reqid_t reqid;
 
     ProxyWriteOp(OpRequestRef _op, hobject_t oid, vector<OSDOp>& _ops, osd_reqid_t _reqid)
       : ctx(NULL), op(_op), soid(oid),
@@ -909,7 +912,7 @@ protected:
   void hit_set_persist();   ///< persist hit info
   bool hit_set_apply_log(); ///< apply log entries to update in-memory HitSet
   void hit_set_trim(RepGather *repop, unsigned max); ///< discard old HitSets
-  void hit_set_in_memory_trim();                     ///< discard old in memory HitSets
+  void hit_set_in_memory_trim(uint32_t max_in_memory); ///< discard old in memory HitSets
   void hit_set_remove_all();
 
   hobject_t get_hit_set_current_object(utime_t stamp);
@@ -921,6 +924,7 @@ protected:
   boost::scoped_ptr<TierAgentState> agent_state;
 
   friend struct C_AgentFlushStartStop;
+  friend struct C_AgentEvictStartStop;
   friend struct C_HitSetFlushing;
 
   void agent_setup();       ///< initialize agent state
@@ -1157,6 +1161,8 @@ protected:
   void reply_ctx(OpContext *ctx, int err, eversion_t v, version_t uv);
   void make_writeable(OpContext *ctx);
   void log_op_stats(OpContext *ctx);
+  void apply_ctx_stats(OpContext *ctx,
+		       bool scrub_ok=false); ///< true if we should skip scrub stat update
 
   void write_update_size_and_usage(object_stat_sum_t& stats, object_info_t& oi,
 				   interval_set<uint64_t>& modified, uint64_t offset,
@@ -1581,6 +1587,11 @@ public:
     PGBackend::PGTransaction *t,
     const string &key,
     bufferlist &val);
+  void setattrs_maybe_cache(
+    ObjectContextRef obc,
+    OpContext *op,
+    PGBackend::PGTransaction *t,
+    map<string, bufferlist> &attrs);
   void rmattr_maybe_cache(
     ObjectContextRef obc,
     OpContext *op,

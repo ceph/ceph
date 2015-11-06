@@ -809,11 +809,11 @@ int librados::IoCtxImpl::aio_write(const object_t &oid, AioCompletionImpl *c,
   if (snap_seq != CEPH_NOSNAP)
     return -EROFS;
 
-  c->io = this;
-  queue_aio_write(c);
-
   Context *onack = new C_aio_Ack(c);
   Context *onsafe = new C_aio_Safe(c);
+
+  c->io = this;
+  queue_aio_write(c);
 
   c->tid = objecter->write(oid, oloc,
 		  off, len, snapc, bl, ut, 0,
@@ -833,11 +833,11 @@ int librados::IoCtxImpl::aio_append(const object_t &oid, AioCompletionImpl *c,
   if (snap_seq != CEPH_NOSNAP)
     return -EROFS;
 
-  c->io = this;
-  queue_aio_write(c);
-
   Context *onack = new C_aio_Ack(c);
   Context *onsafe = new C_aio_Safe(c);
+
+  c->io = this;
+  queue_aio_write(c);
 
   c->tid = objecter->append(oid, oloc,
 		   len, snapc, bl, ut, 0,
@@ -858,11 +858,11 @@ int librados::IoCtxImpl::aio_write_full(const object_t &oid,
   if (snap_seq != CEPH_NOSNAP)
     return -EROFS;
 
-  c->io = this;
-  queue_aio_write(c);
-
   Context *onack = new C_aio_Ack(c);
   Context *onsafe = new C_aio_Safe(c);
+
+  c->io = this;
+  queue_aio_write(c);
 
   c->tid = objecter->write_full(oid, oloc,
 		       snapc, bl, ut, 0,
@@ -879,11 +879,11 @@ int librados::IoCtxImpl::aio_remove(const object_t &oid, AioCompletionImpl *c)
   if (snap_seq != CEPH_NOSNAP)
     return -EROFS;
 
-  c->io = this;
-  queue_aio_write(c);
-
   Context *onack = new C_aio_Ack(c);
   Context *onsafe = new C_aio_Safe(c);
+
+  c->io = this;
+  queue_aio_write(c);
 
   c->tid = objecter->remove(oid, oloc,
 		   snapc, ut, 0,
@@ -896,9 +896,9 @@ int librados::IoCtxImpl::aio_remove(const object_t &oid, AioCompletionImpl *c)
 int librados::IoCtxImpl::aio_stat(const object_t& oid, AioCompletionImpl *c,
 				  uint64_t *psize, time_t *pmtime)
 {
-  c->io = this;
   C_aio_stat_Ack *onack = new C_aio_stat_Ack(c, pmtime);
 
+  c->io = this;
   c->tid = objecter->stat(oid, oloc,
 		 snap_seq, psize, &onack->mtime, 0,
 		 onack, &c->objver);
@@ -1399,6 +1399,7 @@ void librados::IoCtxImpl::set_notify_timeout(uint32_t timeout)
 
 librados::IoCtxImpl::C_aio_Ack::C_aio_Ack(AioCompletionImpl *_c) : c(_c)
 {
+  assert(!c->io);
   c->get();
 }
 
@@ -1431,6 +1432,7 @@ librados::IoCtxImpl::C_aio_stat_Ack::C_aio_stat_Ack(AioCompletionImpl *_c,
 						    time_t *pm)
    : c(_c), pmtime(pm)
 {
+  assert(!c->io);
   c->get();
 }
 

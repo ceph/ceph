@@ -56,6 +56,7 @@ Set the target size and enable the tiering agent for foo-hot::
  ceph osd pool set foo-hot hit_set_period 3600   # 1 hour
  ceph osd pool set foo-hot target_max_bytes 1000000000000  # 1 TB
  ceph osd pool set foo-hot min_read_recency_for_promote 1
+ ceph osd pool set foo-hot min_write_recency_for_promote 1
 
 Drain the cache in preparation for turning it off::
 
@@ -114,14 +115,18 @@ between 0 and ``hit_set_count``. If it's set to 0, the object is always promoted
 If it's set to 1, the current HitSet is checked. And if this object is in the
 current HitSet, it's promoted. Otherwise not. For the other values, the exact
 number of archive HitSets are checked. The object is promoted if the object is
-found in any of the most recent ``min_read_recency_for_promote`` HitSets. ::
+found in any of the most recent ``min_read_recency_for_promote`` HitSets.
+
+A similar parameter can be set for the write operation, which is
+``min_write_recency_for_promote``. ::
 
  ceph osd pool set {cachepool} min_read_recency_for_promote 1
+ ceph osd pool set {cachepool} min_write_recency_for_promote 1
 
 Note that the longer the ``hit_set_period`` and the higher the
-``min_read_recency_for_promote`` the more RAM will be consumed by the ceph-osd
-process. In particular, when the agent is active to flush or evict cache objects,
-all hit_set_count HitSets are loaded into RAM.
+``min_read_recency_for_promote``/``min_write_recency_for_promote`` the more RAM
+will be consumed by the ceph-osd process. In particular, when the agent is active
+to flush or evict cache objects, all hit_set_count HitSets are loaded into RAM.
 
 Cache mode
 ~~~~~~~~~~

@@ -408,6 +408,12 @@ int ImageWatcher::release_lock()
       lderr(cct) << this << " failed to flush: " << cpp_strerror(r) << dendl;
       goto err_cancel_unlock;
     }
+    r = m_image_ctx.flush_cache();
+    if (r < 0) {
+      lderr(cct) << this << " failed to flush cache: " << cpp_strerror(r)
+		 << dendl;
+      goto err_cancel_unlock;
+    }
   }
 
   m_image_ctx.owner_lock.get_write();
@@ -1263,4 +1269,30 @@ void ImageWatcher::notify_listeners_updated_lock(
   m_listeners_cond.Signal();
 }
 
+} // namespace librbd
+
+std::ostream &operator<<(std::ostream &os,
+			 const librbd::ImageWatcher::LockUpdateState &state) {
+  switch (state) {
+  case librbd::ImageWatcher::LOCK_UPDATE_STATE_NOT_SUPPORTED:
+    os << "NotSupported";
+    break;
+  case librbd::ImageWatcher::LOCK_UPDATE_STATE_LOCKED:
+    os << "Locked";
+    break;
+  case librbd::ImageWatcher::LOCK_UPDATE_STATE_RELEASING:
+    os << "Releasing";
+    break;
+  case librbd::ImageWatcher::LOCK_UPDATE_STATE_UNLOCKED:
+    os << "Unlocked";
+    break;
+  case librbd::ImageWatcher::LOCK_UPDATE_STATE_NOTIFICATION:
+    os << "Notification";
+    break;
+  default:
+    os << "Unknown (" << static_cast<uint32_t>(state) << ")";
+    break;
+  }
+  return os;
 }
+

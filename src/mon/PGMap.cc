@@ -374,7 +374,7 @@ void PGMap::calc_stats()
 
   redo_full_sets();
 
-  calc_min_last_epoch_clean();
+  min_last_epoch_clean = calc_min_last_epoch_clean();
 }
 
 void PGMap::update_pg(pg_t pgid, bufferlist& bl)
@@ -694,6 +694,7 @@ void PGMap::dump_basic(Formatter *f) const
   f->dump_stream("stamp") << stamp;
   f->dump_unsigned("last_osdmap_epoch", last_osdmap_epoch);
   f->dump_unsigned("last_pg_scan", last_pg_scan);
+  f->dump_unsigned("min_last_epoch_clean", min_last_epoch_clean);
   f->dump_float("full_ratio", full_ratio);
   f->dump_float("near_full_ratio", nearfull_ratio);
   

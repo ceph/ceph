@@ -323,6 +323,10 @@ public:
       pool->_lock.Unlock();
     }
 
+    Mutex &get_lock() {
+      return pool->_lock;
+    }
+
     void lock() {
       pool->lock();
     }
