@@ -32,15 +32,13 @@ struct rgw_http_attr {
 /*
  * mapping between rgw object attrs and output http fields
  */
-static struct rgw_http_attr rgw_to_http_attr_list[] = {
-  { RGW_ATTR_CONTENT_TYPE, "Content-Type"},
-  { RGW_ATTR_CONTENT_LANG, "Content-Language"},
-  { RGW_ATTR_EXPIRES, "Expires"},
-  { RGW_ATTR_CACHE_CONTROL, "Cache-Control"},
-  { RGW_ATTR_CONTENT_DISP, "Content-Disposition"},
-  { RGW_ATTR_CONTENT_ENC, "Content-Encoding"},
-  { RGW_ATTR_USER_MANIFEST, "X-Object-Manifest"},
-  { NULL, NULL},
+static const struct rgw_http_attr base_rgw_to_http_attrs[] = {
+  { RGW_ATTR_CONTENT_LANG,      "Content-Language" },
+  { RGW_ATTR_EXPIRES,           "Expires" },
+  { RGW_ATTR_CACHE_CONTROL,     "Cache-Control" },
+  { RGW_ATTR_CONTENT_DISP,      "Content-Disposition" },
+  { RGW_ATTR_CONTENT_ENC,       "Content-Encoding" },
+  { RGW_ATTR_USER_MANIFEST,     "X-Object-Manifest" },
 };
 
 
@@ -52,14 +50,13 @@ struct generic_attr {
 /*
  * mapping between http env fields and rgw object attrs
  */
-struct generic_attr generic_attrs[] = {
-  { "CONTENT_TYPE", RGW_ATTR_CONTENT_TYPE },
-  { "HTTP_CONTENT_LANGUAGE", RGW_ATTR_CONTENT_LANG },
-  { "HTTP_EXPIRES", RGW_ATTR_EXPIRES },
-  { "HTTP_CACHE_CONTROL", RGW_ATTR_CACHE_CONTROL },
+static const struct generic_attr generic_attrs[] = {
+  { "CONTENT_TYPE",             RGW_ATTR_CONTENT_TYPE },
+  { "HTTP_CONTENT_LANGUAGE",    RGW_ATTR_CONTENT_LANG },
+  { "HTTP_EXPIRES",             RGW_ATTR_EXPIRES },
+  { "HTTP_CACHE_CONTROL",       RGW_ATTR_CACHE_CONTROL },
   { "HTTP_CONTENT_DISPOSITION", RGW_ATTR_CONTENT_DISP },
-  { "HTTP_CONTENT_ENCODING", RGW_ATTR_CONTENT_ENC },
-  { NULL, NULL },
+  { "HTTP_CONTENT_ENCODING",    RGW_ATTR_CONTENT_ENC },
 };
 
 map<string, string> rgw_to_http_attrs;
@@ -147,14 +144,16 @@ string camelcase_dash_http_attr(const string& orig)
   for (size_t i = 0; i < orig.size(); ++i, ++s) {
     switch (*s) {
       case '_':
+      case '-':
         buf[i] = '-';
         last_sep = true;
         break;
       default:
-        if (last_sep)
+        if (last_sep) {
           buf[i] = toupper(*s);
-        else
+        } else {
           buf[i] = tolower(*s);
+        }
         last_sep = false;
     }
   }
@@ -166,12 +165,12 @@ static set<string> hostnames_set;
 
 void rgw_rest_init(CephContext *cct, RGWRegion& region)
 {
-  for (struct rgw_http_attr *attr = rgw_to_http_attr_list; attr->rgw_attr; attr++) {
-    rgw_to_http_attrs[attr->rgw_attr] = attr->http_attr;
+  for (const auto& rgw2http : base_rgw_to_http_attrs)  {
+    rgw_to_http_attrs[rgw2http.rgw_attr] = rgw2http.http_attr;
   }
 
-  for (struct generic_attr *gen_attr = generic_attrs; gen_attr->http_header; gen_attr++) {
-    generic_attrs_map[gen_attr->http_header] = gen_attr->rgw_attr;
+  for (const auto& http2rgw : generic_attrs) {
+    generic_attrs_map[http2rgw.http_header] = http2rgw.rgw_attr;
   }
 
   list<string> extended_http_attrs;
