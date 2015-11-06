@@ -127,6 +127,13 @@ void RGWMongoose::init_env(CephContext *cct)
   char port_buf[16];
   snprintf(port_buf, sizeof(port_buf), "%d", port);
   env.set("SERVER_PORT", port_buf);
+
+  if (info->is_ssl) {
+    if (port == 0) {
+      strcpy(port_buf,"443");
+    }
+    env.set("SERVER_PORT_SECURE", port_buf);
+  }
 }
 
 int RGWMongoose::send_status(const char *status, const char *status_name)
