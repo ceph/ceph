@@ -175,6 +175,7 @@ find_package(snappy REQUIRED)
 if(ALLOCATOR)
   if(${ALLOCATOR} STREQUAL "tcmalloc")
     find_package(tcmalloc)
+    set(HAVE_LIBTCMALLOC ${Tcmalloc_FOUND})
     if(NOT Tcmalloc_FOUND)
       message(FATAL_ERROR "FATAL ERROR: tcmalloc specified but not found")
     endif(NOT Tcmalloc_FOUND)
@@ -186,6 +187,7 @@ if(ALLOCATOR)
   endif()
 else(ALLOCATOR)
   find_package(tcmalloc)
+  set(HAVE_LIBTCMALLOC ${Tcmalloc_FOUND})
   find_package(JeMalloc)
   if(NOT Tcmalloc_FOUND AND NOT JEMALLOC_FOUND)
     message(WARNING "tcmalloc and jemalloc not found, falling back to libc")
@@ -245,12 +247,24 @@ if(WITH_REENTRANT_STRSIGNAL)
     set(HAVE_REENTRANT_STRSIGNAL 1 CACHE INTERNAL "Reentrant strsignal is supported.")
 endif(WITH_REENTRANT_STRSIGNAL)
 
+option(WITH_ROCKSDB "Building rocksdb" ON)
+set(HAVE_LIBROCKSDB ${WITH_ROCKSDB})
+
 #option for LTTng
 option(HAVE_LTTNG "LTTng tracing is enabled" ON)
-if(${HAVE_LTTNG})
-find_package(lttng-ust REQUIRED)
-set(WITH_LTTNG ${LTTNG_FOUND})
+  if(${HAVE_LTTNG})
+  find_package(lttng-ust REQUIRED)
+  set(WITH_LTTNG ${LTTNG_FOUND})
 endif(${HAVE_LTTNG})
+
+#option for Babeltrace
+option(HAVE_BABELTRACE "Babeltrace libraries are enabled" ON)
+if(${HAVE_BABELTRACE})
+  find_package(babeltrace REQUIRED)
+  set(WITH_BABELTRACE ${BABELTRACE_FOUND})
+  set(HAVE_BABELTRACE_BABELTRACE_H ${BABELTRACE_FOUND})
+  set(HAVE_BABELTRACE_CTF_EVENTS_H ${BABELTRACE_FOUND})
+endif(${HAVE_BABELTRACE})
 
 # Now create a useable config.h
 configure_file(
@@ -268,7 +282,7 @@ else(${ENABLE_SHARED})
 endif(${ENABLE_SHARED})
 
 set(Boost_USE_MULTITHREADED ON)
-find_package(Boost COMPONENTS thread system regex random program_options REQUIRED)
+find_package(Boost COMPONENTS thread system regex random program_options date_time REQUIRED)
 include_directories(${Boost_INCLUDE_DIRS})
 
 find_package(Threads REQUIRED)
