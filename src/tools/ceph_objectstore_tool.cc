@@ -396,52 +396,6 @@ void dump_log(Formatter *formatter, ostream &out, pg_log_t &log,
   formatter->flush(out);
 }
 
-//Based on RemoveWQ::_process()
-void remove_coll(ObjectStore *store, const coll_t &coll,
-		 ObjectStore::Sequencer &osr)
-{
-  spg_t pg;
-  coll.is_pg_prefix(&pg);
-  OSDriver driver(
-    store,
-    coll_t(),
-    OSD::make_snapmapper_oid());
-  SnapMapper mapper(&driver, 0, 0, 0, pg.shard);
-
-  ghobject_t next;
-  int r = 0;
-  int64_t num = 0;
-  ObjectStore::Transaction t;
-  cout << "remove_coll " << coll << std::endl;
-  while (!next.is_max()) {
-    vector<ghobject_t> objects;
-    r = store->collection_list(coll, next, ghobject_t::get_max(), true, 300,
-      &objects, &next);
-    if (r < 0)
-      return;
-    for (vector<ghobject_t>::iterator i = objects.begin();
-	 i != objects.end();
-	 ++i, ++num) {
-
-      OSDriver::OSTransaction _t(driver.get_transaction(&t));
-      cout << "remove " << *i << std::endl;
-      int r = mapper.remove_oid(i->hobj, &_t);
-      if (r != 0 && r != -ENOENT) {
-        assert(0);
-      }
-
-      t.remove(coll, *i);
-      if (num >= 30) {
-        store->apply_transaction(&osr, t);
-        t = ObjectStore::Transaction();
-        num = 0;
-      }
-    }
-  }
-  t.remove_collection(coll);
-  store->apply_transaction(&osr, t);
-}
-
 //Based on part of OSD::load_pgs()
 int finish_remove_pgs(ObjectStore *store)
 {
