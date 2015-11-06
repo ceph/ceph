@@ -1,6 +1,6 @@
 #!/bin/sh -x
 
-expect_failure() { 
+expect_failure() {
     if [ `"$@"` -e 0 ]; then
 	return 1
     fi
