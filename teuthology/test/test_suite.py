@@ -750,6 +750,7 @@ class TestBuildMatrix(object):
         assert fragments[0] == 'thrash/ceph/base.yaml'
         assert fragments[1] == 'thrash/ceph-thrash/default.yaml'
 
+
 @patch('subprocess.check_output')
 def test_git_branch_exists(m_check_output):
     m_check_output.return_value = ''
@@ -757,24 +758,37 @@ def test_git_branch_exists(m_check_output):
     m_check_output.return_value = 'HHH branch'
     assert True == suite.git_branch_exists('ceph', 'master')
 
+
 class TestSuiteMain(object):
 
     def test_main(self):
         suite_name = 'SUITE'
         throttle = '3'
         machine_type = 'burnupi'
+
         def prepare_and_schedule(**kwargs):
             assert kwargs['job_config']['suite'] == suite_name
             assert kwargs['throttle'] == throttle
+
+        def fake_str(*args, **kwargs):
+            return 'fake'
+
+        def fake_bool(*args, **kwargs):
+            return True
 
         with patch.multiple(
                 suite,
                 fetch_repos=DEFAULT,
                 prepare_and_schedule=prepare_and_schedule,
+                get_hash=fake_str,
+                package_version_for_hash=fake_str,
+                git_branch_exists=fake_bool,
+                git_ls_remote=fake_str,
                 ):
             main(['--suite', suite_name,
                   '--throttle', throttle,
-                  '--machine-type', machine_type])
+                  '--machine-type', machine_type,
+                  ])
 
     def test_schedule_suite(self):
         suite_name = 'noop'
