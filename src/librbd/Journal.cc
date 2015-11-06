@@ -624,11 +624,7 @@ void Journal::handle_event_safe(int r, uint64_t tid) {
     aio_object_requests.swap(event.aio_object_requests);
     on_safe_contexts.swap(event.on_safe_contexts);
 
-    if (event.pending_extents.empty()) {
-      m_events.erase(it);
-    } else {
-      event.safe = true;
-    }
+    event.safe = true;
   }
 
   ldout(cct, 20) << "completing tid=" << tid << dendl;
