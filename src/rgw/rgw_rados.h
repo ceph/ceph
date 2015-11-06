@@ -1291,7 +1291,7 @@ public:
   const string& get_current_period() const {
     return current_period;
   }
-  int set_current_period(const string& period_id, const rgw_meta_sync_status* sync_status = NULL);
+  int set_current_period(const string& period_id);
 
   string get_control_oid();
   int notify_zone();
@@ -1323,7 +1323,7 @@ class RGWPeriod
   string id;
   epoch_t epoch;
   string predecessor_uuid;
-  rgw_meta_sync_status sync_status;
+  std::vector<std::string> sync_status;
   RGWPeriodMap period_map;
   RGWPeriodConfig period_config;
   string master_zonegroup;
@@ -1343,6 +1343,9 @@ class RGWPeriod
   const string get_period_oid();
   const string get_period_oid_prefix();
 
+  // gather the metadata sync status for each shard; only for use on master zone
+  int update_sync_status();
+
 public:
   RGWPeriod() : epoch(0) {}
 
@@ -1357,7 +1360,7 @@ public:
   const string& get_realm() const { return realm_id; }
   const RGWPeriodMap& get_map() const { return period_map; }
   const RGWPeriodConfig& get_config() const { return period_config; }
-  const rgw_meta_sync_status& get_sync_status() const { return sync_status; }
+  const std::vector<std::string>& get_sync_status() const { return sync_status; }
   const string& get_pool_name(CephContext *cct);
   const string& get_latest_epoch_oid();
   const string& get_info_oid_prefix();
@@ -1375,10 +1378,6 @@ public:
 
   void set_realm_id(const string& _realm_id) {
     realm_id = _realm_id;
-  }
-
-  void set_sync_status(const rgw_meta_sync_status& _sync_status) {
-    sync_status = _sync_status;
   }
 
   void update(const RGWZoneGroupMap& map);

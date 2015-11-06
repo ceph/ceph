@@ -740,7 +740,7 @@ const string& RGWRealm::get_info_oid_prefix(bool old_format)
   return realm_info_oid_prefix;
 }
 
-int RGWRealm::set_current_period(const string& period_id, const rgw_meta_sync_status* sync_status) {
+int RGWRealm::set_current_period(const string& period_id) {
   /* check to see period id is valid */
   RGWPeriod new_current(period_id);
   int ret = new_current.init(cct, store, id, name);
@@ -749,9 +749,6 @@ int RGWRealm::set_current_period(const string& period_id, const rgw_meta_sync_st
     return ret;
   }
   new_current.set_predecessor(current_period);
-  if (sync_status) {
-    new_current.set_sync_status(*sync_status);
-  }
 
   ret = new_current.store_info(false);
   if (ret < 0) {
@@ -1131,6 +1128,39 @@ void RGWPeriod::update(const RGWZoneGroupMap& map)
   period_map.master_zonegroup = map.master_zonegroup;
 }
 
+int RGWPeriod::update_sync_status()
+{
+  // must be new period's master zone to write sync status
+  if (master_zone != store->get_zone_params().get_id()) {
+    lderr(cct) << "my zone " << store->get_zone_params().get_id()
+        << " is not period's master zone " << master_zone << dendl;
+    return -EINVAL;
+  }
+
+  auto mdlog = store->meta_mgr->get_log();
+  const auto num_shards = cct->_conf->rgw_md_log_max_shards;
+
+  std::vector<std::string> markers;
+  markers.reserve(num_shards);
+
+  // gather the markers for each shard
+  // TODO: use coroutines to read them in parallel
+  for (int i = 0; i < num_shards; i++) {
+    RGWMetadataLogInfo info;
+    int r = mdlog->get_info(i, &info);
+    if (r < 0) {
+      lderr(cct) << "period failed to get metadata log info for shard " << i
+          << ": " << cpp_strerror(-r) << dendl;
+      return r;
+    }
+    ldout(cct, 15) << "got shard " << i << " marker " << info.marker << dendl;
+    markers.emplace_back(std::move(info.marker));
+  }
+
+  std::swap(sync_status, markers);
+  return 0;
+}
+
 int RGWPeriod::commit(RGWRealm& realm, const RGWPeriod& current_period)
 {
   // gateway must be in the master zone to commit
@@ -1154,8 +1184,15 @@ int RGWPeriod::commit(RGWRealm& realm, const RGWPeriod& current_period)
       lderr(cct) << "failed to create new period: " << cpp_strerror(-r) << dendl;
       return r;
     }
+    // store the current metadata sync status in the period
+    r = update_sync_status();
+    if (r < 0) {
+      lderr(cct) << "failed to update metadata sync status: "
+          << cpp_strerror(-r) << dendl;
+      return r;
+    }
     // set as current period
-    r = realm.set_current_period(id); // TODO: add sync status argument
+    r = realm.set_current_period(id);
     if (r < 0) {
       lderr(cct) << "failed to update realm's current period: "
           << cpp_strerror(-r) << dendl;
