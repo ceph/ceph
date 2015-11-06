@@ -810,6 +810,7 @@ rm -rf $RPM_BUILD_ROOT
 %{_libdir}/rados-classes/libcls_timeindex.so*
 %{_libdir}/rados-classes/libcls_user.so*
 %{_libdir}/rados-classes/libcls_version.so*
+%{_libdir}/rados-classes/libcls_journal.so*
 %dir %{_libdir}/ceph/erasure-code
 %{_libdir}/ceph/erasure-code/libec_*.so*
 %if 0%{?_with_lttng}
