@@ -483,6 +483,38 @@ int RGWOp::verify_op_mask()
   return 0;
 }
 
+int RGWOp::do_aws4_auth_completion() {
+
+  int ret;
+
+  if (s->aws4_auth_needs_complete) {
+
+    s->aws4_auth_needs_complete = false;
+
+    /* complete aws4 auth */
+
+    ret = RGW_Auth_S3::authorize_aws4_auth_complete(store, s);
+    if (ret) {
+      return ret;
+    }
+
+    /* verify signature */
+
+    if (s->aws4_auth->signature != s->aws4_auth->new_signature) {
+      ret = -ERR_SIGNATURE_NO_MATCH;
+      ldout(s->cct, 20) << "delayed aws4 auth failed" << dendl;
+      return ret;
+    }
+
+    /* authorization ok */
+
+    dout(10) << "v4 auth ok" << dendl;
+
+  }
+
+  return 0;
+}
+
 int RGWOp::init_quota()
 {
   /* no quota enforcement for system requests */
@@ -1952,30 +1984,9 @@ void RGWPutObj::execute()
   s->obj_size = ofs;
   perfcounter->inc(l_rgw_put_b, s->obj_size);
 
-  if (s->aws4_auth_needs_complete) {
-
-    /* complete aws4 auth */
-
-    ret = RGW_Auth_S3::authorize_aws4_auth_complete(store, s);
-    if (ret) {
-      goto done;
-    }
-
-    s->aws4_auth_needs_complete = false;
-
-    /* verify signature */
-
-    if (s->aws4_auth->signature != s->aws4_auth->new_signature) {
-      ret = -ERR_SIGNATURE_NO_MATCH;
-      ldout(s->cct, 20) << "delayed aws4 auth failed" << dendl;
-      goto done;
-    }
-
-    /* authorization ok */
-
-    dout(10) << "v4 auth ok" << dendl;
-
-  }
+  ret = do_aws4_auth_completion();
+  if (ret)
+    goto done;
 
   ret = store->check_quota(s->bucket_owner.get_id(), s->bucket,
                            user_quota, bucket_quota, s->obj_size);
