@@ -409,7 +409,8 @@ enum scrub_error_type PGBackend::be_compare_scrub_objects(
   if (auth.size != candidate.size) {
     if (error != CLEAN)
       errorstream << ", ";
-    error = SHALLOW_ERROR;
+    if (error != DEEP_ERROR)
+      error = SHALLOW_ERROR;
     errorstream << "size " << candidate.size
 		<< " != known size " << auth.size;
   }
@@ -419,12 +420,14 @@ enum scrub_error_type PGBackend::be_compare_scrub_objects(
     if (!candidate.attrs.count(i->first)) {
       if (error != CLEAN)
         errorstream << ", ";
-      error = SHALLOW_ERROR;
+      if (error != DEEP_ERROR)
+	error = SHALLOW_ERROR;
       errorstream << "missing attr " << i->first;
     } else if (candidate.attrs.find(i->first)->second.cmp(i->second)) {
       if (error != CLEAN)
         errorstream << ", ";
-      error = SHALLOW_ERROR;
+      if (error != DEEP_ERROR)
+	error = SHALLOW_ERROR;
       errorstream << "attr value mismatch " << i->first;
     }
   }
@@ -434,7 +437,8 @@ enum scrub_error_type PGBackend::be_compare_scrub_objects(
     if (!auth.attrs.count(i->first)) {
       if (error != CLEAN)
         errorstream << ", ";
-      error = SHALLOW_ERROR;
+      if (error != DEEP_ERROR)
+	error = SHALLOW_ERROR;
       errorstream << "extra attr " << i->first;
     }
   }
@@ -654,11 +658,12 @@ void PGBackend::be_compare_scrubmaps(
 	  update = FORCE;
       }
 
-      if (auth_object.digest_present && auth_object.omap_digest_present &&
-	  (!auth_oi.is_data_digest() || !auth_oi.is_omap_digest())) {
+      if ((auth_object.digest_present && !auth_oi.is_data_digest()) ||
+	  (auth_object.omap_digest_present && !auth_oi.is_omap_digest())) {
 	dout(20) << __func__ << " missing digest on " << *k << dendl;
 	update = MAYBE;
       }
+
       if (g_conf->osd_debug_scrub_chance_rewrite_digest &&
 	  (((unsigned)rand() % 100) >
 	   g_conf->osd_debug_scrub_chance_rewrite_digest)) {

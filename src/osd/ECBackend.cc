@@ -2090,7 +2090,24 @@ void ECBackend::be_deep_scrub(
     o.read_error = true;
   }
 
-  ECUtil::HashInfoRef hinfo = get_hash_info(poid, false);
+  //copy from get_hash_info. Because we already got xattrs, so it don't need
+  //do stat and getattr.
+  ECUtil::HashInfoRef hinfo = unstable_hashinfo_registry.lookup(poid);
+  {
+    if (!hinfo) {
+	map<string, bufferptr>::iterator k = o.attrs.find(ECUtil::get_hinfo_key());
+	if (k != o.attrs.end()) {
+	  bufferlist bl;
+	  ECUtil::HashInfo info(ec_impl->get_chunk_count());
+	  bl.push_back(k->second);
+	  bufferlist::iterator bliter = bl.begin();
+	  ::decode(info, bliter);
+	  hinfo = unstable_hashinfo_registry.lookup_or_create(poid, info);
+	} else
+	  dout(10) << __func__ << " " << poid << " don't find hinfo attr" << dendl;
+    }
+  }
+
   if (!hinfo) {
     dout(0) << "_scan_list  " << poid << " could not retrieve hash info" << dendl;
     o.read_error = true;
@@ -2115,7 +2132,4 @@ void ECBackend::be_deep_scrub(
     o.digest = hinfo->get_chunk_hash(0);
     o.digest_present = true;
   }
-
-  o.omap_digest = seed;
-  o.omap_digest_present = true;
 }
