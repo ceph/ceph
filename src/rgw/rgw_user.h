@@ -203,7 +203,10 @@ struct RGWUserAdminOpState {
   bool system_specified;
   bool key_op;
   bool temp_url_key_specified;
-
+  bool found_by_uid; 
+  bool found_by_email;  
+  bool found_by_key;
+ 
   // req parameters
   bool populated;
   bool initialized;
@@ -479,6 +482,9 @@ struct RGWUserAdminOpState {
     bucket_quota_specified = false;
     temp_url_key_specified = false;
     user_quota_specified = false;
+    found_by_uid = false;
+    found_by_email = false;
+    found_by_key = false;
   }
 };
 
