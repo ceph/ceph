@@ -1959,10 +1959,7 @@ int FileStore::queue_transactions(Sequencer *posr, list<Transaction*> &tls,
     journal->throttle();
     //prepare and encode transactions data out of lock
     bufferlist tbl;
-    int orig_len = -1;
-    if (journal && journal->is_writeable()) {
-      orig_len = journal->prepare_entry(o->tls, &tbl);
-    }
+    int orig_len = journal->prepare_entry(o->tls, &tbl);
     uint64_t op_num = submit_manager.op_submit_start();
     o->op = op_num;
 
@@ -2011,11 +2008,11 @@ int FileStore::queue_transactions(Sequencer *posr, list<Transaction*> &tls,
     return 0;
   }
 
-
+  assert(journal);
   //prepare and encode transactions data out of lock
   bufferlist tbl;
   int orig_len = -1;
-  if (journal && journal->is_writeable()) {
+  if (journal->is_writeable()) {
     orig_len = journal->prepare_entry(tls, &tbl);
   }
   uint64_t op = submit_manager.op_submit_start();
