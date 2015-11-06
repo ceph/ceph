@@ -929,23 +929,16 @@ static bool char_needs_url_encoding(char c)
   return false;
 }
 
-void url_encode(const string& src, string& dst, bool in_query)
+void url_encode(const string& src, string& dst)
 {
   const char *p = src.c_str();
   for (unsigned i = 0; i < src.size(); i++, p++) {
-    if (*p == '%' && in_query && (i + 2) < src.size()) {
-      /* keep %AB as it is */
-      dst.append(p, 3);
-      i += 2;
-      p += 2;
-    } else {
-      if (char_needs_url_encoding(*p)) {
-	escape_char(*p, dst);
-	continue;
-      }
-
-      dst.append(p, 1);
+    if (char_needs_url_encoding(*p)) {
+      escape_char(*p, dst);
+      continue;
     }
+
+    dst.append(p, 1);
   }
 }
 
