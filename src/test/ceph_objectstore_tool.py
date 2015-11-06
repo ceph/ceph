@@ -446,6 +446,13 @@ def set_osd_weight(CFSD_PREFIX, osd_ids, osd_path, weight):
                stderr=subprocess.DEVNULL,
                shell=True)
     assert(ret == 0)
+
+    # Minimum test of --dry-run by using it, but not checking anything
+    cmd = CFSD_PREFIX + "--op set-osdmap --file {osdmap_file} --epoch {epoch} --force --dry-run"
+    cmd = cmd.format(osd=osd_path, osdmap_file=osdmap_file.name, epoch=epoch)
+    ret = call(cmd, stdout=subprocess.DEVNULL, shell=True)
+    assert(ret == 0)
+
     # osdmaptool increases the epoch of the changed osdmap, so we need to force the tool
     # to use use a different epoch than the one in osdmap
     cmd = CFSD_PREFIX + "--op set-osdmap --file {osdmap_file} --epoch {epoch} --force"
@@ -524,6 +531,10 @@ def test_get_set_inc_osdmap(CFSD_PREFIX, osd_path):
     # overwrite e1 with e2
     cmd = CFSD_PREFIX + "--op set-inc-osdmap --force --epoch {epoch} --file {file}"
     ret = call(cmd.format(osd=osd_path, epoch=epoch, file=file_e2.name), shell=True)
+    if ret: return 1
+    # Use dry-run to set back to e1 which shouldn't happen
+    cmd = CFSD_PREFIX + "--op set-inc-osdmap --dry-run --epoch {epoch} --file {file}"
+    ret = call(cmd.format(osd=osd_path, epoch=epoch, file=file_e1_backup.name), shell=True)
     if ret: return 1
     # read from e1
     file_e1_read = tempfile.NamedTemporaryFile(delete=False)
@@ -1136,6 +1147,14 @@ def main(argv):
                             logging.error("Bad exit status {ret} from set-attr".format(ret=ret))
                             ERRORS += 1
                             continue
+                        # Test set-attr with dry-run
+                        cmd = ("echo -n dryrunbroken | " + CFSD_PREFIX + "--dry-run '{json}' set-attr {key}").format(osd=osd, pg=pg, json=JSON, key=attrkey)
+                        logging.debug(cmd)
+                        ret = call(cmd, shell=True, stdout=nullfd)
+                        if ret != 0:
+                            logging.error("Bad exit status {ret} from set-attr".format(ret=ret))
+                            ERRORS += 1
+                            continue
                         # Check the set-attr
                         cmd = (CFSD_PREFIX + " --pgid {pg} '{json}' get-attr {key}").format(osd=osd, pg=pg, json=JSON, key=attrkey)
                         logging.debug(cmd)
@@ -1152,6 +1171,14 @@ def main(argv):
                         cmd = (CFSD_PREFIX + "'{json}' rm-attr {key}").format(osd=osd, pg=pg, json=JSON, key=attrkey)
                         logging.debug(cmd)
                         ret = call(cmd, shell=True)
+                        if ret != 0:
+                            logging.error("Bad exit status {ret} from rm-attr".format(ret=ret))
+                            ERRORS += 1
+                            continue
+                        # Check rm-attr with dry-run
+                        cmd = (CFSD_PREFIX + "--dry-run '{json}' rm-attr {key}").format(osd=osd, pg=pg, json=JSON, key=attrkey)
+                        logging.debug(cmd)
+                        ret = call(cmd, shell=True, stdout=nullfd)
                         if ret != 0:
                             logging.error("Bad exit status {ret} from rm-attr".format(ret=ret))
                             ERRORS += 1
@@ -1199,6 +1226,14 @@ def main(argv):
                         logging.error("Check of set-omaphdr failed because we got {val}".format(val=getval))
                         ERRORS += 1
                         continue
+                    # Test dry-run with set-omaphdr
+                    cmd = ("echo -n dryrunbroken | " + CFSD_PREFIX + "--dry-run '{json}' set-omaphdr").format(osd=osd, pg=pg, json=JSON)
+                    logging.debug(cmd)
+                    ret = call(cmd, shell=True, stdout=nullfd)
+                    if ret != 0:
+                        logging.error("Bad exit status {ret} from set-omaphdr".format(ret=ret))
+                        ERRORS += 1
+                        continue
                     # Put back value
                     cmd = ("echo -n {val} | " + CFSD_PREFIX + "'{json}' set-omaphdr").format(osd=osd, pg=pg, json=JSON, val=hdr)
                     logging.debug(cmd)
@@ -1224,6 +1259,14 @@ def main(argv):
                             logging.error("Bad exit status {ret} from set-omap".format(ret=ret))
                             ERRORS += 1
                             continue
+                        # Check set-omap with dry-run
+                        cmd = ("echo -n dryrunbroken | " + CFSD_PREFIX + "--dry-run --pgid {pg} '{json}' set-omap {key}").format(osd=osd, pg=pg, json=JSON, key=omapkey)
+                        logging.debug(cmd)
+                        ret = call(cmd, shell=True, stdout=nullfd)
+                        if ret != 0:
+                            logging.error("Bad exit status {ret} from set-omap".format(ret=ret))
+                            ERRORS += 1
+                            continue
                         # Check the set-omap
                         cmd = (CFSD_PREFIX + " --pgid {pg} '{json}' get-omap {key}").format(osd=osd, pg=pg, json=JSON, key=omapkey)
                         logging.debug(cmd)
@@ -1240,6 +1283,13 @@ def main(argv):
                         cmd = (CFSD_PREFIX + "'{json}' rm-omap {key}").format(osd=osd, pg=pg, json=JSON, key=omapkey)
                         logging.debug(cmd)
                         ret = call(cmd, shell=True)
+                        if ret != 0:
+                            logging.error("Bad exit status {ret} from rm-omap".format(ret=ret))
+                            ERRORS += 1
+                        # Check rm-omap with dry-run
+                        cmd = (CFSD_PREFIX + "--dry-run '{json}' rm-omap {key}").format(osd=osd, pg=pg, json=JSON, key=omapkey)
+                        logging.debug(cmd)
+                        ret = call(cmd, shell=True, stdout=nullfd)
                         if ret != 0:
                             logging.error("Bad exit status {ret} from rm-omap".format(ret=ret))
                             ERRORS += 1
