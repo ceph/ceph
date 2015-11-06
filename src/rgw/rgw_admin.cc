@@ -100,7 +100,8 @@ void _usage()
   cout << "  metadata rm                remove metadata info\n";
   cout << "  metadata list              list metadata info\n";
   cout << "  mdlog list                 list metadata log\n";
-  cout << "  mdlog trim                 trim metadata log\n";
+  cout << "  mdlog trim                 trim metadata log (use start-date, end-date or\n";
+  cout << "                             start-marker, end-marker)\n";
   cout << "  bilog list                 list bucket index log\n";
   cout << "  bilog trim                 trim bucket index log (use start-marker, end-marker)\n";
   cout << "  datalog list               list data log\n";
