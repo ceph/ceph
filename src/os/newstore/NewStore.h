@@ -461,7 +461,6 @@ private:
   KeyValueDB *db;
   FS *fs;
   uuid_d fsid;
-  string db_path;
   int path_fd;  ///< open handle to $path
   int fsid_fd;  ///< open handle (locked) to $path/fsid
   int frag_fd;  ///< open handle to $path/fragments
@@ -525,7 +524,7 @@ private:
   int _open_frag();
   int _create_frag();
   void _close_frag();
-  int _open_db();
+  int _open_db(bool create);
   void _close_db();
   int _open_collections();
   void _close_collections();
@@ -535,12 +534,14 @@ private:
   void _reap_collections();
 
   int _recover_next_fid();
-  int _create_fid(TransContext *txc, fid_t *fid, unsigned flags);
+  int _create_fid(TransContext *txc, OnodeRef o, fid_t *fid, unsigned flags);
   int _open_fid(fid_t fid, unsigned flags);
   int _remove_fid(fid_t fid);
 
   int _recover_next_nid();
   void _assign_nid(TransContext *txc, OnodeRef o);
+
+  void _dump_onode(OnodeRef o);
 
   int _clean_fid_tail_fd(const fragment_t& f, int fd);
   int _clean_fid_tail(TransContext *txc, const fragment_t& f);

@@ -58,6 +58,49 @@ void fid_t::generate_test_instances(list<fid_t*>& o)
   o.push_back(new fid_t(123, 3278));
 }
 
+// fid_backpointer_t
+
+void fid_backpointer_t::encode(bufferlist& bl) const
+{
+  ENCODE_START(1, 1, bl);
+  ::encode(oid, bl);
+  ::encode(nid, bl);
+  ::encode(offset, bl);
+  ENCODE_FINISH(bl);
+}
+
+void fid_backpointer_t::decode(bufferlist::iterator& p)
+{
+  DECODE_START(1, p);
+  ::decode(oid, p);
+  ::decode(nid, p);
+  ::decode(offset, p);
+  DECODE_FINISH(p);
+}
+
+void fid_backpointer_t::dump(Formatter *f) const
+{
+  f->dump_object("oid", oid);
+  f->dump_unsigned("nid", nid);
+  f->dump_unsigned("offset", offset);
+}
+
+void fid_backpointer_t::generate_test_instances(list<fid_backpointer_t*>& o)
+{
+  o.push_back(new fid_backpointer_t);
+  o.push_back(new fid_backpointer_t);
+  o.back()->oid.hobj.oid.name = "foo";
+  o.back()->nid = 12;
+  o.back()->offset = 123;
+}
+
+ostream& operator<<(ostream& out, const fid_backpointer_t& bp)
+{
+  return out << "fidbp(" << bp.oid
+	     << " nid " << bp.nid
+	     << " offset " << bp.offset << ")";
+}
+
 // fragment_t
 
 void fragment_t::encode(bufferlist& bl) const
@@ -153,6 +196,7 @@ void onode_t::encode(bufferlist& bl) const
   ::encode(omap_head, bl);
   ::encode(expected_object_size, bl);
   ::encode(expected_write_size, bl);
+  ::encode(frag_size, bl);
   ENCODE_FINISH(bl);
 }
 
@@ -169,6 +213,7 @@ void onode_t::decode(bufferlist::iterator& p)
   ::decode(omap_head, p);
   ::decode(expected_object_size, p);
   ::decode(expected_write_size, p);
+  ::decode(frag_size, p);
   DECODE_FINISH(p);
 }
 
@@ -210,6 +255,7 @@ void onode_t::dump(Formatter *f) const
   f->close_section();
   f->dump_unsigned("last_overlay_key", last_overlay_key);
   f->dump_unsigned("omap_head", omap_head);
+  f->dump_unsigned("frag_size", frag_size);
   f->dump_unsigned("expected_object_size", expected_object_size);
   f->dump_unsigned("expected_write_size", expected_write_size);
 }
@@ -269,6 +315,22 @@ void wal_op_t::dump(Formatter *f) const
   }
 }
 
+void wal_op_t::generate_test_instances(list<wal_op_t*>& o)
+{
+  o.push_back(new wal_op_t);
+  o.push_back(new wal_op_t);
+  o.back()->op = OP_WRITE;
+  o.back()->offset = 1;
+  o.back()->length = 2;
+  o.back()->data.append("my data");
+  o.back()->nid = 3;
+  o.back()->overlays.push_back(overlay_t());
+  o.back()->overlays.push_back(overlay_t());
+  o.back()->overlays.back().key = 4;
+  o.back()->overlays.back().value_offset = 5;
+  o.back()->overlays.back().length = 6;
+}
+
 void wal_transaction_t::encode(bufferlist& bl) const
 {
   ENCODE_START(1, 1, bl);
@@ -301,4 +363,18 @@ void wal_transaction_t::dump(Formatter *f) const
     f->dump_string("shared_overlay_key", *p);
   }
   f->close_section();
+}
+
+void wal_transaction_t::generate_test_instances(list<wal_transaction_t*>& o)
+{
+  o.push_back(new wal_transaction_t());
+  o.push_back(new wal_transaction_t());
+  o.back()->seq = 123;
+  o.back()->ops.push_back(wal_op_t());
+  o.back()->ops.push_back(wal_op_t());
+  o.back()->ops.back().op = wal_op_t::OP_WRITE;
+  o.back()->ops.back().offset = 2;
+  o.back()->ops.back().length = 3;
+  o.back()->ops.back().data.append("foodata");
+  o.back()->ops.back().nid = 4;
 }

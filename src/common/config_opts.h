@@ -758,7 +758,7 @@ OPTION(keyvaluestore_rocksdb_options, OPT_STR, "")
 // rocksdb options that will be used for omap(if omap_backend is rocksdb)
 OPTION(filestore_rocksdb_options, OPT_STR, "")
 // rocksdb options that will be used in monstore
-OPTION(mon_rocksdb_options, OPT_STR, "")
+OPTION(mon_rocksdb_options, OPT_STR, "cache_size=536870912,write_buffer_size=33554432,block_size=65536,compression=kNoCompression")
 
 /**
  * osd_*_priority adjust the relative priority of client io, recovery io,
@@ -808,9 +808,11 @@ OPTION(memstore_page_set, OPT_BOOL, true)
 OPTION(memstore_page_size, OPT_U64, 64 << 10)
 
 OPTION(newstore_max_dir_size, OPT_U32, 1000000)
+OPTION(newstore_min_frag_size, OPT_U32, 1048576)   // smallest allowed frag size
+OPTION(newstore_max_frag_size, OPT_U32, 1048576*16) // largest allowed fag size
 OPTION(newstore_onode_map_size, OPT_U32, 1024)   // onodes per collection
 OPTION(newstore_backend, OPT_STR, "rocksdb")
-OPTION(newstore_backend_options, OPT_STR, "")
+OPTION(newstore_rocksdb_options, OPT_STR, "max_write_buffer_number=16,min_write_buffer_number_to_merge=6")
 OPTION(newstore_fail_eio, OPT_BOOL, true)
 OPTION(newstore_sync_io, OPT_BOOL, false)  // perform initial io synchronously
 OPTION(newstore_sync_transaction, OPT_BOOL, false)  // perform kv txn synchronously
@@ -832,7 +834,6 @@ OPTION(newstore_overlay_max_length, OPT_INT, 65536)
 OPTION(newstore_overlay_max, OPT_INT, 32)
 OPTION(newstore_open_by_handle, OPT_BOOL, true)
 OPTION(newstore_o_direct, OPT_BOOL, true)
-OPTION(newstore_db_path, OPT_STR, "")
 OPTION(newstore_aio, OPT_BOOL, true)
 OPTION(newstore_aio_poll_ms, OPT_INT, 250)  // milliseconds
 OPTION(newstore_aio_max_queue_depth, OPT_INT, 4096)

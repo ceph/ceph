@@ -31,10 +31,8 @@
 
   TODO:
 
+  * alloc hint to set frag size
   * collection_list must flush pending db work
-  * multiple fragments per object (with configurable size.. maybe 1 or 2 mb default?)
-    * read path should be totally generic (handle any fragment pattern)
-    * write path should ideally tolerate any fragment pattern, but only generate a fixed layout (since the tunable may be changed over time).
   * rocksdb: use db_paths (db/ and db.bulk/ ?)
   * rocksdb: auto-detect use_fsync option when not xfs or btrfs
   * avoid mtime updates when doing open-by-handle
@@ -42,6 +40,31 @@
   * inline first fsync_item in TransContext to void allocation?
   * refcounted fragments (for efficient clone)
 
+ */
+
+/*
+ * Some invariants:
+ *
+ * - The fragment extent referenced by the fragment_t is always
+ *   defined.  It may be zeros (a hole in the underlying fs).
+ *
+ * - The fragment file may be larger than the fragment_t indicates.
+ *   If so, the trailing cruft should be ignored and can be safely
+ *   discarded (see _clean_fid_tail).
+ *
+ * - The fragment file may be smaller than the fragment_t indicates.
+ *   The content is defined to be zeros in this case.
+ *
+ * - All fragments start on a frag_size boundary, and are
+ *   at most frag_size bytes.
+ *
+ * - A fragment *may* be shorter than frag_size, even if
+ *   it isn't at the end of a file.
+ *
+ * - The fragment map never extends beyond the size of the object.
+ *
+ * - The fragment_t::offset is (currently) always 0.
+ *
  */
 
 const string PREFIX_SUPER = "S"; // field -> value
@@ -564,7 +587,6 @@ NewStore::NewStore(CephContext *cct, const string& path)
     cct(cct),
     db(NULL),
     fs(NULL),
-    db_path(cct->_conf->newstore_db_path),
     path_fd(-1),
     fsid_fd(-1),
     frag_fd(-1),
@@ -803,7 +825,7 @@ bool NewStore::test_mount_in_use()
   return ret;
 }
 
-int NewStore::_open_db()
+int NewStore::_open_db(bool create)
 {
   assert(!db);
   char fn[PATH_MAX];
@@ -817,17 +839,24 @@ int NewStore::_open_db()
     db = NULL;
     return -EIO;
   }
-  db->init(g_conf->newstore_backend_options);
+  string options;
+  if (g_conf->newstore_backend == "rocksdb")
+    options = g_conf->newstore_rocksdb_options;
+  db->init(options);
   stringstream err;
-  if (db->create_and_open(err)) {
+  int r;
+  if (create)
+    r = db->create_and_open(err);
+  else
+    r = db->open(err);
+  if (r) {
     derr << __func__ << " erroring opening db: " << err.str() << dendl;
     delete db;
     db = NULL;
     return -EIO;
   }
   dout(1) << __func__ << " opened " << g_conf->newstore_backend
-	  << " path " << path
-	  << " options " << g_conf->newstore_backend_options << dendl;
+	  << " path " << path << " options " << options << dendl;
   return 0;
 }
 
@@ -927,12 +956,7 @@ int NewStore::mkfs()
   if (r < 0)
     goto out_close_fsid;
 
-  if (db_path != "") {
-    r = symlinkat(db_path.c_str(), path_fd, "db");
-    if (r < 0)
-      goto out_close_frag;
-  }
-  r = _open_db();
+  r = _open_db(true);
   if (r < 0)
     goto out_close_frag;
 
@@ -976,7 +1000,7 @@ int NewStore::mount()
 
   // FIXME: superblock, features
 
-  r = _open_db();
+  r = _open_db(false);
   if (r < 0)
     goto out_frag;
 
@@ -1991,6 +2015,7 @@ void NewStore::_assign_nid(TransContext *txc, OnodeRef o)
   o->onode.nid = ++nid_last;
   dout(20) << __func__ << " " << o->onode.nid << dendl;
   if (nid_last > nid_max) {
+#warning fixme this could race?
     nid_max += g_conf->newstore_nid_prealloc;
     bufferlist bl;
     ::encode(nid_max, bl);
@@ -2052,7 +2077,8 @@ int NewStore::_open_fid(fid_t fid, unsigned flags)
   return fd;
 }
 
-int NewStore::_create_fid(TransContext *txc, fid_t *fid, unsigned flags)
+int NewStore::_create_fid(TransContext *txc, OnodeRef o,
+			  fid_t *fid, unsigned flags)
 {
   {
     Mutex::Locker l(fid_lock);
@@ -2063,7 +2089,8 @@ int NewStore::_create_fid(TransContext *txc, fid_t *fid, unsigned flags)
       ++fid_last.fno;
       if (fid_last.fno >= fid_max.fno) {
 	// raise fid_max, same fset, capping to max_dir_size
-	fid_max.fno = min(fid_max.fno + g_conf->newstore_fid_prealloc, g_conf->newstore_max_dir_size);
+	fid_max.fno = min(fid_max.fno + g_conf->newstore_fid_prealloc,
+			  g_conf->newstore_max_dir_size);
 	assert(fid_max.fno >= fid_last.fno);
 	bufferlist bl;
 	::encode(fid_max, bl);
@@ -2112,6 +2139,13 @@ int NewStore::_create_fid(TransContext *txc, fid_t *fid, unsigned flags)
     derr << __func__ << " cannot create " << path << "/fragments/"
 	 << *fid << ": " << cpp_strerror(r) << dendl;
     return r;
+  }
+
+  if (o->onode.expected_object_size) {
+    unsigned hint = MIN(o->onode.expected_object_size,
+			o->onode.frag_size);
+    dout(20) << __func__ << " set alloc hint to " << hint << dendl;
+    fs->set_alloc_hint(fd, hint);
   }
 
   if (g_conf->newstore_open_by_handle) {
@@ -3294,35 +3328,55 @@ int NewStore::_do_write_all_overlays(TransContext *txc,
   if (o->onode.overlay_map.empty())
     return 0;
 
-  // overwrite to new fid
-  if (o->onode.data_map.empty()) {
-    // create
-    fragment_t &f = o->onode.data_map[0];
-    f.offset = 0;
-    f.length = o->onode.size;
-    int fd = _create_fid(txc, &f.fid, O_RDWR);
-    if (fd < 0) {
-      return fd;
-    }
-    VOID_TEMP_FAILURE_RETRY(::close(fd));
-    dout(20) << __func__ << " create " << f.fid << dendl;
-  }
-
-  assert(o->onode.data_map.size() == 1);
-  fragment_t& f = o->onode.data_map.begin()->second;
-  assert(f.offset == 0);
-  assert(f.length == o->onode.size);
-
   for (map<uint64_t,overlay_t>::iterator p = o->onode.overlay_map.begin();
        p != o->onode.overlay_map.end(); ) {
     dout(10) << __func__ << " overlay " << p->first
-	     << "~" << p->second << dendl;
+	     << "~" << p->second.length << " " << p->second << dendl;
+
+    // find or create frag
+    uint64_t frag_first = 0;
+    fragment_t *f;
+    map<uint64_t,fragment_t>::iterator fp = o->onode.find_fragment(p->first);
+    if (fp == o->onode.data_map.end() ||
+	fp->first >= p->first + p->second.length ||
+	fp->first + fp->second.length <= p->first) {
+      dout(20) << __func__ << " frag " << fp->first << " " << fp->second
+	       << dendl;
+      frag_first = p->first - p->first % o->onode.frag_size;
+      if (frag_first == fp->first) {
+	// extend existing frag
+	f = &fp->second;
+	int r = _clean_fid_tail(txc, *f);
+	if (r < 0)
+	  return r;
+	f->length = (p->first + p->second.length) - frag_first;
+	dout(20) << __func__ << " extended " << f->fid << " to "
+		 << frag_first << "~" << f->length << dendl;
+      } else {
+	// new frag
+	f = &o->onode.data_map[frag_first];
+	f->offset = 0;
+	f->length = p->first + p->second.length - frag_first;
+	assert(f->length <= o->onode.frag_size);
+	int fd = _create_fid(txc, o, &f->fid, O_RDWR);
+	if (fd < 0) {
+	  return fd;
+	}
+	VOID_TEMP_FAILURE_RETRY(::close(fd));
+	dout(20) << __func__ << " create " << f->fid << dendl;
+      }
+    } else {
+      frag_first = fp->first;
+      f = &fp->second;
+    }
+    assert(frag_first <= p->first);
+    assert(p->first + p->second.length <= frag_first + f->length);
 
     wal_op_t *op = _get_wal_op(txc);
     op->op = wal_op_t::OP_WRITE;
-    op->offset = p->first;
+    op->offset = p->first - frag_first;
     op->length = p->second.length;
-    op->fid = f.fid;
+    op->fid = f->fid;
     // The overlays will be removed from the db after applying the WAL
     op->nid = o->onode.nid;
     op->overlays.push_back(p->second);
@@ -3331,11 +3385,18 @@ int NewStore::_do_write_all_overlays(TransContext *txc,
     map<uint64_t,overlay_t>::iterator prev = p, next = p;
     ++next;
     while (next != o->onode.overlay_map.end()) {
-      if (prev->first + prev->second.length == next->first) {
+      if (prev->first + prev->second.length == next->first &&
+	  next->first < frag_first + o->onode.frag_size) {
         dout(10) << __func__ << " combining overlay " << next->first
                  << "~" << next->second << dendl;
         op->length += next->second.length;
         op->overlays.push_back(next->second);
+
+	if (next->first + next->second.length > frag_first + f->length) {
+	  f->length = next->first + next->second.length - frag_first;
+	  dout(20) << __func__ << "  extended fragment " << f->fid
+		   << " to " << frag_first << "~" << f->length << dendl;
+	}
 
         ++prev;
         ++next;
@@ -3379,200 +3440,270 @@ void NewStore::_do_read_all_overlays(wal_transaction_t& wt)
   return;
 }
 
+void NewStore::_dump_onode(OnodeRef o)
+{
+  dout(30) << __func__ << " " << o
+	   << " nid " << o->onode.nid
+	   << " size " << o->onode.size
+	   << " frag_size " << o->onode.frag_size
+	   << " expected_object_size " << o->onode.expected_object_size
+	   << " expected_write_size " << o->onode.expected_write_size
+	   << dendl;
+  for (map<string,bufferptr>::iterator p = o->onode.attrs.begin();
+       p != o->onode.attrs.end();
+       ++p) {
+    dout(30) << __func__ << "  attr " << p->first
+	     << " len " << p->second.length() << dendl;
+  }
+  for (map<uint64_t,fragment_t>::iterator p = o->onode.data_map.begin();
+       p != o->onode.data_map.end();
+       ++p) {
+    dout(30) << __func__ << "  fragment " << p->first << " " << p->second
+	     << dendl;
+  }
+  for (map<uint64_t,overlay_t>::iterator p = o->onode.overlay_map.begin();
+       p != o->onode.overlay_map.end();
+       ++p) {
+    dout(30) << __func__ << "  overlay " << p->first << " " << p->second
+	     << dendl;
+  }
+  if (!o->onode.shared_overlays.empty()) {
+    dout(30) << __func__ << "  shared_overlays " << o->onode.shared_overlays
+	     << dendl;
+  }
+}
+
 int NewStore::_do_write(TransContext *txc,
 			OnodeRef o,
-			uint64_t offset, uint64_t length,
-			bufferlist& bl,
+			uint64_t orig_offset, uint64_t orig_length,
+			bufferlist& orig_bl,
 			uint32_t fadvise_flags)
 {
   int fd = -1;
   int r = 0;
   unsigned flags;
 
-  dout(20) << __func__ << " have " << o->onode.size
+  dout(20) << __func__
+	   << " " << o->oid << " " << orig_offset << "~" << orig_length
+	   << " - have " << o->onode.size
 	   << " bytes in " << o->onode.data_map.size()
 	   << " fragments" << dendl;
-
+  _dump_onode(o);
   o->exists = true;
 
-  if (length == 0) {
-    dout(20) << __func__ << " zero-length write" << dendl;
-    goto out;
+  if (!o->onode.frag_size && o->onode.data_map.empty() &&
+      o->onode.overlay_map.empty()) {
+    o->onode.frag_size = g_conf->newstore_min_frag_size;
+    dout(20) << __func__ << " set frag_size " << o->onode.frag_size << dendl;
   }
 
-  if ((int)o->onode.overlay_map.size() < g_conf->newstore_overlay_max &&
-      (int)length <= g_conf->newstore_overlay_max_length) {
-    // write an overlay
-    r = _do_overlay_write(txc, o, offset, length, bl);
-    if (r < 0)
-      goto out;
-    if (offset + length > o->onode.size) {
-      // make sure the data fragment matches
-      if (!o->onode.data_map.empty()) {
-	assert(o->onode.data_map.size() == 1);
-	fragment_t& f = o->onode.data_map.begin()->second;
-	assert(f.offset == 0);
-	assert(f.length == o->onode.size);
-	r = _clean_fid_tail(txc, f);
-	if (r < 0)
+  if (orig_offset + orig_length > o->onode.size) {
+    dout(20) << __func__ << " extending size to " << orig_offset + orig_length
+	     << dendl;
+    o->onode.size = orig_offset + orig_length;
+  }
+
+  uint64_t frag_size = o->onode.frag_size;
+  uint64_t length;
+  for (uint64_t offset = orig_offset;
+       offset < orig_offset + orig_length;
+       offset += length) {
+    // calc length for this fragment / chunk
+    length = orig_offset + orig_length - offset;
+    if (offset / frag_size != (offset + length) / frag_size) {
+      length = (offset / frag_size + 1) * frag_size - offset;
+    }
+    dout(20) << __func__ << " chunk " << offset << "~" << length
+	     << " (frag_size " << frag_size << ")"
+	     << dendl;
+    bufferlist bl;
+    bl.substr_of(orig_bl, offset - orig_offset, length);    
+
+    if ((int)o->onode.overlay_map.size() < g_conf->newstore_overlay_max &&
+	(int)length <= g_conf->newstore_overlay_max_length) {
+      // write an overlay
+      r = _do_overlay_write(txc, o, offset, length, bl);
+      if (r < 0)
+	goto out;
+      txc->write_onode(o);
+      continue;
+    }
+
+    flags = O_RDWR;
+    if (g_conf->newstore_o_direct &&
+	(offset & ~CEPH_PAGE_MASK) == 0 &&
+	(length & ~CEPH_PAGE_MASK) == 0) {
+      dout(20) << __func__ << " page-aligned, can use O_DIRECT, "
+	       << bl.buffers().size() << " buffers" << dendl;
+      flags |= O_DIRECT | O_DSYNC;
+      if (!bl.is_page_aligned()) {
+	dout(20) << __func__ << " rebuilding buffer to be page-aligned" << dendl;
+	bl.rebuild();
+      }
+    }
+
+    map<uint64_t, fragment_t>::iterator fp =
+      o->onode.data_map.lower_bound(offset);
+
+    if ((fp == o->onode.data_map.end() || fp->first > offset) &&
+	fp != o->onode.data_map.begin()) {
+      --fp;
+      if (offset < fp->first + frag_size &&
+      	  offset >= fp->first + fp->second.length) {
+	// -- append (possibly with gap) --
+	fragment_t &f = fp->second;
+	fd = _open_fid(f.fid, flags);
+	if (fd < 0) {
+	  r = fd;
 	  goto out;
-	f.length = offset + length;
+	}
+	r = _clean_fid_tail_fd(f, fd); // in case there is trailing crap
+	if (r < 0) {
+	  goto out;
+	}
+	f.length = (offset + length) - fp->first;
+	uint64_t x_offset = offset - fp->first;
+	dout(20) << __func__ << " append " << f.fid << " writing "
+		 << offset << "~" << length << " to "
+		 << x_offset << "~" << length << dendl;
+#ifdef HAVE_LIBAIO
+	if (g_conf->newstore_aio && (flags & O_DIRECT)) {
+	  txc->pending_aios.push_back(FS::aio_t(txc, fd));
+	  FS::aio_t& aio = txc->pending_aios.back();
+	  bl.prepare_iov(&aio.iov);
+	  txc->aio_bl.append(bl);
+	  aio.pwritev(x_offset);
+	  dout(2) << __func__ << " prepared aio " << &aio << dendl;
+	} else
+#endif
+        {
+	  ::lseek64(fd, x_offset, SEEK_SET);
+	  r = bl.write_fd(fd);
+	  if (r < 0) {
+	    derr << __func__ << " bl.write_fd error: " << cpp_strerror(r)
+		 << dendl;
+	    goto out;
+	  }
+	  txc->sync_fd(fd);
+	}
+	continue;
       }
-      dout(20) << __func__ << " extending size to " << offset + length << dendl;
-      o->onode.size = offset + length;
+      ++fp;
     }
-    txc->write_onode(o);
-    r = 0;
-    goto out;
-  }
 
-  flags = O_RDWR;
-  if (g_conf->newstore_o_direct &&
-      (offset & ~CEPH_PAGE_MASK) == 0 &&
-      (length & ~CEPH_PAGE_MASK) == 0) {
-    dout(20) << __func__ << " page-aligned, can use O_DIRECT, "
-	     << bl.buffers().size() << " buffers" << dendl;
-    flags |= O_DIRECT | O_DSYNC;
-    if (!bl.is_page_aligned()) {
-      dout(20) << __func__ << " rebuilding buffer to be page-aligned" << dendl;
-      bl.rebuild();
-    }
-  }
-
-  if (o->onode.size <= offset ||
-      o->onode.size == 0 ||
-      o->onode.data_map.empty()) {
-    uint64_t x_offset;
-    if (o->onode.data_map.empty()) {
-      // create
-      fragment_t &f = o->onode.data_map[0];
+    if (fp == o->onode.data_map.end() ||
+	fp->first >= offset + length) {
+      // -- new frag --
+      // Note: unless we are at EOF, allocate the full frag_size,
+      // even though we only write to part of it.
+      uint64_t frag_first = offset - (offset % frag_size);
+      fragment_t &f = o->onode.data_map[frag_first];
       f.offset = 0;
-      f.length = MAX(offset + length, o->onode.size);
-      fd = _create_fid(txc, &f.fid, flags);
+      f.length = MIN(frag_size, o->onode.size - frag_first);
+      assert(f.length <= frag_size);
+      fd = _create_fid(txc, o, &f.fid, flags);
       if (fd < 0) {
 	r = fd;
 	goto out;
       }
-      x_offset = offset;
+      uint64_t x_offset = offset - frag_first;
       dout(20) << __func__ << " create " << f.fid << " writing "
-	       << offset << "~" << length << dendl;
-    } else {
-      // append (possibly with gap)
-      assert(o->onode.data_map.size() == 1);
-      fragment_t &f = o->onode.data_map.rbegin()->second;
-      fd = _open_fid(f.fid, flags);
+	       << offset << "~" << length
+	       << " to " << x_offset << "~" << length << dendl;
+#ifdef HAVE_LIBAIO
+      if (g_conf->newstore_aio && (flags & O_DIRECT)) {
+	txc->pending_aios.push_back(FS::aio_t(txc, fd));
+	FS::aio_t& aio = txc->pending_aios.back();
+	bl.prepare_iov(&aio.iov);
+	txc->aio_bl.append(bl);
+	aio.pwritev(x_offset);
+	dout(2) << __func__ << " prepared aio " << &aio << dendl;
+      } else
+#endif
+      {
+	::lseek64(fd, x_offset, SEEK_SET);
+	r = bl.write_fd(fd);
+	if (r < 0) {
+	  derr << __func__ << " bl.write_fd error: " << cpp_strerror(r) << dendl;
+	  goto out;
+	}
+	txc->sync_fd(fd);
+      }
+      continue;
+    }
+
+    if (fp != o->onode.data_map.end() &&
+	fp->first == offset &&
+	fp->second.length <= length) {
+      // -- overwrite/replace entire frag --
+      fragment_t& f = fp->second;
+
+      _do_overlay_trim(txc, o, offset, length);
+
+      wal_op_t *op = _get_wal_op(txc);
+      op->op = wal_op_t::OP_REMOVE;
+      op->fid = fp->second.fid;
+
+      f.length = length;
+      fd = _create_fid(txc, o, &f.fid, O_RDWR);
       if (fd < 0) {
 	r = fd;
 	goto out;
       }
-      r = _clean_fid_tail_fd(f, fd); // in case there is trailing crap
-      if (r < 0) {
-	goto out;
-      }
-      f.length = (offset + length) - f.offset;
-      x_offset = offset - f.offset;
-      dout(20) << __func__ << " append " << f.fid << " writing "
-	       << (offset - f.offset) << "~" << length << dendl;
-    }
-    if (offset + length > o->onode.size) {
-      o->onode.size = offset + length;
-    }
-#ifdef HAVE_LIBAIO
-    if (g_conf->newstore_aio && (flags & O_DIRECT)) {
-      txc->pending_aios.push_back(FS::aio_t(txc, fd));
-      FS::aio_t& aio = txc->pending_aios.back();
-      bl.prepare_iov(&aio.iov);
-      txc->aio_bl.append(bl);
-      aio.pwritev(x_offset);
-      dout(2) << __func__ << " prepared aio " << &aio << dendl;
-    } else
-#endif
-    {
-      ::lseek64(fd, x_offset, SEEK_SET);
-      r = bl.write_fd(fd);
-      if (r < 0) {
-	derr << __func__ << " bl.write_fd error: " << cpp_strerror(r) << dendl;
-	goto out;
-      }
-      txc->sync_fd(fd);
-    }
-    r = 0;
-    goto out;
-  }
-
-  if (offset == 0 &&
-      length >= o->onode.size) {
-    // overwrite to new fid
-    assert(o->onode.data_map.size() == 1);
-    fragment_t& f = o->onode.data_map.begin()->second;
-    assert(f.offset == 0);
-    assert(f.length == o->onode.size);
-
-    _do_overlay_clear(txc, o);
-
-    wal_op_t *op = _get_wal_op(txc);
-    op->op = wal_op_t::OP_REMOVE;
-    op->fid = f.fid;
-
-    f.length = length;
-    o->onode.size = length;
-    fd = _create_fid(txc, &f.fid, O_RDWR);
-    if (fd < 0) {
-      r = fd;
-      goto out;
-    }
-    dout(20) << __func__ << " replace old fid " << op->fid
-	     << " with new fid " << f.fid
-	     << ", writing " << offset << "~" << length << dendl;
+      dout(20) << __func__ << " replace old fid " << op->fid
+	       << " with new fid " << f.fid
+	       << ", writing " << offset << "~" << length
+	       << " to 0~" << length << dendl;
 
 #ifdef HAVE_LIBAIO
-    if (g_conf->newstore_aio && (flags & O_DIRECT)) {
-      txc->pending_aios.push_back(FS::aio_t(txc, fd));
-      FS::aio_t& aio = txc->pending_aios.back();
-      bl.prepare_iov(&aio.iov);
-      txc->aio_bl.append(bl);
-      aio.pwritev(0);
-      dout(2) << __func__ << " prepared aio " << &aio << dendl;
-    } else
+      if (g_conf->newstore_aio && (flags & O_DIRECT)) {
+	txc->pending_aios.push_back(FS::aio_t(txc, fd));
+	FS::aio_t& aio = txc->pending_aios.back();
+	bl.prepare_iov(&aio.iov);
+	txc->aio_bl.append(bl);
+	aio.pwritev(0);
+	dout(2) << __func__ << " prepared aio " << &aio << dendl;
+      } else
 #endif
-    {
-      r = bl.write_fd(fd);
-      if (r < 0) {
-	derr << __func__ << " bl.write_fd error: " << cpp_strerror(r) << dendl;
-	goto out;
+      {
+	r = bl.write_fd(fd);
+	if (r < 0) {
+	  derr << __func__ << " bl.write_fd error: " << cpp_strerror(r) << dendl;
+	  goto out;
+	}
+	txc->sync_fd(fd);
       }
-      txc->sync_fd(fd);
+      continue;
     }
-    r = 0;
-    goto out;
-  }
 
-  if (true) {
-    // WAL
-    assert(o->onode.data_map.size() == 1);
-    fragment_t& f = o->onode.data_map.begin()->second;
-    assert(f.offset == 0);
-    assert(f.length == o->onode.size);
-    r = _do_write_all_overlays(txc, o);
-    if (r < 0)
-      goto out;
-    r = _clean_fid_tail(txc, f);
-    if (r < 0)
-      goto out;
-    wal_op_t *op = _get_wal_op(txc);
-    op->op = wal_op_t::OP_WRITE;
-    op->offset = offset - f.offset;
-    op->length = length;
-    op->fid = f.fid;
-    op->data = bl;
-    if (offset + length > o->onode.size) {
-      o->onode.size = offset + length;
+    if (true) {
+      // -- WAL --
+      r = _do_write_all_overlays(txc, o);
+      if (r < 0)
+	goto out;
+      fragment_t& f = fp->second;
+      assert(fp->first <= offset);
+      assert(offset + length <= fp->first + fp->second.length);
+      r = _clean_fid_tail(txc, f);
+      if (r < 0)
+	goto out;
+      wal_op_t *op = _get_wal_op(txc);
+      op->op = wal_op_t::OP_WRITE;
+      op->offset = offset - fp->first;
+      op->length = length;
+      op->fid = f.fid;
+      op->data = bl;
+      if (offset + length - fp->first > f.length) {
+	f.length = offset + length - fp->first;
+      }
+      dout(20) << __func__ << " wal " << f.fid << " write "
+	       << offset << "~" << length << " to "
+	       << op->offset << "~" << op->length
+	       << dendl;
+      continue;
     }
-    if (offset + length - f.offset > f.length) {
-      f.length = offset + length - f.offset;
-    }
-    dout(20) << __func__ << " wal " << f.fid << " write "
-	     << (offset - f.offset) << "~" << length << dendl;
+
+    assert(0 == "don't get here");
   }
   r = 0;
 
@@ -3590,10 +3721,10 @@ int NewStore::_clean_fid_tail_fd(const fragment_t& f, int fd)
 	 << cpp_strerror(r) << dendl;
     return r;
   }
-  if (st.st_size > f.length) {
-    dout(20) << __func__ << " frag " << f.fid << " is long, truncating"
-	     << dendl;
-    r = ::ftruncate(fd, f.length);
+  if (st.st_size > f.offset + f.length) {
+    dout(20) << __func__ << " frag " << f.fid << " is long (" << st.st_size
+	     << "), truncating to " << (f.offset + f.length) << dendl;
+    r = ::ftruncate(fd, f.offset + f.length);
     if (r < 0) {
       derr << __func__ << " failed to ftruncate " << f.fid << ": "
 	   << cpp_strerror(r) << dendl;
@@ -3661,53 +3792,71 @@ int NewStore::_zero(TransContext *txc,
   _assign_nid(txc, o);
 
   // overlay
-  if (_do_overlay_trim(txc, o, offset, length) > 0)
-    txc->write_onode(o);
+  _do_overlay_trim(txc, o, offset, length);
 
-  if (o->onode.data_map.empty()) {
-    // we're already a big hole
-    if (offset + length > o->onode.size) {
-      o->onode.size = offset + length;
-      txc->write_onode(o);
+  map<uint64_t,fragment_t>::iterator fp = o->onode.find_fragment(offset);
+  while (fp != o->onode.data_map.end()) {
+    if (fp->first >= offset + length)
+      break;
+
+    fragment_t& f = fp->second;
+    if (offset <= fp->first &&
+	offset + length >= fp->first + fp->second.length) {
+      // remove fragment
+      dout(20) << __func__ << " wal rm fragment " << fp->first << " "
+	       << f << dendl;
+      wal_op_t *op = _get_wal_op(txc);
+      op->op = wal_op_t::OP_REMOVE;
+      op->fid = f.fid;
+      o->onode.data_map.erase(fp++);
+      continue;
     }
-  } else {
-    assert(o->onode.data_map.size() == 1);
-    fragment_t& f = o->onode.data_map.begin()->second;
-    assert(f.offset == 0);
-    assert(f.length == o->onode.size);
 
-    r = _clean_fid_tail(txc, f);
-    if (r < 0)
-      goto out;
+    // start,end are offsets in the fragment
+    uint64_t start = 0;
+    if (offset > fp->first) {
+      start = offset - fp->first;
+    }
+    assert(o->onode.frag_size);
+    uint64_t end = MIN(offset + length - fp->first,
+		       o->onode.frag_size);
 
-    if (offset >= o->onode.size) {
-      // after tail
-      int fd = _open_fid(f.fid, O_RDWR);
-      if (fd < 0) {
-	r = fd;
-	goto out;
-      }
-      f.length = (offset + length) - f.offset;
-      r = ::ftruncate(fd, f.length);
-      assert(r == 0);   // this shouldn't fail
-      dout(20) << __func__ << " tail " << f.fid << " truncating up to "
-	       << f.length << dendl;
-      o->onode.size = offset + length;
-      txc->write_onode(o);
+    if (end >= f.length) {
+      // truncate fragment
+      wal_op_t *op = _get_wal_op(txc);
+      op->op = wal_op_t::OP_TRUNCATE;
+      op->fid = f.fid;
+      op->offset = start;
+      dout(20) << __func__ << " wal truncate fragment " << fp->first << " "
+	       << f << " to " << start << dendl;
     } else {
       // WAL
+      r = _clean_fid_tail(txc, f);
+      if (r < 0)
+	goto out;
+
       wal_op_t *op = _get_wal_op(txc);
       op->op = wal_op_t::OP_ZERO;
-      op->offset = offset - f.offset;
-      op->length = length;
+      op->offset = start;
+      op->length = end - start;
       op->fid = f.fid;
-      if (offset + length > o->onode.size) {
-	f.length = offset + length - f.offset;
-	o->onode.size = offset + length;
-	txc->write_onode(o);
-      }
     }
+    
+    // size fragment up?
+    if (end > f.length) {
+      f.length = end;
+      dout(20) << __func__ << " frag " << f.fid << " sized up to "
+	       << f.length << dendl;
+    }
+    fp++;
   }
+  
+  if (offset + length > o->onode.size) {
+    o->onode.size = offset + length;
+    dout(20) << __func__ << " extending size to " << offset + length
+	     << dendl;
+  }
+  txc->write_onode(o);
 
  out:
   dout(10) << __func__ << " " << c->cid << " " << oid
@@ -3756,18 +3905,6 @@ int NewStore::_do_truncate(TransContext *txc, OnodeRef o, uint64_t offset)
   }
 
   // truncate up trailing fragment?
-  if (!o->onode.data_map.empty() && offset > o->onode.size) {
-    // resize file up.  make sure we don't have trailing bytes
-    assert(o->onode.data_map.size() == 1);
-    fragment_t& f = o->onode.data_map.begin()->second;
-    assert(f.offset == 0);
-    assert(f.length == o->onode.size);
-    dout(20) << __func__ << " truncate up " << f << " to " << offset << dendl;
-    int r = _clean_fid_tail(txc, f);
-    if (r < 0)
-      return r;
-    f.length = offset;
-  }
 
   // trim down overlays
   map<uint64_t,overlay_t>::iterator op = o->onode.overlay_map.end();
@@ -4183,6 +4320,10 @@ int NewStore::_setallochint(TransContext *txc,
   o->onode.expected_object_size = expected_object_size;
   o->onode.expected_write_size = expected_write_size;
   txc->write_onode(o);
+
+  if (o->onode.data_map.empty() && o->onode.overlay_map.empty()) {
+    // FIXME: we could do something clever with onode.frag_size here.
+  }
 
  out:
   dout(10) << __func__ << " " << c->cid << " " << oid
