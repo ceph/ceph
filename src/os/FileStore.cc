@@ -4035,12 +4035,6 @@ int FileStore::getattr(coll_t cid, const ghobject_t& oid, const char *name, buff
     map<string, bufferlist> got;
     set<string> to_get;
     to_get.insert(string(name));
-    Index index;
-    r = get_index(cid, &index);
-    if (r < 0) {
-      dout(10) << __func__ << " could not get index r = " << r << dendl;
-      goto out;
-    }
     r = object_map->get_xattrs(oid, to_get, &got);
     if (r < 0 && r != -ENOENT) {
       dout(10) << __func__ << " get_xattrs err r =" << r << dendl;
@@ -4072,7 +4066,6 @@ int FileStore::getattrs(coll_t cid, const ghobject_t& oid, map<string,bufferptr>
   _kludge_temp_object_collection(cid, oid);
   set<string> omap_attrs;
   map<string, bufferlist> omap_aset;
-  Index index;
   dout(15) << "getattrs " << cid << "/" << oid << dendl;
   FDRef fd;
   bool spill_out = true;
@@ -4098,11 +4091,6 @@ int FileStore::getattrs(coll_t cid, const ghobject_t& oid, map<string,bufferptr>
     goto out;
   }
 
-  r = get_index(cid, &index);
-  if (r < 0) {
-    dout(10) << __func__ << " could not get index r = " << r << dendl;
-    goto out;
-  }
   {
     r = object_map->get_all_xattrs(oid, &omap_attrs);
     if (r < 0 && r != -ENOENT) {
@@ -4262,12 +4250,6 @@ int FileStore::_rmattr(coll_t cid, const ghobject_t& oid, const char *name,
   get_attrname(name, n, CHAIN_XATTR_MAX_NAME_LEN);
   r = chain_fremovexattr(**fd, n);
   if (r == -ENODATA && spill_out) {
-    Index index;
-    r = get_index(cid, &index);
-    if (r < 0) {
-      dout(10) << __func__ << " could not get index r = " << r << dendl;
-      goto out_close;
-    }
     set<string> to_remove;
     to_remove.insert(string(name));
     r = object_map->remove_xattrs(oid, to_remove, &spos);
@@ -4292,7 +4274,6 @@ int FileStore::_rmattrs(coll_t cid, const ghobject_t& oid,
   map<string,bufferptr> aset;
   FDRef fd;
   set<string> omap_attrs;
-  Index index;
   bool spill_out = true;
 
   int r = lfn_open(cid, oid, false, &fd);
@@ -4322,11 +4303,6 @@ int FileStore::_rmattrs(coll_t cid, const ghobject_t& oid,
     goto out_close;
   }
 
-  r = get_index(cid, &index);
-  if (r < 0) {
-    dout(10) << __func__ << " could not get index r = " << r << dendl;
-    goto out_close;
-  }
   {
     r = object_map->get_all_xattrs(oid, &omap_attrs);
     if (r < 0 && r != -ENOENT) {
