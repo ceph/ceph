@@ -35,15 +35,10 @@ add_executable(test_build_librgw buildtest_skeleton.cc)
 target_link_libraries(test_build_librgw rgw_a global pthread ${CRYPTO_LIBS} ${EXTRALIBS})
 
 # From src/test/Makefile-client.am: I dont get this one... testing the osdc build but link in libcephfs?
-add_executable(test_build_libcephfs
-  buildtest_skeleton.cc
-  ${osdc_srcs})
+add_executable(test_build_libcephfs buildtest_skeleton.cc)
 target_link_libraries(test_build_libcephfs cephfs expat pthread ${CRYPTO_LIBS} ${EXTRALIBS})
 
-add_executable(test_build_librados
-  buildtest_skeleton.cc
-  ${librados_srcs}
-  )
+add_executable(test_build_librados buildtest_skeleton.cc)
 target_link_libraries(test_build_librados librados pthread ${CRYPTO_LIBS} ${EXTRALIBS} osdc osd os common cls_lock_client ${BLKID_LIBRARIES} ${ALLOC_LIBS})
 
 # test_rados
@@ -1244,6 +1239,7 @@ target_link_libraries(unittest_snap_mapper osd global ${CMAKE_DL_LIBS}
 set_target_properties(unittest_snap_mapper PROPERTIES COMPILE_FLAGS
   ${UNITTEST_CXX_FLAGS})
 
+if(${WITH_ROCKSDB})
 # unittest_rocksdb_option
 add_executable(unittest_rocksdb_option EXCLUDE_FROM_ALL
   objectstore/TestRocksdbOptionParse.cc
@@ -1256,6 +1252,7 @@ target_link_libraries(unittest_rocksdb_option librocksdb os_rocksdb global ${CMA
 set(UNITTEST_ROCKSDB_OPTION_FLAGS "${UNITTEST_CXX_FLAGS} ${LIBROCKSDB_CFLAGS}")
 target_include_directories(unittest_rocksdb_option PUBLIC ${CMAKE_SOURCE_DIR}/src/rocksdb/include)
 set_target_properties(unittest_rocksdb_option PROPERTIES COMPILE_FLAGS ${UNITTEST_ROCKSDB_OPTION_FLAGS})
+endif(${WITH_ROCKSDB})
 
 # unittest_mds_authcap
 add_executable(unittest_mds_authcap EXCLUDE_FROM_ALL

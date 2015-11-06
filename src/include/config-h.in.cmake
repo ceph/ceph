@@ -233,7 +233,16 @@
 #cmakedefine HAVE_XIO
 
 /* Defined if LTTNG */
-#cmakedefine WITH_LTTNG
+#cmakedefine WITH_LTTNG 1
+
+/* Defined if Babeltrace */
+#cmakedefine WITH_BABELTRACE 1
+
+/* Define to 1 if you have the <babeltrace/babeltrace.h> header file. */
+#cmakedefine HAVE_BABELTRACE_BABELTRACE_H 1
+
+/* Define to 1 if you have the <babeltrace/ctf/events.h> header file. */
+#cmakedefine HAVE_BABELTRACE_CTF_EVENTS_H 1
 
 /* Defined if you have librocksdb enabled */
 #cmakedefine HAVE_LIBROCKSDB

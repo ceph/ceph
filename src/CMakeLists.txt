@@ -123,7 +123,6 @@ endif(HAVE_XIO)
 
 # sort out which allocator to use
 if(Tcmalloc_FOUND)
-  set(HAVE_LIBTCMALLOC 1)
   set(ALLOC_LIBS tcmalloc)
   set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fno-builtin-malloc -fno-builtin-calloc -fno-builtin-realloc -fno-builtin-free")
   set(TCMALLOC_srcs perfglue/heap_profiler.cc)
@@ -596,6 +595,7 @@ target_link_libraries(ceph-mon mon ${Boost_THREAD_LIBRARY} common os global ${EX
 install(TARGETS ceph-mon DESTINATION bin)
 
 #external project rocksdb
+if(${WITH_ROCKSDB})
 include(ExternalProject)
 ExternalProject_Add(rocksdb
   SOURCE_DIR ${CMAKE_SOURCE_DIR}/src/rocksdb
@@ -613,14 +613,14 @@ set_property(TARGET librocksdb PROPERTY IMPORTED_LOCATION ${CMAKE_SOURCE_DIR}/sr
 set_property(TARGET librocksdb PROPERTY INTERFACE_LINK_LIBRARIES z bz2 snappy)
 add_dependencies(librocksdb rocksdb)
 
-set(HAVE_LIBROCKSDB 1)
-
+#os_rocksdb
 add_library(os_rocksdb STATIC os/RocksDBStore.cc)
 add_dependencies(os_rocksdb librocksdb)
 target_link_libraries(os_rocksdb librocksdb)
 target_include_directories(os_rocksdb PUBLIC ${CMAKE_SOURCE_DIR}/src/rocksdb/include)
 set(LIBROCKSDB_CFLAGS "${CMAKE_CXX_FLAGS} -fno-builtin-memcmp -std=gnu++11")
 set_target_properties(os_rocksdb PROPERTIES COMPILE_FLAGS ${LIBROCKSDB_CFLAGS})
+endif(${WITH_ROCKSDB})
 
 # OSD
 if(${HAVE_XFS})
@@ -665,7 +665,10 @@ endif(${HAVE_LIBAIO})
 if(${WITH_LTTNG})
   target_link_libraries(os libos_tp)
 endif(${WITH_LTTNG})
-target_link_libraries(os leveldb snappy os_rocksdb)
+if(${WITH_ROCKSDB})
+  target_link_libraries(os os_rocksdb)
+endif(${WITH_ROCKSDB})
+target_link_libraries(os leveldb snappy)
 
 set(cls_references_files objclass/class_api.cc)
 add_library(cls_references_objs OBJECT ${cls_references_files})
@@ -1026,7 +1029,6 @@ if(${WITH_RBD})
 
   set(librbd_replay_srcs
       rbd_replay/actions.cc 
-      rbd_replay/ActionTypes.cc
       rbd_replay/BufferReader.cc
       rbd_replay/ImageNameMap.cc 
       rbd_replay/PendingIO.cc 
@@ -1047,7 +1049,28 @@ if(${WITH_RBD})
   add_library(librbd_replay_ios STATIC ${librbd_replay_ios_srcs})
   target_link_libraries(librbd_replay_ios librbd librados global)
 
+  set(librbd_replay_prep_srcs
+      rbd_replay/rbd-replay-prep.cc)
+  add_executable(librbd_replay_prep
+    ${librbd_replay_prep_srcs}
+    $<TARGET_OBJECTS:parse_secret_objs>
+    )
+  target_link_libraries(librbd_replay_prep 
+    librbd_replay
+    librbd_replay_ios
+    librbd_replay_types
+    librbd
+    librados
+    common
+    keyutils
+    global
+    babeltrace
+    babeltrace-ctf
+    ${Boost_DATE_TIME_LIBRARY}
+    )
+
   install(TARGETS librbd_replay librbd_replay_ios DESTINATION lib)
+  install(TARGETS librbd_replay_prep DESTINATION bin)
 
 endif(${WITH_RBD})
 
