@@ -1101,7 +1101,7 @@ public:
 };
 
 // FrontendPauser implementation for RGWRealmReloader
-class RGWFrontendPauser : public RGWRealmReloader::FrontendPauser {
+class RGWFrontendPauser : public RGWRealmReloader::Pauser {
   std::list<RGWFrontend*> &frontends;
  public:
   RGWFrontendPauser(std::list<RGWFrontend*> &frontends)
