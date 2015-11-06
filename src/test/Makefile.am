@@ -79,6 +79,7 @@ check_SCRIPTS += \
 	test/mon/mkfs.sh \
 	test/mon/mon-scrub.sh \
 	test/osd/osd-scrub-repair.sh \
+	test/osd/osd-scrub-snaps.sh \
 	test/osd/osd-config.sh \
 	test/osd/osd-bench.sh \
 	test/osd/osd-copy-from.sh \
@@ -466,4 +467,5 @@ noinst_HEADERS += \
 	test/system/st_rados_watch.h \
 	test/system/systest_runnable.h \
 	test/system/systest_settings.h \
-	test/unit.h
+	test/unit.h \
+	test/journal/RadosTestFixture.h

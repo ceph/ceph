@@ -184,6 +184,13 @@ ceph_test_cls_numops_LDADD = \
 ceph_test_cls_numops_CXXFLAGS = $(UNITTEST_CXXFLAGS)
 bin_DEBUGPROGRAMS += ceph_test_cls_numops
 
+ceph_test_cls_journal_SOURCES = test/cls_journal/test_cls_journal.cc
+ceph_test_cls_journal_LDADD = \
+        libcls_journal_client.la $(LIBRADOS) \
+        $(LIBCOMMON) $(CRYPTO_LIBS) $(UNITTEST_LDADD) $(RADOS_TEST_LDADD) -luuid
+ceph_test_cls_journal_CXXFLAGS = $(UNITTEST_CXXFLAGS)
+bin_DEBUGPROGRAMS += ceph_test_cls_journal
+
 ceph_test_rados_api_cmd_SOURCES = test/librados/cmd.cc
 ceph_test_rados_api_cmd_LDADD = \
 	$(LIBCOMMON) $(LIBRADOS) $(CRYPTO_LIBS) \
@@ -283,6 +290,8 @@ librados_test_stub_la_SOURCES = \
 	test/librados_test_stub/TestWatchNotify.cc
 noinst_HEADERS += \
 	test/librados_test_stub/LibradosTestStub.h \
+	test/librados_test_stub/MockTestMemIoCtxImpl.h \
+	test/librados_test_stub/MockTestMemRadosClient.h \
 	test/librados_test_stub/TestClassHandler.h \
 	test/librados_test_stub/TestRadosClient.h \
 	test/librados_test_stub/TestMemRadosClient.h \
@@ -291,6 +300,24 @@ noinst_HEADERS += \
 	test/librados_test_stub/TestIoCtxImpl.h
 noinst_LTLIBRARIES += librados_test_stub.la
 
+unittest_journal_SOURCES = \
+	test/journal/test_main.cc \
+        test/journal/test_Entry.cc \
+	test/journal/test_FutureImpl.cc \
+	test/journal/test_Journaler.cc \
+	test/journal/test_JournalMetadata.cc \
+	test/journal/test_JournalPlayer.cc \
+	test/journal/test_JournalRecorder.cc \
+	test/journal/test_JournalTrimmer.cc \
+	test/journal/test_ObjectPlayer.cc \
+	test/journal/test_ObjectRecorder.cc \
+	test/journal/RadosTestFixture.cc
+unittest_journal_CXXFLAGS = $(UNITTEST_CXXFLAGS)
+unittest_journal_LDADD = \
+	libjournal.la libcls_journal_client.la \
+	librados_test_stub.la librados_internal.la \
+	$(UNITTEST_LDADD) $(CEPH_GLOBAL) $(RADOS_TEST_LDADD)
+check_TESTPROGRAMS += unittest_journal
 
 if WITH_RBD
 ceph_smalliobenchrbd_SOURCES = \
@@ -361,12 +388,6 @@ noinst_HEADERS += \
 	test/librbd/mock/MockImageCtx.h \
 	test/librbd/mock/MockImageWatcher.h \
 	test/librbd/mock/MockObjectMap.h
-
-if WITH_LTTNG
-unittest_librbd_LDADD += $(LIBRBD_TP)
-ceph_test_librbd_LDADD += $(LIBRBD_TP)
-ceph_test_librbd_api_LDADD += $(LIBRBD_TP)
-endif
 
 if LINUX
 ceph_test_librbd_fsx_SOURCES = test/librbd/fsx.cc
@@ -450,12 +471,13 @@ ceph_test_libcephfs_SOURCES = \
 	test/libcephfs/test.cc \
 	test/libcephfs/readdir_r_cb.cc \
 	test/libcephfs/caps.cc \
-	test/libcephfs/multiclient.cc
+	test/libcephfs/multiclient.cc \
+	test/libcephfs/access.cc
 if LINUX
 ceph_test_libcephfs_SOURCES += test/libcephfs/flock.cc
 endif # LINUX
 
-ceph_test_libcephfs_LDADD = $(LIBCEPHFS) $(UNITTEST_LDADD)
+ceph_test_libcephfs_LDADD = $(LIBRADOS) $(LIBCEPHFS) $(LIBCOMMON) $(UNITTEST_LDADD)
 ceph_test_libcephfs_CXXFLAGS = $(UNITTEST_CXXFLAGS)
 bin_DEBUGPROGRAMS += ceph_test_libcephfs
 
@@ -532,6 +554,15 @@ ceph_test_rgw_manifest_LDADD = \
 
 ceph_test_rgw_manifest_CXXFLAGS = $(UNITTEST_CXXFLAGS)
 bin_DEBUGPROGRAMS += ceph_test_rgw_manifest
+
+ceph_test_rgw_obj_SOURCES = test/rgw/test_rgw_obj.cc
+ceph_test_rgw_obj_LDADD = \
+	$(LIBRADOS) $(LIBRGW) $(LIBRGW_DEPS) $(CEPH_GLOBAL) \
+	$(UNITTEST_LDADD) $(CRYPTO_LIBS) \
+	-lcurl -luuid -lexpat
+
+ceph_test_rgw_obj_CXXFLAGS = $(UNITTEST_CXXFLAGS)
+bin_DEBUGPROGRAMS += ceph_test_rgw_obj
 
 ceph_test_cls_rgw_meta_SOURCES = test/test_rgw_admin_meta.cc
 ceph_test_cls_rgw_meta_LDADD = \

@@ -18,6 +18,7 @@
 #include "common/errno.h"
 #include "common/ceph_argparse.h"
 #include "common/common_init.h"
+#include "common/TracepointProvider.h"
 #include "include/rados/librados.h"
 #include "include/rados/librados.hpp"
 #include "include/types.h"
@@ -39,7 +40,11 @@
 #include <stdexcept>
 
 #ifdef WITH_LTTNG
+#define TRACEPOINT_DEFINE
+#define TRACEPOINT_PROBE_DYNAMIC_LINKAGE
 #include "tracing/librados.h"
+#undef TRACEPOINT_PROBE_DYNAMIC_LINKAGE
+#undef TRACEPOINT_DEFINE
 #else
 #define tracepoint(...)
 #endif
@@ -56,6 +61,12 @@ using std::runtime_error;
 #define dout_prefix *_dout << "librados: "
 
 #define RADOS_LIST_MAX_ENTRIES 1024
+
+namespace {
+
+TracepointProvider::Traits tracepoint_traits("librados_tp.so", "rados_tracing");
+
+} // anonymous namespace
 
 /*
  * Structure of this file
@@ -419,9 +430,16 @@ void librados::ObjectWriteOperation::omap_rm_keys(
 }
 
 void librados::ObjectWriteOperation::copy_from(const std::string& src,
-					       const IoCtx& src_ioctx,
-					       uint64_t src_version,
-					       uint32_t src_fadvise_flags)
+                                               const IoCtx& src_ioctx,
+                                               uint64_t src_version)
+{
+  copy_from2(src, src_ioctx, src_version, 0);
+}
+
+void librados::ObjectWriteOperation::copy_from2(const std::string& src,
+					        const IoCtx& src_ioctx,
+					        uint64_t src_version,
+					        uint32_t src_fadvise_flags)
 {
   ::ObjectOperation *o = (::ObjectOperation *)impl;
   o->copy_from(object_t(src), src_ioctx.io_ctx_impl->snap_seq,
@@ -493,6 +511,18 @@ void librados::ObjectWriteOperation::set_alloc_hint(
 {
   ::ObjectOperation *o = (::ObjectOperation *)impl;
   o->set_alloc_hint(expected_object_size, expected_write_size);
+}
+
+void librados::ObjectWriteOperation::cache_pin()
+{
+  ::ObjectOperation *o = (::ObjectOperation *)impl;
+  o->cache_pin();
+}
+
+void librados::ObjectWriteOperation::cache_unpin()
+{
+  ::ObjectOperation *o = (::ObjectOperation *)impl;
+  o->cache_unpin();
 }
 
 librados::WatchCtx::
@@ -1319,6 +1349,8 @@ static int translate_flags(int flags)
     op_flags |= CEPH_OSD_FLAG_SKIPRWLOCKS;
   if (flags & librados::OPERATION_IGNORE_OVERLAY)
     op_flags |= CEPH_OSD_FLAG_IGNORE_OVERLAY;
+  if (flags & librados::OPERATION_FULL_TRY)
+    op_flags |= CEPH_OSD_FLAG_FULL_TRY;
 
   return op_flags;
 }
@@ -1552,6 +1584,12 @@ int librados::IoCtx::list_lockers(const std::string &oid, const std::string &nam
   return tmp_lockers.size();
 }
 
+librados::NObjectIterator librados::IoCtx::nobjects_begin()
+{
+  bufferlist bl;
+  return nobjects_begin(bl);
+}
+
 librados::NObjectIterator librados::IoCtx::nobjects_begin(
     const bufferlist &filter)
 {
@@ -1563,6 +1601,12 @@ librados::NObjectIterator librados::IoCtx::nobjects_begin(
   }
   iter.get_next();
   return iter;
+}
+
+librados::NObjectIterator librados::IoCtx::nobjects_begin(uint32_t pos)
+{
+  bufferlist bl;
+  return nobjects_begin(pos, bl);
 }
 
 librados::NObjectIterator librados::IoCtx::nobjects_begin(
@@ -1767,6 +1811,15 @@ int librados::IoCtx::notify2(const string& oid, bufferlist& bl,
   return io_ctx_impl->notify(obj, bl, timeout_ms, preplybl, NULL, NULL);
 }
 
+int librados::IoCtx::aio_notify(const string& oid, AioCompletion *c,
+                                bufferlist& bl, uint64_t timeout_ms,
+                                bufferlist *preplybl)
+{
+  object_t obj(oid);
+  return io_ctx_impl->aio_notify(obj, c->pc, bl, timeout_ms, preplybl, NULL,
+                                 NULL);
+}
+
 void librados::IoCtx::notify_ack(const std::string& o,
 				 uint64_t notify_id, uint64_t handle,
 				 bufferlist& bl)
@@ -1827,6 +1880,18 @@ void librados::IoCtx::set_assert_src_version(const std::string& oid, uint64_t ve
 {
   object_t obj(oid);
   io_ctx_impl->set_assert_src_version(obj, ver);
+}
+
+int librados::IoCtx::cache_pin(const string& oid)
+{
+  object_t obj(oid);
+  return io_ctx_impl->cache_pin(obj);
+}
+
+int librados::IoCtx::cache_unpin(const string& oid)
+{
+  object_t obj(oid);
+  return io_ctx_impl->cache_unpin(obj);
 }
 
 void librados::IoCtx::locator_set_key(const string& key)
@@ -2204,10 +2269,9 @@ librados::ObjectOperation::~ObjectOperation()
 }
 
 ///////////////////////////// C API //////////////////////////////
-static
-int rados_create_common(rados_t *pcluster,
-			const char * const clustername,
-			CephInitParameters *iparams)
+
+static CephContext *rados_create_cct(const char * const clustername,
+                                     CephInitParameters *iparams)
 {
   // missing things compared to global_init:
   // g_ceph_context, g_conf, g_lockdep, signal handlers
@@ -2217,26 +2281,27 @@ int rados_create_common(rados_t *pcluster,
   cct->_conf->parse_env(); // environment variables override
   cct->_conf->apply_changes(NULL);
 
-  librados::RadosClient *radosp = new librados::RadosClient(cct);
-  *pcluster = (void *)radosp;
+  TracepointProvider::initialize<tracepoint_traits>(cct);
+  return cct;
+}
+
+extern "C" int rados_create(rados_t *pcluster, const char * const id)
+{
+  CephInitParameters iparams(CEPH_ENTITY_TYPE_CLIENT);
+  if (id) {
+    iparams.name.set(CEPH_ENTITY_TYPE_CLIENT, id);
+  }
+  CephContext *cct = rados_create_cct("ceph", &iparams);
+
+  tracepoint(librados, rados_create_enter, id);
+  *pcluster = reinterpret_cast<rados_t>(new librados::RadosClient(cct));
+  tracepoint(librados, rados_create_exit, 0, *pcluster);
 
   cct->put();
   return 0;
 }
 
-extern "C" int rados_create(rados_t *pcluster, const char * const id)
-{
-  tracepoint(librados, rados_create_enter, id);
-  CephInitParameters iparams(CEPH_ENTITY_TYPE_CLIENT);
-  if (id) {
-    iparams.name.set(CEPH_ENTITY_TYPE_CLIENT, id);
-  }
-  int retval = rados_create_common(pcluster, "ceph", &iparams);
-  tracepoint(librados, rados_create_exit, retval, *pcluster);
-  return retval;
-}
-
-// as above, but 
+// as above, but
 // 1) don't assume 'client.'; name is a full type.id namestr
 // 2) allow setting clustername
 // 3) flags is for future expansion (maybe some of the global_init()
@@ -2245,16 +2310,21 @@ extern "C" int rados_create(rados_t *pcluster, const char * const id)
 extern "C" int rados_create2(rados_t *pcluster, const char *const clustername,
 			     const char * const name, uint64_t flags)
 {
-  tracepoint(librados, rados_create2_enter, clustername, name, flags);
   // client is assumed, but from_str will override
+  int retval = 0;
   CephInitParameters iparams(CEPH_ENTITY_TYPE_CLIENT);
   if (!name || !iparams.name.from_str(name)) {
-    tracepoint(librados, rados_create2_exit, -EINVAL, *pcluster);
-    return -EINVAL;
+    retval = -EINVAL;
   }
 
-  int retval = rados_create_common(pcluster, clustername, &iparams);
+  CephContext *cct = rados_create_cct(clustername, &iparams);
+  tracepoint(librados, rados_create2_enter, clustername, name, flags);
+  if (retval == 0) {
+    *pcluster = reinterpret_cast<rados_t>(new librados::RadosClient(cct));
+  }
   tracepoint(librados, rados_create2_exit, retval, *pcluster);
+
+  cct->put();
   return retval;
 }
 
@@ -2264,8 +2334,10 @@ extern "C" int rados_create2(rados_t *pcluster, const char *const clustername,
  */
 extern "C" int rados_create_with_context(rados_t *pcluster, rados_config_t cct_)
 {
-  tracepoint(librados, rados_create_with_context_enter, cct_);
   CephContext *cct = (CephContext *)cct_;
+  TracepointProvider::initialize<tracepoint_traits>(cct);
+
+  tracepoint(librados, rados_create_with_context_enter, cct_);
   librados::RadosClient *radosp = new librados::RadosClient(cct);
   *pcluster = (void *)radosp;
   tracepoint(librados, rados_create_with_context_exit, 0, *pcluster);
@@ -4009,6 +4081,28 @@ extern "C" int rados_notify2(rados_ioctx_t io, const char *o,
   return ret;
 }
 
+extern "C" int rados_aio_notify(rados_ioctx_t io, const char *o,
+                                rados_completion_t completion,
+                                const char *buf, int buf_len,
+                                uint64_t timeout_ms, char **reply_buffer,
+                                size_t *reply_buffer_len)
+{
+  tracepoint(librados, rados_aio_notify_enter, io, o, completion, buf, buf_len,
+             timeout_ms);
+  librados::IoCtxImpl *ctx = (librados::IoCtxImpl *)io;
+  object_t oid(o);
+  bufferlist bl;
+  if (buf) {
+    bl.push_back(buffer::copy(buf, buf_len));
+  }
+  librados::AioCompletionImpl *c =
+    reinterpret_cast<librados::AioCompletionImpl*>(completion);
+  int ret = ctx->aio_notify(oid, c, bl, timeout_ms, NULL, reply_buffer,
+                            reply_buffer_len);
+  tracepoint(librados, rados_aio_notify_exit, ret);
+  return ret;
+}
+
 extern "C" int rados_notify_ack(rados_ioctx_t io, const char *o,
 				uint64_t notify_id, uint64_t handle,
 				const char *buf, int buf_len)
@@ -4760,6 +4854,26 @@ extern "C" int rados_aio_read_op_operate(rados_read_op_t read_op,
   int retval = ctx->aio_operate_read(obj, (::ObjectOperation *)read_op,
 				     c, translate_flags(flags), NULL);
   tracepoint(librados, rados_aio_read_op_operate_exit, retval);
+  return retval;
+}
+
+extern "C" int rados_cache_pin(rados_ioctx_t io, const char *o)
+{
+  tracepoint(librados, rados_cache_pin_enter, io, o);
+  librados::IoCtxImpl *ctx = (librados::IoCtxImpl *)io;
+  object_t oid(o);
+  int retval = ctx->cache_pin(oid);
+  tracepoint(librados, rados_cache_pin_exit, retval);
+  return retval;
+}
+
+extern "C" int rados_cache_unpin(rados_ioctx_t io, const char *o)
+{
+  tracepoint(librados, rados_cache_unpin_enter, io, o);
+  librados::IoCtxImpl *ctx = (librados::IoCtxImpl *)io;
+  object_t oid(o);
+  int retval = ctx->cache_unpin(oid);
+  tracepoint(librados, rados_cache_unpin_exit, retval);
   return retval;
 }
 

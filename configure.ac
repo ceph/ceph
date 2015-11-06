@@ -8,7 +8,7 @@ AC_PREREQ(2.59)
 # VERSION define is not used by the code.  It gets a version string
 # from 'git describe'; see src/ceph_ver.[ch]
 
-AC_INIT([ceph], [9.0.3], [ceph-devel@vger.kernel.org])
+AC_INIT([ceph], [9.2.0], [ceph-devel@vger.kernel.org])
 
 AX_CXX_COMPILE_STDCXX_11(, mandatory)
 
@@ -46,13 +46,12 @@ AC_CANONICAL_TARGET
 m4_ifdef([AM_PROG_AR], [AM_PROG_AR])
 
 # Automake
-AM_INIT_AUTOMAKE
 AM_PROG_CC_C_O
 AM_PROG_LIBTOOL
 AM_PROG_AS
 
 
-AM_INIT_AUTOMAKE([foreign parallel-tests])
+AM_INIT_AUTOMAKE([foreign parallel-tests tar-ustar])
 # enable make V=0 (if automake >1.11)
 m4_ifdef([AM_SILENT_RULES], [AM_SILENT_RULES([yes])])
 
@@ -277,19 +276,19 @@ ACX_PTHREAD
 
 #Linux only dependencies
 if test x"$linux" = x"yes"; then
-  # libblkid
-  AC_CHECK_HEADER([blkid/blkid.h], [],
-    AC_MSG_ERROR([blkid/blkid.h not found (libblkid-dev, libblkid-devel)]))
-  AC_CHECK_LIB([blkid], [blkid_get_cache], [true],
-    AC_MSG_FAILURE([libblkid not found]))
-  AC_CHECK_LIB([blkid], [blkid_find_dev_with_tag], [true],
-    AC_MSG_FAILURE([libblkid not found]))
-  AC_CHECK_LIB([blkid], [blkid_dev_devname], [true],
-    AC_MSG_FAILURE([libblkid not found]))
 
   # rbd {map,unmap,showmapped} dependencies, Linux only
   if test x"$with_rbd" = x"yes"; then
+
     # libblkid
+    AC_CHECK_HEADER([blkid/blkid.h], [],
+      AC_MSG_ERROR([blkid/blkid.h not found (libblkid-dev, libblkid-devel)]))
+    AC_CHECK_LIB([blkid], [blkid_get_cache], [true],
+      AC_MSG_FAILURE([libblkid not found]))
+    AC_CHECK_LIB([blkid], [blkid_find_dev_with_tag], [true],
+      AC_MSG_FAILURE([libblkid not found]))
+    AC_CHECK_LIB([blkid], [blkid_dev_devname], [true],
+      AC_MSG_FAILURE([libblkid not found]))
     AC_CHECK_LIB([blkid], [blkid_devno_to_wholedisk], [true],
       AC_MSG_FAILURE([libblkid not found]))
 
@@ -791,8 +790,6 @@ AC_ARG_WITH([librocksdb-static],
 AS_IF([test "x$with_librocksdb_static" = "xcheck" -a "x$HAVE_CXX11" = "x1" ],
             [with_librocksdb_static="yes"])
 AS_IF([test "x$with_librocksdb_static" = "xyes"],
-            [AC_CONFIG_SUBDIRS([src/rocksdb])])
-AS_IF([test "x$with_librocksdb_static" = "xyes"],
             [AC_DEFINE([HAVE_LIBROCKSDB], [1], [Defined if you have librocksdb enabled])])
 AM_CONDITIONAL(WITH_SLIBROCKSDB, [ test "x$with_librocksdb_static" = "xyes" ])
 AM_CONDITIONAL(WITH_LIBROCKSDB, [ test "x$with_librocksdb_static" = "xyes" -o "x$with_librocksdb" = "xyes" ])
@@ -964,6 +961,10 @@ AC_CHECK_FUNC([sync_file_range],
 AC_CHECK_FUNC([fallocate],
 	[AC_DEFINE([CEPH_HAVE_FALLOCATE], [], [fallocate(2) is supported])],
 	[])
+
+# mallinfo
+AC_CHECK_FUNC([mallinfo],
+  [AC_DEFINE(HAVE_MALLINFO, 1, [Define if you have mallinfo])])
 
 # getgrouplist
 AC_CHECK_FUNCS([getgrouplist])
@@ -1337,7 +1338,6 @@ AC_CONFIG_FILES([Makefile
 	src/ocf/ceph
 	src/ocf/rbd
 	src/java/Makefile
-	src/tracing/Makefile
 	systemd/Makefile
 	man/Makefile
 	doc/Makefile

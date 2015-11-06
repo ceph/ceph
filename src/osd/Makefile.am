@@ -8,7 +8,7 @@ noinst_LTLIBRARIES += libosd_types.la
 if ENABLE_SERVER
 if WITH_OSD
 
-libosd_la_SOURCES = \
+libosd_a_SOURCES = \
 	osd/PG.cc \
 	osd/ReplicatedPG.cc \
 	osd/ReplicatedBackend.cc \
@@ -26,15 +26,9 @@ libosd_la_SOURCES = \
 	osd/SnapMapper.cc \
 	objclass/class_api.cc
 
-libosd_la_CXXFLAGS = ${AM_CXXFLAGS}
-if WITH_KINETIC
-libosd_la_CXXFLAGS += -std=gnu++11
-endif
-libosd_la_LIBADD = $(LIBOSDC) $(LIBOS) $(LIBOSD_TYPES) $(LIBOS_TYPES)
-if WITH_LTTNG
-libosd_la_LIBADD += $(LIBOSD_TP)
-endif
-noinst_LTLIBRARIES += libosd.la
+libosd_a_CXXFLAGS = ${AM_CXXFLAGS}
+libosd_a_LIBADD =
+noinst_LIBRARIES += libosd.a
 
 noinst_HEADERS += \
 	osd/ClassHandler.h \

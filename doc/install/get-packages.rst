@@ -70,13 +70,13 @@ APT
 
 To install the ``release.asc`` key, execute the following::
 
-	wget -q -O- 'https://git.ceph.com/git/?p=ceph.git;a=blob_plain;f=keys/release.asc' | sudo apt-key add -
+	wget -q -O- 'https://download.ceph.com/keys/release.asc' | sudo apt-key add -
 
 
 To install the ``autobuild.asc`` key, execute the following
 (QA and developers only)::
 
-	wget -q -O- 'https://git.ceph.com/git/?p=ceph.git;a=blob_plain;f=keys/autobuild.asc' | sudo apt-key add -
+	wget -q -O- 'https://download.ceph.com/keys/autobuild.asc' | sudo apt-key add -
 
 
 RPM
@@ -84,12 +84,34 @@ RPM
 
 To install the ``release.asc`` key, execute the following::
 
-	sudo rpm --import 'https://git.ceph.com/git/?p=ceph.git;a=blob_plain;f=keys/release.asc'
+	sudo rpm --import 'https://download.ceph.com/keys/release.asc'
 
 To install the ``autobuild.asc`` key, execute the following
 (QA and developers only)::
 
-	sudo rpm --import 'https://git.ceph.com/git/?p=ceph.git;a=blob_plain;f=keys/autobuild.asc'
+	sudo rpm --import 'https://download.ceph.com/keys/autobuild.asc'
+
+
+.. _mirrors:
+
+Mirrors
+=======
+
+For improved user experience multiple mirrors for Ceph are available around the
+world.
+
+These mirrors are available on the following locations:
+
+- **EU**: http://eu.ceph.com/
+- **AU**: http://au.ceph.com/
+
+You can replace all ceph.com URLs with any of the mirrors, for example:
+
+  http://download.ceph.com/debian-hammer
+
+Change this to:
+
+  http://eu.ceph.com/debian-hammer
 
 
 Add Ceph
@@ -132,9 +154,7 @@ The major releases of Ceph include:
   was retired in May 2015), so we recommend that users upgrade to a more
   recent version.
 
-.. tip:: For European users, there is also a mirror in the Netherlands at:
-   http://eu.ceph.com/
-
+.. tip:: For international users, there are various mirrors globally. See :ref:`mirrors`.
 
 Debian Packages
 ---------------
@@ -174,6 +194,8 @@ of Debian and Ubuntu releases supported. ::
 
 	echo deb http://download.ceph.com/debian-testing/ $(lsb_release -sc) main | sudo tee /etc/apt/sources.list.d/ceph.list
 
+.. tip:: For international users, there are various mirrors globally. See the
+   information at the start of this page.
 
 RPM Packages
 ------------
@@ -194,7 +216,7 @@ take priority over standard packages, so you must ensure that you set
 	priority=2
 	gpgcheck=1
 	type=rpm-md
-	gpgkey=https://git.ceph.com/git/?p=ceph.git;a=blob_plain;f=keys/release.asc
+	gpgkey=https://download.ceph.com/keys/release.asc
 
 	[ceph-noarch]
 	name=Ceph noarch packages
@@ -203,7 +225,7 @@ take priority over standard packages, so you must ensure that you set
 	priority=2
 	gpgcheck=1
 	type=rpm-md
-	gpgkey=https://git.ceph.com/git/?p=ceph.git;a=blob_plain;f=keys/release.asc
+	gpgkey=https://download.ceph.com/keys/release.asc
 
 	[ceph-source]
 	name=Ceph source packages
@@ -212,7 +234,7 @@ take priority over standard packages, so you must ensure that you set
 	priority=2
 	gpgcheck=1
 	type=rpm-md
-	gpgkey=https://git.ceph.com/git/?p=ceph.git;a=blob_plain;f=keys/release.asc
+	gpgkey=https://download.ceph.com/keys/release.asc
 
 
 For development release packages, you may specify the repository
@@ -225,7 +247,7 @@ for development releases instead. ::
 	priority=2
 	gpgcheck=1
 	type=rpm-md
-	gpgkey=https://git.ceph.com/git/?p=ceph.git;a=blob_plain;f=keys/release.asc
+	gpgkey=https://download.ceph.com/keys/release.asc
 
 	[ceph-noarch]
 	name=Ceph noarch packages
@@ -234,7 +256,7 @@ for development releases instead. ::
 	priority=2
 	gpgcheck=1
 	type=rpm-md
-	gpgkey=https://git.ceph.com/git/?p=ceph.git;a=blob_plain;f=keys/release.asc
+	gpgkey=https://download.ceph.com/keys/release.asc
 
 	[ceph-source]
 	name=Ceph source packages
@@ -243,7 +265,7 @@ for development releases instead. ::
 	priority=2
 	gpgcheck=1
 	type=rpm-md
-	gpgkey=https://git.ceph.com/git/?p=ceph.git;a=blob_plain;f=keys/release.asc
+	gpgkey=https://download.ceph.com/keys/release.asc
 
 
 For specific packages, you may retrieve them by specifically downloading the
@@ -262,7 +284,7 @@ You can download the RPMs directly from::
 
      http://download.ceph.com/rpm-testing
 
-
+.. tip:: For international users, there are various mirrors globally. See :ref:`mirrors`.
 Add Ceph Development
 ====================
 
@@ -302,7 +324,7 @@ install. ::
 	enabled=0
 	gpgcheck=1
 	type=rpm-md
-	gpgkey=https://git.ceph.com/git/?p=ceph.git;a=blob_plain;f=keys/autobuild.asc
+	gpgkey=https://download.ceph.com/keys/autobuild.asc
 
 
 You may view http://gitbuilder.ceph.com directory to see which distributions
@@ -344,7 +366,7 @@ http://gitbuilder.ceph.com directory to see which distributions Ceph supports.
 	priority=2
 	gpgcheck=1
 	type=rpm-md
-	gpgkey=https://git.ceph.com/git/?p=ceph.git;a=blob_plain;f=keys/autobuild.asc
+	gpgkey=https://download.ceph.com/keys/autobuild.asc
 
 	[apache2-ceph-source]
 	name=Apache source packages for Ceph
@@ -353,7 +375,7 @@ http://gitbuilder.ceph.com directory to see which distributions Ceph supports.
 	priority=2
 	gpgcheck=1
 	type=rpm-md
-	gpgkey=https://git.ceph.com/git/?p=ceph.git;a=blob_plain;f=keys/autobuild.asc
+	gpgkey=https://download.ceph.com/keys/autobuild.asc
 
 
 Repeat the forgoing process by creating a ``ceph-fastcgi.repo`` file. ::
@@ -365,7 +387,7 @@ Repeat the forgoing process by creating a ``ceph-fastcgi.repo`` file. ::
 	priority=2
 	gpgcheck=1
 	type=rpm-md
-	gpgkey=https://git.ceph.com/git/?p=ceph.git;a=blob_plain;f=keys/autobuild.asc
+	gpgkey=https://download.ceph.com/keys/autobuild.asc
 
 	[fastcgi-ceph-noarch]
 	name=FastCGI noarch packages for Ceph
@@ -374,7 +396,7 @@ Repeat the forgoing process by creating a ``ceph-fastcgi.repo`` file. ::
 	priority=2
 	gpgcheck=1
 	type=rpm-md
-	gpgkey=https://git.ceph.com/git/?p=ceph.git;a=blob_plain;f=keys/autobuild.asc
+	gpgkey=https://download.ceph.com/keys/autobuild.asc
 
 	[fastcgi-ceph-source]
 	name=FastCGI source packages for Ceph
@@ -383,7 +405,7 @@ Repeat the forgoing process by creating a ``ceph-fastcgi.repo`` file. ::
 	priority=2
 	gpgcheck=1
 	type=rpm-md
-	gpgkey=https://git.ceph.com/git/?p=ceph.git;a=blob_plain;f=keys/autobuild.asc
+	gpgkey=https://download.ceph.com/keys/autobuild.asc
 
 
 Download Packages
@@ -461,5 +483,5 @@ line to get the short codename. ::
 
 
 .. _Install Ceph Object Storage: ../install-storage-cluster
-.. _the testing Debian repository: http://ceph.com/debian-testing/dists
+.. _the testing Debian repository: http://download.ceph.com/debian-testing/dists
 .. _the gitbuilder page: http://gitbuilder.ceph.com

@@ -5,6 +5,7 @@ DIST_SUBDIRS =
 BUILT_SOURCES =
 EXTRA_DIST =
 CLEANFILES =
+dist_noinst_DATA =
 
 noinst_HEADERS =
 bin_PROGRAMS =
@@ -169,12 +170,12 @@ LIBCRUSH = libcrush.la
 LIBCOMPRESSOR = libcompressor.la -lsnappy
 LIBJSON_SPIRIT = libjson_spirit.la
 LIBLOG = liblog.la
-LIBOS = libos.la
-LIBOS_TYPES = libos_types.la
-LIBOSD = libosd.la
+LIBOS = libos.a
+LIBOS_TYPES = libos_types.a
+LIBOSD = libosd.a
 LIBOSD_TYPES = libosd_types.la
 LIBOSDC = libosdc.la
-LIBMON = libmon.la
+LIBMON = libmon.a
 LIBMON_TYPES = libmon_types.la
 LIBMDS = libmds.la
 LIBCLIENT = libclient.la
@@ -188,10 +189,6 @@ LIBRBD_TYPES = librbd_types.la
 LIBKRBD = libkrbd.la
 LIBCEPHFS = libcephfs.la
 LIBERASURE_CODE = liberasure_code.la
-LIBOSD_TP = tracing/libosd_tp.la
-LIBRADOS_TP = tracing/librados_tp.la
-LIBRBD_TP = tracing/librbd_tp.la
-LIBOS_TP = tracing/libos_tp.la
 
 if WITH_LIBAIO
 LIBOS += -laio
@@ -200,10 +197,6 @@ endif # WITH_LIBAIO
 if WITH_LIBZFS
 LIBOS += libos_zfs.a -lzfs
 endif # WITH_LIBZFS
-
-if WITH_LIBROCKSDB
-LIBOS += libos_rocksdb.la
-endif # WITH_LIBROCKSDB
 
 if WITH_TCMALLOC_MINIMAL
 LIBPERFGLUE += -ltcmalloc_minimal
@@ -232,8 +225,17 @@ LIBMON += $(LIBPERFGLUE)
 LIBOSD += $(LIBPERFGLUE)
 LIBMDS += $(LIBPERFGLUE)
 
-# Always use system leveldb
-LIBOS += -lleveldb -lsnappy
+# OSD needs types
+LIBOSD += $(LIBOSD_TYPES) $(LIBOS_TYPES)
+
+# libos linking order is ornery
+LIBOS += $(LIBOS_TYPES)
+if WITH_SLIBROCKSDB
+LIBOS += rocksdb/librocksdb.a
+endif
+LIBOS += -lbz2 -lz -lleveldb -lsnappy
+
+LIBMON += $(LIBMON_TYPES)
 
 # Use this for binaries requiring libglobal
 CEPH_GLOBAL = $(LIBGLOBAL) $(LIBCOMMON) $(PTHREAD_LIBS) -lm $(CRYPTO_LIBS) $(EXTRALIBS)

@@ -187,7 +187,9 @@ void Paxos::collect(version_t oldpn)
 
   // set timeout event
   collect_timeout_event = new C_CollectTimeout(this);
-  mon->timer.add_event_after(g_conf->mon_accept_timeout, collect_timeout_event);
+  mon->timer.add_event_after(g_conf->mon_accept_timeout_factor *
+			     g_conf->mon_lease,
+			     collect_timeout_event);
 }
 
 
@@ -686,7 +688,9 @@ void Paxos::begin(bufferlist& v)
 
   // set timeout event
   accept_timeout_event = new C_AcceptTimeout(this);
-  mon->timer.add_event_after(g_conf->mon_accept_timeout, accept_timeout_event);
+  mon->timer.add_event_after(g_conf->mon_accept_timeout_factor *
+			     g_conf->mon_lease,
+			     accept_timeout_event);
 }
 
 // peon
@@ -972,7 +976,8 @@ void Paxos::extend_lease()
   //  if old timeout is still in place, leave it.
   if (!lease_ack_timeout_event) {
     lease_ack_timeout_event = new C_LeaseAckTimeout(this);
-    mon->timer.add_event_after(g_conf->mon_lease_ack_timeout, 
+    mon->timer.add_event_after(g_conf->mon_lease_ack_timeout_factor *
+			       g_conf->mon_lease,
 			       lease_ack_timeout_event);
   }
 
@@ -980,7 +985,7 @@ void Paxos::extend_lease()
   lease_renew_event = new C_LeaseRenew(this);
   utime_t at = lease_expire;
   at -= g_conf->mon_lease;
-  at += g_conf->mon_lease_renew_interval;
+  at += g_conf->mon_lease_renew_interval_factor * g_conf->mon_lease;
   mon->timer.add_event_at(at, lease_renew_event);
 }
 
@@ -1163,7 +1168,9 @@ void Paxos::reset_lease_timeout()
   if (lease_timeout_event)
     mon->timer.cancel_event(lease_timeout_event);
   lease_timeout_event = new C_LeaseTimeout(this);
-  mon->timer.add_event_after(g_conf->mon_lease_ack_timeout, lease_timeout_event);
+  mon->timer.add_event_after(g_conf->mon_lease_ack_timeout_factor *
+			     g_conf->mon_lease,
+			     lease_timeout_event);
 }
 
 void Paxos::lease_timeout()

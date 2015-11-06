@@ -922,6 +922,8 @@ struct pg_pool_t {
     FLAG_NOPGCHANGE = 1<<5, // pool's pg and pgp num can't be changed
     FLAG_NOSIZECHANGE = 1<<6, // pool's size and min size can't be changed
     FLAG_WRITE_FADVISE_DONTNEED = 1<<7, // write mode with LIBRADOS_OP_FLAG_FADVISE_DONTNEED
+    FLAG_NOSCRUB = 1<<8, // block periodic scrub
+    FLAG_NODEEP_SCRUB = 1<<9, // block periodic deep-scrub
   };
 
   static const char *get_flag_name(int f) {
@@ -934,6 +936,8 @@ struct pg_pool_t {
     case FLAG_NOPGCHANGE: return "nopgchange";
     case FLAG_NOSIZECHANGE: return "nosizechange";
     case FLAG_WRITE_FADVISE_DONTNEED: return "write_fadvise_dontneed";
+    case FLAG_NOSCRUB: return "noscrub";
+    case FLAG_NODEEP_SCRUB: return "nodeep-scrub";
     default: return "???";
     }
   }
@@ -968,6 +972,10 @@ struct pg_pool_t {
       return FLAG_NOSIZECHANGE;
     if (name == "write_fadvise_dontneed")
       return FLAG_WRITE_FADVISE_DONTNEED;
+    if (name == "noscrub")
+      return FLAG_NOSCRUB;
+    if (name == "nodeep-scrub")
+      return FLAG_NODEEP_SCRUB;
     return 0;
   }
 
@@ -1350,6 +1358,7 @@ struct object_stat_sum_t {
   int32_t num_flush_mode_low;   // 1 when in low flush mode, otherwise 0
   int32_t num_evict_mode_some;  // 1 when in evict some mode, otherwise 0
   int32_t num_evict_mode_full;  // 1 when in evict full mode, otherwise 0
+  int64_t num_objects_pinned;
 
   object_stat_sum_t()
     : num_bytes(0),
@@ -1374,7 +1383,8 @@ struct object_stat_sum_t {
       num_evict_kb(0),
       num_promote(0),
       num_flush_mode_high(0), num_flush_mode_low(0),
-      num_evict_mode_some(0), num_evict_mode_full(0)
+      num_evict_mode_some(0), num_evict_mode_full(0),
+      num_objects_pinned(0)
   {}
 
   void floor(int64_t f) {
@@ -1411,6 +1421,7 @@ struct object_stat_sum_t {
     FLOOR(num_flush_mode_low);
     FLOOR(num_evict_mode_some);
     FLOOR(num_evict_mode_full);
+    FLOOR(num_objects_pinned);
 #undef FLOOR
   }
 
@@ -1455,6 +1466,7 @@ struct object_stat_sum_t {
     SPLIT(num_flush_mode_low);
     SPLIT(num_evict_mode_some);
     SPLIT(num_evict_mode_full);
+    SPLIT(num_objects_pinned);
 #undef SPLIT
   }
 
@@ -1588,6 +1600,7 @@ struct pg_stat_t {
   bool omap_stats_invalid;
   bool hitset_stats_invalid;
   bool hitset_bytes_stats_invalid;
+  bool pin_stats_invalid;
 
   /// up, acting primaries
   int32_t up_primary;
@@ -1606,6 +1619,7 @@ struct pg_stat_t {
       omap_stats_invalid(false),
       hitset_stats_invalid(false),
       hitset_bytes_stats_invalid(false),
+      pin_stats_invalid(false),
       up_primary(-1),
       acting_primary(-1)
   { }
@@ -1740,8 +1754,6 @@ WRITE_CLASS_ENCODER(pg_hit_set_info_t)
  */
 struct pg_hit_set_history_t {
   eversion_t current_last_update;  ///< last version inserted into current set
-  utime_t current_last_stamp;      ///< timestamp of last insert
-  pg_hit_set_info_t current_info;  ///< metadata about the current set
   list<pg_hit_set_info_t> history; ///< archived sets, sorted oldest -> newest
 
   void encode(bufferlist &bl) const;
@@ -1765,6 +1777,7 @@ struct pg_history_t {
   epoch_t last_epoch_started;  // lower bound on last epoch started (anywhere, not necessarily locally)
   epoch_t last_epoch_clean;    // lower bound on last epoch the PG was completely clean.
   epoch_t last_epoch_split;    // as parent
+  epoch_t last_epoch_marked_full;  // pool or cluster
   
   /**
    * In the event of a map discontinuity, same_*_since may reflect the first
@@ -1786,6 +1799,7 @@ struct pg_history_t {
   pg_history_t()
     : epoch_created(0),
       last_epoch_started(0), last_epoch_clean(0), last_epoch_split(0),
+      last_epoch_marked_full(0),
       same_up_since(0), same_interval_since(0), same_primary_since(0) {}
   
   bool merge(const pg_history_t &other) {
@@ -1805,6 +1819,10 @@ struct pg_history_t {
     }
     if (last_epoch_split < other.last_epoch_split) {
       last_epoch_split = other.last_epoch_split; 
+      modified = true;
+    }
+    if (last_epoch_marked_full < other.last_epoch_marked_full) {
+      last_epoch_marked_full = other.last_epoch_marked_full;
       modified = true;
     }
     if (other.last_scrub > last_scrub) {
@@ -1839,7 +1857,8 @@ WRITE_CLASS_ENCODER(pg_history_t)
 
 inline ostream& operator<<(ostream& out, const pg_history_t& h) {
   return out << "ec=" << h.epoch_created
-	     << " les/c " << h.last_epoch_started << "/" << h.last_epoch_clean
+	     << " les/c/f " << h.last_epoch_started << "/" << h.last_epoch_clean
+	     << "/" << h.last_epoch_marked_full
 	     << " " << h.same_up_since << "/" << h.same_interval_since << "/" << h.same_primary_since;
 }
 
@@ -2843,13 +2862,11 @@ public:
   // last interval over which i mounted and was then active
   epoch_t mounted;     // last epoch i mounted
   epoch_t clean_thru;  // epoch i was active and clean thru
-  epoch_t last_map_marked_full; // last epoch osdmap was marked full
-  map<int64_t, epoch_t> pool_last_map_marked_full; // last epoch pool was marked full
 
   OSDSuperblock() : 
     whoami(-1), 
     current_epoch(0), oldest_map(0), newest_map(0), weight(0),
-    mounted(0), clean_thru(0), last_map_marked_full(0) {
+    mounted(0), clean_thru(0) {
   }
 
   void encode(bufferlist &bl) const;
@@ -2970,12 +2987,15 @@ static inline ostream& operator<<(ostream& out, const watch_info_t& w) {
 
 struct notify_info_t {
   uint64_t cookie;
+  uint64_t notify_id;
   uint32_t timeout;
   bufferlist bl;
 };
 
 static inline ostream& operator<<(ostream& out, const notify_info_t& n) {
-  return out << "notify(cookie " << n.cookie << " " << n.timeout << "s)";
+  return out << "notify(cookie " << n.cookie
+	     << " notify" << n.notify_id
+	     << " " << n.timeout << "s)";
 }
 
 
@@ -2998,6 +3018,7 @@ struct object_info_t {
     FLAG_OMAP     = 1 << 3,  // has (or may have) some/any omap data
     FLAG_DATA_DIGEST = 1 << 4,  // has data crc
     FLAG_OMAP_DIGEST = 1 << 5,  // has omap crc
+    FLAG_CACHE_PIN = 1 << 6,    // pin the object in cache tier
     // ...
     FLAG_USES_TMAP = 1<<8,  // deprecated; no longer used.
   } flag_t;
@@ -3020,6 +3041,8 @@ struct object_info_t {
       s += "|data_digest";
     if (flags & FLAG_OMAP_DIGEST)
       s += "|omap_digest";
+    if (flags & FLAG_CACHE_PIN)
+      s += "|cache_pin";
     if (s.length())
       return s.substr(1);
     return s;
@@ -3070,6 +3093,9 @@ struct object_info_t {
   bool is_omap_digest() const {
     return test_flag(FLAG_OMAP_DIGEST);
   }
+  bool is_cache_pinned() const {
+    return test_flag(FLAG_CACHE_PIN);
+  }
 
   void set_data_digest(__u32 d) {
     set_flag(FLAG_DATA_DIGEST);
@@ -3116,6 +3142,10 @@ struct object_info_t {
 
   object_info_t(bufferlist& bl) {
     decode(bl);
+  }
+  object_info_t operator=(bufferlist& bl) {
+    decode(bl);
+    return *this;
   }
 };
 WRITE_CLASS_ENCODER(object_info_t)

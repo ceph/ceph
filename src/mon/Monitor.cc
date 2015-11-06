@@ -451,8 +451,9 @@ const char** Monitor::get_tracked_conf_keys() const
   static const char* KEYS[] = {
     "crushtool", // helpful for testing
     "mon_lease",
-    "mon_lease_renew_interval",
-    "mon_lease_ack_timeout",
+    "mon_lease_renew_interval_factor",
+    "mon_lease_ack_timeout_factor",
+    "mon_accept_timeout_factor",
     // clog & admin clog
     "clog_to_monitors",
     "clog_to_syslog",
@@ -517,11 +518,10 @@ int Monitor::sanitize_options()
 
   // mon_lease must be greater than mon_lease_renewal; otherwise we
   // may incur in leases expiring before they are renewed.
-  if (g_conf->mon_lease <= g_conf->mon_lease_renew_interval) {
-    clog->error() << "mon_lease (" << g_conf->mon_lease
-                 << ") must be greater "
-                 << "than mon_lease_renew_interval ("
-                 << g_conf->mon_lease_renew_interval << ")";
+  if (g_conf->mon_lease_renew_interval_factor >= 1.0) {
+    clog->error() << "mon_lease_renew_interval_factor ("
+		  << g_conf->mon_lease_renew_interval_factor
+		  << ") must be less than 1.0";
     r = -EINVAL;
   }
 
@@ -530,13 +530,13 @@ int Monitor::sanitize_options()
   // with the same value, for a given small vale, could mean timing out if
   // the monitors happened to be overloaded -- or even under normal load for
   // a small enough value.
-  if (g_conf->mon_lease_ack_timeout <= g_conf->mon_lease) {
-    clog->error() << "mon_lease_ack_timeout ("
-                 << g_conf->mon_lease_ack_timeout
-                 << ") must be greater than mon_lease ("
-                 << g_conf->mon_lease << ")";
+  if (g_conf->mon_lease_ack_timeout_factor <= 1.0) {
+    clog->error() << "mon_lease_ack_timeout_factor ("
+		  << g_conf->mon_lease_ack_timeout_factor
+		  << ") must be greater than 1.0";
     r = -EINVAL;
   }
+
   return r;
 }
 
@@ -852,6 +852,8 @@ void Monitor::shutdown()
   wait_for_paxos_write();
 
   state = STATE_SHUTDOWN;
+
+  g_conf->remove_observer(this);
 
   if (admin_hook) {
     AdminSocket* admin_socket = cct->get_admin_socket();
@@ -2567,11 +2569,7 @@ void Monitor::handle_command(MonOpRequestRef op)
   }
 
   MonSession *session = m->get_session();
-  if (!session) {
-    string rs = "Access denied";
-    reply_command(op, -EACCES, rs, 0);
-    return;
-  }
+  assert(session);
 
   if (m->cmd.empty()) {
     string rs = "No command supplied";
@@ -3050,9 +3048,9 @@ void Monitor::forward_request_leader(MonOpRequestRef op)
   
   if (req->get_source().is_mon() && req->get_source_addr() != messenger->get_myaddr()) {
     dout(10) << "forward_request won't forward (non-local) mon request " << *req << dendl;
-  } else if (session && session->proxy_con) {
+  } else if (session->proxy_con) {
     dout(10) << "forward_request won't double fwd request " << *req << dendl;
-  } else if (session && !session->closed) {
+  } else if (!session->closed) {
     RoutedRequest *rr = new RoutedRequest;
     rr->tid = ++routed_request_tid;
     rr->client_inst = req->get_source_inst();
@@ -3186,6 +3184,7 @@ void Monitor::send_reply(MonOpRequestRef op, Message *reply)
   op->mark_event(__func__);
 
   MonSession *session = op->get_session();
+  assert(session);
   Message *req = op->get_req();
   ConnectionRef con = op->get_connection();
 
@@ -3197,14 +3196,6 @@ void Monitor::send_reply(MonOpRequestRef op, Message *reply)
 	    << " to " << req << " " << *req << dendl;
     reply->put();
     op->mark_event("reply: no connection");
-    return;
-  }
-
-  if (!session) {
-    dout(2) << "send_reply no session, dropping reply " << *reply
-	    << " to " << req << " " << *req << dendl;
-    reply->put();
-    op->mark_event("reply: no session");
     return;
   }
 
@@ -3233,12 +3224,6 @@ void Monitor::no_reply(MonOpRequestRef op)
   MonSession *session = op->get_session();
   Message *req = op->get_req();
 
-  if (!session) {
-    dout(2) << "no_reply no session, dropping non-reply to "
-            << *req << dendl;
-    op->mark_event("no_reply: no session");
-    return;
-  }
   if (session->proxy_con) {
     if (get_quorum_features() & CEPH_FEATURE_MON_NULLROUTE) {
       dout(10) << "no_reply to " << req->get_source_inst()
@@ -3265,7 +3250,7 @@ void Monitor::handle_route(MonOpRequestRef op)
   MRoute *m = static_cast<MRoute*>(op->get_req());
   MonSession *session = op->get_session();
   //check privileges
-  if (session && !session->is_capable("mon", MON_CAP_X)) {
+  if (!session->is_capable("mon", MON_CAP_X)) {
     dout(0) << "MRoute received from entity without appropriate perms! "
 	    << dendl;
     return;
@@ -3311,20 +3296,19 @@ void Monitor::resend_routed_requests()
        ++p) {
     RoutedRequest *rr = p->second;
 
-    bufferlist::iterator q = rr->request_bl.begin();
-    PaxosServiceMessage *req = (PaxosServiceMessage *)decode_message(cct, 0, q);
-
     if (mon == rank) {
-      dout(10) << " requeue for self tid " << rr->tid << " " << *req << dendl;
-      req->set_connection(rr->con);
+      dout(10) << " requeue for self tid " << rr->tid << dendl;
       rr->op->mark_event("retry routed request");
       retry.push_back(new C_RetryMessage(this, rr->op));
       delete rr;
     } else {
+      bufferlist::iterator q = rr->request_bl.begin();
+      PaxosServiceMessage *req = (PaxosServiceMessage *)decode_message(cct, 0, q);
       rr->op->mark_event("resend forwarded message to leader");
       dout(10) << " resend to mon." << mon << " tid " << rr->tid << " " << *req << dendl;
       MForward *forward = new MForward(rr->tid, req, rr->con_features,
 				       rr->session->caps);
+      req->put();  // forward takes its own ref; drop ours.
       forward->client = rr->client_inst;
       forward->set_priority(req->get_priority());
       messenger->send_message(forward, monmap->get_inst(mon));
@@ -3339,6 +3323,7 @@ void Monitor::resend_routed_requests()
 void Monitor::remove_session(MonSession *s)
 {
   dout(10) << "remove_session " << s << " " << s->inst << dendl;
+  assert(s->con);
   assert(!s->closed);
   for (set<uint64_t>::iterator p = s->routed_request_tids.begin();
        p != s->routed_request_tids.end();
@@ -3393,6 +3378,7 @@ void Monitor::waitlist_or_zap_client(MonOpRequestRef op)
    * circumstances.
    */
   Message *m = op->get_req();
+  MonSession *s = op->get_session();
   ConnectionRef con = op->get_connection();
   utime_t too_old = ceph_clock_now(g_ceph_context);
   too_old -= g_ceph_context->_conf->mon_lease;
@@ -3404,6 +3390,10 @@ void Monitor::waitlist_or_zap_client(MonOpRequestRef op)
   } else {
     dout(5) << "discarding message " << *m << " and sending client elsewhere" << dendl;
     con->mark_down();
+    // proxied sessions aren't registered and don't have a con; don't remove
+    // those.
+    if (!s->proxy_con)
+      remove_session(s);
     op->mark_zap();
   }
 }
@@ -3416,31 +3406,12 @@ void Monitor::_ms_dispatch(Message *m)
   }
 
   MonOpRequestRef op = op_tracker.create_request<MonOpRequest>(m);
-  dispatch(op);
-}
-
-void Monitor::dispatch(MonOpRequestRef op)
-{
-  op->mark_event("mon:dispatch");
-  ConnectionRef connection = op->get_connection();
-  MonSession *s = NULL;
-  MonCap caps;
   bool src_is_mon = op->is_src_mon();
-
-  // regardless of who we are or who the sender is, the message must
-  // have a connection associated.  If it doesn't then something fishy
-  // is going on.
-  assert(connection);
-
-  bool reuse_caps = false;
-  dout(20) << "have connection" << dendl;
-  s = op->get_session();
+  op->mark_event("mon:_ms_dispatch");
+  MonSession *s = op->get_session();
   if (s && s->closed) {
-    caps = s->caps;
-    reuse_caps = true;
-    s = NULL;
+    return;
   }
-  Message *m = op->get_req();
   if (!s) {
     // if the sender is not a monitor, make sure their first message for a
     // session is an MAuth.  If it is not, assume it's a stray message,
@@ -3448,49 +3419,38 @@ void Monitor::dispatch(MonOpRequestRef op)
     // assume that the sender hasn't authenticated yet, so we have no way
     // of assessing whether we should handle it or not.
     if (!src_is_mon && (m->get_type() != CEPH_MSG_AUTH &&
-			m->get_type() != CEPH_MSG_MON_GET_MAP)) {
-      if (m->get_type() == CEPH_MSG_PING) {
-        // let it go through and be dispatched immediately!
-        return dispatch_op(op);
-      }
+			m->get_type() != CEPH_MSG_MON_GET_MAP &&
+			m->get_type() != CEPH_MSG_PING)) {
       dout(1) << __func__ << " dropping stray message " << *m
 	      << " from " << m->get_source_inst() << dendl;
       return;
     }
 
-    if (!exited_quorum.is_zero() && !src_is_mon) {
-      waitlist_or_zap_client(op);
-      return;
-    }
-
-    dout(10) << "do not have session, making new one" << dendl;
     s = session_map.new_session(m->get_source_inst(), m->get_connection().get());
     assert(s);
     m->get_connection()->set_priv(s->get());
-    dout(10) << "ms_dispatch new session " << s << " " << *s << dendl;
+    dout(10) << __func__ << " new session " << s << " " << *s << dendl;
     op->set_session(s);
 
     logger->set(l_mon_num_sessions, session_map.get_size());
     logger->inc(l_mon_session_add);
 
     if (!src_is_mon) {
-      dout(10) << "setting timeout on session" << dendl;
-      // set an initial timeout here, so we will trim this session even if they don't
-      // do anything.
+      dout(30) << __func__ << "  setting timeout on session" << dendl;
+      // set an initial timeout here, so we will trim this session
+      // even if they don't do anything.
       s->until = ceph_clock_now(g_ceph_context);
       s->until += g_conf->mon_subscribe_interval;
     } else {
-      //give it monitor caps; the peer type has been authenticated
-      reuse_caps = false;
-      dout(5) << "setting monitor caps on this connection" << dendl;
-      if (!s->caps.is_allow_all()) //but no need to repeatedly copy
+      // give it monitor caps; the peer type has been authenticated
+      dout(5) << __func__ << " setting monitor caps on this connection" << dendl;
+      if (!s->caps.is_allow_all()) // but no need to repeatedly copy
         s->caps = *mon_caps;
     }
-    if (reuse_caps)
-      s->caps = caps;
     s->put();
   } else {
-    dout(20) << "ms_dispatch existing session " << s << " for " << s->inst << dendl;
+    dout(20) << __func__ << " existing session " << s << " for " << s->inst
+	     << dendl;
   }
 
   assert(s);
@@ -3499,7 +3459,10 @@ void Monitor::dispatch(MonOpRequestRef op)
   }
   dout(20) << " caps " << s->caps.get_str() << dendl;
 
-  if (is_synchronizing() && !src_is_mon) {
+  if ((is_synchronizing() ||
+       (s->global_id == 0 && !exited_quorum.is_zero())) &&
+      !src_is_mon &&
+      m->get_type() != CEPH_MSG_PING) {
     waitlist_or_zap_client(op);
   } else {
     dispatch_op(op);
@@ -3510,6 +3473,13 @@ void Monitor::dispatch(MonOpRequestRef op)
 void Monitor::dispatch_op(MonOpRequestRef op)
 {
   op->mark_event("mon:dispatch_op");
+  MonSession *s = op->get_session();
+  assert(s);
+  if (s->closed) {
+    dout(10) << " session closed, dropping " << op->get_req() << dendl;
+    return;
+  }
+
   /* we will consider the default type as being 'monitor' until proven wrong */
   op->set_type_monitor();
   /* deal with all messages that do not necessarily need caps */
@@ -3709,8 +3679,7 @@ void Monitor::dispatch_op(MonOpRequestRef op)
     case MSG_MON_ELECTION:
       op->set_type_election();
       //check privileges here for simplicity
-      if (op->get_session() &&
-          !op->get_session()->is_capable("mon", MON_CAP_X)) {
+      if (!op->get_session()->is_capable("mon", MON_CAP_X)) {
         dout(0) << "MMonElection received from entity without enough caps!"
           << op->get_session()->caps << dendl;
         break;
@@ -4154,10 +4123,7 @@ void Monitor::handle_subscribe(MonOpRequestRef op)
   bool reply = false;
 
   MonSession *s = op->get_session();
-  if (!s) {
-    dout(10) << " no session, dropping" << dendl;
-    return;
-  }
+  assert(s);
 
   s->until = ceph_clock_now(g_ceph_context);
   s->until += g_conf->mon_subscribe_interval;
@@ -4209,10 +4175,7 @@ void Monitor::handle_get_version(MonOpRequestRef op)
   PaxosService *svc = NULL;
 
   MonSession *s = op->get_session();
-  if (!s) {
-    dout(10) << " no session, dropping" << dendl;
-    return;
-  }
+  assert(s);
 
   if (!is_leader() && !is_peon()) {
     dout(10) << " waiting for quorum" << dendl;
@@ -5041,9 +5004,9 @@ bool Monitor::ms_verify_authorizer(Connection *con, int peer_type,
       CephXServiceTicketInfo auth_ticket_info;
       
       if (authorizer_data.length()) {
-	int ret = cephx_verify_authorizer(g_ceph_context, &keyring, iter,
+	bool ret = cephx_verify_authorizer(g_ceph_context, &keyring, iter,
 					  auth_ticket_info, authorizer_reply);
-	if (ret >= 0) {
+	if (ret) {
 	  session_key = auth_ticket_info.session_key;
 	  isvalid = true;
 	} else {

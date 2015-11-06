@@ -3,6 +3,6 @@ Description=Ceph disk activation: %f
 
 [Service]
 Type=oneshot
-RemainAfterExit=yes
-ExecStart=/usr/sbin/ceph-disk --verbose --log-stdout trigger --sync %f
+KillMode=none
+ExecStart=/bin/flock /var/lock/ceph-disk -c '/usr/sbin/ceph-disk --verbose --log-stdout trigger --sync %f'
 TimeoutSec=0

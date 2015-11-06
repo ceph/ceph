@@ -230,6 +230,10 @@ TYPE(EUpdate)
 TYPE(librbd::WatchNotify::NotifyMessage)
 TYPE(librbd::WatchNotify::ResponseMessage)
 
+#include "rbd_replay/ActionTypes.h"
+TYPE(rbd_replay::action::Dependency)
+TYPE(rbd_replay::action::ActionEntry);
+
 #ifdef WITH_RADOSGW
 
 #include "rgw/rgw_rados.h"
@@ -307,6 +311,11 @@ TYPE(cls_user_get_header_op)
 TYPE(cls_user_get_header_ret)
 TYPE(cls_user_complete_stats_sync_op)
 
+#include "cls/journal/cls_journal_types.h"
+TYPE(cls::journal::EntryPosition)
+TYPE(cls::journal::ObjectSetPosition)
+TYPE(cls::journal::Client)
+
 #include "rgw/rgw_common.h"
 TYPE(RGWAccessKey)
 TYPE(RGWSubUser)
@@ -356,6 +365,8 @@ TYPE(cls_refcount_read_op)
 TYPE(cls_refcount_read_ret)
 TYPE(cls_refcount_set_op)
 
+#include "journal/Entry.h"
+TYPE(journal::Entry)
 
 // --- messages ---
 #include "messages/MAuth.h"

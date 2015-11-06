@@ -501,7 +501,8 @@ int* ErasureCodeShec::shec_reedsolomon_coding_matrix(int is_single)
         if (true) {
           double r_e1;
           r_e1 = shec_calc_recovery_efficiency1(k, m1, m2, c1, c2);
-          if (r_e1 < min_r_e1){
+          if (min_r_e1 - r_e1 > std::numeric_limits<double>::epsilon() &&
+	      r_e1 < min_r_e1) {
             min_r_e1 = r_e1;
             c1_best = c1;
             m1_best = m1;

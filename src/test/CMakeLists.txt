@@ -1283,6 +1283,19 @@ target_link_libraries(unittest_mds_authcap mds global ${CMAKE_DL_LIBS}
 set_target_properties(unittest_mds_authcap PROPERTIES COMPILE_FLAGS
   ${UNITTEST_CXX_FLAGS})
 
+# unittest_mds_sessionfilter
+add_executable(unittest_mds_sessionfilter EXCLUDE_FROM_ALL
+    mds/TestSessionFilter.cc
+  $<TARGET_OBJECTS:heap_profiler_objs>
+  $<TARGET_OBJECTS:common_util_obj>
+  )
+add_test(unittest_mds_sessionfilter unittest_mds_sessionfilter)
+add_dependencies(check unittest_mds_sessionfilter)
+target_link_libraries(unittest_mds_sessionfilter mds osdc common global
+  ${CMAKE_DL_LIBS} ${BLKID_LIBRARIES} ${TCMALLOC_LIBS} ${UNITTEST_LIBS})
+set_target_properties(unittest_mds_sessionfilter PROPERTIES COMPILE_FLAGS
+  ${UNITTEST_CXX_FLAGS})
+
 # unittest_ipaddr
 add_executable(unittest_ipaddr EXCLUDE_FROM_ALL
   test_ipaddr.cc)  
@@ -1461,6 +1474,36 @@ if(${WITH_RADOSGW})
     ${CRYPTO_LIBS}
     )
   set_target_properties(test_rgw_manifest PROPERTIES COMPILE_FLAGS
+    ${UNITTEST_CXX_FLAGS})
+
+  # test_rgw_obj
+  set(test_rgw_obj_srcs rgw/test_rgw_obj.cc)
+  add_executable(test_rgw_obj
+    ${test_rgw_obj_srcs}
+    $<TARGET_OBJECTS:heap_profiler_objs>
+    )
+  target_link_libraries(test_rgw_obj
+    rgw_a
+    cls_rgw_client
+    cls_lock_client
+    cls_refcount_client
+    cls_log_client
+    cls_statelog_client
+    cls_version_client
+    cls_replica_log_client
+    cls_kvs
+    cls_user_client
+    librados
+    global
+    curl
+    uuid
+    expat
+    ${CMAKE_DL_LIBS}
+    ${TCMALLOC_LIBS}
+    ${UNITTEST_LIBS}
+    ${CRYPTO_LIBS}
+    )
+  set_target_properties(test_rgw_obj PROPERTIES COMPILE_FLAGS
     ${UNITTEST_CXX_FLAGS})
 
   # test_cls_rgw_meta
@@ -2134,7 +2177,7 @@ target_link_libraries(test_keyvaluedb_iterators
   ${CMAKE_DL_LIBS}
   )
 
-if(${WITH_FUSE})
+if(${HAVE_FUSE})
   add_executable(test_cfuse_cache_invalidate
     test_cfuse_cache_invalidate.cc
     )
@@ -2145,7 +2188,7 @@ if(${WITH_FUSE})
     ${TCMALLOC_LIBS}
     ${CMAKE_DL_LIBS}
     )
-endif(${WITH_FUSE})
+endif(${HAVE_FUSE})
 
 if(${WITH_CEPHFS})
   add_executable(test_c_headers

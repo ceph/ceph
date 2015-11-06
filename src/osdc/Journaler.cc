@@ -803,11 +803,12 @@ void Journaler::_finish_prezero(int r, uint64_t start, uint64_t len)
 class Journaler::C_Read : public Context {
   Journaler *ls;
   uint64_t offset;
+  uint64_t length;
 public:
   bufferlist bl;
-  C_Read(Journaler *l, uint64_t o) : ls(l), offset(o) {}
+  C_Read(Journaler *j, uint64_t o, uint64_t l) : ls(j), offset(o), length(l) {}
   void finish(int r) {
-    ls->_finish_read(r, offset, bl);
+    ls->_finish_read(r, offset, length, bl);
   }
 };
 
@@ -822,23 +823,30 @@ public:
   }  
 };
 
-void Journaler::_finish_read(int r, uint64_t offset, bufferlist& bl)
+void Journaler::_finish_read(int r, uint64_t offset, uint64_t length, bufferlist& bl)
 {
   Mutex::Locker l(lock);
 
   if (r < 0) {
     ldout(cct, 0) << "_finish_read got error " << r << dendl;
     error = r;
+  } else {
+    ldout(cct, 10) << "_finish_read got " << offset << "~" << bl.length() << dendl;
+    if (bl.length() < length) {
+      ldout(cct, 0) << "_finish_read got less than expected (" << length << ")" << dendl;
+      error = -EINVAL;
+    }
+  }
+
+  if (error) {
     if (on_readable) {
       C_OnFinisher *f = on_readable;
       on_readable = 0;
-      f->complete(r);
+      f->complete(error);
     }
     return;
   }
-  assert(r>=0);
 
-  ldout(cct, 10) << "_finish_read got " << offset << "~" << bl.length() << dendl;
   prefetch_buf[offset].swap(bl);
 
   try {
@@ -940,7 +948,7 @@ void Journaler::_issue_read(uint64_t len)
     uint64_t l = e - requested_pos;
     if (l > len)
       l = len;
-    C_Read *c = new C_Read(this, requested_pos);
+    C_Read *c = new C_Read(this, requested_pos, l);
     filer.read(ino, &layout, CEPH_NOSNAP, requested_pos, l, &c->bl, 0, wrap_finisher(c), CEPH_OSD_OP_FLAG_FADVISE_DONTNEED);
     requested_pos += l;
     len -= l;

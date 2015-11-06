@@ -321,7 +321,7 @@ private:
   C_OnFinisher    *on_write_error;
   bool             called_write_error;
 
-  void _finish_read(int r, uint64_t offset, bufferlist &bl); // read completion callback
+  void _finish_read(int r, uint64_t offset, uint64_t length, bufferlist &bl); // read completion callback
   void _finish_retry_read(int r);
   void _assimilate_prefetch();
   void _issue_read(uint64_t len);  // read some more

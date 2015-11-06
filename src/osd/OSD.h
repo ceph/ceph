@@ -881,6 +881,7 @@ public:
   void pg_stat_queue_dequeue(PG *pg);
 
   void init();
+  void final_init();  
   void start_shutdown();
   void shutdown();
 
@@ -1813,8 +1814,7 @@ private:
   void handle_osd_map(class MOSDMap *m);
   void note_down_osd(int osd);
   void note_up_osd(int osd);
-  void set_pool_last_map_marked_full(OSDMap *o, epoch_t &e);
-  
+
   bool advance_pg(
     epoch_t advance_to, PG *pg,
     ThreadPool::TPHandle &handle,
@@ -2009,6 +2009,12 @@ protected:
 
   void queue_want_up_thru(epoch_t want);
   void send_alive();
+
+  // -- full map requests --
+  epoch_t requested_full_first, requested_full_last;
+
+  void request_full_map(epoch_t first, epoch_t last);
+  void got_full_map(epoch_t e);
 
   // -- failures --
   map<int,utime_t> failure_queue;
