@@ -50,13 +50,13 @@ public:
   struct write_item {
     uint64_t seq;
     bufferlist bl;
-    int alignment;
+    uint32_t orig_len;
     TrackedOpRef tracked_op;
-    write_item(uint64_t s, bufferlist& b, int al, TrackedOpRef opref) :
-      seq(s), alignment(al), tracked_op(opref) {
+    write_item(uint64_t s, bufferlist& b, int ol, TrackedOpRef opref) :
+      seq(s), orig_len(ol), tracked_op(opref) {
       bl.claim(b, buffer::list::CLAIM_ALLOW_NONSHAREABLE); // potential zero-copy
     }
-    write_item() : seq(0), alignment(0) {}
+    write_item() : seq(0), orig_len(0) {}
   };
 
   Mutex finisher_lock;
@@ -88,7 +88,9 @@ public:
     completions.pop_front();
   }
 
-  void submit_entry(uint64_t seq, bufferlist& bl, int alignment,
+  int prepare_entry(list<ObjectStore::Transaction*>& tls, bufferlist* tbl);
+
+  void submit_entry(uint64_t seq, bufferlist& bl, uint32_t orig_len,
 		    Context *oncommit,
 		    TrackedOpRef osd_op = TrackedOpRef());
   /// End protected by finisher_lock
@@ -203,14 +205,13 @@ public:
     uint64_t magic1;
     uint64_t magic2;
     
-    void make_magic(off64_t pos, uint64_t fsid) {
-      magic1 = pos;
-      magic2 = fsid ^ seq ^ len;
+    static uint64_t make_magic(uint64_t seq, uint32_t len, uint64_t fsid) {
+      return (fsid ^ seq ^ len);
     }
     bool check_magic(off64_t pos, uint64_t fsid) {
       return
-	magic1 == (uint64_t)pos &&
-	magic2 == (fsid ^ seq ^ len);
+    magic1 == (uint64_t)pos &&
+    magic2 == (fsid ^ seq ^ len);
     }
   } __attribute__((__packed__, aligned(4)));
 
@@ -220,7 +221,6 @@ private:
   string fn;
 
   char *zero_buf;
-
   off64_t max_size;
   size_t block_size;
   bool directio, aio, force_aio;
