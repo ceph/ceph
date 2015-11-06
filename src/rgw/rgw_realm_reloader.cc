@@ -21,7 +21,7 @@
 static constexpr bool USE_SAFE_TIMER_CALLBACKS = false;
 
 
-RGWRealmReloader::RGWRealmReloader(RGWRados*& store, FrontendPauser* frontends)
+RGWRealmReloader::RGWRealmReloader(RGWRados*& store, Pauser* frontends)
   : store(store),
     frontends(frontends),
     timer(store->ctx(), mutex, USE_SAFE_TIMER_CALLBACKS),
