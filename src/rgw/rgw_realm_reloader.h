@@ -16,16 +16,16 @@ class RGWRados;
 class RGWRealmReloader : public RGWRealmWatcher::Watcher {
  public:
   /**
-   * FrontendPauser is an interface to pause/resume frontends. Frontend
-   * cooperation is required to ensure that they stop issuing requests on the
-   * old RGWRados instance, and restart with the updated configuration.
+   * Pauser is an interface to pause/resume frontends. Frontend cooperation
+   * is required to ensure that they stop issuing requests on the old
+   * RGWRados instance, and restart with the updated configuration.
    *
    * This abstraction avoids a depency on class RGWFrontend, which is only
    * defined in rgw_main.cc
    */
-  class FrontendPauser {
+  class Pauser {
    public:
-    virtual ~FrontendPauser() = default;
+    virtual ~Pauser() = default;
 
     /// pause all frontends while realm reconfiguration is in progress
     virtual void pause() = 0;
@@ -33,7 +33,7 @@ class RGWRealmReloader : public RGWRealmWatcher::Watcher {
     virtual void resume(RGWRados* store) = 0;
   };
 
-  RGWRealmReloader(RGWRados*& store, FrontendPauser* frontends);
+  RGWRealmReloader(RGWRados*& store, Pauser* frontends);
   ~RGWRealmReloader();
 
   /// respond to realm notifications by scheduling a reload()
@@ -47,7 +47,7 @@ class RGWRealmReloader : public RGWRealmWatcher::Watcher {
 
   /// main()'s RGWRados pointer as a reference, modified by reload()
   RGWRados*& store;
-  FrontendPauser *const frontends;
+  Pauser *const frontends;
 
   /// reload() takes a significant amount of time, so we don't want to run
   /// it in the handle_notify() thread. we choose a timer thread because we
