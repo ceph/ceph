@@ -10,6 +10,8 @@
 
 /* RGWOps */
 
+/* XXX can gc this entire level, and shrink vtables */
+
 class RGWListBuckets_OS_Lib : public RGWListBuckets {
 public:
 
