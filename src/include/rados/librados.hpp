@@ -647,7 +647,9 @@ namespace librados
     std::string get_pool_name();
 
     bool pool_requires_alignment();
+    int pool_requires_alignment2(bool * requires);
     uint64_t pool_required_alignment();
+    int pool_required_alignment2(uint64_t * alignment);
 
     // create an object
     int create(const std::string& oid, bool exclusive);
