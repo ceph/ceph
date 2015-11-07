@@ -396,12 +396,14 @@ public:
     bool contents_equal(const buffer::list& other) const;
 
     bool can_zero_copy() const;
+    bool is_provided_buffer(const char *dst) const;
     bool is_aligned(unsigned align) const;
     bool is_page_aligned() const;
     bool is_n_align_sized(unsigned align) const;
     bool is_n_page_sized() const;
 
     bool is_zero() const;
+    bool is_contiguous() const;
 
     // modifiers
     void clear() {
@@ -434,7 +436,6 @@ public:
     void zero();
     void zero(unsigned o, unsigned l);
 
-    bool is_contiguous();
     void rebuild();
     void rebuild(ptr& nb);
     void rebuild_aligned(unsigned align);
