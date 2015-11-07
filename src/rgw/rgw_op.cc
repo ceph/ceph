@@ -1239,6 +1239,10 @@ void RGWGetObj::execute()
 
   start = ofs;
 
+  /* STAT ops don't need data, and do no i/o */
+  if (get_type() == RGW_OP_STAT_OBJ)
+    return;
+
   if (!get_data || ofs > end)
     goto done_err;
 
