@@ -106,6 +106,28 @@ bool librados::RadosClient::pool_requires_alignment(int64_t pool_id)
   return ret;
 }
 
+// a safer version of pool_requires_alignment
+int librados::RadosClient::pool_requires_alignment2(int64_t pool_id,
+	bool *requires)
+{
+  if (!requires)
+    return -EINVAL;
+
+  int r = wait_for_osdmap();
+  if (r < 0) {
+    return r;
+  }
+
+  const OSDMap *osdmap = objecter->get_osdmap_read();
+  if (!osdmap->have_pg_pool(pool_id)) { 
+    objecter->put_osdmap_read();
+    return -ENOENT;
+  }
+  *requires = osdmap->get_pg_pool(pool_id)->requires_aligned_append();
+  objecter->put_osdmap_read();
+  return 0;
+}
+
 uint64_t librados::RadosClient::pool_required_alignment(int64_t pool_id)
 {
   int r = wait_for_osdmap();
@@ -118,6 +140,28 @@ uint64_t librados::RadosClient::pool_required_alignment(int64_t pool_id)
     osdmap->get_pg_pool(pool_id)->required_alignment() : 0;
   objecter->put_osdmap_read();
   return ret;
+}
+
+// a safer version of pool_required_alignment
+int librados::RadosClient::pool_required_alignment2(int64_t pool_id,
+	uint64_t *alignment)
+{
+  if (!alignment)
+    return -EINVAL;
+
+  int r = wait_for_osdmap();
+  if (r < 0) {
+    return r;
+  }
+
+  const OSDMap *osdmap = objecter->get_osdmap_read();
+  if (!osdmap->have_pg_pool(pool_id)) {
+    objecter->put_osdmap_read();
+    return -ENOENT;
+  }
+  *alignment = osdmap->get_pg_pool(pool_id)->required_alignment();
+  objecter->put_osdmap_read();
+  return 0;
 }
 
 int librados::RadosClient::pool_get_auid(uint64_t pool_id, unsigned long long *auid)
