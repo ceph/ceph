@@ -27,7 +27,7 @@ int RGWMongoose::write_data(const char *buf, int len)
   return r;
 }
 
-RGWMongoose::RGWMongoose(mg_connection *_conn, int _port) : conn(_conn), port(_port), header_done(false), sent_header(false), has_content_length(false),
+RGWMongoose::RGWMongoose(mg_connection *_conn, int _port, int _sport) : conn(_conn), port(_port), sport(_sport),  header_done(false), sent_header(false), has_content_length(false),
                                                  explicit_keepalive(false), explicit_conn_close(false)
 {
 }
@@ -125,14 +125,14 @@ void RGWMongoose::init_env(CephContext *cct)
   env.set("SCRIPT_URI", info->uri); /* FIXME */
 
   char port_buf[16];
-  snprintf(port_buf, sizeof(port_buf), "%d", port);
-  env.set("SERVER_PORT", port_buf);
 
   if (info->is_ssl) {
-    if (port == 0) {
-      strcpy(port_buf,"443");
-    }
+    snprintf(port_buf, sizeof(port_buf), "%d", sport);
+    env.set("SERVER_PORT", port_buf);
     env.set("SERVER_PORT_SECURE", port_buf);
+  } else {
+    snprintf(port_buf, sizeof(port_buf), "%d", port);
+    env.set("SERVER_PORT", port_buf);
   }
 }
 

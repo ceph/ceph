@@ -174,6 +174,7 @@ struct RGWProcessEnv {
   RGWREST *rest;
   OpsLogSocket *olog;
   int port;
+  int sport;
 };
 
 class RGWProcess {
@@ -717,7 +718,7 @@ static int civetweb_callback(struct mg_connection *conn) {
   OpsLogSocket *olog = pe->olog;
 
   RGWRequest *req = new RGWRequest(store->get_new_req_id());
-  RGWMongoose client_io(conn, pe->port);
+  RGWMongoose client_io(conn, pe->port, pe->sport);
 
   int ret = process_request(store, rest, req, &client_io, olog);
   if (ret < 0) {
@@ -834,6 +835,7 @@ bool RGWFrontendConfig::get_val(const string& key, int def_val, int *out)
     *out = def_val;
     return false;
   }
+
   string err;
   *out = strict_strtol(str.c_str(), 10, &err);
   if (!err.empty()) {
@@ -967,10 +969,23 @@ public:
   int run() {
     char thread_pool_buf[32];
     snprintf(thread_pool_buf, sizeof(thread_pool_buf), "%d", (int)g_conf->rgw_thread_pool_size);
-    string port_str;
+    string port_str, sport_str;
     map<string, string> conf_map = conf->get_config_map();
-    conf->get_val("port", "80", &port_str);
+
+    bool ishttp = false, ishttps =false;
+    ishttp = conf->get_val("port", "80", &port_str);
     conf_map.erase("port");
+    ishttps = conf->get_val("sport", "443", &sport_str);
+    conf_map.erase("sport");
+    if (ishttp && ishttps) {
+      port_str += ",";
+      port_str += sport_str;
+      port_str += "s";
+      conf_map["listening_ports"] = port_str;
+    } else if (ishttps) {
+      port_str = sport_str + "s";
+    }
+
     conf_map["listening_ports"] = port_str;
     set_conf_default(conf_map, "enable_keep_alive", "yes");
     set_conf_default(conf_map, "num_threads", thread_pool_buf);
@@ -1157,7 +1172,6 @@ int main(int argc, const char **argv)
 
   list<string> frontends;
   get_str_list(g_conf->rgw_frontends, ",", frontends);
-
   multimap<string, RGWFrontendConfig *> fe_map;
   list<RGWFrontendConfig *> configs;
   if (frontends.empty()) {
@@ -1190,10 +1204,10 @@ int main(int argc, const char **argv)
 
       fe = new RGWFCGXFrontend(fcgi_pe, config);
     } else if (framework == "civetweb" || framework == "mongoose") {
-      int port;
+      int port, sport;
       config->get_val("port", 80, &port);
-
-      RGWProcessEnv env = { store, &rest, olog, port };
+      config->get_val("sport", 443, &sport);
+      RGWProcessEnv env = { store, &rest, olog, port, sport };
 
       fe = new RGWMongooseFrontend(env, config);
     } else if (framework == "loadgen") {
