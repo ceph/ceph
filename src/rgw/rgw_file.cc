@@ -233,7 +233,7 @@ int rgw_lookup(struct rgw_fs *rgw_fs,
 
   RGWFileHandle* parent = get_rgwfh(parent_fh);
   if ((! parent) ||
-      (! parent->is_bucket())) {
+      (parent->is_object())) {
     /* bad parent */
     return EINVAL;
   }
