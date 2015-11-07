@@ -98,12 +98,12 @@ namespace librbd {
       async_op.finish_op();
     }
 
-    lock.Unlock();
     if (complete_cb) {
+      lock.Unlock();
       complete_cb(rbd_comp, complete_arg);
+      lock.Lock();
     }
 
-    lock.Lock();
     done = true;
     if (ictx && event_notify && ictx->event_socket.is_valid()) {
       ictx->completed_reqs_lock.Lock();
