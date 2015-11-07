@@ -131,14 +131,6 @@ public:
 
   int ImageCtx::init() {
     int r;
-    string pname = string("librbd-") + id + string("-") +
-      data_ctx.get_pool_name() + string("/") + name;
-    if (!snap_name.empty()) {
-      pname += "@";
-      pname += snap_name;
-    }
-
-    perf_start(pname);
 
     if (id.length()) {
       old_format = false;
@@ -183,6 +175,15 @@ public:
       apply_metadata_confs();
       header_oid = old_header_name(name);
     }
+
+    string pname = string("librbd-") + id + string("-") +
+      data_ctx.get_pool_name() + string("/") + name;
+    if (!snap_name.empty()) {
+      pname += "@";
+      pname += snap_name;
+    }
+
+    perf_start(pname);
 
     if (cache) {
       Mutex::Locker l(cache_lock);
