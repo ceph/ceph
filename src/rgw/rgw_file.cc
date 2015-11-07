@@ -228,19 +228,26 @@ int rgw_lookup(struct rgw_fs *rgw_fs,
 	      struct rgw_file_handle *parent_fh, const char* path,
 	      struct rgw_file_handle **fh, uint32_t flags)
 {
+  CephContext* cct = static_cast<CephContext*>(rgw_fs->rgw);
   RGWLibFS *fs = static_cast<RGWLibFS*>(rgw_fs->fs_private);
 
   RGWFileHandle* parent = get_rgwfh(parent_fh);
-  if (! parent) {
+  if ((! parent) ||
+      (! parent->is_bucket())) {
     /* bad parent */
     return EINVAL;
   }
 
-  RGWFileHandle* rgw_fh = fs->lookup_fh(parent, path);
-  if (! rgw_fh) {
-    /* not found */
+  RGWStatObjRequest req(cct, fs->get_user(), parent->bucket_name(), path,
+			RGWStatObjRequest::FLAG_NONE);
+
+  int rc = librgw.get_fe()->execute_req(&req);
+  if (rc != 0)
     return ENOENT;
-  }
+
+  RGWFileHandle* rgw_fh = fs->lookup_fh(parent, path);
+  if (! rgw_fh)
+    return ENOENT;
 
   struct rgw_file_handle *rfh = rgw_fh->get_fh();
   *fh = rfh;
@@ -286,6 +293,33 @@ int rgw_fh_rele(struct rgw_fs *rgw_fs, struct rgw_file_handle *fh,
 int rgw_getattr(struct rgw_fs *rgw_fs,
 		struct rgw_file_handle *fh, struct stat *st)
 {
+  CephContext* cct = static_cast<CephContext*>(rgw_fs->rgw);
+  RGWLibFS *fs = static_cast<RGWLibFS*>(rgw_fs->fs_private);
+  RGWFileHandle* rgw_fh = get_rgwfh(fh);
+
+  RGWStatObjRequest req(cct, fs->get_user(),
+			rgw_fh->bucket_name(), rgw_fh->object_name(),
+			RGWStatObjRequest::FLAG_NONE);
+
+  int rc = librgw.get_fe()->execute_req(&req);
+  if (rc != 0)
+    return EINVAL;
+
+  /* fill in stat data */
+  memset(st, 0, sizeof(struct stat));
+  st->st_dev = fs->get_inst();
+  st->st_ino = rgw_fh->get_fh()->fh_hk.object; // XXX
+  st->st_mode = 666;
+  st->st_nlink = 1;
+  st->st_uid = 0; // XXX
+  st->st_gid = 0; // XXX
+  st->st_size = req.size();
+  st->st_blksize = 4096;
+  st->st_blocks = (st->st_size) / 512;
+  st->st_atim.tv_sec = req.mtime();
+  st->st_mtim.tv_sec = req.mtime();
+  st->st_ctim.tv_sec = req.ctime();
+
   return 0;
 }
 

@@ -805,4 +805,97 @@ public:
 
 }; /* RGWDeleteObjRequest */
 
+class RGWStatObjRequest : public RGWLibRequest,
+			  public RGWGetObj /* RGWOp */
+{
+public:
+  const std::string& bucket_name;
+  const std::string& obj_name;
+//  buffer::list& bl; // remove?
+  uint32_t flags;
+  /* XXX results metadata */
+
+  static constexpr uint32_t FLAG_NONE = 0x000;
+
+  RGWStatObjRequest(CephContext* _cct, RGWUserInfo *_user,
+		    const std::string& _bname, const std::string& _oname,
+		    uint32_t _flags)
+    : RGWLibRequest(_cct, _user), bucket_name(_bname), obj_name(_oname) {
+    magic = 78;
+    op = this;
+
+    /* fixup RGWGetObj (already know range parameters) */
+    RGWGetObj::range_parsed = true;
+    RGWGetObj::get_data = false; // XXX
+    RGWGetObj::partial_content = true;
+    RGWGetObj::ofs = 0;
+    RGWGetObj::end = 0;
+  }
+
+  //buffer::list& get_bl() { return bl; }
+
+  virtual const string name() { return "stat_obj"; }
+  virtual RGWOpType get_type() { return RGW_OP_STAT_OBJ; }
+
+  /* attributes */
+  uint64_t size() { return total_len; }
+  time_t ctime() { return mod_time; } // XXX
+  time_t mtime() { return mod_time; }
+  map<string, bufferlist>& get_attrs() { return attrs; }
+
+  virtual bool only_bucket() { return false; }
+
+  virtual int op_init() {
+    // assign store, s, and dialect_handler
+    RGWObjectCtx* rados_ctx
+      = static_cast<RGWObjectCtx*>(get_state()->obj_ctx);
+    // framework promises to call op_init after parent init
+    assert(rados_ctx);
+    RGWOp::init(rados_ctx->store, get_state(), this);
+    op = this; // assign self as op: REQUIRED
+    return 0;
+  }
+
+  virtual int header_init() {
+
+    struct req_state* s = get_state();
+    s->info.method = "GET";
+    s->op = OP_GET;
+
+    /* XXX derp derp derp */
+    string uri = "/" + bucket_name + "/" + obj_name;
+    s->relative_uri = uri;
+    s->info.request_uri = uri; // XXX
+    s->info.effective_uri = uri;
+    s->info.request_params = "";
+    s->info.domain = ""; /* XXX ? */
+
+    // woo
+    s->user = user;
+
+    return 0;
+  }
+
+  virtual void execute() {
+    /* XXX save metadata */
+  }
+
+  virtual int get_params() {
+    return 0;
+  }
+
+  virtual int send_response_data(ceph::buffer::list& _bl, off_t s_off,
+				off_t e_off) {
+    /* NOP */
+    return 0;
+  }
+
+  virtual int send_response_data_error() {
+    /* NOP */
+    return 0;
+  }
+
+}; /* RGWStatObjRequest */
+
+
 #endif /* RGW_FILE_H */
