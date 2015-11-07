@@ -36,7 +36,7 @@ class EventSocket {
         return 0;
       }
     }
-    return -1;
+    return -EINVAL;
   }
   int notify() {
     int ret;
@@ -48,6 +48,8 @@ class EventSocket {
         ret = write(socket, buf, 1);
         if (ret < 0)
           ret = -errno;
+        else
+          ret = 0;
       }
       case EVENT_SOCKET_TYPE_EVENTFD:
       {
@@ -55,6 +57,8 @@ class EventSocket {
         ret = write(socket, &value, sizeof (value));
         if (ret < 0)
           ret = -errno;
+        else
+          ret = 0;
       }
       default:
       {
