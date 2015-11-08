@@ -56,6 +56,8 @@ using std::string;
 
 static std::mutex librgw_mtx;
 
+bool global_stop = false;
+
 RGWLib librgw; /* XXX initialize? */
 
 class C_InitTimeout : public Context {
