@@ -356,6 +356,16 @@ namespace rgw {
 
 } /* namespace rgw */
 
+static inline std::string make_uri(const std::string& bucket_name,
+				    const std::string& object_name) {
+  std::string uri("/");
+  uri.reserve(bucket_name.length() + object_name.length() + 2);
+  uri += bucket_name;
+  uri += "/";
+  uri += object_name;
+  return uri;
+}
+
 /*
   read directory content (buckets)
 */
@@ -626,7 +636,7 @@ public:
     s->op = OP_PUT;
 
     /* XXX derp derp derp */
-    string uri = "/" + bucket_name + "/" + obj_name;
+    std::string uri = make_uri(bucket_name, obj_name);
     s->relative_uri = uri;
     s->info.request_uri = uri; // XXX
     s->info.effective_uri = uri;
@@ -711,7 +721,7 @@ public:
     s->op = OP_GET;
 
     /* XXX derp derp derp */
-    string uri = "/" + bucket_name + "/" + obj_name;
+    std::string uri = make_uri(bucket_name, obj_name);
     s->relative_uri = uri;
     s->info.request_uri = uri; // XXX
     s->info.effective_uri = uri;
@@ -788,7 +798,7 @@ public:
     s->op = OP_DELETE;
 
     /* XXX derp derp derp */
-    string uri = "/" + bucket_name + "/" + obj_name;
+    std::string uri = make_uri(bucket_name, obj_name);
     s->relative_uri = uri;
     s->info.request_uri = uri; // XXX
     s->info.effective_uri = uri;
@@ -863,7 +873,7 @@ public:
     s->op = OP_GET;
 
     /* XXX derp derp derp */
-    string uri = "/" + bucket_name + "/" + obj_name;
+    std::string uri = make_uri(bucket_name, obj_name);
     s->relative_uri = uri;
     s->info.request_uri = uri; // XXX
     s->info.effective_uri = uri;

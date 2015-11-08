@@ -32,9 +32,13 @@ namespace {
   string access_key("");
   string secret_key("");
   struct rgw_fs *fs = nullptr;
-  typedef std::tuple<string,uint64_t, struct rgw_file_handle*> fid_type; //in c++2014 can alias...
+  typedef std::tuple<string, uint64_t, struct rgw_file_handle*> fid_type; //in c++2014 can alias...
+  typedef std::tuple<fid_type, std::vector<fid_type>> bucket_type;
+		     
   std::vector<fid_type> fids1;
-  std::vector<fid_type> fids2;
+  std::vector<bucket_type> bucket_matrix;
+
+  bool do_getattr = false;
 
   struct {
     int argc;
@@ -53,6 +57,19 @@ TEST(LibRGW, MOUNT) {
 		      &fs);
   ASSERT_EQ(ret, 0);
   ASSERT_NE(fs, nullptr);
+}
+
+TEST(LibRGW, GETATTR_ROOT) {
+  if (do_getattr) {
+    using std::get;
+
+    if (! fs)
+      return;
+
+    struct stat st;
+    int ret = rgw_getattr(fs, fs->root_fh, &st);
+    ASSERT_EQ(ret, 0);
+  }
 }
 
 extern "C" {
@@ -84,16 +101,10 @@ TEST(LibRGW, LIST_BUCKETS) {
   for (auto& fid : fids1) {
     std::cout << "fname: " << get<0>(fid) << " fid: " << get<1>(fid)
 	      << std::endl;
+    /* push row for bucket into bucket_matrix */
+    bucket_matrix.push_back(bucket_type(fid, std::vector<fid_type>()));
   }
   ASSERT_EQ(ret, 0);
-}
-
-extern "C" {
-  static bool r2_cb(const char* name, void *arg, uint64_t offset) {
-    // don't need arg--it would point to fids2
-    fids2.push_back(fid_type(name, offset, nullptr));
-    return true; /* XXX ? */
-  }
 }
 
 TEST(LibRGW, LOOKUP_BUCKETS) {
@@ -103,13 +114,42 @@ TEST(LibRGW, LOOKUP_BUCKETS) {
     return;
 
   int ret = 0;
-  for (auto& fid : fids1) {
-    struct rgw_file_handle *rgw_fh;
+  for (auto& fid_row : bucket_matrix) {
+    auto& fid = get<0>(fid_row);
+    // auto& obj_vector = get<1>(fid_row);
+    struct rgw_file_handle *rgw_fh = nullptr;
     ret = rgw_lookup(fs, fs->root_fh, get<0>(fid).c_str(), &rgw_fh,
 		    0 /* flags */);
     ASSERT_EQ(ret, 0);
     get<2>(fid) = rgw_fh;
     ASSERT_NE(get<2>(fid), nullptr);
+  }
+}
+
+TEST(LibRGW, GETATTR_BUCKETS) {
+  if (do_getattr) {
+    using std::get;
+
+    if (! fs)
+      return;
+
+    int ret = 0;
+    struct stat st;
+
+    for (auto& fid_row : bucket_matrix) {
+      auto& fid = get<0>(fid_row);
+      struct rgw_file_handle *rgw_fh = get<2>(fid);
+      ret = rgw_getattr(fs, rgw_fh, &st);
+      ASSERT_EQ(ret, 0);
+    }
+  }
+}
+
+extern "C" {
+  static bool r2_cb(const char* name, void *arg, uint64_t offset) {
+    std::vector<fid_type>& obj_vector = *(static_cast<std::vector<fid_type>*>(arg));
+    obj_vector.push_back(fid_type(name, offset, nullptr));
+    return true; /* XXX ? */
   }
 }
 
@@ -120,31 +160,74 @@ TEST(LibRGW, LIST_OBJECTS) {
   if (! fs)
     return;
 
-  for (auto& fid : fids1) {
+  for (auto& fid_row : bucket_matrix) {
+    auto& fid = get<0>(fid_row); // bucket
+    std::vector<fid_type>& obj_vector = get<1>(fid_row); // objects in bucket
+    struct rgw_file_handle *bucket_fh = get<2>(fid);
+
     ldout(g_ceph_context, 0) << __func__ << " readdir on bucket " << get<0>(fid)
-		     << dendl;
+			     << dendl;
+
     bool eof = false;
     uint64_t offset = 0;
-    int ret = rgw_readdir(fs, get<2>(fid), &offset, r2_cb, &fids2,
-			  &eof);
-    for (auto& fid2 : fids2) {
-      std::cout << "fname: " << get<0>(fid2) << " fid: " << get<1>(fid2)
+    int ret = rgw_readdir(fs, bucket_fh, &offset, r2_cb, &obj_vector, &eof);
+    for (auto& obj : obj_vector) {
+      std::cout << "fname: " << get<0>(obj) << " fid: " << get<1>(obj)
 		<< std::endl;
     }
     ASSERT_EQ(ret, 0);
   }
 }
 
+extern bool global_stop;
+
+TEST(LibRGW, GETATTR_OBJECTS) {
+  if (do_getattr) {
+    using std::get;
+    struct stat st;
+    int ret;
+
+    global_stop = true;
+
+    for (auto& fid_row : bucket_matrix) {
+      auto& fid = get<0>(fid_row); // bucket
+      std::vector<fid_type>& obj_vector = get<1>(fid_row); // objects in bucket
+      struct rgw_file_handle *bucket_fh = get<2>(fid);
+
+      for (auto& obj : obj_vector) {
+	struct rgw_file_handle *obj_fh = nullptr;
+	std::string object_name = get<0>(obj);
+	ret = rgw_lookup(fs, bucket_fh, get<0>(obj).c_str(), &obj_fh,
+			0 /* flags */);
+	ASSERT_EQ(ret, 0);
+	get<2>(obj) = obj_fh; // stash obj_fh for cleanup
+	ASSERT_NE(get<2>(obj), nullptr);
+	ret = rgw_getattr(fs, obj_fh, &st); // now, getattr
+	ASSERT_EQ(ret, 0);
+      }
+    }
+  }
+}
+
 TEST(LibRGW, CLEANUP) {
   int ret = 0;
   using std::get;
-  struct rgw_file_handle *rgw_fh;
+
   /* release file handles */
-  for (auto& fids : { fids1, fids2 }) {
-    for (auto& fid : fids) {
-      rgw_fh = get<2>(fid);
-      if (rgw_fh)
-	ret = rgw_fh_rele(fs, rgw_fh, 0 /* flags */);
+  for (auto& fid_row : bucket_matrix) {
+    auto& bucket = get<0>(fid_row); // bucket
+    std::vector<fid_type>& obj_vector = get<1>(fid_row); // objects in bucket
+    for (auto& obj : obj_vector) {
+      struct rgw_file_handle *obj_fh = get<2>(obj);
+      if (obj_fh) {
+	ret = rgw_fh_rele(fs, obj_fh, 0 /* flags */);
+	ASSERT_EQ(ret, 0);
+      }
+    }
+    // now the bucket
+    struct rgw_file_handle *bucket_fh = get<2>(bucket);
+    if (bucket_fh) {
+      ret = rgw_fh_rele(fs, bucket_fh, 0 /* flags */);
       ASSERT_EQ(ret, 0);
     }
   }
@@ -183,16 +266,18 @@ int main(int argc, char *argv[])
 
   for (auto arg_iter = args.begin(); arg_iter != args.end();) {
     if (ceph_argparse_witharg(args, arg_iter, &val, "--access",
-			      (char*) NULL)) {
+			      (char*) nullptr)) {
       access_key = val;
     } else if (ceph_argparse_witharg(args, arg_iter, &val, "--secret",
-				     (char*) NULL)) {
+				     (char*) nullptr)) {
       secret_key = val;
     } else if (ceph_argparse_witharg(args, arg_iter, &val, "--uid",
-				     (char*) NULL)) {
+				     (char*) nullptr)) {
       uid = val;
-    }
-    else {
+    } else if (ceph_argparse_flag(args, arg_iter, "--getattr",
+					    (char*) nullptr)) {
+      do_getattr = true;
+    } else {
       ++arg_iter;
     }
   }
