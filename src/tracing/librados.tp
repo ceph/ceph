@@ -1591,7 +1591,7 @@ TRACEPOINT_EVENT(librados, rados_tmap_get_exit,
         int, len),
     TP_FIELDS(
         ctf_integer(int, retval, retval)
-        ctf_sequence(unsigned char, buf, buf, uint32_t, CEPH_MIN(len, CEPH_TRACE_BUF_TRUNC_LEN))
+        ctf_sequence(unsigned char, buf, buf, uint32_t, CEPH_MIN((size_t)len, CEPH_TRACE_BUF_TRUNC_LEN))
         ctf_integer(int, len, len)
     )
 )

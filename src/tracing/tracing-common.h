@@ -4,7 +4,7 @@
 // Amount of buffer data to dump when using ceph_ctf_sequence or ceph_ctf_sequencep.
 // If 0, then *_data field is omitted entirely.
 #if !defined(CEPH_TRACE_BUF_TRUNC_LEN)
-#define CEPH_TRACE_BUF_TRUNC_LEN 0
+#define CEPH_TRACE_BUF_TRUNC_LEN 0u
 #endif
 
 // TODO: This is GCC-specific.  Replace CEPH_MAX and CEPH_MIN with standard macros, if possible.
