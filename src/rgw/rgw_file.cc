@@ -249,7 +249,9 @@ int rgw_lookup(struct rgw_fs *rgw_fs,
     if (! rgw_fh)
       return ENOENT;
   } else {
-    RGWStatObjRequest req(cct, fs->get_user(), parent->bucket_name(), path,
+    std::string object_name{path};
+    RGWStatObjRequest req(cct, fs->get_user(),
+			  parent->bucket_name(), object_name,
 			  RGWStatObjRequest::FLAG_NONE);
 
     int rc = librgw.get_fe()->execute_req(&req);
@@ -343,6 +345,9 @@ int rgw_getattr(struct rgw_fs *rgw_fs,
 #endif
   } else {
     /* object */
+    const std::string bname = rgw_fh->bucket_name();
+    const std::string oname = rgw_fh->object_name();
+
     RGWStatObjRequest req(cct, fs->get_user(),
 			  rgw_fh->bucket_name(), rgw_fh->object_name(),
 			  RGWStatObjRequest::FLAG_NONE);
