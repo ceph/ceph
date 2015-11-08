@@ -79,6 +79,9 @@ struct rgw_statvfs {
 /*
   lookup object by name (POSIX style)
 */
+#define RGW_LOOKUP_FLAG_NONE    0x0000
+#define RGW_LOOKUP_FLAG_CREATE  0x0001
+
 int rgw_lookup(struct rgw_fs *rgw_fs,
 	      struct rgw_file_handle *parent_fh, const char *path,
 	      struct rgw_file_handle **fh, uint32_t flags);
@@ -184,6 +187,9 @@ int rgw_truncate(struct rgw_fs *rgw_fs,
 /*
    open file
 */
+#define RGW_OPEN_FLAG_NONE    0x0000
+#define RGW_OPEN_FLAG_CREATE  0x0001
+
 int rgw_open(struct rgw_fs *rgw_fs, struct rgw_file_handle *parent_fh,
 	    uint32_t flags);
 

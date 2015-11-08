@@ -255,8 +255,9 @@ int rgw_lookup(struct rgw_fs *rgw_fs,
 			  RGWStatObjRequest::FLAG_NONE);
 
     int rc = librgw.get_fe()->execute_req(&req);
-    if ((rc != 0) ||
-	(req.get_ret() != 0))
+    if (((rc != 0) ||
+	    (req.get_ret() != 0)) &&
+	(! (flags & RGW_LOOKUP_FLAG_CREATE)))
       return ENOENT;
 
     rgw_fh = fs->lookup_fh(parent, path);

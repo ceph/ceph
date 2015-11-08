@@ -219,7 +219,7 @@ TEST(LibRGW, LIST_OBJECTS) {
 TEST(LibRGW, LOOKUP_OBJECT) {
   if (do_get || do_put || do_bulk || do_readv || do_writev) {
     int ret = rgw_lookup(fs, bucket_fh, object_name.c_str(), &object_fh,
-			0 /* flags */);
+			RGW_LOOKUP_FLAG_CREATE);
     ASSERT_EQ(ret, 0);
   }
 }
