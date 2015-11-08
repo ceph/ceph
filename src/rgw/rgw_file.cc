@@ -238,16 +238,26 @@ int rgw_lookup(struct rgw_fs *rgw_fs,
     return EINVAL;
   }
 
-  RGWStatObjRequest req(cct, fs->get_user(), parent->bucket_name(), path,
-			RGWStatObjRequest::FLAG_NONE);
+  RGWFileHandle* rgw_fh;
 
-  int rc = librgw.get_fe()->execute_req(&req);
-  if (rc != 0)
-    return ENOENT;
+  if (parent->is_root()) {
+    /* XXX if lookup is in the root, then (for now) just get a handle */
+    rgw_fh = fs->lookup_fh(parent, path);
+    if (! rgw_fh)
+      return ENOENT;
+  } else {
+    RGWStatObjRequest req(cct, fs->get_user(), parent->bucket_name(), path,
+			  RGWStatObjRequest::FLAG_NONE);
 
-  RGWFileHandle* rgw_fh = fs->lookup_fh(parent, path);
-  if (! rgw_fh)
-    return ENOENT;
+    int rc = librgw.get_fe()->execute_req(&req);
+    if ((rc != 0) ||
+	(req.get_ret() != 0))
+      return ENOENT;
+
+    rgw_fh = fs->lookup_fh(parent, path);
+    if (! rgw_fh)
+      return ENOENT;
+  }
 
   struct rgw_file_handle *rfh = rgw_fh->get_fh();
   *fh = rfh;
@@ -302,7 +312,8 @@ int rgw_getattr(struct rgw_fs *rgw_fs,
 			RGWStatObjRequest::FLAG_NONE);
 
   int rc = librgw.get_fe()->execute_req(&req);
-  if (rc != 0)
+  if ((rc != 0) ||
+      (req.get_ret() != 0))
     return EINVAL;
 
   /* fill in stat data */
