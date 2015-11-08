@@ -3,6 +3,9 @@
 
 #include "include/rados/rgw_file.h"
 
+#include <sys/types.h>
+#include <sys/stat.h>
+
 #include "rgw_lib.h"
 #include "rgw_rados.h"
 #include "rgw_resolve.h"
@@ -307,29 +310,63 @@ int rgw_getattr(struct rgw_fs *rgw_fs,
   RGWLibFS *fs = static_cast<RGWLibFS*>(rgw_fs->fs_private);
   RGWFileHandle* rgw_fh = get_rgwfh(fh);
 
-  RGWStatObjRequest req(cct, fs->get_user(),
-			rgw_fh->bucket_name(), rgw_fh->object_name(),
-			RGWStatObjRequest::FLAG_NONE);
+  if (rgw_fh->is_root()) {
+    /* XXX do something */
+    memset(st, 0, sizeof(struct stat));
+    st->st_dev = fs->get_inst();
+    st->st_ino = rgw_fh->get_fh()->fh_hk.object; // XXX
+    st->st_mode = 755|S_IFDIR;
+    st->st_nlink = 3;
+    st->st_uid = 0; // XXX
+    st->st_gid = 0; // XXX
+#if 0
+    /* XXX cluster create time? do we know that? */
+    st->st_atim.tv_sec = req.mtime();
+    st->st_mtim.tv_sec = req.mtime();
+    st->st_ctim.tv_sec = req.ctime();
+#endif
+  } else if (rgw_fh->is_bucket()) {
+    /* bucket */
+    /* fill in stat data */
+    memset(st, 0, sizeof(struct stat));
+    st->st_dev = fs->get_inst();
+    st->st_ino = rgw_fh->get_fh()->fh_hk.object; // XXX
+    st->st_mode = 666|S_IFDIR;
+    st->st_nlink = 3;
+    st->st_uid = 0; // XXX
+    st->st_gid = 0; // XXX
+#if 0
+    /* XXX we can at least get creation_time */
+    st->st_atim.tv_sec = req.mtime();
+    st->st_mtim.tv_sec = req.mtime();
+    st->st_ctim.tv_sec = req.ctime();
+#endif
+  } else {
+    /* object */
+    RGWStatObjRequest req(cct, fs->get_user(),
+			  rgw_fh->bucket_name(), rgw_fh->object_name(),
+			  RGWStatObjRequest::FLAG_NONE);
 
-  int rc = librgw.get_fe()->execute_req(&req);
-  if ((rc != 0) ||
-      (req.get_ret() != 0))
-    return EINVAL;
+    int rc = librgw.get_fe()->execute_req(&req);
+    if ((rc != 0) ||
+	(req.get_ret() != 0))
+      return EINVAL;
 
-  /* fill in stat data */
-  memset(st, 0, sizeof(struct stat));
-  st->st_dev = fs->get_inst();
-  st->st_ino = rgw_fh->get_fh()->fh_hk.object; // XXX
-  st->st_mode = 666;
-  st->st_nlink = 1;
-  st->st_uid = 0; // XXX
-  st->st_gid = 0; // XXX
-  st->st_size = req.size();
-  st->st_blksize = 4096;
-  st->st_blocks = (st->st_size) / 512;
-  st->st_atim.tv_sec = req.mtime();
-  st->st_mtim.tv_sec = req.mtime();
-  st->st_ctim.tv_sec = req.ctime();
+    /* fill in stat data */
+    memset(st, 0, sizeof(struct stat));
+    st->st_dev = fs->get_inst();
+    st->st_ino = rgw_fh->get_fh()->fh_hk.object; // XXX
+    st->st_mode = 666|S_IFREG;
+    st->st_nlink = 1;
+    st->st_uid = 0; // XXX
+    st->st_gid = 0; // XXX
+    st->st_size = req.size();
+    st->st_blksize = 4096;
+    st->st_blocks = (st->st_size) / 512;
+    st->st_atim.tv_sec = req.mtime();
+    st->st_mtim.tv_sec = req.mtime();
+    st->st_ctim.tv_sec = req.ctime();
+  }
 
   return 0;
 }
