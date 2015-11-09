@@ -17,7 +17,6 @@
 
 #include "cls/lock/cls_lock_client.h"
 
-#include <boost/asio/coroutine.hpp>
 #include <boost/asio/yield.hpp>
 
 
