@@ -3,7 +3,9 @@
 /*
  * Ceph - scalable distributed file system
  *
- * Copyright (C) 2015 Haomai Wang <haomaiwang@gmail.com>
+ * Copyright (C) 2015 XSky <haomai@xsky.com>
+ *
+ * Author: Haomai Wang <haomaiwang@gmail.com>
  *
  * This is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public
