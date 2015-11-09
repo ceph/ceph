@@ -161,7 +161,6 @@ class LocalRemote(object):
         return tmpfile
 
     def put_file(self, src, dst, sudo=False):
-        assert sudo is False
         shutil.copy(src, dst)
 
     def run(self, args, check_status=True, wait=True,
