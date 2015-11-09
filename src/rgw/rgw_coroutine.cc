@@ -2,7 +2,6 @@
 
 #include "rgw_coroutine.h"
 
-#include <boost/asio/coroutine.hpp>
 #include <boost/asio/yield.hpp>
 
 #define dout_subsys ceph_subsys_rgw
