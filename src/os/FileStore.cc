@@ -3624,7 +3624,6 @@ void FileStore::sync_entry()
     fin.swap(sync_waiters);
     lock.Unlock();
     
-    op_tp.pause();
     if (apply_manager.commit_start()) {
       utime_t start = ceph_clock_now(g_ceph_context);
       uint64_t cp = apply_manager.get_committing_seq();
@@ -3663,7 +3662,6 @@ void FileStore::sync_entry()
 
 	snaps.push_back(cp);
 	apply_manager.commit_started();
-	op_tp.unpause();
 
 	if (cid > 0) {
 	  dout(20) << " waiting for checkpoint " << cid << " to complete" << dendl;
@@ -3677,7 +3675,6 @@ void FileStore::sync_entry()
       } else
       {
 	apply_manager.commit_started();
-	op_tp.unpause();
 
 	object_map->sync();
 	int err = backend->syncfs();
@@ -3732,9 +3729,7 @@ void FileStore::sync_entry()
       sync_entry_timeo_lock.Lock();
       timer.cancel_event(sync_entry_timeo);
       sync_entry_timeo_lock.Unlock();
-    } else {
-      op_tp.unpause();
-    }
+    } 
     
     lock.Lock();
     finish_contexts(g_ceph_context, fin, 0);

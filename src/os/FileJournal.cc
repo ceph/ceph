@@ -526,7 +526,7 @@ int FileJournal::open(uint64_t fs_op_seq)
 	    << " to fs op_seq " << fs_op_seq << dendl;
     last_committed_seq = fs_op_seq;
   }
-
+  
   while (1) {
     bufferlist bl;
     off64_t old_pos = read_pos;
