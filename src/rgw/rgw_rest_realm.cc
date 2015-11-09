@@ -156,7 +156,6 @@ void RGWOp_Period_Post::execute()
     lderr(cct) << "period epoch " << period.get_epoch() << " is not newer "
         "than current epoch " << current_period.get_epoch()
         << ", discarding update" << dendl;
-    http_ret = -EEXIST; // XXX: error code
     return;
   }
 
