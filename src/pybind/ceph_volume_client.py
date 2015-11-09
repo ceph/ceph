@@ -425,7 +425,8 @@ class CephFSVolumeClient(object):
         else:
             return
 
-        parts = os.path.split(path)
+        parts = path.split(os.path.sep)
+
         for i in range(1, len(parts) + 1):
             subpath = os.path.join(*parts[0:i])
             try:
