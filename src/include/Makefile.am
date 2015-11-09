@@ -115,4 +115,5 @@ noinst_HEADERS += \
 	include/rados/memory.h \
 	include/unordered_set.h \
 	include/unordered_map.h \
-	include/timegm.h
+	include/timegm.h \
+	include/event_type.h

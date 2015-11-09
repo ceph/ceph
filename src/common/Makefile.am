@@ -259,7 +259,8 @@ noinst_HEADERS += \
 	common/bit_vector.hpp \
 	common/SubProcess.h \
 	common/valgrind.h \
-	common/TracepointProvider.h
+	common/TracepointProvider.h \
+	common/event_socket.h
 
 if ENABLE_XIO
 noinst_HEADERS += \
