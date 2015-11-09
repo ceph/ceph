@@ -129,6 +129,7 @@ int IndexManager::get_index(coll_t c, const string& baseDir, Index *index) {
       return r;
     col_indices[c] = colIndex;
     index->index = colIndex;
+    colIndex->open_coll();
   } else {
     index->index = it->second;
   }

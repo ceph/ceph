@@ -66,7 +66,9 @@ void LFNIndex::maybe_inject_failure()
 struct FDCloser {
   int fd;
   FDCloser(int f) : fd(f) {}
+  FDCloser() : fd(-1) {}
   ~FDCloser() {
+    if (fd >= 0)
     VOID_TEMP_FAILURE_RETRY(::close(fd));
   }
 };
@@ -164,7 +166,7 @@ int LFNIndex::collection_list_partial(const ghobject_t &start,
 int LFNIndex::fsync_dir(const vector<string> &path)
 {
   maybe_inject_failure();
-  int fd = ::open(get_full_path_subdir(path).c_str(), O_RDONLY);
+  int fd = ::openat(get_coll_fd(), get_relative_path_subdir(path).c_str(), O_RDONLY);
   if (fd < 0)
     return -errno;
   FDCloser f(fd);
@@ -183,14 +185,14 @@ int LFNIndex::link_object(const vector<string> &from,
 			  const string &from_short_name)
 {
   int r;
-  string from_path = get_full_path(from, from_short_name);
+  string from_path = get_relative_path(from, from_short_name);
   string to_path;
   maybe_inject_failure();
   r = lfn_get_name(to, oid, 0, &to_path, 0);
   if (r < 0)
     return r;
   maybe_inject_failure();
-  r = ::link(from_path.c_str(), to_path.c_str());
+  r = ::linkat(fd, from_path.c_str(), fd, to_path.c_str(), 0);
   maybe_inject_failure();
   if (r < 0)
     return -errno;
@@ -208,7 +210,7 @@ int LFNIndex::remove_objects(const vector<string> &dir,
        ++to_clean) {
     if (!lfn_is_hashed_filename(to_clean->first)) {
       maybe_inject_failure();
-      int r = ::unlink(get_full_path(dir, to_clean->first).c_str());
+      int r = ::unlinkat(fd, get_relative_path(dir, to_clean->first).c_str(), 0);
       maybe_inject_failure();
       if (r < 0)
 	return -errno;
@@ -235,18 +237,18 @@ int LFNIndex::remove_objects(const vector<string> &dir,
 	 ++i) {
       if (candidate == chain.rend() || *i > candidate->first) {
 	string remove_path_name = 
-	  get_full_path(dir, lfn_get_short_name(to_clean->second, *i)); 
+	  get_relative_path(dir, lfn_get_short_name(to_clean->second, *i)); 
 	maybe_inject_failure();
-	int r = ::unlink(remove_path_name.c_str());
+	int r = ::unlinkat(fd, remove_path_name.c_str(), 0);
 	maybe_inject_failure();
 	if (r < 0)
 	  return -errno;
 	continue;
       }
-      string from = get_full_path(dir, candidate->second.first);
-      string to = get_full_path(dir, lfn_get_short_name(candidate->second.second, *i));
+      string from = get_relative_path(dir, candidate->second.first);
+      string to = get_relative_path(dir, lfn_get_short_name(candidate->second.second, *i));
       maybe_inject_failure();
-      int r = ::rename(from.c_str(), to.c_str());
+      int r = ::renameat(fd, from.c_str(), fd, to.c_str());
       maybe_inject_failure();
       if (r < 0)
 	return -errno;
@@ -273,13 +275,13 @@ int LFNIndex::move_objects(const vector<string> &from,
   for (map<string,ghobject_t>::iterator i = to_move.begin();
        i != to_move.end();
        ++i) {
-    string from_path = get_full_path(from, i->first);
+    string from_path = get_relative_path(from, i->first);
     string to_path, to_name;
     r = lfn_get_name(to, i->second, &to_name, &to_path, 0);
     if (r < 0)
       return r;
     maybe_inject_failure();
-    r = ::link(from_path.c_str(), to_path.c_str());
+    r = ::linkat(fd, from_path.c_str(), fd, to_path.c_str(), 0);
     if (r < 0 && errno != EEXIST)
       return -errno;
     maybe_inject_failure();
@@ -295,7 +297,7 @@ int LFNIndex::move_objects(const vector<string> &from,
        i != to_move.end();
        ++i) {
     maybe_inject_failure();
-    r = ::unlink(get_full_path(from, i->first).c_str());
+    r = ::unlinkat(fd, get_relative_path(from, i->first).c_str(), 0);
     maybe_inject_failure();
     if (r < 0)
       return -errno;
@@ -332,9 +334,9 @@ int LFNIndex::move_subdir(
 {
   vector<string> sub_path(path.begin(), path.end());
   sub_path.push_back(dir);
-  string from_path(from.get_full_path_subdir(sub_path));
-  string to_path(dest.get_full_path_subdir(sub_path));
-  int r = ::rename(from_path.c_str(), to_path.c_str());
+  string from_path(from.get_relative_path_subdir(sub_path));
+  string to_path(dest.get_relative_path_subdir(sub_path));
+  int r = ::renameat(from.get_coll_fd(), from_path.c_str(), dest.get_coll_fd(),  to_path.c_str());
   if (r < 0)
     return -errno;
   return 0;
@@ -347,7 +349,7 @@ int LFNIndex::move_object(
   const pair<string, ghobject_t> &obj
   )
 {
-  string from_path(from.get_full_path(path, obj.first));
+  string from_path(from.get_relative_path(path, obj.first));
   string to_path;
   string to_name;
   int exists;
@@ -355,7 +357,7 @@ int LFNIndex::move_object(
   if (r < 0)
     return r;
   if (!exists) {
-    r = ::link(from_path.c_str(), to_path.c_str());
+    r = ::linkat(from.get_coll_fd(), from_path.c_str(), dest.get_coll_fd(), to_path.c_str(), 0);
     if (r < 0)
       return r;
   }
@@ -479,7 +481,7 @@ int LFNIndex::list_subdirs(const vector<string> &to_list,
 int LFNIndex::create_path(const vector<string> &to_create)
 {
   maybe_inject_failure();
-  int r = ::mkdir(get_full_path_subdir(to_create).c_str(), 0777);
+  int r = ::mkdirat(fd, get_relative_path_subdir(to_create).c_str(), 0777);
   maybe_inject_failure();
   if (r < 0)
     return -errno;
@@ -500,9 +502,9 @@ int LFNIndex::remove_path(const vector<string> &to_remove)
 
 int LFNIndex::path_exists(const vector<string> &to_check, int *exists)
 {
-  string full_path = get_full_path_subdir(to_check);
+  string relative_path = get_relative_path_subdir(to_check);
   struct stat buf;
-  if (::stat(full_path.c_str(), &buf)) {
+  if (::fstatat(fd, relative_path.c_str(), &buf, 0)) {
     int r = -errno;
     if (r == -ENOENT) {
       *exists = 0;
@@ -733,12 +735,12 @@ int LFNIndex::lfn_get_name(const vector<string> &path,
     if (mangled_name)
       *mangled_name = full_name;
     if (out_path)
-      *out_path = get_full_path(path, full_name);
+      *out_path = get_relative_path(path, full_name);
     if (exists) {
       struct stat buf;
-      string full_path = get_full_path(path, full_name);
+      string relative_path = get_relative_path(path, full_name);
       maybe_inject_failure();
-      r = ::stat(full_path.c_str(), &buf);
+      r = ::fstatat(fd, relative_path.c_str(), &buf, 0);
       if (r < 0) {
 	if (errno == ENOENT)
 	  *exists = 0;
@@ -754,19 +756,26 @@ int LFNIndex::lfn_get_name(const vector<string> &path,
   int i = 0;
   string candidate;
   string candidate_path;
+  FDCloser f;
   char buf[FILENAME_MAX_LEN + 1];
   for ( ; ; ++i) {
     candidate = lfn_get_short_name(oid, i);
-    candidate_path = get_full_path(path, candidate);
-    r = chain_getxattr(candidate_path.c_str(), get_lfn_attr().c_str(),
-		       buf, sizeof(buf));
+    candidate_path = get_relative_path(path, candidate);
+    int fd = ::openat(get_coll_fd(), candidate_path.c_str(), O_RDONLY);
+
+    if (fd > 0) {
+      f.fd = fd;
+      r = chain_fgetxattr(fd, get_lfn_attr().c_str(),  buf, sizeof(buf));
+    } else
+      r = fd;
+
     if (r < 0) {
       if (errno != ENODATA && errno != ENOENT)
 	return -errno;
       if (errno == ENODATA) {
 	// Left over from incomplete transaction, it'll be replayed
 	maybe_inject_failure();
-	r = ::unlink(candidate_path.c_str());
+	r = ::unlinkat(get_coll_fd(), candidate_path.c_str(), 0);
 	maybe_inject_failure();
 	if (r < 0)
 	  return -errno;
@@ -790,12 +799,11 @@ int LFNIndex::lfn_get_name(const vector<string> &path,
 	*exists = 1;
       return 0;
     }
-    r = chain_getxattr(candidate_path.c_str(), get_alt_lfn_attr().c_str(),
-		       buf, sizeof(buf));
+    r = chain_fgetxattr(fd, get_alt_lfn_attr().c_str(), buf, sizeof(buf));
     if (r > 0) {
       // only consider alt name if nlink > 1
       struct stat st;
-      int rc = ::stat(candidate_path.c_str(), &st);
+      int rc = ::fstat(fd, &st);
       if (rc < 0)
 	return -errno;
       if (st.st_nlink <= 1) {
@@ -803,8 +811,7 @@ int LFNIndex::lfn_get_name(const vector<string> &path,
 	maybe_inject_failure();
 	dout(20) << __func__ << " found extra alt attr for " << candidate_path
 		 << ", long name " << string(buf, r) << dendl;
-	rc = chain_removexattr(candidate_path.c_str(),
-			       get_alt_lfn_attr().c_str());
+	rc = chain_fremovexattr(fd, get_alt_lfn_attr().c_str());
 	maybe_inject_failure();
 	if (rc < 0)
 	  return rc;
@@ -862,9 +869,9 @@ int LFNIndex::lfn_unlink(const vector<string> &path,
 			 const string &mangled_name)
 {
   if (!lfn_is_hashed_filename(mangled_name)) {
-    string full_path = get_full_path(path, mangled_name);
+    string relative_path = get_relative_path(path, mangled_name);
     maybe_inject_failure();
-    int r = ::unlink(full_path.c_str());
+    int r = ::unlinkat(fd, relative_path.c_str(), 0);
     maybe_inject_failure();
     if (r < 0)
       return -errno;
@@ -882,8 +889,8 @@ int LFNIndex::lfn_unlink(const vector<string> &path,
   for ( ; ; ++i) {
     struct stat buf;
     string to_check = lfn_get_short_name(oid, i);
-    string to_check_path = get_full_path(path, to_check);
-    int r = ::stat(to_check_path.c_str(), &buf);
+    string to_check_path = get_relative_path(path, to_check);
+    int r = ::fstatat(fd, to_check_path.c_str(), &buf, 0);
     if (r < 0) {
       if (errno == ENOENT) {
 	break;
@@ -892,22 +899,22 @@ int LFNIndex::lfn_unlink(const vector<string> &path,
       }
     }
   }
-  string full_path = get_full_path(path, mangled_name);
-  int fd = ::open(full_path.c_str(), O_RDONLY);
+  string relative_path = get_relative_path(path, mangled_name);
+  int fd = ::openat(get_coll_fd(), relative_path.c_str(), O_RDONLY);
   if (fd < 0)
     return -errno;
   FDCloser f(fd);
   if (i == removed_index + 1) {
     maybe_inject_failure();
-    int r = ::unlink(full_path.c_str());
+    int r = ::unlinkat(get_coll_fd(), relative_path.c_str(), 0);
     maybe_inject_failure();
     if (r < 0)
       return -errno;
   } else {
-    string& rename_to = full_path;
-    string rename_from = get_full_path(path, lfn_get_short_name(oid, i - 1));
+    string& rename_to = relative_path;
+    string rename_from = get_relative_path(path, lfn_get_short_name(oid, i - 1));
     maybe_inject_failure();
-    int r = ::rename(rename_from.c_str(), rename_to.c_str());
+    int r = ::renameat(get_coll_fd(), rename_from.c_str(), get_coll_fd(), rename_to.c_str());
     maybe_inject_failure();
     if (r < 0)
       return -errno;
@@ -916,7 +923,7 @@ int LFNIndex::lfn_unlink(const vector<string> &path,
   int r = ::fstat(fd, &st);
   if (r == 0 && st.st_nlink > 0) {
     // remove alt attr
-    dout(20) << __func__ << " removing alt attr from " << full_path << dendl;
+    dout(20) << __func__ << " removing alt attr from " << relative_path << dendl;
     fsync_dir(path);
     chain_fremovexattr(fd, get_alt_lfn_attr().c_str());
   }

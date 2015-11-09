@@ -184,6 +184,7 @@ public:
     ::chmod("PATH_1", 0700);
     ASSERT_EQ(0, ::system("rm -fr PATH_1"));
     ASSERT_EQ(0, ::mkdir("PATH_1", 0700));
+    open_coll();
   }
 
   virtual void TearDown() {

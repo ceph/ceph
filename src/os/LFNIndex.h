@@ -439,7 +439,7 @@ private:
    * @param [in] path Path in which to get filename for oid.
    * @param [in] oid Object for which to get filename.
    * @param [out] mangled_name Filename for oid, pass NULL if not needed.
-   * @param [out] full_path Fullpath for oid, pass NULL if not needed.
+   * @param [out] relative_path Relativepath for oid which relative to coll_t, pass NULL if not needed.
    * @param [out] exists 1 if the file exists, 0 otherwise, pass NULL if 
    * not needed
    * @return Error Code, 0 on success.
@@ -448,7 +448,7 @@ private:
     const vector<string> &path,
     const ghobject_t &oid,
     string *mangled_name,
-    string *full_path,
+    string *relative_path,
     int *exists
     );
 
