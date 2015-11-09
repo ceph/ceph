@@ -169,7 +169,11 @@ public:
   int verify_permission();
   void pre_exec();
   void execute();
-  int read_user_manifest_part(rgw_bucket& bucket, RGWObjEnt& ent, RGWAccessControlPolicy *bucket_policy, off_t start_ofs, off_t end_ofs);
+  int read_user_manifest_part(rgw_bucket& bucket,
+                              const RGWObjEnt& ent,
+                              RGWAccessControlPolicy *bucket_policy,
+                              off_t start_ofs,
+                              off_t end_ofs);
   int handle_user_manifest(const char *prefix);
 
   int get_data_cb(bufferlist& bl, off_t ofs, off_t len);
