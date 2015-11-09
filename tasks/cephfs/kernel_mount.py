@@ -41,11 +41,11 @@ class KernelMount(CephFSMount):
             ],
         )
 
-    def mount(self):
+    def mount(self, mount_path=None):
         log.info('Mounting kclient client.{id} at {remote} {mnt}...'.format(
             id=self.client_id, remote=self.client_remote, mnt=self.mountpoint))
 
-        keyring = '/etc/ceph/ceph.client.{id}.keyring'.format(id=self.client_id)
+        keyring = self.get_keyring_path()
         secret = '{tdir}/data/client.{id}.secret'.format(tdir=self.test_dir, id=self.client_id)
         self.write_secret_file(self.client_remote, 'client.{id}'.format(id=self.client_id),
                                keyring, secret)
@@ -58,6 +58,9 @@ class KernelMount(CephFSMount):
             ],
         )
 
+        if mount_path is None:
+            mount_path = "/"
+
         self.client_remote.run(
             args=[
                 'sudo',
@@ -65,7 +68,7 @@ class KernelMount(CephFSMount):
                 'ceph-coverage',
                 '{tdir}/archive/coverage'.format(tdir=self.test_dir),
                 '/sbin/mount.ceph',
-                '{mons}:/'.format(mons=','.join(self.mons)),
+                '{mons}:{mount_path}'.format(mons=','.join(self.mons), mount_path=mount_path),
                 self.mountpoint,
                 '-v',
                 '-o',
