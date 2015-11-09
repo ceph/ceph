@@ -1177,16 +1177,19 @@ int RGWHandler_ObjStore::allocate_formatter(struct req_state *s, int default_typ
     }
   }
 
+  const string& mm = s->info.args.get("multipart-manifest");
+  const bool multipart_delete = (mm.compare("delete") == 0);
+
   switch (s->format) {
     case RGW_FORMAT_PLAIN:
       {
-        const bool use_kv_syntax = s->info.args.exists("bulk-delete");
+        const bool use_kv_syntax = s->info.args.exists("bulk-delete") || multipart_delete;
         s->formatter = new RGWFormatter_Plain(use_kv_syntax);
         break;
       }
     case RGW_FORMAT_XML:
       {
-        const bool lowercase_underscore = s->info.args.exists("bulk-delete");
+        const bool lowercase_underscore = s->info.args.exists("bulk-delete") || multipart_delete;
         s->formatter = new XMLFormatter(false, lowercase_underscore);
         break;
       }

@@ -731,6 +731,61 @@ void RGWPutMetadataObject_ObjStore_SWIFT::send_response()
   rgw_flush_formatter_and_reset(s, s->formatter);
 }
 
+static void bulkdelete_respond(const unsigned num_deleted,
+                               const unsigned int num_unfound,
+                               const std::list<RGWBulkDelete::fail_desc_t>& failures,
+                               const int prot_flags,                  /* in  */
+                               ceph::Formatter& formatter)            /* out */
+{
+  formatter.open_object_section("delete");
+
+  string resp_status;
+  string resp_body;
+
+  if (!failures.empty()) {
+    int reason = ERR_INVALID_REQUEST;
+    for (const auto fail_desc : failures) {
+      if (-ENOENT != fail_desc.err && -EACCES != fail_desc.err) {
+        reason = fail_desc.err;
+      }
+    }
+
+    rgw_err err;
+    set_req_state_err(err, reason, prot_flags);
+    dump_errno(err, resp_status);
+  } else if (0 == num_deleted && 0 == num_unfound) {
+    /* 400 Bad Request */
+    dump_errno(400, resp_status);
+    resp_body = "Invalid bulk delete.";
+  } else {
+    /* 200 OK */
+    dump_errno(200, resp_status);
+  }
+
+  formatter.dump_int("Number Deleted", num_deleted);
+  formatter.dump_int("Number Not Found", num_unfound);
+  formatter.dump_string("Response Body", resp_body);
+  formatter.dump_string("Response Status", resp_status);
+  formatter.open_array_section("Errors");
+  for (const auto fail_desc : failures) {
+    formatter.open_array_section("object");
+
+    stringstream ss_name;
+    ss_name << fail_desc.path;
+    formatter.dump_string("Name", ss_name.str());
+
+    rgw_err err;
+    set_req_state_err(err, fail_desc.err, prot_flags);
+    string status;
+    dump_errno(err, status);
+    formatter.dump_string("Status", status);
+    formatter.close_section();
+  }
+  formatter.close_section();
+
+  formatter.close_section();
+}
+
 int RGWDeleteObj_ObjStore_SWIFT::get_params()
 {
   const string& mm = s->info.args.get("multipart-manifest");
@@ -742,13 +797,41 @@ int RGWDeleteObj_ObjStore_SWIFT::get_params()
 void RGWDeleteObj_ObjStore_SWIFT::send_response()
 {
   int r = ret;
-  if (!r)
+
+  if (multipart_delete) {
+    r = 0;
+  } else if(!r) {
     r = STATUS_NO_CONTENT;
+  }
 
   set_req_state_err(s, r);
   dump_errno(s);
   end_header(s, this);
+
+  if (multipart_delete) {
+    if (deleter) {
+      bulkdelete_respond(deleter->get_num_deleted(),
+                         deleter->get_num_unfound(),
+                         deleter->get_failures(),
+                         s->prot_flags,
+                         *s->formatter);
+    } else if (-ENOENT == ret) {
+      bulkdelete_respond(0, 1, {}, s->prot_flags, *s->formatter);
+    } else {
+      RGWBulkDelete::acct_path_t path;
+      path.bucket_name = s->bucket_name_str;
+      path.obj_key = s->object;
+
+      RGWBulkDelete::fail_desc_t fail_desc;
+      fail_desc.err = ret;
+      fail_desc.path = path;
+
+      bulkdelete_respond(0, 0, { fail_desc }, s->prot_flags, *s->formatter);
+    }
+  }
+
   rgw_flush_formatter_and_reset(s, s->formatter);
+
 }
 
 static void get_contype_from_attrs(map<string, bufferlist>& attrs,
@@ -1030,58 +1113,11 @@ void RGWBulkDelete_ObjStore_SWIFT::send_response()
   dump_errno(s);
   end_header(s, NULL);
 
-  s->formatter->open_object_section("delete");
-
-  const auto num_deleted = deleter->get_num_deleted();
-  const auto num_unfound = deleter->get_num_unfound();
-  const auto& failures = deleter->get_failures();
-
-  string resp_status;
-  string resp_body;
-
-  if (!failures.empty()) {
-    int reason = ERR_INVALID_REQUEST;
-    for (const auto fail_desc : failures) {
-      if (-ENOENT != fail_desc.err && -EACCES != fail_desc.err) {
-        reason = fail_desc.err;
-      }
-    }
-
-    rgw_err err;
-    set_req_state_err(err, reason, s->prot_flags);
-    dump_errno(err, resp_status);
-  } else if (0 == num_deleted && 0 == num_unfound) {
-    /* 400 Bad Request */
-    dump_errno(400, resp_status);
-    resp_body = "Invalid bulk delete.";
-  } else {
-    /* 200 OK */
-    dump_errno(200, resp_status);
-  }
-
-  s->formatter->dump_int("Number Deleted", num_deleted);
-  s->formatter->dump_int("Number Not Found", num_unfound);
-  s->formatter->dump_string("Response Body", resp_body);
-  s->formatter->dump_string("Response Status", resp_status);
-  s->formatter->open_array_section("Errors");
-  for (const auto fail_desc : failures) {
-    s->formatter->open_array_section("object");
-
-    stringstream ss_name;
-    ss_name << fail_desc.path;
-    s->formatter->dump_string("Name", ss_name.str());
-
-    rgw_err err;
-    set_req_state_err(err, fail_desc.err, s->prot_flags);
-    string status;
-    dump_errno(err, status);
-    s->formatter->dump_string("Status", status);
-    s->formatter->close_section();
-  }
-  s->formatter->close_section();
-
-  s->formatter->close_section();
-
+  bulkdelete_respond(deleter->get_num_deleted(),
+                     deleter->get_num_unfound(),
+                     deleter->get_failures(),
+                     s->prot_flags,
+                     *s->formatter);
   rgw_flush_formatter_and_reset(s, s->formatter);
 }
 
