@@ -23,6 +23,7 @@
 #include "common/signal.h"
 #include "common/ceph_argparse.h"
 #include "common/errno.h"
+#include "common/JSONFormatter.h"
 
 #include "msg/Messenger.h"
 #include "mon/MonClient.h"
