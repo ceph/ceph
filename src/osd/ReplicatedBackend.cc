@@ -398,11 +398,24 @@ public:
       written += p->first.length() + p->second.length();
     return t->omap_setkeys(get_coll(hoid), ghobject_t(hoid), keys);
   }
+  void omap_setkeys(
+    const hobject_t &hoid,
+    bufferlist &keys_bl
+    ) {
+    written += keys_bl.length();
+    return t->omap_setkeys(get_coll(hoid), ghobject_t(hoid), keys_bl);
+  }
   void omap_rmkeys(
     const hobject_t &hoid,
     set<string> &keys
     ) {
     t->omap_rmkeys(get_coll(hoid), ghobject_t(hoid), keys);
+  }
+  void omap_rmkeys(
+    const hobject_t &hoid,
+    bufferlist &keys_bl
+    ) {
+    t->omap_rmkeys(get_coll(hoid), ghobject_t(hoid), keys_bl);
   }
   void omap_clear(
     const hobject_t &hoid
@@ -800,7 +813,7 @@ void ReplicatedBackend::be_deep_scrub(
       poid, ghobject_t::NO_GEN, get_parent()->whoami_shard().shard));
   assert(iter);
   uint64_t keys_scanned = 0;
-  for (iter->seek_to_first(); iter->valid() ; iter->next()) {
+  for (iter->seek_to_first(); iter->valid() ; iter->next(false)) {
     if (cct->_conf->osd_scan_list_ping_tp_interval &&
 	(keys_scanned % cct->_conf->osd_scan_list_ping_tp_interval == 0)) {
       handle.reset_tp_timeout();
@@ -2021,7 +2034,7 @@ int ReplicatedBackend::build_push_op(const ObjectRecoveryInfo &recovery_info,
 			       ghobject_t(recovery_info.soid));
     for (iter->lower_bound(progress.omap_recovered_to);
 	 iter->valid();
-	 iter->next()) {
+	 iter->next(false)) {
       if (!out_op->omap_entries.empty() &&
 	  available <= (iter->key().size() + iter->value().length()))
 	break;

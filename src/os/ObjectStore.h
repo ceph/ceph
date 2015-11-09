@@ -84,6 +84,10 @@ static inline void encode(const map<string,bufferptr> *attrset, bufferlist &bl) 
   ::encode(*attrset, bl);
 }
 
+// this isn't the best place for these, but...
+void decode_str_str_map_to_bl(bufferlist::iterator& p, bufferlist *out);
+void decode_str_set_to_bl(bufferlist::iterator& p, bufferlist *out);
+
 // Flag bits
 typedef uint32_t osflagbits_t;
 const int SKIP_JOURNAL_REPLAY = 1 << 0;
@@ -836,8 +840,14 @@ public:
       void decode_attrset(map<string,bufferlist>& aset) {
         ::decode(aset, data_bl_p);
       }
+      void decode_attrset_bl(bufferlist *pbl) {
+	decode_str_str_map_to_bl(data_bl_p, pbl);
+      }
       void decode_keyset(set<string> &keys){
         ::decode(keys, data_bl_p);
+      }
+      void decode_keyset_bl(bufferlist *pbl){
+        decode_str_set_to_bl(data_bl_p, pbl);
       }
 
       const ghobject_t &get_oid(__le32 oid_id) {
@@ -1405,6 +1415,29 @@ public:
       }
       data.ops++;
     }
+
+    /// Set keys on an oid omap (bufferlist variant).
+    void omap_setkeys(
+      coll_t cid,                           ///< [in] Collection containing oid
+      const ghobject_t &oid,                ///< [in] Object to update
+      const bufferlist &attrset_bl          ///< [in] Replacement keys and values
+      ) {
+      if (use_tbl) {
+        __u32 op = OP_OMAP_SETKEYS;
+        ::encode(op, tbl);
+        ::encode(cid, tbl);
+        ::encode(oid, tbl);
+        tbl.append(attrset_bl);
+      } else {
+        Op* _op = _get_next_op();
+        _op->op = OP_OMAP_SETKEYS;
+        _op->cid = _get_coll_id(cid);
+        _op->oid = _get_object_id(oid);
+        data_bl.append(attrset_bl);
+      }
+      data.ops++;
+    }
+
     /// Remove keys from oid omap
     void omap_rmkeys(
       coll_t cid,             ///< [in] Collection containing oid
@@ -1423,6 +1456,28 @@ public:
         _op->cid = _get_coll_id(cid);
         _op->oid = _get_object_id(oid);
         ::encode(keys, data_bl);
+      }
+      data.ops++;
+    }
+
+    /// Remove keys from oid omap
+    void omap_rmkeys(
+      coll_t cid,             ///< [in] Collection containing oid
+      const ghobject_t &oid,  ///< [in] Object from which to remove the omap
+      const bufferlist &keys_bl ///< [in] Keys to clear
+      ) {
+      if (use_tbl) {
+        __u32 op = OP_OMAP_RMKEYS;
+        ::encode(op, tbl);
+        ::encode(cid, tbl);
+        ::encode(oid, tbl);
+        tbl.append(keys_bl);
+      } else {
+        Op* _op = _get_next_op();
+        _op->op = OP_OMAP_RMKEYS;
+        _op->cid = _get_coll_id(cid);
+        _op->oid = _get_object_id(oid);
+        data_bl.append(keys_bl);
       }
       data.ops++;
     }

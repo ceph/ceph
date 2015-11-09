@@ -25,6 +25,7 @@
 #include "common/dout.h"
 #include "include/assert.h"
 #include "common/Formatter.h"
+#include "common/Cond.h"
 
 #include "common/ceph_context.h"
 
@@ -204,6 +205,10 @@ public:
     std::map<string, bufferlist> *out
     );
 
+  int get(const string &prefix, 
+    const string &key,   
+    bufferlist *value);
+      
   class LevelDBWholeSpaceIteratorImpl :
     public KeyValueDB::WholeSpaceIteratorImpl {
   protected:
@@ -275,6 +280,14 @@ public:
       string prefix, key;
       split_key(dbiter->key(), &prefix, &key);
       return make_pair(prefix, key);
+    }
+    bool raw_key_is_prefixed(const string &prefix) {
+      leveldb::Slice key = dbiter->key();
+      if ((key.size() > prefix.length()) && (key[prefix.length()] == '\0')) {
+        return memcmp(key.data(), prefix.c_str(), prefix.length()) == 0;
+      } else {
+        return false;
+      }
     }
     bufferlist value() {
       return to_bufferlist(dbiter->value());

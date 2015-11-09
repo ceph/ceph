@@ -11,7 +11,7 @@
 #include <vector>
 
 #include "ObjectMap.h"
-#include "KeyValueDB.h"
+#include "kv/KeyValueDB.h"
 #include "DBObjectMap.h"
 #include <errno.h>
 
@@ -344,7 +344,7 @@ bool DBObjectMap::DBObjectMapIteratorImpl::valid_parent()
   return false;
 }
 
-int DBObjectMap::DBObjectMapIteratorImpl::next()
+int DBObjectMap::DBObjectMapIteratorImpl::next(bool validate)
 {
   assert(cur_iter->valid());
   assert(valid());
@@ -1089,17 +1089,16 @@ DBObjectMap::Header DBObjectMap::_lookup_map_header(
     }
   }
 
-  map<string, bufferlist> out;
-  set<string> to_get;
-  to_get.insert(map_header_key(oid));
-  int r = db->get(HOBJECT_TO_SEQ, to_get, &out);
-  if (r < 0 || out.empty()) {
+  bufferlist out;
+  int r = db->get(HOBJECT_TO_SEQ, map_header_key(oid), &out);
+  if (r < 0 || out.length()==0) {
     delete header;
     return Header();
   }
 
   Header ret(header, RemoveOnDelete(this));
-  bufferlist::iterator iter = out.begin()->second.begin();
+  bufferlist::iterator iter = out.begin();
+
   ret->decode(iter);
   {
     Mutex::Locker l(cache_lock);

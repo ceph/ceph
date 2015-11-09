@@ -27,7 +27,7 @@
 #include "common/WorkQueue.h"
 #include "os/ObjectStore.h"
 #include "os/fs/FS.h"
-#include "os/KeyValueDB.h"
+#include "kv/KeyValueDB.h"
 
 #include "newstore_types.h"
 
@@ -124,7 +124,7 @@ public:
     int upper_bound(const string &after);
     int lower_bound(const string &to);
     bool valid();
-    int next();
+    int next(bool validate=true);
     string key();
     bufferlist value();
     int status() {
@@ -788,7 +788,7 @@ private:
   int _omap_setkeys(TransContext *txc,
 		    CollectionRef& c,
 		    const ghobject_t& oid,
-		    const map<string,bufferlist>& m);
+		    bufferlist& bl);
   int _omap_setheader(TransContext *txc,
 		      CollectionRef& c,
 		      const ghobject_t& oid,
@@ -796,7 +796,7 @@ private:
   int _omap_rmkeys(TransContext *txc,
 		   CollectionRef& c,
 		   const ghobject_t& oid,
-		   const set<string>& m);
+		   bufferlist& bl);
   int _omap_rmkey_range(TransContext *txc,
 			CollectionRef& c,
 			const ghobject_t& oid,

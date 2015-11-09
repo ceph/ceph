@@ -406,9 +406,17 @@
        const hobject_t &hoid,         ///< [in] object to write
        map<string, bufferlist> &keys  ///< [in] omap keys, may be cleared
        ) { assert(0); }
+     virtual void omap_setkeys(
+       const hobject_t &hoid,         ///< [in] object to write
+       bufferlist &keys_bl  ///< [in] omap keys, may be cleared
+       ) { assert(0); }
      virtual void omap_rmkeys(
        const hobject_t &hoid,         ///< [in] object to write
        set<string> &keys              ///< [in] omap keys, may be cleared
+       ) { assert(0); }
+     virtual void omap_rmkeys(
+       const hobject_t &hoid,         ///< [in] object to write
+       bufferlist &keys_bl            ///< [in] omap keys, may be cleared
        ) { assert(0); }
      virtual void omap_clear(
        const hobject_t &hoid          ///< [in] object to clear omap
