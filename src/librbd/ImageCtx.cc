@@ -15,6 +15,7 @@
 #include "librbd/internal.h"
 #include "librbd/ImageCtx.h"
 #include "librbd/ImageWatcher.h"
+#include "librbd/LibrbdAdminSocketHook.h"
 #include "librbd/ObjectMap.h"
 
 #include <boost/bind.hpp>
@@ -84,7 +85,8 @@ public:
       object_cacher(NULL), writeback_handler(NULL), object_set(NULL),
       readahead(),
       total_bytes_read(0), copyup_finisher(NULL),
-      object_map(*this), aio_work_queue(NULL), op_work_queue(NULL)
+      object_map(*this), aio_work_queue(NULL), op_work_queue(NULL),
+      asok_hook(new LibrbdAdminSocketHook(this))
   {
     md_ctx.dup(p);
     data_ctx.dup(p);
@@ -127,6 +129,8 @@ public:
 
     delete op_work_queue;
     delete aio_work_queue;
+
+    delete asok_hook;
   }
 
   int ImageCtx::init() {
@@ -294,6 +298,7 @@ public:
     plb.add_u64_counter(l_librbd_resize, "resize", "Resizes");
     plb.add_u64_counter(l_librbd_readahead, "readahead", "Read ahead");
     plb.add_u64_counter(l_librbd_readahead_bytes, "readahead_bytes", "Data size in read ahead");
+    plb.add_u64_counter(l_librbd_invalidate_cache, "invalidate_cache", "Cache invalidates");
 
     perfcounter = plb.create_perf_counters();
     cct->get_perfcounters_collection()->add(perfcounter);
@@ -687,6 +692,7 @@ public:
     C_SaferCond ctx;
     invalidate_cache(&ctx);
     result = ctx.wait();
+    ldout(cct, 20) << "finished invalidating cache" << dendl;
 
     if (result && purge_on_error) {
       cache_lock.Lock();

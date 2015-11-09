@@ -20,6 +20,7 @@ librbd_internal_la_SOURCES = \
 	librbd/ImageCtx.cc \
 	librbd/ImageWatcher.cc \
 	librbd/internal.cc \
+	librbd/LibrbdAdminSocketHook.cc \
 	librbd/LibrbdWriteback.cc \
 	librbd/ObjectMap.cc \
 	librbd/RebuildObjectMapRequest.cc
@@ -60,6 +61,7 @@ noinst_HEADERS += \
 	librbd/ImageCtx.h \
 	librbd/ImageWatcher.h \
 	librbd/internal.h \
+	librbd/LibrbdAdminSocketHook.h \
 	librbd/LibrbdWriteback.h \
 	librbd/ObjectMap.h \
 	librbd/parent_types.h \
