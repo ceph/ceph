@@ -23,7 +23,7 @@ class FuseMount(CephFSMount):
         self.fuse_daemon = None
         self._fuse_conn = None
 
-    def mount(self):
+    def mount(self, mount_path=None):
         log.info("Client client.%s config is %s" % (self.client_id, self.client_config))
 
         daemon_signal = 'kill'
@@ -50,9 +50,13 @@ class FuseMount(CephFSMount):
             'daemon-helper',
             daemon_signal,
         ]
-        run_cmd_tail = [
-            'ceph-fuse',
-            '-f',
+
+        fuse_cmd = ['ceph-fuse', "-f"]
+
+        if mount_path is not None:
+            fuse_cmd += ["--client_mountpoint={0}".format(mount_path)]
+
+        fuse_cmd += [
             '--name', 'client.{id}'.format(id=self.client_id),
             # TODO ceph-fuse doesn't understand dash dash '--',
             mnt,
@@ -66,7 +70,7 @@ class FuseMount(CephFSMount):
                 self.client_config.get('valgrind'),
             )
 
-        run_cmd.extend(run_cmd_tail)
+        run_cmd.extend(fuse_cmd)
 
         def list_connections():
             self.client_remote.run(
