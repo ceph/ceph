@@ -84,6 +84,7 @@ void OpRequest::_unregistered() {
 }
 
 bool OpRequest::check_rmw(int flag) {
+  assert(rmw_flags != 0);
   return rmw_flags & flag;
 }
 bool OpRequest::may_read() { return need_read_cap() || need_class_read_cap(); }
