@@ -218,9 +218,9 @@ int KineticStore::split_key(string in_prefix, string *prefix, string *key)
 
   // Fetch prefix and/or key directly from Slice
   if (prefix)
-    *prefix = string(in_data, 0, prefix_len);
+    *prefix = string(in_data, prefix_len);
   if (key)
-    *key = string(separator+1, 0, in_prefix.size()-prefix_len-1);
+    *key = string(separator+1, in_prefix.size()-prefix_len-1);
   return 0;
 }
 

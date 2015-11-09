@@ -342,9 +342,9 @@ int RocksDBStore::split_key(rocksdb::Slice in, string *prefix, string *key)
 
   // Fetch prefix and/or key directly from Slice
   if (prefix)
-    *prefix = string(in.data(), 0, prefix_len);
+    *prefix = string(in.data(), prefix_len);
   if (key)
-    *key = string(separator+1, 0, in.size()-prefix_len-1);
+    *key = string(separator+1, in.size()-prefix_len-1);
   return 0;
 }
 
