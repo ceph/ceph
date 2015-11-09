@@ -878,15 +878,8 @@ struct C_InvalidateCache : public Context {
     Mutex::Locker l(completed_reqs_lock);
     ldout(cct, 10) << "clear pending AioCompletion: count="
                    << completed_reqs.size() << dendl;
-
-    for (xlist<AioCompletion*>::iterator it = completed_reqs.begin();
-         !it.end(); ++it) {
-      ldout(cct, 10) << "clear pending AioCompletion: " << *it << dendl;
-      (*it)->set_event_notify(false);
-    }
     completed_reqs.clear();
   }
-
 
   bool ImageCtx::_filter_metadata_confs(const string &prefix, map<string, bool> &configs,
                                         map<string, bufferlist> &pairs, map<string, bufferlist> *res) {
