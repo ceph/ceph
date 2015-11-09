@@ -65,6 +65,15 @@ typedef struct {
 #define RBD_MAX_IMAGE_NAME_SIZE 96
 #define RBD_MAX_BLOCK_NAME_SIZE 24
 
+/**
+ * These types used to in set_image_notification to indicate the type of event
+ * socket passed in.
+ */
+enum {
+  EVENT_TYPE_PIPE = 1,
+  EVENT_TYPE_EVENTFD = 2
+};
+
 typedef struct {
   uint64_t size;
   uint64_t obj_size;
