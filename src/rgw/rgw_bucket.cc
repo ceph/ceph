@@ -839,7 +839,7 @@ int RGWBucket::check_bad_index_multipart(RGWBucketAdminOpState& op_state,
   int max = 1000;
 
   map<string, bool> common_prefixes;
-  string ns = "multipart";
+  string ns = "";
 
   bool is_truncated;
   map<string, bool> meta_objs;
