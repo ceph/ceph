@@ -782,7 +782,7 @@ TEST_F(TestClsRbd, snapshots)
   ASSERT_EQ("snap1", snap_names[1]);
   ASSERT_EQ(10u, snap_sizes[1]);
 
-  ASSERT_EQ(0, snapshot_rename(&ioctx, oid, 1, "snap1-rename"));
+  ASSERT_EQ(0, snapshot_rename(&ioctx, oid, 0, "snap1-rename"));
   ASSERT_EQ(0, snapshot_list(&ioctx, oid, snapc.snaps, &snap_names,
 			     &snap_sizes, &parents, &protection_status));
   ASSERT_EQ(2u, snap_names.size());
