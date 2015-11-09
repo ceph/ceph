@@ -169,9 +169,8 @@ def main(ctx):
         else:
             log.info('Creating archive dir %s', archive_path_full)
             safepath.makedirs(ctx.archive_dir, safe_archive)
-            if 'roles' in job_config:
-                log.info('Running job %d', job.jid)
-                run_job(job_config, teuth_bin_path, ctx.verbose)
+            log.info('Running job %d', job.jid)
+            run_job(job_config, teuth_bin_path, ctx.verbose)
         job.delete()
 
 
