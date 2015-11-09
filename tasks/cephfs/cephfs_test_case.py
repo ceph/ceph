@@ -132,12 +132,20 @@ class CephFSTestCase(unittest.TestCase):
             self.fs.mon_manager.raw_cluster_cmd("osd", "blacklist", "rm", addr)
 
         # In case some test messed with auth caps, reset them
-        for mount in self.mounts:
+        client_mount_ids = [m.client_id for m in self.mounts]
+        for client_id in client_mount_ids:
             self.fs.mon_manager.raw_cluster_cmd_result(
-                'auth', 'caps', "client.{0}".format(mount.client_id),
+                'auth', 'caps', "client.{0}".format(client_id),
                 'mds', 'allow',
                 'mon', 'allow r',
                 'osd', 'allow rw pool={0}'.format(self.fs.get_data_pool_name()))
+
+        # In case there were any extra auth identities around from a previous
+        # test, delete them
+        for entry in self.auth_list():
+            ent_type, ent_id = entry['entity'].split(".")
+            if ent_type == "client" and ent_id not in client_mount_ids and ent_id != "admin":
+                self.fs.mon_manager.raw_cluster_cmd("auth", "del", entry['entity'])
 
         self.fs.mds_restart()
         self.fs.wait_for_daemons()
