@@ -170,6 +170,14 @@ class CephFSTestCase(unittest.TestCase):
         self.configs_set.add((subsys, key))
         self.fs.set_ceph_conf(subsys, key, value)
 
+    def auth_list(self):
+        """
+        Convenience wrapper on "ceph auth list"
+        """
+        return json.loads(self.fs.mon_manager.raw_cluster_cmd(
+            "auth", "list", "--format=json-pretty"
+        ))['auth_dump']
+
     def assert_session_count(self, expected, ls_data=None, mds_id=None):
         if ls_data is None:
             ls_data = self.fs.mds_asok(['session', 'ls'], mds_id=mds_id)
