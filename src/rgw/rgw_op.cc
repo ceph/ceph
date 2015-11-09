@@ -823,10 +823,18 @@ struct rgw_slo_part {
   rgw_slo_part() : bucket_policy(NULL), size(0) {}
 };
 
-static int iterate_slo_parts(CephContext *cct, RGWRados *store, off_t ofs, off_t end,
-                                       map<uint64_t, rgw_slo_part>& slo_parts,
-                                       int (*cb)(rgw_bucket& bucket, RGWObjEnt& ent, RGWAccessControlPolicy *bucket_policy,
-                                                 off_t start_ofs, off_t end_ofs, void *param), void *cb_param)
+static int iterate_slo_parts(CephContext *cct,
+                             RGWRados *store,
+                             off_t ofs,
+                             off_t end,
+                             map<uint64_t, rgw_slo_part>& slo_parts,
+                             int (*cb)(rgw_bucket& bucket,
+                                       const RGWObjEnt& ent,
+                                       RGWAccessControlPolicy *bucket_policy,
+                                       off_t start_ofs,
+                                       off_t end_ofs,
+                                       void *param),
+                             void *cb_param)
 {
   uint64_t obj_ofs = 0, len_count = 0;
   bool found_start = false, found_end = false;
