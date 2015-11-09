@@ -666,6 +666,7 @@ template<typename T, int MSGTYPE>
 void ReplicatedBackend::sub_op_modify_reply(OpRequestRef op)
 {
   T *r = static_cast<T *>(op->get_req());
+  r->finish_decode();
   assert(r->get_header().type == MSGTYPE);
   assert(MSGTYPE == MSG_OSD_SUBOPREPLY || MSGTYPE == MSG_OSD_REPOPREPLY);
 
