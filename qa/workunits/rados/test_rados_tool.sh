@@ -53,7 +53,7 @@ DNAME="`dirname $0`"
 DNAME="`readlink -f $DNAME`"
 RADOS_TOOL="`readlink -f \"$DNAME/../rados\"`"
 if ! test -f $RADOS_TOOL ; then
-    RADOS_TOOL=rados
+    RADOS_TOOL=$(which rados)
 fi
 KEEP_TEMP_FILES=0
 POOL=trs_pool
