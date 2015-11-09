@@ -3617,6 +3617,7 @@ reprotect_and_return_err:
     RWLock::RLocker owner_locker(ictx->owner_lock);
     RWLock::WLocker md_locker(ictx->md_lock);
     r = ictx->invalidate_cache();
+    ictx->perfcounter->inc(l_librbd_invalidate_cache);
     return r;
   }
 
