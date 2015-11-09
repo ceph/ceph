@@ -194,6 +194,8 @@ noinst_HEADERS += \
 	rgw/rgw_keystone.h \
 	rgw/rgw_realm_watcher.h \
 	rgw/rgw_civetweb.h \
+	rgw/rgw_boost_asio_coroutine.h \
+	rgw/rgw_boost_asio_yield.h \
 	rgw/rgw_civetweb_log.h \
 	civetweb/civetweb.h \
 	civetweb/include/civetweb.h \

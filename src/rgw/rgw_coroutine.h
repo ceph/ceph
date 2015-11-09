@@ -18,6 +18,7 @@
 #include "common/Timer.h"
 
 #include "rgw_common.h"
+#include "rgw_boost_asio_coroutine.h"
 
 #define RGW_ASYNC_OPS_MGR_WINDOW 100
 
@@ -123,6 +124,7 @@ struct rgw_spawned_stacks {
     source->entries.clear();
   }
 };
+
 
 
 class RGWCoroutine : public RefCountedObject, public boost::asio::coroutine {
