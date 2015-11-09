@@ -878,6 +878,9 @@ AC_CHECK_HEADER([boost/random/discrete_distribution.hpp],
 	[AC_DEFINE([HAVE_BOOST_RANDOM_DISCRETE_DISTRIBUTION], [], [have boost::random::discrete_distribution])],
 	[])
 
+AC_CHECK_HEADER([boost/asio/coroutine.hpp],
+	[AC_DEFINE([HAVE_BOOST_ASIO_COROUTINE], [], [have boost::asio::coroutine])],
+	[])
 AC_CHECK_HEADER([boost/statechart/state.hpp], [],
     AC_MSG_FAILURE(["Can't find boost statechart headers; need 1.34 or later"]))
 AC_CHECK_HEADER([boost/program_options/option.hpp], [],
