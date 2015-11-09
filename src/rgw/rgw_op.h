@@ -764,15 +764,24 @@ class RGWDeleteObj : public RGWOp {
 protected:
   int ret;
   bool delete_marker;
+  bool multipart_delete;
   string version_id;
+  std::unique_ptr<RGWBulkDelete::Deleter> deleter;
 
 public:
-  RGWDeleteObj() : ret(0), delete_marker(false) {}
+  RGWDeleteObj()
+    : ret(0),
+      delete_marker(false),
+      multipart_delete(false),
+      deleter(nullptr) {
+  }
 
   int verify_permission();
   void pre_exec();
   void execute();
+  int handle_slo_manifest(bufferlist& bl);
 
+  virtual int get_params() { return 0; };
   virtual void send_response() = 0;
   virtual const string name() { return "delete_obj"; }
   virtual RGWOpType get_type() { return RGW_OP_DELETE_OBJ; }

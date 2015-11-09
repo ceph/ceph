@@ -2659,6 +2659,61 @@ void RGWPutMetadataObject::execute()
   ret = store->set_attrs(s->obj_ctx, obj, attrs, &rmattrs, NULL);
 }
 
+int RGWDeleteObj::handle_slo_manifest(bufferlist& bl)
+{
+  RGWSLOInfo slo_info;
+  bufferlist::iterator bliter = bl.begin();
+  try {
+    ::decode(slo_info, bliter);
+  } catch (buffer::error& err) {
+    ldout(s->cct, 0) << "ERROR: failed to decode slo manifest" << dendl;
+    return -EIO;
+  }
+
+  try {
+    deleter = std::unique_ptr<RGWBulkDelete::Deleter>(\
+          new RGWBulkDelete::Deleter(store, s));
+  } catch (std::bad_alloc) {
+    return -ENOMEM;
+  }
+
+  list<RGWBulkDelete::acct_path_t> items;
+  for (const auto& iter : slo_info.entries) {
+    const string& path_str = iter.path;
+
+    const size_t sep_pos = path_str.find('/', 1 /* skip first slash */);
+    if (string::npos == sep_pos) {
+      return -EINVAL;
+    }
+
+    RGWBulkDelete::acct_path_t path;
+
+    string bucket_name;
+    url_decode(path_str.substr(1, sep_pos - 1), bucket_name);
+
+    string obj_name;
+    url_decode(path_str.substr(sep_pos + 1), obj_name);
+
+    path.bucket_name = bucket_name;
+    path.obj_key = obj_name;
+
+    items.push_back(path);
+  }
+
+  /* Request removal of the manifet object itself. */
+  RGWBulkDelete::acct_path_t path;
+  path.bucket_name = s->bucket_name_str;
+  path.obj_key = s->object;
+  items.push_back(path);
+
+  int ret = deleter->delete_chunk(items);
+  if (ret < 0) {
+    return ret;
+  }
+
+  return 0;
+}
+
 int RGWDeleteObj::verify_permission()
 {
   if (!verify_bucket_permission(s, RGW_PERM_WRITE))
@@ -2676,16 +2731,37 @@ void RGWDeleteObj::execute()
 {
   ret = -EINVAL;
   rgw_obj obj(s->bucket, s->object);
-  map<string, bufferlist> orig_attrs;
+  map<string, bufferlist> attrs;
+
+  ret = get_params();
+  if (ret < 0) {
+    return;
+  }
 
   if (!s->object.empty()) {
-    if (need_object_expiration()) {
+    if (need_object_expiration() || multipart_delete) {
       /* check if obj exists, read orig attrs */
-      ret = get_obj_attrs(store, s, obj, orig_attrs);
+      ret = get_obj_attrs(store, s, obj, attrs);
       if (ret < 0) {
         return;
       }
     }
+
+    if (multipart_delete) {
+      const auto slo_attr = attrs.find(RGW_ATTR_SLO_MANIFEST);
+
+      if (slo_attr != attrs.end()) {
+        ret = handle_slo_manifest(slo_attr->second);
+        if (ret < 0) {
+          ldout(s->cct, 0) << "ERROR: failed to handle slo manifest ret=" << ret << dendl;
+        }
+      } else {
+        ret = -ERR_NOT_SLO_MANIFEST;
+      }
+
+      return;
+    }
+
     RGWObjectCtx *obj_ctx = static_cast<RGWObjectCtx *>(s->obj_ctx);
 
     obj_ctx->set_atomic(obj);
@@ -2697,6 +2773,7 @@ void RGWDeleteObj::execute()
     if (ret < 0) {
       return;
     }
+
     del_op.params.bucket_owner = s->bucket_owner.get_id();
     del_op.params.versioning_status = s->bucket_info.versioning_status();
     del_op.params.obj_owner = s->owner;
@@ -2709,7 +2786,7 @@ void RGWDeleteObj::execute()
 
     /* Check whether the object has expired. Swift API documentation
      * stands that we should return 404 Not Found in such case. */
-    if (need_object_expiration() && object_is_expired(orig_attrs)) {
+    if (need_object_expiration() && object_is_expired(attrs)) {
       ret = -ENOENT;
       return;
     }
