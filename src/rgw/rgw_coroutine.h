@@ -7,7 +7,6 @@
 #endif
 
 #include <boost/asio.hpp>
-#include <boost/asio/coroutine.hpp>
 
 #ifdef NEED_ASSERT_H
 #pragma pop_macro("_ASSERT_H")
