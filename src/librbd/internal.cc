@@ -1994,7 +1994,6 @@ reprotect_and_return_err:
     int r = ictx_check(ictx);
     if (r < 0)
       return r;
-    bufferlist bl, bl2;
 
     RWLock::RLocker l(ictx->snap_lock);
     for (map<snap_t, SnapInfo>::iterator it = ictx->snap_info.begin();
@@ -2172,7 +2171,6 @@ reprotect_and_return_err:
     RWLock::WLocker md_locker(ictx->md_lock);
 
     CephContext *cct = ictx->cct;
-    bufferlist bl, bl2;
 
     ldout(cct, 20) << "ictx_refresh " << ictx << dendl;
 
