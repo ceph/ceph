@@ -73,6 +73,7 @@ struct rgw_data_sync_marker {
   string next_step_marker;
   uint64_t total_entries;
   uint64_t pos;
+  utime_t timestamp;
 
   rgw_data_sync_marker() : state(FullSync), total_entries(0), pos(0) {}
 
@@ -83,6 +84,7 @@ struct rgw_data_sync_marker {
     ::encode(next_step_marker, bl);
     ::encode(total_entries, bl);
     ::encode(pos, bl);
+    ::encode(timestamp, bl);
     ENCODE_FINISH(bl);
   }
 
@@ -93,6 +95,7 @@ struct rgw_data_sync_marker {
     ::decode(next_step_marker, bl);
     ::decode(total_entries, bl);
     ::decode(pos, bl);
+    ::decode(timestamp, bl);
      DECODE_FINISH(bl);
   }
 
@@ -102,6 +105,7 @@ struct rgw_data_sync_marker {
     encode_json("next_step_marker", next_step_marker, f);
     encode_json("total_entries", total_entries, f);
     encode_json("pos", pos, f);
+    encode_json("timestamp", timestamp, f);
   }
 };
 WRITE_CLASS_ENCODER(rgw_data_sync_marker)
