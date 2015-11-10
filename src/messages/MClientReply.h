@@ -17,6 +17,7 @@
 #define CEPH_MCLIENTREPLY_H
 
 #include "include/types.h"
+#include "include/fs_types.h"
 #include "MClientRequest.h"
 
 #include "msg/Message.h"

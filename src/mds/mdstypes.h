@@ -21,6 +21,7 @@
 #include "include/interval_set.h"
 #include "include/compact_map.h"
 #include "include/compact_set.h"
+#include "include/fs_types.h"
 
 #include "inode_backtrace.h"
 
