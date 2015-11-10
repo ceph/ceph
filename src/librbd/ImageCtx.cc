@@ -183,9 +183,9 @@ public:
     }
 
     string pname = string("librbd-") + id + string("-") +
-      data_ctx.get_pool_name() + string("/") + name;
+      data_ctx.get_pool_name() + string("-") + name;
     if (!snap_name.empty()) {
-      pname += "@";
+      pname += "-";
       pname += snap_name;
     }
 
