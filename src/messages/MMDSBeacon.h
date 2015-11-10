@@ -120,7 +120,7 @@ WRITE_CLASS_ENCODER(MDSHealth)
 
 class MMDSBeacon : public PaxosServiceMessage {
 
-  static const int HEAD_VERSION = 4;
+  static const int HEAD_VERSION = 5;
   static const int COMPAT_VERSION = 2;
 
   uuid_d fsid;
@@ -138,12 +138,15 @@ class MMDSBeacon : public PaxosServiceMessage {
 
   map<string, string> sys_info;
 
+  uint64_t mds_features;
+
  public:
   MMDSBeacon() : PaxosServiceMessage(MSG_MDS_BEACON, 0, HEAD_VERSION, COMPAT_VERSION) { }
-  MMDSBeacon(const uuid_d &f, mds_gid_t g, string& n, epoch_t les, MDSMap::DaemonState st, version_t se) : 
+  MMDSBeacon(const uuid_d &f, mds_gid_t g, string& n, epoch_t les, MDSMap::DaemonState st, version_t se, uint64_t feat) :
     PaxosServiceMessage(MSG_MDS_BEACON, les, HEAD_VERSION, COMPAT_VERSION),
     fsid(f), global_id(g), name(n), state(st), seq(se),
-    standby_for_rank(MDS_RANK_NONE) {
+    standby_for_rank(MDS_RANK_NONE),
+    mds_features(feat) {
   }
 private:
   ~MMDSBeacon() {}
@@ -158,6 +161,7 @@ public:
   const char *get_type_name() const { return "mdsbeacon"; }
   mds_rank_t get_standby_for_rank() { return standby_for_rank; }
   const string& get_standby_for_name() { return standby_for_name; }
+  uint64_t get_mds_features() const { return mds_features; }
 
   CompatSet const& get_compat() const { return compat; }
   void set_compat(const CompatSet& c) { compat = c; }
@@ -191,6 +195,7 @@ public:
     if (state == MDSMap::STATE_BOOT) {
       ::encode(sys_info, payload);
     }
+    ::encode(mds_features, payload);
   }
   void decode_payload() {
     bufferlist::iterator p = payload.begin();
@@ -210,6 +215,9 @@ public:
     if (state == MDSMap::STATE_BOOT &&
 	header.version >= 4) {
       ::decode(sys_info, p);
+    }
+    if (header.version >= 5) {
+      ::decode(mds_features, p);
     }
   }
 };

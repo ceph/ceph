@@ -202,7 +202,8 @@ void Beacon::_send()
       name,
       epoch,
       want_state,
-      last_seq);
+      last_seq,
+      CEPH_FEATURES_SUPPORTED_DEFAULT);
 
   beacon->set_standby_for_rank(standby_for_rank);
   beacon->set_standby_for_name(standby_for_name);
