@@ -306,7 +306,9 @@ public:
       yield {
         for (int i = 0; i < (int)status.num_shards; i++) {
 	  rgw_data_sync_marker marker;
-	  marker.next_step_marker = shards_info[i].marker;
+          RGWDataChangesLogInfo& info = shards_info[i];
+	  marker.next_step_marker = info.marker;
+	  marker.timestamp = info.last_update;
           spawn(new RGWSimpleRadosWriteCR<rgw_data_sync_marker>(async_rados, store, store->get_zone_params().log_pool,
 				                          RGWDataSyncStatusManager::shard_obj_name(source_zone, i), marker), true);
         }
@@ -632,7 +634,7 @@ public:
                                                                 marker_oid(_marker_oid),
                                                                 sync_marker(_marker) {}
 
-  RGWCoroutine *store_marker(const string& new_marker, uint64_t index_pos) {
+  RGWCoroutine *store_marker(const string& new_marker, uint64_t index_pos, const utime_t& timestamp) {
     sync_marker.marker = new_marker;
     sync_marker.pos = index_pos;
 
@@ -899,7 +901,7 @@ public:
         for (; iter != entries.end(); ++iter) {
           ldout(store->ctx(), 20) << __func__ << ": full sync: " << iter->first << dendl;
           total_entries++;
-          marker_tracker->start(iter->first, total_entries);
+          marker_tracker->start(iter->first, total_entries, utime_t());
             // fetch remote and write locally
           yield spawn(new RGWDataSyncSingleEntryCR(store, http_manager, async_rados, conn, source_zone, iter->first, iter->first, marker_tracker), false);
           if (retcode < 0) {
@@ -969,7 +971,7 @@ public:
               ldout(store->ctx(), 20) << __func__ << ": skipping sync of entry: " << log_iter->log_id << ":" << log_iter->entry.key << " sync already in progress for bucket shard" << dendl;
               continue;
             }
-            marker_tracker->start(log_iter->log_id, 0);
+            marker_tracker->start(log_iter->log_id, 0, log_iter->log_timestamp);
             yield spawn(new RGWDataSyncSingleEntryCR(store, http_manager, async_rados, conn, source_zone, log_iter->entry.key, log_iter->log_id, marker_tracker), false);
             if (retcode < 0) {
               return set_cr_error(retcode);
@@ -1711,7 +1713,7 @@ public:
                                                                 marker_oid(_marker_oid),
                                                                 sync_marker(_marker) {}
 
-  RGWCoroutine *store_marker(const rgw_obj_key& new_marker, uint64_t index_pos) {
+  RGWCoroutine *store_marker(const rgw_obj_key& new_marker, uint64_t index_pos, const utime_t& timestamp) {
     sync_marker.position = new_marker;
     sync_marker.count = index_pos;
 
@@ -1741,7 +1743,7 @@ public:
                                                                 marker_oid(_marker_oid),
                                                                 sync_marker(_marker) {}
 
-  RGWCoroutine *store_marker(const string& new_marker, uint64_t index_pos) {
+  RGWCoroutine *store_marker(const string& new_marker, uint64_t index_pos, const utime_t& timestamp) {
     sync_marker.position = new_marker;
 
     map<string, bufferlist> attrs;
@@ -1914,7 +1916,7 @@ int RGWBucketShardFullSyncCR::operate()
         yield {
           bucket_list_entry& entry = *entries_iter;
           total_entries++;
-          marker_tracker->start(entry.key, total_entries);
+          marker_tracker->start(entry.key, total_entries, utime_t());
           list_marker = entry.key;
           spawn(new RGWBucketSyncSingleEntryCR<rgw_obj_key>(store, async_rados, source_zone, bucket_info, shard_id,
                                                entry.key, entry.versioned_epoch, entry.mtime, CLS_RGW_OP_ADD, entry.key, marker_tracker), false);
@@ -2022,7 +2024,7 @@ int RGWBucketShardIncrementalSyncCR::operate()
           rgw_obj_key key(entries_iter->object, entries_iter->instance);
           ldout(store->ctx(), 20) << "[inc sync] syncing object: " << bucket_name << ":" << bucket_id << ":" << shard_id << "/" << key << dendl;
           rgw_bi_log_entry& entry = *entries_iter;
-          marker_tracker->start(entry.id, 0);
+          marker_tracker->start(entry.id, 0, entries_iter->timestamp);
           inc_marker.position = entry.id;
           uint64_t versioned_epoch = 0;
           if (entry.ver.pool < 0) {
