@@ -433,7 +433,7 @@ int RGWCoroutinesManager::run(list<RGWCoroutinesStack *>& stacks)
       }
       if (going_down.read() > 0) {
 	ldout(cct, 5) << __func__ << "(): was stopped, exiting" << dendl;
-	return 0;
+	return -ECANCELED;
       }
       handle_unblocked_stack(stacks, blocked_stack, &blocked_count);
       iter = stacks.begin();
@@ -466,9 +466,9 @@ int RGWCoroutinesManager::run(RGWCoroutine *op)
   r = run(stacks);
   if (r < 0) {
     ldout(cct, 0) << "ERROR: run(stacks) returned r=" << r << dendl;
+  } else {
+    r = op->get_ret_status();
   }
-
-  r = op->get_ret_status();
   op->put();
 
   return r;
