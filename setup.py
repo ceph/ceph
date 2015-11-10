@@ -60,7 +60,6 @@ setup(
                       # is resolved
                       'cliff-tablib', # required to get a Field/Value output from openstack server show
                       'python-openstackclient',
-                      'os-client-config==1.9.0',
                       ],
 
 
