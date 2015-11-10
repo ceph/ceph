@@ -147,14 +147,16 @@ public:
     bool scrub_recursive; /// true if we are scrubbing everything under this
     bool scrub_children; /// true if we have to scrub all direct children
     bool dentry_scrubbing; /// safety check
+    bool dentry_children_done; /// safety check
+    bool inode_validated;  /// Has our inode's validate_disk_state run?
     Context *on_finish; /// called when we finish scrubbing
     ScrubHeaderRefConst header;
-    bool inode_validated;  /// Has our inode's validate_disk_state run?
 
     scrub_info_t() :
       scrub_parent(NULL), scrub_recursive(false),
-      scrub_children(false), dentry_scrubbing(false), on_finish(NULL),
-      inode_validated(false)
+      scrub_children(false), dentry_scrubbing(false),
+      dentry_children_done(false), inode_validated(false),
+      on_finish(NULL)
     {}
   };
 
@@ -181,6 +183,9 @@ public:
                         ScrubHeaderRefConst header,
                         Context *f);
   void scrub_finished(Context **c);
+  void scrub_children_finished() {
+    scrub_infop->dentry_children_done = true;
+  }
 
 private:
   /**

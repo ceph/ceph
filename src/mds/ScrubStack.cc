@@ -177,7 +177,6 @@ void ScrubStack::scrub_dir_dentry(CDentry *dn,
   list<CDir*>::iterator i = scrubbing_cdirs.begin();
   bool all_frags_terminal = true;
   bool all_frags_done = true;
-  bool finally_done = false;
   while (g_conf->mds_max_scrub_ops_in_progress > scrubs_in_progress) {
     // select next CDir
     CDir *cur_dir = NULL;
@@ -227,12 +226,11 @@ void ScrubStack::scrub_dir_dentry(CDentry *dn,
     // OK, so now I can... fire off a validate on the dir inode, and
     // when it completes, come through here again, noticing that we've
     // set a flag to indicate the the validate happened, and 
-
-    scrub_dir_dentry_final(dn, &finally_done);
+    scrub_dir_dentry_final(dn);
   }
 
   *terminal = all_frags_terminal;
-  *done = all_frags_done && finally_done;
+  *done = all_frags_done;
   dout(10) << __func__ << " is exiting " << *terminal << " " << *done << dendl;
   return;
 }
@@ -282,7 +280,7 @@ class C_InodeValidated : public MDSInternalContext
 };
 
 
-void ScrubStack::scrub_dir_dentry_final(CDentry *dn, bool *finally_done)
+void ScrubStack::scrub_dir_dentry_final(CDentry *dn)
 {
   dout(20) << __func__ << *dn << dendl;
 
@@ -293,8 +291,8 @@ void ScrubStack::scrub_dir_dentry_final(CDentry *dn, bool *finally_done)
   // doing our validate_disk_state on the inode
   // FIXME: the magic-constructing scrub_info() is going to leave
   // an unneeded scrub_infop lying around here
-  *finally_done = !dn->scrub_info()->dentry_scrubbing;
-  if (!*finally_done) {
+  if (!dn->scrub_info()->dentry_children_done) {
+    dn->scrub_children_finished();
     CInode *in = dn->get_projected_inode();
     C_InodeValidated *fin = new C_InodeValidated(mdcache->mds, this, dn);
     MDRequestRef null_mdr;
