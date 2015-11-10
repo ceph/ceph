@@ -30,8 +30,8 @@ static ostream& _prefix(std::ostream *_dout, MDSRank *mds) {
 void ScrubStack::push_dentry(CDentry *dentry)
 {
   dout(20) << "pushing " << *dentry << " on top of ScrubStack" << dendl;
-  dentry->get(CDentry::PIN_SCRUBQUEUE);
   if (!dentry->item_scrub.is_on_list()) {
+    dentry->get(CDentry::PIN_SCRUBQUEUE);
     stack_size++;
   }
   dentry_stack.push_front(&dentry->item_scrub);
@@ -40,8 +40,8 @@ void ScrubStack::push_dentry(CDentry *dentry)
 void ScrubStack::push_dentry_bottom(CDentry *dentry)
 {
   dout(20) << "pushing " << *dentry << " on bottom of ScrubStack" << dendl;
-  dentry->get(CDentry::PIN_SCRUBQUEUE);
   if (!dentry->item_scrub.is_on_list()) {
+    dentry->get(CDentry::PIN_SCRUBQUEUE);
     stack_size++;
   }
   dentry_stack.push_back(&dentry->item_scrub);
