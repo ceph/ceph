@@ -262,7 +262,6 @@ int librados::IoCtxImpl::rollback(const object_t& oid, const char *snapName)
   if (r < 0) {
     return r;
   }
-  string sName(snapName);
 
   return selfmanaged_snap_rollback_object(oid, snapc, snap);
 }
