@@ -42,6 +42,7 @@ struct rgw_meta_sync_marker {
   string next_step_marker;
   uint64_t total_entries;
   uint64_t pos;
+  utime_t timestamp;
 
   rgw_meta_sync_marker() : state(FullSync), total_entries(0), pos(0) {}
 
@@ -52,6 +53,7 @@ struct rgw_meta_sync_marker {
     ::encode(next_step_marker, bl);
     ::encode(total_entries, bl);
     ::encode(pos, bl);
+    ::encode(timestamp, bl);
     ENCODE_FINISH(bl);
   }
 
@@ -62,6 +64,7 @@ struct rgw_meta_sync_marker {
     ::decode(next_step_marker, bl);
     ::decode(total_entries, bl);
     ::decode(pos, bl);
+    ::decode(timestamp, bl);
      DECODE_FINISH(bl);
   }
 
