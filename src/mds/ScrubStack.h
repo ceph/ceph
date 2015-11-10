@@ -27,7 +27,7 @@ class MDCache;
 class Finisher;
 
 class ScrubStack {
-  protected:
+protected:
   /// A finisher needed so that we don't re-enter kick_off_scrubs
   Finisher *finisher;
 
@@ -37,6 +37,19 @@ class ScrubStack {
   int scrubs_in_progress;
   ScrubStack *scrubstack; // hack for dout
   int stack_size;
+
+  class C_KickOffScrubs : public MDSInternalContext {
+    ScrubStack *stack;
+  public:
+    C_KickOffScrubs(MDCache *mdcache, ScrubStack *s);
+    void finish(int r) { }
+    void complete(int r) {
+      stack->kick_off_scrubs();
+      // don't delete self
+    }
+  };
+  C_KickOffScrubs scrub_kick;
+
 public:
   MDCache *mdcache;
   ScrubStack(MDCache *mdc, Finisher *finisher_) :
@@ -45,6 +58,7 @@ public:
     scrubs_in_progress(0),
     scrubstack(this),
     stack_size(0),
+    scrub_kick(mdc, this),
     mdcache(mdc) {}
   ~ScrubStack() {
     assert(dentry_stack.empty());
@@ -181,17 +195,6 @@ private:
    */
   bool get_next_cdir(CInode *in, CDir **new_dir);
 
-  class C_KickOffScrubs : public MDSInternalContext {
-    ScrubStack *stack;
-  public:
-    C_KickOffScrubs(MDSRank *mds, ScrubStack *s)
-      : MDSInternalContext(mds), stack(s)
-    {
-    }
-    void finish(int r){
-      stack->kick_off_scrubs();
-    }
-  };
 };
 
 #endif /* SCRUBSTACK_H_ */
