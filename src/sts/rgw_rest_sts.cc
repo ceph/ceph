@@ -7,6 +7,7 @@
 #include "common/ceph_crypto.h"
 #include "common/Formatter.h"
 #include "common/utf8.h"
+#include "common/armor.h"
 #include "common/ceph_json.h"
 
 #include "rgw_rest.h"
@@ -25,28 +26,55 @@ using namespace ceph::crypto;
 
 // indexed by tsErrorType
 string error_types[] = {"Unknown", "Sender", "Receiver"};
-// indexed by tsErrorCode
-string error_codes[] = {
-  "AccessDenied", "IDPRejectedClaim", "InvalidAccessKeyId",
-  "InvalidAction", "InvalidClientTokenId", "MalformedInput",
-  "MissingAuthenticationToken",
-};
 
-void tsErrorResponse::dump(Formatter *f)
+void encode_base64_thing(string s, bufferlist &out)
 {
-  char encoded_uuid[38];
+  int est_encoded_len = 9 + (41 * s.length() / 30);
+  char temp[est_encoded_len];
+  const char *src = s.c_str();
+// fixme..  how to do line wrapping?
+  int olen = ceph_armor(temp, temp + est_encoded_len,
+	src, src + s.length());
+  out.append(temp, olen);
+}
 
+void assume_role_response::dump(Formatter *f)
+{
+  bufferlist encoded_token;
+  bufferlist encoded_key;
+  char encoded_uuid[38];
+  char encoded_time[30];
+
+  encode_base64_thing(credentials.session_token, encoded_token);
+  encoded_token.append('\0');
+  encode_base64_thing(credentials.secret_access_key, encoded_key);
+  encoded_key.append('\0');
   request_id.print(encoded_uuid);
   encoded_uuid[37] = 0;
+  time_t uv;
+  struct tm res[1];
+  uv = credentials.expiration.sec();
+  struct tm *tmp = gmtime_r(&uv, res);
+  strftime(encoded_time, sizeof encoded_time, "%Y-%m-%dT%T.000Z", tmp);
 
-  f->open_object_section_in_ns("ErrorResponse",
+  f->open_object_section_in_ns("AssumeRoleResponse",
 			"http://s3.amazonaws.com/doc/2011-06-15/");
-    f->open_object_section("Error");
-      f->dump_string("Type", error_types[error.type]);
-      f->dump_string("Code", error_codes[error.code]);
-      f->dump_string("Message", error.message);
+    f->open_object_section("AssumeRoleResult");
+      f->open_object_section("Credentials");
+	f->dump_string_linewrap("SessionToken", encoded_token.c_str());
+	f->dump_string_linewrap("SecretAccessKey", encoded_key.c_str());
+	f->dump_string("Expiration", encoded_time);
+	f->dump_string("AccessKeyId", credentials.access_key_id);
+      f->close_section();
+      f->open_object_section("AssumedRoleUser");
+	f->dump_string("Arn", assumed_role_user.arn);
+	f->dump_string("AssumedRoleId", assumed_role_user.assumed_role_id);
+      f->close_section();
+      f->dump_int("PackedPolicySize", packed_policy_size);
     f->close_section();
-    f->dump_string("RequestId", encoded_uuid);
+    f->open_object_section("ResponseMetadata");
+      f->dump_string("RequestId", encoded_uuid);
+    f->close_section();
   f->close_section();
 }
 
@@ -458,16 +486,65 @@ int RGWGetPost_STS::verify_permission()
 	return 0;
 }
 
+void make_fake_response(assume_role_response &response)
+{
+  unsigned char x_session[] = {
+    0x1, 0xa, 0x3, 0x61, 0x77, 0x73, 0x10, 0xf4, 0xff, 0xff, 0xff, 0xff,
+    0xff, 0xff, 0xff, 0xff, 0x1, 0x17, 0x0, 0xc3, 0xcb, 0x12, 0xd7, 0x3b,
+    0xeb, 0x86, 0xcd, 0xac, 0x2f, 0x52, 0x0, 0xf0, 0x52, 0x33, 0x6d, 0xb0,
+    0xc, 0xe9, 0x38, 0xc7, 0x81, 0xc8, 0x67, 0xc8, 0xf8, 0x15, 0x94, 0xf0,
+    0x75, 0x5, 0x8b, 0x5a, 0xc2, 0x96, 0x1c, 0x60, 0x6e, 0x16, 0xac, 0x0,
+    0x78, 0xc8, 0x9c, 0x45, 0x79, 0xb1, 0x7e, 0x94, 0x8f, 0x7c, 0x87, 0xa8,
+    0x21, 0x84, 0x6a, 0x4d, 0xf9, 0x5f, 0x28, 0x3f, 0x18, 0x52, 0xec, 0x2d,
+    0x84, 0xc, 0x7b, 0x99, 0x21, 0x8, 0xfe, 0xa9, 0xf, 0xa4, 0xa3, 0xe2,
+    0xfe, 0x43, 0x1c, 0x19, 0xd4, 0x2b, 0x98, 0x67, 0x5e, 0x7a, 0x13, 0x38,
+    0x20, 0x2d, 0x4d, 0xb4, 0x19, 0x94, 0xa6, 0x9d, 0xb0, 0x50, 0x4f, 0x29,
+    0x85, 0x46, 0x5a, 0x9a, 0x92, 0xac, 0x6e, 0xea, 0xc4, 0xf, 0x2d, 0xa,
+    0x3e, 0x4c, 0x90, 0xd, 0x8c, 0x13, 0xed, 0x66, 0x74, 0xc2, 0xae, 0x55,
+    0x49, 0x70, 0xef, 0xa7, 0xbe, 0x58, 0x53, 0xd1, 0xc5, 0xbe, 0x54, 0x5d,
+    0xf1, 0x3c, 0x7a, 0xab, 0xa7, 0xc4, 0xf1, 0x84, 0x1c, 0x1c, 0xd5, 0x57,
+    0x2, 0x48, 0x98, 0xf6, 0xae, 0x9d, 0xfb, 0x1a, 0x34, 0xac, 0xac, 0x13,
+    0xdf, 0xcc, 0x55, 0xaa, 0xbe, 0xd9, 0xf, 0x4b, 0xb4, 0x88, 0xf3, 0xe4,
+    0x50, 0xbe, 0xb8, 0x94, 0x86, 0x5b, 0xa8, 0x10, 0x33, 0xfa, 0xc7, 0x2a,
+    0x2a, 0x69, 0x73, 0x9b, 0xc1, 0x43, 0xaf, 0x2a, 0x4d, 0xb, 0xd6, 0x23,
+    0x73, 0xc7, 0xcf, 0x38, 0xb9, 0xfd, 0x15, 0x7f, 0x4a, 0x49, 0x8b, 0xca,
+    0x4e, 0xbe, 0x2b, 0xbf, 0x1d, 0xe2, 0x48, 0x89, 0x53, 0x25, 0xa6, 0xc8,
+    0x43, 0x8, 0xf6, 0x20, 0x20, 0x91, 0xfe, 0x82, 0xf1, 0x4,
+
+  };
+  unsigned char x_key[] = {
+    0xc0, 0x96, 0xa5, 0xad, 0x75, 0x2d, 0x9c, 0x51, 0xc, 0x23, 0xf2,
+    0xbb, 0x30, 0x31, 0xd, 0x1b, 0xf6, 0xcf, 0xc5, 0x17, 0xe2, 0x9,
+    0x8c, 0xc4, 0x5c, 0x3, 0xf, 0x2c, 0x42, 0x84,
+  };
+
+
+  response.credentials.session_token = string((char*)x_session, sizeof x_session);
+  response.credentials.secret_access_key = string((char*)x_key, sizeof x_key);
+  struct timeval tv;
+  tv.tv_sec = 1310772513;	// 2011-07-15 23:28:33 Z
+  tv.tv_usec = 0;
+  response.credentials.expiration.set_from_timeval(&tv);
+  response.credentials.access_key_id = "AKIAIOSFODNN7EXAMPLE";
+  response.assumed_role_user.arn = "arn:aws:sts::123456789012:assumed-role/demo/Bob";
+  response.assumed_role_user.assumed_role_id = "ARO123EXAMPLE123:Bob";
+  response.packed_policy_size = 6;
+//  response.request_id.generate_random();
+}
+
 void RGWGetPost_STS::execute()
 {
-  int ret = ERR_INVALID_ACTION;
-  s->formatter = new XMLFormatter(false);
+  assume_role_response response(dynamic_cast<sts_err*>(s->err)->request_id);
+//  int ret = 0;
+//  ret = ERR_INVALID_ACTION;
+  s->formatter = new XMLFormatter(true);
 //  tsErrorResponse err(Unknown, InvalidAction, "Why I don't know"); MAKE RESPONSE
-  s->set_req_state_err(ret, "Why I don't know");
+  make_fake_response(response);
+//  s->set_req_state_err(ret, "Why I don't know");
   dump_errno(s);
   end_header(s, dump_access_control_f(), "application/xml");
-//  err.dump(s->formatter);						DUMP RESPONSE
-//  rgw_flush_formatter_and_reset(s, s->formatter);			DUMP RESPONSE
+  response.dump(s->formatter);
+  rgw_flush_formatter_and_reset(s, s->formatter);
 }
 
 RGWOp *RGWHandler_STS::get_obj_op(bool get_data)

@@ -15,15 +15,10 @@
 void rgw_get_errno_sts(rgw_http_errors *e, int err_no);
 
 // if you change tsErrorType or tsErrorCode,
-//	please change error_types[] and error_codes[] in
+//	please change error_types[] in
 //	rgw_rest_sts.cc too!
 enum tsErrorType {
   Unknown = 0, Sender, Receiver,
-};
-enum tsErrorCode {
-  AccessDenied = 0, IDPRejectedClaim, InvalidAccessKeyId,
-  InvalidAction, InvalidClientTokenId, MalformedInput,
-  MissingAuthenticationToken,
 };
 
 struct sts_err : public rgw_err {
@@ -36,25 +31,33 @@ struct sts_err : public rgw_err {
 };
 
 extern string error_types[];
-extern string error_codes[];
 
-class tsError {
+class sts_credentials {
 public:
-  tsErrorType type;
-  tsErrorCode code;
-  string message;
-
-  tsError(tsErrorType _t, tsErrorCode _c, string _m) : type(_t), code(_c),
-	message(_m) { }
+  string session_token;		// base64
+  string secret_access_key;	// base64
+  utime_t expiration;		// yyyy-mm-ddThh:mm:ss.fffZ
+  string access_key_id;		// string
 };
 
-class tsErrorResponse {
+class sts_usertype {
 public:
-  tsError error;
+  string arn;				// string: arn:aws:...
+  string assumed_role_id;		// string: [A-Z0-9]*:Name
+};
+
+class assume_role_result {
+public:
+  sts_credentials credentials;
+  sts_usertype assumed_role_user;
+  int packed_policy_size;
+};
+
+class assume_role_response: public assume_role_result {
+public:
   uuid_d request_id;
-  tsErrorResponse(tsErrorType _t, tsErrorCode _c, string _m)
-    : error(_t, _c, _m) {
-    request_id.generate_random();
+  assume_role_response(uuid_d &id) {
+    request_id = id;
   }
   void dump(Formatter *f);
 };
