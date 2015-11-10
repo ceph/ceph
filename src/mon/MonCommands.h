@@ -634,7 +634,7 @@ COMMAND("osd pool get " \
 	"get pool parameter <var>", "osd", "r", "cli,rest")
 COMMAND("osd pool set " \
 	"name=pool,type=CephPoolname " \
-	"name=var,type=CephChoices,strings=size|min_size|crash_replay_interval|pg_num|pgp_num|crush_ruleset|hashpspool|nodelete|nopgchange|nosizechange|hit_set_type|hit_set_period|hit_set_count|hit_set_fpp|debug_fake_ec_pool|target_max_bytes|target_max_objects|cache_target_dirty_ratio|cache_target_full_ratio|cache_min_flush_age|cache_min_evict_age|auid|min_read_recency_for_promote|write_fadvise_dontneed " \
+	"name=var,type=CephChoices,strings=size|min_size|crash_replay_interval|pg_num|pgp_num|crush_ruleset|hashpspool|nodelete|nopgchange|nosizechange|hit_set_type|hit_set_period|hit_set_count|hit_set_fpp|use_gmt_hitset|debug_fake_ec_pool|target_max_bytes|target_max_objects|cache_target_dirty_ratio|cache_target_full_ratio|cache_min_flush_age|cache_min_evict_age|auid|min_read_recency_for_promote|write_fadvise_dontneed " \
 	"name=val,type=CephString " \
 	"name=force,type=CephChoices,strings=--yes-i-really-mean-it,req=false", \
 	"set pool parameter <var> to <val>", "osd", "rw", "cli,rest")

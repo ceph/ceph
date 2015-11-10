@@ -36,9 +36,6 @@ HitSet::HitSet(const HitSet::Params& params)
     impl.reset(new ExplicitObjectHitSet(static_cast<ExplicitObjectHitSet::Params*>(params.impl.get())));
     break;
 
-  case TYPE_NONE:
-    break;
-
   default:
     assert (0 == "unknown HitSet type");
   }
