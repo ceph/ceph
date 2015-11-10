@@ -483,6 +483,53 @@ void XMLFormatter::dump_string_with_attrs(const char *name, const std::string& s
     m_ss << "\n";
 }
 
+void XMLFormatter::dump_string_linewrap(const char *name, const std::string& s)
+{
+  std::string e(name);
+  std::string escaped = escape_xml_str(s.c_str());
+  print_spaces();
+  m_ss << "<" << e << ">";
+  if (m_pretty) {
+    int lw = 0;
+    int dont_break = 0;
+    m_sections.push_back("");
+    m_ss << "\n";
+    for (unsigned i = 0; i < escaped.length(); ++i) {
+      if (!dont_break && lw >= 72) {
+	m_ss << '\n';
+	lw = 0;
+      }
+      if (!lw) {
+        print_spaces();
+        lw = m_sections.size();
+      }
+      m_ss << escaped[i];
+      switch(dont_break) {
+      case 0:
+	if (escaped[i] == '=') dont_break = 2;
+	else if (escaped[i] == '&') dont_break = 1;
+	break;
+      case 1:
+	if (escaped[i] == ';') dont_break = 0;
+	break;
+      case 2:
+	if (escaped[i] != '=') dont_break = 0;
+      }
+      ++lw;
+    }
+    if (lw) m_ss << '\n';
+  } else {
+    m_ss << escaped;
+  }
+  if (m_pretty) {
+    m_sections.pop_back();
+    print_spaces();
+  }
+  m_ss << "</" << e << ">";
+  if (m_pretty)
+    m_ss << '\n';
+}
+
 std::ostream& XMLFormatter::dump_stream(const char *name)
 {
   print_spaces();
