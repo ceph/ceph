@@ -34,7 +34,9 @@
 
 #include "common/blkdev.h"
 #include "common/linux_version.h"
+#include "global/error_handlers.h"
 
+ 
 #if defined(__FreeBSD__)
 #define O_DSYNC O_SYNC
 #endif
@@ -1136,12 +1138,14 @@ void FileJournal::do_write(bufferlist& bl)
     if (write_bl(pos, second)) {
       derr << "FileJournal::do_write: write_bl(pos=" << orig_pos
 	   << ") failed" << dendl;
+      ceph_io_error_tidy_shutdown();
       ceph_abort();
     }
     orig_pos = first_pos;
     if (write_bl(first_pos, first)) {
       derr << "FileJournal::do_write: write_bl(pos=" << orig_pos
 	   << ") failed" << dendl;
+      ceph_io_error_tidy_shutdown();
       ceph_abort();
     }
     assert(first_pos == get_top());
@@ -1153,6 +1157,7 @@ void FileJournal::do_write(bufferlist& bl)
 	derr << "FileJournal::do_write: pwrite(fd=" << fd
 	     << ", hbp.length=" << hbp.length() << ") failed :"
 	     << cpp_strerror(err) << dendl;
+	ceph_io_error_tidy_shutdown();
 	ceph_abort();
       }
     }
@@ -1160,6 +1165,7 @@ void FileJournal::do_write(bufferlist& bl)
     if (write_bl(pos, bl)) {
       derr << "FileJournal::do_write: write_bl(pos=" << pos
 	   << ") failed" << dendl;
+      ceph_io_error_tidy_shutdown();
       ceph_abort();
     }
   }
@@ -1190,6 +1196,7 @@ void FileJournal::do_write(bufferlist& bl)
 #endif
     if (ret < 0) {
       derr << __func__ << " fsync/fdatasync failed: " << cpp_strerror(errno) << dendl;
+      ceph_io_error_tidy_shutdown();
       ceph_abort();
     }
 #ifdef HAVE_POSIX_FADVISE
