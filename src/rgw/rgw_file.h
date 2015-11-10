@@ -109,15 +109,16 @@ namespace rgw {
   public:
     const static string root_name;
 
-    static constexpr uint32_t FLAG_NONE = 0x0000;
-    static constexpr uint32_t FLAG_OPEN = 0x0001;
-    static constexpr uint32_t FLAG_ROOT = 0x0002;
+    static constexpr uint32_t FLAG_NONE =   0x0000;
+    static constexpr uint32_t FLAG_OPEN =   0x0001;
+    static constexpr uint32_t FLAG_ROOT =   0x0002;
+    static constexpr uint32_t FLAG_CREATE = 0x0004;
 
     friend class RGWLibFS;
 
   private:
     RGWFileHandle(RGWLibFS* _fs)
-      : fs(_fs), parent(nullptr), flags(FLAG_ROOT)
+      : refcnt(1), fs(_fs), parent(nullptr), flags(FLAG_ROOT)
       {
 	/* root */
 	fh.fh_type = RGW_FS_TYPE_DIRECTORY;
@@ -130,6 +131,8 @@ namespace rgw {
       fh.fh_hk.bucket = XXH64(fsid.c_str(), fsid.length(), fh_key::seed);
       fh.fh_hk.object = XXH64(object_name.c_str(), object_name.length(),
 			      fh_key::seed);
+      fhk = fh.fh_hk;
+      name = object_name;
     }
 
   public:
@@ -169,6 +172,7 @@ namespace rgw {
     bool is_root() const { return flags & FLAG_ROOT; }
     bool is_bucket() const { return (fh.fh_type == RGW_FS_TYPE_DIRECTORY); }
     bool is_object() const { return (fh.fh_type == RGW_FS_TYPE_FILE); }
+    bool creating() const { return flags & FLAG_CREATE; }
 
     void open() {
       flags |= FLAG_OPEN;
@@ -176,6 +180,10 @@ namespace rgw {
 
     void close() {
       flags &= ~FLAG_OPEN;
+    }
+
+    void open_for_create() {
+      flags |= FLAG_CREATE;
     }
 
     friend void intrusive_ptr_add_ref(const RGWFileHandle* fh) {
@@ -251,6 +259,8 @@ namespace rgw {
     return static_cast<RGWFileHandle*>(fh->fh_private);
   }
 
+  typedef std::tuple<RGWFileHandle*, uint32_t> LookupFHResult;
+
   class RGWLibFS
   {
     CephContext* cct;
@@ -299,10 +309,13 @@ namespace rgw {
     }
 
     /* find or create an RGWFileHandle */
-    RGWFileHandle* lookup_fh(RGWFileHandle* parent, const char *name) {
+    LookupFHResult lookup_fh(RGWFileHandle* parent, const char *name) {
 
       RGWFileHandle::FHCache::Latch lat;
       fh_key fhk(parent->fhk.fh_hk.object, name);
+      LookupFHResult fhr { nullptr, RGWFileHandle::FLAG_NONE };
+
+      using std::get;
 
       RGWFileHandle* fh =
 	fh_cache.find_latch(fhk.fh_hk.object /* partition selector*/,
@@ -314,10 +327,14 @@ namespace rgw {
 	intrusive_ptr_add_ref(fh); /* sentinel ref */
 	fh_cache.insert_latched(fh, lat,
 				RGWFileHandle::FHCache::FLAG_NONE);
+	get<1>(fhr) = RGWFileHandle::FLAG_CREATE;
       }
       intrusive_ptr_add_ref(fh); /* call path/handle ref */
       lat.lock->unlock(); /* !LATCHED */
-      return fh;
+
+      get<0>(fhr) = fh;
+
+      return fhr;
     }
 
     /* find or create an RGWFileHandle */
