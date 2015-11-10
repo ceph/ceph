@@ -44,6 +44,7 @@ protected:
     C_KickOffScrubs(MDCache *mdcache, ScrubStack *s);
     void finish(int r) { }
     void complete(int r) {
+      stack->scrubs_in_progress--;
       stack->kick_off_scrubs();
       // don't delete self
     }
