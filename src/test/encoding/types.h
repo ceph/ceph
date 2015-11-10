@@ -181,6 +181,9 @@ TYPE(cap_reconnect_t)
 TYPE(inode_backtrace_t)
 TYPE(inode_backpointer_t)
 TYPE(quota_info_t)
+
+#include "include/fs_types.h"
+TYPE_FEATUREFUL(file_layout_t)
 TYPE(ceph_file_layout_wrapper)
 
 #include "mds/CInode.h"

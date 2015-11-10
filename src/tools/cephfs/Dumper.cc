@@ -17,6 +17,7 @@
 #endif
 
 #include "include/compat.h"
+#include "include/fs_types.h"
 #include "common/entity_name.h"
 #include "common/errno.h"
 #include "common/safe_io.h"

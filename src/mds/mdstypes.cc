@@ -7,24 +7,6 @@
 const mds_gid_t MDS_GID_NONE = mds_gid_t(0);
 const mds_rank_t MDS_RANK_NONE = mds_rank_t(-1);
 
-void dump(const ceph_file_layout& l, Formatter *f)
-{
-  f->dump_unsigned("stripe_unit", l.fl_stripe_unit);
-  f->dump_unsigned("stripe_count", l.fl_stripe_count);
-  f->dump_unsigned("object_size", l.fl_object_size);
-  if (l.fl_cas_hash)
-    f->dump_unsigned("cas_hash", l.fl_cas_hash);
-  if (l.fl_object_stripe_unit)
-    f->dump_unsigned("object_stripe_unit", l.fl_object_stripe_unit);
-  if (l.fl_pg_pool)
-    f->dump_unsigned("pg_pool", l.fl_pg_pool);
-}
-
-void dump(const ceph_dir_layout& l, Formatter *f)
-{
-  f->dump_unsigned("dir_hash", l.dl_dir_hash);
-}
-
 
 /*
  * frag_info_t
