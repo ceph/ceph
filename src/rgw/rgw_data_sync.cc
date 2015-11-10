@@ -1134,11 +1134,20 @@ int RGWRemoteDataLog::run_sync(int num_shards, rgw_data_sync_status& sync_status
 {
   RGWObjectCtx obj_ctx(store, NULL);
 
+  int r = run(new RGWReadDataSyncStatusCoroutine(async_rados, store, obj_ctx, source_zone, &sync_status));
+  if (r == -ENOENT) {
+    r = run(new RGWInitDataSyncStatusCoroutine(async_rados, store, &http_manager, obj_ctx, source_zone, num_shards));
+  }
+  if (r < 0) {
+    ldout(store->ctx(), 0) << "ERROR: failed to read sync status from source_zone=" << source_zone << " r=" << r << dendl;
+    return r;
+  }
+
   lock.get_write();
   data_sync_cr = new RGWDataSyncCR(store, &http_manager, async_rados, conn, store->get_zone_params().log_pool, source_zone);
   data_sync_cr->get();
   lock.unlock();
-  int r = run(data_sync_cr);
+  r = run(data_sync_cr);
   if (r < 0) {
     ldout(store->ctx(), 0) << "ERROR: failed to run sync" << dendl;
     return r;
