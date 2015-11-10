@@ -101,7 +101,7 @@ void ScrubStack::kick_off_scrubs()
 
       if (curi->is_file()) {
 	if (!cur->scrub_info()->on_finish)
-	  cur->scrub_set_finisher(new C_KickOffScrubs(mdcache->mds, this));
+	  cur->scrub_set_finisher(&scrub_kick);
         scrub_file_dentry(cur);
         can_continue = true;
       } else {
@@ -229,7 +229,7 @@ void ScrubStack::scrub_dir_dentry(CDentry *dn,
     assert (!*added_children); // can't do this if children are still pending
 
     if (!dn->scrub_info()->on_finish)
-      dn->scrub_set_finisher(new C_KickOffScrubs(mdcache->mds, this));
+      dn->scrub_set_finisher(&scrub_kick);
 
     // OK, so now I can... fire off a validate on the dir inode, and
     // when it completes, come through here again, noticing that we've
@@ -255,8 +255,7 @@ bool ScrubStack::get_next_cdir(CInode *in, CDir **new_dir)
     dout(25) << "looking up new frag " << next_frag << dendl;
     CDir *next_dir = in->get_or_open_dirfrag(mdcache, next_frag);
     if (!next_dir->is_complete()) {
-      C_KickOffScrubs *c = new C_KickOffScrubs(mdcache->mds, this);
-      next_dir->fetch(c);
+      next_dir->fetch(&scrub_kick);
       dout(25) << "fetching frag from RADOS" << dendl;
       return false;
     }
@@ -325,7 +324,7 @@ void ScrubStack::scrub_dirfrag(CDir *dir, bool *added_children,
     // scrub initialize, so that it can populate its lists
     // of dentries.
     if (!dir->is_complete()) {
-      dir->fetch(new C_KickOffScrubs(mdcache->mds, this));
+      dir->fetch(&scrub_kick);
       return;
     }
 
@@ -334,13 +333,11 @@ void ScrubStack::scrub_dirfrag(CDir *dir, bool *added_children,
 
   int r = 0;
   while(r == 0) {
-    MDSInternalContext *kick = new C_KickOffScrubs(mdcache->mds, this);
     CDentry *dn = NULL;
-    r = dir->scrub_dentry_next(kick, &dn);
+    r = dir->scrub_dentry_next(&scrub_kick, &dn);
     if (r != EAGAIN) {
       // ctx only used by scrub_dentry_next in EAGAIN case
       // FIXME It's kind of annoying to keep allocating and deleting a ctx here
-      delete kick;
     }
 
     if (r == EAGAIN) {
@@ -438,3 +435,5 @@ void ScrubStack::_validate_inode_done(CDentry *dn, int r,
   }
 }
 
+ScrubStack::C_KickOffScrubs::C_KickOffScrubs(MDCache *mdcache, ScrubStack *s)
+  : MDSInternalContext(mdcache->mds), stack(s) { }
