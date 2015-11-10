@@ -100,12 +100,17 @@ void ScrubStack::kick_off_scrubs()
       pop_dentry(cur); // we only touch it this once, so remove from stack
 
       if (curi->is_file()) {
+	if (!cur->scrub_info()->on_finish)
+	  cur->scrub_set_finisher(new C_KickOffScrubs(mdcache->mds, this));
         scrub_file_dentry(cur);
         can_continue = true;
       } else {
         // drat, we don't do anything with these yet :(
         dout(5) << "skipping scrub on non-dir, non-file dentry "
                 << *cur << dendl;
+	Context *c = NULL;
+	cur->scrub_finished(&c);
+	assert(c == NULL);
       }
     } else {
       bool completed; // it's done, so pop it off the stack
@@ -222,6 +227,9 @@ void ScrubStack::scrub_dir_dentry(CDentry *dn,
            << ", all_frags_done=" << all_frags_done << dendl;
   if (all_frags_done) {
     assert (!*added_children); // can't do this if children are still pending
+
+    if (!dn->scrub_info()->on_finish)
+      dn->scrub_set_finisher(new C_KickOffScrubs(mdcache->mds, this));
 
     // OK, so now I can... fire off a validate on the dir inode, and
     // when it completes, come through here again, noticing that we've
@@ -378,13 +386,12 @@ void ScrubStack::scrub_dirfrag(CDir *dir, bool *added_children,
 
     // FIXME: Do I *really* need to construct a kick context for every
     // single dentry I'm going to scrub?
-    MDSInternalContext *on_d_scrub = new C_KickOffScrubs(mdcache->mds, this);
     _enqueue_dentry(dn,
         dir,
         parent_dn->scrub_info()->scrub_recursive,
         false,  // We are already recursing so scrub_children not meaningful
         header,
-        on_d_scrub,
+	NULL,
         true);
 
     *added_children = true;
