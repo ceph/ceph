@@ -337,6 +337,7 @@ int get_formatter(const po::variables_map &vm,
 
 void init_context() {
   g_conf->set_val_or_die("rbd_cache_writethrough_until_flush", "false");
+  g_conf->apply_changes(NULL);
   common_init_finish(g_ceph_context);
 }
 
