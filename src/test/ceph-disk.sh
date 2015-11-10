@@ -49,6 +49,7 @@ CEPH_ARGS+=" --log-file=$DIR/\$name.log"
 CEPH_ARGS+=" --pid-file=$DIR/\$name.pidfile"
 if test -d .libs ; then
     CEPH_ARGS+=" --erasure-code-dir=.libs"
+    CEPH_ARGS+=" --compression-dir=.libs"
 fi
 CEPH_ARGS+=" --auth-supported=none"
 CEPH_ARGS+=" --osd-journal-size=100"
