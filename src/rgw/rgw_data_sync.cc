@@ -1802,7 +1802,7 @@ public:
         int r;
         if (op == CLS_RGW_OP_ADD ||
             op == CLS_RGW_OP_LINK_OLH) {
-          if (op == CLS_RGW_OP_ADD && !key.instance.empty()) {
+          if (op == CLS_RGW_OP_ADD && !key.instance.empty() && key.instance != "null") {
             ldout(store->ctx(), 10) << "bucket skipping sync obj: " << source_zone << "/" << bucket_info->bucket << "/" << key << "[" << versioned_epoch << "]: versioned object will be synced on link_olh" << dendl;
             return set_cr_done();
 
