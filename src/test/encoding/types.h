@@ -203,43 +203,43 @@ TYPE(InoTable)
 TYPE_STRAYDATA(SnapServer)
 
 #include "mds/events/ECommitted.h"
-TYPE(ECommitted)
+TYPE_FEATUREFUL(ECommitted)
 #include "mds/events/EExport.h"
-TYPE(EExport)
+TYPE_FEATUREFUL(EExport)
 #include "mds/events/EFragment.h"
-TYPE(EFragment)
+TYPE_FEATUREFUL(EFragment)
 #include "mds/events/EImportFinish.h"
-TYPE(EImportFinish)
+TYPE_FEATUREFUL(EImportFinish)
 #include "mds/events/EImportStart.h"
-TYPE(EImportStart)
+TYPE_FEATUREFUL(EImportStart)
 #include "mds/events/EMetaBlob.h"
-TYPE_NOCOPY(EMetaBlob::fullbit)
+TYPE_FEATUREFUL_NOCOPY(EMetaBlob::fullbit)
 TYPE(EMetaBlob::remotebit)
 TYPE(EMetaBlob::nullbit)
-TYPE(EMetaBlob::dirlump)
-TYPE(EMetaBlob)
+TYPE_FEATUREFUL(EMetaBlob::dirlump)
+TYPE_FEATUREFUL(EMetaBlob)
 #include "mds/events/EOpen.h"
-TYPE(EOpen)
+TYPE_FEATUREFUL(EOpen)
 #include "mds/events/EResetJournal.h"
-TYPE(EResetJournal)
+TYPE_FEATUREFUL(EResetJournal)
 #include "mds/events/ESession.h"
-TYPE(ESession)
+TYPE_FEATUREFUL(ESession)
 #include "mds/events/ESessions.h"
-TYPE(ESessions)
+TYPE_FEATUREFUL(ESessions)
 #include "mds/events/ESlaveUpdate.h"
 TYPE(link_rollback)
 TYPE(rmdir_rollback)
 TYPE(rename_rollback::drec)
 TYPE(rename_rollback)
-TYPE(ESlaveUpdate)
+TYPE_FEATUREFUL(ESlaveUpdate)
 #include "mds/events/ESubtreeMap.h"
-TYPE(ESubtreeMap)
+TYPE_FEATUREFUL(ESubtreeMap)
 #include "mds/events/ETableClient.h"
-TYPE(ETableClient)
+TYPE_FEATUREFUL(ETableClient)
 #include "mds/events/ETableServer.h"
-TYPE(ETableServer)
+TYPE_FEATUREFUL(ETableServer)
 #include "mds/events/EUpdate.h"
-TYPE(EUpdate)
+TYPE_FEATUREFUL(EUpdate)
 
 #ifdef WITH_RBD
 #include "librbd/journal/Types.h"

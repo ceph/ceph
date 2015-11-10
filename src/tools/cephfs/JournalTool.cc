@@ -1095,7 +1095,7 @@ int JournalTool::erase_region(JournalScanner const &js, uint64_t const pos, uint
   // is needed inside the ENoOp to make up the difference.
   bufferlist tmp;
   ENoOp enoop(0);
-  enoop.encode_with_header(tmp);
+  enoop.encode_with_header(tmp, CEPH_FEATURES_SUPPORTED_DEFAULT);
 
   dout(4) << "erase_region " << pos << " len=" << length << dendl;
 
@@ -1111,7 +1111,7 @@ int JournalTool::erase_region(JournalScanner const &js, uint64_t const pos, uint
   // Serialize an ENoOp with the correct amount of padding
   enoop = ENoOp(padding);
   bufferlist entry;
-  enoop.encode_with_header(entry);
+  enoop.encode_with_header(entry, CEPH_FEATURES_SUPPORTED_DEFAULT);
   JournalStream stream(JOURNAL_FORMAT_RESILIENT);
 
   // Serialize region of log stream
