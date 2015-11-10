@@ -52,7 +52,9 @@ using namespace std;
 #include "common/shared_cache.hpp"
 #include "common/simple_cache.hpp"
 #include "common/sharedptr_registry.hpp"
-#include "common/PrioritizedQueue.h"
+//#include "common/PrioritizedQueue.h"
+//#include "common/OpQueue.h"
+#include "common/WrrQueue.h"
 #include "messages/MOSDOp.h"
 
 #define CEPH_OSD_PROTOCOL    10 /* cluster internal */
@@ -1598,7 +1600,8 @@ private:
       Cond sdata_cond;
       Mutex sdata_op_ordering_lock;
       map<PG*, list<PGQueueable> > pg_for_processing;
-      PrioritizedQueue< pair<PGRef, PGQueueable>, entity_inst_t> pqueue;
+      //PrioritizedQueue< pair<PGRef, PGQueueable>, entity_inst_t> pqueue;
+      WrrQueue< pair<PGRef, PGQueueable>, entity_inst_t> pqueue;
       ShardData(
 	string lock_name, string ordering_lock,
 	uint64_t max_tok_per_prio, uint64_t min_cost)
