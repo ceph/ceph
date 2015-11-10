@@ -100,8 +100,10 @@ void ScrubStack::kick_off_scrubs()
       pop_dentry(cur); // we only touch it this once, so remove from stack
 
       if (curi->is_file()) {
-	if (!cur->scrub_info()->on_finish)
+	if (!cur->scrub_info()->on_finish) {
+	  scrubs_in_progress++;
 	  cur->scrub_set_finisher(&scrub_kick);
+	}
         scrub_file_dentry(cur);
         can_continue = true;
       } else {
@@ -228,8 +230,10 @@ void ScrubStack::scrub_dir_dentry(CDentry *dn,
   if (all_frags_done) {
     assert (!*added_children); // can't do this if children are still pending
 
-    if (!dn->scrub_info()->on_finish)
+    if (!dn->scrub_info()->on_finish) {
+      scrubs_in_progress++;
       dn->scrub_set_finisher(&scrub_kick);
+    }
 
     // OK, so now I can... fire off a validate on the dir inode, and
     // when it completes, come through here again, noticing that we've
@@ -255,6 +259,7 @@ bool ScrubStack::get_next_cdir(CInode *in, CDir **new_dir)
     dout(25) << "looking up new frag " << next_frag << dendl;
     CDir *next_dir = in->get_or_open_dirfrag(mdcache, next_frag);
     if (!next_dir->is_complete()) {
+      scrubs_in_progress++;
       next_dir->fetch(&scrub_kick);
       dout(25) << "fetching frag from RADOS" << dendl;
       return false;
@@ -324,6 +329,7 @@ void ScrubStack::scrub_dirfrag(CDir *dir, bool *added_children,
     // scrub initialize, so that it can populate its lists
     // of dentries.
     if (!dir->is_complete()) {
+      scrubs_in_progress++;
       dir->fetch(&scrub_kick);
       return;
     }
@@ -334,10 +340,12 @@ void ScrubStack::scrub_dirfrag(CDir *dir, bool *added_children,
   int r = 0;
   while(r == 0) {
     CDentry *dn = NULL;
+    scrubs_in_progress++;
     r = dir->scrub_dentry_next(&scrub_kick, &dn);
     if (r != EAGAIN) {
       // ctx only used by scrub_dentry_next in EAGAIN case
       // FIXME It's kind of annoying to keep allocating and deleting a ctx here
+      scrubs_in_progress--;
     }
 
     if (r == EAGAIN) {
