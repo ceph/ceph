@@ -1921,8 +1921,11 @@ int RGWBucketShardFullSyncCR::operate()
           total_entries++;
           marker_tracker->start(entry.key, total_entries, utime_t());
           list_marker = entry.key;
+
+          RGWModifyOp op = (entry.key.instance.empty() || entry.key.instance == "null" ? CLS_RGW_OP_ADD : CLS_RGW_OP_LINK_OLH);
+
           spawn(new RGWBucketSyncSingleEntryCR<rgw_obj_key>(store, async_rados, source_zone, bucket_info, shard_id,
-                                               entry.key, entry.versioned_epoch, entry.mtime, CLS_RGW_OP_ADD, entry.key, marker_tracker), false);
+                                               entry.key, entry.versioned_epoch, entry.mtime, op, entry.key, marker_tracker), false);
         }
         while ((int)num_spawned() > spawn_window) {
           yield wait_for_child();
