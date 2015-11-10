@@ -2884,7 +2884,8 @@ reprotect_and_return_err:
     if (ictx->object_cacher) {
       r = ictx->shutdown_cache(); // implicitly flushes
     } else {
-      r = flush(ictx);
+      RWLock::RLocker owner_locker(ictx->owner_lock);
+      r = _flush(ictx);
     }
     if (r < 0) {
       lderr(ictx->cct) << "error flushing IO: " << cpp_strerror(r)
