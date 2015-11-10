@@ -186,6 +186,9 @@ public:
   void scrub_children_finished() {
     scrub_infop->dentry_children_done = true;
   }
+  void scrub_set_finisher(Context *c) {
+    scrub_infop->on_finish = c;
+  }
 
 private:
   /**
