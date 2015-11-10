@@ -156,39 +156,46 @@ public:
 
 template <class T>
 class RGWSyncShardMarkerTrack {
-  typename std::map<T, uint64_t> pending;
+  struct marker_entry {
+    uint64_t pos;
+    utime_t timestamp;
+
+    marker_entry() : pos(0) {}
+    marker_entry(uint64_t _p, const utime_t& _ts) : pos(_p), timestamp(_ts) {}
+  };
+  typename std::map<T, marker_entry> pending;
 
   T high_marker;
-  uint64_t high_index;
+  marker_entry high_entry;
 
   int window_size;
   int updates_since_flush;
 
 
 protected:
-  virtual RGWCoroutine *store_marker(const T& new_marker, uint64_t index_pos) = 0;
+  virtual RGWCoroutine *store_marker(const T& new_marker, uint64_t index_pos, const utime_t& timestamp) = 0;
   virtual void handle_finish(const T& marker) { }
 
 public:
-  RGWSyncShardMarkerTrack(int _window_size) : high_index(0), window_size(_window_size), updates_since_flush(0) {}
+  RGWSyncShardMarkerTrack(int _window_size) : window_size(_window_size), updates_since_flush(0) {}
   virtual ~RGWSyncShardMarkerTrack() {}
 
-  void start(const T& pos, int index_pos) {
-    pending[pos] = index_pos;
+  void start(const T& pos, int index_pos, const utime_t& timestamp) {
+    pending[pos] = marker_entry(index_pos, timestamp);
   }
 
   RGWCoroutine *finish(const T& pos) {
     assert(!pending.empty());
 
-    typename std::map<T, uint64_t>::iterator iter = pending.begin();
+    typename std::map<T, marker_entry>::iterator iter = pending.begin();
     const T& first_pos = iter->first;
 
-    typename std::map<T, uint64_t>::iterator pos_iter = pending.find(pos);
+    typename std::map<T, marker_entry>::iterator pos_iter = pending.find(pos);
     assert(pos_iter != pending.end());
 
     if (!(pos <= high_marker)) {
       high_marker = pos;
-      high_index = pos_iter->second;
+      high_entry = pos_iter->second;
     }
 
     pending.erase(pos);
@@ -198,14 +205,14 @@ public:
     updates_since_flush++;
 
     if (pos == first_pos && (updates_since_flush >= window_size || pending.empty())) {
-      return update_marker(high_marker, high_index);
+      return update_marker(high_marker, high_entry);
     }
     return NULL;
   }
 
-  RGWCoroutine *update_marker(const T& new_marker, uint64_t index_pos) {
+  RGWCoroutine *update_marker(const T& new_marker, marker_entry& entry) {
     updates_since_flush = 0;
-    return store_marker(new_marker, index_pos);
+    return store_marker(new_marker, entry.pos, entry.timestamp);
   }
 };
 
