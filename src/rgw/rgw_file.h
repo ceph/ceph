@@ -191,6 +191,11 @@ namespace rgw {
       }
     }
 
+    RGWFileHandle* ref() {
+      intrusive_ptr_add_ref(this);
+      return this;
+    }
+
     inline void rele() {
       intrusive_ptr_release(this);
     }
@@ -248,6 +253,7 @@ namespace rgw {
 
   class RGWLibFS
   {
+    CephContext* cct;
     struct rgw_fs fs;
     RGWFileHandle root_fh;
 
@@ -262,8 +268,9 @@ namespace rgw {
     std::string fsid;
     
   public:
-    RGWLibFS(const char *_uid, const char *_user_id, const char* _key)
-      : root_fh(this),  uid(_uid), key(_user_id, _key) {
+    RGWLibFS(CephContext* _cct, const char *_uid, const char *_user_id,
+	    const char* _key)
+      : cct(_cct), root_fh(this),  uid(_uid), key(_user_id, _key) {
 
       /* no bucket may be named rgw_fs_inst-(.*) */
       fsid = RGWFileHandle::root_name + "rgw_fs_inst-" +
@@ -339,7 +346,7 @@ namespace rgw {
     }
 
     CephContext* get_context() {
-      return static_cast<CephContext*>(get_fs()->fs_private);
+      return cct;
     }
 
     struct rgw_fs* get_fs() { return &fs; }

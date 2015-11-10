@@ -47,7 +47,8 @@ extern "C" {
   int rc = 0;
 
   /* stash access data for "mount" */
-  RGWLibFS* new_fs = new RGWLibFS(uid, acc_key, sec_key);
+  RGWLibFS* new_fs = new RGWLibFS(static_cast<CephContext*>(rgw), uid, acc_key,
+				  sec_key);
   assert(new_fs);
 
   rc = new_fs->authorize(librgw.get_store());
@@ -244,10 +245,15 @@ int rgw_lookup(struct rgw_fs *rgw_fs,
   RGWFileHandle* rgw_fh;
 
   if (parent->is_root()) {
-    /* XXX if lookup is in the root, then (for now) just get a handle */
-    rgw_fh = fs->lookup_fh(parent, path);
-    if (! rgw_fh)
-      return ENOENT;
+    /* special: lookup on root itself */
+    if (strcmp(path, "/") == 0) {
+      rgw_fh = parent->ref();
+    } else {
+      /* name lookup in root--for now) just get a handle */
+      rgw_fh = fs->lookup_fh(parent, path);
+      if (! rgw_fh)
+	return ENOENT;
+    }
   } else {
     std::string object_name{path};
     RGWStatObjRequest req(cct, fs->get_user(),
@@ -263,7 +269,7 @@ int rgw_lookup(struct rgw_fs *rgw_fs,
     rgw_fh = fs->lookup_fh(parent, path);
     if (! rgw_fh)
       return ENOENT;
-  }
+  } /* !root */
 
   struct rgw_file_handle *rfh = rgw_fh->get_fh();
   *fh = rfh;
