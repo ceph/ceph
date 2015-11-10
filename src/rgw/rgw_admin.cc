@@ -100,7 +100,8 @@ void _usage()
   cout << "  metadata rm                remove metadata info\n";
   cout << "  metadata list              list metadata info\n";
   cout << "  mdlog list                 list metadata log\n";
-  cout << "  mdlog trim                 trim metadata log\n";
+  cout << "  mdlog trim                 trim metadata log (use start-date, end-date or\n";
+  cout << "                             start-marker, end-marker)\n";
   cout << "  bilog list                 list bucket index log\n";
   cout << "  bilog trim                 trim bucket index log (use start-marker, end-marker)\n";
   cout << "  datalog list               list data log\n";
@@ -2772,16 +2773,15 @@ next:
     do {
       list<string> keys;
       ret = store->meta_mgr->list_keys_next(handle, max, keys, &truncated);
-      if (ret < 0) {
+      if (ret < 0 && ret != -ENOENT) {
         cerr << "ERROR: lists_keys_next(): " << cpp_strerror(-ret) << std::endl;
         return -ret;
+      } if (ret != -ENOENT) {
+	for (list<string>::iterator iter = keys.begin(); iter != keys.end(); ++iter) {
+	  formatter->dump_string("key", *iter);
+	}
+	formatter->flush(cout);
       }
-
-      for (list<string>::iterator iter = keys.begin(); iter != keys.end(); ++iter) {
-	formatter->dump_string("key", *iter);
-      }
-      formatter->flush(cout);
-
     } while (truncated);
 
     formatter->close_section();

@@ -2648,13 +2648,53 @@ void PG::init(
   write_if_dirty(*t);
 }
 
+#pragma GCC diagnostic ignored "-Wpragmas"
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wdeprecated-declarations"
+
 void PG::upgrade(ObjectStore *store)
 {
   assert(info_struct_v <= 8);
   ObjectStore::Transaction t;
 
-  assert(0 == "no support for pre v8");
+  assert(info_struct_v == 7);
+
+  // 7 -> 8
+  pg_log.mark_log_for_rewrite();
+  ghobject_t log_oid(OSD::make_pg_log_oid(pg_id));
+  ghobject_t biginfo_oid(OSD::make_pg_biginfo_oid(pg_id));
+  t.remove(coll_t::meta(), log_oid);
+  t.remove(coll_t::meta(), biginfo_oid);
+  t.collection_rmattr(coll, "info");
+
+  t.touch(coll, pgmeta_oid);
+  map<string,bufferlist> v;
+  __u8 ver = cur_struct_v;
+  ::encode(ver, v[infover_key]);
+  t.omap_setkeys(coll, pgmeta_oid, v);
+
+  dirty_info = true;
+  dirty_big_info = true;
+  write_if_dirty(t);
+
+  ceph::shared_ptr<ObjectStore::Sequencer> osr(
+    new ObjectStore::Sequencer("upgrade"));
+  int r = store->apply_transaction(osr.get(), t);
+  if (r != 0) {
+    derr << __func__ << ": apply_transaction returned "
+	 << cpp_strerror(r) << dendl;
+    assert(0);
+  }
+  assert(r == 0);
+
+  C_SaferCond waiter;
+  if (!osr->flush_commit(&waiter)) {
+    waiter.wait();
+  }
 }
+
+#pragma GCC diagnostic pop
+#pragma GCC diagnostic warning "-Wpragmas"
 
 int PG::_prepare_write_info(map<string,bufferlist> *km,
 			    epoch_t epoch,
@@ -2725,6 +2765,10 @@ void PG::prepare_write_info(map<string,bufferlist> *km)
   dirty_big_info = false;
 }
 
+#pragma GCC diagnostic ignored "-Wpragmas"
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wdeprecated-declarations"
+
 bool PG::_has_removal_flag(ObjectStore *store,
 			   spg_t pgid)
 {
@@ -2739,6 +2783,10 @@ bool PG::_has_removal_flag(ObjectStore *store,
       values.size() == 1)
     return true;
 
+  // try old way.  tolerate EOPNOTSUPP.
+  char val;
+  if (store->collection_getattr(coll, "remove", &val, 1) > 0)
+    return true;
   return false;
 }
 
@@ -2764,25 +2812,57 @@ int PG::peek_map_epoch(ObjectStore *store,
   keys.insert(epoch_key);
   map<string,bufferlist> values;
   int r = store->omap_get_values(coll, pgmeta_oid, keys, &values);
-  if (r != 0) {
-    // probably bug 10617; see OSD::load_pgs()
-    return -1;
+  if (r == 0) {
+    assert(values.size() == 2);
+
+    // sanity check version
+    bufferlist::iterator bp = values[infover_key].begin();
+    __u8 struct_v = 0;
+    ::decode(struct_v, bp);
+    assert(struct_v >= 8);
+
+    // get epoch
+    bp = values[epoch_key].begin();
+    ::decode(cur_epoch, bp);
+  } else if (r == -ENOENT) {
+    // legacy: try v7 or older
+    r = store->collection_getattr(coll, "info", *bl);
+    if (r <= 0) {
+      // probably bug 10617; see OSD::load_pgs()
+      return -1;
+    }
+    bufferlist::iterator bp = bl->begin();
+    __u8 struct_v = 0;
+    ::decode(struct_v, bp);
+    assert(struct_v >= 5);
+    if (struct_v < 6) {
+      ::decode(cur_epoch, bp);
+      *pepoch = cur_epoch;
+      return cur_epoch;
+    }
+
+    // get epoch out of leveldb
+    string ek = get_epoch_key(pgid);
+    keys.clear();
+    values.clear();
+    keys.insert(ek);
+    store->omap_get_values(coll_t::meta(), legacy_infos_oid, keys, &values);
+    if (values.size() < 1) {
+      // probably bug 10617; see OSD::load_pgs()
+      return -1;
+    }
+    bufferlist::iterator p = values[ek].begin();
+    ::decode(cur_epoch, p);
+  } else {
+    assert(0 == "unable to open pg metadata");
   }
-  assert(values.size() == 2);
-
-  // sanity check version
-  bufferlist::iterator bp = values[infover_key].begin();
-  __u8 struct_v = 0;
-  ::decode(struct_v, bp);
-  assert(struct_v >= 8);
-
-  // get epoch
-  bp = values[epoch_key].begin();
-  ::decode(cur_epoch, bp);
 
   *pepoch = cur_epoch;
   return 0;
 }
+
+#pragma GCC diagnostic pop
+#pragma GCC diagnostic warning "-Wpragmas"
 
 void PG::write_if_dirty(ObjectStore::Transaction& t)
 {
@@ -3503,8 +3583,18 @@ void PG::_scan_snaps(ScrubMap &smap)
     if (hoid.snap < CEPH_MAXSNAP) {
       // fake nlinks for old primaries
       bufferlist bl;
+      if (o.attrs.find(OI_ATTR) == o.attrs.end()) {
+	o.nlinks = 0;
+	continue;
+      }
       bl.push_back(o.attrs[OI_ATTR]);
-      object_info_t oi(bl);
+      object_info_t oi;
+      try {
+	oi = bl;
+      } catch(...) {
+	o.nlinks = 0;
+	continue;
+      }
       if (oi.snaps.empty()) {
 	// Just head
 	o.nlinks = 1;
@@ -5012,22 +5102,6 @@ bool PG::can_discard_op(OpRequestRef& op)
     return true;
   }
 
-  if ((m->get_flags() & (CEPH_OSD_FLAG_BALANCE_READS |
-			 CEPH_OSD_FLAG_LOCALIZE_READS)) &&
-      op->may_read() &&
-      !(op->may_write() || op->may_cache())) {
-    // balanced reads; any replica will do
-    if (!(is_primary() || is_replica())) {
-      osd->handle_misdirected_op(this, op);
-      return true;
-    }
-  } else {
-    // normal case; must be primary
-    if (!is_primary()) {
-      osd->handle_misdirected_op(this, op);
-      return true;
-    }
-  }
   if (is_replay()) {
     if (m->get_version().version > 0) {
       dout(7) << " queueing replay at " << m->get_version()

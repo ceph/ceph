@@ -160,6 +160,7 @@ void usage()
 "  snap purge <image-spec>                     deletes all snapshots\n"
 "  snap protect <snap-spec>                    prevent a snapshot from being deleted\n"
 "  snap unprotect <snap-spec>                  allow a snapshot to be deleted\n"
+"  snap rename <src-snap-spec> <dst-snap-spec> rename a snapshot\n"
 "  watch <image-spec>                          watch events on image\n"
 "  status <image-spec>                         show the status of this image\n"
 "  map <image-spec> | <snap-spec>              map image to a block device\n"
@@ -778,6 +779,15 @@ static int do_rollback_snap(librbd::Image& image, const char *snapname)
     return r;
   }
   pc.finish();
+  return 0;
+}
+
+static int do_rename_snap(librbd::Image& image, const char *srcname, const char *dstname)
+{
+  int r = image.snap_rename(srcname, dstname);
+  if (r < 0)
+    return r;
+
   return 0;
 }
 
@@ -2907,6 +2917,7 @@ enum {
   OPT_SNAP_PURGE,
   OPT_SNAP_PROTECT,
   OPT_SNAP_UNPROTECT,
+  OPT_SNAP_RENAME,
   OPT_WATCH,
   OPT_STATUS,
   OPT_MAP,
@@ -3002,6 +3013,8 @@ static int get_cmd(const char *cmd, CommandType command_type)
       return OPT_SNAP_PROTECT;
     if (strcmp(cmd, "unprotect") == 0)
       return OPT_SNAP_UNPROTECT;
+    if (strcmp(cmd, "rename") == 0)
+      return OPT_SNAP_RENAME;
     break;
   case COMMAND_TYPE_METADATA:
     if (strcmp(cmd, "list") == 0)
@@ -3265,12 +3278,6 @@ int main(int argc, const char **argv)
     }
   }
 
-  if (features != 0 && !format_specified) {
-    format = 2;
-    format_specified = true;
-  } else if (features == 0) {
-    features = g_conf->rbd_default_features;
-  }
   if (shared) {
     features &= ~(RBD_FEATURE_EXCLUSIVE_LOCK | RBD_FEATURE_OBJECT_MAP);
   }
@@ -3366,6 +3373,7 @@ if (!set_conf_param(v, p1, p2, p3)) { \
       case OPT_COPY:
       case OPT_RENAME:
       case OPT_CLONE:
+      case OPT_SNAP_RENAME:
 	SET_CONF_PARAM(v, &imgname, &destname, NULL);
 	break;
       case OPT_SHOWMAPPED:
@@ -3405,8 +3413,13 @@ if (!set_conf_param(v, p1, p2, p3)) { \
 
   /* get defaults from rbd_default_* options to keep behavior consistent with
      manual short-form options */
-  if (!format_specified)
-    format = g_conf->rbd_default_format;
+  if (features != 0 && !format_specified) {
+    format = 2;
+  } else if (features == 0) {
+    features = g_conf->rbd_default_features;
+    if (!format_specified)
+      format = g_conf->rbd_default_format;
+  }
   if (!order)
     order = g_conf->rbd_default_order;
   if (!stripe_unit)
@@ -3511,7 +3524,7 @@ if (!set_conf_param(v, p1, p2, p3)) { \
       opt_cmd != OPT_MAP && opt_cmd != OPT_UNMAP && opt_cmd != OPT_CLONE &&
       opt_cmd != OPT_SNAP_PROTECT && opt_cmd != OPT_SNAP_UNPROTECT &&
       opt_cmd != OPT_CHILDREN && opt_cmd != OPT_OBJECT_MAP_REBUILD &&
-      opt_cmd != OPT_DISK_USAGE) {
+      opt_cmd != OPT_DISK_USAGE && opt_cmd != OPT_SNAP_RENAME) {
     cerr << "rbd: snapname specified for a command that doesn't use it"
 	 << std::endl;
     return EXIT_FAILURE;
@@ -3519,17 +3532,21 @@ if (!set_conf_param(v, p1, p2, p3)) { \
   if ((opt_cmd == OPT_SNAP_CREATE || opt_cmd == OPT_SNAP_ROLLBACK ||
        opt_cmd == OPT_SNAP_REMOVE || opt_cmd == OPT_CLONE ||
        opt_cmd == OPT_SNAP_PROTECT || opt_cmd == OPT_SNAP_UNPROTECT ||
-       opt_cmd == OPT_CHILDREN) && !snapname) {
+       opt_cmd == OPT_CHILDREN || opt_cmd == OPT_SNAP_RENAME) && !snapname) {
     cerr << "rbd: snap name was not specified" << std::endl;
     return EXIT_FAILURE;
   }
 
   set_pool_image_name(destname, (char **)&dest_poolname,
 		      (char **)&destname, (char **)&dest_snapname);
-  if (dest_snapname) {
+  if (dest_snapname && opt_cmd != OPT_SNAP_RENAME) {
     // no command uses dest_snapname
     cerr << "rbd: destination snapname specified for a command that doesn't use it"
          << std::endl;
+    return EXIT_FAILURE;
+  }
+  if (opt_cmd == OPT_SNAP_RENAME && !dest_snapname) {
+    cerr << "rbd: destination snap name was not specified" << std::endl;
     return EXIT_FAILURE;
   }
 
@@ -3581,6 +3598,10 @@ if (!set_conf_param(v, p1, p2, p3)) { \
   if ((opt_cmd == OPT_CLONE) && size) {
     cerr << "rbd: clone must begin at size of parent" << std::endl;
     return EXIT_FAILURE;
+  }
+  if ((opt_cmd == OPT_CLONE) &&
+      ((features & RBD_FEATURE_LAYERING) != RBD_FEATURE_LAYERING)) {
+    features |= RBD_FEATURE_LAYERING;
   }
 
   if ((opt_cmd == OPT_RENAME) && (strcmp(poolname, dest_poolname) != 0)) {
@@ -3670,7 +3691,8 @@ if (!set_conf_param(v, p1, p2, p3)) { \
        opt_cmd == OPT_METADATA_SET || opt_cmd == OPT_METADATA_LIST ||
        opt_cmd == OPT_METADATA_REMOVE || opt_cmd == OPT_METADATA_GET ||
        opt_cmd == OPT_FEATURE_DISABLE || opt_cmd == OPT_FEATURE_ENABLE ||
-       opt_cmd == OPT_OBJECT_MAP_REBUILD || opt_cmd == OPT_DISK_USAGE)) {
+       opt_cmd == OPT_OBJECT_MAP_REBUILD || opt_cmd == OPT_DISK_USAGE ||
+       opt_cmd == OPT_SNAP_RENAME)) {
 
     if (opt_cmd == OPT_INFO || opt_cmd == OPT_SNAP_LIST ||
 	opt_cmd == OPT_EXPORT || opt_cmd == OPT_EXPORT || opt_cmd == OPT_COPY ||
@@ -3846,6 +3868,15 @@ if (!set_conf_param(v, p1, p2, p3)) { \
     r = do_add_snap(image, snapname);
     if (r < 0) {
       cerr << "rbd: failed to create snapshot: " << cpp_strerror(-r)
+	   << std::endl;
+      return -r;
+    }
+    break;
+
+  case OPT_SNAP_RENAME:
+    r = do_rename_snap(image, snapname, dest_snapname);
+    if (r < 0) {
+      cerr << "rbd: failed to rename snapshot: " << cpp_strerror(-r)
 	   << std::endl;
       return -r;
     }

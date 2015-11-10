@@ -21,12 +21,13 @@
 #include <boost/scoped_ptr.hpp>
 #include <sstream>
 #include <fstream>
-#include "os/KeyValueDB.h"
+#include "kv/KeyValueDB.h"
 
 #include "include/assert.h"
 #include "common/Formatter.h"
 #include "common/Finisher.h"
 #include "common/errno.h"
+#include "common/debug.h"
 
 class MonitorDBStore
 {

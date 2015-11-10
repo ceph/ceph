@@ -205,14 +205,22 @@ bufferlist KineticStore::to_bufferlist(const kinetic::KineticRecord &record)
 
 int KineticStore::split_key(string in_prefix, string *prefix, string *key)
 {
-  size_t prefix_len = in_prefix.find('\1');
+  size_t prefix_len = 0;
+  char* in_data = in.c_str();
+  
+  // Find separator inside Slice
+  char* separator = (char*) memchr((void*)in_data, 1, in.size());
+  if (separator == NULL)
+     return -EINVAL;
+  prefix_len = size_t(separator - in_data);
   if (prefix_len >= in_prefix.size())
     return -EINVAL;
 
+  // Fetch prefix and/or key directly from Slice
   if (prefix)
-    *prefix = string(in_prefix, 0, prefix_len);
+    *prefix = string(in_data, prefix_len);
   if (key)
-    *key= string(in_prefix, prefix_len + 1);
+    *key = string(separator+1, in_prefix.size()-prefix_len-1);
   return 0;
 }
 
@@ -315,6 +323,17 @@ pair<string,string> KineticStore::KineticWholeSpaceIteratorImpl::raw_key() {
   split_key(*keys_iter, &prefix, &key);
   return make_pair(prefix, key);
 }
+
+bool KineticStore::KineticWholeSpaceIteratorImpl::raw_key_is_prefixed(const string &prefix) {
+  // Look for "prefix\1" right in *keys_iter without making a copy
+  string key = *keys_iter;
+  if ((key.size() > prefix.length()) && (key[prefix.length()] == '\1')) {
+    return memcmp(key.c_str(), prefix.c_str(), prefix.length()) == 0;
+  } else {
+    return false;
+  }
+}
+
 
 bufferlist KineticStore::KineticWholeSpaceIteratorImpl::value() {
   dout(30) << "kinetic iterator value()" << dendl;

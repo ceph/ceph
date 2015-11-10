@@ -324,22 +324,7 @@ namespace librbd {
       ldout(m_ictx->cct, 20) << "WRITE_CHECK_GUARD" << dendl;
 
       if (r == -ENOENT) {
-        bool has_parent;
-        {
-	  RWLock::RLocker snap_locker(m_ictx->snap_lock);
-	  RWLock::RLocker parent_locker(m_ictx->parent_lock);
-          has_parent = compute_parent_extents();
-        }
-
-	// If parent still exists, overlap might also have changed.
-	if (has_parent) {
-          send_copyup();
-	} else {
-          // parent may have disappeared -- send original write again
-	  ldout(m_ictx->cct, 20) << "should_complete(" << this
-				 << "): parent overlap now 0" << dendl;
-          send_write();
-	}
+        handle_write_guard();
 	finished = false;
 	break;
       } else if (r < 0) {
@@ -395,6 +380,7 @@ namespace librbd {
   void AbstractWrite::send_pre() {
     assert(m_ictx->owner_lock.is_locked());
 
+    m_object_exist = m_ictx->object_map.object_may_exist(m_object_no);
     bool write = false;
     {
       RWLock::RLocker snap_lock(m_ictx->snap_lock);
@@ -464,19 +450,15 @@ namespace librbd {
 
   void AbstractWrite::send_write() {
     ldout(m_ictx->cct, 20) << "send_write " << this << " " << m_oid << " "
-			   << m_object_off << "~" << m_object_len << dendl;
+			   << m_object_off << "~" << m_object_len 
+                           << " object exist " << m_object_exist << dendl;
 
-    m_state = LIBRBD_AIO_WRITE_FLAT;
-    guard_write();
-    add_write_ops(&m_write);
-    assert(m_write.size() != 0);
-
-    librados::AioCompletion *rados_completion =
-      librados::Rados::aio_create_completion(this, NULL, rados_req_cb);
-    int r = m_ictx->data_ctx.aio_operate(m_oid, rados_completion, &m_write,
-					 m_snap_seq, m_snaps);
-    assert(r == 0);
-    rados_completion->release();
+    if (!m_object_exist && has_parent()) {
+      m_state = LIBRBD_AIO_WRITE_GUARD;
+      handle_write_guard();
+    } else {
+      send_write_op(true);
+    }
   }
 
   void AbstractWrite::send_copyup()
@@ -504,6 +486,39 @@ namespace librbd {
       m_ictx->copyup_list_lock.Unlock();
     }
   }
+  void AbstractWrite::send_write_op(bool write_guard)
+  {
+    m_state = LIBRBD_AIO_WRITE_FLAT;
+    if (write_guard)
+      guard_write();
+    add_write_ops(&m_write);
+    assert(m_write.size() != 0);
+
+    librados::AioCompletion *rados_completion =
+      librados::Rados::aio_create_completion(this, NULL, rados_req_cb);
+    int r = m_ictx->data_ctx.aio_operate(m_oid, rados_completion, &m_write,
+					 m_snap_seq, m_snaps);
+    assert(r == 0);
+    rados_completion->release();
+  }
+  void AbstractWrite::handle_write_guard()
+  {
+    bool has_parent;
+    {
+      RWLock::RLocker snap_locker(m_ictx->snap_lock);
+      RWLock::RLocker parent_locker(m_ictx->parent_lock);
+      has_parent = compute_parent_extents();
+    }
+    // If parent still exists, overlap might also have changed.
+    if (has_parent) {
+      send_copyup();
+    } else {
+      // parent may have disappeared -- send original write again
+      ldout(m_ictx->cct, 20) << "should_complete(" << this
+        << "): parent overlap now 0" << dendl;
+      send_write();
+    }
+  }
 
   void AioWrite::add_write_ops(librados::ObjectWriteOperation *wr) {
     if (m_ictx->enable_alloc_hint && !m_ictx->object_map.object_may_exist(m_object_no))
@@ -515,6 +530,18 @@ namespace librbd {
     }
     wr->set_op_flags2(m_op_flags);
   }
+  void AioWrite::send_write() {
+    bool write_full = (m_object_off == 0 && m_object_len == m_ictx->get_object_size());
+    ldout(m_ictx->cct, 20) << "send_write " << this << " " << m_oid << " "
+			   << m_object_off << "~" << m_object_len
+                           << " object exist " << m_object_exist
+			   << " write_full " << write_full << dendl;
+    if (write_full) {
+      send_write_op(false);
+    } else {
+      AbstractWrite::send_write();
+    }
+  }
 
   void AioRemove::guard_write() {
     // do nothing to disable write guard only if deep-copyup not required
@@ -522,5 +549,10 @@ namespace librbd {
     if (!m_ictx->snaps.empty()) {
       AbstractWrite::guard_write();
     }
+  }
+  void AioRemove::send_write() {
+    ldout(m_ictx->cct, 20) << "send_write " << this << " " << m_oid << " "
+			   << m_object_off << "~" << m_object_len << dendl;
+    send_write_op(true);
   }
 }

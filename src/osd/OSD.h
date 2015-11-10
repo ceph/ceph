@@ -883,6 +883,7 @@ public:
   void pg_stat_queue_dequeue(PG *pg);
 
   void init();
+  void final_init();  
   void start_shutdown();
   void shutdown();
 

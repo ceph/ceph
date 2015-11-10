@@ -2831,6 +2831,7 @@ int RGWRados::create_bucket(RGWUserInfo& owner, rgw_bucket& bucket,
     info.placement_rule = selected_placement_rule;
     info.num_shards = bucket_index_max_shards;
     info.bucket_index_shard_hash_type = RGWBucketInfo::MOD;
+    info.requester_pays = false;
     if (!creation_time)
       time(&info.creation_time);
     else
@@ -7901,7 +7902,7 @@ int RGWRados::list_raw_objects(rgw_bucket& pool, const string& prefix_filter,
   if (!ctx.initialized) {
     int r = pool_iterate_begin(pool, ctx.iter_ctx);
     if (r < 0) {
-      lderr(cct) << "failed to list objects pool_iterate_begin() returned r=" << r << dendl;
+      ldout(cct, 10) << "failed to list objects pool_iterate_begin() returned r=" << r << dendl;
       return r;
     }
     ctx.initialized = true;
@@ -7910,7 +7911,7 @@ int RGWRados::list_raw_objects(rgw_bucket& pool, const string& prefix_filter,
   vector<RGWObjEnt> objs;
   int r = pool_iterate(ctx.iter_ctx, max, objs, is_truncated, &filter);
   if (r < 0) {
-    lderr(cct) << "failed to list objects pool_iterate returned r=" << r << dendl;
+    ldout(cct, 10) << "failed to list objects pool_iterate returned r=" << r << dendl;
     return r;
   }
 

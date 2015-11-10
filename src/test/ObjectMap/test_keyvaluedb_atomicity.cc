@@ -1,15 +1,19 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 #include <pthread.h>
 #include "include/buffer.h"
-#include "os/LevelDBStore.h"
+#include "kv/KeyValueDB.h"
 #include <sys/types.h>
 #include <dirent.h>
 #include <string>
 #include <vector>
 #include "include/memory.h"
 #include <boost/scoped_ptr.hpp>
+#include <iostream>
 #include <sstream>
 #include "stdlib.h"
+#include "global/global_context.h"
+
+using namespace std;
 
 const string CONTROL_PREFIX = "CONTROL";
 const string PRIMARY_PREFIX = "PREFIX";
@@ -84,7 +88,7 @@ int main() {
   }
   string strpath(path);
   std::cerr << "Using path: " << strpath << std::endl;
-  LevelDBStore *store = new LevelDBStore(NULL, strpath);
+  KeyValueDB *store = KeyValueDB::create(g_ceph_context, "leveldb", strpath);
   assert(!store->create_and_open(std::cerr));
   db.reset(store);
 

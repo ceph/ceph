@@ -1169,14 +1169,14 @@ int librados::IoCtx::mapext(const std::string& oid, uint64_t off, size_t len,
 			    std::map<uint64_t,uint64_t>& m)
 {
   object_t obj(oid);
-  return io_ctx_impl->mapext(oid, off, len, m);
+  return io_ctx_impl->mapext(obj, off, len, m);
 }
 
 int librados::IoCtx::sparse_read(const std::string& oid, std::map<uint64_t,uint64_t>& m,
 				 bufferlist& bl, size_t len, uint64_t off)
 {
   object_t obj(oid);
-  return io_ctx_impl->sparse_read(oid, m, bl, len, off);
+  return io_ctx_impl->sparse_read(obj, m, bl, len, off);
 }
 
 int librados::IoCtx::getxattr(const std::string& oid, const char *name, bufferlist& bl)
@@ -1206,7 +1206,7 @@ int librados::IoCtx::rmxattr(const std::string& oid, const char *name)
 int librados::IoCtx::stat(const std::string& oid, uint64_t *psize, time_t *pmtime)
 {
   object_t obj(oid);
-  return io_ctx_impl->stat(oid, psize, pmtime);
+  return io_ctx_impl->stat(obj, psize, pmtime);
 }
 
 int librados::IoCtx::exec(const std::string& oid, const char *cls, const char *method,
@@ -1760,7 +1760,7 @@ int librados::IoCtx::aio_stat(const std::string& oid, librados::AioCompletion *c
 			      uint64_t *psize, time_t *pmtime)
 {
   object_t obj(oid);
-  return io_ctx_impl->aio_stat(oid, c->pc, psize, pmtime);
+  return io_ctx_impl->aio_stat(obj, c->pc, psize, pmtime);
 }
 
 int librados::IoCtx::aio_cancel(librados::AioCompletion *c)
@@ -1784,7 +1784,6 @@ int librados::IoCtx::watch2(const string& oid, uint64_t *cookie,
 
 int librados::IoCtx::unwatch(const string& oid, uint64_t handle)
 {
-  object_t obj(oid);
   return io_ctx_impl->unwatch(handle);
 }
 

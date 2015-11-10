@@ -8,6 +8,7 @@
 #include "include/memory.h"
 #include <errno.h>
 using std::string;
+#include "common/debug.h"
 #include "common/perf_counters.h"
 
 int LevelDBStore::init(string option_str)
@@ -163,11 +164,29 @@ void LevelDBStore::LevelDBTransactionImpl::set(
   const bufferlist &to_set_bl)
 {
   string key = combine_strings(prefix, k);
-  //bufferlist::c_str() is non-constant, so we need to make a copy
-  bufferlist val = to_set_bl;
-  bat.Delete(leveldb::Slice(key));
-  bat.Put(leveldb::Slice(key),
-	  leveldb::Slice(val.c_str(), val.length()));
+  size_t bllen = to_set_bl.length();
+  // bufferlist::c_str() is non-constant, so we can't call c_str()
+  if (to_set_bl.is_contiguous() && bllen > 0) {
+    // bufferlist contains just one ptr or they're contiguous
+    bat.Put(leveldb::Slice(key), leveldb::Slice(to_set_bl.buffers().front().c_str(), bllen));
+  } else if ((bllen <= 32 * 1024) && (bllen > 0)) {
+    // 2+ bufferptrs that are not contiguopus
+    // allocate buffer on stack and copy bl contents to that buffer
+    // make sure the buffer isn't too large or we might crash here...    
+    char* slicebuf = (char*) alloca(bllen);
+    leveldb::Slice newslice(slicebuf, bllen);
+    std::list<buffer::ptr>::const_iterator pb;
+    for (pb = to_set_bl.buffers().begin(); pb != to_set_bl.buffers().end(); ++pb) {
+      size_t ptrlen = (*pb).length();
+      memcpy((void*)slicebuf, (*pb).c_str(), ptrlen);
+      slicebuf += ptrlen;
+    } 
+    bat.Put(leveldb::Slice(key), newslice);
+  } else {
+    // 2+ bufferptrs that are not contiguous, and enormous in size
+    bufferlist val = to_set_bl;
+    bat.Put(leveldb::Slice(key), leveldb::Slice(val.c_str(), val.length()));
+  }
 }
 
 void LevelDBStore::LevelDBTransactionImpl::rmkey(const string &prefix,
@@ -210,6 +229,25 @@ int LevelDBStore::get(
   return 0;
 }
 
+int LevelDBStore::get(const string &prefix, 
+		  const string &key,
+		  bufferlist *value)
+{
+  utime_t start = ceph_clock_now(g_ceph_context);
+  int r = 0;
+  KeyValueDB::Iterator it = get_iterator(prefix);
+  it->lower_bound(key);
+  if (it->valid() && it->key() == key) {
+    *value = it->value();
+  } else {
+    r = -ENOENT;
+  }
+  utime_t lat = ceph_clock_now(g_ceph_context) - start;
+  logger->inc(l_leveldb_gets);
+  logger->tinc(l_leveldb_get_latency, lat);
+  return r;
+}
+
 string LevelDBStore::combine_strings(const string &prefix, const string &value)
 {
   string out = prefix;
@@ -227,16 +265,21 @@ bufferlist LevelDBStore::to_bufferlist(leveldb::Slice in)
 
 int LevelDBStore::split_key(leveldb::Slice in, string *prefix, string *key)
 {
-  string in_prefix = in.ToString();
-  size_t prefix_len = in_prefix.find('\0');
-  if (prefix_len >= in_prefix.size())
+  size_t prefix_len = 0;
+  
+  // Find separator inside Slice
+  char* separator = (char*) memchr(in.data(), 0, in.size());
+  if (separator == NULL)
+     return -EINVAL;
+  prefix_len = size_t(separator - in.data());
+  if (prefix_len >= in.size())
     return -EINVAL;
 
   if (prefix)
-    *prefix = string(in_prefix, 0, prefix_len);
+    *prefix = string(in.data(), prefix_len);
   if (key)
-    *key= string(in_prefix, prefix_len + 1);
-  return 0;
+    *key = string(separator+1, in.size() - prefix_len - 1);
+   return 0;
 }
 
 void LevelDBStore::compact()

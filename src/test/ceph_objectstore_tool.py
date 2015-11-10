@@ -184,10 +184,15 @@ def verify(DATADIR, POOL, NAME_PREFIX):
     TMPFILE = r"/tmp/tmp.{pid}".format(pid=os.getpid())
     nullfd = open(os.devnull, "w")
     ERRORS = 0
-    for nsfile in [f for f in os.listdir(DATADIR) if f.split('-')[1].find(NAME_PREFIX) == 0]:
+    for rawnsfile in [f for f in os.listdir(DATADIR) if f.split('-')[1].find(NAME_PREFIX) == 0]:
+        nsfile = rawnsfile.split("__")[0]
+        clone = rawnsfile.split("__")[1]
         nspace = nsfile.split("-")[0]
         file = nsfile.split("-")[1]
-        path = os.path.join(DATADIR, nsfile)
+        # Skip clones
+        if clone != "head":
+            continue
+        path = os.path.join(DATADIR, rawnsfile)
         try:
             os.unlink(TMPFILE)
         except:
@@ -324,10 +329,15 @@ def kill_daemons():
 def check_data(DATADIR, TMPFILE, OSDDIR, SPLIT_NAME):
     repcount = 0
     ERRORS = 0
-    for nsfile in [f for f in os.listdir(DATADIR) if f.split('-')[1].find(SPLIT_NAME) == 0]:
+    for rawnsfile in [f for f in os.listdir(DATADIR) if f.split('-')[1].find(SPLIT_NAME) == 0]:
+        nsfile = rawnsfile.split("__")[0]
+        clone = rawnsfile.split("__")[1]
         nspace = nsfile.split("-")[0]
-        file = nsfile.split("-")[1]
-        path = os.path.join(DATADIR, nsfile)
+        file = nsfile.split("-")[1] + "__" + clone
+        # Skip clones
+        if clone != "head":
+            continue
+        path = os.path.join(DATADIR, rawnsfile)
         tmpfd = open(TMPFILE, "w")
         cmd = "find {dir} -name '{file}_*_{nspace}_*'".format(dir=OSDDIR, file=file, nspace=nspace)
         logging.debug(cmd)
@@ -568,6 +578,7 @@ def main(argv):
             NAME = REP_NAME + "{num}".format(num=i)
             LNAME = nspace + "-" + NAME
             DDNAME = os.path.join(DATADIR, LNAME)
+            DDNAME += "__head"
 
             cmd = "rm -f " + DDNAME
             logging.debug(cmd)
@@ -634,6 +645,45 @@ def main(argv):
                     logging.critical("setomapval failed with {ret}".format(ret=ret))
                 db[nspace][NAME]["omap"][mykey] = myval
 
+    # Create some clones
+    cmd = "./rados -p {pool} mksnap snap1".format(pool=REP_POOL)
+    logging.debug(cmd)
+    call(cmd, shell=True)
+
+    objects = range(1, NUM_REP_OBJECTS + 1)
+    nspaces = range(NUM_NSPACES)
+    for n in nspaces:
+        nspace = get_nspace(n)
+
+        for i in objects:
+            NAME = REP_NAME + "{num}".format(num=i)
+            LNAME = nspace + "-" + NAME
+            DDNAME = os.path.join(DATADIR, LNAME)
+            # First clone
+            CLONENAME = DDNAME + "__1"
+            DDNAME += "__head"
+
+            cmd = "mv -f " + DDNAME + " " + CLONENAME
+            logging.debug(cmd)
+            call(cmd, shell=True)
+
+            if i == 1:
+                dataline = range(DATALINECOUNT)
+            else:
+                dataline = range(1)
+            fd = open(DDNAME, "w")
+            data = "This is the replicated data after a snapshot for " + LNAME + "\n"
+            for _ in dataline:
+                fd.write(data)
+            fd.close()
+
+            cmd = "./rados -p {pool} -N '{nspace}' put {name} {ddname}".format(pool=REP_POOL, name=NAME, ddname=DDNAME, nspace=nspace)
+            logging.debug(cmd)
+            ret = call(cmd, shell=True, stderr=nullfd)
+            if ret != 0:
+                logging.critical("Rados put command failed with {ret}".format(ret=ret))
+                return 1
+
     print "Creating {objs} objects in erasure coded pool".format(objs=(NUM_EC_OBJECTS*NUM_NSPACES))
 
     objects = range(1, NUM_EC_OBJECTS + 1)
@@ -645,6 +695,7 @@ def main(argv):
             NAME = EC_NAME + "{num}".format(num=i)
             LNAME = nspace + "-" + NAME
             DDNAME = os.path.join(DATADIR, LNAME)
+            DDNAME += "__head"
 
             cmd = "rm -f " + DDNAME
             logging.debug(cmd)
@@ -760,7 +811,13 @@ def main(argv):
 
     os.unlink(OTHERFILE)
     cmd = (CFSD_PREFIX + "--op import --file {FOO}").format(osd=ONEOSD, FOO=OTHERFILE)
-    ERRORS += test_failure(cmd, "open: No such file or directory")
+    ERRORS += test_failure(cmd, "file: {FOO}: No such file or directory".format(FOO=OTHERFILE))
+
+    cmd = "./ceph-objectstore-tool --data-path BAD_DATA_PATH --journal-path " + OSDDIR + "/{osd}.journal --op list".format(osd=ONEOSD)
+    ERRORS += test_failure(cmd, "data-path: BAD_DATA_PATH: No such file or directory")
+
+    cmd = "./ceph-objectstore-tool --journal-path BAD_JOURNAL_PATH --op dump-journal"
+    ERRORS += test_failure(cmd, "journal-path: BAD_JOURNAL_PATH: (2) No such file or directory")
 
     # On import can't use stdin from a terminal
     cmd = (CFSD_PREFIX + "--op import --pgid {pg}").format(osd=ONEOSD, pg=ONEPG)
@@ -804,6 +861,27 @@ def main(argv):
     # Provide an invalid object command
     cmd = (CFSD_PREFIX + "--pgid {pg} '' notacommand").format(osd=ONEOSD, pg=ONEPG)
     ERRORS += test_failure(cmd, "Unknown object command 'notacommand'")
+
+    cmd = (CFSD_PREFIX + "foo list-omap").format(osd=ONEOSD, pg=ONEPG)
+    ERRORS += test_failure(cmd, "No object id 'foo' found or invalid JSON specified")
+
+    cmd = (CFSD_PREFIX + "'{{\"oid\":\"obj4\",\"key\":\"\",\"snapid\":-1,\"hash\":2826278768,\"max\":0,\"pool\":1,\"namespace\":\"\"}}' list-omap").format(osd=ONEOSD, pg=ONEPG)
+    ERRORS += test_failure(cmd, "Without --pgid the object '{\"oid\":\"obj4\",\"key\":\"\",\"snapid\":-1,\"hash\":2826278768,\"max\":0,\"pool\":1,\"namespace\":\"\"}' must be a JSON array")
+
+    cmd = (CFSD_PREFIX + "'[]' list-omap").format(osd=ONEOSD, pg=ONEPG)
+    ERRORS += test_failure(cmd, "Object '[]' must be a JSON array with 2 elements")
+
+    cmd = (CFSD_PREFIX + "'[\"1.0\"]' list-omap").format(osd=ONEOSD, pg=ONEPG)
+    ERRORS += test_failure(cmd, "Object '[\"1.0\"]' must be a JSON array with 2 elements")
+
+    cmd = (CFSD_PREFIX + "'[\"1.0\", 5, 8, 9]' list-omap").format(osd=ONEOSD, pg=ONEPG)
+    ERRORS += test_failure(cmd, "Object '[\"1.0\", 5, 8, 9]' must be a JSON array with 2 elements")
+
+    cmd = (CFSD_PREFIX + "'[1, 2]' list-omap").format(osd=ONEOSD, pg=ONEPG)
+    ERRORS += test_failure(cmd, "Object '[1, 2]' must be a JSON array with the first element a string")
+
+    cmd = (CFSD_PREFIX + "'[\"1.3\",{{\"snapid\":\"not an int\"}}]' list-omap").format(osd=ONEOSD, pg=ONEPG)
+    ERRORS += test_failure(cmd, "Decode object JSON error: value type is 2 not 4")
 
     TMPFILE = r"/tmp/tmp.{pid}".format(pid=pid)
     ALLPGS = OBJREPPGS + OBJECPGS
@@ -883,6 +961,9 @@ def main(argv):
     JSONOBJ = sorted(set(lines))
     for JSON in JSONOBJ:
         (pgid, jsondict) = json.loads(JSON)
+        # Skip clones for now
+        if jsondict['snapid'] != -2:
+            continue
         db[jsondict['namespace']][jsondict['oid']]['json'] = json.dumps((pgid, jsondict))
         # print db[jsondict['namespace']][jsondict['oid']]['json']
         if string.find(jsondict['oid'], EC_NAME) == 0 and 'shard_id' not in jsondict:
@@ -893,7 +974,7 @@ def main(argv):
     print "Test get-bytes and set-bytes"
     for nspace in db.keys():
         for basename in db[nspace].keys():
-            file = os.path.join(DATADIR, nspace + "-" + basename)
+            file = os.path.join(DATADIR, nspace + "-" + basename + "__head")
             JSON = db[nspace][basename]['json']
             GETNAME = "/tmp/getbytes.{pid}".format(pid=pid)
             TESTNAME = "/tmp/testbytes.{pid}".format(pid=pid)
@@ -1011,6 +1092,28 @@ def main(argv):
         os.unlink(BADNAME)
     except:
         pass
+
+    # Test dump
+    print "Test dump"
+    for nspace in db.keys():
+        for basename in db[nspace].keys():
+            file = os.path.join(DATADIR, nspace + "-" + basename + "__head")
+            JSON = db[nspace][basename]['json']
+            GETNAME = "/tmp/getbytes.{pid}".format(pid=pid)
+            for pg in OBJREPPGS:
+                OSDS = get_osds(pg, OSDDIR)
+                for osd in OSDS:
+                    DIR = os.path.join(OSDDIR, os.path.join(osd, os.path.join("current", "{pg}_head".format(pg=pg))))
+                    fnames = [f for f in os.listdir(DIR) if os.path.isfile(os.path.join(DIR, f))
+                              and f.split("_")[0] == basename and f.split("_")[4] == nspace]
+                    if not fnames:
+                        continue
+                    cmd = (CFSD_PREFIX + " '{json}' dump | grep '\"snap\": 1,' > /dev/null").format(osd=osd, json=JSON)
+                    logging.debug(cmd)
+                    ret = call(cmd, shell=True)
+                    if ret != 0:
+                        logging.error("Invalid dump for {json}".format(json=JSON))
+                        ERRORS += 1
 
     print "Test list-attrs get-attr"
     ATTRFILE = r"/tmp/attrs.{pid}".format(pid=pid)
@@ -1393,6 +1496,7 @@ def main(argv):
             NAME = SPLIT_NAME + "{num}".format(num=i)
             LNAME = nspace + "-" + NAME
             DDNAME = os.path.join(DATADIR, LNAME)
+            DDNAME += "__head"
 
             cmd = "rm -f " + DDNAME
             logging.debug(cmd)

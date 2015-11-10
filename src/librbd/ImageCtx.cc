@@ -15,6 +15,7 @@
 #include "librbd/internal.h"
 #include "librbd/ImageCtx.h"
 #include "librbd/ImageWatcher.h"
+#include "librbd/LibrbdAdminSocketHook.h"
 #include "librbd/ObjectMap.h"
 
 #include <boost/bind.hpp>
@@ -84,7 +85,8 @@ public:
       object_cacher(NULL), writeback_handler(NULL), object_set(NULL),
       readahead(),
       total_bytes_read(0), copyup_finisher(NULL),
-      object_map(*this), aio_work_queue(NULL), op_work_queue(NULL)
+      object_map(*this), aio_work_queue(NULL), op_work_queue(NULL),
+      asok_hook(new LibrbdAdminSocketHook(this))
   {
     md_ctx.dup(p);
     data_ctx.dup(p);
@@ -106,7 +108,9 @@ public:
   }
 
   ImageCtx::~ImageCtx() {
-    perf_stop();
+    if (perfcounter) {
+      perf_stop();
+    }
     if (object_cacher) {
       delete object_cacher;
       object_cacher = NULL;
@@ -127,18 +131,12 @@ public:
 
     delete op_work_queue;
     delete aio_work_queue;
+
+    delete asok_hook;
   }
 
   int ImageCtx::init() {
     int r;
-    string pname = string("librbd-") + id + string("-") +
-      data_ctx.get_pool_name() + string("/") + name;
-    if (!snap_name.empty()) {
-      pname += "@";
-      pname += snap_name;
-    }
-
-    perf_start(pname);
 
     if (id.length()) {
       old_format = false;
@@ -183,6 +181,15 @@ public:
       apply_metadata_confs();
       header_oid = old_header_name(name);
     }
+
+    string pname = string("librbd-") + id + string("-") +
+      data_ctx.get_pool_name() + string("/") + name;
+    if (!snap_name.empty()) {
+      pname += "@";
+      pname += snap_name;
+    }
+
+    perf_start(pname);
 
     if (cache) {
       Mutex::Locker l(cache_lock);
@@ -288,10 +295,12 @@ public:
     plb.add_u64_counter(l_librbd_snap_create, "snap_create", "Snap creations");
     plb.add_u64_counter(l_librbd_snap_remove, "snap_remove", "Snap removals");
     plb.add_u64_counter(l_librbd_snap_rollback, "snap_rollback", "Snap rollbacks");
+    plb.add_u64_counter(l_librbd_snap_rename, "snap_rename", "Snap rename");
     plb.add_u64_counter(l_librbd_notify, "notify", "Updated header notifications");
     plb.add_u64_counter(l_librbd_resize, "resize", "Resizes");
     plb.add_u64_counter(l_librbd_readahead, "readahead", "Read ahead");
     plb.add_u64_counter(l_librbd_readahead_bytes, "readahead_bytes", "Data size in read ahead");
+    plb.add_u64_counter(l_librbd_invalidate_cache, "invalidate_cache", "Cache invalidates");
 
     perfcounter = plb.create_perf_counters();
     cct->get_perfcounters_collection()->add(perfcounter);
@@ -685,6 +694,7 @@ public:
     C_SaferCond ctx;
     invalidate_cache(&ctx);
     result = ctx.wait();
+    ldout(cct, 20) << "finished invalidating cache" << dendl;
 
     if (result && purge_on_error) {
       cache_lock.Lock();

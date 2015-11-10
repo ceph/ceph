@@ -17,6 +17,7 @@
 #include "rocksdb/utilities/convenience.h"
 using std::string;
 #include "common/perf_counters.h"
+#include "common/debug.h"
 #include "include/str_map.h"
 #include "KeyValueDB.h"
 #include "RocksDBStore.h"
@@ -240,11 +241,18 @@ void RocksDBStore::RocksDBTransactionImpl::set(
   const bufferlist &to_set_bl)
 {
   string key = combine_strings(prefix, k);
-  //bufferlist::c_str() is non-constant, so we need to make a copy
-  bufferlist val = to_set_bl;
-  bat->Delete(rocksdb::Slice(key));
-  bat->Put(rocksdb::Slice(key),
-	  rocksdb::Slice(val.c_str(), val.length()));
+
+  // bufferlist::c_str() is non-constant, so we can't call c_str()
+  if (to_set_bl.is_contiguous() && to_set_bl.length() > 0) {
+    bat->Put(rocksdb::Slice(key),
+	     rocksdb::Slice(to_set_bl.buffers().front().c_str(),
+			    to_set_bl.length()));
+  } else {
+    // make a copy
+    bufferlist val = to_set_bl;
+    bat->Put(rocksdb::Slice(key),
+	     rocksdb::Slice(val.c_str(), val.length()));
+  }
 }
 
 void RocksDBStore::RocksDBTransactionImpl::rmkey(const string &prefix,
@@ -285,6 +293,26 @@ int RocksDBStore::get(
   return 0;
 }
 
+int RocksDBStore::get(
+    const string &prefix,
+    const string &key,
+    bufferlist *out)
+{
+  utime_t start = ceph_clock_now(g_ceph_context);
+  int r = 0;
+  KeyValueDB::Iterator it = get_iterator(prefix);
+  it->lower_bound(key);
+  if (it->valid() && it->key() == key) {
+    *out = it->value();
+  } else {
+    r = -ENOENT;
+  }
+  utime_t lat = ceph_clock_now(g_ceph_context) - start;
+  logger->inc(l_rocksdb_gets);
+  logger->tinc(l_rocksdb_get_latency, lat);
+  return r;
+}
+
 string RocksDBStore::combine_strings(const string &prefix, const string &value)
 {
   string out = prefix;
@@ -302,15 +330,21 @@ bufferlist RocksDBStore::to_bufferlist(rocksdb::Slice in)
 
 int RocksDBStore::split_key(rocksdb::Slice in, string *prefix, string *key)
 {
-  string in_prefix = in.ToString();
-  size_t prefix_len = in_prefix.find('\0');
-  if (prefix_len >= in_prefix.size())
+  size_t prefix_len = 0;
+  
+  // Find separator inside Slice
+  char* separator = (char*) memchr(in.data(), 0, in.size());
+  if (separator == NULL)
+     return -EINVAL;
+  prefix_len = size_t(separator - in.data());
+  if (prefix_len >= in.size())
     return -EINVAL;
 
+  // Fetch prefix and/or key directly from Slice
   if (prefix)
-    *prefix = string(in_prefix, 0, prefix_len);
+    *prefix = string(in.data(), prefix_len);
   if (key)
-    *key= string(in_prefix, prefix_len + 1);
+    *key = string(separator+1, in.size()-prefix_len-1);
   return 0;
 }
 
@@ -472,6 +506,17 @@ pair<string,string> RocksDBStore::RocksDBWholeSpaceIteratorImpl::raw_key()
   split_key(dbiter->key(), &prefix, &key);
   return make_pair(prefix, key);
 }
+
+bool RocksDBStore::RocksDBWholeSpaceIteratorImpl::raw_key_is_prefixed(const string &prefix) {
+  // Look for "prefix\0" right in rocksb::Slice
+  rocksdb::Slice key = dbiter->key();
+  if ((key.size() > prefix.length()) && (key[prefix.length()] == '\0')) {
+    return memcmp(key.data(), prefix.c_str(), prefix.length()) == 0;
+  } else {
+    return false;
+  }
+}
+
 bufferlist RocksDBStore::RocksDBWholeSpaceIteratorImpl::value()
 {
   return to_bufferlist(dbiter->value());
