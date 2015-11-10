@@ -828,16 +828,16 @@ class RGWStatObjRequest : public RGWLibRequest,
 public:
   const std::string& bucket_name;
   const std::string& obj_name;
-//  buffer::list& bl; // remove?
+  uint64_t _size;
   uint32_t flags;
-  /* XXX results metadata */
 
   static constexpr uint32_t FLAG_NONE = 0x000;
 
   RGWStatObjRequest(CephContext* _cct, RGWUserInfo *_user,
 		    const std::string& _bname, const std::string& _oname,
 		    uint32_t _flags)
-    : RGWLibRequest(_cct, _user), bucket_name(_bname), obj_name(_oname) {
+    : RGWLibRequest(_cct, _user), bucket_name(_bname), obj_name(_oname),
+      _size(0), flags(_flags) {
     magic = 78;
     op = this;
 
@@ -846,16 +846,14 @@ public:
     RGWGetObj::get_data = false; // XXX
     RGWGetObj::partial_content = true;
     RGWGetObj::ofs = 0;
-    RGWGetObj::end = 0;
+    RGWGetObj::end = UINT64_MAX;
   }
-
-  //buffer::list& get_bl() { return bl; }
 
   virtual const string name() { return "stat_obj"; }
   virtual RGWOpType get_type() { return RGW_OP_STAT_OBJ; }
 
   /* attributes */
-  uint64_t size() { return total_len; }
+  uint64_t size() { return _size; }
   time_t ctime() { return mod_time; } // XXX
   time_t mtime() { return mod_time; }
   map<string, bufferlist>& get_attrs() { return attrs; }
@@ -893,10 +891,6 @@ public:
     return 0;
   }
 
-  virtual void execute() {
-    /* XXX save metadata */
-  }
-
   virtual int get_params() {
     return 0;
   }
@@ -912,7 +906,11 @@ public:
     return 0;
   }
 
-}; /* RGWStatObjRequest */
+  virtual void execute() {
+    RGWGetObj::execute();
+    _size = get_state()->obj_size;
+  }
 
+}; /* RGWStatObjRequest */
 
 #endif /* RGW_FILE_H */
