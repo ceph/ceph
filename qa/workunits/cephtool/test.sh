@@ -574,6 +574,27 @@ function test_auth_profiles()
   rm -f client.xx.keyring client.xx.keyring.2
 }
 
+function test_mon_caps()
+{
+  ./ceph-authtool --create-keyring $TMPDIR/ceph.client.bug.keyring
+  chmod +r  $TMPDIR/ceph.client.bug.keyring
+  ./ceph-authtool  $TMPDIR/ceph.client.bug.keyring -n client.bug --gen-key
+  ./ceph auth add client.bug -i  $TMPDIR/ceph.client.bug.keyring
+
+  ./rados lspools --keyring $TMPDIR/ceph.client.bug.keyring -n client.bug >& $TMPFILE || true
+  check_response "Permission denied"
+
+  rm -rf $TMPDIR/ceph.client.bug.keyring
+  ./ceph auth del client.bug
+  ./ceph-authtool --create-keyring $TMPDIR/ceph.client.bug.keyring
+  chmod +r  $TMPDIR/ceph.client.bug.keyring
+  ./ceph-authtool  $TMPDIR/ceph.client.bug.keyring -n client.bug --gen-key
+  ./ceph-authtool -n client.bug --cap mon '' $TMPDIR/ceph.client.bug.keyring
+  ./ceph auth add client.bug -i  $TMPDIR/ceph.client.bug.keyring
+  ./rados lspools --keyring $TMPDIR/ceph.client.bug.keyring -n client.bug >& $TMPFILE || true
+  check_response "Permission denied"  
+}
+
 function test_mon_misc()
 {
   # with and without verbosity
@@ -1720,7 +1741,7 @@ MON_TESTS+=" mon_tell"
 MON_TESTS+=" mon_crushmap_validation"
 MON_TESTS+=" mon_ping"
 MON_TESTS+=" mon_deprecated_commands"
-
+MON_TESTS+=" mon_caps"
 OSD_TESTS+=" osd_bench"
 OSD_TESTS+=" tiering_agent"
 
