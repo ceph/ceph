@@ -108,7 +108,9 @@ public:
   }
 
   ImageCtx::~ImageCtx() {
-    perf_stop();
+    if (perfcounter) {
+      perf_stop();
+    }
     if (object_cacher) {
       delete object_cacher;
       object_cacher = NULL;
