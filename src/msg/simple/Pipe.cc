@@ -2019,7 +2019,7 @@ int Pipe::read_message(Message **pm, AuthSessionHandler* auth_handler)
       }
       bufferptr bp = blp.get_current_ptr();
       int read = MIN(bp.length(), left);
-      ldout(msgr->cct,20) << "reader reading nonblocking into " << (void*)bp.c_str() << " len " << bp.length() << dendl;
+      ldout(msgr->cct,20) << "reader reading nonblocking into " << (void*)bp.c_str() << " len " << read << dendl;
       int got = tcp_read_nonblocking(bp.c_str(), read);
       ldout(msgr->cct,30) << "reader read " << got << " of " << read << dendl;
       connection_state->lock.Unlock();
