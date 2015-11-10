@@ -583,7 +583,8 @@ OPTION(osd_pool_default_min_size, OPT_INT, 0)  // 0 means no specific default; c
 OPTION(osd_pool_default_pg_num, OPT_INT, 8) // number of PGs for new pools. Configure in global or mon section of ceph.conf
 OPTION(osd_pool_default_pgp_num, OPT_INT, 8) // number of PGs for placement purposes. Should be equal to pg_num
 OPTION(osd_compression_plugins, OPT_STR,
-       "snappy"
+       "zlib"
+       " snappy"
        ) // list of compression plugins
 OPTION(osd_pool_default_erasure_code_profile,
        OPT_STR,
