@@ -166,10 +166,8 @@ private:
    * Scrub a directory-representing dentry.
    *
    * @param dn The CDentry of the directory we're doing final scrub on.
-   * @param done Set to true if the dentry scrub is finished. (That
-   * won't every actually happen, right? It needs disk accesses? I forget.)
    */
-  void scrub_dir_dentry_final(CDentry *dn, bool *done);
+  void scrub_dir_dentry_final(CDentry *dn);
 
   /**
    * Get a CDir into memory, and return it if it's already complete.

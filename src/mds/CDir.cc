@@ -2937,8 +2937,6 @@ void CDir::scrub_finished()
   scrub_infop->others_scrubbed.clear();
   scrub_infop->directory_scrubbing = false;
 
-  scrub_infop->last_scrub_dirty = true;
-
   scrub_infop->last_recursive = scrub_infop->recursive_start;
   scrub_infop->last_scrub_dirty = true;
 }
