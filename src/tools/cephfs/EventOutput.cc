@@ -36,7 +36,7 @@ int EventOutput::binary() const
   for (JournalScanner::EventMap::const_iterator i = scan.events.begin(); i != scan.events.end(); ++i) {
     LogEvent *le = i->second.log_event;
     bufferlist le_bin;
-    le->encode(le_bin);
+    le->encode(le_bin, CEPH_FEATURES_SUPPORTED_DEFAULT);
 
     std::stringstream filename;
     filename << "0x" << std::hex << i->first << std::dec << "_" << le->get_type_str() << ".bin";

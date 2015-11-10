@@ -161,7 +161,7 @@ int Resetter::_write_reset_event(Journaler *journaler)
   LogEvent *le = new EResetJournal;
 
   bufferlist bl;
-  le->encode_with_header(bl);
+  le->encode_with_header(bl, CEPH_FEATURES_SUPPORTED_DEFAULT);
   
   cout << "writing EResetJournal entry" << std::endl;
   C_SaferCond cond;

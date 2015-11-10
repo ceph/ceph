@@ -382,7 +382,7 @@ void MDLog::_submit_thread()
       LogSegment *ls = le->_segment;
       // encode it, with event type
       bufferlist bl;
-      le->encode_with_header(bl);
+      le->encode_with_header(bl, mds->mdsmap->get_up_features());
 
       uint64_t write_pos = journaler->get_write_pos();
 
@@ -1134,7 +1134,7 @@ void MDLog::_reformat_journal(JournalPointer const &jp_in, Journaler *old_journa
 
       if (modified) {
         bl.clear();
-        le->encode_with_header(bl);
+        le->encode_with_header(bl, mds->mdsmap->get_up_features());
       }
 
       delete le;
