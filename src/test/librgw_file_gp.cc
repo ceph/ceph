@@ -45,6 +45,7 @@ namespace {
   bool do_verify = false;
   bool do_get = false;
   bool do_delete = false;
+  bool do_stat = false; // stat objects (not buckets)
   bool do_hexdump = false;
 
   bool object_open = false;
@@ -217,7 +218,7 @@ TEST(LibRGW, LIST_OBJECTS) {
 }
 
 TEST(LibRGW, LOOKUP_OBJECT) {
-  if (do_get || do_put || do_bulk || do_readv || do_writev) {
+  if (do_get || do_stat || do_put || do_bulk || do_readv || do_writev) {
     int ret = rgw_lookup(fs, bucket_fh, object_name.c_str(), &object_fh,
 			RGW_LOOKUP_FLAG_CREATE);
     ASSERT_EQ(ret, 0);
@@ -257,6 +258,16 @@ TEST(LibRGW, GET_OBJECT) {
       bl.hexdump(*_dout);
       *_dout << dendl;
     }
+  }
+}
+
+TEST(LibRGW, STAT_OBJECT) {
+  if (do_stat) {
+    struct stat st;
+    int ret = rgw_getattr(fs, object_fh, &st);
+    ASSERT_EQ(ret, 0);
+    dout(15) << "rgw_getattr on " << object_name << " size = "
+	     << st.st_size << dendl;
   }
 }
 
@@ -424,6 +435,9 @@ int main(int argc, char *argv[])
     } else if (ceph_argparse_flag(args, arg_iter, "--get",
 					    (char*) nullptr)) {
       do_get = true;
+    } else if (ceph_argparse_flag(args, arg_iter, "--stat",
+					    (char*) nullptr)) {
+      do_stat = true;
     } else if (ceph_argparse_flag(args, arg_iter, "--put",
 					    (char*) nullptr)) {
       do_put = true;
