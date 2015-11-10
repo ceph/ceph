@@ -222,7 +222,7 @@ struct rgw_bucket_shard_full_sync_marker {
   rgw_obj_key position;
   uint64_t count;
 
-  rgw_bucket_shard_full_sync_marker() {}
+  rgw_bucket_shard_full_sync_marker() : count(0) {}
 
   void encode_attr(map<string, bufferlist>& attrs);
 
