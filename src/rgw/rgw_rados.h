@@ -1783,6 +1783,26 @@ public:
   map<string, RGWRESTConn *> zone_conn_map;
   map<string, RGWRESTConn *> zonegroup_conn_map;
 
+  map<string, string> zone_id_by_name;
+
+  RGWRESTConn *get_zone_conn_by_id(const string& id) {
+    auto citer = zone_conn_map.find(id);
+    if (citer == zone_conn_map.end()) {
+      return NULL;
+    }
+
+    return citer->second;
+  }
+
+  RGWRESTConn *get_zone_conn_by_name(const string& name) {
+    auto i = zone_id_by_name.find(name);
+    if (i == zone_id_by_name.end()) {
+      return NULL;
+    }
+
+    return get_zone_conn_by_id(i->second);
+  }
+
   int get_zonegroup(const string& id, RGWZoneGroup& zonegroup) {
     int ret = 0;
     if (id == get_zonegroup().get_id()) {
