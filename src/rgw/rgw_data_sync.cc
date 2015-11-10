@@ -1152,13 +1152,11 @@ int RGWRemoteDataLog::run_sync(int num_shards, rgw_data_sync_status& sync_status
 
 int RGWDataSyncStatusManager::init()
 {
-  map<string, RGWRESTConn *>::iterator iter = store->zone_conn_map.find(source_zone);
-  if (iter == store->zone_conn_map.end()) {
-    lderr(store->ctx()) << "no REST connection to master zone" << dendl;
-    return -EIO;
+  conn = store->get_zone_conn_by_name(source_zone);
+  if (!conn) {
+    ldout(store->ctx(), 0) << "connection object to zone " << source_zone << " does not exist" << dendl;
+    return -EINVAL;
   }
-
-  conn = iter->second;
 
   const char *log_pool = store->get_zone_params().log_pool.name.c_str();
   librados::Rados *rados = store->get_rados_handle();
@@ -2152,13 +2150,11 @@ RGWCoroutine *RGWRemoteBucketLog::run_sync_cr()
 
 int RGWBucketSyncStatusManager::init()
 {
-  map<string, RGWRESTConn *>::iterator iter = store->zone_conn_map.find(source_zone);
-  if (iter == store->zone_conn_map.end()) {
-    lderr(store->ctx()) << "no REST connection to master zone" << dendl;
-    return -EIO;
+  conn = store->get_zone_conn_by_name(source_zone);
+  if (!conn) {
+    ldout(store->ctx(), 0) << "connection object to zone " << source_zone << " does not exist" << dendl;
+    return -EINVAL;
   }
-
-  conn = iter->second;
 
   async_rados = new RGWAsyncRadosProcessor(store, store->ctx()->_conf->rgw_num_async_rados_threads);
   async_rados->start();

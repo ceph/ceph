@@ -3258,10 +3258,12 @@ int RGWRados::init_complete()
   for (ziter = get_zonegroup().zones.begin(); ziter != get_zonegroup().zones.end(); ++ziter) {
     const string& id = ziter->first;
     RGWZone& z = ziter->second;
+    zone_id_by_name[z.name] = id;
     if (id != zone_id()) {
       if (!z.endpoints.empty()) {
         ldout(cct, 20) << "generating connection object for zone " << z.name << " id " << z.id << dendl;
-        zone_conn_map[id] = new RGWRESTConn(cct, this, z.endpoints);
+        RGWRESTConn *conn = new RGWRESTConn(cct, this, z.endpoints);
+        zone_conn_map[id] = conn;
       } else {
         ldout(cct, 0) << "WARNING: can't generate connection for zone " << z.id << " id " << z.name << ": no endpoints defined" << dendl;
       }
