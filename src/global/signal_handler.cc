@@ -249,6 +249,10 @@ struct SignalHandler : public Thread {
     int r = write(handlers[signum]->pipefd[1], " ", 1);
     assert(r == 1);
   }
+  void handle_signal(int signum){
+    assert(handlers[signum]);
+    handlers[signum]->handler(signum);
+  }
 
   void register_handler(int signum, signal_handler_t handler, bool oneshot);
   void unregister_handler(int signum, signal_handler_t handler);
@@ -336,6 +340,12 @@ void queue_async_signal(int signum)
 {
   assert(g_signal_handler);
   g_signal_handler->queue_signal(signum);
+}
+
+void handle_sync_signal(int signum)
+{
+  assert(g_signal_handler);
+  g_signal_handler->handle_signal(signum); 
 }
 
 void register_async_signal_handler(int signum, signal_handler_t handler)
