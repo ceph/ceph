@@ -111,7 +111,7 @@ int rgw_create(struct rgw_fs *rgw_fs,
 	       const char *name, mode_t mode, struct stat *st,
 	       struct rgw_file_handle **fh)
 {
-  return EINVAL;
+  return -EINVAL;
 }
 
 /*
@@ -133,12 +133,12 @@ int rgw_mkdir(struct rgw_fs *rgw_fs,
   RGWFileHandle* parent = get_rgwfh(parent_fh);
   if (! parent) {
     /* bad parent */
-    return EINVAL;
+    return -EINVAL;
   }
 
   if (! parent->is_root()) {
     /* cannot create a bucket in a bucket */
-    return ENOTDIR;
+    return -ENOTDIR;
   }
 
   // XXXX fix this
@@ -239,7 +239,7 @@ int rgw_lookup(struct rgw_fs *rgw_fs,
   if ((! parent) ||
       (parent->is_object())) {
     /* bad parent */
-    return EINVAL;
+    return -EINVAL;
   }
 
   RGWFileHandle* rgw_fh;
@@ -252,7 +252,7 @@ int rgw_lookup(struct rgw_fs *rgw_fs,
       /* name lookup in root--for now) just get a handle */
       rgw_fh = fs->lookup_fh(parent, path);
       if (! rgw_fh)
-	return ENOENT;
+	return -ENOENT;
     }
   } else {
     std::string object_name{path};
@@ -264,11 +264,11 @@ int rgw_lookup(struct rgw_fs *rgw_fs,
     if (((rc != 0) ||
 	    (req.get_ret() != 0)) &&
 	(! (flags & RGW_LOOKUP_FLAG_CREATE)))
-      return ENOENT;
+      return -ENOENT;
 
     rgw_fh = fs->lookup_fh(parent, path);
     if (! rgw_fh)
-      return ENOENT;
+      return -ENOENT;
   } /* !root */
 
   struct rgw_file_handle *rfh = rgw_fh->get_fh();
@@ -288,7 +288,7 @@ int rgw_lookup_handle(struct rgw_fs *rgw_fs, struct rgw_fh_hk *fh_hk,
   RGWFileHandle* rgw_fh = fs->lookup_handle(*fh_hk);
   if (! rgw_fh) {
     /* not found */
-    return ENOENT;
+    return -ENOENT;
   }
 
   struct rgw_file_handle *rfh = rgw_fh->get_fh();
@@ -317,6 +317,10 @@ int rgw_getattr(struct rgw_fs *rgw_fs,
 {
   CephContext* cct = static_cast<CephContext*>(rgw_fs->rgw);
   RGWLibFS *fs = static_cast<RGWLibFS*>(rgw_fs->fs_private);
+
+  if (!fh)
+    return -ENOENT;
+
   RGWFileHandle* rgw_fh = get_rgwfh(fh);
 
   if (rgw_fh->is_root()) {
@@ -362,7 +366,7 @@ int rgw_getattr(struct rgw_fs *rgw_fs,
     int rc = librgw.get_fe()->execute_req(&req);
     if ((rc != 0) ||
 	(req.get_ret() != 0))
-      return EINVAL;
+      return -EINVAL;
 
     /* fill in stat data */
     memset(st, 0, sizeof(struct stat));
@@ -447,7 +451,7 @@ int rgw_readdir(struct rgw_fs *rgw_fs,
   RGWFileHandle* parent = get_rgwfh(parent_fh);
   if (! parent) {
     /* bad parent */
-    return EINVAL;
+    return -EINVAL;
   }
 
   if (parent->is_root()) {
@@ -482,7 +486,7 @@ int rgw_read(struct rgw_fs *rgw_fs,
   RGWFileHandle* rgw_fh = get_rgwfh(fh);
 
   if (! rgw_fh->is_object())
-    return EINVAL;
+    return -EINVAL;
 
   size_t nread = 0;
 
@@ -522,7 +526,7 @@ int rgw_write(struct rgw_fs *rgw_fs,
   RGWFileHandle* rgw_fh = get_rgwfh(fh);
 
   if (! rgw_fh->is_object())
-    return EINVAL;
+    return -EINVAL;
 
   /* XXXX testing only */
   buffer::list bl;
@@ -576,7 +580,7 @@ int rgw_readv(struct rgw_fs *rgw_fs,
   RGWFileHandle* rgw_fh = get_rgwfh(fh);
 
   if (! rgw_fh->is_object())
-    return EINVAL;
+    return -EINVAL;
 
   dout(15) << "test dout" << dendl;
 
@@ -628,7 +632,7 @@ int rgw_readv(struct rgw_fs *rgw_fs,
   RGWFileHandle* rgw_fh = get_rgwfh(fh);
 
   if (! rgw_fh->is_object())
-    return EINVAL;
+    return -EINVAL;
 
   buffer::list bl;
   for (unsigned int ix = 0; ix < uio->uio_cnt; ++ix) {
