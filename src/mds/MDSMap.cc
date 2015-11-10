@@ -85,6 +85,7 @@ void MDSMap::mds_info_t::dump(Formatter *f) const
        p != export_targets.end(); ++p) {
     f->dump_int("mds", *p);
   }
+  f->dump_unsigned("features", mds_features);
   f->close_section();
 }
 
@@ -398,7 +399,7 @@ void MDSMap::get_health(list<pair<health_status_t,string> >& summary,
 
 void MDSMap::mds_info_t::encode_versioned(bufferlist& bl, uint64_t features) const
 {
-  ENCODE_START(4, 4, bl);
+  ENCODE_START(5, 4, bl);
   ::encode(global_id, bl);
   ::encode(name, bl);
   ::encode(rank, bl);
@@ -410,6 +411,7 @@ void MDSMap::mds_info_t::encode_versioned(bufferlist& bl, uint64_t features) con
   ::encode(standby_for_rank, bl);
   ::encode(standby_for_name, bl);
   ::encode(export_targets, bl);
+  ::encode(mds_features, bl);
   ENCODE_FINISH(bl);
 }
 
@@ -432,7 +434,7 @@ void MDSMap::mds_info_t::encode_unversioned(bufferlist& bl) const
 
 void MDSMap::mds_info_t::decode(bufferlist::iterator& bl)
 {
-  DECODE_START_LEGACY_COMPAT_LEN(4, 4, 4, bl);
+  DECODE_START_LEGACY_COMPAT_LEN(5, 4, 4, bl);
   ::decode(global_id, bl);
   ::decode(name, bl);
   ::decode(rank, bl);
@@ -445,6 +447,8 @@ void MDSMap::mds_info_t::decode(bufferlist::iterator& bl)
   ::decode(standby_for_name, bl);
   if (struct_v >= 2)
     ::decode(export_targets, bl);
+  if (struct_v >= 5)
+    ::decode(mds_features, bl);
   DECODE_FINISH(bl);
 }
 

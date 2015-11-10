@@ -140,6 +140,7 @@ public:
     mds_rank_t standby_for_rank;
     std::string standby_for_name;
     std::set<mds_rank_t> export_targets;
+    uint64_t mds_features;
 
     mds_info_t() : global_id(MDS_GID_NONE), rank(MDS_RANK_NONE), inc(0), state(STATE_STANDBY), state_seq(0),
 		   standby_for_rank(MDS_NO_STANDBY_PREF) { }
@@ -348,6 +349,19 @@ public:
   }
   void get_failed_mds_set(std::set<mds_rank_t>& s) {
     s = failed;
+  }
+
+  // features
+  uint64_t get_up_features() {
+    uint64_t f = 0;
+    for (std::map<mds_rank_t, mds_gid_t>::const_iterator p = up.begin();
+	 p != up.end();
+	 ++p) {
+      std::map<mds_gid_t, mds_info_t>::const_iterator q = mds_info.find(p->second);
+      assert(q != mds_info.end());
+      f |= q->second.mds_features;
+    }
+    return f;
   }
 
   /**
