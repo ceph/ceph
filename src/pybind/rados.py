@@ -41,6 +41,9 @@ class PermissionError(Error):
     """ `PermissionError` class, derived from `Error` """
     pass
 
+class PermissionDeniedError(Error):
+    """ deal with EACCES related. """
+    pass
 
 class ObjectNotFound(Error):
     """ `ObjectNotFound` class, derived from `Error` """
@@ -122,7 +125,8 @@ def make_ex(ret, msg):
         errno.EBUSY     : ObjectBusy,
         errno.ENODATA   : NoData,
         errno.EINTR     : InterruptedOrTimeoutError,
-        errno.ETIMEDOUT : TimedOut
+        errno.ETIMEDOUT : TimedOut,
+        errno.EACCES    : PermissionDeniedError
         }
     ret = abs(ret)
     if ret in errors:

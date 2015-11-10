@@ -710,6 +710,10 @@ def main():
     except KeyboardInterrupt:
         print >> sys.stderr, 'Cluster connection aborted'
         return 1
+    except rados.PermissionDeniedError as e:
+        print >> sys.stderr, 'Error connecting to cluster: {0}'.\
+            format(e.__class__.__name__)
+        return errno.EACCES
     except Exception as e:
         print >> sys.stderr, 'Error connecting to cluster: {0}'.\
             format(e.__class__.__name__)
