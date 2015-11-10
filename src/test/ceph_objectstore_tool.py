@@ -1057,6 +1057,159 @@ def main(argv):
     except:
         pass
 
+    # Test get-attr, set-attr, rm-attr, get-omaphdr, set-omaphdr, get-omap, set-omap, rm-omap
+    print "Test get-attr, set-attr, rm-attr, get-omaphdr, set-omaphdr, get-omap, set-omap, rm-omap"
+    for nspace in db.keys():
+        for basename in db[nspace].keys():
+            file = os.path.join(DATADIR, nspace + "-" + basename + "__head")
+            JSON = db[nspace][basename]['json']
+            for pg in OBJREPPGS:
+                OSDS = get_osds(pg, OSDDIR)
+                for osd in OSDS:
+                    DIR = os.path.join(OSDDIR, os.path.join(osd, os.path.join("current", "{pg}_head".format(pg=pg))))
+                    fnames = [f for f in os.listdir(DIR) if os.path.isfile(os.path.join(DIR, f))
+                              and f.split("_")[0] == basename and f.split("_")[4] == nspace]
+                    if not fnames:
+                        continue
+                    for key, val in db[nspace][basename]["xattr"].iteritems():
+                        attrkey = "_" + key
+                        cmd = (CFSD_PREFIX + " '{json}' get-attr {key}").format(osd=osd, json=JSON, key=attrkey)
+                        logging.debug(cmd)
+                        getval = check_output(cmd, shell=True)
+                        if getval != val:
+                            logging.error("get-attr of key {key} returned wrong val: {get} instead of {orig}".format(key=attrkey, get=getval, orig=val))
+                            ERRORS += 1
+                            continue
+                        # set-attr to bogus value "foobar"
+                        cmd = ("echo -n foobar | " + CFSD_PREFIX + " --pgid {pg} '{json}' set-attr {key}").format(osd=osd, pg=pg, json=JSON, key=attrkey)
+                        logging.debug(cmd)
+                        ret = call(cmd, shell=True)
+                        if ret != 0:
+                            logging.error("Bad exit status {ret} from set-attr".format(ret=ret))
+                            ERRORS += 1
+                            continue
+                        # Check the set-attr
+                        cmd = (CFSD_PREFIX + " --pgid {pg} '{json}' get-attr {key}").format(osd=osd, pg=pg, json=JSON, key=attrkey)
+                        logging.debug(cmd)
+                        getval = check_output(cmd, shell=True)
+                        if ret != 0:
+                            logging.error("Bad exit status {ret} from get-attr".format(ret=ret))
+                            ERRORS += 1
+                            continue
+                        if getval != "foobar":
+                            logging.error("Check of set-attr failed because we got {val}".format(val=getval))
+                            ERRORS += 1
+                            continue
+                        # Test rm-attr
+                        cmd = (CFSD_PREFIX + "'{json}' rm-attr {key}").format(osd=osd, pg=pg, json=JSON, key=attrkey)
+                        logging.debug(cmd)
+                        ret = call(cmd, shell=True)
+                        if ret != 0:
+                            logging.error("Bad exit status {ret} from rm-attr".format(ret=ret))
+                            ERRORS += 1
+                            continue
+                        cmd = (CFSD_PREFIX + "'{json}' get-attr {key}").format(osd=osd, pg=pg, json=JSON, key=attrkey)
+                        logging.debug(cmd)
+                        ret = call(cmd, shell=True, stderr=nullfd, stdout=nullfd)
+                        if ret == 0:
+                            logging.error("For rm-attr expect get-attr to fail, but it succeeded")
+                            ERRORS += 1
+                        # Put back value
+                        cmd = ("echo -n {val} | " + CFSD_PREFIX + " --pgid {pg} '{json}' set-attr {key}").format(osd=osd, pg=pg, json=JSON, key=attrkey, val=val)
+                        logging.debug(cmd)
+                        ret = call(cmd, shell=True)
+                        if ret != 0:
+                            logging.error("Bad exit status {ret} from set-attr".format(ret=ret))
+                            ERRORS += 1
+                            continue
+
+                    hdr = db[nspace][basename].get("omapheader", "")
+                    cmd = (CFSD_PREFIX + "'{json}' get-omaphdr").format(osd=osd, json=JSON)
+                    logging.debug(cmd)
+                    gethdr = check_output(cmd, shell=True)
+                    if gethdr != hdr:
+                        logging.error("get-omaphdr was wrong: {get} instead of {orig}".format(get=gethdr, orig=hdr))
+                        ERRORS += 1
+                        continue
+                    # set-omaphdr to bogus value "foobar"
+                    cmd = ("echo -n foobar | " + CFSD_PREFIX + "'{json}' set-omaphdr").format(osd=osd, pg=pg, json=JSON)
+                    logging.debug(cmd)
+                    ret = call(cmd, shell=True)
+                    if ret != 0:
+                        logging.error("Bad exit status {ret} from set-omaphdr".format(ret=ret))
+                        ERRORS += 1
+                        continue
+                    # Check the set-omaphdr
+                    cmd = (CFSD_PREFIX + "'{json}' get-omaphdr").format(osd=osd, pg=pg, json=JSON)
+                    logging.debug(cmd)
+                    gethdr = check_output(cmd, shell=True)
+                    if ret != 0:
+                        logging.error("Bad exit status {ret} from get-omaphdr".format(ret=ret))
+                        ERRORS += 1
+                        continue
+                    if gethdr != "foobar":
+                        logging.error("Check of set-omaphdr failed because we got {val}".format(val=getval))
+                        ERRORS += 1
+                        continue
+                    # Put back value
+                    cmd = ("echo -n {val} | " + CFSD_PREFIX + "'{json}' set-omaphdr").format(osd=osd, pg=pg, json=JSON, val=hdr)
+                    logging.debug(cmd)
+                    ret = call(cmd, shell=True)
+                    if ret != 0:
+                        logging.error("Bad exit status {ret} from set-omaphdr".format(ret=ret))
+                        ERRORS += 1
+                        continue
+
+                    for omapkey, val in db[nspace][basename]["omap"].iteritems():
+                        cmd = (CFSD_PREFIX + " '{json}' get-omap {key}").format(osd=osd, json=JSON, key=omapkey)
+                        logging.debug(cmd)
+                        getval = check_output(cmd, shell=True)
+                        if getval != val:
+                            logging.error("get-omap of key {key} returned wrong val: {get} instead of {orig}".format(key=omapkey, get=getval, orig=val))
+                            ERRORS += 1
+                            continue
+                        # set-omap to bogus value "foobar"
+                        cmd = ("echo -n foobar | " + CFSD_PREFIX + " --pgid {pg} '{json}' set-omap {key}").format(osd=osd, pg=pg, json=JSON, key=omapkey)
+                        logging.debug(cmd)
+                        ret = call(cmd, shell=True)
+                        if ret != 0:
+                            logging.error("Bad exit status {ret} from set-omap".format(ret=ret))
+                            ERRORS += 1
+                            continue
+                        # Check the set-omap
+                        cmd = (CFSD_PREFIX + " --pgid {pg} '{json}' get-omap {key}").format(osd=osd, pg=pg, json=JSON, key=omapkey)
+                        logging.debug(cmd)
+                        getval = check_output(cmd, shell=True)
+                        if ret != 0:
+                            logging.error("Bad exit status {ret} from get-omap".format(ret=ret))
+                            ERRORS += 1
+                            continue
+                        if getval != "foobar":
+                            logging.error("Check of set-omap failed because we got {val}".format(val=getval))
+                            ERRORS += 1
+                            continue
+                        # Test rm-omap
+                        cmd = (CFSD_PREFIX + "'{json}' rm-omap {key}").format(osd=osd, pg=pg, json=JSON, key=omapkey)
+                        logging.debug(cmd)
+                        ret = call(cmd, shell=True)
+                        if ret != 0:
+                            logging.error("Bad exit status {ret} from rm-omap".format(ret=ret))
+                            ERRORS += 1
+                        cmd = (CFSD_PREFIX + "'{json}' get-omap {key}").format(osd=osd, pg=pg, json=JSON, key=omapkey)
+                        logging.debug(cmd)
+                        ret = call(cmd, shell=True, stderr=nullfd, stdout=nullfd)
+                        if ret == 0:
+                            logging.error("For rm-omap expect get-omap to fail, but it succeeded")
+                            ERRORS += 1
+                        # Put back value
+                        cmd = ("echo -n {val} | " + CFSD_PREFIX + " --pgid {pg} '{json}' set-omap {key}").format(osd=osd, pg=pg, json=JSON, key=omapkey, val=val)
+                        logging.debug(cmd)
+                        ret = call(cmd, shell=True)
+                        if ret != 0:
+                            logging.error("Bad exit status {ret} from set-omap".format(ret=ret))
+                            ERRORS += 1
+                            continue
+
     # Test dump
     print "Test dump"
     for nspace in db.keys():
