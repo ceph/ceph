@@ -38,6 +38,7 @@
 #include "rgw_acl.h"
 #include "rgw_user.h"
 #include "rgw_op.h"
+#include "rgw_period_pusher.h"
 #include "rgw_realm_reloader.h"
 #include "rgw_rest.h"
 #include "rgw_rest_s3.h"
@@ -1056,17 +1057,23 @@ public:
 // FrontendPauser implementation for RGWRealmReloader
 class RGWFrontendPauser : public RGWRealmReloader::Pauser {
   std::list<RGWFrontend*> &frontends;
+  RGWRealmReloader::Pauser* pauser;
  public:
-  RGWFrontendPauser(std::list<RGWFrontend*> &frontends)
-    : frontends(frontends) {}
+  RGWFrontendPauser(std::list<RGWFrontend*> &frontends,
+                    RGWRealmReloader::Pauser* pauser = nullptr)
+    : frontends(frontends), pauser(pauser) {}
 
   void pause() override {
     for (auto frontend : frontends)
       frontend->pause_for_new_config();
+    if (pauser)
+      pauser->pause();
   }
   void resume(RGWRados *store) {
     for (auto frontend : frontends)
       frontend->unpause_with_new_config(store);
+    if (pauser)
+      pauser->resume(store);
   }
 };
 
@@ -1281,11 +1288,13 @@ int main(int argc, const char **argv)
   }
 
   // add a watcher to respond to realm configuration changes
-  RGWFrontendPauser pauser(fes);
+  RGWPeriodPusher pusher(store);
+  RGWFrontendPauser pauser(fes, &pusher);
   RGWRealmReloader reloader(store, &pauser);
 
   RGWRealmWatcher realm_watcher(g_ceph_context, store->realm);
   realm_watcher.add_watcher(RGWRealmNotify::Reload, reloader);
+  realm_watcher.add_watcher(RGWRealmNotify::ZonesNeedPeriod, pusher);
 
   wait_shutdown();
 
