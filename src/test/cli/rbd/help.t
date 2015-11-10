@@ -101,7 +101,7 @@
   rbd help clone
   usage: rbd clone [--pool <pool>] [--image <image>] [--snap <snap>] 
                    [--dest-pool <dest-pool>] [--dest <dest>] [--order <order>] 
-                   [--image-features <image-features>] [--image-shared] 
+                   [--image-feature <image-feature>] [--image-shared] 
                    [--stripe-unit <stripe-unit>] [--stripe-count <stripe-count>] 
                    <source-snap-spec> <dest-image-spec> 
   
@@ -120,7 +120,7 @@
     --dest-pool arg      destination pool name
     --dest arg           destination image name
     --order arg          object order [12 <= order <= 25]
-    --image-features arg image features
+    --image-feature arg  image features
                          [layering(+), striping(+), exclusive-lock(*),
                          object-map(*), fast-diff(*), deep-flatten]
     --image-shared       shared image
@@ -156,7 +156,7 @@
   rbd help create
   usage: rbd create [--pool <pool>] [--image <image>] 
                     [--image-format <image-format>] [--new-format] 
-                    [--order <order>] [--image-features <image-features>] 
+                    [--order <order>] [--image-feature <image-feature>] 
                     [--image-shared] [--stripe-unit <stripe-unit>] 
                     [--stripe-count <stripe-count>] --size <size> 
                     <image-spec> 
@@ -174,7 +174,7 @@
     --new-format         use image format 2
                          (deprecated)
     --order arg          object order [12 <= order <= 25]
-    --image-features arg image features
+    --image-feature arg  image features
                          [layering(+), striping(+), exclusive-lock(*),
                          object-map(*), fast-diff(*), deep-flatten]
     --image-shared       shared image
@@ -383,7 +383,7 @@
   rbd help import
   usage: rbd import [--path <path>] [--dest-pool <dest-pool>] [--dest <dest>] 
                     [--image-format <image-format>] [--new-format] 
-                    [--order <order>] [--image-features <image-features>] 
+                    [--order <order>] [--image-feature <image-feature>] 
                     [--image-shared] [--stripe-unit <stripe-unit>] 
                     [--stripe-count <stripe-count>] [--no-progress] 
                     [--pool <pool>] [--image <image>] 
@@ -404,7 +404,7 @@
     --new-format         use image format 2
                          (deprecated)
     --order arg          object order [12 <= order <= 25]
-    --image-features arg image features
+    --image-feature arg  image features
                          [layering(+), striping(+), exclusive-lock(*),
                          object-map(*), fast-diff(*), deep-flatten]
     --image-shared       shared image
