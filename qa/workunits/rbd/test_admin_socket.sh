@@ -36,9 +36,15 @@ function rbd_get_perfcounter()
 {
     local image=$1
     local counter=$2
+    local name
 
-    ceph --admin-daemon $(rbd_watch_asok ${image}) perf dump |
-	sed -ne 's/^.*"'${counter}'": \([0-9]*\).*$/\1/p'
+    name=$(ceph --format xml --admin-daemon $(rbd_watch_asok ${image}) \
+		perf schema | $XMLSTARLET el -d3 |
+		  grep "/librbd-.*-${image}/${counter}\$")
+    test -n "${name}" || return 1
+
+    ceph --format xml --admin-daemon $(rbd_watch_asok ${image}) perf dump |
+	$XMLSTARLET sel -t -m "${name}" -v .
 }
 
 function rbd_check_perfcounter()
