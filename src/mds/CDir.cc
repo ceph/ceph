@@ -2909,11 +2909,15 @@ void CDir::scrub_initialize()
     if (i->first.snapid != CEPH_NOSNAP)
       continue;
 
-    CInode *in = i->second->get_projected_linkage()->get_inode();
-    if (in && in->is_dir())
-      scrub_infop->directories_to_scrub.insert(i->first);
-    else if (in)
-      scrub_infop->others_to_scrub.insert(i->first);
+    CDentry::linkage_t *dnl = i->second->get_projected_linkage();
+    if (dnl->is_primary()) {
+      if (dnl->get_inode()->is_dir())
+	scrub_infop->directories_to_scrub.insert(i->first);
+      else
+	scrub_infop->others_to_scrub.insert(i->first);
+    } else if (dnl->is_remote()) {
+      // TODO: check remote linkage
+    }
   }
   scrub_infop->directory_scrubbing = true;
 
