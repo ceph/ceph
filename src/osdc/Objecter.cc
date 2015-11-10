@@ -3851,6 +3851,7 @@ void Objecter::get_pool_stats(list<string>& pools, map<string,pool_stat_t> *resu
 {
   ldout(cct, 10) << "get_pool_stats " << pools << dendl;
 
+  RWLock::WLocker wl(rwlock);
   PoolStatOp *op = new PoolStatOp;
   op->tid = last_tid.inc();
   op->pools = pools;
@@ -3862,8 +3863,6 @@ void Objecter::get_pool_stats(list<string>& pools, map<string,pool_stat_t> *resu
     op->ontimeout = new C_CancelPoolStatOp(op->tid, this);
     timer.add_event_after(mon_timeout, op->ontimeout);
   }
-
-  RWLock::WLocker wl(rwlock);
 
   poolstat_ops[op->tid] = op;
 
