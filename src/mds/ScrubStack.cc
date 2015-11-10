@@ -350,14 +350,14 @@ void ScrubStack::scrub_dirfrag(CDir *dir, bool *added_children,
       if (scrubbing.empty()) {
         dout(20) << __func__ << " dirfrag done: " << *dir << dendl;
         // FIXME: greg: What's the diff meant to be between done and terminal
+	dir->scrub_finished();
         *done = true;
         *is_terminal = true;
-        continue;
       } else {
         dout(20) << __func__ << " " << scrubbing.size() << " dentries still "
                    "scrubbing in " << *dir << dendl;
-        return;
       }
+      return;
     }
 
     if (r < 0) {
