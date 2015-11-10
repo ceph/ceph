@@ -1,0 +1,132 @@
+#!/usr/bin/env python
+"""
+  For each backport associated with a merged pull request,
+  set the release and resolve it.
+
+  To run this script first install the dependencies
+
+  virtualenv v
+  source v/bin/activate
+  pip install githubpy python-redmine
+
+  python set-release --token $github_token --key $redmine_key
+
+"""
+
+from __future__ import print_function
+import argparse
+import github
+import os
+import re
+import sys
+import redmine
+import subprocess
+
+fixes_re = re.compile(r"Fixes\:? #(\d+)")
+tracker_re = re.compile("http://tracker.ceph.com/issues/(\d+)")
+pr_re = re.compile("https?://github.com/ceph/ceph/pull/(\d+)")
+
+def display_issue(issue):
+    print("http://tracker.ceph.com/issues/" + str(issue['id']) + " " + issue['subject'])
+    print(issue['description'])
+
+def display_pr(pr):
+    print("https://github.com/ceph/ceph/pull/" + str(pr['number']))
+    print(pr['body'])
+    print("merged " + str(pr['merged']))
+
+def set_release(gh, r, dry_run, verbose):
+
+    status2status_id = {}
+    for status in r.issue_status.all():
+        status2status_id[status.name] = status.id
+
+    versions = r.version.filter(project_id='ceph')
+    version2version_id = {}
+    for version in versions:
+        version2version_id[version.name] = version.id
+
+    tracker2tracker_id = {}
+    for tracker in r.tracker.all():
+        tracker2tracker_id[tracker.name] = tracker.id
+
+    kwargs = {
+        'status_id': 'open',
+        'limit': 500,
+        'tracker_id': tracker2tracker_id['Backport'],
+        'status_id': status2status_id['In Progress'],
+    }
+
+    for issue in r.issue.filter(**kwargs):
+        if verbose:
+            display_issue(issue)
+        prs = pr_re.findall(issue['description'])
+        if len(prs) != 1:
+            display_issue(issue)
+            print("ERROR: expected exactly one PR got " + str(prs))
+            continue
+        pr = gh.repos("ceph")("ceph").pulls(prs[0]).get()
+        issues = fixes_re.findall(pr['body']) + tracker_re.findall(pr['body'])
+        if verbose:
+            display_pr(pr)
+        if not pr['merged']:
+            continue
+        if str(issue['id']) not in issues:
+            display_issue(issue)
+            display_pr(pr)
+            print("ERROR: expected the PR to reference the issue")
+            continue
+        if pr['base']['ref'] not in ('firefly', 'hammer', 'infernalis'):
+            display_issue(issue)
+            display_pr(pr)
+            print("ERROR: " + pr['base']['ref'] + " is not a known stable branch")
+            continue
+
+        events = gh.repos("ceph")("ceph").issues(prs[0]).events().get()
+        merge_sha = None
+        for event in events:
+            if event['event'] == 'merged':
+                merge_sha = event['commit_id']
+                break
+        if not merge_sha:
+            display_issue(issue)
+            display_pr(pr)
+            print("ERROR: " + str(events) + " does not contain a 'merged' event")
+            continue
+        describe = subprocess.check_output("git describe " + merge_sha, shell=True)
+        version = re.findall("^(v\d+\.\d+\.\d+)", describe)
+        if not version:
+            display_issue(issue)
+            display_pr(pr)
+            print("ERROR: " + describe + " as returned by git describe " + merge_sha + " is not parseable")
+            continue
+        ((major,minor),) = re.findall("(.*)\.(.*)", version[0])
+        minor = "%d" % (int(minor) + 1)
+        version = major + "." + minor
+        if version not in version2version_id:
+            print("ERROR: " + str(version) + " obtained from " + describe + " as returned by git describe " + merge_sha + " is not a known version")
+            continue
+        print("set version " + version + " on http://tracker.ceph.com/issues/" + str(issue['id']) + " https://github.com/ceph/ceph/pull/" + str(pr['number']))
+        if not dry_run:
+            r.issue.update(issue['id'],
+                           version_id=version2version_id[version],
+                           status_id=status2status_id['Resolved'],
+            )
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--verbose", "-v",
+                        action='store_true', default=None,
+                        help="verbose")
+    parser.add_argument("--dry-run",
+                        action='store_true', default=None,
+                        help="dry-run")
+    parser.add_argument("--token", default=os.getenv("GITHUB_ACCESS_TOKEN"),
+                        help="Github Access Token ($GITHUB_ACCESS_TOKEN otherwise)")
+    parser.add_argument("--key", help="redmine key http://tracker.ceph.com/my/api_key")
+
+    args = parser.parse_args()
+    gh = github.GitHub(
+        access_token=args.token)
+    r = redmine.Redmine('http://tracker.ceph.com', key=args.key)
+    set_release(gh, r, args.dry_run, args.verbose)
