@@ -843,6 +843,8 @@ rm -rf $RPM_BUILD_ROOT
 %{_libdir}/rados-classes/libcls_journal.so*
 %dir %{_libdir}/ceph/erasure-code
 %{_libdir}/ceph/erasure-code/libec_*.so*
+%dir %{_libdir}/ceph/compressor
+%{_libdir}/ceph/comressor/libceph_*.so*
 %if 0%{?_with_lttng}
 %{_libdir}/libos_tp.so*
 %{_libdir}/libosd_tp.so*
