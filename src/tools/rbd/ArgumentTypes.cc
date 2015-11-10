@@ -172,7 +172,7 @@ void add_create_image_options(po::options_description *opt,
   opt->add_options()
     (IMAGE_ORDER.c_str(), po::value<ImageOrder>(),
      "object order [12 <= order <= 25]")
-    (IMAGE_FEATURES.c_str(), po::value<ImageFeatures>()->multitoken(),
+    (IMAGE_FEATURES.c_str(), po::value<ImageFeatures>()->composing(),
      ("image features\n" + get_short_features_help(true)).c_str())
     (IMAGE_SHARED.c_str(), po::bool_switch(), "shared image")
     (IMAGE_STRIPE_UNIT.c_str(), po::value<uint32_t>(), "stripe unit")
