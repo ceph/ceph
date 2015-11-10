@@ -104,14 +104,43 @@ int rgw_statfs(struct rgw_fs *rgw_fs,
 }
 
 /*
-  generic create
+  generic create -- creates a regular file
 */
 int rgw_create(struct rgw_fs *rgw_fs,
 	       struct rgw_file_handle *parent_fh,
 	       const char *name, mode_t mode, struct stat *st,
 	       struct rgw_file_handle **fh)
 {
-  return -EINVAL;
+  /* XXX a CREATE operation can be a precursor to the canonical
+   * OPEN, WRITE*, CLOSE transaction which writes or overwrites
+   * an object in S3 */
+  RGWLibFS *fs = static_cast<RGWLibFS*>(rgw_fs->fs_private);
+
+  RGWFileHandle* parent = get_rgwfh(parent_fh);
+  if ((! parent) ||
+      (parent->is_root()) ||
+      (parent->is_object())) {
+    /* bad parent */
+    return -EINVAL;
+  }
+
+  using std::get;
+
+  LookupFHResult fhr = fs->lookup_fh(parent, name);
+  RGWFileHandle* rgw_fh = get<0>(fhr);
+
+  if (! rgw_fh)
+    return -EINVAL;
+
+
+  /* mark if we created it */
+  if (get<1>(fhr) & RGWFileHandle::FLAG_CREATE)
+    rgw_fh->open_for_create();
+
+  struct rgw_file_handle *rfh = rgw_fh->get_fh();
+  *fh = rfh;
+
+  return 0;
 }
 
 /*
@@ -148,7 +177,8 @@ int rgw_mkdir(struct rgw_fs *rgw_fs,
   rc = librgw.get_fe()->execute_req(&req);
 
   /* XXX: atomicity */
-  RGWFileHandle* rgw_fh = fs->lookup_fh(parent, name);
+  LookupFHResult fhr = fs->lookup_fh(parent, name);
+  RGWFileHandle* rgw_fh = get<0>(fhr);
 
   struct rgw_file_handle *rfh = rgw_fh->get_fh();
   *fh = rfh;
@@ -250,9 +280,11 @@ int rgw_lookup(struct rgw_fs *rgw_fs,
       rgw_fh = parent->ref();
     } else {
       /* name lookup in root--for now) just get a handle */
-      rgw_fh = fs->lookup_fh(parent, path);
+      LookupFHResult fhr = fs->lookup_fh(parent, path);
+      rgw_fh = get<0>(fhr);
+
       if (! rgw_fh)
-	return -ENOENT;
+	return -ENOMEM;
     }
   } else {
     std::string object_name{path};
@@ -266,7 +298,9 @@ int rgw_lookup(struct rgw_fs *rgw_fs,
 	(! (flags & RGW_LOOKUP_FLAG_CREATE)))
       return -ENOENT;
 
-    rgw_fh = fs->lookup_fh(parent, path);
+    LookupFHResult fhr = fs->lookup_fh(parent, path);
+    rgw_fh = get<0>(fhr);
+
     if (! rgw_fh)
       return -ENOENT;
   } /* !root */
@@ -317,9 +351,6 @@ int rgw_getattr(struct rgw_fs *rgw_fs,
 {
   CephContext* cct = static_cast<CephContext*>(rgw_fs->rgw);
   RGWLibFS *fs = static_cast<RGWLibFS*>(rgw_fs->fs_private);
-
-  if (!fh)
-    return -ENOENT;
 
   RGWFileHandle* rgw_fh = get_rgwfh(fh);
 
