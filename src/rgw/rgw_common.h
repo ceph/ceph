@@ -342,6 +342,9 @@ class RGWHTTPArgs
       val_map[iter->first] = iter->second;
     }
   }
+  const string& get_str() {
+    return str;
+  }
 };
 
 class RGWConf;
