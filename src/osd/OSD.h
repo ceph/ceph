@@ -112,6 +112,8 @@ enum {
   l_osd_buf,
   l_osd_history_alloc_bytes,
   l_osd_history_alloc_num,
+  l_osd_cached_crc,
+  l_osd_cached_crc_adjusted,
 
   l_osd_pg,
   l_osd_pg_primary,
