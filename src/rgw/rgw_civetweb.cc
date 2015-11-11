@@ -45,9 +45,16 @@ int RGWMongoose::complete_request()
 {
   if (!sent_header) {
     if (!has_content_length) {
+
       header_done = false; /* let's go back to writing the header */
 
-      if (0 && data.length() == 0) {
+      /*
+       * Status 204 should not include a content-length header
+       * RFC7230 says so
+       */
+      if (status_num == 204) {
+        has_content_length = true;
+      } else if (0 && data.length() == 0) {
         has_content_length = true;
         print("Transfer-Enconding: %s\r\n", "chunked");
         data.append("0\r\n\r\n", sizeof("0\r\n\r\n")-1);
@@ -75,6 +82,8 @@ void RGWMongoose::init_env(CephContext *cct)
 {
   env.init(cct);
   struct mg_request_info *info = mg_get_request_info(conn);
+  status_num = 0;
+
   if (!info)
     return;
 
@@ -114,7 +123,7 @@ void RGWMongoose::init_env(CephContext *cct)
       *dest = c;
     }
     *dest = '\0';
-    
+
     env.set(buf, header->value);
   }
 
@@ -150,7 +159,7 @@ int RGWMongoose::send_status(const char *status, const char *status_name)
   bl.append(header_data);
   header_data = bl;
 
-  int status_num = atoi(status);
+  status_num = atoi(status);
   mg_set_http_status(conn, status_num);
 
   return 0;
