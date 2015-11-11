@@ -3246,7 +3246,13 @@ void RGWCompleteMultipart::execute()
   string version_id;
 
   ret = get_params();
-  if (ret < 0)
+  if (ret < 0) {
+    s->aws4_auth_needs_complete = false;
+    return;
+  }
+
+  ret = do_aws4_auth_completion();
+  if (ret)
     return;
 
   ret = get_system_versioning_params(s, &olh_epoch, &version_id);
