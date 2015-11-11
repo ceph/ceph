@@ -50,11 +50,13 @@ void RGWSyncBackoff::backoff(RGWCoroutine *op)
 }
 
 int RGWBackoffControlCR::operate() {
+  RGWCoroutine *finisher_cr;
   reenter(this) {
     while (true) {
       yield {
         Mutex::Locker l(lock);
         cr = alloc_cr();
+        cr->get();
         int r = call(cr);
         if (r < 0) {
           cr->put();
@@ -76,6 +78,20 @@ int RGWBackoffControlCR::operate() {
         backoff.reset();
       }
       yield backoff.backoff(this);
+      finisher_cr = alloc_finisher_cr();
+      if (finisher_cr) {
+        yield {
+          int r = call(finisher_cr);
+          if (r < 0) {
+            ldout(cct, 0) << "ERROR: failed to call to finisher_cr(): r=" << r << dendl;
+            return set_cr_error(r);
+          }
+        }
+        if (retcode < 0) {
+          ldout(cct, 0) << "ERROR: call to finisher_cr() failed: retcode=" << retcode << dendl;
+          return set_cr_error(retcode);
+        }
+      }
     }
   }
   return 0;
@@ -1397,7 +1413,7 @@ public:
   }
 };
 
-class RGWMetaSyncShardControlCR : public RGWCoroutine
+class RGWMetaSyncShardControlCR : public RGWBackoffControlCR
 {
   RGWMetaSyncEnv *sync_env;
 
@@ -1408,44 +1424,23 @@ class RGWMetaSyncShardControlCR : public RGWCoroutine
 
   RGWObjectCtx obj_ctx;
 
-  RGWSyncBackoff backoff;
-  bool reset_backoff;
-
 public:
   RGWMetaSyncShardControlCR(RGWMetaSyncEnv *_sync_env,
 		     rgw_bucket& _pool,
-		     uint32_t _shard_id, rgw_meta_sync_marker& _marker) : RGWCoroutine(_sync_env->cct), sync_env(_sync_env),
+		     uint32_t _shard_id, rgw_meta_sync_marker& _marker) : RGWBackoffControlCR(_sync_env->cct), sync_env(_sync_env),
 						      pool(_pool),
 						      shard_id(_shard_id),
-						      sync_marker(_marker), obj_ctx(sync_env->store), reset_backoff(false) {
+						      sync_marker(_marker), obj_ctx(sync_env->store) {
   }
 
-  int operate() {
-    reenter(this) {
-      while (true) {
-        yield {
-          call(new RGWMetaSyncShardCR(sync_env, pool, shard_id, sync_marker, &reset_backoff));
-        }
-        if (retcode < 0 && retcode != -EBUSY && retcode != -EAGAIN) {
-          ldout(sync_env->cct, 0) << "ERROR: RGWMetaSyncShardCR() returned " << retcode << dendl;
-          return set_cr_error(retcode);
-        }
-        if (reset_backoff) {
-          backoff.reset();
-        }
-        yield backoff.backoff(this);
-        yield {
-          RGWRados *store = sync_env->store;
-          call(new RGWSimpleRadosReadCR<rgw_meta_sync_marker>(sync_env->async_rados, store, obj_ctx, store->get_zone_params().log_pool,
-                                                               sync_env->shard_obj_name(shard_id), &sync_marker));
-        }
-        if (retcode < 0) {
-          ldout(sync_env->cct, 0) << "ERROR: failed to read sync state for metadata shard id=" << shard_id << " retcode=" << retcode << dendl;
-          return set_cr_error(retcode);
-        }
-      }
-    }
-    return 0;
+  RGWCoroutine *alloc_cr() {
+    return new RGWMetaSyncShardCR(sync_env, pool, shard_id, sync_marker, backoff_ptr());
+  }
+
+  RGWCoroutine *alloc_finisher_cr() {
+    RGWRados *store = sync_env->store;
+    return new RGWSimpleRadosReadCR<rgw_meta_sync_marker>(sync_env->async_rados, store, obj_ctx, store->get_zone_params().log_pool,
+                                                               sync_env->shard_obj_name(shard_id), &sync_marker);
   }
 };
 

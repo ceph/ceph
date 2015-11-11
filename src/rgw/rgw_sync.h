@@ -73,6 +73,7 @@ public:
   }
 
   virtual RGWCoroutine *alloc_cr() = 0;
+  virtual RGWCoroutine *alloc_finisher_cr() { return NULL; }
 
   int operate();
 };
