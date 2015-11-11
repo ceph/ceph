@@ -83,16 +83,18 @@ int do_list(librbd::RBD &rbd, librados::IoCtx& io_ctx, bool lflag,
     parent.clear();
     r = im.parent_info(&pool, &image, &snap);
     if (r < 0 && r != -ENOENT)
-      return r;
+      goto out;
     bool has_parent = false;
     if (r != -ENOENT) {
       parent = pool + "/" + image + "@" + snap;
       has_parent = true;
     }
 
-    if (im.stat(info, sizeof(info)) < 0)
-      return -EINVAL;
-
+    if (im.stat(info, sizeof(info)) < 0) {
+      r = -EINVAL;
+      goto out;
+    }
+    
     uint8_t old_format;
     im.old_format(&old_format);
 
@@ -100,7 +102,7 @@ int do_list(librbd::RBD &rbd, librados::IoCtx& io_ctx, bool lflag,
     bool exclusive;
     r = im.list_lockers(&lockers, &exclusive, NULL);
     if (r < 0)
-      return r;
+      goto out;
     std::string lockstr;
     if (!lockers.empty()) {
       lockstr = (exclusive) ? "excl" : "shr";
@@ -141,7 +143,7 @@ int do_list(librbd::RBD &rbd, librados::IoCtx& io_ctx, bool lflag,
         im.snap_set(s->name.c_str());
         r = im.snap_is_protected(s->name.c_str(), &is_protected);
         if (r < 0)
-          return r;
+          goto out;
         if (im.parent_info(&pool, &image, &snap) >= 0) {
           parent = pool + "/" + image + "@" + snap;
           has_parent = true;
@@ -173,6 +175,8 @@ int do_list(librbd::RBD &rbd, librados::IoCtx& io_ctx, bool lflag,
       }
     }
   }
+  
+out:
   if (f) {
     f->close_section();
     f->flush(std::cout);
@@ -180,7 +184,7 @@ int do_list(librbd::RBD &rbd, librados::IoCtx& io_ctx, bool lflag,
     std::cout << tbl;
   }
 
-  return 0;
+  return r < 0 ? r : 0;
 }
 
 void get_arguments(po::options_description *positional,
