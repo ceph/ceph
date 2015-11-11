@@ -570,6 +570,9 @@ if(${HAVE_XFS})
     os/XfsFileStoreBackend.cc
     os/fs/XFS.cc)
 endif(${HAVE_XFS})
+set(libkv_srcs
+  kv/LevelDBStore.cc
+  kv/KeyValueDB.cc)
 set(libos_srcs
   os/FileJournal.cc
   os/FileStore.cc
@@ -578,7 +581,6 @@ set(libos_srcs
   os/JournalingObjectStore.cc
   os/LFNIndex.cc
   os/IndexManager.cc
-  os/LevelDBStore.cc
   os/DBObjectMap.cc 
   os/Transaction.cc
   os/WBThrottle.cc
@@ -586,17 +588,17 @@ set(libos_srcs
   os/BtrfsFileStoreBackend.cc
   os/ZFSFileStoreBackend.cc
   os/KeyValueStore.cc
-  os/KeyValueDB.cc
   os/MemStore.cc
   os/GenericObjectMap.cc
   os/HashIndex.cc
   os/newstore/NewStore.cc
   os/newstore/newstore_types.cc
   os/fs/FS.cc
+  ${libkv_srcs}
   ${libos_xfs_srcs})
 
 set(os_mon_files
-  os/LevelDBStore.cc)
+  kv/LevelDBStore.cc)
 add_library(os_mon_objs OBJECT ${os_mon_files})
 add_library(os STATIC ${libos_srcs} $<TARGET_OBJECTS:os_mon_objs>)
 if(${HAVE_LIBAIO})
