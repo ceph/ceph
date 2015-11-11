@@ -1619,7 +1619,7 @@ int RGWPutCORS_ObjStore_S3::get_params()
        goto done_err;
     }
     int read_len;
-    r = s->cio->read(data, cl, &read_len);
+    r = s->cio->read(data, cl, &read_len, s->aws4_auth_needs_complete);
     len = read_len;
     if (r < 0)
       goto done_err;
