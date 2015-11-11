@@ -19,6 +19,7 @@ class RGWMongoose : public RGWClientIO
   bufferlist data;
 
   int port;
+  int status_num;
 
   bool header_done;
   bool sent_header;
