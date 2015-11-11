@@ -2370,7 +2370,7 @@ public:
   int shutdown();
 
   void handle_signal(int signum);
-
+  void io_error_tidy_shutdown();
   /// check if we can throw out op from a disconnected client
   static bool op_is_discardable(MOSDOp *m);
 
