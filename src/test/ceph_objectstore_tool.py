@@ -180,7 +180,7 @@ def get_nspace(num):
     return "ns{num}".format(num=num)
 
 
-def verify(DATADIR, POOL, NAME_PREFIX):
+def verify(DATADIR, POOL, NAME_PREFIX, db):
     TMPFILE = r"/tmp/tmp.{pid}".format(pid=os.getpid())
     nullfd = open(os.devnull, "w")
     ERRORS = 0
@@ -206,6 +206,55 @@ def verify(DATADIR, POOL, NAME_PREFIX):
         if ret != 0:
             logging.error("{file} data not imported properly".format(file=file))
             ERRORS += 1
+        try:
+            os.unlink(TMPFILE)
+        except:
+            pass
+        for key, val in db[nspace][file]["xattr"].iteritems():
+            cmd = "./rados -p {pool} -N '{nspace}' getxattr {name} {key}".format(pool=POOL, name=file, key=key, nspace=nspace)
+            logging.debug(cmd)
+            getval = check_output(cmd, shell=True, stderr=nullfd)
+            logging.debug("getxattr {key} {val}".format(key=key, val=getval))
+            if getval != val:
+                logging.error("getxattr of key {key} returned wrong val: {get} instead of {orig}".format(key=key, get=getval, orig=val))
+                ERRORS += 1
+                continue
+        hdr = db[nspace][file].get("omapheader", "")
+        cmd = "./rados -p {pool} -N '{nspace}' getomapheader {name} {file}".format(pool=POOL, name=file, nspace=nspace, file=TMPFILE)
+        logging.debug(cmd)
+        ret = call(cmd, shell=True, stderr=nullfd)
+        if ret != 0:
+            logging.error("rados getomapheader returned {ret}".format(ret=ret))
+            ERRORS += 1
+        else:
+            getlines = get_lines(TMPFILE)
+            assert(len(getlines) == 0 or len(getlines) == 1)
+            if len(getlines) == 0:
+                gethdr = ""
+            else:
+                gethdr = getlines[0]
+            logging.debug("header: {hdr}".format(hdr=gethdr))
+            if gethdr != hdr:
+                logging.error("getomapheader returned wrong val: {get} instead of {orig}".format(get=gethdr, orig=hdr))
+                ERRORS += 1
+        for key, val in db[nspace][file]["omap"].iteritems():
+            cmd = "./rados -p {pool} -N '{nspace}' getomapval {name} {key} {file}".format(pool=POOL, name=file, key=key, nspace=nspace, file=TMPFILE)
+            logging.debug(cmd)
+            ret = call(cmd, shell=True, stderr=nullfd)
+            if ret != 0:
+                logging.error("getomapval returned {ret}".format(ret=ret))
+                ERRORS += 1
+                continue
+            getlines = get_lines(TMPFILE)
+            if len(getlines) != 1:
+                logging.error("Bad data from getomapval {lines}".format(lines=getlines))
+                ERRORS += 1
+                continue
+            getval = getlines[0]
+            logging.debug("getomapval {key} {val}".format(key=key, val=getval))
+            if getval != val:
+                logging.error("getomapval returned wrong val: {get} instead of {orig}".format(get=getval, orig=val))
+                ERRORS += 1
         try:
             os.unlink(TMPFILE)
         except:
@@ -1450,7 +1499,7 @@ def main(argv):
 
     if EXP_ERRORS == 0 and RM_ERRORS == 0 and IMP_ERRORS == 0:
         print "Verify erasure coded import data"
-        ERRORS += verify(DATADIR, EC_POOL, EC_NAME)
+        ERRORS += verify(DATADIR, EC_POOL, EC_NAME, db)
 
     if EXP_ERRORS == 0:
         NEWPOOL = "import-rados-pool"
@@ -1472,7 +1521,7 @@ def main(argv):
                     logging.error("Import-rados failed from {file} with {ret}".format(file=file, ret=ret))
                     ERRORS += 1
 
-        ERRORS += verify(DATADIR, NEWPOOL, REP_NAME)
+        ERRORS += verify(DATADIR, NEWPOOL, REP_NAME, db)
     else:
         logging.warning("SKIPPING IMPORT-RADOS TESTS DUE TO PREVIOUS FAILURES")
 
