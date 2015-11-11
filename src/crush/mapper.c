@@ -841,7 +841,8 @@ int crush_do_rule(const struct crush_map *map,
 		case CRUSH_RULE_TAKE:
 			if ((curstep->arg1 >= 0 &&
 			     curstep->arg1 < map->max_devices) ||
-			    (-1-curstep->arg1 < map->max_buckets &&
+			    (-1-curstep->arg1 >= 0 &&
+			     -1-curstep->arg1 < map->max_buckets &&
 			     map->buckets[-1-curstep->arg1])) {
 				w[0] = curstep->arg1;
 				wsize = 1;
@@ -894,6 +895,7 @@ int crush_do_rule(const struct crush_map *map,
 			osize = 0;
 
 			for (i = 0; i < wsize; i++) {
+				int bno;
 				/*
 				 * see CRUSH_N, CRUSH_N_MINUS macros.
 				 * basically, numrep <= 0 means relative to
@@ -906,6 +908,13 @@ int crush_do_rule(const struct crush_map *map,
 						continue;
 				}
 				j = 0;
+				/* make sure bucket id is valid */
+				bno = -1 - w[i];
+				if (bno < 0 || bno >= map->max_buckets) {
+					// w[i] is probably CRUSH_ITEM_NONE
+					dprintk("  bad w[i] %d\n", w[i]);
+					continue;
+				}
 				if (firstn) {
 					int recurse_tries;
 					if (choose_leaf_tries)
@@ -917,7 +926,7 @@ int crush_do_rule(const struct crush_map *map,
 						recurse_tries = choose_tries;
 					osize += crush_choose_firstn(
 						map,
-						map->buckets[-1-w[i]],
+						map->buckets[bno],
 						weight, weight_max,
 						x, numrep,
 						curstep->arg2,
@@ -936,7 +945,7 @@ int crush_do_rule(const struct crush_map *map,
                                                     numrep : (result_max-osize));
 					crush_choose_indep(
 						map,
-						map->buckets[-1-w[i]],
+						map->buckets[bno],
 						weight, weight_max,
 						x, out_size, numrep,
 						curstep->arg2,
