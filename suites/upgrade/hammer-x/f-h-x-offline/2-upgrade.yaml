@@ -1,5 +1,6 @@
 tasks:
 - install.upgrade:
+    mon.a:
 - ceph.restart: [mon.a, mon.b, mon.c]
 - ceph.stop: [osd.0, osd.1, osd.2]
 - exec:
