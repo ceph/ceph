@@ -27,8 +27,7 @@ void validate(boost::any& v, const std::vector<std::string>& values,
 
   po::validators::check_first_occurrence(v);
   const std::string &s = po::validators::get_single_string(values);
-  int r = g_conf->set_val("keyfile", s.c_str());
-  assert(r == 0);
+  g_conf->set_val_or_die("keyfile", s.c_str());
   v = boost::any(s);
 }
 
