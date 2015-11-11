@@ -1005,73 +1005,7 @@ public:
   }
 };
 
-class RGWControlCR : public RGWCoroutine
-{
-  RGWCoroutine *cr;
-  Mutex lock;
-
-  RGWSyncBackoff backoff;
-  bool reset_backoff;
-
-protected:
-  bool *backoff_ptr() {
-    return &reset_backoff;
-  }
-
-  Mutex& cr_lock() {
-    return lock;
-  }
-
-  RGWCoroutine *get_cr() {
-    return cr;
-  }
-
-public:
-  RGWControlCR(CephContext *_cct) : RGWCoroutine(_cct), cr(NULL), lock("RGWControlCR::lock"), reset_backoff(false) {
-  }
-
-  virtual ~RGWControlCR() {
-    if (cr) {
-      cr->put();
-    }
-  }
-
-  virtual RGWCoroutine *alloc_cr() = 0;
-
-  int operate() {
-    reenter(this) {
-      while (true) {
-        yield {
-          Mutex::Locker l(lock);
-          cr = alloc_cr();
-          int r = call(cr);
-          if (r < 0) {
-            cr->put();
-            cr = NULL;
-            ldout(cct, 0) << "ERROR: call() returned " << r << dendl;
-            return set_cr_error(r);
-          }
-        }
-        {
-          Mutex::Locker l(lock);
-          cr->put();
-          cr = NULL;
-        }
-        if (retcode < 0 && retcode != -EBUSY && retcode != -EAGAIN) {
-          ldout(cct, 0) << "ERROR: RGWControlCR called coroutine returned " << retcode << dendl;
-          return set_cr_error(retcode);
-        }
-        if (reset_backoff) {
-          backoff.reset();
-        }
-        yield backoff.backoff(this);
-      }
-    }
-    return 0;
-  }
-};
-
-class RGWDataSyncShardControlCR : public RGWControlCR {
+class RGWDataSyncShardControlCR : public RGWBackoffControlCR {
   RGWRados *store;
   RGWHTTPManager *http_manager;
   RGWAsyncRadosProcessor *async_rados;
@@ -1086,7 +1020,7 @@ class RGWDataSyncShardControlCR : public RGWControlCR {
 public:
   RGWDataSyncShardControlCR(RGWRados *_store, RGWHTTPManager *_mgr, RGWAsyncRadosProcessor *_async_rados,
                      RGWRESTConn *_conn, rgw_bucket& _pool, const string& _source_zone,
-		     uint32_t _shard_id, rgw_data_sync_marker& _marker) : RGWControlCR(_store->ctx()), store(_store),
+		     uint32_t _shard_id, rgw_data_sync_marker& _marker) : RGWBackoffControlCR(_store->ctx()), store(_store),
                                                       http_manager(_mgr),
 						      async_rados(_async_rados),
                                                       conn(_conn),
@@ -1259,7 +1193,7 @@ public:
   }
 };
 
-class RGWDataSyncControlCR : public RGWControlCR
+class RGWDataSyncControlCR : public RGWBackoffControlCR
 {
   RGWRados *store;
   RGWHTTPManager *http_manager;
@@ -1269,7 +1203,7 @@ class RGWDataSyncControlCR : public RGWControlCR
 
 public:
   RGWDataSyncControlCR(RGWRados *_store, RGWHTTPManager *_mgr, RGWAsyncRadosProcessor *_async_rados,
-                RGWRESTConn *_conn, const string& _source_zone) : RGWControlCR(_store->ctx()), store(_store),
+                RGWRESTConn *_conn, const string& _source_zone) : RGWBackoffControlCR(_store->ctx()), store(_store),
                                                       http_manager(_mgr),
 						      async_rados(_async_rados),
                                                       conn(_conn),

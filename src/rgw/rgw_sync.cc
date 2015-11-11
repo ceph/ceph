@@ -49,6 +49,38 @@ void RGWSyncBackoff::backoff(RGWCoroutine *op)
   op->wait(utime_t(cur_wait, 0));
 }
 
+int RGWBackoffControlCR::operate() {
+  reenter(this) {
+    while (true) {
+      yield {
+        Mutex::Locker l(lock);
+        cr = alloc_cr();
+        int r = call(cr);
+        if (r < 0) {
+          cr->put();
+          cr = NULL;
+          ldout(cct, 0) << "ERROR: call() returned " << r << dendl;
+          return set_cr_error(r);
+        }
+      }
+      {
+        Mutex::Locker l(lock);
+        cr->put();
+        cr = NULL;
+      }
+      if (retcode < 0 && retcode != -EBUSY && retcode != -EAGAIN) {
+        ldout(cct, 0) << "ERROR: RGWBackoffControlCR called coroutine returned " << retcode << dendl;
+        return set_cr_error(retcode);
+      }
+      if (reset_backoff) {
+        backoff.reset();
+      }
+      yield backoff.backoff(this);
+    }
+  }
+  return 0;
+}
+
 void rgw_mdlog_info::decode_json(JSONObj *obj) {
   JSONDecoder::decode_json("num_objects", num_shards, obj);
 }

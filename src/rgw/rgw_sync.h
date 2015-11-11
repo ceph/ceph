@@ -41,6 +41,42 @@ public:
   void backoff(RGWCoroutine *op);
 };
 
+class RGWBackoffControlCR : public RGWCoroutine
+{
+  RGWCoroutine *cr;
+  Mutex lock;
+
+  RGWSyncBackoff backoff;
+  bool reset_backoff;
+
+protected:
+  bool *backoff_ptr() {
+    return &reset_backoff;
+  }
+
+  Mutex& cr_lock() {
+    return lock;
+  }
+
+  RGWCoroutine *get_cr() {
+    return cr;
+  }
+
+public:
+  RGWBackoffControlCR(CephContext *_cct) : RGWCoroutine(_cct), cr(NULL), lock("RGWBackoffControlCR::lock"), reset_backoff(false) {
+  }
+
+  virtual ~RGWBackoffControlCR() {
+    if (cr) {
+      cr->put();
+    }
+  }
+
+  virtual RGWCoroutine *alloc_cr() = 0;
+
+  int operate();
+};
+
 struct RGWMetaSyncEnv {
   CephContext *cct;
   RGWRados *store;
