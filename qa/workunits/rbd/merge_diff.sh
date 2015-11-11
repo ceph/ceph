@@ -30,7 +30,7 @@ function rebuild()
   clear_all
   echo Starting test $testno
   ((testno++))
-  rbd create $gen --size 100 --order $1 --stripe_unit $2 --stripe_count $3 --image-format $4
+  rbd create $gen --size 100 --order $1 --stripe-unit $2 --stripe-count $3 --image-format $4
   rbd create $out --size 1 --order 19
   mkdir -p mnt diffs
   # lttng has atexit handlers that need to be fork/clone aware
@@ -241,14 +241,15 @@ merge_diff null r2 r3
 merge_diff null r3 r4
 check null r4
 
-rebuild 22 65536 8 2
-write 0 32
-snap r1
-write 16 32
-snap r2
-export_diff null r1
-export_diff r1 r2
-expect_false merge_diff null r1 r2
+# merge diff doesn't yet support fancy striping
+# rebuild 22 65536 8 2
+# write 0 32
+# snap r1
+# write 16 32
+# snap r2
+# export_diff null r1
+# export_diff r1 r2
+# expect_false merge_diff null r1 r2
 
 rebuild 22 4194304 1 2
 write 0 1
