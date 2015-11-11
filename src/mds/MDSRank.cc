@@ -1795,7 +1795,13 @@ std::vector<entity_name_t> MDSRankDispatcher::evict_sessions(
     }
   }
 
+  dout(20) << __func__ << " matched " << victims.size() << " sessions" << dendl;
+
   std::vector<entity_name_t> result;
+
+  if (victims.empty()) {
+    return result;
+  }
 
   C_SaferCond on_safe;
   C_GatherBuilder gather(g_ceph_context, &on_safe);
