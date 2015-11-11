@@ -4041,6 +4041,10 @@ void Monitor::handle_subscribe(MMonSubscribe *m)
       }
     } else if (p->first == "osdmap") {
       if ((int)s->is_capable("osd", MON_CAP_R)) {
+	if (s->osd_epoch > p->second.start) {
+	  // client needs earlier osdmaps on purpose, so reset the sent epoch
+	  s->osd_epoch = 0;
+	}
         osdmon()->check_sub(s->sub_map["osdmap"]);
       }
     } else if (p->first == "osd_pg_creates") {
