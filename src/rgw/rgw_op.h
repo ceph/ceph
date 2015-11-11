@@ -108,6 +108,7 @@ public:
   virtual void execute() = 0;
   virtual void send_response() {}
   virtual void complete() {
+    assert(!s->aws4_auth_needs_complete);
     send_response();
   }
   virtual const string name() = 0;
