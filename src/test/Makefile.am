@@ -82,6 +82,7 @@ check_SCRIPTS += \
 	test/osd/osd-scrub-snaps.sh \
 	test/osd/osd-config.sh \
 	test/osd/osd-bench.sh \
+	test/osd/osd-reactivate.sh \
 	test/osd/osd-copy-from.sh \
 	test/mon/mon-handle-forward.sh \
 	test/libradosstriper/rados-striper.sh \
