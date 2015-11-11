@@ -1054,6 +1054,21 @@ int MDSMonitor::_check_pool(
          << " is an erasure-code pool";
       return -EINVAL;
     }
+
+    // That cache tier overlay must be writeback, not readonly (it's the
+    // write operations like modify+truncate we care about support for)
+    const pg_pool_t *write_tier = mon->osdmon()->osdmap.get_pg_pool(
+        pool->write_tier);
+    assert(write_tier != NULL);  // OSDMonitor shouldn't allow DNE tier
+    if (write_tier->cache_mode == pg_pool_t::CACHEMODE_FORWARD
+        || write_tier->cache_mode == pg_pool_t::CACHEMODE_READONLY) {
+      *ss << "EC pool '" << pool_name << "' has a write tier ("
+          << mon->osdmon()->osdmap.get_pool_name(pool->write_tier)
+          << ") that is configured "
+             "to forward writes.  Use a cache mode such as 'writeback' for "
+             "CephFS";
+      return -EINVAL;
+    }
   }
 
   if (pool->is_tier()) {
