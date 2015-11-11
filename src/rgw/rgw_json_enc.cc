@@ -705,9 +705,6 @@ static void decode_json(const char *field, rgw_bucket& bucket, JSONObj *obj)
 {
   string pool;
   JSONDecoder::decode_json(field, pool, obj);
-  if (pool[0] != '.') {
-    pool = string(".") + pool;
-  }
   bucket = rgw_bucket(pool.c_str());
 }
 
