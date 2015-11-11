@@ -171,7 +171,6 @@ req_state::req_state(CephContext *_cct, class RGWEnv *e) : cct(_cct), cio(NULL),
   bucket_exists = false;
   has_bad_meta = false;
   length = NULL;
-  copy_source = NULL;
   http_auth = NULL;
   local_source = false;
 

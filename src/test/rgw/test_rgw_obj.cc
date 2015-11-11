@@ -32,7 +32,7 @@ using namespace std;
 
 static void init_bucket(rgw_bucket *bucket, const char *name)
 {
-  *bucket = rgw_bucket(name, ".data-pool", ".index-pool", "marker", "bucket-id", NULL);
+  *bucket = rgw_bucket("", name, ".data-pool", ".index-pool", "marker", "bucket-id", NULL);
 }
 
 void check_parsed_correctly(rgw_obj& obj, const string& name, const string& ns, const string& instance)

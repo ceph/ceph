@@ -51,7 +51,7 @@ static inline void get_obj_bucket_and_oid_loc(const rgw_obj& obj, rgw_bucket& bu
   prepend_bucket_marker(bucket, obj.get_object(), oid);
   const string& loc = obj.get_loc();
   if (!loc.empty()) {
-    prepend_bucket_marker(bucket, obj.get_loc(), locator);
+    prepend_bucket_marker(bucket, obj.get_loc(), locator); // XXX get_loc twice
   } else {
     locator.clear();
   }
@@ -996,26 +996,34 @@ struct RGWRegionMap {
 WRITE_CLASS_ENCODER(RGWRegionMap)
 
 struct objexp_hint_entry {
+  string tenant;
   string bucket_name;
   string bucket_id;
   rgw_obj_key obj_key;
   utime_t exp_time;
 
   void encode(bufferlist& bl) const {
-    ENCODE_START(1, 1, bl);
+    ENCODE_START(2, 1, bl);
     ::encode(bucket_name, bl);
     ::encode(bucket_id, bl);
     ::encode(obj_key, bl);
     ::encode(exp_time, bl);
+    ::encode(tenant, bl);
     ENCODE_FINISH(bl);
   }
 
   void decode(bufferlist::iterator& bl) {
-    DECODE_START(1, bl);
+    // XXX Do we want DECODE_START_LEGACY_COMPAT_LEN(2, 1, 1, bl); ?
+    DECODE_START(2, bl);
     ::decode(bucket_name, bl);
     ::decode(bucket_id, bl);
     ::decode(obj_key, bl);
     ::decode(exp_time, bl);
+    if (struct_v >= 2) {
+      ::decode(tenant, bl);
+    } else {
+      tenant.clear();
+    }
     DECODE_FINISH(bl);
   }
 };
@@ -1208,7 +1216,7 @@ class RGWRados
   int open_gc_pool_ctx();
   int open_objexp_pool_ctx();
 
-  int open_bucket_pool_ctx(const string& bucket_name, const string& pool, librados::IoCtx&  io_ctx);
+  int open_bucket_pool_ctx(const string& pool, librados::IoCtx&  io_ctx);
   int open_bucket_index_ctx(rgw_bucket& bucket, librados::IoCtx&  index_ctx);
   int open_bucket_data_ctx(rgw_bucket& bucket, librados::IoCtx&  io_ctx);
   int open_bucket_data_extra_ctx(rgw_bucket& bucket, librados::IoCtx&  io_ctx);
@@ -1417,12 +1425,12 @@ public:
    * returns 0 on success, -ERR# otherwise.
    */
   virtual int init_bucket_index(rgw_bucket& bucket, int num_shards);
-  int select_bucket_placement(RGWUserInfo& user_info, const string& region_name, const std::string& rule,
-                              const std::string& bucket_name, rgw_bucket& bucket, string *pselected_rule);
-  int select_legacy_bucket_placement(const string& bucket_name, rgw_bucket& bucket);
+  int select_bucket_placement(RGWUserInfo& user_info, const string& region_name, const string& rule,
+                              const string& tenant_name, const string& bucket_name, rgw_bucket& bucket, string *pselected_rule);
+  int select_legacy_bucket_placement(const string& tenant_name, const string& bucket_name, rgw_bucket& bucket);
   int select_new_bucket_location(RGWUserInfo& user_info, const string& region_name, const string& rule,
-                                 const std::string& bucket_name, rgw_bucket& bucket, string *pselected_rule);
-  int set_bucket_location_by_rule(const string& location_rule, const std::string& bucket_name, rgw_bucket& bucket);
+                                 const string& tenant_name, const string& bucket_name, rgw_bucket& bucket, string *pselected_rule);
+  int set_bucket_location_by_rule(const string& location_rule, const string& tenant_name, const string& bucket_name, rgw_bucket& bucket);
   virtual int create_bucket(RGWUserInfo& owner, rgw_bucket& bucket,
                             const string& region_name,
                             const string& placement_rule,
@@ -2055,18 +2063,23 @@ public:
   void get_bucket_instance_entry(rgw_bucket& bucket, string& entry);
   void get_bucket_meta_oid(rgw_bucket& bucket, string& oid);
 
-  int put_bucket_entrypoint_info(const string& bucket_name, RGWBucketEntryPoint& entry_point, bool exclusive, RGWObjVersionTracker& objv_tracker, time_t mtime,
+  int put_bucket_entrypoint_info(const string& tenant_name, const string& bucket_name, RGWBucketEntryPoint& entry_point,
+                                 bool exclusive, RGWObjVersionTracker& objv_tracker, time_t mtime,
                                  map<string, bufferlist> *pattrs);
   int put_bucket_instance_info(RGWBucketInfo& info, bool exclusive, time_t mtime, map<string, bufferlist> *pattrs);
-  int get_bucket_entrypoint_info(RGWObjectCtx& obj_ctx, const string& tenant, const string& bucket_name, RGWBucketEntryPoint& entry_point, RGWObjVersionTracker *objv_tracker, time_t *pmtime,
-                                 map<string, bufferlist> *pattrs, rgw_cache_entry_info *cache_info = NULL);
+  int get_bucket_entrypoint_info(RGWObjectCtx& obj_ctx, const string& tenant_name, const string& bucket_name,
+                                 RGWBucketEntryPoint& entry_point, RGWObjVersionTracker *objv_tracker,
+                                 time_t *pmtime, map<string, bufferlist> *pattrs, rgw_cache_entry_info *cache_info = NULL);
   int get_bucket_instance_info(RGWObjectCtx& obj_ctx, const string& meta_key, RGWBucketInfo& info, time_t *pmtime, map<string, bufferlist> *pattrs);
   int get_bucket_instance_info(RGWObjectCtx& obj_ctx, rgw_bucket& bucket, RGWBucketInfo& info, time_t *pmtime, map<string, bufferlist> *pattrs);
   int get_bucket_instance_from_oid(RGWObjectCtx& obj_ctx, string& oid, RGWBucketInfo& info, time_t *pmtime, map<string, bufferlist> *pattrs,
                                    rgw_cache_entry_info *cache_info = NULL);
 
-  int convert_old_bucket_info(RGWObjectCtx& obj_ctx, string& bucket_name);
-  virtual int get_bucket_info(RGWObjectCtx& obj_ctx, const string& bucket_name, RGWBucketInfo& info,
+  int convert_old_bucket_info(RGWObjectCtx& obj_ctx, const string& tenant_name, const string& bucket_name);
+  static void make_bucket_entry_name(const string& tenant_name, const string& bucket_name, string& bucket_entry);
+  virtual int get_bucket_info(RGWObjectCtx& obj_ctx,
+                              const string& tenant_name, const string& bucket_name,
+                              RGWBucketInfo& info,
                               time_t *pmtime, map<string, bufferlist> *pattrs = NULL);
   virtual int put_linked_bucket_info(RGWBucketInfo& info, bool exclusive, time_t mtime, obj_version *pep_objv,
                                      map<string, bufferlist> *pattrs, bool create_entry_point);
@@ -2118,6 +2131,7 @@ public:
   void objexp_get_shard(int shard_num,
                         string& shard);                       /* out */
   int objexp_hint_add(const utime_t& delete_at,
+                      const string& tenant_name,
                       const string& bucket_name,
                       const string& bucket_id,
                       const rgw_obj_key& obj_key);

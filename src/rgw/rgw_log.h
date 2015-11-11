@@ -60,7 +60,7 @@ struct rgw_log_entry {
     DECODE_START_LEGACY_COMPAT_LEN(8, 5, 5, p);
     ::decode(object_owner.id, p);
     if (struct_v > 3)
-      ::decode(bucket_owner, p);
+      ::decode(bucket_owner.id, p);
     ::decode(bucket, p);
     ::decode(time, p);
     ::decode(remote_addr, p);

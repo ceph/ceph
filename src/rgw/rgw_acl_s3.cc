@@ -516,7 +516,7 @@ int RGWAccessControlPolicy_S3::rebuild(RGWRados *store, ACLOwner *owner, RGWAcce
           ldout(cct, 0) << "ERROR: src_grant.get_id() failed" << dendl;
           return -EINVAL;
         }
-        email = u.id;
+        email = u.id;  // XXX none of that .to_str() stuff here, but why?
         ldout(cct, 10) << "grant user email=" << email << dendl;
         if (rgw_get_user_info_by_email(store, email, grant_user) < 0) {
           ldout(cct, 10) << "grant user email not found or other error" << dendl;
