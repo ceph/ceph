@@ -2445,7 +2445,7 @@ void OSDMonitor::send_incremental(epoch_t first,
 	     << first << " " << bl.length() << " bytes" << dendl;
 
     MOSDMap *m = new MOSDMap(osdmap.get_fsid());
-    m->oldest_map = first;
+    m->oldest_map = get_first_committed();
     m->newest_map = osdmap.get_epoch();
     m->maps[first] = bl;
 
