@@ -156,6 +156,7 @@ noinst_HEADERS += \
 	common/SloppyCRCMap.h \
 	common/WorkQueue.h \
 	common/PrioritizedQueue.h \
+	common/WrrQueue.h \
 	common/ceph_argparse.h \
 	common/ceph_context.h \
 	common/xattr.h \
