@@ -257,7 +257,9 @@ void RGWListBucket_ObjStore_S3::send_versioned_response()
 {
   s->formatter->open_object_section_in_ns("ListVersionsResult",
 					  "http://s3.amazonaws.com/doc/2006-03-01/");
-  s->formatter->dump_string("Name", s->bucket_name_str);
+  if (!s->bucket_tenant.empty())
+    s->formatter->dump_string("Tenant", s->bucket_tenant);
+  s->formatter->dump_string("Name", s->bucket_name);
   s->formatter->dump_string("Prefix", prefix);
   s->formatter->dump_string("KeyMarker", marker.name);
   if (is_truncated && !next_marker.empty())
@@ -334,7 +336,9 @@ void RGWListBucket_ObjStore_S3::send_response()
 
   s->formatter->open_object_section_in_ns("ListBucketResult",
 					  "http://s3.amazonaws.com/doc/2006-03-01/");
-  s->formatter->dump_string("Name", s->bucket_name_str);
+  if (!s->bucket_tenant.empty())
+    s->formatter->dump_string("Tenant", s->bucket_tenant);
+  s->formatter->dump_string("Name", s->bucket_name);
   s->formatter->dump_string("Prefix", prefix);
   s->formatter->dump_string("Marker", marker.name);
   if (is_truncated && !next_marker.empty())
@@ -1347,6 +1351,7 @@ void RGWPostObj_ObjStore_S3::send_response()
 
     part_str("success_action_redirect", &redirect);
 
+    string tenant;
     string bucket;
     string key;
     string etag_str = "\"";
@@ -1356,12 +1361,28 @@ void RGWPostObj_ObjStore_S3::send_response()
 
     string etag_url;
 
-    url_encode(s->bucket_name_str, bucket);
+    url_encode(s->bucket_tenant, tenant); /* surely overkill, but cheap */
+    url_encode(s->bucket_name, bucket);
     url_encode(s->object.name, key);
     url_encode(etag_str, etag_url);
 
-    redirect.append("?bucket=");
-    redirect.append(bucket);
+    if (!s->bucket_tenant.empty()) {
+      /*
+       * What we really would like is to quaily the bucket name, so
+       * that the client could simply copy it and paste into next request.
+       * Unfortunately, in S3 we cannot know if the client will decide
+       * to come through DNS, with "bucket.tenant" sytanx, or through
+       * URL with "tenant\bucket" syntax. Therefore, we provide the
+       * tenant separately.
+       */
+      redirect.append("?tenant=");
+      redirect.append(tenant);
+      redirect.append("&bucket=");
+      redirect.append(bucket);
+    } else {
+      redirect.append("?bucket=");
+      redirect.append(bucket);
+    }
     redirect.append("&key=");
     redirect.append(key);
     redirect.append("&etag=");
@@ -1405,7 +1426,9 @@ done:
     s->formatter->open_object_section("PostResponse");
     if (g_conf->rgw_dns_name.length())
       s->formatter->dump_format("Location", "%s/%s", s->info.script_uri.c_str(), s->object.name.c_str());
-    s->formatter->dump_string("Bucket", s->bucket_name_str);
+    if (!s->bucket_tenant.empty())
+      s->formatter->dump_string("Tenant", s->bucket_tenant);
+    s->formatter->dump_string("Bucket", s->bucket_name);
     s->formatter->dump_string("Key", s->object.name);
     s->formatter->close_section();
   }
@@ -1467,8 +1490,10 @@ int RGWCopyObj_ObjStore_S3::get_params()
   if_match = s->info.env->get("HTTP_X_AMZ_COPY_IF_MATCH");
   if_nomatch = s->info.env->get("HTTP_X_AMZ_COPY_IF_NONE_MATCH");
 
+  src_tenant_name = s->src_tenant_name;
   src_bucket_name = s->src_bucket_name;
   src_object = s->src_object;
+  dest_tenant_name = s->bucket.tenant;
   dest_bucket_name = s->bucket.name;
   dest_object = s->object.name;
 
@@ -1500,6 +1525,7 @@ int RGWCopyObj_ObjStore_S3::get_params()
   }
 
   if (source_zone.empty() &&
+      (dest_tenant_name.compare(src_tenant_name) == 0) &&
       (dest_bucket_name.compare(src_bucket_name) == 0) &&
       (dest_object.compare(src_object.name) == 0) &&
       src_object.instance.empty() &&
@@ -1816,7 +1842,9 @@ void RGWInitMultipart_ObjStore_S3::send_response()
     dump_start(s);
     s->formatter->open_object_section_in_ns("InitiateMultipartUploadResult",
 		  "http://s3.amazonaws.com/doc/2006-03-01/");
-    s->formatter->dump_string("Bucket", s->bucket_name_str);
+    if (!s->bucket_tenant.empty())
+      s->formatter->dump_string("Tenant", s->bucket_tenant);
+    s->formatter->dump_string("Bucket", s->bucket_name);
     s->formatter->dump_string("Key", s->object.name);
     s->formatter->dump_string("UploadId", upload_id);
     s->formatter->close_section();
@@ -1834,9 +1862,22 @@ void RGWCompleteMultipart_ObjStore_S3::send_response()
     dump_start(s);
     s->formatter->open_object_section_in_ns("CompleteMultipartUploadResult",
 			  "http://s3.amazonaws.com/doc/2006-03-01/");
-    if (s->info.domain.length())
-      s->formatter->dump_format("Location", "%s.%s", s->bucket_name_str.c_str(), s->info.domain.c_str());
-    s->formatter->dump_string("Bucket", s->bucket_name_str);
+    if (!s->bucket_tenant.empty()) {
+      if (s->info.domain.length()) {
+        s->formatter->dump_format("Location", "%s.%s.%s",
+          s->bucket_name.c_str(),
+          s->bucket_tenant.c_str(),
+          s->info.domain.c_str());
+      }
+      s->formatter->dump_string("Tenant", s->bucket_tenant);
+    } else {
+      if (s->info.domain.length()) {
+        s->formatter->dump_format("Location", "%s.%s",
+          s->bucket_name.c_str(),
+          s->info.domain.c_str());
+      }
+    }
+    s->formatter->dump_string("Bucket", s->bucket_name);
     s->formatter->dump_string("Key", s->object.name);
     s->formatter->dump_string("ETag", etag);
     s->formatter->close_section();
@@ -1875,7 +1916,9 @@ void RGWListMultipart_ObjStore_S3::send_response()
     if (test_iter != parts.rend()) {
       cur_max = test_iter->first;
     }
-    s->formatter->dump_string("Bucket", s->bucket_name_str);
+    if (!s->bucket_tenant.empty())
+      s->formatter->dump_string("Tenant", s->bucket_tenant);
+    s->formatter->dump_string("Bucket", s->bucket_name);
     s->formatter->dump_string("Key", s->object.name);
     s->formatter->dump_string("UploadId", upload_id);
     s->formatter->dump_string("StorageClass", "STANDARD");
@@ -1923,7 +1966,9 @@ void RGWListBucketMultiparts_ObjStore_S3::send_response()
     return;
 
   s->formatter->open_object_section("ListMultipartUploadsResult");
-  s->formatter->dump_string("Bucket", s->bucket_name_str);
+  if (!s->bucket_tenant.empty())
+    s->formatter->dump_string("Tenant", s->bucket_tenant);
+  s->formatter->dump_string("Bucket", s->bucket_name);
   if (!prefix.empty())
     s->formatter->dump_string("ListMultipartUploadsResult.Prefix", prefix);
   string& key_marker = marker.get_key();
@@ -2161,7 +2206,7 @@ RGWOp *RGWHandler_ObjStore_Obj_S3::op_put()
   if (is_acl_op()) {
     return new RGWPutACLs_ObjStore_S3;
   }
-  if (!s->copy_source)
+  if (s->src_bucket_name.empty())
     return new RGWPutObj_ObjStore_S3;
   else
     return new RGWCopyObj_ObjStore_S3;
@@ -2231,8 +2276,20 @@ int RGWHandler_ObjStore_S3::init_from_header(struct req_state *s, int default_fo
     first = req;
   }
 
-  if (s->bucket_name_str.empty()) {
-    s->bucket_name_str = first;
+  /*
+   * XXX The intent of the check for empty is apparently to let the bucket
+   * name from DNS to be set ahead. However, we currently take the DNS
+   * bucket and re-insert it into URL in rgw_rest.cc:RGWREST::preprocess().
+   * So, this check is meaningless.
+   *
+   * Rather than dropping this, the code needs to be changed into putting
+   * the bucket (and its tenant) from DNS and Host: header (HTTP_HOST)
+   * into req_status.bucket_name directly.
+   */
+  if (s->bucket_name.empty()) {
+    rgw_parse_url_bucket(first, s->bucket_tenant, s->bucket_name);
+    if (s->bucket_tenant.empty())
+      s->bucket_tenant = s->user.user_id.tenant;
 
     if (pos >= 0) {
       string encoded_obj_str = req.substr(pos+1);
@@ -2304,10 +2361,16 @@ int RGWHandler_ObjStore_S3::validate_bucket_name(const string& bucket, bool rela
 
 int RGWHandler_ObjStore_S3::init(RGWRados *store, struct req_state *s, RGWClientIO *cio)
 {
-  dout(10) << "s->object=" << (!s->object.empty() ? s->object : rgw_obj_key("<NULL>")) << " s->bucket=" << (!s->bucket_name_str.empty() ? s->bucket_name_str : "<NULL>") << dendl;
+  string bucket_log;
+  rgw_make_bucket_entry_name(s->bucket_tenant, s->bucket_name, bucket_log);
+  dout(10) << "s->object=" << (!s->object.empty() ? s->object : rgw_obj_key("<NULL>")) << " s->bucket=" << bucket_log << dendl;
 
+  int ret;
+  ret = validate_tenant_name(s->bucket_tenant);
+  if (ret)
+    return ret;
   bool relaxed_names = s->cct->_conf->rgw_relaxed_s3_bucket_names;
-  int ret = validate_bucket_name(s->bucket_name_str, relaxed_names);
+  ret = validate_bucket_name(s->bucket_name, relaxed_names);
   if (ret)
     return ret;
   ret = validate_object_name(s->object.name);
@@ -2320,13 +2383,17 @@ int RGWHandler_ObjStore_S3::init(RGWRados *store, struct req_state *s, RGWClient
 
   s->has_acl_header = s->info.env->exists_prefix("HTTP_X_AMZ_GRANT");
 
-  s->copy_source = s->info.env->get("HTTP_X_AMZ_COPY_SOURCE");
-  if (s->copy_source) {
-    ret = RGWCopyObj::parse_copy_location(s->copy_source, s->src_bucket_name, s->src_object);
+  const char *copy_source = s->info.env->get("HTTP_X_AMZ_COPY_SOURCE");
+  if (copy_source) {
+    string src_bucket_str;
+    ret = RGWCopyObj::parse_copy_location(copy_source, src_bucket_str, s->src_object);
     if (!ret) {
       ldout(s->cct, 0) << "failed to parse copy location" << dendl;
-      return -EINVAL;
+      return -EINVAL; // XXX why not -ERR_INVALID_BUCKET_NAME or -ERR_BAD_URL?
     }
+    rgw_parse_url_bucket(src_bucket_str, s->src_tenant_name, s->src_bucket_name);
+    if (s->src_tenant_name.empty())
+      s->src_tenant_name = s->user.user_id.tenant;
   }
 
   s->dialect = "s3";
@@ -2583,7 +2650,6 @@ int RGW_Auth_S3::authorize(RGWRados *store, struct req_state *s)
   } /* if keystone_result < 0 */
 
   // populate the owner info
-  s->tenant = s->user.user_id.tenant;
   s->owner.set_id(s->user.user_id);
   s->owner.set_name(s->user.display_name);
 
@@ -2606,7 +2672,7 @@ RGWHandler *RGWRESTMgr_S3::get_handler(struct req_state *s)
   if (ret < 0)
     return NULL;
 
-  if (s->bucket_name_str.empty())
+  if (s->bucket_name.empty())
     return new RGWHandler_ObjStore_Service_S3;
 
   if (s->object.empty())

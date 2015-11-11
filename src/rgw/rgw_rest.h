@@ -304,6 +304,7 @@ protected:
   virtual RGWOp *op_copy() { return NULL; }
   virtual RGWOp *op_options() { return NULL; }
 
+  virtual int validate_tenant_name(const string& bucket);
   virtual int validate_bucket_name(const string& bucket);
   virtual int validate_object_name(const string& object);
 

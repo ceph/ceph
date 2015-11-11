@@ -29,7 +29,7 @@ struct rgw_user {
 
   void to_str(std::string& str) const {
     if (!tenant.empty()) {
-      str = tenant + ':' + id;
+      str = tenant + '$' + id;
     } else {
       str = id;
     }
@@ -51,7 +51,7 @@ struct rgw_user {
   }
 
   void from_str(const std::string& str) {
-    ssize_t pos = str.find(':');
+    ssize_t pos = str.find('$');
     if (pos >= 0) {
       tenant = str.substr(0, pos);
       id = str.substr(pos + 1);

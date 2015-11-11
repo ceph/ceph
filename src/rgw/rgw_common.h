@@ -28,6 +28,7 @@
 #include "include/types.h"
 #include "include/utime.h"
 #include "rgw_acl.h"
+#include "rgw_basic_types.h"
 #include "rgw_cors.h"
 #include "rgw_quota.h"
 #include "rgw_string.h"
@@ -35,7 +36,6 @@
 #include "cls/user/cls_user_types.h"
 #include "cls/rgw/cls_rgw_types.h"
 #include "include/rados/librados.hpp"
-#include "rgw_basic_types.h"
 
 using namespace std;
 
@@ -506,7 +506,7 @@ struct RGWUserInfo
      ::encode(bucket_quota, bl);
      ::encode(temp_url_keys, bl);
      ::encode(user_quota, bl);
-     ::encode(user_id, bl);
+     ::encode(user_id.tenant, bl);
      ENCODE_FINISH(bl);
   }
   void decode(bufferlist::iterator& bl) {
@@ -525,13 +525,11 @@ struct RGWUserInfo
     }
     ::decode(display_name, bl);
     ::decode(user_email, bl);
+    /* We populate swift_keys map later nowadays, but we have to decode. */
     string swift_name;
     string swift_key;
     if (struct_v >= 3) ::decode(swift_name, bl);
     if (struct_v >= 4) ::decode(swift_key, bl);
-    if (struct_v < 13) {
-      user_id.tenant.clear();
-    }
     if (struct_v >= 5)
       ::decode(user_id.id, bl);
     else
@@ -575,7 +573,9 @@ struct RGWUserInfo
       ::decode(user_quota, bl);
     }
     if (struct_v >= 17) {
-      ::decode(user_id, bl);
+      ::decode(user_id.tenant, bl);
+    } else {
+      user_id.tenant.clear();
     }
     DECODE_FINISH(bl);
   }
@@ -613,8 +613,8 @@ struct rgw_bucket {
     data_pool = index_pool = n;
     marker = "";
   }
-  rgw_bucket(const char *n, const char *dp, const char *ip, const char *m, const char *id, const char *h) :
-    name(n), data_pool(dp), index_pool(ip), marker(m), bucket_id(id) {}
+  rgw_bucket(const char *t, const char *n, const char *dp, const char *ip, const char *m, const char *id, const char *h) :
+    tenant(t), name(n), data_pool(dp), index_pool(ip), marker(m), bucket_id(id) {}
 
   void convert(cls_user_bucket *b) {
     b->name = name;
@@ -625,8 +625,6 @@ struct rgw_bucket {
     b->bucket_id = bucket_id;
   }
 
-  rgw_bucket(const char *t, const char *n, const char *p, const char *m, const char *id) :
-    tenant(t), name(n), pool(p), marker(m), bucket_id(id) {}
   void encode(bufferlist& bl) const {
      ENCODE_START(8, 3, bl);
     ::encode(name, bl);
@@ -815,7 +813,7 @@ struct RGWBucketInfo
      ::encode(num_shards, bl);
      ::encode(bucket_index_shard_hash_type, bl);
      ::encode(requester_pays, bl);
-     ::encode(owner, bl);
+     ::encode(owner.tenant, bl);
      ENCODE_FINISH(bl);
   }
   void decode(bufferlist::iterator& bl) {
@@ -848,7 +846,7 @@ struct RGWBucketInfo
      if (struct_v >= 12)
        ::decode(requester_pays, bl);
      if (struct_v >= 13)
-       ::decode(owner, bl);
+       ::decode(owner.tenant, bl);
      DECODE_FINISH(bl);
   }
   void dump(Formatter *f) const;
@@ -1049,9 +1047,13 @@ struct req_state {
    uint32_t perm_mask;
    utime_t header_time;
 
+   /* Set once when req_state is initialized and not violated thereafter */
+   string bucket_tenant;
+   string bucket_name;
+
    rgw_bucket bucket;
-   string bucket_name_str;
    rgw_obj_key object;
+   string src_tenant_name;
    string src_bucket_name;
    rgw_obj_key src_object;
    ACLOwner bucket_owner;
@@ -1067,7 +1069,6 @@ struct req_state {
    bool has_bad_meta;
 
    RGWUserInfo user; 
-   string tenant;
    RGWAccessControlPolicy *bucket_acl;
    RGWAccessControlPolicy *object_acl;
 
@@ -1075,7 +1076,6 @@ struct req_state {
 
    string canned_acl;
    bool has_acl_header;
-   const char *copy_source;
    const char *http_auth;
    bool local_source; /* source is local */
 

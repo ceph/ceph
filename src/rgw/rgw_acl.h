@@ -119,7 +119,7 @@ public:
   bool get_id(rgw_user& _id) {
     switch(type.get_type()) {
     case ACL_TYPE_EMAIL_USER:
-      _id = email;
+      _id = email; // implies from_str() that parses the 't:u' syntax
       return true;
     case ACL_TYPE_GROUP:
       return false;
@@ -133,9 +133,11 @@ public:
   ACLGroupTypeEnum get_group() { return group; }
 
   void encode(bufferlist& bl) const {
-    ENCODE_START(3, 3, bl);
+    ENCODE_START(4, 3, bl);
     ::encode(type, bl);
-    ::encode(id, bl);
+    string s;
+    id.to_str(s);
+    ::encode(s, bl);
     string uri;
     ::encode(uri, bl);
     ::encode(email, bl);
@@ -146,9 +148,11 @@ public:
     ENCODE_FINISH(bl);
   }
   void decode(bufferlist::iterator& bl) {
-    DECODE_START_LEGACY_COMPAT_LEN(3, 3, 3, bl);
+    DECODE_START_LEGACY_COMPAT_LEN(4, 3, 3, bl);
     ::decode(type, bl);
-    ::decode(id, bl);
+    string s;
+    ::decode(s, bl);
+    id.from_str(s);
     string uri;
     ::decode(uri, bl);
     ::decode(email, bl);
@@ -168,7 +172,7 @@ public:
 
   ACLGroupTypeEnum uri_to_group(string& uri);
   
-  void set_canon(rgw_user& _id, string& _name, int perm) {
+  void set_canon(const rgw_user& _id, string& _name, int perm) {
     type.set(ACL_TYPE_CANON_USER);
     id = _id;
     name = _name;
@@ -235,7 +239,7 @@ public:
 
   multimap<string, ACLGrant>& get_grant_map() { return grant_map; }
 
-  void create_default(rgw_user& id, string name) {
+  void create_default(const rgw_user& id, string name) {
     acl_user_map.clear();
     acl_group_map.clear();
 
@@ -273,7 +277,7 @@ public:
   }
   void dump(Formatter *f) const;
   static void generate_test_instances(list<ACLOwner*>& o);
-  void set_id(rgw_user& _id) { id = _id; }
+  void set_id(const rgw_user& _id) { id = _id; }
   void set_name(string& name) { display_name = name; }
 
   rgw_user& get_id() { return id; }
@@ -327,7 +331,7 @@ public:
     return owner;
   }
 
-  void create_default(rgw_user& id, string& name) {
+  void create_default(const rgw_user& id, string& name) {
     acl.create_default(id, name);
     owner.set_id(id);
     owner.set_name(name);
