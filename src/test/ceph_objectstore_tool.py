@@ -1619,6 +1619,9 @@ def main(argv):
     if EXP_ERRORS == 0 and RM_ERRORS == 0 and IMP_ERRORS == 0:
         print "Verify erasure coded import data"
         ERRORS += verify(DATADIR, EC_POOL, EC_NAME, db)
+        # Check replicated data/xattr/omap using rados
+        print "Verify replicated import data using rados"
+        ERRORS += verify(DATADIR, REP_POOL, REP_NAME, db)
 
     if EXP_ERRORS == 0:
         NEWPOOL = "rados-import-pool"
