@@ -1,0 +1,6 @@
+v10.0.0
+======
+
+* The rbd CLI no longer accepts the deprecated '--image-features' option
+  during create, import, and clone operations.  The '--image-feature'
+  option should be used instead.

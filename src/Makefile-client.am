@@ -58,12 +58,6 @@ if LINUX
 noinst_LTLIBRARIES += libkrbd.la
 endif # LINUX
 
-rbd_SOURCES = rbd.cc
-rbd_LDADD = $(LIBKRBD) $(LIBRBD) $(LIBRADOS) $(CEPH_GLOBAL)
-if LINUX
-bin_PROGRAMS += rbd
-endif # LINUX
-
 endif # WITH_RBD
 
 # Fuse targets
