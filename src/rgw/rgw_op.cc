@@ -2781,7 +2781,13 @@ void RGWPutACLs::execute()
   owner = existing_policy->get_owner();
 
   ret = get_params();
-  if (ret < 0)
+  if (ret < 0) {
+    s->aws4_auth_needs_complete = false;
+    return;
+  }
+
+  ret = do_aws4_auth_completion();
+  if (ret)
     return;
 
   ldout(s->cct, 15) << "read len=" << len << " data=" << (data ? data : "") << dendl;
