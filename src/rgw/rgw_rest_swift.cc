@@ -1020,23 +1020,24 @@ void RGWBulkDelete_ObjStore_SWIFT::send_response()
     dump_errno(200, resp_status);
   }
 
-  s->formatter->dump_int("Number Deleted", num_deleted);
-  s->formatter->dump_int("Number Not Found", num_unfound);
-  s->formatter->dump_string("Response Body", resp_body);
-  s->formatter->dump_string("Response Status", resp_status);
+  encode_json("Number Deleted", num_deleted, s->formatter);
+  encode_json("Number Not Found", num_unfound, s->formatter);
+  encode_json("Response Body", resp_body, s->formatter);
+  encode_json("Response Status", resp_status, s->formatter);
+
   s->formatter->open_array_section("Errors");
   for (const auto fail_desc : failures) {
     s->formatter->open_array_section("object");
 
     stringstream ss_name;
     ss_name << fail_desc.path;
-    s->formatter->dump_string("Name", ss_name.str());
+    encode_json("Name", ss_name.str(), s->formatter);
 
     rgw_err err;
     set_req_state_err(err, fail_desc.err, s->prot_flags);
     string status;
     dump_errno(err, status);
-    s->formatter->dump_string("Status", status);
+    encode_json("Status", status, s->formatter);
     s->formatter->close_section();
   }
   s->formatter->close_section();
