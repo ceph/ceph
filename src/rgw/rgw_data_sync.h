@@ -139,7 +139,7 @@ WRITE_CLASS_ENCODER(rgw_data_sync_status)
 
 class RGWAsyncRadosProcessor;
 class RGWDataSyncStatusManager;
-class RGWDataSyncCR;
+class RGWDataSyncControlCR;
 
 class RGWRemoteDataLog : public RGWCoroutinesManager {
   RGWRados *store;
@@ -151,7 +151,7 @@ class RGWRemoteDataLog : public RGWCoroutinesManager {
   RGWDataSyncStatusManager *status_manager;
 
   RWLock lock;
-  RGWDataSyncCR *data_sync_cr;
+  RGWDataSyncControlCR *data_sync_cr;
 
   bool initialized;
 
