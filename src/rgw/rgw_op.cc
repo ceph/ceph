@@ -808,8 +808,13 @@ int RGWGetObj::handle_user_manifest(const char *prefix)
   if (pos < 0)
     return -EINVAL;
 
-  string bucket_name = prefix_str.substr(0, pos);
-  string obj_prefix = prefix_str.substr(pos + 1);
+  string bucket_name_raw, bucket_name;
+  bucket_name_raw = prefix_str.substr(0, pos);
+  url_decode(bucket_name_raw, bucket_name);
+
+  string obj_prefix_raw, obj_prefix;
+  obj_prefix_raw = prefix_str.substr(pos + 1);
+  url_decode(obj_prefix_raw, obj_prefix);
 
   rgw_bucket bucket;
 
