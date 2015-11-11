@@ -45,6 +45,16 @@ int RGWMongoose::complete_request()
 {
   if (!sent_header) {
     if (!has_content_length) {
+
+      /*
+       * Status 204 should not include a content-length header
+       * RFC7230 says so
+       */
+      if (status_num == 204) {
+          header_done = true;
+          return 0;
+      }
+
       header_done = false; /* let's go back to writing the header */
 
       if (0 && data.length() == 0) {
@@ -114,7 +124,7 @@ void RGWMongoose::init_env(CephContext *cct)
       *dest = c;
     }
     *dest = '\0';
-    
+
     env.set(buf, header->value);
   }
 
@@ -150,7 +160,7 @@ int RGWMongoose::send_status(const char *status, const char *status_name)
   bl.append(header_data);
   header_data = bl;
 
-  int status_num = atoi(status);
+  status_num = atoi(status);
   mg_set_http_status(conn, status_num);
 
   return 0;
