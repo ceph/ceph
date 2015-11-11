@@ -411,7 +411,6 @@ def check_data(DATADIR, TMPFILE, OSDDIR, SPLIT_NAME):
 
 
 def set_osd_weight(CFSD_PREFIX, osd_ids, osd_path, weight):
-    print "Testing get-osdmap and set-osdmap"
     # change the weight of osd.0 to math.pi in the newest osdmap of given osd
     osdmap_file = tempfile.NamedTemporaryFile()
     cmd = (CFSD_PREFIX + "--op get-osdmap --file {osdmap_file}").format(osd=osd_path,
