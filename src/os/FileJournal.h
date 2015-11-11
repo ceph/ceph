@@ -293,7 +293,7 @@ private:
   bool aio_stop;
 
   Cond commit_cond;
-
+  bool do_fast_sync;
   int _open(bool wr, bool create=false);
   int _open_block_device();
   void _close(int fd) const;
@@ -356,6 +356,7 @@ private:
   off64_t get_top() const {
     return ROUND_UP_TO(sizeof(header), block_size);
   }
+  uint32_t percentage_empty;
 
  public:
   FileJournal(uuid_d fsid, Finisher *fin, Cond *sync_cond, const char *f, bool dio=false, bool ai=true, bool faio=false) :
@@ -388,8 +389,10 @@ private:
     write_lock("FileJournal::write_lock", false, true, false, g_ceph_context),
     write_stop(true),
     aio_stop(true),
+    do_fast_sync(false),
     write_thread(this),
-    write_finish_thread(this) {
+    write_finish_thread(this),
+    percentage_empty(100) {
 
       if (aio && !directio) {
         derr << "FileJournal::_open_any: aio not supported without directio; disabling aio" << dendl;
@@ -409,7 +412,7 @@ private:
 
   int check();
   int create();
-  int open(uint64_t fs_op_seq);
+  int open(uint64_t fs_op_seq, bool fast_sync = false, uint64_t* last_committed_j_seq = NULL);
   void close();
   int peek_fsid(uuid_d& fsid);
 
