@@ -1635,6 +1635,8 @@ void OSDMonitor::check_failures(utime_t now)
 
 bool OSDMonitor::check_failure(utime_t now, int target_osd, failure_info_t& fi)
 {
+  set<string> reporters_by_subtree;
+  string reporter_subtree_level = g_conf->mon_osd_reporter_subtree_level ;
   utime_t orig_grace(g_conf->osd_heartbeat_grace, 0);
   utime_t max_failed_since = fi.get_failed_since();
   utime_t failed_for = now - max_failed_since;
@@ -1663,6 +1665,19 @@ bool OSDMonitor::check_failure(utime_t now, int target_osd, failure_info_t& fi)
     for (map<int,failure_reporter_t>::iterator p = fi.reporters.begin();
 	 p != fi.reporters.end();
 	 ++p) {
+      //get subtree reporter
+      if (reporter_subtree_level == "osd") {
+	reporters_by_subtree.insert("osd." + to_string(p->first));
+      } else {
+	map<string, string> reporter_loc = osdmap.crush->get_full_location(p->first);
+	map<string, string>::iterator iter = reporter_loc.find(reporter_subtree_level); 
+	if (iter != reporter_loc.end()) {
+	  reporters_by_subtree.insert(iter->second);
+	} else {
+	  reporters_by_subtree.insert("UNKNOWN");
+	}
+      }
+
       const osd_xinfo_t& xi = osdmap.get_xinfo(p->first);
       utime_t elapsed = now - xi.down_stamp;
       double decay = exp((double)elapsed * decay_k);
@@ -1685,15 +1700,17 @@ bool OSDMonitor::check_failure(utime_t now, int target_osd, failure_info_t& fi)
     return true;
   }
 
+
   if (failed_for >= grace &&
-      ((int)fi.reporters.size() >= g_conf->mon_osd_min_down_reporters)) {
+      (int)reporters_by_subtree.size() >= g_conf->mon_osd_min_down_reporters) {
     dout(1) << " we have enough reporters to mark osd." << target_osd
 	    << " down" << dendl;
     pending_inc.new_state[target_osd] = CEPH_OSD_UP;
 
     mon->clog->info() << osdmap.get_inst(target_osd) << " failed ("
-		     << (int)fi.reporters.size() << " reporters after "
-		     << failed_for << " >= grace " << grace << ")\n";
+		      << (int)reporters_by_subtree.size() << " reporters from different "
+		      << reporter_subtree_level <<" after "
+		      << failed_for << " >= grace " << grace << ")\n";
     return true;
   }
   return false;
