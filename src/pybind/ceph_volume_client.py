@@ -23,7 +23,6 @@ except EnvironmentError as e:
     raise ImportError(e.__str__())
 
 
-
 class RadosError(Exception):
     """
     Something went wrong talking to Ceph with librados
@@ -116,7 +115,7 @@ class RankEvicter(threading.Thread):
     def _ready_to_evict(self):
         if self._mds_map['up'].get("mds_{0}".format(self.rank), None) != self.gid:
             log.info("Evicting {0} from {1}/{2}: rank no longer associated with gid, done.".format(
-                self._client_spec,
+                self._client_spec, self.rank, self.gid
             ))
             raise RankEvicter.GidGone()
 
@@ -273,6 +272,9 @@ class CephFSVolumeClient(object):
             volume_path.volume_id)
 
     def _get_group_path(self, group_id):
+        if group_id is None:
+            raise ValueError("group_id may not be None")
+
         return os.path.join(
             self.VOLUME_PREFIX,
             group_id
@@ -337,7 +339,7 @@ class CephFSVolumeClient(object):
         self.disconnect()
 
     def _get_pool_id(self, osd_map, pool_name):
-        # Maybe borrow the OSDMap wrapper class from calamari if more helpers like this aren needed.
+        # Maybe borrow the OSDMap wrapper class from calamari if more helpers like this aren't needed.
         for pool in osd_map['pools']:
             if pool['pool_name'] == pool_name:
                 return pool['pool']
