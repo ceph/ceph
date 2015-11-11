@@ -488,12 +488,9 @@ int RGWOp::do_aws4_auth_completion() {
   int ret;
 
   if (s->aws4_auth_needs_complete) {
-
+    ret = RGW_Auth_S3::authorize_aws4_auth_complete(store, s);
     s->aws4_auth_needs_complete = false;
 
-    /* complete aws4 auth */
-
-    ret = RGW_Auth_S3::authorize_aws4_auth_complete(store, s);
     if (ret) {
       return ret;
     }
