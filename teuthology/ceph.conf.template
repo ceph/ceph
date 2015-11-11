@@ -44,6 +44,9 @@
 
 	osd map max advance = 10
 
+	filestore ondisk finisher threads = 3
+	filestore apply finisher threads = 3
+
 [mon]
 	debug ms = 1
 	debug mon = 20
