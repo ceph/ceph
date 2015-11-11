@@ -38,10 +38,9 @@ void OpHistory::on_shutdown()
 
 void OpHistory::insert(utime_t now, TrackedOpRef op)
 {
+  Mutex::Locker history_lock(ops_history_lock);
   if (shutdown)
     return;
-
-  Mutex::Locker history_lock(ops_history_lock);
   duration.insert(make_pair(op->get_duration(), op));
   arrived.insert(make_pair(op->get_initiated(), op));
   cleanup(now);
@@ -118,8 +117,8 @@ void OpTracker::dump_ops_in_flight(Formatter *f)
 
 void OpTracker::register_inflight_op(xlist<TrackedOp*>::item *i)
 {
-  if (!tracking_enabled)
-    return;
+  // caller checks;
+  assert(tracking_enabled);
 
   uint64_t current_seq = seq.inc();
   uint32_t shard_index = current_seq % num_optracker_shards;
@@ -135,7 +134,7 @@ void OpTracker::register_inflight_op(xlist<TrackedOp*>::item *i)
 void OpTracker::unregister_inflight_op(TrackedOp *i)
 {
   // caller checks;
-  assert(tracking_enabled);
+  assert(i->is_tracked);
 
   uint32_t shard_index = i->seq % num_optracker_shards;
   ShardedTrackingData* sdata = sharded_in_flight_list[shard_index];
@@ -146,12 +145,18 @@ void OpTracker::unregister_inflight_op(TrackedOp *i)
     i->xitem.remove_myself();
   }
   i->_unregistered();
-  utime_t now = ceph_clock_now(cct);
-  history.insert(now, TrackedOpRef(i));
+
+  if (!tracking_enabled)
+    delete i;
+  else {
+    utime_t now = ceph_clock_now(cct);
+    history.insert(now, TrackedOpRef(i));
+  }
 }
 
 bool OpTracker::check_ops_in_flight(std::vector<string> &warning_vector)
 {
+  RWLock::RLocker l(lock);
   if (!tracking_enabled)
     return false;
 
@@ -260,7 +265,7 @@ void OpTracker::get_age_ms_histogram(pow2_hist_t *h)
 
 void OpTracker::mark_event(TrackedOp *op, const string &dest, utime_t time)
 {
-  if (!tracking_enabled)
+  if (!op->is_tracked)
     return;
   return _mark_event(op, dest, time);
 }
@@ -278,7 +283,7 @@ void OpTracker::_mark_event(TrackedOp *op, const string &evt,
 }
 
 void OpTracker::RemoveOnDelete::operator()(TrackedOp *op) {
-  if (!tracker->tracking_enabled) {
+  if (!op->is_tracked) {
     op->_unregistered();
     delete op;
     return;
@@ -290,7 +295,7 @@ void OpTracker::RemoveOnDelete::operator()(TrackedOp *op) {
 
 void TrackedOp::mark_event(const string &event)
 {
-  if (!tracker->tracking_enabled)
+  if (!is_tracked)
     return;
 
   utime_t now = ceph_clock_now(g_ceph_context);
