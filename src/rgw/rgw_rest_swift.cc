@@ -802,23 +802,24 @@ static void bulkdelete_respond(const unsigned num_deleted,
     dump_errno(200, resp_status);
   }
 
-  formatter.dump_int("Number Deleted", num_deleted);
-  formatter.dump_int("Number Not Found", num_unfound);
-  formatter.dump_string("Response Body", resp_body);
-  formatter.dump_string("Response Status", resp_status);
+  encode_json("Number Deleted", num_deleted, &formatter);
+  encode_json("Number Not Found", num_unfound, &formatter);
+  encode_json("Response Body", resp_body, &formatter);
+  encode_json("Response Status", resp_status, &formatter);
+
   formatter.open_array_section("Errors");
   for (const auto fail_desc : failures) {
     formatter.open_array_section("object");
 
     stringstream ss_name;
     ss_name << fail_desc.path;
-    formatter.dump_string("Name", ss_name.str());
+    encode_json("Name", ss_name.str(), &formatter);
 
     rgw_err err;
     set_req_state_err(err, fail_desc.err, prot_flags);
     string status;
     dump_errno(err, status);
-    formatter.dump_string("Status", status);
+    encode_json("Status", status, &formatter);
     formatter.close_section();
   }
   formatter.close_section();
