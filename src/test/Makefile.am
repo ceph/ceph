@@ -467,4 +467,5 @@ noinst_HEADERS += \
 	test/system/st_rados_watch.h \
 	test/system/systest_runnable.h \
 	test/system/systest_settings.h \
-	test/unit.h
+	test/unit.h \
+	test/journal/RadosTestFixture.h
