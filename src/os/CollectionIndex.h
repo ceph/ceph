@@ -192,6 +192,20 @@ protected:
       uint64_t expected_num_objs  ///< [in] expected number of objects this collection has
       ) { assert(0); return 0; }
 
+  /*
+   * Return the file descriptor for pg dir.
+   */
+  virtual int get_coll_fd() const {
+    assert(0);
+    return 0;
+  }
+
+  /*
+   * Open collection directory
+   */
+  virtual void open_coll() {
+    assert(0);
+  }
   /// Virtual destructor
   virtual ~CollectionIndex() {}
 };

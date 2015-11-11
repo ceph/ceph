@@ -28,6 +28,7 @@
 #include "common/ceph_crypto.h"
 
 #include "CollectionIndex.h"
+#include "include/compat.h"
 
 /** 
  * LFNIndex also encapsulates logic for manipulating
@@ -123,6 +124,7 @@ protected:
 private:
   string lfn_attribute, lfn_alt_attribute;
   coll_t collection;
+  int fd; //indicate the file descriptor for this coll
 
 public:
   /// Constructor
@@ -138,7 +140,7 @@ public:
       error_injection_on(_error_injection_probability != 0),
       error_injection_probability(_error_injection_probability),
       last_failure(0), current_failure(0),
-      collection(collection) {
+      collection(collection), fd(-1) {
     if (index_version == HASH_INDEX_TAG) {
       lfn_attribute = LFN_ATTR;
     } else {
@@ -152,7 +154,12 @@ public:
   coll_t coll() const { return collection; }
 
   /// Virtual destructor
-  virtual ~LFNIndex() {}
+  virtual ~LFNIndex() {
+    if (fd >= 0) {
+      VOID_TEMP_FAILURE_RETRY(::close(fd));
+      fd = -1;
+    }
+  }
 
   /// @see CollectionIndex
   int init();
@@ -212,6 +219,15 @@ public:
       );
   }
 
+  /// return the file descriptor of this coll.
+  int get_coll_fd() const {
+    return fd;
+  }
+
+  void open_coll() {
+    fd = ::open(base_path.c_str(), O_RDONLY);
+    assert(fd >= 0);
+  }
 
 protected:
   virtual int _init() = 0;
