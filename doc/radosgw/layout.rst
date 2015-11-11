@@ -34,7 +34,7 @@ $ radosgw-admin metadata list user
 
 $ radosgw-admin metadata get bucket:<bucket>
 $ radosgw-admin metadata get bucket.instance:<bucket>:<bucket_id>
-$ radosgw-admin metadata get user:<user>   # or set
+$ radosgw-admin metadata get user:<user>   # get or set
 
 user: Holds user information
 bucket: Holds a mapping between bucket name and bucket instance id
@@ -149,14 +149,30 @@ Known pools:
 
 .rgw
   <bucket>
-  .bucket.meta.<bucket>:<marker>
+  .bucket.meta.<bucket>:<marker>   # see put_bucket_instance_info()
+
+  The tenant is used to disambiguate buckets, but not bucket instances.
+  Example:
+
+  .bucket.meta.prodtx:test%25star:default.84099.6
+  .bucket.meta.testcont:default.4126.1
+  .bucket.meta.prodtx:testcont:default.84099.4
+  prodtx/testcont
+  prodtx/test%25star
+  testcont
 
 .rgw.gc
   gc.<N>
 
 .users.uid
   Contains _both_ per-user information (RGWUserInfo) in "<user>" objects
-  and per-user bucket lists in omaps of "<user>.buckets" objects.
+  and per-user lists of buckets in omaps of "<user>.buckets" objects.
+  The "<user>" may contain the tenant if non-empty, for example:
+
+  prodtx$prodt
+  test2.buckets
+  prodtx$prodt.buckets
+  test2
 
 .users.email
   Unimportant
@@ -170,9 +186,14 @@ Known pools:
 
 .rgw.buckets.index
   Objects are named ".dir.<marker>", each contains a bucket index.
+  If the index is sharded, each shard appends the shard index after
+  the marker.
 
 .rgw.buckets
   default.7593.4__shadow_.488urDFerTYXavx4yAd-Op8mxehnvTI_1
   <marker>_<key>
 
 An example of a marker would be "default.16004.1" or "default.7593.4".
+The current format is "<zone>.<instance_id>.<bucket_id>". But once
+generated, a marker is not parsed again, so its format may change
+freely in the future.

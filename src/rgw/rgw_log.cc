@@ -7,6 +7,7 @@
 #include "common/OutputDataSocket.h"
 #include "common/Formatter.h"
 
+#include "rgw_bucket.h"
 #include "rgw_log.h"
 #include "rgw_acl.h"
 #include "rgw_rados.h"
@@ -177,7 +178,7 @@ static void log_usage(struct req_state *s, const string& op_name)
 
   rgw_user user;
 
-  if (!s->bucket_name_str.empty())
+  if (!s->bucket_name.empty())
     user = s->bucket_owner.get_id();
   else
     user = s->user.user_id;
@@ -275,7 +276,7 @@ int rgw_log_op(RGWRados *store, struct req_state *s, const string& op_name, OpsL
   if (!s->enable_ops_log)
     return 0;
 
-  if (s->bucket_name_str.empty()) {
+  if (s->bucket_name.empty()) {
     ldout(s->cct, 5) << "nothing to log for operation" << dendl;
     return -EINVAL;
   }
@@ -288,9 +289,11 @@ int rgw_log_op(RGWRados *store, struct req_state *s, const string& op_name, OpsL
   } else {
     bucket_id = s->bucket.bucket_id;
   }
-  entry.bucket = s->bucket_name_str;
+  string bucket_log;
+  rgw_make_bucket_entry_name(s->bucket_tenant, s->bucket_name, bucket_log);
+  entry.bucket = bucket_log;
 
-  if (check_utf8(s->bucket_name_str.c_str(), entry.bucket.size()) != 0) {
+  if (check_utf8(s->bucket_name.c_str(), entry.bucket.size()) != 0) {
     ldout(s->cct, 5) << "not logging op on bucket with non-utf8 name" << dendl;
     return 0;
   }
