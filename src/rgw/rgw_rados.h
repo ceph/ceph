@@ -698,10 +698,10 @@ struct RGWRegion;
 struct RGWZonePlacementInfo {
   string index_pool;
   string data_pool;
-  string data_extra_pool; /* if not set we should use data_pool */
+  std::array<std::string, SC_MAX> data_extra_pool; /* if not set, then we should use data_pool instead */
 
   void encode(bufferlist& bl) const {
-    ENCODE_START(4, 1, bl);
+    ENCODE_START(5, 1, bl);
     ::encode(index_pool, bl);
     ::encode(data_pool, bl);
     ::encode(data_extra_pool, bl);
@@ -712,16 +712,18 @@ struct RGWZonePlacementInfo {
     DECODE_START(4, bl);
     ::decode(index_pool, bl);
     ::decode(data_pool, bl);
-    if (struct_v >= 4) {
+    if (struct_v >= 5) {
       ::decode(data_extra_pool, bl);
+    } else if (struct_v == 4) {
+      ::decode(data_extra_pool[SC_STANDARD], bl);
     }
     DECODE_FINISH(bl);
   }
-  const string& get_data_extra_pool() {
-    if (data_extra_pool.empty()) {
+  const string& get_data_extra_pool(rgw_storage_class sc) {
+    if (data_extra_pool[sc].empty()) {
       return data_pool;
     }
-    return data_extra_pool;
+    return data_extra_pool[sc];
   }
   void dump(Formatter *f) const;
   void decode_json(JSONObj *obj);
@@ -1211,7 +1213,7 @@ class RGWRados
   int open_bucket_pool_ctx(const string& bucket_name, const string& pool, librados::IoCtx&  io_ctx);
   int open_bucket_index_ctx(rgw_bucket& bucket, librados::IoCtx&  index_ctx);
   int open_bucket_data_ctx(rgw_bucket& bucket, librados::IoCtx&  io_ctx);
-  int open_bucket_data_extra_ctx(rgw_bucket& bucket, librados::IoCtx&  io_ctx);
+  int open_bucket_data_extra_ctx(rgw_bucket& bucket, librados::IoCtx&  io_ctx, rgw_storage_class sc);
   int open_bucket_index(rgw_bucket& bucket, librados::IoCtx&  index_ctx, string& bucket_oid);
   int open_bucket_index_base(rgw_bucket& bucket, librados::IoCtx&  index_ctx,
       string& bucket_oid_base);
@@ -1261,7 +1263,7 @@ class RGWRados
   // This field represents the number of bucket index object shards
   uint32_t bucket_index_max_shards;
 
-  int get_obj_ioctx(const rgw_obj& obj, librados::IoCtx *ioctx);
+  int get_obj_ioctx(const rgw_obj& obj, librados::IoCtx *ioctx, rgw_storage_class sc);
   int get_obj_ref(const rgw_obj& obj, rgw_rados_ref *ref, rgw_bucket *bucket, bool ref_system_obj = false);
   uint64_t max_bucket_id;
 
@@ -2456,6 +2458,7 @@ class RGWPutObjProcessor_Atomic : public RGWPutObjProcessor_Aio
 protected:
   rgw_bucket bucket;
   string obj_str;
+  rgw_storage_class storage_class;
 
   string unique_tag;
 
@@ -2478,7 +2481,7 @@ protected:
 public:
   ~RGWPutObjProcessor_Atomic() {}
   RGWPutObjProcessor_Atomic(RGWObjectCtx& obj_ctx, RGWBucketInfo& bucket_info,
-                            rgw_bucket& _b, const string& _o, uint64_t _p, const string& _t, bool versioned) :
+                            rgw_bucket& _b, const string& _o, uint64_t _p, const string& _t, bool versioned, const rgw_storage_class _sc) :
                                 RGWPutObjProcessor_Aio(obj_ctx, bucket_info),
                                 part_size(_p),
                                 cur_part_ofs(0),
@@ -2491,6 +2494,7 @@ public:
                                 olh_epoch(0),
                                 bucket(_b),
                                 obj_str(_o),
+                                storage_class(_sc),
                                 unique_tag(_t) {}
   int prepare(RGWRados *store, string *oid_rand);
   virtual bool immutable_head() { return false; }

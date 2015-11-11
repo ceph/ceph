@@ -820,6 +820,49 @@ inline void decode(std::deque<T>& ls, bufferlist::iterator& p)
   }
 }
 
+// array
+template<class T, std::size_t S>
+inline void encode(const std::array<T, S>& v, bufferlist& bl, uint64_t features)
+{
+  __u32 n = (__u32)(v.size());
+  encode(n, bl);
+  for (typename std::array<T, S>::const_iterator p = v.begin(); p != v.end(); ++p)
+    encode(*p, bl, features);
+}
+template<class T, std::size_t S>
+inline void encode(const std::array<T, S>& v, bufferlist& bl)
+{
+  __u32 n = (__u32)(v.size());
+  encode(n, bl);
+  for (typename std::array<T, S>::const_iterator p = v.begin(); p != v.end(); ++p)
+    encode(*p, bl);
+}
+template<class T, std::size_t S>
+inline void decode(std::array<T, S>& v, bufferlist::iterator& p)
+{
+  __u32 n;
+  decode(n, p);
+  if (n > S)
+    n = S;
+  for (__u32 i=0; i<n; i++) 
+    decode(v[i], p);
+}
+
+template<class T, std::size_t S>
+inline void encode_nohead(const std::array<T, S>& v, bufferlist& bl)
+{
+  for (typename std::array<T, S>::const_iterator p = v.begin(); p != v.end(); ++p)
+    encode(*p, bl);
+}
+template<class T, std::size_t S>
+inline void decode_nohead(int len, std::array<T, S>& v, bufferlist::iterator& p)
+{
+  if (len > S)
+    len = S;
+  for (__u32 i=0; i<v.size(); i++) 
+    decode(v[i], p);
+}
+
 
 /*
  * guards

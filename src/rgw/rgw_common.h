@@ -157,6 +157,13 @@ using ceph::crypto::MD5;
 #define UINT32_MAX (0xffffffffu)
 #endif
 
+enum rgw_storage_class {
+  SC_STANDARD = 0,
+  SC_REDUCED_REDUNDANCY,
+  //SC_GLACIER,
+  SC_MAX
+};
+
 typedef void *RGWAccessHandle;
 
 
@@ -589,7 +596,7 @@ WRITE_CLASS_ENCODER(RGWUserInfo)
 struct rgw_bucket {
   std::string name;
   std::string data_pool;
-  std::string data_extra_pool; /* if not set, then we should use data_pool instead */
+  std::array<std::string, SC_MAX> data_extra_pool; /* if not set, then we should use data_pool instead */
   std::string index_pool;
   std::string marker;
   std::string bucket_id;
@@ -625,7 +632,7 @@ struct rgw_bucket {
   }
 
   void encode(bufferlist& bl) const {
-     ENCODE_START(7, 3, bl);
+     ENCODE_START(8, 3, bl);
     ::encode(name, bl);
     ::encode(data_pool, bl);
     ::encode(marker, bl);
@@ -655,17 +662,19 @@ struct rgw_bucket {
     } else {
       index_pool = data_pool;
     }
-    if (struct_v >= 7) {
+    if (struct_v >= 8) {
       ::decode(data_extra_pool, bl);
+    } else if (struct_v == 7) {
+      ::decode(data_extra_pool[SC_STANDARD], bl);
     }
     DECODE_FINISH(bl);
   }
 
-  const string& get_data_extra_pool() {
-    if (data_extra_pool.empty()) {
+  const string& get_data_extra_pool(rgw_storage_class sc) {
+    if (data_extra_pool[sc].empty()) {
       return data_pool;
     }
-    return data_extra_pool;
+    return data_extra_pool[sc];
   }
 
   void dump(Formatter *f) const;
@@ -685,11 +694,13 @@ inline ostream& operator<<(ostream& out, const rgw_bucket &b) {
     string s;
     if (!b.index_pool.empty() && b.data_pool.compare(b.index_pool))
       s = "i=" + b.index_pool;
-    if (!b.data_extra_pool.empty() && b.data_pool.compare(b.data_extra_pool)) {
-      if (!s.empty()) {
-        s += ",";
+    for (int i = 0; i < SC_MAX; i++) {
+      if (!b.data_extra_pool[i].empty() && b.data_pool.compare(b.data_extra_pool[i])) {
+	if (!s.empty()) {
+	  s += ",";
+	}
+	s += "e=" + b.data_extra_pool[i];
       }
-      s += "e=" + b.data_extra_pool;
     }
     if (!s.empty()) {
       out << "{"  << s << "}";
@@ -1178,6 +1189,7 @@ public:
   const std::string& get_loc() const { return loc; }
   const std::string& get_instance() const { return instance; }
   rgw_bucket bucket;
+  rgw_storage_class storage_class;
   std::string ns;
 
   bool in_extra_data; /* in-memory only member, does not serialize */
@@ -1185,11 +1197,11 @@ public:
   // Represents the hash index source for this object once it is set (non-empty)
   std::string index_hash_source;
 
-  rgw_obj() : in_extra_data(false) {}
-  rgw_obj(rgw_bucket& b, const std::string& o) : in_extra_data(false) {
+  rgw_obj() : storage_class(SC_STANDARD), in_extra_data(false) {}
+  rgw_obj(rgw_bucket& b, const std::string& o) : storage_class(SC_STANDARD), in_extra_data(false) {
     init(b, o);
   }
-  rgw_obj(rgw_bucket& b, const rgw_obj_key& k) : in_extra_data(false) {
+  rgw_obj(rgw_bucket& b, const rgw_obj_key& k) : storage_class(SC_STANDARD), in_extra_data(false) {
     init(b, k.name);
     set_instance(k.instance);
   }
@@ -1215,6 +1227,10 @@ public:
       return -EINVAL;
     ns = n;
     set_obj(orig_obj);
+    return 0;
+  }
+  int set_storage_class(rgw_storage_class sc) {
+    storage_class = sc;
     return 0;
   }
   int set_instance(const string& i) {
@@ -1577,6 +1593,16 @@ static inline uint64_t rgw_rounded_kb(uint64_t bytes)
 static inline uint64_t rgw_rounded_objsize_kb(uint64_t bytes)
 {
   return ((bytes + 4095) & ~4095) / 1024;
+}
+
+static inline rgw_storage_class rgw_parse_sc(const char *sc)
+{
+  if (!strncmp(sc, "STANDARD", 8))
+    return SC_STANDARD;
+  else if (!strncmp(sc, "REDUCED_REDUNDANCY", 18))
+    return SC_REDUCED_REDUNDANCY;
+  else
+    return SC_STANDARD; // Treat unknown as standard
 }
 
 extern string rgw_string_unquote(const string& s);

@@ -1,5 +1,5 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// vim: ft=cpp ts=8 sw=2 smarttab
 
 #ifndef CEPH_RGW_REST_S3_H
 #define CEPH_RGW_REST_S3_H

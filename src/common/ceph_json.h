@@ -168,6 +168,25 @@ void decode_json_obj(vector<T>& l, JSONObj *obj)
   }
 }
 
+template<class T, std::size_t S>
+void decode_json_obj(array<T, S>& l, JSONObj *obj)
+{
+  JSONObjIter iter = obj->find_first();
+  auto liter = l.begin();
+
+  for (; !iter.end() && liter != l.end(); ++iter) {
+    T val;
+    JSONObj *o = *iter;
+    decode_json_obj(val, o);
+	*liter = val;
+	++liter;
+  }
+
+  for (; liter != l.end(); ++liter) {
+	  *liter = T();
+  }
+}
+
 template<class K, class V>
 void decode_json_obj(map<K, V>& m, JSONObj *obj)
 {
@@ -346,6 +365,16 @@ static void encode_json(const char *name, const std::vector<T>& l, ceph::Formatt
 {
   f->open_array_section(name);
   for (typename std::vector<T>::const_iterator iter = l.begin(); iter != l.end(); ++iter) {
+    encode_json("obj", *iter, f);
+  }
+  f->close_section();
+}
+
+template<class T, std::size_t S>
+static void encode_json(const char *name, const std::array<T, S>& l, ceph::Formatter *f)
+{
+  f->open_array_section(name);
+  for (typename std::array<T, S>::const_iterator iter = l.begin(); iter != l.end(); ++iter) {
     encode_json("obj", *iter, f);
   }
   f->close_section();

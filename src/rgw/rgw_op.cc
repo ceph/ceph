@@ -1591,8 +1591,8 @@ protected:
 
 public:
   bool immutable_head() { return true; }
-  RGWPutObjProcessor_Multipart(RGWObjectCtx& obj_ctx, RGWBucketInfo& bucket_info, uint64_t _p, req_state *_s) :
-                   RGWPutObjProcessor_Atomic(obj_ctx, bucket_info, _s->bucket, _s->object.name, _p, _s->req_id, false), s(_s) {}
+  RGWPutObjProcessor_Multipart(RGWObjectCtx& obj_ctx, RGWBucketInfo& bucket_info, uint64_t _p, req_state *_s, rgw_storage_class _sc) :
+                   RGWPutObjProcessor_Atomic(obj_ctx, bucket_info, _s->bucket, _s->object.name, _p, _s->req_id, false, _sc), s(_s) {}
 };
 
 int RGWPutObjProcessor_Multipart::prepare(RGWRados *store, string *oid_rand)
@@ -1721,13 +1721,19 @@ RGWPutObjProcessor *RGWPutObj::select_processor(RGWObjectCtx& obj_ctx, bool *is_
   bool multipart = s->info.args.exists("uploadId");
 
   uint64_t part_size = s->cct->_conf->rgw_obj_stripe_size;
+  rgw_storage_class sc = SC_STANDARD;
+
+  const char *_sc = s->info.env->get("x-amz-storage-class");
+  if (_sc) {
+    sc = rgw_parse_sc(_sc);
+  }
 
   if (!multipart) {
-    processor = new RGWPutObjProcessor_Atomic(obj_ctx, s->bucket_info, s->bucket, s->object.name, part_size, s->req_id, s->bucket_info.versioning_enabled());
+    processor = new RGWPutObjProcessor_Atomic(obj_ctx, s->bucket_info, s->bucket, s->object.name, part_size, s->req_id, s->bucket_info.versioning_enabled(), sc);
     (static_cast<RGWPutObjProcessor_Atomic *>(processor))->set_olh_epoch(olh_epoch);
     (static_cast<RGWPutObjProcessor_Atomic *>(processor))->set_version_id(version_id);
   } else {
-    processor = new RGWPutObjProcessor_Multipart(obj_ctx, s->bucket_info, part_size, s);
+    processor = new RGWPutObjProcessor_Multipart(obj_ctx, s->bucket_info, part_size, s, sc);
   }
 
   if (is_multipart) {
@@ -2030,8 +2036,14 @@ RGWPutObjProcessor *RGWPostObj::select_processor(RGWObjectCtx& obj_ctx)
   RGWPutObjProcessor *processor;
 
   uint64_t part_size = s->cct->_conf->rgw_obj_stripe_size;
+  rgw_storage_class sc = SC_STANDARD;
 
-  processor = new RGWPutObjProcessor_Atomic(obj_ctx, s->bucket_info, s->bucket, s->object.name, part_size, s->req_id, s->bucket_info.versioning_enabled());
+  const char *_sc = s->info.env->get("x-amz-storage-class");
+  if (_sc) {
+    sc = rgw_parse_sc(_sc);
+  }
+
+  processor = new RGWPutObjProcessor_Atomic(obj_ctx, s->bucket_info, s->bucket, s->object.name, part_size, s->req_id, s->bucket_info.versioning_enabled(), sc);
 
   return processor;
 }

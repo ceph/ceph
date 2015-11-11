@@ -328,7 +328,7 @@ void RGWZoneParams::init_default(RGWRados *store)
     RGWZonePlacementInfo default_placement;
     default_placement.index_pool = ".rgw.buckets.index";
     default_placement.data_pool = ".rgw.buckets";
-    default_placement.data_extra_pool = ".rgw.buckets.extra";
+    default_placement.data_extra_pool[SC_STANDARD] = ".rgw.buckets.extra";
     placement_pools["default-placement"] = default_placement;
   }
 }
@@ -1887,9 +1887,9 @@ int RGWRados::open_bucket_data_ctx(rgw_bucket& bucket, librados::IoCtx& data_ctx
   return 0;
 }
 
-int RGWRados::open_bucket_data_extra_ctx(rgw_bucket& bucket, librados::IoCtx& data_ctx)
+int RGWRados::open_bucket_data_extra_ctx(rgw_bucket& bucket, librados::IoCtx& data_ctx, rgw_storage_class sc)
 {
-  string& pool = (!bucket.data_extra_pool.empty() ? bucket.data_extra_pool : bucket.data_pool);
+  string& pool = (!bucket.data_extra_pool[sc].empty() ? bucket.data_extra_pool[sc] : bucket.data_pool);
   int r = open_bucket_pool_ctx(bucket.name, pool, data_ctx);
   if (r < 0)
     return r;
@@ -3161,7 +3161,7 @@ int RGWRados::create_pools(vector<string>& names, vector<int>& retcodes)
 }
 
 
-int RGWRados::get_obj_ioctx(const rgw_obj& obj, librados::IoCtx *ioctx)
+int RGWRados::get_obj_ioctx(const rgw_obj& obj, librados::IoCtx *ioctx, rgw_storage_class sc)
 {
   rgw_bucket bucket;
   string oid, key;
@@ -3172,7 +3172,7 @@ int RGWRados::get_obj_ioctx(const rgw_obj& obj, librados::IoCtx *ioctx)
   if (!obj.is_in_extra_data()) {
     r = open_bucket_data_ctx(bucket, *ioctx);
   } else {
-    r = open_bucket_data_extra_ctx(bucket, *ioctx);
+    r = open_bucket_data_extra_ctx(bucket, *ioctx, sc);
   }
   if (r < 0)
     return r;
@@ -3196,7 +3196,7 @@ int RGWRados::get_obj_ref(const rgw_obj& obj, rgw_rados_ref *ref, rgw_bucket *bu
   } else if (!obj.is_in_extra_data()) {
     r = open_bucket_data_ctx(*bucket, ref->ioctx);
   } else {
-    r = open_bucket_data_extra_ctx(*bucket, ref->ioctx);
+    r = open_bucket_data_extra_ctx(*bucket, ref->ioctx, obj.storage_class);
   }
   if (r < 0)
     return r;
@@ -3226,7 +3226,7 @@ int RGWRados::fix_head_obj_locator(rgw_bucket& bucket, bool copy_obj, bool remov
 
   librados::IoCtx ioctx;
 
-  int ret = get_obj_ioctx(obj, &ioctx);
+  int ret = get_obj_ioctx(obj, &ioctx, obj.storage_class);
   if (ret < 0) {
     cerr << "ERROR: get_obj_ioctx() returned ret=" << ret << std::endl;
     return ret;
@@ -3963,7 +3963,8 @@ int RGWRados::fetch_remote_obj(RGWObjectCtx& obj_ctx,
 
   RGWPutObjProcessor_Atomic processor(obj_ctx,
                                       dest_bucket_info, dest_obj.bucket, dest_obj.get_object(),
-                                      cct->_conf->rgw_obj_stripe_size, tag, dest_bucket_info.versioning_enabled());
+                                      cct->_conf->rgw_obj_stripe_size, tag, dest_bucket_info.versioning_enabled(),
+				      src_obj.storage_class);
   int ret = processor.prepare(this, NULL);
   if (ret < 0) {
     return ret;
@@ -4405,7 +4406,8 @@ int RGWRados::copy_obj_data(RGWObjectCtx& obj_ctx,
 
   RGWPutObjProcessor_Atomic processor(obj_ctx,
                                       dest_bucket_info, dest_obj.bucket, dest_obj.get_object(),
-                                      cct->_conf->rgw_obj_stripe_size, tag, dest_bucket_info.versioning_enabled());
+                                      cct->_conf->rgw_obj_stripe_size, tag, dest_bucket_info.versioning_enabled(),
+				      src_obj.storage_class);
   if (version_id) {
     processor.set_version_id(*version_id);
   }
@@ -5255,7 +5257,7 @@ int RGWRados::Object::Stat::stat_async()
   rgw_bucket bucket;
   get_obj_bucket_and_oid_loc(obj, bucket, oid, loc);
 
-  int r = store->get_obj_ioctx(obj, &state.io_ctx);
+  int r = store->get_obj_ioctx(obj, &state.io_ctx, obj.storage_class);
   if (r < 0) {
     return r;
   }
@@ -5641,7 +5643,7 @@ int RGWRados::Object::Read::prepare(int64_t *pofs, int64_t *pend)
 
   state.obj = astate->obj;
 
-  r = store->get_obj_ioctx(state.obj, &state.io_ctx);
+  r = store->get_obj_ioctx(state.obj, &state.io_ctx, state.obj.storage_class);
   if (r < 0) {
     return r;
   }
@@ -5975,7 +5977,7 @@ int RGWRados::Object::Read::read(int64_t ofs, int64_t end, bufferlist& bl)
 int RGWRados::SystemObject::Read::GetObjState::get_ioctx(RGWRados *store, rgw_obj& obj, librados::IoCtx **ioctx)
 {
   if (!has_ioctx) {
-    int r = store->get_obj_ioctx(obj, &io_ctx);
+    int r = store->get_obj_ioctx(obj, &io_ctx, obj.storage_class);
     if (r < 0) {
       return r;
     }

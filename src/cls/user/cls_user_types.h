@@ -8,6 +8,13 @@
 #include "include/types.h"
 #include "include/utime.h"
 
+enum cls_storage_class {
+  CSC_STANDARD = 0,
+  CSC_REDUCED_REDUNDANCY,
+  //CSC_GLACIER,
+  CSC_MAX
+};
+
 /*
  * this needs to be compatible with with rgw_bucket, as it replaces it
  */
@@ -17,10 +24,10 @@ struct cls_user_bucket {
   std::string index_pool;
   std::string marker;
   std::string bucket_id;
-  std::string data_extra_pool;
+  std::array<std::string, CSC_MAX> data_extra_pool; /* if not set, then we should use data_pool instead */
 
   void encode(bufferlist& bl) const {
-     ENCODE_START(7, 3, bl);
+     ENCODE_START(8, 3, bl);
     ::encode(name, bl);
     ::encode(data_pool, bl);
     ::encode(marker, bl);
@@ -50,8 +57,10 @@ struct cls_user_bucket {
     } else {
       index_pool = data_pool;
     }
-    if (struct_v >= 7) {
+    if (struct_v >= 8) {
       ::decode(data_extra_pool, bl);
+    } else if (struct_v == 7) {
+      ::decode(data_extra_pool[CSC_STANDARD], bl);
     }
     DECODE_FINISH(bl);
   }
