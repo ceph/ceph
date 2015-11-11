@@ -38,7 +38,7 @@ log = logging.getLogger(__name__)
 
 
 # Reserved volume group name which we use in paths for volumes
-# that
+# that are not assigned to a group (i.e. created with group=None)
 NO_GROUP_NAME = "_nogroup"
 
 
