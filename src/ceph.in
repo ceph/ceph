@@ -19,6 +19,7 @@ License version 2, as published by the Free Software
 Foundation.  See file COPYING.
 """
 
+import codecs
 import os
 import sys
 import platform
@@ -108,6 +109,12 @@ from ceph_daemon import DaemonWatcher, admin_socket
 
 verbose = False
 cluster_handle = None
+
+# Always use Unicode (UTF-8) for stdout
+raw_stdout = sys.__stdout__
+raw_stderr = sys.__stderr__
+sys.stdout = codecs.getwriter('utf-8')(raw_stdout)
+sys.stderr = codecs.getwriter('utf-8')(raw_stderr)
 
 ############################################################################
 
@@ -887,6 +894,8 @@ def main():
             if outs:
                 print >> sys.stderr, prefix + outs
 
+        sys.stdout.flush()
+
         if (parsed_args.output_file):
             outf.write(outbuf)
         else:
@@ -897,13 +906,16 @@ def main():
             if parsed_args.output_format and \
                parsed_args.output_format.startswith('json') and \
                not compat:
-                sys.stdout.write('\n')
+                raw_stdout.write('\n')
 
             # if we are prettifying things, normalize newlines.  sigh.
             if suffix != '':
                 outbuf = outbuf.rstrip()
             if outbuf != '':
-                sys.stdout.write(prefix + outbuf + suffix)
+                # Write directly to binary stdout
+                raw_stdout.write(prefix)
+                raw_stdout.write(outbuf)
+                raw_stdout.write(suffix)
 
         sys.stdout.flush()
 
