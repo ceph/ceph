@@ -59,7 +59,7 @@ public:
   assume_role_response(uuid_d &id) {
     request_id = id;
   }
-  void dump(Formatter *f);
+  void dump(Formatter *f) const;
 };
 
 #if 0

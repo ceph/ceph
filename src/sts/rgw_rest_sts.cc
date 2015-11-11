@@ -3,6 +3,7 @@
 
 #include <errno.h>
 #include <string.h>
+#include <boost/function.hpp>
 
 #include "common/ceph_crypto.h"
 #include "common/Formatter.h"
@@ -38,7 +39,7 @@ void encode_base64_thing(string s, bufferlist &out)
   out.append(temp, olen);
 }
 
-void assume_role_response::dump(Formatter *f)
+void assume_role_response::dump(Formatter *f) const
 {
   bufferlist encoded_token;
   bufferlist encoded_key;
@@ -473,10 +474,16 @@ int RGWPostObj_STS::get_policy()
 class RGWGetPost_STS : public RGWOp {
 protected:
   bool get_flag;
+  int ret;
+  const char *why;
+  boost::function<void()> dump_results;
 public:
-  RGWGetPost_STS(bool _gf) : get_flag(_gf) {}
+  RGWGetPost_STS(bool _gf) : get_flag(_gf), ret(0), why(0) {}
   virtual int verify_permission();
   virtual void execute();
+  virtual void send_response();
+
+  virtual int get_params();
   virtual const string name() { return get_flag ? "get_sts" : "post_sts"; }
 };
 
@@ -532,18 +539,63 @@ void make_fake_response(assume_role_response &response)
 //  response.request_id.generate_random();
 }
 
+int RGWGetPost_STS::get_params()
+{
+  /* get: all got done in init_from_header */
+  if (get_flag) return 0;
+
+  if (s->info.args.get_str().length() > 0) {
+    /* post w/ params in url.  this can't be good */
+    return -ERR_MALFORMED_INPUT;
+  }
+#define GET_PARAMS_MAX_SIZE 65536
+  char *data;
+  int len = 0;
+  int r = rgw_rest_read_all_input(s, &data, &len, GET_PARAMS_MAX_SIZE);
+  if (r < 0) {
+    return r;
+  }
+  s->info.args.set(*new string(data, len));
+  s->info.args.parse();
+  return 0;
+}
+
 void RGWGetPost_STS::execute()
 {
+  // for POST, read in data
+  ret = get_params();
+  if (ret < 0) {
+// XXX client?
+    why = "parsing parameters";
+    return;
+  }
   assume_role_response response(dynamic_cast<sts_err*>(s->err)->request_id);
 //  int ret = 0;
 //  ret = ERR_INVALID_ACTION;
-  s->formatter = new XMLFormatter(true);
 //  tsErrorResponse err(Unknown, InvalidAction, "Why I don't know"); MAKE RESPONSE
+
+map<string,string> val_map = s->info.args.get_params();
+stringstream ss;
+ss << "params:";
+for (map<string,string>::iterator iter = val_map.begin(); iter != val_map.end(); ++iter) {
+ss << " " << iter->first << "=" << iter->second;
+}
+dout(1) << ss.str() << dendl;
+
   make_fake_response(response);
+  dump_results = boost::function<void()>([this,response]{response.dump(s->formatter);});
 //  s->set_req_state_err(ret, "Why I don't know");
+}
+
+void RGWGetPost_STS::send_response()
+{
+  s->formatter = new XMLFormatter(true);
+  if (ret < 0)
+    s->set_req_state_err(ret);
   dump_errno(s);
-  end_header(s, dump_access_control_f(), "application/xml");
-  response.dump(s->formatter);
+  end_header(s, 0, "application/xml");
+  if (ret) return;
+  dump_results();
   rgw_flush_formatter_and_reset(s, s->formatter);
 }
 
@@ -591,6 +643,7 @@ int RGWHandler_STS::init_from_header(struct req_state *s, int default_formatter,
   const char *req_name = s->relative_uri.c_str();
   const char *p;
 
+  /* NB: for a post this should be empty - will pick up params in execute */
   if (*req_name == '?') {
     p = req_name;
   } else {
