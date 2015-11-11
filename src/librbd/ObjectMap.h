@@ -131,7 +131,7 @@ private:
 
   bool m_enabled;
 
-  void invalidate();
+  void invalidate(bool force);
 
 };
 
