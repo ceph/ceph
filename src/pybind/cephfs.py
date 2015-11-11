@@ -200,6 +200,9 @@ class LibCephFS(object):
 
         self.state = "uninitialized"
         if rados_inst is not None:
+            if auth_id is not None or conffile is not None or conf is not None:
+                raise InvalidValue("May not pass RADOS instance as well as other configuration")
+
             return self.create_with_rados(rados_inst)
         else:
             return self.create(conf, conffile, auth_id)
