@@ -40,10 +40,26 @@ fi
 
 usage_exit() {
     echo "usage: $0 [options] {start|stop|restart|condrestart} [mon|osd|mds]..."
-    printf "\t-c ceph.conf\n"
-    printf "\t--cluster [cluster name]\tdefine the cluster name\n"
-    printf "\t--valgrind\trun via valgrind\n"
-    printf "\t--hostname [hostname]\toverride hostname lookup\n"
+    printf "Core options:\n"
+    printf "\t--allhosts / -a           execute (via ssh) on all hosts in conf file\n"
+    printf "\t--cluster [cluster name]  define the cluster name\n"
+    printf "\t--conf / -c [conf file]   use [conf file] instead of default\n"
+    printf "\t--help / -h               show this usage message\n"
+    printf "\t--hostname [hostname]     override hostname lookup\n"
+    printf "\t-m [mon addr]             mon address\n"
+    printf "\n"
+    printf "Other options:\n"
+    printf "\t--btrfs                   btrfs\n"
+    printf "\t--nobtrfs                 no btrfs\n"
+    printf "\t--btrfsumount             btrfs umount\n"
+    printf "\t--fsmount                 fsmount\n"
+    printf "\t--nofsmount               no fsmount\n"
+    printf "\t--fsumount                fsumount\n"
+    printf "\t--restart                 restart on core dump\n"
+    printf "\t--norestart               do not restart on core dump\n"
+    printf "\t--valgrind                run via valgrind\n"
+    printf "\t--novalgrind              do not run via valgrind\n"
+    printf "\t--verbose / -v            be verbose\n"
     exit
 }
 
@@ -109,11 +125,17 @@ stop_daemon() {
 ## command line options
 options=
 
-version=0
+OPTS=$(getopt -n 'init-ceph' -o 'hvam:c:' -l 'help,verbose,valgrind,novalgrind,allhosts,restart,norestart,btrfs,nobtrfs,fsmount,nofsmount,btrfsumount,fsumount,conf:,cluster:,hostname:' -- "$@")
+if [ $? != 0 ]
+then
+    exit 1
+fi
+
+eval set -- "$OPTS"
+
 dovalgrind=
 docrun=
 allhosts=0
-debug=0
 monaddr=
 dofsmount=1
 dofsumount=0
@@ -141,6 +163,9 @@ case $1 in
     --norestart)
 	    docrun=0
 	    ;;
+    -h | --help)
+            usage_exit
+            ;;
     -m )
 	    [ -z "$2" ] && usage_exit
 	    options="$options $1"
@@ -175,6 +200,10 @@ case $1 in
 	    shift
 	    hostname=$1
             ;;
+    -- )
+            shift
+            break
+            ;;
     *)
 	    echo unrecognized option \'$1\'
 	    usage_exit
@@ -183,7 +212,6 @@ esac
 options="$options $1"
 shift
 done
-
 
 # if `--cluster` was not passed in, fallback to looking at the config name
 if [ -z "$cluster" ]; then
