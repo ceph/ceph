@@ -316,7 +316,7 @@ class MountDaemon(object):
         Return PID as an integer or None if not found
         """
         ps_txt = self.controller.run(
-            args=["ps", "ua", "-C", "ceph-fuse"],
+            args=["ps", "uaww", "-C", "ceph-fuse"],
             check_status=False  # ps returns err if nothing running so ignore
         ).stdout.getvalue().strip()
         lines = ps_txt.split("\n")[1:]
