@@ -3318,20 +3318,27 @@ bool PG::sched_scrub()
 
 void PG::reg_next_scrub()
 {
+  if (!is_primary())
+    return;
+
+  utime_t reg_stamp;
   if (scrubber.must_scrub ||
       (info.stats.stats_invalid && g_conf->osd_scrub_invalid_stats)) {
-    scrubber.scrub_reg_stamp = utime_t();
+    reg_stamp = ceph_clock_now(cct);
   } else {
-    scrubber.scrub_reg_stamp = info.history.last_scrub_stamp;
+    reg_stamp = info.history.last_scrub_stamp;
   }
-  if (is_primary())
-    osd->reg_last_pg_scrub(info.pgid, scrubber.scrub_reg_stamp);
+  // note down the sched_time, so we can locate this scrub, and remove it
+  // later on.
+  scrubber.scrub_reg_stamp = osd->reg_pg_scrub(info.pgid,
+					       reg_stamp,
+					       scrubber.must_scrub);
 }
 
 void PG::unreg_next_scrub()
 {
   if (is_primary())
-    osd->unreg_last_pg_scrub(info.pgid, scrubber.scrub_reg_stamp);
+    osd->unreg_pg_scrub(info.pgid, scrubber.scrub_reg_stamp);
 }
 
 void PG::sub_op_scrub_map(OpRequestRef op)

@@ -926,6 +926,7 @@ void pg_pool_t::dump(Formatter *f) const
   f->close_section(); // hit_set_params
   f->dump_unsigned("hit_set_period", hit_set_period);
   f->dump_unsigned("hit_set_count", hit_set_count);
+  f->dump_bool("use_gmt_hitset", use_gmt_hitset);
   f->dump_unsigned("min_read_recency_for_promote", min_read_recency_for_promote);
   f->dump_unsigned("stripe_width", get_stripe_width());
   f->dump_unsigned("expected_num_objects", expected_num_objects);
@@ -1238,7 +1239,7 @@ void pg_pool_t::encode(bufferlist& bl, uint64_t features) const
     return;
   }
 
-  ENCODE_START(17, 5, bl);
+  ENCODE_START(21, 5, bl);
   ::encode(type, bl);
   ::encode(size, bl);
   ::encode(crush_ruleset, bl);
@@ -1280,12 +1281,15 @@ void pg_pool_t::encode(bufferlist& bl, uint64_t features) const
   ::encode(last_force_op_resend, bl);
   ::encode(min_read_recency_for_promote, bl);
   ::encode(expected_num_objects, bl);
+  ::encode(uint32_t(.6 * 1e6), bl);
+  ::encode(uint32_t(1), bl);
+  ::encode(use_gmt_hitset, bl);
   ENCODE_FINISH(bl);
 }
 
 void pg_pool_t::decode(bufferlist::iterator& bl)
 {
-  DECODE_START_LEGACY_COMPAT_LEN(17, 5, 5, bl);
+  DECODE_START_LEGACY_COMPAT_LEN(21, 5, 5, bl);
   ::decode(type, bl);
   ::decode(size, bl);
   ::decode(crush_ruleset, bl);
@@ -1396,6 +1400,19 @@ void pg_pool_t::decode(bufferlist::iterator& bl)
     ::decode(expected_num_objects, bl);
   } else {
     expected_num_objects = 0;
+  }
+  if (struct_v >= 19) {
+    uint32_t dummy;	    
+    ::decode(dummy, bl);
+  }
+  if (struct_v >= 20) {
+    uint32_t dummy;
+    ::decode(dummy, bl);
+  }
+  if (struct_v >= 21) {
+    ::decode(use_gmt_hitset, bl);
+  } else {
+    use_gmt_hitset = false;
   }
   DECODE_FINISH(bl);
   calc_pg_masks();
@@ -3789,19 +3806,25 @@ void pg_create_t::generate_test_instances(list<pg_create_t*>& o)
 
 void pg_hit_set_info_t::encode(bufferlist& bl) const
 {
-  ENCODE_START(1, 1, bl);
+  ENCODE_START(2, 1, bl);
   ::encode(begin, bl);
   ::encode(end, bl);
   ::encode(version, bl);
+  ::encode(using_gmt, bl);
   ENCODE_FINISH(bl);
 }
 
 void pg_hit_set_info_t::decode(bufferlist::iterator& p)
 {
-  DECODE_START(1, p);
+  DECODE_START(2, p);
   ::decode(begin, p);
   ::decode(end, p);
   ::decode(version, p);
+  if (struct_v >= 2) {
+    ::decode(using_gmt, p);
+  } else {
+    using_gmt = false;
+  }
   DECODE_FINISH(p);
 }
 
@@ -3810,6 +3833,7 @@ void pg_hit_set_info_t::dump(Formatter *f) const
   f->dump_stream("begin") << begin;
   f->dump_stream("end") << end;
   f->dump_stream("version") << version;
+  f->dump_stream("using_gmt") << using_gmt;
 }
 
 void pg_hit_set_info_t::generate_test_instances(list<pg_hit_set_info_t*>& ls)
