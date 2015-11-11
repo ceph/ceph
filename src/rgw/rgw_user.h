@@ -112,7 +112,7 @@ extern int rgw_get_user_info_by_access_key(RGWRados *store, string& access_key, 
  * Returns: 0 on success, -ERR# on failure.
  */
 extern int rgw_get_user_attrs_by_uid(RGWRados *store,
-                                     const string& user_id,
+                                     const rgw_user& user_id,
                                      map<string, bufferlist>& attrs,
                                      RGWObjVersionTracker *objv_tracker = NULL);
 /**
@@ -269,7 +269,7 @@ struct RGWUserAdminOpState {
     size_t pos = _subuser.find(":");
 
     if (pos != string::npos) {
-      user_id = _subuser.substr(0, pos);
+      user_id.id = _subuser.substr(0, pos);
       subuser = _subuser.substr(pos+1);
     } else {
       subuser = _subuser;
@@ -411,10 +411,10 @@ struct RGWUserAdminOpState {
   RGWUserCaps *get_caps_obj() { return &info.caps; }
 
   std::string build_default_swift_kid() {
-    if (user_id.id.empty() || subuser.empty())
+    if (user_id.empty() || subuser.empty())
       return "";
 
-    string kid;
+    std::string kid;
     user_id.to_str(kid);
     kid.append(":");
     kid.append(subuser);
@@ -423,7 +423,7 @@ struct RGWUserAdminOpState {
   }
 
   std::string generate_subuser() {
-    if (user_id.id.empty())
+    if (user_id.empty())
       return "";
 
     std::string generated_subuser;

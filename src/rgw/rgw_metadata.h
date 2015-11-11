@@ -108,6 +108,17 @@ protected:
     }
     return true;
   }
+
+  /*
+   * The tenant_name is always returned on purpose. May be empty, of course.
+   */
+  static void parse_bucket(const string &bucket,
+                           string &tenant_name, string &bucket_name)
+  {
+    int pos = bucket.find('/');
+    tenant_name = bucket.substr(0, pos);
+    bucket_name = bucket.substr(pos + 1);
+  }
 };
 
 #define META_LOG_OBJ_PREFIX "meta.log."
