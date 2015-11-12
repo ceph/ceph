@@ -235,8 +235,6 @@ namespace librbd {
 						callback_t cb_complete);
 
   // raw callbacks
-  void rados_req_cb(rados_completion_t cb, void *arg);
-  void rados_ctx_cb(rados_completion_t cb, void *arg);
   void rbd_req_cb(completion_t cb, void *arg);
   void rbd_ctx_cb(completion_t cb, void *arg);
 }

@@ -42,6 +42,7 @@
 #include "librbd/operation/SnapshotRollbackRequest.h"
 #include "librbd/operation/SnapshotUnprotectRequest.h"
 #include "librbd/operation/TrimRequest.h"
+#include "librbd/Utils.h"
 #include "include/util.h"
 
 #include <boost/bind.hpp>
@@ -3501,18 +3502,6 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
                         whole_object, cb, arg);
     r = command.execute();
     return r;
-  }
-
-  void rados_req_cb(rados_completion_t c, void *arg)
-  {
-    AioObjectRequest *req = reinterpret_cast<AioObjectRequest *>(arg);
-    req->complete(rados_aio_get_return_value(c));
-  }
-
-  void rados_ctx_cb(rados_completion_t c, void *arg)
-  {
-    Context *comp = reinterpret_cast<Context *>(arg);
-    comp->complete(rados_aio_get_return_value(c));
   }
 
   // validate extent against image size; clip to image size if necessary
