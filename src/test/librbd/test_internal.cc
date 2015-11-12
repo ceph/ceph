@@ -672,3 +672,70 @@ TEST_F(TestInternal, ShrinkFlushesCache) {
   ASSERT_EQ(0, cond_ctx.wait());
   c->put();
 }
+
+TEST_F(TestInternal, ImageOptions) {
+  rbd_image_options_t opts1 = NULL, opts2 = NULL;
+  uint64_t uint64_val1 = 10, uint64_val2 = 0;
+  std::string string_val1;
+
+  librbd::image_options_create(&opts1);
+  ASSERT_NE((rbd_image_options_t)NULL, opts1);
+  ASSERT_TRUE(librbd::image_options_is_empty(opts1));
+
+  ASSERT_EQ(-EINVAL, librbd::image_options_get(opts1, RBD_IMAGE_OPTION_FEATURES,
+	  &string_val1));
+  ASSERT_EQ(-ENOENT, librbd::image_options_get(opts1, RBD_IMAGE_OPTION_FEATURES,
+	  &uint64_val1));
+
+  ASSERT_EQ(-EINVAL, librbd::image_options_set(opts1, RBD_IMAGE_OPTION_FEATURES,
+	  string_val1));
+
+  ASSERT_EQ(0, librbd::image_options_set(opts1, RBD_IMAGE_OPTION_FEATURES,
+	  uint64_val1));
+  ASSERT_FALSE(librbd::image_options_is_empty(opts1));
+  ASSERT_EQ(0, librbd::image_options_get(opts1, RBD_IMAGE_OPTION_FEATURES,
+	  &uint64_val2));
+  ASSERT_EQ(uint64_val1, uint64_val2);
+
+  librbd::image_options_create_ref(&opts2, opts1);
+  ASSERT_NE((rbd_image_options_t)NULL, opts2);
+  ASSERT_FALSE(librbd::image_options_is_empty(opts2));
+
+  uint64_val2 = 0;
+  ASSERT_NE(uint64_val1, uint64_val2);
+  ASSERT_EQ(0, librbd::image_options_get(opts2, RBD_IMAGE_OPTION_FEATURES,
+	  &uint64_val2));
+  ASSERT_EQ(uint64_val1, uint64_val2);
+
+  uint64_val2++;
+  ASSERT_NE(uint64_val1, uint64_val2);
+  ASSERT_EQ(-ENOENT, librbd::image_options_get(opts1, RBD_IMAGE_OPTION_ORDER,
+	  &uint64_val1));
+  ASSERT_EQ(-ENOENT, librbd::image_options_get(opts2, RBD_IMAGE_OPTION_ORDER,
+	  &uint64_val2));
+  ASSERT_EQ(0, librbd::image_options_set(opts2, RBD_IMAGE_OPTION_ORDER,
+	  uint64_val2));
+  ASSERT_EQ(0, librbd::image_options_get(opts1, RBD_IMAGE_OPTION_ORDER,
+	  &uint64_val1));
+  ASSERT_EQ(0, librbd::image_options_get(opts2, RBD_IMAGE_OPTION_ORDER,
+	  &uint64_val2));
+  ASSERT_EQ(uint64_val1, uint64_val2);
+
+  librbd::image_options_destroy(opts1);
+
+  uint64_val2++;
+  ASSERT_NE(uint64_val1, uint64_val2);
+  ASSERT_EQ(0, librbd::image_options_get(opts2, RBD_IMAGE_OPTION_ORDER,
+	  &uint64_val2));
+  ASSERT_EQ(uint64_val1, uint64_val2);
+
+  ASSERT_EQ(0, librbd::image_options_unset(opts2, RBD_IMAGE_OPTION_ORDER));
+  ASSERT_EQ(-ENOENT, librbd::image_options_unset(opts2, RBD_IMAGE_OPTION_ORDER));
+
+  librbd::image_options_clear(opts2);
+  ASSERT_EQ(-ENOENT, librbd::image_options_get(opts2, RBD_IMAGE_OPTION_FEATURES,
+	  &uint64_val2));
+  ASSERT_TRUE(librbd::image_options_is_empty(opts2));
+
+  librbd::image_options_destroy(opts2);
+}
