@@ -581,7 +581,7 @@ class Image(object):
             'obj_size'          : info.obj_size,
             'num_objs'          : info.num_objs,
             'order'             : info.order,
-            'block_name_prefix' : info.block_name_prefix,
+            'block_name_prefix' : decode_cstr(info.block_name_prefix),
             'parent_pool'       : info.parent_pool,
             'parent_name'       : info.parent_name
             }
@@ -1101,8 +1101,8 @@ written." % (self.name, ret, length))
                 raise make_ex(ret, 'error listing images')
         if ret == 0:
             return []
-        pools = c_pools.raw[:pools_size.value - 1].split('\0')
-        images = c_images.raw[:images_size.value - 1].split('\0')
+        pools = map(decode_cstr, c_pools.raw[:pools_size.value - 1].split(b'\0'))
+        images = map(decode_cstr, c_images.raw[:images_size.value - 1].split(b'\0'))
         return list(zip(pools, images))
 
     def list_lockers(self):
