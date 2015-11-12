@@ -2061,6 +2061,9 @@ void RGWPutObj::execute()
   ret = processor->complete(etag, &mtime, 0, attrs, delete_at, if_match, if_nomatch);
 
 done:
+  if (ret)
+    s->aws4_auth_needs_complete = false;
+
   dispose_processor(processor);
   perfcounter->tinc(l_rgw_put_lat,
                    (ceph_clock_now(s->cct) - s->time));
