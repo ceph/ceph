@@ -3343,3 +3343,127 @@ TEST_F(TestLibRBD, FlushEmptyOpsOnExternalSnapshot) {
   ASSERT_EQ(0, read_comp->wait_for_complete());
   read_comp->release();
 }
+
+TEST_F(TestLibRBD, TestImageOptions)
+{
+  rados_ioctx_t ioctx;
+  rados_ioctx_create(_cluster, m_pool_name.c_str(), &ioctx);
+
+  //make create image options
+  uint64_t features = RBD_FEATURE_LAYERING | RBD_FEATURE_STRIPINGV2 ;
+  uint64_t order = 0;
+  uint64_t stripe_unit = 65536;
+  uint64_t stripe_count = 16;
+  rbd_image_options_t opts;
+  rbd_image_options_create(&opts);
+  ASSERT_EQ(0, rbd_image_options_set_uint64(opts, RBD_IMAGE_OPTION_FORMAT,
+	  2));
+  ASSERT_EQ(0, rbd_image_options_set_uint64(opts, RBD_IMAGE_OPTION_FEATURES,
+	  features));
+  ASSERT_EQ(0, rbd_image_options_set_uint64(opts, RBD_IMAGE_OPTION_ORDER,
+	  order));
+  ASSERT_EQ(0, rbd_image_options_set_uint64(opts, RBD_IMAGE_OPTION_STRIPE_UNIT,
+	  stripe_unit));
+  ASSERT_EQ(0, rbd_image_options_set_uint64(opts, RBD_IMAGE_OPTION_STRIPE_COUNT,
+	  stripe_count));
+
+  std::string parent_name = get_temp_image_name();
+
+  // make parent
+  ASSERT_EQ(0, rbd_create4(ioctx, parent_name.c_str(), 4<<20, opts));
+
+  // check order is returned in opts
+  ASSERT_EQ(0, rbd_image_options_get_uint64(opts, RBD_IMAGE_OPTION_ORDER,
+	  &order));
+  ASSERT_NE((uint64_t)0, order);
+
+  // write some data to parent
+  rbd_image_t parent;
+  ASSERT_EQ(0, rbd_open(ioctx, parent_name.c_str(), &parent, NULL));
+  char *data = (char *)"testdata";
+  ASSERT_EQ((ssize_t)strlen(data), rbd_write(parent, 0, strlen(data), data));
+  ASSERT_EQ((ssize_t)strlen(data), rbd_write(parent, 12, strlen(data), data));
+
+  // create a snapshot, reopen as the parent we're interested in
+  ASSERT_EQ(0, rbd_snap_create(parent, "parent_snap"));
+  ASSERT_EQ(0, rbd_close(parent));
+  ASSERT_EQ(0, rbd_open(ioctx, parent_name.c_str(), &parent, "parent_snap"));
+
+  // clone
+  std::string child_name = get_temp_image_name();
+  ASSERT_EQ(0, rbd_snap_protect(parent, "parent_snap"));
+  ASSERT_EQ(0, rbd_clone3(ioctx, parent_name.c_str(), "parent_snap", ioctx,
+	  child_name.c_str(), opts));
+
+  // copy
+  std::string copy1_name = get_temp_image_name();
+  ASSERT_EQ(0, rbd_copy3(parent, ioctx, copy1_name.c_str(), opts));
+  std::string copy2_name = get_temp_image_name();
+  ASSERT_EQ(0, rbd_copy_with_progress3(parent, ioctx, copy2_name.c_str(), opts,
+	  print_progress_percent, NULL));
+
+  ASSERT_EQ(0, rbd_close(parent));
+
+  rbd_image_options_destroy(opts);
+
+  rados_ioctx_destroy(ioctx);
+}
+
+TEST_F(TestLibRBD, TestImageOptionsPP)
+{
+  librados::IoCtx ioctx;
+  ASSERT_EQ(0, _rados.ioctx_create(m_pool_name.c_str(), ioctx));
+
+  //make create image options
+  uint64_t features = RBD_FEATURE_LAYERING | RBD_FEATURE_STRIPINGV2 ;
+  uint64_t order = 0;
+  uint64_t stripe_unit = 65536;
+  uint64_t stripe_count = 16;
+  librbd::ImageOptions opts;
+  ASSERT_EQ(0, opts.set(RBD_IMAGE_OPTION_FORMAT, static_cast<uint64_t>(2)));
+  ASSERT_EQ(0, opts.set(RBD_IMAGE_OPTION_FEATURES, features));
+  ASSERT_EQ(0, opts.set(RBD_IMAGE_OPTION_ORDER, order));
+  ASSERT_EQ(0, opts.set(RBD_IMAGE_OPTION_STRIPE_UNIT, stripe_unit));
+  ASSERT_EQ(0, opts.set(RBD_IMAGE_OPTION_STRIPE_COUNT, stripe_count));
+
+  librbd::RBD rbd;
+  std::string parent_name = get_temp_image_name();
+
+  // make parent
+  ASSERT_EQ(0, rbd.create4(ioctx, parent_name.c_str(), 4<<20, opts));
+
+  // check order is returned in opts
+  ASSERT_EQ(0, opts.get(RBD_IMAGE_OPTION_ORDER, &order));
+  ASSERT_NE((uint64_t)0, order);
+
+  // write some data to parent
+  librbd::Image parent;
+  ASSERT_EQ(0, rbd.open(ioctx, parent, parent_name.c_str(), NULL));
+
+  ssize_t len = 1024;
+  bufferlist bl;
+  bl.append(buffer::create(len));
+  bl.zero();
+  ASSERT_EQ(len, parent.write(0, len, bl));
+  ASSERT_EQ(len, parent.write(len, len, bl));
+
+  // create a snapshot, reopen as the parent we're interested in
+  ASSERT_EQ(0, parent.snap_create("parent_snap"));
+  ASSERT_EQ(0, parent.close());
+  ASSERT_EQ(0, rbd.open(ioctx, parent, parent_name.c_str(), "parent_snap"));
+
+  // clone
+  std::string child_name = get_temp_image_name();
+  ASSERT_EQ(0, parent.snap_protect("parent_snap"));
+  ASSERT_EQ(0, rbd.clone3(ioctx, parent_name.c_str(), "parent_snap", ioctx,
+	  child_name.c_str(), opts));
+
+  // copy
+  std::string copy1_name = get_temp_image_name();
+  ASSERT_EQ(0, parent.copy3(ioctx, copy1_name.c_str(), opts));
+  std::string copy2_name = get_temp_image_name();
+  PrintProgress pp;
+  ASSERT_EQ(0, parent.copy_with_progress3(ioctx, copy2_name.c_str(), opts, pp));
+
+  ASSERT_EQ(0, parent.close());
+}

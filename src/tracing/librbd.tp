@@ -305,6 +305,29 @@ TRACEPOINT_EVENT(librbd, create3_exit,
     )
 )
 
+TRACEPOINT_EVENT(librbd, create4_enter,
+    TP_ARGS(
+        const char*, pool_name,
+        int64_t, id,
+        const char*, imgname,
+        uint64_t, size,
+        void*, opts),
+    TP_FIELDS(
+        ctf_string(pool_name, pool_name)
+        ctf_integer(int64_t, id, id)
+        ctf_string(imgname, imgname)
+        ctf_integer_hex(void*, opts, opts)
+    )
+)
+
+TRACEPOINT_EVENT(librbd, create4_exit,
+    TP_ARGS(
+        int, retval),
+    TP_FIELDS(
+        ctf_integer(int, retval, retval)
+    )
+)
+
 TRACEPOINT_EVENT(librbd, remove_enter,
     TP_ARGS(
         const char*, pool_name,
@@ -671,6 +694,36 @@ TRACEPOINT_EVENT(librbd, copy2_exit,
     )
 )
 
+TRACEPOINT_EVENT(librbd, copy3_enter,
+    TP_ARGS(
+        void*, src_imagectx,
+        const char*, src_name,
+        const char*, src_snap_name,
+        char, src_read_only,
+        const char*, dst_pool_name,
+        uint64_t, dst_id,
+        const char*, dst_name,
+        void*, opts),
+    TP_FIELDS(
+        ctf_integer_hex(void*, src_imagectx, src_imagectx)
+        ctf_string(src_name, src_name)
+        ctf_string(src_snap_name, src_snap_name)
+        ctf_integer(char, src_read_only, src_read_only)
+        ctf_string(dst_pool_name, dst_pool_name)
+        ctf_integer(uint64_t, dst_id, dst_id)
+        ctf_string(dst_name, dst_name)
+        ctf_integer_hex(void*, opts, opts)
+    )
+)
+
+TRACEPOINT_EVENT(librbd, copy3_exit,
+    TP_ARGS(
+        int, retval),
+    TP_FIELDS(
+        ctf_integer(int, retval, retval)
+    )
+)
+
 TRACEPOINT_EVENT(librbd, resize_enter,
     TP_ARGS(
         void*, imagectx,
@@ -871,6 +924,36 @@ TRACEPOINT_EVENT(librbd, clone2_exit,
     TP_FIELDS(
         ctf_integer(int, retval, retval)
         ctf_integer(int, order, order)
+    )
+)
+
+TRACEPOINT_EVENT(librbd, clone3_enter,
+    TP_ARGS(
+        const char*, parent_pool_name,
+        uint64_t, parent_id,
+        const char*, parent_name,
+        const char*, parent_snap_name,
+        const char*, child_pool_name,
+        uint64_t, child_id,
+        const char*, child_name,
+	void*, opts),
+    TP_FIELDS(
+        ctf_string(parent_pool_name, parent_pool_name)
+        ctf_integer(uint64_t, parent_id, parent_id)
+        ctf_string(parent_name, parent_name)
+        ctf_string(parent_snap_name, parent_snap_name)
+        ctf_string(child_pool_name, child_pool_name)
+        ctf_integer(uint64_t, child_id, child_id)
+        ctf_string(child_name, child_name)
+	ctf_integer_hex(void*, opts, opts)
+    )
+)
+
+TRACEPOINT_EVENT(librbd, clone3_exit,
+    TP_ARGS(
+        int, retval),
+    TP_FIELDS(
+        ctf_integer(int, retval, retval)
     )
 )
 

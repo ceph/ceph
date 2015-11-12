@@ -77,6 +77,21 @@ namespace librbd {
 
   bool has_parent(int64_t parent_pool_id, uint64_t off, uint64_t overlap);
 
+  void image_options_create(rbd_image_options_t* opts);
+  void image_options_create_ref(rbd_image_options_t* opts,
+				rbd_image_options_t orig);
+  void image_options_destroy(rbd_image_options_t opts);
+  int image_options_set(rbd_image_options_t opts, int optname,
+			const std::string& optval);
+  int image_options_set(rbd_image_options_t opts, int optname, uint64_t optval);
+  int image_options_get(rbd_image_options_t opts, int optname,
+			std::string* optval);
+  int image_options_get(rbd_image_options_t opts, int optname,
+			uint64_t* optval);
+  int image_options_unset(rbd_image_options_t opts, int optname);
+  void image_options_clear(rbd_image_options_t opts);
+  bool image_options_is_empty(rbd_image_options_t opts);
+
   int snap_set(ImageCtx *ictx, const char *snap_name);
   int list(librados::IoCtx& io_ctx, std::vector<std::string>& names);
   int list_children(ImageCtx *ictx,
@@ -86,10 +101,14 @@ namespace librbd {
   int create(librados::IoCtx& io_ctx, const char *imgname, uint64_t size,
 	     bool old_format, uint64_t features, int *order,
 	     uint64_t stripe_unit, uint64_t stripe_count);
+  int create(IoCtx& io_ctx, const char *imgname, uint64_t size,
+	     ImageOptions& opts);
   int clone(IoCtx& p_ioctx, const char *p_name, const char *p_snap_name,
 	    IoCtx& c_ioctx, const char *c_name,
 	    uint64_t features, int *c_order,
 	    uint64_t stripe_unit, int stripe_count);
+  int clone(IoCtx& p_ioctx, const char *p_name, const char *p_snap_name,
+	    IoCtx& c_ioctx, const char *c_name, ImageOptions& c_opts);
   int rename(librados::IoCtx& io_ctx, const char *srcname, const char *dstname);
   int info(ImageCtx *ictx, image_info_t& info, size_t image_size);
   int get_old_format(ImageCtx *ictx, uint8_t *old);
@@ -127,7 +146,7 @@ namespace librbd {
   int ictx_check(ImageCtx *ictx, bool owner_locked=false);
   int ictx_refresh(ImageCtx *ictx);
   int copy(ImageCtx *ictx, IoCtx& dest_md_ctx, const char *destname,
-	   ProgressContext &prog_ctx);
+	   ImageOptions& opts, ProgressContext &prog_ctx);
   int copy(ImageCtx *src, ImageCtx *dest, ProgressContext &prog_ctx);
 
   int open_parent(ImageCtx *ictx);
