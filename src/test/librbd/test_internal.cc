@@ -252,9 +252,8 @@ TEST_F(TestInternal, AioWriteRequestsLock) {
   ASSERT_EQ(0, lock_image(*ictx, LOCK_EXCLUSIVE, "manually locked"));
 
   std::string buffer(256, '1');
-  DummyContext *ctx = new DummyContext();
-  librbd::AioCompletion *c =
-    librbd::aio_create_completion_internal(ctx, librbd::rbd_ctx_cb);
+  Context *ctx = new DummyContext();
+  librbd::AioCompletion *c = librbd::AioCompletion::create(ctx);
   c->get();
   ictx->aio_work_queue->aio_write(c, 0, buffer.size(), buffer.c_str(), 0);
 
@@ -275,9 +274,8 @@ TEST_F(TestInternal, AioDiscardRequestsLock) {
   ASSERT_EQ(0, open_image(m_image_name, &ictx));
   ASSERT_EQ(0, lock_image(*ictx, LOCK_EXCLUSIVE, "manually locked"));
 
-  DummyContext *ctx = new DummyContext();
-  librbd::AioCompletion *c =
-    librbd::aio_create_completion_internal(ctx, librbd::rbd_ctx_cb);
+  Context *ctx = new DummyContext();
+  librbd::AioCompletion *c = librbd::AioCompletion::create(ctx);
   c->get();
   ictx->aio_work_queue->aio_discard(c, 0, 256);
 
@@ -661,8 +659,7 @@ TEST_F(TestInternal, ShrinkFlushesCache) {
   ictx->aio_work_queue->write(0, buffer.size(), buffer.c_str(), 0);
 
   C_SaferCond cond_ctx;
-  librbd::AioCompletion *c =
-    librbd::aio_create_completion_internal(&cond_ctx, librbd::rbd_ctx_cb);
+  librbd::AioCompletion *c = librbd::AioCompletion::create(&cond_ctx);
   c->get();
   ictx->aio_work_queue->aio_write(c, 0, buffer.size(), buffer.c_str(), 0);
 
