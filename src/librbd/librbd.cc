@@ -314,10 +314,8 @@ namespace librbd {
 
   RBD::AioCompletion::AioCompletion(void *cb_arg, callback_t complete_cb)
   {
-    librbd::AioCompletion *c = librbd::aio_create_completion(cb_arg,
-							     complete_cb);
-    pc = (void *)c;
-    c->rbd_comp = this;
+    pc = reinterpret_cast<void*>(librbd::AioCompletion::create(
+      cb_arg, complete_cb, this));
   }
 
   bool RBD::AioCompletion::is_complete()

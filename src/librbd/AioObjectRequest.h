@@ -11,6 +11,7 @@
 #include "include/buffer.h"
 #include "include/Context.h"
 #include "include/rados/librados.hpp"
+#include "include/rbd/librbd.hpp"
 #include "librbd/ObjectMap.h"
 
 namespace librbd {
@@ -63,7 +64,6 @@ namespace librbd {
 	          vector<pair<uint64_t,uint64_t> >& be,
 	          librados::snap_t snap_id, bool sparse,
 	          Context *completion, int op_flags);
-    virtual ~AioObjectRead();
 
     virtual bool should_complete(int r);
     virtual void send();
@@ -110,6 +110,7 @@ namespace librbd {
     read_state_d m_state;
 
     void send_copyup();
+
     void read_from_parent(const vector<pair<uint64_t,uint64_t> >& image_extents);
   };
 
