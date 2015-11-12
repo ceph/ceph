@@ -135,24 +135,33 @@ static simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZER;
   buffer::error_code::error_code(int error) :
     buffer::malformed_input(cpp_strerror(error).c_str()), code(error) {}
 
+#define CRC_CACHE_THRESHOLD (2 * CEPH_PAGE_SIZE)
+
   class buffer::raw {
   public:
     char *data;
     unsigned len;
     atomic_t nref;
 
-    mutable RWLock crc_lock;
-    map<pair<size_t, size_t>, pair<uint32_t, uint32_t> > crc_map;
+    mutable RWLock* crc_lock;
+    map<pair<size_t, size_t>, pair<uint32_t, uint32_t> >* crc_map;
 
-    raw(unsigned l)
-      : data(NULL), len(l), nref(0),
-	crc_lock("buffer::raw::crc_lock", false)
-    { }
+    raw(unsigned l) : raw(NULL, l) { }
+
     raw(char *c, unsigned l)
-      : data(c), len(l), nref(0),
-	crc_lock("buffer::raw::crc_lock", false)
-    { }
-    virtual ~raw() {}
+      : data(c), len(l), nref(0), crc_lock(NULL), crc_map(NULL)
+    {
+		if(l > CRC_CACHE_THRESHOLD) {
+			crc_lock = new RWLock("buffer::raw::crc_lock", false);
+			crc_map = new map<pair<size_t, size_t>, pair<uint32_t, uint32_t>>;
+		}
+	}
+    virtual ~raw() {
+		if(crc_lock)
+			delete crc_lock;
+		if(crc_map)
+			delete crc_map;
+	}
 
     // no copying.
     raw(const raw &other);
@@ -187,32 +196,35 @@ static simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZER;
     }
     bool get_crc(const pair<size_t, size_t> &fromto,
          pair<uint32_t, uint32_t> *crc) const {
-      crc_lock.get_read();
+      if(!crc_lock) return false;
+      crc_lock->get_read();
       map<pair<size_t, size_t>, pair<uint32_t, uint32_t> >::const_iterator i =
-      crc_map.find(fromto);
-      if (i == crc_map.end()) {
-          crc_lock.unlock();
+      crc_map->find(fromto);
+      if (i == crc_map->end()) {
+          crc_lock->unlock();
           return false;
       }
       *crc = i->second;
-      crc_lock.unlock();
+      crc_lock->unlock();
       return true;
     }
     void set_crc(const pair<size_t, size_t> &fromto,
          const pair<uint32_t, uint32_t> &crc) {
-      crc_lock.get_write();
-      crc_map[fromto] = crc;
-      crc_lock.unlock();
+      if(!crc_lock) return;
+      crc_lock->get_write();
+      (*crc_map)[fromto] = crc;
+      crc_lock->unlock();
     }
     void invalidate_crc() {
+      if(!crc_lock) return;
       // don't own the write lock when map is empty
-      crc_lock.get_read();
-      if (crc_map.size() != 0) {
-        crc_lock.unlock();
-        crc_lock.get_write();
-        crc_map.clear();
+      crc_lock->get_read();
+      if (crc_map->size() != 0) {
+        crc_lock->unlock();
+        crc_lock->get_write();
+        crc_map->clear();
       }
-      crc_lock.unlock();
+      crc_lock->unlock();
     }
   };
 
