@@ -905,94 +905,66 @@ public:
   }
 };
 
-class RGWMetaSyncSingleEntryCR : public RGWCoroutine {
-  RGWMetaSyncEnv *sync_env;
-
-  string raw_key;
-  string entry_marker;
-
-  ssize_t pos;
-  string section;
-  string key;
-
-  int sync_status;
-
-  bufferlist md_bl;
-
-  RGWMetaSyncShardMarkerTrack *marker_tracker;
-
-  int tries;
-
-public:
-  RGWMetaSyncSingleEntryCR(RGWMetaSyncEnv *_sync_env,
-		           const string& _raw_key, const string& _entry_marker, RGWMetaSyncShardMarkerTrack *_marker_tracker) : RGWCoroutine(_sync_env->cct),
-                                                      sync_env(_sync_env),
-						      raw_key(_raw_key), entry_marker(_entry_marker),
-                                                      pos(0), sync_status(0),
-                                                      marker_tracker(_marker_tracker), tries(0) {
-  }
-
-  int operate() {
-    reenter(this) {
+int RGWMetaSyncSingleEntryCR::operate() {
+  reenter(this) {
 #define NUM_TRANSIENT_ERROR_RETRIES 10
-      for (tries = 0; tries < NUM_TRANSIENT_ERROR_RETRIES; tries++) {
-        yield {
-          pos = raw_key.find(':');
-          section = raw_key.substr(0, pos);
-          key = raw_key.substr(pos + 1);
-          ldout(sync_env->cct, 20) << "fetching remote metadata: " << section << ":" << key << (tries == 0 ? "" : " (retry)") << dendl;
-          int ret = call(new RGWReadRemoteMetadataCR(sync_env, section, key, &md_bl));
-          if (ret < 0) {
-            ldout(sync_env->cct, 0) << "ERROR: failed to call RGWReadRemoteMetadataCR()" << dendl;
-            return set_cr_error(sync_status);
-          }
-        }
-
-        sync_status = retcode;
-
-        if (sync_status == -ENOENT) {
-#warning remove entry from local
-          return set_cr_done();
-        }
-
-        if (sync_status == -EAGAIN && (tries < NUM_TRANSIENT_ERROR_RETRIES - 1)) {
-          ldout(sync_env->cct, 20) << *this << ": failed to fetch remote metadata: " << section << ":" << key << ", will retry" << dendl;
-          continue;
-        }
-
-        if (sync_status < 0) {
-#warning need to store entry for non-transient errors
-          ldout(sync_env->cct, 10) << *this << ": failed to send read remote metadata entry: section=" << section << " key=" << key << " status=" << sync_status << dendl;
-          log_error() << "failed to send read remote metadata entry: section=" << section << " key=" << key << " status=" << sync_status << std::endl;
+    for (tries = 0; tries < NUM_TRANSIENT_ERROR_RETRIES; tries++) {
+      yield {
+        pos = raw_key.find(':');
+        section = raw_key.substr(0, pos);
+        key = raw_key.substr(pos + 1);
+        ldout(sync_env->cct, 20) << "fetching remote metadata: " << section << ":" << key << (tries == 0 ? "" : " (retry)") << dendl;
+        int ret = call(new RGWReadRemoteMetadataCR(sync_env, section, key, &md_bl));
+        if (ret < 0) {
+          ldout(sync_env->cct, 0) << "ERROR: failed to call RGWReadRemoteMetadataCR()" << dendl;
           return set_cr_error(sync_status);
         }
-
-        break;
       }
-
-      yield call(new RGWMetaStoreEntryCR(sync_env, raw_key, md_bl));
 
       sync_status = retcode;
 
-      if (sync_status == 0) {
-        yield {
-          /* update marker */
-          int ret = call(marker_tracker->finish(entry_marker));
-          if (ret < 0) {
-            ldout(sync_env->cct, 0) << "ERROR: marker_tracker->finish(" << entry_marker << ") returned ret=" << ret << dendl;
-            return set_cr_error(sync_status);
-          }
-        }
-        sync_status = retcode;
+      if (sync_status == -ENOENT) {
+#warning remove entry from local
+        return set_cr_done();
       }
+
+      if (sync_status == -EAGAIN && (tries < NUM_TRANSIENT_ERROR_RETRIES - 1)) {
+        ldout(sync_env->cct, 20) << *this << ": failed to fetch remote metadata: " << section << ":" << key << ", will retry" << dendl;
+        continue;
+      }
+
       if (sync_status < 0) {
+#warning need to store entry for non-transient errors
+        ldout(sync_env->cct, 10) << *this << ": failed to send read remote metadata entry: section=" << section << " key=" << key << " status=" << sync_status << dendl;
+        log_error() << "failed to send read remote metadata entry: section=" << section << " key=" << key << " status=" << sync_status << std::endl;
         return set_cr_error(sync_status);
       }
-      return set_cr_done();
+
+      break;
     }
-    return 0;
+
+    yield call(new RGWMetaStoreEntryCR(sync_env, raw_key, md_bl));
+
+    sync_status = retcode;
+
+    if (sync_status == 0 && marker_tracker) {
+      yield {
+        /* update marker */
+        int ret = call(marker_tracker->finish(entry_marker));
+        if (ret < 0) {
+          ldout(sync_env->cct, 0) << "ERROR: marker_tracker->finish(" << entry_marker << ") returned ret=" << ret << dendl;
+          return set_cr_error(sync_status);
+        }
+      }
+      sync_status = retcode;
+    }
+    if (sync_status < 0) {
+      return set_cr_error(sync_status);
+    }
+    return set_cr_done();
   }
-};
+  return 0;
+}
 
 class RGWCloneMetaLogCoroutine : public RGWCoroutine {
   RGWMetaSyncEnv *sync_env;

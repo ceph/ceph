@@ -87,6 +87,15 @@ struct RGWMetaSyncEnv {
 
   RGWMetaSyncEnv() : cct(NULL), store(NULL), conn(NULL), async_rados(NULL), http_manager(NULL) {}
 
+  void init(CephContext *_cct, RGWRados *_store, RGWRESTConn *_conn,
+            RGWAsyncRadosProcessor *_async_rados, RGWHTTPManager *_http_manager) {
+    cct = _cct;
+    store = _store;
+    conn = _conn;
+    async_rados = _async_rados;
+    http_manager = _http_manager;
+  }
+
   string shard_obj_name(int shard_id);
   string status_oid();
 };
@@ -252,5 +261,38 @@ public:
     return store_marker(new_marker, entry.pos, entry.timestamp);
   }
 };
+
+class RGWMetaSyncShardMarkerTrack;
+
+class RGWMetaSyncSingleEntryCR : public RGWCoroutine {
+  RGWMetaSyncEnv *sync_env;
+
+  string raw_key;
+  string entry_marker;
+
+  ssize_t pos;
+  string section;
+  string key;
+
+  int sync_status;
+
+  bufferlist md_bl;
+
+  RGWMetaSyncShardMarkerTrack *marker_tracker;
+
+  int tries;
+
+public:
+  RGWMetaSyncSingleEntryCR(RGWMetaSyncEnv *_sync_env,
+		           const string& _raw_key, const string& _entry_marker, RGWMetaSyncShardMarkerTrack *_marker_tracker) : RGWCoroutine(_sync_env->cct),
+                                                      sync_env(_sync_env),
+						      raw_key(_raw_key), entry_marker(_entry_marker),
+                                                      pos(0), sync_status(0),
+                                                      marker_tracker(_marker_tracker), tries(0) {
+  }
+
+  int operate();
+};
+
 
 #endif

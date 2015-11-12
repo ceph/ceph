@@ -694,6 +694,7 @@ class RGWRunBucketSyncCoroutine : public RGWCoroutine {
   RGWBucketInfo bucket_info;
   int shard_id;
   rgw_bucket_shard_sync_info sync_status;
+  RGWMetaSyncEnv sync_env;
 
 public:
   RGWRunBucketSyncCoroutine(RGWHTTPManager *_mgr, RGWAsyncRadosProcessor *_async_rados,
@@ -2198,11 +2199,41 @@ int RGWRunBucketSyncCoroutine::operate()
       int r = call(new RGWGetBucketInstanceInfoCR(async_rados, store, bucket_name, bucket_id, &bucket_info));
       if (r < 0) {
         ldout(store->ctx(), 0) << "ERROR: failed to fetch sync status" << dendl;
-        return r;
+        return set_cr_error(r);
       }
     }
 
-    if (retcode < 0 && retcode != -ENOENT) {
+    if (retcode == -ENOENT) {
+      /* bucket instance info has not been synced in yet, fetch it now */
+      yield {
+        ldout(store->ctx(), 10) << "no local info for bucket " << bucket_name << ":" << bucket_id << ": fetching metadata" << dendl;
+        string raw_key = string("bucket.instance:") + bucket_name + ":" + bucket_id;
+
+        sync_env.init(cct, store, store->rest_master_conn, async_rados, http_manager);
+
+        int r = call(new RGWMetaSyncSingleEntryCR(&sync_env, raw_key,
+                                                  string() /* no marker */,
+                                                  NULL /* no marker tracker */));
+        if (r < 0) {
+          ldout(store->ctx(), 0) << "ERROR: failed to fetch bucket instance info for " << raw_key << dendl;
+          return set_cr_error(r);
+        }
+      }
+
+      if (retcode < 0) {
+        ldout(store->ctx(), 0) << "ERROR: failed to fetch bucket instance info for " << bucket_name << ":" << bucket_id << dendl;
+        return set_cr_error(retcode);
+      }
+      yield {
+        int r = call(new RGWGetBucketInstanceInfoCR(async_rados, store, bucket_name, bucket_id, &bucket_info));
+        if (r < 0) {
+          ldout(store->ctx(), 0) << "ERROR: failed to fetch sync status" << dendl;
+          return set_cr_error(r);
+        }
+      }
+    }
+
+    if (retcode < 0) {
       ldout(store->ctx(), 0) << "ERROR: failed to retrieve bucket info for bucket=" << bucket_name << " bucket_id=" << bucket_id << dendl;
       return set_cr_error(retcode);
     }
