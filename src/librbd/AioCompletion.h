@@ -68,6 +68,30 @@ namespace librbd {
     xlist<AioCompletion*>::item m_xlist_item;
     bool event_notify;
 
+    template <typename T, void (T::*MF)(int)>
+    static void callback_adapter(completion_t cb, void *arg) {
+      AioCompletion *comp = reinterpret_cast<AioCompletion *>(cb);
+      T *t = reinterpret_cast<T *>(arg);
+      (t->*MF)(comp->get_return_value());
+      comp->release();
+    }
+
+    static AioCompletion *create(void *cb_arg, callback_t cb_complete,
+                                 rbd_completion_t rbd_comp) {
+      AioCompletion *comp = new AioCompletion();
+      comp->set_complete_cb(cb_arg, cb_complete);
+      comp->rbd_comp = (rbd_comp != nullptr ? rbd_comp : comp);
+      return comp;
+    }
+
+    template <typename T, void (T::*MF)(int) = &T::complete>
+    static AioCompletion *create(T *obj) {
+      AioCompletion *comp = new AioCompletion();
+      comp->set_complete_cb(obj, &callback_adapter<T, MF>);
+      comp->rbd_comp = comp;
+      return comp;
+    }
+
     AioCompletion() : lock("AioCompletion::lock", true, false),
 		      done(false), rval(0), complete_cb(NULL),
 		      complete_arg(NULL), rbd_comp(NULL),

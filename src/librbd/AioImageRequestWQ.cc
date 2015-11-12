@@ -34,7 +34,7 @@ ssize_t AioImageRequestWQ::read(uint64_t off, uint64_t len, char *buf,
   image_extents.push_back(make_pair(off, len));
 
   C_SaferCond cond;
-  AioCompletion *c = aio_create_completion_internal(&cond, rbd_ctx_cb);
+  AioCompletion *c = AioCompletion::create(&cond);
   aio_read(c, off, len, buf, NULL, op_flags, false);
   return cond.wait();
 }
@@ -53,7 +53,7 @@ ssize_t AioImageRequestWQ::write(uint64_t off, uint64_t len, const char *buf,
   }
 
   C_SaferCond cond;
-  AioCompletion *c = aio_create_completion_internal(&cond, rbd_ctx_cb);
+  AioCompletion *c = AioCompletion::create(&cond);
   aio_write(c, off, len, buf, op_flags, false);
 
   r = cond.wait();
@@ -76,7 +76,7 @@ int AioImageRequestWQ::discard(uint64_t off, uint64_t len) {
   }
 
   C_SaferCond cond;
-  AioCompletion *c = aio_create_completion_internal(&cond, rbd_ctx_cb);
+  AioCompletion *c = AioCompletion::create(&cond);
   aio_discard(c, off, len, false);
 
   r = cond.wait();

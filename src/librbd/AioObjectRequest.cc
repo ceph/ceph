@@ -103,14 +103,6 @@ namespace librbd {
     guard_read();
   }
 
-  AioObjectRead::~AioObjectRead()
-  {
-    if (m_parent_completion) {
-      m_parent_completion->release();
-      m_parent_completion = NULL;
-    }
-  }
-
   void AioObjectRead::guard_read()
   {
     RWLock::RLocker snap_locker(m_ictx->snap_lock);
@@ -262,7 +254,7 @@ namespace librbd {
   void AioObjectRead::read_from_parent(const vector<pair<uint64_t,uint64_t> >& parent_extents)
   {
     assert(!m_parent_completion);
-    m_parent_completion = aio_create_completion_internal(this, rbd_req_cb);
+    m_parent_completion = AioCompletion::create<AioObjectRequest>(this);
 
     // prevent the parent image from being deleted while this
     // request is still in-progress

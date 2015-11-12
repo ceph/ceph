@@ -2818,7 +2818,7 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
       }
 
       Context *ctx = new C_CopyWrite(m_throttle, m_bl);
-      AioCompletion *comp = aio_create_completion_internal(ctx, rbd_ctx_cb);
+      AioCompletion *comp = AioCompletion::create(ctx);
 
       // coordinate through AIO WQ to ensure lock is acquired if needed
       m_dest->aio_work_queue->aio_write(comp, m_offset, m_bl->length(),
@@ -2876,7 +2876,7 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
       uint64_t len = min(period, src_size - offset);
       bufferlist *bl = new bufferlist();
       Context *ctx = new C_CopyRead(&throttle, dest, offset, bl);
-      AioCompletion *comp = aio_create_completion_internal(ctx, rbd_ctx_cb);
+      AioCompletion *comp = AioCompletion::create(ctx);
       AioImageRequest::aio_read(src, comp, offset, len, NULL, bl,
                                 fadvise_flags);
       prog_ctx.update_progress(offset, src_size);
@@ -3440,26 +3440,19 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
 
       bufferlist bl;
 
-      Mutex mylock("IoCtxImpl::write::mylock");
-      Cond cond;
-      bool done;
-      int ret;
-
-      Context *ctx = new C_SafeCond(&mylock, &cond, &done, &ret);
-      AioCompletion *c = aio_create_completion_internal(ctx, rbd_ctx_cb);
+      C_SaferCond ctx;
+      AioCompletion *c = AioCompletion::create(&ctx);
       AioImageRequest::aio_read(ictx, c, off, read_len, NULL, &bl, 0);
 
-      mylock.Lock();
-      while (!done)
-	cond.Wait(mylock);
-      mylock.Unlock();
-
-      if (ret < 0)
-	return ret;
+      int ret = ctx.wait();
+      if (ret < 0) {
+        return ret;
+      }
 
       r = cb(total_read, ret, bl.c_str(), arg);
-      if (r < 0)
+      if (r < 0) {
 	return r;
+      }
 
       total_read += ret;
       left -= ret;
@@ -3823,23 +3816,5 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
       ictx->perfcounter->inc(l_librbd_readahead);
       ictx->perfcounter->inc(l_librbd_readahead_bytes, readahead_length);
     }
-  }
-
-  AioCompletion *aio_create_completion() {
-    AioCompletion *c = new AioCompletion();
-    return c;
-  }
-
-  AioCompletion *aio_create_completion(void *cb_arg, callback_t cb_complete) {
-    AioCompletion *c = new AioCompletion();
-    c->set_complete_cb(cb_arg, cb_complete);
-    return c;
-  }
-
-  AioCompletion *aio_create_completion_internal(void *cb_arg,
-						callback_t cb_complete) {
-    AioCompletion *c = aio_create_completion(cb_arg, cb_complete);
-    c->rbd_comp = c;
-    return c;
   }
 }

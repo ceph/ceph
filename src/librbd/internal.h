@@ -229,14 +229,6 @@ namespace librbd {
   int mirror_peer_set_cluster(IoCtx& io_ctx, const std::string &cluster_uuid,
                               const std::string &cluster_name);
 
-  AioCompletion *aio_create_completion();
-  AioCompletion *aio_create_completion(void *cb_arg, callback_t cb_complete);
-  AioCompletion *aio_create_completion_internal(void *cb_arg,
-						callback_t cb_complete);
-
-  // raw callbacks
-  void rbd_req_cb(completion_t cb, void *arg);
-  void rbd_ctx_cb(completion_t cb, void *arg);
 }
 
 #endif
