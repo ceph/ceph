@@ -629,7 +629,7 @@ Rados object in state %s." % self.state)
             elif ret < 0:
                 raise make_ex(ret, "error reverse looking up pool '%s'" % pool_id)
             else:
-                return c_name.value
+                return decode_cstr(c_name.value)
                 break
 
     @requires(('pool_name', str_type), ('auid', opt(int)), ('crush_rule', opt(int)))
