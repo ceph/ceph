@@ -178,7 +178,7 @@ def task(ctx, config):
                 select = ''
             build_flavor = openstack.flavor(config['machine'], select)
             http_flavor = openstack.flavor({
-                'disk': 10, # GB
+                'disk': 40, # GB
                 'ram': 1024, # MB
                 'cpus': 1,
             }, select)
