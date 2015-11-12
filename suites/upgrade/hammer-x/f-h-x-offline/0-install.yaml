@@ -4,3 +4,5 @@ tasks:
 - install:
     branch: firefly
 - ceph:
+    log-whitelist:
+    - reached quota
