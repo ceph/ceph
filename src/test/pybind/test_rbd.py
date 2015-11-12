@@ -300,6 +300,24 @@ class TestImage(object):
         self.image.update_features(RBD_FEATURE_EXCLUSIVE_LOCK, True)
         eq(features | RBD_FEATURE_EXCLUSIVE_LOCK, self.image.features())
 
+    @require_features([RBD_FEATURE_STRIPINGV2])
+    def test_create_with_params(self):
+        global features
+        image_name = get_temp_image_name()
+        order = 20
+        stripe_unit = 1 << 20
+        stripe_count = 10
+        self.rbd.create(ioctx, image_name, IMG_SIZE, order,
+                        False, features, stripe_unit, stripe_count)
+        image = Image(ioctx, image_name)
+        info = image.stat()
+        check_stat(info, IMG_SIZE, order)
+        eq(image.features(), features)
+        eq(image.stripe_unit(), stripe_unit)
+        eq(image.stripe_count(), stripe_count)
+        image.close()
+        RBD().remove(ioctx, image_name)
+
     def test_invalidate_cache(self):
         self.image.write('abc', 0)
         eq('abc', self.image.read(0, 3))
@@ -393,18 +411,41 @@ class TestImage(object):
         read = self.image.read(IMG_SIZE / 2 - 5, 251)
         eq('\0' * 251, read)
 
-    def test_copy(self):
+    def _test_copy(self, features=None, order=None, stripe_unit=None,
+                   stripe_count=None):
         global ioctx
         data = rand_data(256)
         self.image.write(data, 256)
         image_name = get_temp_image_name()
-        self.image.copy(ioctx, image_name)
+        if features is None:
+            self.image.copy(ioctx, image_name)
+        elif order is None:
+            self.image.copy(ioctx, image_name, features)
+        elif stripe_unit is None:
+            self.image.copy(ioctx, image_name, features, order)
+        elif stripe_count is None:
+            self.image.copy(ioctx, image_name, features, order, stripe_unit)
+        else:
+            self.image.copy(ioctx, image_name, features, order, stripe_unit,
+                            stripe_count)
         assert_raises(ImageExists, self.image.copy, ioctx, image_name)
         copy = Image(ioctx, image_name)
         copy_data = copy.read(256, 256)
         copy.close()
         self.rbd.remove(ioctx, image_name)
         eq(data, copy_data)
+
+    def test_copy(self):
+        self._test_copy()
+
+    def test_copy2(self):
+        self._test_copy(self.image.features(), self.image.stat()['order'])
+
+    @require_features([RBD_FEATURE_STRIPINGV2])
+    def test_copy3(self):
+        global features
+        self._test_copy(features, self.image.stat()['order'],
+                        self.image.stripe_unit(), self.image.stripe_count())
 
     def test_create_snap(self):
         global ioctx
@@ -706,6 +747,19 @@ class TestClone(object):
         self.image.remove_snap('snap1')
         self.image.close()
         remove_image()
+
+    @require_features([RBD_FEATURE_STRIPINGV2])
+    def test_with_params(self):
+        global features
+        self.image.create_snap('snap2')
+        self.image.protect_snap('snap2')
+        clone_name2 = get_temp_image_name()
+        self.rbd.clone(ioctx, image_name, 'snap2', ioctx, clone_name2,
+                       features, self.image.stat()['order'],
+                       self.image.stripe_unit(), self.image.stripe_count())
+        self.rbd.remove(ioctx, clone_name2)
+        self.image.unprotect_snap('snap2')
+        self.image.remove_snap('snap2')
 
     def test_unprotected(self):
         self.image.create_snap('snap2')
