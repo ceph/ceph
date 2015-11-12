@@ -3236,7 +3236,7 @@ int RGWRados::init_complete()
       zone_public_config = zone_iter->second;
       ldout(cct, 20) << "zone " << zone_params.get_name() << dendl;
     } else {
-      lderr(cct) << "Cannot find zone " << zone_params.get_name() << dendl;
+      lderr(cct) << "Cannot find zone id=" << zone_params.get_id() << " (name=" << zone_params.get_name() << ")" << dendl;
       return -EINVAL;
     }
   }
