@@ -277,7 +277,7 @@ def check_stat(info, size, order):
     assert 'block_name_prefix' in info
     eq(info['size'], size)
     eq(info['order'], order)
-    eq(info['num_objs'], size / (1 << order))
+    eq(info['num_objs'], size // (1 << order))
     eq(info['obj_size'], 1 << order)
 
 class TestImage(object):
@@ -928,7 +928,7 @@ class TestClone(object):
         self.rbd.clone(ioctx, image_name, 'snap1', ioctx, clone_name2,
                        features, new_order)
         with Image(ioctx, clone_name2) as clone:
-            clone.resize(IMG_SIZE / 2 - 1)
+            clone.resize(IMG_SIZE // 2 - 1)
             clone.flatten()
             eq(0, clone.overlap())
         self.rbd.remove(ioctx, clone_name2)
@@ -937,7 +937,7 @@ class TestClone(object):
         self.rbd.clone(ioctx, image_name, 'snap1', ioctx, clone_name2,
                        features, new_order)
         with Image(ioctx, clone_name2) as clone:
-            clone.resize(IMG_SIZE / 2 + 1)
+            clone.resize(IMG_SIZE // 2 + 1)
             clone.flatten()
             eq(clone.overlap(), 0)
         self.rbd.remove(ioctx, clone_name2)
@@ -1076,7 +1076,7 @@ class TestExclusiveLock(object):
     def test_follower_resize(self):
         with Image(ioctx, image_name) as image1, Image(ioctx2, image_name) as image2:
             image1.write(b'0'*256, 0)
-            for new_size in [IMG_SIZE * 2, IMG_SIZE / 2]:
+            for new_size in [IMG_SIZE * 2, IMG_SIZE // 2]:
                 image2.resize(new_size);
                 eq(new_size, image1.size())
                 for x in range(30):
@@ -1113,9 +1113,9 @@ class TestExclusiveLock(object):
         with Image(ioctx, image_name) as image1, Image(ioctx2, image_name) as image2:
             data = rand_data(256)
             image1.write(data, 0)
-            image2.write(data, IMG_SIZE / 2)
+            image2.write(data, IMG_SIZE // 2)
             eq(image1.is_exclusive_lock_owner(), False)
             eq(image2.is_exclusive_lock_owner(), True)
-            for offset in [0, IMG_SIZE / 2]:
+            for offset in [0, IMG_SIZE // 2]:
                 read = image2.read(offset, 256)
                 eq(data, read)
