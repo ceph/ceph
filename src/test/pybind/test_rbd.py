@@ -479,9 +479,9 @@ class TestImage(object):
     def test_rename_snap(self):
         eq([], list(self.image.list_snaps()))
         self.image.create_snap('snap1')
-        eq(['snap1'], map(lambda snap: snap['name'], self.image.list_snaps()))
+        eq(['snap1'], [snap['name'] for snap in self.image.list_snaps()])
         self.image.rename_snap("snap1", "snap1-rename")
-        eq(['snap1-rename'], map(lambda snap: snap['name'], self.image.list_snaps()))
+        eq(['snap1-rename'], [snap['name'] for snap in self.image.list_snaps()])
         self.image.remove_snap('snap1-rename')
         eq([], list(self.image.list_snaps()))
 
