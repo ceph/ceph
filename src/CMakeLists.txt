@@ -511,6 +511,7 @@ target_link_libraries(ceph-dencoder
   mds
   mon
   osdc
+  journal
   cls_lock_client
   cls_refcount_client
   cls_log_client
@@ -519,6 +520,7 @@ target_link_libraries(ceph-dencoder
   cls_replica_log_client
   cls_kvs
   cls_user_client
+  cls_journal_client
   ${DENCODER_EXTRALIBS}
   blkid
   udev
@@ -844,6 +846,21 @@ endif(${ENABLE_SHARED})
   endif(HAVE_FUSE)
 endif(WITH_LIBCEPHFS)
 
+set(journal_srcs
+  journal/AsyncOpTracker.cc
+  journal/Entry.cc
+  journal/Future.cc
+  journal/FutureImpl.cc
+  journal/Journaler.cc
+  journal/JournalMetadata.cc
+  journal/JournalPlayer.cc
+  journal/JournalRecorder.cc
+  journal/JournalTrimmer.cc
+  journal/ObjectPlayer.cc
+  journal/ObjectRecorder.cc
+  journal/Utils.cc)
+add_library(journal ${journal_srcs})
+
 if(${WITH_RBD})
   set(librbd_srcs
     krbd.cc
@@ -862,6 +879,7 @@ if(${WITH_RBD})
     librbd/WatchNotifyTypes.cc
     librbd/internal.cc
     librbd/librbd.cc
+    librbd/LibrbdAdminSocketHook.cc
     librbd/LibrbdWriteback.cc
     librbd/ObjectMap.cc
     librbd/RebuildObjectMapRequest.cc
