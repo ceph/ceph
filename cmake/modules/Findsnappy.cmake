@@ -37,6 +37,8 @@ find_library(SNAPPY_LIBRARY NAMES ${SNAPPY_NAMES} NO_DEFAULT_PATH PATHS
     /opt/local/lib
     /usr/lib
     )
+find_library(SNAPPY_LIBRARY
+  NAMES ${SNAPPY_NAMES})
 
 if (SNAPPY_INCLUDE_DIR AND SNAPPY_LIBRARY)
   set(SNAPPY_FOUND TRUE)

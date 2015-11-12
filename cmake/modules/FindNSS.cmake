@@ -34,6 +34,14 @@ else (NSS_LIBRARIES AND NSS_INCLUDE_DIRS)
       /sw/include
     PATH_SUFFIXES
       nss3
+    NO_DEFAULT_PATH
+  )
+
+  find_path(NSS_INCLUDE_DIR
+    NAMES
+      nss.h
+    PATH_SUFFIXES
+      nss3
   )
 
   find_library(SSL3_LIBRARY
