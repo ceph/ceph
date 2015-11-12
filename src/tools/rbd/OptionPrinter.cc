@@ -11,6 +11,8 @@ namespace po = boost::program_options;
 const std::string OptionPrinter::POSITIONAL_ARGUMENTS("Positional arguments");
 const std::string OptionPrinter::OPTIONAL_ARGUMENTS("Optional arguments");
 
+const size_t OptionPrinter::MAX_DESCRIPTION_OFFSET;
+
 OptionPrinter::OptionPrinter(const OptionsDescription &positional,
                              const OptionsDescription &optional)
   : m_positional(positional), m_optional(optional) {
