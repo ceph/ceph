@@ -904,7 +904,7 @@ int RGWPutACLs_ObjStore::get_params()
        return ret;
     }
     int read_len;
-    int r = s->cio->read(data, cl, &read_len);
+    int r = s->cio->read(data, cl, &read_len, s->aws4_auth_needs_complete);
     len = read_len;
     if (r < 0)
       return r;
