@@ -8,6 +8,7 @@
 #include "librbd/ImageWatcher.h"
 #include "librbd/internal.h"
 #include "librbd/ObjectMap.h"
+#include "librbd/Utils.h"
 #include "common/ContextCompletion.h"
 #include "common/dout.h"
 #include "common/errno.h"
@@ -76,7 +77,7 @@ public:
     ldout(image_ctx.cct, 10) << "removing " << oid << dendl;
 
     librados::AioCompletion *rados_completion =
-      librados::Rados::aio_create_completion(this, NULL, rados_ctx_cb);
+      util::create_rados_safe_callback(this);
     int r = image_ctx.data_ctx.aio_remove(oid, rados_completion);
     assert(r == 0);
     rados_completion->release();

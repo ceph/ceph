@@ -90,6 +90,7 @@ noinst_HEADERS += \
 	librbd/parent_types.h \
 	librbd/SnapInfo.h \
 	librbd/TaskFinisher.h \
+	librbd/Utils.h \
 	librbd/WatchNotifyTypes.h \
 	librbd/object_map/InvalidateRequest.h \
 	librbd/object_map/Request.h \

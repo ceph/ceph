@@ -11,6 +11,7 @@
 #include "librbd/ObjectMap.h"
 #include "librbd/operation/ResizeRequest.h"
 #include "librbd/operation/TrimRequest.h"
+#include "librbd/Utils.h"
 #include <boost/lambda/bind.hpp>
 #include <boost/lambda/construct.hpp>
 
@@ -83,12 +84,10 @@ private:
     ldout(image_ctx.cct, 5) << m_oid << " C_VerifyObject::send_list_snaps"
                             << dendl;
 
-    librados::AioCompletion *comp = librados::Rados::aio_create_completion(
-      this, NULL, rados_ctx_cb);
-
     librados::ObjectReadOperation op;
     op.list_snaps(&m_snap_set, &m_snap_list_ret);
 
+    librados::AioCompletion *comp = util::create_rados_safe_callback(this);
     int r = m_io_ctx.aio_operate(m_oid, comp, &op, NULL);
     assert(r == 0);
     comp->release();

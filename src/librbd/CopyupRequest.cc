@@ -15,6 +15,7 @@
 #include "librbd/ImageWatcher.h"
 #include "librbd/internal.h"
 #include "librbd/ObjectMap.h"
+#include "librbd/Utils.h"
 
 #include <boost/bind.hpp>
 #include <boost/lambda/bind.hpp>
@@ -142,9 +143,7 @@ private:
 
       ldout(m_ictx->cct, 20) << __func__ << " " << this << " copyup with "
                              << "empty snapshot context" << dendl;
-      librados::AioCompletion *comp =
-        librados::Rados::aio_create_completion(create_callback_context(), NULL,
-                                               rados_ctx_cb);
+      librados::AioCompletion *comp = util::create_rados_safe_callback(this);
       r = m_ictx->md_ctx.aio_operate(m_oid, comp, &copyup_op, 0, snaps);
       assert(r == 0);
       comp->release();
@@ -167,9 +166,7 @@ private:
       assert(write_op.size() != 0);
 
       snaps.insert(snaps.end(), snapc.snaps.begin(), snapc.snaps.end());
-      librados::AioCompletion *comp =
-        librados::Rados::aio_create_completion(create_callback_context(), NULL,
-                                               rados_ctx_cb);
+      librados::AioCompletion *comp = util::create_rados_safe_callback(this);
       r = m_ictx->data_ctx.aio_operate(m_oid, comp, &write_op);
       assert(r == 0);
       comp->release();
@@ -181,7 +178,7 @@ private:
   {
     m_state = STATE_READ_FROM_PARENT;
     AioCompletion *comp = aio_create_completion_internal(
-      create_callback_context(), rbd_ctx_cb);
+      util::create_context_callback(this), rbd_ctx_cb);
 
     ldout(m_ictx->cct, 20) << __func__ << " " << this
                            << ": completion " << comp
@@ -311,15 +308,10 @@ private:
         boost::lambda::_1, m_ictx, m_object_no, &m_snap_ids,
         boost::lambda::_2));
       AsyncObjectThrottle<> *throttle = new AsyncObjectThrottle<>(
-        NULL, *m_ictx, context_factory, create_callback_context(), NULL, 0,
-        m_snap_ids.size());
+        NULL, *m_ictx, context_factory, util::create_context_callback(this),
+        NULL, 0, m_snap_ids.size());
       throttle->start_ops(m_ictx->concurrent_management_ops);
     }
     return false;
-  }
-
-  Context *CopyupRequest::create_callback_context()
-  {
-    return new FunctionContext(boost::bind(&CopyupRequest::complete, this, _1));
   }
 }
