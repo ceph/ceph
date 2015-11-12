@@ -695,9 +695,9 @@ class TestImage(object):
 
     def test_diff_iterate(self):
         check_diff(self.image, 0, IMG_SIZE, None, [])
-        self.image.write('a' * 256, 0)
+        self.image.write(b'a' * 256, 0)
         check_diff(self.image, 0, IMG_SIZE, None, [(0, 256, True)])
-        self.image.write('b' * 256, 256)
+        self.image.write(b'b' * 256, 256)
         check_diff(self.image, 0, IMG_SIZE, None, [(0, 512, True)])
         self.image.discard(128, 256)
         check_diff(self.image, 0, IMG_SIZE, None, [(0, 512, True)])
@@ -844,7 +844,7 @@ class TestClone(object):
         eq(child_data, parent_data[:128] + (b'\0' * 128))
         self.clone.resize(IMG_SIZE // 2 + 1)
         child_data = self.clone.read(IMG_SIZE // 2, 1)
-        eq(child_data, parent_data[0])
+        eq(child_data, parent_data[0:1])
         self.clone.resize(0)
         self.clone.resize(IMG_SIZE)
         child_data = self.clone.read(IMG_SIZE // 2, 256)
@@ -1024,7 +1024,7 @@ class TestExclusiveLock(object):
 
     def test_ownership(self):
         with Image(ioctx, image_name) as image1, Image(ioctx2, image_name) as image2:
-            image1.write('0'*256, 0)
+            image1.write(b'0'*256, 0)
             eq(image1.is_exclusive_lock_owner(), True)
             eq(image2.is_exclusive_lock_owner(), False)
 
@@ -1107,7 +1107,7 @@ class TestExclusiveLock(object):
             eq(image1.is_exclusive_lock_owner(), False)
             eq(image2.is_exclusive_lock_owner(), True)
             read = image2.read(0, 256)
-            eq(256*'\0', read)
+            eq(256 * b'\0', read)
 
     def test_follower_write(self):
         with Image(ioctx, image_name) as image1, Image(ioctx2, image_name) as image2:
