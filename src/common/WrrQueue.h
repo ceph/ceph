@@ -12,11 +12,12 @@
  *
  */
 
-#ifndef PRIORITY_QUEUE_H
-#define PRIORITY_QUEUE_H
+#ifndef WRR_QUEUE_H
+#define WRR_QUEUE_H
 
 //#include "common/Mutex.h"
 #include "common/Formatter.h"
+#include "common/OpQueue.h"
 
 #include <map>
 //#include <utility>
@@ -44,22 +45,22 @@
  * to provide fairness for different clients.
  */
 
-template <typename T, typename K>
-class OpQueue {
-
-  public:
-    virtual unsigned length() const = 0;
-    virtual void remove_by_filter(std::function<bool (T)> f, list<T> *removed = 0) = 0;
-    virtual void remove_by_class(K k, list<T> *out = 0) = 0;
-    virtual void enqueue_strict(K cl, unsigned priority, T item) = 0;
-    virtual void enqueue_strict_front(K cl, unsigned priority, T item) = 0;
-    virtual void enqueue(K cl, unsigned priority, unsigned cost, T item) = 0;
-    virtual void enqueue_front(K cl, unsigned priority, unsigned cost, T item) = 0;
-    virtual bool empty() const = 0;
-    virtual T dequeue() = 0;
-    virtual void dump(Formatter *f) const = 0;
-    virtual ~OpQueue() {};
-};
+//template <typename T, typename K>
+//class OpQueue {
+//
+//  public:
+//    virtual unsigned length() const = 0;
+//    virtual void remove_by_filter(std::function<bool (T)> f, list<T> *removed = 0) = 0;
+//    virtual void remove_by_class(K k, list<T> *out = 0) = 0;
+//    virtual void enqueue_strict(K cl, unsigned priority, T item) = 0;
+//    virtual void enqueue_strict_front(K cl, unsigned priority, T item) = 0;
+//    virtual void enqueue(K cl, unsigned priority, unsigned cost, T item) = 0;
+//    virtual void enqueue_front(K cl, unsigned priority, unsigned cost, T item) = 0;
+//    virtual bool empty() const = 0;
+//    virtual T dequeue() = 0;
+//    virtual void dump(Formatter *f) const = 0;
+//    virtual ~OpQueue() {};
+//};
 
 template <typename T, typename K>
 class WrrQueue : public OpQueue <T, K> {
@@ -253,7 +254,8 @@ class WrrQueue : public OpQueue <T, K> {
 
 public:
   WrrQueue(unsigned max_per, unsigned min_c)
-    : total_priority(0)
+    : total_priority(0),
+      dq(queue.rbegin())
       //max_tokens_per_subqueue(max_per),
       //min_cost(min_c)
   {}
@@ -362,13 +364,13 @@ public:
   }
 
   void print_queue() {
-    //cerr << "Number of queues: " << (unsigned) queue.size() << " -:- ";
+    //cerr << "Number of queues: " << std::dec << queue.size() << " -:- ";
     for (typename SubQueues::reverse_iterator ri = queue.rbegin();
 	ri != queue.rend(); ri++){
       //cerr << ri->first << ", ";
     }
     //cerr << "\n";
-    //cerr << "Queue pointer currently at priority " << (unsigned) dq->first << ".\n";
+    //cerr << "Queue pointer currently at priority " << std::dec << dq->first << ".\n";
   }
 
   void inc_dq() {
@@ -380,20 +382,21 @@ public:
     } else {
       //cerr << "Moving to the next queue...\n";
     }
-    //cerr << "dq now at priority " << (unsigned) dq->first << ".\n";
+    //cerr << "dq now at priority " << std::dec << dq->first << ".\n";
   }
 
   T dequeue() final {
     assert(!empty());
 
     //cerr << "Dequeing OP, but first going to check the high queue...\n";
+    //cerr << "High queue has " << std::dec << high_queue.size() << " ops in the queue.\n";
     if (!(high_queue.empty())) {
-      //cerr << "High queue has ops, going to schedule one of them. (" << (unsigned) high_queue.size() << " ops in the high_queue)\n";
+      //cerr << "High queue has ops, going to schedule one of them. (" << std::dec << high_queue.size() << " ops in the high_queue)\n";
       for (typename SubQueues::const_iterator i = high_queue.begin();
            i != high_queue.end();
            ++i) {
         //assert(i->second.length());
-        //cerr << "High queue priority " << (unsigned) i->first << " has " << (unsigned) i->second.length() << " ops.\n";
+        //cerr << "High queue priority " << std::dec << i->first << " has " << std::dec << i->second.length() << " ops.\n";
       }
       T ret = high_queue.rbegin()->second.front().second;
       high_queue.rbegin()->second.pop_front();
@@ -401,17 +404,17 @@ public:
 	high_queue.erase(high_queue.rbegin()->first);
       return ret;
     }
-    //cerr << "Dequeuing op with priority " << dq->first << "... (" << (unsigned) length() << " ops in the queue)\n";
     if ( dq == queue.rend()) {
       //cerr << "For some odd reason the queue pointer is at the end of the queue, going to set it to the start.\n";
       dq = queue.rbegin();
     }
     //print_queue();
-    //cerr << "Start Subqueue length: " << (unsigned) dq->second.length() << "\n";
+    //cerr << "Dequeuing op with priority " << std::dec << dq->first << "... (" << std::dec << length() << " ops in the queue)\n";
+    //cerr << "Start Subqueue length: " << std::dec << dq->second.length() << "\n";
     while (dq->second.length() == 0) {
       // Look thorugh other priorities for something to run
-      //cerr << "Loop Subqueue length: " << (unsigned) dq->second.length() << "\n";
-      //cerr << "Didn't find an OP at priority " << (unsigned) dq->first << ". Total Priorty: " << (unsigned) total_priority << "\n";
+      //cerr << "Loop Subqueue length: " << std::dec << dq->second.length() << "\n";
+      //cerr << "Didn't find an OP at priority " << std::dec << dq->first << ". Total Priorty: " << std::dec << total_priority << "\n";
       inc_dq();
     }
     T ret = dq->second.front().second;
@@ -421,7 +424,7 @@ public:
     //  remove_queue(dq->first);
     //}
 
-    //cerr << "Going to dispatch " << &ret << " with priority " << (unsigned) dq->first << "...\n";
+    //cerr << "Going to dispatch " << std::hex << &ret << " with priority " << std::dec << dq->first << "...\n";
 
     // Flip a coin to see if we dequeue another of the sam priorty or move on
     if ( (rand() % total_priority) > dq->first) {
