@@ -6,13 +6,13 @@
 
 #include "include/int_types.h"
 #include "include/buffer.h"
+#include "include/Context.h"
 #include "include/rados/librados.hpp"
 #include "journal/Future.h"
 #include <string>
 #include <map>
 #include "include/assert.h"
 
-class Context;
 class SafeTimer;
 
 namespace journal {
@@ -26,11 +26,11 @@ class ReplayHandler;
 
 class Journaler {
 public:
-  Journaler(librados::IoCtx &header_ioctx, librados::IoCtx &data_ioctx,
-            const std::string &journal_id, const std::string &client_id);
+  Journaler(librados::IoCtx &header_ioctx, const std::string &journal_id,
+	    const std::string &client_id, double commit_interval);
   ~Journaler();
 
-  int create(uint8_t order, uint8_t splay_width);
+  int create(uint8_t order, uint8_t splay_width, int64_t pool_id);
   int remove();
 
   void init(Context *on_init);
@@ -43,7 +43,7 @@ public:
   bool try_pop_front(ReplayEntry *replay_entry);
   void stop_replay();
 
-  void start_append();
+  void start_append(int flush_interval, uint64_t flush_bytes, double flush_age);
   Future append(const std::string &tag, const bufferlist &bl);
   void flush(Context *on_safe);
   void stop_append(Context *on_safe);
@@ -52,6 +52,20 @@ public:
   void committed(const Future &future);
 
 private:
+  struct C_InitJournaler : public Context {
+    Journaler *journaler;
+    Context *on_safe;
+    C_InitJournaler(Journaler *_journaler, Context *_on_safe)
+      : journaler(_journaler), on_safe(_on_safe) {
+    }
+    virtual void finish(int r) {
+      if (r == 0) {
+	r = journaler->init_complete();
+      }
+      on_safe->complete(r);
+    }
+  };
+
   librados::IoCtx m_header_ioctx;
   librados::IoCtx m_data_ioctx;
   CephContext *m_cct;
@@ -65,8 +79,15 @@ private:
   JournalRecorder *m_recorder;
   JournalTrimmer *m_trimmer;
 
+  int init_complete();
   void create_player(ReplayHandler *replay_handler);
+
+  friend std::ostream &operator<<(std::ostream &os,
+				  const Journaler &journaler);
 };
+
+std::ostream &operator<<(std::ostream &os,
+			 const Journaler &journaler);
 
 } // namespace journal
 

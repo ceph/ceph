@@ -184,6 +184,39 @@ TEST_F(TestJournalPlayer, Prefetch) {
   ASSERT_EQ(125U, last_tid);
 }
 
+TEST_F(TestJournalPlayer, PrefetchSkip) {
+  std::string oid = get_temp_oid();
+
+  journal::JournalPlayer::EntryPositions positions;
+  positions = {
+    cls::journal::EntryPosition("tag1", 125) };
+  cls::journal::ObjectSetPosition commit_position(0, positions);
+
+  ASSERT_EQ(0, create(oid));
+  ASSERT_EQ(0, client_register(oid));
+  ASSERT_EQ(0, client_commit(oid, commit_position));
+
+  journal::JournalMetadataPtr metadata = create_metadata(oid);
+  ASSERT_EQ(0, init_metadata(metadata));
+
+  journal::JournalPlayer *player = create_player(oid, metadata);
+
+  ASSERT_EQ(0, write_entry(oid, 0, "tag1", 122));
+  ASSERT_EQ(0, write_entry(oid, 1, "tag1", 123));
+  ASSERT_EQ(0, write_entry(oid, 0, "tag1", 124));
+  ASSERT_EQ(0, write_entry(oid, 1, "tag1", 125));
+
+  player->prefetch();
+
+  Entries entries;
+  ASSERT_TRUE(wait_for_entries(player, 0, &entries));
+  ASSERT_TRUE(wait_for_complete(player));
+
+  uint64_t last_tid;
+  ASSERT_TRUE(metadata->get_last_allocated_tid("tag1", &last_tid));
+  ASSERT_EQ(125U, last_tid);
+}
+
 TEST_F(TestJournalPlayer, PrefetchWithoutCommit) {
   std::string oid = get_temp_oid();
 
