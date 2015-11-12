@@ -419,10 +419,9 @@ void Monitor::read_features_off_disk(MonitorDBStore *store, CompatSet *features)
     //be made smarter.
     *features = get_legacy_features();
 
-    bufferlist bl;
-    features->encode(bl);
+    features->encode(featuresbl);
     MonitorDBStore::TransactionRef t(new MonitorDBStore::Transaction);
-    t->put(MONITOR_NAME, COMPAT_SET_LOC, bl);
+    t->put(MONITOR_NAME, COMPAT_SET_LOC, featuresbl);
     store->apply_transaction(t);
   } else {
     bufferlist::iterator it = featuresbl.begin();
