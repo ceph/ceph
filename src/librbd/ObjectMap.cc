@@ -10,6 +10,7 @@
 #include "librbd/object_map/SnapshotRemoveRequest.h"
 #include "librbd/object_map/SnapshotRollbackRequest.h"
 #include "librbd/object_map/UpdateRequest.h"
+#include "librbd/Utils.h"
 #include "common/dout.h"
 #include "common/errno.h"
 #include "include/stringify.h"
@@ -297,8 +298,7 @@ void ObjectMap::aio_save(Context *on_finish)
   cls_client::object_map_save(&op, m_object_map);
 
   std::string oid(object_map_name(m_image_ctx.id, m_snap_id));
-  librados::AioCompletion *comp = librados::Rados::aio_create_completion(
-    on_finish, NULL, rados_ctx_cb);
+  librados::AioCompletion *comp = util::create_rados_safe_callback(on_finish);
 
   int r = m_image_ctx.md_ctx.aio_operate(oid, comp, &op);
   assert(r == 0);

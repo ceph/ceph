@@ -8,6 +8,7 @@
 #include "librbd/AsyncObjectThrottle.h"
 #include "librbd/ImageCtx.h"
 #include "librbd/ObjectMap.h"
+#include "librbd/Utils.h"
 #include "librbd/operation/ResizeRequest.h"
 #include "osdc/Striper.h"
 #include <boost/lambda/bind.hpp>
@@ -62,10 +63,11 @@ public:
 
     std::string oid = image_ctx.get_object_name(m_object_num);
 
-    librados::AioCompletion *rados_completion =
-      librados::Rados::aio_create_completion(this, NULL, rados_ctx_cb);
     librados::ObjectWriteOperation op;
     op.selfmanaged_snap_rollback(m_snap_id);
+
+    librados::AioCompletion *rados_completion =
+      util::create_rados_safe_callback(this);
     image_ctx.data_ctx.aio_operate(oid, rados_completion, &op);
     rados_completion->release();
     return 0;
