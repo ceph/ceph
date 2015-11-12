@@ -105,13 +105,7 @@ function build_package() {
         ccache=$(echo /usr/lib*/ccache)
         # Build RPMs
         buildarea=`readlink -fn ${releasedir}`   ### rpm wants absolute path
-        local unpackaged
-        if echo $vers | grep 0.87 ; then # giant has unpackaged files
-            unpackaged='--define=_unpackaged_files_terminate_build 0'
-        else
-            unpackaged='--define=_unpackaged_files_terminate_build 1'
-        fi
-        PATH=$ccache:$PATH rpmbuild -ba "$unpackaged" --define "_topdir ${buildarea}" ceph.spec
+        PATH=$ccache:$PATH rpmbuild -ba --define "_unpackaged_files_terminate_build 0" --define "_topdir ${buildarea}" ceph.spec
     )
 }
 
