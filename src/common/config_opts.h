@@ -901,6 +901,7 @@ OPTION(osd_bench_max_block_size, OPT_U64, 64 << 20) // cap the block size at 64M
 OPTION(osd_bench_duration, OPT_U32, 30) // duration of 'osd bench', capped at 30s to avoid triggering timeouts
 
 OPTION(osd_blkin_trace_all, OPT_BOOL, false) // create a blkin trace for all osd requests
+OPTION(osdc_blkin_trace_all, OPT_BOOL, false) // create a blkin trace for all objecter requests
 
 OPTION(osd_discard_disconnected_ops, OPT_BOOL, true)
 
