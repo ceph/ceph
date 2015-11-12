@@ -244,6 +244,8 @@ class TestStrays(CephFSTestCase):
         # See that the data objects no longer exist
         self.assertTrue(self.fs.data_objects_absent(open_file_ino, size_mb * 1024 * 1024))
 
+        self.await_data_pool_empty()
+
     def test_hardlink_reintegration(self):
         """
         That removal of primary dentry of hardlinked inode results
@@ -457,6 +459,8 @@ class TestStrays(CephFSTestCase):
         # See that the file objects no longer exist
         self.assertTrue(self.fs.data_objects_absent(ino, size_mb * 1024 * 1024))
 
+        self.await_data_pool_empty()
+
     def assert_backtrace(self, ino, expected_path):
         """
         Assert that the backtrace in the data pool for an inode matches
@@ -521,3 +525,92 @@ class TestStrays(CephFSTestCase):
 
         # file_a's data should still exist
         self.assertTrue(self.fs.data_objects_present(file_a_ino, size_mb * 1024 * 1024))
+
+    def _pool_df(self, pool_name):
+        """
+        Return a dict like
+            {
+                "kb_used": 0,
+                "bytes_used": 0,
+                "max_avail": 19630292406,
+                "objects": 0
+            }
+
+        :param pool_name: Which pool (must exist)
+        """
+        out = self.fs.mon_manager.raw_cluster_cmd("df", "--format=json-pretty")
+        for p in json.loads(out)['pools']:
+            if p['name'] == pool_name:
+                return p['stats']
+
+        raise RuntimeError("Pool '{0}' not found".format(pool_name))
+
+    def await_data_pool_empty(self):
+        self.wait_until_true(
+            lambda: self._pool_df(
+                self.fs.get_data_pool_name()
+            )['objects'] == 0,
+            timeout=60)
+
+    def test_snapshot_remove(self):
+        """
+        That removal of a snapshot that references a now-unlinked file results
+        in purging on the stray for the file.
+        """
+        # Enable snapshots
+        self.fs.mon_manager.raw_cluster_cmd("mds", "set", "allow_new_snaps", "true",
+                                            "--yes-i-really-mean-it")
+
+        # Create a dir with a file in it
+        size_mb = 8
+        self.mount_a.run_shell(["mkdir", "snapdir"])
+        self.mount_a.run_shell(["mkdir", "snapdir/subdir"])
+        self.mount_a.write_test_pattern("snapdir/subdir/file_a", size_mb * 1024 * 1024)
+        file_a_ino = self.mount_a.path_to_ino("snapdir/subdir/file_a")
+
+        # Snapshot the dir
+        self.mount_a.run_shell(["mkdir", "snapdir/.snap/snap1"])
+
+        # Cause the head revision to deviate from the snapshot
+        self.mount_a.write_n_mb("snapdir/subdir/file_a", size_mb)
+
+        # Flush the journal so that backtraces, dirfrag objects will actually be written
+        self.fs.mds_asok(["flush", "journal"])
+
+        # Unlink the file
+        self.mount_a.run_shell(["rm", "-f", "snapdir/subdir/file_a"])
+        self.mount_a.run_shell(["rmdir", "snapdir/subdir"])
+
+        # Unmount the client because when I come back to check the data is still
+        # in the file I don't want to just see what's in the page cache.
+        self.mount_a.umount_wait()
+
+        self.assertEqual(self.get_mdc_stat("strays_created"), 2)
+
+        # FIXME: at this stage we see a purge and the stray count drops to
+        # zero, but there's actually still a stray, so at the very
+        # least the StrayManager stats code is slightly off
+
+        self.mount_a.mount()
+
+        # See that the data from the snapshotted revision of the file is still present
+        # and correct
+        self.mount_a.validate_test_pattern("snapdir/.snap/snap1/subdir/file_a", size_mb * 1024 * 1024)
+
+        # Remove the snapshot
+        self.mount_a.run_shell(["rmdir", "snapdir/.snap/snap1"])
+        self.mount_a.umount_wait()
+
+        # Purging file_a doesn't happen until after we've flushed the journal, because
+        # it is referenced by the snapshotted subdir, and the snapshot isn't really
+        # gone until the journal references to it are gone
+        self.fs.mds_asok(["flush", "journal"])
+
+        # See that a purge happens now
+        self.wait_until_equal(
+            lambda: self.get_mdc_stat("strays_purged"),
+            expect_val=2, timeout=60, reject_fn=lambda x: x > 1
+        )
+
+        self.assertTrue(self.fs.data_objects_absent(file_a_ino, size_mb * 1024 * 1024))
+        self.await_data_pool_empty()
