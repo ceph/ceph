@@ -611,7 +611,9 @@ class Image(object):
 
         if ret != 0:
             raise make_ex(ret, 'error getting parent info for image %s' % (self.name,))
-        return (pool.value, name.value, snapname.value)
+        return (decode_cstr(pool.value),
+                decode_cstr(name.value),
+                decode_cstr(snapname.value))
 
     def old_format(self):
         """
