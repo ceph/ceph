@@ -31,6 +31,12 @@
 #include "librbd/Journal.h"
 #include "librbd/ObjectMap.h"
 #include "librbd/parent_types.h"
+#include "librbd/Utils.h"
+#include "librbd/image/CloseRequest.h"
+#include "librbd/image/OpenRequest.h"
+#include "librbd/image/RefreshParentRequest.h"
+#include "librbd/image/RefreshRequest.h"
+#include "librbd/image/SetSnapRequest.h"
 #include "librbd/operation/FlattenRequest.h"
 #include "librbd/operation/RebuildObjectMapRequest.h"
 #include "librbd/operation/RenameRequest.h"
@@ -42,7 +48,6 @@
 #include "librbd/operation/SnapshotRollbackRequest.h"
 #include "librbd/operation/SnapshotUnprotectRequest.h"
 #include "librbd/operation/TrimRequest.h"
-#include "librbd/Utils.h"
 #include "include/util.h"
 
 #include <boost/bind.hpp>
@@ -2959,7 +2964,7 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
 			 << "' id = '" << ictx->id
 			 << "' snap_name = '"
 			 << ictx->snap_name << "'" << dendl;
-    int r = ictx->init();
+    int r = ictx->init_legacy();
     if (r < 0)
       goto err_close;
 

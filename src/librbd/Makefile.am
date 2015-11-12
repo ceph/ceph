@@ -19,6 +19,7 @@ librbd_internal_la_SOURCES = \
 	librbd/DiffIterate.cc \
 	librbd/ExclusiveLock.cc \
 	librbd/ImageCtx.cc \
+	librbd/ImageRefresh.cc \
 	librbd/ImageWatcher.cc \
 	librbd/internal.cc \
 	librbd/Journal.cc \
@@ -29,6 +30,11 @@ librbd_internal_la_SOURCES = \
 	librbd/Utils.cc \
 	librbd/exclusive_lock/AcquireRequest.cc \
 	librbd/exclusive_lock/ReleaseRequest.cc \
+	librbd/image/CloseRequest.cc \
+	librbd/image/OpenRequest.cc \
+	librbd/image/RefreshParentRequest.cc \
+	librbd/image/RefreshRequest.cc \
+	librbd/image/SetSnapRequest.cc \
 	librbd/object_map/InvalidateRequest.cc \
 	librbd/object_map/LockRequest.cc \
 	librbd/object_map/Request.cc \
@@ -87,6 +93,7 @@ noinst_HEADERS += \
 	librbd/DiffIterate.h \
 	librbd/ExclusiveLock.h \
 	librbd/ImageCtx.h \
+	librbd/ImageRefresh.h \
 	librbd/ImageWatcher.h \
 	librbd/internal.h \
 	librbd/Journal.h \
@@ -102,6 +109,11 @@ noinst_HEADERS += \
 	librbd/WatchNotifyTypes.h \
 	librbd/exclusive_lock/AcquireRequest.h \
 	librbd/exclusive_lock/ReleaseRequest.h \
+	librbd/image/CloseRequest.h \
+	librbd/image/OpenRequest.h \
+	librbd/image/RefreshParentRequest.h \
+	librbd/image/RefreshRequest.h \
+	librbd/image/SetSnapRequest.h \
 	librbd/object_map/InvalidateRequest.h \
 	librbd/object_map/LockRequest.h \
 	librbd/object_map/Request.h \

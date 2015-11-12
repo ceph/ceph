@@ -21,6 +21,10 @@ class ExclusiveLock {
 public:
   static const std::string WATCHER_LOCK_TAG;
 
+  static ExclusiveLock *create(ImageCtxT &image_ctx) {
+    return new ExclusiveLock<ImageCtxT>(image_ctx);
+  }
+
   ExclusiveLock(ImageCtxT &image_ctx);
   ~ExclusiveLock();
 
