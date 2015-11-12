@@ -535,7 +535,7 @@ int main(int argc, const char **argv)
     exit(1);
 
   // Set up crypto, daemonize, etc.
-  global_init_daemonize(g_ceph_context, 0);
+  global_init_daemonize(g_ceph_context);
   common_init_finish(g_ceph_context);
 
   TracepointProvider::initialize<osd_tracepoint_traits>(g_ceph_context);
