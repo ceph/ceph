@@ -35,13 +35,6 @@ const string RGWFileHandle::root_name = "/";
 
 atomic<uint32_t> RGWLibFS::fs_inst;
 
-
-#define RGW_RWXMODE  (S_IRWXU | S_IRWXG | S_IRWXO)
-
-#define RGW_RWMODE (RGW_RWXMODE &			\
-		      ~(S_IXUSR | S_IXGRP | S_IXOTH))
-
-
 /* librgw */
 extern "C" {
 
@@ -144,21 +137,13 @@ int rgw_create(struct rgw_fs *rgw_fs,
   if (get<1>(fhr) & RGWFileHandle::FLAG_CREATE) {
         /* fill in stat data */
     time_t now = time(0);
-    memset(st, 0, sizeof(struct stat));
-    st->st_dev = fs->get_inst();
-    st->st_ino = rgw_fh->get_fh()->fh_hk.object; // XXX
-    st->st_mode = RGW_RWMODE|S_IFREG;
-    st->st_nlink = 1;
-    st->st_uid = 0; // XXX
-    st->st_gid = 0; // XXX
-    st->st_size = 0;
-    st->st_blksize = 4096;
-    st->st_blocks = 0;
-    st->st_atim.tv_sec = now;
-    st->st_mtim.tv_sec = now;
-    st->st_ctim.tv_sec = now;
+    rgw_fh->get_stat()->st_atim.tv_sec = now;
+    rgw_fh->get_stat()->st_mtim.tv_sec = now;
+    rgw_fh->get_stat()->st_ctim.tv_sec = now;
     rgw_fh->open_for_create();
   }
+
+  *st = *(rgw_fh->get_stat());
 
   struct rgw_file_handle *rfh = rgw_fh->get_fh();
   *fh = rfh;
@@ -377,39 +362,17 @@ int rgw_getattr(struct rgw_fs *rgw_fs,
 
   RGWFileHandle* rgw_fh = get_rgwfh(fh);
 
-  if (rgw_fh->is_root()) {
-    /* XXX do something */
-    memset(st, 0, sizeof(struct stat));
-    st->st_dev = fs->get_inst();
-    st->st_ino = rgw_fh->get_fh()->fh_hk.object; // XXX
-    st->st_mode = RGW_RWXMODE|S_IFDIR;
-    st->st_nlink = 3;
-    st->st_uid = 0; // XXX
-    st->st_gid = 0; // XXX
-#if 0
-    /* XXX cluster create time? do we know that? */
-    st->st_atim.tv_sec = req.mtime();
-    st->st_mtim.tv_sec = req.mtime();
-    st->st_ctim.tv_sec = req.ctime();
-#endif
-  } else if (rgw_fh->is_bucket()) {
-    /* bucket */
-    /* fill in stat data */
-    memset(st, 0, sizeof(struct stat));
-    st->st_dev = fs->get_inst();
-    st->st_ino = rgw_fh->get_fh()->fh_hk.object; // XXX
-    st->st_mode = RGW_RWXMODE|S_IFDIR;
-    st->st_nlink = 3;
-    st->st_uid = 0; // XXX
-    st->st_gid = 0; // XXX
-#if 0
-    /* XXX we can at least get creation_time */
-    st->st_atim.tv_sec = req.mtime();
-    st->st_mtim.tv_sec = req.mtime();
-    st->st_ctim.tv_sec = req.ctime();
-#endif
+  if (rgw_fh->is_root() ||
+      rgw_fh->is_bucket()) {
+    /* XXX nothing */
   } else {
     /* object */
+
+    /* an object being created isn't expected to exist (if it does,
+     * we'll detect the conflict later */
+    if (rgw_fh->creating())
+      goto done;
+
     const std::string bname = rgw_fh->bucket_name();
     const std::string oname = rgw_fh->object_name();
 
@@ -419,25 +382,22 @@ int rgw_getattr(struct rgw_fs *rgw_fs,
 
     int rc = librgw.get_fe()->execute_req(&req);
     if ((rc != 0) ||
-	(req.get_ret() != 0))
+	(req.get_ret() != 0)) {
+      /* XXX EINVAL is likely illegal protocol return--if the object
+       * should but doesn't exist, it should probably be ENOENT */
       return -EINVAL;
+    }
 
     /* fill in stat data */
-    memset(st, 0, sizeof(struct stat));
-    st->st_dev = fs->get_inst();
-    st->st_ino = rgw_fh->get_fh()->fh_hk.object; // XXX
-    st->st_mode = RGW_RWMODE|S_IFREG;
-    st->st_nlink = 1;
-    st->st_uid = 0; // XXX
-    st->st_gid = 0; // XXX
-    st->st_size = req.size();
-    st->st_blksize = 4096;
-    st->st_blocks = (st->st_size) / 512;
-    st->st_atim.tv_sec = req.mtime();
-    st->st_mtim.tv_sec = req.mtime();
-    st->st_ctim.tv_sec = req.ctime();
+    rgw_fh->get_stat()->st_size = req.size();
+    rgw_fh->get_stat()->st_blocks = (st->st_size) / 512;
+    rgw_fh->get_stat()->st_atim.tv_sec = req.mtime();
+    rgw_fh->get_stat()->st_mtim.tv_sec = req.mtime();
+    rgw_fh->get_stat()->st_ctim.tv_sec = req.ctime();
   }
 
+done:
+  *st = *(rgw_fh->get_stat());
   return 0;
 }
 
@@ -520,6 +480,8 @@ int rgw_readdir(struct rgw_fs *rgw_fs,
     RGWListBucketRequest req(cct, fs->get_user(), uri, rcb, cb_arg, offset);
     rc = librgw.get_fe()->execute_req(&req);
 
+    /* XXX update link count (incorrectly) */
+    parent->get_stat()->st_nlink = 3 + *offset;
   }
 
   /* XXXX request MUST set this */
@@ -592,6 +554,11 @@ int rgw_write(struct rgw_fs *rgw_fs,
 		      rgw_fh->object_name(), bl);
 
   int rc = librgw.get_fe()->execute_req(&req);
+
+  /* XXX move into request */
+  ssize_t min_size = offset+length;
+  if (min_size > rgw_fh->get_stat()->st_size)
+    rgw_fh->get_stat()->st_size = min_size;
 
   *bytes_written = (rc == 0) ? req.bytes_written : 0;
 
@@ -700,6 +667,8 @@ int rgw_readv(struct rgw_fs *rgw_fs,
 		      rgw_fh->object_name(), bl);
 
   int rc = librgw.get_fe()->execute_req(&req);
+
+  /* XXX update size (in request) */
 
   return rc;
 }
