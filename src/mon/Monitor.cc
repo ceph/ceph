@@ -674,11 +674,14 @@ int Monitor::preinit()
     if (authmon()->get_last_committed() == 0) {
       dout(10) << "loading initial keyring to bootstrap authentication for mkfs" << dendl;
       bufferlist bl;
-      store->get("mkfs", "keyring", bl);
-      KeyRing keyring;
-      bufferlist::iterator p = bl.begin();
-      ::decode(keyring, p);
-      extract_save_mon_key(keyring);
+      int err = store->get("mkfs", "keyring", bl);
+      if (err == 0 && bl.length() > 0) {
+        // Attempt to decode and extract keyring only if it is found.
+        KeyRing keyring;
+        bufferlist::iterator p = bl.begin();
+        ::decode(keyring, p);
+        extract_save_mon_key(keyring);
+      }
     }
 
     string keyring_loc = g_conf->mon_data + "/keyring";
