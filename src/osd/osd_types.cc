@@ -4435,7 +4435,16 @@ void object_info_t::encode(bufferlist& bl) const
        ++i) {
     old_watchers.insert(make_pair(i->first.second, i->second));
   }
-  ENCODE_START(15, 8, bl);
+  
+  // kludge to reduce xattr size for most rbd objects
+  int ev = 15;
+  if ((flags & ~0xff) == 0 &&  // no flags outside low 8 bits set
+      watchers.empty()) {      // no watchers
+    // note: we dropped local_mtime too, even though it may have been used.
+    ev = 10;
+  }
+
+  ENCODE_START(ev, 8, bl);
   ::encode(soid, bl);
   ::encode(myoloc, bl);	//Retained for compatibility
   ::encode((__u32)0, bl); // was category, no longer used
@@ -4450,19 +4459,33 @@ void object_info_t::encode(bufferlist& bl) const
     ::encode(snaps, bl);
   ::encode(truncate_seq, bl);
   ::encode(truncate_size, bl);
-  ::encode(is_lost(), bl);
+  {
+    __u8 lo = is_lost();
+    if (ev < 13) {
+      lo = flags;   // all flags fit in 8 bits!
+    }
+    ::encode(lo, bl);
+  }
   ::encode(old_watchers, bl);
   /* shenanigans to avoid breaking backwards compatibility in the disk format.
    * When we can, switch this out for simply putting the version_t on disk. */
   eversion_t user_eversion(0, user_version);
   ::encode(user_eversion, bl);
   ::encode(test_flag(FLAG_USES_TMAP), bl);
-  ::encode(watchers, bl);
-  __u32 _flags = flags;
-  ::encode(_flags, bl);
-  ::encode(local_mtime, bl);
-  ::encode(data_digest, bl);
-  ::encode(omap_digest, bl);
+  if (ev >= 11) {
+    ::encode(watchers, bl);
+  }
+  if (ev >= 13) {
+    __u32 _flags = flags;
+    ::encode(_flags, bl);
+  }
+  if (ev >= 14) {
+    ::encode(local_mtime, bl);
+  }
+  if (ev >= 15) {
+    ::encode(data_digest, bl);
+    ::encode(omap_digest, bl);
+  }
   ENCODE_FINISH(bl);
 }
 
