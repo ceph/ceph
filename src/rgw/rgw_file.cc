@@ -228,7 +228,9 @@ int rgw_unlink(struct rgw_fs *rgw_fs, struct rgw_file_handle* parent_fh,
     /*
      * object
      */
-    RGWDeleteObjRequest req(cct, fs->get_user(), parent->bucket_name(), name);
+    string object_name{name};
+    RGWDeleteObjRequest req(cct, fs->get_user(), parent->bucket_name(),
+      object_name);
     rc = librgw.get_fe()->execute_req(&req);
   }
 
