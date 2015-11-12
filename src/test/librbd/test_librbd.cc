@@ -3429,7 +3429,7 @@ TEST_F(TestLibRBD, RebuildObjectMap)
 
 TEST_F(TestLibRBD, RebuildNewObjectMap)
 {
-  REQUIRE_FEATURE(RBD_FEATURE_LAYERING);
+  REQUIRE_FEATURE(RBD_FEATURE_OBJECT_MAP);
 
   rados_ioctx_t ioctx;
   rados_ioctx_create(_cluster, m_pool_name.c_str(), &ioctx);
