@@ -1,6 +1,8 @@
 v10.0.0
 ======
 
+* [FileStore] removed empty lfn_close function and calls to it.
+
 * The rbd CLI no longer accepts the deprecated '--image-features' option
   during create, import, and clone operations.  The '--image-feature'
   option should be used instead.
