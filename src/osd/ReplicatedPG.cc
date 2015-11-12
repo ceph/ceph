@@ -4940,11 +4940,16 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	    // category is no longer implemented.
 	  }
           if (result >= 0) {
+	    bool is_whiteout = obs.exists && oi.is_whiteout();
 	    if (maybe_create_new_object(ctx)) {
-              ctx->mod_desc.create();
-	      t->touch(soid);
+	      if (is_whiteout)
+		t->nop(); //change whiteout to no-whiteout only need a nop to update xattr.
+	      else {
+		ctx->mod_desc.create();
+		t->touch(soid);
+	      }
 	    }
-          }
+	  }
 	}
       }
       break;
