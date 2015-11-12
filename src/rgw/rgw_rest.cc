@@ -1088,7 +1088,7 @@ int RGWDeleteMultiObj_ObjStore::get_params()
       return ret;
     }
     int read_len;
-    ret = s->cio->read(data, cl, &read_len);
+    ret = s->cio->read(data, cl, &read_len, s->aws4_auth_needs_complete);
     len = read_len;
     if (ret < 0)
       return ret;

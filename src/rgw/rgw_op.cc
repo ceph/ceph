@@ -3645,8 +3645,13 @@ void RGWDeleteMultiObj::execute()
 
   ret = get_params();
   if (ret < 0) {
+    s->aws4_auth_needs_complete = false;
     goto error;
   }
+
+  ret = do_aws4_auth_completion();
+  if (ret)
+    return;
 
   if (!data) {
     ret = -EINVAL;
