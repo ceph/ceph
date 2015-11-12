@@ -24,6 +24,7 @@
 #include "rgw_acl.h"
 #include "rgw_cors.h"
 #include "rgw_quota.h"
+#include "rgw_ws.h"
 
 using namespace std;
 
@@ -367,6 +368,25 @@ public:
   virtual void send_response() = 0;
   virtual const string name() { return "stat_bucket"; }
   virtual RGWOpType get_type() { return RGW_OP_STAT_BUCKET; }
+  virtual uint32_t op_mask() { return RGW_OP_TYPE_READ; }
+};
+
+class RGWGetBucketWS : public RGWOp {
+protected:
+  int ret;
+  RGWWebsiteConfiguration website;
+  bool ws_exist;
+
+public:
+  RGWGetBucketWS() : ret(0), ws_exist(0) {}
+  ~RGWGetBucketWS() {}
+
+  int verify_permission();
+  void pre_exec();
+  void execute();
+
+  virtual void send_response() = 0;
+  virtual const string name() { return "get_bucket_ws"; }
   virtual uint32_t op_mask() { return RGW_OP_TYPE_READ; }
 };
 
@@ -758,6 +778,63 @@ public:
   virtual void send_response() = 0;
   virtual const string name() { return "put_acls"; }
   virtual RGWOpType get_type() { return RGW_OP_PUT_ACLS; }
+  virtual uint32_t op_mask() { return RGW_OP_TYPE_WRITE; }
+};
+
+class RGWGetWS : public RGWOp {
+protected:
+  int ret;
+  RGWWebsiteConfiguration website;
+public:
+  RGWGetWS() : ret(0) {}
+
+  int verify_permission();
+  void pre_exec();
+  void execute();
+
+  virtual void send_response() = 0;
+  virtual const string name() { return "get_ws"; }
+  virtual uint32_t op_mask() { return RGW_OP_TYPE_READ; }
+};
+
+class RGWPutWS : public RGWOp {
+protected:
+  int ret;
+  size_t len;
+  char *data;
+
+public:
+  RGWPutWS() {
+    ret = 0;
+    len = 0;
+    data = NULL;
+  }
+  virtual ~RGWPutWS() {
+    free(data);
+  }
+
+  int verify_permission();
+  void pre_exec();
+  void execute();
+
+  virtual int get_params() = 0;
+  virtual void send_response() = 0;
+  virtual const string name() { return "put_ws"; }
+  virtual uint32_t op_mask() { return RGW_OP_TYPE_WRITE; }
+};
+
+class RGWDeleteWS : public RGWOp {
+protected:
+  int ret;
+
+public:
+  RGWDeleteWS() : ret(0) {}
+
+  int verify_permission();
+  void execute();
+
+  virtual void send_response() = 0;
+  virtual const string name() { return "delete_ws"; }
   virtual uint32_t op_mask() { return RGW_OP_TYPE_WRITE; }
 };
 

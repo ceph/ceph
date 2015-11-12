@@ -17,6 +17,8 @@
 #include "rgw_user.h"
 #include "rgw_cors.h"
 #include "rgw_cors_s3.h"
+#include "rgw_ws.h"
+#include "rgw_ws_s3.h"
 
 #include "rgw_client_io.h"
 
@@ -528,6 +530,46 @@ void RGWStatBucket_ObjStore_S3::send_response()
 
   end_header(s, this);
   dump_start(s);
+}
+
+static int create_redirect_url(struct req_state *s, RGWWebsiteConfiguration& website)
+{
+  string redirect;
+  
+  if (strcmp(g_conf->rgw_dns_name.c_str(), s->info.host.c_str()) == 0) {
+    redirect.append("http://");
+    redirect.append(s->info.host);
+    redirect.append("/");
+    redirect.append(s->bucket_name_str);
+    redirect.append("/");
+    redirect.append(website.get_idx_doc().get_suffix());
+    dump_redirect(s, redirect);
+  }
+  else {
+    redirect.append("http://");
+    redirect.append(s->info.host);
+    redirect.append("/");
+    redirect.append(website.get_idx_doc().get_suffix());
+    dump_redirect(s, redirect);
+  }
+  return 0;
+}
+
+void RGWGetBucketWS_ObjStore_S3::send_response()
+{
+  if (ret < 0)
+    set_req_state_err(s, ret);
+  dump_errno(s);
+
+  if (ws_exist){
+    create_redirect_url(s, website);
+    end_header(s);
+  }
+  else {
+    dump_bucket_from_state(s);
+    end_header(s);
+    rgw_flush_formatter_and_reset(s, s->formatter); 
+  }
 }
 
 static int create_s3_policy(struct req_state *s, RGWRados *store, RGWAccessControlPolicy_S3& s3policy, ACLOwner& owner)
@@ -1585,6 +1627,48 @@ void RGWPutACLs_ObjStore_S3::send_response()
   dump_start(s);
 }
 
+void RGWPutWS_ObjStore_S3::send_response()
+{
+  if (ret)
+    set_req_state_err(s, ret);
+  dump_errno(s);
+  end_header(s);
+  dump_start(s);
+}
+
+void RGWGetWS_ObjStore_S3::send_response()
+{
+  if (ret) {
+    if (ret == -ENOENT) 
+      set_req_state_err(s, ERR_NOT_FOUND);
+    else 
+      set_req_state_err(s, ret);
+  }
+  dump_errno(s);
+  end_header(s, NULL, "application/xml");
+  dump_start(s);
+  if (!ret) {
+    string cors;
+    RGWWebsiteConfiguration_S3 *s3ws = static_cast<RGWWebsiteConfiguration_S3 *>(&website);
+    stringstream ss;
+
+    s3ws->to_xml(ss);
+    cors = ss.str();
+    s->cio->write(cors.c_str(), cors.size());
+  }
+}
+
+void RGWDeleteWS_ObjStore_S3::send_response()
+{
+  int r = ret;
+  if (!r || r == -ENOENT)
+    r = STATUS_NO_CONTENT;
+
+  set_req_state_err(s, r);
+  dump_errno(s);
+  end_header(s, NULL);
+}
+
 void RGWGetCORS_ObjStore_S3::send_response()
 {
   if (ret) {
@@ -2065,10 +2149,16 @@ RGWOp *RGWHandler_ObjStore_Bucket_S3::op_get()
   if (s->info.args.sub_resource_exists("versioning"))
     return new RGWGetBucketVersioning_ObjStore_S3;
 
+  if (!is_auth_op()) {
+    return new RGWGetBucketWS_ObjStore_S3;
+  }
+
   if (is_acl_op()) {
     return new RGWGetACLs_ObjStore_S3;
   } else if (is_cors_op()) {
     return new RGWGetCORS_ObjStore_S3;
+  } else if (is_ws_op()) { 
+    return new RGWGetWS_ObjStore_S3;
   } else if (is_request_payment_op()) {
     return new RGWGetRequestPayment_ObjStore_S3;
   } else if (s->info.args.exists("uploads")) {
@@ -2097,6 +2187,8 @@ RGWOp *RGWHandler_ObjStore_Bucket_S3::op_put()
     return new RGWPutACLs_ObjStore_S3;
   } else if (is_cors_op()) {
     return new RGWPutCORS_ObjStore_S3;
+  } else if (is_ws_op()) {
+    return new RGWPutWS_ObjStore_S3;
   } else if (is_request_payment_op()) {
     return new RGWSetRequestPayment_ObjStore_S3;
   }
@@ -2107,6 +2199,8 @@ RGWOp *RGWHandler_ObjStore_Bucket_S3::op_delete()
 {
   if (is_cors_op()) {
     return new RGWDeleteCORS_ObjStore_S3;
+  } else if (is_ws_op()) {
+    return new RGWDeleteWS_ObjStore_S3;
   }
   return new RGWDeleteBucket_ObjStore_S3;
 }

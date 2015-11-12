@@ -92,6 +92,14 @@ public:
   void send_response();
 };
 
+class RGWGetBucketWS_ObjStore_S3 : public RGWGetBucketWS_ObjStore {
+public:
+  RGWGetBucketWS_ObjStore_S3() {}
+  ~RGWGetBucketWS_ObjStore_S3() {}
+
+  void send_response();
+};
+
 class RGWCreateBucket_ObjStore_S3 : public RGWCreateBucket_ObjStore {
 public:
   RGWCreateBucket_ObjStore_S3() {}
@@ -199,6 +207,30 @@ public:
   ~RGWPutACLs_ObjStore_S3() {}
 
   int get_policy_from_state(RGWRados *store, struct req_state *s, stringstream& ss);
+  void send_response();
+};
+
+class RGWGetWS_ObjStore_S3 : public RGWGetWS_ObjStore {
+public:
+  RGWGetWS_ObjStore_S3() {}
+  ~RGWGetWS_ObjStore_S3() {}
+
+  void send_response();
+};
+
+class RGWPutWS_ObjStore_S3 : public RGWPutWS_ObjStore {
+public:
+  RGWPutWS_ObjStore_S3() {}
+  ~RGWPutWS_ObjStore_S3() {}
+
+  void send_response();
+};
+
+class RGWDeleteWS_ObjStore_S3 : public RGWDeleteWS_ObjStore {
+public:
+  RGWDeleteWS_ObjStore_S3() {}
+  ~RGWDeleteWS_ObjStore_S3() {}
+
   void send_response();
 };
 
@@ -411,6 +443,12 @@ class RGWHandler_ObjStore_Bucket_S3 : public RGWHandler_ObjStore_S3 {
 protected:
   bool is_acl_op() {
     return s->info.args.exists("acl");
+  }
+  bool is_ws_op() {
+    return s->info.args.exists("website");
+  }
+  bool is_auth_op() {
+    return (s->http_auth ? 1 : 0);
   }
   bool is_cors_op() {
       return s->info.args.exists("cors");

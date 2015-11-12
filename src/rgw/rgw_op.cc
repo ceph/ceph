@@ -24,6 +24,8 @@
 #include "rgw_multi_del.h"
 #include "rgw_cors.h"
 #include "rgw_cors_s3.h"
+#include "rgw_ws.h"
+#include "rgw_ws_s3.h"
 
 #include "rgw_client_io.h"
 
@@ -1163,6 +1165,63 @@ void RGWStatAccount::execute()
       done = (m.size() < max_buckets);
     }
   } while (!done);
+}
+
+static int read_bucket_ws(struct req_state *s, RGWWebsiteConfiguration& website, bool& ws_exist)
+{
+  bufferlist bl;
+
+  map<string, bufferlist>::iterator aiter = s->bucket_attrs.find(RGW_ATTR_WEBSITE);
+  if (aiter == s->bucket_attrs.end()) {
+    ldout(s->cct, 20) << "no website configuration attr found" << dendl;
+    ws_exist = false;
+    return 0; /* no website configuration found */
+  }
+
+  bl = aiter->second;
+
+  bufferlist::iterator iter = bl.begin();
+  try {
+    website.decode(iter);
+  } catch (buffer::error& err) {
+    ldout(s->cct, 0) << "ERROR: could not decode website, caught buffer::error" << dendl;
+    return -EIO;
+  }
+  if (s->cct->_conf->subsys.should_gather(ceph_subsys_rgw, 15)) {
+    RGWWebsiteConfiguration_S3 *s3ws = static_cast<RGWWebsiteConfiguration_S3 *>(&website);
+    ldout(s->cct, 15) << "Read RGWWebsiteConfiguration";
+    s3ws->to_xml(*_dout);
+    *_dout << dendl;
+  }
+  ws_exist = true;
+  return 0;
+}
+
+int RGWGetBucketWS::verify_permission()
+{
+  if (!verify_bucket_permission(s, RGW_PERM_READ))
+    return -EACCES;
+
+  return 0;
+}
+
+void RGWGetBucketWS::pre_exec()
+{
+  rgw_bucket_object_pre_exec(s);
+}
+
+void RGWGetBucketWS::execute()
+{
+  ret = read_bucket_ws(s, website, ws_exist);
+  if (ret < 0)
+    return ;
+
+  if (!ws_exist) {
+    dout(2) << "No website configuration set yet for this bucket" << dendl;
+    ret = -ERR_NOT_SET_WEBSITE;
+    return;
+  }
+  ret = -STATUS_REDIRECT;
 }
 
 int RGWGetBucketVersioning::verify_permission()
@@ -2831,6 +2890,103 @@ void RGWPutACLs::execute()
   } else {
     ret = rgw_bucket_set_attrs(store, s->bucket_info, attrs, NULL, ptracker);
   }
+}
+
+int RGWGetWS::verify_permission()
+{
+  if (s->user.user_id.compare(s->bucket_owner.get_id()) != 0)
+    return -EACCES;
+
+  return 0;
+}
+
+void RGWGetWS::pre_exec()
+{
+  rgw_bucket_object_pre_exec(s);
+}
+
+void RGWGetWS::execute()
+{
+  bool ws_exist = false;
+  ret = read_bucket_ws(s, website, ws_exist);
+  if (ret < 0)
+    return ;
+
+  if (!ws_exist) {
+    dout(2) << "No website configuration set yet for this bucket" << dendl;
+    ret = -ENOENT;
+    return;
+  }
+}
+
+int RGWPutWS::verify_permission()
+{
+  if (s->user.user_id.compare(s->bucket_owner.get_id()) != 0)
+    return -EACCES;
+
+  return 0;
+}
+
+void RGWPutWS::pre_exec()
+{
+  rgw_bucket_object_pre_exec(s);
+}
+
+void RGWPutWS::execute()
+{
+  RGWWebsiteConfiguration_S3 *ws_config;
+  RGWWSXMLParser_S3 parser(s->cct);
+  bufferlist bl;
+
+  ret = 0;
+
+  if (!parser.init()) {
+    ret = -EINVAL;
+    return;
+  }
+
+  ret = get_params();
+  if (ret < 0)
+    return;
+
+  ldout(s->cct, 15) << "read len=" << len << " data=" << (data ? data : "") << dendl;
+
+  if (!parser.parse(data, len, 1)) {
+    ret = -EACCES;
+    return;
+  }
+  ws_config = static_cast<RGWWebsiteConfiguration_S3 *>(parser.find_first("WebsiteConfiguration"));
+  if (!ws_config) {
+    ret = -EINVAL;
+    return;
+  }
+
+  if (s->cct->_conf->subsys.should_gather(ceph_subsys_rgw, 15)) {
+    ldout(s->cct, 15) << "New WebsiteConfiguration:";
+    ws_config->to_xml(*_dout);
+    *_dout << dendl;
+  }
+
+  ws_config->encode(bl);
+  map<string, bufferlist> attrs;
+  attrs[RGW_ATTR_WEBSITE] = bl;
+  ret = rgw_bucket_set_attrs(store, s->bucket_info, attrs, NULL, NULL);  
+}
+
+int RGWDeleteWS::verify_permission()
+{
+  if (s->user.user_id.compare(s->bucket_owner.get_id()) != 0)
+    return -EACCES;
+
+  return 0;
+}
+
+void RGWDeleteWS::execute()
+{
+  bufferlist bl;
+  map<string, bufferlist> attrs, rmattrs;
+  rmattrs[RGW_ATTR_WEBSITE] = bl;
+  ret = rgw_bucket_set_attrs(store, s->bucket_info, attrs, &rmattrs, NULL);
 }
 
 int RGWGetCORS::verify_permission()

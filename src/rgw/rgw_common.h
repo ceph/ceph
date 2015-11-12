@@ -70,6 +70,7 @@ using ceph::crypto::MD5;
 #define RGW_ATTR_SHADOW_OBJ    	RGW_ATTR_PREFIX "shadow_name"
 #define RGW_ATTR_MANIFEST    	RGW_ATTR_PREFIX "manifest"
 #define RGW_ATTR_USER_MANIFEST  RGW_ATTR_PREFIX "user_manifest"
+#define RGW_ATTR_WEBSITE        RGW_ATTR_PREFIX "website"
 
 #define RGW_ATTR_TEMPURL_KEY1   RGW_ATTR_META_PREFIX "temp-url-key"
 #define RGW_ATTR_TEMPURL_KEY2   RGW_ATTR_META_PREFIX "temp-url-key-2"
@@ -150,6 +151,7 @@ using ceph::crypto::MD5;
 #define ERR_INVALID_ACCESS_KEY   2028
 #define ERR_MALFORMED_XML        2029
 #define ERR_USER_EXIST           2030
+#define ERR_NOT_SET_WEBSITE      2031
 #define ERR_USER_SUSPENDED       2100
 #define ERR_INTERNAL_ERROR       2200
 #define ERR_NOT_IMPLEMENTED      2201

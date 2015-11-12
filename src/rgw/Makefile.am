@@ -40,6 +40,7 @@ librgw_la_SOURCES =  \
 	rgw/rgw_env.cc \
 	rgw/rgw_cors.cc \
 	rgw/rgw_cors_s3.cc \
+	rgw/rgw_ws_s3.cc \
 	rgw/rgw_auth_s3.cc \
 	rgw/rgw_metadata.cc \
 	rgw/rgw_replica_log.cc \
@@ -135,6 +136,8 @@ noinst_HEADERS += \
 	rgw/rgw_cors.h \
 	rgw/rgw_cors_s3.h \
 	rgw/rgw_cors_swift.h \
+	rgw/rgw_ws.h \
+	rgw/rgw_ws_s3.h \
 	rgw/rgw_string.h \
 	rgw/rgw_formats.h \
 	rgw/rgw_http_errors.h \
