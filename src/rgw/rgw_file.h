@@ -414,11 +414,6 @@ namespace rgw {
     uint32_t get_inst() { return fs_inst; }
 
     RGWUserInfo* get_user() { return &user; }
-
-    bool is_root(struct rgw_fs* _fs) {
-      return (&fs == _fs);
-    }
-
   }; /* RGWLibFS */
 
 } /* namespace rgw */

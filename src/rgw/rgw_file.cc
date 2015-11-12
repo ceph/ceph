@@ -208,25 +208,27 @@ int rgw_rename(struct rgw_fs *rgw_fs,
 /*
   remove file or directory
 */
-int rgw_unlink(struct rgw_fs *rgw_fs, struct rgw_file_handle* parent,
-	      const char* path)
+int rgw_unlink(struct rgw_fs *rgw_fs, struct rgw_file_handle* parent_fh,
+	      const char *name)
 {
   int rc = 0;
 
   RGWLibFS *fs = static_cast<RGWLibFS*>(rgw_fs->fs_private);
   CephContext* cct = static_cast<CephContext*>(rgw_fs->rgw);
 
-  if (fs->is_root(rgw_fs)) {
+  RGWFileHandle* parent = get_rgwfh(parent_fh);
+
+  if (parent->is_root()) {
     /* XXXX remove uri and deal with bucket and object names */
     string uri = "/";
-    uri += path;
+    uri += name;
     RGWDeleteBucketRequest req(cct, fs->get_user(), uri);
     rc = librgw.get_fe()->execute_req(&req);
   } else {
     /*
      * object
      */
-    RGWDeleteObjRequest req(cct, fs->get_user(), "/", path);
+    RGWDeleteObjRequest req(cct, fs->get_user(), parent->bucket_name(), name);
     rc = librgw.get_fe()->execute_req(&req);
   }
 
@@ -602,8 +604,6 @@ int rgw_readv(struct rgw_fs *rgw_fs,
 
   if (! rgw_fh->is_object())
     return -EINVAL;
-
-  dout(15) << "test dout" << dendl;
 
   buffer::list bl;
   RGWGetObjRequest req(cct, fs->get_user(), rgw_fh->bucket_name(),
