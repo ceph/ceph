@@ -6517,14 +6517,16 @@ void OSD::handle_osd_map(MOSDMap *m)
     dout(10) << " msg say newest map is " << m->newest_map << ", requesting more" << dendl;
     osdmap_subscribe(osdmap->get_epoch()+1, true);
   }
+  else if (do_shutdown) {
+    osd_lock.Unlock();
+    shutdown();
+    osd_lock.Lock();
+  }
   else if (is_booting()) {
     start_boot();  // retry
   }
   else if (do_restart)
     start_boot();
-
-  if (do_shutdown)
-    shutdown();
 
   m->put();
 }
