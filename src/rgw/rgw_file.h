@@ -22,6 +22,13 @@
  */
 #include "include/assert.h"
 
+
+#define RGW_RWXMODE  (S_IRWXU | S_IRWXG | S_IRWXO)
+
+#define RGW_RWMODE (RGW_RWXMODE &			\
+		      ~(S_IXUSR | S_IXGRP | S_IXOTH))
+
+
 namespace rgw {
 
   namespace bi = boost::intrusive;
@@ -104,6 +111,7 @@ namespace rgw {
     RGWFHRef parent;
     /* const */ std::string name; /* XXX file or bucket name */
     /* const */ fh_key fhk;
+    struct stat st;
     uint32_t flags;
 
   public:
@@ -117,11 +125,21 @@ namespace rgw {
     friend class RGWLibFS;
 
   private:
-    RGWFileHandle(RGWLibFS* _fs)
+    RGWFileHandle(RGWLibFS* _fs, uint32_t fs_inst)
       : refcnt(1), fs(_fs), parent(nullptr), flags(FLAG_ROOT)
       {
 	/* root */
 	fh.fh_type = RGW_FS_TYPE_DIRECTORY;
+
+	/* partial Unix attrs */
+	memset(&st, 0, sizeof(struct stat));
+	st.st_dev = fs_inst;
+	st.st_mode = RGW_RWXMODE|S_IFDIR;
+	st.st_nlink = 3;
+
+	st.st_uid = 0; // XXX
+	st.st_gid = 0; // XXX
+
 	/* pointer to self */
 	fh.fh_private = this;
       }
@@ -131,13 +149,15 @@ namespace rgw {
       fh.fh_hk.bucket = XXH64(fsid.c_str(), fsid.length(), fh_key::seed);
       fh.fh_hk.object = XXH64(object_name.c_str(), object_name.length(),
 			      fh_key::seed);
+      /* fixup Unix attrs */
+      st.st_ino = fh.fh_hk.object;
       fhk = fh.fh_hk;
       name = object_name;
     }
 
   public:
-    RGWFileHandle(RGWLibFS* fs, RGWFileHandle* _parent, const fh_key& _fhk,
-		  const char *_name)
+    RGWFileHandle(RGWLibFS* fs, uint32_t fs_inst, RGWFileHandle* _parent,
+		  const fh_key& _fhk, const char *_name)
       : parent(_parent), name(_name), fhk(_fhk), flags(FLAG_NONE) {
 
       fh.fh_type = parent->is_root()
@@ -146,6 +166,27 @@ namespace rgw {
       /* save constant fhk */
       fh_key fhk(parent->name, name);
       fh.fh_hk = fhk.fh_hk; /* XXX redundant in fh_hk */
+
+      /* partial Unix attrs */
+      memset(&st, 0, sizeof(struct stat));
+      st.st_dev = fs_inst;
+      st.st_ino = fh.fh_hk.object; // XXX
+
+      st.st_uid = 0; // XXX
+      st.st_gid = 0; // XXX
+
+      switch (fh.fh_type) {
+      case RGW_FS_TYPE_DIRECTORY:
+	st.st_mode = RGW_RWXMODE|S_IFDIR;
+	st.st_nlink = 3;
+	break;
+      case RGW_FS_TYPE_FILE:
+	st.st_mode = RGW_RWMODE|S_IFREG;
+	st.st_nlink = 1;
+	st.st_blksize = 4096;
+      default:
+	break;
+      }
 
       /* pointer to self */
       fh.fh_private = this;
@@ -156,6 +197,8 @@ namespace rgw {
     }
 
     struct rgw_file_handle* get_fh() { return &fh; }
+
+    struct stat *get_stat() { return &st; }
 
     const std::string& bucket_name() const {
       if (is_root())
@@ -280,7 +323,7 @@ namespace rgw {
   public:
     RGWLibFS(CephContext* _cct, const char *_uid, const char *_user_id,
 	    const char* _key)
-      : cct(_cct), root_fh(this),  uid(_uid), key(_user_id, _key) {
+      : cct(_cct), root_fh(this, get_inst()), uid(_uid), key(_user_id, _key) {
 
       /* no bucket may be named rgw_fs_inst-(.*) */
       fsid = RGWFileHandle::root_name + "rgw_fs_inst-" +
@@ -323,7 +366,7 @@ namespace rgw {
 			    RGWFileHandle::FHCache::FLAG_LOCK);
       /* LATCHED */
       if (! fh) {
-	fh = new RGWFileHandle(this, parent, fhk, name);
+	fh = new RGWFileHandle(this, get_inst(), parent, fhk, name);
 	intrusive_ptr_add_ref(fh); /* sentinel ref */
 	fh_cache.insert_latched(fh, lat,
 				RGWFileHandle::FHCache::FLAG_NONE);
