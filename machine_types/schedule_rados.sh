@@ -4,6 +4,7 @@
 # $2 - branch name
 # $3 - machine name
 # $4 - filter out
+# $5 - email address
 
 ## example #1 
 ## (date +%U) week number
@@ -19,4 +20,4 @@
 ## $1 day of the week (0-6)
 ## /28 for 4 weeks
 
-teuthology-suite -v -c $2 -m $3 -k distro -s rados --subset $(echo "(($(date +%U) % 4) * 7) + $1" | bc)/28 $4
+teuthology-suite -v -c $2 -m $3 -k distro -s rados --subset $(echo "(($(date +%U) % 4) * 7) + $1" | bc)/28 $4 -e $5
