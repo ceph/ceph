@@ -69,6 +69,19 @@ struct C_FlushCache : public Context {
   }
 };
 
+struct C_ShutDownCache : public Context {
+  ImageCtx *image_ctx;
+  Context *on_finish;
+
+  C_ShutDownCache(ImageCtx *_image_ctx, Context *_on_finish)
+    : image_ctx(_image_ctx), on_finish(_on_finish) {
+  }
+  virtual void finish(int r) {
+    image_ctx->object_cacher->stop();
+    on_finish->complete(r);
+  }
+};
+
 struct C_InvalidateCache : public Context {
   ImageCtx *image_ctx;
   bool purge_on_error;
@@ -151,6 +164,7 @@ struct C_InvalidateCache : public Context {
       object_cacher(NULL), writeback_handler(NULL), object_set(NULL),
       readahead(),
       total_bytes_read(0), copyup_finisher(NULL),
+      exclusive_lock(nullptr),
       object_map(*this), object_map_ptr(nullptr), aio_work_queue(NULL), op_work_queue(NULL),
       refresh_in_progress(false), asok_hook(new LibrbdAdminSocketHook(this))
   {
@@ -202,7 +216,7 @@ struct C_InvalidateCache : public Context {
     delete asok_hook;
   }
 
-  int ImageCtx::init() {
+  int ImageCtx::init_legacy() {
     int r;
 
     if (id.length()) {
@@ -306,6 +320,71 @@ struct C_InvalidateCache : public Context {
     readahead.set_max_readahead_size(readahead_max_bytes);
 
     return 0;
+  }
+
+  void ImageCtx::init() {
+    assert(!header_oid.empty());
+    assert(old_format || !id.empty());
+    if (!old_format) {
+      init_layout();
+    }
+    apply_metadata_confs();
+
+    string pname = string("librbd-") + id + string("-") +
+      data_ctx.get_pool_name() + string("-") + name;
+    if (!snap_name.empty()) {
+      pname += "-";
+      pname += snap_name;
+    }
+
+    perf_start(pname);
+
+    if (cache) {
+      Mutex::Locker l(cache_lock);
+      ldout(cct, 20) << "enabling caching..." << dendl;
+      writeback_handler = new LibrbdWriteback(this, cache_lock);
+
+      uint64_t init_max_dirty = cache_max_dirty;
+      if (cache_writethrough_until_flush)
+	init_max_dirty = 0;
+      ldout(cct, 20) << "Initial cache settings:"
+		     << " size=" << cache_size
+		     << " num_objects=" << 10
+		     << " max_dirty=" << init_max_dirty
+		     << " target_dirty=" << cache_target_dirty
+		     << " max_dirty_age="
+		     << cache_max_dirty_age << dendl;
+
+      object_cacher = new ObjectCacher(cct, pname, *writeback_handler, cache_lock,
+				       NULL, NULL,
+				       cache_size,
+				       10,  /* reset this in init */
+				       init_max_dirty,
+				       cache_target_dirty,
+				       cache_max_dirty_age,
+				       cache_block_writes_upfront);
+
+      // size object cache appropriately
+      uint64_t obj = cache_max_dirty_object;
+      if (!obj) {
+	obj = MIN(2000, MAX(10, cache_size / 100 / sizeof(ObjectCacher::Object)));
+      }
+      ldout(cct, 10) << " cache bytes " << cache_size
+	<< " -> about " << obj << " objects" << dendl;
+      object_cacher->set_max_objects(obj);
+
+      object_set = new ObjectCacher::ObjectSet(NULL, data_ctx.get_id(), 0);
+      object_set->return_enoent = true;
+      object_cacher->start();
+    }
+
+    if (clone_copy_on_read) {
+      copyup_finisher = new Finisher(cct);
+      copyup_finisher->start();
+    }
+
+    readahead.set_trigger_requests(readahead_trigger_requests);
+    readahead.set_max_readahead_size(readahead_max_bytes);
   }
 
   void ImageCtx::init_layout()
@@ -752,6 +831,21 @@ struct C_InvalidateCache : public Context {
     return r;
   }
 
+  void ImageCtx::shut_down_cache(Context *on_finish) {
+    if (object_cacher == NULL) {
+      on_finish->complete(0);
+      return;
+    }
+
+    RWLock::RLocker owner_locker(owner_lock);
+    cache_lock.Lock();
+    object_cacher->release_set(object_set);
+    cache_lock.Unlock();
+
+    C_ShutDownCache *shut_down = new C_ShutDownCache(this, on_finish);
+    flush_cache(new C_InvalidateCache(this, true, false, shut_down));
+  }
+
   int ImageCtx::invalidate_cache(bool purge_on_error) {
     flush_async_operations();
     if (object_cacher == NULL) {
@@ -881,6 +975,15 @@ struct C_InvalidateCache : public Context {
     }
 
     on_finish->complete(0);
+  }
+
+  void ImageCtx::flush_copyup(Context *on_finish) {
+    if (copyup_finisher == nullptr) {
+      on_finish->complete(0);
+      return;
+    }
+
+    copyup_finisher->queue(on_finish);
   }
 
   void ImageCtx::clear_pending_completions() {

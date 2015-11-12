@@ -880,6 +880,7 @@ if(${WITH_RBD})
     librbd/DiffIterate.cc
     librbd/ExclusiveLock.cc
     librbd/ImageCtx.cc
+    librbd/ImageRefresh.cc
     librbd/ImageWatcher.cc
     librbd/internal.cc
     librbd/Journal.cc
@@ -892,6 +893,11 @@ if(${WITH_RBD})
     librbd/Utils.cc
     librbd/exclusive_lock/AcquireRequest.cc
     librbd/exclusive_lock/ReleaseRequest.cc
+    librbd/image/CloseRequest.cc
+    librbd/image/OpenRequest.cc
+    librbd/image/RefreshParentRequest.cc
+    librbd/image/RefreshRequest.cc
+    librbd/image/SetSnapRequest.cc
     librbd/object_map/InvalidateRequest.cc
     librbd/object_map/LockRequest.cc
     librbd/object_map/Request.cc
