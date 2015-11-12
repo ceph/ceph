@@ -63,6 +63,9 @@ public:
   inline uint8_t get_splay_width() const {
     return m_splay_width;
   }
+  inline int64_t get_pool_id() const {
+    return m_pool_id;
+  }
 
   inline Finisher &get_finisher() {
     return *m_finisher;
@@ -259,6 +262,7 @@ private:
 
   uint8_t m_order;
   uint8_t m_splay_width;
+  int64_t m_pool_id;
   bool m_initialized;
 
   Finisher *m_finisher;
@@ -304,7 +308,16 @@ private:
   void handle_watch_notify(uint64_t notify_id, uint64_t cookie);
   void handle_watch_error(int err);
   void handle_notified(int r);
+
+  friend std::ostream &operator<<(std::ostream &os,
+				  const JournalMetadata &journal_metadata);
 };
+
+std::ostream &operator<<(std::ostream &os,
+			 const JournalMetadata::RegisteredClients &clients);
+
+std::ostream &operator<<(std::ostream &os,
+			 const JournalMetadata &journal_metadata);
 
 } // namespace journal
 
