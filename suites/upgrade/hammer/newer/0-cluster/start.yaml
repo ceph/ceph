@@ -4,6 +4,7 @@ overrides:
     - scrub
     - scrub mismatch
     - ScrubResult
+    - failed to encode
     fs: xfs
 roles:
 - - mon.a
