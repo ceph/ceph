@@ -1056,6 +1056,7 @@ class RGWDataSyncCR : public RGWCoroutine {
   RGWAsyncRadosProcessor *async_rados;
   RGWRESTConn *conn;
   string source_zone;
+  uint32_t num_shards;
 
   RGWObjectCtx obj_ctx;
 
@@ -1070,11 +1071,12 @@ class RGWDataSyncCR : public RGWCoroutine {
 
 public:
   RGWDataSyncCR(RGWRados *_store, RGWHTTPManager *_mgr, RGWAsyncRadosProcessor *_async_rados,
-                RGWRESTConn *_conn, const string& _source_zone, bool *_reset_backoff) : RGWCoroutine(_store->ctx()), store(_store),
+                RGWRESTConn *_conn, const string& _source_zone, uint32_t _num_shards, bool *_reset_backoff) : RGWCoroutine(_store->ctx()), store(_store),
                                                       http_manager(_mgr),
 						      async_rados(_async_rados),
                                                       conn(_conn),
                                                       source_zone(_source_zone),
+                                                      num_shards(_num_shards),
                                                       obj_ctx(store),
                                                       marker_tracker(NULL),
                                                       shard_crs_lock("RGWDataSyncCR::shard_crs_lock"),
@@ -1094,7 +1096,7 @@ public:
         }
       }
 
-      if (retcode < 0) {
+      if (retcode < 0 && retcode != -ENOENT) {
         ldout(store->ctx(), 0) << "ERROR: failed to fetch sync status, retcode=" << retcode << dendl;
         return set_cr_error(retcode);
       }
@@ -1113,6 +1115,7 @@ public:
           ldout(store->ctx(), 0) << "ERROR: failed to init sync, retcode=" << retcode << dendl;
           return set_cr_error(retcode);
         }
+        sync_status.sync_info.num_shards = num_shards;
         sync_status.sync_info.state = rgw_data_sync_info::StateBuildingFullSyncMaps;
         /* update new state */
         yield {
@@ -1204,18 +1207,19 @@ class RGWDataSyncControlCR : public RGWBackoffControlCR
   RGWAsyncRadosProcessor *async_rados;
   RGWRESTConn *conn;
   string source_zone;
+  uint32_t num_shards;
 
 public:
   RGWDataSyncControlCR(RGWRados *_store, RGWHTTPManager *_mgr, RGWAsyncRadosProcessor *_async_rados,
-                RGWRESTConn *_conn, const string& _source_zone) : RGWBackoffControlCR(_store->ctx()), store(_store),
+                RGWRESTConn *_conn, const string& _source_zone, uint32_t _num_shards) : RGWBackoffControlCR(_store->ctx()), store(_store),
                                                       http_manager(_mgr),
 						      async_rados(_async_rados),
                                                       conn(_conn),
-                                                      source_zone(_source_zone) {
+                                                      source_zone(_source_zone), num_shards(_num_shards) {
   }
 
   RGWCoroutine *alloc_cr() {
-    return new RGWDataSyncCR(store, http_manager, async_rados, conn, source_zone, backoff_ptr());
+    return new RGWDataSyncCR(store, http_manager, async_rados, conn, source_zone, num_shards, backoff_ptr());
   }
 
   void wakeup(int shard_id, set<string>& keys) {
@@ -1247,7 +1251,7 @@ int RGWRemoteDataLog::run_sync(int num_shards, rgw_data_sync_status& sync_status
   }
   
   lock.get_write();
-  data_sync_cr = new RGWDataSyncControlCR(store, &http_manager, async_rados, conn, source_zone);
+  data_sync_cr = new RGWDataSyncControlCR(store, &http_manager, async_rados, conn, source_zone, num_shards);
   data_sync_cr->get();
   lock.unlock();
   r = run(data_sync_cr);
@@ -2198,7 +2202,7 @@ int RGWRunBucketSyncCoroutine::operate()
       }
     }
 
-    if (retcode < 0) {
+    if (retcode < 0 && retcode != -ENOENT) {
       ldout(store->ctx(), 0) << "ERROR: failed to retrieve bucket info for bucket=" << bucket_name << " bucket_id=" << bucket_id << dendl;
       return set_cr_error(retcode);
     }
