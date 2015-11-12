@@ -1088,7 +1088,6 @@ void Monitor::sync_obtain_latest_monmap(bufferlist &bl)
     bufferlist backup_bl;
     int err = store->get("mon_sync", "latest_monmap", backup_bl);
     if (err < 0) {
-      assert(err != -ENOENT);
       derr << __func__
            << " something wrong happened while reading the store: "
            << cpp_strerror(err) << dendl;
@@ -1375,6 +1374,7 @@ void Monitor::handle_sync_get_chunk(MonOpRequestRef op)
     bufferlist bl;
     sp.last_committed++;
     store->get(paxos->get_name(), sp.last_committed, bl);
+    // TODO: what if store->get returns error or empty bl?
     tx->put(paxos->get_name(), sp.last_committed, bl);
     left -= bl.length();
     dout(20) << __func__ << " including paxos state " << sp.last_committed
@@ -4339,7 +4339,7 @@ int Monitor::get_mon_metadata(int mon, Formatter *f, ostream& err)
   assert(f);
   map<int, Metadata> last_metadata;
   if (int r = load_metadata(last_metadata)) {
-    err << "Unable to load metadata";
+    err << "Unable to load metadata: " << cpp_strerror(r);
     return r;
   }
   if (!last_metadata.count(mon)) {
@@ -4535,6 +4535,7 @@ bool Monitor::_scrub(ScrubResult *r,
     }
 
     bufferlist bl;
+    //TODO: what when store->get returns error or empty bl?
     store->get(k.first, k.second, bl);
     uint32_t key_crc = bl.crc32c(0);
     dout(30) << __func__ << " " << k << " bl " << bl.length() << " bytes"
@@ -4764,11 +4765,10 @@ void Monitor::prepare_new_fingerprint(MonitorDBStore::TransactionRef t)
 
 int Monitor::check_fsid()
 {
-  if (!store->exists(MONITOR_NAME, "cluster_uuid"))
-    return -ENOENT;
-
   bufferlist ebl;
   int r = store->get(MONITOR_NAME, "cluster_uuid", ebl);
+  if (r == -ENOENT)
+    return r;
   assert(r == 0);
 
   string es(ebl.c_str(), ebl.length());
