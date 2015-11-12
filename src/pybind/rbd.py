@@ -798,11 +798,11 @@ class Image(object):
         :type dstname: str
         :raises: :class:`ImageExists`
         """
-        if not isinstance(srcname, str):
+        if not isinstance(srcname, str_type):
             raise TypeError('src name must be a string')
-        if not isinstance(dstname, str):
+        if not isinstance(dstname, str_type):
             raise TypeError('dst name must be a string')
-        ret = self.librbd.rbd_snap_rename(self.image, c_char_p(srcname), c_char_p(dstname))
+        ret = self.librbd.rbd_snap_rename(self.image, cstr(srcname), cstr(dstname))
         if ret != 0:
             raise make_ex(ret, 'error renaming snapshot of %s from %s to %s' % (self.name, srcname, dstname))
 
