@@ -72,7 +72,7 @@ void Beacon::shutdown()
 {
   Mutex::Locker l(lock);
   if (sender) {
-    timer.cancel_event(sender);
+    int result = timer.cancel_event(sender);
     if (result == false) {
       delete sender;
     }
