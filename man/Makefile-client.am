@@ -16,6 +16,7 @@ endif
 if WITH_RBD
 dist_man_MANS += \
 	ceph-rbdnamer.8 \
+	rbd-nbd.8 \
 	rbd-replay.8 \
 	rbd-replay-many.8 \
 	rbd-replay-prep.8
