@@ -166,8 +166,6 @@ public:
   void finish();
 
   int read_log_info(rgw_datalog_info *log_info);
-  int list_shard(int shard_id);
-  int list_shards(int num_shards);
   int get_shard_info(int shard_id);
   int read_sync_status(rgw_data_sync_status *sync_status);
   int init_sync_status(int num_shards);
