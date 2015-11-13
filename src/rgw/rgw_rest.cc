@@ -904,7 +904,7 @@ int RGWPutACLs_ObjStore::get_params()
        return ret;
     }
     int read_len;
-    int r = s->cio->read(data, cl, &read_len);
+    int r = s->cio->read(data, cl, &read_len, s->aws4_auth_needs_complete);
     len = read_len;
     if (r < 0)
       return r;
@@ -928,7 +928,7 @@ static int read_all_chunked_input(req_state *s, char **pdata, int *plen, int max
 
   int read_len = 0, len = 0;
   do {
-    int r = s->cio->read(data + len, need_to_read, &read_len);
+    int r = s->cio->read(data + len, need_to_read, &read_len, s->aws4_auth_needs_complete);
     if (r < 0) {
       free(data);
       return r;
@@ -981,7 +981,7 @@ int rgw_rest_read_all_input(struct req_state *s, char **pdata, int *plen, int ma
     if (!data) {
        return -ENOMEM;
     }
-    int ret = s->cio->read(data, cl, &len);
+    int ret = s->cio->read(data, cl, &len, s->aws4_auth_needs_complete);
     if (ret < 0) {
       free(data);
       return ret;
@@ -1088,7 +1088,7 @@ int RGWDeleteMultiObj_ObjStore::get_params()
       return ret;
     }
     int read_len;
-    ret = s->cio->read(data, cl, &read_len);
+    ret = s->cio->read(data, cl, &read_len, s->aws4_auth_needs_complete);
     len = read_len;
     if (ret < 0)
       return ret;

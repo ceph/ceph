@@ -483,6 +483,35 @@ int RGWOp::verify_op_mask()
   return 0;
 }
 
+int RGWOp::do_aws4_auth_completion() {
+
+  int ret;
+
+  if (s->aws4_auth_needs_complete) {
+    ret = RGW_Auth_S3::authorize_aws4_auth_complete(store, s);
+    s->aws4_auth_needs_complete = false;
+
+    if (ret) {
+      return ret;
+    }
+
+    /* verify signature */
+
+    if (s->aws4_auth->signature != s->aws4_auth->new_signature) {
+      ret = -ERR_SIGNATURE_NO_MATCH;
+      ldout(s->cct, 20) << "delayed aws4 auth failed" << dendl;
+      return ret;
+    }
+
+    /* authorization ok */
+
+    dout(10) << "v4 auth ok" << dendl;
+
+  }
+
+  return 0;
+}
+
 int RGWOp::init_quota()
 {
   /* no quota enforcement for system requests */
@@ -1199,7 +1228,13 @@ void RGWSetBucketVersioning::execute()
 {
   ret = get_params();
 
-  if (ret < 0)
+  if (ret < 0) {
+    s->aws4_auth_needs_complete = false;
+    return;
+  }
+
+  ret = do_aws4_auth_completion();
+  if (ret)
     return;
 
   if (enable_versioning) {
@@ -1952,30 +1987,9 @@ void RGWPutObj::execute()
   s->obj_size = ofs;
   perfcounter->inc(l_rgw_put_b, s->obj_size);
 
-  if (s->aws4_auth_needs_complete) {
-
-    /* complete aws4 auth */
-
-    ret = RGW_Auth_S3::authorize_aws4_auth_complete(store, s);
-    if (ret) {
-      goto done;
-    }
-
-    s->aws4_auth_needs_complete = false;
-
-    /* verify signature */
-
-    if (s->aws4_auth->signature != s->aws4_auth->new_signature) {
-      ret = -ERR_SIGNATURE_NO_MATCH;
-      ldout(s->cct, 20) << "delayed aws4 auth failed" << dendl;
-      goto done;
-    }
-
-    /* authorization ok */
-
-    dout(10) << "v4 auth ok" << dendl;
-
-  }
+  ret = do_aws4_auth_completion();
+  if (ret)
+    goto done;
 
   ret = store->check_quota(s->bucket_owner.get_id(), s->bucket,
                            user_quota, bucket_quota, s->obj_size);
@@ -2047,6 +2061,9 @@ void RGWPutObj::execute()
   ret = processor->complete(etag, &mtime, 0, attrs, delete_at, if_match, if_nomatch);
 
 done:
+  if (ret)
+    s->aws4_auth_needs_complete = false;
+
   dispose_processor(processor);
   perfcounter->tinc(l_rgw_put_lat,
                    (ceph_clock_now(s->cct) - s->time));
@@ -2770,7 +2787,13 @@ void RGWPutACLs::execute()
   owner = existing_policy->get_owner();
 
   ret = get_params();
-  if (ret < 0)
+  if (ret < 0) {
+    s->aws4_auth_needs_complete = false;
+    return;
+  }
+
+  ret = do_aws4_auth_completion();
+  if (ret)
     return;
 
   ldout(s->cct, 15) << "read len=" << len << " data=" << (data ? data : "") << dendl;
@@ -2865,7 +2888,13 @@ void RGWPutCORS::execute()
   rgw_obj obj;
 
   ret = get_params();
-  if (ret < 0)
+  if (ret < 0) {
+    s->aws4_auth_needs_complete = false;
+    return;
+  }
+
+  ret = do_aws4_auth_completion();
+  if (ret)
     return;
 
   RGWObjVersionTracker *ptracker = (!s->object.empty() ? NULL : &s->bucket_info.objv_tracker);
@@ -3229,7 +3258,13 @@ void RGWCompleteMultipart::execute()
   string version_id;
 
   ret = get_params();
-  if (ret < 0)
+  if (ret < 0) {
+    s->aws4_auth_needs_complete = false;
+    return;
+  }
+
+  ret = do_aws4_auth_completion();
+  if (ret)
     return;
 
   ret = get_system_versioning_params(s, &olh_epoch, &version_id);
@@ -3610,8 +3645,13 @@ void RGWDeleteMultiObj::execute()
 
   ret = get_params();
   if (ret < 0) {
+    s->aws4_auth_needs_complete = false;
     goto error;
   }
+
+  ret = do_aws4_auth_completion();
+  if (ret)
+    return;
 
   if (!data) {
     ret = -EINVAL;
