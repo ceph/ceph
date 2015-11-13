@@ -1892,10 +1892,17 @@ struct CallClientContexts :
       }
       assert(i->second.second);
       assert(i->second.first);
-      i->second.first->substr_of(
-	bl,
-	i->first.get<0>() - adjusted.first,
-	MIN(i->first.get<1>(), bl.length() - (i->first.get<0>() - adjusted.first)));
+      if (i->first.get<1>()) {
+        i->second.first->substr_of(
+	  bl,
+	  i->first.get<0>() - adjusted.first,
+	  MIN(i->first.get<1>(), bl.length() - (i->first.get<0>() - adjusted.first)));
+      } else {
+        i->second.first->substr_of(
+	  bl,
+	  i->first.get<0>() - adjusted.first,
+	  bl.length() - (i->first.get<0>() - adjusted.first));
+      }
       if (i->second.second) {
 	i->second.second->complete(i->second.first->length());
       }
