@@ -191,6 +191,8 @@ int CrushCompiler::decompile(ostream &out)
     out << "tunable chooseleaf_descend_once " << crush.get_chooseleaf_descend_once() << "\n";
   if (crush.get_chooseleaf_vary_r() != 0)
     out << "tunable chooseleaf_vary_r " << crush.get_chooseleaf_vary_r() << "\n";
+  if (crush.get_chooseleaf_stable() != 0)
+    out << "tunable chooseleaf_stable " << crush.get_chooseleaf_stable() << "\n";
   if (crush.get_straw_calc_version() != 0)
     out << "tunable straw_calc_version " << crush.get_straw_calc_version() << "\n";
   if (crush.get_allowed_bucket_algs() != CRUSH_LEGACY_ALLOWED_BUCKET_ALGS)
@@ -373,6 +375,8 @@ int CrushCompiler::parse_tunable(iter_t const& i)
     crush.set_chooseleaf_descend_once(val);
   else if (name == "chooseleaf_vary_r")
     crush.set_chooseleaf_vary_r(val);
+  else if (name == "chooseleaf_stable")
+    crush.set_chooseleaf_stable(val);
   else if (name == "straw_calc_version")
     crush.set_straw_calc_version(val);
   else if (name == "allowed_bucket_algs")
