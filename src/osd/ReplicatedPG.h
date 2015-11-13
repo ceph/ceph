@@ -473,6 +473,17 @@ public:
 
   LogClientTemp clog_error() { return osd->clog->error(); }
 
+  struct watch_disconnect_t {
+    uint64_t cookie;
+    entity_name_t name;
+    bool send_disconnect;
+    watch_disconnect_t(uint64_t c, entity_name_t n, bool sd)
+      : cookie(c), name(n), send_disconnect(sd) {}
+  };
+  void complete_disconnect_watches(
+    ObjectContextRef obc,
+    const list<watch_disconnect_t> &to_disconnect);
+
   /*
    * Capture all object state associated with an in-progress read or write.
    */
@@ -498,13 +509,6 @@ public:
 
     // side effects
     list<pair<watch_info_t,bool> > watch_connects; ///< new watch + will_ping flag
-    struct watch_disconnect_t {
-      uint64_t cookie;
-      entity_name_t name;
-      bool send_disconnect;
-      watch_disconnect_t(uint64_t c, entity_name_t n, bool sd)
-	: cookie(c), name(n), send_disconnect(sd) {}
-    };
     list<watch_disconnect_t> watch_disconnects; ///< old watch + send_discon
     list<notify_info_t> notifies;
     struct NotifyAck {
