@@ -141,13 +141,26 @@ public:
       (1 << CRUSH_BUCKET_STRAW) |
       (1 << CRUSH_BUCKET_STRAW2);
   }
+  void set_tunables_jewel() {
+    crush->choose_local_tries = 0;
+    crush->choose_local_fallback_tries = 0;
+    crush->choose_total_tries = 50;
+    crush->chooseleaf_descend_once = 1;
+    crush->chooseleaf_vary_r = 1;
+    crush->chooseleaf_stable = 1;
+    crush->allowed_bucket_algs =
+      (1 << CRUSH_BUCKET_UNIFORM) |
+      (1 << CRUSH_BUCKET_LIST) |
+      (1 << CRUSH_BUCKET_STRAW) |
+      (1 << CRUSH_BUCKET_STRAW2);
+  }
 
   void set_tunables_legacy() {
     set_tunables_argonaut();
     crush->straw_calc_version = 0;
   }
   void set_tunables_optimal() {
-    set_tunables_hammer();
+    set_tunables_jewel();
     crush->straw_calc_version = 1;
   }
   void set_tunables_default() {
@@ -257,10 +270,24 @@ public:
 				      (1 << CRUSH_BUCKET_LIST) |
 				      (1 << CRUSH_BUCKET_STRAW) |
 				      (1 << CRUSH_BUCKET_STRAW2));
-}
+  }
+  bool has_jewel_tunables() const {
+    return
+      crush->choose_local_tries == 0 &&
+      crush->choose_local_fallback_tries == 0 &&
+      crush->choose_total_tries == 50 &&
+      crush->chooseleaf_descend_once == 1 &&
+      crush->chooseleaf_vary_r == 1 &&
+      crush->chooseleaf_stable == 1 &&
+      crush->straw_calc_version == 1 &&
+      crush->allowed_bucket_algs == ((1 << CRUSH_BUCKET_UNIFORM) |
+				      (1 << CRUSH_BUCKET_LIST) |
+				      (1 << CRUSH_BUCKET_STRAW) |
+				      (1 << CRUSH_BUCKET_STRAW2));
+  }
 
   bool has_optimal_tunables() const {
-    return has_hammer_tunables();
+    return has_jewel_tunables();
   }
   bool has_legacy_tunables() const {
     return has_argonaut_tunables();
