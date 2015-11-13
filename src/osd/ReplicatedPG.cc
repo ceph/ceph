@@ -3013,6 +3013,13 @@ void ReplicatedPG::execute_ctx(OpContext *ctx)
 	ctx->op->mark_commit_sent();
       }
     });
+  ctx->register_on_success(
+    [ctx, this]() {
+      do_osd_op_effects(
+	ctx,
+	ctx->op ? ctx->op->get_req()->get_connection() :
+	ConnectionRef());
+    });
 
   // issue replica writes
   ceph_tid_t rep_tid = osd->get_tid();
@@ -6384,8 +6391,8 @@ void ReplicatedPG::do_osd_op_effects(OpContext *ctx, const ConnectionRef& conn)
   // disconnects first
   complete_disconnect_watches(ctx->obc, ctx->watch_disconnects);
 
-  if (!conn)
-    return;
+  assert(conn);
+
   boost::intrusive_ptr<OSD::Session> session((OSD::Session *)conn->get_priv());
   if (!session.get())
     return;
@@ -8320,11 +8327,6 @@ void ReplicatedPG::eval_repop(RepGather *repop)
   if (repop->all_applied && repop->all_committed) {
     repop->rep_done = true;
 
-    do_osd_op_effects(
-      repop->ctx,
-      repop->ctx->op ? repop->ctx->op->get_req()->get_connection() :
-      ConnectionRef());
-
     calc_min_last_complete_ondisk();
 
     for (auto p = repop->on_success.begin();
@@ -8612,8 +8614,13 @@ void ReplicatedPG::handle_watch_timeout(WatchRef watch)
   oi.watchers.erase(make_pair(watch->get_cookie(),
 			      watch->get_entity()));
 
-  ctx->watch_disconnects.push_back(
-    OpContext::watch_disconnect_t(watch->get_cookie(), watch->get_entity(), true));
+  list<watch_disconnect_t> watch_disconnects = {
+    watch_disconnect_t(watch->get_cookie(), watch->get_entity(), true)
+  };
+  ctx->register_on_success(
+    [this, obc, watch_disconnects]() {
+      complete_disconnect_watches(obc, watch_disconnects);
+    });
 
 
   PGBackend::PGTransaction *t = ctx->op_t;
