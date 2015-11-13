@@ -59,7 +59,6 @@ protected:
     map<version_t, vector<Context*> > commit_waiters;
     uint64_t committing_seq, committed_seq;
 
-    //std::set use red-black tree, default ascending order
     set<uint64_t>   applying_seq_set;
 
   public:
