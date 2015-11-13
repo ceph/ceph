@@ -1741,7 +1741,7 @@ public:
   void _send_op_account(Op *op);
   void _cancel_linger_op(Op *op);
   void finish_op(OSDSession *session, ceph_tid_t tid);
-  void _finish_op(Op *op);
+  void _finish_op(Op *op, int r);
   static bool is_pg_changed(
     int oldprimary,
     const vector<int>& oldacting,
@@ -2469,7 +2469,7 @@ public:
 private:
   void pool_op_submit(PoolOp *op);
   void _pool_op_submit(PoolOp *op);
-  void _finish_pool_op(PoolOp *op);
+  void _finish_pool_op(PoolOp *op, int r);
   void _do_delete_pool(int64_t pool, Context *onfinish);
 public:
   int create_pool_snap(int64_t pool, string& snapName, Context *onfinish);
@@ -2495,7 +2495,7 @@ public:
   void get_pool_stats(list<string>& pools, map<string,pool_stat_t> *result,
 		      Context *onfinish);
   int pool_stat_op_cancel(ceph_tid_t tid, int r);
-  void _finish_pool_stat_op(PoolStatOp *op);
+  void _finish_pool_stat_op(PoolStatOp *op, int r);
 
   // ---------------------------
   // df stats
@@ -2505,7 +2505,7 @@ public:
   void handle_fs_stats_reply(MStatfsReply *m);
   void get_fs_stats(struct ceph_statfs& result, Context *onfinish);
   int statfs_op_cancel(ceph_tid_t tid, int r);
-  void _finish_statfs_op(StatfsOp *op);
+  void _finish_statfs_op(StatfsOp *op, int r);
 
   // ---------------------------
   // some scatter/gather hackery

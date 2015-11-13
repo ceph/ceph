@@ -63,6 +63,7 @@ Depends: binutils,
          ceph-common (>= 0.94.2-2),
          cryptsetup-bin | cryptsetup,
          gdisk,
+         logrotate,
          parted,
          python,
          python-argparse,
@@ -192,9 +193,11 @@ Depends: librbd1 (= ${binary:Version}), ${misc:Depends}, ${shlibs:Depends},
 Conflicts: ceph-client-tools
 Replaces: ceph-client-tools,
 	  ceph (<< 0.94.2-2),
+	  ceph-test (<< 0.94.2-2),
 	  python-ceph (<< 0.92-1223),
 	  librbd1 (<< 0.92-1238)
 Breaks: ceph (<< 0.94.2-2),
+	ceph-test (<< 0.94.2-2),
 	python-ceph (<< 0.92-1223),
 	librbd1 (<< 0.92-1238)
 Suggests: ceph, ceph-mds
