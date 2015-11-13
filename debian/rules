@@ -161,6 +161,7 @@ binary-arch: build install
 	dh_strip -pceph-mds --dbg-package=ceph-mds-dbg
 	dh_strip -pceph-fuse --dbg-package=ceph-fuse-dbg
 	dh_strip -prbd-fuse --dbg-package=rbd-fuse-dbg
+	dh_strip -prbd-nbd --dbg-package=rbd-nbd-dbg
 	dh_strip -pceph-common --dbg-package=ceph-common-dbg
 	dh_strip -pceph-fs-common --dbg-package=ceph-fs-common-dbg
 	dh_strip -plibrados2 --dbg-package=librados2-dbg
