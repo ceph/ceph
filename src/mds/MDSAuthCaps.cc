@@ -70,11 +70,13 @@ struct MDSCapParser : qi::grammar<Iterator, MDSAuthCaps()>
 
     // capspec = * | r[w]
     capspec = spaces >> (
-        lit("*")[_val = MDSCapSpec(true, true, true)]
+        lit("*")[_val = MDSCapSpec(true, true, true, true)]
         |
-        (lit("rw"))[_val = MDSCapSpec(true, true, false)]
+        (lit("rwp"))[_val = MDSCapSpec(true, true, false, true)]
         |
-        (lit("r"))[_val = MDSCapSpec(true, false, false)]
+        (lit("rw"))[_val = MDSCapSpec(true, true, false, false)]
+        |
+        (lit("r"))[_val = MDSCapSpec(true, false, false, false)]
         );
 
     grant = lit("allow") >> (capspec >> match)[_val = phoenix::construct<MDSCapGrant>(_1, _2)];
@@ -159,6 +161,13 @@ bool MDSAuthCaps::is_capable(const std::string &inode_path,
     if (i->match.match(inode_path, caller_uid, caller_gid) &&
 	i->spec.allows(mask & (MAY_READ|MAY_EXECUTE), mask & MAY_WRITE)) {
 
+      // Spec is non-allowing if caller asked for set pool but spec forbids it
+      if (mask & MAY_SET_POOL) {
+        if (!i->spec.allows_set_pool()) {
+          continue;
+        }
+      }
+
       // check unix permissions?
       if (i->match.uid == MDSCapMatch::MDS_AUTH_UID_ANY) {
         return true;
@@ -209,7 +218,9 @@ bool MDSAuthCaps::is_capable(const std::string &inode_path,
 void MDSAuthCaps::set_allow_all()
 {
     grants.clear();
-    grants.push_back(MDSCapGrant(MDSCapSpec(true, true, true), MDSCapMatch()));
+    grants.push_back(MDSCapGrant(
+                       MDSCapSpec(true, true, true, true),
+                       MDSCapMatch()));
 }
 
 bool MDSAuthCaps::parse(CephContext *c, const std::string& str, ostream *err)
@@ -217,7 +228,7 @@ bool MDSAuthCaps::parse(CephContext *c, const std::string& str, ostream *err)
   // Special case for legacy caps
   if (str == "allow") {
     grants.clear();
-    grants.push_back(MDSCapGrant(MDSCapSpec(true, true, false), MDSCapMatch()));
+    grants.push_back(MDSCapGrant(MDSCapSpec(true, true, false, true), MDSCapMatch()));
     return true;
   }
 
