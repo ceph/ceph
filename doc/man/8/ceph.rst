@@ -884,7 +884,7 @@ Only for tiered pools::
 	ceph osd pool get <poolname> hit_set_type|hit_set_period|hit_set_count|hit_set_fpp|
 	target_max_objects|target_max_bytes|cache_target_dirty_ratio|cache_target_dirty_high_ratio|
 	cache_target_full_ratio|cache_min_flush_age|cache_min_evict_age|
-	min_read_recency_for_promote
+	min_read_recency_for_promote|hit_set_grade_decay_rate|hit_set_search_last_n
 
 Only for erasure coded pools::
 
@@ -934,7 +934,8 @@ Usage::
 	target_max_bytes|target_max_objects|cache_target_dirty_ratio|
 	cache_target_dirty_high_ratio|
 	cache_target_full_ratio|cache_min_flush_age|cache_min_evict_age|auid|
-	min_read_recency_for_promote|write_fadvise_dontneed
+	min_read_recency_for_promote|write_fadvise_dontneed|hit_set_grade_decay_rate|
+	hit_set_search_last_n
 	<val> {--yes-i-really-mean-it}
 
 Subcommand ``set-quota`` sets object or byte limit on pool.

@@ -889,7 +889,6 @@ void pool_snap_info_t::generate_test_instances(list<pool_snap_info_t*>& o)
   o.back()->name = "foo";
 }
 
-
 // -- pg_pool_t --
 
 void pg_pool_t::dump(Formatter *f) const
@@ -947,6 +946,12 @@ void pg_pool_t::dump(Formatter *f) const
   f->dump_bool("use_gmt_hitset", use_gmt_hitset);
   f->dump_unsigned("min_read_recency_for_promote", min_read_recency_for_promote);
   f->dump_unsigned("min_write_recency_for_promote", min_write_recency_for_promote);
+  f->dump_unsigned("hit_set_grade_decay_rate", hit_set_grade_decay_rate);
+  f->dump_unsigned("hit_set_search_last_n", hit_set_search_last_n);
+  f->open_array_section("grade_table");
+  for (unsigned i = 0; i < hit_set_count; ++i)
+    f->dump_unsigned("value", get_grade(i));
+  f->close_section();
   f->dump_unsigned("stripe_width", get_stripe_width());
   f->dump_unsigned("expected_num_objects", expected_num_objects);
   f->dump_bool("fast_read", fast_read);
@@ -1259,7 +1264,7 @@ void pg_pool_t::encode(bufferlist& bl, uint64_t features) const
     return;
   }
 
-  ENCODE_START(22, 5, bl);
+  ENCODE_START(23, 5, bl);
   ::encode(type, bl);
   ::encode(size, bl);
   ::encode(crush_ruleset, bl);
@@ -1305,12 +1310,14 @@ void pg_pool_t::encode(bufferlist& bl, uint64_t features) const
   ::encode(min_write_recency_for_promote, bl);
   ::encode(use_gmt_hitset, bl);
   ::encode(fast_read, bl);
+  ::encode(hit_set_grade_decay_rate, bl);
+  ::encode(hit_set_search_last_n, bl);
   ENCODE_FINISH(bl);
 }
 
 void pg_pool_t::decode(bufferlist::iterator& bl)
 {
-  DECODE_START_LEGACY_COMPAT_LEN(22, 5, 5, bl);
+  DECODE_START_LEGACY_COMPAT_LEN(23, 5, 5, bl);
   ::decode(type, bl);
   ::decode(size, bl);
   ::decode(crush_ruleset, bl);
@@ -1442,8 +1449,16 @@ void pg_pool_t::decode(bufferlist::iterator& bl)
   } else {
     fast_read = false;
   }
+  if (struct_v >= 23) {
+    ::decode(hit_set_grade_decay_rate, bl);
+    ::decode(hit_set_search_last_n, bl);
+  } else {
+    hit_set_grade_decay_rate = 0;
+    hit_set_search_last_n = 1;
+  }
   DECODE_FINISH(bl);
   calc_pg_masks();
+  calc_grade_table();
 }
 
 void pg_pool_t::generate_test_instances(list<pg_pool_t*>& o)
@@ -1489,6 +1504,9 @@ void pg_pool_t::generate_test_instances(list<pg_pool_t*>& o)
   a.hit_set_count = 8;
   a.min_read_recency_for_promote = 1;
   a.min_write_recency_for_promote = 1;
+  a.hit_set_grade_decay_rate = 50;
+  a.hit_set_search_last_n = 1;
+  a.calc_grade_table();
   a.set_stripe_width(12345);
   a.target_max_bytes = 1238132132;
   a.target_max_objects = 1232132;
@@ -1542,7 +1560,9 @@ ostream& operator<<(ostream& out, const pg_pool_t& p)
   if (p.hit_set_params.get_type() != HitSet::TYPE_NONE) {
     out << " hit_set " << p.hit_set_params
 	<< " " << p.hit_set_period << "s"
-	<< " x" << p.hit_set_count;
+	<< " x" << p.hit_set_count << " decay_rate "
+	<< p.hit_set_grade_decay_rate
+	<< " search_last_n " << p.hit_set_search_last_n;
   }
   if (p.min_read_recency_for_promote)
     out << " min_read_recency_for_promote " << p.min_read_recency_for_promote;
