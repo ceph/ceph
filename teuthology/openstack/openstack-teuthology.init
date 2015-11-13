@@ -72,14 +72,10 @@ case $1 in
                 ip=$(ip a show dev eth0 | sed -n "s:.*inet \(.*\)/.*:\1:p")
                 openstack server list --long -f json | \
                     jq ".[] | select(.Properties | contains(\"ownedby='$ip'\")) | .ID" | \
-                    while read uuid ; do
-                    eval openstack server delete --wait $uuid
-                done
+                    xargs --no-run-if-empty --max-args 1 -P20 openstack server delete --wait
                 openstack volume list --long -f json | \
                     jq ".[] | select(.Properties | contains(\"ownedby='$ip'\")) | .ID" | \
-                    while read uuid ; do
-                    eval openstack volume delete $uuid
-                done
+                    xargs --no-run-if-empty --max-args 1 -P20 openstack volume delete
                 perl -pi -e 's/.*gitbuilder_host.*/gitbuilder_host: gitbuilder.ceph.com/' /home/$user/.teuthology.yaml
                 rm -fr /home/$user/src/* /tmp/stampsdir
                 ;;
