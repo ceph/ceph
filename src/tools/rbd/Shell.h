@@ -62,10 +62,9 @@ private:
   void prune_command_line_arguments(int arg_count, const char **arg_values,
                                     std::vector<std::string> *args);
 
-  void print_help(const std::string &app_name);
-  void print_action_help(const std::string &app_name, Action *action);
-  void print_unknown_action(const std::string &app_name,
-                            const CommandSpec &command_spec);
+  void print_help();
+  void print_action_help(Action *action);
+  void print_unknown_action(const CommandSpec &command_spec);
 
   void print_bash_completion(const CommandSpec &command_spec);
   void print_bash_completion_options(
