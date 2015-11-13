@@ -226,8 +226,12 @@ public:
   RGWSyncShardMarkerTrack(int _window_size) : window_size(_window_size), updates_since_flush(0) {}
   virtual ~RGWSyncShardMarkerTrack() {}
 
-  void start(const T& pos, int index_pos, const utime_t& timestamp) {
+  bool start(const T& pos, int index_pos, const utime_t& timestamp) {
+    if (pending.find(pos) != pending.end()) {
+      return false;
+    }
     pending[pos] = marker_entry(index_pos, timestamp);
+    return true;
   }
 
   RGWCoroutine *finish(const T& pos) {
