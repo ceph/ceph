@@ -2406,6 +2406,12 @@ TEST_F(LibRadosTwoPoolsPP, PromoteOn2ndRead) {
   ASSERT_EQ(0, cluster.mon_command(
     set_pool_str(cache_pool_name, "min_read_recency_for_promote", 1),
     inbl, NULL, NULL));
+  ASSERT_EQ(0, cluster.mon_command(
+    set_pool_str(cache_pool_name, "hit_set_grade_decay_rate", 20),
+    inbl, NULL, NULL));
+  ASSERT_EQ(0, cluster.mon_command(
+    set_pool_str(cache_pool_name, "hit_set_search_last_n", 1),
+    inbl, NULL, NULL));
 
   // wait for maps to settle
   cluster.wait_for_latest_osdmap();
@@ -4758,6 +4764,12 @@ TEST_F(LibRadosTwoPoolsECPP, PromoteOn2ndRead) {
     inbl, NULL, NULL));
   ASSERT_EQ(0, cluster.mon_command(
     set_pool_str(cache_pool_name, "min_read_recency_for_promote", 1),
+    inbl, NULL, NULL));
+  ASSERT_EQ(0, cluster.mon_command(
+    set_pool_str(cache_pool_name, "hit_set_grade_decay_rate", 20),
+    inbl, NULL, NULL));
+  ASSERT_EQ(0, cluster.mon_command(
+    set_pool_str(cache_pool_name, "hit_set_search_last_n", 1),
     inbl, NULL, NULL));
 
   // wait for maps to settle
