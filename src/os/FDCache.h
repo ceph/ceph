@@ -77,7 +77,7 @@ public:
     return registry[registry_id].lookup(hoid);
   }
 
-  FDRef add(const ghobject_t &hoid, int fd, bool *existed) {
+  FDRef add(const ghobject_t &hoid, int fd, bool *existed = NULL) {
     int registry_id = hoid.hobj.get_hash() % registry_shards;
     return registry[registry_id].add(hoid, new FD(fd), existed);
   }
