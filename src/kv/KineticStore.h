@@ -137,7 +137,7 @@ public:
 
   /// Utility
   static string combine_strings(const string &prefix, const string &value);
-  static int split_key(string in_prefix, string *prefix, string *key);
+  static int split_key(string &in_prefix, string *prefix, string *key);
   static bufferlist to_bufferlist(const kinetic::KineticRecord &record);
   virtual uint64_t get_estimated_size(map<string,uint64_t> &extra) {
     // not used by the osd
