@@ -245,7 +245,7 @@ public:
 }
 
   bool has_optimal_tunables() const {
-    return has_firefly_tunables();
+    return has_hammer_tunables();
   }
   bool has_legacy_tunables() const {
     return has_argonaut_tunables();
