@@ -110,6 +110,9 @@ use an upgrade procedure like:
 Upgrading from Hammer
 ---------------------
 
+* All cluster nodes must first upgrade to Hammer v0.94.4 or a later v0.94.z release; only
+  then is it possible to upgrade to Infernalis 9.2.z.
+
 * For all distributions that support systemd (CentOS 7, Fedora, Debian
   Jessie 8.x, OpenSUSE), ceph daemons are now managed using native systemd
   files instead of the legacy sysvinit scripts.  For example,::
@@ -786,19 +789,19 @@ Upgrading from Firefly
 
 Upgrading directly from Firefly v0.80.z is not possible.  All clusters
 must first upgrade to Hammer v0.94.4 or a later v0.94.z release; only
-then is it possible to upgrade to Infernalis 9.2.z.
+then is it possible to do online upgrade to Infernalis 9.2.z.
 
-Note that v0.94.4 isn't released yet, but you can upgrade to a test build
-from gitbuilder with::
+User can upgrade to latest hammer v0.94.z 
+from gitbuilder with(also refer the hammer release notes for more details)::
 
-  ceph-deploy install --dev hammer HOST
-
-The v0.94.4 Hammer point release will be out before v9.2.0 Infernalis
-is.
+  ceph-deploy install --release hammer HOST
 
 
 Upgrading from Hammer
 ---------------------
+
+* All cluster nodes must first upgrade to Hammer v0.94.4 or a later v0.94.z release; only
+  then is it possible to do online upgrade to Infernalis 9.2.z.
 
 * For all distributions that support systemd (CentOS 7, Fedora, Debian
   Jessie 8.x, OpenSUSE), ceph daemons are now managed using native systemd
