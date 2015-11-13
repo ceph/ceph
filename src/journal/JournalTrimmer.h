@@ -37,6 +37,7 @@ private:
 
     virtual void finish(int r) {
       journal_trimmer->handle_commit_position_safe(r, object_set_position);
+      journal_trimmer->m_async_op_tracker.finish_op();
     }
   };
   struct C_RemoveSet : public Context {
@@ -51,6 +52,7 @@ private:
     virtual void complete(int r);
     virtual void finish(int r) {
       journal_trimmer->handle_set_removed(r, object_set);
+      journal_trimmer->m_async_op_tracker.finish_op();
     }
   };
 
