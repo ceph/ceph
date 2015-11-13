@@ -1069,7 +1069,9 @@ public:
         }
       }
 
-      if (retcode < 0 && retcode != -ENOENT) {
+      if (retcode == -ENOENT) {
+        sync_status.sync_info.num_shards = num_shards;
+      } else if (retcode < 0 && retcode != -ENOENT) {
         ldout(store->ctx(), 0) << "ERROR: failed to fetch sync status, retcode=" << retcode << dendl;
         return set_cr_error(retcode);
       }
