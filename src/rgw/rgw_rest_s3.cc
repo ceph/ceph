@@ -2370,7 +2370,7 @@ int RGW_Auth_S3::authorize(RGWRados *store, struct req_state *s)
 
   }
 
-  return -EPERM;
+  return -EINVAL;
 }
 
 int RGW_Auth_S3::authorize_aws4_auth_complete(RGWRados *store, struct req_state *s)
