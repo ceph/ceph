@@ -1211,19 +1211,21 @@ public:
         for (; iter != entries.end(); ++iter) {
           ldout(sync_env->cct, 20) << __func__ << ": full sync: " << iter->first << dendl;
           total_entries++;
-          marker_tracker->start(iter->first, total_entries, utime_t());
-
+          if (!marker_tracker->start(iter->first, total_entries, utime_t())) {
+            ldout(sync_env->cct, 0) << "ERROR: cannot start syncing " << iter->first << ". Duplicate entry?" << dendl;
+          } else {
             // fetch remote and write locally
-          yield {
-            RGWCoroutinesStack *stack = spawn(new RGWMetaSyncSingleEntryCR(sync_env, iter->first, iter->first, marker_tracker), false);
-            if (retcode < 0) {
-              return retcode;
-            }
-            assert(stack);
-            stack->get();
+            yield {
+              RGWCoroutinesStack *stack = spawn(new RGWMetaSyncSingleEntryCR(sync_env, iter->first, iter->first, marker_tracker), false);
+              if (retcode < 0) {
+                return retcode;
+              }
+              assert(stack);
+              stack->get();
 
-            stack_to_pos[stack] = iter->first;
-            pos_to_prev[iter->first] = marker;
+              stack_to_pos[stack] = iter->first;
+              pos_to_prev[iter->first] = marker;
+            }
           }
           marker = iter->first;
         }
@@ -1342,17 +1344,20 @@ public:
           yield call(new RGWReadMDLogEntriesCR(sync_env, shard_id, &max_marker, INCREMENTAL_MAX_ENTRIES, &log_entries, &truncated));
           for (log_iter = log_entries.begin(); log_iter != log_entries.end(); ++log_iter) {
             ldout(sync_env->cct, 20) << __func__ << ":" << __LINE__ << ": shard_id=" << shard_id << " log_entry: " << log_iter->id << ":" << log_iter->section << ":" << log_iter->name << ":" << log_iter->timestamp << dendl;
-            marker_tracker->start(log_iter->id, 0, log_iter->timestamp);
-            raw_key = log_iter->section + ":" + log_iter->name;
-            yield {
-              RGWCoroutinesStack *stack = spawn(new RGWMetaSyncSingleEntryCR(sync_env, raw_key, log_iter->id, marker_tracker), false);
-              assert(stack);
-              stack->get();
+            if (!marker_tracker->start(log_iter->id, 0, log_iter->timestamp)) {
+              ldout(sync_env->cct, 0) << "ERROR: cannot start syncing " << log_iter->id << ". Duplicate entry?" << dendl;
+            } else {
+              raw_key = log_iter->section + ":" + log_iter->name;
+              yield {
+                RGWCoroutinesStack *stack = spawn(new RGWMetaSyncSingleEntryCR(sync_env, raw_key, log_iter->id, marker_tracker), false);
+                assert(stack);
+                stack->get();
 
-              stack_to_pos[stack] = log_iter->id;
-              pos_to_prev[log_iter->id] = marker;
-              marker = log_iter->id;
+                stack_to_pos[stack] = log_iter->id;
+                pos_to_prev[log_iter->id] = marker;
+              }
             }
+            marker = log_iter->id;
           }
         }
         collect_children();
