@@ -231,15 +231,19 @@ private:
   }
   void _sub_got(string what, version_t got) {
     if (sub_new.count(what)) {
-      if (sub_new[what].flags & CEPH_SUBSCRIBE_ONETIME)
-	sub_new.erase(what);
-      else
-	sub_new[what].start = got + 1;
+      if (sub_new[what].start <= got) {
+	if (sub_new[what].flags & CEPH_SUBSCRIBE_ONETIME)
+	  sub_new.erase(what);
+	else
+	  sub_new[what].start = got + 1;
+      }
     } else if (sub_sent.count(what)) {
-      if (sub_sent[what].flags & CEPH_SUBSCRIBE_ONETIME)
-	sub_sent.erase(what);
-      else
-	sub_sent[what].start = got + 1;
+      if (sub_sent[what].start <= got) {
+	if (sub_sent[what].flags & CEPH_SUBSCRIBE_ONETIME)
+	  sub_sent.erase(what);
+	else
+	  sub_sent[what].start = got + 1;
+      }
     }
   }
   void _sub_unwant(string what) {
