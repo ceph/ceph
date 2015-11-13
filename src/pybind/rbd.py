@@ -9,18 +9,18 @@ Error codes from librbd are turned into exceptions that subclass
 (the base class of all rbd exceptions), :class:`PermissionError`
 and :class:`IOError`, in addition to those documented for the
 method.
-
-A number of methods have string arguments, which must not be unicode
-to interact correctly with librbd. If unicode is passed to these
-methods, a :class:`TypeError` will be raised.
 """
 # Copyright 2011 Josh Durgin
+from collections import Iterable
 from ctypes import CDLL, c_char, c_char_p, c_size_t, c_void_p, c_int, \
     create_string_buffer, byref, Structure, c_uint64, c_int64, c_uint8, \
     CFUNCTYPE
 from ctypes.util import find_library
 import ctypes
 import errno
+import sys
+
+from rados import cstr, decode_cstr
 
 ANONYMOUS_AUID = 0xffffffffffffffff
 ADMIN_AUID = 0
@@ -70,6 +70,16 @@ RBD_IMAGE_OPTION_FEATURES = 1
 RBD_IMAGE_OPTION_ORDER = 2
 RBD_IMAGE_OPTION_STRIPE_UNIT = 3
 RBD_IMAGE_OPTION_STRIPE_COUNT = 4
+
+
+# Are we running Python 2.x
+_python2 = sys.hexversion < 0x03000000
+
+
+if _python2:
+    str_type = basestring
+else:
+    str_type = str
 
 
 class Error(Exception):
@@ -250,13 +260,13 @@ class RBD(object):
         """
         if order is None:
             order = 0
-        if not isinstance(name, str):
+        if not isinstance(name, str_type):
             raise TypeError('name must be a string')
         if old_format:
             if features != 0 or stripe_unit != 0 or stripe_count != 0:
                 raise InvalidArgument('format 1 images do not support feature'
                                       ' masks or non-default striping')
-            ret = self.librbd.rbd_create(ioctx.io, c_char_p(name),
+            ret = self.librbd.rbd_create(ioctx.io, cstr(name),
                                          c_uint64(size),
                                          byref(c_int(order)))
         else:
@@ -287,21 +297,21 @@ class RBD(object):
                 self.librbd.rbd_image_options_set_uint64(opts,
                                                          RBD_IMAGE_OPTION_STRIPE_COUNT,
                                                          c_uint64(stripe_count))
-                ret = self.librbd.rbd_create4(ioctx.io, c_char_p(name),
+                ret = self.librbd.rbd_create4(ioctx.io, cstr(name),
                                               c_uint64(size), opts)
                 self.librbd.rbd_image_options_get_uint64(opts,
                                                          RBD_IMAGE_OPTION_ORDER,
                                                          byref(c_uint64(order)))
                 self.librbd.rbd_image_options_destroy(opts)
             elif has_create3:
-                ret = self.librbd.rbd_create3(ioctx.io, c_char_p(name),
+                ret = self.librbd.rbd_create3(ioctx.io, cstr(name),
                                               c_uint64(size),
                                               c_uint64(features),
                                               byref(c_int(order)),
                                               c_uint64(stripe_unit),
                                               c_uint64(stripe_count))
             else:
-                ret = self.librbd.rbd_create2(ioctx.io, c_char_p(name),
+                ret = self.librbd.rbd_create2(ioctx.io, cstr(name),
                                               c_uint64(size),
                                               c_uint64(features),
                                               byref(c_int(order)))
@@ -339,9 +349,9 @@ class RBD(object):
         """
         if order is None:
             order = 0
-        if not isinstance(p_snapname, str) or not isinstance(p_name, str):
+        if not isinstance(p_snapname, str_type) or not isinstance(p_name, str_type):
             raise TypeError('parent name and snapname must be strings')
-        if not isinstance(c_name, str):
+        if not isinstance(c_name, str_type):
             raise TypeError('child name must be a string')
 
         has_clone3 = hasattr(self.librbd, 'rbd_clone3')
@@ -363,18 +373,18 @@ class RBD(object):
             self.librbd.rbd_image_options_set_uint64(opts,
                                                      RBD_IMAGE_OPTION_STRIPE_COUNT,
                                                      c_uint64(stripe_count))
-            ret = self.librbd.rbd_clone3(p_ioctx.io, c_char_p(p_name),
-                                         c_char_p(p_snapname),
-                                         c_ioctx.io, c_char_p(c_name),
+            ret = self.librbd.rbd_clone3(p_ioctx.io, cstr(p_name),
+                                         cstr(p_snapname),
+                                         c_ioctx.io, cstr(c_name),
                                          opts)
             self.librbd.rbd_image_options_get_uint64(opts,
                                                      RBD_IMAGE_OPTION_ORDER,
                                                      byref(c_uint64(order)))
             self.librbd.rbd_image_options_destroy(opts)
         else:
-            ret = self.librbd.rbd_clone(p_ioctx.io, c_char_p(p_name),
-                                        c_char_p(p_snapname),
-                                        c_ioctx.io, c_char_p(c_name),
+            ret = self.librbd.rbd_clone(p_ioctx.io, cstr(p_name),
+                                        cstr(p_snapname),
+                                        c_ioctx.io, cstr(c_name),
                                         c_uint64(features),
                                         byref(c_int(order)))
         if ret < 0:
@@ -396,7 +406,8 @@ class RBD(object):
                 break
             elif ret != -errno.ERANGE:
                 raise make_ex(ret, 'error listing images')
-        return filter(lambda name: name != '', c_names.raw.split('\0'))
+
+        return [decode_cstr(name) for name in c_names.raw.split(b'\0') if len(name) > 0]
 
     def remove(self, ioctx, name):
         """
@@ -415,9 +426,9 @@ class RBD(object):
         :raises: :class:`ImageNotFound`, :class:`ImageBusy`,
                  :class:`ImageHasSnapshots`
         """
-        if not isinstance(name, str):
+        if not isinstance(name, str_type):
             raise TypeError('name must be a string')
-        ret = self.librbd.rbd_remove(ioctx.io, c_char_p(name))
+        ret = self.librbd.rbd_remove(ioctx.io, cstr(name))
         if ret != 0:
             raise make_ex(ret, 'error removing image')
 
@@ -433,9 +444,9 @@ class RBD(object):
         :type dest: str
         :raises: :class:`ImageNotFound`, :class:`ImageExists`
         """
-        if not isinstance(src, str) or not isinstance(dest, str):
+        if not isinstance(src, str_type) or not isinstance(dest, str_type):
             raise TypeError('src and dest must be strings')
-        ret = self.librbd.rbd_rename(ioctx.io, c_char_p(src), c_char_p(dest))
+        ret = self.librbd.rbd_rename(ioctx.io, cstr(src), cstr(dest))
         if ret != 0:
             raise make_ex(ret, 'error renaming image')
 
@@ -476,20 +487,20 @@ class Image(object):
         self.librbd = load_librbd()
         self.image = c_void_p()
         self.name = name
-        if not isinstance(name, str):
+        if not isinstance(name, str_type):
             raise TypeError('name must be a string')
-        if snapshot is not None and not isinstance(snapshot, str):
+        if snapshot is not None and not isinstance(snapshot, str_type):
             raise TypeError('snapshot must be a string or None')
         if read_only:
             if not hasattr(self.librbd, 'rbd_open_read_only'):
                 raise FunctionNotSupported('installed version of librbd does '
                                            'not support open in read-only mode')
-            ret = self.librbd.rbd_open_read_only(ioctx.io, c_char_p(name),
+            ret = self.librbd.rbd_open_read_only(ioctx.io, cstr(name),
                                                  byref(self.image),
-                                                 c_char_p(snapshot))
+                                                 cstr(snapshot))
         else:
-            ret = self.librbd.rbd_open(ioctx.io, c_char_p(name),
-                                       byref(self.image), c_char_p(snapshot))
+            ret = self.librbd.rbd_open(ioctx.io, cstr(name),
+                                       byref(self.image), cstr(snapshot))
         if ret != 0:
             raise make_ex(ret, 'error opening image %s at snapshot %s' % (name, snapshot))
         self.closed = False
@@ -721,7 +732,7 @@ class Image(object):
         """
         if order is None:
             order = 0
-        if not isinstance(dest_name, str):
+        if not isinstance(dest_name, str_type):
             raise TypeError('dest_name must be a string')
         has_copy3 = hasattr(self.librbd, 'rbd_copy3')
         if (stripe_unit != 0 or stripe_count != 0) and not has_copy3:
@@ -743,13 +754,13 @@ class Image(object):
                                                      RBD_IMAGE_OPTION_STRIPE_COUNT,
                                                      c_uint64(stripe_count))
             ret = self.librbd.rbd_copy3(self.image, dest_ioctx.io,
-                                        c_char_p(dest_name), opts)
+                                        cstr(dest_name), opts)
             self.librbd.rbd_image_options_get_uint64(opts,
                                                      RBD_IMAGE_OPTION_ORDER,
                                                      byref(c_uint64(order)))
             self.librbd.rbd_image_options_destroy(opts)
         else:
-            ret = self.librbd.rbd_copy(self.image, dest_ioctx.io, c_char_p(dest_name))
+            ret = self.librbd.rbd_copy(self.image, dest_ioctx.io, cstr(dest_name))
         if ret < 0:
             raise make_ex(ret, 'error copying image %s to %s' % (self.name, dest_name))
 
@@ -769,9 +780,9 @@ class Image(object):
         :type name: str
         :raises: :class:`ImageExists`
         """
-        if not isinstance(name, str):
+        if not isinstance(name, str_type):
             raise TypeError('name must be a string')
-        ret = self.librbd.rbd_snap_create(self.image, c_char_p(name))
+        ret = self.librbd.rbd_snap_create(self.image, cstr(name))
         if ret != 0:
             raise make_ex(ret, 'error creating snapshot %s from %s' % (name, self.name))
 
@@ -801,9 +812,9 @@ class Image(object):
         :type name: str
         :raises: :class:`IOError`, :class:`ImageBusy`
         """
-        if not isinstance(name, str):
+        if not isinstance(name, str_type):
             raise TypeError('name must be a string')
-        ret = self.librbd.rbd_snap_remove(self.image, c_char_p(name))
+        ret = self.librbd.rbd_snap_remove(self.image, cstr(name))
         if ret != 0:
             raise make_ex(ret, 'error removing snapshot %s from %s' % (name, self.name))
 
@@ -817,9 +828,9 @@ class Image(object):
         :type name: str
         :raises: :class:`IOError`
         """
-        if not isinstance(name, str):
+        if not isinstance(name, str_type):
             raise TypeError('name must be a string')
-        ret = self.librbd.rbd_snap_rollback(self.image, c_char_p(name))
+        ret = self.librbd.rbd_snap_rollback(self.image, cstr(name))
         if ret != 0:
             raise make_ex(ret, 'error rolling back image %s to snapshot %s' % (self.name, name))
 
@@ -832,9 +843,9 @@ class Image(object):
         :type name: str
         :raises: :class:`IOError`, :class:`ImageNotFound`
         """
-        if not isinstance(name, str):
+        if not isinstance(name, str_type):
             raise TypeError('name must be a string')
-        ret = self.librbd.rbd_snap_protect(self.image, c_char_p(name))
+        ret = self.librbd.rbd_snap_protect(self.image, cstr(name))
         if ret != 0:
             raise make_ex(ret, 'error protecting snapshot %s@%s' % (self.name, name))
 
@@ -847,9 +858,9 @@ class Image(object):
         :type name: str
         :raises: :class:`IOError`, :class:`ImageNotFound`
         """
-        if not isinstance(name, str):
+        if not isinstance(name, str_type):
             raise TypeError('name must be a string')
-        ret = self.librbd.rbd_snap_unprotect(self.image, c_char_p(name))
+        ret = self.librbd.rbd_snap_unprotect(self.image, cstr(name))
         if ret != 0:
             raise make_ex(ret, 'error unprotecting snapshot %s@%s' % (self.name, name))
 
@@ -862,10 +873,10 @@ class Image(object):
         :returns: bool - whether the snapshot is protected
         :raises: :class:`IOError`, :class:`ImageNotFound`
         """
-        if not isinstance(name, str):
+        if not isinstance(name, str_type):
             raise TypeError('name must be a string')
         is_protected = c_int()
-        ret = self.librbd.rbd_snap_is_protected(self.image, c_char_p(name),
+        ret = self.librbd.rbd_snap_is_protected(self.image, cstr(name),
                                                 byref(is_protected))
         if ret != 0:
             raise make_ex(ret, 'error checking if snapshot %s@%s is protected' % (self.name, name))
@@ -880,9 +891,9 @@ class Image(object):
         :param name: the snapshot to read from, or None to unset the snapshot
         :type name: str or None
         """
-        if name is not None and not isinstance(name, str):
+        if name is not None and not isinstance(name, str_type):
             raise TypeError('name must be a string')
-        ret = self.librbd.rbd_snap_set(self.image, c_char_p(name))
+        ret = self.librbd.rbd_snap_set(self.image, cstr(name))
         if ret != 0:
             raise make_ex(ret, 'error setting image %s to snapshot %s' % (self.name, name))
 
@@ -954,14 +965,14 @@ class Image(object):
         :raises: :class:`InvalidArgument`, :class:`IOError`,
                  :class:`ImageNotFound`
         """
-        if from_snapshot is not None and not isinstance(from_snapshot, str):
+        if from_snapshot is not None and not isinstance(from_snapshot, str_type):
             raise TypeError('client must be a string')
 
         RBD_DIFF_CB = CFUNCTYPE(c_int, c_uint64, c_size_t, c_int, c_void_p)
         cb_holder = DiffIterateCB(iterate_cb)
         cb = RBD_DIFF_CB(cb_holder.callback)
         ret = self.librbd.rbd_diff_iterate2(self.image,
-                                            c_char_p(from_snapshot),
+                                            cstr(from_snapshot),
                                             c_uint64(offset),
                                             c_uint64(length),
                                             c_uint8(include_parent),
@@ -978,7 +989,7 @@ class Image(object):
         part of the write would fall outside the image.
 
         :param data: the data to be written
-        :type data: str
+        :type data: bytes
         :param offset: where to start writing data
         :type offset: int
         :param fadvise_flags: fadvise flags for this write
@@ -987,8 +998,8 @@ class Image(object):
         :raises: :class:`IncompleteWriteError`, :class:`LogicError`,
                  :class:`InvalidArgument`, :class:`IOError`
         """
-        if not isinstance(data, str):
-            raise TypeError('data must be a string')
+        if not isinstance(data, bytes):
+            raise TypeError('data must be a byte string')
         length = len(data)
 
         if fadvise_flags == 0:
@@ -1090,7 +1101,7 @@ written." % (self.name, ret, length))
             return []
         pools = c_pools.raw[:pools_size.value - 1].split('\0')
         images = c_images.raw[:images_size.value - 1].split('\0')
-        return zip(pools, images)
+        return list(zip(pools, images))
 
     def list_lockers(self):
         """
@@ -1133,13 +1144,13 @@ written." % (self.name, ret, length))
                 raise make_ex(ret, 'error listing images')
         if ret == 0:
             return []
-        clients = c_clients.raw[:clients_size.value - 1].split('\0')
-        cookies = c_cookies.raw[:cookies_size.value - 1].split('\0')
-        addrs = c_addrs.raw[:addrs_size.value - 1].split('\0')
+        clients = [client.decode("utf-8") for client in c_clients.raw[:clients_size.value - 1].split(b'\0')]
+        cookies = [cookie.decode("utf-8") for cookie in c_cookies.raw[:cookies_size.value - 1].split(b'\0')]
+        addrs = [addr.decode("utf-8") for addr in c_addrs.raw[:addrs_size.value - 1].split(b'\0')]
         return {
-            'tag'       : c_tag.value,
+            'tag'       : decode_cstr(c_tag),
             'exclusive' : exclusive.value == 1,
-            'lockers'   : zip(clients, cookies, addrs),
+            'lockers'   : list(zip(clients, cookies, addrs)),
             }
 
     def lock_exclusive(self, cookie):
@@ -1149,9 +1160,9 @@ written." % (self.name, ret, length))
         :raises: :class:`ImageBusy` if a different client or cookie locked it
                  :class:`ImageExists` if the same client and cookie locked it
         """
-        if not isinstance(cookie, str):
+        if not isinstance(cookie, str_type):
             raise TypeError('cookie must be a string')
-        ret = self.librbd.rbd_lock_exclusive(self.image, c_char_p(cookie))
+        ret = self.librbd.rbd_lock_exclusive(self.image, cstr(cookie))
         if ret < 0:
             raise make_ex(ret, 'error acquiring exclusive lock on image')
 
@@ -1163,12 +1174,12 @@ written." % (self.name, ret, length))
         :raises: :class:`ImageBusy` if a different client or cookie locked it
                  :class:`ImageExists` if the same client and cookie locked it
         """
-        if not isinstance(cookie, str):
+        if not isinstance(cookie, str_type):
             raise TypeError('cookie must be a string')
-        if not isinstance(tag, str):
+        if not isinstance(tag, str_type):
             raise TypeError('tag must be a string')
-        ret = self.librbd.rbd_lock_shared(self.image, c_char_p(cookie),
-                                          c_char_p(tag))
+        ret = self.librbd.rbd_lock_shared(self.image, cstr(cookie),
+                                          cstr(tag))
         if ret < 0:
             raise make_ex(ret, 'error acquiring shared lock on image')
 
@@ -1176,9 +1187,9 @@ written." % (self.name, ret, length))
         """
         Release a lock on the image that was locked by this rados client.
         """
-        if not isinstance(cookie, str):
+        if not isinstance(cookie, str_type):
             raise TypeError('cookie must be a string')
-        ret = self.librbd.rbd_unlock(self.image, c_char_p(cookie))
+        ret = self.librbd.rbd_unlock(self.image, cstr(cookie))
         if ret < 0:
             raise make_ex(ret, 'error unlocking image')
 
@@ -1186,12 +1197,12 @@ written." % (self.name, ret, length))
         """
         Release a lock held by another rados client.
         """
-        if not isinstance(client, str):
+        if not isinstance(client, str_type):
             raise TypeError('client must be a string')
-        if not isinstance(cookie, str):
+        if not isinstance(cookie, str_type):
             raise TypeError('cookie must be a string')
-        ret = self.librbd.rbd_break_lock(self.image, c_char_p(client),
-                                         c_char_p(cookie))
+        ret = self.librbd.rbd_break_lock(self.image, cstr(client),
+                                         cstr(cookie))
         if ret < 0:
             raise make_ex(ret, 'error unlocking image')
 
@@ -1205,7 +1216,7 @@ class DiffIterateCB(object):
         return 0
 
 
-class SnapIterator(object):
+class SnapIterator(Iterable):
     """
     Iterator over snapshot info for an image.
 
@@ -1233,11 +1244,11 @@ class SnapIterator(object):
                 raise make_ex(ret, 'error listing snapshots for image %s' % (image.name,))
 
     def __iter__(self):
-        for i in xrange(self.num_snaps):
+        for i in range(self.num_snaps):
             yield {
                 'id'   : self.snaps[i].id,
                 'size' : self.snaps[i].size,
-                'name' : self.snaps[i].name,
+                'name' : decode_cstr(self.snaps[i].name),
                 }
 
     def __del__(self):
