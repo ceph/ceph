@@ -5242,7 +5242,7 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
             oi.watchers.erase(oi_iter);
 	    t->nop();  // update oi on disk
 	    ctx->watch_disconnects.push_back(
-	      OpContext::watch_disconnect_t(cookie, entity, false));
+	      watch_disconnect_t(cookie, entity, false));
 	  } else {
 	    dout(10) << " can't remove: no watch by " << entity << dendl;
 	  }
@@ -5989,7 +5989,7 @@ inline int ReplicatedPG::_delete_oid(OpContext *ctx, bool no_whiteout)
        ++p) {
     dout(20) << __func__ << " will disconnect watcher " << p->first << dendl;
     ctx->watch_disconnects.push_back(
-      OpContext::watch_disconnect_t(p->first.first, p->first.second, true));
+      watch_disconnect_t(p->first.first, p->first.second, true));
   }
   oi.watchers.clear();
 
@@ -6355,27 +6355,34 @@ void ReplicatedPG::add_interval_usage(interval_set<uint64_t>& s, object_stat_sum
   }
 }
 
-void ReplicatedPG::do_osd_op_effects(OpContext *ctx, const ConnectionRef& conn)
+void ReplicatedPG::complete_disconnect_watches(
+  ObjectContextRef obc,
+  const list<watch_disconnect_t> &to_disconnect)
 {
-  entity_name_t entity = ctx->reqid.name;
-  dout(15) << "do_osd_op_effects " << entity << " con " << conn.get() << dendl;
-
-  // disconnects first
-  for (list<OpContext::watch_disconnect_t>::iterator i =
-	 ctx->watch_disconnects.begin();
-       i != ctx->watch_disconnects.end();
+  for (list<watch_disconnect_t>::const_iterator i =
+	 to_disconnect.begin();
+       i != to_disconnect.end();
        ++i) {
     pair<uint64_t, entity_name_t> watcher(i->cookie, i->name);
-    if (ctx->obc->watchers.count(watcher)) {
-      WatchRef watch = ctx->obc->watchers[watcher];
+    if (obc->watchers.count(watcher)) {
+      WatchRef watch = obc->watchers[watcher];
       dout(10) << "do_osd_op_effects disconnect watcher " << watcher << dendl;
-      ctx->obc->watchers.erase(watcher);
+      obc->watchers.erase(watcher);
       watch->remove(i->send_disconnect);
     } else {
       dout(10) << "do_osd_op_effects disconnect failed to find watcher "
 	       << watcher << dendl;
     }
   }
+}
+
+void ReplicatedPG::do_osd_op_effects(OpContext *ctx, const ConnectionRef& conn)
+{
+  entity_name_t entity = ctx->reqid.name;
+  dout(15) << "do_osd_op_effects " << entity << " con " << conn.get() << dendl;
+
+  // disconnects first
+  complete_disconnect_watches(ctx->obc, ctx->watch_disconnects);
 
   if (!conn)
     return;
