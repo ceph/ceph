@@ -919,6 +919,8 @@ OPTION(filestore_update_to, OPT_INT, 1000)
 OPTION(filestore_blackhole, OPT_BOOL, false)     // drop any new transactions on the floor
 OPTION(filestore_fd_cache_size, OPT_INT, 128)    // FD lru size
 OPTION(filestore_fd_cache_shards, OPT_INT, 16)   // FD number of shards
+OPTION(filestore_ondisk_finisher_threads, OPT_INT, 1)
+OPTION(filestore_apply_finisher_threads, OPT_INT, 1)
 OPTION(filestore_dump_file, OPT_STR, "")         // file onto which store transaction dumps
 OPTION(filestore_kill_at, OPT_INT, 0)            // inject a failure at the n'th opportunity
 OPTION(filestore_inject_stall, OPT_INT, 0)       // artificially stall for N seconds in op queue thread
