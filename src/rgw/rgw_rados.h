@@ -1803,6 +1803,15 @@ public:
     return get_zone_conn_by_id(i->second);
   }
 
+  bool find_zone_id_by_name(const string& name, string *id) {
+    auto i = zone_id_by_name.find(name);
+    if (i == zone_id_by_name.end()) {
+      return false;
+    }
+    *id = i->second; 
+    return true;
+  }
+
   int get_zonegroup(const string& id, RGWZoneGroup& zonegroup) {
     int ret = 0;
     if (id == get_zonegroup().get_id()) {
