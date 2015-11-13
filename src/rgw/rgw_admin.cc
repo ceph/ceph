@@ -4350,7 +4350,6 @@ next:
       cerr << "ERROR: sync.init() returned ret=" << ret << std::endl;
       return -ret;
     }
-
     ret = sync.init_sync_status();
     if (ret < 0) {
       cerr << "ERROR: sync.get_sync_status() returned ret=" << ret << std::endl;
