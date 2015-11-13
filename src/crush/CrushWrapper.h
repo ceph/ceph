@@ -794,6 +794,9 @@ public:
   int set_rule_step_set_chooseleaf_vary_r(unsigned ruleno, unsigned step, int val) {
     return set_rule_step(ruleno, step, CRUSH_RULE_SET_CHOOSELEAF_VARY_R, val, 0);
   }
+  int set_rule_step_set_chooseleaf_stable(unsigned ruleno, unsigned step, int val) {
+    return set_rule_step(ruleno, step, CRUSH_RULE_SET_CHOOSELEAF_STABLE, val, 0);
+  }
   int set_rule_step_choose_firstn(unsigned ruleno, unsigned step, int val, int type) {
     return set_rule_step(ruleno, step, CRUSH_RULE_CHOOSE_FIRSTN, val, type);
   }
