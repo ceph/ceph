@@ -280,13 +280,19 @@ public:
     return
       crush->chooseleaf_vary_r != 0;
   }
+  bool has_nondefault_tunables5() const {
+    return
+        crush->chooseleaf_stable != 0;
+  }
 
   bool has_v2_rules() const;
   bool has_v3_rules() const;
   bool has_v4_buckets() const;
+  bool has_v5_rules() const;
 
   bool is_v2_rule(unsigned ruleid) const;
   bool is_v3_rule(unsigned ruleid) const;
+  bool is_v5_rule(unsigned ruleid) const;
 
   // default bucket types
   unsigned get_default_bucket_alg() const {
