@@ -128,9 +128,7 @@ uint64_t JournalingObjectStore::ApplyManager::op_apply_start(uint64_t op)
   assert(!blocked);
   assert(op > committed_seq);
   open_ops++;
-
   applying_seq_set.insert(op);
-
   return op;
 }
 
@@ -155,7 +153,6 @@ void JournalingObjectStore::ApplyManager::op_apply_finish(uint64_t op)
   // meaningful unless/until we've quiesced all in-flight applies.
   if (op > max_applied_seq)
     max_applied_seq = op;
-  
 }
 
 uint64_t JournalingObjectStore::SubmitManager::op_submit_start()
@@ -196,40 +193,35 @@ bool JournalingObjectStore::ApplyManager::commit_start()
   {
     Mutex::Locker l(apply_lock);
     dout(10) << "commit_start max_applied_seq " << max_applied_seq
-	     << ", open_ops " << open_ops
-	     << dendl;
+	     << ", open_ops " << open_ops << dendl;
   
     blocked = true;
     {
       Mutex::Locker l(com_lock);
 
       set<uint64_t>::iterator it = applying_seq_set.begin();
-      if(it == applying_seq_set.end()){
-       		_committing_seq = committing_seq = max_applied_seq; 
+      if (it == applying_seq_set.end() ){
+       	_committing_seq = committing_seq = max_applied_seq; 
 		
-        	dout(10) << "commit_start committing from end: " << committing_seq 
-			 << ",current applying_seq_set size:"<< applying_seq_set.size()
-			<< ", still blocked" << dendl;
-		assert(applying_seq_set.size() ==0);
+      dout(10) << "commit_start committing from end: " << committing_seq 
+		<< ",current applying_seq_set size:"<< applying_seq_set.size()
+		<< ", still blocked" << dendl;
+		assert( applying_seq_set.size() == 0 );
       }else
       {
-        	_committing_seq = committing_seq = *it;
-       		dout(10) << "commit_start committing from head: " << committing_seq 
-			 << ",current applying_seq_set size:"<< applying_seq_set.size()
-			<< ", still blocked" << dendl;
-		 assert((int)applying_seq_set.size() == open_ops);
+        _committing_seq = committing_seq = *it - 1;
+       	dout(10) << "commit_start committing from head: " << committing_seq 
+		<< ",current applying_seq_set size:"<< applying_seq_set.size()
+		<< ", still blocked" << dendl;
+		assert( (int)applying_seq_set.size() == open_ops );
       }
       
-      if(committing_seq == committed_seq){
-      	dout(10) << "commit_start nothing to do" << dendl;
+      if (committing_seq == committed_seq) {
+       	dout(10) << "commit_start nothing to do" << dendl;
 	blocked = false;
 	goto out;
       }
-      
     } 
-    
-  
-
   }
   ret = true;
 
