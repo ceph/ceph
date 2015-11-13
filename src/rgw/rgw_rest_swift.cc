@@ -84,15 +84,17 @@ static void dump_account_metadata(struct req_state * const s,
     }
   }
 
-  /* Dump user-defined metadata items */
+  /* Dump user-defined metadata items and generic attrs. */
   const size_t PREFIX_LEN = sizeof(RGW_ATTR_META_PREFIX) - 1;
   map<string, bufferlist>::iterator iter;
-  for (iter = attrs.lower_bound(RGW_ATTR_META_PREFIX); iter != attrs.end(); ++iter) {
+  for (iter = attrs.lower_bound(RGW_ATTR_PREFIX); iter != attrs.end(); ++iter) {
     const char *name = iter->first.c_str();
-    if (strncmp(name, RGW_ATTR_META_PREFIX, PREFIX_LEN) == 0) {
+    map<string, string>::const_iterator geniter = rgw_to_http_attrs.find(name);
+
+    if (geniter != rgw_to_http_attrs.end()) {
+      s->cio->print("%s: %s\r\n", geniter->second.c_str(), iter->second.c_str());
+    } else if (strncmp(name, RGW_ATTR_META_PREFIX, PREFIX_LEN) == 0) {
       s->cio->print("X-Account-Meta-%s: %s\r\n", name + PREFIX_LEN, iter->second.c_str());
-    } else {
-      break;
     }
   }
 }
@@ -338,15 +340,20 @@ static void dump_container_metadata(struct req_state *s, RGWBucketEnt& bucket)
     if (!s->bucket_info.placement_rule.empty()) {
       s->cio->print("X-Storage-Policy: %s\r\n", s->bucket_info.placement_rule.c_str());
     }
-    // Dump user-defined metadata items
+
+    /* Dump user-defined metadata items and generic attrs. */
     const size_t PREFIX_LEN = sizeof(RGW_ATTR_META_PREFIX) - 1;
     map<string, bufferlist>::iterator iter;
-    for (iter = s->bucket_attrs.lower_bound(RGW_ATTR_META_PREFIX); iter != s->bucket_attrs.end(); ++iter) {
+    for (iter = s->bucket_attrs.lower_bound(RGW_ATTR_PREFIX);
+         iter != s->bucket_attrs.end();
+         ++iter) {
       const char *name = iter->first.c_str();
-      if (strncmp(name, RGW_ATTR_META_PREFIX, PREFIX_LEN) == 0) {
+      map<string, string>::const_iterator geniter = rgw_to_http_attrs.find(name);
+
+      if (geniter != rgw_to_http_attrs.end()) {
+        s->cio->print("%s: %s\r\n", geniter->second.c_str(), iter->second.c_str());
+      } else if (strncmp(name, RGW_ATTR_META_PREFIX, PREFIX_LEN) == 0) {
         s->cio->print("X-Container-Meta-%s: %s\r\n", name + PREFIX_LEN, iter->second.c_str());
-      } else {
-        break;
       }
     }
   }
@@ -721,9 +728,7 @@ static void dump_object_metadata(struct req_state * const s,
     const char *name = iter->first.c_str();
     map<string, string>::const_iterator aiter = rgw_to_http_attrs.find(name);
 
-    if (aiter != rgw_to_http_attrs.end() &&
-        aiter->first.compare(RGW_ATTR_CONTENT_TYPE) != 0) {
-      /* Filter out Content-Type. It must be treated separately. */
+    if (aiter != rgw_to_http_attrs.end()) {
       response_attrs[aiter->second] = iter->second.c_str();
     } else if (strncmp(name, RGW_ATTR_META_PREFIX, sizeof(RGW_ATTR_META_PREFIX)-1) == 0) {
       name += sizeof(RGW_ATTR_META_PREFIX) - 1;
@@ -839,6 +844,20 @@ void RGWCopyObj_ObjStore_SWIFT::send_response()
     s->formatter->close_section();
     rgw_flush_formatter(s, s->formatter);
   }
+}
+
+int RGWGetObj_ObjStore_SWIFT::get_params()
+{
+  const string& mm = s->info.args.get("multipart-manifest");
+  skip_manifest = (mm.compare("get") == 0);
+
+  return RGWGetObj_ObjStore::get_params();
+}
+
+int RGWGetObj_ObjStore_SWIFT::send_response_data_error()
+{
+  bufferlist bl;
+  return send_response_data(bl, 0, 0);
 }
 
 int RGWGetObj_ObjStore_SWIFT::send_response_data(bufferlist& bl, off_t bl_ofs, off_t bl_len)

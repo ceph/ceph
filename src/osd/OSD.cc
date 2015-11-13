@@ -135,7 +135,11 @@
 #include "common/config.h"
 
 #ifdef WITH_LTTNG
+#define TRACEPOINT_DEFINE
+#define TRACEPOINT_PROBE_DYNAMIC_LINKAGE
 #include "tracing/osd.h"
+#undef TRACEPOINT_PROBE_DYNAMIC_LINKAGE
+#undef TRACEPOINT_DEFINE
 #else
 #define tracepoint(...)
 #endif
@@ -476,11 +480,15 @@ void OSDService::init()
   reserver_finisher.start();
   objecter_finisher.start();
   objecter->set_client_incarnation(0);
-  objecter->start();
   watch_timer.init();
   agent_timer.init();
 
   agent_thread.create();
+}
+
+void OSDService::final_init()
+{
+  objecter->start();
 }
 
 void OSDService::activate_map()
@@ -543,7 +551,7 @@ void OSDService::agent_entry()
     dout(10) << "high_count " << flush_mode_high_count << " agent_ops " << agent_ops << " flush_quota " << agent_flush_quota << dendl;
     agent_lock.Unlock();
     if (!pg->agent_work(max, agent_flush_quota)) {
-      dout(10) << __func__ << " " << *pg
+      dout(10) << __func__ << " " << pg->get_pgid()
 	<< " no agent_work, delay for " << g_conf->osd_agent_delay_time
 	<< " seconds" << dendl;
 
@@ -1803,13 +1811,6 @@ int OSD::init()
     goto out;
   }
 
-  if (!superblock.compat_features.incompat.contains(CEPH_OSD_FEATURE_INCOMPAT_PGMETA)) {
-    derr << "OSD store does not have PGMETA feature." << dendl;
-    derr << "You must first upgrade to hammer." << dendl;
-    r = -EINVAL;
-    goto out;
-  }
-
   if (osd_compat.compare(superblock.compat_features) < 0) {
     derr << "The disk uses features unsupported by the executable." << dendl;
     derr << " ondisk features " << superblock.compat_features << dendl;
@@ -1954,6 +1955,10 @@ int OSD::init()
   if (is_stopping())
     return 0;
 
+  // start objecter *after* we have authenticated, so that we don't ignore
+  // the OSDMaps it requests.
+  service.final_init();
+
   check_config();
 
   dout(10) << "ensuring pgs have consumed prior maps" << dendl;
@@ -1962,6 +1967,9 @@ int OSD::init()
 
   dout(0) << "done with init, starting boot process" << dendl;
   set_state(STATE_BOOTING);
+
+  // we don't need to ask for an osdmap here; objecter will
+
   start_boot();
 
   return 0;
@@ -2827,30 +2835,23 @@ void OSD::load_pgs()
     derr << "failed to list pgs: " << cpp_strerror(-r) << dendl;
   }
 
-  set<spg_t> pgs;
+  bool has_upgraded = false;
+
   for (vector<coll_t>::iterator it = ls.begin();
        it != ls.end();
        ++it) {
     spg_t pgid;
-    if (it->is_temp(&pgid) ||
-	it->is_removal(&pgid) ||
-	(it->is_pg(&pgid) && PG::_has_removal_flag(store, pgid))) {
+    if (it->is_temp(&pgid) || it->is_removal(&pgid) ||
+        (it->is_pg(&pgid) && PG::_has_removal_flag(store, pgid))) {
       dout(10) << "load_pgs " << *it << " clearing temp" << dendl;
       recursive_remove_collection(store, pgid, *it);
       continue;
     }
 
-    if (it->is_pg(&pgid)) {
-      pgs.insert(pgid);
+    if (!it->is_pg(&pgid)) {
+      dout(10) << "load_pgs ignoring unrecognized " << *it << dendl;
       continue;
     }
-
-    dout(10) << "load_pgs ignoring unrecognized " << *it << dendl;
-  }
-
-  bool has_upgraded = false;
-  for (set<spg_t>::iterator i = pgs.begin(); i != pgs.end(); ++i) {
-    spg_t pgid(*i);
 
     if (pgid.preferred() >= 0) {
       dout(10) << __func__ << ": skipping localized PG " << pgid << dendl;
@@ -2876,7 +2877,7 @@ void OSD::load_pgs()
 	  derr << __func__ << ": could not find map for epoch " << map_epoch
 	       << " on pg " << pgid << ", but the pool is not present in the "
 	       << "current map, so this is probably a result of bug 10617.  "
-	       << "Skipping the pg for now, you can use ceph_objectstore_tool "
+	       << "Skipping the pg for now, you can use ceph-objectstore-tool "
 	       << "to clean it up later." << dendl;
 	  continue;
 	} else {
@@ -3070,6 +3071,8 @@ void OSD::build_past_intervals_parallel()
 		 << " " << debug.str() << dendl;
 	p.old_up = up;
 	p.old_acting = acting;
+	p.primary = primary;
+	p.up_primary = up_primary;
 	p.same_interval_since = cur_epoch;
       }
     }
@@ -4223,7 +4226,7 @@ bool remove_dir(
 {
   vector<ghobject_t> olist;
   int64_t num = 0;
-  ObjectStore::Transaction *t = new ObjectStore::Transaction;
+  ObjectStore::Transaction t;
   ghobject_t next;
   handle.reset_tp_timeout();
   store->collection_list(
@@ -4239,38 +4242,36 @@ bool remove_dir(
        ++i, ++num) {
     if (i->is_pgmeta())
       continue;
-    OSDriver::OSTransaction _t(osdriver->get_transaction(t));
+    OSDriver::OSTransaction _t(osdriver->get_transaction(&t));
     int r = mapper->remove_oid(i->hobj, &_t);
     if (r != 0 && r != -ENOENT) {
       assert(0);
     }
-    t->remove(coll, *i);
+    t.remove(coll, *i);
     if (num >= cct->_conf->osd_target_transaction_size) {
       C_SaferCond waiter;
-      store->queue_transaction(osr, t, &waiter);
+      store->queue_transaction(osr, &t, &waiter);
       bool cont = dstate->pause_clearing();
       handle.suspend_tp_timeout();
       waiter.wait();
       handle.reset_tp_timeout();
       if (cont)
         cont = dstate->resume_clearing();
-      delete t;
       if (!cont)
 	return false;
-      t = new ObjectStore::Transaction;
+      t = ObjectStore::Transaction();
       num = 0;
     }
   }
 
   C_SaferCond waiter;
-  store->queue_transaction(osr, t, &waiter);
+  store->queue_transaction(osr, &t, &waiter);
   bool cont = dstate->pause_clearing();
   handle.suspend_tp_timeout();
   waiter.wait();
   handle.reset_tp_timeout();
   if (cont)
     cont = dstate->resume_clearing();
-  delete t;
   // whether there are more objects to remove in the collection
   *finished = next.is_max();
   return cont;
@@ -4513,7 +4514,8 @@ bool OSD::_is_healthy()
       ++num;
     }
     if ((float)up < (float)num * cct->_conf->osd_heartbeat_min_healthy_ratio) {
-      dout(1) << "is_healthy false -- only " << up << "/" << num << " up peers (less than 1/3)" << dendl;
+      dout(1) << "is_healthy false -- only " << up << "/" << num << " up peers (less than "
+	      << int(cct->_conf->osd_heartbeat_min_healthy_ratio * 100.0) << "%)" << dendl;
       return false;
     }
   }
@@ -7864,11 +7866,11 @@ void OSD::check_replay_queue()
       PG *pg = _lookup_lock_pg_with_map_lock_held(pgid);
       pg_map_lock.unlock();
       dout(10) << "check_replay_queue " << *pg << dendl;
-      if (pg->is_active() &&
-          pg->is_replay() &&
+      if ((pg->is_active() || pg->is_activating()) &&
+	  pg->is_replay() &&
           pg->is_primary() &&
           pg->replay_until == p->second) {
-        pg->replay_queued_ops();
+	pg->replay_queued_ops();
       }
       pg->unlock();
     } else {
@@ -7932,7 +7934,7 @@ void OSD::do_recovery(PG *pg, ThreadPool::TPHandle &handle)
     dout(20) << "  active was " << recovery_oids[pg->info.pgid] << dendl;
 #endif
     
-    int started;
+    int started = 0;
     bool more = pg->start_recovery_ops(max, handle, &started);
     dout(10) << "do_recovery started " << started << "/" << max << " on " << *pg << dendl;
     // If no recovery op is started, don't bother to manipulate the RecoveryCtx
@@ -8086,26 +8088,6 @@ void OSD::handle_op(OpRequestRef& op, OSDMapRef& osdmap)
     return;
   }
 
-  // we don't need encoded payload anymore
-  m->clear_payload();
-
-  // object name too long?
-  unsigned max_name_len = MIN(g_conf->osd_max_object_name_len,
-			      store->get_max_object_name_length());
-  if (m->get_oid().name.size() > max_name_len) {
-    dout(4) << "handle_op '" << m->get_oid().name << "' is longer than "
-	    << max_name_len << " bytes" << dendl;
-    service.reply_op_error(op, -ENAMETOOLONG);
-    return;
-  }
-
-  // blacklisted?
-  if (osdmap->is_blacklisted(m->get_source_addr())) {
-    dout(4) << "handle_op " << m->get_source_addr() << " is blacklisted" << dendl;
-    service.reply_op_error(op, -EBLACKLISTED);
-    return;
-  }
-
   // set up a map send if the Op gets blocked for some reason
   send_map_on_destruct share_map(this, m, osdmap, m->get_map_epoch());
   Session *client_session =
@@ -8121,14 +8103,6 @@ void OSD::handle_op(OpRequestRef& op, OSDMapRef& osdmap)
     client_session->put();
   }
 
-  if (op->rmw_flags == 0) {
-    int r = init_op_flags(op);
-    if (r) {
-      service.reply_op_error(op, r);
-      return;
-    }
-  }
-
   if (cct->_conf->osd_debug_drop_op_probability > 0 &&
       !m->get_source().is_mds()) {
     if ((double)rand() / (double)RAND_MAX < cct->_conf->osd_debug_drop_op_probability) {
@@ -8140,29 +8114,6 @@ void OSD::handle_op(OpRequestRef& op, OSDMapRef& osdmap)
   // calc actual pgid
   pg_t _pgid = m->get_pg();
   int64_t pool = _pgid.pool();
-  if (op->may_write()) {
-    const pg_pool_t *pi = osdmap->get_pg_pool(pool);
-    if (!pi) {
-      return;
-    }
-    
-    // invalid?
-    if (m->get_snapid() != CEPH_NOSNAP) {
-      service.reply_op_error(op, -EINVAL);
-      return;
-    }
-
-    // too big?
-    if (cct->_conf->osd_max_write_size &&
-	m->get_data_len() > ((int64_t)g_conf->osd_max_write_size) << 20) {
-      // journal can't hold commit!
-      derr << "handle_op msg data len " << m->get_data_len()
-	   << " > osd_max_write_size " << (cct->_conf->osd_max_write_size << 20)
-	   << " on " << *m << dendl;
-      service.reply_op_error(op, -OSD_WRITETOOBIG);
-      return;
-    }
-  }
 
   if ((m->get_flags() & CEPH_OSD_FLAG_PGOP) == 0 &&
       osdmap->have_pg_pool(pool))
@@ -8772,13 +8723,19 @@ int OSD::init_op_flags(OpRequestRef& op)
 	}
 	is_read = flags & CLS_METHOD_RD;
 	is_write = flags & CLS_METHOD_WR;
+        bool is_promote = flags & CLS_METHOD_PROMOTE;
 
-	dout(10) << "class " << cname << " method " << mname
-		<< " flags=" << (is_read ? "r" : "") << (is_write ? "w" : "") << dendl;
+	dout(10) << "class " << cname << " method " << mname << " "
+		 << "flags=" << (is_read ? "r" : "")
+                             << (is_write ? "w" : "")
+                             << (is_promote ? "p" : "")
+                 << dendl;
 	if (is_read)
 	  op->set_class_read();
 	if (is_write)
 	  op->set_class_write();
+        if (is_promote)
+          op->set_promote();
 	break;
       }
 
@@ -8827,6 +8784,12 @@ int OSD::init_op_flags(OpRequestRef& op)
         op->set_skip_promote();
       }
       break;
+
+    // force promotion when pin an object in cache tier
+    case CEPH_OSD_OP_CACHE_PIN:
+      op->set_promote();
+      break;
+
     default:
       break;
     }

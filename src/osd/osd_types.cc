@@ -1593,11 +1593,12 @@ void object_stat_sum_t::dump(Formatter *f) const
   f->dump_int("num_flush_mode_low", num_flush_mode_low);
   f->dump_int("num_evict_mode_some", num_evict_mode_some);
   f->dump_int("num_evict_mode_full", num_evict_mode_full);
+  f->dump_int("num_objects_pinned", num_objects_pinned);
 }
 
 void object_stat_sum_t::encode(bufferlist& bl) const
 {
-  ENCODE_START(13, 3, bl);
+  ENCODE_START(14, 3, bl);
   ::encode(num_bytes, bl);
   ::encode(num_objects, bl);
   ::encode(num_object_clones, bl);
@@ -1630,12 +1631,13 @@ void object_stat_sum_t::encode(bufferlist& bl) const
   ::encode(num_flush_mode_low, bl);
   ::encode(num_evict_mode_some, bl);
   ::encode(num_evict_mode_full, bl);
+  ::encode(num_objects_pinned, bl);
   ENCODE_FINISH(bl);
 }
 
 void object_stat_sum_t::decode(bufferlist::iterator& bl)
 {
-  DECODE_START_LEGACY_COMPAT_LEN(13, 3, 3, bl);
+  DECODE_START_LEGACY_COMPAT_LEN(14, 3, 3, bl);
   ::decode(num_bytes, bl);
   if (struct_v < 3) {
     uint64_t num_kb;
@@ -1723,6 +1725,11 @@ void object_stat_sum_t::decode(bufferlist::iterator& bl)
     num_evict_mode_some = 0;
     num_evict_mode_full = 0;
   }
+  if (struct_v >= 14) {
+    ::decode(num_objects_pinned, bl);
+  } else {
+    num_objects_pinned = 0;
+  }
   DECODE_FINISH(bl);
 }
 
@@ -1759,6 +1766,7 @@ void object_stat_sum_t::generate_test_instances(list<object_stat_sum_t*>& o)
   a.num_flush_mode_low = 1;
   a.num_evict_mode_some = 1;
   a.num_evict_mode_full = 0;
+  a.num_objects_pinned = 20;
   o.push_back(new object_stat_sum_t(a));
 }
 
@@ -1796,6 +1804,7 @@ void object_stat_sum_t::add(const object_stat_sum_t& o)
   num_flush_mode_low += o.num_flush_mode_low;
   num_evict_mode_some += o.num_evict_mode_some;
   num_evict_mode_full += o.num_evict_mode_full;
+  num_objects_pinned += o.num_objects_pinned;
 }
 
 void object_stat_sum_t::sub(const object_stat_sum_t& o)
@@ -1832,6 +1841,7 @@ void object_stat_sum_t::sub(const object_stat_sum_t& o)
   num_flush_mode_low -= o.num_flush_mode_low;
   num_evict_mode_some -= o.num_evict_mode_some;
   num_evict_mode_full -= o.num_evict_mode_full;
+  num_objects_pinned -= o.num_objects_pinned;
 }
 
 bool operator==(const object_stat_sum_t& l, const object_stat_sum_t& r)
@@ -1868,7 +1878,8 @@ bool operator==(const object_stat_sum_t& l, const object_stat_sum_t& r)
     l.num_flush_mode_high == r.num_flush_mode_high &&
     l.num_flush_mode_low == r.num_flush_mode_low &&
     l.num_evict_mode_some == r.num_evict_mode_some &&
-    l.num_evict_mode_full == r.num_evict_mode_full;
+    l.num_evict_mode_full == r.num_evict_mode_full &&
+    l.num_objects_pinned == r.num_objects_pinned;
 }
 
 // -- object_stat_collection_t --
@@ -1995,7 +2006,7 @@ void pg_stat_t::dump_brief(Formatter *f) const
 
 void pg_stat_t::encode(bufferlist &bl) const
 {
-  ENCODE_START(21, 8, bl);
+  ENCODE_START(22, 8, bl);
   ::encode(version, bl);
   ::encode(reported_seq, bl);
   ::encode(reported_epoch, bl);
@@ -2035,12 +2046,13 @@ void pg_stat_t::encode(bufferlist &bl) const
   ::encode(hitset_bytes_stats_invalid, bl);
   ::encode(last_peered, bl);
   ::encode(last_became_peered, bl);
+  ::encode(pin_stats_invalid, bl);
   ENCODE_FINISH(bl);
 }
 
 void pg_stat_t::decode(bufferlist::iterator &bl)
 {
-  DECODE_START_LEGACY_COMPAT_LEN(20, 8, 8, bl);
+  DECODE_START_LEGACY_COMPAT_LEN(22, 8, 8, bl);
   ::decode(version, bl);
   ::decode(reported_seq, bl);
   ::decode(reported_epoch, bl);
@@ -2174,6 +2186,13 @@ void pg_stat_t::decode(bufferlist::iterator &bl)
     last_peered = last_active;
     last_became_peered = last_became_active;
   }
+  if (struct_v >= 22) {
+    ::decode(pin_stats_invalid, bl);
+  } else {
+    // if we are decoding an old encoding of this object, then the
+    // encoder may not have supported num_objects_pinned accounting.
+    pin_stats_invalid = true;
+  }
   DECODE_FINISH(bl);
 }
 
@@ -2264,7 +2283,8 @@ bool operator==(const pg_stat_t& l, const pg_stat_t& r)
     l.hitset_stats_invalid == r.hitset_stats_invalid &&
     l.hitset_bytes_stats_invalid == r.hitset_bytes_stats_invalid &&
     l.up_primary == r.up_primary &&
-    l.acting_primary == r.acting_primary;
+    l.acting_primary == r.acting_primary &&
+    l.pin_stats_invalid == r.pin_stats_invalid;
 }
 
 // -- pool_stat_t --
@@ -4008,8 +4028,14 @@ void pg_hit_set_history_t::encode(bufferlist& bl) const
 {
   ENCODE_START(1, 1, bl);
   ::encode(current_last_update, bl);
-  ::encode(current_last_stamp, bl);
-  ::encode(current_info, bl);
+  {
+    utime_t dummy_stamp;
+    ::encode(dummy_stamp, bl);
+  }
+  {
+    pg_hit_set_info_t dummy_info;
+    ::encode(dummy_info, bl);
+  }
   ::encode(history, bl);
   ENCODE_FINISH(bl);
 }
@@ -4018,8 +4044,14 @@ void pg_hit_set_history_t::decode(bufferlist::iterator& p)
 {
   DECODE_START(1, p);
   ::decode(current_last_update, p);
-  ::decode(current_last_stamp, p);
-  ::decode(current_info, p);
+  {
+    utime_t dummy_stamp;
+    ::decode(dummy_stamp, p);
+  }
+  {
+    pg_hit_set_info_t dummy_info;
+    ::decode(dummy_info, p);
+  }
   ::decode(history, p);
   DECODE_FINISH(p);
 }
@@ -4027,10 +4059,6 @@ void pg_hit_set_history_t::decode(bufferlist::iterator& p)
 void pg_hit_set_history_t::dump(Formatter *f) const
 {
   f->dump_stream("current_last_update") << current_last_update;
-  f->dump_stream("current_last_stamp") << current_last_stamp;
-  f->open_object_section("current_info");
-  current_info.dump(f);
-  f->close_section();
   f->open_array_section("history");
   for (list<pg_hit_set_info_t>::const_iterator p = history.begin();
        p != history.end(); ++p) {
@@ -4046,10 +4074,6 @@ void pg_hit_set_history_t::generate_test_instances(list<pg_hit_set_history_t*>& 
   ls.push_back(new pg_hit_set_history_t);
   ls.push_back(new pg_hit_set_history_t);
   ls.back()->current_last_update = eversion_t(1, 2);
-  ls.back()->current_last_stamp = utime_t(100, 123);
-  ls.back()->current_info.begin = utime_t(2, 4);
-  ls.back()->current_info.end = utime_t(62, 24);
-  ls.back()->history.push_back(ls.back()->current_info);
   ls.back()->history.push_back(pg_hit_set_info_t());
 }
 
@@ -4445,7 +4469,7 @@ void object_info_t::encode(bufferlist& bl) const
 void object_info_t::decode(bufferlist::iterator& bl)
 {
   object_locator_t myoloc;
-  DECODE_START_LEGACY_COMPAT_LEN(14, 8, 8, bl);
+  DECODE_START_LEGACY_COMPAT_LEN(15, 8, 8, bl);
   map<entity_name_t, watch_info_t> old_watchers;
   ::decode(soid, bl);
   ::decode(myoloc, bl);
@@ -5129,6 +5153,8 @@ ostream& operator<<(ostream& out, const OSDOp& op)
     case CEPH_OSD_OP_CACHE_FLUSH:
     case CEPH_OSD_OP_CACHE_TRY_FLUSH:
     case CEPH_OSD_OP_CACHE_EVICT:
+    case CEPH_OSD_OP_CACHE_PIN:
+    case CEPH_OSD_OP_CACHE_UNPIN:
       break;
     case CEPH_OSD_OP_ASSERT_VER:
       out << " v" << op.op.assert_ver.ver;

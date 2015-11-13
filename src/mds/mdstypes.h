@@ -13,6 +13,7 @@
 #include "common/config.h"
 #include "common/Clock.h"
 #include "common/DecayCounter.h"
+#include "common/entity_name.h"
 #include "MDSContext.h"
 
 #include "include/frag.h"
@@ -467,6 +468,8 @@ struct inode_t {
 
   snapid_t oldest_snap;
 
+  string stray_prior_path; //stores path before unlink
+
   inode_t() : ino(0), rdev(0),
 	      mode(0), uid(0), gid(0), nlink(0),
 	      size(0), max_size_ever(0),
@@ -643,6 +646,7 @@ struct session_info_t {
   interval_set<inodeno_t> used_inos;       // journaling use
   std::map<std::string, std::string> client_metadata;
   std::set<ceph_tid_t> completed_flushes;
+  EntityName auth_name;
 
   client_t get_client() const { return client_t(inst.name.num()); }
 

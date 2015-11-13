@@ -34,7 +34,7 @@
 
 #ifndef TEMP_FAILURE_RETRY
 #define TEMP_FAILURE_RETRY(expression) ({     \
-  typeof(expression) __result;                \
+  __typeof(expression) __result;              \
   do {                                        \
     __result = (expression);                  \
   } while (__result == -1 && errno == EINTR); \

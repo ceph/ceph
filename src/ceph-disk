@@ -3567,6 +3567,8 @@ def list_format_dev_plain(dev, devices=[], prefix=''):
             desc = ['ceph data (dmcrypt %s)' % dmcrypt['type'], 'not currently mapped']
         elif len(dmcrypt['holders']) == 1:
             holder = '/dev/' + dmcrypt['holders'][0]
+            # re-list with the dm-x path
+            devices = list_devices([holder])
             def lookup_dev(devices, path):
                 for device in devices:
                     if device['path'] == path:
@@ -3682,8 +3684,8 @@ def list_dev(dev, uuid_map, journal_map):
 
     return info
 
-def list_devices(args):
-    partmap = list_all_partitions(args.path)
+def list_devices(path):
+    partmap = list_all_partitions(path)
 
     uuid_map = {}
     journal_map = {}
@@ -3743,7 +3745,7 @@ def list_devices(args):
     return devices
 
 def main_list(args):
-    devices = list_devices(args)
+    devices = list_devices(args.path)
     if args.format == 'json':
         print json.dumps(devices)
     else:

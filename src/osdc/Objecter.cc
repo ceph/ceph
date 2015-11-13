@@ -163,17 +163,21 @@ void Objecter::handle_conf_change(const struct md_config_t *conf,
 				  const std::set <std::string> &changed)
 {
   if (changed.count("crush_location")) {
-    crush_location.clear();
-    vector<string> lvec;
-    get_str_vec(cct->_conf->crush_location, ";, \t", lvec);
-    int r = CrushWrapper::parse_loc_multimap(lvec, &crush_location);
-    if (r < 0) {
-      lderr(cct) << "warning: crush_location '" << cct->_conf->crush_location
-		 << "' does not parse" << dendl;
-    }
+    update_crush_location();
   }
 }
 
+void Objecter::update_crush_location()
+{
+  crush_location.clear();
+  vector<string> lvec;
+  get_str_vec(cct->_conf->crush_location, ";, \t", lvec);
+  int r = CrushWrapper::parse_loc_multimap(lvec, &crush_location);
+  if (r < 0) {
+    lderr(cct) << "warning: crush_location '" << cct->_conf->crush_location
+               << "' does not parse" << dendl;
+  }
+}
 
 // messages ------------------------------
 
@@ -288,6 +292,7 @@ void Objecter::init()
   timer.init();
   timer_lock.Unlock();
 
+  update_crush_location();
   cct->_conf->add_observer(this);
 
   initialized.set(1);
@@ -313,6 +318,8 @@ void Objecter::shutdown()
   rwlock.get_write();
 
   initialized.set(0);
+
+  cct->_conf->remove_observer(this);
 
   map<int,OSDSession*>::iterator p;
   while (!osd_sessions.empty()) {
@@ -433,6 +440,7 @@ void Objecter::_send_linger(LingerOp *info)
   vector<OSDOp> opv;
   Context *oncommit = NULL;
   info->watch_lock.get_read(); // just to read registered status
+  bufferlist *poutbl = NULL;
   if (info->registered && info->is_watch) {
     ldout(cct, 15) << "send_linger " << info->linger_id << " reconnect" << dendl;
     opv.push_back(OSDOp());
@@ -444,7 +452,12 @@ void Objecter::_send_linger(LingerOp *info)
   } else {
     ldout(cct, 15) << "send_linger " << info->linger_id << " register" << dendl;
     opv = info->ops;
-    oncommit = new C_Linger_Commit(this, info);
+    C_Linger_Commit *c = new C_Linger_Commit(this, info);
+    if (!info->is_watch) {
+      info->notify_id = 0;
+      poutbl = &c->outbl;
+    }
+    oncommit = c;
   }
   info->watch_lock.put_read();
   Op *o = new Op(info->target.base_oid, info->target.base_oloc,
@@ -452,6 +465,7 @@ void Objecter::_send_linger(LingerOp *info)
 		 NULL, NULL,
 		 info->pobjver);
   o->oncommit_sync = oncommit;
+  o->outbl = poutbl;
   o->snapid = info->snap;
   o->snapc = info->snapc;
   o->mtime = info->mtime;
@@ -481,7 +495,7 @@ void Objecter::_send_linger(LingerOp *info)
   logger->inc(l_osdc_linger_send);
 }
 
-void Objecter::_linger_commit(LingerOp *info, int r) 
+void Objecter::_linger_commit(LingerOp *info, int r, bufferlist& outbl)
 {
   RWLock::WLocker wl(info->watch_lock);
   ldout(cct, 10) << "_linger_commit " << info->linger_id << dendl;
@@ -493,6 +507,17 @@ void Objecter::_linger_commit(LingerOp *info, int r)
   // only tell the user the first time we do this
   info->registered = true;
   info->pobjver = NULL;
+
+  if (!info->is_watch) {
+    // make note of the notify_id
+    bufferlist::iterator p = outbl.begin();
+    try {
+      ::decode(info->notify_id, p);
+      ldout(cct, 10) << "_linger_commit  notify_id=" << info->notify_id << dendl;
+    }
+    catch (buffer::error& e) {
+    }
+  }
 }
 
 struct C_DoWatchError : public Context {
@@ -793,9 +818,15 @@ void Objecter::handle_watch_notify(MWatchNotify *m)
   } else if (!info->is_watch) {
     // we have CEPH_WATCH_EVENT_NOTIFY_COMPLETE; we can do this inline since
     // we know the only user (librados) is safe to call in fast-dispatch context
-    assert(info->on_notify_finish);
-    info->notify_result_bl->claim(m->get_data());
-    info->on_notify_finish->complete(m->return_code);
+    if (info->notify_id &&
+	info->notify_id != m->notify_id) {
+      ldout(cct, 10) << __func__ << " reply notify " << m->notify_id
+		     << " != " << info->notify_id << ", ignoring" << dendl;
+    } else {
+      assert(info->on_notify_finish);
+      info->notify_result_bl->claim(m->get_data());
+      info->on_notify_finish->complete(m->return_code);
+    }
   } else {
     finisher->queue(new C_DoWatchNotify(this, info, m));
     _linger_callback_queue();
@@ -2161,17 +2192,23 @@ ceph_tid_t Objecter::_op_submit(Op *op, RWLock::Context& lc)
 
   if ((op->target.flags & CEPH_OSD_FLAG_WRITE) &&
       osdmap->test_flag(CEPH_OSDMAP_PAUSEWR)) {
-    ldout(cct, 10) << " paused modify " << op << " tid " << last_tid.read() << dendl;
+    ldout(cct, 10) << " paused modify " << op << " tid " << last_tid.read()
+		   << dendl;
     op->target.paused = true;
     _maybe_request_map();
   } else if ((op->target.flags & CEPH_OSD_FLAG_READ) &&
 	     osdmap->test_flag(CEPH_OSDMAP_PAUSERD)) {
-    ldout(cct, 10) << " paused read " << op << " tid " << last_tid.read() << dendl;
+    ldout(cct, 10) << " paused read " << op << " tid " << last_tid.read()
+		   << dendl;
     op->target.paused = true;
     _maybe_request_map();
   } else if ((op->target.flags & CEPH_OSD_FLAG_WRITE) &&
-             (_osdmap_full_flag() || _osdmap_pool_full(op->target.base_oloc.pool))) {
-    ldout(cct, 0) << " FULL, paused modify " << op << " tid " << last_tid.read() << dendl;
+	     !(op->target.flags & (CEPH_OSD_FLAG_FULL_TRY |
+				   CEPH_OSD_FLAG_FULL_FORCE)) &&
+             (_osdmap_full_flag() ||
+	      _osdmap_pool_full(op->target.base_oloc.pool))) {
+    ldout(cct, 0) << " FULL, paused modify " << op << " tid " << last_tid.read()
+		  << dendl;
     op->target.paused = true;
     _maybe_request_map();
   } else if (!s->is_homeless()) {

@@ -338,27 +338,27 @@ class TestIoctx(object):
         eq(list(self.ioctx.list_snaps()), [])
 
     def test_set_omap(self):
-        keys = ("1", "2", "3")
-        values = ("aaa", "bbb", "ccc")
+        keys = ("1", "2", "3", "4")
+        values = ("aaa", "bbb", "ccc", "\x04\x04\x04\x04")
         with WriteOpCtx(self.ioctx) as write_op:
             self.ioctx.set_omap(write_op, keys, values)
             self.ioctx.operate_write_op(write_op, "hw")
         with ReadOpCtx(self.ioctx) as read_op:
-            iter, ret = self.ioctx.get_omap_vals(read_op, "", "", 3)
+            iter, ret = self.ioctx.get_omap_vals(read_op, "", "", 4)
             self.ioctx.operate_read_op(read_op, "hw")
             iter.next()
-            eq(list(iter), [("2", "bbb"), ("3", "ccc")])
+            eq(list(iter), [("2", "bbb"), ("3", "ccc"), ("4", "\x04\x04\x04\x04")])
 
     def test_get_omap_vals_by_keys(self):
-        keys = ("1", "2", "3")
-        values = ("aaa", "bbb", "ccc")
+        keys = ("1", "2", "3", "4")
+        values = ("aaa", "bbb", "ccc", "\x04\x04\x04\x04")
         with WriteOpCtx(self.ioctx) as write_op:
             self.ioctx.set_omap(write_op, keys, values)
             self.ioctx.operate_write_op(write_op, "hw")
         with ReadOpCtx(self.ioctx) as read_op:
-            iter, ret = self.ioctx.get_omap_vals_by_keys(read_op,("3",))
+            iter, ret = self.ioctx.get_omap_vals_by_keys(read_op,("3","4",))
             self.ioctx.operate_read_op(read_op, "hw")
-            eq(list(iter), [("3", "ccc")])
+            eq(list(iter), [("3", "ccc"), ("4", "\x04\x04\x04\x04")])
 
     def test_get_omap_keys(self):
         keys = ("1", "2", "3")

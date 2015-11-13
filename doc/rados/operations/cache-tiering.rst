@@ -174,9 +174,7 @@ For example::
 	ceph osd pool set hot-storage hit_set_type bloom
 
 The ``hit_set_count`` and ``hit_set_period`` define how much time each HitSet
-should cover, and how many such HitSets to store. Currently there is minimal
-benefit for ``hit_set_count`` > 1 since the agent does not yet act intelligently
-on that information. ::
+should cover, and how many such HitSets to store. ::
 
 	ceph osd pool set {cachepool} hit_set_count 1
 	ceph osd pool set {cachepool} hit_set_period 3600

@@ -99,7 +99,7 @@ is_err() const
 
 
 req_info::req_info(CephContext *cct, class RGWEnv *e) : env(e) {
-  method = env->get("REQUEST_METHOD");
+  method = env->get("REQUEST_METHOD", "");
   script_uri = env->get("SCRIPT_URI", cct->_conf->rgw_script_uri.c_str());
   request_uri = env->get("REQUEST_URI", cct->_conf->rgw_request_uri.c_str());
   int pos = request_uri.find('?');
@@ -109,7 +109,7 @@ req_info::req_info(CephContext *cct, class RGWEnv *e) : env(e) {
   } else {
     request_params = env->get("QUERY_STRING", "");
   }
-  host = env->get("HTTP_HOST");
+  host = env->get("HTTP_HOST", "");
 
   // strip off any trailing :port from host (added by CrossFTP and maybe others)
   size_t colon_offset = host.find_last_of(':');
@@ -613,6 +613,7 @@ int RGWHTTPArgs::parse()
           (name.compare("versionId") == 0) ||
           (name.compare("versions") == 0) ||
           (name.compare("versioning") == 0) ||
+          (name.compare("requestPayment") == 0) ||
           (name.compare("torrent") == 0)) {
         sub_resources[name] = val;
       } else if (name[0] == 'r') { // root of all evil
@@ -703,12 +704,39 @@ void RGWHTTPArgs::get_bool(const char *name, bool *val, bool def_val)
   }
 }
 
+bool verify_requester_payer_permission(struct req_state *s)
+{
+  if (!s->bucket_info.requester_pays)
+    return true;
+
+  if (s->bucket_info.owner == s->user.user_id)
+    return true;
+
+  const char *request_payer = s->info.env->get("HTTP_X_AMZ_REQUEST_PAYER");
+  if (!request_payer) {
+    bool exists;
+    request_payer = s->info.args.get("x-amz-request-payer", &exists).c_str();
+    if (!exists) {
+      return false;
+    }
+  }
+
+  if (strcasecmp(request_payer, "requester") == 0) {
+    return true;
+  }
+
+  return false;
+}
+
 bool verify_bucket_permission(struct req_state *s, int perm)
 {
   if (!s->bucket_acl)
     return false;
 
   if ((perm & (int)s->perm_mask) != perm)
+    return false;
+
+  if (!verify_requester_payer_permission(s))
     return false;
 
   return s->bucket_acl->verify_permission(s->user.user_id, perm, perm);
@@ -721,6 +749,9 @@ static inline bool check_deferred_bucket_acl(struct req_state *s, uint8_t deferr
 
 bool verify_object_permission(struct req_state *s, RGWAccessControlPolicy *bucket_acl, RGWAccessControlPolicy *object_acl, int perm)
 {
+  if (!verify_requester_payer_permission(s))
+    return false;
+
   if (check_deferred_bucket_acl(s, RGW_DEFER_TO_BUCKET_ACLS_RECURSE, perm) ||
       check_deferred_bucket_acl(s, RGW_DEFER_TO_BUCKET_ACLS_FULL_CONTROL, RGW_PERM_FULL_CONTROL)) {
     return true;

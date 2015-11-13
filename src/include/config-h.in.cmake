@@ -6,6 +6,9 @@
 /* fallocate(2) is supported */
 #cmakedefine CEPH_HAVE_FALLOCATE 
 
+/* mallinfo(3) is supported */
+#cmakedefine HAVE_MALLINFO
+
 /* posix_fadvise is supported */
 #cmakedefine HAVE_POSIX_FADVISE
 

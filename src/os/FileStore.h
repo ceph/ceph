@@ -141,7 +141,10 @@ private:
   int init_index(coll_t c);
 
   void _kludge_temp_object_collection(coll_t& cid, const ghobject_t& oid) {
-    if (oid.hobj.pool < -1 && !cid.is_temp())
+    // - normal temp case: cid is pg, object is temp (pool < -1)
+    // - hammer temp case: cid is pg (or already temp), object pool is -1
+    if (cid.is_pg() && (oid.hobj.pool < -1 ||
+			oid.hobj.pool == -1))
       cid = cid.get_temp();
   }
   void init_temp_collections();
@@ -607,6 +610,13 @@ public:
   int _rmattrs(coll_t cid, const ghobject_t& oid,
 	       const SequencerPosition &spos);
 
+  int collection_getattr(coll_t c, const char *name, void *value, size_t size);
+  int collection_getattr(coll_t c, const char *name, bufferlist& bl);
+  int collection_getattrs(coll_t cid, map<string,bufferptr> &aset);
+
+  int _collection_setattr(coll_t c, const char *name, const void *value, size_t size);
+  int _collection_rmattr(coll_t c, const char *name);
+  int _collection_setattrs(coll_t cid, map<string,bufferptr> &aset);
   int _collection_remove_recursive(const coll_t &cid,
 				   const SequencerPosition &spos);
 

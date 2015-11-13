@@ -72,6 +72,12 @@ static struct response_attr_param resp_attr_params[] = {
   {NULL, NULL},
 };
 
+int RGWGetObj_ObjStore_S3::send_response_data_error()
+{
+  bufferlist bl;
+  return send_response_data(bl, 0 , 0);
+}
+
 int RGWGetObj_ObjStore_S3::send_response_data(bufferlist& bl, off_t bl_ofs, off_t bl_len)
 {
   const char *content_type = NULL;
@@ -138,22 +144,22 @@ int RGWGetObj_ObjStore_S3::send_response_data(bufferlist& bl, off_t bl_ofs, off_
 
     for (iter = attrs.begin(); iter != attrs.end(); ++iter) {
       const char *name = iter->first.c_str();
+
       map<string, string>::iterator aiter = rgw_to_http_attrs.find(name);
       if (aiter != rgw_to_http_attrs.end()) {
-	if (response_attrs.count(aiter->second) > 0) // was already overridden by a response param
-	  continue;
-
-	if (aiter->first.compare(RGW_ATTR_CONTENT_TYPE) == 0) { // special handling for content_type
-	  if (!content_type)
-	    content_type = iter->second.c_str();
-	  continue;
+        if (response_attrs.count(aiter->second) == 0) {
+          /* Was not already overridden by a response param. */
+          response_attrs[aiter->second] = iter->second.c_str();
         }
-	response_attrs[aiter->second] = iter->second.c_str();
-      } else {
-        if (strncmp(name, RGW_ATTR_META_PREFIX, sizeof(RGW_ATTR_META_PREFIX)-1) == 0) {
-          name += sizeof(RGW_ATTR_PREFIX) - 1;
-          s->cio->print("%s: %s\r\n", name, iter->second.c_str());
+      } else if (iter->first.compare(RGW_ATTR_CONTENT_TYPE) == 0) {
+        /* Special handling for content_type. */
+        if (!content_type) {
+          content_type = iter->second.c_str();
         }
+      } else if (strncmp(name, RGW_ATTR_META_PREFIX, sizeof(RGW_ATTR_META_PREFIX)-1) == 0) {
+        /* User custom metadata. */
+        name += sizeof(RGW_ATTR_PREFIX) - 1;
+        s->cio->print("%s: %s\r\n", name, iter->second.c_str());
       }
     }
   }
@@ -393,13 +399,21 @@ void RGWGetBucketLocation_ObjStore_S3::send_response()
   end_header(s, this);
   dump_start(s);
 
-  string location_constraint(s->bucket_info.region);
-  if (s->bucket_info.region == "default")
-    location_constraint.clear();
+  string region = s->bucket_info.region;
+  string api_name;
+
+  map<string, RGWRegion>::iterator iter = store->region_map.regions.find(region);
+  if (iter != store->region_map.regions.end()) {
+    api_name = iter->second.api_name;
+  } else  {
+    if (region != "default") {
+      api_name = region;
+    }
+  }
 
   s->formatter->dump_format_ns("LocationConstraint",
 			       "http://doc.s3.amazonaws.com/doc/2006-03-01/",
-			       "%s",location_constraint.c_str());
+			       "%s",api_name.c_str());
   rgw_flush_formatter_and_reset(s, s->formatter);
 }
 
@@ -1692,6 +1706,93 @@ void RGWOptionsCORS_ObjStore_S3::send_response()
   end_header(s, NULL);
 }
 
+void RGWGetRequestPayment_ObjStore_S3::send_response()
+{
+  dump_errno(s);
+  end_header(s, this, "application/xml");
+  dump_start(s);
+
+  s->formatter->open_object_section_in_ns("RequestPaymentConfiguration",
+					  "http://s3.amazonaws.com/doc/2006-03-01/");
+  const char *payer = requester_pays ? "Requester" :  "BucketOwner";
+  s->formatter->dump_string("Payer", payer);
+  s->formatter->close_section();
+  rgw_flush_formatter_and_reset(s, s->formatter);
+}
+
+class RGWSetRequestPaymentParser : public RGWXMLParser
+{
+  XMLObj *alloc_obj(const char *el) {
+    return new XMLObj;
+  }
+
+public:
+  RGWSetRequestPaymentParser() {}
+  ~RGWSetRequestPaymentParser() {}
+
+  int get_request_payment_payer(bool *requester_pays) {
+    XMLObj *config = find_first("RequestPaymentConfiguration");
+    if (!config)
+      return -EINVAL;
+
+    *requester_pays = false;
+
+    XMLObj *field = config->find_first("Payer");
+    if (!field)
+      return 0;
+
+    string& s = field->get_data();
+
+    if (stringcasecmp(s, "Requester") == 0) {
+      *requester_pays = true;
+    } else if (stringcasecmp(s, "BucketOwner") != 0) {
+      return -EINVAL;
+    }
+
+    return 0;
+  }
+};
+
+int RGWSetRequestPayment_ObjStore_S3::get_params()
+{
+#define GET_REQUEST_PAYMENT_BUF_MAX (128 * 1024)
+  char *data;
+  int len = 0;
+  int r = rgw_rest_read_all_input(s, &data, &len, GET_REQUEST_PAYMENT_BUF_MAX);
+  if (r < 0) {
+    return r;
+  }
+
+  RGWSetRequestPaymentParser parser;
+
+  if (!parser.init()) {
+    ldout(s->cct, 0) << "ERROR: failed to initialize parser" << dendl;
+    r = -EIO;
+    goto done;
+  }
+
+  if (!parser.parse(data, len, 1)) {
+    ldout(s->cct, 10) << "failed to parse data: " << data << dendl;
+    r = -EINVAL;
+    goto done;
+  }
+
+  r = parser.get_request_payment_payer(&requester_pays);
+
+done:
+  free(data);
+
+  return r;
+}
+
+void RGWSetRequestPayment_ObjStore_S3::send_response()
+{
+  if (ret)
+    set_req_state_err(s, ret);
+  dump_errno(s);
+  end_header(s);
+}
+
 int RGWInitMultipart_ObjStore_S3::get_params()
 {
   RGWAccessControlPolicy_S3 s3policy(s->cct);
@@ -1968,6 +2069,8 @@ RGWOp *RGWHandler_ObjStore_Bucket_S3::op_get()
     return new RGWGetACLs_ObjStore_S3;
   } else if (is_cors_op()) {
     return new RGWGetCORS_ObjStore_S3;
+  } else if (is_request_payment_op()) {
+    return new RGWGetRequestPayment_ObjStore_S3;
   } else if (s->info.args.exists("uploads")) {
     return new RGWListBucketMultiparts_ObjStore_S3;
   }
@@ -1994,7 +2097,9 @@ RGWOp *RGWHandler_ObjStore_Bucket_S3::op_put()
     return new RGWPutACLs_ObjStore_S3;
   } else if (is_cors_op()) {
     return new RGWPutCORS_ObjStore_S3;
-  } 
+  } else if (is_request_payment_op()) {
+    return new RGWSetRequestPayment_ObjStore_S3;
+  }
   return new RGWCreateBucket_ObjStore_S3;
 }
 

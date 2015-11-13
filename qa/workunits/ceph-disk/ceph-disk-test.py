@@ -21,16 +21,18 @@
 #  ln -sf /home/ubuntu/ceph/systemd/ceph-disk@.service /usr/lib/systemd/system/ceph-disk@.service
 #  ceph-disk.conf will be silently ignored if it is a symbolic link or a hard link /var/log/upstart for logs
 #  cp /home/ubuntu/ceph/src/upstart/ceph-disk.conf /etc/init/ceph-disk.conf
-#  python ceph-disk-test.py --verbose --destroy-osd 0
+#  sudo env PATH=..:$PATH python ceph-disk-test.py --destroy-osd 2 --verbose
 #  py.test -s -v -k test_activate_dmcrypt_luks ceph-disk-test.py
 #  udevadm monitor --property & tail -f /var/log/messages # on CentOS 7
 #  udevadm monitor --property & tail -f /var/log/syslog /var/log/upstart/*  # on Ubuntu 14.04
 #  udevadm test --action=add /block/vdb/vdb1 # verify the udev rule is run as expected
 #  udevadm control --reload # when changing the udev rules
+#  sudo /usr/sbin/ceph-disk -v trigger /dev/vdb1 # activates if vdb1 is data
 #
 import argparse
 import json
 import logging
+import configobj
 import os
 import pytest
 import re
@@ -43,6 +45,12 @@ import uuid
 LOG = logging.getLogger('CephDisk')
 
 class CephDisk:
+
+    def __init__(self):
+        self.conf = configobj.ConfigObj('/etc/ceph/ceph.conf')
+
+    def save_conf(self):
+        self.conf.write(open('/etc/ceph/ceph.conf', 'w'))
 
     @staticmethod
     def helper(command):
@@ -167,27 +175,23 @@ class CephDisk:
             time.sleep(delay)
         raise Exception('timeout waiting for osd ' + uuid + ' to be ' + info)
 
-    @staticmethod
-    def augtool(command):
-        return CephDisk.sh("""
-        augtool <<'EOF'
-        set /augeas/load/IniFile/lens Puppet.lns
-        set /augeas/load/IniFile/incl "/etc/ceph/ceph.conf"
-        load
-        {command}
-        save
-EOF
-        """.format(command=command))
 
 class TestCephDisk(object):
 
     def setup_class(self):
         logging.basicConfig(level=logging.DEBUG)
         c = CephDisk()
-        c.helper("install augeas-tools augeas")
         if c.sh("lsb_release -si") == 'CentOS':
             c.helper("install multipath-tools device-mapper-multipath")
-        c.augtool("set /files/etc/ceph/ceph.conf/global/osd_journal_size 100")
+        c.conf['global']['osd journal size'] = 100
+        c.save_conf()
+
+    def setup(self):
+        c = CephDisk()
+        for key in ('osd objectstore', 'osd dmcrypt type'):
+            if key in c.conf['global']:
+                del c.conf['global'][key]
+        c.save_conf()
 
     def test_destroy_osd(self):
         c = CephDisk()
@@ -201,18 +205,15 @@ class TestCephDisk(object):
         c.destroy_osd(osd_uuid)
         c.sh("ceph-disk zap " + disk)
 
-    def test_augtool(self):
-        c = CephDisk()
-        out = c.augtool("ls /files/etc/ceph/ceph.conf")
-        assert 'global' in out
-
     def test_activate_dmcrypt_plain(self):
-        CephDisk.augtool("set /files/etc/ceph/ceph.conf/global/osd_dmcrypt_type plain")
+        c = CephDisk()
+        c.conf['global']['osd dmcrypt type'] = 'plain'
+        c.save_conf()
         self.activate_dmcrypt('plain')
-        CephDisk.augtool("rm /files/etc/ceph/ceph.conf/global/osd_dmcrypt_type")
+        c.save_conf()
 
     def test_activate_dmcrypt_luks(self):
-        CephDisk.augtool("rm /files/etc/ceph/ceph.conf/global/osd_dmcrypt_type")
+        c = CephDisk()
         self.activate_dmcrypt('luks')
 
     def activate_dmcrypt(self, type):
@@ -221,7 +222,7 @@ class TestCephDisk(object):
         osd_uuid = str(uuid.uuid1())
         journal_uuid = str(uuid.uuid1())
         c.sh("ceph-disk zap " + disk)
-        c.sh("ceph-disk prepare " +
+        c.sh("ceph-disk --verbose prepare " +
              " --osd-uuid " + osd_uuid +
              " --journal-uuid " + journal_uuid +
              " --dmcrypt " +
@@ -240,7 +241,8 @@ class TestCephDisk(object):
         disk = c.unused_disks()[0]
         osd_uuid = str(uuid.uuid1())
         c.sh("ceph-disk zap " + disk)
-        c.augtool("set /files/etc/ceph/ceph.conf/global/osd_objectstore memstore")
+        c.conf['global']['osd objectstore'] = 'memstore'
+        c.save_conf()
         c.sh("ceph-disk prepare --osd-uuid " + osd_uuid +
              " " + disk)
         c.wait_for_osd_up(osd_uuid)
@@ -253,7 +255,7 @@ class TestCephDisk(object):
         c.helper("pool_read_write")
         c.destroy_osd(osd_uuid)
         c.sh("ceph-disk zap " + disk)
-        c.augtool("rm /files/etc/ceph/ceph.conf/global/osd_objectstore")
+        c.save_conf()
 
     def test_activate_with_journal(self):
         c = CephDisk()

@@ -238,9 +238,12 @@ public:
 
     unsigned append(char c);
     unsigned append(const char *p, unsigned l);
-    void copy_in(unsigned o, unsigned l, const char *src, bool crc_reset = true);
-    void zero(bool crc_reset = true);
-    void zero(unsigned o, unsigned l, bool crc_reset = true);
+    void copy_in(unsigned o, unsigned l, const char *src);
+    void copy_in(unsigned o, unsigned l, const char *src, bool crc_reset);
+    void zero();
+    void zero(bool crc_reset);
+    void zero(unsigned o, unsigned l);
+    void zero(unsigned o, unsigned l, bool crc_reset);
 
   };
 
@@ -258,7 +261,7 @@ public:
     ptr append_buffer;  // where i put small appends.
 
     template <bool is_const>
-      class iterator_impl: public std::iterator<std::forward_iterator_tag, char> {
+    class iterator_impl: public std::iterator<std::forward_iterator_tag, char> {
     protected:
       typedef typename std::conditional<is_const,
 					const list,
@@ -326,8 +329,23 @@ public:
 	iterator_impl(l, o) {}
       iterator(bl_t *l, unsigned o, list_iter_t ip, unsigned po) :
 	iterator_impl(l, o, ip, po) {}
+
+      void advance(int o);
+      void seek(unsigned o);
+      char operator*();
+      iterator& operator++();
+      ptr get_current_ptr();
+
+      // copy data out
+      void copy(unsigned len, char *dest);
+      void copy(unsigned len, ptr &dest);
+      void copy(unsigned len, list &dest);
+      void copy(unsigned len, std::string &dest);
+      void copy_all(list &dest);
+
       // copy data in
-      void copy_in(unsigned len, const char *src, bool crc_reset = true);
+      void copy_in(unsigned len, const char *src);
+      void copy_in(unsigned len, const char *src, bool crc_reset);
       void copy_in(unsigned len, const list& otherl);
     };
 
@@ -373,6 +391,8 @@ public:
 #endif
       return _len;
     }
+
+    bool contents_equal(buffer::list& other);
     bool contents_equal(const buffer::list& other) const;
 
     bool can_zero_copy() const;
@@ -469,7 +489,8 @@ public:
     void copy(unsigned off, unsigned len, char *dest) const;
     void copy(unsigned off, unsigned len, list &dest) const;
     void copy(unsigned off, unsigned len, std::string& dest) const;
-    void copy_in(unsigned off, unsigned len, const char *src, bool crc_reset = true);
+    void copy_in(unsigned off, unsigned len, const char *src);
+    void copy_in(unsigned off, unsigned len, const char *src, bool crc_reset);
     void copy_in(unsigned off, unsigned len, const list& src);
 
     void append(char c);

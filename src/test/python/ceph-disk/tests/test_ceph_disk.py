@@ -404,7 +404,11 @@ class TestCephDisk(object):
                     'ptype': ptype,
                     'state': 'prepared',
                 }
-                out = ceph_disk.list_format_dev_plain(dev, devices)
+                with patch.multiple(
+                        ceph_disk,
+                        list_devices=lambda path: devices,
+                        ):
+                    out = ceph_disk.list_format_dev_plain(dev, devices)
                 assert 'data' in out
                 assert 'dmcrypt' in out
                 assert type in out

@@ -984,7 +984,7 @@ void RGWGetObj::execute()
     goto done_err;
 
   attr_iter = attrs.find(RGW_ATTR_USER_MANIFEST);
-  if (attr_iter != attrs.end()) {
+  if (attr_iter != attrs.end() && !skip_manifest) {
     ret = handle_user_manifest(attr_iter->second.c_str());
     if (ret < 0) {
       ldout(s->cct, 0) << "ERROR: failed to handle user manifest ret=" << ret << dendl;
@@ -1017,8 +1017,11 @@ void RGWGetObj::execute()
     goto done_err;
   }
 
-done_err:
   send_response_data(bl, 0, 0);
+  return;
+
+done_err:
+  send_response_data_error();
 }
 
 int RGWGetObj::init_common()
@@ -2122,6 +2125,7 @@ void RGWPostObj::execute()
     goto done;
   }
 
+  processor->complete_hash(&hash);
   hash.Final(m);
   buf_to_hex(m, CEPH_CRYPTO_MD5_DIGESTSIZE, calc_md5);
 
@@ -2427,7 +2431,16 @@ void RGWDeleteObj::execute()
 {
   ret = -EINVAL;
   rgw_obj obj(s->bucket, s->object);
+  map<string, bufferlist> orig_attrs;
+
   if (!s->object.empty()) {
+    if (need_object_expiration()) {
+      /* check if obj exists, read orig attrs */
+      ret = get_obj_attrs(store, s, obj, orig_attrs);
+      if (ret < 0) {
+        return;
+      }
+    }
     RGWObjectCtx *obj_ctx = static_cast<RGWObjectCtx *>(s->obj_ctx);
 
     obj_ctx->set_atomic(obj);
@@ -2447,6 +2460,13 @@ void RGWDeleteObj::execute()
     if (ret >= 0) {
       delete_marker = del_op.result.delete_marker;
       version_id = del_op.result.version_id;
+    }
+
+    /* Check whether the object has expired. Swift API documentation
+     * stands that we should return 404 Not Found in such case. */
+    if (need_object_expiration() && object_is_expired(orig_attrs)) {
+      ret = -ENOENT;
+      return;
     }
   }
 }
@@ -2965,6 +2985,49 @@ void RGWOptionsCORS::execute()
     return;
   }
   return;
+}
+
+int RGWGetRequestPayment::verify_permission()
+{
+  return 0;
+}
+
+void RGWGetRequestPayment::pre_exec()
+{
+  rgw_bucket_object_pre_exec(s);
+}
+
+void RGWGetRequestPayment::execute()
+{
+  requester_pays = s->bucket_info.requester_pays;
+}
+
+int RGWSetRequestPayment::verify_permission()
+{
+  if (s->user.user_id.compare(s->bucket_owner.get_id()) != 0)
+    return -EACCES;
+
+  return 0;
+}
+
+void RGWSetRequestPayment::pre_exec()
+{
+  rgw_bucket_object_pre_exec(s);
+}
+
+void RGWSetRequestPayment::execute()
+{
+  ret = get_params();
+
+  if (ret < 0)
+    return;
+
+  s->bucket_info.requester_pays = requester_pays;
+  ret = store->put_bucket_instance_info(s->bucket_info, false, 0, &s->bucket_attrs);
+  if (ret < 0) {
+    ldout(s->cct, 0) << "NOTICE: put_bucket_info on bucket=" << s->bucket.name << " returned err=" << ret << dendl;
+    return;
+  }
 }
 
 int RGWInitMultipart::verify_permission()

@@ -100,7 +100,8 @@ void _usage()
   cout << "  metadata rm                remove metadata info\n";
   cout << "  metadata list              list metadata info\n";
   cout << "  mdlog list                 list metadata log\n";
-  cout << "  mdlog trim                 trim metadata log\n";
+  cout << "  mdlog trim                 trim metadata log (use start-date, end-date or\n";
+  cout << "                             start-marker, end-marker)\n";
   cout << "  bilog list                 list bucket index log\n";
   cout << "  bilog trim                 trim bucket index log (use start-marker, end-marker)\n";
   cout << "  datalog list               list data log\n";
@@ -118,7 +119,8 @@ void _usage()
   cout << "   --subuser=<name>          subuser name\n";
   cout << "   --access-key=<key>        S3 access key\n";
   cout << "   --email=<email>\n";
-  cout << "   --secret=<key>            specify secret key\n";
+  cout << "   --secret/--secret-key=<key>\n";
+  cout << "                             specify secret key\n";
   cout << "   --gen-access-key          generate random access key (for S3)\n";
   cout << "   --gen-secret              generate random secret key\n";
   cout << "   --key-type=<type>         key type, options are: swift, s3\n";
@@ -1180,7 +1182,7 @@ int main(int argc, char **argv)
       access_key = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--subuser", (char*)NULL)) {
       subuser = val;
-    } else if (ceph_argparse_witharg(args, i, &val, "--secret", (char*)NULL)) {
+    } else if (ceph_argparse_witharg(args, i, &val, "--secret", "--secret-key", (char*)NULL)) {
       secret_key = val;
     } else if (ceph_argparse_witharg(args, i, &val, "-e", "--email", (char*)NULL)) {
       user_email = val;
@@ -1238,9 +1240,17 @@ int main(int argc, char **argv)
     } else if (ceph_argparse_witharg(args, i, &val, "--min-rewrite-stripe-size", (char*)NULL)) {
       min_rewrite_stripe_size = (uint64_t)atoll(val.c_str());
     } else if (ceph_argparse_witharg(args, i, &val, "--max-buckets", (char*)NULL)) {
-      max_buckets = atoi(val.c_str());
+      max_buckets = (int)strict_strtol(val.c_str(), 10, &err);
+      if (!err.empty()) {
+        cerr << "ERROR: failed to parse max buckets: " << err << std::endl;
+        return EINVAL;
+      }
     } else if (ceph_argparse_witharg(args, i, &val, "--max-entries", (char*)NULL)) {
-      max_entries = atoi(val.c_str());
+      max_entries = (int)strict_strtol(val.c_str(), 10, &err);
+      if (!err.empty()) {
+        cerr << "ERROR: failed to parse max entries: " << err << std::endl;
+        return EINVAL;
+      }
     } else if (ceph_argparse_witharg(args, i, &val, "--max-size", (char*)NULL)) {
       max_size = (int64_t)strict_strtoll(val.c_str(), 10, &err);
       if (!err.empty()) {
@@ -1264,13 +1274,29 @@ int main(int argc, char **argv)
     } else if (ceph_argparse_witharg(args, i, &val, "--end-date", "--end-time", (char*)NULL)) {
       end_date = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--num-shards", (char*)NULL)) {
-      num_shards = atoi(val.c_str());
+      num_shards = (int)strict_strtol(val.c_str(), 10, &err);
+      if (!err.empty()) {
+        cerr << "ERROR: failed to parse num shards: " << err << std::endl;
+        return EINVAL;
+      }
     } else if (ceph_argparse_witharg(args, i, &val, "--max-concurrent-ios", (char*)NULL)) {
-      max_concurrent_ios = atoi(val.c_str());
+      max_concurrent_ios = (int)strict_strtol(val.c_str(), 10, &err);
+      if (!err.empty()) {
+        cerr << "ERROR: failed to parse max concurrent ios: " << err << std::endl;
+        return EINVAL;
+      }
     } else if (ceph_argparse_witharg(args, i, &val, "--orphan-stale-secs", (char*)NULL)) {
-      orphan_stale_secs = (uint64_t)atoi(val.c_str());
+      orphan_stale_secs = (uint64_t)strict_strtoll(val.c_str(), 10, &err);
+      if (!err.empty()) {
+        cerr << "ERROR: failed to parse orphan stale secs: " << err << std::endl;
+        return EINVAL;
+      }
     } else if (ceph_argparse_witharg(args, i, &val, "--shard-id", (char*)NULL)) {
-      shard_id = atoi(val.c_str());
+      shard_id = (int)strict_strtol(val.c_str(), 10, &err);
+      if (!err.empty()) {
+        cerr << "ERROR: failed to parse shard id: " << err << std::endl;
+        return EINVAL;
+      }
       specified_shard_id = true;
     } else if (ceph_argparse_witharg(args, i, &val, "--daemon-id", (char*)NULL)) {
       daemon_id = val;
@@ -2747,16 +2773,15 @@ next:
     do {
       list<string> keys;
       ret = store->meta_mgr->list_keys_next(handle, max, keys, &truncated);
-      if (ret < 0) {
+      if (ret < 0 && ret != -ENOENT) {
         cerr << "ERROR: lists_keys_next(): " << cpp_strerror(-ret) << std::endl;
         return -ret;
+      } if (ret != -ENOENT) {
+	for (list<string>::iterator iter = keys.begin(); iter != keys.end(); ++iter) {
+	  formatter->dump_string("key", *iter);
+	}
+	formatter->flush(cout);
       }
-
-      for (list<string>::iterator iter = keys.begin(); iter != keys.end(); ++iter) {
-	formatter->dump_string("key", *iter);
-      }
-      formatter->flush(cout);
-
     } while (truncated);
 
     formatter->close_section();
