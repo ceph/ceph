@@ -11,7 +11,9 @@ import ctypes
 import errno
 import threading
 import time
+import sys
 
+from collections import Iterator
 from datetime import datetime
 from functools import wraps
 from itertools import chain
@@ -25,6 +27,16 @@ LIBRADOS_OP_FLAG_FADVISE_SEQUENTIAL = 0x8
 LIBRADOS_OP_FLAG_FADVISE_WILLNEED = 0x10
 LIBRADOS_OP_FLAG_FADVISE_DONTNEED = 0x20
 LIBRADOS_OP_FLAG_FADVISE_NOCACHE = 0x40
+
+
+# Are we running Python 2.x
+_python2 = sys.hexversion < 0x03000000
+
+
+if _python2:
+    str_type = basestring
+else:
+    str_type = str
 
 
 class Error(Exception):
@@ -261,6 +273,42 @@ def requires(*types):
     return wrapper
 
 
+def cstr(val, encoding="utf-8"):
+    """
+    Create a C-style string from a Python string
+
+    :param str val: Python string
+    :param encoding: Encoding to use
+    :rtype: c_char_p
+    """
+    if val is None:
+        return c_char_p(None)
+
+    if _python2 and isinstance(val, str):
+        # Don't encode str on Python 2, as it's already an 8-bit string
+        return c_char_p(val)
+    else:
+        return c_char_p(val.encode(encoding))
+
+
+def decode_cstr(addr, size=-1, encoding="utf-8"):
+    """
+    Decode a C-style string into a Python string.
+
+    Return None if a the C string is a NULL pointer.
+
+    :param c_char_p addr: C-style string
+    :param int: String size (assume NUL-terminated if size is -1)
+    :param encoding: Encoding to use
+    :rtype: str or None
+    """
+    if not addr:
+        # NULL pointer
+        return None
+
+    return ctypes.string_at(addr, size).decode(encoding)
+
+
 class Rados(object):
     """librados python wrapper"""
     def require_state(self, *args):
@@ -274,8 +322,8 @@ class Rados(object):
         raise RadosStateError("You cannot perform that operation on a \
 Rados object in state %s." % self.state)
 
-    @requires(('rados_id', opt(str)), ('name', opt(str)), ('clustername', opt(str)),
-              ('conffile', opt(str)))
+    @requires(('rados_id', opt(str_type)), ('name', opt(str_type)), ('clustername', opt(str_type)),
+              ('conffile', opt(str_type)))
     def __init__(self, rados_id=None, name=None, clustername=None,
                  conf_defaults=None, conffile=None, conf=None, flags=0):
         library_path = find_library('rados')
@@ -297,15 +345,15 @@ Rados object in state %s." % self.state)
         if clustername is None:
             clustername = 'ceph'
         ret = run_in_thread(self.librados.rados_create2,
-                            (byref(self.cluster), c_char_p(clustername),
-                             c_char_p(name), c_uint64(flags)))
+                            (byref(self.cluster), cstr(clustername),
+                            cstr(name), c_uint64(flags)))
 
         if ret != 0:
             raise Error("rados_initialize failed with error code: %d" % ret)
         self.state = "configuring"
         # order is important: conf_defaults, then conffile, then conf
         if conf_defaults:
-            for key, value in conf_defaults.iteritems():
+            for key, value in conf_defaults.items():
                 self.conf_set(key, value)
         if conffile is not None:
             # read the default conf file when '' is given
@@ -313,7 +361,7 @@ Rados object in state %s." % self.state)
                 conffile = None
             self.conf_read_file(conffile)
         if conf:
-            for key, value in conf.iteritems():
+            for key, value in conf.items():
                 self.conf_set(key, value)
 
     def shutdown(self):
@@ -348,7 +396,7 @@ Rados object in state %s." % self.state)
         return Version(major.value, minor.value, extra.value)
 
 
-    @requires(('path', opt(str)))
+    @requires(('path', opt(str_type)))
     def conf_read_file(self, path=None):
         """
         Configure the cluster handle using a Ceph config file.
@@ -358,7 +406,7 @@ Rados object in state %s." % self.state)
         """
         self.require_state("configuring", "connected")
         ret = run_in_thread(self.librados.rados_conf_read_file,
-                            (self.cluster, c_char_p(path)))
+                            (self.cluster, cstr(path)))
         if (ret != 0):
             raise make_ex(ret, "error calling conf_read_file")
 
@@ -372,7 +420,7 @@ Rados object in state %s." % self.state)
             return
         # create instances of arrays of c_char_p's, both len(args) long
         # cretargs will always be a subset of cargs (perhaps identical)
-        cargs = (c_char_p * len(args))(*args)
+        cargs = (c_char_p * len(args))(*map(cstr, args))
         cretargs = (c_char_p * len(args))()
         ret = run_in_thread(self.librados.rados_conf_parse_argv_remainder,
                             (self.cluster, len(args), cargs, cretargs))
@@ -382,7 +430,7 @@ Rados object in state %s." % self.state)
         # cretargs was allocated with fixed length; collapse return
         # list to eliminate any missing args
 
-        retargs = [a for a in cretargs if a is not None]
+        retargs = [decode_cstr(a) for a in cretargs if a is not None]
         self.parsed_args = args
         return retargs
 
@@ -395,11 +443,11 @@ Rados object in state %s." % self.state)
         if not var:
             return
         ret = run_in_thread(self.librados.rados_conf_parse_env,
-                            (self.cluster, c_char_p(var)))
+                            (self.cluster, cstr(var)))
         if (ret != 0):
             raise make_ex(ret, "error calling conf_parse_env")
 
-    @requires(('option', str))
+    @requires(('option', str_type))
     def conf_get(self, option):
         """
         Get the value of a configuration option
@@ -415,10 +463,10 @@ Rados object in state %s." % self.state)
         while True:
             ret_buf = create_string_buffer(length)
             ret = run_in_thread(self.librados.rados_conf_get,
-                                (self.cluster, c_char_p(option), ret_buf,
-                                 c_size_t(length)))
+                                (self.cluster, cstr(option), ret_buf,
+                                c_size_t(length)))
             if (ret == 0):
-                return ret_buf.value
+                return decode_cstr(ret_buf)
             elif (ret == -errno.ENAMETOOLONG):
                 length = length * 2
             elif (ret == -errno.ENOENT):
@@ -426,7 +474,7 @@ Rados object in state %s." % self.state)
             else:
                 raise make_ex(ret, "error calling conf_get")
 
-    @requires(('option', str), ('val', str))
+    @requires(('option', str_type), ('val', str_type))
     def conf_set(self, option, val):
         """
         Set the value of a configuration option
@@ -440,7 +488,7 @@ Rados object in state %s." % self.state)
         """
         self.require_state("configuring", "connected")
         ret = run_in_thread(self.librados.rados_conf_set,
-                            (self.cluster, c_char_p(option), c_char_p(val)))
+                            (self.cluster, cstr(option), cstr(val)))
         if (ret != 0):
             raise make_ex(ret, "error calling conf_set")
 
@@ -463,7 +511,7 @@ Rados object in state %s." % self.state)
         outstrlen = c_long()
 
         ret = run_in_thread(self.librados.rados_ping_monitor,
-                            (self.cluster, c_char_p(mon_id),
+                            (self.cluster, cstr(mon_id),
                              outstrp, byref(outstrlen)))
 
         my_outstr = outstrp.contents[:(outstrlen.value)]
@@ -472,7 +520,7 @@ Rados object in state %s." % self.state)
 
         if ret != 0:
             raise make_ex(ret, "error calling ping_monitor")
-        return my_outstr
+        return decode_cstr(my_outstr)
 
     def connect(self, timeout=0):
         """
@@ -515,7 +563,7 @@ Rados object in state %s." % self.state)
                 'kb_avail': stats.kb_avail,
                 'num_objects': stats.num_objects}
 
-    @requires(('pool_name', str))
+    @requires(('pool_name', str_type))
     def pool_exists(self, pool_name):
         """
         Checks if a given pool exists.
@@ -528,7 +576,7 @@ Rados object in state %s." % self.state)
         """
         self.require_state("connected")
         ret = run_in_thread(self.librados.rados_pool_lookup,
-                            (self.cluster, c_char_p(pool_name)))
+                            (self.cluster, cstr(pool_name)))
         if (ret >= 0):
             return True
         elif (ret == -errno.ENOENT):
@@ -536,7 +584,7 @@ Rados object in state %s." % self.state)
         else:
             raise make_ex(ret, "error looking up pool '%s'" % pool_name)
 
-    @requires(('pool_name', str))
+    @requires(('pool_name', str_type))
     def pool_lookup(self, pool_name):
         """
         Returns a pool's ID based on its name.
@@ -549,7 +597,7 @@ Rados object in state %s." % self.state)
         """
         self.require_state("connected")
         ret = run_in_thread(self.librados.rados_pool_lookup,
-                            (self.cluster, c_char_p(pool_name)))
+                            (self.cluster, cstr(pool_name)))
         if (ret >= 0):
             return int(ret)
         elif (ret == -errno.ENOENT):
@@ -584,7 +632,7 @@ Rados object in state %s." % self.state)
                 return c_name.value
                 break
 
-    @requires(('pool_name', str), ('auid', opt(int)), ('crush_rule', opt(int)))
+    @requires(('pool_name', str_type), ('auid', opt(int)), ('crush_rule', opt(int)))
     def create_pool(self, pool_name, auid=None, crush_rule=None):
         """
         Create a pool:
@@ -606,20 +654,20 @@ Rados object in state %s." % self.state)
         if auid is None:
             if crush_rule is None:
                 ret = run_in_thread(self.librados.rados_pool_create,
-                                    (self.cluster, c_char_p(pool_name)))
+                                    (self.cluster, cstr(pool_name)))
             else:
                 ret = run_in_thread(self.librados.
                                     rados_pool_create_with_crush_rule,
-                                    (self.cluster, c_char_p(pool_name),
+                                    (self.cluster, cstr(pool_name),
                                      c_ubyte(crush_rule)))
 
         elif crush_rule is None:
             ret = run_in_thread(self.librados.rados_pool_create_with_auid,
-                                (self.cluster, c_char_p(pool_name),
+                                (self.cluster, cstr(pool_name),
                                  c_uint64(auid)))
         else:
             ret = run_in_thread(self.librados.rados_pool_create_with_all,
-                                (self.cluster, c_char_p(pool_name),
+                                (self.cluster, cstr(pool_name),
                                  c_uint64(auid), c_ubyte(crush_rule)))
         if ret < 0:
             raise make_ex(ret, "error creating pool '%s'" % pool_name)
@@ -639,7 +687,7 @@ Rados object in state %s." % self.state)
             raise make_ex(ret, "get_pool_base_tier(%d)" % pool_id)
         return base_tier.value
 
-    @requires(('pool_name', str))
+    @requires(('pool_name', str_type))
     def delete_pool(self, pool_name):
         """
         Delete a pool and all data inside it.
@@ -654,7 +702,7 @@ Rados object in state %s." % self.state)
         """
         self.require_state("connected")
         ret = run_in_thread(self.librados.rados_pool_delete,
-                            (self.cluster, c_char_p(pool_name)))
+                            (self.cluster, cstr(pool_name)))
         if ret < 0:
             raise make_ex(ret, "error deleting pool '%s'" % pool_name)
 
@@ -674,7 +722,8 @@ Rados object in state %s." % self.state)
                 size = c_size_t(ret)
             else:
                 break
-        return filter(lambda name: name != '', c_names.raw.split('\0'))
+
+        return [decode_cstr(name) for name in c_names.raw.split(b'\0') if len(name) > 0]
 
     def get_fsid(self):
         """
@@ -692,7 +741,7 @@ Rados object in state %s." % self.state)
             raise make_ex(ret, "error getting cluster fsid")
         return fsid.value
 
-    @requires(('ioctx_name', str))
+    @requires(('ioctx_name', str_type))
     def open_ioctx(self, ioctx_name):
         """
         Create an io context
@@ -709,7 +758,7 @@ Rados object in state %s." % self.state)
         self.require_state("connected")
         ioctx = c_void_p()
         ret = run_in_thread(self.librados.rados_ioctx_create,
-                            (self.cluster, c_char_p(ioctx_name), byref(ioctx)))
+                            (self.cluster, cstr(ioctx_name), byref(ioctx)))
         if ret < 0:
             raise make_ex(ret, "error opening pool '%s'" % ioctx_name)
         return Ioctx(ioctx_name, self.librados, ioctx)
@@ -724,11 +773,11 @@ Rados object in state %s." % self.state)
         outbuflen = c_long()
         outsp = pointer(pointer(c_char()))
         outslen = c_long()
-        cmdarr = (c_char_p * len(cmd))(*cmd)
+        cmdarr = (c_char_p * len(cmd))(*map(cstr, cmd))
 
         if target:
             ret = run_in_thread(self.librados.rados_mon_command_target,
-                                (self.cluster, c_char_p(target), cmdarr,
+                                (self.cluster, cstr(target), cmdarr,
                                  len(cmd), c_char_p(inbuf), len(inbuf),
                                  outbufp, byref(outbuflen), outsp,
                                  byref(outslen)), timeout)
@@ -741,7 +790,7 @@ Rados object in state %s." % self.state)
 
         # copy returned memory (ctypes makes a copy, not a reference)
         my_outbuf = outbufp.contents[:(outbuflen.value)]
-        my_outs = outsp.contents[:(outslen.value)]
+        my_outs = decode_cstr(outsp.contents, outslen.value)
 
         # free callee's allocations
         if outbuflen.value:
@@ -761,7 +810,7 @@ Rados object in state %s." % self.state)
         outbuflen = c_long()
         outsp = pointer(pointer(c_char()))
         outslen = c_long()
-        cmdarr = (c_char_p * len(cmd))(*cmd)
+        cmdarr = (c_char_p * len(cmd))(*map(cstr, cmd))
         ret = run_in_thread(self.librados.rados_osd_command,
                             (self.cluster, osdid, cmdarr, len(cmd),
                              c_char_p(inbuf), len(inbuf),
@@ -770,7 +819,7 @@ Rados object in state %s." % self.state)
 
         # copy returned memory (ctypes makes a copy, not a reference)
         my_outbuf = outbufp.contents[:(outbuflen.value)]
-        my_outs = outsp.contents[:(outslen.value)]
+        my_outs = decode_cstr(outsp.contents, outslen.value)
 
         # free callee's allocations
         if outbuflen.value:
@@ -790,16 +839,16 @@ Rados object in state %s." % self.state)
         outbuflen = c_long()
         outsp = pointer(pointer(c_char()))
         outslen = c_long()
-        cmdarr = (c_char_p * len(cmd))(*cmd)
+        cmdarr = (c_char_p * len(cmd))(*map(cstr, cmd))
         ret = run_in_thread(self.librados.rados_pg_command,
-                            (self.cluster, c_char_p(pgid), cmdarr, len(cmd),
+                            (self.cluster, cstr(pgid), cmdarr, len(cmd),
                              c_char_p(inbuf), len(inbuf),
                              outbufp, byref(outbuflen), outsp, byref(outslen)),
                             timeout)
 
         # copy returned memory (ctypes makes a copy, not a reference)
         my_outbuf = outbufp.contents[:(outbuflen.value)]
-        my_outs = outsp.contents[:(outslen.value)]
+        my_outs = decode_cstr(outsp.contents, outslen.value)
 
         # free callee's allocations
         if outbuflen.value:
@@ -826,13 +875,13 @@ Rados object in state %s." % self.state)
         """
         self.require_state("connected")
         ret = run_in_thread(self.librados.rados_blacklist_add,
-                            (self.cluster, c_char_p(client_address),
+                            (self.cluster, cstr(client_address),
                              c_uint32(expire_seconds)))
         if ret < 0:
             raise make_ex(ret, "error blacklisting client '%s'" % client_address)
 
 
-class OmapIterator(object):
+class OmapIterator(Iterator):
     """Omap iterator"""
     def __init__(self, ioctx, ctx):
         self.ioctx = ioctx
@@ -842,6 +891,9 @@ class OmapIterator(object):
         return self
 
     def next(self):
+        return self.__next__()
+
+    def __next__(self):
         """
         Get the next key-value pair in the object
         :returns: next rados.OmapItem
@@ -855,7 +907,7 @@ class OmapIterator(object):
             raise make_ex(ret, "error iterating over the omap")
         if key_.value is None:
             raise StopIteration()
-        key = ctypes.string_at(key_)
+        key = decode_cstr(key_)
         val = None
         if val_.value is not None:
             val = ctypes.string_at(val_, len_)
@@ -865,7 +917,7 @@ class OmapIterator(object):
         run_in_thread(self.ioctx.librados.rados_omap_get_end, (self.ctx,))
 
 
-class ObjectIterator(object):
+class ObjectIterator(Iterator):
     """rados.Ioctx Object iterator"""
     def __init__(self, ioctx):
         self.ioctx = ioctx
@@ -880,26 +932,33 @@ class ObjectIterator(object):
         return self
 
     def next(self):
+        return self.__next__()
+
+    def __next__(self):
         """
         Get the next object name and locator in the pool
 
         :raises: StopIteration
         :returns: next rados.Ioctx Object
         """
-        key = c_char_p()
-        locator = c_char_p()
-        nspace = c_char_p()
+        key_ = c_char_p()
+        locator_ = c_char_p()
+        nspace_ = c_char_p()
         ret = run_in_thread(self.ioctx.librados.rados_nobjects_list_next,
-                            (self.ctx, byref(key), byref(locator), byref(nspace)))
+                            (self.ctx, byref(key_), byref(locator_), byref(nspace_)))
         if ret < 0:
             raise StopIteration()
-        return Object(self.ioctx, key.value, locator.value, nspace.value)
+
+        key = decode_cstr(key_)
+        locator = decode_cstr(locator_)
+        nspace = decode_cstr(nspace_)
+        return Object(self.ioctx, key, locator, nspace)
 
     def __del__(self):
         run_in_thread(self.ioctx.librados.rados_nobjects_list_close, (self.ctx,))
 
 
-class XattrIterator(object):
+class XattrIterator(Iterator):
     """Extended attribute iterator"""
     def __init__(self, ioctx, it, oid):
         self.ioctx = ioctx
@@ -910,6 +969,9 @@ class XattrIterator(object):
         return self
 
     def next(self):
+        return self.__next__()
+
+    def __next__(self):
         """
         Get the next xattr on the object
 
@@ -926,7 +988,7 @@ class XattrIterator(object):
 in '%s'" % self.oid)
         if name_.value is None:
             raise StopIteration()
-        name = ctypes.string_at(name_)
+        name = decode_cstr(name_)
         val = ctypes.string_at(val_, len_)
         return (name, val)
 
@@ -934,7 +996,7 @@ in '%s'" % self.oid)
         run_in_thread(self.ioctx.librados.rados_getxattrs_end, (self.it,))
 
 
-class SnapIterator(object):
+class SnapIterator(Iterator):
     """Snapshot iterator"""
     def __init__(self, ioctx):
         self.ioctx = ioctx
@@ -958,6 +1020,9 @@ ioctx '%s'" % self.ioctx.name)
         return self
 
     def next(self):
+        return self.__next__()
+
+    def __next__(self):
         """
         Get the next Snapshot
 
@@ -979,7 +1044,7 @@ ioctx '%s'" % self.ioctx.name)
             elif (ret != -errno.ERANGE):
                 raise make_ex(ret, "rados_snap_get_name error")
             name_len = name_len * 2
-        snap = Snap(self.ioctx, name.value, snap_id)
+        snap = Snap(self.ioctx, decode_cstr(name), snap_id)
         self.cur_snap = self.cur_snap + 1
         return snap
 
@@ -1244,7 +1309,7 @@ class Ioctx(object):
         """
         completion = self.__get_completion(oncomplete, onsafe)
         ret = run_in_thread(self.librados.rados_aio_write,
-                            (self.io, c_char_p(object_name),
+                            (self.io, cstr(object_name),
                              completion.rados_comp, c_char_p(to_write),
                              c_size_t(len(to_write)), c_uint64(offset)))
         if ret < 0:
@@ -1276,7 +1341,7 @@ class Ioctx(object):
         """
         completion = self.__get_completion(oncomplete, onsafe)
         ret = run_in_thread(self.librados.rados_aio_write_full,
-                            (self.io, c_char_p(object_name),
+                            (self.io, cstr(object_name),
                              completion.rados_comp, c_char_p(to_write),
                              c_size_t(len(to_write))))
         if ret < 0:
@@ -1307,7 +1372,7 @@ class Ioctx(object):
         """
         completion = self.__get_completion(oncomplete, onsafe)
         ret = run_in_thread(self.librados.rados_aio_append,
-                            (self.io, c_char_p(object_name),
+                            (self.io, cstr(object_name),
                              completion.rados_comp, c_char_p(to_append),
                              c_size_t(len(to_append))))
         if ret < 0:
@@ -1354,7 +1419,7 @@ class Ioctx(object):
 
         completion = self.__get_completion(oncomplete_, None)
         ret = run_in_thread(self.librados.rados_aio_read,
-                            (self.io, c_char_p(object_name),
+                            (self.io, cstr(object_name),
                              completion.rados_comp, buf, c_size_t(length),
                              c_uint64(offset)))
         if ret < 0:
@@ -1379,7 +1444,7 @@ class Ioctx(object):
         """
         completion = self.__get_completion(oncomplete, onsafe)
         ret = run_in_thread(self.librados.rados_aio_remove,
-                            (self.io, c_char_p(object_name),
+                            (self.io, cstr(object_name),
                              completion.rados_comp))
         if ret < 0:
             raise make_ex(ret, "error removing %s" % object_name)
@@ -1410,7 +1475,7 @@ class Ioctx(object):
             raise make_ex(ret, "error changing auid of '%s' to %d"
                           % (self.name, auid))
 
-    @requires(('loc_key', str))
+    @requires(('loc_key', str_type))
     def set_locator_key(self, loc_key):
         """
         Set the key for mapping objects to pgs within an io context.
@@ -1428,7 +1493,7 @@ class Ioctx(object):
         """
         self.require_ioctx_open()
         run_in_thread(self.librados.rados_ioctx_locator_set_key,
-                      (self.io, c_char_p(loc_key)))
+                      (self.io, cstr(loc_key)))
         self.locator_key = loc_key
 
     def get_locator_key(self):
@@ -1440,7 +1505,7 @@ class Ioctx(object):
         return self.locator_key
 
 
-    @requires(('nspace', str))
+    @requires(('nspace', str_type))
     def set_namespace(self, nspace):
         """
         Set the namespace for objects within an io context.
@@ -1459,7 +1524,7 @@ class Ioctx(object):
         if nspace is None:
             nspace = ""
         run_in_thread(self.librados.rados_ioctx_set_namespace,
-                      (self.io, c_char_p(nspace)))
+                      (self.io, cstr(nspace)))
         self.nspace = nspace
 
     def get_namespace(self):
@@ -1485,7 +1550,7 @@ class Ioctx(object):
             self.state = "closed"
 
 
-    @requires(('key', str), ('data', str))
+    @requires(('key', str_type), ('data', bytes))
     def write(self, key, data, offset=0):
         """
         Write data to an object synchronously
@@ -1493,7 +1558,7 @@ class Ioctx(object):
         :param key: name of the object
         :type key: str
         :param data: data to write
-        :type data: str
+        :type data: bytes
         :param offset: byte offset in the object to begin writing at
         :type offset: int
 
@@ -1504,7 +1569,7 @@ class Ioctx(object):
         self.require_ioctx_open()
         length = len(data)
         ret = run_in_thread(self.librados.rados_write,
-                            (self.io, c_char_p(key), c_char_p(data),
+                            (self.io, cstr(key), c_char_p(data),
                              c_size_t(length), c_uint64(offset)))
         if ret == 0:
             return ret
@@ -1515,7 +1580,7 @@ class Ioctx(object):
             raise LogicError("Ioctx.write(%s): rados_write \
 returned %d, but should return zero on success." % (self.name, ret))
 
-    @requires(('key', str), ('data', str))
+    @requires(('key', str_type), ('data', bytes))
     def write_full(self, key, data):
         """
         Write an entire object synchronously.
@@ -1526,7 +1591,7 @@ returned %d, but should return zero on success." % (self.name, ret))
         :param key: name of the object
         :type key: str
         :param data: data to write
-        :type data: str
+        :type data: bytes
 
         :raises: :class:`TypeError`
         :raises: :class:`Error`
@@ -1535,7 +1600,7 @@ returned %d, but should return zero on success." % (self.name, ret))
         self.require_ioctx_open()
         length = len(data)
         ret = run_in_thread(self.librados.rados_write_full,
-                            (self.io, c_char_p(key), c_char_p(data),
+                            (self.io, cstr(key), c_char_p(data),
                              c_size_t(length)))
         if ret == 0:
             return ret
@@ -1546,7 +1611,7 @@ returned %d, but should return zero on success." % (self.name, ret))
             raise LogicError("Ioctx.write_full(%s): rados_write_full \
 returned %d, but should return zero on success." % (self.name, ret))
 
-    @requires(('key', str), ('data', str))
+    @requires(('key', str_type), ('data', bytes))
     def append(self, key, data):
         """
         Append data to an object synchronously
@@ -1554,7 +1619,7 @@ returned %d, but should return zero on success." % (self.name, ret))
         :param key: name of the object
         :type key: str
         :param data: data to write
-        :type data: str
+        :type data: bytes
 
         :raises: :class:`TypeError`
         :raises: :class:`LogicError`
@@ -1563,7 +1628,7 @@ returned %d, but should return zero on success." % (self.name, ret))
         self.require_ioctx_open()
         length = len(data)
         ret = run_in_thread(self.librados.rados_append,
-                            (self.io, c_char_p(key), c_char_p(data),
+                            (self.io, cstr(key), c_char_p(data),
                              c_size_t(length)))
         if ret == 0:
             return ret
@@ -1574,7 +1639,7 @@ returned %d, but should return zero on success." % (self.name, ret))
             raise LogicError("Ioctx.append(%s): rados_append \
 returned %d, but should return zero on success." % (self.name, ret))
 
-    @requires(('key', str))
+    @requires(('key', str_type))
     def read(self, key, length=8192, offset=0):
         """
         Read data from an object synchronously
@@ -1593,7 +1658,7 @@ returned %d, but should return zero on success." % (self.name, ret))
         self.require_ioctx_open()
         ret_buf = create_string_buffer(length)
         ret = run_in_thread(self.librados.rados_read,
-                            (self.io, c_char_p(key), ret_buf, c_size_t(length),
+                            (self.io, cstr(key), ret_buf, c_size_t(length),
                              c_uint64(offset)))
         if ret < 0:
             raise make_ex(ret, "Ioctx.read(%s): failed to read %s" % (self.name, key))
@@ -1649,7 +1714,7 @@ returned %d, but should return zero on success." % (self.name, ret))
                 "num_wr": stats.num_wr,
                 "num_wr_kb": stats.num_wr_kb}
 
-    @requires(('key', str))
+    @requires(('key', str_type))
     def remove_object(self, key):
         """
         Delete an object
@@ -1665,12 +1730,12 @@ returned %d, but should return zero on success." % (self.name, ret))
         """
         self.require_ioctx_open()
         ret = run_in_thread(self.librados.rados_remove,
-                            (self.io, c_char_p(key)))
+                            (self.io, cstr(key)))
         if ret < 0:
             raise make_ex(ret, "Failed to remove '%s'" % key)
         return True
 
-    @requires(('key', str))
+    @requires(('key', str_type))
     def trunc(self, key, size):
         """
         Resize an object
@@ -1690,12 +1755,12 @@ returned %d, but should return zero on success." % (self.name, ret))
 
         self.require_ioctx_open()
         ret = run_in_thread(self.librados.rados_trunc,
-                            (self.io, c_char_p(key), c_uint64(size)))
+                            (self.io, cstr(key), c_uint64(size)))
         if ret < 0:
             raise make_ex(ret, "Ioctx.trunc(%s): failed to truncate %s" % (self.name, key))
         return ret
 
-    @requires(('key', str))
+    @requires(('key', str_type))
     def stat(self, key):
         """
         Get object stats (size/mtime)
@@ -1712,13 +1777,13 @@ returned %d, but should return zero on success." % (self.name, ret))
         pmtime = c_uint64()
 
         ret = run_in_thread(self.librados.rados_stat,
-                            (self.io, c_char_p(key), pointer(psize),
+                            (self.io, cstr(key), pointer(psize),
                              pointer(pmtime)))
         if ret < 0:
             raise make_ex(ret, "Failed to stat %r" % key)
         return psize.value, time.localtime(pmtime.value)
 
-    @requires(('key', str), ('xattr_name', str))
+    @requires(('key', str_type), ('xattr_name', str_type))
     def get_xattr(self, key, xattr_name):
         """
         Get the value of an extended attribute on an object.
@@ -1737,7 +1802,7 @@ returned %d, but should return zero on success." % (self.name, ret))
         while ret_length < 4096 * 1024 * 1024:
             ret_buf = create_string_buffer(ret_length)
             ret = run_in_thread(self.librados.rados_getxattr,
-                                (self.io, c_char_p(key), c_char_p(xattr_name),
+                                (self.io, cstr(key), cstr(xattr_name),
                                  ret_buf, c_size_t(ret_length)))
             if (ret == -errno.ERANGE):
                 ret_length *= 2
@@ -1747,13 +1812,13 @@ returned %d, but should return zero on success." % (self.name, ret))
                 break
         return ctypes.string_at(ret_buf, ret)
 
-    @requires(('oid', str))
+    @requires(('oid', str_type))
     def get_xattrs(self, oid):
         """
         Start iterating over xattrs on an object.
 
         :param oid: the name of the object to get xattrs from
-        :type key: str
+        :type oid: str
 
         :raises: :class:`TypeError`
         :raises: :class:`Error`
@@ -1762,12 +1827,12 @@ returned %d, but should return zero on success." % (self.name, ret))
         self.require_ioctx_open()
         it = c_void_p(0)
         ret = run_in_thread(self.librados.rados_getxattrs,
-                            (self.io, oid, byref(it)))
+                            (self.io, cstr(oid), byref(it)))
         if ret != 0:
             raise make_ex(ret, "Failed to get rados xattrs for object %r" % oid)
         return XattrIterator(self, it, oid)
 
-    @requires(('key', str), ('xattr_name', str), ('xattr_value', str))
+    @requires(('key', str_type), ('xattr_name', str_type), ('xattr_value', bytes))
     def set_xattr(self, key, xattr_name, xattr_value):
         """
         Set an extended attribute on an object.
@@ -1777,7 +1842,7 @@ returned %d, but should return zero on success." % (self.name, ret))
         :param xattr_name: which extended attribute to set
         :type xattr_name: str
         :param xattr_value: the value of the  extended attribute
-        :type xattr_value: str
+        :type xattr_value: bytes
 
         :raises: :class:`TypeError`
         :raises: :class:`Error`
@@ -1785,13 +1850,13 @@ returned %d, but should return zero on success." % (self.name, ret))
         """
         self.require_ioctx_open()
         ret = run_in_thread(self.librados.rados_setxattr,
-                            (self.io, c_char_p(key), c_char_p(xattr_name),
+                            (self.io, cstr(key), cstr(xattr_name),
                              c_char_p(xattr_value), c_size_t(len(xattr_value))))
         if ret < 0:
             raise make_ex(ret, "Failed to set xattr %r" % xattr_name)
         return True
 
-    @requires(('key', str), ('xattr_name', str))
+    @requires(('key', str_type), ('xattr_name', str_type))
     def rm_xattr(self, key, xattr_name):
         """
         Removes an extended attribute on from an object.
@@ -1807,7 +1872,7 @@ returned %d, but should return zero on success." % (self.name, ret))
         """
         self.require_ioctx_open()
         ret = run_in_thread(self.librados.rados_rmxattr,
-                            (self.io, c_char_p(key), c_char_p(xattr_name)))
+                            (self.io, cstr(key), cstr(xattr_name)))
         if ret < 0:
             raise make_ex(ret, "Failed to delete key %r xattr %r" %
                           (key, xattr_name))
@@ -1831,7 +1896,7 @@ returned %d, but should return zero on success." % (self.name, ret))
         self.require_ioctx_open()
         return SnapIterator(self)
 
-    @requires(('snap_name', str))
+    @requires(('snap_name', str_type))
     def create_snap(self, snap_name):
         """
         Create a pool-wide snapshot
@@ -1844,11 +1909,11 @@ returned %d, but should return zero on success." % (self.name, ret))
         """
         self.require_ioctx_open()
         ret = run_in_thread(self.librados.rados_ioctx_snap_create,
-                            (self.io, c_char_p(snap_name)))
+                            (self.io, cstr(snap_name)))
         if (ret != 0):
             raise make_ex(ret, "Failed to create snap %s" % snap_name)
 
-    @requires(('snap_name', str))
+    @requires(('snap_name', str_type))
     def remove_snap(self, snap_name):
         """
         Removes a pool-wide snapshot
@@ -1861,11 +1926,11 @@ returned %d, but should return zero on success." % (self.name, ret))
         """
         self.require_ioctx_open()
         ret = run_in_thread(self.librados.rados_ioctx_snap_remove,
-                            (self.io, c_char_p(snap_name)))
+                            (self.io, cstr(snap_name)))
         if (ret != 0):
             raise make_ex(ret, "Failed to remove snap %s" % snap_name)
 
-    @requires(('snap_name', str))
+    @requires(('snap_name', str_type))
     def lookup_snap(self, snap_name):
         """
         Get the id of a pool snapshot
@@ -1880,7 +1945,7 @@ returned %d, but should return zero on success." % (self.name, ret))
         self.require_ioctx_open()
         snap_id = c_uint64()
         ret = run_in_thread(self.librados.rados_ioctx_snap_lookup,
-                            (self.io, c_char_p(snap_name), byref(snap_id)))
+                            (self.io, cstr(snap_name), byref(snap_id)))
         if (ret != 0):
             raise make_ex(ret, "Failed to lookup snap %s" % snap_name)
         return Snap(self, snap_name, snap_id)
@@ -1945,7 +2010,7 @@ returned %d, but should return zero on success." % (self.name, ret))
         key_num = len(keys)
         key_array_type = c_char_p*key_num
         key_array = key_array_type()
-        key_array[:] = keys
+        key_array[:] = [cstr(key) for key in keys]
 
         value_array_type = c_char_p*key_num
         value_array = value_array_type()
@@ -1960,7 +2025,7 @@ returned %d, but should return zero on success." % (self.name, ret))
                       (c_void_p(write_op), byref(key_array), byref(value_array),
                        byref(lens_array), c_int(key_num),))
 
-    @requires(('write_op', int), ('oid', str), ('mtime', opt(int)), ('flags', opt(int)))
+    @requires(('write_op', int), ('oid', str_type), ('mtime', opt(int)), ('flags', opt(int)))
     def operate_write_op(self, write_op, oid, mtime=0, flags=0):
         """
         excute the real write operation
@@ -1974,10 +2039,10 @@ returned %d, but should return zero on success." % (self.name, ret))
         :type flags: int
         """
         run_in_thread(self.librados.rados_write_op_operate,
-                      (c_void_p(write_op), self.io, c_char_p(oid),
+                      (c_void_p(write_op), self.io, cstr(oid),
                        c_long(mtime), c_int(flags),))
 
-    @requires(('read_op', int), ('oid', str), ('flag', opt(int)))
+    @requires(('read_op', int), ('oid', str_type), ('flag', opt(int)))
     def operate_read_op(self, read_op, oid, flag=0):
         """
         excute the real read operation
@@ -1989,9 +2054,9 @@ returned %d, but should return zero on success." % (self.name, ret))
         :type flag: int
         """
         run_in_thread(self.librados.rados_read_op_operate,
-                      (c_void_p(read_op), self.io, c_char_p(oid), c_int(flag),))
+                      (c_void_p(read_op), self.io, cstr(oid), c_int(flag),))
 
-    @requires(('read_op', int), ('start_after', str), ('filter_prefix', str), ('max_return', int))
+    @requires(('read_op', int), ('start_after', str_type), ('filter_prefix', str_type), ('max_return', int))
     def get_omap_vals(self, read_op, start_after, filter_prefix, max_return):
         """
         get the omap values
@@ -2008,12 +2073,12 @@ returned %d, but should return zero on success." % (self.name, ret))
         prval = c_int()
         iter_addr = c_void_p()
         run_in_thread(self.librados.rados_read_op_omap_get_vals,
-                      (c_void_p(read_op), c_char_p(start_after),
-                       c_char_p(filter_prefix), c_int(max_return),
+                      (c_void_p(read_op), cstr(start_after),
+                       cstr(filter_prefix), c_int(max_return),
                        byref(iter_addr), pointer(prval)))
         return OmapIterator(self, iter_addr), prval.value
 
-    @requires(('read_op', int), ('start_after', str), ('max_return', int))
+    @requires(('read_op', int), ('start_after', str_type), ('max_return', int))
     def get_omap_keys(self, read_op, start_after, max_return):
         """
         get the omap keys
@@ -2028,7 +2093,7 @@ returned %d, but should return zero on success." % (self.name, ret))
         prval = c_int()
         iter_addr = c_void_p()
         run_in_thread(self.librados.rados_read_op_omap_get_keys,
-                      (c_void_p(read_op), c_char_p(start_after),
+                      (c_void_p(read_op), cstr(start_after),
                        c_int(max_return), byref(iter_addr), pointer(prval)))
         return OmapIterator(self, iter_addr), prval.value
 
@@ -2047,7 +2112,7 @@ returned %d, but should return zero on success." % (self.name, ret))
         key_num = len(keys)
         key_array_type = c_char_p*key_num
         key_array = key_array_type()
-        key_array[:] = keys
+        key_array[:] = [cstr(key) for key in keys]
         run_in_thread(self.librados.rados_read_op_omap_get_vals_by_keys,
                       (c_void_p(read_op), byref(key_array), c_int(key_num),
                        byref(iter_addr), pointer(prval)))
@@ -2065,7 +2130,7 @@ returned %d, but should return zero on success." % (self.name, ret))
         key_num = len(keys)
         key_array_type = c_char_p*key_num
         key_array = key_array_type()
-        key_array[:] = keys
+        key_array[:] = [cstr(key) for key in keys]
         run_in_thread(self.librados.rados_write_op_omap_rm_keys,
                       (c_void_p(write_op), byref(key_array), c_int(key_num)))
 
@@ -2079,7 +2144,7 @@ returned %d, but should return zero on success." % (self.name, ret))
         run_in_thread(self.librados.rados_write_op_omap_clear,
                       (c_void_p(write_op),))
 
-    @requires(('key', str), ('name', str), ('cookie', str), ('desc', str),
+    @requires(('key', str_type), ('name', str_type), ('cookie', str_type), ('desc', str_type),
               ('duration', opt(int)), ('flags', int))
     def lock_exclusive(self, key, name, cookie, desc="", duration=None, flags=0):
 
@@ -2105,15 +2170,15 @@ returned %d, but should return zero on success." % (self.name, ret))
         self.require_ioctx_open()
 
         ret = run_in_thread(self.librados.rados_lock_exclusive,
-                            (self.io, c_char_p(key), c_char_p(name), c_char_p(cookie),
-                             c_char_p(desc),
+                            (self.io, cstr(key), cstr(name), cstr(cookie),
+                             cstr(desc),
                              timeval(duration, None) if duration is None else None,
                              c_uint8(flags)))
         if ret < 0:
             raise make_ex(ret, "Ioctx.rados_lock_exclusive(%s): failed to set lock %s on %s" % (self.name, name, key))
 
-    @requires(('key', str), ('name', str), ('cookie', str), ('tag', str),
-              ('desc', str), ('duration', opt(int)), ('flags', int))
+    @requires(('key', str_type), ('name', str_type), ('cookie', str_type), ('tag', str_type),
+              ('desc', str_type), ('duration', opt(int)), ('flags', int))
     def lock_shared(self, key, name, cookie, tag, desc="", duration=None, flags=0):
 
         """
@@ -2140,14 +2205,14 @@ returned %d, but should return zero on success." % (self.name, ret))
         self.require_ioctx_open()
 
         ret = run_in_thread(self.librados.rados_lock_shared,
-                            (self.io, c_char_p(key), c_char_p(name), c_char_p(cookie),
-                             c_char_p(tag), c_char_p(desc),
+                            (self.io, cstr(key), cstr(name), cstr(cookie),
+                             cstr(tag), cstr(desc),
                              timeval(duration, None) if duration is None else None,
                              c_uint8(flags)))
         if ret < 0:
             raise make_ex(ret, "Ioctx.rados_lock_exclusive(%s): failed to set lock %s on %s" % (self.name, name, key))
 
-    @requires(('key', str), ('name', str), ('cookie', str))
+    @requires(('key', str_type), ('name', str_type), ('cookie', str_type))
     def unlock(self, key, name, cookie):
 
         """
@@ -2166,7 +2231,7 @@ returned %d, but should return zero on success." % (self.name, ret))
         self.require_ioctx_open()
 
         ret = run_in_thread(self.librados.rados_unlock,
-                            (self.io, c_char_p(key), c_char_p(name), c_char_p(cookie)))
+                            (self.io, cstr(key), cstr(name), cstr(cookie)))
         if ret < 0:
             raise make_ex(ret, "Ioctx.rados_lock_exclusive(%s): failed to set lock %s on %s" % (self.name, name, key))
 
