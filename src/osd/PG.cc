@@ -4026,12 +4026,14 @@ void PG::chunky_scrub(ThreadPool::TPHandle &handle)
 
         // walk the log to find the latest update that affects our chunk
         scrubber.subset_last_update = pg_log.get_tail();
-        for (list<pg_log_entry_t>::const_iterator p = pg_log.get_log().log.begin();
-             p != pg_log.get_log().log.end();
+        for (list<pg_log_entry_t>::const_reverse_iterator p = pg_log.get_log().log.rbegin();
+             p != pg_log.get_log().log.rend();
              ++p) {
           if (cmp(p->soid, scrubber.start, get_sort_bitwise()) >= 0 &&
-	      cmp(p->soid, scrubber.end, get_sort_bitwise()) < 0)
+	      cmp(p->soid, scrubber.end, get_sort_bitwise()) < 0) {
             scrubber.subset_last_update = p->version;
+            break;
+          }
         }
 
         // ask replicas to wait until last_update_applied >= scrubber.subset_last_update and then scan
