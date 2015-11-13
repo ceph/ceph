@@ -1,6 +1,7 @@
 from mock import patch, DEFAULT, Mock
 import argparse
 import pytest
+import struct
 import ceph_disk
 
 def fail_to_mount(dev, fstype, options):
@@ -10,6 +11,7 @@ class TestCephDisk(object):
 
     def setup_class(self):
         ceph_disk.setup_logging(verbose=True, log_stdout=False)
+
 
     def test_main_list_json(self, capsys):
         args = ceph_disk.parse_args(['list', '--format', 'json'])
@@ -642,3 +644,149 @@ class TestCephDisk(object):
                        'ptype': 'unknown',
                        'type': 'other'}]
             assert expect == ceph_disk.list_devices(args)
+
+    def test_gpt_rawread_partition_guids(self):
+
+        gpt_hdr = struct.pack('<QIIIIQQQQQQQIII',
+            # 8 bytes	Signature ("EFI PART")
+            0x5452415020494645,
+            # 4 bytes	Revision
+            0x00010000,
+            # 4 bytes Header size in little endian
+            0x0000005C,
+            # 4 bytes CRC32 of header
+            0x4C72F79D,
+            # 4 bytes Reserved; must be zero
+            0x00000000,
+            # 8 bytes Current LBA (location of this header copy)
+            0x00000001,
+            # 8 bytes Backup LBA (location of the other header copy)
+            0x6FC7D255,
+            # 8 bytes First usable LBA for partitions
+            0x00000006,
+            # 8 bytes Last usable LBA
+            0x6FC7D250,
+            # 16 bytes Disk GUID
+            0x40576A0BFA1F857E,
+            0x6E1D63E20B56A5A7,
+            # 8 bytes Starting LBA of array of partition entries
+            0x00000002,
+            # 4 bytes Number of partition entries in array
+            0x00000080,
+            # 4 bytes Size of a single partition entry
+            0x00000080,
+            # 4 bytes CRC32 of partition array
+            0x0793AD0B)
+
+        p1name = 'ceph data'
+        p1uuid = 'f4aee2f3-b699-4068-8721-1f92462c95e0'
+        p1type = '4fbd7e29-9d25-41b8-afd0-062c0ceff05d'
+        gpt_part1 = struct.pack('<QQQQQQQ72s',
+            # 16 bytes	Partition type GUID
+            0x41B89D254FBD7E29,
+            0x5DF0EF0C2C06D0AF,
+            # 16 bytes	Unique partition GUID
+            0x4068B699F4AEE2F3,
+            0xE0952C46921F2187,
+            # 8 bytes	First LBA (little endian)
+            0x00040100,
+            # 8 bytes	Last LBA
+            0x6FC7D250,
+            # 8 bytes	Attribute flags
+            0x00000000,
+            # 72 bytes	Partition name (36 UTF-16LE code units)
+            p1name.encode('utf-16le'))
+
+        p2name = 'ceph journal'
+        p2uuid='e50882fe-b180-4ec5-a3ac-4a3cb0d9cc53'
+        p2type='45b0969e-9b03-4f30-b4c6-b4b80ceff106'
+        gpt_part2 = struct.pack('<QQQQQQQ72s',
+            # 16 bytes	Partition type GUID
+            0x4F309B0345B0969E,
+            0x6F1EF0CB8B4C6B4,
+            # 16 bytes	Unique partition GUID
+            0x4EC5B180E50882FE,
+            0x53CCD9B03C4AACA3,
+            # 8 bytes	First LBA (little endian)
+            0x00000100,
+            # 8 bytes	Last LBA
+            0x00040000,
+            # 8 bytes	Attribute flags
+            0x00000000,
+            # 72 bytes	Partition name (36 UTF-16LE code units)
+            p2name.encode('utf-16le'))
+
+        fdesc = {}
+        fdesc['offset'] = 0
+        sz_sect = 512
+        hdr_off = 1
+        part_tbl_off = 2
+
+        def gpt_lseek(fd, offset, mode):
+            fd['offset'] = offset
+
+        def gpt_read(fd, rlen):
+            curr_offset = fd['offset']
+            if curr_offset == (hdr_off * sz_sect):
+                return gpt_hdr
+            elif curr_offset == (part_tbl_off * sz_sect):
+                assert(rlen == 16384)
+                pad = struct.pack('16128s', '\0')
+                return gpt_part1 + gpt_part2 + struct.pack('16128x')
+            else:
+                raise Exception('unknown offset' + curr_offset)
+
+        with patch.multiple(
+                'ceph_disk.os',
+                open=lambda dev, m : fdesc,
+                close=lambda fd: 0,
+                lseek=lambda fd, off, m: gpt_lseek(fd, off, m),
+                read=lambda fd, rlen: gpt_read(fd, rlen),
+        ):
+            ptype, puuid = ceph_disk.rawread_partition_guids('dummy', 1, sz_sect)
+            assert(ptype == p1type)
+            assert(puuid == p1uuid)
+            ptype, puuid = ceph_disk.rawread_partition_guids('dummy', 2, sz_sect)
+            assert(ptype == p2type)
+            assert(puuid == p2uuid)
+            sz_sect = 4096
+            ptype, puuid = ceph_disk.rawread_partition_guids('dummy', 1, sz_sect)
+            assert(ptype == p1type)
+            assert(puuid == p1uuid)
+            ptype, puuid = ceph_disk.rawread_partition_guids('dummy', 2, sz_sect)
+            assert(ptype == p2type)
+            assert(puuid == p2uuid)
+            # corrupt part entry
+            gpt_part1 = struct.pack('<QQQQQQQ72s',
+                # 16 bytes	Partition type GUID
+                0x41B89D254FBD7E29,
+                0x5DF0EF0C2C06D0AF,
+                # 16 bytes	Unique partition GUID
+                0x4068B699F4AEE2F3,
+                0xE0952C46921F2187,
+                # 8 bytes	First LBA (little endian)
+                0x00000000, # CORRUPTED HERE
+                # 8 bytes	Last LBA
+                0x6FC7D250,
+                # 8 bytes	Attribute flags
+                0x00000000,
+                # 72 bytes	Partition name (36 UTF-16LE code units)
+                p1name.encode('utf-16le'))
+            ptype, puuid = ceph_disk.rawread_partition_guids('dummy', 1, sz_sect)
+            assert(ptype == None)
+            assert(puuid == None)
+            # Bad GPT header
+            gpt_hdr = struct.pack('<Q84x',
+                # 8 bytes	Signature ("EFI PART")
+                0x5452415020494645)
+            ptype, puuid = ceph_disk.rawread_partition_guids('dummy', 1, sz_sect)
+            assert(ptype == None)
+            assert(puuid == None)
+            # Bad Signature, Null Header
+            gpt_hdr = struct.pack('<Q84x',
+                # 8 bytes	Signature ("EFI PART")
+                0x0452410000494640)
+            ptype, puuid = ceph_disk.rawread_partition_guids('dummy', 1, sz_sect)
+            assert(ptype == None)
+            assert(puuid == None)
+

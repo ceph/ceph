@@ -3,6 +3,7 @@
 # Copyright (C) 2014 Inktank <info@inktank.com>
 # Copyright (C) 2014 Cloudwatt <libre.licensing@cloudwatt.com>
 # Copyright (C) 2014 Catalyst.net Ltd
+# Copyright (C) 2015 SanDisk Corp.
 #
 # Author: Loic Dachary <loic@dachary.org>
 #
@@ -35,6 +36,8 @@ import time
 import shlex
 import pwd
 import grp
+import zlib
+import struct
 
 """
 Prepare:
@@ -2680,6 +2683,122 @@ def get_sgdisk_partition_info(dev, regexp):
         if m:
             return m.group(1).lower()
     return None
+
+def rawread_partition_guids(base_dev, part_num, hw_sector_sz):
+
+    LOG.debug('RawRead GPT: Device=%s Partition=%i HW-Sector=%i', base_dev,
+                part_num, hw_sector_sz)
+    # Location of the GTP Header on the disk
+    gpt_hdr_sector = long(1)
+    # standard 'EFI part' gpt signature
+    gpt_hdr_efi_signature = 0x5452415020494645
+
+    """
+    GPT Header Format, Header encompasses the full sector
+    however, we want only the first 92 bytes
+    Also, the GPT header is written in little-endian format!
+    See: http://en.wikipedia.org/wiki/GUID_Partition_Table#Partition_entries
+    """
+
+    struct_gpt_hdr_format = '<QIIIIQQQQ16sQIII'
+
+    gpt_hdr_offset = hw_sector_sz * gpt_hdr_sector
+    fd = os.open(base_dev, os.O_RDONLY)
+    try:
+        os.lseek(fd, gpt_hdr_offset, os.SEEK_SET)
+    except Exception as error:
+        LOG.debug('failed to open Dev %s: Error: %s' % (base_dev, str(error)))
+        os.close(fd)
+        return None, None
+
+    read_sz = hw_sector_sz
+    try:
+        gpt_hdr_raw = os.read(fd, read_sz)
+    except Exception as error:
+        LOG.debug('failed to read Dev %s: Error: %s' % (base_dev, str(error)))
+        os.close(fd)
+        return None, None
+
+    gpt_hdr = struct.unpack_from(struct_gpt_hdr_format, gpt_hdr_raw)
+
+    gpt_signature = gpt_hdr[0]
+    LOG.debug('GPT-Signature %lx', gpt_signature)
+
+    if gpt_signature != gpt_hdr_efi_signature:
+        LOG.debug('Not a GPT partition!')
+        os.close(fd)
+        return None, None
+
+    sz_hdr      = gpt_hdr[2]
+    hdr_crc     = gpt_hdr[3]
+    nr_part_ent = gpt_hdr[11]
+    sz_part_ent = gpt_hdr[12]
+    tbl_crc     = gpt_hdr[13]
+    offset_part_ent_table = gpt_hdr[10] * hw_sector_sz
+
+    # Verify header CRC
+    offset_crc_start = 16
+    offset_crc_end   = 20
+    verify_hdr = gpt_hdr_raw[:offset_crc_start] + struct.pack('=I', 0x00) +  gpt_hdr_raw[offset_crc_end:sz_hdr]
+    cal_hdr_crc = zlib.crc32(verify_hdr) & 0xffffffff
+    LOG.debug('GPT Header CRC: %X Calculated = %X', hdr_crc, cal_hdr_crc)
+    if hdr_crc != cal_hdr_crc:
+        LOG.info('Corrupt GPT header on %s', base_dev)
+        os.close(fd)
+        return None, None
+
+    if nr_part_ent == 0 or sz_part_ent == 0:
+        LOG.debug('BAD GPT Entries: Num PartEnt: %i Size PartEnt=%i', nr_part_ent, sz_part_ent)
+        os.close(fd)
+        return None, None
+
+    LOG.debug('offset_part_ent_table=%u nr_part_ent= %u sz_part_ent=%u',
+        offset_part_ent_table, nr_part_ent, sz_part_ent)
+
+    part_index = part_num - 1
+    if part_index >= nr_part_ent:
+        os.close(fd)
+        return None, None
+
+    # get to the partition sector
+
+    try:
+        os.lseek(fd, offset_part_ent_table, os.SEEK_SET)
+    except Exception as error:
+        os.close(fd)
+        return None, None
+
+    sz_part_ent_table   = nr_part_ent * sz_part_ent
+    try:
+        gpt_part_ent_table = os.read(fd, sz_part_ent_table)
+    except Exception as error:
+        os.close(fd)
+        return None, None
+
+    # verify part table CRC
+    cal_tbl_crc = zlib.crc32(gpt_part_ent_table) & 0xffffffff
+    LOG.debug('GPT Part Table CRC: %X Calculated: %X', tbl_crc, cal_tbl_crc)
+    if tbl_crc != cal_tbl_crc:
+        LOG.debug('Corrupt GPT part table on %s', base_dev)
+        os.close(fd)
+        return None, None
+
+    offset_part_ent = part_index * sz_part_ent
+
+    # Decode part entry
+    struct_gpt_part_entry_format  = '<16s16sQQQ'
+    part_ent = struct.unpack_from(struct_gpt_part_entry_format,
+        gpt_part_ent_table, offset_part_ent)
+
+    ptype_guid = str(uuid.UUID(bytes_le = part_ent[0]))
+    part_guid  = str(uuid.UUID(bytes_le = part_ent[1]))
+    LOG.debug('PTYPE GUID: %s', ptype_guid)
+    LOG.debug('PART GUID: %s' , part_guid)
+
+    os.close(fd)
+    # All ok
+    return ptype_guid, part_guid
+
 
 def more_osd_info(path, uuid_map, desc):
     desc['ceph_fsid'] = get_oneliner(path, 'ceph_fsid')
