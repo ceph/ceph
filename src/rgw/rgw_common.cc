@@ -351,10 +351,18 @@ bool parse_rfc2616(const char *s, struct tm *t)
   return parse_rfc850(s, t) || parse_asctime(s, t) || parse_rfc1123(s, t) || parse_rfc1123_alt(s,t);
 }
 
-bool parse_iso8601(const char *s, struct tm *t)
+bool parse_iso8601(const char *s, struct tm *t, bool extended_format)
 {
   memset(t, 0, sizeof(*t));
-  const char *p = strptime(s, "%Y-%m-%dT%T", t);
+  const char *p;
+
+  if (!s)
+    s = "";
+
+  if (extended_format)
+    p = strptime(s, "%Y-%m-%dT%T", t);
+  else
+    p = strptime(s, "%Y%m%dT%H%M%S", t);
   if (!p) {
     dout(0) << "parse_iso8601 failed" << dendl;
     return false;

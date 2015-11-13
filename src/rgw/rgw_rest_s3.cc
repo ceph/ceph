@@ -2579,12 +2579,12 @@ int RGW_Auth_S3::authorize_v4(RGWRados *store, struct req_state *s)
     /* grab date */
 
     const char *d = s->info.env->get("HTTP_X_AMZ_DATE");
-    s->aws4_auth->date = d ? d : "";
-    if (s->aws4_auth->date.empty()) {
+    struct tm t;
+    if (!parse_iso8601(d, &t, false)) {
       dout(10) << "error reading date via http_x_amz_date" << dendl;
-      return -EINVAL;
+      return -EACCES;
     }
-
+    s->aws4_auth->date = d;
   }
 
   /* AKIAIVKTAZLOCF43WNQD/AAAAMMDD/region/host/aws4_request */
