@@ -437,6 +437,7 @@ void AsyncConnection::process()
 {
   int r = 0;
   int prev_state = state;
+  bool already_dispatch_writer = false;
   Mutex::Locker l(lock);
   do {
     ldout(async_msgr->cct, 20) << __func__ << " state is " << get_state_name(state)
@@ -842,10 +843,12 @@ void AsyncConnection::process()
 	  ldout(async_msgr->cct, 1) << " == rx == " << message->get_source() << " seq "
                                     << message->get_seq() << " " << message << " " << *message << dendl;
 
-          // if send_message always successfully send, it may have no
-          // opportunity to send seq ack. 10 is a experience value.
-          if (ack_left.inc() > 10) {
+          ack_left.inc();
+          // if send_message always send inline, it may have no
+          // opportunity to send seq ack.
+          if (!already_dispatch_writer) {
             center->dispatch_event_external(write_handler);
+            already_dispatch_writer = true;
           }
 
           state = STATE_OPEN;
