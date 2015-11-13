@@ -72,7 +72,10 @@ void Beacon::shutdown()
 {
   Mutex::Locker l(lock);
   if (sender) {
-    timer.cancel_event(sender);
+    int result = timer.cancel_event(sender);
+    if (result == false) {
+      delete sender;
+    }
     sender = NULL;
   }
   timer.shutdown();
@@ -176,9 +179,14 @@ void Beacon::send_and_wait(const double duration)
 void Beacon::_send()
 {
   if (sender) {
-    timer.cancel_event(sender);
+    int result = timer.cancel_event(sender);
+    if (result == true) {
+      sender = new C_MDS_BeaconSender(this);
+    }
+  } else {
+      sender = new C_MDS_BeaconSender(this);
   }
-  sender = new C_MDS_BeaconSender(this);
+
   timer.add_event_after(g_conf->mds_beacon_interval, sender);
 
   if (!cct->get_heartbeat_map()->is_healthy()) {
