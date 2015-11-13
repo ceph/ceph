@@ -12214,22 +12214,6 @@ bool ReplicatedPG::_range_available_for_scrub(
   return true;
 }
 
-struct C_ScrubDigestUpdated : public Context {
-  ReplicatedPGRef pg;
-  explicit C_ScrubDigestUpdated(ReplicatedPG *pg) : pg(pg) {}
-  void finish(int r) {
-    pg->_scrub_digest_updated();
-  }
-};
-
-void ReplicatedPG::_scrub_digest_updated()
-{
-  dout(20) << __func__ << dendl;
-  if (--scrubber.num_digest_updates_pending == 0) {
-    requeue_scrub();
-  }
-}
-
 static bool doing_clones(const boost::optional<SnapSet> &snapset,
 			 const vector<snapid_t>::reverse_iterator &curclone) {
     return snapset && curclone != snapset.get().clones.rend();
@@ -12615,7 +12599,15 @@ void ReplicatedPG::_scrub(
     ctx->new_obs.oi.set_data_digest(p->second.first);
     ctx->new_obs.oi.set_omap_digest(p->second.second);
     finish_ctx(ctx.get(), pg_log_entry_t::MODIFY, true, true);
-    ctx->on_finish = new C_ScrubDigestUpdated(this);
+
+    ctx->register_on_success(
+      [this]() {
+	dout(20) << "updating scrub digest" << dendl;
+	if (--scrubber.num_digest_updates_pending == 0) {
+	  requeue_scrub();
+	}
+      });
+
     simple_opc_submit(std::move(ctx));
     ++scrubber.num_digest_updates_pending;
   }
