@@ -191,6 +191,7 @@ class TestCephDisk(object):
         c.check_osd_status(osd_uuid, have_journal)
         data_partition = c.get_osd_partition(osd_uuid)
         c.sh("ceph-disk deactivate " + data_partition['path'])
+        c.wait_for_osd_down(osd_uuid)
         c.sh("ceph-disk activate " + data_partition['path'] + " --reactivate")
         # check again
         c.wait_for_osd_up(osd_uuid)
@@ -219,6 +220,7 @@ class TestCephDisk(object):
         assert partition['type'] == 'data'
         assert partition['state'] == 'active'
         c.sh("ceph-disk deactivate " + partition['path'])
+        c.wait_for_osd_down(osd_uuid)
         c.sh("ceph-disk destroy " + partition['path'] + " --zap")
 
     def test_deactivate_reactivate_dmcrypt_plain(self):
@@ -248,6 +250,7 @@ class TestCephDisk(object):
         c.check_osd_status(osd_uuid, have_journal)
         data_partition = c.get_osd_partition(osd_uuid)
         c.sh("ceph-disk deactivate " + data_partition['path'])
+        c.wait_for_osd_down(osd_uuid)
         c.sh("ceph-disk activate " + data_partition['path'] +
              " --reactivate" + " --dmcrypt")
         # check again
