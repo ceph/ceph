@@ -832,6 +832,36 @@ Rados object in state %s." % self.state)
             raise make_ex(ret, "error blacklisting client '%s'" % client_address)
 
 
+    @requires(('obj_name', str))
+    def map_object(self, obj_name, pool_id=-1):
+        """
+        Map an object
+
+        :param obj_name: the name of the object to find
+        :type obj_name: str
+        :param pool_id: id of the pool to look up
+        :type pool_id: int
+
+        :raises: :class:`Error`
+        :returns: int ret, OSD up set
+        """
+        self.require_state("connected")
+        up_set = pointer(pointer(c_char()))
+        up_size = c_long()
+        ret = run_in_thread(self.librados.rados_map_object,
+                            (self.cluster, c_char_p(obj_name), up_set, byref(up_size),
+                             c_int64(pool_id)))
+
+        my_outbuf = up_set.contents[:(up_size.value)]
+
+        if up_size.value:
+            run_in_thread(self.librados.rados_buffer_free, (up_set.contents,))
+
+        if ret < 0:
+            raise make_ex(ret, "error map object '%s'" % obj_name)
+        return (ret, my_outbuf)
+
+
 class OmapIterator(object):
     """Omap iterator"""
     def __init__(self, ioctx, ctx):
