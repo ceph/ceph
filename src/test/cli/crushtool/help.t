@@ -40,6 +40,8 @@
                            set chooseleaf to (not) retry the recursive descent
      --set-chooseleaf-vary-r <0|1>
                            set chooseleaf to (not) vary r based on parent
+     --set-chooseleaf-stable <0|1>
+                           set chooseleaf firstn to (not) return stable results
   
   Options for the modifications stage
   

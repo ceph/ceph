@@ -128,6 +128,7 @@ struct crush_grammar : public grammar<crush_grammar>
       step_set_choose_local_fallback_tries = str_p("set_choose_local_fallback_tries") >> posint;
       step_set_chooseleaf_tries = str_p("set_chooseleaf_tries") >> posint;
       step_set_chooseleaf_vary_r = str_p("set_chooseleaf_vary_r") >> posint;
+      step_set_chooseleaf_stable = str_p("set_chooseleaf_stable") >> posint;
       step_choose = str_p("choose")
 	>> ( str_p("indep") | str_p("firstn") )
 	>> integer
