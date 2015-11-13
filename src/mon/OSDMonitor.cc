@@ -5651,6 +5651,8 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       newcrush.set_tunables_firefly();
     } else if (profile == "hammer") {
       newcrush.set_tunables_hammer();
+    } else if (profile == "jewel") {
+      newcrush.set_tunables_jewel();
     } else if (profile == "optimal") {
       newcrush.set_tunables_optimal();
     } else if (profile == "default") {

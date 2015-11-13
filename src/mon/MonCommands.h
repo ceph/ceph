@@ -536,7 +536,7 @@ COMMAND("osd crush reweight-subtree " \
 	"change all leaf items beneath <name> to <weight> in crush map", \
 	"osd", "rw", "cli,rest")
 COMMAND("osd crush tunables " \
-	"name=profile,type=CephChoices,strings=legacy|argonaut|bobtail|firefly|hammer|optimal|default", \
+	"name=profile,type=CephChoices,strings=legacy|argonaut|bobtail|firefly|hammer|jewel|optimal|default", \
 	"set crush tunables values to <profile>", "osd", "rw", "cli,rest")
 COMMAND("osd crush set-tunable "				    \
 	"name=tunable,type=CephChoices,strings=straw_calc_version " \
