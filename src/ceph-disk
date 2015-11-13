@@ -2143,7 +2143,6 @@ def stop_daemon(
     path = (STATEDIR + '/osd/{cluster}-{osd_id}').format(
         cluster=cluster, osd_id=osd_id)
 
-    # upstart?
     try:
         if os.path.exists(os.path.join(path,'upstart')):
             command_check_call(
@@ -2299,11 +2298,8 @@ def mount_activate(
         # Now active successfully
         # If we got reactivate and deactive, remove the deactive file
         if deactive and reactivate:
-            try:
-                os.remove(os.path.join(path, 'deactive'))
-                LOG.info('Remove `deactive` file.')
-            except OSError:
-                raise Error('Cannot remove `deactive` file!')
+            os.remove(os.path.join(path, 'deactive'))
+            LOG.info('Remove `deactive` file.')
 
         # check if the disk is already active, or if something else is already
         # mounted there
@@ -2573,17 +2569,14 @@ def main_activate(args):
 
 def _mark_osd_out(cluster, osd_id):
     LOG.info('Prepare to mark osd.%d out...', osd_id)
-    try:
-        out, ret = command(
-                [
-                    'ceph',
-                    'osd',
-                    'out',
-                    'osd.%d' % osd_id,
-                    ],
-                )
-    except:
-        raise Error('Could not find osd.%s, is a vaild/exist osd id?' % osd_id)
+    command(
+            [
+                'ceph',
+                'osd',
+                'out',
+                'osd.%d' % osd_id,
+                ],
+            )
 
 
 def _check_osd_status(cluster, osd_id):
@@ -2627,20 +2620,14 @@ def _remove_osd_directory_files(mounted_path, cluster):
     To remove the 'ready', 'active', INIT-specific files.
     """
     if os.path.exists(os.path.join(mounted_path, 'ready')):
-        try:
-            os.remove(os.path.join(mounted_path, 'ready'))
-            LOG.info('Remove `ready` file.')
-        except OSError:
-            raise Error('Could not remove `ready` file!')
+        os.remove(os.path.join(mounted_path, 'ready'))
+        LOG.info('Remove `ready` file.')
     else:
         LOG.info('`ready` file is already removed.')
 
     if os.path.exists(os.path.join(mounted_path, 'active')):
-        try:
-            os.remove(os.path.join(mounted_path, 'active'))
-            LOG.info('Remove `active` file.')
-        except OSError:
-            raise Error('Could not remove `active` file!')
+        os.remove(os.path.join(mounted_path, 'active'))
+        LOG.info('Remove `active` file.')
     else:
         LOG.info('`active` file is already removed.')
 
@@ -2653,12 +2640,9 @@ def _remove_osd_directory_files(mounted_path, cluster):
         init = conf_val
     else:
         init = init_get()
-    try:
-        os.remove(os.path.join(mounted_path, init))
-        LOG.info('Remove `%s` file.', init)
-        return
-    except OSError:
-        raise Error('Could not remove %s (init) file!' % init)
+    os.remove(os.path.join(mounted_path, init))
+    LOG.info('Remove `%s` file.', init)
+    return
 
 
 def main_deactivate(args):
@@ -2729,46 +2713,37 @@ def main_deactivate(args):
 
 def _remove_from_crush_map(cluster, osd_id):
     LOG.info("Prepare to remove osd.%s from crush map..." % osd_id)
-    try:
-        out, ret = command(
-                [
-                    'ceph',
-                    'osd',
-                    'crush',
-                    'remove',
-                    'osd.%s' % osd_id,
-                    ],
-                )
-    except subprocess.CalledProcessError as e:
-        raise Error(e)
+    command(
+            [
+                'ceph',
+                'osd',
+                'crush',
+                'remove',
+                'osd.%s' % osd_id,
+                ],
+            )
 
 def _delete_osd_auth_key(cluster, osd_id):
     LOG.info("Prepare to delete osd.%s cephx key..." % osd_id)
-    try:
-        out, ret = command(
-                [
-                    'ceph',
-                    'auth',
-                    'del',
-                    'osd.%s' % osd_id,
-                    ],
-                )
-    except subprocess.CalledProcessError as e:
-        raise Error(e)
+    command(
+            [
+                'ceph',
+                'auth',
+                'del',
+                'osd.%s' % osd_id,
+                ],
+            )
 
 def _deallocate_osd_id(cluster, osd_id):
     LOG.info("Prepare to deallocate the osd-id: %s..." % osd_id)
-    try:
-        out, ret = command(
-                [
-                    'ceph',
-                    'osd',
-                    'rm',
-                    '%s' % osd_id,
-                    ],
-                )
-    except subprocess.CalledProcessError as e:
-        raise Error(e)
+    command(
+            [
+                'ceph',
+                'osd',
+                'rm',
+                '%s' % osd_id,
+                ],
+            )
 
 def main_destroy(args):
     osd_id = args.destroy_by_id
