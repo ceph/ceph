@@ -3319,6 +3319,7 @@ int RGWRados::init_complete()
 
     Mutex::Locker dl(data_sync_thread_lock);
     for (map<string, RGWRESTConn *>::iterator iter = zone_conn_map.begin(); iter != zone_conn_map.end(); ++iter) {
+      ldout(cct, 5) << "starting data sync thread for zone " << iter->first << dendl;
       RGWDataSyncProcessorThread *thread = new RGWDataSyncProcessorThread(this, iter->first);
       ret = thread->init();
       if (ret < 0) {

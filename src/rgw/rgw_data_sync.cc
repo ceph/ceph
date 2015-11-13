@@ -359,12 +359,13 @@ int RGWRemoteDataLog::init(const string& _source_zone, RGWRESTConn *_conn)
     return 0;
   }
 
+  source_zone = _source_zone;
+
   CephContext *cct = store->ctx();
   async_rados = new RGWAsyncRadosProcessor(store, cct->_conf->rgw_num_async_rados_threads);
   async_rados->start();
 
   conn = _conn;
-  source_zone = _source_zone;
 
   int ret = http_manager.set_threaded();
   if (ret < 0) {
@@ -1277,7 +1278,7 @@ int RGWRemoteDataLog::run_sync(int num_shards, rgw_data_sync_status& sync_status
 
 int RGWDataSyncStatusManager::init()
 {
-  conn = store->get_zone_conn_by_name(source_zone);
+  conn = store->get_zone_conn_by_id(source_zone);
   if (!conn) {
     ldout(store->ctx(), 0) << "connection object to zone " << source_zone << " does not exist" << dendl;
     return -EINVAL;
@@ -2313,7 +2314,7 @@ RGWCoroutine *RGWRemoteBucketLog::run_sync_cr()
 
 int RGWBucketSyncStatusManager::init()
 {
-  conn = store->get_zone_conn_by_name(source_zone);
+  conn = store->get_zone_conn_by_id(source_zone);
   if (!conn) {
     ldout(store->ctx(), 0) << "connection object to zone " << source_zone << " does not exist" << dendl;
     return -EINVAL;

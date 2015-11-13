@@ -1578,7 +1578,8 @@ int main(int argc, char **argv)
   string err;
   long long tmp = 0;
 
-  string source_zone;
+  string source_zone_name;
+  string source_zone; /* zone id */
 
   for (std::vector<const char*>::iterator i = args.begin(); i != args.end(); ) {
     if (ceph_argparse_double_dash(args, i)) {
@@ -1812,7 +1813,7 @@ int main(int argc, char **argv)
       list<string>::iterator iter;
       get_str_list(val, endpoints);
     } else if (ceph_argparse_witharg(args, i, &val, "--source-zone", (char*)NULL)) {
-      source_zone = val;
+      source_zone_name = val;
     } else if (strncmp(*i, "-", 1) == 0) {
       cerr << "ERROR: invalid flag " << *i << std::endl;
       return EINVAL;
@@ -1918,6 +1919,13 @@ int main(int argc, char **argv)
   if (!store) {
     cerr << "couldn't init storage provider" << std::endl;
     return 5; //EIO
+  }
+
+  if (!source_zone_name.empty()) {
+    if (!store->find_zone_id_by_name(source_zone_name, &source_zone)) {
+      cerr << "WARNING: cannot find source zone id for name=" << source_zone_name << std::endl;
+      source_zone = source_zone_name;
+    }
   }
 
   rgw_user_init(store);
