@@ -410,8 +410,11 @@ enum scrub_error_type PGBackend::be_compare_scrub_objects(
     if (error != CLEAN)
       errorstream << ", ";
     error = SHALLOW_ERROR;
+    bool known = auth.size == be_get_ondisk_size(auth_oi.size);
     errorstream << "size " << candidate.size
-		<< " != known size " << auth.size;
+		<< " != "
+                << (known ? "known" : "best guess")
+                << " size " << auth.size;
   }
   for (map<string,bufferptr>::const_iterator i = auth.attrs.begin();
        i != auth.attrs.end();
