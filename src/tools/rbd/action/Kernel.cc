@@ -112,6 +112,9 @@ static int parse_map_options(char *options)
     } else if (!strcmp(this_char, "tcp_nodelay") ||
                !strcmp(this_char, "notcp_nodelay")) {
       put_map_option("tcp_nodelay", this_char);
+    } else if (!strcmp(this_char, "cephx_sign_messages") ||
+               !strcmp(this_char, "nocephx_sign_messages")) {
+      put_map_option("cephx_sign_messages", this_char);
     } else if (!strcmp(this_char, "mount_timeout")) {
       if (put_map_option_value("mount_timeout", value_char, map_option_int_cb))
         return -EINVAL;
