@@ -51,7 +51,8 @@
   Optional arguments:
     -c [ --conf ] arg     path to cluster configuration
     --cluster arg         cluster name
-    -i [ --id ] arg       client id (without 'client.' prefix)
+    --id arg              client id (without 'client.' prefix)
+    --user arg            client id (without 'client.' prefix)
     -n [ --name ] arg     client name
     -m [ --mon_host ] arg monitor host
     --secret arg          path to secret key (deprecated)
