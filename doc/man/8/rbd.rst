@@ -429,6 +429,10 @@ libceph (per client instance) options:
 
 * notcp_nodelay - Enable Nagle's algorithm on client sockets (since 4.0).
 
+* cephx_sign_messages - Enable message signing (since 4.4, default).
+
+* nocephx_sign_messages - Disable message signing (since 4.4).
+
 * mount_timeout=x - A timeout on various steps in `rbd map` and `rbd unmap`
   sequences (default is 60 seconds).  In particular, since 4.2 this can be used
   to ensure that `rbd unmap` eventually times out when there is no network
