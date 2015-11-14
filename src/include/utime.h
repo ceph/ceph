@@ -51,7 +51,7 @@ public:
   utime_t(const struct ceph_timespec &v) {
     decode_timeval(&v);
   }
-  utime_t(const struct timespec v)
+  utime_t(const struct timespec &v)
   {
     tv.tv_sec = v.tv_sec;
     tv.tv_nsec = v.tv_nsec;
