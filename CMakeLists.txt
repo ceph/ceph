@@ -136,6 +136,13 @@ set(HAVE_LIBAIO ${AIO_FOUND})
 message(STATUS "${AIO_LIBS}")
 endif(${WITH_AIO})
 
+option(WITH_OPENLDAP "OPENLDAP is here" ON)
+if(${WITH_OPENLDAP})
+find_package(OpenLdap REQUIRED)
+set(HAVE_OPENLDAP ${OPENLDAP_FOUND})
+message(STATUS "${OPENLDAP_LIBS}")
+endif(${WITH_OPENLDAP})
+
 option(WITH_FUSE "Fuse is here" ON)
 if(${WITH_FUSE})
 find_package(fuse)

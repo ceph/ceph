@@ -44,6 +44,7 @@ librgw_la_SOURCES = \
 	rgw/rgw_http_client.cc \
 	rgw/rgw_json_enc.cc \
 	rgw/rgw_keystone.cc \
+	rgw/rgw_ldap.cc \
 	rgw/rgw_loadgen.cc \
 	rgw/rgw_log.cc \
 	rgw/rgw_metadata.cc \
