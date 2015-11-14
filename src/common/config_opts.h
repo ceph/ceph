@@ -713,8 +713,6 @@ OPTION(osd_op_log_threshold, OPT_INT, 5) // how many op log messages to show in 
 OPTION(osd_verify_sparse_read_holes, OPT_BOOL, false)  // read fiemap-reported holes and verify they are zeros
 OPTION(osd_debug_drop_ping_probability, OPT_DOUBLE, 0)
 OPTION(osd_debug_drop_ping_duration, OPT_INT, 0)
-OPTION(osd_debug_drop_pg_create_probability, OPT_DOUBLE, 0)
-OPTION(osd_debug_drop_pg_create_duration, OPT_INT, 1)
 OPTION(osd_debug_drop_op_probability, OPT_DOUBLE, 0)   // probability of stalling/dropping a client op
 OPTION(osd_debug_op_order, OPT_BOOL, false)
 OPTION(osd_debug_scrub_chance_rewrite_digest, OPT_U64, 0)

@@ -1887,7 +1887,6 @@ protected:
   PG   *_create_lock_pg(
     OSDMapRef createmap,
     spg_t pgid,
-    bool newly_created,
     bool hold_map_lock,
     bool backfill,
     int role,
@@ -1913,9 +1912,6 @@ protected:
   
   void load_pgs();
   void build_past_intervals_parallel();
-
-  void calc_priors_during(
-    spg_t pgid, epoch_t start, epoch_t end, set<pg_shard_t>& pset);
 
   /// project pg history from from to now
   bool project_pg_history(
@@ -1944,20 +1940,9 @@ protected:
     }
   }
 
-  // -- pg creation --
-  struct create_pg_info {
-    pg_history_t history;
-    vector<int> acting;
-    set<pg_shard_t> prior;
-    pg_t parent;
-  };
-  ceph::unordered_map<spg_t, create_pg_info> creating_pgs;
-  epoch_t last_pg_create_epoch;
-  double debug_drop_pg_create_probability;
-  int debug_drop_pg_create_duration;
-  int debug_drop_pg_create_left;  // 0 if we just dropped the last one, -1 if we can drop more
 
-  bool can_create_pg(spg_t pgid);
+  epoch_t last_pg_create_epoch;
+
   void handle_pg_create(OpRequestRef op);
 
   void split_pgs(
