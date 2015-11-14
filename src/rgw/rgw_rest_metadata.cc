@@ -20,6 +20,7 @@
 #include "rgw_client_io.h"
 #include "common/errno.h"
 #include "common/strtol.h"
+#include "include/assert.h"
 
 #define dout_subsys ceph_subsys_rgw
 
