@@ -59,7 +59,7 @@
     -k [ --keyring ] arg  path to keyring
   
   See 'rbd help <command>' for help on a specific command.
-  $ while read -r line; do echo rbd help $line ; rbd help $line; done <<< "$(rbd help | grep '^    [a-z]' | sed 's/^    \([a-z -]*[a-z]\).*/\1/g')"
+  $ rbd help | grep '^    [a-z]' | sed 's/^    \([a-z -]*[a-z]\).*/\1/g' | while read -r line; do echo rbd help $line ; rbd help $line; done
   rbd help bench-write
   usage: rbd bench-write [--pool <pool>] [--image <image>] [--io-size <io-size>] 
                          [--io-threads <io-threads>] [--io-total <io-total>] 
