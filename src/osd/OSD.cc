@@ -1598,9 +1598,6 @@ OSD::OSD(CephContext *cct_, ObjectStore *store_,
   map_lock("OSD::map_lock"),
   pg_map_lock("OSD::pg_map_lock"),
   last_pg_create_epoch(0),
-  debug_drop_pg_create_probability(cct->_conf->osd_debug_drop_pg_create_probability),
-  debug_drop_pg_create_duration(cct->_conf->osd_debug_drop_pg_create_duration),
-  debug_drop_pg_create_left(-1),
   mon_report_lock("OSD::mon_report_lock"),
   stats_ack_timeout(cct->_conf->osd_mon_ack_timeout),
   up_thru_wanted(0), up_thru_pending(0),
@@ -2771,7 +2768,6 @@ OSD::res_result OSD::_try_resurrect_pg(
 PG *OSD::_create_lock_pg(
   OSDMapRef createmap,
   spg_t pgid,
-  bool newly_created,
   bool hold_map_lock,
   bool backfill,
   int role,
@@ -3202,34 +3198,13 @@ void OSD::handle_pg_peering_evt(
 
     if (!valid_history || epoch < history.same_interval_since) {
       dout(10) << "get_or_create_pg " << pgid << " acting changed in "
-	       << history.same_interval_since << " (msg from " << epoch << ")" << dendl;
+	       << history.same_interval_since << " (msg from " << epoch << ")"
+	       << dendl;
       return;
     }
 
     if (service.splitting(pgid)) {
       assert(0);
-    }
-
-    bool create = false;
-    if (primary) {
-      // DNE on source?
-      if (info.dne()) {
-	// is there a creation pending on this pg?
-	if (creating_pgs.count(pgid)) {
-	  creating_pgs[pgid].prior.erase(from);
-	  if (!can_create_pg(pgid))
-	    return;
-	  history = creating_pgs[pgid].history;
-	  create = true;
-	} else {
-	  dout(10) << "get_or_create_pg " << pgid
-		   << " DNE on source, but creation probe, ignoring" << dendl;
-	  return;
-	}
-      }
-      creating_pgs.erase(pgid);
-    } else {
-      assert(!info.dne());  // pg exists if we are hearing about it
     }
 
     // do we need to resurrect a deleting pg?
@@ -3250,7 +3225,7 @@ void OSD::handle_pg_peering_evt(
 
       PG *pg = _create_lock_pg(
 	get_map(epoch),
-	pgid, create, false, result == RES_SELF,
+	pgid, false, result == RES_SELF,
 	role,
 	up, up_primary,
 	acting, acting_primary,
@@ -3268,7 +3243,7 @@ void OSD::handle_pg_peering_evt(
       return;
     }
     case RES_SELF: {
-      old_pg_state->lock();
+        old_pg_state->lock();
       OSDMapRef old_osd_map = old_pg_state->get_osdmap();
       int old_role = old_pg_state->role;
       vector<int> old_up = old_pg_state->up;
@@ -3281,7 +3256,6 @@ void OSD::handle_pg_peering_evt(
       PG *pg = _create_lock_pg(
 	old_osd_map,
 	resurrected,
-	false,
 	false,
 	true,
 	old_role,
@@ -3318,7 +3292,6 @@ void OSD::handle_pg_peering_evt(
       PG *parent = _create_lock_pg(
 	old_osd_map,
 	resurrected,
-	false,
 	false,
 	true,
 	old_role,
@@ -3360,56 +3333,6 @@ void OSD::handle_pg_peering_evt(
     pg->unlock();
     return;
   }
-}
-
-
-/*
- * calculate prior pg members during an epoch interval [start,end)
- *  - from each epoch, include all osds up then AND now
- *  - if no osds from then are up now, include them all, even tho they're not reachable now
- */
-void OSD::calc_priors_during(
-  spg_t pgid, epoch_t start, epoch_t end, set<pg_shard_t>& pset)
-{
-  dout(15) << "calc_priors_during " << pgid << " [" << start
-	   << "," << end << ")" << dendl;
-  
-  for (epoch_t e = start; e < end; e++) {
-    OSDMapRef oldmap = get_map(e);
-    vector<int> acting;
-    oldmap->pg_to_acting_osds(pgid.pgid, acting);
-    dout(20) << "  " << pgid << " in epoch " << e << " was " << acting << dendl;
-    int up = 0;
-    int actual_osds = 0;
-    for (unsigned i=0; i<acting.size(); i++) {
-      if (acting[i] != CRUSH_ITEM_NONE) {
-	if (osdmap->is_up(acting[i])) {
-	  if (acting[i] != whoami) {
-	    pset.insert(
-	      pg_shard_t(
-		acting[i],
-		osdmap->pg_is_ec(pgid.pgid) ? shard_id_t(i) : shard_id_t::NO_SHARD));
-	  }
-	  up++;
-	}
-	actual_osds++;
-      }
-    }
-    if (!up && actual_osds) {
-      // sucky.  add down osds, even tho we can't reach them right now.
-      for (unsigned i=0; i<acting.size(); i++) {
-	if (acting[i] != whoami && acting[i] != CRUSH_ITEM_NONE) {
-	  pset.insert(
-	    pg_shard_t(
-	      acting[i],
-	      osdmap->pg_is_ec(pgid.pgid) ? shard_id_t(i) : shard_id_t::NO_SHARD));
-	}
-      }
-    }
-  }
-  dout(10) << "calc_priors_during " << pgid
-	   << " [" << start << "," << end 
-	   << ") = " << pset << dendl;
 }
 
 
@@ -6819,28 +6742,6 @@ void OSD::advance_map()
     }
     service.set_epochs(&boot_epoch, &up_epoch, NULL);
   }
-
-  // scan pg creations
-  ceph::unordered_map<spg_t, create_pg_info>::iterator n = creating_pgs.begin();
-  while (n != creating_pgs.end()) {
-    ceph::unordered_map<spg_t, create_pg_info>::iterator p = n++;
-    spg_t pgid = p->first;
-
-    // am i still primary?
-    vector<int> acting;
-    int primary;
-    osdmap->pg_to_acting_osds(pgid.pgid, &acting, &primary);
-    if (primary != whoami) {
-      dout(10) << " no longer primary for " << pgid << ", stopping creation" << dendl;
-      creating_pgs.erase(p);
-    } else {
-      /*
-       * adding new ppl to our pg has no effect, since we're still primary,
-       * and obviously haven't given the new nodes any data.
-       */
-      p->second.acting.swap(acting);  // keep the latest
-    }
-  }
 }
 
 void OSD::consume_map()
@@ -7081,22 +6982,6 @@ bool OSD::require_same_or_newer_map(OpRequestRef& op, epoch_t epoch,
 // ----------------------------------------
 // pg creation
 
-
-bool OSD::can_create_pg(spg_t pgid)
-{
-  assert(creating_pgs.count(pgid));
-
-  // priors empty?
-  if (!creating_pgs[pgid].prior.empty()) {
-    dout(10) << "can_create_pg " << pgid
-	     << " - waiting for priors " << creating_pgs[pgid].prior << dendl;
-    return false;
-  }
-
-  dout(10) << "can_create_pg " << pgid << " - can create now" << dendl;
-  return true;
-}
-
 void OSD::split_pgs(
   PG *parent,
   const set<spg_t> &childpgids, set<boost::intrusive_ptr<PG> > *out_pgs,
@@ -7159,21 +7044,6 @@ void OSD::handle_pg_create(OpRequestRef op)
 
   dout(10) << "handle_pg_create " << *m << dendl;
 
-  // drop the next N pg_creates in a row?
-  if (debug_drop_pg_create_left < 0 &&
-      cct->_conf->osd_debug_drop_pg_create_probability >
-      ((((double)(rand()%100))/100.0))) {
-    debug_drop_pg_create_left = debug_drop_pg_create_duration;
-  }
-  if (debug_drop_pg_create_left >= 0) {
-    --debug_drop_pg_create_left;
-    if (debug_drop_pg_create_left >= 0) {
-      dout(0) << "DEBUG dropping/ignoring pg_create, will drop the next "
-	      << debug_drop_pg_create_left << " too" << dendl;
-      return;
-    }
-  }
-
   /* we have to hack around require_mon_peer's interface limits, so
    * grab an extra reference before going in. If the peer isn't
    * a Monitor, the reference is put for us (and then cleared
@@ -7190,15 +7060,12 @@ void OSD::handle_pg_create(OpRequestRef op)
 
   op->mark_started();
 
-  int num_created = 0;
-
   map<pg_t,utime_t>::iterator ci = m->ctimes.begin();
   for (map<pg_t,pg_create_t>::iterator p = m->mkpg.begin();
        p != m->mkpg.end();
        ++p, ++ci) {
     assert(ci != m->ctimes.end() && ci->first == p->first);
     epoch_t created = p->second.created;
-    pg_t parent = p->second.parent;
     if (p->second.split_bits) // Skip split pgs
       continue;
     pg_t on = p->first;
@@ -7245,73 +7112,35 @@ void OSD::handle_pg_create(OpRequestRef op)
       continue;
     }
 
-    // figure history
     pg_history_t history;
     history.epoch_created = created;
-    history.last_epoch_clean = created;
-    // Newly created PGs don't need to scrub immediately, so mark them
-    // as scrubbed at creation time.
-    if (ci->second == utime_t()) {
-      // Older OSD doesn't send ctime, so just do what we did before
-      // The repair_test.py can fail in a mixed cluster
-      utime_t now = ceph_clock_now(NULL);
-      history.last_scrub_stamp = now;
-      history.last_deep_scrub_stamp = now;
-    } else {
-      history.last_scrub_stamp = ci->second;
-      history.last_deep_scrub_stamp = ci->second;
-    }
+    history.last_scrub_stamp = ci->second;
+    history.last_deep_scrub_stamp = ci->second;
     bool valid_history = project_pg_history(
       pgid, history, created, up, up_primary, acting, acting_primary);
     /* the pg creation message must have come from a mon and therefore
      * cannot be on the other side of a map gap
      */
     assert(valid_history);
-    
-    // register.
-    creating_pgs[pgid].history = history;
-    creating_pgs[pgid].parent = parent;
-    creating_pgs[pgid].acting.swap(acting);
-    calc_priors_during(pgid, created, history.same_interval_since, 
-		       creating_pgs[pgid].prior);
 
     PG::RecoveryCtx rctx = create_context();
-    // poll priors
-    set<pg_shard_t>& pset = creating_pgs[pgid].prior;
-    dout(10) << "mkpg " << pgid << " e" << created
-	     << " h " << history
-	     << " : querying priors " << pset << dendl;
-    for (set<pg_shard_t>::iterator p = pset.begin(); p != pset.end(); ++p)
-      if (osdmap->is_up(p->osd))
-	(*rctx.query_map)[p->osd][spg_t(pgid.pgid, p->shard)] =
-	  pg_query_t(
-	    pg_query_t::INFO,
-	    p->shard, pgid.shard,
-	    history,
-	    osdmap->get_epoch());
+    const pg_pool_t* pp = osdmap->get_pg_pool(pgid.pool());
+    PG::_create(*rctx.transaction, pgid, pgid.get_split_bits(pp->get_pg_num()));
+    PG::_init(*rctx.transaction, pgid, pp);
 
-    PG *pg = NULL;
-    if (can_create_pg(pgid)) {
-      const pg_pool_t* pp = osdmap->get_pg_pool(pgid.pool());
-      PG::_create(*rctx.transaction, pgid, pgid.get_split_bits(pp->get_pg_num()));
-      PG::_init(*rctx.transaction, pgid, pp);
-
-      pg_interval_map_t pi;
-      pg = _create_lock_pg(
-	osdmap, pgid, true, false, false,
-	0, creating_pgs[pgid].acting, whoami,
-	creating_pgs[pgid].acting, whoami,
-	history, pi,
-	*rctx.transaction);
-      pg->info.last_epoch_started = pg->info.history.last_epoch_started;
-      creating_pgs.erase(pgid);
-      pg->handle_create(&rctx);
-      pg->write_if_dirty(*rctx.transaction);
-      pg->publish_stats_to_osd();
-      pg->unlock();
-      num_created++;
-      wake_pg_waiters(pg, pgid);
-    }
+    pg_interval_map_t pi;
+    PG *pg = _create_lock_pg(
+      osdmap, pgid, false, false,
+      0, up, up_primary,
+      acting, acting_primary,
+      history, pi,
+      *rctx.transaction);
+    pg->info.last_epoch_started = created;
+    pg->handle_create(&rctx);
+    pg->write_if_dirty(*rctx.transaction);
+    pg->publish_stats_to_osd();
+    pg->unlock();
+    wake_pg_waiters(pg, pgid);
     dispatch_context(rctx, pg, osdmap);
   }
 
