@@ -464,6 +464,17 @@ namespace rgw {
     if (r)
       return -EIO;
 
+    const string& ldap_uri = store->ctx()->_conf->rgw_ldap_uri;
+    const string& ldap_binddn = store->ctx()->_conf->rgw_ldap_binddn;
+    const string& ldap_searchdn = store->ctx()->_conf->rgw_ldap_searchdn;
+    const string& ldap_memberattr =
+      store->ctx()->_conf->rgw_ldap_memberattr;
+
+    ldh = new rgw::LDAPHelper(ldap_uri, ldap_binddn, ldap_searchdn,
+			      ldap_memberattr);
+    ldh->init();
+    ldh->bind();
+
     rgw_user_init(store);
     rgw_bucket_init(store->meta_mgr);
     rgw_log_usage_init(g_ceph_context, store);

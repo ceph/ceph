@@ -2238,6 +2238,22 @@ if(${HAVE_LIBFUSE})
     )
 endif(${HAVE_LIBFUSE})
 
+# librgw_file_gp (just the rgw_file get-put bucket ops)
+add_executable(test_rgw_ldap
+  ../rgw/rgw_ldap.cc
+  test_rgw_ldap.cc
+  $<TARGET_OBJECTS:heap_profiler_objs>
+  )
+set_target_properties(test_rgw_ldap PROPERTIES COMPILE_FLAGS
+  ${UNITTEST_CXX_FLAGS})
+target_link_libraries(test_rgw_ldap
+  librados
+  ${OPENLDAP_LIBS}
+  ${Boost_LIBRARIES}
+  ${ALLOC_LIBS}
+  ${UNITTEST_LIBS}
+  )
+
 if(${WITH_CEPHFS})
   add_executable(test_c_headers
     test_c_headers.c

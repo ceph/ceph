@@ -12,6 +12,8 @@
 #include "rgw_frontend.h"
 #include "rgw_process.h"
 #include "rgw_rest_s3.h" // RGW_Auth_S3
+#include "rgw_ldap.h"
+#include "include/assert.h"
 
 class OpsLogSocket;
 
@@ -24,6 +26,7 @@ namespace rgw {
     RGWFrontendConfig* fec;
     RGWLibFrontend* fe;
     OpsLogSocket* olog;
+    rgw::LDAPHelper* ldh;
     RGWREST rest; // XXX needed for RGWProcessEnv
     RGWProcessEnv env;
     RGWRados* store;
@@ -36,6 +39,8 @@ namespace rgw {
     RGWRados* get_store() { return store; }
 
     RGWLibFrontend* get_fe() { return fe; }
+
+    rgw::LDAPHelper* get_ldh() { return ldh; }
 
     int init();
     int init(vector<const char *>& args);
