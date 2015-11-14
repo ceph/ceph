@@ -107,9 +107,6 @@ static int have_minor_attr(void)
   return access("/sys/module/rbd/parameters/single_major", F_OK) == 0;
 }
 
-/*
- * options can be NULL
- */
 static int build_map_buf(CephContext *cct, const char *pool, const char *image,
                          const char *snap, const char *options, string *pbuf)
 {
@@ -164,7 +161,7 @@ static int build_map_buf(CephContext *cct, const char *pool, const char *image,
     oss << ",key=" << key_name;
   }
 
-  if (options && strcmp(options, "") != 0)
+  if (strcmp(options, "") != 0)
     oss << "," << options;
 
   oss << " " << pool << " " << image << " " << snap;
@@ -283,16 +280,13 @@ out_mon:
   return r;
 }
 
-/*
- * snap and options can be NULL
- */
 static int map_image(struct krbd_ctx *ctx, const char *pool, const char *image,
                      const char *snap, const char *options, string *pname)
 {
   string buf;
   int r;
 
-  if (!snap)
+  if (strcmp(snap, "") == 0)
     snap = "-";
 
   r = build_map_buf(ctx->cct, pool, image, snap, options, &buf);
