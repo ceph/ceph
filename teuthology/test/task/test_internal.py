@@ -13,27 +13,31 @@ class TestInternal(object):
         #
         self.ctx.config = { 'tasks': [] }
         assert internal.buildpackages_prep(self.ctx,
-                                      self.ctx.config) == internal.BUILDPACKAGES_NOTHING
+                                           self.ctx.config) == internal.BUILDPACKAGES_NOTHING
         #
-        # move the buildpackages tasks before the install task
+        # make the buildpackages tasks the first to run
         #
         self.ctx.config = {
             'tasks': [ { 'atask': None },
+                       { 'internal.buildpackages_prep': None },
+                       { 'btask': None },
                        { 'install': None },
                        { 'buildpackages': None } ],
         }
         assert internal.buildpackages_prep(self.ctx,
-                                      self.ctx.config) == internal.BUILDPACKAGES_SWAPPED
+                                           self.ctx.config) == internal.BUILDPACKAGES_FIRST
         assert self.ctx.config == {
             'tasks': [ { 'atask': None },
+                       { 'internal.buildpackages_prep': None },
                        { 'buildpackages': None },
+                       { 'btask': None },
                        { 'install': None } ],
         }
         #
-        # the buildpackages task already is before the install task
+        # the buildpackages task already the first task to run
         #
         assert internal.buildpackages_prep(self.ctx,
-                                      self.ctx.config) == internal.BUILDPACKAGES_OK
+                                           self.ctx.config) == internal.BUILDPACKAGES_OK
         #
         # no buildpackages task
         #
@@ -41,7 +45,7 @@ class TestInternal(object):
             'tasks': [ { 'install': None } ],
         }
         assert internal.buildpackages_prep(self.ctx,
-                                      self.ctx.config) == internal.BUILDPACKAGES_NOTHING
+                                           self.ctx.config) == internal.BUILDPACKAGES_NOTHING
         #
         # no install task: the buildpackages task must be removed
         #
@@ -49,5 +53,5 @@ class TestInternal(object):
             'tasks': [ { 'buildpackages': None } ],
         }
         assert internal.buildpackages_prep(self.ctx,
-                                      self.ctx.config) == internal.BUILDPACKAGES_REMOVED
+                                           self.ctx.config) == internal.BUILDPACKAGES_REMOVED
         assert self.ctx.config == {'tasks': []}
