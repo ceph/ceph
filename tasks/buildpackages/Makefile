@@ -13,13 +13,17 @@ ${HOME}/.ssh_agent:
 	source ${HOME}/.ssh_agent ; ssh-add ; ssh-add -l
 	grep -q ssh_agent ~/.bashrc_teuthology || echo 'source ${HOME}/.ssh_agent' >> ~/.bashrc_teuthology
 
-packages-repository:
-	openstack server create --image 'teuthology-ubuntu-14.04' --flavor ${HTTP_FLAVOR} --key-name teuthology --security-group teuthology --property ownedby=${MY_IP} --wait $@ ; sleep 30
-	ip=$(call get_ip,$@) ; \
+flock-packages-repository:
+	openstack server create --image 'teuthology-ubuntu-14.04' --flavor ${HTTP_FLAVOR} --key-name teuthology --security-group teuthology --property ownedby=${MY_IP} --wait packages-repository ; sleep 30
+	ip=$(call get_ip,packages-repository) ; \
 	ssh $$ip sudo apt-get install -y nginx ; \
 	ssh $$ip sudo chown -R ubuntu /usr/share/nginx/html ; \
 	perl -pi -e "s/^gitbuilder_host:.*/gitbuilder_host: $$ip/" ~/.teuthology.yaml
 	mkdir -p ${D}/${@D} ; touch ${D}/$@
+
+packages-repository:
+	mkdir -p ${D}
+	flock --close ${D}/flock-$@.lock ${MAKE} flock-$@
 
 ceph-${CEPH_PKG_TYPE}-${CEPH_DIST}-${CEPH_ARCH}-${CEPH_FLAVOR}-${CEPH_SHA1}: packages-repository
 	openstack server create --image 'teuthology-${CEPH_OS_TYPE}-${CEPH_OS_VERSION}' --flavor ${BUILD_FLAVOR} --key-name teuthology --security-group teuthology --property ownedby=${MY_IP} --user-data ${CEPH_OS_TYPE}-${CEPH_OS_VERSION}-user-data.txt --wait $@ ; sleep 30
