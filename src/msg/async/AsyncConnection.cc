@@ -2506,7 +2506,7 @@ void AsyncConnection::handle_write()
     write_lock.Unlock();
     lock.Lock();
     write_lock.Lock();
-    if (state == STATE_STANDBY && !policy.server && is_queued()) {
+    if (state == STATE_STANDBY && !policy.server && (is_queued() || keepalive)) {
       ldout(async_msgr->cct, 10) << __func__ << " state is " << get_state_name(state)
                                  << " policy.server is false" << dendl;
       _connect();
