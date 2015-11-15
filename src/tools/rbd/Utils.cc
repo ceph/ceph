@@ -226,13 +226,13 @@ int get_image_options(const boost::program_options::variables_map &vm,
   if (vm.count(at::IMAGE_STRIPE_UNIT)) {
     *stripe_unit = vm[at::IMAGE_STRIPE_UNIT].as<uint32_t>();
   } else {
-    *stripe_unit = g_conf->rbd_default_stripe_count;
+    *stripe_unit = g_conf->rbd_default_stripe_unit;
   }
 
   if (vm.count(at::IMAGE_STRIPE_COUNT)) {
     *stripe_count = vm[at::IMAGE_STRIPE_COUNT].as<uint32_t>();
   } else {
-    *stripe_count = g_conf->rbd_default_stripe_unit;
+    *stripe_count = g_conf->rbd_default_stripe_count;
   }
 
   if ((*stripe_unit != 0 && *stripe_count == 0) ||
