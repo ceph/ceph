@@ -894,7 +894,7 @@ int FileJournal::prepare_multi_write(bufferlist& bl, uint64_t& orig_ops, uint64_
 	// throw out what we have so far
 	full_state = FULL_FULL;
 	while (!writeq_empty()) {
-	  put_throttle(1, peek_write().bl.length());
+	  put_throttle(1, peek_write().orig_len);
 	  pop_write();
 	}  
 	print_header(header);
@@ -974,54 +974,39 @@ int FileJournal::prepare_single_write(bufferlist& bl, off64_t& queue_pos, uint64
   write_item &next_write = peek_write();
   uint64_t seq = next_write.seq;
   bufferlist &ebl = next_write.bl;
-  unsigned head_size = sizeof(entry_header_t);
-  off64_t base_size = 2*head_size + ebl.length();
-
-  int alignment = next_write.alignment; // we want to start ebl with this alignment
-  unsigned pre_pad = 0;
-  if (alignment >= 0)
-    pre_pad = ((unsigned int)alignment - (unsigned int)head_size) & ~CEPH_PAGE_MASK;
-  off64_t size = ROUND_UP_TO(base_size + pre_pad, header.alignment);
-  unsigned post_pad = size - base_size - pre_pad;
+  off64_t size = ebl.length();
 
   int r = check_for_full(seq, queue_pos, size);
   if (r < 0)
     return r;   // ENOSPC or EAGAIN
 
-  orig_bytes += ebl.length();
+  uint32_t orig_len = next_write.orig_len;
+  orig_bytes += orig_len;
   orig_ops++;
 
   // add to write buffer
   dout(15) << "prepare_single_write " << orig_ops << " will write " << queue_pos << " : seq " << seq
-	   << " len " << ebl.length() << " -> " << size
-	   << " (head " << head_size << " pre_pad " << pre_pad
-	   << " ebl " << ebl.length() << " post_pad " << post_pad << " tail " << head_size << ")"
-	   << " (ebl alignment " << alignment << ")"
-	   << dendl;
+	   << " len " << orig_len << " -> " << size << dendl;
     
-  // add it this entry
-  entry_header_t h;
-  memset(&h, 0, sizeof(h));
-  h.seq = seq;
-  h.pre_pad = pre_pad;
-  h.len = ebl.length();
-  h.post_pad = post_pad;
-  h.make_magic(queue_pos, header.get_fsid64());
-  h.crc32c = ebl.crc32c(0);
+  unsigned seq_offset = offsetof(entry_header_t, seq);
+  unsigned magic1_offset = offsetof(entry_header_t, magic1);
+  unsigned magic2_offset = offsetof(entry_header_t, magic2);
 
-  bl.append((const char*)&h, sizeof(h));
-  if (pre_pad) {
-    bufferptr bp = buffer::create_static(pre_pad, zero_buf);
-    bl.push_back(bp);
-  }
-  bl.claim_append(ebl, buffer::list::CLAIM_ALLOW_NONSHAREABLE); // potential zero-copy
+  bufferptr headerptr = ebl.buffers().front();
+  uint64_t _seq = seq;
+  uint64_t _queue_pos = queue_pos;
+  uint64_t magic2 = entry_header_t::make_magic(seq, orig_len, header.get_fsid64());
+  headerptr.copy_in(seq_offset, sizeof(uint64_t), (char *)&_seq);
+  headerptr.copy_in(magic1_offset, sizeof(uint64_t), (char *)&_queue_pos);
+  headerptr.copy_in(magic2_offset, sizeof(uint64_t), (char *)&magic2);
 
-  if (h.post_pad) {
-    bufferptr bp = buffer::create_static(post_pad, zero_buf);
-    bl.push_back(bp);
-  }
-  bl.append((const char*)&h, sizeof(h));
+  bufferptr footerptr = ebl.buffers().back();
+  unsigned post_offset  = footerptr.length() - sizeof(entry_header_t);
+  footerptr.copy_in(post_offset + seq_offset, sizeof(uint64_t), (char *)&_seq);
+  footerptr.copy_in(post_offset + magic1_offset, sizeof(uint64_t), (char *)&_queue_pos);
+  footerptr.copy_in(post_offset + magic2_offset, sizeof(uint64_t), (char *)&magic2);
 
+  bl.claim_append(ebl);
   if (next_write.tracked_op)
     next_write.tracked_op->mark_event("write_thread_in_journal_buffer");
 
@@ -1042,8 +1027,7 @@ void FileJournal::align_bl(off64_t pos, bufferlist& bl)
   // make sure list segments are page aligned
   if (directio && (!bl.is_aligned(block_size) ||
 		   !bl.is_n_align_sized(CEPH_MINIMUM_BLOCK_SIZE))) {
-    bl.rebuild_aligned(CEPH_MINIMUM_BLOCK_SIZE);
-    dout(10) << __func__ << " total memcopy: " << bl.get_memcopy_count() << dendl;
+    assert(0 == "bl should be align");
     if ((bl.length() & (CEPH_MINIMUM_BLOCK_SIZE - 1)) != 0 ||
 	(pos & (CEPH_MINIMUM_BLOCK_SIZE - 1)) != 0)
       dout(0) << "rebuild_page_aligned failed, " << bl << dendl;
@@ -1301,7 +1285,7 @@ void FileJournal::write_thread_entry()
       if (write_stop) {
 	dout(20) << "write_thread_entry full and stopping, throw out queue and finish up" << dendl;
 	while (!writeq_empty()) {
-	  put_throttle(1, peek_write().bl.length());
+	  put_throttle(1, peek_write().orig_len);
 	  pop_write();
 	}  
 	print_header(header);
@@ -1577,7 +1561,60 @@ void FileJournal::check_aio_completion()
 }
 #endif
 
-void FileJournal::submit_entry(uint64_t seq, bufferlist& e, int alignment,
+int FileJournal::prepare_entry(list<ObjectStore::Transaction*>& tls, bufferlist* tbl) {
+  dout(10) << "prepare_entry " << tls << dendl;
+  unsigned data_len = 0;
+  int data_align = -1; // -1 indicates that we don't care about the alignment
+  bufferlist bl;
+  for (list<ObjectStore::Transaction*>::iterator p = tls.begin();
+      p != tls.end(); ++p) {
+    ObjectStore::Transaction *t = *p;
+    if (t->get_data_length() > data_len &&
+     (int)t->get_data_length() >= g_conf->journal_align_min_size) {
+     data_len = t->get_data_length();
+     data_align = (t->get_data_alignment() - bl.length()) & ~CEPH_PAGE_MASK;
+    }
+    ::encode(*t, bl);
+  }
+  if (tbl->length()) {
+    bl.claim_append(*tbl);
+  }
+  // add it this entry
+  entry_header_t h;
+  unsigned head_size = sizeof(entry_header_t);
+  off64_t base_size = 2*head_size + bl.length();
+  memset(&h, 0, sizeof(h));
+  if (data_align >= 0)
+    h.pre_pad = ((unsigned int)data_align - (unsigned int)head_size) & ~CEPH_PAGE_MASK;
+  off64_t size = ROUND_UP_TO(base_size + h.pre_pad, header.alignment);
+  unsigned post_pad = size - base_size - h.pre_pad;
+  h.len = bl.length();
+  h.post_pad = post_pad;
+  h.crc32c = bl.crc32c(0);
+  dout(10) << " len " << bl.length() << " -> " << size
+       << " (head " << head_size << " pre_pad " << h.pre_pad
+       << " bl " << bl.length() << " post_pad " << post_pad << " tail " << head_size << ")"
+       << " (bl alignment " << data_align << ")"
+       << dendl;
+  bufferlist ebl;
+  // header
+  ebl.append((const char*)&h, sizeof(h));
+  if (h.pre_pad) {
+    ebl.push_back(buffer::create_static(h.pre_pad, zero_buf));
+  }
+  // payload
+  ebl.claim_append(bl, buffer::list::CLAIM_ALLOW_NONSHAREABLE); // potential zero-copy
+  if (h.post_pad) {
+    ebl.push_back(buffer::create_static(h.post_pad, zero_buf));
+  }
+  // footer
+  ebl.append((const char*)&h, sizeof(h));
+  ebl.rebuild_aligned(CEPH_MINIMUM_BLOCK_SIZE);
+  tbl->claim(ebl);
+  return h.len;
+}
+
+void FileJournal::submit_entry(uint64_t seq, bufferlist& e, uint32_t orig_len,
 			       Context *oncommit, TrackedOpRef osd_op)
 {
   // dump on queue
@@ -1587,7 +1624,7 @@ void FileJournal::submit_entry(uint64_t seq, bufferlist& e, int alignment,
   assert(e.length() > 0);
 
   throttle_ops.take(1);
-  throttle_bytes.take(e.length());
+  throttle_bytes.take(orig_len);
   if (osd_op)
     osd_op->mark_event("commit_queued_for_journal_write");
   if (logger) {
@@ -1605,7 +1642,7 @@ void FileJournal::submit_entry(uint64_t seq, bufferlist& e, int alignment,
 	seq, oncommit, ceph_clock_now(g_ceph_context), osd_op));
     if (writeq.empty())
       writeq_cond.Signal();
-    writeq.push_back(write_item(seq, e, alignment, osd_op));
+    writeq.push_back(write_item(seq, e, orig_len, osd_op));
   }
 }
 
@@ -1738,7 +1775,7 @@ void FileJournal::committed_thru(uint64_t seq)
     dout(15) << " dropping committed but unwritten seq " << peek_write().seq 
 	     << " len " << peek_write().bl.length()
 	     << dendl;
-    put_throttle(1, peek_write().bl.length());
+    put_throttle(1, peek_write().orig_len);
     pop_write();
   }
   
