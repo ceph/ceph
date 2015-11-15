@@ -55,7 +55,7 @@ using ceph::bufferlist;
  */
 class CephContext {
 public:
-  CephContext(uint32_t module_type_);
+  CephContext(uint32_t module_type_, int init_flags_ = 0);
 
   // ref count!
 private:
@@ -85,6 +85,8 @@ public:
 
   /* Get the module type (client, mon, osd, mds, etc.) */
   uint32_t get_module_type() const;
+
+  int get_init_flags() const;
 
   /* Get the PerfCountersCollection of this CephContext */
   PerfCountersCollection *get_perfcounters_collection();
@@ -172,6 +174,8 @@ private:
   void join_service_thread();
 
   uint32_t _module_type;
+
+  int _init_flags;
 
   bool _crypto_inited;
 

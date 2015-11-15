@@ -1046,7 +1046,7 @@ int main(int argc, const char **argv)
   check_curl();
 
   if (g_conf->daemonize) {
-    global_init_daemonize(g_ceph_context, 0);
+    global_init_daemonize(g_ceph_context);
   }
   Mutex mutex("main");
   SafeTimer init_timer(g_ceph_context, mutex);
