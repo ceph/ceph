@@ -26,6 +26,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+#include <signal.h>
 
 #include <sstream>
 #include <vector>
@@ -44,9 +45,9 @@
  *     std::cerr << "cat failed: " << cat.err() << std::endl;
  *     return false;
  *   }
- *   write_to_fd(cat.stdout(), "hello world!\n");
+ *   write_to_fd(cat.get_stdout(), "hello world!\n");
  *   cat.close_stdout();
- *   read_from_fd(cat.stdin(), buf);
+ *   read_from_fd(cat.get_stdin(), buf);
  *   if (cat.join() != 0) {
  *     std::cerr << cat.err() << std::endl;
  *     return false;
@@ -67,9 +68,9 @@ public:
 
   bool is_spawned() const { return pid > 0; }
 
-  int stdin() const;
-  int stdout() const;
-  int stderr() const;
+  int get_stdin() const;
+  int get_stdout() const;
+  int get_stderr() const;
 
   void close_stdin();
   void close_stdout();
@@ -113,12 +114,12 @@ private:
   int sigkill;
 };
 
-SubProcess::SubProcess(const char *cmd_, bool stdin, bool stdout, bool stderr) :
+SubProcess::SubProcess(const char *cmd_, bool use_stdin, bool use_stdout, bool use_stderr) :
   cmd(cmd_),
   cmd_args(),
-  pipe_stdin(stdin),
-  pipe_stdout(stdout),
-  pipe_stderr(stderr),
+  pipe_stdin(use_stdin),
+  pipe_stdout(use_stdout),
+  pipe_stderr(use_stderr),
   stdin_pipe_out_fd(-1),
   stdout_pipe_in_fd(-1),
   stderr_pipe_in_fd(-1),
@@ -152,21 +153,21 @@ void SubProcess::add_cmd_arg(const char *arg) {
   cmd_args.push_back(arg);
 }
 
-int SubProcess::stdin() const {
+int SubProcess::get_stdin() const {
   assert(is_spawned());
   assert(pipe_stdin);
 
   return stdin_pipe_out_fd;
 }
 
-int SubProcess::stdout() const {
+int SubProcess::get_stdout() const {
   assert(is_spawned());
   assert(pipe_stdout);
 
   return stdout_pipe_in_fd;
 }
 
-int SubProcess::stderr() const {
+int SubProcess::get_stderr() const {
   assert(is_spawned());
   assert(pipe_stderr);
 
