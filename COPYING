@@ -149,3 +149,8 @@ Files: src/include/timegm.h
   Copyright (C) Copyright Howard Hinnant
   Copyright (C) Copyright 2010-2011 Vicente J. Botet Escriba
   License: Boost Software License, Version 1.0
+
+Files: src/msg/async/AsyncConnection.cc, src/msg/simple/Pipe.cc (sigpipe suppression)
+  Copyright (C) 2010 Tomash Brechko.  All rights reserved.
+  License: GPL3
+
