@@ -2510,7 +2510,7 @@ void AsyncConnection::handle_write()
       ldout(async_msgr->cct, 10) << __func__ << " state is " << get_state_name(state)
                                  << " policy.server is false" << dendl;
       _connect();
-    } else if (sd >= 0 && state != STATE_CONNECTING && state != STATE_CONNECTING_RE && state != STATE_CLOSED) {
+    } else if (sd >= 0 && state != STATE_CONNECTING && state != STATE_CONNECTING_RE && (is_queued() || keepalive)) {
       r = _try_send(bl);
       if (r < 0) {
         ldout(async_msgr->cct, 1) << __func__ << " send outcoming bl failed" << dendl;
