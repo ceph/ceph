@@ -75,6 +75,6 @@ void complain_about_parse_errors(CephContext *cct,
  * libraries. The most obvious reason for this is that the threads started by
  * the Ceph libraries would be destroyed by a fork().
  */
-void common_init_finish(CephContext *cct, int flags = 0);
+void common_init_finish(CephContext *cct);
 
 #endif
