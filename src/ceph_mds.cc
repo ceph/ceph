@@ -187,7 +187,7 @@ int main(int argc, const char **argv)
     exit(1);
 
   if (shadow != MDSMap::STATE_ONESHOT_REPLAY)
-    global_init_daemonize(g_ceph_context, 0);
+    global_init_daemonize(g_ceph_context);
   common_init_finish(g_ceph_context);
 
   // get monmap
