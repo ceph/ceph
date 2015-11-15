@@ -8132,6 +8132,17 @@ void OSD::handle_op(OpRequestRef& op, OSDMapRef& osdmap)
     return;
   }
 
+  PG *pg = get_pg_or_queue_for_pg(pgid, op);
+  if (pg) {
+    op->send_map_update = share_map.should_send;
+    op->sent_epoch = m->get_map_epoch();
+    enqueue_op(pg, op);
+    share_map.should_send = false;
+    return;
+  }
+
+  // ok, we didn't have the PG.  let's see if it's our fault or the client's.
+
   OSDMapRef send_map = service.try_get_map(m->get_map_epoch());
   // check send epoch
   if (!send_map) {
@@ -8170,14 +8181,6 @@ void OSD::handle_op(OpRequestRef& op, OSDMapRef& osdmap)
     dout(7) << "dropping; no longer have PG (or pool); client will retarget"
 	    << dendl;
     return;
-  }
-
-  PG *pg = get_pg_or_queue_for_pg(pgid, op);
-  if (pg) {
-    op->send_map_update = share_map.should_send;
-    op->sent_epoch = m->get_map_epoch();
-    enqueue_op(pg, op);
-    share_map.should_send = false;
   }
 }
 
