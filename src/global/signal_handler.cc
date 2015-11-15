@@ -40,9 +40,17 @@ void install_sighandler(int signum, signal_handler_t handler, int flags)
   ret = sigaction(signum, &act, &oldact);
   if (ret != 0) {
     char buf[1024];
+#if defined(__sun) 
+    char message[SIG2STR_MAX];
+    sig2str(signum,message);
+    snprintf(buf, sizeof(buf), "install_sighandler: sigaction returned "
+	    "%d when trying to install a signal handler for %s\n",
+	     ret, message);
+#else
     snprintf(buf, sizeof(buf), "install_sighandler: sigaction returned "
 	    "%d when trying to install a signal handler for %s\n",
 	     ret, sys_siglist[signum]);
+#endif
     dout_emergency(buf);
     exit(1);
   }
@@ -79,8 +87,15 @@ static void handle_fatal_signal(int signum)
   // case, SA_RESETHAND specifies that the default signal handler--
   // presumably dump core-- will handle it.
   char buf[1024];
+#if defined(__sun)
+  char message[SIG2STR_MAX];
+  sig2str(signum,message);
+  snprintf(buf, sizeof(buf), "*** Caught signal (%s) **\n "
+	    "in thread %llx\n", message, (unsigned long long)pthread_self());
+#else
   snprintf(buf, sizeof(buf), "*** Caught signal (%s) **\n "
 	    "in thread %llx\n", sys_siglist[signum], (unsigned long long)pthread_self());
+#endif
   dout_emergency(buf);
   pidfile_remove();
 
