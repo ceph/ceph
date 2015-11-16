@@ -3650,12 +3650,24 @@ void Objecter::handle_pool_op_reply(MPoolOpReply *m)
     if (osdmap->get_epoch() < m->epoch) {
       rwlock.unlock();
       rwlock.get_write();
+      // recheck op existence since we have let go of rwlock
+      // (for promotion) above.
+      iter = pool_ops.find(tid);
+      if (iter == pool_ops.end())
+        goto done; // op is gone.
       if (osdmap->get_epoch() < m->epoch) {
         ldout(cct, 20) << "waiting for client to reach epoch " << m->epoch << " before calling back" << dendl;
         _wait_for_new_map(op->onfinish, m->epoch, m->replyCode);
+      } else {
+	// map epoch changed, probably because a MOSDMap message
+	// sneaked in. Do caller-specified callback now or else
+	// we lose it forever.
+	assert(op->onfinish);
+	op->onfinish->complete(m->replyCode);	
       }
     }
     else {
+      assert(op->onfinish);
       op->onfinish->complete(m->replyCode);
     }
     op->onfinish = NULL;
@@ -3670,6 +3682,8 @@ void Objecter::handle_pool_op_reply(MPoolOpReply *m)
   } else {
     ldout(cct, 10) << "unknown request " << tid << dendl;
   }
+
+done:
   rwlock.unlock();
 
   ldout(cct, 10) << "done" << dendl;
