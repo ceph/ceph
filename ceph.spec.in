@@ -91,6 +91,7 @@ Requires:	hdparm
 Requires:	cryptsetup
 Requires:	findutils
 Requires:	which
+Requires:	python-pyudev
 Requires(post):	binutils
 %if 0%{with cephfs_java}
 BuildRequires:	java-devel
@@ -123,6 +124,13 @@ BuildRequires:	pkgconfig
 BuildRequires:	python
 BuildRequires:	python-nose
 BuildRequires:	python-requests
+BuildRequires:	python-pyudev
+%if 0%{?rhel} > 0 && 0%{?rhel} < 7
+BuildRequires:	python-sphinx10
+%endif
+%if 0%{?fedora} || 0%{?suse_version} || 0%{?rhel} >= 7
+BuildRequires:	python-sphinx
+%endif
 BuildRequires:	python-virtualenv
 BuildRequires:	snappy-devel
 BuildRequires:	util-linux
