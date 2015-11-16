@@ -54,6 +54,7 @@ using namespace std;
 #include "common/sharedptr_registry.hpp"
 #include "common/PrioritizedQueue.h"
 #include "messages/MOSDOp.h"
+#include "include/Spinlock.h"
 
 #define CEPH_OSD_PROTOCOL    10 /* cluster internal */
 
@@ -1286,17 +1287,16 @@ public:
     OSDMapRef osdmap;  /// Map as of which waiting_for_pg is current
     map<spg_t, list<OpRequestRef> > waiting_for_pg;
 
-    Mutex sent_epoch_lock;
+    Spinlock sent_epoch_lock;
     epoch_t last_sent_epoch;
-    Mutex received_map_lock;
+    Spinlock received_map_lock;
     epoch_t received_map_epoch; // largest epoch seen in MOSDMap from here
 
     Session(CephContext *cct) :
       RefCountedObject(cct),
       auid(-1), con(0),
-      session_dispatch_lock("Session::session_dispatch_lock"),
-      sent_epoch_lock("Session::sent_epoch_lock"), last_sent_epoch(0),
-      received_map_lock("Session::received_map_lock"), received_map_epoch(0)
+      session_dispatch_lock("Session::session_dispatch_lock"), 
+      last_sent_epoch(0), received_map_epoch(0)
     {}
 
 
