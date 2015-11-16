@@ -608,6 +608,10 @@ OPTION(osd_map_message_max, OPT_INT, 100)  // max maps per MOSDMap message
 OPTION(osd_map_share_max_epochs, OPT_INT, 100)  // cap on # of inc maps we send to peers, clients
 OPTION(osd_inject_bad_map_crc_probability, OPT_FLOAT, 0)
 OPTION(osd_inject_failure_on_pg_removal, OPT_BOOL, false)
+// shutdown the OSD if stuatus flipping more than max_flipping_threshold times in recent flipping_log_period seconds
+OPTION(osd_flipping_log_period, OPT_INT, 600)
+OPTION(osd_max_flipping_threshold, OPT_INT, 5)
+
 OPTION(osd_op_threads, OPT_INT, 2)    // 0 == no threading
 OPTION(osd_peering_wq_batch_size, OPT_U64, 20)
 OPTION(osd_op_pq_max_tokens_per_priority, OPT_U64, 4194304)

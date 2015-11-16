@@ -6506,6 +6506,18 @@ void OSD::handle_osd_map(MOSDMap *m)
         service.set_epochs(NULL,&up_epoch, &bind_epoch);
 	do_restart = true;
 
+	//add reboot log
+	utime_t now = ceph_clock_now(g_ceph_context);
+	utime_t grace = utime_t(g_conf->osd_flipping_log_period, 0);
+	osd_reboot_log.push_back(now);
+	//clear all out-of-date log
+	while(!osd_reboot_log.empty() && osd_reboot_log.front() + grace < now)
+	  osd_reboot_log.pop_front();
+	if ((int)osd_reboot_log.size() > g_conf->osd_max_flipping_threshold) {
+	  do_restart = false;
+	  do_shutdown = true;
+	}
+
 	start_waiting_for_healthy();
 
 	set<int> avoid_ports;

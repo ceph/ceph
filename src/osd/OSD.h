@@ -1814,6 +1814,7 @@ private:
   utime_t         had_map_since;
   RWLock          map_lock;
   list<OpRequestRef>  waiting_for_osdmap;
+  deque<utime_t> osd_reboot_log;
 
   friend struct send_map_on_destruct;
 
