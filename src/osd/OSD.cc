@@ -1809,6 +1809,15 @@ int OSD::init()
 
   dout(2) << "boot" << dendl;
 
+  // initialize the daily loadavg with current 15min loadavg
+  double loadavgs[3];
+  if (getloadavg(loadavgs, 3) == 3) {
+    daily_loadavg = loadavgs[2];
+  } else {
+    derr << "OSD::init() : couldn't read loadavgs\n" << dendl;
+    daily_loadavg = 1.0;
+  }
+
   // read superblock
   r = read_superblock();
   if (r < 0) {
@@ -3862,8 +3871,12 @@ void OSD::heartbeat()
 
   // get CPU load avg
   double loadavgs[1];
-  if (getloadavg(loadavgs, 1) == 1)
+  int n_samples = 86400 / cct->_conf->osd_heartbeat_interval;
+  if (getloadavg(loadavgs, 1) == 1) {
     logger->set(l_osd_loadavg, 100 * loadavgs[0]);
+    daily_loadavg = (daily_loadavg * (n_samples - 1) + loadavgs[0]) / n_samples;
+    dout(30) << "heartbeat: daily_loadavg " << daily_loadavg << dendl;
+  }
 
   dout(30) << "heartbeat checking stats" << dendl;
 
@@ -6065,23 +6078,35 @@ bool OSD::scrub_time_permit(utime_t now)
 
 bool OSD::scrub_load_below_threshold()
 {
-  double loadavgs[1];
-  if (getloadavg(loadavgs, 1) != 1) {
+  double loadavgs[3];
+  if (getloadavg(loadavgs, 3) != 3) {
     dout(10) << __func__ << " couldn't read loadavgs\n" << dendl;
     return false;
   }
 
-  if (loadavgs[0] >= cct->_conf->osd_scrub_load_threshold) {
-    dout(20) << __func__ << " loadavg " << loadavgs[0]
-	     << " >= max " << cct->_conf->osd_scrub_load_threshold
-	     << " = no, load too high" << dendl;
-    return false;
-  } else {
+  // allow scrub if below configured threshold
+  if (loadavgs[0] < cct->_conf->osd_scrub_load_threshold) {
     dout(20) << __func__ << " loadavg " << loadavgs[0]
 	     << " < max " << cct->_conf->osd_scrub_load_threshold
 	     << " = yes" << dendl;
     return true;
   }
+
+  // allow scrub if below daily avg and currently decreasing
+  if (loadavgs[0] < daily_loadavg && loadavgs[0] < loadavgs[2]) {
+    dout(20) << __func__ << " loadavg " << loadavgs[0]
+	     << " < daily_loadavg " << daily_loadavg
+	     << " and < 15m avg " << loadavgs[2]
+	     << " = yes" << dendl;
+    return true;
+  }
+
+  dout(20) << __func__ << " loadavg " << loadavgs[0]
+	   << " >= max " << cct->_conf->osd_scrub_load_threshold
+	   << " and ( >= daily_loadavg " << daily_loadavg
+	   << " or >= 15m avg " << loadavgs[2]
+	   << ") = no" << dendl;
+  return false;
 }
 
 void OSD::sched_scrub()
