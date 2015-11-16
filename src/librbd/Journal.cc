@@ -104,7 +104,7 @@ bool Journal::is_journal_supported(ImageCtx &image_ctx) {
 }
 
 int Journal::create(librados::IoCtx &io_ctx, const std::string &image_id,
-		    double commit_age, uint8_t order, uint8_t splay_width,
+		    uint8_t order, uint8_t splay_width,
 		    const std::string &object_pool) {
   CephContext *cct = reinterpret_cast<CephContext *>(io_ctx.cct());
   ldout(cct, 5) << __func__ << ": image=" << image_id << dendl;
@@ -123,7 +123,8 @@ int Journal::create(librados::IoCtx &io_ctx, const std::string &image_id,
     pool_id = data_io_ctx.get_id();
   }
 
-  ::journal::Journaler journaler(io_ctx, image_id, "", commit_age);
+  ::journal::Journaler journaler(io_ctx, image_id, "",
+				 cct->_conf->rbd_journal_commit_age);
 
   int r = journaler.create(order, splay_width, pool_id);
   if (r < 0) {
