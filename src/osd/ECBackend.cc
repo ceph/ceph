@@ -2088,6 +2088,7 @@ void ECBackend::be_deep_scrub(
     dout(0) << "_scan_list  " << poid << " got "
 	    << r << " on read, read_error" << dendl;
     o.read_error = true;
+    return;
   }
 
   ECUtil::HashInfoRef hinfo = get_hash_info(poid, false);
@@ -2095,15 +2096,18 @@ void ECBackend::be_deep_scrub(
     dout(0) << "_scan_list  " << poid << " could not retrieve hash info" << dendl;
     o.read_error = true;
     o.digest_present = false;
+    return;
   } else {
     if (hinfo->get_chunk_hash(get_parent()->whoami_shard().shard) != h.digest()) {
       dout(0) << "_scan_list  " << poid << " got incorrect hash on read" << dendl;
       o.read_error = true;
+      return;
     }
 
     if (hinfo->get_total_chunk_size() != pos) {
       dout(0) << "_scan_list  " << poid << " got incorrect size on read" << dendl;
       o.read_error = true;
+      return;
     }
 
     /* We checked above that we match our own stored hash.  We cannot
