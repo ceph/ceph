@@ -554,7 +554,7 @@ public:
   void append_section_from_set(set<string>& all_sections, const string& name) {
     set<string>::iterator iter = all_sections.find(name);
     if (iter != all_sections.end()) {
-      sections.push_back(name);
+      sections.emplace_back(std::move(*iter));
       all_sections.erase(iter);
     }
   }
@@ -564,17 +564,16 @@ public:
    */
   void rearrange_sections() {
     set<string> all_sections;
-    for (list<string>::iterator iter = sections.begin(); iter != sections.end(); ++iter) {
-      all_sections.insert(*iter);
-    }
+    std::move(sections.begin(), sections.end(),
+              std::inserter(all_sections, all_sections.end()));
     sections.clear();
+
     append_section_from_set(all_sections, "user");
     append_section_from_set(all_sections, "bucket.instance");
     append_section_from_set(all_sections, "bucket");
 
-    for (set<string>::iterator iter = all_sections.begin(); iter != all_sections.end(); ++iter) {
-      sections.push_back(*iter);
-    }
+    std::move(all_sections.begin(), all_sections.end(),
+              std::back_inserter(sections));
   }
 
   int operate() {
