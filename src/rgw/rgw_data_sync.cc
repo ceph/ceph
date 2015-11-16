@@ -14,12 +14,9 @@
 #include "rgw_http_client.h"
 #include "rgw_bucket.h"
 #include "rgw_metadata.h"
+#include "rgw_boost_asio_yield.h"
 
 #include "cls/lock/cls_lock_client.h"
-
-#include <boost/asio/coroutine.hpp>
-#include <boost/asio/yield.hpp>
-
 
 #define dout_subsys ceph_subsys_rgw
 

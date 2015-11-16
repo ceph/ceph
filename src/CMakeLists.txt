@@ -948,6 +948,10 @@ if(${WITH_RADOSGW})
     cls_log_client cls_statelog_client cls_timeindex_client cls_version_client
     cls_replica_log_client cls_user_client curl global expat)
 
+  if(HAVE_BOOST_ASIO_COROUTINE)
+    target_compile_definitions(rgw_a PUBLIC "HAVE_BOOST_ASIO_COROUTINE")
+  endif()
+
   set(radosgw_srcs
     rgw/rgw_resolve.cc
     rgw/rgw_rest.cc
@@ -990,6 +994,7 @@ if(${WITH_RADOSGW})
 
   add_executable(radosgw-admin ${radosgw_admin_srcs} $<TARGET_OBJECTS:heap_profiler_objs>)
   target_link_libraries(radosgw-admin rgw_a ${TCMALLOC_LIBS})
+
   install(TARGETS radosgw-admin DESTINATION bin)
 
   add_executable(radosgw-object-expirer ${radosgw_object_expirer_srcs} $<TARGET_OBJECTS:heap_profiler_objs>)
