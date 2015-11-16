@@ -2,11 +2,11 @@
 // vim: ts=8 sw=2 smarttab
 
 #include "StupidAllocator.h"
-#include "newstore_types.h"
-#include "NewStore.h"
+#include "bluestore_types.h"
+#include "BlueStore.h"
 #include "FreelistManager.h"
 
-#define dout_subsys ceph_subsys_newstore
+#define dout_subsys ceph_subsys_bluestore
 #undef dout_prefix
 #define dout_prefix *_dout << "stupidalloc "
 
@@ -28,7 +28,7 @@ StupidAllocator::~StupidAllocator()
 
 unsigned StupidAllocator::_choose_bin(uint64_t orig_len)
 {
-  uint64_t len = orig_len / g_conf->newstore_min_alloc_size;
+  uint64_t len = orig_len / g_conf->bluestore_min_alloc_size;
   assert(len);
   int bin = -1;
   while (len && bin + 1 < (int)free.size()) {

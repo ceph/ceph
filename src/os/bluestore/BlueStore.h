@@ -12,8 +12,8 @@
  *
  */
 
-#ifndef CEPH_OSD_NEWSTORE_H
-#define CEPH_OSD_NEWSTORE_H
+#ifndef CEPH_OSD_BLUESTORE_H
+#define CEPH_OSD_BLUESTORE_H
 
 #include "acconfig.h"
 
@@ -29,7 +29,7 @@
 #include "os/fs/FS.h"
 #include "kv/KeyValueDB.h"
 
-#include "newstore_types.h"
+#include "bluestore_types.h"
 #include "BlockDevice.h"
 
 #include "boost/intrusive/list.hpp"
@@ -37,7 +37,7 @@
 class Allocator;
 class FreelistManager;
 
-class NewStore : public ObjectStore {
+class BlueStore : public ObjectStore {
   // -----------------------------------------------------
   // types
 public:
@@ -93,7 +93,7 @@ public:
     ceph::unordered_map<ghobject_t,OnodeRef> onode_map;  ///< forward lookups
     lru_list_t lru;                                      ///< lru
 
-    OnodeHashLRU() : lock("NewStore::OnodeHashLRU::lock") {}
+    OnodeHashLRU() : lock("BlueStore::OnodeHashLRU::lock") {}
 
     void add(const ghobject_t& oid, OnodeRef o);
     void _touch(OnodeRef o);
@@ -106,7 +106,7 @@ public:
   };
 
   struct Collection {
-    NewStore *store;
+    BlueStore *store;
     coll_t cid;
     cnode_t cnode;
     RWLock lock;
@@ -128,7 +128,7 @@ public:
       return false;
     }
 
-    Collection(NewStore *ns, coll_t c);
+    Collection(BlueStore *ns, coll_t c);
   };
   typedef ceph::shared_ptr<Collection> CollectionRef;
 
@@ -228,7 +228,7 @@ public:
 	onreadable_sync(NULL),
 	wal_txn(NULL),
 	ioc(this),
-	lock("NewStore::TransContext::lock") {
+	lock("BlueStore::TransContext::lock") {
       //cout << "txc new " << this << std::endl;
     }
     ~TransContext() {
@@ -269,9 +269,9 @@ public:
 
     OpSequencer()
 	//set the qlock to to PTHREAD_MUTEX_RECURSIVE mode
-      : qlock("NewStore::OpSequencer::qlock", true, false),
+      : qlock("BlueStore::OpSequencer::qlock", true, false),
 	parent(NULL),
-	wal_apply_lock("NewStore::OpSequencer::wal_apply_lock") {
+	wal_apply_lock("BlueStore::OpSequencer::wal_apply_lock") {
     }
     ~OpSequencer() {
       assert(q.empty());
@@ -319,12 +319,12 @@ public:
 	&OpSequencer::wal_osr_queue_item> > wal_osr_queue_t;
 
   private:
-    NewStore *store;
+    BlueStore *store;
     wal_osr_queue_t wal_queue;
 
   public:
-    WALWQ(NewStore *s, time_t ti, time_t sti, ThreadPool *tp)
-      : ThreadPool::WorkQueue<TransContext>("NewStore::WALWQ", ti, sti, tp),
+    WALWQ(BlueStore *s, time_t ti, time_t sti, ThreadPool *tp)
+      : ThreadPool::WorkQueue<TransContext>("BlueStore::WALWQ", ti, sti, tp),
 	store(s) {
     }
     bool _empty() {
@@ -376,8 +376,8 @@ public:
   };
 
   struct KVSyncThread : public Thread {
-    NewStore *store;
-    KVSyncThread(NewStore *s) : store(s) {}
+    BlueStore *store;
+    KVSyncThread(BlueStore *s) : store(s) {}
     void *entry() {
       store->_kv_sync_thread();
       return NULL;
@@ -495,8 +495,8 @@ private:
   int _wal_replay();
 
 public:
-  NewStore(CephContext *cct, const string& path);
-  ~NewStore();
+  BlueStore(CephContext *cct, const string& path);
+  ~BlueStore();
 
   bool needs_journal() { return false; };
   bool wants_journal() { return false; };
@@ -753,21 +753,21 @@ private:
 
 };
 
-inline ostream& operator<<(ostream& out, const NewStore::OpSequencer& s) {
+inline ostream& operator<<(ostream& out, const BlueStore::OpSequencer& s) {
   return out << *s.parent;
 }
 
-static inline void intrusive_ptr_add_ref(NewStore::Onode *o) {
+static inline void intrusive_ptr_add_ref(BlueStore::Onode *o) {
   o->get();
 }
-static inline void intrusive_ptr_release(NewStore::Onode *o) {
+static inline void intrusive_ptr_release(BlueStore::Onode *o) {
   o->put();
 }
 
-static inline void intrusive_ptr_add_ref(NewStore::OpSequencer *o) {
+static inline void intrusive_ptr_add_ref(BlueStore::OpSequencer *o) {
   o->get();
 }
-static inline void intrusive_ptr_release(NewStore::OpSequencer *o) {
+static inline void intrusive_ptr_release(BlueStore::OpSequencer *o) {
   o->put();
 }
 

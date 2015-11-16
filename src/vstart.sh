@@ -78,7 +78,7 @@ overwrite_conf=1
 cephx=1 #turn cephx on by default
 cache=""
 memstore=0
-newstore=0
+bluestore=0
 journal=1
 
 MON_ADDR=""
@@ -217,8 +217,8 @@ case $1 in
     --memstore )
 	    memstore=1
 	    ;;
-    --newstore )
-	    newstore=1
+    --bluestore )
+	    bluestore=1
 	    ;;
     --hitset )
 	    hitset="$hitset $2 $3"
@@ -295,7 +295,7 @@ else
         debug monc = 20
         debug journal = 20
         debug filestore = 20
-        debug newstore = 30
+        debug bluestore = 30
         debug bdev = 20
         debug rgw = 20
         debug objclass = 20'
@@ -319,10 +319,10 @@ if [ "$memstore" -eq 1 ]; then
     COSDMEMSTORE='
 	osd objectstore = memstore'
 fi
-if [ "$newstore" -eq 1 ]; then
+if [ "$bluestore" -eq 1 ]; then
     COSDMEMSTORE='
-	osd objectstore = newstore
-	newstore fsck on mount = true'
+	osd objectstore = bluestore
+	bluestore fsck on mount = true'
 fi
 
 # lockdep everywhere?
@@ -464,7 +464,7 @@ $DAEMONOPTS
         osd class dir = $OBJCLASS_PATH
         osd scrub load threshold = 2000.0
         osd debug op order = true
-        newstore block size = 10737418240
+        bluestore block size = 10737418240
         filestore wbthrottle xfs ios start flusher = 10
         filestore wbthrottle xfs ios hard limit = 20
         filestore wbthrottle xfs inodes hard limit = 30

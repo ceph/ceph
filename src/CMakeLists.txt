@@ -594,8 +594,8 @@ set(libos_srcs
   os/MemStore.cc
   os/GenericObjectMap.cc
   os/HashIndex.cc
-  os/newstore/NewStore.cc
-  os/newstore/newstore_types.cc
+  os/bluestore/BlueStore.cc
+  os/bluestore/bluestore_types.cc
   os/fs/FS.cc
   ${libkv_srcs}
   ${libos_xfs_srcs})

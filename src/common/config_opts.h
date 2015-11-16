@@ -136,7 +136,7 @@ SUBSYS(throttle, 1, 1)
 SUBSYS(refs, 0, 0)
 SUBSYS(xio, 1, 5)
 SUBSYS(compressor, 1, 5)
-SUBSYS(newstore, 1, 5)
+SUBSYS(bluestore, 1, 5)
 SUBSYS(bdev, 1, 5)
 SUBSYS(rocksdb, 4, 5)
 
@@ -821,36 +821,36 @@ OPTION(memstore_page_size, OPT_U64, 64 << 10)
 
 OPTION(bdev_debug_inflight_ios, OPT_BOOL, false)
 
-OPTION(newstore_block_path, OPT_STR, "")
-OPTION(newstore_block_size, OPT_U64, 0)  // 10gb for testing
-OPTION(newstore_max_dir_size, OPT_U32, 1000000)
-OPTION(newstore_min_alloc_size, OPT_U32, 512*1024)
-OPTION(newstore_onode_map_size, OPT_U32, 1024)   // onodes per collection
-OPTION(newstore_cache_tails, OPT_BOOL, true)   // cache tail blocks in Onode
-OPTION(newstore_backend, OPT_STR, "rocksdb")
-OPTION(newstore_rocksdb_options, OPT_STR, "compression=kNoCompression,max_write_buffer_number=16,min_write_buffer_number_to_merge=6") //,recycle_log_file_num=16")
-OPTION(newstore_fsck_on_mount, OPT_BOOL, false)
-OPTION(newstore_fail_eio, OPT_BOOL, true)
-OPTION(newstore_sync_io, OPT_BOOL, false)  // perform initial io synchronously
-OPTION(newstore_sync_transaction, OPT_BOOL, false)  // perform kv txn synchronously
-OPTION(newstore_sync_submit_transaction, OPT_BOOL, false)
-OPTION(newstore_sync_wal_apply, OPT_BOOL, true)     // perform initial wal work synchronously (possibly in combination with aio so we only *queue* ios)
-OPTION(newstore_wal_threads, OPT_INT, 4)
-OPTION(newstore_wal_thread_timeout, OPT_INT, 30)
-OPTION(newstore_wal_thread_suicide_timeout, OPT_INT, 120)
-OPTION(newstore_max_ops, OPT_U64, 512)
-OPTION(newstore_max_bytes, OPT_U64, 64*1024*1024)
-OPTION(newstore_wal_max_ops, OPT_U64, 512)
-OPTION(newstore_wal_max_bytes, OPT_U64, 128*1024*1024)
-OPTION(newstore_fid_prealloc, OPT_INT, 1024)
-OPTION(newstore_nid_prealloc, OPT_INT, 1024)
-OPTION(newstore_overlay_max_length, OPT_INT, 65536)
-OPTION(newstore_overlay_max, OPT_INT, 32)
-OPTION(newstore_open_by_handle, OPT_BOOL, true)
-OPTION(newstore_o_direct, OPT_BOOL, true)
-OPTION(newstore_aio, OPT_BOOL, true)
-OPTION(newstore_aio_poll_ms, OPT_INT, 250)  // milliseconds
-OPTION(newstore_aio_max_queue_depth, OPT_INT, 4096)
+OPTION(bluestore_block_path, OPT_STR, "")
+OPTION(bluestore_block_size, OPT_U64, 0)  // 10gb for testing
+OPTION(bluestore_max_dir_size, OPT_U32, 1000000)
+OPTION(bluestore_min_alloc_size, OPT_U32, 512*1024)
+OPTION(bluestore_onode_map_size, OPT_U32, 1024)   // onodes per collection
+OPTION(bluestore_cache_tails, OPT_BOOL, true)   // cache tail blocks in Onode
+OPTION(bluestore_backend, OPT_STR, "rocksdb")
+OPTION(bluestore_rocksdb_options, OPT_STR, "compression=kNoCompression,max_write_buffer_number=16,min_write_buffer_number_to_merge=6") //,recycle_log_file_num=16")
+OPTION(bluestore_fsck_on_mount, OPT_BOOL, false)
+OPTION(bluestore_fail_eio, OPT_BOOL, true)
+OPTION(bluestore_sync_io, OPT_BOOL, false)  // perform initial io synchronously
+OPTION(bluestore_sync_transaction, OPT_BOOL, false)  // perform kv txn synchronously
+OPTION(bluestore_sync_submit_transaction, OPT_BOOL, false)
+OPTION(bluestore_sync_wal_apply, OPT_BOOL, true)     // perform initial wal work synchronously (possibly in combination with aio so we only *queue* ios)
+OPTION(bluestore_wal_threads, OPT_INT, 4)
+OPTION(bluestore_wal_thread_timeout, OPT_INT, 30)
+OPTION(bluestore_wal_thread_suicide_timeout, OPT_INT, 120)
+OPTION(bluestore_max_ops, OPT_U64, 512)
+OPTION(bluestore_max_bytes, OPT_U64, 64*1024*1024)
+OPTION(bluestore_wal_max_ops, OPT_U64, 512)
+OPTION(bluestore_wal_max_bytes, OPT_U64, 128*1024*1024)
+OPTION(bluestore_fid_prealloc, OPT_INT, 1024)
+OPTION(bluestore_nid_prealloc, OPT_INT, 1024)
+OPTION(bluestore_overlay_max_length, OPT_INT, 65536)
+OPTION(bluestore_overlay_max, OPT_INT, 32)
+OPTION(bluestore_open_by_handle, OPT_BOOL, true)
+OPTION(bluestore_o_direct, OPT_BOOL, true)
+OPTION(bluestore_aio, OPT_BOOL, true)
+OPTION(bluestore_aio_poll_ms, OPT_INT, 250)  // milliseconds
+OPTION(bluestore_aio_max_queue_depth, OPT_INT, 4096)
 
 OPTION(filestore_omap_backend, OPT_STR, "leveldb")
 
