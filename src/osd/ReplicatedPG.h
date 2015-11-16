@@ -624,8 +624,6 @@ public:
 
     enum { W_LOCK, R_LOCK, E_LOCK, NONE } lock_to_release;
 
-    Context *on_finish;
-
     OpContext(const OpContext& other);
     const OpContext& operator=(const OpContext& other);
 
@@ -652,7 +650,6 @@ public:
       async_read_result(0),
       inflightreads(0),
       lock_to_release(NONE),
-      on_finish(NULL),
       release_snapset_obc(false) {
       if (obc->ssc) {
 	new_snapset = obc->ssc->snapset;
@@ -674,7 +671,6 @@ public:
       async_read_result(0),
       inflightreads(0),
       lock_to_release(NONE),
-      on_finish(NULL),
       release_snapset_obc(false) { }
     void reset_obs(ObjectContextRef obc) {
       new_obs = ObjectState(obc->obs.oi, obc->obs.exists);
@@ -694,13 +690,6 @@ public:
 	   i != pending_async_reads.end();
 	   pending_async_reads.erase(i++)) {
 	delete i->second.second;
-      }
-      assert(on_finish == NULL);
-    }
-    void finish(int r) {
-      if (on_finish) {
-	on_finish->complete(r);
-	on_finish = NULL;
       }
     }
   };
@@ -826,7 +815,6 @@ protected:
 	 ctx->on_finish.erase(p++)) {
       (*p)();
     }
-    ctx->finish(r);
     delete ctx;
   }
 
