@@ -7,7 +7,7 @@
 
 #include "common/debug.h"
 
-#define dout_subsys ceph_subsys_newstore
+#define dout_subsys ceph_subsys_bluestore
 #undef dout_prefix
 #define dout_prefix *_dout << "freelist "
 

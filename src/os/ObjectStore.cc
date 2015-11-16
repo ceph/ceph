@@ -22,7 +22,7 @@
 #include "common/safe_io.h"
 
 #if defined(HAVE_LIBAIO)
-#include "newstore/NewStore.h"
+#include "bluestore/BlueStore.h"
 #endif
 
 void decode_str_str_map_to_bl(bufferlist::iterator& p,
@@ -77,9 +77,9 @@ ObjectStore *ObjectStore::create(CephContext *cct,
     return new KeyValueStore(data);
   }
 #if defined(HAVE_LIBAIO)
-  if (type == "newstore" &&
-      cct->check_experimental_feature_enabled("newstore")) {
-    return new NewStore(cct, data);
+  if (type == "bluestore" &&
+      cct->check_experimental_feature_enabled("bluestore")) {
+    return new BlueStore(cct, data);
   }
 #endif
   return NULL;

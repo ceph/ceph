@@ -12,7 +12,7 @@
  *
  */
 
-#include "newstore_types.h"
+#include "bluestore_types.h"
 #include "common/Formatter.h"
 
 // cnode_t
