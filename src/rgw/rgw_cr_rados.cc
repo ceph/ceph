@@ -508,13 +508,8 @@ int RGWContinuousLeaseCR::operate()
   }
   reenter(this) {
     while (!going_down.read()) {
-      yield {
-        int r = call(new RGWSimpleRadosLockCR(async_rados, store, pool, oid, lock_name, cookie, interval));
-        if (r < 0) {
-          ldout(store->ctx(), 0) << *this << ": ERROR: failed to call RGWSimpleRadosLockCR()" << dendl;
-          return set_state(RGWCoroutine_Error, r);
-        }
-      }
+      yield call(new RGWSimpleRadosLockCR(async_rados, store, pool, oid, lock_name, cookie, interval));
+
       caller->set_sleeping(false); /* will only be relevant when we return, that's why we can do it early */
       if (retcode < 0) {
         set_locked(false);
@@ -525,13 +520,7 @@ int RGWContinuousLeaseCR::operate()
       yield wait(utime_t(interval / 2, 0));
     }
     set_locked(false); /* moot at this point anyway */
-    yield {
-      int r = call(new RGWSimpleRadosUnlockCR(async_rados, store, pool, oid, lock_name, cookie));
-      if (r < 0) {
-        ldout(store->ctx(), 0) << *this << ": ERROR: failed to call RGWSimpleRadosUnlockCR()" << dendl;
-        return set_state(RGWCoroutine_Error, r);
-      }
-    }
+    yield call(new RGWSimpleRadosUnlockCR(async_rados, store, pool, oid, lock_name, cookie));
     return set_state(RGWCoroutine_Done);
   }
   return 0;
