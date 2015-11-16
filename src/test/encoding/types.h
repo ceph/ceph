@@ -111,7 +111,7 @@ TYPE(ObjectStore::Transaction)
 #include "os/SequencerPosition.h"
 TYPE(SequencerPosition)
 
-#include "os/newstore/newstore_types.h"
+#include "os/bluestore/bluestore_types.h"
 TYPE(cnode_t)
 TYPE(extent_t)
 TYPE(overlay_t)

@@ -19,7 +19,7 @@
 #include <fcntl.h>
 #include <unistd.h>
 
-#include "NewStore.h"
+#include "BlueStore.h"
 #include "kv.h"
 #include "include/compat.h"
 #include "include/stringify.h"
@@ -28,7 +28,7 @@
 #include "Allocator.h"
 #include "FreelistManager.h"
 
-#define dout_subsys ceph_subsys_newstore
+#define dout_subsys ceph_subsys_bluestore
 
 /*
 
@@ -426,18 +426,18 @@ void get_wal_key(uint64_t seq, string *out)
 // Onode
 
 #undef dout_prefix
-#define dout_prefix *_dout << "newstore.onode(" << this << ") "
+#define dout_prefix *_dout << "bluestore.onode(" << this << ") "
 
-NewStore::Onode::Onode(const ghobject_t& o, const string& k)
+BlueStore::Onode::Onode(const ghobject_t& o, const string& k)
   : nref(0),
     oid(o),
     key(k),
     dirty(false),
     exists(true),
-    flush_lock("NewStore::Onode::flush_lock") {
+    flush_lock("BlueStore::Onode::flush_lock") {
 }
 
-void NewStore::Onode::flush()
+void BlueStore::Onode::flush()
 {
   Mutex::Locker l(flush_lock);
   dout(20) << __func__ << " " << flush_txns << dendl;
@@ -449,16 +449,16 @@ void NewStore::Onode::flush()
 // OnodeHashLRU
 
 #undef dout_prefix
-#define dout_prefix *_dout << "newstore.lru(" << this << ") "
+#define dout_prefix *_dout << "bluestore.lru(" << this << ") "
 
-void NewStore::OnodeHashLRU::_touch(OnodeRef o)
+void BlueStore::OnodeHashLRU::_touch(OnodeRef o)
 {
   lru_list_t::iterator p = lru.iterator_to(*o);
   lru.erase(p);
   lru.push_front(*o);
 }
 
-void NewStore::OnodeHashLRU::add(const ghobject_t& oid, OnodeRef o)
+void BlueStore::OnodeHashLRU::add(const ghobject_t& oid, OnodeRef o)
 {
   Mutex::Locker l(lock);
   dout(30) << __func__ << " " << oid << " " << o << dendl;
@@ -467,7 +467,7 @@ void NewStore::OnodeHashLRU::add(const ghobject_t& oid, OnodeRef o)
   lru.push_back(*o);
 }
 
-NewStore::OnodeRef NewStore::OnodeHashLRU::lookup(const ghobject_t& oid)
+BlueStore::OnodeRef BlueStore::OnodeHashLRU::lookup(const ghobject_t& oid)
 {
   Mutex::Locker l(lock);
   dout(30) << __func__ << dendl;
@@ -481,7 +481,7 @@ NewStore::OnodeRef NewStore::OnodeHashLRU::lookup(const ghobject_t& oid)
   return p->second;
 }
 
-void NewStore::OnodeHashLRU::clear()
+void BlueStore::OnodeHashLRU::clear()
 {
   Mutex::Locker l(lock);
   dout(10) << __func__ << dendl;
@@ -489,7 +489,7 @@ void NewStore::OnodeHashLRU::clear()
   onode_map.clear();
 }
 
-void NewStore::OnodeHashLRU::remove(const ghobject_t& oid)
+void BlueStore::OnodeHashLRU::remove(const ghobject_t& oid)
 {
   Mutex::Locker l(lock);
   ceph::unordered_map<ghobject_t,OnodeRef>::iterator p = onode_map.find(oid);
@@ -503,7 +503,7 @@ void NewStore::OnodeHashLRU::remove(const ghobject_t& oid)
   onode_map.erase(p);
 }
 
-void NewStore::OnodeHashLRU::rename(const ghobject_t& old_oid,
+void BlueStore::OnodeHashLRU::rename(const ghobject_t& old_oid,
 				    const ghobject_t& new_oid)
 {
   Mutex::Locker l(lock);
@@ -523,7 +523,7 @@ void NewStore::OnodeHashLRU::rename(const ghobject_t& old_oid,
   onode_map.erase(po);
 }
 
-bool NewStore::OnodeHashLRU::get_next(
+bool BlueStore::OnodeHashLRU::get_next(
   const ghobject_t& after,
   pair<ghobject_t,OnodeRef> *next)
 {
@@ -553,7 +553,7 @@ bool NewStore::OnodeHashLRU::get_next(
   return true;
 }
 
-int NewStore::OnodeHashLRU::trim(int max)
+int BlueStore::OnodeHashLRU::trim(int max)
 {
   Mutex::Locker l(lock);
   dout(20) << __func__ << " max " << max
@@ -592,17 +592,17 @@ int NewStore::OnodeHashLRU::trim(int max)
 // Collection
 
 #undef dout_prefix
-#define dout_prefix *_dout << "newstore(" << store->path << ").collection(" << cid << ") "
+#define dout_prefix *_dout << "bluestore(" << store->path << ").collection(" << cid << ") "
 
-NewStore::Collection::Collection(NewStore *ns, coll_t c)
+BlueStore::Collection::Collection(BlueStore *ns, coll_t c)
   : store(ns),
     cid(c),
-    lock("NewStore::Collection::lock"),
+    lock("BlueStore::Collection::lock"),
     onode_map()
 {
 }
 
-NewStore::OnodeRef NewStore::Collection::get_onode(
+BlueStore::OnodeRef BlueStore::Collection::get_onode(
   const ghobject_t& oid,
   bool create)
 {
@@ -656,16 +656,16 @@ NewStore::OnodeRef NewStore::Collection::get_onode(
 // =======================================================
 
 #undef dout_prefix
-#define dout_prefix *_dout << "newstore(" << path << ") "
+#define dout_prefix *_dout << "bluestore(" << path << ") "
 
 
 void aio_cb(void *priv, void *priv2)
 {
-  NewStore *store = static_cast<NewStore*>(priv);
+  BlueStore *store = static_cast<BlueStore*>(priv);
   store->_txc_aio_finish(priv2);
 }
 
-NewStore::NewStore(CephContext *cct, const string& path)
+BlueStore::BlueStore(CephContext *cct, const string& path)
   : ObjectStore(path),
     cct(cct),
     db(NULL),
@@ -676,38 +676,38 @@ NewStore::NewStore(CephContext *cct, const string& path)
     path_fd(-1),
     fsid_fd(-1),
     mounted(false),
-    coll_lock("NewStore::coll_lock"),
-    nid_lock("NewStore::nid_lock"),
+    coll_lock("BlueStore::coll_lock"),
+    nid_lock("BlueStore::nid_lock"),
     nid_max(0),
-    throttle_ops(cct, "newstore_max_ops", cct->_conf->newstore_max_ops),
-    throttle_bytes(cct, "newstore_max_bytes", cct->_conf->newstore_max_bytes),
-    throttle_wal_ops(cct, "newstore_wal_max_ops",
-		     cct->_conf->newstore_max_ops +
-		     cct->_conf->newstore_wal_max_ops),
-    throttle_wal_bytes(cct, "newstore_wal_max_bytes",
-		       cct->_conf->newstore_max_bytes +
-		       cct->_conf->newstore_wal_max_bytes),
-    wal_lock("NewStore::wal_lock"),
+    throttle_ops(cct, "bluestore_max_ops", cct->_conf->bluestore_max_ops),
+    throttle_bytes(cct, "bluestore_max_bytes", cct->_conf->bluestore_max_bytes),
+    throttle_wal_ops(cct, "bluestore_wal_max_ops",
+		     cct->_conf->bluestore_max_ops +
+		     cct->_conf->bluestore_wal_max_ops),
+    throttle_wal_bytes(cct, "bluestore_wal_max_bytes",
+		       cct->_conf->bluestore_max_bytes +
+		       cct->_conf->bluestore_wal_max_bytes),
+    wal_lock("BlueStore::wal_lock"),
     wal_seq(0),
     wal_tp(cct,
-	   "NewStore::wal_tp",
-	   cct->_conf->newstore_wal_threads,
-	   "newstore_wal_threads"),
+	   "BlueStore::wal_tp",
+	   cct->_conf->bluestore_wal_threads,
+	   "bluestore_wal_threads"),
     wal_wq(this,
-	     cct->_conf->newstore_wal_thread_timeout,
-	     cct->_conf->newstore_wal_thread_suicide_timeout,
+	     cct->_conf->bluestore_wal_thread_timeout,
+	     cct->_conf->bluestore_wal_thread_suicide_timeout,
 	     &wal_tp),
     finisher(cct),
     kv_sync_thread(this),
-    kv_lock("NewStore::kv_lock"),
+    kv_lock("BlueStore::kv_lock"),
     kv_stop(false),
     logger(NULL),
-    reap_lock("NewStore::reap_lock")
+    reap_lock("BlueStore::reap_lock")
 {
   _init_logger();
 }
 
-NewStore::~NewStore()
+BlueStore::~BlueStore()
 {
   _shutdown_logger();
   assert(!mounted);
@@ -715,22 +715,22 @@ NewStore::~NewStore()
   assert(fsid_fd < 0);
 }
 
-void NewStore::_init_logger()
+void BlueStore::_init_logger()
 {
   // XXX
 }
 
-void NewStore::_shutdown_logger()
+void BlueStore::_shutdown_logger()
 {
   // XXX
 }
 
-int NewStore::peek_journal_fsid(uuid_d *fsid)
+int BlueStore::peek_journal_fsid(uuid_d *fsid)
 {
   return 0;
 }
 
-int NewStore::_open_path()
+int BlueStore::_open_path()
 {
   assert(path_fd < 0);
   path_fd = ::open(path.c_str(), O_DIRECTORY);
@@ -746,7 +746,7 @@ int NewStore::_open_path()
   return 0;
 }
 
-void NewStore::_close_path()
+void BlueStore::_close_path()
 {
   VOID_TEMP_FAILURE_RETRY(::close(path_fd));
   path_fd = -1;
@@ -754,7 +754,7 @@ void NewStore::_close_path()
   fs = NULL;
 }
 
-int NewStore::_open_bdev()
+int BlueStore::_open_bdev()
 {
   assert(bdev == NULL);
   bdev = new BlockDevice(aio_cb, static_cast<void*>(this));
@@ -767,7 +767,7 @@ int NewStore::_open_bdev()
   return r;
 }
 
-void NewStore::_close_bdev()
+void BlueStore::_close_bdev()
 {
   assert(bdev);
   bdev->close();
@@ -775,7 +775,7 @@ void NewStore::_close_bdev()
   bdev = NULL;
 }
 
-int NewStore::_open_alloc()
+int BlueStore::_open_alloc()
 {
   assert(fm == NULL);
   assert(alloc == NULL);
@@ -799,7 +799,7 @@ int NewStore::_open_alloc()
   return r;
 }
 
-void NewStore::_close_alloc()
+void BlueStore::_close_alloc()
 {
   assert(fm);
   assert(alloc);
@@ -811,7 +811,7 @@ void NewStore::_close_alloc()
   fm = NULL;
 }
 
-int NewStore::_open_fsid(bool create)
+int BlueStore::_open_fsid(bool create)
 {
   assert(fsid_fd < 0);
   int flags = O_RDWR;
@@ -826,7 +826,7 @@ int NewStore::_open_fsid(bool create)
   return 0;
 }
 
-int NewStore::_read_fsid(uuid_d *uuid)
+int BlueStore::_read_fsid(uuid_d *uuid)
 {
   char fsid_str[40];
   int ret = safe_read(fsid_fd, fsid_str, sizeof(fsid_str));
@@ -841,7 +841,7 @@ int NewStore::_read_fsid(uuid_d *uuid)
   return 0;
 }
 
-int NewStore::_write_fsid()
+int BlueStore::_write_fsid()
 {
   int r = ::ftruncate(fsid_fd, 0);
   if (r < 0) {
@@ -863,13 +863,13 @@ int NewStore::_write_fsid()
   return 0;
 }
 
-void NewStore::_close_fsid()
+void BlueStore::_close_fsid()
 {
   VOID_TEMP_FAILURE_RETRY(::close(fsid_fd));
   fsid_fd = -1;
 }
 
-int NewStore::_lock_fsid()
+int BlueStore::_lock_fsid()
 {
   struct flock l;
   memset(&l, 0, sizeof(l));
@@ -888,7 +888,7 @@ int NewStore::_lock_fsid()
   return 0;
 }
 
-bool NewStore::test_mount_in_use()
+bool BlueStore::test_mount_in_use()
 {
   // most error conditions mean the mount is not in use (e.g., because
   // it doesn't exist).  only if we fail to lock do we conclude it is
@@ -909,7 +909,7 @@ bool NewStore::test_mount_in_use()
   return ret;
 }
 
-int NewStore::_open_db(bool create)
+int BlueStore::_open_db(bool create)
 {
   assert(!db);
   char fn[PATH_MAX];
@@ -938,7 +938,7 @@ int NewStore::_open_db(bool create)
     }
   }
   db = KeyValueDB::create(g_ceph_context,
-			  g_conf->newstore_backend,
+			  g_conf->bluestore_backend,
 			  fn);
   if (!db) {
     derr << __func__ << " error creating db" << dendl;
@@ -947,8 +947,8 @@ int NewStore::_open_db(bool create)
     return -EIO;
   }
   string options;
-  if (g_conf->newstore_backend == "rocksdb")
-    options = g_conf->newstore_rocksdb_options;
+  if (g_conf->bluestore_backend == "rocksdb")
+    options = g_conf->bluestore_rocksdb_options;
   db->init(options);
   stringstream err;
   int r;
@@ -962,7 +962,7 @@ int NewStore::_open_db(bool create)
     db = NULL;
     return -EIO;
   }
-  dout(1) << __func__ << " opened " << g_conf->newstore_backend
+  dout(1) << __func__ << " opened " << g_conf->bluestore_backend
 	  << " path " << fn << " options " << options << dendl;
 
   if (create) {
@@ -981,14 +981,14 @@ int NewStore::_open_db(bool create)
   return 0;
 }
 
-void NewStore::_close_db()
+void BlueStore::_close_db()
 {
   assert(db);
   delete db;
   db = NULL;
 }
 
-int NewStore::_open_collections(int *errors)
+int BlueStore::_open_collections(int *errors)
 {
   KeyValueDB::Iterator it = db->get_iterator(PREFIX_COLL);
   for (it->upper_bound(string());
@@ -1012,7 +1012,7 @@ int NewStore::_open_collections(int *errors)
   return 0;
 }
 
-int NewStore::mkfs()
+int BlueStore::mkfs()
 {
   dout(1) << __func__ << " path " << path << dendl;
   int r;
@@ -1053,15 +1053,15 @@ int NewStore::mkfs()
   }
 
   // block device
-  if (g_conf->newstore_block_path.length()) {
-    int r = ::symlinkat(g_conf->newstore_block_path.c_str(), path_fd, "block");
+  if (g_conf->bluestore_block_path.length()) {
+    int r = ::symlinkat(g_conf->bluestore_block_path.c_str(), path_fd, "block");
     if (r < 0) {
       r = -errno;
       derr << __func__ << " failed to create block symlink to "
-	   << g_conf->newstore_block_path << ": " << cpp_strerror(r) << dendl;
+	   << g_conf->bluestore_block_path << ": " << cpp_strerror(r) << dendl;
       goto out_close_fsid;
     }
-  } else if (g_conf->newstore_block_size) {
+  } else if (g_conf->bluestore_block_size) {
     struct stat st;
     int r = ::fstatat(path_fd, "block", &st, 0);
     if (r < 0)
@@ -1074,10 +1074,10 @@ int NewStore::mkfs()
 	     << dendl;
 	goto out_close_fsid;
       }
-      int r = ::ftruncate(fd, g_conf->newstore_block_size);
+      int r = ::ftruncate(fd, g_conf->bluestore_block_size);
       assert(r == 0);
       dout(1) << __func__ << " created block file with size "
-	      << pretty_si_t(g_conf->newstore_block_size) << "B" << dendl;
+	      << pretty_si_t(g_conf->bluestore_block_size) << "B" << dendl;
     }
   }
 
@@ -1118,11 +1118,11 @@ int NewStore::mkfs()
   return r;
 }
 
-int NewStore::mount()
+int BlueStore::mount()
 {
   dout(1) << __func__ << " path " << path << dendl;
 
-  if (g_conf->newstore_fsck_on_mount) {
+  if (g_conf->bluestore_fsck_on_mount) {
     int rc = fsck();
     if (rc < 0)
       return rc;
@@ -1192,7 +1192,7 @@ int NewStore::mount()
   return r;
 }
 
-int NewStore::umount()
+int BlueStore::umount()
 {
   assert(mounted);
   dout(1) << __func__ << dendl;
@@ -1221,7 +1221,7 @@ int NewStore::umount()
   return 0;
 }
 
-int NewStore::fsck()
+int BlueStore::fsck()
 {
   dout(1) << __func__ << dendl;
   int errors = 0;
@@ -1522,7 +1522,7 @@ int NewStore::fsck()
   return errors;
 }
 
-void NewStore::_sync()
+void BlueStore::_sync()
 {
   dout(10) << __func__ << dendl;
 
@@ -1540,7 +1540,7 @@ void NewStore::_sync()
   dout(10) << __func__ << " done" << dendl;
 }
 
-int NewStore::statfs(struct statfs *buf)
+int BlueStore::statfs(struct statfs *buf)
 {
   memset(buf, 0, sizeof(*buf));
   buf->f_blocks = bdev->get_size() / bdev->get_block_size();
@@ -1552,7 +1552,7 @@ int NewStore::statfs(struct statfs *buf)
   struct statfs fs;
   if (::statfs(path.c_str(), &fs) < 0) {
     int r = -errno;
-    assert(!g_conf->newstore_fail_eio || r != -EIO);
+    assert(!g_conf->bluestore_fail_eio || r != -EIO);
     return r;
   }
   */
@@ -1563,7 +1563,7 @@ int NewStore::statfs(struct statfs *buf)
 // ---------------
 // cache
 
-NewStore::CollectionRef NewStore::_get_collection(coll_t cid)
+BlueStore::CollectionRef BlueStore::_get_collection(coll_t cid)
 {
   RWLock::RLocker l(coll_lock);
   ceph::unordered_map<coll_t,CollectionRef>::iterator cp = coll_map.find(cid);
@@ -1572,14 +1572,14 @@ NewStore::CollectionRef NewStore::_get_collection(coll_t cid)
   return cp->second;
 }
 
-void NewStore::_queue_reap_collection(CollectionRef& c)
+void BlueStore::_queue_reap_collection(CollectionRef& c)
 {
   dout(10) << __func__ << " " << c->cid << dendl;
   Mutex::Locker l(reap_lock);
   removed_collections.push_back(c);
 }
 
-void NewStore::_reap_collections()
+void BlueStore::_reap_collections()
 {
   reap_lock.Lock();
 
@@ -1614,7 +1614,7 @@ void NewStore::_reap_collections()
 // ---------------
 // read operations
 
-bool NewStore::exists(coll_t cid, const ghobject_t& oid)
+bool BlueStore::exists(coll_t cid, const ghobject_t& oid)
 {
   dout(10) << __func__ << " " << cid << " " << oid << dendl;
   CollectionRef c = _get_collection(cid);
@@ -1627,7 +1627,7 @@ bool NewStore::exists(coll_t cid, const ghobject_t& oid)
   return true;
 }
 
-int NewStore::stat(
+int BlueStore::stat(
     coll_t cid,
     const ghobject_t& oid,
     struct stat *st,
@@ -1648,7 +1648,7 @@ int NewStore::stat(
   return 0;
 }
 
-int NewStore::read(
+int BlueStore::read(
   coll_t cid,
   const ghobject_t& oid,
   uint64_t offset,
@@ -1686,7 +1686,7 @@ int NewStore::read(
   return r;
 }
 
-int NewStore::_do_read(
+int BlueStore::_do_read(
     OnodeRef o,
     uint64_t offset,
     size_t length,
@@ -1819,7 +1819,7 @@ int NewStore::_do_read(
   return r;
 }
 
-int NewStore::fiemap(
+int BlueStore::fiemap(
   coll_t cid,
   const ghobject_t& oid,
   uint64_t offset,
@@ -1924,7 +1924,7 @@ int NewStore::fiemap(
   return 0;
 }
 
-int NewStore::getattr(
+int BlueStore::getattr(
   coll_t cid,
   const ghobject_t& oid,
   const char *name,
@@ -1956,7 +1956,7 @@ int NewStore::getattr(
   return r;
 }
 
-int NewStore::getattrs(
+int BlueStore::getattrs(
   coll_t cid,
   const ghobject_t& oid,
   map<string,bufferptr>& aset)
@@ -1981,7 +1981,7 @@ int NewStore::getattrs(
   return r;
 }
 
-int NewStore::list_collections(vector<coll_t>& ls)
+int BlueStore::list_collections(vector<coll_t>& ls)
 {
   RWLock::RLocker l(coll_lock);
   for (ceph::unordered_map<coll_t, CollectionRef>::iterator p = coll_map.begin();
@@ -1991,13 +1991,13 @@ int NewStore::list_collections(vector<coll_t>& ls)
   return 0;
 }
 
-bool NewStore::collection_exists(coll_t c)
+bool BlueStore::collection_exists(coll_t c)
 {
   RWLock::RLocker l(coll_lock);
   return coll_map.count(c);
 }
 
-bool NewStore::collection_empty(coll_t cid)
+bool BlueStore::collection_empty(coll_t cid)
 {
   dout(15) << __func__ << " " << cid << dendl;
   vector<ghobject_t> ls;
@@ -2011,7 +2011,7 @@ bool NewStore::collection_empty(coll_t cid)
   return empty;
 }
 
-int NewStore::collection_list(
+int BlueStore::collection_list(
   coll_t cid, ghobject_t start, ghobject_t end,
   bool sort_bitwise, int max,
   vector<ghobject_t> *ls, ghobject_t *pnext)
@@ -2124,7 +2124,7 @@ int NewStore::collection_list(
 
 // omap reads
 
-NewStore::OmapIteratorImpl::OmapIteratorImpl(CollectionRef c, OnodeRef o, KeyValueDB::Iterator it)
+BlueStore::OmapIteratorImpl::OmapIteratorImpl(CollectionRef c, OnodeRef o, KeyValueDB::Iterator it)
   : c(c), o(o), it(it)
 {
   RWLock::RLocker l(c->lock);
@@ -2135,7 +2135,7 @@ NewStore::OmapIteratorImpl::OmapIteratorImpl(CollectionRef c, OnodeRef o, KeyVal
   }
 }
 
-int NewStore::OmapIteratorImpl::seek_to_first()
+int BlueStore::OmapIteratorImpl::seek_to_first()
 {
   RWLock::RLocker l(c->lock);
   if (o->onode.omap_head) {
@@ -2146,7 +2146,7 @@ int NewStore::OmapIteratorImpl::seek_to_first()
   return 0;
 }
 
-int NewStore::OmapIteratorImpl::upper_bound(const string& after)
+int BlueStore::OmapIteratorImpl::upper_bound(const string& after)
 {
   RWLock::RLocker l(c->lock);
   if (o->onode.omap_head) {
@@ -2159,7 +2159,7 @@ int NewStore::OmapIteratorImpl::upper_bound(const string& after)
   return 0;
 }
 
-int NewStore::OmapIteratorImpl::lower_bound(const string& to)
+int BlueStore::OmapIteratorImpl::lower_bound(const string& to)
 {
   RWLock::RLocker l(c->lock);
   if (o->onode.omap_head) {
@@ -2172,7 +2172,7 @@ int NewStore::OmapIteratorImpl::lower_bound(const string& to)
   return 0;
 }
 
-bool NewStore::OmapIteratorImpl::valid()
+bool BlueStore::OmapIteratorImpl::valid()
 {
   RWLock::RLocker l(c->lock);
   if (o->onode.omap_head && it->valid() && it->raw_key().second <= tail) {
@@ -2182,7 +2182,7 @@ bool NewStore::OmapIteratorImpl::valid()
   }
 }
 
-int NewStore::OmapIteratorImpl::next(bool validate)
+int BlueStore::OmapIteratorImpl::next(bool validate)
 {
   RWLock::RLocker l(c->lock);
   if (o->onode.omap_head) {
@@ -2193,7 +2193,7 @@ int NewStore::OmapIteratorImpl::next(bool validate)
   }
 }
 
-string NewStore::OmapIteratorImpl::key()
+string BlueStore::OmapIteratorImpl::key()
 {
   RWLock::RLocker l(c->lock);
   assert(it->valid());
@@ -2203,14 +2203,14 @@ string NewStore::OmapIteratorImpl::key()
   return user_key;
 }
 
-bufferlist NewStore::OmapIteratorImpl::value()
+bufferlist BlueStore::OmapIteratorImpl::value()
 {
   RWLock::RLocker l(c->lock);
   assert(it->valid());
   return it->value();
 }
 
-int NewStore::omap_get(
+int BlueStore::omap_get(
   coll_t cid,                ///< [in] Collection containing oid
   const ghobject_t &oid,   ///< [in] Object containing omap
   bufferlist *header,      ///< [out] omap header
@@ -2260,7 +2260,7 @@ int NewStore::omap_get(
   return r;
 }
 
-int NewStore::omap_get_header(
+int BlueStore::omap_get_header(
   coll_t cid,                ///< [in] Collection containing oid
   const ghobject_t &oid,   ///< [in] Object containing omap
   bufferlist *header,      ///< [out] omap header
@@ -2295,7 +2295,7 @@ int NewStore::omap_get_header(
   return r;
 }
 
-int NewStore::omap_get_keys(
+int BlueStore::omap_get_keys(
   coll_t cid,              ///< [in] Collection containing oid
   const ghobject_t &oid, ///< [in] Object containing omap
   set<string> *keys      ///< [out] Keys defined on oid
@@ -2345,7 +2345,7 @@ int NewStore::omap_get_keys(
   return r;
 }
 
-int NewStore::omap_get_values(
+int BlueStore::omap_get_values(
   coll_t cid,                    ///< [in] Collection containing oid
   const ghobject_t &oid,       ///< [in] Object containing omap
   const set<string> &keys,     ///< [in] Keys to get
@@ -2381,7 +2381,7 @@ int NewStore::omap_get_values(
   return r;
 }
 
-int NewStore::omap_check_keys(
+int BlueStore::omap_check_keys(
   coll_t cid,                ///< [in] Collection containing oid
   const ghobject_t &oid,   ///< [in] Object containing omap
   const set<string> &keys, ///< [in] Keys to check
@@ -2420,7 +2420,7 @@ int NewStore::omap_check_keys(
   return r;
 }
 
-ObjectMap::ObjectMapIterator NewStore::get_omap_iterator(
+ObjectMap::ObjectMapIterator BlueStore::get_omap_iterator(
   coll_t cid,              ///< [in] collection
   const ghobject_t &oid  ///< [in] object
   )
@@ -2448,7 +2448,7 @@ ObjectMap::ObjectMapIterator NewStore::get_omap_iterator(
 // -----------------
 // write helpers
 
-int NewStore::_recover_next_nid()
+int BlueStore::_recover_next_nid()
 {
   nid_max = 0;
   bufferlist bl;
@@ -2462,7 +2462,7 @@ int NewStore::_recover_next_nid()
   return 0;
 }
 
-void NewStore::_assign_nid(TransContext *txc, OnodeRef o)
+void BlueStore::_assign_nid(TransContext *txc, OnodeRef o)
 {
   if (o->onode.nid)
     return;
@@ -2470,7 +2470,7 @@ void NewStore::_assign_nid(TransContext *txc, OnodeRef o)
   o->onode.nid = ++nid_last;
   dout(20) << __func__ << " " << o->onode.nid << dendl;
   if (nid_last > nid_max) {
-    nid_max += g_conf->newstore_nid_prealloc;
+    nid_max += g_conf->bluestore_nid_prealloc;
     bufferlist bl;
     ::encode(nid_max, bl);
     txc->t->set(PREFIX_SUPER, "nid_max", bl);
@@ -2478,7 +2478,7 @@ void NewStore::_assign_nid(TransContext *txc, OnodeRef o)
   }
 }
 
-NewStore::TransContext *NewStore::_txc_create(OpSequencer *osr)
+BlueStore::TransContext *BlueStore::_txc_create(OpSequencer *osr)
 {
   TransContext *txc = new TransContext(osr);
   txc->t = db->get_transaction();
@@ -2487,12 +2487,12 @@ NewStore::TransContext *NewStore::_txc_create(OpSequencer *osr)
   return txc;
 }
 
-void NewStore::_txc_release(TransContext *txc, uint64_t offset, uint64_t length)
+void BlueStore::_txc_release(TransContext *txc, uint64_t offset, uint64_t length)
 {
   txc->released.insert(offset, length);
 }
 
-void NewStore::_txc_state_proc(TransContext *txc)
+void BlueStore::_txc_state_proc(TransContext *txc)
 {
   while (true) {
     dout(10) << __func__ << " txc " << txc
@@ -2513,9 +2513,9 @@ void NewStore::_txc_state_proc(TransContext *txc)
     case TransContext::STATE_IO_DONE:
       assert(txc->osr->qlock.is_locked());  // see _txc_finish_io
       txc->state = TransContext::STATE_KV_QUEUED;
-      if (!g_conf->newstore_sync_transaction) {
+      if (!g_conf->bluestore_sync_transaction) {
 	Mutex::Locker l(kv_lock);
-	if (g_conf->newstore_sync_submit_transaction) {
+	if (g_conf->bluestore_sync_submit_transaction) {
 	  db->submit_transaction(txc->t);
 	}
 	kv_queue.push_back(txc);
@@ -2533,7 +2533,7 @@ void NewStore::_txc_state_proc(TransContext *txc)
     case TransContext::STATE_KV_DONE:
       if (txc->wal_txn) {
 	txc->state = TransContext::STATE_WAL_QUEUED;
-	if (g_conf->newstore_sync_wal_apply) {
+	if (g_conf->bluestore_sync_wal_apply) {
 	  _wal_apply(txc);
 	} else {
 	  wal_wq.queue(txc);
@@ -2572,7 +2572,7 @@ void NewStore::_txc_state_proc(TransContext *txc)
   }
 }
 
-void NewStore::_txc_finish_io(TransContext *txc)
+void BlueStore::_txc_finish_io(TransContext *txc)
 {
   dout(20) << __func__ << " " << txc << dendl;
 
@@ -2604,7 +2604,7 @@ void NewStore::_txc_finish_io(TransContext *txc)
 	   p->state == TransContext::STATE_IO_DONE);
 }
 
-int NewStore::_txc_finalize(OpSequencer *osr, TransContext *txc)
+int BlueStore::_txc_finalize(OpSequencer *osr, TransContext *txc)
 {
   dout(20) << __func__ << " osr " << osr << " txc " << txc
 	   << " onodes " << txc->onodes << dendl;
@@ -2635,7 +2635,7 @@ int NewStore::_txc_finalize(OpSequencer *osr, TransContext *txc)
   return 0;
 }
 
-void NewStore::_txc_finish_kv(TransContext *txc)
+void BlueStore::_txc_finish_kv(TransContext *txc)
 {
   dout(20) << __func__ << " txc " << txc << dendl;
 
@@ -2661,7 +2661,7 @@ void NewStore::_txc_finish_kv(TransContext *txc)
   throttle_bytes.put(txc->bytes);
 }
 
-void NewStore::_txc_finish(TransContext *txc)
+void BlueStore::_txc_finish(TransContext *txc)
 {
   dout(20) << __func__ << " " << txc << " onodes " << txc->onodes << dendl;
   assert(txc->state == TransContext::STATE_FINISHING);
@@ -2697,7 +2697,7 @@ void NewStore::_txc_finish(TransContext *txc)
   _osr_reap_done(osr.get());
 }
 
-void NewStore::_osr_reap_done(OpSequencer *osr)
+void BlueStore::_osr_reap_done(OpSequencer *osr)
 {
   Mutex::Locker l(osr->qlock);
   dout(20) << __func__ << " osr " << osr << dendl;
@@ -2710,7 +2710,7 @@ void NewStore::_osr_reap_done(OpSequencer *osr)
     }
 
     if (txc->first_collection) {
-      txc->first_collection->onode_map.trim(g_conf->newstore_onode_map_size);
+      txc->first_collection->onode_map.trim(g_conf->bluestore_onode_map_size);
     }
 
     osr->q.pop_front();
@@ -2721,7 +2721,7 @@ void NewStore::_osr_reap_done(OpSequencer *osr)
   }
 }
 
-void NewStore::_kv_sync_thread()
+void BlueStore::_kv_sync_thread()
 {
   dout(10) << __func__ << " start" << dendl;
   kv_lock.Lock();
@@ -2804,7 +2804,7 @@ void NewStore::_kv_sync_thread()
       // flush/barrier on block device
       bdev->flush();
 
-      if (!g_conf->newstore_sync_submit_transaction) {
+      if (!g_conf->bluestore_sync_submit_transaction) {
 	for (std::deque<TransContext *>::iterator it = kv_committing.begin();
 	     it != kv_committing.end();
 	     ++it) {
@@ -2861,7 +2861,7 @@ void NewStore::_kv_sync_thread()
   dout(10) << __func__ << " finish" << dendl;
 }
 
-wal_op_t *NewStore::_get_wal_op(TransContext *txc, OnodeRef o)
+wal_op_t *BlueStore::_get_wal_op(TransContext *txc, OnodeRef o)
 {
   if (!txc->wal_txn) {
     txc->wal_txn = new wal_transaction_t;
@@ -2871,7 +2871,7 @@ wal_op_t *NewStore::_get_wal_op(TransContext *txc, OnodeRef o)
   return &txc->wal_txn->ops.back();
 }
 
-int NewStore::_wal_apply(TransContext *txc)
+int BlueStore::_wal_apply(TransContext *txc)
 {
   wal_transaction_t& wt = *txc->wal_txn;
   dout(20) << __func__ << " txc " << txc << " seq " << wt.seq << dendl;
@@ -2890,7 +2890,7 @@ int NewStore::_wal_apply(TransContext *txc)
   return 0;
 }
 
-int NewStore::_wal_finish(TransContext *txc)
+int BlueStore::_wal_finish(TransContext *txc)
 {
   wal_transaction_t& wt = *txc->wal_txn;
   dout(20) << __func__ << " txc " << " seq " << wt.seq << txc << dendl;
@@ -2902,7 +2902,7 @@ int NewStore::_wal_finish(TransContext *txc)
   return 0;
 }
 
-int NewStore::_do_wal_op(wal_op_t& wo, IOContext *ioc)
+int BlueStore::_do_wal_op(wal_op_t& wo, IOContext *ioc)
 {
   const uint64_t block_size = bdev->get_block_size();
   const uint64_t block_mask = ~(block_size - 1);
@@ -2996,7 +2996,7 @@ int NewStore::_do_wal_op(wal_op_t& wo, IOContext *ioc)
   return 0;
 }
 
-int NewStore::_wal_replay()
+int BlueStore::_wal_replay()
 {
   dout(10) << __func__ << " start" << dendl;
   OpSequencerRef osr = new OpSequencer;
@@ -3028,7 +3028,7 @@ int NewStore::_wal_replay()
 // ---------------------------
 // transactions
 
-int NewStore::queue_transactions(
+int BlueStore::queue_transactions(
     Sequencer *posr,
     list<Transaction*>& tls,
     TrackedOpRef op,
@@ -3080,13 +3080,13 @@ int NewStore::queue_transactions(
   return 0;
 }
 
-void NewStore::_txc_aio_submit(TransContext *txc)
+void BlueStore::_txc_aio_submit(TransContext *txc)
 {
   dout(10) << __func__ << " txc " << txc << dendl;
   bdev->aio_submit(&txc->ioc);
 }
 
-int NewStore::_txc_add_transaction(TransContext *txc, Transaction *t)
+int BlueStore::_txc_add_transaction(TransContext *txc, Transaction *t)
 {
   Transaction::iterator i = t->begin();
   int pos = 0;
@@ -3408,7 +3408,7 @@ int NewStore::_txc_add_transaction(TransContext *txc, Transaction *t)
 // -----------------
 // write operations
 
-int NewStore::_touch(TransContext *txc,
+int BlueStore::_touch(TransContext *txc,
 		     CollectionRef& c,
 		     const ghobject_t& oid)
 {
@@ -3424,7 +3424,7 @@ int NewStore::_touch(TransContext *txc,
   return r;
 }
 
-int NewStore::_do_overlay_clear(TransContext *txc,
+int BlueStore::_do_overlay_clear(TransContext *txc,
 				OnodeRef o)
 {
   dout(10) << __func__ << " " << o->oid << dendl;
@@ -3441,7 +3441,7 @@ int NewStore::_do_overlay_clear(TransContext *txc,
   return 0;
 }
 
-int NewStore::_do_overlay_trim(TransContext *txc,
+int BlueStore::_do_overlay_trim(TransContext *txc,
 			       OnodeRef o,
 			       uint64_t offset,
 			       uint64_t length)
@@ -3516,7 +3516,7 @@ int NewStore::_do_overlay_trim(TransContext *txc,
   return changed;
 }
 
-int NewStore::_do_overlay_write(TransContext *txc,
+int BlueStore::_do_overlay_write(TransContext *txc,
 				OnodeRef o,
 				uint64_t offset,
 				uint64_t length,
@@ -3539,7 +3539,7 @@ int NewStore::_do_overlay_write(TransContext *txc,
   return 0;
 }
 
-int NewStore::_do_write_overlays(TransContext *txc,
+int BlueStore::_do_write_overlays(TransContext *txc,
 				 OnodeRef o,
 				 uint64_t orig_offset,
 				 uint64_t orig_length)
@@ -3547,7 +3547,7 @@ int NewStore::_do_write_overlays(TransContext *txc,
   if (o->onode.overlay_map.empty())
     return 0;
 
-  uint64_t min_alloc_size = g_conf->newstore_min_alloc_size;
+  uint64_t min_alloc_size = g_conf->bluestore_min_alloc_size;
 
   uint64_t offset = 0;
   uint64_t length = 0;
@@ -3633,7 +3633,7 @@ int NewStore::_do_write_overlays(TransContext *txc,
   return 0;
 }
 
-void NewStore::_do_read_all_overlays(wal_op_t& wo)
+void BlueStore::_do_read_all_overlays(wal_op_t& wo)
 {
   for (vector<overlay_t>::iterator q = wo.overlays.begin();
        q != wo.overlays.end(); ++q) {
@@ -3647,7 +3647,7 @@ void NewStore::_do_read_all_overlays(wal_op_t& wo)
   return;
 }
 
-void NewStore::_dump_onode(OnodeRef o)
+void BlueStore::_dump_onode(OnodeRef o)
 {
   dout(30) << __func__ << " " << o
 	   << " nid " << o->onode.nid
@@ -3684,7 +3684,7 @@ void NewStore::_dump_onode(OnodeRef o)
   }
 }
 
-void NewStore::_pad_zeros(
+void BlueStore::_pad_zeros(
   OnodeRef o,
   bufferlist *bl, uint64_t *offset, uint64_t *length,
   uint64_t block_size)
@@ -3729,7 +3729,7 @@ void NewStore::_pad_zeros(
     bl->substr_of(old, 0, *length - back_copy);
     bl->append(tail);
     *length += back_pad;
-    if (end > o->onode.size && g_conf->newstore_cache_tails) {
+    if (end > o->onode.size && g_conf->bluestore_cache_tails) {
       o->tail_bl.clear();
       o->tail_bl.append(tail, 0, back_copy);
       o->tail_offset = end - back_copy;
@@ -3744,7 +3744,7 @@ void NewStore::_pad_zeros(
   *_dout << dendl;
 }
 
-int NewStore::_do_allocate(TransContext *txc,
+int BlueStore::_do_allocate(TransContext *txc,
 			   OnodeRef o,
 			   uint64_t orig_offset, uint64_t orig_length,
 			   uint32_t fadvise_flags,
@@ -3755,7 +3755,7 @@ int NewStore::_do_allocate(TransContext *txc,
 	   << " - have " << o->onode.size
 	   << " bytes in " << o->onode.block_map.size()
 	   << " extents" << dendl;
-  uint64_t min_alloc_size = g_conf->newstore_min_alloc_size;
+  uint64_t min_alloc_size = g_conf->bluestore_min_alloc_size;
 
   // start with any full blocks we will write
   uint64_t offset = orig_offset;
@@ -3915,14 +3915,14 @@ int NewStore::_do_allocate(TransContext *txc,
   return 0;
 }
 
-bool NewStore::_can_overlay_write(OnodeRef o, uint64_t length)
+bool BlueStore::_can_overlay_write(OnodeRef o, uint64_t length)
 {
   return
-    (int)o->onode.overlay_map.size() < g_conf->newstore_overlay_max &&
-    (int)length <= g_conf->newstore_overlay_max_length;
+    (int)o->onode.overlay_map.size() < g_conf->bluestore_overlay_max &&
+    (int)length <= g_conf->bluestore_overlay_max_length;
 }
 
-int NewStore::_do_write(TransContext *txc,
+int BlueStore::_do_write(TransContext *txc,
 			OnodeRef o,
 			uint64_t orig_offset, uint64_t orig_length,
 			bufferlist& orig_bl,
@@ -3944,7 +3944,7 @@ int NewStore::_do_write(TransContext *txc,
 
   uint64_t block_size = bdev->get_block_size();
   const uint64_t block_mask = ~(block_size - 1);
-  uint64_t min_alloc_size = g_conf->newstore_min_alloc_size;
+  uint64_t min_alloc_size = g_conf->bluestore_min_alloc_size;
   map<uint64_t, extent_t>::iterator bp;
   uint64_t length;
 
@@ -4143,7 +4143,7 @@ int NewStore::_do_write(TransContext *txc,
   return r;
 }
 
-int NewStore::_write(TransContext *txc,
+int BlueStore::_write(TransContext *txc,
 		     CollectionRef& c,
 		     const ghobject_t& oid,
 		     uint64_t offset, size_t length,
@@ -4165,7 +4165,7 @@ int NewStore::_write(TransContext *txc,
   return r;
 }
 
-int NewStore::_zero(TransContext *txc,
+int BlueStore::_zero(TransContext *txc,
 		    CollectionRef& c,
 		    const ghobject_t& oid,
 		    uint64_t offset, size_t length)
@@ -4229,10 +4229,10 @@ int NewStore::_zero(TransContext *txc,
   return r;
 }
 
-int NewStore::_do_truncate(TransContext *txc, OnodeRef o, uint64_t offset)
+int BlueStore::_do_truncate(TransContext *txc, OnodeRef o, uint64_t offset)
 {
   uint64_t block_size = bdev->get_block_size();
-  uint64_t min_alloc_size = g_conf->newstore_min_alloc_size;
+  uint64_t min_alloc_size = g_conf->bluestore_min_alloc_size;
   uint64_t alloc_end = ROUND_UP_TO(offset, min_alloc_size);
 
   // ensure any wal IO has completed before we truncate off any extents
@@ -4356,7 +4356,7 @@ int NewStore::_do_truncate(TransContext *txc, OnodeRef o, uint64_t offset)
   return 0;
 }
 
-int NewStore::_truncate(TransContext *txc,
+int BlueStore::_truncate(TransContext *txc,
 			CollectionRef& c,
 			const ghobject_t& oid,
 			uint64_t offset)
@@ -4381,7 +4381,7 @@ int NewStore::_truncate(TransContext *txc,
   return r;
 }
 
-int NewStore::_do_remove(TransContext *txc,
+int BlueStore::_do_remove(TransContext *txc,
 			 OnodeRef o)
 {
   string key;
@@ -4406,7 +4406,7 @@ int NewStore::_do_remove(TransContext *txc,
   return 0;
 }
 
-int NewStore::_remove(TransContext *txc,
+int BlueStore::_remove(TransContext *txc,
 		      CollectionRef& c,
 		      const ghobject_t& oid)
 {
@@ -4425,7 +4425,7 @@ int NewStore::_remove(TransContext *txc,
   return r;
 }
 
-int NewStore::_setattr(TransContext *txc,
+int BlueStore::_setattr(TransContext *txc,
 		       CollectionRef& c,
 		       const ghobject_t& oid,
 		       const string& name,
@@ -4453,7 +4453,7 @@ int NewStore::_setattr(TransContext *txc,
   return r;
 }
 
-int NewStore::_setattrs(TransContext *txc,
+int BlueStore::_setattrs(TransContext *txc,
 			CollectionRef& c,
 			const ghobject_t& oid,
 			const map<string,bufferptr>& aset)
@@ -4483,7 +4483,7 @@ int NewStore::_setattrs(TransContext *txc,
 }
 
 
-int NewStore::_rmattr(TransContext *txc,
+int BlueStore::_rmattr(TransContext *txc,
 		      CollectionRef& c,
 		      const ghobject_t& oid,
 		      const string& name)
@@ -4508,7 +4508,7 @@ int NewStore::_rmattr(TransContext *txc,
   return r;
 }
 
-int NewStore::_rmattrs(TransContext *txc,
+int BlueStore::_rmattrs(TransContext *txc,
 		       CollectionRef& c,
 		       const ghobject_t& oid)
 {
@@ -4530,7 +4530,7 @@ int NewStore::_rmattrs(TransContext *txc,
   return r;
 }
 
-void NewStore::_do_omap_clear(TransContext *txc, uint64_t id)
+void BlueStore::_do_omap_clear(TransContext *txc, uint64_t id)
 {
   KeyValueDB::Iterator it = db->get_iterator(PREFIX_OMAP);
   string prefix, tail;
@@ -4548,7 +4548,7 @@ void NewStore::_do_omap_clear(TransContext *txc, uint64_t id)
   }
 }
 
-int NewStore::_omap_clear(TransContext *txc,
+int BlueStore::_omap_clear(TransContext *txc,
 			  CollectionRef& c,
 			  const ghobject_t& oid)
 {
@@ -4571,7 +4571,7 @@ int NewStore::_omap_clear(TransContext *txc,
   return r;
 }
 
-int NewStore::_omap_setkeys(TransContext *txc,
+int BlueStore::_omap_setkeys(TransContext *txc,
 			    CollectionRef& c,
 			    const ghobject_t& oid,
 			    bufferlist &bl)
@@ -4610,7 +4610,7 @@ int NewStore::_omap_setkeys(TransContext *txc,
   return r;
 }
 
-int NewStore::_omap_setheader(TransContext *txc,
+int BlueStore::_omap_setheader(TransContext *txc,
 			      CollectionRef& c,
 			      const ghobject_t& oid,
 			      bufferlist& bl)
@@ -4638,7 +4638,7 @@ int NewStore::_omap_setheader(TransContext *txc,
   return r;
 }
 
-int NewStore::_omap_rmkeys(TransContext *txc,
+int BlueStore::_omap_rmkeys(TransContext *txc,
 			   CollectionRef& c,
 			   const ghobject_t& oid,
 			   bufferlist& bl)
@@ -4679,7 +4679,7 @@ int NewStore::_omap_rmkeys(TransContext *txc,
   return r;
 }
 
-int NewStore::_omap_rmkey_range(TransContext *txc,
+int BlueStore::_omap_rmkey_range(TransContext *txc,
 				CollectionRef& c,
 				const ghobject_t& oid,
 				const string& first, const string& last)
@@ -4720,7 +4720,7 @@ int NewStore::_omap_rmkey_range(TransContext *txc,
   return r;
 }
 
-int NewStore::_setallochint(TransContext *txc,
+int BlueStore::_setallochint(TransContext *txc,
 			    CollectionRef& c,
 			    const ghobject_t& oid,
 			    uint64_t expected_object_size,
@@ -4750,7 +4750,7 @@ int NewStore::_setallochint(TransContext *txc,
   return r;
 }
 
-int NewStore::_clone(TransContext *txc,
+int BlueStore::_clone(TransContext *txc,
 		     CollectionRef& c,
 		     const ghobject_t& old_oid,
 		     const ghobject_t& new_oid)
@@ -4826,7 +4826,7 @@ int NewStore::_clone(TransContext *txc,
   return r;
 }
 
-int NewStore::_clone_range(TransContext *txc,
+int BlueStore::_clone_range(TransContext *txc,
 			   CollectionRef& c,
 			   const ghobject_t& old_oid,
 			   const ghobject_t& new_oid,
@@ -4867,7 +4867,7 @@ int NewStore::_clone_range(TransContext *txc,
   return r;
 }
 
-int NewStore::_rename(TransContext *txc,
+int BlueStore::_rename(TransContext *txc,
 		      CollectionRef& c,
 		      const ghobject_t& old_oid,
 		      const ghobject_t& new_oid)
@@ -4913,7 +4913,7 @@ int NewStore::_rename(TransContext *txc,
 
 // collections
 
-int NewStore::_create_collection(
+int BlueStore::_create_collection(
   TransContext *txc,
   coll_t cid,
   unsigned bits,
@@ -4942,7 +4942,7 @@ int NewStore::_create_collection(
   return r;
 }
 
-int NewStore::_remove_collection(TransContext *txc, coll_t cid,
+int BlueStore::_remove_collection(TransContext *txc, coll_t cid,
 				 CollectionRef *c)
 {
   dout(15) << __func__ << " " << cid << dendl;
@@ -4974,7 +4974,7 @@ int NewStore::_remove_collection(TransContext *txc, coll_t cid,
   return r;
 }
 
-int NewStore::_split_collection(TransContext *txc,
+int BlueStore::_split_collection(TransContext *txc,
 				CollectionRef& c,
 				CollectionRef& d,
 				unsigned bits, int rem)
