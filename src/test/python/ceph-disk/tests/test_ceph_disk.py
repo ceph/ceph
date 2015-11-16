@@ -552,7 +552,6 @@ class TestCephDisk(object):
             assert {disk: [partition]} == ceph_disk.list_all_partitions([disk])
 
     def test_list_data(self):
-        args = ceph_disk.parse_args(['list'])
         #
         # a data partition that fails to mount is silently
         # ignored
@@ -602,10 +601,9 @@ class TestCephDisk(object):
                            'type': 'data',
                            'uuid': partition_uuid,
                        }]}]
-            assert expect == ceph_disk.list_devices(args)
+            assert expect == ceph_disk.list_devices(None)
 
     def test_list_dmcrypt_data(self):
-        args = ceph_disk.parse_args(['list'])
         partition_type2type = {
             ceph_disk.DMCRYPT_OSD_UUID: 'plain',
             ceph_disk.DMCRYPT_LUKS_OSD_UUID: 'LUKS',
@@ -660,7 +658,7 @@ class TestCephDisk(object):
                                'type': 'data',
                                'uuid': partition_uuid,
                            }]}]
-                assert expect == ceph_disk.list_devices(args)
+                assert expect == ceph_disk.list_devices(None)
                 #
                 # dmcrypt data partition with two holders
                 #
@@ -680,10 +678,9 @@ class TestCephDisk(object):
                                'type': 'data',
                                'uuid': partition_uuid,
                            }]}]
-                assert expect == ceph_disk.list_devices(args)
+                assert expect == ceph_disk.list_devices(None)
 
     def test_list_multipath(self):
-        args = ceph_disk.parse_args(['list'])
         #
         # multipath data partition
         #
@@ -726,7 +723,7 @@ class TestCephDisk(object):
                            'type': 'data',
                            'uuid': partition_uuid,
                        }]}]
-            assert expect == ceph_disk.list_devices(args)
+            assert expect == ceph_disk.list_devices(None)
             #
             # multipath journal partition
             #
@@ -743,7 +740,7 @@ class TestCephDisk(object):
                            'type': 'journal',
                            'uuid': journal_partition_uuid,
                        }]}]
-            assert expect == ceph_disk.list_devices(args)
+            assert expect == ceph_disk.list_devices(None)
 
     def test_list_dmcrypt(self):
         self.list(ceph_disk.DMCRYPT_OSD_UUID, ceph_disk.DMCRYPT_JOURNAL_UUID)
@@ -753,7 +750,6 @@ class TestCephDisk(object):
         self.list(ceph_disk.OSD_UUID, ceph_disk.JOURNAL_UUID)
 
     def list(self, data_ptype, journal_ptype):
-        args = ceph_disk.parse_args(['--verbose', 'list'])
         #
         # a single disk has a data partition and a journal
         # partition and the osd is active
@@ -882,10 +878,9 @@ class TestCephDisk(object):
                            'uuid': journal_uuid,
                        },
                                   ]}]
-            assert expect == ceph_disk.list_devices(args)
+            assert expect == ceph_disk.list_devices(None)
 
     def test_list_other(self):
-        args = ceph_disk.parse_args(['list'])
         #
         # not swap, unknown fs type, not mounted, with uuid
         #
@@ -922,7 +917,7 @@ class TestCephDisk(object):
                                        'ptype': partition_type,
                                        'type': 'other',
                                        'uuid': partition_uuid}]}]
-            assert expect == ceph_disk.list_devices(args)
+            assert expect == ceph_disk.list_devices(None)
         #
         # not swap, mounted, ext4 fs type, with uuid
         #
@@ -957,7 +952,7 @@ class TestCephDisk(object):
                                        'type': 'other',
                                        'uuid': partition_uuid,
                                    }]}]
-            assert expect == ceph_disk.list_devices(args)
+            assert expect == ceph_disk.list_devices(None)
 
         #
         # swap, with uuid
@@ -987,7 +982,7 @@ class TestCephDisk(object):
                                        'ptype': partition_type,
                                        'type': 'swap',
                                        'uuid': partition_uuid}]}]
-            assert expect == ceph_disk.list_devices(args)
+            assert expect == ceph_disk.list_devices(None)
 
         #
         # whole disk
@@ -1018,4 +1013,4 @@ class TestCephDisk(object):
                        'is_partition': False,
                        'ptype': 'unknown',
                        'type': 'other'}]
-            assert expect == ceph_disk.list_devices(args)
+            assert expect == ceph_disk.list_devices(None)
