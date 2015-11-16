@@ -812,10 +812,15 @@ int md_config_t::_get_val(const char *key, char **buf, int len) const
 }
 
 void md_config_t::get_all_keys(std::vector<std::string> *keys) const {
+  const std::string negative_flag_prefix("no_");
+
   keys->clear();
   keys->reserve(NUM_CONFIG_OPTIONS);
   for (size_t i = 0; i < NUM_CONFIG_OPTIONS; ++i) {
     keys->push_back(config_optionsp[i].name);
+    if (config_optionsp[i].type == OPT_BOOL) {
+      keys->push_back(negative_flag_prefix + config_optionsp[i].name);
+    }
   }
   for (int i = 0; i < subsys.get_num(); ++i) {
     keys->push_back("debug_" + subsys.get_name(i));
