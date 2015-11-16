@@ -17,6 +17,7 @@
 
 #include <ostream>
 #include "include/types.h"
+#include "include/interval_set.h"
 #include "common/hobject.h"
 
 namespace ceph {
@@ -36,81 +37,55 @@ struct cnode_t {
 };
 WRITE_CLASS_ENCODER(cnode_t)
 
-/// unique id for a local file
-struct fid_t {
-  uint32_t fset, fno;
-  string handle;
-  fid_t() : fset(0), fno(0) { }
-  fid_t(uint32_t s, uint32_t n) : fset(s), fno(n) { }
+/// extent: a byte extent back by the block device
+struct extent_t {
+  enum {
+    FLAG_UNWRITTEN = 1,   ///< extent is unwritten (and defined to be zero)
+//    FLAG_SHARED = 2,    ///< extent is shared by another object, and read-only
+  };
+  static string get_flags_string(unsigned flags);
+
+  uint64_t offset;
+  uint32_t length;
+  uint32_t flags;  /// or reserved
+
+  extent_t(uint64_t o=0, uint32_t l=0, uint32_t f=0)
+    : offset(o), length(l), flags(f) {}
+
+  uint64_t end() const {
+    return offset + length;
+  }
+
+  bool has_flag(unsigned f) const {
+    return flags & f;
+  }
+  void set_flag(unsigned f) {
+    flags |= f;
+  }
+  void clear_flag(unsigned f) {
+    flags &= ~f;
+  }
 
   void encode(bufferlist& bl) const {
-    ::encode(fset, bl);
-    ::encode(fno, bl);
-    ::encode(handle, bl);
+    ::encode(offset, bl);
+    ::encode(length, bl);
+    ::encode(flags, bl);
   }
   void decode(bufferlist::iterator& p) {
-    ::decode(fset, p);
-    ::decode(fno, p);
-    ::decode(handle, p);
+    ::decode(offset, p);
+    ::decode(length, p);
+    ::decode(flags, p);
   }
   void dump(Formatter *f) const;
-  static void generate_test_instances(list<fid_t*>& o);
+  static void generate_test_instances(list<extent_t*>& o);
 };
-WRITE_CLASS_ENCODER(fid_t)
+WRITE_CLASS_ENCODER(extent_t)
 
-static inline ostream& operator<<(ostream& out, const fid_t& fid) {
-  out << fid.fset << "/" << fid.fno;
-  if (fid.handle.length())
-    out << "~";
-  return out;
-}
+ostream& operator<<(ostream& out, const extent_t& bp);
 
-static inline bool operator==(const fid_t& a, const fid_t& b) {
-  return a.fset == b.fset && a.fno == b.fno && a.handle == b.handle;
-}
-static inline bool operator!=(const fid_t& a, const fid_t& b) {
-  return !(a == b);
-}
-
-struct fid_backpointer_t {
-  ghobject_t oid;
-  uint64_t nid;
-  uint64_t offset;
-
-  fid_backpointer_t() : nid(0), offset(0) {}
-  fid_backpointer_t(const ghobject_t& o, uint64_t n, uint64_t off)
-    : oid(o), nid(n), offset(off) {}
-
-  void encode(bufferlist& bl) const;
-  void decode(bufferlist::iterator& p);
-  void dump(Formatter *f) const;
-  static void generate_test_instances(list<fid_backpointer_t*>& o);
-};
-WRITE_CLASS_ENCODER(fid_backpointer_t)
-
-ostream& operator<<(ostream& out, const fid_backpointer_t& bp);
-
-/// fragment: a byte extent backed by a file
-struct fragment_t {
-  uint32_t offset;   ///< offset in file to first byte of this fragment
-  uint32_t length;   ///< length of fragment/extent
-  fid_t fid;         ///< file backing this fragment
-
-  fragment_t() : offset(0), length(0) {}
-  fragment_t(uint32_t o, uint32_t l) : offset(o), length(l) {}
-  fragment_t(uint32_t o, uint32_t l, fid_t f) : offset(o), length(l), fid(f) {}
-
-  void encode(bufferlist& bl) const;
-  void decode(bufferlist::iterator& p);
-  void dump(Formatter *f) const;
-  static void generate_test_instances(list<fragment_t*>& o);
-};
-WRITE_CLASS_ENCODER(fragment_t)
-
-ostream& operator<<(ostream& out, const fragment_t& o);
-
+/// overlay: a byte extent backed by kv pair, logically overlaying other content
 struct overlay_t {
-  uint64_t key;          ///< key (offset of start of original k/v pair)
+  uint64_t key;          ///< key (nid+key identify the kv pair in the kvdb)
   uint32_t value_offset; ///< offset in associated value for this extent
   uint32_t length;
 
@@ -133,13 +108,11 @@ struct onode_t {
   uint64_t nid;                        ///< numeric id (locally unique)
   uint64_t size;                       ///< object size
   map<string, bufferptr> attrs;        ///< attrs
-  map<uint64_t, fragment_t> data_map;  ///< data (offset to fragment mapping)
+  map<uint64_t, extent_t> block_map;   ///< block data
   map<uint64_t,overlay_t> overlay_map; ///< overlay data (stored in db)
-  set<uint64_t> shared_overlays;       ///< overlay keys that are shared
+  map<uint64_t,uint16_t> overlay_refs; ///< overlay keys ref counts (if >1)
   uint32_t last_overlay_key;           ///< key for next overlay
   uint64_t omap_head;                  ///< id for omap root node
-
-  uint32_t frag_size;                  ///< fixed fragment size
 
   uint32_t expected_object_size;
   uint32_t expected_write_size;
@@ -149,21 +122,51 @@ struct onode_t {
       size(0),
       last_overlay_key(0),
       omap_head(0),
-      frag_size(0),
       expected_object_size(0),
       expected_write_size(0) {}
 
-  map<uint64_t,fragment_t>::iterator find_fragment(uint64_t offset) {
-    map<uint64_t, fragment_t>::iterator fp = data_map.lower_bound(offset);
-    fp = data_map.lower_bound(offset);
-    if (fp != data_map.begin()) {
+  map<uint64_t,extent_t>::iterator find_extent(uint64_t offset) {
+    map<uint64_t,extent_t>::iterator fp = block_map.lower_bound(offset);
+    fp = block_map.lower_bound(offset);
+    if (fp != block_map.begin()) {
       --fp;
+      if (fp->first + fp->second.length <= offset) {
+	++fp;
+      }
     }
-    if (fp != data_map.end() &&
-	fp->first + fp->second.length <= offset) {
-      ++fp;
+    if (fp != block_map.end() && fp->first > offset)
+      return block_map.end();  // extent is past offset
+    return fp;
+  }
+
+  map<uint64_t,extent_t>::iterator seek_extent(uint64_t offset) {
+    map<uint64_t,extent_t>::iterator fp = block_map.lower_bound(offset);
+    fp = block_map.lower_bound(offset);
+    if (fp != block_map.begin()) {
+      --fp;
+      if (fp->first + fp->second.length <= offset) {
+	++fp;
+      }
     }
     return fp;
+  }
+
+  bool put_overlay_ref(uint64_t key) {
+    map<uint64_t,uint16_t>::iterator q = overlay_refs.find(key);
+    if (q == overlay_refs.end())
+      return true;
+    assert(q->second >= 2);
+    if (--q->second == 1) {
+      overlay_refs.erase(q);
+    }
+    return false;
+  }
+  void get_overlay_ref(uint64_t key) {
+    map<uint64_t,uint16_t>::iterator q = overlay_refs.find(key);
+    if (q == overlay_refs.end())
+      overlay_refs[key] = 2;
+    else
+      ++q->second;
   }
 
   void encode(bufferlist& bl) const;
@@ -178,18 +181,16 @@ WRITE_CLASS_ENCODER(onode_t)
 struct wal_op_t {
   typedef enum {
     OP_WRITE = 1,
-    OP_TRUNCATE = 3,
     OP_ZERO = 4,
-    OP_REMOVE = 5,
   } type_t;
   __u8 op;
-  fid_t fid;
-  uint64_t offset, length;
+  extent_t extent;
   bufferlist data;
   uint64_t nid;
   vector<overlay_t> overlays;
+  vector<uint64_t> removed_overlays;
 
-  wal_op_t() : offset(0), length(0), nid(0) {}
+  wal_op_t() : nid(0) {}
 
   void encode(bufferlist& bl) const;
   void decode(bufferlist::iterator& p);
@@ -203,21 +204,24 @@ WRITE_CLASS_ENCODER(wal_op_t)
 struct wal_transaction_t {
   uint64_t seq;
   list<wal_op_t> ops;
-  vector<string> shared_overlay_keys;
+  interval_set<uint64_t> released;  ///< allocations to release after wal
 
   int64_t _bytes;  ///< cached byte count
 
   wal_transaction_t() : _bytes(-1) {}
 
+#if 0
+  no users for htis
   uint64_t get_bytes() {
     if (_bytes < 0) {
       _bytes = 0;
       for (list<wal_op_t>::iterator p = ops.begin(); p != ops.end(); ++p) {
-	_bytes += p->length;
+	_bytes += p->extent.length;
       }
     }
     return _bytes;
   }
+#endif
 
   void encode(bufferlist& bl) const;
   void decode(bufferlist::iterator& p);
