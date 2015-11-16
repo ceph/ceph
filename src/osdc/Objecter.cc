@@ -801,10 +801,13 @@ void Objecter::handle_watch_notify(MWatchNotify *m)
 	info->notify_id != m->notify_id) {
       ldout(cct, 10) << __func__ << " reply notify " << m->notify_id
 		     << " != " << info->notify_id << ", ignoring" << dendl;
-    } else {
-      assert(info->on_notify_finish);
+    } else if (info->on_notify_finish) {
       info->notify_result_bl->claim(m->get_data());
       info->on_notify_finish->complete(m->return_code);
+
+      // if we race with reconnect we might get a second notify; only
+      // notify the caller once!
+      info->on_notify_finish = NULL;
     }
   } else {
     finisher->queue(new C_DoWatchNotify(this, info, m));
