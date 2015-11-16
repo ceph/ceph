@@ -1631,6 +1631,8 @@ void OSDMonitor::check_failures(utime_t now)
 
 bool OSDMonitor::check_failure(utime_t now, int target_osd, failure_info_t& fi)
 {
+  set<int> authorized_reporters;
+  string authorized_level = g_conf->mon_osd_reporter_authorized_level;
   utime_t orig_grace(g_conf->osd_heartbeat_grace, 0);
   utime_t max_failed_since = fi.get_failed_since();
   utime_t failed_for = now - max_failed_since;
@@ -1659,6 +1661,12 @@ bool OSDMonitor::check_failure(utime_t now, int target_osd, failure_info_t& fi)
     for (map<int,failure_reporter_t>::iterator p = fi.reporters.begin();
 	 p != fi.reporters.end();
 	 ++p) {
+      //get authorized reporter
+      map<string,string> reporter_loc = osdmap.crush->get_full_location(p->first);
+      int authorized_reporter = osdmap.crush->get_item_id(reporter_loc[authorized_level]);
+      assert(authorized_reporter != 0);
+      authorized_reporters.insert(authorized_reporter);
+
       const osd_xinfo_t& xi = osdmap.get_xinfo(p->first);
       utime_t elapsed = now - xi.down_stamp;
       double decay = exp((double)elapsed * decay_k);
@@ -1681,14 +1689,15 @@ bool OSDMonitor::check_failure(utime_t now, int target_osd, failure_info_t& fi)
     return true;
   }
 
+
   if (failed_for >= grace &&
-      ((int)fi.reporters.size() >= g_conf->mon_osd_min_down_reporters) &&
+      ((int)authorized_reporters.size() >= g_conf->mon_osd_min_down_reporters) &&
       (fi.num_reports >= g_conf->mon_osd_min_down_reports)) {
     dout(1) << " we have enough reports/reporters to mark osd." << target_osd << " down" << dendl;
     pending_inc.new_state[target_osd] = CEPH_OSD_UP;
 
     mon->clog->info() << osdmap.get_inst(target_osd) << " failed ("
-		     << fi.num_reports << " reports from " << (int)fi.reporters.size() << " peers after "
+		     << fi.num_reports << " reports from peers in " << (int)authorized_reporters.size() << " " <<authorized_level <<" after "
 		     << failed_for << " >= grace " << grace << ")\n";
     return true;
   }
