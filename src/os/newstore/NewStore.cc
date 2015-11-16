@@ -914,6 +914,16 @@ int NewStore::_open_db(bool create)
   assert(!db);
   char fn[PATH_MAX];
   snprintf(fn, sizeof(fn), "%s/db", path.c_str());
+  if (create) {
+    int r = ::mkdir(fn, 0755);
+    if (r < 0)
+      r = -errno;
+    if (r < 0 && r != -EEXIST) {
+      derr << __func__ << " failed to create " << fn << ": " << cpp_strerror(r)
+	   << dendl;
+      return r;
+    }
+  }
   db = KeyValueDB::create(g_ceph_context,
 			  g_conf->newstore_backend,
 			  fn);
@@ -940,7 +950,7 @@ int NewStore::_open_db(bool create)
     return -EIO;
   }
   dout(1) << __func__ << " opened " << g_conf->newstore_backend
-	  << " path " << path << " options " << options << dendl;
+	  << " path " << fn << " options " << options << dendl;
 
   if (create) {
     // blow it away
