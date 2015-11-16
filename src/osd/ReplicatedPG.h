@@ -389,12 +389,12 @@ public:
     const eversion_t &trim_to,
     const eversion_t &trim_rollback_to,
     bool transaction_applied,
-    ObjectStore::Transaction *t) {
+    ObjectStore::Transaction &t) {
     if (hset_history) {
       info.hit_set = *hset_history;
       dirty_info = true;
     }
-    append_log(logv, trim_to, trim_rollback_to, *t, transaction_applied);
+    append_log(logv, trim_to, trim_rollback_to, t, transaction_applied);
   }
 
   void op_applied(
@@ -531,7 +531,7 @@ public:
 
     int current_osd_subop_num;
 
-    PGBackend::PGTransaction *op_t;
+    PGBackend::PGTransactionUPtr op_t;
     vector<pg_log_entry_t> log;
     boost::optional<pg_hit_set_history_t> updated_hset_history;
 
@@ -640,7 +640,6 @@ public:
       ignore_cache(false), ignore_log_op_stats(false),
       bytes_written(0), bytes_read(0), user_at_version(0),
       current_osd_subop_num(0),
-      op_t(NULL),
       obc(obc),
       data_off(0), reply(NULL), pg(_pg),
       num_read(0),
@@ -663,7 +662,6 @@ public:
       ignore_cache(false), ignore_log_op_stats(false),
       bytes_written(0), bytes_read(0), user_at_version(0),
       current_osd_subop_num(0),
-      op_t(NULL),
       data_off(0), reply(NULL), pg(_pg),
       num_read(0),
       num_write(0),
@@ -808,8 +806,7 @@ protected:
    */
   void close_op_ctx(OpContext *ctx, int r) {
     release_op_ctx_locks(ctx);
-    delete ctx->op_t;
-    ctx->op_t = NULL;
+    ctx->op_t.reset();
     for (auto p = ctx->on_finish.begin();
 	 p != ctx->on_finish.end();
 	 ctx->on_finish.erase(p++)) {

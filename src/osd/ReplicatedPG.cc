@@ -2810,8 +2810,7 @@ void ReplicatedPG::execute_ctx(OpContext *ctx)
 
   // this method must be idempotent since we may call it several times
   // before we finally apply the resulting transaction.
-  delete ctx->op_t;
-  ctx->op_t = pgbackend->get_transaction();
+  ctx->op_t.reset(pgbackend->get_transaction());
 
   if (op->may_write() || op->may_cache()) {
     // snap
@@ -3364,7 +3363,7 @@ ReplicatedPG::OpContextUPtr ReplicatedPG::trim_object(const hobject_t &coid)
   ctx->release_snapset_obc = true;
   ctx->at_version = get_next_version();
 
-  PGBackend::PGTransaction *t = ctx->op_t;
+  PGBackend::PGTransaction *t = ctx->op_t.get();
  
   if (new_snaps.empty()) {
     // remove clone
@@ -4035,7 +4034,7 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 
   bool first_read = true;
 
-  PGBackend::PGTransaction* t = ctx->op_t;
+  PGBackend::PGTransaction* t = ctx->op_t.get();
 
   dout(10) << "do_osd_op " << soid << " " << ops << dendl;
 
@@ -5955,7 +5954,7 @@ inline int ReplicatedPG::_delete_oid(OpContext *ctx, bool no_whiteout)
   ObjectState& obs = ctx->new_obs;
   object_info_t& oi = obs.oi;
   const hobject_t& soid = oi.soid;
-  PGBackend::PGTransaction* t = ctx->op_t;
+  PGBackend::PGTransaction* t = ctx->op_t.get();
 
   if (!obs.exists || (obs.oi.is_whiteout() && !no_whiteout))
     return -ENOENT;
@@ -6029,7 +6028,7 @@ int ReplicatedPG::_rollback_to(OpContext *ctx, ceph_osd_op& op)
   ObjectState& obs = ctx->new_obs;
   object_info_t& oi = obs.oi;
   const hobject_t& soid = oi.soid;
-  PGBackend::PGTransaction* t = ctx->op_t;
+  PGBackend::PGTransaction* t = ctx->op_t.get();
   snapid_t snapid = (uint64_t)op.snap.snapid;
   hobject_t missing_oid;
 
@@ -6276,9 +6275,8 @@ void ReplicatedPG::make_writeable(OpContext *ctx)
     // prepend transaction to op_t
     PGBackend::PGTransaction *t = pgbackend->get_transaction();
     _make_clone(ctx, t, ctx->clone_obc, soid, coid, snap_oi);
-    t->append(ctx->op_t);
-    delete ctx->op_t;
-    ctx->op_t = t;
+    t->append(ctx->op_t.get());
+    ctx->op_t.reset(t);
     
     ctx->delta_stats.num_objects++;
     if (snap_oi->is_dirty()) {
@@ -6628,7 +6626,7 @@ void ReplicatedPG::finish_ctx(OpContext *ctx, int log_op_type, bool maintain_ssc
       ctx->op_t->touch(snapoid);
       attrs[OI_ATTR].claim(bv);
       attrs[SS_ATTR].claim(bss);
-      setattrs_maybe_cache(ctx->snapset_obc, ctx, ctx->op_t, attrs);
+      setattrs_maybe_cache(ctx->snapset_obc, ctx, ctx->op_t.get(), attrs);
       if (pool.info.require_rollback()) {
 	map<string, boost::optional<bufferlist> > to_set;
 	to_set[SS_ATTR];
@@ -6680,7 +6678,7 @@ void ReplicatedPG::finish_ctx(OpContext *ctx, int log_op_type, bool maintain_ssc
     } else {
       dout(10) << " no snapset (this is a clone)" << dendl;
     }
-    setattrs_maybe_cache(ctx->obc, ctx, ctx->op_t, attrs);
+    setattrs_maybe_cache(ctx->obc, ctx, ctx->op_t.get(), attrs);
 
     if (pool.info.require_rollback()) {
       set<string> changing;
@@ -7216,7 +7214,7 @@ void ReplicatedPG::process_copy_chunk(hobject_t oid, ceph_tid_t tid, int r)
     if (cop->temp_cursor.is_initial()) {
       ctx->new_temp_oid = cop->results.temp_oid;
     }
-    _write_copy_chunk(cop, ctx->op_t);
+    _write_copy_chunk(cop, ctx->op_t.get());
     simple_opc_submit(std::move(ctx));
     dout(10) << __func__ << " fetching more" << dendl;
     _copy_some(cobc, cop);
@@ -8403,7 +8401,7 @@ void ReplicatedPG::issue_repop(RepGather *repop)
   pgbackend->submit_transaction(
     soid,
     repop->ctx->at_version,
-    repop->ctx->op_t,
+    std::move(repop->ctx->op_t),
     pg_trim_to,
     min_last_complete_ondisk,
     repop->ctx->log,
@@ -8414,7 +8412,6 @@ void ReplicatedPG::issue_repop(RepGather *repop)
     repop->rep_tid,
     repop->ctx->reqid,
     repop->ctx->op);
-  repop->ctx->op_t = NULL;
 }
 
 ReplicatedPG::RepGather *ReplicatedPG::new_repop(
@@ -8467,7 +8464,7 @@ ReplicatedPG::OpContextUPtr ReplicatedPG::simple_opc_create(ObjectContextRef obc
   ceph_tid_t rep_tid = osd->get_tid();
   osd_reqid_t reqid(osd->get_cluster_msgr_name(), 0, rep_tid);
   OpContextUPtr ctx(new OpContext(OpRequestRef(), reqid, ops, obc, this));
-  ctx->op_t = pgbackend->get_transaction();
+  ctx->op_t.reset(pgbackend->get_transaction());
   ctx->mtime = ceph_clock_now(g_ceph_context);
   return ctx;
 }
@@ -8618,7 +8615,7 @@ void ReplicatedPG::handle_watch_timeout(WatchRef watch)
     });
 
 
-  PGBackend::PGTransaction *t = ctx->op_t;
+  PGBackend::PGTransaction *t = ctx->op_t.get();
   ctx->log.push_back(pg_log_entry_t(pg_log_entry_t::MODIFY, obc->obs.oi.soid,
 				    ctx->at_version,
 				    oi.version,
@@ -11399,7 +11396,7 @@ void ReplicatedPG::hit_set_persist()
   map <string, bufferlist> attrs;
   attrs[OI_ATTR].claim(boi);
   attrs[SS_ATTR].claim(bss);
-  setattrs_maybe_cache(ctx->obc, ctx.get(), ctx->op_t, attrs);
+  setattrs_maybe_cache(ctx->obc, ctx.get(), ctx->op_t.get(), attrs);
   ctx->log.push_back(
     pg_log_entry_t(
       pg_log_entry_t::MODIFY,
