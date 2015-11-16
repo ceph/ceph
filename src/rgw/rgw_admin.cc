@@ -2773,6 +2773,12 @@ int main(int argc, char **argv)
 	  zone.set_id(zone_name);
 	}
 
+	cerr << "zone id " << zone.get_id();
+	ret = zone.fix_pool_names();
+	if (ret < 0) {
+	  cerr << "ERROR: couldn't fix zone: " << cpp_strerror(-ret) << std::endl;
+	  return ret;
+	}
 	ret = zone.write(false);
 	if (ret < 0) {
 	  cerr << "ERROR: couldn't create zone: " << cpp_strerror(-ret) << std::endl;

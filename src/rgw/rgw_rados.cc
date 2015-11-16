@@ -1269,6 +1269,108 @@ int RGWZoneParams::create_default(bool old_format)
 }
 
 
+int get_zones_pool_names_set(CephContext* cct,
+			     RGWRados* store,
+			     const list<string>& zones,
+			     const string& my_zone_id,
+			     set<string>& pool_names)
+{
+  for(auto const& iter : zones) {
+    RGWZoneParams zone(iter);
+    int r = zone.init(cct, store);
+    if (r < 0) {
+      ldout(cct, 0) << "Error: init zone " << iter << ":" << cpp_strerror(-r) << dendl;
+      return r;
+    }
+    if (zone.get_id() != my_zone_id) {
+      pool_names.insert(zone.domain_root.name);
+      pool_names.insert(zone.metadata_heap.name);
+      pool_names.insert(zone.control_pool.name);
+      pool_names.insert(zone.gc_pool.name);
+      pool_names.insert(zone.log_pool.name);
+      pool_names.insert(zone.intent_log_pool.name);
+      pool_names.insert(zone.usage_log_pool.name);
+      pool_names.insert(zone.user_keys_pool.name);
+      pool_names.insert(zone.user_email_pool.name);
+      pool_names.insert(zone.user_swift_pool.name);
+      pool_names.insert(zone.user_uid_pool.name);
+      for(auto& iter : zone.placement_pools) {
+	pool_names.insert(iter.second.index_pool);
+	pool_names.insert(iter.second.data_pool);
+	pool_names.insert(iter.second.data_extra_pool);
+      }
+    }
+  }
+  return 0;
+}
+
+string fix_zone_pool_name(set<string> pool_names,
+			  const string& default_prefix,
+			  const string& default_suffix,
+			  const string& suggested_name)
+{
+  string prefix = default_prefix;
+  string suffix = default_suffix;
+
+  if (!suggested_name.empty()) {
+    prefix = suggested_name.substr(0,suggested_name.find("."));
+    suffix = suggested_name.substr(prefix.length(), suggested_name.length() - 1);
+  }
+
+  string name = prefix + suffix;
+  
+  if (pool_names.find(name) == pool_names.end()) {
+    return name;
+  } else {
+    while(true) {
+      name =  prefix + "_" + std::to_string(std::rand()) + suffix;
+      if (pool_names.find(name) == pool_names.end()) {
+	return name;
+      }
+    }
+  }  
+}
+
+int RGWZoneParams::fix_pool_names()
+{
+
+  list<string> zones;
+  int r = store->list_zones(zones);
+  if (r < 0) {
+    ldout(cct, 0) << "WARNING: store->list_zones() returned r=" << r << dendl;
+  }
+
+  set<string> pool_names;
+  r = get_zones_pool_names_set(cct, store, zones, id, pool_names);
+  if (r < 0) {
+    ldout(cct, 0) << "Error: get_zones_pool_names" << r << dendl;
+    return r;
+  }
+
+  domain_root = fix_zone_pool_name(pool_names, name, ".rgw.data.root", domain_root.name);
+  metadata_heap = fix_zone_pool_name(pool_names, name, ".rgw.meta", metadata_heap.name);
+  control_pool = fix_zone_pool_name(pool_names, name, ".rgw.control", control_pool.name);
+  gc_pool = fix_zone_pool_name(pool_names, name ,".rgw.gc", gc_pool.name);
+  log_pool = fix_zone_pool_name(pool_names, name, ".rgw.log", log_pool.name);
+  intent_log_pool = fix_zone_pool_name(pool_names, name, ".rgw.intent-log", intent_log_pool.name);
+  usage_log_pool = fix_zone_pool_name(pool_names, name, ".rgw.usage", usage_log_pool.name);
+  user_keys_pool = fix_zone_pool_name(pool_names, name, ".rgw.users.keys", user_keys_pool.name);
+  user_email_pool = fix_zone_pool_name(pool_names, name, ".rgw.users.email", user_email_pool.name);
+  user_swift_pool = fix_zone_pool_name(pool_names, name, ".rgw.users.swift", user_swift_pool.name);
+  user_uid_pool = fix_zone_pool_name(pool_names, name, ".rgw.users.uid", user_uid_pool.name);
+
+  for(auto& iter : placement_pools) {
+    iter.second.index_pool = fix_zone_pool_name(pool_names, name, "." + default_bucket_index_pool_suffix,
+						iter.second.index_pool);
+    iter.second.data_pool = fix_zone_pool_name(pool_names, name, "." + default_storage_pool_suffix,
+					       iter.second.data_pool);
+    iter.second.data_extra_pool= fix_zone_pool_name(pool_names, name, "." + default_storage_extra_pool_suffix,
+						    iter.second.data_extra_pool);
+  }
+
+  return 0;
+}
+
 int RGWZoneParams::create(bool exclusive)
 {
   list<string> zones;
@@ -1276,18 +1378,6 @@ int RGWZoneParams::create(bool exclusive)
   if (r < 0) {
     ldout(cct, 0) << "WARNING: store->list_zones() returned r=" << r << dendl;
   }
-
-  domain_root = name + ".rgw.data.root";
-  metadata_heap = name + ".rgw.meta";
-  control_pool = name + ".rgw.control";
-  gc_pool = name + ".rgw.gc";
-  log_pool = name + ".rgw.log";
-  intent_log_pool = name + ".rgw.intent-log";
-  usage_log_pool = name + ".rgw.usage";
-  user_keys_pool = name + ".rgw.users.keys";
-  user_email_pool = name + ".rgw.users.email";
-  user_swift_pool = name + ".rgw.users.swift";
-  user_uid_pool = name + ".rgw.users.uid";
 
   /* check for old pools config */
   rgw_obj obj(domain_root, avail_pools);
@@ -1297,9 +1387,15 @@ int RGWZoneParams::create(bool exclusive)
     /* a new system, let's set new placement info */
     RGWZonePlacementInfo default_placement;
     default_placement.index_pool = name + "." + default_bucket_index_pool_suffix;
-    default_placement.data_pool = name + "." + default_storage_pool_suffix;
+    default_placement.data_pool =  name + "." + default_storage_pool_suffix;
     default_placement.data_extra_pool = name + "." + default_storage_extra_pool_suffix;
     placement_pools["default-placement"] = default_placement;
+  }
+
+  r = fix_pool_names();
+  if (r < 0) {
+    ldout(cct, 0) << "ERROR: fix_pool_names returned r=" << r << dendl;
+    return r;
   }
 
   r = RGWSystemMetaObj::create(exclusive);
