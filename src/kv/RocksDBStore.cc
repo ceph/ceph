@@ -25,6 +25,47 @@ using std::string;
 #include "KeyValueDB.h"
 #include "RocksDBStore.h"
 
+#include "common/debug.h"
+
+#define dout_subsys ceph_subsys_rocksdb
+#undef dout_prefix
+#define dout_prefix *_dout << "rocksdb: "
+
+class CephRocksdbLogger : public rocksdb::Logger {
+  CephContext *cct;
+public:
+  CephRocksdbLogger(CephContext *c) : cct(c) {
+    cct->get();
+  }
+  ~CephRocksdbLogger() {
+    cct->put();
+  }
+
+  // Write an entry to the log file with the specified format.
+  void Logv(const char* format, va_list ap) {
+    Logv(rocksdb::INFO_LEVEL, format, ap);
+  }
+
+  // Write an entry to the log file with the specified log level
+  // and format.  Any log with level under the internal log level
+  // of *this (see @SetInfoLogLevel and @GetInfoLogLevel) will not be
+  // printed.
+  void Logv(const rocksdb::InfoLogLevel log_level, const char* format,
+	    va_list ap) {
+    int v = rocksdb::NUM_INFO_LOG_LEVELS - log_level - 1;
+    dout(v);
+    char buf[1048576];
+    vsnprintf(buf, sizeof(buf), format, ap);
+    buf[sizeof(buf)-1] = 0;
+    *_dout << buf << dendl;
+  }
+};
+
+rocksdb::Logger *create_rocksdb_ceph_logger()
+{
+  return new CephRocksdbLogger(g_ceph_context);
+}
+
 int string2bool(string val, bool &b_val)
 {
   if (strcasecmp(val.c_str(), "false") == 0) {
@@ -141,6 +182,10 @@ int RocksDBStore::do_open(ostream &out, bool create_if_missing)
   }
   opt.create_if_missing = create_if_missing;
   opt.wal_dir = path + ".wal";
+
+  if (g_conf->rocksdb_log_to_ceph_log) {
+    opt.info_log.reset(new CephRocksdbLogger(g_ceph_context));
+  }
 
   status = rocksdb::DB::Open(opt, path, &db);
   if (!status.ok()) {
