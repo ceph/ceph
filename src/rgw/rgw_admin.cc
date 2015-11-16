@@ -185,6 +185,7 @@ void _usage()
   cerr << "   --realm-new-name=<realm new name> realm new name\n";
   cerr << "   --rgw-zonegroup=<zonegroup>   zonegroup name\n";
   cerr << "   --rgw-zone=<zone>         zone in which radosgw is running\n";
+  cerr << "   --zone-new-name=<zone>    zone new name\n";
   cerr << "   --endpoints=<list>        zone endpoints\n";
   cerr << "   --fix                     besides checking bucket index, will also fix it\n";
   cerr << "   --check-objects           bucket check: rebuilds bucket index according to\n";
