@@ -509,13 +509,13 @@ int RGWSystemMetaObj::rename(const string& new_name)
   if (!ret) {
     return -EEXIST;
   }
-  if (ret < 0) {
+  if (ret < 0 && ret != -ENOENT) {
     lderr(cct) << "Error read_id " << new_name << ": " << cpp_strerror(-ret) << dendl;
     return ret;
   }
   string old_name = name;
   name = new_name;
-  ret = store_info(true);
+  ret = update();
   if (ret < 0) {
     lderr(cct) << "Error storing new obj info " << new_name << ": " << cpp_strerror(-ret) << dendl;
     return ret;
