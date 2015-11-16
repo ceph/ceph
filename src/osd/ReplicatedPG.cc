@@ -5866,7 +5866,8 @@ void ReplicatedPG::finish_ctx(OpContext *ctx, int log_op_type, bool maintain_ssc
   // apply new object state.
   ctx->obc->obs = ctx->new_obs;
 
-  if (!maintain_ssc && soid.is_head()) {
+  if (soid.is_head() && !ctx->obc->obs.exists &&
+      (!maintain_ssc || ctx->cache_evict)) {
     ctx->obc->ssc->exists = false;
     ctx->obc->ssc->snapset = SnapSet();
   } else {
