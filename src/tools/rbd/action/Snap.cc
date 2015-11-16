@@ -466,10 +466,10 @@ int execute_rename(const po::variables_map &vm) {
 }
 
 Shell::Action action_list(
-  {"snap", "ls"}, {}, "Dump list of image snapshots.", "",
+  {"snap", "list"}, {"snap", "ls"}, "Dump list of image snapshots.", "",
   &get_list_arguments, &execute_list);
 Shell::Action action_create(
-  {"snap", "create"}, {}, "Create a snapshot.", "",
+  {"snap", "create"}, {"snap", "add"}, "Create a snapshot.", "",
   &get_create_arguments, &execute_create);
 Shell::Action action_remove(
   {"snap", "remove"}, {"snap", "rm"}, "Deletes a snapshot.", "",
@@ -478,7 +478,7 @@ Shell::Action action_purge(
   {"snap", "purge"}, {}, "Deletes all snapshots.", "",
   &get_purge_arguments, &execute_purge);
 Shell::Action action_rollback(
-  {"snap", "rollback"}, {}, "Rollback image to snapshot.", "",
+  {"snap", "rollback"}, {"snap", "revert"}, "Rollback image to snapshot.", "",
   &get_rollback_arguments, &execute_rollback);
 Shell::Action action_protect(
   {"snap", "protect"}, {}, "Prevent a snapshot from being deleted.", "",

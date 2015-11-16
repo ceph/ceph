@@ -252,7 +252,7 @@ int execute_remove(const po::variables_map &vm) {
 }
 
 Shell::Action action_list(
-  {"lock", "list"}, {}, "Show locks held on an image.", "",
+  {"lock", "list"}, {"lock", "ls"}, "Show locks held on an image.", "",
   &get_list_arguments, &execute_list);
 Shell::Action action_add(
   {"lock", "add"}, {}, "Take a lock on an image.", "",
