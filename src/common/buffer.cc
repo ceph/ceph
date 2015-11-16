@@ -151,17 +151,18 @@ static simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZER;
     raw(char *c, unsigned l)
       : data(c), len(l), nref(0), crc_lock(NULL), crc_map(NULL)
     {
-		if(l > CRC_CACHE_THRESHOLD) {
-			crc_lock = new RWLock("buffer::raw::crc_lock", false);
-			crc_map = new map<pair<size_t, size_t>, pair<uint32_t, uint32_t>>;
-		}
-	}
+      if(l > CRC_CACHE_THRESHOLD) {
+	crc_lock = new RWLock("buffer::raw::crc_lock", false);
+	crc_map = new map<pair<size_t, size_t>, pair<uint32_t, uint32_t>>;
+      }
+    }
+
     virtual ~raw() {
-		if(crc_lock)
-			delete crc_lock;
-		if(crc_map)
-			delete crc_map;
-	}
+      if(crc_lock)
+	delete crc_lock;
+      if(crc_map)
+	delete crc_map;
+    }
 
     // no copying.
     raw(const raw &other);
