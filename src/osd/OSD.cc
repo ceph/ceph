@@ -6531,6 +6531,18 @@ void OSD::handle_osd_map(MOSDMap *m)
         service.set_epochs(NULL,&up_epoch, &bind_epoch);
 	do_restart = true;
 
+	//add markdown log
+	utime_t now = ceph_clock_now(g_ceph_context);
+	utime_t grace = utime_t(g_conf->osd_max_markdown_period, 0);
+	osd_markdown_log.push_back(now);
+	//clear all out-of-date log
+	while (!osd_markdown_log.empty() && osd_markdown_log.front() + grace < now)
+	  osd_markdown_log.pop_front();
+	if ((int)osd_markdown_log.size() > g_conf->osd_max_markdown_count) {
+	  do_restart = false;
+	  do_shutdown = true;
+	}
+
 	start_waiting_for_healthy();
 
 	set<int> avoid_ports;
