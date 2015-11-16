@@ -153,10 +153,19 @@ int RocksDBStore::init(string _options_str)
 
 int RocksDBStore::create_and_open(ostream &out)
 {
+  int r = ::mkdir(path.c_str(), 0755);
+  if (r < 0)
+    r = -errno;
+  if (r < 0 && r != -EEXIST) {
+    derr << __func__ << " failed to create " << path << ": " << cpp_strerror(r)
+	 << dendl;
+    return r;
+  }
+
   // create tertiary paths
   string wal_path = path + ".wal";
   struct stat st;
-  int r = ::stat(wal_path.c_str(), &st);
+  r = ::stat(wal_path.c_str(), &st);
   if (r < 0)
     r = -errno;
   if (r == -ENOENT) {
