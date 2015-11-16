@@ -259,6 +259,15 @@ int RGWZoneGroup::add_zone(const RGWZoneParams& zone_params, bool *is_master, bo
   return update();
 }
 
+
+int RGWZoneGroup::rename_zone(const RGWZoneParams& zone_params)
+{ 
+  RGWZone& zone = zones[zone_params.get_id()];
+  zone.name = zone_params.get_name();
+  
+  return update();
+}
+
 void RGWZoneGroup::post_process_params()
 {
   bool log_data = zones.size() > 1;
