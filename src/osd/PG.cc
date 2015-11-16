@@ -1818,6 +1818,7 @@ void PG::queue_op(OpRequestRef& op)
 void PG::replay_queued_ops()
 {
   assert(is_replay());
+  assert(is_active() || is_activating());
   eversion_t c = info.last_update;
   list<OpRequestRef> replay;
   dout(10) << "replay_queued_ops" << dendl;
@@ -1838,9 +1839,13 @@ void PG::replay_queued_ops()
     replay.push_back(p->second);
   }
   replay_queue.clear();
-  requeue_ops(replay);
-  requeue_ops(waiting_for_active);
-  assert(waiting_for_peered.empty());
+  if (is_active()) {
+    requeue_ops(replay);
+    requeue_ops(waiting_for_active);
+    assert(waiting_for_peered.empty());
+  } else {
+    waiting_for_active.splice(waiting_for_active.begin(), replay);
+  }
 
   publish_stats_to_osd();
 }
