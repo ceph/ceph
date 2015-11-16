@@ -55,13 +55,7 @@ int RGWBackoffControlCR::operate() {
         Mutex::Locker l(lock);
         cr = alloc_cr();
         cr->get();
-        int r = call(cr);
-        if (r < 0) {
-          cr->put();
-          cr = NULL;
-          ldout(cct, 0) << "ERROR: call() returned " << r << dendl;
-          return set_cr_error(r);
-        }
+        call(cr);
       }
       {
         Mutex::Locker l(lock);
@@ -78,13 +72,7 @@ int RGWBackoffControlCR::operate() {
       yield backoff.backoff(this);
       finisher_cr = alloc_finisher_cr();
       if (finisher_cr) {
-        yield {
-          int r = call(finisher_cr);
-          if (r < 0) {
-            ldout(cct, 0) << "ERROR: failed to call to finisher_cr(): r=" << r << dendl;
-            return set_cr_error(r);
-          }
-        }
+        yield call(finisher_cr);
         if (retcode < 0) {
           ldout(cct, 0) << "ERROR: call to finisher_cr() failed: retcode=" << retcode << dendl;
           return set_cr_error(retcode);
@@ -912,11 +900,7 @@ int RGWMetaSyncSingleEntryCR::operate() {
         section = raw_key.substr(0, pos);
         key = raw_key.substr(pos + 1);
         ldout(sync_env->cct, 20) << "fetching remote metadata: " << section << ":" << key << (tries == 0 ? "" : " (retry)") << dendl;
-        int ret = call(new RGWReadRemoteMetadataCR(sync_env, section, key, &md_bl));
-        if (ret < 0) {
-          ldout(sync_env->cct, 0) << "ERROR: failed to call RGWReadRemoteMetadataCR()" << dendl;
-          return set_cr_error(sync_status);
-        }
+        call(new RGWReadRemoteMetadataCR(sync_env, section, key, &md_bl));
       }
 
       sync_status = retcode;
@@ -946,14 +930,8 @@ int RGWMetaSyncSingleEntryCR::operate() {
     sync_status = retcode;
 
     if (sync_status == 0 && marker_tracker) {
-      yield {
-        /* update marker */
-        int ret = call(marker_tracker->finish(entry_marker));
-        if (ret < 0) {
-          ldout(sync_env->cct, 0) << "ERROR: marker_tracker->finish(" << entry_marker << ") returned ret=" << ret << dendl;
-          return set_cr_error(sync_status);
-        }
-      }
+      /* update marker */
+      yield call(marker_tracker->finish(entry_marker));
       sync_status = retcode;
     }
     if (sync_status < 0) {
@@ -1200,7 +1178,7 @@ public:
           lost_lock = true;
           break;
         }
-        yield return call(new RGWRadosGetOmapKeysCR(sync_env->store, pool, oid, marker, &entries, max_entries));
+        yield call(new RGWRadosGetOmapKeysCR(sync_env->store, pool, oid, marker, &entries, max_entries));
         if (retcode < 0) {
           ldout(sync_env->cct, 0) << "ERROR: " << __func__ << "(): RGWRadosGetOmapKeysCR() returned ret=" << retcode << dendl;
           return retcode;
@@ -1468,11 +1446,7 @@ int RGWRemoteMetaLog::clone_shards(int num_shards, vector<string>& clone_markers
   list<RGWCoroutinesStack *> stacks;
   for (int i = 0; i < (int)num_shards; i++) {
     RGWCoroutinesStack *stack = new RGWCoroutinesStack(store->ctx(), this);
-    int r = stack->call(new RGWCloneMetaLogCoroutine(&sync_env, i, clone_markers[i], NULL));
-    if (r < 0) {
-      ldout(store->ctx(), 0) << "ERROR: stack->call() returned r=" << r << dendl;
-      return r;
-    }
+    stack->call(new RGWCloneMetaLogCoroutine(&sync_env, i, clone_markers[i], NULL));
 
     stacks.push_back(stack);
   }
@@ -1485,11 +1459,7 @@ int RGWRemoteMetaLog::fetch(int num_shards, vector<string>& clone_markers)
   list<RGWCoroutinesStack *> stacks;
   for (int i = 0; i < (int)num_shards; i++) {
     RGWCoroutinesStack *stack = new RGWCoroutinesStack(store->ctx(), this);
-    int r = stack->call(new RGWCloneMetaLogCoroutine(&sync_env, i, clone_markers[i], NULL));
-    if (r < 0) {
-      ldout(store->ctx(), 0) << "ERROR: stack->call() returned r=" << r << dendl;
-      return r;
-    }
+    stack->call(new RGWCloneMetaLogCoroutine(&sync_env, i, clone_markers[i], NULL));
 
     stacks.push_back(stack);
   }
