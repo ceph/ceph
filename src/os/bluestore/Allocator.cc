@@ -5,7 +5,7 @@
 #include "StupidAllocator.h"
 #include "common/debug.h"
 
-#define dout_subsys ceph_subsys_newstore
+#define dout_subsys ceph_subsys_bluestore
 
 Allocator *Allocator::create(string type)
 {

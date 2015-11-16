@@ -1,6 +1,6 @@
 libos_types_a_SOURCES = \
 	os/Transaction.cc \
-	os/newstore/newstore_types.cc
+	os/bluestore/bluestore_types.cc
 libos_types_a_CXXFLAGS = ${AM_CXXFLAGS}
 noinst_LIBRARIES += libos_types.a
 
@@ -9,12 +9,12 @@ if ENABLE_SERVER
 libos_a_SOURCES = \
 	os/chain_xattr.cc \
 	os/fs/FS.cc \
-	os/newstore/kv.cc \
-	os/newstore/Allocator.cc \
-	os/newstore/BlockDevice.cc \
-	os/newstore/FreelistManager.cc \
-	os/newstore/NewStore.cc \
-	os/newstore/StupidAllocator.cc \
+	os/bluestore/kv.cc \
+	os/bluestore/Allocator.cc \
+	os/bluestore/BlockDevice.cc \
+	os/bluestore/FreelistManager.cc \
+	os/bluestore/BlueStore.cc \
+	os/bluestore/StupidAllocator.cc \
 	os/DBObjectMap.cc \
 	os/GenericObjectMap.cc \
 	os/FileJournal.cc \
@@ -54,11 +54,13 @@ noinst_LIBRARIES += libos.a
 noinst_HEADERS += \
 	os/btrfs_ioctl.h \
 	os/chain_xattr.h \
-	os/newstore/newstore_types.h \
-	os/newstore/Allocator.h \
-	os/newstore/BlockDevice.h \
-	os/newstore/NewStore.h \
-	os/newstore/StupidAllocator.h \
+	os/bluestore/bluestore_types.h \
+	os/bluestore/kv.h \
+	os/bluestore/Allocator.h \
+	os/bluestore/BlockDevice.h \
+	os/bluestore/BlueStore.h \
+	os/bluestore/FreelistManager.h \
+	os/bluestore/StupidAllocator.h \
 	os/BtrfsFileStoreBackend.h \
 	os/CollectionIndex.h \
 	os/DBObjectMap.h \
