@@ -970,14 +970,19 @@ public:
   enum {
     NOT_STOPPING,
     PREPARING_TO_STOP,
-    STOPPING } state;
+    STOPPING };
+  atomic_t state;
+  int get_state() {
+    return state.read();
+  }
+  void set_state(int s) {
+    state.set(s);
+  }
   bool is_stopping() {
-    Mutex::Locker l(is_stopping_lock);
-    return state == STOPPING;
+    return get_state() == STOPPING;
   }
   bool is_preparing_to_stop() {
-    Mutex::Locker l(is_stopping_lock);
-    return state == PREPARING_TO_STOP;
+    return get_state() == PREPARING_TO_STOP;
   }
   bool prepare_to_stop();
   void got_stop_ack();
