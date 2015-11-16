@@ -175,6 +175,8 @@ int FileStore::init_index(coll_t cid)
 
 int FileStore::lfn_find(const ghobject_t& oid, const Index& index, IndexedPath *path)
 {
+  if (fdcache.lookup(oid) && !path)
+    return 0;
   IndexedPath path2;
   if (!path)
     path = &path2;
