@@ -6742,7 +6742,8 @@ boost::statechart::result PG::RecoveryState::Active::react(const ActMap&)
     pg->queue_snap_trim();
   }
 
-  if (!pg->is_clean() &&
+  if (pg->is_peered() &&
+      !pg->is_clean() &&
       !pg->get_osdmap()->test_flag(CEPH_OSDMAP_NOBACKFILL) &&
       (!pg->get_osdmap()->test_flag(CEPH_OSDMAP_NOREBALANCE) || pg->is_degraded())) {
     pg->queue_recovery();
@@ -6810,7 +6811,8 @@ boost::statechart::result PG::RecoveryState::Active::react(const MLogRec& logevt
     pg->peer_missing[logevt.from],
     logevt.from,
     context< RecoveryMachine >().get_recovery_ctx());
-  if (got_missing)
+  if (pg->is_peered() &&
+      got_missing)
     pg->queue_recovery();
   return discard_event();
 }
