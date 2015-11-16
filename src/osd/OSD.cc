@@ -1021,13 +1021,13 @@ void OSDService::set_epochs(const epoch_t *_boot_epoch, const epoch_t *_up_epoch
 bool OSDService::prepare_to_stop()
 {
   Mutex::Locker l(is_stopping_lock);
-  if (state != NOT_STOPPING)
+  if (get_state() != NOT_STOPPING)
     return false;
 
   OSDMapRef osdmap = get_osdmap();
   if (osdmap && osdmap->is_up(whoami)) {
     dout(0) << __func__ << " telling mon we are shutting down" << dendl;
-    state = PREPARING_TO_STOP;
+    set_state(PREPARING_TO_STOP);
     monc->send_mon_message(new MOSDMarkMeDown(monc->get_fsid(),
 					      osdmap->get_inst(whoami),
 					      osdmap->get_epoch(),
@@ -1037,27 +1037,26 @@ bool OSDService::prepare_to_stop()
     utime_t timeout;
     timeout.set_from_double(now + cct->_conf->osd_mon_shutdown_timeout);
     while ((ceph_clock_now(cct) < timeout) &&
-	   (state != STOPPING)) {
+       (get_state() != STOPPING)) {
       is_stopping_cond.WaitUntil(is_stopping_lock, timeout);
     }
   }
   dout(0) << __func__ << " starting shutdown" << dendl;
-  state = STOPPING;
+  set_state(STOPPING);
   return true;
 }
 
 void OSDService::got_stop_ack()
 {
   Mutex::Locker l(is_stopping_lock);
-  if (state == PREPARING_TO_STOP) {
+  if (get_state() == PREPARING_TO_STOP) {
     dout(0) << __func__ << " starting shutdown" << dendl;
-    state = STOPPING;
+    set_state(STOPPING);
     is_stopping_cond.Signal();
   } else {
     dout(10) << __func__ << " ignoring msg" << dendl;
   }
 }
-
 
 MOSDMap *OSDService::build_incremental_map_msg(epoch_t since, epoch_t to,
                                                OSDSuperblock& sblock)
