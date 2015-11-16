@@ -141,12 +141,7 @@ public:
   }
   
   bool raw_key_is_prefixed(const string &prefix) {
-    string key = (*it).first.first;
-    if ((key.size() > prefix.length()) && (key[prefix.length()] == '\0')) {
-      return memcmp(key.c_str(), prefix.c_str(), prefix.length()) == 0;
-    } else {
-      return false;
-    }
+    return prefix == (*it).first.first;
   }
 
   bufferlist value() {
