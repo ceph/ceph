@@ -181,7 +181,7 @@ public:
     return retcode;
   }
 
-  int call(RGWCoroutine *op); /* call at the same stack we're in */
+  void call(RGWCoroutine *op); /* call at the same stack we're in */
   RGWCoroutinesStack *spawn(RGWCoroutine *op, bool wait); /* execute on a different stack */
   bool collect(int *ret); /* returns true if needs to be called again */
   bool collect_next(int *ret, RGWCoroutinesStack **collected_stack = NULL); /* returns true if found a stack to collect */
@@ -348,7 +348,7 @@ public:
 
   string error_str();
 
-  int call(RGWCoroutine *next_op, int ret = 0);
+  void call(RGWCoroutine *next_op);
   RGWCoroutinesStack *spawn(RGWCoroutine *next_op, bool wait);
   int unwind(int retcode);
 
