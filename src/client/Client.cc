@@ -11344,6 +11344,13 @@ int Client::check_pool_perm(Inode *in, int need)
   }
 
   if (!have) {
+    if (in->snapid != CEPH_NOSNAP) {
+      // pool permission check needs to write to the first object. But for snapshot,
+      // head of the first object may have alread been deleted. To avoid creating
+      // orphan object, skip the check for now.
+      return 0;
+    }
+
     pool_perms[pool] = POOL_CHECKING;
 
     char oid_buf[32];
