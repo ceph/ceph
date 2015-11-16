@@ -2864,8 +2864,7 @@ void Client::put_cap_ref(Inode *in, int cap)
     if (drop) {
       if (drop & CEPH_CAP_FILE_CACHE)
 	_invalidate_inode_cache(in);
-      else
-	check_caps(in, false);
+      check_caps(in, false);
     }
     if (put_nref)
       put_inode(in, put_nref);
@@ -3385,41 +3384,36 @@ private:
   Client *client;
   InodeRef inode;
   int64_t offset, length;
-  bool keep_caps;
 public:
-  C_Client_CacheInvalidate(Client *c, Inode *in, int64_t off, int64_t len, bool keep) :
-			   client(c), inode(in), offset(off), length(len), keep_caps(keep) {
+  C_Client_CacheInvalidate(Client *c, Inode *in, int64_t off, int64_t len) :
+			   client(c), inode(in), offset(off), length(len) {
   }
   void finish(int r) {
     // _async_invalidate takes the lock when it needs to, call this back from outside of lock.
     assert(!client->client_lock.is_locked_by_me());
-    client->_async_invalidate(inode, offset, length, keep_caps);
+    client->_async_invalidate(inode, offset, length);
   }
 };
 
-void Client::_async_invalidate(InodeRef& in, int64_t off, int64_t len, bool keep_caps)
+void Client::_async_invalidate(InodeRef& in, int64_t off, int64_t len)
 {
-  ldout(cct, 10) << "_async_invalidate " << off << "~" << len << (keep_caps ? " keep_caps" : "") << dendl;
+  ldout(cct, 10) << "_async_invalidate " << off << "~" << len << dendl;
   if (use_faked_inos())
     ino_invalidate_cb(callback_handle, vinodeno_t(in->faked_ino, CEPH_NOSNAP), off, len);
   else
     ino_invalidate_cb(callback_handle, in->vino(), off, len);
 
   client_lock.Lock();
-  if (!keep_caps)
-    check_caps(in.get(), false);
   in.reset(); // put inode inside client_lock
   client_lock.Unlock();
-  ldout(cct, 10) << "_async_invalidate " << off << "~" << len << (keep_caps ? " keep_caps" : "") << " done" << dendl;
+  ldout(cct, 10) << "_async_invalidate " << off << "~" << len << " done" << dendl;
 }
 
-void Client::_schedule_invalidate_callback(Inode *in, int64_t off, int64_t len, bool keep_caps) {
+void Client::_schedule_invalidate_callback(Inode *in, int64_t off, int64_t len) {
 
   if (ino_invalidate_cb)
     // we queue the invalidate, which calls the callback and decrements the ref
-    async_ino_invalidator.queue(new C_Client_CacheInvalidate(this, in, off, len, keep_caps));
-  else if (!keep_caps)
-    check_caps(in, false);
+    async_ino_invalidator.queue(new C_Client_CacheInvalidate(this, in, off, len));
 }
 
 void Client::_invalidate_inode_cache(Inode *in)
@@ -3430,7 +3424,7 @@ void Client::_invalidate_inode_cache(Inode *in)
   if (cct->_conf->client_oc)
     objectcacher->release_set(&in->oset);
 
-  _schedule_invalidate_callback(in, 0, 0, false);
+  _schedule_invalidate_callback(in, 0, 0);
 }
 
 void Client::_invalidate_inode_cache(Inode *in, int64_t off, int64_t len)
@@ -3444,15 +3438,17 @@ void Client::_invalidate_inode_cache(Inode *in, int64_t off, int64_t len)
     objectcacher->discard_set(&in->oset, ls);
   }
 
-  _schedule_invalidate_callback(in, off, len, true);
+  _schedule_invalidate_callback(in, off, len);
 }
 
-void Client::_release(Inode *in)
+bool Client::_release(Inode *in)
 {
   ldout(cct, 20) << "_release " << *in << dendl;
   if (in->cap_refs[CEPH_CAP_FILE_CACHE] == 0) {
     _invalidate_inode_cache(in);
+    return true;
   }
+  return false;
 }
 
 bool Client::_flush(Inode *in, Context *onfinish)
@@ -4689,7 +4685,8 @@ void Client::handle_cap_grant(MetaSession *session, Inode *in, Cap *cap, MClient
         && !_flush(in, new C_Client_FlushComplete(this, in))) {
       // waitin' for flush
     } else if ((old_caps & ~new_caps) & CEPH_CAP_FILE_CACHE) {
-      _release(in);
+      if (_release(in))
+	check = true;
     } else {
       cap->wanted = 0; // don't let check_caps skip sending a response to MDS
       check = true;
@@ -7137,8 +7134,7 @@ int Client::_release_fh(Fh *f)
 	  !(in->caps_wanted() & CEPH_CAP_FILE_CACHE) &&
 	  !objectcacher->set_is_empty(&in->oset))
 	_invalidate_inode_cache(in);
-      else
-	check_caps(in, false);
+      check_caps(in, false);
     }
   } else {
     assert(in->snap_cap_refs > 0);
@@ -8655,7 +8651,8 @@ int Client::lazyio_synchronize(int fd, loff_t offset, size_t count)
   Inode *in = f->inode.get();
   
   _fsync(f, true);
-  _release(in);
+  if (_release(in))
+    check_caps(in, false);
   return 0;
 }
 
