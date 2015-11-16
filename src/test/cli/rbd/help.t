@@ -5,48 +5,53 @@
   
   Positional arguments:
     <command>
-      bench-write           Simple write benchmark.
-      children              Display children of snapshot.
-      clone                 Clone a snapshot into a COW child image.
-      copy (cp)             Copy src image to dest.
-      create                Create an empty image.
-      diff                  Print extents that differ since a previous snap, or
-                            image creation.
-      disk-usage (du)       Show disk usage stats for pool, image or snapshot
-      export                Export image to file.
-      export-diff           Export incremental diff to file.
-      feature disable       Disable the specified image feature.
-      feature enable        Enable the specified image feature.
-      flatten               Fill clone with parent data (make it independent).
-      image-meta get        Image metadata get the value associated with the key.
-      image-meta list       Image metadata list keys with values.
-      image-meta remove     Image metadata remove the key and value associated.
-      image-meta set        Image metadata set key with value.
-      import                Import image from file.
-      import-diff           Import an incremental diff.
-      info                  Show information about image size, striping, etc.
-      list (ls)             List rbd images.
-      lock add              Take a lock on an image.
-      lock list             Show locks held on an image.
-      lock remove (lock rm) Release a lock on an image.
-      map                   Map image to a block device using the kernel.
-      merge-diff            Merge two diff exports together.
-      object-map rebuild    Rebuild an invalid object map.
-      remove (rm)           Delete an image.
-      rename (mv)           Rename image within pool.
-      resize                Resize (expand or shrink) image.
-      showmapped            Show the rbd images mapped by the kernel.
-      snap create           Create a snapshot.
-      snap ls               Dump list of image snapshots.
-      snap protect          Prevent a snapshot from being deleted.
-      snap purge            Deletes all snapshots.
-      snap remove (snap rm) Deletes a snapshot.
-      snap rename           Rename a snapshot.
-      snap rollback         Rollback image to snapshot.
-      snap unprotect        Allow a snapshot to be deleted.
-      status                Show the status of this image.
-      unmap                 Unmap a rbd device that was used by the kernel.
-      watch                 Watch events on image.
+      bench-write                 Simple write benchmark.
+      children                    Display children of snapshot.
+      clone                       Clone a snapshot into a COW child image.
+      copy (cp)                   Copy src image to dest.
+      create                      Create an empty image.
+      diff                        Print extents that differ since a previous
+                                  snap, or image creation.
+      disk-usage (du)             Show disk usage stats for pool, image or
+                                  snapshot
+      export                      Export image to file.
+      export-diff                 Export incremental diff to file.
+      feature disable             Disable the specified image feature.
+      feature enable              Enable the specified image feature.
+      flatten                     Fill clone with parent data (make it
+                                  independent).
+      image-meta get              Image metadata get the value associated with
+                                  the key.
+      image-meta list             Image metadata list keys with values.
+      image-meta remove           Image metadata remove the key and value
+                                  associated.
+      image-meta set              Image metadata set key with value.
+      import                      Import image from file.
+      import-diff                 Import an incremental diff.
+      info                        Show information about image size, striping,
+                                  etc.
+      list (ls)                   List rbd images.
+      lock add                    Take a lock on an image.
+      lock list (lock ls)         Show locks held on an image.
+      lock remove (lock rm)       Release a lock on an image.
+      map                         Map image to a block device using the kernel.
+      merge-diff                  Merge two diff exports together.
+      object-map rebuild          Rebuild an invalid object map.
+      remove (rm)                 Delete an image.
+      rename (mv)                 Rename image within pool.
+      resize                      Resize (expand or shrink) image.
+      showmapped                  Show the rbd images mapped by the kernel.
+      snap create (snap add)      Create a snapshot.
+      snap list (snap ls)         Dump list of image snapshots.
+      snap protect                Prevent a snapshot from being deleted.
+      snap purge                  Deletes all snapshots.
+      snap remove (snap rm)       Deletes a snapshot.
+      snap rename                 Rename a snapshot.
+      snap rollback (snap revert) Rollback image to snapshot.
+      snap unprotect              Allow a snapshot to be deleted.
+      status                      Show the status of this image.
+      unmap                       Unmap a rbd device that was used by the kernel.
+      watch                       Watch events on image.
   
   Optional arguments:
     -c [ --conf ] arg     path to cluster configuration
@@ -645,10 +650,10 @@
     --image arg          image name
     --snap arg           snapshot name
   
-  rbd help snap ls
-  usage: rbd snap ls [--pool <pool>] [--image <image>] [--format <format>] 
-                     [--pretty-format] 
-                     <image-spec> 
+  rbd help snap list
+  usage: rbd snap list [--pool <pool>] [--image <image>] [--format <format>] 
+                       [--pretty-format] 
+                       <image-spec> 
   
   Dump list of image snapshots.
   
