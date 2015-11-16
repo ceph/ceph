@@ -57,13 +57,18 @@ public:
     void *priv;
     int fd;
     vector<iovec> iov;
+    uint64_t offset, length;
 
     aio_t(void *p, int f) : priv(p), fd(f) {
       memset(&iocb, 0, sizeof(iocb));
     }
 
-    void pwritev(uint64_t offset) {
+    void pwritev(uint64_t _offset) {
+      offset = _offset;
       io_prep_pwritev(&iocb, fd, &iov[0], iov.size(), offset);
+      length = 0;
+      for (unsigned u=0; u<iov.size(); ++u)
+	length += iov[u].iov_len;
     }
   };
 

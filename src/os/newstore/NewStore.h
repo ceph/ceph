@@ -30,8 +30,12 @@
 #include "kv/KeyValueDB.h"
 
 #include "newstore_types.h"
+#include "BlockDevice.h"
 
 #include "boost/intrusive/list.hpp"
+
+class Allocator;
+class FreelistManager;
 
 class NewStore : public ObjectStore {
   // -----------------------------------------------------
@@ -52,23 +56,27 @@ public:
     bool dirty;     // ???
     bool exists;
 
-    Mutex flush_lock;  ///< protect unappliex_txns, num_fsyncs
-    Cond flush_cond;   ///< wait here for unapplied txns, fsyncs
-    set<TransContext*> flush_txns;   ///< fsyncing or committing or wal txns
+    Mutex flush_lock;  ///< protect flush_txns
+    Cond flush_cond;   ///< wait here for unapplied txns
+    set<TransContext*> flush_txns;   ///< committing or wal txns
+
+    uint64_t tail_offset;
+    bufferlist tail_bl;
 
     Onode(const ghobject_t& o, const string& k);
 
-    void flush() {
-      Mutex::Locker l(flush_lock);
-      while (!flush_txns.empty())
-	flush_cond.Wait(flush_lock);
-    }
+    void flush();
     void get() {
       nref.inc();
     }
     void put() {
       if (nref.dec() == 0)
 	delete this;
+    }
+
+    void clear_tail() {
+      tail_offset = 0;
+      tail_bl.clear();
     }
   };
   typedef boost::intrusive_ptr<Onode> OnodeRef;
@@ -109,6 +117,17 @@ public:
 
     OnodeRef get_onode(const ghobject_t& oid, bool create);
 
+    bool contains(const ghobject_t& oid) {
+      if (cid.is_meta())
+	return oid.hobj.pool == -1;
+      spg_t spgid;
+      if (cid.is_pg(&spgid))
+	return
+	  spgid.pgid.contains(cnode.bits, oid) &&
+	  oid.shard_id == spgid.shard;
+      return false;
+    }
+
     Collection(NewStore *ns, coll_t c);
   };
   typedef ceph::shared_ptr<Collection> CollectionRef;
@@ -135,17 +154,9 @@ public:
   class OpSequencer;
   typedef boost::intrusive_ptr<OpSequencer> OpSequencerRef;
 
-  struct fsync_item {
-    boost::intrusive::list_member_hook<> queue_item;
-    int fd;
-    TransContext *txc;
-    fsync_item(int f, TransContext *t) : fd(f), txc(t) {}
-  };
-
   struct TransContext {
     typedef enum {
       STATE_PREPARE,
-      STATE_FSYNC_WAIT,
       STATE_AIO_WAIT,
       STATE_IO_DONE,
       STATE_KV_QUEUED,
@@ -165,7 +176,6 @@ public:
     const char *get_state_name() {
       switch (state) {
       case STATE_PREPARE: return "prepare";
-      case STATE_FSYNC_WAIT: return "fsync_wait";
       case STATE_AIO_WAIT: return "aio_wait";
       case STATE_IO_DONE: return "io_done";
       case STATE_KV_QUEUED: return "kv_queued";
@@ -187,7 +197,6 @@ public:
 
     uint64_t ops, bytes;
 
-    list<fsync_item> sync_items; ///< these fds need to be synced
     set<OnodeRef> onodes;     ///< these onodes need to be updated/written
     KeyValueDB::Transaction t; ///< then we will commit this
     Context *oncommit;         ///< signal on commit
@@ -198,12 +207,11 @@ public:
 
     boost::intrusive::list_member_hook<> wal_queue_item;
     wal_transaction_t *wal_txn; ///< wal transaction (if any)
-    unsigned num_fsyncs_completed;
+    vector<OnodeRef> wal_op_onodes;
 
-    list<FS::aio_t> pending_aios;    ///< not yet submitted
-    list<FS::aio_t> submitted_aios;  ///< submitting or submitted
-    bufferlist aio_bl;  // just a pile of refs
-    atomic_t num_aio;
+    interval_set<uint64_t> allocated, released;
+
+    IOContext ioc;
 
     Mutex lock;
     Cond cond;
@@ -219,8 +227,7 @@ public:
 	onreadable(NULL),
 	onreadable_sync(NULL),
 	wal_txn(NULL),
-	num_fsyncs_completed(0),
-	num_aio(0),
+	ioc(this),
 	lock("NewStore::TransContext::lock") {
       //cout << "txc new " << this << std::endl;
     }
@@ -229,26 +236,8 @@ public:
       //cout << "txc del " << this << std::endl;
     }
 
-    void sync_fd(int f) {
-      sync_items.push_back(fsync_item(f, this));
-    }
     void write_onode(OnodeRef &o) {
       onodes.insert(o);
-    }
-
-    bool finish_fsync() {
-      Mutex::Locker l(lock);
-      ++num_fsyncs_completed;
-      if (num_fsyncs_completed == sync_items.size()) {
-	cond.Signal();
-	return true;
-      }
-      return false;
-    }
-    void wait_fsync() {
-      Mutex::Locker l(lock);
-      while (num_fsyncs_completed < sync_items.size())
-	cond.Wait(lock);
     }
   };
 
@@ -311,56 +300,6 @@ public:
       assert(txc->state < TransContext::STATE_KV_DONE);
       txc->oncommits.push_back(c);
       return false;
-    }
-  };
-
-  class FsyncWQ : public ThreadPool::WorkQueue<fsync_item> {
-  public:
-    typedef boost::intrusive::list<
-      fsync_item,
-      boost::intrusive::member_hook<
-        fsync_item,
-	boost::intrusive::list_member_hook<>,
-	&fsync_item::queue_item> > fsync_queue_t;
-  private:
-    NewStore *store;
-    fsync_queue_t fd_queue;
-
-  public:
-    FsyncWQ(NewStore *s, time_t ti, time_t sti, ThreadPool *tp)
-      : ThreadPool::WorkQueue<fsync_item>("NewStore::FsyncWQ", ti, sti, tp),
-	store(s) {
-    }
-    bool _empty() {
-      return fd_queue.empty();
-    }
-    bool _enqueue(fsync_item *i) {
-      fd_queue.push_back(*i);
-      return true;
-    }
-    void _dequeue(fsync_item *p) {
-      assert(0 == "not needed, not implemented");
-    }
-    fsync_item *_dequeue() {
-      if (fd_queue.empty())
-	return NULL;
-      fsync_item *i = &fd_queue.front();
-      fd_queue.pop_front();
-      return i;
-    }
-    void _process(fsync_item *i, ThreadPool::TPHandle &handle) {
-      store->_txc_process_fsync(i);
-    }
-    void _clear() {
-      fd_queue.clear();
-    }
-
-    void flush() {
-      lock();
-      while (!fd_queue.empty())
-	_wait();
-      unlock();
-      drain();
     }
   };
 
@@ -445,34 +384,22 @@ public:
     }
   };
 
-  struct AioCompletionThread : public Thread {
-    NewStore *store;
-    AioCompletionThread(NewStore *s) : store(s) {}
-    void *entry() {
-      store->_aio_thread();
-      return NULL;
-    }
-  };
-
   // --------------------------------------------------------
   // members
 private:
   CephContext *cct;
   KeyValueDB *db;
   FS *fs;
+  BlockDevice *bdev;
+  FreelistManager *fm;
+  Allocator *alloc;
   uuid_d fsid;
   int path_fd;  ///< open handle to $path
   int fsid_fd;  ///< open handle (locked) to $path/fsid
-  int frag_fd;  ///< open handle to $path/fragments
-  int fset_fd;  ///< open handle to $path/fragments/$cur_fid.fset
   bool mounted;
 
   RWLock coll_lock;    ///< rwlock to protect coll_map
   ceph::unordered_map<coll_t, CollectionRef> coll_map;
-
-  Mutex fid_lock;
-  fid_t fid_last;  ///< last allocated fid
-  fid_t fid_max;   ///< max fid we can allocate before reserving more
 
   Mutex nid_lock;
   uint64_t nid_last;
@@ -487,12 +414,6 @@ private:
   WALWQ wal_wq;
 
   Finisher finisher;
-  ThreadPool fsync_tp;
-  FsyncWQ fsync_wq;
-
-  AioCompletionThread aio_thread;
-  bool aio_stop;
-  FS::aio_queue_t aio_queue;
 
   KVSyncThread kv_sync_thread;
   Mutex kv_lock;
@@ -521,48 +442,40 @@ private:
   int _read_fsid(uuid_d *f);
   int _write_fsid();
   void _close_fsid();
-  int _open_frag();
-  int _create_frag();
-  void _close_frag();
+  int _open_bdev();
+  void _close_bdev();
   int _open_db(bool create);
   void _close_db();
-  int _open_collections();
+  int _open_alloc();
+  void _close_alloc();
+  int _open_collections(int *errors=0);
   void _close_collections();
 
   CollectionRef _get_collection(coll_t cid);
   void _queue_reap_collection(CollectionRef& c);
   void _reap_collections();
 
-  int _recover_next_fid();
-  int _create_fid(TransContext *txc, OnodeRef o, fid_t *fid, unsigned flags);
-  int _open_fid(fid_t fid, unsigned flags);
-  int _remove_fid(fid_t fid);
-
   int _recover_next_nid();
   void _assign_nid(TransContext *txc, OnodeRef o);
 
   void _dump_onode(OnodeRef o);
 
-  int _clean_fid_tail_fd(const fragment_t& f, int fd);
-  int _clean_fid_tail(TransContext *txc, const fragment_t& f);
-
   TransContext *_txc_create(OpSequencer *osr);
+  void _txc_release(TransContext *txc, uint64_t offset, uint64_t length);
   int _txc_add_transaction(TransContext *txc, Transaction *t);
   int _txc_finalize(OpSequencer *osr, TransContext *txc);
   void _txc_state_proc(TransContext *txc);
   void _txc_aio_submit(TransContext *txc);
-  void _txc_do_sync_fsync(TransContext *txc);
-  void _txc_queue_fsync(TransContext *txc);
-  void _txc_process_fsync(fsync_item *i);
+public:
+  void _txc_aio_finish(void *p) {
+    _txc_state_proc(static_cast<TransContext*>(p));
+  }
+private:
   void _txc_finish_io(TransContext *txc);
   void _txc_finish_kv(TransContext *txc);
   void _txc_finish(TransContext *txc);
 
   void _osr_reap_done(OpSequencer *osr);
-
-  void _aio_thread();
-  int _aio_start();
-  void _aio_stop();
 
   void _kv_sync_thread();
   void _kv_stop() {
@@ -575,10 +488,10 @@ private:
     kv_stop = false;
   }
 
-  wal_op_t *_get_wal_op(TransContext *txc);
+  wal_op_t *_get_wal_op(TransContext *txc, OnodeRef o);
   int _wal_apply(TransContext *txc);
   int _wal_finish(TransContext *txc);
-  int _do_wal_transaction(wal_transaction_t& wt, TransContext *txc);
+  int _do_wal_op(wal_op_t& wo, IOContext *ioc);
   int _wal_replay();
 
 public:
@@ -596,6 +509,8 @@ public:
   int mount();
   int umount();
   void _sync();
+
+  int fsck();
 
   unsigned get_max_object_name_length() {
     return 4096;
@@ -728,6 +643,7 @@ private:
 	     uint64_t offset, size_t len,
 	     bufferlist& bl,
 	     uint32_t fadvise_flags);
+  bool _can_overlay_write(OnodeRef o, uint64_t length);
   int _do_overlay_clear(TransContext *txc,
 			OnodeRef o);
   int _do_overlay_trim(TransContext *txc,
@@ -739,9 +655,16 @@ private:
 			uint64_t offset,
 			uint64_t length,
 			const bufferlist& bl);
-  int _do_write_all_overlays(TransContext *txc,
-			     OnodeRef o);
-  void _do_read_all_overlays(wal_transaction_t& wt);
+  int _do_write_overlays(TransContext *txc, OnodeRef o,
+			 uint64_t offset, uint64_t length);
+  void _do_read_all_overlays(wal_op_t& wo);
+  void _pad_zeros(OnodeRef o, bufferlist *bl, uint64_t *offset, uint64_t *length,
+		  uint64_t block_size);
+  int _do_allocate(TransContext *txc,
+		   OnodeRef o,
+		   uint64_t offset, uint64_t length,
+		   uint32_t fadvise_flags,
+		   bool allow_overlay);
   int _do_write(TransContext *txc,
 		OnodeRef o,
 		uint64_t offset, uint64_t length,

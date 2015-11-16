@@ -296,6 +296,7 @@ else
         debug journal = 20
         debug filestore = 20
         debug newstore = 30
+        debug bdev = 20
         debug rgw = 20
         debug objclass = 20'
     CMDSDEBUG='
@@ -320,7 +321,8 @@ if [ "$memstore" -eq 1 ]; then
 fi
 if [ "$newstore" -eq 1 ]; then
     COSDMEMSTORE='
-	osd objectstore = newstore'
+	osd objectstore = newstore
+	newstore fsck on mount = true'
 fi
 
 # lockdep everywhere?
@@ -462,6 +464,7 @@ $DAEMONOPTS
         osd class dir = $OBJCLASS_PATH
         osd scrub load threshold = 2000.0
         osd debug op order = true
+        newstore block size = 10737418240
         filestore wbthrottle xfs ios start flusher = 10
         filestore wbthrottle xfs ios hard limit = 20
         filestore wbthrottle xfs inodes hard limit = 30
@@ -561,6 +564,7 @@ EOF
 		    rm -rf $CEPH_DEV_DIR/osd$osd || true
 		    for f in $CEPH_DEV_DIR/osd$osd/* ; do btrfs sub delete $f || true ; done || true
 		    mkdir -p $CEPH_DEV_DIR/osd$osd
+
 	    fi
 
 	    uuid=`uuidgen`

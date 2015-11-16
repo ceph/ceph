@@ -137,6 +137,7 @@ SUBSYS(refs, 0, 0)
 SUBSYS(xio, 1, 5)
 SUBSYS(compressor, 1, 5)
 SUBSYS(newstore, 1, 5)
+SUBSYS(bdev, 1, 5)
 
 OPTION(key, OPT_STR, "")
 OPTION(keyfile, OPT_STR, "")
@@ -816,20 +817,22 @@ OPTION(memstore_device_bytes, OPT_U64, 1024*1024*1024)
 OPTION(memstore_page_set, OPT_BOOL, true)
 OPTION(memstore_page_size, OPT_U64, 64 << 10)
 
+OPTION(bdev_debug_inflight_ios, OPT_BOOL, false)
+
+OPTION(newstore_block_path, OPT_STR, "")
+OPTION(newstore_block_size, OPT_U64, 0)  // 10gb for testing
 OPTION(newstore_max_dir_size, OPT_U32, 1000000)
-OPTION(newstore_min_frag_size, OPT_U32, 1048576)   // smallest allowed frag size
-OPTION(newstore_max_frag_size, OPT_U32, 1048576*16) // largest allowed fag size
+OPTION(newstore_min_alloc_size, OPT_U32, 512*1024)
 OPTION(newstore_onode_map_size, OPT_U32, 1024)   // onodes per collection
+OPTION(newstore_cache_tails, OPT_BOOL, true)   // cache tail blocks in Onode
 OPTION(newstore_backend, OPT_STR, "rocksdb")
-OPTION(newstore_rocksdb_options, OPT_STR, "compression=kNoCompression,max_write_buffer_number=16,min_write_buffer_number_to_merge=6,recycle_log_file_num=16")
+OPTION(newstore_rocksdb_options, OPT_STR, "compression=kNoCompression,max_write_buffer_number=16,min_write_buffer_number_to_merge=6") //,recycle_log_file_num=16")
+OPTION(newstore_fsck_on_mount, OPT_BOOL, false)
 OPTION(newstore_fail_eio, OPT_BOOL, true)
 OPTION(newstore_sync_io, OPT_BOOL, false)  // perform initial io synchronously
 OPTION(newstore_sync_transaction, OPT_BOOL, false)  // perform kv txn synchronously
 OPTION(newstore_sync_submit_transaction, OPT_BOOL, false)
 OPTION(newstore_sync_wal_apply, OPT_BOOL, true)     // perform initial wal work synchronously (possibly in combination with aio so we only *queue* ios)
-OPTION(newstore_fsync_threads, OPT_INT, 16)  // num threads calling fsync
-OPTION(newstore_fsync_thread_timeout, OPT_INT, 30) // thread timeout value
-OPTION(newstore_fsync_thread_suicide_timeout, OPT_INT, 120) // suicide timeout value
 OPTION(newstore_wal_threads, OPT_INT, 4)
 OPTION(newstore_wal_thread_timeout, OPT_INT, 30)
 OPTION(newstore_wal_thread_suicide_timeout, OPT_INT, 120)
