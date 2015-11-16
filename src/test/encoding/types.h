@@ -113,9 +113,7 @@ TYPE(SequencerPosition)
 
 #include "os/newstore/newstore_types.h"
 TYPE(cnode_t)
-TYPE(fid_t)
-TYPE(fid_backpointer_t)
-TYPE(fragment_t)
+TYPE(extent_t)
 TYPE(overlay_t)
 TYPE(onode_t)
 TYPE(wal_op_t)

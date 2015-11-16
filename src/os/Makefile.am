@@ -1,5 +1,6 @@
 libos_types_a_SOURCES = \
-	os/Transaction.cc
+	os/Transaction.cc \
+	os/newstore/newstore_types.cc
 libos_types_a_CXXFLAGS = ${AM_CXXFLAGS}
 noinst_LIBRARIES += libos_types.a
 
@@ -8,6 +9,12 @@ if ENABLE_SERVER
 libos_a_SOURCES = \
 	os/chain_xattr.cc \
 	os/fs/FS.cc \
+	os/newstore/kv.cc \
+	os/newstore/Allocator.cc \
+	os/newstore/BlockDevice.cc \
+	os/newstore/FreelistManager.cc \
+	os/newstore/NewStore.cc \
+	os/newstore/StupidAllocator.cc \
 	os/DBObjectMap.cc \
 	os/GenericObjectMap.cc \
 	os/FileJournal.cc \
@@ -24,11 +31,6 @@ libos_a_SOURCES = \
 
 if LINUX
 libos_a_SOURCES += os/BtrfsFileStoreBackend.cc
-endif
-
-if WITH_LIBAIO
-libos_types_a_SOURCES += os/newstore/newstore_types.cc
-libos_a_SOURCES += os/newstore/NewStore.cc
 endif
 
 if WITH_LIBXFS
@@ -53,7 +55,10 @@ noinst_HEADERS += \
 	os/btrfs_ioctl.h \
 	os/chain_xattr.h \
 	os/newstore/newstore_types.h \
+	os/newstore/Allocator.h \
+	os/newstore/BlockDevice.h \
 	os/newstore/NewStore.h \
+	os/newstore/StupidAllocator.h \
 	os/BtrfsFileStoreBackend.h \
 	os/CollectionIndex.h \
 	os/DBObjectMap.h \

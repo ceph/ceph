@@ -468,6 +468,39 @@ TEST_P(StoreTest, ManySmallWrite) {
   }
 }
 
+TEST_P(StoreTest, SmallSequentialUnaligned) {
+  ObjectStore::Sequencer osr("test");
+  int r;
+  coll_t cid;
+  ghobject_t a(hobject_t(sobject_t("Object 1", CEPH_NOSNAP)));
+  {
+    ObjectStore::Transaction t;
+    t.create_collection(cid, 0);
+    cerr << "Creating collection " << cid << std::endl;
+    r = store->apply_transaction(&osr, t);
+    ASSERT_EQ(r, 0);
+  }
+  bufferlist bl;
+  int len = 1000;
+  bufferptr bp(len);
+  bp.zero();
+  bl.append(bp);
+  for (int i=0; i<1000; ++i) {
+    ObjectStore::Transaction t;
+    t.write(cid, a, i*len, len, bl, 0);
+    r = store->apply_transaction(&osr, t);
+    ASSERT_EQ(r, 0);
+  }
+  {
+    ObjectStore::Transaction t;
+    t.remove(cid, a);
+    t.remove_collection(cid);
+    cerr << "Cleaning" << std::endl;
+    r = store->apply_transaction(&osr, t);
+    ASSERT_EQ(r, 0);
+  }
+}
+
 TEST_P(StoreTest, ManyBigWrite) {
   ObjectStore::Sequencer osr("test");
   int r;
@@ -1556,6 +1589,12 @@ public:
 	result.hexdump(cout);
 	cout << "expected:\n";
 	bl.hexdump(cout);
+	for (unsigned i=0; i<result.length(); ++i) {
+	  if (result[i] != bl[i]) {
+	    cout << "first difference at offset " << i << std::endl;
+	    break;
+	  }
+	}
 	assert(0);
       }
       ASSERT_TRUE(result.contents_equal(bl));
