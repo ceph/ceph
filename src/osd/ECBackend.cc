@@ -858,7 +858,7 @@ void ECBackend::handle_sub_write(
     op.trim_to,
     op.trim_rollback_to,
     !(op.t.empty()),
-    &localt);
+    localt);
 
   ReplicatedPG *_rPG = dynamic_cast<ReplicatedPG *>(get_parent());
   if (_rPG && !_rPG->is_undersized() &&
@@ -1342,7 +1342,7 @@ struct MustPrependHashInfo : public ObjectModDesc::Visitor {
 void ECBackend::submit_transaction(
   const hobject_t &hoid,
   const eversion_t &at_version,
-  PGTransaction *_t,
+  PGTransactionUPtr &&_t,
   const eversion_t &trim_to,
   const eversion_t &trim_rollback_to,
   const vector<pg_log_entry_t> &log_entries,
@@ -1370,7 +1370,7 @@ void ECBackend::submit_transaction(
   op->reqid = reqid;
   op->client_op = client_op;
   
-  op->t = static_cast<ECTransaction*>(_t);
+  op->t.reset(static_cast<ECTransaction*>(_t.release()));
 
   set<hobject_t, hobject_t::BitwiseComparator> need_hinfos;
   op->t->get_append_objects(&need_hinfos);
