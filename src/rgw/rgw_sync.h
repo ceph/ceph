@@ -235,13 +235,21 @@ public:
   }
 
   RGWCoroutine *finish(const T& pos) {
-    assert(!pending.empty());
+    if (pending.empty()) {
+      /* can happen, due to a bug that ended up with multiple objects with the same name and version
+       * -- which can happen when versioning is enabled an the version is 'null'.
+       */
+      return NULL;
+    }
 
     typename std::map<T, marker_entry>::iterator iter = pending.begin();
     const T& first_pos = iter->first;
 
     typename std::map<T, marker_entry>::iterator pos_iter = pending.find(pos);
-    assert(pos_iter != pending.end());
+    if (pos_iter == pending.end()) {
+      /* see pending.empty() comment */
+      return NULL;
+    }
 
     if (!(pos <= high_marker)) {
       high_marker = pos;
