@@ -923,6 +923,19 @@ int NewStore::_open_db(bool create)
 	   << dendl;
       return r;
     }
+
+    // wal_dir, too!
+    char walfn[PATH_MAX];
+    snprintf(walfn, sizeof(walfn), "%s/db.wal", path.c_str());
+    r = ::mkdir(walfn, 0755);
+    if (r < 0)
+      r = -errno;
+    if (r < 0 && r != -EEXIST) {
+      derr << __func__ << " failed to create " << walfn
+	   << ": " << cpp_strerror(r)
+	   << dendl;
+      return r;
+    }
   }
   db = KeyValueDB::create(g_ceph_context,
 			  g_conf->newstore_backend,
