@@ -152,9 +152,9 @@ string RGWCoroutinesStack::error_str()
   return string();
 }
 
-int RGWCoroutinesStack::call(RGWCoroutine *next_op, int ret) {
+void RGWCoroutinesStack::call(RGWCoroutine *next_op) {
   if (!next_op) {
-    return ret;
+    return;
   }
   ops.push_back(next_op);
   if (pos != ops.end()) {
@@ -162,7 +162,6 @@ int RGWCoroutinesStack::call(RGWCoroutine *next_op, int ret) {
   } else {
     pos = ops.begin();
   }
-  return ret;
 }
 
 RGWCoroutinesStack *RGWCoroutinesStack::spawn(RGWCoroutine *source_op, RGWCoroutine *op, bool wait)
@@ -179,8 +178,7 @@ RGWCoroutinesStack *RGWCoroutinesStack::spawn(RGWCoroutine *source_op, RGWCorout
   stack->parent = this;
 
   stack->get(); /* we'll need to collect the stack */
-  int r = stack->call(op, 0);
-  assert(r == 0);
+  stack->call(op);
 
   env->stacks->push_back(stack);
 
@@ -455,15 +453,11 @@ int RGWCoroutinesManager::run(RGWCoroutine *op)
   list<RGWCoroutinesStack *> stacks;
   RGWCoroutinesStack *stack = allocate_stack();
   op->get();
-  int r = stack->call(op);
-  if (r < 0) {
-    ldout(cct, 0) << "ERROR: stack->call() returned r=" << r << dendl;
-    return r;
-  }
+  stack->call(op);
 
   stack->schedule(&stacks);
 
-  r = run(stacks);
+  int r = run(stacks);
   if (r < 0) {
     ldout(cct, 0) << "ERROR: run(stacks) returned r=" << r << dendl;
   } else {
@@ -479,11 +473,9 @@ RGWAioCompletionNotifier *RGWCoroutinesManager::create_completion_notifier(RGWCo
   return new RGWAioCompletionNotifier(&completion_mgr, (void *)stack);
 }
 
-int RGWCoroutine::call(RGWCoroutine *op)
+void RGWCoroutine::call(RGWCoroutine *op)
 {
-  int r = stack->call(op, 0);
-  assert(r == 0);
-  return 0;
+  stack->call(op);
 }
 
 RGWCoroutinesStack *RGWCoroutine::spawn(RGWCoroutine *op, bool wait)
