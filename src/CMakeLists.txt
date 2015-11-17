@@ -888,6 +888,7 @@ if(${WITH_RBD})
     librbd/LibrbdAdminSocketHook.cc
     librbd/LibrbdWriteback.cc
     librbd/ObjectMap.cc
+    librbd/Utils.cc
     librbd/object_map/InvalidateRequest.cc
     librbd/object_map/Request.cc
     librbd/object_map/ResizeRequest.cc

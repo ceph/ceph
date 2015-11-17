@@ -86,6 +86,11 @@ struct C_AsyncCallback : public Context {
 
 } // namespace detail
 
+const std::string id_obj_name(const std::string &name);
+const std::string header_name(const std::string &image_id);
+const std::string old_header_name(const std::string &image_name);
+std::string unique_lock_name(const std::string &name, void *address);
+
 template <typename T>
 librados::AioCompletion *create_rados_ack_callback(T *obj) {
   return librados::Rados::aio_create_completion(

@@ -6,6 +6,7 @@
 #include "librbd/internal.h"
 #include "librbd/ObjectMap.h"
 #include "librbd/TaskFinisher.h"
+#include "librbd/Utils.h"
 #include "cls/lock/cls_lock_client.h"
 #include "cls/lock/cls_lock_types.h"
 #include "include/encoding.h"
@@ -32,17 +33,16 @@ static const double	RETRY_DELAY_SECONDS = 1.0;
 
 ImageWatcher::ImageWatcher(ImageCtx &image_ctx)
   : m_image_ctx(image_ctx),
-    m_watch_lock(unique_lock_name("librbd::ImageWatcher::m_watch_lock", this)),
+    m_watch_lock(util::unique_lock_name("librbd::ImageWatcher::m_watch_lock", this)),
     m_watch_ctx(*this), m_watch_handle(0),
     m_watch_state(WATCH_STATE_UNREGISTERED),
-    m_refresh_lock(unique_lock_name("librbd::ImageWatcher::m_refresh_lock",
-                                    this)),
+    m_refresh_lock(util::unique_lock_name("librbd::ImageWatcher::m_refresh_lock", this)),
     m_lock_supported(false), m_lock_owner_state(LOCK_OWNER_STATE_NOT_LOCKED),
-    m_listeners_lock(unique_lock_name("librbd::ImageWatcher::m_listeners_lock", this)),
+    m_listeners_lock(util::unique_lock_name("librbd::ImageWatcher::m_listeners_lock", this)),
     m_listeners_in_use(false),
     m_task_finisher(new TaskFinisher<Task>(*m_image_ctx.cct)),
-    m_async_request_lock(unique_lock_name("librbd::ImageWatcher::m_async_request_lock", this)),
-    m_owner_client_id_lock(unique_lock_name("librbd::ImageWatcher::m_owner_client_id_lock", this))
+    m_async_request_lock(util::unique_lock_name("librbd::ImageWatcher::m_async_request_lock", this)),
+    m_owner_client_id_lock(util::unique_lock_name("librbd::ImageWatcher::m_owner_client_id_lock", this))
 {
 }
 
