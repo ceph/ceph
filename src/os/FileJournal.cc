@@ -1228,9 +1228,9 @@ void FileJournal::flush()
 void FileJournal::write_thread_entry()
 {
   dout(10) << "write_thread_entry start" << dendl;
+  Mutex::Locker locker(writeq_lock);
   while (1) {
     {
-      Mutex::Locker locker(writeq_lock);
       if (writeq.empty() && !must_write_header) {
 	if (write_stop)
 	  break;
@@ -1240,6 +1240,7 @@ void FileJournal::write_thread_entry()
 	continue;
       }
     }
+    writeq_lock.Unlock();
     
 #ifdef HAVE_LIBAIO
     if (aio) {
@@ -1313,6 +1314,7 @@ void FileJournal::write_thread_entry()
     do_write(bl);
 #endif
     put_throttle(orig_ops, orig_bytes);
+    writeq_lock.Lock();
   }
 
   dout(10) << "write_thread_entry finish" << dendl;
