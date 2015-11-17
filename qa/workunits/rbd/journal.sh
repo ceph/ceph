@@ -99,7 +99,126 @@ test_rbd_journal()
     rbd remove ${image}
 }
 
+
+rbd_assert_eq() {
+    local image=$1
+    local cmd=$2
+    local param=$3
+    local expected_val=$4
+
+    local val=$(rbd --format xml ${cmd} --image ${image} |
+		       $XMLSTARLET sel -t -v "${param}")
+    test "${val}" = "${expected_val}"
+}
+
+test_rbd_create()
+{
+    local image=testrbdcreate$$
+
+    rbd create --image-feature exclusive-lock --image-feature journaling \
+	--journal-pool rbd \
+	--journal-object-size 20M \
+	--journal-splay-width 6 \
+	--size 256 ${image}
+
+    rbd_assert_eq ${image} 'journal info' '//journal/order' 25
+    rbd_assert_eq ${image} 'journal info' '//journal/splay_width' 6
+    rbd_assert_eq ${image} 'journal info' '//journal/object_pool' rbd
+
+    rbd remove ${image}
+}
+
+test_rbd_copy()
+{
+    local src=testrbdcopys$$
+    rbd create --size 256 ${src}
+
+    local image=testrbdcopy$$
+    rbd copy --image-feature exclusive-lock --image-feature journaling \
+	--journal-pool rbd \
+	--journal-object-size 20M \
+	--journal-splay-width 6 \
+	${src} ${image}
+
+    rbd remove ${src}
+
+    rbd_assert_eq ${image} 'journal info' '//journal/order' 25
+    rbd_assert_eq ${image} 'journal info' '//journal/splay_width' 6
+    rbd_assert_eq ${image} 'journal info' '//journal/object_pool' rbd
+
+    rbd remove ${image}
+}
+
+test_rbd_clone()
+{
+    local parent=testrbdclonep$$
+    rbd create --image-feature layering --size 256 ${parent}
+    rbd snap create ${parent}@snap
+    rbd snap protect ${parent}@snap
+
+    local image=testrbdclone$$
+    rbd clone --image-feature layering --image-feature exclusive-lock --image-feature journaling \
+	--journal-pool rbd \
+	--journal-object-size 20M \
+	--journal-splay-width 6 \
+	${parent}@snap ${image}
+
+    rbd_assert_eq ${image} 'journal info' '//journal/order' 25
+    rbd_assert_eq ${image} 'journal info' '//journal/splay_width' 6
+    rbd_assert_eq ${image} 'journal info' '//journal/object_pool' rbd
+
+    rbd remove ${image}
+    rbd snap unprotect ${parent}@snap
+    rbd snap purge ${parent}
+    rbd remove ${parent}
+}
+
+test_rbd_import()
+{
+    local src=testrbdimports$$
+    rbd create --size 256 ${src}
+
+    rbd export ${src} $TMPDIR/${src}.export
+    rbd remove ${src}
+
+    local image=testrbdimport$$
+    rbd import --image-feature exclusive-lock --image-feature journaling \
+	--journal-pool rbd \
+	--journal-object-size 20M \
+	--journal-splay-width 6 \
+	$TMPDIR/${src}.export ${image}
+
+    rbd_assert_eq ${image} 'journal info' '//journal/order' 25
+    rbd_assert_eq ${image} 'journal info' '//journal/splay_width' 6
+    rbd_assert_eq ${image} 'journal info' '//journal/object_pool' rbd
+
+    rbd remove ${image}
+}
+
+test_rbd_feature()
+{
+    local image=testrbdfeature$$
+
+    rbd create --image-feature exclusive-lock --size 256 ${image}
+
+    rbd feature enable ${image} journaling \
+	--journal-pool rbd \
+	--journal-object-size 20M \
+	--journal-splay-width 6
+
+    rbd_assert_eq ${image} 'journal info' '//journal/order' 25
+    rbd_assert_eq ${image} 'journal info' '//journal/splay_width' 6
+    rbd_assert_eq ${image} 'journal info' '//journal/object_pool' rbd
+
+    rbd remove ${image}
+}
+
 TESTS+=" rbd_journal"
+TESTS+=" rbd_create"
+TESTS+=" rbd_copy"
+TESTS+=" rbd_clone"
+TESTS+=" rbd_import"
+TESTS+=" rbd_feature"
 
 #
 # "main" follows

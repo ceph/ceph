@@ -223,6 +223,18 @@ void add_create_image_options(po::options_description *opt,
     (IMAGE_SHARED.c_str(), po::bool_switch(), "shared image")
     (IMAGE_STRIPE_UNIT.c_str(), po::value<uint32_t>(), "stripe unit")
     (IMAGE_STRIPE_COUNT.c_str(), po::value<uint32_t>(), "stripe count");
+
+  add_create_journal_options(opt);
+}
+
+void add_create_journal_options(po::options_description *opt) {
+  opt->add_options()
+    (JOURNAL_SPLAY_WIDTH.c_str(), po::value<uint64_t>(),
+     "number of active journal objects")
+    (JOURNAL_OBJECT_SIZE.c_str(), po::value<JournalObjectSize>(),
+     "size of journal objects")
+    (JOURNAL_POOL.c_str(), po::value<std::string>(),
+     "pool for journal objects");
 }
 
 void add_size_option(boost::program_options::options_description *opt) {
@@ -391,6 +403,20 @@ void validate(boost::any& v, const std::vector<std::string>& values,
   } else {
     throw po::validation_error(po::validation_error::invalid_option_value);
   }
+}
+
+void validate(boost::any& v, const std::vector<std::string>& values,
+              JournalObjectSize *target_type, int) {
+  po::validators::check_first_occurrence(v);
+  const std::string &s = po::validators::get_single_string(values);
+
+  std::string parse_error;
+  uint64_t size = strict_sistrtoll(s.c_str(), &parse_error);
+  if (parse_error.empty() && (size >= (1 << 12))) {
+    v = boost::any(size);
+    return;
+  }
+  throw po::validation_error(po::validation_error::invalid_option_value);
 }
 
 } // namespace argument_types
