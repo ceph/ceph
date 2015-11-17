@@ -648,7 +648,8 @@ public:
 		 map<string,bufferlist> *km,
 		 const coll_t& coll,
 		 const ghobject_t &log_oid,
-		 bool require_rollback);
+		 bool require_rollback,
+                 map<string, bufferlist> *pglog_encode_checksum = NULL);
 
   static void write_log(
     ObjectStore::Transaction& t,
@@ -671,7 +672,8 @@ public:
     bool dirty_divergent_priors,
     bool touch_log,
     bool require_rollback,
-    set<string> *log_keys_debug
+    set<string> *log_keys_debug,
+    map<string, bufferlist> *pglog_encode_checksum
     );
 
   void read_log(ObjectStore *store, coll_t pg_coll,

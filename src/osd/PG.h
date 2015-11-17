@@ -2176,7 +2176,7 @@ public:
     ghobject_t &pgmeta_oid,
     bool dirty_big_info,
     bool dirty_epoch);
-  void write_if_dirty(ObjectStore::Transaction& t);
+  void write_if_dirty(ObjectStore::Transaction& t, map<string, bufferlist> *pglog_encode_checksum = NULL);
 
   eversion_t get_next_version() const {
     eversion_t at_version(get_osdmap()->get_epoch(),
@@ -2192,6 +2192,7 @@ public:
     eversion_t trim_to,
     eversion_t trim_rollback_to,
     ObjectStore::Transaction &t,
+    map<string, bufferlist> *pglog_encode_checksum,
     bool transaction_applied = true);
   bool check_log_for_corruption(ObjectStore *store);
   void trim_peers();

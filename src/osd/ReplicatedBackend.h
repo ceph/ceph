@@ -375,7 +375,7 @@ private:
     ObjectStore::Transaction *op_t,
     pg_shard_t peer,
     const pg_info_t &pinfo);
-  void issue_op(
+  bool prepare_op(
     const hobject_t &soid,
     const eversion_t &at_version,
     ceph_tid_t tid,
@@ -387,7 +387,11 @@ private:
     const vector<pg_log_entry_t> &log_entries,
     boost::optional<pg_hit_set_history_t> &hset_history,
     InProgressOp *op,
-    ObjectStore::Transaction *op_t);
+    ObjectStore::Transaction *op_t,
+    list<Message*> &msgs);
+  void issue_op(bool repop_same_payload,
+    list<Message*>,
+    map<string, bufferlist> &pglog_encode_checksum);
   void op_applied(InProgressOp *op);
   void op_commit(InProgressOp *op);
   template<typename T, int MSGTYPE>

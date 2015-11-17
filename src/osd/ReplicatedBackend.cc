@@ -587,7 +587,8 @@ void ReplicatedBackend::submit_transaction(
     parent->get_actingbackfill_shards().end());
 
 
-  issue_op(
+  list<Message*> msgs;
+  bool repop_same_payload = prepare_op(
     soid,
     at_version,
     tid,
@@ -600,21 +601,26 @@ void ReplicatedBackend::submit_transaction(
     log_entries,
     hset_history,
     &op,
-    op_t);
+    op_t,
+    msgs);
 
   if (!(t->get_temp_added().empty())) {
     add_temp_objs(t->get_temp_added());
   }
   clear_temp_objs(t->get_temp_cleared());
 
+  map<string, bufferlist> pglog_encode_checksum;
   parent->log_operation(
     log_entries,
     hset_history,
     trim_to,
     trim_rollback_to,
     true,
-    op_t);
- 
+    op_t,
+    &pglog_encode_checksum);
+
+  issue_op(repop_same_payload, msgs, pglog_encode_checksum);
+
   op_t->register_on_applied_sync(on_local_applied_sync);
   op_t->register_on_applied(
     parent->bless_context(
@@ -1039,7 +1045,40 @@ Message * ReplicatedBackend::generate_subop(
   return wr;
 }
 
-void ReplicatedBackend::issue_op(
+void ReplicatedBackend::issue_op(bool repop_same_payload, list<Message*> msgs,
+  map<string, bufferlist> &pglog_encode_checksum)
+{
+  const set<pg_shard_t> &actingbackfill_shards = parent->get_actingbackfill_shards();
+  assert(msgs.size() == actingbackfill_shards.size() - 1);
+  list<Message*>::iterator it = msgs.begin();
+  bufferlist payload;
+  uint64_t min_features = parent->min_peer_features();
+  for (set<pg_shard_t>::const_iterator i =
+	 actingbackfill_shards.begin();
+       i != actingbackfill_shards.end();
+       ++i) {
+    if (*i == parent->whoami_shard()) continue;
+    pg_shard_t peer = *i;
+    if (repop_same_payload && actingbackfill_shards.size() > 2) {
+      ((MOSDRepOp*)(*it))->pglog_encode_checksum = pglog_encode_checksum;
+      if (payload.length()) {
+        (*it)->fillin_payload(payload);
+      } else {
+        (*it)->encode_payload(min_features);
+        payload = (*it)->get_payload();
+      }
+      // if the encoder didn't specify past compatibility, we assume it
+      // is incompatible.
+      if ((*it)->get_header().compat_version == 0)
+        (*it)->get_header().compat_version = (*it)->get_header().version;
+    }
+    get_parent()->send_message_osd_cluster(
+      peer.osd, *it, get_osdmap()->get_epoch());
+    it++;
+  }
+}
+
+bool ReplicatedBackend::prepare_op(
   const hobject_t &soid,
   const eversion_t &at_version,
   ceph_tid_t tid,
@@ -1051,7 +1090,8 @@ void ReplicatedBackend::issue_op(
   const vector<pg_log_entry_t> &log_entries,
   boost::optional<pg_hit_set_history_t> &hset_hist,
   InProgressOp *op,
-  ObjectStore::Transaction *op_t)
+  ObjectStore::Transaction *op_t,
+  list<Message*> &msgs)
 {
 
   if (parent->get_actingbackfill_shards().size() > 1) {
@@ -1080,7 +1120,6 @@ void ReplicatedBackend::issue_op(
   }
 
   Message *wr = NULL;
-  bufferlist payload;
   const set<pg_shard_t> &actingbackfill_shards = parent->get_actingbackfill_shards();
   for (set<pg_shard_t>::const_iterator i =
 	 actingbackfill_shards.begin();
@@ -1125,22 +1164,9 @@ void ReplicatedBackend::issue_op(
 	    peer,
 	    pinfo);
     }
-    if (repop_same_payload && actingbackfill_shards.size() > 2) {
-      if (payload.length()) {
-        wr->fillin_payload(payload);
-      } else {
-        wr->encode_payload(min_features);
-        payload = wr->get_payload();
-      }
-      // if the encoder didn't specify past compatibility, we assume it
-      // is incompatible.
-      if (wr->get_header().compat_version == 0)
-        wr->get_header().compat_version = wr->get_header().version;
-    }
-
-    get_parent()->send_message_osd_cluster(
-      peer.osd, wr, get_osdmap()->get_epoch());
+    msgs.push_back(wr);
   }
+  return repop_same_payload;
 }
 
 // sub op modify
@@ -1224,6 +1250,11 @@ void ReplicatedBackend::sub_op_modify_impl(OpRequestRef op)
     // collections now.  Otherwise, we do it later on push.
     update_snaps = true;
   }
+
+  map<string, bufferlist> *pglog_encode_checksum = NULL;
+  if (m->pglog_encode_checksum.size()) {
+    pglog_encode_checksum = &(m->pglog_encode_checksum);
+  }
   parent->update_stats(m->pg_stats);
   parent->log_operation(
     log,
@@ -1231,7 +1262,8 @@ void ReplicatedBackend::sub_op_modify_impl(OpRequestRef op)
     m->pg_trim_to,
     m->pg_trim_rollback_to,
     update_snaps,
-    &(rm->localt));
+    &(rm->localt),
+    pglog_encode_checksum);
 
   rm->bytes_written = rm->opt.get_encoded_bytes();
 

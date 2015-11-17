@@ -178,7 +178,8 @@
        const eversion_t &trim_to,
        const eversion_t &trim_rollback_to,
        bool transaction_applied,
-       ObjectStore::Transaction *t) = 0;
+       ObjectStore::Transaction *t,
+       map<string, bufferlist> *pglog_encode_checksum = NULL) = 0;
 
      virtual void update_peer_last_complete_ondisk(
        pg_shard_t fromosd,

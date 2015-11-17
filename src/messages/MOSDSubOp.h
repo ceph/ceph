@@ -92,6 +92,8 @@ public:
   /// non-empty if this transaction involves a hit_set history update
   boost::optional<pg_hit_set_history_t> updated_hit_set_history;
 
+  map<string, bufferlist> pglog_encode_checksum;
+
   int get_cost() const {
     if (ops.size() == 1 && ops[0].op.op == CEPH_OSD_OP_PULL)
       return ops[0].op.extent.length;

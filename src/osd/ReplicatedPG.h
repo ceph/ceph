@@ -388,12 +388,13 @@ public:
     const eversion_t &trim_to,
     const eversion_t &trim_rollback_to,
     bool transaction_applied,
-    ObjectStore::Transaction *t) {
+    ObjectStore::Transaction *t,
+    map<string, bufferlist> *pglog_encode_checksum = NULL) {
     if (hset_history) {
       info.hit_set = *hset_history;
       dirty_info = true;
     }
-    append_log(logv, trim_to, trim_rollback_to, *t, transaction_applied);
+    append_log(logv, trim_to, trim_rollback_to, *t, pglog_encode_checksum, transaction_applied);
   }
 
   void op_applied(
