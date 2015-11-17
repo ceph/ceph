@@ -435,7 +435,7 @@ int RGWRemoteDataLog::init_sync_status(int num_shards)
 
 static string full_data_sync_index_shard_oid(const string& source_zone, int shard_id)
 {
-  char buf[datalog_sync_full_sync_index_prefix.size() + 16];
+  char buf[datalog_sync_full_sync_index_prefix.size() + 1 + source_zone.size() + 1 + 16];
   snprintf(buf, sizeof(buf), "%s.%s.%d", datalog_sync_full_sync_index_prefix.c_str(), source_zone.c_str(), shard_id);
   return string(buf);
 }
