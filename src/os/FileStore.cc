@@ -5007,7 +5007,7 @@ int FileStore::_destroy_collection(coll_t c)
   dout(15) << "_destroy_collection " << fn << dendl;
   {
     Index from;
-    int r = get_index(c, &from);
+    r = get_index(c, &from);
     if (r < 0)
       goto out;
     assert(NULL != from.index);
