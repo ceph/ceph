@@ -2962,13 +2962,15 @@ reprotect_and_return_err:
 	return;
       }
 
-      RWLock::RLocker owner_lock(m_dest->owner_lock);
       Context *ctx = new C_CopyWrite(m_throttle, m_bl);
       AioCompletion *comp = aio_create_completion_internal(ctx, rbd_ctx_cb);
-      AioImageRequest::aio_write(m_dest, comp, m_offset, m_bl->length(),
-                                 m_bl->c_str(),
-                                 LIBRADOS_OP_FLAG_FADVISE_DONTNEED);
+
+      // coordinate through AIO WQ to ensure lock is acquired if needed
+      m_dest->aio_work_queue->aio_write(comp, m_offset, m_bl->length(),
+                                        m_bl->c_str(),
+                                        LIBRADOS_OP_FLAG_FADVISE_DONTNEED);
     }
+
   private:
     SimpleThrottle *m_throttle;
     ImageCtx *m_dest;
