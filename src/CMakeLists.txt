@@ -866,7 +866,9 @@ if(${WITH_RBD})
     krbd.cc
     common/ContextCompletion.cc
     librbd/AioCompletion.cc
-    librbd/AioRequest.cc
+    librbd/AioImageRequest.cc
+    librbd/AioImageRequestWQ.cc
+    librbd/AioObjectRequest.cc
     librbd/AsyncFlattenRequest.cc
     librbd/AsyncObjectThrottle.cc
     librbd/AsyncOperation.cc
@@ -874,16 +876,19 @@ if(${WITH_RBD})
     librbd/AsyncResizeRequest.cc
     librbd/AsyncTrimRequest.cc
     librbd/CopyupRequest.cc
+    librbd/DiffIterate.cc
     librbd/ImageCtx.cc
     librbd/ImageWatcher.cc
-    librbd/WatchNotifyTypes.cc
     librbd/internal.cc
+    librbd/Journal.cc
+    librbd/JournalReplay.cc
+    librbd/JournalTypes.cc
     librbd/librbd.cc
     librbd/LibrbdAdminSocketHook.cc
     librbd/LibrbdWriteback.cc
     librbd/ObjectMap.cc
     librbd/RebuildObjectMapRequest.cc
-    librbd/DiffIterate.cc)
+    librbd/WatchNotifyTypes.cc)
   add_library(librbd ${CEPH_SHARED} ${librbd_srcs}
     $<TARGET_OBJECTS:osdc_rbd_objs>
     $<TARGET_OBJECTS:common_util_obj>)
