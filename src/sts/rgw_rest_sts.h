@@ -149,6 +149,29 @@ public:
   string encoded_message;
 };
 
+class get_federation_token_result {
+public:
+  sts_usertype federated_user;
+  sts_credentials credentials;
+  int packed_policy_size;
+};
+
+class get_federation_token_response: public get_federation_token_result {
+public:
+  uuid_d request_id;
+  get_federation_token_response(uuid_d &id) {
+    request_id = id;
+  }
+  void dump(Formatter *f) const;
+};
+
+class get_federation_token_request {
+public:
+  string policy;
+  int duration_seconds;
+  string name;
+};
+
 #if 0
 struct post_part_field {
   string val;
