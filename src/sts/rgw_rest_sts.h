@@ -73,6 +73,34 @@ public:
   string token_code;
 };
 
+class assume_role_with_web_identity_result {
+public:
+  string subject_from_web_identity;
+  string audience;
+  sts_usertype assumed_role_user;
+  sts_credentials credentials;
+  string provider;
+};
+
+class assume_role_with_web_identity_response: public assume_role_with_web_identity_result {
+public:
+  uuid_d request_id;
+  assume_role_with_web_identity_response(uuid_d &id) {
+    request_id = id;
+  }
+  void dump(Formatter *f) const;
+};
+
+class assume_role_with_web_identity_request {
+public:
+  string role_session_name;
+  string arn;
+  string policy;
+  int duration_seconds;
+  string provider_id;
+  string web_identity_token;
+};
+
 class sts_principal {
 public:
   string id;

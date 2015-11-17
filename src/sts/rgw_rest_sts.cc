@@ -79,6 +79,48 @@ void assume_role_response::dump(Formatter *f) const
   f->close_section();
 }
 
+void assume_role_with_web_identity_response::dump(Formatter *f) const
+{
+  bufferlist encoded_token;
+  bufferlist encoded_key;
+  char encoded_uuid[38];
+  char encoded_time[30];
+
+  encode_base64_thing(credentials.session_token, encoded_token);
+  encoded_token.append('\0');
+  encode_base64_thing(credentials.secret_access_key, encoded_key);
+  encoded_key.append('\0');
+  request_id.print(encoded_uuid);
+  encoded_uuid[37] = 0;
+  time_t uv;
+  struct tm res[1];
+  uv = credentials.expiration.sec();
+  struct tm *tmp = gmtime_r(&uv, res);
+  strftime(encoded_time, sizeof encoded_time, "%Y-%m-%dT%T.000Z", tmp);
+
+  f->open_object_section_in_ns("AssumeRoleWithWebIdentityResponse",
+			"http://s3.amazonaws.com/doc/2011-06-15/");
+    f->open_object_section("AssumeRoleWithWebIdentityResult");
+      f->dump_string("SubjectFromWebIdentityToken", subject_from_web_identity);
+      f->dump_string("Audience", audience);
+      f->open_object_section("AssumedRoleUser");
+	f->dump_string("Arn", assumed_role_user.arn);
+	f->dump_string("AssumedRoleId", assumed_role_user.assumed_role_id);
+      f->close_section();
+      f->open_object_section("Credentials");
+	f->dump_string_linewrap("SessionToken", encoded_token.c_str());
+	f->dump_string_linewrap("SecretAccessKey", encoded_key.c_str());
+	f->dump_string("Expiration", encoded_time);
+	f->dump_string("AccessKeyId", credentials.access_key_id);
+      f->close_section();
+      f->dump_string("Provider", provider);
+    f->close_section();
+    f->open_object_section("ResponseMetadata");
+      f->dump_string("RequestId", encoded_uuid);
+    f->close_section();
+  f->close_section();
+}
+
 static inline const string t_or_f(bool f)
 {
   return f ? "true" : "false";
@@ -210,7 +252,6 @@ static struct response_attr_param resp_attr_params[] = {
   {"response-content-encoding", "Content-Encoding"},
   {NULL, NULL},
 };
-#endif
 
 class RGWAssumeRole_STS : public RGWRESTOp {
 
@@ -225,7 +266,6 @@ public:
   virtual const string name() { return "get_usage"; }
 };
 
-#if 0
 void RGWAssumeRole_STS::send_response()
 {
   if (ret)
@@ -554,6 +594,7 @@ public:
 
   int assume_role_execute(boost::function<void()>&);
   int decode_authorization_message(boost::function<void()>&);
+  int assume_role_with_web_identity_execute(boost::function<void()>&);
 
   virtual int get_params();
   virtual const string name() { return get_flag ? "get_sts" : "post_sts"; }
@@ -608,6 +649,34 @@ void make_fake_response(assume_role_response &response)
   response.assumed_role_user.arn = "arn:aws:sts::123456789012:assumed-role/demo/Bob";
   response.assumed_role_user.assumed_role_id = "ARO123EXAMPLE123:Bob";
   response.packed_policy_size = 6;
+//  response.request_id.generate_random();
+}
+
+void make_fake_response(assume_role_with_web_identity_response &response)
+{
+  unsigned char x_session[] = {
+    0x1, 0xa, 0x3, 0x61, 0x77, 0x73, 0x10, 0x4d, 0x1a, 0xf0, 0x3, 0x57,
+    0x5d, 0x75, 0xd7, 0x5d, 0x75, 0xcd, 0x3b, 0x57, 0xb0, 0xc4, 0x4e, 0x53,
+    0x8a, 0x34, 0x32, 0xa7, 0xe2, 0x4, 0x5c, 0x3, 0xf, 0x2c, 0x4c,
+  };
+  unsigned char x_key[] = {
+    0xc0, 0x96, 0xa5, 0xad, 0x75, 0x2d, 0x9c, 0x51, 0xc, 0x23, 0xf2, 0xbb,
+    0x30, 0x31, 0xd, 0x1b, 0xf6, 0xcf, 0xc5, 0x17, 0xe2, 0x9, 0x8c, 0xc4,
+    0x5c, 0x3, 0xf, 0x2c, 0x42, 0x84, 0x63,
+  };
+
+  response.subject_from_web_identity = "amzn1.account.AF6RHO7KZU5XRVQJGXK6HB56KR2A";
+  response.audience = "client.5498841531868486423.1548@apps.example.com";
+  response.credentials.session_token = string((char*)x_session, sizeof x_session);
+  response.credentials.secret_access_key = string((char*)x_key, sizeof x_key);
+  struct timeval tv;
+  tv.tv_sec = 1414191623;	// 2014-10-24 23:00:23 Z
+  tv.tv_usec = 0;
+  response.credentials.expiration.set_from_timeval(&tv);
+  response.credentials.access_key_id = "AKIAIOSFODNN7EXAMPLE";
+  response.assumed_role_user.arn = "arn:aws:sts::123456789012:assumed-role/FederatedWebIdentityRole/app1";
+  response.assumed_role_user.assumed_role_id = "AROACLKWSDQRAOEXAMPLE:app1";
+  response.provider = "www.amazon.com";
 //  response.request_id.generate_random();
 }
 
@@ -715,6 +784,41 @@ int RGWGetPost_STS::assume_role_execute(boost::function<void()>&f)
   return 0;
 }
 
+int RGWGetPost_STS::assume_role_with_web_identity_execute(boost::function<void()>&f)
+{
+  int r = 0;
+  map<string,string> val_map = s->info.args.get_params();
+  assume_role_with_web_identity_request request;
+  for (map<string,string>::iterator iter = val_map.begin();
+	iter != val_map.end(); ++iter) {
+    if (iter->first == "Action" || iter->first == "Version")
+	;
+    else if (iter->first == "RoleSessionName") {
+	request.role_session_name = iter->second;
+    } else if (iter->first == "RoleArn")
+	request.arn = iter->second;
+    else if (iter->first == "Policy")
+	request.policy = iter->second;
+    else if (iter->first == "DurationSeconds") {
+	r = my_get_integer(iter->second, request.duration_seconds);
+	if (r) why = "Bad DurationSeconds";
+     }
+    else if (iter->first == "ProviderId")
+	request.provider_id = iter->second;
+    else if (iter->first == "WebIdentityToken")
+	request.web_identity_token = iter->second;
+    else {
+	why = "spurious parameter";
+	r = -ERR_MALFORMED_INPUT;
+    }
+    if (r) return r;
+  }
+  assume_role_with_web_identity_response response(dynamic_cast<sts_err*>(s->err)->request_id);
+  make_fake_response(response);
+  f = boost::function<void()>([this,response]{response.dump(s->formatter);});
+  return 0;
+}
+
 int RGWGetPost_STS::decode_authorization_message(boost::function<void()>&f)
 {
   int r = 0;
@@ -746,15 +850,19 @@ int RGWGetPost_STS::decode_authorization_message(boost::function<void()>&f)
 
 typedef map<string,
 boost::function<int(RGWGetPost_STS*,boost::function<void()>&)>> sts_matchers;
+
 const sts_matchers ctable(
 {
-	{"AssumeRole", [](RGWGetPost_STS*o,boost::function<void()>&f)->int{
-		return o->assume_role_execute(f);
-	}},
-	{"DecodeAuthorizationMessage", [](RGWGetPost_STS*o,boost::function<void()>&f)->int{
-		return o->decode_authorization_message(f);
-		return -ERR_INVALID_ACTION;
-	}},
+  {"AssumeRole", [](RGWGetPost_STS*o,boost::function<void()>&f)->int{
+    return o->assume_role_execute(f);
+  }},
+  {"AssumeRoleWithWebIdentity",
+      [](RGWGetPost_STS*o,boost::function<void()>&f)->int{
+    return o->assume_role_with_web_identity_execute(f);
+  }},
+  {"DecodeAuthorizationMessage", [](RGWGetPost_STS*o,boost::function<void()>&f)->int{
+      return o->decode_authorization_message(f);
+  }},
 }
 );
 
