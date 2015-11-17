@@ -316,89 +316,138 @@ int validate_snapshot_name(at::ArgumentModifier mod,
 }
 
 int get_image_options(const boost::program_options::variables_map &vm,
-                      int *order, uint32_t *format, uint64_t *features,
-                      uint32_t *stripe_unit, uint32_t *stripe_count) {
+		      bool get_format, librbd::ImageOptions *opts) {
+  uint64_t order, features, stripe_unit, stripe_count;
+  bool features_specified = false;
+
   if (vm.count(at::IMAGE_ORDER)) {
-    *order = vm[at::IMAGE_ORDER].as<uint32_t>();
+    order = vm[at::IMAGE_ORDER].as<uint64_t>();
   } else {
-    *order = 22;
+    order = 22;
   }
 
-  bool features_specified = false;
   if (vm.count(at::IMAGE_FEATURES)) {
-    *features = vm[at::IMAGE_FEATURES].as<uint64_t>();
+    features = vm[at::IMAGE_FEATURES].as<uint64_t>();
     features_specified = true;
   } else {
-    *features = g_conf->rbd_default_features;
+    features = g_conf->rbd_default_features;
   }
 
   if (vm.count(at::IMAGE_STRIPE_UNIT)) {
-    *stripe_unit = vm[at::IMAGE_STRIPE_UNIT].as<uint32_t>();
+    stripe_unit = vm[at::IMAGE_STRIPE_UNIT].as<uint64_t>();
   } else {
-    *stripe_unit = g_conf->rbd_default_stripe_unit;
+    stripe_unit = g_conf->rbd_default_stripe_unit;
   }
 
   if (vm.count(at::IMAGE_STRIPE_COUNT)) {
-    *stripe_count = vm[at::IMAGE_STRIPE_COUNT].as<uint32_t>();
+    stripe_count = vm[at::IMAGE_STRIPE_COUNT].as<uint64_t>();
   } else {
-    *stripe_count = g_conf->rbd_default_stripe_count;
+    stripe_count = g_conf->rbd_default_stripe_count;
   }
 
-  if ((*stripe_unit != 0 && *stripe_count == 0) ||
-      (*stripe_unit == 0 && *stripe_count != 0)) {
+  if ((stripe_unit != 0 && stripe_count == 0) ||
+      (stripe_unit == 0 && stripe_count != 0)) {
     std::cerr << "must specify both (or neither) of stripe-unit and stripe-count"
               << std::endl;
     return -EINVAL;
-  } else if ((*stripe_unit || *stripe_count) &&
-             (*stripe_unit != (1ll << *order) && *stripe_count != 1)) {
-    *features |= RBD_FEATURE_STRIPINGV2;
+  } else if ((stripe_unit || stripe_count) &&
+             (stripe_unit != (1ull << order) && stripe_count != 1)) {
+    features |= RBD_FEATURE_STRIPINGV2;
   } else {
-    *features &= ~RBD_FEATURE_STRIPINGV2;
+    features &= ~RBD_FEATURE_STRIPINGV2;
   }
 
   if (vm.count(at::IMAGE_SHARED) && vm[at::IMAGE_SHARED].as<bool>()) {
-    *features &= ~RBD_FEATURES_SINGLE_CLIENT;
+    features &= ~RBD_FEATURES_SINGLE_CLIENT;
   }
 
-  if (format != nullptr) {
+  if (get_format) {
+    uint64_t format;
     bool format_specified = false;
     if (vm.count(at::IMAGE_NEW_FORMAT)) {
-      *format = 2;
+      format = 2;
       format_specified = true;
     } else if (vm.count(at::IMAGE_FORMAT)) {
-      *format = vm[at::IMAGE_FORMAT].as<uint32_t>();
+      format = vm[at::IMAGE_FORMAT].as<uint32_t>();
       format_specified = true;
     } else {
-      *format = g_conf->rbd_default_format;
+      format = g_conf->rbd_default_format;
     }
 
-    if (features_specified && *features != 0) {
-      if (format_specified && *format == 1) {
+    if (features_specified && features != 0) {
+      if (format_specified && format == 1) {
         std::cerr << "rbd: features not allowed with format 1; "
                   << "use --image-format 2" << std::endl;
         return -EINVAL;
       } else {
-        *format = 2;
+        format = 2;
         format_specified = true;
       }
     }
 
-    if ((*stripe_unit || *stripe_count) &&
-        (*stripe_unit != (1ull << *order) && *stripe_count != 1)) {
-      if (format_specified && *format == 1) {
+    if ((stripe_unit || stripe_count) &&
+        (stripe_unit != (1ull << order) && stripe_count != 1)) {
+      if (format_specified && format == 1) {
         std::cerr << "rbd: non-default striping not allowed with format 1; "
                   << "use --image-format 2" << std::endl;
         return -EINVAL;
       } else {
-        *format = 2;
+        format = 2;
         format_specified = 2;
       }
     }
 
     if (format_specified) {
-      int r = g_conf->set_val("rbd_default_format", stringify(*format));
+      int r = g_conf->set_val("rbd_default_format", stringify(format));
       assert(r == 0);
     }
+
+    opts->set(RBD_IMAGE_OPTION_FORMAT, format);
+  }
+
+  opts->set(RBD_IMAGE_OPTION_ORDER, order);
+  opts->set(RBD_IMAGE_OPTION_FEATURES, features);
+  opts->set(RBD_IMAGE_OPTION_STRIPE_UNIT, stripe_unit);
+  opts->set(RBD_IMAGE_OPTION_STRIPE_COUNT, stripe_count);
+
+  int r = get_journal_options(vm, opts);
+  if (r < 0) {
+    return r;
+  }
+
+  return 0;
+}
+
+int get_journal_options(const boost::program_options::variables_map &vm,
+			librbd::ImageOptions *opts) {
+
+  if (vm.count(at::JOURNAL_OBJECT_SIZE)) {
+    uint64_t size = vm[at::JOURNAL_OBJECT_SIZE].as<uint64_t>();
+    uint64_t order = 12;
+    while ((1ULL << order) < size) {
+      order++;
+    }
+    opts->set(RBD_IMAGE_OPTION_JOURNAL_ORDER, order);
+
+    int r = g_conf->set_val("rbd_journal_order", stringify(order));
+    assert(r == 0);
+  }
+  if (vm.count(at::JOURNAL_SPLAY_WIDTH)) {
+    opts->set(RBD_IMAGE_OPTION_JOURNAL_SPLAY_WIDTH,
+	      vm[at::JOURNAL_SPLAY_WIDTH].as<uint64_t>());
+
+    int r = g_conf->set_val("rbd_journal_splay_width",
+			    stringify(
+			      vm[at::JOURNAL_SPLAY_WIDTH].as<uint64_t>()));
+    assert(r == 0);
+  }
+  if (vm.count(at::JOURNAL_POOL)) {
+    opts->set(RBD_IMAGE_OPTION_JOURNAL_POOL,
+	      vm[at::JOURNAL_POOL].as<std::string>());
+
+    int r = g_conf->set_val("rbd_journal_pool",
+			    vm[at::JOURNAL_POOL].as<std::string>());
+    assert(r == 0);
   }
 
   return 0;

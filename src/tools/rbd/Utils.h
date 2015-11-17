@@ -65,8 +65,10 @@ int validate_snapshot_name(argument_types::ArgumentModifier mod,
                            SnapshotPresence snapshot_presence);
 
 int get_image_options(const boost::program_options::variables_map &vm,
-                      int *order, uint32_t *format, uint64_t *features,
-                      uint32_t *stripe_unit, uint32_t *stripe_count);
+                      bool get_format, librbd::ImageOptions* opts);
+
+int get_journal_options(const boost::program_options::variables_map &vm,
+			librbd::ImageOptions *opts);
 
 int get_image_size(const boost::program_options::variables_map &vm,
                    uint64_t *size);

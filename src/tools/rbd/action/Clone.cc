@@ -18,14 +18,16 @@ namespace po = boost::program_options;
 int do_clone(librbd::RBD &rbd, librados::IoCtx &p_ioctx,
              const char *p_name, const char *p_snapname,
              librados::IoCtx &c_ioctx, const char *c_name,
-             uint64_t features, int *c_order,
-             uint64_t stripe_unit, uint64_t stripe_count) {
+             librbd::ImageOptions& opts) {
+  uint64_t features;
+  int r = opts.get(RBD_IMAGE_OPTION_FEATURES, &features);
+  assert(r == 0);
+
   if ((features & RBD_FEATURE_LAYERING) != RBD_FEATURE_LAYERING) {
     return -EINVAL;
   }
 
-  return rbd.clone2(p_ioctx, p_name, p_snapname, c_ioctx, c_name, features,
-                    c_order, stripe_unit, stripe_count);
+  return rbd.clone3(p_ioctx, p_name, p_snapname, c_ioctx, c_name, opts);
 }
 
 void get_arguments(po::options_description *positional,
@@ -57,12 +59,8 @@ int execute(const po::variables_map &vm) {
     return r;
   }
 
-  int order;
-  uint64_t features;
-  uint32_t stripe_unit;
-  uint32_t stripe_count;
-  r = utils::get_image_options(vm, &order, nullptr, &features, &stripe_unit,
-                               &stripe_count);
+  librbd::ImageOptions opts;
+  r = utils::get_image_options(vm, false, &opts);
   if (r < 0) {
     return r;
   }
@@ -82,8 +80,7 @@ int execute(const po::variables_map &vm) {
 
   librbd::RBD rbd;
   r = do_clone(rbd, io_ctx, image_name.c_str(), snap_name.c_str(), dst_io_ctx,
-               dst_image_name.c_str(), features, &order, stripe_unit,
-               stripe_count);
+               dst_image_name.c_str(), opts);
   if (r < 0) {
     std::cerr << "rbd: clone error: " << cpp_strerror(r) << std::endl;
     return r;

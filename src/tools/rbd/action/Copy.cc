@@ -16,10 +16,11 @@ namespace at = argument_types;
 namespace po = boost::program_options;
 
 static int do_copy(librbd::Image &src, librados::IoCtx& dest_pp,
-                   const char *destname, bool no_progress)
+		   const char *destname, librbd::ImageOptions& opts,
+		   bool no_progress)
 {
   utils::ProgressContext pc("Image copy", no_progress);
-  int r = src.copy_with_progress(dest_pp, destname, pc);
+  int r = src.copy_with_progress3(dest_pp, destname, opts, pc);
   if (r < 0){
     pc.fail();
     return r;
@@ -33,6 +34,7 @@ void get_arguments(po::options_description *positional,
   at::add_image_or_snap_spec_options(positional, options,
                                      at::ARGUMENT_MODIFIER_SOURCE);
   at::add_image_spec_options(positional, options, at::ARGUMENT_MODIFIER_DEST);
+  at::add_create_image_options(options, false);
   at::add_no_progress_option(options);
 }
 
@@ -58,6 +60,12 @@ int execute(const po::variables_map &vm) {
     return r;
   }
 
+  librbd::ImageOptions opts;
+  r = utils::get_image_options(vm, false, &opts);
+  if (r < 0) {
+    return r;
+  }
+
   librados::Rados rados;
   librados::IoCtx io_ctx;
   librbd::Image image;
@@ -73,7 +81,7 @@ int execute(const po::variables_map &vm) {
     return r;
   }
 
-  r = do_copy(image, dst_io_ctx, dst_image_name.c_str(),
+  r = do_copy(image, dst_io_ctx, dst_image_name.c_str(), opts,
               vm[at::NO_PROGRESS].as<bool>());
   if (r < 0) {
     std::cerr << "rbd: copy failed: " << cpp_strerror(r) << std::endl;
@@ -83,7 +91,8 @@ int execute(const po::variables_map &vm) {
 }
 
 Shell::Action action(
-  {"copy"}, {"cp"}, "Copy src image to dest.", "", &get_arguments, &execute);
+  {"copy"}, {"cp"}, "Copy src image to dest.", at::get_long_features_help(),
+  &get_arguments, &execute);
 
 } // namespace copy
 } // namespace action
