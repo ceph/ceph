@@ -21,6 +21,7 @@
 #include "librbd/LibrbdAdminSocketHook.h"
 #include "librbd/ObjectMap.h"
 #include "librbd/operation/ResizeRequest.h"
+#include "librbd/Utils.h"
 
 #include <boost/bind.hpp>
 
@@ -131,16 +132,16 @@ struct C_InvalidateCache : public Context {
       journal(NULL),
       refresh_seq(0),
       last_refresh(0),
-      owner_lock(unique_lock_name("librbd::ImageCtx::owner_lock", this)),
-      md_lock(unique_lock_name("librbd::ImageCtx::md_lock", this)),
-      cache_lock(unique_lock_name("librbd::ImageCtx::cache_lock", this)),
-      snap_lock(unique_lock_name("librbd::ImageCtx::snap_lock", this)),
-      parent_lock(unique_lock_name("librbd::ImageCtx::parent_lock", this)),
-      refresh_lock(unique_lock_name("librbd::ImageCtx::refresh_lock", this)),
-      object_map_lock(unique_lock_name("librbd::ImageCtx::object_map_lock", this)),
-      async_ops_lock(unique_lock_name("librbd::ImageCtx::async_ops_lock", this)),
-      copyup_list_lock(unique_lock_name("librbd::ImageCtx::copyup_list_lock", this)),
-      completed_reqs_lock(unique_lock_name("librbd::ImageCtx::completed_reqs_lock", this)),
+      owner_lock(util::unique_lock_name("librbd::ImageCtx::owner_lock", this)),
+      md_lock(util::unique_lock_name("librbd::ImageCtx::md_lock", this)),
+      cache_lock(util::unique_lock_name("librbd::ImageCtx::cache_lock", this)),
+      snap_lock(util::unique_lock_name("librbd::ImageCtx::snap_lock", this)),
+      parent_lock(util::unique_lock_name("librbd::ImageCtx::parent_lock", this)),
+      refresh_lock(util::unique_lock_name("librbd::ImageCtx::refresh_lock", this)),
+      object_map_lock(util::unique_lock_name("librbd::ImageCtx::object_map_lock", this)),
+      async_ops_lock(util::unique_lock_name("librbd::ImageCtx::async_ops_lock", this)),
+      copyup_list_lock(util::unique_lock_name("librbd::ImageCtx::copyup_list_lock", this)),
+      completed_reqs_lock(util::unique_lock_name("librbd::ImageCtx::completed_reqs_lock", this)),
       extra_read_flags(0),
       old_format(true),
       order(0), size(0), features(0),
@@ -216,7 +217,7 @@ struct C_InvalidateCache : public Context {
 
     if (!old_format) {
       if (!id.length()) {
-	r = cls_client::get_id(&md_ctx, id_obj_name(name), &id);
+	r = cls_client::get_id(&md_ctx, util::id_obj_name(name), &id);
 	if (r < 0) {
 	  lderr(cct) << "error reading image id: " << cpp_strerror(r)
 		     << dendl;
@@ -224,7 +225,7 @@ struct C_InvalidateCache : public Context {
 	}
       }
 
-      header_oid = header_name(id);
+      header_oid = util::header_name(id);
       apply_metadata_confs();
       r = cls_client::get_immutable_metadata(&md_ctx, header_oid,
 					     &object_prefix, &order);
@@ -245,7 +246,7 @@ struct C_InvalidateCache : public Context {
       init_layout();
     } else {
       apply_metadata_confs();
-      header_oid = old_header_name(name);
+      header_oid = util::old_header_name(name);
     }
 
     string pname = string("librbd-") + id + string("-") +

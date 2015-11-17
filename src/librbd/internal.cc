@@ -260,36 +260,17 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
 
 } // anonymous namespace
 
-  const string id_obj_name(const string &name)
-  {
-    return RBD_ID_PREFIX + name;
-  }
-
-  const string header_name(const string &image_id)
-  {
-    return RBD_HEADER_PREFIX + image_id;
-  }
-
-  const string old_header_name(const string &image_name)
-  {
-    return image_name + RBD_SUFFIX;
-  }
-
-  std::string unique_lock_name(const std::string &name, void *address) {
-    return name + " (" + stringify(address) + ")";
-  }
-
   int detect_format(IoCtx &io_ctx, const string &name,
 		    bool *old_format, uint64_t *size)
   {
     CephContext *cct = (CephContext *)io_ctx.cct();
     if (old_format)
       *old_format = true;
-    int r = io_ctx.stat(old_header_name(name), size, NULL);
+    int r = io_ctx.stat(util::old_header_name(name), size, NULL);
     if (r == -ENOENT) {
       if (old_format)
 	*old_format = false;
-      r = io_ctx.stat(id_obj_name(name), size, NULL);
+      r = io_ctx.stat(util::id_obj_name(name), size, NULL);
       if (r < 0)
 	return r;
     } else if (r < 0) {
@@ -1199,7 +1180,7 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
     bufferlist bl;
     bl.append((const char *)&header, sizeof(header));
 
-    string header_oid = old_header_name(imgname);
+    string header_oid = util::old_header_name(imgname);
     r = io_ctx.write(header_oid, bl, bl.length(), 0);
     if (r < 0) {
       lderr(cct) << "Error writing image header: " << cpp_strerror(r)
@@ -1237,7 +1218,7 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
       return r;
     }
 
-    id_obj = id_obj_name(imgname);
+    id_obj = util::id_obj_name(imgname);
 
     r = io_ctx.create(id_obj, true);
     if (r < 0) {
@@ -1264,7 +1245,7 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
     }
 
     oss << RBD_DATA_PREFIX << id;
-    header_oid = header_name(id);
+    header_oid = util::header_name(id);
     r = cls_client::create_image(&io_ctx, header_oid, size, order,
 				 features, oss.str());
     if (r < 0) {
@@ -2251,7 +2232,7 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
       }
 
       ldout(cct, 2) << "removing id object..." << dendl;
-      r = io_ctx.remove(id_obj_name(imgname));
+      r = io_ctx.remove(util::id_obj_name(imgname));
       if (r < 0 && r != -ENOENT) {
 	lderr(cct) << "error removing id object: " << cpp_strerror(r) << dendl;
 	return r;
