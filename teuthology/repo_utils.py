@@ -6,7 +6,7 @@ import subprocess
 import time
 
 from .config import config
-from .contextutil import safe_while
+from .contextutil import safe_while, MaxWhileTries
 from .exceptions import BootstrapError, BranchNotFoundError, GitError
 
 log = logging.getLogger(__name__)
@@ -39,7 +39,7 @@ def enforce_repo_state(repo_url, dest_path, branch, remove_on_error=True):
 
         reset_repo(repo_url, dest_path, branch)
         # remove_pyc_files(dest_path)
-    except (BranchNotFoundError, GitError):
+    except BranchNotFoundError:
         if remove_on_error:
             shutil.rmtree(dest_path, ignore_errors=True)
         raise
@@ -178,17 +178,20 @@ def fetch_repo(url, branch, bootstrap=None, lock=True):
     lock_path = dest_path.rstrip('/') + '.lock'
     with FileLock(lock_path, noop=not lock):
         with safe_while(sleep=10, tries=60) as proceed:
-            while proceed():
-                try:
-                    enforce_repo_state(url, dest_path,
-                                       branch)
-                    if bootstrap:
-                        bootstrap(dest_path)
-                    break
-                except GitError:
-                    log.exception("Git error encountered; retrying")
-                except BootstrapError:
-                    log.exception("Bootstrap error encountered; retrying")
+            try:
+                while proceed():
+                    try:
+                        enforce_repo_state(url, dest_path, branch)
+                        if bootstrap:
+                            bootstrap(dest_path)
+                        break
+                    except GitError:
+                        log.exception("Git error encountered; retrying")
+                    except BootstrapError:
+                        log.exception("Bootstrap error encountered; retrying")
+            except MaxWhileTries:
+                shutil.rmtree(dest_path, ignore_errors=True)
+                raise
     return dest_path
 
 
