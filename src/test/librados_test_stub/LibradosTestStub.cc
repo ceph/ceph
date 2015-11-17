@@ -698,6 +698,19 @@ void ObjectReadOperation::sparse_read(uint64_t off, uint64_t len,
   o->ops.push_back(op);
 }
 
+void ObjectReadOperation::stat(uint64_t *psize, time_t *pmtime, int *prval) {
+  TestObjectOperationImpl *o = reinterpret_cast<TestObjectOperationImpl*>(impl);
+
+  ObjectOperationTestImpl op = boost::bind(&TestIoCtxImpl::stat, _1, _2,
+                                           psize, pmtime);
+
+  if (prval != NULL) {
+    op = boost::bind(save_operation_result,
+                     boost::bind(op, _1, _2, _3, _4), prval);
+  }
+  o->ops.push_back(op);
+}
+
 void ObjectWriteOperation::append(const bufferlist &bl) {
   TestObjectOperationImpl *o = reinterpret_cast<TestObjectOperationImpl*>(impl);
   o->ops.push_back(boost::bind(&TestIoCtxImpl::append, _1, _2, bl, _4));
