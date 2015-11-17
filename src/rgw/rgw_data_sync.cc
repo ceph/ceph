@@ -864,6 +864,7 @@ public:
         yield call(new RGWRadosGetOmapKeysCR(store, pool, oid, sync_marker.marker, &entries, max_entries));
         if (retcode < 0) {
           ldout(store->ctx(), 0) << "ERROR: " << __func__ << "(): RGWRadosGetOmapKeysCR() returned ret=" << retcode << dendl;
+          drain_all();
           return set_cr_error(retcode);
         }
         iter = entries.begin();
@@ -876,6 +877,7 @@ public:
             // fetch remote and write locally
             yield spawn(new RGWDataSyncSingleEntryCR(store, http_manager, async_rados, conn, source_zone, iter->first, iter->first, marker_tracker), false);
             if (retcode < 0) {
+              drain_all();
               return set_cr_error(retcode);
             }
           }
@@ -925,6 +927,7 @@ public:
         yield call(new RGWReadRemoteDataLogShardInfoCR(store, http_manager, async_rados, conn, shard_id, &shard_info));
         if (retcode < 0) {
           ldout(store->ctx(), 0) << "ERROR: failed to fetch remote data log info: ret=" << retcode << dendl;
+          drain_all();
           return set_cr_error(retcode);
         }
         datalog_marker = shard_info.marker;
@@ -943,6 +946,7 @@ public:
             } else {
               yield spawn(new RGWDataSyncSingleEntryCR(store, http_manager, async_rados, conn, source_zone, log_iter->entry.key, log_iter->log_id, marker_tracker), false);
               if (retcode < 0) {
+                drain_all();
                 return set_cr_error(retcode);
               }
             }
@@ -1900,6 +1904,7 @@ int RGWBucketShardFullSyncCR::operate()
       yield call(new RGWListBucketShardCR(store, http_manager, async_rados, conn, bucket_name, bucket_id, shard_id,
                                       list_marker, &list_result));
       if (retcode < 0 && retcode != -ENOENT) {
+        drain_all();
         return set_cr_error(retcode);
       }
       entries_iter = list_result.entries.begin();

@@ -1181,6 +1181,8 @@ public:
         yield call(new RGWRadosGetOmapKeysCR(sync_env->store, pool, oid, marker, &entries, max_entries));
         if (retcode < 0) {
           ldout(sync_env->cct, 0) << "ERROR: " << __func__ << "(): RGWRadosGetOmapKeysCR() returned ret=" << retcode << dendl;
+          yield lease_cr->go_down();
+          drain_all();
           return retcode;
         }
         iter = entries.begin();
@@ -1193,10 +1195,6 @@ public:
             // fetch remote and write locally
             yield {
               RGWCoroutinesStack *stack = spawn(new RGWMetaSyncSingleEntryCR(sync_env, iter->first, iter->first, marker_tracker), false);
-              if (retcode < 0) {
-                return retcode;
-              }
-              assert(stack);
               stack->get();
 
               stack_to_pos[stack] = iter->first;
