@@ -39,7 +39,7 @@ def enforce_repo_state(repo_url, dest_path, branch, remove_on_error=True):
 
         reset_repo(repo_url, dest_path, branch)
         # remove_pyc_files(dest_path)
-    except (BranchNotFoundError, GitError):
+    except BranchNotFoundError:
         if remove_on_error:
             shutil.rmtree(dest_path, ignore_errors=True)
         raise
