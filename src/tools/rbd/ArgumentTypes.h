@@ -65,6 +65,10 @@ static const std::string IMAGE_SIZE("size");
 static const std::string IMAGE_STRIPE_UNIT("stripe-unit");
 static const std::string IMAGE_STRIPE_COUNT("stripe-count");
 
+static const std::string JOURNAL_OBJECT_SIZE("journal-object-size");
+static const std::string JOURNAL_SPLAY_WIDTH("journal-splay-width");
+static const std::string JOURNAL_POOL("journal-pool");
+
 static const std::string NO_PROGRESS("no-progress");
 static const std::string FORMAT("format");
 static const std::string PRETTY_FORMAT("pretty-format");
@@ -98,6 +102,8 @@ struct Format : public TypedValue<std::string> {
 
   Formatter create_formatter(bool pretty) const;
 };
+
+struct JournalObjectSize {};
 
 std::string get_name_prefix(ArgumentModifier modifier);
 std::string get_description_prefix(ArgumentModifier modifier);
@@ -141,6 +147,9 @@ void add_journal_spec_options(
 void add_create_image_options(boost::program_options::options_description *opt,
                               bool include_format);
 
+void add_create_journal_options(
+  boost::program_options::options_description *opt);
+
 void add_size_option(boost::program_options::options_description *opt);
 
 void add_path_options(boost::program_options::options_description *pos,
@@ -170,6 +179,8 @@ void validate(boost::any& v, const std::vector<std::string>& values,
               ImageFeatures *target_type, int);
 void validate(boost::any& v, const std::vector<std::string>& values,
               Format *target_type, int);
+void validate(boost::any& v, const std::vector<std::string>& values,
+              JournalObjectSize *target_type, int);
 
 std::ostream &operator<<(std::ostream &os, const ImageFeatures &features);
 

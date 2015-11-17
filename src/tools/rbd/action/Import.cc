@@ -64,10 +64,8 @@ private:
 };
 
 static int do_import(librbd::RBD &rbd, librados::IoCtx& io_ctx,
-                     const char *imgname, int *order, const char *path,
-                     int format, uint64_t features,
-                     uint64_t stripe_unit, uint64_t stripe_count,
-                     bool no_progress)
+                     const char *imgname, const char *path,
+		     librbd::ImageOptions& opts, bool no_progress)
 {
   int fd, r;
   struct stat stat_buf;
@@ -75,13 +73,13 @@ static int do_import(librbd::RBD &rbd, librados::IoCtx& io_ctx,
 
   assert(imgname);
 
-  // default order as usual
-  if (*order == 0)
-    *order = 22;
+  uint64_t order;
+  r = opts.get(RBD_IMAGE_OPTION_ORDER, &order);
+  assert(r == 0);
 
   // try to fill whole imgblklen blocks for sparsification
   uint64_t image_pos = 0;
-  size_t imgblklen = 1 << *order;
+  size_t imgblklen = 1 << order;
   char *p = new char[imgblklen];
   size_t reqlen = imgblklen;    // amount requested from read
   ssize_t readlen;              // amount received from one read
@@ -94,7 +92,7 @@ static int do_import(librbd::RBD &rbd, librados::IoCtx& io_ctx,
   if (from_stdin) {
     throttle.reset(new SimpleThrottle(1, false));
     fd = 0;
-    size = 1ULL << *order;
+    size = 1ULL << order;
   } else {
     throttle.reset(new SimpleThrottle(
       max(g_conf->rbd_concurrent_management_ops, 1), false));
@@ -132,18 +130,27 @@ static int do_import(librbd::RBD &rbd, librados::IoCtx& io_ctx,
     posix_fadvise(fd, 0, 0, POSIX_FADV_SEQUENTIAL);
   }
 
+  uint64_t format;
+  r = opts.get(RBD_IMAGE_OPTION_FORMAT, &format);
+  assert(r == 0);
   if (format == 1) {
+    uint64_t stripe_unit, stripe_count;
+    r = opts.get(RBD_IMAGE_OPTION_STRIPE_UNIT, &stripe_unit);
+    assert(r == 0);
+    r = opts.get(RBD_IMAGE_OPTION_STRIPE_COUNT, &stripe_count);
+    assert(r == 0);
+
     // weird striping not allowed with format 1!
     if ((stripe_unit || stripe_count) &&
-        (stripe_unit != (1ull << *order) && stripe_count != 1)) {
+        (stripe_unit != (1ull << order) && stripe_count != 1)) {
       std::cerr << "non-default striping not allowed with format 1; "
                 << "use --image-format 2" << std::endl;
       return -EINVAL;
     }
-    r = rbd.create(io_ctx, imgname, size, order);
+    int order_ = order;
+    r = rbd.create(io_ctx, imgname, size, &order_);
   } else {
-    r = rbd.create3(io_ctx, imgname, size, features, order,
-                    stripe_unit, stripe_count);
+    r = rbd.create4(io_ctx, imgname, size, opts);
   }
   if (r < 0) {
     std::cerr << "rbd: image creation failed" << std::endl;
@@ -280,13 +287,8 @@ int execute(const po::variables_map &vm) {
     image_name = deprecated_image_name;
   }
 
-  int order;
-  uint32_t format;
-  uint64_t features;
-  uint32_t stripe_unit;
-  uint32_t stripe_count;
-  r = utils::get_image_options(vm, &order, &format, &features, &stripe_unit,
-                               &stripe_count);
+  librbd::ImageOptions opts;
+  r = utils::get_image_options(vm, true, &opts);
   if (r < 0) {
     return r;
   }
@@ -299,9 +301,8 @@ int execute(const po::variables_map &vm) {
   }
 
   librbd::RBD rbd;
-  r = do_import(rbd, io_ctx, image_name.c_str(), &order, path.c_str(),
-                format, features, stripe_unit, stripe_count,
-                vm[at::NO_PROGRESS].as<bool>());
+  r = do_import(rbd, io_ctx, image_name.c_str(), path.c_str(),
+                opts, vm[at::NO_PROGRESS].as<bool>());
   if (r < 0) {
     std::cerr << "rbd: import failed: " << cpp_strerror(r) << std::endl;
     return r;
