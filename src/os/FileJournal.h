@@ -356,7 +356,8 @@ private:
   off64_t get_top() const {
     return ROUND_UP_TO(sizeof(header), block_size);
   }
-
+  uint32_t percentage_empty;
+  DynamicThrottle dyn_throttle; 
  public:
   FileJournal(uuid_d fsid, Finisher *fin, Cond *sync_cond, const char *f, bool dio=false, bool ai=true, bool faio=false) :
     Journal(fsid, fin, sync_cond),
@@ -390,7 +391,11 @@ private:
     aio_stop(true),
     do_fast_sync(false),
     write_thread(this),
-    write_finish_thread(this) {
+    write_finish_thread(this),
+    percentage_empty(100),
+    dyn_throttle(g_conf->journal_dynamic_throttle_start_delay, 
+                g_conf->journal_percentage_empty_threshold_aggressive_throttle,
+		g_ceph_context) {
 
       if (aio && !directio) {
         derr << "FileJournal::_open_any: aio not supported without directio; disabling aio" << dendl;

@@ -915,10 +915,10 @@ OPTION(filestore_do_force_sync, OPT_BOOL, false)
 OPTION(filestore_journal_parallel, OPT_BOOL, false)
 OPTION(filestore_journal_writeahead, OPT_BOOL, false)
 OPTION(filestore_journal_trailing, OPT_BOOL, false)
-OPTION(filestore_queue_max_ops, OPT_INT, 50)
-OPTION(filestore_queue_max_bytes, OPT_INT, 100 << 20)
-OPTION(filestore_queue_committing_max_ops, OPT_INT, 500)        // this is ON TOP of filestore_queue_max_*
-OPTION(filestore_queue_committing_max_bytes, OPT_INT, 100 << 20) //  "
+OPTION(filestore_queue_max_ops, OPT_U64, 50)
+OPTION(filestore_queue_max_bytes, OPT_U64, 100 << 20)
+OPTION(filestore_queue_committing_max_ops, OPT_U64, 500)        // this is ON TOP of filestore_queue_max_*
+OPTION(filestore_queue_committing_max_bytes, OPT_U64, 100 << 20) //  "
 OPTION(filestore_op_threads, OPT_INT, 2)
 OPTION(filestore_op_thread_timeout, OPT_INT, 60)
 OPTION(filestore_op_thread_suicide_timeout, OPT_INT, 180)
@@ -937,6 +937,9 @@ OPTION(filestore_kill_at, OPT_INT, 0)            // inject a failure at the n'th
 OPTION(filestore_inject_stall, OPT_INT, 0)       // artificially stall for N seconds in op queue thread
 OPTION(filestore_fail_eio, OPT_BOOL, true)       // fail/crash on EIO
 OPTION(filestore_debug_verify_split, OPT_BOOL, false)
+OPTION(filestore_dynamic_throttle_start_delay, OPT_DOUBLE, 0.0002) //in seconds
+OPTION(filestore_percentage_empty_threshold_aggressive_throttle,  OPT_INT, 20)
+
 OPTION(journal_dio, OPT_BOOL, true)
 OPTION(journal_aio, OPT_BOOL, true)
 OPTION(journal_force_aio, OPT_BOOL, false)
@@ -966,6 +969,9 @@ OPTION(journal_replay_from, OPT_INT, 0)
 OPTION(journal_zero_on_create, OPT_BOOL, false)
 OPTION(journal_ignore_corruption, OPT_BOOL, false) // assume journal is not corrupt
 OPTION(journal_discard, OPT_BOOL, false) //using ssd disk as journal, whether support discard nouse journal-data.
+OPTION(journal_dynamic_throttle, OPT_BOOL, false)
+OPTION(journal_dynamic_throttle_start_delay, OPT_DOUBLE, 0.00001) //in seconds
+OPTION(journal_percentage_empty_threshold_aggressive_throttle,  OPT_INT, 30)
 
 OPTION(rados_mon_op_timeout, OPT_DOUBLE, 0) // how many seconds to wait for a response from the monitor before returning an error from a rados operation. 0 means on limit.
 OPTION(rados_osd_op_timeout, OPT_DOUBLE, 0) // how many seconds to wait for a response from osds before returning an error from a rados operation. 0 means no limit.

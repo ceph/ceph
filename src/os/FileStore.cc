@@ -540,6 +540,9 @@ FileStore::FileStore(const std::string &base, const std::string &jdev, osflagbit
   fdcache(g_ceph_context),
   wbthrottle(g_ceph_context),
   next_osr_id(0),
+  dyn_throttle_filestore(g_conf->filestore_dynamic_throttle_start_delay,
+                g_conf->filestore_percentage_empty_threshold_aggressive_throttle,
+                g_ceph_context),
   throttle_ops(g_ceph_context, "filestore_ops",g_conf->filestore_queue_max_ops),
   throttle_bytes(g_ceph_context, "filestore_bytes",g_conf->filestore_queue_max_bytes),
   m_ondisk_finisher_num(g_conf->filestore_ondisk_finisher_threads),
@@ -1862,13 +1865,65 @@ void FileStore::queue_op(OpSequencer *osr, Op *o)
   dout(5) << "queue_op " << o << " seq " << o->op
 	  << " " << *osr
 	  << " " << o->bytes << " bytes"
-	  << "   (queue has " << throttle_ops.get_current() << " ops and " << throttle_bytes.get_current() << " bytes)"
+	  << "   (queue has " << throttle_ops.get_current() << " ops and " 
+          << throttle_bytes.get_current() << " bytes)"
 	  << dendl;
   op_wq.queue(osr);
+
+  if (g_conf->journal_dynamic_throttle) {
+  /* Trying to throttle the journal commit based on the number of
+     outstanding bytes to be applied. This will restrict the amount of
+     memory growth in the write path. The mode of throttle is to introduce
+     an incremental delay based on the % increase above an outstanding byte
+     threshold.
+   */
+    uint64_t outstanding_bytes = m_filestore_current_queue_bytes.read(); 
+    bool induce_delay = false;
+    uint32_t percentage_more = 0;
+    
+    if (outstanding_bytes > m_filestore_queue_max_bytes) {
+      percentage_more = (uint32_t)((100* (outstanding_bytes -
+                      m_filestore_queue_max_bytes))/m_filestore_queue_max_bytes);
+      if (percentage_more > 100) {
+        percentage_more = 100;
+      }
+
+      induce_delay = true;
+    }
+    
+    if (induce_delay) {
+
+      double delay_time;
+      dyn_throttle_filestore.calc_wait_time(100 - percentage_more, 
+                                                  delay_time, true);
+      if (0 != delay_time) {
+        struct timespec waittime;
+        waittime.tv_sec = 0;
+        waittime.tv_nsec = delay_time * 1000 * 1000 * 1000 ;
+        nanosleep(&waittime, NULL);
+        dout(5) << " Filestore on BaseDir = " << basedir << " and in journal on "
+            << journalpath << " is slow on applying transaction."
+            << " Throttling journal commits.Filestore op_wq depth = "
+            << op_queue.size() << " Outstanding bytes to be applied = "
+            << outstanding_bytes << " seq = " << o->op
+            << " Max op threshold = " << m_filestore_queue_max_ops
+            << " Max byte threshold = " << m_filestore_queue_max_bytes
+            << " Transaction size = " << o->bytes
+            << " Percentage exceeded threshold = " << percentage_more
+            << " Applying delay = " << delay_time << " in the journal commit path."
+            << dendl;
+
+        }
+    }     
+  }
 }
 
 void FileStore::op_queue_reserve_throttle(Op *o, ThreadPool::TPHandle *handle)
 {
+  if (g_conf->journal_dynamic_throttle) {
+    m_filestore_current_queue_bytes.add(o->bytes);
+    return;
+  }
   // Do not call while holding the journal lock!
   uint64_t max_ops = m_filestore_queue_max_ops;
   uint64_t max_bytes = m_filestore_queue_max_bytes;
@@ -1904,6 +1959,11 @@ void FileStore::op_queue_reserve_throttle(Op *o, ThreadPool::TPHandle *handle)
 
 void FileStore::op_queue_release_throttle(Op *o)
 {
+  if (g_conf->journal_dynamic_throttle) {
+    m_filestore_current_queue_bytes.sub(o->bytes);
+    return;
+  }
+
   throttle_ops.put();
   throttle_bytes.put(o->bytes);
   logger->set(l_os_oq_ops, throttle_ops.get_current());

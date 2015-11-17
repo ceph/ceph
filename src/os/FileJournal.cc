@@ -854,7 +854,14 @@ int FileJournal::check_for_full(uint64_t seq, off64_t pos, off64_t size)
   }
 
   if (room >= size) {
-    dout(10) << "check_for_full at " << pos << " : " << size << " < " << room << dendl;
+    if (!g_conf->journal_dynamic_throttle) {
+      dout(10) << "check_for_full at " << pos << " : " << size << " < " << room << dendl;
+    } else {
+      /*Calculate percentage empty*/
+      percentage_empty = (100 * (room - size))/(header.max_size - get_top());
+      dout(10) << "check_for_full at " << pos << " : " << size << " < " << room 
+          << " seq = " << seq << " percentage_empty = " << percentage_empty << dendl;
+    }
     if (pos + size > header.max_size)
       must_write_header = true;
     return 0;
@@ -1249,7 +1256,7 @@ void FileJournal::write_thread_entry()
     }
     
 #ifdef HAVE_LIBAIO
-    if (aio) {
+    if ((aio) && (!g_conf->journal_dynamic_throttle)) {
       Mutex::Locker locker(aio_lock);
       // should we back off to limit aios in flight?  try to do this
       // adaptively so that we submit larger aios once we have lots of
@@ -1285,6 +1292,17 @@ void FileJournal::write_thread_entry()
     uint64_t orig_bytes = 0;
 
     bufferlist bl;
+    if (g_conf->journal_dynamic_throttle) {
+      double delay_time;
+      dyn_throttle.calc_wait_time(percentage_empty, delay_time);
+      if (0 != delay_time) {
+        utime_t dur;
+        dur.set_from_double(delay_time);
+        dout(20) << "Waiting for " << delay_time << "percentage_empty = " << percentage_empty <<dendl;
+        commit_cond.WaitInterval(g_ceph_context, write_lock, dur);
+      }
+    }
+
     int r = prepare_multi_write(bl, orig_ops, orig_bytes);
     // Don't care about journal full if stoppping, so drop queue and
     // possibly let header get written and loop above to notice stop
@@ -1629,16 +1647,20 @@ void FileJournal::submit_entry(uint64_t seq, bufferlist& e, uint32_t orig_len,
 	  << " len " << e.length()
 	  << " (" << oncommit << ")" << dendl;
   assert(e.length() > 0);
-
-  throttle_ops.take(1);
-  throttle_bytes.take(orig_len);
+  if (!g_conf->journal_dynamic_throttle) {
+    throttle_ops.take(1);
+    throttle_bytes.take(orig_len);
+  }
   if (osd_op)
     osd_op->mark_event("commit_queued_for_journal_write");
-  if (logger) {
-    logger->set(l_os_jq_max_ops, throttle_ops.get_max());
-    logger->set(l_os_jq_max_bytes, throttle_bytes.get_max());
-    logger->set(l_os_jq_ops, throttle_ops.get_current());
-    logger->set(l_os_jq_bytes, throttle_bytes.get_current());
+
+  if (!g_conf->journal_dynamic_throttle) {
+    if (logger) {
+      logger->set(l_os_jq_max_ops, throttle_ops.get_max());
+      logger->set(l_os_jq_max_bytes, throttle_bytes.get_max());
+      logger->set(l_os_jq_ops, throttle_ops.get_current());
+      logger->set(l_os_jq_bytes, throttle_bytes.get_current());
+    }
   }
 
   {
@@ -1794,6 +1816,9 @@ void FileJournal::committed_thru(uint64_t seq)
 
 void FileJournal::put_throttle(uint64_t ops, uint64_t bytes)
 {
+  if (g_conf->journal_dynamic_throttle) {
+    return;
+  }
   uint64_t new_ops = throttle_ops.put(ops);
   uint64_t new_bytes = throttle_bytes.put(bytes);
   dout(5) << "put_throttle finished " << ops << " ops and " 
@@ -2010,6 +2035,9 @@ FileJournal::read_entry_result FileJournal::do_read_entry(
 
 void FileJournal::throttle()
 {
+  if (g_conf->journal_dynamic_throttle) {
+    return;
+  }
   if (throttle_ops.wait(g_conf->journal_queue_max_ops))
     dout(2) << "throttle: waited for ops" << dendl;
   if (throttle_bytes.wait(g_conf->journal_queue_max_bytes))
