@@ -148,7 +148,7 @@ void RGWOp_Period_Post::execute()
     ldout(cct, 4) << "current period " << current_period.get_id()
         << " is period " << period.get_id() << "'s predecessor, "
         "updating current period and notifying zone" << dendl;
-    realm.notify_zone();
+    realm.notify_new_period(period);
     return;
   }
 
@@ -156,7 +156,6 @@ void RGWOp_Period_Post::execute()
     lderr(cct) << "period epoch " << period.get_epoch() << " is not newer "
         "than current epoch " << current_period.get_epoch()
         << ", discarding update" << dendl;
-    http_ret = -EEXIST; // XXX: error code
     return;
   }
 
@@ -175,7 +174,7 @@ void RGWOp_Period_Post::execute()
   ldout(cct, 4) << "period epoch " << period.get_epoch()
       << " is newer than current epoch " << current_period.get_epoch()
       << ", updating latest epoch and notifying zone" << dendl;
-  realm.notify_zone();
+  realm.notify_new_period(period);
 }
 
 class RGWHandler_Period : public RGWHandler_Auth_S3 {

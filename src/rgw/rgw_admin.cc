@@ -33,6 +33,7 @@
 #include "rgw_sync.h"
 #include "rgw_data_sync.h"
 #include "rgw_rest_conn.h"
+#include "rgw_realm_watcher.h"
 
 using namespace std;
 
@@ -1401,7 +1402,7 @@ static int commit_period(RGWRealm& realm, RGWPeriod& period,
     cerr << "Error updating period epoch: " << cpp_strerror(ret) << std::endl;
     return ret;
   }
-  realm.notify_zone();
+  realm.notify_new_period(period);
   return ret;
 }
 

@@ -5,10 +5,18 @@
 #define RGW_REALM_WATCHER_H
 
 #include "include/rados/librados.hpp"
+#include "include/assert.h"
 #include "common/Timer.h"
 #include "common/Cond.h"
 
 class RGWRados;
+class RGWRealm;
+
+enum class RGWRealmNotify {
+  Reload,
+  ZonesNeedPeriod,
+};
+WRITE_RAW_ENCODER(RGWRealmNotify);
 
 /**
  * RGWRealmWatcher establishes a watch on the current RGWRealm's control object,
@@ -18,28 +26,24 @@ class RGWRados;
 class RGWRealmWatcher : public librados::WatchCtx2 {
  public:
   /**
-   * FrontendPauser is an interface to pause/resume frontends. Frontend
-   * cooperation is required to ensure that they stop issuing requests on the
-   * old RGWRados instance, and restart with the updated configuration.
-   *
-   * This abstraction avoids a depency on class RGWFrontend, which is only
-   * defined in rgw_main.cc
+   * Watcher is an interface that allows the RGWRealmWatcher to pass
+   * notifications on to other interested objects.
    */
-  class FrontendPauser {
+  class Watcher {
    public:
-    virtual ~FrontendPauser() = default;
+    virtual ~Watcher() = default;
 
-    /// pause all frontends while realm reconfiguration is in progress
-    virtual void pause() = 0;
-    /// resume all frontends with the given RGWRados instance
-    virtual void resume(RGWRados *store) = 0;
+    virtual void handle_notify(RGWRealmNotify type,
+                               bufferlist::iterator& p) = 0;
   };
 
-  RGWRealmWatcher(CephContext *cct, RGWRados *&store,
-                  FrontendPauser *frontends);
+  RGWRealmWatcher(CephContext* cct, RGWRealm& realm);
   ~RGWRealmWatcher();
 
-  /// respond to realm notifications by scheduling a reconfigure()
+  /// register a watcher for the given notification type
+  void add_watcher(RGWRealmNotify type, Watcher& watcher);
+
+  /// respond to realm notifications by calling the appropriate watcher
   void handle_notify(uint64_t notify_id, uint64_t cookie,
                      uint64_t notifier_id, bufferlist& bl) override;
 
@@ -47,36 +51,20 @@ class RGWRealmWatcher : public librados::WatchCtx2 {
   void handle_error(uint64_t cookie, int err) override;
 
  private:
-  CephContext *cct;
-  /// main()'s RGWRados pointer as a reference, modified by reconfigure()
-  RGWRados *&store;
-  FrontendPauser *frontends;
+  CephContext *const cct;
 
-  /// to prevent a race between reconfigure() and another realm notify, we need
-  /// to keep the watch open during reconfiguration. this means we need a
-  /// separate Rados client whose lifetime is independent of RGWRados
+  /// keep a separate Rados client whose lifetime is independent of RGWRados
+  /// so that we don't miss notifications during realm reconfiguration
   librados::Rados rados;
   librados::IoCtx pool_ctx;
   uint64_t watch_handle;
   std::string watch_oid;
 
-  int watch_start();
+  int watch_start(RGWRealm& realm);
   int watch_restart();
   void watch_stop();
 
-  /// reconfigure() takes a significant amount of time, so we don't want to run
-  /// it in the handle_notify() thread. we choose a timer thread, because we
-  /// also want to add a delay (see rgw_realm_reconfigure_delay) so that we can
-  /// batch up notifications within that window
-  SafeTimer timer;
-  Mutex mutex; //< protects access to timer and reconfigure_scheduled
-  Cond cond; //< to signal reconfigure() after an invalid realm config
-  bool reconfigure_scheduled; //< true if reconfigure() is scheduled in timer
-
-  /// pause frontends and replace the RGWRados
-  void reconfigure();
-
-  class C_Reconfigure; //< Context to call reconfigure()
+  std::map<RGWRealmNotify, Watcher&> watchers;
 };
 
 #endif // RGW_REALM_WATCHER_H

@@ -57,6 +57,7 @@ using namespace librados;
 #include "rgw_object_expirer_core.h"
 #include "rgw_sync.h"
 #include "rgw_data_sync.h"
+#include "rgw_realm_watcher.h"
 
 #define dout_subsys ceph_subsys_rgw
 
@@ -772,7 +773,7 @@ string RGWRealm::get_control_oid()
   return get_info_oid_prefix() + id + ".control";
 }
 
-int RGWRealm::notify_zone()
+int RGWRealm::notify_zone(bufferlist& bl)
 {
   // open a context on the realm's pool
   auto pool = get_pool_name(cct);
@@ -783,7 +784,6 @@ int RGWRealm::notify_zone()
     return r;
   }
   // send a notify on the realm object
-  bufferlist bl;
   r = ctx.notify2(get_control_oid(), bl, 0, nullptr);
   if (r < 0) {
     lderr(cct) << "Realm notify failed with " << r << dendl;
@@ -792,6 +792,17 @@ int RGWRealm::notify_zone()
   return 0;
 }
 
+int RGWRealm::notify_new_period(const RGWPeriod& period)
+{
+  bufferlist bl;
+  // push the period to dependent zonegroups/zones
+  ::encode(RGWRealmNotify::ZonesNeedPeriod, bl);
+  ::encode(period, bl);
+  // reload the gateway with the new period
+  ::encode(RGWRealmNotify::Reload, bl);
+
+  return notify_zone(bl);
+}
 
 int RGWPeriod::init(CephContext *_cct, RGWRados *_store, const string& period_realm_id,
 		    const string& period_realm_name, bool setup_obj)
@@ -1089,7 +1100,7 @@ int RGWPeriod::update()
     return ret;
   }
 
-  for (auto iter : zonegroups) {
+  for (auto& iter : zonegroups) {
     RGWZoneGroup zg(string(), iter);
     ret = zg.init(cct, store);
     if (ret < 0) {
@@ -1098,7 +1109,7 @@ int RGWPeriod::update()
     }
 
     if (zg.realm_id != realm_id) {
-      ldout(cct, 20) << "skippinh zonegroup " << zg.get_name() << ", not on our realm" << dendl;
+      ldout(cct, 20) << "skipping zonegroup " << zg.get_name() << ", not on our realm" << dendl;
       continue;
     }
     
@@ -1209,7 +1220,7 @@ int RGWPeriod::commit(RGWRealm& realm, const RGWPeriod& current_period)
     }
     ldout(cct, 4) << "Promoted to master zone and committed new period "
         << id << dendl;
-    realm.notify_zone();
+    realm.notify_new_period(*this);
     return 0;
   }
   // period must be based on predecessor's current epoch
@@ -1236,7 +1247,7 @@ int RGWPeriod::commit(RGWRealm& realm, const RGWPeriod& current_period)
   }
   ldout(cct, 4) << "Committed new epoch " << epoch
       << " for period " << id << dendl;
-  realm.notify_zone();
+  realm.notify_new_period(*this);
   return 0;
 }
 
