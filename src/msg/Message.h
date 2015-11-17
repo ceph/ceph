@@ -358,6 +358,10 @@ public:
       byte_throttler->take(payload.length());
   }
 
+  void fillin_payload(bufferlist bl) {
+    payload.claim(bl);
+  }
+
   void set_middle(bufferlist& bl) {
     if (byte_throttler)
       byte_throttler->put(payload.length());

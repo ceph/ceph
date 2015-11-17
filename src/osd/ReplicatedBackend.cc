@@ -614,7 +614,7 @@ void ReplicatedBackend::submit_transaction(
     trim_rollback_to,
     true,
     op_t);
-  
+ 
   op_t->register_on_applied_sync(on_local_applied_sync);
   op_t->register_on_applied(
     parent->bless_context(
@@ -1062,6 +1062,7 @@ void ReplicatedBackend::issue_op(
     if (op->op)
       op->op->mark_sub_op_sent(ss.str());
   }
+  bool repop_same_payload = true;
   for (set<pg_shard_t>::const_iterator i =
 	 parent->get_actingbackfill_shards().begin();
        i != parent->get_actingbackfill_shards().end();
@@ -1070,7 +1071,25 @@ void ReplicatedBackend::issue_op(
     pg_shard_t peer = *i;
     const pg_info_t &pinfo = parent->get_shard_info().find(peer)->second;
 
-    Message *wr;
+    uint64_t min_features = parent->min_peer_features();
+    if (!(min_features & CEPH_FEATURE_OSD_REPOP) || !parent->should_send_op(peer, soid) ||
+        pinfo.is_incomplete()) {
+      repop_same_payload = false;
+      break;
+    }
+  }
+
+  Message *wr = NULL;
+  bufferlist payload;
+  const set<pg_shard_t> &actingbackfill_shards = parent->get_actingbackfill_shards();
+  for (set<pg_shard_t>::const_iterator i =
+	 actingbackfill_shards.begin();
+       i != actingbackfill_shards.end();
+       ++i) {
+    if (*i == parent->whoami_shard()) continue;
+    pg_shard_t peer = *i;
+    const pg_info_t &pinfo = parent->get_shard_info().find(peer)->second;
+
     uint64_t min_features = parent->min_peer_features();
     if (!(min_features & CEPH_FEATURE_OSD_REPOP)) {
       dout(20) << "Talking to old version of OSD, doesn't support RepOp, fall back to SubOp" << dendl;
@@ -1105,6 +1124,18 @@ void ReplicatedBackend::issue_op(
 	    op_t,
 	    peer,
 	    pinfo);
+    }
+    if (repop_same_payload && actingbackfill_shards.size() > 2) {
+      if (payload.length()) {
+        wr->fillin_payload(payload);
+      } else {
+        wr->encode_payload(min_features);
+        payload = wr->get_payload();
+      }
+      // if the encoder didn't specify past compatibility, we assume it
+      // is incompatible.
+      if (wr->get_header().compat_version == 0)
+        wr->get_header().compat_version = wr->get_header().version;
     }
 
     get_parent()->send_message_osd_cluster(
