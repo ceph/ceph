@@ -7,11 +7,13 @@
 #include "common/Mutex.h"
 
 #include "librbd/AioCompletion.h"
-#include "librbd/AioRequest.h"
+#include "librbd/AioImageRequest.h"
+#include "librbd/AioObjectRequest.h"
 #include "librbd/AsyncObjectThrottle.h"
 #include "librbd/CopyupRequest.h"
 #include "librbd/ImageCtx.h"
 #include "librbd/ImageWatcher.h"
+#include "librbd/internal.h"
 #include "librbd/ObjectMap.h"
 
 #include <boost/bind.hpp>
@@ -84,15 +86,15 @@ private:
     m_async_op.finish_op();
   }
 
-  void CopyupRequest::append_request(AioRequest *req) {
+  void CopyupRequest::append_request(AioObjectRequest *req) {
     ldout(m_ictx->cct, 20) << __func__ << " " << this << ": " << req << dendl;
     m_pending_requests.push_back(req);
   }
 
   void CopyupRequest::complete_requests(int r) {
     while (!m_pending_requests.empty()) {
-      vector<AioRequest *>::iterator it = m_pending_requests.begin();
-      AioRequest *req = *it;
+      vector<AioObjectRequest *>::iterator it = m_pending_requests.begin();
+      AioObjectRequest *req = *it;
       ldout(m_ictx->cct, 20) << __func__ << " completing request " << req
 			     << dendl;
       req->complete(r);
@@ -156,7 +158,7 @@ private:
 
       // merge all pending write ops into this single RADOS op
       for (size_t i=0; i<m_pending_requests.size(); ++i) {
-        AioRequest *req = m_pending_requests[i];
+        AioObjectRequest *req = m_pending_requests[i];
         ldout(m_ictx->cct, 20) << __func__ << " add_copyup_ops " << req
                                << dendl;
         req->add_copyup_ops(&write_op);
@@ -185,7 +187,9 @@ private:
 			   << ", oid " << m_oid
                            << ", extents " << m_image_extents
                            << dendl;
-    aio_read(m_ictx->parent, m_image_extents, NULL, &m_copyup_data, comp, 0);
+    RWLock::RLocker owner_locker(m_ictx->parent->owner_lock);
+    AioImageRequest::aio_read(m_ictx->parent, comp, m_image_extents, NULL,
+                              &m_copyup_data, 0);
   }
 
   void CopyupRequest::queue_send()

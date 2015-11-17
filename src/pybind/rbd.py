@@ -31,13 +31,15 @@ RBD_FEATURE_EXCLUSIVE_LOCK = 4
 RBD_FEATURE_OBJECT_MAP = 8
 RBD_FEATURE_FAST_DIFF = 16
 RBD_FEATURE_DEEP_FLATTEN = 32
+RBD_FEATURE_JOURNALING = 64
 
 RBD_FEATURES_ALL = (RBD_FEATURE_LAYERING       |
                     RBD_FEATURE_STRIPINGV2     |
                     RBD_FEATURE_EXCLUSIVE_LOCK |
                     RBD_FEATURE_OBJECT_MAP     |
                     RBD_FEATURE_FAST_DIFF      |
-                    RBD_FEATURE_DEEP_FLATTEN)
+                    RBD_FEATURE_DEEP_FLATTEN   |
+                    RBD_FEATURE_JOURNALING)
 
 # features that make an image inaccessible for read or write by
 # clients that don't understand them
@@ -50,18 +52,21 @@ RBD_FEATURES_RW_INCOMPATIBLE = (RBD_FEATURES_INCOMPATIBLE  |
                                 RBD_FEATURE_EXCLUSIVE_LOCK |
                                 RBD_FEATURE_OBJECT_MAP     |
                                 RBD_FEATURE_FAST_DIFF      |
-                                RBD_FEATURE_DEEP_FLATTEN)
+                                RBD_FEATURE_DEEP_FLATTEN   |
+                                RBD_FEATURE_JOURNALING)
 
 # features that may be dynamically enabled or disabled
 RBD_FEATURES_MUTABLE = (RBD_FEATURE_EXCLUSIVE_LOCK |
                         RBD_FEATURE_OBJECT_MAP     |
-                        RBD_FEATURE_FAST_DIFF)
+                        RBD_FEATURE_FAST_DIFF      |
+                        RBD_FEATURE_JOURNALING)
 
 # features that only work when used with a single client
 # using the image for writes
 RBD_FEATURES_SINGLE_CLIENT = (RBD_FEATURE_EXCLUSIVE_LOCK |
                               RBD_FEATURE_OBJECT_MAP     |
-                              RBD_FEATURE_FAST_DIFF)
+                              RBD_FEATURE_FAST_DIFF      |
+                              RBD_FEATURE_JOURNALING)
 
 RBD_FLAG_OBJECT_MAP_INVALID = 1
 

@@ -128,7 +128,7 @@
     --order arg          object order [12 <= order <= 25]
     --image-feature arg  image features
                          [layering(+), striping(+), exclusive-lock(*),
-                         object-map(*), fast-diff(*), deep-flatten]
+                         object-map(*), fast-diff(*), deep-flatten, journaling(*)]
     --image-shared       shared image
     --stripe-unit arg    stripe unit
     --stripe-count arg   stripe count
@@ -182,7 +182,7 @@
     --order arg          object order [12 <= order <= 25]
     --image-feature arg  image features
                          [layering(+), striping(+), exclusive-lock(*),
-                         object-map(*), fast-diff(*), deep-flatten]
+                         object-map(*), fast-diff(*), deep-flatten, journaling(*)]
     --image-shared       shared image
     --stripe-unit arg    stripe unit
     --stripe-count arg   stripe count
@@ -285,7 +285,7 @@
                          (example: [<pool-name>/]<image-name>)
     <features>           image features
                          [layering, striping, exclusive-lock, object-map,
-                         fast-diff, deep-flatten]
+                         fast-diff, deep-flatten, journaling]
   
   Optional arguments
     -p [ --pool ] arg    pool name
@@ -302,7 +302,7 @@
                          (example: [<pool-name>/]<image-name>)
     <features>           image features
                          [layering, striping, exclusive-lock, object-map,
-                         fast-diff, deep-flatten]
+                         fast-diff, deep-flatten, journaling]
   
   Optional arguments
     -p [ --pool ] arg    pool name
@@ -412,7 +412,7 @@
     --order arg          object order [12 <= order <= 25]
     --image-feature arg  image features
                          [layering(+), striping(+), exclusive-lock(*),
-                         object-map(*), fast-diff(*), deep-flatten]
+                         object-map(*), fast-diff(*), deep-flatten, journaling(*)]
     --image-shared       shared image
     --stripe-unit arg    stripe unit
     --stripe-count arg   stripe count

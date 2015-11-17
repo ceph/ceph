@@ -71,13 +71,16 @@ class ObjectCacher {
     bufferlist bl;
     utime_t mtime;
     int fadvise_flags;
-    OSDWrite(const SnapContext& sc, const bufferlist& b, utime_t mt, int f)
-      : snapc(sc), bl(b), mtime(mt), fadvise_flags(f) {}
+    ceph_tid_t journal_tid;
+    OSDWrite(const SnapContext& sc, const bufferlist& b, utime_t mt, int f,
+             ceph_tid_t _journal_tid)
+      : snapc(sc), bl(b), mtime(mt), fadvise_flags(f),
+        journal_tid(_journal_tid) {}
   };
 
   OSDWrite *prepare_write(const SnapContext& sc, const bufferlist &b,
-			  utime_t mt, int f) { 
-    return new OSDWrite(sc, b, mt, f); 
+			  utime_t mt, int f, ceph_tid_t journal_tid) {
+    return new OSDWrite(sc, b, mt, f, journal_tid);
   }
 
 
@@ -111,6 +114,7 @@ class ObjectCacher {
     ceph_tid_t last_read_tid;   // tid of last read op (if any)
     utime_t last_write;
     SnapContext snapc;
+    ceph_tid_t journal_tid;
     int error; // holds return value for failed reads
     
     map< loff_t, list<Context*> > waitfor_read;
@@ -124,6 +128,7 @@ class ObjectCacher {
       ob(o),
       last_write_tid(0),
       last_read_tid(0),
+      journal_tid(0),
       error(0) {
       ex.start = ex.length = 0;
     }
@@ -143,7 +148,15 @@ class ObjectCacher {
       state = s;
     }
     int get_state() const { return state; }
-    
+
+    inline ceph_tid_t get_journal_tid() const {
+      return journal_tid;
+    }
+    inline void set_journal_tid(ceph_tid_t _journal_tid) {
+      
+      journal_tid = _journal_tid;
+    }
+
     bool is_missing() { return state == STATE_MISSING; }
     bool is_dirty() { return state == STATE_DIRTY; }
     bool is_clean() { return state == STATE_CLEAN; }
@@ -177,6 +190,11 @@ class ObjectCacher {
     }
     bool get_nocache() {
       return nocache;
+    }
+
+    inline bool can_merge_journal(BufferHead *bh) const {
+      return (get_journal_tid() == 0 || bh->get_journal_tid() == 0 ||
+              get_journal_tid() == bh->get_journal_tid());
     }
   };
 
@@ -308,7 +326,8 @@ class ObjectCacher {
                  map<loff_t, BufferHead*>& rx,
 		 map<loff_t, BufferHead*>& errors);
     BufferHead *map_write(OSDWrite *wr);
-    
+
+    void replace_journal_tid(BufferHead *bh, ceph_tid_t tid);
     void truncate(loff_t s);
     void discard(loff_t off, loff_t len);
 
@@ -635,7 +654,7 @@ public:
   loff_t release_set(ObjectSet *oset);  // returns # of bytes not released (ie non-clean)
   uint64_t release_all();
 
-  void discard_set(ObjectSet *oset, vector<ObjectExtent>& ex);
+  void discard_set(ObjectSet *oset, const vector<ObjectExtent>& ex);
 
   /**
    * Retry any in-flight reads that get -ENOENT instead of marking
@@ -687,7 +706,7 @@ public:
   int file_write(ObjectSet *oset, ceph_file_layout *layout, const SnapContext& snapc,
                  loff_t offset, uint64_t len, 
                  bufferlist& bl, utime_t mtime, int flags) {
-    OSDWrite *wr = prepare_write(snapc, bl, mtime, flags);
+    OSDWrite *wr = prepare_write(snapc, bl, mtime, flags, 0);
     Striper::file_to_extents(cct, oset->ino, layout, offset, len, oset->truncate_size, wr->extents);
     return writex(wr, oset, NULL);
   }
@@ -708,6 +727,9 @@ inline ostream& operator<<(ostream& out, ObjectCacher::BufferHead &bh)
       << " " << bh.ob
       << " (" << bh.bl.length() << ")"
       << " v " << bh.last_write_tid;
+  if (bh.get_journal_tid() != 0) {
+    out << " j " << bh.get_journal_tid();
+  }
   if (bh.is_tx()) out << " tx";
   if (bh.is_rx()) out << " rx";
   if (bh.is_dirty()) out << " dirty";

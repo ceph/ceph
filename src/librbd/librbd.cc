@@ -26,6 +26,7 @@
 #include "osdc/ObjectCacher.h"
 
 #include "librbd/AioCompletion.h"
+#include "librbd/AioImageRequestWQ.h"
 #include "cls/rbd/cls_rbd_client.h"
 #include "librbd/ImageCtx.h"
 #include "librbd/internal.h"
@@ -59,121 +60,6 @@ using librados::IoCtx;
 namespace {
 
 TracepointProvider::Traits tracepoint_traits("librbd_tp.so", "rbd_tracing");
-
-class C_AioReadWQ : public Context {
-public:
-  C_AioReadWQ(librbd::ImageCtx *ictx, uint64_t off, size_t len,
-              char *buf, bufferlist *pbl, librbd::AioCompletion *c,
-              int op_flags)
-    : m_ictx(ictx), m_off(off), m_len(len), m_buf(buf), m_pbl(pbl), m_comp(c),
-      m_op_flags(op_flags) {
-  }
-protected:
-  virtual void finish(int r) {
-    librbd::aio_read(m_ictx, m_off, m_len, m_buf, m_pbl, m_comp, m_op_flags);
-  }
-private:
-  librbd::ImageCtx *m_ictx;
-  uint64_t m_off;
-  uint64_t m_len;
-  char *m_buf;
-  bufferlist *m_pbl;
-  librbd::AioCompletion *m_comp;
-  int m_op_flags;
-};
-
-class C_AioWriteWQ : public Context {
-public:
-  C_AioWriteWQ(librbd::ImageCtx *ictx, uint64_t off, size_t len,
-               const char *buf, librbd::AioCompletion *c, int op_flags)
-    : m_ictx(ictx), m_off(off), m_len(len), m_buf(buf), m_comp(c),
-      m_op_flags(op_flags) {
-  }
-protected:
-  virtual void finish(int r) {
-    librbd::aio_write(m_ictx, m_off, m_len, m_buf, m_comp, m_op_flags);
-  }
-private:
-  librbd::ImageCtx *m_ictx;
-  uint64_t m_off;
-  uint64_t m_len;
-  const char *m_buf;
-  librbd::AioCompletion *m_comp;
-  int m_op_flags;
-};
-
-class C_AioDiscardWQ : public Context {
-public:
-  C_AioDiscardWQ(librbd::ImageCtx *ictx, uint64_t off, uint64_t len,
-                 librbd::AioCompletion *c)
-    : m_ictx(ictx), m_off(off), m_len(len), m_comp(c) {
-  }
-protected:
-  virtual void finish(int r) {
-    librbd::aio_discard(m_ictx, m_off, m_len, m_comp);
-  }
-private:
-  librbd::ImageCtx *m_ictx;
-  uint64_t m_off;
-  uint64_t m_len;
-  librbd::AioCompletion *m_comp;
-};
-
-class C_AioFlushWQ : public Context {
-public:
-  C_AioFlushWQ(librbd::ImageCtx *ictx, librbd::AioCompletion *c)
-    : m_ictx(ictx), m_comp(c) {
-  }
-protected:
-  virtual void finish(int r) {
-    librbd::aio_flush(m_ictx, m_comp);
-  }
-private:
-  librbd::ImageCtx *m_ictx;
-  librbd::AioCompletion *m_comp;
-};
-
-void submit_aio_read(librbd::ImageCtx *ictx, uint64_t off, size_t len,
-                     char *buf, bufferlist *pbl, librbd::AioCompletion *c,
-                     int op_flags) {
-  c->init_time(ictx, librbd::AIO_TYPE_READ);
-  if (ictx->non_blocking_aio) {
-    ictx->aio_work_queue->queue(new C_AioReadWQ(ictx, off, len, buf, pbl, c,
-                                                op_flags));
-  } else {
-    librbd::aio_read(ictx, off, len, buf, pbl, c, op_flags);
-  }
-}
-
-void submit_aio_write(librbd::ImageCtx *ictx, uint64_t off, size_t len,
-                      const char *buf, librbd::AioCompletion *c, int op_flags) {
-  c->init_time(ictx, librbd::AIO_TYPE_WRITE);
-  if (ictx->non_blocking_aio) {
-    ictx->aio_work_queue->queue(new C_AioWriteWQ(ictx, off, len, buf, c,
-                                                 op_flags));
-  } else {
-    librbd::aio_write(ictx, off, len, buf, c, op_flags);
-  }
-}
-
-void submit_aio_discard(librbd::ImageCtx *ictx, uint64_t off, uint64_t len,
-                        librbd::AioCompletion *c) {
-  c->init_time(ictx, librbd::AIO_TYPE_DISCARD);
-  if (ictx->non_blocking_aio) {
-    ictx->aio_work_queue->queue(new C_AioDiscardWQ(ictx, off, len, c));
-  } else {
-    librbd::aio_discard(ictx, off, len, c);
-  }
-}
-
-void submit_aio_flush(librbd::ImageCtx *ictx, librbd::AioCompletion *c) {
-  c->init_time(ictx, librbd::AIO_TYPE_FLUSH);
-  if (ictx->non_blocking_aio) {
-    ictx->aio_work_queue->queue(new C_AioFlushWQ(ictx, c));
-  } else {
-    librbd::aio_flush(ictx, c);
-  }
-}
 
 CephContext* get_cct(IoCtx &io_ctx) {
   return reinterpret_cast<CephContext*>(io_ctx.cct());
@@ -896,7 +782,7 @@ namespace librbd {
     tracepoint(librbd, read_enter, ictx, ictx->name.c_str(), ictx->snap_name.c_str(), ictx->read_only, ofs, len);
     bufferptr ptr(len);
     bl.push_back(ptr);
-    int r = librbd::read(ictx, ofs, len, bl.c_str(), 0);
+    int r = ictx->aio_work_queue->read(ofs, len, bl.c_str(), 0);
     tracepoint(librbd, read_exit, r);
     return r;
   }
@@ -908,7 +794,7 @@ namespace librbd {
 		ictx->read_only, ofs, len, op_flags);
     bufferptr ptr(len);
     bl.push_back(ptr);
-    int r = librbd::read(ictx, ofs, len, bl.c_str(), op_flags);
+    int r = ictx->aio_work_queue->read(ofs, len, bl.c_str(), op_flags);
     tracepoint(librbd, read_exit, r);
     return r;
   }
@@ -974,7 +860,7 @@ namespace librbd {
       tracepoint(librbd, write_exit, -EINVAL);
       return -EINVAL;
     }
-    int r = librbd::write(ictx, ofs, len, bl.c_str(), 0);
+    int r = ictx->aio_work_queue->write(ofs, len, bl.c_str(), 0);
     tracepoint(librbd, write_exit, r);
     return r;
   }
@@ -988,7 +874,7 @@ namespace librbd {
       tracepoint(librbd, write_exit, -EINVAL);
       return -EINVAL;
     }
-    int r = librbd::write(ictx, ofs, len, bl.c_str(), op_flags);
+    int r = ictx->aio_work_queue->write(ofs, len, bl.c_str(), op_flags);
     tracepoint(librbd, write_exit, r);
     return r;
   }
@@ -997,7 +883,7 @@ namespace librbd {
   {
     ImageCtx *ictx = (ImageCtx *)ctx;
     tracepoint(librbd, discard_enter, ictx, ictx->name.c_str(), ictx->snap_name.c_str(), ictx->read_only, ofs, len);
-    int r = librbd::discard(ictx, ofs, len);
+    int r = ictx->aio_work_queue->discard(ofs, len);
     tracepoint(librbd, discard_exit, r);
     return r;
   }
@@ -1011,7 +897,8 @@ namespace librbd {
       tracepoint(librbd, aio_write_exit, -EINVAL);
       return -EINVAL;
     }
-    submit_aio_write(ictx, off, len, bl.c_str(), get_aio_completion(c), 0);
+    ictx->aio_work_queue->aio_write(get_aio_completion(c), off, len, bl.c_str(),
+                                    0);
     tracepoint(librbd, aio_write_exit, 0);
     return 0;
   }
@@ -1026,8 +913,8 @@ namespace librbd {
       tracepoint(librbd, aio_write_exit, -EINVAL);
       return -EINVAL;
     }
-    submit_aio_write(ictx, off, len, bl.c_str(), get_aio_completion(c),
-                     op_flags);
+    ictx->aio_work_queue->aio_write(get_aio_completion(c), off, len, bl.c_str(),
+                                    op_flags);
     tracepoint(librbd, aio_write_exit, 0);
     return 0;
   }
@@ -1036,7 +923,7 @@ namespace librbd {
   {
     ImageCtx *ictx = (ImageCtx *)ctx;
     tracepoint(librbd, aio_discard_enter, ictx, ictx->name.c_str(), ictx->snap_name.c_str(), ictx->read_only, off, len, c->pc);
-    submit_aio_discard(ictx, off, len, get_aio_completion(c));
+    ictx->aio_work_queue->aio_discard(get_aio_completion(c), off, len);
     tracepoint(librbd, aio_discard_exit, 0);
     return 0;
   }
@@ -1048,7 +935,8 @@ namespace librbd {
     tracepoint(librbd, aio_read_enter, ictx, ictx->name.c_str(), ictx->snap_name.c_str(), ictx->read_only, off, len, bl.c_str(), c->pc);
     ldout(ictx->cct, 10) << "Image::aio_read() buf=" << (void *)bl.c_str() << "~"
 			 << (void *)(bl.c_str() + len - 1) << dendl;
-    submit_aio_read(ictx, off, len, NULL, &bl, get_aio_completion(c), 0);
+    ictx->aio_work_queue->aio_read(get_aio_completion(c), off, len, NULL, &bl,
+                                   0);
     tracepoint(librbd, aio_read_exit, 0);
     return 0;
   }
@@ -1061,7 +949,8 @@ namespace librbd {
 		ictx->read_only, off, len, bl.c_str(), c->pc, op_flags);
     ldout(ictx->cct, 10) << "Image::aio_read() buf=" << (void *)bl.c_str() << "~"
 			 << (void *)(bl.c_str() + len - 1) << dendl;
-    submit_aio_read(ictx, off, len, NULL, &bl, get_aio_completion(c), op_flags);
+    ictx->aio_work_queue->aio_read(get_aio_completion(c), off, len, NULL, &bl,
+                                   op_flags);
     tracepoint(librbd, aio_read_exit, 0);
     return 0;
   }
@@ -1079,7 +968,7 @@ namespace librbd {
   {
     ImageCtx *ictx = (ImageCtx *)ctx;
     tracepoint(librbd, aio_flush_enter, ictx, ictx->name.c_str(), ictx->snap_name.c_str(), ictx->read_only, c->pc);
-    submit_aio_flush(ictx, get_aio_completion(c));
+    ictx->aio_work_queue->aio_flush(get_aio_completion(c));
     tracepoint(librbd, aio_flush_exit, 0);
     return 0;
   }
@@ -2020,7 +1909,7 @@ extern "C" ssize_t rbd_read(rbd_image_t image, uint64_t ofs, size_t len,
 {
   librbd::ImageCtx *ictx = (librbd::ImageCtx *)image;
   tracepoint(librbd, read_enter, ictx, ictx->name.c_str(), ictx->snap_name.c_str(), ictx->read_only, ofs, len);
-  int r = librbd::read(ictx, ofs, len, buf, 0);
+  int r = ictx->aio_work_queue->read(ofs, len, buf, 0);
   tracepoint(librbd, read_exit, r);
   return r;
 }
@@ -2031,7 +1920,7 @@ extern "C" ssize_t rbd_read2(rbd_image_t image, uint64_t ofs, size_t len,
   librbd::ImageCtx *ictx = (librbd::ImageCtx *)image;
   tracepoint(librbd, read2_enter, ictx, ictx->name.c_str(),
 	      ictx->snap_name.c_str(), ictx->read_only, ofs, len, op_flags);
-  int r = librbd::read(ictx, ofs, len, buf, op_flags);
+  int r = ictx->aio_work_queue->read(ofs, len, buf, op_flags);
   tracepoint(librbd, read_exit, r);
   return r;
 }
@@ -2098,7 +1987,7 @@ extern "C" ssize_t rbd_write(rbd_image_t image, uint64_t ofs, size_t len,
 {
   librbd::ImageCtx *ictx = (librbd::ImageCtx *)image;
   tracepoint(librbd, write_enter, ictx, ictx->name.c_str(), ictx->snap_name.c_str(), ictx->read_only, ofs, len, buf);
-  int r = librbd::write(ictx, ofs, len, buf, 0);
+  int r = ictx->aio_work_queue->write(ofs, len, buf, 0);
   tracepoint(librbd, write_exit, r);
   return r;
 }
@@ -2109,7 +1998,7 @@ extern "C" ssize_t rbd_write2(rbd_image_t image, uint64_t ofs, size_t len,
   librbd::ImageCtx *ictx = (librbd::ImageCtx *)image;
   tracepoint(librbd, write2_enter, ictx, ictx->name.c_str(),
 	      ictx->snap_name.c_str(), ictx->read_only, ofs, len, buf, op_flags);
-  int r = librbd::write(ictx, ofs, len, buf, op_flags);
+  int r = ictx->aio_work_queue->write(ofs, len, buf, op_flags);
   tracepoint(librbd, write_exit, r);
   return r;
 }
@@ -2119,7 +2008,7 @@ extern "C" int rbd_discard(rbd_image_t image, uint64_t ofs, uint64_t len)
 {
   librbd::ImageCtx *ictx = (librbd::ImageCtx *)image;
   tracepoint(librbd, discard_enter, ictx, ictx->name.c_str(), ictx->snap_name.c_str(), ictx->read_only, ofs, len);
-  int r = librbd::discard(ictx, ofs, len);
+  int r = ictx->aio_work_queue->discard(ofs, len);
   tracepoint(librbd, discard_exit, r);
   return r;
 }
@@ -2140,7 +2029,7 @@ extern "C" int rbd_aio_write(rbd_image_t image, uint64_t off, size_t len,
   librbd::ImageCtx *ictx = (librbd::ImageCtx *)image;
   librbd::RBD::AioCompletion *comp = (librbd::RBD::AioCompletion *)c;
   tracepoint(librbd, aio_write_enter, ictx, ictx->name.c_str(), ictx->snap_name.c_str(), ictx->read_only, off, len, buf, comp->pc);
-  submit_aio_write(ictx, off, len, buf, get_aio_completion(comp), 0);
+  ictx->aio_work_queue->aio_write(get_aio_completion(comp), off, len, buf, 0);
   tracepoint(librbd, aio_write_exit, 0);
   return 0;
 }
@@ -2152,7 +2041,8 @@ extern "C" int rbd_aio_write2(rbd_image_t image, uint64_t off, size_t len,
   librbd::RBD::AioCompletion *comp = (librbd::RBD::AioCompletion *)c;
   tracepoint(librbd, aio_write2_enter, ictx, ictx->name.c_str(), ictx->snap_name.c_str(),
 	      ictx->read_only, off, len, buf, comp->pc, op_flags);
-  submit_aio_write(ictx, off, len, buf, get_aio_completion(comp), op_flags);
+  ictx->aio_work_queue->aio_write(get_aio_completion(comp), off, len, buf,
+                                  op_flags);
   tracepoint(librbd, aio_write_exit, 0);
   return 0;
 }
@@ -2164,7 +2054,7 @@ extern "C" int rbd_aio_discard(rbd_image_t image, uint64_t off, uint64_t len,
   librbd::ImageCtx *ictx = (librbd::ImageCtx *)image;
   librbd::RBD::AioCompletion *comp = (librbd::RBD::AioCompletion *)c;
   tracepoint(librbd, aio_discard_enter, ictx, ictx->name.c_str(), ictx->snap_name.c_str(), ictx->read_only, off, len, comp->pc);
-  submit_aio_discard(ictx, off, len, get_aio_completion(comp));
+  ictx->aio_work_queue->aio_discard(get_aio_completion(comp), off, len);
   tracepoint(librbd, aio_discard_exit, 0);
   return 0;
 }
@@ -2175,7 +2065,8 @@ extern "C" int rbd_aio_read(rbd_image_t image, uint64_t off, size_t len,
   librbd::ImageCtx *ictx = (librbd::ImageCtx *)image;
   librbd::RBD::AioCompletion *comp = (librbd::RBD::AioCompletion *)c;
   tracepoint(librbd, aio_read_enter, ictx, ictx->name.c_str(), ictx->snap_name.c_str(), ictx->read_only, off, len, buf, comp->pc);
-  submit_aio_read(ictx, off, len, buf, NULL, get_aio_completion(comp), 0);
+  ictx->aio_work_queue->aio_read(get_aio_completion(comp), off, len, buf, NULL,
+                                 0);
   tracepoint(librbd, aio_read_exit, 0);
   return 0;
 }
@@ -2187,8 +2078,8 @@ extern "C" int rbd_aio_read2(rbd_image_t image, uint64_t off, size_t len,
   librbd::RBD::AioCompletion *comp = (librbd::RBD::AioCompletion *)c;
   tracepoint(librbd, aio_read2_enter, ictx, ictx->name.c_str(), ictx->snap_name.c_str(),
 	      ictx->read_only, off, len, buf, comp->pc, op_flags);
-  submit_aio_read(ictx, off, len, buf, NULL, get_aio_completion(comp),
-                  op_flags);
+  ictx->aio_work_queue->aio_read(get_aio_completion(comp), off, len, buf, NULL,
+                                 op_flags);
   tracepoint(librbd, aio_read_exit, 0);
   return 0;
 }
@@ -2207,7 +2098,7 @@ extern "C" int rbd_aio_flush(rbd_image_t image, rbd_completion_t c)
   librbd::ImageCtx *ictx = (librbd::ImageCtx *)image;
   librbd::RBD::AioCompletion *comp = (librbd::RBD::AioCompletion *)c;
   tracepoint(librbd, aio_flush_enter, ictx, ictx->name.c_str(), ictx->snap_name.c_str(), ictx->read_only, comp->pc);
-  submit_aio_flush(ictx, get_aio_completion(comp));
+  ictx->aio_work_queue->aio_flush(get_aio_completion(comp));
   tracepoint(librbd, aio_flush_exit, 0);
   return 0;
 }

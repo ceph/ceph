@@ -34,9 +34,14 @@ namespace librbd {
 
     // Note that oloc, trunc_size, and trunc_seq are ignored
     virtual ceph_tid_t write(const object_t& oid, const object_locator_t& oloc,
-			uint64_t off, uint64_t len, const SnapContext& snapc,
-			const bufferlist &bl, utime_t mtime, uint64_t trunc_size,
-			__u32 trunc_seq, Context *oncommit);
+                             uint64_t off, uint64_t len,
+                             const SnapContext& snapc, const bufferlist &bl,
+                             utime_t mtime, uint64_t trunc_size,
+                             __u32 trunc_seq, ceph_tid_t journal_tid,
+                             Context *oncommit);
+
+    virtual void overwrite_extent(const object_t& oid, uint64_t off,
+                                  uint64_t len, ceph_tid_t journal_tid);
 
     virtual void get_client_lock();
     virtual void put_client_lock();

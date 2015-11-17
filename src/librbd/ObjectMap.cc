@@ -21,6 +21,10 @@ ObjectMap::ObjectMap(ImageCtx &image_ctx)
 {
 }
 
+int ObjectMap::remove(librados::IoCtx &io_ctx, const std::string &image_id) {
+  return io_ctx.remove(object_map_name(image_id, CEPH_NOSNAP));
+}
+
 std::string ObjectMap::object_map_name(const std::string &image_id,
 				       uint64_t snap_id) {
   std::string oid(RBD_OBJECT_MAP_PREFIX + image_id);
