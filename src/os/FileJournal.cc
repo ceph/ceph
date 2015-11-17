@@ -1482,46 +1482,48 @@ void FileJournal::write_finish_thread_entry()
 {
 #ifdef HAVE_LIBAIO
   dout(10) << "write_finish_thread_entry enter" << dendl;
+  aio_lock.Lock();
   while (true) {
-    {
-      Mutex::Locker locker(aio_lock);
-      if (aio_queue.empty()) {
-	if (aio_stop)
-	  break;
-	dout(20) << "write_finish_thread_entry sleeping" << dendl;
-	write_finish_cond.Wait(aio_lock);
-	continue;
-      }
+    if (aio_queue.empty()) {
+      if (aio_stop)
+        break;
+      dout(20) << "write_finish_thread_entry sleeping" << dendl;
+      write_finish_cond.Wait(aio_lock);
+      continue;
     }
-    
+
+    aio_lock.Unlock();
+
     dout(20) << "write_finish_thread_entry waiting for aio(s)" << dendl;
     io_event event[16];
     int r = io_getevents(aio_ctx, 1, 16, event, NULL);
     if (r < 0) {
       if (r == -EINTR) {
 	dout(0) << "io_getevents got " << cpp_strerror(r) << dendl;
+	aio_lock.Lock();
 	continue;
       }
       derr << "io_getevents got " << cpp_strerror(r) << dendl;
       assert(0 == "got unexpected error from io_getevents");
     }
     
-    {
-      Mutex::Locker locker(aio_lock);
-      for (int i=0; i<r; i++) {
-	aio_info *ai = (aio_info *)event[i].obj;
-	if (event[i].res != ai->len) {
-	  derr << "aio to " << ai->off << "~" << ai->len
-	       << " wrote " << event[i].res << dendl;
-	  assert(0 == "unexpected aio error");
-	}
-	dout(10) << "write_finish_thread_entry aio " << ai->off
-		 << "~" << ai->len << " done" << dendl;
-	ai->done = true;
+    aio_lock.Lock();
+    for (int i=0; i<r; i++) {
+      aio_info *ai = (aio_info *)event[i].obj;
+      if (event[i].res != ai->len) {
+        derr << "aio to " << ai->off << "~" << ai->len
+             << " wrote " << event[i].res << dendl;
+	assert(0 == "unexpected aio error");
       }
-      check_aio_completion();
+      dout(10) << "write_finish_thread_entry aio " << ai->off
+               << "~" << ai->len << " done" << dendl;
+      ai->done = true;
     }
+    check_aio_completion();
   }
+
+  aio_lock.Unlock();
+
   dout(10) << "write_finish_thread_entry exit" << dendl;
 #endif
 }
