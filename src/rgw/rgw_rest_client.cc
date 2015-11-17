@@ -713,7 +713,7 @@ int RGWRESTStreamRWRequest::send_data(void *ptr, size_t len)
     return 0;
   }
 
-  uint64_t send_size = min(len, outbl.length() - write_ofs);
+  uint64_t send_size = min(len, (size_t)(outbl.length() - write_ofs));
   if (send_size > 0) {
     memcpy(ptr, outbl.c_str() + write_ofs, send_size);
     write_ofs += send_size;
