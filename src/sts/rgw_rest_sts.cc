@@ -79,6 +79,75 @@ void assume_role_response::dump(Formatter *f) const
   f->close_section();
 }
 
+static inline const string t_or_f(bool f)
+{
+  return f ? "true" : "false";
+}
+
+void authorization_message_result::dump(Formatter *f) const
+{
+  vector<sts_item>::const_iterator iter;
+  vector<string>::const_iterator viter;
+
+  // oddities in aws documentation:
+  //	1. booleans dumped as quoted strings.
+  //	2. slashes in strings aren't backslashed.
+  //	3. strangeness in [{}] nesting inside of 'conditions'
+  //	http://docs.aws.amazon.com/STS/latest/APIReference/API_DecodeAuthorizationMessage.html
+  f->open_object_section("");
+    f->dump_string("allowed", t_or_f(allowed));
+    f->dump_string("explicitDeny", t_or_f(explicit_deny));
+    f->dump_string("matchedStatements", matched_statements);
+    f->dump_string("failures", failures);
+    f->open_object_section("context");
+      f->open_object_section("principal");
+	f->dump_string("id", context.principal.id);
+	f->dump_string("name", context.principal.name);
+	f->dump_string("arn", context.principal.arn);
+      f->close_section();
+      f->dump_string("action", context.action);
+      f->dump_string("resource", context.resource);
+      f->open_array_section("conditions");
+	for (iter = context.conditions.begin();
+	    iter != context.conditions.end(); ++iter) {
+          f->open_object_section("");
+	    f->open_object_section("item");
+	      f->dump_string("key", iter->key);
+	      f->open_array_section("values");
+	      for (viter = iter->values.begin();
+		  viter != iter->values.end(); ++viter) {
+		f->dump_string("value", *viter);
+	      }
+	      f->close_section();
+	    f->close_section();
+	  f->close_section();
+	}
+      f->close_section();
+    f->close_section();
+  f->close_section();
+}
+
+void authorization_message_response::dump(Formatter *f) const
+{
+  char encoded_uuid[38];
+  JSONFormatter message(true);
+  stringstream ss;
+
+  request_id.print(encoded_uuid);
+  encoded_uuid[37] = 0;
+
+  authorization_message_result::dump(&message);
+  message.flush(ss);
+
+  f->open_object_section_in_ns("DecodeAuthorizationMessageResponse",
+			"http://s3.amazonaws.com/doc/2011-06-15/");
+    f->dump_string("RequestId", encoded_uuid);
+    f->open_object_section("DecodedMessage");
+    f->write_raw_data(ss.str().c_str());
+    f->close_section();
+  f->close_section();
+}
+
 rgw_http_errors rgw_http_sts_errors({
     { ERR_IDP_REJECTED_CLAIM, {403, "IDPRejectedClaim" }},
     { ERR_UNKNOWN_ERROR, {500, "Unknown" }},
@@ -106,9 +175,9 @@ void sts_err::dump(Formatter *f) const
     f->open_object_section("Error");
       f->dump_string("Type", error_types[type]);
       if (!s3_code_E.empty())
-        f->dump_string("Code", s3_code_E);
+	f->dump_string("Code", s3_code_E);
       if (!message_E.empty())
-        f->dump_string("Message", message_E);
+	f->dump_string("Message", message_E);
     f->close_section();
     f->dump_string("RequestId", encoded_uuid);
   f->close_section();
@@ -240,14 +309,14 @@ int RGWPostObj_STS::get_params()
     if (s->cct->_conf->subsys.should_gather(ceph_subsys_rgw, 20)) {
       map<string, struct post_part_field, ltstr_nocase>::iterator piter;
       for (piter = part.fields.begin(); piter != part.fields.end(); ++piter) {
-        ldout(s->cct, 20) << "read part header: name=" << part.name << " content_type=" << part.content_type << dendl;
-        ldout(s->cct, 20) << "name=" << piter->first << dendl;
-        ldout(s->cct, 20) << "val=" << piter->second.val << dendl;
-        ldout(s->cct, 20) << "params:" << dendl;
-        map<string, string>& params = piter->second.params;
-        for (iter = params.begin(); iter != params.end(); ++iter) {
-          ldout(s->cct, 20) << " " << iter->first << " -> " << iter->second << dendl;
-        }
+	ldout(s->cct, 20) << "read part header: name=" << part.name << " content_type=" << part.content_type << dendl;
+	ldout(s->cct, 20) << "name=" << piter->first << dendl;
+	ldout(s->cct, 20) << "val=" << piter->second.val << dendl;
+	ldout(s->cct, 20) << "params:" << dendl;
+	map<string, string>& params = piter->second.params;
+	for (iter = params.begin(); iter != params.end(); ++iter) {
+	  ldout(s->cct, 20) << " " << iter->first << " -> " << iter->second << dendl;
+	}
       }
     }
 
@@ -260,7 +329,7 @@ int RGWPostObj_STS::get_params()
       struct post_part_field& field = part.fields["Content-Disposition"];
       map<string, string>::iterator iter = field.params.find("filename");
       if (iter != field.params.end()) {
-        filename = iter->second;
+	filename = iter->second;
       }
       parts[part.name] = part;
       data_pending = true;
@@ -356,7 +425,7 @@ int RGWPostObj_STS::get_policy()
       int keystone_result = -EINVAL;
       if (!store->ctx()->_conf->rgw_s3_auth_use_keystone ||
 	  store->ctx()->_conf->rgw_keystone_url.empty()) {
-        return -EACCES;
+	return -EACCES;
       }
       dout(20) << "s3 keystone: trying keystone auth" << dendl;
 
@@ -364,9 +433,9 @@ int RGWPostObj_STS::get_policy()
       keystone_result = keystone_validator.validate_s3token(s3_access_key,string(encoded_policy.c_str(),encoded_policy.length()),received_signature_str);
 
       if (keystone_result < 0) {
-        ldout(s->cct, 0) << "User lookup failed!" << dendl;
-        err_msg = "Bad access key / signature";
-        return -EACCES;
+	ldout(s->cct, 0) << "User lookup failed!" << dendl;
+	err_msg = "Bad access key / signature";
+	return -EACCES;
       }
 
       user_info.user_id = keystone_validator.response.token.tenant.id;
@@ -374,12 +443,12 @@ int RGWPostObj_STS::get_policy()
 
       /* try to store user if it not already exists */
       if (rgw_get_user_info_by_uid(store, keystone_validator.response.token.tenant.id, user_info) < 0) {
-        int ret = rgw_store_user_info(store, user_info, NULL, NULL, 0, true);
-        if (ret < 0) {
-          dout(10) << "NOTICE: failed to store new user's info: ret=" << ret << dendl;
-        }
+	int ret = rgw_store_user_info(store, user_info, NULL, NULL, 0, true);
+	if (ret < 0) {
+	  dout(10) << "NOTICE: failed to store new user's info: ret=" << ret << dendl;
+	}
 
-        s->perm_mask = RGW_PERM_FULL_CONTROL;
+	s->perm_mask = RGW_PERM_FULL_CONTROL;
       }
     } else {
       map<string, RGWAccessKey> access_keys  = user_info.access_keys;
@@ -483,6 +552,9 @@ public:
   virtual void execute();
   virtual void send_response();
 
+  int assume_role_execute(boost::function<void()>&);
+  int decode_authorization_message(boost::function<void()>&);
+
   virtual int get_params();
   virtual const string name() { return get_flag ? "get_sts" : "post_sts"; }
 };
@@ -539,6 +611,24 @@ void make_fake_response(assume_role_response &response)
 //  response.request_id.generate_random();
 }
 
+void make_fake_decode_auth(authorization_message_result &response)
+{
+  response.allowed = false;
+  response.explicit_deny = false;
+  response.matched_statements = "";
+  response.failures = "";
+  response.context.principal.id = "AIDACKCEVSQ6C2EXAMPLE";
+  response.context.principal.name = "Bob";
+  response.context.principal.arn = "arn:aws:iam::123456789012:user/Bob";
+  response.context.action = "ec2:StopInstances",
+  response.context.resource = "arn:aws:ec2:us-east-1:123456789012:instance/i-dd01c9bd";
+  response.context.conditions = vector<sts_item>(2);
+  response.context.conditions[0].key = "ec2:Tenancy";
+  response.context.conditions[0].values = {"default"};
+  response.context.conditions[1].key = "ec2:ResourceTag/elasticbeanstalk:environment-name";
+  response.context.conditions[1].values = {"Default-Environment"};
+}
+
 int RGWGetPost_STS::get_params()
 {
   /* get: all got done in init_from_header */
@@ -546,6 +636,7 @@ int RGWGetPost_STS::get_params()
 
   if (s->info.args.get_str().length() > 0) {
     /* post w/ params in url.  this can't be good */
+    why = "Post with query?";
     return -ERR_MALFORMED_INPUT;
   }
 #define GET_PARAMS_MAX_SIZE 65536
@@ -560,6 +651,113 @@ int RGWGetPost_STS::get_params()
   return 0;
 }
 
+int
+my_get_integer(const string &s, int &result)
+{
+  const char *cp = s.c_str();
+  const char *ep;
+  long int r;
+  r = strtol(cp, (char **) &ep, 0);
+  if (*ep || ep == cp) {
+    return -ERR_MALFORMED_INPUT;
+  }
+  result = r;
+  return 0;
+}
+
+int
+my_valid_token_code(const string &s)
+{
+  if (s.length() != 6) return -ERR_MALFORMED_INPUT;
+  const char *cp = s.c_str();
+  for (int i = 0; i < 6; ++i)
+    if (!isdigit(*cp))
+      return -ERR_MALFORMED_INPUT;
+  return 0;
+}
+
+int RGWGetPost_STS::assume_role_execute(boost::function<void()>&f)
+{
+  int r = 0;
+  map<string,string> val_map = s->info.args.get_params();
+  assume_role_request request;
+  for (map<string,string>::iterator iter = val_map.begin();
+	iter != val_map.end(); ++iter) {
+    if (iter->first == "Action" || iter->first == "Version")
+	;
+    else if (iter->first == "RoleSessionName") {
+	request.role_session_name = iter->second;
+    } else if (iter->first == "RoleArn")
+	request.arn = iter->second;
+    else if (iter->first == "Policy")
+	request.policy = iter->second;
+    else if (iter->first == "DurationSeconds") {
+	r = my_get_integer(iter->second, request.duration_seconds);
+	if (r) why = "Bad DurationSeconds";
+     }
+    else if (iter->first == "ExternalId")
+	request.external_id = iter->second;
+    else if (iter->first == "SerialNumber")
+	request.serial_number = iter->second;
+    else if (iter->first == "TokenCode") {
+	r = my_valid_token_code(iter->second);
+	if (!r) request.token_code = iter->second;
+	else why = "Bad token code";
+    } else {
+	why = "spurious parameter";
+	r = -ERR_MALFORMED_INPUT;
+    }
+    if (r) return r;
+  }
+  assume_role_response response(dynamic_cast<sts_err*>(s->err)->request_id);
+  make_fake_response(response);
+  f = boost::function<void()>([this,response]{response.dump(s->formatter);});
+  return 0;
+}
+
+int RGWGetPost_STS::decode_authorization_message(boost::function<void()>&f)
+{
+  int r = 0;
+  map<string,string> val_map = s->info.args.get_params();
+  authorization_message_request request;
+  for (map<string,string>::iterator iter = val_map.begin();
+	iter != val_map.end(); ++iter) {
+    if (iter->first == "Action" || iter->first == "Version")
+	;
+    else if (iter->first == "EncodedMessage") {
+	request.encoded_message = iter->second;
+    } else {
+	why = "spurious parameter";
+	r = -ERR_MALFORMED_INPUT;
+    }
+    if (r) return r;
+  }
+
+  if (request.encoded_message.empty()) {
+    why = "Can't decode thin air";
+    return -ERR_MALFORMED_INPUT;
+  }
+
+  authorization_message_response response(dynamic_cast<sts_err*>(s->err)->request_id);
+  make_fake_decode_auth(response);
+  f = boost::function<void()>([this,response]{response.dump(s->formatter);});
+  return 0;
+}
+
+typedef map<string,
+boost::function<int(RGWGetPost_STS*,boost::function<void()>&)>> sts_matchers;
+const sts_matchers ctable(
+{
+	{"AssumeRole", [](RGWGetPost_STS*o,boost::function<void()>&f)->int{
+		return o->assume_role_execute(f);
+	}},
+	{"DecodeAuthorizationMessage", [](RGWGetPost_STS*o,boost::function<void()>&f)->int{
+		return o->decode_authorization_message(f);
+		return -ERR_INVALID_ACTION;
+	}},
+}
+);
+
 void RGWGetPost_STS::execute()
 {
   // for POST, read in data
@@ -569,12 +767,11 @@ void RGWGetPost_STS::execute()
     why = "parsing parameters";
     return;
   }
-  assume_role_response response(dynamic_cast<sts_err*>(s->err)->request_id);
 //  int ret = 0;
 //  ret = ERR_INVALID_ACTION;
 //  tsErrorResponse err(Unknown, InvalidAction, "Why I don't know"); MAKE RESPONSE
 
-map<string,string> val_map = s->info.args.get_params();
+  map<string,string> val_map = s->info.args.get_params();
 stringstream ss;
 ss << "params:";
 for (map<string,string>::iterator iter = val_map.begin(); iter != val_map.end(); ++iter) {
@@ -582,17 +779,60 @@ ss << " " << iter->first << "=" << iter->second;
 }
 dout(1) << ss.str() << dendl;
 
-  make_fake_response(response);
-  dump_results = boost::function<void()>([this,response]{response.dump(s->formatter);});
+  map<string,string>::const_iterator ap;
+  const char *action, *version;
+
+  if ((ap = val_map.find("Action")) != val_map.end())
+    action = ap->second.c_str();
+  else {
+    if (!ret) why = "Missing action";
+    ret = -ERR_MALFORMED_INPUT;
+  }
+
+  if ((ap = val_map.find("Version")) != val_map.end())
+    version = ap->second.c_str();
+  else {
+    if (!ret) why = "Missing version";
+    ret = -ERR_MALFORMED_INPUT;
+  }
+
+  if (ret < 0) {
+// XXX client?
+    return;
+  }
+
+  if (strcmp(version, "2011-06-15")) {
+    ret = -ERR_INVALID_ACTION;
+// XXX client?
+    why = "version mismatch";
+    return;
+  }
+
+  sts_matchers::const_iterator finder;
+  finder = ctable.find(action);
+
+  if (finder == ctable.end()) {
+    ret = -ERR_INVALID_ACTION;
+// XXX client?
+    why = "Missing/unimplemented action";
+    return;
+  }
+  ret = finder->second(this, dump_results);
+
 //  s->set_req_state_err(ret, "Why I don't know");
 }
 
 void RGWGetPost_STS::send_response()
 {
+  s->format = RGW_FORMAT_XML;
   s->formatter = new XMLFormatter(true);
-  if (ret < 0)
+  if (ret < 0) {
     s->set_req_state_err(ret);
+    if (why)
+      s->err->message_E = why;
+  }
   dump_errno(s);
+  dump_start(s);
   end_header(s, 0, "application/xml");
   if (ret) return;
   dump_results();
@@ -794,7 +1034,7 @@ int RGWHandler_STS::authorize()
       string date = s->info.args.get("Expires");
       time_t exp = atoll(date.c_str());
       if (now >= exp)
-        return -EPERM;
+	return -EPERM;
 
       qsr = true;
     } else {
@@ -824,7 +1064,7 @@ int RGWHandler_STS::authorize()
     string token;
 
     if (!rgw_create_s3_canonical_header(s->info, &s->header_time, token, qsr)) {
-        dout(10) << "failed to create auth header\n" << token << dendl;
+	dout(10) << "failed to create auth header\n" << token << dendl;
     } else {
       keystone_result = keystone_validator.validate_s3token(auth_id, token, auth_sign);
       if (keystone_result == 0) {
@@ -840,16 +1080,16 @@ int RGWHandler_STS::authorize()
 
 
 	s->user.user_id = keystone_validator.response.token.tenant.id;
-        s->user.display_name = keystone_validator.response.token.tenant.name; // wow.
+	s->user.display_name = keystone_validator.response.token.tenant.name; // wow.
 
-        /* try to store user if it not already exists */
-        if (rgw_get_user_info_by_uid(store, keystone_validator.response.token.tenant.id, s->user) < 0) {
-          int ret = rgw_store_user_info(store, s->user, NULL, NULL, 0, true);
-          if (ret < 0)
-            dout(10) << "NOTICE: failed to store new user's info: ret=" << ret << dendl;
-        }
+	/* try to store user if it not already exists */
+	if (rgw_get_user_info_by_uid(store, keystone_validator.response.token.tenant.id, s->user) < 0) {
+	  int ret = rgw_store_user_info(store, s->user, NULL, NULL, 0, true);
+	  if (ret < 0)
+	    dout(10) << "NOTICE: failed to store new user's info: ret=" << ret << dendl;
+	}
 
-        s->perm_mask = RGW_PERM_FULL_CONTROL;
+	s->perm_mask = RGW_PERM_FULL_CONTROL;
       }
     }
   }
@@ -878,7 +1118,7 @@ int RGWHandler_STS::authorize()
 
     time_t req_sec = s->header_time.sec();
     if ((req_sec < now - RGW_AUTH_GRACE_MINS * 60 ||
-        req_sec > now + RGW_AUTH_GRACE_MINS * 60) && !qsr) {
+	req_sec > now + RGW_AUTH_GRACE_MINS * 60) && !qsr) {
       dout(10) << "req_sec=" << req_sec << " now=" << now << "; now - RGW_AUTH_GRACE_MINS=" << now - RGW_AUTH_GRACE_MINS * 60 << "; now + RGW_AUTH_GRACE_MINS=" << now + RGW_AUTH_GRACE_MINS * 60 << dendl;
       dout(0) << "NOTICE: request time skew too big now=" << utime_t(now, 0) << " req_time=" << s->header_time << dendl;
       return -ERR_REQUEST_TIME_SKEWED;
@@ -894,8 +1134,8 @@ int RGWHandler_STS::authorize()
     if (!k.subuser.empty()) {
       map<string, RGWSubUser>::iterator uiter = s->user.subusers.find(k.subuser);
       if (uiter == s->user.subusers.end()) {
-        dout(0) << "NOTICE: could not find subuser: " << k.subuser << dendl;
-        return -EPERM;
+	dout(0) << "NOTICE: could not find subuser: " << k.subuser << dendl;
+	return -EPERM;
       }
       RGWSubUser& subuser = uiter->second;
       s->perm_mask = subuser.perm_mask;
@@ -923,12 +1163,12 @@ int RGWHandler_STS::authorize()
       string effective_uid = s->info.args.get(RGW_SYS_PARAM_PREFIX "uid");
       RGWUserInfo effective_user;
       if (!effective_uid.empty()) {
-        ret = rgw_get_user_info_by_uid(store, effective_uid, effective_user);
-        if (ret < 0) {
-          ldout(s->cct, 0) << "User lookup failed!" << dendl;
-          return -ENOENT;
-        }
-        s->user = effective_user;
+	ret = rgw_get_user_info_by_uid(store, effective_uid, effective_user);
+	if (ret < 0) {
+	  ldout(s->cct, 0) << "User lookup failed!" << dendl;
+	  return -ENOENT;
+	}
+	s->user = effective_user;
       }
     }
 

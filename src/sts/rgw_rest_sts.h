@@ -62,6 +62,65 @@ public:
   void dump(Formatter *f) const;
 };
 
+class assume_role_request {
+public:
+  string role_session_name;
+  string arn;
+  string policy;
+  int duration_seconds;
+  string external_id;
+  string serial_number;
+  string token_code;
+};
+
+class sts_principal {
+public:
+  string id;
+  string name;
+  string arn;
+};
+
+class sts_item {
+public:
+  string key;
+  vector<string> values;
+
+  sts_item() {};
+};
+
+class sts_context {
+public:
+  sts_principal principal;
+  string action;
+  string resource;
+  vector<sts_item> conditions;
+};
+
+class authorization_message_result {
+public:
+  bool allowed;
+  bool explicit_deny;
+  string matched_statements;
+  string failures;
+  sts_context context;
+
+  void dump(Formatter *f) const;
+};
+
+class authorization_message_response: public authorization_message_result {
+public:
+  uuid_d request_id;
+  authorization_message_response(uuid_d &id) {
+    request_id = id;
+  }
+  void dump(Formatter *f) const;
+};
+
+class authorization_message_request {
+public:
+  string encoded_message;
+};
+
 #if 0
 struct post_part_field {
   string val;
