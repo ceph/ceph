@@ -172,6 +172,28 @@ public:
   string name;
 };
 
+class get_session_token_result {
+public:
+  sts_credentials credentials;
+};
+
+class get_session_token_response: public get_session_token_result {
+public:
+  uuid_d request_id;
+  get_session_token_response(uuid_d &id) {
+    request_id = id;
+  }
+  void dump(Formatter *f) const;
+};
+
+class get_session_token_request {
+public:
+  string policy;
+  int duration_seconds;
+  string serial_number;		// not a number
+  string token_code;		// is a number
+};
+
 #if 0
 struct post_part_field {
   string val;

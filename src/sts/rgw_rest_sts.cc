@@ -33,7 +33,7 @@ void encode_base64_thing(string s, bufferlist &out)
   int est_encoded_len = 9 + (41 * s.length() / 30);
   char temp[est_encoded_len];
   const char *src = s.c_str();
-// fixme..  how to do line wrapping?
+
   int olen = ceph_armor(temp, temp + est_encoded_len,
 	src, src + s.length());
   out.append(temp, olen);
@@ -229,6 +229,41 @@ void get_federation_token_response::dump(Formatter *f) const
   f->close_section();
 }
 
+void get_session_token_response::dump(Formatter *f) const
+{
+  bufferlist encoded_token;
+  bufferlist encoded_key;
+  char encoded_uuid[38];
+  char encoded_time[30];
+
+  encode_base64_thing(credentials.session_token, encoded_token);
+  encoded_token.append('\0');
+  encode_base64_thing(credentials.secret_access_key, encoded_key);
+  encoded_key.append('\0');
+  request_id.print(encoded_uuid);
+  encoded_uuid[37] = 0;
+  time_t uv;
+  struct tm res[1];
+  uv = credentials.expiration.sec();
+  struct tm *tmp = gmtime_r(&uv, res);
+  strftime(encoded_time, sizeof encoded_time, "%Y-%m-%dT%T.000Z", tmp);
+
+  f->open_object_section_in_ns("GetSessionTokenResponse",
+			"http://s3.amazonaws.com/doc/2011-06-15/");
+    f->open_object_section("GetSessionTokenResult");
+      f->open_object_section("Credentials");
+	f->dump_string_linewrap("SessionToken", encoded_token.c_str());
+	f->dump_string_linewrap("SecretAccessKey", encoded_key.c_str());
+	f->dump_string("Expiration", encoded_time);
+	f->dump_string("AccessKeyId", credentials.access_key_id);
+      f->close_section();
+    f->close_section();
+    f->open_object_section("ResponseMetadata");
+      f->dump_string("RequestId", encoded_uuid);
+    f->close_section();
+  f->close_section();
+}
+
 rgw_http_errors rgw_http_sts_errors({
     { ERR_IDP_REJECTED_CLAIM, {403, "IDPRejectedClaim" }},
     { ERR_UNKNOWN_ERROR, {500, "Unknown" }},
@@ -275,62 +310,6 @@ bool sts_err::set_rgw_err(int err_no) {
   }
   return rgw_err::set_rgw_err(err_no);
 }
-
-#if 0
-struct response_attr_param {
-  const char *param;
-  const char *http_attr;
-};
-
-static struct response_attr_param resp_attr_params[] = {
-  {"response-content-type", "Content-Type"},
-  {"response-content-language", "Content-Language"},
-  {"response-expires", "Expires"},
-  {"response-cache-control", "Cache-Control"},
-  {"response-content-disposition", "Content-Disposition"},
-  {"response-content-encoding", "Content-Encoding"},
-  {NULL, NULL},
-};
-
-class RGWAssumeRole_STS : public RGWRESTOp {
-
-public:
-  RGWAssumeRole_STS() {}
-
-  int check_caps(RGWUserCaps& caps) {
-    return caps.check_cap("sts", RGW_CAP_READ);
-  }
-  void execute();
-
-  virtual const string name() { return "get_usage"; }
-};
-
-void RGWAssumeRole_STS::send_response()
-{
-  if (ret)
-    s->set_req_state_err(ret);
-  dump_errno(s);
-  dump_start(s);
-  end_header(s, NULL, "application/xml");
-
-  if (!ret) {
-    list_all_buckets_start(s);
-    dump_owner(s, s->user.user_id, s->user.display_name);
-    s->formatter->open_array_section("Buckets");
-    sent_data = true;
-  }
-  rgw_flush_formatter(s, s->formatter);
-}
-
-void RGWAssumeRole_STS::send_response_end()
-{
-  if (sent_data) {
-    s->formatter->close_section();
-    list_all_buckets_end(s);
-    rgw_flush_formatter_and_reset(s, s->formatter);
-  }
-}
-#endif
 
 #if 0
 int RGWPostObj_STS::get_params()
@@ -635,6 +614,7 @@ public:
   int decode_authorization_message(boost::function<void()>&);
   int assume_role_with_web_identity_execute(boost::function<void()>&);
   int get_federation_token_execute(boost::function<void()>&);
+  int get_session_token_execute(boost::function<void()>&);
 
   virtual int get_params();
   virtual const string name() { return get_flag ? "get_sts" : "post_sts"; }
@@ -780,6 +760,43 @@ void make_fake_response(get_federation_token_response &response)
   response.federated_user.arn = "arn:aws:sts::123456789012:federated-user/Bob";
   response.federated_user.assumed_role_id = "123456789012:Bob";
   response.packed_policy_size = 6;
+//  response.request_id.generate_random();
+}
+
+void make_fake_response(get_session_token_response &response)
+{
+  static const unsigned char x_session[] = {
+    0x1,  0xa,  0x4, 0x5c,  0x3,  0xf, 0x2c, 0x41, 0xf8, 0x6a, 0x80,
+    0x7, 0xd2,  0x3, 0x42,  0x0, 0xfc, 0x89, 0xc7, 0x3e,  0x1, 0x94,
+    0x21, 0x45, 0xc5, 0x63, 0x44, 0xd4, 0xe3, 0xd3, 0x82, 0x4e, 0x53,
+    0xb6, 0x14, 0xfe, 0x16, 0xfc, 0x2a, 0x9c, 0xac, 0x11, 0x70, 0xe2,
+    0x1f, 0xad, 0x18, 0x77, 0x73, 0xf2, 0xd3, 0xa3, 0xa5,  0x3, 0x77,
+    0x22, 0x70, 0x38, 0xeb, 0xc4, 0x54, 0xfb, 0xcb, 0x5c, 0x2a, 0xeb,
+    0xad, 0x4b, 0x5d, 0x9e, 0x78, 0x82, 0x11, 0x70,  0xc, 0x3c, 0xb1,
+    0x3f, 0x22, 0xf5, 0x35, 0x75, 0x85, 0x20, 0xd9, 0x15, 0x40, 0x24,
+    0x16, 0xa7, 0x2e, 0x21, 0xdb, 0xe0, 0x88, 0x11, 0x9a, 0x94, 0x55,
+    0xdf, 0x3a, 0xe4, 0xb9, 0x62, 0x4e, 0x81,  0xb, 0x3c, 0x21, 0x96,
+    0x5a, 0x22, 0xfd, 0x81, 0x5c, 0x86, 0xb6, 0x47, 0x83, 0xa5, 0x82,
+    0x40, 0x4d, 0xf5, 0xb9, 0x14,  0xc, 0xd0, 0x89, 0x88, 0x17, 0x9b,
+    0xfc,  0x5, 0xe5, 0xcc, 0x10, 0x64, 0xa3, 0xb6, 0xf5, 0xe5, 0xf8,
+    0xeb, 0x6, 0xcd, 0xbe, 0x71, 0x34, 0x2d, 0xa5, 0x9d, 0xc2, 0x61,
+    0x61, 0x57, 0x1b, 0xc0, 0xb9, 0xce, 0xac, 0x77, 0xef,  0x9, 0xce,
+    0x13, 0x8f, 0x66, 0x46, 0x5f, 0xfe, 0x3a, 0xd9,  0x8, 0x28, 0x63,
+    0xbb, 0x7c,  0x1, 0x31, 0xc7,
+  };
+  static const unsigned char x_key[] = {
+    0xc0, 0x96, 0xa5, 0xad, 0x75, 0x2d, 0x9c, 0x51,  0xc, 0x23, 0xf2,
+    0xbb, 0x30, 0x31,  0xd, 0x1b, 0xf6, 0xcf, 0xc5, 0x17, 0xe2,  0x9,
+    0x8c, 0xc4, 0x5c,  0x3,  0xf, 0x2c, 0x42, 0x84, 0x63,
+  };
+
+  response.credentials.session_token = string((char*)x_session, sizeof x_session);
+  response.credentials.secret_access_key = string((char*)x_key, sizeof x_key);
+  struct timeval tv;
+  tv.tv_sec = 1310414129;	// 2011-07-11 19:55:29 Z
+  tv.tv_usec = 611000;
+  response.credentials.expiration.set_from_timeval(&tv);
+  response.credentials.access_key_id = "AKIAIOSFODNN7EXAMPLE";
 //  response.request_id.generate_random();
 }
 
@@ -933,6 +950,37 @@ int RGWGetPost_STS::get_federation_token_execute(boost::function<void()>&f)
   return 0;
 }
 
+int RGWGetPost_STS::get_session_token_execute(boost::function<void()>&f)
+{
+  int r = 0;
+  map<string,string> val_map = s->info.args.get_params();
+  get_session_token_request request;
+  for (map<string,string>::iterator iter = val_map.begin();
+	iter != val_map.end(); ++iter) {
+    if (iter->first == "Action" || iter->first == "Version")
+	;
+    else if (iter->first == "Policy")
+	request.policy = iter->second;
+    else if (iter->first == "SerialNumber")
+	request.serial_number = iter->second;
+    else if (iter->first == "TokenCode")
+	request.token_code = iter->second;
+    else if (iter->first == "DurationSeconds") {
+	r = my_get_integer(iter->second, request.duration_seconds);
+	if (r) why = "Bad DurationSeconds";
+     }
+    else {
+	why = "spurious parameter";
+	r = -ERR_MALFORMED_INPUT;
+    }
+    if (r) return r;
+  }
+  get_session_token_response response(dynamic_cast<sts_err*>(s->err)->request_id);
+  make_fake_response(response);
+  f = boost::function<void()>([this,response]{response.dump(s->formatter);});
+  return 0;
+}
+
 int RGWGetPost_STS::decode_authorization_message(boost::function<void()>&f)
 {
   int r = 0;
@@ -980,6 +1028,10 @@ const sts_matchers ctable(
   {"GetFederationToken",
       [](RGWGetPost_STS*o,boost::function<void()>&f)->int{
     return o->get_federation_token_execute(f);
+  }},
+  {"GetSessionToken",
+      [](RGWGetPost_STS*o,boost::function<void()>&f)->int{
+    return o->get_session_token_execute(f);
   }},
 }
 );
