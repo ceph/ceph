@@ -29,6 +29,7 @@
 
 #define dout_subsys ceph_subsys_mds
 
+#define HEADER_LEN 4096
 
 int Dumper::init(int rank_)
 {
@@ -90,7 +91,7 @@ int Dumper::dump(const char *dump_file)
   int fd = ::open(dump_file, O_WRONLY|O_CREAT|O_TRUNC, 0644);
   if (fd >= 0) {
     // include an informative header
-    char buf[200];
+    char buf[HEADER_LEN];
     memset(buf, 0, sizeof(buf));
     sprintf(buf, "Ceph mds%d journal dump\n start offset %llu (0x%llx)\n       length %llu (0x%llx)\n    write_pos %llu (0x%llx)\n    format %llu\n    trimmed_pos %llu (0x%llx)\n%c",
 	    rank, 
@@ -185,7 +186,7 @@ int Dumper::undump(const char *dump_file)
   //  start offset 232401996 (0xdda2c4c)
   //        length 1097504 (0x10bf20)
 
-  char buf[200];
+  char buf[HEADER_LEN];
   r = safe_read(fd, buf, sizeof(buf));
   if (r < 0) {
     VOID_TEMP_FAILURE_RETRY(::close(fd));
