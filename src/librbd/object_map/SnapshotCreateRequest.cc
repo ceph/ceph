@@ -80,14 +80,14 @@ void SnapshotCreateRequest::send_read_map() {
   assert(m_image_ctx.get_snap_info(m_snap_id) != NULL);
 
   CephContext *cct = m_image_ctx.cct;
-  ldout(cct, 5) << this << " " << __func__ << dendl;
+  std::string oid(ObjectMap::object_map_name(m_image_ctx.id, CEPH_NOSNAP));
+  ldout(cct, 5) << this << " " << __func__ << ": oid=" << oid << dendl;
   m_state = STATE_READ_MAP;
 
   // IO is blocked due to the snapshot creation -- consistent to read from disk
   librados::ObjectReadOperation op;
   op.read(0, 0, NULL, NULL);
 
-  std::string oid(ObjectMap::object_map_name(m_image_ctx.id, CEPH_NOSNAP));
   librados::AioCompletion *rados_completion = create_callback_completion();
   int r = m_image_ctx.md_ctx.aio_operate(oid, rados_completion, &op,
                                          &m_read_bl);
@@ -96,9 +96,8 @@ void SnapshotCreateRequest::send_read_map() {
 }
 
 void SnapshotCreateRequest::send_write_map() {
-  std::string snap_oid(ObjectMap::object_map_name(m_image_ctx.id, m_snap_id));
-
   CephContext *cct = m_image_ctx.cct;
+  std::string snap_oid(ObjectMap::object_map_name(m_image_ctx.id, m_snap_id));
   ldout(cct, 5) << this << " " << __func__ << ": snap_oid=" << snap_oid
                 << dendl;
   m_state = STATE_WRITE_MAP;
@@ -119,14 +118,14 @@ bool SnapshotCreateRequest::send_add_snapshot() {
   }
 
   CephContext *cct = m_image_ctx.cct;
-  ldout(cct, 5) << this << " " << __func__ << dendl;
+  std::string oid(ObjectMap::object_map_name(m_image_ctx.id, CEPH_NOSNAP));
+  ldout(cct, 5) << this << " " << __func__ << ": oid=" << oid << dendl;
   m_state = STATE_ADD_SNAPSHOT;
 
   librados::ObjectWriteOperation op;
   rados::cls::lock::assert_locked(&op, RBD_LOCK_NAME, LOCK_EXCLUSIVE, "", "");
   cls_client::object_map_snap_add(&op);
 
-  std::string oid(ObjectMap::object_map_name(m_image_ctx.id, CEPH_NOSNAP));
   librados::AioCompletion *rados_completion = create_callback_completion();
   int r = m_image_ctx.md_ctx.aio_operate(oid, rados_completion, &op);
   assert(r == 0);

@@ -86,7 +86,8 @@ int ObjectMap::lock()
   std::string oid(object_map_name(m_image_ctx.id, CEPH_NOSNAP));
   while (true) {
     int r;
-    ldout(cct, 10) << &m_image_ctx << " locking object map" << dendl;
+    ldout(cct, 10) << &m_image_ctx << " locking object map: "
+                   << oid << dendl;
     r = rados::cls::lock::lock(&m_image_ctx.md_ctx, oid,
 			       RBD_LOCK_NAME, LOCK_EXCLUSIVE, "", "", "",
 			       utime_t(), 0);
@@ -140,9 +141,9 @@ int ObjectMap::unlock()
     return 0;
   }
 
-  ldout(m_image_ctx.cct, 10) << &m_image_ctx << " unlocking object map"
-			     << dendl;
   std::string oid = object_map_name(m_image_ctx.id, CEPH_NOSNAP);
+  ldout(m_image_ctx.cct, 10) << &m_image_ctx << " unlocking object map: "
+			     << oid << dendl;
   int r = rados::cls::lock::unlock(&m_image_ctx.md_ctx, oid,
                                    RBD_LOCK_NAME, "");
   if (r < 0 && r != -ENOENT) {
@@ -187,12 +188,13 @@ void ObjectMap::refresh(uint64_t snap_id)
   m_enabled = true;
 
   CephContext *cct = m_image_ctx.cct;
-  ldout(cct, 10) << &m_image_ctx << " refreshing object map" << dendl;
+  std::string oid(object_map_name(m_image_ctx.id, snap_id));
+  ldout(cct, 10) << &m_image_ctx << " refreshing object map: "
+                 << oid << dendl;
 
   uint64_t num_objs = Striper::get_num_objects(
     m_image_ctx.layout, m_image_ctx.get_image_size(snap_id));
 
-  std::string oid(object_map_name(m_image_ctx.id, snap_id));
   int r = cls_client::object_map_load(&m_image_ctx.md_ctx, oid,
                                       &m_object_map);
   if (r == -EINVAL) {
@@ -223,7 +225,7 @@ void ObjectMap::refresh(uint64_t snap_id)
     return;
   }
 
-  ldout(cct, 20) << "refreshed object map: " << m_object_map.size()
+  ldout(cct, 20) << "refreshed object map: num_objs=" << m_object_map.size()
                  << dendl;
 
   if (m_object_map.size() < num_objs) {

@@ -25,10 +25,9 @@ void UpdateRequest::send() {
 
   // safe to update in-memory state first without handling rollback since any
   // failures will invalidate the object map
+  std::string oid(ObjectMap::object_map_name(m_image_ctx.id, m_snap_id));
   ldout(cct, 20) << &m_image_ctx << " updating object map"
-                 << (m_snap_id != CEPH_NOSNAP ?
-                       " snap " + stringify(m_snap_id) : std::string())
-                 << ": ["
+                 << ": oid=" << oid << ", ["
 		 << m_start_object_no << "," << m_end_object_no << ") = "
 		 << (m_current_state ?
 		       stringify(static_cast<uint32_t>(*m_current_state)) : "")
@@ -57,7 +56,6 @@ void UpdateRequest::send() {
 				m_new_state, m_current_state);
 
   librados::AioCompletion *rados_completion = create_callback_completion();
-  std::string oid(ObjectMap::object_map_name(m_image_ctx.id, m_snap_id));
   int r = m_image_ctx.md_ctx.aio_operate(oid, rados_completion, &op);
   assert(r == 0);
   rados_completion->release();
