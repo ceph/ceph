@@ -51,7 +51,7 @@ TEST(SubProcess, False)
 
 TEST(SubProcess, NotFound)
 {
-  SubProcess p("NOTEXISTENTBINARY", false, false, true);
+  SubProcess p("NOTEXISTENTBINARY", SubProcess::CLOSE, SubProcess::CLOSE, SubProcess::PIPE);
   ASSERT_EQ(p.spawn(), 0);
   std::string buf;
   ASSERT_TRUE(read_from_fd(p.get_stderr(), buf));
@@ -63,7 +63,7 @@ TEST(SubProcess, NotFound)
 
 TEST(SubProcess, Echo)
 {
-  SubProcess echo("echo", false, true);
+  SubProcess echo("echo", SubProcess::CLOSE, SubProcess::PIPE);
   echo.add_cmd_args("1", "2", "3", NULL);
 
   ASSERT_EQ(echo.spawn(), 0);
@@ -77,7 +77,7 @@ TEST(SubProcess, Echo)
 
 TEST(SubProcess, Cat)
 {
-  SubProcess cat("cat", true, true, true);
+  SubProcess cat("cat", SubProcess::PIPE, SubProcess::PIPE, SubProcess::PIPE);
 
   ASSERT_EQ(cat.spawn(), 0);
   std::string msg("to my, trociny!");
@@ -96,7 +96,7 @@ TEST(SubProcess, Cat)
 
 TEST(SubProcess, CatDevNull)
 {
-  SubProcess cat("cat", true, true, true);
+  SubProcess cat("cat", SubProcess::PIPE, SubProcess::PIPE, SubProcess::PIPE);
   cat.add_cmd_arg("/dev/null");
 
   ASSERT_EQ(cat.spawn(), 0);
@@ -111,7 +111,7 @@ TEST(SubProcess, CatDevNull)
 
 TEST(SubProcess, Killed)
 {
-  SubProcessTimed cat("cat", true, true);
+  SubProcessTimed cat("cat", SubProcess::PIPE, SubProcess::PIPE);
 
   ASSERT_EQ(cat.spawn(), 0);
   cat.kill();
@@ -122,7 +122,7 @@ TEST(SubProcess, Killed)
 
 TEST(SubProcess, CatWithArgs)
 {
-  SubProcess cat("cat", true, true, true);
+  SubProcess cat("cat", SubProcess::PIPE, SubProcess::PIPE, SubProcess::PIPE);
   cat.add_cmd_args("/dev/stdin", "/dev/null", "/NOTEXIST", NULL);
 
   ASSERT_EQ(cat.spawn(), 0);
@@ -144,7 +144,7 @@ TEST(SubProcess, CatWithArgs)
 
 TEST(SubProcess, Subshell)
 {
-  SubProcess sh("/bin/sh", true, true, true);
+  SubProcess sh("/bin/sh", SubProcess::PIPE, SubProcess::PIPE, SubProcess::PIPE);
   sh.add_cmd_args("-c",
       "sleep 0; "
       "cat; "
@@ -169,7 +169,7 @@ TEST(SubProcess, Subshell)
 
 TEST(SubProcessTimed, True)
 {
-  SubProcessTimed p("true", false, false, false, 10);
+  SubProcessTimed p("true", SubProcess::CLOSE, SubProcess::CLOSE, SubProcess::CLOSE, 10);
   ASSERT_EQ(p.spawn(), 0);
   ASSERT_EQ(p.join(), 0);
   ASSERT_TRUE(p.err()[0] == '\0');
@@ -177,7 +177,7 @@ TEST(SubProcessTimed, True)
 
 TEST(SubProcessTimed, SleepNoTimeout)
 {
-  SubProcessTimed sleep("sleep", false, false, false, 0);
+  SubProcessTimed sleep("sleep", SubProcess::CLOSE, SubProcess::CLOSE, SubProcess::CLOSE, 0);
   sleep.add_cmd_arg("1");
 
   ASSERT_EQ(sleep.spawn(), 0);
@@ -187,7 +187,7 @@ TEST(SubProcessTimed, SleepNoTimeout)
 
 TEST(SubProcessTimed, Killed)
 {
-  SubProcessTimed cat("cat", true, true, true, 5);
+  SubProcessTimed cat("cat", SubProcess::PIPE, SubProcess::PIPE, SubProcess::PIPE, 5);
 
   ASSERT_EQ(cat.spawn(), 0);
   cat.kill();
@@ -203,7 +203,7 @@ TEST(SubProcessTimed, Killed)
 
 TEST(SubProcessTimed, SleepTimedout)
 {
-  SubProcessTimed sleep("sleep", false, false, true, 1);
+  SubProcessTimed sleep("sleep", SubProcess::CLOSE, SubProcess::CLOSE, SubProcess::PIPE, 1);
   sleep.add_cmd_arg("10");
 
   ASSERT_EQ(sleep.spawn(), 0);
@@ -218,7 +218,7 @@ TEST(SubProcessTimed, SleepTimedout)
 
 TEST(SubProcessTimed, SubshellNoTimeout)
 {
-  SubProcessTimed sh("/bin/sh", true, true, true, 0);
+  SubProcessTimed sh("/bin/sh", SubProcess::PIPE, SubProcess::PIPE, SubProcess::PIPE, 0);
   sh.add_cmd_args("-c", "cat >&2", NULL);
   ASSERT_EQ(sh.spawn(), 0);
   std::string msg("the quick brown fox jumps over the lazy dog");
@@ -238,7 +238,7 @@ TEST(SubProcessTimed, SubshellNoTimeout)
 
 TEST(SubProcessTimed, SubshellKilled)
 {
-  SubProcessTimed sh("/bin/sh", true, true, true, 10);
+  SubProcessTimed sh("/bin/sh", SubProcess::PIPE, SubProcess::PIPE, SubProcess::PIPE, 10);
   sh.add_cmd_args("-c", "sh -c cat", NULL);
   ASSERT_EQ(sh.spawn(), 0);
   std::string msg("etaoin shrdlu");
@@ -255,7 +255,7 @@ TEST(SubProcessTimed, SubshellKilled)
 
 TEST(SubProcessTimed, SubshellTimedout)
 {
-  SubProcessTimed sh("/bin/sh", true, true, true, 1, SIGTERM);
+  SubProcessTimed sh("/bin/sh", SubProcess::PIPE, SubProcess::PIPE, SubProcess::PIPE, 1, SIGTERM);
   sh.add_cmd_args("-c", "sleep 1000& cat; NEVER REACHED", NULL);
   ASSERT_EQ(sh.spawn(), 0);
   std::string buf;
