@@ -1195,6 +1195,7 @@ void RGWGetObj::execute()
     ret = handle_slo_manifest(attr_iter->second);
     if (ret < 0) {
       ldout(s->cct, 0) << "ERROR: failed to handle slo manifest ret=" << ret << dendl;
+      goto done_err;
     }
     return;
   }
