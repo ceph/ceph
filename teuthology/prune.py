@@ -34,16 +34,21 @@ def prune_archive(archive_dir, pass_days, remotes_days, dry_run=False):
     directories that might be old enough
     """
     max_days = max(pass_days, remotes_days)
-    run_dirs = list()
     log.debug("Archive {archive} has {count} children".format(
         archive=archive_dir, count=len(os.listdir(archive_dir))))
-    for child in listdir(archive_dir):
-        item = os.path.join(archive_dir, child)
+    # Use full paths
+    children = map(
+        lambda p: os.path.join(archive_dir, p),
+        listdir(archive_dir)
+    )
+    run_dirs = list()
+    for child in children:
         # Ensure that the path is not a symlink, is a directory, and is old
         # enough to process
-        if (not os.path.islink(item) and os.path.isdir(item) and
-                is_old_enough(item, max_days)):
-            run_dirs.append(item)
+        if (not os.path.islink(child) and os.path.isdir(child) and
+                is_old_enough(child, max_days)):
+            run_dirs.append(child)
+    run_dirs.sort(key=lambda p: os.path.getctime(p), reverse=True)
     for run_dir in run_dirs:
         log.debug("Processing %s ..." % run_dir)
         maybe_remove_passes(run_dir, pass_days, dry_run)
