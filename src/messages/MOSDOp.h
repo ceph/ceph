@@ -344,7 +344,14 @@ struct ceph_osd_request_head {
     assert(partial_decode_needed && final_decode_needed);
     p = payload.begin();
 
-    if (header.version < 2) {
+    // Always keep here the newest version of decoding order/rule
+    if (header.version == HEAD_VERSION) {
+	  ::decode(pgid, p);
+	  ::decode(osdmap_epoch, p);
+	  ::decode(flags, p);
+	  ::decode(reassert_version, p);
+	  ::decode(reqid, p);
+    } else if (header.version < 2) {
       // old decode
       ::decode(client_inc, p);
 
@@ -446,13 +453,6 @@ struct ceph_osd_request_head {
       // put client_inc in reqid.inc for get_reqid()'s benefit
       if (reqid.name == entity_name_t() && reqid.tid == 0)
 	reqid.inc = client_inc;
-    } else {
-      // new, v7 decode, splitted to partial and final
-      ::decode(pgid, p);
-      ::decode(osdmap_epoch, p);
-      ::decode(flags, p);
-      ::decode(reassert_version, p);
-      ::decode(reqid, p);
     }
 
     partial_decode_needed = false;
