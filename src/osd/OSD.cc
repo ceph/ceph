@@ -623,6 +623,14 @@ void OSDService::agent_schedule_flush_start()
   }
 }
 
+//on schedule_flush ending, setup the next period's schedule jobs.
+void OSDService::agent_schedule_flush_end()
+{
+  agent_in_schedule_time = false;
+  dout(10) << "stop user specified flushing" << dendl;
+  agent_schedule_flush_setup();
+}
+
 void OSDService::agent_schedule_flush_setup()
 {
   dout(10) << __func__ << " start" << dendl;
