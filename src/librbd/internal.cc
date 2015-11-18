@@ -1889,32 +1889,30 @@ int invoke_async_request(ImageCtx *ictx, const std::string& request_type,
       return r;
     }
 
-    ictx->parent->cache_lock.Lock();
-    ictx->parent->snap_lock.get_write();
-    r = ictx->parent->get_snap_name(parent_snap_id, &ictx->parent->snap_name);
+    {
+      RWLock::RLocker owner_locker(ictx->parent->owner_lock);
+      Mutex::Locker cache_locker(ictx->parent->cache_lock);
+      RWLock::WLocker snap_locker(ictx->parent->snap_lock);
+      r = ictx->parent->get_snap_name(parent_snap_id, &ictx->parent->snap_name);
+      if (r < 0) {
+        lderr(ictx->cct) << "parent snapshot does not exist" << dendl;
+      } else {
+        ictx->parent->snap_set(ictx->parent->snap_name);
+
+        RWLock::WLocker parent_locker(ictx->parent->parent_lock);
+        r = refresh_parent(ictx->parent);
+        if (r < 0) {
+          lderr(ictx->cct) << "error refreshing parent snapshot "
+		           << ictx->parent->id << " "
+		           << ictx->parent->snap_name << dendl;
+        }
+      }
+    }
+
     if (r < 0) {
-      lderr(ictx->cct) << "parent snapshot does not exist" << dendl;
-      ictx->parent->snap_lock.put_write();
-      ictx->parent->cache_lock.Unlock();
       close_parent(ictx);
       return r;
     }
-    ictx->parent->snap_set(ictx->parent->snap_name);
-    ictx->parent->parent_lock.get_write();
-    r = refresh_parent(ictx->parent);
-    if (r < 0) {
-      lderr(ictx->cct) << "error refreshing parent snapshot "
-		       << ictx->parent->id << " "
-		       << ictx->parent->snap_name << dendl;
-      ictx->parent->parent_lock.put_write();
-      ictx->parent->snap_lock.put_write();
-      ictx->parent->cache_lock.Unlock();
-      close_parent(ictx);
-      return r;
-    }
-    ictx->parent->parent_lock.put_write();
-    ictx->parent->snap_lock.put_write();
-    ictx->parent->cache_lock.Unlock();
 
     return 0;
   }
