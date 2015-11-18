@@ -30,8 +30,9 @@ void ResizeRequest::send() {
   RWLock::WLocker l(m_image_ctx.object_map_lock);
   m_num_objs = Striper::get_num_objects(m_image_ctx.layout, m_new_size);
 
+  std::string oid(ObjectMap::object_map_name(m_image_ctx.id, m_snap_id));
   ldout(cct, 5) << &m_image_ctx << " resizing on-disk object map: "
-		<< m_num_objs << dendl;
+                << "oid=" << oid << ", num_objs=" << m_num_objs << dendl;
 
   librados::ObjectWriteOperation op;
   if (m_snap_id == CEPH_NOSNAP) {
@@ -40,7 +41,6 @@ void ResizeRequest::send() {
   cls_client::object_map_resize(&op, m_num_objs, m_default_object_state);
 
   librados::AioCompletion *rados_completion = create_callback_completion();
-  std::string oid(ObjectMap::object_map_name(m_image_ctx.id, m_snap_id));
   int r = m_image_ctx.md_ctx.aio_operate(oid, rados_completion, &op);
   assert(r == 0);
   rados_completion->release();

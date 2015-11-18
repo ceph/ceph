@@ -103,17 +103,19 @@ bool SnapshotRemoveRequest::should_complete(int r) {
 
 void SnapshotRemoveRequest::send_load_map() {
   CephContext *cct = m_image_ctx.cct;
-  ldout(cct, 5) << this << " " << __func__ << dendl;
+  std::string snap_oid(ObjectMap::object_map_name(m_image_ctx.id, m_snap_id));
+  ldout(cct, 5) << this << " " << __func__ << ": snap_oid=" << snap_oid
+                << dendl;
   m_state = STATE_LOAD_MAP;
 
-  std::string snap_oid(ObjectMap::object_map_name(m_image_ctx.id, m_snap_id));
   cls_client::object_map_load(&m_image_ctx.md_ctx, snap_oid,
                               &m_snap_object_map, create_callback_context());
 }
 
 void SnapshotRemoveRequest::send_remove_snapshot() {
   CephContext *cct = m_image_ctx.cct;
-  ldout(cct, 5) << this << " " << __func__ << dendl;
+  std::string oid(ObjectMap::object_map_name(m_image_ctx.id, m_next_snap_id));
+  ldout(cct, 5) << this << " " << __func__ << ": oid=" << oid << dendl;
   m_state = STATE_REMOVE_SNAPSHOT;
 
   librados::ObjectWriteOperation op;
@@ -122,7 +124,6 @@ void SnapshotRemoveRequest::send_remove_snapshot() {
   }
   cls_client::object_map_snap_remove(&op, m_snap_object_map);
 
-  std::string oid(ObjectMap::object_map_name(m_image_ctx.id, m_next_snap_id));
   librados::AioCompletion *rados_completion = create_callback_completion();
   int r = m_image_ctx.md_ctx.aio_operate(oid, rados_completion, &op);
   assert(r == 0);
@@ -145,13 +146,13 @@ void SnapshotRemoveRequest::send_invalidate_next_map() {
 
 void SnapshotRemoveRequest::send_remove_map() {
   CephContext *cct = m_image_ctx.cct;
-  ldout(cct, 5) << this << " " << __func__ << dendl;
+  std::string oid(ObjectMap::object_map_name(m_image_ctx.id, m_snap_id));
+  ldout(cct, 5) << this << " " << __func__ << ": oid=" << oid << dendl;
   m_state = STATE_REMOVE_MAP;
 
   librados::ObjectWriteOperation op;
   op.remove();
 
-  std::string oid(ObjectMap::object_map_name(m_image_ctx.id, m_snap_id));
   librados::AioCompletion *rados_completion = create_callback_completion();
   int r = m_image_ctx.md_ctx.aio_operate(oid, rados_completion, &op);
   assert(r == 0);
