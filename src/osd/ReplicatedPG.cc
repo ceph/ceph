@@ -2258,12 +2258,12 @@ bool ReplicatedPG::maybe_promote(ObjectContextRef obc,
       promote_object(obc, missing_oid, oloc, promote_op);
     } else {
       // Check if in other hit sets
-      map<time_t,HitSetRef>::iterator itor;
+      map<time_t,HitSetRef>::reverse_iterator itor;
       bool in_other_hit_sets = false;
       unsigned max_in_memory_read = pool.info.min_read_recency_for_promote > 0 ? pool.info.min_read_recency_for_promote - 1 : 0;
       unsigned max_in_memory_write = pool.info.min_write_recency_for_promote > 0 ? pool.info.min_write_recency_for_promote - 1 : 0;
       unsigned max_in_memory = MAX(max_in_memory_read, max_in_memory_write);
-      for (itor = agent_state->hit_set_map.begin(); itor != agent_state->hit_set_map.end() && max_in_memory--; ++itor) {
+      for (itor = agent_state->hit_set_map.rbegin(); itor != agent_state->hit_set_map.rend() && max_in_memory--; ++itor) {
         if (obc.get()) {
           if (obc->obs.oi.soid != hobject_t() && itor->second->contains(obc->obs.oi.soid)) {
             in_other_hit_sets = true;
