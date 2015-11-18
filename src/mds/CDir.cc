@@ -2947,12 +2947,13 @@ int CDir::_next_dentry_on_set(set<dentry_key_t>& dns, bool missing_okay,
                               MDSInternalContext *cb, CDentry **dnout)
 {
   dentry_key_t dnkey;
+  CDentry *dn;
 
   while (!dns.empty()) {
     set<dentry_key_t>::iterator front = dns.begin();
     dnkey = *front;
-    *dnout = lookup(dnkey.name);
-    if (!*dnout) {
+    dn = lookup(dnkey.name);
+    if (!dn) {
       if (!is_complete() &&
           (!has_bloom() || is_in_bloom(dnkey.name))) {
         // need to re-read this dirfrag
@@ -2974,6 +2975,13 @@ int CDir::_next_dentry_on_set(set<dentry_key_t>& dns, bool missing_okay,
     // okay, we got a  dentry
     dns.erase(dnkey);
 
+    if (dn->get_projected_version() < scrub_infop->last_recursive.version) {
+      dout(15) << " skip dentry " << dnkey.name
+	       << ", no change since last scrub" << dendl;
+      continue;
+    }
+
+    *dnout = dn;
     return 0;
   }
   *dnout = NULL;
