@@ -1975,11 +1975,11 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
     }
 
     if (values.size() && values.begin()->first == key) {
-      cout << " (length " << values.begin()->second.length() << ") : ";
       if (!outfile.empty()) {
 	cerr << "Writing to " << outfile << std::endl;
 	dump_data(outfile, values.begin()->second);
       } else {
+        cout << "value (" << values.begin()->second.length() << " bytes) :\n";
 	values.begin()->second.hexdump(cout);
 	cout << std::endl;
       }
@@ -2029,7 +2029,7 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
 	// dump key in hex if it contains nonprintable characters
 	if (std::count_if(it->first.begin(), it->first.end(),
 	    (int (*)(int))isprint) < (int)it->first.length()) {
-	  cout << "key: (" << it->first.length() << " bytes):\n";
+	  cout << "key (" << it->first.length() << " bytes):\n";
 	  bufferlist keybl;
 	  keybl.append(it->first);
 	  keybl.hexdump(cout);
@@ -2037,7 +2037,7 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
 	  cout << it->first;
 	}
 	cout << std::endl;
-	cout << "value: (" << it->second.length() << " bytes) :\n";
+	cout << "value (" << it->second.length() << " bytes) :\n";
 	it->second.hexdump(cout);
 	cout << std::endl;
       }
