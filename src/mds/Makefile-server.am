@@ -36,6 +36,8 @@ noinst_HEADERS += \
 	mds/Mutation.h \
 	mds/Migrator.h \
 	mds/ScatterLock.h \
+	mds/ScrubStack.h \
+	mds/ScrubHeader.h \
 	mds/Server.h \
 	mds/SessionMap.h \
 	mds/SimpleLock.h \
