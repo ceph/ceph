@@ -3452,8 +3452,21 @@ int RGWRados::list_realms(list<string>& realms)
 int RGWRados::list_periods(list<string>& periods)
 {
   RGWPeriod period;
-
-  return list_raw_prefixed_objs(period.get_pool_name(cct), period.get_info_oid_prefix(), periods);
+  list<string> raw_periods;
+  int ret = list_raw_prefixed_objs(period.get_pool_name(cct), period.get_info_oid_prefix(), raw_periods);
+  if (ret < 0) {
+    return ret;
+  }
+  for(list<string>::iterator iter = raw_periods.begin(); iter != raw_periods.end(); iter++) {
+    size_t pos = iter->find(".");
+    if ( pos != std::string::npos) {
+      periods.push_back(iter->substr(0, pos));
+    } else {
+      periods.push_back(*iter);
+    }
+  }
+  periods.unique();
+  return 0;
 }
 
 
