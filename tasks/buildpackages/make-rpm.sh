@@ -231,12 +231,7 @@ function build_rpm_repo() {
         cp -fla ${dir} $sha1_dir
     done
 
-    ref_dir=${buildarea}/../$codename/$base/ref
-    mkdir -p $ref_dir
-    ( cd ${ceph_dir} ; git for-each-ref refs/tags/** refs/remotes/origin/** ) | grep $sha1 | while read sha1 type ref ; do
-        base_ref=$(basename $ref)
-        ( cd $ref_dir ; ln -sf ../sha1/$sha1 $base_ref )
-    done
+    link_same ${buildarea}/../$codename/$base/ref $ceph_dir $sha1
     if test "$gitbuilder_host" ; then
         (
             cd ${buildarea}/../$codename

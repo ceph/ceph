@@ -16,14 +16,15 @@ ${HOME}/.ssh_agent:
 flock-packages-repository:
 	openstack server create --image 'teuthology-ubuntu-14.04' --flavor ${HTTP_FLAVOR} --key-name teuthology --security-group teuthology --property ownedby=${MY_IP} --wait packages-repository ; sleep 30
 	ip=$(call get_ip,packages-repository) ; \
+	ssh $$ip sudo apt-get update ; \
 	ssh $$ip sudo apt-get install -y nginx ; \
 	ssh $$ip sudo chown -R ubuntu /usr/share/nginx/html ; \
 	perl -pi -e "s/^gitbuilder_host:.*/gitbuilder_host: $$ip/" ~/.teuthology.yaml
-	mkdir -p ${D}/${@D} ; touch ${D}/$@
 
 packages-repository:
 	mkdir -p ${D}
 	flock --close ${D}/flock-$@.lock ${MAKE} flock-$@
+	touch ${D}/$@
 
 ceph-${CEPH_PKG_TYPE}-${CEPH_DIST}-${CEPH_ARCH}-${CEPH_FLAVOR}-${CEPH_SHA1}: packages-repository
 	openstack server create --image 'teuthology-${CEPH_OS_TYPE}-${CEPH_OS_VERSION}' --flavor ${BUILD_FLAVOR} --key-name teuthology --security-group teuthology --property ownedby=${MY_IP} --user-data ${CEPH_OS_TYPE}-${CEPH_OS_VERSION}-user-data.txt --wait $@ ; sleep 30
