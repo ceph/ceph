@@ -135,12 +135,7 @@ EOF
     reprepro --basedir $sha1_dir include $codename WORKDIR/*.changes
     echo $dvers > $sha1_dir/version
     echo $sha1 > $sha1_dir/sha1
-    ref_dir=$codename/$base/ref
-    mkdir -p $ref_dir
-    ( cd ${ceph_dir} ; git for-each-ref refs/tags/** refs/remotes/origin/** ) | grep $sha1 | while read sha1 type ref ; do
-        base_ref=$(basename $ref)
-        ( cd $ref_dir ; ln -sf ../sha1/$sha1 $base_ref )
-    done
+    link_same $codename/$base/ref $ceph_dir $sha1
     if test "$gitbuilder_host" ; then
         cd $codename
         RSYNC_RSH='ssh -o StrictHostKeyChecking=false' rsync -av $base/ $gitbuilder_host:/usr/share/nginx/html/$base/
