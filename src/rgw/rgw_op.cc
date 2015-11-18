@@ -1052,9 +1052,21 @@ int RGWGetObj::handle_slo_manifest(bufferlist& bl)
   s->obj_size = slo_info.total_size;
   ldout(s->cct, 20) << "s->obj_size=" << s->obj_size << dendl;
 
-  int r = iterate_slo_parts(s->cct, store, start_ofs, end, slo_parts, get_obj_user_manifest_iterate_cb, (void *)this);
-  if (r < 0)
+  if (ofs < 0) {
+    ofs = total_len - std::min(-ofs, static_cast<off_t>(total_len));
+  }
+
+  if (end < 0 || end >= static_cast<off_t>(total_len)) {
+    end = total_len - 1;
+  }
+
+  total_len = end - ofs + 1;
+
+  int r = iterate_slo_parts(s->cct, store, ofs, end, slo_parts,
+        get_obj_user_manifest_iterate_cb, (void *)this);
+  if (r < 0) {
     return r;
+  }
 
   return 0;
 }
