@@ -611,6 +611,18 @@ public:
   }
 };
 
+void OSDService::agent_schedule_flush_start()
+{
+  agent_in_schedule_time = true;
+  dout(10) << "start user specified flushing" << dendl;
+  RWLock::RLocker rl(osd->pg_map_lock);
+  for (ceph::unordered_map<spg_t, PG*>::iterator p = osd->pg_map.begin();
+        p != osd->pg_map.end(); ++p) {
+    p->second->agent_choose_mode_restart(true);
+    dout(10) << p->first.pgid << " agent_state reset" << dendl;
+  }
+}
+
 void OSDService::agent_schedule_flush_setup()
 {
   dout(10) << __func__ << " start" << dendl;

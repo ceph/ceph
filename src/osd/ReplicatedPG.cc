@@ -11813,13 +11813,19 @@ void ReplicatedPG::agent_delay()
   }
 }
 
-void ReplicatedPG::agent_choose_mode_restart()
+//schedule flush timer thread will force pg to choose agent mode,
+//and, if the pg is delaying, precedingly wake it up.
+void ReplicatedPG::agent_choose_mode_restart(bool force)
 {
   dout(20) << __func__ << dendl;
   lock();
-  if (agent_state && agent_state->delaying) {
-    agent_state->delaying = false;
-    agent_choose_mode(true);
+  if (agent_state) {
+    if (agent_state->delaying) {
+      agent_state->delaying = false;
+      agent_choose_mode(true);
+    } else if (force) {
+      agent_choose_mode(false);
+    }
   }
   unlock();
 }
@@ -11922,21 +11928,26 @@ bool ReplicatedPG::agent_choose_mode(bool restart, OpRequestRef op)
 	   << dendl;
 
   // flush mode
-  uint64_t flush_target = pool.info.cache_target_dirty_ratio_micro;
-  uint64_t flush_high_target = pool.info.cache_target_dirty_high_ratio_micro;
-  uint64_t flush_slop = (float)flush_target * g_conf->osd_agent_slop;
-  if (restart || agent_state->flush_mode == TierAgentState::FLUSH_MODE_IDLE) {
-    flush_target += flush_slop;
-    flush_high_target += flush_slop;
+  if (osd->agent_in_schedule_time) {
+    if (dirty_micro > 0)
+      flush_mode = TierAgentState::FLUSH_MODE_HIGH;
   } else {
-    flush_target -= MIN(flush_target, flush_slop);
-    flush_high_target -= MIN(flush_high_target, flush_slop);
-  }
+    uint64_t flush_target = pool.info.cache_target_dirty_ratio_micro;
+    uint64_t flush_high_target = pool.info.cache_target_dirty_high_ratio_micro;
+    uint64_t flush_slop = (float)flush_target * g_conf->osd_agent_slop;
+    if (restart || agent_state->flush_mode == TierAgentState::FLUSH_MODE_IDLE) {
+      flush_target += flush_slop;
+      flush_high_target += flush_slop;
+    } else {
+      flush_target -= MIN(flush_target, flush_slop);
+      flush_high_target -= MIN(flush_high_target, flush_slop);
+    }
 
-  if (dirty_micro > flush_high_target) {
-    flush_mode = TierAgentState::FLUSH_MODE_HIGH;
-  } else if (dirty_micro > flush_target) {
-    flush_mode = TierAgentState::FLUSH_MODE_LOW;
+    if (dirty_micro > flush_high_target) {
+      flush_mode = TierAgentState::FLUSH_MODE_HIGH;
+    } else if (dirty_micro > flush_target) {
+      flush_mode = TierAgentState::FLUSH_MODE_LOW;
+    }
   }
 
   // evict mode
