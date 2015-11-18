@@ -464,6 +464,9 @@ struct inode_t {
   version_t file_data_version; // auth only
   version_t xattr_version;
 
+  utime_t last_scrub_stamp;    // start time of last complete scrub
+  version_t last_scrub_version;// (parent) start version of last complete scrub
+
   version_t backtrace_version;
 
   snapid_t oldest_snap;
@@ -476,7 +479,8 @@ struct inode_t {
 	      truncate_seq(0), truncate_size(0), truncate_from(0),
 	      truncate_pending(0),
 	      time_warp_seq(0),
-	      version(0), file_data_version(0), xattr_version(0), backtrace_version(0) {
+	      version(0), file_data_version(0), xattr_version(0),
+	      last_scrub_version(0), backtrace_version(0) {
     clear_layout();
     memset(&dir_layout, 0, sizeof(dir_layout));
     memset(&quota, 0, sizeof(quota));
@@ -610,11 +614,19 @@ struct fnode_t {
   nest_info_t rstat, accounted_rstat;
   damage_flags_t damage_flags;
 
+  // we know we and all our descendants have been scrubbed since this version
+  version_t recursive_scrub_version;
+  utime_t recursive_scrub_stamp;
+  // version at which we last scrubbed our personal data structures
+  version_t localized_scrub_version;
+  utime_t localized_scrub_stamp;
+
   void encode(bufferlist &bl) const;
   void decode(bufferlist::iterator& bl);
   void dump(Formatter *f) const;
   static void generate_test_instances(list<fnode_t*>& ls);
-  fnode_t() : version(0) {}
+  fnode_t() : version(0),
+	      recursive_scrub_version(0), localized_scrub_version(0) {}
 };
 WRITE_CLASS_ENCODER(fnode_t)
 
@@ -673,6 +685,8 @@ struct dentry_key_t {
   const char *name;
   dentry_key_t() : snapid(0), name(0) {}
   dentry_key_t(snapid_t s, const char *n) : snapid(s), name(n) {}
+
+  bool is_valid() { return name || snapid; }
 
   // encode into something that can be decoded as a string.
   // name_ (head) or name_%x (!head)

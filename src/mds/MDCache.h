@@ -1115,10 +1115,31 @@ public:
     while (n--) ++p;
     return p->second;
   }
+
   void scrub_dentry(const string& path, Formatter *f, Context *fin);
+  /**
+   * Scrub the named dentry only (skip the scrubstack)
+   */
   void scrub_dentry_work(MDRequestRef& mdr);
+
   void flush_dentry(const string& path, Context *fin);
   void flush_dentry_work(MDRequestRef& mdr);
+
+  /**
+   * Create and start an OP_ENQUEUE_SCRUB
+   */
+  void enqueue_scrub(const string& path, const std::string &tag,
+                     Formatter *f, Context *fin);
+
+  /**
+   * Resolve path to a dentry and pass it onto the ScrubStack.
+   *
+   * TODO: return enough information to the original mdr formatter
+   * and completion that they can subsequeuntly check the progress of
+   * this scrub (we won't block them on a whole scrub as it can take a very
+   * long time)
+   */
+  void enqueue_scrub_work(MDRequestRef& mdr);
 };
 
 class C_MDS_RetryRequest : public MDSInternalContext {
