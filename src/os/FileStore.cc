@@ -311,11 +311,8 @@ int FileStore::lfn_open(coll_t cid,
   }
 
   if (!replaying) {
-    bool existed;
-    *outfd = fdcache.add(oid, fd, &existed);
-    if (existed) {
-      TEMP_FAILURE_RETRY(::close(fd));
-    }
+    assert(((*index).index)->access_lock.is_wlocked());
+    *outfd = fdcache.add(oid, fd);
   } else {
     *outfd = FDRef(new FDCache::FD(fd));
   }
