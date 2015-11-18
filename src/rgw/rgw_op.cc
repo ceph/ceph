@@ -836,7 +836,6 @@ static int iterate_slo_parts(CephContext *cct,
                                        void *param),
                              void *cb_param)
 {
-  uint64_t obj_ofs = 0, len_count = 0;
   bool found_start = false, found_end = false;
   string delim;
   vector<RGWObjEnt> objs;
@@ -852,6 +851,8 @@ static int iterate_slo_parts(CephContext *cct,
   if (iter != slo_parts.begin()) {
     --iter;
   }
+
+  uint64_t obj_ofs = iter->first;
 
   for (; iter != slo_parts.end() && !found_end; ++iter) {
     rgw_slo_part& part = iter->second;
@@ -879,8 +880,6 @@ static int iterate_slo_parts(CephContext *cct,
                       (ceph_clock_now(cct) - start_time));
 
     if (found_start) {
-      len_count += end_ofs - start_ofs;
-
       if (cb) {
         int r = cb(part.bucket, ent, part.bucket_policy, start_ofs, end_ofs, cb_param);
         if (r < 0)
@@ -990,7 +989,6 @@ int RGWGetObj::handle_slo_manifest(bufferlist& bl)
   map<string, RGWAccessControlPolicy *> policies;
   map<string, rgw_bucket> buckets;
 
-  uint64_t ofs = 0, start_ofs = 0;
   map<uint64_t, rgw_slo_part> slo_parts;
 
   total_len = 0;
