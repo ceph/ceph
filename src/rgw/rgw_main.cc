@@ -13,6 +13,8 @@
 
 #include <curl/curl.h>
 
+#include <boost/intrusive_ptr.hpp>
+
 #include "acconfig.h"
 #ifdef FASTCGI_INCLUDE_DIR
 # include "fastcgi/fcgiapp.h"
@@ -1077,6 +1079,9 @@ class RGWFrontendPauser : public RGWRealmReloader::Pauser {
   }
 };
 
+void intrusive_ptr_add_ref(CephContext* cct) { cct->get(); }
+void intrusive_ptr_release(CephContext* cct) { cct->put(); }
+
 /*
  * start up the RADOS connection and then handle HTTP messages as they come in
  */
@@ -1126,6 +1131,9 @@ int main(int argc, const char **argv)
   g_ceph_context->enable_perf_counter();
 
   common_init_finish(g_ceph_context);
+
+  // claim the reference and release it after subsequent destructors have fired
+  boost::intrusive_ptr<CephContext> cct(g_ceph_context, false);
 
   rgw_tools_init(g_ceph_context);
 
