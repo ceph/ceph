@@ -1192,7 +1192,7 @@ static simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZER;
     if (p == ls->end())
       seek(off);
     unsigned left = len;
-    for (std::list<ptr>::const_iterator i = otherl._buffers.begin();
+    for (ptrlist::const_iterator i = otherl._buffers.begin();
 	 i != otherl._buffers.end();
 	 ++i) {
       unsigned l = (*i).length();
@@ -1240,8 +1240,8 @@ static simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZER;
 
     // buffer-wise comparison
     if (true) {
-      std::list<ptr>::const_iterator a = _buffers.begin();
-      std::list<ptr>::const_iterator b = other._buffers.begin();
+      ptrlist::const_iterator a = _buffers.begin();
+      ptrlist::const_iterator b = other._buffers.begin();
       unsigned aoff = 0, boff = 0;
       while (a != _buffers.end()) {
 	unsigned len = a->length() - aoff;
@@ -1280,7 +1280,7 @@ static simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZER;
 
   bool buffer::list::can_zero_copy() const
   {
-    for (std::list<ptr>::const_iterator it = _buffers.begin();
+    for (ptrlist::const_iterator it = _buffers.begin();
 	 it != _buffers.end();
 	 ++it)
       if (!it->can_zero_copy())
@@ -1290,7 +1290,7 @@ static simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZER;
 
   bool buffer::list::is_aligned(unsigned align) const
   {
-    for (std::list<ptr>::const_iterator it = _buffers.begin();
+    for (ptrlist::const_iterator it = _buffers.begin();
 	 it != _buffers.end();
 	 ++it) 
       if (!it->is_aligned(align))
@@ -1300,7 +1300,7 @@ static simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZER;
 
   bool buffer::list::is_n_align_sized(unsigned align) const
   {
-    for (std::list<ptr>::const_iterator it = _buffers.begin();
+    for (ptrlist::const_iterator it = _buffers.begin();
 	 it != _buffers.end();
 	 ++it) 
       if (!it->is_n_align_sized(align))
@@ -1309,7 +1309,7 @@ static simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZER;
   }
 
   bool buffer::list::is_zero() const {
-    for (std::list<ptr>::const_iterator it = _buffers.begin();
+    for (ptrlist::const_iterator it = _buffers.begin();
 	 it != _buffers.end();
 	 ++it) {
       if (!it->is_zero()) {
@@ -1321,7 +1321,7 @@ static simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZER;
 
   void buffer::list::zero()
   {
-    for (std::list<ptr>::iterator it = _buffers.begin();
+    for (ptrlist::iterator it = _buffers.begin();
 	 it != _buffers.end();
 	 ++it)
       it->zero();
@@ -1331,7 +1331,7 @@ static simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZER;
   {
     assert(o+l <= _len);
     unsigned p = 0;
-    for (std::list<ptr>::iterator it = _buffers.begin();
+    for (ptrlist::iterator it = _buffers.begin();
 	 it != _buffers.end();
 	 ++it) {
       if (p + it->length() > o) {
@@ -1391,7 +1391,7 @@ static simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZER;
   void buffer::list::rebuild(ptr& nb)
   {
     unsigned pos = 0;
-    for (std::list<ptr>::iterator it = _buffers.begin();
+    for (ptrlist::iterator it = _buffers.begin();
 	 it != _buffers.end();
 	 ++it) {
       nb.copy_in(pos, it->length(), it->c_str(), false);
@@ -1413,7 +1413,7 @@ static simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZER;
   void buffer::list::rebuild_aligned_size_and_memory(unsigned align_size,
   						   unsigned align_memory)
   {
-    std::list<ptr>::iterator p = _buffers.begin();
+    ptrlist::iterator p = _buffers.begin();
     while (p != _buffers.end()) {
       // keep anything that's already align and sized aligned
       if (p->is_aligned(align_memory) && p->is_n_align_sized(align_size)) {
@@ -1597,7 +1597,7 @@ static simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZER;
   void buffer::list::append(const list& bl)
   {
     _len += bl._len;
-    for (std::list<ptr>::const_iterator p = bl._buffers.begin();
+    for (ptrlist::const_iterator p = bl._buffers.begin();
 	 p != bl._buffers.end();
 	 ++p) 
       _buffers.push_back(*p);
@@ -1630,7 +1630,7 @@ static simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZER;
     if (n >= _len)
       throw end_of_buffer();
     
-    for (std::list<ptr>::const_iterator p = _buffers.begin();
+    for (ptrlist::const_iterator p = _buffers.begin();
 	 p != _buffers.end();
 	 ++p) {
       if (n >= p->length()) {
@@ -1650,7 +1650,7 @@ static simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZER;
     if (_buffers.empty())
       return 0;                         // no buffers
 
-    std::list<ptr>::const_iterator iter = _buffers.begin();
+    ptrlist::const_iterator iter = _buffers.begin();
     ++iter;
 
     if (iter != _buffers.end())
@@ -1668,7 +1668,7 @@ static simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZER;
     }
 
     unsigned off = orig_off;
-    std::list<ptr>::iterator curbuf = _buffers.begin();
+    ptrlist::iterator curbuf = _buffers.begin();
     while (off > 0 && off >= curbuf->length()) {
       off -= curbuf->length();
       ++curbuf;
@@ -1708,7 +1708,7 @@ static simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZER;
     clear();
 
     // skip off
-    std::list<ptr>::const_iterator curbuf = other._buffers.begin();
+    ptrlist::const_iterator curbuf = other._buffers.begin();
     while (off > 0 &&
 	   off >= curbuf->length()) {
       // skip this buffer
@@ -1751,7 +1751,7 @@ static simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZER;
     //cout << "splice off " << off << " len " << len << " ... mylen = " << length() << std::endl;
       
     // skip off
-    std::list<ptr>::iterator curbuf = _buffers.begin();
+    ptrlist::iterator curbuf = _buffers.begin();
     while (off > 0) {
       assert(curbuf != _buffers.end());
       if (off >= (*curbuf).length()) {
@@ -1807,7 +1807,7 @@ static simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZER;
   {
     list s;
     s.substr_of(*this, off, len);
-    for (std::list<ptr>::const_iterator it = s._buffers.begin(); 
+    for (ptrlist::const_iterator it = s._buffers.begin(); 
 	 it != s._buffers.end(); 
 	 ++it)
       if (it->length())
@@ -1953,7 +1953,7 @@ int buffer::list::write_fd(int fd) const
   int iovlen = 0;
   ssize_t bytes = 0;
 
-  std::list<ptr>::const_iterator p = _buffers.begin();
+  ptrlist::const_iterator p = _buffers.begin();
   while (p != _buffers.end()) {
     if (p->length() > 0) {
       iov[iovlen].iov_base = (void *)p->c_str();
@@ -2002,7 +2002,7 @@ void buffer::list::prepare_iov(std::vector<iovec> *piov) const
 {
   piov->resize(_buffers.size());
   unsigned n = 0;
-  for (std::list<buffer::ptr>::const_iterator p = _buffers.begin();
+  for (buffer::ptrlist::const_iterator p = _buffers.begin();
        p != _buffers.end();
        ++p, ++n) {
     (*piov)[n].iov_base = (void *)p->c_str();
@@ -2023,7 +2023,7 @@ int buffer::list::write_fd_zero_copy(int fd) const
     return (int) offset;
   if (offset == ESPIPE)
     off_p = NULL;
-  for (std::list<ptr>::const_iterator it = _buffers.begin();
+  for (ptrlist::const_iterator it = _buffers.begin();
        it != _buffers.end(); ++it) {
     int r = it->zero_copy_to_fd(fd, off_p);
     if (r < 0)
@@ -2036,7 +2036,7 @@ int buffer::list::write_fd_zero_copy(int fd) const
 
 __u32 buffer::list::crc32c(__u32 crc) const
 {
-  for (std::list<ptr>::const_iterator it = _buffers.begin();
+  for (ptrlist::const_iterator it = _buffers.begin();
        it != _buffers.end();
        ++it) {
     if (it->length()) {
@@ -2074,7 +2074,7 @@ __u32 buffer::list::crc32c(__u32 crc) const
 
 void buffer::list::invalidate_crc()
 {
-  for (std::list<ptr>::const_iterator p = _buffers.begin(); p != _buffers.end(); ++p) {
+  for (ptrlist::const_iterator p = _buffers.begin(); p != _buffers.end(); ++p) {
     raw *r = p->get_raw();
     if (r) {
       r->invalidate_crc();
@@ -2087,7 +2087,7 @@ void buffer::list::invalidate_crc()
  */
 void buffer::list::write_stream(std::ostream &out) const
 {
-  for (std::list<ptr>::const_iterator p = _buffers.begin(); p != _buffers.end(); ++p) {
+  for (ptrlist::const_iterator p = _buffers.begin(); p != _buffers.end(); ++p) {
     if (p->length() > 0) {
       out.write(p->c_str(), p->length());
     }
@@ -2182,7 +2182,7 @@ std::ostream& buffer::operator<<(std::ostream& out, const buffer::ptr& bp) {
 std::ostream& buffer::operator<<(std::ostream& out, const buffer::list& bl) {
   out << "buffer::list(len=" << bl.length() << "," << std::endl;
 
-  std::list<buffer::ptr>::const_iterator it = bl.buffers().begin();
+  buffer::ptrlist::const_iterator it = bl.buffers().begin();
   while (it != bl.buffers().end()) {
     out << "\t" << *it;
     if (++it == bl.buffers().end()) break;
