@@ -165,7 +165,7 @@ void RGWPeriodPusher::handle_notify(RGWRealmNotify type,
   try {
     ::decode(info, p);
   } catch (buffer::error& e) {
-    derr(cct) << "Failed to decode the period: " << e.what() << dendl;
+    derr << "Failed to decode the period: " << e.what() << dendl;
     return;
   }
 
