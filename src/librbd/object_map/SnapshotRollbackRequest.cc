@@ -98,14 +98,15 @@ void SnapshotRollbackRequest::send_write_map() {
   RWLock::RLocker owner_locker(m_image_ctx.owner_lock);
 
   CephContext *cct = m_image_ctx.cct;
-  ldout(cct, 5) << this << " " << __func__ << dendl;
+  std::string snap_oid(ObjectMap::object_map_name(m_image_ctx.id, CEPH_NOSNAP));
+  ldout(cct, 5) << this << " " << __func__ << ": snap_oid=" << snap_oid
+                << dendl;
   m_state = STATE_WRITE_MAP;
 
   librados::ObjectWriteOperation op;
   rados::cls::lock::assert_locked(&op, RBD_LOCK_NAME, LOCK_EXCLUSIVE, "", "");
   op.write_full(m_read_bl);
 
-  std::string snap_oid(ObjectMap::object_map_name(m_image_ctx.id, CEPH_NOSNAP));
   librados::AioCompletion *rados_completion = create_callback_completion();
   int r = m_image_ctx.md_ctx.aio_operate(snap_oid, rados_completion, &op);
   assert(r == 0);
