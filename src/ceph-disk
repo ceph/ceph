@@ -594,7 +594,7 @@ def get_partition_base(dev):
     # find the base
     for basename in os.listdir('/sys/block'):
         if os.path.exists(os.path.join('/sys/block', basename, name)):
-            return '/dev/' + basename
+            return basename, '/dev/' + basename
     raise Error('no parent device for partition', dev)
 
 def is_partition_mpath(dev):
@@ -611,7 +611,7 @@ def get_partition_base_mpath(dev):
     assert slaves
     name_path = os.path.join(slave_path, slaves[0], 'dm', 'name')
     name = open(name_path, 'r').read().strip()
-    return os.path.join('/dev/mapper', name)
+    return slaves[0], os.path.join('/dev/mapper', name)
 
 def is_partition(dev):
     """
@@ -2662,27 +2662,39 @@ def get_dev_fs(dev):
 def split_dev_base_partnum(dev):
     if is_mpath(dev):
         partnum = partnum_mpath(dev)
-        base = get_partition_base_mpath(dev)
+        basename, basedev = get_partition_base_mpath(dev)
     else:
         b = block_path(dev)
         partnum = open(os.path.join(b, 'partition')).read().strip()
-        base = get_partition_base(dev)
-    return (base, partnum)
+        basename, basedev = get_partition_base(dev)
+    return (basename, basedev, partnum)
 
 def get_partition_type(part):
-    return get_sgdisk_partition_info(part, 'Partition GUID code: (\S+)')
+    ptype, puuid =  get_sgdisk_partition_info(part)
+    return ptype
 
 def get_partition_uuid(part):
-    return get_sgdisk_partition_info(part, 'Partition unique GUID: (\S+)')
+    ptype, puuid =  get_sgdisk_partition_info(part)
+    return puuid
 
-def get_sgdisk_partition_info(dev, regexp):
-    (base, partnum) = split_dev_base_partnum(dev)
-    out, _ = command(['sgdisk', '-i', partnum, base])
-    for line in out.splitlines():
-        m = re.match(regexp, line)
-        if m:
-            return m.group(1).lower()
-    return None
+def get_sgdisk_partition_info(dev):
+    (basename, basedev, partnum) = split_dev_base_partnum(dev)
+    hw_sector_sz = get_sys_hw_sector_size(os.path.join('/sys/block', basename))
+    return rawread_partition_guids(basedev, int(partnum), hw_sector_sz)
+
+"""
+Get the hardware sector size of the block device
+"""
+def get_sys_hw_sector_size(sys_node):
+    sys_queue_node = os.path.join(sys_node, 'queue')
+    LOG.debug('Getting HW sector size for: %s', sys_queue_node)
+    sect_size = read_one_line(sys_queue_node, 'hw_sector_size')
+    if sect_size:
+        return long(sect_size)
+
+    # Default to 512bytes
+    LOG.warning('Failed to get sector size, Default to 512bytes')
+    return 512
 
 def rawread_partition_guids(base_dev, part_num, hw_sector_sz):
 
