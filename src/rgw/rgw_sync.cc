@@ -23,6 +23,35 @@ static string mdlog_sync_status_oid = "mdlog.sync-status";
 static string mdlog_sync_status_shard_prefix = "mdlog.sync-status.shard";
 static string mdlog_sync_full_sync_index_prefix = "meta.full-sync.index";
 
+void RGWReportContainer::set_status(const string& s) {
+  RWLock::WLocker l(lock);
+  if (!timestamp.is_zero()) {
+    status_history.push_back(StatusHistoryItem(timestamp, status));
+  }
+  if (status_history.size() > (size_t)max_previous) {
+    status_history.pop_front();
+  }
+  status = s;
+}
+
+void RGWReportContainer::dump(Formatter *f) const {
+  ::encode_json("id", id, f);
+  ::encode_json("timestamp", timestamp, f);
+  ::encode_json("operation", operation, f);
+  ::encode_json("status", status, f);
+  ::encode_json("status_history", status_history, f);
+  f->open_array_section("actions");
+  for (auto i = actions.begin(); i != actions.end(); ++i) {
+    ::encode_json(i->first.c_str(), *(i->second), f);
+  }
+  f->close_section();
+}
+
+void RGWReportContainer::StatusHistoryItem::dump(Formatter *f) const {
+  ::encode_json("timestamp", timestamp, f);
+  ::encode_json("status", status, f);
+}
+
 void RGWSyncBackoff::update_wait_time()
 {
   if (cur_wait == 0) {
@@ -281,6 +310,15 @@ int RGWMetaSyncStatusManager::init()
   return 0;
 }
 
+void RGWMetaSyncEnv::init(CephContext *_cct, RGWRados *_store, RGWRESTConn *_conn,
+                          RGWAsyncRadosProcessor *_async_rados, RGWHTTPManager *_http_manager) {
+  cct = _cct;
+  store = _store;
+  conn = _conn;
+  async_rados = _async_rados;
+  http_manager = _http_manager;
+}
+
 string RGWMetaSyncEnv::status_oid()
 {
   return mdlog_sync_status_oid;
@@ -451,16 +489,19 @@ public:
 
 class RGWInitSyncStatusCoroutine : public RGWCoroutine {
   RGWMetaSyncEnv *sync_env;
+  RGWReportContainer *report;
   RGWObjectCtx& obj_ctx;
 
   rgw_meta_sync_info status;
   map<int, RGWMetadataLogInfo> shards_info;
   RGWContinuousLeaseCR *lease_cr;
 public:
-  RGWInitSyncStatusCoroutine(RGWMetaSyncEnv *_sync_env,
+  RGWInitSyncStatusCoroutine(RGWMetaSyncEnv *_sync_env, RGWReportContainer& parent_report,
 		      RGWObjectCtx& _obj_ctx, uint32_t _num_shards) : RGWCoroutine(_sync_env->store->ctx()), sync_env(_sync_env),
                                                 obj_ctx(_obj_ctx), lease_cr(NULL) {
     status.num_shards = _num_shards;
+    report = parent_report.new_action("init", "initialize metadata sync");
+    report->set_status("start");
   }
 
   ~RGWInitSyncStatusCoroutine() {
@@ -468,12 +509,14 @@ public:
       lease_cr->abort();
       lease_cr->put();
     }
+    report->finish();
   }
 
   int operate() {
     int ret;
     reenter(this) {
       yield {
+        report->set_status("acquiring sync lock");
 	uint32_t lock_duration = cct->_conf->rgw_sync_lease_period;
         string lock_name = "sync_lock";
         RGWRados *store = sync_env->store;
@@ -485,17 +528,26 @@ public:
       while (!lease_cr->is_locked()) {
         if (lease_cr->is_done()) {
           ldout(cct, 0) << "ERROR: lease cr failed, done early " << dendl;
+          report->set_status("lease lock failed, early abort");
           return set_cr_error(lease_cr->get_ret_status());
         }
         set_sleeping(true);
         yield;
       }
       yield {
+        report->set_status("writing sync status");
         RGWRados *store = sync_env->store;
         call(new RGWSimpleRadosWriteCR<rgw_meta_sync_info>(sync_env->async_rados, store, store->get_zone_params().log_pool,
 				 sync_env->status_oid(), status));
       }
+
+      if (retcode < 0) {
+        report->set_status("failed to write sync status");
+        ldout(cct, 0) << "ERROR: failed to write sync status, retcode=" << retcode << dendl;
+        return set_cr_error(retcode);
+      }
       /* fetch current position in logs */
+      report->set_status("fetching remote log position");
       yield {
         for (int i = 0; i < (int)status.num_shards; i++) {
           spawn(new RGWReadRemoteMDLogShardInfoCR(sync_env->store, sync_env->http_manager, sync_env->async_rados, i, &shards_info[i]), false);
@@ -505,6 +557,7 @@ public:
       drain_all_but(1); /* the lease cr still needs to run */
 
       yield {
+        report->set_status("updating sync status");
         for (int i = 0; i < (int)status.num_shards; i++) {
 	  rgw_meta_sync_marker marker;
           RGWMetadataLogInfo& info = shards_info[i];
@@ -516,11 +569,13 @@ public:
         }
       }
       yield {
+        report->set_status("changing sync state: build full sync maps");
 	status.state = rgw_meta_sync_info::StateBuildingFullSyncMaps;
         RGWRados *store = sync_env->store;
         call(new RGWSimpleRadosWriteCR<rgw_meta_sync_info>(sync_env->async_rados, store, store->get_zone_params().log_pool,
 				 sync_env->status_oid(), status));
       }
+      report->set_status("drop lock lease");
       yield lease_cr->go_down();
       while (collect(&ret)) {
 	if (ret < 0) {
@@ -1439,6 +1494,16 @@ public:
   }
 };
 
+void RGWRemoteMetaLog::init_sync_env(RGWMetaSyncEnv *env) {
+  env->cct = store->ctx();
+  env->store = store;
+  env->conn = conn;
+  env->async_rados = async_rados;
+  env->http_manager = &http_manager;
+
+  sync_report.set_source(conn->get_remote_id());
+}
+
 int RGWRemoteMetaLog::clone_shards(int num_shards, vector<string>& clone_markers)
 {
   list<RGWCoroutinesStack *> stacks;
@@ -1492,7 +1557,7 @@ int RGWRemoteMetaLog::init_sync_status(int num_shards)
   }
 
   RGWObjectCtx obj_ctx(store, NULL);
-  return run(new RGWInitSyncStatusCoroutine(&sync_env, obj_ctx, num_shards));
+  return run(new RGWInitSyncStatusCoroutine(&sync_env, sync_report.get_container(), obj_ctx, num_shards));
 }
 
 int RGWRemoteMetaLog::set_sync_info(const rgw_meta_sync_info& sync_info)
@@ -1532,7 +1597,7 @@ int RGWRemoteMetaLog::run_sync(int num_shards, rgw_meta_sync_status& sync_status
 
     if (sync_status.sync_info.state == rgw_meta_sync_info::StateInit) {
       ldout(store->ctx(), 20) << __func__ << "(): init" << dendl;
-      r = run(new RGWInitSyncStatusCoroutine(&sync_env, obj_ctx, num_shards));
+      r = run(new RGWInitSyncStatusCoroutine(&sync_env, sync_report.get_container(), obj_ctx, num_shards));
       if (r == -EBUSY) {
         backoff.backoff_sleep();
         continue;

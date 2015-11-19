@@ -7,12 +7,14 @@
 #define dout_subsys ceph_subsys_rgw
 
 RGWRESTConn::RGWRESTConn(CephContext *_cct, RGWRados *store,
+                         const string& _remote_id,
                          const list<string>& remote_endpoints)
   : cct(_cct),
-    endpoints(remote_endpoints.begin(), remote_endpoints.end())
+    endpoints(remote_endpoints.begin(), remote_endpoints.end()),
+    remote_id(_remote_id)
 {
   key = store->get_zone_params().system_key;
-  zone_group = store->get_zonegroup().get_id();
+  self_zone_group = store->get_zonegroup().get_id();
 }
 
 int RGWRESTConn::get_url(string& endpoint)
@@ -51,8 +53,8 @@ int RGWRESTConn::forward(const rgw_user& uid, req_info& info, obj_version *objv,
   string uid_str = uid.to_str();
   param_list_t params;
   if (!uid.empty())
-    params.push_back(pair<string, string>(RGW_SYS_PARAM_PREFIX "uid", uid_str));
-  params.push_back(pair<string, string>(RGW_SYS_PARAM_PREFIX "region", zone_group));
+    params.push_back(param_pair_t(RGW_SYS_PARAM_PREFIX "uid", uid_str));
+  params.push_back(param_pair_t(RGW_SYS_PARAM_PREFIX "region", self_zone_group));
   if (objv) {
     params.push_back(param_pair_t(RGW_SYS_PARAM_PREFIX "tag", objv->tag));
     char buf[16];
@@ -79,8 +81,8 @@ int RGWRESTConn::put_obj_init(const rgw_user& uid, rgw_obj& obj, uint64_t obj_si
 
   string uid_str = uid.to_str();
   param_list_t params;
-  params.push_back(pair<string, string>(RGW_SYS_PARAM_PREFIX "uid", uid_str));
-  params.push_back(pair<string, string>(RGW_SYS_PARAM_PREFIX "region", zone_group));
+  params.push_back(param_pair_t(RGW_SYS_PARAM_PREFIX "uid", uid_str));
+  params.push_back(param_pair_t(RGW_SYS_PARAM_PREFIX "region", self_zone_group));
   *req = new RGWRESTStreamWriteRequest(cct, url, NULL, &params);
   return (*req)->put_obj_init(key, obj, obj_size, attrs);
 }
@@ -118,9 +120,9 @@ int RGWRESTConn::get_obj(const rgw_user& uid, req_info *info /* optional */, rgw
   if (!uid.empty()) {
     params.push_back(param_pair_t(RGW_SYS_PARAM_PREFIX "uid", uid.to_str()));
   }
-  params.push_back(param_pair_t(RGW_SYS_PARAM_PREFIX "region", zone_group));
+  params.push_back(param_pair_t(RGW_SYS_PARAM_PREFIX "region", self_zone_group));
   if (prepend_metadata) {
-    params.push_back(param_pair_t(RGW_SYS_PARAM_PREFIX "prepend-metadata", zone_group));
+    params.push_back(param_pair_t(RGW_SYS_PARAM_PREFIX "prepend-metadata", self_zone_group));
   }
   if (!obj.get_instance().empty()) {
     const string& instance = obj.get_instance();
@@ -174,7 +176,7 @@ int RGWRESTConn::get_resource(const string& resource,
     params.insert(params.end(), extra_params->begin(), extra_params->end());
   }
 
-  params.push_back(param_pair_t(RGW_SYS_PARAM_PREFIX "zonegroup", zone_group));
+  params.push_back(param_pair_t(RGW_SYS_PARAM_PREFIX "zonegroup", self_zone_group));
 
   RGWStreamIntoBufferlist cb(bl);
 
@@ -221,7 +223,7 @@ RGWRESTReadResource::RGWRESTReadResource(RGWRESTConn *_conn,
 
 void RGWRESTReadResource::init_common(param_list_t *extra_headers)
 {
-  params.push_back(param_pair_t(RGW_SYS_PARAM_PREFIX "zonegroup", conn->get_zonegroup()));
+  params.push_back(param_pair_t(RGW_SYS_PARAM_PREFIX "zonegroup", conn->get_self_zonegroup()));
 
   if (extra_headers) {
     headers.insert(extra_headers->begin(), extra_headers->end());
@@ -281,7 +283,7 @@ RGWRESTPostResource::RGWRESTPostResource(RGWRESTConn *_conn,
 
 void RGWRESTPostResource::init_common(param_list_t *extra_headers)
 {
-  params.push_back(param_pair_t(RGW_SYS_PARAM_PREFIX "zonegroup", conn->get_zonegroup()));
+  params.push_back(param_pair_t(RGW_SYS_PARAM_PREFIX "zonegroup", conn->get_self_zonegroup()));
 
   if (extra_headers) {
     headers.insert(extra_headers->begin(), extra_headers->end());

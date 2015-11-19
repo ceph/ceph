@@ -7,7 +7,6 @@
 
 #include "common/RWLock.h"
 
-
 struct rgw_mdlog_info {
   uint32_t num_shards;
 
@@ -22,6 +21,97 @@ class RGWMetaSyncStatusManager;
 class RGWMetaSyncCR;
 class RGWRESTConn;
 
+class RGWReportContainer : public RefCountedObject {
+  CephContext *cct;
+  RGWReportContainer *parent;
+
+  string id;
+  string operation;
+  utime_t timestamp;
+  string status;
+
+  struct StatusHistoryItem {
+    utime_t timestamp;
+    string status;
+
+    StatusHistoryItem() {}
+    StatusHistoryItem(const utime_t& _ts, const string& _status) : timestamp(_ts), status(_status) {}
+
+    void dump(Formatter *f) const;
+  };
+  deque<StatusHistoryItem> status_history;
+
+  int max_previous;
+
+  map<string, RGWReportContainer *> actions;
+
+  RWLock lock;
+
+  void _finish_action(const string& id) {
+    auto i = actions.find(id);
+    if (i != actions.end()) {
+      i->second->put();
+    }
+  }
+
+public:
+  RGWReportContainer(CephContext *_cct) : cct(_cct), parent(NULL), lock("RGWStatsuContainer::lock") {}
+  RGWReportContainer(CephContext *_cct, RGWReportContainer *_parent, const string& _id, const string& op) : cct(_cct), parent(_parent), id(_id), operation("op"), lock("RGWReportContainer::lock") {}
+
+  void set_status(const string& s);
+
+  RGWReportContainer *new_action(const string& id, const string& op) {
+    RWLock::WLocker l(lock);
+    _finish_action(id);
+    RGWReportContainer *new_status = new RGWReportContainer(cct, this, id, op);
+    new_status->get();
+    actions[id] = new_status;
+    return new_status;
+  }
+
+  RGWReportContainer *new_action(RGWReportContainer *new_status) {
+    RWLock::WLocker l(lock);
+    _finish_action(id);
+    new_status->get();
+    actions[id] = new_status;
+    return new_status;
+  }
+
+  void finish_action(const string& action_id) {
+    RWLock::WLocker l(lock);
+    _finish_action(action_id);
+  }
+
+  void finish() {
+    if (parent) {
+      parent->finish_action(id);
+    }
+    RWLock::WLocker l(lock);
+    put();
+  }
+
+  virtual void dump(Formatter *f) const;
+};
+
+class RGWMetaSyncReport {
+  string source;
+
+  RGWReportContainer report;
+
+  RWLock lock;
+
+public:
+  RGWMetaSyncReport(CephContext *cct) : report(cct), lock("RGWMetaSycnReport::lock") {}
+
+  void set_source(const string& s) {
+    RWLock::WLocker l(lock);
+    source = s;
+  }
+
+  RGWReportContainer& get_container() { return report; }
+
+  void dump(Formatter *f) const;
+};
 
 #define DEFAULT_BACKOFF_MAX 30
 
@@ -88,13 +178,7 @@ struct RGWMetaSyncEnv {
   RGWMetaSyncEnv() : cct(NULL), store(NULL), conn(NULL), async_rados(NULL), http_manager(NULL) {}
 
   void init(CephContext *_cct, RGWRados *_store, RGWRESTConn *_conn,
-            RGWAsyncRadosProcessor *_async_rados, RGWHTTPManager *_http_manager) {
-    cct = _cct;
-    store = _store;
-    conn = _conn;
-    async_rados = _async_rados;
-    http_manager = _http_manager;
-  }
+            RGWAsyncRadosProcessor *_async_rados, RGWHTTPManager *_http_manager);
 
   string shard_obj_name(int shard_id);
   string status_oid();
@@ -115,19 +199,15 @@ class RGWRemoteMetaLog : public RGWCoroutinesManager {
 
   RGWMetaSyncEnv sync_env;
 
-  void init_sync_env(RGWMetaSyncEnv *env) {
-    env->cct = store->ctx();
-    env->store = store;
-    env->conn = conn;
-    env->async_rados = async_rados;
-    env->http_manager = &http_manager;
-  }
+  RGWMetaSyncReport sync_report;
+
+  void init_sync_env(RGWMetaSyncEnv *env);
 
 public:
   RGWRemoteMetaLog(RGWRados *_store, RGWMetaSyncStatusManager *_sm) : RGWCoroutinesManager(_store->ctx()), store(_store),
                                        conn(NULL), async_rados(nullptr),
                                        http_manager(store->ctx(), &completion_mgr),
-                                       status_manager(_sm), meta_sync_cr(NULL) {}
+                                       status_manager(_sm), meta_sync_cr(NULL), sync_report(_store->ctx()) {}
 
   int init();
   void finish();
@@ -305,6 +385,7 @@ public:
 
   int operate();
 };
+
 
 
 #endif
