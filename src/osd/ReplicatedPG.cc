@@ -12190,7 +12190,7 @@ void ReplicatedPG::_scrub(
   boost::optional<hobject_t> head;
   boost::optional<SnapSet> snapset; // If initialized so will head (above)
   vector<snapid_t>::reverse_iterator curclone; // Defined only if snapset initialized
-  bool missing = false;
+  unsigned missing = 0;
 
   bufferlist last_data;
 
@@ -12320,7 +12320,7 @@ void ReplicatedPG::_scrub(
 
       // Set this as a new head object
       head = soid;
-      missing = false;
+      missing = 0;
 
       dout(20) << __func__ << " " << mode << " new head " << head << dendl;
 
