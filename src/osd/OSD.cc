@@ -4509,6 +4509,16 @@ bool OSD::_is_healthy()
 
   if (is_waiting_for_healthy()) {
     Mutex::Locker l(heartbeat_lock);
+    if (heartbeat_peers.empty() && osdmap->get_num_up_osds()) {
+      // We are here because there are still up peers but we failed
+      // to establish backend network connection with them.
+      // So don't mark us as healthy yet in case we'll be marked 
+      // as up again by monitor and thus may confuse all the other osds
+      // which are still maintaining a stable backend connection within
+      // each other.
+      dout(1) << "is_healthy false -- no reachable heartbeat peers" << dendl;
+      return false;
+    }
     utime_t cutoff = ceph_clock_now(cct);
     cutoff -= cct->_conf->osd_heartbeat_grace;
     int num = 0, up = 0;
