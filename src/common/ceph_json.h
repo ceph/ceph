@@ -165,6 +165,21 @@ void decode_json_obj(list<T>& l, JSONObj *obj)
 }
 
 template<class T>
+void decode_json_obj(deque<T>& l, JSONObj *obj)
+{
+  l.clear();
+
+  JSONObjIter iter = obj->find_first();
+
+  for (; !iter.end(); ++iter) {
+    T val;
+    JSONObj *o = *iter;
+    decode_json_obj(val, o);
+    l.push_back(val);
+  }
+}
+
+template<class T>
 void decode_json_obj(set<T>& l, JSONObj *obj)
 {
   l.clear();
@@ -342,6 +357,14 @@ static void encode_json(const char *name, const std::list<T>& l, ceph::Formatter
   f->close_section();
 }
 template<class T>
+static void encode_json(const char *name, const std::deque<T>& l, ceph::Formatter *f)
+{
+  f->open_array_section(name);
+  for (typename std::deque<T>::const_iterator iter = l.begin(); iter != l.end(); ++iter) {
+    encode_json("obj", *iter, f);
+  }
+  f->close_section();
+}template<class T>
 static void encode_json(const char *name, const std::set<T>& l, ceph::Formatter *f)
 {
   f->open_array_section(name);
