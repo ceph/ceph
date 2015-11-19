@@ -20,6 +20,7 @@ flock-packages-repository:
 	ssh $$ip sudo apt-get install -y nginx ; \
 	ssh $$ip sudo chown -R ubuntu /usr/share/nginx/html ; \
 	perl -pi -e "s/^gitbuilder_host:.*/gitbuilder_host: $$ip/" ~/.teuthology.yaml
+	touch ${D}/$@
 
 packages-repository:
 	mkdir -p ${D}
