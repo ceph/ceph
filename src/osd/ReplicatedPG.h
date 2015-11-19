@@ -901,12 +901,9 @@ protected:
   bool hit_set_apply_log(); ///< apply log entries to update in-memory HitSet
   void hit_set_trim(RepGather *repop, unsigned max); ///< discard old HitSets
   void hit_set_in_memory_trim();                     ///< discard old in memory HitSets
-  void hit_set_remove_all();
 
   hobject_t get_hit_set_current_object(utime_t stamp);
-  hobject_t get_hit_set_archive_object(utime_t start,
-				       utime_t end,
-				       bool using_gmt);
+  hobject_t get_hit_set_archive_object(utime_t start, utime_t end);
 
   // agent
   boost::scoped_ptr<TierAgentState> agent_state;
