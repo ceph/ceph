@@ -341,6 +341,7 @@ private:
 
   atomic_t next_osr_id;
   DynamicThrottle dyn_throttle_filestore;
+  bool m_disable_wbthrottle;
   deque<OpSequencer*> op_queue;
   const int m_ondisk_finisher_num;
   const int m_apply_finisher_num;
