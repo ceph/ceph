@@ -222,6 +222,9 @@ def task(ctx, config):
                 else:
                     pool = ctx.manager.create_pool_with_unique_name(erasure_code_profile_name=profile_name)
                     created_pools.append(pool)
+                    if config.get('fast_read', False):
+                        ctx.manager.raw_cluster_cmd(
+                            'osd', 'pool', 'set', pool, 'fast_read', 'true')
 
                 (remote,) = ctx.cluster.only(role).remotes.iterkeys()
                 proc = remote.run(
