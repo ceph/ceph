@@ -687,6 +687,7 @@ int RGWGetObj::read_user_manifest_part(rgw_bucket& bucket,
   RGWRados::Object op_target(store, s->bucket_info, obj_ctx, part);
   RGWRados::Object::Read read_op(&op_target);
 
+  read_op.conds.if_match = ent.etag.c_str();
   read_op.params.attrs = &attrs;
   read_op.params.obj_size = &obj_size;
   read_op.params.perr = &s->err;
@@ -819,6 +820,7 @@ struct rgw_slo_part {
   rgw_bucket bucket;
   string obj_name;
   uint64_t size;
+  string etag;
 
   rgw_slo_part() : bucket_policy(NULL), size(0) {}
 };
@@ -860,6 +862,7 @@ static int iterate_slo_parts(CephContext *cct,
 
     ent.key.name = part.obj_name;
     ent.size = part.size;
+    ent.etag = part.etag;
 
     uint64_t cur_total_len = obj_ofs;
     uint64_t start_ofs = 0, end_ofs = ent.size;
@@ -1043,7 +1046,13 @@ int RGWGetObj::handle_slo_manifest(bufferlist& bl)
     part.bucket = bucket;
     part.obj_name = obj_name;
     part.size = iter->size_bytes;
-    ldout(s->cct, 20) << "slo_part: ofs=" << ofs << " bucket=" << part.bucket << " obj=" << part.obj_name << " size=" << iter->size_bytes << dendl;
+    part.etag = iter->etag;
+    ldout(s->cct, 20) << "slo_part: ofs=" << ofs
+                      << " bucket=" << part.bucket
+                      << " obj=" << part.obj_name
+                      << " size=" << part.size
+                      << " etag=" << part.etag
+                      << dendl;
 
     slo_parts[total_len] = part;
     total_len += part.size;
