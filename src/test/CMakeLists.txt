@@ -102,7 +102,6 @@ target_link_libraries(test_keys mon global ${CMAKE_DL_LIBS} ${ALLOC_LIBS})
 add_executable(get_command_descriptions
   common/get_command_descriptions.cc
   ${CMAKE_SOURCE_DIR}/src/common/TextTable.cc
-  $<TARGET_OBJECTS:os_mon_objs>
   $<TARGET_OBJECTS:heap_profiler_objs>
   )
 target_link_libraries(get_command_descriptions
@@ -1247,9 +1246,9 @@ add_executable(unittest_rocksdb_option EXCLUDE_FROM_ALL
   )
 add_test(unittest_rocksdb_option unittest_rocksdb_option)
 add_dependencies(check unittest_rocksdb_option)
-target_link_libraries(unittest_rocksdb_option librocksdb os_rocksdb global ${CMAKE_DL_LIBS}
+target_link_libraries(unittest_rocksdb_option global os librocksdb ${CMAKE_DL_LIBS}
   ${BLKID_LIBRARIES} ${ALLOC_LIBS} ${UNITTEST_LIBS})
-set(UNITTEST_ROCKSDB_OPTION_FLAGS "${UNITTEST_CXX_FLAGS} ${LIBROCKSDB_CFLAGS}")
+set(UNITTEST_ROCKSDB_OPTION_FLAGS "${UNITTEST_CXX_FLAGS} -fno-builtin-memcmp -std=gnu++11")
 target_include_directories(unittest_rocksdb_option PUBLIC ${CMAKE_SOURCE_DIR}/src/rocksdb/include)
 set_target_properties(unittest_rocksdb_option PROPERTIES COMPILE_FLAGS ${UNITTEST_ROCKSDB_OPTION_FLAGS})
 endif(${WITH_ROCKSDB})

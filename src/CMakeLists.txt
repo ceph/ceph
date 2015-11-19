@@ -582,7 +582,7 @@ set(common_util_src
   common/util.cc)
 add_library(common_util_obj OBJECT ${common_util_src})
 add_library(mon STATIC ${lib_mon_srcs} $<TARGET_OBJECTS:mon_common_objs>
-  $<TARGET_OBJECTS:os_mon_objs> $<TARGET_OBJECTS:osd_mon_objs>
+  $<TARGET_OBJECTS:kv_objs> $<TARGET_OBJECTS:osd_mon_objs>
   $<TARGET_OBJECTS:common_util_obj>)
 
 set(ceph_mon_srcs
@@ -601,25 +601,15 @@ ExternalProject_Add(rocksdb
   SOURCE_DIR ${CMAKE_SOURCE_DIR}/src/rocksdb
   CONFIGURE_COMMAND autoreconf -fvi && ./configure
   BINARY_DIR ${CMAKE_SOURCE_DIR}/src/rocksdb 
-  BUILD_COMMAND make VERBOSE=1
+  BUILD_COMMAND EXTRA_CXXFLAGS=fPIC PORTABLE=1 make VERBOSE=1
   INSTALL_COMMAND make install 
 )
 
 #For now only building rocksdb statically
 add_library(librocksdb STATIC IMPORTED)
-find_package(ZLIB REQUIRED)
-find_package(BZip2 REQUIRED)
 set_property(TARGET librocksdb PROPERTY IMPORTED_LOCATION ${CMAKE_SOURCE_DIR}/src/rocksdb/.libs/librocksdb.a) 
 set_property(TARGET librocksdb PROPERTY INTERFACE_LINK_LIBRARIES z bz2 snappy)
 add_dependencies(librocksdb rocksdb)
-
-#os_rocksdb
-add_library(os_rocksdb STATIC os/RocksDBStore.cc)
-add_dependencies(os_rocksdb librocksdb)
-target_link_libraries(os_rocksdb librocksdb)
-target_include_directories(os_rocksdb PUBLIC ${CMAKE_SOURCE_DIR}/src/rocksdb/include)
-set(LIBROCKSDB_CFLAGS "${CMAKE_CXX_FLAGS} -fno-builtin-memcmp -std=gnu++11")
-set_target_properties(os_rocksdb PROPERTIES COMPILE_FLAGS ${LIBROCKSDB_CFLAGS})
 endif(${WITH_ROCKSDB})
 
 # OSD
@@ -628,9 +618,7 @@ if(${HAVE_XFS})
     os/XfsFileStoreBackend.cc
     os/fs/XFS.cc)
 endif(${HAVE_XFS})
-set(libkv_srcs
-  kv/LevelDBStore.cc
-  kv/KeyValueDB.cc)
+
 set(libos_srcs
   os/FileJournal.cc
   os/FileStore.cc
@@ -652,23 +640,18 @@ set(libos_srcs
   os/newstore/NewStore.cc
   os/newstore/newstore_types.cc
   os/fs/FS.cc
-  ${libkv_srcs}
   ${libos_xfs_srcs})
 
-set(os_mon_files
-  kv/LevelDBStore.cc)
-add_library(os_mon_objs OBJECT ${os_mon_files})
-add_library(os STATIC ${libos_srcs} $<TARGET_OBJECTS:os_mon_objs>)
+add_subdirectory(kv)
+
+add_library(os STATIC ${libos_srcs} $<TARGET_OBJECTS:kv_objs>)
 if(${HAVE_LIBAIO})
   target_link_libraries(os aio)
 endif(${HAVE_LIBAIO})
 if(${WITH_LTTNG})
   target_link_libraries(os libos_tp)
 endif(${WITH_LTTNG})
-if(${WITH_ROCKSDB})
-  target_link_libraries(os os_rocksdb)
-endif(${WITH_ROCKSDB})
-target_link_libraries(os leveldb snappy)
+target_link_libraries(os kv leveldb snappy)
 
 set(cls_references_files objclass/class_api.cc)
 add_library(cls_references_objs OBJECT ${cls_references_files})
