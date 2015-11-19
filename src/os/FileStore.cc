@@ -243,6 +243,9 @@ int FileStore::lfn_open(coll_t cid,
 
   if (create)
     flags |= O_CREAT;
+  if (g_conf->filestore_odsync_write) {
+    flags |= O_DSYNC;
+  }
 
   Index index2;
   if (!index) {
@@ -3256,12 +3259,16 @@ int FileStore::_write(coll_t cid, const ghobject_t& oid,
     int rc = backend->_crc_update_write(**fd, offset, len, bl);
     assert(rc >= 0);
   }
-
-  // flush?
-  if (!replaying &&
-      g_conf->filestore_wbthrottle_enable)
-    wbthrottle.queue_wb(fd, oid, offset, len,
+  
+  if (g_conf->filestore_odsync_write) {
+    posix_fadvise(**fd, 0, 0, POSIX_FADV_DONTNEED);
+  } else {
+    // flush?
+    if (!replaying &&
+        g_conf->filestore_wbthrottle_enable)
+      wbthrottle.queue_wb(fd, oid, offset, len,
 			  fadvise_flags & CEPH_OSD_OP_FLAG_FADVISE_DONTNEED);
+  }
   lfn_close(fd);
 
  out:
