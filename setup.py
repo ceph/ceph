@@ -60,6 +60,7 @@ setup(
                       # is resolved
                       'cliff-tablib', # required to get a Field/Value output from openstack server show
                       'python-openstackclient',
+                      'prettytable',
                       ],
 
 

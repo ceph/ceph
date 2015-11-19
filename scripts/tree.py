@@ -11,6 +11,9 @@ usage:
 Describe the contents of a qa suite by extracting comments
 starting with particular prefixes from files in the suite.
 
+By default, the remainder of a line starting with '# desc:' will
+be included from each file in the specified suite directory.
+
 positional arguments:
   <suite_dir>            path under which to archive results
 
