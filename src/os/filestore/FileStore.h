@@ -340,6 +340,7 @@ private:
   WBThrottle wbthrottle;
 
   atomic_t next_osr_id;
+  bool m_disable_wbthrottle;
   deque<OpSequencer*> op_queue;
   BackoffThrottle throttle_ops, throttle_bytes;
   const int m_ondisk_finisher_num;
