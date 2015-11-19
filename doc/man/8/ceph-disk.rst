@@ -323,15 +323,6 @@ Options
 
 	Directory where ``dm-crypt`` keys are stored.
 
-.. option:: --activate-key
-
-   Use when a copy of ``/var/lib/ceph/bootstrap-osd/{cluster}.keyring`` isn't
-   present in the OSD node. Suffix the option by the path to the keyring.
-
-.. option:: --mark-init
-
-   Provide init system to manage the OSD directory.
-
 Availability
 ============
 
