@@ -84,6 +84,7 @@ setup(
             'teuthology-kill = scripts.kill:main',
             'teuthology-queue = scripts.queue:main',
             'teuthology-prune-logs = scripts.prune_logs:main',
+            'teuthology-tree = scripts.tree:main',
             ],
         },
 
