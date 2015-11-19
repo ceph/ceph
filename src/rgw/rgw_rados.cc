@@ -3197,10 +3197,10 @@ int RGWRados::init_complete()
       for (iter = current_period.get_map().zonegroups.begin();
 	   iter != current_period.get_map().zonegroups.end(); ++iter){
 	const RGWZoneGroup& zg = iter->second;
-	add_new_connection_to_map(zonegroup_conn_map, zg, new RGWRESTConn(cct, this, zonegroup.endpoints));
+	add_new_connection_to_map(zonegroup_conn_map, zg, new RGWRESTConn(cct, this, zonegroup.get_id(), zonegroup.endpoints));
 	if (!current_period.get_master_zonegroup().empty() &&
 	    zg.get_id() == current_period.get_master_zonegroup()) {
-	  rest_master_conn = new RGWRESTConn(cct, this, zg.endpoints);
+	  rest_master_conn = new RGWRESTConn(cct, this, zg.get_id(), zg.endpoints);
 	}
       }
     }
@@ -3231,7 +3231,7 @@ int RGWRados::init_complete()
     }
     ldout(cct, 20) << "zonegroup " << zonegroup.get_name() << dendl;
     if (zonegroup.is_master) {
-      rest_master_conn = new RGWRESTConn(cct, this, zonegroup.endpoints);
+      rest_master_conn = new RGWRESTConn(cct, this, zonegroup.get_id(), zonegroup.endpoints);
     }
   }
 
@@ -3276,7 +3276,7 @@ int RGWRados::init_complete()
     if (id != zone_id()) {
       if (!z.endpoints.empty()) {
         ldout(cct, 20) << "generating connection object for zone " << z.name << " id " << z.id << dendl;
-        RGWRESTConn *conn = new RGWRESTConn(cct, this, z.endpoints);
+        RGWRESTConn *conn = new RGWRESTConn(cct, this, z.id, z.endpoints);
         zone_conn_map[id] = conn;
       } else {
         ldout(cct, 0) << "WARNING: can't generate connection for zone " << z.id << " id " << z.name << ": no endpoints defined" << dendl;
