@@ -1087,7 +1087,7 @@ void RGWListBuckets::execute()
     }
 
     ret = rgw_read_user_buckets(store, s->user.user_id, buckets,
-                                marker, read_count, should_get_stats(), 0);
+                                marker, read_count, should_get_stats(), 0, end_marker);
 
     if (ret < 0) {
       /* hmm.. something wrong here.. the user was authenticated, so it
