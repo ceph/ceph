@@ -23,7 +23,7 @@ Timeline
 |                |Development|`Dumpling`_|`Emperor`_ |`Firefly`_ |`Giant`_   |`Hammer`_  |`Infernalis`_ |
 |                |Testing    |LTS        |Stable     |LTS        |Stable     |LTS        |Stable        |
 +----------------+-----------+-----------+-----------+-----------+-----------+-----------+--------------+
-| November  2015 |           |           |           |           |           |           |`9.2.0`_      |
+| November  2015 |           |           |           |`0.80.11`_ |           |           |`9.2.0`_      |
 +----------------+-----------+-----------+-----------+-----------+-----------+-----------+--------------+
 | October   2015 |`9.1.0`_   |           |           |           |           |`0.94.4`_  |              |
 |                |           |           |           |           |           |`0.94.5`_  |              |
@@ -149,6 +149,7 @@ Timeline
 .. _0.82: ../release-notes#v0-82
 .. _0.81: ../release-notes#v0-81
 
+.. _0.80.11: ../release-notes#v0-80-11-firefly
 .. _0.80.10: ../release-notes#v0-80-10-firefly
 .. _0.80.9: ../release-notes#v0-80-9-firefly
 .. _0.80.8: ../release-notes#v0-80-8-firefly
