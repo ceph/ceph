@@ -121,7 +121,8 @@ extern int rgw_read_user_buckets(RGWRados *store,
                                  const string& marker,
                                  uint64_t max,
                                  bool need_stats,
-                                 uint64_t default_amount = 1000);
+                                 uint64_t default_amount = 1000,
+                                 string end_marker = string());
 
 extern int rgw_link_bucket(RGWRados *store, const rgw_user& user_id, rgw_bucket& bucket, time_t creation_time, bool update_entrypoint = true);
 extern int rgw_unlink_bucket(RGWRados *store, const rgw_user& user_id,
