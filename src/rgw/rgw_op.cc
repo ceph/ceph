@@ -1087,7 +1087,7 @@ void RGWListBuckets::execute()
     }
 
     ret = rgw_read_user_buckets(store, s->user.user_id, buckets,
-                                marker, read_count, should_get_stats(), 0, end_marker);
+                                marker, end_marker, read_count, should_get_stats(), 0);
 
     if (ret < 0) {
       /* hmm.. something wrong here.. the user was authenticated, so it
@@ -1144,7 +1144,8 @@ void RGWStatAccount::execute()
   do {
     RGWUserBuckets buckets;
 
-    ret = rgw_read_user_buckets(store, s->user.user_id, buckets, marker, max_buckets, false);
+    ret = rgw_read_user_buckets(store, s->user.user_id, buckets,
+                                marker, string(), max_buckets, false);
     if (ret < 0) {
       /* hmm.. something wrong here.. the user was authenticated, so it
          should exist */
@@ -1346,7 +1347,8 @@ int RGWCreateBucket::verify_permission()
   if (s->user.max_buckets) {
     RGWUserBuckets buckets;
     string marker;
-    int ret = rgw_read_user_buckets(store, s->user.user_id, buckets, marker, s->user.max_buckets, false);
+    int ret = rgw_read_user_buckets(store, s->user.user_id, buckets,
+                                    marker, string(), s->user.max_buckets, false);
     if (ret < 0)
       return ret;
 
