@@ -1754,18 +1754,19 @@ public:
 			 Context *onreadable, Context *ondisk=0,
 			 Context *onreadable_sync=0,
 			 TrackedOpRef op = TrackedOpRef(),
-			 ThreadPool::TPHandle *handle = NULL) {
+			 ThreadPool::TPHandle *handle = NULL,
+                         bool delete_tx_object = false) {
     assert(!tls.empty());
     tls.back()->register_on_applied(onreadable);
     tls.back()->register_on_commit(ondisk);
     tls.back()->register_on_applied_sync(onreadable_sync);
-    return queue_transactions(osr, tls, op, handle);
+    return queue_transactions(osr, tls, op, handle, delete_tx_object);
   }
 
   virtual int queue_transactions(
     Sequencer *osr, list<Transaction*>& tls,
     TrackedOpRef op = TrackedOpRef(),
-    ThreadPool::TPHandle *handle = NULL) = 0;
+    ThreadPool::TPHandle *handle = NULL, bool delete_tx_object = false) = 0;
 
 
   int queue_transactions(

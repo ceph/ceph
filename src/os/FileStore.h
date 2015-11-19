@@ -189,6 +189,7 @@ private:
     Context *onreadable, *onreadable_sync;
     uint64_t ops, bytes;
     TrackedOpRef osd_op;
+    bool delete_tx;
   };
   class OpSequencer : public Sequencer_impl {
     Mutex qlock; // to protect q, for benefit of flush (peek/dequeue also protected by lock)
@@ -484,7 +485,8 @@ public:
 
   int queue_transactions(Sequencer *osr, list<Transaction*>& tls,
 			 TrackedOpRef op = TrackedOpRef(),
-			 ThreadPool::TPHandle *handle = NULL);
+			 ThreadPool::TPHandle *handle = NULL,
+                         bool delete_tx_object = false);
 
   /**
    * set replay guard xattr on given file

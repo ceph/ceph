@@ -619,15 +619,13 @@ void ReplicatedBackend::submit_transaction(
   op_t->register_on_applied(
     parent->bless_context(
       new C_OSD_OnOpApplied(this, &op)));
-  op_t->register_on_applied(
-    new ObjectStore::C_DeleteTransaction(op_t));
   op_t->register_on_commit(
     parent->bless_context(
       new C_OSD_OnOpCommit(this, &op)));
 
   list<ObjectStore::Transaction*> tls;
   tls.push_back(op_t);
-  parent->queue_transactions(tls, op.op);
+  parent->queue_transactions(tls, op.op, true);
   delete t;
 }
 
@@ -1160,9 +1158,12 @@ void ReplicatedBackend::sub_op_modify_impl(OpRequestRef op)
   // shipped transaction and log entries
   vector<pg_log_entry_t> log;
 
+  ObjectStore::Transaction *opt = new ObjectStore::Transaction;
+  ObjectStore::Transaction *localt = new ObjectStore::Transaction;
+
   bufferlist::iterator p = m->get_data().begin();
-  ::decode(rm->opt, p);
-  rm->localt.set_use_tbl(rm->opt.get_use_tbl());
+  ::decode(*opt, p);
+  localt->set_use_tbl(opt->get_use_tbl());
 
   if (m->new_temp_oid != hobject_t()) {
     dout(20) << __func__ << " start tracking temp " << m->new_temp_oid << dendl;
@@ -1170,20 +1171,20 @@ void ReplicatedBackend::sub_op_modify_impl(OpRequestRef op)
   }
   if (m->discard_temp_oid != hobject_t()) {
     dout(20) << __func__ << " stop tracking temp " << m->discard_temp_oid << dendl;
-    if (rm->opt.empty()) {
+    if (opt->empty()) {
       dout(10) << __func__ << ": removing object " << m->discard_temp_oid
 	       << " since we won't get the transaction" << dendl;
-      rm->localt.remove(coll, ghobject_t(m->discard_temp_oid));
+      localt->remove(coll, ghobject_t(m->discard_temp_oid));
     }
     clear_temp_obj(m->discard_temp_oid);
   }
 
   p = m->logbl.begin();
   ::decode(log, p);
-  rm->opt.set_fadvise_flag(CEPH_OSD_OP_FLAG_FADVISE_DONTNEED);
+  opt->set_fadvise_flag(CEPH_OSD_OP_FLAG_FADVISE_DONTNEED);
 
   bool update_snaps = false;
-  if (!rm->opt.empty()) {
+  if (!opt->empty()) {
     // If the opt is non-empty, we infer we are before
     // last_backfill (according to the primary, not our
     // not-quite-accurate value), and should update the
@@ -1197,22 +1198,22 @@ void ReplicatedBackend::sub_op_modify_impl(OpRequestRef op)
     m->pg_trim_to,
     m->pg_trim_rollback_to,
     update_snaps,
-    &(rm->localt));
+    localt);
 
-  rm->bytes_written = rm->opt.get_encoded_bytes();
+  rm->bytes_written = opt->get_encoded_bytes();
 
   op->mark_started();
 
-  rm->opt.register_on_commit(
+  opt->register_on_commit(
     parent->bless_context(
       new C_OSD_RepModifyCommit(this, rm)));
-  rm->localt.register_on_applied(
+  localt->register_on_applied(
     parent->bless_context(
       new C_OSD_RepModifyApply(this, rm)));
   list<ObjectStore::Transaction*> tls;
-  tls.push_back(&(rm->localt));
-  tls.push_back(&(rm->opt));
-  parent->queue_transactions(tls, op);
+  tls.push_back(localt);
+  tls.push_back(opt);
+  parent->queue_transactions(tls, op, true);
   // op is cleaned up by oncommit/onapply when both are executed
 }
 

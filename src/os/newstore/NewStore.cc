@@ -2748,7 +2748,8 @@ int NewStore::queue_transactions(
     Sequencer *posr,
     list<Transaction*>& tls,
     TrackedOpRef op,
-    ThreadPool::TPHandle *handle)
+    ThreadPool::TPHandle *handle,
+    bool delete_tx_object)
 {
   Context *onreadable;
   Context *ondisk;

@@ -1038,7 +1038,8 @@ int KeyValueStore::umount()
 
 int KeyValueStore::queue_transactions(Sequencer *posr, list<Transaction*> &tls,
                                       TrackedOpRef osd_op,
-                                      ThreadPool::TPHandle *handle)
+                                      ThreadPool::TPHandle *handle,
+                                      bool delete_tx_object)
 {
   Context *onreadable;
   Context *ondisk;

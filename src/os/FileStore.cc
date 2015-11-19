@@ -1899,6 +1899,17 @@ void FileStore::_do_op(OpSequencer *osr, ThreadPool::TPHandle &handle)
   apply_manager.op_apply_finish(o->op);
   dout(10) << "_do_op " << o << " seq " << o->op << " r = " << r
 	   << ", finisher " << o->onreadable << " " << o->onreadable_sync << dendl;
+
+  if (o->delete_tx) {
+    for (list<Transaction*>::iterator p = o->tls.begin();
+      p != o->tls.end();
+        ++p) {
+
+      delete (*p);
+    }
+    o->tls.clear();
+  }
+
 }
 
 void FileStore::_finish_op(OpSequencer *osr)
@@ -1945,7 +1956,8 @@ struct C_JournaledAhead : public Context {
 
 int FileStore::queue_transactions(Sequencer *posr, list<Transaction*> &tls,
 				  TrackedOpRef osd_op,
-				  ThreadPool::TPHandle *handle)
+				  ThreadPool::TPHandle *handle,
+                                  bool delete_tx_object)
 {
   Context *onreadable;
   Context *ondisk;
@@ -1988,6 +2000,11 @@ int FileStore::queue_transactions(Sequencer *posr, list<Transaction*> &tls,
     int orig_len = journal->prepare_entry(o->tls, &tbl);
     uint64_t op_num = submit_manager.op_submit_start();
     o->op = op_num;
+    if (delete_tx_object) {
+      o->delete_tx = true;
+    } else {
+      o->delete_tx = false;
+    }
 
     if (m_filestore_do_dump)
       dump_transactions(o->tls, o->op, osr);
