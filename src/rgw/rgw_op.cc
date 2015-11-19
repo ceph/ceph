@@ -2272,6 +2272,15 @@ void RGWPutObj::execute()
   rgw_get_request_metadata(s->cct, s->info, attrs);
   encode_delete_at_attr(delete_at, attrs);
 
+  /* Add a custom metadata to expose the information whether an object
+   * is an SLO or not. Appending the attribute must be performed AFTER
+   * processing any input from user in order to prohibit overwriting. */
+  if (slo_info) {
+    bufferlist slo_userindicator_bl;
+    ::encode("True", slo_userindicator_bl);
+    attrs[RGW_ATTR_SLO_UINDICATOR] = slo_userindicator_bl;
+  }
+
   ret = processor->complete(etag, &mtime, 0, attrs, delete_at, if_match, if_nomatch);
 
 done:
