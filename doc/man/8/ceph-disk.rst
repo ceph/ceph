@@ -1,7 +1,7 @@
 :orphan:
 
 ===================================================================
- ceph-disk -- Ceph disk preparation and activation utility for OSD
+ ceph-disk -- Ceph disk utility for OSD
 ===================================================================
 
 .. program:: ceph-disk
@@ -14,11 +14,17 @@ Synopsis
 
 | **ceph-disk** **activate** [*data-path*] [--activate-key *path*]
         [--mark-init *sysvinit|upstart|systemd|auto|none*]
-        [--no-start-daemon]
+        [--no-start-daemon] [--reactivate]
 
 | **ceph-disk** **activate-all**
 
 | **ceph-disk** **list**
+
+| **ceph-disk** **deactivate** [--cluster *clustername*] [*device-path*]
+        [--deactivate-by-id *id*] [--mark-out]
+
+| **ceph-disk** **destroy** [--cluster *clustername*] [*device-path*]
+        [--destroy-by-id *id*] [--dmcrypt-key-dir *KEYDIR*] [--zap]
 
 Description
 ===========
@@ -31,6 +37,10 @@ or ``udev``. It can also be triggered by other deployment utilities like ``Chef`
 It actually automates the multiple steps involved in manual creation and start
 of an OSD into two steps of preparing and activating the OSD by using the
 subcommands ``prepare`` and ``activate``.
+
+:program:`ceph-disk` also automates the multiple steps involved to manually stop
+and destroy an OSD into two steps of deactivating and destroying the OSD by using
+the subcommands ``deactivate`` and ``destroy``.
 
 Subcommands
 ============
@@ -96,6 +106,13 @@ Usage::
 
 If the option :option:`--no-start-daemon` is given, the activation
 steps are performed but the OSD daemon is not started.
+
+The latest option :option:`--reactivate` can re-activate the OSD which has been
+deactivated with the ``deactivate`` subcommand.
+
+Usage::
+
+	ceph-disk activate [PATH] [--reactivate]
 
 activate-journal
 ----------------
@@ -176,6 +193,57 @@ Usage::
 
 Here, [PATH] is path to a block device or a directory.
 
+deactivate
+----------
+Deactivate the Ceph OSD. It stops OSD daemon and optionally marks it out. The
+content of the OSD is left untouched but the *ready*, *active*, *INIT-specific*
+files are removed (so that it is not automatically re-activated by the ``udev``
+rules) and the file deactive is created to remember the OSD is deactivated.
+If the OSD is dmcrypt, remove the data dmcrypt map. When deactivate finishes,
+the OSD is ``down``. A deactivated OSD can later be re-activated using the
+:option:`--reactivate` option of the ``activate`` subcommand.
+
+Usage::
+
+	ceph-disk deactivate [PATH]
+
+Here, [PATH] is a path to a block device or a directory.
+
+Another option :option:`--mark-out` can also be used with this subcommand.
+``--mark-out`` marks the OSD out. The objects it contains will be remapped.
+If you are not sure you will destroy OSD, do not use this option.
+
+You can also use ``osd-id`` to deactivate an OSD with the option :option:`--deactivate-by-id`.
+
+Usage::
+
+	ceph-disk deactivate --deactivate-by-id [OSD-ID]
+
+destroy
+-------
+Destroy the Ceph OSD. It removes the OSD from the cluster, the crushmap and
+deallocates OSD ID. It can only destroy an OSD which is *down*.
+
+Usage::
+
+	ceph-disk destroy [PATH]
+
+Here, [PATH] is a path to a block device or a directory.
+
+Another option :option:`--zap` can also be used with this subcommand.
+``--zap`` will destroy the partition table and content of the disk.
+
+Usage::
+
+	ceph-disk destroy [PATH] [--zap]
+
+You can also use the id of an OSD instead of the path with the option
+:option:`--destroy-by-id`.
+
+Usage::
+
+	ceph-disk destroy --destroy-by-id [OSD-ID]
+
 zap
 ---
 
@@ -254,15 +322,6 @@ Options
 .. option:: --dmcrypt-key-dir
 
 	Directory where ``dm-crypt`` keys are stored.
-
-.. option:: --activate-key
-
-   Use when a copy of ``/var/lib/ceph/bootstrap-osd/{cluster}.keyring`` isn't
-   present in the OSD node. Suffix the option by the path to the keyring.
-
-.. option:: --mark-init
-
-   Provide init system to manage the OSD directory.
 
 Availability
 ============
