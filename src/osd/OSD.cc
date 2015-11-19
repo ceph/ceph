@@ -3854,6 +3854,14 @@ void OSD::heartbeat_check()
       }
     }
   }
+  //am I failed to receive heartbeat from everyone?
+  if (heartbeat_peers.size() == failure_queue.size()) {
+    //I cannot hear from anyone, suppose something wrong on my side.
+    failure_queue.clear();
+    clog->warn() << "failed to hear all the peers(cutoff " << cutoff << "), is that something wrong "
+	 << "on my side? ";
+    derr << "Skip report failure peers to monitor as I cannot hear any of my peers." <<dendl;
+  }
 }
 
 void OSD::heartbeat()
