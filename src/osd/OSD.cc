@@ -221,6 +221,10 @@ OSDService::OSDService(OSD *osd) :
   peer_map_epoch_lock("OSDService::peer_map_epoch_lock"),
   sched_scrub_lock("OSDService::sched_scrub_lock"), scrubs_pending(0),
   scrubs_active(0),
+  promotion_lock("OSD::promotion_lock"),
+  promotion_stop_flag(false),
+  promotion_thread(this),
+  promotion_ops(g_ceph_context, "promotion_ops", g_conf->osd_promotion_max_ops),
   agent_lock("OSD::agent_lock"),
   agent_valid_iterator(false),
   agent_ops(0),
@@ -483,6 +487,7 @@ void OSDService::init()
   agent_timer.init();
 
   agent_thread.create();
+  promotion_thread.create();
 }
 
 void OSDService::final_init()
@@ -499,6 +504,47 @@ void OSDService::activate_map()
     osd->is_active();
   agent_cond.Signal();
   agent_lock.Unlock();
+}
+ 
+void OSDService::promotion_entry() 
+{
+  dout(10) << __func__ << " start" << dendl;
+  promotion_lock.Lock();
+   
+  while (!promotion_stop_flag) {
+    if (waiting_for_promotion.empty()) {
+      dout(10) << __func__ << " empty promotion queue" << dendl;
+      promotion_cond.Wait(promotion_lock);
+      continue;
+    }
+    hobject_t obj;
+    pair<object_locator_t, PGRef> loc;
+    waiting_for_promotion.pop(&obj, &loc);
+    in_promotion.insert(obj);
+    promotion_lock.Unlock();
+    if (promotion_ops.wait(g_conf->osd_promotion_max_ops))
+      dout(2) << " in flight promotion ops " << promotion_ops.get_current() << " >= " << g_conf->osd_promotion_max_ops << dendl;  
+    dout(20) << "promote object " << obj << " in " << loc.second << " from " << loc.first << dendl;
+    ReplicatedPG* pg = static_cast<ReplicatedPG*>(loc.second.get());
+    ObjectContextRef obc = pg->get_object_context(obj, true);
+    pg->promote_object(obc, loc.first);
+    promotion_lock.Lock();
+  }
+  promotion_lock.Unlock();
+  dout(10) << __func__ << " finish " << dendl;
+}
+
+void OSDService::promotion_stop()
+{
+  {
+    Mutex::Locker l(promotion_lock);
+    if (!waiting_for_promotion.empty()) {
+      assert(0 == "promotion queue ont empty");
+    }
+    promotion_stop_flag = true;
+    promotion_cond.Signal();
+  }
+  promotion_thread.join();
 }
 
 class AgentTimeoutCB : public Context {
@@ -2425,6 +2471,9 @@ int OSD::shutdown()
 
   dout(10) << "stopping agent" << dendl;
   service.agent_stop();
+  
+  dout(10) << "stopping promotion" << dendl;
+  service.promotion_stop();
 
   osd_lock.Lock();
 

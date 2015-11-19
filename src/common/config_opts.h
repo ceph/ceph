@@ -541,6 +541,9 @@ OPTION(osd_agent_min_evict_effort, OPT_FLOAT, .1)
 OPTION(osd_agent_quantize_effort, OPT_FLOAT, .1)
 OPTION(osd_agent_delay_time, OPT_FLOAT, 5.0)
 
+// max promote ops
+OPTION(osd_promotion_max_ops, OPT_INT, 200)
+
 // osd ignore history.last_epoch_started in find_best_info
 OPTION(osd_find_best_info_ignore_history_les, OPT_BOOL, false)
 
