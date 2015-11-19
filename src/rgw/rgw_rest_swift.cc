@@ -17,6 +17,7 @@
 int RGWListBuckets_ObjStore_SWIFT::get_params()
 {
   marker = s->info.args.get("marker");
+  end_marker = s->info.args.get("end_marker");
 
   string limit_str = s->info.args.get("limit");
   if (!limit_str.empty()) {
