@@ -11,6 +11,7 @@
 #include "common/errno.h"
 #include "common/strtol.h"
 #include "common/Formatter.h"
+#include "common/SubProcess.h"
 #include "msg/msg_types.h"
 #include "global/global_context.h"
 #include <iostream>
@@ -211,9 +212,121 @@ static int do_kernel_unmap(const char *dev, const char *poolname,
   return r;
 }
 
+static int call_nbd_cmd(const po::variables_map &vm,
+                        const vector<const char*> &args)
+{
+  char exe_path[PATH_MAX];
+  ssize_t exe_path_bytes = readlink("/proc/self/exe", exe_path,
+				    sizeof(exe_path) - 1);
+  if (exe_path_bytes < 0) {
+    strcpy(exe_path, "rbd-nbd");
+  } else {
+    if (snprintf(exe_path + exe_path_bytes,
+                 sizeof(exe_path) - exe_path_bytes,
+                 "-nbd") < 0) {
+      return -EOVERFLOW;
+    }
+  }
+
+  SubProcess process(exe_path, false, false, false, true);
+
+  if (vm.count("conf")) {
+    process.add_cmd_arg("--conf");
+    process.add_cmd_arg(vm["conf"].as<std::string>().c_str());
+  }
+  if (vm.count("cluster")) {
+    process.add_cmd_arg("--cluster");
+    process.add_cmd_arg(vm["cluster"].as<std::string>().c_str());
+  }
+  if (vm.count("id")) {
+    process.add_cmd_arg("--id");
+    process.add_cmd_arg(vm["id"].as<std::string>().c_str());
+  }
+  if (vm.count("name")) {
+    process.add_cmd_arg("--name");
+    process.add_cmd_arg(vm["name"].as<std::string>().c_str());
+  }
+  if (vm.count("mon_host")) {
+    process.add_cmd_arg("--mon_host");
+    process.add_cmd_arg(vm["mon_host"].as<std::string>().c_str());
+  }
+  if (vm.count("keyfile")) {
+    process.add_cmd_arg("--keyfile");
+    process.add_cmd_arg(vm["keyfile"].as<std::string>().c_str());
+  }
+  if (vm.count("keyring")) {
+    process.add_cmd_arg("--keyring");
+    process.add_cmd_arg(vm["keyring"].as<std::string>().c_str());
+  }
+
+  for (vector<const char*>::const_iterator p = args.begin();
+       p != args.end(); p++)
+    process.add_cmd_arg(*p);
+
+  if (process.spawn()) {
+    std::cerr << "rbd: failed to run rbd-nbd: " << process.err() << std::endl;
+    return -EINVAL;
+  } else if (process.join()) {
+    std::cerr << "rbd: rbd-nbd failed with error: " << process.err() << std::endl;
+    return -EINVAL;
+  }
+
+  return 0;
+}
+
+static int wrap_nbd_map(const po::variables_map &vm,
+                             const std::string &pool,
+                             const std::string &image,
+                             const std::string &snap)
+{
+  vector<const char*> args;
+
+  args.push_back("--map");
+  string img;
+  img.append(pool);
+  img.append("/");
+  img.append(image);
+  if (!snap.empty()) {
+    img.append("@");
+    img.append(snap);
+  }
+  args.push_back(img.c_str());
+
+  if (vm["read-only"].as<bool>())
+    args.push_back("--read-only");
+
+  return call_nbd_cmd(vm, args);
+}
+
+static int wrap_nbd_unmap(const po::variables_map &vm,
+                               const std::string &devpath)
+{
+  vector<const char*> args;
+
+  args.push_back("--unmap");
+  args.push_back(devpath.c_str());
+
+  return call_nbd_cmd(vm, args);
+}
+
+static int wrap_nbd_showmapped(const po::variables_map &vm)
+{
+  vector<const char*> args;
+
+  args.push_back("--showmapped");
+
+  return call_nbd_cmd(vm, args);
+}
+
+static void add_nbd_options(po::options_description *opt) {
+  opt->add_options()
+    ("nbd", po::bool_switch(), "use NBD");
+}
+
 void get_show_arguments(po::options_description *positional,
                         po::options_description *options) {
   at::add_format_options(options);
+  add_nbd_options(options);
 }
 
 int execute_show(const po::variables_map &vm) {
@@ -221,6 +334,14 @@ int execute_show(const po::variables_map &vm) {
   int r = utils::get_formatter(vm, &formatter);
   if (r < 0) {
     return r;
+  }
+
+  if (vm["nbd"].as<bool>()) {
+    if (formatter != nullptr) {
+      std::cerr << "rbd: format must be plain when --nbd specified" << std::endl;
+      return -EINVAL;
+    }
+    return wrap_nbd_showmapped(vm);
   }
 
   utils::init_context();
@@ -240,6 +361,7 @@ void get_map_arguments(po::options_description *positional,
   options->add_options()
     ("options,o", po::value<std::string>(), "mapping options")
     ("read-only", po::bool_switch(), "mount read-only");
+  add_nbd_options(options);
 }
 
 int execute_map(const po::variables_map &vm) {
@@ -253,6 +375,9 @@ int execute_map(const po::variables_map &vm) {
   if (r < 0) {
     return r;
   }
+
+  if (vm["nbd"].as<bool>())
+    return wrap_nbd_map(vm, pool_name, image_name, snap_name);
 
   if (vm["read-only"].as<bool>()) {
     put_map_option("rw", "ro");
@@ -301,6 +426,7 @@ void get_unmap_arguments(po::options_description *positional,
   at::add_pool_option(options, at::ARGUMENT_MODIFIER_NONE);
   at::add_image_option(options, at::ARGUMENT_MODIFIER_NONE);
   at::add_snap_option(options, at::ARGUMENT_MODIFIER_NONE);
+  add_nbd_options(options);
 }
 
 int execute_unmap(const po::variables_map &vm) {
@@ -324,6 +450,14 @@ int execute_unmap(const po::variables_map &vm) {
     }
   }
 
+  if (vm["nbd"].as<bool>()) {
+    if (device_name.empty()) {
+      std::cerr << "rbd: unmap requires device path when --nbd specified" << std::endl;
+      return -EINVAL;
+    }
+    return wrap_nbd_unmap(vm, device_name);
+  }
+
   if (device_name.empty() && image_name.empty()) {
     std::cerr << "rbd: unmap requires either image name or device path"
               << std::endl;
@@ -342,7 +476,7 @@ int execute_unmap(const po::variables_map &vm) {
   return 0;
 }
 
-Shell::SwitchArguments switched_arguments({"read-only"});
+Shell::SwitchArguments switched_arguments({"read-only", "nbd"});
 Shell::Action action_show(
   {"showmapped"}, {}, "Show the rbd images mapped by the kernel.", "",
   &get_show_arguments, &execute_show);

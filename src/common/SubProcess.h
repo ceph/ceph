@@ -57,7 +57,7 @@
 class SubProcess {
 public:
   SubProcess(const char *cmd, bool pipe_stdin = false, bool pipe_stdout = false,
-	     bool pipe_stderr = false);
+	     bool pipe_stderr = false, bool share_parent_std = false);
   virtual ~SubProcess();
 
   void add_cmd_args(const char *arg, ...);
@@ -93,6 +93,7 @@ protected:
   bool pipe_stdin;
   bool pipe_stdout;
   bool pipe_stderr;
+  bool share_parent_std;
   int stdin_pipe_out_fd;
   int stdout_pipe_in_fd;
   int stderr_pipe_in_fd;
@@ -114,12 +115,13 @@ private:
   int sigkill;
 };
 
-SubProcess::SubProcess(const char *cmd_, bool use_stdin, bool use_stdout, bool use_stderr) :
+SubProcess::SubProcess(const char *cmd_, bool use_stdin, bool use_stdout, bool use_stderr, bool share_parent) :
   cmd(cmd_),
   cmd_args(),
   pipe_stdin(use_stdin),
   pipe_stdout(use_stdout),
   pipe_stderr(use_stderr),
+  share_parent_std(share_parent),
   stdin_pipe_out_fd(-1),
   stdout_pipe_in_fd(-1),
   stderr_pipe_in_fd(-1),
@@ -290,11 +292,11 @@ int SubProcess::spawn() {
     if (maxfd == -1)
       maxfd = 16384;
     for (int fd = 0; fd <= maxfd; fd++) {
-      if (fd == STDIN_FILENO && pipe_stdin)
+      if (fd == STDIN_FILENO && (pipe_stdin || share_parent_std))
 	continue;
-      if (fd == STDOUT_FILENO && pipe_stdout)
+      if (fd == STDOUT_FILENO && (pipe_stdout || share_parent_std))
 	continue;
-      if (fd == STDERR_FILENO && pipe_stderr)
+      if (fd == STDERR_FILENO && (pipe_stderr || share_parent_std))
 	continue;
       ::close(fd);
     }

@@ -312,14 +312,15 @@ Commands
 
   This requires image format 2.
 
-:command:`map` [-o | --options *map-options* ] [--read-only] *image-spec* | *snap-spec*
-  Maps the specified image to a block device via the rbd kernel module.
+:command:`map` [--nbd] [-o | --options *map-options* ] [--read-only] *image-spec* | *snap-spec*
+  Maps the specified image to a block device via the rbd kernel module or nbd kernel module.
 
-:command:`unmap` *image-spec* | *snap-spec* | *device-path*
-  Unmaps the block device that was mapped via the rbd kernel module.
+:command:`unmap` [--nbd] *image-spec* | *snap-spec* | *device-path*
+  Unmaps the block device that was mapped via the rbd kernel module or nbd kernel module.
 
-:command:`showmapped`
+:command:`showmapped` [--nbd]
   Show the rbd images that are mapped via the rbd kernel module.
+  Or show the already used nbd devices.
 
 :command:`status` *image-spec*
   Show the status of the image, including which clients have it open.

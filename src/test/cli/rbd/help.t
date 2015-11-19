@@ -526,7 +526,7 @@
   
   rbd help map
   usage: rbd map [--pool <pool>] [--image <image>] [--snap <snap>] 
-                 [--options <options>] [--read-only] 
+                 [--options <options>] [--read-only] [--nbd] 
                  <image-or-snap-spec> 
   
   Map image to a block device using the kernel.
@@ -541,6 +541,7 @@
     --snap arg            snapshot name
     -o [ --options ] arg  mapping options
     --read-only           mount read-only
+    --nbd                 use NBD
   
   rbd help merge-diff
   usage: rbd merge-diff [--path <path>] [--no-progress] 
@@ -627,13 +628,14 @@
     --no-progress        disable progress output
   
   rbd help showmapped
-  usage: rbd showmapped [--format <format>] [--pretty-format] 
+  usage: rbd showmapped [--format <format>] [--pretty-format] [--nbd] 
   
   Show the rbd images mapped by the kernel.
   
   Optional arguments
     --format arg         output format [plain, json, or xml]
     --pretty-format      pretty formatting (json and xml)
+    --nbd                use NBD
   
   rbd help snap create
   usage: rbd snap create [--pool <pool>] [--image <image>] [--snap <snap>] 
@@ -782,7 +784,7 @@
     --pretty-format      pretty formatting (json and xml)
   
   rbd help unmap
-  usage: rbd unmap [--pool <pool>] [--image <image>] [--snap <snap>] 
+  usage: rbd unmap [--pool <pool>] [--image <image>] [--snap <snap>] [--nbd] 
                    <image-or-snap-or-device-spec> 
   
   Unmap a rbd device that was used by the kernel.
@@ -796,6 +798,7 @@
     -p [ --pool ] arg               pool name
     --image arg                     image name
     --snap arg                      snapshot name
+    --nbd                           use NBD
   
   rbd help watch
   usage: rbd watch [--pool <pool>] [--image <image>] 
