@@ -17,6 +17,7 @@
 #include "rgw_rest.h"
 #include "rgw_acl.h"
 #include "rgw_acl_s3.h"
+#include "rgw_acl_swift.h"
 #include "rgw_user.h"
 #include "rgw_bucket.h"
 #include "rgw_log.h"
@@ -356,7 +357,13 @@ static int rgw_build_policies(RGWRados *store, struct req_state *s, bool only_bu
     }
   }
 
-  s->bucket_acl = new RGWAccessControlPolicy(s->cct);
+  if(s->dialect.compare("s3") == 0) {
+    s->bucket_acl = new RGWAccessControlPolicy_S3(s->cct);
+  } else if(s->dialect.compare("swift")  == 0) {
+    s->bucket_acl = new RGWAccessControlPolicy_SWIFT(s->cct);
+  } else {
+    s->bucket_acl = new RGWAccessControlPolicy(s->cct);
+  }
 
   if (s->copy_source) { /* check if copy source is within the current domain */
     const char *src = s->copy_source;
