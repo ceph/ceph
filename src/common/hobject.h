@@ -176,6 +176,8 @@ public:
   }
 
   static uint32_t _reverse_bits(uint32_t v) {
+    if (v == 0)
+      return v;
     // reverse bits
     // swap odd and even bits
     v = ((v >> 1) & 0x55555555) | ((v & 0x55555555) << 1);
