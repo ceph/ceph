@@ -435,6 +435,78 @@ int invoke_async_request(ImageCtx *ictx, const std::string& request_type,
     {RBD_IMAGE_OPTION_STRIPE_COUNT, UINT64},
   };
 
+  std::string image_option_name(int optname) {
+    switch (optname) {
+    case RBD_IMAGE_OPTION_FORMAT:
+      return "format";
+    case RBD_IMAGE_OPTION_FEATURES:
+      return "features";
+    case RBD_IMAGE_OPTION_ORDER:
+      return "order";
+    case RBD_IMAGE_OPTION_STRIPE_UNIT:
+      return "stripe_unit";
+    case RBD_IMAGE_OPTION_STRIPE_COUNT:
+      return "stripe_count";
+    case RBD_IMAGE_OPTION_JOURNAL_ORDER:
+      return "journal_order";
+    case RBD_IMAGE_OPTION_JOURNAL_SPLAY_WIDTH:
+      return "journal_splay_width";
+    case RBD_IMAGE_OPTION_JOURNAL_COMMIT_AGE_MS:
+      return "journal_commit_age_ms";
+    case RBD_IMAGE_OPTION_JOURNAL_OBJECT_FLUSH_INTERVAL:
+      return "journal_object_flush_interval";
+    case RBD_IMAGE_OPTION_JOURNAL_OBJECT_FLUSH_BYTES:
+      return "journal_object_flush_bytes";
+    case RBD_IMAGE_OPTION_JOURNAL_OBJECT_FLUSH_AGE_MS:
+      return "journal_object_flush_age_ms";
+    case RBD_IMAGE_OPTION_JOURNAL_OBJECT_POOL:
+      return "journal_object_pool";
+    default:
+      return "unknown (" + stringify(optname) + ")";
+    }
+  }
+
+  std::ostream &operator<<(std::ostream &os, rbd_image_options_t &opts) {
+    image_options_ref* opts_ = static_cast<image_options_ref*>(opts);
+
+    os << "[";
+
+    for (image_options_t::const_iterator i = (*opts_)->begin();
+	 i != (*opts_)->end(); i++) {
+      os << (i == (*opts_)->begin() ? "" : ", ") << image_option_name(i->first)
+	 << "=" << i->second;
+    }
+
+    os << "]";
+
+    return os;
+  }
+
+  std::ostream &operator<<(std::ostream &os, ImageOptions &opts) {
+    os << "[";
+
+    const char *delimiter = "";
+    for (auto &i : IMAGE_OPTIONS_TYPE_MAPPING) {
+      if (i.second == STR) {
+	std::string val;
+	if (opts.get(i.first, &val) == 0) {
+	  os << delimiter << image_option_name(i.first) << "=" << val;
+	  delimiter = ", ";
+	}
+      } else if (i.second == UINT64) {
+	uint64_t val;
+	if (opts.get(i.first, &val) == 0) {
+	  os << delimiter << image_option_name(i.first) << "=" << val;
+	  delimiter = ", ";
+	}
+      }
+    }
+
+    os << "]";
+
+    return os;
+  }
+
   void image_options_create(rbd_image_options_t* opts)
   {
     image_options_ref* opts_ = new image_options_ref(new image_options_t());
