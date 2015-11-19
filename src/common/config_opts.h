@@ -981,6 +981,9 @@ OPTION(filestore_wbthrottle_xfs_inodes_start_flusher, OPT_U64, 500)
 OPTION(filestore_wbthrottle_btrfs_inodes_hard_limit, OPT_U64, 5000)
 OPTION(filestore_wbthrottle_xfs_inodes_hard_limit, OPT_U64, 5000)
 
+//Introduce a O_DSYNC write in the filestore
+OPTION(filestore_odsync_write, OPT_BOOL, false)
+
 // Tests index failure paths
 OPTION(filestore_index_retry_probability, OPT_DOUBLE, 0)
 
