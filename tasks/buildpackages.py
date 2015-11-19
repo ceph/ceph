@@ -29,6 +29,12 @@ class LocalGitbuilderProject(packaging.GitbuilderProject):
         pass
 
 
+def get_pkg_type(os_type):
+    if os_type in ('centos', 'fedora', 'opensuse', 'rhel', 'sles'):
+        return 'rpm'
+    else:
+        return 'deb'
+
 def apply_overrides(ctx, config):
     if config is None:
         config = {}
@@ -131,7 +137,7 @@ def task(ctx, config):
     arch = ctx.config.get('arch', 'x86_64')
     dist = LocalGitbuilderProject()._get_distro(distro=os_type,
                                                 version=os_version)
-    pkg_type = misc.get_pkg_type(os_type)
+    pkg_type = get_pkg_type(os_type)
     check_call(
         "flock --close /tmp/buildpackages " +
         "make -C " + d + " " + os.environ['HOME'] + "/.ssh_agent",
