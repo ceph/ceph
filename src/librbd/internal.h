@@ -78,6 +78,7 @@ namespace librbd {
 
   bool has_parent(int64_t parent_pool_id, uint64_t off, uint64_t overlap);
 
+  std::string image_option_name(int optname);
   void image_options_create(rbd_image_options_t* opts);
   void image_options_create_ref(rbd_image_options_t* opts,
 				rbd_image_options_t orig);
