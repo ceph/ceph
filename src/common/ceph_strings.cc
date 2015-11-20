@@ -137,6 +137,7 @@ const char *ceph_mds_op_name(int op)
 	case CEPH_MDS_OP_EXPORTDIR: return "exportdir";
 	case CEPH_MDS_OP_VALIDATE: return "validate_path";
 	case CEPH_MDS_OP_FLUSH: return "flush_path";
+	case CEPH_MDS_OP_REPAIR_FRAGSTATS: return "repair_fragstats";
 	}
 	return "???";
 }
