@@ -5277,7 +5277,7 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	newop.op.op = CEPH_OSD_OP_SYNC_READ;
 	newop.op.extent.offset = 0;
 	newop.op.extent.length = 0;
-	result = do_osd_ops(ctx, nops);
+	do_osd_ops(ctx, nops);
 	osd_op.outdata.claim(newop.outdata);
       }
       break;
@@ -5444,9 +5444,7 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
       }
       ++ctx->num_read;
       {
-	result = osd->store->omap_get_header(coll, ghobject_t(soid), &osd_op.outdata);
-	if (result < 0)
-	  break;
+	osd->store->omap_get_header(coll, ghobject_t(soid), &osd_op.outdata);
 	ctx->delta_stats.num_rd_kb += SHIFT_ROUND_UP(osd_op.outdata.length(), 10);
 	ctx->delta_stats.num_rd++;
       }
@@ -5467,9 +5465,7 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	tracepoint(osd, do_osd_op_pre_omapgetvalsbykeys, soid.oid.name.c_str(), soid.snap.val, list_entries(keys_to_get).c_str());
 	map<string, bufferlist> out;
 	if (pool.info.supports_omap()) {
-	  result = osd->store->omap_get_values(coll, ghobject_t(soid), keys_to_get, &out);
-	  if (result < 0)
-	    break;
+	  osd->store->omap_get_values(coll, ghobject_t(soid), keys_to_get, &out);
 	} // else return empty omap entries
 	::encode(out, osd_op.outdata);
 	ctx->delta_stats.num_rd_kb += SHIFT_ROUND_UP(osd_op.outdata.length(), 10);
@@ -5504,10 +5500,12 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	       i != assertions.end();
 	       ++i)
 	    to_get.insert(i->first);
-	  result = osd->store->omap_get_values(coll, ghobject_t(soid),
+	  int r = osd->store->omap_get_values(coll, ghobject_t(soid),
 					      to_get, &out);
-	  if (result < 0)
+	  if (r < 0) {
+	    result = r;
 	    break;
+	  }
 	} // else leave out empty
 
 	//Should set num_rd_kb based on encode length of map
