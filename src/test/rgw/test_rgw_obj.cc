@@ -14,7 +14,7 @@
 #include <iostream>
 #include "global/global_init.h"
 #include "common/ceph_json.h"
-#include "common/Formatter.h"
+#include "common/JSONFormatter.h"
 #include "rgw/rgw_common.h"
 #define GTEST
 #ifdef GTEST
