@@ -174,24 +174,28 @@ def validate_tasks(config):
 
 def get_initial_tasks(lock, config, machine_type):
     init_tasks = [{'internal.check_packages': None}]
-    if lock:
+    if 'roles' in config and lock:
         msg = ('You cannot specify targets in a config file when using the ' +
                '--lock option')
         assert 'targets' not in config, msg
         init_tasks.append({'internal.lock_machines': (
             len(config['roles']), machine_type)})
 
-    init_tasks.extend([
-        {'internal.save_config': None},
-        {'internal.check_lock': None},
-        {'internal.add_remotes': None},
-        {'internal.connect': None},
-        {'internal.push_inventory': None},
-        {'internal.serialize_remote_roles': None},
-        {'internal.check_conflict': None},
-    ])
 
-    if not config.get('use_existing_cluster', False):
+    init_tasks.append({'internal.save_config': None})
+
+    if 'roles' in config:
+        init_tasks.extend([
+            {'internal.check_lock': None},
+            {'internal.add_remotes': None},
+            {'internal.connect': None},
+            {'internal.push_inventory': None},
+            {'internal.serialize_remote_roles': None},
+            {'internal.check_conflict': None},
+        ])
+
+    if ('roles' in config and
+        not config.get('use_existing_cluster', False)):
         init_tasks.extend([
             {'internal.check_ceph_data': None},
             {'internal.vm_setup': None},
@@ -200,17 +204,27 @@ def get_initial_tasks(lock, config, machine_type):
     if 'kernel' in config:
         init_tasks.append({'kernel': config['kernel']})
 
+    if 'roles' in config:
+        init_tasks.append({'internal.base': None})
+    init_tasks.append({'internal.archive_upload': None})
+    if 'roles' in config:
+        init_tasks.extend([
+            {'internal.archive': None},
+            {'internal.coredump': None},
+            {'internal.sudo': None},
+            {'internal.syslog': None},
+        ])
     init_tasks.extend([
-        {'internal.base': None},
-        {'internal.archive_upload': None},
-        {'internal.archive': None},
-        {'internal.coredump': None},
-        {'internal.sudo': None},
-        {'internal.syslog': None},
         {'internal.timer': None},
         {'internal.buildpackages_prep': None},
-        {'selinux': None},
     ])
+
+    if 'roles' in config:
+        init_tasks.extend([
+            {'selinux': None},
+            {'ansible.cephlab': None},
+            {'clock.check': None}
+        ])
 
     return init_tasks
 

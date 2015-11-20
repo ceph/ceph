@@ -95,7 +95,8 @@ class TestRun(object):
 
     def test_get_initial_tasks_invalid(self):
         with pytest.raises(AssertionError) as excinfo:
-            run.get_initial_tasks(True, {"targets": "can't be here"}, "machine_type")
+            run.get_initial_tasks(True, {"targets": "can't be here",
+                                         "roles": "roles" }, "machine_type")
         assert excinfo.value.message.startswith("You cannot")
 
     def test_get_inital_tasks(self):

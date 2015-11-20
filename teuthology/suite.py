@@ -1103,8 +1103,5 @@ dict_templ = {
     'suite': Placeholder('suite'),
     'suite_branch': Placeholder('suite_branch'),
     'suite_sha1': Placeholder('suite_hash'),
-    'tasks': [
-        {'ansible.cephlab': None},
-        {'clock.check': None}
-    ],
+    'tasks': [],
 }
