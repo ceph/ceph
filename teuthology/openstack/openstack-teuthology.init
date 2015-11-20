@@ -73,7 +73,7 @@ case $1 in
                 openstack server list --long -f json | \
                     jq ".[] | select(.Properties | contains(\"ownedby='$ip'\")) | .ID" | \
                     while read uuid ; do
-                    eval openstack server delete $uuid
+                    eval openstack server delete --wait $uuid
                 done
                 openstack volume list --long -f json | \
                     jq ".[] | select(.Properties | contains(\"ownedby='$ip'\")) | .ID" | \
