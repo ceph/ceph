@@ -47,46 +47,48 @@ class RGWReportContainer : public RefCountedObject {
 
   RWLock lock;
 
-  void _finish_action(const string& id) {
+  bool _finish_action(const string& id) {
     auto i = actions.find(id);
     if (i != actions.end()) {
       i->second->put();
+      actions.erase(i);
+      return true;
     }
+    return false;
   }
 
 public:
   RGWReportContainer(CephContext *_cct) : cct(_cct), parent(NULL), lock("RGWStatsuContainer::lock") {}
-  RGWReportContainer(CephContext *_cct, RGWReportContainer *_parent, const string& _id, const string& op) : cct(_cct), parent(_parent), id(_id), operation("op"), lock("RGWReportContainer::lock") {}
+  RGWReportContainer(CephContext *_cct, RGWReportContainer *_parent, const string& _id, const string& _op);
 
   void set_status(const string& s);
 
-  RGWReportContainer *new_action(const string& id, const string& op) {
-    RWLock::WLocker l(lock);
-    _finish_action(id);
-    RGWReportContainer *new_status = new RGWReportContainer(cct, this, id, op);
+  RGWReportContainer *new_action(RGWReportContainer *new_status) {
+    get();
+    finish_action(new_status->id);
     new_status->get();
-    actions[id] = new_status;
+    actions[new_status->id] = new_status;
     return new_status;
   }
 
-  RGWReportContainer *new_action(RGWReportContainer *new_status) {
-    RWLock::WLocker l(lock);
-    _finish_action(id);
-    new_status->get();
-    actions[id] = new_status;
-    return new_status;
+  RGWReportContainer *new_action(const string& action_id, const string& op) {
+    RGWReportContainer *new_status = new RGWReportContainer(cct, this, action_id, op);
+    return new_action(new_status);
   }
 
   void finish_action(const string& action_id) {
-    RWLock::WLocker l(lock);
-    _finish_action(action_id);
+    lock.get_write();
+    bool need_put = _finish_action(action_id);
+    lock.unlock();
+    if (need_put) {
+      put();
+    }
   }
 
   void finish() {
     if (parent) {
       parent->finish_action(id);
     }
-    RWLock::WLocker l(lock);
     put();
   }
 
@@ -109,6 +111,10 @@ public:
   }
 
   RGWReportContainer& get_container() { return report; }
+
+  void set_status(const string& s) {
+    report.set_status(s);
+  }
 
   void dump(Formatter *f) const;
 };
@@ -184,6 +190,7 @@ struct RGWMetaSyncEnv {
   string status_oid();
 };
 
+class RGWMetadataSyncReportHook;
 
 class RGWRemoteMetaLog : public RGWCoroutinesManager {
   RGWRados *store;
@@ -228,6 +235,8 @@ public:
   RGWMetaSyncEnv& get_sync_env() {
     return sync_env;
   }
+
+  RGWMetaSyncReport& get_sync_report() { return sync_report; }
 };
 
 class RGWMetaSyncStatusManager {
@@ -259,13 +268,16 @@ class RGWMetaSyncStatusManager {
   map<utime_shard, int> ts_to_shard;
   vector<string> clone_markers;
 
+  RGWMetadataSyncReportHook *asok_hook;
+
 public:
   RGWMetaSyncStatusManager(RGWRados *_store) : store(_store), master_log(store, this), num_shards(0),
-                                               ts_to_shard_lock("ts_to_shard_lock") {}
+                                               ts_to_shard_lock("ts_to_shard_lock"), asok_hook(NULL) {}
   int init();
   void finish();
 
   rgw_meta_sync_status& get_sync_status() { return sync_status; }
+  RGWMetaSyncReport& get_sync_report() { return master_log.get_sync_report(); }
 
   int read_sync_status() { return master_log.read_sync_status(&sync_status); }
   int init_sync_status() { return master_log.init_sync_status(num_shards); }
