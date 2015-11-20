@@ -3453,7 +3453,7 @@ int FileStore::_do_copy_range(int from, int to, uint64_t srcoff, uint64_t len, u
   if (backend->has_splice()) {
     int pipefd[2];
     if (pipe(pipefd) < 0) {
-      r = errno;
+      r = -errno;
       derr << " pipe " << " got " << cpp_strerror(r) << dendl;
       return r;
     }
