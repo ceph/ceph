@@ -685,8 +685,12 @@ void FileStore::collect_metadata(map<string,string> *pm)
   ss << "0x" << std::hex << m_fs_type << std::dec;
   (*pm)["filestore_f_type"] = ss.str();
 
-  rc = get_device_by_uuid(get_fsid(), "PARTUUID", partition_path,
-        dev_node);
+  if (g_conf->filestore_collect_device_partition_information) {
+    rc = get_device_by_uuid(get_fsid(), "PARTUUID", partition_path,
+          dev_node);
+  } else {
+    rc = -EINVAL;
+  }
 
   switch (rc) {
     case -EOPNOTSUPP:
