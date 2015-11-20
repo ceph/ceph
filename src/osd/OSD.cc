@@ -1021,13 +1021,13 @@ void OSDService::set_epochs(const epoch_t *_boot_epoch, const epoch_t *_up_epoch
 bool OSDService::prepare_to_stop()
 {
   Mutex::Locker l(is_stopping_lock);
-  if (state != NOT_STOPPING)
+  if (get_state() != NOT_STOPPING)
     return false;
 
   OSDMapRef osdmap = get_osdmap();
   if (osdmap && osdmap->is_up(whoami)) {
     dout(0) << __func__ << " telling mon we are shutting down" << dendl;
-    state = PREPARING_TO_STOP;
+    set_state(PREPARING_TO_STOP);
     monc->send_mon_message(new MOSDMarkMeDown(monc->get_fsid(),
 					      osdmap->get_inst(whoami),
 					      osdmap->get_epoch(),
@@ -1037,27 +1037,26 @@ bool OSDService::prepare_to_stop()
     utime_t timeout;
     timeout.set_from_double(now + cct->_conf->osd_mon_shutdown_timeout);
     while ((ceph_clock_now(cct) < timeout) &&
-	   (state != STOPPING)) {
+       (get_state() != STOPPING)) {
       is_stopping_cond.WaitUntil(is_stopping_lock, timeout);
     }
   }
   dout(0) << __func__ << " starting shutdown" << dendl;
-  state = STOPPING;
+  set_state(STOPPING);
   return true;
 }
 
 void OSDService::got_stop_ack()
 {
   Mutex::Locker l(is_stopping_lock);
-  if (state == PREPARING_TO_STOP) {
+  if (get_state() == PREPARING_TO_STOP) {
     dout(0) << __func__ << " starting shutdown" << dendl;
-    state = STOPPING;
+    set_state(STOPPING);
     is_stopping_cond.Signal();
   } else {
     dout(10) << __func__ << " ignoring msg" << dendl;
   }
 }
-
 
 MOSDMap *OSDService::build_incremental_map_msg(epoch_t since, epoch_t to,
                                                OSDSuperblock& sblock)
@@ -5620,9 +5619,9 @@ void OSD::ms_fast_preprocess(Message *m)
       MOSDMap *mm = static_cast<MOSDMap*>(m);
       Session *s = static_cast<Session*>(m->get_connection()->get_priv());
       if (s) {
-	s->received_map_lock.Lock();
+	s->received_map_lock.lock();
 	s->received_map_epoch = mm->get_last();
-	s->received_map_lock.Unlock();
+	s->received_map_lock.unlock();
 	s->put();
       }
     }
@@ -5836,9 +5835,9 @@ bool OSD::dispatch_op_fast(OpRequestRef& op, OSDMapRef& osdmap)
     Session *s = static_cast<Session*>(op->get_req()->
 				       get_connection()->get_priv());
     if (s) {
-      s->received_map_lock.Lock();
+      s->received_map_lock.lock();
       epoch_t received_epoch = s->received_map_epoch;
-      s->received_map_lock.Unlock();
+      s->received_map_lock.unlock();
       if (received_epoch < msg_epoch) {
 	osdmap_subscribe(msg_epoch, false);
       }
@@ -8075,17 +8074,24 @@ public:
   void finish(ThreadPool::TPHandle& tp) {
     OSD::Session *session = static_cast<OSD::Session *>(
         con->get_priv());
+    epoch_t last_sent_epoch;
     if (session) {
-      session->sent_epoch_lock.Lock();
+      session->sent_epoch_lock.lock();
+      last_sent_epoch = session->last_sent_epoch;
+      session->sent_epoch_lock.unlock();
     }
     osd->service.share_map(
 	name,
         con.get(),
         map_epoch,
         osdmap,
-        session ? &session->last_sent_epoch : NULL);
+        session ? &last_sent_epoch : NULL);
     if (session) {
-      session->sent_epoch_lock.Unlock();
+      session->sent_epoch_lock.lock();
+      if (session->last_sent_epoch < last_sent_epoch) {
+	session->last_sent_epoch = last_sent_epoch;	
+      }
+      session->sent_epoch_lock.unlock();
       session->put();
     }
   }
@@ -8124,14 +8130,16 @@ void OSD::handle_op(OpRequestRef& op, OSDMapRef& osdmap)
   send_map_on_destruct share_map(this, m, osdmap, m->get_map_epoch());
   Session *client_session =
       static_cast<Session*>(m->get_connection()->get_priv());
+  epoch_t last_sent_epoch;
   if (client_session) {
-    client_session->sent_epoch_lock.Lock();
+    client_session->sent_epoch_lock.lock();
+    last_sent_epoch = client_session->last_sent_epoch;
+    client_session->sent_epoch_lock.unlock();
   }
   share_map.should_send = service.should_share_map(
       m->get_source(), m->get_connection().get(), m->get_map_epoch(),
-      osdmap, &client_session->last_sent_epoch);
+      osdmap, client_session ? &last_sent_epoch : NULL);
   if (client_session) {
-    client_session->sent_epoch_lock.Unlock();
     client_session->put();
   }
 
@@ -8231,15 +8239,17 @@ void OSD::handle_replica_op(OpRequestRef& op, OSDMapRef& osdmap)
   bool should_share_map = false;
   Session *peer_session =
       static_cast<Session*>(m->get_connection()->get_priv());
+  epoch_t last_sent_epoch;
   if (peer_session) {
-    peer_session->sent_epoch_lock.Lock();
+    peer_session->sent_epoch_lock.lock();
+    last_sent_epoch = peer_session->last_sent_epoch;
+    peer_session->sent_epoch_lock.unlock();
   }
   should_share_map = service.should_share_map(
       m->get_source(), m->get_connection().get(), m->map_epoch,
       osdmap,
-      peer_session ? &peer_session->last_sent_epoch : NULL);
+      peer_session ? &last_sent_epoch : NULL);
   if (peer_session) {
-    peer_session->sent_epoch_lock.Unlock();
     peer_session->put();
   }
 
@@ -8433,17 +8443,24 @@ void OSD::dequeue_op(
   if (op->send_map_update) {
     Message *m = op->get_req();
     Session *session = static_cast<Session *>(m->get_connection()->get_priv());
+    epoch_t last_sent_epoch;
     if (session) {
-      session->sent_epoch_lock.Lock();
+      session->sent_epoch_lock.lock();
+      last_sent_epoch = session->last_sent_epoch;
+      session->sent_epoch_lock.unlock();
     }
     service.share_map(
         m->get_source(),
         m->get_connection().get(),
         op->sent_epoch,
         osdmap,
-        session ? &session->last_sent_epoch : NULL);
+        session ? &last_sent_epoch : NULL);
     if (session) {
-      session->sent_epoch_lock.Unlock();
+      session->sent_epoch_lock.lock();
+      if (session->last_sent_epoch < last_sent_epoch) {
+	session->last_sent_epoch = last_sent_epoch;
+      }
+      session->sent_epoch_lock.unlock();
       session->put();
     }
   }
