@@ -351,9 +351,9 @@ void PGBackend::be_scan_list(
 	       << ", skipping" << dendl;
     } else if (r == -EIO) {
       dout(25) << __func__ << "  " << poid << " got " << r
-	       << ", read_error" << dendl;
+	       << ", stat_error" << dendl;
       ScrubMap::object &o = map.objects[poid];
-      o.read_error = true;
+      o.stat_error = true;
     } else {
       derr << __func__ << " got: " << cpp_strerror(r) << dendl;
       assert(0);
@@ -370,9 +370,11 @@ enum scrub_error_type PGBackend::be_compare_scrub_objects(
   ostream &errorstream)
 {
   enum scrub_error_type error = CLEAN;
+  if (candidate.stat_error) {
+    error = SHALLOW_ERROR;
+    errorstream << "candidate had a stat error";
+  }
   if (candidate.read_error) {
-    // This can occur on stat() of a shallow scrub, but in that case size will
-    // be invalid, and this will be over-ridden below.
     error = DEEP_ERROR;
     errorstream << "candidate had a read error";
   }
@@ -404,9 +406,7 @@ enum scrub_error_type PGBackend::be_compare_scrub_objects(
 		  << " from auth shard " << auth_shard;
     }
   }
-  // Shallow error takes precendence because this will be seen by
-  // both types of scrubs.
-  if (auth.size != candidate.size) {
+  if (!candidate.stat_error && auth.size != candidate.size) {
     if (error != CLEAN)
       errorstream << ", ";
     if (error != DEEP_ERROR)
@@ -464,11 +464,12 @@ map<pg_shard_t, ScrubMap *>::const_iterator
     if (i == j->second->objects.end()) {
       continue;
     }
-    if (i->second.read_error) {
-      // scrub encountered read error, probably corrupt
+    if (i->second.read_error || i->second.stat_error) {
+      // scrub encountered read error or stat_error, probably corrupt
       dout(10) << __func__ << ": rejecting osd " << j->first
 	       << " for obj " << obj
-	       << ", read_error"
+	       << "," << (i->second.read_error ? " read_error" : "")
+	       << (i->second.stat_error ? " stat_error" : "")
 	       << dendl;
       continue;
     }
