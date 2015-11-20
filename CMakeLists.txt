@@ -251,14 +251,6 @@ endif(${HAVE_BABELTRACE})
 find_package(ZLIB REQUIRED)
 find_package(BZip2 REQUIRED)
 
-#add external project for kinetic_client?
-option(WITH_KINTETIC "Seagate Kinetic Client library enabled" OFF)
-if(${WITH_KINETIC})
-  find_package(protobuf REQUIRED)
-  find_package(gflags REQUIRED)
-  find_package(glog REQUIRED)
-endif(${WITH_KINETIC})
-
 # Now create a useable config.h
 configure_file(
   ${PROJECT_SOURCE_DIR}/src/include/config-h.in.cmake

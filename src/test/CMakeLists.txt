@@ -1637,6 +1637,8 @@ endif(${WITH_LTTNG})
 target_link_libraries(unittest_librbd
   librbd
   librados
+  journal
+  cls_journal_client
   librados_api
   librados_test_stub
   ${UNITTEST_LIBS}
