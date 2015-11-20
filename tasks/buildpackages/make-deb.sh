@@ -102,14 +102,9 @@ function build_package() {
         DEBEMAIL="contact@ceph.com" dch -D $codename --force-distribution -b -v "$dvers" "new version"
     fi
     #
-    # create the packages
-    # a) with ccache to speed things up when building repeatedly
-    # b) do not sign the packages
-    # c) use half of the available processors
+    # create the packages (with ccache)
     #
-    if test $NPROC -gt 1 ; then
-        j=-j${NPROC}
-    fi
+    j=$(maybe_parallel $NPROC $vers)
     PATH=/usr/lib/ccache:$PATH dpkg-buildpackage $j -uc -us
 }
 
