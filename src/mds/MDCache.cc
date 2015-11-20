@@ -8851,6 +8851,9 @@ void MDCache::dispatch_request(MDRequestRef& mdr)
     case CEPH_MDS_OP_FLUSH:
       flush_dentry_work(mdr);
       break;
+    case CEPH_MDS_OP_REPAIR_FRAGSTATS:
+      repair_dirfrag_stats_work(mdr);
+      break;
     default:
       assert(0);
     }
@@ -11831,7 +11834,121 @@ void MDCache::enqueue_scrub_work(MDRequestRef& mdr)
   return;
 }
 
+struct C_MDC_RepairDirfragStats : public MDSInternalContext {
+  MDRequestRef mdr;
+  C_MDC_RepairDirfragStats(MDSRank *_mds, MDRequestRef& m) :
+    MDSInternalContext(_mds), mdr(m) {}
+  void finish(int r) {
+    mdr->apply();
+    mds->server->respond_to_request(mdr, r);
+  }
+};
 
+void MDCache::repair_dirfrag_stats(CDir *dir, Context *fin)
+{
+  if (!fin)
+    fin = new C_MDSInternalNoop;
+  MDRequestRef mdr = request_start_internal(CEPH_MDS_OP_REPAIR_FRAGSTATS);
+  mdr->pin(dir);
+  mdr->internal_op_private = dir;
+  mdr->internal_op_finish = fin;
+  repair_dirfrag_stats_work(mdr);
+}
+
+void MDCache::repair_dirfrag_stats_work(MDRequestRef& mdr)
+{
+  CDir *dir = static_cast<CDir*>(mdr->internal_op_private);
+  dout(10) << __func__ << " " << *dir << dendl;
+
+  if (!dir->is_auth()) {
+    mds->server->respond_to_request(mdr, -ESTALE);
+    return;
+  }
+
+  if (!mdr->is_auth_pinned(dir) && !dir->can_auth_pin()) {
+    mds->locker->drop_locks(mdr.get());
+    mdr->drop_local_auth_pins();
+    dir->add_waiter(CDir::WAIT_UNFREEZE, new C_MDS_RetryRequest(this, mdr));
+    return;
+  }
+
+  mdr->auth_pin(dir);
+
+  set<SimpleLock*> rdlocks, wrlocks, xlocks;
+  CInode *diri = dir->inode;
+  rdlocks.insert(&diri->dirfragtreelock);
+  wrlocks.insert(&diri->nestlock);
+  wrlocks.insert(&diri->filelock);
+  if (!mds->locker->acquire_locks(mdr, rdlocks, wrlocks, xlocks))
+    return;
+
+  if (!dir->is_complete()) {
+    dir->fetch(new C_MDS_RetryRequest(this, mdr));
+    return;
+  }
+
+  frag_info_t frag_info;
+  nest_info_t nest_info;
+  for (CDir::map_t::iterator it = dir->begin(); it != dir->end(); ++it) {
+    CDentry *dn = it->second;
+    if (dn->last != CEPH_NOSNAP)
+      continue;
+    CDentry::linkage_t *dnl = dn->get_projected_linkage();
+    if (dnl->is_primary()) {
+      CInode *in = dnl->get_inode();
+      nest_info.add(in->get_projected_inode()->accounted_rstat);
+      if (in->is_dir())
+	frag_info.nsubdirs++;
+      else
+	frag_info.nfiles++;
+    } else if (dnl->is_remote())
+      frag_info.nfiles++;
+  }
+
+  fnode_t *pf = dir->get_projected_fnode();
+  bool bad_fragstat = false, bad_rstat = false;
+  if (frag_info.nfiles != pf->fragstat.nfiles ||
+      frag_info.nsubdirs != pf->fragstat.nsubdirs)
+    bad_fragstat = true;
+  if (nest_info.rfiles != pf->rstat.rfiles ||
+      nest_info.rsubdirs != pf->rstat.rsubdirs ||
+      nest_info.rbytes != pf->rstat.rbytes)
+    bad_rstat = true;
+
+  if (!bad_fragstat || !bad_rstat) {
+    dout(10) << __func__ << " no corruption found" << dendl;
+    mds->server->respond_to_request(mdr, 0);
+    return;
+  }
+
+  pf = dir->project_fnode();
+  pf->version = dir->pre_dirty();
+  mdr->add_projected_fnode(dir);
+
+  mdr->ls = mds->mdlog->get_current_segment();
+  EUpdate *le = new EUpdate(mds->mdlog, "repair_dirfrag");
+  mds->mdlog->start_entry(le);
+
+  if (bad_fragstat) {
+    pf->fragstat.nfiles = frag_info.nfiles;
+    pf->fragstat.nsubdirs = frag_info.nsubdirs;
+    mds->locker->mark_updated_scatterlock(&diri->filelock);
+    mdr->ls->dirty_dirfrag_dir.push_back(&diri->item_dirty_dirfrag_dir);
+    mdr->add_updated_lock(&diri->filelock);
+  }
+
+  if (bad_rstat) {
+    pf->rstat = nest_info;
+    mds->locker->mark_updated_scatterlock(&diri->nestlock);
+    mdr->ls->dirty_dirfrag_nest.push_back(&diri->item_dirty_dirfrag_nest);
+    mdr->add_updated_lock(&diri->nestlock);
+  }
+
+  le->metablob.add_dir_context(dir);
+  le->metablob.add_dir(dir, true);
+
+  mds->mdlog->submit_entry(le, new C_MDC_RepairDirfragStats(mds, mdr));
+}
 
 void MDCache::flush_dentry(const string& path, Context *fin)
 {
