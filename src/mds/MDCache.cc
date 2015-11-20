@@ -6622,12 +6622,6 @@ void MDCache::trim_non_auth()
       if (dnl->is_remote() && dnl->get_inode() && !dnl->get_inode()->is_auth())
 	dn->unlink_remote(dnl);
 
-      if (dn->get_dir()->get_inode()->is_stray()) {
-	dn->state_set(CDentry::STATE_STRAY);
-	if (dnl->is_primary() && dnl->get_inode()->inode.nlink == 0)
-	  dnl->get_inode()->state_set(CInode::STATE_ORPHAN);
-      }
-
       if (!first_auth) {
 	first_auth = dn;
       } else {
@@ -9185,10 +9179,14 @@ void MDCache::scan_stray_dir(dirfrag_t next)
     }
     for (CDir::map_t::iterator q = dir->items.begin(); q != dir->items.end(); ++q) {
       CDentry *dn = q->second;
+      dn->state_set(CDentry::STATE_STRAY);
       CDentry::linkage_t *dnl = dn->get_projected_linkage();
       stray_manager.notify_stray_created();
       if (dnl->is_primary()) {
-	maybe_eval_stray(dnl->get_inode());
+	CInode *in = dnl->get_inode();
+	if (in->inode.nlink == 0)
+	  in->state_set(CInode::STATE_ORPHAN);
+	maybe_eval_stray(in);
       }
     }
   }
