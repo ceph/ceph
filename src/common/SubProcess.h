@@ -30,6 +30,7 @@
 
 #include <sstream>
 #include <vector>
+#include <iostream>
 
 #include <include/assert.h>
 #include <common/errno.h>
