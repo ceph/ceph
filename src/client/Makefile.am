@@ -22,7 +22,8 @@ noinst_HEADERS += \
 	client/SyntheticClient.h \
 	client/Trace.h \
 	client/ioctl.h \
-	client/ObjecterWriteback.h
+	client/ObjecterWriteback.h \
+	client/InodeRef.h
 
 if WITH_FUSE
 libclient_fuse_la_SOURCES = client/fuse_ll.cc
