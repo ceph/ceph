@@ -1091,6 +1091,24 @@ TRACEPOINT_EVENT(librados, rados_ioctx_pool_requires_alignment_exit,
     )
 )
 
+TRACEPOINT_EVENT(librados, rados_ioctx_pool_requires_alignment_enter2,
+    TP_ARGS(
+        rados_ioctx_t, ioctx),
+    TP_FIELDS(
+        ctf_integer_hex(rados_ioctx_t, ioctx, ioctx)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_ioctx_pool_requires_alignment_exit2,
+    TP_ARGS(
+        int, retval,
+        int, requires),
+    TP_FIELDS(
+        ctf_integer(int, retval, retval)
+        ctf_integer(int, requires, requires)
+    )
+)
+
 TRACEPOINT_EVENT(librados, rados_ioctx_pool_required_alignment_enter,
     TP_ARGS(
         rados_ioctx_t, ioctx),
@@ -1104,6 +1122,24 @@ TRACEPOINT_EVENT(librados, rados_ioctx_pool_required_alignment_exit,
         uint64_t, retval),
     TP_FIELDS(
         ctf_integer(uint64_t, retval, retval)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_ioctx_pool_required_alignment_enter2,
+    TP_ARGS(
+        rados_ioctx_t, ioctx),
+    TP_FIELDS(
+        ctf_integer_hex(rados_ioctx_t, ioctx, ioctx)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_ioctx_pool_required_alignment_exit2,
+    TP_ARGS(
+        int, retval,
+        uint64_t, alignment),
+    TP_FIELDS(
+        ctf_integer(int, retval, retval)
+        ctf_integer(uint64_t, alignment, alignment)
     )
 )
 

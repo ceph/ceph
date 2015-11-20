@@ -1450,14 +1450,31 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
       goto out;
     }
 
-    // align op_size
-    if (io_ctx.pool_requires_alignment()) {
-      const uint64_t align = io_ctx.pool_required_alignment();
-      const uint64_t prev_op_size = op_size;
-      op_size = uint64_t((op_size + align - 1) / align) * align;
-      // Warn: if user specified and it was rounded
-      if (prev_op_size != default_op_size && prev_op_size != op_size)
-	cerr << "INFO: op_size has been rounded to " << op_size << std::endl;
+   // align op_size
+   {
+      bool requires;
+      ret = io_ctx.pool_requires_alignment2(&requires);
+      if (ret < 0) {
+        cerr << "error checking pool alignment requirement"
+          << cpp_strerror(ret) << std::endl;
+        goto out;	
+      }
+
+      if (requires) {
+        uint64_t align = 0;
+        ret = io_ctx.pool_required_alignment2(&align);
+        if (ret < 0) {
+          cerr << "error getting pool alignment"
+            << cpp_strerror(ret) << std::endl;
+          goto out;	
+        }
+
+        const uint64_t prev_op_size = op_size;
+        op_size = uint64_t((op_size + align - 1) / align) * align;
+        // Warn: if user specified and it was rounded
+        if (prev_op_size != default_op_size && prev_op_size != op_size)
+          cerr << "INFO: op_size has been rounded to " << op_size << std::endl;
+      }
     }
 
     // create striper interface
