@@ -15,13 +15,13 @@ By default, the remainder of a line starting with '# desc:' will
 be included from each file in the specified suite directory.
 
 positional arguments:
-  <suite_dir>            path under which to archive results
+  <suite_dir>            qa suite path to traverse and describe
 
 optional arguments:
   -h, --help                          Show this help message and exit
   -p <prefixes>, --prefix <prefixes>  Comma-separated list of prefixes
                                       [default: desc]
-""".format(archive_base=teuthology.config.config.archive_base)
+"""
 
 
 def main():
