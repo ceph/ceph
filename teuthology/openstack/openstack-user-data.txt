@@ -1,6 +1,7 @@
 #cloud-config
 bootcmd:
   - touch /tmp/init.out
+  - echo nameserver 8.8.8.8 | sudo tee -a /etc/resolv.conf # last resort, in case the DHCP server does not provide a resolver
 system_info:
   default_user:
     name: TEUTHOLOGY_USERNAME
