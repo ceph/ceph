@@ -1857,6 +1857,11 @@ void CDir::_omap_fetched(bufferlist& hdrbl, map<string, bufferlist>& omap,
   mark_complete();
   state_clear(STATE_FETCHING);
 
+  if (scrub_infop && scrub_infop->need_scrub_local) {
+    scrub_infop->need_scrub_local = false;
+    scrub_local();
+  }
+
   // open & force frags
   while (!undef_inodes.empty()) {
     CInode *in = undef_inodes.front();
@@ -3059,6 +3064,7 @@ void CDir::scrub_maybe_delete_info()
 {
   if (scrub_infop &&
       !scrub_infop->directory_scrubbing &&
+      !scrub_infop->need_scrub_local &&
       !scrub_infop->last_scrub_dirty &&
       scrub_infop->dirty_scrub_stamps.empty()) {
     delete scrub_infop;
