@@ -773,6 +773,7 @@ void ReplicatedBackend::be_deep_scrub(
     dout(25) << __func__ << "  " << poid << " got "
 	     << r << " on read, read_error" << dendl;
     o.read_error = true;
+    return;
   }
   o.digest = h.digest();
   o.digest_present = true;
@@ -800,6 +801,7 @@ void ReplicatedBackend::be_deep_scrub(
     dout(25) << __func__ << "  " << poid << " got "
 	     << r << " on omap header read, read_error" << dendl;
     o.read_error = true;
+    return;
   }
 
   ObjectMap::ObjectMapIterator iter = store->get_omap_iterator(
@@ -827,8 +829,8 @@ void ReplicatedBackend::be_deep_scrub(
     dout(25) << __func__ << "  " << poid << " got "
 	     << r << " on omap scan, read_error" << dendl;
     o.read_error = true;
+    return;
   }
-
   //Store final calculated CRC32 of omap header & key/values
   o.omap_digest = oh.digest();
   o.omap_digest_present = true;
