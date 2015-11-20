@@ -3246,6 +3246,11 @@ bool PG::sched_scrub()
   bool time_for_deep = (ceph_clock_now(cct) >=
     info.history.last_deep_scrub_stamp + cct->_conf->osd_deep_scrub_interval);
 
+  bool deep_coin_flip = (rand() % 100) < cct->_conf->osd_deep_scrub_randomize_ratio * 100;
+  dout(20) << __func__ << ": time_for_deep=" << time_for_deep << " deep_coin_flip=" << deep_coin_flip << dendl;
+
+  time_for_deep = (time_for_deep || deep_coin_flip);
+
   //NODEEP_SCRUB so ignore time initiated deep-scrub
   if (osd->osd->get_osdmap()->test_flag(CEPH_OSDMAP_NODEEP_SCRUB) ||
       pool.info.has_flag(pg_pool_t::FLAG_NODEEP_SCRUB))

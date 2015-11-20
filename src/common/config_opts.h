@@ -686,6 +686,7 @@ OPTION(osd_scrub_sleep, OPT_FLOAT, 0)   // sleep between [deep]scrub ops
 OPTION(osd_scrub_auto_repair, OPT_BOOL, false)   // whether auto-repair inconsistencies upon deep-scrubbing
 OPTION(osd_scrub_auto_repair_num_errors, OPT_U32, 5)   // only auto-repair when number of errors is below this threshold
 OPTION(osd_deep_scrub_interval, OPT_FLOAT, 60*60*24*7) // once a week
+OPTION(osd_deep_scrub_randomize_ratio, OPT_FLOAT, 0.15) // scrubs will randomly become deep scrubs at this rate (0.15 -> 15% of scrubs are deep)
 OPTION(osd_deep_scrub_stride, OPT_INT, 524288)
 OPTION(osd_deep_scrub_update_digest_min_age, OPT_INT, 2*60*60)   // objects must be this old (seconds) before we update the whole-object digest on scrub
 OPTION(osd_scan_list_ping_tp_interval, OPT_U64, 100)
