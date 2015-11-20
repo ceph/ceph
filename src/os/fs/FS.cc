@@ -121,16 +121,49 @@ int FS::zero(int fd, uint64_t offset, uint64_t length)
 {
   int r;
 
-#ifdef CEPH_HAVE_FALLOCATE
-# if !defined(DARWIN) && !defined(__FreeBSD__)
+  /*
+
+    From the fallocate(2) man page:
+
+       Specifying the FALLOC_FL_PUNCH_HOLE flag (available since Linux 2.6.38)
+       in mode deallocates space (i.e., creates a  hole)  in  the  byte  range
+       starting  at offset and continuing for len bytes.  Within the specified
+       range, partial filesystem  blocks  are  zeroed,  and  whole  filesystem
+       blocks  are removed from the file.  After a successful call, subsequent
+       reads from this range will return zeroes.
+
+       The FALLOC_FL_PUNCH_HOLE flag must be ORed with FALLOC_FL_KEEP_SIZE  in
+       mode;  in  other words, even when punching off the end of the file, the
+       file size (as reported by stat(2)) does not change.
+
+       Not all  filesystems  support  FALLOC_FL_PUNCH_HOLE;  if  a  filesystem
+       doesn't  support the operation, an error is returned.  The operation is
+       supported on at least the following filesystems:
+
+       *  XFS (since Linux 2.6.38)
+
+       *  ext4 (since Linux 3.0)
+
+       *  Btrfs (since Linux 3.7)
+
+       *  tmpfs (since Linux 3.5)
+
+   So: we only do this is PUNCH_HOLE *and* KEEP_SIZE are defined.
+
+  */
+#if !defined(DARWIN) && !defined(__FreeBSD__)
+# ifdef CEPH_HAVE_FALLOCATE
+#  ifdef FALLOC_FL_KEEP_SIZE
   // first try fallocate
-  r = fallocate(fd, FALLOC_FL_PUNCH_HOLE, offset, length);
+  r = fallocate(fd, FALLOC_FL_PUNCH_HOLE | FALLOC_FL_KEEP_SIZE, offset, length);
   if (r < 0) {
     r = -errno;
   }
   if (r != -EOPNOTSUPP) {
     goto out;  // a real error
   }
+  // if that failed (-EOPNOTSUPP), fall back to writing zeros.
+#  endif
 # endif
 #endif
 
@@ -140,7 +173,7 @@ int FS::zero(int fd, uint64_t offset, uint64_t length)
     bufferptr bp(length);
     bp.zero();
     bl.append(bp);
-    int r = ::lseek64(fd, offset, SEEK_SET);
+    r = ::lseek64(fd, offset, SEEK_SET);
     if (r < 0) {
       r = -errno;
       goto out;
