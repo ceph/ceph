@@ -1301,9 +1301,12 @@ int64_t PGMonitor::get_rule_avail(OSDMap& osdmap, int ruleno) const
   for (map<int,float>::iterator p = wm.begin(); p != wm.end(); ++p) {
     ceph::unordered_map<int32_t,osd_stat_t>::const_iterator osd_info = pg_map.osd_stat.find(p->first);
     if (osd_info != pg_map.osd_stat.end()) {
-      if (osd_info->second.kb == 0) {
+      if (osd_info->second.kb == 0 || p->second == 0) {
         // osd must be out, hence its stats have been zeroed
         // (unless we somehow managed to have a disk with size 0...)
+        //
+        // (p->second == 0), if osd weight is 0, no need to
+        // calculate proj below.
         continue;
       }
       int64_t proj = (float)((osd_info->second).kb_avail * 1024ull) /
