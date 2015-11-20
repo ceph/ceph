@@ -1,5 +1,7 @@
 
 
+#include "common/ceph_json.h"
+
 #include "rgw_coroutine.h"
 #include "rgw_boost_asio_yield.h"
 
@@ -331,6 +333,14 @@ void RGWCoroutinesManager::report_error(RGWCoroutinesStack *op)
   lderr(cct) << "ERROR: failed operation: " << op->error_str() << dendl;
 }
 
+void RGWCoroutinesStack::dump(Formatter *f) const {
+  f->open_array_section("ops");
+  for (auto& i : ops) {
+    encode_json("op", *i, f);
+  }
+  f->close_section();
+}
+
 void RGWCoroutinesManager::handle_unblocked_stack(list<RGWCoroutinesStack *>& stacks, RGWCoroutinesStack *stack, int *blocked_count)
 {
   --(*blocked_count);
@@ -348,6 +358,13 @@ int RGWCoroutinesManager::run(list<RGWCoroutinesStack *>& stacks)
   int blocked_count = 0;
   int interval_wait_count = 0;
   RGWCoroutinesEnv env;
+
+  uint64_t run_num = run_context_count.inc();
+
+  set<RGWCoroutinesStack *> context_stacks = run_contexts[run_num];
+  for (auto& st : stacks) {
+    context_stacks.insert(st);
+  }
 
   env.manager = this;
   env.stacks = &stacks;
@@ -397,6 +414,7 @@ int RGWCoroutinesManager::run(list<RGWCoroutinesStack *>& stacks)
         stack->parent->set_wait_for_child(false);
         stack->parent->schedule();
       }
+      context_stacks.erase(stack);
       stack->put();
     } else {
       stack->schedule();
@@ -473,6 +491,20 @@ RGWAioCompletionNotifier *RGWCoroutinesManager::create_completion_notifier(RGWCo
   return new RGWAioCompletionNotifier(&completion_mgr, (void *)stack);
 }
 
+void RGWCoroutinesManager::dump(Formatter *f) const {
+  f->open_array_section("run_contexts");
+  for (auto& i : run_contexts) {
+    char buf[32];
+    snprintf(buf, sizeof(buf), "context.%lld", (long long)i.first);
+    f->open_array_section(buf);
+    for (auto& s : i.second) {
+      ::encode_json("entry", *s, f);
+    }
+    f->close_section();
+  }
+  f->close_section();
+}
+
 void RGWCoroutine::call(RGWCoroutine *op)
 {
   stack->call(op);
@@ -546,6 +578,15 @@ bool RGWCoroutine::drain_children(int num_cr_left)
 void RGWCoroutine::wakeup()
 {
   stack->wakeup();
+}
+
+void RGWCoroutine::dump(Formatter *f) const {
+  encode_json("type", typeid(this).name(), f);
+  f->open_array_section("spawned");
+  for (auto& i : spawned.entries) {
+    encode_json("entry", *i, f);
+  }
+  f->close_section();
 }
 
 int RGWSimpleCoroutine::operate()
