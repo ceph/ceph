@@ -341,14 +341,16 @@ void RGWCoroutinesStack::dump(Formatter *f) const {
   f->close_section();
 }
 
-void RGWCoroutinesManager::handle_unblocked_stack(list<RGWCoroutinesStack *>& stacks, RGWCoroutinesStack *stack, int *blocked_count)
+void RGWCoroutinesManager::handle_unblocked_stack(set<RGWCoroutinesStack *>& context_stacks, list<RGWCoroutinesStack *>& stacks, RGWCoroutinesStack *stack, int *blocked_count)
 {
+  RWLock::WLocker wl(lock);
   --(*blocked_count);
   stack->set_io_blocked(false);
   stack->set_interval_wait(false);
   if (!stack->is_done()) {
     stacks.push_back(stack);
   } else {
+    context_stacks.erase(stack);
     stack->put();
   }
 }
@@ -370,6 +372,8 @@ int RGWCoroutinesManager::run(list<RGWCoroutinesStack *>& stacks)
   env.stacks = &stacks;
 
   for (list<RGWCoroutinesStack *>::iterator iter = stacks.begin(); iter != stacks.end() && !going_down.read();) {
+    lock.get_write();
+
     RGWCoroutinesStack *stack = *iter;
     env.stack = stack;
 
@@ -420,9 +424,11 @@ int RGWCoroutinesManager::run(list<RGWCoroutinesStack *>& stacks)
       stack->schedule();
     }
 
+    lock.unlock();
+
     RGWCoroutinesStack *blocked_stack;
     while (completion_mgr.try_get_next((void **)&blocked_stack)) {
-      handle_unblocked_stack(stacks, blocked_stack, &blocked_count);
+      handle_unblocked_stack(context_stacks, stacks, blocked_stack, &blocked_count);
     }
 
     /*
@@ -435,7 +441,7 @@ int RGWCoroutinesManager::run(list<RGWCoroutinesStack *>& stacks)
       if (ret < 0) {
        ldout(cct, 0) << "ERROR: failed to clone shard, completion_mgr.get_next() returned ret=" << ret << dendl;
       }
-      handle_unblocked_stack(stacks, blocked_stack, &blocked_count);
+      handle_unblocked_stack(context_stacks, stacks, blocked_stack, &blocked_count);
     }
 
     ++iter;
@@ -451,7 +457,7 @@ int RGWCoroutinesManager::run(list<RGWCoroutinesStack *>& stacks)
 	ldout(cct, 5) << __func__ << "(): was stopped, exiting" << dendl;
 	return -ECANCELED;
       }
-      handle_unblocked_stack(stacks, blocked_stack, &blocked_count);
+      handle_unblocked_stack(context_stacks, stacks, blocked_stack, &blocked_count);
       iter = stacks.begin();
     }
 
@@ -492,6 +498,8 @@ RGWAioCompletionNotifier *RGWCoroutinesManager::create_completion_notifier(RGWCo
 }
 
 void RGWCoroutinesManager::dump(Formatter *f) const {
+  RWLock::RLocker rl(lock);
+
   f->open_array_section("run_contexts");
   for (auto& i : run_contexts) {
     char buf[32];
