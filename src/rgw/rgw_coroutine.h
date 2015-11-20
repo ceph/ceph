@@ -408,7 +408,9 @@ class RGWCoroutinesManager {
   atomic64_t run_context_count;
   map<uint64_t, set<RGWCoroutinesStack *> > run_contexts;
 
-  void handle_unblocked_stack(list<RGWCoroutinesStack *>& stacks, RGWCoroutinesStack *stack, int *waiting_count);
+  RWLock lock;
+
+  void handle_unblocked_stack(set<RGWCoroutinesStack *>& context_stacks, list<RGWCoroutinesStack *>& stacks, RGWCoroutinesStack *stack, int *waiting_count);
 protected:
   RGWCompletionManager completion_mgr;
 
@@ -416,7 +418,7 @@ protected:
 
   void put_completion_notifier(RGWAioCompletionNotifier *cn);
 public:
-  RGWCoroutinesManager(CephContext *_cct) : cct(_cct), completion_mgr(cct), ops_window(RGW_ASYNC_OPS_MGR_WINDOW) {}
+  RGWCoroutinesManager(CephContext *_cct) : cct(_cct), lock("RGWCoroutinesManager::lock"), completion_mgr(cct), ops_window(RGW_ASYNC_OPS_MGR_WINDOW) {}
   virtual ~RGWCoroutinesManager() {}
 
   int run(list<RGWCoroutinesStack *>& ops);
