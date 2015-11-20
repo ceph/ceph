@@ -1858,8 +1858,8 @@ void FileStore::op_queue_reserve_throttle(Op *o, ThreadPool::TPHandle *handle)
     dout(2) << "waiting " << throttle_ops.get_current() + 1 << " > " << max_ops << " ops || "
       << throttle_bytes.get_current() + o->bytes << " > " << max_bytes << dendl;
   }
-  throttle_ops.get();
-  throttle_bytes.get(o->bytes);
+  throttle_ops.get(1, max_ops);
+  throttle_bytes.get(o->bytes, max_bytes);
   if (handle)
     handle->reset_tp_timeout();
 
