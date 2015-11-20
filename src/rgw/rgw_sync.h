@@ -41,7 +41,7 @@ class RGWReportContainer : public RefCountedObject {
   };
   deque<StatusHistoryItem> status_history;
 
-  int max_previous;
+  int max_history;
 
   map<string, RGWReportContainer *> actions;
 
@@ -59,7 +59,7 @@ class RGWReportContainer : public RefCountedObject {
 
 public:
   RGWReportContainer(CephContext *_cct) : cct(_cct), parent(NULL), lock("RGWStatsuContainer::lock") {}
-  RGWReportContainer(CephContext *_cct, RGWReportContainer *_parent, const string& _id, const string& _op);
+  RGWReportContainer(CephContext *_cct, RGWReportContainer *_parent, const string& _id, const string& _op, const string& _status);
 
   void set_status(const string& s);
 
@@ -71,8 +71,8 @@ public:
     return new_status;
   }
 
-  RGWReportContainer *new_action(const string& action_id, const string& op) {
-    RGWReportContainer *new_status = new RGWReportContainer(cct, this, action_id, op);
+  RGWReportContainer *new_action(const string& action_id, const string& op, const string& status) {
+    RGWReportContainer *new_status = new RGWReportContainer(cct, this, action_id, op, status);
     return new_action(new_status);
   }
 
