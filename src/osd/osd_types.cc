@@ -5306,7 +5306,7 @@ void ScrubMap::object::encode(bufferlist& bl) const
 
 void ScrubMap::object::decode(bufferlist::iterator& bl)
 {
-  DECODE_START_LEGACY_COMPAT_LEN(5, 2, 2, bl);
+  DECODE_START_LEGACY_COMPAT_LEN(6, 2, 2, bl);
   ::decode(size, bl);
   bool tmp;
   ::decode(tmp, bl);
