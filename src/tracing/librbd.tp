@@ -511,7 +511,6 @@ TRACEPOINT_EVENT(librbd, poll_io_events_enter,
     TP_FIELDS(
         ctf_integer_hex(void*, imagectx, imagectx)
         ctf_integer(int, numcomp, numcomp)
-        ctf_integer(int, max, max)
     )
 )
 
