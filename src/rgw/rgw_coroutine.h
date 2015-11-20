@@ -16,6 +16,7 @@
 #include "common/RefCountedObj.h"
 #include "common/debug.h"
 #include "common/Timer.h"
+#include "common/admin_socket.h"
 
 #include "rgw_common.h"
 #include "rgw_boost_asio_coroutine.h"
@@ -401,6 +402,27 @@ void RGWConsumerCR<T>::receive(const T& p, bool wakeup)
   }
 }
 
+class RGWCoroutinesManagerRegistry : public RefCountedObject, public AdminSocketHook {
+  CephContext *cct;
+
+  set<RGWCoroutinesManager *> managers;
+  RWLock lock;
+
+  string admin_command;
+
+public:
+  RGWCoroutinesManagerRegistry(CephContext *_cct) : cct(_cct), lock("RGWCoroutinesRegistry::lock") {}
+
+  void add(RGWCoroutinesManager *mgr);
+  void remove(RGWCoroutinesManager *mgr);
+
+  int hook_to_admin_command(const string& command);
+  bool call(std::string command, cmdmap_t& cmdmap, std::string format,
+	    bufferlist& out);
+    
+  void dump(Formatter *f) const;
+};
+
 class RGWCoroutinesManager {
   CephContext *cct;
   atomic_t going_down;
@@ -413,13 +435,25 @@ class RGWCoroutinesManager {
   void handle_unblocked_stack(set<RGWCoroutinesStack *>& context_stacks, list<RGWCoroutinesStack *>& stacks, RGWCoroutinesStack *stack, int *waiting_count);
 protected:
   RGWCompletionManager completion_mgr;
+  RGWCoroutinesManagerRegistry *cr_registry;
 
   int ops_window;
 
+  string id;
+
   void put_completion_notifier(RGWAioCompletionNotifier *cn);
 public:
-  RGWCoroutinesManager(CephContext *_cct) : cct(_cct), lock("RGWCoroutinesManager::lock"), completion_mgr(cct), ops_window(RGW_ASYNC_OPS_MGR_WINDOW) {}
-  virtual ~RGWCoroutinesManager() {}
+  RGWCoroutinesManager(CephContext *_cct, RGWCoroutinesManagerRegistry *_cr_registry) : cct(_cct), lock("RGWCoroutinesManager::lock"),
+                                                                                        completion_mgr(cct), cr_registry(_cr_registry), ops_window(RGW_ASYNC_OPS_MGR_WINDOW) {
+    if (cr_registry) {
+      cr_registry->add(this);
+    }
+  }
+  virtual ~RGWCoroutinesManager() {
+    if (cr_registry) {
+      cr_registry->remove(this);
+    }
+  }
 
   int run(list<RGWCoroutinesStack *>& ops);
   int run(RGWCoroutine *op);
@@ -439,6 +473,7 @@ public:
     return stack;
   }
 
+  virtual string get_id();
   void dump(Formatter *f) const;
 };
 
