@@ -202,6 +202,8 @@ public:
   RGWCoroutinesStack *get_stack() const {
     return stack;
   }
+
+  void dump(Formatter *f) const;
 };
 
 ostream& operator<<(ostream& out, const RGWCoroutine& cr);
@@ -376,6 +378,8 @@ public:
   bool unblock_stack(RGWCoroutinesStack **s);
 
   RGWCoroutinesEnv *get_env() { return env; }
+
+  void dump(Formatter *f) const;
 };
 
 template <class T>
@@ -400,6 +404,9 @@ void RGWConsumerCR<T>::receive(const T& p, bool wakeup)
 class RGWCoroutinesManager {
   CephContext *cct;
   atomic_t going_down;
+
+  atomic64_t run_context_count;
+  map<uint64_t, set<RGWCoroutinesStack *> > run_contexts;
 
   void handle_unblocked_stack(list<RGWCoroutinesStack *>& stacks, RGWCoroutinesStack *stack, int *waiting_count);
 protected:
@@ -429,6 +436,8 @@ public:
     stack->get();
     return stack;
   }
+
+  void dump(Formatter *f) const;
 };
 
 class RGWSimpleCoroutine : public RGWCoroutine {
