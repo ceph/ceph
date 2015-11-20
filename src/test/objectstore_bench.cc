@@ -145,6 +145,7 @@ void osbench_worker(ObjectStore *os, const Config &cfg,
       delete t;
     }
   }
+  sequencer.flush();
 }
 
 int main(int argc, const char *argv[])
