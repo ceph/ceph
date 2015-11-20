@@ -28,12 +28,12 @@
     quota set                  set quota params
     quota enable               enable quota
     quota disable              disable quota
-    region get                 show region info
-    regions list               list all regions set on this cluster
-    region set                 set region info (requires infile)
-    region default             set default region
-    region-map get             show region-map
-    region-map set             set region-map (requires infile)
+    zonegroup get              show zonegroup info
+    zonegroups list            list all zonegroups set on this cluster
+    zonegroup set              set zonegroup info (requires infile)
+    zonegroup default          set default zonegroup
+    zonegroup-map get          show zonegroup-map
+    zonegroup-map set          set zonegroup-map (requires infile)
     zone get                   show zone cluster params
     zone set                   set zone cluster params (requires infile)
     zone list                  list all zones set on this cluster
@@ -98,7 +98,7 @@
                                  replica mdlog get/delete
                                  replica datalog get/delete
      --metadata-key=<key>      key to retrieve metadata from with metadata get
-     --rgw-region=<region>     region in which radosgw is running
+     --rgw-zonegroup=<zonegroup> zonegroup in which radosgw is running
      --rgw-zone=<zone>         zone in which radosgw is running
      --fix                     besides checking bucket index, will also fix it
      --check-objects           bucket check: rebuilds bucket index according to
@@ -124,7 +124,7 @@
      --categories=<list>       comma separated list of categories, used in usage show
      --caps=<caps>             list of caps (e.g., "usage=read, write; user=read"
      --yes-i-really-mean-it    required for certain operations
-     --reset-regions           reset regionmap when regionmap update
+     --reset-zonegroups        reset zonegroupmap when zonegroupmap update
  
   <date> := "YYYY-MM-DD[ hh:mm:ss]"
   
