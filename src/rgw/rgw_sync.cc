@@ -24,8 +24,12 @@ static string mdlog_sync_status_oid = "mdlog.sync-status";
 static string mdlog_sync_status_shard_prefix = "mdlog.sync-status.shard";
 static string mdlog_sync_full_sync_index_prefix = "meta.full-sync.index";
 
-RGWReportContainer::RGWReportContainer(CephContext *_cct, RGWReportContainer *_parent, const string& _id, const string& _op) : cct(_cct), parent(_parent), id(_id), operation(_op), lock("RGWReportContainer::lock") {
+#define REPORT_MAX_HISTORY 10
+RGWReportContainer::RGWReportContainer(CephContext *_cct, RGWReportContainer *_parent,
+                                       const string& _id, const string& _op, const string& _status) : cct(_cct), parent(_parent), id(_id), operation(_op),
+                                                                                                      max_history(REPORT_MAX_HISTORY), lock("RGWReportContainer::lock") {
   timestamp = ceph_clock_now(cct);
+  set_status(_status);
 }
 
 void RGWReportContainer::set_status(const string& s) {
@@ -33,7 +37,7 @@ void RGWReportContainer::set_status(const string& s) {
   if (!timestamp.is_zero()) {
     status_history.push_back(StatusHistoryItem(timestamp, status));
   }
-  if (status_history.size() > (size_t)max_previous) {
+  if (status_history.size() > (size_t)max_history) {
     status_history.pop_front();
   }
   timestamp = ceph_clock_now(cct);
@@ -537,8 +541,7 @@ public:
 		      RGWObjectCtx& _obj_ctx, uint32_t _num_shards) : RGWCoroutine(_sync_env->store->ctx()), sync_env(_sync_env),
                                                 obj_ctx(_obj_ctx), lease_cr(NULL) {
     status.num_shards = _num_shards;
-    report = parent_report.new_action("init", "initialize metadata sync");
-    report->set_status("start");
+    report = parent_report.new_action("init", "RGWInitSyncStatusCoroutine", "start");
   }
 
   ~RGWInitSyncStatusCoroutine() {
@@ -646,8 +649,7 @@ public:
 									    sync_status(_status) {
 
     if (parent_report) {
-      report = parent_report->new_action("read_status", "read metadata sync status");
-      report->set_status("start");
+      report = parent_report->new_action("read_status", "read metadata sync status", "start");
     }
   }
 
@@ -703,7 +705,7 @@ public:
                     map<uint32_t, rgw_meta_sync_marker>& _markers) : RGWCoroutine(_sync_env->cct), sync_env(_sync_env),
 						      num_shards(_num_shards),
 						      ret_status(0), entries_index(NULL), lease_cr(NULL), lost_lock(false), failed(false), markers(_markers) {
-    report = parent_report.new_action("init", "fetch all meta");
+    report = parent_report.new_action("init", "fetch all meta", "start");
   }
 
   ~RGWFetchAllMetaCR() {
@@ -1100,6 +1102,7 @@ public:
 
 class RGWMetaSyncShardCR : public RGWCoroutine {
   RGWMetaSyncEnv *sync_env;
+  RGWReportContainer *report;
 
   rgw_bucket pool;
 
@@ -1141,7 +1144,7 @@ class RGWMetaSyncShardCR : public RGWCoroutine {
   int total_entries;
 
 public:
-  RGWMetaSyncShardCR(RGWMetaSyncEnv *_sync_env,
+  RGWMetaSyncShardCR(RGWMetaSyncEnv *_sync_env, RGWReportContainer *parent_report,
 		     rgw_bucket& _pool,
 		     uint32_t _shard_id, rgw_meta_sync_marker& _marker,
                      bool *_reset_backoff) : RGWCoroutine(_sync_env->cct), sync_env(_sync_env),
@@ -1152,6 +1155,7 @@ public:
                                                       lease_cr(NULL), lost_lock(false), reset_backoff(_reset_backoff), can_adjust_marker(false),
                                                       total_entries(0) {
     *reset_backoff = false;
+    report = parent_report->new_action("sync_shard", "RGWMetaSyncShardCR", "init");
   }
 
   ~RGWMetaSyncShardCR() {
@@ -1160,6 +1164,7 @@ public:
       lease_cr->abort();
       lease_cr->put();
     }
+    report->finish();
   }
 
   void set_marker_tracker(RGWMetaSyncShardMarkerTrack *mt) {
@@ -1245,6 +1250,7 @@ public:
 #define OMAP_GET_MAX_ENTRIES 100
     int max_entries = OMAP_GET_MAX_ENTRIES;
     reenter(&full_cr) {
+      report->set_status("full_sync");
       oid = full_sync_index_shard_oid(shard_id);
       can_adjust_marker = true;
       /* grab lock */
@@ -1368,6 +1374,7 @@ public:
 
   int incremental_sync() {
     reenter(&incremental_cr) {
+      report->set_status("incremental_sync");
       can_adjust_marker = true;
       /* grab lock */
       if (!lease_cr) { /* could have had  a lease_cr lock from previous state */
@@ -1479,6 +1486,7 @@ public:
 class RGWMetaSyncShardControlCR : public RGWBackoffControlCR
 {
   RGWMetaSyncEnv *sync_env;
+  RGWReportContainer *report;
 
   rgw_bucket pool;
 
@@ -1487,27 +1495,25 @@ class RGWMetaSyncShardControlCR : public RGWBackoffControlCR
 
   RGWObjectCtx obj_ctx;
 
-  RGWReportContainer *report;
-
 public:
   RGWMetaSyncShardControlCR(RGWMetaSyncEnv *_sync_env,
+                     RGWReportContainer *parent_report,
 		     rgw_bucket& _pool,
 		     uint32_t _shard_id,
-                     RGWReportContainer *parent_report,
                      rgw_meta_sync_marker& _marker) : RGWBackoffControlCR(_sync_env->cct), sync_env(_sync_env),
 						      pool(_pool),
 						      shard_id(_shard_id),
 						      sync_marker(_marker), obj_ctx(sync_env->store) {
     char buf[16];
     snprintf(buf, sizeof(buf), "%d", shard_id);
-    report = parent_report->new_action(buf, "RGWMetaSyncShardControlCR");
+    report = parent_report->new_action(buf, "RGWMetaSyncShardControlCR", "run");
   }
   ~RGWMetaSyncShardControlCR() {
     report->finish();
   }
 
   RGWCoroutine *alloc_cr() {
-    return new RGWMetaSyncShardCR(sync_env, pool, shard_id, sync_marker, backoff_ptr());
+    return new RGWMetaSyncShardCR(sync_env, report, pool, shard_id, sync_marker, backoff_ptr());
   }
 
   RGWCoroutine *alloc_finisher_cr() {
@@ -1530,7 +1536,7 @@ class RGWMetaSyncCR : public RGWCoroutine {
 public:
   RGWMetaSyncCR(RGWMetaSyncEnv *_sync_env, RGWReportContainer& parent_report, rgw_meta_sync_status& _sync_status) : RGWCoroutine(_sync_env->cct), sync_env(_sync_env),
 						      sync_status(_sync_status) {
-    report = parent_report.new_action("sync", "start");
+    report = parent_report.new_action("sync", "RGWMetaSyncCR", "start");
   }
   ~RGWMetaSyncCR() {
     report->finish();
@@ -1544,10 +1550,10 @@ public:
 	  uint32_t shard_id = iter->first;
 	  rgw_meta_sync_marker marker;
 
-	  RGWMetaSyncShardControlCR *shard_cr = new RGWMetaSyncShardControlCR(sync_env, sync_env->store->get_zone_params().log_pool,
-				       shard_id,
-                                       report,
-				       sync_status.sync_markers[shard_id]);
+	  RGWMetaSyncShardControlCR *shard_cr = new RGWMetaSyncShardControlCR(sync_env, report,
+                                                                              sync_env->store->get_zone_params().log_pool,
+                                                                              shard_id,
+                                                                              sync_status.sync_markers[shard_id]);
 
 
 	  shard_crs[shard_id] = shard_cr;
