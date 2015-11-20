@@ -3864,7 +3864,7 @@ void CInode::validate_disk_state(CInode::validated_data *results,
         shadow_in->fetch(get_internal_callback(INODE));
         return false;
       } else {
-        return fetch_dirfrag_rstats();
+        return check_dirfrag_rstats();
       }
     }
 
@@ -3891,19 +3891,24 @@ void CInode::validate_disk_state(CInode::validated_data *results,
           return true;
         }
       }
-      return fetch_dirfrag_rstats();
+      return check_dirfrag_rstats();
     }
 
-    bool fetch_dirfrag_rstats() {
+    bool check_dirfrag_rstats() {
       MDSGatherBuilder gather(g_ceph_context);
       std::list<frag_t> frags;
       in->dirfragtree.get_leaves(frags);
       for (list<frag_t>::iterator p = frags.begin();
           p != frags.end();
           ++p) {
-        CDir *dirfrag = in->get_or_open_dirfrag(in->mdcache, *p);
-        if (!dirfrag->is_complete())
-          dirfrag->fetch(gather.new_sub(), false);
+        CDir *dir = in->get_or_open_dirfrag(in->mdcache, *p);
+        if (dir->is_complete()) {
+	  dir->scrub_local();
+	} else {
+	  dir->scrub_info();
+	  dir->scrub_infop->need_scrub_local = true;
+	  dir->fetch(gather.new_sub(), false);
+	}
       }
       if (gather.has_subs()) {
         gather.set_finisher(get_internal_callback(DIRFRAGS));
@@ -3929,13 +3934,9 @@ void CInode::validate_disk_state(CInode::validated_data *results,
       for (compact_map<frag_t,CDir*>::iterator p = in->dirfrags.begin();
 	   p != in->dirfrags.end();
 	   ++p) {
-        if (!p->second->is_complete()) {
-          results->raw_rstats.error_str << "dirfrag is INCOMPLETE despite fetching; probably too large compared to MDS cache size?\n";
-          return true;
-        }
-        // FIXME!!! Don't assert out on damage!
-        assert(p->second->scrub_local());
-        sub_info.add(p->second->fnode.accounted_rstat);
+	CDir *dir = p->second;
+	assert(dir->get_version() > 0);
+	sub_info.add(dir->fnode.accounted_rstat);
       }
       // ...and that their sum matches our inode settings
       results->raw_rstats.memory_value = in->inode.rstat;
