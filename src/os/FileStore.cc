@@ -3333,7 +3333,8 @@ int FileStore::_clone(coll_t cid, const ghobject_t& oldoid, const ghobject_t& ne
     if (r < 0) {
       r = -errno;
       goto out3;
-    }
+    } else if (!replaying && g_conf->filestore_wbthrottle_enable)
+      wbthrottle.queue_wb(n, newoid, 0, r, false);
 
     dout(20) << "objectmap clone" << dendl;
     r = object_map->clone(oldoid, newoid, &spos);
@@ -3581,7 +3582,8 @@ int FileStore::_clone_range(coll_t cid, const ghobject_t& oldoid, const ghobject
   if (r < 0) {
     r = -errno;
     goto out3;
-  }
+  } else if (!replaying && g_conf->filestore_wbthrottle_enable)
+      wbthrottle.queue_wb(n, newoid, dstoff, r, false);
 
   // clone is non-idempotent; record our work.
   _set_replay_guard(**n, spos, &newoid);
