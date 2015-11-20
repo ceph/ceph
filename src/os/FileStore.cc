@@ -3551,7 +3551,9 @@ int FileStore::_do_copy_range(int from, int to, uint64_t srcoff, uint64_t len, u
   if (r >= 0 && !skip_sloppycrc && m_filestore_sloppy_crc) {
     int rc = backend->_crc_update_clone_range(from, to, srcoff, len, dstoff);
     assert(rc >= 0);
+    r = len;
   }
+
   dout(20) << "_do_copy_range " << srcoff << "~" << len << " to " << dstoff << " = " << r << dendl;
   return r;
 }
