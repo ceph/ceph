@@ -16,7 +16,7 @@ def main(args):
     print(table)
 
 def extract_info(file_name, filters):
-    result = {}
+    result = {f: '' for f in filters}
     if os.path.isdir(file_name):
         return result
     with file(file_name, 'r') as f:
@@ -24,7 +24,9 @@ def extract_info(file_name, filters):
             for filt in filters:
                 prefix = '# ' + filt + ':'
                 if line.startswith(prefix):
-                    result[filt] = line[len(prefix):].rstrip('\n')
+                    if result[filt]:
+                        result[filt] += '\n'
+                    result[filt] += line[len(prefix):].rstrip('\n')
     return result
 
 def tree_with_info(cur_dir, filters, prefix, rows):
@@ -39,7 +41,7 @@ def tree_with_info(cur_dir, filters, prefix, rows):
             dir_pad = '│   '
         info = extract_info(path, filters)
         tree_node = prefix + file_pad + f
-        meta = [info.get(f, '') for f in filters]
+        meta = [info[f] for f in filters]
         rows.append([tree_node] + meta)
         if os.path.isdir(path):
             tree_with_info(path, filters, prefix + dir_pad, rows)
