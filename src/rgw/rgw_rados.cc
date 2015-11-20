@@ -2393,7 +2393,7 @@ class RGWMetaNotifierManager : public RGWCoroutinesManager {
   RGWHTTPManager http_manager;
 
 public:
-  RGWMetaNotifierManager(RGWRados *_store) : RGWCoroutinesManager(_store->ctx()), store(_store),
+  RGWMetaNotifierManager(RGWRados *_store) : RGWCoroutinesManager(_store->ctx(), _store->get_cr_registry()), store(_store),
                                              http_manager(store->ctx(), &completion_mgr) {
     http_manager.set_threaded();
   }
@@ -2420,7 +2420,7 @@ class RGWDataNotifierManager : public RGWCoroutinesManager {
   RGWHTTPManager http_manager;
 
 public:
-  RGWDataNotifierManager(RGWRados *_store) : RGWCoroutinesManager(_store->ctx()), store(_store),
+  RGWDataNotifierManager(RGWRados *_store) : RGWCoroutinesManager(_store->ctx(), _store->get_cr_registry()), store(_store),
                                              http_manager(store->ctx(), &completion_mgr) {
     http_manager.set_threaded();
   }
@@ -2822,6 +2822,9 @@ void RGWRados::finalize()
     delete conn;
   }
   RGWQuotaHandler::free_handler(quota_handler);
+  if (cr_registry) {
+    cr_registry->put();
+  }
 }
 
 /** 
@@ -2857,6 +2860,12 @@ int RGWRados::init_rados()
     if (ret < 0) {
       goto fail;
     }
+  }
+
+  cr_registry = new RGWCoroutinesManagerRegistry(cct);
+  ret =  cr_registry->hook_to_admin_command("cr dump");
+  if (ret < 0) {
+    goto fail;
   }
 
   meta_mgr = new RGWMetadataManager(cct, this);
