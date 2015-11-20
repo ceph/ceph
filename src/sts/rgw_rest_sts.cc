@@ -264,6 +264,51 @@ void get_session_token_response::dump(Formatter *f) const
   f->close_section();
 }
 
+void assume_role_with_saml_response::dump(Formatter *f) const
+{
+  bufferlist encoded_token;
+  bufferlist encoded_key;
+  char encoded_uuid[38];
+  char encoded_time[30];
+
+  encode_base64_thing(credentials.session_token, encoded_token);
+  encoded_token.append('\0');
+  encode_base64_thing(credentials.secret_access_key, encoded_key);
+  encoded_key.append('\0');
+  request_id.print(encoded_uuid);
+  encoded_uuid[37] = 0;
+  time_t uv;
+  struct tm res[1];
+  uv = credentials.expiration.sec();
+  struct tm *tmp = gmtime_r(&uv, res);
+  strftime(encoded_time, sizeof encoded_time, "%Y-%m-%dT%T.000Z", tmp);
+
+  f->open_object_section_in_ns("AssumeRoleWithSAMLResponse",
+			"http://s3.amazonaws.com/doc/2011-06-15/");
+    f->open_object_section("AssumeRoleWithSAMLResult");
+      f->open_object_section("Credentials");
+	f->dump_string_linewrap("SessionToken", encoded_token.c_str());
+	f->dump_string_linewrap("SecretAccessKey", encoded_key.c_str());
+	f->dump_string("Expiration", encoded_time);
+	f->dump_string("AccessKeyId", credentials.access_key_id);
+      f->close_section();
+      f->open_object_section("AssumedRoleUser");
+	f->dump_string("Arn", assumed_role_user.arn);
+	f->dump_string("AssumedRoleId", assumed_role_user.assumed_role_id);
+      f->close_section();
+      f->dump_int("PackedPolicySize", packed_policy_size);
+      f->dump_string("Subject", subject);
+      f->dump_string("SubjectType", subject_type);
+      f->dump_string("Issuer", issuer);
+      f->dump_string("Audience", audience);
+      f->dump_string("NameQualifier", name_qualifier);
+    f->close_section();
+    f->open_object_section("ResponseMetadata");
+      f->dump_string("RequestId", encoded_uuid);
+    f->close_section();
+  f->close_section();
+}
+
 rgw_http_errors rgw_http_sts_errors({
     { ERR_IDP_REJECTED_CLAIM, {403, "IDPRejectedClaim" }},
     { ERR_UNKNOWN_ERROR, {500, "Unknown" }},
@@ -615,6 +660,7 @@ public:
   int assume_role_with_web_identity_execute(boost::function<void()>&);
   int get_federation_token_execute(boost::function<void()>&);
   int get_session_token_execute(boost::function<void()>&);
+  int assume_role_with_saml_execute(boost::function<void()>&);
 
   virtual int get_params();
   virtual const string name() { return get_flag ? "get_sts" : "post_sts"; }
@@ -800,6 +846,37 @@ void make_fake_response(get_session_token_response &response)
 //  response.request_id.generate_random();
 }
 
+void make_fake_response(assume_role_with_saml_response &response)
+{
+  static const unsigned char x_session[] = {
+    0x1, 0xa, 0x3, 0x61, 0x77, 0x73, 0x10, 0x4d, 0x1a, 0xf0, 0x3, 0x57,
+    0x5d, 0x75, 0xd7, 0x5d, 0x75, 0xcd, 0x3b, 0x57, 0xb0, 0xc4, 0x4e, 0x53,
+    0x8a, 0x34, 0x32, 0xa7, 0xe2, 0x4, 0x5c, 0x3, 0xf, 0x2c, 0x4c,
+  };
+  static const unsigned char x_key[] = {
+    0xc0, 0x96, 0xa5, 0xad, 0x75, 0x2d, 0x9c, 0x51, 0xc, 0x23, 0xf2, 0xbb,
+    0x30, 0x31, 0xd, 0x1b, 0xf6, 0xcf, 0xc5, 0x17, 0xe2, 0x9, 0x8c, 0xc4,
+    0x5c, 0x3, 0xf, 0x2c, 0x42, 0x84, 0x63,
+  };
+
+  response.subject = "d-U-2ajxWgNtPyLEv4NVz0Vsvuf7w-";
+  response.audience = "http://sp1.example.loc/simplesaml/module.php/saml/sp/saml2-acs.php/sp1";
+  response.name_qualifier = "Nr3niBIh+h+oBTbbbAknh+xk+PM=";
+  response.packed_policy_size = 6;
+  response.subject_type = "transient";
+  response.issuer = "https://idp.com/oam/fed";
+  response.credentials.session_token = string((char*)x_session, sizeof x_session);
+  response.credentials.secret_access_key = string((char*)x_key, sizeof x_key);
+  struct timeval tv;
+  tv.tv_sec = 1414191623;	// 2014-10-24 23:00:23 Z
+  tv.tv_usec = 0;
+  response.credentials.expiration.set_from_timeval(&tv);
+  response.credentials.access_key_id = "AKIAIOSFODNN7EXAMPLE";
+  response.assumed_role_user.arn = "arn:aws:sts::123456789012:assumed-role/FederatedWebIdentityRole/app1";
+  response.assumed_role_user.assumed_role_id = "AROACLKWSDQRAOEXAMPLE:app1";
+//  response.request_id.generate_random();
+}
+
 int RGWGetPost_STS::get_params()
 {
   /* get: all got done in init_from_header */
@@ -981,6 +1058,38 @@ int RGWGetPost_STS::get_session_token_execute(boost::function<void()>&f)
   return 0;
 }
 
+int RGWGetPost_STS::assume_role_with_saml_execute(boost::function<void()>&f)
+{
+  int r = 0;
+  map<string,string> val_map = s->info.args.get_params();
+  assume_role_with_saml_request request;
+  for (map<string,string>::iterator iter = val_map.begin();
+	iter != val_map.end(); ++iter) {
+    if (iter->first == "Action" || iter->first == "Version")
+	;
+    else if (iter->first == "RoleArn")
+	request.arn = iter->second;
+    else if (iter->first == "Policy")
+	request.policy = iter->second;
+    else if (iter->first == "PrincipalArn")
+	request.principal_arn = iter->second;
+    else if (iter->first == "SAMLAssertion")
+	request.saml_assertion = iter->second;
+    else if (iter->first == "DurationSeconds") {
+	r = my_get_integer(iter->second, request.duration_seconds);
+	if (r) why = "Bad DurationSeconds";
+    } else {
+	why = "spurious parameter";
+	r = -ERR_MALFORMED_INPUT;
+    }
+    if (r) return r;
+  }
+  assume_role_with_saml_response response(dynamic_cast<sts_err*>(s->err)->request_id);
+  make_fake_response(response);
+  f = boost::function<void()>([this,response]{response.dump(s->formatter);});
+  return 0;
+}
+
 int RGWGetPost_STS::decode_authorization_message(boost::function<void()>&f)
 {
   int r = 0;
@@ -1032,6 +1141,10 @@ const sts_matchers ctable(
   {"GetSessionToken",
       [](RGWGetPost_STS*o,boost::function<void()>&f)->int{
     return o->get_session_token_execute(f);
+  }},
+  {"AssumeRoleWithSAML",
+      [](RGWGetPost_STS*o,boost::function<void()>&f)->int{
+    return o->assume_role_with_saml_execute(f);
   }},
 }
 );

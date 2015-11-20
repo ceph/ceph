@@ -194,6 +194,36 @@ public:
   string token_code;		// is a number
 };
 
+class assume_role_with_saml_result {
+public:
+  sts_credentials credentials;
+  sts_usertype assumed_role_user;
+  int packed_policy_size;
+  string subject;
+  string subject_type;
+  string issuer;
+  string audience;
+  string name_qualifier;
+};
+
+class assume_role_with_saml_response: public assume_role_with_saml_result {
+public:
+  uuid_d request_id;
+  assume_role_with_saml_response(uuid_d &id) {
+    request_id = id;
+  }
+  void dump(Formatter *f) const;
+};
+
+class assume_role_with_saml_request {
+public:
+  string arn;
+  string policy;
+  int duration_seconds;
+  string principal_arn;
+  string saml_assertion;
+};
+
 #if 0
 struct post_part_field {
   string val;
