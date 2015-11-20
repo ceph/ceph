@@ -1401,7 +1401,27 @@ int RGWRados::get_required_alignment(rgw_bucket& bucket, uint64_t *alignment)
     return r;
   }
 
-  *alignment = ioctx.pool_required_alignment();
+  bool requires;
+  r = ioctx.pool_requires_alignment2(&requires);
+  if (r < 0) {
+    ldout(cct, 0) << "ERROR: ioctx.pool_requires_alignment2() returned " 
+      << r << dendl;
+    return r;
+  }
+
+  if (!requires) {
+    *alignment = 0;
+    return 0;
+  }
+
+  uint64_t align;
+  r = ioctx.pool_required_alignment2(&align);
+  if (r < 0) {
+    ldout(cct, 0) << "ERROR: ioctx.pool_required_alignment2() returned " 
+      << r << dendl;
+    return r;
+  }
+  *alignment = align;
   return 0;
 }
 

@@ -1086,9 +1086,19 @@ bool librados::IoCtx::pool_requires_alignment()
   return io_ctx_impl->client->pool_requires_alignment(get_id());
 }
 
+int librados::IoCtx::pool_requires_alignment2(bool *requires)
+{
+  return io_ctx_impl->client->pool_requires_alignment2(get_id(), requires);
+}
+
 uint64_t librados::IoCtx::pool_required_alignment()
 {
   return io_ctx_impl->client->pool_required_alignment(get_id());
+}
+
+int librados::IoCtx::pool_required_alignment2(uint64_t *alignment)
+{
+  return io_ctx_impl->client->pool_required_alignment2(get_id(), alignment);
 }
 
 std::string librados::IoCtx::get_pool_name()
@@ -3143,12 +3153,36 @@ extern "C" int rados_ioctx_pool_requires_alignment(rados_ioctx_t io)
   return retval;
 }
 
+extern "C" int rados_ioctx_pool_requires_alignment2(rados_ioctx_t io,
+	int *requires)
+{
+  tracepoint(librados, rados_ioctx_pool_requires_alignment_enter2, io);
+  librados::IoCtxImpl *ctx = (librados::IoCtxImpl *)io;
+  int retval = ctx->client->pool_requires_alignment2(ctx->get_id(), 
+  	(bool *)requires);
+  tracepoint(librados, rados_ioctx_pool_requires_alignment_exit2, retval, 
+  	*requires);
+  return retval;
+}
+
 extern "C" uint64_t rados_ioctx_pool_required_alignment(rados_ioctx_t io)
 {
   tracepoint(librados, rados_ioctx_pool_required_alignment_enter, io);
   librados::IoCtxImpl *ctx = (librados::IoCtxImpl *)io;
   uint64_t retval = ctx->client->pool_required_alignment(ctx->get_id());
   tracepoint(librados, rados_ioctx_pool_required_alignment_exit, retval);
+  return retval;
+}
+
+extern "C" int rados_ioctx_pool_required_alignment2(rados_ioctx_t io,
+	uint64_t *alignment)
+{
+  tracepoint(librados, rados_ioctx_pool_required_alignment_enter2, io);
+  librados::IoCtxImpl *ctx = (librados::IoCtxImpl *)io;
+  int retval = ctx->client->pool_required_alignment2(ctx->get_id(),
+  	alignment);
+  tracepoint(librados, rados_ioctx_pool_required_alignment_exit2, retval, 
+  	*alignment);
   return retval;
 }
 
