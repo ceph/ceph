@@ -2506,8 +2506,6 @@ int metadata_list(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
       break;
 
     map<string, bufferlist>::iterator it = raw_data.begin();
-    if (metadata_name_from_key(it->first) == last_read)
-        ++it;
     for (; it != raw_data.end(); ++it)
       data[metadata_name_from_key(it->first)].swap(it->second);
 
