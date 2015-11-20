@@ -809,8 +809,33 @@ CEPH_RADOS_API int rados_ioctx_pool_set_auid(rados_ioctx_t io, uint64_t auid);
  */
 CEPH_RADOS_API int rados_ioctx_pool_get_auid(rados_ioctx_t io, uint64_t *auid);
 
-CEPH_RADOS_API int rados_ioctx_pool_requires_alignment(rados_ioctx_t io);
-CEPH_RADOS_API uint64_t rados_ioctx_pool_required_alignment(rados_ioctx_t io);
+/* deprecated, use rados_ioctx_pool_requires_alignment2 instead */
+CEPH_RADOS_API int rados_ioctx_pool_requires_alignment(rados_ioctx_t io)
+  __attribute__((deprecated));
+
+/**
+ * Test whether the specified pool requires alignment or not.
+ *
+ * @param io pool to query
+ * @param requires 1 if alignment is supported, 0 if not. 
+ * @returns 0 on success, negative error code on failure
+ */
+CEPH_RADOS_API int rados_ioctx_pool_requires_alignment2(rados_ioctx_t io,
+  int *requires);
+
+/* deprecated, use rados_ioctx_pool_required_alignment2 instead */
+CEPH_RADOS_API uint64_t rados_ioctx_pool_required_alignment(rados_ioctx_t io)
+  __attribute__((deprecated));
+
+/**
+ * Get the alignment flavor of a pool
+ *
+ * @param io pool to query
+ * @param alignment where to store the alignment flavor
+ * @returns 0 on success, negative error code on failure
+ */
+CEPH_RADOS_API int rados_ioctx_pool_required_alignment2(rados_ioctx_t io,
+  uint64_t *alignment);
 
 /**
  * Get the pool id of the io context
