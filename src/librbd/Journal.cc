@@ -318,17 +318,20 @@ uint64_t Journal::append_op_event(journal::EventEntry &event_entry) {
 
     bufferlist bl;
     ::encode(event_entry, bl);
-    m_journaler->append("", bl);
+    m_journaler->committed(m_journaler->append("", bl));
   }
 
   CephContext *cct = m_image_ctx.cct;
-  ldout(cct, 20) << this << " " << __func__ << ": "
+  ldout(cct, 10) << this << " " << __func__ << ": "
                  << "event=" << event_entry.get_event_type() << ", "
                  << "tid=" << tid << dendl;
   return tid;
 }
 
 void Journal::commit_op_event(uint64_t tid, int r) {
+  CephContext *cct = m_image_ctx.cct;
+  ldout(cct, 10) << this << " " << __func__ << ": tid=" << tid << dendl;
+
   journal::EventEntry event_entry((journal::OpFinishEvent(tid, r)));
 
   bufferlist bl;
@@ -338,7 +341,7 @@ void Journal::commit_op_event(uint64_t tid, int r) {
     Mutex::Locker locker(m_lock);
     assert(m_state == STATE_RECORDING);
 
-    m_journaler->append("", bl);
+    m_journaler->committed(m_journaler->append("", bl));
   }
 }
 
