@@ -177,39 +177,39 @@ void JournalingObjectStore::ApplyManager::add_waiter(uint64_t op, Context *c)
 bool JournalingObjectStore::ApplyManager::commit_start()
 {
   bool ret = false;
-
   uint64_t _committing_seq = 0;
   {
     Mutex::Locker l(apply_lock);
     dout(10) << "commit_start max_applied_seq " << max_applied_seq
 	     << ", open_ops " << open_ops << dendl;
   
-    {
-      Mutex::Locker l(com_lock);
-
-      set<uint64_t>::iterator it = applying_seq_set.begin();
-      if (it == applying_seq_set.end() ){
-       	_committing_seq = committing_seq = max_applied_seq; 
-		
+    set<uint64_t>::iterator it = applying_seq_set.begin();
+    if (it == applying_seq_set.end() ){
+      _committing_seq = max_applied_seq; 
+    	
       dout(10) << "commit_start committing from end: " << committing_seq 
-		<< ",current applying_seq_set size:"<< applying_seq_set.size()
-		<< ", still blocked" << dendl;
-		assert( applying_seq_set.size() == 0 );
-      }else
-      {
-        _committing_seq = committing_seq = *it - 1;
-       	dout(10) << "commit_start committing from head: " << committing_seq 
-		<< ",current applying_seq_set size:"<< applying_seq_set.size()
-		<< ", still blocked" << dendl;
-		assert( (int)applying_seq_set.size() == open_ops );
-      }
-      
-      if (committing_seq == committed_seq) {
-       	dout(10) << "commit_start nothing to do" << dendl;
-	goto out;
-      }
-    } 
-  }
+    	<< ",current applying_seq_set size:"<< applying_seq_set.size()
+    	<< ", still blocked" << dendl;
+
+      assert( applying_seq_set.size() == 0 );
+    }else{
+       _committing_seq  = *it - 1;
+       dout(10) << "commit_start committing from head: " << committing_seq 
+    	        << ",current applying_seq_set size:"<< applying_seq_set.size()
+    	        << ", still blocked" << dendl;
+       assert( (int)applying_seq_set.size() == open_ops );
+    }
+   }
+
+   Mutex::Locker l(com_lock);
+   {
+     committing_seq = _committing_seq;
+     if (committing_seq == committed_seq) {
+       dout(10) << "commit_start nothing to do" << dendl;
+       goto out;
+     }
+   } 
+  
   ret = true;
 
  out:
