@@ -1429,7 +1429,7 @@ bool OSDMonitor::preprocess_failure(MonOpRequestRef op)
     int from = m->get_orig_source().num();
     if (!osdmap.exists(from) ||
 	osdmap.get_addr(from) != m->get_orig_source_inst().addr ||
-	osdmap.is_down(from)) {
+	(osdmap.is_down(from) && m->if_osd_failed())) {
       dout(5) << "preprocess_failure from dead osd." << from << ", ignoring" << dendl;
       send_incremental(op, m->get_epoch()+1);
       goto didit;
