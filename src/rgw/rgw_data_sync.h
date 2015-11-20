@@ -156,7 +156,7 @@ class RGWRemoteDataLog : public RGWCoroutinesManager {
   bool initialized;
 
 public:
-  RGWRemoteDataLog(RGWRados *_store, RGWDataSyncStatusManager *_sm) : RGWCoroutinesManager(_store->ctx()), store(_store),
+  RGWRemoteDataLog(RGWRados *_store, RGWDataSyncStatusManager *_sm) : RGWCoroutinesManager(_store->ctx(), _store->get_cr_registry()), store(_store),
                                        conn(NULL),
                                        http_manager(store->ctx(), &completion_mgr),
                                        status_manager(_sm), lock("RGWRemoteDataLog::lock"), data_sync_cr(NULL),
@@ -344,7 +344,7 @@ class RGWRemoteBucketLog : public RGWCoroutinesManager {
 
 public:
   RGWRemoteBucketLog(RGWRados *_store, RGWBucketSyncStatusManager *_sm,
-                     RGWAsyncRadosProcessor *_async_rados, RGWHTTPManager *_http_manager) : RGWCoroutinesManager(_store->ctx()), store(_store),
+                     RGWAsyncRadosProcessor *_async_rados, RGWHTTPManager *_http_manager) : RGWCoroutinesManager(_store->ctx(), _store->get_cr_registry()), store(_store),
                                        conn(NULL), shard_id(0),
                                        status_manager(_sm), async_rados(_async_rados), http_manager(_http_manager),
                                        sync_cr(NULL) {}
@@ -388,7 +388,7 @@ class RGWBucketSyncStatusManager {
 public:
   RGWBucketSyncStatusManager(RGWRados *_store, const string& _source_zone,
                              const string& _bucket_name, const string& _bucket_id) : store(_store),
-                                                                                     cr_mgr(_store->ctx()),
+                                                                                     cr_mgr(_store->ctx(), _store->get_cr_registry()),
                                                                                      async_rados(NULL),
                                                                                      http_manager(store->ctx(), cr_mgr.get_completion_mgr()),
                                                                                      source_zone(_source_zone),
