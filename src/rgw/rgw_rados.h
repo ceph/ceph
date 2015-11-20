@@ -1479,6 +1479,7 @@ WRITE_CLASS_ENCODER(RGWPeriod)
 
 class RGWDataChangesLog;
 class RGWReplicaLogger;
+class RGWCoroutinesManagerRegistry;
   
 class RGWStateLog {
   RGWRados *store;
@@ -1770,6 +1771,8 @@ protected:
   RGWQuotaHandler *quota_handler;
 
   Finisher *finisher;
+  
+  RGWCoroutinesManagerRegistry *cr_registry;
 
   RGWZoneGroup zonegroup;
   RGWZone zone_public_config; /* external zone params, e.g., entrypoints, log flags, etc. */  
@@ -1797,6 +1800,7 @@ public:
                pools_initialized(false),
                quota_handler(NULL),
                finisher(NULL),
+               cr_registry(NULL),
 	       has_period_zonegroup(false),
 	       has_period_zone(false),
                rest_master_conn(NULL),
@@ -1998,6 +2002,8 @@ public:
   virtual int remove_bucket_placement(std::string& new_pool);
   virtual int list_placement_set(set<string>& names);
   virtual int create_pools(vector<string>& names, vector<int>& retcodes);
+
+  RGWCoroutinesManagerRegistry *get_cr_registry() { return cr_registry; }
 
   class SystemObject {
     RGWRados *store;
