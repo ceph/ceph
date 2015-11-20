@@ -1,20 +1,24 @@
+from cStringIO import StringIO
+from contextlib import closing
+
 
 def make_fake_fstools(fake_filesystem):
     """
     Build a fake listdir() and isfile(), to be used instead of
-    os.listir() and os.isfile()
+    os.isdir() and os.isfile()
 
     An example fake_filesystem value:
         >>> fake_fs = {
             'a_directory': {
                 'another_directory': {
-                    'a_file': None,
-                    'another_file': None,
+                    'empty_file': None,
+                    'another_empty_file': None,
                 },
                 'random_file': None,
                 'yet_another_directory': {
                     'empty_directory': {},
                 },
+                'file_with_contents': 'data',
             },
         }
 
@@ -24,7 +28,7 @@ def make_fake_fstools(fake_filesystem):
         >>> fake_isfile('a_directory/yet_another_directory')
         False
 
-    :param fake_filesystem: A dict representing a filesystem layout
+    :param fake_filesystem: A dict representing a filesystem
     """
     assert isinstance(fake_filesystem, dict)
 
@@ -57,11 +61,23 @@ def make_fake_fstools(fake_filesystem):
                 raise OSError(
                     '[Errno 2] No such file or directory: %s' % component)
             subdict = subdict.get(component)
-        if subdict is None:
-            return True
-        else:
-            return False
+        return subdict is None or isinstance(subdict, str)
 
     def fake_isdir(path, fsdict=False):
         return not fake_isfile(path)
-    return fake_listdir, fake_isfile, fake_isdir
+
+    def fake_open(path, mode=None, buffering=None):
+        components = path.strip('/').split('/')
+        subdict = fake_filesystem
+        for component in components:
+            if component not in subdict:
+                raise IOError(
+                    '[Errno 2] No such file or directory: %s' % component)
+            subdict = subdict.get(component)
+        if isinstance(subdict, dict):
+            raise IOError('[Errno 21] Is a directory: %s' % path)
+        elif subdict is None:
+            return closing(StringIO(''))
+        return closing(StringIO(subdict))
+
+    return fake_listdir, fake_isfile, fake_isdir, fake_open
