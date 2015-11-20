@@ -10,6 +10,7 @@
 #include "include/rbd/librbd.hpp"
 
 #include "librbd/AsyncOperation.h"
+#include "librbd/ImageCtx.h"
 
 #include "osdc/Striper.h"
 
@@ -73,7 +74,7 @@ namespace librbd {
 		      ref(1), released(false), ictx(NULL),
 		      aio_type(AIO_TYPE_NONE),
 		      read_bl(NULL), read_buf(NULL), read_buf_len(0),
-                      journal_tid(0) {
+                      journal_tid(0),
                       m_xlist_item(this), event_notify(false) {
     }
     ~AioCompletion() {

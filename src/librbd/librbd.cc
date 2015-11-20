@@ -1000,7 +1000,7 @@ namespace librbd {
   {
     AioCompletion *cs[numcomp];
     ImageCtx *ictx = (ImageCtx *)ctx;
-    tracepoint(librbd, poll_io_events_enter, numcomp);
+    tracepoint(librbd, poll_io_events_enter, ictx, numcomp);
     int r = librbd::poll_io_events(ictx, cs, numcomp);
     tracepoint(librbd, poll_io_events_exit, r);
     if (r > 0) {
@@ -2153,7 +2153,7 @@ extern "C" int rbd_poll_io_events(rbd_image_t image, rbd_completion_t *comps, in
 {
   librbd::ImageCtx *ictx = (librbd::ImageCtx *)image;
   librbd::AioCompletion *cs[numcomp];
-  tracepoint(librbd, poll_io_events_enter, numcomp);
+  tracepoint(librbd, poll_io_events_enter, ictx, numcomp);
   int r = librbd::poll_io_events(ictx, cs, numcomp);
   tracepoint(librbd, poll_io_events_exit, r);
   if (r > 0) {
