@@ -26,7 +26,7 @@ def extract_info(file_name, filters, _isdir=os.path.isdir, _open=open):
                 if line.startswith(prefix):
                     if result[filt]:
                         result[filt] += '\n'
-                    result[filt] += line[len(prefix):].rstrip('\n')
+                    result[filt] += line[len(prefix):].rstrip('\n').strip()
     return result
 
 def tree_with_info(cur_dir, filters, prefix, rows,

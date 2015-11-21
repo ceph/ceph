@@ -62,12 +62,12 @@ expected_tree = """├── %
 expected_desc = [
     '',
     '',
-    ' install ceph',
+    'install ceph',
     '',
-    ' single node cluster',
+    'single node cluster',
     '',
-    ' c/c++ librbd api tests with default settings',
-    ' c/c++ librbd api tests with format 1 images',
+    'c/c++ librbd api tests with default settings',
+    'c/c++ librbd api tests with format 1 images',
 ]
 
 
@@ -78,8 +78,8 @@ expected_rbd_features = [
     '',
     '',
     '',
-    ' default',
-    ' none',
+    'default',
+    'none',
 ]
 
 
