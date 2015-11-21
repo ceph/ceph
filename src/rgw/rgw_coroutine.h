@@ -198,7 +198,7 @@ public:
 
   void wait_for_child();
 
-  virtual string to_str();
+  virtual string to_str() const;
 
   RGWCoroutinesStack *get_stack() const {
     return stack;
