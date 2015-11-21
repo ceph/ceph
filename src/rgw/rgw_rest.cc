@@ -555,7 +555,7 @@ void end_header(struct req_state *s, RGWOp *op, const char *content_type, const 
 
   int r;
   if (content_type) {
-      r = s->cio->print("Content-type: %s\r\n", content_type);
+      r = s->cio->print("Content-Type: %s\r\n", content_type);
       if (r < 0) {
 	ldout(s->cct, 0) << "ERROR: s->cio->print() returned err=" << r << dendl;
       }
