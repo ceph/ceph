@@ -366,6 +366,15 @@ void ECBackend::handle_recovery_read_complete(
     op.xattrs.swap(*attrs);
 
     if (!op.obc) {
+      // attrs only reference the origin bufferlist (decode from ECSubReadReply message)
+      // whose size is much greater than attrs in recovery. If obc cache it (get_obc maybe
+      // cache the attr), this causes the whole origin bufferlist would not be free until
+      // obc is evicted from obc cache. So rebuild the bufferlist before cache it.
+      for (map<string, bufferlist>::iterator it = op.xattrs.begin();
+           it != op.xattrs.end();
+           ++it) {
+        it->second.rebuild();
+      }
       op.obc = get_parent()->get_obc(hoid, op.xattrs);
       op.recovery_info.size = op.obc->obs.oi.size;
       op.recovery_info.oi = op.obc->obs.oi;
