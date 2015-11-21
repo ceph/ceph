@@ -334,6 +334,9 @@ void RGWCoroutinesManager::report_error(RGWCoroutinesStack *op)
 }
 
 void RGWCoroutinesStack::dump(Formatter *f) const {
+  stringstream ss;
+  ss << (void *)this;
+  ::encode_json("stack", ss.str(), f);
   f->open_array_section("ops");
   for (auto& i : ops) {
     encode_json("op", *i, f);
@@ -350,6 +353,7 @@ void RGWCoroutinesManager::handle_unblocked_stack(set<RGWCoroutinesStack *>& con
   if (!stack->is_done()) {
     stacks.push_back(stack);
   } else {
+    RWLock::WLocker wl(lock);
     context_stacks.erase(stack);
     stack->put();
   }
@@ -363,10 +367,12 @@ int RGWCoroutinesManager::run(list<RGWCoroutinesStack *>& stacks)
 
   uint64_t run_num = run_context_count.inc();
 
-  set<RGWCoroutinesStack *> context_stacks = run_contexts[run_num];
+  lock.get_write();
+  set<RGWCoroutinesStack *>& context_stacks = run_contexts[run_num];
   for (auto& st : stacks) {
     context_stacks.insert(st);
   }
+  lock.unlock();
 
   env.manager = this;
   env.stacks = &stacks;
@@ -502,12 +508,13 @@ void RGWCoroutinesManager::dump(Formatter *f) const {
 
   f->open_array_section("run_contexts");
   for (auto& i : run_contexts) {
-    char buf[32];
-    snprintf(buf, sizeof(buf), "context.%lld", (long long)i.first);
-    f->open_array_section(buf);
+    f->open_object_section("context");
+    ::encode_json("id", i.first, f);
+    f->open_array_section("entries");
     for (auto& s : i.second) {
       ::encode_json("entry", *s, f);
     }
+    f->close_section();
     f->close_section();
   }
   f->close_section();
@@ -612,7 +619,7 @@ void RGWCoroutine::wait_for_child()
   stack->set_wait_for_child(true);
 }
 
-string RGWCoroutine::to_str()
+string RGWCoroutine::to_str() const
 {
   return typeid(*this).name();
 }
@@ -649,12 +656,14 @@ void RGWCoroutine::wakeup()
 }
 
 void RGWCoroutine::dump(Formatter *f) const {
-  encode_json("type", typeid(this).name(), f);
-  f->open_array_section("spawned");
-  for (auto& i : spawned.entries) {
-    encode_json("entry", *i, f);
+  encode_json("type", to_str(), f);
+  if (!spawned.entries.empty()) {
+    f->open_array_section("spawned");
+    for (auto& i : spawned.entries) {
+      encode_json("entry", *i, f);
+    }
+    f->close_section();
   }
-  f->close_section();
 }
 
 int RGWSimpleCoroutine::operate()
