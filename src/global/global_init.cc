@@ -284,6 +284,7 @@ void global_init_daemonize(CephContext *cct)
   if (global_init_prefork(cct) < 0)
     return;
 
+#if !defined(_AIX)
   int ret = daemon(1, 1);
   if (ret) {
     ret = errno;
@@ -294,6 +295,7 @@ void global_init_daemonize(CephContext *cct)
 
   global_init_postfork_start(cct);
   global_init_postfork_finish(cct);
+#endif
 }
 
 void global_init_postfork_start(CephContext *cct)

@@ -20,8 +20,10 @@ Download and Compile Boost 1.59 (or higher)
 Building Ceph
 =============
 
-        export LDFLAGS="-L<pathtoboost>/boost_1_59_0/stage/lib"
-        export CPPFLAGS="-I<pathtoboost>/boost/boost_1_59_0"
+        export LDFLAGS="-m64  -L<pathtoboost>/stage/lib -L/usr/lib/mps/64"
+        export CPPFLAGS="-m64 -I<pathtoboost>"
+        export CXXFLAGS="-m64"
+        export CFLAGS="-m64"
 
         ./autogen.sh
         ./configure --disable-server --without-fuse --without-tcmalloc --without-libatomic-ops --without-libaio --without-libxfs
