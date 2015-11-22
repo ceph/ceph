@@ -9,6 +9,7 @@ rados_include_DATA = \
 	$(srcdir)/include/rados/rados_types.hpp \
 	$(srcdir)/include/rados/librados.hpp \
 	$(srcdir)/include/buffer.h \
+	$(srcdir)/include/buffer_fwd.h \
 	$(srcdir)/include/page.h \
 	$(srcdir)/include/crc32c.h \
 	$(srcdir)/include/memory.h
@@ -52,6 +53,7 @@ noinst_HEADERS += \
 	include/bitmapper.h \
 	include/blobhash.h \
 	include/buffer.h \
+	include/buffer_fwd.h \
 	include/byteorder.h \
 	include/cephfs/libcephfs.h \
 	include/ceph_features.h \
