@@ -1,6 +1,10 @@
 
 #include "CrushCompiler.h"
 
+#if defined(_AIX)
+#define EBADE ECORRUPT
+#endif
+
 #ifndef EBADE
 #define EBADE EFTYPE
 #endif
