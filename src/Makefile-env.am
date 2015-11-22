@@ -118,28 +118,30 @@ AM_COMMON_CFLAGS = \
 	-fno-strict-aliasing \
 	-fsigned-char
 if !CLANG
-	AM_COMMON_CFLAGS += -rdynamic
+	AM_COMMON_CFLAGS += ${RDYNAMIC_FLAG}
 endif
 if SOLARIS
 	AM_COMMON_CFLAGS += -Wno-unused-local-typedefs
 endif
 
-AM_CFLAGS = $(AM_COMMON_CFLAGS) $(HARDENING_CFLAGS)
+AM_CFLAGS = $(AM_COMMON_CFLAGS)
+if LINUX
+AM_CFLAGS += $(HARDENING_CFLAGS)
+endif
 AM_CPPFLAGS = $(AM_COMMON_CPPFLAGS)
 AM_CXXFLAGS = \
 	@AM_CXXFLAGS@ \
 	$(AM_COMMON_CFLAGS) \
 	-ftemplate-depth-1024 \
 	-Wnon-virtual-dtor \
-	-Wno-invalid-offsetof $(HARDENING_CFLAGS)
+	-Wno-invalid-offsetof 
+if LINUX
+AM_CXXFLAGS += $(HARDENING_CFLAGS) 
+endif
 if !CLANG
 	AM_CXXFLAGS += -Wstrict-null-sentinel
 endif
 
-# solaris harding
-if SOLARIS
-	AM_CXXFLAGS += -lssp_nonshared
-endif
 
 # note: this is position dependant, it affects the -l options that
 # come after it on the command line. when you use ${AM_LDFLAGS} in
@@ -152,6 +154,9 @@ endif
 AM_LDFLAGS =
 if LINUX
 AM_LDFLAGS += -Wl,--as-needed $(HARDENING_LDFLAGS)
+endif
+if AIX
+AM_LDFLAGS += -Wl,-brtl -Wl,-bexpfull
 endif
 
 if USE_BOOST_SPIRIT_OLD_HDR

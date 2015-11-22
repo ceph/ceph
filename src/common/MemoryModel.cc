@@ -4,6 +4,7 @@
 #include "MemoryModel.h"
 #include "common/config.h"
 #include "debug.h"
+#include <malloc.h>
 
 #include <fstream>
 

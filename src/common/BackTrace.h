@@ -2,7 +2,9 @@
 #define CEPH_BACKTRACE_H
 
 #include <iosfwd>
+#ifdef HAVE_EXECINFO_H
 #include <execinfo.h>
+#endif
 #include <stdlib.h>
 
 namespace ceph {
@@ -16,8 +18,10 @@ struct BackTrace {
   char **strings;
 
   BackTrace(int s) : skip(s) {
+#ifdef HAVE_EXECINFO_H
     size = backtrace(array, max);
     strings = backtrace_symbols(array, size);
+#endif
   }
   ~BackTrace() {
     free(strings);
