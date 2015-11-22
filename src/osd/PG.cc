@@ -3246,7 +3246,10 @@ bool PG::sched_scrub()
   bool time_for_deep = (ceph_clock_now(cct) >=
     info.history.last_deep_scrub_stamp + cct->_conf->osd_deep_scrub_interval);
 
-  bool deep_coin_flip = (rand() % 100) < cct->_conf->osd_deep_scrub_randomize_ratio * 100;
+  bool deep_coin_flip = false;
+  // Only add random deep scrubs when NOT user initiated scrub
+  if (!scrubber.must_scrub)
+      deep_coin_flip = (rand() % 100) < cct->_conf->osd_deep_scrub_randomize_ratio * 100;
   dout(20) << __func__ << ": time_for_deep=" << time_for_deep << " deep_coin_flip=" << deep_coin_flip << dendl;
 
   time_for_deep = (time_for_deep || deep_coin_flip);
