@@ -5,10 +5,11 @@ import os
 import random
 import re
 import subprocess
+import time
 import tempfile
 import yaml
 
-from .openstack import OpenStack
+from .openstack import OpenStack, OpenStackInstance
 from .config import config
 from .contextutil import safe_while
 from .misc import decanonicalize_hostname, get_distro, get_distro_version
@@ -266,23 +267,6 @@ class ProvisionOpenStack(OpenStack):
             misc.sh("openstack server add volume " +
                     name + " " + volume_name)
 
-    def list_volumes(self, name_or_id, server_info=None):
-        """
-        Return the uuid of the volumes attached to the name_or_id
-        OpenStack instance.
-
-        :param name_or_id:  The name or ID of the server to query
-        :param server_info: Optionally, use already-retrieved results of
-                            self.show()
-        """
-        if server_info is None:
-            server_info = self.show(name_or_id)
-        if not server_info:
-            return []
-        volumes = self.get_value(server_info,
-                                 'os-extended-volumes:volumes_attached')
-        return [volume['id'] for volume in volumes ]
-
     @staticmethod
     def ip2name(prefix, ip):
         """
@@ -325,22 +309,21 @@ class ProvisionOpenStack(OpenStack):
                 " --property ownedby=" + config.openstack['ip'] +
                 " --wait " +
                 " " + self.basename)
-        all_instances = json.loads(misc.sh("openstack server list -f json --long"))
         instances = filter(
             lambda instance: self.property in instance['Properties'],
-            all_instances)
+            self.list_instances())
+        instances = [OpenStackInstance(i['ID'], i) for i in instances]
         fqdns = []
         try:
             network = config['openstack'].get('network', '')
             for instance in instances:
-                name = self.ip2name(self.basename, self.get_ip(instance['ID'], network))
+                name = self.ip2name(self.basename, instance.get_ip(network))
                 misc.sh("openstack server set " +
                         "--name " + name + " " +
                         instance['ID'])
                 fqdn = name + '.' + config.lab_domain
                 if not misc.ssh_keyscan_wait(fqdn):
                     raise ValueError('ssh_keyscan_wait failed for ' + fqdn)
-                import time
                 time.sleep(15)
                 if not self.cloud_init_wait(fqdn):
                     raise ValueError('clound_init_wait failed for ' + fqdn)
@@ -354,22 +337,8 @@ class ProvisionOpenStack(OpenStack):
         return fqdns
 
     def destroy(self, name_or_id):
-        """
-        Delete the name_or_id OpenStack instance.
-        """
         log.debug('ProvisionOpenStack:destroy ' + name_or_id)
-        server_info = self.show(name_or_id)
-        if not self.exists(name_or_id, server_info=server_info):
-            return True
-        volumes = self.list_volumes(name_or_id, server_info=server_info)
-        server_id = self.get_value(server_info, 'ID')
-        misc.sh("openstack server set --name REMOVE-ME-" + name_or_id +
-                " " + server_id)
-        misc.sh("openstack server delete --wait " + server_id + " || true")
-        for volume in volumes:
-            misc.sh("openstack volume set --name REMOVE-ME " + volume)
-            misc.sh("openstack volume delete " + volume + " || true")
-        return True
+        return OpenStackInstance(name_or_id).destroy()
 
 
 def create_if_vm(ctx, machine_name, _downburst=None):

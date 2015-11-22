@@ -25,13 +25,123 @@ import argparse
 import logging
 import os
 import pytest
+import subprocess
 import tempfile
 from mock import patch
 
 import teuthology
 from teuthology import misc
-from teuthology.openstack import TeuthologyOpenStack, OpenStack
+from teuthology.openstack import TeuthologyOpenStack, OpenStack, OpenStackInstance
 import scripts.openstack
+
+
+class TestOpenStackInstance(object):
+
+    teuthology_instance = '[{"Field": "OS-DCF:diskConfig", "Value": "MANUAL"}, {"Field": "OS-EXT-AZ:availability_zone", "Value": "nova"}, {"Field": "OS-EXT-STS:power_state", "Value": 1}, {"Field": "OS-EXT-STS:task_state", "Value": null}, {"Field": "OS-EXT-STS:vm_state", "Value": "active"}, {"Field": "OS-SRV-USG:launched_at", "Value": "2015-11-12T14:18:42.000000"}, {"Field": "OS-SRV-USG:terminated_at", "Value": null}, {"Field": "accessIPv4", "Value": ""}, {"Field": "accessIPv6", "Value": ""}, {"Field": "addresses", "Value": "Ext-Net=167.114.233.32"}, {"Field": "config_drive", "Value": ""}, {"Field": "created", "Value": "2015-11-12T14:18:22Z"}, {"Field": "flavor", "Value": "eg-30 (3c1d6170-0097-4b5c-a3b3-adff1b7a86e0)"}, {"Field": "hostId", "Value": "b482bcc97b6b2a5b3569dc349e2b262219676ddf47a4eaf72e415131"}, {"Field": "id", "Value": "f3ca32d7-212b-458b-a0d4-57d1085af953"}, {"Field": "image", "Value": "teuthology-ubuntu-14.04 (4300a7ca-4fbd-4b34-a8d5-5a4ebf204df5)"}, {"Field": "key_name", "Value": "myself"}, {"Field": "name", "Value": "teuthology"}, {"Field": "os-extended-volumes:volumes_attached", "Value": [{"id": "627e2631-fbb3-48cd-b801-d29cd2a76f74"}, {"id": "09837649-0881-4ee2-a560-adabefc28764"}, {"id": "44e5175b-6044-40be-885a-c9ddfb6f75bb"}]}, {"Field": "progress", "Value": 0}, {"Field": "project_id", "Value": "131b886b156a4f84b5f41baf2fbe646c"}, {"Field": "properties", "Value": ""}, {"Field": "security_groups", "Value": [{"name": "teuthology"}]}, {"Field": "status", "Value": "ACTIVE"}, {"Field": "updated", "Value": "2015-11-12T14:18:42Z"}, {"Field": "user_id", "Value": "291dde1633154837be2693c6ffa6315c"}]'
+
+    teuthology_instance_no_addresses = '[{"Field": "addresses", "Value": ""}, {"Field": "id", "Value": "f3ca32d7-212b-458b-a0d4-57d1085af953"}]'
+
+    def test_init(self):
+        with patch.multiple(
+                misc,
+                sh=lambda cmd: self.teuthology_instance,
+        ):
+            o = OpenStackInstance('NAME')
+            assert o['id'] == 'f3ca32d7-212b-458b-a0d4-57d1085af953'
+        o = OpenStackInstance('NAME', {"id": "OTHER"})
+        assert o['id'] == "OTHER"
+
+    def test_get_created(self):
+        with patch.multiple(
+                misc,
+                sh=lambda cmd: self.teuthology_instance,
+        ):
+            o = OpenStackInstance('NAME')
+            assert o.get_created() > 0
+
+    def test_exists(self):
+        with patch.multiple(
+                misc,
+                sh=lambda cmd: self.teuthology_instance,
+        ):
+            o = OpenStackInstance('NAME')
+            assert o.exists()
+        def sh_raises(cmd):
+            raise subprocess.CalledProcessError('FAIL', 'BAD')
+        with patch.multiple(
+                misc,
+                sh=sh_raises,
+        ):
+            o = OpenStackInstance('NAME')
+            assert not o.exists()
+
+    def test_volumes(self):
+        with patch.multiple(
+                misc,
+                sh=lambda cmd: self.teuthology_instance,
+        ):
+            o = OpenStackInstance('NAME')
+            assert len(o.get_volumes()) == 3
+
+    def test_get_addresses(self):
+        answers = [
+            self.teuthology_instance_no_addresses,
+            self.teuthology_instance,
+        ]
+        def sh(self):
+            return answers.pop(0)
+        with patch.multiple(
+                misc,
+                sh=sh,
+        ):
+            o = OpenStackInstance('NAME')
+            assert o.get_addresses() == 'Ext-Net=167.114.233.32'
+
+    def test_get_ip_neutron(self):
+        instance_id = '8e1fd70a-3065-46f8-9c30-84dc028c1834'
+        ip = '10.10.10.4'
+        def sh(cmd):
+            if 'neutron subnet-list' in cmd:
+                return """
+[
+  {
+    "ip_version": 6,
+    "id": "c45b9661-b2ba-4817-9e3a-f8f63bf32989"
+  },
+  {
+    "ip_version": 4,
+    "id": "e03a3dbc-afc8-4b52-952e-7bf755397b50"
+  }
+]
+                """
+            elif 'neutron port-list' in cmd:
+                return ("""
+[
+  {
+    "device_id": "915504ad-368b-4cce-be7c-4f8a83902e28",
+    "fixed_ips": "{\\"subnet_id\\": \\"e03a3dbc-afc8-4b52-952e-7bf755397b50\\", \\"ip_address\\": \\"10.10.10.1\\"}\\n{\\"subnet_id\\": \\"c45b9661-b2ba-4817-9e3a-f8f63bf32989\\", \\"ip_address\\": \\"2607:f298:6050:9afc::1\\"}"
+  },
+  {
+    "device_id": "{instance_id}",
+    "fixed_ips": "{\\"subnet_id\\": \\"e03a3dbc-afc8-4b52-952e-7bf755397b50\\", \\"ip_address\\": \\"{ip}\\"}\\n{\\"subnet_id\\": \\"c45b9661-b2ba-4817-9e3a-f8f63bf32989\\", \\"ip_address\\": \\"2607:f298:6050:9afc:f816:3eff:fe07:76c1\\"}"
+  },
+  {
+    "device_id": "17e4a968-4caa-4cee-8e4b-f950683a02bd",
+    "fixed_ips": "{\\"subnet_id\\": \\"e03a3dbc-afc8-4b52-952e-7bf755397b50\\", \\"ip_address\\": \\"10.10.10.5\\"}\\n{\\"subnet_id\\": \\"c45b9661-b2ba-4817-9e3a-f8f63bf32989\\", \\"ip_address\\": \\"2607:f298:6050:9afc:f816:3eff:fe9c:37f0\\"}"
+  }
+]
+                """.replace('{instance_id}', instance_id).
+                        replace('{ip}', ip))
+            else:
+                raise Exception("unexpected " + cmd)
+        with patch.multiple(
+                misc,
+                sh=sh,
+        ):
+            assert ip == OpenStackInstance(
+                instance_id,
+                { 'id': instance_id },
+            ).get_ip_neutron()
 
 class TestOpenStack(object):
 
@@ -95,49 +205,6 @@ class TestOpenStack(object):
             os.environ['OS_AUTH_URL'] = auth
         else:
             del os.environ['OS_AUTH_URL']
-
-    def test_get_ip_neutron(self):
-        instance_id = '8e1fd70a-3065-46f8-9c30-84dc028c1834'
-        ip = '10.10.10.4'
-        def sh(cmd):
-            if 'neutron subnet-list' in cmd:
-                return """
-[
-  {
-    "ip_version": 6,
-    "id": "c45b9661-b2ba-4817-9e3a-f8f63bf32989"
-  },
-  {
-    "ip_version": 4,
-    "id": "e03a3dbc-afc8-4b52-952e-7bf755397b50"
-  }
-]
-                """
-            elif 'neutron port-list' in cmd:
-                return ("""
-[
-  {
-    "device_id": "915504ad-368b-4cce-be7c-4f8a83902e28",
-    "fixed_ips": "{\\"subnet_id\\": \\"e03a3dbc-afc8-4b52-952e-7bf755397b50\\", \\"ip_address\\": \\"10.10.10.1\\"}\\n{\\"subnet_id\\": \\"c45b9661-b2ba-4817-9e3a-f8f63bf32989\\", \\"ip_address\\": \\"2607:f298:6050:9afc::1\\"}"
-  },
-  {
-    "device_id": "{instance_id}",
-    "fixed_ips": "{\\"subnet_id\\": \\"e03a3dbc-afc8-4b52-952e-7bf755397b50\\", \\"ip_address\\": \\"{ip}\\"}\\n{\\"subnet_id\\": \\"c45b9661-b2ba-4817-9e3a-f8f63bf32989\\", \\"ip_address\\": \\"2607:f298:6050:9afc:f816:3eff:fe07:76c1\\"}"
-  },
-  {
-    "device_id": "17e4a968-4caa-4cee-8e4b-f950683a02bd",
-    "fixed_ips": "{\\"subnet_id\\": \\"e03a3dbc-afc8-4b52-952e-7bf755397b50\\", \\"ip_address\\": \\"10.10.10.5\\"}\\n{\\"subnet_id\\": \\"c45b9661-b2ba-4817-9e3a-f8f63bf32989\\", \\"ip_address\\": \\"2607:f298:6050:9afc:f816:3eff:fe9c:37f0\\"}"
-  }
-]
-                """.replace('{instance_id}', instance_id).
-                        replace('{ip}', ip))
-            else:
-                raise Exception("unexpected " + cmd)
-        with patch.multiple(
-                misc,
-                sh=sh,
-        ):
-            assert ip == OpenStack.get_ip_neutron(instance_id)
 
 class TestTeuthologyOpenStack(object):
 
