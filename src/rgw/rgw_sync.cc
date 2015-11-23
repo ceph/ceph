@@ -556,7 +556,7 @@ public:
     int ret;
     reenter(this) {
       yield {
-        report->set_status("acquiring sync lock");
+        set_status("acquiring sync lock");
 	uint32_t lock_duration = cct->_conf->rgw_sync_lease_period;
         string lock_name = "sync_lock";
         RGWRados *store = sync_env->store;
@@ -568,26 +568,26 @@ public:
       while (!lease_cr->is_locked()) {
         if (lease_cr->is_done()) {
           ldout(cct, 0) << "ERROR: lease cr failed, done early " << dendl;
-          report->set_status("lease lock failed, early abort");
+          set_status("lease lock failed, early abort");
           return set_cr_error(lease_cr->get_ret_status());
         }
         set_sleeping(true);
         yield;
       }
       yield {
-        report->set_status("writing sync status");
+        set_status("writing sync status");
         RGWRados *store = sync_env->store;
         call(new RGWSimpleRadosWriteCR<rgw_meta_sync_info>(sync_env->async_rados, store, store->get_zone_params().log_pool,
 				 sync_env->status_oid(), status));
       }
 
       if (retcode < 0) {
-        report->set_status("failed to write sync status");
+        set_status("failed to write sync status");
         ldout(cct, 0) << "ERROR: failed to write sync status, retcode=" << retcode << dendl;
         return set_cr_error(retcode);
       }
       /* fetch current position in logs */
-      report->set_status("fetching remote log position");
+      set_status("fetching remote log position");
       yield {
         for (int i = 0; i < (int)status.num_shards; i++) {
           spawn(new RGWReadRemoteMDLogShardInfoCR(sync_env->store, sync_env->http_manager, sync_env->async_rados, i, &shards_info[i]), false);
@@ -597,7 +597,7 @@ public:
       drain_all_but(1); /* the lease cr still needs to run */
 
       yield {
-        report->set_status("updating sync status");
+        set_status("updating sync status");
         for (int i = 0; i < (int)status.num_shards; i++) {
 	  rgw_meta_sync_marker marker;
           RGWMetadataLogInfo& info = shards_info[i];
@@ -609,13 +609,13 @@ public:
         }
       }
       yield {
-        report->set_status("changing sync state: build full sync maps");
+        set_status("changing sync state: build full sync maps");
 	status.state = rgw_meta_sync_info::StateBuildingFullSyncMaps;
         RGWRados *store = sync_env->store;
         call(new RGWSimpleRadosWriteCR<rgw_meta_sync_info>(sync_env->async_rados, store, store->get_zone_params().log_pool,
 				 sync_env->status_oid(), status));
       }
-      report->set_status("drop lock lease");
+      set_status("drop lock lease");
       yield lease_cr->go_down();
       while (collect(&ret)) {
 	if (ret < 0) {
@@ -746,7 +746,7 @@ public:
 
     reenter(this) {
       yield {
-        report->set_status(string("acquiring lock (") + sync_env->status_oid() + ")");
+        set_status(string("acquiring lock (") + sync_env->status_oid() + ")");
 	uint32_t lock_duration = cct->_conf->rgw_sync_lease_period;
         string lock_name = "sync_lock";
 	lease_cr = new RGWContinuousLeaseCR(sync_env->async_rados, sync_env->store, sync_env->store->get_zone_params().log_pool, sync_env->status_oid(),
@@ -757,7 +757,7 @@ public:
       while (!lease_cr->is_locked()) {
         if (lease_cr->is_done()) {
           ldout(cct, 0) << "ERROR: lease cr failed, done early " << dendl;
-          report->set_status("failed acquiring lock");
+          set_status("failed acquiring lock");
           return set_cr_error(lease_cr->get_ret_status());
         }
         set_sleeping(true);
@@ -1250,7 +1250,7 @@ public:
 #define OMAP_GET_MAX_ENTRIES 100
     int max_entries = OMAP_GET_MAX_ENTRIES;
     reenter(&full_cr) {
-      report->set_status("full_sync");
+      set_status("full_sync");
       oid = full_sync_index_shard_oid(shard_id);
       can_adjust_marker = true;
       /* grab lock */
@@ -1374,7 +1374,7 @@ public:
 
   int incremental_sync() {
     reenter(&incremental_cr) {
-      report->set_status("incremental_sync");
+      set_status("incremental_sync");
       can_adjust_marker = true;
       /* grab lock */
       if (!lease_cr) { /* could have had  a lease_cr lock from previous state */
