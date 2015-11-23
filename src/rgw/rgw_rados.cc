@@ -3219,10 +3219,10 @@ int RGWRados::init_complete()
   if (!has_period_zonegroup) {
     ldout(cct, 10) << " cannot find current period zonegroup using local zonegroup" << dendl;
     ret = zonegroup.init(cct, this);
-    if (ret < 0 && ret != -ENOENT) {
+    if ( (ret < 0 && ret != -ENOENT) || (ret == -ENOENT && !cct->_conf->rgw_zonegroup.empty())) {
       lderr(cct) << "failed reading zonegroup info: ret "<< ret << " " << cpp_strerror(-ret) << dendl;
       return ret;
-    } else if (ret == -ENOENT && cct->_conf->rgw_zonegroup.empty()) {
+    } else if (ret == -ENOENT) {
       creating_defaults = true;
       lderr(cct) << "Creating default zonegroup " << dendl;
       ret = zonegroup.create_default();
@@ -3254,8 +3254,8 @@ int RGWRados::init_complete()
       lderr(cct) << "failed reading zone info: ret "<< ret << " " << cpp_strerror(-ret) << dendl;
       return ret;
     }
-    map<string, RGWZone>::iterator zone_iter = zonegroup.zones.find(zone_params.get_id());
-    if (zone_iter != zonegroup.zones.end()) {
+    map<string, RGWZone>::iterator zone_iter = get_zonegroup().zones.find(zone_params.get_id());
+    if (zone_iter != get_zonegroup().zones.end()) {
       zone_public_config = zone_iter->second;
       ldout(cct, 20) << "zone " << zone_params.get_name() << dendl;
     } else {
