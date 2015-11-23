@@ -43,6 +43,7 @@
 #include "messages/MMonCommand.h"
 #include "messages/MRemoveSnaps.h"
 #include "messages/MOSDScrub.h"
+#include "messages/MRoute.h"
 
 #include "common/TextTable.h"
 #include "common/Timer.h"
@@ -1023,6 +1024,9 @@ void OSDMonitor::maybe_prime_pg_temp()
 void OSDMonitor::prime_pg_temp(OSDMap& next,
 			       ceph::unordered_map<pg_t, pg_stat_t>::iterator pp)
 {
+  // do not prime creating pgs
+  if (pp->second.state & PG_STATE_CREATING)
+    return;
   // do not touch a mapping if a change is pending
   if (pending_inc.new_pg_temp.count(pp->first))
     return;
@@ -1669,9 +1673,9 @@ bool OSDMonitor::check_failure(utime_t now, int target_osd, failure_info_t& fi)
   }
 
   dout(10) << " osd." << target_osd << " has "
-	   << fi.reporters.size() << " reporters and "
-	   << fi.num_reports << " reports, "
-	   << grace << " grace (" << orig_grace << " + " << my_grace << " + " << peer_grace << "), max_failed_since " << max_failed_since
+	   << fi.reporters.size() << " reporters, "
+	   << grace << " grace (" << orig_grace << " + " << my_grace
+	   << " + " << peer_grace << "), max_failed_since " << max_failed_since
 	   << dendl;
 
   // already pending failure?
@@ -1682,13 +1686,13 @@ bool OSDMonitor::check_failure(utime_t now, int target_osd, failure_info_t& fi)
   }
 
   if (failed_for >= grace &&
-      ((int)fi.reporters.size() >= g_conf->mon_osd_min_down_reporters) &&
-      (fi.num_reports >= g_conf->mon_osd_min_down_reports)) {
-    dout(1) << " we have enough reports/reporters to mark osd." << target_osd << " down" << dendl;
+      ((int)fi.reporters.size() >= g_conf->mon_osd_min_down_reporters)) {
+    dout(1) << " we have enough reporters to mark osd." << target_osd
+	    << " down" << dendl;
     pending_inc.new_state[target_osd] = CEPH_OSD_UP;
 
     mon->clog->info() << osdmap.get_inst(target_osd) << " failed ("
-		     << fi.num_reports << " reports from " << (int)fi.reporters.size() << " peers after "
+		     << (int)fi.reporters.size() << " reporters after "
 		     << failed_for << " >= grace " << grace << ")\n";
     return true;
   }
@@ -1699,7 +1703,8 @@ bool OSDMonitor::prepare_failure(MonOpRequestRef op)
 {
   op->mark_osdmon_event(__func__);
   MOSDFailure *m = static_cast<MOSDFailure*>(op->get_req());
-  dout(1) << "prepare_failure " << m->get_target() << " from " << m->get_orig_source_inst()
+  dout(1) << "prepare_failure " << m->get_target()
+	  << " from " << m->get_orig_source_inst()
           << " is reporting failure:" << m->if_osd_failed() << dendl;
 
   int target_osd = m->get_target().name.num();
@@ -1709,7 +1714,9 @@ bool OSDMonitor::prepare_failure(MonOpRequestRef op)
 
   // calculate failure time
   utime_t now = ceph_clock_now(g_ceph_context);
-  utime_t failed_since = m->get_recv_stamp() - utime_t(m->failed_for ? m->failed_for : g_conf->osd_heartbeat_grace, 0);
+  utime_t failed_since =
+    m->get_recv_stamp() -
+    utime_t(m->failed_for ? m->failed_for : g_conf->osd_heartbeat_grace, 0);
 
   if (m->if_osd_failed()) {
     // add a report
@@ -1725,7 +1732,7 @@ bool OSDMonitor::prepare_failure(MonOpRequestRef op)
   } else {
     // remove the report
     mon->clog->debug() << m->get_target() << " failure report canceled by "
-		      << m->get_orig_source_inst() << "\n";
+		       << m->get_orig_source_inst() << "\n";
     if (failure_info.count(target_osd)) {
       failure_info_t& fi = failure_info[target_osd];
       list<MonOpRequestRef> ls;
@@ -1737,12 +1744,12 @@ bool OSDMonitor::prepare_failure(MonOpRequestRef op)
 	ls.pop_front();
       }
       if (fi.reporters.empty()) {
-	dout(10) << " removing last failure_info for osd." << target_osd << dendl;
+	dout(10) << " removing last failure_info for osd." << target_osd
+		 << dendl;
 	failure_info.erase(target_osd);
       } else {
 	dout(10) << " failure_info for osd." << target_osd << " now "
-		 << fi.reporters.size() << " reporters and "
-		 << fi.num_reports << " reports" << dendl;
+		 << fi.reporters.size() << " reporters" << dendl;
       }
     } else {
       dout(10) << " no failure_info for osd." << target_osd << dendl;
@@ -2400,7 +2407,20 @@ void OSDMonitor::send_incremental(MonOpRequestRef op, epoch_t first)
 
   MonSession *s = op->get_session();
   assert(s);
-  send_incremental(first, s, false, op);
+
+  if (s->proxy_con &&
+      s->proxy_con->has_feature(CEPH_FEATURE_MON_ROUTE_OSDMAP)) {
+    // oh, we can tell the other mon to do it
+    dout(10) << __func__ << " asking proxying mon to send_incremental from "
+	     << first << dendl;
+    MRoute *r = new MRoute(s->proxy_tid, NULL);
+    r->send_osdmap_first = first;
+    s->proxy_con->send_message(r);
+    op->mark_event("reply: send routed send_osdmap_first reply");
+  } else {
+    // do it ourselves
+    send_incremental(first, s, false, op);
+  }
 }
 
 void OSDMonitor::send_incremental(epoch_t first,
@@ -2428,7 +2448,7 @@ void OSDMonitor::send_incremental(epoch_t first,
 	     << first << " " << bl.length() << " bytes" << dendl;
 
     MOSDMap *m = new MOSDMap(osdmap.get_fsid());
-    m->oldest_map = first;
+    m->oldest_map = get_first_committed();
     m->newest_map = osdmap.get_epoch();
     m->maps[first] = bl;
 
