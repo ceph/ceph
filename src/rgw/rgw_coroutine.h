@@ -131,6 +131,34 @@ struct rgw_spawned_stacks {
 class RGWCoroutine : public RefCountedObject, public boost::asio::coroutine {
   friend class RGWCoroutinesStack;
 
+  struct StatusItem {
+    utime_t timestamp;
+    string status;
+
+    StatusItem(utime_t& t, const string& s) : timestamp(t), status(s) {}
+
+    void dump(Formatter *f) const;
+  };
+
+#define MAX_COROUTINE_HISTORY 10
+
+  struct Status {
+    CephContext *cct;
+    RWLock lock;
+    int max_history;
+
+    utime_t timestamp;
+    string status;
+
+    Status(CephContext *_cct) : cct(_cct), lock("RGWCoroutine::Status::lock"), max_history(MAX_COROUTINE_HISTORY) {}
+
+    deque<StatusItem> history;
+
+    void set_status(const string& status);
+  } status;
+
+  string description;
+
 protected:
   bool _yield_ret;
   boost::asio::coroutine drain_cr;
@@ -160,8 +188,15 @@ protected:
   void set_io_blocked(bool flag);
   int io_block(int ret = 0);
 
+  void set_description(const string& s) {
+    description = s;
+  }
+  void set_status(const string& s) {
+    status.set_status(s);
+  }
+
 public:
-  RGWCoroutine(CephContext *_cct) : _yield_ret(false), cct(_cct), stack(NULL), retcode(0), state(RGWCoroutine_Run) {}
+  RGWCoroutine(CephContext *_cct) : status(_cct), _yield_ret(false), cct(_cct), stack(NULL), retcode(0), state(RGWCoroutine_Run) {}
   virtual ~RGWCoroutine() {}
 
   virtual int operate() = 0;
