@@ -28,6 +28,7 @@ using std::deque;
 #ifdef HAVE_LIBAIO
 # include <libaio.h>
 #endif
+#include "common/ProducerConsumerQueue.h"
 
 /**
  * Implements journaling on top of block device or file.
@@ -66,7 +67,8 @@ public:
 
   Mutex writeq_lock;
   Cond writeq_cond;
-  deque<write_item> writeq;
+  folly::ProducerConsumerQueue<write_item> writeq;
+
   bool writeq_empty();
   write_item &peek_write();
   void pop_write();
@@ -364,6 +366,7 @@ private:
     journaled_seq(0),
     plug_journal_completions(false),
     writeq_lock("FileJournal::writeq_lock", false, true, false, g_ceph_context),
+    writeq(g_conf->filestore_queue_max_ops * 2),
     completions_lock(
       "FileJournal::completions_lock", false, true, false, g_ceph_context),
     fn(f),

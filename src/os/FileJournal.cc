@@ -1231,7 +1231,7 @@ void FileJournal::write_thread_entry()
   while (1) {
     {
       Mutex::Locker locker(writeq_lock);
-      if (writeq.empty() && !must_write_header) {
+      if (writeq.isEmpty() && !must_write_header) {
 	if (write_stop)
 	  break;
 	dout(20) << "write_thread_entry going to sleep" << dendl;
@@ -1640,30 +1640,26 @@ void FileJournal::submit_entry(uint64_t seq, bufferlist& e, uint32_t orig_len,
     completions.push_back(
       completion_item(
 	seq, oncommit, ceph_clock_now(g_ceph_context), osd_op));
-    if (writeq.empty())
+    if (writeq.isEmpty())
       writeq_cond.Signal();
-    writeq.push_back(write_item(seq, e, orig_len, osd_op));
+    bool ret = writeq.write(write_item(seq, e, orig_len, osd_op));
+    assert(ret == true);
   }
 }
 
 bool FileJournal::writeq_empty()
 {
-  Mutex::Locker locker(writeq_lock);
-  return writeq.empty();
+  return writeq.isEmpty();
 }
 
 FileJournal::write_item &FileJournal::peek_write()
 {
-  assert(write_lock.is_locked());
-  Mutex::Locker locker(writeq_lock);
-  return writeq.front();
+  return *writeq.frontPtr();
 }
 
 void FileJournal::pop_write()
 {
-  assert(write_lock.is_locked());
-  Mutex::Locker locker(writeq_lock);
-  writeq.pop_front();
+  writeq.popFront();
 }
 
 void FileJournal::commit_start(uint64_t seq)
