@@ -2216,7 +2216,7 @@ public:
   bool queue_scrub();
 
   /// share pg info after a pg is active
-  void share_pg_info();
+  void share_pg_info(bool send_stats=false);
   /// share new pg log entries after a pg is active
   void share_pg_log();
 

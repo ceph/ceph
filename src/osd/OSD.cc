@@ -7987,6 +7987,7 @@ void OSD::do_recovery(PG *pg, ThreadPool::TPHandle &handle)
       pg->discover_all_missing(*rctx.query_map);
       if (rctx.query_map->empty()) {
 	dout(10) << "do_recovery  no luck, giving up on this pg for now" << dendl;
+	pg->publish_stats_to_osd();
 	recovery_wq.lock();
 	recovery_wq._dequeue(pg);
 	recovery_wq.unlock();

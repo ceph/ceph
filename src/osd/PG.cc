@@ -4414,11 +4414,11 @@ void PG::scrub_finish()
   scrub_unreserve_replicas();
 
   if (is_active() && is_primary()) {
-    share_pg_info();
+    share_pg_info(true);
   }
 }
 
-void PG::share_pg_info()
+void PG::share_pg_info(bool send_stats)
 {
   dout(10) << "share_pg_info" << dendl;
 
@@ -4432,6 +4432,8 @@ void PG::share_pg_info()
     if (peer_info.count(peer)) {
       peer_info[peer].last_epoch_started = info.last_epoch_started;
       peer_info[peer].history.merge(info.history);
+      if (send_stats && !is_backfill_targets(peer))
+	peer_info[peer].stats = info.stats;
     }
     MOSDPGInfo *m = new MOSDPGInfo(get_osdmap()->get_epoch());
     m->pg_list.push_back(
