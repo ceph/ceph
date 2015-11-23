@@ -103,9 +103,6 @@ class TestPG(TestArgparse):
     def test_getmap(self):
         self.assert_valid_command(['pg', 'getmap'])
 
-    def test_send_pg_creates(self):
-        self.assert_valid_command(['pg', 'send_pg_creates'])
-
     def test_dump(self):
         self.assert_valid_command(['pg', 'dump'])
         self.assert_valid_command(['pg', 'dump',

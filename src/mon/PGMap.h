@@ -181,8 +181,8 @@ public:
 
  public:
 
-  set<pg_t> creating_pgs;   // lru: front = new additions, back = recently pinged
-  map<int,set<pg_t> > creating_pgs_by_osd;
+  set<pg_t> creating_pgs;
+  map<int,map<epoch_t,set<pg_t> > > creating_pgs_by_osd_epoch;
 
   // Bits that use to be enum StuckPG
   static const int STUCK_INACTIVE = (1<<0);

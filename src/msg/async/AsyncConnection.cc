@@ -529,6 +529,7 @@ void AsyncConnection::process()
 
           if (tag == CEPH_MSGR_TAG_KEEPALIVE) {
             ldout(async_msgr->cct, 20) << __func__ << " got KEEPALIVE" << dendl;
+	    set_last_keepalive(ceph_clock_now(NULL));
           } else if (tag == CEPH_MSGR_TAG_KEEPALIVE2) {
             state = STATE_OPEN_KEEPALIVE2;
           } else if (tag == CEPH_MSGR_TAG_KEEPALIVE2_ACK) {
@@ -563,8 +564,9 @@ void AsyncConnection::process()
           utime_t kp_t = utime_t(*t);
           write_lock.Lock();
           _send_keepalive_or_ack(true, &kp_t);
-          write_lock.Unlock();
+	  write_lock.Unlock();
           ldout(async_msgr->cct, 20) << __func__ << " got KEEPALIVE2 " << kp_t << dendl;
+	  set_last_keepalive(ceph_clock_now(NULL));
           state = STATE_OPEN;
           break;
         }
@@ -581,7 +583,7 @@ void AsyncConnection::process()
           }
 
           t = (ceph_timespec*)state_buffer;
-          last_keepalive_ack = utime_t(*t);
+          set_last_keepalive_ack(utime_t(*t));
           ldout(async_msgr->cct, 20) << __func__ << " got KEEPALIVE_ACK" << dendl;
           state = STATE_OPEN;
           break;
