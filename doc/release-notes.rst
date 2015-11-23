@@ -58,7 +58,6 @@ Notable Changes
 * mds/Session: use projected parent for auth path check (`issue#13364 <http://tracker.ceph.com/issues/13364>`_, `pr#6200 <http://github.com/ceph/ceph/pull/6200>`_, Sage Weil)
 * mon: should not set isvalid = true when cephx_verify_authorizer return false (`issue#13525 <http://tracker.ceph.com/issues/13525>`_, `pr#6306 <http://github.com/ceph/ceph/pull/6306>`_, Ruifeng Yang)
 * osd: Add config option osd_read_ec_check_for_errors for testing (`pr#5865 <http://github.com/ceph/ceph/pull/5865>`_, David Zafman)
-osd: add pin/unpin support to cache tier
 * osd: add pin/unpin support to cache tier (11066) (`pr#6326 <http://github.com/ceph/ceph/pull/6326>`_, Zhiqiang Wang)
 * osd: auto repair EC pool (`issue#12754 <http://tracker.ceph.com/issues/12754>`_, `pr#6196 <http://github.com/ceph/ceph/pull/6196>`_, Guang Yang)
 * osd: drop the interim set from load_pgs() (`pr#6277 <http://github.com/ceph/ceph/pull/6277>`_, Piotr Dałek)
