@@ -483,6 +483,10 @@ int RGWCoroutinesManager::run(list<RGWCoroutinesStack *>& stacks)
     }
   }
 
+  lock.get_write();
+  run_contexts.erase(run_context);
+  lock.unlock();
+
   return 0;
 }
 
