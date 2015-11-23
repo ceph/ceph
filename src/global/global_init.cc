@@ -295,6 +295,8 @@ void global_init_daemonize(CephContext *cct)
 
   global_init_postfork_start(cct);
   global_init_postfork_finish(cct);
+#else
+# warning daemon not supported on aix
 #endif
 }
 
