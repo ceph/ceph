@@ -104,6 +104,24 @@ int RGWCoroutine::io_block(int ret) {
   return ret;
 }
 
+void RGWCoroutine::StatusItem::dump(Formatter *f) const {
+  ::encode_json("timestamp", timestamp, f);
+  ::encode_json("status", status, f);
+}
+
+void RGWCoroutine::Status::set_status(const string& s)
+{
+  RWLock::WLocker l(lock);
+  if (!timestamp.is_zero()) {
+    history.push_back(StatusItem(timestamp, status));
+  }
+  if (history.size() > (size_t)max_history) {
+    history.pop_front();
+  }
+  timestamp = ceph_clock_now(cct);
+  status = s;
+}
+
 RGWCoroutinesStack::RGWCoroutinesStack(CephContext *_cct, RGWCoroutinesManager *_ops_mgr, RGWCoroutine *start) : cct(_cct), ops_mgr(_ops_mgr),
                                                                                                          done_flag(false), error_flag(false), blocked_flag(false),
                                                                                                          sleep_flag(false), interval_wait_flag(false), is_scheduled(false), is_waiting_for_child(false),
@@ -677,6 +695,9 @@ void RGWCoroutine::wakeup()
 }
 
 void RGWCoroutine::dump(Formatter *f) const {
+  if (!description.empty()) {
+    encode_json("description", description, f);
+  }
   encode_json("type", to_str(), f);
   if (!spawned.entries.empty()) {
     f->open_array_section("spawned");
@@ -685,6 +706,16 @@ void RGWCoroutine::dump(Formatter *f) const {
       snprintf(buf, sizeof(buf), "%p", (void *)i);
       encode_json("stack", string(buf), f);
     }
+    f->close_section();
+  }
+  if (!status.history.empty()) {
+    encode_json("history", status.history, f);
+  }
+
+  if (!status.status.empty()) {
+    f->open_object_section("status");
+    encode_json("status", status.status, f);
+    encode_json("timestamp", status.timestamp, f);
     f->close_section();
   }
 }
