@@ -2044,9 +2044,13 @@ void CInode::finish_scatter_gather_update(int type)
 	    break;
 	  }
 	if (all) {
-	  clog->error() << "unmatched fragstat on " << ino() << ", inode has "
-		       << pi->dirstat << ", dirfrags have " << dirstat << "\n";
-	  assert(!"unmatched fragstat" == g_conf->mds_verify_scatter);
+	  if (state_test(CInode::STATE_REPAIRSTATS)) {
+	    dout(20) << " dirstat mismatch, fixing" << dendl;
+	  } else {
+	    clog->error() << "unmatched fragstat on " << ino() << ", inode has "
+			  << pi->dirstat << ", dirfrags have " << dirstat << "\n";
+	    assert(!"unmatched fragstat" == g_conf->mds_verify_scatter);
+	  }
 	  // trust the dirfrags for now
 	  version_t v = pi->dirstat.version;
 	  pi->dirstat = dirstat;
@@ -2139,9 +2143,13 @@ void CInode::finish_scatter_gather_update(int type)
 	    break;
 	  }
 	if (all) {
-	  clog->error() << "unmatched rstat on " << ino() << ", inode has "
-		       << pi->rstat << ", dirfrags have " << rstat << "\n";
-	  assert(!"unmatched rstat" == g_conf->mds_verify_scatter);
+	  if (state_test(CInode::STATE_REPAIRSTATS)) {
+	    dout(20) << " rstat mismatch, fixinga" << dendl;
+	  } else {
+	    clog->error() << "unmatched rstat on " << ino() << ", inode has "
+			  << pi->rstat << ", dirfrags have " << rstat << "\n";
+	    assert(!"unmatched rstat" == g_conf->mds_verify_scatter);
+	  }
 	  // trust the dirfrag for now
 	  version_t v = pi->rstat.version;
 	  pi->rstat = rstat;
@@ -3948,6 +3956,7 @@ void CInode::validate_disk_state(CInode::validated_data *results,
 	  !nest_info.same_sums(in->inode.rstat)) {
         results->raw_stats.error_str
         << "freshly-calculated rstats don't match existing ones";
+	in->mdcache->repair_inode_stats(in, NULL);
         return true;
       }
       results->raw_stats.passed = true;
