@@ -57,8 +57,8 @@ public:
     RadosTestFixture::TearDown();
   }
 
-  int create(const std::string &oid) {
-    return RadosTestFixture::create(oid, 14, 2);
+  int create(const std::string &oid, uint8_t splay_width = 2) {
+    return RadosTestFixture::create(oid, 14, splay_width);
   }
 
   int client_register(const std::string &oid) {
@@ -351,4 +351,45 @@ TEST_F(TestJournalPlayer, PrefetchAndWatch) {
 
   expected_entries = {create_entry("tag1", 124)};
   ASSERT_EQ(expected_entries, entries);
+}
+
+TEST_F(TestJournalPlayer, PrefetchSkippedObject) {
+  std::string oid = get_temp_oid();
+
+  cls::journal::ObjectSetPosition commit_position;
+
+  ASSERT_EQ(0, create(oid, 3));
+  ASSERT_EQ(0, client_register(oid));
+  ASSERT_EQ(0, client_commit(oid, commit_position));
+
+  journal::JournalMetadataPtr metadata = create_metadata(oid);
+  ASSERT_EQ(0, init_metadata(metadata));
+  metadata->set_active_set(2);
+
+  journal::JournalPlayer *player = create_player(oid, metadata);
+
+  ASSERT_EQ(0, write_entry(oid, 0, "tag1", 122));
+  ASSERT_EQ(0, write_entry(oid, 1, "tag1", 123));
+  ASSERT_EQ(0, write_entry(oid, 5, "tag1", 124));
+  ASSERT_EQ(0, write_entry(oid, 6, "tag1", 125));
+  ASSERT_EQ(0, write_entry(oid, 7, "tag1", 126));
+
+  player->prefetch();
+
+  Entries entries;
+  ASSERT_TRUE(wait_for_entries(player, 5, &entries));
+  ASSERT_TRUE(wait_for_complete(player));
+
+  Entries expected_entries;
+  expected_entries = {
+    create_entry("tag1", 122),
+    create_entry("tag1", 123),
+    create_entry("tag1", 124),
+    create_entry("tag1", 125),
+    create_entry("tag1", 126)};
+  ASSERT_EQ(expected_entries, entries);
+
+  uint64_t last_tid;
+  ASSERT_TRUE(metadata->get_last_allocated_tid("tag1", &last_tid));
+  ASSERT_EQ(126U, last_tid);
 }
