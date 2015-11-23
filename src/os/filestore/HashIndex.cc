@@ -358,15 +358,27 @@ int HashIndex::_remove(const vector<string> &path,
   }
 }
 
+static const string&
+get_path_component_at_index(uint32_t key, int index, const int max_hash_level)
+{
+    static const string hex2str_map[] = { "0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "A", "B", "C", "D", "E", "F" };
+
+    assert(index < max_hash_level);
+    int shift = (max_hash_level - (index + 1)) * 4;
+    int hexval = (key >> shift) & 0x0F;
+
+    return hex2str_map[hexval];
+}
+
 int HashIndex::_lookup(const ghobject_t &oid,
-		       vector<string> *path,
-		       string *mangled_name,
-		       int *hardlink) {
-  vector<string> path_comp;
-  get_path_components(oid, &path_comp);
-  vector<string>::iterator next = path_comp.begin();
+                      vector<string> *path,
+                      string *mangled_name,
+                      int *hardlink) {
+
+  uint32_t key = (uint32_t)oid.hobj.get_nibblewise_key();
   int exists;
-  while (1) {
+
+  for (int i = 0; i < MAX_HASH_LEVEL; i++) {
     int r = path_exists(*path, &exists);
     if (r < 0)
       return r;
@@ -376,9 +388,7 @@ int HashIndex::_lookup(const ghobject_t &oid,
       path->pop_back();
       break;
     }
-    if (next == path_comp.end())
-      break;
-    path->push_back(*(next++));
+    path->push_back(get_path_component_at_index(key, i, MAX_HASH_LEVEL));
   }
   return get_mangled_name(*path, oid, mangled_name, hardlink);
 }
