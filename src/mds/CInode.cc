@@ -3921,32 +3921,36 @@ void CInode::validate_disk_state(CInode::validated_data *results,
 
     bool _dirfrags(int rval) {
       // basic reporting setup
-      results->raw_rstats.checked = true;
-      results->raw_rstats.ondisk_read_retval = rval;
-      results->raw_rstats.passed = false; // we'll set it true if we make it
+      results->raw_stats.checked = true;
+      results->raw_stats.ondisk_read_retval = rval;
       if (rval != 0) {
-        results->raw_rstats.error_str << "Failed to read dirfrags off disk";
+        results->raw_stats.error_str << "Failed to read dirfrags off disk";
         return true;
       }
 
       // check each dirfrag...
-      nest_info_t& sub_info = results->raw_rstats.ondisk_value;
+
+      frag_info_t& dir_info = results->raw_stats.ondisk_value.dirstat;
+      nest_info_t& nest_info = results->raw_stats.ondisk_value.rstat;
       for (compact_map<frag_t,CDir*>::iterator p = in->dirfrags.begin();
 	   p != in->dirfrags.end();
 	   ++p) {
 	CDir *dir = p->second;
 	assert(dir->get_version() > 0);
-	sub_info.add(dir->fnode.accounted_rstat);
+	nest_info.add(dir->fnode.accounted_rstat);
+	dir_info.add(dir->fnode.accounted_fragstat);
       }
+      nest_info.rsubdirs++; // it gets one to account for self
       // ...and that their sum matches our inode settings
-      results->raw_rstats.memory_value = in->inode.rstat;
-      sub_info.rsubdirs++; // it gets one to account for self
-      if (!sub_info.same_sums(in->inode.rstat)) {
-        results->raw_rstats.error_str
+      results->raw_stats.memory_value.dirstat = in->inode.dirstat;
+      results->raw_stats.memory_value.rstat = in->inode.rstat;
+      if (!dir_info.same_sums(in->inode.dirstat) ||
+	  !nest_info.same_sums(in->inode.rstat)) {
+        results->raw_stats.error_str
         << "freshly-calculated rstats don't match existing ones";
         return true;
       }
-      results->raw_rstats.passed = true;
+      results->raw_stats.passed = true;
       // Hurray! We made it through!
       results->passed_validation = true;
       return true;
@@ -3986,24 +3990,26 @@ void CInode::validated_data::dump(Formatter *f) const
       f->dump_string("error_str", backtrace.error_str.str());
     }
     f->close_section(); // backtrace
-    f->open_object_section("raw_rstats");
+    f->open_object_section("raw_stats");
     {
-      f->dump_bool("checked", raw_rstats.checked);
-      f->dump_bool("passed", raw_rstats.passed);
-      f->dump_int("read_ret_val", raw_rstats.ondisk_read_retval);
-      f->dump_stream("ondisk_value") << raw_rstats.ondisk_value;
-      f->dump_stream("memory_value") << raw_rstats.memory_value;
-      f->dump_string("error_str", raw_rstats.error_str.str());
+      f->dump_bool("checked", raw_stats.checked);
+      f->dump_bool("passed", raw_stats.passed);
+      f->dump_int("read_ret_val", raw_stats.ondisk_read_retval);
+      f->dump_stream("ondisk_value.dirstat") << raw_stats.ondisk_value.dirstat;
+      f->dump_stream("ondisk_value.rstat") << raw_stats.ondisk_value.rstat;
+      f->dump_stream("memory_value.dirrstat") << raw_stats.memory_value.dirstat;
+      f->dump_stream("memory_value.rstat") << raw_stats.memory_value.rstat;
+      f->dump_string("error_str", raw_stats.error_str.str());
     }
-    f->close_section(); // raw_rstats
+    f->close_section(); // raw_stats
     // dump failure return code
     int rc = 0;
     if (backtrace.checked && backtrace.ondisk_read_retval)
       rc = backtrace.ondisk_read_retval;
     if (inode.checked && inode.ondisk_read_retval)
       rc = inode.ondisk_read_retval;
-    if (raw_rstats.checked && raw_rstats.ondisk_read_retval)
-      rc = raw_rstats.ondisk_read_retval;
+    if (raw_stats.checked && raw_stats.ondisk_read_retval)
+      rc = raw_stats.ondisk_read_retval;
     f->dump_int("return_code", rc);
   }
   f->close_section(); // results

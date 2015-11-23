@@ -161,6 +161,10 @@ struct frag_info_t : public scatter_info_t {
     nsubdirs += other.nsubdirs;
   }
 
+  bool same_sums(const frag_info_t &o) const {
+    return nfiles == o.nfiles && nsubdirs == o.nsubdirs;
+  }
+
   void encode(bufferlist &bl) const;
   void decode(bufferlist::iterator& bl);
   void dump(Formatter *f) const;
