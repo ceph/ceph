@@ -48,6 +48,7 @@ do_map() {
 		MAP_RV=""
 		OIFS=$IFS
 		IFS=','
+		CMDPARAMS=""
 		for PARAM in ${PARAMS[@]}; do
 			CMDPARAMS="$CMDPARAMS --$(echo $PARAM | tr '=' ' ')"
 		done
@@ -128,11 +129,11 @@ do_unmap() {
 
 case "$1" in
   start)
-	do_map
+	rbdmap map
 	;;
 
   stop)
-	do_unmap
+	rbdmap unmap
 	;;
 
   restart|force-reload)
@@ -141,7 +142,7 @@ case "$1" in
 	;;
 
   reload)
-	do_map
+	rbdmap map
 	;;
 
   status)
