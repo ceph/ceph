@@ -56,8 +56,8 @@ case $action in start | stop | status | enable | disable | mask | unmask | resta
     rc_check
 ;;
 *)
-    echo "Invalid paramter : $action"
-    echo "Valid paramters  : start | stop | status | enable | disable | mask | unmask | restart | is-active | is-failed | show | kill | reset-failed"
+    echo "Invalid parameter : $action"
+    echo "Valid parameters  : start | stop | status | enable | disable | mask | unmask | restart | is-active | is-failed | show | kill | reset-failed"
 ;;
 esac
 
