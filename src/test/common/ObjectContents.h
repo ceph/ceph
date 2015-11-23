@@ -1,6 +1,6 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 #include "include/interval_set.h"
-#include "include/buffer.h"
+#include "include/buffer_fwd.h"
 #include <map>
 
 #ifndef COMMON_OBJECT_H

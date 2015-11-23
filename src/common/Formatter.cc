@@ -19,6 +19,7 @@
 #include "assert.h"
 #include "Formatter.h"
 #include "common/escape.h"
+#include "include/buffer.h"
 
 #include <iostream>
 #include <sstream>
@@ -87,6 +88,14 @@ Formatter *Formatter::create(const std::string &type,
     return create(fallback, "", "");
   else
     return (Formatter *) NULL;
+}
+
+
+void Formatter::flush(bufferlist &bl)
+{
+  std::stringstream os;
+  flush(os);
+  bl.append(os.str());
 }
 
 void Formatter::dump_format(const char *name, const char *fmt, ...)

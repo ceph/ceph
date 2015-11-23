@@ -18,7 +18,7 @@
 #define CEPH_CDIR_H
 
 #include "include/types.h"
-#include "include/buffer.h"
+#include "include/buffer_fwd.h"
 #include "mdstypes.h"
 #include "common/config.h"
 #include "common/DecayCounter.h"
