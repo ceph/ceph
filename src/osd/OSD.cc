@@ -4721,11 +4721,9 @@ void OSD::got_full_map(epoch_t e)
 void OSD::send_failures()
 {
   assert(osd_lock.is_locked());
-  bool locked = false;
-  if (!failure_queue.empty()) {
-    heartbeat_lock.Lock();
-    locked = true;
-  }
+  if (failure_queue.empty())
+    return;
+  heartbeat_lock.Lock();
   utime_t now = ceph_clock_now(cct);
   while (!failure_queue.empty()) {
     int osd = failure_queue.begin()->first;
@@ -4735,7 +4733,7 @@ void OSD::send_failures()
     failure_pending[osd] = i;
     failure_queue.erase(osd);
   }
-  if (locked) heartbeat_lock.Unlock();
+  heartbeat_lock.Unlock();
 }
 
 void OSD::send_still_alive(epoch_t epoch, const entity_inst_t &i)
