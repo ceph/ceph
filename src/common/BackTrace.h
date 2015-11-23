@@ -21,6 +21,9 @@ struct BackTrace {
 #ifdef HAVE_EXECINFO_H
     size = backtrace(array, max);
     strings = backtrace_symbols(array, size);
+#else
+    skip = 0;
+    size = 0;
 #endif
   }
   ~BackTrace() {
