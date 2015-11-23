@@ -4020,7 +4020,6 @@ void OSD::tick()
   if (is_waiting_for_healthy()) {
     if (_is_healthy()) {
       dout(1) << "healthy again, booting" << dendl;
-      set_state(STATE_BOOTING);
       start_boot();
     }
   }
@@ -4409,8 +4408,10 @@ void OSD::ms_handle_connect(Connection *con)
       return;
     dout(10) << "ms_handle_connect on mon" << dendl;
 
-    if (is_preboot() || is_booting()) {
+    if (is_preboot()) {
       start_boot();
+    } else if (is_booting()) {
+      _send_boot();       // resend boot message
     } else {
       utime_t now = ceph_clock_now(NULL);
       last_mon_report = now;
