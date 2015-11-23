@@ -1076,9 +1076,14 @@ public:
     bool performed_validation;
     bool passed_validation;
 
+    struct raw_stats_t {
+      frag_info_t dirstat;
+      nest_info_t rstat;
+    };
+
     member_status<inode_backtrace_t> backtrace;
     member_status<inode_t> inode;
-    member_status<nest_info_t> raw_rstats;
+    member_status<raw_stats_t> raw_stats;
 
     validated_data() : performed_validation(false),
         passed_validation(false) {}
