@@ -428,7 +428,7 @@ protected:
   unsigned get_num_snap_null() const { return num_snap_null; }
   unsigned get_num_any() const { return num_head_items + num_head_null + num_snap_items + num_snap_null; }
   
-  bool check_rstats();
+  bool check_rstats(bool scrub=false);
 
   void inc_num_dirty() { num_dirty++; }
   void dec_num_dirty() { 
