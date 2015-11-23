@@ -8854,6 +8854,9 @@ void MDCache::dispatch_request(MDRequestRef& mdr)
     case CEPH_MDS_OP_REPAIR_FRAGSTATS:
       repair_dirfrag_stats_work(mdr);
       break;
+    case CEPH_MDS_OP_REPAIR_INODESTATS:
+      repair_inode_stats_work(mdr);
+      break;
     default:
       assert(0);
     }
@@ -11948,6 +11951,101 @@ void MDCache::repair_dirfrag_stats_work(MDRequestRef& mdr)
   le->metablob.add_dir(dir, true);
 
   mds->mdlog->submit_entry(le, new C_MDC_RepairDirfragStats(mds, mdr));
+}
+
+void MDCache::repair_inode_stats(CInode *diri, Context *fin)
+{
+  if (!fin)
+    fin = new C_MDSInternalNoop;
+  MDRequestRef mdr = request_start_internal(CEPH_MDS_OP_REPAIR_INODESTATS);
+  mdr->pin(diri);
+  mdr->internal_op_private = diri;
+  mdr->internal_op_finish = fin;
+  repair_inode_stats_work(mdr);
+}
+
+void MDCache::repair_inode_stats_work(MDRequestRef& mdr)
+{
+  CInode *diri = static_cast<CInode*>(mdr->internal_op_private);
+  dout(10) << __func__ << " " << *diri << dendl;
+
+  if (!diri->is_auth()) {
+    mds->server->respond_to_request(mdr, -ESTALE);
+    return;
+  }
+  if (!diri->is_dir()) {
+    mds->server->respond_to_request(mdr, -ENOTDIR);
+    return;
+  }
+
+  set<SimpleLock*> rdlocks, wrlocks, xlocks;
+  std::list<frag_t> frags;
+
+  if (mdr->ls) // already marked filelock/nestlock dirty ?
+    goto do_rdlocks;
+
+  rdlocks.insert(&diri->dirfragtreelock);
+  wrlocks.insert(&diri->nestlock);
+  wrlocks.insert(&diri->filelock);
+  if (!mds->locker->acquire_locks(mdr, rdlocks, wrlocks, xlocks))
+    return;
+
+  // Fetch all dirfrags and mark filelock/nestlock dirty. This will tirgger
+  // the scatter-gather process, which will fix any fragstat/rstat errors.
+  diri->dirfragtree.get_leaves(frags);
+  for (list<frag_t>::iterator p = frags.begin(); p != frags.end(); ++p) {
+    CDir *dir = diri->get_dirfrag(*p);
+    if (!dir) {
+      assert(mdr->is_auth_pinned(diri));
+      dir = diri->get_or_open_dirfrag(this, *p);
+    }
+    if (dir->get_version() == 0) {
+      assert(dir->is_auth());
+      dir->fetch(new C_MDS_RetryRequest(this, mdr));
+      return;
+    }
+  }
+
+  diri->state_set(CInode::STATE_REPAIRSTATS);
+  mdr->ls = mds->mdlog->get_current_segment();
+  mds->locker->mark_updated_scatterlock(&diri->filelock);
+  mdr->ls->dirty_dirfrag_dir.push_back(&diri->item_dirty_dirfrag_dir);
+  mds->locker->mark_updated_scatterlock(&diri->nestlock);
+  mdr->ls->dirty_dirfrag_nest.push_back(&diri->item_dirty_dirfrag_nest);
+
+  mds->locker->drop_locks(mdr.get());
+
+do_rdlocks:
+  // force the scatter-gather process
+  rdlocks.insert(&diri->dirfragtreelock);
+  rdlocks.insert(&diri->nestlock);
+  rdlocks.insert(&diri->filelock);
+  wrlocks.clear();
+  if (!mds->locker->acquire_locks(mdr, rdlocks, wrlocks, xlocks))
+    return;
+
+  diri->state_clear(CInode::STATE_REPAIRSTATS);
+
+  frag_info_t dir_info;
+  nest_info_t nest_info;
+  nest_info.rsubdirs++; // it gets one to account for self
+
+  diri->dirfragtree.get_leaves(frags);
+  for (list<frag_t>::iterator p = frags.begin(); p != frags.end(); ++p) {
+    CDir *dir = diri->get_dirfrag(*p);
+    assert(dir);
+    assert(dir->get_version() > 0);
+    dir_info.add(dir->fnode.accounted_fragstat);
+    nest_info.add(dir->fnode.accounted_rstat);
+  }
+
+  if (!dir_info.same_sums(diri->inode.dirstat) ||
+      !nest_info.same_sums(diri->inode.rstat)) {
+    dout(10) << __func__ << " failed to fix fragstat/rstat on "
+	     << *diri << dendl;
+  }
+
+  mds->server->respond_to_request(mdr, 0);
 }
 
 void MDCache::flush_dentry(const string& path, Context *fin)
