@@ -604,9 +604,8 @@ def create_nonregion_pools(ctx, config, regions):
                               64*1024*1024)
     yield
 
-
 @contextlib.contextmanager
-def configure_regions_and_zones(ctx, config, regions, role_endpoints):
+def configure_regions_and_zones(ctx, config, regions, role_endpoints, realm):
     """
     Configure regions and zones from rados and rgw.
     """
@@ -617,11 +616,19 @@ def configure_regions_and_zones(ctx, config, regions, role_endpoints):
         yield
         return
 
+    if not realm:
+        log.debug(
+            'In rgw.configure_regions_and_zones() and realm is None. '
+            'Bailing')
+        yield
+        return
+
     log.info('Configuring regions and zones...')
 
     log.debug('config is %r', config)
     log.debug('regions are %r', regions)
     log.debug('role_endpoints = %r', role_endpoints)
+    log.debug('realm is %r', realm)
     # extract the zone info
     role_zones = dict([(client, extract_zone_info(ctx, client, c_config))
                        for client, c_config in config.iteritems()])
@@ -653,6 +660,29 @@ def configure_regions_and_zones(ctx, config, regions, role_endpoints):
           cmd=['-p', '.rgw.root', 'rm', 'region_info.default'])
     rados(ctx, mon,
           cmd=['-p', '.rgw.root', 'rm', 'zone_info.default'])
+
+    # read master zonegroup and master_zone
+    for region, info in region_info.iteritems():
+        if info['is_master']:
+            master_zonegroup = region
+            master_zone = info['master_zone']
+            for client in config.iterkeys():
+                if role_zones[client]['region'] == master_zonegroup and role_zones[client]['zone'] == master_zone:
+                    master_client = client
+                    break
+            break
+
+    rgwadmin(ctx, master_client,
+             cmd=['-n', master_client, 'realm', 'create', '--rgw-realm=', realm],
+             check_status=True)
+
+    rgwadmin(ctx, master_client,
+             cmd=['-n', master_client, 'realm', 'default', '--rgw-realm=', realm],
+             check_status=True)
+
+    rgwadmin(ctx, master_client,
+             cmd=['-n', master_client, 'period', 'update'],
+             check_status=True)
 
     for client in config.iterkeys():
         for role, (_, zone, zone_info, user_info) in role_zones.iteritems():
@@ -696,6 +726,11 @@ def configure_regions_and_zones(ctx, config, regions, role_endpoints):
                          check_status=True)
 
         rgwadmin(ctx, client, cmd=['-n', client, 'regionmap', 'update'])
+
+        rgwadmin(ctx, master_client,
+                 cmd=['-n', master_client, 'period', 'commit'],
+                 check_status=True)
+
     yield
 
 
@@ -806,6 +841,7 @@ def task(ctx, config):
               k: 2
               m: 1
               ruleset-failure-domain: osd
+            realm: foo
             regions:
               foo:
                 api name: api_name # default: region name
@@ -858,6 +894,13 @@ def task(ctx, config):
     # structure
     ctx.rgw.regions = regions
 
+    realm = ''
+    if 'realm' in config:
+        # separate region info so only clients are keys in config
+        realm = config['realm']
+        del config['realm']
+    ctx.rgw.realm = realm
+
     ctx.rgw.ec_data_pool = False
     if 'ec-data-pool' in config:
         ctx.rgw.ec_data_pool = bool(config['ec-data-pool'])
@@ -892,6 +935,7 @@ def task(ctx, config):
             config=config,
             regions=regions,
             role_endpoints=role_endpoints,
+            realm=realm,
             ),
         lambda: configure_users(
             ctx=ctx,
