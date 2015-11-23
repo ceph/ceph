@@ -15,7 +15,7 @@
 #ifndef CEPH_HASHINDEX_H
 #define CEPH_HASHINDEX_H
 
-#include "include/buffer.h"
+#include "include/buffer_fwd.h"
 #include "include/encoding.h"
 #include "LFNIndex.h"
 

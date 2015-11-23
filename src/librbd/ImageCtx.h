@@ -17,7 +17,7 @@
 #include "common/RWLock.h"
 #include "common/snap_types.h"
 #include "include/atomic.h"
-#include "include/buffer.h"
+#include "include/buffer_fwd.h"
 #include "include/rbd/librbd.hpp"
 #include "include/rbd_types.h"
 #include "include/types.h"
