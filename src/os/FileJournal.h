@@ -419,7 +419,7 @@ private:
 
   void flush();
 
-  void throttle();
+  void throttle(ThreadPool::TPHandle *handle);
 
   bool is_writeable() {
     return read_pos == 0;

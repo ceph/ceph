@@ -2001,12 +2001,16 @@ FileJournal::read_entry_result FileJournal::do_read_entry(
   return SUCCESS;
 }
 
-void FileJournal::throttle()
+void FileJournal::throttle(ThreadPool::TPHandle *handle)
 {
+  if (handle)
+    handle->suspend_tp_timeout();
   if (throttle_ops.wait(g_conf->journal_queue_max_ops))
     dout(2) << "throttle: waited for ops" << dendl;
   if (throttle_bytes.wait(g_conf->journal_queue_max_bytes))
     dout(2) << "throttle: waited for bytes" << dendl;
+  if (handle)
+    handle->reset_tp_timeout();
 }
 
 void FileJournal::get_header(

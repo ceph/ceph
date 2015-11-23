@@ -49,7 +49,7 @@ public:
   virtual void close() = 0;  ///< close an open journal
 
   virtual void flush() = 0;
-  virtual void throttle() = 0;
+  virtual void throttle(ThreadPool::TPHandle *handle) = 0;
 
   virtual int dump(ostream& out) { return -EOPNOTSUPP; }
 
