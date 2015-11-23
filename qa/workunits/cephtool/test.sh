@@ -1281,7 +1281,6 @@ function test_mon_pg()
   ceph pg repair 0.0
   ceph pg scrub 0.0
 
-  ceph pg send_pg_creates
   ceph pg set_full_ratio 0.90
   ceph pg dump --format=plain | grep '^full_ratio 0.9'
   ceph pg set_full_ratio 0.95

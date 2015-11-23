@@ -124,7 +124,7 @@ function TEST_crush_rule_create_erasure() {
     # it will prevent the creation of a pool.
     #
     local crushtool_path_old=`ceph-conf --show-config-value crushtool`
-    ceph tell mon.* injectargs --crushtool "false"
+    ceph tell mon.\* injectargs --crushtool "false"
 
     expect_failure $dir "Error EINVAL" \
         ./ceph osd pool create mypool 1 1 erasure || return 1
@@ -257,7 +257,7 @@ function TEST_crush_repair_faulty_crushmap() {
     ./crushtool -c $empty_map.txt -o $empty_map.map || return 1
 
     local crushtool_path_old=`ceph-conf --show-config-value crushtool`
-    ceph tell mon.* injectargs --crushtool "true"
+    ceph tell mon.\* injectargs --crushtool "true"
 
     ceph osd setcrushmap -i $empty_map.map || return 1
     # should be an empty crush map without any buckets

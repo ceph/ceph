@@ -47,9 +47,7 @@ public:
   PGMap pg_map;
 
   bool need_check_down_pgs;
-
-  epoch_t last_map_pg_create_osd_epoch;
-
+  set<int> need_check_down_pg_osds;
 
 private:
   PGMap::Incremental pending_inc;
@@ -114,7 +112,8 @@ private:
   // when we last received PG stats from each osd
   map<int,utime_t> last_osd_report;
 
-  void register_pg(pg_pool_t& pool, pg_t pgid, epoch_t epoch, bool new_pool);
+  void register_pg(OSDMap *osdmap, pg_pool_t& pool, pg_t pgid,
+		   epoch_t epoch, bool new_pool);
 
   /**
    * check latest osdmap for new pgs to register
@@ -123,18 +122,27 @@ private:
    */
   bool register_new_pgs();
 
-  void map_pg_creates();
+  /**
+   * recalculate creating pg mappings
+   *
+   * @return true if we updated pending_inc
+   */
+  bool map_pg_creates();
+
   void send_pg_creates();
-  void send_pg_creates(int osd, Connection *con);
+  epoch_t send_pg_creates(int osd, Connection *con, epoch_t next);
 
   /**
    * check pgs for down primary osds
    *
    * clears need_check_down_pgs
+   * clears need_check_down_pg_osds
    *
    * @return true if we updated pending_inc (and should propose)
    */
   bool check_down_pgs();
+  void _mark_pg_stale(pg_t pgid, const pg_stat_t& cur_stat);
+
 
   /**
    * Dump stats from pgs stuck in specified states.
@@ -156,7 +164,6 @@ public:
   PGMonitor(Monitor *mn, Paxos *p, const string& service_name)
     : PaxosService(mn, p, service_name),
       need_check_down_pgs(false),
-      last_map_pg_create_osd_epoch(0),
       pgmap_meta_prefix("pgmap_meta"),
       pgmap_pg_prefix("pgmap_pg"),
       pgmap_osd_prefix("pgmap_osd")
@@ -204,6 +211,7 @@ public:
 			     list<pair<health_status_t,string> > *detail,
 			     const set<int>& s, const char *desc, health_status_t sev) const;
 
+  void check_subs();
   void check_sub(Subscription *sub);
 
 private:
