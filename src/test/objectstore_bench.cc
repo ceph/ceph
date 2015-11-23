@@ -145,6 +145,7 @@ void osbench_worker(ObjectStore *os, const Config &cfg,
       delete t;
     }
   }
+  sequencer.flush();
 }
 
 int main(int argc, const char *argv[])
@@ -204,6 +205,40 @@ int main(int argc, const char *argv[])
                           g_conf->osd_objectstore,
                           g_conf->osd_data,
                           g_conf->osd_journal));
+
+  //Checking data folder: create if needed or error if it's not empty
+  DIR *dir = ::opendir(g_conf->osd_data.c_str());
+  if (!dir) {
+    std::string cmd("mkdir -p ");
+    cmd+=g_conf->osd_data;
+    int r = ::system( cmd.c_str() );
+    if( r<0 ){
+      derr << "Failed to create data directory, ret = " << r << dendl;
+      return 1;
+    }
+  }
+  else {
+     bool non_empty = readdir(dir) != NULL && readdir(dir) != NULL && readdir(dir) != NULL;
+     if( non_empty ){
+       derr << "Data directory '"<<g_conf->osd_data<<"' isn't empty, please clean it first."<< dendl;
+       return 1;
+     }
+  }
+  ::closedir(dir);
+
+  //Create folders for journal if needed
+  string journal_base = g_conf->osd_journal.substr(0, g_conf->osd_journal.rfind('/'));
+  struct stat sb;
+  if (stat(journal_base.c_str(), &sb) != 0 ){
+    std::string cmd("mkdir -p ");
+    cmd+=journal_base;
+    int r = ::system( cmd.c_str() );
+    if( r<0 ){
+      derr << "Failed to create journal directory, ret = " << r << dendl;
+      return 1;
+    }
+  }
+
   if (!os) {
     derr << "bad objectstore type " << g_conf->osd_objectstore << dendl;
     return 1;
