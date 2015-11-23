@@ -21,104 +21,6 @@ class RGWMetaSyncStatusManager;
 class RGWMetaSyncCR;
 class RGWRESTConn;
 
-class RGWReportContainer : public RefCountedObject {
-  CephContext *cct;
-  RGWReportContainer *parent;
-
-  string id;
-  string operation;
-  utime_t timestamp;
-  string status;
-
-  struct StatusHistoryItem {
-    utime_t timestamp;
-    string status;
-
-    StatusHistoryItem() {}
-    StatusHistoryItem(const utime_t& _ts, const string& _status) : timestamp(_ts), status(_status) {}
-
-    void dump(Formatter *f) const;
-  };
-  deque<StatusHistoryItem> status_history;
-
-  int max_history;
-
-  map<string, RGWReportContainer *> actions;
-
-  RWLock lock;
-
-  bool _finish_action(const string& id) {
-    auto i = actions.find(id);
-    if (i != actions.end()) {
-      i->second->put();
-      actions.erase(i);
-      return true;
-    }
-    return false;
-  }
-
-public:
-  RGWReportContainer(CephContext *_cct) : cct(_cct), parent(NULL), lock("RGWStatsuContainer::lock") {}
-  RGWReportContainer(CephContext *_cct, RGWReportContainer *_parent, const string& _id, const string& _op, const string& _status);
-
-  void set_status(const string& s);
-
-  RGWReportContainer *new_action(RGWReportContainer *new_status) {
-    get();
-    finish_action(new_status->id);
-    new_status->get();
-    actions[new_status->id] = new_status;
-    return new_status;
-  }
-
-  RGWReportContainer *new_action(const string& action_id, const string& op, const string& status) {
-    RGWReportContainer *new_status = new RGWReportContainer(cct, this, action_id, op, status);
-    return new_action(new_status);
-  }
-
-  void finish_action(const string& action_id) {
-    lock.get_write();
-    bool need_put = _finish_action(action_id);
-    lock.unlock();
-    if (need_put) {
-      put();
-    }
-  }
-
-  void finish() {
-    if (parent) {
-      parent->finish_action(id);
-    }
-    put();
-  }
-
-  virtual void dump(Formatter *f) const;
-};
-
-class RGWMetaSyncReport {
-  string source;
-
-  RGWReportContainer report;
-
-  RWLock lock;
-
-public:
-  RGWMetaSyncReport(CephContext *cct) : report(cct), lock("RGWMetaSycnReport::lock") {}
-
-  void set_source(const string& s) {
-    RWLock::WLocker l(lock);
-    source = s;
-  }
-
-  RGWReportContainer& get_container() { return report; }
-
-  void set_status(const string& s) {
-    report.set_status(s);
-  }
-
-  void dump(Formatter *f) const;
-};
-
 #define DEFAULT_BACKOFF_MAX 30
 
 class RGWSyncBackoff {
@@ -190,8 +92,6 @@ struct RGWMetaSyncEnv {
   string status_oid();
 };
 
-class RGWMetadataSyncReportHook;
-
 class RGWRemoteMetaLog : public RGWCoroutinesManager {
   RGWRados *store;
   RGWRESTConn *conn;
@@ -206,15 +106,13 @@ class RGWRemoteMetaLog : public RGWCoroutinesManager {
 
   RGWMetaSyncEnv sync_env;
 
-  RGWMetaSyncReport sync_report;
-
   void init_sync_env(RGWMetaSyncEnv *env);
 
 public:
   RGWRemoteMetaLog(RGWRados *_store, RGWMetaSyncStatusManager *_sm) : RGWCoroutinesManager(_store->ctx(), _store->get_cr_registry()), store(_store),
                                        conn(NULL), async_rados(nullptr),
                                        http_manager(store->ctx(), &completion_mgr),
-                                       status_manager(_sm), meta_sync_cr(NULL), sync_report(_store->ctx()) {}
+                                       status_manager(_sm), meta_sync_cr(NULL) {}
 
   int init();
   void finish();
@@ -235,8 +133,6 @@ public:
   RGWMetaSyncEnv& get_sync_env() {
     return sync_env;
   }
-
-  RGWMetaSyncReport& get_sync_report() { return sync_report; }
 };
 
 class RGWMetaSyncStatusManager {
@@ -268,16 +164,13 @@ class RGWMetaSyncStatusManager {
   map<utime_shard, int> ts_to_shard;
   vector<string> clone_markers;
 
-  RGWMetadataSyncReportHook *asok_hook;
-
 public:
   RGWMetaSyncStatusManager(RGWRados *_store) : store(_store), master_log(store, this), num_shards(0),
-                                               ts_to_shard_lock("ts_to_shard_lock"), asok_hook(NULL) {}
+                                               ts_to_shard_lock("ts_to_shard_lock") {}
   int init();
   void finish();
 
   rgw_meta_sync_status& get_sync_status() { return sync_status; }
-  RGWMetaSyncReport& get_sync_report() { return master_log.get_sync_report(); }
 
   int read_sync_status() { return master_log.read_sync_status(&sync_status); }
   int init_sync_status() { return master_log.init_sync_status(num_shards); }
