@@ -3737,12 +3737,23 @@ void CInode::validate_disk_state(CInode::validated_data *results,
       C_OnFinisher *conf = new C_OnFinisher(get_io_callback(BACKTRACE),
                                             in->mdcache->mds->finisher);
 
-      // Rather than using the usual CInode::fetch_backtrace,
-      // use a special variant that optionally writes a tag in the same
-      // operation.
-      const std::string &tag = in->get_parent_dn()->scrub_info()->header->tag;
-      fetch_backtrace_and_tag(in, tag, conf,
-                              &results->backtrace.ondisk_read_retval, &bl);
+      // Whether we have a tag to apply depends on ScrubHeader (if one is
+      // present)
+      if (in->get_parent_dn() != nullptr &&
+          in->get_parent_dn()->scrub_info()->header != nullptr) {
+        // I'm a non-orphan, so look up my ScrubHeader via my linkage
+        const std::string &tag = in->get_parent_dn()->scrub_info()->header->tag;
+        // Rather than using the usual CInode::fetch_backtrace,
+        // use a special variant that optionally writes a tag in the same
+        // operation.
+        fetch_backtrace_and_tag(in, tag, conf,
+                                &results->backtrace.ondisk_read_retval, &bl);
+      } else {
+        // When we're invoked outside of ScrubStack we might be called
+        // on an orphaned inode like /
+        fetch_backtrace_and_tag(in, {}, conf,
+                                &results->backtrace.ondisk_read_retval, &bl);
+      }
       return false;
     }
 
@@ -3765,7 +3776,12 @@ void CInode::validate_disk_state(CInode::validated_data *results,
         bufferlist::iterator p = bl.begin();
         ::decode(results->backtrace.ondisk_value, p);
       } catch (buffer::error&) {
-        results->backtrace.passed = false;
+        if (results->backtrace.ondisk_read_retval == 0 && rval != 0) {
+          // Cases where something has clearly gone wrong with the overall
+          // fetch op, though we didn't get a nonzero rc from the getxattr
+          // operation.  e.g. object missing.
+          results->backtrace.ondisk_read_retval = rval;
+        }
         results->backtrace.error_str << "failed to decode on-disk backtrace ("
                                      << bl.length() << " bytes)!";
         return true;
