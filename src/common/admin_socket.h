@@ -20,7 +20,7 @@
 
 #include <string>
 #include <map>
-#include "include/buffer.h"
+#include "include/buffer_fwd.h"
 #include "common/cmdparse.h"
 
 class AdminSocket;

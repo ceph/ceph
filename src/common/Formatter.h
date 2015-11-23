@@ -14,7 +14,7 @@
 #include <string>
 #include <map>
 
-#include "include/buffer.h"
+#include "include/buffer_fwd.h"
 
 namespace ceph {
 
@@ -41,12 +41,7 @@ namespace ceph {
     virtual ~Formatter();
 
     virtual void flush(std::ostream& os) = 0;
-    void flush(bufferlist &bl)
-    {
-      std::stringstream os;
-      flush(os);
-      bl.append(os.str());
-    }
+    void flush(bufferlist &bl);
     virtual void reset() = 0;
 
     virtual void open_array_section(const char *name) = 0;
