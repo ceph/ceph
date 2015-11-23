@@ -1347,7 +1347,6 @@ int main(int argc, const char **argv)
   rgw_perf_stop(g_ceph_context);
 
   dout(1) << "final shutdown" << dendl;
-  g_ceph_context->put();
 
   signal_fd_finalize();
 
