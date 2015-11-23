@@ -807,7 +807,7 @@ public:
   void ImageCtx::flush_async_operations(Context *on_finish) {
     Mutex::Locker l(async_ops_lock);
     if (async_ops.empty()) {
-      op_work_queue->queue(on_finish, 0);
+      on_finish->complete(0);
       return;
     }
 

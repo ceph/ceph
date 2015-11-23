@@ -2675,7 +2675,13 @@ TEST_F(TestLibRBD, BlockingAIO)
   int order = 18;
   ASSERT_EQ(0, create_image_pp(rbd, ioctx, name.c_str(), size, &order));
 
+  std::string non_blocking_aio;
+  ASSERT_EQ(0, _rados.conf_get("rbd_non_blocking_aio", non_blocking_aio));
   ASSERT_EQ(0, _rados.conf_set("rbd_non_blocking_aio", "0"));
+  BOOST_SCOPE_EXIT( (non_blocking_aio) ) {
+    ASSERT_EQ(0, _rados.conf_set("rbd_non_blocking_aio",
+                                 non_blocking_aio.c_str()));
+  } BOOST_SCOPE_EXIT_END;
 
   librbd::Image image;
   ASSERT_EQ(0, rbd.open(ioctx, image, name.c_str(), NULL));
@@ -2823,4 +2829,35 @@ TEST_F(TestLibRBD, CacheMayCopyOnWrite) {
   read_bl.clear();
   ASSERT_EQ(1024, clone.read(offset + 2048, 1024, read_bl));
   ASSERT_TRUE(expect_bl.contents_equal(read_bl));
+}
+
+TEST_F(TestLibRBD, FlushEmptyOpsOnExternalSnapshot) {
+  std::string cache_enabled;
+  ASSERT_EQ(0, _rados.conf_get("rbd_cache", cache_enabled));
+  ASSERT_EQ(0, _rados.conf_set("rbd_cache", "false"));
+  BOOST_SCOPE_EXIT( (cache_enabled) ) {
+    ASSERT_EQ(0, _rados.conf_set("rbd_cache", cache_enabled.c_str()));
+  } BOOST_SCOPE_EXIT_END;
+
+  librados::IoCtx ioctx;
+  ASSERT_EQ(0, _rados.ioctx_create(m_pool_name.c_str(), ioctx));
+
+  librbd::RBD rbd;
+  std::string name = get_temp_image_name();
+  uint64_t size = 1 << 18;
+  int order = 0;
+  ASSERT_EQ(0, create_image_pp(rbd, ioctx, name.c_str(), size, &order));
+
+  librbd::Image image1;
+  librbd::Image image2;
+  ASSERT_EQ(0, rbd.open(ioctx, image1, name.c_str(), NULL));
+  ASSERT_EQ(0, rbd.open(ioctx, image2, name.c_str(), NULL));
+  ASSERT_EQ(0, image1.snap_create("snap1"));
+
+  librbd::RBD::AioCompletion *read_comp =
+    new librbd::RBD::AioCompletion(NULL, NULL);
+  bufferlist read_bl;
+  image2.aio_read(0, 1024, read_bl, read_comp);
+  ASSERT_EQ(0, read_comp->wait_for_complete());
+  read_comp->release();
 }
