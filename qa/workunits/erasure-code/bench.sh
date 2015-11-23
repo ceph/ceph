@@ -1,5 +1,6 @@
 #!/bin/bash 
 #
+# Copyright (C) 2015 Red Hat <contact@redhat.com>
 # Copyright (C) 2013,2014 Cloudwatt <libre.licensing@cloudwatt.com>
 #
 # Author: Loic Dachary <loic@dachary.org>
@@ -80,7 +81,7 @@ function bench() {
         --erasures $erasures \
         --parameter k=$k \
         --parameter m=$m \
-        --parameter directory=$PLUGIN_DIRECTORY)
+        --erasure-code-dir $PLUGIN_DIRECTORY)
     result=$($command "$@")
     echo -e "$result\t$plugin\t$k\t$m\t$workload\t$iterations\t$size\t$erasures\t$command ""$@"
 }
