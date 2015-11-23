@@ -146,10 +146,7 @@ int64_t Throttle::take(int64_t c)
   }
   assert(c >= 0);
   ldout(cct, 10) << "take " << c << dendl;
-  {
-    Mutex::Locker l(lock);
-    count.add(c);
-  }
+  count.add(c);
   if (logger) {
     logger->inc(l_throttle_take);
     logger->inc(l_throttle_take_sum, c);
