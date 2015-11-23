@@ -93,13 +93,13 @@ public:
   }
 };
 
-
 struct RGWCoroutinesEnv {
+  uint64_t run_context;
   RGWCoroutinesManager *manager;
-  list<RGWCoroutinesStack *> *stacks;
+  list<RGWCoroutinesStack *> *scheduled_stacks;
   RGWCoroutinesStack *stack;
 
-  RGWCoroutinesEnv() : manager(NULL), stacks(NULL), stack(NULL) {}
+  RGWCoroutinesEnv() : run_context(0), manager(NULL), scheduled_stacks(NULL), stack(NULL) {}
 };
 
 enum RGWCoroutineState {
@@ -337,7 +337,7 @@ public:
 
   void schedule(list<RGWCoroutinesStack *> *stacks = NULL) {
     if (!stacks) {
-      stacks = env->stacks;
+      stacks = env->scheduled_stacks;
     }
     if (!is_scheduled) {
       stacks->push_back(this);
@@ -432,7 +432,7 @@ class RGWCoroutinesManager {
 
   RWLock lock;
 
-  void handle_unblocked_stack(set<RGWCoroutinesStack *>& context_stacks, list<RGWCoroutinesStack *>& stacks, RGWCoroutinesStack *stack, int *waiting_count);
+  void handle_unblocked_stack(set<RGWCoroutinesStack *>& context_stacks, list<RGWCoroutinesStack *>& scheduled_stacks, RGWCoroutinesStack *stack, int *waiting_count);
 protected:
   RGWCompletionManager completion_mgr;
   RGWCoroutinesManagerRegistry *cr_registry;
@@ -467,11 +467,8 @@ public:
   RGWAioCompletionNotifier *create_completion_notifier(RGWCoroutinesStack *stack);
   RGWCompletionManager *get_completion_mgr() { return &completion_mgr; }
 
-  RGWCoroutinesStack *allocate_stack() {
-    RGWCoroutinesStack *stack = new RGWCoroutinesStack(cct, this);
-    stack->get();
-    return stack;
-  }
+  void schedule(RGWCoroutinesEnv *env, RGWCoroutinesStack *stack);
+  RGWCoroutinesStack *allocate_stack();
 
   virtual string get_id();
   void dump(Formatter *f) const;
