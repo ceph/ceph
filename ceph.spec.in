@@ -138,6 +138,7 @@ BuildRequires:	yasm
 %if 0%{?_with_systemd}
 BuildRequires:  pkgconfig(systemd)
 BuildRequires:	systemd-rpm-macros
+BuildRequires:	systemd
 %{?systemd_requires}
 %endif
 PreReq:		%fillup_prereq
