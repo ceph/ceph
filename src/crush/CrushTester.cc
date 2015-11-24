@@ -460,6 +460,11 @@ int CrushTester::test()
     min_x = 0;
     max_x = 1023;
   }
+  // if pool_id is set, then mix_x and max_x will be regarded as pg num
+  if (pool_id >= 0) {
+    min_x = 0;
+    max_x--;
+  }
 
   // initial osd weights
   vector<__u32> weight;
@@ -589,11 +594,22 @@ int CrushTester::test()
         for (int x = batch_min; x <= batch_max; x++) {
           // create a vector to hold the results of a CRUSH placement or RNG simulation
           vector<int> out;
+          
+          uint32_t x1 = x;
+          if (pool_id >= 0) {
+              // map raw pg into a placement seed, like when creating a pool 
+              // so crush.do_rule(...) will get the osd set for current pg 
+              uint32_t pgp_num = batch_max; 
+              unsigned pgp_num_mask = (1 << calc_bits_of(pgp_num-1)) - 1;
+              x1 = crush_hash32_2(CRUSH_HASH_RJENKINS1,
+                    ceph_stable_mod(x, pgp_num, pgp_num_mask),
+                    pool_id); 
+          }
 
           if (use_crush) {
             if (output_mappings)
 	      err << "CRUSH"; // prepend CRUSH to placement output
-            crush.do_rule(r, x, out, nr, weight);
+            crush.do_rule(r, x1, out, nr, weight);
           } else {
             if (output_mappings)
 	      err << "RNG"; // prepend RNG to placement output to denote simulation
@@ -602,10 +618,10 @@ int CrushTester::test()
           }
 
 	  if (output_mappings)
-	    err << " rule " << r << " x " << x << " " << out << std::endl;
+	    err << " rule " << r << " x " << x1 << " " << out << std::endl;
 
           if (output_data_file)
-            write_integer_indexed_vector_data_string(tester_data.placement_information, x, out);
+            write_integer_indexed_vector_data_string(tester_data.placement_information, x1, out);
 
           bool has_item_none = false;
           for (unsigned i = 0; i < out.size(); i++) {
@@ -701,3 +717,14 @@ int CrushTester::test()
 
   return 0;
 }
+
+int CrushTester::calc_bits_of(int t)
+{
+  int b = 0;
+  while (t > 0) {
+    t = t >> 1;
+    ++b;
+  }
+  return b;
+}
+

@@ -36,6 +36,8 @@ class CrushTester {
   bool output_csv;
 
   string output_data_file_name;
+  
+  int pool_id;
 
 /*
  * mark a ratio of devices down, can be used to simulate placement distributions
@@ -184,9 +186,17 @@ public:
       output_choose_tries(false),
       output_data_file(false),
       output_csv(false),
-      output_data_file_name("")
+      output_data_file_name(""),
+      pool_id(-1)
 
   { }
+
+  void set_pool_id(int b) {
+    pool_id = b;
+  }
+  int get_pool_id() const {
+    return pool_id;
+  }
 
   void set_output_data_file_name(string name) {
     output_data_file_name = name;
@@ -352,6 +362,7 @@ public:
 			  int max_id = -1,
 			  int timeout = 0,
 			  int ruleset = -1);
+  static int calc_bits_of(int t);
 };
 
 #endif

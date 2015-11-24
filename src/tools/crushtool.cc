@@ -178,6 +178,10 @@ void usage()
   cout << "      [--simulate]       simulate placements using a random\n";
   cout << "                         number generator in place of the CRUSH\n";
   cout << "                         algorithm\n";
+  cout << "      [--pool-id id]     simulate pg distribution of a specific pool\n";
+  cout << "                         where 'id' is existing pool id or next pool id\n";
+  cout << "                         will be generated\n";
+  cout << "                         and set --x as pg num for this pool\n";
   cout << "   --show-utilization    show OSD usage\n";
   cout << "   --show utilization-all\n";
   cout << "                         include zero weight items\n";
@@ -502,6 +506,12 @@ int main(int argc, const char **argv)
       float f = atof(*i);
       i = args.erase(i);
       tester.set_device_weight(dev, f);
+    } else if (ceph_argparse_witharg(args, i, &x, err, "--pool-id", (char*)NULL)) {
+      if (!err.str().empty()) {
+       cerr << err.str() << std::endl;
+       exit(EXIT_FAILURE);
+      }
+      tester.set_pool_id(x);
     }
     else {
       ++i;
