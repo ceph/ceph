@@ -109,17 +109,20 @@ void RGWCoroutine::StatusItem::dump(Formatter *f) const {
   ::encode_json("status", status, f);
 }
 
-void RGWCoroutine::Status::set_status(const string& s)
+stringstream& RGWCoroutine::Status::set_status()
 {
   RWLock::WLocker l(lock);
+  string s = status.str();
+  status.str(string());
   if (!timestamp.is_zero()) {
-    history.push_back(StatusItem(timestamp, status));
+    history.push_back(StatusItem(timestamp, s));
   }
   if (history.size() > (size_t)max_history) {
     history.pop_front();
   }
   timestamp = ceph_clock_now(cct);
-  status = s;
+
+  return status;
 }
 
 RGWCoroutinesStack::RGWCoroutinesStack(CephContext *_cct, RGWCoroutinesManager *_ops_mgr, RGWCoroutine *start) : cct(_cct), ops_mgr(_ops_mgr),
@@ -695,8 +698,8 @@ void RGWCoroutine::wakeup()
 }
 
 void RGWCoroutine::dump(Formatter *f) const {
-  if (!description.empty()) {
-    encode_json("description", description, f);
+  if (!description.str().empty()) {
+    encode_json("description", description.str(), f);
   }
   encode_json("type", to_str(), f);
   if (!spawned.entries.empty()) {
@@ -712,9 +715,9 @@ void RGWCoroutine::dump(Formatter *f) const {
     encode_json("history", status.history, f);
   }
 
-  if (!status.status.empty()) {
+  if (!status.status.str().empty()) {
     f->open_object_section("status");
-    encode_json("status", status.status, f);
+    encode_json("status", status.status.str(), f);
     encode_json("timestamp", status.timestamp, f);
     f->close_section();
   }

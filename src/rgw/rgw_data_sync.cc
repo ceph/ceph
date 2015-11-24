@@ -720,9 +720,7 @@ public:
 						      raw_key(_raw_key), entry_marker(_entry_marker),
                                                       sync_status(0),
                                                       marker_tracker(_marker_tracker) {
-    stringstream s;
-    s << "data sync single entry (source_zone=" << source_zone << ") key=" <<_raw_key << " entry=" << entry_marker;
-    set_description(s);
+    set_description() << "data sync single entry (source_zone=" << source_zone << ") key=" <<_raw_key << " entry=" << entry_marker;
   }
 
   int operate() {
@@ -1801,19 +1799,18 @@ public:
                              const string& _source_zone, RGWBucketInfo *_bucket_info, int _shard_id,
                              const rgw_obj_key& _key, uint64_t _versioned_epoch,
                              utime_t& _timestamp,
-                             RGWModifyOp _op,
+                             RGWModifyOp _op, RGWPendingState _op_state,
 		             const T& _entry_marker, RGWSyncShardMarkerTrack<T> *_marker_tracker) : RGWCoroutine(_store->ctx()), store(_store),
 						      async_rados(_async_rados),
 						      source_zone(_source_zone),
                                                       bucket_info(_bucket_info), shard_id(_shard_id),
                                                       key(_key), versioned_epoch(_versioned_epoch),
                                                       timestamp(_timestamp), op(_op),
+                                                      op_state(_op_state),
                                                       entry_marker(_entry_marker),
                                                       marker_tracker(_marker_tracker),
                                                       sync_status(0) {
-    stringstream s;
-    s << "bucket sync single entry (source_zone=" << source_zone << ") b=" << bucket_info->bucket << ":" << shard_id <<"/" << key << "[" << versioned_epoch << "] log_entry=" << entry_marker;
-    set_description(s);
+    set_description() << "bucket sync single entry (source_zone=" << source_zone << ") b=" << bucket_info->bucket << ":" << shard_id <<"/" << key << "[" << versioned_epoch << "] log_entry=" << entry_marker;
   }
 
   int operate() {
