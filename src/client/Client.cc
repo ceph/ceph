@@ -557,7 +557,7 @@ void Client::shutdown()
   // If we were not mounted, but were being used for sending
   // MDS commands, we may have sessions that need closing.
   client_lock.Lock();
-  close_sessions();
+  _close_sessions();
   client_lock.Unlock();
 
   cct->_conf->remove_observer(this);
@@ -5106,7 +5106,7 @@ int Client::mount(const std::string &mount_root, bool require_mds)
 
 // UNMOUNT
 
-void Client::close_sessions()
+void Client::_close_sessions()
 {
   while (!mds_sessions.empty()) {
     // send session closes!
@@ -5208,7 +5208,7 @@ void Client::unmount()
     traceout.close();
   }
 
-  close_sessions();
+  _close_sessions();
 
   mounted = false;
 
