@@ -720,6 +720,9 @@ public:
 						      raw_key(_raw_key), entry_marker(_entry_marker),
                                                       sync_status(0),
                                                       marker_tracker(_marker_tracker) {
+    stringstream s;
+    s << "data sync single entry (source_zone=" << source_zone << ") key=" <<_raw_key << " entry=" << entry_marker;
+    set_description(s);
   }
 
   int operate() {
@@ -1807,7 +1810,9 @@ public:
                                                       entry_marker(_entry_marker),
                                                       marker_tracker(_marker_tracker),
                                                       sync_status(0) {
-
+    stringstream s;
+    s << "bucket sync single entry (source_zone=" << source_zone << ") b=" << bucket_info->bucket << ":" << shard_id <<"/" << key << "[" << versioned_epoch << "] log_entry=" << entry_marker;
+    set_description(s);
   }
 
   int operate() {
@@ -1816,10 +1821,12 @@ public:
         if (op == CLS_RGW_OP_ADD ||
             op == CLS_RGW_OP_LINK_OLH) {
           if (op == CLS_RGW_OP_ADD && !key.instance.empty() && key.instance != "null") {
+            set_status("skipping entry");
             ldout(store->ctx(), 10) << "bucket skipping sync obj: " << source_zone << "/" << bucket_info->bucket << "/" << key << "[" << versioned_epoch << "]: versioned object will be synced on link_olh" << dendl;
             return set_cr_done();
 
           }
+          set_status("syncing obj");
           ldout(store->ctx(), 5) << "bucket sync: sync obj: " << source_zone << "/" << bucket_info->bucket << "/" << key << "[" << versioned_epoch << "]" << dendl;
           call(new RGWFetchRemoteObjCR(async_rados, store, source_zone, *bucket_info,
                                            key, versioned_epoch,
@@ -1829,6 +1836,7 @@ public:
         }
       }
       if (retcode < 0 && retcode != -ENOENT) {
+        set_status("failed to sync obj");
         rgw_bucket& bucket = bucket_info->bucket;
         ldout(store->ctx(), 0) << "ERROR: failed to sync object: " << bucket.name << ":" << bucket.bucket_id << ":" << shard_id << "/" << key << dendl;
         sync_status = retcode;
