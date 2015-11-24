@@ -179,6 +179,7 @@ noinst_HEADERS += \
 	rgw/rgw_keystone.h \
 	rgw/rgw_civetweb.h \
 	rgw/rgw_civetweb_log.h \
+	rgw/rgw_website.h \
 	civetweb/civetweb.h \
 	civetweb/include/civetweb.h \
 	civetweb/include/civetweb_conf.h \
