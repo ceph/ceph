@@ -114,7 +114,7 @@ if [ -z "$NO_CLOBBER" ] || [ ! -e ./virtualenv ]; then
     ./virtualenv/bin/pip install --upgrade pip
 
     # work-around change in pip 1.5
-    ./virtualenv/bin/pip install setuptools --no-use-wheel --upgrade
+    ./virtualenv/bin/pip install 'setuptools<18.6' --no-use-wheel --upgrade
 fi
 
 ./virtualenv/bin/pip install --upgrade -r requirements.txt
