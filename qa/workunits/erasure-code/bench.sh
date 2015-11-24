@@ -1,5 +1,6 @@
 #!/bin/bash 
 #
+# Copyright (C) 2015 Red Hat <contact@redhat.com>
 # Copyright (C) 2013,2014 Cloudwatt <libre.licensing@cloudwatt.com>
 #
 # Author: Loic Dachary <loic@dachary.org>
@@ -48,7 +49,8 @@ export PATH=/sbin:$PATH
 : ${VERBOSE:=false}
 : ${CEPH_ERASURE_CODE_BENCHMARK:=ceph_erasure_code_benchmark}
 : ${PLUGIN_DIRECTORY:=/usr/lib/ceph/erasure-code}
-: ${PLUGINS:=example jerasure isa}
+: ${PLUGINS:=isa jerasure_generic jerasure_sse4}
+: ${TECHNIQUES:=vandermonde cauchy}
 : ${TOTAL_SIZE:=$((1024 * 1024))}
 : ${SIZE:=4096}
 : ${PARAMETERS:=--parameter jerasure-per-chunk-alignment=true}
@@ -80,7 +82,7 @@ function bench() {
         --erasures $erasures \
         --parameter k=$k \
         --parameter m=$m \
-        --parameter directory=$PLUGIN_DIRECTORY)
+        --erasure-code-dir $PLUGIN_DIRECTORY)
     result=$($command "$@")
     echo -e "$result\t$plugin\t$k\t$m\t$workload\t$iterations\t$size\t$erasures\t$command ""$@"
 }
@@ -115,8 +117,8 @@ function bench_run() {
     local jerasure_generic2technique_cauchy='cauchy_good'
     local jerasure_sse42technique_vandermonde='reed_sol_van'
     local jerasure_sse42technique_cauchy='cauchy_good'
-    for technique in vandermonde cauchy ; do
-        for plugin in isa jerasure_generic jerasure_sse4 ; do
+    for technique in ${TECHNIQUES} ; do
+        for plugin in ${PLUGINS} ; do
             eval technique_parameter=\$${plugin}2technique_${technique}
             echo "serie encode_${technique}_${plugin}"
             for k in $ks ; do
@@ -130,8 +132,8 @@ function bench_run() {
             done
         done
     done
-    for technique in vandermonde cauchy ; do
-        for plugin in isa jerasure_generic jerasure_sse4 ; do
+    for technique in ${TECHNIQUES} ; do
+        for plugin in ${PLUGINS} ; do
             eval technique_parameter=\$${plugin}2technique_${technique}
             echo "serie decode_${technique}_${plugin}"
             for k in $ks ; do
