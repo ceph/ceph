@@ -466,20 +466,16 @@ int FileStore::lfn_unlink(coll_t cid, const ghobject_t& o,
     }
 
     if (!force_clear_omap) {
-      struct stat st;
-      r = ::stat(path->path(), &st);
-      if (r < 0) {
-	r = -errno;
-	if (r == -ENOENT) {
+      if (exist == 0) {
 	  wbthrottle.clear_object(o); // should be only non-cache ref
 	  fdcache.clear(o);
-	} else {
-	  assert(!m_filestore_fail_eio || r != -EIO);
+	  return 0;
+      } else {
+	struct stat st;
+	r = ::stat(path->path(), &st); //exist == 1 mean file must exist.
+	if (st.st_nlink == 1) {
+	  force_clear_omap = true;
 	}
-	dout(25) << __func__ << " stat failed " << cpp_strerror(r) << dendl;
-	return r;
-      } else if (st.st_nlink == 1) {
-	force_clear_omap = true;
       }
     }
     if (force_clear_omap) {
