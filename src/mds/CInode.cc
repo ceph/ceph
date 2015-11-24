@@ -3741,23 +3741,18 @@ void CInode::validate_disk_state(CInode::validated_data *results,
       object_t oid = CInode::get_object_name(in->ino(), frag_t(), "");
 
       ObjectOperation fetch;
-
       fetch.getxattr("parent", bt, bt_r);
-      // We want to tag even if we get ENODATA fetching the backtrace
-      fetch.set_last_op_flags(CEPH_OSD_OP_FLAG_FAILOK);
+      in->mdcache->mds->objecter->read(oid, object_locator_t(pool), fetch, CEPH_NOSNAP,
+				       NULL, 0, fin);
       if (!tag.empty()) {
+	ObjectOperation scrub_tag;
         bufferlist tag_bl;
         ::encode(tag, tag_bl);
-        fetch.setxattr("scrub_tag", tag_bl);
-      }
-      if (tag.empty()) {
-        in->mdcache->mds->objecter->read(oid, object_locator_t(pool), fetch, CEPH_NOSNAP,
-            NULL, 0, fin);
-      } else {
-	SnapContext snapc;
-	in->mdcache->mds->objecter->mutate(oid, object_locator_t(pool), fetch,
-					   snapc,ceph::real_clock::now(
-					     g_ceph_context), 0, NULL, fin);
+        scrub_tag.setxattr("scrub_tag", tag_bl);
+        SnapContext snapc;
+        in->mdcache->mds->objecter->mutate(oid, object_locator_t(pool), scrub_tag, snapc,
+					   ceph::real_clock::now(g_ceph_context),
+					   0, NULL, NULL);
       }
     }
 
