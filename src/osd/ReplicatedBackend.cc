@@ -1201,8 +1201,6 @@ void ReplicatedBackend::sub_op_modify_impl(OpRequestRef op)
 
   rm->bytes_written = rm->opt.get_encoded_bytes();
 
-  op->mark_started();
-
   rm->opt.register_on_commit(
     parent->bless_context(
       new C_OSD_RepModifyCommit(this, rm)));
