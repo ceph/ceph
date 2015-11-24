@@ -237,4 +237,10 @@
 #cmakedefine HAVE_GPERFTOOLS_MALLOC_EXTENSION_H
 #cmakedefine HAVE_GPERFTOOLS_PROFILER_H
 
+/* res_nquery is supported */
+#cmakedefine HAVE_RES_NQUERY
+
+/* res_query is thread safe */
+#cmakedefine HAVE_THREAD_SAFE_RES_QUERY
+
 #endif /* CONFIG_H */

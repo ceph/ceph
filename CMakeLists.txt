@@ -83,6 +83,8 @@ CHECK_SYMBOL_EXISTS(__u8 "sys/types.h;linux/types.h" HAVE___U8)
 CHECK_SYMBOL_EXISTS(__u64 "sys/types.h;linux/types.h" HAVE___U64)
 CHECK_SYMBOL_EXISTS(__s64 "sys/types.h;linux/types.h" HAVE___S64)
 
+CHECK_SYMBOL_EXISTS(res_nquery "resolv.h" HAVE_RES_NQUERY)
+
 set(CEPH_MAN_DIR "share/man" CACHE STRING "Install location for man pages (relative to prefix).")
 
 option(ENABLE_SHARED "build shared libraries" ON)
@@ -209,6 +211,11 @@ option(WITH_RADOSGW "Rados Gateway is enabled" ON)
 
 #option for CephFS
 option(WITH_CEPHFS "CephFS is enabled" ON)
+
+option(WITH_THREAD_SAFE_RES_QUERY "res_query is thread safe" OFF)
+if(WITH_THREAD_SAFE_RES_QUERY)
+    set(HAVE_THREAD_SAFE_RES_QUERY 1 CACHE INTERNAL "Thread safe res_query supported.")
+endif(WITH_THREAD_SAFE_RES_QUERY)
 
 # Now create a useable config.h
 configure_file(

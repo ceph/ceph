@@ -342,6 +342,7 @@ if test x"$resolv_libs" != "xok"; then
   fi
 fi
 AC_SUBST([RESOLV_LIBS])
+AC_DEFINE(HAVE_RES_NQUERY, 1, [Define if you have res_nquery])
 
 dnl check for libkeyutils on linux
 KEYUTILS_LIB=""

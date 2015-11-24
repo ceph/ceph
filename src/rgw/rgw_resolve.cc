@@ -18,12 +18,13 @@
 #define dout_subsys ceph_subsys_rgw
 
 class RGWDNSResolver {
-  list<res_state> states;
   Mutex lock;
+#ifdef HAVE_RES_NQUERY
+  list<res_state> states;
 
   int get_state(res_state *ps);
   void put_state(res_state s);
-
+#endif
 
 public:
   ~RGWDNSResolver();
@@ -33,14 +34,16 @@ public:
 
 RGWDNSResolver::~RGWDNSResolver()
 {
+#ifdef HAVE_RES_NQUERY
   list<res_state>::iterator iter;
   for (iter = states.begin(); iter != states.end(); ++iter) {
     struct __res_state *s = *iter;
     delete s;
   }
+#endif
 }
 
-
+#ifdef HAVE_RES_NQUERY
 int RGWDNSResolver::get_state(res_state *ps)
 {
   lock.Lock();
@@ -68,18 +71,19 @@ void RGWDNSResolver::put_state(res_state s)
   Mutex::Locker l(lock);
   states.push_back(s);
 }
-
+#endif
 
 int RGWDNSResolver::resolve_cname(const string& hostname, string& cname, bool *found)
 {
-  res_state res;
-
   *found = false;
 
+#ifdef HAVE_RES_NQUERY
+  res_state res;
   int r = get_state(&res);
   if (r < 0) {
     return r;
   }
+#endif
 
   int ret;
 
@@ -91,7 +95,18 @@ int RGWDNSResolver::resolve_cname(const string& hostname, string& cname, bool *f
   const char *origname = hostname.c_str();
   unsigned char *pt, *answer;
   unsigned char *answend;
-  int len = res_nquery(res, origname, C_IN, T_CNAME, buf, sizeof(buf));
+  int len;
+
+#ifdef HAVE_RES_NQUERY
+  len = res_nquery(res, origname, C_IN, T_CNAME, buf, sizeof(buf));
+#else
+  {
+# ifndef HAVE_THREAD_SAFE_RES_QUERY
+    Mutex::Locker l(lock);
+# endif
+    len = res_query(origname, C_IN, T_CNAME, buf, sizeof(buf));
+  }
+#endif
   if (len < 0) {
     dout(20) << "res_query() failed" << dendl;
     ret = 0;
@@ -157,7 +172,9 @@ int RGWDNSResolver::resolve_cname(const string& hostname, string& cname, bool *f
   *found = true;
   ret = 0;
 done:
+#ifdef HAVE_RES_NQUERY
   put_state(res);
+#endif
   return ret;
 }
 
