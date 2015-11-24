@@ -1066,6 +1066,7 @@ if(${WITH_RBD})
   add_library(librbd_replay_ios STATIC ${librbd_replay_ios_srcs})
   target_link_libraries(librbd_replay_ios librbd librados global)
 
+if(${WITH_BABELTRACE})
   set(librbd_replay_prep_srcs
       rbd_replay/rbd-replay-prep.cc)
   add_executable(librbd_replay_prep
@@ -1085,9 +1086,10 @@ if(${WITH_RBD})
     babeltrace-ctf
     ${Boost_DATE_TIME_LIBRARY}
     )
-
-  install(TARGETS librbd_replay librbd_replay_ios DESTINATION lib)
   install(TARGETS librbd_replay_prep DESTINATION bin)
+endif(${WITH_BABELTRACE})
+
+install(TARGETS librbd_replay librbd_replay_ios DESTINATION lib)
 
 endif(${WITH_RBD})
 
