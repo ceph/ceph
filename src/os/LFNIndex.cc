@@ -124,20 +124,6 @@ int LFNIndex::lookup(const ghobject_t &oid,
   if (r < 0)
     goto out;
   string full_path = get_full_path(path, short_name);
-  struct stat buf;
-  maybe_inject_failure();
-  r = ::stat(full_path.c_str(), &buf);
-  maybe_inject_failure();
-  if (r < 0) {
-    if (errno == ENOENT) {
-      *exist = 0;
-    } else {
-      r = -errno;
-      goto out;
-    }
-  } else {
-    *exist = 1;
-  }
   *out_path = IndexedPath(new Path(full_path, this));
   r = 0;
   );
