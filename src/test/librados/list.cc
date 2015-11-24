@@ -1,4 +1,5 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
+// vim: ts=8 sw=2 smarttab
 #include "include/rados/librados.h"
 #include "include/rados/librados.hpp"
 #include "include/stringify.h"
@@ -671,8 +672,6 @@ TEST_F(LibRadosListECPP, ListObjectsStartPP) {
 TEST_F(LibRadosList, EnumerateObjects) {
   char buf[128];
   memset(buf, 0xcc, sizeof(buf));
-  bufferlist bl;
-  bl.append(buf, sizeof(buf));
 
   const uint32_t n_objects = 16;
   for (unsigned i=0; i<n_objects; ++i) {
@@ -720,8 +719,6 @@ TEST_F(LibRadosList, EnumerateObjects) {
 TEST_F(LibRadosList, EnumerateObjectsSplit) {
   char buf[128];
   memset(buf, 0xcc, sizeof(buf));
-  bufferlist bl;
-  bl.append(buf, sizeof(buf));
 
   const uint32_t n_objects = 16;
   for (unsigned i=0; i<n_objects; ++i) {
@@ -781,6 +778,101 @@ TEST_F(LibRadosList, EnumerateObjectsSplit) {
 
   rados_object_list_cursor_free(ioctx, begin);
   rados_object_list_cursor_free(ioctx, end);
+
+  for (unsigned i=0; i<n_objects; ++i) {
+    if (!saw_obj.count(stringify(i))) {
+        std::cerr << "missing object " << i << std::endl;
+    }
+    ASSERT_TRUE(saw_obj.count(stringify(i)));
+  }
+  ASSERT_EQ(n_objects, saw_obj.size());
+}
+
+TEST_F(LibRadosListPP, EnumerateObjectsPP) {
+  char buf[128];
+  memset(buf, 0xcc, sizeof(buf));
+  bufferlist bl;
+  bl.append(buf, sizeof(buf));
+
+  const uint32_t n_objects = 16;
+  for (unsigned i=0; i<n_objects; ++i) {
+    ASSERT_EQ(0, ioctx.write(stringify(i), bl, sizeof(buf), 0));
+  }
+
+  std::set<std::string> saw_obj;
+  ObjectCursor c = ioctx.object_list_begin();
+  ObjectCursor end = ioctx.object_list_end();
+  while(!ioctx.object_list_is_end(c))
+  {
+    std::vector<ObjectItem> result;
+    int r = ioctx.object_list(c, end, 12, &result, &c);
+    ASSERT_GE(r, 0);
+    ASSERT_EQ(r, result.size());
+    for (int i = 0; i < r; ++i) {
+      auto oid = result[i].oid;
+      if (saw_obj.count(oid)) {
+          std::cerr << "duplicate obj " << oid << std::endl;
+      }
+      ASSERT_FALSE(saw_obj.count(oid));
+      saw_obj.insert(oid);
+    }
+  }
+
+  for (unsigned i=0; i<n_objects; ++i) {
+    if (!saw_obj.count(stringify(i))) {
+        std::cerr << "missing object " << i << std::endl;
+    }
+    ASSERT_TRUE(saw_obj.count(stringify(i)));
+  }
+  ASSERT_EQ(n_objects, saw_obj.size());
+}
+
+TEST_F(LibRadosListPP, EnumerateObjectsSplitPP) {
+  char buf[128];
+  memset(buf, 0xcc, sizeof(buf));
+  bufferlist bl;
+  bl.append(buf, sizeof(buf));
+
+  const uint32_t n_objects = 16;
+  for (unsigned i=0; i<n_objects; ++i) {
+    ASSERT_EQ(0, ioctx.write(stringify(i), bl, sizeof(buf), 0));
+  }
+
+  ObjectCursor begin = ioctx.object_list_begin();
+  ObjectCursor end = ioctx.object_list_end();
+
+  // Step through an odd number of shards
+  unsigned m = 5;
+  std::set<std::string> saw_obj;
+  for (unsigned n = 0; n < m; ++n) {
+      ObjectCursor shard_start;
+      ObjectCursor shard_end;
+
+      ioctx.object_list_slice(
+        begin,
+        end,
+        n,
+        m,
+        &shard_start,
+        &shard_end);
+
+      ObjectCursor c(shard_start);
+      while(c < shard_end)
+      {
+        std::vector<ObjectItem> result;
+        int r = ioctx.object_list(c, shard_end, 12, &result, &c);
+        ASSERT_GE(r, 0);
+
+        for (const auto & i : result) {
+          const auto &oid = i.oid;
+          if (saw_obj.count(oid)) {
+              std::cerr << "duplicate obj " << oid << std::endl;
+          }
+          ASSERT_FALSE(saw_obj.count(oid));
+          saw_obj.insert(oid);
+        }
+      }
+  }
 
   for (unsigned i=0; i<n_objects; ++i) {
     if (!saw_obj.count(stringify(i))) {
