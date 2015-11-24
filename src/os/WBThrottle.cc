@@ -262,7 +262,10 @@ void WBThrottle::clear_object(const ghobject_t &hoid)
 void WBThrottle::throttle()
 {
   Mutex::Locker l(lock);
-  while (!stopping && beyond_limit()) {
+  while (!stopping && !(
+	   cur_ios < io_limits.second &&
+	   pending_wbs.size() < fd_limits.second &&
+	   cur_size < size_limits.second)) {
     cond.Wait(lock);
   }
 }
