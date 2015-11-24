@@ -685,14 +685,14 @@ TEST_F(LibRadosList, EnumerateObjects) {
   ASSERT_TRUE(err_str.empty());
 
   std::set<std::string> saw_obj;
-  rados_enumerate_cursor c = rados_enumerate_objects_begin(ioctx);
-  rados_enumerate_cursor end = rados_enumerate_objects_end(ioctx);
-  while(!rados_enumerate_objects_is_end(ioctx, c))
+  rados_object_list_cursor c = rados_object_list_begin(ioctx);
+  rados_object_list_cursor end = rados_object_list_end(ioctx);
+  while(!rados_object_list_is_end(ioctx, c))
   {
-    rados_enumerate_item results[12];
-    memset(results, 0, sizeof(rados_enumerate_item) * 12);
-    int r = rados_enumerate_objects(ioctx,
-            c, rados_enumerate_objects_end(ioctx),
+    rados_object_list_item results[12];
+    memset(results, 0, sizeof(rados_object_list_item) * 12);
+    int r = rados_object_list(ioctx,
+            c, rados_object_list_end(ioctx),
             12, results, &c);
     ASSERT_GE(r, 0);
     for (int i = 0; i < r; ++i) {
@@ -703,10 +703,10 @@ TEST_F(LibRadosList, EnumerateObjects) {
       ASSERT_FALSE(saw_obj.count(oid));
       saw_obj.insert(oid);
     }
-    rados_enumerate_objects_free(12, results);
+    rados_object_list_free(12, results);
   }
-  rados_enumerate_cursor_free(ioctx, c);
-  rados_enumerate_cursor_free(ioctx, end);
+  rados_object_list_cursor_free(ioctx, c);
+  rados_object_list_cursor_free(ioctx, end);
 
   for (unsigned i=0; i<n_objects; ++i) {
     if (!saw_obj.count(stringify(i))) {
@@ -733,17 +733,17 @@ TEST_F(LibRadosList, EnumerateObjectsSplit) {
   std::string err_str = set_pg_num(&s_cluster, pool_name, 11);
   ASSERT_TRUE(err_str.empty());
 
-  rados_enumerate_cursor begin = rados_enumerate_objects_begin(ioctx);
-  rados_enumerate_cursor end = rados_enumerate_objects_end(ioctx);
+  rados_object_list_cursor begin = rados_object_list_begin(ioctx);
+  rados_object_list_cursor end = rados_object_list_end(ioctx);
 
   // Step through an odd number of shards
   unsigned m = 5;
   std::set<std::string> saw_obj;
   for (unsigned n = 0; n < m; ++n) {
-      rados_enumerate_cursor shard_start = rados_enumerate_objects_begin(ioctx);;
-      rados_enumerate_cursor shard_end = rados_enumerate_objects_end(ioctx);;
+      rados_object_list_cursor shard_start = rados_object_list_begin(ioctx);;
+      rados_object_list_cursor shard_end = rados_object_list_end(ioctx);;
 
-      rados_enumerate_objects_split(
+      rados_object_list_slice(
         ioctx,
         begin,
         end,
@@ -755,13 +755,13 @@ TEST_F(LibRadosList, EnumerateObjectsSplit) {
 		<< *(hobject_t*)shard_start << " "
 		<< *(hobject_t*)shard_end << std::endl;
 
-      rados_enumerate_cursor c = shard_start;
+      rados_object_list_cursor c = shard_start;
       //while(c < shard_end)
-      while(rados_enumerate_cursor_cmp(ioctx, c, shard_end) == -1)
+      while(rados_object_list_cursor_cmp(ioctx, c, shard_end) == -1)
       {
-        rados_enumerate_item results[12];
-        memset(results, 0, sizeof(rados_enumerate_item) * 12);
-        int r = rados_enumerate_objects(ioctx,
+        rados_object_list_item results[12];
+        memset(results, 0, sizeof(rados_object_list_item) * 12);
+        int r = rados_object_list(ioctx,
                 c, shard_end,
                 12, results, &c);
         ASSERT_GE(r, 0);
@@ -773,14 +773,14 @@ TEST_F(LibRadosList, EnumerateObjectsSplit) {
           ASSERT_FALSE(saw_obj.count(oid));
           saw_obj.insert(oid);
         }
-        rados_enumerate_objects_free(12, results);
+        rados_object_list_free(12, results);
       }
-      rados_enumerate_cursor_free(ioctx, shard_start);
-      rados_enumerate_cursor_free(ioctx, shard_end);
+      rados_object_list_cursor_free(ioctx, shard_start);
+      rados_object_list_cursor_free(ioctx, shard_end);
   }
 
-  rados_enumerate_cursor_free(ioctx, begin);
-  rados_enumerate_cursor_free(ioctx, end);
+  rados_object_list_cursor_free(ioctx, begin);
+  rados_object_list_cursor_free(ioctx, end);
 
   for (unsigned i=0; i<n_objects; ++i) {
     if (!saw_obj.count(stringify(i))) {

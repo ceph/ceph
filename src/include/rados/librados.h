@@ -190,14 +190,14 @@ typedef void *rados_ioctx_t;
 typedef void *rados_list_ctx_t;
 
 /**
- * @typedef rados_enumerate_cursor
+ * @typedef rados_object_list_cursor
  *
  * The cursor used with rados_enumerate_objects
  * and accompanying methods.
  */
-typedef void * rados_enumerate_cursor;
+typedef void * rados_object_list_cursor;
 
-typedef struct rados_enumerate_item {
+typedef struct rados_object_list_item {
   size_t oid_length;
   char *oid;
 
@@ -206,7 +206,7 @@ typedef struct rados_enumerate_item {
 
   size_t locator_length;
   char *locator;
-} rados_enumerate_item;
+} rados_object_list_item;
 
 /**
  * @typedef rados_snap_t
@@ -975,39 +975,52 @@ CEPH_RADOS_API int rados_nobjects_list_next(rados_list_ctx_t ctx,
  */
 CEPH_RADOS_API void rados_nobjects_list_close(rados_list_ctx_t ctx);
 
-CEPH_RADOS_API rados_enumerate_cursor rados_enumerate_objects_begin(rados_ioctx_t io);
-CEPH_RADOS_API rados_enumerate_cursor rados_enumerate_objects_end(rados_ioctx_t io);
+CEPH_RADOS_API rados_object_list_cursor rados_object_list_begin(rados_ioctx_t io);
+CEPH_RADOS_API rados_object_list_cursor rados_object_list_end(rados_ioctx_t io);
 
-CEPH_RADOS_API int rados_enumerate_objects_is_end(rados_ioctx_t io,
-    rados_enumerate_cursor cur);
+CEPH_RADOS_API int rados_object_list_is_end(rados_ioctx_t io,
+    rados_object_list_cursor cur);
 
-CEPH_RADOS_API void rados_enumerate_cursor_free(rados_ioctx_t io,
-    rados_enumerate_cursor cur);
+CEPH_RADOS_API void rados_object_list_cursor_free(rados_ioctx_t io,
+    rados_object_list_cursor cur);
 
-CEPH_RADOS_API int rados_enumerate_cursor_cmp(rados_ioctx_t io,
-    rados_enumerate_cursor lhs, rados_enumerate_cursor rhs);
+CEPH_RADOS_API int rados_object_list_cursor_cmp(rados_ioctx_t io,
+    rados_object_list_cursor lhs, rados_object_list_cursor rhs);
 
 /**
  * @return the number of items set in the result array
  */
-CEPH_RADOS_API int rados_enumerate_objects(rados_ioctx_t io,
-    const rados_enumerate_cursor start,
-    const rados_enumerate_cursor finish,
+CEPH_RADOS_API int rados_object_list(rados_ioctx_t io,
+    const rados_object_list_cursor start,
+    const rados_object_list_cursor finish,
     const size_t result_size,
-    rados_enumerate_item *results,
-    rados_enumerate_cursor *next);
+    rados_object_list_item *results,
+    rados_object_list_cursor *next);
 
-CEPH_RADOS_API void rados_enumerate_objects_free(
+CEPH_RADOS_API void rados_object_list_free(
     const size_t result_size,
-    rados_enumerate_item *results);
+    rados_object_list_item *results);
 
-CEPH_RADOS_API void rados_enumerate_objects_split(rados_ioctx_t io,
-    const rados_enumerate_cursor start,
-    const rados_enumerate_cursor finish,
+/**
+ * Obtain cursors delineating a subset of a range.  Use this
+ * when you want to split up the work of iterating over the
+ * global namespace.  Expected use case is when you are iterating
+ * in parallel, with `m` workers, and each worker taking an id `n`.
+ *
+ * @param start start of the range to be sliced up (inclusive)
+ * @param finish end of the range to be sliced up (exclusive)
+ * @param m how many chunks to divide start-finish into
+ * @param n which of the m chunks you would like to get cursors for
+ * @param split_start cursor populated with start of the subrange (inclusive)
+ * @param split_finish cursor populated with end of the subrange (exclusive)
+ */
+CEPH_RADOS_API void rados_object_list_slice(rados_ioctx_t io,
+    const rados_object_list_cursor start,
+    const rados_object_list_cursor finish,
     const size_t n,
     const size_t m,
-    rados_enumerate_cursor *split_start,
-    rados_enumerate_cursor *split_finish);
+    rados_object_list_cursor *split_start,
+    rados_object_list_cursor *split_finish);
 
 
 /** @} New Listing Objects */
