@@ -30,10 +30,7 @@ public:
    *           STATE_SUSPEND_REQUESTS
    *               |
    *               v
-   *           STATE_SUSPEND_AIO
-   *               |
-   *               v
-   *           STATE_FLUSH_AIO * * * * * * * * * * * * * *
+   *           STATE_SUSPEND_AIO * * * * * * * * * * * * *
    *               |                                     *
    *   (retry)     v                                     *
    *   . . . > STATE_ALLOCATE_SNAP_ID  * *               *
@@ -61,7 +58,6 @@ public:
   enum State {
     STATE_SUSPEND_REQUESTS,
     STATE_SUSPEND_AIO,
-    STATE_FLUSH_AIO,
     STATE_ALLOCATE_SNAP_ID,
     STATE_CREATE_SNAP,
     STATE_CREATE_OBJECT_MAP,
@@ -112,7 +108,6 @@ private:
 
   void send_suspend_requests();
   void send_suspend_aio();
-  void send_flush_aio();
   void send_allocate_snap_id();
   void send_create_snap();
   bool send_create_object_map();
