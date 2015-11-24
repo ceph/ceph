@@ -6,7 +6,7 @@ import teuthology.tree
 doc = """
 usage:
     teuthology-tree -h
-    teuthology-tree [-p <prefixes>] [--] <suite_dir>
+    teuthology-tree [options] [--] <suite_dir>
 
 Describe the contents of a qa suite by extracting comments
 starting with particular prefixes from files in the suite.
@@ -21,6 +21,8 @@ optional arguments:
   -h, --help                          Show this help message and exit
   -p <prefixes>, --prefix <prefixes>  Comma-separated list of prefixes
                                       [default: desc]
+  --show-facet [yes|no]               List the facet of each file
+                                      [default: yes]
 """
 
 
