@@ -323,9 +323,6 @@ add_dependencies(check monmaptool)
 add_dependencies(check ceph-osd)
 add_dependencies(check ceph-dencoder)
 
-add_test(NAME test_ceph_helpers COMMAND bash ${CMAKE_SOURCE_DIR}/src/test/test-ceph-helpers.sh WORKING_DIRECTORY ${CMAKE_SOURE_DIR}/src)
-add_dependencies(check test_ceph_helpers)
-
 add_test(NAME osd_config COMMAND bash ${CMAKE_SOURCE_DIR}/src/test/osd/osd-config.sh WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/src)
 add_dependencies(check osd_config)
 
@@ -422,7 +419,7 @@ add_dependencies(check test_ceph_argparse_py)
 add_test(NAME unittest_bufferlist_shell COMMAND bash ${CMAKE_SOURCE_DIR}/src/unittest_bufferlist.sh)
 add_dependencies(check unittest_bufferlist_shell)
 
-add_test(NAME osd_reactivate COMMAND bash ${CMAKE_SOURCE_DIR}/src/test/osd/osd-reactivate.sh)
+add_test(NAME osd_reactivate COMMAND bash ${CMAKE_SOURCE_DIR}/src/test/osd/osd-reactivate.sh WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/src)
 add_dependencies(check osd_reactivate)
 
 add_test(NAME run_tox COMMAND bash ${CMAKE_SOURCE_DIR}/src/ceph-detect-init/run-tox.sh WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/src)
@@ -1420,7 +1417,8 @@ add_custom_target(symlinks  COMMAND
   ln -sf ${CMAKE_BINARY_DIR}/src/crushtool ${CMAKE_SOURCE_DIR}/src/ &&
   ln -sf ${CMAKE_BINARY_DIR}/src/ceph-authtool ${CMAKE_SOURCE_DIR}/src &&
   ln -sf ${CMAKE_BINARY_DIR}/src/test/unittest_librbd ${CMAKE_SOURCE_DIR}/src
-  #ln -sf ${CMAKE_BINARY_DIR}/src/test/unittest_bufferlist_shell ${CMAKE_SOURCE_DIR}/src
+  ln -sf ${CMAKE_SOURCE_DIR}/src/pybind/ceph_daemon.py ${CMAKE_SOURCE_DIR}/src/test/pybind
+  ln -sf ${CMAKE_SOURCE_DIR}/src/pybind/ceph_argparse.py ${CMAKE_SOURCE_DIR}/src/test/pybind
   COMMENT "Symlinks for test scripts have been created")
 
 add_subdirectory(erasure-code EXCLUDE_FROM_ALL)
