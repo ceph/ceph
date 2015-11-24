@@ -26,6 +26,7 @@
 %endif
 %bcond_without libs_compat
 %bcond_with lowmem_builder
+%bcond_with lowmem_builder_override
 %if 0%{?fedora} || 0%{?rhel}
 %bcond_without selinux
 %endif
@@ -717,7 +718,7 @@ cmake .. \
     -DWITH_OCF=ON
 %endif
 
-%if %{with lowmem_builder}
+%if %{with lowmem_builder} && ! %{with lowmem_builder_override}
 %if 0%{?jobs} > 8
 %define _smp_mflags -j8
 %endif
