@@ -1734,7 +1734,7 @@ int NewStore::collection_list(
 	   << " to " << pretty_binary_string(end_key)
 	   << " start " << start << dendl;
   it = db->get_iterator(PREFIX_OBJ);
-  if (start == ghobject_t()) {
+  if (start == ghobject_t() || start == cid.get_min_hobj()) {
     it->upper_bound(temp_start_key);
     temp = true;
   } else {
