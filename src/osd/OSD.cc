@@ -1683,6 +1683,31 @@ public:
   }
 };
 
+void OSD::ShardedOpWQ::dump_worker_stats(Formatter *f, bool clear)
+{
+  /* Stats & Clearing are 'fuzzy' */
+  f->open_object_section("shard_stats");
+  f->dump_int("num_shards", num_shards);
+  f->open_array_section("shards");
+  for (unsigned int s = 0; s < num_shards; s++)
+  {
+    ShardData *sdata = shard_list[s];
+    f->open_object_section("shard");
+    
+    f->dump_int("num_dispatches", sdata->num_dispatches);
+    f->dump_int("ql_accum", sdata->ql_accum);
+    f->dump_int("num_stalls", sdata->num_stalls);
+
+    if (clear) { 
+      sdata->num_dispatches = sdata->ql_accum = sdata->num_stalls = 0;
+    }
+
+    f->close_section(); /* shard */
+  }
+  f->close_section(); /* shard array */
+  f->close_section(); /* shard stats */
+}
+
 bool OSD::asok_command(string command, cmdmap_t& cmdmap, string format,
 		       ostream& ss)
 {
@@ -1717,6 +1742,10 @@ bool OSD::asok_command(string command, cmdmap_t& cmdmap, string format,
     } else {
       op_tracker.dump_historic_ops(f);
     }
+  } else if (command == "dump_opwq_thread_stats") { 
+      op_shardedwq.dump_worker_stats(f, false);
+  } else if (command == "dump_opwq_thread_stats_and_clear") { 
+      op_shardedwq.dump_worker_stats(f, true);
   } else if (command == "dump_op_pq_state") {
     f->open_object_section("pq");
     op_shardedwq.dump(f);
@@ -2056,6 +2085,14 @@ void OSD::final_init()
   r = admin_socket->register_command("dump_historic_ops", "dump_historic_ops",
 				     asok_hook,
 				     "show slowest recent ops");
+  assert(r == 0);
+  r = admin_socket->register_command("dump_opwq_thread_stats", "dump_opwq_thread_stats",
+				     asok_hook,
+				     "dump OpWQ thread worker stats");
+  assert(r == 0);
+  r = admin_socket->register_command("dump_opwq_thread_stats_and_clear", "dump_opwq_thread_stats_and_clear",
+				     asok_hook,
+				     "dump OpWQ thread  worker stats, clearing them after");
   assert(r == 0);
   r = admin_socket->register_command("dump_op_pq_state", "dump_op_pq_state",
 				     asok_hook,
@@ -8233,7 +8270,9 @@ void OSD::ShardedOpWQ::_process(uint32_t thread_index, heartbeat_handle_d *hb ) 
   ShardData* sdata = shard_list[shard_index];
   assert(NULL != sdata);
   sdata->sdata_op_ordering_lock.Lock();
+  sdata->num_dispatches++; 
   if (sdata->pqueue.empty()) {
+    sdata->num_stalls++; 
     sdata->sdata_op_ordering_lock.Unlock();
     osd->cct->get_heartbeat_map()->reset_timeout(hb, 4, 0);
     sdata->sdata_lock.Lock();
@@ -8246,6 +8285,8 @@ void OSD::ShardedOpWQ::_process(uint32_t thread_index, heartbeat_handle_d *hb ) 
     }
   }
   pair<PGRef, PGQueueable> item = sdata->pqueue.dequeue();
+  sdata->ql_accum += sdata->pqueue.empty() ? 1 : 2; 
+  
   sdata->pg_for_processing[&*(item.first)].push_back(item.second);
   sdata->sdata_op_ordering_lock.Unlock();
   ThreadPool::TPHandle tp_handle(osd->cct, hb, timeout_interval, 

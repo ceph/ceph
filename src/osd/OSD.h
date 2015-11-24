@@ -1614,12 +1614,16 @@ private:
       Cond sdata_cond;
       Mutex sdata_op_ordering_lock;
       map<PG*, list<PGQueueable> > pg_for_processing;
+      uint64_t num_dispatches;
+      uint64_t ql_accum;
+      uint64_t num_stalls;
       PrioritizedQueue< pair<PGRef, PGQueueable>, entity_inst_t> pqueue;
       ShardData(
 	string lock_name, string ordering_lock,
 	uint64_t max_tok_per_prio, uint64_t min_cost)
 	: sdata_lock(lock_name.c_str()),
 	  sdata_op_ordering_lock(ordering_lock.c_str()),
+	  num_dispatches(0), ql_accum(0), num_stalls(0),
 	  pqueue(max_tok_per_prio, min_cost) {}
     };
     
@@ -1656,6 +1660,8 @@ private:
     void _process(uint32_t thread_index, heartbeat_handle_d *hb);
     void _enqueue(pair <PGRef, PGQueueable> item);
     void _enqueue_front(pair <PGRef, PGQueueable> item);
+
+    void dump_worker_stats(Formatter *f, bool clear); 
       
     void return_waiting_threads() {
       for(uint32_t i = 0; i < num_shards; i++) {
