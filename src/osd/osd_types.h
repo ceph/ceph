@@ -2341,34 +2341,30 @@ struct pg_log_entry_t {
     return get_op_name(op);
   }
 
-  __s32      op;
+  // describes state for a locally-rollbackable entry
+  ObjectModDesc mod_desc;
+  bufferlist snaps;   // only for clone entries
   hobject_t  soid;
+  osd_reqid_t reqid;  // caller+tid to uniquely identify request
+  vector<pair<osd_reqid_t, version_t> > extra_reqids;
   eversion_t version, prior_version, reverting_to;
   version_t user_version; // the user version for this entry
-  osd_reqid_t reqid;  // caller+tid to uniquely identify request
   utime_t     mtime;  // this is the _user_ mtime, mind you
-  bufferlist snaps;   // only for clone entries
+
+  __s32      op;
   bool invalid_hash; // only when decoding sobject_t based entries
   bool invalid_pool; // only when decoding pool-less hobject based entries
 
-  uint64_t offset;   // [soft state] my offset on disk
-
-  /// describes state for a locally-rollbackable entry
-  ObjectModDesc mod_desc;
-
-  vector<pair<osd_reqid_t, version_t> > extra_reqids;
-
   pg_log_entry_t()
-    : op(0), user_version(0),
-      invalid_hash(false), invalid_pool(false), offset(0) {}
-  pg_log_entry_t(int _op, const hobject_t& _soid, 
-		 const eversion_t& v, const eversion_t& pv,
-		 version_t uv,
-		 const osd_reqid_t& rid, const utime_t& mt)
-    : op(_op), soid(_soid), version(v),
-      prior_version(pv), user_version(uv),
-      reqid(rid), mtime(mt), invalid_hash(false), invalid_pool(false),
-      offset(0) {}
+   : user_version(0), op(0),
+     invalid_hash(false), invalid_pool(false) {}
+  pg_log_entry_t(int _op, const hobject_t& _soid,
+                const eversion_t& v, const eversion_t& pv,
+                version_t uv,
+                const osd_reqid_t& rid, const utime_t& mt)
+   : soid(_soid), reqid(rid), version(v), prior_version(pv), user_version(uv),
+     mtime(mt), op(_op), invalid_hash(false), invalid_pool(false)
+     {}
       
   bool is_clone() const { return op == CLONE; }
   bool is_modify() const { return op == MODIFY; }
