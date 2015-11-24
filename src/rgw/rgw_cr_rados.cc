@@ -200,7 +200,7 @@ RGWRadosSetOmapKeysCR::RGWRadosSetOmapKeysCR(RGWRados *_store,
                                                 entries(_entries),
                                                 pool(_pool), oid(_oid), cn(NULL)
 {
-  stringstream s;
+  stringstream& s = set_description();
   s << "set omap keys dest=" << pool.name << "/" << oid << " keys=[" << s.str() << "]";
   for (auto i = entries.begin(); i != entries.end(); ++i) {
     if (i != entries.begin()) {
@@ -209,7 +209,6 @@ RGWRadosSetOmapKeysCR::RGWRadosSetOmapKeysCR(RGWRados *_store,
     s << i->first;
   }
   s << "]";
-  set_description(s.str());
 }
 
 RGWRadosSetOmapKeysCR::~RGWRadosSetOmapKeysCR()
@@ -227,7 +226,7 @@ int RGWRadosSetOmapKeysCR::send_request()
     return r;
   }
 
-  set_status("sending request");
+  set_status() << "sending request";
 
   librados::ObjectWriteOperation op;
   op.omap_set(entries);
@@ -239,14 +238,11 @@ int RGWRadosSetOmapKeysCR::send_request()
 
 int RGWRadosSetOmapKeysCR::request_complete()
 {
-  stringstream s;
   int r = cn->completion()->get_return_value();
 
-  s << "request complete; ret=" << r;
+  set_status() << "request complete; ret=" << r;
 
-  set_status(s.str());
-
-  return cn->completion()->get_return_value();
+  return r;
 }
 
 RGWRadosGetOmapKeysCR::RGWRadosGetOmapKeysCR(RGWRados *_store,
@@ -258,9 +254,7 @@ RGWRadosGetOmapKeysCR::RGWRadosGetOmapKeysCR(RGWRados *_store,
                                                 entries(_entries), max_entries(_max_entries), rval(0),
                                                 pool(_pool), oid(_oid), cn(NULL)
 {
-  stringstream s;
-  s << "set omap keys dest=" << pool.name << "/" << oid << " marker=" << marker;
-  set_description(s.str());
+  set_description() << "set omap keys dest=" << pool.name << "/" << oid << " marker=" << marker;
 }
 
 RGWRadosGetOmapKeysCR::~RGWRadosGetOmapKeysCR()
@@ -275,7 +269,7 @@ int RGWRadosGetOmapKeysCR::send_request() {
     return r;
   }
 
-  set_status("send request");
+  set_status() << "send request";
 
   librados::ObjectReadOperation op;
   op.omap_get_vals(marker, max_entries, entries, &rval);
@@ -307,7 +301,7 @@ RGWSimpleRadosLockCR::~RGWSimpleRadosLockCR()
 
 int RGWSimpleRadosLockCR::send_request()
 {
-  set_status("sending request");
+  set_status() << "sending request";
   rgw_obj obj = rgw_obj(pool, oid);
   req = new RGWAsyncLockSystemObj(stack->create_completion_notifier(),
                                  store, NULL, obj, lock_name, cookie, duration);
@@ -317,9 +311,7 @@ int RGWSimpleRadosLockCR::send_request()
 
 int RGWSimpleRadosLockCR::request_complete()
 {
-  stringstream s;
-  s << "request complete; ret=" << req->get_ret_status();
-  set_status(s.str());
+  set_status() << "request complete; ret=" << req->get_ret_status();
   return req->get_ret_status();
 }
 
@@ -333,9 +325,7 @@ RGWSimpleRadosUnlockCR::RGWSimpleRadosUnlockCR(RGWAsyncRadosProcessor *_async_ra
                                                 pool(_pool), oid(_oid),
                                                 req(NULL)
 {
-  stringstream s;
-  s << "rados unlock dest=" << pool << "/" << oid << " lock=" << lock_name << " cookie=" << cookie;
-  set_description(s.str());
+  set_description() << "rados unlock dest=" << pool << "/" << oid << " lock=" << lock_name << " cookie=" << cookie;
 }
 
 RGWSimpleRadosUnlockCR::~RGWSimpleRadosUnlockCR()
@@ -345,7 +335,7 @@ RGWSimpleRadosUnlockCR::~RGWSimpleRadosUnlockCR()
 
 int RGWSimpleRadosUnlockCR::send_request()
 {
-  set_status("sending request");
+  set_status() << "sending request";
 
   rgw_obj obj = rgw_obj(pool, oid);
   req = new RGWAsyncUnlockSystemObj(stack->create_completion_notifier(),
@@ -356,9 +346,7 @@ int RGWSimpleRadosUnlockCR::send_request()
 
 int RGWSimpleRadosUnlockCR::request_complete()
 {
-  stringstream s;
-  s << "request complete; ret=" << req->get_ret_status();
-  set_status(s.str());
+  set_status() << "request complete; ret=" << req->get_ret_status();
   return req->get_ret_status();
 }
 
@@ -368,22 +356,22 @@ int RGWOmapAppend::operate() {
   reenter(this) {
     for (;;) {
       if (!has_product() && going_down) {
-        set_status("going down");
+        set_status() << "going down";
         break;
       }
-      set_status("waiting for product");
+      set_status() << "waiting for product";
       yield wait_for_product();
       yield {
         string entry;
         while (consume(&entry)) {
-          set_status(string("adding entry: ") + entry);
+          set_status() << "adding entry: " << entry;
           entries[entry] = bufferlist();
           if (entries.size() >= OMAP_APPEND_MAX_ENTRIES) {
             break;
           }
         }
         if (entries.size() >= OMAP_APPEND_MAX_ENTRIES || going_down) {
-          set_status(string("flushing to omap"));
+          set_status() << "flushing to omap";
           call(new RGWRadosSetOmapKeysCR(store, pool, oid, entries));
           entries.clear();
         }

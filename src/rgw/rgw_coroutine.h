@@ -148,16 +148,16 @@ class RGWCoroutine : public RefCountedObject, public boost::asio::coroutine {
     int max_history;
 
     utime_t timestamp;
-    string status;
+    stringstream status;
 
     Status(CephContext *_cct) : cct(_cct), lock("RGWCoroutine::Status::lock"), max_history(MAX_COROUTINE_HISTORY) {}
 
     deque<StatusItem> history;
 
-    void set_status(const string& status);
+    stringstream& set_status();
   } status;
 
-  string description;
+  stringstream description;
 
 protected:
   bool _yield_ret;
@@ -188,11 +188,21 @@ protected:
   void set_io_blocked(bool flag);
   int io_block(int ret = 0);
 
-  void set_description(const string& s) {
-    description = s;
+  void reset_description() {
+    description.str(string());
   }
-  void set_status(const string& s) {
-    status.set_status(s);
+
+  stringstream& set_description() {
+    return description;
+  }
+  stringstream& set_status() {
+    return status.set_status();
+  }
+
+  stringstream& set_status(const string& s) {
+    stringstream& status = set_status();
+    status << s;
+    return status;
   }
 
 public:
