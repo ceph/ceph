@@ -631,6 +631,22 @@ public:
     return coll_t(TYPE_PG_TEMP, pgid, 0);
   }
 
+  ghobject_t get_min_hobj() const {
+    ghobject_t o;
+    switch (type) {
+    case TYPE_PG:
+      o.hobj.pool = pgid.pool();
+      o.set_shard(pgid.shard);
+      break;
+    case TYPE_META:
+      o.hobj.pool = -1;
+      break;
+    default:
+      break;
+    }
+    return o;
+  }
+
   void dump(Formatter *f) const;
   static void generate_test_instances(list<coll_t*>& o);
 };
