@@ -165,12 +165,13 @@ void AioImageRequestWQ::block_writes(Context *on_blocked) {
     ++m_write_blockers;
     ldout(cct, 5) << __func__ << ": " << &m_image_ctx << ", "
                   << "num=" << m_write_blockers << dendl;
-    if (m_in_progress_writes > 0) {
+    if (!m_write_blocker_contexts.empty() || m_in_progress_writes > 0) {
       m_write_blocker_contexts.push_back(on_blocked);
       return;
     }
   }
-  on_blocked->complete(0);
+
+  m_image_ctx.op_work_queue->queue(on_blocked);
 }
 
 void AioImageRequestWQ::unblock_writes() {
@@ -230,7 +231,7 @@ void AioImageRequestWQ::process(AioImageRequest *req) {
     req->send();
   }
 
-  Contexts contexts;
+  bool writes_blocked = false;
   {
     Mutex::Locker locker(m_lock);
     if (req->is_write_op()) {
@@ -238,16 +239,17 @@ void AioImageRequestWQ::process(AioImageRequest *req) {
       --m_queued_writes;
 
       assert(m_in_progress_writes > 0);
-      if (--m_in_progress_writes == 0) {
-        contexts.swap(m_write_blocker_contexts);
+      if (--m_in_progress_writes == 0 && !m_write_blocker_contexts.empty()) {
+        writes_blocked = true;
       }
     }
   }
-  delete req;
 
-  for (Contexts::iterator it = contexts.begin(); it != contexts.end(); ++it) {
-    (*it)->complete(0);
+  if (writes_blocked) {
+    RWLock::RLocker owner_locker(m_image_ctx.owner_lock);
+    m_image_ctx.flush(new C_BlockedWrites(this));
   }
+  delete req;
 }
 
 bool AioImageRequestWQ::is_journal_required() const {
@@ -310,6 +312,18 @@ void AioImageRequestWQ::handle_lock_updated(
   } else if (state == ImageWatcher::LOCK_UPDATE_STATE_NOTIFICATION &&
              !writes_empty()) {
     m_image_ctx.image_watcher->request_lock();
+  }
+}
+
+void AioImageRequestWQ::handle_blocked_writes(int r) {
+  Contexts contexts;
+  {
+    Mutex::Locker locker(m_lock);
+    contexts.swap(m_write_blocker_contexts);
+  }
+
+  for (auto ctx : contexts) {
+    ctx->complete(0);
   }
 }
 

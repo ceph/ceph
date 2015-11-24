@@ -27,9 +27,6 @@ std::ostream& operator<<(std::ostream& os,
   case SnapshotCreateRequest::STATE_SUSPEND_AIO:
     os << "SUSPEND_AIO";
     break;
-  case SnapshotCreateRequest::STATE_FLUSH_AIO:
-    os << "FLUSH_AIO";
-    break;
   case SnapshotCreateRequest::STATE_ALLOCATE_SNAP_ID:
     os << "ALLOCATE_SNAP_ID";
     break;
@@ -86,9 +83,6 @@ bool SnapshotCreateRequest::should_complete(int r) {
     send_suspend_aio();
     break;
   case STATE_SUSPEND_AIO:
-    send_flush_aio();
-    break;
-  case STATE_FLUSH_AIO:
     send_allocate_snap_id();
     break;
   case STATE_ALLOCATE_SNAP_ID:
@@ -154,17 +148,6 @@ void SnapshotCreateRequest::send_suspend_aio() {
 
   // can issue a re-entrant callback if no IO in-progress
   m_image_ctx.aio_work_queue->block_writes(create_async_callback_context());
-}
-
-void SnapshotCreateRequest::send_flush_aio() {
-  assert(m_image_ctx.owner_lock.is_locked());
-
-  CephContext *cct = m_image_ctx.cct;
-  ldout(cct, 5) << this << " " << __func__ << dendl;
-  m_state = STATE_FLUSH_AIO;
-
-  // can issue a re-entrant callback if no IO to flush
-  m_image_ctx.flush(create_async_callback_context());
 }
 
 void SnapshotCreateRequest::send_allocate_snap_id() {
