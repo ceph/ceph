@@ -1570,7 +1570,40 @@ int NewStore::collection_list(
   if (!pnext)
     pnext = &static_next;
 
-  if (start == ghobject_t::get_max())
+  // obtain pool number and shard id of this cid as in FileStore
+  int64_t pool = -1;
+  shard_id_t shard;
+  {
+    spg_t pgid;
+    if (cid.is_temp(&pgid)) {
+      pool = -2 - pgid.pool();
+      shard = pgid.shard;
+    } else if (cid.is_pg(&pgid)) {
+      pool = pgid.pool();
+      shard = pgid.shard;
+    } else if (cid.is_meta()) {
+      pool = -1;
+      shard = shard_id_t::NO_SHARD;
+    } else {
+      // hrm, the caller is test code!  we should get kill it off.  for now,
+      // tolerate it.
+      pool = 0;
+      shard = shard_id_t::NO_SHARD;
+    }
+    dout(20) << __func__ << " pool is " << pool << " shard is " << shard
+         << " pgid " << pgid << dendl;
+  }
+  
+  // make compatiable with https://github.com/ceph/ceph/pull/6076
+  // because this ghobject_t start's hobject_t might contain pool id if it is 
+  // the scrub bounds, otherwise it will never equal to ghobject_t()
+  ghobject_t ghobject_min;
+  ghobject_min.hobj.pool = pool;
+  ghobject_min.set_shard(shard);
+  dout(20) << __func__ << " start " << start << " to " << end << ", gh_min "
+       << ghobject_min << dendl;
+
+  if (start.is_max())
     goto out;
   get_coll_key_range(cid, c->cnode.bits, &temp_start_key, &temp_end_key,
 		     &start_key, &end_key);
@@ -1578,7 +1611,7 @@ int NewStore::collection_list(
 	   << temp_end_key << " and " << start_key << " to " << end_key
 	   << " start " << start << dendl;
   it = db->get_iterator(PREFIX_OBJ);
-  if (start == ghobject_t()) {
+  if (start == ghobject_t() || start == ghobject_min) {
     it->upper_bound(temp_start_key);
     temp = true;
   } else {
