@@ -1494,3 +1494,44 @@ void librados::IoCtxImpl::C_aio_Safe::finish(int r)
 
   c->put_unlock();
 }
+
+void librados::IoCtxImpl::object_list_slice(
+  const hobject_t start,
+  const hobject_t finish,
+  const size_t n,
+  const size_t m,
+  hobject_t *split_start,
+  hobject_t *split_finish)
+{
+  if (start.is_max()) {
+    *split_start = hobject_t::get_max();
+    *split_finish = hobject_t::get_max();
+    return;
+  }
+
+  uint64_t start_hash = hobject_t::_reverse_bits(start.get_hash());
+  uint64_t finish_hash =
+    finish.is_max() ? 0x100000000 :
+    hobject_t::_reverse_bits(finish.get_hash());
+
+  uint64_t diff = finish_hash - start_hash;
+  uint64_t rev_start = start_hash + (diff * n / m);
+  uint64_t rev_finish = start_hash + (diff * (n + 1) / m);
+  if (n == 0) {
+    *split_start = start;
+  } else {
+    *split_start = hobject_t(
+      object_t(), string(), CEPH_NOSNAP,
+      hobject_t::_reverse_bits(rev_start), poolid, string());
+  }
+
+  if (n == m - 1)
+    *split_finish = finish;
+  else if (rev_finish >= 0x100000000)
+    *split_finish = hobject_t::get_max();
+  else
+    *split_finish = hobject_t(
+      object_t(), string(), CEPH_NOSNAP,
+      hobject_t::_reverse_bits(rev_finish), poolid, string());
+}
+

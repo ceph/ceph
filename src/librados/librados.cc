@@ -3652,7 +3652,6 @@ extern "C" int rados_object_list(rados_ioctx_t io,
 
   int r = cond.wait();
   if (r < 0) {
-    std::cerr << "objecter returned " << r << std::endl;
     *next_hobj = hobject_t::get_max();
     return r;
   }
@@ -5095,37 +5094,137 @@ CEPH_RADOS_API void rados_object_list_slice(
   hobject_t *split_start_hobj = (hobject_t*)(*split_start);
   hobject_t *split_finish_hobj = (hobject_t*)(*split_finish);
   assert(split_start_hobj);
-  assert(split_finish);
+  assert(split_finish_hobj);
   hobject_t *start_hobj = (hobject_t*)(start);
   hobject_t *finish_hobj = (hobject_t*)(finish);
 
-  if (start_hobj->is_max()) {
-    *split_start_hobj = hobject_t::get_max();
-    *split_finish_hobj = hobject_t::get_max();
-    return;
+  ctx->object_list_slice(
+      *start_hobj,
+      *finish_hobj,
+      n,
+      m,
+      split_start_hobj,
+      split_finish_hobj);
+}
+
+librados::ObjectCursor::ObjectCursor()
+{
+  c_cursor = new hobject_t();
+}
+
+librados::ObjectCursor::~ObjectCursor()
+{
+  hobject_t *h = (hobject_t *)c_cursor;
+  delete h;
+}
+
+bool librados::ObjectCursor::operator<(const librados::ObjectCursor &rhs)
+{
+  const hobject_t lhs_hobj = (c_cursor == nullptr) ? hobject_t() : *((hobject_t*)c_cursor);
+  const hobject_t rhs_hobj = (rhs.c_cursor == nullptr) ? hobject_t() : *((hobject_t*)(rhs.c_cursor));
+  return cmp_bitwise(lhs_hobj, rhs_hobj) == -1;
+}
+
+librados::ObjectCursor::ObjectCursor(const librados::ObjectCursor &rhs)
+{
+  if (rhs.c_cursor != nullptr) {
+    hobject_t *h = (hobject_t*)rhs.c_cursor;
+    c_cursor = (rados_object_list_cursor)(new hobject_t(*h));
+  } else {
+    c_cursor = nullptr;
+  }
+}
+
+librados::ObjectCursor librados::IoCtx::object_list_begin()
+{
+  hobject_t *h = new hobject_t(io_ctx_impl->objecter->enumerate_objects_begin());
+  ObjectCursor oc;
+  oc.c_cursor = (rados_object_list_cursor)h;
+  return oc;
+}
+
+
+librados::ObjectCursor librados::IoCtx::object_list_end()
+{
+  hobject_t *h = new hobject_t(io_ctx_impl->objecter->enumerate_objects_end());
+  librados::ObjectCursor oc;
+  oc.c_cursor = (rados_object_list_cursor)h;
+  return oc;
+}
+
+
+void librados::ObjectCursor::set(rados_object_list_cursor c)
+{
+  delete (hobject_t*)c_cursor;
+  c_cursor = c;
+}
+
+bool librados::IoCtx::object_list_is_end(const ObjectCursor &oc)
+{
+  hobject_t *h = (hobject_t *)oc.c_cursor;
+  return h->is_max();
+}
+
+int librados::IoCtx::object_list(const ObjectCursor &start,
+                const ObjectCursor &finish,
+                const size_t result_item_count,
+                std::vector<ObjectItem> *result,
+                ObjectCursor *next)
+{
+  assert(result != nullptr);
+  assert(next != nullptr);
+  result->clear();
+
+  C_SaferCond cond;
+  hobject_t next_hash;
+  std::list<librados::ListObjectImpl> obj_result;
+  io_ctx_impl->objecter->enumerate_objects(
+      io_ctx_impl->poolid,
+      io_ctx_impl->oloc.nspace,
+      *((hobject_t*)start.c_cursor),
+      *((hobject_t*)finish.c_cursor),
+      result_item_count,
+      &obj_result,
+      &next_hash,
+      &cond);
+
+  int r = cond.wait();
+  if (r < 0) {
+    next->set((rados_object_list_cursor)(new hobject_t(hobject_t::get_max())));
+    return r;
   }
 
-  uint64_t start_hash = hobject_t::_reverse_bits(start_hobj->get_hash());
-  uint64_t finish_hash =
-    finish_hobj->is_max() ? 0x100000000 :
-    hobject_t::_reverse_bits(finish_hobj->get_hash());
+  next->set((rados_object_list_cursor)(new hobject_t(next_hash)));
 
-  uint64_t diff = finish_hash - start_hash;
-  uint64_t rev_start = start_hash + (diff * n / m);
-  uint64_t rev_finish = start_hash + (diff * (n + 1) / m);
-  if (n == 0)
-    *split_start_hobj = *start_hobj;
-  else
-    *split_start_hobj = hobject_t(
-      object_t(), string(), CEPH_NOSNAP,
-      hobject_t::_reverse_bits(rev_start), ctx->poolid, string());
-  if (n == m - 1)
-    *split_finish_hobj = *finish_hobj;
-  else if (rev_finish >= 0x100000000)
-    *split_finish_hobj = hobject_t::get_max();
-  else
-    *split_finish_hobj = hobject_t(
-      object_t(), string(), CEPH_NOSNAP,
-      hobject_t::_reverse_bits(rev_finish), ctx->poolid, string());
+  for (std::list<librados::ListObjectImpl>::iterator i = obj_result.begin();
+       i != obj_result.end(); ++i) {
+    ObjectItem oi;
+    oi.oid = i->oid;
+    oi.nspace = i->nspace;
+    oi.locator = i->locator;
+    result->push_back(oi);
+  }
+
+  return obj_result.size();
+}
+
+void librados::IoCtx::object_list_slice(
+    const ObjectCursor start,
+    const ObjectCursor finish,
+    const size_t n,
+    const size_t m,
+    ObjectCursor *split_start,
+    ObjectCursor *split_finish)
+{
+  assert(split_start != nullptr);
+  assert(split_finish != nullptr);
+
+  io_ctx_impl->object_list_slice(
+      *((hobject_t*)(start.c_cursor)),
+      *((hobject_t*)(finish.c_cursor)),
+      n,
+      m,
+      (hobject_t*)(split_start->c_cursor),
+      (hobject_t*)(split_finish->c_cursor));
 }
 
