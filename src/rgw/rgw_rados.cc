@@ -6897,7 +6897,7 @@ int RGWRados::Object::Delete::delete_obj()
   bool removed = (r >= 0);
 
   int64_t poolid = ref.ioctx.get_id();
-  if (r >= 0 || r == -ENOENT) {
+  if (r >= 0) {
     r = index_op.complete_del(poolid, ref.ioctx.get_last_version(), params.remove_objs);
   } else {
     int ret = index_op.cancel();
