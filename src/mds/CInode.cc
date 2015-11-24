@@ -3770,11 +3770,8 @@ void CInode::validate_disk_state(CInode::validated_data *results,
       }
       if (in->is_symlink()) {
         // there's nothing to do for symlinks!
-        results->passed_validation = true;
         return true;
       }
-
-      results->passed_validation = false; // we haven't finished it yet
 
       C_OnFinisher *conf = new C_OnFinisher(get_io_callback(BACKTRACE),
                                             in->mdcache->mds->finisher);
@@ -3803,14 +3800,23 @@ void CInode::validate_disk_state(CInode::validated_data *results,
       // set up basic result reporting and make sure we got the data
       results->performed_validation = true; // at least, some of it!
       results->backtrace.checked = true;
-      results->backtrace.passed = false; // we'll set it true if we make it
+
+      int64_t pool;
+      if (in->is_dir())
+        pool = in->mdcache->mds->mdsmap->get_metadata_pool();
+      else
+        pool = in->inode.layout.pool_id;
+      inode_backtrace_t& memory_backtrace = results->backtrace.memory_value;
+      in->build_backtrace(pool, memory_backtrace);
+      bool equivalent, divergent;
+      int memory_newer;
 
       // Ignore rval because it's the result of a FAILOK operation
       // from fetch_backtrace_and_tag: the real result is in
       // backtrace.ondisk_read_retval
       if (results->backtrace.ondisk_read_retval != 0) {
         results->backtrace.error_str << "failed to read off disk; see retval";
-        return true;
+	goto next;
       }
 
       // extract the backtrace, and compare it to a newly-constructed one
@@ -3826,35 +3832,26 @@ void CInode::validate_disk_state(CInode::validated_data *results,
         }
         results->backtrace.error_str << "failed to decode on-disk backtrace ("
                                      << bl.length() << " bytes)!";
-        return true;
+	goto next;
       }
-      int64_t pool;
-      if (in->is_dir())
-        pool = in->mdcache->mds->mdsmap->get_metadata_pool();
-      else
-        pool = in->inode.layout.pool_id;
-      inode_backtrace_t& memory_backtrace = results->backtrace.memory_value;
-      in->build_backtrace(pool, memory_backtrace);
-      bool equivalent, divergent;
-      int memory_newer =
-          memory_backtrace.compare(results->backtrace.ondisk_value,
-                                   &equivalent, &divergent);
+
+      memory_newer = memory_backtrace.compare(results->backtrace.ondisk_value,
+					      &equivalent, &divergent);
+
       if (equivalent) {
         results->backtrace.passed = true;
       } else {
-        results->backtrace.passed = false; // we couldn't validate :(
         if (divergent || memory_newer <= 0) {
           // we're divergent, or don't have a newer version to write
           results->backtrace.error_str <<
               "On-disk backtrace is divergent or newer";
-          return true;
+	  goto next;
         }
       }
-
+next:
       // quit if we're a file, or kick off directory checks otherwise
       // TODO: validate on-disk inode for non-base directories
-      if (in->is_file() || in->is_symlink()) {
-        results->passed_validation = true;
+      if (!in->is_dir()) {
         return true;
       }
 
@@ -3872,6 +3869,7 @@ void CInode::validate_disk_state(CInode::validated_data *results,
         shadow_in->fetch(get_internal_callback(INODE));
         return false;
       } else {
+	results->inode.passed = true;
         return check_dirfrag_rstats();
       }
     }
@@ -3879,7 +3877,6 @@ void CInode::validate_disk_state(CInode::validated_data *results,
     bool _inode_disk(int rval) {
       results->inode.checked = true;
       results->inode.ondisk_read_retval = rval;
-      results->inode.passed = false;
       results->inode.ondisk_value = shadow_in->inode;
       results->inode.memory_value = in->inode;
 
@@ -3888,7 +3885,7 @@ void CInode::validate_disk_state(CInode::validated_data *results,
       if (si.version > i.version) {
         // uh, what?
         results->inode.error_str << "On-disk inode is newer than in-memory one!";
-        return true;
+	goto next;
       } else {
         bool divergent = false;
         int r = i.compare(si, &divergent);
@@ -3896,9 +3893,10 @@ void CInode::validate_disk_state(CInode::validated_data *results,
         if (!results->inode.passed) {
           results->inode.error_str <<
               "On-disk inode is divergent or newer than in-memory one!";
-          return true;
+	  goto next;
         }
       }
+next:
       return check_dirfrag_rstats();
     }
 
@@ -3931,15 +3929,18 @@ void CInode::validate_disk_state(CInode::validated_data *results,
       // basic reporting setup
       results->raw_stats.checked = true;
       results->raw_stats.ondisk_read_retval = rval;
+
+      results->raw_stats.memory_value.dirstat = in->inode.dirstat;
+      results->raw_stats.memory_value.rstat = in->inode.rstat;
+      frag_info_t& dir_info = results->raw_stats.ondisk_value.dirstat;
+      nest_info_t& nest_info = results->raw_stats.ondisk_value.rstat;
+
       if (rval != 0) {
         results->raw_stats.error_str << "Failed to read dirfrags off disk";
-        return true;
+	goto next;
       }
 
       // check each dirfrag...
-
-      frag_info_t& dir_info = results->raw_stats.ondisk_value.dirstat;
-      nest_info_t& nest_info = results->raw_stats.ondisk_value.rstat;
       for (compact_map<frag_t,CDir*>::iterator p = in->dirfrags.begin();
 	   p != in->dirfrags.end();
 	   ++p) {
@@ -3950,22 +3951,23 @@ void CInode::validate_disk_state(CInode::validated_data *results,
       }
       nest_info.rsubdirs++; // it gets one to account for self
       // ...and that their sum matches our inode settings
-      results->raw_stats.memory_value.dirstat = in->inode.dirstat;
-      results->raw_stats.memory_value.rstat = in->inode.rstat;
       if (!dir_info.same_sums(in->inode.dirstat) ||
 	  !nest_info.same_sums(in->inode.rstat)) {
         results->raw_stats.error_str
-        << "freshly-calculated rstats don't match existing ones";
+	  << "freshly-calculated rstats don't match existing ones";
 	in->mdcache->repair_inode_stats(in, NULL);
-        return true;
+	goto next;
       }
       results->raw_stats.passed = true;
-      // Hurray! We made it through!
-      results->passed_validation = true;
+next:
       return true;
     }
 
     void _done() {
+      if (results->raw_stats.passed &&
+	  results->backtrace.passed &&
+	  results->inode.passed)
+        results->passed_validation = true;
       if (mdr) {
         server->respond_to_request(mdr, get_rval());
       } else if (fin) {
