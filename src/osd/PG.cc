@@ -6511,11 +6511,11 @@ boost::statechart::result PG::RecoveryState::Active::react(const ActMap&)
   if (unfound > 0 &&
       pg->all_unfound_are_queried_or_lost(pg->get_osdmap())) {
     if (pg->cct->_conf->osd_auto_mark_unfound_lost) {
-      pg->osd->clog->error() << pg->info.pgid << " has " << unfound
+      pg->osd->clog->error() << pg->info.pgid.pgid << " has " << unfound
 			    << " objects unfound and apparently lost, would automatically marking lost but NOT IMPLEMENTED\n";
       //pg->mark_all_unfound_lost(*context< RecoveryMachine >().get_cur_transaction());
     } else
-      pg->osd->clog->error() << pg->info.pgid << " has " << unfound << " objects unfound and apparently lost\n";
+      pg->osd->clog->error() << pg->info.pgid.pgid << " has " << unfound << " objects unfound and apparently lost\n";
   }
 
   if (!pg->snap_trimq.empty() &&
