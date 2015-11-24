@@ -3579,59 +3579,59 @@ extern "C" int rados_exec(rados_ioctx_t io, const char *o, const char *cls, cons
   return ret;
 }
 
-extern "C" rados_enumerate_cursor rados_enumerate_objects_begin(rados_ioctx_t io)
+extern "C" rados_object_list_cursor rados_object_list_begin(rados_ioctx_t io)
 {
   librados::IoCtxImpl *ctx = (librados::IoCtxImpl *)io;
 
   hobject_t *result = new hobject_t(ctx->objecter->enumerate_objects_begin());
-  return (rados_enumerate_cursor)result;
+  return (rados_object_list_cursor)result;
 }
 
-extern "C" rados_enumerate_cursor rados_enumerate_objects_end(rados_ioctx_t io)
+extern "C" rados_object_list_cursor rados_object_list_end(rados_ioctx_t io)
 {
   librados::IoCtxImpl *ctx = (librados::IoCtxImpl *)io;
 
   hobject_t *result = new hobject_t(ctx->objecter->enumerate_objects_end());
-  return (rados_enumerate_cursor)result;
+  return (rados_object_list_cursor)result;
 }
 
-extern "C" int rados_enumerate_objects_is_end(
-    rados_ioctx_t io, rados_enumerate_cursor cur)
+extern "C" int rados_object_list_is_end(
+    rados_ioctx_t io, rados_object_list_cursor cur)
 {
   hobject_t *hobj = (hobject_t*)cur;
   return hobj->is_max();
 }
 
-extern "C" void rados_enumerate_cursor_free(
-    rados_ioctx_t io, rados_enumerate_cursor cur)
+extern "C" void rados_object_list_cursor_free(
+    rados_ioctx_t io, rados_object_list_cursor cur)
 {
   hobject_t *hobj = (hobject_t*)cur;
   delete hobj;
 }
 
-extern "C" int rados_enumerate_cursor_cmp(
+extern "C" int rados_object_list_cursor_cmp(
     rados_ioctx_t io,
-    rados_enumerate_cursor lhs_cur,
-    rados_enumerate_cursor rhs_cur)
+    rados_object_list_cursor lhs_cur,
+    rados_object_list_cursor rhs_cur)
 {
   hobject_t *lhs = (hobject_t*)lhs_cur;
   hobject_t *rhs = (hobject_t*)rhs_cur;
   return cmp_bitwise(*lhs, *rhs);
 }
 
-extern "C" int rados_enumerate_objects(rados_ioctx_t io,
-    const rados_enumerate_cursor start,
-    const rados_enumerate_cursor finish,
+extern "C" int rados_object_list(rados_ioctx_t io,
+    const rados_object_list_cursor start,
+    const rados_object_list_cursor finish,
     const size_t result_item_count,
-    rados_enumerate_item *result_items,
-    rados_enumerate_cursor *next)
+    rados_object_list_item *result_items,
+    rados_object_list_cursor *next)
 {
   assert(next);
 
   librados::IoCtxImpl *ctx = (librados::IoCtxImpl *)io;
 
   // Zero out items so that they will be safe to free later
-  //memset(result_items, 0, sizeof(rados_enumerate_item) * result_item_count);
+  memset(result_items, 0, sizeof(rados_object_list_item) * result_item_count);
 
   std::list<librados::ListObjectImpl> result;
   hobject_t next_hash;
@@ -3662,7 +3662,7 @@ extern "C" int rados_enumerate_objects(rados_ioctx_t io,
   int k = 0;
   for (std::list<librados::ListObjectImpl>::iterator i = result.begin();
        i != result.end(); ++i) {
-    rados_enumerate_item &item = result_items[k++];
+    rados_object_list_item &item = result_items[k++];
     do_out_buffer(i->oid, &item.oid, &item.oid_length);
     do_out_buffer(i->nspace, &item.nspace, &item.nspace_length);
     do_out_buffer(i->locator, &item.locator, &item.locator_length);
@@ -3673,9 +3673,9 @@ extern "C" int rados_enumerate_objects(rados_ioctx_t io,
   return result.size();
 }
 
-extern "C" void rados_enumerate_objects_free(
+extern "C" void rados_object_list_free(
     const size_t result_size,
-    rados_enumerate_item *results)
+    rados_object_list_item *results)
 {
   assert(results);
 
@@ -5079,14 +5079,14 @@ std::ostream& librados::operator<<(std::ostream& out, const librados::ListObject
   return out;
 }
 
-CEPH_RADOS_API void rados_enumerate_objects_split(
+CEPH_RADOS_API void rados_object_list_slice(
     rados_ioctx_t io,
-    const rados_enumerate_cursor start,
-    const rados_enumerate_cursor finish,
+    const rados_object_list_cursor start,
+    const rados_object_list_cursor finish,
     const size_t n,
     const size_t m,
-    rados_enumerate_cursor *split_start,
-    rados_enumerate_cursor *split_finish)
+    rados_object_list_cursor *split_start,
+    rados_object_list_cursor *split_finish)
 {
   librados::IoCtxImpl *ctx = (librados::IoCtxImpl *)io;
 
