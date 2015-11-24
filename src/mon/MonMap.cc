@@ -331,7 +331,7 @@ int MonMap::build_initial(CephContext *cct, ostream& errout)
 
   if (size() == 0) {
     errout << "no monitors specified to connect to." << std::endl;
-    return -ENOENT;
+    return -EHOSTUNREACH;
   }
   return 0;
 }
