@@ -1461,7 +1461,7 @@ void PGMap::print_summary(Formatter *f, ostream *out) const
     *out << "      pgmap v" << version << ": "
 	 << pg_stat.size() << " pgs, " << pg_pool_sum.size() << " pools, "
 	 << prettybyte_t(pg_sum.stats.sum.num_bytes) << " data, "
-	 << pretty_si_t(pg_sum.stats.sum.num_objects) << "objects\n";
+	 << pretty_si_t(pg_sum.stats.sum.num_objects) << " objects\n";
     *out << "            "
 	 << kb_t(osd_sum.kb_used) << " used, "
 	 << kb_t(osd_sum.kb_avail) << " / "
