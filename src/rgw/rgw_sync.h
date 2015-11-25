@@ -185,7 +185,7 @@ public:
   }
 };
 
-template <class T>
+template <class T, class K>
 class RGWSyncShardMarkerTrack {
   struct marker_entry {
     uint64_t pos;
@@ -204,6 +204,8 @@ class RGWSyncShardMarkerTrack {
 
 
 protected:
+  typename std::set<K> need_retry_set;
+
   virtual RGWCoroutine *store_marker(const T& new_marker, uint64_t index_pos, const utime_t& timestamp) = 0;
   virtual void handle_finish(const T& marker) { }
 
@@ -228,7 +230,8 @@ public:
     }
 
     typename std::map<T, marker_entry>::iterator iter = pending.begin();
-    const T& first_pos = iter->first;
+
+    bool is_first = (pos == iter->first);
 
     typename std::map<T, marker_entry>::iterator pos_iter = pending.find(pos);
     if (pos_iter == pending.end()) {
@@ -247,7 +250,7 @@ public:
 
     updates_since_flush++;
 
-    if (pos == first_pos && (updates_since_flush >= window_size || pending.empty())) {
+    if (is_first && (updates_since_flush >= window_size || pending.empty())) {
       return update_marker(high_marker, high_entry);
     }
     return NULL;
@@ -256,6 +259,25 @@ public:
   RGWCoroutine *update_marker(const T& new_marker, marker_entry& entry) {
     updates_since_flush = 0;
     return store_marker(new_marker, entry.pos, entry.timestamp);
+  }
+
+  /*
+   * a key needs retry if it was processing when another marker that points
+   * to the same bucket shards arrives. Instead of processing it, we mark
+   * it as need_retry so that when we finish processing the original, we
+   * retry the processing on the same bucket shard, in case there are more
+   * entries to process. This closes a race that can happen.
+   */
+  bool need_retry(const K& key) {
+    return (need_retry_set.find(key) != need_retry_set.end());
+  }
+
+  void set_need_retry(const K& key) {
+    need_retry_set.insert(key);
+  }
+
+  void reset_need_retry(const K& key) {
+    need_retry_set.erase(key);
   }
 };
 

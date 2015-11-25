@@ -886,7 +886,7 @@ public:
 
 #define META_SYNC_UPDATE_MARKER_WINDOW 10
 
-class RGWMetaSyncShardMarkerTrack : public RGWSyncShardMarkerTrack<string> {
+class RGWMetaSyncShardMarkerTrack : public RGWSyncShardMarkerTrack<string, string> {
   RGWMetaSyncEnv *sync_env;
 
   string marker_oid;
