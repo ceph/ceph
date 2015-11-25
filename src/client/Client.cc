@@ -2857,16 +2857,9 @@ void Client::put_cap_ref(Inode *in, int cap)
     if (last & CEPH_CAP_FILE_CACHE) {
       ldout(cct, 5) << "put_cap_ref dropped last FILE_CACHE ref on " << *in << dendl;
       ++put_nref;
-      // release clean pages too, if we dont want RDCACHE
-      if (!(in->caps_wanted() & CEPH_CAP_FILE_CACHE))
-	drop |= CEPH_CAP_FILE_CACHE;
     }
-    if (drop) {
-      if (drop & CEPH_CAP_FILE_CACHE)
-	_invalidate_inode_cache(in);
-      else
+    if (drop)
 	check_caps(in, false);
-    }
     if (put_nref)
       put_inode(in, put_nref);
   }
@@ -3087,6 +3080,10 @@ void Client::check_caps(Inode *in, bool is_delayed)
     wanted |= CEPH_CAP_FILE_EXCL;
   }
 
+  int implemented;
+  int issued = in->caps_issued(&implemented);
+  int revoking = implemented & ~issued;
+
   int retain = wanted | used | CEPH_CAP_PIN;
   if (!unmounting) {
     if (wanted)
@@ -3098,6 +3095,8 @@ void Client::check_caps(Inode *in, bool is_delayed)
   ldout(cct, 10) << "check_caps on " << *in
 	   << " wanted " << ccap_string(wanted)
 	   << " used " << ccap_string(used)
+	   << " issued " << ccap_string(issued)
+	   << " revoking " << ccap_string(revoking)
 	   << " is_delayed=" << is_delayed
 	   << dendl;
 
@@ -3106,6 +3105,10 @@ void Client::check_caps(Inode *in, bool is_delayed)
 
   if (in->caps.empty())
     return;   // guard if at end of func
+
+  if ((revoking & (CEPH_CAP_FILE_CACHE | CEPH_CAP_FILE_LAZYIO)) &&
+      (used & CEPH_CAP_FILE_CACHE) && !(used & CEPH_CAP_FILE_BUFFER))
+    _release(in);
 
   if (!in->cap_snaps.empty())
     flush_snaps(in);
@@ -3130,7 +3133,7 @@ void Client::check_caps(Inode *in, bool is_delayed)
     if (in->auth_cap && cap != in->auth_cap)
       cap_used &= ~in->auth_cap->issued;
 
-    int revoking = cap->implemented & ~cap->issued;
+    revoking = cap->implemented & ~cap->issued;
     
     ldout(cct, 10) << " cap mds." << mds
 	     << " issued " << ccap_string(cap->issued)
@@ -7138,13 +7141,7 @@ int Client::_release_fh(Fh *f)
   if (in->snapid == CEPH_NOSNAP) {
     if (in->put_open_ref(f->mode)) {
       _flush(in, new C_Client_FlushComplete(this, in));
-      // release clean pages too, if we dont want RDCACHE
-      if (in->cap_refs[CEPH_CAP_FILE_CACHE] == 0 &&
-	  !(in->caps_wanted() & CEPH_CAP_FILE_CACHE) &&
-	  !objectcacher->set_is_empty(&in->oset))
-	_invalidate_inode_cache(in);
-      else
-	check_caps(in, false);
+      check_caps(in, false);
     }
   } else {
     assert(in->snap_cap_refs > 0);
