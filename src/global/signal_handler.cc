@@ -26,6 +26,11 @@
 #include <sys/stat.h>
 #include <sys/types.h>
 
+#if defined(_AIX)
+extern char *sys_siglist[]; 
+#endif 
+
+
 void install_sighandler(int signum, signal_handler_t handler, int flags)
 {
   int ret;
@@ -40,7 +45,7 @@ void install_sighandler(int signum, signal_handler_t handler, int flags)
   ret = sigaction(signum, &act, &oldact);
   if (ret != 0) {
     char buf[1024];
-#if defined(__sun) 
+#if defined(__sun)
     char message[SIG2STR_MAX];
     sig2str(signum,message);
     snprintf(buf, sizeof(buf), "install_sighandler: sigaction returned "
