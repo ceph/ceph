@@ -69,6 +69,7 @@ bool SnapshotCreateRequest<I>::should_complete(int r) {
   CephContext *cct = image_ctx.cct;
   ldout(cct, 5) << this << " " << __func__ << ": state=" << m_state << ", "
                 << "r=" << r << dendl;
+  int orig_result = r;
   r = filter_state_return_code(r);
   if (r < 0) {
     lderr(cct) << "encountered error: " << cpp_strerror(r) << dendl;
@@ -94,11 +95,11 @@ bool SnapshotCreateRequest<I>::should_complete(int r) {
     send_create_snap();
     break;
   case STATE_CREATE_SNAP:
-    if (r == 0) {
+    if (orig_result == 0) {
       update_snap_context();
       finished = send_create_object_map();
     } else {
-      assert(r == -ESTALE);
+      assert(orig_result == -ESTALE);
       send_allocate_snap_id();
     }
     break;
