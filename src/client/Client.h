@@ -534,6 +534,8 @@ protected:
    */
   void _handle_full_flag(int64_t pool);
 
+  void _close_sessions();
+
  public:
   void set_filer_flags(int flags);
   void clear_filer_flags(int flags);
