@@ -1623,16 +1623,8 @@ void FileJournal::submit_entry(uint64_t seq, bufferlist& e, uint32_t orig_len,
 	  << " (" << oncommit << ")" << dendl;
   assert(e.length() > 0);
 
-  throttle_ops.take(1);
-  throttle_bytes.take(orig_len);
   if (osd_op)
     osd_op->mark_event("commit_queued_for_journal_write");
-  if (logger) {
-    logger->set(l_os_jq_max_ops, throttle_ops.get_max());
-    logger->set(l_os_jq_max_bytes, throttle_bytes.get_max());
-    logger->set(l_os_jq_ops, throttle_ops.get_current());
-    logger->set(l_os_jq_bytes, throttle_bytes.get_current());
-  }
 
   {
     Mutex::Locker l1(writeq_lock);  // ** lock **
@@ -2001,16 +1993,23 @@ FileJournal::read_entry_result FileJournal::do_read_entry(
   return SUCCESS;
 }
 
-void FileJournal::throttle(ThreadPool::TPHandle *handle)
+void FileJournal::throttle(int bytes, ThreadPool::TPHandle *handle)
 {
   if (handle)
     handle->suspend_tp_timeout();
-  if (throttle_ops.wait(g_conf->journal_queue_max_ops))
+  if (throttle_ops.get(1, g_conf->journal_queue_max_ops))
     dout(2) << "throttle: waited for ops" << dendl;
-  if (throttle_bytes.wait(g_conf->journal_queue_max_bytes))
+  if (throttle_bytes.get(bytes, g_conf->journal_queue_max_bytes))
     dout(2) << "throttle: waited for bytes" << dendl;
   if (handle)
     handle->reset_tp_timeout();
+  if (logger) {
+    logger->set(l_os_jq_max_ops, throttle_ops.get_max());
+    logger->set(l_os_jq_max_bytes, throttle_bytes.get_max());
+    logger->set(l_os_jq_ops, throttle_ops.get_current());
+    logger->set(l_os_jq_bytes, throttle_bytes.get_current());
+  }
+
 }
 
 void FileJournal::get_header(

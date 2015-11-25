@@ -1981,11 +1981,12 @@ int FileStore::queue_transactions(Sequencer *posr, list<Transaction*> &tls,
 
   if (journal && journal->is_writeable() && !m_filestore_journal_trailing) {
     Op *o = build_op(tls, onreadable, onreadable_sync, osd_op);
-    op_queue_reserve_throttle(o, handle);
-    journal->throttle(handle);
     //prepare and encode transactions data out of lock
     bufferlist tbl;
     int orig_len = journal->prepare_entry(o->tls, &tbl);
+
+    op_queue_reserve_throttle(o, handle);
+    journal->throttle(orig_len, handle);
     uint64_t op_num = submit_manager.op_submit_start();
     o->op = op_num;
 
