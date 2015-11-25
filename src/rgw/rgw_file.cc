@@ -137,13 +137,11 @@ int rgw_create(struct rgw_fs *rgw_fs,
   if (get<1>(fhr) & RGWFileHandle::FLAG_CREATE) {
         /* fill in stat data */
     time_t now = time(0);
-    rgw_fh->get_stat()->st_atim.tv_sec = now;
-    rgw_fh->get_stat()->st_mtim.tv_sec = now;
-    rgw_fh->get_stat()->st_ctim.tv_sec = now;
+    rgw_fh->set_times(now);
     rgw_fh->open_for_create();
   }
 
-  *st = *(rgw_fh->get_stat());
+  (void) rgw_fh->stat(st);
 
   struct rgw_file_handle *rfh = rgw_fh->get_fh();
   *fh = rfh;
@@ -393,15 +391,14 @@ int rgw_getattr(struct rgw_fs *rgw_fs,
     }
 
     /* fill in stat data */
-    rgw_fh->get_stat()->st_size = req.size();
-    rgw_fh->get_stat()->st_blocks = (st->st_size) / 512;
-    rgw_fh->get_stat()->st_atim.tv_sec = req.mtime();
-    rgw_fh->get_stat()->st_mtim.tv_sec = req.mtime();
-    rgw_fh->get_stat()->st_ctim.tv_sec = req.ctime();
+    rgw_fh->set_size(req.size());
+    rgw_fh->set_ctime({req.ctime(), 0});
+    rgw_fh->set_mtime({req.mtime(), 0});
+    rgw_fh->set_atime({req.mtime(), 0});
   }
 
 done:
-  *st = *(rgw_fh->get_stat());
+  (void) rgw_fh->stat(st);
   return 0;
 }
 
@@ -485,7 +482,7 @@ int rgw_readdir(struct rgw_fs *rgw_fs,
     rc = librgw.get_fe()->execute_req(&req);
 
     /* XXX update link count (incorrectly) */
-    parent->get_stat()->st_nlink = 3 + *offset;
+    parent->set_nlink(3 + *offset);
   }
 
   /* XXXX request MUST set this */
@@ -561,8 +558,8 @@ int rgw_write(struct rgw_fs *rgw_fs,
 
   /* XXX move into request */
   ssize_t min_size = offset+length;
-  if (min_size > rgw_fh->get_stat()->st_size)
-    rgw_fh->get_stat()->st_size = min_size;
+  if (min_size > rgw_fh->get_size())
+    rgw_fh->set_size(min_size);
 
   *bytes_written = (rc == 0) ? req.bytes_written : 0;
 
