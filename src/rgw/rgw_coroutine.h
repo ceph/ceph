@@ -328,6 +328,8 @@ class RGWCoroutinesStack : public RefCountedObject {
 
   int retcode;
 
+  uint64_t run_count;
+
 protected:
   RGWCoroutinesEnv *env;
   RGWCoroutinesStack *parent;
