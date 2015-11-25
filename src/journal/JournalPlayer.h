@@ -39,6 +39,7 @@ public:
   bool try_pop_front(Entry *entry, uint64_t *commit_tid);
 
 private:
+  typedef std::set<uint8_t> PrefetchSplayOffsets;
   typedef std::map<std::string, uint64_t> AllocatedTids;
   typedef std::map<uint64_t, ObjectPlayerPtr> ObjectPlayers;
   typedef std::map<uint8_t, ObjectPlayers> SplayedObjectPlayers;
@@ -50,44 +51,28 @@ private:
     STATE_ERROR
   };
 
-  struct C_ProcessState : public Context {
+  struct C_Watch : public Context {
     JournalPlayer *player;
-    C_ProcessState(JournalPlayer *p) : player(p) {}
-    virtual void complete(int r) {
-      player->process_state(r);
-    }
-    virtual void finish(int r) {}
-  };
+    uint64_t object_num;
 
-  struct C_PrefetchBatch : public Context {
-    JournalPlayer *player;
-    Mutex lock;
-    uint32_t refs;
-    int return_value;
-
-    C_PrefetchBatch(JournalPlayer *p);
-    virtual ~C_PrefetchBatch() {
-      player->m_async_op_tracker.finish_op();
+    C_Watch(JournalPlayer *p, uint64_t o) : player(p), object_num(o) {
     }
-    void add_fetch();
-    virtual void complete(int r);
-    virtual void finish(int r) {}
+    virtual void finish(int r) {
+      player->handle_watch(object_num, r);
+    }
   };
 
   struct C_Fetch : public Context {
     JournalPlayer *player;
     uint64_t object_num;
-    Context *on_fetch;
-    C_Fetch(JournalPlayer *p, uint64_t o, Context *c)
-      : player(p), object_num(o), on_fetch(c) {
+    C_Fetch(JournalPlayer *p, uint64_t o) : player(p), object_num(o) {
       player->m_async_op_tracker.start_op();
     }
     virtual ~C_Fetch() {
       player->m_async_op_tracker.finish_op();
     }
     virtual void finish(int r) {
-      r = player->handle_fetched(r, object_num);
-      on_fetch->complete(r);
+      player->handle_fetched(object_num, r);
     }
   };
 
@@ -97,8 +82,6 @@ private:
   JournalMetadataPtr m_journal_metadata;
 
   ReplayHandler *m_replay_handler;
-
-  C_ProcessState m_process_state;
 
   AsyncOpTracker m_async_op_tracker;
 
@@ -110,6 +93,7 @@ private:
   bool m_watch_scheduled;
   double m_watch_interval;
 
+  PrefetchSplayOffsets m_prefetch_splay_offsets;
   SplayedObjectPlayers m_object_players;
   uint64_t m_commit_object;
   std::string m_commit_tag;
@@ -120,15 +104,15 @@ private:
   const ObjectPlayers &get_object_players() const;
   ObjectPlayerPtr get_object_player() const;
   ObjectPlayerPtr get_next_set_object_player() const;
-  void remove_object_player(const ObjectPlayerPtr &object_player,
-                            Context *on_fetch);
+  bool remove_empty_object_player(const ObjectPlayerPtr &object_player);
 
-  void process_state(int r);
-  int process_prefetch();
+  void process_state(uint64_t object_number, int r);
+  int process_prefetch(uint64_t object_number);
   int process_playback();
 
-  void fetch(uint64_t object_num, Context *ctx);
-  int handle_fetched(int r, uint64_t object_num);
+  void fetch(uint64_t object_num);
+  void handle_fetched(uint64_t object_num, int r);
+  void handle_watch(uint64_t object_num, int r);
 };
 
 } // namespace journal
