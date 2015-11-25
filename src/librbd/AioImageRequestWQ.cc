@@ -24,7 +24,7 @@ AioImageRequestWQ::AioImageRequestWQ(ImageCtx *image_ctx, const string &name,
   ldout(cct, 5) << this << " " << ": ictx=" << image_ctx << dendl;
 }
 
-ssize_t AioImageRequestWQ::read(uint64_t off, size_t len, char *buf,
+ssize_t AioImageRequestWQ::read(uint64_t off, uint64_t len, char *buf,
                                 int op_flags) {
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 20) << "read: ictx=" << &m_image_ctx << ", off=" << off << ", "
@@ -39,7 +39,7 @@ ssize_t AioImageRequestWQ::read(uint64_t off, size_t len, char *buf,
   return cond.wait();
 }
 
-ssize_t AioImageRequestWQ::write(uint64_t off, size_t len, const char *buf,
+ssize_t AioImageRequestWQ::write(uint64_t off, uint64_t len, const char *buf,
                                  int op_flags) {
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 20) << "write: ictx=" << &m_image_ctx << ", off=" << off << ", "
@@ -86,7 +86,7 @@ int AioImageRequestWQ::discard(uint64_t off, uint64_t len) {
   return len;
 }
 
-void AioImageRequestWQ::aio_read(AioCompletion *c, uint64_t off, size_t len,
+void AioImageRequestWQ::aio_read(AioCompletion *c, uint64_t off, uint64_t len,
                                  char *buf, bufferlist *pbl, int op_flags) {
   c->init_time(&m_image_ctx, librbd::AIO_TYPE_READ);
   CephContext *cct = m_image_ctx.cct;
@@ -102,7 +102,7 @@ void AioImageRequestWQ::aio_read(AioCompletion *c, uint64_t off, size_t len,
   }
 }
 
-void AioImageRequestWQ::aio_write(AioCompletion *c, uint64_t off, size_t len,
+void AioImageRequestWQ::aio_write(AioCompletion *c, uint64_t off, uint64_t len,
                                   const char *buf, int op_flags) {
   c->init_time(&m_image_ctx, librbd::AIO_TYPE_WRITE);
   CephContext *cct = m_image_ctx.cct;
