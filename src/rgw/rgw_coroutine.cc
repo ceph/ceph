@@ -128,7 +128,7 @@ stringstream& RGWCoroutine::Status::set_status()
 RGWCoroutinesStack::RGWCoroutinesStack(CephContext *_cct, RGWCoroutinesManager *_ops_mgr, RGWCoroutine *start) : cct(_cct), ops_mgr(_ops_mgr),
                                                                                                          done_flag(false), error_flag(false), blocked_flag(false),
                                                                                                          sleep_flag(false), interval_wait_flag(false), is_scheduled(false), is_waiting_for_child(false),
-													 retcode(0),
+													 retcode(0), run_count(0),
 													 env(NULL), parent(NULL)
 {
   if (start) {
@@ -358,6 +358,7 @@ void RGWCoroutinesStack::dump(Formatter *f) const {
   stringstream ss;
   ss << (void *)this;
   ::encode_json("stack", ss.str(), f);
+  ::encode_json("run_count", run_count, f);
   f->open_array_section("ops");
   for (auto& i : ops) {
     encode_json("op", *i, f);
@@ -425,6 +426,8 @@ int RGWCoroutinesManager::run(list<RGWCoroutinesStack *>& stacks)
       report_error(stack);
     }
 
+    bool op_not_blocked = false;
+
     if (stack->is_io_blocked()) {
       ldout(cct, 20) << __func__ << ":" << " stack=" << (void *)stack << " is io blocked" << dendl;
       if (stack->is_interval_waiting()) {
@@ -459,7 +462,13 @@ int RGWCoroutinesManager::run(list<RGWCoroutinesStack *>& stacks)
       context_stacks.erase(stack);
       stack->put();
     } else {
+      op_not_blocked = true;
+      stack->run_count++;
       stack->schedule();
+    }
+
+    if (!op_not_blocked) {
+      stack->run_count = 0;
     }
 
     lock.unlock();
