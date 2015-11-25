@@ -416,7 +416,7 @@ CephContext::CephContext(uint32_t module_type_, int init_flags_)
     _crypto_aes(NULL),
     _lockdep_obs(NULL),
     _cct_perf(NULL),
-	plugin_registry(NULL)
+	  _plugin_registry(NULL)
 {
   ceph_spin_init(&_service_thread_lock);
   ceph_spin_init(&_associated_objs_lock);
@@ -591,6 +591,11 @@ void CephContext::join_service_thread()
 uint32_t CephContext::get_module_type() const
 {
   return _module_type;
+}
+
+int CephContext::get_init_flags() const
+{
+  return _init_flags;
 }
 
 PerfCountersCollection *CephContext::get_perfcounters_collection()

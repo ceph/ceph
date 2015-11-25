@@ -71,6 +71,8 @@ libcommon_internal_la_SOURCES = \
 	common/TracepointProvider.cc \
 	common/PluginRegistry.cc
 
+common/PluginRegistry.cc: ./ceph_ver.h
+
 if ENABLE_SERVER
 libcommon_internal_la_SOURCES += \
 	common/xattr.c \
