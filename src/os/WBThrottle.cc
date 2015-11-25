@@ -139,7 +139,6 @@ bool WBThrottle::get_next_should_flush(
          cond.Wait(lock);
   if (stopping)
     return false;
-  assert(!pending_wbs.empty());
   ghobject_t obj(pop_object());
   
   ceph::unordered_map<ghobject_t, pair<PendingWB, FDRef> >::iterator i =
