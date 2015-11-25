@@ -1,9 +1,9 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
-#ifndef CEPH_LIBRBD_ASYNC_RESIZE_REQUEST_H
-#define CEPH_LIBRBD_ASYNC_RESIZE_REQUEST_H
+#ifndef CEPH_LIBRBD_OPERATION_RESIZE_REQUEST_H
+#define CEPH_LIBRBD_OPERATION_RESIZE_REQUEST_H
 
-#include "librbd/AsyncRequest.h"
+#include "librbd/operation/Request.h"
 #include "include/xlist.h"
 
 namespace librbd
@@ -12,14 +12,14 @@ namespace librbd
 class ImageCtx;
 class ProgressContext;
 
-class AsyncResizeRequest : public AsyncRequest<>
+namespace operation {
+
+class ResizeRequest : public Request
 {
 public:
-  AsyncResizeRequest(ImageCtx &image_ctx, Context *on_finish, uint64_t new_size,
+  ResizeRequest(ImageCtx &image_ctx, Context *on_finish, uint64_t new_size,
                      ProgressContext &prog_ctx);
-  virtual ~AsyncResizeRequest();
-
-  virtual void send();
+  virtual ~ResizeRequest();
 
   inline bool shrinking() const {
     return m_new_size < m_original_size;
@@ -27,6 +27,16 @@ public:
 
   inline uint64_t get_image_size() const {
     return m_new_size;
+  }
+
+  virtual void send();
+
+protected:
+  virtual void send_op();
+  virtual bool should_complete(int r);
+
+  virtual journal::Event create_event() const {
+    return journal::ResizeEvent(0, m_new_size);
   }
 
 private:
@@ -80,10 +90,7 @@ private:
   ProgressContext &m_prog_ctx;
   uint64_t m_new_parent_overlap;
 
-  xlist<AsyncResizeRequest *>::item m_xlist_item;
-
-  virtual bool safely_cancel(int r);
-  virtual bool should_complete(int r);
+  xlist<ResizeRequest *>::item m_xlist_item;
 
   void send_flush();
   void send_invalidate_cache();
@@ -97,6 +104,7 @@ private:
 
 };
 
+} // namespace operation
 } // namespace librbd
 
-#endif // CEPH_LIBRBD_ASYNC_RESIZE_REQUEST_H
+#endif // CEPH_LIBRBD_OPERATION_RESIZE_REQUEST_H

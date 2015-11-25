@@ -1,16 +1,16 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
-#include "librbd/RebuildObjectMapRequest.h"
+#include "librbd/operation/RebuildObjectMapRequest.h"
 #include "common/dout.h"
 #include "common/errno.h"
 #include "librbd/AsyncObjectThrottle.h"
-#include "librbd/AsyncResizeRequest.h"
-#include "librbd/AsyncTrimRequest.h"
 #include "librbd/ImageCtx.h"
 #include "librbd/ImageWatcher.h"
 #include "librbd/internal.h"
 #include "librbd/ObjectMap.h"
+#include "librbd/operation/ResizeRequest.h"
+#include "librbd/operation/TrimRequest.h"
 #include <boost/lambda/bind.hpp>
 #include <boost/lambda/construct.hpp>
 
@@ -19,6 +19,7 @@
 #define dout_prefix *_dout << "librbd::RebuildObjectMapRequest: "
 
 namespace librbd {
+namespace operation {
 
 namespace {
 
@@ -165,17 +166,16 @@ bool RebuildObjectMapRequest::should_complete(int r) {
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 5) << this << " should_complete: " << " r=" << r << dendl;
 
+  RWLock::RLocker owner_lock(m_image_ctx.owner_lock);
   switch (m_state) {
   case STATE_RESIZE_OBJECT_MAP:
     ldout(cct, 5) << "RESIZE_OBJECT_MAP" << dendl;
     if (r == -ESTALE && !m_attempted_trim) {
       // objects are still flagged as in-use -- delete them
       m_attempted_trim = true;
-      RWLock::RLocker owner_lock(m_image_ctx.owner_lock);
       send_trim_image();
       return false;
     } else if (r == 0) {
-      RWLock::RLocker owner_lock(m_image_ctx.owner_lock);
       send_verify_objects();
     }
     break;
@@ -183,7 +183,6 @@ bool RebuildObjectMapRequest::should_complete(int r) {
   case STATE_TRIM_IMAGE:
     ldout(cct, 5) << "TRIM_IMAGE" << dendl;
     if (r == 0) {
-      RWLock::RLocker owner_lock(m_image_ctx.owner_lock);
       send_resize_object_map();
     }
     break;
@@ -191,7 +190,6 @@ bool RebuildObjectMapRequest::should_complete(int r) {
   case STATE_VERIFY_OBJECTS:
     ldout(cct, 5) << "VERIFY_OBJECTS" << dendl;
     if (r == 0) {
-      assert(m_image_ctx.owner_lock.is_locked());
       send_save_object_map();
     }
     break;
@@ -199,7 +197,6 @@ bool RebuildObjectMapRequest::should_complete(int r) {
   case STATE_SAVE_OBJECT_MAP:
     ldout(cct, 5) << "SAVE_OBJECT_MAP" << dendl;
     if (r == 0) {
-      RWLock::RLocker owner_lock(m_image_ctx.owner_lock);
       send_update_header();
     }
     break;
@@ -269,10 +266,8 @@ void RebuildObjectMapRequest::send_trim_image() {
     orig_size = m_image_ctx.get_object_size() *
                 m_image_ctx.object_map.size();
   }
-  AsyncTrimRequest *req = new AsyncTrimRequest(m_image_ctx,
-                                               create_callback_context(),
-                                               orig_size, new_size,
-                                               m_prog_ctx);
+  TrimRequest *req = new TrimRequest(m_image_ctx, create_callback_context(),
+                                     orig_size, new_size, m_prog_ctx);
   req->send();
 }
 
@@ -349,8 +344,8 @@ void RebuildObjectMapRequest::send_update_header() {
 uint64_t RebuildObjectMapRequest::get_image_size() const {
   assert(m_image_ctx.snap_lock.is_locked());
   if (m_image_ctx.snap_id == CEPH_NOSNAP) {
-    if (!m_image_ctx.async_resize_reqs.empty()) {
-      return m_image_ctx.async_resize_reqs.front()->get_image_size();
+    if (!m_image_ctx.resize_reqs.empty()) {
+      return m_image_ctx.resize_reqs.front()->get_image_size();
     } else {
       return m_image_ctx.size;
     }
@@ -358,4 +353,5 @@ uint64_t RebuildObjectMapRequest::get_image_size() const {
   return  m_image_ctx.get_image_size(m_image_ctx.snap_id);
 }
 
+} // namespace operation
 } // namespace librbd

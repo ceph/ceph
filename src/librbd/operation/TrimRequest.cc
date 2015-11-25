@@ -1,6 +1,7 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
-#include "librbd/AsyncTrimRequest.h"
+
+#include "librbd/operation/TrimRequest.h"
 #include "librbd/AsyncObjectThrottle.h"
 #include "librbd/AioObjectRequest.h"
 #include "librbd/ImageCtx.h"
@@ -19,10 +20,10 @@
 
 #define dout_subsys ceph_subsys_rbd
 #undef dout_prefix
-#define dout_prefix *_dout << "librbd::AsyncTrimRequest: "
+#define dout_prefix *_dout << "librbd::TrimRequest: "
 
-namespace librbd
-{
+namespace librbd {
+namespace operation {
 
 class C_CopyupObject : public C_AsyncObjectThrottle<> {
 public:
@@ -82,9 +83,9 @@ private:
   uint64_t m_object_no;
 };
 
-AsyncTrimRequest::AsyncTrimRequest(ImageCtx &image_ctx, Context *on_finish,
-				   uint64_t original_size, uint64_t new_size,
-				   ProgressContext &prog_ctx)
+TrimRequest::TrimRequest(ImageCtx &image_ctx, Context *on_finish,
+                         uint64_t original_size, uint64_t new_size,
+                         ProgressContext &prog_ctx)
   : AsyncRequest(image_ctx, on_finish), m_new_size(new_size),
     m_prog_ctx(prog_ctx)
 {
@@ -104,7 +105,7 @@ AsyncTrimRequest::AsyncTrimRequest(ImageCtx &image_ctx, Context *on_finish,
 }
 
 
-bool AsyncTrimRequest::should_complete(int r)
+bool TrimRequest::should_complete(int r)
 {
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 5) << this << " should_complete: r=" << r << dendl;
@@ -113,6 +114,7 @@ bool AsyncTrimRequest::should_complete(int r)
     return true;
   }
 
+  RWLock::RLocker owner_lock(m_image_ctx.owner_lock);
   switch (m_state) {
   case STATE_COPYUP_OBJECTS:
     ldout(cct, 5) << " COPYUP_OBJECTS" << dendl;
@@ -121,10 +123,7 @@ bool AsyncTrimRequest::should_complete(int r)
 
   case STATE_PRE_REMOVE:
     ldout(cct, 5) << " PRE_REMOVE" << dendl;
-    {
-      RWLock::RLocker owner_lock(m_image_ctx.owner_lock);
-      send_remove_objects();
-    }
+    send_remove_objects();
     break;
 
   case STATE_REMOVE_OBJECTS:
@@ -134,15 +133,12 @@ bool AsyncTrimRequest::should_complete(int r)
 
   case STATE_POST_REMOVE:
     ldout(cct, 5) << " POST_OBJECTS" << dendl;
-    {
-      RWLock::RLocker owner_lock(m_image_ctx.owner_lock);
-      send_clean_boundary();
-    }
+    send_clean_boundary();
     break;
 
   case STATE_CLEAN_BOUNDARY:
     ldout(cct, 5) << "CLEAN_BOUNDARY" << dendl;
-    finish(0);
+    send_finish(0);
     break;
 
   case STATE_FINISHED:
@@ -157,11 +153,11 @@ bool AsyncTrimRequest::should_complete(int r)
   return false;
 }
 
-void AsyncTrimRequest::send() {
+void TrimRequest::send() {
   send_copyup_objects();
 }
 
-void AsyncTrimRequest::send_copyup_objects() {
+void TrimRequest::send_copyup_objects() {
   assert(m_image_ctx.owner_lock.is_locked());
   assert(!m_image_ctx.image_watcher->is_lock_supported() ||
          m_image_ctx.image_watcher->is_lock_owner());
@@ -212,7 +208,7 @@ void AsyncTrimRequest::send_copyup_objects() {
   throttle->start_ops(m_image_ctx.concurrent_management_ops);
 }
 
-void AsyncTrimRequest::send_remove_objects() {
+void TrimRequest::send_remove_objects() {
   assert(m_image_ctx.owner_lock.is_locked());
 
   ldout(m_image_ctx.cct, 5) << this << " send_remove_objects: "
@@ -230,7 +226,7 @@ void AsyncTrimRequest::send_remove_objects() {
   throttle->start_ops(m_image_ctx.concurrent_management_ops);
 }
 
-void AsyncTrimRequest::send_pre_remove() {
+void TrimRequest::send_pre_remove() {
   assert(m_image_ctx.owner_lock.is_locked());
   if (m_delete_start >= m_num_objects) {
     send_clean_boundary();
@@ -269,7 +265,7 @@ void AsyncTrimRequest::send_pre_remove() {
   }
 }
 
-void AsyncTrimRequest::send_post_remove() {
+void TrimRequest::send_post_remove() {
   assert(m_image_ctx.owner_lock.is_locked());
 
   bool clean_boundary = false;
@@ -304,11 +300,11 @@ void AsyncTrimRequest::send_post_remove() {
   }
 }
 
-void AsyncTrimRequest::send_clean_boundary() {
+void TrimRequest::send_clean_boundary() {
   assert(m_image_ctx.owner_lock.is_locked());
   CephContext *cct = m_image_ctx.cct;
   if (m_delete_off <= m_new_size) {
-    finish(0);
+    send_finish(0);
     return;
   }
 
@@ -334,7 +330,7 @@ void AsyncTrimRequest::send_clean_boundary() {
                            extents);
 
   ContextCompletion *completion =
-    new ContextCompletion(create_callback_context(), true);
+    new ContextCompletion(create_async_callback_context(), true);
   for (vector<ObjectExtent>::iterator p = extents.begin();
        p != extents.end(); ++p) {
     ldout(cct, 20) << " ex " << *p << dendl;
@@ -353,9 +349,10 @@ void AsyncTrimRequest::send_clean_boundary() {
   completion->finish_adding_requests();
 }
 
-void AsyncTrimRequest::finish(int r) {
+void TrimRequest::send_finish(int r) {
   m_state = STATE_FINISHED;
   async_complete(r);
 }
 
+} // namespace operation
 } // namespace librbd
