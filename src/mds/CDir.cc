@@ -1891,12 +1891,14 @@ void CDir::_omap_fetched(bufferlist& hdrbl, map<string, bufferlist>& omap,
 
 void CDir::go_bad()
 {
+  if (get_version() == 0)
+    set_version(1);
   state_set(STATE_BADFRAG);
   // mark complete, !fetching
   mark_complete();
   state_clear(STATE_FETCHING);
   auth_unpin(this);
-  
+
   // kick waiters
   finish_waiting(WAIT_COMPLETE, 0);
 }
