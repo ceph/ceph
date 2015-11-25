@@ -78,6 +78,7 @@ using ceph::crypto::SHA1;
 
 #include "common/config.h"
 #include "common/blkdev.h"
+#include "global/error_handlers.h"
 
 #ifdef WITH_LTTNG
 #define TRACEPOINT_DEFINE
@@ -1249,6 +1250,9 @@ int FileStore::read_op_seq(uint64_t *seq)
   int op_fd = ::open(current_op_seq_fn.c_str(), O_CREAT|O_RDWR, 0644);
   if (op_fd < 0) {
     int r = -errno;
+    if (m_filestore_fail_eio && r == -EIO) {
+      ceph_io_error_tidy_shutdown();
+    }
     assert(!m_filestore_fail_eio || r != -EIO);
     return r;
   }
@@ -1258,6 +1262,9 @@ int FileStore::read_op_seq(uint64_t *seq)
   if (ret < 0) {
     derr << "error reading " << current_op_seq_fn << ": " << cpp_strerror(ret) << dendl;
     VOID_TEMP_FAILURE_RETRY(::close(op_fd));
+    if (m_filestore_fail_eio && ret == -EIO) {
+      ceph_io_error_tidy_shutdown();
+    }
     assert(!m_filestore_fail_eio || ret != -EIO);
     return ret;
   }
@@ -1272,6 +1279,9 @@ int FileStore::write_op_seq(int fd, uint64_t seq)
   int ret = TEMP_FAILURE_RETRY(::pwrite(fd, s, strlen(s), 0));
   if (ret < 0) {
     ret = -errno;
+    if (m_filestore_fail_eio && ret == -EIO) {
+      ceph_io_error_tidy_shutdown();
+    }
     assert(!m_filestore_fail_eio || ret != -EIO);
   }
   return ret;
@@ -2880,7 +2890,7 @@ unsigned FileStore::_do_transaction(
 	if (r == -EMFILE) {
 	  dump_open_fds(g_ceph_context);
 	}
-
+	ceph_io_error_tidy_shutdown();
 	assert(0 == "unexpected error");
       }
     }
@@ -3677,6 +3687,7 @@ void FileStore::sync_entry()
 	int err = write_op_seq(op_fd, cp);
 	if (err < 0) {
 	  derr << "Error during write_op_seq: " << cpp_strerror(err) << dendl;
+	  ceph_io_error_tidy_shutdown();
 	  assert(0 == "error during write_op_seq");
 	}
 
@@ -3718,11 +3729,13 @@ void FileStore::sync_entry()
 	err = write_op_seq(op_fd, cp);
 	if (err < 0) {
 	  derr << "Error during write_op_seq: " << cpp_strerror(err) << dendl;
+	  ceph_io_error_tidy_shutdown();
 	  assert(0 == "error during write_op_seq");
 	}
 	err = ::fsync(op_fd);
 	if (err < 0) {
 	  derr << "Error during fsync of op_seq: " << cpp_strerror(err) << dendl;
+	  ceph_io_error_tidy_shutdown();
 	  assert(0 == "error during fsync of op_seq");
 	}
       }

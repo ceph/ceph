@@ -3,7 +3,8 @@ libglobal_la_SOURCES = \
 	global/global_init.cc \
 	global/pidfile.cc \
 	global/signal_handler.cc \
-	common/TrackedOp.cc
+	common/TrackedOp.cc \
+	global/error_handlers.cc
 libglobal_la_LIBADD = $(LIBCOMMON)
 noinst_LTLIBRARIES += libglobal.la
 
@@ -11,5 +12,6 @@ noinst_HEADERS += \
 	global/pidfile.h \
 	global/global_init.h \
 	global/global_context.h \
-	global/signal_handler.h
+	global/signal_handler.h \
+	global/error_handlers.h
 

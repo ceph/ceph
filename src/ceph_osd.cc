@@ -38,7 +38,7 @@ using namespace std;
 
 #include "global/global_init.h"
 #include "global/signal_handler.h"
-
+#include "global/error_handlers.h"
 #include "include/color.h"
 #include "common/errno.h"
 #include "common/pick_address.h"
@@ -67,7 +67,11 @@ void handle_osd_signal(int signum)
   if (osd)
     osd->handle_signal(signum);
 }
-
+void handle_io_error_tidy_shutdown()
+{
+  if (osd)
+    osd->io_error_tidy_shutdown();
+}
 void usage() 
 {
   cout << "usage: ceph-osd -i <osdid>\n"
@@ -589,7 +593,7 @@ int main(int argc, const char **argv)
   register_async_signal_handler(SIGHUP, sighup_handler);
   register_async_signal_handler_oneshot(SIGINT, handle_osd_signal);
   register_async_signal_handler_oneshot(SIGTERM, handle_osd_signal);
-
+  register_ceph_io_error_handler(handle_io_error_tidy_shutdown);
   osd->final_init();
 
   if (g_conf->inject_early_sigterm)

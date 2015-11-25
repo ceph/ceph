@@ -34,7 +34,9 @@
 
 #include "common/blkdev.h"
 #include "common/linux_version.h"
+#include "global/error_handlers.h"
 
+ 
 #if defined(__FreeBSD__)
 #define O_DSYNC O_SYNC
 #endif
@@ -1120,12 +1122,14 @@ void FileJournal::do_write(bufferlist& bl)
     if (write_bl(pos, second)) {
       derr << "FileJournal::do_write: write_bl(pos=" << orig_pos
 	   << ") failed" << dendl;
+      ceph_io_error_tidy_shutdown();
       ceph_abort();
     }
     orig_pos = first_pos;
     if (write_bl(first_pos, first)) {
       derr << "FileJournal::do_write: write_bl(pos=" << orig_pos
 	   << ") failed" << dendl;
+      ceph_io_error_tidy_shutdown();
       ceph_abort();
     }
     assert(first_pos == get_top());
@@ -1137,6 +1141,7 @@ void FileJournal::do_write(bufferlist& bl)
 	derr << "FileJournal::do_write: pwrite(fd=" << fd
 	     << ", hbp.length=" << hbp.length() << ") failed :"
 	     << cpp_strerror(err) << dendl;
+	ceph_io_error_tidy_shutdown();
 	ceph_abort();
       }
     }
@@ -1144,6 +1149,7 @@ void FileJournal::do_write(bufferlist& bl)
     if (write_bl(pos, bl)) {
       derr << "FileJournal::do_write: write_bl(pos=" << pos
 	   << ") failed" << dendl;
+      ceph_io_error_tidy_shutdown();
       ceph_abort();
     }
   }
@@ -1174,6 +1180,7 @@ void FileJournal::do_write(bufferlist& bl)
 #endif
     if (ret < 0) {
       derr << __func__ << " fsync/fdatasync failed: " << cpp_strerror(errno) << dendl;
+      ceph_io_error_tidy_shutdown();
       ceph_abort();
     }
 #ifdef HAVE_POSIX_FADVISE
@@ -1358,6 +1365,7 @@ void FileJournal::do_aio_write(bufferlist& bl)
     if (write_aio_bl(pos, first, 0)) {
       derr << "FileJournal::do_aio_write: write_aio_bl(pos=" << pos
 	   << ") failed" << dendl;
+      ceph_io_error_tidy_shutdown();
       ceph_abort();
     }
     assert(pos == header.max_size);
@@ -1370,6 +1378,7 @@ void FileJournal::do_aio_write(bufferlist& bl)
     if (write_aio_bl(pos, second, writing_seq)) {
       derr << "FileJournal::do_aio_write: write_aio_bl(pos=" << pos
 	   << ") failed" << dendl;
+      ceph_io_error_tidy_shutdown();
       ceph_abort();
     }
   } else {
@@ -1380,6 +1389,7 @@ void FileJournal::do_aio_write(bufferlist& bl)
       loff_t pos = 0;
       if (write_aio_bl(pos, hbl, 0)) {
 	derr << "FileJournal::do_aio_write: write_aio_bl(header) failed" << dendl;
+	ceph_io_error_tidy_shutdown();
 	ceph_abort();
       }
     }
@@ -1387,6 +1397,7 @@ void FileJournal::do_aio_write(bufferlist& bl)
     if (write_aio_bl(pos, bl, writing_seq)) {
       derr << "FileJournal::do_aio_write: write_aio_bl(pos=" << pos
 	   << ") failed" << dendl;
+      ceph_io_error_tidy_shutdown();
       ceph_abort();
     }
   }
@@ -1847,6 +1858,7 @@ void FileJournal::wrap_read_bl(
     if (r) {
       derr << "FileJournal::wrap_read_bl: safe_read_exact " << pos << "~" << len << " returned "
 	   << r << dendl;
+      ceph_io_error_tidy_shutdown();
       ceph_abort();
     }
     bl->push_back(bp);

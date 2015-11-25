@@ -1651,6 +1651,10 @@ void OSD::handle_signal(int signum)
   derr << "*** Got signal " << sys_siglist[signum] << " ***" << dendl;
   shutdown();
 }
+void OSD::io_error_tidy_shutdown() 
+{
+  service.prepare_to_stop();
+}
 
 int OSD::pre_init()
 {
