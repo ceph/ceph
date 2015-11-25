@@ -422,6 +422,7 @@ function test_run_osd() {
     run_osd $dir 0 || return 1
     local backfills=$(CEPH_ARGS='' ceph --format=json daemon $dir//ceph-osd.0.asok \
         config get osd_max_backfills)
+    echo "$backfills" | grep --quiet 'osd_max_backfills' || return 1
 
     run_osd $dir 1 --osd-max-backfills 20 || return 1
     local backfills=$(CEPH_ARGS='' ceph --format=json daemon $dir//ceph-osd.1.asok \
@@ -523,6 +524,7 @@ function test_activate_osd() {
     run_osd $dir 0 || return 1
     local backfills=$(CEPH_ARGS='' ceph --format=json daemon $dir//ceph-osd.0.asok \
         config get osd_max_backfills)
+    echo "$backfills" | grep --quiet 'osd_max_backfills' || return 1
 
     kill_daemons $dir TERM osd || return 1
 
@@ -669,6 +671,8 @@ function test_get_config() {
     test $(get_config osd 0 osd_max_scrubs) = 3 || return 1
     teardown $dir || return 1
 }
+
+#######################################################################
 
 ##
 # Set the **config** to specified **value**, via the config set command
