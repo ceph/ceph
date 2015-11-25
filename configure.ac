@@ -70,11 +70,15 @@ freebsd*)
 solaris*)
 	solaris="yes"
 	;;
+aix*)
+	aix="yes"
+	;;
 esac
 AM_CONDITIONAL(LINUX, test x"$linux" = x"yes")
 AM_CONDITIONAL(FREEBSD, test x"$freebsd" = x"yes")
 AM_CONDITIONAL(DARWIN, test x"$darwin" = x"yes")
 AM_CONDITIONAL(SOLARIS, test x"$solaris" = x"yes")
+AM_CONDITIONAL(AIX, test x"$aix" = x"yes")
 
 # Checks for programs.
 AC_PROG_CXX
@@ -265,6 +269,8 @@ AC_DEFUN([AC_CHECK_CC_FLAG],
 AC_CHECK_CC_FLAG([-Wtype-limits], [WARN_TYPE_LIMITS])
 AC_CHECK_CC_FLAG([-Wignored-qualifiers], [WARN_IGNORED_QUALIFIERS])
 AC_CHECK_CC_FLAG([-Werror=format-security], [WARN_ERROR_FORMAT_SECURITY])
+
+AC_CHECK_CC_FLAG([-rdynamic], [RDYNAMIC_FLAG])
 
 # Check for compiler VTA support
 AX_CHECK_COMPILE_FLAG([-fvar-tracking-assignments], [HAS_VTA_SUPPORT=1], [HAS_VTA_SUPPORT=0])
@@ -964,6 +970,7 @@ AC_CHECK_HEADERS([ \
 	sys/cdefs.h \
 	syslog.h \
 	utime.h \
+	execinfo.h
 ])
 
 # name_to_handle_at
@@ -1001,9 +1008,16 @@ AC_CHECK_MEMBER([struct stat.st_mtimespec.tv_nsec],
     [Define if you have struct stat.st_mtimespec.tv_nsec])])
 
 # splice/tee
-AC_CHECK_FUNC([splice],
-	[AC_DEFINE([CEPH_HAVE_SPLICE], [], [splice(2) is supported])],
-	[])
+case "${target_os}" in
+aix*)
+	# AIX splice() is something else
+	;;
+*)
+	AC_CHECK_FUNC([splice],
+		[AC_DEFINE([CEPH_HAVE_SPLICE], [], [splice(2) is supported])],
+		[])
+	;;
+esac
 
 # F_SETPIPE_SZ in fcntl.h
 AC_MSG_CHECKING([for F_SETPIPE_SZ in fcntl.h])

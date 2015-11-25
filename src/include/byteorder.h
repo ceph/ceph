@@ -42,6 +42,10 @@
 # endif
 #endif
 
+#if defined(_AIX)
+# define CEPH_BIG_ENDIAN
+#endif
+
 
 
 

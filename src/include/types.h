@@ -83,7 +83,7 @@ typedef off_t loff_t;
 typedef off_t off64_t;
 #endif
 
-#ifdef __sun
+#if defined(__sun) || defined(_AIX)
 typedef off_t loff_t;
 #endif
 
@@ -520,7 +520,7 @@ WRITE_EQ_OPERATORS_1(shard_id_t, id)
 WRITE_CMP_OPERATORS_1(shard_id_t, id)
 ostream &operator<<(ostream &lhs, const shard_id_t &rhs);
 
-#if defined(__sun)
+#if defined(__sun) || defined(_AIX)
 __s32  ceph_to_host_errno(__s32 e);
 #else
 #define  ceph_to_host_errno(e) (e)
