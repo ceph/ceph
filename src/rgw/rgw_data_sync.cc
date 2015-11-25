@@ -1905,6 +1905,8 @@ class RGWBucketShardFullSyncCR : public RGWCoroutine {
   RGWBucketFullSyncShardMarkerTrack *marker_tracker;
   int spawn_window;
   rgw_obj_key list_marker;
+  bucket_list_entry *entry;
+  RGWModifyOp op;
 
   int total_entries;
 
@@ -1921,7 +1923,9 @@ public:
 									    bucket_id(_bucket_id), shard_id(_shard_id),
                                                                             bucket_info(_bucket_info),
                                                                             full_marker(_full_marker), marker_tracker(NULL),
-                                                                            spawn_window(BUCKET_SYNC_SPAWN_WINDOW), total_entries(0) {}
+                                                                            spawn_window(BUCKET_SYNC_SPAWN_WINDOW), entry(NULL),
+                                                                            op(CLS_RGW_OP_ADD),
+                                                                            total_entries(0) {}
 
   ~RGWBucketShardFullSyncCR() {
     delete marker_tracker;
@@ -1950,17 +1954,17 @@ int RGWBucketShardFullSyncCR::operate()
       entries_iter = list_result.entries.begin();
       for (; entries_iter != list_result.entries.end(); ++entries_iter) {
         ldout(store->ctx(), 20) << "[full sync] syncing object: " << bucket_name << ":" << bucket_id << ":" << shard_id << "/" << entries_iter->key << dendl;
-        yield {
-          bucket_list_entry& entry = *entries_iter;
-          total_entries++;
-          list_marker = entry.key;
-          if (!marker_tracker->start(entry.key, total_entries, utime_t())) {
-            ldout(store->ctx(), 0) << "ERROR: cannot start syncing " << entry.key << ". Duplicate entry?" << dendl;
-          } else {
-            RGWModifyOp op = (entry.key.instance.empty() || entry.key.instance == "null" ? CLS_RGW_OP_ADD : CLS_RGW_OP_LINK_OLH);
+        entry = &(*entries_iter);
+        total_entries++;
+        list_marker = entries_iter->key;
+        if (!marker_tracker->start(entry->key, total_entries, utime_t())) {
+          ldout(store->ctx(), 0) << "ERROR: cannot start syncing " << entry->key << ". Duplicate entry?" << dendl;
+        } else {
+          op = (entry->key.instance.empty() || entry->key.instance == "null" ? CLS_RGW_OP_ADD : CLS_RGW_OP_LINK_OLH);
 
+          yield {
             spawn(new RGWBucketSyncSingleEntryCR<rgw_obj_key, rgw_obj_key>(store, async_rados, source_zone, bucket_info, shard_id,
-                                                              entry.key, entry.versioned_epoch, entry.mtime, op, CLS_RGW_STATE_COMPLETE, entry.key, marker_tracker), false);
+                                                                           entry->key, entry->versioned_epoch, entry->mtime, op, CLS_RGW_STATE_COMPLETE, entry->key, marker_tracker), false);
           }
         }
         while ((int)num_spawned() > spawn_window) {
