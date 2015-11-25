@@ -419,6 +419,8 @@ int CryptoKey::_set_secret(int t, const bufferptr& s)
     if (error.length()) {
       return -EIO;
     }
+  } else {
+      return -EOPNOTSUPP;
   }
   type = t;
   secret = s;
