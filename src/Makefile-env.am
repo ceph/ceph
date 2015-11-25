@@ -156,7 +156,7 @@ if LINUX
 AM_LDFLAGS += -Wl,--as-needed $(HARDENING_LDFLAGS)
 endif
 if AIX
-AM_LDFLAGS += -Wl,-brtl -Wl,-bexpfull
+AM_LDFLAGS += -Wl,-brtl 
 endif
 
 if USE_BOOST_SPIRIT_OLD_HDR
