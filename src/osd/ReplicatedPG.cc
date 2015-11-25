@@ -2259,8 +2259,9 @@ bool ReplicatedPG::maybe_promote(ObjectContextRef obc,
       if (count) {
 	// Check if in other hit sets
 	const hobject_t& oid = obc.get() ? obc->obs.oi.soid : missing_oid;
-	for (map<time_t,HitSetRef>::iterator itor = agent_state->hit_set_map.begin();
-	     itor != agent_state->hit_set_map.end();
+	for (map<time_t,HitSetRef>::reverse_iterator itor =
+	       agent_state->hit_set_map.rbegin();
+	     itor != agent_state->hit_set_map.rend();
 	     ++itor) {
 	  if (!itor->second->contains(oid)) {
 	    break;
