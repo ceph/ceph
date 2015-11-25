@@ -267,6 +267,10 @@ struct rgw_bucket_shard_inc_sync_marker {
   void dump(Formatter *f) const {
     encode_json("position", position, f);
   }
+
+  bool operator<(const rgw_bucket_shard_inc_sync_marker& m) const {
+    return (position < m.position);
+  }
 };
 WRITE_CLASS_ENCODER(rgw_bucket_shard_inc_sync_marker)
 
