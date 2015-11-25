@@ -1796,11 +1796,33 @@ FileStore::Op *FileStore::build_op(list<Transaction*>& tls,
 				   TrackedOpRef osd_op)
 {
   uint64_t bytes = 0, ops = 0;
+  bool need_wbthrottle = false;;
   for (list<Transaction*>::iterator p = tls.begin();
        p != tls.end();
        ++p) {
     bytes += (*p)->get_num_bytes();
     ops += (*p)->get_num_ops();
+    if (!need_wbthrottle) {
+      Transaction::iterator i = (*p)->begin();
+      while (i.have_op()) {
+	Transaction::Op *op = i.decode_op();
+	switch(op->op) {
+	  case Transaction::OP_WRITE:
+	  case Transaction::OP_CLONE:
+	  case Transaction::OP_CLONERANGE:
+	  case Transaction::OP_CLONERANGE2:
+#if !defined(CEPH_HVAE_FALLOCATE)
+	  case Transaction::OP_ZERO:
+#elif defined(DARWIN) || defined(__FreeBSD__)
+	  case Transaction::OP_ZERO:
+#endif
+	    need_wbthrottle = true;
+	    break;
+	}
+	if (need_wbthrottle)
+	  break;
+      }
+    }
   }
 
   Op *o = new Op;
@@ -1811,6 +1833,8 @@ FileStore::Op *FileStore::build_op(list<Transaction*>& tls,
   o->ops = ops;
   o->bytes = bytes;
   o->osd_op = osd_op;
+  if (!need_wbthrottle)
+    o->flags |= OP_SKIP_WBTHROTTLE;
   return o;
 }
 
@@ -1880,7 +1904,7 @@ void FileStore::op_queue_release_throttle(Op *o)
 
 void FileStore::_do_op(OpSequencer *osr, ThreadPool::TPHandle &handle)
 {
-  wbthrottle.throttle();
+  Op *o;
   // inject a stall?
   if (g_conf->filestore_inject_stall) {
     int orig = g_conf->filestore_inject_stall;
@@ -1891,8 +1915,16 @@ void FileStore::_do_op(OpSequencer *osr, ThreadPool::TPHandle &handle)
     dout(5) << "_do_op done stalling" << dendl;
   }
 
-  osr->apply_lock.Lock();
-  Op *o = osr->peek_queue();
+  do {
+    osr->apply_lock.Lock();
+    o = osr->peek_queue();
+    if (o->flags & OP_SKIP_WBTHROTTLE == 0) {
+      osr->apply_lock.Unlock();
+      wbthrottle.throttle();
+    } else {
+      break;
+    }
+  } while (true);
   apply_manager.op_apply_start(o->op);
   dout(5) << "_do_op " << o << " seq " << o->op << " " << *osr << "/" << osr->parent << " start" << dendl;
   int r = _do_transactions(o->tls, o->op, &handle);

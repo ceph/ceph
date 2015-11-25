@@ -182,6 +182,9 @@ private:
   } sync_thread;
 
   // -- op workqueue --
+  enum {
+    OP_SKIP_WBTHROTTLE = 1, //this Op can skip wbthrottle limit.
+  };
   struct Op {
     utime_t start;
     uint64_t op;
@@ -189,6 +192,7 @@ private:
     Context *onreadable, *onreadable_sync;
     uint64_t ops, bytes;
     TrackedOpRef osd_op;
+    uint32_t flags;
   };
   class OpSequencer : public Sequencer_impl {
     Mutex qlock; // to protect q, for benefit of flush (peek/dequeue also protected by lock)
