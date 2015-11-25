@@ -111,7 +111,15 @@ namespace rgw {
     RGWFHRef parent;
     /* const */ std::string name; /* XXX file or bucket name */
     /* const */ fh_key fhk;
-    struct stat st;
+    struct state {
+      uint64_t dev;
+      size_t size;
+      uint64_t nlink;
+      struct timespec ctime;
+      struct timespec mtime;
+      struct timespec atime;
+      state() : dev(0), size(0), nlink(1), ctime{0,0}, mtime{0,0}, atime{0,0} {}
+    } state;
     uint32_t flags;
 
   public:
@@ -130,16 +138,8 @@ namespace rgw {
       {
 	/* root */
 	fh.fh_type = RGW_FS_TYPE_DIRECTORY;
-
-	/* partial Unix attrs */
-	memset(&st, 0, sizeof(struct stat));
-	st.st_dev = fs_inst;
-	st.st_mode = RGW_RWXMODE|S_IFDIR;
-	st.st_nlink = 3;
-
-	st.st_uid = 0; // XXX
-	st.st_gid = 0; // XXX
-
+	/* stat */
+	state.dev = fs_inst;
 	/* pointer to self */
 	fh.fh_private = this;
       }
@@ -149,8 +149,6 @@ namespace rgw {
       fh.fh_hk.bucket = XXH64(fsid.c_str(), fsid.length(), fh_key::seed);
       fh.fh_hk.object = XXH64(object_name.c_str(), object_name.length(),
 			      fh_key::seed);
-      /* fixup Unix attrs */
-      st.st_ino = fh.fh_hk.object;
       fhk = fh.fh_hk;
       name = object_name;
     }
@@ -167,27 +165,6 @@ namespace rgw {
       fh_key fhk(parent->name, name);
       fh.fh_hk = fhk.fh_hk; /* XXX redundant in fh_hk */
 
-      /* partial Unix attrs */
-      memset(&st, 0, sizeof(struct stat));
-      st.st_dev = fs_inst;
-      st.st_ino = fh.fh_hk.object; // XXX
-
-      st.st_uid = 0; // XXX
-      st.st_gid = 0; // XXX
-
-      switch (fh.fh_type) {
-      case RGW_FS_TYPE_DIRECTORY:
-	st.st_mode = RGW_RWXMODE|S_IFDIR;
-	st.st_nlink = 3;
-	break;
-      case RGW_FS_TYPE_FILE:
-	st.st_mode = RGW_RWMODE|S_IFREG;
-	st.st_nlink = 1;
-	st.st_blksize = 4096;
-      default:
-	break;
-      }
-
       /* pointer to self */
       fh.fh_private = this;
     }
@@ -196,9 +173,40 @@ namespace rgw {
       return fhk;
     }
 
+    const size_t get_size() { return state.size; }
+
     struct rgw_file_handle* get_fh() { return &fh; }
 
-    struct stat *get_stat() { return &st; }
+    int stat(struct stat *st) {
+      /* partial Unix attrs */
+      memset(st, 0, sizeof(struct stat));
+      st->st_dev = state.dev;
+      st->st_ino = fh.fh_hk.object; // XXX
+
+      st->st_uid = 0; // XXX
+      st->st_gid = 0; // XXX
+
+      st->st_atim = state.atime;
+      st->st_mtim = state.mtime;
+      st->st_ctim = state.ctime;
+
+      switch (fh.fh_type) {
+      case RGW_FS_TYPE_DIRECTORY:
+	st->st_mode = RGW_RWXMODE|S_IFDIR;
+	st->st_nlink = 3;
+	break;
+      case RGW_FS_TYPE_FILE:
+	st->st_mode = RGW_RWMODE|S_IFREG;
+	st->st_nlink = 1;
+	st->st_blksize = 4096;
+	st->st_size = state.size;
+	st->st_blocks = (state.size) / 512;
+      default:
+	break;
+      }
+
+      return 0;
+    }
 
     const std::string& bucket_name() const {
       if (is_root())
@@ -227,6 +235,32 @@ namespace rgw {
 
     void open_for_create() {
       flags |= FLAG_CREATE;
+    }
+
+    void set_nlink(const uint64_t n) {
+      state.nlink = n;
+    }
+
+    void set_size(const size_t size) {
+      state.size = size;
+    }
+
+    void set_times(time_t t) {
+      state.ctime = {t, 0};
+      state.mtime = {t, 0};
+      state.atime = {t, 0};
+    }
+
+    void set_ctime(const struct timespec &ts) {
+      state.ctime = ts;
+    }
+
+    void set_mtime(const struct timespec &ts) {
+      state.mtime = ts;
+    }
+
+    void set_atime(const struct timespec &ts) {
+      state.atime = ts;
     }
 
     friend void intrusive_ptr_add_ref(const RGWFileHandle* fh) {
