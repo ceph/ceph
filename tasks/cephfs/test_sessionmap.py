@@ -87,7 +87,10 @@ class TestSessionMap(CephFSTestCase):
         # dirty)
         # The number of writes is two per session, because the header (sessionmap version) update and
         # KV write both count.
-        self.assertEqual(get_omap_wrs() - initial_omap_wrs, 2)
+        self.wait_until_true(
+            lambda: get_omap_wrs() - initial_omap_wrs == 2,
+            timeout=10  # Long enough for an export to get acked
+        )
 
         # Now end our sessions and check the backing sessionmap is updated correctly
         self.mount_a.umount_wait()
