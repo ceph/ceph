@@ -39,16 +39,17 @@ void AsyncObjectThrottle<T>::start_ops(uint64_t max_concurrent) {
     complete = (m_current_ops == 0);
   }
   if (complete) {
-    m_ctx->complete(m_ret);
+    // avoid re-entrant callback
+    m_image_ctx.op_work_queue->queue(m_ctx, m_ret);
     delete this;
   }
 }
 
 template <typename T>
 void AsyncObjectThrottle<T>::finish_op(int r) {
-  assert(m_image_ctx.owner_lock.is_locked());
   bool complete;
   {
+    RWLock::RLocker owner_locker(m_image_ctx.owner_lock);
     Mutex::Locker locker(m_lock);
     --m_current_ops;
     if (r < 0 && r != -ENOENT && m_ret == 0) {
