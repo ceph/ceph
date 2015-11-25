@@ -245,11 +245,11 @@ void AsyncResizeRequest::send_update_header() {
 
   librados::ObjectWriteOperation op;
   if (m_image_ctx.old_format) {
-    // rewrite header
+    // rewrite only the size field of the header
+    // NOTE: format 1 image headers are not stored in fixed endian format
     bufferlist bl;
-    m_image_ctx.header.image_size = m_new_size;
-    bl.append((const char *)&m_image_ctx.header, sizeof(m_image_ctx.header));
-    op.write(0, bl);
+    bl.append(reinterpret_cast<const char*>(&m_new_size), sizeof(m_new_size));
+    op.write(offsetof(rbd_obj_header_ondisk, image_size), bl);
   } else {
     if (m_image_ctx.image_watcher->is_lock_supported()) {
       m_image_ctx.image_watcher->assert_header_locked(&op);
