@@ -6179,6 +6179,11 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       err = -ENOENT;
       goto reply;
     }
+    if (pending_inc.new_pg_temp.count(pgid)) {
+      dout(10) << __func__ << " waiting for pending update on " << pgid << dendl;
+      wait_for_finished_proposal(op, new C_RetryMessage(this, op));
+      return true;
+    }
 
     vector<string> id_vec;
     vector<int32_t> new_pg_temp;
