@@ -1,7 +1,7 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
-#include "librbd/AsyncFlattenRequest.h"
+#include "librbd/operation/FlattenRequest.h"
 #include "librbd/AioObjectRequest.h"
 #include "librbd/AsyncObjectThrottle.h"
 #include "librbd/ImageCtx.h"
@@ -14,15 +14,15 @@
 
 #define dout_subsys ceph_subsys_rbd
 #undef dout_prefix
-#define dout_prefix *_dout << "librbd::AsyncFlattenRequest: "
+#define dout_prefix *_dout << "librbd::FlattenRequest: "
 
 namespace librbd {
+namespace operation {
 
-class AsyncFlattenObjectContext : public C_AsyncObjectThrottle<> {
+class C_FlattenObject : public C_AsyncObjectThrottle<> {
 public:
-  AsyncFlattenObjectContext(AsyncObjectThrottle<> &throttle,
-                            ImageCtx *image_ctx, uint64_t object_size,
-                            ::SnapContext snapc, uint64_t object_no)
+  C_FlattenObject(AsyncObjectThrottle<> &throttle, ImageCtx *image_ctx,
+                  uint64_t object_size, ::SnapContext snapc, uint64_t object_no)
     : C_AsyncObjectThrottle(throttle, *image_ctx), m_object_size(object_size),
       m_snapc(snapc), m_object_no(object_no)
   {
@@ -59,7 +59,7 @@ private:
   uint64_t m_object_no;
 };
 
-bool AsyncFlattenRequest::should_complete(int r) {
+bool FlattenRequest::should_complete(int r) {
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 5) << this << " should_complete: " << " r=" << r << dendl;
   if (r < 0 && !(r == -ENOENT && m_ignore_enoent) ) {
@@ -67,6 +67,7 @@ bool AsyncFlattenRequest::should_complete(int r) {
     return true;
   }
 
+  RWLock::RLocker owner_locker(m_image_ctx.owner_lock);
   switch (m_state) {
   case STATE_FLATTEN_OBJECTS:
     ldout(cct, 5) << "FLATTEN_OBJECTS" << dendl;
@@ -88,14 +89,14 @@ bool AsyncFlattenRequest::should_complete(int r) {
   return false;
 }
 
-void AsyncFlattenRequest::send() {
+void FlattenRequest::send_op() {
   assert(m_image_ctx.owner_lock.is_locked());
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 5) << this << " send" << dendl;
 
   m_state = STATE_FLATTEN_OBJECTS;
   AsyncObjectThrottle<>::ContextFactory context_factory(
-    boost::lambda::bind(boost::lambda::new_ptr<AsyncFlattenObjectContext>(),
+    boost::lambda::bind(boost::lambda::new_ptr<C_FlattenObject>(),
       boost::lambda::_1, &m_image_ctx, m_object_size, m_snapc,
       boost::lambda::_2));
   AsyncObjectThrottle<> *throttle = new AsyncObjectThrottle<>(
@@ -104,7 +105,7 @@ void AsyncFlattenRequest::send() {
   throttle->start_ops(m_image_ctx.concurrent_management_ops);
 }
 
-bool AsyncFlattenRequest::send_update_header() {
+bool FlattenRequest::send_update_header() {
   assert(m_image_ctx.owner_lock.is_locked());
   CephContext *cct = m_image_ctx.cct;
 
@@ -142,10 +143,9 @@ bool AsyncFlattenRequest::send_update_header() {
   return false;
 }
 
-bool AsyncFlattenRequest::send_update_children() {
+bool FlattenRequest::send_update_children() {
+  assert(m_image_ctx.owner_lock.is_locked());
   CephContext *cct = m_image_ctx.cct;
-
-  RWLock::RLocker owner_locker(m_image_ctx.owner_lock);
 
   // should have been canceled prior to releasing lock
   assert(!m_image_ctx.image_watcher->is_lock_supported() ||
@@ -174,4 +174,5 @@ bool AsyncFlattenRequest::send_update_children() {
   return false;
 }
 
+} // namespace operation
 } // namespace librbd

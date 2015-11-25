@@ -36,7 +36,6 @@ protected:
   ImageCtxT &m_image_ctx;
 
   virtual void finish(int r) {
-    RWLock::RLocker locker(m_image_ctx.owner_lock);
     m_finisher.finish_op(r);
   }
 

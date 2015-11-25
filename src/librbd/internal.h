@@ -48,6 +48,7 @@ enum {
 };
 
 class Context;
+class RWLock;
 class SimpleThrottle;
 
 namespace librbd {
@@ -110,6 +111,7 @@ namespace librbd {
   int clone(IoCtx& p_ioctx, const char *p_name, const char *p_snap_name,
 	    IoCtx& c_ioctx, const char *c_name, ImageOptions& c_opts);
   int rename(librados::IoCtx& io_ctx, const char *srcname, const char *dstname);
+  void rename_helper(ImageCtx *ictx, Context *ctx, const char *dstname);
   int info(ImageCtx *ictx, image_info_t& info, size_t image_size);
   int get_old_format(ImageCtx *ictx, uint8_t *old);
   int get_size(ImageCtx *ictx, uint64_t *size);
@@ -125,23 +127,23 @@ namespace librbd {
 	     ProgressContext& prog_ctx);
   int resize(ImageCtx *ictx, uint64_t size, ProgressContext& prog_ctx);
   int snap_create(ImageCtx *ictx, const char *snap_name);
-  int snap_create_helper(ImageCtx *ictx, Context* ctx, const char *snap_name);
+  void snap_create_helper(ImageCtx *ictx, Context* ctx, const char *snap_name);
   int snap_list(ImageCtx *ictx, std::vector<snap_info_t>& snaps);
   bool snap_exists(ImageCtx *ictx, const char *snap_name);
   int snap_rollback(ImageCtx *ictx, const char *snap_name,
 		    ProgressContext& prog_ctx);
   int snap_remove(ImageCtx *ictx, const char *snap_name);
-  int snap_remove_helper(ImageCtx *ictx, Context* ctx, const char *snap_name);
-  int snap_rename_helper(ImageCtx *ictx, Context* ctx, const uint64_t src_snap_id,
-			 const char *dst_name);
+  void snap_remove_helper(ImageCtx *ictx, Context* ctx, const char *snap_name);
   int snap_rename(ImageCtx *ictx, const char *srcname, const char *dstname);
+  void snap_rename_helper(ImageCtx *ictx, Context* ctx,
+                          const uint64_t src_snap_id, const char *dst_name);
   int snap_protect(ImageCtx *ictx, const char *snap_name);
+  void snap_protect_helper(ImageCtx *ictx, Context* ctx, const char *snap_name);
   int snap_unprotect(ImageCtx *ictx, const char *snap_name);
+  void snap_unprotect_helper(ImageCtx *ictx, Context* ctx,
+                             const char *snap_name);
   int snap_is_protected(ImageCtx *ictx, const char *snap_name,
 			bool *is_protected);
-  int add_snap(ImageCtx *ictx, const char *snap_name);
-  int rm_snap(ImageCtx *ictx, const char *snap_name, uint64_t snap_id);
-  int rename_snap(ImageCtx *ictx, uint64_t src_snap_id, const char *dst_name);
   int refresh_parent(ImageCtx *ictx);
   int ictx_check(ImageCtx *ictx);
   int ictx_check(ImageCtx *ictx, const RWLock &owner_lock);
@@ -182,10 +184,6 @@ namespace librbd {
 		  struct rbd_obj_header_ondisk *header, uint64_t *ver);
   int tmap_set(librados::IoCtx& io_ctx, const std::string& imgname);
   int tmap_rm(librados::IoCtx& io_ctx, const std::string& imgname);
-  void rollback_object(ImageCtx *ictx, uint64_t snap_id, const string& oid,
-                       SimpleThrottle& throttle);
-  int rollback_image(ImageCtx *ictx, uint64_t snap_id,
-		     ProgressContext& prog_ctx);
   void image_info(const ImageCtx *ictx, image_info_t& info, size_t info_size);
   uint64_t oid_to_object_no(const std::string& oid,
 			    const std::string& object_prefix);
@@ -203,13 +201,11 @@ namespace librbd {
   void readahead(ImageCtx *ictx,
                  const vector<pair<uint64_t,uint64_t> >& image_extents);
 
-  int async_flatten(ImageCtx *ictx, Context *ctx, ProgressContext &prog_ctx);
-  int async_resize(ImageCtx *ictx, Context *ctx, uint64_t size,
-		   ProgressContext &prog_ctx);
-  void async_resize_helper(ImageCtx *ictx, Context *ctx, uint64_t new_size,
-                           ProgressContext& prog_ctx);
-  int async_rebuild_object_map(ImageCtx *ictx, Context *ctx,
-                               ProgressContext &prog_ctx);
+  void async_flatten(ImageCtx *ictx, Context *ctx, ProgressContext &prog_ctx);
+  void async_resize(ImageCtx *ictx, Context *ctx, uint64_t size,
+                    ProgressContext &prog_ctx);
+  void async_rebuild_object_map(ImageCtx *ictx, Context *ctx,
+                                ProgressContext &prog_ctx);
 
   int flush(ImageCtx *ictx);
   int invalidate_cache(ImageCtx *ictx);

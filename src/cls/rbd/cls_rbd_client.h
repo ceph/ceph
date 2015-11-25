@@ -14,6 +14,8 @@
 #include <string>
 #include <vector>
 
+class Context;
+
 namespace librbd {
   namespace cls_client {
     // high-level interface to the header
@@ -63,16 +65,13 @@ namespace librbd {
     int remove_child(librados::IoCtx *ioctx, const std::string &oid,
 		     parent_spec pspec, const std::string &c_imageid);
     int get_children(librados::IoCtx *ioctx, const std::string &oid,
-		     parent_spec pspec, set<string>& children);
-    int snapshot_add(librados::IoCtx *ioctx, const std::string &oid,
-		     snapid_t snap_id, const std::string &snap_name);
+                      parent_spec pspec, set<string>& children);
+    void get_children(librados::IoCtx *ioctx, const std::string &oid,
+                      const parent_spec &pspec, std::set<string> *children,
+                      Context *on_finish);
     void snapshot_add(librados::ObjectWriteOperation *op, snapid_t snap_id,
 		      const std::string &snap_name);
-    int snapshot_remove(librados::IoCtx *ioctx, const std::string &oid,
-			snapid_t snap_id);
-    int snapshot_rename(librados::IoCtx *ioctx, const std::string &oid,
-			snapid_t src_snap_id,
-			const std::string &dst_name);
+    void snapshot_remove(librados::ObjectWriteOperation *op, snapid_t snap_id);
     void snapshot_rename(librados::ObjectWriteOperation *op,
 			snapid_t src_snap_id,
 			const std::string &dst_name);
@@ -90,6 +89,8 @@ namespace librbd {
 			      snapid_t snap_id, uint8_t *protection_status);
     int set_protection_status(librados::IoCtx *ioctx, const std::string &oid,
 			      snapid_t snap_id, uint8_t protection_status);
+    void set_protection_status(librados::ObjectWriteOperation *op,
+                               snapid_t snap_id, uint8_t protection_status);
     int get_stripe_unit_count(librados::IoCtx *ioctx, const std::string &oid,
 			      uint64_t *stripe_unit, uint64_t *stripe_count);
     int set_stripe_unit_count(librados::IoCtx *ioctx, const std::string &oid,
@@ -121,13 +122,15 @@ namespace librbd {
     int dir_remove_image(librados::IoCtx *ioctx, const std::string &oid,
 			 const std::string &name, const std::string &id);
     // atomic remove and add
-    int dir_rename_image(librados::IoCtx *ioctx, const std::string &oid,
-			 const std::string &src, const std::string &dest,
-			 const std::string &id);
+    void dir_rename_image(librados::ObjectWriteOperation *op,
+			  const std::string &src, const std::string &dest,
+			  const std::string &id);
 
     // operations on the rbd_object_map.$image_id object
     int object_map_load(librados::IoCtx *ioctx, const std::string &oid,
 		        ceph::BitVector<2> *object_map);
+    void object_map_load(librados::IoCtx *ioctx, const std::string &oid,
+                         ceph::BitVector<2> *object_map, Context *on_finish);
     void object_map_save(librados::ObjectWriteOperation *rados_op,
                          const ceph::BitVector<2> &object_map);
     void object_map_resize(librados::ObjectWriteOperation *rados_op,
@@ -142,17 +145,16 @@ namespace librbd {
 
     // class operations on the old format, kept for
     // backwards compatability
-    int old_snapshot_add(librados::IoCtx *ioctx, const std::string &oid,
-			 snapid_t snap_id, const std::string &snap_name);
-    int old_snapshot_remove(librados::IoCtx *ioctx, const std::string &oid,
+    void old_snapshot_add(librados::ObjectWriteOperation *rados_op,
+                          snapid_t snap_id, const std::string &snap_name);
+    void old_snapshot_remove(librados::ObjectWriteOperation *rados_op,
 			    const std::string &snap_name);
+    void old_snapshot_rename(librados::ObjectWriteOperation *rados_op,
+			     snapid_t src_snap_id, const std::string &dst_name);
     int old_snapshot_list(librados::IoCtx *ioctx, const std::string &oid,
 			  std::vector<string> *names,
 			  std::vector<uint64_t> *sizes,
 			  ::SnapContext *snapc);
-    int old_snapshot_rename(librados::IoCtx *ioctx, const std::string &oid,
-			    snapid_t src_snap_id,
-			    const std::string &dst_name);
   } // namespace cls_client
 } // namespace librbd
 #endif // CEPH_LIBRBD_CLS_RBD_CLIENT_H

@@ -75,6 +75,22 @@ static int get_features(bool *old_format, uint64_t *features)
   return 0;
 }
 
+static int get_image_id(librbd::Image &image, std::string *image_id)
+{
+  librbd::image_info_t info;
+  int r = image.stat(info, sizeof(info));
+  if (r < 0) {
+    return r;
+  }
+
+  char prefix[RBD_MAX_BLOCK_NAME_SIZE + 1];
+  strncpy(prefix, info.block_name_prefix, RBD_MAX_BLOCK_NAME_SIZE);
+  prefix[RBD_MAX_BLOCK_NAME_SIZE] = '\0';
+
+  *image_id = std::string(prefix + strlen(RBD_DATA_PREFIX));
+  return 0;
+}
+
 static int create_image_full(rados_ioctx_t ioctx, const char *name,
 			      uint64_t size, int *order, int old_format,
 			      uint64_t features)
@@ -2697,6 +2713,90 @@ TEST_F(TestLibRBD, TestPendingAio)
   rados_ioctx_destroy(ioctx);
 }
 
+TEST_F(TestLibRBD, RebuildObjectMapViaLockOwner)
+{
+  REQUIRE_FEATURE(RBD_FEATURE_EXCLUSIVE_LOCK | RBD_FEATURE_OBJECT_MAP);
+
+  librados::IoCtx ioctx;
+  ASSERT_EQ(0, _rados.ioctx_create(m_pool_name.c_str(), ioctx));
+
+  librbd::RBD rbd;
+  std::string name = get_temp_image_name();
+  uint64_t size = 2 << 20;
+  int order = 0;
+  ASSERT_EQ(0, create_image_pp(rbd, ioctx, name.c_str(), size, &order));
+
+  std::string object_map_oid;
+  {
+    librbd::Image image;
+    ASSERT_EQ(0, rbd.open(ioctx, image, name.c_str(), NULL));
+
+    std::string image_id;
+    ASSERT_EQ(0, get_image_id(image, &image_id));
+    object_map_oid = RBD_OBJECT_MAP_PREFIX + image_id;
+  }
+
+  // corrupt the object map
+  bufferlist bl;
+  bl.append("foo");
+  ASSERT_EQ(0, ioctx.write(object_map_oid, bl, bl.length(), 0));
+
+  librbd::Image image1;
+  ASSERT_EQ(0, rbd.open(ioctx, image1, name.c_str(), NULL));
+
+  uint64_t flags;
+  ASSERT_EQ(0, image1.get_flags(&flags));
+  ASSERT_TRUE((flags & RBD_FLAG_OBJECT_MAP_INVALID) != 0);
+
+  bool lock_owner;
+  bl.clear();
+  ASSERT_EQ(0, image1.write(0, 0, bl));
+  ASSERT_EQ(0, image1.is_exclusive_lock_owner(&lock_owner));
+  ASSERT_TRUE(lock_owner);
+
+  librbd::Image image2;
+  ASSERT_EQ(0, rbd.open(ioctx, image2, name.c_str(), NULL));
+  ASSERT_EQ(0, image2.is_exclusive_lock_owner(&lock_owner));
+  ASSERT_FALSE(lock_owner);
+
+  PrintProgress prog_ctx;
+  ASSERT_EQ(0, image2.rebuild_object_map(prog_ctx));
+  ASSERT_PASSED(validate_object_map, image1);
+  ASSERT_PASSED(validate_object_map, image2);
+}
+
+TEST_F(TestLibRBD, RenameViaLockOwner)
+{
+  REQUIRE_FEATURE(RBD_FEATURE_LAYERING | RBD_FEATURE_EXCLUSIVE_LOCK);
+
+  librados::IoCtx ioctx;
+  ASSERT_EQ(0, _rados.ioctx_create(m_pool_name.c_str(), ioctx));
+
+  librbd::RBD rbd;
+  std::string name = get_temp_image_name();
+  uint64_t size = 2 << 20;
+  int order = 0;
+  ASSERT_EQ(0, create_image_pp(rbd, ioctx, name.c_str(), size, &order));
+
+  librbd::Image image1;
+  ASSERT_EQ(0, rbd.open(ioctx, image1, name.c_str(), NULL));
+
+  bufferlist bl;
+  ASSERT_EQ(0, image1.write(0, 0, bl));
+
+  bool lock_owner;
+  ASSERT_EQ(0, image1.is_exclusive_lock_owner(&lock_owner));
+  ASSERT_TRUE(lock_owner);
+
+  std::string new_name = get_temp_image_name();
+  ASSERT_EQ(0, rbd.rename(ioctx, name.c_str(), new_name.c_str()));
+  ASSERT_EQ(0, image1.is_exclusive_lock_owner(&lock_owner));
+  ASSERT_TRUE(lock_owner);
+
+  librbd::Image image2;
+  ASSERT_EQ(0, rbd.open(ioctx, image2, new_name.c_str(), NULL));
+}
+
 TEST_F(TestLibRBD, SnapCreateViaLockOwner)
 {
   REQUIRE_FEATURE(RBD_FEATURE_LAYERING | RBD_FEATURE_EXCLUSIVE_LOCK);
@@ -2767,6 +2867,129 @@ TEST_F(TestLibRBD, SnapRemoveViaLockOwner)
   ASSERT_EQ(0, image2.snap_remove("snap1"));
   ASSERT_FALSE(image1.snap_exists("snap1"));
   ASSERT_FALSE(image2.snap_exists("snap1"));
+
+  ASSERT_EQ(0, image1.is_exclusive_lock_owner(&lock_owner));
+  ASSERT_TRUE(lock_owner);
+}
+
+TEST_F(TestLibRBD, SnapRenameViaLockOwner)
+{
+  REQUIRE_FEATURE(RBD_FEATURE_LAYERING | RBD_FEATURE_EXCLUSIVE_LOCK);
+
+  librados::IoCtx ioctx;
+  ASSERT_EQ(0, _rados.ioctx_create(m_pool_name.c_str(), ioctx));
+
+  librbd::RBD rbd;
+  std::string name = get_temp_image_name();
+  uint64_t size = 2 << 20;
+  int order = 0;
+  ASSERT_EQ(0, create_image_pp(rbd, ioctx, name.c_str(), size, &order));
+
+  librbd::Image image1;
+  ASSERT_EQ(0, rbd.open(ioctx, image1, name.c_str(), NULL));
+
+  bufferlist bl;
+  ASSERT_EQ(0, image1.write(0, 0, bl));
+  ASSERT_EQ(0, image1.snap_create("snap1"));
+
+  bool lock_owner;
+  ASSERT_EQ(0, image1.is_exclusive_lock_owner(&lock_owner));
+  ASSERT_TRUE(lock_owner);
+
+  librbd::Image image2;
+  ASSERT_EQ(0, rbd.open(ioctx, image2, name.c_str(), NULL));
+
+  ASSERT_EQ(0, image2.is_exclusive_lock_owner(&lock_owner));
+  ASSERT_FALSE(lock_owner);
+
+  ASSERT_EQ(0, image2.snap_rename("snap1", "snap1-rename"));
+  ASSERT_TRUE(image1.snap_exists("snap1-rename"));
+  ASSERT_TRUE(image2.snap_exists("snap1-rename"));
+
+  ASSERT_EQ(0, image1.is_exclusive_lock_owner(&lock_owner));
+  ASSERT_TRUE(lock_owner);
+}
+
+TEST_F(TestLibRBD, SnapProtectViaLockOwner)
+{
+  REQUIRE_FEATURE(RBD_FEATURE_LAYERING | RBD_FEATURE_EXCLUSIVE_LOCK);
+
+  librados::IoCtx ioctx;
+  ASSERT_EQ(0, _rados.ioctx_create(m_pool_name.c_str(), ioctx));
+
+  librbd::RBD rbd;
+  std::string name = get_temp_image_name();
+  uint64_t size = 2 << 20;
+  int order = 0;
+  ASSERT_EQ(0, create_image_pp(rbd, ioctx, name.c_str(), size, &order));
+
+  librbd::Image image1;
+  ASSERT_EQ(0, rbd.open(ioctx, image1, name.c_str(), NULL));
+
+  bufferlist bl;
+  ASSERT_EQ(0, image1.write(0, 0, bl));
+
+  bool lock_owner;
+  ASSERT_EQ(0, image1.is_exclusive_lock_owner(&lock_owner));
+  ASSERT_TRUE(lock_owner);
+  ASSERT_EQ(0, image1.snap_create("snap1"));
+
+  librbd::Image image2;
+  ASSERT_EQ(0, rbd.open(ioctx, image2, name.c_str(), NULL));
+
+  ASSERT_EQ(0, image2.is_exclusive_lock_owner(&lock_owner));
+  ASSERT_FALSE(lock_owner);
+
+  ASSERT_EQ(0, image2.snap_protect("snap1"));
+  bool is_protected;
+  ASSERT_EQ(0, image2.snap_is_protected("snap1", &is_protected));
+  ASSERT_TRUE(is_protected);
+  ASSERT_EQ(0, image1.snap_is_protected("snap1", &is_protected));
+  ASSERT_TRUE(is_protected);
+
+  ASSERT_EQ(0, image1.is_exclusive_lock_owner(&lock_owner));
+  ASSERT_TRUE(lock_owner);
+}
+
+TEST_F(TestLibRBD, SnapUnprotectViaLockOwner)
+{
+  REQUIRE_FEATURE(RBD_FEATURE_LAYERING | RBD_FEATURE_EXCLUSIVE_LOCK);
+
+  librados::IoCtx ioctx;
+  ASSERT_EQ(0, _rados.ioctx_create(m_pool_name.c_str(), ioctx));
+
+  librbd::RBD rbd;
+  std::string name = get_temp_image_name();
+  uint64_t size = 2 << 20;
+  int order = 0;
+  ASSERT_EQ(0, create_image_pp(rbd, ioctx, name.c_str(), size, &order));
+
+  librbd::Image image1;
+  ASSERT_EQ(0, rbd.open(ioctx, image1, name.c_str(), NULL));
+
+  bufferlist bl;
+  ASSERT_EQ(0, image1.write(0, 0, bl));
+
+  bool lock_owner;
+  ASSERT_EQ(0, image1.is_exclusive_lock_owner(&lock_owner));
+  ASSERT_TRUE(lock_owner);
+  ASSERT_EQ(0, image1.snap_create("snap1"));
+  ASSERT_EQ(0, image1.snap_protect("snap1"));
+  bool is_protected;
+  ASSERT_EQ(0, image1.snap_is_protected("snap1", &is_protected));
+  ASSERT_TRUE(is_protected);
+
+  librbd::Image image2;
+  ASSERT_EQ(0, rbd.open(ioctx, image2, name.c_str(), NULL));
+
+  ASSERT_EQ(0, image2.is_exclusive_lock_owner(&lock_owner));
+  ASSERT_FALSE(lock_owner);
+
+  ASSERT_EQ(0, image2.snap_unprotect("snap1"));
+  ASSERT_EQ(0, image2.snap_is_protected("snap1", &is_protected));
+  ASSERT_FALSE(is_protected);
+  ASSERT_EQ(0, image1.snap_is_protected("snap1", &is_protected));
+  ASSERT_FALSE(is_protected);
 
   ASSERT_EQ(0, image1.is_exclusive_lock_owner(&lock_owner));
   ASSERT_TRUE(lock_owner);
@@ -3090,14 +3313,8 @@ TEST_F(TestLibRBD, RebuildObjectMap)
     ASSERT_EQ(0, image.snap_create("snap1"));
     ASSERT_EQ(bl.length(), image.write(1<<order, bl.length(), bl));
 
-    librbd::image_info_t info;
-    ASSERT_EQ(0, image.stat(info, sizeof(info)));
-
-    char prefix[RBD_MAX_BLOCK_NAME_SIZE + 1];
-    strncpy(prefix, info.block_name_prefix, RBD_MAX_BLOCK_NAME_SIZE);
-    prefix[RBD_MAX_BLOCK_NAME_SIZE] = '\0';
-
-    std::string image_id(prefix + strlen(RBD_DATA_PREFIX));
+    std::string image_id;
+    ASSERT_EQ(0, get_image_id(image, &image_id));
     object_map_oid = RBD_OBJECT_MAP_PREFIX + image_id;
   }
 
