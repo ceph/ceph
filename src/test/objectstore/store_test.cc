@@ -1860,7 +1860,7 @@ TEST_P(StoreTest, HashCollisionTest) {
   for (int i = 0; i < 1000; ++i) {
     char buf[100];
     sprintf(buf, "%d", i);
-    if (!(i % 5)) {
+    if (!(i % 100)) {
       cerr << "Object n" << n << " "<< i << std::endl;
     }
     ghobject_t hoid(hobject_t(string(buf) + base, string(), CEPH_NOSNAP, 0, poolid, string(nbuf)));
