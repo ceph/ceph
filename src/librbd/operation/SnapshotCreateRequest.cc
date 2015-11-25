@@ -243,7 +243,7 @@ bool SnapshotCreateRequest<I>::send_release_snap_id() {
     m_state = STATE_RELEASE_SNAP_ID;
 
     // TODO add async version of selfmanaged_snap_remove
-    int r = image_ctx.data_ctx.selfmanaged_snap_remove(m_snap_id);
+    int r = image_ctx.md_ctx.selfmanaged_snap_remove(m_snap_id);
     m_snap_id = CEPH_NOSNAP;
 
     this->async_complete(r);

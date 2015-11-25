@@ -189,7 +189,7 @@ void SnapshotRemoveRequest<I>::send_release_snap_id() {
   m_state = STATE_RELEASE_SNAP_ID;
 
   // TODO add async version of selfmanaged_snap_remove
-  image_ctx.data_ctx.selfmanaged_snap_remove(m_snap_id);
+  image_ctx.md_ctx.selfmanaged_snap_remove(m_snap_id);
   this->async_complete(0);
 }
 
