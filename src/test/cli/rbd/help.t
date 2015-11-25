@@ -36,6 +36,13 @@
       lock remove (lock rm)       Release a lock on an image.
       map                         Map image to a block device using the kernel.
       merge-diff                  Merge two diff exports together.
+      mirror pool disable         Disable RBD mirroring by default within a pool.
+      mirror pool enable          Enable RBD mirroring by default within a pool.
+      mirror pool info            Show information about the pool mirroring
+                                  configuration.
+      mirror pool peer add        Add a mirroring peer to a pool.
+      mirror pool peer remove     Remove a mirroring peer from a pool.
+      mirror pool peer set        Update mirroring peer settings.
       nbd list (nbd ls)           List the nbd devices already used.
       nbd map                     Map image to a nbd device.
       nbd unmap                   Unmap a nbd device.
@@ -559,6 +566,93 @@
   Optional arguments
     --path arg           path to merged diff (or '-' for stdout)
     --no-progress        disable progress output
+  
+  rbd help mirror pool disable
+  usage: rbd mirror pool disable [--pool <pool>] 
+                                 <pool-name> 
+  
+  Disable RBD mirroring by default within a pool.
+  
+  Positional arguments
+    <pool-name>          pool name
+  
+  Optional arguments
+    -p [ --pool ] arg    pool name
+  
+  rbd help mirror pool enable
+  usage: rbd mirror pool enable [--pool <pool>] 
+                                <pool-name> 
+  
+  Enable RBD mirroring by default within a pool.
+  
+  Positional arguments
+    <pool-name>          pool name
+  
+  Optional arguments
+    -p [ --pool ] arg    pool name
+  
+  rbd help mirror pool info
+  usage: rbd mirror pool info [--pool <pool>] [--format <format>] 
+                              [--pretty-format] 
+                              <pool-name> 
+  
+  Show information about the pool mirroring configuration.
+  
+  Positional arguments
+    <pool-name>          pool name
+  
+  Optional arguments
+    -p [ --pool ] arg    pool name
+    --format arg         output format [plain, json, or xml]
+    --pretty-format      pretty formatting (json and xml)
+  
+  rbd help mirror pool peer add
+  usage: rbd mirror pool peer add [--pool <pool>] 
+                                  [--remote-client-name <remote-client-name>] 
+                                  [--remote-cluster <remote-cluster>] 
+                                  [--remote-cluster-uuid <remote-cluster-uuid>] 
+                                  <pool-name> <remote-cluster-spec> 
+  
+  Add a mirroring peer to a pool.
+  
+  Positional arguments
+    <pool-name>               pool name
+    <remote-cluster-spec>     remote cluster spec
+                              (example: [<client name>@]<cluster name>
+  
+  Optional arguments
+    -p [ --pool ] arg         pool name
+    --remote-client-name arg  remote client name
+    --remote-cluster arg      remote cluster name
+    --remote-cluster-uuid arg remote cluster uuid
+  
+  rbd help mirror pool peer remove
+  usage: rbd mirror pool peer remove [--pool <pool>] 
+                                     <pool-name> <cluster-uuid> 
+  
+  Remove a mirroring peer from a pool.
+  
+  Positional arguments
+    <pool-name>          pool name
+    <cluster-uuid>       cluster UUID
+  
+  Optional arguments
+    -p [ --pool ] arg    pool name
+  
+  rbd help mirror pool peer set
+  usage: rbd mirror pool peer set [--pool <pool>] 
+                                  <pool-name> <cluster-uuid> <key> <value> 
+  
+  Update mirroring peer settings.
+  
+  Positional arguments
+    <pool-name>          pool name
+    <cluster-uuid>       cluster UUID
+    <key>                peer parameter [client or cluster]
+    <value>              new client or cluster name
+  
+  Optional arguments
+    -p [ --pool ] arg    pool name
   
   rbd help nbd list
   usage: rbd nbd list 
