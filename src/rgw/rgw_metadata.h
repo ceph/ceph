@@ -116,7 +116,11 @@ protected:
                            string &tenant_name, string &bucket_name)
   {
     int pos = bucket.find('/');
-    tenant_name = bucket.substr(0, pos);
+    if (pos >= 0) {
+      tenant_name = bucket.substr(0, pos);
+    } else {
+      tenant_name.clear();
+    }
     bucket_name = bucket.substr(pos + 1);
   }
 };
