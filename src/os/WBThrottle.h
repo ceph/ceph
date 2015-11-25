@@ -83,6 +83,7 @@ class WBThrottle : Thread, public md_config_obs_t {
   bool stopping;
   Mutex lock;
   Cond cond;
+  Cond flush_cond;
 
 
   /**

@@ -58,6 +58,7 @@ void WBThrottle::stop()
     Mutex::Locker l(lock);
     stopping = true;
     cond.Signal();
+    flush_cond.Signal();
   }
 
   join();
@@ -116,6 +117,7 @@ void WBThrottle::set_from_conf()
     assert(0 == "invalid value for fs");
   }
   cond.Signal();
+  flush_cond.Signal();
 }
 
 void WBThrottle::handle_conf_change(const md_config_t *conf,
@@ -136,7 +138,7 @@ bool WBThrottle::get_next_should_flush(
   assert(lock.is_locked());
   assert(next);
   while (!stopping && !beyond_limit())
-         cond.Wait(lock);
+         flush_cond.Wait(lock);
   if (stopping)
     return false;
   ghobject_t obj(pop_object());
@@ -209,7 +211,7 @@ void WBThrottle::queue_wb(
   wbiter->second.first.add(nocache, len, 1);
   insert_object(hoid);
   if (beyond_limit())
-    cond.Signal();
+    flush_cond.Signal();
 }
 
 void WBThrottle::clear()
