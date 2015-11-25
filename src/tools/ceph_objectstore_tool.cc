@@ -530,7 +530,7 @@ int write_info(ObjectStore::Transaction &t, epoch_t epoch, pg_info_t &info,
     info, coll,
     past_intervals,
     pgmeta_oid,
-    true);
+    true, true);
   if (ret) cerr << "Failed to write info" << std::endl;
   t.omap_setkeys(coll, pgmeta_oid, km);
   return ret;
