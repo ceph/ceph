@@ -10,6 +10,20 @@ class TestSessionMap(CephFSTestCase):
     CLIENTS_REQUIRED = 2
     MDSS_REQUIRED = 2
 
+    def test_tell_session_drop(self):
+        """
+        That when a `tell` command is sent using the python CLI,
+        its MDS session is gone after it terminates
+        """
+        self.mount_a.umount_wait()
+        self.mount_b.umount_wait()
+
+        mds_id = self.fs.get_lone_mds_id()
+        self.fs.mon_manager.raw_cluster_cmd("tell", "mds.{0}".format(mds_id), "session", "ls")
+
+        ls_data = self.fs.mds_asok(['session', 'ls'])
+        self.assertEqual(len(ls_data), 0)
+
     def test_version_splitting(self):
         """
         That when many sessions are updated, they are correctly
