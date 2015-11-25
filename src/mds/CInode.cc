@@ -2033,8 +2033,7 @@ void CInode::finish_scatter_gather_update(int type)
 	pi->mtime = pi->ctime = pi->dirstat.mtime;
       dout(20) << " final dirstat " << pi->dirstat << dendl;
 
-      if (dirstat.nfiles != pi->dirstat.nfiles ||
-	  dirstat.nsubdirs != pi->dirstat.nsubdirs) {
+      if (!dirstat.same_sums(pi->dirstat)) {
 	bool all = true;
 	list<frag_t> ls;
 	tmpdft.get_leaves_under(frag_t(), ls);
@@ -2053,6 +2052,8 @@ void CInode::finish_scatter_gather_update(int type)
 	  }
 	  // trust the dirfrags for now
 	  version_t v = pi->dirstat.version;
+	  if (pi->dirstat.mtime > dirstat.mtime)
+	    dirstat.mtime = pi->dirstat.mtime;
 	  pi->dirstat = dirstat;
 	  pi->dirstat.version = v;
 	}
@@ -2131,9 +2132,7 @@ void CInode::finish_scatter_gather_update(int type)
       }
       dout(20) << " final rstat " << pi->rstat << dendl;
 
-      if (rstat.rfiles != pi->rstat.rfiles ||
-	  rstat.rsubdirs != pi->rstat.rsubdirs ||
-	  rstat.rbytes != pi->rstat.rbytes) {
+      if (!rstat.same_sums(pi->rstat)) {
 	bool all = true;
 	list<frag_t> ls;
 	tmpdft.get_leaves_under(frag_t(), ls);
@@ -2152,6 +2151,8 @@ void CInode::finish_scatter_gather_update(int type)
 	  }
 	  // trust the dirfrag for now
 	  version_t v = pi->rstat.version;
+	  if (pi->rstat.rctime > rstat.rctime)
+	    rstat.rctime = pi->rstat.rctime;
 	  pi->rstat = rstat;
 	  pi->rstat.version = v;
 	}

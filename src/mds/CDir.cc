@@ -249,8 +249,7 @@ bool CDir::check_rstats(bool scrub)
 
   bool good = true;
   // fragstat
-  if(!(frag_info.nfiles == fnode.fragstat.nfiles) ||
-     !(frag_info.nsubdirs == fnode.fragstat.nsubdirs)) {
+  if(!frag_info.same_sums(fnode.fragstat)) {
     dout(1) << "mismatch between head items and fnode.fragstat! printing dentries" << dendl;
     dout(1) << "get_num_head_items() = " << get_num_head_items()
              << "; fnode.fragstat.nfiles=" << fnode.fragstat.nfiles
@@ -263,9 +262,7 @@ bool CDir::check_rstats(bool scrub)
   }
 
   // rstat
-  if ((!(nest_info.rbytes == fnode.rstat.rbytes)) ||
-      (!(nest_info.rfiles == fnode.rstat.rfiles)) ||
-      (!(nest_info.rsubdirs == fnode.rstat.rsubdirs))) {
+  if (!nest_info.same_sums(fnode.rstat)) {
     dout(1) << "mismatch between child accounted_rstats and my rstats!" << dendl;
     dout(1) << "total of child dentrys: " << nest_info << dendl;
     dout(1) << "my rstats:              " << fnode.rstat << dendl;
