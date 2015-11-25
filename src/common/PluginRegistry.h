@@ -16,7 +16,7 @@
  */
 
 #ifndef CEPH_COMMON_PLUGINREGISTRY_H
-#define CEPH_COMMON_PLUGINREGISTERY_H
+#define CEPH_COMMON_PLUGINREGISTRY_H
 
 #include <string>
 #include <map>
@@ -58,6 +58,7 @@ namespace ceph {
 	    Plugin *factory);
     int remove(const std::string& type, const std::string& name);
     Plugin *get(const std::string& type, const std::string& name);
+    Plugin *get_with_load(const std::string& type, const std::string& name);
 
     int load(const std::string& type,
 	     const std::string& name);
