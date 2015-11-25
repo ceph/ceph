@@ -29,7 +29,6 @@
 #include "FreelistManager.h"
 #include "BlueFS.h"
 #include "BlueRocksEnv.h"
-#include "MirrorEnv.h"
 
 
 #define dout_subsys ceph_subsys_bluestore
@@ -1086,7 +1085,7 @@ int BlueStore::_open_db(bool create)
 	int r = system(cmd.c_str());
 	(void)r;
       }
-      env = new rocksdb::MirrorEnv(b, a);
+      env = new rocksdb::EnvMirror(b, a);
     } else {
       env = new BlueRocksEnv(bluefs);
 
