@@ -27,7 +27,7 @@ Linux)
         #   C) Adding "Precise" conditionals somewhere, eg. conditionalizing
         #   this bootstrap script to only use the python-libvirt package on
         #   Ubuntu Precise.
-        for package in qemu-utils python-dev libssl-dev python-pip python-virtualenv libevent-dev python-libvirt libmysqlclient-dev libffi-dev libyaml-dev ; do
+        for package in qemu-utils python-dev libssl-dev python-pip python-virtualenv libev-dev python-libvirt libmysqlclient-dev libffi-dev libyaml-dev ; do
             if [ "$(dpkg --status -- $package|sed -n 's/^Status: //p')" != "install ok installed" ]; then
                 # add a space after old values
                 missing="${missing:+$missing }$package"
@@ -47,7 +47,7 @@ Linux)
         fi
         ;;
     Fedora)
-        for package in python-pip python-virtualenv libevent-devel libvirt-python community-mysql-devel libffi-devel; do
+        for package in python-pip python-virtualenv libev-devel libvirt-python community-mysql-devel libffi-devel; do
 	    if [ "$(rpm -q $package)" == "package $package is not installed" ]; then
 		missing="${missing:+$missing }$package"
 	    fi
@@ -66,7 +66,7 @@ Linux)
 	fi
 	;;
     "openSUSE project"|"SUSE LINUX")
-        for package in python-pip python-virtualenv libevent-devel libvirt-python libmysqlclient-devel libffi-devel; do
+        for package in python-pip python-virtualenv libev-devel libvirt-python libmysqlclient-devel libffi-devel; do
             if [ "$(rpm -q $package)" == "package $package is not installed" ]; then
                 missing="${missing:+$missing }$package"
             fi
@@ -88,7 +88,7 @@ Darwin)
         echo "You need Homebrew: http://brew.sh/"
         exit 1
     fi
-    for keg in python libvirt libevent mysql; do
+    for keg in python libvirt libev mysql; do
         if brew list $keg >/dev/null 2>&1; then
             echo "Found $keg"
         else
