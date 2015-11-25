@@ -355,3 +355,32 @@ class TestJournalRepair(CephFSTestCase):
                             "pending_destroy": []},
              "result": 0}
         )
+
+    def test_table_tool_take_inos(self):
+        initial_range_start = 1099511627776
+        initial_range_len = 1099511627776
+        # Initially a completely clear range
+        self.assertEqual(
+            json.loads(self.fs.table_tool(["all", "show", "inode"])),
+            {"0": {"data": {"version": 0,
+                            "inotable": {"projected_free": [
+                                {"start": initial_range_start,
+                                 "len": initial_range_len}],
+                                "free": [
+                                    {"start": initial_range_start,
+                                     "len": initial_range_len}]}},
+                   "result": 0}}
+        )
+
+        # Remove some
+        self.assertEqual(
+            json.loads(self.fs.table_tool(["all", "take_inos", "{0}".format(initial_range_start + 100)])),
+            {"0": {"data": {"version": 1,
+                            "inotable": {"projected_free": [
+                                {"start": initial_range_start + 101,
+                                 "len": initial_range_len - 101}],
+                                "free": [
+                                    {"start": initial_range_start + 101,
+                                     "len": initial_range_len - 101}]}},
+                   "result": 0}}
+        )
