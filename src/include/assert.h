@@ -11,7 +11,7 @@
 #elif defined(__FreeBSD__)
 #include <sys/cdefs.h>
 #define	__GNUC_PREREQ(minor, major)	__GNUC_PREREQ__(minor, major)
-#elif defined(__sun)
+#elif defined(__sun) || defined(_AIX)
 #include "include/compat.h"
 #include <assert.h>
 #endif
