@@ -1,9 +1,9 @@
 """
 MDS admin socket scrubbing-related tests.
 """
-from cStringIO import StringIO
 import json
 import logging
+import errno
 from teuthology.exceptions import CommandFailedError
 import os
 from tasks.cephfs.cephfs_test_case import CephFSTestCase
@@ -71,9 +71,9 @@ class TestScrubChecks(CephFSTestCase):
 
         nep = "{test_path}/i/dont/exist".format(test_path=abs_test_path)
         self.asok_command(mds_rank, "flush_path {nep}".format(nep=nep),
-                          lambda j, r: json_validator(j, r, "return_code", -2))
+                          lambda j, r: json_validator(j, r, "return_code", -errno.ENOENT))
         self.asok_command(mds_rank, "scrub_path {nep}".format(nep=nep),
-                          lambda j, r: json_validator(j, r, "return_code", -2))
+                          lambda j, r: json_validator(j, r, "return_code", -errno.ENOENT))
 
         test_repo_path = "{test_path}/ceph-qa-suite".format(test_path=abs_test_path)
         dirpath = "{repo_path}/suites".format(repo_path=test_repo_path)
@@ -125,26 +125,20 @@ class TestScrubChecks(CephFSTestCase):
         command = "flush_path {file}".format(file=test_new_file)
         self.asok_command(mds_rank, command, success_validator)
 
-        # check that scrub fails on errors. First, get ino
-        proc = client.run(
-            args=[
-                "ls", "-li", new_file, run.Raw('|'),
-                "grep", "-o", run.Raw('"^[0-9]*"')
-            ],
-            wait=False,
-            stdout=StringIO()
-        )
-        proc.wait()
-        ino = int(proc.stdout.getvalue().strip())
-        rados_obj_name = "{ino}.00000000".format(ino=hex(ino).split('x')[1])
-        self.fs.rados(["rmxattr", rados_obj_name, "parent"], pool=self.fs.get_data_pool_name())
-
+        # check that scrub fails on errors
+        ino = self.mount_a.path_to_ino(new_file)
+        rados_obj_name = "{ino:x}.00000000".format(ino=ino)
         command = "scrub_path {file}".format(file=test_new_file)
+
+        # Missing parent xattr -> ENODATA
+        self.fs.rados(["rmxattr", rados_obj_name, "parent"], pool=self.fs.get_data_pool_name())
         self.asok_command(mds_rank, command,
-                          lambda j, r: json_validator(j, r, "return_code", -61))
+                          lambda j, r: json_validator(j, r, "return_code", -errno.ENODATA))
+
+        # Missing object -> ENOENT
         self.fs.rados(["rm", rados_obj_name], pool=self.fs.get_data_pool_name())
         self.asok_command(mds_rank, command,
-                          lambda j, r: json_validator(j, r, "return_code", -2))
+                          lambda j, r: json_validator(j, r, "return_code", -errno.ENOENT))
 
         command = "flush_path /"
         self.asok_command(mds_rank, command, success_validator)
