@@ -91,6 +91,10 @@ Building Ceph
 	export CXXFLAGS="-I/opt/freeware/include -I<pathtoboost>/boost_1_59_0"
 
         ./autogen.sh
+	Then manually modify the config.guess
+	-    *:AIX:*:[456])
+	+    *:AIX:*:[4567])
+
         ./configure --disable-server --without-fuse --without-tcmalloc --without-libatomic-ops --without-libaio --without-libxfs
 	cd src
         gmake librados.la
