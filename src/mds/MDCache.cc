@@ -11909,16 +11909,9 @@ void MDCache::repair_dirfrag_stats_work(MDRequestRef& mdr)
   }
 
   fnode_t *pf = dir->get_projected_fnode();
-  bool bad_fragstat = false, bad_rstat = false;
-  if (frag_info.nfiles != pf->fragstat.nfiles ||
-      frag_info.nsubdirs != pf->fragstat.nsubdirs)
-    bad_fragstat = true;
-  if (nest_info.rfiles != pf->rstat.rfiles ||
-      nest_info.rsubdirs != pf->rstat.rsubdirs ||
-      nest_info.rbytes != pf->rstat.rbytes)
-    bad_rstat = true;
-
-  if (!bad_fragstat || !bad_rstat) {
+  bool good_fragstat = frag_info.same_sums(pf->fragstat);
+  bool good_rstat = nest_info.same_sums(pf->rstat);
+  if (good_fragstat && good_rstat) {
     dout(10) << __func__ << " no corruption found" << dendl;
     mds->server->respond_to_request(mdr, 0);
     return;
@@ -11932,15 +11925,18 @@ void MDCache::repair_dirfrag_stats_work(MDRequestRef& mdr)
   EUpdate *le = new EUpdate(mds->mdlog, "repair_dirfrag");
   mds->mdlog->start_entry(le);
 
-  if (bad_fragstat) {
-    pf->fragstat.nfiles = frag_info.nfiles;
-    pf->fragstat.nsubdirs = frag_info.nsubdirs;
+  if (!good_fragstat) {
+    if (pf->fragstat.mtime > frag_info.mtime)
+      frag_info.mtime = pf->fragstat.mtime;
+    pf->fragstat = frag_info;
     mds->locker->mark_updated_scatterlock(&diri->filelock);
     mdr->ls->dirty_dirfrag_dir.push_back(&diri->item_dirty_dirfrag_dir);
     mdr->add_updated_lock(&diri->filelock);
   }
 
-  if (bad_rstat) {
+  if (!good_rstat) {
+    if (pf->rstat.rctime > nest_info.rctime)
+      nest_info.rctime = pf->rstat.rctime;
     pf->rstat = nest_info;
     mds->locker->mark_updated_scatterlock(&diri->nestlock);
     mdr->ls->dirty_dirfrag_nest.push_back(&diri->item_dirty_dirfrag_nest);

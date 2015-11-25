@@ -162,7 +162,9 @@ struct frag_info_t : public scatter_info_t {
   }
 
   bool same_sums(const frag_info_t &o) const {
-    return nfiles == o.nfiles && nsubdirs == o.nsubdirs;
+    return mtime <= o.mtime &&
+	nfiles == o.nfiles &&
+	nsubdirs == o.nsubdirs;
   }
 
   void encode(bufferlist &bl) const;
@@ -218,7 +220,7 @@ struct nest_info_t : public scatter_info_t {
   }
 
   bool same_sums(const nest_info_t &o) const {
-    return rctime == o.rctime &&
+    return rctime <= o.rctime &&
         rbytes == o.rbytes &&
         rfiles == o.rfiles &&
         rsubdirs == o.rsubdirs &&
