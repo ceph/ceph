@@ -965,7 +965,7 @@ int RGWUserCaps::get_cap(const string& cap, string& type, uint32_t *pperm)
     trim_whitespace(cap.substr(0, pos), type);
   }
 
-  if (type.size() == 0)
+  if (!is_valid_cap_type(type))
     return -EINVAL;
 
   string cap_perm;
@@ -1125,6 +1125,26 @@ int RGWUserCaps::check_cap(const string& cap, uint32_t perm)
   return 0;
 }
 
+bool RGWUserCaps::is_valid_cap_type(const string& tp)
+{
+  static const char *cap_type[] = { "users",
+                                    "buckets",
+                                    "metadata",
+                                    "usage",
+                                    "zone",
+                                    "bilog",
+                                    "mdlog",
+                                    "datalog",
+                                    "opstate" };
+
+  for (unsigned int i = 0; i < sizeof(cap_type) / sizeof(char *); ++i) {
+    if (tp.compare(cap_type[i]) == 0) {
+      return true;
+    }
+  }
+
+  return false;
+}
 
 static struct rgw_name_to_flag op_type_mapping[] = { {"*",  RGW_OP_TYPE_ALL},
                   {"read",  RGW_OP_TYPE_READ},
