@@ -42,7 +42,7 @@ void InvalidateRequest::send() {
   // do not update on-disk flags if not image owner
   if (m_image_ctx.image_watcher == NULL ||
       (m_image_ctx.image_watcher->is_lock_supported(m_image_ctx.snap_lock) &&
-       !m_image_ctx.image_watcher->is_lock_owner())) {
+       !m_image_ctx.image_watcher->is_lock_owner() && !m_force)) {
     async_complete(0);
     return;
   }
