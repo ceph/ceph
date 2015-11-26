@@ -412,6 +412,7 @@ private:
 			   std::map<int,utime_t> &last_osd_report);
   void mark_all_down();
 
+  int set_cache_tier_default_options(pg_pool_t *cachetier, stringstream& ss);
   void send_latest(MonOpRequestRef op, epoch_t start=0);
   void send_latest_now_nodelete(MonOpRequestRef op, epoch_t start=0) {
     op->mark_osdmon_event(__func__);

@@ -2750,6 +2750,38 @@ void OSDMonitor::mark_all_down()
   propose_pending();
 }
 
+int OSDMonitor::set_cache_tier_default_options(pg_pool_t* cachetier, stringstream& ss)
+{
+  string modestr = g_conf->osd_tier_default_cache_mode;
+  pg_pool_t::cache_mode_t mode = pg_pool_t::get_cache_mode_from_str(modestr);
+  if (mode < 0) {
+    ss << "osd tier cache default mode '" << modestr << "' is not a valid cache mode";
+    return -EINVAL;
+  }
+  HitSet::Params hsp;
+  if (g_conf->osd_tier_default_cache_hit_set_type == "bloom") {
+    BloomHitSet::Params *bsp = new BloomHitSet::Params;
+    bsp->set_fpp(g_conf->osd_pool_default_hit_set_bloom_fpp);
+    hsp = HitSet::Params(bsp);
+  } else if (g_conf->osd_tier_default_cache_hit_set_type == "explicit_hash") {
+    hsp = HitSet::Params(new ExplicitHashHitSet::Params);
+  }
+  else if (g_conf->osd_tier_default_cache_hit_set_type == "explicit_object") {
+    hsp = HitSet::Params(new ExplicitObjectHitSet::Params);
+  } else {
+    ss << "osd tier cache default hit set type '" <<
+      g_conf->osd_tier_default_cache_hit_set_type << "' is not a known type";
+    return -EINVAL;
+  }
+  cachetier->cache_mode = mode;
+  cachetier->hit_set_count = g_conf->osd_tier_default_cache_hit_set_count;
+  cachetier->hit_set_period = g_conf->osd_tier_default_cache_hit_set_period;
+  cachetier->min_read_recency_for_promote = g_conf->osd_tier_default_cache_min_read_recency_for_promote;
+  cachetier->min_write_recency_for_promote = g_conf->osd_tier_default_cache_min_write_recency_for_promote;
+  cachetier->hit_set_params = hsp;
+  return 0;
+}
+
 void OSDMonitor::get_health(list<pair<health_status_t,string> >& summary,
 			    list<pair<health_status_t,string> > *detail) const
 {
@@ -6866,6 +6898,9 @@ done:
       wait_for_finished_proposal(op, new C_RetryMessage(this, op));
       return true;
     }
+    int r = set_cache_tier_default_options(ntp, ss);
+    if (r < 0)
+      goto reply;
     np->tiers.insert(tierpool_id);
     np->set_snap_epoch(pending_inc.epoch); // tier will update to our snap info
     ntp->tier_of = pool_id;
@@ -7186,29 +7221,6 @@ done:
       err = -ENOTEMPTY;
       goto reply;
     }
-    string modestr = g_conf->osd_tier_default_cache_mode;
-    pg_pool_t::cache_mode_t mode = pg_pool_t::get_cache_mode_from_str(modestr);
-    if (mode < 0) {
-      ss << "osd tier cache default mode '" << modestr << "' is not a valid cache mode";
-      err = -EINVAL;
-      goto reply;
-    }
-    HitSet::Params hsp;
-    if (g_conf->osd_tier_default_cache_hit_set_type == "bloom") {
-      BloomHitSet::Params *bsp = new BloomHitSet::Params;
-      bsp->set_fpp(g_conf->osd_pool_default_hit_set_bloom_fpp);
-      hsp = HitSet::Params(bsp);
-    } else if (g_conf->osd_tier_default_cache_hit_set_type == "explicit_hash") {
-      hsp = HitSet::Params(new ExplicitHashHitSet::Params);
-    }
-    else if (g_conf->osd_tier_default_cache_hit_set_type == "explicit_object") {
-      hsp = HitSet::Params(new ExplicitObjectHitSet::Params);
-    } else {
-      ss << "osd tier cache default hit set type '" <<
-	g_conf->osd_tier_default_cache_hit_set_type << "' is not a known type";
-      err = -EINVAL;
-      goto reply;
-    }
     // go
     pg_pool_t *np = pending_inc.get_new_pool(pool_id, p);
     pg_pool_t *ntp = pending_inc.get_new_pool(tierpool_id, tp);
@@ -7216,18 +7228,13 @@ done:
       wait_for_finished_proposal(op, new C_RetryMessage(this, op));
       return true;
     }
+    int r = set_cache_tier_default_options(ntp, ss);
+    if (r < 0)
+      goto reply;
     np->tiers.insert(tierpool_id);
     np->read_tier = np->write_tier = tierpool_id;
     np->set_snap_epoch(pending_inc.epoch); // tier will update to our snap info
     ntp->tier_of = pool_id;
-    ntp->cache_mode = mode;
-    ntp->hit_set_count = g_conf->osd_tier_default_cache_hit_set_count;
-    ntp->hit_set_period = g_conf->osd_tier_default_cache_hit_set_period;
-    ntp->min_read_recency_for_promote = g_conf->osd_tier_default_cache_min_read_recency_for_promote;
-    ntp->min_write_recency_for_promote = g_conf->osd_tier_default_cache_min_write_recency_for_promote;
-    ntp->hit_set_grade_decay_rate = g_conf->osd_tier_default_cache_hit_set_grade_decay_rate;
-    ntp->hit_set_search_last_n = g_conf->osd_tier_default_cache_hit_set_search_last_n;
-    ntp->hit_set_params = hsp;
     ntp->target_max_bytes = size;
     ss << "pool '" << tierpoolstr << "' is now (or already was) a cache tier of '" << poolstr << "'";
     wait_for_finished_proposal(op, new Monitor::C_Command(mon, op, 0, ss.str(),
