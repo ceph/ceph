@@ -361,7 +361,7 @@ int HashIndex::_remove(const vector<string> &path,
 int HashIndex::_lookup(const ghobject_t &oid,
 		       vector<string> *path,
 		       string *mangled_name,
-		       int *exists_out) {
+		       int *hardlink) {
   vector<string> path_comp;
   get_path_components(oid, &path_comp);
   vector<string>::iterator next = path_comp.begin();
@@ -380,7 +380,7 @@ int HashIndex::_lookup(const ghobject_t &oid,
       break;
     path->push_back(*(next++));
   }
-  return get_mangled_name(*path, oid, mangled_name, exists_out);
+  return get_mangled_name(*path, oid, mangled_name, hardlink);
 }
 
 int HashIndex::_collection_list_partial(const ghobject_t &start,
