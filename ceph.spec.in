@@ -43,6 +43,7 @@ restorecon -R /var/log/ceph > /dev/null 2>&1;
 # /var/run/ceph.
 %if 0%{?fedora} || 0%{?rhel} >= 7 || 0%{?suse_version} >= 1210
 %global _with_systemd 1
+%{!?tmpfiles_create: %global tmpfiles_create systemd-tmpfiles --create}
 %endif
 
 # LTTng-UST enabled on Fedora, RHEL 6, and SLES 12
@@ -935,7 +936,7 @@ exit 0
 
 %post -n ceph-common
 %if 0%{?_with_systemd}
-systemd-tmpfiles --create --prefix=/run/ceph
+%tmpfiles_create %{_tmpfilesdir}/ceph-common.conf
 %endif
 
 %postun -n ceph-common
