@@ -1608,7 +1608,6 @@ struct pg_stat_t {
   utime_t last_clean_scrub_stamp;
 
   object_stat_collection_t stats;
-  bool stats_invalid;
 
   int64_t log_size;
   int64_t ondisk_log_size;    // >= active_log_size
@@ -1621,17 +1620,18 @@ struct pg_stat_t {
   utime_t last_became_active;
   utime_t last_became_peered;
 
-  /// true if num_objects_dirty is not accurate (because it was not
-  /// maintained starting from pool creation)
-  bool dirty_stats_invalid;
-  bool omap_stats_invalid;
-  bool hitset_stats_invalid;
-  bool hitset_bytes_stats_invalid;
-  bool pin_stats_invalid;
-
   /// up, acting primaries
   int32_t up_primary;
   int32_t acting_primary;
+
+  bool stats_invalid:1;
+  /// true if num_objects_dirty is not accurate (because it was not
+  /// maintained starting from pool creation)
+  bool dirty_stats_invalid:1;
+  bool omap_stats_invalid:1;
+  bool hitset_stats_invalid:1;
+  bool hitset_bytes_stats_invalid:1;
+  bool pin_stats_invalid:1;
 
   pg_stat_t()
     : reported_seq(0),
@@ -1639,16 +1639,16 @@ struct pg_stat_t {
       state(0),
       created(0), last_epoch_clean(0),
       parent_split_bits(0),
-      stats_invalid(false),
       log_size(0), ondisk_log_size(0),
       mapping_epoch(0),
+      up_primary(-1),
+      acting_primary(-1),
+      stats_invalid(false),
       dirty_stats_invalid(false),
       omap_stats_invalid(false),
       hitset_stats_invalid(false),
       hitset_bytes_stats_invalid(false),
-      pin_stats_invalid(false),
-      up_primary(-1),
-      acting_primary(-1)
+      pin_stats_invalid(false)
   { }
 
   epoch_t get_effective_last_epoch_clean() const {
@@ -2721,15 +2721,15 @@ WRITE_CLASS_ENCODER(pg_ls_response_t)
  * object_copy_cursor_t
  */
 struct object_copy_cursor_t {
-  bool attr_complete;
   uint64_t data_offset;
-  bool data_complete;
   string omap_offset;
+  bool attr_complete;
+  bool data_complete;
   bool omap_complete;
 
   object_copy_cursor_t()
-    : attr_complete(false),
-      data_offset(0),
+    : data_offset(0),
+      attr_complete(false),
       data_complete(false),
       omap_complete(false)
   {}
@@ -3187,18 +3187,16 @@ struct ObjectState {
     : oi(oi_), exists(exists_) {}
 };
 
-
 struct SnapSetContext {
   hobject_t oid;
-  int ref;
-  bool registered;
   SnapSet snapset;
-  bool exists;
+  int ref;
+  bool registered : 1;
+  bool exists : 1;
 
   SnapSetContext(const hobject_t& o) :
     oid(o), ref(0), registered(false), exists(true) { }
 };
-
 
 /*
   * keep tabs on object modifications that are in flight.
@@ -3224,17 +3222,32 @@ public:
   Cond cond;
   int unstable_writes, readers, writers_waiting, readers_waiting;
 
-  /// in-progress copyfrom ops for this object
-  bool blocked;
 
   // set if writes for this object are blocked on another objects recovery
   ObjectContextRef blocked_by;      // object blocking our writes
   set<ObjectContextRef> blocking;   // objects whose writes we block
-  bool requeue_scrub_on_unblock;    // true if we need to requeue scrub on unblock
 
   // any entity in obs.oi.watchers MUST be in either watchers or unconnected_watchers.
   map<pair<uint64_t, entity_name_t>, WatchRef> watchers;
 
+  // attr cache
+  map<string, bufferlist> attr_cache;
+
+  void fill_in_setattrs(const set<string> &changing, ObjectModDesc *mod) {
+    map<string, boost::optional<bufferlist> > to_set;
+    for (set<string>::const_iterator i = changing.begin();
+	 i != changing.end();
+	 ++i) {
+      map<string, bufferlist>::iterator iter = attr_cache.find(*i);
+      if (iter != attr_cache.end()) {
+	to_set[*i] = iter->second;
+      } else {
+	to_set[*i];
+      }
+    }
+    mod->setattrs(to_set);
+  }
+  
   struct RWState {
     enum State {
       RWNONE,
@@ -3255,19 +3268,18 @@ public:
       return get_state_name(state);
     }
 
-    State state;                 ///< rw state
-    uint64_t count;              ///< number of readers or writers
     list<OpRequestRef> waiters;  ///< ops waiting on state change
+    int count;              ///< number of readers or writers
 
+    State state:4;               ///< rw state
     /// if set, restart backfill when we can get a read lock
-    bool recovery_read_marker;
-
+    bool recovery_read_marker:1;
     /// if set, requeue snaptrim on lock release
-    bool snaptrimmer_write_marker;
+    bool snaptrimmer_write_marker:1;
 
     RWState()
-      : state(RWNONE),
-	count(0),
+      : count(0),
+	state(RWNONE),
 	recovery_read_marker(false),
 	snaptrimmer_write_marker(false)
     {}
@@ -3532,23 +3544,10 @@ public:
     lock.Unlock();
   }
 
-  // attr cache
-  map<string, bufferlist> attr_cache;
+  /// in-progress copyfrom ops for this object
+  bool blocked:1;
+  bool requeue_scrub_on_unblock:1;    // true if we need to requeue scrub on unblock
 
-  void fill_in_setattrs(const set<string> &changing, ObjectModDesc *mod) {
-    map<string, boost::optional<bufferlist> > to_set;
-    for (set<string>::const_iterator i = changing.begin();
-	 i != changing.end();
-	 ++i) {
-      map<string, bufferlist>::iterator iter = attr_cache.find(*i);
-      if (iter != attr_cache.end()) {
-	to_set[*i] = iter->second;
-      } else {
-	to_set[*i];
-      }
-    }
-    mod->setattrs(to_set);
-  }
 };
 
 inline ostream& operator<<(ostream& out, const ObjectState& obs)
@@ -3599,15 +3598,15 @@ WRITE_CLASS_ENCODER(ObjectRecoveryInfo)
 ostream& operator<<(ostream& out, const ObjectRecoveryInfo &inf);
 
 struct ObjectRecoveryProgress {
-  bool first;
   uint64_t data_recovered_to;
-  bool data_complete;
   string omap_recovered_to;
+  bool first;
+  bool data_complete;
   bool omap_complete;
 
   ObjectRecoveryProgress()
-    : first(true),
-      data_recovered_to(0),
+    : data_recovered_to(0),
+      first(true),
       data_complete(false), omap_complete(false) { }
 
   bool is_complete(const ObjectRecoveryInfo& info) const {
@@ -3687,21 +3686,21 @@ ostream& operator<<(ostream& out, const PushOp &op);
  */
 struct ScrubMap {
   struct object {
-    uint64_t size;
-    bool negative;
     map<string,bufferptr> attrs;
-    __u32 digest;              ///< data crc32c
-    bool digest_present;
-    uint32_t nlinks;
     set<snapid_t> snapcolls;
+    uint64_t size;
     __u32 omap_digest;         ///< omap crc32c
-    bool omap_digest_present;
-    bool read_error;
+    __u32 digest;              ///< data crc32c
+    uint32_t nlinks;
+    bool negative:1;
+    bool digest_present:1;
+    bool omap_digest_present:1;
+    bool read_error:1;
 
     object() :
       // Init invalid size so it won't match if we get a stat EIO error
-      size(-1), negative(false), digest(0), digest_present(false),
-      nlinks(0), omap_digest(0), omap_digest_present(false),
+      size(-1), omap_digest(0), digest(0), nlinks(0), 
+      negative(false), digest_present(false), omap_digest_present(false), 
       read_error(false) {}
 
     void encode(bufferlist& bl) const;
