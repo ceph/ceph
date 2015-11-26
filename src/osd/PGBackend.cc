@@ -396,7 +396,7 @@ enum scrub_error_type PGBackend::be_compare_scrub_objects(
         errorstream << ", ";
       error = DEEP_ERROR;
       bool known = okseed && auth_oi.is_omap_digest() &&
-	auth.digest == auth_oi.omap_digest;
+	auth.omap_digest == auth_oi.omap_digest;
       errorstream << "omap_digest 0x" << std::hex << candidate.omap_digest
 		  << " != "
 		  << (known ? "known" : "best guess")
