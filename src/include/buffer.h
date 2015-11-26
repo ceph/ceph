@@ -360,7 +360,7 @@ public:
       append_buffer = buffer::create(prealloc);
       append_buffer.set_length(0);   // unused, so far.
     }
-    ~list() {}
+
     list(const list& other) : _buffers(other._buffers), _len(other._len),
 			      _memcopy_count(other._memcopy_count), last_p(this) {
       make_shareable();
