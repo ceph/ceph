@@ -4578,7 +4578,7 @@ void object_info_t::dump(Formatter *f) const
   f->dump_stream("mtime") << mtime;
   f->dump_stream("local_mtime") << local_mtime;
   f->dump_unsigned("lost", (int)is_lost());
-  f->dump_unsigned("flags", (int)flags);
+  f->dump_stream("flags") << get_flag_string();
   f->open_array_section("snaps");
   for (vector<snapid_t>::const_iterator p = snaps.begin(); p != snaps.end(); ++p)
     f->dump_unsigned("snap", *p);
