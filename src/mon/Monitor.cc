@@ -3277,8 +3277,9 @@ void Monitor::handle_route(MonOpRequestRef op)
 	osdmon()->send_incremental(m->send_osdmap_first, rr->session,
 				   true, MonOpRequestRef());
       }
+      assert(rr->tid == m->session_mon_tid && rr->session->routed_request_tids.count(m->session_mon_tid));
       routed_requests.erase(m->session_mon_tid);
-      rr->session->routed_request_tids.insert(rr->tid);
+      rr->session->routed_request_tids.erase(m->session_mon_tid);
       delete rr;
     } else {
       dout(10) << " don't have routed request tid " << m->session_mon_tid << dendl;
@@ -3306,6 +3307,10 @@ void Monitor::resend_routed_requests()
       dout(10) << " requeue for self tid " << rr->tid << dendl;
       rr->op->mark_event("retry routed request");
       retry.push_back(new C_RetryMessage(this, rr->op));
+      if (rr->session) {
+        assert(rr->session->routed_request_tids.count(p->first));
+        rr->session->routed_request_tids.erase(p->first);
+      }
       delete rr;
     } else {
       bufferlist::iterator q = rr->request_bl.begin();
@@ -3334,13 +3339,13 @@ void Monitor::remove_session(MonSession *s)
   for (set<uint64_t>::iterator p = s->routed_request_tids.begin();
        p != s->routed_request_tids.end();
        ++p) {
-    if (routed_requests.count(*p)) {
-      RoutedRequest *rr = routed_requests[*p];
-      dout(10) << " dropping routed request " << rr->tid << dendl;
-      delete rr;
-      routed_requests.erase(*p);
-    }
+    assert(routed_requests.count(*p));
+    RoutedRequest *rr = routed_requests[*p];
+    dout(10) << " dropping routed request " << rr->tid << dendl;
+    delete rr;
+    routed_requests.erase(*p);
   }
+  s->routed_request_tids.clear();
   s->con->set_priv(NULL);
   session_map.remove_session(s);
   logger->set(l_mon_num_sessions, session_map.get_size());
