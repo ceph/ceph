@@ -1040,6 +1040,7 @@ int KeyValueStore::queue_transactions(Sequencer *posr, list<Transaction*> &tls,
                                       TrackedOpRef osd_op,
                                       ThreadPool::TPHandle *handle)
 {
+  utime_t start = ceph_clock_now(g_ceph_context);
   Context *onreadable;
   Context *ondisk;
   Context *onreadable_sync;
@@ -1067,6 +1068,8 @@ int KeyValueStore::queue_transactions(Sequencer *posr, list<Transaction*> &tls,
   dout(5) << "queue_transactions (trailing journal) " << " " << tls <<dendl;
   queue_op(osr, o);
 
+  utime_t end = ceph_clock_now(g_ceph_context);
+  perf_logger->tinc(l_os_queue_lat, end - start);
   return 0;
 }
 
@@ -1122,7 +1125,6 @@ void KeyValueStore::op_queue_reserve_throttle(Op *o, ThreadPool::TPHandle *handl
   perf_logger->set(l_os_oq_max_ops, max_ops);
   perf_logger->set(l_os_oq_max_bytes, max_bytes);
 
-  utime_t start = ceph_clock_now(g_ceph_context);
   if (handle)
     handle->suspend_tp_timeout();
   if (throttle_ops.should_wait(1) ||
@@ -1135,9 +1137,6 @@ void KeyValueStore::op_queue_reserve_throttle(Op *o, ThreadPool::TPHandle *handl
   throttle_bytes.get(o->bytes);
   if (handle)
     handle->reset_tp_timeout();
-
-  utime_t end = ceph_clock_now(g_ceph_context);
-  perf_logger->tinc(l_os_queue_lat, end - start);
 
   perf_logger->set(l_os_oq_ops, throttle_ops.get_current());
   perf_logger->set(l_os_oq_bytes, throttle_bytes.get_current());
