@@ -139,6 +139,13 @@ int CephxServiceHandler::handle_request(bufferlist::iterator& indata, bufferlist
 
       if (!key_server->get_service_caps(entity_name, CEPH_ENTITY_TYPE_MON, caps)) {
         ldout(cct, 0) << " could not get mon caps for " << entity_name << dendl;
+        ret = -EACCES;
+      } else {
+        char *caps_str = caps.caps.c_str();
+        if (!caps_str || !caps_str[0]) {
+          ldout(cct,0) << "mon caps null for " << entity_name << dendl;
+          ret = -EACCES;
+        }
       }
     }
     break;
