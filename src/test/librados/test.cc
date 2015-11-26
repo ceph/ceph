@@ -241,14 +241,29 @@ int destroy_one_pool(const std::string &pool_name, rados_t *cluster)
 int destroy_one_ec_pool(const std::string &pool_name, rados_t *cluster)
 {
   int ret = rados_pool_delete(*cluster, pool_name.c_str());
-  if (ret == 0) {
-    int ret2 = destroy_ec_profile(cluster);
-    if (ret2) {
-      rados_shutdown(*cluster);
-      return ret2;
-    }
-    rados_wait_for_latest_osdmap(*cluster);
+  if (ret) {
+    rados_shutdown(*cluster);
+    return ret;
   }
+
+  char *cmd[2];
+
+  cmd[0] = (char *)(std::string("{\"prefix\": \"osd crush rule rm\", \"name\":\"") + pool_name + std::string("\"}")).c_str();
+  cmd[1] = NULL;
+  ret = rados_mon_command(*cluster, (const char **)cmd, 1, "", 0, NULL, 0, NULL, 0);
+  if (ret) {
+    rados_shutdown(*cluster);
+    return ret;
+  }
+
+  cmd[0] = (char *)"{\"prefix\": \"osd erasure-code-profile rm\", \"name\": \"testprofile\"}";
+  cmd[1] = NULL;
+  ret = rados_mon_command(*cluster, (const char **)cmd, 1, "", 0, NULL, 0, NULL, 0);
+  if (ret) {
+    rados_shutdown(*cluster);
+    return ret;
+  }
+  rados_wait_for_latest_osdmap(*cluster);
   rados_shutdown(*cluster);
   return ret;
 }
@@ -267,15 +282,25 @@ int destroy_one_pool_pp(const std::string &pool_name, Rados &cluster)
 int destroy_one_ec_pool_pp(const std::string &pool_name, Rados &cluster)
 {
   int ret = cluster.pool_delete(pool_name.c_str());
-  bufferlist inbl;
-  if (ret == 0) {
-    int ret2 = destroy_ec_profile_pp(cluster);
-    if (ret2) {
-      cluster.shutdown();
-      return ret2;
-    }
-    cluster.wait_for_latest_osdmap();
+  if (ret) {
+    cluster.shutdown();
+    return ret;
   }
+
+  bufferlist inbl;
+
+  ret = cluster.mon_command(std::string("{\"prefix\": \"osd crush rule rm\", \"name\":\"") + pool_name + std::string("\"}"), inbl, NULL, NULL);
+  if (ret) {
+    cluster.shutdown();
+    return ret;
+  }
+
+  ret = cluster.mon_command("{\"prefix\": \"osd erasure-code-profile rm\", \"name\": \"testprofile\"}", inbl, NULL, NULL);
+  if (ret) {
+    cluster.shutdown();
+    return ret;
+  }
+  cluster.wait_for_latest_osdmap();
   cluster.shutdown();
   return ret;
 }
