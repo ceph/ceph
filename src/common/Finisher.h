@@ -27,6 +27,7 @@ class CephContext;
 enum {
   l_finisher_first = 997082,
   l_finisher_queue_len,
+  l_finisher_complete_lat,
   l_finisher_last
 };
 
@@ -146,9 +147,11 @@ class Finisher {
     PerfCountersBuilder b(cct, string("finisher-") + name,
 			  l_finisher_first, l_finisher_last);
     b.add_u64(l_finisher_queue_len, "queue_len");
+    b.add_time_avg(l_finisher_complete_lat, "complete_latency");
     logger = b.create_perf_counters();
     cct->get_perfcounters_collection()->add(logger);
     logger->set(l_finisher_queue_len, 0);
+    logger->set(l_finisher_complete_lat, 0);
   }
 
   ~Finisher() {
