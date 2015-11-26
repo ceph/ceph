@@ -124,9 +124,8 @@ int LFNIndex::lookup(const ghobject_t &oid,
   if (r < 0)
     goto out;
   string full_path = get_full_path(path, short_name);
-  struct stat buf;
   maybe_inject_failure();
-  r = ::stat(full_path.c_str(), &buf);
+  r = ::access(full_path.c_str(), F_OK);
   maybe_inject_failure();
   if (r < 0) {
     if (errno == ENOENT) {
@@ -501,8 +500,7 @@ int LFNIndex::remove_path(const vector<string> &to_remove)
 int LFNIndex::path_exists(const vector<string> &to_check, int *exists)
 {
   string full_path = get_full_path_subdir(to_check);
-  struct stat buf;
-  if (::stat(full_path.c_str(), &buf)) {
+  if (::access(full_path.c_str(), F_OK) < 0) {
     int r = -errno;
     if (r == -ENOENT) {
       *exists = 0;
@@ -736,10 +734,9 @@ int LFNIndex::lfn_get_name(const vector<string> &path,
     if (out_path)
       *out_path = get_full_path(path, full_name);
     if (exists) {
-      struct stat buf;
       string full_path = get_full_path(path, full_name);
       maybe_inject_failure();
-      r = ::stat(full_path.c_str(), &buf);
+      r = ::access(full_path.c_str(), F_OK);
       if (r < 0) {
 	if (errno == ENOENT)
 	  *exists = 0;
@@ -883,10 +880,9 @@ int LFNIndex::lfn_unlink(const vector<string> &path,
   int removed_index = i;
   ++i;
   for ( ; ; ++i) {
-    struct stat buf;
     string to_check = lfn_get_short_name(oid, i);
     string to_check_path = get_full_path(path, to_check);
-    int r = ::stat(to_check_path.c_str(), &buf);
+    int r = ::access(to_check_path.c_str(), F_OK);
     if (r < 0) {
       if (errno == ENOENT) {
 	break;
