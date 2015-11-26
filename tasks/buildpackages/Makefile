@@ -53,7 +53,7 @@ ceph-${CEPH_PKG_TYPE}-${CEPH_DIST}-${CEPH_ARCH}-${CEPH_FLAVOR}-${CEPH_SHA1}: ${P
 	openstack server create --image 'teuthology-${CEPH_OS_TYPE}-${CEPH_OS_VERSION}-${CEPH_ARCH}' ${OPENSTACK_NETWORK} --flavor ${BUILD_FLAVOR} --key-name teuthology --security-group teuthology --property ownedby=${MY_IP} --user-data ${CEPH_OS_TYPE}-${CEPH_OS_VERSION}-user-data.txt --wait $@
 	sleep 30
 	set -ex ; \
-	trap "openstack server delete $@" EXIT ; \
+	trap "openstack server delete --wait $@" EXIT ; \
 	ip=$(call get_ip,$@) ; \
 	for delay in 1 2 4 8 8 8 8 8 8 8 8 8 16 16 16 16 16 32 32 32 64 128 256 512 ; do if ssh -o 'ConnectTimeout=3' $$ip bash -c '"grep -q READYTORUN /var/log/cloud-init*.log"' ; then break ; else sleep $$delay ; fi ; done ; \
 	scp make-${CEPH_PKG_TYPE}.sh common.sh ubuntu@$$ip: ; \
