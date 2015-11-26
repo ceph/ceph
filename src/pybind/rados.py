@@ -429,8 +429,7 @@ Rados object in state %s." % self.state)
 
         # cretargs was allocated with fixed length; collapse return
         # list to eliminate any missing args
-
-        retargs = [decode_cstr(a) for a in cretargs if a is not None]
+        retargs = [a.decode('utf-8') for a in cretargs if a is not None]
         self.parsed_args = args
         return retargs
 
