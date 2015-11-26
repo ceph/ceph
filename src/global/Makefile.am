@@ -5,7 +5,7 @@ libglobal_la_SOURCES = \
 	global/signal_handler.cc
 libglobal_la_LIBADD = $(LIBCOMMON)
 if WITH_LTTNG
-libglobal_la_LIBADD += -llttng-ust -ldl
+libglobal_la_LIBADD += -ldl -llttng-ust
 endif
 noinst_LTLIBRARIES += libglobal.la
 

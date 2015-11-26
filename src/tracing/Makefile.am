@@ -22,7 +22,7 @@ nodist_libosd_tp_la_SOURCES = \
 	pg.h \
 	pg.c
 endif
-libosd_tp_la_LIBADD = -llttng-ust -ldl
+libosd_tp_la_LIBADD = -ldl -llttng-ust
 libosd_tp_la_CPPFLAGS = -DTRACEPOINT_PROBE_DYNAMIC_LINKAGE
 libosd_tp_la_CFLAGS = -I$(top_srcdir)/src $(AM_CFLAGS)
 libosd_tp_la_LDFLAGS =
@@ -32,7 +32,7 @@ nodist_librados_tp_la_SOURCES = \
 	librados.c \
 	librados.h
 endif
-librados_tp_la_LIBADD = -llttng-ust -ldl
+librados_tp_la_LIBADD = -ldl -llttng-ust
 librados_tp_la_CPPFLAGS = -DTRACEPOINT_PROBE_DYNAMIC_LINKAGE
 librados_tp_la_CFLAGS = -I$(top_srcdir)/src $(AM_CFLAGS)
 librados_tp_la_LDFLAGS =
@@ -42,7 +42,7 @@ nodist_librbd_tp_la_SOURCES = \
 	librbd.c \
 	librbd.h
 endif
-librbd_tp_la_LIBADD = -llttng-ust -ldl
+librbd_tp_la_LIBADD = -ldl -llttng-ust
 librbd_tp_la_CPPFLAGS = -DTRACEPOINT_PROBE_DYNAMIC_LINKAGE
 librbd_tp_la_CFLAGS = -I$(top_srcdir)/src $(AM_CFLAGS)
 librbd_tp_la_LDFLAGS =
@@ -52,7 +52,7 @@ nodist_libos_tp_la_SOURCES = \
 	objectstore.c \
 	objectstore.h
 endif
-libos_tp_la_LIBADD = -llttng-ust -ldl
+libos_tp_la_LIBADD = -ldl -llttng-ust
 libos_tp_la_CPPFLAGS = -DTRACEPOINT_PROBE_DYNAMIC_LINKAGE
 libos_tp_la_CFLAGS = -I$(top_srcdir)/src $(AM_CFLAGS)
 libos_tp_la_LDFLAGS =
