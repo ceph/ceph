@@ -8,7 +8,7 @@ increasing number of people are updating the documentation and adding new
 information. Even small contributions like fixing spelling errors or clarifying
 instructions will help the Ceph project immensely.
 
-The Ceph documentation source resides in the ``ceph/docs`` directory of the Ceph
+The Ceph documentation source resides in the ``ceph/doc`` directory of the Ceph
 repository, and Python Sphinx renders the source into HTML and manpages. The
 http://ceph.com/docs link currenly displays the  ``master`` branch by default,
 but you may view documentation for older branches (e.g., ``argonaut``) or future
