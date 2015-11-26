@@ -870,12 +870,9 @@ if(${WITH_RBD})
     librbd/AioImageRequest.cc
     librbd/AioImageRequestWQ.cc
     librbd/AioObjectRequest.cc
-    librbd/AsyncFlattenRequest.cc
     librbd/AsyncObjectThrottle.cc
     librbd/AsyncOperation.cc
     librbd/AsyncRequest.cc
-    librbd/AsyncResizeRequest.cc
-    librbd/AsyncTrimRequest.cc
     librbd/CopyupRequest.cc
     librbd/DiffIterate.cc
     librbd/ImageCtx.cc
@@ -888,12 +885,31 @@ if(${WITH_RBD})
     librbd/LibrbdAdminSocketHook.cc
     librbd/LibrbdWriteback.cc
     librbd/ObjectMap.cc
-    librbd/RebuildObjectMapRequest.cc
+    librbd/object_map/InvalidateRequest.cc
+    librbd/object_map/Request.cc
+    librbd/object_map/ResizeRequest.cc
+    librbd/object_map/SnapshotCreateRequest.cc
+    librbd/object_map/SnapshotRemoveRequest.cc
+    librbd/object_map/SnapshotRollbackRequest.cc
+    librbd/object_map/UpdateRequest.cc
+    librbd/operation/FlattenRequest.cc
+    librbd/operation/RebuildObjectMapRequest.cc
+    librbd/operation/RenameRequest.cc
+    librbd/operation/Request.cc
+    librbd/operation/ResizeRequest.cc
+    librbd/operation/SnapshotCreateRequest.cc
+    librbd/operation/SnapshotProtectRequest.cc
+    librbd/operation/SnapshotRemoveRequest.cc
+    librbd/operation/SnapshotRenameRequest.cc
+    librbd/operation/SnapshotRollbackRequest.cc
+    librbd/operation/SnapshotUnprotectRequest.cc
+    librbd/operation/TrimRequest.cc
     librbd/WatchNotifyTypes.cc)
   add_library(librbd ${CEPH_SHARED} ${librbd_srcs}
     $<TARGET_OBJECTS:osdc_rbd_objs>
     $<TARGET_OBJECTS:common_util_obj>)
-  target_link_libraries(librbd PRIVATE librados common cls_lock_client cls_rbd_client
+  target_link_libraries(librbd PRIVATE librados common journal
+    cls_lock_client cls_rbd_client cls_journal_client
     ${CMAKE_DL_LIBS})
   if(${ENABLE_SHARED})
     set_target_properties(librbd PROPERTIES VERSION "1.0.0" SOVERSION "1"
