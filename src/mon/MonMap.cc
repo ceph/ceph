@@ -17,8 +17,44 @@
 
 using ceph::Formatter;
 
+void mon_info_t::encode(bufferlist& bl) const
+{
+  ENCODE_START(1, 1, bl);
+  ::encode(name, bl);
+  ::encode(public_addr, bl);
+  ENCODE_FINISH(bl);
+}
+
+void mon_info_t::decode(bufferlist::iterator& p)
+{
+  DECODE_START(1, p);
+  ::decode(name, p);
+  ::decode(public_addr, p);
+  DECODE_FINISH(p);
+}
+
+void mon_info_t::print(ostream& out) const
+{
+  out << "mon." << name
+      << " public " << public_addr;
+}
+
 void MonMap::encode(bufferlist& blist, uint64_t con_features) const
 {
+  /* we keep the mon_addr map when encoding to ensure compatibility
+   * with clients and other monitors that do not yet support the 'mons'
+   * map. This map keeps its original behavior, containing a mapping of
+   * monitor id (i.e., 'foo' in 'mon.foo') to the monitor's public
+   * address -- which is obtained from the public address of each entry
+   * in the 'mons' map.
+   */
+  map<string,entity_addr_t> mon_addr;
+  for (map<string,mon_info_t>::const_iterator p = mon_info.begin();
+       p != mon_info.end();
+       ++p) {
+    mon_addr[p->first] = p->second.public_addr;
+  }
+
   if ((con_features & CEPH_FEATURE_MONNAMES) == 0) {
     __u16 v = 1;
     ::encode(v, blist);
@@ -43,7 +79,7 @@ void MonMap::encode(bufferlist& blist, uint64_t con_features) const
     ::encode(created, blist);
   }
 
-  ENCODE_START(4, 3, blist);
+  ENCODE_START(5, 3, blist);
   ::encode_raw(fsid, blist);
   ::encode(epoch, blist);
   ::encode(mon_addr, blist);
@@ -51,12 +87,15 @@ void MonMap::encode(bufferlist& blist, uint64_t con_features) const
   ::encode(created, blist);
   ::encode(persistent_features, blist);
   ::encode(optional_features, blist);
+  // this superseeds 'mon_addr'
+  ::encode(mon_info, blist);
   ENCODE_FINISH(blist);
 }
 
 void MonMap::decode(bufferlist::iterator &p)
 {
-  DECODE_START_LEGACY_COMPAT_LEN_16(4, 3, 3, p);
+  map<string,entity_addr_t> mon_addr;
+  DECODE_START_LEGACY_COMPAT_LEN_16(5, 3, 3, p);
   ::decode_raw(fsid, p);
   ::decode(epoch, p);
   if (struct_v == 1) {
@@ -78,8 +117,11 @@ void MonMap::decode(bufferlist::iterator &p)
     ::decode(persistent_features, p);
     ::decode(optional_features, p);
   }
-
+  if (struct_v >= 5) {
+    ::decode(mon_info, p);
+  }
   DECODE_FINISH(p);
+  sanitize_mons(mon_addr);
   calc_ranks();
 }
 
@@ -118,8 +160,21 @@ int MonMap::read(const char *fn)
 void MonMap::print_summary(ostream& out) const
 {
   out << "e" << epoch << ": "
-      << mon_addr.size() << " mons at "
-      << mon_addr;
+      << mon_info.size() << " mons at {";
+  // the map that we used to print, as it was, no longer
+  // maps strings to the monitor's public address, but to
+  // mon_info_t instead. As such, print the map in a way
+  // that keeps the expected format.
+  bool has_printed = false;
+  for (map<string,mon_info_t>::const_iterator p = mon_info.begin();
+       p != mon_info.end();
+       ++p) {
+    if (has_printed)
+      out << ",";
+    out << p->first << "=" << p->second.public_addr;
+    has_printed = true;
+  }
+  out << "}";
 }
  
 void MonMap::print(ostream& out) const
@@ -129,10 +184,11 @@ void MonMap::print(ostream& out) const
   out << "last_changed " << last_changed << "\n";
   out << "created " << created << "\n";
   unsigned i = 0;
-  for (map<entity_addr_t,string>::const_iterator p = addr_name.begin();
-       p != addr_name.end();
-       ++p)
-    out << i++ << ": " << p->first << " mon." << p->second << "\n";
+  for (vector<string>::const_iterator p = ranks.begin();
+       p != ranks.end();
+       ++p) {
+    out << i++ << ": " << get_addr(*p) << " mon." << *p << "\n";
+  }
 }
 
 void MonMap::dump(Formatter *f) const
@@ -147,13 +203,14 @@ void MonMap::dump(Formatter *f) const
   f->close_section();
   f->open_array_section("mons");
   int i = 0;
-  for (map<entity_addr_t,string>::const_iterator p = addr_name.begin();
-       p != addr_name.end();
+  for (vector<string>::const_iterator p = ranks.begin();
+       p != ranks.end();
        ++p, ++i) {
     f->open_object_section("mon");
     f->dump_int("rank", i);
-    f->dump_string("name", p->second);
-    f->dump_stream("addr") << p->first;
+    f->dump_string("name", *p);
+    f->dump_stream("addr") << get_addr(*p);
+    f->dump_stream("public_addr") << get_addr(*p);
     f->close_section();
   }
   f->close_section();
