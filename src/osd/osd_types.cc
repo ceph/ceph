@@ -15,6 +15,8 @@
  *
  */
 
+#include <boost/assign/list_of.hpp>
+
 #include "osd_types.h"
 #include "include/ceph_features.h"
 extern "C" {
@@ -889,6 +891,162 @@ void pool_snap_info_t::generate_test_instances(list<pool_snap_info_t*>& o)
   o.back()->name = "foo";
 }
 
+// -- pool_opts_t --
+
+typedef std::map<std::string, pool_opts_t::opt_desc_t> opt_mapping_t;
+static opt_mapping_t opt_mapping = boost::assign::map_list_of
+	   ("scrub_min_interval", pool_opts_t::opt_desc_t(
+	     pool_opts_t::SCRUB_MIN_INTERVAL, pool_opts_t::DOUBLE))
+	   ("scrub_max_interval", pool_opts_t::opt_desc_t(
+	     pool_opts_t::SCRUB_MAX_INTERVAL, pool_opts_t::DOUBLE))
+	   ("deep_scrub_interval", pool_opts_t::opt_desc_t(
+	     pool_opts_t::DEEP_SCRUB_INTERVAL, pool_opts_t::DOUBLE));
+
+bool pool_opts_t::is_opt_name(const std::string& name) {
+    return opt_mapping.find(name) != opt_mapping.end();
+}
+
+pool_opts_t::opt_desc_t pool_opts_t::get_opt_desc(const std::string& name) {
+    opt_mapping_t::iterator i = opt_mapping.find(name);
+    assert(i != opt_mapping.end());
+    return i->second;
+}
+
+bool pool_opts_t::is_set(pool_opts_t::key_t key) const {
+    return opts.find(key) != opts.end();
+}
+
+const pool_opts_t::value_t& pool_opts_t::get(pool_opts_t::key_t key) const {
+  opts_t::const_iterator i = opts.find(key);
+  assert(i != opts.end());
+  return i->second;
+}
+
+bool pool_opts_t::unset(pool_opts_t::key_t key) {
+  return opts.erase(key) > 0;
+}
+
+class pool_opts_dumper_t : public boost::static_visitor<>
+{
+public:
+  pool_opts_dumper_t(const std::string& name_, Formatter* f_) :
+    name(name_.c_str()), f(f_) {}
+
+  void operator()(std::string s) const {
+    f->dump_string(name, s);
+  }
+  void operator()(int i) const {
+    f->dump_int(name, i);
+  }
+  void operator()(double d) const {
+    f->dump_float(name, d);
+  }
+
+private:
+  const char* name;
+  Formatter* f;
+};
+
+void pool_opts_t::dump(const std::string& name, Formatter* f) const
+{
+  const opt_desc_t& desc = get_opt_desc(name);
+  opts_t::const_iterator i = opts.find(desc.key);
+  if (i == opts.end()) {
+      return;
+  }
+  boost::apply_visitor(pool_opts_dumper_t(name, f), i->second);
+}
+
+void pool_opts_t::dump(Formatter* f) const
+{
+  for (opt_mapping_t::iterator i = opt_mapping.begin(); i != opt_mapping.end();
+       i++) {
+    const std::string& name = i->first;
+    const opt_desc_t& desc = i->second;
+    opts_t::const_iterator j = opts.find(desc.key);
+    if (j == opts.end()) {
+      continue;
+    }
+    boost::apply_visitor(pool_opts_dumper_t(name, f), j->second);
+  }
+}
+
+class pool_opts_encoder_t : public boost::static_visitor<>
+{
+public:
+  pool_opts_encoder_t(bufferlist& bl_) : bl(bl_) {}
+
+  void operator()(std::string s) const {
+    ::encode(static_cast<int32_t>(pool_opts_t::STR), bl);
+    ::encode(s, bl);
+  }
+  void operator()(int i) const {
+    ::encode(static_cast<int32_t>(pool_opts_t::INT), bl);
+    ::encode(i, bl);
+  }
+  void operator()(double d) const {
+    ::encode(static_cast<int32_t>(pool_opts_t::DOUBLE), bl);
+    ::encode(d, bl);
+  }
+
+private:
+  bufferlist& bl;
+};
+
+void pool_opts_t::encode(bufferlist& bl) const {
+  ENCODE_START(1, 1, bl);
+  uint32_t n = static_cast<uint32_t>(opts.size());
+  ::encode(n, bl);
+  for (opts_t::const_iterator i = opts.begin(); i != opts.end(); ++i) {
+    ::encode(static_cast<int32_t>(i->first), bl);
+    boost::apply_visitor(pool_opts_encoder_t(bl), i->second);
+  }
+  ENCODE_FINISH(bl);
+}
+
+void pool_opts_t::decode(bufferlist::iterator& bl) {
+  DECODE_START(1, bl);
+  __u32 n;
+  ::decode(n, bl);
+  opts.clear();
+  while (n--) {
+    int32_t k, t;
+    ::decode(k, bl);
+    ::decode(t, bl);
+    if (t == STR) {
+      std::string s;
+      ::decode(s, bl);
+      opts[static_cast<key_t>(k)] = s;
+    } else if (t == INT) {
+      int i;
+      ::decode(i, bl);
+      opts[static_cast<key_t>(k)] = i;
+    } else if (t == DOUBLE) {
+      double d;
+      ::decode(d, bl);
+      opts[static_cast<key_t>(k)] = d;
+    } else {
+      assert(!"invalid type");
+    }
+  }
+  DECODE_FINISH(bl);
+}
+
+ostream& operator<<(ostream& out, const pool_opts_t& opts)
+{
+  for (opt_mapping_t::iterator i = opt_mapping.begin(); i != opt_mapping.end();
+       i++) {
+    const std::string& name = i->first;
+    const pool_opts_t::opt_desc_t& desc = i->second;
+    pool_opts_t::opts_t::const_iterator j = opts.opts.find(desc.key);
+    if (j == opts.opts.end()) {
+      continue;
+    }
+    out << " " << name << " " << j->second;
+  }
+  return out;
+}
+
 // -- pg_pool_t --
 
 void pg_pool_t::dump(Formatter *f) const
@@ -955,6 +1113,9 @@ void pg_pool_t::dump(Formatter *f) const
   f->dump_unsigned("stripe_width", get_stripe_width());
   f->dump_unsigned("expected_num_objects", expected_num_objects);
   f->dump_bool("fast_read", fast_read);
+  f->open_object_section("options");
+  opts.dump(f);
+  f->close_section(); // options
 }
 
 void pg_pool_t::convert_to_pg_shards(const vector<int> &from, set<pg_shard_t>* to) const {
@@ -1264,7 +1425,7 @@ void pg_pool_t::encode(bufferlist& bl, uint64_t features) const
     return;
   }
 
-  ENCODE_START(23, 5, bl);
+  ENCODE_START(24, 5, bl);
   ::encode(type, bl);
   ::encode(size, bl);
   ::encode(crush_ruleset, bl);
@@ -1312,12 +1473,13 @@ void pg_pool_t::encode(bufferlist& bl, uint64_t features) const
   ::encode(fast_read, bl);
   ::encode(hit_set_grade_decay_rate, bl);
   ::encode(hit_set_search_last_n, bl);
+  ::encode(opts, bl);
   ENCODE_FINISH(bl);
 }
 
 void pg_pool_t::decode(bufferlist::iterator& bl)
 {
-  DECODE_START_LEGACY_COMPAT_LEN(23, 5, 5, bl);
+  DECODE_START_LEGACY_COMPAT_LEN(24, 5, 5, bl);
   ::decode(type, bl);
   ::decode(size, bl);
   ::decode(crush_ruleset, bl);
@@ -1456,6 +1618,9 @@ void pg_pool_t::decode(bufferlist::iterator& bl)
     hit_set_grade_decay_rate = 0;
     hit_set_search_last_n = 1;
   }
+  if (struct_v >= 24) {
+    ::decode(opts, bl);
+  }
   DECODE_FINISH(bl);
   calc_pg_masks();
   calc_grade_table();
@@ -1573,6 +1738,7 @@ ostream& operator<<(ostream& out, const pg_pool_t& p)
     out << " expected_num_objects " << p.expected_num_objects;
   if (p.fast_read)
     out << " fast_read " << p.fast_read;
+  out << p.opts;
   return out;
 }
 

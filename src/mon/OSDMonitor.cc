@@ -2906,7 +2906,8 @@ namespace {
     CACHE_MIN_FLUSH_AGE, CACHE_MIN_EVICT_AGE,
     ERASURE_CODE_PROFILE, MIN_READ_RECENCY_FOR_PROMOTE,
     MIN_WRITE_RECENCY_FOR_PROMOTE, FAST_READ,
-    HIT_SET_GRADE_DECAY_RATE, HIT_SET_SEARCH_LAST_N};
+    HIT_SET_GRADE_DECAY_RATE, HIT_SET_SEARCH_LAST_N,
+    SCRUB_MIN_INTERVAL, SCRUB_MAX_INTERVAL, DEEP_SCRUB_INTERVAL};
 
   std::set<osd_pool_get_choices>
     subtract_second_from_first(const std::set<osd_pool_get_choices>& first,
@@ -3382,7 +3383,10 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
       ("min_write_recency_for_promote", MIN_WRITE_RECENCY_FOR_PROMOTE)
       ("fast_read", FAST_READ)
       ("hit_set_grade_decay_rate", HIT_SET_GRADE_DECAY_RATE)
-      ("hit_set_search_last_n", HIT_SET_SEARCH_LAST_N);
+      ("hit_set_search_last_n", HIT_SET_SEARCH_LAST_N)
+      ("scrub_min_interval", SCRUB_MIN_INTERVAL)
+      ("scrub_max_interval", SCRUB_MAX_INTERVAL)
+      ("deep_scrub_interval", DEEP_SCRUB_INTERVAL);
 
     typedef std::set<osd_pool_get_choices> choices_set_t;
 
@@ -3561,6 +3565,16 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
 	    f->dump_int("hit_set_search_last_n",
 			p->hit_set_search_last_n);
 	    break;
+	  case SCRUB_MIN_INTERVAL:
+	  case SCRUB_MAX_INTERVAL:
+	  case DEEP_SCRUB_INTERVAL:
+	    for (i = ALL_CHOICES.begin(); i != ALL_CHOICES.end(); ++i) {
+	      if (i->second == *it)
+		break;
+	    }
+	    assert(i != ALL_CHOICES.end());
+	    p->opts.dump(i->first, f.get());
+            break;
 	}
 	f->close_section();
 	f->flush(rdata);
@@ -3682,6 +3696,21 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
           case FAST_READ:
             ss << "fast_read: " << p->fast_read << "\n";
             break;
+	  case SCRUB_MIN_INTERVAL:
+	  case SCRUB_MAX_INTERVAL:
+	  case DEEP_SCRUB_INTERVAL:
+	    for (i = ALL_CHOICES.begin(); i != ALL_CHOICES.end(); ++i) {
+	      if (i->second == *it)
+		break;
+	    }
+	    assert(i != ALL_CHOICES.end());
+	    {
+	      pool_opts_t::key_t key = pool_opts_t::get_opt_desc(i->first).key;
+	      if (p->opts.is_set(key)) {
+		ss << i->first << ": " << p->opts.get(key) << "\n";
+	      }
+	    }
+	    break;
 	}
 	rdata.append(ss.str());
 	ss.str("");
@@ -5086,6 +5115,41 @@ int OSDMonitor::prepare_command_pool_set(map<string,cmd_vartype> &cmdmap,
       p.fast_read = true;
     } else if (val == "false" || (interr.empty() && n == 0)) {
       p.fast_read = false;
+    }
+  } else if (pool_opts_t::is_opt_name(var)) {
+    pool_opts_t::opt_desc_t desc = pool_opts_t::get_opt_desc(var);
+    switch (desc.type) {
+    case pool_opts_t::STR:
+      if (val.empty()) {
+	p.opts.unset(desc.key);
+      } else {
+	p.opts.set(desc.key, static_cast<std::string>(val));
+      }
+      break;
+    case pool_opts_t::INT:
+      if (interr.length()) {
+	ss << "error parsing integer value '" << val << "': " << interr;
+	return -EINVAL;
+      }
+      if (n == 0) {
+	p.opts.unset(desc.key);
+      } else {
+	p.opts.set(desc.key, static_cast<int>(n));
+      }
+      break;
+    case pool_opts_t::DOUBLE:
+      if (floaterr.length()) {
+	ss << "error parsing floating point value '" << val << "': " << floaterr;
+	return -EINVAL;
+      }
+      if (f == 0) {
+	p.opts.unset(desc.key);
+      } else {
+	p.opts.set(desc.key, static_cast<double>(f));
+      }
+      break;
+    default:
+      assert(!"unknown type");
     }
   } else {
     ss << "unrecognized variable '" << var << "'";

@@ -3243,8 +3243,13 @@ bool PG::sched_scrub()
     return false;
   }
 
-  bool time_for_deep = (ceph_clock_now(cct) >=
-    info.history.last_deep_scrub_stamp + cct->_conf->osd_deep_scrub_interval);
+  double deep_scrub_interval = 0;
+  pool.info.opts.get(pool_opts_t::DEEP_SCRUB_INTERVAL, &deep_scrub_interval);
+  if (deep_scrub_interval <= 0) {
+    deep_scrub_interval = cct->_conf->osd_deep_scrub_interval;
+  }
+  bool time_for_deep = ceph_clock_now(cct) >=
+    info.history.last_deep_scrub_stamp + deep_scrub_interval;
 
   bool deep_coin_flip = false;
   // Only add random deep scrubs when NOT user initiated scrub
@@ -3332,8 +3337,13 @@ void PG::reg_next_scrub()
   }
   // note down the sched_time, so we can locate this scrub, and remove it
   // later on.
+  double scrub_min_interval = 0, scrub_max_interval = 0;
+  pool.info.opts.get(pool_opts_t::SCRUB_MIN_INTERVAL, &scrub_min_interval);
+  pool.info.opts.get(pool_opts_t::SCRUB_MAX_INTERVAL, &scrub_max_interval);
   scrubber.scrub_reg_stamp = osd->reg_pg_scrub(info.pgid,
 					       reg_stamp,
+					       scrub_min_interval,
+					       scrub_max_interval,
 					       scrubber.must_scrub);
 }
 
