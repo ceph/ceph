@@ -284,7 +284,10 @@ void Server::handle_client_session(MClientSession *m)
     // root is actually within the caps of the session
     if (session->info.client_metadata.count("root")) {
       const auto claimed_root = session->info.client_metadata.at("root");
-      if (!session->auth_caps.path_capable(claimed_root)) {
+      // claimed_root has a leading "/" which we strip before passing
+      // into caps check
+      if (claimed_root.empty() || claimed_root[0] != '/' ||
+          !session->auth_caps.path_capable(claimed_root.substr(1))) {
         derr << __func__ << " forbidden path claimed as mount root: "
              << claimed_root << " by " << m->get_source() << dendl;
         // Tell the client we're rejecting their open
