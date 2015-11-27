@@ -663,7 +663,7 @@ BlueStore::OnodeRef BlueStore::Collection::get_onode(
 #define dout_prefix *_dout << "bluestore(" << path << ") "
 
 
-void aio_cb(void *priv, void *priv2)
+static void aio_cb(void *priv, void *priv2)
 {
   BlueStore *store = static_cast<BlueStore*>(priv);
   store->_txc_aio_finish(priv2);
@@ -796,7 +796,7 @@ int BlueStore::_open_alloc()
   alloc = Allocator::create("stupid");
   uint64_t num = 0, bytes = 0;
   const map<uint64_t,uint64_t>& fl = fm->get_freelist();
-  for (auto p : fl) {
+  for (auto& p : fl) {
     alloc->init_add_free(p.first, p.second);
     ++num;
     bytes += p.second;
@@ -1175,7 +1175,7 @@ void BlueStore::_commit_bluefs_freespace(
   const vector<extent_t>& bluefs_gift_extents)
 {
   dout(10) << __func__ << dendl;
-  for (auto p : bluefs_gift_extents) {
+  for (auto& p : bluefs_gift_extents) {
     bluefs->add_block_extent(0, p.offset, p.length);
   }
 }
@@ -1506,7 +1506,7 @@ int BlueStore::fsck()
       if (ols.empty()) {
 	break;
       }
-      for (auto oid : ols) {
+      for (auto& oid : ols) {
 	dout(10) << __func__ << "  " << oid << dendl;
 	OnodeRef o = c->get_onode(oid, false);
 	if (!o || !o->exists) {
@@ -1523,7 +1523,7 @@ int BlueStore::fsck()
 	  used_nids.insert(o->onode.nid);
 	}
 	// blocks
-	for (auto b : o->onode.block_map) {
+	for (auto& b : o->onode.block_map) {
 	  if (used_blocks.contains(b.second.offset, b.second.length)) {
 	    derr << " " << oid << " extent " << b.first << ": " << b.second
 		 << " already allocated" << dendl;
@@ -1540,7 +1540,7 @@ int BlueStore::fsck()
 	// overlays
 	set<string> overlay_keys;
 	map<uint64_t,int> refs;
-	for (auto v : o->onode.overlay_map) {
+	for (auto& v : o->onode.overlay_map) {
 	  if (v.first + v.second.length > o->onode.size) {
 	    derr << " " << oid << " overlay " << v.first << " " << v.second
 		 << " extends past end of object" << dendl;
@@ -1569,7 +1569,7 @@ int BlueStore::fsck()
 	    ++errors;
 	  }
 	}
-	for (auto vr : o->onode.overlay_refs) {
+	for (auto& vr : o->onode.overlay_refs) {
 	  if (refs[vr.first] != vr.second) {
 	    derr << " " << oid << " overlay key " << vr.first
 		 << " says " << vr.second << " refs but we have "
@@ -1578,7 +1578,7 @@ int BlueStore::fsck()
 	  }
 	  refs.erase(vr.first);
 	}
-	for (auto p : refs) {
+	for (auto& p : refs) {
 	  if (p.second > 1) {
 	    derr << " " << oid << " overlay key " << p.first
 		 << " has " << p.second << " refs but they are not recorded"
@@ -3048,7 +3048,7 @@ void BlueStore::_kv_sync_thread()
 	int r = _balance_bluefs_freespace(&bluefs_gift_extents);
 	assert(r >= 0);
 	if (r > 0) {
-	  for (auto p : bluefs_gift_extents) {
+	  for (auto& p : bluefs_gift_extents) {
 	    fm->allocate(p.offset, p.length, t);
 	    bluefs_extents.insert(p.offset, p.length);
 	  }

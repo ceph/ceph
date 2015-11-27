@@ -13,31 +13,30 @@ struct IOContext {
 
   Mutex lock;
   Cond cond;
-  interval_set<uint64_t> blocks;  ///< blocks with aio in flight
+  //interval_set<uint64_t> blocks;  ///< blocks with aio in flight
 
   list<FS::aio_t> pending_aios;    ///< not yet submitted
   list<FS::aio_t> running_aios;    ///< submitting or submitted
-  int num_pending;
-  int num_running;
-  int num_reading;
-
-  bufferlist pending_bl;  // just a pile of refs
-  bufferlist running_bl;  // just a pile of refs
+  atomic_t num_pending;
+  atomic_t num_running;
+  atomic_t num_reading;
+  atomic_t num_waiting;
 
   IOContext(void *p)
     : priv(p),
-      lock("IOContext::lock"),
-      num_pending(0),
-      num_running(0),
-      num_reading(0) {}
+      lock("IOContext::lock")
+    {}
+
+  // no copying
+  IOContext(const IOContext& other);
+  IOContext &operator=(const IOContext& other);
 
   bool has_aios() {
     Mutex::Locker l(lock);
-    return num_pending + num_running;
+    return num_pending.read() + num_running.read();
   }
 
   void aio_wait();
-  void _aio_wait();
 };
 
 class BlockDevice {
@@ -53,6 +52,7 @@ private:
   bool aio, dio;
   bufferptr zeros;
 
+  Mutex debug_lock;
   interval_set<uint64_t> debug_inflight;
 
   FS::aio_queue_t aio_queue;
@@ -73,8 +73,8 @@ private:
   int _aio_start();
   void _aio_stop();
 
-  void _aio_prepare(IOContext *ioc, uint64_t offset, uint64_t length);
-  void _aio_finish(IOContext *ioc, uint64_t offset, uint64_t length);
+  void _aio_log_start(IOContext *ioc, uint64_t offset, uint64_t length);
+  void _aio_log_finish(IOContext *ioc, uint64_t offset, uint64_t length);
 
   int _lock();
 

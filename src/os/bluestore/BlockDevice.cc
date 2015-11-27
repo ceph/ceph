@@ -23,27 +23,27 @@
 void IOContext::aio_wait()
 {
   Mutex::Locker l(lock);
-  _aio_wait();
-}
-
-void IOContext::_aio_wait()
-{
   // see _aio_thread for waker logic
-  while (num_running > 0 || num_reading > 0) {
+  num_waiting.inc();
+  while (num_running.read() > 0 || num_reading.read() > 0) {
     dout(10) << __func__ << " " << this
-	     << " waiting for " << num_running << " aios and/or "
-	     << num_reading << " readers to complete" << dendl;
+	     << " waiting for " << num_running.read() << " aios and/or "
+	     << num_reading.read() << " readers to complete" << dendl;
     cond.Wait(lock);
   }
+  num_waiting.dec();
   dout(20) << __func__ << " " << this << " done" << dendl;
 }
 
 // ----------------
+#undef dout_prefix
+#define dout_prefix *_dout << "bdev(" << path << ") "
 
 BlockDevice::BlockDevice(aio_callback_t cb, void *cbpriv)
   : fd(-1),
     size(0), block_size(0),
     fs(NULL), aio(false), dio(false),
+    debug_lock("BlockDevice::debug_lock"),
     aio_queue(g_conf->bluestore_aio_max_queue_depth),
     aio_callback(cb),
     aio_callback_priv(cbpriv),
@@ -192,20 +192,22 @@ void BlockDevice::_aio_thread()
       dout(30) << __func__ << " got " << r << " completed aios" << dendl;
       for (int i = 0; i < r; ++i) {
 	IOContext *ioc = static_cast<IOContext*>(aio[i]->priv);
-	Mutex::Locker l(ioc->lock);
-	--ioc->num_running;
+	_aio_log_finish(ioc, aio[i]->offset, aio[i]->length);
+	int left = ioc->num_running.dec();
 	int r = aio[i]->get_return_value();
 	dout(10) << __func__ << " finished aio " << aio[i] << " r " << r
 		 << " ioc " << ioc
-		 << " with " << ioc->num_running << " aios left" << dendl;
+		 << " with " << left << " aios left" << dendl;
 	assert(r >= 0);
-	_aio_finish(ioc, aio[i]->offset, aio[i]->length);
-	if (ioc->num_running == 0) {
-	  ioc->running_bl.clear();
-	  ioc->running_aios.clear();
+	if (left == 0) {
 	  if (ioc->priv) {
 	    aio_callback(aio_callback_priv, ioc->priv);
 	  }
+	}
+	if (ioc->num_waiting.read()) {
+	  dout(20) << __func__ << " waking waiter" << dendl;
+	  Mutex::Locker l(ioc->lock);
+	  ioc->cond.Signal();
 	}
       }
     }
@@ -213,23 +215,14 @@ void BlockDevice::_aio_thread()
   dout(10) << __func__ << " end" << dendl;
 }
 
-void BlockDevice::_aio_prepare(IOContext *ioc, uint64_t offset, uint64_t length)
+void BlockDevice::_aio_log_start(
+  IOContext *ioc,
+  uint64_t offset,
+  uint64_t length)
 {
-  dout(20) << __func__ << " " << offset << "~" << length
-	   << " (" << ioc->blocks << ")" << dendl;
-  while (ioc->blocks.intersects(offset, length)) {
-    dout(20) << __func__ << " waiting for overlapping io on "
-	     << offset << "~" << length
-	     << " (" << ioc->blocks << ")" << dendl;
-    if (ioc->num_pending) {
-      aio_submit(ioc);
-    }
-    ioc->_aio_wait();
-    dout(20) << __func__ << " done waiting" << dendl;
-  }
-  ioc->blocks.insert(offset, length);
-
+  dout(20) << __func__ << " " << offset << "~" << length << dendl;
   if (g_conf->bdev_debug_inflight_ios) {
+    Mutex::Locker l(debug_lock);
     if (debug_inflight.intersects(offset, length)) {
       derr << __func__ << " inflight overlap of "
 	   << offset << "~" << length
@@ -240,46 +233,44 @@ void BlockDevice::_aio_prepare(IOContext *ioc, uint64_t offset, uint64_t length)
   }
 }
 
-void BlockDevice::_aio_finish(IOContext *ioc, uint64_t offset, uint64_t length)
+void BlockDevice::_aio_log_finish(
+  IOContext *ioc,
+  uint64_t offset,
+  uint64_t length)
 {
-  assert(ioc->lock.is_locked());
-  dout(20) << __func__ << " " << aio << " " << offset << "~" << length
-	   << " (" << ioc->blocks << ")"
-	   << dendl;
-  ioc->blocks.erase(offset, length);
-  ioc->cond.Signal();
-
+  dout(20) << __func__ << " " << aio << " " << offset << "~" << length << dendl;
   if (g_conf->bdev_debug_inflight_ios) {
+    Mutex::Locker l(debug_lock);
     debug_inflight.erase(offset, length);
   }
 }
 
 void BlockDevice::aio_submit(IOContext *ioc)
 {
-  Mutex::Locker l(ioc->lock);
   dout(20) << __func__ << " ioc " << ioc
-	   << " pending " << ioc->num_pending
-	   << " running " << ioc->num_running
+	   << " pending " << ioc->num_pending.read()
+	   << " running " << ioc->num_running.read()
 	   << dendl;
-
-#warning fixme can we make this avoid a mutex?
   // move these aside, and get our end iterator position now, as the
   // aios might complete as soon as they are submitted and queue more
   // wal aio's.
   list<FS::aio_t>::iterator e = ioc->running_aios.begin();
   ioc->running_aios.splice(e, ioc->pending_aios);
   list<FS::aio_t>::iterator p = ioc->running_aios.begin();
-  ioc->num_running += ioc->num_pending;
-  ioc->num_pending = 0;
-  ioc->running_bl.claim_append(ioc->pending_bl);
+
+  int pending = ioc->num_pending.read();
+  ioc->num_running.add(pending);
+  ioc->num_pending.sub(pending);
+  assert(ioc->num_pending.read() == 0);  // we should be only thread doing this
+
   bool done = false;
   while (!done) {
     FS::aio_t& aio = *p;
     aio.priv = static_cast<void*>(ioc);
-    dout(20) << __func__ << " aio " << &aio << " fd " << aio.fd
+    dout(20) << __func__ << "  aio " << &aio << " fd " << aio.fd
 	     << " " << aio.offset << "~" << aio.length << dendl;
     for (vector<iovec>::iterator q = aio.iov.begin(); q != aio.iov.end(); ++q)
-      dout(30) << __func__ << "  iov " << (void*)q->iov_base
+      dout(30) << __func__ << "   iov " << (void*)q->iov_base
 	       << " len " << q->iov_len << dendl;
 
     // be careful: as soon as we submit aio we race with completion.
@@ -324,22 +315,19 @@ int BlockDevice::aio_write(
   bl.hexdump(*_dout);
   *_dout << dendl;
 
-  {
-    Mutex::Locker l(ioc->lock);
-    _aio_prepare(ioc, off, bl.length());
-  }
+  _aio_log_start(ioc, off, bl.length());
 
 #ifdef HAVE_LIBAIO
   if (aio && dio) {
     ioc->pending_aios.push_back(FS::aio_t(ioc, fd));
-    ++ioc->num_pending;
+    ioc->num_pending.inc();
     FS::aio_t& aio = ioc->pending_aios.back();
     bl.prepare_iov(&aio.iov);
     for (unsigned i=0; i<aio.iov.size(); ++i) {
       dout(30) << "aio " << i << " " << aio.iov[i].iov_base
 	       << " " << aio.iov[i].iov_len << dendl;
     }
-    ioc->pending_bl.append(bl);
+    aio.bl.claim_append(bl);
     aio.pwritev(off);
     dout(2) << __func__ << " prepared aio " << &aio << dendl;
   } else
@@ -393,11 +381,8 @@ int BlockDevice::read(uint64_t off, uint64_t len, bufferlist *pbl, IOContext *io
   assert(off < size);
   assert(off + len <= size);
 
-  {
-    Mutex::Locker l(ioc->lock);
-    _aio_prepare(ioc, off, len);
-    ++ioc->num_reading;
-  }
+  _aio_log_start(ioc, off, len);
+  ioc->num_reading.inc();;
 
   bufferptr p = buffer::create_page_aligned(len);
   int r = ::pread(fd, p.c_str(), len, off);
@@ -407,12 +392,18 @@ int BlockDevice::read(uint64_t off, uint64_t len, bufferlist *pbl, IOContext *io
   }
   pbl->clear();
   pbl->push_back(p);
+
   dout(40) << "data: ";
   pbl->hexdump(*_dout);
   *_dout << dendl;
+
  out:
-  Mutex::Locker l(ioc->lock);
-  --ioc->num_reading;
-  _aio_finish(ioc, off, len);
+  _aio_log_finish(ioc, off, len);
+  ioc->num_reading.dec();
+  if (ioc->num_waiting.read()) {
+    dout(20) << __func__ << " waking waiter" << dendl;
+    Mutex::Locker l(ioc->lock);
+    ioc->cond.Signal();
+  }
   return r < 0 ? r : 0;
 }

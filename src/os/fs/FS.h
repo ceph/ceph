@@ -59,6 +59,7 @@ public:
     vector<iovec> iov;
     uint64_t offset, length;
     int rval;
+    bufferlist bl;  ///< write payload (so that it remains stable for duration)
 
     aio_t(void *p, int f) : priv(p), fd(f), rval(-1000) {
       memset(&iocb, 0, sizeof(iocb));

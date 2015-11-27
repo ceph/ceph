@@ -41,7 +41,7 @@ int main(int argc, char **argv)
   vector<string> dirs;
   r = fs.readdir("", &dirs);
   assert(r == 0);
-  for (auto dir : dirs) {
+  for (auto& dir : dirs) {
     if (dir[0] == '.')
       continue;
     cout << dir << "/" << std::endl;
@@ -51,7 +51,7 @@ int main(int argc, char **argv)
     string cmd = "mkdir -p " + outdir + "/" + dir;
     r = system(cmd.c_str());
     assert(r == 0);
-    for (auto file : ls) {
+    for (auto& file : ls) {
       if (file[0] == '.')
 	continue;
       cout << dir << "/" << file << std::endl;

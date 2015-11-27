@@ -39,7 +39,7 @@ struct bluefs_fnode_t {
 
   uint64_t get_allocated() const {
     uint64_t r = 0;
-    for (auto p : extents)
+    for (auto& p : extents)
       r += p.length;
     return r;
   }
