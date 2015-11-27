@@ -275,6 +275,15 @@ function setup_bootscript() {
     echo "CREATED init script /etc/init.d/teuthology"
 }
 
+function setup_crontab() {
+    local where=$(dirname $0)
+    crontab $where/openstack-teuthology.cron
+}
+
+function remove_crontab() {
+    crontab -r
+}
+
 function get_or_create_keypair() {
     local keypair=$1
     local key_file=$HOME/.ssh/id_rsa
@@ -556,6 +565,7 @@ function main() {
         setup_authorized_keys || return 1
         setup_bashrc || return 1
         setup_bootscript $nworkers || return 1
+        setup_crontab || return 1
     fi
 
     if $do_setup_keypair ; then
@@ -586,6 +596,7 @@ function main() {
         teardown_pulpito || return 1
         teardown_ansible || return 1
         remove_images || return 1
+        remove_crontab || return 1
     fi
 }
 

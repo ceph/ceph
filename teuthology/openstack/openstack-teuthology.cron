@@ -1,0 +1,2 @@
+SHELL=/bin/bash
+*/30 * * * * ( date ; source $HOME/openrc.sh ; time timeout 900 $HOME/teuthology/virtualenv/bin/teuthology-nuke --stale-openstack ) >> $HOME/cron.log 2>&1
