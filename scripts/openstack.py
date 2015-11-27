@@ -51,7 +51,7 @@ and analyze results.
         '--simultaneous-jobs',
         help='maximum number of jobs running in parallel',
         type=int,
-        default=2,
+        default=1,
     )
     parser.add_argument(
         '--teardown',
