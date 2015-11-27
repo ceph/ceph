@@ -33,11 +33,18 @@ BlueFS::~BlueFS()
   }
 }
 
+/*static void aio_cb(void *priv, void *priv2)
+{
+  BlueFS *fs = static_cast<BlueFS*>(priv);
+  if (priv2)
+    fs->_aio_finish(priv2);
+    }*/
+
 int BlueFS::add_block_device(unsigned id, string path)
 {
   dout(10) << __func__ << " bdev " << id << " path " << path << dendl;
   assert(id == bdev.size());
-  BlockDevice *b = new BlockDevice(NULL, NULL);  // no aio callback; use ioc
+  BlockDevice *b = new BlockDevice(NULL, NULL); //aio_cb, this);
   int r = b->open(path);
   if (r < 0) {
     delete b;
@@ -114,7 +121,7 @@ int BlueFS::mkfs(uint64_t super_offset_a, uint64_t super_offset_b)
   FileRef log_file = new File;
   log_file->fnode.ino = 1;
   _allocate(0, g_conf->bluefs_max_log_runway, &log_file->fnode.extents);
-  log_writer = new FileWriter(log_file);
+  log_writer = new FileWriter(log_file, bdev.size());
 
   // initial txn
   log_t.op_init();
@@ -135,6 +142,7 @@ int BlueFS::mkfs(uint64_t super_offset_a, uint64_t super_offset_b)
   super.block_size = bdev[0]->get_block_size();
   super.log_fnode = log_file->fnode;
   _write_super();
+  _flush_bdev();
   super.version = 1;
   _write_super();
   _flush_bdev();
@@ -186,15 +194,15 @@ int BlueFS::mount(uint64_t super_offset_a, uint64_t super_offset_b)
   }
 
   // init freelist
-  for (auto p : file_map) {
+  for (auto& p : file_map) {
     dout(30) << __func__ << " noting alloc for " << p.second->fnode << dendl;
-    for (auto q : p.second->fnode.extents) {
+    for (auto& q : p.second->fnode.extents) {
       alloc[q.bdev]->init_rm_free(q.offset, q.length);
     }
   }
 
   // set up the log for future writes
-  log_writer = new FileWriter(_get_file(1));
+  log_writer = new FileWriter(_get_file(1), bdev.size());
   assert(log_writer->file->fnode.ino == 1);
   log_writer->pos = log_writer->file->fnode.size;
   dout(10) << __func__ << " log write pos set to " << log_writer->pos << dendl;
@@ -218,7 +226,7 @@ void BlueFS::umount()
   alloc.clear();
   block_all.clear();
   file_map.clear();
-  for (auto p : dir_map) {
+  for (auto& p : dir_map) {
     delete p.second;
   }
   super = bluefs_super_t();
@@ -248,8 +256,10 @@ int BlueFS::_write_super()
 
   uint64_t off = (super.version & 1) ?
     super.super_b_offset : super.super_a_offset;
-  bdev[0]->aio_write(off, bl, ioc[0]);
-  _submit_bdev();
+  IOContext ioc(NULL);
+  bdev[0]->aio_write(off, bl, &ioc);
+  bdev[0]->aio_submit(&ioc);
+  ioc.aio_wait();
   dout(20) << __func__ << " v " << super.version << " crc " << crc
 	   << " offset " << off << dendl;
   return 0;
@@ -573,7 +583,7 @@ void BlueFS::_drop_link(FileRef file)
     dout(20) << __func__ << " destroying " << file->fnode << dendl;
     assert(file->num_reading.read() == 0);
     log_t.op_file_remove(file->fnode.ino);
-    for (auto r : file->fnode.extents) {
+    for (auto& r : file->fnode.extents) {
       alloc[r.bdev]->release(r.offset, r.length);
     }
     file_map.erase(file->fnode.ino);
@@ -675,7 +685,7 @@ uint64_t BlueFS::_estimate_log_size()
   int avg_file_size = 12;
   uint64_t size = 4096 * 2;
   size += file_map.size() * (1 + sizeof(bluefs_fnode_t));
-  for (auto p : block_all)
+  for (auto& p : block_all)
     size += p.num_intervals() * (1 + 1 + sizeof(uint64_t) * 2);
   size += dir_map.size() + (1 + avg_dir_size);
   size += file_map.size() * (1 + avg_dir_size + avg_file_size);
@@ -724,16 +734,16 @@ void BlueFS::_compact_log()
       t.op_alloc_add(bdev, q.get_start(), q.get_len());
     }
   }
-  for (auto p : file_map) {
+  for (auto& p : file_map) {
     if (p.first == 1)
       continue;
     dout(20) << __func__ << " op_file_update " << p.second->fnode << dendl;
     t.op_file_update(p.second->fnode);
   }
-  for (auto p : dir_map) {
+  for (auto& p : dir_map) {
     dout(20) << __func__ << " op_dir_create " << p.first << dendl;
     t.op_dir_create(p.first);
-    for (auto q : p.second->file_map) {
+    for (auto& q : p.second->file_map) {
       dout(20) << __func__ << " op_dir_link " << p.first << "/" << q.first
 	       << " to " << q.second->fnode.ino << dendl;
       t.op_dir_link(p.first, q.first, q.second->fnode.ino);
@@ -760,7 +770,7 @@ void BlueFS::_compact_log()
   delete log_writer;
 
   log_file->fnode.size = bl.length();
-  log_writer = new FileWriter(log_file);
+  log_writer = new FileWriter(log_file, bdev.size());
   log_writer->append(bl);
   _flush(log_writer);
 
@@ -771,7 +781,7 @@ void BlueFS::_compact_log()
   _flush_bdev();
 
   dout(10) << __func__ << " release old log extents " << old_extents << dendl;
-  for (auto r : old_extents) {
+  for (auto& r : old_extents) {
     alloc[r.bdev]->release(r.offset, r.length);
   }
 }
@@ -882,6 +892,10 @@ int BlueFS::_flush_range(FileWriter *h, uint64_t offset, uint64_t length)
     x_off -= partial;
     offset -= partial;
     length += partial;
+    dout(20) << __func__ << " waiting for previous aio to complete" << dendl;
+    for (auto p : h->iocv) {
+      p->aio_wait();
+    }
   }
   if (length == partial + h->buffer.length()) {
     bl.claim_append(h->buffer);
@@ -916,17 +930,32 @@ int BlueFS::_flush_range(FileWriter *h, uint64_t offset, uint64_t length)
       z.zero();
       t.append(z);
     }
-    bdev[0]->aio_write(p->offset + x_off, t, ioc[0]);
+    bdev[0]->aio_write(p->offset + x_off, t, h->iocv[0]);
     bloff += x_len;
     length -= x_len;
     ++p;
     x_off = 0;
   }
-  _submit_bdev();
+  for (unsigned i = 0; i < bdev.size(); ++i) {
+    if (!h->iocv[i]->pending_aios.empty()) {
+      bdev[i]->aio_submit(h->iocv[i]);
+    }
+  }
   dout(20) << __func__ << " h " << h << " pos now " << h->pos << dendl;
-
   return 0;
 }
+
+/*
+void BlueFS::_aio_finish(void *priv)
+{
+  FileWriter *h = static_cast<FileWriter*>(priv);
+  Mutex::Locker l(h->lock);
+  dout(10) << __func__ << " h " << h << " on " << h->file->fnode << dendl;
+  if (--h->num_aio_in_flight == 0) {
+    h->cond.Signal();
+  }
+}
+*/
 
 int BlueFS::_flush(FileWriter *h)
 {
@@ -984,20 +1013,9 @@ void BlueFS::_fsync(FileWriter *h)
   }
 }
 
-void BlueFS::_submit_bdev()
-{
-  dout(20) << __func__ << dendl;
-  for (unsigned i = 0; i < bdev.size(); ++i) {
-    bdev[i]->aio_submit(ioc[i]);
-  }
-}
-
 void BlueFS::_flush_bdev()
 {
   dout(20) << __func__ << dendl;
-  for (auto p : ioc) {
-    p->aio_wait();
-  }
   for (auto p : bdev) {
     p->flush();
   }
@@ -1124,7 +1142,7 @@ int BlueFS::open_for_write(
     log_t.op_file_update(file->fnode);
   }
 
-  *h = new FileWriter(file);
+  *h = new FileWriter(file, bdev.size());
   dout(10) << __func__ << " h " << *h << " on " << file->fnode << dendl;
   return 0;
 }
@@ -1332,7 +1350,7 @@ int BlueFS::readdir(const string& dirname, vector<string> *ls)
   if (dirname.size() == 0) {
     // list dirs
     ls->reserve(dir_map.size() + 2);
-    for (auto q : dir_map) {
+    for (auto& q : dir_map) {
       ls->push_back(q.first);
     }
   } else {
@@ -1344,7 +1362,7 @@ int BlueFS::readdir(const string& dirname, vector<string> *ls)
     }
     Dir *dir = p->second;
     ls->reserve(dir->file_map.size() + 2);
-    for (auto q : dir->file_map) {
+    for (auto& q : dir->file_map) {
       ls->push_back(q.first);
     }
   }
