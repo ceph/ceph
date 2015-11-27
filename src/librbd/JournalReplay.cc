@@ -158,7 +158,8 @@ void JournalReplay::handle_aio_completion(AioCompletion *aio_comp) {
   }
 
   m_aio_completions.erase(it);
-  m_cond.Signal();
+  if (m_aio_completions.empty())
+    m_cond.Signal();
 }
 
 void JournalReplay::aio_completion_callback(completion_t cb, void *arg) {
