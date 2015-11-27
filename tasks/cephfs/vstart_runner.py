@@ -502,6 +502,10 @@ class LocalCephManager(CephManager):
         """
         return LocalRemote()
 
+    def run_ceph_w(self):
+        proc = self.controller.run(["./ceph", "-w"], wait=False, stdout=StringIO())
+        return proc
+
     def raw_cluster_cmd(self, *args):
         """
         args like ["osd", "dump"}
