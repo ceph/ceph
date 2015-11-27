@@ -2083,6 +2083,24 @@ TEST(BufferList, write_fd) {
   ::unlink(FILENAME);
 }
 
+TEST(BufferList, write_fd_offset) {
+  ::unlink(FILENAME);
+  int fd = ::open(FILENAME, O_WRONLY|O_CREAT|O_TRUNC, 0600);
+  bufferlist bl;
+  for (unsigned i = 0; i < IOV_MAX * 2; i++) {
+    bufferptr ptr("A", 1);
+    bl.push_back(ptr);
+  }
+  uint64_t offset = 200;
+  EXPECT_EQ(0, bl.write_fd(fd, offset));
+  ::close(fd);
+  struct stat st;
+  memset(&st, 0, sizeof(st));
+  ::stat(FILENAME, &st);
+  EXPECT_EQ(IOV_MAX * 2 + offset, st.st_size);
+  ::unlink(FILENAME);
+}
+
 TEST(BufferList, crc32c) {
   bufferlist bl;
   __u32 crc = 0;

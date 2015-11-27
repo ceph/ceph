@@ -1968,6 +1968,59 @@ int buffer::list::write_fd(int fd) const
   return 0;
 }
 
+int buffer::list::write_fd(int fd, uint64_t offset) const
+{
+  // use writev!
+  iovec iov[IOV_MAX];
+  int iovlen = 0;
+  ssize_t bytes = 0;
+
+  std::list<ptr>::const_iterator p = _buffers.begin();
+  while (p != _buffers.end()) {
+    if (p->length() > 0) {
+      iov[iovlen].iov_base = (void *)p->c_str();
+      iov[iovlen].iov_len = p->length();
+      bytes += p->length();
+      iovlen++;
+    }
+    ++p;
+
+    if (iovlen == IOV_MAX-1 ||
+	p == _buffers.end()) {
+      iovec *start = iov;
+      int num = iovlen;
+      ssize_t wrote;
+    retry:
+      wrote = ::pwritev(fd, start, num, offset);
+      if (wrote < 0) {
+	int err = errno;
+	if (err == EINTR)
+	  goto retry;
+	return -err;
+      }
+      offset += wrote;
+      if (wrote < bytes) {
+	// partial write, recover!
+	while ((size_t)wrote >= start[0].iov_len) {
+	  wrote -= start[0].iov_len;
+	  bytes -= start[0].iov_len;
+	  start++;
+	  num--;
+	}
+	if (wrote > 0) {
+	  start[0].iov_len -= wrote;
+	  start[0].iov_base = (char *)start[0].iov_base + wrote;
+	  bytes -= wrote;
+	}
+	goto retry;
+      }
+      iovlen = 0;
+      bytes = 0;
+    }
+  }
+  return 0;
+}
+
 void buffer::list::prepare_iov(std::vector<iovec> *piov) const
 {
   piov->resize(_buffers.size());

@@ -3207,8 +3207,6 @@ int FileStore::_write(coll_t cid, const ghobject_t& oid,
   dout(15) << "write " << cid << "/" << oid << " " << offset << "~" << len << dendl;
   int r;
 
-  int64_t actual;
-
   FDRef fd;
   r = lfn_open(cid, oid, true, &fd);
   if (r < 0) {
@@ -3218,23 +3216,8 @@ int FileStore::_write(coll_t cid, const ghobject_t& oid,
     goto out;
   }
     
-  // seek
-  actual = ::lseek64(**fd, offset, SEEK_SET);
-  if (actual < 0) {
-    r = -errno;
-    dout(0) << "write lseek64 to " << offset << " failed: " << cpp_strerror(r) << dendl;
-    lfn_close(fd);
-    goto out;
-  }
-  if (actual != (int64_t)offset) {
-    dout(0) << "write lseek64 to " << offset << " gave bad offset " << actual << dendl;
-    r = -EIO;
-    lfn_close(fd);
-    goto out;
-  }
-
   // write
-  r = bl.write_fd(**fd);
+  r = bl.write_fd(**fd,offset);
   if (r == 0)
     r = bl.length();
 
