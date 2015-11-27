@@ -1636,7 +1636,7 @@ public:
     set<ghobject_t, ghobject_t::BitwiseComparator> objects_set, objects_set2;
     ghobject_t next, current;
     while (1) {
-      cerr << "scanning..." << std::endl;
+      //cerr << "scanning..." << std::endl;
       int r = store->collection_list(cid, current, ghobject_t::get_max(),
 				     true, 100,
 				     &objects, &next);
@@ -1771,11 +1771,11 @@ TEST_P(StoreTest, Synthetic) {
   SyntheticWorkloadState test_obj(store.get(), &gen, &rng, &osr, cid);
   test_obj.init();
   for (int i = 0; i < 1000; ++i) {
-    if (!(i % 10)) cerr << "seeding object " << i << std::endl;
+    if (!(i % 500)) cerr << "seeding object " << i << std::endl;
     test_obj.touch();
   }
-  for (int i = 0; i < 10000; ++i) {
-    if (!(i % 10)) {
+  for (int i = 0; i < 100000; ++i) {
+    if (!(i % 1000)) {
       cerr << "Op " << i << std::endl;
       test_obj.print_internal_state();
     }
@@ -1815,7 +1815,7 @@ TEST_P(StoreTest, AttrSynthetic) {
     test_obj.touch();
   }
   for (int i = 0; i < 10000; ++i) {
-    if (!(i % 10)) {
+    if (!(i % 100)) {
       cerr << "Op " << i << std::endl;
       test_obj.print_internal_state();
     }
