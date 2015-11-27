@@ -1,4 +1,5 @@
 import argparse
+import datetime
 import json
 import logging
 import subprocess
@@ -535,6 +536,11 @@ def unlock_one(ctx, name, user, description=None):
             node=name, reason=reason))
     return success
 
+def locked_since_seconds(node):
+    now = datetime.datetime.now()
+    since = datetime.datetime.strptime(
+        node['locked_since'], '%Y-%m-%d %H:%M:%S.%f')
+    return (now - since).total_seconds()
 
 def list_locks(keyed_by_name=False, **kwargs):
     uri = os.path.join(config.lock_server, 'nodes', '')
