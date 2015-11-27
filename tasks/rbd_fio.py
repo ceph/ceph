@@ -120,7 +120,9 @@ def run_fio(remote, config, rbd_test_dir):
         remote.run(args=['sudo', 'yum' , 'install', 'librbd1-devel', '-y'])
     elif ioengine == 'rbd':
         log.info("Installing librbd devel package on {sn}".format(sn=sn))
-        remote.run(args=['sudo', 'apt-get', '-y', 'install', 'librbd-dev'])
+        remote.run(args=['sudo', 'apt-get', '-y',
+                         '--force-yes',
+                         'install', 'librbd-dev'])
     if ioengine == 'rbd':
         fio_config.write('clientname=admin\n')
         fio_config.write('pool=rbd\n')
