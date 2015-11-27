@@ -3760,7 +3760,6 @@ void PG::replica_scrub(
   if (last_update_applied < msg->scrub_to) {
     dout(10) << "waiting for last_update_applied to catch up" << dendl;
     scrubber.active_rep_scrub = op;
-    msg->get();
     return;
   }
 
