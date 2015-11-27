@@ -1,4 +1,6 @@
 import argparse
+import datetime
+import json
 import logging
 import os
 import subprocess
@@ -9,23 +11,27 @@ from StringIO import StringIO
 import teuthology
 from . import orchestra
 import orchestra.remote
+from .openstack import OpenStack, OpenStackInstance
 from .orchestra import run
 from .config import FakeNamespace
 from .lock import list_locks
+from .lock import locked_since_seconds
 from .lock import unlock_one
 from .lock import find_stale_locks
 from .lockstatus import get_status
+from .misc import canonicalize_hostname
 from .misc import config_file
+from .misc import decanonicalize_hostname
 from .misc import merge_configs
 from .misc import get_testdir
 from .misc import get_user
 from .misc import reconnect
+from .misc import sh
 from .parallel import parallel
 from .task import install as install_task
 from .task.internal import check_lock, add_remotes, connect
 
 log = logging.getLogger(__name__)
-
 
 def clear_firewall(ctx):
     """
@@ -361,6 +367,115 @@ def synch_clocks(remotes):
         log.info('Waiting for clock to synchronize on %s...', name)
         proc.wait()
 
+def stale_openstack(ctx):
+    targets = dict(map(lambda i: (i['Name'], i),
+                       OpenStack.list_instances()))
+    nodes = list_locks(keyed_by_name=True, locked=True)
+    stale_openstack_instances(ctx, targets, nodes)
+    stale_openstack_nodes(ctx, targets, nodes)
+    stale_openstack_volumes(ctx, OpenStack.list_volumes())
+    if not ctx.dry_run:
+        openstack_remove_again()
+
+#
+# A delay, in seconds, that is significantly longer than
+# any kind of OpenStack server creation / deletion / etc.
+#
+OPENSTACK_DELAY = 30 * 60
+
+def stale_openstack_instances(ctx, instances, locked_nodes):
+    for (name, instance) in instances.iteritems():
+        i = OpenStackInstance(name)
+        if (i.get_created() >
+            ctx.teuthology_config['max_job_time'] + OPENSTACK_DELAY):
+            log.info(
+                "stale-openstack: destroying instance {instance}" 
+                " because it was created {created} seconds ago"
+                " which is older than"
+                " max_job_time {max_job_time} + {delay}"
+                .format(instance=i['name'],
+                        created=i.get_created(),
+                        max_job_time=ctx.teuthology_config['max_job_time'],
+                        delay=OPENSTACK_DELAY))
+            if not ctx.dry_run:
+                i.destroy()
+            continue
+        name = canonicalize_hostname(i['name'], user=None)
+        if i.get_created() > OPENSTACK_DELAY and name not in locked_nodes:
+            log.info("stale-openstack: destroying instance {instance}" 
+                     " because it was created {created} seconds ago"
+                     " is older than {delay}s and it is not locked"
+                     .format(instance=i['name'],
+                             created=i.get_created(),
+                             delay=OPENSTACK_DELAY))
+            if not ctx.dry_run:
+                i.destroy()
+            continue
+        log.debug("stale-openstack: instance " + i['name'] + " OK")
+
+def openstack_delete_volume(id):
+    sh("openstack volume delete " + id + " || true")
+
+def stale_openstack_volumes(ctx, volumes):
+    now = datetime.datetime.now()
+    for volume in volumes:
+        volume = json.loads(sh("openstack volume show -f json " +
+                               volume['ID']))
+        volume = dict(map(lambda v: (v['Field'], v['Value']), volume))
+        created_at = datetime.datetime.strptime(
+            volume['created_at'], '%Y-%m-%dT%H:%M:%S.%f')
+        created = (now - created_at).total_seconds()
+        if created > ctx.teuthology_config['max_job_time'] + OPENSTACK_DELAY:
+            log.info(
+                "stale-openstack: destroying volume {volume}({id})"
+                " because it was created {created} seconds ago"
+                " which is older than"
+                " max_job_time {max_job_time} + {delay}"
+                .format(volume=volume['display_name'],
+                        id=volume['id'],
+                        created=created,
+                        max_job_time=ctx.teuthology_config['max_job_time'],
+                        delay=OPENSTACK_DELAY))
+            if not ctx.dry_run:
+                openstack_delete_volume(volume['id'])
+            continue
+        log.debug("stale-openstack: volume " + volume['id'] + " OK")
+
+def stale_openstack_nodes(ctx, instances, locked_nodes):
+    for (name, node) in locked_nodes.iteritems():
+        name = decanonicalize_hostname(name)
+        if node['machine_type'] != 'openstack':
+            continue
+        if (name not in instances and
+            locked_since_seconds(node) > OPENSTACK_DELAY):
+            log.info("stale-openstack: unlocking node {name} unlocked" 
+                     " because it was created {created}"
+                     " seconds ago which is older than {delay}"
+                     " and it has no instance"
+                     .format(name=name,
+                             created=locked_since_seconds(node),
+                             delay=OPENSTACK_DELAY))
+            if not ctx.dry_run:
+                unlock_one(ctx, name, node['locked_by'])
+            continue
+        log.debug("stale-openstack: node " + name + " OK")
+
+def openstack_remove_again():
+    """
+    Volumes and servers with REMOVE-ME in the name are leftover
+    that failed to be removed. It is not uncommon for a failed removal
+    to succeed later on.
+    """
+    sh("""
+    openstack server list --name REMOVE-ME --column ID --format value |
+    xargs --no-run-if-empty --max-args 1 -P20 openstack server delete --wait
+    true
+    """)
+    sh("""
+    openstack volume list --name REMOVE-ME --column ID --format value |
+    xargs --no-run-if-empty --max-args 1 -P20 openstack volume delete
+    true
+    """)
 
 def main(args):
     ctx = FakeNamespace(args)
@@ -392,6 +507,10 @@ def main(args):
         for node in stale_nodes:
             targets[node['name']] = node['ssh_pub_key']
         ctx.config = dict(targets=targets)
+
+    if ctx.stale_openstack:
+        stale_openstack(ctx)
+        return
 
     log.info(
         '\n  '.join(
