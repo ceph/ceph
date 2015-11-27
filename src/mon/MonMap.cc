@@ -17,6 +17,28 @@
 
 using ceph::Formatter;
 
+void mon_info_t::encode(bufferlist& bl) const
+{
+  ENCODE_START(1, 1, bl);
+  ::encode(name, bl);
+  ::encode(public_addr, bl);
+  ENCODE_FINISH(bl);
+}
+
+void mon_info_t::decode(bufferlist::iterator& p)
+{
+  DECODE_START(1, p);
+  ::decode(name, p);
+  ::decode(public_addr, p);
+  DECODE_FINISH(p);
+}
+
+void mon_info_t::print(ostream& out) const
+{
+  out << "mon." << name
+      << " public " << public_addr;
+}
+
 void MonMap::encode(bufferlist& blist, uint64_t features) const
 {
   if ((features & CEPH_FEATURE_MONNAMES) == 0) {
@@ -43,12 +65,14 @@ void MonMap::encode(bufferlist& blist, uint64_t features) const
     ::encode(created, blist);
   }
 
-  ENCODE_START(3, 3, blist);
+  ENCODE_START(4, 3, blist);
   ::encode_raw(fsid, blist);
   ::encode(epoch, blist);
   ::encode(mon_addr, blist);
   ::encode(last_changed, blist);
   ::encode(created, blist);
+  // this superseeds 'mon_addr'
+  ::encode(mons, blist);
   ENCODE_FINISH(blist);
 }
 
@@ -72,7 +96,12 @@ void MonMap::decode(bufferlist::iterator &p)
   }
   ::decode(last_changed, p);
   ::decode(created, p);
+
+  if (struct_v >= 4) {
+    ::decode(mons, p);
+  }
   DECODE_FINISH(p);
+  normalize_mon_addr(false);
   calc_ranks();
 }
 
@@ -111,8 +140,21 @@ int MonMap::read(const char *fn)
 void MonMap::print_summary(ostream& out) const
 {
   out << "e" << epoch << ": "
-      << mon_addr.size() << " mons at "
-      << mon_addr;
+      << mons.size() << " mons at {";
+  // the map that we used to print, as it was, no longer
+  // maps strings to the monitor's public address, but to
+  // mon_info_t instead. As such, print the map in a way
+  // that keeps the expected format.
+  bool has_printed = false;
+  for (map<string,mon_info_t>::const_iterator p = mons.begin();
+       p != mons.end();
+       ++p) {
+    if (has_printed)
+      out << ",";
+    out << p->first << "=" << p->second.public_addr;
+    has_printed = true;
+  }
+  out << "}";
 }
  
 void MonMap::print(ostream& out) const
@@ -122,10 +164,11 @@ void MonMap::print(ostream& out) const
   out << "last_changed " << last_changed << "\n";
   out << "created " << created << "\n";
   unsigned i = 0;
-  for (map<entity_addr_t,string>::const_iterator p = addr_name.begin();
-       p != addr_name.end();
-       ++p)
-    out << i++ << ": " << p->first << " mon." << p->second << "\n";
+  for (vector<mon_info_t>::const_iterator p = ranks.begin();
+       p != ranks.end();
+       ++p) {
+    out << i++ << ": " << p->public_addr << " mon." << p->name << "\n";
+  }
 }
 
 void MonMap::dump(Formatter *f) const
@@ -136,13 +179,14 @@ void MonMap::dump(Formatter *f) const
   f->dump_stream("created") << created;
   f->open_array_section("mons");
   int i = 0;
-  for (map<entity_addr_t,string>::const_iterator p = addr_name.begin();
-       p != addr_name.end();
+  for (vector<mon_info_t>::const_iterator p = ranks.begin();
+       p != ranks.end();
        ++p, ++i) {
     f->open_object_section("mon");
     f->dump_int("rank", i);
-    f->dump_string("name", p->second);
-    f->dump_stream("addr") << p->first;
+    f->dump_string("name", p->name);
+    f->dump_stream("addr") << p->public_addr;
+    f->dump_stream("public_addr") << p->public_addr;
     f->close_section();
   }
   f->close_section();
