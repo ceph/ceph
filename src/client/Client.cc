@@ -1605,6 +1605,11 @@ int Client::make_request(MetaRequest *request,
       if (session->state == MetaSession::STATE_OPENING) {
 	ldout(cct, 10) << "waiting for session to mds." << mds << " to open" << dendl;
 	wait_on_context_list(session->waiting_for_open);
+        // Abort requests on REJECT from MDS
+        if (rejected_by_mds.count(mds)) {
+          request->aborted = true;
+          break;
+        }
 	continue;
       }
 
