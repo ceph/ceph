@@ -82,6 +82,7 @@ using namespace std;
 #include "common/perf_counters.h"
 #include "common/admin_socket.h"
 #include "common/errno.h"
+#include "include/str_list.h"
 
 #define dout_subsys ceph_subsys_client
 
@@ -1862,6 +1863,19 @@ void Client::populate_metadata()
   // Ceph version
   metadata["ceph_version"] = pretty_version_to_str();
   metadata["ceph_sha1"] = git_version_to_str();
+
+  // Apply any metadata from the user's configured overrides
+  std::vector<std::string> tokens;
+  get_str_vec(cct->_conf->client_metadata, ",", tokens);
+  for (const auto &i : tokens) {
+    auto eqpos = i.find("=");
+    // Throw out anything that isn't of the form "<str>=<str>"
+    if (eqpos == 0 || eqpos == std::string::npos || eqpos == i.size()) {
+      lderr(cct) << "Invalid metadata keyval pair: '" << i << "'" << dendl;
+      continue;
+    }
+    metadata[i.substr(0, eqpos)] = i.substr(eqpos + 1);
+  }
 }
 
 /**
