@@ -95,6 +95,12 @@ struct MDSCapMatch {
 	     const int caller_uid,
 	     const int caller_gid) const;
 
+  /**
+   * Check whether this path *might* be accessible (actual permission
+   * depends on the stronger check in match()).
+   *
+   * @param target_path filesystem path without leading '/'
+   */
   bool match_path(const std::string &target_path) const;
 };
 
