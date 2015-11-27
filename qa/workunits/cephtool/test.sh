@@ -286,6 +286,8 @@ function test_tiering()
   # test with dirty objects in the tier pool
   # tier pool currently set to 'writeback'
   rados -p cache put /etc/passwd /etc/passwd
+  rados -p cache put /etc/passwd /etc/passwd
+  rados -p cache put /etc/passwd /etc/passwd
   ceph tell osd.\* flush_pg_stats || true
   # 1 dirty object in pool 'cache'
   ceph osd tier cache-mode cache forward
