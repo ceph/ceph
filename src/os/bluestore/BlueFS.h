@@ -66,8 +66,22 @@ public:
     bufferlist buffer;      ///< new data to write (at end of file)
     bufferlist tail_block;  ///< existing partial block at end of file, if any
 
-    FileWriter(FileRef f) : file(f), pos(0) {
+    Mutex lock;
+    /*Cond cond;
+    bool num_aio_in_flight;
+    */
+    vector<IOContext*> iocv;  ///< one for each bdev
+
+    FileWriter(FileRef f, unsigned num_bdev)
+      : file(f),
+	pos(0),
+	lock("BlueFS::FileWriter::lock") { //,
+	//num_aio_in_flight(0) {
       file->num_writers.inc();
+      iocv.resize(num_bdev);
+      for (unsigned i = 0; i < num_bdev; ++i) {
+	iocv[i] = new IOContext(NULL);
+      }
     }
     ~FileWriter() {
       file->num_writers.dec();
@@ -170,7 +184,8 @@ private:
   void _maybe_compact_log();
   void _compact_log();
 
-  void _submit_bdev();
+  //void _aio_finish(void *priv);
+
   void _flush_bdev();
 
   int _preallocate(FileRef f, uint64_t off, uint64_t len);
@@ -265,6 +280,7 @@ public:
     // no need to hold the global lock here; we only touch h and
     // h->file, and read vs write or delete is already protected (via
     // atomics and asserts).
+    Mutex::Locker l(lock);
     return _read(h, buf, offset, len, outbl, out);
   }
   void invalidate_cache(FileRef f, uint64_t offset, uint64_t len) {

@@ -147,7 +147,7 @@ void bluefs_fnode_t::dump(Formatter *f) const
   f->dump_unsigned("size", size);
   f->dump_stream("mtime") << mtime;
   f->open_array_section("extents");
-  for (auto p : extents)
+  for (auto& p : extents)
     f->dump_object("extent", p);
   f->close_section();
 }
