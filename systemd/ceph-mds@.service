@@ -2,7 +2,7 @@
 Description=Ceph metadata server daemon
 After=network-online.target local-fs.target
 Wants=network-online.target local-fs.target
-PartOf=ceph.target
+PartOf=ceph-mds.target
 
 [Service]
 LimitNOFILE=1048576
@@ -13,4 +13,4 @@ ExecStart=/usr/bin/ceph-mds -f --cluster ${CLUSTER} --id %i --setuser ceph --set
 ExecReload=/bin/kill -HUP $MAINPID
 
 [Install]
-WantedBy=ceph.target
+WantedBy=ceph-mds.target

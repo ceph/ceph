@@ -8,7 +8,7 @@ Description=Ceph cluster monitor daemon
 After=network-online.target local-fs.target ceph-create-keys@%i.service
 Wants=network-online.target local-fs.target ceph-create-keys@%i.service
 
-PartOf=ceph.target
+PartOf=ceph-mon.target
 
 [Service]
 LimitNOFILE=1048576
@@ -19,4 +19,4 @@ ExecStart=/usr/bin/ceph-mon -f --cluster ${CLUSTER} --id %i --setuser ceph --set
 ExecReload=/bin/kill -HUP $MAINPID
 
 [Install]
-WantedBy=ceph.target
+WantedBy=ceph-mon.target
