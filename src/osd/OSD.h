@@ -1627,9 +1627,9 @@ private:
       PrioritizedQueue< pair<PGRef, PGQueueable>, entity_inst_t> pqueue;
       ShardData(
 	string lock_name, string ordering_lock,
-	uint64_t max_tok_per_prio, uint64_t min_cost)
-	: sdata_lock(lock_name.c_str()),
-	  sdata_op_ordering_lock(ordering_lock.c_str()),
+	uint64_t max_tok_per_prio, uint64_t min_cost, CephContext *cct)
+	: sdata_lock(lock_name.c_str(), false, true, false, cct),
+	  sdata_op_ordering_lock(ordering_lock.c_str(), false, true, false, cct),
 	  pqueue(max_tok_per_prio, min_cost) {}
     };
     
@@ -1651,7 +1651,7 @@ private:
 	ShardData* one_shard = new ShardData(
 	  lock_name, order_lock,
 	  osd->cct->_conf->osd_op_pq_max_tokens_per_priority, 
-	  osd->cct->_conf->osd_op_pq_min_cost);
+	  osd->cct->_conf->osd_op_pq_min_cost, osd->cct);
 	shard_list.push_back(one_shard);
       }
     }
