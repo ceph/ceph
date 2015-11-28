@@ -175,8 +175,21 @@ function TEST_auto_repair_erasure_coded() {
     # Remove the object from one shard physically
     objectstore_tool $dir $(get_not_primary $poolname SOMETHING) SOMETHING remove || return 1
 
-    # Give some time for auto repair
-    sleep 20
+    
+    local pgid=$(get_pg $poolname SOMETHING)
+    local last_scrub=$(get_last_scrub_stamp $pgid)
+    
+    # Give some time for scheduling the scrub
+    for ((i=0; i < $TIMEOUT; i++)); do
+        if test "$last_scrub" != "$(get_last_scrub_stamp $pgid)" ; then
+            echo "It take $i seconds to schdule the scrub"
+            break
+        fi
+        sleep 1
+    done
+
+    # Give some time for repair the object after the scrub finish
+    sleep 10
 
     # Verify - the file should be back
     objectstore_tool $dir $(get_not_primary $poolname SOMETHING) SOMETHING list-attrs || return 1
