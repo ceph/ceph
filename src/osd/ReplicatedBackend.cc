@@ -674,6 +674,7 @@ template<typename T, int MSGTYPE>
 void ReplicatedBackend::sub_op_modify_reply(OpRequestRef op)
 {
   T *r = static_cast<T *>(op->get_req());
+  r->finish_decode();
   assert(r->get_header().type == MSGTYPE);
   assert(MSGTYPE == MSG_OSD_SUBOPREPLY || MSGTYPE == MSG_OSD_REPOPREPLY);
 
@@ -1127,6 +1128,7 @@ template<typename T, int MSGTYPE>
 void ReplicatedBackend::sub_op_modify_impl(OpRequestRef op)
 {
   T *m = static_cast<T *>(op->get_req());
+  m->finish_decode();
   int msg_type = m->get_type();
   assert(MSGTYPE == msg_type);
   assert(msg_type == MSG_OSD_SUBOP || msg_type == MSG_OSD_REPOP);
