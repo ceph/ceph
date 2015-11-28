@@ -623,6 +623,10 @@ install -m 0644 -D etc/sysconfig/ceph $RPM_BUILD_ROOT%{_localstatedir}/adm/fillu
   install -m 0644 -D systemd/ceph-mds@.service $RPM_BUILD_ROOT%{_unitdir}/ceph-mds@.service
   install -m 0644 -D systemd/ceph-radosgw@.service $RPM_BUILD_ROOT%{_unitdir}/ceph-radosgw@.service
   install -m 0644 -D systemd/ceph.target $RPM_BUILD_ROOT%{_unitdir}/ceph.target
+  install -m 0644 -D systemd/ceph-osd.target $RPM_BUILD_ROOT%{_unitdir}/ceph-osd.target
+  install -m 0644 -D systemd/ceph-mon.target $RPM_BUILD_ROOT%{_unitdir}/ceph-mon.target
+  install -m 0644 -D systemd/ceph-mds.target $RPM_BUILD_ROOT%{_unitdir}/ceph-mds.target
+  install -m 0644 -D systemd/ceph-radosgw.target $RPM_BUILD_ROOT%{_unitdir}/ceph-radosgw.target
   install -m 0644 -D systemd/ceph-disk@.service $RPM_BUILD_ROOT%{_unitdir}/ceph-disk@.service
   install -m 0755 -D systemd/ceph $RPM_BUILD_ROOT%{_sbindir}/rcceph
 %else
@@ -781,6 +785,10 @@ rm -rf $RPM_BUILD_ROOT
 %{_unitdir}/ceph-radosgw@.service
 %{_unitdir}/ceph-disk@.service
 %{_unitdir}/ceph.target
+%{_unitdir}/ceph-osd.target
+%{_unitdir}/ceph-mon.target
+%{_unitdir}/ceph-mds.target
+%{_unitdir}/ceph-radosgw.target
 %else
 %{_initrddir}/ceph
 %endif
