@@ -1,0 +1,3 @@
+job1:
+  tags: [ ceph-workbench ]
+  script: "env ; pwd ; git remote -v ; git branch -v"
