@@ -101,6 +101,12 @@ public:
   /// total bytes allocated
   static int get_total_alloc();
 
+  /// history total bytes allocated
+  static uint64_t get_history_alloc_bytes();
+
+  /// total num allocated
+  static uint64_t get_history_alloc_num();
+
   /// enable/disable alloc tracking
   static void track_alloc(bool b);
 
@@ -120,6 +126,7 @@ private:
  
   /* hack for memory utilization debugging. */
   static void inc_total_alloc(unsigned len);
+  static void inc_history_alloc(uint64_t len);
   static void dec_total_alloc(unsigned len);
 
   /*
