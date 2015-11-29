@@ -94,7 +94,7 @@ class TestStrays(CephFSTestCase):
         # We will run the deletion in the background, to reduce the risk of it completing before
         # we have started monitoring the stray statistics.
         def background():
-            self.mount_a.run_shell(["sudo", "rm", "-rf", "delete_me"])
+            self.mount_a.run_shell(["rm", "-rf", "delete_me"])
             self.fs.mds_asok(["flush", "journal"])
 
         background_thread = gevent.spawn(background)

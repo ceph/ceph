@@ -133,8 +133,8 @@ class TestForwardScrub(CephFSTestCase):
         # look orphaned to backward scan if backward scan wisnae
         # respectin' tha scrub_tag xattr.
         self.mount_a.mount()
-        self.mount_a.run_shell(["sudo", "mkdir", "parent/unflushed"])
-        self.mount_a.run_shell(["sudo", "dd", "if=/dev/urandom",
+        self.mount_a.run_shell(["mkdir", "parent/unflushed"])
+        self.mount_a.run_shell(["dd", "if=/dev/urandom",
                                 "of=./parent/unflushed/jfile",
                                 "bs=1M", "count=8"])
         inos["./parent/unflushed"] = self.mount_a.path_to_ino("./parent/unflushed")

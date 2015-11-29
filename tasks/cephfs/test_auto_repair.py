@@ -24,8 +24,8 @@ class TestMDSAutoRepair(CephFSTestCase):
         MDS should verify/fix backtrace on fetch dirfrag
         """
 
-        self.mount_a.run_shell(["sudo", "mkdir", "testdir1"])
-        self.mount_a.run_shell(["sudo", "touch", "testdir1/testfile"])
+        self.mount_a.run_shell(["mkdir", "testdir1"])
+        self.mount_a.run_shell(["touch", "testdir1/testfile"])
         dir_objname = "{:x}.00000000".format(self.mount_a.path_to_ino("testdir1"))
 
         # drop inodes caps
@@ -46,7 +46,7 @@ class TestMDSAutoRepair(CephFSTestCase):
         # readdir (fetch dirfrag) should fix testdir1's backtrace
         self.mount_a.mount()
         self.mount_a.wait_until_mounted()
-        self.mount_a.run_shell(["sudo", "ls", "testdir1"])
+        self.mount_a.run_shell(["ls", "testdir1"])
 
         # flush journal entries to dirfrag objects
         self.fs.mds_asok(['flush', 'journal'])
@@ -59,7 +59,7 @@ class TestMDSAutoRepair(CephFSTestCase):
         test if MDS behave correct when it's readonly
         """
         # operation should successd when MDS is not readonly
-        self.mount_a.run_shell(["sudo", "touch", "test_file1"])
+        self.mount_a.run_shell(["touch", "test_file1"])
         writer = self.mount_a.write_background(loop=True)
 
         time.sleep(10)
@@ -71,7 +71,7 @@ class TestMDSAutoRepair(CephFSTestCase):
 
         # touching test file should fail
         try:
-            self.mount_a.run_shell(["sudo", "touch", "test_file1"])
+            self.mount_a.run_shell(["touch", "test_file1"])
         except CommandFailedError:
             pass
         else:

@@ -304,10 +304,10 @@ class TestClientRecovery(CephFSTestCase):
         count = 500
         # Create lots of files
         for i in range(count):
-            self.mount_a.run_shell(["sudo", "touch", "f{0}".format(i)])
+            self.mount_a.run_shell(["touch", "f{0}".format(i)])
 
         # Populate mount_b's cache
-        self.mount_b.run_shell(["sudo", "ls"])
+        self.mount_b.run_shell(["ls"])
 
         client_id = self.mount_b.get_global_id()
         num_caps = self._session_num_caps(client_id)
