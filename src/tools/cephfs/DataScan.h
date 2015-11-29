@@ -149,7 +149,7 @@ class MetadataTool
    * Construct a synthetic InodeStore for a directory
    */
   void build_dir_dentry(
-    inodeno_t ino, uint64_t nfiles, uint64_t nsubdirs,
+    inodeno_t ino, uint64_t nfiles,
     time_t mtime,
     const ceph_file_layout &layout,
     InodeStore *out);
