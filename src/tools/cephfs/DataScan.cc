@@ -863,7 +863,7 @@ int DataScan::scan_frags()
 
     InodeStore dentry;
     build_dir_dentry(obj_name_ino, fnode.fragstat.nfiles,
-        fnode.fragstat.nsubdirs, fnode.fragstat.mtime, loaded_layout, &dentry);
+        fnode.fragstat.mtime, loaded_layout, &dentry);
 
     // Inject inode to the metadata pool
     if (have_backtrace) {
@@ -1008,7 +1008,7 @@ int MetadataDriver::inject_lost_and_found(
     memset(&inherit_layout, 0, sizeof(inherit_layout));
 
     // Construct LF inode
-    build_dir_dentry(CEPH_INO_LOST_AND_FOUND, 1, 0, 0, inherit_layout, &lf_ino);
+    build_dir_dentry(CEPH_INO_LOST_AND_FOUND, 1, 0, inherit_layout, &lf_ino);
 
     // Inject link to LF inode in the root dir
     r = inject_linkage(CEPH_INO_ROOT, "lost+found", frag_t(), lf_ino);
@@ -1602,7 +1602,7 @@ void MetadataTool::build_file_dentry(
 }
 
 void MetadataTool::build_dir_dentry(
-    inodeno_t ino, uint64_t nfiles, uint64_t nsubdirs,
+    inodeno_t ino, uint64_t nfiles,
     time_t mtime, const ceph_file_layout &layout, InodeStore *out)
 {
   assert(out != NULL);
@@ -1622,7 +1622,7 @@ void MetadataTool::build_dir_dentry(
 
   out->inode.inline_data.version = CEPH_INLINE_NONE;
 
-  out->inode.nlink = 2 + nsubdirs;
+  out->inode.nlink = 1;
   out->inode.ino = ino;
   out->inode.version = 1;
   out->inode.backtrace_version = 1;
