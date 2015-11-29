@@ -1288,27 +1288,36 @@ def sh(command, log_limit=1024):
     stdout).  If the command fails, raise an exception. The command
     and its output are logged, on success and on error.
     """
-    log.debug(command)
-    output = ''
+    log.debug(":sh: " + command)
     proc = subprocess.Popen(
         args=command,
         stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT,
-        shell=True)
-    output = proc.communicate()[0]
-    if proc.returncode == 0:
-        if output.strip():
-            if len(output) > log_limit:
-                log.debug(command + " output " + str(output)[:log_limit] +
+        shell=True,
+        bufsize=1)
+    lines = []
+    truncated = False
+    with proc.stdout:
+        for line in iter(proc.stdout.readline, b''):
+            lines.append(line)
+            line = line.strip()
+            if len(line) > log_limit:
+                truncated = True
+                log.debug(str(line)[:log_limit] +
                           "... (truncated to the first " + str(log_limit) +
                           " characters)")
             else:
-                log.debug(command + " output " + str(output))
-    else:
-        log.debug(command + " failed with " + str(output))
+                log.debug(str(line))
+    output = "".join(lines)
+    if proc.wait() != 0:
+        if truncated:
+            log.error(command + " replay full stdout/stderr"
+                      " because an error occurred and some of"
+                      " it was truncated")
+            log.error(output)
         raise subprocess.CalledProcessError(
             returncode=proc.returncode,
             cmd=command,
-            output=output,
+            output=output
         )
     return output.decode('utf-8')
