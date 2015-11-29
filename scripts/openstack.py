@@ -34,6 +34,11 @@ and analyze results.
         help='be more verbose',
     )
     parser.add_argument(
+        '--wait',
+        action='store_true', default=None,
+        help='block until the suite is finished',
+    )
+    parser.add_argument(
         '--name',
         help='OpenStack primary instance name',
         default='teuthology',
