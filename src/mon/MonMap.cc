@@ -133,6 +133,30 @@ void MonMap::generate_test_instances(list<MonMap*>& o)
   o.back()->last_changed = utime_t(123, 456);
   o.back()->created = utime_t(789, 101112);
   o.back()->add("one", entity_addr_t());
+
+  MonMap *m = new MonMap;
+  {
+    m->epoch = 1;
+    m->last_changed = utime_t(123, 456);
+
+    entity_addr_t empty_addr_one;
+    empty_addr_one.set_nonce(1);
+    m->add("empty_addr_one", empty_addr_one);
+    entity_addr_t empty_addr_two;
+    empty_addr_two.set_nonce(2);
+    m->add("empty_adrr_two", empty_addr_two);
+
+    const char *local_pub_addr_s = "127.0.1.2";
+
+    const char *end_p = local_pub_addr_s + strlen(local_pub_addr_s);
+    entity_addr_t local_pub_addr;
+    local_pub_addr.parse(local_pub_addr_s, &end_p);
+
+    m->add("filled_pub_addr", local_pub_addr);
+
+    m->add("empty_addr_zero", entity_addr_t());
+  }
+  o.push_back(m);
 }
 
 // read from/write to a file
