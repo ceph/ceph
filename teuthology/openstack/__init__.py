@@ -444,24 +444,16 @@ class TeuthologyOpenStack(OpenStack):
         self.verify_openstack()
         self.setup()
         if self.args.suite:
+            if self.args.wait:
+                self.reminders()
             self.run_suite()
-        if self.args.key_filename:
-            identity = '-i ' + self.args.key_filename + ' '
-        else:
-            identity = ''
-        if self.args.upload:
-            upload = 'upload to    : ' + self.args.archive_upload
-        else:
-            upload = ''
-        log.info("""
-pulpito web interface: http://{ip}:8081/
-ssh access           : ssh {identity}{username}@{ip} # logs in /usr/share/nginx/html
-{upload}""".format(ip=self.instance.get_floating_ip_or_ip(),
-                   username=self.username,
-                   identity=identity,
-                   upload=upload))
+            self.reminders()
         if self.args.teardown:
-            self.teardown()
+            if self.args.suite and not self.args.wait:
+                log.error("it does not make sense to teardown a cluster"
+                          " right after a suite is scheduled")
+            else:
+                self.teardown()
 
     def run_suite(self):
         """
@@ -490,6 +482,23 @@ ssh access           : ssh {identity}{username}@{ip} # logs in /usr/share/nginx/
             " ".join(map(lambda x: "'" + x + "'", argv))
         )
         print self.ssh(command)
+
+    def reminders(self):
+        if self.args.key_filename:
+            identity = '-i ' + self.args.key_filename + ' '
+        else:
+            identity = ''
+        if self.args.upload:
+            upload = 'upload to    : ' + self.args.archive_upload
+        else:
+            upload = ''
+        log.info("""
+pulpito web interface: http://{ip}:8081/
+ssh access           : ssh {identity}{username}@{ip} # logs in /usr/share/nginx/html
+{upload}""".format(ip=self.instance.get_floating_ip_or_ip(),
+                   username=self.username,
+                   identity=identity,
+                   upload=upload))
 
     def setup(self):
         self.instance = OpenStackInstance(self.args.name)
