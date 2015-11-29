@@ -312,12 +312,13 @@ class ProvisionOpenStack(OpenStack):
         instances = filter(
             lambda instance: self.property in instance['Properties'],
             self.list_instances())
-        instances = [OpenStackInstance(i['ID'], i) for i in instances]
+        instances = [OpenStackInstance(i['ID']) for i in instances]
         fqdns = []
         try:
             network = config['openstack'].get('network', '')
             for instance in instances:
-                name = self.ip2name(self.basename, instance.get_ip(network))
+                ip = instance.get_ip(network)
+                name = self.ip2name(self.basename, ip)
                 misc.sh("openstack server set " +
                         "--name " + name + " " +
                         instance['ID'])
@@ -325,8 +326,8 @@ class ProvisionOpenStack(OpenStack):
                 if not misc.ssh_keyscan_wait(fqdn):
                     raise ValueError('ssh_keyscan_wait failed for ' + fqdn)
                 time.sleep(15)
-                if not self.cloud_init_wait(fqdn):
-                    raise ValueError('clound_init_wait failed for ' + fqdn)
+                if not self.cloud_init_wait(instance):
+                    raise ValueError('cloud_init_wait failed for ' + fqdn)
                 self.attach_volumes(name, resources_hint['volumes'])
                 fqdns.append(fqdn)
         except Exception as e:
