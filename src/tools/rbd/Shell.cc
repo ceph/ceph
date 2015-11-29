@@ -123,8 +123,11 @@ int Shell::execute(int arg_count, const char **arg_values) {
     po::positional_options_description positional_options;
     positional_options.add(at::POSITIONAL_COMMAND_SPEC.c_str(),
                            matching_spec->size());
-    if (command_spec.size() > matching_spec->size()) {
-      positional_options.add(at::POSITIONAL_ARGUMENTS.c_str(), -1);
+    if (!positional_opts.options().empty()) {
+      int max_count = positional_opts.options().size();
+      if (positional_opts.options().back()->semantic()->max_tokens() > 1)
+        max_count = -1;
+      positional_options.add(at::POSITIONAL_ARGUMENTS.c_str(), max_count);
     }
 
     po::options_description global_opts;
@@ -156,8 +159,8 @@ int Shell::execute(int arg_count, const char **arg_values) {
     std::cerr << "rbd: " << e.what() << std::endl;
     return EXIT_FAILURE;
   } catch (po::too_many_positional_options_error& e) {
-    std::cerr << "rbd: too many positional arguments or unrecognized optional "
-              << "argument" << std::endl;
+    std::cerr << "rbd: too many arguments" << std::endl;
+    return EXIT_FAILURE;
   } catch (po::error& e) {
     std::cerr << "rbd: " << e.what() << std::endl;
     return EXIT_FAILURE;
