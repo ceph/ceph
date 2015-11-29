@@ -758,6 +758,55 @@ def test_git_branch_exists(m_check_output):
     m_check_output.return_value = 'HHH branch'
     assert True == suite.git_branch_exists('ceph', 'master')
 
+@patch.object(suite.ResultsReporter, 'get_jobs')
+def test_wait_success(m_get_jobs, caplog):
+    results = [
+        [{'status': 'queued', 'job_id': '2'}],
+        [],
+    ]
+    final = [
+        {'status': 'pass', 'job_id': '1',
+         'description': 'DESC1', 'log_href': 'http://URL1'},
+        {'status': 'fail', 'job_id': '2',
+         'description': 'DESC2', 'log_href': 'http://URL2'},
+        {'status': 'pass', 'job_id': '3',
+         'description': 'DESC3', 'log_href': 'http://URL3'},
+    ]
+    def get_jobs(name, **kwargs):
+        if kwargs['fields'] == ['job_id', 'status']:
+            return in_progress.pop(0)
+        else:
+            return final
+    m_get_jobs.side_effect = get_jobs
+    suite.WAIT_PAUSE = 1
+
+    in_progress = deepcopy(results)
+    assert 0 == suite.wait('name', 1, 'http://UPLOAD_URL')
+    assert m_get_jobs.called_with('name', fields=['job_id', 'status'])
+    assert 0 == len(in_progress)
+    assert 'fail http://UPLOAD_URL/name/2' in caplog.text()
+
+    in_progress = deepcopy(results)
+    in_progress = deepcopy(results)
+    assert 0 == suite.wait('name', 1, None)
+    assert m_get_jobs.called_with('name', fields=['job_id', 'status'])
+    assert 0 == len(in_progress)
+    assert 'fail http://URL2' in caplog.text()
+
+@patch.object(suite.ResultsReporter, 'get_jobs')
+def test_wait_fails(m_get_jobs):
+    results = []
+    results.append([{'status': 'queued', 'job_id': '2'}])
+    results.append([{'status': 'queued', 'job_id': '2'}])
+    results.append([{'status': 'queued', 'job_id': '2'}])
+    def get_jobs(name, **kwargs):
+        return results.pop(0)
+    m_get_jobs.side_effect = get_jobs
+    suite.WAIT_PAUSE = 1
+    suite.WAIT_MAX_JOB_TIME = 1
+    with pytest.raises(suite.WaitException) as error:
+        suite.wait('name', 1, None)
+        assert 'abc' in str(error)
 
 class TestSuiteMain(object):
 

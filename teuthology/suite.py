@@ -14,6 +14,7 @@ import smtplib
 import socket
 import sys
 from time import sleep
+from time import time
 import yaml
 import math
 from email.mime.text import MIMEText
@@ -26,6 +27,8 @@ from .config import config, JobConfig
 from .exceptions import BranchNotFoundError, ScheduleFailError
 from .misc import deep_merge, get_results_url
 from .repo_utils import fetch_qa_suite, fetch_teuthology
+from .report import ResultsReporter
+from .results import UNFINISHED_STATUSES
 from .task.install import get_flavor
 
 log = logging.getLogger(__name__)
@@ -121,7 +124,58 @@ def main(args):
                          throttle=throttle,
                          )
     os.remove(base_yaml_path)
+    if not dry_run and args['--wait']:
+        return wait(name, config.max_job_time,
+                    None)
 
+WAIT_MAX_JOB_TIME = 30 * 60
+WAIT_PAUSE = 5 * 60
+
+class WaitException(Exception):
+    pass
+
+def wait(name, max_job_time, upload_url):
+    stale_job = max_job_time + WAIT_MAX_JOB_TIME
+    reporter = ResultsReporter()
+    past_unfinished_jobs = []
+    progress = time()
+    log.info("waiting for the suite to complete")
+    log.debug("the list of unfinished jobs will be displayed "
+              "every " + str(WAIT_PAUSE / 60) + " minutes")
+    exit_code = 0
+    while True:
+        jobs = reporter.get_jobs(name, fields=['job_id', 'status'])
+        unfinished_jobs = []
+        for job in jobs:
+            if job['status'] in UNFINISHED_STATUSES:
+                unfinished_jobs.append(job)
+            elif job['status'] != 'pass':
+                exit_code = 1
+        if len(unfinished_jobs) == 0:
+            log.info("wait is done")
+            break
+        if (len(past_unfinished_jobs) == len(unfinished_jobs) and
+            time() - progress > stale_job):
+            raise WaitException(
+                "no progress since " + str(config.max_job_time) +
+                " + " + str(WAIT_PAUSE) + " seconds")
+        if len(past_unfinished_jobs) != len(unfinished_jobs):
+            past_unfinished_jobs = unfinished_jobs
+            progress = time()
+        sleep(WAIT_PAUSE)
+        job_ids = [ job['job_id'] for job in unfinished_jobs ]
+        log.debug('wait for jobs ' + str(job_ids))
+    jobs = reporter.get_jobs(name, fields=['job_id', 'status',
+                                           'description', 'log_href'])
+    # dead, fail, pass : show fail/dead jobs first
+    jobs = sorted(jobs, lambda a, b: cmp(a['status'], b['status']))
+    for job in jobs:
+        if upload_url:
+            url = os.path.join(upload_url, name, job['job_id'])
+        else:
+            url = job['log_href']
+        log.info(job['status'] + " " + url + " " + job['description'])
+    return exit_code
 
 def make_run_name(suite, ceph_branch, kernel_branch, kernel_flavor,
                   machine_type, user=None, timestamp=None):
