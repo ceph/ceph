@@ -47,6 +47,7 @@ class OpenStackInstance(object):
 
     def __init__(self, name_or_id, info=None):
         self.name_or_id = name_or_id
+        self.ip = None
         if info is None:
             self.set_info()
         else:
@@ -130,6 +131,21 @@ class OpenStackInstance(object):
             log.debug("ignoring get_ip_neutron exception " + str(e))
             return re.findall(network + '=([\d.]+)',
                               self.get_addresses())[0]
+
+    def get_floating_ip(self):
+        ips = json.loads(misc.sh("openstack ip floating list -f json"))
+        for ip in ips:
+            if ip['Instance ID'] == self['id']:
+                return ip['IP']
+        return None
+
+    def get_floating_ip_or_ip(self):
+        if not self.ip:
+            self.ip = self.get_floating_ip()
+            if not self.ip:
+                self.ip = re.findall('([\d.]+)$',
+                                     self.get_addresses())[0]
+        return self.ip
 
     def destroy(self):
         """
@@ -324,13 +340,14 @@ class OpenStack(object):
                     volume['Display Name'].startswith('target'))
         return filter(select, all)
 
-    def cloud_init_wait(self, name_or_ip):
+    def cloud_init_wait(self):
         """
         Wait for cloud-init to complete on the name_or_ip OpenStack instance.
         """
-        log.debug('cloud_init_wait ' + name_or_ip)
+        ip = self.instance.get_floating_ip_or_ip()
+        log.debug('cloud_init_wait ' + ip)
         client_args = {
-            'user_at_host': '@'.join((self.username, name_or_ip)),
+            'user_at_host': '@'.join((self.username, ip)),
             'timeout': 240,
             'retry': False,
         }
@@ -338,7 +355,7 @@ class OpenStack(object):
             log.debug("using key " + self.key_filename)
             client_args['key_filename'] = self.key_filename
         with safe_while(sleep=30, tries=100,
-                        action="cloud_init_wait " + name_or_ip) as proceed:
+                        action="cloud_init_wait " + ip) as proceed:
             success = False
             # CentOS 6.6 logs in /var/log/clout-init-output.log
             # CentOS 7.0 logs in /var/log/clout-init.log
@@ -371,7 +388,7 @@ class OpenStack(object):
                     for transient in transients:
                         if transient in str(e):
                             continue
-                    log.exception('cloud_init_wait ' + name_or_ip)
+                    log.exception('cloud_init_wait ' + ip)
                     raise
                 log.debug('cloud_init_wait ' + all_done)
                 try:
@@ -424,7 +441,7 @@ class TeuthologyOpenStack(OpenStack):
         misc.read_config(self.args)
         self.key_filename = self.args.key_filename
         self.verify_openstack()
-        ip = self.setup()
+        self.setup()
         if self.args.suite:
             self.run_suite()
         if self.args.key_filename:
@@ -438,7 +455,7 @@ class TeuthologyOpenStack(OpenStack):
         log.info("""
 pulpito web interface: http://{ip}:8081/
 ssh access           : ssh {identity}{username}@{ip} # logs in /usr/share/nginx/html
-{upload}""".format(ip=ip,
+{upload}""".format(ip=self.instance.get_floating_ip_or_ip(),
                    username=self.username,
                    identity=identity,
                    upload=upload))
@@ -474,16 +491,11 @@ ssh access           : ssh {identity}{username}@{ip} # logs in /usr/share/nginx/
         print self.ssh(command)
 
     def setup(self):
-        """
-        Create the teuthology cluster if it does not already exists
-        and return its IP address.
-        """
-        if not self.cluster_exists():
+        self.instance = OpenStackInstance(self.args.name)
+        if not self.instance.exists():
             if self.provider != 'rackspace':
                 self.create_security_group()
             self.create_cluster()
-        instance_id = self.get_instance_id(self.args.name)
-        return self.get_floating_ip_or_ip(instance_id)
 
     def setup_logs(self):
         """
@@ -500,8 +512,7 @@ ssh access           : ssh {identity}{username}@{ip} # logs in /usr/share/nginx/
         Run a command in the OpenStack instance of the teuthology cluster.
         Return the stdout / stderr of the command.
         """
-        instance_id = self.get_instance_id(self.args.name)
-        ip = self.get_floating_ip_or_ip(instance_id)
+        ip = self.instance.get_floating_ip_or_ip()
         client_args = {
             'user_at_host': '@'.join((self.username, ip)),
             'retry': False,
@@ -668,17 +679,6 @@ openstack security group rule create --proto udp --dst-port 53 teuthology # dns
             misc.sh("openstack ip floating add " + ip + " " + name_or_id)
 
     @staticmethod
-    def get_floating_ip(instance_id):
-        """
-        Return the floating IP of the OpenStack instance_id.
-        """
-        ips = json.loads(misc.sh("openstack ip floating list -f json"))
-        for ip in ips:
-            if ip['Instance ID'] == instance_id:
-                return ip['IP']
-        return None
-
-    @staticmethod
     def get_floating_ip_id(ip):
         """
         Return the id of a floating IP
@@ -688,18 +688,6 @@ openstack security group rule create --proto udp --dst-port 53 teuthology # dns
             if result['IP'] == ip:
                 return str(result['ID'])
         return None
-
-    @staticmethod
-    def get_floating_ip_or_ip(instance_id):
-        """
-        Return the floating ip, if any, otherwise return the last
-        IP displayed with openstack server list.
-        """
-        ip = TeuthologyOpenStack.get_floating_ip(instance_id)
-        if not ip:
-            ip = re.findall('([\d.]+)$',
-                            OpenStackInstance(instance_id).get_addresses())[0]
-        return ip
 
     @staticmethod
     def get_instance_id(name):
@@ -718,16 +706,12 @@ openstack security group rule create --proto udp --dst-port 53 teuthology # dns
         misc.sh("openstack ip floating delete " + ip_id)
 
     def create_cluster(self):
-        """
-        Create an OpenStack instance that runs the teuthology cluster
-        and wait for it to come up.
-        """
         user_data = self.get_user_data()
         if self.provider == 'rackspace':
             security_group = ''
         else:
             security_group = " --security-group teuthology"
-        instance = misc.sh(
+        misc.sh(
             "openstack server create " +
             " --image '" + self.image('ubuntu', '14.04') + "' " +
             " --flavor '" + self.flavor() + "' " +
@@ -737,21 +721,10 @@ openstack security group rule create --proto udp --dst-port 53 teuthology # dns
             security_group +
             " --wait " + self.args.name +
             " -f json")
-        instance_id = self.get_value(json.loads(instance), 'id')
         os.unlink(user_data)
-        self.associate_floating_ip(instance_id)
-        ip = self.get_floating_ip_or_ip(instance_id)
-        return self.cloud_init_wait(ip)
-
-    def cluster_exists(self):
-        """
-        Return true if there exists an instance running the teuthology cluster.
-        """
-        instance = OpenStackInstance(self.args.name)
-        if not instance.exists():
-            return False
-        ip = self.get_floating_ip_or_ip(instance['id'])
-        return self.cloud_init_wait(ip)
+        self.instance = OpenStackInstance(self.args.name)
+        self.associate_floating_ip(self.instance['id'])
+        return self.cloud_init_wait()
 
     def teardown(self):
         """
