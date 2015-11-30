@@ -145,7 +145,7 @@ enum {
 typedef void *rados_t;
 
 /**
- * @tyepdef rados_config_t
+ * @typedef rados_config_t
  *
  * A handle for the ceph configuration context for the rados_t cluster
  * instance.  This can be used to share configuration context/state
