@@ -1,12 +1,12 @@
 import docopt
 
 import teuthology.config
-import teuthology.tree
+import teuthology.describe_tests
 
 doc = """
 usage:
-    teuthology-tree -h
-    teuthology-tree [options] [--] <suite_dir>
+    teuthology-describe-tests -h
+    teuthology-describe-tests [options] [--] <suite_dir>
 
 Describe the contents of a qa suite by extracting comments
 starting with particular prefixes from files in the suite.
@@ -28,4 +28,4 @@ optional arguments:
 
 def main():
     args = docopt.docopt(doc)
-    teuthology.tree.main(args)
+    teuthology.describe_tests.main(args)

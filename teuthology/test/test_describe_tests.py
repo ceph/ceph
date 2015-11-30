@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 from fake_fs import make_fake_fstools
-from teuthology.tree import tree_with_info, extract_info
+from teuthology.describe_tests import tree_with_info, extract_info
 
 realistic_fs = {
     'basic': {
@@ -95,7 +95,7 @@ expected_rbd_features = [
 ]
 
 
-class TestTree(object):
+class TestDescribeTests(object):
 
     def setup(self):
         self.fake_listdir, _, self.fake_isdir, self.fake_open = \
