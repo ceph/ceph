@@ -171,12 +171,11 @@ namespace rgw {
       : parent(_parent), name(std::move(_name)), fhk(_fhk), flags(FLAG_NONE) {
 
       fh.fh_type = parent->is_root()
-	? RGW_FS_TYPE_DIRECTORY : RGW_FS_TYPE_FILE;      
+	? RGW_FS_TYPE_DIRECTORY : RGW_FS_TYPE_FILE;
 
       depth = parent->depth + 1;
 
       /* save constant fhk */
-      fh_key fhk(parent->bucket_name(), make_path());
       fh.fh_hk = fhk.fh_hk; /* XXX redundant in fh_hk */
 
       /* pointer to self */
@@ -235,7 +234,7 @@ namespace rgw {
 
     const std::string& object_name() const { return name; }
 
-    std::string make_path() {
+    std::string full_object_name() {
       if (depth <= 1) {
 	return object_name();
       }
@@ -451,7 +450,8 @@ namespace rgw {
     }
 
     /* find or create an RGWFileHandle */
-    LookupFHResult lookup_fh(RGWFileHandle* parent, const char *name) {
+    LookupFHResult lookup_fh(RGWFileHandle* parent, const char *name,
+			     const uint32_t cflags = RGWFileHandle::FLAG_NONE) {
 
       std::string sname(name);
       RGWFileHandle::FHCache::Latch lat;
@@ -470,6 +470,8 @@ namespace rgw {
 	intrusive_ptr_add_ref(fh); /* sentinel ref */
 	fh_cache.insert_latched(fh, lat,
 				RGWFileHandle::FHCache::FLAG_NONE);
+	if (cflags & RGWFileHandle::FLAG_PSEUDO)
+	  fh->set_pseudo();
 	get<1>(fhr) = RGWFileHandle::FLAG_CREATE;
       }
       intrusive_ptr_add_ref(fh); /* call path/handle ref */
