@@ -119,10 +119,19 @@ int Journal::remove(librados::IoCtx &io_ctx, const std::string &image_id) {
   // TODO configurable commit flush interval
   ::journal::Journaler journaler(io_ctx, image_id, "", 5);
 
+  bool journal_exists;
+  int r = journaler.exists(&journal_exists);
+  if (r < 0) {
+    lderr(cct) << "failed to stat journal header: " << cpp_strerror(r) << dendl;
+    return r;
+  } else if (!journal_exists) {
+    return 0;
+  }
+
   C_SaferCond cond;
   journaler.init(&cond);
 
-  int r = cond.wait();
+  r = cond.wait();
   if (r == -ENOENT) {
     return 0;
   } else if (r < 0) {
