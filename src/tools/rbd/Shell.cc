@@ -153,13 +153,13 @@ int Shell::execute(int arg_count, const char **arg_values) {
       return std::abs(r);
     }
   } catch (po::required_option& e) {
-    std::cerr << "rbd: " << e.what() << std::endl << std::endl;
+    std::cerr << "rbd: " << e.what() << std::endl;
     return EXIT_FAILURE;
   } catch (po::too_many_positional_options_error& e) {
     std::cerr << "rbd: too many positional arguments or unrecognized optional "
               << "argument" << std::endl;
   } catch (po::error& e) {
-    std::cerr << "rbd: " << e.what() << std::endl << std::endl;
+    std::cerr << "rbd: " << e.what() << std::endl;
     return EXIT_FAILURE;
   }
 
