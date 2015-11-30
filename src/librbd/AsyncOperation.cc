@@ -63,9 +63,11 @@ void AsyncOperation::finish_op() {
     }
   }
 
-  C_CompleteFlushes *ctx = new C_CompleteFlushes(m_image_ctx,
-                                                 std::move(m_flush_contexts));
-  m_image_ctx->op_work_queue->queue(ctx);
+  if (!m_flush_contexts.empty()) {
+    C_CompleteFlushes *ctx = new C_CompleteFlushes(m_image_ctx,
+                                                   std::move(m_flush_contexts));
+    m_image_ctx->op_work_queue->queue(ctx);
+  }
 }
 
 void AsyncOperation::add_flush_context(Context *on_finish) {
