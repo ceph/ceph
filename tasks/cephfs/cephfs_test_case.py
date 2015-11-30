@@ -160,9 +160,8 @@ class CephFSTestCase(unittest.TestCase):
 
     def tearDown(self):
         self.fs.clear_firewall()
-        self.mount_a.teardown()
-        if self.mount_b:
-            self.mount_b.teardown()
+        for m in self.mounts:
+            m.teardown()
 
         for subsys, key in self.configs_set:
             self.fs.clear_ceph_conf(subsys, key)

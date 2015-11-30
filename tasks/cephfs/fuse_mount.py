@@ -2,7 +2,6 @@
 from StringIO import StringIO
 import json
 import time
-import os
 import logging
 from textwrap import dedent
 
@@ -30,15 +29,14 @@ class FuseMount(CephFSMount):
         if self.client_config.get('coverage') or self.client_config.get('valgrind') is not None:
             daemon_signal = 'term'
 
-        mnt = os.path.join(self.test_dir, 'mnt.{id}'.format(id=self.client_id))
         log.info('Mounting ceph-fuse client.{id} at {remote} {mnt}...'.format(
-            id=self.client_id, remote=self.client_remote, mnt=mnt))
+            id=self.client_id, remote=self.client_remote, mnt=self.mountpoint))
 
         self.client_remote.run(
             args=[
                 'mkdir',
                 '--',
-                mnt,
+                self.mountpoint,
             ],
         )
 
@@ -59,7 +57,7 @@ class FuseMount(CephFSMount):
         fuse_cmd += [
             '--name', 'client.{id}'.format(id=self.client_id),
             # TODO ceph-fuse doesn't understand dash dash '--',
-            mnt,
+            self.mountpoint,
         ]
 
         if self.client_config.get('valgrind') is not None:
