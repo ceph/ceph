@@ -2690,7 +2690,8 @@ int RGWHandler_ObjStore_S3Website::get_errordoc(const string errordoc_key, strin
     // 1. Check if errordoc exists
     // 2. Check if errordoc is public
     // 3. Fetch errordoc content
-    RGWGetObj_ObjStore_S3Website *getop = new RGWGetObj_ObjStore_S3Website;
+#warning 2015119: FIXME need to clear all
+    RGWGetObj_ObjStore_S3Website *getop = new RGWGetObj_ObjStore_S3Website(true);
     getop->set_get_data(true);
     getop->init(store, s, this);
 
