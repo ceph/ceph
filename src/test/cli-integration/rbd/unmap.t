@@ -220,15 +220,11 @@ Not a mapped spec - spec that's just been unmapped:
   rbd: unmap failed: (22) Invalid argument
   [22]
 
-Either --image or arg:
-
-  $ sudo rbd unmap --image foobar barbaz
-  rbd: extraneous parameter barbaz
-  [1]
+Need an arg:
 
   $ sudo rbd unmap
   rbd: unmap requires either image name or device path
-  [1]
+  [22]
 
 
 Two images
