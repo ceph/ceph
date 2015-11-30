@@ -3722,8 +3722,8 @@ void PG::repair_object(
   if (bad_peer != primary) {
     peer_missing[bad_peer].add(soid, oi.version, eversion_t());
   } else {
-    // We should only be scrubbing if the PG is clean.
-    assert(waiting_for_unreadable_object.empty());
+    // Before we set, this object is clean.
+    assert(waiting_for_unreadable_object.count(soid) == 0);
 
     pg_log.missing_add(soid, oi.version, eversion_t());
 
@@ -4147,6 +4147,8 @@ void PG::chunky_scrub(ThreadPool::TPHandle &handle)
 	  done = true;
 	  break;
 	}
+	
+	scrub_process_inconsistent();
 
 	if (cmp(scrubber.end, hobject_t::get_max(), get_sort_bitwise()) < 0) {
           scrubber.state = PG::Scrubber::NEW_CHUNK;
@@ -4282,7 +4284,8 @@ bool PG::scrub_process_inconsistent()
   bool repair = state_test(PG_STATE_REPAIR);
   bool deep_scrub = state_test(PG_STATE_DEEP_SCRUB);
   const char *mode = (repair ? "repair": (deep_scrub ? "deep-scrub" : "scrub"));
-  
+  bool has_error = false;
+
   // authoriative only store objects which missing or inconsistent.
   if (!scrubber.authoritative.empty()) {
     stringstream ss;
@@ -4292,7 +4295,6 @@ bool PG::scrub_process_inconsistent()
     dout(2) << ss.str() << dendl;
     osd->clog->error(ss);
     if (repair) {
-      state_clear(PG_STATE_CLEAN);
       for (map<hobject_t, list<pair<ScrubMap::object, pg_shard_t> >, hobject_t::BitwiseComparator>::iterator i =
 	     scrubber.authoritative.begin();
 	   i != scrubber.authoritative.end();
@@ -4321,9 +4323,14 @@ bool PG::scrub_process_inconsistent()
 	  }
 	}
       }
+
+      scrubber.authoritative.clear();
+      scrubber.inconsistent.clear();
+      scrubber.missing.clear();
+      has_error = true;
     }
   }
-  return (!scrubber.authoritative.empty() && repair);
+  return has_error;
 }
 
 // the part that actually finalizes a scrub
@@ -4343,7 +4350,9 @@ void PG::scrub_finish()
   // type-specific finish (can tally more errors)
   _scrub_finish();
 
-  bool has_error = scrub_process_inconsistent();
+  assert(scrubber.authoritative.empty());
+  assert(scrubber.inconsistent.empty());
+  assert(scrubber.missing.empty());
 
   {
     stringstream oss;
@@ -4411,7 +4420,8 @@ void PG::scrub_finish()
   }
 
 
-  if (has_error) {
+  if (scrubber.fixed) {
+    state_clear(PG_STATE_CLEAN);
     queue_peering_event(
       CephPeeringEvtRef(
 	new CephPeeringEvt(
