@@ -12,6 +12,7 @@
 #include <atomic>
 #include <mutex>
 #include <boost/intrusive_ptr.hpp>
+#include <boost/range/adaptor/reversed.hpp>
 #include "xxhash.h"
 #include "include/buffer.h"
 #include "common/cohort_lru.h"
@@ -111,6 +112,7 @@ namespace rgw {
     RGWFHRef parent;
     /* const */ std::string name; /* XXX file or bucket name */
     /* const */ fh_key fhk;
+
     struct state {
       uint64_t dev;
       size_t size;
@@ -120,10 +122,14 @@ namespace rgw {
       struct timespec atime;
       state() : dev(0), size(0), nlink(1), ctime{0,0}, mtime{0,0}, atime{0,0} {}
     } state;
+
+    uint16_t depth;
     uint32_t flags;
 
   public:
     const static string root_name;
+
+    static constexpr uint16_t MAX_DEPTH = 256;
 
     static constexpr uint32_t FLAG_NONE =   0x0000;
     static constexpr uint32_t FLAG_OPEN =   0x0001;
@@ -134,7 +140,7 @@ namespace rgw {
 
   private:
     RGWFileHandle(RGWLibFS* _fs, uint32_t fs_inst)
-      : refcnt(1), fs(_fs), parent(nullptr), flags(FLAG_ROOT)
+      : refcnt(1), fs(_fs), parent(nullptr), depth(0), flags(FLAG_ROOT)
       {
 	/* root */
 	fh.fh_type = RGW_FS_TYPE_DIRECTORY;
@@ -161,6 +167,8 @@ namespace rgw {
       fh.fh_type = parent->is_root()
 	? RGW_FS_TYPE_DIRECTORY : RGW_FS_TYPE_FILE;      
 
+      depth = parent->depth + 1;
+
       /* save constant fhk */
       fh_key fhk(parent->name, name);
       fh.fh_hk = fhk.fh_hk; /* XXX redundant in fh_hk */
@@ -173,7 +181,9 @@ namespace rgw {
       return fhk;
     }
 
-    const size_t get_size() { return state.size; }
+    size_t get_size() const { return state.size; }
+
+    uint16_t get_depth() const { return depth; }
 
     struct rgw_file_handle* get_fh() { return &fh; }
 
@@ -218,6 +228,29 @@ namespace rgw {
     }
 
     const std::string& object_name() const { return name; }
+
+    std::string make_path() {
+      if (depth <= 1) {
+	return object_name();
+      }
+      std::string path;
+      std::vector<const std::string*> segments = { &object_name() };
+      int reserve = object_name().length();
+      while (parent && !parent->is_bucket()) {
+	segments.push_back(&parent->object_name());
+	reserve += (1 + parent->object_name().length());
+      }
+      bool first = true;
+      path.reserve(reserve);
+      for (auto& s : boost::adaptors::reverse(segments)) {
+	if (! first) {
+	  path += "/";
+	  first = false;
+	}
+	path += *s;
+      }
+      return path;
+    }
 
     bool is_open() const { return flags & FLAG_OPEN; }
     bool is_root() const { return flags & FLAG_ROOT; }
