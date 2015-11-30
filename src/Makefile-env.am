@@ -57,6 +57,7 @@ HARDENING_CFLAGS = \
                    -g \
                    -pipe \
                    -Wall \
+                   -Wp,-U_FORTIFY_SOURCE \
                    -Wp,-D_FORTIFY_SOURCE=2 \
                    -fexceptions \
                    --param=ssp-buffer-size=4 \
