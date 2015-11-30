@@ -2932,7 +2932,10 @@ int invoke_async_request(ImageCtx *ictx, const std::string& request_type,
     ImageCtx *parent_ictx = ictx->parent;
 
     // AIO to the parent must be complete before closing
-    parent_ictx->flush_async_operations();
+    {
+      RWLock::RLocker owner_locker(parent_ictx->owner_lock);
+      parent_ictx->flush();
+    }
     parent_ictx->readahead.wait_for_pending();
     {
       Mutex::Locker async_ops_locker(parent_ictx->async_ops_lock);
