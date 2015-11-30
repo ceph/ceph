@@ -299,6 +299,8 @@ int LFNIndex::remove_object(const vector<string> &from,
   maybe_inject_failure();
   if (r < 0)
     return r;
+  if (exist == 0)
+    return -ENOENT;
   return lfn_unlink(from, oid, short_name);
 }
 
