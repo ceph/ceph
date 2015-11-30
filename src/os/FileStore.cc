@@ -3217,7 +3217,7 @@ int FileStore::_write(coll_t cid, const ghobject_t& oid,
   }
     
   // write
-  r = bl.write_fd(**fd,offset);
+  r = bl.write_fd(**fd, offset);
   if (r == 0)
     r = bl.length();
 
