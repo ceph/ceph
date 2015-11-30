@@ -316,7 +316,7 @@ unittest_journal_CXXFLAGS = $(UNITTEST_CXXFLAGS)
 unittest_journal_LDADD = \
 	libjournal.la libcls_journal_client.la \
 	librados_test_stub.la librados_internal.la \
-	$(UNITTEST_LDADD) $(CEPH_GLOBAL) $(RADOS_TEST_LDADD)
+	$(UNITTEST_LDADD) $(CEPH_GLOBAL) $(RADOS_TEST_LDADD) $(LIBRADOS)
 check_TESTPROGRAMS += unittest_journal
 
 if WITH_RBD
@@ -359,7 +359,7 @@ unittest_librbd_LDADD = \
 	libcls_rbd_client.la libcls_lock_client.la \
 	libjournal.la libcls_journal_client.la \
 	librados_test_stub.la librados_internal.la \
-	$(LIBOSDC) $(UNITTEST_LDADD) \
+	$(LIBRADOS) $(LIBOSDC) $(UNITTEST_LDADD) \
 	$(CEPH_GLOBAL) $(RADOS_TEST_LDADD)
 check_PROGRAMS += unittest_librbd
 check_SCRIPTS += test/run-rbd-unit-tests.sh
