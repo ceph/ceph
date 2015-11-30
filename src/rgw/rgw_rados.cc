@@ -2990,10 +2990,6 @@ int RGWRados::set_bucket_location_by_rule(const string& location_rule, const str
   bucket.data_extra_pool = placement_info.data_extra_pool;
   bucket.index_pool = placement_info.index_pool;
 
-  // XXX The select_legacy_bucket_placement() does this, but here we don't?
-  // bucket.tenant = tenant_name;
-  // bucket.name = bucket_name;
-
   return 0;
 }
 
@@ -3085,8 +3081,6 @@ read_omap:
   }
   bucket.data_pool = pool_name;
   bucket.index_pool = pool_name;
-  bucket.tenant = tenant_name;
-  bucket.name = bucket_name;
 
   return 0;
 
