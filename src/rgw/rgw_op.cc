@@ -1338,10 +1338,10 @@ int RGWCreateBucket::verify_permission()
   if (!rgw_user_is_authenticated(s->user))
     return -EACCES;
 
-  /* XXX: maybe we need to check ACLs here! */
-  // if ((s->perm_mask & RGW_PERM_WRITE) == 0) {
-  //   return -EACCES;
-  // }
+  if (s->user.user_id.tenant != s->bucket_tenant) {
+    ldout(s->cct, 10) << "user cannot create a bucket in a different tenant (user_id.tenant=" << s->user.user_id.tenant << " requested=" << s->bucket_tenant << ")" << dendl;
+    return -EACCES;
+  }
 
   if (s->user.max_buckets) {
     RGWUserBuckets buckets;
