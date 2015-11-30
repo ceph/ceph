@@ -261,7 +261,7 @@ namespace rgw {
       if (depth <= 1)
 	return fh_key(fhk.fh_hk.object, name.c_str());
       else {
-	std::vector<const std::string*> segments = { &object_name(), &name };
+	std::vector<const std::string*> segments = { &name, &object_name() };
 	while (parent && !parent->is_bucket())
 	   segments.push_back(&parent->object_name());
 	/* hash path */
