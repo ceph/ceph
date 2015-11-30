@@ -52,9 +52,8 @@ using namespace std;
 #include "common/shared_cache.hpp"
 #include "common/simple_cache.hpp"
 #include "common/sharedptr_registry.hpp"
-//#include "common/PrioritizedQueue.h"
-//#include "common/OpQueue.h"
 #include "common/WrrQueue.h"
+//#include "common/PrioritizedQueue.h"
 #include "messages/MOSDOp.h"
 
 #define CEPH_OSD_PROTOCOL    10 /* cluster internal */

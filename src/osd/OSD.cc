@@ -8262,7 +8262,14 @@ void OSD::ShardedOpWQ::_process(uint32_t thread_index, heartbeat_handle_d *hb ) 
       return;
     }
   }
+  std::chrono::time_point<std::chrono::system_clock> start, end;
+  start = std::chrono::system_clock::now();
   pair<PGRef, PGQueueable> item = sdata->pqueue.dequeue();
+  end = std::chrono::system_clock::now();
+  sdata->pqueue.dq_push(std::chrono::duration_cast<std::chrono::nanoseconds>(end-start).count());
+  cerr << "Wrr (" << std::hex << std::this_thread::get_id() << ") " << std::dec <<
+    sdata->pqueue.get_queue() << "dq " <<
+    sdata->pqueue.dq_stats() << "" << std::endl;
   sdata->pg_for_processing[&*(item.first)].push_back(item.second);
   sdata->sdata_op_ordering_lock.Unlock();
   ThreadPool::TPHandle tp_handle(osd->cct, hb, timeout_interval, 
@@ -8332,13 +8339,26 @@ void OSD::ShardedOpWQ::_enqueue(pair<PGRef, PGQueueable> item) {
   unsigned cost = item.second.get_cost();
   sdata->sdata_op_ordering_lock.Lock();
  
-  if (priority >= CEPH_MSG_PRIO_LOW)
-    sdata->pqueue.enqueue_strict(
-      item.second.get_owner(), priority, item);
+  std::chrono::time_point<std::chrono::system_clock> start, end;
+  start = std::chrono::system_clock::now();
+  if (priority >= CEPH_MSG_PRIO_HIGH)
+    sdata->pqueue.enqueue(item.second.get_owner(),
+			  item, priority, 0,
+			  CEPH_OP_QUEUE_BACK,
+			  CEPH_OP_CLASS_STRICT);
+//    sdata->pqueue.enqueue_strict(
+//      item.second.get_owner(), priority, item);
   else
-    sdata->pqueue.enqueue(
-      item.second.get_owner(),
-      priority, cost, item);
+    sdata->pqueue.enqueue(item.second.get_owner(),
+			  item, priority, cost);
+//    sdata->pqueue.enqueue(
+//      item.second.get_owner(),
+//      priority, cost, item);
+  end = std::chrono::system_clock::now();
+  sdata->pqueue.eq_push(std::chrono::duration_cast<std::chrono::nanoseconds>(end-start).count());
+  cerr << "Wrr (" << std::hex << std::this_thread::get_id() << ") " << std::dec <<
+    sdata->pqueue.get_queue() << "eq " <<
+    sdata->pqueue.eq_stats() << "." << std::endl;
   sdata->sdata_op_ordering_lock.Unlock();
 
   sdata->sdata_lock.Lock();
@@ -8361,15 +8381,28 @@ void OSD::ShardedOpWQ::_enqueue_front(pair<PGRef, PGQueueable> item) {
   }
   unsigned priority = item.second.get_priority();
   unsigned cost = item.second.get_cost();
-  if (priority >= CEPH_MSG_PRIO_LOW)
-    sdata->pqueue.enqueue_strict_front(
-      item.second.get_owner(),
-      priority, item);
+  std::chrono::time_point<std::chrono::system_clock> start, end;
+  start = std::chrono::system_clock::now();
+  if (priority >= CEPH_MSG_PRIO_HIGH)
+    sdata->pqueue.enqueue(item.second.get_owner(),
+			  item, priority, 0,
+			  CEPH_OP_QUEUE_FRONT,
+			  CEPH_OP_CLASS_STRICT);
+//    sdata->pqueue.enqueue_strict_front(
+//      item.second.get_owner(),
+//      priority, item);
   else
-    sdata->pqueue.enqueue_front(
-      item.second.get_owner(),
-      priority, cost, item);
-
+    sdata->pqueue.enqueue(item.second.get_owner(),
+			  item, priority, cost,
+			  CEPH_OP_QUEUE_FRONT);
+//    sdata->pqueue.enqueue_front(
+//      item.second.get_owner(),
+//      priority, cost, item);
+  end = std::chrono::system_clock::now();
+  sdata->pqueue.eq_push(std::chrono::duration_cast<std::chrono::nanoseconds>(end-start).count());
+  cerr << "Wrr (" << std::hex << std::this_thread::get_id() << ") " << std::dec <<
+    sdata->pqueue.get_queue() << "eq " <<
+    sdata->pqueue.eq_stats() << "." << std::endl;
   sdata->sdata_op_ordering_lock.Unlock();
   sdata->sdata_lock.Lock();
   sdata->sdata_cond.SignalOne();

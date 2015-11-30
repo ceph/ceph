@@ -23,7 +23,8 @@
 #include "common/Mutex.h"
 #include "common/Cond.h"
 #include "common/Thread.h"
-#include "common/PrioritizedQueue.h"
+//#include "common/PrioritizedQueue.h"
+#include "common/WrrQueue.h"
 
 class CephContext;
 class DispatchQueue;
@@ -68,7 +69,8 @@ class DispatchQueue {
   mutable Mutex lock;
   Cond cond;
 
-  PrioritizedQueue<QueueItem, uint64_t> mqueue;
+  //PrioritizedQueue<QueueItem, uint64_t> mqueue;
+  WrrQueue<QueueItem, uint64_t> mqueue;
 
   set<pair<double, Message*> > marrival;
   map<Message *, set<pair<double, Message*> >::iterator> marrival_map;
@@ -138,40 +140,56 @@ class DispatchQueue {
     Mutex::Locker l(lock);
     if (stop)
       return;
-    mqueue.enqueue_strict(
-      0,
-      CEPH_MSG_PRIO_HIGHEST,
-      QueueItem(D_CONNECT, con));
+    mqueue.enqueue(0, QueueItem(D_CONNECT, con),
+		   CEPH_MSG_PRIO_HIGHEST,
+		   CEPH_OP_QUEUE_BACK,
+		   CEPH_OP_CLASS_STRICT);
+//    mqueue.enqueue_strict(
+//      0,
+//      CEPH_MSG_PRIO_HIGHEST,
+//      QueueItem(D_CONNECT, con));
     cond.Signal();
   }
   void queue_accept(Connection *con) {
     Mutex::Locker l(lock);
     if (stop)
       return;
-    mqueue.enqueue_strict(
-      0,
-      CEPH_MSG_PRIO_HIGHEST,
-      QueueItem(D_ACCEPT, con));
+    mqueue.enqueue(0, QueueItem(D_ACCEPT, con),
+		   CEPH_MSG_PRIO_HIGHEST,
+		   CEPH_OP_QUEUE_BACK,
+		   CEPH_OP_CLASS_STRICT);
+//    mqueue.enqueue_strict(
+//      0,
+//      CEPH_MSG_PRIO_HIGHEST,
+//      QueueItem(D_ACCEPT, con));
     cond.Signal();
   }
   void queue_remote_reset(Connection *con) {
     Mutex::Locker l(lock);
     if (stop)
       return;
-    mqueue.enqueue_strict(
-      0,
-      CEPH_MSG_PRIO_HIGHEST,
-      QueueItem(D_BAD_REMOTE_RESET, con));
+    mqueue.enqueue(0, QueueItem(D_BAD_REMOTE_RESET, con),
+		   CEPH_MSG_PRIO_HIGHEST,
+		   CEPH_OP_QUEUE_BACK,
+		   CEPH_OP_CLASS_STRICT);
+//    mqueue.enqueue_strict(
+//      0,
+//      CEPH_MSG_PRIO_HIGHEST,
+//      QueueItem(D_BAD_REMOTE_RESET, con));
     cond.Signal();
   }
   void queue_reset(Connection *con) {
     Mutex::Locker l(lock);
     if (stop)
       return;
-    mqueue.enqueue_strict(
-      0,
-      CEPH_MSG_PRIO_HIGHEST,
-      QueueItem(D_BAD_RESET, con));
+    mqueue.enqueue(0, QueueItem(D_BAD_RESET, con),
+		   CEPH_MSG_PRIO_HIGHEST,
+		   CEPH_OP_QUEUE_BACK,
+		   CEPH_OP_CLASS_STRICT);
+//    mqueue.enqueue_strict(
+//      0,
+//      CEPH_MSG_PRIO_HIGHEST,
+//      QueueItem(D_BAD_RESET, con));
     cond.Signal();
   }
 
