@@ -1411,7 +1411,7 @@ int RGWREST::preprocess(struct req_state *s, RGWClientIO *cio)
       string encoded_bucket = "/";
       encoded_bucket.append(subdomain);
       if (s->info.request_uri[0] != '/')
-        encoded_bucket.append("/'");  // XXX What in the world is this apostrophe?
+        encoded_bucket.append("/");
       encoded_bucket.append(s->info.request_uri);
       s->info.request_uri = encoded_bucket;
     }
