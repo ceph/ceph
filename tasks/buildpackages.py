@@ -163,6 +163,7 @@ def task(ctx, config):
             select = '^(vps|eg)-'
         else:
             select = ''
+        openstack.image(os_type, os_version) # create if it does not exist
         build_flavor = openstack.flavor(config['machine'], select)
         http_flavor = openstack.flavor({
             'disk': 40, # GB
