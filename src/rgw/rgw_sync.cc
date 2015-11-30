@@ -322,26 +322,21 @@ public:
 
 
 class RGWReadRemoteMDLogShardInfoCR : public RGWCoroutine {
-  RGWRados *store;
-  RGWHTTPManager *http_manager;
-  RGWAsyncRadosProcessor *async_rados;
-
+  RGWMetaSyncEnv *env;
   RGWRESTReadResource *http_op;
 
+  const std::string& period;
   int shard_id;
   RGWMetadataLogInfo *shard_info;
 
 public:
-  RGWReadRemoteMDLogShardInfoCR(RGWRados *_store, RGWHTTPManager *_mgr, RGWAsyncRadosProcessor *_async_rados,
-                                                      int _shard_id, RGWMetadataLogInfo *_shard_info) : RGWCoroutine(_store->ctx()), store(_store),
-                                                      http_manager(_mgr),
-						      async_rados(_async_rados),
-                                                      http_op(NULL),
-                                                      shard_id(_shard_id),
-                                                      shard_info(_shard_info) {
-  }
+  RGWReadRemoteMDLogShardInfoCR(RGWMetaSyncEnv *env, const std::string& period,
+                                int _shard_id, RGWMetadataLogInfo *_shard_info)
+    : RGWCoroutine(env->store->ctx()), env(env), http_op(NULL),
+      period(period), shard_id(_shard_id), shard_info(_shard_info) {}
 
   int operate() {
+    auto store = env->store;
     RGWRESTConn *conn = store->rest_master_conn;
     reenter(this) {
       yield {
@@ -349,12 +344,14 @@ public:
 	snprintf(buf, sizeof(buf), "%d", shard_id);
         rgw_http_param_pair pairs[] = { { "type" , "metadata" },
 	                                { "id", buf },
+	                                { "period", period.c_str() },
 					{ "info" , NULL },
 	                                { NULL, NULL } };
 
         string p = "/admin/log/";
 
-        http_op = new RGWRESTReadResource(conn, p, pairs, NULL, http_manager);
+        http_op = new RGWRESTReadResource(conn, p, pairs, NULL,
+                                          env->http_manager);
 
         http_op->set_user_info((void *)stack);
 
@@ -389,10 +386,10 @@ class RGWInitSyncStatusCoroutine : public RGWCoroutine {
   RGWContinuousLeaseCR *lease_cr;
 public:
   RGWInitSyncStatusCoroutine(RGWMetaSyncEnv *_sync_env,
-		      RGWObjectCtx& _obj_ctx, uint32_t _num_shards) : RGWCoroutine(_sync_env->store->ctx()), sync_env(_sync_env),
-                                                obj_ctx(_obj_ctx), lease_cr(NULL) {
-    status.num_shards = _num_shards;
-  }
+                             RGWObjectCtx& _obj_ctx,
+                             const rgw_meta_sync_info &status)
+    : RGWCoroutine(_sync_env->store->ctx()), sync_env(_sync_env),
+      obj_ctx(_obj_ctx), status(status), lease_cr(NULL) {}
 
   ~RGWInitSyncStatusCoroutine() {
     if (lease_cr) {
@@ -440,7 +437,8 @@ public:
       set_status("fetching remote log position");
       yield {
         for (int i = 0; i < (int)status.num_shards; i++) {
-          spawn(new RGWReadRemoteMDLogShardInfoCR(sync_env->store, sync_env->http_manager, sync_env->async_rados, i, &shards_info[i]), false);
+          spawn(new RGWReadRemoteMDLogShardInfoCR(sync_env, status.period,
+                                                  i, &shards_info[i]), false);
 	}
       }
 
@@ -972,6 +970,7 @@ class RGWCloneMetaLogCoroutine : public RGWCoroutine {
   RGWMetaSyncEnv *sync_env;
   RGWMetadataLog *mdlog;
 
+  const std::string& period;
   int shard_id;
   string marker;
   bool truncated;
@@ -986,14 +985,12 @@ class RGWCloneMetaLogCoroutine : public RGWCoroutine {
   rgw_mdlog_shard_data data;
 
 public:
-  RGWCloneMetaLogCoroutine(RGWMetaSyncEnv *_sync_env,
-		    int _id, const string& _marker, string *_new_marker) : RGWCoroutine(_sync_env->cct), sync_env(_sync_env),
-                                                      mdlog(sync_env->store->meta_mgr->get_log()),
-                                                      shard_id(_id),
-                                                      marker(_marker), truncated(false), new_marker(_new_marker),
-                                                      max_entries(CLONE_MAX_ENTRIES),
-						      http_op(NULL),
-						      req_ret(0) {
+  RGWCloneMetaLogCoroutine(RGWMetaSyncEnv *_sync_env, const std::string& period,
+                           int _id, const string& _marker, string *_new_marker)
+    : RGWCoroutine(_sync_env->cct), sync_env(_sync_env),
+      mdlog(sync_env->store->meta_mgr->get_log()), period(period),
+      shard_id(_id), marker(_marker), truncated(false), new_marker(_new_marker),
+      max_entries(CLONE_MAX_ENTRIES), http_op(NULL), req_ret(0) {
     if (new_marker) {
       *new_marker = marker;
     }
@@ -1020,6 +1017,7 @@ class RGWMetaSyncShardCR : public RGWCoroutine {
 
   rgw_bucket pool;
 
+  const std::string& period;
   uint32_t shard_id;
   rgw_meta_sync_marker sync_marker;
   string marker;
@@ -1060,10 +1058,11 @@ class RGWMetaSyncShardCR : public RGWCoroutine {
 
 public:
   RGWMetaSyncShardCR(RGWMetaSyncEnv *_sync_env,
-		     rgw_bucket& _pool,
+		     rgw_bucket& _pool, const std::string& period,
 		     uint32_t _shard_id, rgw_meta_sync_marker& _marker,
                      bool *_reset_backoff) : RGWCoroutine(_sync_env->cct), sync_env(_sync_env),
 						      pool(_pool),
+                  period(period),
 						      shard_id(_shard_id),
 						      sync_marker(_marker),
                                                       marker_tracker(NULL), truncated(false), inc_lock("RGWMetaSyncShardCR::inc_lock"),
@@ -1336,7 +1335,8 @@ public:
 	if (mdlog_marker <= max_marker) {
 	  /* we're at the tip, try to bring more entries */
           ldout(sync_env->cct, 20) << __func__ << ":" << __LINE__ << ": shard_id=" << shard_id << " syncing mdlog for shard_id=" << shard_id << dendl;
-	  yield call(new RGWCloneMetaLogCoroutine(sync_env, shard_id, mdlog_marker, &mdlog_marker));
+          yield call(new RGWCloneMetaLogCoroutine(sync_env, period, shard_id,
+                                                  mdlog_marker, &mdlog_marker));
 	}
         if (retcode < 0) {
           ldout(sync_env->cct, 10) << *this << ": failed to fetch more log entries, retcode=" << retcode << dendl;
@@ -1406,6 +1406,7 @@ class RGWMetaSyncShardControlCR : public RGWBackoffControlCR
 
   rgw_bucket pool;
 
+  const std::string& period;
   uint32_t shard_id;
   rgw_meta_sync_marker sync_marker;
 
@@ -1413,18 +1414,15 @@ class RGWMetaSyncShardControlCR : public RGWBackoffControlCR
 
 public:
   RGWMetaSyncShardControlCR(RGWMetaSyncEnv *_sync_env,
-		     rgw_bucket& _pool,
-		     uint32_t _shard_id,
-                     rgw_meta_sync_marker& _marker) : RGWBackoffControlCR(_sync_env->cct), sync_env(_sync_env),
-						      pool(_pool),
-						      shard_id(_shard_id),
-						      sync_marker(_marker), obj_ctx(sync_env->store) {
-    char buf[16];
-    snprintf(buf, sizeof(buf), "%d", shard_id);
-  }
+                            rgw_bucket& _pool, const std::string& period,
+                            uint32_t _shard_id, rgw_meta_sync_marker& _marker)
+    : RGWBackoffControlCR(_sync_env->cct), sync_env(_sync_env),
+      pool(_pool), period(period), shard_id(_shard_id),
+      sync_marker(_marker), obj_ctx(sync_env->store) {}
 
   RGWCoroutine *alloc_cr() {
-    return new RGWMetaSyncShardCR(sync_env, pool, shard_id, sync_marker, backoff_ptr());
+    return new RGWMetaSyncShardCR(sync_env, pool, period, shard_id,
+                                  sync_marker, backoff_ptr());
   }
 
   RGWCoroutine *alloc_finisher_cr() {
@@ -1443,7 +1441,7 @@ class RGWMetaSyncCR : public RGWCoroutine {
 
 
 public:
-  RGWMetaSyncCR(RGWMetaSyncEnv *_sync_env, rgw_meta_sync_status& _sync_status) : RGWCoroutine(_sync_env->cct), sync_env(_sync_env),
+  RGWMetaSyncCR(RGWMetaSyncEnv *_sync_env, const rgw_meta_sync_status& _sync_status) : RGWCoroutine(_sync_env->cct), sync_env(_sync_env),
 						      sync_status(_sync_status) {
   }
 
@@ -1457,7 +1455,7 @@ public:
 
 	  RGWMetaSyncShardControlCR *shard_cr = new RGWMetaSyncShardControlCR(sync_env,
                                                                               sync_env->store->get_zone_params().log_pool,
-                                                                              shard_id,
+                                                                              sync_status.sync_info.period, shard_id,
                                                                               sync_status.sync_markers[shard_id]);
 
 
@@ -1516,7 +1514,7 @@ int RGWRemoteMetaLog::init_sync_status()
 
   RGWObjectCtx obj_ctx(store, NULL);
   return run(new RGWInitSyncStatusCoroutine(&sync_env, obj_ctx,
-                                            sync_status.sync_info.num_shards));
+                                            sync_status.sync_info));
 }
 
 int RGWRemoteMetaLog::store_sync_info()
@@ -1550,7 +1548,7 @@ int RGWRemoteMetaLog::run_sync()
     if (sync_status.sync_info.state == rgw_meta_sync_info::StateInit) {
       ldout(store->ctx(), 20) << __func__ << "(): init" << dendl;
       r = run(new RGWInitSyncStatusCoroutine(&sync_env, obj_ctx,
-                                             sync_status.sync_info.num_shards));
+                                             sync_status.sync_info));
       if (r == -EBUSY) {
         backoff.backoff_sleep();
         continue;
@@ -1702,6 +1700,7 @@ int RGWCloneMetaLogCoroutine::state_send_rest_request()
 
   rgw_http_param_pair pairs[] = { { "type", "metadata" },
                                   { "id", buf },
+                                  { "period", period.c_str() },
                                   { "max-entries", max_entries_buf },
                                   { marker_key, marker.c_str() },
                                   { NULL, NULL } };
