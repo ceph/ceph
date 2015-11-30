@@ -118,7 +118,7 @@ arise, don't panic. Common examples include:
 - You added or removed an OSD. Then, CRUSH reassigned the placement group to 
   other OSDs--thereby changing the composition of the Acting Set and spawning
   the migration of data with a "backfill" process.
-- An OSD was ``down``, was restared, and is now ``recovering``.
+- An OSD was ``down``, was restarted, and is now ``recovering``.
 - An OSD in the Acting Set is ``down`` or unable to service requests, 
   and another OSD has temporarily assumed its duties.
 
