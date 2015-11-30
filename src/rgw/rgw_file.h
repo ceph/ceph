@@ -284,6 +284,7 @@ namespace rgw {
     bool is_bucket() const { return (fh.fh_type == RGW_FS_TYPE_DIRECTORY); }
     bool is_object() const { return (fh.fh_type == RGW_FS_TYPE_FILE); }
     bool creating() const { return flags & FLAG_CREATE; }
+    bool pseudo() const { return flags & FLAG_PSEUDO; }
 
     void open() {
       flags |= FLAG_OPEN;
