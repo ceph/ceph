@@ -171,20 +171,18 @@ int rgw_mkdir(struct rgw_fs *rgw_fs,
     return -EINVAL;
   }
 
-  if (! parent->is_root()) {
-    /* cannot create a bucket in a bucket */
-    return -ENOTDIR;
-  }
-
-  // XXXX fix this
-  uri += "/";
-  uri += name;
-  RGWCreateBucketRequest req(cct, fs->get_user(), uri);
-  rc = librgw.get_fe()->execute_req(&req);
-
   /* XXX: atomicity */
   LookupFHResult fhr = fs->lookup_fh(parent, name);
   RGWFileHandle* rgw_fh = get<0>(fhr);
+
+  if (parent->is_root()) {
+    /* mkdir in root creates a new bucket */
+    uri += "/"; /* XXX */
+    uri += name;
+    RGWCreateBucketRequest req(cct, fs->get_user(), uri);
+    rc = librgw.get_fe()->execute_req(&req);
+  } else
+    rgw_fh->set_pseudo();
 
   struct rgw_file_handle *rfh = rgw_fh->get_fh();
   *fh = rfh;
