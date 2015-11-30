@@ -38,6 +38,15 @@ class Matrix:
         """
         return self.size() / self.minscanlen()
 
+    def tostr(self, depth):
+        pass
+
+    def __str__(self):
+        """
+        str method
+        """
+        return self.tostr(0)
+
 
 class Cycle(Matrix):
     """
@@ -56,6 +65,8 @@ class Cycle(Matrix):
     def minscanlen(self):
         return self.mat.minscanlen()
 
+    def tostr(self, depth):
+        return '\t'*depth + "Cycle({num}):\n".format(num=self.num) + self.mat.tostr(depth + 1)
 
 class Base(Matrix):
     """
@@ -72,6 +83,9 @@ class Base(Matrix):
 
     def minscanlen(self):
         return 1
+
+    def tostr(self, depth):
+        return '\t'*depth + "Base({item})\n".format(item=self.item)
 
 
 class Product(Matrix):
@@ -95,6 +109,9 @@ class Product(Matrix):
         self.submats.reverse()
 
         self._minscanlen = max([i.minscanlen() for i in _submats])
+    def tostr(self, depth):
+        ret = '\t'*depth + "Product({item}):\n".format(item=self.item)
+        return ret + ''.join([i[1].tostr(depth+1) for i in self.submats])
 
     def minscanlen(self):
         return self._minscanlen
@@ -166,6 +183,10 @@ class Concat(Matrix):
                 out = out | frozenset([submat.index(i)])
         return (self.item, out)
 
+    def tostr(self, depth):
+        ret = '\t'*depth + "Concat({item}):\n".format(item=self.item)
+        return ret + ''.join([i[1].tostr(depth+1) for i in self.submats])
+
 class Sum(Matrix):
     """
     We want to mix the subsequences proportionately to their size.
@@ -188,6 +209,9 @@ class Sum(Matrix):
         self._minscanlen = max(
             [(self._size / i.size()) *
              i.minscanlen() for i in _submats])
+    def tostr(self, depth):
+        ret = '\t'*depth + "Sum({item}):\n".format(item=self.item)
+        return ret + ''.join([i[1].tostr(depth+1) for i in self._submats])
 
     def minscanlen(self):
         return self._minscanlen
