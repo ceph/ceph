@@ -2399,7 +2399,7 @@ static string objexp_hint_get_keyext(const string& tenant_name,
                                      const string& bucket_id,
                                      const rgw_obj_key& obj_key)
 {
-  return tenant_name + ":" + bucket_name + ":" + bucket_id +
+  return tenant_name + (tenant_name.empty() ? "" : ":") + bucket_name + ":" + bucket_id +
       ":" + obj_key.name + ":" + obj_key.instance;
 }
 
