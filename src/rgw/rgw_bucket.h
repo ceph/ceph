@@ -47,6 +47,8 @@ extern int rgw_bucket_sync_user_stats(RGWRados *store, const string& tenant_name
 extern void rgw_make_bucket_entry_name(const string& tenant_name,
                                        const string& bucket_name,
                                        string& bucket_entry);
+extern string rgw_make_bucket_entry_name(const string& tenant_name,
+                                       const string& bucket_name);
 extern void rgw_parse_url_bucket(const string &bucket,
                                  string &tenant_name, string &bucket_name);
 
