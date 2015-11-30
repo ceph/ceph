@@ -65,6 +65,11 @@ namespace rgw {
       // nothing
     }
 
+    fh_key(const uint64_t bk, const uint64_t ok) {
+      fh_hk.bucket = bk;
+      fh_hk.object = ok;
+    }
+
     fh_key(const uint64_t bk, const char *_o) {
       fh_hk.bucket = bk;
       fh_hk.object = XXH64(_o, ::strlen(_o), seed);
@@ -135,6 +140,7 @@ namespace rgw {
     static constexpr uint32_t FLAG_OPEN =   0x0001;
     static constexpr uint32_t FLAG_ROOT =   0x0002;
     static constexpr uint32_t FLAG_CREATE = 0x0004;
+    static constexpr uint32_t FLAG_PSEUDO = 0x0008;
 
     friend class RGWLibFS;
 
@@ -161,8 +167,8 @@ namespace rgw {
 
   public:
     RGWFileHandle(RGWLibFS* fs, uint32_t fs_inst, RGWFileHandle* _parent,
-		  const fh_key& _fhk, const char *_name)
-      : parent(_parent), name(_name), fhk(_fhk), flags(FLAG_NONE) {
+		  const fh_key& _fhk, std::string& _name)
+      : parent(_parent), name(std::move(_name)), fhk(_fhk), flags(FLAG_NONE) {
 
       fh.fh_type = parent->is_root()
 	? RGW_FS_TYPE_DIRECTORY : RGW_FS_TYPE_FILE;      
@@ -170,7 +176,7 @@ namespace rgw {
       depth = parent->depth + 1;
 
       /* save constant fhk */
-      fh_key fhk(parent->name, name);
+      fh_key fhk(parent->bucket_name(), make_path());
       fh.fh_hk = fhk.fh_hk; /* XXX redundant in fh_hk */
 
       /* pointer to self */
@@ -243,13 +249,35 @@ namespace rgw {
       bool first = true;
       path.reserve(reserve);
       for (auto& s : boost::adaptors::reverse(segments)) {
-	if (! first) {
+	if (! first)
 	  path += "/";
+	else
 	  first = false;
-	}
 	path += *s;
       }
       return path;
+    }
+
+    fh_key make_fhk(const std::string& name) {
+      if (depth <= 1)
+	return fh_key(fhk.fh_hk.object, name.c_str());
+      else {
+	std::vector<const std::string*> segments = { &object_name(), &name };
+	while (parent && !parent->is_bucket())
+	   segments.push_back(&parent->object_name());
+	/* hash path */
+	XXH64_state_t hs;
+	XXH64_reset(&hs, fh_key::seed);
+	bool first = true;
+	for (auto& s : boost::adaptors::reverse(segments)) {
+	  if (! first)
+	    (void) XXH64_update(&hs, (void*) "/", 1);
+	  else
+	    first = false;
+	  (void) XXH64_update(&hs, s->c_str(), s->size());
+	}
+	return fh_key(fhk.fh_hk.object, XXH64_digest(&hs));
+      }
     }
 
     bool is_open() const { return flags & FLAG_OPEN; }
@@ -268,6 +296,10 @@ namespace rgw {
 
     void open_for_create() {
       flags |= FLAG_CREATE;
+    }
+
+    void set_pseudo() {
+      flags |= FLAG_PSEUDO;
     }
 
     void set_nlink(const uint64_t n) {
@@ -421,8 +453,9 @@ namespace rgw {
     /* find or create an RGWFileHandle */
     LookupFHResult lookup_fh(RGWFileHandle* parent, const char *name) {
 
+      std::string sname(name);
       RGWFileHandle::FHCache::Latch lat;
-      fh_key fhk(parent->fhk.fh_hk.object, name);
+      fh_key fhk = parent->make_fhk(sname);
       LookupFHResult fhr { nullptr, RGWFileHandle::FLAG_NONE };
 
       using std::get;
@@ -433,7 +466,7 @@ namespace rgw {
 			    RGWFileHandle::FHCache::FLAG_LOCK);
       /* LATCHED */
       if (! fh) {
-	fh = new RGWFileHandle(this, get_inst(), parent, fhk, name);
+	fh = new RGWFileHandle(this, get_inst(), parent, fhk, sname);
 	intrusive_ptr_add_ref(fh); /* sentinel ref */
 	fh_cache.insert_latched(fh, lat,
 				RGWFileHandle::FHCache::FLAG_NONE);
