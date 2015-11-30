@@ -69,6 +69,16 @@ Journaler::~Journaler() {
   assert(m_recorder == NULL);
 }
 
+int Journaler::exists(bool *header_exists) const {
+  int r = m_header_ioctx.stat(m_header_oid, NULL, NULL);
+  if (r < 0 && r != -ENOENT) {
+    return r;
+  }
+
+  *header_exists = (r == 0);
+  return 0;
+}
+
 void Journaler::init(Context *on_init) {
   m_metadata->init(new C_InitJournaler(this, on_init));
 }
