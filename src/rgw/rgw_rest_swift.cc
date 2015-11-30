@@ -1223,8 +1223,7 @@ int RGWHandler_ObjStore_SWIFT::init(RGWRados *store, struct req_state *s, RGWCli
   ret = validate_tenant_name(s->bucket_tenant);
   if (ret)
     return ret;
-  /* XXX The c_str is redundant here, isn't it? We do one inside. */
-  ret = validate_bucket_name(s->bucket_name.c_str());
+  ret = validate_bucket_name(s->bucket_name);
   if (ret)
     return ret;
   ret = validate_object_name(s->object.name);
@@ -1255,7 +1254,7 @@ int RGWHandler_ObjStore_SWIFT::init(RGWRados *store, struct req_state *s, RGWCli
 
     string dest_object = dest_obj_key.name;
     if (dest_bucket_name != s->bucket_name) {
-      ret = validate_bucket_name(dest_bucket_name.c_str());
+      ret = validate_bucket_name(dest_bucket_name);
       if (ret < 0)
         return ret;
     }
