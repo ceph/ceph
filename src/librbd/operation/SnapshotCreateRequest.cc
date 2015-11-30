@@ -232,7 +232,6 @@ bool SnapshotCreateRequest::send_create_object_map() {
 }
 
 bool SnapshotCreateRequest::send_release_snap_id() {
-  assert(m_image_ctx.owner_lock.is_locked());
   if (m_snap_id != CEPH_NOSNAP && !m_snap_created) {
     CephContext *cct = m_image_ctx.cct;
     ldout(cct, 5) << this << " " << __func__ << ": snap_id=" << m_snap_id
