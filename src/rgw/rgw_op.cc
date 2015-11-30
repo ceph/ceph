@@ -2279,14 +2279,8 @@ void RGWPutMetadataAccount::filter_out_temp_url(map<string, bufferlist>& add_att
 
 void RGWPutMetadataAccount::execute()
 {
-  rgw_obj obj;
   map<string, bufferlist> attrs, orig_attrs, rmattrs;
   RGWObjVersionTracker acct_op_tracker;
-
-  /* Get the name of raw object which stores the metadata in its xattrs. */
-  string buckets_obj_id;
-  rgw_get_buckets_obj(s->user.user_id, buckets_obj_id);
-  obj = rgw_obj(store->zone.user_uid_pool, buckets_obj_id);
 
   ret = get_params();
   if (ret < 0) {
