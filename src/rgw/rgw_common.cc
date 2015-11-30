@@ -1157,7 +1157,8 @@ int RGWUserCaps::check_cap(const string& cap, uint32_t perm)
 
 bool RGWUserCaps::is_valid_cap_type(const string& tp)
 {
-  static const char *cap_type[] = { "users",
+  static const char *cap_type[] = { "user",
+                                    "users",
                                     "buckets",
                                     "metadata",
                                     "usage",
