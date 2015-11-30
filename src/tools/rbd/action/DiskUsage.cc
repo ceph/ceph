@@ -131,7 +131,7 @@ static int do_disk_usage(librbd::RBD &rbd, librados::IoCtx &io_ctx,
     if (r < 0) {
       std::cerr << "rbd: failed to retrieve image features: " << cpp_strerror(r)
                 << std::endl;
-      return r;
+      goto out;
     }
     if ((features & RBD_FEATURE_FAST_DIFF) == 0) {
       std::cerr << "warning: fast-diff map is not enabled for " << *name << ". "
@@ -140,7 +140,8 @@ static int do_disk_usage(librbd::RBD &rbd, librados::IoCtx &io_ctx,
 
     librbd::image_info_t info;
     if (image.stat(info, sizeof(info)) < 0) {
-      return -EINVAL;
+      r = -EINVAL;
+      goto out;
     }
 
     std::vector<librbd::snap_info_t> snap_list;
@@ -163,7 +164,7 @@ static int do_disk_usage(librbd::RBD &rbd, librados::IoCtx &io_ctx,
       if (r < 0) {
         std::cerr << "rbd: error opening snapshot " << *name << "@"
                   << snap->name << ": " << cpp_strerror(r) << std::endl;
-        return r;
+        goto out;
       }
 
       if (imgname == NULL || (snapname != NULL && snap->name == snapname)) {
@@ -171,7 +172,7 @@ static int do_disk_usage(librbd::RBD &rbd, librados::IoCtx &io_ctx,
                                      snap_image, snap->size, tbl, f,
                                      &used_size);
         if (r < 0) {
-          return r;
+          goto out;
         }
 
         if (snapname != NULL) {
@@ -186,13 +187,14 @@ static int do_disk_usage(librbd::RBD &rbd, librados::IoCtx &io_ctx,
       r = compute_image_disk_usage(*name, "", last_snap_name, image, info.size,
                                    tbl, f, &used_size);
       if (r < 0) {
-        return r;
+        goto out;
       }
       total_prov += info.size;
       total_used += used_size;
     }
   }
 
+out:
   if (f) {
     f->close_section();
     if (imgname == NULL) {
@@ -211,7 +213,7 @@ static int do_disk_usage(librbd::RBD &rbd, librados::IoCtx &io_ctx,
     std::cout << tbl;
   }
 
-  return 0;
+  return r < 0 ? r : 0;
 }
 
 void get_arguments(po::options_description *positional,
