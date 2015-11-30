@@ -1,6 +1,8 @@
 #ifndef RGW_META_SYNC_STATUS_H
 #define RGW_META_SYNC_STATUS_H
 
+#include <string>
+
 struct rgw_meta_sync_info {
   enum SyncState {
     StateInit = 0,
@@ -10,19 +12,27 @@ struct rgw_meta_sync_info {
 
   uint16_t state;
   uint32_t num_shards;
+  std::string period; //< period id of current metadata log
+  epoch_t realm_epoch = 0; //< realm epoch of period
 
   void encode(bufferlist& bl) const {
-    ENCODE_START(1, 1, bl);
+    ENCODE_START(2, 1, bl);
     ::encode(state, bl);
     ::encode(num_shards, bl);
+    ::encode(period, bl);
+    ::encode(realm_epoch, bl);
     ENCODE_FINISH(bl);
   }
 
   void decode(bufferlist::iterator& bl) {
-     DECODE_START(1, bl);
-     ::decode(state, bl);
-     ::decode(num_shards, bl);
-     DECODE_FINISH(bl);
+    DECODE_START(1, bl);
+    ::decode(state, bl);
+    ::decode(num_shards, bl);
+    if (struct_v >= 2) {
+      ::decode(period, bl);
+      ::decode(realm_epoch, bl);
+    }
+    DECODE_FINISH(bl);
   }
 
   void decode_json(JSONObj *obj);
@@ -58,14 +68,14 @@ struct rgw_meta_sync_marker {
   }
 
   void decode(bufferlist::iterator& bl) {
-     DECODE_START(1, bl);
+    DECODE_START(1, bl);
     ::decode(state, bl);
     ::decode(marker, bl);
     ::decode(next_step_marker, bl);
     ::decode(total_entries, bl);
     ::decode(pos, bl);
     ::decode(timestamp, bl);
-     DECODE_FINISH(bl);
+    DECODE_FINISH(bl);
   }
 
   void decode_json(JSONObj *obj);
