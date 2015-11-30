@@ -105,8 +105,10 @@ class RGWRemoteMetaLog : public RGWCoroutinesManager {
   RGWSyncBackoff backoff;
 
   RGWMetaSyncEnv sync_env;
+  rgw_meta_sync_status sync_status;
 
   void init_sync_env(RGWMetaSyncEnv *env);
+  int store_sync_info();
 
   atomic_t going_down;
 
@@ -122,16 +124,16 @@ public:
   void finish();
 
   int read_log_info(rgw_mdlog_info *log_info);
-  int read_sync_status(rgw_meta_sync_status *sync_status);
-  int init_sync_status(int num_shards);
-  int set_sync_info(const rgw_meta_sync_info& sync_info);
-  int run_sync(int num_shards, rgw_meta_sync_status& sync_status);
+  int read_sync_status();
+  int init_sync_status();
+  int run_sync();
 
   void wakeup(int shard_id);
 
   RGWMetaSyncEnv& get_sync_env() {
     return sync_env;
   }
+  const rgw_meta_sync_status& get_sync_status() const { return sync_status; }
 };
 
 class RGWMetaSyncStatusManager {
@@ -140,10 +142,7 @@ class RGWMetaSyncStatusManager {
 
   RGWRemoteMetaLog master_log;
 
-  rgw_meta_sync_status sync_status;
   map<int, rgw_obj> shard_objs;
-
-  int num_shards;
 
   struct utime_shard {
     utime_t ts;
@@ -166,16 +165,18 @@ class RGWMetaSyncStatusManager {
 public:
   RGWMetaSyncStatusManager(RGWRados *_store, RGWAsyncRadosProcessor *async_rados)
     : store(_store), master_log(store, async_rados, this),
-      num_shards(0), ts_to_shard_lock("ts_to_shard_lock") {}
+      ts_to_shard_lock("ts_to_shard_lock") {}
   int init();
   void finish();
 
-  rgw_meta_sync_status& get_sync_status() { return sync_status; }
+  const rgw_meta_sync_status& get_sync_status() const {
+    return master_log.get_sync_status();
+  }
 
-  int read_sync_status() { return master_log.read_sync_status(&sync_status); }
-  int init_sync_status() { return master_log.init_sync_status(num_shards); }
+  int read_sync_status() { return master_log.read_sync_status(); }
+  int init_sync_status() { return master_log.init_sync_status(); }
 
-  int run() { return master_log.run_sync(num_shards, sync_status); }
+  int run() { return master_log.run_sync(); }
 
   void wakeup(int shard_id) { return master_log.wakeup(shard_id); }
   void stop() {

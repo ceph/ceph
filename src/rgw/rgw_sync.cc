@@ -207,7 +207,7 @@ int RGWMetaSyncStatusManager::init()
     return r;
   }
 
-  num_shards = sync_status.sync_info.num_shards;
+  int num_shards = master_log.get_sync_status().sync_info.num_shards;
 
   for (int i = 0; i < num_shards; i++) {
     shard_objs[i] = rgw_obj(store->get_zone_params().log_pool, sync_env.shard_obj_name(i));
@@ -1487,22 +1487,23 @@ void RGWRemoteMetaLog::init_sync_env(RGWMetaSyncEnv *env) {
   env->http_manager = &http_manager;
 }
 
-int RGWRemoteMetaLog::read_sync_status(rgw_meta_sync_status *sync_status)
+int RGWRemoteMetaLog::read_sync_status()
 {
   if (store->is_meta_master()) {
     return 0;
   }
 
   RGWObjectCtx obj_ctx(store, NULL);
-  return run(new RGWReadSyncStatusCoroutine(&sync_env, obj_ctx, sync_status));
+  return run(new RGWReadSyncStatusCoroutine(&sync_env, obj_ctx, &sync_status));
 }
 
-int RGWRemoteMetaLog::init_sync_status(int num_shards)
+int RGWRemoteMetaLog::init_sync_status()
 {
   if (store->is_meta_master()) {
     return 0;
   }
 
+  auto num_shards = sync_status.sync_info.num_shards;
   if (!num_shards) {
     rgw_mdlog_info mdlog_info;
     int r = read_log_info(&mdlog_info);
@@ -1514,16 +1515,17 @@ int RGWRemoteMetaLog::init_sync_status(int num_shards)
   }
 
   RGWObjectCtx obj_ctx(store, NULL);
-  return run(new RGWInitSyncStatusCoroutine(&sync_env, obj_ctx, num_shards));
+  return run(new RGWInitSyncStatusCoroutine(&sync_env, obj_ctx,
+                                            sync_status.sync_info.num_shards));
 }
 
-int RGWRemoteMetaLog::set_sync_info(const rgw_meta_sync_info& sync_info)
+int RGWRemoteMetaLog::store_sync_info()
 {
   return run(new RGWSimpleRadosWriteCR<rgw_meta_sync_info>(async_rados, store, store->get_zone_params().log_pool,
-				 sync_env.status_oid(), sync_info));
+				 sync_env.status_oid(), sync_status.sync_info));
 }
 
-int RGWRemoteMetaLog::run_sync(int num_shards, rgw_meta_sync_status& sync_status)
+int RGWRemoteMetaLog::run_sync()
 {
   if (store->is_meta_master()) {
     return 0;
@@ -1538,13 +1540,6 @@ int RGWRemoteMetaLog::run_sync(int num_shards, rgw_meta_sync_status& sync_status
     return r;
   }
 
-  if (!num_shards) {
-    num_shards = mdlog_info.num_shards;
-  } else if ((uint32_t)num_shards != mdlog_info.num_shards) {
-    lderr(store->ctx()) << "ERROR: can't sync, mismatch between num shards, master num_shards=" << mdlog_info.num_shards << " local num_shards=" << num_shards << dendl;
-    return r;
-  }
-
   do {
     r = run(new RGWReadSyncStatusCoroutine(&sync_env, obj_ctx, &sync_status));
     if (r < 0 && r != -ENOENT) {
@@ -1554,7 +1549,8 @@ int RGWRemoteMetaLog::run_sync(int num_shards, rgw_meta_sync_status& sync_status
 
     if (sync_status.sync_info.state == rgw_meta_sync_info::StateInit) {
       ldout(store->ctx(), 20) << __func__ << "(): init" << dendl;
-      r = run(new RGWInitSyncStatusCoroutine(&sync_env, obj_ctx, num_shards));
+      r = run(new RGWInitSyncStatusCoroutine(&sync_env, obj_ctx,
+                                             sync_status.sync_info.num_shards));
       if (r == -EBUSY) {
         backoff.backoff_sleep();
         continue;
@@ -1566,6 +1562,12 @@ int RGWRemoteMetaLog::run_sync(int num_shards, rgw_meta_sync_status& sync_status
       }
     }
   } while (sync_status.sync_info.state == rgw_meta_sync_info::StateInit);
+
+  auto num_shards = sync_status.sync_info.num_shards;
+  if (num_shards != mdlog_info.num_shards) {
+    lderr(store->ctx()) << "ERROR: can't sync, mismatch between num shards, master num_shards=" << mdlog_info.num_shards << " local num_shards=" << num_shards << dendl;
+    return r;
+  }
 
   do {
     r = run(new RGWReadSyncStatusCoroutine(&sync_env, obj_ctx, &sync_status));
@@ -1589,7 +1591,7 @@ int RGWRemoteMetaLog::run_sync(int num_shards, rgw_meta_sync_status& sync_status
         }
 
         sync_status.sync_info.state = rgw_meta_sync_info::StateSync;
-        r = set_sync_info(sync_status.sync_info);
+        r = store_sync_info();
         if (r < 0) {
           ldout(store->ctx(), 0) << "ERROR: failed to update sync status" << dendl;
           return r;

@@ -4471,7 +4471,7 @@ next:
       return -ret;
     }
 
-    rgw_meta_sync_status& sync_status = sync.get_sync_status();
+    const rgw_meta_sync_status& sync_status = sync.get_sync_status();
 
     formatter->open_object_section("summary");
     encode_json("sync_status", sync_status, formatter);
