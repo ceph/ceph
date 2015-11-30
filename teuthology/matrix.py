@@ -109,6 +109,11 @@ class Product(Matrix):
         self.submats.reverse()
 
         self._minscanlen = max([i.minscanlen() for i in _submats])
+        if self._minscanlen + 1 > self._size:
+            self._minscanlen  = self._size
+        else:
+            self._minscanlen += 1
+
     def tostr(self, depth):
         ret = '\t'*depth + "Product({item}):\n".format(item=self.item)
         return ret + ''.join([i[1].tostr(depth+1) for i in self.submats])
@@ -130,7 +135,7 @@ class Product(Matrix):
 
         In general, if the gcd(lmat.size(), rmat.size()) == N,
         index(i) would be periodic on the interval (lmat.size() *
-        rmat.size()) / N.  To adjust, we increment the lmat index
+        rmat.size()) / N.  To adjust, we decrement the lmat index
         number on each repeat.  Each of the N repeats must therefore
         be distinct from the previous ones resulting in lmat.size() *
         rmat.size() combinations.
@@ -154,7 +159,7 @@ class Product(Matrix):
                 return s | r
             return s | frozenset([r])
 
-        litems = lmat.index(i + off)
+        litems = lmat.index((i - off) % lmat.size())
         ritems = self._index(i, submats[1:])
         return combine(litems, combine(ritems))
 
