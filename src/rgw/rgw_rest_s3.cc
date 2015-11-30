@@ -2291,6 +2291,8 @@ int RGWHandler_ObjStore_S3::init_from_header(struct req_state *s, int default_fo
     if (s->bucket_tenant.empty())
       s->bucket_tenant = s->user.user_id.tenant;
 
+    ldout(s->cct, 20) << "s->user.user_id=" << s->user.user_id << " s->bucket_tenant=" << s->bucket_tenant << " s->bucket_name=" << s->bucket_name << dendl;
+
     if (pos >= 0) {
       string encoded_obj_str = req.substr(pos+1);
       s->object = rgw_obj_key(encoded_obj_str, s->info.args.get("versionId"));
@@ -2564,6 +2566,10 @@ int RGW_Auth_S3::authorize(RGWRados *store, struct req_state *s)
         }
 
         s->perm_mask = RGW_PERM_FULL_CONTROL;
+
+        if (s->bucket_tenant.empty()) {
+          s->bucket_tenant = s->user.user_id.tenant;
+        }
       }
     }
   }
@@ -2579,6 +2585,10 @@ int RGW_Auth_S3::authorize(RGWRados *store, struct req_state *s)
     if (rgw_get_user_info_by_access_key(store, auth_id, s->user) < 0) {
       dout(5) << "error reading user info, uid=" << auth_id << " can't authenticate" << dendl;
       return -ERR_INVALID_ACCESS_KEY;
+    }
+
+    if (s->bucket_tenant.empty()) {
+      s->bucket_tenant = s->user.user_id.tenant;
     }
 
     /* now verify signature */
