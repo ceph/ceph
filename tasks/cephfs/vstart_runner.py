@@ -358,10 +358,8 @@ class MountDaemon(object):
 
 
 class LocalFuseMount(FuseMount):
-    def __init__(self, client_id, mount_point):
-        test_dir = "/tmp/not_there"
+    def __init__(self, test_dir, client_id):
         super(LocalFuseMount, self).__init__(None, test_dir, client_id, LocalRemote())
-        self.mountpoint = mount_point
 
     @property
     def config_path(self):
@@ -752,15 +750,14 @@ def exec_test():
 
             open("./keyring", "a").write(p.stdout.getvalue())
 
-        mount_point = os.path.join(test_dir, "mnt.{0}".format(client_id))
-        mount = LocalFuseMount(client_id, mount_point)
+        mount = LocalFuseMount(test_dir, client_id)
         mounts.append(mount)
         if mount.is_mounted():
-            log.warn("unmounting {0}".format(mount_point))
+            log.warn("unmounting {0}".format(mount.mountpoint))
             mount.umount_wait()
         else:
-            if os.path.exists(mount_point):
-                os.rmdir(mount_point)
+            if os.path.exists(mount.mountpoint):
+                os.rmdir(mount.mountpoint)
     filesystem = LocalFilesystem(ctx)
 
     from tasks.cephfs_test_runner import DecoratingLoader
