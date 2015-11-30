@@ -56,9 +56,26 @@ public:
 // TODO: do we actually need this?
 class  RGWGetObj_ObjStore_S3Website : public RGWGetObj_ObjStore_S3
 {
+private:
+   bool is_errordoc_request;
 public:
-  RGWGetObj_ObjStore_S3Website() {}
+  RGWGetObj_ObjStore_S3Website() : is_errordoc_request(false) {}
+  RGWGetObj_ObjStore_S3Website(bool is_errordoc_request) : is_errordoc_request(false) { this->is_errordoc_request = is_errordoc_request; }
   ~RGWGetObj_ObjStore_S3Website() {}
+  // We override RGWGetObj_ObjStore::get_params here, to allow ignoring all
+  // conditional params for error pages.
+  int get_params() {
+      if (is_errordoc_request) {
+        range_str = NULL;
+        if_mod = NULL;
+        if_unmod = NULL;
+        if_match = NULL;
+        if_nomatch = NULL;
+		return 0;
+      } else {
+        return RGWGetObj_ObjStore_S3::get_params();
+      }
+  }
 };
  
 #endif
