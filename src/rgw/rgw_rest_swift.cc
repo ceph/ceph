@@ -1216,9 +1216,8 @@ int RGWHandler_ObjStore_SWIFT::init_from_header(struct req_state *s)
 
 int RGWHandler_ObjStore_SWIFT::init(RGWRados *store, struct req_state *s, RGWClientIO *cio)
 {
-  string bucket_log;
-  rgw_make_bucket_entry_name(s->bucket_tenant, s->bucket_name, bucket_log);
-  dout(10) << "s->object=" << (!s->object.empty() ? s->object : rgw_obj_key("<NULL>")) << " s->bucket=" << bucket_log << dendl;
+  dout(10) << "s->object=" << (!s->object.empty() ? s->object : rgw_obj_key("<NULL>"))
+           << " s->bucket=" << rgw_make_bucket_entry_name(s->bucket_tenant, s->bucket_name) << dendl;
 
   int ret;
   ret = validate_tenant_name(s->bucket_tenant);

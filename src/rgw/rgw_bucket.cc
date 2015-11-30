@@ -53,6 +53,18 @@ void rgw_make_bucket_entry_name(const string& tenant_name, const string& bucket_
   }
 }
 
+string rgw_make_bucket_entry_name(const string& tenant_name, const string& bucket_name) {
+  string bucket_entry;
+
+  if (tenant_name.empty()) {
+    bucket_entry = bucket_name;
+  } else {
+    bucket_entry = tenant_name + "/" + bucket_name;
+  }
+
+  return bucket_entry;
+}
+
 /*
  * Tenants are separated from buckets in URLs by a colon in S3.
  * This function is not to be used on Swift URLs, not even for COPY arguments.
