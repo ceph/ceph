@@ -28,6 +28,10 @@ class ConfigError(RuntimeError):
     pass
 
 
+class ParseError(Exception):
+    pass
+
+
 class CommandFailedError(Exception):
 
     """

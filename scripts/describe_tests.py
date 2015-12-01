@@ -8,21 +8,29 @@ usage:
     teuthology-describe-tests -h
     teuthology-describe-tests [options] [--] <suite_dir>
 
-Describe the contents of a qa suite by extracting comments
-starting with particular prefixes from files in the suite.
+Describe the contents of a qa suite by reading 'description' elements
+from yaml files in the suite.
 
-By default, the remainder of a line starting with '# desc:' will
-be included from each file in the specified suite directory.
+The 'description' element should contain a list with a dictionary
+of fields, e.g.:
+
+description:
+- field1: value1
+  field2: value2
+  field3: value3
+  desc: short human-friendly description
+
+Fields are user-defined, and are not required to be in all yaml files.
 
 positional arguments:
-  <suite_dir>            qa suite path to traverse and describe
+  <suite_dir>                        path of qa suite
 
 optional arguments:
-  -h, --help                          Show this help message and exit
-  -p <prefixes>, --prefix <prefixes>  Comma-separated list of prefixes
-                                      [default: desc]
-  --show-facet [yes|no]               List the facet of each file
-                                      [default: yes]
+  -h, --help                         Show this help message and exit
+  -f <fields>, --fields <fields>     Comma-separated list of fields to
+                                     include [default: desc]
+  --show-facet [yes|no]              List the facet of each file
+                                     [default: yes]
 """
 
 

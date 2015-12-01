@@ -1,27 +1,33 @@
 # -*- coding: utf-8 -*-
+import pytest
+
 from fake_fs import make_fake_fstools
 from teuthology.describe_tests import tree_with_info, extract_info
+from teuthology.exceptions import ParseError
 
 realistic_fs = {
     'basic': {
         '%': None,
         'base': {
             'install.yaml':
-            """# desc: install ceph
+            """description:
+- desc: install ceph
 install:
 """
         },
         'clusters': {
             'fixed-1.yaml':
-            """# desc: single node cluster
+            """description:
+- desc: single node cluster
 roles:
 - [osd.0, osd.1, osd.2, mon.a, mon.b, mon.c, client.0]
 """
         },
         'workloads': {
             'rbd_api_tests_old_format.yaml':
-            """# desc: c/c++ librbd api tests with format 1 images
-# rbd_features: none
+            """description:
+- desc: c/c++ librbd api tests with format 1 images
+  rbd_features: none
 overrides:
   ceph:
     conf:
@@ -36,8 +42,9 @@ tasks:
         - rbd/test_librbd.sh
 """,
             'rbd_api_tests.yaml':
-            """# desc: c/c++ librbd api tests with default settings
-# rbd_features: default
+            """description:
+- desc: c/c++ librbd api tests with default settings
+  rbd_features: default
 tasks:
 - workunit:
     clients:
@@ -182,10 +189,28 @@ class TestDescribeTests(object):
 
 
 def test_extract_info_dir():
-    simple_fs = {'a': {'b': '# foo:'}}
+    simple_fs = {'a': {'b.yaml': 'description: [{foo: c}]'}}
     _, _, fake_isdir, fake_open = make_fake_fstools(simple_fs)
     info = extract_info('a', [], fake_isdir, fake_open)
     assert info == {}
 
     info = extract_info('a', ['foo', 'bar'], fake_isdir, fake_open)
     assert info == {'foo': '', 'bar': ''}
+
+    info = extract_info('a/b.yaml', ['foo', 'bar'], fake_isdir, fake_open)
+    assert info == {'foo': 'c', 'bar': ''}
+
+def check_parse_error(fs):
+    _, _, fake_isdir, fake_open = make_fake_fstools(fs)
+    with pytest.raises(ParseError):
+        a = extract_info('a.yaml', ['a'], fake_isdir, fake_open)
+        raise Exception(str(a))
+
+def test_extract_info_too_many_elements():
+    check_parse_error({'a.yaml': 'description: [{a: b}, {b: c}]'})
+
+def test_extract_info_not_a_list():
+    check_parse_error({'a.yaml': 'description: {a: b}'})
+
+def test_extract_info_not_a_dict():
+    check_parse_error({'a.yaml': 'description: [[a, b]]'})

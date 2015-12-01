@@ -1,43 +1,54 @@
 # -*- coding: utf-8 -*-
 from prettytable import PrettyTable, FRAME, ALL
 import os
+import yaml
+
+from teuthology.exceptions import ParseError
 
 def main(args):
     suite_dir = os.path.abspath(args["<suite_dir>"])
-    filters = args["--prefix"].split(',')
+    fields = args["--fields"].split(',')
     include_facet = args['--show-facet'] == 'yes'
 
-    print(suite_dir)
-    rows = tree_with_info(suite_dir, filters, include_facet, '', [])
+    try:
+        rows = tree_with_info(suite_dir, fields, include_facet, '', [])
+    except ParseError:
+        return 1
 
     headers = ['path']
     if include_facet:
         headers.append('facet')
 
-    table = PrettyTable(headers + filters)
+    table = PrettyTable(headers + fields)
     table.align = 'l'
     table.vrules = ALL
     table.hrules = FRAME
 
     for row in rows:
         table.add_row(row)
+
+    print(suite_dir)
     print(table)
 
-def extract_info(file_name, filters, _isdir=os.path.isdir, _open=open):
-    result = {f: '' for f in filters}
-    if _isdir(file_name):
-        return result
-    with _open(file_name, 'r') as f:
-        for line in f:
-            for filt in filters:
-                prefix = '# ' + filt + ':'
-                if line.startswith(prefix):
-                    if result[filt]:
-                        result[filt] += '\n'
-                    result[filt] += line[len(prefix):].rstrip('\n').strip()
-    return result
+def extract_info(file_name, fields, _isdir=os.path.isdir, _open=open):
+    if _isdir(file_name) or not file_name.endswith('.yaml'):
+        return {f: '' for f in fields}
 
-def tree_with_info(cur_dir, filters, include_facet, prefix, rows,
+    with _open(file_name, 'r') as f:
+        parsed = yaml.load(f)
+
+    description = parsed.get('description', [{}])
+    if not (isinstance(description, list) and
+            len(description) == 1 and
+            isinstance(description[0], dict)):
+        print 'Error in description format in', file_name
+        print 'Description must be a list containing exactly one dict.'
+        print 'Description is:', description
+        raise ParseError()
+
+    return {field: description[0].get(field, '') for field in fields}
+
+def tree_with_info(cur_dir, fields, include_facet, prefix, rows,
                    _listdir=os.listdir, _isdir=os.path.isdir,
                    _open=open):
     files = sorted(_listdir(cur_dir))
@@ -51,15 +62,15 @@ def tree_with_info(cur_dir, filters, include_facet, prefix, rows,
         else:
             file_pad = '├── '
             dir_pad = '│   '
-        info = extract_info(path, filters, _isdir, _open)
+        info = extract_info(path, fields, _isdir, _open)
         tree_node = prefix + file_pad + f
-        meta = [info[f] for f in filters]
+        meta = [info[f] for f in fields]
         row = [tree_node]
         if include_facet:
             row.append(facet)
         rows.append(row + meta)
         if _isdir(path):
-            tree_with_info(path, filters, include_facet,
+            tree_with_info(path, fields, include_facet,
                            prefix + dir_pad, rows,
                            _listdir, _isdir, _open)
     return rows
