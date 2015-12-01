@@ -17,7 +17,7 @@
 # MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 # GNU Library Public License for more details.
 #
-TIMEOUT=120
+TIMEOUT=300
 PG_NUM=4
 
 if type xmlstarlet > /dev/null 2>&1; then
@@ -1041,6 +1041,37 @@ function test_repair() {
     repair 1.0 || return 1
     kill_daemons $dir KILL osd || return 1
     ! TIMEOUT=1 repair 1.0 || return 1
+    teardown $dir || return 1
+}
+#######################################################################
+
+##
+# Run scrub on **pgid** and wait until it completes. The pg_scrub
+# function will fail if repair does not complete within $TIMEOUT
+# seconds. The pg_scrub is complete whenever the
+# **get_last_scrub_stamp** function reports a timestamp different from
+# the one stored before starting the scrub.
+#
+# @param pgid the id of the PG
+# @return 0 on success, 1 on error
+#
+function pg_scrub() {
+    local pgid=$1
+    local last_scrub=$(get_last_scrub_stamp $pgid)
+    ceph pg scrub $pgid
+    wait_for_scrub $pgid "$last_scrub"
+}
+
+function test_pg_scrub() {
+    local dir=$1
+
+    setup $dir || return 1
+    run_mon $dir a --osd_pool_default_size=1 || return 1
+    run_osd $dir 0 || return 1
+    wait_for_clean || return 1
+    pg_scrub 1.0 || return 1
+    kill_daemons $dir KILL osd || return 1
+    ! TIMEOUT=1 pg_scrub 1.0 || return 1
     teardown $dir || return 1
 }
 
