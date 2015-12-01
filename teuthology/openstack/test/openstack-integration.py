@@ -39,13 +39,15 @@ import scripts.schedule
 import scripts.lock
 import scripts.suite
 from teuthology.config import config as teuth_config
+from teuthology.config import set_config_attr
+
 
 class Integration(object):
 
     @classmethod
     def setup_class(self):
         teuthology.log.setLevel(logging.DEBUG)
-        teuthology.misc.read_config(argparse.Namespace())
+        set_config_attr(argparse.Namespace())
         self.teardown_class()
 
     @classmethod

@@ -133,14 +133,12 @@ class TestFakeNamespace(TestYamlConfig):
     def test_config(self):
         """
         Tests that a teuthology_config property is automatically added
-        by misc.read_config.
+        to the conf_obj
         """
         conf_obj = self.test_class(dict(foo="bar"))
         assert conf_obj["foo"] == "bar"
         assert conf_obj.foo == "bar"
-        # teuthology_config needs to be a dict because all
-        # of the tasks expect it to be
-        assert isinstance(conf_obj.teuthology_config, dict)
+        assert conf_obj.teuthology_config.get("fake key") is None
 
     def test_getattr(self):
         conf_obj = self.test_class.from_dict({"foo": "bar"})
@@ -165,3 +163,20 @@ class TestFakeNamespace(TestYamlConfig):
         in_str = "foo: bar"
         conf_obj = self.test_class.from_str(in_str)
         assert conf_obj.to_str() == "{'foo': 'bar'}"
+
+    def test_multiple_access(self):
+        """
+        Test that config.config and FakeNamespace.teuthology_config reflect
+        each others' modifications
+        """
+        in_str = "foo: bar"
+        conf_obj = self.test_class.from_str(in_str)
+        assert config.config.get('test_key_1') is None
+        assert conf_obj.teuthology_config.get('test_key_1') is None
+        config.config.test_key_1 = 'test value'
+        assert conf_obj.teuthology_config['test_key_1'] == 'test value'
+
+        assert config.config.get('test_key_2') is None
+        assert conf_obj.teuthology_config.get('test_key_2') is None
+        conf_obj.teuthology_config['test_key_2'] = 'test value'
+        assert config.config['test_key_2'] == 'test value'

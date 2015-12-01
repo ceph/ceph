@@ -31,6 +31,7 @@ from mock import patch
 
 import teuthology
 from teuthology import misc
+from teuthology.config import set_config_attr
 from teuthology.openstack import TeuthologyOpenStack, OpenStack, OpenStackInstance
 import scripts.openstack
 
@@ -214,7 +215,7 @@ class TestTeuthologyOpenStack(object):
             pytest.skip('no OS_AUTH_URL environment variable')
 
         teuthology.log.setLevel(logging.DEBUG)
-        teuthology.misc.read_config(argparse.Namespace())
+        set_config_attr(argparse.Namespace())
 
         ip = TeuthologyOpenStack.create_floating_ip()
         if ip:
@@ -223,7 +224,7 @@ class TestTeuthologyOpenStack(object):
             self.can_create_floating_ips = True
         else:
             self.can_create_floating_ips = False
-        
+
     def setup(self):
         self.key_filename = tempfile.mktemp()
         self.key_name = 'teuthology-test'

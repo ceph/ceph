@@ -178,29 +178,23 @@ class TeuthologyConfig(YamlConfig):
         return (self.ceph_git_url or
                 self.ceph_git_base_url + 'ceph.git')
 
+
 class JobConfig(YamlConfig):
     pass
 
 
 class FakeNamespace(YamlConfig):
     """
-    This class is meant to behave like a argparse Namespace. It mimics the old
-    way of doing things with argparse and teuthology.misc.read_config.
+    This class is meant to behave like a argparse Namespace
 
     We'll use this as a stop-gap as we refactor commands but allow the tasks
     to still be passed a single namespace object for the time being.
     """
-    def __init__(self, config_dict=None, yaml_path=None):
-        if not yaml_path:
-            yaml_path = _get_config_path()
+    def __init__(self, config_dict=None):
         if not config_dict:
             config_dict = dict()
         self._conf = self._clean_config(config_dict)
-        # avoiding circular imports
-        from .misc import read_config
-        # teuthology.misc.read_config attaches the teuthology config
-        # to a teuthology_config key.
-        read_config(self)
+        set_config_attr(self)
 
     def _clean_config(self, config_dict):
         """
@@ -234,11 +228,24 @@ class FakeNamespace(YamlConfig):
             return self._defaults[name]
         raise AttributeError(name)
 
+    def __setattr__(self, name, value):
+        if name == 'teuthology_config':
+            object.__setattr__(self, name, value)
+        else:
+            super(FakeNamespace, self).__setattr__(name, value)
+
     def __repr__(self):
         return repr(self._conf)
 
     def __str__(self):
         return str(self._conf)
+
+
+def set_config_attr(obj):
+    """
+    Set obj.teuthology_config, mimicking the old behavior of misc.read_config
+    """
+    obj.teuthology_config = config
 
 
 def _get_config_path():

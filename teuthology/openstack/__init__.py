@@ -38,6 +38,7 @@ from subprocess import CalledProcessError
 
 from teuthology.contextutil import safe_while
 from teuthology.config import config as teuth_config
+from teuthology.config import set_config_attr
 from teuthology.orchestra import connection
 from teuthology import misc
 
@@ -421,7 +422,7 @@ class TeuthologyOpenStack(OpenStack):
         Entry point implementing the teuthology-openstack command.
         """
         self.setup_logs()
-        misc.read_config(self.args)
+        set_config_attr(self.args)
         self.key_filename = self.args.key_filename
         self.verify_openstack()
         ip = self.setup()

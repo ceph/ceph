@@ -1000,23 +1000,6 @@ def get_user():
     return getpass.getuser() + '@' + socket.gethostname()
 
 
-def read_config(ctx):
-    """
-    read the default teuthology yaml configuration file.
-    """
-    ctx.teuthology_config = {}
-    filename = os.path.join(os.environ['HOME'], '.teuthology.yaml')
-
-    if not os.path.exists(filename):
-        log.debug("%s not found", filename)
-        return
-
-    with file(filename) as f:
-        g = yaml.safe_load_all(f)
-        for new in g:
-            ctx.teuthology_config.update(new)
-
-
 def get_mon_names(ctx):
     """
     :returns: a list of monitor names
