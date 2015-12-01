@@ -144,10 +144,6 @@ class DispatchQueue {
 		   CEPH_MSG_PRIO_HIGHEST,
 		   CEPH_OP_QUEUE_BACK,
 		   CEPH_OP_CLASS_STRICT);
-//    mqueue.enqueue_strict(
-//      0,
-//      CEPH_MSG_PRIO_HIGHEST,
-//      QueueItem(D_CONNECT, con));
     cond.Signal();
   }
   void queue_accept(Connection *con) {
@@ -158,10 +154,6 @@ class DispatchQueue {
 		   CEPH_MSG_PRIO_HIGHEST,
 		   CEPH_OP_QUEUE_BACK,
 		   CEPH_OP_CLASS_STRICT);
-//    mqueue.enqueue_strict(
-//      0,
-//      CEPH_MSG_PRIO_HIGHEST,
-//      QueueItem(D_ACCEPT, con));
     cond.Signal();
   }
   void queue_remote_reset(Connection *con) {
@@ -172,10 +164,6 @@ class DispatchQueue {
 		   CEPH_MSG_PRIO_HIGHEST,
 		   CEPH_OP_QUEUE_BACK,
 		   CEPH_OP_CLASS_STRICT);
-//    mqueue.enqueue_strict(
-//      0,
-//      CEPH_MSG_PRIO_HIGHEST,
-//      QueueItem(D_BAD_REMOTE_RESET, con));
     cond.Signal();
   }
   void queue_reset(Connection *con) {
@@ -186,10 +174,6 @@ class DispatchQueue {
 		   CEPH_MSG_PRIO_HIGHEST,
 		   CEPH_OP_QUEUE_BACK,
 		   CEPH_OP_CLASS_STRICT);
-//    mqueue.enqueue_strict(
-//      0,
-//      CEPH_MSG_PRIO_HIGHEST,
-//      QueueItem(D_BAD_RESET, con));
     cond.Signal();
   }
 

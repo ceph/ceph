@@ -21,8 +21,6 @@
 #include <map>
 #include <list>
 
-#include <thread>
-
 /**
  * Manages queue for normal and strict priority items
  *
@@ -125,18 +123,6 @@ class PrioritizedQueue : public OpQueue <T, K> {
 	cur = q.begin();
       ++size;
     }
-//    void enqueue(K cl, unsigned cost, T item) {
-//      q[cl].push_back(std::make_pair(cost, item));
-//      if (cur == q.end())
-//	cur = q.begin();
-//      size++;
-//    }
-//    void enqueue_front(K cl, unsigned cost, T item) {
-//      q[cl].push_front(std::make_pair(cost, item));
-//      if (cur == q.end())
-//	cur = q.begin();
-//      size++;
-//    }
     std::pair<unsigned, T> front() const {
       assert(!(q.empty()));
       assert(cur != q.end());
@@ -209,11 +195,6 @@ class PrioritizedQueue : public OpQueue <T, K> {
     }
   };
 
-  // For benchmarks only
-  //std::chrono::time_point<std::chrono::system_clock> start, end;
-  typename OpQueue<T, K>::RunningStat eq_stat, dq_stat;
-  // End benchmarks
-
   typedef std::map<unsigned, SubQueue> SubQueues;
   SubQueues high_queue;
   SubQueues queue;
@@ -252,44 +233,6 @@ public:
       min_cost(min_c)
   {}
 
-  std::string get_queue() {
-    std::stringstream os;
-    os << "Prio len: " << high_queue.size() << ":" << queue.size() <<
-      " Prios:(";
-    if (high_queue.empty())
-      os << "-";
-    else
-      for (typename SubQueues::reverse_iterator i = high_queue.rbegin();
-	  i != high_queue.rend(); ++i) {
-	os << i->first << "-" << i->second.length();
-      }
-    os << ")(";
-    if (queue.empty())
-      os << "-";
-    else
-      for (typename SubQueues::reverse_iterator i = queue.rbegin();
-	  i != queue.rend(); ++i) {
-	os << i->first << "-" << i->second.length();
-      }
-    os << ")";
-    return os.str();
-  }
-  void eq_push(double val) {
-    eq_stat.Push(val);
-  }
-  void dq_push(double val) {
-    dq_stat.Push(val);
-  }
-  std::string eq_stats() {
-    std::stringstream out;
-    out << "Mean: " << eq_stat.Mean() << " ns, Std. Dev.: " << eq_stat.StandardDeviation() << " ns";
-    return out.str();
-  }
-  std::string dq_stats() {
-    std::stringstream out;
-    out << "Mean: " << dq_stat.Mean() << " ns, Std. Dev.: " << dq_stat.StandardDeviation() << " ns";
-    return out.str();
-  }
   unsigned length() const final {
     unsigned total = 0;
     for (typename SubQueues::const_iterator i = queue.begin();
@@ -363,7 +306,6 @@ public:
   void enqueue (K cl, T item, unsigned priority, unsigned cost = 0,
 		bool front = CEPH_OP_QUEUE_BACK,
 		unsigned opclass = CEPH_OP_CLASS_NORMAL) final {
-    //start = std::chrono::system_clock::now();
     switch (opclass){
       case CEPH_OP_CLASS_NORMAL :
 	if (cost < min_cost)
@@ -378,34 +320,7 @@ public:
       default :
 	assert(1);
     }
-    //end = std::chrono::system_clock::now();
-    //eq_stat.Push(std::chrono::duration_cast<std::chrono::nanoseconds>(end - start).count());
-    //cerr << "Prio ( " << std::this_thread::get_id() << ") enqueue stats: Mean=" << std::dec << eq_stat.Mean() << "ns, Std dev.=" << eq_stat.StandardDeviation() << " ns\n";
   }
-
-//  void enqueue_strict(K cl, unsigned priority, T item) final {
-//    high_queue[priority].enqueue(cl, 0, item);
-//  }
-//
-//  void enqueue_strict_front(K cl, unsigned priority, T item) final {
-//    high_queue[priority].enqueue_front(cl, 0, item);
-//  }
-//
-//  void enqueue(K cl, unsigned priority, unsigned cost, T item) final {
-//    if (cost < min_cost)
-//      cost = min_cost;
-//    if (cost > max_tokens_per_subqueue)
-//      cost = max_tokens_per_subqueue;
-//    create_queue(priority)->enqueue(cl, cost, item);
-//  }
-//
-//  void enqueue_front(K cl, unsigned priority, unsigned cost, T item) final {
-//    if (cost < min_cost)
-//      cost = min_cost;
-//    if (cost > max_tokens_per_subqueue)
-//      cost = max_tokens_per_subqueue;
-//    create_queue(priority)->enqueue_front(cl, cost, item);
-//  }
 
   bool empty() const final {
     assert(total_priority >= 0);
@@ -414,7 +329,6 @@ public:
   }
 
   T dequeue() final {
-    //start = std::chrono::system_clock::now();
     assert(!empty());
 
     if (!(high_queue.empty())) {
@@ -452,9 +366,6 @@ public:
     if (queue.rbegin()->second.empty())
       remove_queue(queue.rbegin()->first);
     distribute_tokens(cost);
-    //end = std::chrono::system_clock::now();
-    //dq_stat.Push(std::chrono::duration_cast<std::chrono::nanoseconds>(end - start).count());
-    //cerr << "Prio ( " << std::this_thread::get_id() << ") dequeue stats: Mean=" << std::dec << dq_stat.Mean() << "ns, Std dev.=" << dq_stat.StandardDeviation() << " ns\n";
     return ret;
   }
 
