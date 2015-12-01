@@ -19,8 +19,11 @@
 extern "C" {
 #include "libxio.h"
 }
-#include "XioInSeq.h"
+#include <atomic>
+#include <vector>
 #include <boost/lexical_cast.hpp>
+#include "XioInSeq.h"
+#include "include/mpmc-bounded-queue.hpp"
 #include "msg/SimplePolicyMessenger.h"
 #include "XioConnection.h"
 #include "XioMsg.h"
@@ -39,30 +42,39 @@ private:
 
   struct SubmitQueue
   {
-    const static int nlanes = 7;
+
+    int nlanes;
+    int nspins;
 
     struct Lane
     {
-      uint32_t size;
-      XioMsg::Queue q;
-      pthread_spinlock_t sp;
+      mpmc_bounded_queue_t<XioSubmit*> mpmc_q;
       CACHE_PAD(0);
+      Lane(uint32_t mpmc_depth) : mpmc_q(mpmc_depth)
+	{}
     };
 
-    Lane qlane[nlanes];
-
+    Lane* qlane;
     int ix; /* atomicity by portal thread */
 
-    SubmitQueue() : ix(0)
+    SubmitQueue(uint32_t nlanes, uint32_t nspins, uint32_t mpmc_depth)
+      : nspins(nspins)
       {
-	int ix;
-	Lane* lane;
-
-	for (ix = 0; ix < nlanes; ++ix) {
-	  lane = &qlane[ix];
-	  pthread_spin_init(&lane->sp, PTHREAD_PROCESS_PRIVATE);
-	  lane->size = 0;
+	qlane = static_cast<Lane*>(::operator new(nlanes * sizeof(Lane)));
+	assert(qlane);
+	for (unsigned ix = 0; ix < nlanes; ++ix) {
+	  Lane* lane = &qlane[ix];
+	  new (lane) Lane(mpmc_depth);
 	}
+      }
+
+    ~SubmitQueue()
+      {
+	for (unsigned ix = 0; ix < nlanes; ++ix) {
+	  Lane* lane = &qlane[ix];
+	  lane->~Lane();
+	}
+	::operator delete(qlane);
       }
 
     inline Lane* get_lane(XioConnection *xcon)
@@ -73,41 +85,33 @@ private:
     void enq(XioConnection *xcon, XioSubmit* xs)
       {
 	Lane* lane = get_lane(xcon);
-	pthread_spin_lock(&lane->sp);
-	lane->q.push_back(*xs);
-	++(lane->size);
-	pthread_spin_unlock(&lane->sp);
+	while (! lane->mpmc_q.enqueue(xs))
+	  ;
       }
 
     void enq(XioConnection *xcon, XioSubmit::Queue& requeue_q)
       {
-	int size = requeue_q.size();
-	Lane* lane = get_lane(xcon);
-	pthread_spin_lock(&lane->sp);
-	XioSubmit::Queue::const_iterator i1 = lane->q.end();
-	lane->q.splice(i1, requeue_q);
-	lane->size += size;
-	pthread_spin_unlock(&lane->sp);
+	auto q_iter = requeue_q.begin();
+	while (q_iter != requeue_q.end()) {
+	  XioSubmit *xs = &(*q_iter);
+	  enq(xcon, xs);
+	}
       }
 
     void deq(XioSubmit::Queue& send_q)
-      {
-	Lane* lane;
-	int cnt;
-	for (cnt = 0; cnt < nlanes; ++cnt, ++ix, ix = ix % nlanes) {
-	  lane = &qlane[ix];
-	  pthread_spin_lock(&lane->sp);
-	  if (lane->size > 0) {
-	    XioSubmit::Queue::const_iterator i1 = send_q.end();
-	    send_q.splice(i1, lane->q);
-	    lane->size = 0;
-	    ++ix, ix = ix % nlanes;
-	    pthread_spin_unlock(&lane->sp);
-	    break;
-	  }
-	  pthread_spin_unlock(&lane->sp);
+    {
+      int ix, n;
+      Lane* lane;
+      XioSubmit* xs;
+
+      for (ix = 0, n = 0; ix < nlanes; ++ix) {
+	lane = &qlane[ix];
+	for (n = 0; n < nspins; ++n) {
+	  if (lane->mpmc_q.dequeue(xs))
+	    send_q.push_back(*xs);
 	}
       }
+    }
 
   }; /* SubmitQueue */
 
@@ -120,20 +124,26 @@ private:
   void *ev_loop;
   string xio_uri;
   char *portal_id;
-  bool _shutdown;
+  std::atomic<bool> _shutdown;
   bool drained;
   uint32_t magic;
   uint32_t special_handling;
+  uint32_t delay_ms;
 
   friend class XioPortals;
   friend class XioMessenger;
 
 public:
   XioPortal(Messenger *_msgr) :
-  msgr(_msgr), ctx(NULL), server(NULL), submit_q(), xio_uri(""),
+  msgr(_msgr), ctx(NULL), server(NULL),
+  submit_q(msgr->cct->_conf->xio_submit_lanes,
+	  msgr->cct->_conf->xio_submit_spins,
+	  msgr->cct->_conf->xio_submit_mpmc_depth),
+  xio_uri(""),
   portal_id(NULL), _shutdown(false), drained(false),
   magic(0),
-  special_handling(0)
+  special_handling(0),
+  delay_ms(msgr->cct->_conf->xio_submit_mpmc_depth)
     {
       pthread_spin_init(&sp, PTHREAD_PROCESS_PRIVATE);
       pthread_mutex_init(&mtx, NULL);
@@ -233,16 +243,13 @@ public:
       uint32_t xio_qdepth_high;
       XioSubmit::Queue send_q;
       XioSubmit::Queue::iterator q_iter;
-      struct xio_msg *msg = NULL;
-      XioConnection *xcon;
-      XioSubmit *xs;
-      XioMsg *xmsg;
+      struct xio_msg* msg = NULL;
+      XioConnection* xcon;
+      XioSubmit* xs;
+      XioMsg* xmsg;
 
       do {
 	submit_q.deq(send_q);
-
-	/* shutdown() barrier */
-	pthread_spin_lock(&sp);
 
       restart:
 	size = send_q.size();
@@ -266,8 +273,8 @@ public:
 		code = ENOTCONN;
 	      else {
 		/* XXX guard Accelio send queue (should be safe to rely
-		 * on Accelio's check on below, but this assures that
-		 * all chained xio_msg are accounted) */
+		 * on Accelio's check below, but this assures that all
+		 * chained xio_msg objects are accounted) */
 		xio_qdepth_high = xcon->xio_qdepth_high_mark();
 		if (unlikely((xcon->send_ctr + xmsg->hdr.msg_cnt) >
 			     xio_qdepth_high)) {
@@ -275,7 +282,21 @@ public:
 		  goto restart;
 		}
 
+		/* cond set header */
 		msg = &xmsg->req_0.msg;
+		if (! xmsg->m->have_header()) {
+		  /* update header.seq */
+		  xmsg->m->set_seq(xcon->state.next_out_seq());
+		  /* encode it, set as xio header */
+		  xmsg->m->encode_header(xcon->get_features(), msgr->crcflags);
+		  const std::list<buffer::ptr>& header =
+		    xmsg->hdr.get_bl().buffers();
+		  assert(header.size() == 1);
+		  list<bufferptr>::const_iterator pb = header.begin();
+		  msg->out.header.iov_base = (char*) pb->c_str();
+		  msg->out.header.iov_len = pb->length();
+		}
+
 		code = xio_send_msg(xcon->conn, msg);
 		/* header trace moved here to capture xio serial# */
 		if (ldlog_p1(msgr->cct, ceph_subsys_xio, 11)) {
@@ -312,7 +333,7 @@ public:
 		  break;
 		};
 	      } else {
-		xcon->send.set(msg->timestamp); // need atomic?
+		xcon->send.store(msg->timestamp, std::memory_order_relaxed);
 		xcon->send_ctr += xmsg->hdr.msg_cnt; // only inc if cb promised
 	      }
 	      break;
@@ -326,8 +347,7 @@ public:
 	  } /* while */
 	} /* size > 0 */
 
-	pthread_spin_unlock(&sp);
-	xio_context_run_loop(ctx, 300);
+	xio_context_run_loop(ctx, delay_ms);
 
       } while ((!_shutdown) || (!drained));
 
@@ -341,9 +361,7 @@ public:
 
   void shutdown()
     {
-	pthread_spin_lock(&sp);
 	_shutdown = true;
-	pthread_spin_unlock(&sp);
     }
 };
 

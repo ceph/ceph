@@ -169,10 +169,11 @@
 #define MSG_TIMECHECK             0x600
 #define MSG_MON_HEALTH            0x601
 
-// *** Message::encode() crcflags bits ***
+// *** Message::encode() flags bits ***
 #define MSG_CRC_DATA           (1 << 0)
 #define MSG_CRC_HEADER         (1 << 1)
 #define MSG_CRC_ALL            (MSG_CRC_DATA | MSG_CRC_HEADER)
+#define MSG_LATE_HEADER        (1 << 2)
 
 // Xio Testing
 #define MSG_DATA_PING		  0x602
@@ -257,6 +258,9 @@ protected:
   // currently throttled.
   uint64_t dispatch_throttle_size;
 
+  // header has been encoded
+  bool header_encoded;
+
   friend class Messenger;
 
 public:
@@ -266,7 +270,8 @@ public:
       completion_hook(NULL),
       byte_throttler(NULL),
       msg_throttler(NULL),
-      dispatch_throttle_size(0) {
+      dispatch_throttle_size(0),
+      header_encoded(false) {
     memset(&header, 0, sizeof(header));
     memset(&footer, 0, sizeof(footer));
   }
@@ -315,6 +320,7 @@ public:
   void set_dispatch_throttle_size(uint64_t s) { dispatch_throttle_size = s; }
   uint64_t get_dispatch_throttle_size() const { return dispatch_throttle_size; }
 
+  bool have_header() { return header_encoded; }
   const ceph_msg_header &get_header() const { return header; }
   ceph_msg_header &get_header() { return header; }
   void set_header(const ceph_msg_header &e) { header = e; }
@@ -456,7 +462,16 @@ public:
 
   virtual void dump(Formatter *f) const;
 
-  void encode(uint64_t features, int crcflags);
+  void encode(uint64_t features, int flags);
+  void encode_header(uint64_t features, int flags) {
+    // update envelope
+    header.front_len = get_payload().length();
+    header.middle_len = get_middle().length();
+    header.data_len = get_data().length();
+    if (flags & MSG_CRC_HEADER)
+      calc_header_crc();
+    header_encoded = true;
+  }
 };
 typedef boost::intrusive_ptr<Message> MessageRef;
 
