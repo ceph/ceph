@@ -2,6 +2,7 @@
 // vim: ts=8 sw=2 smarttab
 #include "librbd/ImageWatcher.h"
 #include "librbd/AioCompletion.h"
+#include "librbd/AioImageRequestWQ.h"
 #include "librbd/ImageCtx.h"
 #include "librbd/internal.h"
 #include "librbd/ObjectMap.h"
@@ -392,7 +393,6 @@ int ImageWatcher::release_lock()
 
   // ensure all maint operations are canceled
   m_image_ctx.cancel_async_requests();
-  m_image_ctx.flush_async_operations();
 
   int r;
   {
@@ -402,12 +402,8 @@ int ImageWatcher::release_lock()
     // lock is being released
     notify_listeners_updated_lock(LOCK_UPDATE_STATE_RELEASING);
 
-    RWLock::WLocker md_locker(m_image_ctx.md_lock);
-    r = m_image_ctx.flush();
-    if (r < 0) {
-      lderr(cct) << this << " failed to flush: " << cpp_strerror(r) << dendl;
-      goto err_cancel_unlock;
-    }
+    // AioImageRequestWQ will have blocked writes / flushed IO by this point
+    assert(m_image_ctx.aio_work_queue->writes_blocked());
   }
 
   m_image_ctx.owner_lock.get_write();
@@ -430,13 +426,6 @@ int ImageWatcher::release_lock()
   }
 
   return 0;
-
-err_cancel_unlock:
-  m_image_ctx.owner_lock.get_write();
-  if (m_lock_owner_state == LOCK_OWNER_STATE_RELEASING) {
-    m_lock_owner_state = LOCK_OWNER_STATE_LOCKED;
-  }
-  return r;
 }
 
 void ImageWatcher::assert_header_locked(librados::ObjectWriteOperation *op) {
