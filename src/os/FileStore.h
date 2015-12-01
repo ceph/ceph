@@ -96,7 +96,7 @@ public:
     return target_version;
   }
 
-  int peek_journal_fsid(uuid_d *fsid);
+  static int get_block_device_fsid(const string& path, uuid_d *fsid);
 
   struct FSPerfTracker {
     PerfCounters::avg_tracker<uint64_t> os_commit_latency;

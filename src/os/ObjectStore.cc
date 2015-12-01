@@ -85,6 +85,20 @@ ObjectStore *ObjectStore::create(CephContext *cct,
   return NULL;
 }
 
+int ObjectStore::probe_block_device_fsid(
+  const string& path,
+  uuid_d *fsid)
+{
+  int r;
+
+  // okay, try FileStore (journal).
+  r = FileStore::get_block_device_fsid(path, fsid);
+  if (r == 0)
+    return r;
+
+  return -EINVAL;
+}
+
 int ObjectStore::write_meta(const std::string& key,
 			    const std::string& value)
 {
