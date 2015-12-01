@@ -48,6 +48,7 @@ include tools/Makefile.am
 include Makefile-rocksdb.am
 include compressor/Makefile.am
 include tracing/Makefile.am
+include pybind/Makefile.am
 
 
 # shell scripts
