@@ -2757,6 +2757,11 @@ int main(int argc, char **argv)
           }
         }
 
+	if(zone.get_name() != zone_name) {
+	  cerr << "Error: zone name" << zone_name << " is different than the zone name " << zone.get_name() << " in the provided json " << std::endl;
+	  return -EINVAL;
+	}
+
         zone_name = zone.get_name();
 
         if (zone.get_id().empty()) {
