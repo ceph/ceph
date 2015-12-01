@@ -536,7 +536,7 @@ static inline std::string make_uri(const std::string& bucket_name,
 */
 
 class RGWListBucketsRequest : public RGWLibRequest,
-			      public RGWListBuckets_OS_Lib /* RGWOp */
+			      public RGWListBuckets /* RGWOp */
 {
 public:
   uint64_t* offset;
@@ -583,6 +583,36 @@ public:
     return 0;
   }
 
+  int get_params() {
+    limit = -1; /* no limit */
+    return 0;
+  }
+
+  virtual void send_response_begin(bool has_buckets) {
+    sent_data = true;
+  }
+
+  virtual void send_response_data(RGWUserBuckets& buckets) {
+    if (!sent_data)
+      return;
+
+    // XXX if necessary, we can remove the need for dynamic_cast
+    RGWListBucketsRequest* req
+      = dynamic_cast<RGWListBucketsRequest*>(this);
+
+    map<string, RGWBucketEnt>& m = buckets.get_buckets();
+    for (const auto& iter : m) {
+      const std::string& marker = iter.first; // XXX may need later
+      const RGWBucketEnt& ent = iter.second;
+      /* call me maybe */
+      req->operator()(ent.bucket.name, marker); // XXX attributes
+    }
+  } /* send_response_data */
+
+  virtual void send_response_end() {
+    // do nothing
+  }
+
   int operator()(const std::string& name, const std::string& marker) {
     rcb(name.c_str(), cb_arg, (*offset)++);
     return 0;
@@ -595,7 +625,7 @@ public:
 */
 
 class RGWListBucketRequest : public RGWLibRequest,
-			     public RGWListBucket_OS_Lib /* RGWOp */
+			     public RGWListBucket /* RGWOp */
 {
 public:
   std::string& uri;
@@ -608,6 +638,7 @@ public:
     : RGWLibRequest(_cct, _user), uri(_uri), offset(_offset),
       cb_arg(_cb_arg),
       rcb(_rcb) {
+    default_max = 1000; // XXX was being omitted
     magic = 72;
     op = this;
   }
@@ -649,6 +680,43 @@ public:
     return 0;
   }
 
+  virtual int get_params() {
+    // XXX S3
+    struct req_state* s = get_state();
+    list_versions = s->info.args.exists("versions");
+    prefix = s->info.args.get("prefix");
+    if (!list_versions) {
+      marker = s->info.args.get("marker");
+    } else {
+    marker.name = s->info.args.get("key-marker");
+    marker.instance = s->info.args.get("version-id-marker");
+    }
+    max_keys = s->info.args.get("max-keys");
+    op_ret = parse_max_keys();
+    if (op_ret < 0) {
+      return op_ret;
+    }
+#if 0 /* XXX? */
+    delimiter = s->info.args.get("delimiter");
+    encoding_type = s->info.args.get("encoding-type");
+#endif
+    return 0;
+  }
+
+  virtual void send_response() {
+    // XXX if necessary, we can remove the need for dynamic_cast
+    RGWListBucketRequest* req
+      = dynamic_cast<RGWListBucketRequest*>(this);
+
+    for (const auto& iter : objs) {
+      /* call me maybe */
+      req->operator()(iter.key.name, iter.key.name); // XXX attributes
+    }
+  }
+
+  virtual void send_versioned_response() {
+    send_response();
+  }
 }; /* RGWListBucketRequest */
 
 /*
@@ -656,7 +724,7 @@ public:
 */
 
 class RGWCreateBucketRequest : public RGWLibRequest,
-			       public RGWCreateBucket_OS_Lib /* RGWOp */
+			       public RGWCreateBucket /* RGWOp */
 {
 public:
   std::string& uri;
@@ -704,6 +772,19 @@ public:
 
     return 0;
   }
+
+  virtual int get_params() {
+    struct req_state* s = get_state();
+    RGWAccessControlPolicy_S3 s3policy(s->cct);
+    /* we don't have (any) headers, so just create canned ACLs */
+    int ret = s3policy.create_canned(s->owner, s->bucket_owner, s->canned_acl);
+    policy = s3policy;
+    return ret;
+  }
+
+  virtual void send_response() {
+    /* TODO: something (maybe) */
+  }
 }; /* RGWCreateBucketRequest */
 
 /*
@@ -711,7 +792,7 @@ public:
 */
 
 class RGWDeleteBucketRequest : public RGWLibRequest,
-			       public RGWDeleteBucket_OS_Lib /* RGWOp */
+			       public RGWDeleteBucket /* RGWOp */
 {
 public:
   std::string& uri;
@@ -764,7 +845,7 @@ public:
 */
 
 class RGWPutObjRequest : public RGWLibRequest,
-			 public RGWPutObj_OS_Lib /* RGWOp */
+			 public RGWPutObj /* RGWOp */
 {
 public:
   const std::string& bucket_name;
@@ -817,6 +898,15 @@ public:
     return 0;
   }
 
+  virtual int get_params() {
+    struct req_state* s = get_state();
+    RGWAccessControlPolicy_S3 s3policy(s->cct);
+    /* we don't have (any) headers, so just create canned ACLs */
+    int ret = s3policy.create_canned(s->owner, s->bucket_owner, s->canned_acl);
+    policy = s3policy;
+    return ret;
+  }
+
   virtual int get_data(buffer::list& _bl) {
     /* XXX for now, use sharing semantics */
     _bl.claim(bl);
@@ -840,7 +930,7 @@ public:
 */
 
 class RGWGetObjRequest : public RGWLibRequest,
-			 public RGWGetObj_OS_Lib /* RGWOp */
+			 public RGWGetObj /* RGWOp */
 {
 public:
   const std::string& bucket_name;
@@ -930,7 +1020,7 @@ public:
 */
 
 class RGWDeleteObjRequest : public RGWLibRequest,
-			    public RGWDeleteObj_OS_Lib /* RGWOp */
+			    public RGWDeleteObj /* RGWOp */
 {
 public:
   const std::string& bucket_name;
