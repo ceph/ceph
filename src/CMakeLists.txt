@@ -1007,6 +1007,7 @@ if(${WITH_RADOSGW})
     rgw/rgw_acl_s3.cc
     rgw/rgw_acl_swift.cc
     rgw/rgw_client_io.cc
+    rgw/rgw_cms.cc
     rgw/rgw_fcgi.cc
     rgw/rgw_xml.cc
     rgw/rgw_usage.cc
@@ -1043,6 +1044,7 @@ if(${WITH_RADOSGW})
   include_directories("${CMAKE_SOURCE_DIR}/src/civetweb/include")
 
   set(radosgw_srcs
+    rgw/rgw_cms.cc
     rgw/rgw_resolve.cc
     rgw/rgw_rest.cc
     rgw/rgw_rest_swift.cc
