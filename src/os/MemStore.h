@@ -348,8 +348,6 @@ public:
       sharded(false) {}
   ~MemStore() { }
 
-  int peek_journal_fsid(uuid_d *fsid);
-
   bool test_mount_in_use() {
     return false;
   }

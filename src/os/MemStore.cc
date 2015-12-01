@@ -41,12 +41,6 @@ bool operator>(const MemStore::CollectionRef& l,
 }
 
 
-int MemStore::peek_journal_fsid(uuid_d *fsid)
-{
-  *fsid = uuid_d();
-  return 0;
-}
-
 int MemStore::mount()
 {
   int r = _load();
