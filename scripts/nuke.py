@@ -8,6 +8,7 @@ usage:
   teuthology-nuke [-v] [--owner OWNER] [-n NAME] [-u] [-i] [-r] [-s]
                        [-p PID] [--dry-run] (-t CONFIG... | -a DIR)
   teuthology-nuke [-v] [-u] [-i] [-r] [-s] [--dry-run] --owner OWNER --stale
+  teuthology-nuke [-v] [--dry-run] --stale-openstack
 
 Reset test machines
 
@@ -20,6 +21,8 @@ optional arguments:
                         archive path for a job to kill and nuke
   --stale               attempt to find and nuke 'stale' machines
                         (e.g. locked by jobs that are no longer running)
+  --stale-openstack     nuke 'stale' OpenStack instances and volumes
+                        and unlock OpenStack targets with no instance
   --dry-run             Don't actually nuke anything; just print the list of
                         targets that would be nuked
   --owner OWNER         job owner

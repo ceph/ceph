@@ -22,6 +22,7 @@
 # THE SOFTWARE.
 #
 import copy
+import datetime
 import json
 import logging
 import os
@@ -41,6 +42,111 @@ from teuthology.orchestra import connection
 from teuthology import misc
 
 log = logging.getLogger(__name__)
+
+class OpenStackInstance(object):
+
+    def __init__(self, name_or_id, info=None):
+        self.name_or_id = name_or_id
+        if info is None:
+            self.set_info()
+        else:
+            self.info = dict(map(lambda (k,v): (k.lower(), v), info.iteritems()))
+
+    def set_info(self):
+        try:
+            info = json.loads(
+                misc.sh("openstack server show -f json " + self.name_or_id))
+            self.info = dict(map(
+                lambda p: (p['Field'].lower(), p['Value']), info))
+        except CalledProcessError:
+            self.info = None
+
+    def __getitem__(self, name):
+        return self.info[name.lower()]
+
+    def get_created(self):
+        now = datetime.datetime.now()
+        created = datetime.datetime.strptime(
+            self['created'], '%Y-%m-%dT%H:%M:%SZ')
+        return (now - created).total_seconds()
+
+    def exists(self):
+        return self.info is not None
+
+    def get_volumes(self):
+        """
+        Return the uuid of the volumes attached to the name_or_id
+        OpenStack instance.
+        """
+        volumes = self['os-extended-volumes:volumes_attached']
+        return [volume['id'] for volume in volumes ]
+
+    def get_addresses(self):
+        """
+        Return the list of IPs associated with instance_id in OpenStack.
+        """
+        with safe_while(sleep=2, tries=30,
+                        action="get ip " + self['id']) as proceed:
+            while proceed():
+                found = re.match('.*\d+', self['addresses'])
+                if found:
+                    return self['addresses']
+                self.set_info()
+
+    def get_ip_neutron(self):
+        subnets = json.loads(misc.sh("neutron subnet-list -f json -c id -c ip_version"))
+        subnet_id = None
+        for subnet in subnets:
+            if subnet['ip_version'] == 4:
+                subnet_id = subnet['id']
+                break
+        if not subnet_id:
+            raise Exception("no subnet with ip_version == 4")
+        ports = json.loads(misc.sh("neutron port-list -f json -c fixed_ips -c device_id"))
+        fixed_ips = None
+        for port in ports:
+            if port['device_id'] == self['id']:
+                fixed_ips = port['fixed_ips'].split("\n")
+                break
+        if not fixed_ips:
+            raise Exception("no fixed ip record found")
+        ip = None
+        for fixed_ip in fixed_ips:
+            record = json.loads(fixed_ip)
+            if record['subnet_id'] == subnet_id:
+                ip = record['ip_address']
+                break
+        if not ip:
+            raise Exception("no ip")
+        return ip
+
+    def get_ip(self, network):
+        """
+        Return the private IP of the OpenStack instance_id.
+        """
+        try:
+            return self.get_ip_neutron()
+        except Exception as e:
+            log.debug("ignoring get_ip_neutron exception " + str(e))
+            return re.findall(network + '=([\d.]+)',
+                              self.get_addresses())[0]
+
+    def destroy(self):
+        """
+        Delete the name_or_id OpenStack instance.
+        """
+        if not self.exists():
+            return True
+        volumes = self.get_volumes()
+        misc.sh("openstack server set --name REMOVE-ME-" + self.name_or_id +
+                " " + self['id'])
+        misc.sh("openstack server delete --wait " + self['id'] +
+                " || true")
+        for volume in volumes:
+            misc.sh("openstack volume set --name REMOVE-ME " + volume)
+            misc.sh("openstack volume delete " + volume + " || true")
+        return True
+
 
 class OpenStack(object):
 
@@ -201,6 +307,23 @@ class OpenStack(object):
                         current[key] = max(current[key], new[key])
         return result
 
+    @staticmethod
+    def list_instances():
+        ownedby = "ownedby='" + teuth_config.openstack['ip'] + "'"
+        all = json.loads(misc.sh(
+            "openstack server list -f json --long --name 'target'"))
+        return filter(lambda instance: ownedby in instance['Properties'], all)
+
+    @staticmethod
+    def list_volumes():
+        ownedby = "ownedby='" + teuth_config.openstack['ip'] + "'"
+        all = json.loads(misc.sh(
+            "openstack volume list -f json --long"))
+        def select(volume):
+            return (ownedby in volume['Properties'] and
+                    volume['Display Name'].startswith('target'))
+        return filter(select, all)
+
     def cloud_init_wait(self, name_or_ip):
         """
         Wait for cloud-init to complete on the name_or_ip OpenStack instance.
@@ -273,93 +396,8 @@ class OpenStack(object):
                     break
             return success
 
-    @staticmethod
-    def show(name_or_id):
-        """
-        Run "openstack server show -f json <name_or_id>" and return the result.
-
-        Does not handle exceptions.
-        """
-        try:
-            return json.loads(
-                misc.sh("openstack server show -f json %s" % name_or_id)
-            )
-        except CalledProcessError:
-            return False
-
-    @classmethod
-    def exists(cls, name_or_id, server_info=None):
-        """
-        Return true if the OpenStack name_or_id instance exists,
-        false otherwise.
-
-        :param name_or_id:  The name or ID of the server to query
-        :param server_info: Optionally, use already-retrieved results of
-                            self.show()
-        """
-        if server_info is None:
-            server_info = cls.show(name_or_id)
-        if not server_info:
-            return False
-        if (cls.get_value(server_info, 'Name') == name_or_id or
-                cls.get_value(server_info, 'ID') == name_or_id):
-            return True
-        return False
-
-    @staticmethod
-    def get_addresses(instance_id):
-        """
-        Return the list of IPs associated with instance_id in OpenStack.
-        """
-        with safe_while(sleep=2, tries=30,
-                        action="get ip " + instance_id) as proceed:
-            while proceed():
-                instance = misc.sh("openstack server show -f json " +
-                                   instance_id)
-                addresses = OpenStack.get_value(json.loads(instance),
-                                                'addresses')
-                found = re.match('.*\d+', addresses)
-                if found:
-                    return addresses
-
-    @staticmethod
-    def get_ip_neutron(instance_id):
-        subnets = json.loads(misc.sh("neutron subnet-list -f json -c id -c ip_version"))
-        subnet_id = None
-        for subnet in subnets:
-            if subnet['ip_version'] == 4:
-                subnet_id = subnet['id']
-                break
-        if not subnet_id:
-            raise Exception("no subnet with ip_version == 4")
-        ports = json.loads(misc.sh("neutron port-list -f json -c fixed_ips -c device_id"))
-        fixed_ips = None
-        for port in ports:
-            if port['device_id'] == instance_id:
-                fixed_ips = port['fixed_ips'].split("\n")
-                break
-        if not fixed_ips:
-            raise Exception("no fixed ip record found")
-        ip = None
-        for fixed_ip in fixed_ips:
-            record = json.loads(fixed_ip)
-            if record['subnet_id'] == subnet_id:
-                ip = record['ip_address']
-                break
-        if not ip:
-            raise Exception("no ip")
-        return ip
-
     def get_ip(self, instance_id, network):
-        """
-        Return the private IP of the OpenStack instance_id.
-        """
-        try:
-            return self.get_ip_neutron(instance_id)
-        except Exception as e:
-            log.debug("ignoring get_ip_neutron exception " + str(e))
-            return re.findall(network + '=([\d.]+)',
-                              self.get_addresses(instance_id))[0]
+        return OpenStackInstance(instance_id).get_ip(network)
 
 
 class TeuthologyOpenStack(OpenStack):
@@ -660,13 +698,12 @@ openstack security group rule create --proto udp --dst-port 53 teuthology # dns
         ip = TeuthologyOpenStack.get_floating_ip(instance_id)
         if not ip:
             ip = re.findall('([\d.]+)$',
-                            TeuthologyOpenStack.get_addresses(instance_id))[0]
+                            OpenStackInstance(instance_id).get_addresses())[0]
         return ip
 
     @staticmethod
     def get_instance_id(name):
-        instance = json.loads(misc.sh("openstack server show -f json " + name))
-        return TeuthologyOpenStack.get_value(instance, 'id')
+        return OpenStackInstance(name)['id']
 
     @staticmethod
     def delete_floating_ip(instance_id):
@@ -710,10 +747,10 @@ openstack security group rule create --proto udp --dst-port 53 teuthology # dns
         """
         Return true if there exists an instance running the teuthology cluster.
         """
-        if not self.exists(self.args.name):
+        instance = OpenStackInstance(self.args.name)
+        if not instance.exists():
             return False
-        instance_id = self.get_instance_id(self.args.name)
-        ip = self.get_floating_ip_or_ip(instance_id)
+        ip = self.get_floating_ip_or_ip(instance['id'])
         return self.cloud_init_wait(ip)
 
     def teardown(self):
