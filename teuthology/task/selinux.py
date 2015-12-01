@@ -6,6 +6,7 @@ from cStringIO import StringIO
 from teuthology.exceptions import SELinuxError
 from teuthology.misc import get_archive_dir
 from teuthology.orchestra.cluster import Cluster
+from teuthology.orchestra import run
 from teuthology.lockstatus import get_status
 
 from . import Task
@@ -88,10 +89,15 @@ class SELinux(Task):
         Look for denials in the audit log
         """
         all_denials = dict()
+        ignore_known_denials = '\'\(' + 'comm="dmidecode"'
+        # dmidecode issue https://bugzilla.redhat.com/show_bug.cgi?id=1289274
+        ignore_known_denials = ignore_known_denials + '\|' + 'chronyd.service' + '\)\''
+        # tracker for chronyd issue http://tracker.ceph.com/issues/14244
         for remote in self.cluster.remotes.iterkeys():
             proc = remote.run(
                 args=['sudo', 'grep', 'avc: .*denied',
-                      '/var/log/audit/audit.log'],
+                      '/var/log/audit/audit.log', run.Raw('|'), 'grep', '-v',
+                      run.Raw(ignore_known_denials)],
                 stdout=StringIO(),
                 check_status=False,
             )
