@@ -128,14 +128,12 @@ struct ObjectOperation {
   }
   void add_data(int op, uint64_t off, uint64_t len, bufferlist& bl) {
     OSDOp& osd_op = add_op(op);
-    osd_op.op.op = op;
     osd_op.op.extent.offset = off;
     osd_op.op.extent.length = len;
     osd_op.indata.claim_append(bl);
   }
   void add_clone_range(int op, uint64_t off, uint64_t len, const object_t& srcoid, uint64_t srcoff, snapid_t srcsnapid) {
     OSDOp& osd_op = add_op(op);
-    osd_op.op.op = op;
     osd_op.op.clonerange.offset = off;
     osd_op.op.clonerange.length = len;
     osd_op.op.clonerange.src_offset = srcoff;
@@ -143,7 +141,6 @@ struct ObjectOperation {
   }
   void add_xattr(int op, const char *name, const bufferlist& data) {
     OSDOp& osd_op = add_op(op);
-    osd_op.op.op = op;
     osd_op.op.xattr.name_len = (name ? strlen(name) : 0);
     osd_op.op.xattr.value_len = data.length();
     if (name)
@@ -152,7 +149,6 @@ struct ObjectOperation {
   }
   void add_xattr_cmp(int op, const char *name, uint8_t cmp_op, uint8_t cmp_mode, const bufferlist& data) {
     OSDOp& osd_op = add_op(op);
-    osd_op.op.op = op;
     osd_op.op.xattr.name_len = (name ? strlen(name) : 0);
     osd_op.op.xattr.value_len = data.length();
     osd_op.op.xattr.cmp_op = cmp_op;
@@ -170,7 +166,6 @@ struct ObjectOperation {
     out_bl[p] = outbl;
     out_rval[p] = prval;
 
-    osd_op.op.op = op;
     osd_op.op.cls.class_len = strlen(cname);
     osd_op.op.cls.method_len = strlen(method);
     osd_op.op.cls.indata_len = indata.length();
@@ -180,14 +175,12 @@ struct ObjectOperation {
   }
   void add_pgls(int op, uint64_t count, collection_list_handle_t cookie, epoch_t start_epoch) {
     OSDOp& osd_op = add_op(op);
-    osd_op.op.op = op;
     osd_op.op.pgls.count = count;
     osd_op.op.pgls.start_epoch = start_epoch;
     ::encode(cookie, osd_op.indata);
   }
   void add_pgls_filter(int op, uint64_t count, bufferlist& filter, collection_list_handle_t cookie, epoch_t start_epoch) {
     OSDOp& osd_op = add_op(op);
-    osd_op.op.op = op;
     osd_op.op.pgls.count = count;
     osd_op.op.pgls.start_epoch = start_epoch;
     string cname = "pg";
@@ -200,7 +193,6 @@ struct ObjectOperation {
   void add_alloc_hint(int op, uint64_t expected_object_size,
                       uint64_t expected_write_size) {
     OSDOp& osd_op = add_op(op);
-    osd_op.op.op = op;
     osd_op.op.alloc_hint.expected_object_size = expected_object_size;
     osd_op.op.alloc_hint.expected_write_size = expected_write_size;
   }
@@ -535,7 +527,6 @@ struct ObjectOperation {
   }
   void tmap_to_omap(bool nullok=false) {
      OSDOp& osd_op = add_op(CEPH_OSD_OP_TMAP2OMAP);
-     osd_op.op.op = CEPH_OSD_OP_TMAP2OMAP;
      if (nullok)
        osd_op.op.tmap2omap.flags = CEPH_OSD_TMAP2OMAP_NULLOK;
   }
@@ -615,8 +606,6 @@ struct ObjectOperation {
     if (prval) {
       unsigned p = ops.size() - 1;
       out_rval[p] = prval;
-      out_bl[p] = NULL;
-      out_handler[p] = NULL;
     }
   }
 
