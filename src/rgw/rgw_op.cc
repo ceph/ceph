@@ -1764,7 +1764,7 @@ void RGWCreateBucket::execute()
   rgw_bucket *pmaster_bucket;
   time_t creation_time;
 
-  if (!store->get_zonegroup().is_master) {
+  if (!store->is_meta_master()) {
     JSONParser jp;
     op_ret = forward_request_to_master(s, NULL, store, in_data, &jp);
     if (op_ret < 0)
@@ -1917,7 +1917,7 @@ void RGWDeleteBucket::execute()
     return;
   }
 
-  if (!store->get_zonegroup().is_master) {
+  if (!store->is_meta_master()) {
     bufferlist in_data;
     JSONParser jp;
     op_ret = forward_request_to_master(s, &ot.read_version, store, in_data,
