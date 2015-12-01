@@ -129,25 +129,25 @@ def merge_configs(config_paths):
     return conf_dict
 
 
-def get_testdir(ctx):
+def get_testdir(ctx=None):
     """
+    :param ctx: Unused; accepted for compatibility
     :returns: A test directory
     """
-    if 'test_path' in ctx.teuthology_config:
-        return ctx.teuthology_config['test_path']
-    test_user = get_test_user(ctx)
-    # FIXME this ideally should use os.path.expanduser() in the future, in case
-    # $HOME isn't /home/$USER - e.g. on a Mac. However, since we're executing
-    # this on the server side, it won't work properly.
-    return ctx.teuthology_config.get('test_path', '/home/%s/cephtest' %
-                                     test_user)
+    if 'test_path' in config:
+        return config['test_path']
+    return config.get(
+        'test_path',
+        '/home/%s/cephtest' % get_test_user()
+    )
 
 
-def get_test_user(ctx):
+def get_test_user(ctx=None):
     """
-    :returns: str -- the user to run tests as on remote hosts
+    :param ctx: Unused; accepted for compatibility
+    :returns:   str -- the user to run tests as on remote hosts
     """
-    return ctx.teuthology_config.get('test_user', 'ubuntu')
+    return config.get('test_user', 'ubuntu')
 
 
 def get_archive_dir(ctx):
