@@ -1309,8 +1309,15 @@ AC_ARG_WITH(
     ]
 )
 
-
-
+# Force not to use eventfd
+AC_ARG_WITH([eventfd],
+            [AS_HELP_STRING([--without-eventfd], [disable eventfd [default=no]])],
+            ,
+            [with_eventfd=yes])
+AS_IF([test "x$with_eventfd" != xno],
+    AC_CHECK_HEADERS(sys/eventfd.h,
+                     [AC_DEFINE(HAVE_EVENTFD, 1, [Have eventfd extension.])]))
+AM_CONDITIONAL(WITH_EVENTFD, [ test "$with_eventfd" = "yes" ])
 
 # Checks for typedefs, structures, and compiler characteristics.
 #AC_HEADER_STDBOOL
