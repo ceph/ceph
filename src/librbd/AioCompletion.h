@@ -10,6 +10,7 @@
 #include "include/rbd/librbd.hpp"
 
 #include "librbd/AsyncOperation.h"
+#include "librbd/ImageCtx.h"
 
 #include "osdc/Striper.h"
 
@@ -63,6 +64,8 @@ namespace librbd {
     AsyncOperation async_op;
 
     uint64_t journal_tid;
+    xlist<AioCompletion*>::item m_xlist_item;
+    bool event_notify;
 
     AioCompletion() : lock("AioCompletion::lock", true, false),
 		      done(false), rval(0), complete_cb(NULL),
@@ -71,7 +74,8 @@ namespace librbd {
 		      ref(1), released(false), ictx(NULL),
 		      aio_type(AIO_TYPE_NONE),
 		      read_bl(NULL), read_buf(NULL), read_buf_len(0),
-                      journal_tid(0) {
+                      journal_tid(0),
+                      m_xlist_item(this), event_notify(false) {
     }
     ~AioCompletion() {
     }
@@ -128,8 +132,14 @@ namespace librbd {
       assert(ref > 0);
       int n = --ref;
       lock.Unlock();
-      if (!n)
-	delete this;
+      if (!n) {
+        if (ictx && event_notify) {
+          ictx->completed_reqs_lock.Lock();
+          m_xlist_item.remove_myself();
+          ictx->completed_reqs_lock.Unlock();
+        }
+        delete this;
+      }
     }
 
     void block() {
@@ -144,6 +154,15 @@ namespace librbd {
         finalize(cct, rval);
         complete(cct);
       }
+    }
+
+    void set_event_notify(bool s) {
+      Mutex::Locker l(lock);
+      event_notify = s;
+    }
+
+    void *get_arg() {
+      return complete_arg;
     }
   };
 

@@ -121,6 +121,7 @@ namespace librbd {
   int get_parent_info(ImageCtx *ictx, std::string *parent_pool_name,
 		      std::string *parent_name, std::string *parent_snap_name);
   int get_flags(ImageCtx *ictx, uint64_t *flags);
+  int set_image_notification(ImageCtx *ictx, int fd, int type);
   int is_exclusive_lock_owner(ImageCtx *ictx, bool *is_owner);
 
   int remove(librados::IoCtx& io_ctx, const char *imgname,
@@ -209,6 +210,7 @@ namespace librbd {
 
   int flush(ImageCtx *ictx);
   int invalidate_cache(ImageCtx *ictx);
+  int poll_io_events(ImageCtx *ictx, AioCompletion **comps, int numcomp);
   int metadata_list(ImageCtx *ictx, const string &last, uint64_t max, map<string, bufferlist> *pairs);
   int metadata_get(ImageCtx *ictx, const std::string &key, std::string *value);
   int metadata_set(ImageCtx *ictx, const std::string &key, const std::string &value);

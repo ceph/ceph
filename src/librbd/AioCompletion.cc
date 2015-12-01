@@ -103,7 +103,14 @@ namespace librbd {
       complete_cb(rbd_comp, complete_arg);
       lock.Lock();
     }
+
     done = true;
+    if (ictx && event_notify && ictx->event_socket.is_valid()) {
+      ictx->completed_reqs_lock.Lock();
+      ictx->completed_reqs.push_back(&m_xlist_item);
+      ictx->completed_reqs_lock.Unlock();
+      ictx->event_socket.notify();
+    }
     cond.Signal();
     tracepoint(librbd, aio_complete_exit);
   }

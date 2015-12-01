@@ -11,6 +11,7 @@
 #include "common/WorkQueue.h"
 
 #include "librbd/AioImageRequestWQ.h"
+#include "librbd/AioCompletion.h"
 #include "librbd/AsyncOperation.h"
 #include "librbd/AsyncRequest.h"
 #include "librbd/internal.h"
@@ -139,6 +140,7 @@ struct C_InvalidateCache : public Context {
       object_map_lock(unique_lock_name("librbd::ImageCtx::object_map_lock", this)),
       async_ops_lock(unique_lock_name("librbd::ImageCtx::async_ops_lock", this)),
       copyup_list_lock(unique_lock_name("librbd::ImageCtx::copyup_list_lock", this)),
+      completed_reqs_lock(unique_lock_name("librbd::ImageCtx::completed_reqs_lock", this)),
       extra_read_flags(0),
       old_format(true),
       order(0), size(0), features(0),
@@ -870,6 +872,13 @@ struct C_InvalidateCache : public Context {
     while (!async_requests.empty()) {
       async_requests_cond.Wait(async_ops_lock);
     }
+  }
+
+  void ImageCtx::clear_pending_completions() {
+    Mutex::Locker l(completed_reqs_lock);
+    ldout(cct, 10) << "clear pending AioCompletion: count="
+                   << completed_reqs.size() << dendl;
+    completed_reqs.clear();
   }
 
   bool ImageCtx::_filter_metadata_confs(const string &prefix, map<string, bool> &configs,

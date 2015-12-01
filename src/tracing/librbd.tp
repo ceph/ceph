@@ -504,6 +504,23 @@ TRACEPOINT_EVENT(librbd, invalidate_cache_exit,
     )
 )
 
+TRACEPOINT_EVENT(librbd, poll_io_events_enter,
+    TP_ARGS(
+        void*, imagectx,
+        int, numcomp),
+    TP_FIELDS(
+        ctf_integer_hex(void*, imagectx, imagectx)
+        ctf_integer(int, numcomp, numcomp)
+    )
+)
+
+TRACEPOINT_EVENT(librbd, poll_io_events_exit,
+    TP_ARGS(
+        int, retval),
+    TP_FIELDS(
+        ctf_integer(int, retval, retval)
+    )
+)
 TRACEPOINT_EVENT(librbd, metadata_get_enter,
     TP_ARGS(
         void*, imagectx,
@@ -1631,6 +1648,28 @@ TRACEPOINT_EVENT(librbd, get_flags_exit,
       ctf_integer_hex(void*, imagectx, imagectx)
       ctf_integer(int, retval, retval)
       ctf_integer(uint64_t, flags, flags)
+    )
+)
+
+TRACEPOINT_EVENT(librbd, set_image_notification_enter,
+    TP_ARGS(
+        void*, imagectx,
+        int, fd,
+        int, type),
+    TP_FIELDS(
+      ctf_integer_hex(void*, imagectx, imagectx)
+      ctf_integer(int, fd, fd)
+      ctf_integer(int, type, type)
+    )
+)
+
+TRACEPOINT_EVENT(librbd, set_image_notification_exit,
+    TP_ARGS(
+        void*, imagectx,
+        int, retval),
+    TP_FIELDS(
+      ctf_integer_hex(void*, imagectx, imagectx)
+      ctf_integer(int, retval, retval)
     )
 )
 
