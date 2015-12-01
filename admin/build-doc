@@ -7,7 +7,7 @@ TOPDIR=`pwd`
 install -d -m0755 build-doc
 
 if command -v dpkg >/dev/null; then
-    for package in python-dev python-pip python-virtualenv doxygen ditaa ant libxml2-dev libxslt1-dev; do
+    for package in python-dev python-pip python-virtualenv doxygen ditaa ant libxml2-dev libxslt1-dev cython; do
 	if [ "$(dpkg --status -- $package|sed -n 's/^Status: //p')" != "install ok installed" ]; then
             # add a space after old values
 	    missing="${missing:+$missing }$package"
@@ -19,7 +19,7 @@ if command -v dpkg >/dev/null; then
 	exit 1
     fi
 elif command -v yum >/dev/null; then
-    for package in python-devel python-pip python-virtualenv doxygen ditaa ant libxml-devel libxslt-devel; do
+    for package in python-devel python-pip python-virtualenv doxygen ditaa ant libxml-devel libxslt-devel Cython; do
 	if ! rpm -q $package >/dev/null ; then
 		missing="${missing:+$missing }$package"
 	fi
@@ -30,7 +30,7 @@ elif command -v yum >/dev/null; then
         exit 1
     fi
 else
-    for command in virtualenv doxygen ant ditaa; do
+    for command in virtualenv doxygen ant ditaa cython; do
 	command -v "$command" > /dev/null;
 	ret_code=$?
 	if [ $ret_code -ne 0 ]; then
@@ -56,7 +56,7 @@ cd build-doc
 [ -z "$vdir" ] && vdir="./virtualenv"
 
 if [ ! -e $vdir ]; then
-    virtualenv --no-site-packages $vdir
+    virtualenv --system-site-packages $vdir
 fi
 $vdir/bin/pip install --quiet -r ../admin/doc-requirements.txt
 
