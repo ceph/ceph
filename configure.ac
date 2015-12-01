@@ -125,6 +125,12 @@ AC_ARG_WITH([rbd],
 AM_CONDITIONAL(WITH_RBD, test "$with_rbd" = "yes")
 #AS_IF([test "$with_rbd" = "yes"], [AC_DEFINE([WITH_RADOS, WITH_RBD])])
 
+AC_ARG_WITH([cython],
+	[AS_HELP_STRING([--with-cython], [build python bindings for librbd])],
+	[],
+	[with_cython=yes])
+AM_CONDITIONAL(WITH_CYTHON, test "$with_cython" = "yes")
+
 # cephfs?
 # cephfs requires rados
 AC_ARG_WITH([cephfs],
@@ -200,6 +206,14 @@ AC_ARG_ENABLE([server],
 	[enable_server=yes])
 AM_CONDITIONAL(ENABLE_SERVER, test "$enable_server" = "yes")
 #AS_IF([test "$enable_server" = "yes"], [AC_DEFINE([WITH_MON, WITH_OSD, WITH_MDS, ENABLE_SERVER])])
+
+# cython is required to build librbd python bindings
+if test x"$with_cython" = xyes; then
+    AC_CHECK_PROG(CYTHON_CHECK, cython, yes)
+    if test x"$CYTHON_CHECK" != xyes; then
+        AC_MSG_FAILURE([cython not found])
+    fi
+fi
 
 # cond-check if snappy-devel is installed, needed by leveldb that is need by server parts of the project
 AS_IF([test "$enable_server" = "yes" -a \( "$with_osd" = "yes" -o "$with_mon" = "yes" \)],
