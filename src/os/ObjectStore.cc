@@ -19,8 +19,46 @@
 #include "FileStore.h"
 #include "MemStore.h"
 #include "KeyValueStore.h"
-#include "newstore/NewStore.h"
 #include "common/safe_io.h"
+
+#if defined(HAVE_LIBAIO)
+#include "newstore/NewStore.h"
+#endif
+
+void decode_str_str_map_to_bl(bufferlist::iterator& p,
+			      bufferlist *out)
+{
+  bufferlist::iterator start = p;
+  __u32 n;
+  ::decode(n, p);
+  unsigned len = 4;
+  while (n--) {
+    __u32 l;
+    ::decode(l, p);
+    p.advance(l);
+    len += 4 + l;
+    ::decode(l, p);
+    p.advance(l);
+    len += 4 + l;
+  }
+  start.copy(len, *out);
+}
+
+void decode_str_set_to_bl(bufferlist::iterator& p,
+			  bufferlist *out)
+{
+  bufferlist::iterator start = p;
+  __u32 n;
+  ::decode(n, p);
+  unsigned len = 4;
+  while (n--) {
+    __u32 l;
+    ::decode(l, p);
+    p.advance(l);
+    len += 4 + l;
+  }
+  start.copy(len, *out);
+}
 
 ObjectStore *ObjectStore::create(CephContext *cct,
 				 const string& type,
@@ -38,10 +76,12 @@ ObjectStore *ObjectStore::create(CephContext *cct,
       cct->check_experimental_feature_enabled("keyvaluestore")) {
     return new KeyValueStore(data);
   }
+#if defined(HAVE_LIBAIO)
   if (type == "newstore" &&
       cct->check_experimental_feature_enabled("newstore")) {
     return new NewStore(cct, data);
   }
+#endif
   return NULL;
 }
 

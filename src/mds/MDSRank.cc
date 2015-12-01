@@ -19,8 +19,6 @@
 #include "messages/MMDSMap.h"
 
 #include "MDSMap.h"
-//#include "MDS.h"
-#include "mds_table_types.h"
 #include "SnapClient.h"
 #include "SnapServer.h"
 #include "MDBalancer.h"
@@ -30,6 +28,7 @@
 #include "InoTable.h"
 #include "mon/MonClient.h"
 #include "common/HeartbeatMap.h"
+#include "ScrubStack.h"
 
 
 #include "MDSRank.h"
@@ -40,7 +39,6 @@
 
 MDSRank::MDSRank(
     mds_rank_t whoami_,
-    int incarnation_,
     Mutex &mds_lock_,
     LogChannelRef &clog_,
     SafeTimer &timer_,
@@ -52,13 +50,13 @@ MDSRank::MDSRank(
     Context *respawn_hook_,
     Context *suicide_hook_)
   :
-    whoami(whoami_),
-    incarnation(incarnation_),
+    whoami(whoami_), incarnation(0),
     mds_lock(mds_lock_), clog(clog_), timer(timer_),
     mdsmap(mdsmap_),
     objecter(objecter_),
     server(NULL), mdcache(NULL), locker(NULL), mdlog(NULL),
-    balancer(NULL), inotable(NULL), snapserver(NULL), snapclient(NULL),
+    balancer(NULL), scrubstack(NULL),
+    inotable(NULL), snapserver(NULL), snapclient(NULL),
     sessionmap(this), logger(NULL), mlogger(NULL),
     op_tracker(g_ceph_context, g_conf->mds_enable_op_tracker, 
                g_conf->osd_num_op_tracker_shard),
@@ -81,6 +79,8 @@ MDSRank::MDSRank(
   mdlog = new MDLog(this);
   balancer = new MDBalancer(this, messenger, monc);
 
+  scrubstack = new ScrubStack(mdcache, finisher);
+
   inotable = new InoTable(this);
   snapserver = new SnapServer(this, monc);
   snapclient = new SnapClient(this);
@@ -100,6 +100,7 @@ MDSRank::~MDSRank()
     g_ceph_context->get_heartbeat_map()->remove_worker(hb);
   }
 
+  if (scrubstack) { delete scrubstack; scrubstack = NULL; }
   if (mdcache) { delete mdcache; mdcache = NULL; }
   if (mdlog) { delete mdlog; mdlog = NULL; }
   if (balancer) { delete balancer; balancer = NULL; }
@@ -185,8 +186,8 @@ void MDSRankDispatcher::tick()
 
   // ...
   if (is_clientreplay() || is_active() || is_stopping()) {
-    locker->tick();
     server->find_idle_sessions();
+    locker->tick();
   }
   
   if (is_reconnect())
@@ -1252,6 +1253,9 @@ void MDSRank::active_start()
   mdcache->clean_open_file_lists();
   mdcache->export_remaining_imported_caps();
   finish_contexts(g_ceph_context, waiting_for_replay);  // kick waiters
+
+  mdcache->reissue_all_caps();
+
   finish_contexts(g_ceph_context, waiting_for_active);  // kick waiters
 }
 
@@ -1273,8 +1277,6 @@ void MDSRank::recovery_done(int oldstate)
   mdcache->start_recovered_truncates();
   mdcache->do_file_recover();
 
-  mdcache->reissue_all_caps();
-  
   // tell connected clients
   //bcast_mds_map();     // not anymore, they get this from the monitor
 
@@ -1369,10 +1371,11 @@ void MDSRankDispatcher::handle_mds_map(
   assert(whoami != MDS_RANK_NONE);
 
   MDSMap::DaemonState oldstate = state;
-  state = mdsmap->get_state_gid(mds_gid_t(
-        monc->get_global_id()));
+  mds_gid_t mds_gid = mds_gid_t(monc->get_global_id());
+  state = mdsmap->get_state_gid(mds_gid);
   if (state != oldstate) {
     last_state = oldstate;
+    incarnation = mdsmap->get_inc_gid(mds_gid);
   }
 
   version_t epoch = m->get_epoch();
@@ -1417,9 +1420,9 @@ void MDSRankDispatcher::handle_mds_map(
   if (oldstate != state) {
     // update messenger.
     if (state == MDSMap::STATE_STANDBY_REPLAY || state == MDSMap::STATE_ONESHOT_REPLAY) {
-      dout(1) << "handle_mds_map i am now mds." << monc->get_global_id() << "." << incarnation
-	      << "replaying mds." << whoami << "." << incarnation << dendl;
-      messenger->set_myname(entity_name_t::MDS(monc->get_global_id()));
+      dout(1) << "handle_mds_map i am now mds." << mds_gid << "." << incarnation
+	      << " replaying mds." << whoami << "." << incarnation << dendl;
+      messenger->set_myname(entity_name_t::MDS(mds_gid));
     } else {
       dout(1) << "handle_mds_map i am now mds." << whoami << "." << incarnation << dendl;
       messenger->set_myname(entity_name_t::MDS(whoami));
@@ -1596,6 +1599,25 @@ void MDSRankDispatcher::handle_mds_map(
     set_osd_epoch_barrier(osd_epoch);
   }
 
+  if (is_active()) {
+    bool found = false;
+    MDSMap::mds_info_t info = mdsmap->get_info(whoami);
+
+    for (map<mds_gid_t,MDSMap::mds_info_t>::const_iterator p = mdsmap->get_mds_info().begin();
+       p != mdsmap->get_mds_info().end();
+       ++p) {
+      if (p->second.state == MDSMap::STATE_STANDBY_REPLAY &&
+	  (p->second.standby_for_rank == whoami ||(info.name.length() && p->second.standby_for_name == info.name))) {
+	found = true;
+	break;
+      }
+      if (found)
+	mdlog->set_write_iohint(0);
+      else
+	mdlog->set_write_iohint(CEPH_OSD_OP_FLAG_FADVISE_DONTNEED);
+    }
+  }
+
   mdcache->notify_mdsmap_changed();
 }
 
@@ -1632,12 +1654,14 @@ bool MDSRankDispatcher::handle_asok_command(
 {
   if (command == "dump_ops_in_flight" ||
              command == "ops") {
+    RWLock::RLocker l(op_tracker.lock);
     if (!op_tracker.tracking_enabled) {
       ss << "op_tracker tracking is not enabled";
     } else {
       op_tracker.dump_ops_in_flight(f);
     }
   } else if (command == "dump_historic_ops") {
+    RWLock::RLocker l(op_tracker.lock);
     if (!op_tracker.tracking_enabled) {
       ss << "op_tracker tracking is not enabled";
     } else {
@@ -1668,38 +1692,7 @@ bool MDSRankDispatcher::handle_asok_command(
     
     heartbeat_reset();
     
-    // Dump sessions, decorated with recovery/replay status
-    f->open_array_section("sessions");
-    const ceph::unordered_map<entity_name_t, Session*> session_map = sessionmap.get_sessions();
-    for (ceph::unordered_map<entity_name_t,Session*>::const_iterator p = session_map.begin();
-         p != session_map.end();
-         ++p)  {
-      if (!p->first.is_client()) {
-        continue;
-      }
-      
-      Session *s = p->second;
-      
-      f->open_object_section("session");
-      f->dump_int("id", p->first.num());
-      
-      f->dump_int("num_leases", s->leases.size());
-      f->dump_int("num_caps", s->caps.size());
-      
-      f->dump_string("state", s->get_state_name());
-      f->dump_int("replay_requests", is_clientreplay() ? s->get_request_count() : 0);
-      f->dump_unsigned("completed_requests", s->get_num_completed_requests());
-      f->dump_bool("reconnecting", server->waiting_for_reconnect(p->first.num()));
-      f->dump_stream("inst") << s->info.inst;
-      f->open_object_section("client_metadata");
-      for (map<string, string>::const_iterator i = s->info.client_metadata.begin();
-           i != s->info.client_metadata.end(); ++i) {
-        f->dump_string(i->first.c_str(), i->second);
-      }
-      f->close_section(); // client_metadata
-      f->close_section(); //session
-    }
-    f->close_section(); //sessions
+    dump_sessions(SessionFilter(), f);
     
     mds_lock.Unlock();
   } else if (command == "session evict") {
@@ -1724,6 +1717,12 @@ bool MDSRankDispatcher::handle_asok_command(
     string path;
     cmd_getval(g_ceph_context, cmdmap, "path", path);
     command_scrub_path(f, path);
+  } else if (command == "tag path") {
+    string path;
+    cmd_getval(g_ceph_context, cmdmap, "path", path);
+    string tag;
+    cmd_getval(g_ceph_context, cmdmap, "tag", tag);
+    command_tag_path(f, path, tag);
   } else if (command == "flush_path") {
     string path;
     cmd_getval(g_ceph_context, cmdmap, "path", path);
@@ -1773,7 +1772,84 @@ bool MDSRankDispatcher::handle_asok_command(
   return true;
 }
 
+/**
+ * This function drops the mds_lock, so don't do anything with
+ * MDSRank after calling it (we could have gone into shutdown): just
+ * send your result back to the calling client and finish.
+ */
+std::vector<entity_name_t> MDSRankDispatcher::evict_sessions(
+    const SessionFilter &filter)
+{
+  std::list<Session*> victims;
 
+  const auto sessions = sessionmap.get_sessions();
+  for (const auto p : sessions)  {
+    if (!p.first.is_client()) {
+      continue;
+    }
+
+    Session *s = p.second;
+
+    if (filter.match(*s, std::bind(&Server::waiting_for_reconnect, server, std::placeholders::_1))) {
+      victims.push_back(s);
+    }
+  }
+
+  std::vector<entity_name_t> result;
+
+  C_SaferCond on_safe;
+  C_GatherBuilder gather(g_ceph_context, &on_safe);
+  for (const auto s : victims) {
+    server->kill_session(s, gather.new_sub());
+    result.push_back(s->info.inst.name);
+  }
+  gather.activate();
+  mds_lock.Unlock();
+  on_safe.wait();
+  mds_lock.Lock();
+
+  return result;
+}
+
+void MDSRankDispatcher::dump_sessions(const SessionFilter &filter, Formatter *f) const
+{
+  // Dump sessions, decorated with recovery/replay status
+  f->open_array_section("sessions");
+  const ceph::unordered_map<entity_name_t, Session*> session_map = sessionmap.get_sessions();
+  for (ceph::unordered_map<entity_name_t,Session*>::const_iterator p = session_map.begin();
+       p != session_map.end();
+       ++p)  {
+    if (!p->first.is_client()) {
+      continue;
+    }
+
+    Session *s = p->second;
+
+    if (!filter.match(*s, std::bind(&Server::waiting_for_reconnect, server, std::placeholders::_1))) {
+      continue;
+    }
+    
+    f->open_object_section("session");
+    f->dump_int("id", p->first.num());
+    
+    f->dump_int("num_leases", s->leases.size());
+    f->dump_int("num_caps", s->caps.size());
+    
+    f->dump_string("state", s->get_state_name());
+    f->dump_int("replay_requests", is_clientreplay() ? s->get_request_count() : 0);
+    f->dump_unsigned("completed_requests", s->get_num_completed_requests());
+    f->dump_bool("reconnecting", server->waiting_for_reconnect(p->first.num()));
+    f->dump_stream("inst") << s->info.inst;
+    f->open_object_section("client_metadata");
+    for (map<string, string>::const_iterator i = s->info.client_metadata.begin();
+         i != s->info.client_metadata.end(); ++i) {
+      f->dump_string(i->first.c_str(), i->second);
+    }
+    f->close_section(); // client_metadata
+    f->close_section(); //session
+  }
+  f->close_section(); //sessions
+}
 
 void MDSRank::command_scrub_path(Formatter *f, const string& path)
 {
@@ -1784,6 +1860,17 @@ void MDSRank::command_scrub_path(Formatter *f, const string& path)
   }
   scond.wait();
   // scrub_dentry() finishers will dump the data for us; we're done!
+}
+
+void MDSRank::command_tag_path(Formatter *f,
+    const string& path, const std::string &tag)
+{
+  C_SaferCond scond;
+  {
+    Mutex::Locker l(mds_lock);
+    mdcache->enqueue_scrub(path, tag, f, &scond);
+  }
+  scond.wait();
 }
 
 void MDSRank::command_flush_path(Formatter *f, const string& path)
@@ -2370,7 +2457,6 @@ bool MDSRankDispatcher::handle_command_legacy(std::vector<std::string> args)
 
 MDSRankDispatcher::MDSRankDispatcher(
     mds_rank_t whoami_,
-    int incarnation_,
     Mutex &mds_lock_,
     LogChannelRef &clog_,
     SafeTimer &timer_,
@@ -2381,7 +2467,54 @@ MDSRankDispatcher::MDSRankDispatcher(
     Objecter *objecter_,
     Context *respawn_hook_,
     Context *suicide_hook_)
-  : MDSRank(whoami_, incarnation_, mds_lock_, clog_, timer_, beacon_, mdsmap_,
+  : MDSRank(whoami_, mds_lock_, clog_, timer_, beacon_, mdsmap_,
       msgr, monc_, objecter_, respawn_hook_, suicide_hook_)
 {}
+
+bool MDSRankDispatcher::handle_command(
+  const cmdmap_t &cmdmap,
+  bufferlist const &inbl,
+  int *r,
+  std::stringstream *ds,
+  std::stringstream *ss)
+{
+  assert(r != nullptr);
+  assert(ds != nullptr);
+  assert(ss != nullptr);
+
+  std::string prefix;
+  cmd_getval(g_ceph_context, cmdmap, "prefix", prefix);
+
+  if (prefix == "session ls") {
+    std::vector<std::string> filter_args;
+    cmd_getval(g_ceph_context, cmdmap, "filters", filter_args);
+
+    SessionFilter filter;
+    *r = filter.parse(filter_args, ss);
+    if (*r != 0) {
+      return true;
+    }
+
+    Formatter *f = new JSONFormatter();
+    dump_sessions(filter, f);
+    f->flush(*ds);
+    delete f;
+    return true;
+  } else if (prefix == "session evict") {
+    std::vector<std::string> filter_args;
+    cmd_getval(g_ceph_context, cmdmap, "filters", filter_args);
+
+    SessionFilter filter;
+    *r = filter.parse(filter_args, ss);
+    if (*r != 0) {
+      return true;
+    }
+
+    evict_sessions(filter);
+
+    return true;
+  } else {
+    return false;
+  }
+}
 

@@ -3,9 +3,17 @@
 
 #if defined(__linux__)
 #include <features.h>
+
+#ifndef __STRING
+# define __STRING(x) #x
+#endif
+
 #elif defined(__FreeBSD__)
 #include <sys/cdefs.h>
 #define	__GNUC_PREREQ(minor, major)	__GNUC_PREREQ__(minor, major)
+#elif defined(__sun) || defined(_AIX)
+#include "include/compat.h"
+#include <assert.h>
 #endif
 
 #ifdef __CEPH__

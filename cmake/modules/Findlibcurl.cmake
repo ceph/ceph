@@ -26,7 +26,6 @@ find_path(CURL_INCLUDE_DIR curl.h NO_DEFAULT_PATH PATHS
 find_library(LIBCURL NAMES curl)
 set(CURL_LIBRARIES ${LIBCURL})
 
-
 # check curl/multi.h for curl_multi_wait()
 set(CMAKE_REQUIRED_INCLUDES ${CURL_INCLUDE_DIR})
 set(CMAKE_REQUIRED_LIBRARIES ${CURL_LIBRARIES})

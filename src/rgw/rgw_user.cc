@@ -454,7 +454,7 @@ int rgw_delete_user(RGWRados *store, RGWUserInfo& info, RGWObjVersionTracker& ob
   rgw_obj uid_obj(store->get_zone_params().user_uid_pool, info.user_id);
   ldout(store->ctx(), 10) << "removing user index: " << info.user_id << dendl;
   ret = store->meta_mgr->remove_entry(user_meta_handler, info.user_id, &objv_tracker);
-  if (ret < 0 && ret != -ENOENT) {
+  if (ret < 0 && ret != -ENOENT && ret  != -ECANCELED) {
     ldout(store->ctx(), 0) << "ERROR: could not remove " << info.user_id << ":" << uid_obj << ", should be fixed (err=" << ret << ")" << dendl;
     return ret;
   }
@@ -801,9 +801,14 @@ int RGWAccessKeyPool::check_op(RGWUserAdminOpState& op_state,
 
   int32_t key_type = op_state.get_key_type();
 
-  // if a key type wasn't specified set it to s3
-  if (key_type < 0)
-    key_type = KEY_TYPE_S3;
+  // if a key type wasn't specified
+  if (key_type < 0) {
+      if (op_state.has_subuser()) {
+        key_type = KEY_TYPE_SWIFT;
+      } else {
+        key_type = KEY_TYPE_S3;
+      }
+  }
 
   op_state.set_key_type(key_type);
 
@@ -866,12 +871,23 @@ int RGWAccessKeyPool::generate_key(RGWUserAdminOpState& op_state, std::string *e
     }
   }
 
-  if (op_state.has_subuser())
-    new_key.subuser = op_state.get_subuser();
+  //key's subuser
+  if (op_state.has_subuser()) {
+    //create user and subuser at the same time, user's s3 key should not be set this
+    if (!op_state.key_type_setbycontext || (key_type == KEY_TYPE_SWIFT)) {
+      new_key.subuser = op_state.get_subuser();
+    }
+  }
 
+  //Secret key
   if (!gen_secret) {
+    if (op_state.get_secret_key().empty()) {
+      set_err_msg(err_msg, "empty secret key");
+      return -EINVAL; 
+    }
+  
     key = op_state.get_secret_key();
-  } else if (gen_secret) {
+  } else {
     char secret_key_buf[SECRET_KEY_LEN + 1];
 
     ret = gen_rand_alphanumeric_plain(g_ceph_context, secret_key_buf, sizeof(secret_key_buf));
@@ -1226,6 +1242,12 @@ int RGWSubUserPool::check_op(RGWUserAdminOpState& op_state,
     return -EINVAL;
   }
 
+  //set key type when it not set or set by context
+  if ((op_state.get_key_type() < 0) || op_state.key_type_setbycontext) {
+    op_state.set_key_type(KEY_TYPE_SWIFT);
+    op_state.key_type_setbycontext = true;
+  }
+
   // check if the subuser exists
   if (!subuser.empty())
     existing = exists(subuser);
@@ -1293,7 +1315,7 @@ int RGWSubUserPool::add(RGWUserAdminOpState& op_state, std::string *err_msg, boo
   }
 
   if (op_state.get_secret_key().empty()) {
-    op_state.set_gen_access();
+    op_state.set_gen_secret();
   }
 
   ret = execute_add(op_state, &subprocess_msg, defer_user_update);
@@ -1631,18 +1653,23 @@ int RGWUser::init(RGWUserAdminOpState& op_state)
     }
   }
 
-  if (!uid.empty() && (uid.compare(RGW_USER_ANON_ID) != 0))
+  if (!uid.empty() && (uid.compare(RGW_USER_ANON_ID) != 0)) {
     found = (rgw_get_user_info_by_uid(store, uid, user_info, &op_state.objv) >= 0);
-
-  if (!user_email.empty() && !found)
+    op_state.found_by_uid = found;
+  }
+  if (!user_email.empty() && !found) {
     found = (rgw_get_user_info_by_email(store, user_email, user_info, &op_state.objv) >= 0);
-
-  if (!swift_user.empty() && !found)
+    op_state.found_by_email = found;
+  }
+  if (!swift_user.empty() && !found) {
     found = (rgw_get_user_info_by_swift(store, swift_user, user_info, &op_state.objv) >= 0);
-
-  if (!access_key.empty() && !found)
+    op_state.found_by_key = found;
+  }
+  if (!access_key.empty() && !found) {
     found = (rgw_get_user_info_by_access_key(store, access_key, user_info, &op_state.objv) >= 0);
-
+    op_state.found_by_key = found;
+  }
+  
   op_state.set_existing_user(found);
   if (found) {
     op_state.set_user_info(user_info);
@@ -1744,6 +1771,12 @@ int RGWUser::check_op(RGWUserAdminOpState& op_state, std::string *err_msg)
     return -EINVAL;
   }
 
+  //set key type when it not set or set by context
+  if ((op_state.get_key_type() < 0) || op_state.key_type_setbycontext) {
+    op_state.set_key_type(KEY_TYPE_S3);
+    op_state.key_type_setbycontext = true;
+  }
+
   return 0;
 }
 
@@ -1767,8 +1800,13 @@ int RGWUser::execute_add(RGWUserAdminOpState& op_state, std::string *err_msg)
       return execute_modify(op_state, err_msg);
     }
 
-    set_err_msg(err_msg, "user: " + op_state.user_id + " exists");
-
+    if (op_state.found_by_email) {
+      set_err_msg(err_msg, "email: " + user_email + " exists");
+    } else if (op_state.found_by_key) {
+      set_err_msg(err_msg, "duplicate key provided");
+    } else {
+      set_err_msg(err_msg, "user: " + op_state.user_id + " exists");
+    }
     return -EEXIST;
   }
 
@@ -1784,12 +1822,7 @@ int RGWUser::execute_add(RGWUserAdminOpState& op_state, std::string *err_msg)
     return -EINVAL;
   }
 
-  // fail if the user email is a duplicate
-  if (op_state.has_existing_email()) {
-    set_err_msg(err_msg, "duplicate email provided");
-    return -EEXIST;
-  }
-
+		
   // set the user info
   user_id = uid;
   user_info.user_id = user_id;
@@ -1891,7 +1924,7 @@ int RGWUser::execute_remove(RGWUserAdminOpState& op_state, std::string *err_msg)
 
   if (!op_state.has_existing_user()) {
     set_err_msg(err_msg, "user does not exist");
-    return -EINVAL;
+    return -ENOENT;
   }
 
   bool done;
@@ -2188,8 +2221,11 @@ int RGWUserAdminOp_User::create(RGWRados *store, RGWUserAdminOpState& op_state,
   Formatter *formatter = flusher.get_formatter();
 
   ret = user.add(op_state, NULL);
-  if (ret < 0)
+  if (ret < 0) {
+    if (ret == -EEXIST)
+      ret = -ERR_USER_EXIST;
     return ret;
+  }
 
   ret = user.info(info, NULL);
   if (ret < 0)

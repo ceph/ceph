@@ -3,6 +3,8 @@
 #include "test/librbd/test_fixture.h"
 #include "test/librbd/test_support.h"
 #include "librbd/AioCompletion.h"
+#include "librbd/AioImageRequest.h"
+#include "librbd/AioImageRequestWQ.h"
 #include "librbd/ImageWatcher.h"
 #include "librbd/internal.h"
 #include "librbd/ObjectMap.h"
@@ -254,7 +256,7 @@ TEST_F(TestInternal, AioWriteRequestsLock) {
   librbd::AioCompletion *c =
     librbd::aio_create_completion_internal(ctx, librbd::rbd_ctx_cb);
   c->get();
-  aio_write(ictx, 0, buffer.size(), buffer.c_str(), c, 0);
+  ictx->aio_work_queue->aio_write(c, 0, buffer.size(), buffer.c_str(), 0);
 
   bool is_owner;
   ASSERT_EQ(0, librbd::is_exclusive_lock_owner(ictx, &is_owner));
@@ -277,7 +279,7 @@ TEST_F(TestInternal, AioDiscardRequestsLock) {
   librbd::AioCompletion *c =
     librbd::aio_create_completion_internal(ctx, librbd::rbd_ctx_cb);
   c->get();
-  aio_discard(ictx, 0, 256, c);
+  ictx->aio_work_queue->aio_discard(c, 0, 256);
 
   bool is_owner;
   ASSERT_EQ(0, librbd::is_exclusive_lock_owner(ictx, &is_owner));
@@ -312,7 +314,7 @@ TEST_F(TestInternal, CancelAsyncResize) {
     size -= MIN(size, 1<<18);
     {
       RWLock::RLocker l(ictx->owner_lock);
-      ASSERT_EQ(0, librbd::async_resize(ictx, &ctx, size, prog_ctx));
+      librbd::async_resize(ictx, &ctx, size, prog_ctx);
     }
 
     // try to interrupt the in-progress resize
@@ -356,8 +358,7 @@ TEST_F(TestInternal, MultipleResize) {
 
     RWLock::RLocker l(ictx->owner_lock);
     contexts.push_back(new C_SaferCond());
-    ASSERT_EQ(0, librbd::async_resize(ictx, contexts.back(), new_size,
-                                      prog_ctx));
+    librbd::async_resize(ictx, contexts.back(), new_size, prog_ctx);
   }
 
   for (uint32_t i = 0; i < contexts.size(); ++i) {
@@ -369,7 +370,7 @@ TEST_F(TestInternal, MultipleResize) {
   ASSERT_EQ(0U, size);
 }
 
-TEST_F(TestInternal, MetadatConfig) {
+TEST_F(TestInternal, Metadata) {
   REQUIRE_FEATURE(RBD_FEATURE_LAYERING);
 
   map<string, bool> test_confs = boost::assign::map_list_of(
@@ -396,7 +397,7 @@ TEST_F(TestInternal, MetadatConfig) {
   map<string, bufferlist> pairs;
   r = librbd::metadata_list(ictx, "", 0, &pairs);
   ASSERT_EQ(0, r);
-  ASSERT_EQ(5, pairs.size());
+  ASSERT_EQ(5u, pairs.size());
   r = librbd::metadata_remove(ictx, "abcd");
   ASSERT_EQ(0, r);
   r = librbd::metadata_remove(ictx, "xyz");
@@ -404,11 +405,56 @@ TEST_F(TestInternal, MetadatConfig) {
   pairs.clear();
   r = librbd::metadata_list(ictx, "", 0, &pairs);
   ASSERT_EQ(0, r);
-  ASSERT_EQ(3, pairs.size());
+  ASSERT_EQ(3u, pairs.size());
   string val;
   r = librbd::metadata_get(ictx, it->first, &val);
   ASSERT_EQ(0, r);
   ASSERT_STREQ(val.c_str(), "value3");
+}
+
+TEST_F(TestInternal, MetadataFilter) {
+  REQUIRE_FEATURE(RBD_FEATURE_LAYERING);
+
+  map<string, bool> test_confs = boost::assign::map_list_of(
+    "aaaaaaa", false)(
+    "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", false)(
+    "cccccccccccccc", false);
+  map<string, bool>::iterator it = test_confs.begin();
+  const string prefix = "test_config_";
+  bool is_continue;
+  librbd::ImageCtx *ictx;
+  ASSERT_EQ(0, open_image(m_image_name, &ictx));
+
+  librbd::Image image1;
+  map<string, bufferlist> pairs, res;
+  pairs["abc"].append("value");
+  pairs["abcabc"].append("value");
+  pairs[prefix+it->first].append("value1");
+  ++it;
+  pairs[prefix+it->first].append("value2");
+  ++it;
+  pairs[prefix+it->first].append("value3");
+  pairs[prefix+"asdfsdaf"].append("value6");
+  pairs[prefix+"zxvzxcv123"].append("value5");
+
+  is_continue = ictx->_filter_metadata_confs(prefix, test_confs, pairs, &res);
+  ASSERT_TRUE(is_continue);
+  ASSERT_TRUE(res.size() == 3U);
+  it = test_confs.begin();
+  ASSERT_TRUE(res.count(it->first));
+  ASSERT_TRUE(it->second);
+  ++it;
+  ASSERT_TRUE(res.count(it->first));
+  ASSERT_TRUE(it->second);
+  ++it;
+  ASSERT_TRUE(res.count(it->first));
+  ASSERT_TRUE(it->second);
+  res.clear();
+
+  pairs["zzzzzzzz"].append("value7");
+  is_continue = ictx->_filter_metadata_confs(prefix, test_confs, pairs, &res);
+  ASSERT_FALSE(is_continue);
+  ASSERT_TRUE(res.size() == 3U);
 }
 
 TEST_F(TestInternal, SnapshotCopyup)
@@ -420,7 +466,7 @@ TEST_F(TestInternal, SnapshotCopyup)
 
   bufferlist bl;
   bl.append(std::string(256, '1'));
-  ASSERT_EQ(256, librbd::write(ictx, 0, bl.length(), bl.c_str(), 0));
+  ASSERT_EQ(256, ictx->aio_work_queue->write(0, bl.length(), bl.c_str(), 0));
 
   ASSERT_EQ(0, librbd::snap_create(ictx, "snap1"));
   ASSERT_EQ(0, librbd::snap_protect(ictx, "snap1"));
@@ -439,7 +485,7 @@ TEST_F(TestInternal, SnapshotCopyup)
   ASSERT_EQ(0, librbd::snap_create(ictx2, "snap1"));
   ASSERT_EQ(0, librbd::snap_create(ictx2, "snap2"));
 
-  ASSERT_EQ(256, librbd::write(ictx2, 256, bl.length(), bl.c_str(), 0));
+  ASSERT_EQ(256, ictx2->aio_work_queue->write(256, bl.length(), bl.c_str(), 0));
 
   librados::IoCtx snap_ctx;
   snap_ctx.dup(m_ioctx);
@@ -469,10 +515,10 @@ TEST_F(TestInternal, SnapshotCopyup)
     const char *snap_name = it->empty() ? NULL : it->c_str();
     ASSERT_EQ(0, librbd::snap_set(ictx2, snap_name));
 
-    ASSERT_EQ(256, librbd::read(ictx2, 0, 256, read_bl.c_str(), 0));
+    ASSERT_EQ(256, ictx2->aio_work_queue->read(0, 256, read_bl.c_str(), 0));
     ASSERT_TRUE(bl.contents_equal(read_bl));
 
-    ASSERT_EQ(256, librbd::read(ictx2, 256, 256, read_bl.c_str(), 0));
+    ASSERT_EQ(256, ictx2->aio_work_queue->read(256, 256, read_bl.c_str(), 0));
     if (snap_name == NULL) {
       ASSERT_TRUE(bl.contents_equal(read_bl));
     } else {
@@ -511,7 +557,8 @@ TEST_F(TestInternal, ResizeCopyup)
   bufferlist bl;
   bl.append(std::string(4096, '1'));
   for (size_t i = 0; i < m_image_size; i += bl.length()) {
-    ASSERT_EQ(bl.length(), librbd::write(ictx, i, bl.length(), bl.c_str(), 0));
+    ASSERT_EQ(bl.length(), ictx->aio_work_queue->write(i, bl.length(),
+                                                       bl.c_str(), 0));
   }
 
   ASSERT_EQ(0, librbd::snap_create(ictx, "snap1"));
@@ -542,8 +589,8 @@ TEST_F(TestInternal, ResizeCopyup)
   }
 
   for (size_t i = 2 << order; i < m_image_size; i += bl.length()) {
-    ASSERT_EQ(bl.length(), librbd::read(ictx2, i, bl.length(), read_bl.c_str(),
-                                        0));
+    ASSERT_EQ(bl.length(), ictx2->aio_work_queue->read(i, bl.length(),
+                                                       read_bl.c_str(), 0));
     ASSERT_TRUE(bl.contents_equal(read_bl));
   }
 }
@@ -567,7 +614,8 @@ TEST_F(TestInternal, DiscardCopyup)
   bufferlist bl;
   bl.append(std::string(4096, '1'));
   for (size_t i = 0; i < m_image_size; i += bl.length()) {
-    ASSERT_EQ(bl.length(), librbd::write(ictx, i, bl.length(), bl.c_str(), 0));
+    ASSERT_EQ(bl.length(), ictx->aio_work_queue->write(i, bl.length(),
+                                                       bl.c_str(), 0));
   }
 
   ASSERT_EQ(0, librbd::snap_create(ictx, "snap1"));
@@ -587,7 +635,7 @@ TEST_F(TestInternal, DiscardCopyup)
   read_bl.push_back(read_ptr);
 
   ASSERT_EQ(static_cast<int>(m_image_size - 64),
-            librbd::discard(ictx2, 32, m_image_size - 64));
+            ictx2->aio_work_queue->discard(32, m_image_size - 64));
   ASSERT_EQ(0, librbd::snap_set(ictx2, "snap1"));
 
   {
@@ -597,8 +645,8 @@ TEST_F(TestInternal, DiscardCopyup)
   }
 
   for (size_t i = 0; i < m_image_size; i += bl.length()) {
-    ASSERT_EQ(bl.length(), librbd::read(ictx2, i, bl.length(), read_bl.c_str(),
-                                        0));
+    ASSERT_EQ(bl.length(), ictx2->aio_work_queue->read(i, bl.length(),
+                                                       read_bl.c_str(), 0));
     ASSERT_TRUE(bl.contents_equal(read_bl));
   }
 }
@@ -607,17 +655,16 @@ TEST_F(TestInternal, ShrinkFlushesCache) {
   librbd::ImageCtx *ictx;
   ASSERT_EQ(0, open_image(m_image_name, &ictx));
 
-  {
-    RWLock::WLocker owner_locker(ictx->owner_lock);
-    ASSERT_EQ(0, ictx->image_watcher->try_lock());
-  }
-
   std::string buffer(4096, '1');
+
+  // ensure write-path is initialized
+  ictx->aio_work_queue->write(0, buffer.size(), buffer.c_str(), 0);
+
   C_SaferCond cond_ctx;
   librbd::AioCompletion *c =
     librbd::aio_create_completion_internal(&cond_ctx, librbd::rbd_ctx_cb);
   c->get();
-  aio_write(ictx, 0, buffer.size(), buffer.c_str(), c, 0);
+  ictx->aio_work_queue->aio_write(c, 0, buffer.size(), buffer.c_str(), 0);
 
   librbd::NoOpProgressContext no_op;
   ASSERT_EQ(0, librbd::resize(ictx, m_image_size >> 1, no_op));
@@ -626,4 +673,71 @@ TEST_F(TestInternal, ShrinkFlushesCache) {
   ASSERT_EQ(0, c->wait_for_complete());
   ASSERT_EQ(0, cond_ctx.wait());
   c->put();
+}
+
+TEST_F(TestInternal, ImageOptions) {
+  rbd_image_options_t opts1 = NULL, opts2 = NULL;
+  uint64_t uint64_val1 = 10, uint64_val2 = 0;
+  std::string string_val1;
+
+  librbd::image_options_create(&opts1);
+  ASSERT_NE((rbd_image_options_t)NULL, opts1);
+  ASSERT_TRUE(librbd::image_options_is_empty(opts1));
+
+  ASSERT_EQ(-EINVAL, librbd::image_options_get(opts1, RBD_IMAGE_OPTION_FEATURES,
+	  &string_val1));
+  ASSERT_EQ(-ENOENT, librbd::image_options_get(opts1, RBD_IMAGE_OPTION_FEATURES,
+	  &uint64_val1));
+
+  ASSERT_EQ(-EINVAL, librbd::image_options_set(opts1, RBD_IMAGE_OPTION_FEATURES,
+	  string_val1));
+
+  ASSERT_EQ(0, librbd::image_options_set(opts1, RBD_IMAGE_OPTION_FEATURES,
+	  uint64_val1));
+  ASSERT_FALSE(librbd::image_options_is_empty(opts1));
+  ASSERT_EQ(0, librbd::image_options_get(opts1, RBD_IMAGE_OPTION_FEATURES,
+	  &uint64_val2));
+  ASSERT_EQ(uint64_val1, uint64_val2);
+
+  librbd::image_options_create_ref(&opts2, opts1);
+  ASSERT_NE((rbd_image_options_t)NULL, opts2);
+  ASSERT_FALSE(librbd::image_options_is_empty(opts2));
+
+  uint64_val2 = 0;
+  ASSERT_NE(uint64_val1, uint64_val2);
+  ASSERT_EQ(0, librbd::image_options_get(opts2, RBD_IMAGE_OPTION_FEATURES,
+	  &uint64_val2));
+  ASSERT_EQ(uint64_val1, uint64_val2);
+
+  uint64_val2++;
+  ASSERT_NE(uint64_val1, uint64_val2);
+  ASSERT_EQ(-ENOENT, librbd::image_options_get(opts1, RBD_IMAGE_OPTION_ORDER,
+	  &uint64_val1));
+  ASSERT_EQ(-ENOENT, librbd::image_options_get(opts2, RBD_IMAGE_OPTION_ORDER,
+	  &uint64_val2));
+  ASSERT_EQ(0, librbd::image_options_set(opts2, RBD_IMAGE_OPTION_ORDER,
+	  uint64_val2));
+  ASSERT_EQ(0, librbd::image_options_get(opts1, RBD_IMAGE_OPTION_ORDER,
+	  &uint64_val1));
+  ASSERT_EQ(0, librbd::image_options_get(opts2, RBD_IMAGE_OPTION_ORDER,
+	  &uint64_val2));
+  ASSERT_EQ(uint64_val1, uint64_val2);
+
+  librbd::image_options_destroy(opts1);
+
+  uint64_val2++;
+  ASSERT_NE(uint64_val1, uint64_val2);
+  ASSERT_EQ(0, librbd::image_options_get(opts2, RBD_IMAGE_OPTION_ORDER,
+	  &uint64_val2));
+  ASSERT_EQ(uint64_val1, uint64_val2);
+
+  ASSERT_EQ(0, librbd::image_options_unset(opts2, RBD_IMAGE_OPTION_ORDER));
+  ASSERT_EQ(-ENOENT, librbd::image_options_unset(opts2, RBD_IMAGE_OPTION_ORDER));
+
+  librbd::image_options_clear(opts2);
+  ASSERT_EQ(-ENOENT, librbd::image_options_get(opts2, RBD_IMAGE_OPTION_FEATURES,
+	  &uint64_val2));
+  ASSERT_TRUE(librbd::image_options_is_empty(opts2));
+
+  librbd::image_options_destroy(opts2);
 }

@@ -31,10 +31,6 @@ using namespace std;
 #include "common/ceph_argparse.h"
 #include "common/pick_address.h"
 
-#if !defined(DARWIN) && !defined(__FreeBSD__)
-#include <envz.h>
-#endif // DARWIN || __FreeBSD__
-
 #include <sys/types.h>
 #include <fcntl.h>
 
@@ -65,10 +61,8 @@ int main(int argc, const char **argv, char *envp[])
 
   cout << "ceph-syn: starting " << g_conf->num_client << " syn client(s)" << std::endl;
   for (int i=0; i<g_conf->num_client; i++) {
-      messengers[i] = Messenger::create(
-	g_ceph_context, g_conf->ms_type,
-	entity_name_t(entity_name_t::TYPE_CLIENT,-1), "synclient",
-	i * 1000000 + getpid());
+    messengers[i] = Messenger::create_client_messenger(g_ceph_context,
+						       "synclient");
     messengers[i]->bind(g_conf->public_addr);
     mclients[i] = new MonClient(g_ceph_context);
     mclients[i]->build_initial_monmap();

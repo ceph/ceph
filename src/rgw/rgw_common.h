@@ -149,6 +149,7 @@ using ceph::crypto::MD5;
 #define ERR_SIGNATURE_NO_MATCH   2027
 #define ERR_INVALID_ACCESS_KEY   2028
 #define ERR_MALFORMED_XML        2029
+#define ERR_USER_EXIST           2030
 #define ERR_USER_SUSPENDED       2100
 #define ERR_INTERNAL_ERROR       2200
 #define ERR_NOT_IMPLEMENTED      2201
@@ -431,6 +432,7 @@ public:
      DECODE_FINISH(bl);
   }
   int check_cap(const string& cap, uint32_t perm);
+  bool is_valid_cap_type(const string& tp);
   void dump(Formatter *f) const;
   void dump(Formatter *f, const char *name) const;
 
@@ -796,8 +798,10 @@ struct RGWBucketInfo
   // Represents the shard number for blind bucket.
   const static uint32_t NUM_SHARDS_BLIND_BUCKET;
 
+  bool requester_pays;
+
   void encode(bufferlist& bl) const {
-     ENCODE_START(11, 4, bl);
+     ENCODE_START(12, 4, bl);
      ::encode(bucket, bl);
      ::encode(owner, bl);
      ::encode(flags, bl);
@@ -809,6 +813,7 @@ struct RGWBucketInfo
      ::encode(quota, bl);
      ::encode(num_shards, bl);
      ::encode(bucket_index_shard_hash_type, bl);
+     ::encode(requester_pays, bl);
      ENCODE_FINISH(bl);
   }
   void decode(bufferlist::iterator& bl) {
@@ -835,6 +840,8 @@ struct RGWBucketInfo
        ::decode(num_shards, bl);
      if (struct_v >= 11)
        ::decode(bucket_index_shard_hash_type, bl);
+     if (struct_v >= 12)
+       ::decode(requester_pays, bl);
      DECODE_FINISH(bl);
   }
   void dump(Formatter *f) const;
@@ -846,7 +853,7 @@ struct RGWBucketInfo
   int versioning_status() { return flags & (BUCKET_VERSIONED | BUCKET_VERSIONS_SUSPENDED); }
   bool versioning_enabled() { return versioning_status() == BUCKET_VERSIONED; }
 
-  RGWBucketInfo() : flags(0), creation_time(0), has_instance_obj(false), num_shards(0), bucket_index_shard_hash_type(MOD) {}
+  RGWBucketInfo() : flags(0), creation_time(0), has_instance_obj(false), num_shards(0), bucket_index_shard_hash_type(MOD), requester_pays(false) {}
 };
 WRITE_CLASS_ENCODER(RGWBucketInfo)
 
@@ -941,6 +948,10 @@ struct rgw_obj_key {
   }
   rgw_obj_key(const string& n, const string& i) {
     set(n, i);
+  }
+
+  rgw_obj_key(const cls_rgw_obj_key& k) {
+    set(k);
   }
 
   void set(const cls_rgw_obj_key& k) {
@@ -1196,8 +1207,7 @@ public:
     init(b, o);
   }
   rgw_obj(rgw_bucket& b, const rgw_obj_key& k) : in_extra_data(false) {
-    init(b, k.name);
-    set_instance(k.instance);
+    from_index_key(b, k);
   }
   void init(rgw_bucket& b, const std::string& o) {
     bucket = b;
@@ -1306,6 +1316,29 @@ public:
     return string(buf) + orig_obj;
   };
 
+  void from_index_key(rgw_bucket& b, const rgw_obj_key& key) {
+    if (key.name[0] != '_') {
+      init(b, key.name);
+      set_instance(key.instance);
+      return;
+    }
+    if (key.name[1] == '_') {
+      init(b, key.name.substr(1));
+      set_instance(key.instance);
+      return;
+    }
+    ssize_t pos = key.name.find('_', 1);
+    if (pos < 0) {
+      /* shouldn't happen, just use key */
+      init(b, key.name);
+      set_instance(key.instance);
+      return;
+    }
+
+    init_ns(b, key.name.substr(pos + 1), key.name.substr(1, pos -1));
+    set_instance(key.instance);
+  }
+
   void get_index_key(rgw_obj_key *key) const {
     key->name = get_index_key_name();
     key->instance = instance;
@@ -1396,6 +1429,11 @@ public:
       return false;
     }
 
+    if (obj[1] == '_') {
+      obj = obj.substr(1);
+      return true;
+    }
+
     size_t period_pos = obj.find('.');
     if (period_pos < pos) {
       return false;
@@ -1440,7 +1478,11 @@ public:
     if (struct_v >= 4)
       ::decode(instance, bl);
     if (ns.empty() && instance.empty()) {
-      orig_obj = object;
+      if (object[0] != '_') {
+        orig_obj = object;
+      } else {
+	orig_obj = object.substr(1);
+      }
     } else {
       if (struct_v >= 5) {
         ::decode(orig_obj, bl);

@@ -415,7 +415,7 @@ bool GenericObjectMap::GenericObjectMapIteratorImpl::valid_parent()
   return false;
 }
 
-int GenericObjectMap::GenericObjectMapIteratorImpl::next()
+int GenericObjectMap::GenericObjectMapIteratorImpl::next(bool validate)
 {
   assert(cur_iter->valid());
   assert(valid());

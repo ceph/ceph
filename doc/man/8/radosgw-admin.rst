@@ -316,10 +316,6 @@ Options
 
    Remove all objects before bucket removal.
 
-.. option:: --lazy-remove
-
-   Defer removal of object tail.
-
 .. option:: --metadata-key=<key>
 
 	Key to retrieve metadata from with ``metadata get``.

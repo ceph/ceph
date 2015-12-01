@@ -34,6 +34,7 @@
 #include "common/Throttle.h"
 #include "common/QueueRing.h"
 #include "common/safe_io.h"
+#include "include/compat.h"
 #include "include/str_list.h"
 #include "rgw_common.h"
 #include "rgw_rados.h"
@@ -1118,7 +1119,7 @@ int main(int argc, const char **argv)
   check_curl();
 
   if (g_conf->daemonize) {
-    global_init_daemonize(g_ceph_context, 0);
+    global_init_daemonize(g_ceph_context);
   }
   Mutex mutex("main");
   SafeTimer init_timer(g_ceph_context, mutex);

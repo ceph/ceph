@@ -51,7 +51,7 @@ public:
   virtual int zero(int fd, uint64_t offset, uint64_t length);
 
   // -- aio --
-
+#if defined(HAVE_LIBAIO)
   struct aio_t {
     struct iocb iocb;  // must be first element; see shenanigans in aio_queue_t
     void *priv;
@@ -94,7 +94,7 @@ public:
     int submit(aio_t &aio, int *retries) {
       int attempts = 10;
       iocb *piocb = &aio.iocb;
-      do {
+      while (true) {
 	int r = io_submit(ctx, 1, &piocb);
 	if (r < 0) {
 	  if (r == -EAGAIN && attempts-- > 0) {
@@ -105,7 +105,8 @@ public:
 	  return r;
 	}
 	assert(r == 1);
-      } while (false);
+	break;
+      }
       return 0;
     }
 
@@ -125,7 +126,7 @@ public:
       return r;
     }
   };
-
+#endif
 };
 
 #endif

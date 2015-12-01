@@ -22,9 +22,10 @@ int __cls_ver_min = min;
 int __cls_name__## name = 0; \
 const char *__cls_name = #name;
 
-#define CLS_METHOD_RD		0x1
-#define CLS_METHOD_WR		0x2
-#define CLS_METHOD_PUBLIC	0x4
+#define CLS_METHOD_RD       0x1 /// method executes read operations
+#define CLS_METHOD_WR       0x2 /// method executes write operations
+#define CLS_METHOD_PUBLIC   0x4 /// unused
+#define CLS_METHOD_PROMOTE  0x8 /// method cannot be proxied to base tier
 
 
 #define CLS_LOG(level, fmt, ...)					\

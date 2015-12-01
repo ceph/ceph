@@ -21,7 +21,7 @@ function run() {
     local dir=$1
     shift
 
-    export CEPH_MON="127.0.0.1:7104"
+    export CEPH_MON="127.0.0.1:7104" # git grep '\<7104\>' : there must be only one
     export CEPH_ARGS
     CEPH_ARGS+="--fsid=$(uuidgen) --auth-supported=none "
     CEPH_ARGS+="--mon-host=$CEPH_MON "
@@ -124,7 +124,7 @@ function TEST_crush_rule_create_erasure() {
     # it will prevent the creation of a pool.
     #
     local crushtool_path_old=`ceph-conf --show-config-value crushtool`
-    ceph tell mon.* injectargs --crushtool "false"
+    ceph tell mon.\* injectargs --crushtool "false"
 
     expect_failure $dir "Error EINVAL" \
         ./ceph osd pool create mypool 1 1 erasure || return 1
@@ -241,9 +241,9 @@ function TEST_crush_tree() {
 function TEST_crush_repair_faulty_crushmap() {
     local dir=$1
     fsid=$(uuidgen)
-    MONA=127.0.0.1:7113
-    MONB=127.0.0.1:7114
-    MONC=127.0.0.1:7115
+    MONA=127.0.0.1:7113 # git grep '\<7113\>' : there must be only one
+    MONB=127.0.0.1:7114 # git grep '\<7114\>' : there must be only one
+    MONC=127.0.0.1:7115 # git grep '\<7115\>' : there must be only one
     CEPH_ARGS_orig=$CEPH_ARGS
     CEPH_ARGS="--fsid=$fsid --auth-supported=none "
     CEPH_ARGS+="--mon-initial-members=a,b,c "
@@ -257,7 +257,7 @@ function TEST_crush_repair_faulty_crushmap() {
     ./crushtool -c $empty_map.txt -o $empty_map.map || return 1
 
     local crushtool_path_old=`ceph-conf --show-config-value crushtool`
-    ceph tell mon.* injectargs --crushtool "true"
+    ceph tell mon.\* injectargs --crushtool "true"
 
     ceph osd setcrushmap -i $empty_map.map || return 1
     # should be an empty crush map without any buckets

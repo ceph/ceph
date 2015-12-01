@@ -12,6 +12,7 @@
 */
 #include <boost/program_options/variables_map.hpp>
 #include <boost/program_options/parsers.hpp>
+#include <boost/scope_exit.hpp>
 
 #include <stdlib.h>
 #include <string>
@@ -600,6 +601,13 @@ int main(int argc, char **argv) {
       }
     }
 
+    BOOST_SCOPE_EXIT((&r) (&fd) (&outpath)) {
+      ::close(fd);
+      if (r < 0 && fd != STDOUT_FILENO) {
+        ::remove(outpath.c_str());
+      }
+    } BOOST_SCOPE_EXIT_END
+
     bufferlist bl;
     r = 0;
     if (map_type == "osdmap") {
@@ -610,7 +618,6 @@ int main(int argc, char **argv) {
     if (r < 0) {
       std::cerr << "Error getting map: " << cpp_strerror(r) << std::endl;
       err = EINVAL;
-      ::close(fd);
       goto done;
     }
     bl.write_fd(fd);

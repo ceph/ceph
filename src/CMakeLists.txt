@@ -13,24 +13,25 @@ add_definitions("-DCEPH_PKGLIBDIR=\"${libdir}\"")
 add_definitions("-DHAVE_CONFIG_H -D__CEPH__ -D_FILE_OFFSET_BITS=64 -D_REENTRANT -D_THREAD_SAFE -D__STDC_FORMAT_MACROS -D_GNU_SOURCE")
 
 set(CMAKE_ASM_COMPILER  ${PROJECT_SOURCE_DIR}/src/yasm-wrapper)
-message(status " ams compiler ${CMAKE_ASM_COMPILER}")
 set(CMAKE_ASM_FLAGS "-f elf64")
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -rdynamic -Wall -Wtype-limits -Wignored-qualifiers -Winit-self -Wpointer-arith -Werror=format-security -fno-strict-aliasing -fsigned-char -fPIC")
 
 execute_process(
-  COMMAND "yasm -f elf64 ${CMAKE_SOURCE_DIR}/src/common/crc32c_intel_fast_asm.S -o /dev/null"
-  RETURN_VALUE no_yasm
+  COMMAND yasm -f elf64 ${CMAKE_SOURCE_DIR}/src/common/crc32c_intel_fast_asm.S -o /dev/null
+  RESULT_VARIABLE no_yasm
   OUTPUT_QUIET)
 if(no_yasm)
-  message("we do not have a modern/working yasm")
+  message(STATUS " we do not have a modern/working yasm")
 else(no_yasm)
-  message("we have a modern and working yasm")
+  message(STATUS " we have a modern and working yasm")
   execute_process(
-    COMMAND "arch"
+    COMMAND uname -m
     OUTPUT_VARIABLE arch
     OUTPUT_STRIP_TRAILING_WHITESPACE)
   if(arch STREQUAL "x86_64")
-    message("we are x84_64")
+    message(STATUS " we are x84_64")
+    set(save_quiet ${CMAKE_REQUIRED_QUIET})
+    set(CMAKE_REQUIRED_QUIET true)
     include(CheckCXXSourceCompiles)
     check_cxx_source_compiles("
       #if defined(__x86_64__) && defined(__ILP32__)
@@ -38,24 +39,30 @@ else(no_yasm)
       #endif
       int main() {}
       " not_arch_x32)
+    set(CMAKE_REQUIRED_QUIET ${save_quiet})
     if(not_arch_x32)
-      message("we are not x32")
+      message(STATUS " we are not x32")
+      set(HAVE_GOOD_YASM_ELF64 1)
       add_definitions("-DHAVE_GOOD_YASM_ELF64")
+      execute_process(COMMAND yasm -f elf64 -i
+        ${CMAKE_SOURCE_DIR}/src/erasure-code/isa/isa-l/include/
+        ${CMAKE_SOURCE_DIR}/src/erasure-code/isa/isa-l/erasure_code/gf_vect_dot_prod_avx2.asm.s
+        -o /dev/null
+        RESULT_VARIABLE rc
+        OUTPUT_QUIET)
+      if(NOT rc)
+        set(HAVE_BETTER_YASM_ELF64 1)
+        add_definitions("-DHAVE_BETTER_YASM_ELF64")
+        message(STATUS " yasm can also build the isa-l stuff")
+      endif(NOT rc)
     else(not_arch_x32)
-      message("we are x32; no yasm for you")
+      message(STATUS " we are x32; no yasm for you")
     endif(not_arch_x32)
   else(arch STREQUAL "x86_64")
-    message("we are not x86_64 && !x32")
+    message(STATUS " we are not x86_64 && !x32")
   endif(arch STREQUAL "x86_64")
 endif(no_yasm)
 
-execute_process(COMMAND yasm -f elf64 -i ${CMAKE_SOURCE_DIR}/src/erasure-code/isa/isa-l/include/ ${CMAKE_SOURCE_DIR}/src/erasure-code/isa/isa-l/erasure_code/gf_vect_dot_prod_avx2.asm.s -o /dev/null
-  RESULT_VARIABLE rc
-  OUTPUT_QUIET)
-if(NOT rc)
-  set(HAVE_BETTER_YASM_ELF64 1)
-endif(NOT rc)
-MESSAGE("HAVE_BETTER_YASM_ELF64=" ${HAVE_BETTER_YASM_ELF64})
 
 set(CMAKE_CXX_FLAGS "${CMAKE_C_FLAGS} -ftemplate-depth-1024 -Wno-invalid-offsetof -Wnon-virtual-dtor -Wno-invalid-offsetof -Wstrict-null-sentinel -Woverloaded-virtual")
 
@@ -69,7 +76,7 @@ else()
 endif()
 
 
-set(EXTRALIBS uuid rt dl ${Boost_LIBS})
+set(EXTRALIBS uuid rt dl ${Boost_LIBS} ${ATOMIC_OPS_LIBRARIES})
 
 if(${WITH_PROFILER})
   list(APPEND EXTRALIBS profiler)
@@ -82,12 +89,6 @@ if(USE_NSS)
     endif(NSPR_FOUND)
   endif(NSS_FOUND)
 endif(USE_NSS)
-
-if(${HAVE_ATOMIC_OPS})
-  set(EXTRALIBS
-	atomic_ops
-	${EXTRALIBS})
-endif(${HAVE_ATOMIC_OPS})
 
 set(GCOV_PREFIX_STRIP 4)
 
@@ -120,13 +121,13 @@ if(HAVE_XIO)
   list(APPEND EXTRALIBS ${Xio_LIBRARY} ibverbs rdmacm pthread rt)
 endif(HAVE_XIO)
 
-if(${WITH_TCMALLOC})
+if(${WITH_TCMALLOC} AND ${HAVE_GPERFTOOLS})
   set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fno-builtin-malloc -fno-builtin-calloc -fno-builtin-realloc -fno-builtin-free")
   set(TCMALLOC_LIBS tcmalloc)
   set(TCMALLOC_srcs perfglue/heap_profiler.cc)
-else()
+else(${WITH_TCMALLOC} AND ${HAVE_GPERFTOOLS})
   set(TCMALLOC_srcs perfglue/disabled_heap_profiler.cc)
-endif(${WITH_TCMALLOC})
+endif(${WITH_TCMALLOC} AND ${HAVE_GPERFTOOLS})
 
 # tcmalloc heap profiler
 set(heap_profiler_files ${TCMALLOC_srcs})
@@ -190,6 +191,12 @@ if(HAVE_XIO)
     msg/xio/QueueStrategy.cc)
 endif(HAVE_XIO)
 
+if(HAVE_GOOD_YASM_ELF64)
+  set(yasm_srcs
+    common/crc32c_intel_fast_asm.S
+    common/crc32c_intel_fast_zero_asm.S)
+endif(HAVE_GOOD_YASM_ELF64)
+
 set(libcommon_files
   ${CMAKE_BINARY_DIR}/src/include/ceph_ver.h
   ceph_ver.c
@@ -218,8 +225,7 @@ set(libcommon_files
   common/crc32c.cc
   common/crc32c_intel_baseline.c
   common/crc32c_intel_fast.c
-  common/crc32c_intel_fast_asm.S
-  common/crc32c_intel_fast_zero_asm.S
+  ${yasm_srcs}
   common/assert.cc
   common/run_cmd.cc
   common/WorkQueue.cc
@@ -313,13 +319,13 @@ set(common_mountcephfs_files
 add_library(common_mountcephfs_objs OBJECT
   ${common_mountcephfs_files})
 
-if(${WITH_PROFILER})
+if(${HAVE_GPERFTOOLS})
   list(APPEND libcommon_files
     perfglue/cpu_profiler.cc)
 else()
   list(APPEND libcommon_files
     perfglue/disabled_stubs.cc)
-endif(${WITH_PROFILER})
+endif(${HAVE_GPERFTOOLS})
 
 if(${ENABLE_SHARED})
   list(APPEND libcommon_files
@@ -335,9 +341,9 @@ set_source_files_properties(${CMAKE_SOURCE_DIR}/src/ceph_ver.c
   ${CMAKE_SOURCE_DIR}/src/test/encoding/ceph_dencoder.cc
   APPEND PROPERTY OBJECT_DEPENDS ${CMAKE_BINARY_DIR}/src/include/ceph_ver.h)
 
-if(${WITH_PROFILER})
+if(${HAVE_GPERFTOOLS})
   target_link_libraries(common profiler)
-endif(${WITH_PROFILER})
+endif(${HAVE_GPERFTOOLS})
 
 add_library(common_utf8 STATIC common/utf8.c)
 
@@ -492,6 +498,11 @@ if(${WITH_RADOSGW})
 endif(${WITH_RADOSGW})
 
 add_executable(ceph-dencoder ${dencoder_srcs} $<TARGET_OBJECTS:heap_profiler_objs>)
+if(${WITH_RBD})
+  set(DENCODER_EXTRALIBS
+      ${DENCODER_EXTRALIBS}
+      librbd_replay_types)
+endif(${WITH_RBD})
 target_link_libraries(ceph-dencoder
   librados
   librbd
@@ -501,6 +512,7 @@ target_link_libraries(ceph-dencoder
   mon
   osdc
   ${DENCODER_EXTRALIBS}
+  journal
   cls_lock_client
   cls_refcount_client
   cls_log_client
@@ -510,6 +522,7 @@ target_link_libraries(ceph-dencoder
   cls_kvs
   cls_user_client
   cls_timeindex_client
+  cls_journal_client
   blkid
   udev
   keyutils
@@ -549,11 +562,20 @@ set(ceph_mon_srcs
   ceph_mon.cc
   common/TextTable.cc)
 add_executable(ceph-mon ${ceph_mon_srcs} $<TARGET_OBJECTS:heap_profiler_objs>)
+add_dependencies(ceph-mon erasure_code_plugins)
 target_link_libraries(ceph-mon mon boost_thread common os global ${EXTRALIBS}
   ${CMAKE_DL_LIBS} ${TCMALLOC_LIBS})
 install(TARGETS ceph-mon DESTINATION bin)
 
 # OSD
+if(${HAVE_XFS})
+  set(libos_xfs_srcs
+    os/XfsFileStoreBackend.cc
+    os/fs/XFS.cc)
+endif(${HAVE_XFS})
+set(libkv_srcs
+  kv/LevelDBStore.cc
+  kv/KeyValueDB.cc)
 set(libos_srcs
   os/FileJournal.cc
   os/FileStore.cc
@@ -562,25 +584,24 @@ set(libos_srcs
   os/JournalingObjectStore.cc
   os/LFNIndex.cc
   os/IndexManager.cc
-  os/LevelDBStore.cc
   os/DBObjectMap.cc 
   os/Transaction.cc
   os/WBThrottle.cc
   os/GenericFileStoreBackend.cc
   os/BtrfsFileStoreBackend.cc
   os/ZFSFileStoreBackend.cc
-  os/XfsFileStoreBackend.cc
   os/KeyValueStore.cc
-  os/KeyValueDB.cc
   os/MemStore.cc
   os/GenericObjectMap.cc
   os/HashIndex.cc
   os/newstore/NewStore.cc
   os/newstore/newstore_types.cc
   os/fs/FS.cc
-  os/fs/XFS.cc)
+  ${libkv_srcs}
+  ${libos_xfs_srcs})
+
 set(os_mon_files
-  os/LevelDBStore.cc)
+  kv/LevelDBStore.cc)
 add_library(os_mon_objs OBJECT ${os_mon_files})
 add_library(os STATIC ${libos_srcs} $<TARGET_OBJECTS:os_mon_objs>)
 if(${HAVE_LIBAIO})
@@ -631,6 +652,7 @@ set(ceph_osd_srcs
 add_executable(ceph-osd ${ceph_osd_srcs}
   $<TARGET_OBJECTS:heap_profiler_objs>
   $<TARGET_OBJECTS:common_util_obj>)
+add_dependencies(ceph-osd erasure_code_plugins)
 target_link_libraries(ceph-osd osd os global ${BLKID_LIBRARIES} ${TCMALLOC_LIBS})
 install(TARGETS ceph-osd DESTINATION bin)
 
@@ -661,6 +683,7 @@ if(${WITH_MDS})
     mds/JournalPointer.cc
     mds/MDSTableClient.cc
     mds/MDSTableServer.cc
+    mds/ScrubStack.cc
     mds/SimpleLock.cc
     mds/SnapRealm.cc
     mds/SnapServer.cc
@@ -789,6 +812,10 @@ if(WITH_LIBCEPHFS)
   target_link_libraries(client osdc mds ${LIBEDIT_LIBS})
   set(libcephfs_srcs libcephfs.cc)
   add_library(cephfs SHARED ${libcephfs_srcs})
+if(${ENABLE_SHARED})
+  set_target_properties(cephfs PROPERTIES OUTPUT_NAME cephfs VERSION 1.0.0
+    SOVERSION 1)
+endif(${ENABLE_SHARED})
   target_link_libraries(cephfs client global)
   install(TARGETS cephfs DESTINATION lib)
   install(DIRECTORY
@@ -810,7 +837,7 @@ if(WITH_LIBCEPHFS)
   install(TARGETS ceph-syn DESTINATION bin)
   install(TARGETS mount.ceph DESTINATION sbin)
 
-  if(WITH_FUSE)
+  if(HAVE_FUSE)
     set(ceph_fuse_srcs
       ceph_fuse.cc
       client/fuse_ll.cc)
@@ -818,35 +845,72 @@ if(WITH_LIBCEPHFS)
     target_link_libraries(ceph-fuse fuse client global)
     set_target_properties(ceph-fuse PROPERTIES COMPILE_FLAGS "-I${FUSE_INCLUDE_DIRS}")
     install(TARGETS ceph-fuse DESTINATION bin)
-  endif(WITH_FUSE)
+  endif(HAVE_FUSE)
 endif(WITH_LIBCEPHFS)
+
+set(journal_srcs
+  journal/AsyncOpTracker.cc
+  journal/Entry.cc
+  journal/Future.cc
+  journal/FutureImpl.cc
+  journal/Journaler.cc
+  journal/JournalMetadata.cc
+  journal/JournalPlayer.cc
+  journal/JournalRecorder.cc
+  journal/JournalTrimmer.cc
+  journal/ObjectPlayer.cc
+  journal/ObjectRecorder.cc
+  journal/Utils.cc)
+add_library(journal ${journal_srcs})
 
 if(${WITH_RBD})
   set(librbd_srcs
     krbd.cc
     common/ContextCompletion.cc
     librbd/AioCompletion.cc
-    librbd/AioRequest.cc
-    librbd/AsyncFlattenRequest.cc
+    librbd/AioImageRequest.cc
+    librbd/AioImageRequestWQ.cc
+    librbd/AioObjectRequest.cc
     librbd/AsyncObjectThrottle.cc
     librbd/AsyncOperation.cc
     librbd/AsyncRequest.cc
-    librbd/AsyncResizeRequest.cc
-    librbd/AsyncTrimRequest.cc
     librbd/CopyupRequest.cc
+    librbd/DiffIterate.cc
     librbd/ImageCtx.cc
     librbd/ImageWatcher.cc
-    librbd/WatchNotifyTypes.cc
     librbd/internal.cc
+    librbd/Journal.cc
+    librbd/JournalReplay.cc
+    librbd/JournalTypes.cc
     librbd/librbd.cc
+    librbd/LibrbdAdminSocketHook.cc
     librbd/LibrbdWriteback.cc
     librbd/ObjectMap.cc
-    librbd/RebuildObjectMapRequest.cc
-    librbd/DiffIterate.cc)
+    librbd/object_map/InvalidateRequest.cc
+    librbd/object_map/Request.cc
+    librbd/object_map/ResizeRequest.cc
+    librbd/object_map/SnapshotCreateRequest.cc
+    librbd/object_map/SnapshotRemoveRequest.cc
+    librbd/object_map/SnapshotRollbackRequest.cc
+    librbd/object_map/UpdateRequest.cc
+    librbd/operation/FlattenRequest.cc
+    librbd/operation/RebuildObjectMapRequest.cc
+    librbd/operation/RenameRequest.cc
+    librbd/operation/Request.cc
+    librbd/operation/ResizeRequest.cc
+    librbd/operation/SnapshotCreateRequest.cc
+    librbd/operation/SnapshotProtectRequest.cc
+    librbd/operation/SnapshotRemoveRequest.cc
+    librbd/operation/SnapshotRenameRequest.cc
+    librbd/operation/SnapshotRollbackRequest.cc
+    librbd/operation/SnapshotUnprotectRequest.cc
+    librbd/operation/TrimRequest.cc
+    librbd/WatchNotifyTypes.cc)
   add_library(librbd ${CEPH_SHARED} ${librbd_srcs}
     $<TARGET_OBJECTS:osdc_rbd_objs>
     $<TARGET_OBJECTS:common_util_obj>)
-  target_link_libraries(librbd PRIVATE librados common cls_lock_client cls_rbd_client
+  target_link_libraries(librbd PRIVATE librados common journal
+    cls_lock_client cls_rbd_client cls_journal_client
     ${CMAKE_DL_LIBS})
   if(${ENABLE_SHARED})
     set_target_properties(librbd PROPERTIES VERSION "1.0.0" SOVERSION "1"
@@ -854,26 +918,63 @@ if(${WITH_RBD})
   endif(${ENABLE_SHARED})
   install(TARGETS librados librbd DESTINATION lib)
   set(rbd_srcs
-    rbd.cc common/TextTable.cc)
+    tools/rbd/rbd.cc
+    tools/rbd/ArgumentTypes.cc
+    tools/rbd/IndentStream.cc
+    tools/rbd/OptionPrinter.cc
+    tools/rbd/Shell.cc
+    tools/rbd/Utils.cc
+    tools/rbd/action/BenchWrite.cc
+    tools/rbd/action/Children.cc
+    tools/rbd/action/Clone.cc
+    tools/rbd/action/Copy.cc
+    tools/rbd/action/Create.cc
+    tools/rbd/action/Diff.cc
+    tools/rbd/action/DiskUsage.cc
+    tools/rbd/action/Export.cc
+    tools/rbd/action/ExportDiff.cc
+    tools/rbd/action/Feature.cc
+    tools/rbd/action/Flatten.cc
+    tools/rbd/action/ImageMeta.cc
+    tools/rbd/action/Import.cc
+    tools/rbd/action/ImportDiff.cc
+    tools/rbd/action/Info.cc
+    tools/rbd/action/Kernel.cc
+    tools/rbd/action/List.cc
+    tools/rbd/action/Lock.cc
+    tools/rbd/action/MergeDiff.cc
+    tools/rbd/action/ObjectMap.cc
+    tools/rbd/action/Remove.cc
+    tools/rbd/action/Rename.cc
+    tools/rbd/action/Resize.cc
+    tools/rbd/action/Snap.cc
+    tools/rbd/action/Status.cc
+    tools/rbd/action/Watch.cc
+    common/TextTable.cc)
   add_executable(rbd ${rbd_srcs} $<TARGET_OBJECTS:common_util_obj>
     $<TARGET_OBJECTS:parse_secret_objs>
     $<TARGET_OBJECTS:heap_profiler_objs>)
   set_target_properties(rbd PROPERTIES OUTPUT_NAME rbd)
   target_link_libraries(rbd librbd librados global common keyutils udev
+    boost_regex boost_program_options
     ${BLKID_LIBRARIES} ${CMAKE_DL_LIBS} ${TCMALLOC_LIBS})
   install(TARGETS rbd DESTINATION bin)
   install(PROGRAMS ${CMAKE_SOURCE_DIR}/src/ceph-rbdnamer DESTINATION bin)
+  install(PROGRAMS ${CMAKE_SOURCE_DIR}/src/rbdmap DESTINATION bin)
+
+  set(librbd_replay_types_srcs
+      rbd_replay/ActionTypes.cc)
+  add_library(librbd_replay_types STATIC ${librbd_replay_types_srcs})
 
   set(librbd_replay_srcs
-      rbd_replay/actions.cc 
-      rbd_replay/Deser.cc 
-      rbd_replay/ImageNameMap.cc 
-      rbd_replay/PendingIO.cc 
-      rbd_replay/rbd_loc.cc 
-      rbd_replay/Replayer.cc 
-      rbd_replay/Ser.cc)
+      rbd_replay/actions.cc
+      rbd_replay/BufferReader.cc
+      rbd_replay/ImageNameMap.cc
+      rbd_replay/PendingIO.cc
+      rbd_replay/rbd_loc.cc
+      rbd_replay/Replayer.cc)
   add_library(librbd_replay STATIC ${librbd_replay_srcs})
-  target_link_libraries(librbd_replay PRIVATE librbd librados global udev)
+  target_link_libraries(librbd_replay PRIVATE librbd_replay_types librbd librados global udev)
 
   add_executable(rbd_replay
     rbd_replay/rbd-replay.cc
@@ -1003,3 +1104,24 @@ if(${WITH_RADOSGW})
   target_link_libraries(radosgw-object-expirer rgw_a ${TCMALLOC_LIBS})
   install(TARGETS radosgw-object-expirer DESTINATION bin)
 endif(${WITH_RADOSGW})
+
+# Everything you need to spin up a cluster with vstart.sh
+add_custom_target(vstart DEPENDS
+    ceph-osd
+    ceph-mon
+    ceph-mds
+    ceph-authtool
+    ceph-conf
+    monmaptool
+    crushtool)
+
+# Everything you need to run CephFS tests
+add_custom_target(cephfs_testing DEPENDS
+    vstart
+    rados
+    ceph-fuse
+    ceph-dencoder
+    cephfs-journal-tool
+    cephfs-data-scan
+    cephfs-table-tool)
+

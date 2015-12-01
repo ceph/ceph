@@ -27,6 +27,7 @@
 #include "include/memory.h"
 #include "common/errno.h"
 #include "MemStore.h"
+#include "include/compat.h"
 
 #define dout_subsys ceph_subsys_filestore
 #undef dout_prefix
@@ -850,18 +851,18 @@ void MemStore::_do_transaction(Transaction& t)
       {
         coll_t cid = i.get_cid(op->cid);
         ghobject_t oid = i.get_oid(op->oid);
-        map<string, bufferlist> aset;
-        i.decode_attrset(aset);
-	r = _omap_setkeys(cid, oid, aset);
+        bufferlist aset_bl;
+        i.decode_attrset_bl(&aset_bl);
+	r = _omap_setkeys(cid, oid, aset_bl);
       }
       break;
     case Transaction::OP_OMAP_RMKEYS:
       {
         coll_t cid = i.get_cid(op->cid);
         ghobject_t oid = i.get_oid(op->oid);
-        set<string> keys;
-        i.decode_keyset(keys);
-	r = _omap_rmkeys(cid, oid, keys);
+        bufferlist keys_bl;
+        i.decode_keyset_bl(&keys_bl);
+	r = _omap_rmkeys(cid, oid, keys_bl);
       }
       break;
     case Transaction::OP_OMAP_RMKEYRANGE:
@@ -1157,7 +1158,7 @@ int MemStore::_omap_clear(coll_t cid, const ghobject_t &oid)
 }
 
 int MemStore::_omap_setkeys(coll_t cid, const ghobject_t &oid,
-			    const map<string, bufferlist> &aset)
+			    bufferlist& aset_bl)
 {
   dout(10) << __func__ << " " << cid << " " << oid << dendl;
   CollectionRef c = get_collection(cid);
@@ -1168,13 +1169,19 @@ int MemStore::_omap_setkeys(coll_t cid, const ghobject_t &oid,
   if (!o)
     return -ENOENT;
   std::lock_guard<std::mutex> lock(o->omap_mutex);
-  for (map<string,bufferlist>::const_iterator p = aset.begin(); p != aset.end(); ++p)
-    o->omap[p->first] = p->second;
+  bufferlist::iterator p = aset_bl.begin();
+  __u32 num;
+  ::decode(num, p);
+  while (num--) {
+    string key;
+    ::decode(key, p);
+    ::decode(o->omap[key], p);
+  }
   return 0;
 }
 
 int MemStore::_omap_rmkeys(coll_t cid, const ghobject_t &oid,
-			   const set<string> &keys)
+			   bufferlist& keys_bl)
 {
   dout(10) << __func__ << " " << cid << " " << oid << dendl;
   CollectionRef c = get_collection(cid);
@@ -1185,8 +1192,14 @@ int MemStore::_omap_rmkeys(coll_t cid, const ghobject_t &oid,
   if (!o)
     return -ENOENT;
   std::lock_guard<std::mutex> lock(o->omap_mutex);
-  for (set<string>::const_iterator p = keys.begin(); p != keys.end(); ++p)
-    o->omap.erase(*p);
+  bufferlist::iterator p = keys_bl.begin();
+  __u32 num;
+  ::decode(num, p);
+  while (num--) {
+    string key;
+    ::decode(key, p);
+    o->omap.erase(key);
+  }
   return 0;
 }
 
@@ -1426,9 +1439,14 @@ int MemStore::BufferlistObject::truncate(uint64_t size)
 
 // PageSetObject
 
+#if defined(__GLIBCXX__)
 // use a thread-local vector for the pages returned by PageSet, so we
 // can avoid allocations in read/write()
 thread_local PageSet::page_vector MemStore::PageSetObject::tls_pages;
+#define DEFINE_PAGE_VECTOR(name)
+#else
+#define DEFINE_PAGE_VECTOR(name) PageSet::page_vector name;
+#endif
 
 int MemStore::PageSetObject::read(uint64_t offset, uint64_t len, bufferlist& bl)
 {
@@ -1436,6 +1454,7 @@ int MemStore::PageSetObject::read(uint64_t offset, uint64_t len, bufferlist& bl)
   const auto end = offset + len;
   auto remaining = len;
 
+  DEFINE_PAGE_VECTOR(tls_pages);
   data.get_range(offset, len, tls_pages);
 
   // allocate a buffer for the data
@@ -1482,6 +1501,7 @@ int MemStore::PageSetObject::write(uint64_t offset, const bufferlist &src)
 {
   unsigned len = src.length();
 
+  DEFINE_PAGE_VECTOR(tls_pages);
   // make sure the page range is allocated
   data.alloc_range(offset, src.length(), tls_pages);
 
@@ -1516,10 +1536,11 @@ int MemStore::PageSetObject::clone(Object *src, uint64_t srcoff,
   auto &dst_data = data;
   const auto dst_page_size = dst_data.get_page_size();
 
+  DEFINE_PAGE_VECTOR(tls_pages);
   PageSet::page_vector dst_pages;
 
   while (len) {
-    const auto count = std::min(len, src_page_size * 16);
+    const auto count = std::min(len, (uint64_t)src_page_size * 16);
     src_data.get_range(srcoff, count, tls_pages);
 
     for (auto &src_page : tls_pages) {
@@ -1560,6 +1581,7 @@ int MemStore::PageSetObject::truncate(uint64_t size)
   if (page_offset == size)
     return 0;
 
+  DEFINE_PAGE_VECTOR(tls_pages);
   // write zeroes to the rest of the last page
   data.get_range(page_offset, page_size, tls_pages);
   if (tls_pages.empty())

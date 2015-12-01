@@ -52,14 +52,14 @@ using namespace std;
 
 #if defined(__linux__)
 # ifndef BTRFS_SUPER_MAGIC
-static const __SWORD_TYPE BTRFS_SUPER_MAGIC(0x9123683E);
+#define BTRFS_SUPER_MAGIC 0x9123683E
 # endif
 # ifndef XFS_SUPER_MAGIC
-static const __SWORD_TYPE XFS_SUPER_MAGIC(0x58465342);
+#define XFS_SUPER_MAGIC 0x58465342
 # endif
-#ifndef ZFS_SUPER_MAGIC
-static const __SWORD_TYPE ZFS_SUPER_MAGIC(0x2fc12fc1);
-#endif
+# ifndef ZFS_SUPER_MAGIC
+#define ZFS_SUPER_MAGIC 0x2fc12fc1
+# endif
 #endif
 
 
@@ -141,7 +141,10 @@ private:
   int init_index(coll_t c);
 
   void _kludge_temp_object_collection(coll_t& cid, const ghobject_t& oid) {
-    if (oid.hobj.pool < -1 && !cid.is_temp())
+    // - normal temp case: cid is pg, object is temp (pool < -1)
+    // - hammer temp case: cid is pg (or already temp), object pool is -1
+    if (cid.is_pg() && (oid.hobj.pool < -1 ||
+			oid.hobj.pool == -1))
       cid = cid.get_temp();
   }
   void init_temp_collections();
@@ -149,8 +152,6 @@ private:
   // ObjectMap
   boost::scoped_ptr<ObjectMap> object_map;
   
-  Finisher ondisk_finisher;
-
   // helper fns
   int get_cdir(coll_t cid, char *s, int len);
   
@@ -198,6 +199,7 @@ private:
   public:
     Sequencer *parent;
     Mutex apply_lock;  // for apply mutual exclusion
+    int id;
     
     /// get_max_uncompleted
     bool _get_max_uncompleted(
@@ -263,6 +265,7 @@ private:
       q.push_back(o);
     }
     Op *peek_queue() {
+      Mutex::Locker l(qlock);
       assert(apply_lock.is_locked());
       return q.front();
     }
@@ -311,10 +314,11 @@ private:
       }
     }
 
-    OpSequencer()
+    OpSequencer(int i)
       : qlock("FileStore::OpSequencer::qlock", false, false),
 	parent(0),
-	apply_lock("FileStore::OpSequencer::apply_lock", false, false) {}
+	apply_lock("FileStore::OpSequencer::apply_lock", false, false),
+        id(i) {}
     ~OpSequencer() {
       assert(q.empty());
     }
@@ -329,9 +333,13 @@ private:
   FDCache fdcache;
   WBThrottle wbthrottle;
 
+  atomic_t next_osr_id;
   deque<OpSequencer*> op_queue;
   Throttle throttle_ops, throttle_bytes;
-  Finisher op_finisher;
+  const int m_ondisk_finisher_num;
+  const int m_apply_finisher_num;
+  vector<Finisher*> ondisk_finishers;
+  vector<Finisher*> apply_finishers;
 
   ThreadPool op_tp;
   struct OpWQ : public ThreadPool::WorkQueue<OpSequencer> {
@@ -606,6 +614,13 @@ public:
   int _rmattrs(coll_t cid, const ghobject_t& oid,
 	       const SequencerPosition &spos);
 
+  int collection_getattr(coll_t c, const char *name, void *value, size_t size);
+  int collection_getattr(coll_t c, const char *name, bufferlist& bl);
+  int collection_getattrs(coll_t cid, map<string,bufferptr> &aset);
+
+  int _collection_setattr(coll_t c, const char *name, const void *value, size_t size);
+  int _collection_rmattr(coll_t c, const char *name);
+  int _collection_setattrs(coll_t cid, map<string,bufferptr> &aset);
   int _collection_remove_recursive(const coll_t &cid,
 				   const SequencerPosition &spos);
 

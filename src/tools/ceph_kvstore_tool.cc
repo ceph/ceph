@@ -20,10 +20,12 @@
 #include "common/config.h"
 #include "common/errno.h"
 #include "common/strtol.h"
-
+#include "global/global_context.h"
 #include "global/global_init.h"
 #include "include/stringify.h"
-#include "os/KeyValueDB.h"
+#include "include/utime.h"
+#include "common/Clock.h"
+#include "kv/KeyValueDB.h"
 
 using namespace std;
 
@@ -289,13 +291,16 @@ int main(int argc, const char *argv[])
 
     if (argc >= 7) {
       string subcmd(argv[6]);
-      string out(argv[7]);
-
       if (subcmd != "out") {
         std::cerr << "unrecognized subcmd '" << subcmd << "'"
                   << std::endl;
         return 1;
       }
+      if (argc < 8) {
+        std::cerr << "output path not specified" << std::endl;
+        return 1;
+      }
+      string out(argv[7]);
 
       if (out.empty()) {
         std::cerr << "unspecified out file" << std::endl;

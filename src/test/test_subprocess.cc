@@ -54,7 +54,7 @@ TEST(SubProcess, NotFound)
   SubProcess p("NOTEXISTENTBINARY", false, false, true);
   ASSERT_EQ(p.spawn(), 0);
   std::string buf;
-  ASSERT_TRUE(read_from_fd(p.stderr(), buf));
+  ASSERT_TRUE(read_from_fd(p.get_stderr(), buf));
   std::cerr << "stderr: " << buf;
   ASSERT_EQ(p.join(), 1);
   std::cerr << "err: " << p.err() << std::endl;
@@ -68,7 +68,7 @@ TEST(SubProcess, Echo)
 
   ASSERT_EQ(echo.spawn(), 0);
   std::string buf;
-  ASSERT_TRUE(read_from_fd(echo.stdout(), buf));
+  ASSERT_TRUE(read_from_fd(echo.get_stdout(), buf));
   std::cerr << "stdout: " << buf;
   ASSERT_EQ(buf, "1 2 3\n");
   ASSERT_EQ(echo.join(), 0);
@@ -81,14 +81,14 @@ TEST(SubProcess, Cat)
 
   ASSERT_EQ(cat.spawn(), 0);
   std::string msg("to my, trociny!");
-  int n = write(cat.stdin(), msg.c_str(), msg.size());
+  int n = write(cat.get_stdin(), msg.c_str(), msg.size());
   ASSERT_EQ(n, (int)msg.size());
   cat.close_stdin();
   std::string buf;
-  ASSERT_TRUE(read_from_fd(cat.stdout(), buf));
+  ASSERT_TRUE(read_from_fd(cat.get_stdout(), buf));
   std::cerr << "stdout: " << buf << std::endl;
   ASSERT_EQ(buf, msg);
-  ASSERT_TRUE(read_from_fd(cat.stderr(), buf));
+  ASSERT_TRUE(read_from_fd(cat.get_stderr(), buf));
   ASSERT_EQ(buf, "");
   ASSERT_EQ(cat.join(), 0);
   ASSERT_TRUE(cat.err()[0] == '\0');
@@ -101,9 +101,9 @@ TEST(SubProcess, CatDevNull)
 
   ASSERT_EQ(cat.spawn(), 0);
   std::string buf;
-  ASSERT_TRUE(read_from_fd(cat.stdout(), buf));
+  ASSERT_TRUE(read_from_fd(cat.get_stdout(), buf));
   ASSERT_EQ(buf, "");
-  ASSERT_TRUE(read_from_fd(cat.stderr(), buf));
+  ASSERT_TRUE(read_from_fd(cat.get_stderr(), buf));
   ASSERT_EQ(buf, "");
   ASSERT_EQ(cat.join(), 0);
   ASSERT_TRUE(cat.err()[0] == '\0');
@@ -127,14 +127,14 @@ TEST(SubProcess, CatWithArgs)
 
   ASSERT_EQ(cat.spawn(), 0);
   std::string msg("Hello, Word!");
-  int n = write(cat.stdin(), msg.c_str(), msg.size());
+  int n = write(cat.get_stdin(), msg.c_str(), msg.size());
   ASSERT_EQ(n, (int)msg.size());
   cat.close_stdin();
   std::string buf;
-  ASSERT_TRUE(read_from_fd(cat.stdout(), buf));
+  ASSERT_TRUE(read_from_fd(cat.get_stdout(), buf));
   std::cerr << "stdout: " << buf << std::endl;
   ASSERT_EQ(buf, msg);
-  ASSERT_TRUE(read_from_fd(cat.stderr(), buf));
+  ASSERT_TRUE(read_from_fd(cat.get_stderr(), buf));
   std::cerr << "stderr: " << buf;
   ASSERT_FALSE(buf.empty());
   ASSERT_EQ(cat.join(), 1);
@@ -152,14 +152,14 @@ TEST(SubProcess, Subshell)
       "/bin/sh -c 'exit 13'", NULL);
   ASSERT_EQ(sh.spawn(), 0);
   std::string msg("hello via subshell");
-  int n = write(sh.stdin(), msg.c_str(), msg.size());
+  int n = write(sh.get_stdin(), msg.c_str(), msg.size());
   ASSERT_EQ(n, (int)msg.size());
   sh.close_stdin();
   std::string buf;
-  ASSERT_TRUE(read_from_fd(sh.stdout(), buf));
+  ASSERT_TRUE(read_from_fd(sh.get_stdout(), buf));
   std::cerr << "stdout: " << buf << std::endl;
   ASSERT_EQ(buf, msg);
-  ASSERT_TRUE(read_from_fd(sh.stderr(), buf));
+  ASSERT_TRUE(read_from_fd(sh.get_stderr(), buf));
   std::cerr << "stderr: " << buf;
   ASSERT_EQ(buf, "error from subshell\n");
   ASSERT_EQ(sh.join(), 13);
@@ -192,9 +192,9 @@ TEST(SubProcessTimed, Killed)
   ASSERT_EQ(cat.spawn(), 0);
   cat.kill();
   std::string buf;
-  ASSERT_TRUE(read_from_fd(cat.stdout(), buf));
+  ASSERT_TRUE(read_from_fd(cat.get_stdout(), buf));
   ASSERT_TRUE(buf.empty());
-  ASSERT_TRUE(read_from_fd(cat.stderr(), buf));
+  ASSERT_TRUE(read_from_fd(cat.get_stderr(), buf));
   ASSERT_TRUE(buf.empty());
   ASSERT_EQ(cat.join(), 128 + SIGTERM);
   std::cerr << "err: " << cat.err() << std::endl;
@@ -208,7 +208,7 @@ TEST(SubProcessTimed, SleepTimedout)
 
   ASSERT_EQ(sleep.spawn(), 0);
   std::string buf;
-  ASSERT_TRUE(read_from_fd(sleep.stderr(), buf));
+  ASSERT_TRUE(read_from_fd(sleep.get_stderr(), buf));
   std::cerr << "stderr: " << buf;
   ASSERT_FALSE(buf.empty());
   ASSERT_EQ(sleep.join(), 128 + SIGKILL);
@@ -222,14 +222,14 @@ TEST(SubProcessTimed, SubshellNoTimeout)
   sh.add_cmd_args("-c", "cat >&2", NULL);
   ASSERT_EQ(sh.spawn(), 0);
   std::string msg("the quick brown fox jumps over the lazy dog");
-  int n = write(sh.stdin(), msg.c_str(), msg.size());
+  int n = write(sh.get_stdin(), msg.c_str(), msg.size());
   ASSERT_EQ(n, (int)msg.size());
   sh.close_stdin();
   std::string buf;
-  ASSERT_TRUE(read_from_fd(sh.stdout(), buf));
+  ASSERT_TRUE(read_from_fd(sh.get_stdout(), buf));
   std::cerr << "stdout: " << buf << std::endl;
   ASSERT_TRUE(buf.empty());
-  ASSERT_TRUE(read_from_fd(sh.stderr(), buf));
+  ASSERT_TRUE(read_from_fd(sh.get_stderr(), buf));
   std::cerr << "stderr: " << buf << std::endl;
   ASSERT_EQ(buf, msg);
   ASSERT_EQ(sh.join(), 0);
@@ -242,11 +242,11 @@ TEST(SubProcessTimed, SubshellKilled)
   sh.add_cmd_args("-c", "sh -c cat", NULL);
   ASSERT_EQ(sh.spawn(), 0);
   std::string msg("etaoin shrdlu");
-  int n = write(sh.stdin(), msg.c_str(), msg.size());
+  int n = write(sh.get_stdin(), msg.c_str(), msg.size());
   ASSERT_EQ(n, (int)msg.size());
   sh.kill();
   std::string buf;
-  ASSERT_TRUE(read_from_fd(sh.stderr(), buf));
+  ASSERT_TRUE(read_from_fd(sh.get_stderr(), buf));
   ASSERT_TRUE(buf.empty());
   ASSERT_EQ(sh.join(), 128 + SIGTERM);
   std::cerr << "err: " << sh.err() << std::endl;
@@ -259,7 +259,7 @@ TEST(SubProcessTimed, SubshellTimedout)
   sh.add_cmd_args("-c", "sleep 1000& cat; NEVER REACHED", NULL);
   ASSERT_EQ(sh.spawn(), 0);
   std::string buf;
-  ASSERT_TRUE(read_from_fd(sh.stderr(), buf));
+  ASSERT_TRUE(read_from_fd(sh.get_stderr(), buf));
   std::cerr << "stderr: " << buf;
   ASSERT_FALSE(buf.empty());
   ASSERT_EQ(sh.join(), 128 + SIGTERM);

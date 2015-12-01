@@ -374,7 +374,7 @@ void PGMap::calc_stats()
 
   redo_full_sets();
 
-  calc_min_last_epoch_clean();
+  min_last_epoch_clean = calc_min_last_epoch_clean();
 }
 
 void PGMap::update_pg(pg_t pgid, bufferlist& bl)
@@ -471,8 +471,9 @@ void PGMap::stat_pg_add(const pg_t &pgid, const pg_stat_t &s, bool nocreating,
   if (!nocreating) {
     if (s.state & PG_STATE_CREATING) {
       creating_pgs.insert(pgid);
-      if (s.acting_primary >= 0)
-	creating_pgs_by_osd[s.acting_primary].insert(pgid);
+      if (s.acting_primary >= 0) {
+	creating_pgs_by_osd_epoch[s.acting_primary][s.mapping_epoch].insert(pgid);
+      }
     }
   }
 
@@ -501,16 +502,21 @@ void PGMap::stat_pg_sub(const pg_t &pgid, const pg_stat_t &s, bool nocreating,
   pg_sum.sub(s);
 
   num_pg--;
-  if (--num_pg_by_state[s.state] == 0)
+  int end = --num_pg_by_state[s.state];
+  assert(end >= 0);
+  if (end == 0)
     num_pg_by_state.erase(s.state);
 
   if (!nocreating) {
     if (s.state & PG_STATE_CREATING) {
       creating_pgs.erase(pgid);
       if (s.acting_primary >= 0) {
-	creating_pgs_by_osd[s.acting_primary].erase(pgid);
-	if (creating_pgs_by_osd[s.acting_primary].size() == 0)
-	  creating_pgs_by_osd.erase(s.acting_primary);
+	map<epoch_t,set<pg_t> >& r = creating_pgs_by_osd_epoch[s.acting_primary];
+	r[s.mapping_epoch].erase(pgid);
+	if (r[s.mapping_epoch].empty())
+	  r.erase(s.mapping_epoch);
+	if (r.empty())
+	  creating_pgs_by_osd_epoch.erase(s.acting_primary);
       }
     }
   }
@@ -694,6 +700,7 @@ void PGMap::dump_basic(Formatter *f) const
   f->dump_stream("stamp") << stamp;
   f->dump_unsigned("last_osdmap_epoch", last_osdmap_epoch);
   f->dump_unsigned("last_pg_scan", last_pg_scan);
+  f->dump_unsigned("min_last_epoch_clean", min_last_epoch_clean);
   f->dump_float("full_ratio", full_ratio);
   f->dump_float("near_full_ratio", nearfull_ratio);
   

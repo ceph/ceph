@@ -79,8 +79,10 @@ check_SCRIPTS += \
 	test/mon/mkfs.sh \
 	test/mon/mon-scrub.sh \
 	test/osd/osd-scrub-repair.sh \
+	test/osd/osd-scrub-snaps.sh \
 	test/osd/osd-config.sh \
 	test/osd/osd-bench.sh \
+	test/osd/osd-reactivate.sh \
 	test/osd/osd-copy-from.sh \
 	test/mon/mon-handle-forward.sh \
 	test/libradosstriper/rados-striper.sh \
@@ -133,6 +135,11 @@ UNITTEST_LDADD = \
 	$(top_builddir)/src/gmock/lib/libgmock.la \
 	$(top_builddir)/src/gmock/gtest/lib/libgtest.la \
 	$(PTHREAD_LIBS)
+
+if SOLARIS
+UNITTEST_LDADD += \
+	-lsocket -lnsl
+endif
 
 unittest_addrs_SOURCES = test/test_addrs.cc
 unittest_addrs_CXXFLAGS = $(UNITTEST_CXXFLAGS)
@@ -466,4 +473,5 @@ noinst_HEADERS += \
 	test/system/st_rados_watch.h \
 	test/system/systest_runnable.h \
 	test/system/systest_settings.h \
-	test/unit.h
+	test/unit.h \
+	test/journal/RadosTestFixture.h

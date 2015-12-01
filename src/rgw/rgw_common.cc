@@ -99,7 +99,7 @@ is_err() const
 
 
 req_info::req_info(CephContext *cct, class RGWEnv *e) : env(e) {
-  method = env->get("REQUEST_METHOD");
+  method = env->get("REQUEST_METHOD", "");
   script_uri = env->get("SCRIPT_URI", cct->_conf->rgw_script_uri.c_str());
   request_uri = env->get("REQUEST_URI", cct->_conf->rgw_request_uri.c_str());
   int pos = request_uri.find('?');
@@ -596,7 +596,49 @@ int RGWHTTPArgs::parse()
       string& name = nv.get_name();
       string& val = nv.get_val();
 
-      append(name, val);
+      if (name.compare(0, sizeof(RGW_SYS_PARAM_PREFIX) - 1, RGW_SYS_PARAM_PREFIX) == 0) {
+        sys_val_map[name] = val;
+      } else {
+        val_map[name] = val;
+      }
+
+      if ((name.compare("acl") == 0) ||
+          (name.compare("cors") == 0) ||
+          (name.compare("location") == 0) ||
+          (name.compare("logging") == 0) ||
+          (name.compare("delete") == 0) ||
+          (name.compare("uploads") == 0) ||
+          (name.compare("partNumber") == 0) ||
+          (name.compare("uploadId") == 0) ||
+          (name.compare("versionId") == 0) ||
+          (name.compare("versions") == 0) ||
+          (name.compare("versioning") == 0) ||
+          (name.compare("requestPayment") == 0) ||
+          (name.compare("torrent") == 0)) {
+        sub_resources[name] = val;
+      } else if (name[0] == 'r') { // root of all evil
+        if ((name.compare("response-content-type") == 0) ||
+           (name.compare("response-content-language") == 0) ||
+           (name.compare("response-expires") == 0) ||
+           (name.compare("response-cache-control") == 0) ||
+           (name.compare("response-content-disposition") == 0) ||
+           (name.compare("response-content-encoding") == 0)) {
+          sub_resources[name] = val;
+          has_resp_modifier = true;
+        }
+      } else if  ((name.compare("subuser") == 0) ||
+          (name.compare("key") == 0) ||
+          (name.compare("caps") == 0) ||
+          (name.compare("index") == 0) ||
+          (name.compare("policy") == 0) ||
+          (name.compare("quota") == 0) ||
+          (name.compare("object") == 0)) {
+
+        if (!admin_subresource_added) {
+          sub_resources[name] = "";
+          admin_subresource_added = true;
+        }
+      }
     }
 
     pos = fpos + 1;  
@@ -708,12 +750,39 @@ void RGWHTTPArgs::get_bool(const char *name, bool *val, bool def_val)
   }
 }
 
+bool verify_requester_payer_permission(struct req_state *s)
+{
+  if (!s->bucket_info.requester_pays)
+    return true;
+
+  if (s->bucket_info.owner == s->user.user_id)
+    return true;
+
+  const char *request_payer = s->info.env->get("HTTP_X_AMZ_REQUEST_PAYER");
+  if (!request_payer) {
+    bool exists;
+    request_payer = s->info.args.get("x-amz-request-payer", &exists).c_str();
+    if (!exists) {
+      return false;
+    }
+  }
+
+  if (strcasecmp(request_payer, "requester") == 0) {
+    return true;
+  }
+
+  return false;
+}
+
 bool verify_bucket_permission(struct req_state *s, int perm)
 {
   if (!s->bucket_acl)
     return false;
 
   if ((perm & (int)s->perm_mask) != perm)
+    return false;
+
+  if (!verify_requester_payer_permission(s))
     return false;
 
   return s->bucket_acl->verify_permission(s->user.user_id, perm, perm);
@@ -726,6 +795,9 @@ static inline bool check_deferred_bucket_acl(struct req_state *s, uint8_t deferr
 
 bool verify_object_permission(struct req_state *s, RGWAccessControlPolicy *bucket_acl, RGWAccessControlPolicy *object_acl, int perm)
 {
+  if (!verify_requester_payer_permission(s))
+    return false;
+
   if (check_deferred_bucket_acl(s, RGW_DEFER_TO_BUCKET_ACLS_RECURSE, perm) ||
       check_deferred_bucket_acl(s, RGW_DEFER_TO_BUCKET_ACLS_FULL_CONTROL, RGW_PERM_FULL_CONTROL)) {
     return true;
@@ -970,7 +1042,7 @@ int RGWUserCaps::get_cap(const string& cap, string& type, uint32_t *pperm)
     trim_whitespace(cap.substr(0, pos), type);
   }
 
-  if (type.size() == 0)
+  if (!is_valid_cap_type(type))
     return -EINVAL;
 
   string cap_perm;
@@ -1130,6 +1202,26 @@ int RGWUserCaps::check_cap(const string& cap, uint32_t perm)
   return 0;
 }
 
+bool RGWUserCaps::is_valid_cap_type(const string& tp)
+{
+  static const char *cap_type[] = { "users",
+                                    "buckets",
+                                    "metadata",
+                                    "usage",
+                                    "zone",
+                                    "bilog",
+                                    "mdlog",
+                                    "datalog",
+                                    "opstate" };
+
+  for (unsigned int i = 0; i < sizeof(cap_type) / sizeof(char *); ++i) {
+    if (tp.compare(cap_type[i]) == 0) {
+      return true;
+    }
+  }
+
+  return false;
+}
 
 static struct rgw_name_to_flag op_type_mapping[] = { {"*",  RGW_OP_TYPE_ALL},
                   {"read",  RGW_OP_TYPE_READ},

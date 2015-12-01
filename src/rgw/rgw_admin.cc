@@ -46,181 +46,182 @@ static RGWRados *store = NULL;
 
 void _usage() 
 {
-  cerr << "usage: radosgw-admin <cmd> [options...]" << std::endl;
-  cerr << "commands:\n";
-  cerr << "  user create                create a new user\n" ;
-  cerr << "  user modify                modify user\n";
-  cerr << "  user info                  get user info\n";
-  cerr << "  user rm                    remove user\n";
-  cerr << "  user suspend               suspend a user\n";
-  cerr << "  user enable                re-enable user after suspension\n";
-  cerr << "  user check                 check user info\n";
-  cerr << "  user stats                 show user stats as accounted by quota subsystem\n";
-  cerr << "  caps add                   add user capabilities\n";
-  cerr << "  caps rm                    remove user capabilities\n";
-  cerr << "  subuser create             create a new subuser\n" ;
-  cerr << "  subuser modify             modify subuser\n";
-  cerr << "  subuser rm                 remove subuser\n";
-  cerr << "  key create                 create access key\n";
-  cerr << "  key rm                     remove access key\n";
-  cerr << "  bucket list                list buckets\n";
-  cerr << "  bucket link                link bucket to specified user\n";
-  cerr << "  bucket unlink              unlink bucket from specified user\n";
-  cerr << "  bucket stats               returns bucket statistics\n";
-  cerr << "  bucket rm                  remove bucket\n";
-  cerr << "  bucket check               check bucket index\n";
-  cerr << "  object rm                  remove object\n";
-  cerr << "  object unlink              unlink object from bucket index\n";
-  cerr << "  objects expire             run expired objects cleanup\n";
-  cerr << "  period prepare             prepare a new period\n";
-  cerr << "  period delete              delete a period\n";
-  cerr << "  period get                 get period info\n";
-  cerr << "  period get-current         get current period info\n";
-  cerr << "  period pull                pull a period\n";
-  cerr << "  period push                push a period\n";
-  cerr << "  period list                list all periods\n";
-  cerr << "  period update              update the staging period\n";
-  cerr << "  period commit              commit the staging period\n";
-  cerr << "  quota set                  set quota params\n";
-  cerr << "  quota enable               enable quota\n";
-  cerr << "  quota disable              disable quota\n";
-  cerr << "  realm create               create a new realm\n";
-  cerr << "  realm delete               delete a realm\n";
-  cerr << "  realm get                  show realm info\n";
-  cerr << "  realm get-default          get default realm name\n";
-  cerr << "  realm list                 list realms\n";
-  cerr << "  realm list-periods         list all realm periods\n";
-  cerr << "  realm remove               remove a zonegroup from the realm\n";
-  cerr << "  realm rename               rename a realm\n";
-  cerr << "  realm set                  set realm info (requires infile)\n";
-  cerr << "  realm default              set realm as default\n";
-  cerr << "  realm pull                 pull a realm and its current period\n";
-  cerr << "  zonegroup add              add a zone to a zonegroup\n";
-  cerr << "  zonegroup create           create a new zone group info\n";
-  cerr << "  zonegroup default          set default zone group\n";
-  cerr << "  zonegroup delete           delete a zone group info\n";
-  cerr << "  zonegroup get              show zone group info\n";
-  cerr << "  zonegroup modify           set/clear zonegroup master status\n";
-  cerr << "  zonegroup set              set zone group info (requires infile)\n";
-  cerr << "  zonegroup rename           rename a zone group\n";
-  cerr << "  zonegroup list             list all zone groups set on this cluster\n";
-  cerr << "  zonegroup-map get          show zonegroup-map\n";
-  cerr << "  zonegroup-map set          set zonegroup-map (requires infile)\n";
-  cerr << "  zone create                create a new zone\n";
-  cerr << "  zone get                   show zone cluster params\n";
-  cerr << "  zone modify                set/clear zone master status\n";
-  cerr << "  zone set                   set zone cluster params (requires infile)\n";
-  cerr << "  zone list                  list all zones set on this cluster\n";
-  cerr << "  pool add                   add an existing pool for data placement\n";
-  cerr << "  pool rm                    remove an existing pool from data placement set\n";
-  cerr << "  pools list                 list placement active set\n";
-  cerr << "  policy                     read bucket/object policy\n";
-  cerr << "  log list                   list log objects\n";
-  cerr << "  log show                   dump a log from specific object or (bucket + date\n";
-  cerr << "                             + bucket-id)\n";
-  cerr << "  log rm                     remove log object\n";
-  cerr << "  usage show                 show usage (by user, date range)\n";
-  cerr << "  usage trim                 trim usage (by user, date range)\n";
-  cerr << "  temp remove                remove temporary objects that were created up to\n";
-  cerr << "                             specified date (and optional time)\n";
-  cerr << "  gc list                    dump expired garbage collection objects (specify\n";
-  cerr << "                             --include-all to list all entries, including unexpired)\n";
-  cerr << "  gc process                 manually process garbage\n";
-  cerr << "  metadata get               get metadata info\n";
-  cerr << "  metadata put               put metadata info\n";
-  cerr << "  metadata rm                remove metadata info\n";
-  cerr << "  metadata list              list metadata info\n";
-  cerr << "  mdlog list                 list metadata log\n";
-  cerr << "  mdlog trim                 trim metadata log\n";
-  cerr << "  bilog list                 list bucket index log\n";
-  cerr << "  bilog trim                 trim bucket index log (use start-marker, end-marker)\n";
-  cerr << "  datalog list               list data log\n";
-  cerr << "  datalog trim               trim data log\n";
-  cerr << "  opstate list               list stateful operations entries (use client_id,\n";
-  cerr << "                             op_id, object)\n";
-  cerr << "  opstate set                set state on an entry (use client_id, op_id, object, state)\n";
-  cerr << "  opstate renew              renew state on an entry (use client_id, op_id, object)\n";
-  cerr << "  opstate rm                 remove entry (use client_id, op_id, object)\n";
-  cerr << "  replicalog get             get replica metadata log entry\n";
-  cerr << "  replicalog update          update replica metadata log entry\n";
-  cerr << "  replicalog delete          delete replica metadata log entry\n";
-  cerr << "options:\n";
-  cerr << "   --uid=<id>                user id\n";
-  cerr << "   --subuser=<name>          subuser name\n";
-  cerr << "   --access-key=<key>        S3 access key\n";
-  cerr << "   --email=<email>\n";
-  cerr << "   --secret=<key>            specify secret key\n";
-  cerr << "   --gen-access-key          generate random access key (for S3)\n";
-  cerr << "   --gen-secret              generate random secret key\n";
-  cerr << "   --key-type=<type>         key type, options are: swift, s3\n";
-  cerr << "   --temp-url-key[-2]=<key>  temp url key\n";
-  cerr << "   --access=<access>         Set access permissions for sub-user, should be one\n";
-  cerr << "                             of read, write, readwrite, full\n";
-  cerr << "   --display-name=<name>\n";
-  cerr << "   --max_buckets             max number of buckets for a user\n";
-  cerr << "   --system                  set the system flag on the user\n";
-  cerr << "   --bucket=<bucket>\n";
-  cerr << "   --pool=<pool>\n";
-  cerr << "   --object=<object>\n";
-  cerr << "   --date=<date>\n";
-  cerr << "   --start-date=<date>\n";
-  cerr << "   --end-date=<date>\n";
-  cerr << "   --bucket-id=<bucket-id>\n";
-  cerr << "   --shard-id=<shard-id>     optional for mdlog list\n";
-  cerr << "                             required for: \n";
-  cerr << "                               mdlog trim\n";
-  cerr << "                               replica mdlog get/delete\n";
-  cerr << "                               replica datalog get/delete\n";
-  cerr << "   --metadata-key=<key>      key to retrieve metadata from with metadata get\n";
-  cerr << "   --remote=<remote>         remote to pull period\n";
-  cerr << "   --parent=<id>             parent period id\n";
-  cerr << "   --period=<id>             period id\n";
-  cerr << "   --epoch=<number>          period epoch\n";
-  cerr << "   --commit                  commit the period during 'period update'\n";
-  cerr << "   --master                  set as master\n";
-  cerr << "   --master-url              master url\n";
-  cerr << "   --master-zonegroup=<id>   master zonegroup id\n";
-  cerr << "   --master-zone=<id>        master zone id\n";
-  cerr << "   --rgw-realm=<realm>       realm name\n";
-  cerr << "   --realm-id=<realm id>     realm id\n";
-  cerr << "   --realm-new-name=<realm new name> realm new name\n";
-  cerr << "   --rgw-zonegroup=<zonegroup>   zonegroup name\n";
-  cerr << "   --rgw-zone=<zone>         zone in which radosgw is running\n";
-  cerr << "   --zone-new-name=<zone>    zone new name\n";
-  cerr << "   --endpoints=<list>        zone endpoints\n";
-  cerr << "   --fix                     besides checking bucket index, will also fix it\n";
-  cerr << "   --check-objects           bucket check: rebuilds bucket index according to\n";
-  cerr << "                             actual objects state\n";
-  cerr << "   --format=<format>         specify output format for certain operations: xml,\n";
-  cerr << "                             json\n";
-  cerr << "   --purge-data              when specified, user removal will also purge all the\n";
-  cerr << "                             user data\n";
-  cerr << "   --purge-keys              when specified, subuser removal will also purge all the\n";
-  cerr << "                             subuser keys\n";
-  cerr << "   --purge-objects           remove a bucket's objects before deleting it\n";
-  cerr << "                             (NOTE: required to delete a non-empty bucket)\n";
-  cerr << "   --sync-stats              option to 'user stats', update user stats with current\n";
-  cerr << "                             stats reported by user's buckets indexes\n";
-  cerr << "   --show-log-entries=<flag> enable/disable dump of log entries on log show\n";
-  cerr << "   --show-log-sum=<flag>     enable/disable dump of log summation on log show\n";
-  cerr << "   --skip-zero-entries       log show only dumps entries that don't have zero value\n";
-  cerr << "                             in one of the numeric field\n";
-  cerr << "   --infile                  specify a file to read in when setting data\n";
-  cerr << "   --state=<state string>    specify a state for the opstate set command\n";
-  cerr << "   --replica-log-type        replica log type (metadata, data, bucket), required for\n";
-  cerr << "                             replica log operations\n";
-  cerr << "   --categories=<list>       comma separated list of categories, used in usage show\n";
-  cerr << "   --caps=<caps>             list of caps (e.g., \"usage=read, write; user=read\"\n";
-  cerr << "   --yes-i-really-mean-it    required for certain operations\n";
-  cerr << "   --reset-regions           reset regionmap when regionmap update";
-  cerr << "\n";
-  cerr << "<date> := \"YYYY-MM-DD[ hh:mm:ss]\"\n";
-  cerr << "\nQuota options:\n";
-  cerr << "   --bucket                  specified bucket for quota command\n";
-  cerr << "   --max-objects             specify max objects (negative value to disable)\n";
-  cerr << "   --max-size                specify max size (in bytes, negative value to disable)\n";
-  cerr << "   --quota-scope             scope of quota (bucket, user)\n";
-  cerr << "\n";
+  cout << "usage: radosgw-admin <cmd> [options...]" << std::endl;
+  cout << "commands:\n";
+  cout << "  user create                create a new user\n" ;
+  cout << "  user modify                modify user\n";
+  cout << "  user info                  get user info\n";
+  cout << "  user rm                    remove user\n";
+  cout << "  user suspend               suspend a user\n";
+  cout << "  user enable                re-enable user after suspension\n";
+  cout << "  user check                 check user info\n";
+  cout << "  user stats                 show user stats as accounted by quota subsystem\n";
+  cout << "  caps add                   add user capabilities\n";
+  cout << "  caps rm                    remove user capabilities\n";
+  cout << "  subuser create             create a new subuser\n" ;
+  cout << "  subuser modify             modify subuser\n";
+  cout << "  subuser rm                 remove subuser\n";
+  cout << "  key create                 create access key\n";
+  cout << "  key rm                     remove access key\n";
+  cout << "  bucket list                list buckets\n";
+  cout << "  bucket link                link bucket to specified user\n";
+  cout << "  bucket unlink              unlink bucket from specified user\n";
+  cout << "  bucket stats               returns bucket statistics\n";
+  cout << "  bucket rm                  remove bucket\n";
+  cout << "  bucket check               check bucket index\n";
+  cout << "  object rm                  remove object\n";
+  cout << "  object unlink              unlink object from bucket index\n";
+  cout << "  objects expire             run expired objects cleanup\n";
+  cout << "  period prepare             prepare a new period\n";
+  cout << "  period delete              delete a period\n";
+  cout << "  period get                 get period info\n";
+  cout << "  period get-current         get current period info\n";
+  cout << "  period pull                pull a period\n";
+  cout << "  period push                push a period\n";
+  cout << "  period list                list all periods\n";
+  cout << "  period update              update the staging period\n";
+  cout << "  period commit              commit the staging period\n";
+  cout << "  quota set                  set quota params\n";
+  cout << "  quota enable               enable quota\n";
+  cout << "  quota disable              disable quota\n";
+  cout << "  realm create               create a new realm\n";
+  cout << "  realm delete               delete a realm\n";
+  cout << "  realm get                  show realm info\n";
+  cout << "  realm get-default          get default realm name\n";
+  cout << "  realm list                 list realms\n";
+  cout << "  realm list-periods         list all realm periods\n";
+  cout << "  realm remove               remove a zonegroup from the realm\n";
+  cout << "  realm rename               rename a realm\n";
+  cout << "  realm set                  set realm info (requires infile)\n";
+  cout << "  realm default              set realm as default\n";
+  cout << "  realm pull                 pull a realm and its current period\n";
+  cout << "  zonegroup add              add a zone to a zonegroup\n";
+  cout << "  zonegroup create           create a new zone group info\n";
+  cout << "  zonegroup default          set default zone group\n";
+  cout << "  zonegroup delete           delete a zone group info\n";
+  cout << "  zonegroup get              show zone group info\n";
+  cout << "  zonegroup modify           set/clear zonegroup master status\n";
+  cout << "  zonegroup set              set zone group info (requires infile)\n";
+  cout << "  zonegroup rename           rename a zone group\n";
+  cout << "  zonegroup list             list all zone groups set on this cluster\n";
+  cout << "  zonegroup-map get          show zonegroup-map\n";
+  cout << "  zonegroup-map set          set zonegroup-map (requires infile)\n";
+  cout << "  zone create                create a new zone\n";
+  cout << "  zone get                   show zone cluster params\n";
+  cout << "  zone modify                set/clear zone master status\n";
+  cout << "  zone set                   set zone cluster params (requires infile)\n";
+  cout << "  zone list                  list all zones set on this cluster\n";
+  cout << "  pool add                   add an existing pool for data placement\n";
+  cout << "  pool rm                    remove an existing pool from data placement set\n";
+  cout << "  pools list                 list placement active set\n";
+  cout << "  policy                     read bucket/object policy\n";
+  cout << "  log list                   list log objects\n";
+  cout << "  log show                   dump a log from specific object or (bucket + date\n";
+  cout << "                             + bucket-id)\n";
+  cout << "  log rm                     remove log object\n";
+  cout << "  usage show                 show usage (by user, date range)\n";
+  cout << "  usage trim                 trim usage (by user, date range)\n";
+  cout << "  temp remove                remove temporary objects that were created up to\n";
+  cout << "                             specified date (and optional time)\n";
+  cout << "  gc list                    dump expired garbage collection objects (specify\n";
+  cout << "                             --include-all to list all entries, including unexpired)\n";
+  cout << "  gc process                 manually process garbage\n";
+  cout << "  metadata get               get metadata info\n";
+  cout << "  metadata put               put metadata info\n";
+  cout << "  metadata rm                remove metadata info\n";
+  cout << "  metadata list              list metadata info\n";
+  cout << "  mdlog list                 list metadata log\n";
+  cout << "  mdlog trim                 trim metadata log (use start-date, end-date or\n";
+  cout << "                             start-marker, end-marker)\n";
+  cout << "  bilog list                 list bucket index log\n";
+  cout << "  bilog trim                 trim bucket index log (use start-marker, end-marker)\n";
+  cout << "  datalog list               list data log\n";
+  cout << "  datalog trim               trim data log\n";
+  cout << "  opstate list               list stateful operations entries (use client_id,\n";
+  cout << "                             op_id, object)\n";
+  cout << "  opstate set                set state on an entry (use client_id, op_id, object, state)\n";
+  cout << "  opstate renew              renew state on an entry (use client_id, op_id, object)\n";
+  cout << "  opstate rm                 remove entry (use client_id, op_id, object)\n";
+  cout << "  replicalog get             get replica metadata log entry\n";
+  cout << "  replicalog update          update replica metadata log entry\n";
+  cout << "  replicalog delete          delete replica metadata log entry\n";
+  cout << "options:\n";
+  cout << "   --uid=<id>                user id\n";
+  cout << "   --subuser=<name>          subuser name\n";
+  cout << "   --access-key=<key>        S3 access key\n";
+  cout << "   --email=<email>\n";
+  cout << "   --secret/--secret-key=<key>\n";
+  cout << "                             specify secret key\n";
+  cout << "   --gen-access-key          generate random access key (for S3)\n";
+  cout << "   --gen-secret              generate random secret key\n";
+  cout << "   --key-type=<type>         key type, options are: swift, s3\n";
+  cout << "   --temp-url-key[-2]=<key>  temp url key\n";
+  cout << "   --access=<access>         Set access permissions for sub-user, should be one\n";
+  cout << "                             of read, write, readwrite, full\n";
+  cout << "   --display-name=<name>\n";
+  cout << "   --max_buckets             max number of buckets for a user\n";
+  cout << "   --system                  set the system flag on the user\n";
+  cout << "   --bucket=<bucket>\n";
+  cout << "   --pool=<pool>\n";
+  cout << "   --object=<object>\n";
+  cout << "   --date=<date>\n";
+  cout << "   --start-date=<date>\n";
+  cout << "   --end-date=<date>\n";
+  cout << "   --bucket-id=<bucket-id>\n";
+  cout << "   --shard-id=<shard-id>     optional for mdlog list\n";
+  cout << "                             required for: \n";
+  cout << "                             mdlog trim\n";
+  cout << "                             replica mdlog get/delete\n";
+  cout << "                             replica datalog get/delete\n";
+  cout << "   --metadata-key=<key>      key to retrieve metadata from with metadata get\n";
+  cout << "   --parent=<id>             parent period id\n";
+  cout << "   --period=<id>             period id\n";
+  cout << "   --epoch=<number>          period epoch\n";
+  cout << "   --commit                  commit the period during 'period update'\n";
+  cout << "   --master                  set as master\n";
+  cout << "   --master-url              master url\n";
+  cout << "   --master-zonegroup=<id>   master zonegroup id\n";
+  cout << "   --master-zone=<id>        master zone id\n";
+  cout << "   --rgw-realm=<realm>       realm name\n";
+  cout << "   --realm-id=<realm id>     realm id\n";
+  cout << "   --realm-new-name=<realm new name> realm new name\n";
+  cout << "   --rgw-zonegroup=<zonegroup>   zonegroup name\n";
+  cout << "   --rgw-zone=<zone>         zone in which radosgw is running\n";
+  cout << "   --zone-new-name=<zone>    zone new name\n";
+  cout << "   --endpoints=<list>        zone endpoints\n";
+  cout << "   --fix                     besides checking bucket index, will also fix it\n";
+  cout << "   --check-objects           bucket check: rebuilds bucket index according to\n";
+  cout << "                             actual objects state\n";
+  cout << "   --format=<format>         specify output format for certain operations: xml,\n";
+  cout << "                             json\n";
+  cout << "   --purge-data              when specified, user removal will also purge all the\n";
+  cout << "                             user data\n";
+  cout << "   --purge-keys              when specified, subuser removal will also purge all the\n";
+  cout << "                             subuser keys\n";
+  cout << "   --purge-objects           remove a bucket's objects before deleting it\n";
+  cout << "                             (NOTE: required to delete a non-empty bucket)\n";
+  cout << "   --sync-stats              option to 'user stats', update user stats with current\n";
+  cout << "                             stats reported by user's buckets indexes\n";
+  cout << "   --show-log-entries=<flag> enable/disable dump of log entries on log show\n";
+  cout << "   --show-log-sum=<flag>     enable/disable dump of log summation on log show\n";
+  cout << "   --skip-zero-entries       log show only dumps entries that don't have zero value\n";
+  cout << "                             in one of the numeric field\n";
+  cout << "   --infile                  specify a file to read in when setting data\n";
+  cout << "   --state=<state string>    specify a state for the opstate set command\n";
+  cout << "   --replica-log-type        replica log type (metadata, data, bucket), required for\n";
+  cout << "                             replica log operations\n";
+  cout << "   --categories=<list>       comma separated list of categories, used in usage show\n";
+  cout << "   --caps=<caps>             list of caps (e.g., \"usage=read, write; user=read\"\n";
+  cout << "   --yes-i-really-mean-it    required for certain operations\n";
+  cout << "   --reset-regions           reset regionmap when regionmap update";
+  cout << "\n";
+  cout << "<date> := \"YYYY-MM-DD[ hh:mm:ss]\"\n";
+  cout << "\nQuota options:\n";
+  cout << "   --bucket                  specified bucket for quota command\n";
+  cout << "   --max-objects             specify max objects (negative value to disable)\n";
+  cout << "   --max-size                specify max size (in bytes, negative value to disable)\n";
+  cout << "   --quota-scope             scope of quota (bucket, user)\n";
+  cout << "\n";
   generic_client_usage();
 }
 
@@ -1628,7 +1629,7 @@ int main(int argc, char **argv)
       access_key = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--subuser", (char*)NULL)) {
       subuser = val;
-    } else if (ceph_argparse_witharg(args, i, &val, "--secret", (char*)NULL)) {
+    } else if (ceph_argparse_witharg(args, i, &val, "--secret", "--secret-key", (char*)NULL)) {
       secret_key = val;
     } else if (ceph_argparse_witharg(args, i, &val, "-e", "--email", (char*)NULL)) {
       user_email = val;
@@ -1690,9 +1691,17 @@ int main(int argc, char **argv)
     } else if (ceph_argparse_witharg(args, i, &val, "--min-rewrite-stripe-size", (char*)NULL)) {
       min_rewrite_stripe_size = (uint64_t)atoll(val.c_str());
     } else if (ceph_argparse_witharg(args, i, &val, "--max-buckets", (char*)NULL)) {
-      max_buckets = atoi(val.c_str());
+      max_buckets = (int)strict_strtol(val.c_str(), 10, &err);
+      if (!err.empty()) {
+        cerr << "ERROR: failed to parse max buckets: " << err << std::endl;
+        return EINVAL;
+      }
     } else if (ceph_argparse_witharg(args, i, &val, "--max-entries", (char*)NULL)) {
-      max_entries = atoi(val.c_str());
+      max_entries = (int)strict_strtol(val.c_str(), 10, &err);
+      if (!err.empty()) {
+        cerr << "ERROR: failed to parse max entries: " << err << std::endl;
+        return EINVAL;
+      }
     } else if (ceph_argparse_witharg(args, i, &val, "--max-size", (char*)NULL)) {
       max_size = (int64_t)strict_strtoll(val.c_str(), 10, &err);
       if (!err.empty()) {
@@ -1716,13 +1725,29 @@ int main(int argc, char **argv)
     } else if (ceph_argparse_witharg(args, i, &val, "--end-date", "--end-time", (char*)NULL)) {
       end_date = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--num-shards", (char*)NULL)) {
-      num_shards = atoi(val.c_str());
+      num_shards = (int)strict_strtol(val.c_str(), 10, &err);
+      if (!err.empty()) {
+        cerr << "ERROR: failed to parse num shards: " << err << std::endl;
+        return EINVAL;
+      }
     } else if (ceph_argparse_witharg(args, i, &val, "--max-concurrent-ios", (char*)NULL)) {
-      max_concurrent_ios = atoi(val.c_str());
+      max_concurrent_ios = (int)strict_strtol(val.c_str(), 10, &err);
+      if (!err.empty()) {
+        cerr << "ERROR: failed to parse max concurrent ios: " << err << std::endl;
+        return EINVAL;
+      }
     } else if (ceph_argparse_witharg(args, i, &val, "--orphan-stale-secs", (char*)NULL)) {
-      orphan_stale_secs = (uint64_t)atoi(val.c_str());
+      orphan_stale_secs = (uint64_t)strict_strtoll(val.c_str(), 10, &err);
+      if (!err.empty()) {
+        cerr << "ERROR: failed to parse orphan stale secs: " << err << std::endl;
+        return EINVAL;
+      }
     } else if (ceph_argparse_witharg(args, i, &val, "--shard-id", (char*)NULL)) {
-      shard_id = atoi(val.c_str());
+      shard_id = (int)strict_strtol(val.c_str(), 10, &err);
+      if (!err.empty()) {
+        cerr << "ERROR: failed to parse shard id: " << err << std::endl;
+        return EINVAL;
+      }
       specified_shard_id = true;
     } else if (ceph_argparse_witharg(args, i, &val, "--daemon-id", (char*)NULL)) {
       daemon_id = val;
@@ -3014,7 +3039,9 @@ int main(int argc, char **argv)
     break;
   case OPT_USER_RM:
     ret = user.remove(user_op, &err_msg);
-    if (ret < 0) {
+    if (ret == -ENOENT) {
+      cerr << err_msg << std::endl;
+    } else if (ret < 0) {
       cerr << "could not remove user: " << err_msg << std::endl;
       return -ret;
     }
@@ -4154,16 +4181,15 @@ next:
     do {
       list<string> keys;
       ret = store->meta_mgr->list_keys_next(handle, max, keys, &truncated);
-      if (ret < 0) {
+      if (ret < 0 && ret != -ENOENT) {
         cerr << "ERROR: lists_keys_next(): " << cpp_strerror(-ret) << std::endl;
         return -ret;
+      } if (ret != -ENOENT) {
+	for (list<string>::iterator iter = keys.begin(); iter != keys.end(); ++iter) {
+	  formatter->dump_string("key", *iter);
+	}
+	formatter->flush(cout);
       }
-
-      for (list<string>::iterator iter = keys.begin(); iter != keys.end(); ++iter) {
-	formatter->dump_string("key", *iter);
-      }
-      formatter->flush(cout);
-
     } while (truncated);
 
     formatter->close_section();

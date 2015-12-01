@@ -114,7 +114,7 @@ class Processor {
   void accept();
 };
 
-class WorkerPool: CephContext::AssociatedSingletonObject {
+class WorkerPool {
   WorkerPool(const WorkerPool &);
   WorkerPool& operator=(const WorkerPool &);
   CephContext *cct;

@@ -50,6 +50,7 @@ Build-Depends: autoconf,
                python (>= 2.6.6-3~),
                python-argparse,
                python-nose,
+	       python-setuptools,
                python-sphinx,
                python-virtualenv,
                sdparm | hdparm,
@@ -217,7 +218,9 @@ Package: ceph-common-dbg
 Architecture: linux-any
 Depends: ceph-common (= ${binary:Version}), ${misc:Depends}
 Conflicts: ceph-client-tools-dbg
-Replaces: ceph-client-tools-dbg
+Replaces: ceph-client-tools-dbg,
+	  ceph-test-dbg (<< 9.0.3-1646)
+Breaks: ceph-test-dbg (<< 9.0.3-1646)
 Section: debug
 Priority: extra
 Description: debugging symbols for ceph-common

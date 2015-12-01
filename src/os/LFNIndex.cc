@@ -467,7 +467,6 @@ int LFNIndex::list_subdirs(const vector<string> &to_list,
     }
     string short_name(de->d_name);
     string demangled_name;
-    ghobject_t obj;
     if (lfn_is_subdir(short_name, &demangled_name)) {
       out->push_back(demangled_name);
     }

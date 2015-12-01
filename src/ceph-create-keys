@@ -106,7 +106,7 @@ def get_key(cluster, mon_id):
                         'client.admin',
                         'mon', 'allow *',
                         'osd', 'allow *',
-                        'mds', 'allow',
+                        'mds', 'allow *',
                         ],
                     stdout=f,
                     )

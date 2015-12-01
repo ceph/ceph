@@ -52,7 +52,7 @@ static std::string generate_object_name(int objnum, int pid = 0)
   return oss.str();
 }
 
-static void sanitize_object_contents (bench_data *data, int length) {
+static void sanitize_object_contents (bench_data *data, size_t length) {
   memset(data->object_contents, 'z', length);
 }
 
@@ -204,7 +204,7 @@ void *ObjBencher::status_printer(void *_bencher) {
 
 int ObjBencher::aio_bench(
   int operation, int secondsToRun,
-  int concurrentios, int object_size, bool cleanup, const std::string& run_name, bool no_verify) {
+  int concurrentios, size_t object_size, bool cleanup, const std::string& run_name, bool no_verify) {
 
   if (concurrentios <= 0) 
     return -EINVAL;
@@ -322,11 +322,11 @@ static T vec_stddev(vector<T>& v)
   return sqrt(stddev);
 }
 
-int ObjBencher::fetch_bench_metadata(const std::string& metadata_file, int* object_size, int* num_objects, int* prevPid) {
+int ObjBencher::fetch_bench_metadata(const std::string& metadata_file, size_t* object_size, int* num_objects, int* prevPid) {
   int r = 0;
   bufferlist object_data;
 
-  r = sync_read(metadata_file, object_data, sizeof(int)*3);
+  r = sync_read(metadata_file, object_data, sizeof(int) * 2 + sizeof(size_t));
   if (r <= 0) {
     // treat an empty file as a file that does not exist
     if (r == 0) {
@@ -666,7 +666,8 @@ int ObjBencher::seq_read_bench(int seconds_to_run, int num_objects, int concurre
   
     if (!no_verify) {
       snprintf(data.object_contents, data.object_size, "I'm the %16dth object!", current_index);
-      if (memcmp(data.object_contents, cur_contents->c_str(), data.object_size) != 0) {
+      if ( (cur_contents->length() != data.object_size) || 
+           (memcmp(data.object_contents, cur_contents->c_str(), data.object_size) != 0) ) {
         cerr << name[slot] << " is not correct!" << std::endl;
         ++errors;
       }
@@ -676,13 +677,13 @@ int ObjBencher::seq_read_bench(int seconds_to_run, int num_objects, int concurre
     index[slot] = data.started;
     lock.Unlock();
     completion_wait(slot);
+    lock.Lock();
     r = completion_ret(slot);
     if (r < 0) {
       cerr << "read got " << r << std::endl;
       lock.Unlock();
       goto ERR;
     }
-    lock.Lock();
     total_latency += data.cur_latency;
     if (data.cur_latency > data.max_latency) data.max_latency = data.cur_latency;
     if (data.cur_latency < data.min_latency) data.min_latency = data.cur_latency;
@@ -728,7 +729,8 @@ int ObjBencher::seq_read_bench(int seconds_to_run, int num_objects, int concurre
     if (!no_verify) {
       snprintf(data.object_contents, data.object_size, "I'm the %16dth object!", index[slot]);
       lock.Unlock();
-      if (memcmp(data.object_contents, contents[slot]->c_str(), data.object_size) != 0) {
+      if ((contents[slot]->length() != data.object_size) || 
+         (memcmp(data.object_contents, contents[slot]->c_str(), data.object_size) != 0)) {
         cerr << name[slot] << " is not correct!" << std::endl;
         ++errors;
       }
@@ -899,7 +901,8 @@ int ObjBencher::rand_read_bench(int seconds_to_run, int num_objects, int concurr
     
     if (!no_verify) {
       snprintf(data.object_contents, data.object_size, "I'm the %16dth object!", current_index);
-      if (memcmp(data.object_contents, cur_contents->c_str(), data.object_size) != 0) {
+      if ((cur_contents->length() != data.object_size) || 
+          (memcmp(data.object_contents, cur_contents->c_str(), data.object_size) != 0)) {
         cerr << name[slot] << " is not correct!" << std::endl;
         ++errors;
       }
@@ -950,7 +953,8 @@ int ObjBencher::rand_read_bench(int seconds_to_run, int num_objects, int concurr
     if (!no_verify) {
       snprintf(data.object_contents, data.object_size, "I'm the %16dth object!", index[slot]);
       lock.Unlock();
-      if (memcmp(data.object_contents, contents[slot]->c_str(), data.object_size) != 0) {
+      if ((contents[slot]->length() != data.object_size) || 
+          (memcmp(data.object_contents, contents[slot]->c_str(), data.object_size) != 0)) {
         cerr << name[slot] << " is not correct!" << std::endl;
         ++errors;
       }
@@ -1010,7 +1014,7 @@ int ObjBencher::rand_read_bench(int seconds_to_run, int num_objects, int concurr
 
 int ObjBencher::clean_up(const std::string& prefix, int concurrentios, const std::string& run_name) {
   int r = 0;
-  int object_size;
+  size_t object_size;
   int num_objects;
   int prevPid;
 

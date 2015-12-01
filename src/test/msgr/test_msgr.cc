@@ -552,7 +552,9 @@ TEST_P(MessengerTest, ClientStandbyTest) {
   usleep(300*1000);
   // client should be standby, so we use original connection
   {
-    conn->send_keepalive();
+    // Try send message to verify got remote reset callback
+    m = new MPing();
+    ASSERT_EQ(conn->send_message(m), 0);
     {
       Mutex::Locker l(cli_dispatcher.lock);
       while (!cli_dispatcher.got_remote_reset)

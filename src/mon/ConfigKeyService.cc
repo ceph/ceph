@@ -91,13 +91,14 @@ void ConfigKeyService::store_list(stringstream &ss)
 bool ConfigKeyService::service_dispatch(MonOpRequestRef op)
 {
   Message *m = op->get_req();
+  assert(m != NULL);
   dout(10) << __func__ << " " << *m << dendl;
+
   if (!in_quorum()) {
     dout(1) << __func__ << " not in quorum -- ignore message" << dendl;
     return false;
   }
 
-  assert(m != NULL);
   assert(m->get_type() == MSG_MON_COMMAND);
 
   MMonCommand *cmd = static_cast<MMonCommand*>(m);

@@ -87,6 +87,17 @@ add_library(cls_user_client
   user/cls_user_types.cc
   user/cls_user_ops.cc)
 
+# cls_journal
+add_library(cls_journal SHARED
+  journal/cls_journal.cc
+  journal/cls_journal_types.cc)
+set_target_properties(cls_journal PROPERTIES VERSION "1.0.0" SOVERSION "1")
+install(TARGETS cls_journal DESTINATION lib/rados-classes)
+
+add_library(cls_journal_client
+  journal/cls_journal_client.cc
+  journal/cls_journal_types.cc)
+
 # cls_rgw
 if (WITH_RADOSGW)
   add_library(cls_rgw SHARED

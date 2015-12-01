@@ -26,7 +26,7 @@
 
 #include "include/memory.h"
 #include "ObjectMap.h"
-#include "KeyValueDB.h"
+#include "kv/KeyValueDB.h"
 #include "osd/osd_types.h"
 #include "common/Mutex.h"
 #include "common/Cond.h"
@@ -298,7 +298,7 @@ private:
     int upper_bound(const string &after) { return 0; }
     int lower_bound(const string &to) { return 0; }
     bool valid() { return false; }
-    int next() { assert(0); return 0; }
+    int next(bool validate=true) { assert(0); return 0; }
     string key() { assert(0); return ""; }
     bufferlist value() { assert(0); return bufferlist(); }
     int status() { return 0; }
@@ -337,7 +337,7 @@ private:
     int upper_bound(const string &after);
     int lower_bound(const string &to);
     bool valid();
-    int next();
+    int next(bool validate=true);
     string key();
     bufferlist value();
     int status();

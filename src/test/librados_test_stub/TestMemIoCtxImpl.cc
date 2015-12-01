@@ -7,6 +7,7 @@
 #include <boost/algorithm/string/predicate.hpp>
 #include <boost/bind.hpp>
 #include <errno.h>
+#include <include/compat.h>
 
 static void to_vector(const interval_set<uint64_t> &set,
                       std::vector<std::pair<uint64_t, uint64_t> > *vec) {
@@ -47,6 +48,23 @@ int TestMemIoCtxImpl::aio_remove(const std::string& oid, AioCompletionImpl *c) {
   m_client->add_aio_operation(oid, true,
                               boost::bind(&TestMemIoCtxImpl::remove, this, oid),
                               c);
+  return 0;
+}
+
+int TestMemIoCtxImpl::append(const std::string& oid, const bufferlist &bl,
+                             const SnapContext &snapc) {
+  if (get_snap_read() != CEPH_NOSNAP) {
+    return -EROFS;
+  }
+
+  TestMemRadosClient::SharedFile file;
+  {
+    RWLock::WLocker l(m_pool->file_lock);
+    file = get_file(oid, true, snapc);
+  }
+
+  RWLock::WLocker l(file->lock);
+  file->data.append(bl);
   return 0;
 }
 

@@ -450,6 +450,8 @@ $CMDSDEBUG
         mds debug auth pins = true
         mds debug subtrees = true
         mds data = $CEPH_DEV_DIR/mds.\$id
+        mds root ino uid = `id -u`
+        mds root ino gid = `id -g`
 $extra_conf
 [osd]
 $DAEMONOPTS
@@ -724,7 +726,7 @@ do_rgw()
 
     # Create Swift user
     echo "setting up user tester"
-    $CEPH_BIN/radosgw-admin user create -c $conf_fn --subuser=test:tester --display-name=Tester-Subuser --key-type=swift --secret=testing > /dev/null
+    $CEPH_BIN/radosgw-admin user create -c $conf_fn --subuser=test:tester --display-name=Tester-Subuser --key-type=swift --secret=testing --access=full > /dev/null
 
     echo ""
     echo "S3 User Info:"

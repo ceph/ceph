@@ -139,6 +139,10 @@ public:
     else
       return make_pair("", "");
   }
+  
+  bool raw_key_is_prefixed(const string &prefix) {
+    return prefix == (*it).first.first;
+  }
 
   bufferlist value() {
     if (valid())

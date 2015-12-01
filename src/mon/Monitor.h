@@ -882,8 +882,6 @@ public:
     lock.Unlock();
     return true;
   }
-  // dissociate message handling from session and connection logic
-  void dispatch(MonOpRequestRef op);
   void dispatch_op(MonOpRequestRef op);
   //mon_caps is used for un-connected messages from monitors
   MonCap * mon_caps;

@@ -463,7 +463,7 @@ int NewStore::OnodeHashLRU::trim(int max)
   int num = onode_map.size() - max;
   lru_list_t::iterator p = lru.end();
   if (num)
-    p--;
+    --p;
   while (num > 0) {
     Onode *o = &*p;
     int refs = o->nref.read();
@@ -564,7 +564,6 @@ NewStore::NewStore(CephContext *cct, const string& path)
     cct(cct),
     db(NULL),
     fs(NULL),
-    db_path(cct->_conf->newstore_db_path),
     path_fd(-1),
     fsid_fd(-1),
     frag_fd(-1),
@@ -803,7 +802,7 @@ bool NewStore::test_mount_in_use()
   return ret;
 }
 
-int NewStore::_open_db()
+int NewStore::_open_db(bool create)
 {
   assert(!db);
   char fn[PATH_MAX];
@@ -817,17 +816,24 @@ int NewStore::_open_db()
     db = NULL;
     return -EIO;
   }
-  db->init(g_conf->newstore_backend_options);
+  string options;
+  if (g_conf->newstore_backend == "rocksdb")
+    options = g_conf->newstore_rocksdb_options;
+  db->init(options);
   stringstream err;
-  if (db->create_and_open(err)) {
+  int r;
+  if (create)
+    r = db->create_and_open(err);
+  else
+    r = db->open(err);
+  if (r) {
     derr << __func__ << " erroring opening db: " << err.str() << dendl;
     delete db;
     db = NULL;
     return -EIO;
   }
   dout(1) << __func__ << " opened " << g_conf->newstore_backend
-	  << " path " << path
-	  << " options " << g_conf->newstore_backend_options << dendl;
+	  << " path " << path << " options " << options << dendl;
   return 0;
 }
 
@@ -927,12 +933,7 @@ int NewStore::mkfs()
   if (r < 0)
     goto out_close_fsid;
 
-  if (db_path != "") {
-    r = symlinkat(db_path.c_str(), path_fd, "db");
-    if (r < 0)
-      goto out_close_frag;
-  }
-  r = _open_db();
+  r = _open_db(true);
   if (r < 0)
     goto out_close_frag;
 
@@ -976,7 +977,7 @@ int NewStore::mount()
 
   // FIXME: superblock, features
 
-  r = _open_db();
+  r = _open_db(false);
   if (r < 0)
     goto out_frag;
 
@@ -1708,7 +1709,7 @@ bool NewStore::OmapIteratorImpl::valid()
   }
 }
 
-int NewStore::OmapIteratorImpl::next()
+int NewStore::OmapIteratorImpl::next(bool validate)
 {
   RWLock::RLocker l(c->lock);
   if (o->onode.omap_head) {
@@ -2486,7 +2487,7 @@ void NewStore::_kv_sync_thread()
       if (!g_conf->newstore_sync_submit_transaction) {
 	for (std::deque<TransContext *>::iterator it = kv_committing.begin();
 	     it != kv_committing.end();
-	     it++) {
+	     ++it) {
 	  db->submit_transaction((*it)->t);
 	}
       }
@@ -2496,7 +2497,7 @@ void NewStore::_kv_sync_thread()
       KeyValueDB::Transaction txc_cleanup_sync = db->get_transaction();
       for (std::deque<TransContext *>::iterator it = wal_cleaning.begin();
 	    it != wal_cleaning.end();
-	    it++) {
+	    ++it) {
 	wal_transaction_t& wt =*(*it)->wal_txn;
 	// cleanup the data in overlays
 	for (list<wal_op_t>::iterator p = wt.ops.begin(); p != wt.ops.end(); ++p) {
@@ -3050,17 +3051,17 @@ int NewStore::_txc_add_transaction(TransContext *txc, Transaction *t)
     case Transaction::OP_OMAP_SETKEYS:
       {
         ghobject_t oid = i.get_oid(op->oid);
-        map<string, bufferlist> aset;
-        i.decode_attrset(aset);
-	r = _omap_setkeys(txc, c, oid, aset);
+	bufferlist aset_bl;
+        i.decode_attrset_bl(&aset_bl);
+	r = _omap_setkeys(txc, c, oid, aset_bl);
       }
       break;
     case Transaction::OP_OMAP_RMKEYS:
       {
         ghobject_t oid = i.get_oid(op->oid);
-        set<string> keys;
-        i.decode_keyset(keys);
-	r = _omap_rmkeys(txc, c, oid, keys);
+	bufferlist keys_bl;
+        i.decode_keyset_bl(&keys_bl);
+	r = _omap_rmkeys(txc, c, oid, keys_bl);
       }
       break;
     case Transaction::OP_OMAP_RMKEYRANGE:
@@ -4031,10 +4032,12 @@ int NewStore::_omap_clear(TransContext *txc,
 int NewStore::_omap_setkeys(TransContext *txc,
 			    CollectionRef& c,
 			    const ghobject_t& oid,
-			    const map<string,bufferlist>& m)
+			    bufferlist &bl)
 {
   dout(15) << __func__ << " " << c->cid << " " << oid << dendl;
   int r = 0;
+  bufferlist::iterator p = bl.begin();
+  __u32 num;
 
   RWLock::WLocker l(c->lock);
   OnodeRef o = c->get_onode(oid, false);
@@ -4046,11 +4049,16 @@ int NewStore::_omap_setkeys(TransContext *txc,
     o->onode.omap_head = o->onode.nid;
     txc->write_onode(o);
   }
-  for (map<string,bufferlist>::const_iterator p = m.begin(); p != m.end(); ++p) {
+  ::decode(num, p);
+  while (num--) {
     string key;
-    get_omap_key(o->onode.omap_head, p->first, &key);
-    dout(30) << __func__ << "  " << key << " <- " << p->first << dendl;
-    txc->t->set(PREFIX_OMAP, key, p->second);
+    bufferlist value;
+    ::decode(key, p);
+    ::decode(value, p);
+    string final_key;
+    get_omap_key(o->onode.omap_head, key, &final_key);
+    dout(30) << __func__ << "  " << final_key << " <- " << value << dendl;
+    txc->t->set(PREFIX_OMAP, final_key, value);
   }
   r = 0;
 
@@ -4090,10 +4098,12 @@ int NewStore::_omap_setheader(TransContext *txc,
 int NewStore::_omap_rmkeys(TransContext *txc,
 			   CollectionRef& c,
 			   const ghobject_t& oid,
-			   const set<string>& m)
+			   bufferlist& bl)
 {
   dout(15) << __func__ << " " << c->cid << " " << oid << dendl;
   int r = 0;
+  bufferlist::iterator p = bl.begin();
+  __u32 num;
 
   RWLock::WLocker l(c->lock);
   OnodeRef o = c->get_onode(oid, false);
@@ -4109,11 +4119,14 @@ int NewStore::_omap_rmkeys(TransContext *txc,
     o->onode.omap_head = o->onode.nid;
     txc->write_onode(o);
   }
-  for (set<string>::const_iterator p = m.begin(); p != m.end(); ++p) {
+  ::decode(num, p);
+  while (num--) {
     string key;
-    get_omap_key(o->onode.omap_head, *p, &key);
-    dout(30) << __func__ << "  rm " << key << " <- " << *p << dendl;
-    txc->t->rmkey(PREFIX_OMAP, key);
+    ::decode(key, p);
+    string final_key;
+    get_omap_key(o->onode.omap_head, key, &final_key);
+    dout(30) << __func__ << "  rm " << final_key << " <- " << key << dendl;
+    txc->t->rmkey(PREFIX_OMAP, final_key);
   }
   r = 0;
 

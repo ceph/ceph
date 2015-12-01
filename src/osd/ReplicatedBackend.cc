@@ -398,11 +398,24 @@ public:
       written += p->first.length() + p->second.length();
     return t->omap_setkeys(get_coll(hoid), ghobject_t(hoid), keys);
   }
+  void omap_setkeys(
+    const hobject_t &hoid,
+    bufferlist &keys_bl
+    ) {
+    written += keys_bl.length();
+    return t->omap_setkeys(get_coll(hoid), ghobject_t(hoid), keys_bl);
+  }
   void omap_rmkeys(
     const hobject_t &hoid,
     set<string> &keys
     ) {
     t->omap_rmkeys(get_coll(hoid), ghobject_t(hoid), keys);
+  }
+  void omap_rmkeys(
+    const hobject_t &hoid,
+    bufferlist &keys_bl
+    ) {
+    t->omap_rmkeys(get_coll(hoid), ghobject_t(hoid), keys_bl);
   }
   void omap_clear(
     const hobject_t &hoid
@@ -589,8 +602,6 @@ void ReplicatedBackend::submit_transaction(
     &op,
     op_t);
 
-  ObjectStore::Transaction *local_t = new ObjectStore::Transaction;
-  local_t->set_use_tbl(op_t->get_use_tbl());
   if (!(t->get_temp_added().empty())) {
     add_temp_objs(t->get_temp_added());
   }
@@ -602,7 +613,7 @@ void ReplicatedBackend::submit_transaction(
     trim_to,
     trim_rollback_to,
     true,
-    local_t);
+    op_t);
   
   op_t->register_on_applied_sync(on_local_applied_sync);
   op_t->register_on_applied(
@@ -610,14 +621,11 @@ void ReplicatedBackend::submit_transaction(
       new C_OSD_OnOpApplied(this, &op)));
   op_t->register_on_applied(
     new ObjectStore::C_DeleteTransaction(op_t));
-  op_t->register_on_applied(
-    new ObjectStore::C_DeleteTransaction(local_t));
   op_t->register_on_commit(
     parent->bless_context(
       new C_OSD_OnOpCommit(this, &op)));
 
   list<ObjectStore::Transaction*> tls;
-  tls.push_back(local_t);
   tls.push_back(op_t);
   parent->queue_transactions(tls, op.op);
   delete t;
@@ -666,6 +674,7 @@ template<typename T, int MSGTYPE>
 void ReplicatedBackend::sub_op_modify_reply(OpRequestRef op)
 {
   T *r = static_cast<T *>(op->get_req());
+  r->finish_decode();
   assert(r->get_header().type == MSGTYPE);
   assert(MSGTYPE == MSG_OSD_SUBOPREPLY || MSGTYPE == MSG_OSD_REPOPREPLY);
 
@@ -765,6 +774,7 @@ void ReplicatedBackend::be_deep_scrub(
     dout(25) << __func__ << "  " << poid << " got "
 	     << r << " on read, read_error" << dendl;
     o.read_error = true;
+    return;
   }
   o.digest = h.digest();
   o.digest_present = true;
@@ -792,6 +802,7 @@ void ReplicatedBackend::be_deep_scrub(
     dout(25) << __func__ << "  " << poid << " got "
 	     << r << " on omap header read, read_error" << dendl;
     o.read_error = true;
+    return;
   }
 
   ObjectMap::ObjectMapIterator iter = store->get_omap_iterator(
@@ -800,7 +811,7 @@ void ReplicatedBackend::be_deep_scrub(
       poid, ghobject_t::NO_GEN, get_parent()->whoami_shard().shard));
   assert(iter);
   uint64_t keys_scanned = 0;
-  for (iter->seek_to_first(); iter->valid() ; iter->next()) {
+  for (iter->seek_to_first(); iter->valid() ; iter->next(false)) {
     if (cct->_conf->osd_scan_list_ping_tp_interval &&
 	(keys_scanned % cct->_conf->osd_scan_list_ping_tp_interval == 0)) {
       handle.reset_tp_timeout();
@@ -819,8 +830,8 @@ void ReplicatedBackend::be_deep_scrub(
     dout(25) << __func__ << "  " << poid << " got "
 	     << r << " on omap scan, read_error" << dendl;
     o.read_error = true;
+    return;
   }
-
   //Store final calculated CRC32 of omap header & key/values
   o.omap_digest = oh.digest();
   o.omap_digest_present = true;
@@ -1117,6 +1128,7 @@ template<typename T, int MSGTYPE>
 void ReplicatedBackend::sub_op_modify_impl(OpRequestRef op)
 {
   T *m = static_cast<T *>(op->get_req());
+  m->finish_decode();
   int msg_type = m->get_type();
   assert(MSGTYPE == msg_type);
   assert(msg_type == MSG_OSD_SUBOP || msg_type == MSG_OSD_REPOP);
@@ -1503,6 +1515,9 @@ void ReplicatedBackend::prepare_pull(
 		       recovery_info.clone_subset);
     // FIXME: this may overestimate if we are pulling multiple clones in parallel...
     dout(10) << " pulling " << recovery_info << dendl;
+
+    assert(ssc->snapset.clone_size.count(soid.snap));
+    recovery_info.size = ssc->snapset.clone_size[soid.snap];
   } else {
     // pulling head or unversioned object.
     // always pull the whole thing.
@@ -2018,7 +2033,7 @@ int ReplicatedBackend::build_push_op(const ObjectRecoveryInfo &recovery_info,
 			       ghobject_t(recovery_info.soid));
     for (iter->lower_bound(progress.omap_recovered_to);
 	 iter->valid();
-	 iter->next()) {
+	 iter->next(false)) {
       if (!out_op->omap_entries.empty() &&
 	  available <= (iter->key().size() + iter->value().length()))
 	break;

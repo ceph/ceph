@@ -180,6 +180,7 @@ struct RGWUserAdminOpState {
   bool id_specified;
   bool key_specified;
   bool type_specified;
+  bool key_type_setbycontext;   // key type set by user or subuser context
   bool purge_data;
   bool purge_keys;
   bool display_name_specified;
@@ -192,7 +193,10 @@ struct RGWUserAdminOpState {
   bool system_specified;
   bool key_op;
   bool temp_url_key_specified;
-
+  bool found_by_uid; 
+  bool found_by_email;  
+  bool found_by_key;
+ 
   // req parameters
   bool populated;
   bool initialized;
@@ -450,6 +454,7 @@ struct RGWUserAdminOpState {
     id_specified = false;
     key_specified = false;
     type_specified = false;
+    key_type_setbycontext = false;
     purge_data = false;
     display_name_specified = false;
     user_email_specified = false;
@@ -467,6 +472,9 @@ struct RGWUserAdminOpState {
     bucket_quota_specified = false;
     temp_url_key_specified = false;
     user_quota_specified = false;
+    found_by_uid = false;
+    found_by_email = false;
+    found_by_key = false;
   }
 };
 

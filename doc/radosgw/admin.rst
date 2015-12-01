@@ -293,7 +293,7 @@ For example::
 
 To remove administrative capabilities from a user, execute the following:: 
 
-	radosgw-admin caps remove --uid=johndoe --caps={caps}
+	radosgw-admin caps rm --uid=johndoe --caps={caps}
 
 
 Quota Management

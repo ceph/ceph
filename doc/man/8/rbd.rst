@@ -9,8 +9,8 @@
 Synopsis
 ========
 
-| **rbd** [ -c *ceph.conf* ] [ -m *monaddr* ] [ -p | --pool *pool* ] [
-  --size *size* ] [ --order *bits* ] [ *command* ... ]
+| **rbd** [ -c *ceph.conf* ] [ -m *monaddr* ] [--cluster *cluster name*]
+  [ -p | --pool *pool* ] [--size *size* ] [ --order *bits* ] [ *command* ... ] 
 
 
 Description
@@ -34,6 +34,10 @@ Options
 .. option:: -m monaddress[:port]
 
    Connect to specified monitor (instead of looking through ceph.conf).
+
+.. option:: --cluster cluster name
+
+   Use different cluster name as compared to default cluster name *ceph*.
 
 .. option:: -p pool-name, --pool pool-name
 
@@ -137,6 +141,7 @@ Parameters
    * object-map: object map support (requires exclusive-lock)
    * fast-diff: fast diff calculations (requires object-map)
    * deep-flatten: snapshot flatten support
+   * journaling: journaled IO support (requires exclusive-lock)
 
 .. option:: --image-shared
 
@@ -425,6 +430,10 @@ libceph (per client instance) options:
 
 * notcp_nodelay - Enable Nagle's algorithm on client sockets (since 4.0).
 
+* cephx_sign_messages - Enable message signing (since 4.4, default).
+
+* nocephx_sign_messages - Disable message signing (since 4.4).
+
 * mount_timeout=x - A timeout on various steps in `rbd map` and `rbd unmap`
   sequences (default is 60 seconds).  In particular, since 4.2 this can be used
   to ensure that `rbd unmap` eventually times out when there is no network
@@ -477,6 +486,10 @@ To delete a snapshot::
 To map an image via the kernel with cephx enabled::
 
        rbd map mypool/myimage --id admin --keyfile secretfile
+
+To map an image via the kernel with different cluster name other than default *ceph*.
+
+       rbd map mypool/myimage --cluster *cluster name*
 
 To unmap an image::
 

@@ -2400,7 +2400,7 @@ int SyntheticClient::object_rw(int nobj, int osize, int wrpc,
 
 int SyntheticClient::read_random(string& fn, int size, int rdsize)   // size is in MB, wrsize in bytes
 {
-  __uint64_t chunks = (__uint64_t)size * (__uint64_t)(1024*1024) / (__uint64_t)rdsize;
+  uint64_t chunks = (uint64_t)size * (uint64_t)(1024*1024) / (uint64_t)rdsize;
 
   int fd = client->open(fn.c_str(), O_RDWR);
   dout(5) << "reading from " << fn << " fd " << fd << dendl;
@@ -2478,7 +2478,7 @@ int SyntheticClient::read_random(string& fn, int size, int rdsize)   // size is 
       //{
 
       offset=(rand())%(chunks+1);
-    __uint64_t *p = (__uint64_t*)buf;
+    uint64_t *p = (uint64_t*)buf;
     while ((char*)p < buf + rdsize) {
       *p = offset*rdsize + (char*)p - buf;      
       p++;
@@ -2496,11 +2496,11 @@ int SyntheticClient::read_random(string& fn, int size, int rdsize)   // size is 
     if ( read )
     {
     int bad = 0;
-    __int64_t *p = (__int64_t*)buf;
-    __int64_t readoff, readclient;
+    int64_t *p = (int64_t*)buf;
+    int64_t readoff, readclient;
     while ((char*)p + 32 < buf + rdsize) {
       readoff = *p;
-      __int64_t wantoff = offset*rdsize + (__int64_t)((char*)p - buf);
+      int64_t wantoff = offset*rdsize + (int64_t)((char*)p - buf);
       p++;
       readclient = *p;
       p++;
@@ -2573,7 +2573,7 @@ int normdist(int min, int max, int stdev) /* specifies input values */
 
 int SyntheticClient::read_random_ex(string& fn, int size, int rdsize)   // size is in MB, wrsize in bytes
 {
-  __uint64_t chunks = (__uint64_t)size * (__uint64_t)(1024*1024) / (__uint64_t)rdsize;
+  uint64_t chunks = (uint64_t)size * (uint64_t)(1024*1024) / (uint64_t)rdsize;
   
   int fd = client->open(fn.c_str(), O_RDWR);
   dout(5) << "reading from " << fn << " fd " << fd << dendl;
@@ -2660,7 +2660,7 @@ int SyntheticClient::read_random_ex(string& fn, int size, int rdsize)   // size 
 	  {
 	    
 	    offset=(rand())%(chunks+1);
-	    __uint64_t *p = (__uint64_t*)buf;
+	    uint64_t *p = (uint64_t*)buf;
 	    while ((char*)p < buf + rdsize) {
 	      *p = offset*rdsize + (char*)p - buf;      
 	      p++;
@@ -2678,11 +2678,11 @@ int SyntheticClient::read_random_ex(string& fn, int size, int rdsize)   // size 
     if ( read )
       {
 	int bad = 0;
-	__int64_t *p = (__int64_t*)buf;
-	__int64_t readoff, readclient;
+	int64_t *p = (int64_t*)buf;
+	int64_t readoff, readclient;
 	while ((char*)p + 32 < buf + rdsize) {
 	  readoff = *p;
-	  __int64_t wantoff = offset*rdsize + (__int64_t)((char*)p - buf);
+	  int64_t wantoff = offset*rdsize + (int64_t)((char*)p - buf);
 	  p++;
 	  readclient = *p;
 	  p++;

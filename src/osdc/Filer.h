@@ -106,11 +106,12 @@ class Filer {
            uint64_t len, 
            bufferlist *bl,   // ptr to data
 	   int flags,
-           Context *onfinish) {
+           Context *onfinish,
+	   int op_flags = 0) {
     assert(snap);  // (until there is a non-NOSNAP write)
     vector<ObjectExtent> extents;
     Striper::file_to_extents(cct, ino, layout, offset, len, 0, extents);
-    objecter->sg_read(extents, snap, bl, flags, onfinish);
+    objecter->sg_read(extents, snap, bl, flags, onfinish, op_flags);
     return 0;
   }
 
@@ -123,12 +124,13 @@ class Filer {
 	   int flags,
 	   uint64_t truncate_size,
 	   __u32 truncate_seq,
-           Context *onfinish) {
+           Context *onfinish,
+	   int op_flags = 0) {
     assert(snap);  // (until there is a non-NOSNAP write)
     vector<ObjectExtent> extents;
     Striper::file_to_extents(cct, ino, layout, offset, len, truncate_size, extents);
     objecter->sg_read_trunc(extents, snap, bl, flags,
-			    truncate_size, truncate_seq, onfinish);
+			    truncate_size, truncate_seq, onfinish, op_flags);
     return 0;
   }
 
@@ -141,10 +143,11 @@ class Filer {
 	    utime_t mtime,
             int flags, 
             Context *onack,
-            Context *oncommit) {
+            Context *oncommit,
+	    int op_flags = 0) {
     vector<ObjectExtent> extents;
     Striper::file_to_extents(cct, ino, layout, offset, len, 0, extents);
-    objecter->sg_write(extents, snapc, bl, mtime, flags, onack, oncommit);
+    objecter->sg_write(extents, snapc, bl, mtime, flags, onack, oncommit, op_flags);
     return 0;
   }
 
@@ -159,11 +162,12 @@ class Filer {
 	   uint64_t truncate_size,
 	   __u32 truncate_seq,
             Context *onack,
-            Context *oncommit) {
+            Context *oncommit,
+	    int op_flags = 0) {
     vector<ObjectExtent> extents;
     Striper::file_to_extents(cct, ino, layout, offset, len, truncate_size, extents);
     objecter->sg_write_trunc(extents, snapc, bl, mtime, flags,
-		       truncate_size, truncate_seq, onack, oncommit);
+		       truncate_size, truncate_seq, onack, oncommit, op_flags);
     return 0;
   }
 

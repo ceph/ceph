@@ -13,6 +13,8 @@ public:
   RGWGetObj_ObjStore_SWIFT() {}
   ~RGWGetObj_ObjStore_SWIFT() {}
 
+  int get_params();
+  int send_response_data_error();
   int send_response_data(bufferlist& bl, off_t ofs, off_t len);
   bool need_object_expiration() { return true; }
 };
@@ -123,6 +125,7 @@ public:
   RGWDeleteObj_ObjStore_SWIFT() {}
   ~RGWDeleteObj_ObjStore_SWIFT() {}
 
+  bool need_object_expiration() { return true; }
   void send_response();
 };
 

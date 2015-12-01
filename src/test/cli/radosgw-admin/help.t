@@ -57,7 +57,8 @@
     metadata rm                remove metadata info
     metadata list              list metadata info
     mdlog list                 list metadata log
-    mdlog trim                 trim metadata log
+    mdlog trim                 trim metadata log (use start-date, end-date or
+                               start-marker, end-marker)
     bilog list                 list bucket index log
     bilog trim                 trim bucket index log (use start-marker, end-marker)
     datalog list               list data log
@@ -75,7 +76,8 @@
      --subuser=<name>          subuser name
      --access-key=<key>        S3 access key
      --email=<email>
-     --secret=<key>            specify secret key
+     --secret/--secret-key=<key>
+                               specify secret key
      --gen-access-key          generate random access key (for S3)
      --gen-secret              generate random secret key
      --key-type=<type>         key type, options are: swift, s3
@@ -124,8 +126,7 @@
      --categories=<list>       comma separated list of categories, used in usage show
      --caps=<caps>             list of caps (e.g., "usage=read, write; user=read"
      --yes-i-really-mean-it    required for certain operations
-     --reset-zonegroups        reset zonegroupmap when zonegroupmap update
- 
+     --reset-regions           reset regionmap when regionmap update
   <date> := "YYYY-MM-DD[ hh:mm:ss]"
   
   Quota options:
@@ -143,3 +144,4 @@
     --version         show version and quit
   
   [1]
+ 
