@@ -123,13 +123,12 @@ static CompatSet get_fs_supported_compat_set() {
   return compat;
 }
 
-
-int FileStore::peek_journal_fsid(uuid_d *fsid)
+int FileStore::get_block_device_fsid(const string& path, uuid_d *fsid)
 {
   // make sure we don't try to use aio or direct_io (and get annoying
   // error messages from failing to do so); performance implications
   // should be irrelevant for this use
-  FileJournal j(*fsid, 0, 0, journalpath.c_str(), false, false);
+  FileJournal j(*fsid, 0, 0, path.c_str(), false, false);
   return j.peek_fsid(*fsid);
 }
 
