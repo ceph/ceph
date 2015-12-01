@@ -334,7 +334,7 @@ namespace cohort {
       T* find(uint64_t hk, const K& k, uint32_t flags) {
 	T* v;
 	Latch lat;
-	uint32_t slot;
+	uint32_t slot = 0;
 	lat.p = &(partition_of_scalar(hk));
 	if (flags & FLAG_LOCK) {
 	  lat.lock = &lat.p->lock;
@@ -369,7 +369,7 @@ namespace cohort {
 
       T* find_latch(uint64_t hk, const K& k, Latch& lat,
 		    uint32_t flags) {
-	uint32_t slot;
+	uint32_t slot = 0;
 	T* v;
 	lat.p = &(partition_of_scalar(hk));
 	lat.lock = &lat.p->lock;
