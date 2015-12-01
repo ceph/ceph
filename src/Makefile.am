@@ -3,6 +3,11 @@ include Makefile-env.am
 SUBDIRS += ocf java
 DIST_SUBDIRS += gmock ocf java
 
+LOCAL_ALL =
+LOCAL_CLEAN =
+LOCAL_INSTALLDATA =
+LOCAL_INSTALLEXEC =
+
 if NO_GIT_VERSION
 export NO_VERSION="yes"
 endif
@@ -192,11 +197,12 @@ CLEANFILES += ceph_ver.h sample.fetch_config
 
 # cleaning
 
-clean-local::
+base-clean-local::
 	rm -f *.so 
 	find . -name '*.gcno' -o -name '*.gcda' -o -name '*.lcov' -o -name "*.o" -o -name "*.lo" | xargs rm -f
 	rm -f ceph java/java/com/ceph/crush/Bucket.class
 
+LOCAL_CLEAN += base-clean-local
 
 # pybind
 
@@ -242,10 +248,12 @@ if ENABLE_COVERAGE
 	-test/coverage.sh -d $(srcdir) -o check-coverage make check
 endif
 
-install-data-local:: install-coverage
+base-install-data-local:: install-coverage
 	-mkdir -p $(DESTDIR)$(sysconfdir)/ceph
 	-mkdir -p $(DESTDIR)$(localstatedir)/log/ceph
 	-mkdir -p $(DESTDIR)$(localstatedir)/lib/ceph/tmp
+
+LOCAL_INSTALLDATA += base-install-data-local
 
 uninstall-local:: uninstall-coverage
 	-rmdir -p $(DESTDIR)$(sysconfdir)/ceph/
@@ -277,3 +285,9 @@ if ENABLE_SERVER
 include Makefile-server.am
 endif
 
+# local targets
+
+all-local: $(LOCAL_ALL)
+clean-local: $(LOCAL_CLEAN)
+install-exec-local: $(LOCAL_INSTALLEXEC)
+install-data-local: $(LOCAL_INSTALLDATA)
