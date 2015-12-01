@@ -183,8 +183,7 @@ int rgw_mkdir(struct rgw_fs *rgw_fs,
     rc = librgw.get_fe()->execute_req(&req);
   } else {
     /* pseudofs */
-    LookupFHResult fhr =
-      fs->lookup_fh(parent, name, RGWFileHandle::FLAG_PSEUDO);
+    fhr = fs->lookup_fh(parent, name, RGWFileHandle::FLAG_PSEUDO);
   }
 
   rgw_fh = get<0>(fhr);
@@ -559,7 +558,7 @@ int rgw_write(struct rgw_fs *rgw_fs,
   int rc = librgw.get_fe()->execute_req(&req);
 
   /* XXX move into request */
-  ssize_t min_size = offset+length;
+  size_t min_size = offset+length;
   if (min_size > rgw_fh->get_size())
     rgw_fh->set_size(min_size);
 
