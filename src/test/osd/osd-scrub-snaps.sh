@@ -150,16 +150,14 @@ function TEST_scrub_snaps() {
     run_osd $dir 0 || return 1
     wait_for_clean || return 1
 
-    sleep 5
-    ceph pg scrub ${poolid}.0
-    timeout 30 ceph -w
+    local pgid="${poolid}.0"
+    pg_scrub "$pgid" || return 1
+    grep 'log_channel' $dir/osd.0.log
 
     for i in `seq 1 7`
     do
         rados -p $poolname rmsnap snap$i
     done
-
-    sleep 10
 
     ERRORS=0
 
