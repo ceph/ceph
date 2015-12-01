@@ -240,8 +240,23 @@ int main(int argc, const char **argv)
   }
 
   // the store
+  string store_type = g_conf->osd_objectstore;
+  {
+    char fn[PATH_MAX];
+    snprintf(fn, sizeof(fn), "%s/type", g_conf->osd_data.c_str());
+    int fd = ::open(fn, O_RDONLY);
+    if (fd >= 0) {
+      bufferlist bl;
+      bl.read_fd(fd, 64);
+      if (bl.length()) {
+	store_type = string(bl.c_str(), bl.length() - 1);  // drop \n
+	dout(5) << "object store type is " << store_type << dendl;
+      }
+      ::close(fd);
+    }
+  }
   ObjectStore *store = ObjectStore::create(g_ceph_context,
-					   g_conf->osd_objectstore,
+					   store_type,
 					   g_conf->osd_data,
 					   g_conf->osd_journal);
   if (!store) {

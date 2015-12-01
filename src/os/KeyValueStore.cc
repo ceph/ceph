@@ -718,6 +718,10 @@ int KeyValueStore::mkfs()
     delete store;
   }
 
+  ret = write_meta("type", "keyvaluestore");
+  if (ret < 0)
+    goto close_fsid_fd;
+
   dout(1) << "mkfs done in " << basedir << dendl;
   ret = 0;
 

@@ -926,6 +926,10 @@ int FileStore::mkfs()
   if (ret)
     goto close_fsid_fd;
 
+  ret = write_meta("type", "filestore");
+  if (ret)
+    goto close_fsid_fd;
+
   dout(1) << "mkfs done in " << basedir << dendl;
   ret = 0;
 

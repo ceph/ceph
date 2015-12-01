@@ -224,6 +224,10 @@ int MemStore::mkfs()
   if (r < 0)
     return r;
 
+  r = write_meta("type", "memstore");
+  if (r < 0)
+    return r;
+
   return 0;
 }
 
