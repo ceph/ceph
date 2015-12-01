@@ -13,7 +13,7 @@ from . import orchestra
 import orchestra.remote
 from .openstack import OpenStack, OpenStackInstance
 from .orchestra import run
-from .config import FakeNamespace
+from .config import config, FakeNamespace
 from .lock import list_locks
 from .lock import locked_since_seconds
 from .lock import unlock_one
@@ -389,8 +389,7 @@ OPENSTACK_DELAY = 30 * 60
 def stale_openstack_instances(ctx, instances, locked_nodes):
     for (name, instance) in instances.iteritems():
         i = OpenStackInstance(name)
-        if (i.get_created() >
-                ctx.teuthology_config['max_job_time'] + OPENSTACK_DELAY):
+        if (i.get_created() > config['max_job_time'] + OPENSTACK_DELAY):
             log.info(
                 "stale-openstack: destroying instance {instance}"
                 " because it was created {created} seconds ago"
@@ -398,7 +397,7 @@ def stale_openstack_instances(ctx, instances, locked_nodes):
                 " max_job_time {max_job_time} + {delay}"
                 .format(instance=i['name'],
                         created=i.get_created(),
-                        max_job_time=ctx.teuthology_config['max_job_time'],
+                        max_job_time=config['max_job_time'],
                         delay=OPENSTACK_DELAY))
             if not ctx.dry_run:
                 i.destroy()
@@ -430,7 +429,7 @@ def stale_openstack_volumes(ctx, volumes):
         created_at = datetime.datetime.strptime(
             volume['created_at'], '%Y-%m-%dT%H:%M:%S.%f')
         created = (now - created_at).total_seconds()
-        if created > ctx.teuthology_config['max_job_time'] + OPENSTACK_DELAY:
+        if created > config['max_job_time'] + OPENSTACK_DELAY:
             log.info(
                 "stale-openstack: destroying volume {volume}({id})"
                 " because it was created {created} seconds ago"
@@ -439,7 +438,7 @@ def stale_openstack_volumes(ctx, volumes):
                 .format(volume=volume['display_name'],
                         id=volume['id'],
                         created=created,
-                        max_job_time=ctx.teuthology_config['max_job_time'],
+                        max_job_time=config['max_job_time'],
                         delay=OPENSTACK_DELAY))
             if not ctx.dry_run:
                 openstack_delete_volume(volume['id'])
@@ -595,7 +594,7 @@ def nuke_one(ctx, target, should_unlock, synch_clocks, reboot_all,
         check_locks=check_locks,
         synch_clocks=synch_clocks,
         reboot_all=reboot_all,
-        teuthology_config=ctx.teuthology_config,
+        teuthology_config=config.to_dict(),
         name=ctx.name,
         noipmi=noipmi,
     )
@@ -624,16 +623,16 @@ def nuke_helper(ctx, should_unlock):
             return
     log.debug('shortname: %s' % shortname)
     log.debug('{ctx}'.format(ctx=ctx))
-    if (not ctx.noipmi and 'ipmi_user' in ctx.teuthology_config and
+    if (not ctx.noipmi and 'ipmi_user' in config and
             'vpm' not in shortname):
         console = orchestra.remote.getRemoteConsole(
             name=host,
-            ipmiuser=ctx.teuthology_config['ipmi_user'],
-            ipmipass=ctx.teuthology_config['ipmi_password'],
-            ipmidomain=ctx.teuthology_config['ipmi_domain'])
+            ipmiuser=config['ipmi_user'],
+            ipmipass=config['ipmi_password'],
+            ipmidomain=config['ipmi_domain'])
         cname = '{host}.{domain}'.format(
             host=shortname,
-            domain=ctx.teuthology_config['ipmi_domain'])
+            domain=config['ipmi_domain'])
         log.info('checking console status of %s' % cname)
         if not console.check_status():
             # not powered on or can't get IPMI status.  Try to power on
