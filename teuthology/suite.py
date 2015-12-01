@@ -16,7 +16,6 @@ import sys
 from time import sleep
 from time import time
 import yaml
-import math
 from email.mime.text import MIMEText
 from tempfile import NamedTemporaryFile
 
@@ -1035,8 +1034,8 @@ def _build_matrix(path, _isfile=os.path.isfile,
                     continue
                 if submat.cyclicity() < mincyclicity:
                     submat = matrix.Cycle(
-                        int(math.ceil(
-                            mincyclicity / submat.cyclicity())),
+                        ((mincyclicity + submat.cyclicity() - 1) /
+                         submat.cyclicity()),
                         submat)
                 submats.append(submat)
             return matrix.Sum(item, submats)
