@@ -182,8 +182,13 @@ int rgw_mkdir(struct rgw_fs *rgw_fs,
     RGWCreateBucketRequest req(cct, fs->get_user(), uri);
     rc = librgw.get_fe()->execute_req(&req);
   } else {
-    /* pseudofs */
+    /* create an object representing the directory (naive version) */
+    buffer::list bl;
     fhr = fs->lookup_fh(parent, name, RGWFileHandle::FLAG_PSEUDO);
+    string dir_name = rgw_fh->full_object_name() + "/";
+    RGWPutObjRequest req(cct, fs->get_user(), rgw_fh->bucket_name(),
+			 dir_name, bl);
+    rc = librgw.get_fe()->execute_req(&req);
   }
 
   rgw_fh = get<0>(fhr);
@@ -225,8 +230,11 @@ int rgw_unlink(struct rgw_fs *rgw_fs, struct rgw_file_handle* parent_fh,
     rc = librgw.get_fe()->execute_req(&req);
   } else {
     /*
-     * object
+     * leaf object
      */
+    /* XXXX we must peform a hard lookup to deduce the type of
+     * object to be deleted ("foo" vs. "foo/"), and as a side effect
+     * can do no further work if no object existed */
     string object_name{name};
     RGWDeleteObjRequest req(cct, fs->get_user(), parent->bucket_name(),
       object_name);
