@@ -348,7 +348,7 @@ def push_inventory(ctx, config):
     except Exception:
         log.exception("Error pushing inventory")
 
-BUILDPACKAGES_SWAPPED = 0
+BUILDPACKAGES_FIRST = 0
 BUILDPACKAGES_OK = 1
 BUILDPACKAGES_REMOVED = 2
 BUILDPACKAGES_NOTHING = 3
@@ -362,26 +362,31 @@ def buildpackages_prep(ctx, config):
 
     BUILDPACKAGES_NOTHING if there is no buildpackages task
     BUILDPACKAGES_REMOVED if there is a buildpackages task but no install task
-    BUILDPACKAGES_SWAPPED if a buildpackages task was moved before an install task
-    BUILDPACKAGES_OK if a buildpackages task already is before the install task
+    BUILDPACKAGES_FIRST if a buildpackages task was moved at the beginning
+    BUILDPACKAGES_OK if a buildpackages task already at the beginning
     """
     index = 0
     install_index = None
     buildpackages_index = None
+    buildpackages_prep_index = None
     for task in ctx.config['tasks']:
         if task.keys()[0] == 'install':
             install_index = index
         if task.keys()[0] == 'buildpackages':
             buildpackages_index = index
+        if task.keys()[0] == 'internal.buildpackages_prep':
+            buildpackages_prep_index = index
         index += 1
-    if buildpackages_index is not None and install_index is not None:
-        if buildpackages_index > install_index:
-            log.info('buildpackages moved before the install task')
+    if (buildpackages_index is not None and
+        install_index is not None):
+        if buildpackages_index > buildpackages_prep_index + 1:
+            log.info('buildpackages moved to be the first task')
             buildpackages = ctx.config['tasks'].pop(buildpackages_index)
-            ctx.config['tasks'].insert(install_index, buildpackages)
-            return BUILDPACKAGES_SWAPPED
+            ctx.config['tasks'].insert(buildpackages_prep_index + 1,
+                                       buildpackages)
+            return BUILDPACKAGES_FIRST
         else:
-            log.info('buildpackages is before the install task')
+            log.info('buildpackages is already the first task')
             return BUILDPACKAGES_OK
     elif buildpackages_index is not None and install_index is None:
         ctx.config['tasks'].pop(buildpackages_index)

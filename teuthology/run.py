@@ -173,7 +173,10 @@ def validate_tasks(config):
 
 
 def get_initial_tasks(lock, config, machine_type):
-    init_tasks = [{'internal.check_packages': None}]
+    init_tasks = [
+        {'internal.check_packages': None},
+        {'internal.buildpackages_prep': None},
+    ]
     if 'roles' in config and lock:
         msg = ('You cannot specify targets in a config file when using the ' +
                '--lock option')
@@ -214,10 +217,7 @@ def get_initial_tasks(lock, config, machine_type):
             {'internal.sudo': None},
             {'internal.syslog': None},
         ])
-    init_tasks.extend([
-        {'internal.timer': None},
-        {'internal.buildpackages_prep': None},
-    ])
+    init_tasks.append({'internal.timer': None})
 
     if 'roles' in config:
         init_tasks.extend([
