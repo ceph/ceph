@@ -33,6 +33,7 @@ from .task.internal import check_lock, add_remotes, connect
 
 log = logging.getLogger(__name__)
 
+
 def clear_firewall(ctx):
     """
     Remove any iptables rules created by teuthology.  These rules are
@@ -367,6 +368,7 @@ def synch_clocks(remotes):
         log.info('Waiting for clock to synchronize on %s...', name)
         proc.wait()
 
+
 def stale_openstack(ctx):
     targets = dict(map(lambda i: (i['Name'], i),
                        OpenStack.list_instances()))
@@ -383,13 +385,14 @@ def stale_openstack(ctx):
 #
 OPENSTACK_DELAY = 30 * 60
 
+
 def stale_openstack_instances(ctx, instances, locked_nodes):
     for (name, instance) in instances.iteritems():
         i = OpenStackInstance(name)
         if (i.get_created() >
-            ctx.teuthology_config['max_job_time'] + OPENSTACK_DELAY):
+                ctx.teuthology_config['max_job_time'] + OPENSTACK_DELAY):
             log.info(
-                "stale-openstack: destroying instance {instance}" 
+                "stale-openstack: destroying instance {instance}"
                 " because it was created {created} seconds ago"
                 " which is older than"
                 " max_job_time {max_job_time} + {delay}"
@@ -402,7 +405,7 @@ def stale_openstack_instances(ctx, instances, locked_nodes):
             continue
         name = canonicalize_hostname(i['name'], user=None)
         if i.get_created() > OPENSTACK_DELAY and name not in locked_nodes:
-            log.info("stale-openstack: destroying instance {instance}" 
+            log.info("stale-openstack: destroying instance {instance}"
                      " because it was created {created} seconds ago"
                      " is older than {delay}s and it is not locked"
                      .format(instance=i['name'],
@@ -413,8 +416,10 @@ def stale_openstack_instances(ctx, instances, locked_nodes):
             continue
         log.debug("stale-openstack: instance " + i['name'] + " OK")
 
+
 def openstack_delete_volume(id):
     sh("openstack volume delete " + id + " || true")
+
 
 def stale_openstack_volumes(ctx, volumes):
     now = datetime.datetime.now()
@@ -441,14 +446,15 @@ def stale_openstack_volumes(ctx, volumes):
             continue
         log.debug("stale-openstack: volume " + volume['id'] + " OK")
 
+
 def stale_openstack_nodes(ctx, instances, locked_nodes):
     for (name, node) in locked_nodes.iteritems():
         name = decanonicalize_hostname(name)
         if node['machine_type'] != 'openstack':
             continue
         if (name not in instances and
-            locked_since_seconds(node) > OPENSTACK_DELAY):
-            log.info("stale-openstack: unlocking node {name} unlocked" 
+                locked_since_seconds(node) > OPENSTACK_DELAY):
+            log.info("stale-openstack: unlocking node {name} unlocked"
                      " because it was created {created}"
                      " seconds ago which is older than {delay}"
                      " and it has no instance"
@@ -459,6 +465,7 @@ def stale_openstack_nodes(ctx, instances, locked_nodes):
                 unlock_one(ctx, name, node['locked_by'])
             continue
         log.debug("stale-openstack: node " + name + " OK")
+
 
 def openstack_remove_again():
     """
@@ -476,6 +483,7 @@ def openstack_remove_again():
     xargs --no-run-if-empty --max-args 1 -P20 openstack volume delete
     true
     """)
+
 
 def main(args):
     ctx = FakeNamespace(args)
