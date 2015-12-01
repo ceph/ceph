@@ -1,0 +1,3 @@
+teuthology:
+  tags: [ ceph-workbench ]
+  script: "git clean -ffqdx ; ./bootstrap install ; unset OS_AUTH_URL ; source virtualenv/bin/activate ; pip install tox ; tox"
