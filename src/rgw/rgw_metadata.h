@@ -10,6 +10,7 @@
 #include "rgw_common.h"
 #include "cls/version/cls_version_types.h"
 #include "cls/log/cls_log_types.h"
+#include "common/RWLock.h"
 
 
 class RGWRados;
@@ -120,6 +121,8 @@ struct RGWMetadataLogInfo {
   void decode_json(JSONObj *obj);
 };
 
+class RGWCompletionManager;
+
 class RGWMetadataLog {
   CephContext *cct;
   RGWRados *store;
@@ -131,10 +134,16 @@ class RGWMetadataLog {
     oid = prefix + buf;
   }
 
+  RWLock lock;
+  set<int> modified_shards;
+
+  void mark_modified(int shard_id);
 public:
-  RGWMetadataLog(CephContext *_cct, RGWRados *_store) : cct(_cct), store(_store), prefix(META_LOG_OBJ_PREFIX) {}
+  RGWMetadataLog(CephContext *_cct, RGWRados *_store) : cct(_cct), store(_store), prefix(META_LOG_OBJ_PREFIX), lock("RGWMetaLog::lock") {}
 
   int add_entry(RGWRados *store, RGWMetadataHandler *handler, const string& section, const string& key, bufferlist& bl);
+  int get_log_shard_id(RGWRados *store, RGWMetadataHandler *handler, const string& section, const string& key);
+  int store_entries_in_shard(RGWRados *store, list<cls_log_entry>& entries, int shard_id, librados::AioCompletion *completion);
 
   struct LogListCtx {
     int cur_shard;
@@ -159,11 +168,35 @@ public:
 
   int trim(int shard_id, const utime_t& from_time, const utime_t& end_time, const string& start_marker, const string& end_marker);
   int get_info(int shard_id, RGWMetadataLogInfo *info);
+  int get_info_async(int shard_id, RGWMetadataLogInfo *info, RGWCompletionManager *completion_manager, void *user_info, int *pret);
   int lock_exclusive(int shard_id, utime_t& duration, string&zone_id, string& owner_id);
   int unlock(int shard_id, string& zone_id, string& owner_id);
+
+  int update_shards(list<int>& shards);
+
+  void read_clear_modified(set<int> *modified);
 };
 
-struct RGWMetadataLogData;
+struct LogStatusDump {
+  RGWMDLogStatus status;
+
+  LogStatusDump(RGWMDLogStatus _status) : status(_status) {}
+  void dump(Formatter *f) const;
+};
+
+struct RGWMetadataLogData {
+  obj_version read_version;
+  obj_version write_version;
+  RGWMDLogStatus status;
+  
+  RGWMetadataLogData() : status(MDLOG_STATUS_UNKNOWN) {}
+
+  void encode(bufferlist& bl) const;
+  void decode(bufferlist::iterator& bl);
+  void dump(Formatter *f) const;
+  void decode_json(JSONObj *obj);
+};
+WRITE_CLASS_ENCODER(RGWMetadataLogData)
 
 class RGWMetadataManager {
   map<string, RGWMetadataHandler *> handlers;
@@ -180,23 +213,24 @@ class RGWMetadataManager {
   int post_modify(RGWMetadataHandler *handler, const string& section, const string& key, RGWMetadataLogData& log_data,
                  RGWObjVersionTracker *objv_tracker, int ret);
 
+  string heap_oid(RGWMetadataHandler *handler, const string& key, const obj_version& objv);
+  int store_in_heap(RGWMetadataHandler *handler, const string& key, bufferlist& bl,
+                    RGWObjVersionTracker *objv_tracker, time_t mtime,
+                    map<string, bufferlist> *pattrs);
+  int remove_from_heap(RGWMetadataHandler *handler, const string& key, RGWObjVersionTracker *objv_tracker);
 public:
   RGWMetadataManager(CephContext *_cct, RGWRados *_store);
   ~RGWMetadataManager();
 
   int register_handler(RGWMetadataHandler *handler);
 
-  RGWMetadataHandler *get_handler(const char *type);
+  RGWMetadataHandler *get_handler(const string& type);
+
+  int store_md_log_entries(list<cls_log_entry>& entries, int shard_id, librados::AioCompletion *completion);
 
   int put_entry(RGWMetadataHandler *handler, const string& key, bufferlist& bl, bool exclusive,
                 RGWObjVersionTracker *objv_tracker, time_t mtime, map<string, bufferlist> *pattrs = NULL);
   int remove_entry(RGWMetadataHandler *handler, string& key, RGWObjVersionTracker *objv_tracker);
-  int set_attr(RGWMetadataHandler *handler, string& key, rgw_obj& obj, string& attr, bufferlist& bl,
-               RGWObjVersionTracker *objv_tracker);
-  int set_attrs(RGWMetadataHandler *handler, string& key,
-                rgw_obj& obj, map<string, bufferlist>& attrs,
-                map<string, bufferlist>* rmattrs,
-                RGWObjVersionTracker *objv_tracker);
   int get(string& metadata_key, Formatter *f);
   int put(string& metadata_key, bufferlist& bl,
           RGWMetadataHandler::sync_type_t sync_mode,
@@ -214,6 +248,17 @@ public:
   int unlock(string& metadata_key, string& owner_id);
 
   RGWMetadataLog *get_log() { return md_log; }
+
+  int get_log_shard_id(const string& section, const string& key, int *shard_id) {
+    RGWMetadataHandler *handler = get_handler(section);
+    if (!handler) {
+      return -EINVAL;
+    }
+
+    *shard_id = md_log->get_log_shard_id(store, handler, section, key);
+
+    return 0;
+  }
 };
 
 #endif

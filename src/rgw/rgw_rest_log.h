@@ -159,6 +159,20 @@ public:
   }
 };
 
+class RGWOp_MDLog_Notify : public RGWRESTOp {
+public:
+  RGWOp_MDLog_Notify() {}
+  ~RGWOp_MDLog_Notify() {}
+
+  int check_caps(RGWUserCaps& caps) {
+    return caps.check_cap("mdlog", RGW_CAP_WRITE);
+  }
+  void execute();
+  virtual const string name() {
+    return "mdlog_notify";
+  }
+};
+
 class RGWOp_MDLog_Delete : public RGWRESTOp {
 public:
   RGWOp_MDLog_Delete() {}
@@ -174,11 +188,12 @@ public:
 };
 
 class RGWOp_DATALog_List : public RGWRESTOp {
-  list<rgw_data_change> entries;
+  list<rgw_data_change_log_entry> entries;
   string last_marker;
   bool truncated;
+  bool extra_info;
 public:
-  RGWOp_DATALog_List() : truncated(false) {}
+  RGWOp_DATALog_List() : truncated(false), extra_info(false) {}
   ~RGWOp_DATALog_List() {}
 
   int check_caps(RGWUserCaps& caps) {
@@ -257,6 +272,20 @@ public:
   void execute();
   virtual const string name() {
     return "unlock_datalog_object";
+  }
+};
+
+class RGWOp_DATALog_Notify : public RGWRESTOp {
+public:
+  RGWOp_DATALog_Notify() {}
+  ~RGWOp_DATALog_Notify() {}
+
+  int check_caps(RGWUserCaps& caps) {
+    return caps.check_cap("datalog", RGW_CAP_WRITE);
+  }
+  void execute();
+  virtual const string name() {
+    return "datalog_notify";
   }
 };
 

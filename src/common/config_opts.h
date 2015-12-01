@@ -1087,9 +1087,17 @@ OPTION(rgw_num_rados_handles, OPT_U32, 1)
 
 OPTION(rgw_zone, OPT_STR, "") // zone name
 OPTION(rgw_zone_root_pool, OPT_STR, ".rgw.root")    // pool where zone specific info is stored
+OPTION(rgw_default_zone_info_oid, OPT_STR, "default.zone")  // oid where default zone info is stored
 OPTION(rgw_region, OPT_STR, "") // region name
-OPTION(rgw_region_root_pool, OPT_STR, ".rgw.root")  // pool where all region info is stored
 OPTION(rgw_default_region_info_oid, OPT_STR, "default.region")  // oid where default region info is stored
+OPTION(rgw_zonegroup, OPT_STR, "") // zone group name
+OPTION(rgw_zonegroup_root_pool, OPT_STR, ".rgw.root")  // pool where all zone group info is stored
+OPTION(rgw_default_zonegroup_info_oid, OPT_STR, "default.zonegroup")  // oid where default zone group info is stored
+OPTION(rgw_realm, OPT_STR, "") // realm name
+OPTION(rgw_realm_root_pool, OPT_STR, ".rgw.root")  // pool where all realm info is stored
+OPTION(rgw_default_realm_info_oid, OPT_STR, "default.realm")  // oid where default realm info is stored
+OPTION(rgw_period_root_pool, OPT_STR, ".rgw.root")  // pool where all period info is stored
+OPTION(rgw_period_latest_epoch_info_oid, OPT_STR, ".latest_epoch") // oid where current period info is stored
 OPTION(rgw_log_nonexistent_bucket, OPT_BOOL, false)
 OPTION(rgw_log_object_name, OPT_STR, "%Y-%m-%d-%H-%i-%n")      // man date to see codes (a subset are supported)
 OPTION(rgw_log_object_name_utc, OPT_BOOL, false)
@@ -1160,6 +1168,15 @@ OPTION(rgw_objexp_gc_interval, OPT_U32, 60 * 10) // maximum time between round o
 OPTION(rgw_objexp_time_step, OPT_U32, 4096) // number of seconds for rounding the timestamps
 OPTION(rgw_objexp_hints_num_shards, OPT_U32, 127) // maximum number of parts in which the hint index is stored in
 OPTION(rgw_objexp_chunk_size, OPT_U32, 100) // maximum number of entries in a single operation when processing objexp data
+
+OPTION(rgw_num_async_rados_threads, OPT_INT, 32) // num of threads to use for async rados operations
+OPTION(rgw_md_notify_interval_msec, OPT_INT, 200) // metadata changes notification interval to followers
+OPTION(rgw_run_sync_thread, OPT_BOOL, true) // whether radosgw (not radosgw-admin) spawns the sync thread
+OPTION(rgw_sync_lease_period, OPT_INT, 30) // time in second for lease that rgw takes on a specific log (or log shard)
+
+OPTION(rgw_realm_reconfigure_delay, OPT_DOUBLE, 2) // seconds to wait before reloading realm configuration
+OPTION(rgw_period_push_interval, OPT_DOUBLE, 2) // seconds to wait before retrying "period push"
+OPTION(rgw_period_push_interval_max, OPT_DOUBLE, 30) // maximum interval after exponential backoff
 
 OPTION(mutex_perf_counter, OPT_BOOL, false) // enable/disable mutex perf counter
 OPTION(throttler_perf_counter, OPT_BOOL, true) // enable/disable throttler perf counter

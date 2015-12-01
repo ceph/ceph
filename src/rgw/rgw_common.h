@@ -253,10 +253,10 @@ class RGWHTTPArgs
   map<string, string> val_map;
   map<string, string> sys_val_map;
   map<string, string> sub_resources;
-
   bool has_resp_modifier;
+  bool admin_subresource_added;
  public:
-  RGWHTTPArgs() : has_resp_modifier(false) {}
+  RGWHTTPArgs() : has_resp_modifier(false), admin_subresource_added(false) {}
   /** Set the arguments; as received */
   void set(string s) {
     has_resp_modifier = false;
@@ -266,6 +266,7 @@ class RGWHTTPArgs
   }
   /** parse the received arguments */
   int parse();
+  void append(const string& name, const string& val);
   /** Get the value for a specific argument parameter */
   string& get(const string& name, bool *exists = NULL);
   string& get(const char *name, bool *exists = NULL);
@@ -609,8 +610,11 @@ struct rgw_bucket {
     marker = b.marker;
     bucket_id = b.bucket_id;
   }
+  rgw_bucket(const string& s) : name(s) {
+    data_pool = index_pool = s;
+    marker = "";
+  }
   rgw_bucket(const char *n) : name(n) {
-    assert(*n == '.'); // only rgw private buckets should be initialized without pool
     data_pool = index_pool = n;
     marker = "";
   }
@@ -774,7 +778,7 @@ struct RGWBucketInfo
   rgw_bucket bucket;
   string owner;
   uint32_t flags;
-  string region;
+  string zonegroup;
   time_t creation_time;
   string placement_rule;
   bool has_instance_obj;
@@ -801,7 +805,7 @@ struct RGWBucketInfo
      ::encode(bucket, bl);
      ::encode(owner, bl);
      ::encode(flags, bl);
-     ::encode(region, bl);
+     ::encode(zonegroup, bl);
      uint64_t ct = (uint64_t)creation_time;
      ::encode(ct, bl);
      ::encode(placement_rule, bl);
@@ -820,7 +824,7 @@ struct RGWBucketInfo
      if (struct_v >= 3)
        ::decode(flags, bl);
      if (struct_v >= 5)
-       ::decode(region, bl);
+       ::decode(zonegroup, bl);
      if (struct_v >= 6) {
        uint64_t ct;
        ::decode(ct, bl);
@@ -1042,8 +1046,10 @@ struct req_state {
    ACLOwner bucket_owner;
    ACLOwner owner;
 
-   string region_endpoint;
+   string zonegroup_name;
+   string zonegroup_endpoint;
    string bucket_instance_id;
+   int bucket_instance_shard_id;
 
    RGWBucketInfo bucket_info;
    map<string, bufferlist> bucket_attrs;

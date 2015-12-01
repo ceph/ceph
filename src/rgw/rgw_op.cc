@@ -25,6 +25,7 @@
 #include "rgw_multi_del.h"
 #include "rgw_cors.h"
 #include "rgw_cors_s3.h"
+#include "rgw_rest_conn.h"
 
 #include "rgw_client_io.h"
 
@@ -350,8 +351,7 @@ static int rgw_build_policies(RGWRados *store, struct req_state *s, bool only_bu
 
   string bi = s->info.args.get(RGW_SYS_PARAM_PREFIX "bucket-instance");
   if (!bi.empty()) {
-    int shard_id;
-    ret = rgw_bucket_parse_bucket_instance(bi, &s->bucket_instance_id, &shard_id);
+    ret = rgw_bucket_parse_bucket_instance(bi, &s->bucket_instance_id, &s->bucket_instance_shard_id);
     if (ret < 0) {
       return ret;
     }
@@ -377,10 +377,14 @@ static int rgw_build_policies(RGWRados *store, struct req_state *s, bool only_bu
 
     RGWBucketInfo source_info;
 
-    ret = store->get_bucket_info(obj_ctx, copy_source_str, source_info, NULL);
+    if (s->bucket_instance_id.empty()) {
+      ret = store->get_bucket_info(obj_ctx, copy_source_str, source_info, NULL);
+    } else {
+      ret = store->get_bucket_instance_info(obj_ctx, s->bucket_instance_id, source_info, NULL, NULL);
+    }
     if (ret == 0) {
-      string& region = source_info.region;
-      s->local_source = store->region.equals(region);
+      string& zonegroup = source_info.zonegroup;
+      s->local_source = store->get_zonegroup().equals(zonegroup);
     }
   }
 
@@ -410,17 +414,21 @@ static int rgw_build_policies(RGWRados *store, struct req_state *s, bool only_bu
 
     s->bucket_owner = s->bucket_acl->get_owner();
 
-    string& region = s->bucket_info.region;
-    map<string, RGWRegion>::iterator dest_region = store->region_map.regions.find(region);
-    if (dest_region != store->region_map.regions.end() && !dest_region->second.endpoints.empty()) {
-      s->region_endpoint = dest_region->second.endpoints.front();
+    RGWZoneGroup zonegroup;
+    ret = store->get_zonegroup(s->bucket_info.zonegroup, zonegroup);
+    if (!ret) {
+      if (!zonegroup.endpoints.empty()) {
+	s->zonegroup_endpoint = zonegroup.endpoints.front();
+      }
+      s->zonegroup_name = zonegroup.get_name();
     }
-    if (s->bucket_exists && !store->region.equals(region)) {
-      ldout(s->cct, 0) << "NOTICE: request for data in a different region (" << region << " != " << store->region.name << ")" << dendl;
+
+    if (s->bucket_exists && !store->get_zonegroup().equals(s->bucket_info.zonegroup)) {
+      ldout(s->cct, 0) << "NOTICE: request for data in a different zonegroup (" << s->bucket_info.zonegroup << " != " << store->get_zonegroup().get_id() << ")" << dendl;
       /* we now need to make sure that the operation actually requires copy source, that is
        * it's a copy operation
        */
-      if (store->region.is_master && s->op == OP_DELETE && s->system_request) {
+      if (store->get_zonegroup().is_master && s->op == OP_DELETE && s->system_request) {
         /*If the operation is delete and if this is the master, don't redirect*/
       } else if (!s->local_source ||
           (s->op != OP_PUT && s->op != OP_COPY) ||
@@ -481,8 +489,8 @@ int RGWOp::verify_op_mask()
     return -EPERM;
   }
 
-  if (!s->system_request && (required_mask & RGW_OP_TYPE_MODIFY) && !store->zone.is_master)  {
-    ldout(s->cct, 5) << "NOTICE: modify request to a non-master zone by a non-system user, permission denied"  << dendl;
+  if (!s->system_request && (required_mask & RGW_OP_TYPE_MODIFY) && store->get_zone().is_read_only()) {
+    ldout(s->cct, 5) << "NOTICE: modify request to a read-only zone by a non-system user, permission denied"  << dendl;
     return -EPERM;
   }
 
@@ -522,13 +530,13 @@ int RGWOp::init_quota()
   } else if (uinfo->bucket_quota.enabled) {
     bucket_quota = uinfo->bucket_quota;
   } else {
-    bucket_quota = store->region_map.bucket_quota;
+    bucket_quota = store->get_bucket_quota();
   }
 
   if (uinfo->user_quota.enabled) {
     user_quota = uinfo->user_quota;
   } else {
-    user_quota = store->region_map.user_quota;
+    user_quota = store->get_user_quota();
   }
 
   return 0;
@@ -1240,6 +1248,11 @@ void RGWStatBucket::pre_exec()
 
 void RGWStatBucket::execute()
 {
+  if (!s->bucket_exists) {
+    ret = -ERR_NO_SUCH_BUCKET;
+    return;
+  }
+
   RGWUserBuckets buckets;
   bucket.bucket = s->bucket;
   buckets.add(bucket);
@@ -1292,6 +1305,11 @@ void RGWListBucket::pre_exec()
 
 void RGWListBucket::execute()
 {
+  if (!s->bucket_exists) {
+    ret = -ERR_NO_SUCH_BUCKET;
+    return;
+  }
+
   ret = get_params();
   if (ret < 0)
     return;
@@ -1307,6 +1325,9 @@ void RGWListBucket::execute()
   }
 
   RGWRados::Bucket target(store, s->bucket);
+  if (shard_id >= 0) {
+    target.set_shard_id(shard_id);
+  }
   RGWRados::Bucket::List list_op(&target);
 
   list_op.params.prefix = prefix;
@@ -1364,7 +1385,7 @@ static int forward_request_to_master(struct req_state *s, obj_version *objv, RGW
     ldout(s->cct, 0) << "rest connection is invalid" << dendl;
     return -EINVAL;
   }
-  ldout(s->cct, 0) << "sending create_bucket request to master region" << dendl;
+  ldout(s->cct, 0) << "sending create_bucket request to master zonegroup" << dendl;
   bufferlist response;
 #define MAX_REST_RESPONSE (128 * 1024) // we expect a very small response
   int ret = store->rest_master_conn->forward(s->user.user_id, s->info, objv, MAX_REST_RESPONSE, &in_data, &response);
@@ -1374,7 +1395,7 @@ static int forward_request_to_master(struct req_state *s, obj_version *objv, RGW
   ldout(s->cct, 20) << "response: " << response.c_str() << dendl;
   ret = jp->parse(response.c_str(), response.length());
   if (ret < 0) {
-    ldout(s->cct, 0) << "failed parsing response from master region" << dendl;
+    ldout(s->cct, 0) << "failed parsing response from master zonegroup" << dendl;
     return ret;
   }
 
@@ -1393,16 +1414,16 @@ void RGWCreateBucket::execute()
   bufferlist aclbl;
   bufferlist corsbl;
   bool existed;
-  rgw_obj obj(store->zone.domain_root, s->bucket_name_str);
+  rgw_obj obj(store->get_zone_params().domain_root, s->bucket_name_str);
   obj_version objv, *pobjv = NULL;
 
   ret = get_params();
   if (ret < 0)
     return;
 
-  if (!store->region.is_master &&
-      store->region.api_name != location_constraint) {
-    ldout(s->cct, 0) << "location constraint (" << location_constraint << ") doesn't match region" << " (" << store->region.api_name << ")" << dendl;
+  if (!store->get_zonegroup().is_master &&
+      store->get_zonegroup().api_name != location_constraint) {
+    ldout(s->cct, 0) << "location constraint (" << location_constraint << ") doesn't match zonegroup" << " (" << store->get_zonegroup().api_name << ")" << dendl;
     ret = -EINVAL;
     return;
   }
@@ -1431,7 +1452,7 @@ void RGWCreateBucket::execute()
   rgw_bucket *pmaster_bucket;
   time_t creation_time;
 
-  if (!store->region.is_master) {
+  if (!store->get_zonegroup().is_master) {
     JSONParser jp;
     ret = forward_request_to_master(s, NULL, store, in_data, &jp);
     if (ret < 0)
@@ -1450,21 +1471,21 @@ void RGWCreateBucket::execute()
     creation_time = 0;
   }
 
-  string region_name;
+  string zonegroup_id;
 
   if (s->system_request) {
-    region_name = s->info.args.get(RGW_SYS_PARAM_PREFIX "region");
-    if (region_name.empty()) {
-      region_name = store->region.name;
+    zonegroup_id = s->info.args.get(RGW_SYS_PARAM_PREFIX "zonegroup");
+    if (zonegroup_id.empty()) {
+      zonegroup_id = store->get_zonegroup().get_id();
     }
   } else {
-    region_name = store->region.name;
+    zonegroup_id = store->get_zonegroup().get_id();
   }
 
   if (s->bucket_exists) {
     string selected_placement_rule;
     rgw_bucket bucket;
-    ret = store->select_bucket_placement(s->user, region_name, placement_rule, s->bucket_name_str, bucket, &selected_placement_rule);
+    ret = store->select_bucket_placement(s->user, zonegroup_id, placement_rule, s->bucket_name_str, bucket, &selected_placement_rule);
     if (selected_placement_rule != s->bucket_info.placement_rule) {
       ret = -EEXIST;
       return;
@@ -1480,7 +1501,7 @@ void RGWCreateBucket::execute()
     attrs[RGW_ATTR_CORS] = corsbl;
   }
   s->bucket.name = s->bucket_name_str;
-  ret = store->create_bucket(s->user, s->bucket, region_name, placement_rule, attrs, info, pobjv,
+  ret = store->create_bucket(s->user, s->bucket, zonegroup_id, placement_rule, attrs, info, pobjv,
                              &ep_objv, creation_time, pmaster_bucket, true);
   /* continue if EEXIST and create_bucket will fail below.  this way we can recover
    * from a partial create by retrying it. */
@@ -1536,6 +1557,11 @@ void RGWDeleteBucket::execute()
   if (s->bucket_name_str.empty())
     return;
 
+  if (!s->bucket_exists) {
+    ldout(s->cct, 0) << "ERROR: bucket " << s->bucket_name_str << " not found" << dendl;
+    ret = -ERR_NO_SUCH_BUCKET;
+    return;
+  }
   RGWObjVersionTracker ot;
   ot.read_version = s->bucket_info.ep_objv;
 
@@ -1569,7 +1595,7 @@ void RGWDeleteBucket::execute()
     return;
   }
 
-  if (!store->region.is_master) {
+  if (!store->get_zonegroup().is_master) {
     bufferlist in_data;
     JSONParser jp;
     ret = forward_request_to_master(s, &ot.read_version, store, in_data, &jp);
@@ -1842,6 +1868,11 @@ void RGWPutObj::execute()
   ret = -EINVAL;
   if (s->object.empty()) {
     goto done;
+  }
+
+  if (!s->bucket_exists) {
+    ret = -ERR_NO_SUCH_BUCKET;
+    return;
   }
 
   ret = get_params();
@@ -2279,8 +2310,14 @@ void RGWPutMetadataAccount::filter_out_temp_url(map<string, bufferlist>& add_att
 
 void RGWPutMetadataAccount::execute()
 {
+  rgw_obj obj;
   map<string, bufferlist> attrs, orig_attrs, rmattrs;
   RGWObjVersionTracker acct_op_tracker;
+
+  /* Get the name of raw object which stores the metadata in its xattrs. */
+  string buckets_obj_id;
+  rgw_get_buckets_obj(s->user.user_id, buckets_obj_id);
+  obj = rgw_obj(store->get_zone_params().user_uid_pool, buckets_obj_id);
 
   ret = get_params();
   if (ret < 0) {
@@ -2288,8 +2325,8 @@ void RGWPutMetadataAccount::execute()
   }
 
   rgw_get_request_metadata(s->cct, s->info, attrs, false);
-  rgw_get_user_attrs_by_uid(store, s->user.user_id, orig_attrs, &acct_op_tracker);
-  prepare_add_del_attrs(orig_attrs, rmattr_names, attrs, rmattrs);
+  RGWUserInfo orig_uinfo;
+  rgw_get_user_info_by_uid(store, s->user.user_id, orig_uinfo, &acct_op_tracker);
   populate_with_generic_attrs(s, attrs);
 
   /* Handle the TempURL-related stuff. */
@@ -2302,7 +2339,7 @@ void RGWPutMetadataAccount::execute()
     }
   }
 
-  ret = rgw_store_user_attrs(store, s->user.user_id, attrs, &rmattrs, &acct_op_tracker);
+  ret = rgw_store_user_info(store, s->user, &orig_uinfo, &acct_op_tracker, 0, false, &attrs);
   if (ret < 0) {
     return;
   }
@@ -2363,8 +2400,7 @@ void RGWPutMetadataBucket::execute()
     attrs[RGW_ATTR_CORS] = bl;
   }
 
-  ret = rgw_bucket_set_attrs(store, s->bucket_info, attrs, &rmattrs,
-          &s->bucket_info.objv_tracker);
+  ret = rgw_bucket_set_attrs(store, s->bucket_info, attrs, &s->bucket_info.objv_tracker);
 }
 
 int RGWPutMetadataObject::verify_permission()
@@ -2412,7 +2448,7 @@ void RGWPutMetadataObject::execute()
   populate_with_generic_attrs(s, attrs);
   encode_delete_at_attr(delete_at, attrs);
 
-  ret = store->set_attrs(s->obj_ctx, obj, attrs, &rmattrs, NULL);
+  ret = store->set_attrs(s->obj_ctx, obj, attrs, &rmattrs);
 }
 
 int RGWDeleteObj::verify_permission()
@@ -2430,7 +2466,15 @@ void RGWDeleteObj::pre_exec()
 
 void RGWDeleteObj::execute()
 {
-  ret = -EINVAL;
+  if (!s->bucket_exists) {
+    ret = -ERR_NO_SUCH_BUCKET;
+    return;
+  }
+
+  ret = get_params();
+  if (ret < 0) {
+    return;
+  }
   rgw_obj obj(s->bucket, s->object);
   map<string, bufferlist> orig_attrs;
 
@@ -2456,11 +2500,15 @@ void RGWDeleteObj::execute()
     del_op.params.bucket_owner = s->bucket_owner.get_id();
     del_op.params.versioning_status = s->bucket_info.versioning_status();
     del_op.params.obj_owner = s->owner;
+    del_op.params.unmod_since = unmod_since;
 
     ret = del_op.delete_obj();
     if (ret >= 0) {
       delete_marker = del_op.result.delete_marker;
       version_id = del_op.result.version_id;
+    }
+    if (ret == -ERR_PRECONDITION_FAILED && no_precondition_error) {
+      ret = 0;
     }
 
     /* Check whether the object has expired. Swift API documentation
@@ -2469,6 +2517,8 @@ void RGWDeleteObj::execute()
       ret = -ENOENT;
       return;
     }
+  } else {
+    ret = -EINVAL;
   }
 }
 
@@ -2533,7 +2583,12 @@ int RGWCopyObj::verify_permission()
 
   RGWObjectCtx& obj_ctx = *static_cast<RGWObjectCtx *>(s->obj_ctx);
 
-  ret = store->get_bucket_info(obj_ctx, src_bucket_name, src_bucket_info, NULL, &src_attrs);
+  if (s->bucket_instance_id.empty()) {
+    ret = store->get_bucket_info(obj_ctx, src_bucket_name, src_bucket_info, NULL, &src_attrs);
+  } else {
+    /* will only happen in intra region sync where the source and dest bucket is the same */
+    ret = store->get_bucket_instance_info(obj_ctx, s->bucket_instance_id, src_bucket_info, NULL, &src_attrs);
+  }
   if (ret < 0)
     return ret;
 
@@ -2558,7 +2613,8 @@ int RGWCopyObj::verify_permission()
   RGWAccessControlPolicy dest_bucket_policy(s->cct);
   map<string, bufferlist> dest_attrs;
 
-  if (src_bucket_name.compare(dest_bucket_name) == 0) { /* will only happen if s->local_source */
+  if (src_bucket_name.compare(dest_bucket_name) == 0) { /* will only happen if s->local_source
+                                                           or intra region sync */
     dest_bucket_info = src_bucket_info;
     dest_attrs = src_attrs;
   } else {
@@ -2680,6 +2736,7 @@ void RGWCopyObj::execute()
                         if_match,
                         if_nomatch,
                         attrs_mod,
+                        copy_if_newer,
                         attrs, RGW_OBJ_CATEGORY_MAIN,
                         olh_epoch,
 			delete_at,
@@ -2811,8 +2868,6 @@ void RGWPutACLs::execute()
     *_dout << dendl;
   }
 
-  RGWObjVersionTracker *ptracker = (!s->object.empty() ? NULL : &s->bucket_info.objv_tracker);
-
   new_policy.encode(bl);
   obj = rgw_obj(s->bucket, s->object);
   map<string, bufferlist> attrs;
@@ -2828,9 +2883,12 @@ void RGWPutACLs::execute()
   attrs[RGW_ATTR_ACL] = bl;
 
   if (!s->object.empty()) {
-    ret = store->set_attrs(s->obj_ctx, obj, attrs, NULL, ptracker);
+    attrs[RGW_ATTR_ACL] = bl;
+    ret = store->set_attrs(s->obj_ctx, obj, attrs, NULL);
   } else {
-    ret = rgw_bucket_set_attrs(store, s->bucket_info, attrs, NULL, ptracker);
+    attrs = s->bucket_attrs;
+    attrs[RGW_ATTR_ACL] = bl;
+    ret = rgw_bucket_set_attrs(store, s->bucket_info, attrs, &s->bucket_info.objv_tracker);
   }
 }
 
@@ -2871,17 +2929,15 @@ void RGWPutCORS::execute()
   if (ret < 0)
     return;
 
-  RGWObjVersionTracker *ptracker = (!s->object.empty() ? NULL : &s->bucket_info.objv_tracker);
-
   bool is_object_op = (!s->object.empty());
   if (is_object_op) {
     store->get_bucket_instance_obj(s->bucket, obj);
     store->set_atomic(s->obj_ctx, obj);
-    ret = store->set_attr(s->obj_ctx, obj, RGW_ATTR_CORS, cors_bl, ptracker);
+    ret = store->set_attr(s->obj_ctx, obj, RGW_ATTR_CORS, cors_bl);
   } else {
-    map<string, bufferlist> attrs;
+    map<string, bufferlist> attrs = s->bucket_attrs;
     attrs[RGW_ATTR_CORS] = cors_bl;
-    ret = rgw_bucket_set_attrs(store, s->bucket_info, attrs, NULL, ptracker);
+    ret = rgw_bucket_set_attrs(store, s->bucket_info, attrs, &s->bucket_info.objv_tracker);
   }
 }
 
@@ -2912,7 +2968,6 @@ void RGWDeleteCORS::execute()
   map<string, bufferlist>::iterator iter;
 
   bool is_object_op = (!s->object.empty());
-  RGWObjVersionTracker *ptracker = NULL;
 
 
   if (is_object_op) {
@@ -2921,8 +2976,7 @@ void RGWDeleteCORS::execute()
     if (ret < 0)
       return;
   } else {
-    ptracker = (!s->object.empty() ? NULL : &s->bucket_info.objv_tracker);
-    ret = get_system_obj_attrs(store, s, obj, orig_attrs, NULL, ptracker);
+    ret = get_system_obj_attrs(store, s, obj, orig_attrs, NULL, &s->bucket_info.objv_tracker);
     if (ret < 0)
       return;
   }
@@ -2938,9 +2992,9 @@ void RGWDeleteCORS::execute()
     }
   }
   if (is_object_op) {
-    ret = store->set_attrs(s->obj_ctx, obj, attrs, &rmattrs, ptracker);
+    ret = store->set_attrs(s->obj_ctx, obj, attrs, &rmattrs);
   } else {
-    ret = rgw_bucket_set_attrs(store, s->bucket_info, attrs, &rmattrs, ptracker);
+    ret = rgw_bucket_set_attrs(store, s->bucket_info, attrs, &s->bucket_info.objv_tracker);
   }
 }
 

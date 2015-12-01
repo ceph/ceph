@@ -274,11 +274,13 @@ protected:
   int default_max;
   bool is_truncated;
 
+  int shard_id;
+
   int parse_max_keys();
 
 public:
   RGWListBucket() : list_versions(false), max(0), ret(0),
-                    default_max(0), is_truncated(false) {}
+                    default_max(0), is_truncated(false), shard_id(-1) {}
   int verify_permission();
   void pre_exec();
   void execute();
@@ -616,9 +618,12 @@ protected:
   int ret;
   bool delete_marker;
   string version_id;
+  time_t unmod_since; /* if unmodified since */
+  bool no_precondition_error;
+
 
 public:
-  RGWDeleteObj() : ret(0), delete_marker(false) {}
+  RGWDeleteObj() : ret(0), delete_marker(false), unmod_since(0), no_precondition_error(false) {}
 
   int verify_permission();
   void pre_exec();
@@ -627,6 +632,7 @@ public:
   virtual void send_response() = 0;
   virtual const string name() { return "delete_obj"; }
   virtual RGWOpType get_type() { return RGW_OP_DELETE_OBJ; }
+  virtual int get_params() { return 0; }
   virtual uint32_t op_mask() { return RGW_OP_TYPE_DELETE; }
   virtual bool need_object_expiration() { return false; }
 };
@@ -669,6 +675,7 @@ protected:
   uint64_t olh_epoch;
 
   time_t delete_at;
+  bool copy_if_newer;
 
   int init_common();
 
@@ -692,6 +699,7 @@ public:
     last_ofs = 0;
     olh_epoch = 0;
     delete_at = 0;
+    copy_if_newer = false;
   }
 
   static bool parse_copy_location(const string& src, string& bucket_name, rgw_obj_key& object);

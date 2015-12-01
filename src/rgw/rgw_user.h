@@ -62,16 +62,6 @@ extern int rgw_store_user_info(RGWRados *store,
                                time_t mtime,
                                bool exclusive,
                                map<string, bufferlist> *pattrs = NULL);
-/**
- * Save the custom user metadata given in @attrs and delete those in @rmattrs
- * for user specified in @user_id.
- * Returns: 0 on success, -ERR# on failure.
- */
-extern int rgw_store_user_attrs(RGWRados *store,
-                                string& user_id,
-                                map<string, bufferlist>& attrs,
-                                map<string, bufferlist>* rmattrs,
-                                RGWObjVersionTracker *objv_tracker);
 
 /**
  * Given an user_id, finds the user info associated with it.

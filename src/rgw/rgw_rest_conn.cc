@@ -6,15 +6,15 @@
 
 #define dout_subsys ceph_subsys_rgw
 
-RGWRESTConn::RGWRESTConn(CephContext *_cct, RGWRados *store, list<string>& remote_endpoints) : cct(_cct)
+RGWRESTConn::RGWRESTConn(CephContext *_cct, RGWRados *store,
+                         const string& _remote_id,
+                         const list<string>& remote_endpoints)
+  : cct(_cct),
+    endpoints(remote_endpoints.begin(), remote_endpoints.end()),
+    remote_id(_remote_id)
 {
-  list<string>::iterator iter;
-  int i;
-  for (i = 0, iter = remote_endpoints.begin(); iter != remote_endpoints.end(); ++iter, ++i) {
-    endpoints[i] = *iter;
-  }
-  key = store->zone.system_key;
-  region = store->region.name;
+  key = store->get_zone_params().system_key;
+  self_zone_group = store->get_zonegroup().get_id();
 }
 
 int RGWRESTConn::get_url(string& endpoint)
@@ -30,20 +30,35 @@ int RGWRESTConn::get_url(string& endpoint)
   return 0;
 }
 
+string RGWRESTConn::get_url()
+{
+  string endpoint;
+  if (endpoints.empty()) {
+    ldout(cct, 0) << "WARNING: endpoints not configured for upstream zone" << dendl; /* we'll catch this later */
+    return endpoint;
+  }
+
+  int i = counter.inc();
+  endpoint = endpoints[i % endpoints.size()];
+
+  return endpoint;
+}
+
 int RGWRESTConn::forward(const string& uid, req_info& info, obj_version *objv, size_t max_response, bufferlist *inbl, bufferlist *outbl)
 {
   string url;
   int ret = get_url(url);
   if (ret < 0)
     return ret;
-  list<pair<string, string> > params;
-  params.push_back(pair<string, string>(RGW_SYS_PARAM_PREFIX "uid", uid));
-  params.push_back(pair<string, string>(RGW_SYS_PARAM_PREFIX "region", region));
+  param_list_t params;
+  if (!uid.empty())
+    params.push_back(param_pair_t(RGW_SYS_PARAM_PREFIX "uid", uid));
+  params.push_back(param_pair_t(RGW_SYS_PARAM_PREFIX "region", self_zone_group));
   if (objv) {
-    params.push_back(pair<string, string>(RGW_SYS_PARAM_PREFIX "tag", objv->tag));
+    params.push_back(param_pair_t(RGW_SYS_PARAM_PREFIX "tag", objv->tag));
     char buf[16];
     snprintf(buf, sizeof(buf), "%lld", (long long)objv->ver);
-    params.push_back(pair<string, string>(RGW_SYS_PARAM_PREFIX "ver", buf));
+    params.push_back(param_pair_t(RGW_SYS_PARAM_PREFIX "ver", buf));
   }
   RGWRESTSimpleRequest req(cct, url, NULL, &params);
   return req.forward_request(key, info, max_response, inbl, outbl);
@@ -63,9 +78,9 @@ int RGWRESTConn::put_obj_init(const string& uid, rgw_obj& obj, uint64_t obj_size
   if (ret < 0)
     return ret;
 
-  list<pair<string, string> > params;
-  params.push_back(pair<string, string>(RGW_SYS_PARAM_PREFIX "uid", uid));
-  params.push_back(pair<string, string>(RGW_SYS_PARAM_PREFIX "region", region));
+  param_list_t params;
+  params.push_back(param_pair_t(RGW_SYS_PARAM_PREFIX "uid", uid));
+  params.push_back(param_pair_t(RGW_SYS_PARAM_PREFIX "region", self_zone_group));
   *req = new RGWRESTStreamWriteRequest(cct, url, NULL, &params);
   return (*req)->put_obj_init(key, obj, obj_size, attrs);
 }
@@ -78,19 +93,38 @@ int RGWRESTConn::complete_request(RGWRESTStreamWriteRequest *req, string& etag, 
   return ret;
 }
 
-int RGWRESTConn::get_obj(const string& uid, req_info *info /* optional */, rgw_obj& obj, bool prepend_metadata,
-                                 RGWGetDataCB *cb, RGWRESTStreamReadRequest **req)
+static void set_date_header(const time_t *t, map<string, string>& headers, const string& header_name)
+{
+  if (!t) {
+    return;
+  }
+  stringstream s;
+  utime_t tm = utime_t(*t, 0);
+  tm.asctime(s);
+  headers["HTTP_IF_MODIFIED_SINCE"] = s.str();
+}
+
+
+int RGWRESTConn::get_obj(const string& uid, req_info *info /* optional */, rgw_obj& obj,
+                         const time_t *mod_ptr, const time_t *unmod_ptr,
+                         bool prepend_metadata, RGWGetDataCB *cb, RGWRESTStreamReadRequest **req)
 {
   string url;
   int ret = get_url(url);
   if (ret < 0)
     return ret;
 
-  list<pair<string, string> > params;
-  params.push_back(pair<string, string>(RGW_SYS_PARAM_PREFIX "uid", uid));
-  params.push_back(pair<string, string>(RGW_SYS_PARAM_PREFIX "region", region));
+  param_list_t params;
+  if (!uid.empty()) {
+    params.push_back(param_pair_t(RGW_SYS_PARAM_PREFIX "uid", uid));
+  }
+  params.push_back(param_pair_t(RGW_SYS_PARAM_PREFIX "region", self_zone_group));
   if (prepend_metadata) {
-    params.push_back(pair<string, string>(RGW_SYS_PARAM_PREFIX "prepend-metadata", region));
+    params.push_back(param_pair_t(RGW_SYS_PARAM_PREFIX "prepend-metadata", self_zone_group));
+  }
+  if (!obj.get_instance().empty()) {
+    const string& instance = obj.get_instance();
+    params.push_back(param_pair_t("versionId", instance));
   }
   *req = new RGWRESTStreamReadRequest(cct, url, cb, NULL, &params);
   map<string, string> extra_headers;
@@ -108,6 +142,10 @@ int RGWRESTConn::get_obj(const string& uid, req_info *info /* optional */, rgw_o
       extra_headers[iter->first] = iter->second;
     }
   }
+
+  set_date_header(mod_ptr, extra_headers, "HTTP_IF_MODIFIED_SINCE");
+  set_date_header(unmod_ptr, extra_headers, "HTTP_IF_UNMODIFIED_SINCE");
+
   return (*req)->get_obj(key, extra_headers, obj);
 }
 
@@ -119,4 +157,164 @@ int RGWRESTConn::complete_request(RGWRESTStreamReadRequest *req, string& etag, t
   return ret;
 }
 
+int RGWRESTConn::get_resource(const string& resource,
+		     param_list_t *extra_params,
+		     map<string, string> *extra_headers,
+		     bufferlist& bl,
+		     RGWHTTPManager *mgr)
+{
+  string url;
+  int ret = get_url(url);
+  if (ret < 0)
+    return ret;
+
+  param_list_t params;
+
+  if (extra_params) {
+    params.insert(params.end(), extra_params->begin(), extra_params->end());
+  }
+
+  params.push_back(param_pair_t(RGW_SYS_PARAM_PREFIX "zonegroup", self_zone_group));
+
+  RGWStreamIntoBufferlist cb(bl);
+
+  RGWRESTStreamReadRequest req(cct, url, &cb, NULL, &params);
+
+  map<string, string> headers;
+  if (extra_headers) {
+    headers.insert(extra_params->begin(), extra_params->end());
+  }
+
+  ret = req.get_resource(key, headers, resource, mgr);
+  if (ret < 0) {
+    ldout(cct, 0) << __func__ << ": get_resource() resource=" << resource << " returned ret=" << ret << dendl;
+    return ret;
+  }
+
+  string etag;
+  map<string, string> attrs;
+  return req.complete(etag, NULL, attrs);
+}
+
+RGWRESTReadResource::RGWRESTReadResource(RGWRESTConn *_conn,
+                                         const string& _resource,
+		                         const rgw_http_param_pair *pp,
+                                         param_list_t *extra_headers,
+                                         RGWHTTPManager *_mgr)
+  : cct(_conn->get_ctx()), conn(_conn), resource(_resource),
+    params(make_param_list(pp)), cb(bl), mgr(_mgr),
+    req(cct, conn->get_url(), &cb, NULL, NULL)
+{
+  init_common(extra_headers);
+}
+
+RGWRESTReadResource::RGWRESTReadResource(RGWRESTConn *_conn,
+                                         const string& _resource,
+		                         param_list_t& _params,
+                                         param_list_t *extra_headers,
+                                         RGWHTTPManager *_mgr)
+  : cct(_conn->get_ctx()), conn(_conn), resource(_resource), params(_params),
+    cb(bl), mgr(_mgr), req(cct, conn->get_url(), &cb, NULL, NULL)
+{
+  init_common(extra_headers);
+}
+
+void RGWRESTReadResource::init_common(param_list_t *extra_headers)
+{
+  params.push_back(param_pair_t(RGW_SYS_PARAM_PREFIX "zonegroup", conn->get_self_zonegroup()));
+
+  if (extra_headers) {
+    headers.insert(extra_headers->begin(), extra_headers->end());
+  }
+
+  req.set_params(&params);
+}
+
+int RGWRESTReadResource::read()
+{
+  int ret = req.get_resource(conn->get_key(), headers, resource, mgr);
+  if (ret < 0) {
+    ldout(cct, 0) << __func__ << ": get_resource() resource=" << resource << " returned ret=" << ret << dendl;
+    return ret;
+  }
+
+  string etag;
+  map<string, string> attrs;
+  return req.complete(etag, NULL, attrs);
+}
+
+int RGWRESTReadResource::aio_read()
+{
+  get();
+  int ret = req.get_resource(conn->get_key(), headers, resource, mgr);
+  if (ret < 0) {
+    put();
+    ldout(cct, 0) << __func__ << ": get_resource() resource=" << resource << " returned ret=" << ret << dendl;
+    return ret;
+  }
+
+  return 0;
+}
+
+RGWRESTPostResource::RGWRESTPostResource(RGWRESTConn *_conn,
+                                         const string& _resource,
+		                         const rgw_http_param_pair *pp,
+                                         param_list_t *extra_headers,
+                                         RGWHTTPManager *_mgr)
+  : cct(_conn->get_ctx()), conn(_conn), resource(_resource),
+    params(make_param_list(pp)), cb(bl), mgr(_mgr),
+    req(cct, "POST", conn->get_url(), &cb, NULL, NULL)
+{
+  init_common(extra_headers);
+}
+
+RGWRESTPostResource::RGWRESTPostResource(RGWRESTConn *_conn,
+                                         const string& _resource,
+		                         param_list_t& params,
+                                         param_list_t *extra_headers,
+                                         RGWHTTPManager *_mgr)
+  : cct(_conn->get_ctx()), conn(_conn), resource(_resource), params(params),
+    cb(bl), mgr(_mgr), req(cct, "POST", conn->get_url(), &cb, NULL, NULL)
+{
+  init_common(extra_headers);
+}
+
+void RGWRESTPostResource::init_common(param_list_t *extra_headers)
+{
+  params.push_back(param_pair_t(RGW_SYS_PARAM_PREFIX "zonegroup", conn->get_self_zonegroup()));
+
+  if (extra_headers) {
+    headers.insert(extra_headers->begin(), extra_headers->end());
+  }
+
+  req.set_params(&params);
+}
+
+int RGWRESTPostResource::send(bufferlist& outbl)
+{
+  req.set_outbl(outbl);
+  int ret = req.get_resource(conn->get_key(), headers, resource, mgr);
+  if (ret < 0) {
+    ldout(cct, 0) << __func__ << ": get_resource() resource=" << resource << " returned ret=" << ret << dendl;
+    return ret;
+  }
+
+  string etag;
+  map<string, string> attrs;
+  return req.complete(etag, NULL, attrs);
+}
+
+int RGWRESTPostResource::aio_send(bufferlist& outbl)
+{
+  req.set_outbl(outbl);
+  get();
+  int ret = req.get_resource(conn->get_key(), headers, resource, mgr);
+  if (ret < 0) {
+    put();
+    ldout(cct, 0) << __func__ << ": get_resource() resource=" << resource << " returned ret=" << ret << dendl;
+    return ret;
+  }
+
+  return 0;
+}
 

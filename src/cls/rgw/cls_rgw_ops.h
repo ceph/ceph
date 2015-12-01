@@ -459,6 +459,30 @@ struct rgw_cls_obj_check_attrs_prefix {
 };
 WRITE_CLASS_ENCODER(rgw_cls_obj_check_attrs_prefix)
 
+struct rgw_cls_obj_check_mtime {
+  utime_t mtime;
+  RGWCheckMTimeType type;
+
+  rgw_cls_obj_check_mtime() : type(CLS_RGW_CHECK_TIME_MTIME_EQ) {}
+
+  void encode(bufferlist& bl) const {
+    ENCODE_START(1, 1, bl);
+    ::encode(mtime, bl);
+    ::encode((uint8_t)type, bl);
+    ENCODE_FINISH(bl);
+  }
+
+  void decode(bufferlist::iterator& bl) {
+    DECODE_START(1, bl);
+    ::decode(mtime, bl);
+    uint8_t c;
+    ::decode(c, bl);
+    type = (RGWCheckMTimeType)c;
+    DECODE_FINISH(bl);
+  }
+};
+WRITE_CLASS_ENCODER(rgw_cls_obj_check_mtime)
+
 struct rgw_cls_usage_log_add_op {
   rgw_usage_log_info info;
 

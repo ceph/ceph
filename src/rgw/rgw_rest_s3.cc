@@ -250,6 +250,20 @@ int RGWListBucket_ObjStore_S3::get_params()
   }
   delimiter = s->info.args.get("delimiter");
   encoding_type = s->info.args.get("encoding-type");
+  if (s->system_request) {
+    s->info.args.get_bool("objs-container", &objs_container, false);
+    const char *shard_id_str = s->info.env->get("HTTP_RGWX_SHARD_ID");
+    if (shard_id_str) {
+      string err;
+      shard_id = strict_strtol(shard_id_str, 10, &err);
+      if (!err.empty()) {
+        ldout(s->cct, 5) << "bad shard id specified: " << shard_id_str << dendl;
+        return -EINVAL;
+      }
+    } else {
+      shard_id = s->bucket_instance_shard_id;
+    }
+  }
   return 0;
 }
 
@@ -273,11 +287,18 @@ void RGWListBucket_ObjStore_S3::send_versioned_response()
     encode_key = true;
 
   if (ret >= 0) {
+    if (objs_container) {
+      s->formatter->open_array_section("Entries");
+    }
+
     vector<RGWObjEnt>::iterator iter;
     for (iter = objs.begin(); iter != objs.end(); ++iter) {
       time_t mtime = iter->mtime.sec();
       const char *section_name = (iter->is_delete_marker() ? "DeleteMarker" : "Version");
-      s->formatter->open_array_section(section_name);
+      s->formatter->open_object_section(section_name);
+      if (objs_container) {
+        s->formatter->dump_bool("IsDeleteMarker", iter->is_delete_marker());
+      }
       if (encode_key) {
         string key_name;
         url_encode(iter->key.name, key_name);
@@ -289,8 +310,11 @@ void RGWListBucket_ObjStore_S3::send_versioned_response()
       if (version_id.empty()) {
         version_id = "null";
       }
-      if (s->system_request && iter->versioned_epoch > 0) {
-        s->formatter->dump_int("VersionedEpoch", iter->versioned_epoch);
+      if (s->system_request) {
+        if (iter->versioned_epoch > 0) {
+          s->formatter->dump_int("VersionedEpoch", iter->versioned_epoch);
+        }
+        s->formatter->dump_string("RgwxTag", iter->tag);
       }
       s->formatter->dump_string("VersionId", version_id);
       s->formatter->dump_bool("IsLatest", iter->is_current());
@@ -303,6 +327,10 @@ void RGWListBucket_ObjStore_S3::send_versioned_response()
       dump_owner(s, iter->owner, iter->owner_display_name);
       s->formatter->close_section();
     }
+    if (objs_container) {
+      s->formatter->close_section();
+    }
+
     if (!common_prefixes.empty()) {
       map<string, bool>::iterator pref_iter;
       for (pref_iter = common_prefixes.begin(); pref_iter != common_prefixes.end(); ++pref_iter) {
@@ -366,6 +394,9 @@ void RGWListBucket_ObjStore_S3::send_response()
       s->formatter->dump_int("Size", iter->size);
       s->formatter->dump_string("StorageClass", "STANDARD");
       dump_owner(s, iter->owner, iter->owner_display_name);
+      if (s->system_request) {
+        s->formatter->dump_string("RgwxTag", iter->tag);
+      }
       s->formatter->close_section();
     }
     if (!common_prefixes.empty()) {
@@ -399,15 +430,16 @@ void RGWGetBucketLocation_ObjStore_S3::send_response()
   end_header(s, this);
   dump_start(s);
 
-  string region = s->bucket_info.region;
+  string zonegroup_id = s->bucket_info.zonegroup;
   string api_name;
 
-  map<string, RGWRegion>::iterator iter = store->region_map.regions.find(region);
-  if (iter != store->region_map.regions.end()) {
-    api_name = iter->second.api_name;
+  RGWZoneGroup zonegroup;
+  int ret = store->get_zonegroup(zonegroup_id, zonegroup);  
+  if (!ret) {
+    api_name = zonegroup.api_name;
   } else  {
-    if (region != "default") {
-      api_name = region;
+    if (zonegroup_id != "default") {
+      api_name = zonegroup_id;
     }
   }
 
@@ -576,7 +608,7 @@ public:
   RGWCreateBucketParser() {}
   ~RGWCreateBucketParser() {}
 
-  bool get_location_constraint(string& region) {
+  bool get_location_constraint(string& zone_group) {
     XMLObj *config = find_first("CreateBucketConfiguration");
     if (!config)
       return false;
@@ -585,7 +617,7 @@ public:
     if (!constraint)
       return false;
 
-    region = constraint->get_data();
+    zone_group = constraint->get_data();
 
     return true;
   }
@@ -1421,6 +1453,28 @@ done:
   rgw_flush_formatter_and_reset(s, s->formatter);
 }
 
+int RGWDeleteObj_ObjStore_S3::get_params()
+{
+  const char *if_unmod = s->info.env->get("HTTP_X_AMZ_DELETE_IF_UNMODIFIED_SINCE");
+
+  if (s->system_request) {
+    s->info.args.get_bool(RGW_SYS_PARAM_PREFIX "no-precondition-error", &no_precondition_error, false);
+  }
+
+  if (if_unmod) {
+    string if_unmod_str(if_unmod);
+    string if_unmod_decoded;
+    url_decode(if_unmod_str, if_unmod_decoded);
+    uint64_t epoch;
+    if (utime_t::parse_date(if_unmod_decoded, &epoch, NULL) < 0) {
+      ldout(s->cct, 10) << "failed to parse time: " << if_unmod_decoded << dendl;
+      return -EINVAL;
+    }
+    unmod_since = epoch;
+  }
+
+  return 0;
+}
 
 void RGWDeleteObj_ObjStore_S3::send_response()
 {
@@ -1473,12 +1527,13 @@ int RGWCopyObj_ObjStore_S3::get_params()
 
   if (s->system_request) {
     source_zone = s->info.args.get(RGW_SYS_PARAM_PREFIX "source-zone");
+    s->info.args.get_bool(RGW_SYS_PARAM_PREFIX "copy-if-newer", &copy_if_newer, false);
     if (!source_zone.empty()) {
       client_id = s->info.args.get(RGW_SYS_PARAM_PREFIX "client-id");
       op_id = s->info.args.get(RGW_SYS_PARAM_PREFIX "op-id");
 
       if (client_id.empty() || op_id.empty()) {
-        ldout(s->cct, 0) << RGW_SYS_PARAM_PREFIX "client-id or " RGW_SYS_PARAM_PREFIX "op-id were not provided, required for intra-region copy" << dendl;
+        ldout(s->cct, 0) << RGW_SYS_PARAM_PREFIX "client-id or " RGW_SYS_PARAM_PREFIX "op-id were not provided, required for intra-zone_group copy" << dendl;
         return -EINVAL;
       }
     }
@@ -1491,7 +1546,7 @@ int RGWCopyObj_ObjStore_S3::get_params()
     } else if (strcasecmp(md_directive, "REPLACE") == 0) {
       attrs_mod = RGWRados::ATTRSMOD_REPLACE;
     } else if (!source_zone.empty()) {
-      attrs_mod = RGWRados::ATTRSMOD_NONE; // default for intra-region copy
+      attrs_mod = RGWRados::ATTRSMOD_NONE; // default for intra-zone_group copy
     } else {
       ldout(s->cct, 0) << "invalid metadata directive" << dendl;
       return -EINVAL;
@@ -2598,7 +2653,7 @@ int RGWHandler_Auth_S3::init(RGWRados *store, struct req_state *state, RGWClient
 
 RGWHandler *RGWRESTMgr_S3::get_handler(struct req_state *s)
 {
-  int ret = RGWHandler_ObjStore_S3::init_from_header(s, RGW_FORMAT_XML, false);
+  int ret = RGWHandler_ObjStore_S3::init_from_header(s, RGW_FORMAT_XML, true);
   if (ret < 0)
     return NULL;
 

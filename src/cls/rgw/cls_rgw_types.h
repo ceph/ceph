@@ -20,6 +20,7 @@ namespace ceph {
 enum RGWPendingState {
   CLS_RGW_STATE_PENDING_MODIFY = 0,
   CLS_RGW_STATE_COMPLETE       = 1,
+  CLS_RGW_STATE_UNKNOWN        = 2,
 };
 
 enum RGWModifyOp {
@@ -34,6 +35,14 @@ enum RGWModifyOp {
 
 enum RGWBILogFlags {
   RGW_BILOG_FLAG_VERSIONED_OP = 0x1,
+};
+
+enum RGWCheckMTimeType {
+  CLS_RGW_CHECK_TIME_MTIME_EQ = 0,
+  CLS_RGW_CHECK_TIME_MTIME_LT = 1,
+  CLS_RGW_CHECK_TIME_MTIME_LE = 2,
+  CLS_RGW_CHECK_TIME_MTIME_GT = 3,
+  CLS_RGW_CHECK_TIME_MTIME_GE = 4,
 };
 
 struct rgw_bucket_pending_info {
@@ -509,6 +518,7 @@ struct rgw_bi_log_entry {
     DECODE_FINISH(bl);
   }
   void dump(Formatter *f) const;
+  void decode_json(JSONObj *obj);
   static void generate_test_instances(list<rgw_bi_log_entry*>& o);
 };
 WRITE_CLASS_ENCODER(rgw_bi_log_entry)
