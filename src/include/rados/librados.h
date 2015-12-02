@@ -714,7 +714,7 @@ int rados_pool_create_with_all(rados_t cluster, const char *pool_name, uint64_t 
 int rados_pool_delete(rados_t cluster, const char *pool_name);
 
 /**
- * Attempt to change an io context's associated auid "owner."
+ * Attempt to change an io context's associated auid "owner"
  *
  * Requires that you have write permission on both the current and new
  * auid.
