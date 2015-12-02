@@ -789,7 +789,7 @@ CEPH_RADOS_API int rados_pool_get_base_tier(rados_t cluster, int64_t pool,
 CEPH_RADOS_API int rados_pool_delete(rados_t cluster, const char *pool_name);
 
 /**
- * Attempt to change an io context's associated auid "owner."
+ * Attempt to change an io context's associated auid "owner"
  *
  * Requires that you have write permission on both the current and new
  * auid.
