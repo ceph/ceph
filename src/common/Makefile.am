@@ -79,11 +79,6 @@ libcommon_internal_la_SOURCES += \
 	common/pick_address.cc
 endif
 
-if LINUX
-libcommon_internal_la_SOURCES += \
-	common/linux_version.c 
-endif
-
 if SOLARIS
 libcommon_internal_la_SOURCES += \
         common/solaris_errno.cc
@@ -94,12 +89,23 @@ libcommon_internal_la_SOURCES += \
         common/aix_errno.cc
 endif
 
-if WITH_RBD
 if LINUX
 libcommon_internal_la_SOURCES += \
-	common/blkdev.cc
+	common/blkdev.cc \
+	common/linux_version.c
 endif
+if DARWIN
+libcommon_internal_la_SOURCES += \
+	common/blkdev.cc \
+	common/darwin_errno.cc
 endif
+if FREEBSD
+libcommon_internal_la_SOURCES += \
+	common/blkdev.cc \
+	common/freebsd_errno.cc
+endif
+
+
 
 if ENABLE_XIO
 libcommon_internal_la_SOURCES += \
