@@ -558,37 +558,8 @@ static int get_cmd(const char *cmd, const char *prev_cmd, const char *prev_prev_
       return OPT_REALM_DEFAULT;
     if (strcmp(cmd, "pull") == 0)
       return OPT_REALM_PULL;
-  } else if (strcmp(prev_cmd, "region") == 0) {
-    if (strcmp(cmd, "add") == 0)
-      return OPT_ZONEGROUP_ADD;
-    if (strcmp(cmd, "create")== 0)
-      return OPT_ZONEGROUP_CREATE;
-    if (strcmp(cmd, "default") == 0)
-      return OPT_ZONEGROUP_DEFAULT;
-    if (strcmp(cmd, "delete") == 0)
-      return OPT_ZONEGROUP_DELETE;
-    if (strcmp(cmd, "get") == 0)
-      return OPT_ZONEGROUP_GET;
-    if (strcmp(cmd, "modify") == 0)
-      return OPT_ZONEGROUP_MODIFY;
-    if (strcmp(cmd, "list") == 0)
-      return OPT_ZONEGROUP_LIST;
-    if (strcmp(cmd, "set") == 0)
-      return OPT_ZONEGROUP_SET;
-    if (strcmp(cmd, "rename") == 0)
-      return OPT_ZONEGROUP_RENAME;
-  } else if (strcmp(prev_cmd, "regions") == 0) {
-    if (strcmp(cmd, "list") == 0)
-      return OPT_ZONEGROUP_LIST;
-  } else if (strcmp(prev_cmd, "region-map") == 0 ||
-             strcmp(prev_cmd, "regionmap") == 0) {
-    if (strcmp(cmd, "get") == 0)
-      return OPT_ZONEGROUPMAP_GET;
-    if (strcmp(cmd, "set") == 0)
-      return OPT_ZONEGROUPMAP_SET;
-    if (strcmp(cmd, "update") == 0)
-      return OPT_ZONEGROUPMAP_UPDATE;
-  } else if (strcmp(prev_cmd, "zonegroup") == 0) {
+  } else if (strcmp(prev_cmd, "zonegroup") == 0 ||
+	     strcmp(prev_cmd, "region") == 0) {
     if (strcmp(cmd, "add") == 0)
       return OPT_ZONEGROUP_ADD;
     if (strcmp(cmd, "create")== 0)
@@ -614,11 +585,14 @@ static int get_cmd(const char *cmd, const char *prev_cmd, const char *prev_prev_
       return OPT_QUOTA_ENABLE;
     if (strcmp(cmd, "disable") == 0)
       return OPT_QUOTA_DISABLE;
-  } else if (strcmp(prev_cmd, "zonegroups") == 0) {
+  } else if (strcmp(prev_cmd, "zonegroups") == 0 ||
+	     strcmp(prev_cmd, "regions") == 0) {
     if (strcmp(cmd, "list") == 0)
       return OPT_ZONEGROUP_LIST;
   } else if (strcmp(prev_cmd, "zonegroup-map") == 0 ||
-             strcmp(prev_cmd, "zonegroupmap") == 0) {
+             strcmp(prev_cmd, "zonegroupmap") == 0 ||
+	     strcmp(prev_cmd, "region-map") == 0 ||
+             strcmp(prev_cmd, "regionmap") == 0) {
     if (strcmp(cmd, "get") == 0)
       return OPT_ZONEGROUPMAP_GET;
     if (strcmp(cmd, "set") == 0)
