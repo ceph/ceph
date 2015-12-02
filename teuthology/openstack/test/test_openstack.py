@@ -338,7 +338,9 @@ openstack keypair delete {key_name} || true
         ]
         archive_upload = 'user@archive:/tmp'
         argv = (self.options +
-                ['--upload',
+                ['--teuthology-git-url', 'TEUTHOLOGY_URL',
+                 '--teuthology-branch', 'TEUTHOLOGY_BRANCH',
+                 '--upload',
                  '--archive-upload', archive_upload] +
                 teuthology_argv)
         args = scripts.openstack.parse_args(argv)
@@ -358,7 +360,7 @@ openstack keypair delete {key_name} || true
         assert "nworkers=" + str(args.simultaneous_jobs) in l
         assert "username=" + teuthology.username in l
         assert "upload=--archive-upload user@archive:/tmp" in l
-        assert "clone=git clone" in l
+        assert "clone=git clone -b TEUTHOLOGY_BRANCH TEUTHOLOGY_URL" in l
         assert os.environ['OS_AUTH_URL'] in l
         assert " ".join(teuthology_argv) in l
 
