@@ -3127,7 +3127,7 @@ void ReplicatedPG::do_backfill(OpRequestRef op)
 	get_osdmap()->get_epoch(),
 	m->query_epoch,
 	spg_t(info.pgid.pgid, primary.shard));
-      reply->set_priority(cct->_conf->osd_recovery_op_priority);
+      reply->set_priority(get_recovery_op_priority());
       osd->send_message_osd_cluster(reply, m->get_connection());
       queue_peering_event(
 	CephPeeringEvtRef(
@@ -10199,7 +10199,7 @@ int ReplicatedPG::recover_primary(int max, ThreadPool::TPHandle &handle)
 	++skipped;
       } else {
 	int r = recover_missing(
-	  soid, need, cct->_conf->osd_recovery_op_priority, h);
+	  soid, need, get_recovery_op_priority(), h);
 	switch (r) {
 	case PULL_YES:
 	  ++started;
@@ -10222,7 +10222,7 @@ int ReplicatedPG::recover_primary(int max, ThreadPool::TPHandle &handle)
       pg_log.set_last_requested(v);
   }
  
-  pgbackend->run_recovery_op(h, cct->_conf->osd_recovery_op_priority);
+  pgbackend->run_recovery_op(h, get_recovery_op_priority());
   return started;
 }
 
@@ -10364,7 +10364,7 @@ int ReplicatedPG::recover_replicas(int max, ThreadPool::TPHandle &handle)
     }
   }
 
-  pgbackend->run_recovery_op(h, cct->_conf->osd_recovery_op_priority);
+  pgbackend->run_recovery_op(h, get_recovery_op_priority());
   return started;
 }
 
@@ -10709,7 +10709,7 @@ int ReplicatedPG::recover_backfill(
     prep_backfill_object_push(to_push[i].get<0>(), to_push[i].get<1>(),
 	    to_push[i].get<2>(), to_push[i].get<3>(), h);
   }
-  pgbackend->run_recovery_op(h, cct->_conf->osd_recovery_op_priority);
+  pgbackend->run_recovery_op(h, get_recovery_op_priority());
 
   dout(5) << "backfill_pos is " << backfill_pos << dendl;
   for (set<hobject_t, hobject_t::Comparator>::iterator i = backfills_in_flight.begin();

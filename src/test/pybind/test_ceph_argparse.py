@@ -1034,7 +1034,8 @@ class TestOSD(TestArgparse):
         for var in ('size', 'min_size', 'crash_replay_interval',
                     'pg_num', 'pgp_num', 'crush_ruleset', 'auid', 'fast_read',
                     'scrub_min_interval', 'scrub_max_interval',
-                    'deep_scrub_interval'):
+                    'deep_scrub_interval', 'recovery_priority',
+                    'recovery_op_priority'):
             self.assert_valid_command(['osd', 'pool', 'get', 'poolname', var])
         assert_equal({}, validate_command(sigdict, ['osd', 'pool']))
         assert_equal({}, validate_command(sigdict, ['osd', 'pool',
@@ -1053,7 +1054,8 @@ class TestOSD(TestArgparse):
                     'pg_num', 'pgp_num', 'crush_ruleset',
                     'hashpspool', 'auid', 'fast_read',
                     'scrub_min_interval', 'scrub_max_interval',
-                    'deep_scrub_interval'):
+                    'deep_scrub_interval', 'recovery_priority',
+                    'recovery_op_priority'):
             self.assert_valid_command(['osd', 'pool',
                                        'set', 'poolname', var, 'value'])
         assert_equal({}, validate_command(sigdict, ['osd', 'pool',
