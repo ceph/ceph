@@ -57,14 +57,11 @@ class Integration(object):
         # INTERNALERROR> IndexError: list index out of range
         # move that to def tearDown for debug and when it works move it
         # back in tearDownClass so it is not called on every test
+        ownedby = "ownedby='" + teuth_config.openstack['ip']
         all_instances = teuthology.misc.sh("openstack server list -f json --long")
         for instance in json.loads(all_instances):
-            if 'teuthology=' in instance['Properties']:
+            if ownedby in instance['Properties']:
                 teuthology.misc.sh("openstack server delete --wait " + instance['ID'])
-        teuthology.misc.sh("""
-teuthology/openstack/setup-openstack.sh \
-  --populate-paddles
-        """)
 
     def setup_worker(self):
         self.logs = self.d + "/log"
