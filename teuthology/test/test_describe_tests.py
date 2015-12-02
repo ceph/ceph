@@ -2,7 +2,8 @@
 import pytest
 
 from fake_fs import make_fake_fstools
-from teuthology.describe_tests import tree_with_info, extract_info
+from teuthology.describe_tests import (tree_with_info, extract_info,
+                                       get_combinations)
 from teuthology.exceptions import ParseError
 
 realistic_fs = {
@@ -105,7 +106,7 @@ expected_rbd_features = [
 class TestDescribeTests(object):
 
     def setup(self):
-        self.fake_listdir, _, self.fake_isdir, self.fake_open = \
+        self.fake_listdir, self.fake_isfile, self.fake_isdir, self.fake_open = \
             make_fake_fstools(realistic_fs)
 
     def test_no_filters(self):
@@ -182,6 +183,38 @@ class TestDescribeTests(object):
                                      expected_facets,
                                      expected_rbd_features,
                                      expected_desc))
+
+    def test_combinations_only_facets(self):
+        headers, rows = get_combinations('basic', [], None, 1, None, None, True,
+                                         self.fake_isdir, self.fake_open,
+                                         self.fake_isfile, self.fake_listdir)
+        assert headers == sorted(set(filter(bool, expected_facets)))
+        assert rows == [['install', 'fixed-1', 'rbd_api_tests']]
+
+    def test_combinations_desc_features(self):
+        headers, rows = get_combinations('basic', ['desc', 'rbd_features'],
+                                         None, 1, None, None, False,
+                                         self.fake_isdir, self.fake_open,
+                                         self.fake_isfile, self.fake_listdir)
+        assert headers == ['desc', 'rbd_features']
+        assert rows == [['install ceph\nsingle node cluster\nc/c++ librbd api tests with default settings',
+                         'default']]
+
+    def test_combinations_filter_in(self):
+        headers, rows = get_combinations('basic', [], None, 0, ['old_format'],
+                                         None, True,
+                                         self.fake_isdir, self.fake_open,
+                                         self.fake_isfile, self.fake_listdir)
+        assert headers == sorted(set(filter(bool, expected_facets)))
+        assert rows == [['install', 'fixed-1', 'rbd_api_tests_old_format']]
+
+    def test_combinations_filter_out(self):
+        headers, rows = get_combinations('basic', [], None, 0, None,
+                                         ['old_format'], True,
+                                         self.fake_isdir, self.fake_open,
+                                         self.fake_isfile, self.fake_listdir)
+        assert headers == sorted(set(filter(bool, expected_facets)))
+        assert rows == [['install', 'fixed-1', 'rbd_api_tests']]
 
 
 def test_extract_info_dir():
