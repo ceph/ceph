@@ -19,10 +19,13 @@ struct md_config_t;
 
 // Write a pidfile with the current pid, using the configuration in the
 // provided conf structure.
-int pidfile_write(const md_config_t *conf);
+int pidfile_write();
 
 // Remove the pid file that was previously written by pidfile_write.
 // This is safe to call in a signal handler context.
-int pidfile_remove(void);
+int pidfile_remove();
+
+// test whether the pid_file is being used by another process
+int pidfile_open(const md_config_t *conf);
 
 #endif
