@@ -480,18 +480,13 @@ AC_SUBST(GCOV_PREFIX_STRIP, `echo $(pwd)/src | tr -dc / | wc -c`)
 RADOSGW=0
 AS_IF([test "x$with_radosgw" != xno],
 	    [AC_CHECK_LIB([fcgi], [FCGX_Init],
-             [AC_CHECK_LIB([expat], [XML_Parse],
-              [AC_CHECK_LIB([curl], [curl_easy_init],
-               [RADOSGW=1
-	        AC_CHECK_HEADER([fastcgi/fcgiapp.h],
-		 [AC_DEFINE([FASTCGI_INCLUDE_DIR], [1], [FastCGI headers are in /usr/include/fastcgi])])
-	       ],
-	       [if test "x$with_radosgw" != "xcheck"; then
-		    AC_MSG_FAILURE([--with-radosgw was given but libcurl (libcurl-dev on debian) not found])
-	       fi])
-              ],
+             [AC_CHECK_LIB([curl], [curl_easy_init],
+              [RADOSGW=1
+	       AC_CHECK_HEADER([fastcgi/fcgiapp.h],
+		[AC_DEFINE([FASTCGI_INCLUDE_DIR], [1], [FastCGI headers are in /usr/include/fastcgi])])
+	      ],
 	      [if test "x$with_radosgw" != "xcheck"; then
-		   AC_MSG_FAILURE([--with-radosgw was given but libexpat (libexpat1-dev on debian) not found])
+		   AC_MSG_FAILURE([--with-radosgw was given but libcurl (libcurl-dev on debian) not found])
 	      fi])
              ],
 	     [if test "x$with_radosgw" != "xcheck"; then
@@ -505,6 +500,9 @@ AS_IF([test "$RADOSGW" = "1"],
               [AC_CHECK_LIB([curl], [curl_multi_wait],
                             AC_DEFINE([HAVE_CURL_MULTI_WAIT], [1], [Define if have curl_multi_wait()]))
               ])
+
+# expat? needed for rgw and dencoder
+AC_CHECK_LIB([expat], [XML_Parse], [], AC_MSG_FAILURE([libexpat not found]))
 
 # fuse?
 AC_ARG_WITH([fuse],
