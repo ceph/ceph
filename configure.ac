@@ -1315,8 +1315,8 @@ AC_ARG_WITH([eventfd],
             ,
             [with_eventfd=yes])
 AS_IF([test "x$with_eventfd" != xno],
-    AC_CHECK_HEADERS(sys/eventfd.h,
-                     [AC_DEFINE(HAVE_EVENTFD, 1, [Have eventfd extension.])]))
+    [AC_CHECK_HEADERS(sys/eventfd.h,
+                     [AC_DEFINE(HAVE_EVENTFD, 1, [Have eventfd extension.])])])
 AM_CONDITIONAL(WITH_EVENTFD, [ test "$with_eventfd" = "yes" ])
 
 # Checks for typedefs, structures, and compiler characteristics.
