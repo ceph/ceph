@@ -9,6 +9,7 @@ PY_DISTUTILS = \
 	CPPFLAGS="-iquote \${abs_srcdir}/include ${AM_CPPFLAGS} ${CPPFLAGS}" \
 	CFLAGS="-iquote \${abs_srcdir}/include ${AM_CFLAGS} ${CFLAGS}" \
 	LDFLAGS="-L\${abs_builddir}/.libs $(subst -pie,,${AM_LDFLAGS}) ${LDFLAGS}" \
+	CYTHON_BUILD_DIR="$(shell readlink -f $(builddir))/build" \
 	${PYTHON} ./setup.py
 
 pybind-all: librbd.la ${srcdir}/ceph_ver.h
@@ -32,7 +33,9 @@ pybind-install-exec: ${srcdir}/ceph_ver.h
 	else \
 		options=--prefix=$(prefix) ; \
 	fi ; \
-	cd $(srcdir)/pybind; $(PY_DISTUTILS) install \
+	cd $(srcdir)/pybind; $(PY_DISTUTILS) build \
+	--build-base $(shell readlink -f $(builddir))/build \
+	install \
 	$$options $$root \
 	--single-version-externally-managed \
 	--record /dev/null \
