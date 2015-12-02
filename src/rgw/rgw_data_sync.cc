@@ -2098,6 +2098,11 @@ int RGWBucketShardIncrementalSyncCR::operate()
           ldout(store->ctx(), 20) << "[inc sync] skipping object: " << bucket_name << ":" << bucket_id << ":" << shard_id << "/" << key << ": canceled operation" << dendl;
           continue;
         }
+        if (entry->state != CLS_RGW_STATE_COMPLETE) {
+          set_status() << "non-complete operation, skipping";
+          ldout(store->ctx(), 20) << "[inc sync] skipping object: " << bucket_name << ":" << bucket_id << ":" << shard_id << "/" << key << ": non-complete operation" << dendl;
+          continue;
+        }
         ldout(store->ctx(), 20) << "[inc sync] syncing object: " << bucket_name << ":" << bucket_id << ":" << shard_id << "/" << key << dendl;
         inc_marker.position = entry->id;
         updated_status = false;
