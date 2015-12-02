@@ -300,6 +300,7 @@ int rgw_lookup(struct rgw_fs *rgw_fs,
       rgw_fh = parent->ref();
     } else {
       /* name lookup in root--for now) just get a handle */
+      /* XXX RGWStatBucket? */
       LookupFHResult fhr = fs->lookup_fh(parent, path);
       rgw_fh = get<0>(fhr);
 
@@ -307,6 +308,8 @@ int rgw_lookup(struct rgw_fs *rgw_fs,
 	return -ENOMEM;
     }
   } else {
+    /* XXX need to stat either-of <object_name>, <object_name/>,
+     * only one of which can exist;  atomicity? */
     std::string object_name{path};
     RGWStatObjRequest req(cct, fs->get_user(),
 			  parent->bucket_name(), object_name,
