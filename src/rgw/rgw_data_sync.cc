@@ -196,7 +196,6 @@ public:
   }
 
   int operate() {
-    RGWRESTConn *conn = store->rest_master_conn;
     reenter(this) {
       yield {
 	char buf[16];
