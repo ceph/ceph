@@ -51,9 +51,19 @@ void AsyncRequest<T>::start_request() {
 
 template <typename T>
 void AsyncRequest<T>::finish_request() {
-  Mutex::Locker async_ops_locker(m_image_ctx.async_ops_lock);
-  assert(m_xlist_item.remove_myself());
-  m_image_ctx.async_requests_cond.Signal();
+  decltype(m_image_ctx.async_requests_waiters) waiters;
+  {
+    Mutex::Locker async_ops_locker(m_image_ctx.async_ops_lock);
+    assert(m_xlist_item.remove_myself());
+
+    if (m_image_ctx.async_requests.empty()) {
+      waiters = std::move(m_image_ctx.async_requests_waiters);
+    }
+  }
+
+  for (auto ctx : waiters) {
+    ctx->complete(0);
+  }
 }
 
 } // namespace librbd

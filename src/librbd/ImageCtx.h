@@ -5,6 +5,7 @@
 
 #include "include/int_types.h"
 
+#include <list>
 #include <map>
 #include <set>
 #include <string>
@@ -134,9 +135,10 @@ namespace librbd {
 
     xlist<AsyncOperation*> async_ops;
     xlist<AsyncRequest<>*> async_requests;
-    Cond async_requests_cond;
+    std::list<Context*> async_requests_waiters;
 
-    ObjectMap object_map;
+    ObjectMap object_map;         // TODO
+    ObjectMap *object_map_ptr;
 
     atomic_t async_request_seq;
 
@@ -264,10 +266,15 @@ namespace librbd {
     void flush(Context *on_safe);
 
     void cancel_async_requests();
+    void cancel_async_requests(Context *on_finish);
     void apply_metadata_confs();
 
-    void open_journal();
-    int close_journal(bool force);
+    ObjectMap *create_object_map();
+
+    Journal *create_journal();
+    void open_journal();            // TODO remove
+    int close_journal(bool force);  // TODO remove
+
     void clear_pending_completions();
   };
 }

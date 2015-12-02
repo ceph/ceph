@@ -75,6 +75,8 @@ public:
                                 ProgressContext &prog_ctx);
   int notify_rename(const std::string &image_name);
 
+  void notify_request_lock();
+
   void notify_lock_state();
   static void notify_header_update(librados::IoCtx &io_ctx,
                                    const std::string &oid);
@@ -267,7 +269,6 @@ private:
   void notify_released_lock();
 
   void schedule_request_lock(bool use_timer, int timer_delay = -1);
-  void notify_request_lock();
 
   int notify_lock_owner(bufferlist &bl);
 

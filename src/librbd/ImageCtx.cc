@@ -151,7 +151,7 @@ struct C_InvalidateCache : public Context {
       object_cacher(NULL), writeback_handler(NULL), object_set(NULL),
       readahead(),
       total_bytes_read(0), copyup_finisher(NULL),
-      object_map(*this), aio_work_queue(NULL), op_work_queue(NULL),
+      object_map(*this), object_map_ptr(nullptr), aio_work_queue(NULL), op_work_queue(NULL),
       refresh_in_progress(false), asok_hook(new LibrbdAdminSocketHook(this))
   {
     md_ctx.dup(p);
@@ -860,19 +860,27 @@ struct C_InvalidateCache : public Context {
   }
 
   void ImageCtx::cancel_async_requests() {
-    Mutex::Locker l(async_ops_lock);
-    ldout(cct, 10) << "canceling async requests: count="
-                   << async_requests.size() << dendl;
+    C_SaferCond ctx;
+    cancel_async_requests(&ctx);
+    ctx.wait();
+  }
 
-    for (xlist<AsyncRequest<>*>::iterator it = async_requests.begin();
-         !it.end(); ++it) {
-      ldout(cct, 10) << "canceling async request: " << *it << dendl;
-      (*it)->cancel();
+  void ImageCtx::cancel_async_requests(Context *on_finish) {
+    {
+      Mutex::Locker async_ops_locker(async_ops_lock);
+      if (!async_requests.empty()) {
+        ldout(cct, 10) << "canceling async requests: count="
+                       << async_requests.size() << dendl;
+        for (auto req : async_requests) {
+          ldout(cct, 10) << "canceling async request: " << req << dendl;
+          req->cancel();
+        }
+        async_requests_waiters.push_back(on_finish);
+        return;
+      }
     }
 
-    while (!async_requests.empty()) {
-      async_requests_cond.Wait(async_ops_lock);
-    }
+    on_finish->complete(0);
   }
 
   void ImageCtx::clear_pending_completions() {
@@ -1012,6 +1020,14 @@ struct C_InvalidateCache : public Context {
     ASSIGN_OPTION(journal_object_flush_bytes);
     ASSIGN_OPTION(journal_object_flush_age);
     ASSIGN_OPTION(journal_pool);
+  }
+
+  ObjectMap *ImageCtx::create_object_map() {
+    return new ObjectMap(*this);
+  }
+
+  Journal *ImageCtx::create_journal() {
+    return new Journal(*this);
   }
 
   void ImageCtx::open_journal() {

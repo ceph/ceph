@@ -878,6 +878,7 @@ if(${WITH_RBD})
     librbd/AsyncRequest.cc
     librbd/CopyupRequest.cc
     librbd/DiffIterate.cc
+    librbd/ExclusiveLock.cc
     librbd/ImageCtx.cc
     librbd/ImageWatcher.cc
     librbd/internal.cc
@@ -889,6 +890,8 @@ if(${WITH_RBD})
     librbd/LibrbdWriteback.cc
     librbd/ObjectMap.cc
     librbd/Utils.cc
+    librbd/exclusive_lock/AcquireRequest.cc
+    librbd/exclusive_lock/ReleaseRequest.cc
     librbd/object_map/InvalidateRequest.cc
     librbd/object_map/LockRequest.cc
     librbd/object_map/Request.cc

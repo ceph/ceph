@@ -248,6 +248,11 @@ void Journal::open() {
   create_journaler();
 }
 
+void Journal::open(Context *on_finish) {
+  open();
+  wait_for_journal_ready(on_finish);
+}
+
 int Journal::close() {
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 20) << this << " " << __func__ << ": state=" << m_state << dendl;
@@ -286,6 +291,11 @@ int Journal::close() {
 
   destroy_journaler();
   return 0;
+}
+
+void Journal::close(Context *on_finish) {
+  // TODO
+  assert(false);
 }
 
 uint64_t Journal::append_io_event(AioCompletion *aio_comp,

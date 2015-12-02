@@ -17,6 +17,7 @@ librbd_internal_la_SOURCES = \
 	librbd/AsyncRequest.cc \
 	librbd/CopyupRequest.cc \
 	librbd/DiffIterate.cc \
+	librbd/ExclusiveLock.cc \
 	librbd/ImageCtx.cc \
 	librbd/ImageWatcher.cc \
 	librbd/internal.cc \
@@ -26,6 +27,8 @@ librbd_internal_la_SOURCES = \
 	librbd/LibrbdWriteback.cc \
 	librbd/ObjectMap.cc \
 	librbd/Utils.cc \
+	librbd/exclusive_lock/AcquireRequest.cc \
+	librbd/exclusive_lock/ReleaseRequest.cc \
 	librbd/object_map/InvalidateRequest.cc \
 	librbd/object_map/LockRequest.cc \
 	librbd/object_map/Request.cc \
@@ -82,6 +85,7 @@ noinst_HEADERS += \
 	librbd/AsyncRequest.h \
 	librbd/CopyupRequest.h \
 	librbd/DiffIterate.h \
+	librbd/ExclusiveLock.h \
 	librbd/ImageCtx.h \
 	librbd/ImageWatcher.h \
 	librbd/internal.h \
@@ -96,6 +100,8 @@ noinst_HEADERS += \
 	librbd/TaskFinisher.h \
 	librbd/Utils.h \
 	librbd/WatchNotifyTypes.h \
+	librbd/exclusive_lock/AcquireRequest.h \
+	librbd/exclusive_lock/ReleaseRequest.h \
 	librbd/object_map/InvalidateRequest.h \
 	librbd/object_map/LockRequest.h \
 	librbd/object_map/Request.h \
