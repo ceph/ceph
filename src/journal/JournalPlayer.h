@@ -108,7 +108,7 @@ private:
 
   void process_state(uint64_t object_number, int r);
   int process_prefetch(uint64_t object_number);
-  int process_playback();
+  int process_playback(uint64_t object_number);
 
   void fetch(uint64_t object_num);
   void handle_fetched(uint64_t object_num, int r);
