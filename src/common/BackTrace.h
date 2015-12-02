@@ -1,6 +1,7 @@
 #ifndef CEPH_BACKTRACE_H
 #define CEPH_BACKTRACE_H
 
+#include "acconfig.h"
 #include <iosfwd>
 #ifdef HAVE_EXECINFO_H
 #include <execinfo.h>
@@ -24,6 +25,7 @@ struct BackTrace {
 #else
     skip = 0;
     size = 0;
+    strings = nullptr;
 #endif
   }
   ~BackTrace() {
