@@ -27,6 +27,7 @@ for arversion in `ls -v $dir/archive`; do
 
       # is there a fwd incompat change between $arversion and $version?
       incompat=""
+      incompat_paths=""
       sawarversion=0
       for iv in `ls -v $dir/archive`; do
         if [ "$iv" = "$arversion" ]; then
@@ -35,6 +36,17 @@ for arversion in `ls -v $dir/archive`; do
 
         if [ $sawarversion -eq 1 ] && [ -e "$dir/archive/$iv/forward_incompat/$type" ]; then
           incompat="$iv"
+
+          # Check if we'll be ignoring only specified objects, not whole type. If so, remember
+          # all paths for this type into variable. Assuming that this path won't contain any
+          # whitechars (implication of above for loop).
+          if [ -d "$dir/archive/$iv/forward_incompat/$type" ]; then
+            if [ -n "`ls -v $dir/archive/$iv/forward_incompat/$type/`" ]; then
+              incompat_paths="$incompat_paths $dir/archive/$iv/forward_incompat/$type"
+            else
+              echo "type $type directory empty, ignoring whole type instead of single objects"
+            fi;
+          fi
         fi
 
         if [ "$iv" = "$version" ]; then
@@ -43,11 +55,35 @@ for arversion in `ls -v $dir/archive`; do
       done
 
       if [ -n "$incompat" ]; then
-        echo "skipping incompat $type version $arversion, changed at $incompat < code $myversion"
-        continue
+        if [ -z "$incompat_paths" ]; then
+          echo "skipping incompat $type version $arversion, changed at $incompat < code $myversion"
+          continue
+        else
+          # If we are ignoring not whole type, but objects that are in $incompat_path,
+          # we don't skip here, just give info.
+          echo "postponed skip one of incompact $type version $arversion, changed at $incompat < code $myversion"
+        fi;
       fi
 
       for f in `ls $vdir/objects/$type`; do
+
+        skip=0;
+        # Check if processed object $f of $type should be skipped (postponed skip)
+        if [ -n "$incompat_paths" ]; then
+            for i_path in $incompat_paths; do
+              # Check if $f is a symbolic link and if it's pointing to existing target
+              if [ -L "$i_path/$f" ]; then
+                echo "skipping object $f of type $type"
+                skip=1
+                break
+              fi;
+            done;
+        fi;
+
+        if [ $skip -ne 0 ]; then
+          continue
+        fi;
+
         #echo "\t$vdir/$type/$f"
         if ! ./ceph-dencoder type $type import $vdir/objects/$type/$f decode dump_json > $tmp1; then
           echo "**** failed to decode $vdir/objects/$type/$f ****"
