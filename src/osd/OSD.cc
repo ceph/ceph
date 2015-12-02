@@ -1573,7 +1573,7 @@ OSD::OSD(CephContext *cct_, ObjectStore *store_,
   session_waiting_lock("OSD::session_waiting_lock"),
   heartbeat_lock("OSD::heartbeat_lock"),
   heartbeat_stop(false), heartbeat_update_lock("OSD::heartbeat_update_lock"),
-  heartbeat_need_update(true), heartbeat_epoch(0),
+  heartbeat_need_update(true),
   hbclient_messenger(hb_clientm),
   hb_front_server_messenger(hb_front_serverm),
   hb_back_server_messenger(hb_back_serverm),
@@ -3526,7 +3526,6 @@ void OSD::maybe_update_heartbeat_peers()
 
   dout(10) << "maybe_update_heartbeat_peers updating" << dendl;
 
-  heartbeat_epoch = osdmap->get_epoch();
 
   // build heartbeat from set
   if (is_active()) {
