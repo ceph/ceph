@@ -214,3 +214,9 @@ def test_extract_info_not_a_list():
 
 def test_extract_info_not_a_dict():
     check_parse_error({'a.yaml': 'description: [[a, b]]'})
+
+def test_extract_info_empty_file():
+    simple_fs = {'a.yaml': ''}
+    _, _, fake_isdir, fake_open = make_fake_fstools(simple_fs)
+    info = extract_info('a.yaml', [], fake_isdir, fake_open)
+    assert info == {}

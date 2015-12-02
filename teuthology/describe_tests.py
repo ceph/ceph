@@ -31,11 +31,15 @@ def main(args):
     print(table)
 
 def extract_info(file_name, fields, _isdir=os.path.isdir, _open=open):
+    empty_result = {f: '' for f in fields}
     if _isdir(file_name) or not file_name.endswith('.yaml'):
-        return {f: '' for f in fields}
+        return empty_result
 
     with _open(file_name, 'r') as f:
         parsed = yaml.load(f)
+
+    if not isinstance(parsed, dict):
+        return empty_result
 
     description = parsed.get('description', [{}])
     if not (isinstance(description, list) and
