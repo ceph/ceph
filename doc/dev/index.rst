@@ -1,9 +1,6 @@
-====================
-Contributing to Ceph
-====================
-----------------------
-A Guide for Developers
-----------------------
+============================================
+Contributing to Ceph: A Guide for Developers
+============================================
 
 :Author: Loic Dachary
 :Author: Nathan Cutler
@@ -12,7 +9,7 @@ A Guide for Developers
 .. note:: The old (pre-2016) developer documentation has been moved to :doc:`/dev/index-old`.
 
 .. contents::
-   :depth: 4
+   :depth: 3
 
 Introduction
 ============
