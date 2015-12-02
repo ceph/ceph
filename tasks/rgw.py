@@ -662,74 +662,81 @@ def configure_regions_and_zones(ctx, config, regions, role_endpoints, realm):
           cmd=['-p', '.rgw.root', 'rm', 'zone_info.default'])
 
     # read master zonegroup and master_zone
-    for region, info in region_info.iteritems():
-        if info['is_master']:
-            master_zonegroup = region
-            master_zone = info['master_zone']
-            for client in config.iterkeys():
-                if role_zones[client]['region'] == master_zonegroup and role_zones[client]['zone'] == master_zone:
-                    master_client = client
-                    break
+    for zonegroup, zg_info in region_info.iteritems():
+        if zg_info['is_master']:
+            master_zonegroup = zonegroup
+            master_zone = zg_info['master_zone']
             break
 
+    for client in config.iterkeys():
+        (zonegroup, zone, zone_info, user_info) = role_zones[client]
+        if zonegroup == master_zonegroup and zone == master_zone:
+            master_client = client
+            break
+
+    log.debug('master zonegroup =%r', master_zonegroup)
+    log.debug('master zone = %r', master_zone)
+    log.debug('master client = %r', master_client)
+
     rgwadmin(ctx, master_client,
-             cmd=['-n', master_client, 'realm', 'create', '--rgw-realm=', realm],
+             cmd=['-n', master_client, 'realm', 'create', '--rgw-realm', realm, '--default'],
+             check_status=True)
+
+    for region, info in region_info.iteritems():
+        region_json = json.dumps(info)
+        log.debug('region info is: %s', region_json)
+        rgwadmin(ctx, master_client,
+                 cmd=['-n', master_client, 'zonegroup', 'set'],
+                 stdin=StringIO(region_json),
+                 check_status=True)
+
+    rgwadmin(ctx, master_client,
+             cmd=['-n', master_client, 'zonegroup', 'default', '--rgw-zonegroup', region],
+             check_status=True)
+
+    for role, (zonegroup, zone, zone_info, user_info) in role_zones.iteritems():
+        (remote,) = ctx.cluster.only(role).remotes.keys()
+        for pool_info in zone_info['placement_pools']:
+            remote.run(args=['sudo', 'ceph', 'osd', 'pool', 'create',
+                             pool_info['val']['index_pool'], '64', '64'])
+            if ctx.rgw.ec_data_pool:
+                create_ec_pool(remote, pool_info['val']['data_pool'],
+                               zone, 64, ctx.rgw.erasure_code_profile)
+            else:
+                create_replicated_pool(remote, pool_info['val']['data_pool'], 64)
+        zone_json = json.dumps(dict(zone_info.items() + user_info.items()))
+        log.debug("zone info is: %s"), zone_json
+        rgwadmin(ctx, master_client,
+                 cmd=['-n', master_client, 'zone', 'set', '--rgw-zonegroup', zonegroup,
+                      '--rgw-zone', zone],
+                 stdin=StringIO(zone_json),
+                 check_status=True)
+
+    rgwadmin(ctx, master_client,
+             cmd=['-n', master_client, 'zone', 'default', zone],
              check_status=True)
 
     rgwadmin(ctx, master_client,
-             cmd=['-n', master_client, 'realm', 'default', '--rgw-realm=', realm],
-             check_status=True)
-
-    rgwadmin(ctx, master_client,
-             cmd=['-n', master_client, 'period', 'update'],
+             cmd=['-n', master_client, 'period', 'update', '--commit'],
              check_status=True)
 
     for client in config.iterkeys():
-        for role, (_, zone, zone_info, user_info) in role_zones.iteritems():
-            rados(ctx, mon,
-                  cmd=['-p', zone_info['domain_root'],
-                       'rm', 'region_info.default'])
-            rados(ctx, mon,
-                  cmd=['-p', zone_info['domain_root'],
-                       'rm', 'zone_info.default'])
-
-            (remote,) = ctx.cluster.only(role).remotes.keys()
-            for pool_info in zone_info['placement_pools']:
-                remote.run(args=['sudo', 'ceph', 'osd', 'pool', 'create',
-                                 pool_info['val']['index_pool'], '64', '64'])
-                if ctx.rgw.ec_data_pool:
-                    create_ec_pool(remote, pool_info['val']['data_pool'],
-                                   zone, 64, ctx.rgw.erasure_code_profile)
-                else:
-                    create_replicated_pool(
-                        remote, pool_info['val']['data_pool'],
-                        64)
-
+        if client != master_client:
+            host, port = role_endpoints[client]
+            endpoint = 'http://{host}:{port}/'.format(host=host, port=port)
+            log.debug("endpoint: %s"), endpoint
             rgwadmin(ctx, client,
-                     cmd=['-n', client, 'zone', 'set', '--rgw-zone', zone],
-                     stdin=StringIO(json.dumps(dict(
-                         zone_info.items() + user_info.items()))),
+                cmd=['-n', client, 'realm', 'pull', '--rgw-realm', realm, '--url',
+                     user_info['system_key']['access_key'], '--secret',
+                     user_info['system_key']['secret_key']],
                      check_status=True)
 
-        for region, info in region_info.iteritems():
-            region_json = json.dumps(info)
-            log.debug('region info is: %s', region_json)
             rgwadmin(ctx, client,
-                     cmd=['-n', client, 'region', 'set'],
-                     stdin=StringIO(region_json),
+                cmd=['-n', client, 'period', 'pull', '--rgw-realm', realm, '--url',
+                     endpoint, '--acess_key',
+                     user_info['system_key']['access_key'], '--secret',
+                     user_info['system_key']['secret_key']],
                      check_status=True)
-            if info['is_master']:
-                rgwadmin(ctx, client,
-                         cmd=['-n', client,
-                              'region', 'default',
-                              '--rgw-region', region],
-                         check_status=True)
-
-        rgwadmin(ctx, client, cmd=['-n', client, 'regionmap', 'update'])
-
-        rgwadmin(ctx, master_client,
-                 cmd=['-n', master_client, 'period', 'commit'],
-                 check_status=True)
 
     yield
 
