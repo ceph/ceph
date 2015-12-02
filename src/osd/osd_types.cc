@@ -900,7 +900,11 @@ static opt_mapping_t opt_mapping = boost::assign::map_list_of
 	   ("scrub_max_interval", pool_opts_t::opt_desc_t(
 	     pool_opts_t::SCRUB_MAX_INTERVAL, pool_opts_t::DOUBLE))
 	   ("deep_scrub_interval", pool_opts_t::opt_desc_t(
-	     pool_opts_t::DEEP_SCRUB_INTERVAL, pool_opts_t::DOUBLE));
+	     pool_opts_t::DEEP_SCRUB_INTERVAL, pool_opts_t::DOUBLE))
+           ("recovery_priority", pool_opts_t::opt_desc_t(
+             pool_opts_t::RECOVERY_PRIORITY, pool_opts_t::INT))
+           ("recovery_op_priority", pool_opts_t::opt_desc_t(
+             pool_opts_t::RECOVERY_OP_PRIORITY, pool_opts_t::INT));
 
 bool pool_opts_t::is_opt_name(const std::string& name) {
     return opt_mapping.find(name) != opt_mapping.end();
