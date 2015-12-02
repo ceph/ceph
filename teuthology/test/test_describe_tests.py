@@ -139,8 +139,6 @@ class TestDescribeTests(object):
                                      expected_rbd_features))
 
     def test_no_matching(self):
-        fake_listdir, _, fake_isdir, fake_open = \
-            make_fake_fstools(realistic_fs)
         rows = tree_with_info('basic', ['extra'], False, '', [],
                               self.fake_listdir, self.fake_isdir,
                               self.fake_open)
@@ -153,8 +151,6 @@ class TestDescribeTests(object):
                                      [''] * len(expected_tree)))
 
     def test_multiple_filters(self):
-        fake_listdir, _, fake_isdir, fake_open = \
-            make_fake_fstools(realistic_fs)
         rows = tree_with_info('basic', ['desc', 'rbd_features'], False,
                               '', [], self.fake_listdir,
                               self.fake_isdir, self.fake_open)
