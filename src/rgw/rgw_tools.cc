@@ -4,6 +4,7 @@
 #include <errno.h>
 
 #include "common/errno.h"
+#include "common/safe_io.h"
 
 #include "include/types.h"
 
@@ -141,9 +142,9 @@ static int ext_mime_map_init(CephContext *cct, const char *ext_map)
     goto done;
   }
 
-  ret = read(fd, buf, st.st_size + 1);
+  ret = safe_read(fd, buf, st.st_size + 1);
   if (ret != st.st_size) {
-    // huh? file size has changed, what are the odds?
+    // huh? file size has changed?
     ldout(cct, 0) << "ext_mime_map_init(): raced! will retry.." << dendl;
     free(buf);
     close(fd);
