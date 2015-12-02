@@ -430,13 +430,14 @@ void RGWGetBucketLocation_ObjStore_S3::send_response()
   end_header(s, this);
   dump_start(s);
 
-  string api_name;
+  string api_name = s->bucket_info.zonegroup;
 
   RGWZoneGroup zonegroup;
   int ret = store->get_zonegroup(s->bucket_info.zonegroup, zonegroup);
   if (!ret) {
     api_name = zonegroup.api_name;
-  } 
+  }
+    
 
   s->formatter->dump_format_ns("LocationConstraint",
 			       "http://doc.s3.amazonaws.com/doc/2006-03-01/",
