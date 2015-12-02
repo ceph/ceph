@@ -160,14 +160,19 @@ int global_init_prefork(CephContext *cct, int flags)
 {
   if (g_code_env != CODE_ENVIRONMENT_DAEMON)
     return -1;
+
   const md_config_t *conf = cct->_conf;
   if (!conf->daemonize) {
+
+    if (pidfile_open(g_conf) < 0) {
+      exit(1);
+    }
+
     if (atexit(pidfile_remove_void)) {
       derr << "global_init_daemonize: failed to set pidfile_remove function "
 	   << "to run at exit." << dendl;
     }
-
-    pidfile_write(g_conf);
+    pidfile_write();
 
     return -1;
   }
@@ -190,7 +195,7 @@ void global_init_daemonize(CephContext *cct, int flags)
 	 << cpp_strerror(ret) << dendl;
     exit(1);
   }
-
+ 
   global_init_postfork_start(cct);
   global_init_postfork_finish(cct, flags);
 }
@@ -199,6 +204,10 @@ void global_init_postfork_start(CephContext *cct)
 {
   // restart log thread
   g_ceph_context->_log->start();
+
+  if (pidfile_open(g_conf) < 0) {
+    exit(1);
+  }
 
   if (atexit(pidfile_remove_void)) {
     derr << "global_init_daemonize: failed to set pidfile_remove function "
@@ -228,7 +237,7 @@ void global_init_postfork_start(CephContext *cct)
     exit(1);
   }
 
-  pidfile_write(g_conf);
+  pidfile_write();
 }
 
 void global_init_postfork_finish(CephContext *cct, int flags)
