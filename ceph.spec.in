@@ -253,6 +253,15 @@ Requires:	librbd1 = %{epoch}:%{version}-%{release}
 %description -n rbd-fuse
 FUSE based client to map Ceph rbd images to files
 
+%package -n rbd-nbd
+Summary:	Ceph RBD client base on NBD
+Group:		System Environment/Base
+Requires:	%{name}
+Requires:	librados2 = %{epoch}:%{version}-%{release}
+Requires:	librbd1 = %{epoch}:%{version}-%{release}
+%description -n rbd-nbd
+NBD based client to map Ceph rbd images to local device
+
 %package radosgw
 Summary:	Rados REST gateway
 Group:		Development/Libraries
@@ -968,6 +977,12 @@ fi
 %defattr(-,root,root,-)
 %{_bindir}/rbd-fuse
 %{_mandir}/man8/rbd-fuse.8*
+
+#################################################################################
+%files -n rbd-nbd
+%defattr(-,root,root,-)
+%{_bindir}/rbd-nbd
+%{_mandir}/man8/rbd-nbd.8*
 
 #################################################################################
 %files radosgw
