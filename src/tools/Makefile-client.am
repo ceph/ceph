@@ -46,6 +46,7 @@ rbd_SOURCES = \
 	tools/rbd/action/ImportDiff.cc \
 	tools/rbd/action/Info.cc \
 	tools/rbd/action/Kernel.cc \
+	tools/rbd/action/Nbd.cc \
 	tools/rbd/action/List.cc \
 	tools/rbd/action/Lock.cc \
 	tools/rbd/action/MergeDiff.cc \
