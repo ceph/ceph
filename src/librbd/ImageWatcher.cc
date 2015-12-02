@@ -35,8 +35,10 @@ ImageWatcher::ImageWatcher(ImageCtx &image_ctx)
   : m_image_ctx(image_ctx),
     m_watch_lock(unique_lock_name("librbd::ImageWatcher::m_watch_lock", this)),
     m_watch_ctx(*this), m_watch_handle(0),
-    m_watch_state(WATCH_STATE_UNREGISTERED), m_lock_supported(false),
-    m_lock_owner_state(LOCK_OWNER_STATE_NOT_LOCKED),
+    m_watch_state(WATCH_STATE_UNREGISTERED),
+    m_refresh_lock(unique_lock_name("librbd::ImageWatcher::m_refresh_lock",
+                                    this)),
+    m_lock_supported(false), m_lock_owner_state(LOCK_OWNER_STATE_NOT_LOCKED),
     m_listeners_lock(unique_lock_name("librbd::ImageWatcher::m_listeners_lock", this)),
     m_listeners_in_use(false),
     m_task_finisher(new TaskFinisher<Task>(*m_image_ctx.cct)),
@@ -131,7 +133,7 @@ int ImageWatcher::refresh() {
 
   bool lock_support_changed = false;
   {
-    RWLock::WLocker watch_locker(m_watch_lock);
+    Mutex::Locker refresh_locker(m_refresh_lock);
     if (m_lock_supported != is_lock_supported()) {
       m_lock_supported = is_lock_supported();
       lock_support_changed = true;
