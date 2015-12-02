@@ -36,6 +36,9 @@
       lock remove (lock rm)       Release a lock on an image.
       map                         Map image to a block device using the kernel.
       merge-diff                  Merge two diff exports together.
+      nbd list (nbd ls)           List the nbd devices already used.
+      nbd map                     Map image to a nbd device.
+      nbd unmap                   Unmap a nbd device.
       object-map rebuild          Rebuild an invalid object map.
       remove (rm)                 Delete an image.
       rename (mv)                 Rename image within pool.
@@ -556,6 +559,38 @@
   Optional arguments
     --path arg           path to merged diff (or '-' for stdout)
     --no-progress        disable progress output
+  
+  rbd help nbd list
+  usage: rbd nbd list 
+  
+  List the nbd devices already used.
+  
+  rbd help nbd map
+  usage: rbd nbd map [--pool <pool>] [--image <image>] [--snap <snap>] 
+                     [--read-only] [--device <device>] 
+                     <image-or-snap-spec> 
+  
+  Map image to a nbd device.
+  
+  Positional arguments
+    <image-or-snap-spec>  image or snapshot specification
+                          (example: [<pool-name>/]<image-name>[@<snap-name>])
+  
+  Optional arguments
+    -p [ --pool ] arg     pool name
+    --image arg           image name
+    --snap arg            snapshot name
+    --read-only           mount read-only
+    --device arg          specify nbd device
+  
+  rbd help nbd unmap
+  usage: rbd nbd unmap 
+                       <device-spec> 
+  
+  Unmap a nbd device.
+  
+  Positional arguments
+    <device-spec>        specify nbd device
   
   rbd help object-map rebuild
   usage: rbd object-map rebuild [--pool <pool>] [--image <image>] 
