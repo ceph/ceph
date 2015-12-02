@@ -43,6 +43,9 @@
 #include "include/rados/librados.h"
 #include "include/rbd/librbd.h"
 
+#include "common/SubProcess.h"
+#include "common/safe_io.h"
+
 #define NUMPRINTCOLUMNS 32	/* # columns of data to print on each line */
 
 /*
@@ -255,8 +258,8 @@ get_random(void)
 struct rbd_ctx {
 	const char *name;	/* image name */
 	rbd_image_t image;	/* image handle */
-	const char *krbd_name;	/* image /dev/rbd<id> name */
-	int krbd_fd;		/* image /dev/rbd<id> fd */
+	const char *krbd_name;	/* image /dev/rbd<id> name */ /* reused for nbd test */
+	int krbd_fd;		/* image /dev/rbd<id> fd */ /* reused for nbd test */
 };
 
 #define RBD_CTX_INIT	(struct rbd_ctx) { NULL, NULL, NULL, -1 }
@@ -788,6 +791,127 @@ const struct rbd_operations krbd_operations = {
 	krbd_get_size,
 	krbd_resize,
 	krbd_clone,
+	krbd_flatten,
+};
+
+int
+nbd_open(const char *name, struct rbd_ctx *ctx)
+{
+	int r;
+	int fd;
+	char dev[4096];
+	char *devnode;
+
+	SubProcess process("rbd-nbd", SubProcess::KEEP, SubProcess::PIPE);
+	process.add_cmd_arg("map");
+	std::string img;
+	img.append(pool);
+	img.append("/");
+	img.append(name);
+	process.add_cmd_arg(img.c_str());
+
+	r = __librbd_open(name, ctx);
+	if (r < 0)
+		return r;
+
+        r = process.spawn();
+        if (r < 0) {
+		prt("nbd_open failed to run rbd-nbd error: %s\n", process.err());
+		return r;
+        }
+	r = safe_read(process.get_stdout(), dev, sizeof(dev));
+	if (r < 0) {
+		prt("nbd_open failed to get nbd device path\n");
+		return r;
+	}
+	for (int i = 0; i < r; ++i)
+	  if (dev[i] == 10 || dev[i] == 13)
+	    dev[i] = 0;
+	dev[r] = 0;
+	r = process.join();
+	if (r) {
+		prt("rbd-nbd failed with error: %s", process.err());
+		return -EINVAL;
+	}
+
+	devnode = strdup(dev);
+	if (!devnode)
+		return -ENOMEM;
+
+	fd = open(devnode, O_RDWR | o_direct);
+	if (fd < 0) {
+		r = -errno;
+		prt("open(%s) failed\n", devnode);
+		return r;
+	}
+
+	ctx->krbd_name = devnode;
+	ctx->krbd_fd = fd;
+
+	return 0;
+}
+
+int
+nbd_close(struct rbd_ctx *ctx)
+{
+	int r;
+
+	assert(ctx->krbd_name && ctx->krbd_fd >= 0);
+
+	if (close(ctx->krbd_fd) < 0) {
+		r = -errno;
+		prt("close(%s) failed\n", ctx->krbd_name);
+		return r;
+	}
+
+	SubProcess process("rbd-nbd");
+	process.add_cmd_arg("unmap");
+	process.add_cmd_arg(ctx->krbd_name);
+
+        r = process.spawn();
+        if (r < 0) {
+		prt("nbd_close failed to run rbd-nbd error: %s\n", process.err());
+		return r;
+        }
+	r = process.join();
+	if (r) {
+		prt("rbd-nbd failed with error: %d", process.err());
+		return -EINVAL;
+	}
+
+	free((void *)ctx->krbd_name);
+
+	ctx->krbd_name = NULL;
+	ctx->krbd_fd = -1;
+
+	return __librbd_close(ctx);
+}
+
+int
+nbd_clone(struct rbd_ctx *ctx, const char *src_snapname,
+	  const char *dst_imagename, int *order, int stripe_unit,
+	  int stripe_count)
+{
+	int ret;
+
+	ret = __krbd_flush(ctx, false);
+	if (ret < 0)
+		return ret;
+
+	return __librbd_clone(ctx, src_snapname, dst_imagename, order,
+			      stripe_unit, stripe_count, false);
+}
+
+const struct rbd_operations nbd_operations = {
+	nbd_open,
+	nbd_close,
+	krbd_read,
+	krbd_write,
+	krbd_flush,
+	krbd_discard,
+	krbd_get_size,
+	krbd_resize,
+	nbd_clone,
 	krbd_flatten,
 };
 
@@ -1824,6 +1948,7 @@ usage(void)
 #endif
 "	-H: do not use punch hole calls\n\
 	-K: enable krbd mode (use -t and -h too)\n\
+	-M: enable rbd-nbd mode (use -t and -h too)\n\
 	-L: fsxLite - no file creations & no file size changes\n\
 	-N numops: total # operations to do (default infinity)\n\
 	-O: use oplen (see -o flag) for every op (default random)\n\
@@ -2010,7 +2135,7 @@ main(int argc, char **argv)
 
 	setvbuf(stdout, (char *)0, _IOLBF, 0); /* line buffered stdout */
 
-	while ((ch = getopt(argc, argv, "b:c:dfh:l:m:no:p:qr:s:t:w:xyACD:FHKLN:OP:RS:UWZ"))
+	while ((ch = getopt(argc, argv, "b:c:dfh:l:m:no:p:qr:s:t:w:xyACD:FHKMLN:OP:RS:UWZ"))
 	       != EOF)
 		switch (ch) {
 		case 'b':
@@ -2125,6 +2250,10 @@ main(int argc, char **argv)
 		case 'K':
 			prt("krbd mode enabled\n");
 			ops = &krbd_operations;
+			break;
+		case 'M':
+			prt("rbd-nbd mode enabled\n");
+			ops = &nbd_operations;
 			break;
 		case 'L':
 			prt("lite mode not supported for rbd\n");

@@ -321,6 +321,15 @@ Commands
 :command:`showmapped`
   Show the rbd images that are mapped via the rbd kernel module.
 
+:command:`nbd map` [--device *device-path*] [--read-only] *image-spec* | *snap-spec*
+  Maps the specified image to a block device via the rbd-nbd tool.
+
+:command:`nbd unmap` *device-path*
+  Unmaps the block device that was mapped via the rbd-nbd tool.
+
+:command:`nbd list`
+  Show the list of used nbd devices via the rbd-nbd tool.
+
 :command:`status` *image-spec*
   Show the status of the image, including which clients have it open.
 
