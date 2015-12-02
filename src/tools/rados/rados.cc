@@ -1407,11 +1407,8 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
   i = opts.find("format");
   if (i != opts.end()) {
     const char *format = i->second.c_str();
-    if (strcmp(format, "xml") == 0)
-      formatter = new XMLFormatter(pretty_format);
-    else if (strcmp(format, "json") == 0)
-      formatter = new JSONFormatter(pretty_format);
-    else {
+    formatter = Formatter::create(format);
+    if (!formatter) {
       cerr << "unrecognized format: " << format << std::endl;
       return -EINVAL;
     }
