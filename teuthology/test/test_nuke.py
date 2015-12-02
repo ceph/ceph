@@ -1,5 +1,6 @@
 import json
 import datetime
+import subprocess
 
 from mock import patch, Mock, DEFAULT
 
@@ -67,6 +68,20 @@ class TestNuke(object):
                 ) as m:
             nuke.stale_openstack_volumes(ctx, volume_list)
             m['openstack_delete_volume'].assert_called_with(id)
+
+        #
+        # A volume that no longer exists is ignored
+        #
+        def sh(cmd):
+            raise subprocess.CalledProcessError('ERROR', 'FAIL')
+
+        with patch.multiple(
+                nuke,
+                sh=sh,
+                openstack_delete_volume=DEFAULT,
+                ) as m:
+            nuke.stale_openstack_volumes(ctx, volume_list)
+            m['openstack_delete_volume'].assert_not_called()
 
     def test_stale_openstack_nodes(self):
         ctx = Mock()
@@ -147,6 +162,7 @@ class TestNuke(object):
         #
         with patch.multiple(
                 nuke.OpenStackInstance,
+                exists=lambda _: True,
                 get_created=lambda _: 1,
                 __getitem__=lambda _, key: name,
                 destroy=DEFAULT,
@@ -161,6 +177,7 @@ class TestNuke(object):
         #
         with patch.multiple(
                 nuke.OpenStackInstance,
+                exists=lambda _: True,
                 get_created=lambda _: 1000000000,
                 __getitem__=lambda _, key: name,
                 destroy=DEFAULT,
@@ -172,11 +189,28 @@ class TestNuke(object):
             })
             m['destroy'].assert_called_with()
         #
+        # An instance that turns out to not exist any longer
+        # is ignored.
+        #
+        with patch.multiple(
+                nuke.OpenStackInstance,
+                exists=lambda _: False,
+                __getitem__=lambda _, key: name,
+                destroy=DEFAULT,
+                ) as m:
+            nuke.stale_openstack_instances(ctx, {
+                name: { 'id': 'UUID', },
+            }, {
+                misc.canonicalize_hostname(name, user=None): {},
+            })
+            m['destroy'].assert_not_called()
+        #
         # An instance created but not locked after a while is
         # destroyed.
         #
         with patch.multiple(
                 nuke.OpenStackInstance,
+                exists=lambda _: True,
                 get_created=lambda _: nuke.OPENSTACK_DELAY + 1,
                 __getitem__=lambda _, key: name,
                 destroy=DEFAULT,
@@ -192,6 +226,7 @@ class TestNuke(object):
         #
         with patch.multiple(
                 nuke.OpenStackInstance,
+                exists=lambda _: True,
                 get_created=lambda _: nuke.OPENSTACK_DELAY + 1,
                 __getitem__=lambda _, key: name,
                 destroy=DEFAULT,
