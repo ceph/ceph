@@ -53,7 +53,8 @@ int cls_unregister(cls_handle_t handle)
 
 int cls_register_method(cls_handle_t hclass, const char *method,
                         int flags,
-                        cls_method_call_t class_call, cls_method_handle_t *handle)
+                        cls_method_call_t class_call, cls_method_handle_t *handle,
+                        cls_method_cxx_async_call_t async_class_call)
 {
   if (!(flags & (CLS_METHOD_RD | CLS_METHOD_WR)))
     return -EINVAL;
@@ -65,11 +66,13 @@ int cls_register_method(cls_handle_t hclass, const char *method,
 }
 
 int cls_register_cxx_method(cls_handle_t hclass, const char *method,
-                            int flags,
-			    cls_method_cxx_call_t class_call, cls_method_handle_t *handle)
+			    int flags, cls_method_cxx_call_t class_call,
+                            cls_method_handle_t *handle,
+                            cls_method_cxx_async_call_t async_class_call)
 {
   ClassHandler::ClassData *cls = (ClassHandler::ClassData *)hclass;
-  cls_method_handle_t hmethod = (cls_method_handle_t)cls->register_cxx_method(method, flags, class_call);
+  cls_method_handle_t hmethod =
+    (cls_method_handle_t)cls->register_cxx_method(method, flags, class_call, async_class_call);
   if (handle)
     *handle = hmethod;
   return (hmethod != NULL);
@@ -240,6 +243,34 @@ int cls_cxx_stat(cls_method_context_t hctx, uint64_t *size, time_t *mtime)
   if (mtime)
     *mtime = ut.sec();
   return 0;
+}
+
+static void
+cls_cxx_read_async_callback(ReplicatedPG::OpContext *ctx, OSDOp *osd_op, bool asyncmode, int result)
+{
+  osd_op_callback_t callback = osd_op->parent_op_callback;
+  OSDOp *parent_op = osd_op->parent_op;
+  parent_op->outdata.claim(osd_op->outdata);
+  // Invoke the parent op's callback.
+  callback(ctx, parent_op, asyncmode, result);
+  delete osd_op;
+}
+
+int cls_cxx_read_async(cls_method_context_t hctx, int ofs, int len, bufferlist *outbl,
+                       OSDOp& osdop_in, cls_method_cxx_cb_t callback)
+{
+  int ret;
+  ReplicatedPG::OpContext **pctx = (ReplicatedPG::OpContext **) hctx;
+  vector<OSDOp> *ops = new vector<OSDOp>;
+  OSDOp *osd_op = new OSDOp(&osdop_in, (osd_op_callback_t) callback);
+
+  osd_op->op.op = CEPH_OSD_OP_READ;
+  osd_op->op.extent.offset = ofs;
+  osd_op->op.extent.length = len;
+  ops->push_back(*osd_op);
+
+  ret = (*pctx)->pg->do_osd_ops(*pctx, *ops, (osd_op_callback_t) cls_cxx_read_async_callback);
+  return ret;
 }
 
 int cls_cxx_read(cls_method_context_t hctx, int ofs, int len, bufferlist *outbl)

@@ -1922,6 +1922,18 @@ public:
     uint32_t op_flags = 0,
     bool allow_eio = false) = 0;
 
+   virtual bool async_read_capable() { return false;}
+   virtual int create_read_completion_threads() {return 0;}
+   virtual int async_read_dispatch(
+    Context *ctx,
+    const coll_t *cid,
+    const ghobject_t& oid,
+    uint64_t offset,
+    size_t len,
+    bufferlist* bl,
+    uint32_t op_flags = 0,
+    bool allow_eio = false) {return -EINVAL;}
+
   /**
    * fiemap -- get extent map of data of an object
    *

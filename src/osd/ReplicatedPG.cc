@@ -105,6 +105,27 @@ struct OnReadComplete : public Context {
   ~OnReadComplete() {}
 };
 
+struct OnAsyncReadComplete : public Context {
+  ReplicatedPG::OpContext *opcontext;
+  OSDOp& osd_op;
+
+  OnAsyncReadComplete(
+    ReplicatedPG::OpContext *ctx,
+    OSDOp& osd_op_arg) :
+    opcontext(ctx), osd_op(osd_op_arg) {}
+
+  void finish(int r) {
+    int result = r;
+
+    // Check if all OSDOp at this level have completed -- if so, invoke callback of parent.
+    osd_op_callback_t callback =
+        osd_op.opvec_control->check_completion(true, &result, &osd_op);
+    if (callback)
+      callback(opcontext, &osd_op, true, result);
+  }
+  ~OnAsyncReadComplete() {}
+};
+
 // OpContext
 void ReplicatedPG::OpContext::start_async_reads(ReplicatedPG *pg)
 {
@@ -115,6 +136,7 @@ void ReplicatedPG::OpContext::start_async_reads(ReplicatedPG *pg)
     new OnReadComplete(pg, this), pg->get_pool().fast_read);
   pending_async_reads.clear();
 }
+
 void ReplicatedPG::OpContext::finish_read(ReplicatedPG *pg)
 {
   assert(inflightreads > 0);
@@ -2795,7 +2817,15 @@ void ReplicatedPG::execute_ctx(OpContext *ctx)
         reqid.name._num, reqid.tid, reqid.inc);
   }
 
-  int result = prepare_transaction(ctx);
+  (void) prepare_transaction(ctx);
+}
+
+void ReplicatedPG::execute_ctx_continue(OpContext *ctx, int result)
+{
+  OpRequestRef op = ctx->op;
+  MOSDOp *m = static_cast<MOSDOp*>(op->get_req());
+  ObjectContextRef obc = ctx->obc;
+  map<hobject_t,ObjectContextRef, hobject_t::BitwiseComparator>& src_obc = ctx->src_obc;
 
   {
 #ifdef WITH_LTTNG
@@ -3888,13 +3918,50 @@ bool ReplicatedPG::maybe_create_new_object(OpContext *ctx)
   return false;
 }
 
-int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
+static void osd_op_call_callback(ReplicatedPG::OpContext *ctx, OSDOp *osd_op, bool asyncmode, int result)
+{
+  ctx->pg->osd_op_call_completion(ctx, osd_op, asyncmode, result);
+}
+
+void ReplicatedPG::osd_op_call_completion(OpContext *ctx, OSDOp *osd_op, bool asyncmode, int result)
+{
+  OSDOp* parent = osd_op->parent_op;
+  assert(parent);
+  bufferlist outdata = osd_op->outdata;
+  ceph_osd_op& op = osd_op->op;
+  dout(10) << "method called response length=" << outdata.length() << dendl;
+  op.extent.length = outdata.length();
+  parent->outdata.claim_append(outdata);
+  async_opvec_control *cp = parent->opvec_control;
+
+  // Invoke the parent osd_op's callback (lone child op has completed).
+  osd_op_callback_t callback =
+        cp->check_completion(asyncmode, &result, parent);
+
+  if (callback)
+    callback(ctx, parent, asyncmode, result);
+
+  delete osd_op;
+}
+
+// @ctx OpContext which captures all in-progress state associated with reads or writes
+// @ops vector of operations that are associated with this OpContext
+// @callback: For async usage: if non-null *and* if do_osd_ops determines that certain operations
+// can be executed asynchronously, then it will return immediately and invoke callback when
+// the operation is completed.
+// @async_countp For async usage, if any operations are executed asynchronously, then
+// this returns a non-zero value to indicate async/sync mode to the caller.
+int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops,
+                             osd_op_callback_t callback_in)
 {
   int result = 0;
+  int async_count = 0;
   SnapSetContext *ssc = ctx->obc->ssc;
   ObjectState& obs = ctx->new_obs;
   object_info_t& oi = obs.oi;
   const hobject_t& soid = oi.soid;
+  async_opvec_control *opvec_controlp = NULL;
+  bool use_lock = (ops.size() > 1);
 
   bool first_read = true;
 
@@ -3916,7 +3983,7 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 
     bufferlist::iterator bp = osd_op.indata.begin();
 
-    // user-visible modifcation?
+    // user-visible modification?
     switch (op.op) {
       // non user-visible modifications
     case CEPH_OSD_OP_WATCH:
@@ -4026,6 +4093,29 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 				&osd_op.outdata, maybe_crc, oi.size, osd,
 				soid, op.flags))));
 	  dout(10) << " async_read noted for " << soid << dendl;
+	} else if (callback_in && osd->store->async_read_capable()) {
+
+          list<pair<boost::tuple<uint64_t, uint64_t, unsigned>,
+                    pair<bufferlist*, Context*> > > async_read;
+
+	  async_read.push_back(
+	    make_pair(
+	      boost::make_tuple(op.extent.offset, op.extent.length, op.flags),
+	      make_pair(&osd_op.outdata, (Context *) NULL)));
+
+          OnAsyncReadComplete *on_async_read_complete =
+            new OnAsyncReadComplete(ctx, osd_op);
+
+          ++async_count;
+          if (opvec_controlp == NULL)
+            opvec_controlp = new async_opvec_control(use_lock, callback_in);
+          opvec_controlp->add_osd_op(&osd_op);
+
+          pgbackend->objects_read_async_use_aio(
+            ctx->obc->obs.oi.soid,
+            async_read,
+            on_async_read_complete);
+
 	} else {
 	  int r = pgbackend->objects_read_sync(
 	    soid, op.extent.offset, op.extent.length, op.flags, &osd_op.outdata);
@@ -4231,10 +4321,25 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	if (flags & CLS_METHOD_WR)
 	  ctx->user_modify = true;
 
-	bufferlist outdata;
 	dout(10) << "call method " << cname << "." << mname << dendl;
 	int prev_rd = ctx->num_read;
 	int prev_wr = ctx->num_write;
+
+        // Call the asynchronous version if available. This may free up this
+        // thread sooner to process more Workqueue commands.
+        if (callback_in && (flags & CLS_METHOD_ASYNC)) {
+          OSDOp *child_op = new OSDOp(&osd_op, callback_in);
+          ++async_count;
+          if (opvec_controlp == NULL)
+            opvec_controlp = new async_opvec_control(use_lock, callback_in);
+          opvec_controlp->add_osd_op(&osd_op);
+
+          result = method->exec_async((cls_method_context_t) &ctx, *child_op,
+                                      (cls_method_cxx_cb_t) osd_op_call_callback);
+          break;
+        }
+
+	bufferlist outdata;
 	result = method->exec((cls_method_context_t)&ctx, indata, outdata);
 
 	if (ctx->num_read > prev_rd && !(flags & CLS_METHOD_RD)) {
@@ -5761,6 +5866,23 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
     if (result < 0)
       break;
   }
+
+  osd_op_callback_t callback = NULL;
+  // Check for callbacks that may have completed but were blocked.
+  // This includes recursive (this thread) and ObjectStore callbacks.
+  if (opvec_controlp) {
+    ctx->ctx_opvec_controls.push_back(opvec_controlp);
+    // If opvec was not locked then it executes without any supervision
+    // from here.
+    if (use_lock) {
+      opvec_controlp->callbacks_locked = false;
+      callback = opvec_controlp->check_completion(false, &result);
+    }
+  } else
+    callback = callback_in;
+
+  if (callback)
+    callback(ctx, &ops[0], false, result);
   return result;
 }
 
@@ -6350,11 +6472,15 @@ hobject_t ReplicatedPG::get_temp_recovery_object(eversion_t version, snapid_t sn
   return hoid;
 }
 
+static void prepare_transaction_callback(void *ctx_arg, OSDOp *osd_op, bool asyncmode, int result)
+{
+  ReplicatedPG::OpContext *ctx = (ReplicatedPG::OpContext *) ctx_arg;
+  ctx->pg->prepare_transaction_continue(ctx, result, asyncmode);
+}
+
 int ReplicatedPG::prepare_transaction(OpContext *ctx)
 {
   assert(!ctx->ops.empty());
-  
-  const hobject_t& soid = ctx->obs->oi.soid;
 
   // valid snap context?
   if (!ctx->snapc.is_valid()) {
@@ -6363,45 +6489,62 @@ int ReplicatedPG::prepare_transaction(OpContext *ctx)
   }
 
   // prepare the actual mutation
-  int result = do_osd_ops(ctx, ctx->ops);
-  if (result < 0)
-    return result;
+  // Processing will be resumed by prepare_transaction_callback().
+  int result = do_osd_ops(ctx, ctx->ops, prepare_transaction_callback);
+  return result;
+}
 
-  // read-op?  done?
-  if (ctx->op_t->empty() && !ctx->modify) {
-    unstable_stats.add(ctx->delta_stats);
-    return result;
-  }
+int ReplicatedPG::prepare_transaction_continue(OpContext *ctx, int result, bool async_call)
+{
+  if (async_call)
+    lock();
 
-  // check for full
-  if ((ctx->delta_stats.num_bytes > 0 ||
-       ctx->delta_stats.num_objects > 0) &&  // FIXME: keys?
-      (pool.info.has_flag(pg_pool_t::FLAG_FULL) ||
-       get_osdmap()->test_flag(CEPH_OSDMAP_FULL))) {
-    MOSDOp *m = static_cast<MOSDOp*>(ctx->op->get_req());
-    if (ctx->reqid.name.is_mds() ||   // FIXME: ignore MDS for now
-	m->has_flag(CEPH_OSD_FLAG_FULL_FORCE)) {
-      dout(20) << __func__ << " full, but proceeding due to FULL_FORCE or MDS"
-	       << dendl;
-    } else if (m->has_flag(CEPH_OSD_FLAG_FULL_TRY)) {
-      // they tried, they failed.
-      dout(20) << __func__ << " full, replying to FULL_TRY op" << dendl;
-      return pool.info.has_flag(pg_pool_t::FLAG_FULL) ? -EDQUOT : -ENOSPC;
-    } else {
-      // drop request
-      dout(20) << __func__ << " full, dropping request (bad client)" << dendl;
-      return -EAGAIN;
+  do {
+    if (result < 0)
+      break;
+
+    // read-op?  done?
+    if (ctx->op_t->empty() && !ctx->modify) {
+      unstable_stats.add(ctx->delta_stats);
+      break;
     }
-  }
 
-  // clone, if necessary
-  if (soid.snap == CEPH_NOSNAP)
-    make_writeable(ctx);
+    // check for full
+    if ((ctx->delta_stats.num_bytes > 0 ||
+         ctx->delta_stats.num_objects > 0) &&  // FIXME: keys?
+        (pool.info.has_flag(pg_pool_t::FLAG_FULL) ||
+         get_osdmap()->test_flag(CEPH_OSDMAP_FULL))) {
+      MOSDOp *m = static_cast<MOSDOp*>(ctx->op->get_req());
+      if (ctx->reqid.name.is_mds() ||   // FIXME: ignore MDS for now
+          m->has_flag(CEPH_OSD_FLAG_FULL_FORCE)) {
+        dout(20) << __func__ << " full, but proceeding due to FULL_FORCE or MDS"
+                 << dendl;
+      } else if (m->has_flag(CEPH_OSD_FLAG_FULL_TRY)) {
+        // they tried, they failed.
+        dout(20) << __func__ << " full, replying to FULL_TRY op" << dendl;
+        result = pool.info.has_flag(pg_pool_t::FLAG_FULL) ? -EDQUOT : -ENOSPC;
+        break;
+      } else {
+        // drop request
+        dout(20) << __func__ << " full, dropping request (bad client)" << dendl;
+        result = -EAGAIN;
+        break;
+      }
+    }
 
-  finish_ctx(ctx,
-	     ctx->new_obs.exists ? pg_log_entry_t::MODIFY :
-	     pg_log_entry_t::DELETE);
+    const hobject_t& soid = ctx->obs->oi.soid;
+    // clone, if necessary
+    if (soid.snap == CEPH_NOSNAP)
+      make_writeable(ctx);
 
+    finish_ctx(ctx,
+               ctx->new_obs.exists ? pg_log_entry_t::MODIFY :
+               pg_log_entry_t::DELETE);
+  } while (0);
+
+  execute_ctx_continue(ctx, result);
+  if (async_call)
+    unlock();
   return result;
 }
 

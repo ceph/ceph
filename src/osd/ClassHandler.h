@@ -23,8 +23,11 @@ public:
     int flags;
     cls_method_call_t func;
     cls_method_cxx_call_t cxx_func;
+    cls_method_cxx_async_call_t cxx_async_func;
 
     int exec(cls_method_context_t ctx, bufferlist& indata, bufferlist& outdata);
+    int exec_async(cls_method_context_t ctx, OSDOp& osd_op,
+                   cls_method_cxx_cb_t cxx_callback);
     void unregister();
 
     int get_flags() {
@@ -32,7 +35,7 @@ public:
       return flags;
     }
 
-    ClassMethod() : cls(0), flags(0), func(0), cxx_func(0) {}
+    ClassMethod() : cls(0), flags(0), func(0), cxx_func(0), cxx_async_func(0) {}
   };
 
   struct ClassFilter {
@@ -73,7 +76,8 @@ public:
     ~ClassData() { }
 
     ClassMethod *register_method(const char *mname, int flags, cls_method_call_t func);
-    ClassMethod *register_cxx_method(const char *mname, int flags, cls_method_cxx_call_t func);
+    ClassMethod *register_cxx_method(const char *mname, int flags, cls_method_cxx_call_t func,
+                                     cls_method_cxx_async_call_t async_func = NULL);
     void unregister_method(ClassMethod *method);
 
     ClassFilter *register_cxx_filter(

@@ -528,6 +528,7 @@ FileStore::FileStore(const std::string &base, const std::string &jdev, osflagbit
   sync_entry_timeo_lock("sync_entry_timeo_lock"),
   timer(g_ceph_context, sync_entry_timeo_lock),
   stop(false), sync_thread(this),
+  async_read_avail(g_conf->filestore_async_threads > 0),
   fdcache(g_ceph_context),
   wbthrottle(g_ceph_context),
   throttle_ops(g_ceph_context, "filestore_ops",g_conf->filestore_queue_max_ops),
@@ -536,6 +537,7 @@ FileStore::FileStore(const std::string &base, const std::string &jdev, osflagbit
   op_tp(g_ceph_context, "FileStore::op_tp", g_conf->filestore_op_threads, "filestore_op_threads"),
   op_wq(this, g_conf->filestore_op_thread_timeout,
 	g_conf->filestore_op_thread_suicide_timeout, &op_tp),
+  read_completion_threads_lock("read_completion_threads_lock"),
   logger(NULL),
   read_error_lock("FileStore::read_error_lock"),
   m_filestore_commit_timeout(g_conf->filestore_commit_timeout),
@@ -563,6 +565,7 @@ FileStore::FileStore(const std::string &base, const std::string &jdev, osflagbit
   m_filestore_sloppy_crc_block_size(g_conf->filestore_sloppy_crc_block_size),
   m_filestore_max_alloc_hint_size(g_conf->filestore_max_alloc_hint_size),
   m_fs_type(0),
+  m_filestore_async_threads(g_conf->filestore_async_threads),
   m_filestore_max_inline_xattr_size(0),
   m_filestore_max_inline_xattrs(0)
 {
@@ -626,6 +629,15 @@ FileStore::~FileStore()
 
   if (m_filestore_do_dump) {
     dump_stop();
+  }
+
+  // Destroy the read completion threads and io contexts.
+  while (!read_completion_threads.empty()) {
+    list<ReadCompletionThread *>::iterator rct = read_completion_threads.begin();
+    io_context_t ctx = (*rct)->read_aio_ctx;
+    (*rct)->active = false;
+    io_destroy(ctx);
+    read_completion_threads.erase(rct);
   }
 }
 
@@ -1804,6 +1816,190 @@ void FileStore::queue_op(OpSequencer *osr, Op *o)
 	  << "   (queue has " << throttle_ops.get_current() << " ops and " << throttle_bytes.get_current() << " bytes)"
 	  << dendl;
   op_wq.queue(osr);
+}
+
+int FileStore::create_read_completion_threads()
+{
+  // NB: m_filestore_async_threads may be 0 (valid).
+  for (int i = 0; i < m_filestore_async_threads; i++) {
+
+    ReadCompletionThread *thr = new ReadCompletionThread(this);
+    /*
+     * FIXME: do we need to set priority?
+     * int r = thr->set_ioprio(thr->ioprio_class, thr->ioprio_priority);
+     */
+    read_completion_threads.push_back(thr);
+    thr->create();
+  }
+
+  next_read_submit_thread = read_completion_threads.begin();
+  return 0;
+}
+
+int FileStore::async_read_dispatch(
+  Context *ctx,
+  const coll_t *cid,
+  const ghobject_t& oid,
+  uint64_t off,
+  size_t len,
+  bufferlist *bl,
+  uint32_t op_flags,
+  bool allow_eio)
+{
+  FDRef fd;
+  off64_t offset = (off64_t) off;
+  int r = lfn_open(*cid, oid, false, &fd);
+  if (r < 0) {
+    dout(10) << "FileStore::read(" << *cid << "/" << oid << ") open error: "
+	     << cpp_strerror(r) << dendl;
+    return r;
+  }
+
+  if (len == 0) {
+    struct stat st;
+    memset(&st, 0, sizeof(struct stat));
+    int r = ::fstat(**fd, &st);
+    assert(r == 0);
+    len = st.st_size;
+  }
+
+#ifdef HAVE_POSIX_FADVISE
+  if (op_flags & CEPH_OSD_OP_FLAG_FADVISE_RANDOM)
+    posix_fadvise(**fd, offset, len, POSIX_FADV_RANDOM);
+  if (op_flags & CEPH_OSD_OP_FLAG_FADVISE_SEQUENTIAL)
+    posix_fadvise(**fd, offset, len, POSIX_FADV_SEQUENTIAL);
+#endif
+
+  // prealloc space for entire read
+  bufferptr *bptr = new bufferptr((unsigned) len);
+  bl->push_back(*bptr);
+
+  read_aio_bl(fd, bl, bptr, offset, len, ctx, op_flags, oid);
+  return r;
+}
+
+// See FileJournal::write_aio_bl()
+void FileStore::read_aio_bl(FDRef fdref, bufferlist *bl, bufferptr* bptr,
+                            off64_t& pos, size_t len, Context *ctx, uint32_t op_flags,
+                            const ghobject_t& oid)
+{
+  int fd = **fdref;
+  read_aio *rio = new read_aio(fdref, bl, pos, len, op_flags, oid, ctx);
+
+  // Select the right thread's iocontext (round-robin)
+  io_context_t *iocontext;
+  read_completion_threads_lock.Lock();
+  if (++next_read_submit_thread == read_completion_threads.end())
+    next_read_submit_thread = read_completion_threads.begin();
+  iocontext = &(*next_read_submit_thread)->read_aio_ctx;
+  read_completion_threads_lock.Unlock();
+
+  io_prep_pread(&rio->iocb, fd, bptr->c_str(), rio->len, pos);
+  dout(20) << "read_aio_bl .. " << rio->len << dendl;
+
+  rio_num++;
+  rio_bytes += rio->len;
+
+  iocb *piocb = &rio->iocb;
+  int attempts = 10;
+  do {
+    int r = io_submit(*iocontext, (long) 1, &piocb);
+    if (r < 0) {
+      derr << "io_submit len " << "~" << rio->len
+	   << " got " << cpp_strerror(r) << dendl;
+      if (r == -EAGAIN && attempts-- > 0) {
+	usleep(500);
+	continue;
+      }
+      assert(0 == "io_submit got unexpected error");
+    }
+  } while (false);
+}
+
+void FileStore::async_read_finish(read_aio *rio)
+{
+  int got = rio->len;
+  int retval = 0;
+  FDRef fd = rio->fd;
+  uint32_t op_flags = rio->op_flags;
+  uint64_t offset = rio->off;
+  uint64_t len = rio->len;
+  bufferlist *bl = rio->bl;
+  bufferptr bptr = rio->bptr;
+  const ghobject_t& oid = rio->oid;
+
+  if (got < 0) {
+    dout(10) << "FileStore::read(" << oid << ") pread error: " << cpp_strerror(got) << dendl;
+    lfn_close(fd);
+    retval = -EIO;
+    goto done;
+  }
+
+#ifdef HAVE_POSIX_FADVISE
+  if (op_flags & CEPH_OSD_OP_FLAG_FADVISE_DONTNEED)
+    posix_fadvise(**fd, offset, len, POSIX_FADV_DONTNEED);
+  if (op_flags & (CEPH_OSD_OP_FLAG_FADVISE_RANDOM | CEPH_OSD_OP_FLAG_FADVISE_SEQUENTIAL))
+    posix_fadvise(**fd, offset, len, POSIX_FADV_NORMAL);
+#endif
+
+  if (m_filestore_sloppy_crc && (!replaying || backend->can_checkpoint())) {
+    ostringstream ss;
+    int errors = backend->_crc_verify_read(**fd, offset, got, *bl, &ss);
+    if (errors > 0) {
+      dout(0) << "FileStore::read " << oid << " " << offset << "~"
+	      << got << " ... BAD CRC:\n" << ss.str() << dendl;
+      assert(0 == "bad crc on read");
+    }
+  }
+
+  lfn_close(fd);
+
+  dout(10) << "FileStore::read " << oid << " " << offset << "~"
+	   << got << "/" << len << dendl;
+  if (g_conf->filestore_debug_inject_read_err &&
+      debug_data_eio(oid)) {
+    retval = -EIO;
+  } else {
+    tracepoint(objectstore, read_exit, got);
+  }
+  
+done:
+  rio->status = retval;
+  rio->context->complete(rio->status);
+  delete rio;
+}
+
+void FileStore::read_finish_thread_entry(ReadCompletionThread *rct)
+{
+  io_context_t *iocontext = &rct->read_aio_ctx;
+  io_event event_array[MAX_READ_EVENTS];
+  int max_nr = 1;
+  
+  while (true) {
+    int rcvd = io_getevents(*iocontext, 1, max_nr, event_array, NULL);
+    if (rcvd < 0) {
+      if (rcvd == -EINTR) {
+	dout(0) << "io_getevents got " << cpp_strerror(rcvd) << dendl;
+	continue;
+      }
+      derr << "io_getevents got " << cpp_strerror(rcvd) << dendl;
+      if (!rct->active)
+        break;
+      assert(0 == "got unexpected error from io_getevents");
+    }
+    
+    for (int i = 0; i < rcvd; i++) {
+      read_aio *rio = (read_aio *) event_array[i].obj;
+      if (event_array[i].res != rio->len) {
+        derr << "aio to " << rio->off << "~" << rio->len
+             << " wrote " << event_array[i].res << dendl;
+        assert(0 == "unexpected aio error");
+      }
+
+      rio->done = true;
+      async_read_finish(rio);
+    }
+  }
 }
 
 void FileStore::op_queue_reserve_throttle(Op *o, ThreadPool::TPHandle *handle)
