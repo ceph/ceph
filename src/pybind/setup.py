@@ -29,7 +29,8 @@ class EggInfoCommand(egg_info):
 if (len(sys.argv) >= 2 and
     any(i in sys.argv[1:] for i in ('--help', 'clean', 'egg_info', '--version')
     )):
-    cythonize = lambda x: x
+    def cythonize(x, **kwargs):
+        return x
 
 setup(
     name = 'rbd',
@@ -43,7 +44,7 @@ setup(
             ["rbd.pyx"],
             libraries=["rbd"]
             )
-    ]),
+    ], build_dir=os.environ.get("CYTHON_BUILD_DIR", None)),
     cmdclass={
         "egg_info": EggInfoCommand,
     },
