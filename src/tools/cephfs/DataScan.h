@@ -260,7 +260,8 @@ class DataScan : public MDSUtility
 
     DataScan()
       : driver(NULL), data_pool_id(-1), n(0), m(1),
-        force_pool(false)
+        force_pool(false), force_corrupt(false),
+        force_init(false)
     {
     }
 

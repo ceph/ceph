@@ -495,7 +495,7 @@ int DataScan::scan_inodes()
     ceph_file_layout loaded_layout = g_default_file_layout;
     int r = ClsCephFSClient::fetch_inode_accumulate_result(
         data_io, oid, &backtrace, &loaded_layout, &accum_res);
-    
+
     if (r < 0) {
       dout(4) << "Unexpected error loading accumulated metadata from '"
               << oid << "': " << cpp_strerror(r) << dendl;
@@ -508,7 +508,6 @@ int DataScan::scan_inodes()
 
     const time_t file_mtime = accum_res.max_mtime;
     uint64_t file_size = 0;
-    uint32_t chunk_size = g_default_file_layout.fl_object_size;
     bool have_backtrace = !(backtrace.ancestors.empty());
 
     // This is the layout we will use for injection, populated either
@@ -516,8 +515,9 @@ int DataScan::scan_inodes()
     ceph_file_layout guessed_layout;
     guessed_layout.fl_pg_pool = data_pool_id;
 
-    // Calculate file_size, guess chunk_size
+    // Calculate file_size, guess the layout
     if (accum_res.ceiling_obj_index > 0) {
+      uint32_t chunk_size = g_default_file_layout.fl_object_size;
       // When there are multiple objects, the largest object probably
       // indicates the chunk size.  But not necessarily, because files
       // can be sparse.  Only make this assumption if size seen
@@ -531,9 +531,10 @@ int DataScan::scan_inodes()
         guessed_layout.fl_object_size = chunk_size;
         guessed_layout.fl_stripe_unit = chunk_size;
         guessed_layout.fl_stripe_count = 1;
-      } else if (loaded_layout.fl_object_size < accum_res.max_obj_size) {
+      } else if (!ceph_file_layout_is_valid(&loaded_layout) ||
+          loaded_layout.fl_object_size < accum_res.max_obj_size) {
         // If the max size seen exceeds what the stashed layout claims, then
-        // disbelieve it.  Guess instead.
+        // disbelieve it.  Guess instead.  Same for invalid layouts on disk.
         dout(4) << "bogus xattr layout on 0x" << std::hex << obj_name_ino
                 << std::dec << ", ignoring in favour of best guess" << dendl;
         guessed_layout.fl_object_size = chunk_size;
@@ -616,6 +617,14 @@ int DataScan::scan_inodes()
       }
     } else {
       file_size = accum_res.ceiling_obj_size;
+      if (loaded_layout.fl_pg_pool == uint32_t(-1)
+          || loaded_layout.fl_object_size < accum_res.max_obj_size) {
+        // No layout loaded, or inconsistent layout, use default
+        guessed_layout = g_default_file_layout;
+        guessed_layout.fl_pg_pool = data_pool_id;
+      } else {
+        guessed_layout = loaded_layout;
+      }
     }
 
     // Santity checking backtrace ino against object name
