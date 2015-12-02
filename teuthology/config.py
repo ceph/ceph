@@ -80,6 +80,9 @@ class YamlConfig(collections.MutableMapping):
         """
         return str(self)
 
+    def get(self, key, default=None):
+        return self._conf.get(key, default)
+
     def __str__(self):
         return yaml.safe_dump(self._conf, default_flow_style=False).strip()
 

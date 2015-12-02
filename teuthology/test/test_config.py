@@ -70,6 +70,13 @@ class TestYamlConfig(object):
         d.update(conf_obj)
         assert d["foo"] == "bar"
 
+    def test_get(self):
+        conf_obj = self.test_class()
+        assert conf_obj.get('foo') is None
+        assert conf_obj.get('foo', 'bar') == 'bar'
+        conf_obj.foo = 'baz'
+        assert conf_obj.get('foo') == 'baz'
+
 
 class TestTeuthologyConfig(TestYamlConfig):
     def setup(self):
