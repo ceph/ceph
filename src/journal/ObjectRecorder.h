@@ -135,7 +135,7 @@ private:
   void cancel_append_task();
   void schedule_append_task();
 
-  bool append(const AppendBuffer &append_buffer);
+  bool append(const AppendBuffer &append_buffer, bool *schedule_append);
   bool flush_appends(bool force);
   void handle_append_flushed(uint64_t tid, int r);
   void append_overflowed(uint64_t tid);
