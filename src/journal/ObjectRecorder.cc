@@ -44,11 +44,12 @@ ObjectRecorder::~ObjectRecorder() {
 
 bool ObjectRecorder::append(const AppendBuffers &append_buffers) {
   FutureImplPtr last_flushed_future;
+  bool schedule_append = false;
   {
     Mutex::Locker locker(m_lock);
     for (AppendBuffers::const_iterator iter = append_buffers.begin();
          iter != append_buffers.end(); ++iter) {
-      if (append(*iter)) {
+      if (append(*iter, &schedule_append)) {
         last_flushed_future = iter->first;
       }
     }
@@ -56,6 +57,10 @@ bool ObjectRecorder::append(const AppendBuffers &append_buffers) {
 
   if (last_flushed_future) {
     flush(last_flushed_future);
+  } else if (schedule_append) {
+    schedule_append_task();
+  } else {
+    cancel_append_task();
   }
   return (m_size + m_pending_bytes >= m_soft_max_size);
 }
@@ -63,6 +68,7 @@ bool ObjectRecorder::append(const AppendBuffers &append_buffers) {
 void ObjectRecorder::flush(Context *on_safe) {
   ldout(m_cct, 20) << __func__ << ": " << m_oid << dendl;
 
+  cancel_append_task();
   Future future;
   {
     Mutex::Locker locker(m_lock);
@@ -77,7 +83,6 @@ void ObjectRecorder::flush(Context *on_safe) {
       assert(!append_buffers.empty());
       future = Future(append_buffers.rbegin()->first);
     }
-    cancel_append_task();
   }
 
   if (future.is_valid()) {
@@ -130,11 +135,11 @@ void ObjectRecorder::claim_append_buffers(AppendBuffers *append_buffers) {
 bool ObjectRecorder::close_object() {
   ldout(m_cct, 20) << __func__ << ": " << m_oid << dendl;
 
+  cancel_append_task();
+
   Mutex::Locker locker(m_lock);
   m_object_closed = true;
-  if (flush_appends(true)) {
-    cancel_append_task();
-  }
+  flush_appends(true);
   return m_in_flight_appends.empty();
 }
 
@@ -162,17 +167,16 @@ void ObjectRecorder::schedule_append_task() {
   }
 }
 
-bool ObjectRecorder::append(const AppendBuffer &append_buffer) {
+bool ObjectRecorder::append(const AppendBuffer &append_buffer,
+                            bool *schedule_append) {
   assert(m_lock.is_locked());
 
   bool flush_requested = append_buffer.first->attach(&m_flush_handler);
   m_append_buffers.push_back(append_buffer);
   m_pending_bytes += append_buffer.second.length();
 
-  if (flush_appends(false)) {
-    cancel_append_task();
-  } else {
-    schedule_append_task();
+  if (!flush_appends(false)) {
+    *schedule_append = true;
   }
   return flush_requested;
 }
@@ -202,21 +206,30 @@ void ObjectRecorder::handle_append_flushed(uint64_t tid, int r) {
   ldout(m_cct, 10) << __func__ << ": " << m_oid << " tid=" << tid
                    << ", r=" << r << dendl;
 
-  Mutex::Locker locker(m_lock);
-  InFlightAppends::iterator iter = m_in_flight_appends.find(tid);
-  if (iter == m_in_flight_appends.end()) {
-    // must have seen an overflow on a previous append op
-    assert(m_overflowed);
-    return;
-  } else if (r == -EOVERFLOW) {
-    m_overflowed = true;
-    append_overflowed(tid);
-    return;
-  }
+  AppendBuffers append_buffers;
+  {
+    Mutex::Locker locker(m_lock);
+    InFlightAppends::iterator iter = m_in_flight_appends.find(tid);
+    if (iter == m_in_flight_appends.end()) {
+      // must have seen an overflow on a previous append op
+      assert(m_overflowed);
+      return;
+    } else if (r == -EOVERFLOW) {
+      m_overflowed = true;
+      append_overflowed(tid);
+      return;
+    }
 
-  assert(!m_overflowed || r != 0);
-  AppendBuffers &append_buffers = iter->second;
-  assert(!append_buffers.empty());
+    assert(!m_overflowed || r != 0);
+    append_buffers.swap(iter->second);
+    assert(!append_buffers.empty());
+
+    m_in_flight_appends.erase(iter);
+    if (m_in_flight_appends.empty() && m_object_closed) {
+      // all remaining unsent appends should be redirected to new object
+      notify_overflow();
+    }
+  }
 
   // Flag the associated futures as complete.
   for (AppendBuffers::iterator buf_it = append_buffers.begin();
@@ -224,12 +237,6 @@ void ObjectRecorder::handle_append_flushed(uint64_t tid, int r) {
     ldout(m_cct, 20) << __func__ << ": " << *buf_it->first << " marked safe"
                      << dendl;
     buf_it->first->safe(r);
-  }
-  m_in_flight_appends.erase(iter);
-
-  if (m_in_flight_appends.empty() && m_object_closed) {
-    // all remaining unsent appends should be redirected to new object
-    notify_overflow();
   }
 }
 

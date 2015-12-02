@@ -186,12 +186,12 @@ void JournalMetadata::set_active_set(uint64_t object_set) {
 
 void JournalMetadata::flush_commit_position() {
   {
+    Mutex::Locker timer_locker(m_timer_lock);
     Mutex::Locker locker(m_lock);
     if (m_commit_position_task_ctx == NULL) {
       return;
     }
 
-    Mutex::Locker timer_locker(m_timer_lock);
     m_timer->cancel_event(m_commit_position_task_ctx);
     m_commit_position_task_ctx = NULL;
   }
@@ -202,23 +202,28 @@ void JournalMetadata::set_commit_position(
     const ObjectSetPosition &commit_position, Context *on_safe) {
   assert(on_safe != NULL);
 
-  Mutex::Locker locker(m_lock);
-  ldout(m_cct, 20) << __func__ << ": current=" << m_client.commit_position
-                   << ", new=" << commit_position << dendl;
-  if (commit_position <= m_client.commit_position ||
-      commit_position <= m_commit_position) {
-    on_safe->complete(-ESTALE);
-    return;
+  Context *stale_ctx = nullptr;
+  {
+    Mutex::Locker timer_locker(m_timer_lock);
+    Mutex::Locker locker(m_lock);
+    ldout(m_cct, 20) << __func__ << ": current=" << m_client.commit_position
+                     << ", new=" << commit_position << dendl;
+    if (commit_position <= m_client.commit_position ||
+        commit_position <= m_commit_position) {
+      stale_ctx = on_safe;
+    } else {
+      stale_ctx = m_commit_position_ctx;
+
+      m_client.commit_position = commit_position;
+      m_commit_position = commit_position;
+      m_commit_position_ctx = on_safe;
+      schedule_commit_task();
+    }
   }
 
-  if (m_commit_position_ctx != NULL) {
-    m_commit_position_ctx->complete(-ESTALE);
+  if (stale_ctx != nullptr) {
+    stale_ctx->complete(-ESTALE);
   }
-
-  m_client.commit_position = commit_position;
-  m_commit_position = commit_position;
-  m_commit_position_ctx = on_safe;
-  schedule_commit_task();
 }
 
 void JournalMetadata::reserve_tid(const std::string &tag, uint64_t tid) {
@@ -298,9 +303,9 @@ void JournalMetadata::handle_refresh_complete(C_Refresh *refresh, int r) {
 }
 
 void JournalMetadata::schedule_commit_task() {
+  assert(m_timer_lock.is_locked());
   assert(m_lock.is_locked());
 
-  Mutex::Locker timer_locker(m_timer_lock);
   if (m_commit_position_task_ctx == NULL) {
     m_commit_position_task_ctx = new C_CommitPositionTask(this);
     m_timer->add_event_after(m_commit_interval, m_commit_position_task_ctx);
@@ -357,8 +362,8 @@ void JournalMetadata::handle_watch_notify(uint64_t notify_id, uint64_t cookie) {
 
 void JournalMetadata::handle_watch_error(int err) {
   lderr(m_cct) << "journal watch error: " << cpp_strerror(err) << dendl;
-  Mutex::Locker locker(m_lock);
   Mutex::Locker timer_locker(m_timer_lock);
+  Mutex::Locker locker(m_lock);
   if (m_initialized && err != -ENOENT) {
     schedule_watch_reset();
   }

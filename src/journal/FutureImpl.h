@@ -113,7 +113,7 @@ private:
   Contexts m_contexts;
 
   void consistent(int r);
-  void finish();
+  void finish_unlock();
 };
 
 void intrusive_ptr_add_ref(FutureImpl::FlushHandler *p);
