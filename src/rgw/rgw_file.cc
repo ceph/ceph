@@ -177,6 +177,7 @@ int rgw_mkdir(struct rgw_fs *rgw_fs,
   if (parent->is_root()) {
     /* bucket */
     fhr = fs->lookup_fh(parent, name);
+    rgw_fh = get<0>(fhr);
     uri += "/"; /* XXX */
     uri += name;
     RGWCreateBucketRequest req(cct, fs->get_user(), uri);
@@ -185,13 +186,13 @@ int rgw_mkdir(struct rgw_fs *rgw_fs,
     /* create an object representing the directory (naive version) */
     buffer::list bl;
     fhr = fs->lookup_fh(parent, name, RGWFileHandle::FLAG_PSEUDO);
+    rgw_fh = get<0>(fhr);
     string dir_name = rgw_fh->full_object_name() + "/";
     RGWPutObjRequest req(cct, fs->get_user(), rgw_fh->bucket_name(),
 			 dir_name, bl);
     rc = librgw.get_fe()->execute_req(&req);
   }
 
-  rgw_fh = get<0>(fhr);
   struct rgw_file_handle *rfh = rgw_fh->get_fh();
   *fh = rfh;
 
