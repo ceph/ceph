@@ -644,12 +644,12 @@ cdef class Image(object):
         After this is called, this object should not be used.
         """
         if not self.closed:
-            self.closed = True
             with nogil:
                 ret = rbd_close(self.image)
             if ret < 0:
                 raise make_ex(ret, 'error while closing image %s' % (
                               self.name,))
+            self.closed = True
 
     def __del__(self):
         self.close()
