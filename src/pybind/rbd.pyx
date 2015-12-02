@@ -344,9 +344,6 @@ class RBD(object):
     """
     This class wraps librbd CRUD functions.
     """
-    def __init__(self):
-        pass
-
     def version(self):
         """
         Get the version number of the ``librbd`` C library.
