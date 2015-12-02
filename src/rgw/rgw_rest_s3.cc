@@ -469,7 +469,7 @@ void RGWGetBucketLocation_ObjStore_S3::send_response()
   if (ret >= 0) {
     api_name = zonegroup.api_name;
   } else  {
-    if (api_name != "default") {
+    if (s->bucket_info.zonegroup != "default") {
       api_name = s->bucket_info.zonegroup;
     }
   }
