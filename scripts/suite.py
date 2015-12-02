@@ -82,6 +82,7 @@ Scheduler arguments:
                               the keywords in the comma separated keyword
                               string specified.
   --archive-upload RSYNC_DEST Rsync destination to upload archives.
+  --archive-upload-url URL    Public facing URL where archives are uploaded.
   --throttle SLEEP            When scheduling, wait SLEEP seconds between jobs.
                               Useful to avoid bursts that may be too hard on
                               the underlying infrastructure or exceed OpenStack API

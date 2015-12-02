@@ -125,7 +125,7 @@ def main(args):
     os.remove(base_yaml_path)
     if not dry_run and args['--wait']:
         return wait(name, config.max_job_time,
-                    None)
+                    args['--archive-upload-url'])
 
 WAIT_MAX_JOB_TIME = 30 * 60
 WAIT_PAUSE = 5 * 60

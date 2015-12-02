@@ -126,6 +126,19 @@ Here is a sample configuration with many of the options set and documented::
     # demand.
     suite_verify_ceph_hash: True
 
+    # The rsync destination to upload the job results, when --upload is
+    # is provided to teuthology-suite.
+    #
+    archive_upload: ubuntu@teuthology-logs.public.ceph.com:./
+
+    # The path to the SSH private key for rsync to upload to archive_upload
+    #
+    archive_upload_key: None
+
+    # The public facing URL of the archive_upload location
+    #
+    archive_upload_url: http://teuthology-logs.public.ceph.com/
+
     # The OpenStack backend configuration, a dictionary interpreted as follows
     #
     openstack:
