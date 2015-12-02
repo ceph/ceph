@@ -54,8 +54,10 @@ public:
   void wait_for_journal_ready(Context *on_ready);
   void wait_for_journal_ready();
 
-  void open();
-  int close();
+  void open();  // TODO remove
+  void open(Context *on_finish);
+  int close();  // TODO remove
+  void close(Context *on_finish);
 
   uint64_t append_io_event(AioCompletion *aio_comp,
                            const journal::EventEntry &event_entry,
