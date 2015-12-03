@@ -107,7 +107,11 @@ There are also `other Ceph-related mailing lists`_.
 IRC
 ---
 
-See https://ceph.com/resources/mailing-list-irc/
+In addition to mailing lists, the Ceph community also communicates in real
+time using `Internet Relay Chat`_.  
+
+See https://ceph.com/resources/mailing-list-irc/ for how to set up your IRC
+client and a list of channels.
 
 
 High-level structure
