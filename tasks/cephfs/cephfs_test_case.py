@@ -313,7 +313,9 @@ class CephFSTestCase(unittest.TestCase):
                         return
                     else:
                         log.debug("No log hits yet, waiting...")
-                        time.sleep(5)
+                        # Default monc tick interval is 10s, so wait that long and
+                        # then some grace
+                        time.sleep(15)
 
                 self.watcher_process.stdin.close()
                 try:
