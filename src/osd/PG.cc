@@ -74,7 +74,7 @@ static ostream& _prefix(std::ostream *_dout, T *t)
   return *_dout << t->gen_prefix();
 }
 
-void PG::get(const string &tag) 
+void PG::get(const char* tag)
 {
   ref.inc();
 #ifdef PG_DEBUG_REFS
@@ -86,7 +86,7 @@ void PG::get(const string &tag)
 #endif
 }
 
-void PG::put(const string &tag)
+void PG::put(const char* tag)
 {
 #ifdef PG_DEBUG_REFS
   {
