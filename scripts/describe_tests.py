@@ -32,6 +32,7 @@ optional arguments:
   --show-facet [yes|no]              List the facet of each file
                                      [default: yes]
   --format [plain|json|csv]          Output format (written to stdout)
+                                     [default: plain]
 
 options only for describing combinations represented by a suite:
   -c, --combinations                 Describe test combinations rather than
