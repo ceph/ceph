@@ -218,4 +218,35 @@ private:
   void complete_pending_ops();
 };
 
+/* The purpose of this class is to calculate the wait time
+   based on the emptiness of a data structure.
+*/
+
+class DynamicThrottle {
+  /* This class is not thread safe */
+  uint32_t next_threshold;
+  uint32_t last_percentage_empty ;
+  double   delay_start ;
+  uint64_t delay_readjusted ;
+  uint32_t aggressive_delay_threshold;
+  double   delay_time; 
+  const std::string name;
+  CephContext *cct;
+  public:
+  DynamicThrottle (double starting_delay, uint32_t aggressive_threshold, 
+                              CephContext *cct):
+                         next_threshold(95)
+                         , last_percentage_empty(100)
+			 , delay_start(starting_delay)
+			 , delay_readjusted(0)
+			 , aggressive_delay_threshold(aggressive_threshold)
+			 , delay_time(starting_delay)
+			 , name("Dynamic_Throttle")
+			 , cct(cct) {} 
+  
+  uint32_t calc_wait_time(uint32_t percentage_empty, double &wait_time, 
+                                bool return_start_delay_if_none = false);
+};
+
+
 #endif

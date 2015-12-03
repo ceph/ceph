@@ -368,3 +368,59 @@ void OrderedThrottle::complete_pending_ops() {
     ++m_complete_tid;
   }
 }
+
+uint32_t DynamicThrottle::calc_wait_time(uint32_t percentage_empty
+                    , double &wait_time, bool return_start_delay_if_none) {
+
+  bool need_to_delay = false;
+  if (percentage_empty > 100) {
+    return 1;
+  }
+  if ((last_percentage_empty < percentage_empty)) {
+    next_threshold = (percentage_empty - (percentage_empty%5));
+    delay_time = delay_start;
+    double readjust_delay = (double)(100 - percentage_empty)/10000000 ;
+    delay_time += readjust_delay;
+    delay_readjusted++;
+    ldout(cct, 10) << "next_threshold adjusted to "<<next_threshold <<" percentage_empty = "
+      << percentage_empty <<" delay_time = "<< delay_time <<" delay_readjusted "
+        << delay_readjusted << dendl;
+  }
+
+  if ((percentage_empty < next_threshold)&&(last_percentage_empty > percentage_empty)) {
+    uint32_t count = 0;
+    if (0 != next_threshold) {
+      count = (100 - next_threshold)/5;
+      next_threshold -= 5;
+    } else {
+      count = 20;
+    }
+    double readjust_delay = 0;
+    //Readjust delay between 1-10 micro sec
+    readjust_delay = (double)(100 - percentage_empty)/10000000 ;
+    delay_time += readjust_delay;
+
+    if (( percentage_empty < aggressive_delay_threshold )
+          && (delay_readjusted < 5)) {
+
+      readjust_delay = readjust_delay * 10 * count;
+      delay_time += readjust_delay;
+      ldout(cct, 10) <<"Waiting for " << delay_time <<" readjust_delay = " << readjust_delay
+            <<" percentage_empty = " << percentage_empty << " last_percentage_empty = "
+            << last_percentage_empty <<" next_threshold " << next_threshold
+            << " delay_readjusted = " << delay_readjusted <<dendl;
+
+    }
+    delay_readjusted = 0;
+    need_to_delay = true;
+  }
+  last_percentage_empty = percentage_empty;
+  if ((need_to_delay)||(last_percentage_empty > percentage_empty)) {
+    wait_time = delay_time;
+  } else if (return_start_delay_if_none) {
+    wait_time = delay_start;
+  } else {
+    wait_time = 0;
+  }
+  return 0;
+}

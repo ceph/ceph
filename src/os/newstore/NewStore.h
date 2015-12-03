@@ -710,7 +710,8 @@ public:
     Sequencer *osr,
     list<Transaction*>& tls,
     TrackedOpRef op = TrackedOpRef(),
-    ThreadPool::TPHandle *handle = NULL);
+    ThreadPool::TPHandle *handle = NULL,
+    bool delete_tx_object = false);
 
 private:
   // --------------------------------------------------------

@@ -107,7 +107,8 @@
        ) = 0;
      virtual void queue_transactions(
        list<ObjectStore::Transaction*>& tls,
-       OpRequestRef op = OpRequestRef()
+       OpRequestRef op = OpRequestRef(),
+       bool delete_tx_object = false
        ) = 0;
      virtual epoch_t get_epoch() const = 0;
 

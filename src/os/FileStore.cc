@@ -243,6 +243,12 @@ int FileStore::lfn_open(coll_t cid,
 
   if (create)
     flags |= O_CREAT;
+  if (g_conf->filestore_odsync_write) {
+    flags |= O_DSYNC;
+  }
+  if (create) {
+    flags |= O_CREAT ;
+  }
 
   Index index2;
   if (!index) {
@@ -471,7 +477,9 @@ int FileStore::lfn_unlink(coll_t cid, const ghobject_t& o,
       if (r < 0) {
 	r = -errno;
 	if (r == -ENOENT) {
-	  wbthrottle.clear_object(o); // should be only non-cache ref
+          if (g_conf->filestore_wbthrottle_enable) {
+	    wbthrottle.clear_object(o); // should be only non-cache ref
+          }
 	  fdcache.clear(o);
 	} else {
 	  assert(!m_filestore_fail_eio || r != -EIO);
@@ -494,7 +502,9 @@ int FileStore::lfn_unlink(coll_t cid, const ghobject_t& o,
       if (g_conf->filestore_debug_inject_read_err) {
 	debug_obj_on_delete(o);
       }
-      wbthrottle.clear_object(o); // should be only non-cache ref
+      if (g_conf->filestore_wbthrottle_enable) {
+        wbthrottle.clear_object(o); // should be only non-cache ref
+      }
       fdcache.clear(o);
     } else {
       /* Ensure that replay of this op doesn't result in the object_map
@@ -530,6 +540,9 @@ FileStore::FileStore(const std::string &base, const std::string &jdev, osflagbit
   fdcache(g_ceph_context),
   wbthrottle(g_ceph_context),
   next_osr_id(0),
+  dyn_throttle_filestore(g_conf->filestore_dynamic_throttle_start_delay,
+                g_conf->filestore_percentage_empty_threshold_aggressive_throttle,
+                g_ceph_context),
   throttle_ops(g_ceph_context, "filestore_ops",g_conf->filestore_queue_max_ops),
   throttle_bytes(g_ceph_context, "filestore_bytes",g_conf->filestore_queue_max_bytes),
   m_ondisk_finisher_num(g_conf->filestore_ondisk_finisher_threads),
@@ -675,8 +688,12 @@ void FileStore::collect_metadata(map<string,string> *pm)
   ss << "0x" << std::hex << m_fs_type << std::dec;
   (*pm)["filestore_f_type"] = ss.str();
 
-  rc = get_device_by_uuid(get_fsid(), "PARTUUID", partition_path,
-        dev_node);
+  if (g_conf->filestore_collect_device_partition_information) {
+    rc = get_device_by_uuid(get_fsid(), "PARTUUID", partition_path,
+          dev_node);
+  } else {
+    rc = -EINVAL;
+  }
 
   switch (rc) {
     case -EOPNOTSUPP:
@@ -1139,6 +1156,12 @@ int FileStore::_sanity_check_fs()
 	 << TEXT_NORMAL;
   }
 
+  if (g_conf->filestore_do_fast_sync && g_conf->filestore_wbthrottle_enable) {
+   g_conf->set_val("filestore_wbthrottle_enable", "false");
+   dout(0) << "disabling wbthrottle( filestore_wbthrottle_enable = " << g_conf->filestore_wbthrottle_enable 
+           <<" ) since do_fast_sync is enabled" << dendl;
+  }
+
   return 0;
 }
 
@@ -1487,10 +1510,12 @@ int FileStore::mount()
   }
 
   dout(5) << "mount op_seq is " << initial_op_seq << dendl;
-  if (initial_op_seq == 0) {
-    derr << "mount initial op seq is 0; something is wrong" << dendl;
-    ret = -EINVAL;
-    goto close_current_fd;
+  if (!((g_conf->filestore_do_fast_sync) && (m_filestore_journal_writeahead))) {
+    if (initial_op_seq == 0) {
+      derr << "mount initial op seq is 0; something is wrong" << dendl;
+      ret = -EINVAL;
+      goto close_current_fd;
+    }
   }
 
   if (!backend->can_checkpoint()) {
@@ -1610,12 +1635,17 @@ int FileStore::mount()
       index->cleanup();
     }
   }
-
-  wbthrottle.start();
+  if (g_conf->filestore_wbthrottle_enable) {
+    wbthrottle.start();
+  }
   sync_thread.create();
 
   if (!(generic_flags & SKIP_JOURNAL_REPLAY)) {
-    ret = journal_replay(initial_op_seq);
+    if (!((g_conf->filestore_do_fast_sync) && (m_filestore_journal_writeahead))) {
+      ret = journal_replay(initial_op_seq);
+    } else {
+      ret = journal_replay(initial_op_seq, true);
+    }
     if (ret < 0) {
       derr << "mount failed to open journal " << journalpath << ": " << cpp_strerror(ret) << dendl;
       if (ret == -ENOTTY) {
@@ -1629,8 +1659,9 @@ int FileStore::mount()
       sync_cond.Signal();
       lock.Unlock();
       sync_thread.join();
-
-      wbthrottle.stop();
+      if (g_conf->filestore_wbthrottle_enable) {
+        wbthrottle.stop();
+      }
 
       goto close_current_fd;
     }
@@ -1730,15 +1761,19 @@ int FileStore::umount()
   dout(5) << "umount " << basedir << dendl;
   
   flush();
-  sync();
-  do_force_sync();
+  if (!((g_conf->filestore_do_fast_sync) && (m_filestore_journal_writeahead))) {
+    sync();
+    do_force_sync();
+  }
 
   lock.Lock();
   stop = true;
   sync_cond.Signal();
   lock.Unlock();
   sync_thread.join();
-  wbthrottle.stop();
+  if (g_conf->filestore_wbthrottle_enable) {
+    wbthrottle.stop();
+  }
   op_tp.stop();
 
   journal_stop();
@@ -1830,13 +1865,65 @@ void FileStore::queue_op(OpSequencer *osr, Op *o)
   dout(5) << "queue_op " << o << " seq " << o->op
 	  << " " << *osr
 	  << " " << o->bytes << " bytes"
-	  << "   (queue has " << throttle_ops.get_current() << " ops and " << throttle_bytes.get_current() << " bytes)"
+	  << "   (queue has " << throttle_ops.get_current() << " ops and " 
+          << throttle_bytes.get_current() << " bytes)"
 	  << dendl;
   op_wq.queue(osr);
+
+  if (g_conf->journal_dynamic_throttle) {
+  /* Trying to throttle the journal commit based on the number of
+     outstanding bytes to be applied. This will restrict the amount of
+     memory growth in the write path. The mode of throttle is to introduce
+     an incremental delay based on the % increase above an outstanding byte
+     threshold.
+   */
+    uint64_t outstanding_bytes = m_filestore_current_queue_bytes.read(); 
+    bool induce_delay = false;
+    uint32_t percentage_more = 0;
+    
+    if (outstanding_bytes > m_filestore_queue_max_bytes) {
+      percentage_more = (uint32_t)((100* (outstanding_bytes -
+                      m_filestore_queue_max_bytes))/m_filestore_queue_max_bytes);
+      if (percentage_more > 100) {
+        percentage_more = 100;
+      }
+
+      induce_delay = true;
+    }
+    
+    if (induce_delay) {
+
+      double delay_time;
+      dyn_throttle_filestore.calc_wait_time(100 - percentage_more, 
+                                                  delay_time, true);
+      if (0 != delay_time) {
+        struct timespec waittime;
+        waittime.tv_sec = 0;
+        waittime.tv_nsec = delay_time * 1000 * 1000 * 1000 ;
+        nanosleep(&waittime, NULL);
+        dout(5) << " Filestore on BaseDir = " << basedir << " and in journal on "
+            << journalpath << " is slow on applying transaction."
+            << " Throttling journal commits.Filestore op_wq depth = "
+            << op_queue.size() << " Outstanding bytes to be applied = "
+            << outstanding_bytes << " seq = " << o->op
+            << " Max op threshold = " << m_filestore_queue_max_ops
+            << " Max byte threshold = " << m_filestore_queue_max_bytes
+            << " Transaction size = " << o->bytes
+            << " Percentage exceeded threshold = " << percentage_more
+            << " Applying delay = " << delay_time << " in the journal commit path."
+            << dendl;
+
+        }
+    }     
+  }
 }
 
 void FileStore::op_queue_reserve_throttle(Op *o, ThreadPool::TPHandle *handle)
 {
+  if (g_conf->journal_dynamic_throttle) {
+    m_filestore_current_queue_bytes.add(o->bytes);
+    return;
+  }
   // Do not call while holding the journal lock!
   uint64_t max_ops = m_filestore_queue_max_ops;
   uint64_t max_bytes = m_filestore_queue_max_bytes;
@@ -1868,6 +1955,11 @@ void FileStore::op_queue_reserve_throttle(Op *o, ThreadPool::TPHandle *handle)
 
 void FileStore::op_queue_release_throttle(Op *o)
 {
+  if (g_conf->journal_dynamic_throttle) {
+    m_filestore_current_queue_bytes.sub(o->bytes);
+    return;
+  }
+
   throttle_ops.put();
   throttle_bytes.put(o->bytes);
   logger->set(l_os_oq_ops, throttle_ops.get_current());
@@ -1876,7 +1968,10 @@ void FileStore::op_queue_release_throttle(Op *o)
 
 void FileStore::_do_op(OpSequencer *osr, ThreadPool::TPHandle &handle)
 {
-  wbthrottle.throttle();
+  if (g_conf->filestore_wbthrottle_enable) {
+    wbthrottle.throttle();
+  }
+
   // inject a stall?
   if (g_conf->filestore_inject_stall) {
     int orig = g_conf->filestore_inject_stall;
@@ -1889,29 +1984,42 @@ void FileStore::_do_op(OpSequencer *osr, ThreadPool::TPHandle &handle)
 
   osr->apply_lock.Lock();
   Op *o = osr->peek_queue();
-  apply_manager.op_apply_start(o->op);
+
+  if (!((g_conf->filestore_do_fast_sync) && (m_filestore_journal_writeahead))) {
+    apply_manager.op_apply_start(o->op);
+  }
+
   dout(5) << "_do_op " << o << " seq " << o->op << " " << *osr << "/" << osr->parent << " start" << dendl;
   int r = _do_transactions(o->tls, o->op, &handle);
-  apply_manager.op_apply_finish(o->op);
+  if (!((g_conf->filestore_do_fast_sync) && (m_filestore_journal_writeahead))) {
+    apply_manager.op_apply_finish(o->op);
+  }
+
   dout(10) << "_do_op " << o << " seq " << o->op << " r = " << r
 	   << ", finisher " << o->onreadable << " " << o->onreadable_sync << dendl;
+
+  if (o->delete_tx) {
+    for (list<Transaction*>::iterator p = o->tls.begin();
+      p != o->tls.end();
+        ++p) {
+
+      delete (*p);
+    }
+    o->tls.clear();
+  }
+
 }
 
 void FileStore::_finish_op(OpSequencer *osr)
 {
   list<Context*> to_queue;
   Op *o = osr->dequeue(&to_queue);
-  
-  utime_t lat = ceph_clock_now(g_ceph_context);
-  lat -= o->start;
 
-  dout(10) << "_finish_op " << o << " seq " << o->op << " " << *osr << "/" << osr->parent << " lat " << lat << dendl;
+  dout(10) << "_finish_op " << o << " seq " << o->op << " " << *osr << "/" << osr->parent << dendl;
   osr->apply_lock.Unlock();  // locked in _do_op
 
   // called with tp lock held
   op_queue_release_throttle(o);
-
-  logger->tinc(l_os_apply_lat, lat);
 
   if (o->onreadable_sync) {
     o->onreadable_sync->complete(0);
@@ -1922,7 +2030,22 @@ void FileStore::_finish_op(OpSequencer *osr)
   if (!to_queue.empty()) {
     apply_finishers[osr->id % m_apply_finisher_num]->queue(to_queue);
   }
+  uint64_t op_seq = o->op;
+  utime_t start =  o->start;
+
   delete o;
+  utime_t lat = ceph_clock_now(g_ceph_context);
+  lat -= start;
+  logger->tinc(l_os_apply_lat, lat);
+
+  if ((g_conf->filestore_do_fast_sync) && (m_filestore_journal_writeahead)) {
+    apply_manager.complete_op_status(op_seq);
+    if (g_conf->filestore_do_force_sync) {
+      do_force_sync();
+    }
+  }
+  dout(10) << "_finish_op " << " seq " << op_seq << " lat " << lat << dendl;
+
 }
 
 
@@ -1941,7 +2064,8 @@ struct C_JournaledAhead : public Context {
 
 int FileStore::queue_transactions(Sequencer *posr, list<Transaction*> &tls,
 				  TrackedOpRef osd_op,
-				  ThreadPool::TPHandle *handle)
+				  ThreadPool::TPHandle *handle,
+                                  bool delete_tx_object)
 {
   Context *onreadable;
   Context *ondisk;
@@ -1985,6 +2109,11 @@ int FileStore::queue_transactions(Sequencer *posr, list<Transaction*> &tls,
     int orig_len = journal->prepare_entry(o->tls, &tbl);
     uint64_t op_num = submit_manager.op_submit_start();
     o->op = op_num;
+    if (delete_tx_object) {
+      o->delete_tx = true;
+    } else {
+      o->delete_tx = false;
+    }
 
     if (m_filestore_do_dump)
       dump_transactions(o->tls, o->op, osr);
@@ -1998,6 +2127,10 @@ int FileStore::queue_transactions(Sequencer *posr, list<Transaction*> &tls,
       queue_op(osr, o);
     } else if (m_filestore_journal_writeahead) {
       dout(5) << "queue_transactions (writeahead) " << o->op << " " << o->tls << dendl;
+      if (g_conf->filestore_do_fast_sync) {
+        apply_manager.init_op_status(o->op);
+      }
+
       
       osr->queue_journal(o->op);
 
@@ -3242,12 +3375,16 @@ int FileStore::_write(coll_t cid, const ghobject_t& oid,
     int rc = backend->_crc_update_write(**fd, offset, len, bl);
     assert(rc >= 0);
   }
-
-  // flush?
-  if (!replaying &&
-      g_conf->filestore_wbthrottle_enable)
-    wbthrottle.queue_wb(fd, oid, offset, len,
+  
+  if (g_conf->filestore_odsync_write) {
+    posix_fadvise(**fd, 0, 0, POSIX_FADV_DONTNEED);
+  } else {
+    // flush?
+    if (!replaying &&
+        g_conf->filestore_wbthrottle_enable)
+      wbthrottle.queue_wb(fd, oid, offset, len,
 			  fadvise_flags & CEPH_OSD_OP_FLAG_FADVISE_DONTNEED);
+  }
   lfn_close(fd);
 
  out:
@@ -3619,6 +3756,14 @@ private:
 
 void FileStore::sync_entry()
 {
+  bool fast_sync = false;
+  list<Context*> fin;
+  SyncEntryTimeout *sync_entry_timeo = NULL;
+  if ((g_conf->filestore_do_fast_sync) && (m_filestore_journal_writeahead)) {
+    fast_sync = true;
+    dout(0) << "## Fast sync is enabled ##" << dendl;
+  }
+
   lock.Lock();
   while (!stop) {
     utime_t max_interval;
@@ -3643,7 +3788,7 @@ void FileStore::sync_entry()
       woke -= startwait;
       dout(20) << "sync_entry woke after " << woke << dendl;
       if (woke < min_interval) {
-	utime_t t = min_interval;
+        utime_t t = min_interval;
 	t -= woke;
 	dout(20) << "sync_entry waiting for another " << t 
 		 << " to reach min interval " << min_interval << dendl;
@@ -3651,137 +3796,149 @@ void FileStore::sync_entry()
       }
     }
 
-    list<Context*> fin;
-  again:
-    fin.swap(sync_waiters);
-    lock.Unlock();
-    
-    op_tp.pause();
-    if (apply_manager.commit_start()) {
-      utime_t start = ceph_clock_now(g_ceph_context);
-      uint64_t cp = apply_manager.get_committing_seq();
-
-      sync_entry_timeo_lock.Lock();
-      SyncEntryTimeout *sync_entry_timeo =
-	new SyncEntryTimeout(m_filestore_commit_timeout);
-      timer.add_event_after(m_filestore_commit_timeout, sync_entry_timeo);
-      sync_entry_timeo_lock.Unlock();
-
-      logger->set(l_os_committing, 1);
-
-      dout(15) << "sync_entry committing " << cp << dendl;
-      stringstream errstream;
-      if (g_conf->filestore_debug_omap_check && !object_map->check(errstream)) {
-	derr << errstream.str() << dendl;
-	assert(0);
+    again:
+      if (!sync_waiters.empty()) {
+        fin.swap(sync_waiters);
       }
+      lock.Unlock();
+      if (!fast_sync) {   
+        op_tp.pause();
+      }
+      if (apply_manager.commit_start(fast_sync)) {
+        utime_t start = ceph_clock_now(g_ceph_context);
+        uint64_t cp = 0;
+        if (!fast_sync) {
+          cp = apply_manager.get_committing_seq();
+          sync_entry_timeo_lock.Lock();
+          sync_entry_timeo =
+	    new SyncEntryTimeout(m_filestore_commit_timeout);
+          timer.add_event_after(m_filestore_commit_timeout, sync_entry_timeo);
+          sync_entry_timeo_lock.Unlock();
+          dout(15) << "sync_entry committing " << cp << dendl;
+        }
 
-      if (backend->can_checkpoint()) {
-	int err = write_op_seq(op_fd, cp);
-	if (err < 0) {
-	  derr << "Error during write_op_seq: " << cpp_strerror(err) << dendl;
-	  assert(0 == "error during write_op_seq");
-	}
+        logger->set(l_os_committing, 1);
 
-	char s[NAME_MAX];
-	snprintf(s, sizeof(s), COMMIT_SNAP_ITEM, (long long unsigned)cp);
-	uint64_t cid = 0;
-	err = backend->create_checkpoint(s, &cid);
-	if (err < 0) {
-	    int err = errno;
-	    derr << "snap create '" << s << "' got error " << err << dendl;
-	    assert(err == 0);
-	}
+        if (!fast_sync) {
+          stringstream errstream;
+          if (g_conf->filestore_debug_omap_check && !object_map->check(errstream)) {
+	    derr << errstream.str() << dendl;
+	    assert(0);
+          }
+        }
 
-	snaps.push_back(cp);
-	apply_manager.commit_started();
-	op_tp.unpause();
-
-	if (cid > 0) {
-	  dout(20) << " waiting for checkpoint " << cid << " to complete" << dendl;
-	  err = backend->sync_checkpoint(cid);
+        if (backend->can_checkpoint()) {
+	  int err = write_op_seq(op_fd, cp);
 	  if (err < 0) {
-	    derr << "ioctl WAIT_SYNC got " << cpp_strerror(err) << dendl;
-	    assert(0 == "wait_sync got error");
+	    derr << "Error during write_op_seq: " << cpp_strerror(err) << dendl;
+	    assert(0 == "error during write_op_seq");
 	  }
-	  dout(20) << " done waiting for checkpoint" << cid << " to complete" << dendl;
-	}
-      } else
-      {
-	apply_manager.commit_started();
-	op_tp.unpause();
 
-	object_map->sync();
-	int err = backend->syncfs();
-	if (err < 0) {
-	  derr << "syncfs got " << cpp_strerror(err) << dendl;
-	  assert(0 == "syncfs returned error");
-	}
+	  char s[NAME_MAX];
+	  snprintf(s, sizeof(s), COMMIT_SNAP_ITEM, (long long unsigned)cp);
+	  uint64_t cid = 0;
+	  err = backend->create_checkpoint(s, &cid);
+	  if (err < 0) {
+	      int err = errno;
+	      derr << "snap create '" << s << "' got error " << err << dendl;
+	      assert(err == 0);
+	  }
 
-	err = write_op_seq(op_fd, cp);
-	if (err < 0) {
-	  derr << "Error during write_op_seq: " << cpp_strerror(err) << dendl;
-	  assert(0 == "error during write_op_seq");
-	}
-	err = ::fsync(op_fd);
-	if (err < 0) {
-	  derr << "Error during fsync of op_seq: " << cpp_strerror(err) << dendl;
-	  assert(0 == "error during fsync of op_seq");
-	}
-      }
+	  snaps.push_back(cp);
+	  apply_manager.commit_started();
+	  op_tp.unpause();
+
+	  if (cid > 0) {
+	    dout(20) << " waiting for checkpoint " << cid << " to complete" << dendl;
+	    err = backend->sync_checkpoint(cid);
+	    if (err < 0) {
+	      derr << "ioctl WAIT_SYNC got " << cpp_strerror(err) << dendl;
+	      assert(0 == "wait_sync got error");
+	    }
+	    dout(20) << " done waiting for checkpoint" << cid << " to complete" << dendl;
+	  }
+        } else
+        {
+	  apply_manager.commit_started(fast_sync);
+          if (!fast_sync) {
+	    op_tp.unpause();
+	    object_map->sync();
+          }
+	  int err = backend->syncfs();
+	  if (err < 0) {
+	    derr << "syncfs got " << cpp_strerror(err) << dendl;
+	    assert(0 == "syncfs returned error");
+	  }
+          if (!fast_sync) {
+	    err = write_op_seq(op_fd, cp);
+	    if (err < 0) {
+	      derr << "Error during write_op_seq: " << cpp_strerror(err) << dendl;
+	      assert(0 == "error during write_op_seq");
+	    }
+	    err = ::fsync(op_fd);
+	    if (err < 0) {
+	      derr << "Error during fsync of op_seq: " << cpp_strerror(err) << dendl;
+	      assert(0 == "error during fsync of op_seq");
+	    }
+          }
+        }
       
-      utime_t done = ceph_clock_now(g_ceph_context);
-      utime_t lat = done - start;
-      utime_t dur = done - startwait;
-      dout(10) << "sync_entry commit took " << lat << ", interval was " << dur << dendl;
+        utime_t done = ceph_clock_now(g_ceph_context);
+        utime_t lat = done - start;
+        utime_t dur = done - startwait;
+        dout(10) << "sync_entry commit took " << lat << ", interval was " << dur << dendl;
 
-      logger->inc(l_os_commit);
-      logger->tinc(l_os_commit_lat, lat);
-      logger->tinc(l_os_commit_len, dur);
+        logger->inc(l_os_commit);
+        logger->tinc(l_os_commit_lat, lat);
+        logger->tinc(l_os_commit_len, dur);
 
-      apply_manager.commit_finish();
-      wbthrottle.clear();
+        apply_manager.commit_finish(fast_sync);
+        if (g_conf->filestore_wbthrottle_enable) {
+          wbthrottle.clear();
+        }
 
-      logger->set(l_os_committing, 0);
+        logger->set(l_os_committing, 0);
 
-      // remove old snaps?
-      if (backend->can_checkpoint()) {
-	char s[NAME_MAX];
-	while (snaps.size() > 2) {
-	  snprintf(s, sizeof(s), COMMIT_SNAP_ITEM, (long long unsigned)snaps.front());
-	  snaps.pop_front();
-	  dout(10) << "removing snap '" << s << "'" << dendl;
-	  int r = backend->destroy_checkpoint(s);
-	  if (r) {
-	    int err = errno;
-	    derr << "unable to destroy snap '" << s << "' got " << cpp_strerror(err) << dendl;
+        // remove old snaps?
+        if (backend->can_checkpoint()) {
+	  char s[NAME_MAX];
+	  while (snaps.size() > 2) {
+	    snprintf(s, sizeof(s), COMMIT_SNAP_ITEM, (long long unsigned)snaps.front());
+	    snaps.pop_front();
+	    dout(10) << "removing snap '" << s << "'" << dendl;
+	    int r = backend->destroy_checkpoint(s);
+	    if (r) {
+	      int err = errno;
+	      derr << "unable to destroy snap '" << s << "' got " << cpp_strerror(err) << dendl;
+	    }
 	  }
-	}
+        }
+        dout(15) << "sync_entry committed to op_seq " << cp << dendl;
+        if (!fast_sync) {
+          sync_entry_timeo_lock.Lock();
+          timer.cancel_event(sync_entry_timeo);
+          sync_entry_timeo_lock.Unlock();
+        }
+      } else {
+        if (!fast_sync) {
+          op_tp.unpause();
+        }
       }
-
-      dout(15) << "sync_entry committed to op_seq " << cp << dendl;
-
-      sync_entry_timeo_lock.Lock();
-      timer.cancel_event(sync_entry_timeo);
-      sync_entry_timeo_lock.Unlock();
-    } else {
-      op_tp.unpause();
-    }
     
-    lock.Lock();
-    finish_contexts(g_ceph_context, fin, 0);
-    fin.clear();
-    if (!sync_waiters.empty()) {
-      dout(10) << "sync_entry more waiters, committing again" << dendl;
-      goto again;
+      lock.Lock();
+      finish_contexts(g_ceph_context, fin, 0);
+      fin.clear();
+      if (!sync_waiters.empty()) {
+        dout(10) << "sync_entry more waiters, committing again" << dendl;
+        goto again;
+      }
+      if (!stop && journal && journal->should_commit_now()) {
+        dout(10) << "sync_entry journal says we should commit again (probably is/was full)" << dendl;
+        goto again;
+      }
     }
-    if (!stop && journal && journal->should_commit_now()) {
-      dout(10) << "sync_entry journal says we should commit again (probably is/was full)" << dendl;
-      goto again;
-    }
-  }
-  stop = false;
-  lock.Unlock();
+    stop = false;
+    lock.Unlock();
 }
 
 void FileStore::_start_sync()
@@ -3883,7 +4040,9 @@ void FileStore::sync_and_flush()
   } else {
     // includes m_filestore_journal_parallel
     _flush_op_queue();
-    sync();
+    if (!((g_conf->filestore_do_fast_sync) && (m_filestore_journal_writeahead))) {
+      sync();
+    }
   }
   dout(10) << "sync_and_flush done" << dendl;
 }
@@ -3892,7 +4051,9 @@ int FileStore::flush_journal()
 {
   dout(10) << __func__ << dendl;
   sync_and_flush();
-  sync();
+  if (!((g_conf->filestore_do_fast_sync) && (m_filestore_journal_writeahead))) {
+    sync();
+  }
   return 0;
 }
 

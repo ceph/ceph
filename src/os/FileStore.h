@@ -189,6 +189,7 @@ private:
     Context *onreadable, *onreadable_sync;
     uint64_t ops, bytes;
     TrackedOpRef osd_op;
+    bool delete_tx;
   };
   class OpSequencer : public Sequencer_impl {
     Mutex qlock; // to protect q, for benefit of flush (peek/dequeue also protected by lock)
@@ -334,6 +335,7 @@ private:
   WBThrottle wbthrottle;
 
   atomic_t next_osr_id;
+  DynamicThrottle dyn_throttle_filestore;
   deque<OpSequencer*> op_queue;
   Throttle throttle_ops, throttle_bytes;
   const int m_ondisk_finisher_num;
@@ -484,7 +486,8 @@ public:
 
   int queue_transactions(Sequencer *osr, list<Transaction*>& tls,
 			 TrackedOpRef op = TrackedOpRef(),
-			 ThreadPool::TPHandle *handle = NULL);
+			 ThreadPool::TPHandle *handle = NULL,
+                         bool delete_tx_object = false);
 
   /**
    * set replay guard xattr on given file
@@ -717,10 +720,10 @@ private:
   bool m_journal_dio, m_journal_aio, m_journal_force_aio;
   std::string m_osd_rollback_to_cluster_snap;
   bool m_osd_use_stale_snap;
-  int m_filestore_queue_max_ops;
-  int m_filestore_queue_max_bytes;
-  int m_filestore_queue_committing_max_ops;
-  int m_filestore_queue_committing_max_bytes;
+  uint64_t m_filestore_queue_max_ops;
+  uint64_t m_filestore_queue_max_bytes;
+  uint64_t m_filestore_queue_committing_max_ops;
+  uint64_t m_filestore_queue_committing_max_bytes;
   bool m_filestore_do_dump;
   std::ofstream m_filestore_dump;
   JSONFormatter m_filestore_dump_fmt;
@@ -736,6 +739,7 @@ private:
   uint32_t m_filestore_max_inline_xattrs;
 
   FSSuperblock superblock;
+  atomic_t m_filestore_current_queue_bytes;
 
   /**
    * write_superblock()

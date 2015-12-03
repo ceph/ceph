@@ -580,7 +580,8 @@ ObjectMap::ObjectMapIterator MemStore::get_omap_iterator(coll_t cid,
 int MemStore::queue_transactions(Sequencer *osr,
 				 list<Transaction*>& tls,
 				 TrackedOpRef op,
-				 ThreadPool::TPHandle *handle)
+				 ThreadPool::TPHandle *handle,
+                                 bool delete_tx_object)
 {
   // because memstore operations are synchronous, we can implement the
   // Sequencer with a mutex. this guarantees ordering on a given sequencer,

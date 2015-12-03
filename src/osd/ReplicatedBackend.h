@@ -405,8 +405,6 @@ private:
 
     uint64_t bytes_written;
 
-    ObjectStore::Transaction opt, localt;
-    
     RepModify() : applied(false), committed(false), ackerosd(-1),
 		  epoch_started(0), bytes_written(0) {}
   };
