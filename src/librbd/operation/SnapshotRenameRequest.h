@@ -16,7 +16,8 @@ class ImageCtx;
 
 namespace operation {
 
-class SnapshotRenameRequest : public Request {
+template <typename ImageCtxT = ImageCtx>
+class SnapshotRenameRequest : public Request<ImageCtxT> {
 public:
   /**
    * Snap Rename goes through the following state machine:
@@ -38,7 +39,7 @@ public:
     STATE_RENAME_SNAP
   };
 
-  SnapshotRenameRequest(ImageCtx &image_ctx, Context *on_finish,
+  SnapshotRenameRequest(ImageCtxT &image_ctx, Context *on_finish,
                         uint64_t snap_id, const std::string &snap_name);
 
   virtual journal::Event create_event() const {
@@ -59,5 +60,7 @@ private:
 
 } // namespace operation
 } // namespace librbd
+
+extern template class librbd::operation::SnapshotRenameRequest<librbd::ImageCtx>;
 
 #endif // CEPH_LIBRBD_OPERATION_SNAPSHOT_RENAME_REQUEST_H

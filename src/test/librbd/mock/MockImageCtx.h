@@ -4,8 +4,10 @@
 #ifndef CEPH_TEST_LIBRBD_MOCK_IMAGE_CTX_H
 #define CEPH_TEST_LIBRBD_MOCK_IMAGE_CTX_H
 
+#include "test/librbd/mock/MockAioImageRequestWQ.h"
 #include "test/librbd/mock/MockContextWQ.h"
 #include "test/librbd/mock/MockImageWatcher.h"
+#include "test/librbd/mock/MockJournal.h"
 #include "test/librbd/mock/MockObjectMap.h"
 #include "common/RWLock.h"
 #include "librbd/ImageCtx.h"
@@ -33,9 +35,9 @@ struct MockImageCtx {
       header_oid(image_ctx.header_oid),
       id(image_ctx.id),
       parent_md(image_ctx.parent_md),
-      aio_work_queue(new MockContextWQ()),
+      aio_work_queue(new MockAioImageRequestWQ()),
       op_work_queue(new MockContextWQ()),
-      image_watcher(NULL),
+      image_watcher(NULL), journal(NULL),
       concurrent_management_ops(image_ctx.concurrent_management_ops)
   {
     md_ctx.dup(image_ctx.md_ctx);
@@ -98,11 +100,13 @@ struct MockImageCtx {
   xlist<AsyncRequest<MockImageCtx>*> async_requests;
   Cond async_requests_cond;
 
-  MockContextWQ *aio_work_queue;
+  MockAioImageRequestWQ *aio_work_queue;
   MockContextWQ *op_work_queue;
 
   MockImageWatcher *image_watcher;
   MockObjectMap object_map;
+
+  MockJournal *journal;
 
   int concurrent_management_ops;
 };

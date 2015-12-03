@@ -352,7 +352,17 @@ noinst_LTLIBRARIES += librbd_test.la
 
 unittest_librbd_SOURCES = \
         test/librbd/test_main.cc \
-	test/librbd/test_mock_fixture.cc
+	test/librbd/test_mock_fixture.cc \
+	test/librbd/object_map/test_mock_InvalidateRequest.cc \
+	test/librbd/object_map/test_mock_ResizeRequest.cc \
+	test/librbd/object_map/test_mock_SnapshotCreateRequest.cc \
+	test/librbd/object_map/test_mock_SnapshotRemoveRequest.cc \
+	test/librbd/object_map/test_mock_SnapshotRollbackRequest.cc \
+	test/librbd/object_map/test_mock_UpdateRequest.cc \
+	test/librbd/operation/test_mock_SnapshotCreateRequest.cc \
+	test/librbd/operation/test_mock_SnapshotProtectRequest.cc \
+	test/librbd/operation/test_mock_SnapshotRemoveRequest.cc \
+	test/librbd/operation/test_mock_SnapshotUnprotectRequest.cc
 unittest_librbd_CXXFLAGS = $(UNITTEST_CXXFLAGS) -DTEST_LIBRBD_INTERNALS
 unittest_librbd_LDADD = \
 	librbd_test.la librbd_api.la librbd_internal.la $(LIBRBD_TYPES) \
@@ -388,9 +398,11 @@ noinst_HEADERS += \
 	test/librbd/test_fixture.h \
 	test/librbd/test_mock_fixture.h \
 	test/librbd/test_support.h \
+	test/librbd/mock/MockAioImageRequestWQ.h \
 	test/librbd/mock/MockContextWQ.h \
 	test/librbd/mock/MockImageCtx.h \
 	test/librbd/mock/MockImageWatcher.h \
+	test/librbd/mock/MockJournal.h \
 	test/librbd/mock/MockObjectMap.h
 
 if LINUX

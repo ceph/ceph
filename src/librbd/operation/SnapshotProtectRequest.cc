@@ -15,10 +15,11 @@ namespace operation {
 
 namespace {
 
+template <typename I>
 std::ostream& operator<<(std::ostream& os,
-                         const SnapshotProtectRequest::State& state) {
+                         const typename SnapshotProtectRequest<I>::State& state) {
   switch(state) {
-  case SnapshotProtectRequest::STATE_PROTECT_SNAP:
+  case SnapshotProtectRequest<I>::STATE_PROTECT_SNAP:
     os << "PROTECT_SNAP";
     break;
   }
@@ -27,18 +28,22 @@ std::ostream& operator<<(std::ostream& os,
 
 } // anonymous namespace
 
-SnapshotProtectRequest::SnapshotProtectRequest(ImageCtx &image_ctx,
-                                               Context *on_finish,
-                                               const std::string &snap_name)
-  : Request(image_ctx, on_finish), m_snap_name(snap_name) {
+template <typename I>
+SnapshotProtectRequest<I>::SnapshotProtectRequest(I &image_ctx,
+                                                  Context *on_finish,
+                                                  const std::string &snap_name)
+  : Request<I>(image_ctx, on_finish), m_snap_name(snap_name) {
 }
 
-void SnapshotProtectRequest::send_op() {
+template <typename I>
+void SnapshotProtectRequest<I>::send_op() {
   send_protect_snap();
 }
 
-bool SnapshotProtectRequest::should_complete(int r) {
-  CephContext *cct = m_image_ctx.cct;
+template <typename I>
+bool SnapshotProtectRequest<I>::should_complete(int r) {
+  I &image_ctx = this->m_image_ctx;
+  CephContext *cct = image_ctx.cct;
   ldout(cct, 5) << this << " " << __func__ << ": state=" << m_state << ", "
                 << "r=" << r << dendl;
   if (r < 0) {
@@ -47,38 +52,42 @@ bool SnapshotProtectRequest::should_complete(int r) {
   return true;
 }
 
-void SnapshotProtectRequest::send_protect_snap() {
-  assert(m_image_ctx.owner_lock.is_locked());
+template <typename I>
+void SnapshotProtectRequest<I>::send_protect_snap() {
+  I &image_ctx = this->m_image_ctx;
+  assert(image_ctx.owner_lock.is_locked());
 
-  CephContext *cct = m_image_ctx.cct;
+  CephContext *cct = image_ctx.cct;
   ldout(cct, 5) << this << " " << __func__ << dendl;
 
   m_state = STATE_PROTECT_SNAP;
 
   int r = verify_and_send_protect_snap();
   if (r < 0) {
-    async_complete(r);
+    this->async_complete(r);
     return;
   }
 }
 
-int SnapshotProtectRequest::verify_and_send_protect_snap() {
-  RWLock::RLocker md_locker(m_image_ctx.md_lock);
-  RWLock::RLocker snap_locker(m_image_ctx.snap_lock);
+template <typename I>
+int SnapshotProtectRequest<I>::verify_and_send_protect_snap() {
+  I &image_ctx = this->m_image_ctx;
+  RWLock::RLocker md_locker(image_ctx.md_lock);
+  RWLock::RLocker snap_locker(image_ctx.snap_lock);
 
-  CephContext *cct = m_image_ctx.cct;
-  if ((m_image_ctx.features & RBD_FEATURE_LAYERING) == 0) {
+  CephContext *cct = image_ctx.cct;
+  if ((image_ctx.features & RBD_FEATURE_LAYERING) == 0) {
     lderr(cct) << "image must support layering" << dendl;
     return -ENOSYS;
   }
 
-  uint64_t snap_id = m_image_ctx.get_snap_id(m_snap_name);
+  uint64_t snap_id = image_ctx.get_snap_id(m_snap_name);
   if (snap_id == CEPH_NOSNAP) {
     return -ENOENT;
   }
 
   bool is_protected;
-  int r = m_image_ctx.is_snap_protected(snap_id, &is_protected);
+  int r = image_ctx.is_snap_protected(snap_id, &is_protected);
   if (r < 0) {
     return r;
   }
@@ -91,8 +100,9 @@ int SnapshotProtectRequest::verify_and_send_protect_snap() {
   cls_client::set_protection_status(&op, snap_id,
                                     RBD_PROTECTION_STATUS_PROTECTED);
 
-  librados::AioCompletion *rados_completion = create_callback_completion();
-  r = m_image_ctx.md_ctx.aio_operate(m_image_ctx.header_oid, rados_completion,
+  librados::AioCompletion *rados_completion =
+    this->create_callback_completion();
+  r = image_ctx.md_ctx.aio_operate(image_ctx.header_oid, rados_completion,
                                      &op);
   assert(r == 0);
   rados_completion->release();
@@ -102,3 +112,4 @@ int SnapshotProtectRequest::verify_and_send_protect_snap() {
 } // namespace operation
 } // namespace librbd
 
+template class librbd::operation::SnapshotProtectRequest<librbd::ImageCtx>;
