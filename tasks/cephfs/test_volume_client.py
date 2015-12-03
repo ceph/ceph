@@ -4,6 +4,7 @@ import time
 import os
 from textwrap import dedent
 from tasks.cephfs.cephfs_test_case import CephFSTestCase
+from teuthology.exceptions import CommandFailedError
 
 log = logging.getLogger(__name__)
 
@@ -156,7 +157,11 @@ vc.disconnect()
         # Clean up the dead mount (ceph-fuse's behaviour here is a bit undefined)
         self.mounts[2].kill()
         self.mounts[2].kill_cleanup()
-        background.wait()
+        try:
+            background.wait()
+        except CommandFailedError:
+            # We killed the mount out from under you
+            pass
 
         self._volume_client_python(self.mount_b, dedent("""
             vp = VolumePath("{group_id}", "{volume_id}")
