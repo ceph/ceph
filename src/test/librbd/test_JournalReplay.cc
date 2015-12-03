@@ -39,11 +39,12 @@ public:
     Listener listener;
     ictx->image_watcher->register_listener(&listener);
     {
-      Mutex::Locker listener_locker(listener.lock);
       RWLock::RLocker owner_locker(ictx->owner_lock);
       while (!ictx->image_watcher->is_lock_owner()) {
         ictx->owner_lock.put_read();
+        listener.lock.Lock();
         listener.cond.Wait(listener.lock);
+        listener.lock.Unlock();
         ictx->owner_lock.get_read();
       }
     }
