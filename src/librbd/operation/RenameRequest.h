@@ -16,7 +16,8 @@ class ImageCtx;
 
 namespace operation {
 
-class RenameRequest : public Request
+template <typename ImageCtxT = ImageCtx>
+class RenameRequest : public Request<ImageCtxT>
 {
 public:
   /**
@@ -51,7 +52,7 @@ public:
     STATE_REMOVE_SOURCE_HEADER
   };
 
-  RenameRequest(ImageCtx &image_ctx, Context *on_finish,
+  RenameRequest(ImageCtxT &image_ctx, Context *on_finish,
                 const std::string &dest_name);
 
 protected:
@@ -83,5 +84,7 @@ private:
 
 } // namespace operation
 } // namespace librbd
+
+extern template class librbd::operation::RenameRequest<librbd::ImageCtx>;
 
 #endif // CEPH_LIBRBD_RENAME_REQUEST_H

@@ -1020,6 +1020,7 @@ if(${WITH_RADOSGW})
     rgw/rgw_rest_client.cc
     rgw/rgw_rest_conn.cc
     rgw/rgw_op.cc
+    rgw/rgw_basic_types.cc
     rgw/rgw_common.cc
     rgw/rgw_cache.cc
     rgw/rgw_formats.cc

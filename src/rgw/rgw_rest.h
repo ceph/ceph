@@ -304,6 +304,7 @@ protected:
   virtual RGWOp *op_copy() { return NULL; }
   virtual RGWOp *op_options() { return NULL; }
 
+  virtual int validate_tenant_name(const string& bucket);
   virtual int validate_bucket_name(const string& bucket);
   virtual int validate_object_name(const string& object);
 
@@ -377,7 +378,7 @@ extern void end_header(struct req_state *s,
 		       bool force_content_type = false);
 extern void dump_start(struct req_state *s);
 extern void list_all_buckets_start(struct req_state *s);
-extern void dump_owner(struct req_state *s, string& id, string& name, const char *section = NULL);
+extern void dump_owner(struct req_state *s, rgw_user& id, string& name, const char *section = NULL);
 extern void dump_string_header(struct req_state *s, const char *name, const char *val);
 extern void dump_content_length(struct req_state *s, uint64_t len);
 extern void dump_etag(struct req_state *s, const char *etag);

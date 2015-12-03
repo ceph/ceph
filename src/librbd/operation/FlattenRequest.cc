@@ -19,28 +19,30 @@
 namespace librbd {
 namespace operation {
 
-class C_FlattenObject : public C_AsyncObjectThrottle<> {
+template <typename I>
+class C_FlattenObject : public C_AsyncObjectThrottle<I> {
 public:
-  C_FlattenObject(AsyncObjectThrottle<> &throttle, ImageCtx *image_ctx,
+  C_FlattenObject(AsyncObjectThrottle<I> &throttle, I *image_ctx,
                   uint64_t object_size, ::SnapContext snapc, uint64_t object_no)
-    : C_AsyncObjectThrottle(throttle, *image_ctx), m_object_size(object_size),
+    : C_AsyncObjectThrottle<I>(throttle, *image_ctx), m_object_size(object_size),
       m_snapc(snapc), m_object_no(object_no)
   {
   }
 
   virtual int send() {
-    assert(m_image_ctx.owner_lock.is_locked());
-    CephContext *cct = m_image_ctx.cct;
+    I &image_ctx = this->m_image_ctx;
+    assert(image_ctx.owner_lock.is_locked());
+    CephContext *cct = image_ctx.cct;
 
-    if (m_image_ctx.image_watcher->is_lock_supported() &&
-        !m_image_ctx.image_watcher->is_lock_owner()) {
+    if (image_ctx.image_watcher->is_lock_supported() &&
+        !image_ctx.image_watcher->is_lock_owner()) {
       ldout(cct, 1) << "lost exclusive lock during flatten" << dendl;
       return -ERESTART;
     }
 
     bufferlist bl;
-    string oid = m_image_ctx.get_object_name(m_object_no);
-    AioObjectWrite *req = new AioObjectWrite(&m_image_ctx, oid, m_object_no, 0,
+    string oid = image_ctx.get_object_name(m_object_no);
+    AioObjectWrite *req = new AioObjectWrite(&image_ctx, oid, m_object_no, 0,
                                              bl, m_snapc, this);
     if (!req->has_parent()) {
       // stop early if the parent went away - it just means
@@ -59,15 +61,17 @@ private:
   uint64_t m_object_no;
 };
 
-bool FlattenRequest::should_complete(int r) {
-  CephContext *cct = m_image_ctx.cct;
+template <typename I>
+bool FlattenRequest<I>::should_complete(int r) {
+  I &image_ctx = this->m_image_ctx;
+  CephContext *cct = image_ctx.cct;
   ldout(cct, 5) << this << " should_complete: " << " r=" << r << dendl;
   if (r < 0 && !(r == -ENOENT && m_ignore_enoent) ) {
     lderr(cct) << "flatten encountered an error: " << cpp_strerror(r) << dendl;
     return true;
   }
 
-  RWLock::RLocker owner_locker(m_image_ctx.owner_lock);
+  RWLock::RLocker owner_locker(image_ctx.owner_lock);
   switch (m_state) {
   case STATE_FLATTEN_OBJECTS:
     ldout(cct, 5) << "FLATTEN_OBJECTS" << dendl;
@@ -89,74 +93,80 @@ bool FlattenRequest::should_complete(int r) {
   return false;
 }
 
-void FlattenRequest::send_op() {
-  assert(m_image_ctx.owner_lock.is_locked());
-  CephContext *cct = m_image_ctx.cct;
+template <typename I>
+void FlattenRequest<I>::send_op() {
+  I &image_ctx = this->m_image_ctx;
+  assert(image_ctx.owner_lock.is_locked());
+  CephContext *cct = image_ctx.cct;
   ldout(cct, 5) << this << " send" << dendl;
 
   m_state = STATE_FLATTEN_OBJECTS;
-  AsyncObjectThrottle<>::ContextFactory context_factory(
-    boost::lambda::bind(boost::lambda::new_ptr<C_FlattenObject>(),
-      boost::lambda::_1, &m_image_ctx, m_object_size, m_snapc,
+  typename AsyncObjectThrottle<I>::ContextFactory context_factory(
+    boost::lambda::bind(boost::lambda::new_ptr<C_FlattenObject<I> >(),
+      boost::lambda::_1, &image_ctx, m_object_size, m_snapc,
       boost::lambda::_2));
-  AsyncObjectThrottle<> *throttle = new AsyncObjectThrottle<>(
-    this, m_image_ctx, context_factory, create_callback_context(), &m_prog_ctx,
+  AsyncObjectThrottle<I> *throttle = new AsyncObjectThrottle<I>(
+    this, image_ctx, context_factory, this->create_callback_context(), &m_prog_ctx,
     0, m_overlap_objects);
-  throttle->start_ops(m_image_ctx.concurrent_management_ops);
+  throttle->start_ops(image_ctx.concurrent_management_ops);
 }
 
-bool FlattenRequest::send_update_header() {
-  assert(m_image_ctx.owner_lock.is_locked());
-  CephContext *cct = m_image_ctx.cct;
+template <typename I>
+bool FlattenRequest<I>::send_update_header() {
+  I &image_ctx = this->m_image_ctx;
+  assert(image_ctx.owner_lock.is_locked());
+  CephContext *cct = image_ctx.cct;
 
   ldout(cct, 5) << this << " send_update_header" << dendl;
   m_state = STATE_UPDATE_HEADER;
 
   // should have been canceled prior to releasing lock
-  assert(!m_image_ctx.image_watcher->is_lock_supported() ||
-         m_image_ctx.image_watcher->is_lock_owner());
+  assert(!image_ctx.image_watcher->is_lock_supported() ||
+         image_ctx.image_watcher->is_lock_owner());
 
   {
-    RWLock::RLocker parent_locker(m_image_ctx.parent_lock);
+    RWLock::RLocker parent_locker(image_ctx.parent_lock);
     // stop early if the parent went away - it just means
     // another flatten finished first, so this one is useless.
-    if (!m_image_ctx.parent) {
+    if (!image_ctx.parent) {
       ldout(cct, 5) << "image already flattened" << dendl;
       return true;
     }
-    m_parent_spec = m_image_ctx.parent_md.spec;
+    m_parent_spec = image_ctx.parent_md.spec;
   }
   m_ignore_enoent = true;
 
   // remove parent from this (base) image
   librados::ObjectWriteOperation op;
-  if (m_image_ctx.image_watcher->is_lock_supported()) {
-    m_image_ctx.image_watcher->assert_header_locked(&op);
+  if (image_ctx.image_watcher->is_lock_supported()) {
+    image_ctx.image_watcher->assert_header_locked(&op);
   }
   cls_client::remove_parent(&op);
 
-  librados::AioCompletion *rados_completion = create_callback_completion();
-  int r = m_image_ctx.md_ctx.aio_operate(m_image_ctx.header_oid,
+  librados::AioCompletion *rados_completion = this->create_callback_completion();
+  int r = image_ctx.md_ctx.aio_operate(image_ctx.header_oid,
         				 rados_completion, &op);
   assert(r == 0);
   rados_completion->release();
   return false;
 }
 
-bool FlattenRequest::send_update_children() {
-  assert(m_image_ctx.owner_lock.is_locked());
-  CephContext *cct = m_image_ctx.cct;
+template <typename I>
+bool FlattenRequest<I>::send_update_children() {
+  I &image_ctx = this->m_image_ctx;
+  assert(image_ctx.owner_lock.is_locked());
+  CephContext *cct = image_ctx.cct;
 
   // should have been canceled prior to releasing lock
-  assert(!m_image_ctx.image_watcher->is_lock_supported() ||
-         m_image_ctx.image_watcher->is_lock_owner());
+  assert(!image_ctx.image_watcher->is_lock_supported() ||
+         image_ctx.image_watcher->is_lock_owner());
 
   // if there are no snaps, remove from the children object as well
   // (if snapshots remain, they have their own parent info, and the child
   // will be removed when the last snap goes away)
-  RWLock::RLocker snap_locker(m_image_ctx.snap_lock);
-  if ((m_image_ctx.features & RBD_FEATURE_DEEP_FLATTEN) == 0 &&
-      !m_image_ctx.snaps.empty()) {
+  RWLock::RLocker snap_locker(image_ctx.snap_lock);
+  if ((image_ctx.features & RBD_FEATURE_DEEP_FLATTEN) == 0 &&
+      !image_ctx.snaps.empty()) {
     return true;
   }
 
@@ -164,10 +174,10 @@ bool FlattenRequest::send_update_children() {
   m_state = STATE_UPDATE_CHILDREN;
 
   librados::ObjectWriteOperation op;
-  cls_client::remove_child(&op, m_parent_spec, m_image_ctx.id);
+  cls_client::remove_child(&op, m_parent_spec, image_ctx.id);
 
-  librados::AioCompletion *rados_completion = create_callback_completion();
-  int r = m_image_ctx.md_ctx.aio_operate(RBD_CHILDREN, rados_completion,
+  librados::AioCompletion *rados_completion = this->create_callback_completion();
+  int r = image_ctx.md_ctx.aio_operate(RBD_CHILDREN, rados_completion,
     				     &op);
   assert(r == 0);
   rados_completion->release();
@@ -176,3 +186,5 @@ bool FlattenRequest::send_update_children() {
 
 } // namespace operation
 } // namespace librbd
+
+template class librbd::operation::FlattenRequest<librbd::ImageCtx>;

@@ -22,5 +22,9 @@ class ClsCephFSClient
       inode_backtrace_t *backtrace,
       ceph_file_layout *layout,
       AccumulateResult *result);
+
+  static void build_tag_filter(
+      const std::string &scrub_tag,
+      bufferlist *out_bl);
 };
 

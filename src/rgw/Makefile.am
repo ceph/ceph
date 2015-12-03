@@ -2,7 +2,12 @@ if ENABLE_CLIENT
 
 # inject rgw stuff in the decoder testcase
 DENCODER_SOURCES += \
-	rgw/rgw_dencoder.cc
+	rgw/rgw_dencoder.cc \
+	rgw/rgw_acl.cc \
+	rgw/rgw_basic_types.cc \
+	rgw/rgw_common.cc \
+	rgw/rgw_env.cc \
+	rgw/rgw_json_enc.cc
 
 DENCODER_DEPS += -lcurl -lexpat \
 	libcls_version_client.a \
@@ -35,6 +40,7 @@ librgw_la_SOURCES =  \
 	rgw/rgw_rest_client.cc \
 	rgw/rgw_rest_conn.cc \
 	rgw/rgw_op.cc \
+	rgw/rgw_basic_types.cc \
 	rgw/rgw_common.cc \
 	rgw/rgw_cache.cc \
 	rgw/rgw_formats.cc \
@@ -134,7 +140,6 @@ ceph_rgw_jsonparser_SOURCES = \
 ceph_rgw_jsonparser_LDADD = $(LIBRGW) $(LIBRGW_DEPS) $(CEPH_GLOBAL)
 bin_DEBUGPROGRAMS += ceph_rgw_jsonparser
 
-
 noinst_HEADERS += \
 	rgw/rgw_acl.h \
 	rgw/rgw_acl_s3.h \
@@ -145,6 +150,7 @@ noinst_HEADERS += \
 	rgw/rgw_cr_rest.h \
 	rgw/rgw_fcgi.h \
 	rgw/rgw_xml.h \
+	rgw/rgw_basic_types.h \
 	rgw/rgw_cache.h \
 	rgw/rgw_common.h \
 	rgw/rgw_cors.h \

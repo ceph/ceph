@@ -46,6 +46,7 @@ rbd_SOURCES = \
 	tools/rbd/action/ImportDiff.cc \
 	tools/rbd/action/Info.cc \
 	tools/rbd/action/Kernel.cc \
+	tools/rbd/action/Nbd.cc \
 	tools/rbd/action/List.cc \
 	tools/rbd/action/Lock.cc \
 	tools/rbd/action/MergeDiff.cc \
@@ -67,6 +68,12 @@ rbd_LDADD = \
 	$(BOOST_REGEX_LIBS) $(BOOST_PROGRAM_OPTIONS_LIBS)
 if LINUX
 bin_PROGRAMS += rbd
+
+rbd_nbd_SOURCES = tools/rbd_nbd/rbd-nbd.cc
+rbd_nbd_CXXFLAGS = $(AM_CXXFLAGS)
+rbd_nbd_LDADD = $(LIBRBD) $(LIBRADOS) $(CEPH_GLOBAL) $(BOOST_REGEX_LIBS)
+bin_PROGRAMS += rbd-nbd
+
 endif # LINUX
 
 endif # WITH_RBD

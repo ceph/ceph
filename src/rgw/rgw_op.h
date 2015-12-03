@@ -653,10 +653,10 @@ protected:
   time_t *unmod_ptr;
   int ret;
   map<string, bufferlist> attrs;
-  string src_bucket_name;
+  string src_tenant_name, src_bucket_name;
   rgw_bucket src_bucket;
   rgw_obj_key src_object;
-  string dest_bucket_name;
+  string dest_tenant_name, dest_bucket_name;
   rgw_bucket dest_bucket;
   string dest_object;
   time_t src_mtime;
@@ -702,7 +702,9 @@ public:
     copy_if_newer = false;
   }
 
-  static bool parse_copy_location(const string& src, string& bucket_name, rgw_obj_key& object);
+  static bool parse_copy_location(const string& src,
+                                  string& bucket_name,
+                                  rgw_obj_key& object);
 
   virtual void init(RGWRados *store, struct req_state *s, RGWHandler *h) {
     RGWOp::init(store, s, h);
@@ -1098,7 +1100,6 @@ protected:
   int max_to_delete;
   size_t len;
   char *data;
-  string bucket_name;
   rgw_bucket bucket;
   bool quiet;
   bool status_dumped;

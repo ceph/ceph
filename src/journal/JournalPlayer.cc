@@ -146,6 +146,7 @@ bool JournalPlayer::try_pop_front(Entry *entry, uint64_t *commit_tid) {
         m_watch_interval);
       m_watch_scheduled = true;
     } else if (!m_watch_enabled && !object_player->is_fetch_in_progress()) {
+      ldout(m_cct, 10) << __func__ << ": replay complete" << dendl;
       m_journal_metadata->get_finisher().queue(new C_HandleComplete(
         m_replay_handler), 0);
     }
@@ -199,7 +200,7 @@ void JournalPlayer::process_state(uint64_t object_number, int r) {
       break;
     case STATE_PLAYBACK:
       ldout(m_cct, 10) << "PLAYBACK" << dendl;
-      r = process_playback();
+      r = process_playback(object_number);
       break;
     case STATE_ERROR:
       ldout(m_cct, 10) << "ERROR" << dendl;
@@ -221,7 +222,7 @@ void JournalPlayer::process_state(uint64_t object_number, int r) {
 }
 
 int JournalPlayer::process_prefetch(uint64_t object_number) {
-  ldout(m_cct, 10) << __func__ << dendl;
+  ldout(m_cct, 10) << __func__ << ": object_num=" << object_number << dendl;
   assert(m_lock.is_locked());
 
   uint8_t splay_width = m_journal_metadata->get_splay_width();
@@ -311,17 +312,26 @@ int JournalPlayer::process_prefetch(uint64_t object_number) {
   return 0;
 }
 
-int JournalPlayer::process_playback() {
-  ldout(m_cct, 10) << __func__ << dendl;
+int JournalPlayer::process_playback(uint64_t object_number) {
+  ldout(m_cct, 10) << __func__ << ": object_num=" << object_number << dendl;
   assert(m_lock.is_locked());
 
   m_watch_scheduled = false;
 
   ObjectPlayerPtr object_player = get_object_player();
-  if (!object_player->empty()) {
-    ldout(m_cct, 10) << __func__ << ": entries available" << dendl;
-    m_journal_metadata->get_finisher().queue(new C_HandleEntriesAvailable(
-      m_replay_handler), 0);
+  if (object_player->get_object_number() == object_number) {
+    uint8_t splay_width = m_journal_metadata->get_splay_width();
+    uint64_t active_set = m_journal_metadata->get_active_set();
+    uint64_t object_set = object_player->get_object_number() / splay_width;
+    if (!object_player->empty()) {
+      ldout(m_cct, 10) << __func__ << ": entries available" << dendl;
+      m_journal_metadata->get_finisher().queue(new C_HandleEntriesAvailable(
+        m_replay_handler), 0);
+    } else if (object_set == active_set) {
+      ldout(m_cct, 10) << __func__ << ": replay complete" << dendl;
+      m_journal_metadata->get_finisher().queue(new C_HandleComplete(
+        m_replay_handler), 0);
+    }
   }
   return 0;
 }

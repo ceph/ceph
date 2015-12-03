@@ -2,7 +2,6 @@
 // vim: ts=8 sw=2 smarttab
 #include "librbd/ImageWatcher.h"
 #include "librbd/AioCompletion.h"
-#include "librbd/AioImageRequestWQ.h"
 #include "librbd/ImageCtx.h"
 #include "librbd/internal.h"
 #include "librbd/ObjectMap.h"
@@ -35,8 +34,10 @@ ImageWatcher::ImageWatcher(ImageCtx &image_ctx)
   : m_image_ctx(image_ctx),
     m_watch_lock(unique_lock_name("librbd::ImageWatcher::m_watch_lock", this)),
     m_watch_ctx(*this), m_watch_handle(0),
-    m_watch_state(WATCH_STATE_UNREGISTERED), m_lock_supported(false),
-    m_lock_owner_state(LOCK_OWNER_STATE_NOT_LOCKED),
+    m_watch_state(WATCH_STATE_UNREGISTERED),
+    m_refresh_lock(unique_lock_name("librbd::ImageWatcher::m_refresh_lock",
+                                    this)),
+    m_lock_supported(false), m_lock_owner_state(LOCK_OWNER_STATE_NOT_LOCKED),
     m_listeners_lock(unique_lock_name("librbd::ImageWatcher::m_listeners_lock", this)),
     m_listeners_in_use(false),
     m_task_finisher(new TaskFinisher<Task>(*m_image_ctx.cct)),
@@ -131,7 +132,7 @@ int ImageWatcher::refresh() {
 
   bool lock_support_changed = false;
   {
-    RWLock::WLocker watch_locker(m_watch_lock);
+    Mutex::Locker refresh_locker(m_refresh_lock);
     if (m_lock_supported != is_lock_supported()) {
       m_lock_supported = is_lock_supported();
       lock_support_changed = true;
@@ -393,6 +394,7 @@ int ImageWatcher::release_lock()
 
   // ensure all maint operations are canceled
   m_image_ctx.cancel_async_requests();
+  m_image_ctx.flush_async_operations();
 
   int r;
   {
@@ -402,8 +404,12 @@ int ImageWatcher::release_lock()
     // lock is being released
     notify_listeners_updated_lock(LOCK_UPDATE_STATE_RELEASING);
 
-    // AioImageRequestWQ will have blocked writes / flushed IO by this point
-    assert(m_image_ctx.aio_work_queue->writes_blocked());
+    RWLock::WLocker md_locker(m_image_ctx.md_lock);
+    r = m_image_ctx.flush();
+    if (r < 0) {
+      lderr(cct) << this << " failed to flush: " << cpp_strerror(r) << dendl;
+      goto err_cancel_unlock;
+    }
   }
 
   m_image_ctx.owner_lock.get_write();
@@ -426,6 +432,13 @@ int ImageWatcher::release_lock()
   }
 
   return 0;
+
+err_cancel_unlock:
+  m_image_ctx.owner_lock.get_write();
+  if (m_lock_owner_state == LOCK_OWNER_STATE_RELEASING) {
+    m_lock_owner_state = LOCK_OWNER_STATE_LOCKED;
+  }
+  return r;
 }
 
 void ImageWatcher::assert_header_locked(librados::ObjectWriteOperation *op) {
