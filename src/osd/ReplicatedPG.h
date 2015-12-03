@@ -934,7 +934,7 @@ protected:
   }
   bool agent_work(int max, int agent_flush_quota);
   bool agent_maybe_flush(ObjectContextRef& obc);  ///< maybe flush
-  bool agent_maybe_evict(ObjectContextRef& obc);  ///< maybe evict
+  bool agent_maybe_evict(ObjectContextRef& obc, bool after_flush);  ///< maybe evict
 
   void agent_load_hit_sets();  ///< load HitSets, if needed
 
