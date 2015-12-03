@@ -16,8 +16,10 @@
 #define OP_QUEUE_H
 
 #include "common/Formatter.h"
+#include "include/msgr.h"
 
 #include <list>
+#include <functional>
 
 /**
  * Abstract class for all Op Queues
@@ -34,9 +36,9 @@ class OpQueue {
     virtual unsigned length() const = 0;
     // Ops will be removed and placed in *removed if f is true
     virtual void remove_by_filter(
-	std::function<bool (T)> f, list<T> *removed = 0) = 0;
+	std::function<bool (T)> f, std::list<T> *removed = 0) = 0;
     // Ops of this priority should be deleted immediately
-    virtual void remove_by_class(K k, list<T> *out = 0) = 0;
+    virtual void remove_by_class(K k, std::list<T> *out = 0) = 0;
     // Enqueue the op for processing. If front is true then the
     // op should be put in the front of the queue, otherwise it
     // should be queued in the back. The class allows for multiple

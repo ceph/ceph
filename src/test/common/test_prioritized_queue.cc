@@ -6,7 +6,7 @@
 
 #include <numeric>
 #include <vector>
-
+#include <algorithm>
 
 using std::vector;
 
@@ -23,7 +23,7 @@ protected:
     for (int i = 0; i < item_size; i++) {
       items.push_back(Item(i));
     }
-    random_shuffle(items.begin(), items.end());
+    std::random_shuffle(items.begin(), items.end());
   }
   virtual void TearDown() {
     items.clear();
