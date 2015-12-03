@@ -309,7 +309,7 @@ void set_req_state_err(struct req_state *s, int err_no)
     err_no = -err_no;
   s->err.ret = -err_no;
 
-  if (s->prot_flags & RGW_PROTO_SWIFT) {
+  if (s->prot_flags & RGW_REST_SWIFT) {
     r = search_err(err_no, RGW_HTTP_SWIFT_ERRORS, ARRAY_LEN(RGW_HTTP_SWIFT_ERRORS));
     if (r) {
       s->err.http_ret = r->http_ret;
@@ -320,7 +320,7 @@ void set_req_state_err(struct req_state *s, int err_no)
 
   r = search_err(err_no, RGW_HTTP_ERRORS, ARRAY_LEN(RGW_HTTP_ERRORS));
   if (r) {
-    if (s->prot_flags & RGW_PROTO_WEBSITE && err_no == ERR_WEBSITE_REDIRECT && !s->err.is_clear()) {
+    if (s->prot_flags & RGW_REST_WEBSITE && err_no == ERR_WEBSITE_REDIRECT && !s->err.is_clear()) {
       // http_ret was custom set, so don't change it!
     } else {
       s->err.http_ret = r->http_ret;
@@ -375,7 +375,7 @@ void dump_etag(struct req_state * const s, const char * const etag)
   }
 
   int r;
-  if (s->prot_flags & RGW_PROTO_SWIFT) {
+  if (s->prot_flags & RGW_REST_SWIFT) {
     r = s->cio->print("etag: %s\r\n", etag);
   } else {
     r = s->cio->print("ETag: \"%s\"\r\n", etag);
@@ -533,7 +533,7 @@ void dump_start(struct req_state *s)
 
 void dump_trans_id(req_state *s)
 {
-  if (s->prot_flags & RGW_PROTO_SWIFT) {
+  if (s->prot_flags & RGW_REST_SWIFT) {
     s->cio->print("X-Trans-Id: %s\r\n", s->trans_id.c_str());
   }
   else {
@@ -552,7 +552,7 @@ void end_header(struct req_state *s, RGWOp *op, const char *content_type, const 
     dump_access_control(s, op);
   }
 
-  if (s->prot_flags & RGW_PROTO_SWIFT && !content_type) {
+  if (s->prot_flags & RGW_REST_SWIFT && !content_type) {
     force_content_type = true;
   }
 
@@ -573,7 +573,7 @@ void end_header(struct req_state *s, RGWOp *op, const char *content_type, const 
       ctype = "text/plain";
       break;
     }
-    if (s->prot_flags & RGW_PROTO_SWIFT)
+    if (s->prot_flags & RGW_REST_SWIFT)
       ctype.append("; charset=utf-8");
     content_type = ctype.c_str();
   }
@@ -1227,7 +1227,7 @@ int RGWHandler_ObjStore::allocate_formatter(struct req_state *s, int default_typ
       s->formatter = new JSONFormatter(false);
       break;
     case RGW_FORMAT_HTML:
-      s->formatter = new HTMLFormatter(s->prot_flags & RGW_PROTO_WEBSITE);
+      s->formatter = new HTMLFormatter(s->prot_flags & RGW_REST_WEBSITE);
       break;
     default:
       return -EINVAL;
@@ -1455,7 +1455,7 @@ int RGWREST::preprocess(struct req_state *s, RGWClientIO *cio)
 	in_hosted_domain = true; // TODO: should hostnames be a strict superset of hostnames_s3website?
         domain = s3website_domain;
         subdomain = s3website_subdomain;
-        s->prot_flags |= RGW_PROTO_WEBSITE;
+        s->prot_flags |= RGW_REST_WEBSITE;
       }
     }
 
@@ -1485,7 +1485,7 @@ int RGWREST::preprocess(struct req_state *s, RGWClientIO *cio)
 	      in_hosted_domain = true; // TODO: should hostnames be a strict superset of hostnames_s3website?
 	      domain = s3website_domain;
 	      subdomain = s3website_subdomain;
-	      s->prot_flags |= RGW_PROTO_WEBSITE;
+	      s->prot_flags |= RGW_REST_WEBSITE;
 	    }
         }
 
