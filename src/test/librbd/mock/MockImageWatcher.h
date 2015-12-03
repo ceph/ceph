@@ -12,6 +12,8 @@ struct MockImageWatcher {
   MOCK_CONST_METHOD0(is_lock_owner, bool());
   MOCK_CONST_METHOD1(is_lock_supported, bool(const RWLock &));
   MOCK_METHOD1(assert_header_locked, void (librados::ObjectWriteOperation *));
+
+  MOCK_METHOD0(notify_request_lock, void());
 };
 
 } // namespace librbd
