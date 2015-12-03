@@ -11,6 +11,12 @@ from teuthology.exceptions import ParseError
 from teuthology.suite import build_matrix, combine_path
 
 def main(args):
+    try:
+        describe_tests(args)
+    except ParseError:
+        sys.exit(1)
+
+def describe_tests(args):
     suite_dir = os.path.abspath(args["<suite_dir>"])
     fields = args["--fields"].split(',')
     include_facet = args['--show-facet'] == 'yes'
@@ -133,11 +139,8 @@ def get_combinations(suite_dir, fields, subset,
                             for row in rows])
 
 def describe_suite(suite_dir, fields, include_facet, output_format):
-    try:
-        rows = tree_with_info(suite_dir, fields, include_facet, '', [],
-                              output_format=output_format)
-    except ParseError:
-        return 1
+    rows = tree_with_info(suite_dir, fields, include_facet, '', [],
+                          output_format=output_format)
 
     headers = ['path']
     if include_facet:
