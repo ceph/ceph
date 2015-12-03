@@ -29,7 +29,9 @@ and especially the `publications list`_.
 Since this document is to be consumed by developers, who are assumed to
 have Internet access, topics covered elsewhere on the web are treated by
 linking. If you notice that a link is broken or if you know of a better
-link, `open a pull request`.
+link, `open a pull request`_.
+
+.. _`open a pull request`: http://tracker.ceph.com/projects/ceph/issues/new
 
 The bare essentials
 ===================
@@ -82,7 +84,8 @@ directory of the source-code tree`_.
 Source code repositories
 ------------------------
 
-The source code of Ceph lives on GitHub in a number of repositories below https://github.com/ceph
+The source code of Ceph lives on GitHub in a number of repositories below
+https://github.com/ceph.
 
 To make a meaningful contribution to the project as a developer, a working
 knowledge of git_ is essential.
@@ -110,6 +113,8 @@ IRC
 In addition to mailing lists, the Ceph community also communicates in real
 time using `Internet Relay Chat`_.  
 
+.. _`Internet Relay Chat`: http://www.irchelp.org/
+
 See https://ceph.com/resources/mailing-list-irc/ for how to set up your IRC
 client and a list of channels.
 
@@ -129,7 +134,8 @@ for that.
 
 RADOS itself can be further broken down into Monitors, Object Storage Daemons
 (OSDs), and clients (librados). Monitors and OSDs are introduced at
-:doc:`start/intro`. The client library is explained at :doc:`rados/api`.
+:doc:`/start/intro`. The client library is explained at
+:doc:`/rados/api/index`.
 
 RGW
 ---
@@ -139,7 +145,7 @@ provides a REST interface to RADOS objects.
 
 .. _civetweb: https://github.com/civetweb/civetweb
 
-A more thorough introduction to RGW can be found at :doc:`radosgw`.
+A more thorough introduction to RGW can be found at :doc:`/radosgw/index`.
 
 RBD
 ---
@@ -147,7 +153,7 @@ RBD
 RBD stands for RADOS Block Device. It enables a Ceph cluster to store disk
 images, and includes in-kernel code enabling RBD images to be mounted.
 
-To delve further into RBD, see :doc:`rbd/rbd`.
+To delve further into RBD, see :doc:`/rbd/rbd`.
 
 CephFS
 ------
@@ -155,7 +161,7 @@ CephFS
 CephFS is a distributed file system that enables a Ceph cluster to be used as a NAS.
 
 File system metadata is managed by Meta Data Server (MDS) daemons. The Ceph
-file system is explained in more detail at :doc:`cephfs`.
+file system is explained in more detail at :doc:`/cephfs/index`.
 
 Build/Ops
 ---------
@@ -170,46 +176,46 @@ Building
 Building from source
 --------------------
 
-See instructions at :doc:`install/build-ceph`.
+See instructions at :doc:`/install/build-ceph`.
 
 Testing
 =======
 
 You can start a development mode Ceph cluster, after compiling the source, with::
 
-	cd src
-	install -d -m0755 out dev/osd0
-	./vstart.sh -n -x -l
-	# check that it's there
-	./ceph health
+    cd src
+    install -d -m0755 out dev/osd0
+    ./vstart.sh -n -x -l
+    # check that it's there
+    ./ceph health
 
 Issue tracker
 =============
 
-The Ceph project has its own issue tracker, `http://tracker.ceph.com`_,
+The Ceph project has its own issue tracker, http://tracker.ceph.com,
 powered by `Redmine`_.
 
-.. _`http://tracker.ceph.com`: http://tracker.ceph.com
 .. _Redmine: http://www.redmine.org
 
 The tracker has a Ceph project with a number of subprojects loosely
-corresponding to the project components listed in `High-level overview`.
+corresponding to the project components listed in `High-level structure`_.
 
 Mere `registration`_ automatically grants tracker permissions sufficient to
 open new issues and comment on existing ones.
 
 .. _registration: http://tracker.ceph.com/account/register
 
-To report a bug, `jump to the Ceph project`_ and click on `New issue`_
+To report a bug or propose a new feature, `jump to the Ceph project`_ and
+click on `New issue`_.
 
 .. _`jump to the Ceph project`: http://tracker.ceph.com/projects/ceph
 .. _`New issue`: http://tracker.ceph.com/projects/ceph/issues/new
 
-If you start working on a bug, let the other developers know by adding an
-update to the issue.
+If you start working on an issue, let the other developers know by adding
+an update to the issue. If your tracker permissions have been escalated,
+you can change the issue status yourself to reflect reality. 
 
-If your tracker permissions have been escalated, you can change the issue
-status as appropriate:
+**Meanings of some commonly used statuses**
 
 ================ ===========================================
 Status           Meaning
@@ -221,11 +227,9 @@ Pending Backport Fix has been merged, backport(s) pending
 Resolved         Fix and backports (if any) have been merged
 ================ ===========================================
 
-There are other statuses, but these are the most common.
-
 If you do not have permission to change the status yourself, don't worry:
-someone will probably change it for you, even without asking. You can ask
-on IRC for another developer to change the status for you.
+someone will probably change it for you, even without asking. You can also
+ask for assistance on IRC.
 
 Bugfixing
 =========
