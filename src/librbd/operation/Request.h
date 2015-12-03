@@ -9,11 +9,15 @@
 #include "librbd/JournalTypes.h"
 
 namespace librbd {
+
+class ImageCtx;
+
 namespace operation {
 
-class Request : public AsyncRequest<> {
+template <typename ImageCtxT = ImageCtx>
+class Request : public AsyncRequest<ImageCtxT> {
 public:
-  Request(ImageCtx &image_ctx, Context *on_finish);
+  Request(ImageCtxT &image_ctx, Context *on_finish);
 
   virtual void send();
 
@@ -42,5 +46,7 @@ private:
 
 } // namespace operation
 } // namespace librbd
+
+extern template class librbd::operation::Request<librbd::ImageCtx>;
 
 #endif // CEPH_LIBRBD_OPERATION_REQUEST_H
