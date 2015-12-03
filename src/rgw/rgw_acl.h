@@ -10,6 +10,8 @@
 
 #include "common/debug.h"
 
+#include "rgw_basic_types.h"
+
 using namespace std;
 
 #define RGW_PERM_NONE            0x00
@@ -102,7 +104,7 @@ class ACLGrant
 {
 protected:
   ACLGranteeType type;
-  string id;
+  rgw_user id;
   string email;
   ACLPermission permission;
   string name;
@@ -114,10 +116,10 @@ public:
 
   /* there's an assumption here that email/uri/id encodings are
      different and there can't be any overlap */
-  bool get_id(string& _id) {
+  bool get_id(rgw_user& _id) {
     switch(type.get_type()) {
     case ACL_TYPE_EMAIL_USER:
-      _id = email;
+      _id = email; // implies from_str() that parses the 't:u' syntax
       return true;
     case ACL_TYPE_GROUP:
       return false;
@@ -131,9 +133,11 @@ public:
   ACLGroupTypeEnum get_group() { return group; }
 
   void encode(bufferlist& bl) const {
-    ENCODE_START(3, 3, bl);
+    ENCODE_START(4, 3, bl);
     ::encode(type, bl);
-    ::encode(id, bl);
+    string s;
+    id.to_str(s);
+    ::encode(s, bl);
     string uri;
     ::encode(uri, bl);
     ::encode(email, bl);
@@ -144,9 +148,11 @@ public:
     ENCODE_FINISH(bl);
   }
   void decode(bufferlist::iterator& bl) {
-    DECODE_START_LEGACY_COMPAT_LEN(3, 3, 3, bl);
+    DECODE_START_LEGACY_COMPAT_LEN(4, 3, 3, bl);
     ::decode(type, bl);
-    ::decode(id, bl);
+    string s;
+    ::decode(s, bl);
+    id.from_str(s);
     string uri;
     ::decode(uri, bl);
     ::decode(email, bl);
@@ -166,7 +172,7 @@ public:
 
   ACLGroupTypeEnum uri_to_group(string& uri);
   
-  void set_canon(string& _id, string& _name, int perm) {
+  void set_canon(const rgw_user& _id, string& _name, int perm) {
     type.set(ACL_TYPE_CANON_USER);
     id = _id;
     name = _name;
@@ -198,7 +204,7 @@ public:
 
   virtual ~RGWAccessControlList() {}
 
-  int get_perm(string& id, int perm_mask);
+  int get_perm(rgw_user& id, int perm_mask);
   int get_group_perm(ACLGroupTypeEnum group, int perm_mask);
   void encode(bufferlist& bl) const {
     ENCODE_START(3, 3, bl);
@@ -233,7 +239,7 @@ public:
 
   multimap<string, ACLGrant>& get_grant_map() { return grant_map; }
 
-  void create_default(string id, string name) {
+  void create_default(const rgw_user& id, string name) {
     acl_user_map.clear();
     acl_group_map.clear();
 
@@ -247,30 +253,34 @@ WRITE_CLASS_ENCODER(RGWAccessControlList)
 class ACLOwner
 {
 protected:
-  string id;
+  rgw_user id;
   string display_name;
 public:
   ACLOwner() {}
   ~ACLOwner() {}
 
   void encode(bufferlist& bl) const {
-    ENCODE_START(2, 2, bl);
-    ::encode(id, bl);
+    ENCODE_START(3, 2, bl);
+    string s;
+    id.to_str(s);
+    ::encode(s, bl);
     ::encode(display_name, bl);
     ENCODE_FINISH(bl);
   }
   void decode(bufferlist::iterator& bl) {
-    DECODE_START_LEGACY_COMPAT_LEN(2, 2, 2, bl);
-    ::decode(id, bl);
+    DECODE_START_LEGACY_COMPAT_LEN(3, 2, 2, bl);
+    string s;
+    ::decode(s, bl);
+    id.from_str(s);
     ::decode(display_name, bl);
     DECODE_FINISH(bl);
   }
   void dump(Formatter *f) const;
   static void generate_test_instances(list<ACLOwner*>& o);
-  void set_id(const string& _id) { id = _id; }
+  void set_id(const rgw_user& _id) { id = _id; }
   void set_name(string& name) { display_name = name; }
 
-  string& get_id() { return id; }
+  rgw_user& get_id() { return id; }
   string& get_display_name() { return display_name; }
 };
 WRITE_CLASS_ENCODER(ACLOwner)
@@ -292,9 +302,9 @@ public:
     acl.set_ctx(ctx);
   }
 
-  int get_perm(string& id, int perm_mask);
+  int get_perm(rgw_user& id, int perm_mask);
   int get_group_perm(ACLGroupTypeEnum group, int perm_mask);
-  bool verify_permission(string& uid, int user_perm_mask, int perm);
+  bool verify_permission(rgw_user& uid, int user_perm_mask, int perm);
 
   void encode(bufferlist& bl) const {
     ENCODE_START(2, 2, bl);
@@ -321,7 +331,7 @@ public:
     return owner;
   }
 
-  void create_default(string& id, string& name) {
+  void create_default(const rgw_user& id, string& name) {
     acl.create_default(id, name);
     owner.set_id(id);
     owner.set_name(name);

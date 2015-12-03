@@ -542,7 +542,7 @@ int RGWSwift::validate_keystone_token(RGWRados *store, const string& token, stru
 int authenticate_temp_url(RGWRados *store, req_state *s)
 {
   /* temp url requires bucket and object specified in the requets */
-  if (s->bucket_name_str.empty())
+  if (s->bucket_name.empty())
     return -EPERM;
 
   if (s->object.empty())
@@ -559,7 +559,9 @@ int authenticate_temp_url(RGWRados *store, req_state *s)
   /* need to get user info of bucket owner */
   RGWBucketInfo bucket_info;
 
-  int ret = store->get_bucket_info(*static_cast<RGWObjectCtx *>(s->obj_ctx), s->bucket_name_str, bucket_info, NULL);
+  int ret = store->get_bucket_info(*static_cast<RGWObjectCtx *>(s->obj_ctx),
+                                   s->bucket_tenant, s->bucket_name,
+                                   bucket_info, NULL);
   if (ret < 0)
     return -EPERM;
 
@@ -638,8 +640,8 @@ bool RGWSwift::verify_swift_token(RGWRados *store, req_state *s)
     s->perm_mask = 0;
     map<string, RGWSubUser>::iterator iter = s->user.subusers.find(subuser);
     if (iter != s->user.subusers.end()) {
-      RGWSubUser& subuser = iter->second;
-      s->perm_mask = subuser.perm_mask;
+      RGWSubUser& subuser_ = iter->second;
+      s->perm_mask = subuser_.perm_mask;
     }
   } else {
     s->perm_mask = RGW_PERM_FULL_CONTROL;
@@ -684,7 +686,7 @@ bool RGWSwift::do_verify_swift_token(RGWRados *store, req_state *s)
     return false;
   }
 
-  s->swift_user = info.user;
+  s->swift_user = info.user.to_str();
   s->swift_groups = info.auth_groups;
 
   string swift_user = s->swift_user;

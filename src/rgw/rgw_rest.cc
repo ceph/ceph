@@ -366,9 +366,14 @@ void dump_bucket_from_state(struct req_state *s)
 {
   int expose_bucket = g_conf->rgw_expose_bucket;
   if (expose_bucket) {
-    if (!s->bucket_name_str.empty()) {
+    if (!s->bucket_name.empty()) {
       string b;
-      url_encode(s->bucket_name_str, b);
+      if (!s->bucket_tenant.empty()) {
+        string g = s->bucket_tenant + "/" + s->bucket_name;
+        url_encode(g, b);
+      } else {
+        url_encode(s->bucket_name, b);
+      }
       s->cio->print("Bucket: %s\r\n", b.c_str());
     }
   }
@@ -382,8 +387,12 @@ void dump_uri_from_state(struct req_state *s)
     string server = s->info.env->get("SERVER_NAME", "<SERVER_NAME>");
     location.append(server);
     location += "/";
-    if (!s->bucket_name_str.empty()) {
-      location += s->bucket_name_str;
+    if (!s->bucket_name.empty()) {
+      if (!s->bucket_tenant.empty()) {
+        location += s->bucket_tenant;
+        location += ":";
+      }
+      location += s->bucket_name;
       location += "/";
       if (!s->object.empty()) {
         location += s->object.name;
@@ -452,12 +461,12 @@ void dump_time(struct req_state *s, const char *name, time_t *t)
   s->formatter->dump_string(name, buf);
 }
 
-void dump_owner(struct req_state *s, string& id, string& name, const char *section)
+void dump_owner(struct req_state *s, rgw_user& id, string& name, const char *section)
 {
   if (!section)
     section = "Owner";
   s->formatter->open_object_section(section);
-  s->formatter->dump_string("ID", id);
+  s->formatter->dump_string("ID", id.to_str());
   s->formatter->dump_string("DisplayName", name);
   s->formatter->close_section();
 }
@@ -1072,9 +1081,8 @@ int RGWListBucketMultiparts_ObjStore::get_params()
 
 int RGWDeleteMultiObj_ObjStore::get_params()
 {
-  bucket_name = s->bucket_name_str;
 
-  if (bucket_name.empty()) {
+  if (s->bucket_name.empty()) {
     ret = -EINVAL;
     return ret;
   }
@@ -1166,6 +1174,17 @@ int RGWHandler_ObjStore::allocate_formatter(struct req_state *s, int default_typ
   s->formatter->reset();
 
   return 0;
+}
+
+int RGWHandler_ObjStore::validate_tenant_name(string const& t)
+{
+  struct tench {
+    static bool is_good(char ch) {
+      return isalnum(ch) || ch == '_';
+    }
+  };
+  std::string::const_iterator it = std::find_if(t.begin(), t.end(), tench::is_good);
+  return (it == t.end())? 0: -ERR_INVALID_BUCKET_NAME;
 }
 
 // This function enforces Amazon's spec for bucket names.
@@ -1392,7 +1411,7 @@ int RGWREST::preprocess(struct req_state *s, RGWClientIO *cio)
       string encoded_bucket = "/";
       encoded_bucket.append(subdomain);
       if (s->info.request_uri[0] != '/')
-        encoded_bucket.append("/'");
+        encoded_bucket.append("/");
       encoded_bucket.append(s->info.request_uri);
       s->info.request_uri = encoded_bucket;
     }

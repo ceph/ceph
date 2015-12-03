@@ -30,14 +30,15 @@ int RGWRESTConn::get_url(string& endpoint)
   return 0;
 }
 
-int RGWRESTConn::forward(const string& uid, req_info& info, obj_version *objv, size_t max_response, bufferlist *inbl, bufferlist *outbl)
+int RGWRESTConn::forward(const rgw_user& uid, req_info& info, obj_version *objv, size_t max_response, bufferlist *inbl, bufferlist *outbl)
 {
   string url;
   int ret = get_url(url);
   if (ret < 0)
     return ret;
+  string uid_str = uid.to_str();
   list<pair<string, string> > params;
-  params.push_back(pair<string, string>(RGW_SYS_PARAM_PREFIX "uid", uid));
+  params.push_back(pair<string, string>(RGW_SYS_PARAM_PREFIX "uid", uid_str));
   params.push_back(pair<string, string>(RGW_SYS_PARAM_PREFIX "region", region));
   if (objv) {
     params.push_back(pair<string, string>(RGW_SYS_PARAM_PREFIX "tag", objv->tag));
@@ -55,7 +56,7 @@ public:
     StreamObjData(rgw_obj& _obj) : obj(_obj) {}
 };
 
-int RGWRESTConn::put_obj_init(const string& uid, rgw_obj& obj, uint64_t obj_size,
+int RGWRESTConn::put_obj_init(const rgw_user& uid, rgw_obj& obj, uint64_t obj_size,
                                       map<string, bufferlist>& attrs, RGWRESTStreamWriteRequest **req)
 {
   string url;
@@ -63,8 +64,9 @@ int RGWRESTConn::put_obj_init(const string& uid, rgw_obj& obj, uint64_t obj_size
   if (ret < 0)
     return ret;
 
+  string uid_str = uid.to_str();
   list<pair<string, string> > params;
-  params.push_back(pair<string, string>(RGW_SYS_PARAM_PREFIX "uid", uid));
+  params.push_back(pair<string, string>(RGW_SYS_PARAM_PREFIX "uid", uid_str));
   params.push_back(pair<string, string>(RGW_SYS_PARAM_PREFIX "region", region));
   *req = new RGWRESTStreamWriteRequest(cct, url, NULL, &params);
   return (*req)->put_obj_init(key, obj, obj_size, attrs);
@@ -78,7 +80,7 @@ int RGWRESTConn::complete_request(RGWRESTStreamWriteRequest *req, string& etag, 
   return ret;
 }
 
-int RGWRESTConn::get_obj(const string& uid, req_info *info /* optional */, rgw_obj& obj, bool prepend_metadata,
+int RGWRESTConn::get_obj(const rgw_user& uid, req_info *info /* optional */, rgw_obj& obj, bool prepend_metadata,
                                  RGWGetDataCB *cb, RGWRESTStreamReadRequest **req)
 {
   string url;
@@ -86,8 +88,9 @@ int RGWRESTConn::get_obj(const string& uid, req_info *info /* optional */, rgw_o
   if (ret < 0)
     return ret;
 
+  string uid_str = uid.to_str();
   list<pair<string, string> > params;
-  params.push_back(pair<string, string>(RGW_SYS_PARAM_PREFIX "uid", uid));
+  params.push_back(pair<string, string>(RGW_SYS_PARAM_PREFIX "uid", uid_str));
   params.push_back(pair<string, string>(RGW_SYS_PARAM_PREFIX "region", region));
   if (prepend_metadata) {
     params.push_back(pair<string, string>(RGW_SYS_PARAM_PREFIX "prepend-metadata", region));

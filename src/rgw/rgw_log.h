@@ -12,8 +12,8 @@
 class RGWRados;
 
 struct rgw_log_entry {
-  string object_owner;
-  string bucket_owner;
+  rgw_user object_owner;
+  rgw_user bucket_owner;
   string bucket;
   utime_t time;
   string remote_addr;
@@ -32,9 +32,9 @@ struct rgw_log_entry {
   string bucket_id;
 
   void encode(bufferlist &bl) const {
-    ENCODE_START(7, 5, bl);
-    ::encode(object_owner, bl);
-    ::encode(bucket_owner, bl);
+    ENCODE_START(8, 5, bl);
+    ::encode(object_owner.id, bl);
+    ::encode(bucket_owner.id, bl);
     ::encode(bucket, bl);
     ::encode(time, bl);
     ::encode(remote_addr, bl);
@@ -52,13 +52,15 @@ struct rgw_log_entry {
     ::encode(bytes_received, bl);
     ::encode(bucket_id, bl);
     ::encode(obj, bl);
+    ::encode(object_owner, bl);
+    ::encode(bucket_owner, bl);
     ENCODE_FINISH(bl);
   }
   void decode(bufferlist::iterator &p) {
-    DECODE_START_LEGACY_COMPAT_LEN(7, 5, 5, p);
-    ::decode(object_owner, p);
+    DECODE_START_LEGACY_COMPAT_LEN(8, 5, 5, p);
+    ::decode(object_owner.id, p);
     if (struct_v > 3)
-      ::decode(bucket_owner, p);
+      ::decode(bucket_owner.id, p);
     ::decode(bucket, p);
     ::decode(time, p);
     ::decode(remote_addr, p);
@@ -93,6 +95,10 @@ struct rgw_log_entry {
     }
     if (struct_v >= 7) {
       ::decode(obj, p);
+    }
+    if (struct_v >= 8) {
+      ::decode(object_owner, p);
+      ::decode(bucket_owner, p);
     }
     DECODE_FINISH(p);
   }
