@@ -2988,7 +2988,7 @@ int RGWRados::convert_regionmap()
 int RGWRados::replace_region_with_zonegroup()
 {
   if (!cct->_conf->rgw_region.empty() && cct->_conf->rgw_zonegroup.empty()) {
-    int ret = cct->_conf->set_val("rgw_zonegroup", cct->_conf->rgw_region.c_str());
+    int ret = cct->_conf->set_val("rgw_zonegroup", cct->_conf->rgw_region, true, false);
     if (ret < 0) {
       lderr(cct) << "failed to set rgw_zonegroup to " << cct->_conf->rgw_region << dendl;
       return ret;
