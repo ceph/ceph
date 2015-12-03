@@ -179,15 +179,8 @@ You can start a development mode Ceph cluster, after compiling the source, with:
 	# check that it's there
 	./ceph health
 
-Bugfixing
-=========
-
-Without bugs, there would be no software, and without software, there would
-be no software developers. This chapter explains the Ceph-specific aspects
-of bugfixing workflows.
-
 Issue tracker
--------------
+=============
 
 The Ceph project has its own issue tracker, `http://tracker.ceph.com`_,
 powered by `Redmine`_.
@@ -230,7 +223,13 @@ If you do not have permission to change the status yourself, don't worry:
 someone will probably change it for you, even without asking. You can ask
 on IRC for another developer to change the status for you.
 
-Documentation bugs
-------------------
+Bugfixing
+=========
 
+Without bugs, there would be no software, and without software, there would
+be no software developers. This chapter explains the Ceph-specific aspects
+of the project's bugfixing workflows.
+
+A good understanding of the `Issue tracker`_ chapter is necessary before
+you attempt to fix any bugs.
 
