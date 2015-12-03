@@ -172,15 +172,15 @@ def extract_info(file_name, fields, _isdir=os.path.isdir, _open=open):
 
     Assumes fields are set in a format of:
 
-    {'description': [{'field' : value, 'field2' : value2}]
+    {'meta': [{'field' : value, 'field2' : value2}]
 
     or in yaml:
 
-    description:
+    meta:
     - field: value
       field2: value2
 
-    If description is present but not in this format, prints an error
+    If 'meta' is present but not in this format, prints an error
     message and raises ParseError.
     """
     empty_result = {f: '' for f in fields}
@@ -193,16 +193,16 @@ def extract_info(file_name, fields, _isdir=os.path.isdir, _open=open):
     if not isinstance(parsed, dict):
         return empty_result
 
-    description = parsed.get('description', [{}])
-    if not (isinstance(description, list) and
-            len(description) == 1 and
-            isinstance(description[0], dict)):
-        print 'Error in description format in', file_name
-        print 'Description must be a list containing exactly one dict.'
-        print 'Description is:', description
+    meta = parsed.get('meta', [{}])
+    if not (isinstance(meta, list) and
+            len(meta) == 1 and
+            isinstance(meta[0], dict)):
+        print 'Error in meta format in', file_name
+        print 'Meta must be a list containing exactly one dict.'
+        print 'Meta is:', meta
         raise ParseError()
 
-    return {field: description[0].get(field, '') for field in fields}
+    return {field: meta[0].get(field, '') for field in fields}
 
 def path_relative_to_suites(path):
     """Attempt to trim the ceph-qa-suite root directory from the beginning

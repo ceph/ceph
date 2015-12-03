@@ -11,14 +11,14 @@ realistic_fs = {
         '%': None,
         'base': {
             'install.yaml':
-            """description:
+            """meta:
 - desc: install ceph
 install:
 """
         },
         'clusters': {
             'fixed-1.yaml':
-            """description:
+            """meta:
 - desc: single node cluster
 roles:
 - [osd.0, osd.1, osd.2, mon.a, mon.b, mon.c, client.0]
@@ -26,7 +26,7 @@ roles:
         },
         'workloads': {
             'rbd_api_tests_old_format.yaml':
-            """description:
+            """meta:
 - desc: c/c++ librbd api tests with format 1 images
   rbd_features: none
 overrides:
@@ -43,7 +43,7 @@ tasks:
         - rbd/test_librbd.sh
 """,
             'rbd_api_tests.yaml':
-            """description:
+            """meta:
 - desc: c/c++ librbd api tests with default settings
   rbd_features: default
 tasks:
@@ -223,7 +223,7 @@ class TestDescribeTests(object):
 
 
 def test_extract_info_dir():
-    simple_fs = {'a': {'b.yaml': 'description: [{foo: c}]'}}
+    simple_fs = {'a': {'b.yaml': 'meta: [{foo: c}]'}}
     _, _, fake_isdir, fake_open = make_fake_fstools(simple_fs)
     info = extract_info('a', [], fake_isdir, fake_open)
     assert info == {}
@@ -241,13 +241,13 @@ def check_parse_error(fs):
         raise Exception(str(a))
 
 def test_extract_info_too_many_elements():
-    check_parse_error({'a.yaml': 'description: [{a: b}, {b: c}]'})
+    check_parse_error({'a.yaml': 'meta: [{a: b}, {b: c}]'})
 
 def test_extract_info_not_a_list():
-    check_parse_error({'a.yaml': 'description: {a: b}'})
+    check_parse_error({'a.yaml': 'meta: {a: b}'})
 
 def test_extract_info_not_a_dict():
-    check_parse_error({'a.yaml': 'description: [[a, b]]'})
+    check_parse_error({'a.yaml': 'meta: [[a, b]]'})
 
 def test_extract_info_empty_file():
     simple_fs = {'a.yaml': ''}

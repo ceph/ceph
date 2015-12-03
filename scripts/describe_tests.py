@@ -8,13 +8,13 @@ usage:
     teuthology-describe-tests -h
     teuthology-describe-tests [options] [--] <suite_dir>
 
-Describe the contents of a qa suite by reading 'description' elements
-from yaml files in the suite.
+Describe the contents of a qa suite by reading 'meta' elements from
+yaml files in the suite.
 
-The 'description' element should contain a list with a dictionary
+The 'meta' element should contain a list with a dictionary
 of key/value pairs for entries, i.e.:
 
-description:
+meta:
 - field1: value1
   field2: value2
   field3: value3
