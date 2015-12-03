@@ -7919,6 +7919,19 @@ int ReplicatedPG::try_flush_mark_clean(FlushOpRef fop)
     }
   }
 
+  // successfully flushed, can we evict this object?
+  if (!fop->op && agent_state->evict_mode != TierAgentState::EVICT_MODE_IDLE &&
+      agent_maybe_evict(obc, true)) {
+    osd->logger->inc(l_osd_tier_clean);
+    if (fop->on_flush) {
+      Context *on_flush = fop->on_flush;
+      fop->on_flush = NULL;
+      on_flush->complete(0);
+    }
+    flush_ops.erase(oid);
+    return 0;
+  }
+
   // successfully flushed; can we clear the dirty bit?
   // try to take the lock manually, since we don't
   // have a ctx yet.
@@ -11518,7 +11531,7 @@ bool ReplicatedPG::agent_work(int start_max, int agent_flush_quota)
     }
 
     if (agent_state->evict_mode != TierAgentState::EVICT_MODE_IDLE &&
-	agent_maybe_evict(obc))
+	agent_maybe_evict(obc, false))
       ++started;
     else if (agent_state->flush_mode != TierAgentState::FLUSH_MODE_IDLE &&
              agent_flush_quota > 0 && agent_maybe_flush(obc)) {
@@ -11712,10 +11725,10 @@ struct C_AgentEvictStartStop : public Context {
   }
 };
 
-bool ReplicatedPG::agent_maybe_evict(ObjectContextRef& obc)
+bool ReplicatedPG::agent_maybe_evict(ObjectContextRef& obc, bool after_flush)
 {
   const hobject_t& soid = obc->obs.oi.soid;
-  if (obc->obs.oi.is_dirty()) {
+  if (!after_flush && obc->obs.oi.is_dirty()) {
     dout(20) << __func__ << " skip (dirty) " << obc->obs.oi << dendl;
     return false;
   }
@@ -11785,6 +11798,8 @@ bool ReplicatedPG::agent_maybe_evict(ObjectContextRef& obc)
     ctx->delta_stats.num_objects_omap--;
   ctx->delta_stats.num_evict++;
   ctx->delta_stats.num_evict_kb += SHIFT_ROUND_UP(obc->obs.oi.size, 10);
+  if (obc->obs.oi.is_dirty())
+    --ctx->delta_stats.num_objects_dirty;
   assert(r == 0);
   finish_ctx(ctx, pg_log_entry_t::DELETE, false);
   simple_repop_submit(repop);
