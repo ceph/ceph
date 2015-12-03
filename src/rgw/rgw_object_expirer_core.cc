@@ -39,16 +39,22 @@ using namespace std;
 
 static string objexp_lock_name = "gc_process";
 
-int RGWObjectExpirer::init_bucket_info(const string& bucket_name,
-                                    const string& bucket_id,
-                                    RGWBucketInfo& bucket_info)
+int RGWObjectExpirer::init_bucket_info(const string& tenant_name,
+                                       const string& bucket_name,
+                                       const string& bucket_id,
+                                       RGWBucketInfo& bucket_info)
 {
   RGWObjectCtx obj_ctx(store);
-  const string bucket_instance_id = bucket_name + ":" + bucket_id;
 
+  /*
+   * XXX Here's where it gets tricky. We went to all the trouble of
+   * punching the tenant through the objexp_hint_entry, but now we
+   * find that our instances do not actually have tenants. They are
+   * unique thanks to IDs. So the tenant string is not needed...
+   */
+  const string bucket_instance_id = bucket_name + ":" + bucket_id;
   int ret = store->get_bucket_instance_info(obj_ctx, bucket_instance_id,
           bucket_info, NULL, NULL);
-
   return ret;
 }
 
@@ -56,7 +62,8 @@ int RGWObjectExpirer::garbage_single_object(objexp_hint_entry& hint)
 {
   RGWBucketInfo bucket_info;
 
-  int ret = init_bucket_info(hint.bucket_name, hint.bucket_id, bucket_info);
+  int ret = init_bucket_info(hint.tenant, hint.bucket_name,
+          hint.bucket_id, bucket_info);
   if (-ENOENT == ret) {
     ldout(store->ctx(), 15) << "NOTICE: cannot find bucket = " \
         << hint.bucket_name << ". The object must be already removed" << dendl;
