@@ -38,8 +38,9 @@ protected:
         c = rand() % (1<<22);  // 4M cost
         // Make some of the costs 0, but make sure small costs
         // still work ok.
-        if (c > (1<<19) && c < (1<<20))
+        if (c > (1<<19) && c < (1<<20)) {
           c = 0;
+	}
         op_queue = rand() % 10;
         fob = rand() % 10;
       } else {
@@ -113,30 +114,38 @@ protected:
         // Check that if there are multiple classes in a priority
         // that it is not dequeueing the same class each time.
         LastKlass::iterator si = last_strict.find(std::get<0>(r));
-        if (strictq[std::get<0>(r)].size() > 1 && si != last_strict.end())
+        if (strictq[std::get<0>(r)].size() > 1 && si != last_strict.end()) {
 	  EXPECT_NE(std::get<1>(r), si->second);
+	}
         last_strict[std::get<0>(r)] = std::get<1>(r);
-        Item t = strictq[std::get<0>(r)][std::get<1>(r)].front().second;
+
+	Item t = strictq[std::get<0>(r)][std::get<1>(r)].front().second;
         EXPECT_EQ(std::get<2>(r), std::get<2>(t));
         strictq[std::get<0>(r)][std::get<1>(r)].pop_front();
-        if (strictq[std::get<0>(r)][std::get<1>(r)].empty())
+        if (strictq[std::get<0>(r)][std::get<1>(r)].empty()) {
 	  strictq[std::get<0>(r)].erase(std::get<1>(r));
-        if (strictq[std::get<0>(r)].empty())
+	}
+        if (strictq[std::get<0>(r)].empty()) {
 	  strictq.erase(std::get<0>(r));
+	}
       } else {
         // Check that if there are multiple classes in a priority
         // that it is not dequeueing the same class each time.
         LastKlass::iterator si = last_norm.find(std::get<0>(r));
-        if (normq[std::get<0>(r)].size() > 1 && si != last_norm.end())
+        if (normq[std::get<0>(r)].size() > 1 && si != last_norm.end()) {
 	  EXPECT_NE(std::get<1>(r), si->second);
+	}
         last_norm[std::get<0>(r)] = std::get<1>(r);
-        Item t = normq[std::get<0>(r)][std::get<1>(r)].front().second;
+
+	Item t = normq[std::get<0>(r)][std::get<1>(r)].front().second;
         EXPECT_EQ(std::get<2>(r), std::get<2>(t));
         normq[std::get<0>(r)][std::get<1>(r)].pop_front();
-        if (normq[std::get<0>(r)][std::get<1>(r)].empty())
+        if (normq[std::get<0>(r)][std::get<1>(r)].empty()) {
 	  normq[std::get<0>(r)].erase(std::get<1>(r));
-        if (normq[std::get<0>(r)].empty())
+	}
+        if (normq[std::get<0>(r)].empty()) {
 	  normq.erase(std::get<0>(r));
+	}
       }
     }
   }
@@ -211,8 +220,9 @@ TEST_F(WrrQueueTest, wrr_test_remove_by_filter) {
 	 ki != pi->second.end(); ++ki) {
       for (ItemList::iterator li = ki->second.begin();
 	   li != ki->second.end(); ++li) {
-	if (pred(li->second))
+	if (pred(li->second)) {
 	  ++num_to_remove;
+	}
       }
     }
   }
@@ -222,8 +232,9 @@ TEST_F(WrrQueueTest, wrr_test_remove_by_filter) {
 	 ki != pi->second.end(); ++ki) {
       for (ItemList::iterator li = ki->second.begin();
 	   li != ki->second.end(); ++li) {
-	if (pred(li->second))
+	if (pred(li->second)) {
 	  ++num_to_remove;
+	}
       }
     }
   }

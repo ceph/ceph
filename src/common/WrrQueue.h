@@ -67,24 +67,26 @@ class WrrQueue : public OpQueue <T, K> {
     typedef std::map<K, ListPairs> Classes;
     Classes q;
     typename Classes::iterator cur;
-    unsigned _size;
+    unsigned q_size;
   public:
     SubQueue(const SubQueue &other)
       : q(other.q),
 	cur(q.begin()),
-	_size(0) {}
+	q_size(0) {}
     SubQueue()
       :	cur(q.begin()),
-	_size(0) {}
+	q_size(0) {}
     void enqueue(K cl, unsigned cost, T item,
 		 bool front = CEPH_OP_QUEUE_BACK) {
-      if (front == CEPH_OP_QUEUE_FRONT) 
+      if (front == CEPH_OP_QUEUE_FRONT) {
 	q[cl].push_front(std::make_pair(cost, item));
-      else
+      } else {
 	q[cl].push_back(std::make_pair(cost, item));
-      if (cur == q.end())
+      }
+      if (cur == q.end()) {
 	cur = q.begin();
-      ++_size;
+      }
+      ++q_size;
     }
     std::pair<unsigned, T> front() const {
       assert(!(q.empty()));
@@ -99,19 +101,21 @@ class WrrQueue : public OpQueue <T, K> {
       }
       assert(!(cur->second.empty()));
       cur->second.pop_front();
-      if (cur->second.empty())
+      if (cur->second.empty()) {
 	q.erase(cur++);
-      else
+      } else {
 	++cur;
-      if (cur == q.end())
+      }
+      if (cur == q.end()) {
 	cur = q.begin();
-      --_size;
+      }
+      --q_size;
     }
     unsigned size() const {
-      return _size;
+      return q_size;
     }
     bool empty() const {
-      return (_size == 0) ? true : false;
+      return (q_size == 0) ? true : false;
     }
     unsigned remove_by_filter(std::function<bool (T)> f, std::list<T> *out) {
       unsigned count = 0;
@@ -120,24 +124,27 @@ class WrrQueue : public OpQueue <T, K> {
 	   ) {
 	count += filter_list_pairs(&(i->second), f, out);
 	if (i->second.empty()) {
-	  if (cur == i)
+	  if (cur == i) {
 	    ++cur;
+	  }
 	  q.erase(i++);
 	} else {
 	  ++i;
 	}
       }
-      if (cur == q.end())
+      if (cur == q.end()) {
 	cur = q.begin();
-      _size -= count;
+      }
+      q_size -= count;
       return count;
     }
     unsigned remove_by_class(K k, std::list<T> *out) {
       typename Classes::iterator i = q.find(k);
-      if (i == q.end())
+      if (i == q.end()) {
 	return 0;
+      }
       unsigned count = i->second.size();
-      _size -= count;
+      q_size -= count;
       if (out) {
 	for (typename ListPairs::reverse_iterator j =
 	       i->second.rbegin();
@@ -146,23 +153,26 @@ class WrrQueue : public OpQueue <T, K> {
 	  out->push_front(j->second);
 	}
       }
-      if (i == cur)
+      if (i == cur) {
 	++cur;
+      }
       q.erase(i);
-      if (cur == q.end())
+      if (cur == q.end()) {
 	cur = q.begin();
+      }
       return count;
     }
 
     void dump(Formatter *f) const {
       f->dump_int("num_keys", q.size());
-      if (!empty())
+      if (!empty()) {
 	f->dump_int("first_item_cost", front().first);
+      }
     }
   };
 
-  unsigned _high_size, _wrr_size;
-  unsigned _max_cost;
+  unsigned high_size, wrr_size;
+  unsigned max_cost;
 
   typedef std::map<unsigned, SubQueue> SubQueues;
   SubQueues high_queue;
@@ -171,40 +181,38 @@ class WrrQueue : public OpQueue <T, K> {
 
   SubQueue *create_queue(unsigned priority) {
     typename SubQueues::iterator p = queue.find(priority);
-    if (p != queue.end())
+    if (p != queue.end()) {
       return &p->second;
+    }
     total_priority += priority;
     SubQueue *sq = &queue[priority];
     return sq;
   }
 
-  void remove_queue(unsigned priority) {
-  }
-
 public:
   WrrQueue(unsigned max_per, unsigned min_c)
     : total_priority(0),
-      _high_size(0),
-      _wrr_size(0),
-      _max_cost(0),
+      high_size(0),
+      wrr_size(0),
+      max_cost(0),
       dq(queue.rbegin())
   {}
 
   unsigned length() const final {
-    return _high_size + _wrr_size;
+    return high_size + wrr_size;
   }
 
   void remove_by_filter(std::function<bool (T)> f, std::list<T> *removed = 0) final {
     for (typename SubQueues::iterator i = queue.begin();
 	 i != queue.end();
 	 ) {
-      _wrr_size -= i->second.remove_by_filter(f, removed);
+      wrr_size -= i->second.remove_by_filter(f, removed);
       ++i;
     }
     for (typename SubQueues::iterator i = high_queue.begin();
 	 i != high_queue.end();
 	 ) {
-      _high_size -= i->second.remove_by_filter(f, removed);
+      high_size -= i->second.remove_by_filter(f, removed);
       if (i->second.empty()) {
 	high_queue.erase(i++);
       } else {
@@ -217,13 +225,13 @@ public:
     for (typename SubQueues::iterator i = queue.begin();
 	 i != queue.end();
 	 ) {
-      _wrr_size -= i->second.remove_by_class(k, out);
+      wrr_size -= i->second.remove_by_class(k, out);
       ++i;
     }
     for (typename SubQueues::iterator i = high_queue.begin();
 	 i != high_queue.end();
 	 ) {
-      _high_size -= i->second.remove_by_class(k, out);
+      high_size -= i->second.remove_by_class(k, out);
       if (i->second.empty()) {
 	high_queue.erase(i++);
       } else {
@@ -237,14 +245,15 @@ public:
 		unsigned opclass = CEPH_OP_CLASS_NORMAL) final {
     switch (opclass){
       case CEPH_OP_CLASS_NORMAL :
-	if (cost > _max_cost)
-	  _max_cost = cost;
+	if (cost > max_cost) {
+	  max_cost = cost;
+	}
 	create_queue(priority)->enqueue(cl, cost, item, front);
-	++_wrr_size;
+	++wrr_size;
 	break;
       case CEPH_OP_CLASS_STRICT :
 	high_queue[priority].enqueue(cl, 0, item, front);
-	++_high_size;
+	++high_size;
 	break;
       default :
 	assert(1);
@@ -254,13 +263,14 @@ public:
   bool empty() const final {
     assert(total_priority >= 0);
     assert((total_priority == 0) || !(queue.empty()));
-    return (_high_size + _wrr_size  == 0) ? true : false;
+    return (high_size + wrr_size  == 0) ? true : false;
   }
 
   void inc_dq() {
     ++dq;
-    if (dq == queue.rend())
+    if (dq == queue.rend()) {
       dq = queue.rbegin();
+    }
   }
 
   T dequeue() final {
@@ -269,14 +279,15 @@ public:
     if (!(high_queue.empty())) {
       T ret = high_queue.rbegin()->second.front().second;
       high_queue.rbegin()->second.pop_front();
-      if (high_queue.rbegin()->second.empty())
+      if (high_queue.rbegin()->second.empty()) {
 	high_queue.erase(high_queue.rbegin()->first);
-      --_high_size;
+      }
+      --high_size;
       return ret;
     }
     while (true) {
       if (dq->second.size() != 0) {
-	if (dq->second.size() == _wrr_size) {
+	if (dq->second.size() == wrr_size) {
 	  break;
 	}
 	else {
@@ -287,8 +298,8 @@ public:
 	    }
 	    else {
 	      // flip a coin to see if this priority gets to run based on cost
-	      if ((rand() % _max_cost) <=
-		  (_max_cost - (unsigned)((double)dq->second.front().first * 0.9))){
+	      if ((rand() % max_cost) <=
+		  (max_cost - (unsigned)((double)dq->second.front().first * 0.9))){
 		break;
 	      }
 	    }
@@ -299,7 +310,7 @@ public:
     }
     T ret = dq->second.front().second;
     dq->second.pop_front();
-    --_wrr_size;
+    --wrr_size;
     return ret;
   }
 
