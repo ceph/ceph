@@ -3320,15 +3320,16 @@ void Objecter::_nlist_reply(NListContext *list_context, int r,
 
   int response_size = response.entries.size();
   ldout(cct, 20) << " response.entries.size " << response_size
-		 << ", response.entries " << response.entries << dendl;
+		 << ", response.entries " << response.entries
+		 << ", handle " << response.handle << dendl;
   list_context->extra_info.append(extra_info);
   if (response_size) {
     list_context->list.merge(response.entries);
   }
 
-  // if the osd returns 1 (newer code), or no entries, it means we
+  // if the osd returns 1 (newer code), or handle MAX, it means we
   // hit the end of the pg.
-  if (response_size == 0 || r == 1) {
+  if (response.handle.is_max() || r == 1) {
     ldout(cct, 20) << " at end of pg" << dendl;
     list_context->at_end_of_pg = true;
   } else {
@@ -3465,15 +3466,16 @@ void Objecter::_list_reply(ListContext *list_context, int r,
 
   int response_size = response.entries.size();
   ldout(cct, 20) << " response.entries.size " << response_size
-		 << ", response.entries " << response.entries << dendl;
+		 << ", response.entries " << response.entries
+		 << ", handle " << response.handle << dendl;
   list_context->extra_info.append(extra_info);
   if (response_size) {
     list_context->list.merge(response.entries);
   }
 
-  // if the osd returns 1 (newer code), or no entries, it means we
+  // if the osd returns 1 (newer code), or handle == MAX, it means we
   // hit the end of the pg.
-  if (response_size == 0 || r == 1) {
+  if (response.handle.is_max() || r == 1) {
     ldout(cct, 20) << " at end of pg" << dendl;
     list_context->at_end_of_pg = true;
   } else {
