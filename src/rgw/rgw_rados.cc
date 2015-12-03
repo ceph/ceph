@@ -2428,7 +2428,7 @@ public:
   int notify_all(map<string, RGWRESTConn *>& conn_map, map<int, set<string> >& shards) {
     rgw_http_param_pair pairs[] = { { "type", "data" },
                                     { "notify", NULL },
-                                    { "source-zone", store->get_zone_params().get_name().c_str() },
+                                    { "source-zone", store->get_zone_params().get_id().c_str() },
                                     { NULL, NULL } };
 
     list<RGWCoroutinesStack *> stacks;
@@ -2710,9 +2710,11 @@ void RGWRados::wakeup_meta_sync_shards(set<int>& shard_ids)
 
 void RGWRados::wakeup_data_sync_shards(const string& source_zone, map<int, set<string> >& shard_ids)
 {
+  ldout(ctx(), 20) << __func__ << ": source_zone=" << source_zone << ", shard_ids=" << shard_ids << dendl;
   Mutex::Locker l(data_sync_thread_lock);
   map<string, RGWDataSyncProcessorThread *>::iterator iter = data_sync_processor_threads.find(source_zone);
   if (iter == data_sync_processor_threads.end()) {
+    ldout(ctx(), 10) << __func__ << ": couldn't find sync thread for zone " << source_zone << ", skipping async data sync processing" << dendl;
     return;
   }
 
