@@ -329,9 +329,9 @@ static void grants_by_type_add_one_grant(map<int, string>& grants_by_type, int p
     default:
       id_type_str = "id";
   }
-  string id;
+  rgw_user id;
   grant.get_id(id);
-  s.append(id_type_str + "=\"" + id + "\"");
+  s.append(id_type_str + "=\"" + id.to_str() + "\"");
 }
 
 struct grant_type_to_header {
