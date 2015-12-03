@@ -2092,6 +2092,7 @@ int RGWBucketShardIncrementalSyncCR::operate()
         key = rgw_obj_key(entries_iter->object, entries_iter->instance);
         entry = &(*entries_iter);
         set_status() << "got entry.id=" << entry->id << " key=" << key << " op=" << (int)entry->op;
+        inc_marker.position = entry->id;
         if (entry->op == CLS_RGW_OP_CANCEL) {
           set_status() << "canceled operation, skipping";
           ldout(store->ctx(), 20) << "[inc sync] skipping object: " << bucket_name << ":" << bucket_id << ":" << shard_id << "/" << key << ": canceled operation" << dendl;
@@ -2103,7 +2104,6 @@ int RGWBucketShardIncrementalSyncCR::operate()
           continue;
         }
         ldout(store->ctx(), 20) << "[inc sync] syncing object: " << bucket_name << ":" << bucket_id << ":" << shard_id << "/" << key << dendl;
-        inc_marker.position = entry->id;
         updated_status = false;
         while (!marker_tracker->can_do_op(key, entry->op)) {
           if (!updated_status) {
