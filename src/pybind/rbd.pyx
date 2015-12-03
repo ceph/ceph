@@ -654,9 +654,8 @@ cdef class Image(object):
     def __del__(self):
         self.close()
 
-    def __str__(self):
-        s = "rbd.Image(" + dict.__repr__(self.__dict__) + ")"
-        return s
+    def __repr__(self):
+        return "rbd.Image(ioctx, %r)" % self.name
 
     def resize(self, size):
         """
