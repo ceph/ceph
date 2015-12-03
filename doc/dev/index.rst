@@ -27,14 +27,15 @@ and especially the `publications list`_.
 .. _`publications list`: https://ceph.com/resources/publications/
 
 Since this document is to be consumed by developers, who are assumed to
-have Internet access, topics covered elsewhere on the web are treated by
-linking. If you notice that a link is broken or if you know of a better
-link, `open a pull request`_.
+have Internet access, topics covered elsewhere, either within the Ceph
+documentation or elsewhere on the web, are treated by linking. If you
+notice that a link is broken or if you know of a better link, please
+`report it as a bug`_.
 
-.. _`open a pull request`: http://tracker.ceph.com/projects/ceph/issues/new
+.. _`report it as a bug`: http://tracker.ceph.com/projects/ceph/issues/new
 
-The bare essentials
-===================
+Essentials (tl;dr)
+==================
 
 This chapter presents essential information that every Ceph developer needs
 to know.
@@ -46,7 +47,7 @@ The Ceph project is led by Sage Weil. In addition, each major project
 component has its own lead. The following table shows all the leads and
 their nicks on `GitHub`_:
 
-.. _github: https://github.com/ceph/ceph
+.. _github: https://github.com/
 
 ========= =============== =============
 Scope     Lead            GitHub nick
@@ -59,8 +60,8 @@ CephFS    Gregory Farnum  gregsfortytwo
 Build/Ops Ken Dreyer      ktdreyer
 ========= =============== =============
 
-The Ceph-specific acronyms in the table are explained under `High-level
-structure`_, below.
+The Ceph-specific acronyms in the table are explained under
+`Architecture`_, below.
 
 History
 -------
@@ -84,20 +85,48 @@ directory of the source-code tree`_.
 Source code repositories
 ------------------------
 
-The source code of Ceph lives on GitHub in a number of repositories below
-https://github.com/ceph.
+The source code of Ceph lives on `GitHub`_ in a number of repositories below
+the `Ceph "organization"`_.
+
+.. _`Ceph "organization"`: https://github.com/ceph
 
 To make a meaningful contribution to the project as a developer, a working
 knowledge of git_ is essential.
 
 .. _git: https://git-scm.com/documentation
 
+Although the `Ceph "organization"`_ includes several software repositories,
+this document covers only one: https://github.com/ceph/ceph.
+
+Issue tracker
+-------------
+
+Although `GitHub`_ is used for code, Ceph-related issues (Bugs, Features,
+Backports, Documentation, etc.) are tracked at http://tracker.ceph.com,
+which is powered by `Redmine`_.
+
+.. _Redmine: http://www.redmine.org
+
+The tracker has a Ceph project with a number of subprojects loosely
+corresponding to the project components listed in `Architecture`_.
+
+Mere `registration`_ in the tracker automatically grants permissions
+sufficient to open new issues and comment on existing ones.
+
+.. _registration: http://tracker.ceph.com/account/register
+
+To report a bug or propose a new feature, `jump to the Ceph project`_ and
+click on `New issue`_.
+
+.. _`jump to the Ceph project`: http://tracker.ceph.com/projects/ceph
+.. _`New issue`: http://tracker.ceph.com/projects/ceph/issues/new
+
 Mailing list
 ------------
 
-Ceph development email discussions take place on
-``ceph-devel@vger.kernel.org``.  Subscribe by sending a message to
-``majordomo@vger.kernel.org`` with the line::
+Ceph development email discussions take place on the mailing list
+``ceph-devel@vger.kernel.org``. The list is open to all. Subscribe by
+sending a message to ``majordomo@vger.kernel.org`` with the line: ::
 
     subscribe ceph-devel
 
@@ -118,12 +147,116 @@ time using `Internet Relay Chat`_.
 See https://ceph.com/resources/mailing-list-irc/ for how to set up your IRC
 client and a list of channels.
 
+Submitting patches
+------------------
 
-High-level structure
-====================
+The canonical instructions for submitting patches are contained in the 
+`the file CONTRIBUTING.rst in the top-level directory of the source-code
+tree`_. There may be some overlap between this guide and that file.
 
-Like any other large software project, Ceph consists of a number of components.
-Viewed from a very high level, the components are:
+.. _`the file CONTRIBUTING.rst in the top-level directory of the source-code tree`: 
+  https://github.com/ceph/ceph/blob/master/CONTRIBUTING.rst
+
+All newcomers are encouraged to read that file carefully.
+
+Building from source
+--------------------
+
+See instructions at :doc:`/install/build-ceph`.
+
+Development-mode cluster
+------------------------
+
+You can start a development-mode Ceph cluster, after compiling the source, 
+with:
+
+.. code::
+
+    cd src
+    install -d -m0755 out dev/osd0
+    ./vstart.sh -n -x -l
+    # check that it's there
+    ./ceph health
+
+
+Basic workflow
+==============
+
+.. epigraph::
+
+    Without bugs, there would be no software, and without software, there would
+    be no software developers. 
+
+    --Unknown
+    
+Having already introduced the `Issue tracker`_ and the `Source code
+repositories`_, and having touched upon `Submitting patches`_, we now
+describe these in more detail in the context of basic Ceph development
+workflows.
+
+Issue tracker conventions
+-------------------------
+
+When you start working on an existing issue, it's nice to let the other
+developers know this - to avoid duplication of labor. Typically, this is
+done by changing the :code:`Assignee` field (to yourself) and changing the
+:code:`Status` to *In progress*. Newcomers to the Ceph community typically do not
+have sufficient privileges to update these fields, however: they can
+simply update the issue with a brief note.
+
+.. table:: Meanings of some commonly used statuses
+
+   ================ ===========================================
+   Status           Meaning
+   ================ ===========================================
+   New              Initial status
+   In Progress      Somebody is working on it
+   Need Review      Pull request is open with a fix
+   Pending Backport Fix has been merged, backport(s) pending
+   Resolved         Fix and backports (if any) have been merged
+   ================ ===========================================
+
+Pull requests
+-------------
+
+The Ceph source code is maintained in the `ceph/ceph repository` on
+`GitHub`_.
+
+.. _`ceph/ceph project on GitHub`: https://github.com/ceph/ceph
+
+The `GitHub`_ web interface provides a key feature for contributing code
+to the project: the *pull request*.
+
+Newcomers who are uncertain how to use pull requests may read
+`this GitHub pull request tutorial`_.
+
+.. _`this GitHub pull request tutorial`: 
+   https://help.github.com/articles/using-pull-requests/
+
+For some ideas on what constitutes a "good" pull request, see
+the `Git Commit Good Practice`_ article at the `OpenStack Project Wiki`_.
+
+.. _`Git Commit Good Practice`: https://wiki.openstack.org/wiki/GitCommitMessages
+.. _`OpenStack Project Wiki`: https://wiki.openstack.org/wiki/Main_Page
+
+
+Architecture
+============
+
+Ceph is a collection of components built on top of RADOS and provide
+services (RBD, RGW, CephFS) and APIs (S3, Swift, POSIX) for the user to
+store and retrieve data.
+
+See :doc:`/architecture` for an overview of Ceph architecture. The
+following sections treat each of the major architectural components
+in more detail, with links to code and tests.
+
+.. FIXME The following are just stubs. These need to be developed into
+   detailed descriptions of the various high-level components (RADOS, RGW,
+   etc.) with breakdowns of their respective subcomponents.
+
+.. FIXME Later, in the Testing chapter I would like to take another look
+   at these components/subcomponents with a focus on how they are tested.
 
 RADOS
 -----
@@ -133,7 +266,7 @@ cluster, all data are stored in objects, and RADOS is the component responsible
 for that. 
 
 RADOS itself can be further broken down into Monitors, Object Storage Daemons
-(OSDs), and clients (librados). Monitors and OSDs are introduced at
+(OSDs), and client APIs (librados). Monitors and OSDs are introduced at
 :doc:`/start/intro`. The client library is explained at
 :doc:`/rados/api/index`.
 
@@ -163,81 +296,13 @@ CephFS is a distributed file system that enables a Ceph cluster to be used as a 
 File system metadata is managed by Meta Data Server (MDS) daemons. The Ceph
 file system is explained in more detail at :doc:`/cephfs/index`.
 
-Build/Ops
----------
-
-Ceph is regularly built and packaged for a number of major Linux
-distributions. At the time of this writing, these included Debian, Ubuntu,
-CentOS, openSUSE, and Fedora.
-
-Building
-========
-
-Building from source
---------------------
-
-See instructions at :doc:`/install/build-ceph`.
-
-Testing
-=======
-
-You can start a development mode Ceph cluster, after compiling the source, with::
-
-    cd src
-    install -d -m0755 out dev/osd0
-    ./vstart.sh -n -x -l
-    # check that it's there
-    ./ceph health
-
-Issue tracker
-=============
-
-The Ceph project has its own issue tracker, http://tracker.ceph.com,
-powered by `Redmine`_.
-
-.. _Redmine: http://www.redmine.org
-
-The tracker has a Ceph project with a number of subprojects loosely
-corresponding to the project components listed in `High-level structure`_.
-
-Mere `registration`_ automatically grants tracker permissions sufficient to
-open new issues and comment on existing ones.
-
-.. _registration: http://tracker.ceph.com/account/register
-
-To report a bug or propose a new feature, `jump to the Ceph project`_ and
-click on `New issue`_.
-
-.. _`jump to the Ceph project`: http://tracker.ceph.com/projects/ceph
-.. _`New issue`: http://tracker.ceph.com/projects/ceph/issues/new
-
-If you start working on an issue, let the other developers know by adding
-an update to the issue. If your tracker permissions have been escalated,
-you can change the issue status yourself to reflect reality. 
-
-**Meanings of some commonly used statuses**
-
-================ ===========================================
-Status           Meaning
-================ ===========================================
-New              Initial status
-In Progress      Somebody is working on it
-Need Review      Pull request is open with a fix
-Pending Backport Fix has been merged, backport(s) pending
-Resolved         Fix and backports (if any) have been merged
-================ ===========================================
-
-If you do not have permission to change the status yourself, don't worry:
-someone will probably change it for you, even without asking. You can also
-ask for assistance on IRC.
-
-Bugfixing
-=========
-
-Without bugs, there would be no software, and without software, there would
-be no software developers. This chapter explains the Ceph-specific aspects
-of the project's bugfixing workflows.
-
-A good understanding of the `Issue tracker`_ chapter is necessary before
-you attempt to fix any bugs.
+.. WIP
+.. ===
+..
+.. Building RPM packages
+.. ---------------------
+..
+.. Ceph is regularly built and packaged for a number of major Linux
+.. distributions. At the time of this writing, these included CentOS, Debian,
+.. Fedora, openSUSE, and Ubuntu.
 
