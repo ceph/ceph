@@ -228,6 +228,7 @@ private:
   uint64_t m_watch_handle;
   WatchState m_watch_state;
 
+  Mutex m_refresh_lock;
   bool m_lock_supported;
 
   LockOwnerState m_lock_owner_state;
