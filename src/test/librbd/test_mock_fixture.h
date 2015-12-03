@@ -46,6 +46,10 @@ ACTION_P(GetReference, ref_object) {
   ref_object->get();
 }
 
+ACTION_P(Notify, ctx) {
+  ctx->complete(0);
+}
+
 MATCHER_P(ContentsEqual, bl, "") {
   // TODO fix const-correctness of bufferlist
   return const_cast<bufferlist &>(arg).contents_equal(
@@ -62,6 +66,9 @@ public:
   virtual void SetUp();
   virtual void TearDown();
 
+  ::testing::NiceMock<librados::MockTestMemRadosClient> &get_mock_rados_client() {
+    return *s_mock_rados_client;
+  }
   librados::MockTestMemIoCtxImpl &get_mock_io_ctx(librados::IoCtx &ioctx);
 
   void expect_op_work_queue(librbd::MockImageCtx &mock_image_ctx);
