@@ -14,11 +14,11 @@ class ProgressContext;
 
 namespace operation {
 
-class ResizeRequest : public Request
-{
+template <typename ImageCtxT = ImageCtx>
+class ResizeRequest : public Request<ImageCtxT> {
 public:
-  ResizeRequest(ImageCtx &image_ctx, Context *on_finish, uint64_t new_size,
-                     ProgressContext &prog_ctx);
+  ResizeRequest(ImageCtxT &image_ctx, Context *on_finish, uint64_t new_size,
+                ProgressContext &prog_ctx);
   virtual ~ResizeRequest();
 
   inline bool shrinking() const {
@@ -90,7 +90,7 @@ private:
   ProgressContext &m_prog_ctx;
   uint64_t m_new_parent_overlap;
 
-  xlist<ResizeRequest *>::item m_xlist_item;
+  typename xlist<ResizeRequest<ImageCtxT>*>::item m_xlist_item;
 
   void send_flush();
   void send_invalidate_cache();
@@ -106,5 +106,7 @@ private:
 
 } // namespace operation
 } // namespace librbd
+
+extern template class librbd::operation::ResizeRequest<librbd::ImageCtx>;
 
 #endif // CEPH_LIBRBD_OPERATION_RESIZE_REQUEST_H
