@@ -45,6 +45,9 @@ def describe_tests(args):
     output_results(headers, rows, output_format, hrule)
 
 def output_results(headers, rows, output_format, hrule):
+    """Write the headers and rows given in the specified output format to
+    stdout.
+    """
     if output_format == 'json':
         objects = [{k: v for k, v in zip(headers, row) if v}
                    for row in rows]
@@ -65,6 +68,13 @@ def get_combinations(suite_dir, fields, subset,
                      limit, filter_in, filter_out,
                      include_facet, _isdir=os.path.isdir, _open=open,
                      _isfile=os.path.isfile, _listdir=os.listdir):
+    """Describes the combinations of a suite, optionally limiting
+    or filtering output based on the given parameters. Includes
+    columns for the subsuite and facets when include_facet is True.
+
+    Returns a tuple of (headers, rows) where both elements are lists
+    of strings.
+    """
     configs = [(combine_path(suite_dir, item[0]), item[1]) for item in
                build_matrix(suite_dir, _isfile, _isdir, _listdir, subset)]
 
@@ -139,6 +149,12 @@ def get_combinations(suite_dir, fields, subset,
                             for row in rows])
 
 def describe_suite(suite_dir, fields, include_facet, output_format):
+    """Describe a suite listing each subdirectory and file once as a separate
+    row.
+
+    Returns a tuple of (headers, rows) where both elements are lists
+    of strings.
+    """
     rows = tree_with_info(suite_dir, fields, include_facet, '', [],
                           output_format=output_format)
 
@@ -148,6 +164,25 @@ def describe_suite(suite_dir, fields, include_facet, output_format):
     return headers + fields, rows
 
 def extract_info(file_name, fields, _isdir=os.path.isdir, _open=open):
+    """Read a yaml file and return a dictionary mapping the fields to the
+    values of those fields in the file.
+
+    The returned dictionary will always contain all the provided
+    fields, mapping any non-existent ones to ''.
+
+    Assumes fields are set in a format of:
+
+    {'description': [{'field' : value, 'field2' : value2}]
+
+    or in yaml:
+
+    description:
+    - field: value
+      field2: value2
+
+    If description is present but not in this format, prints an error
+    message and raises ParseError.
+    """
     empty_result = {f: '' for f in fields}
     if _isdir(file_name) or not file_name.endswith('.yaml'):
         return empty_result
@@ -170,6 +205,9 @@ def extract_info(file_name, fields, _isdir=os.path.isdir, _open=open):
     return {field: description[0].get(field, '') for field in fields}
 
 def path_relative_to_suites(path):
+    """Attempt to trim the ceph-qa-suite root directory from the beginning
+    of a path.
+    """
     try:
         root = os.path.join('ceph-qa-suite', 'suites')
         return path[path.index(root) + len(root):]
@@ -179,6 +217,15 @@ def path_relative_to_suites(path):
 def tree_with_info(cur_dir, fields, include_facet, prefix, rows,
                    _listdir=os.listdir, _isdir=os.path.isdir,
                    _open=open, output_format='plain'):
+    """Gather fields from all files and directories in cur_dir.
+    Returns a list of strings for each path containing:
+
+    1) the path relative to ceph-qa-suite/suites (or the basename with
+        a /usr/bin/tree-like prefix if output_format is plain)
+    2) the facet containing the path (if include_facet is True)
+    3) the values of the provided fields in the path ('' is used for
+       missing values) in the same order as the provided fields
+    """
     files = sorted(_listdir(cur_dir))
     has_yamls = any([x.endswith('.yaml') for x in files])
     facet = os.path.basename(cur_dir) if has_yamls else ''
