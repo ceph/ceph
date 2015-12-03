@@ -114,9 +114,6 @@ public:
   virtual RGWOpType get_type() { return RGW_OP_UNKNOWN; }
 
   virtual uint32_t op_mask() { return 0; }
-  virtual bool supports_website() {
-    return false;
-  }
 
   virtual int error_handler(int err_no, string *error_content);
 };
@@ -190,9 +187,6 @@ public:
   virtual RGWOpType get_type() { return RGW_OP_GET_OBJ; }
   virtual uint32_t op_mask() { return RGW_OP_TYPE_READ; }
   virtual bool need_object_expiration() { return false; }
-  virtual bool supports_website() {
-    return true;
-  }
 };
 
 class RGWGetObj_CB : public RGWGetDataCB
@@ -246,9 +240,6 @@ public:
   virtual const string name() { return "list_buckets"; }
   virtual RGWOpType get_type() { return RGW_OP_LIST_BUCKETS; }
   virtual uint32_t op_mask() { return RGW_OP_TYPE_READ; }
-  virtual bool supports_website() {
-    return true;
-  }
 };
 
 class RGWStatAccount : public RGWOp {
