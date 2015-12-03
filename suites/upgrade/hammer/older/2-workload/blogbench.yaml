@@ -1,5 +1,7 @@
 workload:
   sequential:
+  - ceph-fuse:
+  - print: "**** done ceph-fuse 2-workload"
   - workunit:
       clients:
          client.0:
