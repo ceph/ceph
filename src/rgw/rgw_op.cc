@@ -370,7 +370,7 @@ static int rgw_build_policies(RGWRados *store, struct req_state *s, bool only_bu
     RGWBucketInfo source_info;
 
     if (s->bucket_instance_id.empty()) {
-      ret = store->get_bucket_info(obj_ctx, s->src_tenant_name, copy_source_str, source_info, NULL);
+      ret = store->get_bucket_info(obj_ctx, s->src_tenant_name, s->src_bucket_name, source_info, NULL);
     } else {
       ret = store->get_bucket_instance_info(obj_ctx, s->bucket_instance_id, source_info, NULL, NULL);
     }
@@ -1489,7 +1489,7 @@ void RGWCreateBucket::execute()
   if (s->bucket_exists) {
     string selected_placement_rule;
     rgw_bucket bucket;
-    ret = store->select_bucket_placement(s->user, zonegroup+id, placement_rule,
+    ret = store->select_bucket_placement(s->user, zonegroup_id, placement_rule,
                                          s->bucket_tenant, s->bucket_name, bucket,
                                          &selected_placement_rule);
     if (selected_placement_rule != s->bucket_info.placement_rule) {
@@ -1565,7 +1565,7 @@ void RGWDeleteBucket::execute()
     return;
 
   if (!s->bucket_exists) {
-    ldout(s->cct, 0) << "ERROR: bucket " << s->bucket_name_str << " not found" << dendl;
+    ldout(s->cct, 0) << "ERROR: bucket " << s->bucket_name << " not found" << dendl;
     ret = -ERR_NO_SUCH_BUCKET;
     return;
   }

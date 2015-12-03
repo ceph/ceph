@@ -461,7 +461,7 @@ int rgw_delete_user(RGWRados *store, RGWUserInfo& info, RGWObjVersionTracker& ob
   string key;
   info.user_id.to_str(key);
   
-  rgw_obj uid_obj(store->get_zone_params().user_uid_pool, key.user_id);
+  rgw_obj uid_obj(store->get_zone_params().user_uid_pool, key);
   ldout(store->ctx(), 10) << "removing user index: " << info.user_id << dendl;
   ret = store->meta_mgr->remove_entry(user_meta_handler, key, &objv_tracker);
   if (ret < 0 && ret != -ENOENT && ret  != -ECANCELED) {

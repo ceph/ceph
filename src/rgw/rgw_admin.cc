@@ -1296,7 +1296,8 @@ static int send_to_remote_gateway(const string& remote, req_info& info,
     }
     conn = iter->second;
   }
-  int ret = conn->forward("", info, NULL, MAX_REST_RESPONSE, &in_data, &response);
+  rgw_user user;
+  int ret = conn->forward(user, info, NULL, MAX_REST_RESPONSE, &in_data, &response);
   if (ret < 0) {
     return ret;
   }

@@ -2607,8 +2607,8 @@ public:
   int get_bucket_stats(rgw_bucket& bucket, int shard_id, string *bucket_ver, string *master_ver,
       map<RGWObjCategory, RGWStorageStats>& stats, string *max_marker);
   int get_bucket_stats_async(rgw_bucket& bucket, int shard_id, RGWGetBucketStats_CB *cb);
-  int get_user_stats(const string& user, RGWStorageStats& stats);
-  int get_user_stats_async(const string& user, RGWGetUserStats_CB *cb);
+  int get_user_stats(const rgw_user& user, RGWStorageStats& stats);
+  int get_user_stats_async(const rgw_user& user, RGWGetUserStats_CB *cb);
   void get_bucket_instance_obj(rgw_bucket& bucket, rgw_obj& obj);
   void get_bucket_instance_entry(rgw_bucket& bucket, string& entry);
   void get_bucket_meta_oid(rgw_bucket& bucket, string& oid);

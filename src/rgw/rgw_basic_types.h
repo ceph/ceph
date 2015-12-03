@@ -40,7 +40,7 @@ struct rgw_user {
     id.clear();
   }
 
-  bool empty() {
+  bool empty() const {
     return id.empty();
   }
 
