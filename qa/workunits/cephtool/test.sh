@@ -1407,6 +1407,18 @@ function test_mon_osd_pool_set()
   ceph osd pool set $TEST_POOL_GETSET deep_scrub_interval 0
   expect_false "ceph osd pool get $TEST_POOL_GETSET deep_scrub_interval | grep '.'"
 
+  expect_false "ceph osd pool get $TEST_POOL_GETSET recovery_priority | grep '.'"
+  ceph osd pool set $TEST_POOL_GETSET recovery_priority 5 
+  ceph osd pool get $TEST_POOL_GETSET recovery_priority | grep 'recovery_priority: 5'
+  ceph osd pool set $TEST_POOL_GETSET recovery_priority 0
+  expect_false "ceph osd pool get $TEST_POOL_GETSET recovery_priority | grep '.'"
+
+  expect_false "ceph osd pool get $TEST_POOL_GETSET recovery_op_priority | grep '.'"
+  ceph osd pool set $TEST_POOL_GETSET recovery_op_priority 5 
+  ceph osd pool get $TEST_POOL_GETSET recovery_op_priority | grep 'recovery_op_priority: 5'
+  ceph osd pool set $TEST_POOL_GETSET recovery_op_priority 0
+  expect_false "ceph osd pool get $TEST_POOL_GETSET recovery_op_priority | grep '.'"
+
   ceph osd pool set $TEST_POOL_GETSET nopgchange 1
   expect_false ceph osd pool set $TEST_POOL_GETSET pg_num 10
   expect_false ceph osd pool set $TEST_POOL_GETSET pgp_num 10
