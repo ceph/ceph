@@ -1356,6 +1356,24 @@ public:
     t.create_collection(cid, 0);
     return store->apply_transaction(osr, t);
   }
+  void shutdown() {
+    while (1) {
+      vector<ghobject_t> objects;
+      int r = store->collection_list(cid, ghobject_t(), ghobject_t::get_max(),
+				     true, 10, &objects, 0);
+      if (objects.empty())
+	break;
+      ObjectStore::Transaction t;
+      for (vector<ghobject_t>::iterator p = objects.begin();
+	   p != objects.end(); ++p) {
+	t.remove(cid, *p);
+      }
+      store->apply_transaction(osr, t);
+    }
+    ObjectStore::Transaction t;
+    t.remove_collection(cid);
+    store->apply_transaction(osr, t);
+  }
 
   ghobject_t get_uniform_random_object() {
     while (in_flight >= max_in_flight || available_objects.empty())
@@ -1821,7 +1839,7 @@ TEST_P(StoreTest, Synthetic) {
     if (!(i % 500)) cerr << "seeding object " << i << std::endl;
     test_obj.touch();
   }
-  for (int i = 0; i < 100000; ++i) {
+  for (int i = 0; i < 10000; ++i) {
     if (!(i % 1000)) {
       cerr << "Op " << i << std::endl;
       test_obj.print_internal_state();
@@ -1847,6 +1865,7 @@ TEST_P(StoreTest, Synthetic) {
     }
   }
   test_obj.wait_for_done();
+  test_obj.shutdown();
 }
 
 TEST_P(StoreTest, AttrSynthetic) {
@@ -1861,7 +1880,7 @@ TEST_P(StoreTest, AttrSynthetic) {
     if (!(i % 10)) cerr << "seeding object " << i << std::endl;
     test_obj.touch();
   }
-  for (int i = 0; i < 10000; ++i) {
+  for (int i = 0; i < 1000; ++i) {
     if (!(i % 100)) {
       cerr << "Op " << i << std::endl;
       test_obj.print_internal_state();
@@ -1885,6 +1904,7 @@ TEST_P(StoreTest, AttrSynthetic) {
     }
   }
   test_obj.wait_for_done();
+  test_obj.shutdown();
 }
 
 TEST_P(StoreTest, HashCollisionTest) {
