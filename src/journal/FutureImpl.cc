@@ -91,7 +91,7 @@ bool FutureImpl::attach(const FlushHandlerPtr &flush_handler) {
 }
 
 void FutureImpl::safe(int r) {
-  Mutex::Locker locker(m_lock);
+  m_lock.Lock();
   assert(!m_safe);
   m_safe = true;
   if (m_return_value == 0) {
@@ -100,12 +100,14 @@ void FutureImpl::safe(int r) {
 
   m_flush_handler.reset();
   if (m_consistent) {
-    finish();
+    finish_unlock();
+  } else {
+    m_lock.Unlock();
   }
 }
 
 void FutureImpl::consistent(int r) {
-  Mutex::Locker locker(m_lock);
+  m_lock.Lock();
   assert(!m_consistent);
   m_consistent = true;
   m_prev_future.reset();
@@ -114,11 +116,13 @@ void FutureImpl::consistent(int r) {
   }
 
   if (m_safe) {
-    finish();
+    finish_unlock();
+  } else {
+    m_lock.Unlock();
   }
 }
 
-void FutureImpl::finish() {
+void FutureImpl::finish_unlock() {
   assert(m_lock.is_locked());
   assert(m_safe && m_consistent);
 
@@ -130,7 +134,6 @@ void FutureImpl::finish() {
        it != contexts.end(); ++it) {
     (*it)->complete(m_return_value);
   }
-  m_lock.Lock();
 }
 
 std::ostream &operator<<(std::ostream &os, const FutureImpl &future) {
