@@ -171,7 +171,6 @@ req_state::req_state(CephContext *_cct, class RGWEnv *e) : cct(_cct), cio(NULL),
   bucket_exists = false;
   has_bad_meta = false;
   length = NULL;
-  copy_source = NULL;
   http_auth = NULL;
   local_source = false;
 
@@ -1158,7 +1157,8 @@ int RGWUserCaps::check_cap(const string& cap, uint32_t perm)
 
 bool RGWUserCaps::is_valid_cap_type(const string& tp)
 {
-  static const char *cap_type[] = { "users",
+  static const char *cap_type[] = { "user",
+                                    "users",
                                     "buckets",
                                     "metadata",
                                     "usage",
