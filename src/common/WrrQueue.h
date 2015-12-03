@@ -196,7 +196,9 @@ public:
       wrr_size(0),
       max_cost(0),
       dq(queue.rbegin())
-  {}
+  {
+    srand(time(0));
+  }
 
   unsigned length() const final {
     return high_size + wrr_size;
