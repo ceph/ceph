@@ -13,9 +13,9 @@ from . import beanstalk
 from . import report
 from . import safepath
 from .config import config as teuth_config
+from .config import set_config_attr
 from .exceptions import BranchNotFoundError
 from .kill import kill_job
-from .misc import read_config
 from .repo_utils import fetch_qa_suite, fetch_teuthology
 
 log = logging.getLogger(__name__)
@@ -73,7 +73,7 @@ def main(ctx):
     else:
         teuth_config.archive_base = ctx.archive_dir
 
-    read_config(ctx)
+    set_config_attr(ctx)
 
     connection = beanstalk.connect()
     beanstalk.watch_tube(connection, ctx.tube)

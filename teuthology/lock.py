@@ -14,6 +14,7 @@ import teuthology
 from . import misc
 from . import provision
 from .config import config
+from .config import set_config_attr
 from .contextutil import safe_while
 from .lockstatus import get_status
 
@@ -184,7 +185,7 @@ def main(ctx):
     if ctx.verbose:
         teuthology.log.setLevel(logging.DEBUG)
 
-    misc.read_config(ctx)
+    set_config_attr(ctx)
 
     ret = 0
     user = ctx.owner
