@@ -109,6 +109,11 @@ class TestDescribeTests(object):
         self.fake_listdir, self.fake_isfile, self.fake_isdir, self.fake_open = \
             make_fake_fstools(realistic_fs)
 
+    @staticmethod
+    def assert_expected_combo_headers(headers):
+        assert headers == (['subsuite depth 0'] +
+                           sorted(set(filter(bool, expected_facets))))
+
     def test_no_filters(self):
         rows = tree_with_info('basic', [], False, '', [],
                               self.fake_listdir, self.fake_isdir,
@@ -188,8 +193,8 @@ class TestDescribeTests(object):
         headers, rows = get_combinations('basic', [], None, 1, None, None, True,
                                          self.fake_isdir, self.fake_open,
                                          self.fake_isfile, self.fake_listdir)
-        assert headers == sorted(set(filter(bool, expected_facets)))
-        assert rows == [['install', 'fixed-1', 'rbd_api_tests']]
+        self.assert_expected_combo_headers(headers)
+        assert rows == [['basic', 'install', 'fixed-1', 'rbd_api_tests']]
 
     def test_combinations_desc_features(self):
         headers, rows = get_combinations('basic', ['desc', 'rbd_features'],
@@ -205,16 +210,16 @@ class TestDescribeTests(object):
                                          None, True,
                                          self.fake_isdir, self.fake_open,
                                          self.fake_isfile, self.fake_listdir)
-        assert headers == sorted(set(filter(bool, expected_facets)))
-        assert rows == [['install', 'fixed-1', 'rbd_api_tests_old_format']]
+        self.assert_expected_combo_headers(headers)
+        assert rows == [['basic', 'install', 'fixed-1', 'rbd_api_tests_old_format']]
 
     def test_combinations_filter_out(self):
         headers, rows = get_combinations('basic', [], None, 0, None,
                                          ['old_format'], True,
                                          self.fake_isdir, self.fake_open,
                                          self.fake_isfile, self.fake_listdir)
-        assert headers == sorted(set(filter(bool, expected_facets)))
-        assert rows == [['install', 'fixed-1', 'rbd_api_tests']]
+        self.assert_expected_combo_headers(headers)
+        assert rows == [['basic', 'install', 'fixed-1', 'rbd_api_tests']]
 
 
 def test_extract_info_dir():

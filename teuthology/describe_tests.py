@@ -40,6 +40,8 @@ def get_combinations(suite_dir, fields, subset,
     rows = []
 
     facet_headers = set()
+    dirs = {}
+    max_dir_depth = 0
 
     for _, fragment_paths in configs:
         if limit > 0 and num_listed >= limit:
@@ -68,15 +70,41 @@ def get_combinations(suite_dir, fields, subset,
         if include_facet:
             # map final dir (facet) -> filename without the .yaml suffix
             for path in fragment_paths:
-                facet = os.path.basename(os.path.dirname(path))
+                facet_dir = os.path.dirname(path)
+                facet = os.path.basename(facet_dir)
                 metadata[facet] = os.path.basename(path)[:-5]
                 facet_headers.add(facet)
+                facet_dirs = facet_dir.split('/')[:-1]
+                for i, dir_ in enumerate(facet_dirs):
+                    if i not in dirs:
+                        dirs[i] = set()
+                    dirs[i].add(dir_)
+                    metadata['_dir_' + str(i)] = os.path.basename(dir_)
+                    max_dir_depth = max(max_dir_depth, i)
 
         rows.append(metadata)
         num_listed += 1
 
-    headers = sorted(facet_headers) + fields
-    return headers, [[row.get(field, '') for field in headers] for row in rows]
+    subsuite_headers = []
+    if include_facet:
+        first_subsuite_depth = max_dir_depth
+        for i in range(max_dir_depth):
+            if len(dirs[i]) > 1:
+                first_subsuite_depth = i
+                break
+
+        subsuite_headers = ['subsuite depth ' + str(i)
+                            for i in
+                            range(0, max_dir_depth - first_subsuite_depth + 1)]
+
+        for row in rows:
+            for i in range(first_subsuite_depth, max_dir_depth + 1):
+                row[subsuite_headers[i - first_subsuite_depth]] = \
+                    row.get('_dir_' + str(i), '')
+
+    headers = subsuite_headers + sorted(facet_headers) + fields
+    return headers, sorted([[row.get(field, '') for field in headers]
+                            for row in rows])
 
 def describe_combinations(suite_dir, fields, subset,
                           limit, filter_in, filter_out,
