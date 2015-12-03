@@ -512,6 +512,7 @@ public:
       if (retcode < 0) {
         set_status("failed to write sync status");
         ldout(cct, 0) << "ERROR: failed to write sync status, retcode=" << retcode << dendl;
+        yield lease_cr->go_down();
         return set_cr_error(retcode);
       }
       /* fetch current position in logs */
