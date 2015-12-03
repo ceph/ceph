@@ -42,7 +42,7 @@ Leads
 
 The Ceph project is led by Sage Weil. In addition, each major project
 component has its own lead. The following table shows all the leads and
-their nicks on `github`:
+their nicks on `GitHub`_:
 
 .. _github: https://github.com/ceph/ceph
 
@@ -63,7 +63,7 @@ structure`_, below.
 History
 -------
 
-See the `History chapter of the Wikipedia article`.
+See the `History chapter of the Wikipedia article`_.
 
 .. _`History chapter of the Wikipedia article`: https://en.wikipedia.org/wiki/Ceph_%28software%29#History
 
@@ -73,9 +73,11 @@ Licensing
 Ceph is free software.
 
 Unless stated otherwise, the Ceph source code is distributed under the terms of
-the LGPL2.1. For full details, see the file COPYING in the top-level directory
-of the source-code distribution:
-https://github.com/ceph/ceph/blob/master/COPYING
+the LGPL2.1. For full details, see `the file COPYING in the top-level
+directory of the source-code tree`_.
+
+.. _`the file COPYING in the top-level directory of the source-code tree`: 
+  https://github.com/ceph/ceph/blob/master/COPYING
 
 Source code repositories
 ------------------------
@@ -176,4 +178,59 @@ You can start a development mode Ceph cluster, after compiling the source, with:
 	./vstart.sh -n -x -l
 	# check that it's there
 	./ceph health
+
+Bugfixing
+=========
+
+Without bugs, there would be no software, and without software, there would
+be no software developers. This chapter explains the Ceph-specific aspects
+of bugfixing workflows.
+
+Issue tracker
+-------------
+
+The Ceph project has its own issue tracker, `http://tracker.ceph.com`_,
+powered by `Redmine`_.
+
+.. _`http://tracker.ceph.com`: http://tracker.ceph.com
+.. _Redmine: http://www.redmine.org
+
+The tracker has a Ceph project with a number of subprojects loosely
+corresponding to the project components listed in `High-level overview`.
+
+Mere `registration`_ automatically grants tracker permissions sufficient to
+open new issues and comment on existing ones.
+
+.. _registration: http://tracker.ceph.com/account/register
+
+To report a bug, `jump to the Ceph project`_ and click on `New issue`_
+
+.. _`jump to the Ceph project`: http://tracker.ceph.com/projects/ceph
+.. _`New issue`: http://tracker.ceph.com/projects/ceph/issues/new
+
+If you start working on a bug, let the other developers know by adding an
+update to the issue.
+
+If your tracker permissions have been escalated, you can change the issue
+status as appropriate:
+
+================ ===========================================
+Status           Meaning
+================ ===========================================
+New              Initial status
+In Progress      Somebody is working on it
+Need Review      Pull request is open with a fix
+Pending Backport Fix has been merged, backport(s) pending
+Resolved         Fix and backports (if any) have been merged
+================ ===========================================
+
+There are other statuses, but these are the most common.
+
+If you do not have permission to change the status yourself, don't worry:
+someone will probably change it for you, even without asking. You can ask
+on IRC for another developer to change the status for you.
+
+Documentation bugs
+------------------
+
 
