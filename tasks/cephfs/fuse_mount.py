@@ -110,6 +110,10 @@ class FuseMount(CephFSMount):
 
         post_mount_conns = list_connections()
         while len(post_mount_conns) <= len(pre_mount_conns):
+            if self.fuse_daemon.finished:
+                # Did mount fail?  Raise the CommandFailedError instead of
+                # hitting the "failed to populate /sys/" timeout
+                self.fuse_daemon.wait()
             time.sleep(1)
             waited += 1
             if waited > timeout:
@@ -224,10 +228,7 @@ class FuseMount(CephFSMount):
                     stderr=stderr
                 )
             except CommandFailedError:
-                if "not found" in stderr.getvalue():
-                    # Missing mount point, so we are unmounted already, yay.
-                    pass
-                else:
+                if self.is_mounted():
                     raise
 
         assert not self.is_mounted()
