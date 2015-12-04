@@ -109,12 +109,30 @@ WRITE_INTTYPE_ENCODER(int16_t, le16)
 
 inline void packed_encode(char *t, bufferlist& bl, uint64_t len)
 {
+#if defined(CEPH_LITTLE_ENDIAN)
   bl.append(t, len);
+#else
+  assert(len <= 16);
+  char dst[16];
+  for (uint64_t i = 0; i < len; i++) {
+    dst[len - 1 - i] = t[i];
+  }
+  bl.append(dst, len);
+#endif
 }
 
 inline void packed_decode(char *t, bufferlist::iterator& p, uint64_t len)
 {
+#if defined(CEPH_LITTLE_ENDIAN)
   p.copy(len, t);
+#else
+  assert(len <= 16);
+  char dst[16];
+  p.copy(len, dst);
+  for (uint64_t i = 0; i < len; i++) {
+    t[i] = dst[len - 1 - i];
+  }
+#endif
 }
 
 #ifdef ENCODE_DUMP
