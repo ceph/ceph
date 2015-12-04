@@ -42,6 +42,15 @@ struct C_DeleteRecorder : public Context {
 
 using namespace cls::journal;
 
+std::string Journaler::header_oid(const std::string &journal_id) {
+  return JOURNAL_HEADER_PREFIX + journal_id;
+}
+
+std::string Journaler::object_oid_prefix(int pool_id,
+					 const std::string &journal_id) {
+  return JOURNAL_OBJECT_PREFIX + stringify(pool_id) + "." + journal_id + ".";
+}
+
 Journaler::Journaler(librados::IoCtx &header_ioctx,
 		     const std::string &journal_id,
 		     const std::string &client_id, double commit_interval)
@@ -51,8 +60,8 @@ Journaler::Journaler(librados::IoCtx &header_ioctx,
   m_header_ioctx.dup(header_ioctx);
   m_cct = reinterpret_cast<CephContext *>(m_header_ioctx.cct());
 
-  m_header_oid = JOURNAL_HEADER_PREFIX + journal_id;
-  m_object_oid_prefix = JOURNAL_OBJECT_PREFIX + journal_id + ".";
+  m_header_oid = header_oid(journal_id);
+  m_object_oid_prefix = object_oid_prefix(m_header_ioctx.get_id(), journal_id);
 
   m_metadata = new JournalMetadata(m_header_ioctx, m_header_oid, m_client_id,
                                    commit_interval);
@@ -107,6 +116,10 @@ int Journaler::init_complete() {
   return 0;
 }
 
+void Journaler::shutdown() {
+  m_metadata->shutdown();
+}
+
 int Journaler::create(uint8_t order, uint8_t splay_width, int64_t pool_id) {
   if (order > 64 || order < 12) {
     lderr(m_cct) << "order must be in the range [12, 64]" << dendl;
@@ -126,10 +139,11 @@ int Journaler::create(uint8_t order, uint8_t splay_width, int64_t pool_id) {
   return 0;
 }
 
-int Journaler::remove() {
+int Journaler::remove(bool force) {
   m_metadata->shutdown();
 
-  int r = m_trimmer->remove_objects();
+  ldout(m_cct, 5) << "removing journal: " << m_header_oid << dendl;
+  int r = m_trimmer->remove_objects(force);
   if (r < 0) {
     lderr(m_cct) << "failed to remove journal objects: " << cpp_strerror(r)
                  << dendl;
@@ -164,7 +178,8 @@ void Journaler::start_live_replay(ReplayHandler *replay_handler,
   m_player->prefetch_and_watch(interval);
 }
 
-bool Journaler::try_pop_front(ReplayEntry *replay_entry) {
+bool Journaler::try_pop_front(ReplayEntry *replay_entry,
+			      std::string* tag) {
   assert(m_player != NULL);
 
   Entry entry;
@@ -174,6 +189,9 @@ bool Journaler::try_pop_front(ReplayEntry *replay_entry) {
   }
 
   *replay_entry = ReplayEntry(entry.get_data(), commit_tid);
+  if (tag != NULL) {
+    *tag = entry.get_tag();
+  }
   return true;
 }
 
@@ -223,6 +241,15 @@ void Journaler::create_player(ReplayHandler *replay_handler) {
   assert(m_player == NULL);
   m_player = new JournalPlayer(m_data_ioctx, m_object_oid_prefix, m_metadata,
                                replay_handler);
+}
+
+void Journaler::get_metadata(uint8_t *order, uint8_t *splay_width,
+			     int64_t *pool_id) {
+  assert(m_metadata != NULL);
+
+  *order = m_metadata->get_order();
+  *splay_width = m_metadata->get_splay_width();
+  *pool_id = m_metadata->get_pool_id();
 }
 
 std::ostream &operator<<(std::ostream &os,

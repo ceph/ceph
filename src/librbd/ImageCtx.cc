@@ -927,7 +927,14 @@ struct C_InvalidateCache : public Context {
         "rbd_clone_copy_on_read", false)(
         "rbd_blacklist_on_break_lock", false)(
         "rbd_blacklist_expire_seconds", false)(
-        "rbd_request_timed_out_seconds", false);
+        "rbd_request_timed_out_seconds", false)(
+        "rbd_journal_order", false)(
+        "rbd_journal_splay_width", false)(
+        "rbd_journal_commit_age", false)(
+        "rbd_journal_object_flush_interval", false)(
+        "rbd_journal_object_flush_bytes", false)(
+        "rbd_journal_object_flush_age", false)(
+        "rbd_journal_pool", false);
 
     string start = METADATA_CONF_PREFIX;
     int r = 0, j = 0;
@@ -997,6 +1004,13 @@ struct C_InvalidateCache : public Context {
     ASSIGN_OPTION(blacklist_expire_seconds);
     ASSIGN_OPTION(request_timed_out_seconds);
     ASSIGN_OPTION(enable_alloc_hint);
+    ASSIGN_OPTION(journal_order);
+    ASSIGN_OPTION(journal_splay_width);
+    ASSIGN_OPTION(journal_commit_age);
+    ASSIGN_OPTION(journal_object_flush_interval);
+    ASSIGN_OPTION(journal_object_flush_bytes);
+    ASSIGN_OPTION(journal_object_flush_age);
+    ASSIGN_OPTION(journal_pool);
   }
 
   void ImageCtx::open_journal() {
