@@ -534,6 +534,7 @@ int RGWAsyncRemoveObj::_send_request()
 int RGWContinuousLeaseCR::operate()
 {
   if (aborted) {
+    caller->set_sleeping(false);
     return set_cr_done();
   }
   reenter(this) {
