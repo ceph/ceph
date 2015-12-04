@@ -42,8 +42,11 @@ public:
   ~Journal();
 
   static bool is_journal_supported(ImageCtx &image_ctx);
-  static int create(librados::IoCtx &io_ctx, const std::string &image_id);
+  static int create(librados::IoCtx &io_ctx, const std::string &image_id,
+		    uint8_t order, uint8_t splay_width,
+		    const std::string &object_pool);
   static int remove(librados::IoCtx &io_ctx, const std::string &image_id);
+  static int reset(librados::IoCtx &io_ctx, const std::string &image_id);
 
   bool is_journal_ready() const;
   bool is_journal_replaying() const;
@@ -221,6 +224,8 @@ private:
   void wait_for_state_transition();
   void schedule_wait_for_ready(Context *on_ready);
   void handle_wait_for_ready(Context *on_ready);
+
+  friend std::ostream &operator<<(std::ostream &os, const State &state);
 };
 
 } // namespace librbd

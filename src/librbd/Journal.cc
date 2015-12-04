@@ -55,6 +55,19 @@ struct SetOpRequestTid : public boost::static_visitor<void> {
   }
 };
 
+struct C_ReplayCommitted : public Context {
+  ::journal::Journaler *journaler;
+  ::journal::ReplayEntry replay_entry;
+
+  C_ReplayCommitted(::journal::Journaler *journaler,
+		    ::journal::ReplayEntry &&replay_entry) :
+    journaler(journaler), replay_entry(std::move(replay_entry)) {
+  }
+  virtual void finish(int r) {
+    journaler->committed(replay_entry);
+  }
+};
+
 } // anonymous namespace
 
 Journal::Journal(ImageCtx &image_ctx)
@@ -90,15 +103,30 @@ bool Journal::is_journal_supported(ImageCtx &image_ctx) {
           !image_ctx.read_only && image_ctx.snap_id == CEPH_NOSNAP);
 }
 
-int Journal::create(librados::IoCtx &io_ctx, const std::string &image_id) {
+int Journal::create(librados::IoCtx &io_ctx, const std::string &image_id,
+		    uint8_t order, uint8_t splay_width,
+		    const std::string &object_pool) {
   CephContext *cct = reinterpret_cast<CephContext *>(io_ctx.cct());
   ldout(cct, 5) << __func__ << ": image=" << image_id << dendl;
 
-  // TODO configurable commit flush interval
-  ::journal::Journaler journaler(io_ctx, image_id, "", 5);
+  int64_t pool_id = -1;
+  if (!object_pool.empty()) {
+    librados::Rados rados(io_ctx);
+    IoCtx data_io_ctx;
+    int r = rados.ioctx_create(object_pool.c_str(), data_io_ctx);
+    if (r != 0) {
+      lderr(cct) << "failed to create journal: "
+		 << "error opening journal objects pool '" << object_pool
+		 << "': " << cpp_strerror(r) << dendl;
+      return r;
+    }
+    pool_id = data_io_ctx.get_id();
+  }
 
-  // TODO order / splay width via config / image metadata / data pool
-  int r = journaler.create(24, 4, io_ctx.get_id());
+  ::journal::Journaler journaler(io_ctx, image_id, "",
+				 cct->_conf->rbd_journal_commit_age);
+
+  int r = journaler.create(order, splay_width, pool_id);
   if (r < 0) {
     lderr(cct) << "failed to create journal: " << cpp_strerror(r) << dendl;
     return r;
@@ -116,8 +144,8 @@ int Journal::remove(librados::IoCtx &io_ctx, const std::string &image_id) {
   CephContext *cct = reinterpret_cast<CephContext *>(io_ctx.cct());
   ldout(cct, 5) << __func__ << ": image=" << image_id << dendl;
 
-  // TODO configurable commit flush interval
-  ::journal::Journaler journaler(io_ctx, image_id, "", 5);
+  ::journal::Journaler journaler(io_ctx, image_id, "",
+				 cct->_conf->rbd_journal_commit_age);
 
   bool journal_exists;
   int r = journaler.exists(&journal_exists);
@@ -139,9 +167,49 @@ int Journal::remove(librados::IoCtx &io_ctx, const std::string &image_id) {
     return r;
   }
 
-  r = journaler.remove();
+  r = journaler.remove(false);
   if (r < 0) {
     lderr(cct) << "failed to remove journal: " << cpp_strerror(r) << dendl;
+    return r;
+  }
+  return 0;
+}
+
+int Journal::reset(librados::IoCtx &io_ctx, const std::string &image_id) {
+  CephContext *cct = reinterpret_cast<CephContext *>(io_ctx.cct());
+  ldout(cct, 5) << __func__ << ": image=" << image_id << dendl;
+
+  ::journal::Journaler journaler(io_ctx, image_id, "",
+				 cct->_conf->rbd_journal_commit_age);
+
+  C_SaferCond cond;
+  journaler.init(&cond);
+
+  int r = cond.wait();
+  if (r == -ENOENT) {
+    return 0;
+  } else if (r < 0) {
+    lderr(cct) << "failed to initialize journal: " << cpp_strerror(r) << dendl;
+    return r;
+  }
+
+  uint8_t order, splay_width;
+  int64_t pool_id;
+  journaler.get_metadata(&order, &splay_width, &pool_id);
+
+  r = journaler.remove(true);
+  if (r < 0) {
+    lderr(cct) << "failed to reset journal: " << cpp_strerror(r) << dendl;
+    return r;
+  }
+  r = journaler.create(order, splay_width, pool_id);
+  if (r < 0) {
+    lderr(cct) << "failed to create journal: " << cpp_strerror(r) << dendl;
+    return r;
+  }
+  r = journaler.register_client(CLIENT_DESCRIPTION);
+  if (r < 0) {
+    lderr(cct) << "failed to register client: " << cpp_strerror(r) << dendl;
     return r;
   }
   return 0;
@@ -403,12 +471,11 @@ void Journal::create_journaler() {
 
   assert(m_lock.is_locked());
   assert(m_state == STATE_UNINITIALIZED);
+  assert(m_journaler == NULL);
 
-  // TODO allow alternate pool for journal objects and commit flush interval
   m_close_pending = false;
   m_journaler = new ::journal::Journaler(m_image_ctx.md_ctx, m_image_ctx.id, "",
-                                         5);
-
+                                         m_image_ctx.journal_commit_age);
   m_journaler->init(new C_InitJournal(this));
   transition_state(STATE_INITIALIZING);
 }
@@ -462,6 +529,8 @@ void Journal::handle_initialized(int r) {
     return;
   }
 
+  ldout(cct, 20) << __func__ << ": Journaler" << *m_journaler << dendl;
+
   m_journal_replay = new JournalReplay(m_image_ctx);
 
   transition_state(STATE_REPLAYING);
@@ -492,7 +561,8 @@ void Journal::handle_replay_ready() {
     m_lock.Unlock();
     bufferlist data = replay_entry.get_data();
     bufferlist::iterator it = data.begin();
-    int r = m_journal_replay->process(it);
+    int r = m_journal_replay->process(it, new C_ReplayCommitted(m_journaler,
+								std::move(replay_entry)));
     m_lock.Lock();
 
     if (r < 0) {
@@ -533,8 +603,9 @@ void Journal::handle_replay_complete(int r) {
       return;
     }
 
-    // TODO configurable flush interval, flush bytes, and flush age
-    m_journaler->start_append(0, 0, 0);
+    m_journaler->start_append(m_image_ctx.journal_object_flush_interval,
+			      m_image_ctx.journal_object_flush_bytes,
+			      m_image_ctx.journal_object_flush_age);
     transition_state(STATE_RECORDING);
 
     unblock_writes();
@@ -739,6 +810,30 @@ void Journal::handle_wait_for_ready(Context *on_ready) {
   } else {
     schedule_wait_for_ready(on_ready);
   }
+}
+
+std::ostream &operator<<(std::ostream &os, const Journal::State &state) {
+  switch (state) {
+  case Journal::STATE_UNINITIALIZED:
+    os << "Uninitialized";
+    break;
+  case Journal::STATE_INITIALIZING:
+    os << "Initializing";
+    break;
+  case Journal::STATE_REPLAYING:
+    os << "Replaying";
+    break;
+  case Journal::STATE_RECORDING:
+    os << "Recording";
+    break;
+  case Journal::STATE_STOPPING_RECORDING:
+    os << "StoppingRecording";
+    break;
+  default:
+    os << "Unknown (" << static_cast<uint32_t>(state) << ")";
+    break;
+  }
+  return os;
 }
 
 } // namespace librbd

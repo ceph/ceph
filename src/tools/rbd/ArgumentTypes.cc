@@ -124,6 +124,29 @@ void add_snap_option(po::options_description *opt,
     (name.c_str(), po::value<std::string>(), description.c_str());
 }
 
+void add_journal_option(po::options_description *opt,
+                      ArgumentModifier modifier,
+                      const std::string &desc_suffix) {
+  std::string name = JOURNAL_NAME;
+  std::string description = "journal name";
+  switch (modifier) {
+  case ARGUMENT_MODIFIER_NONE:
+    break;
+  case ARGUMENT_MODIFIER_SOURCE:
+    description = "source " + description;
+    break;
+  case ARGUMENT_MODIFIER_DEST:
+    name = DEST_JOURNAL_NAME;
+    description = "destination " + description;
+    break;
+  }
+  description += desc_suffix;
+
+  // TODO add validator
+  opt->add_options()
+    (name.c_str(), po::value<std::string>(), description.c_str());
+}
+
 void add_pool_options(boost::program_options::options_description *pos,
                       boost::program_options::options_description *opt) {
   pos->add_options()
@@ -167,6 +190,20 @@ void add_image_or_snap_spec_options(po::options_description *pos,
   add_snap_option(opt, modifier);
 }
 
+void add_journal_spec_options(po::options_description *pos,
+			      po::options_description *opt,
+			      ArgumentModifier modifier) {
+
+  pos->add_options()
+    ((get_name_prefix(modifier) + JOURNAL_SPEC).c_str(),
+     (get_description_prefix(modifier) + "journal specification\n" +
+      "(example: [<pool-name>/]<journal-name>)").c_str());
+  add_pool_option(opt, modifier);
+  add_image_option(opt, modifier);
+  add_journal_option(opt, modifier);
+}
+
+
 void add_create_image_options(po::options_description *opt,
                               bool include_format) {
   // TODO get default image format from conf
@@ -186,6 +223,18 @@ void add_create_image_options(po::options_description *opt,
     (IMAGE_SHARED.c_str(), po::bool_switch(), "shared image")
     (IMAGE_STRIPE_UNIT.c_str(), po::value<uint32_t>(), "stripe unit")
     (IMAGE_STRIPE_COUNT.c_str(), po::value<uint32_t>(), "stripe count");
+
+  add_create_journal_options(opt);
+}
+
+void add_create_journal_options(po::options_description *opt) {
+  opt->add_options()
+    (JOURNAL_SPLAY_WIDTH.c_str(), po::value<uint64_t>(),
+     "number of active journal objects")
+    (JOURNAL_OBJECT_SIZE.c_str(), po::value<JournalObjectSize>(),
+     "size of journal objects")
+    (JOURNAL_POOL.c_str(), po::value<std::string>(),
+     "pool for journal objects");
 }
 
 void add_size_option(boost::program_options::options_description *opt) {
@@ -213,6 +262,16 @@ void add_format_options(boost::program_options::options_description *opt) {
     (FORMAT.c_str(), po::value<Format>(), "output format [plain, json, or xml]")
     (PRETTY_FORMAT.c_str(), po::bool_switch(),
      "pretty formatting (json and xml)");
+}
+
+void add_verbose_option(boost::program_options::options_description *opt) {
+  opt->add_options()
+    (VERBOSE.c_str(), po::bool_switch(), "be verbose");
+}
+
+void add_no_error_option(boost::program_options::options_description *opt) {
+  opt->add_options()
+    (NO_ERROR.c_str(), po::bool_switch(), "continue after error");
 }
 
 std::string get_short_features_help(bool append_suffix) {
@@ -344,6 +403,20 @@ void validate(boost::any& v, const std::vector<std::string>& values,
   } else {
     throw po::validation_error(po::validation_error::invalid_option_value);
   }
+}
+
+void validate(boost::any& v, const std::vector<std::string>& values,
+              JournalObjectSize *target_type, int) {
+  po::validators::check_first_occurrence(v);
+  const std::string &s = po::validators::get_single_string(values);
+
+  std::string parse_error;
+  uint64_t size = strict_sistrtoll(s.c_str(), &parse_error);
+  if (parse_error.empty() && (size >= (1 << 12))) {
+    v = boost::any(size);
+    return;
+  }
+  throw po::validation_error(po::validation_error::invalid_option_value);
 }
 
 } // namespace argument_types

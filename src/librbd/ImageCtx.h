@@ -175,6 +175,13 @@ namespace librbd {
     uint32_t blacklist_expire_seconds;
     uint32_t request_timed_out_seconds;
     bool enable_alloc_hint;
+    uint8_t journal_order;
+    uint8_t journal_splay_width;
+    double journal_commit_age;
+    int journal_object_flush_interval;
+    uint64_t journal_object_flush_bytes;
+    double journal_object_flush_age;
+    std::string journal_pool;
 
     LibrbdAdminSocketHook *asok_hook;
 
