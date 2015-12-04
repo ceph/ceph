@@ -774,7 +774,19 @@ int RGWRealm::set_current_period(const string& period_id) {
     return ret;
   }
   current_period = period_id;
-  return update();
+  ret = update();
+  if (ret < 0) {
+    ldout(cct, 0) << "ERROR: period update: " << cpp_strerror(-ret) << dendl;
+    return ret;
+  }
+
+  ret = new_current.reflect();
+  if (ret < 0) {
+    ldout(cct, 0) << "ERROR: period.reflect(): " << cpp_strerror(-ret) << dendl;
+    return ret;
+  }
+
+  return 0;
 }
 
 string RGWRealm::get_control_oid()
@@ -1152,6 +1164,20 @@ int RGWPeriod::update()
     }
   }
 
+  return 0;
+}
+
+int RGWPeriod::reflect()
+{
+  for (auto& iter : period_map.zonegroups) {
+    RGWZoneGroup& zg = iter.second;
+    zg.reinit_instance(cct, store);
+    int r = zg.write(false);
+    if (r < 0) {
+      ldout(cct, 0) << "ERROR: failed to store zonegroup info for zonegroup=" << iter.first << ": " << cpp_strerror(-r) << dendl;
+      return r;
+    }
+  }
   return 0;
 }
 
