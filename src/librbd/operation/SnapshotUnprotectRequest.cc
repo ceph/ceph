@@ -10,6 +10,7 @@
 #include "librbd/ImageCtx.h"
 #include "librbd/internal.h"
 #include "librbd/parent_types.h"
+#include "librbd/Utils.h"
 #include <list>
 #include <set>
 #include <vector>
@@ -97,8 +98,15 @@ public:
       return r;
     }
 
-    cls_client::get_children(&m_pool_ioctx, RBD_CHILDREN, m_pspec, &m_children,
-                             this);
+    librados::ObjectReadOperation op;
+    cls_client::get_children_start(&op, m_pspec);
+
+    librados::AioCompletion *rados_completion =
+      util::create_rados_ack_callback(this);
+    r = m_pool_ioctx.aio_operate(RBD_CHILDREN, rados_completion, &op,
+                                 &m_children_bl);
+    assert(r == 0);
+    rados_completion->release();
     return 0;
   }
 
@@ -106,8 +114,13 @@ protected:
   virtual void finish(int r) {
     I &image_ctx = this->m_image_ctx;
     CephContext *cct = image_ctx.cct;
-    ldout(cct, 10) << this << " retrieved children: r=" << r << dendl;
 
+    if (r == 0) {
+      bufferlist::iterator it = m_children_bl.begin();
+      r= cls_client::get_children_finish(&it, &m_children);
+    }
+
+    ldout(cct, 10) << this << " retrieved children: r=" << r << dendl;
     if (r == -ENOENT) {
       // no children -- proceed with unprotect
       r = 0;
