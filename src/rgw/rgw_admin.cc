@@ -1482,6 +1482,52 @@ static int init_bucket_for_sync(const string& tenant, const string& bucket_name,
   return 0;
 }
 
+static int do_period_pull(const string& remote, const string& url, const string& access_key, const string& secret_key,
+                          const string& realm_id, const string& realm_name, const string& period_id, const string& period_epoch,
+                          RGWPeriod *period)
+{
+  RGWEnv env;
+  req_info info(g_ceph_context, &env);
+  info.method = "GET";
+  info.request_uri = "/admin/realm/period";
+
+  map<string, string> &params = info.args.get_params();
+  if (!realm_id.empty())
+    params["realm_id"] = realm_id;
+  if (!realm_name.empty())
+    params["realm_name"] = realm_name;
+  if (!period_id.empty())
+    params["period_id"] = period_id;
+  if (!period_epoch.empty())
+    params["epoch"] = period_epoch;
+
+  bufferlist bl;
+  JSONParser p;
+  int ret = send_to_remote_or_url(remote, url, access_key, secret_key,
+                                  info, bl, p);
+  if (ret < 0) {
+    cerr << "request failed: " << cpp_strerror(-ret) << std::endl;
+    return ret;
+  }
+  ret = period->init(g_ceph_context, store, false);
+  if (ret < 0) {
+    cerr << "faile to init period " << cpp_strerror(-ret) << std::endl;
+    return ret;
+  }
+  try {
+    decode_json_obj(*period, &p);
+  } catch (JSONDecoder::err& e) {
+    cout << "failed to decode JSON input: " << e.message << std::endl;
+    return -EINVAL;
+  }
+  ret = period->store_info(false);
+  if (ret < 0) {
+    cerr << "Error storing period " << period->get_id() << ": " << cpp_strerror(ret) << std::endl;
+  }
+
+  return 0;
+}
+
 int main(int argc, char **argv) 
 {
   vector<const char*> args;
@@ -3132,6 +3178,16 @@ int main(int argc, char **argv)
         cout << "failed to decode JSON response: " << e.message << std::endl;
         return -EINVAL;
       }
+      RGWPeriod period;
+      if (!realm.get_current_period().empty()) {
+        ret = do_period_pull(remote, url, access_key, secret_key,
+                             realm_id, realm_name, period_id, period_epoch,
+                             &period);
+        if (ret < 0) {
+          cerr << "could not fetch period " << realm.get_current_period() << std::endl;
+          return -ret;
+        }
+      }
       ret = realm.create(false);
       if (ret < 0) {
         cerr << "Error storing realm " << realm.get_id() << ": "
@@ -3181,44 +3237,12 @@ int main(int argc, char **argv)
     return 0;
   case OPT_PERIOD_PULL:
     {
-      RGWEnv env;
-      req_info info(g_ceph_context, &env);
-      info.method = "GET";
-      info.request_uri = "/admin/realm/period";
-
-      map<string, string> &params = info.args.get_params();
-      if (!realm_id.empty())
-        params["realm_id"] = realm_id;
-      if (!realm_name.empty())
-        params["realm_name"] = realm_name;
-      if (!period_id.empty())
-        params["period_id"] = period_id;
-      if (!period_epoch.empty())
-        params["epoch"] = period_epoch;
-
-      bufferlist bl;
-      JSONParser p;
-      int ret = send_to_remote_or_url(remote, url, access_key, secret_key,
-                                      info, bl, p);
-      if (ret < 0) {
-        cerr << "request failed: " << cpp_strerror(-ret) << std::endl;
-        return ret;
-      }
       RGWPeriod period;
-      ret = period.init(g_ceph_context, store, false);
+      int ret = do_period_pull(remote, url, access_key, secret_key,
+                               realm_id, realm_name, period_id, period_epoch,
+                               &period);
       if (ret < 0) {
-	cerr << "faile to init period " << cpp_strerror(-ret) << std::endl;
-	return ret;
-      }
-      try {
-        decode_json_obj(period, &p);
-      } catch (JSONDecoder::err& e) {
-        cout << "failed to decode JSON input: " << e.message << std::endl;
-        return -EINVAL;
-      }
-      ret = period.store_info(false);
-      if (ret < 0) {
-        cerr << "Error storing period " << period.get_id() << ": " << cpp_strerror(ret) << std::endl;
+        cerr << "period pull failed: " << cpp_strerror(-ret) << std::endl;
       }
 
       encode_json("period", period, formatter);
