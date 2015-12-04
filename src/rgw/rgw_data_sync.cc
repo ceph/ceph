@@ -2034,6 +2034,7 @@ int RGWBucketShardFullSyncCR::operate()
       set_sleeping(true);
       yield;
     }
+    set_status("lock acquired");
     list_marker = full_marker.position;
     marker_tracker = new RGWBucketFullSyncShardMarkerTrack(store, async_rados, 
                                                            status_oid,
@@ -2041,10 +2042,12 @@ int RGWBucketShardFullSyncCR::operate()
 
     total_entries = full_marker.count;
     do {
+      set_status("listing remote bucket");
       ldout(store->ctx(), 20) << __func__ << "(): listing bucket for full sync" << dendl;
       yield call(new RGWListBucketShardCR(store, http_manager, async_rados, conn, bucket_name, bucket_id, shard_id,
                                       list_marker, &list_result));
       if (retcode < 0 && retcode != -ENOENT) {
+        set_status("failed bucket listing, going down");
         yield lease_cr->go_down();
         drain_all();
         return set_cr_error(retcode);
@@ -2077,8 +2080,9 @@ int RGWBucketShardFullSyncCR::operate()
         }
       }
     } while (list_result.is_truncated);
+    set_status("done iterating over all objects");
     /* wait for all operations to complete */
-    drain_all();
+    drain_all_but(1); /* still need to hold lease cr */
     /* update sync state to incremental */
     yield {
       rgw_bucket_shard_sync_info sync_status;
@@ -2090,6 +2094,7 @@ int RGWBucketShardFullSyncCR::operate()
                                           oid, attrs));
     }
     yield lease_cr->go_down();
+    drain_all();
     if (retcode < 0) {
       ldout(store->ctx(), 0) << "ERROR: failed to set sync state on bucket " << bucket_name << ":" << bucket_id << ":" << shard_id
         << " retcode=" << retcode << dendl;
