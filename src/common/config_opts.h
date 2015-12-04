@@ -823,6 +823,7 @@ OPTION(memstore_page_set, OPT_BOOL, true)
 OPTION(memstore_page_size, OPT_U64, 64 << 10)
 
 OPTION(bdev_debug_inflight_ios, OPT_BOOL, false)
+OPTION(bdev_inject_crash, OPT_INT, 0)  // if N>0, then ~ 1/N IOs will complete before we crash on flush.
 
 OPTION(bluefs_alloc_size, OPT_U64, 1048576)
 OPTION(bluefs_max_prefetch, OPT_U64, 1048576)

@@ -72,6 +72,13 @@ public:
       for (unsigned u=0; u<iov.size(); ++u)
 	length += iov[u].iov_len;
     }
+    void pread(uint64_t _offset, uint64_t len) {
+      offset = _offset;
+      length = len;
+      bufferptr p(length);
+      bl.append(p);
+      io_prep_pread(&iocb, fd, p.c_str(), length, offset);
+    }
 
     int get_return_value() {
       return rval;
