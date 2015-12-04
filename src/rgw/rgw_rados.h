@@ -784,6 +784,10 @@ public:
     DECODE_FINISH(bl);
   }
 
+  void reinit_instance(CephContext *_cct, RGWRados *_store) {
+    cct = _cct;
+    store = _store;
+  }
   int init(CephContext *_cct, RGWRados *_store, bool setup_obj = true, bool old_format = false);
   int read_default_id(string& default_id, bool old_format = false);
   int set_as_default();
@@ -1395,6 +1399,7 @@ public:
   }
 
   void update(const RGWZoneGroupMap& map);
+  int reflect();
 
   int get_zonegroup(RGWZoneGroup& zonegroup,
 		    const string& zonegroup_id);
