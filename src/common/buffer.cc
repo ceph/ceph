@@ -1206,8 +1206,11 @@ static simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZER;
     : _buffers(std::move(other._buffers)),
       _len(other._len),
       _memcopy_count(other._memcopy_count),
+      append_buffer(NULL),
+      outer_buf(false),
       last_p(this) {
-    append_buffer.swap(other.append_buffer);
+    std::swap(append_buffer, other.append_buffer);
+    std::swap(outer_buf, other.outer_buf);
     other.clear();
   }
 
@@ -1216,7 +1219,8 @@ static simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZER;
     std::swap(_len, other._len);
     std::swap(_memcopy_count, other._memcopy_count);
     _buffers.swap(other._buffers);
-    append_buffer.swap(other.append_buffer);
+    std::swap(append_buffer, other.append_buffer);
+    std::swap(outer_buf, other.outer_buf);
     //last_p.swap(other.last_p);
     last_p = begin();
     other.last_p = other.begin();
@@ -1529,26 +1533,34 @@ static simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZER;
 
   void buffer::list::append(char c)
   {
-    // put what we can into the existing append_buffer.
-    unsigned gap = append_buffer.unused_tail_length();
+    // put what we can into the existing append_buffer->
+    unsigned gap = 0;
+    if (append_buffer)
+      gap = append_buffer->unused_tail_length();
     if (!gap) {
       // make a new append_buffer!
-      append_buffer = create_aligned(CEPH_BUFFER_APPEND_SIZE, CEPH_BUFFER_APPEND_SIZE);
-      append_buffer.set_length(0);   // unused, so far.
+      if (!outer_buf && append_buffer) {
+        delete append_buffer;
+      }
+      append_buffer = new ptr(create_aligned(CEPH_BUFFER_APPEND_SIZE, CEPH_BUFFER_APPEND_SIZE));
+      outer_buf = false;
+      append_buffer->set_length(0);   // unused, so far.
     }
-    append(append_buffer, append_buffer.append(c) - 1, 1);	// add segment to the list
+    append(*append_buffer, append_buffer->append(c) - 1, 1);	// add segment to the list
   }
 
   void buffer::list::append(const char *data, unsigned len)
   {
     while (len > 0) {
-      // put what we can into the existing append_buffer.
-      unsigned gap = append_buffer.unused_tail_length();
+      // put what we can into the existing append_buffer->
+      unsigned gap = 0;
+      if (append_buffer)
+        gap = append_buffer->unused_tail_length();
       if (gap > 0) {
         if (gap > len) gap = len;
     //cout << "append first char is " << data[0] << ", last char is " << data[len-1] << std::endl;
-        append_buffer.append(data, gap);
-        append(append_buffer, append_buffer.end() - gap, gap);	// add segment to the list
+        append_buffer->append(data, gap);
+        append(*append_buffer, append_buffer->end() - gap, gap);	// add segment to the list
         len -= gap;
         data += gap;
       }
@@ -1557,8 +1569,12 @@ static simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZER;
       
       // make a new append_buffer!
       unsigned alen = CEPH_BUFFER_APPEND_SIZE * (((len-1) / CEPH_BUFFER_APPEND_SIZE) + 1);
-      append_buffer = create_aligned(alen, CEPH_BUFFER_APPEND_SIZE);
-      append_buffer.set_length(0);   // unused, so far.
+      if (!outer_buf && append_buffer) {
+        delete append_buffer;
+      }
+      append_buffer = new ptr(create_aligned(alen, CEPH_BUFFER_APPEND_SIZE));
+      outer_buf = false;
+      append_buffer->set_length(0);   // unused, so far.
     }
   }
 
