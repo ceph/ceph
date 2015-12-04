@@ -15,7 +15,7 @@ PrebufferedStreambuf::int_type PrebufferedStreambuf::overflow(int_type c)
 {
   int old_len = m_overflow.size();
   if (old_len == 0) {
-    m_overflow.resize(m_buf_len);
+    m_overflow.resize(80);
   } else {
     m_overflow.resize(old_len * 2);
   }

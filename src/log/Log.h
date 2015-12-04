@@ -69,6 +69,7 @@ public:
   void set_stderr_level(int log, int crash);
 
   Entry *create_entry(int level, int subsys);
+  Entry *create_entry(int level, int subsys, size_t* expected_size);
   void submit_entry(Entry *e);
 
   void start();
