@@ -16,15 +16,20 @@ namespace at = argument_types;
 namespace po = boost::program_options;
 
 static int do_create(librbd::RBD &rbd, librados::IoCtx& io_ctx,
-                     const char *imgname, uint64_t size, int *order,
-                     int format, uint64_t features,
-                     uint64_t stripe_unit, uint64_t stripe_count) {
+                     const char *imgname, uint64_t size,
+		     librbd::ImageOptions& opts) {
   int r;
+  uint64_t format;
+  r = opts.get(RBD_IMAGE_OPTION_FORMAT, &format);
+  assert(r == 0);
   if (format == 1) {
-    r = rbd.create(io_ctx, imgname, size, order);
+    uint64_t order;
+    r = opts.get(RBD_IMAGE_OPTION_ORDER, &order);
+    assert(r == 0);
+    int order_ = order;
+    r = rbd.create(io_ctx, imgname, size, &order_);
   } else {
-    r = rbd.create3(io_ctx, imgname, size, features, order,
-                    stripe_unit, stripe_count);
+    r = rbd.create4(io_ctx, imgname, size, opts);
   }
   if (r < 0) {
     return r;
@@ -51,13 +56,8 @@ int execute(const po::variables_map &vm) {
     return r;
   }
 
-  int order;
-  uint32_t format;
-  uint64_t features;
-  uint32_t stripe_unit;
-  uint32_t stripe_count;
-  r = utils::get_image_options(vm, &order, &format, &features, &stripe_unit,
-                               &stripe_count);
+  librbd::ImageOptions opts;
+  r = utils::get_image_options(vm, true, &opts);
   if (r < 0) {
     return r;
   }
@@ -76,8 +76,7 @@ int execute(const po::variables_map &vm) {
   }
 
   librbd::RBD rbd;
-  r = do_create(rbd, io_ctx, image_name.c_str(), size, &order, format, features,
-                stripe_unit, stripe_count);
+  r = do_create(rbd, io_ctx, image_name.c_str(), size, opts);
   if (r < 0) {
     std::cerr << "rbd: create error: " << cpp_strerror(r) << std::endl;
     return r;

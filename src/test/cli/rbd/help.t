@@ -30,6 +30,12 @@
       import-diff                 Import an incremental diff.
       info                        Show information about image size, striping,
                                   etc.
+      journal export              Export image journal.
+      journal import              Import image journal.
+      journal info                Show information about image journal.
+      journal inspect             Inspect image journal for structural errors.
+      journal reset               Reset image journal.
+      journal status              Show status of image journal.
       list (ls)                   List rbd images.
       lock add                    Take a lock on an image.
       lock list (lock ls)         Show locks held on an image.
@@ -119,29 +125,37 @@
                    [--dest-pool <dest-pool>] [--dest <dest>] [--order <order>] 
                    [--image-feature <image-feature>] [--image-shared] 
                    [--stripe-unit <stripe-unit>] [--stripe-count <stripe-count>] 
+                   [--journal-splay-width <journal-splay-width>] 
+                   [--journal-object-size <journal-object-size>] 
+                   [--journal-pool <journal-pool>] 
                    <source-snap-spec> <dest-image-spec> 
   
   Clone a snapshot into a COW child image.
   
   Positional arguments
-    <source-snap-spec>   source snapshot specification
-                         (example: [<pool-name>/]<image-name>@<snapshot-name>)
-    <dest-image-spec>    destination image specification
-                         (example: [<pool-name>/]<image-name>)
+    <source-snap-spec>        source snapshot specification
+                              (example:
+                              [<pool-name>/]<image-name>@<snapshot-name>)
+    <dest-image-spec>         destination image specification
+                              (example: [<pool-name>/]<image-name>)
   
   Optional arguments
-    -p [ --pool ] arg    source pool name
-    --image arg          source image name
-    --snap arg           source snapshot name
-    --dest-pool arg      destination pool name
-    --dest arg           destination image name
-    --order arg          object order [12 <= order <= 25]
-    --image-feature arg  image features
-                         [layering(+), striping(+), exclusive-lock(*),
-                         object-map(*), fast-diff(*), deep-flatten, journaling(*)]
-    --image-shared       shared image
-    --stripe-unit arg    stripe unit
-    --stripe-count arg   stripe count
+    -p [ --pool ] arg         source pool name
+    --image arg               source image name
+    --snap arg                source snapshot name
+    --dest-pool arg           destination pool name
+    --dest arg                destination image name
+    --order arg               object order [12 <= order <= 25]
+    --image-feature arg       image features
+                              [layering(+), striping(+), exclusive-lock(*),
+                              object-map(*), fast-diff(*), deep-flatten,
+                              journaling(*)]
+    --image-shared            shared image
+    --stripe-unit arg         stripe unit
+    --stripe-count arg        stripe count
+    --journal-splay-width arg number of active journal objects
+    --journal-object-size arg size of journal objects
+    --journal-pool arg        pool for journal objects
   
   Image Features:
     (*) supports enabling/disabling on existing images
@@ -149,7 +163,12 @@
   
   rbd help copy
   usage: rbd copy [--pool <pool>] [--image <image>] [--snap <snap>] 
-                  [--dest-pool <dest-pool>] [--dest <dest>] [--no-progress] 
+                  [--dest-pool <dest-pool>] [--dest <dest>] [--order <order>] 
+                  [--image-feature <image-feature>] [--image-shared] 
+                  [--stripe-unit <stripe-unit>] [--stripe-count <stripe-count>] 
+                  [--journal-splay-width <journal-splay-width>] 
+                  [--journal-object-size <journal-object-size>] 
+                  [--journal-pool <journal-pool>] [--no-progress] 
                   <source-image-or-snap-spec> <dest-image-spec> 
   
   Copy src image to dest.
@@ -167,36 +186,58 @@
     --snap arg                   source snapshot name
     --dest-pool arg              destination pool name
     --dest arg                   destination image name
+    --order arg                  object order [12 <= order <= 25]
+    --image-feature arg          image features
+                                 [layering(+), striping(+), exclusive-lock(*),
+                                 object-map(*), fast-diff(*), deep-flatten,
+                                 journaling(*)]
+    --image-shared               shared image
+    --stripe-unit arg            stripe unit
+    --stripe-count arg           stripe count
+    --journal-splay-width arg    number of active journal objects
+    --journal-object-size arg    size of journal objects
+    --journal-pool arg           pool for journal objects
     --no-progress                disable progress output
+  
+  Image Features:
+    (*) supports enabling/disabling on existing images
+    (+) enabled by default for new images if features not specified
   
   rbd help create
   usage: rbd create [--pool <pool>] [--image <image>] 
                     [--image-format <image-format>] [--new-format] 
                     [--order <order>] [--image-feature <image-feature>] 
                     [--image-shared] [--stripe-unit <stripe-unit>] 
-                    [--stripe-count <stripe-count>] --size <size> 
+                    [--stripe-count <stripe-count>] 
+                    [--journal-splay-width <journal-splay-width>] 
+                    [--journal-object-size <journal-object-size>] 
+                    [--journal-pool <journal-pool>] --size <size> 
                     <image-spec> 
   
   Create an empty image.
   
   Positional arguments
-    <image-spec>         image specification
-                         (example: [<pool-name>/]<image-name>)
+    <image-spec>              image specification
+                              (example: [<pool-name>/]<image-name>)
   
   Optional arguments
-    -p [ --pool ] arg    pool name
-    --image arg          image name
-    --image-format arg   image format [1 or 2]
-    --new-format         use image format 2
-                         (deprecated)
-    --order arg          object order [12 <= order <= 25]
-    --image-feature arg  image features
-                         [layering(+), striping(+), exclusive-lock(*),
-                         object-map(*), fast-diff(*), deep-flatten, journaling(*)]
-    --image-shared       shared image
-    --stripe-unit arg    stripe unit
-    --stripe-count arg   stripe count
-    -s [ --size ] arg    image size (in M/G/T)
+    -p [ --pool ] arg         pool name
+    --image arg               image name
+    --image-format arg        image format [1 or 2]
+    --new-format              use image format 2
+                              (deprecated)
+    --order arg               object order [12 <= order <= 25]
+    --image-feature arg       image features
+                              [layering(+), striping(+), exclusive-lock(*),
+                              object-map(*), fast-diff(*), deep-flatten,
+                              journaling(*)]
+    --image-shared            shared image
+    --stripe-unit arg         stripe unit
+    --stripe-count arg        stripe count
+    --journal-splay-width arg number of active journal objects
+    --journal-object-size arg size of journal objects
+    --journal-pool arg        pool for journal objects
+    -s [ --size ] arg         image size (in M/G/T)
   
   Image Features:
     (*) supports enabling/disabling on existing images
@@ -303,20 +344,26 @@
   
   rbd help feature enable
   usage: rbd feature enable [--pool <pool>] [--image <image>] 
+                            [--journal-splay-width <journal-splay-width>] 
+                            [--journal-object-size <journal-object-size>] 
+                            [--journal-pool <journal-pool>] 
                             <image-spec> <features> [<features> ...]
   
   Enable the specified image feature.
   
   Positional arguments
-    <image-spec>         image specification
-                         (example: [<pool-name>/]<image-name>)
-    <features>           image features
-                         [layering, striping, exclusive-lock, object-map,
-                         fast-diff, deep-flatten, journaling]
+    <image-spec>              image specification
+                              (example: [<pool-name>/]<image-name>)
+    <features>                image features
+                              [layering, striping, exclusive-lock, object-map,
+                              fast-diff, deep-flatten, journaling]
   
   Optional arguments
-    -p [ --pool ] arg    pool name
-    --image arg          image name
+    -p [ --pool ] arg         pool name
+    --image arg               image name
+    --journal-splay-width arg number of active journal objects
+    --journal-object-size arg size of journal objects
+    --journal-pool arg        pool for journal objects
   
   rbd help flatten
   usage: rbd flatten [--pool <pool>] [--image <image>] [--no-progress] 
@@ -401,34 +448,41 @@
                     [--image-format <image-format>] [--new-format] 
                     [--order <order>] [--image-feature <image-feature>] 
                     [--image-shared] [--stripe-unit <stripe-unit>] 
-                    [--stripe-count <stripe-count>] [--no-progress] 
+                    [--stripe-count <stripe-count>] 
+                    [--journal-splay-width <journal-splay-width>] 
+                    [--journal-object-size <journal-object-size>] 
+                    [--journal-pool <journal-pool>] [--no-progress] 
                     [--pool <pool>] [--image <image>] 
                     <path-name> <dest-image-spec> 
   
   Import image from file.
   
   Positional arguments
-    <path-name>          import file (or '-' for stdin)
-    <dest-image-spec>    destination image specification
-                         (example: [<pool-name>/]<image-name>)
+    <path-name>               import file (or '-' for stdin)
+    <dest-image-spec>         destination image specification
+                              (example: [<pool-name>/]<image-name>)
   
   Optional arguments
-    --path arg           import file (or '-' for stdin)
-    --dest-pool arg      destination pool name
-    --dest arg           destination image name
-    --image-format arg   image format [1 or 2]
-    --new-format         use image format 2
-                         (deprecated)
-    --order arg          object order [12 <= order <= 25]
-    --image-feature arg  image features
-                         [layering(+), striping(+), exclusive-lock(*),
-                         object-map(*), fast-diff(*), deep-flatten, journaling(*)]
-    --image-shared       shared image
-    --stripe-unit arg    stripe unit
-    --stripe-count arg   stripe count
-    --no-progress        disable progress output
-    -p [ --pool ] arg    pool name (deprecated)
-    --image arg          image name (deprecated)
+    --path arg                import file (or '-' for stdin)
+    --dest-pool arg           destination pool name
+    --dest arg                destination image name
+    --image-format arg        image format [1 or 2]
+    --new-format              use image format 2
+                              (deprecated)
+    --order arg               object order [12 <= order <= 25]
+    --image-feature arg       image features
+                              [layering(+), striping(+), exclusive-lock(*),
+                              object-map(*), fast-diff(*), deep-flatten,
+                              journaling(*)]
+    --image-shared            shared image
+    --stripe-unit arg         stripe unit
+    --stripe-count arg        stripe count
+    --journal-splay-width arg number of active journal objects
+    --journal-object-size arg size of journal objects
+    --journal-pool arg        pool for journal objects
+    --no-progress             disable progress output
+    -p [ --pool ] arg         pool name (deprecated)
+    --image arg               image name (deprecated)
   
   Image Features:
     (*) supports enabling/disabling on existing images
@@ -469,6 +523,119 @@
     --snap arg            snapshot name
     --format arg          output format [plain, json, or xml]
     --pretty-format       pretty formatting (json and xml)
+  
+  rbd help journal export
+  usage: rbd journal export [--pool <pool>] [--image <image>] 
+                            [--journal <journal>] [--path <path>] [--verbose] 
+                            [--no-error] 
+                            <source-journal-spec> <path-name> 
+  
+  Export image journal.
+  
+  Positional arguments
+    <source-journal-spec>  source journal specification
+                           (example: [<pool-name>/]<journal-name>)
+    <path-name>            export file (or '-' for stdout)
+  
+  Optional arguments
+    -p [ --pool ] arg      source pool name
+    --image arg            source image name
+    --journal arg          source journal name
+    --path arg             export file (or '-' for stdout)
+    --verbose              be verbose
+    --no-error             continue after error
+  
+  rbd help journal import
+  usage: rbd journal import [--path <path>] [--dest-pool <dest-pool>] 
+                            [--dest <dest>] [--dest-journal <dest-journal>] 
+                            [--verbose] [--no-error] 
+                            <path-name> <dest-journal-spec> 
+  
+  Import image journal.
+  
+  Positional arguments
+    <path-name>          import file (or '-' for stdin)
+    <dest-journal-spec>  destination journal specification
+                         (example: [<pool-name>/]<journal-name>)
+  
+  Optional arguments
+    --path arg           import file (or '-' for stdin)
+    --dest-pool arg      destination pool name
+    --dest arg           destination image name
+    --dest-journal arg   destination journal name
+    --verbose            be verbose
+    --no-error           continue after error
+  
+  rbd help journal info
+  usage: rbd journal info [--pool <pool>] [--image <image>] 
+                          [--journal <journal>] [--format <format>] 
+                          [--pretty-format] 
+                          <journal-spec> 
+  
+  Show information about image journal.
+  
+  Positional arguments
+    <journal-spec>       journal specification
+                         (example: [<pool-name>/]<journal-name>)
+  
+  Optional arguments
+    -p [ --pool ] arg    pool name
+    --image arg          image name
+    --journal arg        journal name
+    --format arg         output format [plain, json, or xml]
+    --pretty-format      pretty formatting (json and xml)
+  
+  rbd help journal inspect
+  usage: rbd journal inspect [--pool <pool>] [--image <image>] 
+                             [--journal <journal>] [--verbose] 
+                             <journal-spec> 
+  
+  Inspect image journal for structural errors.
+  
+  Positional arguments
+    <journal-spec>       journal specification
+                         (example: [<pool-name>/]<journal-name>)
+  
+  Optional arguments
+    -p [ --pool ] arg    pool name
+    --image arg          image name
+    --journal arg        journal name
+    --verbose            be verbose
+  
+  rbd help journal reset
+  usage: rbd journal reset [--pool <pool>] [--image <image>] 
+                           [--journal <journal>] 
+                           <journal-spec> 
+  
+  Reset image journal.
+  
+  Positional arguments
+    <journal-spec>       journal specification
+                         (example: [<pool-name>/]<journal-name>)
+  
+  Optional arguments
+    -p [ --pool ] arg    pool name
+    --image arg          image name
+    --journal arg        journal name
+  
+  rbd help journal status
+  usage: rbd journal status [--pool <pool>] [--image <image>] 
+                            [--journal <journal>] [--format <format>] 
+                            [--pretty-format] 
+                            <journal-spec> 
+  
+  Show status of image journal.
+  
+  Positional arguments
+    <journal-spec>       journal specification
+                         (example: [<pool-name>/]<journal-name>)
+  
+  Optional arguments
+    -p [ --pool ] arg    pool name
+    --image arg          image name
+    --journal arg        journal name
+    --format arg         output format [plain, json, or xml]
+    --pretty-format      pretty formatting (json and xml)
   
   rbd help list
   usage: rbd list [--long] [--pool <pool>] [--format <format>] [--pretty-format] 

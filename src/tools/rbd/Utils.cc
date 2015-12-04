@@ -196,6 +196,97 @@ int get_pool_image_snapshot_names(const po::variables_map &vm,
   return 0;
 }
 
+int get_pool_journal_names(const po::variables_map &vm,
+			   at::ArgumentModifier mod,
+			   size_t *spec_arg_index,
+			   std::string *pool_name,
+			   std::string *journal_name) {
+  std::string pool_key = (mod == at::ARGUMENT_MODIFIER_DEST ?
+    at::DEST_POOL_NAME : at::POOL_NAME);
+  std::string image_key = (mod == at::ARGUMENT_MODIFIER_DEST ?
+    at::DEST_IMAGE_NAME : at::IMAGE_NAME);
+  std::string journal_key = (mod == at::ARGUMENT_MODIFIER_DEST ?
+    at::DEST_JOURNAL_NAME : at::JOURNAL_NAME);
+
+  if (vm.count(pool_key) && pool_name != nullptr) {
+    *pool_name = vm[pool_key].as<std::string>();
+  }
+  if (vm.count(journal_key) && journal_name != nullptr) {
+    *journal_name = vm[journal_key].as<std::string>();
+  }
+
+  std::string image_name;
+  if (vm.count(image_key)) {
+    image_name = vm[image_key].as<std::string>();
+  }
+
+  if (journal_name != nullptr && !journal_name->empty()) {
+    // despite the separate pool option,
+    // we can also specify them via the journal option
+    std::string journal_name_copy(*journal_name);
+    extract_spec(journal_name_copy, pool_name, journal_name, nullptr);
+  }
+
+  if (!image_name.empty()) {
+    // despite the separate pool option,
+    // we can also specify them via the image option
+    std::string image_name_copy(image_name);
+    extract_spec(image_name_copy, pool_name, &image_name, nullptr);
+  }
+
+  int r;
+  if (journal_name != nullptr && spec_arg_index != nullptr &&
+      journal_name->empty()) {
+    std::string spec = get_positional_argument(vm, (*spec_arg_index)++);
+    if (!spec.empty()) {
+      r = extract_spec(spec, pool_name, journal_name, nullptr);
+      if (r < 0) {
+        return r;
+      }
+    }
+  }
+
+  if (pool_name->empty()) {
+    *pool_name = at::DEFAULT_POOL_NAME;
+  }
+
+  if (journal_name != nullptr && journal_name->empty() && !image_name.empty()) {
+    // Try to get journal name from image info.
+    librados::Rados rados;
+    librados::IoCtx io_ctx;
+    librbd::Image image;
+    int r = init_and_open_image(*pool_name, image_name, "", true,
+				  &rados, &io_ctx, &image);
+    if (r < 0) {
+      std::cerr << "rbd: failed to open image " << image_name
+		<< " to get journal name: " << cpp_strerror(r) << std::endl;
+      return r;
+    }
+
+    uint64_t features;
+    r = image.features(&features);
+    if (r < 0) {
+      return r;
+    }
+    if ((features & RBD_FEATURE_JOURNALING) == 0) {
+      std::cerr << "rbd: journaling is not enabled for image " << image_name
+		<< std::endl;
+      return -EINVAL;
+    }
+    *journal_name = image_id(image);
+  }
+
+  if (journal_name != nullptr && journal_name->empty()) {
+    std::string prefix = at::get_description_prefix(mod);
+    std::cerr << "rbd: "
+              << (mod == at::ARGUMENT_MODIFIER_DEST ? prefix : std::string())
+              << "journal was not specified" << std::endl;
+    return -EINVAL;
+  }
+
+  return 0;
+}
+
 int validate_snapshot_name(at::ArgumentModifier mod,
                            const std::string &snap_name,
                            SnapshotPresence snapshot_presence) {
@@ -225,89 +316,138 @@ int validate_snapshot_name(at::ArgumentModifier mod,
 }
 
 int get_image_options(const boost::program_options::variables_map &vm,
-                      int *order, uint32_t *format, uint64_t *features,
-                      uint32_t *stripe_unit, uint32_t *stripe_count) {
+		      bool get_format, librbd::ImageOptions *opts) {
+  uint64_t order, features, stripe_unit, stripe_count;
+  bool features_specified = false;
+
   if (vm.count(at::IMAGE_ORDER)) {
-    *order = vm[at::IMAGE_ORDER].as<uint32_t>();
+    order = vm[at::IMAGE_ORDER].as<uint64_t>();
   } else {
-    *order = 22;
+    order = 22;
   }
 
-  bool features_specified = false;
   if (vm.count(at::IMAGE_FEATURES)) {
-    *features = vm[at::IMAGE_FEATURES].as<uint64_t>();
+    features = vm[at::IMAGE_FEATURES].as<uint64_t>();
     features_specified = true;
   } else {
-    *features = g_conf->rbd_default_features;
+    features = g_conf->rbd_default_features;
   }
 
   if (vm.count(at::IMAGE_STRIPE_UNIT)) {
-    *stripe_unit = vm[at::IMAGE_STRIPE_UNIT].as<uint32_t>();
+    stripe_unit = vm[at::IMAGE_STRIPE_UNIT].as<uint64_t>();
   } else {
-    *stripe_unit = g_conf->rbd_default_stripe_unit;
+    stripe_unit = g_conf->rbd_default_stripe_unit;
   }
 
   if (vm.count(at::IMAGE_STRIPE_COUNT)) {
-    *stripe_count = vm[at::IMAGE_STRIPE_COUNT].as<uint32_t>();
+    stripe_count = vm[at::IMAGE_STRIPE_COUNT].as<uint64_t>();
   } else {
-    *stripe_count = g_conf->rbd_default_stripe_count;
+    stripe_count = g_conf->rbd_default_stripe_count;
   }
 
-  if ((*stripe_unit != 0 && *stripe_count == 0) ||
-      (*stripe_unit == 0 && *stripe_count != 0)) {
+  if ((stripe_unit != 0 && stripe_count == 0) ||
+      (stripe_unit == 0 && stripe_count != 0)) {
     std::cerr << "must specify both (or neither) of stripe-unit and stripe-count"
               << std::endl;
     return -EINVAL;
-  } else if ((*stripe_unit || *stripe_count) &&
-             (*stripe_unit != (1ll << *order) && *stripe_count != 1)) {
-    *features |= RBD_FEATURE_STRIPINGV2;
+  } else if ((stripe_unit || stripe_count) &&
+             (stripe_unit != (1ull << order) && stripe_count != 1)) {
+    features |= RBD_FEATURE_STRIPINGV2;
   } else {
-    *features &= ~RBD_FEATURE_STRIPINGV2;
+    features &= ~RBD_FEATURE_STRIPINGV2;
   }
 
   if (vm.count(at::IMAGE_SHARED) && vm[at::IMAGE_SHARED].as<bool>()) {
-    *features &= ~RBD_FEATURES_SINGLE_CLIENT;
+    features &= ~RBD_FEATURES_SINGLE_CLIENT;
   }
 
-  if (format != nullptr) {
+  if (get_format) {
+    uint64_t format;
     bool format_specified = false;
     if (vm.count(at::IMAGE_NEW_FORMAT)) {
-      *format = 2;
+      format = 2;
       format_specified = true;
     } else if (vm.count(at::IMAGE_FORMAT)) {
-      *format = vm[at::IMAGE_FORMAT].as<uint32_t>();
+      format = vm[at::IMAGE_FORMAT].as<uint32_t>();
       format_specified = true;
     } else {
-      *format = g_conf->rbd_default_format;
+      format = g_conf->rbd_default_format;
     }
 
-    if (features_specified && *features != 0) {
-      if (format_specified && *format == 1) {
+    if (features_specified && features != 0) {
+      if (format_specified && format == 1) {
         std::cerr << "rbd: features not allowed with format 1; "
                   << "use --image-format 2" << std::endl;
         return -EINVAL;
       } else {
-        *format = 2;
+        format = 2;
         format_specified = true;
       }
     }
 
-    if ((*stripe_unit || *stripe_count) &&
-        (*stripe_unit != (1ull << *order) && *stripe_count != 1)) {
-      if (format_specified && *format == 1) {
+    if ((stripe_unit || stripe_count) &&
+        (stripe_unit != (1ull << order) && stripe_count != 1)) {
+      if (format_specified && format == 1) {
         std::cerr << "rbd: non-default striping not allowed with format 1; "
                   << "use --image-format 2" << std::endl;
         return -EINVAL;
       } else {
-        *format = 2;
+        format = 2;
         format_specified = 2;
       }
     }
 
     if (format_specified) {
-      int r = g_conf->set_val("rbd_default_format", stringify(*format));
+      int r = g_conf->set_val("rbd_default_format", stringify(format));
       assert(r == 0);
     }
+
+    opts->set(RBD_IMAGE_OPTION_FORMAT, format);
+  }
+
+  opts->set(RBD_IMAGE_OPTION_ORDER, order);
+  opts->set(RBD_IMAGE_OPTION_FEATURES, features);
+  opts->set(RBD_IMAGE_OPTION_STRIPE_UNIT, stripe_unit);
+  opts->set(RBD_IMAGE_OPTION_STRIPE_COUNT, stripe_count);
+
+  int r = get_journal_options(vm, opts);
+  if (r < 0) {
+    return r;
+  }
+
+  return 0;
+}
+
+int get_journal_options(const boost::program_options::variables_map &vm,
+			librbd::ImageOptions *opts) {
+
+  if (vm.count(at::JOURNAL_OBJECT_SIZE)) {
+    uint64_t size = vm[at::JOURNAL_OBJECT_SIZE].as<uint64_t>();
+    uint64_t order = 12;
+    while ((1ULL << order) < size) {
+      order++;
+    }
+    opts->set(RBD_IMAGE_OPTION_JOURNAL_ORDER, order);
+
+    int r = g_conf->set_val("rbd_journal_order", stringify(order));
+    assert(r == 0);
+  }
+  if (vm.count(at::JOURNAL_SPLAY_WIDTH)) {
+    opts->set(RBD_IMAGE_OPTION_JOURNAL_SPLAY_WIDTH,
+	      vm[at::JOURNAL_SPLAY_WIDTH].as<uint64_t>());
+
+    int r = g_conf->set_val("rbd_journal_splay_width",
+			    stringify(
+			      vm[at::JOURNAL_SPLAY_WIDTH].as<uint64_t>()));
+    assert(r == 0);
+  }
+  if (vm.count(at::JOURNAL_POOL)) {
+    opts->set(RBD_IMAGE_OPTION_JOURNAL_POOL,
+	      vm[at::JOURNAL_POOL].as<std::string>());
+
+    int r = g_conf->set_val("rbd_journal_pool",
+			    vm[at::JOURNAL_POOL].as<std::string>());
+    assert(r == 0);
   }
 
   return 0;
@@ -443,6 +583,20 @@ int snap_set(librbd::Image &image, const std::string snap_name) {
     return r;
   }
   return 0;
+}
+
+std::string image_id(librbd::Image& image) {
+  librbd::image_info_t info;
+  int r = image.stat(info, sizeof(info));
+  if (r < 0) {
+    return string();
+  }
+
+  char prefix[RBD_MAX_BLOCK_NAME_SIZE + 1];
+  strncpy(prefix, info.block_name_prefix, RBD_MAX_BLOCK_NAME_SIZE);
+  prefix[RBD_MAX_BLOCK_NAME_SIZE] = '\0';
+
+  return string(prefix + strlen(RBD_DATA_PREFIX));
 }
 
 } // namespace utils

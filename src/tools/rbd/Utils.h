@@ -55,13 +55,20 @@ int get_pool_image_snapshot_names(
     std::string *pool_name, std::string *image_name, std::string *snap_name,
     SnapshotPresence snapshot_presence, bool image_required = true);
 
+int get_pool_journal_names(
+    const boost::program_options::variables_map &vm,
+    argument_types::ArgumentModifier mod, size_t *spec_arg_index,
+    std::string *pool_name, std::string *journal_name);
+
 int validate_snapshot_name(argument_types::ArgumentModifier mod,
                            const std::string &snap_name,
                            SnapshotPresence snapshot_presence);
 
 int get_image_options(const boost::program_options::variables_map &vm,
-                      int *order, uint32_t *format, uint64_t *features,
-                      uint32_t *stripe_unit, uint32_t *stripe_count);
+                      bool get_format, librbd::ImageOptions* opts);
+
+int get_journal_options(const boost::program_options::variables_map &vm,
+			librbd::ImageOptions *opts);
 
 int get_image_size(const boost::program_options::variables_map &vm,
                    uint64_t *size);
@@ -90,6 +97,8 @@ int init_and_open_image(const std::string &pool_name,
                         librbd::Image *image);
 
 int snap_set(librbd::Image &image, const std::string snap_name);
+
+std::string image_id(librbd::Image& image);
 
 } // namespace utils
 } // namespace rbd

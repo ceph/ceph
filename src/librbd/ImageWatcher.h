@@ -332,4 +332,7 @@ private:
 
 } // namespace librbd
 
+std::ostream &operator<<(std::ostream &os,
+			 const librbd::ImageWatcher::LockUpdateState &state);
+
 #endif // CEPH_LIBRBD_IMAGE_WATCHER_H

@@ -26,22 +26,28 @@ class ReplayHandler;
 
 class Journaler {
 public:
+
+  static std::string header_oid(const std::string &journal_id);
+  static std::string object_oid_prefix(int pool_id,
+				       const std::string &journal_id);
+
   Journaler(librados::IoCtx &header_ioctx, const std::string &journal_id,
 	    const std::string &client_id, double commit_interval);
   ~Journaler();
 
   int exists(bool *header_exists) const;
   int create(uint8_t order, uint8_t splay_width, int64_t pool_id);
-  int remove();
+  int remove(bool force);
 
   void init(Context *on_init);
+  void shutdown();
 
   int register_client(const std::string &description);
   int unregister_client();
 
   void start_replay(ReplayHandler *replay_handler);
   void start_live_replay(ReplayHandler *replay_handler, double interval);
-  bool try_pop_front(ReplayEntry *replay_entry);
+  bool try_pop_front(ReplayEntry *replay_entry, std::string* tag = NULL);
   void stop_replay();
 
   void start_append(int flush_interval, uint64_t flush_bytes, double flush_age);
@@ -51,6 +57,8 @@ public:
 
   void committed(const ReplayEntry &replay_entry);
   void committed(const Future &future);
+
+  void get_metadata(uint8_t *order, uint8_t *splay_width, int64_t *pool_id);
 
 private:
   struct C_InitJournaler : public Context {

@@ -433,7 +433,74 @@ int invoke_async_request(ImageCtx *ictx, const std::string& request_type,
     {RBD_IMAGE_OPTION_ORDER, UINT64},
     {RBD_IMAGE_OPTION_STRIPE_UNIT, UINT64},
     {RBD_IMAGE_OPTION_STRIPE_COUNT, UINT64},
+    {RBD_IMAGE_OPTION_JOURNAL_ORDER, UINT64},
+    {RBD_IMAGE_OPTION_JOURNAL_SPLAY_WIDTH, UINT64},
+    {RBD_IMAGE_OPTION_JOURNAL_POOL, STR},
   };
+
+  std::string image_option_name(int optname) {
+    switch (optname) {
+    case RBD_IMAGE_OPTION_FORMAT:
+      return "format";
+    case RBD_IMAGE_OPTION_FEATURES:
+      return "features";
+    case RBD_IMAGE_OPTION_ORDER:
+      return "order";
+    case RBD_IMAGE_OPTION_STRIPE_UNIT:
+      return "stripe_unit";
+    case RBD_IMAGE_OPTION_STRIPE_COUNT:
+      return "stripe_count";
+    case RBD_IMAGE_OPTION_JOURNAL_ORDER:
+      return "journal_order";
+    case RBD_IMAGE_OPTION_JOURNAL_SPLAY_WIDTH:
+      return "journal_splay_width";
+    case RBD_IMAGE_OPTION_JOURNAL_POOL:
+      return "journal_pool";
+    default:
+      return "unknown (" + stringify(optname) + ")";
+    }
+  }
+
+  std::ostream &operator<<(std::ostream &os, rbd_image_options_t &opts) {
+    image_options_ref* opts_ = static_cast<image_options_ref*>(opts);
+
+    os << "[";
+
+    for (image_options_t::const_iterator i = (*opts_)->begin();
+	 i != (*opts_)->end(); i++) {
+      os << (i == (*opts_)->begin() ? "" : ", ") << image_option_name(i->first)
+	 << "=" << i->second;
+    }
+
+    os << "]";
+
+    return os;
+  }
+
+  std::ostream &operator<<(std::ostream &os, ImageOptions &opts) {
+    os << "[";
+
+    const char *delimiter = "";
+    for (auto &i : IMAGE_OPTIONS_TYPE_MAPPING) {
+      if (i.second == STR) {
+	std::string val;
+	if (opts.get(i.first, &val) == 0) {
+	  os << delimiter << image_option_name(i.first) << "=" << val;
+	  delimiter = ", ";
+	}
+      } else if (i.second == UINT64) {
+	uint64_t val;
+	if (opts.get(i.first, &val) == 0) {
+	  os << delimiter << image_option_name(i.first) << "=" << val;
+	  delimiter = ", ";
+	}
+      }
+    }
+
+    os << "]";
+
+    return os;
+  }
 
   void image_options_create(rbd_image_options_t* opts)
   {
@@ -1110,7 +1177,9 @@ int invoke_async_request(ImageCtx *ictx, const std::string& request_type,
 
   int create_v2(IoCtx& io_ctx, const char *imgname, uint64_t bid, uint64_t size,
 		int order, uint64_t features, uint64_t stripe_unit,
-		uint64_t stripe_count)
+		uint64_t stripe_count, uint8_t journal_order,
+		uint8_t journal_splay_width,
+		const std::string &journal_pool)
   {
     ostringstream bid_ss;
     uint32_t extra;
@@ -1204,7 +1273,8 @@ int invoke_async_request(ImageCtx *ictx, const std::string& request_type,
         goto err_remove_object_map;
       }
 
-      r = Journal::create(io_ctx, id);
+      r = Journal::create(io_ctx, id, journal_order, journal_splay_width,
+			  journal_pool);
       if (r < 0) {
         lderr(cct) << "error creating journal: " << cpp_strerror(r) << dendl;
         goto err_remove_object_map;
@@ -1374,8 +1444,16 @@ int invoke_async_request(ImageCtx *ictx, const std::string& request_type,
 
       r = create_v1(io_ctx, imgname, bid, size, order);
     } else {
+      uint64_t journal_order = cct->_conf->rbd_journal_order;
+      uint64_t journal_splay_width = cct->_conf->rbd_journal_splay_width;
+      std::string journal_pool = cct->_conf->rbd_journal_pool;
+
+      opts.get(RBD_IMAGE_OPTION_JOURNAL_ORDER, &journal_order);
+      opts.get(RBD_IMAGE_OPTION_JOURNAL_SPLAY_WIDTH, &journal_splay_width);
+      opts.get(RBD_IMAGE_OPTION_JOURNAL_POOL, &journal_pool);
+
       r = create_v2(io_ctx, imgname, bid, size, order, features, stripe_unit,
-		    stripe_count);
+		    stripe_count, journal_order, journal_splay_width, journal_pool);
     }
 
     int r1 = opts.set(RBD_IMAGE_OPTION_ORDER, order);
@@ -1388,39 +1466,46 @@ int invoke_async_request(ImageCtx *ictx, const std::string& request_type,
    * Parent may be in different pool, hence different IoCtx
    */
   int clone(IoCtx& p_ioctx, const char *p_name, const char *p_snap_name,
-	    IoCtx& c_ioctx, const char *c_name, ImageOptions& c_opts)
-  {
-    int order = 0;
-    uint64_t features = 0;
-    uint64_t stripe_unit = 0;
-    uint64_t stripe_count = 0;
-    c_opts.get(RBD_IMAGE_OPTION_FEATURES, &features);
-    c_opts.get(RBD_IMAGE_OPTION_STRIPE_UNIT, &stripe_unit);
-    c_opts.get(RBD_IMAGE_OPTION_STRIPE_COUNT, &stripe_count);
-
-    int r = clone(p_ioctx, p_name, p_snap_name, c_ioctx, c_name, features,
-		  &order, stripe_unit, stripe_count);
-    c_opts.set(RBD_IMAGE_OPTION_ORDER, static_cast<uint64_t>(order));
-    return r;
-  }
-
-  int clone(IoCtx& p_ioctx, const char *p_name, const char *p_snap_name,
 	    IoCtx& c_ioctx, const char *c_name,
 	    uint64_t features, int *c_order,
 	    uint64_t stripe_unit, int stripe_count)
   {
+    uint64_t order = *c_order;
+
+    ImageOptions opts;
+    opts.set(RBD_IMAGE_OPTION_FORMAT, static_cast<uint64_t>(2));
+    opts.set(RBD_IMAGE_OPTION_FEATURES, features);
+    opts.set(RBD_IMAGE_OPTION_ORDER, order);
+    opts.set(RBD_IMAGE_OPTION_STRIPE_UNIT, stripe_unit);
+    opts.set(RBD_IMAGE_OPTION_STRIPE_COUNT, stripe_count);
+
+    int r = clone(p_ioctx, p_name, p_snap_name, c_ioctx, c_name, opts);
+    opts.get(RBD_IMAGE_OPTION_ORDER, &order);
+    *c_order = order;
+    return r;
+  }
+
+  int clone(IoCtx& p_ioctx, const char *p_name, const char *p_snap_name,
+	    IoCtx& c_ioctx, const char *c_name, ImageOptions& c_opts)
+  {
     CephContext *cct = (CephContext *)p_ioctx.cct();
     ldout(cct, 20) << "clone " << &p_ioctx << " name " << p_name << " snap "
 		   << p_snap_name << "to child " << &c_ioctx << " name "
-		   << c_name << " features = " << features << " order = "
-		   << *c_order
-		   << " stripe_unit = " << stripe_unit
-		   << " stripe_count = " << stripe_count
-		   << dendl;
+		   << c_name << " opts = " << c_opts << dendl;
 
-    if (features & ~RBD_FEATURES_ALL) {
-      lderr(cct) << "librbd does not support requested features" << dendl;
-      return -ENOSYS;
+    uint64_t format = cct->_conf->rbd_default_format;
+    c_opts.get(RBD_IMAGE_OPTION_FORMAT, &format);
+    if (format < 2) {
+      lderr(cct) << "format 2 or later required for clone" << dendl;
+      return -EINVAL;
+    }
+
+    uint64_t features;
+    if (c_opts.get(RBD_IMAGE_OPTION_FEATURES, &features) != 0) {
+      if (features & ~RBD_FEATURES_ALL) {
+	lderr(cct) << "librbd does not support requested features" << dendl;
+	return -ENOSYS;
+      }
     }
 
     // make sure child doesn't already exist, in either format
@@ -1436,7 +1521,7 @@ int invoke_async_request(ImageCtx *ictx, const std::string& request_type,
     }
 
     bool snap_protected;
-    int order;
+    uint64_t order;
     uint64_t size;
     uint64_t p_features;
     int partial_r;
@@ -1479,12 +1564,12 @@ int invoke_async_request(ImageCtx *ictx, const std::string& request_type,
       goto err_close_parent;
     }
 
-    order = *c_order;
-    if (!order)
-      order = p_imctx->order;
+    order = p_imctx->order;
+    if (c_opts.get(RBD_IMAGE_OPTION_ORDER, &order) != 0) {
+      c_opts.set(RBD_IMAGE_OPTION_ORDER, order);
+    }
 
-    r = create(c_ioctx, c_name, size, false, features, &order,
-	       stripe_unit, stripe_count);
+    r = create(c_ioctx, c_name, size, c_opts);
     if (r < 0) {
       lderr(cct) << "error creating child: " << cpp_strerror(r) << dendl;
       goto err_close_parent;
@@ -1499,13 +1584,13 @@ int invoke_async_request(ImageCtx *ictx, const std::string& request_type,
 
     r = cls_client::set_parent(&c_ioctx, c_imctx->header_oid, pspec, size);
     if (r < 0) {
-      lderr(cct) << "couldn't set parent: " << r << dendl;
+      lderr(cct) << "couldn't set parent: " << cpp_strerror(r) << dendl;
       goto err_close_child;
     }
 
     r = cls_client::add_child(&c_ioctx, RBD_CHILDREN, pspec, c_imctx->id);
     if (r < 0) {
-      lderr(cct) << "couldn't add child: " << r << dendl;
+      lderr(cct) << "couldn't add child: " << cpp_strerror(r) << dendl;
       goto err_close_child;
     }
 
@@ -1516,7 +1601,7 @@ int invoke_async_request(ImageCtx *ictx, const std::string& request_type,
     } else if (r == 0 && !pairs.empty()) {
       r = cls_client::metadata_set(&c_ioctx, c_imctx->header_oid, pairs);
       if (r < 0) {
-        lderr(cct) << "couldn't set metadata: " << r << dendl;
+        lderr(cct) << "couldn't set metadata: " << cpp_strerror(r) << dendl;
         goto err_close_child;
       }
     }
@@ -1753,7 +1838,9 @@ int invoke_async_request(ImageCtx *ictx, const std::string& request_type,
         }
         features_mask |= RBD_FEATURE_EXCLUSIVE_LOCK;
 
-        r = Journal::create(ictx->md_ctx, ictx->id);
+        r = Journal::create(ictx->md_ctx, ictx->id, ictx->journal_order,
+			    ictx->journal_splay_width,
+			    ictx->journal_pool);
         if (r < 0) {
           lderr(cct) << "error creating image journal: " << cpp_strerror(r)
                      << dendl;
@@ -2594,30 +2681,37 @@ int invoke_async_request(ImageCtx *ictx, const std::string& request_type,
     CephContext *cct = (CephContext *)dest_md_ctx.cct();
     ldout(cct, 20) << "copy " << src->name
 		   << (src->snap_name.length() ? "@" + src->snap_name : "")
-		   << " -> " << destname << dendl;
+		   << " -> " << destname << " opts = " << opts << dendl;
 
     src->snap_lock.get_read();
     uint64_t features = src->features;
     uint64_t src_size = src->get_image_size(src->snap_id);
     src->snap_lock.put_read();
-    uint64_t stripe_unit = src->stripe_unit;
-    uint64_t stripe_count = src->stripe_count;
-    opts.get(RBD_IMAGE_OPTION_FEATURES, &features);
-    opts.get(RBD_IMAGE_OPTION_STRIPE_UNIT, &stripe_unit);
-    opts.get(RBD_IMAGE_OPTION_STRIPE_COUNT, &stripe_count);
-    int order = src->order;
-    uint64_t opt_order = 0;
-    if (opts.get(RBD_IMAGE_OPTION_ORDER, &opt_order)) {
-      order = opt_order;
+    if (opts.get(RBD_IMAGE_OPTION_FEATURES, &features) != 0) {
+      opts.set(RBD_IMAGE_OPTION_FEATURES, features);
     }
-
     if (features & ~RBD_FEATURES_ALL) {
       lderr(cct) << "librbd does not support requested features" << dendl;
       return -ENOSYS;
     }
+    uint64_t format = src->old_format ? 1 : 2;
+    if (opts.get(RBD_IMAGE_OPTION_FORMAT, &format) != 0) {
+      opts.set(RBD_IMAGE_OPTION_FORMAT, format);
+    }
+    uint64_t stripe_unit = src->stripe_unit;
+    if (opts.get(RBD_IMAGE_OPTION_STRIPE_UNIT, &stripe_unit) != 0) {
+      opts.set(RBD_IMAGE_OPTION_STRIPE_UNIT, stripe_unit);
+    }
+    uint64_t stripe_count = src->stripe_count;
+    if (opts.get(RBD_IMAGE_OPTION_STRIPE_COUNT, &stripe_count) != 0) {
+      opts.set(RBD_IMAGE_OPTION_STRIPE_COUNT, stripe_count);
+    }
+    uint64_t order = src->order;
+    if (opts.get(RBD_IMAGE_OPTION_ORDER, &order) != 0) {
+      opts.set(RBD_IMAGE_OPTION_ORDER, order);
+    }
 
-    int r = create(dest_md_ctx, destname, src_size, src->old_format,
-		   features, &order, stripe_unit, stripe_count);
+    int r = create(dest_md_ctx, destname, src_size, opts);
     if (r < 0) {
       lderr(cct) << "header creation failed" << dendl;
       return r;

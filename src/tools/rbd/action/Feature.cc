@@ -4,8 +4,10 @@
 #include "tools/rbd/ArgumentTypes.h"
 #include "tools/rbd/Shell.h"
 #include "tools/rbd/Utils.h"
+#include "include/stringify.h"
 #include "common/errno.h"
 #include <iostream>
+#include <map>
 #include <boost/program_options.hpp>
 
 namespace rbd {
@@ -16,11 +18,24 @@ namespace at = argument_types;
 namespace po = boost::program_options;
 
 void get_arguments(po::options_description *positional,
-                   po::options_description *options) {
+                   po::options_description *options, bool enabled) {
   at::add_image_spec_options(positional, options, at::ARGUMENT_MODIFIER_NONE);
   positional->add_options()
     ("features", po::value<at::ImageFeatures>()->multitoken(),
      ("image features\n" + at::get_short_features_help(false)).c_str());
+  if (enabled) {
+    at::add_create_journal_options(options);
+  }
+}
+
+void get_arguments_disable(po::options_description *positional,
+			   po::options_description *options) {
+  get_arguments(positional, options, false);
+}
+
+void get_arguments_enable(po::options_description *positional,
+			  po::options_description *options) {
+  get_arguments(positional, options, true);
 }
 
 int execute(const po::variables_map &vm, bool enabled) {
@@ -31,6 +46,12 @@ int execute(const po::variables_map &vm, bool enabled) {
   int r = utils::get_pool_image_snapshot_names(
     vm, at::ARGUMENT_MODIFIER_NONE, &arg_index, &pool_name, &image_name,
     &snap_name, utils::SNAPSHOT_PRESENCE_NONE);
+  if (r < 0) {
+    return r;
+  }
+
+  librbd::ImageOptions opts;
+  r = utils::get_journal_options(vm, &opts);
   if (r < 0) {
     return r;
   }
@@ -76,10 +97,10 @@ int execute_enable(const po::variables_map &vm) {
 
 Shell::Action action_disable(
   {"feature", "disable"}, {}, "Disable the specified image feature.", "",
-  &get_arguments, &execute_disable);
+  &get_arguments_disable, &execute_disable);
 Shell::Action action_enable(
   {"feature", "enable"}, {}, "Enable the specified image feature.", "",
-  &get_arguments, &execute_enable);
+  &get_arguments_enable, &execute_enable);
 
 } // namespace feature
 } // namespace action
