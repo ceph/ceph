@@ -583,6 +583,14 @@ class TestIoctx(object):
         assert_raises(ObjectNotFound, self.ioctx.unlock, "foo", "lock", "locker1")
         assert_raises(ObjectNotFound, self.ioctx.unlock, "foo", "lock", "locker2")
 
+    def test_execute(self):
+        self.ioctx.write("foo", "") # ensure object exists
+
+        ret, buf = self.ioctx.execute("foo", "hello", "say_hello", "")
+        eq(buf, "Hello, world!")
+
+        ret, buf = self.ioctx.execute("foo", "hello", "say_hello", "nose")
+        eq(buf, "Hello, nose!")
 
 class TestObject(object):
 
