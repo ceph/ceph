@@ -672,16 +672,25 @@ int RGWRealm::create(bool exclusive)
   if (ret < 0) {
     return ret;
   }
-  /* create new period for the realm */
   RGWPeriod period;
-  ret = period.init(cct, store, id, name, false);
-  if (ret < 0 ) {
-    return ret;
-  }
-  ret = period.create(true);
-  if (ret < 0) {
-    ldout(cct, 0) << "ERROR creating new period for realm " << name << ": " << cpp_strerror(-ret) << dendl;
-    return ret;
+  if (current_period.empty()) {
+    /* create new period for the realm */
+    ret = period.init(cct, store, id, name, false);
+    if (ret < 0 ) {
+      return ret;
+    }
+    ret = period.create(true);
+    if (ret < 0) {
+      ldout(cct, 0) << "ERROR: creating new period for realm " << name << ": " << cpp_strerror(-ret) << dendl;
+      return ret;
+    }
+  } else {
+    period = RGWPeriod(current_period, 0);
+    int ret = period.init(cct, store, id, name);
+    if (ret < 0) {
+      lderr(cct) << "ERROR: failed to init period " << current_period << dendl;
+      return ret;
+    }
   }
   ret = set_current_period(period.get_id());
   if (ret < 0) {
@@ -1037,6 +1046,12 @@ int RGWPeriod::create(bool exclusive)
 
 int RGWPeriod::store_info(bool exclusive)
 {
+  epoch_t latest_epoch = FIRST_EPOCH;
+  int ret = get_latest_epoch(latest_epoch);
+  if (ret < 0 && ret != -ENOENT) {
+    ldout(cct, 0) << "ERROR: RGWPeriod::get_latest_epoch() returned " << cpp_strerror(-ret) << dendl;
+    return ret;
+  }
   string pool_name = get_pool_name(cct);
 
   rgw_bucket pool(pool_name.c_str());
@@ -1044,7 +1059,19 @@ int RGWPeriod::store_info(bool exclusive)
   string oid = get_period_oid();
   bufferlist bl;
   ::encode(*this, bl);
-  return rgw_put_system_obj(store, pool, oid, bl.c_str(), bl.length(), exclusive, NULL, 0, NULL);
+  ret = rgw_put_system_obj(store, pool, oid, bl.c_str(), bl.length(), exclusive, NULL, 0, NULL);
+  if (ret < 0) {
+    ldout(cct, 0) << "ERROR: rgw_put_system_obj(" << pool << ":" << oid << "): " << cpp_strerror(-ret) << dendl;
+    return ret;
+  }
+  if (latest_epoch < epoch) {
+    ret = set_latest_epoch(epoch);
+    if (ret < 0) {
+      ldout(cct, 0) << "ERROR: RGWPeriod::set_latest_epoch() returned " << cpp_strerror(-ret) << dendl;
+      return ret;
+    }
+  }
+  return 0;
 }
 
 const string& RGWPeriod::get_pool_name(CephContext *cct)
