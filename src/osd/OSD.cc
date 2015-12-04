@@ -2244,6 +2244,8 @@ void OSD::create_logger()
   osd_plb.add_u64(l_osd_buf, "buffer_bytes", "Total allocated buffer size");       // total ceph::buffer bytes
   osd_plb.add_u64(l_osd_history_alloc_bytes, "history_alloc_Mbytes");       // total ceph::buffer bytes in history
   osd_plb.add_u64(l_osd_history_alloc_num, "history_alloc_num");       // total ceph::buffer num in history
+  osd_plb.add_u64(l_osd_cached_crc, "cached_crc", "Total number getting crc from crc_cache"); // total ceph::buffer buffer_cached_crc_adjusted
+  osd_plb.add_u64(l_osd_cached_crc_adjusted, "cached_crc_adjusted", "Total number getting crc from crc_cache with adjusting"); // total ceph::buffer buffer_cached_crc_adjusted
 
   osd_plb.add_u64(l_osd_pg, "numpg", "Placement groups");   // num pgs
   osd_plb.add_u64(l_osd_pg_primary, "numpg_primary", "Placement groups for which this osd is primary"); // num primary pgs
@@ -3962,6 +3964,8 @@ void OSD::tick()
   logger->set(l_osd_buf, buffer::get_total_alloc());
   logger->set(l_osd_history_alloc_bytes, SHIFT_ROUND_UP(buffer::get_history_alloc_bytes(), 20));
   logger->set(l_osd_history_alloc_num, buffer::get_history_alloc_num());
+  logger->set(l_osd_cached_crc, buffer::get_cached_crc());
+  logger->set(l_osd_cached_crc_adjusted, buffer::get_cached_crc_adjusted());
 
   if (is_active() || is_waiting_for_healthy()) {
     map_lock.get_read();
@@ -5947,6 +5951,8 @@ void OSD::_dispatch(Message *m)
   logger->set(l_osd_buf, buffer::get_total_alloc());
   logger->set(l_osd_history_alloc_bytes, SHIFT_ROUND_UP(buffer::get_history_alloc_bytes(), 20));
   logger->set(l_osd_history_alloc_num, buffer::get_history_alloc_num());
+  logger->set(l_osd_cached_crc, buffer::get_cached_crc());
+  logger->set(l_osd_cached_crc_adjusted, buffer::get_cached_crc_adjusted());
 
   switch (m->get_type()) {
 
