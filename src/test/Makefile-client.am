@@ -403,7 +403,8 @@ noinst_HEADERS += \
 	test/librbd/mock/MockImageCtx.h \
 	test/librbd/mock/MockImageWatcher.h \
 	test/librbd/mock/MockJournal.h \
-	test/librbd/mock/MockObjectMap.h
+	test/librbd/mock/MockObjectMap.h \
+	test/librbd/object_map/mock/MockInvalidateRequest.h
 
 if LINUX
 ceph_test_librbd_fsx_SOURCES = test/librbd/fsx.cc
