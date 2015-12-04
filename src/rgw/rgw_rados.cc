@@ -985,6 +985,12 @@ int RGWPeriod::set_latest_epoch(epoch_t epoch)
   if (ret < 0)
     return ret;
 
+  ret = reflect();
+  if (ret < 0) {
+    ldout(cct, 0) << "ERROR: period.reflect(): " << cpp_strerror(-ret) << dendl;
+    return ret;
+  }
+
   return 0;
 }
 
