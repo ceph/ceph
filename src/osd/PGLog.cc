@@ -830,7 +830,8 @@ void PGLog::_write_log(
   for (list<pg_log_entry_t>::iterator p = log.log.begin();
        p != log.log.end() && p->version <= dirty_to;
        ++p) {
-    bufferlist bl(sizeof(*p) * 2);
+    bufferlist bl;
+    bl.set_append_buffer(t.get_trans_buf());
     p->encode_with_checksum(bl);
     (*km)[p->get_key_name()].claim(bl);
   }
@@ -840,7 +841,8 @@ void PGLog::_write_log(
 	 (p->version >= dirty_from || p->version >= writeout_from) &&
 	 p->version >= dirty_to;
        ++p) {
-    bufferlist bl(sizeof(*p) * 2);
+    bufferlist bl;
+    bl.set_append_buffer(t.get_trans_buf());
     p->encode_with_checksum(bl);
     (*km)[p->get_key_name()].claim(bl);
   }
@@ -858,10 +860,13 @@ void PGLog::_write_log(
 
   if (dirty_divergent_priors) {
     //dout(10) << "write_log: writing divergent_priors" << dendl;
+    (*km)["divergent_priors"].set_append_buffer(t.get_trans_buf());
     ::encode(divergent_priors, (*km)["divergent_priors"]);
   }
   if (require_rollback) {
+    (*km)["can_rollback_to"].set_append_buffer(t.get_trans_buf());
     ::encode(log.can_rollback_to, (*km)["can_rollback_to"]);
+    (*km)["rollback_info_trimmed_to"].set_append_buffer(t.get_trans_buf());
     ::encode(log.rollback_info_trimmed_to, (*km)["rollback_info_trimmed_to"]);
   }
 

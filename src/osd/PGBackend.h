@@ -460,7 +460,22 @@
      virtual void nop() = 0;
      virtual bool empty() const = 0;
      virtual uint64_t get_bytes_written() const = 0;
-     virtual ~PGTransaction() {}
+     bufferptr* trans_buf;
+
+     PGTransaction() : trans_buf(NULL) {}
+
+     bufferptr* get_trans_buf() {
+       if (trans_buf == NULL) {
+         trans_buf = new bufferptr(buffer::create_page_aligned(CEPH_PAGE_SIZE));
+         trans_buf->set_length(0);
+       }
+       return trans_buf;
+     }
+
+     virtual ~PGTransaction() {
+        delete trans_buf;
+        trans_buf = NULL;
+     }
    };
    /// Get implementation specific empty transaction
    virtual PGTransaction *get_transaction() = 0;
@@ -599,6 +614,7 @@
      coll_t coll,
      ObjectStore *store,
      CephContext *cct);
+
  };
 
 struct PG_SendMessageOnConn: public Context {
