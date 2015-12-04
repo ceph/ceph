@@ -31,8 +31,10 @@ public:
     return m_object_map.size();
   }
 
-  int lock();
-  int unlock();
+  int lock();   // TODO remove
+  void lock(Context *on_finish);
+  int unlock(); // TODO remove
+  void unlock(Context *on_finish);
 
   bool object_may_exist(uint64_t object_no) const;
 
@@ -52,7 +54,8 @@ public:
                   const boost::optional<uint8_t> &current_state,
                   Context *on_finish);
 
-  void refresh(uint64_t snap_id);
+  void refresh(uint64_t snap_id); // TODO remove
+  Context *refresh(uint64_t snap_id, Context *on_finish);
   void rollback(uint64_t snap_id, Context *on_finish);
   void snapshot_add(uint64_t snap_id, Context *on_finish);
   void snapshot_remove(uint64_t snap_id, Context *on_finish);
