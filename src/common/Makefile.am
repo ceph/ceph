@@ -263,6 +263,7 @@ noinst_HEADERS += \
 	common/SubProcess.h \
 	common/valgrind.h \
 	common/TracepointProvider.h \
+	common/event_socket.h \
 	common/PluginRegistry.h
 
 if ENABLE_XIO
