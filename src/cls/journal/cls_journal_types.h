@@ -5,7 +5,7 @@
 #define CEPH_CLS_JOURNAL_TYPES_H
 
 #include "include/int_types.h"
-#include "include/buffer.h"
+#include "include/buffer_fwd.h"
 #include "include/encoding.h"
 #include <iosfwd>
 #include <list>

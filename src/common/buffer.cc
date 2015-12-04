@@ -52,20 +52,26 @@ static simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZER;
   static atomic64_t buffer_history_alloc_num;
   const bool buffer_track_alloc = get_env_bool("CEPH_BUFFER_TRACK");
 
-  void buffer::inc_total_alloc(unsigned len) {
+  namespace {
+  void inc_total_alloc(unsigned len) {
     if (buffer_track_alloc)
       buffer_total_alloc.add(len);
   }
-  void buffer::dec_total_alloc(unsigned len) {
+
+  void dec_total_alloc(unsigned len) {
     if (buffer_track_alloc)
       buffer_total_alloc.sub(len);
   }
-  void buffer::inc_history_alloc(uint64_t len) {
+
+  void inc_history_alloc(uint64_t len) {
     if (buffer_track_alloc) {
       buffer_history_alloc_bytes.add(len);
       buffer_history_alloc_num.inc();
     }
   }
+  }
+
+
   int buffer::get_total_alloc() {
     return buffer_total_alloc.read();
   }
@@ -2118,11 +2124,11 @@ void buffer::list::hexdump(std::ostream &out) const
   out.flags(original_flags);
 }
 
-std::ostream& operator<<(std::ostream& out, const buffer::raw &r) {
+std::ostream& buffer::operator<<(std::ostream& out, const buffer::raw &r) {
   return out << "buffer::raw(" << (void*)r.data << " len " << r.len << " nref " << r.nref.read() << ")";
 }
 
-std::ostream& operator<<(std::ostream& out, const buffer::ptr& bp) {
+std::ostream& buffer::operator<<(std::ostream& out, const buffer::ptr& bp) {
   if (bp.have_raw())
     out << "buffer::ptr(" << bp.offset() << "~" << bp.length()
 	<< " " << (void*)bp.c_str()
@@ -2134,7 +2140,7 @@ std::ostream& operator<<(std::ostream& out, const buffer::ptr& bp) {
   return out;
 }
 
-std::ostream& operator<<(std::ostream& out, const buffer::list& bl) {
+std::ostream& buffer::operator<<(std::ostream& out, const buffer::list& bl) {
   out << "buffer::list(len=" << bl.length() << "," << std::endl;
 
   std::list<buffer::ptr>::const_iterator it = bl.buffers().begin();
@@ -2147,9 +2153,8 @@ std::ostream& operator<<(std::ostream& out, const buffer::list& bl) {
   return out;
 }
 
-std::ostream& operator<<(std::ostream& out, const buffer::error& e)
+std::ostream& buffer::operator<<(std::ostream& out, const buffer::error& e)
 {
   return out << e.what();
 }
-
 }

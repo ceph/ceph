@@ -21,7 +21,7 @@
 #include <set>
 
 #include "include/types.h"
-#include "include/buffer.h"
+#include "include/buffer_fwd.h"
 #include "include/lru.h"
 #include "include/elist.h"
 #include "include/filepath.h"

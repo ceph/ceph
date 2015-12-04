@@ -4,7 +4,7 @@
 #define __CEPH_CLS_RBD_H
 
 #include "include/types.h"
-#include "include/buffer.h"
+#include "include/buffer_fwd.h"
 #include "common/Formatter.h"
 #include "librbd/parent_types.h"
 

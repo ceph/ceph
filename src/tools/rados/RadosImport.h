@@ -18,7 +18,7 @@
 #include <string>
 
 #include "include/rados/librados.hpp"
-#include "include/buffer.h"
+#include "include/buffer_fwd.h"
 
 #include "tools/RadosDump.h"
 

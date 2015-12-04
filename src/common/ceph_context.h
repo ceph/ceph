@@ -21,7 +21,7 @@
 #include <set>
 
 #include "include/assert.h"
-#include "include/buffer.h"
+#include "include/buffer_fwd.h"
 #include "include/atomic.h"
 #include "common/cmdparse.h"
 #include "include/Spinlock.h"

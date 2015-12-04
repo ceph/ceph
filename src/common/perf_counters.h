@@ -18,7 +18,6 @@
 
 #include "common/config_obs.h"
 #include "common/Mutex.h"
-#include "include/buffer.h"
 #include "include/utime.h"
 
 #include <stdint.h>

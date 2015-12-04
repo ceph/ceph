@@ -5,6 +5,8 @@
 #include <sstream>
 #include <string>
 
+using namespace ceph;
+
 TEST(tableformatter, singleline)
 {
   std::stringstream sout;

@@ -5,7 +5,7 @@
 #define CEPH_JOURNAL_JOURNALER_H
 
 #include "include/int_types.h"
-#include "include/buffer.h"
+#include "include/buffer_fwd.h"
 #include "include/Context.h"
 #include "include/rados/librados.hpp"
 #include "journal/Future.h"
