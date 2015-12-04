@@ -3446,13 +3446,18 @@ extern "C" int rados_getxattrs_next(rados_xattrs_iter_t iter,
   *name = s.c_str();
   bufferlist &bl(it->i->second);
   size_t bl_len = bl.length();
-  it->val = (char*)malloc(bl_len);
-  if (!it->val) {
-    tracepoint(librados, rados_getxattrs_next_exit, -ENOMEM, *name, NULL, 0);
-    return -ENOMEM;
+  if (!bl_len) {
+    // malloc(0) is not guaranteed to return a valid pointer
+    *val = (char *)NULL;
+  } else {
+    it->val = (char*)malloc(bl_len);
+    if (!it->val) {
+      tracepoint(librados, rados_getxattrs_next_exit, -ENOMEM, *name, NULL, 0);
+      return -ENOMEM;
+    }
+    memcpy(it->val, bl.c_str(), bl_len);
+    *val = it->val;
   }
-  memcpy(it->val, bl.c_str(), bl_len);
-  *val = it->val;
   *len = bl_len;
   ++it->i;
   tracepoint(librados, rados_getxattrs_next_exit, 0, *name, *val, *len);

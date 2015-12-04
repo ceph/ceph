@@ -357,11 +357,11 @@ TEST_F(StriperTest, XattrIter) {
       break;
     }
     ASSERT_LT(num_seen, 2) << "Extra attribute : " << name;
-    if ((strcmp(name, "attr1") == 0) && (memcmp(val, attr1_buf, len) == 0)) {
+    if ((strcmp(name, "attr1") == 0) && (val != NULL) && (memcmp(val, attr1_buf, len) == 0)) {
       num_seen++;
       continue;
     }
-    else if ((strcmp(name, "attr2") == 0) && (memcmp(val, attr2_buf, len) == 0)) {
+    else if ((strcmp(name, "attr2") == 0) && (val != NULL) && (memcmp(val, attr2_buf, len) == 0)) {
       num_seen++;
       continue;
     }
