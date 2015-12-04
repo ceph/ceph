@@ -192,6 +192,7 @@ public:
     pair<string,string> raw_key();
     bool raw_key_is_prefixed(const string &prefix);
     bufferlist value();
+    bufferptr value_as_ptr();
     int status();
   };
 

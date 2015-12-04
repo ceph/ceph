@@ -272,7 +272,7 @@ int LevelDBStore::get(const string &prefix,
   KeyValueDB::Iterator it = get_iterator(prefix);
   it->lower_bound(key);
   if (it->valid() && it->key() == key) {
-    *value = it->value();
+    value->append(it->value_as_ptr());
   } else {
     r = -ENOENT;
   }
