@@ -1305,7 +1305,7 @@ public:
   const string& get_current_period() const {
     return current_period;
   }
-  int set_current_period(const string& period_id);
+  int set_current_period(RGWPeriod& period);
 
   string get_control_oid();
   /// send a notify on the realm control object
