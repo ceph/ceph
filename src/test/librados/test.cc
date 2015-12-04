@@ -38,7 +38,9 @@ std::string get_temp_pool_name()
 int wait_for_healthy(rados_t *cluster)
 {
   bool healthy = false;
-  int timeout = 30;
+  // This timeout is very long because the tests are sometimes
+  // run on a thrashing cluster
+  int timeout = 3600;
   int slept = 0;
 
   while(!healthy) {
