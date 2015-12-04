@@ -350,6 +350,9 @@ bool RGWCoroutinesStack::unblock_stack(RGWCoroutinesStack **s)
 
 void RGWCoroutinesManager::report_error(RGWCoroutinesStack *op)
 {
+  if (!op) {
+    return;
+  }
 #warning need to have error logging infrastructure that logs on backend
   lderr(cct) << "ERROR: failed operation: " << op->error_str() << dendl;
 }
@@ -692,7 +695,7 @@ bool RGWCoroutine::drain_children(int num_cr_left)
         if (ret < 0) {
           ldout(cct, 0) << "ERROR: collect() returned error" << dendl;
           /* we should have reported this error */
-#warning deal with error
+          log_error() << "ERROR: collect() returned error (ret=" << ret << ")";
         }
       }
     }
