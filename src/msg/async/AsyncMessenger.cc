@@ -298,14 +298,25 @@ void *Worker::entry()
   }
 
   center.set_owner(pthread_self());
+  bool cold = false;
+  int r = 0;
   while (!done) {
-    ldout(cct, 20) << __func__ << " calling event process" << dendl;
-
-    int r = center.process_events(EventMaxWaitUs);
+    ldout(cct, 30) << __func__ << " calling event process" << dendl;
+    if (cold) {
+      r = center.process_events(EventMaxWaitUs);
+      cold = false;
+    } else {
+      r = center.process_events(EventMinWaitUs);
+    }
     if (r < 0) {
-      ldout(cct, 20) << __func__ << " process events failed: "
-          << cpp_strerror(errno) << dendl;
+      lderr(cct) << __func__ << " process events failed: "
+                 << cpp_strerror(errno) << dendl;
       // TODO do something?
+      continue;
+    }
+    if (r == 0) {
+      // No memory need to reclaim
+      cold = slab->reclaim();
     }
   }
 
@@ -322,8 +333,9 @@ WorkerPool::WorkerPool(CephContext *c): cct(c), seq(0), started(false),
                                         barrier_count(0)
 {
   assert(cct->_conf->ms_async_op_threads > 0);
+  uint64_t resident = cct->_conf->ms_async_slab_pool_resident_bytes;
   for (int i = 0; i < cct->_conf->ms_async_op_threads; ++i) {
-    Worker *w = new Worker(cct, this, i);
+    Worker *w = new Worker(cct, this, i, resident);
     workers.push_back(w);
   }
   vector<string> corestrs;
@@ -395,7 +407,7 @@ AsyncMessenger::AsyncMessenger(CephContext *cct, entity_name_t name,
   ceph_spin_init(&global_seq_lock);
   cct->lookup_or_create_singleton_object<WorkerPool>(pool, WorkerPool::name);
   Worker *w = pool->get_worker();
-  local_connection = new AsyncConnection(cct, this, &w->center, w->get_perf_counter());
+  local_connection = new AsyncConnection(cct, this, &w->center, w->slab, w->get_perf_counter());
   local_features = features;
   init_local_connection();
 }
@@ -522,7 +534,7 @@ AsyncConnectionRef AsyncMessenger::add_accept(int sd)
 {
   lock.Lock();
   Worker *w = pool->get_worker();
-  AsyncConnectionRef conn = new AsyncConnection(cct, this, &w->center, w->get_perf_counter());
+  AsyncConnectionRef conn = new AsyncConnection(cct, this, &w->center, w->slab, w->get_perf_counter());
   conn->accept(sd);
   accepting_conns.insert(conn);
   lock.Unlock();
@@ -539,7 +551,7 @@ AsyncConnectionRef AsyncMessenger::create_connect(const entity_addr_t& addr, int
 
   // create connection
   Worker *w = pool->get_worker();
-  AsyncConnectionRef conn = new AsyncConnection(cct, this, &w->center, w->get_perf_counter());
+  AsyncConnectionRef conn = new AsyncConnection(cct, this, &w->center, w->slab, w->get_perf_counter());
   conn->connect(addr, type);
   assert(!conns.count(addr));
   conns[addr] = conn;

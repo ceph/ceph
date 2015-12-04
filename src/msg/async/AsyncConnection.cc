@@ -150,7 +150,17 @@ class C_clean_handler : public EventCallback {
   }
 };
 
-static void alloc_aligned_buffer(bufferlist& data, unsigned len, unsigned off)
+static void alloc_slab_buffer(SlabAllocator *slab, bufferlist& data, unsigned len)
+{
+  while (len > 0) {
+    uint64_t size = MIN(slab->max_size(), len);
+    bufferptr bp = buffer::create_slab(slab, size);
+    data.push_back(bp);
+    len -= size;
+  }
+}
+
+static void alloc_aligned_buffer(SlabAllocator *slab, bufferlist& data, unsigned len, unsigned off)
 {
   // create a buffer to read into that matches the data alignment
   unsigned left = len;
@@ -158,24 +168,21 @@ static void alloc_aligned_buffer(bufferlist& data, unsigned len, unsigned off)
     // head
     unsigned head = 0;
     head = MIN(CEPH_PAGE_SIZE - (off & ~CEPH_PAGE_MASK), left);
-    bufferptr bp = buffer::create(head);
+    bufferptr bp = buffer::create_slab(slab, head);
     data.push_back(bp);
     left -= head;
   }
   unsigned middle = left & CEPH_PAGE_MASK;
   if (middle > 0) {
-    bufferptr bp = buffer::create_page_aligned(middle);
+    bufferptr bp = buffer::create_slab(slab, middle);
     data.push_back(bp);
     left -= middle;
   }
-  if (left) {
-    bufferptr bp = buffer::create(left);
-    data.push_back(bp);
-  }
+  alloc_slab_buffer(slab, data, left);
 }
 
-AsyncConnection::AsyncConnection(CephContext *cct, AsyncMessenger *m, EventCenter *c, PerfCounters *p)
-  : Connection(cct, m), async_msgr(m), logger(p), global_seq(0), connect_seq(0), peer_global_seq(0),
+AsyncConnection::AsyncConnection(CephContext *cct, AsyncMessenger *m, EventCenter *c, SlabAllocator *p, PerfCounters *pc)
+  : Connection(cct, m), async_msgr(m), slab(p), logger(pc), global_seq(0), connect_seq(0), peer_global_seq(0),
     out_seq(0), ack_left(0), in_seq(0), state(STATE_NONE), state_after_send(0), sd(-1), port(-1),
     write_lock("AsyncConnection::write_lock"), can_write(NOWRITE),
     open_write(false), keepalive(false), lock("AsyncConnection::lock"), recv_buf(NULL),
@@ -720,14 +727,17 @@ void AsyncConnection::process()
 
       case STATE_OPEN_MESSAGE_READ_FRONT:
         {
-          // read front
-          int front_len = current_header.front_len;
-          if (front_len) {
+          if (current_header.front_len) {
             if (!front.length()) {
-              bufferptr ptr = buffer::create(front_len);
-              front.push_back(ptr);
+              try {
+                alloc_slab_buffer(slab, front, current_header.front_len);
+              } catch (buffer::bad_alloc &e) {
+                lderr(async_msgr->cct) << __func__ << " can't alloc header buffer(len="
+                                       << current_header.front_len << ")" << dendl;
+                goto fail;
+              }
             }
-            r = read_until(front_len, front.c_str());
+            r = read_until(current_header.front_len, front.c_str());
             if (r < 0) {
               ldout(async_msgr->cct, 1) << __func__ << " read message front failed" << dendl;
               goto fail;
@@ -743,14 +753,17 @@ void AsyncConnection::process()
 
       case STATE_OPEN_MESSAGE_READ_MIDDLE:
         {
-          // read middle
-          int middle_len = current_header.middle_len;
-          if (middle_len) {
+          if (current_header.middle_len) {
             if (!middle.length()) {
-              bufferptr ptr = buffer::create(middle_len);
-              middle.push_back(ptr);
+              try {
+                alloc_slab_buffer(slab, middle, current_header.middle_len);
+              } catch (buffer::bad_alloc &e) {
+                lderr(async_msgr->cct) << __func__ << " can't alloc header buffer(len="
+                                       << current_header.middle_len << ")" << dendl;
+                goto fail;
+              }
             }
-            r = read_until(middle_len, middle.c_str());
+            r = read_until(current_header.middle_len, middle.c_str());
             if (r < 0) {
               ldout(async_msgr->cct, 1) << __func__ << " read message middle failed" << dendl;
               goto fail;
@@ -768,24 +781,17 @@ void AsyncConnection::process()
         {
           // read data
           uint64_t data_len = le32_to_cpu(current_header.data_len);
-          int data_off = le32_to_cpu(current_header.data_off);
+          uint32_t data_off = le32_to_cpu(current_header.data_off);
           if (data_len) {
             // get a buffer
-            map<ceph_tid_t,pair<bufferlist,int> >::iterator p = rx_buffers.find(current_header.tid);
-            if (p != rx_buffers.end()) {
-              ldout(async_msgr->cct,10) << __func__ << " seleting rx buffer v " << p->second.second
-                                  << " at offset " << data_off
-                                  << " len " << p->second.first.length() << dendl;
-              data_buf = p->second.first;
-              // make sure it's big enough
-              if (data_buf.length() < data_len)
-                data_buf.push_back(buffer::create(data_len - data_buf.length()));
-              data_blp = data_buf.begin();
-            } else {
-              ldout(async_msgr->cct,20) << __func__ << " allocating new rx buffer at offset " << data_off << dendl;
-              alloc_aligned_buffer(data_buf, data_len, data_off);
-              data_blp = data_buf.begin();
+            ldout(async_msgr->cct,20) << __func__ << " allocating new rx buffer at offset " << data_off << dendl;
+            try {
+              alloc_aligned_buffer(slab, data_buf, data_len, data_off);
+            } catch (buffer::bad_alloc &e) {
+              lderr(async_msgr->cct) << __func__ << " failed to get data memory, len=" << data_len << dendl;
+              goto fail;
             }
+            data_blp = data_buf.begin();
           }
 
           msg_left = data_len;
@@ -2056,6 +2062,7 @@ int AsyncConnection::send_message(Message *m)
   if (!is_queued() && can_write == CANWRITE) {
     if (!can_fast_prepare)
       prepare_send_message(get_features(), m, bl);
+    logger->inc(l_msgr_send_messages_inline);
     if (write_message(m, bl) < 0) {
       ldout(async_msgr->cct, 1) << __func__ << " send msg failed" << dendl;
       // we want to handle fault within internal thread

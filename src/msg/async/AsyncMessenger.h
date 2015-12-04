@@ -36,6 +36,7 @@ using namespace std;
 #include "include/assert.h"
 #include "AsyncConnection.h"
 #include "Event.h"
+#include "SlabPool.h"
 
 
 class AsyncMessenger;
@@ -45,6 +46,7 @@ enum {
   l_msgr_first = 94000,
   l_msgr_recv_messages,
   l_msgr_send_messages,
+  l_msgr_send_messages_inline,
   l_msgr_recv_bytes,
   l_msgr_send_bytes,
   l_msgr_created_connections,
@@ -55,7 +57,9 @@ enum {
 
 class Worker : public Thread {
   static const uint64_t InitEventNumber = 5000;
-  static const uint64_t EventMaxWaitUs = 30000000;
+  static const uint64_t EventMinWaitUs = 0;
+  static const uint64_t EventMaxWaitUs = 30 * 1000 * 1000;
+  static const uint64_t MaxSlabObjectLowBound = 1 << 20;
   CephContext *cct;
   WorkerPool *pool;
   bool done;
@@ -63,17 +67,23 @@ class Worker : public Thread {
   PerfCounters *perf_logger;
 
  public:
+  SlabAllocator *slab;
   EventCenter center;
-  Worker(CephContext *c, WorkerPool *p, int i)
-    : cct(c), pool(p), done(false), id(i), perf_logger(NULL), center(c) {
+  Worker(CephContext *c, WorkerPool *p, int i, uint64_t resident)
+    : cct(c), pool(p), done(false), id(i), perf_logger(NULL),
+      slab(NULL), center(c) {
     center.init(InitEventNumber);
     char name[128];
     sprintf(name, "AsyncMessenger::Worker-%d", id);
+    slab = new SlabAllocator(c, name, cct->_conf->ms_async_slab_grow_factor,
+                             resident,
+                             MAX(cct->_conf->ms_async_slab_unit_size, MaxSlabObjectLowBound));
     // initialize perf_logger
     PerfCountersBuilder plb(cct, name, l_msgr_first, l_msgr_last);
 
     plb.add_u64_counter(l_msgr_recv_messages, "msgr_recv_messages", "Network received messages");
     plb.add_u64_counter(l_msgr_send_messages, "msgr_send_messages", "Network sent messages");
+    plb.add_u64_counter(l_msgr_send_messages_inline, "msgr_send_messages_inline", "Network sent messages without extra dispatch");
     plb.add_u64_counter(l_msgr_recv_bytes, "msgr_recv_bytes", "Network received bytes");
     plb.add_u64_counter(l_msgr_send_bytes, "msgr_send_bytes", "Network received bytes");
     plb.add_u64_counter(l_msgr_created_connections, "msgr_active_connections", "Active connection number");
@@ -87,6 +97,8 @@ class Worker : public Thread {
       cct->get_perfcounters_collection()->remove(perf_logger);
       delete perf_logger;
     }
+    if (slab)
+      slab->release();
   }
   void *entry();
   void stop();
@@ -251,7 +263,7 @@ public:
   Connection *create_anon_connection() {
     Mutex::Locker l(lock);
     Worker *w = pool->get_worker();
-    return new AsyncConnection(cct, this, &w->center, w->get_perf_counter());
+    return new AsyncConnection(cct, this, &w->center, w->slab, w->get_perf_counter());
   }
 
   /**

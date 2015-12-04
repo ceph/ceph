@@ -65,6 +65,8 @@ struct xio_reg_mem;
 class XioDispatchHook;
 #endif
 
+class SlabAllocator;
+
 namespace ceph {
 
 const static int CEPH_BUFFER_APPEND_SIZE(4096);
@@ -141,6 +143,7 @@ private:
   class raw_char;
   class raw_pipe;
   class raw_unshareable; // diagnostic, unshareable char buffer
+  class raw_slab;
 
   friend std::ostream& operator<<(std::ostream& out, const raw &r);
 
@@ -161,6 +164,7 @@ public:
   static raw* create_page_aligned(unsigned len);
   static raw* create_zero_copy(unsigned len, int fd, int64_t *offset);
   static raw* create_unshareable(unsigned len);
+  static raw* create_slab(SlabAllocator *slab, unsigned len);
 
 #if defined(HAVE_XIO)
   static raw* create_msg(unsigned len, char *buf, XioDispatchHook *m_hook);

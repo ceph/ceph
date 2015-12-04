@@ -26,10 +26,12 @@ class PipeConnection : public Connection {
   friend class Pipe;
 
 public:
+  int rx_buffers_version;
+  map<ceph_tid_t,pair<bufferlist,int> > rx_buffers;
 
   PipeConnection(CephContext *cct, Messenger *m)
     : Connection(cct, m),
-      pipe(NULL) { }
+      pipe(NULL), rx_buffers_version(0) { }
 
   ~PipeConnection();
 
@@ -47,7 +49,16 @@ public:
   void send_keepalive();
   void mark_down();
   void mark_disposable();
+  void post_rx_buffer(ceph_tid_t tid, bufferlist& bl) {
+    Mutex::Locker l(lock);
+    ++rx_buffers_version;
+    rx_buffers[tid] = pair<bufferlist,int>(bl, rx_buffers_version);
+  }
 
+  void revoke_rx_buffer(ceph_tid_t tid) {
+    Mutex::Locker l(lock);
+    rx_buffers.erase(tid);
+  }
 }; /* PipeConnection */
 
 typedef boost::intrusive_ptr<PipeConnection> PipeConnectionRef;

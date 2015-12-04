@@ -182,6 +182,10 @@ OPTION(ms_async_set_affinity, OPT_BOOL, true)
 // If ms_async_affinity_cores is empty, all threads will be bind to current running
 // core
 OPTION(ms_async_affinity_cores, OPT_STR, "")
+// each worker memory bytes will be "ms_async_slab_pool_resident_bytes/ms_async_op_threads"
+OPTION(ms_async_slab_pool_resident_bytes, OPT_U64, 100ul << 20)
+OPTION(ms_async_slab_grow_factor, OPT_FLOAT, 2)
+OPTION(ms_async_slab_unit_size, OPT_FLOAT, 4 << 20)
 
 OPTION(inject_early_sigterm, OPT_BOOL, false)
 
@@ -1163,6 +1167,7 @@ OPTION(rgw_objexp_chunk_size, OPT_U32, 100) // maximum number of entries in a si
 
 OPTION(mutex_perf_counter, OPT_BOOL, false) // enable/disable mutex perf counter
 OPTION(throttler_perf_counter, OPT_BOOL, true) // enable/disable throttler perf counter
+OPTION(slab_perf_counter, OPT_BOOL, true) // enable/disable throttler perf counter
 
 // This will be set to true when it is safe to start threads.
 // Once it is true, it will never change.
