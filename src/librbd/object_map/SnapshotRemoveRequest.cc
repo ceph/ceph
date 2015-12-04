@@ -148,9 +148,9 @@ void SnapshotRemoveRequest::send_invalidate_next_map() {
   ldout(cct, 5) << this << " " << __func__ << dendl;
   m_state = STATE_INVALIDATE_NEXT_MAP;
 
-  InvalidateRequest *req = new InvalidateRequest(m_image_ctx, m_next_snap_id,
-                                                 true,
-                                                 create_callback_context());
+  InvalidateRequest<> *req = new InvalidateRequest<>(m_image_ctx,
+                                                     m_next_snap_id, true,
+                                                     create_callback_context());
   req->send();
 }
 

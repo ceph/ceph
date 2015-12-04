@@ -387,7 +387,7 @@ void ObjectMap::invalidate(uint64_t snap_id, bool force) {
 
   // TODO remove once all methods are async
   C_SaferCond cond_ctx;
-  object_map::InvalidateRequest *req = new object_map::InvalidateRequest(
+  object_map::InvalidateRequest<> *req = new object_map::InvalidateRequest<>(
     m_image_ctx, m_snap_id, force, &cond_ctx);
   req->send();
 
