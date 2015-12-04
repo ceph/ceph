@@ -49,9 +49,17 @@ struct MockImageCtx {
   }
 
   ~MockImageCtx() {
+    wait_for_async_requests();
     delete image_watcher;
     delete op_work_queue;
     delete aio_work_queue;
+  }
+
+  void wait_for_async_requests() {
+    Mutex::Locker async_ops_locker(async_ops_lock);
+    while (!async_requests.empty()) {
+      async_requests_cond.Wait(async_ops_lock);
+    }
   }
 
   MOCK_CONST_METHOD1(get_snap_id, librados::snap_t(std::string in_snap_name));
