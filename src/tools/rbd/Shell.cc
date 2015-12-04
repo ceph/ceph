@@ -234,7 +234,7 @@ Shell::Action *Shell::find_action(const CommandSpec &command_spec,
 
 void Shell::get_global_options(po::options_description *opts) {
   opts->add_options()
-    ("conf,c", po::value<std::string>(), "path to cluster configuration")
+    ((at::CONFIG_PATH + ",c").c_str(), po::value<std::string>(), "path to cluster configuration")
     ("cluster", po::value<std::string>(), "cluster name")
     ("id", po::value<std::string>(), "client id (without 'client.' prefix)")
     ("user", po::value<std::string>(), "client id (without 'client.' prefix)")

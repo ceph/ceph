@@ -43,6 +43,7 @@ static const std::string IMAGE_OR_SNAPSHOT_SPEC("image-or-snap-spec");
 static const std::string PATH_NAME("path-name");
 
 // optional arguments
+static const std::string CONFIG_PATH("conf");
 static const std::string POOL_NAME("pool");
 static const std::string DEST_POOL_NAME("dest-pool");
 static const std::string IMAGE_NAME("image");
@@ -106,6 +107,9 @@ void add_image_option(boost::program_options::options_description *opt,
 
 void add_snap_option(boost::program_options::options_description *opt,
                      ArgumentModifier modifier);
+
+void add_pool_options(boost::program_options::options_description *pos,
+                      boost::program_options::options_description *opt);
 
 void add_image_spec_options(boost::program_options::options_description *pos,
                             boost::program_options::options_description *opt,
