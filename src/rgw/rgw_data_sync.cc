@@ -786,6 +786,8 @@ class RGWDataSyncShardCR : public RGWCoroutine {
 
   set<string> spawned_keys;
 
+  RGWContinuousLeaseCR *lease_cr;
+  string status_oid;
 public:
   RGWDataSyncShardCR(RGWRados *_store, RGWHTTPManager *_mgr, RGWAsyncRadosProcessor *_async_rados,
                      RGWRESTConn *_conn, rgw_bucket& _pool, const string& _source_zone,
@@ -798,12 +800,18 @@ public:
 						      shard_id(_shard_id),
 						      sync_marker(_marker),
                                                       marker_tracker(NULL), truncated(false), inc_lock("RGWDataSyncShardCR::inc_lock"),
-                                                      total_entries(0), spawn_window(BUCKET_SHARD_SYNC_SPAWN_WINDOW), reset_backoff(NULL) {
+                                                      total_entries(0), spawn_window(BUCKET_SHARD_SYNC_SPAWN_WINDOW), reset_backoff(NULL),
+                                                      lease_cr(NULL) {
     set_description() << "data sync shard source_zone=" << source_zone << " shard_id=" << shard_id;
+    status_oid = RGWDataSyncStatusManager::shard_obj_name(source_zone, shard_id);
   }
 
   ~RGWDataSyncShardCR() {
     delete marker_tracker;
+    if (lease_cr) {
+      lease_cr->abort();
+      lease_cr->put();
+    }
   }
 
   void append_modified_shards(set<string>& keys) {
@@ -841,20 +849,44 @@ public:
     return 0;
   }
 
+  void init_lease_cr() {
+    set_status("acquiring sync lock");
+    uint32_t lock_duration = cct->_conf->rgw_sync_lease_period;
+    string lock_name = "sync_lock";
+    if (lease_cr) {
+      lease_cr->abort();
+      lease_cr->put();
+    }
+    lease_cr = new RGWContinuousLeaseCR(async_rados, store, store->get_zone_params().log_pool, status_oid,
+                                        lock_name, lock_duration, this);
+    lease_cr->get();
+    spawn(lease_cr, false);
+  }
+
   int full_sync() {
-#warning lock shard for full_sync
 #define OMAP_GET_MAX_ENTRIES 100
     int max_entries = OMAP_GET_MAX_ENTRIES;
     reenter(&full_cr) {
+      yield init_lease_cr();
+      while (!lease_cr->is_locked()) {
+        if (lease_cr->is_done()) {
+          ldout(cct, 0) << "ERROR: lease cr failed, done early " << dendl;
+          set_status("lease lock failed, early abort");
+          return set_cr_error(lease_cr->get_ret_status());
+        }
+        set_sleeping(true);
+        yield;
+      }
       oid = full_data_sync_index_shard_oid(source_zone, shard_id);
       set_marker_tracker(new RGWDataSyncShardMarkerTrack(store, http_manager, async_rados,
-                                                         RGWDataSyncStatusManager::shard_obj_name(source_zone, shard_id),
+                                                         status_oid,
                                                          sync_marker));
       total_entries = sync_marker.pos;
       do {
         yield call(new RGWRadosGetOmapKeysCR(store, pool, oid, sync_marker.marker, &entries, max_entries));
         if (retcode < 0) {
           ldout(store->ctx(), 0) << "ERROR: " << __func__ << "(): RGWRadosGetOmapKeysCR() returned ret=" << retcode << dendl;
+          lease_cr->go_down();
           drain_all();
           return set_cr_error(retcode);
         }
@@ -868,6 +900,7 @@ public:
             // fetch remote and write locally
             yield spawn(new RGWDataSyncSingleEntryCR(store, http_manager, async_rados, conn, source_zone, iter->first, iter->first, marker_tracker), false);
             if (retcode < 0) {
+              lease_cr->go_down();
               drain_all();
               return set_cr_error(retcode);
             }
@@ -876,6 +909,7 @@ public:
         }
       } while ((int)entries.size() == max_entries);
 
+      lease_cr->go_down();
       drain_all();
 
       yield {
@@ -884,22 +918,31 @@ public:
         sync_marker.marker = sync_marker.next_step_marker;
         sync_marker.next_step_marker.clear();
         call(new RGWSimpleRadosWriteCR<rgw_data_sync_marker>(async_rados, store, store->get_zone_params().log_pool,
-                                                                   RGWDataSyncStatusManager::shard_obj_name(source_zone, shard_id), sync_marker));
+                                                             status_oid, sync_marker));
       }
       if (retcode < 0) {
         ldout(store->ctx(), 0) << "ERROR: failed to set sync marker: retcode=" << retcode << dendl;
+        lease_cr->go_down();
         return set_cr_error(retcode);
       }
     }
     return 0;
   }
-    
 
   int incremental_sync() {
-#warning lock shard for inc_sync
     reenter(&incremental_cr) {
+      yield init_lease_cr();
+      while (!lease_cr->is_locked()) {
+        if (lease_cr->is_done()) {
+          ldout(cct, 0) << "ERROR: lease cr failed, done early " << dendl;
+          set_status("lease lock failed, early abort");
+          return set_cr_error(lease_cr->get_ret_status());
+        }
+        set_sleeping(true);
+        yield;
+      }
       set_marker_tracker(new RGWDataSyncShardMarkerTrack(store, http_manager, async_rados,
-                                                         RGWDataSyncStatusManager::shard_obj_name(source_zone, shard_id),
+                                                         status_oid,
                                                          sync_marker));
       do {
         current_modified.clear();
@@ -918,6 +961,7 @@ public:
         yield call(new RGWReadRemoteDataLogShardInfoCR(store, http_manager, async_rados, conn, shard_id, &shard_info));
         if (retcode < 0) {
           ldout(store->ctx(), 0) << "ERROR: failed to fetch remote data log info: ret=" << retcode << dendl;
+          lease_cr->go_down();
           drain_all();
           return set_cr_error(retcode);
         }
@@ -943,6 +987,7 @@ public:
                 spawned_keys.insert(log_iter->entry.key);
                 spawn(new RGWDataSyncSingleEntryCR(store, http_manager, async_rados, conn, source_zone, log_iter->entry.key, log_iter->log_id, marker_tracker), false);
                 if (retcode < 0) {
+                  lease_cr->go_down();
                   drain_all();
                   return set_cr_error(retcode);
                 }
@@ -1959,6 +2004,10 @@ public:
 
   ~RGWBucketShardFullSyncCR() {
     delete marker_tracker;
+    if (lease_cr) {
+      lease_cr->abort();
+      lease_cr->put();
+    }
   }
   int operate();
 };
@@ -2094,6 +2143,10 @@ public:
   }
 
   ~RGWBucketShardIncrementalSyncCR() {
+    if (lease_cr) {
+      lease_cr->abort();
+      lease_cr->put();
+    }
     delete marker_tracker;
   }
   int operate();
