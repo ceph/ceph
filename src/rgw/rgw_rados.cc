@@ -3218,6 +3218,83 @@ int RGWRados::replace_region_with_zonegroup()
   return 0;
 }
 
+int RGWRados::init_zg_from_period(bool *initialized)
+{
+  *initialized = false;
+
+  if (current_period.get_id().empty()) {
+    return 0;
+  }
+
+  int ret = zonegroup.init(cct, this);
+  ldout(cct, 20) << "period zonegroup init ret " << ret << dendl;
+  if (ret == -ENOENT) {
+    return 0;
+  }
+  if (ret < 0) {
+    lderr(cct) << "failed reading zonegroup info: " << " " << cpp_strerror(-ret) << dendl;
+    return ret;
+  }
+  ldout(cct, 20) << "period zonegroup name " << zonegroup.get_name() << dendl;
+
+  map<string, RGWZoneGroup>::const_iterator iter =
+    current_period.get_map().zonegroups.find(zonegroup.get_id());
+
+  if (iter != current_period.get_map().zonegroups.end()) {
+    ldout(cct, 20) << "using current period zonegroup " << zonegroup.get_name() << dendl;
+    zonegroup = iter->second;
+    ret = zone_params.init(cct, this);
+    if (ret < 0 && ret != -ENOENT) {
+      lderr(cct) << "failed reading zone params info: " << " " << cpp_strerror(-ret) << dendl;
+      return ret;
+    }
+  }
+  for (iter = current_period.get_map().zonegroups.begin();
+       iter != current_period.get_map().zonegroups.end(); ++iter){
+    const RGWZoneGroup& zg = iter->second;
+    add_new_connection_to_map(zonegroup_conn_map, zg, new RGWRESTConn(cct, this, zonegroup.get_id(), zonegroup.endpoints));
+    if (!current_period.get_master_zonegroup().empty() &&
+        zg.get_id() == current_period.get_master_zonegroup()) {
+      rest_master_conn = new RGWRESTConn(cct, this, zg.get_id(), zg.endpoints);
+      break;
+    }
+  }
+
+  *initialized = true;
+
+  return 0;
+}
+
+int RGWRados::init_zg_from_local(bool *creating_defaults)
+{
+  int ret = zonegroup.init(cct, this);
+  if ( (ret < 0 && ret != -ENOENT) || (ret == -ENOENT && !cct->_conf->rgw_zonegroup.empty())) {
+    lderr(cct) << "failed reading zonegroup info: ret "<< ret << " " << cpp_strerror(-ret) << dendl;
+    return ret;
+  } else if (ret == -ENOENT) {
+    *creating_defaults = true;
+    lderr(cct) << "Creating default zonegroup " << dendl;
+    ret = zonegroup.create_default();
+    if (ret < 0) {
+      lderr(cct) << "failure in zonegroup create_default: ret "<< ret << " " << cpp_strerror(-ret)
+        << dendl;
+      return ret;
+    }
+    ret = zonegroup.init(cct, this);
+    if (ret < 0) {
+      lderr(cct) << "failure in zonegroup create_default: ret "<< ret << " " << cpp_strerror(-ret)
+        << dendl;
+      return ret;
+    }
+  }
+  ldout(cct, 20) << "zonegroup " << zonegroup.get_name() << dendl;
+  if (zonegroup.is_master) {
+    rest_master_conn = new RGWRESTConn(cct, this, zonegroup.get_id(), zonegroup.endpoints);
+  }
+
+  return 0;
+}
+
 /** 
  * Initialize the RADOS instance and prepare to do other ops
  * Returns 0 on success, -ERR# on failure.
@@ -3250,93 +3327,41 @@ int RGWRados::init_complete()
     return ret;
   }
 
+  bool zg_initialized = false;
+
   if (!current_period.get_id().empty()) {
-    ret = period_zonegroup.init(cct, this);
-    ldout(cct, 20) << "period zonegroup init ret " << ret << dendl;
-    if (ret < 0 && ret != -ENOENT) {
-      lderr(cct) << "failed reading zonegroup info: " << " " << cpp_strerror(-ret) << dendl;
+    ret = init_zg_from_period(&zg_initialized);
+    if (ret < 0) {
       return ret;
-    } else if (ret != -ENOENT) {
-      ldout(cct, 20) << "period zonegroup name " << period_zonegroup.get_name() << dendl;
-      map<string, RGWZoneGroup>::const_iterator iter =
-	current_period.get_map().zonegroups.find(period_zonegroup.get_id());
-      if (iter != current_period.get_map().zonegroups.end()) {
-	ldout(cct, 20) << "using current period zonegroup " << period_zonegroup.get_name() << dendl;
-	period_zonegroup = iter->second;
-	has_period_zonegroup = true;
-	ret = zone_params.init(cct, this);
-	if (ret < 0 && ret != -ENOENT) {
-	  lderr(cct) << "failed reading zone params info: " << " " << cpp_strerror(-ret) << dendl;
-	  return ret;
-	} else if (ret != -ENOENT) {
-	  map<string, RGWZone>::iterator zone_iter =
-	    period_zonegroup.zones.find(zone_params.get_id());
-	  if (zone_iter != period_zonegroup.zones.end()) {
-	    period_zone = zone_iter->second;
-	    ldout(cct, 20) << "using current period zone " << period_zone.name << dendl;
-	    has_period_zone = true;
-	  }
-	}
-      }
-      for (iter = current_period.get_map().zonegroups.begin();
-	   iter != current_period.get_map().zonegroups.end(); ++iter){
-	const RGWZoneGroup& zg = iter->second;
-	add_new_connection_to_map(zonegroup_conn_map, zg, new RGWRESTConn(cct, this, zonegroup.get_id(), zonegroup.endpoints));
-	if (!current_period.get_master_zonegroup().empty() &&
-	    zg.get_id() == current_period.get_master_zonegroup()) {
-	  rest_master_conn = new RGWRESTConn(cct, this, zg.get_id(), zg.endpoints);
-	}
-      }
     }
   }
 
   bool creating_defaults = false;
-  if (!has_period_zonegroup) {
+  if (!zg_initialized) {
     ldout(cct, 10) << " cannot find current period zonegroup using local zonegroup" << dendl;
-    ret = zonegroup.init(cct, this);
-    if ( (ret < 0 && ret != -ENOENT) || (ret == -ENOENT && !cct->_conf->rgw_zonegroup.empty())) {
-      lderr(cct) << "failed reading zonegroup info: ret "<< ret << " " << cpp_strerror(-ret) << dendl;
+    ret = init_zg_from_local(&creating_defaults);
+    if (ret < 0) {
       return ret;
-    } else if (ret == -ENOENT) {
-      creating_defaults = true;
-      lderr(cct) << "Creating default zonegroup " << dendl;
-      ret = zonegroup.create_default();
-      if (ret < 0) {
-	lderr(cct) << "failure in zonegroup create_default: ret "<< ret << " " << cpp_strerror(-ret)
-		   << dendl;
-	return ret;
-      }
-      ret = zonegroup.init(cct, this);
-      if (ret < 0) {
-	lderr(cct) << "failure in zonegroup create_default: ret "<< ret << " " << cpp_strerror(-ret)
-		   << dendl;
-	return ret;
-      }
-    }
-    ldout(cct, 20) << "zonegroup " << zonegroup.get_name() << dendl;
-    if (zonegroup.is_master) {
-      rest_master_conn = new RGWRESTConn(cct, this, zonegroup.get_id(), zonegroup.endpoints);
     }
   }
 
-  if (!has_period_zone) {
-    ldout(cct, 10) << "Cannot find current period zone using local zone" << dendl;
-    if (creating_defaults && cct->_conf->rgw_zone.empty()) {
-      zone_params.set_name(default_zone_name);
-    }
-    ret = zone_params.init(cct, this);
-    if (ret < 0 && ret != -ENOENT) {
-      lderr(cct) << "failed reading zone info: ret "<< ret << " " << cpp_strerror(-ret) << dendl;
-      return ret;
-    }
-    map<string, RGWZone>::iterator zone_iter = get_zonegroup().zones.find(zone_params.get_id());
-    if (zone_iter != get_zonegroup().zones.end()) {
-      zone_public_config = zone_iter->second;
-      ldout(cct, 20) << "zone " << zone_params.get_name() << dendl;
-    } else {
-      lderr(cct) << "Cannot find zone id=" << zone_params.get_id() << " (name=" << zone_params.get_name() << ")" << dendl;
-      return -EINVAL;
-    }
+  ldout(cct, 10) << "Cannot find current period zone using local zone" << dendl;
+  if (creating_defaults && cct->_conf->rgw_zone.empty()) {
+    zone_params.set_name(default_zone_name);
+  }
+
+  ret = zone_params.init(cct, this);
+  if (ret < 0 && ret != -ENOENT) {
+    lderr(cct) << "failed reading zone info: ret "<< ret << " " << cpp_strerror(-ret) << dendl;
+    return ret;
+  }
+  map<string, RGWZone>::iterator zone_iter = get_zonegroup().zones.find(zone_params.get_id());
+  if (zone_iter != get_zonegroup().zones.end()) {
+    zone_public_config = zone_iter->second;
+    ldout(cct, 20) << "zone " << zone_params.get_name() << dendl;
+  } else {
+    lderr(cct) << "Cannot find zone id=" << zone_params.get_id() << " (name=" << zone_params.get_name() << ")" << dendl;
+    return -EINVAL;
   }
 
   init_unique_trans_id_deps();

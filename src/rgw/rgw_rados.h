@@ -1764,11 +1764,6 @@ protected:
   RGWZone zone_public_config; /* external zone params, e.g., entrypoints, log flags, etc. */  
   RGWZoneParams zone_params; /* internal zone params, e.g., rados pools */
 
-  RGWZoneGroup period_zonegroup;
-  RGWZone period_zone; /* external zone params, e.g., entrypoints, log flags, etc. */  
-  bool has_period_zonegroup;
-  bool has_period_zone;
-
   RGWPeriod current_period;
 public:
   RGWRados() : max_req_id(0), lock("rados_timer_lock"), watchers_lock("watchers_lock"), timer(NULL),
@@ -1787,8 +1782,6 @@ public:
                quota_handler(NULL),
                finisher(NULL),
                cr_registry(NULL),
-	       has_period_zonegroup(false),
-	       has_period_zone(false),
                rest_master_conn(NULL),
                meta_mgr(NULL), data_log(NULL) {}
 
@@ -1847,18 +1840,10 @@ public:
 
   RGWZoneParams& get_zone_params() { return zone_params; }
   RGWZoneGroup& get_zonegroup() {
-    if (has_period_zonegroup) {
-      return period_zonegroup;
-    } else {
-      return zonegroup;
-    }
+    return zonegroup;
   }
   RGWZone& get_zone() {
-    if (has_period_zone) {
-      return period_zone;
-    } else {
-      return zone_public_config;
-    }
+    return zone_public_config;
   }
 
   const RGWQuotaInfo& get_bucket_quota() {
@@ -1912,6 +1897,8 @@ public:
   }
   /** Initialize the RADOS instance and prepare to do other ops */
   virtual int init_rados();
+  int init_zg_from_period(bool *initialized);
+  int init_zg_from_local(bool *creating_defaults);
   int init_complete();
   int replace_region_with_zonegroup();
   int convert_regionmap();
