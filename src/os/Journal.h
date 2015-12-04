@@ -18,7 +18,7 @@
 
 #include <errno.h>
 
-#include "include/buffer.h"
+#include "include/buffer_fwd.h"
 #include "include/Context.h"
 #include "common/Finisher.h"
 #include "common/TrackedOp.h"

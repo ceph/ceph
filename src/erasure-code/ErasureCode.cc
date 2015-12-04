@@ -22,6 +22,7 @@
 
 #include "common/strtol.h"
 #include "ErasureCode.h"
+#include "include/buffer.h"
 
 const unsigned ErasureCode::SIMD_ALIGN = 32;
 
