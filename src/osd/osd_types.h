@@ -63,6 +63,14 @@
 /// max recovery priority for MBackfillReserve
 #define OSD_RECOVERY_PRIORITY_MAX 255u
 
+/// base recovery priority for MBackfillReserve
+#define OSD_RECOVERY_PRIORITY_BASE 230u
+
+/// base backfill priority for MBackfillReserve (degraded PG)
+#define OSD_BACKFILL_DEGRADED_PRIORITY_BASE 200u
+
+/// base backfill priority for MBackfillReserve
+#define OSD_BACKFILL_PRIORITY_BASE 1u
 
 typedef hobject_t collection_list_handle_t;
 
@@ -902,6 +910,8 @@ public:
     SCRUB_MIN_INTERVAL,
     SCRUB_MAX_INTERVAL,
     DEEP_SCRUB_INTERVAL,
+    RECOVERY_PRIORITY,
+    RECOVERY_OP_PRIORITY
   };
 
   enum type_t {

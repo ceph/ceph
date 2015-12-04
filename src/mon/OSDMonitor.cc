@@ -2907,7 +2907,8 @@ namespace {
     ERASURE_CODE_PROFILE, MIN_READ_RECENCY_FOR_PROMOTE,
     MIN_WRITE_RECENCY_FOR_PROMOTE, FAST_READ,
     HIT_SET_GRADE_DECAY_RATE, HIT_SET_SEARCH_LAST_N,
-    SCRUB_MIN_INTERVAL, SCRUB_MAX_INTERVAL, DEEP_SCRUB_INTERVAL};
+    SCRUB_MIN_INTERVAL, SCRUB_MAX_INTERVAL, DEEP_SCRUB_INTERVAL,
+    RECOVERY_PRIORITY, RECOVERY_OP_PRIORITY};
 
   std::set<osd_pool_get_choices>
     subtract_second_from_first(const std::set<osd_pool_get_choices>& first,
@@ -3386,7 +3387,9 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
       ("hit_set_search_last_n", HIT_SET_SEARCH_LAST_N)
       ("scrub_min_interval", SCRUB_MIN_INTERVAL)
       ("scrub_max_interval", SCRUB_MAX_INTERVAL)
-      ("deep_scrub_interval", DEEP_SCRUB_INTERVAL);
+      ("deep_scrub_interval", DEEP_SCRUB_INTERVAL)
+      ("recovery_priority", RECOVERY_PRIORITY)
+      ("recovery_op_priority", RECOVERY_OP_PRIORITY);
 
     typedef std::set<osd_pool_get_choices> choices_set_t;
 
@@ -3568,6 +3571,8 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
 	  case SCRUB_MIN_INTERVAL:
 	  case SCRUB_MAX_INTERVAL:
 	  case DEEP_SCRUB_INTERVAL:
+          case RECOVERY_PRIORITY:
+          case RECOVERY_OP_PRIORITY:
 	    for (i = ALL_CHOICES.begin(); i != ALL_CHOICES.end(); ++i) {
 	      if (i->second == *it)
 		break;
@@ -3699,6 +3704,8 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
 	  case SCRUB_MIN_INTERVAL:
 	  case SCRUB_MAX_INTERVAL:
 	  case DEEP_SCRUB_INTERVAL:
+          case RECOVERY_PRIORITY:
+          case RECOVERY_OP_PRIORITY:
 	    for (i = ALL_CHOICES.begin(); i != ALL_CHOICES.end(); ++i) {
 	      if (i->second == *it)
 		break;
