@@ -1711,6 +1711,9 @@ struct pg_stat_t {
   bool hitset_bytes_stats_invalid;
   bool pin_stats_invalid;
 
+  // If add fixed size member in pg_stat_t, please reduce the reserve size
+  __u8 __ss_reserve[34]; // reserve bytes
+
   eversion_t version;
   eversion_t log_start;         // (log_start,version]
   eversion_t ondisk_log_start;  // there may be more on disk

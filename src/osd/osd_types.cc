@@ -2229,8 +2229,8 @@ void pg_stat_t::encode(bufferlist &bl, uint64_t features) const
 #endif
   if (fast_encode) {
     ENCODE_START(23, 8, bl);
-    uint32_t step = offsetof(pg_stat_t, pin_stats_invalid) +
-      sizeof(pin_stats_invalid);
+    uint32_t step = offsetof(pg_stat_t, __ss_reserve) +
+      sizeof(__ss_reserve);
     bl.append((char*)this, step);
     ::encode(version, bl);
     ::encode(log_start, bl);
@@ -2296,8 +2296,8 @@ void pg_stat_t::decode(bufferlist::iterator &bl)
   DECODE_START_LEGACY_COMPAT_LEN(22, 8, 8, bl);
 #if defined(CEPH_LITTLE_ENDIAN)
   if (struct_v >= 23) {
-    uint32_t step = offsetof(pg_stat_t, pin_stats_invalid) +
-      sizeof(pin_stats_invalid);
+    uint32_t step = offsetof(pg_stat_t, __ss_reserve) +
+      sizeof(__ss_reserve);
     bl.copy(step, (char *)(&last_fresh));
     ::decode(version, bl);
     ::decode(log_start, bl);
