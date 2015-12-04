@@ -189,23 +189,15 @@ out:
 
 void get_arguments(po::options_description *positional,
                    po::options_description *options) {
-  positional->add_options()
-    ("pool-name", "pool name");
   options->add_options()
-    ("long,l", po::bool_switch(), "long listing format")
-    ("pool,p", po::value<std::string>(), "pool name");
+    ("long,l", po::bool_switch(), "long listing format");
+  at::add_pool_options(positional, options);
   at::add_format_options(options);
 }
 
 int execute(const po::variables_map &vm) {
-  std::string pool_name = utils::get_positional_argument(vm, 0);
-  if (pool_name.empty() && vm.count("pool")) {
-    pool_name = vm["pool"].as<std::string>();
-  }
-
-  if (pool_name.empty()) {
-    pool_name = at::DEFAULT_POOL_NAME;
-  }
+  size_t arg_index = 0;
+  std::string pool_name = utils::get_pool_name(vm, &arg_index);
 
   at::Format::Formatter formatter;
   int r = utils::get_formatter(vm, &formatter);

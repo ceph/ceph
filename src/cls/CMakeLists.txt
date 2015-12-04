@@ -7,11 +7,11 @@ install(TARGETS cls_hello DESTINATION lib/rados-classes)
 
 # cls_rbd
 if (WITH_RBD)
-  add_library(cls_rbd SHARED rbd/cls_rbd.cc)
+  add_library(cls_rbd SHARED rbd/cls_rbd.cc rbd/cls_rbd_types.cc)
   set_target_properties(cls_rbd PROPERTIES VERSION "1.0.0" SOVERSION "1")
   install(TARGETS cls_rbd DESTINATION lib/rados-classes)
 
-  add_library(cls_rbd_client rbd/cls_rbd_client.cc)
+  add_library(cls_rbd_client rbd/cls_rbd_client.cc rbd/cls_rbd_types.cc)
 endif (WITH_RBD)
 
 # cls_lock

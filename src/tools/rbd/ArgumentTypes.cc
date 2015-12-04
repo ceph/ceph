@@ -124,6 +124,14 @@ void add_snap_option(po::options_description *opt,
     (name.c_str(), po::value<std::string>(), description.c_str());
 }
 
+void add_pool_options(boost::program_options::options_description *pos,
+                      boost::program_options::options_description *opt) {
+  pos->add_options()
+    ("pool-name", "pool name");
+  opt->add_options()
+    ((POOL_NAME + ",p").c_str(), po::value<std::string>(), "pool name");
+}
+
 void add_image_spec_options(po::options_description *pos,
                             po::options_description *opt,
                             ArgumentModifier modifier) {

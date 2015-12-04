@@ -768,7 +768,8 @@ void aio_write_test_data_and_poll(rbd_image_t image, int fd, const char *test_da
   rbd_completion_t comps[1];
   ASSERT_EQ(1, rbd_poll_io_events(image, comps, 1));
   uint64_t count;
-  ASSERT_EQ(sizeof(count), read(fd, &count, sizeof(count)));
+  ASSERT_EQ(static_cast<ssize_t>(sizeof(count)),
+            read(fd, &count, sizeof(count)));
   int r = rbd_aio_get_return_value(comps[0]);
   ASSERT_TRUE(rbd_aio_is_complete(comps[0]));
   ASSERT_TRUE(*(uint64_t*)rbd_aio_get_arg(comps[0]) == data);
@@ -857,7 +858,8 @@ void aio_read_test_data_and_poll(rbd_image_t image, int fd, const char *expected
   rbd_completion_t comps[1];
   ASSERT_EQ(1, rbd_poll_io_events(image, comps, 1));
   uint64_t count;
-  ASSERT_EQ(sizeof(count), read(fd, &count, sizeof(count)));
+  ASSERT_EQ(static_cast<ssize_t>(sizeof(count)),
+            read(fd, &count, sizeof(count)));
 
   int r = rbd_aio_get_return_value(comps[0]);
   ASSERT_TRUE(rbd_aio_is_complete(comps[0]));
@@ -3811,4 +3813,66 @@ TEST_F(TestLibRBD, ImagePollIO)
   ASSERT_EQ(0, rbd_close(image));
   rados_ioctx_destroy(ioctx);
 #endif
+}
+
+namespace librbd {
+
+static bool operator==(const mirror_peer_t &lhs, const mirror_peer_t &rhs) {
+  return (lhs.cluster_uuid == rhs.cluster_uuid &&
+          lhs.cluster_name == rhs.cluster_name &&
+          lhs.client_name == rhs.client_name);
+}
+
+} // namespace librbd
+
+TEST_F(TestLibRBD, Mirror) {
+  librados::IoCtx ioctx;
+  ASSERT_EQ(0, _rados.ioctx_create(m_pool_name.c_str(), ioctx));
+
+  librbd::RBD rbd;
+
+  std::vector<librbd::mirror_peer_t> expected_peers;
+  std::vector<librbd::mirror_peer_t> peers;
+  ASSERT_EQ(0, rbd.mirror_peer_list(ioctx, &peers));
+  ASSERT_EQ(expected_peers, peers);
+
+  ASSERT_EQ(-EINVAL, rbd.mirror_peer_add(ioctx, "uuid1", "cluster1", "client"));
+
+  bool enabled;
+  ASSERT_EQ(0, rbd.mirror_is_enabled(ioctx, &enabled));
+  ASSERT_FALSE(enabled);
+  ASSERT_EQ(0, rbd.mirror_set_enabled(ioctx, true));
+  ASSERT_EQ(0, rbd.mirror_is_enabled(ioctx, &enabled));
+  ASSERT_TRUE(enabled);
+
+  ASSERT_EQ(0, rbd.mirror_peer_add(ioctx, "uuid1", "cluster1", "client"));
+  ASSERT_EQ(0, rbd.mirror_peer_add(ioctx, "uuid2", "cluster2", "admin"));
+  ASSERT_EQ(-EEXIST, rbd.mirror_peer_add(ioctx, "uuid2", "cluster3", "foo"));
+  ASSERT_EQ(-EEXIST, rbd.mirror_peer_add(ioctx, "uuid3", "cluster1", "foo"));
+  ASSERT_EQ(0, rbd.mirror_peer_add(ioctx, "uuid3", "cluster3", "admin"));
+
+  ASSERT_EQ(0, rbd.mirror_peer_list(ioctx, &peers));
+  expected_peers = {
+    {"uuid1", "cluster1", "client"},
+    {"uuid2", "cluster2", "admin"},
+    {"uuid3", "cluster3", "admin"}};
+  ASSERT_EQ(expected_peers, peers);
+
+  ASSERT_EQ(0, rbd.mirror_peer_remove(ioctx, "uuid4"));
+  ASSERT_EQ(0, rbd.mirror_peer_remove(ioctx, "uuid2"));
+
+  ASSERT_EQ(-ENOENT, rbd.mirror_peer_set_client(ioctx, "uuid4", "new client"));
+  ASSERT_EQ(0, rbd.mirror_peer_set_client(ioctx, "uuid1", "new client"));
+
+  ASSERT_EQ(-ENOENT, rbd.mirror_peer_set_cluster(ioctx, "uuid4",
+                                                 "new cluster"));
+  ASSERT_EQ(0, rbd.mirror_peer_set_cluster(ioctx, "uuid3", "new cluster"));
+
+  ASSERT_EQ(0, rbd.mirror_peer_list(ioctx, &peers));
+  expected_peers = {
+    {"uuid1", "cluster1", "new client"},
+    {"uuid3", "new cluster", "admin"}};
+  ASSERT_EQ(expected_peers, peers);
+
+  ASSERT_EQ(-EBUSY, rbd.mirror_set_enabled(ioctx, false));
 }
