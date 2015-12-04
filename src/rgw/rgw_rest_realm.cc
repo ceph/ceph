@@ -140,7 +140,7 @@ void RGWOp_Period_Post::execute()
       return;
     }
     // set as current period
-    http_ret = realm.set_current_period(period.get_id()); // TODO: add sync status argument
+    http_ret = realm.set_current_period(period);
     if (http_ret < 0) {
       lderr(cct) << "failed to update realm's current period" << dendl;
       return;
