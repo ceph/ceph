@@ -35,10 +35,11 @@ namespace librbd {
    *
    * The retrying of individual requests is handled at a lower level,
    * so all AioCompletion cares about is the count of outstanding
-   * requests. Note that this starts at 1 to prevent the reference
-   * count from reaching 0 while more requests are being added. When
-   * all requests have been added, finish_adding_requests() releases
-   * this initial reference.
+   * requests. The number of expected individual requests should be
+   * set initially using set_request_count() prior to issuing the
+   * requests.  This ensures that the completion will not be completed
+   * within the caller's thread of execution (instead via a librados
+   * context or via a thread pool context for cache read hits).
    */
   struct AioCompletion {
     Mutex lock;
@@ -48,7 +49,7 @@ namespace librbd {
     callback_t complete_cb;
     void *complete_arg;
     rbd_completion_t rbd_comp;
-    int pending_count;   ///< number of requests
+    uint32_t pending_count;   ///< number of requests
     uint32_t blockers;
     int ref;
     bool released;
@@ -82,16 +83,7 @@ namespace librbd {
 
     int wait_for_complete();
 
-    void add_request() {
-      lock.Lock();
-      pending_count++;
-      lock.Unlock();
-      get();
-    }
-
     void finalize(CephContext *cct, ssize_t rval);
-
-    void finish_adding_requests(CephContext *cct);
 
     void init_time(ImageCtx *i, aio_type_t t);
     void start_op(ImageCtx *i, aio_type_t t);
@@ -104,6 +96,13 @@ namespace librbd {
       complete_arg = cb_arg;
     }
 
+    void set_request_count(CephContext *cct, uint32_t num);
+    void add_request() {
+      lock.Lock();
+      assert(pending_count > 0);
+      lock.Unlock();
+      get();
+    }
     void complete_request(CephContext *cct, ssize_t r);
 
     void associate_journal_event(uint64_t tid);
