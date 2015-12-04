@@ -198,7 +198,7 @@ public:
     ::encode(snapset, payload);
     ::encode(snapc, payload);
     ::encode(logbl, payload);
-    ::encode(pg_stats, payload);
+    ::encode(pg_stats, payload, features);
     ::encode(pg_trim_to, payload);
     ::encode(peer_stat, payload);
     ::encode(attrset, payload);

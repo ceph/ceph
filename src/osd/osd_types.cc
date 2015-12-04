@@ -2219,12 +2219,16 @@ void pg_stat_t::dump_brief(Formatter *f) const
   f->dump_int("acting_primary", acting_primary);
 }
 
-void pg_stat_t::encode(bufferlist &bl) const
+void pg_stat_t::encode(bufferlist &bl, uint64_t features) const
 {
-  ENCODE_START(23, 8, bl);
-  bool encode_finish = false;
+  bool fast_encode = false;
 #if defined(CEPH_LITTLE_ENDIAN)
-  if (true) {
+  if (features & CEPH_FEATURE_PGSTAT_FAST_ENCODING) {
+    fast_encode = true;
+  }
+#endif
+  if (fast_encode) {
+    ENCODE_START(23, 8, bl);
     uint32_t step = offsetof(pg_stat_t, pin_stats_invalid) +
       sizeof(pin_stats_invalid);
     bl.append((char*)this, step);
@@ -2238,10 +2242,9 @@ void pg_stat_t::encode(bufferlist &bl) const
     ::encode(up, bl);
     ::encode(acting, bl);
     ::encode(blocked_by, bl);
-    encode_finish = true;
-  }
-#endif
-  if (!encode_finish) {
+    ENCODE_FINISH(bl);
+  } else {
+    ENCODE_START(22, 8, bl);
     ::encode(version, bl);
     ::packed_encode((char*)&reported_seq, bl, sizeof(reported_seq));
     ::packed_encode((char*)&reported_epoch, bl, sizeof(reported_epoch));
@@ -2282,8 +2285,8 @@ void pg_stat_t::encode(bufferlist &bl) const
     ::packed_encode((char*)&last_peered, bl, sizeof(last_peered));
     ::packed_encode((char*)&last_became_peered, bl, sizeof(last_became_peered));
     ::packed_encode((char*)&pin_stats_invalid, bl, sizeof(pin_stats_invalid));
+    ENCODE_FINISH(bl);
   }
-  ENCODE_FINISH(bl);
 }
 
 void pg_stat_t::decode(bufferlist::iterator &bl)
@@ -2293,7 +2296,7 @@ void pg_stat_t::decode(bufferlist::iterator &bl)
   DECODE_START_LEGACY_COMPAT_LEN(22, 8, 8, bl);
 #if defined(CEPH_LITTLE_ENDIAN)
   if (struct_v >= 23) {
-    uint32_t step =(uint64_t)(&pin_stats_invalid) - (uint64_t)(&last_fresh) +
+    uint32_t step = offsetof(pg_stat_t, pin_stats_invalid) +
       sizeof(pin_stats_invalid);
     bl.copy(step, (char *)(&last_fresh));
     ::decode(version, bl);
@@ -2733,7 +2736,7 @@ void pg_history_t::generate_test_instances(list<pg_history_t*>& o)
 
 // -- pg_info_t --
 
-void pg_info_t::encode(bufferlist &bl) const
+void pg_info_t::encode(bufferlist &bl, uint64_t features) const
 {
   ENCODE_START(31, 26, bl);
   ::encode(pgid.pgid, bl);
@@ -2745,7 +2748,7 @@ void pg_info_t::encode(bufferlist &bl) const
   } else {
     ::encode(last_backfill, bl);
   }
-  ::encode(stats, bl);
+  ::encode(stats, bl, features);
   history.encode(bl);
   ::encode(purged_snaps, bl);
   ::encode(last_epoch_started, bl);

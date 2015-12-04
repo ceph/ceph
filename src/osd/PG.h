@@ -2175,7 +2175,8 @@ public:
     map<epoch_t,pg_interval_t> &past_intervals,
     ghobject_t &pgmeta_oid,
     bool dirty_big_info,
-    bool dirty_epoch);
+    bool dirty_epoch,
+    uint64_t features);
   void write_if_dirty(ObjectStore::Transaction& t);
 
   eversion_t get_next_version() const {

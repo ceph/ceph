@@ -166,7 +166,7 @@ inline void packed_decode(char *t, bufferlist::iterator& p, uint64_t len)
   inline void decode(cl &c, bufferlist::iterator &p) { c.decode(p); }
 
 #define WRITE_CLASS_ENCODER_FEATURES(cl)				\
-  inline void encode(const cl &c, bufferlist &bl, uint64_t features) {	\
+  inline void encode(const cl &c, bufferlist &bl, uint64_t features=0) {	\
     ENCODE_DUMP_PRE(); c.encode(bl, features); ENCODE_DUMP_POST(cl); }	\
   inline void decode(cl &c, bufferlist::iterator &p) { c.decode(p); }
 

@@ -2723,14 +2723,15 @@ int PG::_prepare_write_info(map<string,bufferlist> *km,
 			    map<epoch_t,pg_interval_t> &past_intervals,
 			    ghobject_t &pgmeta_oid,
 			    bool dirty_big_info,
-			    bool dirty_epoch)
+			    bool dirty_epoch,
+                            uint64_t features)
 {
   // info.  store purged_snaps separately.
   interval_set<snapid_t> purged_snaps;
   if (dirty_epoch)
     ::encode(epoch, (*km)[epoch_key]);
   purged_snaps.swap(info.purged_snaps);
-  ::encode(info, (*km)[info_key]);
+  ::encode(info, (*km)[info_key], features);
   purged_snaps.swap(info.purged_snaps);
 
   if (dirty_big_info) {
@@ -2781,7 +2782,8 @@ void PG::prepare_write_info(map<string,bufferlist> *km)
   bool need_update_epoch = last_epoch < get_osdmap()->get_epoch();
   int ret = _prepare_write_info(km, get_osdmap()->get_epoch(), info, coll,
 				past_intervals, pgmeta_oid,
-				dirty_big_info, need_update_epoch);
+				dirty_big_info, need_update_epoch,
+                                get_min_peer_features());
   assert(ret == 0);
   if (need_update_epoch)
     last_epoch = get_osdmap()->get_epoch();

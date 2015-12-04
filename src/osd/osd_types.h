@@ -1776,11 +1776,11 @@ struct pg_stat_t {
   bool is_acting_osd(int32_t osd, bool primary) const;
   void dump(Formatter *f) const;
   void dump_brief(Formatter *f) const;
-  void encode(bufferlist &bl) const;
+  void encode(bufferlist &bl, uint64_t features = 0) const;
   void decode(bufferlist::iterator &bl);
   static void generate_test_instances(list<pg_stat_t*>& o);
 } __attribute__ ((packed));
-WRITE_CLASS_ENCODER(pg_stat_t)
+WRITE_CLASS_ENCODER_FEATURES(pg_stat_t)
 
 bool operator==(const pg_stat_t& l, const pg_stat_t& r);
 
@@ -2030,7 +2030,7 @@ struct pg_info_t {
 
   bool is_incomplete() const { return !last_backfill.is_max(); }
 
-  void encode(bufferlist& bl) const;
+  void encode(bufferlist& bl, uint64_t features = 0) const;
   void decode(bufferlist::iterator& p);
   void dump(Formatter *f) const;
   bool overlaps_with(const pg_info_t &oinfo) const {
@@ -2040,7 +2040,7 @@ struct pg_info_t {
   }
   static void generate_test_instances(list<pg_info_t*>& o);
 };
-WRITE_CLASS_ENCODER(pg_info_t)
+WRITE_CLASS_ENCODER_FEATURES(pg_info_t)
 
 inline ostream& operator<<(ostream& out, const pg_info_t& pgi) 
 {
