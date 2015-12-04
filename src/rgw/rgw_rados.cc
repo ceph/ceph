@@ -3343,7 +3343,8 @@ int RGWRados::init_complete()
   }
 
   bool creating_defaults = false;
-  if (!zg_initialized) {
+  bool using_local = (!zg_initialized);
+  if (using_local) {
     ldout(cct, 10) << " cannot find current period zonegroup using local zonegroup" << dendl;
     ret = init_zg_from_local(&creating_defaults);
     if (ret < 0) {
@@ -3362,6 +3363,18 @@ int RGWRados::init_complete()
     return ret;
   }
   map<string, RGWZone>::iterator zone_iter = get_zonegroup().zones.find(zone_params.get_id());
+  if (zone_iter == get_zonegroup().zones.end()) {
+    if (using_local) {
+      lderr(cct) << "Cannot find zone id=" << zone_params.get_id() << " (name=" << zone_params.get_name() << ")" << dendl;
+      return -EINVAL;
+    }
+    lderr(cct) << "Cannot find zone id=" << zone_params.get_id() << " (name=" << zone_params.get_name() << "), switching to local zonegroup configuration" << dendl;
+    ret = init_zg_from_local(&creating_defaults);
+    if (ret < 0) {
+      return ret;
+    }
+    zone_iter = get_zonegroup().zones.find(zone_params.get_id());
+  }
   if (zone_iter != get_zonegroup().zones.end()) {
     zone_public_config = zone_iter->second;
     ldout(cct, 20) << "zone " << zone_params.get_name() << dendl;
