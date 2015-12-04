@@ -2079,26 +2079,33 @@ void PG::mark_clean()
 unsigned PG::get_recovery_priority()
 {
   // a higher value -> a higher priority
-  return OSD_RECOVERY_PRIORITY_MAX;
+
+  int pool_recovery_priority = 0;
+  pool.info.opts.get(pool_opts_t::RECOVERY_PRIORITY, &pool_recovery_priority);
+
+  unsigned ret = OSD_RECOVERY_PRIORITY_BASE + pool_recovery_priority;
+  if (ret > OSD_RECOVERY_PRIORITY_MAX)
+    ret = OSD_RECOVERY_PRIORITY_MAX;
+  return ret;
 }
 
 unsigned PG::get_backfill_priority()
 {
   // a higher value -> a higher priority
 
-  // undersized: 200 + num missing replicas
+  unsigned ret = OSD_BACKFILL_PRIORITY_BASE;
   if (is_undersized()) {
+    // undersized: OSD_BACKFILL_DEGRADED_PRIORITY_BASE + num missing replicas
     assert(pool.info.size > actingset.size());
-    return 200 + (pool.info.size - actingset.size());
-  }
+    ret = OSD_BACKFILL_DEGRADED_PRIORITY_BASE + (pool.info.size - actingset.size());
 
-  // degraded: baseline degraded
-  if (is_degraded()) {
-    return 200;
+  } else if (is_degraded()) {
+    // degraded: baseline degraded
+    ret = OSD_BACKFILL_DEGRADED_PRIORITY_BASE;
   }
+  assert (ret < OSD_RECOVERY_PRIORITY_MAX);
 
-  // baseline
-  return 1;
+  return ret;
 }
 
 void PG::finish_recovery(list<Context*>& tfin)

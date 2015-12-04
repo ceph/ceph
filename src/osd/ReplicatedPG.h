@@ -1491,6 +1491,11 @@ private:
   hobject_t generate_temp_object();  ///< generate a new temp object name
   /// generate a new temp object name (for recovery)
   hobject_t get_temp_recovery_object(eversion_t version, snapid_t snap);
+  int get_recovery_op_priority() const {
+      int pri = 0;
+      pool.info.opts.get(pool_opts_t::RECOVERY_OP_PRIORITY, &pri);
+      return  pri > 0 ? pri : cct->_conf->osd_recovery_op_priority;
+  }
   void log_missing(unsigned missing,
 			const boost::optional<hobject_t> &head,
 			LogChannelRef clog,
