@@ -108,6 +108,9 @@ protected:
 
   virtual void send_request();
 
+  virtual uint32_t get_cache_request_count(bool journaling) const {
+    return 0;
+  }
   virtual void send_cache_requests(const ObjectExtents &object_extents,
                                    uint64_t journal_tid) = 0;
 
@@ -177,6 +180,7 @@ protected:
     return "aio_discard";
   }
 
+  virtual uint32_t get_cache_request_count(bool journaling) const override;
   virtual void send_cache_requests(const ObjectExtents &object_extents,
                                    uint64_t journal_tid);
 

@@ -28,12 +28,6 @@
 
 namespace librbd {
 
-  void AioCompletion::finish_adding_requests(CephContext *cct)
-  {
-    ldout(cct, 20) << "AioCompletion::finish_adding_requests " << (void*)this << " pending " << pending_count << dendl;
-    unblock(cct);
-  }
-
   int AioCompletion::wait_for_complete() {
     tracepoint(librbd, aio_wait_for_complete_enter, this);
     lock.Lock();
@@ -46,8 +40,9 @@ namespace librbd {
 
   void AioCompletion::finalize(CephContext *cct, ssize_t rval)
   {
-    ldout(cct, 20) << "AioCompletion::finalize() " << (void*)this << " rval " << rval << " read_buf " << (void*)read_buf
-		   << " read_bl " << (void*)read_bl << dendl;
+    ldout(cct, 20) << this << " " << __func__ << ": r=" << rval << ", "
+                   << "read_buf=" << reinterpret_cast<void*>(read_buf) << ", "
+                   << "real_bl=" <<  reinterpret_cast<void*>(read_bl) << dendl;
     if (rval >= 0 && aio_type == AIO_TYPE_READ) {
       // FIXME: make the destriper write directly into a buffer so
       // that we avoid shuffling pointers and copying zeros around.
@@ -57,11 +52,11 @@ namespace librbd {
       if (read_buf) {
 	assert(bl.length() == read_buf_len);
 	bl.copy(0, read_buf_len, read_buf);
-	ldout(cct, 20) << "AioCompletion::finalize() copied resulting " << bl.length()
+	ldout(cct, 20) << "copied resulting " << bl.length()
 		       << " bytes to " << (void*)read_buf << dendl;
       }
       if (read_bl) {
-	ldout(cct, 20) << "AioCompletion::finalize() moving resulting " << bl.length()
+	ldout(cct, 20) << "moving resulting " << bl.length()
 		       << " bytes to bl " << (void*)read_bl << dendl;
 	read_bl->claim(bl);
       }
@@ -94,6 +89,7 @@ namespace librbd {
     }
 
     // note: possible for image to be closed after op marked finished
+    done = true;
     if (async_op.started()) {
       async_op.finish_op();
     }
@@ -104,7 +100,6 @@ namespace librbd {
       lock.Lock();
     }
 
-    done = true;
     if (ictx && event_notify && ictx->event_socket.is_valid()) {
       ictx->completed_reqs_lock.Lock();
       ictx->completed_reqs.push_back(&m_xlist_item);
@@ -125,14 +120,16 @@ namespace librbd {
 
   void AioCompletion::start_op(ImageCtx *i, aio_type_t t) {
     init_time(i, t);
-    if (!async_op.started()) {
+
+    Mutex::Locker locker(lock);
+    if (!done && !async_op.started()) {
       async_op.start_op(*ictx);
     }
   }
 
   void AioCompletion::fail(CephContext *cct, int r)
   {
-    lderr(cct) << "AioCompletion::fail() " << this << ": " << cpp_strerror(r)
+    lderr(cct) << this << " " << __func__ << ": " << cpp_strerror(r)
                << dendl;
     lock.Lock();
     assert(pending_count == 0);
@@ -141,11 +138,19 @@ namespace librbd {
     put_unlock();
   }
 
+  void AioCompletion::set_request_count(CephContext *cct, uint32_t count) {
+    ldout(cct, 20) << this << " " << __func__ << ": pending=" << count << dendl;
+    lock.Lock();
+    assert(pending_count == 0);
+    pending_count = count;
+    lock.Unlock();
+
+    // if no pending requests, completion will fire now
+    unblock(cct);
+  }
+
   void AioCompletion::complete_request(CephContext *cct, ssize_t r)
   {
-    ldout(cct, 20) << "AioCompletion::complete_request() "
-		   << (void *)this << " complete_cb=" << (void *)complete_cb
-		   << " pending " << pending_count << dendl;
     lock.Lock();
     if (rval >= 0) {
       if (r < 0 && r != -EEXIST)
@@ -155,6 +160,9 @@ namespace librbd {
     }
     assert(pending_count);
     int count = --pending_count;
+
+    ldout(cct, 20) << this << " " << __func__ << ": cb=" << complete_cb << ", "
+                   << "pending=" << pending_count << dendl;
     if (!count && blockers == 0) {
       finalize(cct, rval);
       complete(cct);
