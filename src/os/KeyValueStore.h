@@ -494,10 +494,6 @@ class KeyValueStore : public ObjectStore,
   uint32_t get_target_version() {
     return target_version;
   }
-  int peek_journal_fsid(uuid_d *id) {
-    *id = fsid;
-    return 0;
-  }
 
   int write_version_stamp();
   int mount();
