@@ -2819,9 +2819,9 @@ def main_destroy(args):
     dev_path = target_dev['path']
     journal_part_uuid = target_dev['journal_uuid']
     if target_dev['ptype'] == MPATH_OSD_UUID:
-        base_dev = get_partition_base_mpath(dev_path)
+        base_name, base_dev = get_partition_base_mpath(dev_path)
     else:
-        base_dev = get_partition_base(dev_path)
+        base_name, base_dev = get_partition_base(dev_path)
 
     # Before osd deactivate, we cannot destroy it
     status_code = _check_osd_status(args.cluster, osd_id)
@@ -3061,14 +3061,14 @@ def split_dev_base_partnum(dev):
     return (basename, basedev, partnum)
 
 def get_partition_type(part):
-    ptype, puuid =  get_sgdisk_partition_info(part)
+    ptype, puuid =  get_disk_partition_info(part)
     return ptype
 
 def get_partition_uuid(part):
-    ptype, puuid =  get_sgdisk_partition_info(part)
+    ptype, puuid =  get_disk_partition_info(part)
     return puuid
 
-def get_sgdisk_partition_info(dev):
+def get_disk_partition_info(dev):
     (basename, basedev, partnum) = split_dev_base_partnum(dev)
     hw_sector_sz = get_sys_hw_sector_size(os.path.join('/sys/block', basename))
     return rawread_partition_guids(basedev, int(partnum), hw_sector_sz)
@@ -3202,6 +3202,14 @@ def rawread_partition_guids(base_dev, part_num, hw_sector_sz):
     # All ok
     return ptype_guid, part_guid
 
+def get_sgdisk_partition_info(dev, regexp):
+    (base, partnum) = split_dev_base_partnum(dev)
+    out, _ = command(['sgdisk', '-i', partnum, base])
+    for line in out.splitlines():
+        m = re.match(regexp, line)
+        if m:
+            return m.group(1).lower()
+    return None
 
 def more_osd_info(path, uuid_map, desc):
     desc['ceph_fsid'] = get_oneliner(path, 'ceph_fsid')
