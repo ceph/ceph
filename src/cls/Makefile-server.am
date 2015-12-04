@@ -10,7 +10,9 @@ libcls_numops_la_SOURCES = cls/numops/cls_numops.cc
 libcls_numops_la_LDFLAGS = ${AM_LDFLAGS} -module -avoid-version -shared -export-symbols-regex '.*__cls_.*'
 radoslib_LTLIBRARIES += libcls_numops.la
 
-libcls_rbd_la_SOURCES = cls/rbd/cls_rbd.cc
+libcls_rbd_la_SOURCES = \
+	cls/rbd/cls_rbd.cc \
+	cls/rbd/cls_rbd_types.cc
 libcls_rbd_la_LIBADD = $(PTHREAD_LIBS) $(EXTRALIBS)
 libcls_rbd_la_LDFLAGS = ${AM_LDFLAGS} -module -avoid-version -shared -export-symbols-regex '.*__cls_.*'
 radoslib_LTLIBRARIES += libcls_rbd.la

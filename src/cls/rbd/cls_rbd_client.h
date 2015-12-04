@@ -5,6 +5,7 @@
 #define CEPH_LIBRBD_CLS_RBD_CLIENT_H
 
 #include "cls/lock/cls_lock_types.h"
+#include "cls/rbd/cls_rbd_types.h"
 #include "common/bit_vector.hpp"
 #include "common/snap_types.h"
 #include "include/rados/librados.hpp"
@@ -155,6 +156,24 @@ namespace librbd {
 			  std::vector<string> *names,
 			  std::vector<uint64_t> *sizes,
 			  ::SnapContext *snapc);
+
+    // operations on the rbd_pool_settings object
+    int mirror_is_enabled(librados::IoCtx *ioctx, bool *enabled);
+    int mirror_set_enabled(librados::IoCtx *ioctx, bool enabled);
+    int mirror_peer_list(librados::IoCtx *ioctx,
+                         std::vector<cls::rbd::MirrorPeer> *peers);
+    int mirror_peer_add(librados::IoCtx *ioctx, const std::string &cluster_uuid,
+                        const std::string &cluster_name,
+                        const std::string &client_name);
+    int mirror_peer_remove(librados::IoCtx *ioctx,
+                           const std::string &cluster_uuid);
+    int mirror_peer_set_client(librados::IoCtx *ioctx,
+                               const std::string &cluster_uuid,
+                               const std::string &client_name);
+    int mirror_peer_set_cluster(librados::IoCtx *ioctx,
+                                const std::string &cluster_uuid,
+                                const std::string &cluster_name);
+
   } // namespace cls_client
 } // namespace librbd
 #endif // CEPH_LIBRBD_CLS_RBD_CLIENT_H
