@@ -890,11 +890,14 @@ if(${WITH_RBD})
     librbd/ObjectMap.cc
     librbd/Utils.cc
     librbd/object_map/InvalidateRequest.cc
+    librbd/object_map/LockRequest.cc
     librbd/object_map/Request.cc
+    librbd/object_map/RefreshRequest.cc
     librbd/object_map/ResizeRequest.cc
     librbd/object_map/SnapshotCreateRequest.cc
     librbd/object_map/SnapshotRemoveRequest.cc
     librbd/object_map/SnapshotRollbackRequest.cc
+    librbd/object_map/UnlockRequest.cc
     librbd/object_map/UpdateRequest.cc
     librbd/operation/FlattenRequest.cc
     librbd/operation/RebuildObjectMapRequest.cc

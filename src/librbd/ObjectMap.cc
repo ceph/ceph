@@ -5,10 +5,13 @@
 #include "librbd/ImageWatcher.h"
 #include "librbd/internal.h"
 #include "librbd/object_map/InvalidateRequest.h"
+#include "librbd/object_map/LockRequest.h"
+#include "librbd/object_map/RefreshRequest.h"
 #include "librbd/object_map/ResizeRequest.h"
 #include "librbd/object_map/SnapshotCreateRequest.h"
 #include "librbd/object_map/SnapshotRemoveRequest.h"
 #include "librbd/object_map/SnapshotRollbackRequest.h"
+#include "librbd/object_map/UnlockRequest.h"
 #include "librbd/object_map/UpdateRequest.h"
 #include "librbd/Utils.h"
 #include "common/dout.h"
@@ -22,6 +25,23 @@
 #define dout_prefix *_dout << "librbd::ObjectMap: "
 
 namespace librbd {
+
+namespace {
+
+struct C_ApplyRefresh : public Context {
+  object_map::RefreshRequest<> *request;
+  C_ApplyRefresh(object_map::RefreshRequest<> *request) : request(request) {
+  }
+  virtual void finish(int r) {
+    if (r < 0) {
+      request->apply();
+    } else {
+      request->discard();
+    }
+  }
+};
+
+} // anonymous namespace
 
 ObjectMap::ObjectMap(ImageCtx &image_ctx)
   : m_image_ctx(image_ctx), m_snap_id(CEPH_NOSNAP), m_enabled(false)
@@ -136,6 +156,12 @@ int ObjectMap::lock()
   return 0;
 }
 
+void ObjectMap::lock(Context *on_finish) {
+  object_map::LockRequest<> *req = new object_map::LockRequest<>(
+    m_image_ctx, on_finish);
+  req->send();
+}
+
 int ObjectMap::unlock()
 {
   if (!m_image_ctx.test_features(RBD_FEATURE_OBJECT_MAP)) {
@@ -152,6 +178,12 @@ int ObjectMap::unlock()
 			   << cpp_strerror(r) << dendl;
   }
   return r;
+}
+
+void ObjectMap::unlock(Context *on_finish) {
+  object_map::UnlockRequest<> *req = new object_map::UnlockRequest<>(
+    m_image_ctx, on_finish);
+  req->send();
 }
 
 bool ObjectMap::object_may_exist(uint64_t object_no) const
@@ -252,6 +284,13 @@ void ObjectMap::refresh(uint64_t snap_id)
     ldout(cct, 1) << "object map larger than current object count: "
                   << m_object_map.size() << " != " << num_objs << dendl;
   }
+}
+
+Context* ObjectMap::refresh(uint64_t snap_id, Context *on_finish) {
+  object_map::RefreshRequest<> *req = new object_map::RefreshRequest<>(
+    m_image_ctx, &m_object_map, snap_id, on_finish);
+  req->send();
+  return new C_ApplyRefresh(req);
 }
 
 void ObjectMap::rollback(uint64_t snap_id, Context *on_finish) {
