@@ -5,7 +5,7 @@
 #define CEPH_LIBRBD_AIO_IMAGE_REQUEST_H
 
 #include "include/int_types.h"
-#include "include/buffer.h"
+#include "include/buffer_fwd.h"
 #include "common/snap_types.h"
 #include "osd/osd_types.h"
 #include "librbd/AioCompletion.h"

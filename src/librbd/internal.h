@@ -10,7 +10,7 @@
 #include <string>
 #include <vector>
 
-#include "include/buffer.h"
+#include "include/buffer_fwd.h"
 #include "include/rbd/librbd.hpp"
 #include "include/rbd_types.h"
 
