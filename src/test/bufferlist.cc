@@ -2573,6 +2573,24 @@ TEST(BufferList, InvalidateCrc) {
   EXPECT_NE(crc, bl.crc32c(0));
 }
 
+TEST(BufferList, append_buffer) {
+  bufferptr* ptr = new bufferptr(buffer::create_page_aligned(CEPH_PAGE_SIZE));
+  ptr->set_length(0);
+  bufferlist bl;
+  bl.set_append_buffer(ptr);
+  int64_t a = 123, b = 456;
+  ::encode(a, bl);
+  ::encode(b, bl);
+  int64_t c = 0, d = 0;
+  bufferlist::iterator p = bl.begin();
+  ::decode(c, p);
+  ::decode(d, p);
+  assert(a == c);
+  assert(b == d);
+  assert(bl.buffers().front().get_raw() == ptr->get_raw());
+  delete ptr;
+}
+
 TEST(BufferHash, all) {
   {
     bufferlist bl;
