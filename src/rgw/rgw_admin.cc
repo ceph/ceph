@@ -695,10 +695,9 @@ static int read_decode_json(const string& infile, T& t)
     return ret;
   }
   JSONParser p;
-  ret = p.parse(bl.c_str(), bl.length());
-  if (ret < 0) {
+  if (!p.parse(bl.c_str(), bl.length())) {
     cout << "failed to parse JSON" << std::endl;
-    return ret;
+    return -EINVAL;
   }
 
   try {
@@ -720,10 +719,9 @@ static int read_decode_json(const string& infile, T& t, K *k)
     return ret;
   }
   JSONParser p;
-  ret = p.parse(bl.c_str(), bl.length());
-  if (ret < 0) {
+  if (!p.parse(bl.c_str(), bl.length())) {
     cout << "failed to parse JSON" << std::endl;
-    return ret;
+    return -EINVAL;
   }
 
   try {
