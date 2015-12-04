@@ -281,6 +281,7 @@ set(libcommon_files
   common/Thread.cc
   common/Formatter.cc
   common/HeartbeatMap.cc
+  common/PluginRegistry.cc
   common/ceph_fs.cc
   common/ceph_hash.cc
   common/ceph_strings.cc
