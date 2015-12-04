@@ -53,6 +53,9 @@ class PermissionError(Error):
     """ `PermissionError` class, derived from `Error` """
     pass
 
+class PermissionDeniedError(Error):
+    """ deal with EACCES related. """
+    pass
 
 class ObjectNotFound(Error):
     """ `ObjectNotFound` class, derived from `Error` """
@@ -134,7 +137,8 @@ def make_ex(ret, msg):
         errno.EBUSY     : ObjectBusy,
         errno.ENODATA   : NoData,
         errno.EINTR     : InterruptedOrTimeoutError,
-        errno.ETIMEDOUT : TimedOut
+        errno.ETIMEDOUT : TimedOut,
+        errno.EACCES    : PermissionDeniedError
         }
     ret = abs(ret)
     if ret in errors:
@@ -429,8 +433,7 @@ Rados object in state %s." % self.state)
 
         # cretargs was allocated with fixed length; collapse return
         # list to eliminate any missing args
-
-        retargs = [decode_cstr(a) for a in cretargs if a is not None]
+        retargs = [a.decode('utf-8') for a in cretargs if a is not None]
         self.parsed_args = args
         return retargs
 

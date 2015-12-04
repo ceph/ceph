@@ -150,16 +150,14 @@ function TEST_scrub_snaps() {
     run_osd $dir 0 || return 1
     wait_for_clean || return 1
 
-    sleep 5
-    ceph pg scrub ${poolid}.0
-    timeout 30 ceph -w
+    local pgid="${poolid}.0"
+    pg_scrub "$pgid" || return 1
+    grep 'log_channel' $dir/osd.0.log
 
     for i in `seq 1 7`
     do
         rados -p $poolname rmsnap snap$i
     done
-
-    sleep 10
 
     ERRORS=0
 
@@ -181,7 +179,7 @@ function TEST_scrub_snaps() {
     err_strings[3]="log_channel[(]cluster[)] log [[]ERR[]] : scrub [0-9]*[.]0 [0-9]*/666934a3/obj5/4 on disk size [(]4608[)] does not match object info size [(]512[)] adjusted for ondisk to [(]512[)]"
     err_strings[4]="log_channel[(]cluster[)] log [[]ERR[]] : scrub [0-9]*[.]0 [0-9]*/666934a3/obj5/head expected clone [0-9]*/666934a3/obj5/2"
     err_strings[5]="log_channel[(]cluster[)] log [[]ERR[]] : scrub [0-9]*[.]0 [0-9]*/666934a3/obj5/head expected clone [0-9]*/666934a3/obj5/1"
-    err_strings[6]="log_channel[(]cluster[)] log [[]INF[]] : scrub [0-9]*[.]0 [0-9]*/666934a3/obj5/head 1 missing clone[(]s[)]"
+    err_strings[6]="log_channel[(]cluster[)] log [[]INF[]] : scrub [0-9]*[.]0 [0-9]*/666934a3/obj5/head 2 missing clone[(]s[)]"
     err_strings[7]="log_channel[(]cluster[)] log [[]ERR[]] : scrub [0-9]*[.]0 [0-9]*/d3a9faf5/obj12/head snapset.head_exists=false, but head exists"
     err_strings[8]="log_channel[(]cluster[)] log [[]ERR[]] : scrub [0-9]*[.]0 [0-9]*/8df7eaa5/obj8/head snaps.seq not set"
     err_strings[9]="log_channel[(]cluster[)] log [[]ERR[]] : scrub [0-9]*[.]0 [0-9]*/5c889059/obj7/head snapset.head_exists=false, but head exists"

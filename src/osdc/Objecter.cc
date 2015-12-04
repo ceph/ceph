@@ -50,7 +50,6 @@
 #include "include/str_list.h"
 #include "common/errno.h"
 
-
 #define dout_subsys ceph_subsys_objecter
 #undef dout_prefix
 #define dout_prefix *_dout << messenger->get_myname() << ".objecter "
@@ -822,10 +821,13 @@ void Objecter::handle_watch_notify(MWatchNotify *m)
 	info->notify_id != m->notify_id) {
       ldout(cct, 10) << __func__ << " reply notify " << m->notify_id
 		     << " != " << info->notify_id << ", ignoring" << dendl;
-    } else {
-      assert(info->on_notify_finish);
+    } else if (info->on_notify_finish) {
       info->notify_result_bl->claim(m->get_data());
       info->on_notify_finish->complete(m->return_code);
+
+      // if we race with reconnect we might get a second notify; only
+      // notify the caller once!
+      info->on_notify_finish = NULL;
     }
   } else {
     finisher->queue(new C_DoWatchNotify(this, info, m));
@@ -1317,6 +1319,8 @@ int Objecter::pool_snap_list(int64_t poolid, vector<uint64_t> *snaps)
   RWLock::RLocker rl(rwlock);
 
   const pg_pool_t *pi = osdmap->get_pg_pool(poolid);
+  if (!pi)
+    return -ENOENT;
   for (map<snapid_t,pool_snap_info_t>::const_iterator p = pi->snaps.begin();
        p != pi->snaps.end();
        ++p) {
@@ -2667,10 +2671,7 @@ int Objecter::_calc_target(op_target_t *t, epoch_t *last_force_resend,  bool any
 int Objecter::_map_session(op_target_t *target, OSDSession **s,
 			   RWLock::Context& lc)
 {
-  int r = _calc_target(target);
-  if (r < 0) {
-    return r;
-  }
+  _calc_target(target);
   return _get_session(target->osd, s, lc);
 }
 
@@ -3147,10 +3148,10 @@ void Objecter::handle_osd_op_reply(MOSDOpReply *m)
     // set rval before running handlers so that handlers
     // can change it if e.g. decoding fails
     if (*pr)
-      **pr = p->rval;
+      **pr = ceph_to_host_errno(p->rval);
     if (*ph) {
       ldout(cct, 10) << " op " << i << " handler " << *ph << dendl;
-      (*ph)->complete(p->rval);
+      (*ph)->complete(ceph_to_host_errno(p->rval));
       *ph = NULL;
     }
   }

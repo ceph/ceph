@@ -83,15 +83,17 @@ int do_list(librbd::RBD &rbd, librados::IoCtx& io_ctx, bool lflag,
     parent.clear();
     r = im.parent_info(&pool, &image, &snap);
     if (r < 0 && r != -ENOENT)
-      return r;
+      goto out;
     bool has_parent = false;
     if (r != -ENOENT) {
       parent = pool + "/" + image + "@" + snap;
       has_parent = true;
     }
 
-    if (im.stat(info, sizeof(info)) < 0)
-      return -EINVAL;
+    if (im.stat(info, sizeof(info)) < 0) {
+      r = -EINVAL;
+      goto out;
+    }
 
     uint8_t old_format;
     im.old_format(&old_format);
@@ -100,7 +102,7 @@ int do_list(librbd::RBD &rbd, librados::IoCtx& io_ctx, bool lflag,
     bool exclusive;
     r = im.list_lockers(&lockers, &exclusive, NULL);
     if (r < 0)
-      return r;
+      goto out;
     std::string lockstr;
     if (!lockers.empty()) {
       lockstr = (exclusive) ? "excl" : "shr";
@@ -141,7 +143,7 @@ int do_list(librbd::RBD &rbd, librados::IoCtx& io_ctx, bool lflag,
         im.snap_set(s->name.c_str());
         r = im.snap_is_protected(s->name.c_str(), &is_protected);
         if (r < 0)
-          return r;
+          goto out;
         if (im.parent_info(&pool, &image, &snap) >= 0) {
           parent = pool + "/" + image + "@" + snap;
           has_parent = true;
@@ -173,6 +175,8 @@ int do_list(librbd::RBD &rbd, librados::IoCtx& io_ctx, bool lflag,
       }
     }
   }
+
+out:
   if (f) {
     f->close_section();
     f->flush(std::cout);
@@ -180,28 +184,20 @@ int do_list(librbd::RBD &rbd, librados::IoCtx& io_ctx, bool lflag,
     std::cout << tbl;
   }
 
-  return 0;
+  return r < 0 ? r : 0;
 }
 
 void get_arguments(po::options_description *positional,
                    po::options_description *options) {
-  positional->add_options()
-    ("pool-name", "pool name");
   options->add_options()
-    ("long,l", po::bool_switch(), "long listing format")
-    ("pool,p", po::value<std::string>(), "pool name");
+    ("long,l", po::bool_switch(), "long listing format");
+  at::add_pool_options(positional, options);
   at::add_format_options(options);
 }
 
 int execute(const po::variables_map &vm) {
-  std::string pool_name = utils::get_positional_argument(vm, 0);
-  if (pool_name.empty() && vm.count("pool")) {
-    pool_name = vm["pool"].as<std::string>();
-  }
-
-  if (pool_name.empty()) {
-    pool_name = at::DEFAULT_POOL_NAME;
-  }
+  size_t arg_index = 0;
+  std::string pool_name = utils::get_pool_name(vm, &arg_index);
 
   at::Format::Formatter formatter;
   int r = utils::get_formatter(vm, &formatter);

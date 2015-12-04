@@ -141,6 +141,7 @@ Parameters
    * object-map: object map support (requires exclusive-lock)
    * fast-diff: fast diff calculations (requires object-map)
    * deep-flatten: snapshot flatten support
+   * journaling: journaled IO support (requires exclusive-lock)
 
 .. option:: --image-shared
 
@@ -320,6 +321,15 @@ Commands
 :command:`showmapped`
   Show the rbd images that are mapped via the rbd kernel module.
 
+:command:`nbd map` [--device *device-path*] [--read-only] *image-spec* | *snap-spec*
+  Maps the specified image to a block device via the rbd-nbd tool.
+
+:command:`nbd unmap` *device-path*
+  Unmaps the block device that was mapped via the rbd-nbd tool.
+
+:command:`nbd list`
+  Show the list of used nbd devices via the rbd-nbd tool.
+
 :command:`status` *image-spec*
   Show the status of the image, including which clients have it open.
 
@@ -428,6 +438,10 @@ libceph (per client instance) options:
   default).
 
 * notcp_nodelay - Enable Nagle's algorithm on client sockets (since 4.0).
+
+* cephx_sign_messages - Enable message signing (since 4.4, default).
+
+* nocephx_sign_messages - Disable message signing (since 4.4).
 
 * mount_timeout=x - A timeout on various steps in `rbd map` and `rbd unmap`
   sequences (default is 60 seconds).  In particular, since 4.2 this can be used

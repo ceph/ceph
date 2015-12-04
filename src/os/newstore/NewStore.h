@@ -461,7 +461,6 @@ private:
   KeyValueDB *db;
   FS *fs;
   uuid_d fsid;
-  string db_path;
   int path_fd;  ///< open handle to $path
   int fsid_fd;  ///< open handle (locked) to $path/fsid
   int frag_fd;  ///< open handle to $path/fragments
@@ -525,7 +524,7 @@ private:
   int _open_frag();
   int _create_frag();
   void _close_frag();
-  int _open_db();
+  int _open_db(bool create);
   void _close_db();
   int _open_collections();
   void _close_collections();

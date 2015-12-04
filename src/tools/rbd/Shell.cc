@@ -19,6 +19,7 @@ namespace po = boost::program_options;
 
 namespace {
 
+static const std::string APP_NAME("rbd");
 static const std::string HELP_SPEC("help");
 static const std::string BASH_COMPLETION_SPEC("bash-completion");
 
@@ -32,11 +33,6 @@ void validate(boost::any& v, const std::vector<std::string>& values,
   const std::string &s = po::validators::get_single_string(values);
   g_conf->set_val_or_die("keyfile", s.c_str());
   v = boost::any(s);
-}
-
-std::string base_name(const std::string &path,
-                      const std::string &delims = "/\\") {
-  return path.substr(path.find_last_of(delims) + 1);
 }
 
 std::string format_command_spec(const Shell::CommandSpec &spec) {
@@ -74,7 +70,6 @@ std::vector<Shell::Action *> Shell::s_actions;
 std::set<std::string> Shell::s_switch_arguments;
 
 int Shell::execute(int arg_count, const char **arg_values) {
-  std::string app_name(base_name(arg_values[0]));
 
   std::vector<std::string> arguments;
   prune_command_line_arguments(arg_count, arg_values, &arguments);
@@ -84,17 +79,17 @@ int Shell::execute(int arg_count, const char **arg_values) {
 
   if (command_spec.empty() || command_spec == CommandSpec({"help"})) {
     // list all available actions
-    print_help(app_name);
+    print_help();
     return 0;
   } else if (command_spec[0] == HELP_SPEC) {
     // list help for specific action
     command_spec.erase(command_spec.begin());
     Action *action = find_action(command_spec, NULL);
     if (action == NULL) {
-      print_unknown_action(app_name, command_spec);
+      print_unknown_action(command_spec);
       return EXIT_FAILURE;
     } else {
-      print_action_help(app_name, action);
+      print_action_help(action);
       return 0;
     }
   } else if (command_spec[0] == BASH_COMPLETION_SPEC) {
@@ -106,7 +101,7 @@ int Shell::execute(int arg_count, const char **arg_values) {
   CommandSpec *matching_spec;
   Action *action = find_action(command_spec, &matching_spec);
   if (action == NULL) {
-    print_unknown_action(app_name, command_spec);
+    print_unknown_action(command_spec);
     return EXIT_FAILURE;
   }
 
@@ -128,8 +123,11 @@ int Shell::execute(int arg_count, const char **arg_values) {
     po::positional_options_description positional_options;
     positional_options.add(at::POSITIONAL_COMMAND_SPEC.c_str(),
                            matching_spec->size());
-    if (command_spec.size() > matching_spec->size()) {
-      positional_options.add(at::POSITIONAL_ARGUMENTS.c_str(), -1);
+    if (!positional_opts.options().empty()) {
+      int max_count = positional_opts.options().size();
+      if (positional_opts.options().back()->semantic()->max_tokens() > 1)
+        max_count = -1;
+      positional_options.add(at::POSITIONAL_ARGUMENTS.c_str(), max_count);
     }
 
     po::options_description global_opts;
@@ -158,13 +156,13 @@ int Shell::execute(int arg_count, const char **arg_values) {
       return std::abs(r);
     }
   } catch (po::required_option& e) {
-    std::cerr << "rbd: " << e.what() << std::endl << std::endl;
+    std::cerr << "rbd: " << e.what() << std::endl;
     return EXIT_FAILURE;
   } catch (po::too_many_positional_options_error& e) {
-    std::cerr << "rbd: too many positional arguments or unrecognized optional "
-              << "argument" << std::endl;
+    std::cerr << "rbd: too many arguments" << std::endl;
+    return EXIT_FAILURE;
   } catch (po::error& e) {
-    std::cerr << "rbd: " << e.what() << std::endl << std::endl;
+    std::cerr << "rbd: " << e.what() << std::endl;
     return EXIT_FAILURE;
   }
 
@@ -236,9 +234,10 @@ Shell::Action *Shell::find_action(const CommandSpec &command_spec,
 
 void Shell::get_global_options(po::options_description *opts) {
   opts->add_options()
-    ("conf,c", po::value<std::string>(), "path to cluster configuration")
+    ((at::CONFIG_PATH + ",c").c_str(), po::value<std::string>(), "path to cluster configuration")
     ("cluster", po::value<std::string>(), "cluster name")
-    ("id,i", po::value<std::string>(), "client id (without 'client.' prefix)")
+    ("id", po::value<std::string>(), "client id (without 'client.' prefix)")
+    ("user", po::value<std::string>(), "client id (without 'client.' prefix)")
     ("name,n", po::value<std::string>(), "client name")
     ("mon_host,m", po::value<std::string>(), "monitor host")
     ("secret", po::value<Secret>(), "path to secret key (deprecated)")
@@ -272,8 +271,8 @@ void Shell::prune_command_line_arguments(int arg_count, const char **arg_values,
   }
 }
 
-void Shell::print_help(const std::string &app_name) {
-  std::cout << "usage: " << app_name << " <command> ..."
+void Shell::print_help() {
+  std::cout << "usage: " << APP_NAME << " <command> ..."
             << std::endl << std::endl
             << "Command-line interface for managing Ceph RBD images."
             << std::endl << std::endl;
@@ -318,14 +317,14 @@ void Shell::print_help(const std::string &app_name) {
   po::options_description global_opts(OptionPrinter::OPTIONAL_ARGUMENTS);
   get_global_options(&global_opts);
   std::cout << std::endl << global_opts << std::endl
-            << "See '" << app_name << " help <command>' for help on a specific "
+            << "See '" << APP_NAME << " help <command>' for help on a specific "
             << "command." << std::endl;
 }
 
-void Shell::print_action_help(const std::string &app_name, Action *action) {
+void Shell::print_action_help(Action *action) {
 
   std::stringstream ss;
-  ss << "usage: " << app_name << " "
+  ss << "usage: " << APP_NAME << " "
      << format_command_spec(action->command_spec);
   std::cout << ss.str();
 
@@ -348,13 +347,12 @@ void Shell::print_action_help(const std::string &app_name, Action *action) {
   }
 }
 
-void Shell::print_unknown_action(const std::string &app_name,
-                                 const std::vector<std::string> &command_spec) {
+void Shell::print_unknown_action(const std::vector<std::string> &command_spec) {
   std::cerr << "error: unknown option '"
             << joinify<std::string>(command_spec.begin(),
                                     command_spec.end(), " ") << "'"
             << std::endl << std::endl;
-  print_help(app_name);
+  print_help();
 }
 
 void Shell::print_bash_completion(const CommandSpec &command_spec) {

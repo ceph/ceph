@@ -398,11 +398,12 @@ void CephContext::do_command(std::string command, cmdmap_t& cmdmap,
 }
 
 
-CephContext::CephContext(uint32_t module_type_)
+CephContext::CephContext(uint32_t module_type_, int init_flags_)
   : nref(1),
     _conf(new md_config_t()),
     _log(NULL),
     _module_type(module_type_),
+    _init_flags(init_flags_),
     _crypto_inited(false),
     _service_thread(NULL),
     _log_obs(NULL),
@@ -584,6 +585,11 @@ void CephContext::join_service_thread()
 uint32_t CephContext::get_module_type() const
 {
   return _module_type;
+}
+
+int CephContext::get_init_flags() const
+{
+  return _init_flags;
 }
 
 PerfCountersCollection *CephContext::get_perfcounters_collection()

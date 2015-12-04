@@ -12,11 +12,11 @@
 #include <boost/optional.hpp>
 
 #include "common/Cond.h"
+#include "common/event_socket.h"
 #include "common/Mutex.h"
 #include "common/Readahead.h"
 #include "common/RWLock.h"
 #include "common/snap_types.h"
-#include "common/WorkQueue.h"
 #include "include/atomic.h"
 #include "include/buffer.h"
 #include "include/rbd/librbd.hpp"
@@ -26,23 +26,31 @@
 #include "osdc/ObjectCacher.h"
 
 #include "cls/rbd/cls_rbd_client.h"
+#include "librbd/AsyncRequest.h"
 #include "librbd/LibrbdWriteback.h"
 #include "librbd/ObjectMap.h"
 #include "librbd/SnapInfo.h"
 #include "librbd/parent_types.h"
 
 class CephContext;
+class ContextWQ;
 class Finisher;
 class PerfCounters;
 
 namespace librbd {
 
+  struct ImageCtx;
+  class AioImageRequestWQ;
   class AsyncOperation;
-  template <typename ImageCtxT> class AsyncRequest;
-  class AsyncResizeRequest;
   class CopyupRequest;
   class LibrbdAdminSocketHook;
   class ImageWatcher;
+  class Journal;
+  class AioCompletion;
+
+  namespace operation {
+  template <typename> class ResizeRequest;
+  }
 
   struct ImageCtx {
     CephContext *cct;
@@ -68,6 +76,7 @@ namespace librbd {
     std::string snap_name;
     IoCtx data_ctx, md_ctx;
     ImageWatcher *image_watcher;
+    Journal *journal;
     int refresh_seq;    ///< sequence for refresh requests
     int last_refresh;   ///< last completed refresh
 
@@ -94,6 +103,7 @@ namespace librbd {
     RWLock object_map_lock; // protects object map updates and object_map itself
     Mutex async_ops_lock; // protects async_ops and async_requests
     Mutex copyup_list_lock; // protects copyup_waiting_list
+    Mutex completed_reqs_lock; // protects completed_reqs
 
     unsigned extra_read_flags;
 
@@ -130,10 +140,16 @@ namespace librbd {
 
     atomic_t async_request_seq;
 
-    xlist<AsyncResizeRequest*> async_resize_reqs;
+    xlist<operation::ResizeRequest<ImageCtx>*> resize_reqs;
 
-    ContextWQ *aio_work_queue;
+    AioImageRequestWQ *aio_work_queue;
+    xlist<AioCompletion*> completed_reqs;
+    EventSocket event_socket;
+
     ContextWQ *op_work_queue;
+
+    Cond refresh_cond;
+    bool refresh_in_progress;
 
     // Configuration
     static const string METADATA_CONF_PREFIX;
@@ -220,14 +236,14 @@ namespace librbd {
 			     size_t len, uint64_t off, Context *onfinish,
 			     int fadvise_flags);
     void write_to_cache(object_t o, const bufferlist& bl, size_t len,
-			uint64_t off, Context *onfinish, int fadvise_flags);
+			uint64_t off, Context *onfinish, int fadvise_flags,
+                        uint64_t journal_tid);
     void user_flushed();
-    void flush_cache_aio(Context *onfinish);
     int flush_cache();
+    void flush_cache(Context *onfinish);
     int shutdown_cache();
     int invalidate_cache(bool purge_on_error=false);
     void invalidate_cache(Context *on_finish);
-    void invalidate_cache_completion(int r, Context *on_finish);
     void clear_nonexistence_cache();
     int register_watch();
     void unregister_watch();
@@ -237,8 +253,15 @@ namespace librbd {
     void flush_async_operations();
     void flush_async_operations(Context *on_finish);
 
+    int flush();
+    void flush(Context *on_safe);
+
     void cancel_async_requests();
     void apply_metadata_confs();
+
+    void open_journal();
+    int close_journal(bool force);
+    void clear_pending_completions();
   };
 }
 

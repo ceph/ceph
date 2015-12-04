@@ -203,7 +203,7 @@ bufferlist KineticStore::to_bufferlist(const kinetic::KineticRecord &record)
   return bl;
 }
 
-int KineticStore::split_key(string in_prefix, string *prefix, string *key)
+int KineticStore::split_key(string &in, string *prefix, string *key)
 {
   size_t prefix_len = 0;
   char* in_data = in.c_str();
@@ -213,14 +213,14 @@ int KineticStore::split_key(string in_prefix, string *prefix, string *key)
   if (separator == NULL)
      return -EINVAL;
   prefix_len = size_t(separator - in_data);
-  if (prefix_len >= in_prefix.size())
+  if (prefix_len >= in.size())
     return -EINVAL;
 
   // Fetch prefix and/or key directly from Slice
   if (prefix)
     *prefix = string(in_data, prefix_len);
   if (key)
-    *key = string(separator+1, in_prefix.size()-prefix_len-1);
+    *key = string(separator+1, in.size()-prefix_len-1);
   return 0;
 }
 

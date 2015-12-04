@@ -48,6 +48,8 @@ static simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZER;
 #endif
 
   static atomic_t buffer_total_alloc;
+  static atomic64_t buffer_history_alloc_bytes;
+  static atomic64_t buffer_history_alloc_num;
   const bool buffer_track_alloc = get_env_bool("CEPH_BUFFER_TRACK");
 
   void buffer::inc_total_alloc(unsigned len) {
@@ -58,8 +60,20 @@ static simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZER;
     if (buffer_track_alloc)
       buffer_total_alloc.sub(len);
   }
+  void buffer::inc_history_alloc(uint64_t len) {
+    if (buffer_track_alloc) {
+      buffer_history_alloc_bytes.add(len);
+      buffer_history_alloc_num.inc();
+    }
+  }
   int buffer::get_total_alloc() {
     return buffer_total_alloc.read();
+  }
+  uint64_t buffer::get_history_alloc_bytes() {
+    return buffer_history_alloc_bytes.read();
+  }
+  uint64_t buffer::get_history_alloc_num() {
+    return buffer_history_alloc_num.read();
   }
 
   static atomic_t buffer_cached_crc;
@@ -227,6 +241,7 @@ static simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZER;
 	data = 0;
       }
       inc_total_alloc(len);
+      inc_history_alloc(len);
       bdout << "raw_malloc " << this << " alloc " << (void *)data << " " << l << " " << buffer::get_total_alloc() << bendl;
     }
     raw_malloc(unsigned l, char *b) : raw(b, l) {
@@ -251,6 +266,7 @@ static simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZER;
       if (!data)
 	throw bad_alloc();
       inc_total_alloc(len);
+      inc_history_alloc(len);
       bdout << "raw_mmap " << this << " alloc " << (void *)data << " " << l << " " << buffer::get_total_alloc() << bendl;
     }
     ~raw_mmap_pages() {
@@ -280,6 +296,7 @@ static simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZER;
       if (!data)
 	throw bad_alloc();
       inc_total_alloc(len);
+      inc_history_alloc(len);
       bdout << "raw_posix_aligned " << this << " alloc " << (void *)data << " l=" << l << ", align=" << align << " total_alloc=" << buffer::get_total_alloc() << bendl;
     }
     ~raw_posix_aligned() {
@@ -307,6 +324,7 @@ static simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZER;
       else
 	data = realdata;
       inc_total_alloc(len+align-1);
+      inc_history_alloc(len+align-1);
       //cout << "hack aligned " << (unsigned)data
       //<< " in raw " << (unsigned)realdata
       //<< " off " << off << std::endl;
@@ -356,6 +374,7 @@ static simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZER;
       }
 
       inc_total_alloc(len);
+      inc_history_alloc(len);
       bdout << "raw_pipe " << this << " alloc " << len << " "
 	    << buffer::get_total_alloc() << bendl;
     }
@@ -510,6 +529,7 @@ static simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZER;
       else
 	data = 0;
       inc_total_alloc(len);
+      inc_history_alloc(len);
       bdout << "raw_char " << this << " alloc " << (void *)data << " " << l << " " << buffer::get_total_alloc() << bendl;
     }
     raw_char(unsigned l, char *b) : raw(b, l) {

@@ -1732,8 +1732,8 @@ void ReplicatedPG::do_op(OpRequestRef& op)
     // CEPH_OSD_FLAG_LOCALIZE_READS set, we just return -EAGAIN. Otherwise,
     // we have to wait for the object.
     if (is_primary() ||
-	(!(m->has_flag(CEPH_OSD_FLAG_BALANCE_READS) &&
-	 !(m->has_flag(CEPH_OSD_FLAG_LOCALIZE_READS))))) {
+	(!(m->has_flag(CEPH_OSD_FLAG_BALANCE_READS)) &&
+	 !(m->has_flag(CEPH_OSD_FLAG_LOCALIZE_READS)))) {
       // missing the specific snap we need; requeue and wait.
       assert(!op->may_write()); // only happens on a read/cache
       wait_for_unreadable_object(missing_oid, op);
@@ -2015,6 +2015,16 @@ void ReplicatedPG::do_op(OpRequestRef& op)
   ctx->src_obc.swap(src_obc);
 
   execute_ctx(ctx);
+  utime_t prepare_latency = ceph_clock_now(cct);
+  prepare_latency -= op->get_dequeued_time();
+  osd->logger->tinc(l_osd_op_prepare_lat, prepare_latency);
+  if (op->may_read() && op->may_write()) {
+    osd->logger->tinc(l_osd_op_rw_prepare_lat, prepare_latency);
+  } else if (op->may_read()) {
+    osd->logger->tinc(l_osd_op_r_prepare_lat, prepare_latency);
+  } else if (op->may_write() || op->may_cache()) {
+    osd->logger->tinc(l_osd_op_w_prepare_lat, prepare_latency);
+  }
 }
 
 ReplicatedPG::cache_result_t ReplicatedPG::maybe_handle_cache_detail(
@@ -4940,9 +4950,13 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	    // category is no longer implemented.
 	  }
           if (result >= 0) {
+	    bool is_whiteout = obs.exists && oi.is_whiteout();
 	    if (maybe_create_new_object(ctx)) {
-              ctx->mod_desc.create();
+	      ctx->mod_desc.create();
 	      t->touch(soid);
+	    } else if (is_whiteout) {
+	      // to change whiteout to non-whiteout, it need an op to update xattr
+	      t->nop();
 	    }
           }
 	}
@@ -5277,7 +5291,7 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	newop.op.op = CEPH_OSD_OP_SYNC_READ;
 	newop.op.extent.offset = 0;
 	newop.op.extent.length = 0;
-	result = do_osd_ops(ctx, nops);
+	do_osd_ops(ctx, nops);
 	osd_op.outdata.claim(newop.outdata);
       }
       break;
@@ -5444,9 +5458,7 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
       }
       ++ctx->num_read;
       {
-	result = osd->store->omap_get_header(coll, ghobject_t(soid), &osd_op.outdata);
-	if (result < 0)
-	  break;
+	osd->store->omap_get_header(coll, ghobject_t(soid), &osd_op.outdata);
 	ctx->delta_stats.num_rd_kb += SHIFT_ROUND_UP(osd_op.outdata.length(), 10);
 	ctx->delta_stats.num_rd++;
       }
@@ -5467,9 +5479,7 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	tracepoint(osd, do_osd_op_pre_omapgetvalsbykeys, soid.oid.name.c_str(), soid.snap.val, list_entries(keys_to_get).c_str());
 	map<string, bufferlist> out;
 	if (pool.info.supports_omap()) {
-	  result = osd->store->omap_get_values(coll, ghobject_t(soid), keys_to_get, &out);
-	  if (result < 0)
-	    break;
+	  osd->store->omap_get_values(coll, ghobject_t(soid), keys_to_get, &out);
 	} // else return empty omap entries
 	::encode(out, osd_op.outdata);
 	ctx->delta_stats.num_rd_kb += SHIFT_ROUND_UP(osd_op.outdata.length(), 10);
@@ -5504,10 +5514,12 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	       i != assertions.end();
 	       ++i)
 	    to_get.insert(i->first);
-	  result = osd->store->omap_get_values(coll, ghobject_t(soid),
+	  int r = osd->store->omap_get_values(coll, ghobject_t(soid),
 					      to_get, &out);
-	  if (result < 0)
+	  if (r < 0) {
+	    result = r;
 	    break;
+	  }
 	} // else leave out empty
 
 	//Should set num_rd_kb based on encode length of map
@@ -11524,7 +11536,6 @@ bool ReplicatedPG::agent_work(int start_max, int agent_flush_quota)
   if (++agent_state->hist_age > g_conf->osd_agent_hist_halflife) {
     dout(20) << __func__ << " resetting atime and temp histograms" << dendl;
     agent_state->hist_age = 0;
-    agent_state->atime_hist.decay();
     agent_state->temp_hist.decay();
   }
 
@@ -11731,42 +11742,15 @@ bool ReplicatedPG::agent_maybe_evict(ObjectContextRef& obc)
 
   if (agent_state->evict_mode != TierAgentState::EVICT_MODE_FULL) {
     // is this object old and/or cold enough?
-    int atime = -1, temp = 0;
+    int temp = 0;
+    uint64_t temp_upper = 0, temp_lower = 0;
     if (hit_set)
-      agent_estimate_atime_temp(soid, &atime, NULL /*FIXME &temp*/);
-
-    uint64_t atime_upper = 0, atime_lower = 0;
-    if (atime < 0 && obc->obs.oi.mtime != utime_t()) {
-      if (obc->obs.oi.local_mtime != utime_t()) {
-        atime = ceph_clock_now(NULL).sec() - obc->obs.oi.local_mtime;
-      } else {
-        atime = ceph_clock_now(NULL).sec() - obc->obs.oi.mtime;
-      }
-    }
-    if (atime < 0) {
-      if (hit_set) {
-        atime = pool.info.hit_set_period * pool.info.hit_set_count; // "infinite"
-      } else {
-	atime_upper = 1000000;
-      }
-    }
-    if (atime >= 0) {
-      agent_state->atime_hist.add(atime);
-      agent_state->atime_hist.get_position_micro(atime, &atime_lower,
-						 &atime_upper);
-    }
-
-    unsigned temp_upper = 0, temp_lower = 0;
-    /*
-    // FIXME: bound atime based on creation time?
-    agent_state->temp_hist.add(atime);
+      agent_estimate_temp(soid, &temp);
+    agent_state->temp_hist.add(temp);
     agent_state->temp_hist.get_position_micro(temp, &temp_lower, &temp_upper);
-    */
 
     dout(20) << __func__
-	     << " atime " << atime
-	     << " pos " << atime_lower << "-" << atime_upper
-	     << ", temp " << temp
+	     << " temp " << temp
 	     << " pos " << temp_lower << "-" << temp_upper
 	     << ", evict_effort " << agent_state->evict_effort
 	     << dendl;
@@ -11779,9 +11763,7 @@ bool ReplicatedPG::agent_maybe_evict(ObjectContextRef& obc)
     delete f;
     *_dout << dendl;
 
-    // FIXME: ignore temperature for now.
-
-    if (1000000 - atime_upper >= agent_state->evict_effort)
+    if (1000000 - temp_upper >= agent_state->evict_effort)
       return false;
   }
 
@@ -12065,32 +12047,21 @@ bool ReplicatedPG::agent_choose_mode(bool restart, OpRequestRef op)
   return requeued;
 }
 
-void ReplicatedPG::agent_estimate_atime_temp(const hobject_t& oid,
-					     int *atime, int *temp)
+void ReplicatedPG::agent_estimate_temp(const hobject_t& oid, int *temp)
 {
   assert(hit_set);
-  *atime = -1;
-  if (temp)
-    *temp = 0;
-  if (hit_set->contains(oid)) {
-    *atime = 0;
-    if (temp)
-      ++(*temp);
-    else
-      return;
-  }
-  time_t now = ceph_clock_now(NULL).sec();
+  assert(temp);
+  *temp = 0;
+  if (hit_set->contains(oid))
+    *temp = 1000000;
+  unsigned i = 0;
+  int last_n = pool.info.hit_set_search_last_n;
   for (map<time_t,HitSetRef>::reverse_iterator p =
-	 agent_state->hit_set_map.rbegin();
-       p != agent_state->hit_set_map.rend();
-       ++p) {
+       agent_state->hit_set_map.rbegin(); last_n > 0 &&
+       p != agent_state->hit_set_map.rend(); ++p, ++i) {
     if (p->second->contains(oid)) {
-      if (*atime < 0)
-	*atime = now - p->first;
-      if (temp)
-	++(*temp);
-      else
-	return;
+      *temp += pool.info.get_grade(i);
+      --last_n;
     }
   }
 }
@@ -12231,7 +12202,7 @@ void ReplicatedPG::_scrub(
   boost::optional<hobject_t> head;
   boost::optional<SnapSet> snapset; // If initialized so will head (above)
   vector<snapid_t>::reverse_iterator curclone; // Defined only if snapset initialized
-  bool missing = false;
+  unsigned missing = 0;
 
   bufferlist last_data;
 
@@ -12361,7 +12332,7 @@ void ReplicatedPG::_scrub(
 
       // Set this as a new head object
       head = soid;
-      missing = false;
+      missing = 0;
 
       dout(20) << __func__ << " " << mode << " new head " << head << dendl;
 

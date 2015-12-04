@@ -17,7 +17,7 @@
 # MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 # GNU Library Public License for more details.
 #
-TIMEOUT=120
+TIMEOUT=300
 PG_NUM=4
 
 if type xmlstarlet > /dev/null 2>&1; then
@@ -422,6 +422,7 @@ function test_run_osd() {
     run_osd $dir 0 || return 1
     local backfills=$(CEPH_ARGS='' ceph --format=json daemon $dir//ceph-osd.0.asok \
         config get osd_max_backfills)
+    echo "$backfills" | grep --quiet 'osd_max_backfills' || return 1
 
     run_osd $dir 1 --osd-max-backfills 20 || return 1
     local backfills=$(CEPH_ARGS='' ceph --format=json daemon $dir//ceph-osd.1.asok \
@@ -523,6 +524,7 @@ function test_activate_osd() {
     run_osd $dir 0 || return 1
     local backfills=$(CEPH_ARGS='' ceph --format=json daemon $dir//ceph-osd.0.asok \
         config get osd_max_backfills)
+    echo "$backfills" | grep --quiet 'osd_max_backfills' || return 1
 
     kill_daemons $dir TERM osd || return 1
 
@@ -669,6 +671,8 @@ function test_get_config() {
     test $(get_config osd 0 osd_max_scrubs) = 3 || return 1
     teardown $dir || return 1
 }
+
+#######################################################################
 
 ##
 # Set the **config** to specified **value**, via the config set command
@@ -1015,9 +1019,7 @@ function test_wait_for_clean() {
 ##
 # Run repair on **pgid** and wait until it completes. The repair
 # function will fail if repair does not complete within $TIMEOUT
-# seconds. The repair is complete whenever the
-# **get_last_scrub_stamp** function reports a timestamp different from
-# the one stored before starting the repair.
+# seconds.
 #
 # @param pgid the id of the PG
 # @return 0 on success, 1 on error
@@ -1025,15 +1027,8 @@ function test_wait_for_clean() {
 function repair() {
     local pgid=$1
     local last_scrub=$(get_last_scrub_stamp $pgid)
-
     ceph pg repair $pgid
-    for ((i=0; i < $TIMEOUT; i++)); do
-        if test "$last_scrub" != "$(get_last_scrub_stamp $pgid)" ; then
-            return 0
-        fi
-        sleep 1
-    done
-    return 1
+    wait_for_scrub $pgid "$last_scrub"
 }
 
 function test_repair() {
@@ -1046,6 +1041,37 @@ function test_repair() {
     repair 1.0 || return 1
     kill_daemons $dir KILL osd || return 1
     ! TIMEOUT=1 repair 1.0 || return 1
+    teardown $dir || return 1
+}
+#######################################################################
+
+##
+# Run scrub on **pgid** and wait until it completes. The pg_scrub
+# function will fail if repair does not complete within $TIMEOUT
+# seconds. The pg_scrub is complete whenever the
+# **get_last_scrub_stamp** function reports a timestamp different from
+# the one stored before starting the scrub.
+#
+# @param pgid the id of the PG
+# @return 0 on success, 1 on error
+#
+function pg_scrub() {
+    local pgid=$1
+    local last_scrub=$(get_last_scrub_stamp $pgid)
+    ceph pg scrub $pgid
+    wait_for_scrub $pgid "$last_scrub"
+}
+
+function test_pg_scrub() {
+    local dir=$1
+
+    setup $dir || return 1
+    run_mon $dir a --osd_pool_default_size=1 || return 1
+    run_osd $dir 0 || return 1
+    wait_for_clean || return 1
+    pg_scrub 1.0 || return 1
+    kill_daemons $dir KILL osd || return 1
+    ! TIMEOUT=1 pg_scrub 1.0 || return 1
     teardown $dir || return 1
 }
 
@@ -1097,6 +1123,48 @@ function test_expect_failure() {
     # the command failed but the output does not contain the expected string
     ! expect_failure $dir FAIL bash -c 'echo UNEXPECTED ; exit 1' > $dir/out || return 1
     ! grep --quiet FAIL $dir/out || return 1
+    teardown $dir || return 1
+}
+
+#######################################################################
+
+##
+# Given the *last_scrub*, wait for scrub to happen on **pgid**.  It
+# will fail if scrub does not complete within $TIMEOUT seconds. The
+# repair is complete whenever the **get_last_scrub_stamp** function
+# reports a timestamp different from the one given in argument.
+#
+# @param pgid the id of the PG
+# @param last_scrub timestamp of the last scrub for *pgid*
+# @return 0 on success, 1 on error
+#
+function wait_for_scrub() {
+    local pgid=$1
+    local last_scrub="$2"
+
+    for ((i=0; i < $TIMEOUT; i++)); do
+        if test "$last_scrub" != "$(get_last_scrub_stamp $pgid)" ; then
+            return 0
+        fi
+        sleep 1
+    done
+    return 1
+}
+
+function test_wait_for_scrub() {
+    local dir=$1
+
+    setup $dir || return 1
+    run_mon $dir a --osd_pool_default_size=1 || return 1
+    run_osd $dir 0 || return 1
+    wait_for_clean || return 1
+    local pgid=1.0
+    ceph pg repair $pgid
+    local last_scrub=$(get_last_scrub_stamp $pgid)
+    wait_for_scrub $pgid "$last_scrub" || return 1
+    kill_daemons $dir KILL osd || return 1
+    last_scrub=$(get_last_scrub_stamp $pgid)
+    ! TIMEOUT=1 wait_for_scrub $pgid "$last_scrub" || return 1
     teardown $dir || return 1
 }
 

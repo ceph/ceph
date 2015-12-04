@@ -564,7 +564,6 @@ NewStore::NewStore(CephContext *cct, const string& path)
     cct(cct),
     db(NULL),
     fs(NULL),
-    db_path(cct->_conf->newstore_db_path),
     path_fd(-1),
     fsid_fd(-1),
     frag_fd(-1),
@@ -803,7 +802,7 @@ bool NewStore::test_mount_in_use()
   return ret;
 }
 
-int NewStore::_open_db()
+int NewStore::_open_db(bool create)
 {
   assert(!db);
   char fn[PATH_MAX];
@@ -817,17 +816,24 @@ int NewStore::_open_db()
     db = NULL;
     return -EIO;
   }
-  db->init(g_conf->newstore_backend_options);
+  string options;
+  if (g_conf->newstore_backend == "rocksdb")
+    options = g_conf->newstore_rocksdb_options;
+  db->init(options);
   stringstream err;
-  if (db->create_and_open(err)) {
+  int r;
+  if (create)
+    r = db->create_and_open(err);
+  else
+    r = db->open(err);
+  if (r) {
     derr << __func__ << " erroring opening db: " << err.str() << dendl;
     delete db;
     db = NULL;
     return -EIO;
   }
   dout(1) << __func__ << " opened " << g_conf->newstore_backend
-	  << " path " << path
-	  << " options " << g_conf->newstore_backend_options << dendl;
+	  << " path " << path << " options " << options << dendl;
   return 0;
 }
 
@@ -927,12 +933,7 @@ int NewStore::mkfs()
   if (r < 0)
     goto out_close_fsid;
 
-  if (db_path != "") {
-    r = symlinkat(db_path.c_str(), path_fd, "db");
-    if (r < 0)
-      goto out_close_frag;
-  }
-  r = _open_db();
+  r = _open_db(true);
   if (r < 0)
     goto out_close_frag;
 
@@ -976,7 +977,7 @@ int NewStore::mount()
 
   // FIXME: superblock, features
 
-  r = _open_db();
+  r = _open_db(false);
   if (r < 0)
     goto out_frag;
 

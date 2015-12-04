@@ -5,53 +5,69 @@
   
   Positional arguments:
     <command>
-      bench-write           Simple write benchmark.
-      children              Display children of snapshot.
-      clone                 Clone a snapshot into a COW child image.
-      copy (cp)             Copy src image to dest.
-      create                Create an empty image.
-      diff                  Print extents that differ since a previous snap, or
-                            image creation.
-      disk-usage (du)       Show disk usage stats for pool, image or snapshot
-      export                Export image to file.
-      export-diff           Export incremental diff to file.
-      feature disable       Disable the specified image feature.
-      feature enable        Enable the specified image feature.
-      flatten               Fill clone with parent data (make it independent).
-      image-meta get        Image metadata get the value associated with the key.
-      image-meta list       Image metadata list keys with values.
-      image-meta remove     Image metadata remove the key and value associated.
-      image-meta set        Image metadata set key with value.
-      import                Import image from file.
-      import-diff           Import an incremental diff.
-      info                  Show information about image size, striping, etc.
-      list (ls)             List rbd images.
-      lock add              Take a lock on an image.
-      lock list             Show locks held on an image.
-      lock remove (lock rm) Release a lock on an image.
-      map                   Map image to a block device using the kernel.
-      merge-diff            Merge two diff exports together.
-      object-map rebuild    Rebuild an invalid object map.
-      remove (rm)           Delete an image.
-      rename (mv)           Rename image within pool.
-      resize                Resize (expand or shrink) image.
-      showmapped            Show the rbd images mapped by the kernel.
-      snap create           Create a snapshot.
-      snap ls               Dump list of image snapshots.
-      snap protect          Prevent a snapshot from being deleted.
-      snap purge            Deletes all snapshots.
-      snap remove (snap rm) Deletes a snapshot.
-      snap rename           Rename a snapshot.
-      snap rollback         Rollback image to snapshot.
-      snap unprotect        Allow a snapshot to be deleted.
-      status                Show the status of this image.
-      unmap                 Unmap a rbd device that was used by the kernel.
-      watch                 Watch events on image.
+      bench-write                 Simple write benchmark.
+      children                    Display children of snapshot.
+      clone                       Clone a snapshot into a COW child image.
+      copy (cp)                   Copy src image to dest.
+      create                      Create an empty image.
+      diff                        Print extents that differ since a previous
+                                  snap, or image creation.
+      disk-usage (du)             Show disk usage stats for pool, image or
+                                  snapshot
+      export                      Export image to file.
+      export-diff                 Export incremental diff to file.
+      feature disable             Disable the specified image feature.
+      feature enable              Enable the specified image feature.
+      flatten                     Fill clone with parent data (make it
+                                  independent).
+      image-meta get              Image metadata get the value associated with
+                                  the key.
+      image-meta list             Image metadata list keys with values.
+      image-meta remove           Image metadata remove the key and value
+                                  associated.
+      image-meta set              Image metadata set key with value.
+      import                      Import image from file.
+      import-diff                 Import an incremental diff.
+      info                        Show information about image size, striping,
+                                  etc.
+      list (ls)                   List rbd images.
+      lock add                    Take a lock on an image.
+      lock list (lock ls)         Show locks held on an image.
+      lock remove (lock rm)       Release a lock on an image.
+      map                         Map image to a block device using the kernel.
+      merge-diff                  Merge two diff exports together.
+      mirror pool disable         Disable RBD mirroring by default within a pool.
+      mirror pool enable          Enable RBD mirroring by default within a pool.
+      mirror pool info            Show information about the pool mirroring
+                                  configuration.
+      mirror pool peer add        Add a mirroring peer to a pool.
+      mirror pool peer remove     Remove a mirroring peer from a pool.
+      mirror pool peer set        Update mirroring peer settings.
+      nbd list (nbd ls)           List the nbd devices already used.
+      nbd map                     Map image to a nbd device.
+      nbd unmap                   Unmap a nbd device.
+      object-map rebuild          Rebuild an invalid object map.
+      remove (rm)                 Delete an image.
+      rename (mv)                 Rename image within pool.
+      resize                      Resize (expand or shrink) image.
+      showmapped                  Show the rbd images mapped by the kernel.
+      snap create (snap add)      Create a snapshot.
+      snap list (snap ls)         Dump list of image snapshots.
+      snap protect                Prevent a snapshot from being deleted.
+      snap purge                  Deletes all snapshots.
+      snap remove (snap rm)       Deletes a snapshot.
+      snap rename                 Rename a snapshot.
+      snap rollback (snap revert) Rollback image to snapshot.
+      snap unprotect              Allow a snapshot to be deleted.
+      status                      Show the status of this image.
+      unmap                       Unmap a rbd device that was used by the kernel.
+      watch                       Watch events on image.
   
   Optional arguments:
     -c [ --conf ] arg     path to cluster configuration
     --cluster arg         cluster name
-    -i [ --id ] arg       client id (without 'client.' prefix)
+    --id arg              client id (without 'client.' prefix)
+    --user arg            client id (without 'client.' prefix)
     -n [ --name ] arg     client name
     -m [ --mon_host ] arg monitor host
     --secret arg          path to secret key (deprecated)
@@ -59,7 +75,7 @@
     -k [ --keyring ] arg  path to keyring
   
   See 'rbd help <command>' for help on a specific command.
-  $ while read -r line; do echo rbd help $line ; rbd help $line; done <<< "$(rbd help | grep '^    [a-z]' | sed 's/^    \([a-z -]*[a-z]\).*/\1/g')"
+  $ rbd help | grep '^    [a-z]' | sed 's/^    \([a-z -]*[a-z]\).*/\1/g' | while read -r line; do echo rbd help $line ; rbd help $line; done
   rbd help bench-write
   usage: rbd bench-write [--pool <pool>] [--image <image>] [--io-size <io-size>] 
                          [--io-threads <io-threads>] [--io-total <io-total>] 
@@ -122,7 +138,7 @@
     --order arg          object order [12 <= order <= 25]
     --image-feature arg  image features
                          [layering(+), striping(+), exclusive-lock(*),
-                         object-map(*), fast-diff(*), deep-flatten]
+                         object-map(*), fast-diff(*), deep-flatten, journaling(*)]
     --image-shared       shared image
     --stripe-unit arg    stripe unit
     --stripe-count arg   stripe count
@@ -176,7 +192,7 @@
     --order arg          object order [12 <= order <= 25]
     --image-feature arg  image features
                          [layering(+), striping(+), exclusive-lock(*),
-                         object-map(*), fast-diff(*), deep-flatten]
+                         object-map(*), fast-diff(*), deep-flatten, journaling(*)]
     --image-shared       shared image
     --stripe-unit arg    stripe unit
     --stripe-count arg   stripe count
@@ -279,7 +295,7 @@
                          (example: [<pool-name>/]<image-name>)
     <features>           image features
                          [layering, striping, exclusive-lock, object-map,
-                         fast-diff, deep-flatten]
+                         fast-diff, deep-flatten, journaling]
   
   Optional arguments
     -p [ --pool ] arg    pool name
@@ -296,7 +312,7 @@
                          (example: [<pool-name>/]<image-name>)
     <features>           image features
                          [layering, striping, exclusive-lock, object-map,
-                         fast-diff, deep-flatten]
+                         fast-diff, deep-flatten, journaling]
   
   Optional arguments
     -p [ --pool ] arg    pool name
@@ -406,7 +422,7 @@
     --order arg          object order [12 <= order <= 25]
     --image-feature arg  image features
                          [layering(+), striping(+), exclusive-lock(*),
-                         object-map(*), fast-diff(*), deep-flatten]
+                         object-map(*), fast-diff(*), deep-flatten, journaling(*)]
     --image-shared       shared image
     --stripe-unit arg    stripe unit
     --stripe-count arg   stripe count
@@ -551,6 +567,125 @@
     --path arg           path to merged diff (or '-' for stdout)
     --no-progress        disable progress output
   
+  rbd help mirror pool disable
+  usage: rbd mirror pool disable [--pool <pool>] 
+                                 <pool-name> 
+  
+  Disable RBD mirroring by default within a pool.
+  
+  Positional arguments
+    <pool-name>          pool name
+  
+  Optional arguments
+    -p [ --pool ] arg    pool name
+  
+  rbd help mirror pool enable
+  usage: rbd mirror pool enable [--pool <pool>] 
+                                <pool-name> 
+  
+  Enable RBD mirroring by default within a pool.
+  
+  Positional arguments
+    <pool-name>          pool name
+  
+  Optional arguments
+    -p [ --pool ] arg    pool name
+  
+  rbd help mirror pool info
+  usage: rbd mirror pool info [--pool <pool>] [--format <format>] 
+                              [--pretty-format] 
+                              <pool-name> 
+  
+  Show information about the pool mirroring configuration.
+  
+  Positional arguments
+    <pool-name>          pool name
+  
+  Optional arguments
+    -p [ --pool ] arg    pool name
+    --format arg         output format [plain, json, or xml]
+    --pretty-format      pretty formatting (json and xml)
+  
+  rbd help mirror pool peer add
+  usage: rbd mirror pool peer add [--pool <pool>] 
+                                  [--remote-client-name <remote-client-name>] 
+                                  [--remote-cluster <remote-cluster>] 
+                                  [--remote-cluster-uuid <remote-cluster-uuid>] 
+                                  <pool-name> <remote-cluster-spec> 
+  
+  Add a mirroring peer to a pool.
+  
+  Positional arguments
+    <pool-name>               pool name
+    <remote-cluster-spec>     remote cluster spec
+                              (example: [<client name>@]<cluster name>
+  
+  Optional arguments
+    -p [ --pool ] arg         pool name
+    --remote-client-name arg  remote client name
+    --remote-cluster arg      remote cluster name
+    --remote-cluster-uuid arg remote cluster uuid
+  
+  rbd help mirror pool peer remove
+  usage: rbd mirror pool peer remove [--pool <pool>] 
+                                     <pool-name> <cluster-uuid> 
+  
+  Remove a mirroring peer from a pool.
+  
+  Positional arguments
+    <pool-name>          pool name
+    <cluster-uuid>       cluster UUID
+  
+  Optional arguments
+    -p [ --pool ] arg    pool name
+  
+  rbd help mirror pool peer set
+  usage: rbd mirror pool peer set [--pool <pool>] 
+                                  <pool-name> <cluster-uuid> <key> <value> 
+  
+  Update mirroring peer settings.
+  
+  Positional arguments
+    <pool-name>          pool name
+    <cluster-uuid>       cluster UUID
+    <key>                peer parameter [client or cluster]
+    <value>              new client or cluster name
+  
+  Optional arguments
+    -p [ --pool ] arg    pool name
+  
+  rbd help nbd list
+  usage: rbd nbd list 
+  
+  List the nbd devices already used.
+  
+  rbd help nbd map
+  usage: rbd nbd map [--pool <pool>] [--image <image>] [--snap <snap>] 
+                     [--read-only] [--device <device>] 
+                     <image-or-snap-spec> 
+  
+  Map image to a nbd device.
+  
+  Positional arguments
+    <image-or-snap-spec>  image or snapshot specification
+                          (example: [<pool-name>/]<image-name>[@<snap-name>])
+  
+  Optional arguments
+    -p [ --pool ] arg     pool name
+    --image arg           image name
+    --snap arg            snapshot name
+    --read-only           mount read-only
+    --device arg          specify nbd device
+  
+  rbd help nbd unmap
+  usage: rbd nbd unmap 
+                       <device-spec> 
+  
+  Unmap a nbd device.
+  
+  Positional arguments
+    <device-spec>        specify nbd device
+  
   rbd help object-map rebuild
   usage: rbd object-map rebuild [--pool <pool>] [--image <image>] 
                                 [--snap <snap>] [--no-progress] 
@@ -644,10 +779,10 @@
     --image arg          image name
     --snap arg           snapshot name
   
-  rbd help snap ls
-  usage: rbd snap ls [--pool <pool>] [--image <image>] [--format <format>] 
-                     [--pretty-format] 
-                     <image-spec> 
+  rbd help snap list
+  usage: rbd snap list [--pool <pool>] [--image <image>] [--format <format>] 
+                       [--pretty-format] 
+                       <image-spec> 
   
   Dump list of image snapshots.
   

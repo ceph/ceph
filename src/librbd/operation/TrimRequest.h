@@ -1,7 +1,7 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
-#ifndef CEPH_LIBRBD_ASYNC_TRIM_REQUEST_H
-#define CEPH_LIBRBD_ASYNC_TRIM_REQUEST_H
+#ifndef CEPH_LIBRBD_OPERATION_TRIM_REQUEST_H
+#define CEPH_LIBRBD_OPERATION_TRIM_REQUEST_H
 
 #include "librbd/AsyncRequest.h"
 
@@ -11,12 +11,15 @@ namespace librbd
 class ImageCtx;
 class ProgressContext;
 
-class AsyncTrimRequest : public AsyncRequest<>
+namespace operation {
+
+template <typename ImageCtxT = ImageCtx>
+class TrimRequest : public AsyncRequest<ImageCtxT>
 {
 public:
-  AsyncTrimRequest(ImageCtx &image_ctx, Context *on_finish,
-		   uint64_t original_size, uint64_t new_size,
-		   ProgressContext &prog_ctx);
+  TrimRequest(ImageCtxT &image_ctx, Context *on_finish,
+	      uint64_t original_size, uint64_t new_size,
+	      ProgressContext &prog_ctx);
 
   virtual void send();
 
@@ -82,9 +85,12 @@ private:
   void send_pre_remove();
   void send_post_remove();
   void send_clean_boundary();
-  void finish(int r);
+  void send_finish(int r);
 };
 
+} // namespace operation
 } // namespace librbd
 
-#endif // CEPH_LIBRBD_ASYNC_TRIM_REQUEST_H
+extern template class librbd::operation::TrimRequest<librbd::ImageCtx>;
+
+#endif // CEPH_LIBRBD_OPERATION_TRIM_REQUEST_H

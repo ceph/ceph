@@ -23,7 +23,7 @@
 using namespace std;
 
 // define as static when RGWBucket implementation compete
-extern void rgw_get_buckets_obj(const string& user_id, string& buckets_obj_id);
+extern void rgw_get_buckets_obj(const rgw_user& user_id, string& buckets_obj_id);
 
 extern int rgw_bucket_store_info(RGWRados *store, const string& bucket_name, bufferlist& bl, bool exclusive,
                                  map<string, bufferlist> *pattrs, RGWObjVersionTracker *objv_tracker,
@@ -36,10 +36,21 @@ extern int rgw_bucket_parse_bucket_instance(const string& bucket_instance, strin
 
 extern int rgw_bucket_instance_remove_entry(RGWRados *store, string& entry, RGWObjVersionTracker *objv_tracker);
 
-extern int rgw_bucket_delete_bucket_obj(RGWRados *store, string& bucket_name, RGWObjVersionTracker& objv_tracker);
+extern int rgw_bucket_delete_bucket_obj(RGWRados *store,
+                                        const string& tenant_name,
+                                        const string& bucket_name,
+                                        RGWObjVersionTracker& objv_tracker);
 
-extern int rgw_bucket_sync_user_stats(RGWRados *store, const string& user_id, rgw_bucket& bucket);
-extern int rgw_bucket_sync_user_stats(RGWRados *store, const string& bucket_name);
+extern int rgw_bucket_sync_user_stats(RGWRados *store, const rgw_user& user_id, rgw_bucket& bucket);
+extern int rgw_bucket_sync_user_stats(RGWRados *store, const string& tenant_name, const string& bucket_name);
+
+extern void rgw_make_bucket_entry_name(const string& tenant_name,
+                                       const string& bucket_name,
+                                       string& bucket_entry);
+extern string rgw_make_bucket_entry_name(const string& tenant_name,
+                                       const string& bucket_name);
+extern void rgw_parse_url_bucket(const string &bucket,
+                                 string &tenant_name, string &bucket_name);
 
 /**
  * Store a list of the user's buckets, with associated functinos.
@@ -105,28 +116,29 @@ extern void rgw_bucket_init(RGWMetadataManager *mm);
  * Returns: 0 on success, -ERR# on failure.
  */
 extern int rgw_read_user_buckets(RGWRados *store,
-                                 string user_id,
+                                 const rgw_user& user_id,
                                  RGWUserBuckets& buckets,
                                  const string& marker,
                                  uint64_t max,
                                  bool need_stats,
                                  uint64_t default_amount = 1000);
 
-extern int rgw_link_bucket(RGWRados *store, string user_id, rgw_bucket& bucket, time_t creation_time, bool update_entrypoint = true);
-extern int rgw_unlink_bucket(RGWRados *store, string user_id, const string& bucket_name, bool update_entrypoint = true);
+extern int rgw_link_bucket(RGWRados *store, const rgw_user& user_id, rgw_bucket& bucket, time_t creation_time, bool update_entrypoint = true);
+extern int rgw_unlink_bucket(RGWRados *store, const rgw_user& user_id,
+                             const string& tenant_name, const string& bucket_name, bool update_entrypoint = true);
 
 extern int rgw_remove_object(RGWRados *store, RGWBucketInfo& bucket_info, rgw_bucket& bucket, rgw_obj_key& key);
-extern int rgw_remove_bucket(RGWRados *store, const string& bucket_owner, rgw_bucket& bucket, bool delete_children);
+extern int rgw_remove_bucket(RGWRados *store, rgw_bucket& bucket, bool delete_children);
 
 extern int rgw_bucket_set_attrs(RGWRados *store, RGWBucketInfo& bucket_info,
                                 map<string, bufferlist>& attrs,
                                 map<string, bufferlist>* rmattrs,
                                 RGWObjVersionTracker *objv_tracker);
 
-extern void check_bad_user_bucket_mapping(RGWRados *store, const string& user_id, bool fix);
+extern void check_bad_user_bucket_mapping(RGWRados *store, const rgw_user& user_id, bool fix);
 
 struct RGWBucketAdminOpState {
-  std::string uid;
+  rgw_user uid;
   std::string display_name;
   std::string bucket_name;
   std::string bucket_id;
@@ -146,7 +158,7 @@ struct RGWBucketAdminOpState {
   void set_fix_index(bool value) { fix_index = value; }
   void set_delete_children(bool value) { delete_child_objects = value; }
 
-  void set_user_id(std::string& user_id) {
+  void set_user_id(rgw_user& user_id) {
     if (!user_id.empty())
       uid = user_id;
   }
@@ -157,7 +169,7 @@ struct RGWBucketAdminOpState {
     object_name = object_str;
   }
 
-  std::string& get_user_id() { return uid; }
+  rgw_user& get_user_id() { return uid; }
   std::string& get_user_display_name() { return display_name; }
   std::string& get_bucket_name() { return bucket_name; }
   std::string& get_object_name() { return object_name; }
@@ -197,13 +209,12 @@ class RGWBucket
   RGWAccessHandle handle;
 
   RGWUserInfo user_info;
+  std::string tenant;
   std::string bucket_name;
 
   bool failure;
 
   RGWBucketInfo bucket_info;
-
-private:
 
 public:
   RGWBucket() : store(NULL), handle(NULL), failure(false) {}

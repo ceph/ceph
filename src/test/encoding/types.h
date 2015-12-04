@@ -226,9 +226,11 @@ TYPE(ETableServer)
 #include "mds/events/EUpdate.h"
 TYPE(EUpdate)
 
+#include "librbd/JournalTypes.h"
+TYPE(librbd::journal::EventEntry)
 #include "librbd/WatchNotifyTypes.h"
-TYPE(librbd::WatchNotify::NotifyMessage)
-TYPE(librbd::WatchNotify::ResponseMessage)
+TYPE(librbd::watch_notify::NotifyMessage)
+TYPE(librbd::watch_notify::ResponseMessage)
 
 #include "rbd_replay/ActionTypes.h"
 TYPE(rbd_replay::action::Dependency)
@@ -332,6 +334,9 @@ TYPE(rgw_log_entry)
 #include "cls/rbd/cls_rbd.h"
 TYPE(cls_rbd_parent)
 TYPE(cls_rbd_snap)
+
+#include "cls/rbd/cls_rbd_types.h"
+TYPE(cls::rbd::MirrorPeer)
 
 #endif
 

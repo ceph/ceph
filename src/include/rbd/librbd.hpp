@@ -46,6 +46,12 @@ namespace librbd {
     std::string address;
   } locker_t;
 
+  typedef struct {
+    std::string cluster_uuid;
+    std::string cluster_name;
+    std::string client_name;
+  } mirror_peer_t;
+
   typedef rbd_image_info_t image_info_t;
 
   class CEPH_RBD_API ProgressContext
@@ -70,6 +76,7 @@ public:
     bool is_complete();
     int wait_for_complete();
     ssize_t get_return_value();
+    void *get_arg();
     void release();
   };
 
@@ -100,6 +107,19 @@ public:
   int remove(IoCtx& io_ctx, const char *name);
   int remove_with_progress(IoCtx& io_ctx, const char *name, ProgressContext& pctx);
   int rename(IoCtx& src_io_ctx, const char *srcname, const char *destname);
+
+  // RBD pool mirroring support functions
+  int mirror_is_enabled(IoCtx& io_ctx, bool *enabled);
+  int mirror_set_enabled(IoCtx& io_ctx, bool enabled);
+  int mirror_peer_add(IoCtx& io_ctx, const std::string &cluster_uuid,
+                      const std::string &cluster_name,
+                      const std::string &client_name);
+  int mirror_peer_remove(IoCtx& io_ctx, const std::string &cluster_uuid);
+  int mirror_peer_list(IoCtx& io_ctx, std::vector<mirror_peer_t> *peers);
+  int mirror_peer_set_client(IoCtx& io_ctx, const std::string &cluster_uuid,
+                             const std::string &client_name);
+  int mirror_peer_set_cluster(IoCtx& io_ctx, const std::string &cluster_uuid,
+                              const std::string &cluster_name);
 
 private:
   /* We don't allow assignment or copying */
@@ -147,6 +167,7 @@ public:
   int update_features(uint64_t features, bool enabled);
   int overlap(uint64_t *overlap);
   int get_flags(uint64_t *flags);
+  int set_image_notification(int fd, int type);
 
   /* exclusive lock feature */
   int is_exclusive_lock_owner(bool *is_owner);
@@ -282,6 +303,8 @@ public:
    * @returns 0 on success, negative error code on failure
    */
   int invalidate_cache();
+
+  int poll_io_events(RBD::AioCompletion **comps, int numcomp);
 
   int metadata_get(const std::string &key, std::string *value);
   int metadata_set(const std::string &key, const std::string &value);

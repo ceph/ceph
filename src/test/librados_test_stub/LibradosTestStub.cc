@@ -731,6 +731,13 @@ void ObjectWriteOperation::set_alloc_hint(uint64_t expected_object_size,
 			       expected_object_size, expected_write_size));
 }
 
+
+void ObjectWriteOperation::tmap_update(const bufferlist& cmdbl) {
+  TestObjectOperationImpl *o = reinterpret_cast<TestObjectOperationImpl*>(impl);
+  o->ops.push_back(boost::bind(&TestIoCtxImpl::tmap_update, _1, _2,
+                               cmdbl));
+}
+
 void ObjectWriteOperation::truncate(uint64_t off) {
   TestObjectOperationImpl *o = reinterpret_cast<TestObjectOperationImpl*>(impl);
   o->ops.push_back(boost::bind(&TestIoCtxImpl::truncate, _1, _2, off, _4));
@@ -787,6 +794,11 @@ int Rados::blacklist_add(const std::string& client_address,
 config_t Rados::cct() {
   TestRadosClient *impl = reinterpret_cast<TestRadosClient*>(client);
   return reinterpret_cast<config_t>(impl->cct());
+}
+
+int Rados::cluster_fsid(std::string* fsid) {
+  *fsid = "00000000-1111-2222-3333-444444444444";
+  return 0;
 }
 
 int Rados::conf_set(const char *option, const char *value) {

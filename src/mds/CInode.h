@@ -242,6 +242,87 @@ public:
   snapid_t          first, last;
   compact_set<snapid_t> dirty_old_rstats;
 
+  class scrub_stamp_info_t {
+  public:
+    /// version we started our latest scrub (whether in-progress or finished)
+    version_t scrub_start_version;
+    /// time we started our latest scrub (whether in-progress or finished)
+    utime_t scrub_start_stamp;
+    /// version we started our most recent finished scrub
+    version_t last_scrub_version;
+    /// time we started our most recent finished scrub
+    utime_t last_scrub_stamp;
+    scrub_stamp_info_t() : scrub_start_version(0), last_scrub_version(0) {}
+  };
+
+  class scrub_info_t : public scrub_stamp_info_t {
+  public:
+    bool last_scrub_dirty; /// are our stamps dirty with respect to disk state?
+    bool scrub_in_progress; /// are we currently scrubbing?
+    /// my own (temporary) stamps and versions for each dirfrag we have
+    std::map<frag_t, scrub_stamp_info_t> dirfrag_stamps;
+
+    scrub_info_t() : scrub_stamp_info_t(), last_scrub_dirty(false),
+        scrub_in_progress(false) {}
+  };
+
+  const scrub_info_t *scrub_info() const{
+    if (!scrub_infop)
+      scrub_info_create();
+    return scrub_infop;
+  }
+  /**
+   * Start scrubbing on this inode. That could be very short if it's
+   * a file, or take a long time if we're recursively scrubbing a directory.
+   * @pre It is not currently scrubbing
+   * @post it has set up internal scrubbing state
+   * @param scrub_version What version are we scrubbing at (usually, parent
+   * directory's get_projected_version())
+   */
+  void scrub_initialize(version_t scrub_version);
+  /**
+   * Get the next dirfrag to scrub. Gives you a frag_t in output param which
+   * you must convert to a CDir (and possibly load off disk).
+   * @param dir A pointer to frag_t, will be filled in with the next dirfrag to
+   * scrub if there is one.
+   * @returns 0 on success, you should scrub the passed-out frag_t right now;
+   * ENOENT: There are no remaining dirfrags to scrub
+   * <0 There was some other error (It will return -ENOTDIR if not a directory)
+   */
+  int scrub_dirfrag_next(frag_t* out_dirfrag);
+  /**
+   * Get the currently scrubbing dirfrags. When returned, the
+   * passed-in list will be filled in with all frag_ts which have
+   * been returned from scrub_dirfrag_next but not sent back
+   * via scrub_dirfrag_finished.
+   */
+  void scrub_dirfrags_scrubbing(list<frag_t> *out_dirfrags);
+  /**
+   * Report to the CInode that a dirfrag it owns has been scrubbed. Call
+   * this for every frag_t returned from scrub_dirfrag_next().
+   * @param dirfrag The frag_t that was scrubbed
+   */
+  void scrub_dirfrag_finished(frag_t dirfrag);
+  /**
+   * Call this once the scrub has been completed, whether it's a full
+   * recursive scrub on a directory or simply the data on a file (or
+   * anything in between).
+   * @param c An out param which is filled in with a Context* that must
+   * be complete()ed.
+   */
+  void scrub_finished(Context **c);
+
+private:
+  /**
+   * Create a scrub_info_t struct for the scrub_infop poitner.
+   */
+  void scrub_info_create() const;
+  /**
+   * Delete the scrub_info_t struct if it's not got any useful data
+   */
+  void scrub_maybe_delete_info();
+public:
+
   bool is_multiversion() const {
     return snaprealm ||  // other snaprealms will link to me
       inode.is_dir() ||  // links to me in other snaps
@@ -401,6 +482,7 @@ public:
 private:
   compact_map<frag_t,CDir*> dirfrags; // cached dir fragments under this Inode
   int stickydir_ref;
+  scrub_info_t *scrub_infop;
 
 public:
   bool has_dirfrags() { return !dirfrags.empty(); }
@@ -539,6 +621,7 @@ public:
     num_projected_xattrs(0),
     num_projected_srnodes(0),
     stickydir_ref(0),
+    scrub_infop(NULL),
     parent(0),
     inode_auth(CDIR_AUTH_DEFAULT),
     replica_caps_wanted(0),
@@ -812,7 +895,7 @@ public:
 
   // choose new lock state during recovery, based on issued caps
   void choose_lock_state(SimpleLock *lock, int allissued);
-  void choose_lock_states();
+  void choose_lock_states(int dirty_caps);
 
   int count_nonstale_caps() {
     int n = 0;
@@ -1012,10 +1095,12 @@ public:
    * @param results A freshly-created validated_data struct, with values set
    * as described in the struct documentation.
    * @param mdr The request to be responeded upon the completion of the
-   * validation.
+   * validation (or NULL)
+   * @param fin Context to call back on completion (or NULL)
    */
   void validate_disk_state(validated_data *results,
-                           MDRequestRef& mdr);
+                           MDRequestRef& mdr,
+                           MDSInternalContext *fin);
   static void dump_validation_results(const validated_data& results,
                                       Formatter *f);
 private:
@@ -1024,5 +1109,7 @@ private:
   friend class ValidationContinuation;
   /** @} Scrubbing and fsck */
 };
+
+ostream& operator<<(ostream& out, const CInode::scrub_stamp_info_t& si);
 
 #endif

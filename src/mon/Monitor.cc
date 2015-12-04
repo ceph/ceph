@@ -3272,8 +3272,14 @@ void Monitor::handle_route(MonOpRequestRef op)
 	rr->con->send_message(m->msg);
 	m->msg = NULL;
       }
+      if (m->send_osdmap_first) {
+	dout(10) << " sending osdmaps from " << m->send_osdmap_first << dendl;
+	osdmon()->send_incremental(m->send_osdmap_first, rr->session,
+				   true, MonOpRequestRef());
+      }
+      assert(rr->tid == m->session_mon_tid && rr->session->routed_request_tids.count(m->session_mon_tid));
       routed_requests.erase(m->session_mon_tid);
-      rr->session->routed_request_tids.insert(rr->tid);
+      rr->session->routed_request_tids.erase(m->session_mon_tid);
       delete rr;
     } else {
       dout(10) << " don't have routed request tid " << m->session_mon_tid << dendl;
@@ -3301,6 +3307,10 @@ void Monitor::resend_routed_requests()
       dout(10) << " requeue for self tid " << rr->tid << dendl;
       rr->op->mark_event("retry routed request");
       retry.push_back(new C_RetryMessage(this, rr->op));
+      if (rr->session) {
+        assert(rr->session->routed_request_tids.count(p->first));
+        rr->session->routed_request_tids.erase(p->first);
+      }
       delete rr;
     } else {
       bufferlist::iterator q = rr->request_bl.begin();
@@ -3329,13 +3339,13 @@ void Monitor::remove_session(MonSession *s)
   for (set<uint64_t>::iterator p = s->routed_request_tids.begin();
        p != s->routed_request_tids.end();
        ++p) {
-    if (routed_requests.count(*p)) {
-      RoutedRequest *rr = routed_requests[*p];
-      dout(10) << " dropping routed request " << rr->tid << dendl;
-      delete rr;
-      routed_requests.erase(*p);
-    }
+    assert(routed_requests.count(*p));
+    RoutedRequest *rr = routed_requests[*p];
+    dout(10) << " dropping routed request " << rr->tid << dendl;
+    delete rr;
+    routed_requests.erase(*p);
   }
+  s->routed_request_tids.clear();
   s->con->set_priv(NULL);
   session_map.remove_session(s);
   logger->set(l_mon_num_sessions, session_map.get_size());
@@ -3427,22 +3437,17 @@ void Monitor::_ms_dispatch(Message *m)
       return;
     }
 
-    s = session_map.new_session(m->get_source_inst(), m->get_connection().get());
+    ConnectionRef con = m->get_connection();
+    s = session_map.new_session(m->get_source_inst(), con.get());
     assert(s);
-    m->get_connection()->set_priv(s->get());
+    con->set_priv(s->get());
     dout(10) << __func__ << " new session " << s << " " << *s << dendl;
     op->set_session(s);
 
     logger->set(l_mon_num_sessions, session_map.get_size());
     logger->inc(l_mon_session_add);
 
-    if (!src_is_mon) {
-      dout(30) << __func__ << "  setting timeout on session" << dendl;
-      // set an initial timeout here, so we will trim this session
-      // even if they don't do anything.
-      s->until = ceph_clock_now(g_ceph_context);
-      s->until += g_conf->mon_subscribe_interval;
-    } else {
+    if (src_is_mon) {
       // give it monitor caps; the peer type has been authenticated
       dout(5) << __func__ << " setting monitor caps on this connection" << dendl;
       if (!s->caps.is_allow_all()) // but no need to repeatedly copy
@@ -3455,6 +3460,10 @@ void Monitor::_ms_dispatch(Message *m)
   }
 
   assert(s);
+
+  s->session_timeout = ceph_clock_now(NULL);
+  s->session_timeout += g_conf->mon_session_timeout;
+
   if (s->auth_handler) {
     s->entity_name = s->auth_handler->get_entity_name();
   }
@@ -4126,8 +4135,6 @@ void Monitor::handle_subscribe(MonOpRequestRef op)
   MonSession *s = op->get_session();
   assert(s);
 
-  s->until = ceph_clock_now(g_ceph_context);
-  s->until += g_conf->mon_subscribe_interval;
   for (map<string,ceph_mon_subscribe_item>::iterator p = m->what.begin();
        p != m->what.end();
        ++p) {
@@ -4162,10 +4169,14 @@ void Monitor::handle_subscribe(MonOpRequestRef op)
     }
   }
 
-  // ???
-
-  if (reply)
-    m->get_connection()->send_message(new MMonSubscribeAck(monmap->get_fsid(), (int)g_conf->mon_subscribe_interval));
+  if (reply) {
+    // we only need to reply if the client is old enough to think it
+    // has to send renewals.
+    ConnectionRef con = m->get_connection();
+    if (!con->has_feature(CEPH_FEATURE_MON_STATEFUL_SUB))
+      m->get_connection()->send_message(new MMonSubscribeAck(
+	monmap->get_fsid(), (int)g_conf->mon_subscribe_interval));
+  }
 
 }
 
@@ -4698,11 +4709,17 @@ void Monitor::tick()
     
     // don't trim monitors
     if (s->inst.name.is_mon())
-      continue; 
+      continue;
 
-    if (!s->until.is_zero() && s->until < now) {
+    if (s->session_timeout < now && s->con) {
+      // check keepalive, too
+      s->session_timeout = s->con->get_last_keepalive();
+      s->session_timeout += g_conf->mon_session_timeout;
+    }
+    if (s->session_timeout < now) {
       dout(10) << " trimming session " << s->con << " " << s->inst
-	       << " (until " << s->until << " < now " << now << ")" << dendl;
+	       << " (timeout " << s->session_timeout
+	       << " < now " << now << ")" << dendl;
     } else if (out_for_too_long) {
       // boot the client Session because we've taken too long getting back in
       dout(10) << " trimming session " << s->con << " " << s->inst

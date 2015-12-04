@@ -8,7 +8,7 @@ AC_PREREQ(2.59)
 # VERSION define is not used by the code.  It gets a version string
 # from 'git describe'; see src/ceph_ver.[ch]
 
-AC_INIT([ceph], [9.2.0], [ceph-devel@vger.kernel.org])
+AC_INIT([ceph], [10.0.0], [ceph-devel@vger.kernel.org])
 
 AX_CXX_COMPILE_STDCXX_11(, mandatory)
 
@@ -67,10 +67,18 @@ linux*)
 freebsd*)
 	freebsd="yes"
 	;;
+solaris*)
+	solaris="yes"
+	;;
+aix*)
+	aix="yes"
+	;;
 esac
 AM_CONDITIONAL(LINUX, test x"$linux" = x"yes")
 AM_CONDITIONAL(FREEBSD, test x"$freebsd" = x"yes")
 AM_CONDITIONAL(DARWIN, test x"$darwin" = x"yes")
+AM_CONDITIONAL(SOLARIS, test x"$solaris" = x"yes")
+AM_CONDITIONAL(AIX, test x"$aix" = x"yes")
 
 # Checks for programs.
 AC_PROG_CXX
@@ -262,6 +270,8 @@ AC_CHECK_CC_FLAG([-Wtype-limits], [WARN_TYPE_LIMITS])
 AC_CHECK_CC_FLAG([-Wignored-qualifiers], [WARN_IGNORED_QUALIFIERS])
 AC_CHECK_CC_FLAG([-Werror=format-security], [WARN_ERROR_FORMAT_SECURITY])
 
+AC_CHECK_CC_FLAG([-rdynamic], [RDYNAMIC_FLAG])
+
 # Check for compiler VTA support
 AX_CHECK_COMPILE_FLAG([-fvar-tracking-assignments], [HAS_VTA_SUPPORT=1], [HAS_VTA_SUPPORT=0])
 AM_CONDITIONAL(COMPILER_HAS_VTA, [test "$HAS_VTA_SUPPORT" = 1])
@@ -338,6 +348,7 @@ if test x"$resolv_libs" != "xok"; then
   fi
 fi
 AC_SUBST([RESOLV_LIBS])
+AC_DEFINE(HAVE_RES_NQUERY, 1, [Define if you have res_nquery])
 
 dnl check for libkeyutils on linux
 KEYUTILS_LIB=""
@@ -956,8 +967,10 @@ AC_CHECK_HEADERS([ \
 	sys/time.h \
 	sys/vfs.h \
 	sys/xattr.h \
+	sys/cdefs.h \
 	syslog.h \
 	utime.h \
+	execinfo.h
 ])
 
 # name_to_handle_at
@@ -995,9 +1008,16 @@ AC_CHECK_MEMBER([struct stat.st_mtimespec.tv_nsec],
     [Define if you have struct stat.st_mtimespec.tv_nsec])])
 
 # splice/tee
-AC_CHECK_FUNC([splice],
-	[AC_DEFINE([CEPH_HAVE_SPLICE], [], [splice(2) is supported])],
-	[])
+case "${target_os}" in
+aix*)
+	# AIX splice() is something else
+	;;
+*)
+	AC_CHECK_FUNC([splice],
+		[AC_DEFINE([CEPH_HAVE_SPLICE], [], [splice(2) is supported])],
+		[])
+	;;
+esac
 
 # F_SETPIPE_SZ in fcntl.h
 AC_MSG_CHECKING([for F_SETPIPE_SZ in fcntl.h])
@@ -1289,8 +1309,15 @@ AC_ARG_WITH(
     ]
 )
 
-
-
+# Force not to use eventfd
+AC_ARG_WITH([eventfd],
+            [AS_HELP_STRING([--without-eventfd], [disable eventfd [default=no]])],
+            ,
+            [with_eventfd=yes])
+AS_IF([test "x$with_eventfd" != xno],
+    [AC_CHECK_HEADERS(sys/eventfd.h,
+                     [AC_DEFINE(HAVE_EVENTFD, 1, [Have eventfd extension.])])])
+AM_CONDITIONAL(WITH_EVENTFD, [ test "$with_eventfd" = "yes" ])
 
 # Checks for typedefs, structures, and compiler characteristics.
 #AC_HEADER_STDBOOL

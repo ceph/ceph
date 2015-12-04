@@ -359,7 +359,7 @@ int CrushTester::test_with_crushtool(const char *crushtool_cmd,
 				     int max_id, int timeout,
 				     int ruleset)
 {
-  SubProcessTimed crushtool(crushtool_cmd, true, false, true, timeout);
+  SubProcessTimed crushtool(crushtool_cmd, SubProcess::PIPE, SubProcess::CLOSE, SubProcess::PIPE, timeout);
   string opt_max_id = boost::lexical_cast<string>(max_id);
   crushtool.add_cmd_args(
     "-i", "-",
@@ -381,10 +381,10 @@ int CrushTester::test_with_crushtool(const char *crushtool_cmd,
 
   bufferlist bl;
   ::encode(crush, bl);
-  bl.write_fd(crushtool.stdin());
+  bl.write_fd(crushtool.get_stdin());
   crushtool.close_stdin();
   bl.clear();
-  ret = bl.read_fd(crushtool.stderr(), 100 * 1024);
+  ret = bl.read_fd(crushtool.get_stderr(), 100 * 1024);
   if (ret < 0) {
     err << "failed read from crushtool: " << cpp_strerror(-ret);
     return ret;

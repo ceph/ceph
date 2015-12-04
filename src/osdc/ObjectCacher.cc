@@ -40,6 +40,7 @@ ObjectCacher::BufferHead *ObjectCacher::Object::split(BufferHead *left, loff_t o
   right->last_read_tid = left->last_read_tid;
   right->set_state(left->get_state());
   right->snapc = left->snapc;
+  right->set_journal_tid(left->journal_tid);
 
   loff_t newleftlen = off - left->start();
   right->set_start(off);
@@ -88,8 +89,14 @@ void ObjectCacher::Object::merge_left(BufferHead *left, BufferHead *right)
   assert(oc->lock.is_locked());
   assert(left->end() == right->start());
   assert(left->get_state() == right->get_state());
+  assert(left->can_merge_journal(right));
 
   ldout(oc->cct, 10) << "merge_left " << *left << " + " << *right << dendl;
+  if (left->get_journal_tid() == 0) {
+    left->set_journal_tid(right->get_journal_tid());
+  }
+  right->set_journal_tid(0);
+
   oc->bh_remove(this, right);
   oc->bh_stat_sub(left);
   left->set_length(left->length() + right->length());
@@ -97,8 +104,8 @@ void ObjectCacher::Object::merge_left(BufferHead *left, BufferHead *right)
 
   // data
   left->bl.claim_append(right->bl);
-  
-  // version 
+
+  // version
   // note: this is sorta busted, but should only be used for dirty buffers
   left->last_write_tid =  MAX( left->last_write_tid, right->last_write_tid );
   left->last_write = MAX( left->last_write, right->last_write );
@@ -134,7 +141,8 @@ void ObjectCacher::Object::try_merge_bh(BufferHead *bh)
   if (p != data.begin()) {
     --p;
     if (p->second->end() == bh->start() &&
-	p->second->get_state() == bh->get_state()) {
+        p->second->get_state() == bh->get_state() &&
+        p->second->can_merge_journal(bh)) {
       merge_left(p->second, bh);
       bh = p->second;
     } else {
@@ -146,7 +154,8 @@ void ObjectCacher::Object::try_merge_bh(BufferHead *bh)
   ++p;
   if (p != data.end() &&
       p->second->start() == bh->end() &&
-      p->second->get_state() == bh->get_state())
+      p->second->get_state() == bh->get_state() &&
+      p->second->can_merge_journal(bh))
     merge_left(bh, p->second);
 }
 
@@ -363,6 +372,7 @@ ObjectCacher::BufferHead *ObjectCacher::Object::map_write(OSDWrite *wr)
           oc->bh_add(this, final);
           ldout(oc->cct, 10) << "map_write adding trailing bh " << *final << dendl;
         } else {
+          replace_journal_tid(final, wr->journal_tid);
 	  oc->bh_stat_sub(final);
           final->set_length(final->length() + max);
 	  oc->bh_stat_add(final);
@@ -371,14 +381,14 @@ ObjectCacher::BufferHead *ObjectCacher::Object::map_write(OSDWrite *wr)
         cur += max;
         continue;
       }
-      
+
       ldout(oc->cct, 10) << "cur is " << cur << ", p is " << *p->second << dendl;
       //oc->verify_stats();
 
       if (p->first <= cur) {
         BufferHead *bh = p->second;
         ldout(oc->cct, 10) << "map_write bh " << *bh << " intersected" << dendl;
-        
+
         if (p->first < cur) {
           assert(final == 0);
           if (cur + max >= bh->end()) {
@@ -406,24 +416,26 @@ ObjectCacher::BufferHead *ObjectCacher::Object::map_write(OSDWrite *wr)
 	    oc->mark_dirty(final);
 	    --p;  // move iterator back to final
 	    assert(p->second == final);
+            replace_journal_tid(bh, 0);
             merge_left(final, bh);
 	  } else {
             final = bh;
 	  }
         }
-        
+
         // keep going.
         loff_t lenfromcur = final->end() - cur;
         cur += lenfromcur;
         left -= lenfromcur;
         ++p;
-        continue; 
+        continue;
       } else {
         // gap!
         loff_t next = p->first;
         loff_t glen = MIN(next - cur, max);
         ldout(oc->cct, 10) << "map_write gap " << cur << "~" << glen << dendl;
         if (final) {
+          replace_journal_tid(final, wr->journal_tid);
 	  oc->bh_stat_sub(final);
           final->set_length(final->length() + glen);
 	  oc->bh_stat_add(final);
@@ -433,19 +445,32 @@ ObjectCacher::BufferHead *ObjectCacher::Object::map_write(OSDWrite *wr)
           final->set_length( glen );
           oc->bh_add(this, final);
         }
-        
+
         cur += glen;
         left -= glen;
         continue;    // more?
       }
     }
   }
-  
-  // set versoin
+
+  // set version
   assert(final);
+  replace_journal_tid(final, wr->journal_tid);
   ldout(oc->cct, 10) << "map_write final is " << *final << dendl;
 
   return final;
+}
+
+void ObjectCacher::Object::replace_journal_tid(BufferHead *bh, ceph_tid_t tid) {
+  ceph_tid_t bh_tid = bh->get_journal_tid();
+
+  assert(tid == 0 || bh_tid <= tid);
+  if (bh_tid != 0 && bh_tid != tid) {
+    // inform journal that it should not expect a writeback from this extent
+    oc->writeback_handler.overwrite_extent(get_oid(), bh->start(), bh->length(),
+                                           bh_tid);
+  }
+  bh->set_journal_tid(tid);
 }
 
 void ObjectCacher::Object::truncate(loff_t s)
@@ -467,6 +492,7 @@ void ObjectCacher::Object::truncate(loff_t s)
     // remove bh entirely
     assert(bh->start() >= s);
     assert(bh->waitfor_read.empty());
+    replace_journal_tid(bh, 0);
     oc->bh_remove(this, bh);
     delete bh;
   }
@@ -507,6 +533,7 @@ void ObjectCacher::Object::discard(loff_t off, loff_t len)
     ++p;
     ldout(oc->cct, 10) << "discard " << *this << " bh " << *bh << dendl;
     assert(bh->waitfor_read.empty());
+    replace_journal_tid(bh, 0);
     oc->bh_remove(this, bh);
     delete bh;
   }
@@ -843,10 +870,11 @@ void ObjectCacher::bh_write(BufferHead *bh)
                                               bh->ob->get_soid(), bh->start(), bh->length());
   // go
   ceph_tid_t tid = writeback_handler.write(bh->ob->get_oid(), bh->ob->get_oloc(),
-				      bh->start(), bh->length(),
-				      bh->snapc, bh->bl, bh->last_write,
-				      bh->ob->truncate_size, bh->ob->truncate_seq,
-				      oncommit);
+                                           bh->start(), bh->length(),
+                                           bh->snapc, bh->bl, bh->last_write,
+                                           bh->ob->truncate_size,
+                                           bh->ob->truncate_seq,
+                                           bh->journal_tid, oncommit);
   ldout(cct, 20) << " tid " << tid << " on " << bh->ob->get_oid() << dendl;
 
   // set bh last_write_tid
@@ -920,6 +948,7 @@ void ObjectCacher::bh_write_commit(int64_t poolid, sobject_t oid, loff_t start,
       if (r >= 0) {
 	// ok!  mark bh clean and error-free
 	mark_clean(bh);
+        bh->set_journal_tid(0);
 	if (bh->get_nocache())
 	  bh_lru_rest.lru_bottouch(bh);
 	hit.push_back(bh);
@@ -1967,7 +1996,7 @@ void ObjectCacher::clear_nonexistence(ObjectSet *oset)
 /**
  * discard object extents from an ObjectSet by removing the objects in exls from the in-memory oset.
  */
-void ObjectCacher::discard_set(ObjectSet *oset, vector<ObjectExtent>& exls)
+void ObjectCacher::discard_set(ObjectSet *oset, const vector<ObjectExtent>& exls)
 {
   assert(lock.is_locked());
   if (oset->objects.empty()) {
@@ -1979,11 +2008,11 @@ void ObjectCacher::discard_set(ObjectSet *oset, vector<ObjectExtent>& exls)
 
   bool were_dirty = oset->dirty_or_tx > 0;
 
-  for (vector<ObjectExtent>::iterator p = exls.begin();
+  for (vector<ObjectExtent>::const_iterator p = exls.begin();
        p != exls.end();
        ++p) {
     ldout(cct, 10) << "discard_set " << oset << " ex " << *p << dendl;
-    ObjectExtent &ex = *p;
+    const ObjectExtent &ex = *p;
     sobject_t soid(ex.oid, CEPH_NOSNAP);
     if (objects[oset->poolid].count(soid) == 0)
       continue;
@@ -2192,6 +2221,7 @@ void ObjectCacher::bh_add(Object *ob, BufferHead *bh)
 void ObjectCacher::bh_remove(Object *ob, BufferHead *bh)
 {
   assert(lock.is_locked());
+  assert(bh->get_journal_tid() == 0);
   ldout(cct, 30) << "bh_remove " << *ob << " " << *bh << dendl;
   ob->remove_bh(bh);
   if (bh->is_dirty()) {

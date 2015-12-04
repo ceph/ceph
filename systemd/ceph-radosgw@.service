@@ -2,7 +2,7 @@
 Description=Ceph rados gateway
 After=network-online.target local-fs.target
 Wants=network-online.target local-fs.target
-PartOf=ceph.target
+PartOf=ceph-radosgw.target
 
 [Service]
 LimitNOFILE=1048576
@@ -12,4 +12,4 @@ Environment=CLUSTER=ceph
 ExecStart=/usr/bin/radosgw -f --cluster ${CLUSTER} --name client.%i --setuser ceph --setgroup ceph
 
 [Install]
-WantedBy=ceph.target
+WantedBy=ceph-radosgw.target

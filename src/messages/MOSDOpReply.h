@@ -39,7 +39,7 @@ class MOSDOpReply : public Message {
   pg_t pgid;
   vector<OSDOp> ops;
   int64_t flags;
-  int32_t result;
+  errorcode32_t result;
   eversion_t bad_replay_version;
   eversion_t replay_version;
   version_t user_version;
@@ -203,7 +203,7 @@ public:
       }
       ::decode_nohead(head.object_len, oid.name, p);
       pgid = pg_t(head.layout.ol_pgid);
-      result = head.result;
+      result = (int32_t)head.result;
       flags = head.flags;
       replay_version = head.reassert_version;
       user_version = replay_version.version;

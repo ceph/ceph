@@ -44,6 +44,7 @@
 #include "include/rbd/object_map_types.h"
 
 #include "cls/rbd/cls_rbd.h"
+#include "cls/rbd/cls_rbd_types.h"
 
 
 /*
@@ -110,6 +111,13 @@ cls_method_handle_t h_old_snapshots_list;
 cls_method_handle_t h_old_snapshot_add;
 cls_method_handle_t h_old_snapshot_remove;
 cls_method_handle_t h_old_snapshot_rename;
+cls_method_handle_t h_mirror_is_enabled;
+cls_method_handle_t h_mirror_set_enabled;
+cls_method_handle_t h_mirror_peer_list;
+cls_method_handle_t h_mirror_peer_add;
+cls_method_handle_t h_mirror_peer_remove;
+cls_method_handle_t h_mirror_peer_set_client;
+cls_method_handle_t h_mirror_peer_set_cluster;
 
 #define RBD_MAX_KEYS_READ 64
 #define RBD_SNAP_KEY_PREFIX "snapshot_"
@@ -2506,8 +2514,6 @@ int metadata_list(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
       break;
 
     map<string, bufferlist>::iterator it = raw_data.begin();
-    if (metadata_name_from_key(it->first) == last_read)
-        ++it;
     for (; it != raw_data.end(); ++it)
       data[metadata_name_from_key(it->first)].swap(it->second);
 
@@ -2903,7 +2909,339 @@ int old_snapshot_rename(cls_method_context_t hctx, bufferlist *in, bufferlist *o
   rc = cls_cxx_write_full(hctx, &newbl);
   if (rc < 0)
     return rc;
+  return 0;
+}
 
+namespace mirror {
+
+static const std::string PEER_KEY_PREFIX("mirror_peer_");
+
+std::string peer_key(const std::string &uuid) {
+  return PEER_KEY_PREFIX + uuid;
+}
+
+int is_enabled(cls_method_context_t hctx, bool *enabled) {
+  bufferlist bl;
+  int r = cls_cxx_map_get_val(hctx, "mirror_enabled", &bl);
+  if (r < 0 && r != -ENOENT) {
+    CLS_ERR("error reading mirror enabled flag: %s",
+            cpp_strerror(r).c_str());
+    return r;
+  }
+
+  if (r == 0) {
+    try {
+      bufferlist::iterator bl_it = bl.begin();
+      ::decode(*enabled, bl_it);
+    } catch (const buffer::error &err) {
+      CLS_ERR("could not decode flag");
+      return -EIO;
+    }
+  } else {
+    *enabled = false;
+  }
+  return 0;
+}
+
+int read_peers(cls_method_context_t hctx,
+               std::vector<cls::rbd::MirrorPeer> *peers) {
+  std::string last_read = PEER_KEY_PREFIX;
+  int max_read = RBD_MAX_KEYS_READ;
+  int r = max_read;
+  while (r == max_read) {
+    std::map<std::string, bufferlist> vals;
+    r = cls_cxx_map_get_vals(hctx, last_read, PEER_KEY_PREFIX.c_str(),
+			     max_read, &vals);
+    if (r < 0) {
+      CLS_ERR("error reading peers: %s", cpp_strerror(r).c_str());
+      return r;
+    }
+
+    for (auto &it : vals) {
+      try {
+        bufferlist::iterator bl_it = it.second.begin();
+        cls::rbd::MirrorPeer peer;
+	::decode(peer, bl_it);
+        peers->push_back(peer);
+      } catch (const buffer::error &err) {
+	CLS_ERR("could not decode peer '%s'", it.first.c_str());
+	return -EIO;
+      }
+    }
+  }
+  return 0;
+}
+
+int read_peer(cls_method_context_t hctx, const std::string uuid,
+              cls::rbd::MirrorPeer *peer) {
+  bufferlist bl;
+  int r = cls_cxx_map_get_val(hctx, peer_key(uuid), &bl);
+  if (r < 0) {
+    CLS_ERR("error reading peer '%s': %s", uuid.c_str(),
+            cpp_strerror(r).c_str());
+    return r;
+  }
+
+  try {
+    bufferlist::iterator bl_it = bl.begin();
+    ::decode(*peer, bl_it);
+  } catch (const buffer::error &err) {
+    CLS_ERR("could not decode peer '%s'", uuid.c_str());
+    return -EIO;
+  }
+  return 0;
+}
+
+int write_peer(cls_method_context_t hctx, const std::string uuid,
+               const cls::rbd::MirrorPeer &peer) {
+  bufferlist bl;
+  ::encode(peer, bl);
+
+  int r = cls_cxx_map_set_val(hctx, peer_key(uuid), &bl);
+  if (r < 0) {
+    CLS_ERR("error writing peer '%s': %s", uuid.c_str(),
+            cpp_strerror(r).c_str());
+    return r;
+  }
+  return 0;
+}
+
+} // namespace mirror
+
+/**
+ * Input:
+ * none
+ *
+ * Output:
+ * @param bool: true if enabled
+ * @returns 0 on success, negative error code on failure
+ */
+int mirror_is_enabled(cls_method_context_t hctx, bufferlist *in,
+                      bufferlist *out) {
+  bool enabled;
+  int r = mirror::is_enabled(hctx, &enabled);
+  if (r < 0) {
+    return r;
+  }
+
+  ::encode(enabled, *out);
+  return 0;
+}
+
+/**
+ * Input:
+ * @param enabled (bool)
+ *
+ * Output:
+ * @returns 0 on success, negative error code on failure
+ */
+int mirror_set_enabled(cls_method_context_t hctx, bufferlist *in,
+                       bufferlist *out) {
+  bool enabled;
+  try {
+    bufferlist::iterator bl_it = in->begin();
+    ::decode(enabled, bl_it);
+  } catch (const buffer::error &err) {
+    return -EINVAL;
+  }
+
+  int r;
+  if (enabled) {
+    bufferlist bl;
+    ::encode(enabled, bl);
+
+    r = cls_cxx_map_set_val(hctx, "mirror_enabled", &bl);
+    if (r < 0) {
+      CLS_ERR("error enabling mirroring: %s", cpp_strerror(r).c_str());
+      return r;
+    }
+  } else {
+    std::vector<cls::rbd::MirrorPeer> peers;
+    int r = mirror::read_peers(hctx, &peers);
+    if (r < 0 && r != -ENOENT) {
+      return r;
+    }
+
+    if (!peers.empty()) {
+      CLS_ERR("mirroring peers still registered");
+      return -EBUSY;
+    }
+
+    r = cls_cxx_map_remove_key(hctx, "mirror_enabled");
+    if (r < 0 && r != -ENOENT) {
+      CLS_ERR("error disabling mirroring: %s", cpp_strerror(r).c_str());
+      return r;
+    }
+  }
+  return 0;
+}
+
+/**
+ * Input:
+ * none
+ *
+ * Output:
+ * @param std::vector<cls::rbd::MirrorPeer>: collection of peers
+ * @returns 0 on success, negative error code on failure
+ */
+int mirror_peer_list(cls_method_context_t hctx, bufferlist *in,
+                     bufferlist *out) {
+  std::vector<cls::rbd::MirrorPeer> peers;
+  int r = mirror::read_peers(hctx, &peers);
+  if (r < 0 && r != -ENOENT) {
+    return r;
+  }
+
+  ::encode(peers, *out);
+  return 0;
+}
+
+/**
+ * Input:
+ * @param mirror_peer (cls::rbd::MirrorPeer)
+ *
+ * Output:
+ * @returns 0 on success, negative error code on failure
+ */
+int mirror_peer_add(cls_method_context_t hctx, bufferlist *in,
+                    bufferlist *out) {
+  cls::rbd::MirrorPeer mirror_peer;
+  try {
+    bufferlist::iterator it = in->begin();
+    ::decode(mirror_peer, it);
+  } catch (const buffer::error &err) {
+    return -EINVAL;
+  }
+
+  bool enabled;
+  int r = mirror::is_enabled(hctx, &enabled);
+  if (r < 0) {
+    return r;
+  }
+  if (!enabled) {
+    CLS_ERR("mirroring must be enabled on the pool");
+    return -EINVAL;
+  }
+
+  std::vector<cls::rbd::MirrorPeer> peers;
+  r = mirror::read_peers(hctx, &peers);
+  if (r < 0 && r != -ENOENT) {
+    return r;
+  }
+
+  for (auto const &peer : peers) {
+    if (peer.cluster_uuid == mirror_peer.cluster_uuid) {
+      CLS_ERR("peer cluster uuid '%s' alread exists",
+              peer.cluster_uuid.c_str());
+      return -EEXIST;
+    } else if (peer.cluster_name == mirror_peer.cluster_name) {
+      CLS_ERR("peer cluster name '%s' alread exists",
+              peer.cluster_name.c_str());
+      return -EEXIST;
+    }
+  }
+
+  bufferlist bl;
+  ::encode(mirror_peer, bl);
+  r = cls_cxx_map_set_val(hctx, mirror::peer_key(mirror_peer.cluster_uuid),
+                          &bl);
+  if (r < 0) {
+    CLS_ERR("error adding peer: %s", cpp_strerror(r).c_str());
+    return r;
+  }
+  return 0;
+}
+
+/**
+ * Input:
+ * @param cluster_uuid (std::string)
+ *
+ * Output:
+ * @returns 0 on success, negative error code on failure
+ */
+int mirror_peer_remove(cls_method_context_t hctx, bufferlist *in,
+                       bufferlist *out) {
+  std::string cluster_uuid;
+  try {
+    bufferlist::iterator it = in->begin();
+    ::decode(cluster_uuid, it);
+  } catch (const buffer::error &err) {
+    return -EINVAL;
+  }
+
+  int r = cls_cxx_map_remove_key(hctx, mirror::peer_key(cluster_uuid));
+  if (r < 0 && r != -ENOENT) {
+    CLS_ERR("error removing peer: %s", cpp_strerror(r).c_str());
+    return r;
+  }
+  return 0;
+}
+
+/**
+ * Input:
+ * @param cluster_uuid (std::string)
+ * @param client_name (std::string)
+ *
+ * Output:
+ * @returns 0 on success, negative error code on failure
+ */
+int mirror_peer_set_client(cls_method_context_t hctx, bufferlist *in,
+                           bufferlist *out) {
+  std::string cluster_uuid;
+  std::string client_name;
+  try {
+    bufferlist::iterator it = in->begin();
+    ::decode(cluster_uuid, it);
+    ::decode(client_name, it);
+  } catch (const buffer::error &err) {
+    return -EINVAL;
+  }
+
+  cls::rbd::MirrorPeer peer;
+  int r = mirror::read_peer(hctx, cluster_uuid, &peer);
+  if (r < 0) {
+    return r;
+  }
+
+  peer.client_name = client_name;
+  r = mirror::write_peer(hctx, cluster_uuid, peer);
+  if (r < 0) {
+    return r;
+  }
+  return 0;
+}
+
+/**
+ * Input:
+ * @param cluster_uuid (std::string)
+ * @param cluster_name (std::string)
+ *
+ * Output:
+ * @returns 0 on success, negative error code on failure
+ */
+int mirror_peer_set_cluster(cls_method_context_t hctx, bufferlist *in,
+                            bufferlist *out) {
+  std::string cluster_uuid;
+  std::string cluster_name;
+  try {
+    bufferlist::iterator it = in->begin();
+    ::decode(cluster_uuid, it);
+    ::decode(cluster_name, it);
+  } catch (const buffer::error &err) {
+    return -EINVAL;
+  }
+
+  cls::rbd::MirrorPeer peer;
+  int r = mirror::read_peer(hctx, cluster_uuid, &peer);
+  if (r < 0) {
+    return r;
+  }
+
+  peer.cluster_name = cluster_name;
+  r = mirror::write_peer(hctx, cluster_uuid, peer);
+  if (r < 0) {
+    return r;
+  }
   return 0;
 }
 
@@ -3064,5 +3402,25 @@ void __cls_init()
 			  CLS_METHOD_RD | CLS_METHOD_WR,
 			  old_snapshot_rename, &h_old_snapshot_rename);
 
+  /* methods for the rbd_pool_settings object */
+  cls_register_cxx_method(h_class, "mirror_is_enabled", CLS_METHOD_RD,
+                          mirror_is_enabled, &h_mirror_is_enabled);
+  cls_register_cxx_method(h_class, "mirror_set_enabled",
+                          CLS_METHOD_RD | CLS_METHOD_WR,
+                          mirror_set_enabled, &h_mirror_set_enabled);
+  cls_register_cxx_method(h_class, "mirror_peer_list", CLS_METHOD_RD,
+                          mirror_peer_list, &h_mirror_peer_list);
+  cls_register_cxx_method(h_class, "mirror_peer_add",
+                          CLS_METHOD_RD | CLS_METHOD_WR,
+                          mirror_peer_add, &h_mirror_peer_add);
+  cls_register_cxx_method(h_class, "mirror_peer_remove",
+                          CLS_METHOD_RD | CLS_METHOD_WR,
+                          mirror_peer_remove, &h_mirror_peer_remove);
+  cls_register_cxx_method(h_class, "mirror_peer_set_client",
+                          CLS_METHOD_RD | CLS_METHOD_WR,
+                          mirror_peer_set_client, &h_mirror_peer_set_client);
+  cls_register_cxx_method(h_class, "mirror_peer_set_cluster",
+                          CLS_METHOD_RD | CLS_METHOD_WR,
+                          mirror_peer_set_cluster, &h_mirror_peer_set_cluster);
   return;
 }

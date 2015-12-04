@@ -147,7 +147,6 @@ void JournalTrimmer::handle_commit_position_safe(
       trim_objects(object_set_position.object_number / splay_width);
     }
   }
-  m_async_op_tracker.finish_op();
 }
 
 void JournalTrimmer::handle_set_removed(int r, uint64_t object_set) {
@@ -175,7 +174,6 @@ void JournalTrimmer::handle_set_removed(int r, uint64_t object_set) {
     ldout(m_cct, 20) << "completing remove set context" << dendl;
     m_remove_set_ctx->complete(r);
   }
-  m_async_op_tracker.finish_op();
 }
 
 JournalTrimmer::C_RemoveSet::C_RemoveSet(JournalTrimmer *_journal_trimmer,

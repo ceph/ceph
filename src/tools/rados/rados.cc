@@ -1450,14 +1450,31 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
       goto out;
     }
 
-    // align op_size
-    if (io_ctx.pool_requires_alignment()) {
-      const uint64_t align = io_ctx.pool_required_alignment();
-      const uint64_t prev_op_size = op_size;
-      op_size = uint64_t((op_size + align - 1) / align) * align;
-      // Warn: if user specified and it was rounded
-      if (prev_op_size != default_op_size && prev_op_size != op_size)
-	cerr << "INFO: op_size has been rounded to " << op_size << std::endl;
+   // align op_size
+   {
+      bool requires;
+      ret = io_ctx.pool_requires_alignment2(&requires);
+      if (ret < 0) {
+        cerr << "error checking pool alignment requirement"
+          << cpp_strerror(ret) << std::endl;
+        goto out;	
+      }
+
+      if (requires) {
+        uint64_t align = 0;
+        ret = io_ctx.pool_required_alignment2(&align);
+        if (ret < 0) {
+          cerr << "error getting pool alignment"
+            << cpp_strerror(ret) << std::endl;
+          goto out;	
+        }
+
+        const uint64_t prev_op_size = op_size;
+        op_size = uint64_t((op_size + align - 1) / align) * align;
+        // Warn: if user specified and it was rounded
+        if (prev_op_size != default_op_size && prev_op_size != op_size)
+          cerr << "INFO: op_size has been rounded to " << op_size << std::endl;
+      }
     }
 
     // create striper interface
@@ -1621,9 +1638,9 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
 
     if (wildcard)
       io_ctx.set_namespace(all_nspaces);
-    bool stdout = (nargs.size() < 2) || (strcmp(nargs[1], "-") == 0);
+    bool use_stdout = (nargs.size() < 2) || (strcmp(nargs[1], "-") == 0);
     ostream *outstream;
-    if(stdout)
+    if(use_stdout)
       outstream = &cout;
     else
       outstream = new ofstream(nargs[1]);
@@ -1975,11 +1992,11 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
     }
 
     if (values.size() && values.begin()->first == key) {
-      cout << " (length " << values.begin()->second.length() << ") : ";
       if (!outfile.empty()) {
 	cerr << "Writing to " << outfile << std::endl;
 	dump_data(outfile, values.begin()->second);
       } else {
+        cout << "value (" << values.begin()->second.length() << " bytes) :\n";
 	values.begin()->second.hexdump(cout);
 	cout << std::endl;
       }
@@ -2029,7 +2046,7 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
 	// dump key in hex if it contains nonprintable characters
 	if (std::count_if(it->first.begin(), it->first.end(),
 	    (int (*)(int))isprint) < (int)it->first.length()) {
-	  cout << "key: (" << it->first.length() << " bytes):\n";
+	  cout << "key (" << it->first.length() << " bytes):\n";
 	  bufferlist keybl;
 	  keybl.append(it->first);
 	  keybl.hexdump(cout);
@@ -2037,7 +2054,7 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
 	  cout << it->first;
 	}
 	cout << std::endl;
-	cout << "value: (" << it->second.length() << " bytes) :\n";
+	cout << "value (" << it->second.length() << " bytes) :\n";
 	it->second.hexdump(cout);
 	cout << std::endl;
       }

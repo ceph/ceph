@@ -554,6 +554,12 @@ void Client::shutdown()
 {
   ldout(cct, 1) << "shutdown" << dendl;
 
+  // If we were not mounted, but were being used for sending
+  // MDS commands, we may have sessions that need closing.
+  client_lock.Lock();
+  _close_sessions();
+  client_lock.Unlock();
+
   cct->_conf->remove_observer(this);
 
   AdminSocket* admin_socket = cct->get_admin_socket();
@@ -2492,14 +2498,16 @@ void Client::send_reconnect(MetaSession *session)
       bufferlist flockbl;
       _encode_filelocks(in, flockbl);
 
-      in->caps[mds]->seq = 0;  // reset seq.
-      in->caps[mds]->issue_seq = 0;  // reset seq.
-      in->caps[mds]->mseq = 0;  // reset seq.
+      Cap *cap = in->caps[mds];
+      cap->seq = 0;  // reset seq.
+      cap->issue_seq = 0;  // reset seq.
+      cap->mseq = 0;  // reset seq.
+      cap->issued = cap->implemented;
       m->add_cap(p->first.ino, 
-		 in->caps[mds]->cap_id,
+		 cap->cap_id,
 		 path.get_ino(), path.get_path(),   // ino
 		 in->caps_wanted(), // wanted
-		 in->caps[mds]->issued,     // issued
+		 cap->issued,     // issued
 		 in->snaprealm->ino,
 		 flockbl);
 
@@ -2857,16 +2865,9 @@ void Client::put_cap_ref(Inode *in, int cap)
     if (last & CEPH_CAP_FILE_CACHE) {
       ldout(cct, 5) << "put_cap_ref dropped last FILE_CACHE ref on " << *in << dendl;
       ++put_nref;
-      // release clean pages too, if we dont want RDCACHE
-      if (!(in->caps_wanted() & CEPH_CAP_FILE_CACHE))
-	drop |= CEPH_CAP_FILE_CACHE;
     }
-    if (drop) {
-      if (drop & CEPH_CAP_FILE_CACHE)
-	_invalidate_inode_cache(in);
-      else
-	check_caps(in, false);
-    }
+    if (drop)
+      check_caps(in, false);
     if (put_nref)
       put_inode(in, put_nref);
   }
@@ -3087,6 +3088,10 @@ void Client::check_caps(Inode *in, bool is_delayed)
     wanted |= CEPH_CAP_FILE_EXCL;
   }
 
+  int implemented;
+  int issued = in->caps_issued(&implemented);
+  int revoking = implemented & ~issued;
+
   int retain = wanted | used | CEPH_CAP_PIN;
   if (!unmounting) {
     if (wanted)
@@ -3098,6 +3103,8 @@ void Client::check_caps(Inode *in, bool is_delayed)
   ldout(cct, 10) << "check_caps on " << *in
 	   << " wanted " << ccap_string(wanted)
 	   << " used " << ccap_string(used)
+	   << " issued " << ccap_string(issued)
+	   << " revoking " << ccap_string(revoking)
 	   << " is_delayed=" << is_delayed
 	   << dendl;
 
@@ -3106,6 +3113,10 @@ void Client::check_caps(Inode *in, bool is_delayed)
 
   if (in->caps.empty())
     return;   // guard if at end of func
+
+  if ((revoking & (CEPH_CAP_FILE_CACHE | CEPH_CAP_FILE_LAZYIO)) &&
+      (used & CEPH_CAP_FILE_CACHE) && !(used & CEPH_CAP_FILE_BUFFER))
+    _release(in);
 
   if (!in->cap_snaps.empty())
     flush_snaps(in);
@@ -3130,7 +3141,7 @@ void Client::check_caps(Inode *in, bool is_delayed)
     if (in->auth_cap && cap != in->auth_cap)
       cap_used &= ~in->auth_cap->issued;
 
-    int revoking = cap->implemented & ~cap->issued;
+    revoking = cap->implemented & ~cap->issued;
     
     ldout(cct, 10) << " cap mds." << mds
 	     << " issued " << ccap_string(cap->issued)
@@ -3385,41 +3396,36 @@ private:
   Client *client;
   InodeRef inode;
   int64_t offset, length;
-  bool keep_caps;
 public:
-  C_Client_CacheInvalidate(Client *c, Inode *in, int64_t off, int64_t len, bool keep) :
-			   client(c), inode(in), offset(off), length(len), keep_caps(keep) {
+  C_Client_CacheInvalidate(Client *c, Inode *in, int64_t off, int64_t len) :
+			   client(c), inode(in), offset(off), length(len) {
   }
   void finish(int r) {
     // _async_invalidate takes the lock when it needs to, call this back from outside of lock.
     assert(!client->client_lock.is_locked_by_me());
-    client->_async_invalidate(inode, offset, length, keep_caps);
+    client->_async_invalidate(inode, offset, length);
   }
 };
 
-void Client::_async_invalidate(InodeRef& in, int64_t off, int64_t len, bool keep_caps)
+void Client::_async_invalidate(InodeRef& in, int64_t off, int64_t len)
 {
-  ldout(cct, 10) << "_async_invalidate " << off << "~" << len << (keep_caps ? " keep_caps" : "") << dendl;
+  ldout(cct, 10) << "_async_invalidate " << off << "~" << len << dendl;
   if (use_faked_inos())
     ino_invalidate_cb(callback_handle, vinodeno_t(in->faked_ino, CEPH_NOSNAP), off, len);
   else
     ino_invalidate_cb(callback_handle, in->vino(), off, len);
 
   client_lock.Lock();
-  if (!keep_caps)
-    check_caps(in.get(), false);
   in.reset(); // put inode inside client_lock
   client_lock.Unlock();
-  ldout(cct, 10) << "_async_invalidate " << off << "~" << len << (keep_caps ? " keep_caps" : "") << " done" << dendl;
+  ldout(cct, 10) << "_async_invalidate " << off << "~" << len << " done" << dendl;
 }
 
-void Client::_schedule_invalidate_callback(Inode *in, int64_t off, int64_t len, bool keep_caps) {
+void Client::_schedule_invalidate_callback(Inode *in, int64_t off, int64_t len) {
 
   if (ino_invalidate_cb)
     // we queue the invalidate, which calls the callback and decrements the ref
-    async_ino_invalidator.queue(new C_Client_CacheInvalidate(this, in, off, len, keep_caps));
-  else if (!keep_caps)
-    check_caps(in, false);
+    async_ino_invalidator.queue(new C_Client_CacheInvalidate(this, in, off, len));
 }
 
 void Client::_invalidate_inode_cache(Inode *in)
@@ -3430,7 +3436,7 @@ void Client::_invalidate_inode_cache(Inode *in)
   if (cct->_conf->client_oc)
     objectcacher->release_set(&in->oset);
 
-  _schedule_invalidate_callback(in, 0, 0, false);
+  _schedule_invalidate_callback(in, 0, 0);
 }
 
 void Client::_invalidate_inode_cache(Inode *in, int64_t off, int64_t len)
@@ -3444,15 +3450,17 @@ void Client::_invalidate_inode_cache(Inode *in, int64_t off, int64_t len)
     objectcacher->discard_set(&in->oset, ls);
   }
 
-  _schedule_invalidate_callback(in, off, len, true);
+  _schedule_invalidate_callback(in, off, len);
 }
 
-void Client::_release(Inode *in)
+bool Client::_release(Inode *in)
 {
   ldout(cct, 20) << "_release " << *in << dendl;
   if (in->cap_refs[CEPH_CAP_FILE_CACHE] == 0) {
     _invalidate_inode_cache(in);
+    return true;
   }
+  return false;
 }
 
 bool Client::_flush(Inode *in, Context *onfinish)
@@ -4689,7 +4697,8 @@ void Client::handle_cap_grant(MetaSession *session, Inode *in, Cap *cap, MClient
         && !_flush(in, new C_Client_FlushComplete(this, in))) {
       // waitin' for flush
     } else if ((old_caps & ~new_caps) & CEPH_CAP_FILE_CACHE) {
-      _release(in);
+      if (_release(in))
+	check = true;
     } else {
       cap->wanted = 0; // don't let check_caps skip sending a response to MDS
       check = true;
@@ -5035,15 +5044,21 @@ int Client::mount(const std::string &mount_root, bool require_mds)
   ldout(cct, 2) << "mounted: have mdsmap " << mdsmap->get_epoch() << dendl;
   if (require_mds) {
     while (1) {
-      if (mdsmap->get_epoch() > 0) {
-        if (mdsmap->get_num_mds(CEPH_MDS_STATE_ACTIVE) == 0) {
-          ldout(cct, 10) << "no mds up: epoch=" << mdsmap->get_epoch() << dendl;
-          return CEPH_FUSE_NO_MDS_UP;
-        } else {
-          break;
-        }
-      } else {
+      auto availability = mdsmap->is_cluster_available();
+      if (availability == MDSMap::STUCK_UNAVAILABLE) {
+        // Error out
+        ldout(cct, 10) << "mds cluster unavailable: epoch=" << mdsmap->get_epoch() << dendl;
+        return CEPH_FUSE_NO_MDS_UP;
+      } else if (availability == MDSMap::AVAILABLE) {
+        // Continue to mount
+        break;
+      } else if (availability == MDSMap::TRANSIENT_UNAVAILABLE) {
+        // Else, wait.  MDSMonitor will update the map to bring
+        // us to a conclusion eventually.
         wait_on_list(waiting_for_mdsmap);
+      } else {
+        // Unexpected value!
+        assert(0);
       }
     }
   }
@@ -5099,6 +5114,24 @@ int Client::mount(const std::string &mount_root, bool require_mds)
 }
 
 // UNMOUNT
+
+void Client::_close_sessions()
+{
+  while (!mds_sessions.empty()) {
+    // send session closes!
+    for (map<mds_rank_t,MetaSession*>::iterator p = mds_sessions.begin();
+	p != mds_sessions.end();
+	++p) {
+      if (p->second->state != MetaSession::STATE_CLOSING) {
+	_close_mds_session(p->second);
+      }
+    }
+
+    // wait for sessions to close
+    ldout(cct, 2) << "waiting for " << mds_sessions.size() << " mds sessions to close" << dendl;
+    mount_cond.Wait(client_lock);
+  }
+}
 
 void Client::unmount()
 {
@@ -5184,21 +5217,7 @@ void Client::unmount()
     traceout.close();
   }
 
-  
-  while (!mds_sessions.empty()) {
-    // send session closes!
-    for (map<mds_rank_t,MetaSession*>::iterator p = mds_sessions.begin();
-	p != mds_sessions.end();
-	++p) {
-      if (p->second->state != MetaSession::STATE_CLOSING) {
-	_close_mds_session(p->second);
-      }
-    }
-
-    // wait for sessions to close
-    ldout(cct, 2) << "waiting for " << mds_sessions.size() << " mds sessions to close" << dendl;
-    mount_cond.Wait(client_lock);
-  }
+  _close_sessions();
 
   mounted = false;
 
@@ -7132,13 +7151,7 @@ int Client::_release_fh(Fh *f)
   if (in->snapid == CEPH_NOSNAP) {
     if (in->put_open_ref(f->mode)) {
       _flush(in, new C_Client_FlushComplete(this, in));
-      // release clean pages too, if we dont want RDCACHE
-      if (in->cap_refs[CEPH_CAP_FILE_CACHE] == 0 &&
-	  !(in->caps_wanted() & CEPH_CAP_FILE_CACHE) &&
-	  !objectcacher->set_is_empty(&in->oset))
-	_invalidate_inode_cache(in);
-      else
-	check_caps(in, false);
+      check_caps(in, false);
     }
   } else {
     assert(in->snap_cap_refs > 0);
@@ -8655,7 +8668,8 @@ int Client::lazyio_synchronize(int fd, loff_t offset, size_t count)
   Inode *in = f->inode.get();
   
   _fsync(f, true);
-  _release(in);
+  if (_release(in))
+    check_caps(in, false);
   return 0;
 }
 
@@ -11344,6 +11358,13 @@ int Client::check_pool_perm(Inode *in, int need)
   }
 
   if (!have) {
+    if (in->snapid != CEPH_NOSNAP) {
+      // pool permission check needs to write to the first object. But for snapshot,
+      // head of the first object may have alread been deleted. To avoid creating
+      // orphan object, skip the check for now.
+      return 0;
+    }
+
     pool_perms[pool] = POOL_CHECKING;
 
     char oid_buf[32];

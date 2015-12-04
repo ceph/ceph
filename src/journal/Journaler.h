@@ -30,6 +30,7 @@ public:
 	    const std::string &client_id, double commit_interval);
   ~Journaler();
 
+  int exists(bool *header_exists) const;
   int create(uint8_t order, uint8_t splay_width, int64_t pool_id);
   int remove();
 
@@ -66,7 +67,7 @@ private:
     }
   };
 
-  librados::IoCtx m_header_ioctx;
+  mutable librados::IoCtx m_header_ioctx;
   librados::IoCtx m_data_ioctx;
   CephContext *m_cct;
   std::string m_client_id;

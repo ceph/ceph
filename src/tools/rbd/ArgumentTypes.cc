@@ -22,7 +22,8 @@ const std::map<uint64_t, std::string> ImageFeatures::FEATURE_MAPPING = {
   {RBD_FEATURE_EXCLUSIVE_LOCK, "exclusive-lock"},
   {RBD_FEATURE_OBJECT_MAP, "object-map"},
   {RBD_FEATURE_FAST_DIFF, "fast-diff"},
-  {RBD_FEATURE_DEEP_FLATTEN, "deep-flatten"}};
+  {RBD_FEATURE_DEEP_FLATTEN, "deep-flatten"},
+  {RBD_FEATURE_JOURNALING, "journaling"}};
 
 Format::Formatter Format::create_formatter(bool pretty) const {
   if (value == "json") {
@@ -121,6 +122,14 @@ void add_snap_option(po::options_description *opt,
   // TODO add validator
   opt->add_options()
     (name.c_str(), po::value<std::string>(), description.c_str());
+}
+
+void add_pool_options(boost::program_options::options_description *pos,
+                      boost::program_options::options_description *opt) {
+  pos->add_options()
+    ("pool-name", "pool name");
+  opt->add_options()
+    ((POOL_NAME + ",p").c_str(), po::value<std::string>(), "pool name");
 }
 
 void add_image_spec_options(po::options_description *pos,

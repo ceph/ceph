@@ -522,7 +522,6 @@ FileStore::FileStore(const std::string &base, const std::string &jdev, osflagbit
   basedir_fd(-1), current_fd(-1),
   backend(NULL),
   index_manager(do_update),
-  ondisk_finisher(g_ceph_context),
   lock("FileStore::lock"),
   force_sync(false), 
   sync_entry_timeo_lock("sync_entry_timeo_lock"),
@@ -530,9 +529,11 @@ FileStore::FileStore(const std::string &base, const std::string &jdev, osflagbit
   stop(false), sync_thread(this),
   fdcache(g_ceph_context),
   wbthrottle(g_ceph_context),
+  next_osr_id(0),
   throttle_ops(g_ceph_context, "filestore_ops",g_conf->filestore_queue_max_ops),
   throttle_bytes(g_ceph_context, "filestore_bytes",g_conf->filestore_queue_max_bytes),
-  op_finisher(g_ceph_context),
+  m_ondisk_finisher_num(g_conf->filestore_ondisk_finisher_threads),
+  m_apply_finisher_num(g_conf->filestore_apply_finisher_threads),
   op_tp(g_ceph_context, "FileStore::op_tp", g_conf->filestore_op_threads, "filestore_op_threads"),
   op_wq(this, g_conf->filestore_op_thread_timeout,
 	g_conf->filestore_op_thread_suicide_timeout, &op_tp),
@@ -567,6 +568,18 @@ FileStore::FileStore(const std::string &base, const std::string &jdev, osflagbit
   m_filestore_max_inline_xattrs(0)
 {
   m_filestore_kill_at.set(g_conf->filestore_kill_at);
+  for (int i = 0; i < m_ondisk_finisher_num; ++i) {
+    ostringstream oss;
+    oss << "filestore-ondisk-" << i;
+    Finisher *f = new Finisher(g_ceph_context, oss.str());
+    ondisk_finishers.push_back(f);
+  }
+  for (int i = 0; i < m_apply_finisher_num; ++i) {
+    ostringstream oss;
+    oss << "filestore-apply-" << i;
+    Finisher *f = new Finisher(g_ceph_context, oss.str());
+    apply_finishers.push_back(f);
+  }
 
   ostringstream oss;
   oss << basedir << "/current";
@@ -617,6 +630,14 @@ FileStore::FileStore(const std::string &base, const std::string &jdev, osflagbit
 
 FileStore::~FileStore()
 {
+  for (vector<Finisher*>::iterator it = ondisk_finishers.begin(); it != ondisk_finishers.end(); ++it) {
+    delete *it;
+    *it = NULL;
+  }
+  for (vector<Finisher*>::iterator it = apply_finishers.begin(); it != apply_finishers.end(); ++it) {
+    delete *it;
+    *it = NULL;
+  }
   g_ceph_context->_conf->remove_observer(this);
   g_ceph_context->get_perfcounters_collection()->remove(logger);
 
@@ -1629,8 +1650,12 @@ int FileStore::mount()
   journal_start();
 
   op_tp.start();
-  op_finisher.start();
-  ondisk_finisher.start();
+  for (vector<Finisher*>::iterator it = ondisk_finishers.begin(); it != ondisk_finishers.end(); ++it) {
+    (*it)->start();
+  }
+  for (vector<Finisher*>::iterator it = apply_finishers.begin(); it != apply_finishers.end(); ++it) {
+    (*it)->start();
+  }
 
   timer.init();
 
@@ -1720,8 +1745,12 @@ int FileStore::umount()
   if (!(generic_flags & SKIP_JOURNAL_REPLAY))
     journal_write_close();
 
-  op_finisher.stop();
-  ondisk_finisher.stop();
+  for (vector<Finisher*>::iterator it = ondisk_finishers.begin(); it != ondisk_finishers.end(); ++it) {
+    (*it)->stop();
+  }
+  for (vector<Finisher*>::iterator it = apply_finishers.begin(); it != apply_finishers.end(); ++it) {
+    (*it)->stop();
+  }
 
   if (fsid_fd >= 0) {
     VOID_TEMP_FAILURE_RETRY(::close(fsid_fd));
@@ -1820,7 +1849,6 @@ void FileStore::op_queue_reserve_throttle(Op *o, ThreadPool::TPHandle *handle)
   logger->set(l_os_oq_max_ops, max_ops);
   logger->set(l_os_oq_max_bytes, max_bytes);
 
-  utime_t start = ceph_clock_now(g_ceph_context);
   if (handle)
     handle->suspend_tp_timeout();
   if (throttle_ops.should_wait(1) || 
@@ -1833,9 +1861,6 @@ void FileStore::op_queue_reserve_throttle(Op *o, ThreadPool::TPHandle *handle)
   throttle_bytes.get(o->bytes);
   if (handle)
     handle->reset_tp_timeout();
-
-  utime_t end = ceph_clock_now(g_ceph_context);
-  logger->tinc(l_os_queue_lat, end - start);
 
   logger->set(l_os_oq_ops, throttle_ops.get_current());
   logger->set(l_os_oq_bytes, throttle_bytes.get_current());
@@ -1892,10 +1917,10 @@ void FileStore::_finish_op(OpSequencer *osr)
     o->onreadable_sync->complete(0);
   }
   if (o->onreadable) {
-    op_finisher.queue(o->onreadable);
+    apply_finishers[osr->id % m_apply_finisher_num]->queue(o->onreadable);
   }
   if (!to_queue.empty()) {
-    op_finisher.queue(to_queue);
+    apply_finishers[osr->id % m_apply_finisher_num]->queue(to_queue);
   }
   delete o;
 }
@@ -1931,6 +1956,7 @@ int FileStore::queue_transactions(Sequencer *posr, list<Transaction*> &tls,
     return 0;
   }
 
+  utime_t start = ceph_clock_now(g_ceph_context);
   // set up the sequencer
   OpSequencer *osr;
   assert(posr);
@@ -1938,7 +1964,7 @@ int FileStore::queue_transactions(Sequencer *posr, list<Transaction*> &tls,
     osr = static_cast<OpSequencer *>(posr->p.get());
     dout(5) << "queue_transactions existing " << osr << " " << *osr << dendl;
   } else {
-    osr = new OpSequencer;
+    osr = new OpSequencer(next_osr_id.inc());
     osr->set_cct(g_ceph_context);
     osr->parent = posr;
     posr->p = osr;
@@ -1956,7 +1982,7 @@ int FileStore::queue_transactions(Sequencer *posr, list<Transaction*> &tls,
     journal->throttle();
     //prepare and encode transactions data out of lock
     bufferlist tbl;
-    int data_align = _op_journal_transactions_prepare(o->tls, tbl);
+    int orig_len = journal->prepare_entry(o->tls, &tbl);
     uint64_t op_num = submit_manager.op_submit_start();
     o->op = op_num;
 
@@ -1966,7 +1992,7 @@ int FileStore::queue_transactions(Sequencer *posr, list<Transaction*> &tls,
     if (m_filestore_journal_parallel) {
       dout(5) << "queue_transactions (parallel) " << o->op << " " << o->tls << dendl;
       
-      _op_journal_transactions(tbl, data_align, o->op, ondisk, osd_op);
+      _op_journal_transactions(tbl, orig_len, o->op, ondisk, osd_op);
       
       // queue inside submit_manager op submission lock
       queue_op(osr, o);
@@ -1975,13 +2001,15 @@ int FileStore::queue_transactions(Sequencer *posr, list<Transaction*> &tls,
       
       osr->queue_journal(o->op);
 
-      _op_journal_transactions(tbl, data_align, o->op,
+      _op_journal_transactions(tbl, orig_len, o->op,
 			       new C_JournaledAhead(this, osr, o, ondisk),
 			       osd_op);
     } else {
       assert(0);
     }
     submit_manager.op_submit_finish(op_num);
+    utime_t end = ceph_clock_now(g_ceph_context);
+    logger->tinc(l_os_queue_lat, end - start);
     return 0;
   }
 
@@ -2002,13 +2030,18 @@ int FileStore::queue_transactions(Sequencer *posr, list<Transaction*> &tls,
     if (ondisk)
       apply_manager.add_waiter(op_num, ondisk);
     submit_manager.op_submit_finish(op_num);
+    utime_t end = ceph_clock_now(g_ceph_context);
+    logger->tinc(l_os_queue_lat, end - start);
     return 0;
   }
 
-
+  assert(journal);
   //prepare and encode transactions data out of lock
   bufferlist tbl;
-  int data_align = _op_journal_transactions_prepare(tls, tbl);
+  int orig_len = -1;
+  if (journal->is_writeable()) {
+    orig_len = journal->prepare_entry(tls, &tbl);
+  }
   uint64_t op = submit_manager.op_submit_start();
   dout(5) << "queue_transactions (trailing journal) " << op << " " << tls << dendl;
 
@@ -2019,7 +2052,7 @@ int FileStore::queue_transactions(Sequencer *posr, list<Transaction*> &tls,
   int r = do_transactions(tls, op);
     
   if (r >= 0) {
-    _op_journal_transactions(tbl, data_align, op, ondisk, osd_op);
+    _op_journal_transactions(tbl, orig_len, op, ondisk, osd_op);
   } else {
     delete ondisk;
   }
@@ -2029,11 +2062,13 @@ int FileStore::queue_transactions(Sequencer *posr, list<Transaction*> &tls,
   if (onreadable_sync) {
     onreadable_sync->complete(r);
   }
-  op_finisher.queue(onreadable, r);
+  apply_finishers[osr->id % m_apply_finisher_num]->queue(onreadable, r);
 
   submit_manager.op_submit_finish(op);
   apply_manager.op_apply_finish(op);
 
+  utime_t end = ceph_clock_now(g_ceph_context);
+  logger->tinc(l_os_queue_lat, end - start);
   return r;
 }
 
@@ -2051,10 +2086,10 @@ void FileStore::_journaled_ahead(OpSequencer *osr, Op *o, Context *ondisk)
   // getting blocked behind an ondisk completion.
   if (ondisk) {
     dout(10) << " queueing ondisk " << ondisk << dendl;
-    ondisk_finisher.queue(ondisk);
+    ondisk_finishers[osr->id % m_ondisk_finisher_num]->queue(ondisk);
   }
   if (!to_queue.empty()) {
-    ondisk_finisher.queue(to_queue);
+    ondisk_finishers[osr->id % m_ondisk_finisher_num]->queue(to_queue);
   }
 }
 
@@ -3799,7 +3834,9 @@ void FileStore::_flush_op_queue()
   dout(10) << "_flush_op_queue draining op tp" << dendl;
   op_wq.drain();
   dout(10) << "_flush_op_queue waiting for apply finisher" << dendl;
-  op_finisher.wait_for_empty();
+  for (vector<Finisher*>::iterator it = apply_finishers.begin(); it != apply_finishers.end(); ++it) {
+    (*it)->wait_for_empty();
+  }
 }
 
 /*
@@ -3823,7 +3860,9 @@ void FileStore::flush()
     if (journal)
       journal->flush();
     dout(10) << "flush draining ondisk finisher" << dendl;
-    ondisk_finisher.wait_for_empty();
+    for (vector<Finisher*>::iterator it = ondisk_finishers.begin(); it != ondisk_finishers.end(); ++it) {
+      (*it)->wait_for_empty();
+    }
   }
 
   _flush_op_queue();
@@ -4974,7 +5013,7 @@ int FileStore::_destroy_collection(coll_t c)
   dout(15) << "_destroy_collection " << fn << dendl;
   {
     Index from;
-    int r = get_index(c, &from);
+    r = get_index(c, &from);
     if (r < 0)
       goto out;
     assert(NULL != from.index);

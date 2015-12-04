@@ -1,7 +1,7 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
-#ifndef CEPH_LIBRBD_REBUILD_OBJECT_MAP_REQUEST_H
-#define CEPH_LIBRBD_REBUILD_OBJECT_MAP_REQUEST_H
+#ifndef CEPH_LIBRBD_OPERATION_REBUILD_OBJECT_MAP_REQUEST_H
+#define CEPH_LIBRBD_OPERATION_REBUILD_OBJECT_MAP_REQUEST_H
 
 #include "include/int_types.h"
 #include "librbd/AsyncRequest.h"
@@ -11,12 +11,15 @@ namespace librbd {
 class ImageCtx;
 class ProgressContext;
 
-class RebuildObjectMapRequest : public AsyncRequest<> {
+namespace operation {
+
+template <typename ImageCtxT = ImageCtx>
+class RebuildObjectMapRequest : public AsyncRequest<ImageCtxT> {
 public:
 
-  RebuildObjectMapRequest(ImageCtx &image_ctx, Context *on_finish,
+  RebuildObjectMapRequest(ImageCtxT &image_ctx, Context *on_finish,
                           ProgressContext &prog_ctx)
-    : AsyncRequest(image_ctx, on_finish), m_image_ctx(image_ctx),
+    : AsyncRequest<ImageCtxT>(image_ctx, on_finish), m_image_ctx(image_ctx),
       m_prog_ctx(prog_ctx), m_attempted_trim(false)
   {
   }
@@ -58,7 +61,7 @@ private:
     STATE_UPDATE_HEADER
   };
 
-  ImageCtx &m_image_ctx;
+  ImageCtxT &m_image_ctx;
   ProgressContext &m_prog_ctx;
   State m_state;
   bool m_attempted_trim;
@@ -73,6 +76,9 @@ private:
 
 };
 
+} // namespace operation
 } // namespace librbd
 
-#endif // CEPH_LIBRBD_REBUILD_OBJECT_MAP_REQUEST_H
+extern template class librbd::operation::RebuildObjectMapRequest<librbd::ImageCtx>;
+
+#endif // CEPH_LIBRBD_OPERATION_REBUILD_OBJECT_MAP_REQUEST_H
