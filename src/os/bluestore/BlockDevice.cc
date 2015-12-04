@@ -141,6 +141,14 @@ void BlockDevice::close()
 int BlockDevice::flush()
 {
   dout(10) << __func__ << " start" << dendl;
+  if (g_conf->bdev_inject_crash) {
+    // sleep for a moment to give other threads a chance to submit or
+    // wait on io that races with a flush.
+    derr << __func__ << " injecting crash. first we sleep..." << dendl;
+    sleep(3);
+    derr << __func__ << " and now we die" << dendl;
+    assert(0 == "bdev_inject_crash");
+  }
   utime_t start = ceph_clock_now(NULL);
   int r = ::fdatasync(fd);
   utime_t end = ceph_clock_now(NULL);
@@ -322,13 +330,22 @@ int BlockDevice::aio_write(
     ioc->pending_aios.push_back(FS::aio_t(ioc, fd));
     ioc->num_pending.inc();
     FS::aio_t& aio = ioc->pending_aios.back();
-    bl.prepare_iov(&aio.iov);
-    for (unsigned i=0; i<aio.iov.size(); ++i) {
-      dout(30) << "aio " << i << " " << aio.iov[i].iov_base
-	       << " " << aio.iov[i].iov_len << dendl;
+    if (g_conf->bdev_inject_crash &&
+	rand() % g_conf->bdev_inject_crash == 0) {
+      derr << __func__ << " bdev_inject_crash: dropping io " << off << "~" << len
+	   << dendl;
+      // generate a real io so that aio_wait behaves properly, but make it
+      // a read instead of write, and toss the result.
+      aio.pread(off, len);
+    } else {
+      bl.prepare_iov(&aio.iov);
+      for (unsigned i=0; i<aio.iov.size(); ++i) {
+	dout(30) << "aio " << i << " " << aio.iov[i].iov_base
+		 << " " << aio.iov[i].iov_len << dendl;
+      }
+      aio.bl.claim_append(bl);
+      aio.pwritev(off);
     }
-    aio.bl.claim_append(bl);
-    aio.pwritev(off);
     dout(2) << __func__ << " prepared aio " << &aio << dendl;
   } else
 #endif
