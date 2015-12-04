@@ -107,6 +107,16 @@ WRITE_INTTYPE_ENCODER(int32_t, le32)
 WRITE_INTTYPE_ENCODER(uint16_t, le16)
 WRITE_INTTYPE_ENCODER(int16_t, le16)
 
+inline void packed_encode(char *t, bufferlist& bl, uint64_t len)
+{
+  bl.append(t, len);
+}
+
+inline void packed_decode(char *t, bufferlist::iterator& p, uint64_t len)
+{
+  p.copy(len, t);
+}
+
 #ifdef ENCODE_DUMP
 # include <stdio.h>
 # include <sys/types.h>

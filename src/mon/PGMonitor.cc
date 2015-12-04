@@ -799,7 +799,9 @@ bool PGMonitor::prepare_pg_stats(MonOpRequestRef op)
        p != stats->pg_stat.end();
        ++p) {
     pg_t pgid = p->first;
-    ack->pg_stat[pgid] = make_pair(p->second.reported_seq, p->second.reported_epoch);
+    epoch_t e = p->second.reported_epoch;
+    version_t t = p->second.reported_seq;
+    ack->pg_stat[pgid] = make_pair(t, e);
 
     if (pg_map.pg_stat.count(pgid) &&
         pg_map.pg_stat[pgid].get_version_pair() > p->second.get_version_pair()) {
