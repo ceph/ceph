@@ -41,12 +41,6 @@ bool operator>(const MemStore::CollectionRef& l,
 }
 
 
-int MemStore::peek_journal_fsid(uuid_d *fsid)
-{
-  *fsid = uuid_d();
-  return 0;
-}
-
 int MemStore::mount()
 {
   int r = _load();
@@ -227,6 +221,10 @@ int MemStore::mkfs()
   set<coll_t> collections;
   ::encode(collections, bl);
   r = bl.write_file(fn.c_str());
+  if (r < 0)
+    return r;
+
+  r = write_meta("type", "memstore");
   if (r < 0)
     return r;
 
