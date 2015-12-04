@@ -163,6 +163,14 @@ public:
     virtual std::pair<std::string,std::string> raw_key() = 0;
     virtual bool raw_key_is_prefixed(const std::string &prefix) = 0;
     virtual bufferlist value() = 0;
+    virtual bufferptr value_as_ptr() {
+      bufferlist bl = value();
+      if (bl.length()) {
+        return *bl.buffers().begin();
+      } else {
+        return bufferptr();
+      }
+    }
     virtual int status() = 0;
     virtual ~WholeSpaceIteratorImpl() { }
   };
@@ -222,6 +230,9 @@ public:
     }
     bufferlist value() {
       return generic_iter->value();
+    }
+    bufferptr value_as_ptr() {
+      return generic_iter->value_as_ptr();
     }
     int status() {
       return generic_iter->status();
