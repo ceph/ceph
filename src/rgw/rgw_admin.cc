@@ -2006,7 +2006,7 @@ int main(int argc, char **argv)
 			 opt_cmd == OPT_REALM_LIST_PERIODS ||
 			 opt_cmd == OPT_REALM_GET_DEFAULT || opt_cmd == OPT_REALM_REMOVE ||
 			 opt_cmd == OPT_REALM_RENAME || opt_cmd == OPT_REALM_SET ||
-			 opt_cmd == OPT_REALM_DEFAULT);
+			 opt_cmd == OPT_REALM_DEFAULT || opt_cmd == OPT_REALM_PULL);
 
   if (raw_storage_op) {
     store = RGWStoreManager::get_raw_storage(g_ceph_context);
@@ -2335,6 +2335,58 @@ int main(int argc, char **argv)
 	}
       }
       break;
+    case OPT_REALM_PULL:
+      {
+        RGWEnv env;
+        req_info info(g_ceph_context, &env);
+        info.method = "GET";
+        info.request_uri = "/admin/realm";
+
+        map<string, string> &params = info.args.get_params();
+        if (!realm_id.empty())
+          params["id"] = realm_id;
+        if (!realm_name.empty())
+          params["name"] = realm_name;
+
+        bufferlist bl;
+        JSONParser p;
+        int ret = send_to_remote_or_url(remote, url, access_key, secret_key,
+                                        info, bl, p);
+        if (ret < 0) {
+          cerr << "request failed: " << cpp_strerror(-ret) << std::endl;
+          return ret;
+        }
+        RGWRealm realm;
+        realm.init(g_ceph_context, store, false);
+        try {
+          decode_json_obj(realm, &p);
+        } catch (JSONDecoder::err& e) {
+          cout << "failed to decode JSON response: " << e.message << std::endl;
+          return -EINVAL;
+        }
+        RGWPeriod period;
+        if (!realm.get_current_period().empty()) {
+          ret = do_period_pull(remote, url, access_key, secret_key,
+                               realm_id, realm_name, period_id, period_epoch,
+                               &period);
+          if (ret < 0) {
+            cerr << "could not fetch period " << realm.get_current_period() << std::endl;
+            return -ret;
+          }
+        }
+        ret = realm.create(false);
+        if (ret < 0) {
+          cerr << "Error storing realm " << realm.get_id() << ": "
+            << cpp_strerror(ret) << std::endl;
+          return ret;
+        }
+
+        encode_json("realm", realm, formatter);
+        formatter->flush(cout);
+        cout << std::endl;
+      }
+      return 0;
+
     case OPT_ZONEGROUP_ADD:
       {
 	if (zonegroup_id.empty() && zonegroup_name.empty()) {
@@ -3149,58 +3201,6 @@ int main(int argc, char **argv)
       cerr << "could not remove key: " << err_msg << std::endl;
       return -ret;
     }
-  case OPT_REALM_PULL:
-    {
-      RGWEnv env;
-      req_info info(g_ceph_context, &env);
-      info.method = "GET";
-      info.request_uri = "/admin/realm";
-
-      map<string, string> &params = info.args.get_params();
-      if (!realm_id.empty())
-        params["id"] = realm_id;
-      if (!realm_name.empty())
-        params["name"] = realm_name;
-
-      bufferlist bl;
-      JSONParser p;
-      int ret = send_to_remote_or_url(remote, url, access_key, secret_key,
-                                      info, bl, p);
-      if (ret < 0) {
-        cerr << "request failed: " << cpp_strerror(-ret) << std::endl;
-        return ret;
-      }
-      RGWRealm realm;
-      realm.init(g_ceph_context, store, false);
-      try {
-        decode_json_obj(realm, &p);
-      } catch (JSONDecoder::err& e) {
-        cout << "failed to decode JSON response: " << e.message << std::endl;
-        return -EINVAL;
-      }
-      RGWPeriod period;
-      if (!realm.get_current_period().empty()) {
-        ret = do_period_pull(remote, url, access_key, secret_key,
-                             realm_id, realm_name, period_id, period_epoch,
-                             &period);
-        if (ret < 0) {
-          cerr << "could not fetch period " << realm.get_current_period() << std::endl;
-          return -ret;
-        }
-      }
-      ret = realm.create(false);
-      if (ret < 0) {
-        cerr << "Error storing realm " << realm.get_id() << ": "
-            << cpp_strerror(ret) << std::endl;
-        return ret;
-      }
-
-      encode_json("realm", realm, formatter);
-      formatter->flush(cout);
-      cout << std::endl;
-    }
-    return 0;
-
   case OPT_PERIOD_PUSH:
     {
       RGWEnv env;
