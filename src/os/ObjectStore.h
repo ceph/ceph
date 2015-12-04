@@ -686,10 +686,18 @@ public:
 
       //the other.op_bl SHOULD NOT be changes during append operation,
       //we use additional bufferlist to avoid this problem
-      bufferptr other_op_bl_ptr(other.op_bl.length());
-      other.op_bl.copy(0, other.op_bl.length(), other_op_bl_ptr.c_str());
       bufferlist other_op_bl;
-      other_op_bl.append(other_op_bl_ptr);
+      for (std::list<bufferptr>::const_iterator it = other.op_bl.buffers().begin();
+           it != other.op_bl.buffers().end();
+           ++it) {
+        unsigned offset = 0;
+        while (offset < it->length()) {
+          bufferptr bp = _get_next_opptr(it->length() - offset);
+          bp.copy_in(0, bp.length(), it->c_str() + offset);
+          offset += bp.length();
+          other_op_bl.append(bp, 0, bp.length());
+        }
+      }
 
       //update other_op_bl with cm & om
       //When the other is appended to current transaction, all coll_index and
@@ -697,8 +705,8 @@ public:
       //combined transaction
       _update_op_bl(other_op_bl, cm, om);
 
-      //append op_bl
-      op_bl.append(other_op_bl);
+      //we has append op_bl in _get_next_opptr function
+      
       //append data_bl
       data_bl.append(other.data_bl);
     }
@@ -894,6 +902,20 @@ private:
      * right place. Sadly, there's no corresponding version nor any
      * form of seat belts for the decoder.
      */
+    bufferptr _get_next_opptr(unsigned size) {
+      if (op_ptr.length() == 0 || op_ptr.offset() >= op_ptr.length()) {
+        op_ptr = bufferptr(sizeof(Op) * OPS_PER_PTR);
+        op_ptr.zero();
+      }
+      unsigned get = MIN(size, (op_ptr.length() - op_ptr.offset()));
+      bufferptr ptr(op_ptr, 0, get);
+      op_bl.push_back(ptr);
+
+      op_ptr.set_offset(op_ptr.offset() + get);
+
+      return op_bl.buffers().back();
+    }
+
     Op* _get_next_op() {
       if (op_ptr.length() == 0 || op_ptr.offset() >= op_ptr.length()) {
         op_ptr = bufferptr(sizeof(Op) * OPS_PER_PTR);
