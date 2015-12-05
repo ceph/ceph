@@ -1064,7 +1064,7 @@ int RGWPeriod::create(bool exclusive)
 
 int RGWPeriod::store_info(bool exclusive)
 {
-  epoch_t latest_epoch = FIRST_EPOCH;
+  epoch_t latest_epoch = FIRST_EPOCH - 1;
   int ret = get_latest_epoch(latest_epoch);
   if (ret < 0 && ret != -ENOENT) {
     ldout(cct, 0) << "ERROR: RGWPeriod::get_latest_epoch() returned " << cpp_strerror(-ret) << dendl;
