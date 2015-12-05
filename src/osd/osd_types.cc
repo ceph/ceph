@@ -1790,142 +1790,156 @@ void object_stat_sum_t::dump(Formatter *f) const
 void object_stat_sum_t::encode(bufferlist& bl) const
 {
   ENCODE_START(15, 3, bl);
-  ::encode(num_bytes, bl);
-  ::encode(num_objects, bl);
-  ::encode(num_object_clones, bl);
-  ::encode(num_object_copies, bl);
-  ::encode(num_objects_missing_on_primary, bl);
-  ::encode(num_objects_degraded, bl);
-  ::encode(num_objects_unfound, bl);
-  ::encode(num_rd, bl);
-  ::encode(num_rd_kb, bl);
-  ::encode(num_wr, bl);
-  ::encode(num_wr_kb, bl);
-  ::encode(num_scrub_errors, bl);
-  ::encode(num_objects_recovered, bl);
-  ::encode(num_bytes_recovered, bl);
-  ::encode(num_keys_recovered, bl);
-  ::encode(num_shallow_scrub_errors, bl);
-  ::encode(num_deep_scrub_errors, bl);
-  ::encode(num_objects_dirty, bl);
-  ::encode(num_whiteouts, bl);
-  ::encode(num_objects_omap, bl);
-  ::encode(num_objects_hit_set_archive, bl);
-  ::encode(num_objects_misplaced, bl);
-  ::encode(num_bytes_hit_set_archive, bl);
-  ::encode(num_flush, bl);
-  ::encode(num_flush_kb, bl);
-  ::encode(num_evict, bl);
-  ::encode(num_evict_kb, bl);
-  ::encode(num_promote, bl);
-  ::encode(num_flush_mode_high, bl);
-  ::encode(num_flush_mode_low, bl);
-  ::encode(num_evict_mode_some, bl);
-  ::encode(num_evict_mode_full, bl);
-  ::encode(num_objects_pinned, bl);
-  ::encode(num_objects_missing, bl);
+#if defined(CEPH_LITTLE_ENDIAN)
+  bl.append((char *)(&num_bytes), sizeof(object_stat_sum_t));
+#else
+  ::packed_encode((char*)&num_bytes, bl, sizeof(num_bytes));
+  ::packed_encode((char*)&num_objects, bl, sizeof(num_objects));
+  ::packed_encode((char*)&num_object_clones, bl, sizeof(num_object_clones));
+  ::packed_encode((char*)&num_object_copies, bl, sizeof(num_object_copies));
+  ::packed_encode((char*)&num_objects_missing_on_primary, bl, sizeof(num_objects_missing_on_primary));
+  ::packed_encode((char*)&num_objects_degraded, bl, sizeof(num_objects_degraded));
+  ::packed_encode((char*)&num_objects_unfound, bl, sizeof(num_objects_unfound));
+  ::packed_encode((char*)&num_rd, bl, sizeof(num_rd));
+  ::packed_encode((char*)&num_rd_kb, bl, sizeof(num_rd_kb));
+  ::packed_encode((char*)&num_wr, bl, sizeof(num_wr));
+  ::packed_encode((char*)&num_wr_kb, bl, sizeof(num_wr_kb));
+  ::packed_encode((char*)&num_scrub_errors, bl, sizeof(num_scrub_errors));
+  ::packed_encode((char*)&num_objects_recovered, bl, sizeof(num_objects_recovered));
+  ::packed_encode((char*)&num_bytes_recovered, bl, sizeof(num_bytes_recovered));
+  ::packed_encode((char*)&num_keys_recovered, bl, sizeof(num_keys_recovered));
+  ::packed_encode((char*)&num_shallow_scrub_errors, bl, sizeof(num_shallow_scrub_errors));
+  ::packed_encode((char*)&num_deep_scrub_errors, bl, sizeof(num_deep_scrub_errors));
+  ::packed_encode((char*)&num_objects_dirty, bl, sizeof(num_objects_dirty));
+  ::packed_encode((char*)&num_whiteouts, bl, sizeof(num_whiteouts));
+  ::packed_encode((char*)&num_objects_omap, bl, sizeof(num_objects_omap));
+  ::packed_encode((char*)&num_objects_hit_set_archive, bl, sizeof(num_objects_hit_set_archive));
+  ::packed_encode((char*)&num_objects_misplaced, bl, sizeof(num_objects_misplaced));
+  ::packed_encode((char*)&num_bytes_hit_set_archive, bl, sizeof(num_bytes_hit_set_archive));
+  ::packed_encode((char*)&num_flush, bl, sizeof(num_flush));
+  ::packed_encode((char*)&num_flush_kb, bl, sizeof(num_flush_kb));
+  ::packed_encode((char*)&num_evict, bl, sizeof(num_evict));
+  ::packed_encode((char*)&num_evict_kb, bl, sizeof(num_evict_kb));
+  ::packed_encode((char*)&num_promote, bl, sizeof(num_promote));
+  ::packed_encode((char*)&num_flush_mode_high, bl, sizeof(num_flush_mode_high));
+  ::packed_encode((char*)&num_flush_mode_low, bl, sizeof(num_flush_mode_low));
+  ::packed_encode((char*)&num_evict_mode_some, bl, sizeof(num_evict_mode_some));
+  ::packed_encode((char*)&num_evict_mode_full, bl, sizeof(num_evict_mode_full));
+  ::packed_encode((char*)&num_objects_pinned, bl, sizeof(num_objects_pinned));
+  ::packed_encode((char*)&num_objects_missing, bl, sizeof(num_objects_missing));
+#endif
   ENCODE_FINISH(bl);
 }
 
 void object_stat_sum_t::decode(bufferlist::iterator& bl)
 {
   DECODE_START_LEGACY_COMPAT_LEN(14, 3, 3, bl);
-  ::decode(num_bytes, bl);
-  if (struct_v < 3) {
-    uint64_t num_kb;
-    ::decode(num_kb, bl);
+  bool decode_finish = false;
+#if defined(CEPH_LITTLE_ENDIAN)
+  if (struct_v == 14) {
+    bl.copy(sizeof(object_stat_sum_t), (char*)(&num_bytes));
+    decode_finish = true;
   }
-  ::decode(num_objects, bl);
-  ::decode(num_object_clones, bl);
-  ::decode(num_object_copies, bl);
-  ::decode(num_objects_missing_on_primary, bl);
-  ::decode(num_objects_degraded, bl);
-  if (struct_v >= 2)
-    ::decode(num_objects_unfound, bl);
-  ::decode(num_rd, bl);
-  ::decode(num_rd_kb, bl);
-  ::decode(num_wr, bl);
-  ::decode(num_wr_kb, bl);
-  if (struct_v >= 4)
-    ::decode(num_scrub_errors, bl);
-  else
-    num_scrub_errors = 0;
-  if (struct_v >= 5) {
-    ::decode(num_objects_recovered, bl);
-    ::decode(num_bytes_recovered, bl);
-    ::decode(num_keys_recovered, bl);
-  } else {
-    num_objects_recovered = 0;
-    num_bytes_recovered = 0;
-    num_keys_recovered = 0;
-  }
-  if (struct_v >= 6) {
-    ::decode(num_shallow_scrub_errors, bl);
-    ::decode(num_deep_scrub_errors, bl);
-  } else {
-    num_shallow_scrub_errors = 0;
-    num_deep_scrub_errors = 0;
-  }
-  if (struct_v >= 7) {
-    ::decode(num_objects_dirty, bl);
-    ::decode(num_whiteouts, bl);
-  } else {
-    num_objects_dirty = 0;
-    num_whiteouts = 0;
-  }
-  if (struct_v >= 8) {
-    ::decode(num_objects_omap, bl);
-  } else {
-    num_objects_omap = 0;
-  }
-  if (struct_v >= 9) {
-    ::decode(num_objects_hit_set_archive, bl);
-  } else {
-    num_objects_hit_set_archive = 0;
-  }
-  if (struct_v >= 10) {
-    ::decode(num_objects_misplaced, bl);
-  } else {
-    num_objects_misplaced = 0;
-  }
-  if (struct_v >= 11) {
-    ::decode(num_bytes_hit_set_archive, bl);
-  } else {
-    num_bytes_hit_set_archive = 0;
-  }
-  if (struct_v >= 12) {
-    ::decode(num_flush, bl);
-    ::decode(num_flush_kb, bl);
-    ::decode(num_evict, bl);
-    ::decode(num_evict_kb, bl);
-    ::decode(num_promote, bl);
-  } else {
-    num_flush = 0;
-    num_flush_kb = 0;
-    num_evict = 0;
-    num_evict_kb = 0;
-    num_promote = 0;
-  }
-  if (struct_v >= 13) {
-    ::decode(num_flush_mode_high, bl);
-    ::decode(num_flush_mode_low, bl);
-    ::decode(num_evict_mode_some, bl);
-    ::decode(num_evict_mode_full, bl);
-  } else {
-    num_flush_mode_high = 0;
-    num_flush_mode_low = 0;
-    num_evict_mode_some = 0;
-    num_evict_mode_full = 0;
-  }
-  if (struct_v >= 14) {
-    ::decode(num_objects_pinned, bl);
-  } else {
-    num_objects_pinned = 0;
-  }
-  if (struct_v >= 15) {
-    ::decode(num_objects_missing, bl);
-  } else {
-    num_objects_missing = 0;
+#endif
+  if (!decode_finish) {
+    ::packed_decode((char*)&num_bytes, bl, sizeof(num_bytes));
+    if (struct_v < 3) {
+      uint64_t num_kb;
+      ::packed_decode((char*)&num_kb, bl, sizeof(num_kb));
+    }
+    ::packed_decode((char*)&num_objects, bl, sizeof(num_objects));
+    ::packed_decode((char*)&num_object_clones, bl, sizeof(num_object_clones));
+    ::packed_decode((char*)&num_object_copies, bl, sizeof(num_object_copies));
+    ::packed_decode((char*)&num_objects_missing_on_primary, bl,
+        sizeof(num_objects_missing_on_primary));
+    ::packed_decode((char*)&num_objects_degraded, bl, sizeof(num_objects_degraded));
+    if (struct_v >= 2)
+      ::packed_decode((char*)&num_objects_unfound, bl, sizeof(num_objects_unfound));
+    ::packed_decode((char*)&num_rd, bl, sizeof(num_rd));
+    ::packed_decode((char*)&num_rd_kb, bl, sizeof(num_rd_kb));
+    ::packed_decode((char*)&num_wr, bl, sizeof(num_wr));
+    ::packed_decode((char*)&num_wr_kb, bl, sizeof(num_wr_kb));
+    if (struct_v >= 4)
+      ::packed_decode((char*)&num_scrub_errors, bl, sizeof(num_scrub_errors));
+    else
+      num_scrub_errors = 0;
+    if (struct_v >= 5) {
+      ::packed_decode((char*)&num_objects_recovered, bl, sizeof(num_objects_recovered));
+      ::packed_decode((char*)&num_bytes_recovered, bl, sizeof(num_bytes_recovered));
+      ::packed_decode((char*)&num_keys_recovered, bl, sizeof(num_keys_recovered));
+    } else {
+      num_objects_recovered = 0;
+      num_bytes_recovered = 0;
+      num_keys_recovered = 0;
+    }
+    if (struct_v >= 6) {
+      ::packed_decode((char*)&num_shallow_scrub_errors, bl, sizeof(num_shallow_scrub_errors));
+      ::packed_decode((char*)&num_deep_scrub_errors, bl, sizeof(num_deep_scrub_errors));
+    } else {
+      num_shallow_scrub_errors = 0;
+      num_deep_scrub_errors = 0;
+    }
+    if (struct_v >= 7) {
+      ::packed_decode((char*)&num_objects_dirty, bl, sizeof(num_objects_dirty));
+      ::packed_decode((char*)&num_whiteouts, bl, sizeof(num_whiteouts));
+    } else {
+      num_objects_dirty = 0;
+      num_whiteouts = 0;
+    }
+    if (struct_v >= 8) {
+      ::packed_decode((char*)&num_objects_omap, bl, sizeof(num_objects_omap));
+    } else {
+      num_objects_omap = 0;
+    }
+    if (struct_v >= 9) {
+      ::packed_decode((char*)&num_objects_hit_set_archive, bl, sizeof(num_objects_hit_set_archive));
+    } else {
+      num_objects_hit_set_archive = 0;
+    }
+    if (struct_v >= 10) {
+      ::packed_decode((char*)&num_objects_misplaced, bl, sizeof(num_objects_misplaced));
+    } else {
+      num_objects_misplaced = 0;
+    }
+    if (struct_v >= 11) {
+      ::packed_decode((char*)&num_bytes_hit_set_archive, bl, sizeof(num_bytes_hit_set_archive));
+    } else {
+      num_bytes_hit_set_archive = 0;
+    }
+    if (struct_v >= 12) {
+      ::packed_decode((char*)&num_flush, bl, sizeof(num_flush));
+      ::packed_decode((char*)&num_flush_kb, bl, sizeof(num_flush_kb));
+      ::packed_decode((char*)&num_evict, bl, sizeof(num_evict));
+      ::packed_decode((char*)&num_evict_kb, bl, sizeof(num_evict_kb));
+      ::packed_decode((char*)&num_promote, bl, sizeof(num_promote));
+    } else {
+      num_flush = 0;
+      num_flush_kb = 0;
+      num_evict = 0;
+      num_evict_kb = 0;
+      num_promote = 0;
+    }
+    if (struct_v >= 13) {
+      ::packed_decode((char*)&num_flush_mode_high, bl, sizeof(num_flush_mode_high));
+      ::packed_decode((char*)&num_flush_mode_low, bl, sizeof(num_flush_mode_low));
+      ::packed_decode((char*)&num_evict_mode_some, bl, sizeof(num_evict_mode_some));
+      ::packed_decode((char*)&num_evict_mode_full, bl, sizeof(num_evict_mode_full));
+    } else {
+      num_flush_mode_high = 0;
+      num_flush_mode_low = 0;
+      num_evict_mode_some = 0;
+      num_evict_mode_full = 0;
+    }
+    if (struct_v >= 14) {
+      ::packed_decode((char*)&num_objects_pinned, bl, sizeof(num_objects_pinned));
+    } else {
+      num_objects_pinned = 0;
+    }
+    if (struct_v >= 15) {
+      ::packed_decode((char*)&num_objects_missing, bl, sizeof(num_objects_missing));
+    } else {
+      num_objects_missing = 0;
+    }
   }
   DECODE_FINISH(bl);
 }
@@ -2205,201 +2219,343 @@ void pg_stat_t::dump_brief(Formatter *f) const
   f->dump_int("acting_primary", acting_primary);
 }
 
-void pg_stat_t::encode(bufferlist &bl) const
+void pg_stat_t::encode(bufferlist &bl, uint64_t features) const
 {
-  ENCODE_START(22, 8, bl);
-  ::encode(version, bl);
-  ::encode(reported_seq, bl);
-  ::encode(reported_epoch, bl);
-  ::encode(state, bl);
-  ::encode(log_start, bl);
-  ::encode(ondisk_log_start, bl);
-  ::encode(created, bl);
-  ::encode(last_epoch_clean, bl);
-  ::encode(parent, bl);
-  ::encode(parent_split_bits, bl);
-  ::encode(last_scrub, bl);
-  ::encode(last_scrub_stamp, bl);
-  ::encode(stats, bl);
-  ::encode(log_size, bl);
-  ::encode(ondisk_log_size, bl);
-  ::encode(up, bl);
-  ::encode(acting, bl);
-  ::encode(last_fresh, bl);
-  ::encode(last_change, bl);
-  ::encode(last_active, bl);
-  ::encode(last_clean, bl);
-  ::encode(last_unstale, bl);
-  ::encode(mapping_epoch, bl);
-  ::encode(last_deep_scrub, bl);
-  ::encode(last_deep_scrub_stamp, bl);
-  ::encode(stats_invalid, bl);
-  ::encode(last_clean_scrub_stamp, bl);
-  ::encode(last_became_active, bl);
-  ::encode(dirty_stats_invalid, bl);
-  ::encode(up_primary, bl);
-  ::encode(acting_primary, bl);
-  ::encode(omap_stats_invalid, bl);
-  ::encode(hitset_stats_invalid, bl);
-  ::encode(blocked_by, bl);
-  ::encode(last_undegraded, bl);
-  ::encode(last_fullsized, bl);
-  ::encode(hitset_bytes_stats_invalid, bl);
-  ::encode(last_peered, bl);
-  ::encode(last_became_peered, bl);
-  ::encode(pin_stats_invalid, bl);
-  ENCODE_FINISH(bl);
+  bool fast_encode = false;
+#if defined(CEPH_LITTLE_ENDIAN)
+  if (features & CEPH_FEATURE_PGSTAT_FAST_ENCODING) {
+    fast_encode = true;
+  }
+#endif
+  if (fast_encode) {
+    ENCODE_START(23, 8, bl);
+    uint32_t step = offsetof(pg_stat_t, __ss_reserve) +
+      sizeof(__ss_reserve);
+    bl.append((char*)this, step);
+    ::encode(version, bl);
+    ::encode(log_start, bl);
+    ::encode(ondisk_log_start, bl);
+    ::encode(last_scrub, bl);
+    ::encode(last_deep_scrub, bl);
+    ::encode(parent, bl);
+    ::encode(stats, bl);
+    ::encode(up, bl);
+    ::encode(acting, bl);
+    ::encode(blocked_by, bl);
+    ENCODE_FINISH(bl);
+  } else {
+    if (features & CEPH_FEATURE_PGSTAT_FAST_ENCODING) {
+      // big-endian encoding
+      ENCODE_START(23, 8, bl);
+      ::encode(last_fresh, bl);
+      ::encode(last_change, bl);
+      ::encode(last_active, bl);
+      ::encode(last_peered, bl);
+      ::encode(last_clean, bl);
+      ::encode(last_unstale, bl);
+      ::encode(last_undegraded, bl);
+      ::encode(last_fullsized, bl);
+      ::encode(last_scrub_stamp, bl);
+      ::encode(last_deep_scrub_stamp, bl);
+      ::encode(last_clean_scrub_stamp, bl);
+      ::encode(last_became_active, bl);
+      ::encode(last_became_peered, bl);
+
+      ::packed_encode((char*)&log_size, bl, sizeof(log_size));
+      ::packed_encode((char*)&ondisk_log_size, bl, sizeof(ondisk_log_size));
+      ::packed_encode((char*)&reported_seq, bl, sizeof(reported_seq));
+      ::packed_encode((char*)&mapping_epoch, bl, sizeof(mapping_epoch));
+      ::packed_encode((char*)&created, bl, sizeof(created));
+      ::packed_encode((char*)&last_epoch_clean, bl, sizeof(last_epoch_clean));
+      ::packed_encode((char*)&parent_split_bits, bl, sizeof(parent_split_bits));
+      ::packed_encode((char*)&reported_epoch, bl, sizeof(reported_epoch));
+      ::packed_encode((char*)&state, bl, sizeof(state));
+      ::packed_encode((char*)&up_primary, bl, sizeof(up_primary));
+      ::packed_encode((char*)&acting_primary, bl, sizeof(acting_primary));
+      ::packed_encode((char*)&stats_invalid, bl, sizeof(stats_invalid));
+      ::packed_encode((char*)&dirty_stats_invalid, bl, sizeof(dirty_stats_invalid));
+      ::packed_encode((char*)&omap_stats_invalid, bl, sizeof(omap_stats_invalid));
+      ::packed_encode((char*)&hitset_stats_invalid, bl, sizeof(hitset_stats_invalid));
+      ::packed_encode((char*)&hitset_bytes_stats_invalid, bl, sizeof(hitset_bytes_stats_invalid));
+      ::packed_encode((char*)&pin_stats_invalid, bl, sizeof(pin_stats_invalid));
+      ::packed_encode((char*)&__ss_reserve, bl, sizeof(__ss_reserve));
+
+      ::encode(version, bl);
+      ::encode(log_start, bl);
+      ::encode(ondisk_log_start, bl);
+      ::encode(last_scrub, bl);
+      ::encode(last_deep_scrub, bl);
+      ::encode(parent, bl);
+      ::encode(stats, bl);
+      ::encode(up, bl);
+      ::encode(acting, bl);
+      ::encode(blocked_by, bl);
+      ENCODE_FINISH(bl);
+    } else {
+      ENCODE_START(22, 8, bl);
+      ::encode(version, bl);
+      ::packed_encode((char*)&reported_seq, bl, sizeof(reported_seq));
+      ::packed_encode((char*)&reported_epoch, bl, sizeof(reported_epoch));
+      ::packed_encode((char*)&state, bl, sizeof(state));
+      ::encode(log_start, bl);
+      ::encode(ondisk_log_start, bl);
+      ::packed_encode((char*)&created, bl, sizeof(created));
+      ::packed_encode((char*)&last_epoch_clean, bl, sizeof(last_epoch_clean));
+      ::encode(parent, bl);
+      ::packed_encode((char*)&parent_split_bits, bl, sizeof(parent_split_bits));
+      ::encode(last_scrub, bl);
+      ::packed_encode((char*)&last_scrub_stamp, bl, sizeof(last_scrub_stamp));
+      ::encode(stats, bl);
+      ::packed_encode((char*)&log_size, bl, sizeof(log_size));
+      ::packed_encode((char*)&ondisk_log_size, bl, sizeof(ondisk_log_size));
+      ::encode(up, bl);
+      ::encode(acting, bl);
+      ::packed_encode((char*)&last_fresh, bl, sizeof(last_fresh));
+      ::packed_encode((char*)&last_change, bl, sizeof(last_change));
+      ::packed_encode((char*)&last_active, bl, sizeof(last_active));
+      ::packed_encode((char*)&last_clean, bl, sizeof(last_clean));
+      ::packed_encode((char*)&last_unstale, bl, sizeof(last_unstale));
+      ::packed_encode((char*)&mapping_epoch, bl, sizeof(mapping_epoch));
+      ::encode(last_deep_scrub, bl);
+      ::packed_encode((char*)&last_deep_scrub_stamp, bl, sizeof(last_deep_scrub_stamp));
+      ::packed_encode((char*)&stats_invalid, bl, sizeof(stats_invalid));
+      ::packed_encode((char*)&last_clean_scrub_stamp, bl, sizeof(last_clean_scrub_stamp));
+      ::packed_encode((char*)&last_became_active, bl, sizeof(last_became_active));
+      ::packed_encode((char*)&dirty_stats_invalid, bl, sizeof(dirty_stats_invalid));
+      ::packed_encode((char*)&up_primary, bl, sizeof(up_primary));
+      ::packed_encode((char*)&acting_primary, bl, sizeof(acting_primary));
+      ::packed_encode((char*)&omap_stats_invalid, bl, sizeof(omap_stats_invalid));
+      ::packed_encode((char*)&hitset_stats_invalid, bl, sizeof(hitset_stats_invalid));
+      ::encode(blocked_by, bl);
+      ::packed_encode((char*)&last_undegraded, bl, sizeof(last_undegraded));
+      ::packed_encode((char*)&last_fullsized, bl, sizeof(last_fullsized));
+      ::packed_encode((char*)&hitset_bytes_stats_invalid, bl, sizeof(hitset_bytes_stats_invalid));
+      ::packed_encode((char*)&last_peered, bl, sizeof(last_peered));
+      ::packed_encode((char*)&last_became_peered, bl, sizeof(last_became_peered));
+      ::packed_encode((char*)&pin_stats_invalid, bl, sizeof(pin_stats_invalid));
+      ENCODE_FINISH(bl);
+    }
+  }
 }
 
 void pg_stat_t::decode(bufferlist::iterator &bl)
 {
   bool tmp;
+  bool finish_decode = false;
   DECODE_START_LEGACY_COMPAT_LEN(22, 8, 8, bl);
-  ::decode(version, bl);
-  ::decode(reported_seq, bl);
-  ::decode(reported_epoch, bl);
-  ::decode(state, bl);
-  ::decode(log_start, bl);
-  ::decode(ondisk_log_start, bl);
-  ::decode(created, bl);
-  if (struct_v >= 7)
-    ::decode(last_epoch_clean, bl);
-  else
-    last_epoch_clean = 0;
-  if (struct_v < 6) {
-    old_pg_t opgid;
-    ::decode(opgid, bl);
-    parent = opgid;
-  } else {
+#if defined(CEPH_LITTLE_ENDIAN)
+  if (struct_v >= 23) {
+    uint32_t step = offsetof(pg_stat_t, __ss_reserve) +
+      sizeof(__ss_reserve);
+    bl.copy(step, (char *)(&last_fresh));
+    ::decode(version, bl);
+    ::decode(log_start, bl);
+    ::decode(ondisk_log_start, bl);
+    ::decode(last_scrub, bl);
+    ::decode(last_deep_scrub, bl);
     ::decode(parent, bl);
-  }
-  ::decode(parent_split_bits, bl);
-  ::decode(last_scrub, bl);
-  ::decode(last_scrub_stamp, bl);
-  if (struct_v <= 4) {
-    ::decode(stats.sum.num_bytes, bl);
-    uint64_t num_kb;
-    ::decode(num_kb, bl);
-    ::decode(stats.sum.num_objects, bl);
-    ::decode(stats.sum.num_object_clones, bl);
-    ::decode(stats.sum.num_object_copies, bl);
-    ::decode(stats.sum.num_objects_missing_on_primary, bl);
-    ::decode(stats.sum.num_objects_degraded, bl);
-    ::decode(log_size, bl);
-    ::decode(ondisk_log_size, bl);
-    if (struct_v >= 2) {
-      ::decode(stats.sum.num_rd, bl);
-      ::decode(stats.sum.num_rd_kb, bl);
-      ::decode(stats.sum.num_wr, bl);
-      ::decode(stats.sum.num_wr_kb, bl);
-    }
-    if (struct_v >= 3) {
-      ::decode(up, bl);
-    }
-    if (struct_v == 4) {
-      ::decode(stats.sum.num_objects_unfound, bl);  // sigh.
-    }
-    ::decode(acting, bl);
-  } else {
     ::decode(stats, bl);
-    ::decode(log_size, bl);
-    ::decode(ondisk_log_size, bl);
     ::decode(up, bl);
     ::decode(acting, bl);
-    if (struct_v >= 9) {
+    ::decode(blocked_by, bl);
+    finish_decode = true;
+  }
+#endif
+  if (!finish_decode) {
+    if (struct_v >= 23) {
       ::decode(last_fresh, bl);
       ::decode(last_change, bl);
       ::decode(last_active, bl);
+      ::decode(last_peered, bl);
       ::decode(last_clean, bl);
       ::decode(last_unstale, bl);
-      ::decode(mapping_epoch, bl);
-      if (struct_v >= 10) {
-        ::decode(last_deep_scrub, bl);
-        ::decode(last_deep_scrub_stamp, bl);
+      ::decode(last_undegraded, bl);
+      ::decode(last_fullsized, bl);
+      ::decode(last_scrub_stamp, bl);
+      ::decode(last_deep_scrub_stamp, bl);
+      ::decode(last_clean_scrub_stamp, bl);
+      ::decode(last_became_active, bl);
+      ::decode(last_became_peered, bl);
+
+      ::packed_decode((char*)&log_size, bl, sizeof(log_size));
+      ::packed_decode((char*)&ondisk_log_size, bl, sizeof(ondisk_log_size));
+      ::packed_decode((char*)&reported_seq, bl, sizeof(reported_seq));
+      ::packed_decode((char*)&mapping_epoch, bl, sizeof(mapping_epoch));
+      ::packed_decode((char*)&created, bl, sizeof(created));
+      ::packed_decode((char*)&last_epoch_clean, bl, sizeof(last_epoch_clean));
+      ::packed_decode((char*)&parent_split_bits, bl, sizeof(parent_split_bits));
+      ::packed_decode((char*)&reported_epoch, bl, sizeof(reported_epoch));
+      ::packed_decode((char*)&state, bl, sizeof(state));
+      ::packed_decode((char*)&up_primary, bl, sizeof(up_primary));
+      ::packed_decode((char*)&acting_primary, bl, sizeof(acting_primary));
+      ::packed_decode((char*)&stats_invalid, bl, sizeof(stats_invalid));
+      ::packed_decode((char*)&dirty_stats_invalid, bl, sizeof(dirty_stats_invalid));
+      ::packed_decode((char*)&omap_stats_invalid, bl, sizeof(omap_stats_invalid));
+      ::packed_decode((char*)&hitset_stats_invalid, bl, sizeof(hitset_stats_invalid));
+      ::packed_decode((char*)&hitset_bytes_stats_invalid, bl, sizeof(hitset_bytes_stats_invalid));
+      ::packed_decode((char*)&pin_stats_invalid, bl, sizeof(pin_stats_invalid));
+      ::packed_decode((char*)&__ss_reserve, bl, sizeof(__ss_reserve));
+
+      ::decode(version, bl);
+      ::decode(log_start, bl);
+      ::decode(ondisk_log_start, bl);
+      ::decode(last_scrub, bl);
+      ::decode(last_deep_scrub, bl);
+      ::decode(parent, bl);
+      ::decode(stats, bl);
+      ::decode(up, bl);
+      ::decode(acting, bl);
+      ::decode(blocked_by, bl);
+    } else {
+      ::decode(version, bl);
+      ::packed_decode((char*)&reported_seq, bl, sizeof(reported_seq));
+      ::packed_decode((char*)&reported_epoch, bl, sizeof(reported_epoch));
+      ::packed_decode((char*)&state, bl, sizeof(state));
+      ::decode(log_start, bl);
+      ::decode(ondisk_log_start, bl);
+      ::packed_decode((char*)&created, bl, sizeof(created));
+      if (struct_v >= 7)
+        ::packed_decode((char*)&last_epoch_clean, bl, sizeof(last_epoch_clean));
+      else
+        last_epoch_clean = 0;
+      if (struct_v < 6) {
+        old_pg_t opgid;
+        ::decode(opgid, bl);
+        parent = opgid;
+      } else {
+        ::decode(parent, bl);
+      }
+      ::packed_decode((char*)&parent_split_bits, bl, sizeof(parent_split_bits));
+      ::decode(last_scrub, bl);
+      ::packed_decode((char*)&last_scrub_stamp, bl, sizeof(last_scrub_stamp));
+      if (struct_v <= 4) {
+        ::packed_decode((char*)&stats.sum.num_bytes, bl, sizeof(stats.sum.num_bytes));
+        uint64_t num_kb;
+        ::packed_decode((char*)&num_kb, bl, sizeof(num_kb));
+        ::packed_decode((char*)&stats.sum.num_objects, bl, sizeof(stats.sum.num_objects));
+        ::packed_decode((char*)&stats.sum.num_object_clones, bl, sizeof(stats.sum.num_object_clones));
+        ::packed_decode((char*)&stats.sum.num_object_copies, bl, sizeof(stats.sum.num_object_copies));
+        ::packed_decode((char*)&stats.sum.num_objects_missing_on_primary, bl,
+            sizeof(stats.sum.num_objects_missing_on_primary));
+        ::packed_decode((char*)&stats.sum.num_objects_degraded, bl,
+            sizeof(stats.sum.num_objects_degraded));
+        ::packed_decode((char*)&log_size, bl, sizeof(log_size));
+        ::packed_decode((char*)&ondisk_log_size, bl, sizeof(ondisk_log_size));
+        if (struct_v >= 2) {
+          ::packed_decode((char*)&stats.sum.num_rd, bl, sizeof(stats.sum.num_rd));
+          ::packed_decode((char*)&stats.sum.num_rd_kb, bl, sizeof(stats.sum.num_rd_kb));
+          ::packed_decode((char*)&stats.sum.num_wr, bl, sizeof(stats.sum.num_wr));
+          ::packed_decode((char*)&stats.sum.num_wr_kb, bl, sizeof(stats.sum.num_wr_kb));
+        }
+        if (struct_v >= 3) {
+          ::decode(up, bl);
+        }
+        if (struct_v == 4) {
+          ::packed_decode((char*)&stats.sum.num_objects_unfound, bl, sizeof(stats.sum.num_objects_unfound));  // sigh.
+        }
+        ::decode(acting, bl);
+      } else {
+        ::decode(stats, bl);
+        ::packed_decode((char*)&log_size, bl, sizeof(log_size));
+        ::packed_decode((char*)&ondisk_log_size, bl, sizeof(ondisk_log_size));
+        ::decode(up, bl);
+        ::decode(acting, bl);
+        if (struct_v >= 9) {
+          ::packed_decode((char*)&last_fresh, bl, sizeof(last_fresh));
+          ::packed_decode((char*)&last_change, bl, sizeof(last_change));
+          ::packed_decode((char*)&last_active, bl, sizeof(last_active));
+          ::packed_decode((char*)&last_clean, bl, sizeof(last_clean));
+          ::packed_decode((char*)&last_unstale, bl, sizeof(last_unstale));
+          ::packed_decode((char*)&mapping_epoch, bl, sizeof(mapping_epoch));
+          if (struct_v >= 10) {
+            ::decode(last_deep_scrub, bl);
+            ::packed_decode((char*)&last_deep_scrub_stamp, bl, sizeof(last_deep_scrub_stamp));
+          }
+        }
+      }
+      if (struct_v < 11) {
+        stats_invalid = false;
+      } else {
+        ::packed_decode((char*)&tmp, bl, sizeof(tmp));
+        stats_invalid = tmp;
+      }
+      if (struct_v >= 12) {
+        ::packed_decode((char*)&last_clean_scrub_stamp, bl, sizeof(last_clean_scrub_stamp));
+      } else {
+        last_clean_scrub_stamp = utime_t();
+      }
+      if (struct_v >= 13) {
+        ::packed_decode((char*)&last_became_active, bl, sizeof(last_became_active));
+      } else {
+        last_became_active = last_active;
+      }
+      if (struct_v >= 14) {
+        ::packed_decode((char*)&tmp, bl, sizeof(tmp));
+        dirty_stats_invalid = tmp;
+      } else {
+        // if we are decoding an old encoding of this object, then the
+        // encoder may not have supported num_objects_dirty accounting.
+        dirty_stats_invalid = true;
+      }
+      if (struct_v >= 15) {
+        ::packed_decode((char*)&up_primary, bl, sizeof(up_primary));
+        ::packed_decode((char*)&acting_primary, bl, sizeof(acting_primary));
+      } else {
+        up_primary = up.size() ? up[0] : -1;
+        acting_primary = acting.size() ? acting[0] : -1;
+      }
+      if (struct_v >= 16) {
+        ::packed_decode((char*)&tmp, bl, sizeof(tmp));
+        omap_stats_invalid = tmp;
+      } else {
+        // if we are decoding an old encoding of this object, then the
+        // encoder may not have supported num_objects_omap accounting.
+        omap_stats_invalid = true;
+      }
+      if (struct_v >= 17) {
+        ::packed_decode((char*)&tmp, bl, sizeof(tmp));
+        hitset_stats_invalid = tmp;
+      } else {
+        // if we are decoding an old encoding of this object, then the
+        // encoder may not have supported num_objects_hit_set_archive accounting.
+        hitset_stats_invalid = true;
+      }
+      if (struct_v >= 18) {
+        ::decode(blocked_by, bl);
+      } else {
+        blocked_by.clear();
+      }
+      if (struct_v >= 19) {
+        ::packed_decode((char*)&last_undegraded, bl, sizeof(last_undegraded));
+        ::packed_decode((char*)&last_fullsized, bl, sizeof(last_fullsized));
+      } else {
+        last_undegraded = utime_t();
+        last_fullsized = utime_t();
+      }
+      if (struct_v >= 20) {
+        ::packed_decode((char*)&tmp, bl, sizeof(tmp));
+        hitset_bytes_stats_invalid = tmp;
+      } else {
+        // if we are decoding an old encoding of this object, then the
+        // encoder may not have supported num_bytes_hit_set_archive accounting.
+        hitset_bytes_stats_invalid = true;
+      }
+      if (struct_v >= 21) {
+        ::packed_decode((char*)&last_peered, bl, sizeof(last_peered));
+        ::packed_decode((char*)&last_became_peered, bl, sizeof(last_became_peered));
+      } else {
+        last_peered = last_active;
+        last_became_peered = last_became_active;
+      }
+      if (struct_v >= 22) {
+        ::packed_decode((char*)&tmp, bl, sizeof(tmp));
+        pin_stats_invalid = tmp;
+      } else {
+        // if we are decoding an old encoding of this object, then the
+        // encoder may not have supported num_objects_pinned accounting.
+        pin_stats_invalid = true;
       }
     }
-  }
-  if (struct_v < 11) {
-    stats_invalid = false;
-  } else {    
-    ::decode(tmp, bl);
-    stats_invalid = tmp;
-  }
-  if (struct_v >= 12) {
-    ::decode(last_clean_scrub_stamp, bl);
-  } else {
-    last_clean_scrub_stamp = utime_t();
-  }
-  if (struct_v >= 13) {
-    ::decode(last_became_active, bl);
-  } else {
-    last_became_active = last_active;
-  }
-  if (struct_v >= 14) {
-    ::decode(tmp, bl);
-    dirty_stats_invalid = tmp;
-  } else {
-    // if we are decoding an old encoding of this object, then the
-    // encoder may not have supported num_objects_dirty accounting.
-    dirty_stats_invalid = true;
-  }
-  if (struct_v >= 15) {
-    ::decode(up_primary, bl);
-    ::decode(acting_primary, bl);
-  } else {
-    up_primary = up.size() ? up[0] : -1;
-    acting_primary = acting.size() ? acting[0] : -1;
-  }
-  if (struct_v >= 16) {
-    ::decode(tmp, bl);
-    omap_stats_invalid = tmp;
-  } else {
-    // if we are decoding an old encoding of this object, then the
-    // encoder may not have supported num_objects_omap accounting.
-    omap_stats_invalid = true;
-  }
-  if (struct_v >= 17) {
-    ::decode(tmp, bl);
-    hitset_stats_invalid = tmp;
-  } else {
-    // if we are decoding an old encoding of this object, then the
-    // encoder may not have supported num_objects_hit_set_archive accounting.
-    hitset_stats_invalid = true;
-  }
-  if (struct_v >= 18) {
-    ::decode(blocked_by, bl);
-  } else {
-    blocked_by.clear();
-  }
-  if (struct_v >= 19) {
-    ::decode(last_undegraded, bl);
-    ::decode(last_fullsized, bl);
-  } else {
-    last_undegraded = utime_t();
-    last_fullsized = utime_t();
-  }
-  if (struct_v >= 20) {
-    ::decode(tmp, bl);
-    hitset_bytes_stats_invalid = tmp;
-  } else {
-    // if we are decoding an old encoding of this object, then the
-    // encoder may not have supported num_bytes_hit_set_archive accounting.
-    hitset_bytes_stats_invalid = true;
-  }
-  if (struct_v >= 21) {
-    ::decode(last_peered, bl);
-    ::decode(last_became_peered, bl);
-  } else {
-    last_peered = last_active;
-    last_became_peered = last_became_active;
-  }
-  if (struct_v >= 22) {
-    ::decode(tmp, bl);
-    pin_stats_invalid = tmp;
-  } else {
-    // if we are decoding an old encoding of this object, then the
-    // encoder may not have supported num_objects_pinned accounting.
-    pin_stats_invalid = true;
   }
   DECODE_FINISH(bl);
 }
@@ -2541,24 +2697,29 @@ void pool_stat_t::decode(bufferlist::iterator &bl)
       acting = 0;
     }
   } else {
-    ::decode(stats.sum.num_bytes, bl);
+    ::packed_decode((char*)&stats.sum.num_bytes, bl, sizeof(stats.sum.num_bytes));
     uint64_t num_kb;
     ::decode(num_kb, bl);
-    ::decode(stats.sum.num_objects, bl);
-    ::decode(stats.sum.num_object_clones, bl);
-    ::decode(stats.sum.num_object_copies, bl);
-    ::decode(stats.sum.num_objects_missing_on_primary, bl);
-    ::decode(stats.sum.num_objects_degraded, bl);
+    ::packed_decode((char*)&stats.sum.num_objects, bl,
+        sizeof(stats.sum.num_objects));
+    ::packed_decode((char*)&stats.sum.num_object_clones, bl,
+        sizeof(stats.sum.num_object_clones));
+    ::packed_decode((char*)&stats.sum.num_object_copies, bl,
+        sizeof(stats.sum.num_object_copies));
+    ::packed_decode((char*)&stats.sum.num_objects_missing_on_primary, bl,
+        sizeof(stats.sum.num_objects_missing_on_primary));
+    ::packed_decode((char*)&stats.sum.num_objects_degraded, bl,
+        sizeof(stats.sum.num_objects_degraded));
     ::decode(log_size, bl);
     ::decode(ondisk_log_size, bl);
     if (struct_v >= 2) {
-      ::decode(stats.sum.num_rd, bl);
-      ::decode(stats.sum.num_rd_kb, bl);
-      ::decode(stats.sum.num_wr, bl);
-      ::decode(stats.sum.num_wr_kb, bl);
+      ::packed_decode((char*)&stats.sum.num_rd, bl, sizeof(stats.sum.num_rd));
+      ::packed_decode((char*)&stats.sum.num_rd_kb, bl, sizeof(stats.sum.num_rd_kb));
+      ::packed_decode((char*)&stats.sum.num_wr, bl, sizeof(stats.sum.num_wr));
+      ::packed_decode((char*)&stats.sum.num_wr_kb, bl, sizeof(stats.sum.num_wr_kb));
     }
     if (struct_v >= 3) {
-      ::decode(stats.sum.num_objects_unfound, bl);
+      ::packed_decode((char*)&stats.sum.num_objects_unfound, bl, sizeof(stats.sum.num_objects_unfound));
     }
   }
   DECODE_FINISH(bl);
@@ -2670,7 +2831,7 @@ void pg_history_t::generate_test_instances(list<pg_history_t*>& o)
 
 // -- pg_info_t --
 
-void pg_info_t::encode(bufferlist &bl) const
+void pg_info_t::encode(bufferlist &bl, uint64_t features) const
 {
   ENCODE_START(31, 26, bl);
   ::encode(pgid.pgid, bl);
@@ -2682,7 +2843,7 @@ void pg_info_t::encode(bufferlist &bl) const
   } else {
     ::encode(last_backfill, bl);
   }
-  ::encode(stats, bl);
+  ::encode(stats, bl, features);
   history.encode(bl);
   ::encode(purged_snaps, bl);
   ::encode(last_epoch_started, bl);

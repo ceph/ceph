@@ -1446,24 +1446,23 @@ struct object_stat_sum_t {
   int64_t num_object_clones;
   int64_t num_object_copies;  // num_objects * num_replicas
   int64_t num_objects_missing_on_primary;
-  int64_t num_objects_missing;
   int64_t num_objects_degraded;
-  int64_t num_objects_misplaced;
   int64_t num_objects_unfound;
   int64_t num_rd;
   int64_t num_rd_kb;
   int64_t num_wr;
   int64_t num_wr_kb;
   int64_t num_scrub_errors;	// total deep and shallow scrub errors
-  int64_t num_shallow_scrub_errors;
-  int64_t num_deep_scrub_errors;
   int64_t num_objects_recovered;
   int64_t num_bytes_recovered;
   int64_t num_keys_recovered;
+  int64_t num_shallow_scrub_errors;
+  int64_t num_deep_scrub_errors;
   int64_t num_objects_dirty;
   int64_t num_whiteouts;
   int64_t num_objects_omap;
   int64_t num_objects_hit_set_archive;
+  int64_t num_objects_misplaced;
   int64_t num_bytes_hit_set_archive;
   int64_t num_flush;
   int64_t num_flush_kb;
@@ -1475,24 +1474,25 @@ struct object_stat_sum_t {
   int32_t num_evict_mode_some;  // 1 when in evict some mode, otherwise 0
   int32_t num_evict_mode_full;  // 1 when in evict full mode, otherwise 0
   int64_t num_objects_pinned;
+  int64_t num_objects_missing;
 
   object_stat_sum_t()
     : num_bytes(0),
       num_objects(0), num_object_clones(0), num_object_copies(0),
-      num_objects_missing_on_primary(0), num_objects_missing(0),
-      num_objects_degraded(0),
-      num_objects_misplaced(0),
+      num_objects_missing_on_primary(0), num_objects_degraded(0),
       num_objects_unfound(0),
       num_rd(0), num_rd_kb(0), num_wr(0), num_wr_kb(0),
-      num_scrub_errors(0), num_shallow_scrub_errors(0),
-      num_deep_scrub_errors(0),
+      num_scrub_errors(0),
       num_objects_recovered(0),
       num_bytes_recovered(0),
       num_keys_recovered(0),
+      num_shallow_scrub_errors(0),
+      num_deep_scrub_errors(0),
       num_objects_dirty(0),
       num_whiteouts(0),
       num_objects_omap(0),
       num_objects_hit_set_archive(0),
+      num_objects_misplaced(0),
       num_bytes_hit_set_archive(0),
       num_flush(0),
       num_flush_kb(0),
@@ -1501,7 +1501,8 @@ struct object_stat_sum_t {
       num_promote(0),
       num_flush_mode_high(0), num_flush_mode_low(0),
       num_evict_mode_some(0), num_evict_mode_full(0),
-      num_objects_pinned(0)
+      num_objects_pinned(0),
+      num_objects_missing(0)
   {}
 
   void floor(int64_t f) {
@@ -1609,7 +1610,7 @@ struct object_stat_sum_t {
   void encode(bufferlist& bl) const;
   void decode(bufferlist::iterator& bl);
   static void generate_test_instances(list<object_stat_sum_t*>& o);
-};
+} __attribute__ ((packed));
 WRITE_CLASS_ENCODER(object_stat_sum_t)
 
 bool operator==(const object_stat_sum_t& l, const object_stat_sum_t& r);
@@ -1672,10 +1673,6 @@ struct pg_stat_t {
   /**************************************************************************
    * WARNING: be sure to update the operator== when adding/removing fields! *
    **************************************************************************/
-  eversion_t version;
-  version_t reported_seq;  // sequence number
-  epoch_t reported_epoch;  // epoch of this report
-  __u32 state;
   utime_t last_fresh;   // last reported
   utime_t last_change;  // new state != previous state
   utime_t last_active;  // state & PG_STATE_ACTIVE
@@ -1684,55 +1681,58 @@ struct pg_stat_t {
   utime_t last_unstale; // (state & PG_STATE_STALE) == 0
   utime_t last_undegraded; // (state & PG_STATE_DEGRADED) == 0
   utime_t last_fullsized; // (state & PG_STATE_UNDERSIZED) == 0
-
-  eversion_t log_start;         // (log_start,version]
-  eversion_t ondisk_log_start;  // there may be more on disk
-
-  epoch_t created;
-  epoch_t last_epoch_clean;
-  pg_t parent;
-  __u32 parent_split_bits;
-
-  eversion_t last_scrub;
-  eversion_t last_deep_scrub;
   utime_t last_scrub_stamp;
   utime_t last_deep_scrub_stamp;
   utime_t last_clean_scrub_stamp;
-
-  object_stat_collection_t stats;
+  utime_t last_became_active;
+  utime_t last_became_peered;
 
   int64_t log_size;
   int64_t ondisk_log_size;    // >= active_log_size
 
-  vector<int32_t> up, acting;
+  version_t reported_seq;  // sequence number
   epoch_t mapping_epoch;
-
-  vector<int32_t> blocked_by;  ///< osds on which the pg is blocked
-
-  utime_t last_became_active;
-  utime_t last_became_peered;
+  epoch_t created;
+  epoch_t last_epoch_clean;
+  __u32 parent_split_bits;
+  epoch_t reported_epoch;  // epoch of this report
+  __u32 state;
 
   /// up, acting primaries
   int32_t up_primary;
   int32_t acting_primary;
 
-  bool stats_invalid:1;
+  bool stats_invalid;
   /// true if num_objects_dirty is not accurate (because it was not
   /// maintained starting from pool creation)
-  bool dirty_stats_invalid:1;
-  bool omap_stats_invalid:1;
-  bool hitset_stats_invalid:1;
-  bool hitset_bytes_stats_invalid:1;
-  bool pin_stats_invalid:1;
+  bool dirty_stats_invalid;
+  bool omap_stats_invalid;
+  bool hitset_stats_invalid;
+  bool hitset_bytes_stats_invalid;
+  bool pin_stats_invalid;
+
+  // If add fixed size member in pg_stat_t, please reduce the reserve size
+  __u8 __ss_reserve[34]; // reserve bytes
+
+  eversion_t version;
+  eversion_t log_start;         // (log_start,version]
+  eversion_t ondisk_log_start;  // there may be more on disk
+  eversion_t last_scrub;
+  eversion_t last_deep_scrub;
+  pg_t parent;
+  object_stat_collection_t stats;
+  vector<int32_t> up, acting;
+  vector<int32_t> blocked_by;  ///< osds on which the pg is blocked
 
   pg_stat_t()
-    : reported_seq(0),
+    : log_size(0), ondisk_log_size(0),
+      reported_seq(0),
+      mapping_epoch(0),
+      created(0),
+      last_epoch_clean(0),
+      parent_split_bits(0),
       reported_epoch(0),
       state(0),
-      created(0), last_epoch_clean(0),
-      parent_split_bits(0),
-      log_size(0), ondisk_log_size(0),
-      mapping_epoch(0),
       up_primary(-1),
       acting_primary(-1),
       stats_invalid(false),
@@ -1779,11 +1779,11 @@ struct pg_stat_t {
   bool is_acting_osd(int32_t osd, bool primary) const;
   void dump(Formatter *f) const;
   void dump_brief(Formatter *f) const;
-  void encode(bufferlist &bl) const;
+  void encode(bufferlist &bl, uint64_t features = 0) const;
   void decode(bufferlist::iterator &bl);
   static void generate_test_instances(list<pg_stat_t*>& o);
-};
-WRITE_CLASS_ENCODER(pg_stat_t)
+} __attribute__ ((packed));
+WRITE_CLASS_ENCODER_FEATURES(pg_stat_t)
 
 bool operator==(const pg_stat_t& l, const pg_stat_t& r);
 
@@ -2033,7 +2033,7 @@ struct pg_info_t {
 
   bool is_incomplete() const { return !last_backfill.is_max(); }
 
-  void encode(bufferlist& bl) const;
+  void encode(bufferlist& bl, uint64_t features = 0) const;
   void decode(bufferlist::iterator& p);
   void dump(Formatter *f) const;
   bool overlaps_with(const pg_info_t &oinfo) const {
@@ -2043,7 +2043,7 @@ struct pg_info_t {
   }
   static void generate_test_instances(list<pg_info_t*>& o);
 };
-WRITE_CLASS_ENCODER(pg_info_t)
+WRITE_CLASS_ENCODER_FEATURES(pg_info_t)
 
 inline ostream& operator<<(ostream& out, const pg_info_t& pgi) 
 {

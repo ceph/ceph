@@ -106,7 +106,7 @@ public:
     ::encode(acks_wanted, payload);
     ::encode(version, payload);
     ::encode(logbl, payload);
-    ::encode(pg_stats, payload);
+    ::encode(pg_stats, payload, features);
     ::encode(pg_trim_to, payload);
     ::encode(new_temp_oid, payload);
     ::encode(discard_temp_oid, payload);
