@@ -194,6 +194,7 @@ void _usage()
   cerr << "   --rgw-zonegroup=<zonegroup>   zonegroup name\n";
   cerr << "   --rgw-zone=<zone>         zone in which radosgw is running\n";
   cerr << "   --zone-new-name=<zone>    zone new name\n";
+  cerr << "   --default                 set entity (realm, zonegroup, zone) as default\n";
   cerr << "   --endpoints=<list>        zone endpoints\n";
   cerr << "   --fix                     besides checking bucket index, will also fix it\n";
   cerr << "   --check-objects           bucket check: rebuilds bucket index according to\n";
@@ -1560,6 +1561,7 @@ int main(int argc, char **argv)
   list<string> endpoints;
   std::string master_url;
   int is_master_int;
+  int set_default = 0;
   bool is_master = false;
   bool is_master_set = false;
   int read_only_int;
@@ -1873,6 +1875,8 @@ int main(int argc, char **argv)
     } else if (ceph_argparse_binary_flag(args, i, &is_master_int, NULL, "--master", (char*)NULL)) {
       is_master = (bool)is_master_int;
       is_master_set = true;
+    } else if (ceph_argparse_binary_flag(args, i, &set_default, NULL, "--default", (char*)NULL)) {
+      /* do nothing */
     } else if (ceph_argparse_binary_flag(args, i, &read_only_int, NULL, "--read-only", (char*)NULL)) {
       read_only = (bool)read_only_int;
       is_read_only_set = true;
@@ -2170,6 +2174,13 @@ int main(int argc, char **argv)
 	  return ret;
 	}
 
+        if (set_default) {
+          ret = realm.set_as_default();
+          if (ret < 0) {
+            cerr << "failed to set realm " << realm_name << " as default: " << cpp_strerror(-ret) << std::endl;
+          }
+        }
+
 	encode_json("realm", realm, formatter);
 	formatter->flush(cout);
 	cout << std::endl;
@@ -2322,6 +2333,12 @@ int main(int argc, char **argv)
 	  return 1;
 	}
 
+        if (set_default) {
+          ret = realm.set_as_default();
+          if (ret < 0) {
+            cerr << "failed to set realm " << realm_name << " as default: " << cpp_strerror(-ret) << std::endl;
+          }
+        }
 	encode_json("realm", realm, formatter);
 	formatter->flush(cout);
       }
@@ -2388,6 +2405,13 @@ int main(int argc, char **argv)
           return ret;
         }
 
+        if (set_default) {
+          ret = realm.set_as_default();
+          if (ret < 0) {
+            cerr << "failed to set realm " << realm_name << " as default: " << cpp_strerror(-ret) << std::endl;
+          }
+        }
+
         encode_json("realm", realm, formatter);
         formatter->flush(cout);
         cout << std::endl;
@@ -2442,9 +2466,16 @@ int main(int argc, char **argv)
         zonegroup.api_name = (api_name.empty() ? zonegroup_name : api_name);
 	ret = zonegroup.create();
 	if (ret < 0) {
-	  cerr << "failed to create zonegroup" << zonegroup_name << ": " << cpp_strerror(-ret) << std::endl;
+	  cerr << "failed to create zonegroup " << zonegroup_name << ": " << cpp_strerror(-ret) << std::endl;
 	  return -ret;
 	}
+
+        if (set_default) {
+          ret = zonegroup.set_as_default();
+          if (ret < 0) {
+            cerr << "failed to set zonegroup " << zonegroup_name << " as default: " << cpp_strerror(-ret) << std::endl;
+          }
+        }
 
 	encode_json("zonegroup", zonegroup, formatter);
 	formatter->flush(cout);
@@ -2579,6 +2610,13 @@ int main(int argc, char **argv)
 	    return -ret;
 	  }
 	}
+
+        if (set_default) {
+          ret = zonegroup.set_as_default();
+          if (ret < 0) {
+            cerr << "failed to set zonegroup " << zonegroup_name << " as default: " << cpp_strerror(-ret) << std::endl;
+          }
+        }
       }
       break;
     case OPT_ZONEGROUP_SET:
@@ -2611,6 +2649,13 @@ int main(int argc, char **argv)
 	    return 1;
 	  }
 	}
+
+        if (set_default) {
+          ret = zonegroup.set_as_default();
+          if (ret < 0) {
+            cerr << "failed to set zonegroup " << zonegroup_name << " as default: " << cpp_strerror(-ret) << std::endl;
+          }
+        }
 
 	encode_json("zonegroup", zonegroup, formatter);
 	formatter->flush(cout);
@@ -2767,6 +2812,13 @@ int main(int argc, char **argv)
 	  }
 	}
 
+        if (set_default) {
+          ret = zone.set_as_default();
+          if (ret < 0) {
+            cerr << "failed to set zone " << zone_name << " as default: " << cpp_strerror(-ret) << std::endl;
+          }
+        }
+
 	encode_json("zone", zone, formatter);
 	formatter->flush(cout);
 	cout << std::endl;
@@ -2911,6 +2963,13 @@ int main(int argc, char **argv)
 	  return 1;
 	}
 
+        if (set_default) {
+          ret = zone.set_as_default();
+          if (ret < 0) {
+            cerr << "failed to set zone " << zone_name << " as default: " << cpp_strerror(-ret) << std::endl;
+          }
+        }
+
 	encode_json("zone", zone, formatter);
 	formatter->flush(cout);
       }
@@ -2986,6 +3045,13 @@ int main(int argc, char **argv)
 	  cerr << "failed to update zonegroup: " << cpp_strerror(-ret) << std::endl;
 	  return -ret;
 	}
+
+        if (set_default) {
+          ret = zone.set_as_default();
+          if (ret < 0) {
+            cerr << "failed to set zone " << zone_name << " as default: " << cpp_strerror(-ret) << std::endl;
+          }
+        }
       }
       break;
     case OPT_ZONE_RENAME:
