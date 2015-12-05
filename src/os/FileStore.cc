@@ -4182,7 +4182,7 @@ int FileStore::_setattrs(coll_t cid, const ghobject_t& oid, map<string,bufferptr
   map<string, bufferlist> omap_set;
   set<string> omap_remove;
   map<string, bufferptr> inline_set;
-  map<string, bufferptr> inline_to_set;
+  map<string,bufferptr>::iterator p;
   FDRef fd;
   int spill_out = -1;
   bool incomplete_inline = false;
@@ -4205,16 +4205,16 @@ int FileStore::_setattrs(coll_t cid, const ghobject_t& oid, map<string,bufferptr
   dout(15) << "setattrs " << cid << "/" << oid
     	   << (incomplete_inline ? " (incomplete_inline, forcing omap)" : "")
 	   << dendl;
-
-  for (map<string,bufferptr>::iterator p = aset.begin();
-       p != aset.end();
-       ++p) {
+ 
+  p = aset.begin();
+  while (p != aset.end()) {
     char n[CHAIN_XATTR_MAX_NAME_LEN];
     get_attrname(p->first.c_str(), n, CHAIN_XATTR_MAX_NAME_LEN);
 
     if (incomplete_inline) {
       chain_fremovexattr(**fd, n); // ignore any error
       omap_set[p->first].push_back(p->second);
+      aset.erase(p++);
       continue;
     }
 
@@ -4226,18 +4226,22 @@ int FileStore::_setattrs(coll_t cid, const ghobject_t& oid, map<string,bufferptr
 	    goto out_close;
 	}
 	omap_set[p->first].push_back(p->second);
+	aset.erase(p++);
 	continue;
     }
 
-    if (!inline_set.count(p->first) &&
-	  inline_set.size() >= m_filestore_max_inline_xattrs) {
+    if (!inline_set.count(p->first)) {
+      inline_set.insert(*p);
+      if(inline_set.size() >= m_filestore_max_inline_xattrs) {
 	omap_set[p->first].push_back(p->second);
+	aset.erase(p++);
 	continue;
+      }
     }
-    omap_remove.insert(p->first);
-    inline_set.insert(*p);
 
-    inline_to_set.insert(*p);
+    if (spill_out)
+      omap_remove.insert(p->first);
+    ++p;
   }
 
   if (spill_out != 1 && !omap_set.empty()) {
@@ -4245,7 +4249,7 @@ int FileStore::_setattrs(coll_t cid, const ghobject_t& oid, map<string,bufferptr
 		    sizeof(XATTR_SPILL_OUT));
   }
 
-  r = _fsetattrs(**fd, inline_to_set);
+  r = _fsetattrs(**fd, aset);
   if (r < 0)
     goto out_close;
 
