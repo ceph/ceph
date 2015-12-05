@@ -2352,15 +2352,15 @@ int Pipe::write_message(const ceph_msg_header& header, const ceph_msg_footer& fo
 
   // payload (front+data)
   list<bufferptr>::const_iterator pb = blist.buffers().begin();
-  int b_off = 0;  // carry-over buffer offset, if any
-  int bl_pos = 0; // blist pos
-  int left = blist.length();
+  unsigned b_off = 0;  // carry-over buffer offset, if any
+  unsigned bl_pos = 0; // blist pos
+  unsigned left = blist.length();
 
   while (left > 0) {
-    int donow = MIN(left, (int)pb->length()-b_off);
+    unsigned donow = MIN(left, pb->length()-b_off);
     if (donow == 0) {
       ldout(msgr->cct,0) << "donow = " << donow << " left " << left << " pb->length " << pb->length()
-	      << " b_off " << b_off << dendl;
+                         << " b_off " << b_off << dendl;
     }
     assert(donow > 0);
     ldout(msgr->cct,30) << " bl_pos " << bl_pos << " b_off " << b_off
