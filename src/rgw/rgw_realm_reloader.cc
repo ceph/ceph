@@ -74,10 +74,12 @@ void RGWRealmReloader::reload()
 
   frontends->pause();
 
+  ldout(cct, 1) << "Frontends paused" << dendl;
   // destroy the existing store
   RGWStoreManager::close_storage(store);
   store = nullptr;
 
+  ldout(cct, 1) << "Store closed" << dendl;
   {
     // allow a new notify to reschedule us. it's important that we do this
     // before we start loading the new realm, or we could miss some updates
@@ -91,6 +93,8 @@ void RGWRealmReloader::reload()
                                          cct->_conf->rgw_enable_gc_threads,
                                          cct->_conf->rgw_enable_quota_threads,
                                          cct->_conf->rgw_run_sync_thread);
+
+    ldout(cct, 1) << "Creating new store" << dendl;
 
     RGWRados* store_cleanup = nullptr;
     {
@@ -131,10 +135,15 @@ void RGWRealmReloader::reload()
     }
   }
 
+  ldout(cct, 1) << "Finishing initialization of new store" << dendl;
   // finish initializing the new store
+  ldout(cct, 1) << " - REST subsystem init" << dendl;
   rgw_rest_init(cct, store->get_zonegroup());
+  ldout(cct, 1) << " - user subsystem init" << dendl;
   rgw_user_init(store);
+  ldout(cct, 1) << " - user subsystem init" << dendl;
   rgw_bucket_init(store->meta_mgr);
+  ldout(cct, 1) << " - usage subsystem init" << dendl;
   rgw_log_usage_init(cct, store);
 
   ldout(cct, 1) << "Resuming frontends with new realm configuration." << dendl;

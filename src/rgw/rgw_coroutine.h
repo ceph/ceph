@@ -459,6 +459,7 @@ class RGWCoroutinesManagerRegistry : public RefCountedObject, public AdminSocket
 
 public:
   RGWCoroutinesManagerRegistry(CephContext *_cct) : cct(_cct), lock("RGWCoroutinesRegistry::lock") {}
+  ~RGWCoroutinesManagerRegistry();
 
   void add(RGWCoroutinesManager *mgr);
   void remove(RGWCoroutinesManager *mgr);
