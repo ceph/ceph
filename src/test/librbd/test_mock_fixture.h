@@ -5,6 +5,7 @@
 #define CEPH_TEST_LIBRBD_TEST_MOCK_FIXTURE_H
 
 #include "test/librbd/test_fixture.h"
+#include "test/librbd/mock/MockImageCtx.h"
 #include "common/WorkQueue.h"
 #include <boost/shared_ptr.hpp>
 #include <gmock/gmock.h>
@@ -18,6 +19,10 @@ namespace librbd {
 class MockImageCtx;
 }
 
+ACTION_P(CopyInBufferlist, str) {
+  arg0->append(str);
+}
+
 ACTION_P2(CompleteContext, r, wq) {
   ContextWQ *context_wq = reinterpret_cast<ContextWQ *>(wq);
   if (context_wq != NULL) {
@@ -29,6 +34,12 @@ ACTION_P2(CompleteContext, r, wq) {
 
 ACTION_P(DispatchContext, wq) {
   wq->queue(arg0, arg1);
+}
+
+ACTION_P3(FinishRequest, request, r, mock) {
+  librbd::MockImageCtx *mock_image_ctx =
+    reinterpret_cast<librbd::MockImageCtx *>(mock);
+  mock_image_ctx->image_ctx->op_work_queue->queue(request->on_finish, r);
 }
 
 ACTION_P(GetReference, ref_object) {

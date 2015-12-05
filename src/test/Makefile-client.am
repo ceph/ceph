@@ -354,10 +354,13 @@ unittest_librbd_SOURCES = \
         test/librbd/test_main.cc \
 	test/librbd/test_mock_fixture.cc \
 	test/librbd/object_map/test_mock_InvalidateRequest.cc \
+	test/librbd/object_map/test_mock_LockRequest.cc \
+	test/librbd/object_map/test_mock_RefreshRequest.cc \
 	test/librbd/object_map/test_mock_ResizeRequest.cc \
 	test/librbd/object_map/test_mock_SnapshotCreateRequest.cc \
 	test/librbd/object_map/test_mock_SnapshotRemoveRequest.cc \
 	test/librbd/object_map/test_mock_SnapshotRollbackRequest.cc \
+	test/librbd/object_map/test_mock_UnlockRequest.cc \
 	test/librbd/object_map/test_mock_UpdateRequest.cc \
 	test/librbd/operation/test_mock_SnapshotCreateRequest.cc \
 	test/librbd/operation/test_mock_SnapshotProtectRequest.cc \
