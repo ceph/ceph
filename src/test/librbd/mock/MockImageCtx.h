@@ -35,6 +35,7 @@ struct MockImageCtx {
       header_oid(image_ctx.header_oid),
       id(image_ctx.id),
       parent_md(image_ctx.parent_md),
+      layout(image_ctx.layout),
       aio_work_queue(new MockAioImageRequestWQ()),
       op_work_queue(new MockContextWQ()),
       image_watcher(NULL), journal(NULL),
@@ -62,6 +63,7 @@ struct MockImageCtx {
     }
   }
 
+  MOCK_CONST_METHOD1(get_image_size, uint64_t(librados::snap_t));
   MOCK_CONST_METHOD1(get_snap_id, librados::snap_t(std::string in_snap_name));
   MOCK_CONST_METHOD1(get_snap_info, const SnapInfo*(librados::snap_t));
   MOCK_CONST_METHOD2(get_parent_spec, int(librados::snap_t in_snap_id,
@@ -104,6 +106,8 @@ struct MockImageCtx {
   std::string header_oid;
   std::string id;
   parent_info parent_md;
+
+  ceph_file_layout layout;
 
   xlist<AsyncRequest<MockImageCtx>*> async_requests;
   Cond async_requests_cond;
