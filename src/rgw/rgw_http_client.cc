@@ -603,7 +603,7 @@ void *RGWHTTPManager::reqs_thread_entry()
   RWLock::WLocker rl(reqs_lock);
   map<uint64_t, rgw_http_req_data *>::iterator iter = reqs.begin();
   for (; iter != reqs.end(); ++iter) {
-    finish_request(iter->second, -ECANCELED);
+    _finish_request(iter->second, -ECANCELED);
   }
 
   if (completion_mgr) {
