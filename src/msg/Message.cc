@@ -255,7 +255,8 @@ void Message::dump(Formatter *f) const
   f->dump_string("summary", ss.str());
 }
 
-void Message::try_compress(CephContext *cct, AsyncCompressor *compressor)
+void Message::try_compress(CephContext *cct, AsyncCompressor *compressor,
+                           uint8_t compress_flags)
 {
   ldout(cct, 20) << __func__ << " BEFORE compression:\n"
                  << " front_len=" << payload.length()
@@ -266,14 +267,20 @@ void Message::try_compress(CephContext *cct, AsyncCompressor *compressor)
                  << " header.data_len=" << header.data_len
                  << dendl;
 
-  if ((header.flags & CEPH_MSG_HEADER_FLAGS_COMPRESS_FRONT) && payload.length())
+  if ((compress_flags & CEPH_MSG_HEADER_FLAGS_COMPRESS_FRONT) && payload.length()) {
     front_compress_id = compressor->async_compress(payload);
+    header.flags |= CEPH_MSG_HEADER_FLAGS_COMPRESS_FRONT;
+  }
 
-  if ((header.flags & CEPH_MSG_HEADER_FLAGS_COMPRESS_MIDDLE) && middle.length())
+  if ((compress_flags & CEPH_MSG_HEADER_FLAGS_COMPRESS_MIDDLE) && middle.length()) {
     middle_compress_id = compressor->async_compress(middle);
+    header.flags |= CEPH_MSG_HEADER_FLAGS_COMPRESS_MIDDLE;
+  }
 
-  if ((header.flags & CEPH_MSG_HEADER_FLAGS_COMPRESS_DATA) && data.length())
+  if ((compress_flags & CEPH_MSG_HEADER_FLAGS_COMPRESS_DATA) && data.length()) {
     data_compress_id = compressor->async_compress(data);
+    header.flags |= CEPH_MSG_HEADER_FLAGS_COMPRESS_DATA;
+  }
 }
 
 int Message::ready_compress(CephContext *cct, AsyncCompressor *compressor)
