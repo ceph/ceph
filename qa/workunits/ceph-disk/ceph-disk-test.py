@@ -16,14 +16,21 @@
 # When debugging these tests (must be root), here are a few useful commands:
 #
 #  export PATH=..:$PATH
+#  ceph-disk.sh # run once to prepare the environment as it would be by teuthology
 #  ln -sf /home/ubuntu/ceph/src/ceph-disk $(which ceph-disk)
 #  ln -sf /home/ubuntu/ceph/udev/95-ceph-osd.rules /lib/udev/rules.d/95-ceph-osd.rules
 #  ln -sf /home/ubuntu/ceph/systemd/ceph-disk@.service /usr/lib/systemd/system/ceph-disk@.service
 #  ceph-disk.conf will be silently ignored if it is a symbolic link or a hard link /var/log/upstart for logs
 #  cp /home/ubuntu/ceph/src/upstart/ceph-disk.conf /etc/init/ceph-disk.conf
-#  sudo env PATH=..:$PATH python ceph-disk-test.py --destroy-osd 2 --verbose
+#  id=3 ; ceph-disk deactivate --deactivate-by-id $id ; ceph-disk destroy --zap --destroy-by-id $id
 #  py.test -s -v -k test_activate_dmcrypt_luks ceph-disk-test.py
-#  udevadm monitor --property & tail -f /var/log/messages # on CentOS 7
+#
+#  CentOS 7
+#    udevadm monitor --property & tail -f /var/log/messages
+#    udev rules messages are logged in /var/log/messages
+#    systemctl stop ceph-osd@2
+#    systemctl start ceph-osd@2
+#
 #  udevadm monitor --property & tail -f /var/log/syslog /var/log/upstart/*  # on Ubuntu 14.04
 #  udevadm test --action=add /block/vdb/vdb1 # verify the udev rule is run as expected
 #  udevadm control --reload # when changing the udev rules
