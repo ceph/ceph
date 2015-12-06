@@ -35,6 +35,32 @@ const string RGWFileHandle::root_name = "/";
 
 atomic<uint32_t> RGWLibFS::fs_inst;
 
+LookupFHResult RGWLibFS::stat_leaf(RGWFileHandle* parent,
+				  const char *path,
+				  uint32_t flags)
+{
+  /* find either-of <object_name>, <object_name/>, only one of
+   * which can exist;  atomicity? */
+  RGWLibFS* fs = parent->get_fs();
+  LookupFHResult fhr{nullptr, 0};
+  std::string object_name{path};
+
+  for (auto ix : { 0, 1 }) {
+    ignore(ix);
+    RGWStatObjRequest req(cct, fs->get_user(),
+			  parent->bucket_name(), object_name,
+			  RGWStatObjRequest::FLAG_NONE);
+    int rc = librgw.get_fe()->execute_req(&req);
+    if ((rc == 0) &&
+	(req.get_ret() == 0)) {
+      fhr = fs->lookup_fh(parent, path);
+      break;
+    }
+    object_name += "/";
+  }
+  return fhr;
+} /* RGWLibFS::stat_leaf */
+
 /* librgw */
 extern "C" {
 
@@ -293,6 +319,7 @@ int rgw_lookup(struct rgw_fs *rgw_fs,
   }
 
   RGWFileHandle* rgw_fh;
+  LookupFHResult fhr;
 
   if (parent->is_root()) {
     /* special: lookup on root itself */
@@ -301,31 +328,21 @@ int rgw_lookup(struct rgw_fs *rgw_fs,
     } else {
       /* name lookup in root--for now) just get a handle */
       /* XXX RGWStatBucket? */
-      LookupFHResult fhr = fs->lookup_fh(parent, path);
+      fhr = fs->lookup_fh(parent, path);
       rgw_fh = get<0>(fhr);
 
       if (! rgw_fh)
 	return -ENOMEM;
     }
   } else {
-    /* XXX need to stat either-of <object_name>, <object_name/>,
-     * only one of which can exist;  atomicity? */
-    std::string object_name{path};
-    RGWStatObjRequest req(cct, fs->get_user(),
-			  parent->bucket_name(), object_name,
-			  RGWStatObjRequest::FLAG_NONE);
-
-    int rc = librgw.get_fe()->execute_req(&req);
-    if (((rc != 0) ||
-	    (req.get_ret() != 0)) &&
-	(! (flags & RGW_LOOKUP_FLAG_CREATE)))
-      return -ENOENT;
-
-    LookupFHResult fhr = fs->lookup_fh(parent, path);
+    fhr = fs->stat_leaf(parent, path, RGWFileHandle::FLAG_NONE);
+    if (! get<0>(fhr)) {
+      if (! (flags & RGW_LOOKUP_FLAG_CREATE))
+	return -ENOENT;
+      else
+	fhr = fs->lookup_fh(parent, path, RGWFileHandle::FLAG_CREATE);
+    }
     rgw_fh = get<0>(fhr);
-
-    if (! rgw_fh)
-      return -ENOENT;
   } /* !root */
 
   struct rgw_file_handle *rfh = rgw_fh->get_fh();
