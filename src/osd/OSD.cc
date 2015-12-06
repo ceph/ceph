@@ -238,7 +238,6 @@ OSDService::OSDService(OSD *osd) :
   backfill_request_lock("OSD::backfill_request_lock"),
   backfill_request_timer(cct, backfill_request_lock, false),
   last_tid(0),
-  tid_lock("OSDService::tid_lock"),
   reserver_finisher(cct),
   local_reserver(&reserver_finisher, cct->_conf->osd_max_backfills,
 		 cct->_conf->osd_min_recovery_priority),
