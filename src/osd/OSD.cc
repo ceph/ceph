@@ -6073,12 +6073,13 @@ bool OSD::scrub_random_backoff()
   return false;
 }
 
-OSDService::ScrubJob::ScrubJob(const spg_t& pg, const utime_t& timestamp,
+OSDService::ScrubJob::ScrubJob(const spg_t& pg, const utime_t& sched_stamp,
+                               const utime_t& dead_stamp,
 			       double pool_scrub_min_interval,
 			       double pool_scrub_max_interval, bool must)
   : pgid(pg),
-    sched_time(timestamp),
-    deadline(timestamp)
+    sched_time(sched_stamp),
+    deadline(dead_stamp)
 {
   // if not explicitly requested, postpone the scrub with a random delay
   if (!must) {
@@ -6100,6 +6101,10 @@ bool OSDService::ScrubJob::ScrubJob::operator<(const OSDService::ScrubJob& rhs) 
   if (sched_time < rhs.sched_time)
     return true;
   if (sched_time > rhs.sched_time)
+    return false;
+  if (deadline < rhs.deadline)
+    return true;
+  if (deadline > rhs.deadline)
     return false;
   return pgid < rhs.pgid;
 }

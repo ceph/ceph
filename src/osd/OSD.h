@@ -598,7 +598,7 @@ public:
     /// the hard upper bound of scrub time
     utime_t deadline;
     ScrubJob() {}
-    explicit ScrubJob(const spg_t& pg, const utime_t& timestamp,
+    explicit ScrubJob(const spg_t& pg, const utime_t& sched_stamp, const utime_t& dead_stamp,
 		      double pool_scrub_min_interval = 0,
 		      double pool_scrub_max_interval = 0, bool must = true);
     /// order the jobs by sched_time
@@ -606,18 +606,18 @@ public:
   };
   set<ScrubJob> sched_scrub_pg;
 
-  /// @returns the scrub_reg_stamp used for unregister the scrub job
-  utime_t reg_pg_scrub(spg_t pgid, utime_t t, double pool_scrub_min_interval,
+  /// @returns the scrub_reg_stamp and deadline stamp used for unregister the scrub job
+  pair<utime_t, utime_t> reg_pg_scrub(spg_t pgid, utime_t t, double pool_scrub_min_interval,
 		       double pool_scrub_max_interval, bool must) {
-    ScrubJob scrub(pgid, t, pool_scrub_min_interval, pool_scrub_max_interval,
+    ScrubJob scrub(pgid, t, t, pool_scrub_min_interval, pool_scrub_max_interval,
 		   must);
     Mutex::Locker l(sched_scrub_lock);
     sched_scrub_pg.insert(scrub);
-    return scrub.sched_time;
+    return make_pair(scrub.sched_time, scrub.deadline);
   }
-  void unreg_pg_scrub(spg_t pgid, utime_t t) {
+  void unreg_pg_scrub(spg_t pgid, pair<utime_t, utime_t> t) {
     Mutex::Locker l(sched_scrub_lock);
-    size_t removed = sched_scrub_pg.erase(ScrubJob(pgid, t));
+    size_t removed = sched_scrub_pg.erase(ScrubJob(pgid, t.first, t.second));
     assert(removed);
   }
   bool first_scrub_stamp(ScrubJob *out) {

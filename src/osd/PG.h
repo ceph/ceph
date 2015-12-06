@@ -1096,7 +1096,7 @@ public:
     ScrubMap primary_scrubmap;
     map<pg_shard_t, ScrubMap> received_maps;
     OpRequestRef active_rep_scrub;
-    utime_t scrub_reg_stamp;  // stamp we registered for
+    pair<utime_t, utime_t> scrub_reg_stamp;  // stamp we registered for
 
     // flags to indicate explicitly requested scrubs (by admin)
     bool must_scrub, must_deep_scrub, must_repair;
