@@ -312,9 +312,8 @@ def _run_tests(ctx, refspec, role, tests, env, subdir=None, timeout=None):
         ],
     )
 
-    workunits = sorted(misc.get_file(
-        remote,
-        '{tdir}/workunits.list.{role}'.format(tdir=testdir, role=role)).split('\0'))
+    workunits_file = '{tdir}/workunits.list.{role}'.format(tdir=testdir, role=role)
+    workunits = sorted(misc.get_file(remote, workunits_file).split('\0'))
     assert workunits
 
     try:
@@ -369,6 +368,6 @@ def _run_tests(ctx, refspec, role, tests, env, subdir=None, timeout=None):
         remote.run(
             logger=log.getChild(role),
             args=[
-                'rm', '-rf', '--', '{tdir}/workunits.list.{role}'.format(tdir=testdir, role=role), srcdir,
+                'rm', '-rf', '--', workunits_file, srcdir,
             ],
         )
