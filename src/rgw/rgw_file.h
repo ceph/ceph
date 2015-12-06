@@ -32,6 +32,10 @@
 
 namespace rgw {
 
+  template <typename T>
+  static inline void ignore(T &&) {}
+
+
   namespace bi = boost::intrusive;
 
   class RGWLibFS;
@@ -113,6 +117,7 @@ namespace rgw {
   {
     struct rgw_file_handle fh;
     mutable std::atomic<uint64_t> refcnt;
+    std::mutex mtx;
     RGWLibFS* fs;
     RGWFHRef parent;
     /* const */ std::string name; /* XXX file or bucket name */
@@ -141,6 +146,7 @@ namespace rgw {
     static constexpr uint32_t FLAG_ROOT =   0x0002;
     static constexpr uint32_t FLAG_CREATE = 0x0004;
     static constexpr uint32_t FLAG_PSEUDO = 0x0008;
+    static constexpr uint32_t FLAG_LOCK =   0x0010;
 
     friend class RGWLibFS;
 
@@ -191,6 +197,8 @@ namespace rgw {
     uint16_t get_depth() const { return depth; }
 
     struct rgw_file_handle* get_fh() { return &fh; }
+
+    RGWLibFS* get_fs() { return fs; }
 
     int stat(struct stat *st) {
       /* partial Unix attrs */
@@ -466,15 +474,17 @@ namespace rgw {
 			    fhk /* key */, lat /* serializer */,
 			    RGWFileHandle::FHCache::FLAG_LOCK);
       /* LATCHED */
-      if (! fh) {
+      if ((! fh) &&
+	  (cflags & RGWFileHandle::FLAG_CREATE)) {
 	fh = new RGWFileHandle(this, get_inst(), parent, fhk, sname);
 	intrusive_ptr_add_ref(fh); /* sentinel ref */
 	fh_cache.insert_latched(fh, lat,
-				RGWFileHandle::FHCache::FLAG_NONE);
+				  RGWFileHandle::FHCache::FLAG_NONE);
 	if (cflags & RGWFileHandle::FLAG_PSEUDO)
 	  fh->set_pseudo();
 	get<1>(fhr) = RGWFileHandle::FLAG_CREATE;
       }
+
       intrusive_ptr_add_ref(fh); /* call path/handle ref */
       lat.lock->unlock(); /* !LATCHED */
 
@@ -482,6 +492,10 @@ namespace rgw {
 
       return fhr;
     }
+
+    LookupFHResult stat_leaf(RGWFileHandle* parent,
+			    const char *path,
+			    uint32_t flags);
 
     /* find or create an RGWFileHandle */
     RGWFileHandle* lookup_handle(struct rgw_fh_hk fh_hk) {
