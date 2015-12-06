@@ -938,11 +938,13 @@ if(${WITH_RBD})
     tools/rbd/action/Import.cc
     tools/rbd/action/ImportDiff.cc
     tools/rbd/action/Info.cc
+    tools/rbd/action/Journal.cc
     tools/rbd/action/Kernel.cc
     tools/rbd/action/List.cc
     tools/rbd/action/Lock.cc
     tools/rbd/action/MergeDiff.cc
     tools/rbd/action/MirrorPool.cc
+    tools/rbd/action/Nbd.cc
     tools/rbd/action/ObjectMap.cc
     tools/rbd/action/Remove.cc
     tools/rbd/action/Rename.cc
