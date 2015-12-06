@@ -27,6 +27,7 @@ LIBRADOS_OP_FLAG_FADVISE_SEQUENTIAL = 0x8
 LIBRADOS_OP_FLAG_FADVISE_WILLNEED = 0x10
 LIBRADOS_OP_FLAG_FADVISE_DONTNEED = 0x20
 LIBRADOS_OP_FLAG_FADVISE_NOCACHE = 0x40
+LIBRADOS_SNAP_HEAD = -2
 
 
 # Are we running Python 2.x
@@ -1507,6 +1508,21 @@ class Ioctx(object):
         """
         return self.locator_key
 
+    @requires(('snap_id', int))
+    def set_read(self, snap_id):
+        """
+        Set the snapshot for reading objects.
+
+        To stop to read from snapshot, use set_read(LIBRADOS_SNAP_HEAD)
+
+        :param snap_id: the snapshot Id
+        :type snap_id: int
+
+        :raises: :class:`TypeError`
+        """
+        self.require_ioctx_open()
+        run_in_thread(self.librados.rados_ioctx_snap_set_read,
+                      (self.io, c_uint64(snap_id)))
 
     @requires(('nspace', str_type))
     def set_namespace(self, nspace):
