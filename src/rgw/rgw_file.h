@@ -141,12 +141,13 @@ namespace rgw {
 
     static constexpr uint16_t MAX_DEPTH = 256;
 
-    static constexpr uint32_t FLAG_NONE =   0x0000;
-    static constexpr uint32_t FLAG_OPEN =   0x0001;
-    static constexpr uint32_t FLAG_ROOT =   0x0002;
-    static constexpr uint32_t FLAG_CREATE = 0x0004;
-    static constexpr uint32_t FLAG_PSEUDO = 0x0008;
-    static constexpr uint32_t FLAG_LOCK =   0x0010;
+    static constexpr uint32_t FLAG_NONE =    0x0000;
+    static constexpr uint32_t FLAG_OPEN =    0x0001;
+    static constexpr uint32_t FLAG_ROOT =    0x0002;
+    static constexpr uint32_t FLAG_CREATE =  0x0004;
+    static constexpr uint32_t FLAG_PSEUDO =  0x0008;
+    static constexpr uint32_t FLAG_DIRECTORY = 0x0010;
+    static constexpr uint32_t FLAG_LOCK =   0x0020;
 
     friend class RGWLibFS;
 
@@ -173,10 +174,10 @@ namespace rgw {
 
   public:
     RGWFileHandle(RGWLibFS* fs, uint32_t fs_inst, RGWFileHandle* _parent,
-		  const fh_key& _fhk, std::string& _name)
-      : parent(_parent), name(std::move(_name)), fhk(_fhk), flags(FLAG_NONE) {
+		  const fh_key& _fhk, std::string& _name, uint32_t _flags)
+      : parent(_parent), name(std::move(_name)), fhk(_fhk), flags(_flags) {
 
-      fh.fh_type = parent->is_root()
+      fh.fh_type = (parent->is_root() || (flags & FLAG_DIRECTORY))
 	? RGW_FS_TYPE_DIRECTORY : RGW_FS_TYPE_FILE;
 
       depth = parent->depth + 1;
@@ -476,7 +477,7 @@ namespace rgw {
       /* LATCHED */
       if ((! fh) &&
 	  (cflags & RGWFileHandle::FLAG_CREATE)) {
-	fh = new RGWFileHandle(this, get_inst(), parent, fhk, sname);
+	fh = new RGWFileHandle(this, get_inst(), parent, fhk, sname, cflags);
 	intrusive_ptr_add_ref(fh); /* sentinel ref */
 	fh_cache.insert_latched(fh, lat,
 				  RGWFileHandle::FHCache::FLAG_NONE);

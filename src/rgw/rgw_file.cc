@@ -44,6 +44,7 @@ LookupFHResult RGWLibFS::stat_leaf(RGWFileHandle* parent,
   RGWLibFS* fs = parent->get_fs();
   LookupFHResult fhr{nullptr, 0};
   std::string object_name{path};
+  uint32_t cflags = RGWFileHandle::FLAG_NONE;
 
   for (auto ix : { 0, 1 }) {
     ignore(ix);
@@ -53,9 +54,10 @@ LookupFHResult RGWLibFS::stat_leaf(RGWFileHandle* parent,
     int rc = librgw.get_fe()->execute_req(&req);
     if ((rc == 0) &&
 	(req.get_ret() == 0)) {
-      fhr = fs->lookup_fh(parent, path);
+      fhr = fs->lookup_fh(parent, path, cflags);
       break;
     }
+    cflags = RGWFileHandle::FLAG_DIRECTORY;
     object_name += "/";
   }
   return fhr;
