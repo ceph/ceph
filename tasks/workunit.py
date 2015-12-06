@@ -70,9 +70,9 @@ def task(ctx, config):
 
     refspec = config.get('branch')
     if refspec is None:
-        refspec = config.get('sha1')
-    if refspec is None:
         refspec = config.get('tag')
+    if refspec is None:
+        refspec = config.get('sha1')
     if refspec is None:
         refspec = 'HEAD'
 
