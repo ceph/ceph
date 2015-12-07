@@ -351,6 +351,7 @@ public:
     void _process(fsync_item *i, ThreadPool::TPHandle &handle) {
       store->_txc_process_fsync(i);
     }
+    using ThreadPool::WorkQueue<fsync_item>::_process;
     void _clear() {
       fd_queue.clear();
     }
@@ -422,6 +423,7 @@ public:
       store->_wal_apply(i);
       i->osr->wal_apply_lock.Unlock();
     }
+    using ThreadPool::WorkQueue<TransContext>::_process;
     void _clear() {
       assert(wal_queue.empty());
     }
