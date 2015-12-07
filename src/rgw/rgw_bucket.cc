@@ -494,7 +494,7 @@ int rgw_remove_bucket(RGWRados *store, rgw_bucket& bucket, bool delete_children)
     return ret;
   }
 
-  ret = rgw_unlink_bucket(store, info.owner, bucket.tenant, bucket.name);
+  ret = rgw_unlink_bucket(store, info.owner, bucket.tenant, bucket.name, false);
   if (ret < 0) {
     lderr(store->ctx()) << "ERROR: unable to remove user bucket information" << dendl;
   }
