@@ -113,13 +113,15 @@ int AsyncCompressor::get_compress_data(uint64_t compress_id, bufferlist &data, b
     return -EIO;
   } else if (blocking) {
     if (it->second.status.compare_and_swap(WAIT, DONE)) {
+      bufferlist compressed_data;
       ldout(cct, 10) << __func__ << " compress job id=" << compress_id << " hasn't finished, abort!"<< dendl;
-      if (compressor->compress(it->second.data, data)) {
+      if (compressor->compress(it->second.data, compressed_data)) {
         ldout(cct, 1) << __func__ << " compress job id=" << compress_id << " failed!"<< dendl;
         it->second.status.set(ERROR);
         perf_logger->inc(l_compressor_error_results);
         return -EIO;
       }
+      compressed_data.swap(data);
       *finished = true;
     } else {
       job_lock.Unlock();
@@ -170,13 +172,15 @@ int AsyncCompressor::get_decompress_data(uint64_t decompress_id, bufferlist &dat
     return -EIO;
   } else if (blocking) {
     if (it->second.status.compare_and_swap(WAIT, DONE)) {
+      bufferlist decompressed_data;
       ldout(cct, 10) << __func__ << " decompress job id=" << decompress_id << " hasn't started, abort!"<< dendl;
-      if (compressor->decompress(it->second.data, data)) {
+      if (compressor->decompress(it->second.data, decompressed_data)) {
         ldout(cct, 1) << __func__ << " decompress job id=" << decompress_id << " failed!"<< dendl;
         it->second.status.set(ERROR);
         perf_logger->inc(l_compressor_error_results);
         return -EIO;
       }
+      decompressed_data.swap(data);
       *finished = true;
     } else {
       job_lock.Unlock();
