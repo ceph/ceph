@@ -90,6 +90,7 @@ authentication keyring.
 	Handling full filesystems <full>
 	Troubleshooting <troubleshooting>
 	Disaster recovery <disaster-recovery>
+	Client authentication <client-auth>
 
 .. raw:: html
 
