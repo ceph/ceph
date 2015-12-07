@@ -502,7 +502,7 @@ int rgw_readdir(struct rgw_fs *rgw_fs,
   }
 
   if (parent->is_root()) {
-    RGWListBucketsRequest req(cct, fs->get_user(), rcb, cb_arg, offset);
+    RGWListBucketsRequest req(cct, fs->get_user(), parent, rcb, cb_arg, offset);
     rc = librgw.get_fe()->execute_req(&req);
   } else {
     /*
@@ -510,7 +510,8 @@ int rgw_readdir(struct rgw_fs *rgw_fs,
      */
     /* XXXX remove uri, deal with bucket and object names */
     string uri = "/" + parent->bucket_name() + "/";
-    RGWListBucketRequest req(cct, fs->get_user(), uri, rcb, cb_arg, offset);
+    RGWListBucketRequest req(cct, fs->get_user(), uri, parent, rcb, cb_arg,
+			    offset);
     rc = librgw.get_fe()->execute_req(&req);
 
     /* XXX update link count (incorrectly) */
