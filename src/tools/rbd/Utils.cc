@@ -317,11 +317,16 @@ int validate_snapshot_name(at::ArgumentModifier mod,
 
 int get_image_options(const boost::program_options::variables_map &vm,
 		      bool get_format, librbd::ImageOptions *opts) {
-  uint64_t order, features, stripe_unit, stripe_count;
+  uint64_t order, features, stripe_unit, stripe_count, object_size;
   bool features_specified = false;
 
   if (vm.count(at::IMAGE_ORDER)) {
     order = vm[at::IMAGE_ORDER].as<uint64_t>();
+    std::cerr << "rbd: --order is deprecated, use --object-size"
+	      << std::endl;
+  } else if (vm.count(at::IMAGE_OBJECT_SIZE)) {
+    object_size = vm[at::IMAGE_OBJECT_SIZE].as<uint64_t>();
+    order = std::round(std::log2(object_size)); 
   } else {
     order = 22;
   }

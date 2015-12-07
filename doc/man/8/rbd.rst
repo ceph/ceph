@@ -10,7 +10,7 @@ Synopsis
 ========
 
 | **rbd** [ -c *ceph.conf* ] [ -m *monaddr* ] [--cluster *cluster name*]
-  [ -p | --pool *pool* ] [--size *size* ] [ --order *bits* ] [ *command* ... ] 
+  [ -p | --pool *pool* ] [--size *size* ] [ --object-size *B/K/M* ] [ *command* ... ] 
 
 
 Description
@@ -69,10 +69,11 @@ Parameters
 
    Specifies the size (in M/G/T) of the new rbd image.
 
-.. option:: --order bits
+.. option:: --object-size B/K/M
 
-   Specifies the object size expressed as a number of bits, such that
-   the object size is ``1 << order``. The default is 22 (4 MB).
+   Specifies the object size in B/K/M, it will be rounded up the nearest power of two.
+   The default object size is 4 MB, smallest is 4K and maximum is 32M.
+
 
 .. option:: --stripe-unit size-in-B/K/M
 
@@ -177,17 +178,17 @@ Commands
   require querying the OSDs for every potential object within the image.
 
 :command:`info` *image-spec* | *snap-spec*
-  Will dump information (such as size and order) about a specific rbd image.
+  Will dump information (such as size and object size) about a specific rbd image.
   If image is a clone, information about its parent is also displayed.
   If a snapshot is specified, whether it is protected is shown as well.
 
-:command:`create` (-s | --size *size-in-M/G/T*) [--image-format *format-id*] [--order *bits*] [--stripe-unit *size-in-B/K/M* --stripe-count *num*] [--image-feature *feature-name*]... [--image-shared] *image-spec*
+:command:`create` (-s | --size *size-in-M/G/T*) [--image-format *format-id*] [--object-size *B/K/M*] [--stripe-unit *size-in-B/K/M* --stripe-count *num*] [--image-feature *feature-name*]... [--image-shared] *image-spec*
   Will create a new rbd image. You must also specify the size via --size.  The
   --stripe-unit and --stripe-count arguments are optional, but must be used together.
 
-:command:`clone` [--order *bits*] [--stripe-unit *size-in-B/K/M* --stripe-count *num*] [--image-feature *feature-name*] [--image-shared] *parent-snap-spec* *child-image-spec*
+:command:`clone` [--object-size *B/K/M*] [--stripe-unit *size-in-B/K/M* --stripe-count *num*] [--image-feature *feature-name*] [--image-shared] *parent-snap-spec* *child-image-spec*
   Will create a clone (copy-on-write child) of the parent snapshot.
-  Object order will be identical to that of the parent image unless
+  Object size will be identical to that of the parent image unless
   specified. Size will be the same as the parent snapshot. The --stripe-unit
   and --stripe-count arguments are optional, but must be used together.
 
@@ -219,11 +220,11 @@ Commands
 :command:`export` (*image-spec* | *snap-spec*) [*dest-path*]
   Exports image to dest path (use - for stdout).
 
-:command:`import` [--image-format *format-id*] [--order *bits*] [--stripe-unit *size-in-B/K/M* --stripe-count *num*] [--image-feature *feature-name*]... [--image-shared] *src-path* [*image-spec*]
+:command:`import` [--image-format *format-id*] [--object-size *B/K/M*] [--stripe-unit *size-in-B/K/M* --stripe-count *num*] [--image-feature *feature-name*]... [--image-shared] *src-path* [*image-spec*]
   Creates a new image and imports its data from path (use - for
   stdin).  The import operation will try to create sparse rbd images 
   if possible.  For import from stdin, the sparsification unit is
-  the data block size of the destination image (1 << order).
+  the data block size of the destination image (object size).
 
   The --stripe-unit and --stripe-count arguments are optional, but must be
   used together.
@@ -258,7 +259,7 @@ Commands
 
 :command:`cp` (*src-image-spec* | *src-snap-spec*) *dest-image-spec*
   Copies the content of a src-image into the newly created dest-image.
-  dest-image will have the same size, order, and image format as src-image.
+  dest-image will have the same size, object size, and image format as src-image.
 
 :command:`mv` *src-image-spec* *dest-image-spec*
   Renames an image.  Note: rename across pools is not supported.
@@ -385,10 +386,10 @@ bottleneck when individual images get large or busy.
 
 The striping is controlled by three parameters:
 
-.. option:: order
+.. option:: object-size
 
-  The size of objects we stripe over is a power of two, specifically 2^[*order*] bytes.  The default
-  is 22, or 4 MB.
+  The size of objects we stripe over is a power of two. It will be rounded up the nearest power of two.
+  The default object size is 4 MB, smallest is 4K and maximum is 32M.
 
 .. option:: stripe_unit
 
@@ -398,8 +399,8 @@ The striping is controlled by three parameters:
 .. option:: stripe_count
 
   After we write [*stripe_unit*] bytes to [*stripe_count*] objects, we loop back to the initial object
-  and write another stripe, until the object reaches its maximum size (as specified by [*order*].  At that
-  point, we move on to the next [*stripe_count*] objects.
+  and write another stripe, until the object reaches its maximum size.  At that point,
+  we move on to the next [*stripe_count*] objects.
 
 By default, [*stripe_unit*] is the same as the object size and [*stripe_count*] is 1.  Specifying a different
 [*stripe_unit*] requires that the STRIPINGV2 feature be supported (added in Ceph v0.53) and format 2 images be
@@ -470,7 +471,7 @@ To create a new rbd image that is 100 GB::
 
 To use a non-default object size (8 MB)::
 
-       rbd create mypool/myimage --size 102400 --order 23
+       rbd create mypool/myimage --size 102400 --object-size 8M
 
 To delete an rbd image (be careful!)::
 
