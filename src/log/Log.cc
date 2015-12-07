@@ -256,7 +256,7 @@ void Log::_flush(EntryQueue *t, EntryQueue *requeue, bool crash)
       }
 
       if (do_syslog) {
-        syslog(LOG_USER, "%s", buf);
+        syslog(LOG_USER|LOG_DEBUG, "%s", buf);
       }
 
       if (do_stderr) {
@@ -284,7 +284,7 @@ void Log::_log_message(const char *s, bool crash)
       cerr << "problem writing to " << m_log_file << ": " << cpp_strerror(r) << std::endl;
   }
   if ((crash ? m_syslog_crash : m_syslog_log) >= 0) {
-    syslog(LOG_USER, "%s", s);
+    syslog(LOG_USER|LOG_DEBUG, "%s", s);
   }
   
   if ((crash ? m_stderr_crash : m_stderr_log) >= 0) {
