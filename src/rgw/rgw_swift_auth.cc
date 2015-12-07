@@ -13,7 +13,7 @@
 
 #define dout_subsys ceph_subsys_rgw
 
-#define DEFAULT_SWIFT_PREFIX "swift"
+#define DEFAULT_SWIFT_PREFIX "/swift"
 
 using namespace ceph::crypto;
 
@@ -61,10 +61,13 @@ static int encode_token(CephContext *cct, string& swift_user, string& key, buffe
 
 int rgw_swift_verify_signed_token(CephContext *cct, RGWRados *store, const char *token, RGWUserInfo& info, string *pswift_user)
 {
-  if (strncmp(token, "AUTH_rgwtk", 10) != 0)
+  if (strncmp(token, "AUTH_rgwtk", 10) == 0) {
+    token += 10;
+  } else if (strncmp(token, "AUTH_rgwts", 10) == 0) {
+    token += 10;
+  } else {
     return -EINVAL;
-
-  token += 10;
+  }
 
   int len = strlen(token);
   if (len & 1) {
@@ -134,6 +137,7 @@ int rgw_swift_verify_signed_token(CephContext *cct, RGWRados *store, const char 
 void RGW_SWIFT_Auth_Get::execute()
 {
   int ret = -EPERM;
+  const char *token_tag = "rgwtk";
 
   const char *key = s->info.env->get("HTTP_X_AUTH_KEY");
   const char *user = s->info.env->get("HTTP_X_AUTH_USER");
@@ -148,8 +152,20 @@ void RGW_SWIFT_Auth_Get::execute()
   string swift_prefix = g_conf->rgw_swift_url_prefix;
   string tenant_path;
 
+  /*
+   * We did not allow an empty Swift prefix before, but we want it now.
+   * So, we take rgw_swift_url_prefix = "/" to yield the empty prefix.
+   * The rgw_swift_url_prefix = "" is the default and yields "/swift"
+   * in a backwards-compatible way.
+   */
   if (swift_prefix.size() == 0) {
     swift_prefix = DEFAULT_SWIFT_PREFIX;
+  } else if (swift_prefix == "/") {
+    swift_prefix.clear();
+  } else {
+    if (swift_prefix[0] != '/') {
+      swift_prefix.insert(0, "/");
+    }
   }
 
   if (swift_url.size() == 0) {
@@ -179,7 +195,6 @@ void RGW_SWIFT_Auth_Get::execute()
     }
   }
 
-
   if (!key || !user)
     goto done;
 
@@ -207,9 +222,13 @@ void RGW_SWIFT_Auth_Get::execute()
   if (!g_conf->rgw_swift_tenant_name.empty()) {
     tenant_path = "/AUTH_";
     tenant_path.append(g_conf->rgw_swift_tenant_name);
+  } else {
+    tenant_path = "/AUTH_";
+    tenant_path.append(info.user_id.to_str());
+    token_tag = "rgwts";
   }
 
-  s->cio->print("X-Storage-Url: %s/%s/v1%s\r\n", swift_url.c_str(),
+  s->cio->print("X-Storage-Url: %s%s/v1%s\r\n", swift_url.c_str(),
 	        swift_prefix.c_str(), tenant_path.c_str());
 
   if ((ret = encode_token(s->cct, swift_key->id, swift_key->key, bl)) < 0)
@@ -219,8 +238,8 @@ void RGW_SWIFT_Auth_Get::execute()
     char buf[bl.length() * 2 + 1];
     buf_to_hex((const unsigned char *)bl.c_str(), bl.length(), buf);
 
-    s->cio->print("X-Storage-Token: AUTH_rgwtk%s\r\n", buf);
-    s->cio->print("X-Auth-Token: AUTH_rgwtk%s\r\n", buf);
+    s->cio->print("X-Storage-Token: AUTH_%s%s\r\n", token_tag, buf);
+    s->cio->print("X-Auth-Token: AUTH_%s%s\r\n", token_tag, buf);
   }
 
   ret = STATUS_NO_CONTENT;
