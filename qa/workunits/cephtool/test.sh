@@ -247,7 +247,7 @@ function test_tiering_agent()
   done
   $evicted # assert
   # the object is proxy read and promoted to the cache
-  rados -p $slow get obj1 /tmp/obj1
+  rados -p $slow get obj1 - >/dev/null
   # wait for the promoted object to be evicted again
   evicted=false
   for i in 1 2 4 8 16 32 64 128 256 ; do
