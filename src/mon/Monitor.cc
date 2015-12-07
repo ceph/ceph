@@ -62,6 +62,8 @@
 #include "common/perf_counters.h"
 #include "common/admin_socket.h"
 
+#include "global/signal_handler.h"
+
 #include "include/color.h"
 #include "include/ceph_fs.h"
 #include "include/str_list.h"
@@ -356,7 +358,7 @@ abort:
 void Monitor::handle_signal(int signum)
 {
   assert(signum == SIGINT || signum == SIGTERM);
-  derr << "*** Got Signal " << sys_siglist[signum] << " ***" << dendl;
+  derr << "*** Got Signal " << sig_str(signum) << " ***" << dendl;
   shutdown();
 }
 
