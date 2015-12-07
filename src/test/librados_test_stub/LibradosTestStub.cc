@@ -661,6 +661,19 @@ void ObjectReadOperation::list_snaps(snap_set_t *out_snaps, int *prval) {
   o->ops.push_back(op);
 }
 
+void ObjectReadOperation::list_watchers(std::list<obj_watch_t> *out_watchers,
+                                        int *prval) {
+  TestObjectOperationImpl *o = reinterpret_cast<TestObjectOperationImpl*>(impl);
+
+  ObjectOperationTestImpl op = boost::bind(&TestIoCtxImpl::list_watchers, _1,
+                                           _2, out_watchers);
+  if (prval != NULL) {
+    op = boost::bind(save_operation_result,
+                     boost::bind(op, _1, _2, _3, _4), prval);
+  }
+  o->ops.push_back(op);
+}
+
 void ObjectReadOperation::read(size_t off, uint64_t len, bufferlist *pbl,
                                int *prval) {
   TestObjectOperationImpl *o = reinterpret_cast<TestObjectOperationImpl*>(impl);
