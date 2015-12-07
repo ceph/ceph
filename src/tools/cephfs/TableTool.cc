@@ -30,103 +30,11 @@ void TableTool::usage()
 {
   std::cout << "Usage: \n"
     << "  cephfs-table-tool <all|[mds rank]> <reset|show> <session|snap|inode>"
+    << "  cephfs-table-tool <all|[mds rank]> <take_inos> <max_ino>"
     << std::endl;
 
   generic_client_usage();
 }
-
-
-int TableTool::main(std::vector<const char*> &argv)
-{
-  int r;
-
-  dout(10) << __func__ << dendl;
-
-  // RADOS init
-  // ==========
-  r = rados.init_with_context(g_ceph_context);
-  if (r < 0) {
-    derr << "RADOS unavailable, cannot scan filesystem journal" << dendl;
-    return r;
-  }
-
-  dout(4) << "connecting to RADOS..." << dendl;
-  rados.connect();
- 
-  int const pool_id = mdsmap->get_metadata_pool();
-  dout(4) << "resolving pool " << pool_id << dendl;
-  std::string pool_name;
-  r = rados.pool_reverse_lookup(pool_id, &pool_name);
-  if (r < 0) {
-    derr << "Pool " << pool_id << " identified in MDS map not found in RADOS!" << dendl;
-    return r;
-  }
-
-  dout(4) << "creating IoCtx.." << dendl;
-  r = rados.ioctx_create(pool_name.c_str(), io);
-  assert(r == 0);
-
-  // Require at least 3 args <action> <table> <rank>
-  if (argv.size() < 3) {
-    usage();
-    return -EINVAL;
-  }
-
-  const std::string rank_str = std::string(argv[0]);
-  const std::string mode = std::string(argv[1]);
-  const std::string table = std::string(argv[2]);
-
-  if (rank_str == "all") {
-    rank = MDS_RANK_NONE;
-  } else {
-    std::string rank_err;
-    rank = strict_strtol(rank_str.c_str(), 10, &rank_err);
-    if (!rank_err.empty()) {
-      derr << "Bad rank '" << rank_str << "'" << dendl;
-      usage();
-    }
-  }
-
-  JSONFormatter jf(true);
-  if (mode == "reset") {
-    if (table == "session") {
-      r = apply_rank_fn(&TableTool::_reset_session_table, &jf);
-    } else if (table == "inode") {
-      r = apply_rank_fn(&TableTool::_reset_ino_table, &jf);
-    } else if (table == "snap") {
-      r = _reset_snap_table(&jf);
-    } else {
-      derr << "Invalid table '" << table << "'" << dendl;
-      usage();
-      return -EINVAL;
-    }
-  } else if (mode == "show") {
-    if (table == "session") {
-      r = apply_rank_fn(&TableTool::_show_session_table, &jf);
-    } else if (table == "inode") {
-      r = apply_rank_fn(&TableTool::_show_ino_table, &jf);
-    } else if (table == "snap") {
-      r = _show_snap_table(&jf);
-    } else {
-      derr << "Invalid table '" << table << "'" << dendl;
-      usage();
-      return -EINVAL;
-    }
-  } else {
-    derr << "Invalid mode '" << mode << "'" << dendl;
-    usage();
-    return -EINVAL;
-  }
-
-  // Subcommand should have written to formatter, flush it
-  jf.flush(std::cout);
-  std::cout << std::endl;
-  return r;
-}
-
-
-
-
 
 
 /**
@@ -135,7 +43,7 @@ int TableTool::main(std::vector<const char*> &argv)
  * this->rank is MDS_RANK_NONE), or on the rank specified
  * by this->rank.
  */
-int TableTool::apply_rank_fn(int (TableTool::*fptr) (mds_rank_t, Formatter*), Formatter *f)
+int TableTool::apply_rank_fn(std::function<int(mds_rank_t, Formatter *)> fptr, Formatter *f)
 {
   assert(f != NULL);
 
@@ -156,7 +64,7 @@ int TableTool::apply_rank_fn(int (TableTool::*fptr) (mds_rank_t, Formatter*), Fo
     f->open_object_section(rank_str.str().c_str());
 
     f->open_object_section("data");
-    int rank_r = (this->*fptr)(*rank_i, f);
+    int rank_r = fptr(*rank_i, f);
     f->close_section();
     r = r ? r : rank_r;
 
@@ -178,7 +86,7 @@ int TableTool::apply_rank_fn(int (TableTool::*fptr) (mds_rank_t, Formatter*), Fo
 template <typename A>
 class TableHandler
 {
-private:
+protected:
   // The RADOS object ID for the table
   std::string object_name;
 
@@ -238,10 +146,17 @@ public:
   int reset(librados::IoCtx *io)
   {
     A table_inst;
+    // Compose new (blank) table
     table_inst.set_rank(rank);
     table_inst.reset_state();
-    
-    // Compose new (blank) table
+    // Write the table out
+    return write(table_inst, io);
+  }
+
+protected:
+
+  int write(const A &table_inst, librados::IoCtx *io)
+  {
     bufferlist new_bl;
     if (mds_table) {
       version_t version = 1;
@@ -346,7 +261,6 @@ public:
     A table_inst;
     table_inst.set_rank(rank);
     table_inst.reset_state();
-
     bufferlist header_bl;
     table_inst.encode_header(&header_bl);
 
@@ -360,46 +274,147 @@ public:
   }
 };
 
-int TableTool::_show_session_table(mds_rank_t rank, Formatter *f)
+class InoTableHandler : public TableHandler<InoTable>
 {
-  return TableHandlerOmap<SessionMapStore>(rank, "sessionmap", false).load_and_dump(&io, f);
-}
+  public:
+  InoTableHandler(mds_rank_t r)
+    : TableHandler(r, "inotable", true)
+  {}
 
-int TableTool::_reset_session_table(mds_rank_t rank, Formatter *f)
-{
-  return TableHandlerOmap<SessionMapStore>(rank, "sessionmap", false).reset(&io);
-}
+  int take_inos(librados::IoCtx *io, inodeno_t max, Formatter *f)
+  {
+    InoTable inst;
+    inst.set_rank(rank);
+    inst.reset_state();
 
-int TableTool::_show_ino_table(mds_rank_t rank, Formatter *f)
-{
-  return TableHandler<InoTable>(rank, "inotable", true).load_and_dump(&io, f);;
-}
+    int r = 0;
+    if (inst.force_consume_to(max)) {
+      r = write(inst, io);
+    }
 
-int TableTool::_reset_ino_table(mds_rank_t rank, Formatter *f)
-{
-  return TableHandler<InoTable>(rank, "inotable", true).reset(&io);
-}
+    f->dump_int("version", inst.get_version());
+    inst.dump(f);
 
-int TableTool::_show_snap_table(Formatter *f)
+    return r;
+  }
+};
+
+
+int TableTool::main(std::vector<const char*> &argv)
 {
   int r;
 
-  f->open_object_section("show_snap_table");
-  {
-    r = TableHandler<SnapServer>(MDS_RANK_NONE, "snaptable", true).load_and_dump(&io, f);
-    f->dump_int("result", r);
+  dout(10) << __func__ << dendl;
+
+  // RADOS init
+  // ==========
+  r = rados.init_with_context(g_ceph_context);
+  if (r < 0) {
+    derr << "RADOS unavailable, cannot scan filesystem journal" << dendl;
+    return r;
   }
-  f->close_section();
 
-  return r;
-}
+  dout(4) << "connecting to RADOS..." << dendl;
+  rados.connect();
+ 
+  int const pool_id = mdsmap->get_metadata_pool();
+  dout(4) << "resolving pool " << pool_id << dendl;
+  std::string pool_name;
+  r = rados.pool_reverse_lookup(pool_id, &pool_name);
+  if (r < 0) {
+    derr << "Pool " << pool_id << " identified in MDS map not found in RADOS!" << dendl;
+    return r;
+  }
 
-int TableTool::_reset_snap_table(Formatter *f)
-{
-  int r = TableHandler<SnapServer>(MDS_RANK_NONE, "snaptable", true).reset(&io);
-  f->open_object_section("reset_snap_status");
-  f->dump_int("result", r);
-  f->close_section();
+  dout(4) << "creating IoCtx.." << dendl;
+  r = rados.ioctx_create(pool_name.c_str(), io);
+  assert(r == 0);
+
+  // Require at least 3 args <rank> <mode> <arg> [args...]
+  if (argv.size() < 3) {
+    usage();
+    return -EINVAL;
+  }
+
+  const std::string rank_str = std::string(argv[0]);
+  const std::string mode = std::string(argv[1]);
+
+  if (rank_str == "all") {
+    rank = MDS_RANK_NONE;
+  } else {
+    std::string rank_err;
+    rank = strict_strtol(rank_str.c_str(), 10, &rank_err);
+    if (!rank_err.empty()) {
+      derr << "Bad rank '" << rank_str << "'" << dendl;
+      usage();
+    }
+  }
+
+  JSONFormatter jf(true);
+  if (mode == "reset") {
+    const std::string table = std::string(argv[2]);
+    if (table == "session") {
+      r = apply_rank_fn([this](mds_rank_t rank, Formatter *f) -> int {
+            return TableHandlerOmap<SessionMapStore>(rank, "sessionmap", false).reset(&io);
+      }, &jf);
+    } else if (table == "inode") {
+      r = apply_rank_fn([this](mds_rank_t rank, Formatter *f) -> int {
+            return TableHandler<InoTable>(rank, "inotable", true).reset(&io);
+      }, &jf);
+    } else if (table == "snap") {
+      r = TableHandler<SnapServer>(MDS_RANK_NONE, "snaptable", true).reset(&io);
+      jf.open_object_section("reset_snap_status");
+      jf.dump_int("result", r);
+      jf.close_section();
+      return r;
+    } else {
+      derr << "Invalid table '" << table << "'" << dendl;
+      usage();
+      return -EINVAL;
+    }
+  } else if (mode == "show") {
+    const std::string table = std::string(argv[2]);
+    if (table == "session") {
+      r = apply_rank_fn([this](mds_rank_t rank, Formatter *f) -> int {
+        return TableHandlerOmap<SessionMapStore>(rank, "sessionmap", false).load_and_dump(&io, f);
+      }, &jf);
+    } else if (table == "inode") {
+      r = apply_rank_fn([this](mds_rank_t rank, Formatter *f) -> int {
+        return TableHandler<InoTable>(rank, "inotable", true).load_and_dump(&io, f);;
+      }, &jf);
+    } else if (table == "snap") {
+      jf.open_object_section("show_snap_table");
+      {
+        r = TableHandler<SnapServer>(
+            MDS_RANK_NONE, "snaptable", true).load_and_dump(&io, &jf);
+        jf.dump_int("result", r);
+      }
+      jf.close_section();
+    } else {
+      derr << "Invalid table '" << table << "'" << dendl;
+      usage();
+      return -EINVAL;
+    }
+  } else if (mode == "take_inos") {
+    const std::string ino_str = std::string(argv[2]);
+    std::string ino_err;
+    inodeno_t ino = strict_strtoll(ino_str.c_str(), 10, &ino_err);
+    if (!ino_err.empty()) {
+      derr << "Bad ino '" << ino_str << "'" << dendl;
+      return -EINVAL;
+    }
+    r = apply_rank_fn([this, ino](mds_rank_t rank, Formatter *f) -> int {
+      return InoTableHandler(rank).take_inos(&io, ino, f);
+    }, &jf);
+  } else {
+    derr << "Invalid mode '" << mode << "'" << dendl;
+    usage();
+    return -EINVAL;
+  }
+
+  // Subcommand should have written to formatter, flush it
+  jf.flush(std::cout);
+  std::cout << std::endl;
   return r;
 }
 
