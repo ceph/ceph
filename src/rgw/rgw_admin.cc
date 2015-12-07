@@ -2382,12 +2382,14 @@ int main(int argc, char **argv)
           return -EINVAL;
         }
         RGWPeriod period;
-        if (!realm.get_current_period().empty()) {
+        auto& current_period = realm.get_current_period();
+        if (!current_period.empty()) {
+          // pull the latest epoch of the realm's current period
           ret = do_period_pull(remote, url, access_key, secret_key,
-                               realm_id, realm_name, period_id, period_epoch,
+                               realm_id, realm_name, current_period, 0,
                                &period);
           if (ret < 0) {
-            cerr << "could not fetch period " << realm.get_current_period() << std::endl;
+            cerr << "could not fetch period " << current_period << std::endl;
             return -ret;
           }
         }
