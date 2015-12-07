@@ -13,6 +13,8 @@
 #include <mutex>
 #include <boost/intrusive_ptr.hpp>
 #include <boost/range/adaptor/reversed.hpp>
+#include <boost/container/flat_map.hpp>
+#include <boost/variant.hpp>
 #include "xxhash.h"
 #include "include/buffer.h"
 #include "common/cohort_lru.h"
@@ -113,6 +115,9 @@ namespace rgw {
     return (lhs < rhs) || (lhs == rhs);
   }
 
+  using boost::variant;
+  using boost::container::flat_map;
+
   class RGWFileHandle
   {
     struct rgw_file_handle fh;
@@ -132,6 +137,15 @@ namespace rgw {
       struct timespec atime;
       state() : dev(0), size(0), nlink(1), ctime{0,0}, mtime{0,0}, atime{0,0} {}
     } state;
+
+    struct file {
+    };
+
+    struct directory {
+      flat_map<uint64_t, std::string> marker_cache;
+    };
+
+    boost::variant<file, directory> variant_type;
 
     uint16_t depth;
     uint32_t flags;
@@ -288,6 +302,14 @@ namespace rgw {
       }
     }
 
+    void add_marker(uint64_t off, const std::string& marker) {
+      directory* d = get<directory>(&variant_type);
+      if (d) {
+	d->marker_cache.insert(
+	  flat_map<uint64_t, std::string>::value_type(off, marker));
+      }
+    }
+    
     bool is_open() const { return flags & FLAG_OPEN; }
     bool is_root() const { return flags & FLAG_ROOT; }
     bool is_bucket() const { return (fh.fh_type == RGW_FS_TYPE_DIRECTORY); }
@@ -534,8 +556,6 @@ namespace rgw {
     RGWUserInfo* get_user() { return &user; }
   }; /* RGWLibFS */
 
-} /* namespace rgw */
-
 static inline std::string make_uri(const std::string& bucket_name,
 				    const std::string& object_name) {
   std::string uri("/");
@@ -554,14 +574,17 @@ class RGWListBucketsRequest : public RGWLibRequest,
 			      public RGWListBuckets /* RGWOp */
 {
 public:
+  RGWFileHandle* rgw_fh;
   uint64_t* offset;
   void* cb_arg;
   rgw_readdir_cb rcb;
+  int ix;
 
   RGWListBucketsRequest(CephContext* _cct, RGWUserInfo *_user,
-			rgw_readdir_cb _rcb, void* _cb_arg, uint64_t* _offset)
-    : RGWLibRequest(_cct, _user), offset(_offset), cb_arg(_cb_arg),
-      rcb(_rcb) {
+			RGWFileHandle* _rgw_fh, rgw_readdir_cb _rcb,
+			void* _cb_arg, uint64_t* _offset)
+    : RGWLibRequest(_cct, _user), rgw_fh(_rgw_fh), offset(_offset),
+      cb_arg(_cb_arg), rcb(_rcb), ix(0) {
     magic = 71;
     op = this;
   }
@@ -643,14 +666,17 @@ class RGWListBucketRequest : public RGWLibRequest,
 			     public RGWListBucket /* RGWOp */
 {
 public:
+  RGWFileHandle* rgw_fh;
   std::string& uri;
   uint64_t* offset;
   void* cb_arg;
   rgw_readdir_cb rcb;
+  int ix;
 
   RGWListBucketRequest(CephContext* _cct, RGWUserInfo *_user, std::string& _uri,
-		      rgw_readdir_cb _rcb, void* _cb_arg, uint64_t* _offset)
-    : RGWLibRequest(_cct, _user), uri(_uri), offset(_offset),
+		      RGWFileHandle* _rgw_fh, rgw_readdir_cb _rcb,
+		      void* _cb_arg, uint64_t* _offset)
+    : RGWLibRequest(_cct, _user), rgw_fh(_rgw_fh), uri(_uri), offset(_offset),
       cb_arg(_cb_arg),
       rcb(_rcb) {
     default_max = 1000; // XXX was being omitted
@@ -691,7 +717,13 @@ public:
   }
 
   int operator()(const std::string& name, const std::string& marker) {
-    rcb(name.c_str(), cb_arg, (*offset)++);
+    uint64_t off = XXH64(name.c_str(), name.length(), fh_key::seed);
+    *offset = off;
+    /* update traversal cache */
+    if ((++ix % max) == 0)
+      rgw_fh->add_marker(off, marker);
+    /* call back */
+    rcb(name.c_str(), cb_arg, off);
     return 0;
   }
 
@@ -1175,5 +1207,7 @@ public:
   }
 
 }; /* RGWStatObjRequest */
+
+} /* namespace rgw */
 
 #endif /* RGW_FILE_H */
