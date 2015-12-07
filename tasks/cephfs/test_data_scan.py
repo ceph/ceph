@@ -271,7 +271,7 @@ class NonDefaultLayout(Workload):
         self._initial_state = self._mount.stat("datafile")
 
     def validate(self):
-        p = self._mount.run_shell(["sudo", "getfattr", "--only-values", "-n", "ceph.file.layout.object_size", "./datafile"])
+        p = self._mount.run_shell(["getfattr", "--only-values", "-n", "ceph.file.layout.object_size", "./datafile"])
 
         # Check we got the layout reconstructed properly
         object_size = int(p.stdout.getvalue().strip())
@@ -459,7 +459,7 @@ class TestDataScan(CephFSTestCase):
         self.fs.wait_for_daemons()
         self.mount_a.mount()
         self.mount_a.wait_until_mounted()
-        out = self.mount_a.run_shell(["sudo", "cat", "subdir/{0}".format(victim_dentry)]).stdout.getvalue().strip()
+        out = self.mount_a.run_shell(["cat", "subdir/{0}".format(victim_dentry)]).stdout.getvalue().strip()
         self.assertEqual(out, victim_dentry)
 
         # Finally, close the loop by checking our injected dentry survives a merge
