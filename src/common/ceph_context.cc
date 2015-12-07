@@ -414,9 +414,9 @@ CephContext::CephContext(uint32_t module_type_, int init_flags_)
     _heartbeat_map(NULL),
     _crypto_none(NULL),
     _crypto_aes(NULL),
+    _plugin_registry(NULL),
     _lockdep_obs(NULL),
-    _cct_perf(NULL),
-	  _plugin_registry(NULL)
+    _cct_perf(NULL)
 {
   ceph_spin_init(&_service_thread_lock);
   ceph_spin_init(&_associated_objs_lock);
