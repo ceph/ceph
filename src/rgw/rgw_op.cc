@@ -2343,7 +2343,6 @@ void RGWPutMetadataBucket::pre_exec()
 
 void RGWPutMetadataBucket::execute()
 {
-  rgw_obj obj(s->bucket, s->object);
   map<string, bufferlist> attrs, orig_attrs, rmattrs;
 
   ret = get_params();
