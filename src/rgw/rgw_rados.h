@@ -1266,6 +1266,7 @@ class RGWRealm : public RGWSystemMetaObj
   string master_zonegroup;
   map<string, RGWZoneGroup> zonegroups;
   string current_period;
+  epoch_t epoch{0}; //< realm epoch, incremented for each new period
 
   int create_control();
   int delete_control();
@@ -1281,6 +1282,7 @@ public:
     ::encode(master_zonegroup, bl);
     ::encode(zonegroups, bl);
     ::encode(current_period, bl);
+    ::encode(epoch, bl);
     ENCODE_FINISH(bl);
   }
 
@@ -1290,6 +1292,7 @@ public:
     ::decode(master_zonegroup, bl);
     ::decode(zonegroups, bl);
     ::decode(current_period, bl);
+    ::decode(epoch, bl);
     DECODE_FINISH(bl);
   }
 
@@ -1308,6 +1311,8 @@ public:
     return current_period;
   }
   int set_current_period(RGWPeriod& period);
+
+  epoch_t get_epoch() const { return epoch; }
 
   string get_control_oid();
   /// send a notify on the realm control object
@@ -1350,6 +1355,7 @@ class RGWPeriod
 
   string realm_id;
   string realm_name;
+  epoch_t realm_epoch{1}; //< realm epoch when period was made current
 
   CephContext *cct;
   RGWRados *store;
@@ -1373,6 +1379,7 @@ public:
 
   const string& get_id() const { return id; }
   epoch_t get_epoch() const { return epoch; }
+  epoch_t get_realm_epoch() const { return realm_epoch; }
   const string& get_predecessor() const { return predecessor_uuid; }
   const string& get_master_zone() const { return master_zone; }
   const string& get_master_zonegroup() const { return master_zonegroup; }
@@ -1427,9 +1434,10 @@ public:
   int commit(RGWRealm& realm, const RGWPeriod &current_period);
 
   void encode(bufferlist& bl) const {
-    ENCODE_START(1, 1, bl);    
+    ENCODE_START(1, 1, bl);
     ::encode(id, bl);
     ::encode(epoch, bl);
+    ::encode(realm_epoch, bl);
     ::encode(predecessor_uuid, bl);
     ::encode(sync_status, bl);
     ::encode(period_map, bl);
@@ -1445,6 +1453,7 @@ public:
     DECODE_START(1, bl);
     ::decode(id, bl);
     ::decode(epoch, bl);
+    ::decode(realm_epoch, bl);
     ::decode(predecessor_uuid, bl);
     ::decode(sync_status, bl);
     ::decode(period_map, bl);

@@ -761,7 +761,14 @@ const string& RGWRealm::get_info_oid_prefix(bool old_format)
 
 int RGWRealm::set_current_period(RGWPeriod& period)
 {
+  // update realm epoch to match the period's
+  if (epoch >= period.get_realm_epoch()) {
+    lderr(cct) << "ERROR: set_current_period with old realm epoch "
+        << period.get_realm_epoch() << ", current epoch=" << epoch << dendl;
+    return -EINVAL;
+  }
 
+  epoch = period.get_realm_epoch();
   current_period = period.get_id();
 
   int ret = update();
@@ -1182,6 +1189,7 @@ void RGWPeriod::fork()
   predecessor_uuid = id;
   id = get_staging_id(realm_id);
   period_map.reset();
+  realm_epoch++;
 }
 
 void RGWPeriod::update(const RGWZoneGroupMap& map)
@@ -1245,6 +1253,13 @@ int RGWPeriod::commit(RGWRealm& realm, const RGWPeriod& current_period)
         << dendl;
     return -EINVAL;
   }
+  // realm epoch must be 1 greater than current period
+  if (realm_epoch != current_period.get_realm_epoch() + 1) {
+    lderr(cct) << "period's realm epoch " << realm_epoch
+        << " does not come directly after current realm epoch "
+        << current_period.get_realm_epoch() << dendl;
+    return -EINVAL;
+  }
   // did the master zone change?
   if (master_zone != current_period.get_master_zone()) {
     // store the current metadata sync status in the period
@@ -1282,6 +1297,7 @@ int RGWPeriod::commit(RGWRealm& realm, const RGWPeriod& current_period)
   set_id(current_period.get_id());
   set_epoch(current_period.get_epoch() + 1);
   set_predecessor(current_period.get_predecessor());
+  realm_epoch = current_period.get_realm_epoch();
   // write the period to rados
   int r = store_info(false);
   if (r < 0) {

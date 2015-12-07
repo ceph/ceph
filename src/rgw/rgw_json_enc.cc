@@ -675,6 +675,7 @@ void RGWPeriod::dump(Formatter *f) const
   encode_json("period_config", period_config, f);
   encode_json("realm_id", realm_id, f);
   encode_json("realm_name", realm_name, f);
+  encode_json("realm_epoch", realm_epoch, f);
 }
 
 void RGWPeriod::decode_json(JSONObj *obj)
@@ -689,6 +690,7 @@ void RGWPeriod::decode_json(JSONObj *obj)
   JSONDecoder::decode_json("period_config", period_config, obj);
   JSONDecoder::decode_json("realm_id", realm_id, obj);
   JSONDecoder::decode_json("realm_name", realm_name, obj);
+  JSONDecoder::decode_json("realm_epoch", realm_epoch, obj);
 }
 
 void RGWZoneParams::dump(Formatter *f) const
@@ -946,6 +948,7 @@ void RGWRealm::dump(Formatter *f) const
   encode_json("master_zonegroup", master_zonegroup, f);
   encode_json_map("zonegroups", zonegroups, f);
   encode_json("current_period", current_period, f);
+  encode_json("epoch", epoch, f);
 }
 
 
@@ -955,6 +958,7 @@ void RGWRealm::decode_json(JSONObj *obj)
   JSONDecoder::decode_json("master_zonegroup", master_zonegroup, obj);
   JSONDecoder::decode_json("zonegroups", zonegroups, decode_zonegroups, obj);
   JSONDecoder::decode_json("current_period", current_period, obj);
+  JSONDecoder::decode_json("epoch", epoch, obj);
 }
 
 void KeystoneToken::Metadata::decode_json(JSONObj *obj)
