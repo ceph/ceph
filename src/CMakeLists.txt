@@ -302,6 +302,7 @@ set(libcommon_files
   common/pick_address.cc
   common/address_helper.cc
   common/linux_version.c
+  common/TracepointProvider.cc
   osdc/Striper.cc
   osdc/Objecter.cc
   ${arch_files}
