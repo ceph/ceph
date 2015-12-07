@@ -9417,6 +9417,12 @@ void ReplicatedPG::mark_all_unfound_lost(int what)
 	  coll,
 	  ghobject_t(oid, ghobject_t::NO_GEN, pg_whoami.shard));
 	pg_log.missing_add_event(e);
+        // remove from peering missing list to prevent recovering for the object
+        for (map<pg_shard_t, pg_missing_t>::iterator pm = peer_missing.begin();
+            pm != peer_missing.end();
+            ++pm) {
+          pm->second.rm(oid, m->second.need);
+        }
 	++m;
 	missing_loc.recovered(oid);
       }
