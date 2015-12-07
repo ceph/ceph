@@ -316,8 +316,6 @@ function setup_dnsmasq() {
         sudo sed -ie 's/^#IGNORE_RESOLVCONF=yes/IGNORE_RESOLVCONF=yes/' /etc/default/dnsmasq
         echo nameserver 127.0.0.1 | sudo tee /etc/resolvconf/resolv.conf.d/head
         sudo resolvconf -u
-        # see http://tracker.ceph.com/issues/12212 apt-mirror.front.sepia.ceph.com is not publicly accessible
-        echo host-record=apt-mirror.front.sepia.ceph.com,64.90.32.37 | sudo tee /etc/dnsmasq.d/apt-mirror
         echo "INSTALLED dnsmasq and configured to be a resolver"
     else
         echo "OK dnsmasq installed"
