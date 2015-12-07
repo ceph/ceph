@@ -772,11 +772,11 @@ int NewStore::_lock_fsid()
   l.l_len = 0;
   int r = ::fcntl(fsid_fd, F_SETLK, &l);
   if (r < 0) {
-    int err = errno;
+    int err = -errno;
     derr << __func__ << " failed to lock " << path << "/fsid"
 	 << " (is another ceph-osd still running?)"
 	 << cpp_strerror(err) << dendl;
-    return -err;
+    return err;
   }
   return 0;
 }
