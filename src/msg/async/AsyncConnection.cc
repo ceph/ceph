@@ -2090,6 +2090,8 @@ int AsyncConnection::send_message(Message *m)
    return 0;
   }
 
+  if (async_msgr->cct->_conf->ms_compress)
+    m->try_compress(async_msgr->cct, async_msgr->compressor, CEPH_MSG_HEADER_FLAGS_COMPRESS_ALL);
   // we don't want to consider local message here, it's too lightweight which
   // may disturb users
   logger->inc(l_msgr_send_messages);

@@ -1780,6 +1780,9 @@ void Pipe::writer()
 	  m->get();
 	}
 
+        if (msgr->cct->_conf->ms_compress)
+          m->try_compress(msgr->cct, msgr->compressor, CEPH_MSG_HEADER_FLAGS_COMPRESS_ALL);
+
 	// associate message with Connection (for benefit of encode_payload)
 	m->set_connection(connection_state.get());
 

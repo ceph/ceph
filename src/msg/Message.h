@@ -224,6 +224,7 @@ protected:
   ConnectionRef connection;
 
   uint32_t magic;
+  bool compress_done;
 
   bi::list_member_hook<> dispatch_q;
 
@@ -266,7 +267,7 @@ protected:
 public:
   Message()
     : connection(NULL),
-      magic(0),
+      magic(0), compress_done(false),
       front_compress_id(0), middle_compress_id(0), data_compress_id(0),
       completion_hook(NULL),
       byte_throttler(NULL),
@@ -277,7 +278,7 @@ public:
   }
   Message(int t, int version=1, int compat_version=0)
     : connection(NULL),
-      magic(0),
+      magic(0), compress_done(false),
       front_compress_id(0), middle_compress_id(0), data_compress_id(0),
       completion_hook(NULL),
       byte_throttler(NULL),
