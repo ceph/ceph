@@ -935,7 +935,7 @@ void handle_test_signal(int signum)
   if ((signum != SIGINT) && (signum != SIGTERM))
     return;
 
-  std::cerr << "*** Got signal " << sys_siglist[signum] << " ***" << std::endl;
+  std::cerr << "*** Got signal " << sig_str(signum) << " ***" << std::endl;
   Mutex::Locker l(shutdown_lock);
   if (shutdown_timer) {
     shutdown_timer->cancel_all_events();

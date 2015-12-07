@@ -223,6 +223,11 @@ if(WITH_THREAD_SAFE_RES_QUERY)
     set(HAVE_THREAD_SAFE_RES_QUERY 1 CACHE INTERNAL "Thread safe res_query supported.")
 endif(WITH_THREAD_SAFE_RES_QUERY)
 
+option(WITH_REENTRANT_STRSIGNAL "strsignal is reentrant" OFF)
+if(WITH_REENTRANT_STRSIGNAL)
+    set(HAVE_REENTRANT_STRSIGNAL 1 CACHE INTERNAL "Reentrant strsignal is supported.")
+endif(WITH_REENTRANT_STRSIGNAL)
+
 # Now create a useable config.h
 configure_file(
   ${PROJECT_SOURCE_DIR}/src/include/config-h.in.cmake
