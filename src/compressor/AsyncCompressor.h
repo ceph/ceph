@@ -44,6 +44,7 @@ class AsyncCompressor {
   atomic_t job_id;
   ThreadPool compress_tp;
   PerfCounters *perf_logger;
+  atomic_t started;
 
   enum {
     WAIT,
@@ -92,7 +93,7 @@ class AsyncCompressor {
         if (item->status.compare_and_swap(WAIT, WORKING)) {
           break;
         } else {
-          Mutex::Locker (async_compressor->job_lock);
+          Mutex::Locker l(async_compressor->job_lock);
           async_compressor->jobs.erase(item->id);
           item = NULL;
         }

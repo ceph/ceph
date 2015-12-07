@@ -295,7 +295,7 @@ int Message::ready_compress(CephContext *cct, AsyncCompressor *compressor)
   if (front_compress_id) {
     r = compressor->get_compress_data(front_compress_id, payload, true, &finished);
     if (r < 0) {
-      ldout(cct, 0) << __func__ << " failed to compress payload" << dendl;
+      ldout(cct, 0) << __func__ << " failed to compress payload " << front_compress_id << dendl;
       return r;
     }
     ++num;
@@ -305,7 +305,7 @@ int Message::ready_compress(CephContext *cct, AsyncCompressor *compressor)
   if (middle_compress_id) {
     r = compressor->get_compress_data(middle_compress_id, middle, true, &finished);
     if (r < 0) {
-      ldout(cct, 0) << __func__ << " failed to compress middle" << dendl;
+      ldout(cct, 0) << __func__ << " failed to compress middle " << middle_compress_id << dendl;
       return r;
     }
     ++num;
@@ -315,7 +315,7 @@ int Message::ready_compress(CephContext *cct, AsyncCompressor *compressor)
   if (data_compress_id) {
     r = compressor->get_compress_data(data_compress_id, data, true, &finished);
     if (r < 0) {
-      ldout(cct, 0) << __func__ << " failed to compress data" << dendl;
+      ldout(cct, 0) << __func__ << " failed to compress data " << data_compress_id << dendl;
       return r;
     }
     ++num;

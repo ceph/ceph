@@ -23,7 +23,7 @@
 AsyncCompressor::AsyncCompressor(CephContext *c):
   compressor(Compressor::create(c->_conf->async_compressor_type)), cct(c),
   job_id(0),
-  compress_tp(cct, "AsyncCompressor::compressor_tp", cct->_conf->async_compressor_threads, "async_compressor_threads"),
+  compress_tp(cct, "AsyncCompressor::compressor_tp", cct->_conf->async_compressor_threads, "async_compressor_threads"), started(0),
   job_lock("AsyncCompressor::job_lock"),
   compress_wq(this, c->_conf->async_compressor_thread_timeout,
               c->_conf->async_compressor_thread_suicide_timeout, &compress_tp)
@@ -46,13 +46,15 @@ AsyncCompressor::AsyncCompressor(CephContext *c):
 void AsyncCompressor::init()
 {
   ldout(cct, 10) << __func__ << dendl;
-  compress_tp.start();
+  if (started.compare_and_swap(0, 1))
+    compress_tp.start();
 }
 
 void AsyncCompressor::terminate()
 {
   ldout(cct, 10) << __func__ << dendl;
-  compress_tp.stop();
+  if (started.compare_and_swap(1, 0))
+    compress_tp.stop();
 }
 
 uint64_t AsyncCompressor::async_compress(bufferlist &data)
@@ -73,6 +75,7 @@ uint64_t AsyncCompressor::async_compress(bufferlist &data)
 
 uint64_t AsyncCompressor::async_decompress(bufferlist &data)
 {
+  assert(data.length());
   uint64_t id = job_id.inc();
   pair<unordered_map<uint64_t, Job>::iterator, bool> it;
   {
@@ -117,8 +120,8 @@ int AsyncCompressor::get_compress_data(uint64_t compress_id, bufferlist &data, b
       ldout(cct, 10) << __func__ << " compress job id=" << compress_id << " hasn't finished, abort!"<< dendl;
       if (compressor->compress(it->second.data, compressed_data)) {
         ldout(cct, 1) << __func__ << " compress job id=" << compress_id << " failed!"<< dendl;
-        it->second.status.set(ERROR);
         perf_logger->inc(l_compressor_error_results);
+        it->second.status.set(ERROR);
         return -EIO;
       }
       compressed_data.swap(data);
@@ -173,11 +176,11 @@ int AsyncCompressor::get_decompress_data(uint64_t decompress_id, bufferlist &dat
   } else if (blocking) {
     if (it->second.status.compare_and_swap(WAIT, DONE)) {
       bufferlist decompressed_data;
-      ldout(cct, 10) << __func__ << " decompress job id=" << decompress_id << " hasn't started, abort!"<< dendl;
+      ldout(cct, 10) << __func__ << " decompress job id=" << decompress_id << " hasn't started, abort!" << dendl;
       if (compressor->decompress(it->second.data, decompressed_data)) {
         ldout(cct, 1) << __func__ << " decompress job id=" << decompress_id << " failed!"<< dendl;
-        it->second.status.set(ERROR);
         perf_logger->inc(l_compressor_error_results);
+        it->second.status.set(ERROR);
         return -EIO;
       }
       decompressed_data.swap(data);

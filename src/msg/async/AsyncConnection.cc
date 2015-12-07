@@ -833,18 +833,19 @@ void AsyncConnection::process()
             msg_left -= read;
           }
 
-          if (msg_left == 0)
+          if (msg_left == 0) {
             state = STATE_OPEN_MESSAGE_READ_FOOTER_AND_DISPATCH;
 
-          // try decompress data
-          if (has_feature(CEPH_FEATURE_MSG_COMPRESS) &&
-              current_header.flags & CEPH_MSG_HEADER_FLAGS_COMPRESS_DATA) {
-            ldout(async_msgr->cct, 20) << "decompressing incoming message" << dendl;
-            ldout(async_msgr->cct, 20) << __func__ << " BEFORE decompression:\n"
-                                                   << " data_len=" << data.length()
-                                                   << " header.data_len=" << current_header.data_len
-                                                   << dendl;
-            data_decompress_id = async_msgr->compressor->async_decompress(data);
+            // try decompress data
+            if (has_feature(CEPH_FEATURE_MSG_COMPRESS) &&
+                current_header.flags & CEPH_MSG_HEADER_FLAGS_COMPRESS_DATA) {
+              ldout(async_msgr->cct, 20) << "decompressing incoming message" << dendl;
+              ldout(async_msgr->cct, 20) << __func__ << " BEFORE decompression:\n"
+                                                    << " data_len=" << data.length()
+                                                    << " header.data_len=" << current_header.data_len
+                                                    << dendl;
+              data_decompress_id = async_msgr->compressor->async_decompress(data);
+            }
           }
 
           break;
@@ -2091,7 +2092,7 @@ int AsyncConnection::send_message(Message *m)
   }
 
   if (async_msgr->cct->_conf->ms_compress)
-    m->try_compress(async_msgr->cct, async_msgr->compressor, CEPH_MSG_HEADER_FLAGS_COMPRESS_ALL);
+    m->try_compress(async_msgr->cct, async_msgr->compressor, CEPH_MSG_HEADER_FLAGS_COMPRESS_DATA);
   // we don't want to consider local message here, it's too lightweight which
   // may disturb users
   logger->inc(l_msgr_send_messages);

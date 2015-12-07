@@ -139,9 +139,15 @@ public:
       crcflags(get_default_crc_flags(cct->_conf)), compressor(NULL)
   {
     my_inst.name = w;
-    cct->lookup_or_create_singleton_object<AsyncCompressor>(compressor, "Messenger::Messenger");
+    if (cct->_conf->ms_compress) {
+      cct->lookup_or_create_singleton_object<AsyncCompressor>(compressor, "Messenger::Messenger::Compressor");
+      compressor->init();
+    }
   }
-  virtual ~Messenger() {}
+  virtual ~Messenger() {
+    if (compressor)
+      compressor->terminate();
+  }
 
   /**
    * create a new messenger
