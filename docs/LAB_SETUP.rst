@@ -60,8 +60,8 @@ Teuthology Node
 Create an ``/etc/teuthology.yaml`` that looks like::
 
     lab_domain: example.com
-    lock_server: http://pulpito.example.com:8080
-    results_server: http://pulpito.example.com:8080
+    lock_server: http://paddles.example.com:8080
+    results_server: http://paddles.example.com:8080
     queue_host: localhost
     queue_port: 11300
     results_email: you@example.com
