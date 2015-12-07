@@ -321,7 +321,9 @@ function setup_dnsmasq() {
         sudo apt-get -qq install -y dnsmasq resolvconf
         echo resolv-file=/etc/dnsmasq-resolv.conf | sudo tee /etc/dnsmasq.d/resolv
         echo nameserver $resolver | sudo tee /etc/dnsmasq-resolv.conf
-        sudo /etc/init.d/dnsmasq restart
+        # restart is not always picking up changes
+        sudo /etc/init.d/dnsmasq stop || true
+        sudo /etc/init.d/dnsmasq start
         sudo sed -ie 's/^#IGNORE_RESOLVCONF=yes/IGNORE_RESOLVCONF=yes/' /etc/default/dnsmasq
         echo nameserver 127.0.0.1 | sudo tee /etc/resolvconf/resolv.conf.d/head
         sudo resolvconf -u
@@ -350,7 +352,9 @@ function define_dnsmasq() {
         done | sudo tee $host_records > /tmp/dnsmasq
         head -2 /tmp/dnsmasq
         echo 'etc.'
-        sudo /etc/init.d/dnsmasq restart
+        # restart is not always picking up changes
+        sudo /etc/init.d/dnsmasq stop || true
+        sudo /etc/init.d/dnsmasq start
         echo "CREATED $host_records"
     else
         echo "OK $host_records exists"
