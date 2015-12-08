@@ -100,12 +100,12 @@ void SnapshotRemoveRequest<I>::send_remove_object_map() {
   {
     RWLock::WLocker snap_locker(image_ctx.snap_lock);
     RWLock::RLocker object_map_locker(image_ctx.object_map_lock);
-    if (image_ctx.object_map.enabled(image_ctx.object_map_lock)) {
+    if (image_ctx.object_map != nullptr) {
       CephContext *cct = image_ctx.cct;
       ldout(cct, 5) << this << " " << __func__ << dendl;
       m_state = STATE_REMOVE_OBJECT_MAP;
 
-      image_ctx.object_map.snapshot_remove(
+      image_ctx.object_map->snapshot_remove(
         m_snap_id, this->create_callback_context());
       return;
     }

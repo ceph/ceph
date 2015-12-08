@@ -189,7 +189,9 @@ namespace librbd {
                                      &m_lock);
 
     {
-      if (!m_ictx->object_map.object_may_exist(object_no)) {
+      RWLock::RLocker snap_locker(m_ictx->snap_lock);
+      if (m_ictx->object_map != nullptr &&
+          !m_ictx->object_map->object_may_exist(object_no)) {
 	m_finisher->queue(req, -ENOENT);
 	return;
       }

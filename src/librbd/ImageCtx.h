@@ -29,7 +29,6 @@
 #include "cls/rbd/cls_rbd_client.h"
 #include "librbd/AsyncRequest.h"
 #include "librbd/LibrbdWriteback.h"
-#include "librbd/ObjectMap.h"
 #include "librbd/SnapInfo.h"
 #include "librbd/parent_types.h"
 
@@ -49,6 +48,7 @@ namespace librbd {
   class ImageWatcher;
   class Journal;
   class LibrbdAdminSocketHook;
+  class ObjectMap;
 
   namespace operation {
   template <typename> class ResizeRequest;
@@ -99,7 +99,8 @@ namespace librbd {
                    // lock_tag
                    // lockers
     Mutex cache_lock; // used as client_lock for the ObjectCacher
-    RWLock snap_lock; // protects snapshot-related member variables, features, and flags
+    RWLock snap_lock; // protects snapshot-related member variables,
+                      // features (and associated helper classes), and flags
     RWLock parent_lock; // protects parent_md and parent
     Mutex refresh_lock; // protects refresh_seq and last_refresh
     RWLock object_map_lock; // protects object map updates and object_map itself
@@ -140,8 +141,7 @@ namespace librbd {
 
     ExclusiveLock<ImageCtx> *exclusive_lock;
 
-    ObjectMap object_map;         // TODO
-    ObjectMap *object_map_ptr;
+    ObjectMap *object_map;
 
     atomic_t async_request_seq;
 

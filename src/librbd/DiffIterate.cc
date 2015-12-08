@@ -4,6 +4,7 @@
 #include "librbd/DiffIterate.h"
 #include "librbd/ImageCtx.h"
 #include "librbd/internal.h"
+#include "librbd/ObjectMap.h"
 #include "librbd/Utils.h"
 #include "include/rados/librados.hpp"
 #include "include/interval_set.h"
