@@ -15,7 +15,11 @@
 #ifndef CEPH_LIB_H
 #define CEPH_LIB_H
 
+#if defined(__FreeBSD__)
+/* Seems to compile oke on FreeBSD without this header */
+#else
 #include <features.h>
+#endif
 #include <utime.h>
 #include <sys/stat.h>
 #include <sys/types.h>
