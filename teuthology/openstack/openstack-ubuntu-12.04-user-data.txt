@@ -8,6 +8,7 @@ bootcmd:
  - hostname $(cat /etc/hostname)
  - echo "MaxSessions 1000" >> /etc/ssh/sshd_config
 preserve_hostname: true
+manage_etc_hosts: true
 system_info:
   default_user:
     name: {username}
