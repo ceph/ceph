@@ -2584,6 +2584,12 @@ bool MDSRankDispatcher::handle_command(
     evict_sessions(filter);
 
     return true;
+  } else if (prefix == "damage ls") {
+    Formatter *f = new JSONFormatter();
+    damage_table.dump(f);
+    f->flush(*ds);
+    delete f;
+    return true;
   } else {
     return false;
   }
