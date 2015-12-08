@@ -13,7 +13,6 @@
 #include "common/Cond.h"
 #include "journal/Future.h"
 #include "journal/ReplayHandler.h"
-#include "librbd/ImageWatcher.h"
 #include <algorithm>
 #include <list>
 #include <string>
@@ -108,19 +107,6 @@ private:
   };
   typedef ceph::unordered_map<uint64_t, Event> Events;
 
-  struct LockListener : public ImageWatcher::Listener {
-    Journal *journal;
-    LockListener(Journal *_journal) : journal(_journal) {
-    }
-
-    virtual bool handle_requested_lock() {
-      return journal->handle_requested_lock();
-    }
-    virtual void handle_lock_updated(ImageWatcher::LockUpdateState state) {
-      journal->handle_lock_updated(state);
-    }
-  };
-
   struct C_InitJournal : public Context {
     Journal *journal;
 
@@ -186,7 +172,6 @@ private:
   State m_state;
 
   Contexts m_wait_for_state_contexts;
-  LockListener m_lock_listener;
 
   ReplayHandler m_replay_handler;
   bool m_close_pending;
@@ -212,9 +197,6 @@ private:
   void handle_replay_complete(int r);
 
   void handle_event_safe(int r, uint64_t tid);
-
-  bool handle_requested_lock();
-  void handle_lock_updated(ImageWatcher::LockUpdateState state);
 
   int stop_recording();
 

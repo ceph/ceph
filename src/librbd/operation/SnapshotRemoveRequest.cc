@@ -4,6 +4,7 @@
 #include "librbd/operation/SnapshotRemoveRequest.h"
 #include "common/dout.h"
 #include "common/errno.h"
+#include "librbd/ExclusiveLock.h"
 #include "librbd/ImageCtx.h"
 #include "librbd/ImageWatcher.h"
 #include "librbd/ObjectMap.h"
@@ -164,8 +165,9 @@ void SnapshotRemoveRequest<I>::send_remove_snap() {
   if (image_ctx.old_format) {
     cls_client::old_snapshot_remove(&op, m_snap_name);
   } else {
-    if (image_ctx.image_watcher->is_lock_owner()) {
-      image_ctx.image_watcher->assert_header_locked(&op);
+    if (image_ctx.exclusive_lock != nullptr &&
+        image_ctx.exclusive_lock->is_lock_owner()) {
+      image_ctx.exclusive_lock->assert_header_locked(&op);
     }
     cls_client::snapshot_remove(&op, m_snap_id);
   }

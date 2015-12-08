@@ -5,6 +5,7 @@
 #include "common/dout.h"
 #include "common/errno.h"
 #include "librbd/AsyncObjectThrottle.h"
+#include "librbd/ExclusiveLock.h"
 #include "librbd/ImageCtx.h"
 #include "librbd/ImageWatcher.h"
 #include "librbd/internal.h"
@@ -141,8 +142,8 @@ private:
     CephContext *cct = image_ctx.cct;
 
     // should have been canceled prior to releasing lock
-    assert(!image_ctx.image_watcher->is_lock_supported() ||
-           image_ctx.image_watcher->is_lock_owner());
+    assert(image_ctx.exclusive_lock == nullptr ||
+           image_ctx.exclusive_lock->is_lock_owner());
 
     RWLock::WLocker l(image_ctx.object_map_lock);
     uint8_t state = image_ctx.object_map[m_object_no];
@@ -250,8 +251,8 @@ void RebuildObjectMapRequest<I>::send_resize_object_map() {
   m_state = STATE_RESIZE_OBJECT_MAP;
 
   // should have been canceled prior to releasing lock
-  assert(!m_image_ctx.image_watcher->is_lock_supported() ||
-         m_image_ctx.image_watcher->is_lock_owner());
+  assert(m_image_ctx.exclusive_lock == nullptr ||
+         m_image_ctx.exclusive_lock->is_lock_owner());
   m_image_ctx.object_map.aio_resize(size, OBJECT_NONEXISTENT,
                                     this->create_callback_context());
 }
@@ -263,8 +264,8 @@ void RebuildObjectMapRequest<I>::send_trim_image() {
   RWLock::RLocker l(m_image_ctx.owner_lock);
 
   // should have been canceled prior to releasing lock
-  assert(!m_image_ctx.image_watcher->is_lock_supported() ||
-         m_image_ctx.image_watcher->is_lock_owner());
+  assert(m_image_ctx.exclusive_lock == nullptr ||
+         m_image_ctx.exclusive_lock->is_lock_owner());
   ldout(cct, 5) << this << " send_trim_image" << dendl;
   m_state = STATE_TRIM_IMAGE;
 
@@ -322,8 +323,8 @@ void RebuildObjectMapRequest<I>::send_save_object_map() {
   m_state = STATE_SAVE_OBJECT_MAP;
 
   // should have been canceled prior to releasing lock
-  assert(!m_image_ctx.image_watcher->is_lock_supported() ||
-         m_image_ctx.image_watcher->is_lock_owner());
+  assert(m_image_ctx.exclusive_lock == nullptr ||
+         m_image_ctx.exclusive_lock->is_lock_owner());
   m_image_ctx.object_map.aio_save(this->create_callback_context());
 }
 
@@ -332,15 +333,15 @@ void RebuildObjectMapRequest<I>::send_update_header() {
   assert(m_image_ctx.owner_lock.is_locked());
 
   // should have been canceled prior to releasing lock
-  assert(!m_image_ctx.image_watcher->is_lock_supported() ||
-         m_image_ctx.image_watcher->is_lock_owner());
+  assert(m_image_ctx.exclusive_lock == nullptr ||
+         m_image_ctx.exclusive_lock->is_lock_owner());
 
   ldout(m_image_ctx.cct, 5) << this << " send_update_header" << dendl;
   m_state = STATE_UPDATE_HEADER;
 
   librados::ObjectWriteOperation op;
-  if (m_image_ctx.image_watcher->is_lock_supported()) {
-    m_image_ctx.image_watcher->assert_header_locked(&op);
+  if (m_image_ctx.exclusive_lock != nullptr) {
+    m_image_ctx.exclusive_lock->assert_header_locked(&op);
   }
 
   uint64_t flags = RBD_FLAG_OBJECT_MAP_INVALID | RBD_FLAG_FAST_DIFF_INVALID;

@@ -4,6 +4,7 @@
 #include "librbd/operation/TrimRequest.h"
 #include "librbd/AsyncObjectThrottle.h"
 #include "librbd/AioObjectRequest.h"
+#include "librbd/ExclusiveLock.h"
 #include "librbd/ImageCtx.h"
 #include "librbd/ImageWatcher.h"
 #include "librbd/internal.h"
@@ -39,8 +40,8 @@ public:
   virtual int send() {
     I &image_ctx = this->m_image_ctx;
     assert(image_ctx.owner_lock.is_locked());
-    assert(!image_ctx.image_watcher->is_lock_supported() ||
-           image_ctx.image_watcher->is_lock_owner());
+    assert(image_ctx.exclusive_lock == nullptr ||
+           image_ctx.exclusive_lock->is_lock_owner());
 
     string oid = image_ctx.get_object_name(m_object_no);
     ldout(image_ctx.cct, 10) << "removing (with copyup) " << oid << dendl;
@@ -67,8 +68,8 @@ public:
   virtual int send() {
     I &image_ctx = this->m_image_ctx;
     assert(image_ctx.owner_lock.is_locked());
-    assert(!image_ctx.image_watcher->is_lock_supported() ||
-           image_ctx.image_watcher->is_lock_owner());
+    assert(image_ctx.exclusive_lock == nullptr ||
+           image_ctx.exclusive_lock->is_lock_owner());
     if (!image_ctx.object_map.object_may_exist(m_object_no)) {
       return 1;
     }
@@ -169,8 +170,8 @@ template <typename I>
 void TrimRequest<I>::send_copyup_objects() {
   I &image_ctx = this->m_image_ctx;
   assert(image_ctx.owner_lock.is_locked());
-  assert(!image_ctx.image_watcher->is_lock_supported() ||
-         image_ctx.image_watcher->is_lock_owner());
+  assert(image_ctx.exclusive_lock == nullptr ||
+         image_ctx.exclusive_lock->is_lock_owner());
 
   if (m_delete_start >= m_num_objects) {
     send_clean_boundary();
@@ -258,7 +259,7 @@ void TrimRequest<I>::send_pre_remove() {
 				<< " num_objects=" << m_num_objects << dendl;
       m_state = STATE_PRE_REMOVE;
 
-      assert(image_ctx.image_watcher->is_lock_owner());
+      assert(image_ctx.exclusive_lock->is_lock_owner());
 
       // flag the objects as pending deletion
       Context *ctx = this->create_callback_context();
@@ -295,7 +296,7 @@ void TrimRequest<I>::send_post_remove() {
           		        << " num_objects=" << m_num_objects << dendl;
       m_state = STATE_POST_REMOVE;
 
-      assert(image_ctx.image_watcher->is_lock_owner());
+      assert(image_ctx.exclusive_lock->is_lock_owner());
 
       // flag the pending objects as removed
       Context *ctx = this->create_callback_context();
@@ -327,8 +328,8 @@ void TrimRequest<I>::send_clean_boundary() {
   }
 
   // should have been canceled prior to releasing lock
-  assert(!image_ctx.image_watcher->is_lock_supported() ||
-         image_ctx.image_watcher->is_lock_owner());
+  assert(image_ctx.exclusive_lock == nullptr ||
+         image_ctx.exclusive_lock->is_lock_owner());
   uint64_t delete_len = m_delete_off - m_new_size;
   ldout(image_ctx.cct, 5) << this << " send_clean_boundary: "
 			    << " delete_off=" << m_delete_off
