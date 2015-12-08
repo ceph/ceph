@@ -124,6 +124,7 @@ namespace rgw {
     mutable std::atomic<uint64_t> refcnt;
     std::mutex mtx;
     RGWLibFS* fs;
+    RGWFHRef bucket;
     RGWFHRef parent;
     /* const */ std::string name; /* XXX file or bucket name */
     /* const */ fh_key fhk;
@@ -161,13 +162,15 @@ namespace rgw {
     static constexpr uint32_t FLAG_CREATE =  0x0004;
     static constexpr uint32_t FLAG_PSEUDO =  0x0008;
     static constexpr uint32_t FLAG_DIRECTORY = 0x0010;
-    static constexpr uint32_t FLAG_LOCK =   0x0020;
+    static constexpr uint32_t FLAG_BUCKET = 0x0020;
+    static constexpr uint32_t FLAG_LOCK =   0x0040;
 
     friend class RGWLibFS;
 
   private:
     RGWFileHandle(RGWLibFS* _fs, uint32_t fs_inst)
-      : refcnt(1), fs(_fs), parent(nullptr), depth(0), flags(FLAG_ROOT)
+      : refcnt(1), fs(_fs), bucket(nullptr), parent(nullptr), depth(0),
+	flags(FLAG_ROOT)
       {
 	/* root */
 	fh.fh_type = RGW_FS_TYPE_DIRECTORY;
@@ -189,10 +192,18 @@ namespace rgw {
   public:
     RGWFileHandle(RGWLibFS* fs, uint32_t fs_inst, RGWFileHandle* _parent,
 		  const fh_key& _fhk, std::string& _name, uint32_t _flags)
-      : parent(_parent), name(std::move(_name)), fhk(_fhk), flags(_flags) {
+      : bucket(nullptr), parent(_parent), name(std::move(_name)), fhk(_fhk),
+	flags(_flags) {
 
-      fh.fh_type = (parent->is_root() || (flags & FLAG_DIRECTORY))
-	? RGW_FS_TYPE_DIRECTORY : RGW_FS_TYPE_FILE;
+      if (parent->is_root()) {
+	fh.fh_type = RGW_FS_TYPE_DIRECTORY;
+	flags |= FLAG_BUCKET;
+      } else {
+	bucket = (parent->flags & FLAG_BUCKET) ? parent
+	  : parent->bucket;
+	fh.fh_type = (flags & FLAG_DIRECTORY) ? RGW_FS_TYPE_DIRECTORY
+	  : RGW_FS_TYPE_FILE;
+      }
 
       depth = parent->depth + 1;
 
@@ -249,10 +260,7 @@ namespace rgw {
     const std::string& bucket_name() const {
       if (is_root())
 	return root_name;
-      if (is_object()) {
-	return parent->object_name();
-      }
-      return name;
+      return bucket->object_name();
     }
 
     const std::string& object_name() const { return name; }
@@ -312,7 +320,7 @@ namespace rgw {
     
     bool is_open() const { return flags & FLAG_OPEN; }
     bool is_root() const { return flags & FLAG_ROOT; }
-    bool is_bucket() const { return (fh.fh_type == RGW_FS_TYPE_DIRECTORY); }
+    bool is_bucket() const { return flags & FLAG_BUCKET; }
     bool is_object() const { return (fh.fh_type == RGW_FS_TYPE_FILE); }
     bool creating() const { return flags & FLAG_CREATE; }
     bool pseudo() const { return flags & FLAG_PSEUDO; }
@@ -516,9 +524,8 @@ namespace rgw {
       return fhr;
     }
 
-    LookupFHResult stat_leaf(RGWFileHandle* parent,
-			    const char *path,
-			    uint32_t flags);
+    LookupFHResult stat_leaf(RGWFileHandle* parent, const char *path,
+			     uint32_t flags);
 
     /* find or create an RGWFileHandle */
     RGWFileHandle* lookup_handle(struct rgw_fh_hk fh_hk) {
@@ -557,7 +564,7 @@ namespace rgw {
   }; /* RGWLibFS */
 
 static inline std::string make_uri(const std::string& bucket_name,
-				    const std::string& object_name) {
+				   const std::string& object_name) {
   std::string uri("/");
   uri.reserve(bucket_name.length() + object_name.length() + 2);
   uri += bucket_name;
@@ -1207,6 +1214,88 @@ public:
   }
 
 }; /* RGWStatObjRequest */
+
+  class RGWStatLeafRequest : public RGWLibRequest,
+			     public RGWListBucket /* RGWOp */
+  {
+  public:
+    const std::string& bucket;
+    std::string path;
+    bool matched;
+
+    RGWStatLeafRequest(CephContext* _cct, RGWUserInfo *_user,
+		       const std::string& _bucket, const std::string& _path)
+      : RGWLibRequest(_cct, _user), bucket(_bucket), path(_path),
+	matched(false) {
+      default_max = 2; // logical max {"foo", "foo/"}
+      magic = 79;
+      op = this;
+    }
+
+    virtual bool only_bucket() { return false; }
+
+    virtual int op_init() {
+      // assign store, s, and dialect_handler
+      RGWObjectCtx* rados_ctx
+	= static_cast<RGWObjectCtx*>(get_state()->obj_ctx);
+      // framework promises to call op_init after parent init
+      assert(rados_ctx);
+      RGWOp::init(rados_ctx->store, get_state(), this);
+      op = this; // assign self as op: REQUIRED
+      return 0;
+    }
+
+    virtual int header_init() {
+
+      struct req_state* s = get_state();
+      s->info.method = "GET";
+      s->op = OP_GET;
+
+      /* XXX derp derp derp */
+      std::string uri = "/" + bucket;
+      s->relative_uri = uri;
+      s->info.request_uri = uri; // XXX
+      s->info.effective_uri = uri;
+      s->info.request_params = "";
+      s->info.domain = ""; /* XXX ? */
+
+      // woo
+      s->user = user;
+
+      return 0;
+    }
+
+    virtual int get_params() {
+      // XXX S3
+      struct req_state* s = get_state();
+      list_versions = s->info.args.exists("versions");
+      if (!list_versions) {
+	marker = s->info.args.get("marker");
+      } else {
+	marker.name = s->info.args.get("key-marker");
+	marker.instance = s->info.args.get("version-id-marker");
+      }
+      max_keys = default_max; // 2
+      prefix = path;
+      delimiter = "/";
+#if 0 /* XXX? */
+      encoding_type = s->info.args.get("encoding-type");
+#endif
+      return 0;
+    }
+
+    virtual void send_response() {
+      for (const auto& iter : objs) {
+	path = iter.key.name;
+	matched = true;
+	break;
+      }
+    }
+
+    virtual void send_versioned_response() {
+      send_response();
+    }
+  }; /* RGWStatLeafRequest */
 
 } /* namespace rgw */
 
