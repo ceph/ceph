@@ -94,6 +94,12 @@ libcommon_internal_la_SOURCES += \
         common/aix_errno.cc
 endif
 
+if FREEBSD
+libcommon_internal_la_SOURCES += \
+       common/freebsd_version.c \
+       common/blkdev.cc
+endif
+
 if WITH_RBD
 if LINUX
 libcommon_internal_la_SOURCES += \
