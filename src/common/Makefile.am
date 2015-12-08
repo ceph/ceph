@@ -97,7 +97,12 @@ libcommon_internal_la_SOURCES += \
         common/aix_errno.cc
 endif
 
-# used by RBD and FileStore
+if FREEBSD
+libcommon_internal_la_SOURCES += \
+       common/freebsd_version.c \
+       common/blkdev.cc
+endif
+
 if LINUX
 libcommon_internal_la_SOURCES += \
 	common/blkdev.cc
