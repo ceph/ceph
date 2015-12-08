@@ -20,7 +20,12 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <dirent.h>
+#if defined(__FreeBSD__)
+#include <sys/extattr.h>
+#define XATTR_CREATE	1 // XXX/WjW
+#else
 #include <sys/xattr.h>
+#endif
 #include <sys/uio.h>
 
 #ifdef __linux__
