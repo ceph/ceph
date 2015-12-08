@@ -104,6 +104,7 @@ noinst_HEADERS += \
 	include/rados/page.h \
 	include/rados/crc32c.h \
 	include/rados/buffer.h \
+	include/rados/buffer_fwd.h \
 	include/radosstriper/libradosstriper.h \
 	include/radosstriper/libradosstriper.hpp \
 	include/rbd/features.h \
