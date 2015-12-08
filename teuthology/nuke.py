@@ -389,7 +389,12 @@ OPENSTACK_DELAY = 30 * 60
 def stale_openstack_instances(ctx, instances, locked_nodes):
     for (name, instance) in instances.iteritems():
         i = OpenStackInstance(name)
-        if (i.get_created() > config['max_job_time'] + OPENSTACK_DELAY):
+        if not i.exists():
+            log.debug("stale-openstack: {instance} disappeared, ignored"
+                      .format(instance=name))
+            continue
+        if (i.get_created() >
+            config['max_job_time'] + OPENSTACK_DELAY):
             log.info(
                 "stale-openstack: destroying instance {instance}"
                 " because it was created {created} seconds ago"
@@ -423,8 +428,13 @@ def openstack_delete_volume(id):
 def stale_openstack_volumes(ctx, volumes):
     now = datetime.datetime.now()
     for volume in volumes:
-        volume = json.loads(sh("openstack volume show -f json " +
-                               volume['ID']))
+        try:
+            volume = json.loads(sh("openstack volume show -f json " +
+                                   volume['ID']))
+        except subprocess.CalledProcessError:
+            log.debug("stale-openstack: {id} disappeared, ignored"
+                      .format(id=volume['ID']))
+            continue
         volume = dict(map(lambda v: (v['Field'], v['Value']), volume))
         created_at = datetime.datetime.strptime(
             volume['created_at'], '%Y-%m-%dT%H:%M:%S.%f')
