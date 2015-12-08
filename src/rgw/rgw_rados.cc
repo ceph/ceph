@@ -1285,17 +1285,17 @@ int RGWPeriod::commit(RGWRealm& realm, const RGWPeriod& current_period)
   }
   // did the master zone change?
   if (master_zone != current_period.get_master_zone()) {
-    // create with a new period id
-    int r = create(true);
-    if (r < 0) {
-      lderr(cct) << "failed to create new period: " << cpp_strerror(-r) << dendl;
-      return r;
-    }
     // store the current metadata sync status in the period
-    r = update_sync_status();
+    int r = update_sync_status();
     if (r < 0) {
       lderr(cct) << "failed to update metadata sync status: "
           << cpp_strerror(-r) << dendl;
+      return r;
+    }
+    // create an object with a new period id
+    r = create(true);
+    if (r < 0) {
+      lderr(cct) << "failed to create new period: " << cpp_strerror(-r) << dendl;
       return r;
     }
     // set as current period
