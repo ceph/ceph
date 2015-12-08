@@ -1,4 +1,3 @@
-
 ==========================
 Submitting Patches to Ceph
 ==========================
@@ -260,17 +259,20 @@ A: The target branch depends on the nature of your change:
    If you are adding a feature, target the "master" branch in your pull
    request.
 
-   If you are fixing a bug, target the "next" branch in your pull request.
-   The Ceph core developers will periodically merge "next" into "master". When
-   this happens, the master branch will contain your fix as well.
+   If you are fixing a bug, target the named branch corresponding to the
+   major version that is currently in development. For example, if
+   Infernalis is the latest stable release and Jewel is development, target
+   the "jewel" branch for bugfixes. The Ceph core developers will
+   periodically merge this named branch into "master". When this happens,
+   the master branch will contain your fix as well.
 
    If you are fixing a bug (see above) *and* the bug exists in older stable
-   branches (for example, the "dumpling" or "firefly" branches), then you
+   branches (for example, the "hammer" or "infernalis" branches), then you
    should file a Redmine ticket describing your issue and fill out the
    "Backport: <branchname>" form field. This will notify other developers that
    your commit should be cherry-picked to these stable branches. For example,
-   you should set "Backport: firefly" in your Redmine ticket to indicate that
-   you are fixing a bug that exists on the "firefly" branch and that you
+   you should set "Backport: hammer" in your Redmine ticket to indicate that
+   you are fixing a bug that exists on the "hammer" branch and that you
    desire that your change be cherry-picked to that branch.
 
 Q: How to include Reviewed-by: tag(s) in my pull request?

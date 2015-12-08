@@ -16,6 +16,7 @@ using namespace std;
 #include "common/ceph_argparse.h"
 #include "common/Formatter.h"
 #include "common/errno.h"
+#include "common/safe_io.h"
 
 #include "global/global_init.h"
 
@@ -668,7 +669,7 @@ static int read_input(const string& infile, bufferlist& bl)
   do {
     char buf[READ_CHUNK];
 
-    r = read(fd, buf, READ_CHUNK);
+    r = safe_read(fd, buf, READ_CHUNK);
     if (r < 0) {
       err = -errno;
       cerr << "error while reading input" << std::endl;
