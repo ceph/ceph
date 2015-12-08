@@ -43,8 +43,8 @@ class RGWPeriodPusher final : public RGWRealmWatcher::Watcher,
   RGWRados* store;
 
   std::mutex mutex;
-  std::string period_id; //< the current period id being sent
-  epoch_t period_epoch; //< the current period epoch being sent
+  epoch_t realm_epoch{0}; //< the current realm epoch being sent
+  epoch_t period_epoch{0}; //< the current period epoch being sent
 
   /// while paused for reconfiguration, we need to queue up notifications
   std::vector<RGWZonesNeedPeriod> pending_periods;
