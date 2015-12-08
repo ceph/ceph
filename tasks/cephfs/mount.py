@@ -484,8 +484,13 @@ class CephFSMount(object):
             import os
             import stat
             import json
+            import sys
 
-            s = os.stat("{path}")
+            try:
+                s = os.stat("{path}")
+            except OSError as e:
+                sys.exit(e.errno)
+
             attrs = ["st_mode", "st_ino", "st_dev", "st_nlink", "st_uid", "st_gid", "st_size", "st_atime", "st_mtime", "st_ctime"]
             print json.dumps(
                 dict([(a, getattr(s, a)) for a in attrs]),
