@@ -179,11 +179,6 @@ int RGWZoneGroup::create_default(bool old_format)
     }
   }
 
-  r = set_as_default(); /* set this as default even if we weren't the creators */
-  if (r < 0) {
-    return r;
-  }
-
   if (old_format) {
     name = id;
   }
@@ -1323,7 +1318,6 @@ int RGWZoneParams::create_default(bool old_format)
     name = id;
   }
 
-  r = set_as_default();
   return r;
 }
 
