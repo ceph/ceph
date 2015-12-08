@@ -5,6 +5,11 @@ CephFS Client Capabilities
 Use Ceph authentication capabilities to restrict your filesystem clients
 to the lowest possible level of authority needed.
 
+.. note::
+
+    Path restriction and layout modification restriction are new features
+    in the Jewel release of Ceph.
+
 Path restriction
 ================
 
@@ -46,6 +51,7 @@ those in use for CephFS, set an OSD authentication capability that
 restricts access to the CephFS data pool(s):
 
 ::
+
     client.0
         key: AQAz7EVWygILFRAAdIcuJ12opU/JKyfFmxhuaw==
         caps: [mds] allow rw
@@ -67,6 +73,7 @@ For example, in the following snippet client.0 can modify the pool used
 for files, but client.1 cannot.
 
 ::
+
     client.0
         key: AQAz7EVWygILFRAAdIcuJ12opU/JKyfFmxhuaw==
         caps: [mds] allow rwp
