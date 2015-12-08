@@ -151,7 +151,10 @@ function TEST_scrub_snaps() {
     wait_for_clean || return 1
 
     local pgid="${poolid}.0"
-    pg_scrub "$pgid" || return 1
+    if ! pg_scrub "$pgid" ; then
+        cat $dir/osd.0.log
+        return 1
+    fi
     grep 'log_channel' $dir/osd.0.log
 
     for i in `seq 1 7`
