@@ -880,7 +880,7 @@ if(${WITH_RBD})
     librbd/DiffIterate.cc
     librbd/ExclusiveLock.cc
     librbd/ImageCtx.cc
-    librbd/ImageRefresh.cc
+    librbd/ImageState.cc
     librbd/ImageWatcher.cc
     librbd/internal.cc
     librbd/Journal.cc

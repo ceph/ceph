@@ -19,7 +19,7 @@ librbd_internal_la_SOURCES = \
 	librbd/DiffIterate.cc \
 	librbd/ExclusiveLock.cc \
 	librbd/ImageCtx.cc \
-	librbd/ImageRefresh.cc \
+	librbd/ImageState.cc \
 	librbd/ImageWatcher.cc \
 	librbd/internal.cc \
 	librbd/Journal.cc \
@@ -93,7 +93,7 @@ noinst_HEADERS += \
 	librbd/DiffIterate.h \
 	librbd/ExclusiveLock.h \
 	librbd/ImageCtx.h \
-	librbd/ImageRefresh.h \
+	librbd/ImageState.h \
 	librbd/ImageWatcher.h \
 	librbd/internal.h \
 	librbd/Journal.h \
