@@ -1,8 +1,8 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
-#ifndef CEPH_LIBRBD_IMAGE_REFRESH_H
-#define CEPH_LIBRBD_IMAGE_REFRESH_H
+#ifndef CEPH_LIBRBD_IMAGE_STATE_H
+#define CEPH_LIBRBD_IMAGE_STATE_H
 
 #include "include/int_types.h"
 
@@ -13,9 +13,9 @@ namespace librbd {
 class ImageCtx;
 
 template <typename ImageCtxT = ImageCtx>
-class ImageRefresh {
+class ImageState {
 public:
-  ImageRefresh(ImageCtxT &image_ctx);
+  ImageState(ImageCtxT &image_ctx);
 
   bool is_refresh_required() const;
 
@@ -28,6 +28,6 @@ private:
 
 } // namespace librbd
 
-extern template class librbd::ImageRefresh<librbd::ImageCtx>;
+extern template class librbd::ImageState<librbd::ImageCtx>;
 
-#endif // CEPH_LIBRBD_IMAGE_REFRESH_H
+#endif // CEPH_LIBRBD_IMAGE_STATE_H
