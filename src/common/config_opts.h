@@ -545,6 +545,7 @@ OPTION(osd_agent_slop, OPT_FLOAT, .02)
 OPTION(osd_uuid, OPT_UUID, uuid_d())
 OPTION(osd_data, OPT_STR, "/var/lib/ceph/osd/$cluster-$id")
 OPTION(osd_journal, OPT_STR, "/var/lib/ceph/osd/$cluster-$id/journal")
+OPTION(osd_journal_padding_ahead, OPT_BOOL, false) // whether add padding bytes in entry before inserting writeq
 OPTION(osd_journal_size, OPT_INT, 5120)         // in mb
 OPTION(osd_max_write_size, OPT_INT, 90)
 OPTION(osd_max_pgls, OPT_U64, 1024) // max number of pgls entries to return
