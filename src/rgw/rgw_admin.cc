@@ -3312,6 +3312,22 @@ int main(int argc, char **argv)
     return 0;
   case OPT_PERIOD_PULL:
     {
+      if (remote.empty() && url.empty() ) {
+	/* use realm master zonegroup as remote */
+	RGWRealm realm(realm_id, realm_name);
+	int ret = realm.init(g_ceph_context, store);
+	if (ret < 0) {
+	  cerr << "failed to init realm: " << cpp_strerror(-ret) << std::endl;
+	  return ret;
+	}
+	RGWPeriod current_period(realm.get_current_period());
+	ret = current_period.init(g_ceph_context, store);
+	if (ret < 0) {
+	  cerr << "failed to init current period: " << cpp_strerror(-ret) << std::endl;
+	  return ret;
+	}
+	remote = current_period.get_master_zonegroup();
+      }
       RGWPeriod period;
       int ret = do_period_pull(remote, url, access_key, secret_key,
                                realm_id, realm_name, period_id, period_epoch,
