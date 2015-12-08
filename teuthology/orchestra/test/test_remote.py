@@ -5,6 +5,7 @@ from pytest import skip
 from cStringIO import StringIO, OutputType
 
 from .. import remote
+from .. import opsys
 from ..run import RemoteProcess
 
 
@@ -137,3 +138,18 @@ class TestRemote(object):
         key.expects('get_base64').returns('test ssh key')
         r = remote.Remote(name='jdoe@xyzzy.example.com', ssh=ssh)
         assert r.host_key == 'key_type test ssh key'
+
+    def test_inventory_info(self):
+        r = remote.Remote('user@host', host_key='host_key')
+        r._arch = 'arch'
+        r._os = opsys.OS(name='os_name', version='1.2.3', codename='code')
+        inv_info = r.inventory_info
+        assert inv_info == dict(
+            name='host',
+            user='user',
+            arch='arch',
+            os_type='os_name',
+            os_version='1.2',
+            ssh_pub_key='host_key',
+            up=True,
+        )
