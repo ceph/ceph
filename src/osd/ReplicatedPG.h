@@ -677,7 +677,6 @@ public:
     }
     ~OpContext() {
       assert(!op_t);
-      assert(lock_type == ObjectContext::RWState::RWNONE);
       if (reply)
 	reply->put();
       for (list<pair<boost::tuple<uint64_t, uint64_t, unsigned>,
@@ -805,7 +804,7 @@ protected:
    * @param ctx [in] ctx to clean up
    */
   void close_op_ctx(OpContext *ctx) {
-    release_op_ctx_locks(ctx);
+    release_object_locks(ctx->lock_manager);
     ctx->op_t.reset();
     for (auto p = ctx->on_finish.begin();
 	 p != ctx->on_finish.end();
@@ -816,37 +815,38 @@ protected:
   }
 
   /**
-   * Releases ctx locks
+   * Releases locks
    *
-   * @param ctx [in] ctx to clean up
+   * @param manager [in] manager with locks to release
    */
-  void release_op_ctx_locks(OpContext *ctx) {
-    list<OpRequestRef> to_req;
+  void release_object_locks(
+    ObcLockManager &lock_manager) {
+    list<pair<hobject_t, list<OpRequestRef> > > to_req;
     bool requeue_recovery = false;
     bool requeue_snaptrim = false;
-    ctx->lock_manager.put_locks(
+    lock_manager.put_locks(
       &to_req,
       &requeue_recovery,
       &requeue_snaptrim);
-    ctx->lock_type = ObjectContext::RWState::RWNONE;
     if (requeue_recovery)
       osd->recovery_wq.queue(this);
     if (requeue_snaptrim)
       queue_snap_trim();
 
     if (!to_req.empty()) {
-      assert(ctx->obc);
       // requeue at front of scrub blocking queue if we are blocked by scrub
-      if (scrubber.write_blocked_by_scrub(
-	    ctx->obc->obs.oi.soid.get_head(),
-	    get_sort_bitwise())) {
-	waiting_for_active.splice(
-	  waiting_for_active.begin(),
-	  to_req,
-	  to_req.begin(),
-	  to_req.end());
-      } else {
-	requeue_ops(to_req);
+      for (auto &&p: to_req) {
+	if (scrubber.write_blocked_by_scrub(
+	      p.first.get_head(),
+	      get_sort_bitwise())) {
+	  waiting_for_active.splice(
+	    waiting_for_active.begin(),
+	    p.second,
+	    p.second.begin(),
+	    p.second.end());
+	} else {
+	  requeue_ops(p.second);
+	}
       }
     }
   }
