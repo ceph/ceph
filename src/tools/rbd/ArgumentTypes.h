@@ -59,6 +59,7 @@ static const std::string WHOLE_OBJECT("whole-object");
 static const std::string IMAGE_FORMAT("image-format");
 static const std::string IMAGE_NEW_FORMAT("new-format");
 static const std::string IMAGE_ORDER("order");
+static const std::string IMAGE_OBJECT_SIZE("object-size");
 static const std::string IMAGE_FEATURES("image-feature");
 static const std::string IMAGE_SHARED("image-shared");
 static const std::string IMAGE_SIZE("size");
@@ -80,6 +81,7 @@ static const std::set<std::string> SWITCH_ARGUMENTS = {
 
 struct ImageSize {};
 struct ImageOrder {};
+struct ImageObjectSize {};
 struct ImageFormat {};
 struct ImageNewFormat {};
 
@@ -171,6 +173,8 @@ void validate(boost::any& v, const std::vector<std::string>& values,
               ImageSize *target_type, int);
 void validate(boost::any& v, const std::vector<std::string>& values,
               ImageOrder *target_type, int);
+void validate(boost::any& v, const std::vector<std::string>& values,
+              ImageObjectSize *target_type, int);
 void validate(boost::any& v, const std::vector<std::string>& values,
               ImageFormat *target_type, int);
 void validate(boost::any& v, const std::vector<std::string>& values,

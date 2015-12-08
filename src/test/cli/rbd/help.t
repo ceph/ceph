@@ -123,6 +123,7 @@
   rbd help clone
   usage: rbd clone [--pool <pool>] [--image <image>] [--snap <snap>] 
                    [--dest-pool <dest-pool>] [--dest <dest>] [--order <order>] 
+                   [--object-size <object-size>] 
                    [--image-feature <image-feature>] [--image-shared] 
                    [--stripe-unit <stripe-unit>] [--stripe-count <stripe-count>] 
                    [--journal-splay-width <journal-splay-width>] 
@@ -146,6 +147,7 @@
     --dest-pool arg           destination pool name
     --dest arg                destination image name
     --order arg               object order [12 <= order <= 25]
+    --object-size arg         object size in B/K/M [4K <= object size <= 32M]
     --image-feature arg       image features
                               [layering(+), striping(+), exclusive-lock(*),
                               object-map(*), fast-diff(*), deep-flatten,
@@ -164,6 +166,7 @@
   rbd help copy
   usage: rbd copy [--pool <pool>] [--image <image>] [--snap <snap>] 
                   [--dest-pool <dest-pool>] [--dest <dest>] [--order <order>] 
+                  [--object-size <object-size>] 
                   [--image-feature <image-feature>] [--image-shared] 
                   [--stripe-unit <stripe-unit>] [--stripe-count <stripe-count>] 
                   [--journal-splay-width <journal-splay-width>] 
@@ -187,6 +190,7 @@
     --dest-pool arg              destination pool name
     --dest arg                   destination image name
     --order arg                  object order [12 <= order <= 25]
+    --object-size arg            object size in B/K/M [4K <= object size <= 32M]
     --image-feature arg          image features
                                  [layering(+), striping(+), exclusive-lock(*),
                                  object-map(*), fast-diff(*), deep-flatten,
@@ -206,8 +210,9 @@
   rbd help create
   usage: rbd create [--pool <pool>] [--image <image>] 
                     [--image-format <image-format>] [--new-format] 
-                    [--order <order>] [--image-feature <image-feature>] 
-                    [--image-shared] [--stripe-unit <stripe-unit>] 
+                    [--order <order>] [--object-size <object-size>] 
+                    [--image-feature <image-feature>] [--image-shared] 
+                    [--stripe-unit <stripe-unit>] 
                     [--stripe-count <stripe-count>] 
                     [--journal-splay-width <journal-splay-width>] 
                     [--journal-object-size <journal-object-size>] 
@@ -227,6 +232,7 @@
     --new-format              use image format 2
                               (deprecated)
     --order arg               object order [12 <= order <= 25]
+    --object-size arg         object size in B/K/M [4K <= object size <= 32M]
     --image-feature arg       image features
                               [layering(+), striping(+), exclusive-lock(*),
                               object-map(*), fast-diff(*), deep-flatten,
@@ -446,8 +452,9 @@
   rbd help import
   usage: rbd import [--path <path>] [--dest-pool <dest-pool>] [--dest <dest>] 
                     [--image-format <image-format>] [--new-format] 
-                    [--order <order>] [--image-feature <image-feature>] 
-                    [--image-shared] [--stripe-unit <stripe-unit>] 
+                    [--order <order>] [--object-size <object-size>] 
+                    [--image-feature <image-feature>] [--image-shared] 
+                    [--stripe-unit <stripe-unit>] 
                     [--stripe-count <stripe-count>] 
                     [--journal-splay-width <journal-splay-width>] 
                     [--journal-object-size <journal-object-size>] 
@@ -470,6 +477,7 @@
     --new-format              use image format 2
                               (deprecated)
     --order arg               object order [12 <= order <= 25]
+    --object-size arg         object size in B/K/M [4K <= object size <= 32M]
     --image-feature arg       image features
                               [layering(+), striping(+), exclusive-lock(*),
                               object-map(*), fast-diff(*), deep-flatten,

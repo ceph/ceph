@@ -218,6 +218,8 @@ void add_create_image_options(po::options_description *opt,
   opt->add_options()
     (IMAGE_ORDER.c_str(), po::value<ImageOrder>(),
      "object order [12 <= order <= 25]")
+    (IMAGE_OBJECT_SIZE.c_str(), po::value<ImageObjectSize>(),
+     "object size in B/K/M [4K <= object size <= 32M]")
     (IMAGE_FEATURES.c_str(), po::value<ImageFeatures>()->composing(),
      ("image features\n" + get_short_features_help(true)).c_str())
     (IMAGE_SHARED.c_str(), po::bool_switch(), "shared image")
@@ -335,7 +337,7 @@ void validate(boost::any& v, const std::vector<std::string>& values,
   po::validators::check_first_occurrence(v);
   const std::string &s = po::validators::get_single_string(values);
   try {
-    uint32_t order = boost::lexical_cast<uint32_t>(s);
+    uint64_t order = boost::lexical_cast<uint64_t>(s);
     if (order >= 12 && order <= 25) {
       v = boost::any(order);
       return;
@@ -343,6 +345,19 @@ void validate(boost::any& v, const std::vector<std::string>& values,
   } catch (const boost::bad_lexical_cast &) {
   }
   throw po::validation_error(po::validation_error::invalid_option_value);
+}
+
+void validate(boost::any& v, const std::vector<std::string>& values,
+              ImageObjectSize *target_type, int dummy) {
+  po::validators::check_first_occurrence(v);
+  const std::string &s = po::validators::get_single_string(values);
+  
+  std::string parse_error;
+  uint64_t objectsize = strict_sistrtoll(s.c_str(), &parse_error);
+  if (!parse_error.empty()) {
+    throw po::validation_error(po::validation_error::invalid_option_value);
+  }
+  v = boost::any(objectsize);
 }
 
 void validate(boost::any& v, const std::vector<std::string>& values,
