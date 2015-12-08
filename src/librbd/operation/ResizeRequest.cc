@@ -197,7 +197,10 @@ template <typename I>
 void ResizeRequest<I>::send_grow_object_map() {
   I &image_ctx = this->m_image_ctx;
   assert(image_ctx.owner_lock.is_locked());
-  if (!image_ctx.object_map.enabled()) {
+
+  image_ctx.snap_lock.get_read();
+  if (image_ctx.object_map == nullptr) {
+    image_ctx.snap_lock.put_read();
     send_update_header();
     return;
   }
@@ -211,15 +214,19 @@ void ResizeRequest<I>::send_grow_object_map() {
   assert(image_ctx.exclusive_lock == nullptr ||
          image_ctx.exclusive_lock->is_lock_owner());
 
-  image_ctx.object_map.aio_resize(m_new_size, OBJECT_NONEXISTENT,
-				  this->create_callback_context());
+  image_ctx.object_map->aio_resize(m_new_size, OBJECT_NONEXISTENT,
+				   this->create_callback_context());
+  image_ctx.snap_lock.put_read();
 }
 
 template <typename I>
 bool ResizeRequest<I>::send_shrink_object_map() {
   I &image_ctx = this->m_image_ctx;
   assert(image_ctx.owner_lock.is_locked());
-  if (!image_ctx.object_map.enabled() || m_new_size > m_original_size) {
+
+  image_ctx.snap_lock.get_read();
+  if (image_ctx.object_map == nullptr || m_new_size > m_original_size) {
+    image_ctx.snap_lock.put_read();
     return true;
   }
 
@@ -232,8 +239,9 @@ bool ResizeRequest<I>::send_shrink_object_map() {
   assert(image_ctx.exclusive_lock == nullptr ||
          image_ctx.exclusive_lock->is_lock_owner());
 
-  image_ctx.object_map.aio_resize(m_new_size, OBJECT_NONEXISTENT,
-				  this->create_callback_context());
+  image_ctx.object_map->aio_resize(m_new_size, OBJECT_NONEXISTENT,
+				   this->create_callback_context());
+  image_ctx.snap_lock.put_read();
   return false;
 }
 

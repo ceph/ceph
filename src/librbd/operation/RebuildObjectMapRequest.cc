@@ -145,8 +145,11 @@ private:
     assert(image_ctx.exclusive_lock == nullptr ||
            image_ctx.exclusive_lock->is_lock_owner());
 
+    RWLock::RLocker snap_locker(image_ctx.snap_lock);
+    assert(image_ctx.object_map != nullptr);
+
     RWLock::WLocker l(image_ctx.object_map_lock);
-    uint8_t state = image_ctx.object_map[m_object_no];
+    uint8_t state = (*image_ctx.object_map)[m_object_no];
     if (state == OBJECT_EXISTS && new_state == OBJECT_NONEXISTENT &&
         m_snap_id == CEPH_NOSNAP) {
       // might be writing object to OSD concurrently
@@ -157,7 +160,7 @@ private:
       ldout(cct, 15) << m_oid << " C_VerifyObject::update_object_map "
                      << static_cast<uint32_t>(state) << "->"
                      << static_cast<uint32_t>(new_state) << dendl;
-      image_ctx.object_map[m_object_no] = new_state;
+      (*image_ctx.object_map)[m_object_no] = new_state;
     }
     return true;
   }
@@ -234,15 +237,14 @@ void RebuildObjectMapRequest<I>::send_resize_object_map() {
   assert(m_image_ctx.owner_lock.is_locked());
   CephContext *cct = m_image_ctx.cct;
 
-  uint64_t num_objects;
-  uint64_t size;
-  {
-    RWLock::RLocker l(m_image_ctx.snap_lock);
-    size = get_image_size();
-    num_objects = Striper::get_num_objects(m_image_ctx.layout, size);
-  }
+  m_image_ctx.snap_lock.get_read();
+  assert(m_image_ctx.object_map != nullptr);
 
-  if (m_image_ctx.object_map.size() == num_objects) {
+  uint64_t size = get_image_size();
+  uint64_t num_objects = Striper::get_num_objects(m_image_ctx.layout, size);
+
+  if (m_image_ctx.object_map->size() == num_objects) {
+    m_image_ctx.snap_lock.put_read();
     send_verify_objects();
     return;
   }
@@ -253,8 +255,10 @@ void RebuildObjectMapRequest<I>::send_resize_object_map() {
   // should have been canceled prior to releasing lock
   assert(m_image_ctx.exclusive_lock == nullptr ||
          m_image_ctx.exclusive_lock->is_lock_owner());
-  m_image_ctx.object_map.aio_resize(size, OBJECT_NONEXISTENT,
-                                    this->create_callback_context());
+
+  m_image_ctx.object_map->aio_resize(size, OBJECT_NONEXISTENT,
+                                     this->create_callback_context());
+  m_image_ctx.snap_lock.put_read();
 }
 
 template <typename I>
@@ -273,9 +277,11 @@ void RebuildObjectMapRequest<I>::send_trim_image() {
   uint64_t orig_size;
   {
     RWLock::RLocker l(m_image_ctx.snap_lock);
+    assert(m_image_ctx.object_map != nullptr);
+
     new_size = get_image_size();
     orig_size = m_image_ctx.get_object_size() *
-                m_image_ctx.object_map.size();
+                m_image_ctx.object_map->size();
   }
   TrimRequest<I> *req = new TrimRequest<I>(m_image_ctx,
                                            this->create_callback_context(),
@@ -325,7 +331,10 @@ void RebuildObjectMapRequest<I>::send_save_object_map() {
   // should have been canceled prior to releasing lock
   assert(m_image_ctx.exclusive_lock == nullptr ||
          m_image_ctx.exclusive_lock->is_lock_owner());
-  m_image_ctx.object_map.aio_save(this->create_callback_context());
+
+  RWLock::RLocker snap_locker(m_image_ctx.snap_lock);
+  assert(m_image_ctx.object_map != nullptr);
+  m_image_ctx.object_map->aio_save(this->create_callback_context());
 }
 
 template <typename I>

@@ -7,15 +7,15 @@
 #include "common/Mutex.h"
 #include "common/RWLock.h"
 
+#include "librbd/AioObjectRequest.h"
 #include "librbd/AioCompletion.h"
 #include "librbd/AioImageRequest.h"
+#include "librbd/CopyupRequest.h"
 #include "librbd/ExclusiveLock.h"
 #include "librbd/ImageCtx.h"
 #include "librbd/ImageWatcher.h"
 #include "librbd/internal.h"
-
-#include "librbd/AioObjectRequest.h"
-#include "librbd/CopyupRequest.h"
+#include "librbd/ObjectMap.h"
 #include "librbd/Utils.h"
 
 #include <boost/bind.hpp>
@@ -206,7 +206,13 @@ namespace librbd {
                            << m_object_off << "~" << m_object_len << dendl;
 
     // send read request to parent if the object doesn't exist locally
-    if (!m_ictx->object_map.object_may_exist(m_object_no)) {
+    bool non_existent = false;
+    {
+      RWLock::RLocker snap_locker(m_ictx->snap_lock);
+      non_existent = (m_ictx->object_map != nullptr &&
+                      !m_ictx->object_map->object_may_exist(m_object_no));
+    }
+    if (non_existent) {
       complete(-ENOENT);
       return;
     }
@@ -380,15 +386,17 @@ namespace librbd {
   void AbstractAioObjectWrite::send_pre() {
     assert(m_ictx->owner_lock.is_locked());
 
-    m_object_exist = m_ictx->object_map.object_may_exist(m_object_no);
     bool write = false;
     {
       RWLock::RLocker snap_lock(m_ictx->snap_lock);
-      if (!m_ictx->object_map.enabled()) {
+      if (m_ictx->object_map == nullptr) {
+        m_object_exist = true;
         write = true;
       } else {
         // should have been flushed prior to releasing lock
         assert(m_ictx->exclusive_lock->is_lock_owner());
+
+        m_object_exist = m_ictx->object_map->object_may_exist(m_object_no);
 
         ldout(m_ictx->cct, 20) << "send_pre " << this << " " << m_oid << " "
           		       << m_object_off << "~" << m_object_len << dendl;
@@ -399,10 +407,10 @@ namespace librbd {
         pre_object_map_update(&new_state);
 
         RWLock::WLocker object_map_locker(m_ictx->object_map_lock);
-        if (m_ictx->object_map[m_object_no] != new_state) {
+        if ((*m_ictx->object_map)[m_object_no] != new_state) {
           Context *ctx = util::create_context_callback<AioObjectRequest>(this);
-          bool updated = m_ictx->object_map.aio_update(m_object_no, new_state,
-                                                       current_state, ctx);
+          bool updated = m_ictx->object_map->aio_update(m_object_no, new_state,
+                                                        current_state, ctx);
           assert(updated);
         } else {
           write = true;
@@ -420,7 +428,7 @@ namespace librbd {
   bool AbstractAioObjectWrite::send_post() {
     RWLock::RLocker owner_locker(m_ictx->owner_lock);
     RWLock::RLocker snap_locker(m_ictx->snap_lock);
-    if (!m_ictx->object_map.enabled() || !post_object_map_update()) {
+    if (m_ictx->object_map == nullptr || !post_object_map_update()) {
       return true;
     }
 
@@ -432,16 +440,16 @@ namespace librbd {
     m_state = LIBRBD_AIO_WRITE_POST;
 
     RWLock::WLocker object_map_locker(m_ictx->object_map_lock);
-    uint8_t current_state = m_ictx->object_map[m_object_no];
+    uint8_t current_state = (*m_ictx->object_map)[m_object_no];
     if (current_state != OBJECT_PENDING ||
         current_state == OBJECT_NONEXISTENT) {
       return true;
     }
 
     Context *ctx = util::create_context_callback<AioObjectRequest>(this);
-    bool updated = m_ictx->object_map.aio_update(m_object_no,
-                                                 OBJECT_NONEXISTENT,
-				                 OBJECT_PENDING, ctx);
+    bool updated = m_ictx->object_map->aio_update(m_object_no,
+                                                  OBJECT_NONEXISTENT,
+				                  OBJECT_PENDING, ctx);
     assert(updated);
     return false;
   }
@@ -519,8 +527,13 @@ namespace librbd {
   }
 
   void AioObjectWrite::add_write_ops(librados::ObjectWriteOperation *wr) {
-    if (m_ictx->enable_alloc_hint && !m_ictx->object_map.object_may_exist(m_object_no))
+    RWLock::RLocker snap_locker(m_ictx->snap_lock);
+    if (m_ictx->enable_alloc_hint &&
+        (m_ictx->object_map == nullptr ||
+         !m_ictx->object_map->object_may_exist(m_object_no))) {
       wr->set_alloc_hint(m_ictx->get_object_size(), m_ictx->get_object_size());
+    }
+
     if (m_object_off == 0 && m_object_len == m_ictx->get_object_size()) {
       wr->write_full(m_write_data);
     } else {

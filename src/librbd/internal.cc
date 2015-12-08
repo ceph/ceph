@@ -2605,7 +2605,8 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
 	ictx->snap_exists = false;
       }
 
-      ictx->object_map.refresh(ictx->snap_id);
+      // TODO handle by new async refresh state machine
+      //ictx->object_map.refresh(ictx->snap_id);
 
       ictx->data_ctx.selfmanaged_snap_set_write_ctx(ictx->snapc.seq, ictx->snaps);
 

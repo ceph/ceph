@@ -108,7 +108,7 @@ template <typename I>
 void ReleaseRequest<I>::send_unlock_object_map() {
   {
     RWLock::WLocker snap_locker(m_image_ctx.snap_lock);
-    std::swap(m_object_map, m_image_ctx.object_map_ptr);
+    std::swap(m_object_map, m_image_ctx.object_map);
   }
 
   if (m_object_map == nullptr) {

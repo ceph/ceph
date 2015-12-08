@@ -70,8 +70,13 @@ public:
     assert(image_ctx.owner_lock.is_locked());
     assert(image_ctx.exclusive_lock == nullptr ||
            image_ctx.exclusive_lock->is_lock_owner());
-    if (!image_ctx.object_map.object_may_exist(m_object_no)) {
-      return 1;
+
+    {
+      RWLock::RLocker snap_locker(image_ctx.snap_lock);
+      if (image_ctx.object_map != nullptr &&
+          !image_ctx.object_map->object_may_exist(m_object_no)) {
+        return 1;
+      }
     }
 
     string oid = image_ctx.get_object_name(m_object_no);
@@ -251,7 +256,7 @@ void TrimRequest<I>::send_pre_remove() {
   bool remove_objects = false;
   {
     RWLock::RLocker snap_locker(image_ctx.snap_lock);
-    if (!image_ctx.object_map.enabled()) {
+    if (image_ctx.object_map == nullptr) {
       remove_objects = true;
     } else {
       ldout(image_ctx.cct, 5) << this << " send_pre_remove: "
@@ -264,9 +269,9 @@ void TrimRequest<I>::send_pre_remove() {
       // flag the objects as pending deletion
       Context *ctx = this->create_callback_context();
       RWLock::WLocker object_map_locker(image_ctx.object_map_lock);
-      if (!image_ctx.object_map.aio_update(m_delete_start, m_num_objects,
-					     OBJECT_PENDING, OBJECT_EXISTS,
-                                             ctx)) {
+      if (!image_ctx.object_map->aio_update(m_delete_start, m_num_objects,
+					    OBJECT_PENDING, OBJECT_EXISTS,
+                                            ctx)) {
         delete ctx;
         remove_objects = true;
       }
@@ -288,7 +293,7 @@ void TrimRequest<I>::send_post_remove() {
   bool clean_boundary = false;
   {
     RWLock::RLocker snap_locker(image_ctx.snap_lock);
-    if (!image_ctx.object_map.enabled()) {
+    if (image_ctx.object_map == nullptr) {
       clean_boundary = true;
     } else {
       ldout(image_ctx.cct, 5) << this << " send_post_remove: "
@@ -301,9 +306,9 @@ void TrimRequest<I>::send_post_remove() {
       // flag the pending objects as removed
       Context *ctx = this->create_callback_context();
       RWLock::WLocker object_map_locker(image_ctx.object_map_lock);
-      if (!image_ctx.object_map.aio_update(m_delete_start, m_num_objects,
-					     OBJECT_NONEXISTENT,
-					     OBJECT_PENDING, ctx)) {
+      if (!image_ctx.object_map->aio_update(m_delete_start, m_num_objects,
+					    OBJECT_NONEXISTENT,
+					    OBJECT_PENDING, ctx)) {
         delete ctx;
 	clean_boundary = true;
       }
