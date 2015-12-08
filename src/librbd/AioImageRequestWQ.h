@@ -7,7 +7,6 @@
 #include "include/Context.h"
 #include "common/WorkQueue.h"
 #include "common/Mutex.h"
-#include "librbd/ImageWatcher.h"
 
 namespace librbd {
 
@@ -48,28 +47,12 @@ public:
   void block_writes(Context *on_blocked);
   void unblock_writes();
 
-  void register_lock_listener();
-
 protected:
   virtual void *_void_dequeue();
   virtual void process(AioImageRequest *req);
 
 private:
   typedef std::list<Context *> Contexts;
-
-  struct LockListener : public ImageWatcher::Listener {
-    AioImageRequestWQ *aio_work_queue;
-    LockListener(AioImageRequestWQ *_aio_work_queue)
-      : aio_work_queue(_aio_work_queue) {
-    }
-
-    virtual bool handle_requested_lock() {
-      return true;
-    }
-    virtual void handle_lock_updated(ImageWatcher::LockUpdateState state) {
-      aio_work_queue->handle_lock_updated(state);
-    }
-  };
 
   struct C_BlockedWrites : public Context {
     AioImageRequestWQ *aio_work_queue;
@@ -89,14 +72,10 @@ private:
   uint32_t m_in_progress_writes;
   uint32_t m_queued_writes;
 
-  LockListener m_lock_listener;
-  bool m_blocking_writes;
-
   bool is_journal_required() const;
   bool is_lock_required() const;
   void queue(AioImageRequest *req);
 
-  void handle_lock_updated(ImageWatcher::LockUpdateState state);
   void handle_blocked_writes(int r);
 };
 

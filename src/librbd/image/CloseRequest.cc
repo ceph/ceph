@@ -7,6 +7,7 @@
 #include "common/WorkQueue.h"
 #include "librbd/AioImageRequestWQ.h"
 #include "librbd/ExclusiveLock.h"
+#include "librbd/ImageWatcher.h"
 #include "librbd/ImageCtx.h"
 #include "librbd/ImageState.h"
 #include "librbd/ImageWatcher.h"

@@ -4,6 +4,7 @@
 #include "librbd/AioImageRequestWQ.h"
 #include "librbd/AioCompletion.h"
 #include "librbd/AioImageRequest.h"
+#include "librbd/ExclusiveLock.h"
 #include "librbd/ImageCtx.h"
 #include "librbd/internal.h"
 
@@ -17,9 +18,7 @@ AioImageRequestWQ::AioImageRequestWQ(ImageCtx *image_ctx, const string &name,
                                      time_t ti, ThreadPool *tp)
   : ThreadPool::PointerWQ<AioImageRequest>(name, ti, 0, tp),
     m_image_ctx(*image_ctx), m_lock("AioImageRequestWQ::m_lock"),
-    m_write_blockers(0), m_in_progress_writes(0), m_queued_writes(0),
-    m_lock_listener(this), m_blocking_writes(false) {
-
+    m_write_blockers(0), m_in_progress_writes(0), m_queued_writes(0) {
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 5) << this << " " << ": ictx=" << image_ctx << dendl;
 }
@@ -207,10 +206,6 @@ void AioImageRequestWQ::unblock_writes() {
   }
 }
 
-void AioImageRequestWQ::register_lock_listener() {
-  m_image_ctx.image_watcher->register_listener(&m_lock_listener);
-}
-
 void *AioImageRequestWQ::_void_dequeue() {
   AioImageRequest *peek_item = front();
   if (peek_item == NULL) {
@@ -271,12 +266,11 @@ bool AioImageRequestWQ::is_journal_required() const {
 
 bool AioImageRequestWQ::is_lock_required() const {
   assert(m_image_ctx.owner_lock.is_locked());
-  if (m_image_ctx.image_watcher == NULL) {
+  if (m_image_ctx.exclusive_lock == NULL) {
     return false;
   }
 
-  return (m_image_ctx.image_watcher->is_lock_supported() &&
-          !m_image_ctx.image_watcher->is_lock_owner());
+  return (!m_image_ctx.exclusive_lock->is_lock_owner());
 }
 
 void AioImageRequestWQ::queue(AioImageRequest *req) {
@@ -286,44 +280,16 @@ void AioImageRequestWQ::queue(AioImageRequest *req) {
 
   assert(m_image_ctx.owner_lock.is_locked());
 
-  bool first_write_op = false;
   {
     Mutex::Locker locker(m_lock);
     if (req->is_write_op()) {
-      if (++m_queued_writes == 1) {
-        first_write_op = true;
-      }
+      ++m_queued_writes;
     }
   }
   ThreadPool::PointerWQ<AioImageRequest>::queue(req);
 
-  if (is_lock_required() && first_write_op) {
-    m_image_ctx.image_watcher->request_lock();
-  }
-}
-
-void AioImageRequestWQ::handle_lock_updated(
-    ImageWatcher::LockUpdateState state) {
-  assert(m_image_ctx.owner_lock.is_locked());
-
-  CephContext *cct = m_image_ctx.cct;
-  ldout(cct, 20) << __func__ << ": ictx=" << &m_image_ctx << ", "
-                 << "state=" << state << dendl;
-
-  if ((state == ImageWatcher::LOCK_UPDATE_STATE_NOT_SUPPORTED ||
-       state == ImageWatcher::LOCK_UPDATE_STATE_LOCKED) && m_blocking_writes) {
-    m_blocking_writes = false;
-    unblock_writes();
-  } else if (state == ImageWatcher::LOCK_UPDATE_STATE_RELEASING &&
-             !m_blocking_writes) {
-    m_blocking_writes = true;
-    block_writes();
-  } else if (state == ImageWatcher::LOCK_UPDATE_STATE_UNLOCKED) {
-    assert(m_blocking_writes);
-    assert(writes_blocked());
-  } else if (state == ImageWatcher::LOCK_UPDATE_STATE_NOTIFICATION &&
-             !writes_empty()) {
-    m_image_ctx.image_watcher->request_lock();
+  if (is_lock_required()) {
+    m_image_ctx.exclusive_lock->request_lock(nullptr);
   }
 }
 

@@ -9,6 +9,7 @@
 
 #include "librbd/AioCompletion.h"
 #include "librbd/AioImageRequest.h"
+#include "librbd/ExclusiveLock.h"
 #include "librbd/ImageCtx.h"
 #include "librbd/ImageWatcher.h"
 #include "librbd/internal.h"
@@ -387,7 +388,7 @@ namespace librbd {
         write = true;
       } else {
         // should have been flushed prior to releasing lock
-        assert(m_ictx->image_watcher->is_lock_owner());
+        assert(m_ictx->exclusive_lock->is_lock_owner());
 
         ldout(m_ictx->cct, 20) << "send_pre " << this << " " << m_oid << " "
           		       << m_object_off << "~" << m_object_len << dendl;
@@ -424,7 +425,7 @@ namespace librbd {
     }
 
     // should have been flushed prior to releasing lock
-    assert(m_ictx->image_watcher->is_lock_owner());
+    assert(m_ictx->exclusive_lock->is_lock_owner());
 
     ldout(m_ictx->cct, 20) << "send_post " << this << " " << m_oid << " "
 			   << m_object_off << "~" << m_object_len << dendl;

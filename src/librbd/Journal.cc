@@ -5,6 +5,7 @@
 #include "librbd/AioCompletion.h"
 #include "librbd/AioImageRequestWQ.h"
 #include "librbd/AioObjectRequest.h"
+#include "librbd/ExclusiveLock.h"
 #include "librbd/ImageCtx.h"
 #include "librbd/JournalReplay.h"
 #include "librbd/JournalTypes.h"
@@ -73,13 +74,11 @@ struct C_ReplayCommitted : public Context {
 Journal::Journal(ImageCtx &image_ctx)
   : m_image_ctx(image_ctx), m_journaler(NULL),
     m_lock("Journal::m_lock"), m_state(STATE_UNINITIALIZED),
-    m_lock_listener(this), m_replay_handler(this), m_close_pending(false),
+    m_replay_handler(this), m_close_pending(false),
     m_event_lock("Journal::m_event_lock"), m_event_tid(0),
     m_blocking_writes(false), m_journal_replay(NULL) {
 
   ldout(m_image_ctx.cct, 5) << this << ": ictx=" << &m_image_ctx << dendl;
-
-  m_image_ctx.image_watcher->register_listener(&m_lock_listener);
 
   Mutex::Locker locker(m_lock);
   block_writes();
@@ -90,8 +89,6 @@ Journal::~Journal() {
   assert(m_journaler == NULL);
   assert(m_journal_replay == NULL);
   assert(m_wait_for_state_contexts.empty());
-
-  m_image_ctx.image_watcher->unregister_listener(&m_lock_listener);
 
   Mutex::Locker locker(m_lock);
   unblock_writes();
@@ -620,9 +617,6 @@ void Journal::handle_replay_complete(int r) {
 
     unblock_writes();
   }
-
-  // kick peers to let them know they can re-request the lock now
-  m_image_ctx.image_watcher->notify_lock_state();
 }
 
 void Journal::handle_event_safe(int r, uint64_t tid) {
@@ -659,7 +653,7 @@ void Journal::handle_event_safe(int r, uint64_t tid) {
   } else {
     // send any waiting aio requests now that journal entry is safe
     RWLock::RLocker owner_locker(m_image_ctx.owner_lock);
-    assert(m_image_ctx.image_watcher->is_lock_owner());
+    assert(m_image_ctx.exclusive_lock->is_lock_owner());
 
     for (AioObjectRequests::iterator it = aio_object_requests.begin();
          it != aio_object_requests.end(); ++it) {
@@ -671,60 +665,6 @@ void Journal::handle_event_safe(int r, uint64_t tid) {
   for (Contexts::iterator it = on_safe_contexts.begin();
        it != on_safe_contexts.end(); ++it) {
     (*it)->complete(r);
-  }
-}
-
-bool Journal::handle_requested_lock() {
-  Mutex::Locker locker(m_lock);
-
-  CephContext *cct = m_image_ctx.cct;
-  ldout(cct, 20) << this << " " << __func__ << ": " << "state=" << m_state
-                 << dendl;
-
-  // prevent peers from taking our lock while we are replaying since that
-  // will stale forward progress
-  return (m_state != STATE_INITIALIZING && m_state != STATE_REPLAYING);
-}
-
-void Journal::handle_lock_updated(ImageWatcher::LockUpdateState state) {
-
-  CephContext *cct = m_image_ctx.cct;
-  ldout(cct, 20) << this << " " << __func__ << ": "
-                 << "state=" << state << dendl;
-
-  Mutex::Locker locker(m_lock);
-  if (state == ImageWatcher::LOCK_UPDATE_STATE_LOCKED &&
-      m_state == STATE_UNINITIALIZED) {
-    create_journaler();
-  } else if (state == ImageWatcher::LOCK_UPDATE_STATE_RELEASING) {
-    if (m_state == STATE_INITIALIZING || m_state == STATE_REPLAYING) {
-      // wait for replay to successfully interrupt
-      m_close_pending = true;
-      wait_for_state_transition();
-    }
-
-    if (m_state == STATE_UNINITIALIZED || m_state == STATE_RECORDING) {
-      // prevent new write ops but allow pending ops to flush to the journal
-      block_writes();
-    }
-    if (m_state == STATE_RECORDING) {
-      flush_journal();
-    }
-  } else if ((state == ImageWatcher::LOCK_UPDATE_STATE_NOT_SUPPORTED ||
-              state == ImageWatcher::LOCK_UPDATE_STATE_UNLOCKED) &&
-             m_state != STATE_UNINITIALIZED &&
-             m_state != STATE_STOPPING_RECORDING) {
-    assert(m_state == STATE_RECORDING);
-    {
-      Mutex::Locker event_locker(m_event_lock);
-      assert(m_events.empty());
-    }
-
-    int r = stop_recording();
-    if (r < 0) {
-      // TODO handle failed journal writes
-      assert(false);
-    }
   }
 }
 

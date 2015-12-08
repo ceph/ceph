@@ -2,6 +2,7 @@
 // vim: ts=8 sw=2 smarttab
 
 #include "librbd/ExclusiveLock.h"
+#include "cls/lock/cls_lock_client.h"
 #include "common/dout.h"
 #include "common/errno.h"
 #include "librbd/AioImageRequestWQ.h"
@@ -43,30 +44,42 @@ ExclusiveLock<I>::~ExclusiveLock() {
 
 template <typename I>
 bool ExclusiveLock<I>::is_lock_owner() const {
-  ldout(m_image_ctx.cct, 20) << __func__ << dendl;
-  assert(m_image_ctx.owner_lock.is_locked());
-
   Mutex::Locker locker(m_lock);
-  return (m_state == STATE_LOCKED);
+
+  bool lock_owner;
+  switch (m_state) {
+  case STATE_LOCKED:
+  case STATE_POST_ACQUIRING:
+  case STATE_PRE_RELEASING:
+    lock_owner = true;
+    break;
+  default:
+    lock_owner = false;
+    break;
+  }
+
+  ldout(m_image_ctx.cct, 20) << this << " " << __func__ << "=" << lock_owner
+                             << dendl;
+  return lock_owner;
 }
 
 template <typename I>
 void ExclusiveLock<I>::init(Context *on_init) {
-  ldout(m_image_ctx.cct, 10) << __func__ << dendl;
+  assert(m_image_ctx.owner_lock.is_locked());
+  ldout(m_image_ctx.cct, 10) << this << " " << __func__ << dendl;
 
-  assert(m_image_ctx.owner_lock.is_wlocked());
-
-  Mutex::Locker locker(m_lock);
-  assert(m_state == STATE_UNINITIALIZED);
-  m_state = STATE_INITIALIZING;
+  {
+    Mutex::Locker locker(m_lock);
+    assert(m_state == STATE_UNINITIALIZED);
+    m_state = STATE_INITIALIZING;
+  }
 
   m_image_ctx.aio_work_queue->block_writes(new C_InitComplete(this, on_init));
 }
 
 template <typename I>
 void ExclusiveLock<I>::shut_down(Context *on_shut_down) {
-  ldout(m_image_ctx.cct, 10) << __func__ << dendl;
-  assert(m_image_ctx.owner_lock.is_wlocked());
+  ldout(m_image_ctx.cct, 10) << this << " " << __func__ << dendl;
 
   Mutex::Locker locker(m_lock);
   assert(!is_shutdown());
@@ -81,7 +94,7 @@ void ExclusiveLock<I>::try_lock(Context *on_tried_lock) {
     assert(!is_shutdown());
 
     if (m_state != STATE_LOCKED || !m_actions_contexts.empty()) {
-      ldout(m_image_ctx.cct, 10) << __func__ << dendl;
+      ldout(m_image_ctx.cct, 10) << this << " " << __func__ << dendl;
       execute_action(ACTION_TRY_LOCK, on_tried_lock);
       return;
     }
@@ -94,11 +107,10 @@ template <typename I>
 void ExclusiveLock<I>::request_lock(Context *on_locked) {
   {
     Mutex::Locker locker(m_lock);
+    assert(m_image_ctx.owner_lock.is_locked());
     assert(!is_shutdown());
-    assert(m_image_ctx.owner_lock.is_wlocked());
-
     if (m_state != STATE_LOCKED || !m_actions_contexts.empty()) {
-      ldout(m_image_ctx.cct, 10) << __func__ << dendl;
+      ldout(m_image_ctx.cct, 10) << this << " " << __func__ << dendl;
       execute_action(ACTION_REQUEST_LOCK, on_locked);
       return;
     }
@@ -113,11 +125,11 @@ template <typename I>
 void ExclusiveLock<I>::release_lock(Context *on_released) {
   {
     Mutex::Locker locker(m_lock);
-    assert(m_image_ctx.owner_lock.is_wlocked());
+    assert(m_image_ctx.owner_lock.is_locked());
     assert(!is_shutdown());
 
     if (m_state != STATE_UNLOCKED || !m_actions_contexts.empty()) {
-      ldout(m_image_ctx.cct, 10) << __func__ << dendl;
+      ldout(m_image_ctx.cct, 10) << this << " " << __func__ << dendl;
       execute_action(ACTION_RELEASE_LOCK, on_released);
       return;
     }
@@ -133,16 +145,16 @@ void ExclusiveLock<I>::handle_lock_released() {
     return;
   }
 
-  ldout(m_image_ctx.cct, 10) << __func__ << dendl;
+  ldout(m_image_ctx.cct, 10) << this << " " << __func__ << dendl;
   assert(get_active_action() == ACTION_REQUEST_LOCK);
   execute_next_action();
 }
 
 template <typename I>
-void ExclusiveLock<I>::set_watch_handle(uint64_t watch_handle) {
+void ExclusiveLock<I>::assert_header_locked(librados::ObjectWriteOperation *op) {
   Mutex::Locker locker(m_lock);
-  assert(m_watch_handle == 0 || watch_handle == 0);
-  m_watch_handle = watch_handle;
+  rados::cls::lock::assert_locked(op, RBD_LOCK_NAME, LOCK_EXCLUSIVE,
+                                  encode_lock_cookie(), WATCHER_LOCK_TAG);
 }
 
 template <typename I>
@@ -172,6 +184,8 @@ bool ExclusiveLock<I>::is_transition_state() const {
   case STATE_INITIALIZING:
   case STATE_ACQUIRING:
   case STATE_WAITING_FOR_PEER:
+  case STATE_POST_ACQUIRING:
+  case STATE_PRE_RELEASING:
   case STATE_RELEASING:
   case STATE_SHUTTING_DOWN:
     return true;
@@ -257,7 +271,7 @@ void ExclusiveLock<I>::complete_active_action(State next_state, int r) {
   }
   m_lock.Lock();
 
-  if (!m_actions_contexts.empty()) {
+  if (!is_transition_state() && !m_actions_contexts.empty()) {
     execute_next_action();
   }
 }
@@ -273,7 +287,7 @@ bool ExclusiveLock<I>::is_shutdown() const {
 
 template <typename I>
 void ExclusiveLock<I>::handle_init_complete() {
-  ldout(m_image_ctx.cct, 10) << __func__ << dendl;
+  ldout(m_image_ctx.cct, 10) << this << " " << __func__ << dendl;
 
   Mutex::Locker locker(m_lock);
   m_state = STATE_UNLOCKED;
@@ -287,20 +301,25 @@ void ExclusiveLock<I>::send_acquire_lock() {
     return;
   }
 
-  ldout(m_image_ctx.cct, 10) << __func__ << dendl;
+  ldout(m_image_ctx.cct, 10) << this << " " << __func__ << dendl;
   m_state = STATE_ACQUIRING;
+
+  m_watch_handle = m_image_ctx.image_watcher->get_watch_handle();
 
   using el = ExclusiveLock<I>;
   AcquireRequest<I>* req = AcquireRequest<I>::create(
     m_image_ctx, encode_lock_cookie(),
     util::create_context_callback<el, &el::handle_acquire_lock>(this));
+
+  m_lock.Unlock();
   req->send();
+  m_lock.Lock();
 }
 
 template <typename I>
 void ExclusiveLock<I>::handle_acquire_lock(int r) {
   CephContext *cct = m_image_ctx.cct;
-  ldout(cct, 10) << __func__ << ": r=" << r << dendl;
+  ldout(cct, 10) << this << " " << __func__ << ": r=" << r << dendl;
 
   if (r == -EBUSY) {
     ldout(cct, 5) << "unable to acquire exclusive lock" << dendl;
@@ -331,10 +350,16 @@ void ExclusiveLock<I>::handle_acquire_lock(int r) {
     r = 0;
   }
 
-  Mutex::Locker locker(m_lock);
   if (next_state == STATE_LOCKED) {
+    {
+      Mutex::Locker locker(m_lock);
+      m_state = STATE_POST_ACQUIRING;
+    }
+    m_image_ctx.image_watcher->notify_acquired_lock();
     m_image_ctx.aio_work_queue->unblock_writes();
   }
+
+  Mutex::Locker locker(m_lock);
   complete_active_action(next_state, r);
 }
 
@@ -346,8 +371,8 @@ void ExclusiveLock<I>::send_release_lock() {
     return;
   }
 
-  ldout(m_image_ctx.cct, 10) << __func__ << dendl;
-  m_state = STATE_RELEASING;
+  ldout(m_image_ctx.cct, 10) << this << " " << __func__ << dendl;
+  m_state = STATE_PRE_RELEASING;
 
   m_image_ctx.op_work_queue->queue(
     new C_BlockWrites(m_image_ctx, new C_ReleaseBlockWrites(this)), 0);
@@ -360,28 +385,49 @@ void ExclusiveLock<I>::handle_release_blocked_writes(int r) {
     return;
   }
 
-  ldout(m_image_ctx.cct, 10) << __func__ << ": r=" << r << dendl;
+  ldout(m_image_ctx.cct, 10) << this << " " << __func__ << ": r=" << r << dendl;
 
   Mutex::Locker locker(m_lock);
-  assert(m_state == STATE_RELEASING);
+  assert(m_state == STATE_PRE_RELEASING);
+  m_state = STATE_RELEASING;
 
   using el = ExclusiveLock<I>;
   ReleaseRequest<I>* req = ReleaseRequest<I>::create(
     m_image_ctx, encode_lock_cookie(),
     util::create_context_callback<el, &el::handle_release_lock>(this));
+
+  m_lock.Unlock();
   req->send();
+  m_lock.Lock();
 }
 
 template <typename I>
 void ExclusiveLock<I>::handle_release_lock(int r) {
-  Mutex::Locker locker(m_lock);
+  bool pending_writes = false;
+  {
+    Mutex::Locker locker(m_lock);
+    ldout(m_image_ctx.cct, 10) << this << " " << __func__ << ": r=" << r
+                               << dendl;
 
-  ldout(m_image_ctx.cct, 10) << __func__ << ": r=" << r << dendl;
+    assert(m_state == STATE_RELEASING);
+    if (r < 0) {
+      m_image_ctx.aio_work_queue->unblock_writes();
+    } else {
+      m_lock.Unlock();
+      m_image_ctx.image_watcher->notify_released_lock();
+      pending_writes = !m_image_ctx.aio_work_queue->writes_empty();
+      m_lock.Lock();
 
-  if (r < 0) {
-    m_image_ctx.aio_work_queue->unblock_writes();
+      m_watch_handle = 0;
+    }
+    complete_active_action(r < 0 ? STATE_LOCKED : STATE_UNLOCKED, r);
   }
-  complete_active_action(r < 0 ? STATE_LOCKED : STATE_UNLOCKED, r);
+
+  if (r >= 0 && pending_writes) {
+    // if we have pending writes -- re-request the lock
+    RWLock::RLocker owner_locker(m_image_ctx.owner_lock);
+    request_lock(nullptr);
+  }
 }
 
 template <typename I>
@@ -389,27 +435,66 @@ void ExclusiveLock<I>::send_shutdown() {
   assert(m_lock.is_locked());
   if (m_state == STATE_UNLOCKED) {
     m_image_ctx.aio_work_queue->unblock_writes();
-    complete_active_action(STATE_SHUTDOWN, 0);
+    m_image_ctx.op_work_queue->queue(util::create_context_callback<
+      ExclusiveLock<I>, &ExclusiveLock<I>::complete_shutdown>(this), 0);
     return;
   }
 
-  ldout(m_image_ctx.cct, 10) << __func__ << dendl;
+  ldout(m_image_ctx.cct, 10) << this << " " << __func__ << dendl;
   assert(m_state == STATE_LOCKED);
   m_state = STATE_SHUTTING_DOWN;
 
+  m_lock.Unlock();
+  m_image_ctx.op_work_queue->queue(new C_ShutDownRelease(this), 0);
+  m_lock.Lock();
+}
+
+template <typename I>
+void ExclusiveLock<I>::send_shutdown_release() {
+  std::string cookie;
+  {
+    Mutex::Locker locker(m_lock);
+    cookie = encode_lock_cookie();
+  }
+
   using el = ExclusiveLock<I>;
   ReleaseRequest<I>* req = ReleaseRequest<I>::create(
-    m_image_ctx, encode_lock_cookie(),
+    m_image_ctx, cookie,
     util::create_context_callback<el, &el::handle_shutdown>(this));
   req->send();
 }
 
 template <typename I>
 void ExclusiveLock<I>::handle_shutdown(int r) {
-  Mutex::Locker locker(m_lock);
-  ldout(m_image_ctx.cct, 10) << __func__ << ": r=" << r << dendl;
+  CephContext *cct = m_image_ctx.cct;
+  ldout(cct, 10) << this << " " << __func__ << ": r=" << r << dendl;
 
-  complete_active_action(r == 0 ? STATE_SHUTDOWN : STATE_LOCKED, r);
+  if (r < 0) {
+    lderr(cct) << "failed to shut down exclusive lock: " << cpp_strerror(r)
+               << dendl;
+  }
+
+  m_image_ctx.image_watcher->notify_released_lock();
+  complete_shutdown(r);
+}
+
+template <typename I>
+void ExclusiveLock<I>::complete_shutdown(int r) {
+  ActionContexts action_contexts;
+  {
+    Mutex::Locker locker(m_lock);
+    assert(m_lock.is_locked());
+    assert(m_actions_contexts.size() == 1);
+
+    action_contexts = std::move(m_actions_contexts.front());
+    m_actions_contexts.pop_front();
+    m_state = STATE_SHUTDOWN;
+  }
+
+  // expect to be destroyed after firing callback
+  for (auto ctx : action_contexts.second) {
+    ctx->complete(r);
+  }
 }
 
 } // namespace librbd

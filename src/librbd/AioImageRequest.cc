@@ -4,6 +4,7 @@
 #include "librbd/AioImageRequest.h"
 #include "librbd/AioCompletion.h"
 #include "librbd/AioObjectRequest.h"
+#include "librbd/ExclusiveLock.h"
 #include "librbd/ImageCtx.h"
 #include "librbd/ImageWatcher.h"
 #include "librbd/internal.h"
@@ -247,8 +248,8 @@ void AbstractAioImageWrite::send_request() {
                   !m_image_ctx.journal->is_journal_replaying());
   }
 
-  assert(!m_image_ctx.image_watcher->is_lock_supported() ||
-          m_image_ctx.image_watcher->is_lock_owner());
+  assert(m_image_ctx.exclusive_lock == nullptr ||
+         m_image_ctx.exclusive_lock->is_lock_owner());
 
   m_aio_comp->set_request_count(
     m_image_ctx.cct, object_extents.size() +

@@ -1,6 +1,7 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 #include "librbd/ObjectMap.h"
+#include "librbd/ExclusiveLock.h"
 #include "librbd/ImageCtx.h"
 #include "librbd/ImageWatcher.h"
 #include "librbd/internal.h"
@@ -349,8 +350,8 @@ void ObjectMap::aio_resize(uint64_t new_size, uint8_t default_object_state,
   assert(m_image_ctx.test_features(RBD_FEATURE_OBJECT_MAP));
   assert(m_image_ctx.owner_lock.is_locked());
   assert(m_image_ctx.image_watcher != NULL);
-  assert(!m_image_ctx.image_watcher->is_lock_supported() ||
-         m_image_ctx.image_watcher->is_lock_owner());
+  assert(m_image_ctx.exclusive_lock == nullptr ||
+         m_image_ctx.exclusive_lock->is_lock_owner());
 
   object_map::ResizeRequest *req = new object_map::ResizeRequest(
     m_image_ctx, &m_object_map, m_snap_id, new_size, default_object_state,
@@ -375,8 +376,8 @@ bool ObjectMap::aio_update(uint64_t start_object_no, uint64_t end_object_no,
   assert((m_image_ctx.features & RBD_FEATURE_OBJECT_MAP) != 0);
   assert(m_image_ctx.owner_lock.is_locked());
   assert(m_image_ctx.image_watcher != NULL);
-  assert(!m_image_ctx.image_watcher->is_lock_supported(m_image_ctx.snap_lock) ||
-         m_image_ctx.image_watcher->is_lock_owner());
+  assert(m_image_ctx.exclusive_lock == nullptr ||
+         m_image_ctx.exclusive_lock->is_lock_owner());
   assert(m_image_ctx.object_map_lock.is_wlocked());
   assert(start_object_no < end_object_no);
 

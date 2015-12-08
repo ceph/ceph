@@ -5,6 +5,7 @@
 #include "common/dout.h"
 #include "common/errno.h"
 #include "librbd/AioImageRequestWQ.h"
+#include "librbd/ExclusiveLock.h"
 #include "librbd/ImageCtx.h"
 #include "librbd/ImageWatcher.h"
 #include "librbd/ObjectMap.h"
@@ -188,8 +189,8 @@ void SnapshotCreateRequest<I>::send_create_snap() {
   m_state = STATE_CREATE_SNAP;
 
   // should have been canceled prior to releasing lock
-  assert(!image_ctx.image_watcher->is_lock_supported(image_ctx.snap_lock) ||
-         image_ctx.image_watcher->is_lock_owner());
+  assert(image_ctx.exclusive_lock == nullptr ||
+         image_ctx.exclusive_lock->is_lock_owner());
 
   // save current size / parent info for creating snapshot record in ImageCtx
   m_size = image_ctx.size;
@@ -199,8 +200,8 @@ void SnapshotCreateRequest<I>::send_create_snap() {
   if (image_ctx.old_format) {
     cls_client::old_snapshot_add(&op, m_snap_id, m_snap_name);
   } else {
-    if (image_ctx.image_watcher->is_lock_owner()) {
-      image_ctx.image_watcher->assert_header_locked(&op);
+    if (image_ctx.exclusive_lock != nullptr) {
+      image_ctx.exclusive_lock->assert_header_locked(&op);
     }
     cls_client::snapshot_add(&op, m_snap_id, m_snap_name);
   }
@@ -296,8 +297,8 @@ void SnapshotCreateRequest<I>::update_snap_context() {
   ldout(cct, 5) << this << " " << __func__ << dendl;
 
   // should have been canceled prior to releasing lock
-  assert(!image_ctx.image_watcher->is_lock_supported(image_ctx.snap_lock) ||
-         image_ctx.image_watcher->is_lock_owner());
+  assert(image_ctx.exclusive_lock == nullptr ||
+         image_ctx.exclusive_lock->is_lock_owner());
 
   // immediately add a reference to the new snapshot
   image_ctx.add_snap(m_snap_name, m_snap_id, m_size, m_parent_info,
