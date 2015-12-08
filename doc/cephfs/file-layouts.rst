@@ -95,7 +95,22 @@ Layout fields are modified using ``setfattr``:
     $ setfattr -n ceph.file.layout.pool -v 1 file2  # Setting pool by ID
     $ setfattr -n ceph.file.layout.pool -v cephfs_data file2  # Setting pool by name
 
+.. note::
 
+    When the layout fields of a file are modified using ``setfattr``, this file must be empty, otherwise an error will occur.
+
+.. code-block:: bash
+
+    # touch an empty file
+    $ touch file1
+    # modify layout field successfully
+    $ setfattr -n ceph.file.layout.stripe_count -v 3 file1
+
+    # write something to file1
+    $ echo "hello world" > file1
+    $ setfattr -n ceph.file.layout.stripe_count -v 4 file1
+    setfattr: file1: Directory not empty
+    
 Inheritance of layouts
 ----------------------
 
