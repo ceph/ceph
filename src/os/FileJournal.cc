@@ -34,6 +34,7 @@
 
 #include "common/blkdev.h"
 #if defined(__linux__)
+#include "common/linux_version.h"
 #endif
 
 #if defined(__FreeBSD__)
