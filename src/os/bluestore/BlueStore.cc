@@ -2282,7 +2282,7 @@ int BlueStore::statfs(struct statfs *buf)
 // ---------------
 // cache
 
-BlueStore::CollectionRef BlueStore::_get_collection(coll_t cid)
+BlueStore::CollectionRef BlueStore::_get_collection(const coll_t& cid)
 {
   RWLock::RLocker l(coll_lock);
   ceph::unordered_map<coll_t,CollectionRef>::iterator cp = coll_map.find(cid);
@@ -2337,7 +2337,7 @@ ObjectStore::CollectionHandle BlueStore::open_collection(const coll_t& cid)
   return _get_collection(cid);
 }
 
-bool BlueStore::exists(coll_t cid, const ghobject_t& oid)
+bool BlueStore::exists(const coll_t& cid, const ghobject_t& oid)
 {
   CollectionHandle c = _get_collection(cid);
   if (!c)
@@ -2359,7 +2359,7 @@ bool BlueStore::exists(CollectionHandle &c_, const ghobject_t& oid)
 }
 
 int BlueStore::stat(
-    coll_t cid,
+    const coll_t& cid,
     const ghobject_t& oid,
     struct stat *st,
     bool allow_eio)
@@ -2392,7 +2392,7 @@ int BlueStore::stat(
 }
 
 int BlueStore::read(
-  coll_t cid,
+  const coll_t& cid,
   const ghobject_t& oid,
   uint64_t offset,
   size_t length,
@@ -2595,7 +2595,7 @@ int BlueStore::_do_read(
 }
 
 int BlueStore::fiemap(
-  coll_t cid,
+  const coll_t& cid,
   const ghobject_t& oid,
   uint64_t offset,
   size_t len,
@@ -2709,7 +2709,7 @@ int BlueStore::fiemap(
 }
 
 int BlueStore::getattr(
-  coll_t cid,
+  const coll_t& cid,
   const ghobject_t& oid,
   const char *name,
   bufferptr& value)
@@ -2754,7 +2754,7 @@ int BlueStore::getattr(
 
 
 int BlueStore::getattrs(
-  coll_t cid,
+  const coll_t& cid,
   const ghobject_t& oid,
   map<string,bufferptr>& aset)
 {
@@ -2799,13 +2799,13 @@ int BlueStore::list_collections(vector<coll_t>& ls)
   return 0;
 }
 
-bool BlueStore::collection_exists(coll_t c)
+bool BlueStore::collection_exists(const coll_t& c)
 {
   RWLock::RLocker l(coll_lock);
   return coll_map.count(c);
 }
 
-bool BlueStore::collection_empty(coll_t cid)
+bool BlueStore::collection_empty(const coll_t& cid)
 {
   dout(15) << __func__ << " " << cid << dendl;
   vector<ghobject_t> ls;
@@ -2819,7 +2819,7 @@ bool BlueStore::collection_empty(coll_t cid)
   return empty;
 }
 
-int BlueStore::collection_bits(coll_t cid)
+int BlueStore::collection_bits(const coll_t& cid)
 {
   dout(15) << __func__ << " " << cid << dendl;
   CollectionRef c = _get_collection(cid);
@@ -2831,7 +2831,7 @@ int BlueStore::collection_bits(coll_t cid)
 }
 
 int BlueStore::collection_list(
-  coll_t cid, ghobject_t start, ghobject_t end,
+  const coll_t& cid, ghobject_t start, ghobject_t end,
   bool sort_bitwise, int max,
   vector<ghobject_t> *ls, ghobject_t *pnext)
 {
@@ -3053,7 +3053,7 @@ bufferlist BlueStore::OmapIteratorImpl::value()
 }
 
 int BlueStore::omap_get(
-  coll_t cid,                ///< [in] Collection containing oid
+  const coll_t& cid,                ///< [in] Collection containing oid
   const ghobject_t &oid,   ///< [in] Object containing omap
   bufferlist *header,      ///< [out] omap header
   map<string, bufferlist> *out /// < [out] Key to value map
@@ -3117,7 +3117,7 @@ int BlueStore::omap_get(
 }
 
 int BlueStore::omap_get_header(
-  coll_t cid,                ///< [in] Collection containing oid
+  const coll_t& cid,                ///< [in] Collection containing oid
   const ghobject_t &oid,   ///< [in] Object containing omap
   bufferlist *header,      ///< [out] omap header
   bool allow_eio ///< [in] don't assert on eio
@@ -3166,7 +3166,7 @@ int BlueStore::omap_get_header(
 }
 
 int BlueStore::omap_get_keys(
-  coll_t cid,              ///< [in] Collection containing oid
+  const coll_t& cid,              ///< [in] Collection containing oid
   const ghobject_t &oid, ///< [in] Object containing omap
   set<string> *keys      ///< [out] Keys defined on oid
   )
@@ -3224,7 +3224,7 @@ int BlueStore::omap_get_keys(
 }
 
 int BlueStore::omap_get_values(
-  coll_t cid,                    ///< [in] Collection containing oid
+  const coll_t& cid,                    ///< [in] Collection containing oid
   const ghobject_t &oid,       ///< [in] Object containing omap
   const set<string> &keys,     ///< [in] Keys to get
   map<string, bufferlist> *out ///< [out] Returned keys and values
@@ -3274,7 +3274,7 @@ int BlueStore::omap_get_values(
 }
 
 int BlueStore::omap_check_keys(
-  coll_t cid,                ///< [in] Collection containing oid
+  const coll_t& cid,                ///< [in] Collection containing oid
   const ghobject_t &oid,   ///< [in] Object containing omap
   const set<string> &keys, ///< [in] Keys to check
   set<string> *out         ///< [out] Subset of keys defined on oid
@@ -3327,7 +3327,7 @@ int BlueStore::omap_check_keys(
 }
 
 ObjectMap::ObjectMapIterator BlueStore::get_omap_iterator(
-  coll_t cid,              ///< [in] collection
+  const coll_t& cid,              ///< [in] collection
   const ghobject_t &oid  ///< [in] object
   )
 {

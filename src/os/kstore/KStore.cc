@@ -1439,7 +1439,7 @@ void KStore::_reap_collections()
 // ---------------
 // read operations
 
-bool KStore::exists(coll_t cid, const ghobject_t& oid)
+bool KStore::exists(const coll_t& cid, const ghobject_t& oid)
 {
   dout(10) << __func__ << " " << cid << " " << oid << dendl;
   CollectionRef c = _get_collection(cid);
@@ -1453,7 +1453,7 @@ bool KStore::exists(coll_t cid, const ghobject_t& oid)
 }
 
 int KStore::stat(
-    coll_t cid,
+    const coll_t& cid,
     const ghobject_t& oid,
     struct stat *st,
     bool allow_eio)
@@ -1474,7 +1474,7 @@ int KStore::stat(
 }
 
 int KStore::read(
-  coll_t cid,
+  const coll_t& cid,
   const ghobject_t& oid,
   uint64_t offset,
   size_t length,
@@ -1589,7 +1589,7 @@ int KStore::_do_read(
 }
 
 int KStore::fiemap(
-  coll_t cid,
+  const coll_t& cid,
   const ghobject_t& oid,
   uint64_t offset,
   size_t len,
@@ -1627,7 +1627,7 @@ int KStore::fiemap(
 }
 
 int KStore::getattr(
-  coll_t cid,
+  const coll_t& cid,
   const ghobject_t& oid,
   const char *name,
   bufferptr& value)
@@ -1659,7 +1659,7 @@ int KStore::getattr(
 }
 
 int KStore::getattrs(
-  coll_t cid,
+  const coll_t& cid,
   const ghobject_t& oid,
   map<string,bufferptr>& aset)
 {
@@ -1693,13 +1693,13 @@ int KStore::list_collections(vector<coll_t>& ls)
   return 0;
 }
 
-bool KStore::collection_exists(coll_t c)
+bool KStore::collection_exists(const coll_t& c)
 {
   RWLock::RLocker l(coll_lock);
   return coll_map.count(c);
 }
 
-bool KStore::collection_empty(coll_t cid)
+bool KStore::collection_empty(const coll_t& cid)
 {
   dout(15) << __func__ << " " << cid << dendl;
   vector<ghobject_t> ls;
@@ -1714,7 +1714,7 @@ bool KStore::collection_empty(coll_t cid)
 }
 
 int KStore::collection_list(
-  coll_t cid, ghobject_t start, ghobject_t end,
+  const coll_t& cid, ghobject_t start, ghobject_t end,
   bool sort_bitwise, int max,
   vector<ghobject_t> *ls, ghobject_t *pnext)
 {
@@ -1914,7 +1914,7 @@ bufferlist KStore::OmapIteratorImpl::value()
 }
 
 int KStore::omap_get(
-  coll_t cid,                ///< [in] Collection containing oid
+  const coll_t& cid,                ///< [in] Collection containing oid
   const ghobject_t &oid,   ///< [in] Object containing omap
   bufferlist *header,      ///< [out] omap header
   map<string, bufferlist> *out /// < [out] Key to value map
@@ -1964,7 +1964,7 @@ int KStore::omap_get(
 }
 
 int KStore::omap_get_header(
-  coll_t cid,                ///< [in] Collection containing oid
+  const coll_t& cid,                ///< [in] Collection containing oid
   const ghobject_t &oid,   ///< [in] Object containing omap
   bufferlist *header,      ///< [out] omap header
   bool allow_eio ///< [in] don't assert on eio
@@ -1999,7 +1999,7 @@ int KStore::omap_get_header(
 }
 
 int KStore::omap_get_keys(
-  coll_t cid,              ///< [in] Collection containing oid
+  const coll_t& cid,              ///< [in] Collection containing oid
   const ghobject_t &oid, ///< [in] Object containing omap
   set<string> *keys      ///< [out] Keys defined on oid
   )
@@ -2044,7 +2044,7 @@ int KStore::omap_get_keys(
 }
 
 int KStore::omap_get_values(
-  coll_t cid,                    ///< [in] Collection containing oid
+  const coll_t& cid,                    ///< [in] Collection containing oid
   const ghobject_t &oid,       ///< [in] Object containing omap
   const set<string> &keys,     ///< [in] Keys to get
   map<string, bufferlist> *out ///< [out] Returned keys and values
@@ -2080,7 +2080,7 @@ int KStore::omap_get_values(
 }
 
 int KStore::omap_check_keys(
-  coll_t cid,                ///< [in] Collection containing oid
+  const coll_t& cid,                ///< [in] Collection containing oid
   const ghobject_t &oid,   ///< [in] Object containing omap
   const set<string> &keys, ///< [in] Keys to check
   set<string> *out         ///< [out] Subset of keys defined on oid
@@ -2119,7 +2119,7 @@ int KStore::omap_check_keys(
 }
 
 ObjectMap::ObjectMapIterator KStore::get_omap_iterator(
-  coll_t cid,              ///< [in] collection
+  const coll_t& cid,              ///< [in] collection
   const ghobject_t &oid  ///< [in] object
   )
 {
