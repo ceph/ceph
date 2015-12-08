@@ -21,6 +21,7 @@
 #include "uuid.h"
 
 #include <netinet/in.h>
+#include <sys/un.h>
 #include <fcntl.h>
 #include <string.h>
 

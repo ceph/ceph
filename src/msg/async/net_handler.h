@@ -25,10 +25,14 @@ namespace ceph {
     int generic_connect(const entity_addr_t& addr, bool nonblock);
 
     CephContext *cct;
+#ifdef SO_NOSIGPIPE
+    void set_nosigpipe(int sd)
+#endif
    public:
     explicit NetHandler(CephContext *c): cct(c) {}
     int set_nonblock(int sd);
     void set_socket_options(int sd);
+    void set_unix_socket_options(int sd);
     int connect(const entity_addr_t &addr);
     
     /**
@@ -40,6 +44,7 @@ namespace ceph {
      */
     int reconnect(const entity_addr_t &addr, int sd);
     int nonblock_connect(const entity_addr_t &addr);
+    static entity_addr_t ip_to_unix(const entity_addr_t &addr, int type, const string& path, bool catch_all);
   };
 }
 

@@ -100,6 +100,7 @@ class Worker : public Thread {
  * and listens for incoming connections.
  */
 class Processor {
+  protected:
   AsyncMessenger *msgr;
   NetHandler net;
   Worker *worker;
@@ -110,23 +111,32 @@ class Processor {
   class C_processor_accept : public EventCallback {
     Processor *pro;
 
-   public:
+  public:
     explicit C_processor_accept(Processor *p): pro(p) {}
     void do_request(int id) {
-      pro->accept();
+      pro->accept(pro->listen_sd);
     }
   };
 
- public:
-  Processor(AsyncMessenger *r, CephContext *c, uint64_t n)
-          : msgr(r), net(c), worker(NULL), listen_sd(-1), nonce(n), listen_handler(new C_processor_accept(this)) {}
+  public:
+  Processor(AsyncMessenger *r, CephContext *c, uint64_t n): msgr(r), net(c), worker(NULL), listen_sd(-1), nonce(n), listen_handler(new C_processor_accept(this)) {}
   ~Processor() { delete listen_handler; };
 
   void stop();
   int bind(const entity_addr_t &bind_addr, const set<int>& avoid_ports);
   int rebind(const set<int>& avoid_port);
   int start(Worker *w);
-  void accept();
+  void accept(int sock_sd);
+};
+
+class UnixProcessor : private Processor {
+  public:
+  UnixProcessor(AsyncMessenger *r, CephContext *c, uint64_t n): Processor(r, c, n) {};
+  void stop();
+  int bind(const entity_addr_t &bind_addr, const set<int>& avoid_ports);
+  using Processor::rebind;  
+  using Processor::start;   
+  using Processor::accept;                            
 };
 
 class WorkerPool {
@@ -270,6 +280,8 @@ public:
     return new AsyncConnection(cct, this, &w->center, w->get_perf_counter());
   }
 
+  entity_addr_t try_unixify(const entity_addr_t original, int peer_type);
+
   /**
    * @} // Inner classes
    */
@@ -328,7 +340,9 @@ private:
   WorkerPool *pool;
 
   Processor processor;
+  UnixProcessor unix_processor;
   friend class Processor;
+  friend class UnixProcessor;
 
   class C_handle_reap : public EventCallback {
     AsyncMessenger *msgr;

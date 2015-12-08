@@ -49,11 +49,106 @@ static ostream& _prefix(std::ostream *_dout, WorkerPool *p) {
   return *_dout << " WorkerPool -- ";
 }
 
-
-
 /*******************
  * Processor
  */
+
+int UnixProcessor::bind(const entity_addr_t &bind_addr, const set<int>& avoid_ports)
+{
+  const md_config_t *conf = msgr->cct->_conf;
+  // bind to a socket
+  ldout(msgr->cct, 10) << __func__ << dendl;
+
+  /* socket creation */
+  listen_sd = ::socket(AF_UNIX, SOCK_STREAM, 0);
+  if (listen_sd < 0) {
+    lderr(msgr->cct) << __func__ << " unable to create UNIX domain socket: "
+        << cpp_strerror(errno) << dendl;
+    return -errno;
+  }
+
+  int r = net.set_nonblock(listen_sd);
+  if (r < 0) {
+    lderr(msgr->cct) << __func__ << " failed to make UNIX domain socket non-blocking: "
+        << cpp_strerror(errno) << dendl;
+    ::close(listen_sd);
+    listen_sd = -1;
+    return -errno;
+  }
+
+  entity_addr_t unix_ent = net.ip_to_unix(bind_addr, msgr->my_inst.name._type, msgr->cct->_conf->run_dir, false);
+  ldout(msgr->cct, 1) << __func__ << " " << msgr->my_inst.name << " unix socket " << unix_ent.addrun.sun_path << dendl;
+
+  net.set_unix_socket_options(listen_sd);
+
+  /* bind to file */
+  int rc = -1;
+  r = -1;
+
+  for (int i = 0; i < conf->ms_bind_retry_count; i++) {
+    if (i > 0) {
+      lderr(msgr->cct) << __func__ << " was unable to bind. Trying again in "
+                       << conf->ms_bind_retry_delay << " seconds " << dendl;
+      sleep(conf->ms_bind_retry_delay);
+    }
+
+    unlink(unix_ent.addrun.sun_path);
+    rc = ::bind(listen_sd, (struct sockaddr *) &unix_ent.addrun, sizeof(unix_ent.addrun));
+    if (rc < 0) {
+      lderr(msgr->cct) << __func__ << " unable to bind to " << unix_ent.addrun.sun_path
+                       << ": " << cpp_strerror(errno) << dendl;
+      r = -errno;
+      continue;
+    }
+    if (rc == 0)
+      break;
+  }
+  // It seems that binding completely failed, return with that exit status
+  if (rc < 0) {
+    lderr(msgr->cct) << __func__ << " was unable to bind after " << conf->ms_bind_retry_count
+                     << " attempts: " << cpp_strerror(errno) << dendl;
+    ::close(listen_sd);
+    listen_sd = -1;
+    return r;
+  }
+
+  ldout(msgr->cct, 10) << __func__ << " bound to " << unix_ent.addrun.sun_path << dendl;
+
+  // listen!
+  rc = ::listen(listen_sd, 128);
+  if (rc < 0) {
+    rc = -errno;
+    lderr(msgr->cct) << __func__ << " unable to listen on " << unix_ent.addrun.sun_path
+        << ": " << cpp_strerror(rc) << dendl;
+    ::close(listen_sd);
+    listen_sd = -1;
+    // unlink the stale socket (if any)
+    unlink(unix_ent.addrun.sun_path);
+    return rc;
+  }
+
+  return 0;
+}
+
+void UnixProcessor::stop()
+{
+  ldout(msgr->cct,10) << __func__ << dendl;
+
+  if (listen_sd >= 0) {
+    worker->center.delete_file_event(listen_sd, EVENT_READABLE);
+    // remove the socket, if any
+    sockaddr_un addr;
+    socklen_t len = sizeof(addr);
+    int r = ::getsockname(listen_sd, (sockaddr*)&addr, &len);
+    if ((r >= 0) && (addr.sun_family == AF_UNIX)) {
+      unlink(addr.sun_path);
+    }
+
+    ::shutdown(listen_sd, SHUT_RDWR);
+    ::close(listen_sd);
+    listen_sd = -1;
+  }
+}
 
 int Processor::bind(const entity_addr_t &bind_addr, const set<int>& avoid_ports)
 {
@@ -229,14 +324,14 @@ int Processor::start(Worker *w)
   return 0;
 }
 
-void Processor::accept()
+void Processor::accept(int sock_sd)
 {
-  ldout(msgr->cct, 10) << __func__ << " listen_sd=" << listen_sd << dendl;
+  ldout(msgr->cct, 10) << __func__ << " sock_sd=" << sock_sd << dendl;
   int errors = 0;
   while (errors < 4) {
     entity_addr_t addr;
     socklen_t slen = sizeof(addr.ss_addr());
-    int sd = ::accept(listen_sd, (sockaddr*)&addr.ss_addr(), &slen);
+    int sd = ::accept(sock_sd, (sockaddr*)&addr.ss_addr(), &slen);
     if (sd >= 0) {
       errors = 0;
       ldout(msgr->cct, 10) << __func__ << " accepted incoming on sd " << sd << dendl;
@@ -377,6 +472,7 @@ AsyncMessenger::AsyncMessenger(CephContext *cct, entity_name_t name,
                                string mname, uint64_t _nonce, uint64_t features)
   : SimplePolicyMessenger(cct, name,mname, _nonce),
     processor(this, cct, _nonce),
+    unix_processor(this, cct, _nonce),
     lock("AsyncMessenger::lock"),
     nonce(_nonce), need_addr(true), did_bind(false),
     global_seq(0), deleted_lock("AsyncMessenger::deleted_lock"),
@@ -409,6 +505,9 @@ void AsyncMessenger::ready()
   Mutex::Locker l(lock);
   Worker *w = pool->get_worker();
   processor.start(w);
+  
+  w = pool->get_worker();
+  unix_processor.start(w);
 }
 
 int AsyncMessenger::shutdown()
@@ -417,6 +516,7 @@ int AsyncMessenger::shutdown()
 
   // break ref cycles on the loopback connection
   processor.stop();
+  unix_processor.stop();
   mark_down_all();
   local_connection->set_priv(NULL);
   pool->barrier();
@@ -442,8 +542,17 @@ int AsyncMessenger::bind(const entity_addr_t &bind_addr)
   // bind to a socket
   set<int> avoid_ports;
   int r = processor.bind(bind_addr, avoid_ports);
-  if (r >= 0)
+  if (r >= 0) {
     did_bind = true;
+    // initialize AF_LOCAL socket
+    if (cct->_conf->ms_async_use_local_socket) {
+      r = unix_processor.bind(get_myaddr(), avoid_ports);
+      if ((r < 0) && cct->_conf->ms_async_require_local_socket) {
+        processor.stop();
+        did_bind = false;
+      }
+    }
+  }
   return r;
 }
 
@@ -453,11 +562,18 @@ int AsyncMessenger::rebind(const set<int>& avoid_ports)
   assert(did_bind);
 
   processor.stop();
+  unix_processor.stop();
   mark_down_all();
   int r = processor.rebind(avoid_ports);
   if (r == 0) {
     Worker *w = pool->get_worker();
     processor.start(w);
+    
+    r = unix_processor.rebind(avoid_ports);
+    if (r == 0) {
+      Worker *w = pool->get_worker();
+      unix_processor.start(w);
+    }
   }
   return r;
 }
@@ -499,6 +615,7 @@ void AsyncMessenger::wait()
   // done!  clean up.
   ldout(cct,20) << __func__ << ": stopping processor thread" << dendl;
   processor.stop();
+  unix_processor.stop();
   did_bind = false;
   ldout(cct,20) << __func__ << ": stopped processor thread" << dendl;
 
@@ -521,6 +638,31 @@ AsyncConnectionRef AsyncMessenger::add_accept(int sd)
   return conn;
 }
 
+// Attempts to convert original entity_addr_t to the unix socket equivalent
+// takes into consideration:
+// 1. are we supporting local sockets at all?
+// 2. whether original addr is on same host as the async_msgr addr (that
+//    requires 2a. async_msgr to have its addr learned already)
+// 3. whether predicted unix socket exists on this machine
+// 4. whether original addr isn't unix socket already
+// if (most probably) can successfully connect to the corresponding unix socket,
+// its address structure is returned, otherwise original entity_addr_t is
+// returned. Check addr.addr.ss_family to see what was actual result.
+entity_addr_t AsyncMessenger::try_unixify(const entity_addr_t original, int peer_type) {
+  if (cct->_conf->ms_async_use_local_socket && (original.addr.ss_family != AF_UNIX) &&
+      !need_addr && original.is_same_host(my_inst.addr)) {
+      entity_addr_t newaddr = NetHandler::ip_to_unix(original, peer_type, cct->_conf->run_dir, true);
+      if (newaddr.addr.ss_family == AF_UNIX) {
+          struct stat statbuf;
+          if (!stat(newaddr.addrun.sun_path, &statbuf) && (S_ISSOCK(statbuf.st_mode)) ) {
+             ldout(cct, 10) << __func__ << " attempting to connect to " << string(&newaddr.addrun.sun_path[0]) << dendl;
+             return newaddr;
+          }
+      }
+  }
+  return original;
+}
+
 AsyncConnectionRef AsyncMessenger::create_connect(const entity_addr_t& addr, int type)
 {
   assert(lock.is_locked());
@@ -532,7 +674,18 @@ AsyncConnectionRef AsyncMessenger::create_connect(const entity_addr_t& addr, int
   // create connection
   Worker *w = pool->get_worker();
   AsyncConnectionRef conn = new AsyncConnection(cct, this, &w->center, w->get_perf_counter());
-  conn->connect(addr, type);
+  entity_addr_t unix_addr = try_unixify(addr, type);
+  if (addr.addr.ss_family == AF_UNIX) {
+      ldout(cct, 10) << __func__ << " got local UNIX socket at " << string(&unix_addr.addrun.sun_path[0]) << ", trying that instead" << dendl;
+      // we're connecting to unix_addr, but then we're replacing peer addr with original (IP) addr
+      // so the both sides will think that they're using IP protocol and IP address/port. this
+      // prevents any mismatches in OSD maps, etc.
+      conn->connect(unix_addr, type);
+      conn->set_peer_addr(addr);
+  } else {
+      conn->connect(addr, type);
+  }
+
   assert(!conns.count(addr));
   conns[addr] = conn;
   w->get_perf_counter()->inc(l_msgr_active_connections);
