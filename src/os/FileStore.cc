@@ -13,6 +13,7 @@
  * 
  */
 #include "include/int_types.h"
+#include "include/compat.h"
 
 #include <unistd.h>
 #include <stdlib.h>
@@ -31,7 +32,6 @@
 #include <iostream>
 #include <map>
 
-#include "include/compat.h"
 #include "include/linux_fiemap.h"
 
 #include "common/xattr.h"
