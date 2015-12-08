@@ -540,8 +540,27 @@ public:
   }
 
   coll_t(const coll_t& other)
-    : type(other.type), pgid(other.pgid), removal_seq(other.removal_seq) {
-    calc_str();
+    : type(other.type), pgid(other.pgid), removal_seq(other.removal_seq), _str(other._str) {
+  }
+
+  coll_t(coll_t&& other)
+    : type(other.type), pgid(other.pgid), removal_seq(other.removal_seq), _str(std::move(other._str)) {
+  }
+
+  coll_t& operator=(const coll_t& other) {
+    type = other.type;
+    pgid = other.pgid;
+    removal_seq = other.removal_seq;
+    _str = other._str;
+    return *this;
+  }
+
+  coll_t& operator=(coll_t&& other) {
+    type = other.type;
+    pgid = other.pgid;
+    removal_seq = other.removal_seq;
+    _str = std::move(other._str);
+    return *this;
   }
 
   explicit coll_t(spg_t pgid)
