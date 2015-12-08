@@ -1824,16 +1824,17 @@ void CDir::_omap_fetched(bufferlist& hdrbl, map<string, bufferlist>& omap,
                                   "dir frag " << dirfrag() << ": "
                                << err;
 
+      // Remember that this dentry is damaged.  Subsequent operations
+      // that try to act directly on it will get their EIOs, but this
+      // dirfrag as a whole will continue to look okay (minus the
+      // mysteriously-missing dentry)
       go_bad_dentry(last, dname);
 
-      // mark complete, !fetching
-      state_clear(STATE_FETCHING);
-      auth_unpin(this);
-
-      // kick waiters
-      finish_waiting(WAIT_DENTRY, -EIO);
-      finish_waiting(WAIT_COMPLETE, -EIO);
-      return;
+      // Anyone who was WAIT_DENTRY for this guy will get kicked
+      // to RetryRequest, and hit the DamageTable-interrogating path.
+      // Stats will now be bogus because we will think we're complete,
+      // but have 1 or more missing dentries.
+      continue;
     }
 
     if (dn && want_dn.length() && want_dn == dname) {
