@@ -47,9 +47,10 @@ public:
       RWLock::RLocker snap_locker(m_image_ctx.snap_lock);
       RWLock::WLocker object_map_locker(m_image_ctx.object_map_lock);
       assert(m_image_ctx.exclusive_lock->is_lock_owner());
-      bool sent = m_image_ctx.object_map.aio_update(m_object_no, OBJECT_EXISTS,
-                                                    boost::optional<uint8_t>(),
-                                                    this);
+      assert(m_image_ctx.object_map != nullptr);
+      bool sent = m_image_ctx.object_map->aio_update(m_object_no, OBJECT_EXISTS,
+                                                     boost::optional<uint8_t>(),
+                                                     this);
       return (sent ? 0 : 1);
     }
 
@@ -61,8 +62,12 @@ public:
 
     RWLock::RLocker snap_locker(m_image_ctx.snap_lock);
     RWLock::RLocker object_map_locker(m_image_ctx.object_map_lock);
-    m_image_ctx.object_map.aio_update(snap_id, m_object_no, m_object_no + 1,
-                                      state, boost::optional<uint8_t>(), this);
+    if (m_image_ctx.object_map == nullptr) {
+      return 1;
+    }
+
+    m_image_ctx.object_map->aio_update(snap_id, m_object_no, m_object_no + 1,
+                                       state, boost::optional<uint8_t>(), this);
     return 0;
   }
 
@@ -270,7 +275,7 @@ private:
     {
       RWLock::RLocker owner_locker(m_ictx->owner_lock);
       RWLock::RLocker snap_locker(m_ictx->snap_lock);
-      if (m_ictx->object_map.enabled()) {
+      if (m_ictx->object_map != nullptr) {
         bool copy_on_read = m_pending_requests.empty();
         if (!m_ictx->exclusive_lock->is_lock_owner()) {
           ldout(m_ictx->cct, 20) << "exclusive lock not held for copyup request"
@@ -280,7 +285,8 @@ private:
         }
 
         RWLock::WLocker object_map_locker(m_ictx->object_map_lock);
-        if (copy_on_read && m_ictx->object_map[m_object_no] != OBJECT_EXISTS) {
+        if (copy_on_read &&
+            (*m_ictx->object_map)[m_object_no] != OBJECT_EXISTS) {
           // CoW already updates the HEAD object map
           m_snap_ids.push_back(CEPH_NOSNAP);
         }

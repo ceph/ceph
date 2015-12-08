@@ -222,13 +222,13 @@ bool SnapshotCreateRequest<I>::send_create_object_map() {
   {
     RWLock::RLocker snap_locker(image_ctx.snap_lock);
     RWLock::RLocker object_map_lock(image_ctx.object_map_lock);
-    if (image_ctx.object_map.enabled(image_ctx.object_map_lock)) {
+    if (image_ctx.object_map != nullptr) {
       CephContext *cct = image_ctx.cct;
       ldout(cct, 5) << this << " " << __func__ << dendl;
       m_state = STATE_CREATE_OBJECT_MAP;
 
-      image_ctx.object_map.snapshot_add(m_snap_id,
-                                        this->create_callback_context());
+      image_ctx.object_map->snapshot_add(m_snap_id,
+                                         this->create_callback_context());
       return false;
     }
   }

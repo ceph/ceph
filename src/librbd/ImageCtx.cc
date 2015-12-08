@@ -165,7 +165,7 @@ struct C_InvalidateCache : public Context {
       readahead(),
       total_bytes_read(0), copyup_finisher(NULL),
       exclusive_lock(nullptr),
-      object_map(*this), object_map_ptr(nullptr), aio_work_queue(NULL), op_work_queue(NULL),
+      object_map(nullptr), aio_work_queue(NULL), op_work_queue(NULL),
       refresh_in_progress(false), asok_hook(new LibrbdAdminSocketHook(this))
   {
     md_ctx.dup(p);
@@ -483,7 +483,6 @@ struct C_InvalidateCache : public Context {
       snap_name = in_snap_name;
       snap_exists = true;
       data_ctx.snap_set_read(snap_id);
-      object_map.refresh(in_snap_id);
       return 0;
     }
     return -ENOENT;
@@ -496,7 +495,6 @@ struct C_InvalidateCache : public Context {
     snap_name = "";
     snap_exists = true;
     data_ctx.snap_set_read(snap_id);
-    object_map.refresh(CEPH_NOSNAP);
   }
 
   snap_t ImageCtx::get_snap_id(string in_snap_name) const

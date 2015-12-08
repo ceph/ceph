@@ -45,7 +45,7 @@ struct C_ApplyRefresh : public Context {
 } // anonymous namespace
 
 ObjectMap::ObjectMap(ImageCtx &image_ctx)
-  : m_image_ctx(image_ctx), m_snap_id(CEPH_NOSNAP), m_enabled(false)
+  : m_image_ctx(image_ctx), m_snap_id(CEPH_NOSNAP)
 {
 }
 
@@ -79,28 +79,10 @@ uint8_t ObjectMap::operator[](uint64_t object_no) const
   return m_object_map[object_no];
 }
 
-bool ObjectMap::enabled() const
-{
-  RWLock::RLocker l(m_image_ctx.object_map_lock);
-  return m_enabled;
-}
-
-bool ObjectMap::enabled(const RWLock &object_map_lock) const {
-  assert(m_image_ctx.object_map_lock.is_locked());
-  return m_enabled;
-}
-
 int ObjectMap::lock()
 {
   if (!m_image_ctx.test_features(RBD_FEATURE_OBJECT_MAP)) {
     return 0;
-  }
-
-  {
-    RWLock::RLocker l(m_image_ctx.object_map_lock);
-    if (!m_enabled) {
-      return 0;
-    }
   }
 
   bool broke_lock = false;
@@ -196,9 +178,6 @@ bool ObjectMap::object_may_exist(uint64_t object_no) const
   }
 
   RWLock::RLocker l(m_image_ctx.object_map_lock);
-  if (!m_enabled) {
-    return true;
-  }
   uint8_t state = (*this)[object_no];
   bool exists = (state != OBJECT_NONEXISTENT);
   ldout(m_image_ctx.cct, 20) << &m_image_ctx << " object_may_exist: "
@@ -212,14 +191,6 @@ void ObjectMap::refresh(uint64_t snap_id)
   assert(m_image_ctx.snap_lock.is_wlocked());
   RWLock::WLocker l(m_image_ctx.object_map_lock);
   m_snap_id = snap_id;
-
-  if ((m_image_ctx.features & RBD_FEATURE_OBJECT_MAP) == 0 ||
-      (m_image_ctx.snap_id == snap_id && !m_image_ctx.snap_exists)) {
-    m_object_map.clear();
-    m_enabled = false;
-    return;
-  }
-  m_enabled = true;
 
   CephContext *cct = m_image_ctx.cct;
   std::string oid(object_map_name(m_image_ctx.id, snap_id));
@@ -297,7 +268,6 @@ Context* ObjectMap::refresh(uint64_t snap_id, Context *on_finish) {
 void ObjectMap::rollback(uint64_t snap_id, Context *on_finish) {
   assert(m_image_ctx.snap_lock.is_locked());
   assert(m_image_ctx.object_map_lock.is_wlocked());
-  assert(m_enabled);
 
   object_map::SnapshotRollbackRequest *req =
     new object_map::SnapshotRollbackRequest(m_image_ctx, snap_id, on_finish);

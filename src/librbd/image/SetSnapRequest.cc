@@ -326,7 +326,7 @@ int SetSnapRequest<I>::apply() {
   }
 
   std::swap(m_exclusive_lock, m_image_ctx.exclusive_lock);
-  std::swap(m_object_map, m_image_ctx.object_map_ptr);
+  std::swap(m_object_map, m_image_ctx.object_map);
   return 0;
 }
 

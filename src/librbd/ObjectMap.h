@@ -60,14 +60,10 @@ public:
   void snapshot_add(uint64_t snap_id, Context *on_finish);
   void snapshot_remove(uint64_t snap_id, Context *on_finish);
 
-  bool enabled() const;
-  bool enabled(const RWLock &object_map_lock) const;
-
 private:
   ImageCtx &m_image_ctx;
   ceph::BitVector<2> m_object_map;
   uint64_t m_snap_id;
-  bool m_enabled;
 
   void invalidate(uint64_t snap_id, bool force);
 };

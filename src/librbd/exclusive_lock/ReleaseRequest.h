@@ -56,7 +56,7 @@ private:
   std::string m_cookie;
   Context *m_on_finish;
 
-  decltype(m_image_ctx.object_map_ptr) m_object_map;
+  decltype(m_image_ctx.object_map) m_object_map;
   decltype(m_image_ctx.journal) m_journal;
 
   void send_cancel_op_requests();
