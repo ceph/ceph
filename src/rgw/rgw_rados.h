@@ -1282,8 +1282,6 @@ class RGWPeriod;
 
 class RGWRealm : public RGWSystemMetaObj
 {
-  string master_zonegroup;
-  map<string, RGWZoneGroup> zonegroups;
   string current_period;
 
   int create_control();
@@ -1297,8 +1295,6 @@ public:
   void encode(bufferlist& bl) const {
     ENCODE_START(1, 1, bl);
     RGWSystemMetaObj::encode(bl);
-    ::encode(master_zonegroup, bl);
-    ::encode(zonegroups, bl);
     ::encode(current_period, bl);
     ENCODE_FINISH(bl);
   }
@@ -1306,8 +1302,6 @@ public:
   void decode(bufferlist::iterator& bl) {
     DECODE_START(1, bl);
     RGWSystemMetaObj::decode(bl);
-    ::decode(master_zonegroup, bl);
-    ::decode(zonegroups, bl);
     ::decode(current_period, bl);
     DECODE_FINISH(bl);
   }
