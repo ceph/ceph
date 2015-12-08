@@ -886,7 +886,6 @@ struct C_InvalidateCache : public Context {
   int ImageCtx::register_watch() {
     assert(image_watcher == NULL);
     image_watcher = new ImageWatcher(*this);
-    aio_work_queue->register_lock_listener();
     return image_watcher->register_watch();
   }
 

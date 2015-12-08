@@ -11,6 +11,7 @@
 #include "librbd/AioObjectRequest.h"
 #include "librbd/AsyncObjectThrottle.h"
 #include "librbd/CopyupRequest.h"
+#include "librbd/ExclusiveLock.h"
 #include "librbd/ImageCtx.h"
 #include "librbd/ImageWatcher.h"
 #include "librbd/internal.h"
@@ -45,7 +46,7 @@ public:
     if (snap_id == CEPH_NOSNAP) {
       RWLock::RLocker snap_locker(m_image_ctx.snap_lock);
       RWLock::WLocker object_map_locker(m_image_ctx.object_map_lock);
-      assert(m_image_ctx.image_watcher->is_lock_owner());
+      assert(m_image_ctx.exclusive_lock->is_lock_owner());
       bool sent = m_image_ctx.object_map.aio_update(m_object_no, OBJECT_EXISTS,
                                                     boost::optional<uint8_t>(),
                                                     this);
@@ -271,7 +272,7 @@ private:
       RWLock::RLocker snap_locker(m_ictx->snap_lock);
       if (m_ictx->object_map.enabled()) {
         bool copy_on_read = m_pending_requests.empty();
-        if (!m_ictx->image_watcher->is_lock_owner()) {
+        if (!m_ictx->exclusive_lock->is_lock_owner()) {
           ldout(m_ictx->cct, 20) << "exclusive lock not held for copyup request"
                                  << dendl;
           assert(copy_on_read);

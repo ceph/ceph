@@ -12,6 +12,7 @@
 #include "include/rbd/librbd.hpp"
 
 #include "librbd/AioObjectRequest.h"
+#include "librbd/ExclusiveLock.h"
 #include "librbd/ImageCtx.h"
 #include "librbd/internal.h"
 #include "librbd/LibrbdWriteback.h"
@@ -157,7 +158,7 @@ namespace librbd {
                      << "journal committed: sending write request" << dendl;
 
       RWLock::RLocker owner_locker(image_ctx->owner_lock);
-      assert(image_ctx->image_watcher->is_lock_owner());
+      assert(image_ctx->exclusive_lock->is_lock_owner());
 
       request_sent = true;
       AioObjectWrite *req = new AioObjectWrite(image_ctx, oid, object_no, off,

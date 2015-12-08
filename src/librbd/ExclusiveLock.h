@@ -6,6 +6,7 @@
 
 #include "include/int_types.h"
 #include "include/Context.h"
+#include "include/rados/librados.hpp"
 #include "common/Mutex.h"
 #include "common/RWLock.h"
 #include <list>
@@ -39,7 +40,8 @@ public:
 
   void handle_lock_released();
 
-  void set_watch_handle(uint64_t watch_handle);
+  void assert_header_locked(librados::ObjectWriteOperation *op);
+
   static bool decode_lock_cookie(const std::string &cookie, uint64_t *handle);
 
 private:
@@ -53,9 +55,12 @@ private:
    *    v            (init)            (try_lock/request_lock)      *        |
    * UNINITIALIZED  -------> UNLOCKED ------------------------> ACQUIRING <--/
    *                            ^                                   |
+   *                            |                                   v
+   *                         RELEASING                        POST_ACQUIRING
+   *                            |                                   |
    *                            |                                   |
    *                            |          (release_lock)           v
-   *                         RELEASING <------------------------- LOCKED
+   *                      PRE_RELEASING <------------------------ LOCKED
    *
    * <UNLOCKED/LOCKED states>
    *    |
@@ -69,7 +74,9 @@ private:
     STATE_LOCKED,
     STATE_INITIALIZING,
     STATE_ACQUIRING,
+    STATE_POST_ACQUIRING,
     STATE_WAITING_FOR_PEER,
+    STATE_PRE_RELEASING,
     STATE_RELEASING,
     STATE_SHUTTING_DOWN,
     STATE_SHUTDOWN,
@@ -122,6 +129,16 @@ private:
     }
   };
 
+  struct C_ShutDownRelease : public Context {
+    ExclusiveLock *exclusive_lock;
+    C_ShutDownRelease(ExclusiveLock *exclusive_lock)
+      : exclusive_lock(exclusive_lock) {
+    }
+    virtual void finish(int r) override {
+      exclusive_lock->send_shutdown_release();
+    }
+  };
+
   ImageCtxT &m_image_ctx;
 
   mutable Mutex m_lock;
@@ -153,7 +170,9 @@ private:
   void handle_release_lock(int r);
 
   void send_shutdown();
+  void send_shutdown_release();
   void handle_shutdown(int r);
+  void complete_shutdown(int r);
 };
 
 } // namespace librbd

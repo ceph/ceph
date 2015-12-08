@@ -4,6 +4,7 @@
 #include "librbd/object_map/InvalidateRequest.h"
 #include "common/dout.h"
 #include "common/errno.h"
+#include "librbd/ExclusiveLock.h"
 #include "librbd/ImageCtx.h"
 #include "librbd/ImageWatcher.h"
 
@@ -49,17 +50,19 @@ void InvalidateRequest<I>::send() {
   }
 
   // do not update on-disk flags if not image owner
-  if (image_ctx.image_watcher == NULL ||
-      (image_ctx.image_watcher->is_lock_supported(image_ctx.snap_lock) &&
-       !image_ctx.image_watcher->is_lock_owner() && !m_force)) {
+  if (image_ctx.image_watcher == nullptr ||
+      (!m_force && m_snap_id == CEPH_NOSNAP &&
+       image_ctx.exclusive_lock != nullptr &&
+       !image_ctx.exclusive_lock->is_lock_owner())) {
     this->async_complete(0);
     return;
   }
 
   lderr(cct) << this << " invalidating object map on-disk" << dendl;
   librados::ObjectWriteOperation op;
-  if (m_snap_id == CEPH_NOSNAP && !m_force) {
-    image_ctx.image_watcher->assert_header_locked(&op);
+  if (image_ctx.exclusive_lock != nullptr &&
+      m_snap_id == CEPH_NOSNAP && !m_force) {
+    image_ctx.exclusive_lock->assert_header_locked(&op);
   }
   cls_client::set_flags(&op, m_snap_id, flags, flags);
 
