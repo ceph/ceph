@@ -530,8 +530,9 @@ int rgw_readdir(struct rgw_fs *rgw_fs,
      */
     /* XXXX remove uri, deal with bucket and object names */
     string uri = "/" + parent->bucket_name() + "/";
-    RGWListBucketRequest req(cct, fs->get_user(), uri, parent, rcb, cb_arg,
-			    offset);
+    rgw_obj_key marker{"", ""};
+    RGWListBucketRequest req(cct, fs->get_user(), parent, uri, rcb, cb_arg,
+			     offset);
     rc = librgw.get_fe()->execute_req(&req);
 
     /* XXX update link count (incorrectly) */

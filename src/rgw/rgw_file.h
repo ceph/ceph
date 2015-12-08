@@ -317,6 +317,16 @@ namespace rgw {
 	  flat_map<uint64_t, std::string>::value_type(off, marker));
       }
     }
+
+    std::string find_marker(uint64_t off) { // XXX copy
+      directory* d = get<directory>(&variant_type);
+      if (d) {
+	const auto& iter = d->marker_cache.find(off);
+	if (iter != d->marker_cache.end())
+	  return iter->second;
+      }
+      return "";
+    }
     
     bool is_open() const { return flags & FLAG_OPEN; }
     bool is_root() const { return flags & FLAG_ROOT; }
@@ -585,13 +595,14 @@ public:
   uint64_t* offset;
   void* cb_arg;
   rgw_readdir_cb rcb;
-  int ix;
+  size_t ix;
 
   RGWListBucketsRequest(CephContext* _cct, RGWUserInfo *_user,
 			RGWFileHandle* _rgw_fh, rgw_readdir_cb _rcb,
 			void* _cb_arg, uint64_t* _offset)
     : RGWLibRequest(_cct, _user), rgw_fh(_rgw_fh), offset(_offset),
       cb_arg(_cb_arg), rcb(_rcb), ix(0) {
+    RGWListBuckets::marker = rgw_fh->find_marker(*offset);
     magic = 71;
     op = this;
   }
@@ -640,17 +651,14 @@ public:
   virtual void send_response_data(RGWUserBuckets& buckets) {
     if (!sent_data)
       return;
-
-    // XXX if necessary, we can remove the need for dynamic_cast
-    RGWListBucketsRequest* req
-      = dynamic_cast<RGWListBucketsRequest*>(this);
-
     map<string, RGWBucketEnt>& m = buckets.get_buckets();
+    size_t size = m.size();
     for (const auto& iter : m) {
-      const std::string& marker = iter.first; // XXX may need later
+      const std::string& marker = iter.first;
       const RGWBucketEnt& ent = iter.second;
       /* call me maybe */
-      req->operator()(ent.bucket.name, marker); // XXX attributes
+      this->operator()(ent.bucket.name, marker, (ix == size-1) ? true : false);
+      ++ix;
     }
   } /* send_response_data */
 
@@ -658,10 +666,18 @@ public:
     // do nothing
   }
 
-  int operator()(const std::string& name, const std::string& marker) {
+  int operator()(const std::string& name, const std::string& marker,
+		 bool add_marker) {
+    uint64_t off = XXH64(name.c_str(), name.length(), fh_key::seed);
+    *offset = off;
+    /* update traversal cache */
+    if (add_marker)
+      rgw_fh->add_marker(off, marker);
     rcb(name.c_str(), cb_arg, (*offset)++);
     return 0;
   }
+
+  bool eof() { return ssize_t(ix) < RGWListBuckets::limit; }
 
 }; /* RGWListBucketsRequest */
 
@@ -678,14 +694,14 @@ public:
   uint64_t* offset;
   void* cb_arg;
   rgw_readdir_cb rcb;
-  int ix;
+  size_t ix;
 
-  RGWListBucketRequest(CephContext* _cct, RGWUserInfo *_user, std::string& _uri,
-		      RGWFileHandle* _rgw_fh, rgw_readdir_cb _rcb,
-		      void* _cb_arg, uint64_t* _offset)
-    : RGWLibRequest(_cct, _user), rgw_fh(_rgw_fh), uri(_uri), offset(_offset),
-      cb_arg(_cb_arg),
-      rcb(_rcb) {
+  RGWListBucketRequest(CephContext* _cct, RGWUserInfo *_user,
+		       RGWFileHandle* _rgw_fh, std::string& _uri,
+		       rgw_readdir_cb _rcb, void* _cb_arg, uint64_t* _offset)
+    : RGWLibRequest(_cct, _user), rgw_fh(_rgw_fh), uri(_uri),
+      offset(_offset), cb_arg(_cb_arg), rcb(_rcb), ix(0) {
+    RGWListBucket::marker = {rgw_fh->find_marker(*offset), ""};
     default_max = 1000; // XXX was being omitted
     magic = 72;
     op = this;
@@ -723,18 +739,19 @@ public:
     return 0;
   }
 
-  int operator()(const std::string& name, const std::string& marker) {
+  int operator()(const std::string& name, const std::string& marker,
+		 bool add_marker) {
     uint64_t off = XXH64(name.c_str(), name.length(), fh_key::seed);
     *offset = off;
     /* update traversal cache */
-    if ((++ix % max) == 0)
+    if (add_marker)
       rgw_fh->add_marker(off, marker);
-    /* call back */
     rcb(name.c_str(), cb_arg, off);
     return 0;
   }
 
   virtual int get_params() {
+#if 0
     // XXX S3
     struct req_state* s = get_state();
     list_versions = s->info.args.exists("versions");
@@ -750,6 +767,7 @@ public:
     if (op_ret < 0) {
       return op_ret;
     }
+#endif
 #if 0 /* XXX? */
     delimiter = s->info.args.get("delimiter");
     encoding_type = s->info.args.get("encoding-type");
@@ -758,19 +776,21 @@ public:
   }
 
   virtual void send_response() {
-    // XXX if necessary, we can remove the need for dynamic_cast
-    RGWListBucketRequest* req
-      = dynamic_cast<RGWListBucketRequest*>(this);
-
+    size_t size = objs.size();
     for (const auto& iter : objs) {
       /* call me maybe */
-      req->operator()(iter.key.name, iter.key.name); // XXX attributes
+      this->operator()(iter.key.name, iter.key.name,
+		       (ix == size-1) ? true : false);
+      ++ix;
     }
   }
 
   virtual void send_versioned_response() {
     send_response();
   }
+
+  bool eof() { return ssize_t(ix) < RGWListBucket::max; }
+
 }; /* RGWListBucketRequest */
 
 /*
