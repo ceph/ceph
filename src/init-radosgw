@@ -106,7 +106,7 @@ case "$1" in
             else
                 ulimit -n 32768
                 core_limit=`ceph-conf -n $name 'core file limit'`
-                if [ -z $core_limit ]
+                if [ -z $core_limit ]; then
                     DAEMON_COREFILE_LIMIT=$core_limit
                 fi
                 daemon --user="$user" "$RADOSGW -n $name"
