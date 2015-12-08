@@ -2282,6 +2282,8 @@ void PG::split_into(pg_t child_pgid, PG *child, unsigned split_bits)
   split_ops(child, split_bits);
   _split_into(child_pgid, child, split_bits);
 
+  child->on_new_interval();
+
   child->dirty_info = true;
   child->dirty_big_info = true;
   dirty_info = true;
