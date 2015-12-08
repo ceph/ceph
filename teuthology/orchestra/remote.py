@@ -357,7 +357,7 @@ class Remote(object):
         node['user'] = self.user
         node['arch'] = self.arch
         node['os_type'] = self.os.name
-        node['os_version'] = self.os.version
+        node['os_version'] = '.'.join(self.os.version.split('.')[:2])
         node['ssh_pub_key'] = self.host_key
         node['up'] = True
         return node
