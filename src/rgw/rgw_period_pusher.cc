@@ -152,7 +152,23 @@ class RGWPeriodPusher::CRThread {
 
 RGWPeriodPusher::RGWPeriodPusher(RGWRados* store)
   : cct(store->ctx()), store(store)
-{}
+{
+  const auto& realm = store->realm;
+  auto& realm_id = realm.get_id();
+  if (realm_id.empty()) // no realm configuration
+    return;
+
+  // always send out the current period on startup
+  RGWPeriod period;
+  int r = period.init(cct, store, realm_id, realm.get_name());
+  if (r < 0) {
+    lderr(cct) << "failed to load period for realm " << realm_id << dendl;
+    return;
+  }
+
+  std::lock_guard<std::mutex> lock(mutex);
+  handle_notify(std::move(period));
+}
 
 // destructor is here because CRThread is incomplete in the header
 RGWPeriodPusher::~RGWPeriodPusher() = default;
