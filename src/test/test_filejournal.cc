@@ -12,7 +12,7 @@
 #include "include/Context.h"
 #include "common/Mutex.h"
 #include "common/safe_io.h"
-#include "os/JournalingObjectStore.h"
+#include "os/filestore/JournalingObjectStore.h"
 
 Finisher *finisher;
 Cond sync_cond;

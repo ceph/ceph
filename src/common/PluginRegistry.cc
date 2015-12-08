@@ -134,7 +134,7 @@ int PluginRegistry::load(const std::string &type,
   Mutex::Locker l(lock);
   ldout(cct, 10) << __func__ << " " << type << " " << name << dendl;
 
-  std::string fname = cct->_conf->plugin_dir + "/" + type + "/" PLUGIN_PREFIX
+  std::string fname = cct->_conf->plugin_dir + "/" + PLUGIN_PREFIX
     + name + PLUGIN_SUFFIX;
   void *library = dlopen(fname.c_str(), RTLD_NOW);
   if (!library) {

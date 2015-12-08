@@ -462,6 +462,11 @@ $DAEMONOPTS
         osd class dir = $OBJCLASS_PATH
         osd scrub load threshold = 5.0
         osd debug op order = true
+	plugin_dir =$CEPH_DIR/.libs 
+        osd_objectstore = newstore
+        enable_experimental_unrecoverable_data_corrupting_features = keyvaluestore, rocksdb
+        #filestore_omap_backend = rocksdb
+        #keyvaluestore_backend = rocksdb
         filestore wbthrottle xfs ios start flusher = 10
         filestore wbthrottle xfs ios hard limit = 20
         filestore wbthrottle xfs inodes hard limit = 30

@@ -58,7 +58,8 @@ endif
 
 libceph_filestore_rocksdb_la_SOURCES = os/keyvaluestore/RocksDBStore.cc
 libceph_filestore_rocksdb_la_CXXFLAGS = ${AM_CXXFLAGS} ${LIBROCKSDB_CFLAGS} -std=gnu++11 -I rocksdb/include
-libceph_filestore_rocksdb_la_LIBADD = rocksdb/librocksdb.la
+libceph_filestore_rocksdb_la_LIBADD = -lpthread -lrt -lsnappy -lz -lbz2 -llz4
+libceph_filestore_rocksdb_la_LIBADD += -L./rocksdb  -lrocksdb
 noinst_LTLIBRARIES += libceph_filestore_rocksdb.la
 noinst_HEADERS += os/keyvaluestore/RocksDBStore.h
 
@@ -69,6 +70,7 @@ libceph_filestore_la_CXXFLAGS = ${AM_CXXFLAGS}
 libceph_filestore_la_CPPFLAGS = -DTRACEPOINT_PROBE_DYNAMIC_LINKAGE
 libceph_filestore_la_LIBADD = $(EXTRALIBS)
 libceph_filestore_la_LIBADD += $(LIBOS) $(PTHREAD_LIBS)
+libceph_filestore_la_LIBADD += -lpthread -lrt -lsnappy -lz -lbz2 -llz4
 libceph_filestore_la_LIBADD += libceph_filestore_rocksdb.la
 if WITH_LTTNG
 libceph_filestore_la_LIBADD += $(LIBOS_TP)
@@ -76,7 +78,7 @@ endif
 
 libceph_filestore_la_LDFLAGS = ${AM_LDFLAGS} -version-info 1:0:0
 if LINUX
-#libceph_filestore_la_LDFLAGS += -export-symbols-regex '.*__ceph_plugin_.*'
+libceph_filestore_la_LDFLAGS += -export-symbols-regex '.*__ceph_plugin_.*'
 endif
 
 LIBFILESTORE_DEPS += libceph_filestore_rocksdb.la

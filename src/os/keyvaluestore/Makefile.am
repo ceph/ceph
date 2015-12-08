@@ -20,6 +20,7 @@ libceph_keyvaluestore_la_SOURCES = \
 
 libceph_keyvaluestore_la_CXXFLAGS = ${AM_CXXFLAGS}
 libceph_keyvaluestore_la_LIBADD =  $(PTHREAD_LIBS) $(EXTRALIBS) $(LIBCOMMON) $(LIBOS)
+libceph_keyvaluestore_la_LIBADD +=  -lpthread -lrt -lsnappy -lz -lbz2 -llz4
 libceph_keyvaluestore_la_LDFLAGS = ${AM_LDFLAGS} -version-info 1:0:0
 
 if LINUX
@@ -34,16 +35,21 @@ noinst_LTLIBRARIES += libceph_keyvaluestore_rocksdb.la
 noinst_HEADERS += os/keyvaluestore/RocksDBStore.h
 libceph_keyvaluestore_la_LIBADD += libceph_keyvaluestore_rocksdb.la
 endif
-#else
+
 if WITH_SLIBROCKSDB
+# for some stupid reason this needs -fPIC...
+# PORTABLE=1 fixes the aarch64 build (-march=native doesn't work there)
+rocksdb/librocksdb.a:
+	cd rocksdb && EXTRA_CXXFLAGS=-fPIC PORTABLE=1 make -j$(shell nproc) static_lib
 libceph_keyvaluestore_rocksdb_la_SOURCES = os/keyvaluestore/RocksDBStore.cc
 libceph_keyvaluestore_rocksdb_la_CXXFLAGS = ${AM_CXXFLAGS} ${LIBROCKSDB_CFLAGS} -std=gnu++11 -I rocksdb/include
-libceph_keyvaluestore_rocksdb_la_LIBADD = rocksdb/librocksdb.la
+libceph_keyvaluestore_rocksdb_la_CXXFLAGS +=  -I rocksdb/include -fPIC
+libceph_keyvaluestore_rocksdb_la_LIBADD = -lpthread -lrt -lsnappy -lz -lbz2 -llz4
+libceph_keyvaluestore_rocksdb_la_LIBADD += -L./rocksdb  -lrocksdb
 noinst_LTLIBRARIES += libceph_keyvaluestore_rocksdb.la
 noinst_HEADERS += os/keyvaluestore/RocksDBStore.h
 libceph_keyvaluestore_la_LIBADD += libceph_keyvaluestore_rocksdb.la
 endif
-
 
 if WITH_KINETIC
 libceph_keyvaluestore_la_SOURCES += os/keyvaluestore/KineticStore.cc
@@ -52,4 +58,5 @@ libceph_keyvaluestore_la_LIBADD += -lkinetic_client -lprotobuf -lglog -lgflags l
 noinst_HEADERS += os/keyvaluestore/KineticStore.h
 endif
 lib_LTLIBRARIES += libceph_keyvaluestore.la
+
 endif # ENABLE_SERVER

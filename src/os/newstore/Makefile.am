@@ -11,7 +11,7 @@ libceph_newstore_la_SOURCES = \
 
 libceph_newstore_rocksdb_la_SOURCES = os/keyvaluestore/RocksDBStore.cc
 libceph_newstore_rocksdb_la_CXXFLAGS = ${AM_CXXFLAGS} ${LIBROCKSDB_CFLAGS} -std=gnu++11 -I rocksdb/include
-libceph_newstore_rocksdb_la_LIBADD = rocksdb/librocksdb.la
+libceph_newstore_rocksdb_la_LIBADD = -L./rocksdb  -lrocksdb
 noinst_LTLIBRARIES += libceph_newstore_rocksdb.la
 noinst_HEADERS += os/keyvaluestore/RocksDBStore.h
 

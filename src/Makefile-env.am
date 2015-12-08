@@ -174,7 +174,7 @@ AM_CCASFLAGS = -f elf64
 #####################
 ## library definitions and dependencies
 
-EXTRALIBS = -luuid -lm -lleveldb
+EXTRALIBS = -luuid -lm -lleveldb -llz4 -lz
 if FREEBSD
 EXTRALIBS += -lexecinfo
 endif # FREEBSD
@@ -197,7 +197,6 @@ LIBMSG = libmsg.la
 LIBCRUSH = libcrush.la
 LIBCOMPRESSOR = libcompressor.la -lsnappy
 LIBJSON_SPIRIT = libjson_spirit.la
-LIBKV = libkv.a
 LIBLOG = liblog.la
 LIBOS = libceph_os.la
 LIBKVSTORE = libceph_keyvaluestore.la
@@ -207,7 +206,7 @@ LIBNEWSTORE = libceph_newstore.la
 LIBOSD = libosd.la
 LIBOSD_TYPES = libosd_types.la
 LIBOSDC = libosdc.la
-LIBMON = libmon.a
+LIBMON = libmon.la
 LIBMON_TYPES = libmon_types.la
 LIBMDS = libmds.la
 LIBCLIENT = libclient.la
@@ -264,12 +263,8 @@ LIBMDS += $(LIBPERFGLUE)
 # OSD needs types
 LIBOSD += $(LIBOSD_TYPES) $(LIBOS_TYPES)
 
-# libkv/libos linking order is ornery
-if WITH_SLIBROCKSDB
-LIBKVSTORE += rocksdb/librocksdb.a
-endif
 LIBKVSTORE += -lbz2 -lz -lleveldb -lsnappy
-LIBOS += $(LIBOS_TYPES) $(LIBKV)
+LIBOS += $(LIBOS_TYPES) 
 
 LIBMON += $(LIBMON_TYPES)
 

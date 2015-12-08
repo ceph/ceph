@@ -8,7 +8,7 @@ noinst_LTLIBRARIES += libosd_types.la
 if ENABLE_SERVER
 if WITH_OSD
 
-libosd_a_SOURCES = \
+libosd_la_SOURCES = \
 	osd/PG.cc \
 	osd/ReplicatedPG.cc \
 	osd/ReplicatedBackend.cc \
