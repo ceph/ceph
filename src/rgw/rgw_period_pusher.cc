@@ -181,7 +181,7 @@ void RGWPeriodPusher::handle_notify(RGWRealmNotify type,
   try {
     ::decode(info, p);
   } catch (buffer::error& e) {
-    derr << "Failed to decode the period: " << e.what() << dendl;
+    lderr(cct) << "Failed to decode the period: " << e.what() << dendl;
     return;
   }
 
@@ -200,14 +200,14 @@ void RGWPeriodPusher::handle_notify(RGWRealmNotify type,
 // expects the caller to hold a lock on mutex
 void RGWPeriodPusher::handle_notify(RGWZonesNeedPeriod&& period)
 {
-  if (period.get_id() != period_id) {
-    // new period must follow current period
-    if (period.get_predecessor() != period_id) {
-      ldout(cct, 10) << "current period " << period_id << " is not period "
-          << period.get_id() << "'s predecessor" << dendl;
-      return;
-    }
-  } else if (period.get_epoch() <= period_epoch) {
+  if (period.get_realm_epoch() < realm_epoch) {
+    ldout(cct, 10) << "period's realm epoch " << period.get_realm_epoch()
+        << " is not newer than current realm epoch " << realm_epoch
+        << ", discarding update" << dendl;
+    return;
+  }
+  if (period.get_realm_epoch() == realm_epoch &&
+      period.get_epoch() <= period_epoch) {
     ldout(cct, 10) << "period epoch " << period.get_epoch() << " is not newer "
         "than current epoch " << period_epoch << ", discarding update" << dendl;
     return;
@@ -267,10 +267,10 @@ void RGWPeriodPusher::handle_notify(RGWZonesNeedPeriod&& period)
     return;
   }
 
-  period_id = period.get_id();
+  realm_epoch = period.get_realm_epoch();
   period_epoch = period.get_epoch();
 
-  ldout(cct, 4) << "Zone master pushing period " << period_id
+  ldout(cct, 4) << "Zone master pushing period " << period.get_id()
       << " epoch " << period_epoch << " to "
       << conns.size() << " other zones" << dendl;
 
