@@ -13,7 +13,7 @@ struct FCGX_Request;
 class RGWFCGX : public RGWClientIO
 {
   FCGX_Request *fcgx;
-  int status_num;
+  int status_num = 0;
 protected:
   void init_env(CephContext *cct);
   int write_data(const char *buf, int len);
