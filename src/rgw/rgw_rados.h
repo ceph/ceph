@@ -789,8 +789,8 @@ public:
     store = _store;
   }
   int init(CephContext *_cct, RGWRados *_store, bool setup_obj = true, bool old_format = false);
-  int read_default_id(string& default_id, bool old_format = false);
-  int set_as_default();
+  virtual int read_default_id(string& default_id, bool old_format = false);
+  virtual int set_as_default();
   int delete_default();
   virtual int create(bool exclusive = true);
   int delete_obj(bool old_format = false);
@@ -801,7 +801,7 @@ public:
   int write(bool exclusive);
 
   virtual const string& get_pool_name(CephContext *cct) = 0;
-  virtual const string& get_default_oid(bool old_format = false) = 0;
+  virtual const string get_default_oid(bool old_format = false) = 0;
   virtual const string& get_names_oid_prefix() = 0;
   virtual const string& get_info_oid_prefix(bool old_format = false) = 0;
   virtual const string& get_predefined_name(CephContext *cct) = 0;
@@ -869,7 +869,7 @@ struct RGWZoneParams : RGWSystemMetaObj {
   RGWZoneParams(const string& id, const string& name) : RGWSystemMetaObj(id, name) {}
 
   const string& get_pool_name(CephContext *cct);
-  const string& get_default_oid(bool old_format = false);
+  const string get_default_oid(bool old_format = false);
   const string& get_names_oid_prefix();
   const string& get_info_oid_prefix(bool old_format = false);
   const string& get_predefined_name(CephContext *cct);
@@ -1120,13 +1120,15 @@ struct RGWZoneGroup : public RGWSystemMetaObj {
     DECODE_FINISH(bl);
   }
 
+  int read_default_id(string& default_id, bool old_format = false);
+  int set_as_default();
   int create_default(bool old_format = false);
   int equals(const string& other_zonegroup) const;
   int add_zone(const RGWZoneParams& zone_params, bool *is_master, bool *read_only, const list<string>& endpoints);
   int remove_zone(const RGWZoneParams& zone_params);
   int rename_zone(const RGWZoneParams& zone_params);
   const string& get_pool_name(CephContext *cct);
-  const string& get_default_oid(bool old_region_format = false);
+  const string get_default_oid(bool old_region_format = false);
   const string& get_info_oid_prefix(bool old_region_format = false);
   const string& get_names_oid_prefix();
   const string& get_predefined_name(CephContext *cct);
@@ -1290,7 +1292,7 @@ public:
   int create(bool exclusive = true);
   int delete_obj();
   const string& get_pool_name(CephContext *cct);
-  const string& get_default_oid(bool old_format = false);
+  const string get_default_oid(bool old_format = false);
   const string& get_names_oid_prefix();
   const string& get_info_oid_prefix(bool old_format = false);
   const string& get_predefined_name(CephContext *cct);

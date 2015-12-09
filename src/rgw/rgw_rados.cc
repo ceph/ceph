@@ -188,7 +188,7 @@ int RGWZoneGroup::create_default(bool old_format)
   return 0;
 }
 
-const string& RGWZoneGroup::get_default_oid(bool old_region_format)
+const string RGWZoneGroup::get_default_oid(bool old_region_format)
 {
   if (old_region_format) {
     if (cct->_conf->rgw_default_region_info_oid.empty()) {
@@ -197,11 +197,15 @@ const string& RGWZoneGroup::get_default_oid(bool old_region_format)
     return cct->_conf->rgw_default_region_info_oid;
   }
 
+  string default_oid = cct->_conf->rgw_default_zonegroup_info_oid;
+
   if (cct->_conf->rgw_default_zonegroup_info_oid.empty()) {
-    return default_zone_group_info_oid;
+    default_oid = default_zone_group_info_oid;
   }
 
-  return cct->_conf->rgw_default_zonegroup_info_oid;
+  default_oid += "." + realm_id;
+
+  return default_oid;
 }
 
 const string& RGWZoneGroup::get_info_oid_prefix(bool old_region_format)
@@ -319,6 +323,38 @@ int RGWZoneGroup::remove_zone(const RGWZoneParams& zone_params)
   return update();
 }
 
+int RGWZoneGroup::read_default_id(string& default_id, bool old_format)
+{
+  if (realm_id.empty()) {
+    /* try using default realm */
+    RGWRealm realm;
+    int ret = realm.init(cct, store);
+    if (ret < 0) {
+      lderr(cct) << "could not read realm id: " << cpp_strerror(-ret) << dendl;
+      return -ENOENT;
+    }
+    realm_id = realm.get_id();
+  }
+
+  return RGWSystemMetaObj::read_default_id(default_id, old_format);
+}
+
+int RGWZoneGroup::set_as_default()
+{
+  if (realm_id.empty()) {
+    /* try using default realm */
+    RGWRealm realm;
+    int ret = realm.init(cct, store);
+    if (ret < 0) {
+      lderr(cct) << "could not read realm id: " << cpp_strerror(-ret) << dendl;
+      return -EINVAL;
+    }
+    realm_id = realm.get_id();
+  }
+
+  return RGWSystemMetaObj::set_as_default();
+}
+
 int RGWSystemMetaObj::init(CephContext *_cct, RGWRados *_store, bool setup_obj, bool old_format)
 {
   cct = _cct;
@@ -381,6 +417,7 @@ int RGWSystemMetaObj::read_default_id(string& default_id, bool old_format)
 
   int ret = read_default(default_info, get_default_oid(old_format));
   if (ret < 0) {
+    lderr(cct) << "error in read_default: " << cpp_strerror(-ret) << dendl;
     return ret;
   }
 
@@ -391,14 +428,7 @@ int RGWSystemMetaObj::read_default_id(string& default_id, bool old_format)
 
 int RGWSystemMetaObj::use_default(bool old_format)
 {
-  RGWDefaultSystemMetaObjInfo default_info;
-  int ret = read_default(default_info, get_default_oid(old_format));
-  if (ret < 0)
-    return ret;
-
-  id = default_info.default_id;
-
-  return 0;
+  return read_default_id(id, old_format);
 }
 
 int RGWSystemMetaObj::set_as_default()
@@ -736,7 +766,7 @@ const string& RGWRealm::get_pool_name(CephContext *cct)
   return cct->_conf->rgw_realm_root_pool;
 }
 
-const string& RGWRealm::get_default_oid(bool old_format)
+const string RGWRealm::get_default_oid(bool old_format)
 {
   if (cct->_conf->rgw_default_realm_info_oid.empty()) {
     return default_realm_info_oid;
@@ -1482,7 +1512,7 @@ const string& RGWZoneParams::get_pool_name(CephContext *cct)
   return cct->_conf->rgw_zone_root_pool;
 }
 
-const string& RGWZoneParams::get_default_oid(bool old_format)
+const string RGWZoneParams::get_default_oid(bool old_format)
 {
   return cct->_conf->rgw_default_zone_info_oid;
 }
