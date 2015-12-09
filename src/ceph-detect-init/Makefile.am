@@ -53,13 +53,13 @@ EXTRA_DIST += \
 	ceph-detect-init/tests/test_all.py \
 	ceph-detect-init/tox.ini
 
-all-local::
+ceph-detect-init-all:
 	cd $(srcdir)/ceph-detect-init ; python setup.py build
 
-clean-local::
+ceph-detect-init-clean:
 	cd $(srcdir)/ceph-detect-init ; python setup.py clean ; rm -fr wheelhouse .tox build .coverage *.egg-info
 
-install-data-local::
+ceph-detect-init-install-data:
 	cd $(srcdir)/ceph-detect-init ; \
 	if test "$(DESTDIR)" ; then \
 		if lsb_release -si | grep --quiet 'Ubuntu\|Debian\|Devuan' ; then \
@@ -70,3 +70,7 @@ install-data-local::
 		root="--root=$(DESTDIR)" ; \
 	fi ; \
 	python setup.py install $$root $$options
+
+LOCAL_ALL += ceph-detect-init-all
+LOCAL_CLEAN += ceph-detect-init-clean
+LOCAL_INSTALLDATA += ceph-detect-init-install-data
