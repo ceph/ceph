@@ -260,21 +260,25 @@ namespace rgw {
     const std::string& bucket_name() const {
       if (is_root())
 	return root_name;
+      if (flags & FLAG_BUCKET)
+	return name;
       return bucket->object_name();
     }
 
     const std::string& object_name() const { return name; }
 
-    std::string full_object_name() {
-      if (depth <= 1) {
-	return object_name();
+    std::string full_object_name(uint8_t min_depth = 1) {
+      if (depth <= min_depth) {
+	return "";
       }
       std::string path;
-      std::vector<const std::string*> segments = { &object_name() };
-      int reserve = object_name().length();
-      while (parent && !parent->is_bucket()) {
+      std::vector<const std::string*> segments;
+      int reserve = 0;
+      RGWFileHandle* tfh = this;
+      while (tfh && !tfh->is_bucket()) {
 	segments.push_back(&parent->object_name());
 	reserve += (1 + parent->object_name().length());
+	tfh = tfh->parent.get();
       }
       bool first = true;
       path.reserve(reserve);
@@ -727,13 +731,12 @@ public:
   }
 
   virtual int header_init() {
-
     struct req_state* s = get_state();
     s->info.method = "GET";
     s->op = OP_GET;
 
     /* XXX derp derp derp */
-    string uri = "/" + rgw_fh->bucket_name() + "/" + rgw_fh->full_object_name();
+    string uri = "/" + rgw_fh->bucket_name() + "/";
     s->relative_uri = uri;
     s->info.request_uri = uri; // XXX
     s->info.effective_uri = uri;
@@ -742,6 +745,9 @@ public:
 
     // woo
     s->user = user;
+
+    prefix = rgw_fh->full_object_name();
+    delimiter = '/';
 
     return 0;
   }
@@ -758,27 +764,7 @@ public:
   }
 
   virtual int get_params() {
-#if 0
-    // XXX S3
-    struct req_state* s = get_state();
-    list_versions = s->info.args.exists("versions");
-    prefix = s->info.args.get("prefix");
-    if (!list_versions) {
-      marker = s->info.args.get("marker");
-    } else {
-    marker.name = s->info.args.get("key-marker");
-    marker.instance = s->info.args.get("version-id-marker");
-    }
-    max_keys = s->info.args.get("max-keys");
-    op_ret = parse_max_keys();
-    if (op_ret < 0) {
-      return op_ret;
-    }
-#endif
-#if 0 /* XXX? */
-    delimiter = s->info.args.get("delimiter");
-    encoding_type = s->info.args.get("encoding-type");
-#endif
+    max = default_max;
     return 0;
   }
 
@@ -788,6 +774,14 @@ public:
       /* call me maybe */
       this->operator()(iter.key.name, iter.key.name,
 		       (ix == size-1) ? true : false);
+      ++ix;
+    }
+    size = common_prefixes.size();
+    for (auto& iter : common_prefixes) {
+      std::string& pref = const_cast<std::string&>(iter.first);
+      if (pref.back() == '/')
+	pref.pop_back();
+      this->operator()(pref, pref, (ix == size-1) ? true : false);
       ++ix;
     }
   }
@@ -1247,11 +1241,10 @@ class RGWStatBucketRequest : public RGWLibRequest,
 {
 public:
   std::string uri;
-  bool matched;
 
   RGWStatBucketRequest(CephContext* _cct, RGWUserInfo *_user,
 		       const std::string& _path)
-    : RGWLibRequest(_cct, _user), matched(false) {
+    : RGWLibRequest(_cct, _user) {
     uri = "/" + _path;
     magic = 79;
     op = this;
@@ -1293,9 +1286,10 @@ public:
     return 0;
   }
 
-  virtual void send_response() {
-    if (bucket.bucket.name.length() > 0)
-      matched = true;
+  virtual void send_response() {}
+
+  bool matched() {
+    return (bucket.bucket.name.length() > 0);
   }
 
 }; /* RGWStatBucketRequest */
