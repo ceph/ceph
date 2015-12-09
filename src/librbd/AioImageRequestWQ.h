@@ -5,8 +5,9 @@
 #define CEPH_LIBRBD_AIO_IMAGE_REQUEST_WQ_H
 
 #include "include/Context.h"
+#include "include/atomic.h"
 #include "common/WorkQueue.h"
-#include "common/Mutex.h"
+#include "common/RWLock.h"
 
 namespace librbd {
 
@@ -34,14 +35,16 @@ public:
   using ThreadPool::PointerWQ<AioImageRequest>::empty;
 
   inline bool writes_empty() const {
-    Mutex::Locker locker(m_lock);
-    return (m_queued_writes == 0);
+    RWLock::RLocker locker(m_lock);
+    return (m_queued_writes.read() == 0);
   }
 
   inline bool writes_blocked() const {
-    Mutex::Locker locker(m_lock);
+    RWLock::RLocker locker(m_lock);
     return (m_write_blockers > 0);
   }
+
+  void shut_down(Context *on_shutdown);
 
   void block_writes();
   void block_writes(Context *on_blocked);
@@ -66,11 +69,18 @@ private:
   };
 
   ImageCtx &m_image_ctx;
-  mutable Mutex m_lock;
+  mutable RWLock m_lock;
   Contexts m_write_blocker_contexts;
   uint32_t m_write_blockers;
-  uint32_t m_in_progress_writes;
-  uint32_t m_queued_writes;
+  atomic_t m_in_progress_writes;
+  atomic_t m_queued_writes;
+  atomic_t m_in_flight_ops;
+
+  bool m_shutdown;
+  Context *m_on_shutdown;
+
+  int start_in_flight_op(AioCompletion *c);
+  void finish_in_flight_op();
 
   bool is_journal_required() const;
   bool is_lock_required() const;
