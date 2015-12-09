@@ -15,6 +15,27 @@ print data$var
 END
 }
 
+function python_array_len {
+python - <<END
+arr=$@
+print len(arr)
+END
+}
+
+function project_python_array_field {
+var=$(var_to_python_json_index $1)
+shift
+python - <<END
+arr=$@
+s='( '
+for x in arr:
+    s += str(x$var) + ' '
+s += ')'
+print s
+END
+}
+
+
 x() {
   echo "x " "$@"
   eval "$@"
