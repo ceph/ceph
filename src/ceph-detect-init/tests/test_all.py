@@ -50,6 +50,9 @@ class TestCephDetectInit(testtools.TestCase):
         with mock.patch('ceph_detect_init.debian.distro',
                         'ubuntu'):
             self.assertEqual('upstart', debian.choose_init())
+            with mock.patch('ceph_detect_init.debian.codename',
+                            'vivid'):
+                self.assertEqual('systemd', debian.choose_init())
 
     def test_fedora(self):
         with mock.patch('ceph_detect_init.fedora.release',
