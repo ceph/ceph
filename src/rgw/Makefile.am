@@ -17,8 +17,6 @@ librgw_la_SOURCES =  \
 	rgw/rgw_acl.cc \
 	rgw/rgw_acl_s3.cc \
 	rgw/rgw_acl_swift.cc \
-	rgw/rgw_lc.cc \
-	rgw/rgw_lc_s3.cc \
 	rgw/rgw_client_io.cc \
 	rgw/rgw_fcgi.cc \
 	rgw/rgw_xml.cc \
@@ -130,8 +128,6 @@ noinst_HEADERS += \
 	rgw/rgw_acl.h \
 	rgw/rgw_acl_s3.h \
 	rgw/rgw_acl_swift.h \
-	rgw/rgw_lc.h \
-	rgw/rgw_lc_s3.h \
 	rgw/rgw_client_io.h \
 	rgw/rgw_fcgi.h \
 	rgw/rgw_xml.h \
