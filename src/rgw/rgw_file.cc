@@ -35,13 +35,28 @@ const string RGWFileHandle::root_name = "/";
 
 atomic<uint32_t> RGWLibFS::fs_inst;
 
+LookupFHResult RGWLibFS::stat_bucket(RGWFileHandle* parent,
+				     const char *path, uint32_t flags)
+{
+  LookupFHResult fhr{nullptr, 0};
+  std::string bucket_name{path};
+  RGWStatBucketRequest req(cct, get_user(), bucket_name);
+
+  int rc = librgw.get_fe()->execute_req(&req);
+  if ((rc == 0) &&
+      (req.get_ret() == 0) &&
+      (req.matched)) {
+    fhr = lookup_fh(parent, path, RGWFileHandle::FLAG_NONE);
+  }
+  return fhr;
+}
+
 LookupFHResult RGWLibFS::stat_leaf(RGWFileHandle* parent,
 				  const char *path,
 				  uint32_t flags)
 {
   /* find either-of <object_name>, <object_name/>, only one of
    * which should exist;  atomicity? */
-  RGWLibFS* fs = parent->get_fs();
   LookupFHResult fhr{nullptr, 0};
   std::string object_name{path};
 
@@ -49,28 +64,28 @@ LookupFHResult RGWLibFS::stat_leaf(RGWFileHandle* parent,
     switch (ix) {
     case 0:
     {
-      RGWStatObjRequest req(cct, fs->get_user(),
+      RGWStatObjRequest req(cct, get_user(),
 			    parent->bucket_name(), object_name,
 			    RGWStatObjRequest::FLAG_NONE);
       int rc = librgw.get_fe()->execute_req(&req);
       if ((rc == 0) &&
 	  (req.get_ret() == 0)) {
-	fhr = fs->lookup_fh(parent, path, RGWFileHandle::FLAG_NONE);
+	fhr = lookup_fh(parent, path, RGWFileHandle::FLAG_NONE);
       }
     }
     break;
     case 1:
     {
-      RGWStatLeafRequest req(cct, fs->get_user(), parent->bucket_name(),
+      RGWStatLeafRequest req(cct, get_user(), parent->bucket_name(),
 			     object_name);
       int rc = librgw.get_fe()->execute_req(&req);
       if ((rc == 0) &&
 	  (req.get_ret() == 0)) {
 	if (req.matched) {
-	  fhr = fs->lookup_fh(parent, path,
-			      (req.path.back() == '/') ?
-			      RGWFileHandle::FLAG_DIRECTORY :
-			      RGWFileHandle::FLAG_NONE);
+	  fhr = lookup_fh(parent, path,
+			  (req.path.back() == '/') ?
+			  RGWFileHandle::FLAG_DIRECTORY :
+			  RGWFileHandle::FLAG_NONE);
 	}
       }
     }
@@ -355,13 +370,10 @@ int rgw_lookup(struct rgw_fs *rgw_fs,
     if (strcmp(path, "/") == 0) {
       rgw_fh = parent->ref();
     } else {
-      /* name lookup in root--for now) just get a handle */
-      /* XXX RGWStatBucket? */
-      fhr = fs->lookup_fh(parent, path);
+      fhr = fs->stat_bucket(parent, path, RGWFileHandle::FLAG_NONE);
       rgw_fh = get<0>(fhr);
-
       if (! rgw_fh)
-	return -ENOMEM;
+	return -ENOENT;
     }
   } else {
     fhr = fs->stat_leaf(parent, path, RGWFileHandle::FLAG_NONE);
