@@ -807,7 +807,7 @@ int main(int argc, char *argv[]){
 
   global_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT, CODE_ENVIRONMENT_UTILITY, 0);
   common_init_finish(g_ceph_context);
-  store = RGWStoreManager::get_storage(g_ceph_context, false, false);
+  store = RGWStoreManager::get_storage(g_ceph_context, false, false, false);
   g_test = new admin_log::test_helper();
   finisher = new Finisher(g_ceph_context);
 #ifdef GTEST
