@@ -4,6 +4,7 @@
 #include "librbd/AioCompletion.h"
 #include "librbd/ExclusiveLock.h"
 #include "librbd/ImageCtx.h"
+#include "librbd/ImageState.h"
 #include "librbd/internal.h"
 #include "librbd/ObjectMap.h"
 #include "librbd/TaskFinisher.h"
@@ -497,8 +498,7 @@ bool ImageWatcher::handle_payload(const HeaderUpdatePayload &payload,
 				  C_NotifyAck *ack_ctx) {
   ldout(m_image_ctx.cct, 10) << this << " image header updated" << dendl;
 
-  Mutex::Locker lictx(m_image_ctx.refresh_lock);
-  ++m_image_ctx.refresh_seq;
+  m_image_ctx.state->handle_update_notification();
   m_image_ctx.perfcounter->inc(l_librbd_notify);
   return true;
 }
