@@ -790,6 +790,7 @@ void RGWZoneParams::dump(Formatter *f) const
   encode_json_plain("system_key", system_key, f);
   encode_json("placement_pools", placement_pools, f);
   encode_json("metadata_heap", metadata_heap.data_pool, f);
+  encode_json("realm_id", realm_id, f);
 }
 
 static void decode_json(const char *field, rgw_bucket& bucket, JSONObj *obj)
@@ -829,6 +830,8 @@ void RGWZoneParams::decode_json(JSONObj *obj)
   JSONDecoder::decode_json("system_key", system_key, obj);
   JSONDecoder::decode_json("placement_pools", placement_pools, obj);
   ::decode_json("metadata_heap", metadata_heap, obj);
+  JSONDecoder::decode_json("realm_id", realm_id, obj);
+
 }
 
 void RGWZone::dump(Formatter *f) const
