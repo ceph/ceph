@@ -6,6 +6,10 @@
 #include "debug.h"
 #include <stdlib.h>
 
+#if defined(HAVE_MALLINFO)
+#include <malloc.h>
+#endif
+
 #include <fstream>
 
 #define dout_subsys ceph_subsys_
