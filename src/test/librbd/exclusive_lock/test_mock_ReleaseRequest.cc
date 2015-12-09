@@ -59,9 +59,10 @@ TEST_F(TestMockExclusiveLockReleaseRequest, Success) {
   librbd::ImageCtx *ictx;
   ASSERT_EQ(0, open_image(m_image_name, &ictx));
 
-  InSequence seq;
   MockImageCtx mock_image_ctx(*ictx);
+  expect_op_work_queue(mock_image_ctx);
 
+  InSequence seq;
   expect_cancel_op_requests(mock_image_ctx, 0);
 
   MockJournal *mock_journal = new MockJournal();
@@ -69,7 +70,7 @@ TEST_F(TestMockExclusiveLockReleaseRequest, Success) {
   expect_close_journal(mock_image_ctx, *mock_journal, -EINVAL);
 
   MockObjectMap *mock_object_map = new MockObjectMap();
-  mock_image_ctx.object_map_ptr = mock_object_map;
+  mock_image_ctx.object_map = mock_object_map;
   expect_unlock_object_map(mock_image_ctx, *mock_object_map);
 
   expect_unlock(mock_image_ctx, 0);
@@ -88,13 +89,14 @@ TEST_F(TestMockExclusiveLockReleaseRequest, SuccessJournalDisabled) {
   librbd::ImageCtx *ictx;
   ASSERT_EQ(0, open_image(m_image_name, &ictx));
 
-  InSequence seq;
   MockImageCtx mock_image_ctx(*ictx);
+  expect_op_work_queue(mock_image_ctx);
 
+  InSequence seq;
   expect_cancel_op_requests(mock_image_ctx, 0);
 
   MockObjectMap *mock_object_map = new MockObjectMap();
-  mock_image_ctx.object_map_ptr = mock_object_map;
+  mock_image_ctx.object_map = mock_object_map;
   expect_unlock_object_map(mock_image_ctx, *mock_object_map);
 
   expect_unlock(mock_image_ctx, 0);
@@ -113,9 +115,10 @@ TEST_F(TestMockExclusiveLockReleaseRequest, SuccessObjectMapDisabled) {
   librbd::ImageCtx *ictx;
   ASSERT_EQ(0, open_image(m_image_name, &ictx));
 
-  InSequence seq;
   MockImageCtx mock_image_ctx(*ictx);
+  expect_op_work_queue(mock_image_ctx);
 
+  InSequence seq;
   expect_cancel_op_requests(mock_image_ctx, 0);
 
   expect_unlock(mock_image_ctx, 0);
@@ -134,9 +137,10 @@ TEST_F(TestMockExclusiveLockReleaseRequest, UnlockError) {
   librbd::ImageCtx *ictx;
   ASSERT_EQ(0, open_image(m_image_name, &ictx));
 
-  InSequence seq;
   MockImageCtx mock_image_ctx(*ictx);
+  expect_op_work_queue(mock_image_ctx);
 
+  InSequence seq;
   expect_cancel_op_requests(mock_image_ctx, 0);
 
   expect_unlock(mock_image_ctx, -EINVAL);
