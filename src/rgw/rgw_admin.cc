@@ -2979,7 +2979,20 @@ int main(int argc, char **argv)
 	  cerr << "failed to list zones: " << cpp_strerror(-ret) << std::endl;
 	  return -ret;
 	}
+
+	RGWZoneParams zone;
+	ret = zone.init(g_ceph_context, store, false);
+	if (ret < 0) {
+	  cerr << "failed to init zone: " << cpp_strerror(-ret) << std::endl;
+	  return -ret;
+	}
+	string default_zone;
+	ret = zone.read_default_id(default_zone);
+	if (ret < 0 && ret != -ENOENT) {
+	  cerr << "could not determine default zone: " << cpp_strerror(-ret) << std::endl;
+	}
 	formatter->open_object_section("zones_list");
+	encode_json("default_info", default_zone, formatter);
 	encode_json("zones", zones, formatter);
 	formatter->close_section();
 	formatter->flush(cout);
