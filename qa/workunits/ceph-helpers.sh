@@ -491,6 +491,7 @@ function activate_osd() {
     ceph_args+=" --osd-backfill-full-ratio=.99"
     ceph_args+=" --osd-failsafe-full-ratio=.99"
     ceph_args+=" --osd-journal-size=100"
+    ceph_args+=" --osd-scrub-load-threshold=2000"
     ceph_args+=" --osd-data=$osd_data"
     ceph_args+=" --chdir="
     ceph_args+=" --erasure-code-dir=.libs"
