@@ -45,8 +45,9 @@ LookupFHResult RGWLibFS::stat_bucket(RGWFileHandle* parent,
   int rc = librgw.get_fe()->execute_req(&req);
   if ((rc == 0) &&
       (req.get_ret() == 0) &&
-      (req.matched)) {
-    fhr = lookup_fh(parent, path, RGWFileHandle::FLAG_NONE);
+      (req.matched())) {
+    fhr = lookup_fh(parent, path,
+		    RGWFileHandle::FLAG_CREATE|RGWFileHandle::FLAG_BUCKET);
   }
   return fhr;
 }
