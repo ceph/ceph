@@ -296,9 +296,8 @@ class OpenStack(object):
         if not hints:
             return result
         if type(hints) is types.DictType:
-            hints = [hints]
-            # TODO: raise after converting all ceph-qa-suite to only use arrays (oct 2015)
-            # raise Exception("openstack: " + str(hints) + " must be an array, not a dict")
+            raise TypeError("openstack: " + str(hints) +
+                            " must be an array, not a dict")
         for hint in hints:
             for resource in ('machine', 'volumes'):
                 if resource in hint:
