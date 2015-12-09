@@ -49,10 +49,6 @@
 #include "common/perf_counters.h"
 #include "common/sync_filesystem.h"
 
-#ifdef HAVE_KINETIC
-#include "KineticStore.h"
-#endif
-
 #include "common/ceph_crypto.h"
 using ceph::crypto::SHA1;
 
