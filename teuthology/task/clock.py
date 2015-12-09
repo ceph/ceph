@@ -3,6 +3,7 @@ Clock synchronizer
 """
 import logging
 import contextlib
+import os
 
 from ..orchestra import run
 
@@ -31,29 +32,29 @@ def task(ctx, config):
 
     log.info('Syncing clocks and checking initial clock skew...')
     for rem in ctx.cluster.remotes.iterkeys():
-        rem.run(
-            args=[
-                'sudo',
-                'service', 'ntp', 'stop',
-                run.Raw(';'),
-                'sudo',
-                'ntpdate',
-#                'clock1.dreamhost.com',
-#                'clock2.dreamhost.com',
-#                'clock3.dreamhost.com',
-#                'time.apple.com',
-                '0.debian.pool.ntp.org',
-                '1.debian.pool.ntp.org',
-                '2.debian.pool.ntp.org',
-                '3.debian.pool.ntp.org',
-                run.Raw(';'),
-                'sudo',
-                'service', 'ntp', 'start',
-                run.Raw(';'),
-                'PATH=/usr/bin:/usr/sbin',
-                'ntpdc', '-p',
-                ],
-        )
+        ntpconf = rem.get_file('/etc/ntp.conf')
+        servers = [
+            l.strip().split()[1] for l in open(ntpconf, 'r').readlines()
+            if l.startswith('server')
+        ]
+        os.remove(ntpconf)
+        args = [
+            'sudo',
+            'service', 'ntp', 'stop',
+            run.Raw(';'),
+            'sudo',
+            'ntpdate',
+        ]
+        args.extend(servers)
+        args.extend([
+            run.Raw(';'),
+            'sudo',
+            'service', 'ntp', 'start',
+            run.Raw(';'),
+            'PATH=/usr/bin:/usr/sbin',
+            'ntpdc', '-p',
+        ])
+        rem.run(args)
 
     try:
         yield
