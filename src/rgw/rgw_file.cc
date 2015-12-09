@@ -261,7 +261,7 @@ int rgw_rename(struct rgw_fs *rgw_fs,
 /*
   remove file or directory
 */
-int rgw_unlink(struct rgw_fs *rgw_fs, struct rgw_file_handle* parent_fh,
+int rgw_unlink(struct rgw_fs *rgw_fs, struct rgw_file_handle *parent_fh,
 	      const char *name)
 {
   int rc = 0;
@@ -281,13 +281,20 @@ int rgw_unlink(struct rgw_fs *rgw_fs, struct rgw_file_handle* parent_fh,
     /*
      * leaf object
      */
-    /* XXXX we must peform a hard lookup to deduce the type of
+    /* XXX we must peform a hard lookup to deduce the type of
      * object to be deleted ("foo" vs. "foo/"), and as a side effect
      * can do no further work if no object existed */
-    string object_name{name};
-    RGWDeleteObjRequest req(cct, fs->get_user(), parent->bucket_name(),
-      object_name);
-    rc = librgw.get_fe()->execute_req(&req);
+    struct rgw_file_handle *fh;
+    rc = rgw_lookup(rgw_fs, parent_fh, name, &fh, 0 /* flags */);
+    if (! rc)  {
+      /* rgw_fh ref+ */
+      RGWFileHandle* rgw_fh = get_rgwfh(fh);
+      RGWDeleteObjRequest req(cct, fs->get_user(), parent->bucket_name(),
+			      rgw_fh->full_object_name());
+      rc = librgw.get_fe()->execute_req(&req);
+      /* release */
+      (void) rgw_fh_rele(rgw_fs, fh, 0 /* flags */);
+    }
   }
 
   return rc;
