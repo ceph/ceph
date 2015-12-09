@@ -17,6 +17,8 @@
 #include "rgw_cache.h"
 #include "rgw_acl.h"
 #include "rgw_acl_s3.h" /* for dumping s3policy in debug log */
+#include "rgw_lc.h"
+#include "rgw_lc_s3.h"
 #include "rgw_metadata.h"
 #include "rgw_bucket.h"
 
@@ -48,6 +50,8 @@ using namespace librados;
 #include "rgw_log.h"
 
 #include "rgw_gc.h"
+#include "rgw_lc.h"
+
 #include "rgw_object_expirer_core.h"
 
 #define dout_subsys ceph_subsys_rgw
@@ -311,6 +315,7 @@ void RGWZoneParams::init_default(RGWRados *store)
   domain_root = ".rgw";
   control_pool = ".rgw.control";
   gc_pool = ".rgw.gc";
+  lc_pool = ".rgw.lc";
   log_pool = ".log";
   intent_log_pool = ".intent-log";
   usage_log_pool = ".usage";
@@ -1647,6 +1652,10 @@ int RGWRados::init_complete()
   if (ret < 0)
     return ret;
 
+  ret = open_lc_pool_ctx();
+  if (ret < 0)
+    return ret;
+
   ret = open_objexp_pool_ctx();
   if (ret < 0)
     return ret;
@@ -1663,6 +1672,12 @@ int RGWRados::init_complete()
     obj_expirer->start_processor();
   }
 
+  lc = new RGWLC();
+  lc->initialize(cct, this);
+  
+  if (use_lc_thread)
+    lc->start_processor();
+  
   quota_handler = RGWQuotaHandler::generate_handler(this, quota_threads);
 
   bucket_index_max_shards = (cct->_conf->rgw_override_bucket_index_max_shards ? cct->_conf->rgw_override_bucket_index_max_shards :
@@ -1791,6 +1806,24 @@ int RGWRados::open_gc_pool_ctx()
       return r;
 
     r = rad->ioctx_create(gc_pool, gc_pool_ctx);
+  }
+
+  return r;
+}
+
+int RGWRados::open_lc_pool_ctx()
+{
+  const char *lc_pool = zone.lc_pool.name.c_str();
+  librados::Rados *rad = get_rados_handle();
+  int r = rad->ioctx_create(lc_pool, lc_pool_ctx);
+  if (r == -ENOENT) {
+    r = rad->pool_create(lc_pool);
+    if (r == -EEXIST)
+      r = 0;
+    if (r < 0)
+      return r;
+
+    r = rad->ioctx_create(lc_pool, lc_pool_ctx);
   }
 
   return r;
@@ -8206,6 +8239,16 @@ int RGWRados::process_gc()
   return gc->process();
 }
 
+int RGWRados::list_lc_progress(map<string, int>& progress_map)
+{
+  return lc->list_lc_progress(progress_map);
+}
+
+int RGWRados::process_lc()
+{
+  return lc->process();
+}
+
 int RGWRados::process_expire_objects()
 {
   obj_expirer->inspect_all_shards(utime_t(), ceph_clock_now(cct));
@@ -9220,7 +9263,7 @@ uint64_t RGWRados::next_bucket_id()
   return ++max_bucket_id;
 }
 
-RGWRados *RGWStoreManager::init_storage_provider(CephContext *cct, bool use_gc_thread, bool quota_threads)
+RGWRados *RGWStoreManager::init_storage_provider(CephContext *cct, bool use_gc_thread, bool use_lc_thread, bool quota_threads)
 {
   int use_cache = cct->_conf->rgw_cache_enabled;
   RGWRados *store = NULL;
@@ -9230,7 +9273,7 @@ RGWRados *RGWStoreManager::init_storage_provider(CephContext *cct, bool use_gc_t
     store = new RGWCache<RGWRados>; 
   }
 
-  if (store->initialize(cct, use_gc_thread, quota_threads) < 0) {
+  if (store->initialize(cct, use_gc_thread, use_lc_thread, quota_threads) < 0) {
     delete store;
     return NULL;
   }
