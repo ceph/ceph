@@ -4,10 +4,11 @@
  * Copyright (C) 2015 Red Hat Inc.
  */
 
-#include <ostream>
+#include <memory>
 #include <map>
 #include <deque>
 #include <mutex>
+#include <ostream>
 
 
 namespace dmc {
@@ -88,15 +89,32 @@ namespace dmc {
   template<typename T, typename R>
   class ClientQueue {
 
+    typedef typename std::unique_ptr<R> RequestRef;
+
   public:
 
-    typedef typename std::pair<RequestTag,R> Entry;
+    struct Entry {
+      RequestTag tag;
+      RequestRef request;
+
+      Entry(RequestTag t, RequestRef&& r) :
+	tag(t), request(std::move(r))
+      {
+	// empty
+      }
+
+      Entry(Entry&& e) :
+	tag(e.tag), request(std::move(e.request))
+      {
+	// empty
+      }
+    }; // struct Entry
 
   protected:
 
     typedef typename std::lock_guard<std::mutex> Guard;
 
-    std::deque<Entry> queue;
+    std::deque<Entry>  queue;
     mutable std::mutex queue_mutex;
 
   public:
@@ -116,10 +134,9 @@ namespace dmc {
       queue.pop_front();
     }
 
-    void append(R request) {
-      Entry entry(RequestTag(), request);
+    void append(RequestRef&& request) {
       std::lock_guard<std::mutex> guard(queue_mutex);
-      queue.push_back(entry);
+      queue.emplace_back(Entry(RequestTag(), std::move(request)));
     }
 
     // can only be called when queue is not empty
@@ -127,8 +144,6 @@ namespace dmc {
       Guard g(queue_mutex);
       return queue.empty();
     }
-
-
   }; // class ClientQueue
 
     

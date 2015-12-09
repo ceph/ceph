@@ -4,6 +4,7 @@
  * Copyright (C) 2015 Red Hat Inc.
  */
 
+#include <memory>
 #include <iostream>
 
 #include "dm_clock_srv.h"
@@ -12,8 +13,23 @@
 struct Request {
   int client;
   uint32_t op;
-  char data[32];
+  std::string data;
+
+  Request(int c, uint32_t o, const char* d) :
+    Request(c, o, std::string(d))
+  {
+    // empty
+  }
+
+  Request(int c, uint32_t o, std::string d) :
+    client(c), op(o), data(d)
+  {
+    // empty
+  }
 };
+
+
+typedef std::unique_ptr<Request> RequestRef;
 
 
 int main(int argc, char* argv[]) {
@@ -35,19 +51,17 @@ int main(int argc, char* argv[]) {
 
 
   dmc::ClientQueue<int,Request> client_queue;
-  Request r0a = {0, 1, "foo"};
-  Request r0b = {0, 2, "bar"};
-  Request r0c = {0, 3, "baz"};
-  Request r0d = {0, 4, "blast"};
 
-  client_queue.append(r0a);
-  client_queue.append(r0b);
-  client_queue.append(r0c);
-  client_queue.append(r0d);
+  RequestRef r0a(new Request(0, 1, "foo"));
+  client_queue.append(std::move(r0a));
+
+  client_queue.append(RequestRef( new Request(0, 2, "bar")));
+  client_queue.append(RequestRef( new Request(0, 3, "baz")));
+  client_queue.append(RequestRef( new Request(0, 4, "bazzzzz")));
 
   while (!client_queue.empty()) {
     auto e = client_queue.peek_front();
-    std::cout << e->second.op << std::endl;
+    std::cout << e->request.get()->op << std::endl;
     client_queue.pop();
   }
 }
