@@ -42,6 +42,10 @@
 #include <sys/mount.h>
 #endif // DARWIN
 
+#ifdef CEPH_HAVE_FALLOCATE
+#include <xfs/xfs.h>
+#endif
+
 
 #include <fstream>
 #include <sstream>
@@ -3267,8 +3271,46 @@ int FileStore::_zero(coll_t cid, const ghobject_t& oid, uint64_t offset, size_t 
 # if !defined(DARWIN) && !defined(__FreeBSD__)
   // first try to punch a hole.
   FDRef fd;
+  const char *backend_name = NULL;
   ret = lfn_open(cid, oid, false, &fd);
   if (ret < 0) {
+    goto out;
+  }
+
+  backend_name = backend->get_name();
+  if (!strcmp(backend_name, "xfs")) {
+    struct xfs_flock64 fl;
+    memset(&fl, 0, sizeof(fl));
+    fl.l_whence = SEEK_SET;
+    fl.l_start = offset;
+    fl.l_len = len;
+    ret = xfsctl(NULL, **fd, XFS_IOC_ZERO_RANGE, &fl);
+    if (ret < 0)
+      ret = -errno;
+
+    if (ret == 0 && m_filestore_sloppy_crc) {
+      int rc = backend->_crc_update_zero(**fd, offset, len);
+      assert(rc >= 0);
+    }
+
+    if ((ret == 0)||(ret != -EOPNOTSUPP)) {
+      lfn_close(fd);
+      goto out;
+    }
+  }
+
+  ret = fallocate(**fd, FALLOC_FL_ZERO_RANGE, offset, len);
+  if (ret < 0) {
+    ret = -errno;
+  }
+
+  if (ret == 0 && m_filestore_sloppy_crc) {
+    int rc = backend->_crc_update_zero(**fd, offset, len);
+    assert(rc >= 0);
+  }
+
+  if ((ret == 0) || (ret != -EOPNOTSUPP)) {
+    lfn_close(fd);
     goto out;
   }
 
@@ -3292,7 +3334,8 @@ int FileStore::_zero(coll_t cid, const ghobject_t& oid, uint64_t offset, size_t 
 
   // lame, kernel is old and doesn't support it.
   // write zeros.. yuck!
-  dout(20) << "zero FALLOC_FL_PUNCH_HOLE not supported, falling back to writing zeros" << dendl;
+  dout(20) << "zero FALLOC_FL_ZERO_HOLE/FALLOC_FL_PUNCH_HOLE not supported,"
+  " falling back to writing zeros" << dendl;
   {
     bufferptr bp(len);
     bp.zero();
