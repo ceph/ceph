@@ -202,22 +202,6 @@ public:
   void send_response();
 };
 
-class RGWPutLC_ObjStore_S3 : public RGWPutLC_ObjStore {
-public:
-  RGWPutLC_ObjStore_S3() {}
-  ~RGWPutLC_ObjStore_S3() {}
-  
- void send_response();
-};
-
-class RGWDeleteLC_ObjStore_S3 : public RGWDeleteLC_ObjStore {
-public:
-  RGWDeleteLC_ObjStore_S3() {}
-  ~RGWDeleteLC_ObjStore_S3() {}
-  
- void send_response();
-};
-
 class RGWGetCORS_ObjStore_S3 : public RGWGetCORS_ObjStore {
 public:
   RGWGetCORS_ObjStore_S3() {}
@@ -430,9 +414,6 @@ protected:
   }
   bool is_cors_op() {
       return s->info.args.exists("cors");
-  }
-  bool is_lc_op() {
-      return s->info.args.exists("lifecycle");
   }
   bool is_obj_update_op() {
     return is_acl_op() || is_cors_op();
