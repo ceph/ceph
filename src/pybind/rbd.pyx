@@ -26,9 +26,9 @@ cdef extern from "Python.h":
     # PyObject*, which invokes assumptions in cpython that we need to
     # legitimately break to implement zero-copy string buffers in Image.read().
     # This is valid use of the Python API and documented as a special case.
-    PyObject *PyString_FromStringAndSize(char *v, Py_ssize_t len) except NULL
-    char* PyString_AsString(PyObject *string) except NULL
-    int _PyString_Resize(PyObject **string, Py_ssize_t newsize) except -1
+    PyObject *PyBytes_FromStringAndSize(char *v, Py_ssize_t len) except NULL
+    char* PyBytes_AsString(PyObject *string) except NULL
+    int _PyBytes_Resize(PyObject **string, Py_ssize_t newsize) except -1
 
 cdef extern from "rbd/librbd.h" nogil:
     enum:
@@ -1062,9 +1062,9 @@ cdef class Image(object):
             size_t _length = length
             int _fadvise_flags = fadvise_flags
             PyObject* ret_s = NULL
-        ret_s = PyString_FromStringAndSize(NULL, length)
+        ret_s = PyBytes_FromStringAndSize(NULL, length)
         try:
-            ret_buf = PyString_AsString(ret_s)
+            ret_buf = PyBytes_AsString(ret_s)
             with nogil:
                 ret = rbd_read2(self.image, _offset, _length, ret_buf,
                                 _fadvise_flags)
@@ -1072,7 +1072,7 @@ cdef class Image(object):
                 raise make_ex(ret, 'error reading %s %ld~%ld' % (self.name, offset, length))
 
             if ret != length:
-                _PyString_Resize(&ret_s, ret)
+                _PyBytes_Resize(&ret_s, ret)
 
             return <object>ret_s
         finally:
