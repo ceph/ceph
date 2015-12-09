@@ -460,7 +460,7 @@ $DAEMONOPTS
         osd journal size = 100
         osd class tmp = out
         osd class dir = $OBJCLASS_PATH
-        osd scrub load threshold = 5.0
+        osd scrub load threshold = 2000.0
         osd debug op order = true
         filestore wbthrottle xfs ios start flusher = 10
         filestore wbthrottle xfs ios hard limit = 20
