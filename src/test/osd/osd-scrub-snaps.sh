@@ -39,7 +39,9 @@ function TEST_scrub_snaps() {
 
     setup $dir || return 1
     run_mon $dir a --osd_pool_default_size=1 || return 1
-    run_osd $dir 0 || return 1
+    run_osd $dir 0 \
+            --osd-scrub-min-interval=1 \
+            --osd-scrub-interval-randomize-ratio=0 || return 1
 
     wait_for_clean || return 1
 
@@ -152,7 +154,11 @@ function TEST_scrub_snaps() {
 
     local pgid="${poolid}.0"
     if ! pg_scrub "$pgid" ; then
+        echo ====================================
         cat $dir/osd.0.log
+        echo ====================================
+        cat $dir/mon.a.log
+        echo ====================================
         return 1
     fi
     grep 'log_channel' $dir/osd.0.log

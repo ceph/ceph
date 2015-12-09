@@ -1037,7 +1037,9 @@ function test_repair() {
 
     setup $dir || return 1
     run_mon $dir a --osd_pool_default_size=1 || return 1
-    run_osd $dir 0 || return 1
+    run_osd $dir 0 \
+            --osd-scrub-min-interval=1 \
+            --osd-scrub-interval-randomize-ratio=0 || return 1
     wait_for_clean || return 1
     repair 1.0 || return 1
     kill_daemons $dir KILL osd || return 1
@@ -1068,7 +1070,9 @@ function test_pg_scrub() {
 
     setup $dir || return 1
     run_mon $dir a --osd_pool_default_size=1 || return 1
-    run_osd $dir 0 || return 1
+    run_osd $dir 0 \
+            --osd-scrub-min-interval=1 \
+            --osd-scrub-interval-randomize-ratio=0 || return 1
     wait_for_clean || return 1
     pg_scrub 1.0 || return 1
     kill_daemons $dir KILL osd || return 1
@@ -1157,7 +1161,9 @@ function test_wait_for_scrub() {
 
     setup $dir || return 1
     run_mon $dir a --osd_pool_default_size=1 || return 1
-    run_osd $dir 0 || return 1
+    run_osd $dir 0 \
+            --osd-scrub-min-interval=1 \
+            --osd-scrub-interval-randomize-ratio=0 || return 1
     wait_for_clean || return 1
     local pgid=1.0
     ceph pg repair $pgid
