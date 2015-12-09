@@ -1379,6 +1379,7 @@ public:
       vector<ghobject_t> objects;
       int r = store->collection_list(cid, ghobject_t(), ghobject_t::get_max(),
 				     true, 10, &objects, 0);
+      assert(r >= 0);
       if (objects.empty())
 	break;
       ObjectStore::Transaction t;
