@@ -149,9 +149,10 @@ TEST_F(TestMockExclusiveLockAcquireRequest, Success) {
   librbd::ImageCtx *ictx;
   ASSERT_EQ(0, open_image(m_image_name, &ictx));
 
-  InSequence seq;
   MockImageCtx mock_image_ctx(*ictx);
+  expect_op_work_queue(mock_image_ctx);
 
+  InSequence seq;
   expect_lock(mock_image_ctx, 0);
 
   MockJournal mock_journal;
@@ -179,9 +180,10 @@ TEST_F(TestMockExclusiveLockAcquireRequest, SuccessJournalDisabled) {
   librbd::ImageCtx *ictx;
   ASSERT_EQ(0, open_image(m_image_name, &ictx));
 
-  InSequence seq;
   MockImageCtx mock_image_ctx(*ictx);
+  expect_op_work_queue(mock_image_ctx);
 
+  InSequence seq;
   expect_lock(mock_image_ctx, 0);
 
   expect_test_features(mock_image_ctx, RBD_FEATURE_JOURNALING, false);
@@ -206,9 +208,10 @@ TEST_F(TestMockExclusiveLockAcquireRequest, SuccessObjectMapDisabled) {
   librbd::ImageCtx *ictx;
   ASSERT_EQ(0, open_image(m_image_name, &ictx));
 
-  InSequence seq;
   MockImageCtx mock_image_ctx(*ictx);
+  expect_op_work_queue(mock_image_ctx);
 
+  InSequence seq;
   expect_lock(mock_image_ctx, 0);
 
   MockJournal mock_journal;
@@ -232,15 +235,15 @@ TEST_F(TestMockExclusiveLockAcquireRequest, LockBusy) {
   librbd::ImageCtx *ictx;
   ASSERT_EQ(0, open_image(m_image_name, &ictx));
 
-  InSequence seq;
   MockImageCtx mock_image_ctx(*ictx);
+  expect_op_work_queue(mock_image_ctx);
 
+  InSequence seq;
   expect_lock(mock_image_ctx, -EBUSY);
   expect_get_lock_info(mock_image_ctx, 0, entity_name_t::CLIENT(1), "1.2.3.4",
                        "auto 123", MockExclusiveLock::WATCHER_LOCK_TAG,
                        LOCK_EXCLUSIVE);
   expect_list_watchers(mock_image_ctx, 0, "dead client", 123);
-  expect_op_work_queue(mock_image_ctx);
   expect_blacklist_add(mock_image_ctx, 0);
   expect_break_lock(mock_image_ctx, 0);
   expect_lock(mock_image_ctx, -ENOENT);
@@ -259,9 +262,10 @@ TEST_F(TestMockExclusiveLockAcquireRequest, GetLockInfoError) {
   librbd::ImageCtx *ictx;
   ASSERT_EQ(0, open_image(m_image_name, &ictx));
 
-  InSequence seq;
   MockImageCtx mock_image_ctx(*ictx);
+  expect_op_work_queue(mock_image_ctx);
 
+  InSequence seq;
   expect_lock(mock_image_ctx, -EBUSY);
   expect_get_lock_info(mock_image_ctx, -EINVAL, entity_name_t::CLIENT(1), "",
                        "", "", LOCK_EXCLUSIVE);
@@ -280,9 +284,10 @@ TEST_F(TestMockExclusiveLockAcquireRequest, GetLockInfoEmpty) {
   librbd::ImageCtx *ictx;
   ASSERT_EQ(0, open_image(m_image_name, &ictx));
 
-  InSequence seq;
   MockImageCtx mock_image_ctx(*ictx);
+  expect_op_work_queue(mock_image_ctx);
 
+  InSequence seq;
   expect_lock(mock_image_ctx, -EBUSY);
   expect_get_lock_info(mock_image_ctx, -ENOENT, entity_name_t::CLIENT(1), "",
                        "", "", LOCK_EXCLUSIVE);
@@ -302,9 +307,10 @@ TEST_F(TestMockExclusiveLockAcquireRequest, GetLockInfoExternalTag) {
   librbd::ImageCtx *ictx;
   ASSERT_EQ(0, open_image(m_image_name, &ictx));
 
-  InSequence seq;
   MockImageCtx mock_image_ctx(*ictx);
+  expect_op_work_queue(mock_image_ctx);
 
+  InSequence seq;
   expect_lock(mock_image_ctx, -EBUSY);
   expect_get_lock_info(mock_image_ctx, 0, entity_name_t::CLIENT(1), "1.2.3.4",
                        "auto 123", "external tag", LOCK_EXCLUSIVE);
@@ -323,9 +329,10 @@ TEST_F(TestMockExclusiveLockAcquireRequest, GetLockInfoShared) {
   librbd::ImageCtx *ictx;
   ASSERT_EQ(0, open_image(m_image_name, &ictx));
 
-  InSequence seq;
   MockImageCtx mock_image_ctx(*ictx);
+  expect_op_work_queue(mock_image_ctx);
 
+  InSequence seq;
   expect_lock(mock_image_ctx, -EBUSY);
   expect_get_lock_info(mock_image_ctx, 0, entity_name_t::CLIENT(1), "1.2.3.4",
                        "auto 123", MockExclusiveLock::WATCHER_LOCK_TAG,
@@ -345,9 +352,10 @@ TEST_F(TestMockExclusiveLockAcquireRequest, GetLockInfoExternalCookie) {
   librbd::ImageCtx *ictx;
   ASSERT_EQ(0, open_image(m_image_name, &ictx));
 
-  InSequence seq;
   MockImageCtx mock_image_ctx(*ictx);
+  expect_op_work_queue(mock_image_ctx);
 
+  InSequence seq;
   expect_lock(mock_image_ctx, -EBUSY);
   expect_get_lock_info(mock_image_ctx, 0, entity_name_t::CLIENT(1), "1.2.3.4",
                        "external cookie", MockExclusiveLock::WATCHER_LOCK_TAG,
@@ -367,9 +375,10 @@ TEST_F(TestMockExclusiveLockAcquireRequest, GetWatchersError) {
   librbd::ImageCtx *ictx;
   ASSERT_EQ(0, open_image(m_image_name, &ictx));
 
-  InSequence seq;
   MockImageCtx mock_image_ctx(*ictx);
+  expect_op_work_queue(mock_image_ctx);
 
+  InSequence seq;
   expect_lock(mock_image_ctx, -EBUSY);
   expect_get_lock_info(mock_image_ctx, 0, entity_name_t::CLIENT(1), "1.2.3.4",
                        "auto 123", MockExclusiveLock::WATCHER_LOCK_TAG,
@@ -390,9 +399,10 @@ TEST_F(TestMockExclusiveLockAcquireRequest, GetWatchersAlive) {
   librbd::ImageCtx *ictx;
   ASSERT_EQ(0, open_image(m_image_name, &ictx));
 
-  InSequence seq;
   MockImageCtx mock_image_ctx(*ictx);
+  expect_op_work_queue(mock_image_ctx);
 
+  InSequence seq;
   expect_lock(mock_image_ctx, -EBUSY);
   expect_get_lock_info(mock_image_ctx, 0, entity_name_t::CLIENT(1), "1.2.3.4",
                        "auto 123", MockExclusiveLock::WATCHER_LOCK_TAG,
@@ -413,16 +423,16 @@ TEST_F(TestMockExclusiveLockAcquireRequest, BlacklistDisabled) {
   librbd::ImageCtx *ictx;
   ASSERT_EQ(0, open_image(m_image_name, &ictx));
 
-  InSequence seq;
   MockImageCtx mock_image_ctx(*ictx);
+  expect_op_work_queue(mock_image_ctx);
   mock_image_ctx.blacklist_on_break_lock = false;
 
+  InSequence seq;
   expect_lock(mock_image_ctx, -EBUSY);
   expect_get_lock_info(mock_image_ctx, 0, entity_name_t::CLIENT(1), "1.2.3.4",
                        "auto 123", MockExclusiveLock::WATCHER_LOCK_TAG,
                        LOCK_EXCLUSIVE);
   expect_list_watchers(mock_image_ctx, 0, "dead client", 123);
-  expect_op_work_queue(mock_image_ctx);
   expect_break_lock(mock_image_ctx, 0);
   expect_lock(mock_image_ctx, -ENOENT);
 
@@ -440,15 +450,15 @@ TEST_F(TestMockExclusiveLockAcquireRequest, BlacklistError) {
   librbd::ImageCtx *ictx;
   ASSERT_EQ(0, open_image(m_image_name, &ictx));
 
-  InSequence seq;
   MockImageCtx mock_image_ctx(*ictx);
+  expect_op_work_queue(mock_image_ctx);
 
+  InSequence seq;
   expect_lock(mock_image_ctx, -EBUSY);
   expect_get_lock_info(mock_image_ctx, 0, entity_name_t::CLIENT(1), "1.2.3.4",
                        "auto 123", MockExclusiveLock::WATCHER_LOCK_TAG,
                        LOCK_EXCLUSIVE);
   expect_list_watchers(mock_image_ctx, 0, "dead client", 123);
-  expect_op_work_queue(mock_image_ctx);
   expect_blacklist_add(mock_image_ctx, -EINVAL);
 
   C_SaferCond ctx;
@@ -465,15 +475,15 @@ TEST_F(TestMockExclusiveLockAcquireRequest, BreakLockMissing) {
   librbd::ImageCtx *ictx;
   ASSERT_EQ(0, open_image(m_image_name, &ictx));
 
-  InSequence seq;
   MockImageCtx mock_image_ctx(*ictx);
+  expect_op_work_queue(mock_image_ctx);
 
+  InSequence seq;
   expect_lock(mock_image_ctx, -EBUSY);
   expect_get_lock_info(mock_image_ctx, 0, entity_name_t::CLIENT(1), "1.2.3.4",
                        "auto 123", MockExclusiveLock::WATCHER_LOCK_TAG,
                        LOCK_EXCLUSIVE);
   expect_list_watchers(mock_image_ctx, 0, "dead client", 123);
-  expect_op_work_queue(mock_image_ctx);
   expect_blacklist_add(mock_image_ctx, 0);
   expect_break_lock(mock_image_ctx, -ENOENT);
   expect_lock(mock_image_ctx, -EINVAL);
@@ -492,15 +502,15 @@ TEST_F(TestMockExclusiveLockAcquireRequest, BreakLockError) {
   librbd::ImageCtx *ictx;
   ASSERT_EQ(0, open_image(m_image_name, &ictx));
 
-  InSequence seq;
   MockImageCtx mock_image_ctx(*ictx);
+  expect_op_work_queue(mock_image_ctx);
 
+  InSequence seq;
   expect_lock(mock_image_ctx, -EBUSY);
   expect_get_lock_info(mock_image_ctx, 0, entity_name_t::CLIENT(1), "1.2.3.4",
                        "auto 123", MockExclusiveLock::WATCHER_LOCK_TAG,
                        LOCK_EXCLUSIVE);
   expect_list_watchers(mock_image_ctx, 0, "dead client", 123);
-  expect_op_work_queue(mock_image_ctx);
   expect_blacklist_add(mock_image_ctx, 0);
   expect_break_lock(mock_image_ctx, -EINVAL);
 

@@ -406,10 +406,12 @@ noinst_HEADERS += \
 	test/librbd/test_support.h \
 	test/librbd/mock/MockAioImageRequestWQ.h \
 	test/librbd/mock/MockContextWQ.h \
+	test/librbd/mock/MockExclusiveLock.h \
 	test/librbd/mock/MockImageCtx.h \
 	test/librbd/mock/MockImageWatcher.h \
 	test/librbd/mock/MockJournal.h \
 	test/librbd/mock/MockObjectMap.h \
+	test/librbd/mock/MockReadahead.h \
 	test/librbd/object_map/mock/MockInvalidateRequest.h
 
 if LINUX
