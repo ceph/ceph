@@ -690,17 +690,17 @@ class RGWListBucketRequest : public RGWLibRequest,
 {
 public:
   RGWFileHandle* rgw_fh;
-  std::string& uri;
+  std::string uri;
   uint64_t* offset;
   void* cb_arg;
   rgw_readdir_cb rcb;
   size_t ix;
 
   RGWListBucketRequest(CephContext* _cct, RGWUserInfo *_user,
-		       RGWFileHandle* _rgw_fh, std::string& _uri,
-		       rgw_readdir_cb _rcb, void* _cb_arg, uint64_t* _offset)
-    : RGWLibRequest(_cct, _user), rgw_fh(_rgw_fh), uri(_uri),
-      offset(_offset), cb_arg(_cb_arg), rcb(_rcb), ix(0) {
+		      RGWFileHandle* _rgw_fh, rgw_readdir_cb _rcb,
+		      void* _cb_arg, uint64_t* _offset)
+    : RGWLibRequest(_cct, _user), rgw_fh(_rgw_fh), offset(_offset),
+      cb_arg(_cb_arg), rcb(_rcb), ix(0) {
     RGWListBucket::marker = {rgw_fh->find_marker(*offset), ""};
     default_max = 1000; // XXX was being omitted
     magic = 72;
@@ -727,6 +727,7 @@ public:
     s->op = OP_GET;
 
     /* XXX derp derp derp */
+    string uri = "/" + rgw_fh->bucket_name() + "/" + rgw_fh->full_object_name();
     s->relative_uri = uri;
     s->info.request_uri = uri; // XXX
     s->info.effective_uri = uri;
