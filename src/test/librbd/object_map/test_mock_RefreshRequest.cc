@@ -83,14 +83,6 @@ public:
       (*object_map)[i] = rand() % 3;
     }
   }
-
-  void when_apply_refresh_request(MockImageCtx &mock_image_ctx,
-                                 MockRefreshRequest *req) {
-    RWLock::WLocker snap_locker(mock_image_ctx.snap_lock);
-    RWLock::WLocker object_map_locker(mock_image_ctx.object_map_lock);
-    expect_get_image_size(mock_image_ctx, mock_image_ctx.image_ctx->size);
-    req->apply();
-  }
 };
 
 TEST_F(TestMockObjectMapRefreshRequest, Success) {
@@ -110,10 +102,10 @@ TEST_F(TestMockObjectMapRefreshRequest, Success) {
   InSequence seq;
   expect_get_image_size(mock_image_ctx, mock_image_ctx.image_ctx->size);
   expect_object_map_load(mock_image_ctx, &on_disk_object_map, 0);
+  expect_get_image_size(mock_image_ctx, mock_image_ctx.image_ctx->size);
   req->send();
   ASSERT_EQ(0, ctx.wait());
 
-  when_apply_refresh_request(mock_image_ctx, req);
   ASSERT_EQ(on_disk_object_map, object_map);
 }
 
@@ -137,11 +129,10 @@ TEST_F(TestMockObjectMapRefreshRequest, LoadError) {
 
   MockInvalidateRequest invalidate_request;
   expect_invalidate_request(mock_image_ctx, invalidate_request);
+  expect_get_image_size(mock_image_ctx, mock_image_ctx.image_ctx->size);
 
   req->send();
   ASSERT_EQ(0, ctx.wait());
-
-  when_apply_refresh_request(mock_image_ctx, req);
 }
 
 TEST_F(TestMockObjectMapRefreshRequest, LoadCorrupt) {
@@ -166,11 +157,10 @@ TEST_F(TestMockObjectMapRefreshRequest, LoadCorrupt) {
   expect_invalidate_request(mock_image_ctx, invalidate_request);
   expect_truncate_request(mock_image_ctx);
   expect_object_map_resize(mock_image_ctx, on_disk_object_map.size(), 0);
+  expect_get_image_size(mock_image_ctx, mock_image_ctx.image_ctx->size);
 
   req->send();
   ASSERT_EQ(0, ctx.wait());
-
-  when_apply_refresh_request(mock_image_ctx, req);
 }
 
 TEST_F(TestMockObjectMapRefreshRequest, TooSmall) {
@@ -196,11 +186,10 @@ TEST_F(TestMockObjectMapRefreshRequest, TooSmall) {
   MockInvalidateRequest invalidate_request;
   expect_invalidate_request(mock_image_ctx, invalidate_request);
   expect_object_map_resize(mock_image_ctx, on_disk_object_map.size(), 0);
+  expect_get_image_size(mock_image_ctx, mock_image_ctx.image_ctx->size);
 
   req->send();
   ASSERT_EQ(0, ctx.wait());
-
-  when_apply_refresh_request(mock_image_ctx, req);
 }
 
 TEST_F(TestMockObjectMapRefreshRequest, TooLarge) {
@@ -223,10 +212,9 @@ TEST_F(TestMockObjectMapRefreshRequest, TooLarge) {
   InSequence seq;
   expect_get_image_size(mock_image_ctx, mock_image_ctx.image_ctx->size);
   expect_object_map_load(mock_image_ctx, &large_object_map, 0);
+  expect_get_image_size(mock_image_ctx, mock_image_ctx.image_ctx->size);
   req->send();
   ASSERT_EQ(0, ctx.wait());
-
-  when_apply_refresh_request(mock_image_ctx, req);
 }
 
 TEST_F(TestMockObjectMapRefreshRequest, ResizeError) {
@@ -252,38 +240,10 @@ TEST_F(TestMockObjectMapRefreshRequest, ResizeError) {
   MockInvalidateRequest invalidate_request;
   expect_invalidate_request(mock_image_ctx, invalidate_request);
   expect_object_map_resize(mock_image_ctx, on_disk_object_map.size(), -ESTALE);
+  expect_get_image_size(mock_image_ctx, mock_image_ctx.image_ctx->size);
 
   req->send();
   ASSERT_EQ(0, ctx.wait());
-
-  when_apply_refresh_request(mock_image_ctx, req);
-}
-
-TEST_F(TestMockObjectMapRefreshRequest, StaleRefresh) {
-  librbd::ImageCtx *ictx;
-  ASSERT_EQ(0, open_image(m_image_name, &ictx));
-
-  MockImageCtx mock_image_ctx(*ictx);
-
-  C_SaferCond ctx;
-  ceph::BitVector<2> object_map;
-  MockRefreshRequest *req = new MockRefreshRequest(mock_image_ctx, &object_map,
-                                                   TEST_SNAP_ID, &ctx);
-  ASSERT_THROW(when_apply_refresh_request(mock_image_ctx, req),
-               ceph::FailedAssertion);
-}
-
-TEST_F(TestMockObjectMapRefreshRequest, Discard) {
-  librbd::ImageCtx *ictx;
-  ASSERT_EQ(0, open_image(m_image_name, &ictx));
-
-  MockImageCtx mock_image_ctx(*ictx);
-
-  C_SaferCond ctx;
-  ceph::BitVector<2> object_map;
-  MockRefreshRequest *req = new MockRefreshRequest(mock_image_ctx, &object_map,
-                                                   TEST_SNAP_ID, &ctx);
-  req->discard();
 }
 
 } // namespace object_map

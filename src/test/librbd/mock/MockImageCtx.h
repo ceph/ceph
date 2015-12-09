@@ -6,9 +6,11 @@
 
 #include "test/librbd/mock/MockAioImageRequestWQ.h"
 #include "test/librbd/mock/MockContextWQ.h"
+#include "test/librbd/mock/MockExclusiveLock.h"
 #include "test/librbd/mock/MockImageWatcher.h"
 #include "test/librbd/mock/MockJournal.h"
 #include "test/librbd/mock/MockObjectMap.h"
+#include "test/librbd/mock/MockReadahead.h"
 #include "common/RWLock.h"
 #include "librbd/ImageCtx.h"
 #include "gmock/gmock.h"
@@ -38,7 +40,8 @@ struct MockImageCtx {
       layout(image_ctx.layout),
       aio_work_queue(new MockAioImageRequestWQ()),
       op_work_queue(new MockContextWQ()),
-      image_watcher(NULL), object_map_ptr(NULL), journal(NULL),
+      parent(NULL), image_watcher(NULL), object_map(NULL),
+      exclusive_lock(NULL), journal(NULL),
       concurrent_management_ops(image_ctx.concurrent_management_ops),
       blacklist_on_break_lock(image_ctx.blacklist_on_break_lock),
       blacklist_expire_seconds(image_ctx.blacklist_expire_seconds)
@@ -87,13 +90,17 @@ struct MockImageCtx {
                               uint64_t in_size, parent_info parent,
                               uint8_t protection_status, uint64_t flags));
   MOCK_METHOD2(rm_snap, void(std::string in_snap_name, librados::snap_t id));
+
   MOCK_METHOD1(flush, void(Context *));
+  MOCK_METHOD1(flush_copyup, void(Context *));
+
+  MOCK_METHOD1(shut_down_cache, void(Context *));
 
   MOCK_CONST_METHOD1(test_features, bool(uint64_t test_features));
 
   MOCK_METHOD1(cancel_async_requests, void(Context*));
 
-  MOCK_METHOD0(create_object_map, MockObjectMap*());
+  MOCK_METHOD1(create_object_map, MockObjectMap*(uint64_t));
   MOCK_METHOD0(create_journal, MockJournal*());
 
   ImageCtx *image_ctx;
@@ -131,10 +138,13 @@ struct MockImageCtx {
   MockAioImageRequestWQ *aio_work_queue;
   MockContextWQ *op_work_queue;
 
-  MockImageWatcher *image_watcher;
-  MockObjectMap object_map;       // TODO replace with ptr
-  MockObjectMap *object_map_ptr;  // TODO
+  MockReadahead readahead;
 
+  MockImageCtx *parent;
+
+  MockImageWatcher *image_watcher;
+  MockObjectMap *object_map;
+  MockExclusiveLock *exclusive_lock;
   MockJournal *journal;
 
   int concurrent_management_ops;

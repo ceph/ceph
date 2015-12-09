@@ -5,6 +5,7 @@
 #include "librbd/AioCompletion.h"
 #include "librbd/AioImageRequest.h"
 #include "librbd/AioImageRequestWQ.h"
+#include "librbd/ExclusiveLock.h"
 #include "librbd/ImageWatcher.h"
 #include "librbd/internal.h"
 #include "librbd/ObjectMap.h"
@@ -79,11 +80,12 @@ TEST_F(TestInternal, IsExclusiveLockOwner) {
   ASSERT_EQ(0, librbd::is_exclusive_lock_owner(ictx, &is_owner));
   ASSERT_FALSE(is_owner);
 
+  C_SaferCond ctx;
   {
     RWLock::WLocker l(ictx->owner_lock);
-    ASSERT_EQ(0, ictx->image_watcher->try_lock());
+    ictx->exclusive_lock->try_lock(&ctx);
   }
-
+  ASSERT_EQ(0, ctx.wait());
   ASSERT_EQ(0, librbd::is_exclusive_lock_owner(ictx, &is_owner));
   ASSERT_TRUE(is_owner);
 }
@@ -295,10 +297,16 @@ TEST_F(TestInternal, CancelAsyncResize) {
   librbd::ImageCtx *ictx;
   ASSERT_EQ(0, open_image(m_image_name, &ictx));
 
+  C_SaferCond ctx;
   {
     RWLock::WLocker l(ictx->owner_lock);
-    ASSERT_EQ(0, ictx->image_watcher->try_lock());
-    ASSERT_TRUE(ictx->image_watcher->is_lock_owner());
+    ictx->exclusive_lock->try_lock(&ctx);
+  }
+
+  ASSERT_EQ(0, ctx.wait());
+  {
+    RWLock::RLocker owner_locker(ictx->owner_lock);
+    ASSERT_TRUE(ictx->exclusive_lock->is_lock_owner());
   }
 
   uint64_t size;
@@ -331,12 +339,16 @@ TEST_F(TestInternal, MultipleResize) {
   librbd::ImageCtx *ictx;
   ASSERT_EQ(0, open_image(m_image_name, &ictx));
 
-  {
-    RWLock::WLocker l(ictx->owner_lock);
-    if (ictx->image_watcher->is_lock_supported()) {
-      ASSERT_EQ(0, ictx->image_watcher->try_lock());
-      ASSERT_TRUE(ictx->image_watcher->is_lock_owner());
+  if (ictx->exclusive_lock != nullptr) {
+    C_SaferCond ctx;
+    {
+      RWLock::WLocker l(ictx->owner_lock);
+      ictx->exclusive_lock->try_lock(&ctx);
     }
+
+    RWLock::RLocker owner_locker(ictx->owner_lock);
+    ASSERT_EQ(0, ctx.wait());
+    ASSERT_TRUE(ictx->exclusive_lock->is_lock_owner());
   }
 
   uint64_t size;
@@ -506,8 +518,7 @@ TEST_F(TestInternal, SnapshotCopyup)
   bufferlist read_bl;
   read_bl.push_back(read_ptr);
 
-  std::list<std::string> snaps = boost::assign::list_of(
-    "snap1")("snap2")("");
+  std::list<std::string> snaps = {"snap1", "snap2", ""};
   for (std::list<std::string>::iterator it = snaps.begin();
        it != snaps.end(); ++it) {
     const char *snap_name = it->empty() ? NULL : it->c_str();
@@ -530,8 +541,14 @@ TEST_F(TestInternal, SnapshotCopyup)
           it != snaps.begin() && snap_name != NULL) {
         state = OBJECT_EXISTS_CLEAN;
       }
+
+      librbd::ObjectMap object_map(*ictx2, ictx2->snap_id);
+      C_SaferCond ctx;
+      object_map.open(&ctx);
+      ASSERT_EQ(0, ctx.wait());
+
       RWLock::WLocker object_map_locker(ictx2->object_map_lock);
-      ASSERT_EQ(state, ictx2->object_map[0]);
+      ASSERT_EQ(state, object_map[0]);
     }
   }
 }
