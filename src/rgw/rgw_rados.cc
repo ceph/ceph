@@ -1514,7 +1514,11 @@ const string& RGWZoneParams::get_pool_name(CephContext *cct)
 
 const string RGWZoneParams::get_default_oid(bool old_format)
 {
-  return cct->_conf->rgw_default_zone_info_oid;
+  if (old_format) {
+    return cct->_conf->rgw_default_zone_info_oid;
+  }
+
+  return cct->_conf->rgw_default_zone_info_oid + "." + realm_id;
 }
 
 const string& RGWZoneParams::get_names_oid_prefix()
@@ -1543,6 +1547,39 @@ int RGWZoneParams::init(CephContext *cct, RGWRados *store, bool setup_obj, bool 
   }
 
   return ret;
+}
+
+int RGWZoneParams::read_default_id(string& default_id, bool old_format)
+{
+  if (realm_id.empty()) {
+    /* try using default realm */
+    RGWRealm realm;
+    int ret = realm.init(cct, store);
+    if (ret < 0) {
+      lderr(cct) << "could not read realm id: " << cpp_strerror(-ret) << dendl;
+      return -ENOENT;
+    }
+    realm_id = realm.get_id();
+  }
+
+  return RGWSystemMetaObj::read_default_id(default_id, old_format);
+}
+
+
+int RGWZoneParams::set_as_default()
+{
+  if (realm_id.empty()) {
+    /* try using default realm */
+    RGWRealm realm;
+    int ret = realm.init(cct, store);
+    if (ret < 0) {
+      lderr(cct) << "could not read realm id: " << cpp_strerror(-ret) << dendl;
+      return -EINVAL;
+    }
+    realm_id = realm.get_id();
+  }
+
+  return RGWSystemMetaObj::set_as_default();
 }
 
 void RGWPeriodMap::encode(bufferlist& bl) const {
