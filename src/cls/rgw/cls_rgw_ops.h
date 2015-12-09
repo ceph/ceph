@@ -861,9 +861,9 @@ struct cls_rgw_bi_log_list_ret {
 };
 WRITE_CLASS_ENCODER(cls_rgw_bi_log_list_ret)
 
-struct cls_rgw_lc_get_entry_op {
+struct cls_rgw_lc_get_next_entry_op {
   string marker;
-  cls_rgw_lc_get_entry_op() {}
+  cls_rgw_lc_get_next_entry_op() {}
 
   void encode(bufferlist& bl) const {
     ENCODE_START(1, 1, bl);
@@ -877,12 +877,12 @@ struct cls_rgw_lc_get_entry_op {
     DECODE_FINISH(bl);
   }
 };
-WRITE_CLASS_ENCODER(cls_rgw_lc_get_entry_op)
+WRITE_CLASS_ENCODER(cls_rgw_lc_get_next_entry_op)
 
-struct cls_rgw_lc_get_entry_ret {
+struct cls_rgw_lc_get_next_entry_ret {
   pair<string, int> entry;
 
-  cls_rgw_lc_get_entry_ret() {}
+  cls_rgw_lc_get_next_entry_ret() {}
 
   void encode(bufferlist& bl) const {
     ENCODE_START(1, 1, bl);
@@ -897,7 +897,7 @@ struct cls_rgw_lc_get_entry_ret {
   }
 
 };
-WRITE_CLASS_ENCODER(cls_rgw_lc_get_entry_ret)
+WRITE_CLASS_ENCODER(cls_rgw_lc_get_next_entry_ret)
 
 struct cls_rgw_lc_rm_entry_op {
   pair<string, int> entry;
@@ -976,10 +976,33 @@ struct cls_rgw_lc_get_head_ret {
 };
 WRITE_CLASS_ENCODER(cls_rgw_lc_get_head_ret)
 
-struct cls_rgw_lc_list_entry_ret {
+struct cls_rgw_lc_list_entries_op {
+  string marker;
+  uint32_t max_entries;
+
+  cls_rgw_lc_list_entries_op() {}
+
+  void encode(bufferlist& bl) const {
+    ENCODE_START(1, 1, bl);
+    ::encode(marker, bl);
+    ::encode(max_entries, bl);
+    ENCODE_FINISH(bl);
+  }
+
+  void decode(bufferlist::iterator& bl) {
+    DECODE_START(1, bl);
+    ::decode(marker, bl);
+    ::decode(max_entries, bl);
+    DECODE_FINISH(bl);
+  }
+  
+};
+WRITE_CLASS_ENCODER(cls_rgw_lc_list_entries_op)
+
+struct cls_rgw_lc_list_entries_ret {
   map<string, int> entries;
 
-  cls_rgw_lc_list_entry_ret() {}
+  cls_rgw_lc_list_entries_ret() {}
 
   void encode(bufferlist& bl) const {
     ENCODE_START(1, 1, bl);
@@ -994,6 +1017,6 @@ struct cls_rgw_lc_list_entry_ret {
   }
   
 };
-WRITE_CLASS_ENCODER(cls_rgw_lc_list_entry_ret)
+WRITE_CLASS_ENCODER(cls_rgw_lc_list_entries_ret)
 
 #endif

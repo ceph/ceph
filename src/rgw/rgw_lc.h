@@ -212,7 +212,7 @@ public:
   int process();
   int process(int index, int max_secs);
   bool if_already_run_today(time_t& start_date);
-  int list_lc_progress(map<string, int>& progress_map);
+  int list_lc_progress(const string& marker, uint32_t max_entries, map<string, int> *progress_map);
   int bucket_lc_prepare(int index);
   int bucket_lc_process(string& shard_id);
   int bucket_lc_post(int index, int max_lock_sec, cls_rgw_lc_obj_head& head, 

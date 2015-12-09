@@ -8239,9 +8239,9 @@ int RGWRados::process_gc()
   return gc->process();
 }
 
-int RGWRados::list_lc_progress(map<string, int>& progress_map)
+int RGWRados::list_lc_progress(const string& marker, uint32_t max_entries, map<string, int> *progress_map)
 {
-  return lc->list_lc_progress(progress_map);
+  return lc->list_lc_progress(marker, max_entries, progress_map);
 }
 
 int RGWRados::process_lc()

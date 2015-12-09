@@ -140,20 +140,29 @@ static std::vector<std::string> split(const std::string &s, char delim) {
 int RGWLC::bucket_lc_prepare(int index)
 {
   map<string, int > entries;
-  int ret = cls_rgw_lc_list(store->lc_pool_ctx, obj_names[index], entries);
-  if (ret < 0)
+
+  string marker;
+
+#define MAX_LC_LIST_ENTRIES 100
+  do {
+    int ret = cls_rgw_lc_list(store->lc_pool_ctx, obj_names[index], marker, MAX_LC_LIST_ENTRIES, entries);
+    if (ret < 0)
       return ret;
-  map<string, int>::iterator iter;
-  for (iter = entries.begin(); iter != entries.end(); ++iter) {
-    pair<string, int > entry(iter->first, lc_uninitial);
-    ret = cls_rgw_lc_set_entry(store->lc_pool_ctx, obj_names[index],  entry);
-    if (ret < 0) {
-    dout(0) << "RGWLC::bucket_lc_prepare() failed to set entry " << obj_names[index] << dendl;
-    break;
+    map<string, int>::iterator iter;
+    for (iter = entries.begin(); iter != entries.end(); ++iter) {
+      pair<string, int > entry(iter->first, lc_uninitial);
+      ret = cls_rgw_lc_set_entry(store->lc_pool_ctx, obj_names[index],  entry);
+      if (ret < 0) {
+        dout(0) << "RGWLC::bucket_lc_prepare() failed to set entry " << obj_names[index] << dendl;
+        break;
+      }
+      marker = iter->first;
     }
-  }
-  return ret;
+  } while (!entries.empty());
+
+  return 0;
 }
+
 int RGWLC::bucket_lc_process(string& shard_id)
 {
   RGWLifecycleConfiguration  config(cct);
@@ -212,6 +221,7 @@ int RGWLC::bucket_lc_process(string& shard_id)
       continue;
     }
   }
+
   if (default_config) { 
     do {
       
@@ -271,31 +281,31 @@ int RGWLC::bucket_lc_process(string& shard_id)
           }
         }
       }    
-    }while (is_truncated);
-  }else {
+    } while (is_truncated);
+  } else {
     for(map<string, int>::iterator prefix_iter = prefix_map.begin(); prefix_iter != prefix_map.end();  prefix_iter++) {
       if (prefix_iter->first.empty()) {
         continue;
       }
       list_op.params.prefix = prefix_iter->first;
-      
+
       do {
-        
+
         objs.clear();
         list_op.params.marker = list_op.get_next_marker();          
         ret = list_op.list_objects(1000, &objs, &common_prefixes, &is_truncated); 
-        
+
         if (ret < 0) {
           if (ret == (-ENOENT))
             return 0;
           ldout(cct, 0) << "ERROR: store->list_objects():" <<dendl;
           return ret;
         }
-        
+
         vector<RGWObjEnt>::iterator obj_iter;
         int days = prefix_iter->second;           
         utime_t now = ceph_clock_now(cct);
-        
+
         for (obj_iter = objs.begin(); obj_iter != objs.end(); obj_iter++) {                  
           if (now - (*obj_iter).mtime >= days*24*60*60) {
             RGWObjectCtx rctx(store);
@@ -356,20 +366,21 @@ clean:
     l.unlock(&store->lc_pool_ctx, obj_names[index]);
     dout(20) << "RGWLC::bucket_lc_post()  unlock" << obj_names[index] << dendl;
     return 0;
-  }while(1);
+  } while (true);
 }
 
-int RGWLC::list_lc_progress(map<string, int>& progress_map)
+int RGWLC::list_lc_progress(const string& marker, uint32_t max_entries, map<string, int> *progress_map)
 {
   int index = 0;
+  progress_map->clear();
   for(; index <max_objs; index++) {
     map<string, int > entries;
-    int ret = cls_rgw_lc_list(store->lc_pool_ctx, obj_names[index], entries);
+    int ret = cls_rgw_lc_list(store->lc_pool_ctx, obj_names[index], marker, max_entries, entries);
     if (ret < 0)
       return ret;
     map<string, int>::iterator iter;
     for (iter = entries.begin(); iter != entries.end(); ++iter) {
-      progress_map.insert(*iter);
+      progress_map->insert(*iter);
     }
   }
   return 0;
@@ -433,7 +444,7 @@ int RGWLC::process(int index, int max_lock_secs)
       }
     }
 
-    ret = cls_rgw_lc_get_entry(store->lc_pool_ctx, obj_names[index], head.marker, entry);
+    ret = cls_rgw_lc_get_next_entry(store->lc_pool_ctx, obj_names[index], head.marker, entry);
     if (ret < 0) {
       dout(0) << "RGWLC::process() failed to get obj entry " << obj_names[index] << dendl;
       goto exit;

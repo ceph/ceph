@@ -1317,7 +1317,7 @@ protected:
 
 public:
   RGWRados() : max_req_id(0), lock("rados_timer_lock"), watchers_lock("watchers_lock"), timer(NULL),
-               gc(NULL), obj_expirer(NULL), use_gc_thread(false), use_lc_thread(false), quota_threads(false),
+               gc(NULL), lc(NULL), obj_expirer(NULL), use_gc_thread(false), use_lc_thread(false), quota_threads(false),
                num_watchers(0), watchers(NULL),
                watch_initialized(false),
                bucket_id_lock("rados_bucket_id"),
@@ -2179,7 +2179,7 @@ public:
   int defer_gc(void *ctx, rgw_obj& obj);
 
   int process_lc();
-  int list_lc_progress(map<string, int>& progress_map);
+  int list_lc_progress(const string& marker, uint32_t max_entries, map<string, int> *progress_map);
   
   int bucket_check_index(rgw_bucket& bucket,
                          map<RGWObjCategory, RGWStorageStats> *existing_stats,

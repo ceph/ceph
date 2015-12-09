@@ -657,17 +657,17 @@ int cls_rgw_lc_put_head(IoCtx& io_ctx, string& oid, cls_rgw_lc_obj_head& head)
   return r;
 }
 
-int cls_rgw_lc_get_entry(IoCtx& io_ctx, string& oid, string& marker, pair<string, int>& entry)
+int cls_rgw_lc_get_next_entry(IoCtx& io_ctx, string& oid, string& marker, pair<string, int>& entry)
 {
   bufferlist in, out;
-  cls_rgw_lc_get_entry_op call;
+  cls_rgw_lc_get_next_entry_op call;
   call.marker = marker;
   ::encode(call, in);
-  int r = io_ctx.exec(oid, "rgw", "lc_get_entry", in, out);
+  int r = io_ctx.exec(oid, "rgw", "lc_get_next_entry", in, out);
   if (r < 0)
     return r;
 
-  cls_rgw_lc_get_entry_ret ret;
+  cls_rgw_lc_get_next_entry_ret ret;
   try {
     bufferlist::iterator iter = out.begin();
     ::decode(ret, iter);
@@ -699,14 +699,26 @@ int cls_rgw_lc_set_entry(IoCtx& io_ctx, string& oid, pair<string, int>& entry)
   return r;
 }
 
-int cls_rgw_lc_list(IoCtx& io_ctx, string& oid, map<string, int>& entries)
+int cls_rgw_lc_list(IoCtx& io_ctx, string& oid,
+                    const string& marker,
+                    uint32_t max_entries,
+                    map<string, int>& entries)
 {
   bufferlist in, out;
-  int r = io_ctx.exec(oid, "rgw", "lc_list_entry", in, out);
+  cls_rgw_lc_list_entries_op op;
+
+  entries.clear();
+
+  op.marker = marker;
+  op.max_entries = max_entries;
+
+  ::encode(op, in);
+
+  int r = io_ctx.exec(oid, "rgw", "lc_list_entries", in, out);
   if (r < 0)
     return r;
 
-  cls_rgw_lc_list_entry_ret ret;
+  cls_rgw_lc_list_entries_ret ret;
   try {
     bufferlist::iterator iter = out.begin();
     ::decode(ret, iter);
