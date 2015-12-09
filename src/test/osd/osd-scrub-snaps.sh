@@ -154,7 +154,11 @@ function TEST_scrub_snaps() {
 
     local pgid="${poolid}.0"
     if ! pg_scrub "$pgid" ; then
+        echo ====================================
         cat $dir/osd.0.log
+        echo ====================================
+        cat $dir/mon.a.log
+        echo ====================================
         return 1
     fi
     grep 'log_channel' $dir/osd.0.log
