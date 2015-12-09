@@ -45,6 +45,7 @@ namespace librbd {
   class AsyncOperation;
   class CopyupRequest;
   template <typename> class ExclusiveLock;
+  template <typename> class ImageState;
   class ImageWatcher;
   class Journal;
   class LibrbdAdminSocketHook;
@@ -79,14 +80,12 @@ namespace librbd {
     IoCtx data_ctx, md_ctx;
     ImageWatcher *image_watcher;
     Journal *journal;
-    int refresh_seq;    ///< sequence for refresh requests
-    int last_refresh;   ///< last completed refresh
 
     /**
      * Lock ordering:
      *
      * owner_lock, md_lock, cache_lock, snap_lock, parent_lock,
-     * refresh_lock, object_map_lock, async_op_lock
+     * object_map_lock, async_op_lock
      */
     RWLock owner_lock; // protects exclusive lock leadership updates
     RWLock md_lock; // protects access to the mutable image metadata that
@@ -102,7 +101,6 @@ namespace librbd {
     RWLock snap_lock; // protects snapshot-related member variables,
                       // features (and associated helper classes), and flags
     RWLock parent_lock; // protects parent_md and parent
-    Mutex refresh_lock; // protects refresh_seq and last_refresh
     RWLock object_map_lock; // protects object map updates and object_map itself
     Mutex async_ops_lock; // protects async_ops and async_requests
     Mutex copyup_list_lock; // protects copyup_waiting_list
@@ -139,8 +137,8 @@ namespace librbd {
     xlist<AsyncRequest<>*> async_requests;
     std::list<Context*> async_requests_waiters;
 
+    ImageState<ImageCtx> *state;
     ExclusiveLock<ImageCtx> *exclusive_lock;
-
     ObjectMap *object_map;
 
     atomic_t async_request_seq;
@@ -152,9 +150,6 @@ namespace librbd {
     EventSocket event_socket;
 
     ContextWQ *op_work_queue;
-
-    Cond refresh_cond;
-    bool refresh_in_progress;
 
     // Configuration
     static const string METADATA_CONF_PREFIX;
@@ -201,7 +196,6 @@ namespace librbd {
     ImageCtx(const std::string &image_name, const std::string &image_id,
 	     const char *snap, IoCtx& p, bool read_only);
     ~ImageCtx();
-    int init_legacy();   // TODO
     void init();
     void init_layout();
     void perf_start(std::string name);
@@ -252,9 +246,7 @@ namespace librbd {
 			uint64_t off, Context *onfinish, int fadvise_flags,
                         uint64_t journal_tid);
     void user_flushed();
-    int flush_cache();
     void flush_cache(Context *onfinish);
-    int shutdown_cache(); // TODO
     void shut_down_cache(Context *on_finish);
     int invalidate_cache(bool purge_on_error=false);
     void invalidate_cache(Context *on_finish);

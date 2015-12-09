@@ -94,10 +94,7 @@ bool ImageState<I>::is_refresh_required() const {
 template <typename I>
 int ImageState<I>::refresh() {
   C_SaferCond refresh_ctx;
-  {
-    RWLock::RLocker owner_lock(m_image_ctx->owner_lock);
-    refresh(&refresh_ctx);
-  }
+  refresh(&refresh_ctx);
   return refresh_ctx.wait();
 }
 

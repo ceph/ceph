@@ -27,17 +27,13 @@
 #include "librbd/DiffIterate.h"
 #include "librbd/ExclusiveLock.h"
 #include "librbd/ImageCtx.h"
+#include "librbd/ImageState.h"
 #include "librbd/ImageWatcher.h"
 #include "librbd/internal.h"
 #include "librbd/Journal.h"
 #include "librbd/ObjectMap.h"
 #include "librbd/parent_types.h"
 #include "librbd/Utils.h"
-#include "librbd/image/CloseRequest.h"
-#include "librbd/image/OpenRequest.h"
-#include "librbd/image/RefreshParentRequest.h"
-#include "librbd/image/RefreshRequest.h"
-#include "librbd/image/SetSnapRequest.h"
 #include "librbd/operation/FlattenRequest.h"
 #include "librbd/operation/RebuildObjectMapRequest.h"
 #include "librbd/operation/RenameRequest.h"
@@ -396,11 +392,7 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
   int notify_change(IoCtx& io_ctx, const string& oid, ImageCtx *ictx)
   {
     if (ictx) {
-      ictx->refresh_lock.Lock();
-      ldout(ictx->cct, 20) << "notify_change refresh_seq = " << ictx->refresh_seq
-			   << " last_refresh = " << ictx->last_refresh << dendl;
-      ++ictx->refresh_seq;
-      ictx->refresh_lock.Unlock();
+      ictx->state->handle_update_notification();
     }
 
     ImageWatcher::notify_header_update(io_ctx, oid);
@@ -704,7 +696,7 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
     CephContext *cct = ictx->cct;
     ldout(cct, 20) << "children list " << ictx->name << dendl;
 
-    int r = ictx_check(ictx);
+    int r = ictx->state->refresh_if_required();
     if (r < 0)
       return r;
 
@@ -782,7 +774,7 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
       return -EROFS;
     }
 
-    int r = ictx_check(ictx);
+    int r = ictx->state->refresh_if_required();
     if (r < 0)
       return r;
 
@@ -815,7 +807,7 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
     ldout(ictx->cct, 20) << "snap_create_helper " << ictx << " " << snap_name
                          << dendl;
 
-    int r = ictx_check(ictx, ictx->owner_lock);
+    int r = ictx->state->refresh_if_required(ictx->owner_lock);
     if (r < 0) {
       ctx->complete(r);
       return;
@@ -833,7 +825,7 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
     if (ictx->read_only)
       return -EROFS;
 
-    int r = ictx_check(ictx);
+    int r = ictx->state->refresh_if_required();
     if (r < 0)
       return r;
 
@@ -886,7 +878,7 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
     ldout(ictx->cct, 20) << "snap_remove_helper " << ictx << " " << snap_name
                          << dendl;
 
-    int r = ictx_check(ictx, ictx->owner_lock);
+    int r = ictx->state->refresh_if_required(ictx->owner_lock);
     if (r < 0) {
       ctx->complete(r);
       return;
@@ -928,7 +920,7 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
       return -EROFS;
     }
 
-    int r = ictx_check(ictx);
+    int r = ictx->state->refresh_if_required();
     if (r < 0)
       return r;
 
@@ -979,7 +971,7 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
     ldout(ictx->cct, 20) << __func__ << " " << ictx << " from "
                          << src_snap_id << " to " << dst_name << dendl;
 
-    int r = ictx_check(ictx, ictx->owner_lock);
+    int r = ictx->state->refresh_if_required(ictx->owner_lock);
     if (r < 0) {
       ctx->complete(r);
       return;
@@ -999,7 +991,7 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
       return -EROFS;
     }
 
-    int r = ictx_check(ictx);
+    int r = ictx->state->refresh_if_required();
     if (r < 0) {
       return r;
     }
@@ -1052,7 +1044,7 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
     ldout(ictx->cct, 20) << "snap_protect_helper " << ictx << " " << snap_name
                          << dendl;
 
-    int r = ictx_check(ictx, ictx->owner_lock);
+    int r = ictx->state->refresh_if_required(ictx->owner_lock);
     if (r < 0) {
       ctx->complete(r);
       return;
@@ -1072,7 +1064,7 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
       return -EROFS;
     }
 
-    int r = ictx_check(ictx);
+    int r = ictx->state->refresh_if_required();
     if (r < 0) {
       return r;
     }
@@ -1127,7 +1119,7 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
     ldout(ictx->cct, 20) << "snap_unprotect_helper " << ictx << " " << snap_name
                          << dendl;
 
-    int r = ictx_check(ictx, ictx->owner_lock);
+    int r = ictx->state->refresh_if_required(ictx->owner_lock);
     if (r < 0) {
       ctx->complete(r);
       return;
@@ -1144,7 +1136,7 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
     ldout(ictx->cct, 20) << "snap_is_protected " << ictx << " " << snap_name
 			 << dendl;
 
-    int r = ictx_check(ictx);
+    int r = ictx->state->refresh_if_required();
     if (r < 0)
       return r;
 
@@ -1563,7 +1555,7 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
     map<string, bufferlist> pairs;
     // make sure parent snapshot exists
     ImageCtx *p_imctx = new ImageCtx(p_name, "", p_snap_name, p_ioctx, true);
-    r = open_image(p_imctx);
+    r = p_imctx->state->open();
     if (r < 0) {
       lderr(cct) << "error opening parent image: "
 		 << cpp_strerror(-r) << dendl;
@@ -1609,7 +1601,7 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
     }
 
     c_imctx = new ImageCtx(c_name, "", NULL, c_ioctx, false);
-    r = open_image(c_imctx);
+    r = c_imctx->state->open();
     if (r < 0) {
       lderr(cct) << "Error opening new image: " << cpp_strerror(r) << dendl;
       goto err_remove;
@@ -1627,23 +1619,7 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
       goto err_close_child;
     }
 
-    r = cls_client::metadata_list(&p_ioctx, p_imctx->header_oid, "", 0, &pairs);
-    if (r < 0 && r != -EOPNOTSUPP && r != -EIO) {
-      lderr(cct) << "couldn't list metadata: " << r << dendl;
-      goto err_close_child;
-    } else if (r == 0 && !pairs.empty()) {
-      r = cls_client::metadata_set(&c_ioctx, c_imctx->header_oid, pairs);
-      if (r < 0) {
-        lderr(cct) << "couldn't set metadata: " << cpp_strerror(r) << dendl;
-        goto err_close_child;
-      }
-    }
-
-    {
-      RWLock::RLocker owner_locker(p_imctx->owner_lock);
-      r = ictx_refresh(p_imctx);
-    }
-
+    r = p_imctx->state->refresh();
     if (r == 0) {
       p_imctx->snap_lock.get_read();
       r = p_imctx->is_snap_protected(p_imctx->snap_id, &snap_protected);
@@ -1655,9 +1631,22 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
       goto err_remove_child;
     }
 
+    r = cls_client::metadata_list(&p_ioctx, p_imctx->header_oid, "", 0, &pairs);
+    if (r < 0 && r != -EOPNOTSUPP && r != -EIO) {
+      lderr(cct) << "couldn't list metadata: " << r << dendl;
+      goto err_remove_child;
+    } else if (r == 0 && !pairs.empty()) {
+      r = cls_client::metadata_set(&c_ioctx, c_imctx->header_oid, pairs);
+      if (r < 0) {
+        lderr(cct) << "couldn't set metadata: " << cpp_strerror(r) << dendl;
+        goto err_remove_child;
+      }
+    }
+
     ldout(cct, 2) << "done." << dendl;
-    r = close_image(c_imctx);
-    partial_r = close_image(p_imctx);
+    r = c_imctx->state->close();
+    partial_r = p_imctx->state->close();
+
     if (r == 0 && partial_r < 0) {
       r = partial_r;
     }
@@ -1671,7 +1660,7 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
                 << cpp_strerror(partial_r) << dendl;
     }
   err_close_child:
-    close_image(c_imctx);
+    c_imctx->state->close();
   err_remove:
     partial_r = remove(c_ioctx, c_name, no_op);
     if (partial_r < 0) {
@@ -1679,7 +1668,7 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
 		 << cpp_strerror(partial_r) << dendl;
     }
   err_close_parent:
-    close_image(p_imctx);
+    p_imctx->state->close();
     return r;
   }
 
@@ -1690,14 +1679,14 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
 		   << dstname << dendl;
 
     ImageCtx *ictx = new ImageCtx(srcname, "", "", io_ctx, false);
-    int r = open_image(ictx);
+    int r = ictx->state->open();
     if (r < 0) {
       lderr(ictx->cct) << "error opening source image: " << cpp_strerror(r)
 		       << dendl;
       return r;
     }
     BOOST_SCOPE_EXIT((ictx)) {
-      close_image(ictx);
+      ictx->state->close();
     } BOOST_SCOPE_EXIT_END
 
     r = detect_format(io_ctx, dstname, NULL, NULL);
@@ -1748,7 +1737,7 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
     ldout(ictx->cct, 20) << "rename_helper " << ictx << " " << dstname
                          << dendl;
 
-    int r = ictx_check(ictx, ictx->owner_lock);
+    int r = ictx->state->refresh_if_required(ictx->owner_lock);
     if (r < 0) {
       ctx->complete(r);
       return;
@@ -1763,7 +1752,7 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
   {
     ldout(ictx->cct, 20) << "info " << ictx << dendl;
 
-    int r = ictx_check(ictx);
+    int r = ictx->state->refresh_if_required();
     if (r < 0)
       return r;
 
@@ -1773,7 +1762,7 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
 
   int get_old_format(ImageCtx *ictx, uint8_t *old)
   {
-    int r = ictx_check(ictx);
+    int r = ictx->state->refresh_if_required();
     if (r < 0)
       return r;
     *old = ictx->old_format;
@@ -1782,7 +1771,7 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
 
   int get_size(ImageCtx *ictx, uint64_t *size)
   {
-    int r = ictx_check(ictx);
+    int r = ictx->state->refresh_if_required();
     if (r < 0)
       return r;
     RWLock::RLocker l2(ictx->snap_lock);
@@ -1792,7 +1781,7 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
 
   int get_features(ImageCtx *ictx, uint64_t *features)
   {
-    int r = ictx_check(ictx);
+    int r = ictx->state->refresh_if_required();
     if (r < 0)
       return r;
     RWLock::RLocker l(ictx->snap_lock);
@@ -1802,7 +1791,7 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
 
   int update_features(ImageCtx *ictx, uint64_t features, bool enabled)
   {
-    int r = ictx_check(ictx);
+    int r = ictx->state->refresh_if_required();
     if (r < 0) {
       return r;
     }
@@ -1954,7 +1943,7 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
 
   int get_overlap(ImageCtx *ictx, uint64_t *overlap)
   {
-    int r = ictx_check(ictx);
+    int r = ictx->state->refresh_if_required();
     if (r < 0)
       return r;
     RWLock::RLocker l(ictx->snap_lock);
@@ -1962,87 +1951,10 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
     return ictx->get_parent_overlap(ictx->snap_id, overlap);
   }
 
-  int open_parent(ImageCtx *ictx)
-  {
-    assert(ictx->cache_lock.is_locked());
-    assert(ictx->snap_lock.is_wlocked());
-    assert(ictx->parent_lock.is_wlocked());
-
-    string pool_name;
-    Rados rados(ictx->md_ctx);
-
-    int64_t pool_id = ictx->get_parent_pool_id(ictx->snap_id);
-    string parent_image_id = ictx->get_parent_image_id(ictx->snap_id);
-    snap_t parent_snap_id = ictx->get_parent_snap_id(ictx->snap_id);
-    assert(parent_snap_id != CEPH_NOSNAP);
-
-    if (pool_id < 0)
-      return -ENOENT;
-    int r = rados.pool_reverse_lookup(pool_id, &pool_name);
-    if (r < 0) {
-      lderr(ictx->cct) << "error looking up name for pool id " << pool_id
-		       << ": " << cpp_strerror(r) << dendl;
-      return r;
-    }
-
-    IoCtx p_ioctx;
-    r = rados.ioctx_create(pool_name.c_str(), p_ioctx);
-    if (r < 0) {
-      lderr(ictx->cct) << "error opening pool " << pool_name << ": "
-		       << cpp_strerror(r) << dendl;
-      return r;
-    }
-
-    // since we don't know the image and snapshot name, set their ids and
-    // reset the snap_name and snap_exists fields after we read the header
-    ictx->parent = new ImageCtx("", parent_image_id, NULL, p_ioctx, true);
-
-    // set rados flags for reading the parent image
-    if (ictx->balance_parent_reads)
-      ictx->parent->set_read_flag(librados::OPERATION_BALANCE_READS);
-    else if (ictx->localize_parent_reads)
-      ictx->parent->set_read_flag(librados::OPERATION_LOCALIZE_READS);
-
-    r = open_image(ictx->parent);
-    if (r < 0) {
-      lderr(ictx->cct) << "error opening parent image: " << cpp_strerror(r)
-		       << dendl;
-      ictx->parent = NULL;
-      return r;
-    }
-
-    {
-      RWLock::RLocker owner_locker(ictx->parent->owner_lock);
-      Mutex::Locker cache_locker(ictx->parent->cache_lock);
-      RWLock::WLocker snap_locker(ictx->parent->snap_lock);
-      r = ictx->parent->get_snap_name(parent_snap_id, &ictx->parent->snap_name);
-      if (r < 0) {
-        lderr(ictx->cct) << "parent snapshot does not exist" << dendl;
-      } else {
-        ictx->parent->snap_set(ictx->parent->snap_name);
-
-        RWLock::WLocker parent_locker(ictx->parent->parent_lock);
-        r = refresh_parent(ictx->parent);
-        if (r < 0) {
-          lderr(ictx->cct) << "error refreshing parent snapshot "
-		           << ictx->parent->id << " "
-		           << ictx->parent->snap_name << dendl;
-        }
-      }
-    }
-
-    if (r < 0) {
-      close_parent(ictx);
-      return r;
-    }
-
-    return 0;
-  }
-
   int get_parent_info(ImageCtx *ictx, string *parent_pool_name,
 		      string *parent_name, string *parent_snap_name)
   {
-    int r = ictx_check(ictx);
+    int r = ictx->state->refresh_if_required();
     if (r < 0)
       return r;
 
@@ -2104,7 +2016,7 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
 
   int get_flags(ImageCtx *ictx, uint64_t *flags)
   {
-    int r = ictx_check(ictx);
+    int r = ictx->state->refresh_if_required();
     if (r < 0) {
       return r;
     }
@@ -2118,7 +2030,7 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
     CephContext *cct = ictx->cct;
     ldout(cct, 20) << __func__ << " " << ictx << " fd " << fd << " type" << type << dendl;
 
-    int r = ictx_check(ictx);
+    int r = ictx->state->refresh_if_required();
     if (r < 0) {
       return r;
     }
@@ -2145,7 +2057,7 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
     bool old_format = false;
     bool unknown_format = true;
     ImageCtx *ictx = new ImageCtx(imgname, "", NULL, io_ctx, false);
-    int r = open_image(ictx);
+    int r = ictx->state->open();
     if (r < 0) {
       ldout(cct, 2) << "error opening image: " << cpp_strerror(-r) << dendl;
     } else {
@@ -2160,7 +2072,7 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
         if (r < 0 || !ictx->exclusive_lock->is_lock_owner()) {
 	  lderr(cct) << "cannot obtain exclusive lock - not removing" << dendl;
 	  ictx->owner_lock.put_read();
-	  close_image(ictx);
+	  ictx->state->close();
           return -EBUSY;
         }
       }
@@ -2168,7 +2080,7 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
       if (ictx->snaps.size()) {
 	lderr(cct) << "image has snapshots - not removing" << dendl;
 	ictx->owner_lock.put_read();
-	close_image(ictx);
+	ictx->state->close();
 	return -ENOTEMPTY;
       }
 
@@ -2177,13 +2089,13 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
       if (r < 0) {
         lderr(cct) << "error listing watchers" << dendl;
 	ictx->owner_lock.put_read();
-        close_image(ictx);
+        ictx->state->close();
         return r;
       }
       if (watchers.size() > 1) {
         lderr(cct) << "image has watchers - not removing" << dendl;
 	ictx->owner_lock.put_read();
-        close_image(ictx);
+        ictx->state->close();
         return -EBUSY;
       }
 
@@ -2199,12 +2111,12 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
       if (r < 0 && r != -ENOENT) {
 	lderr(cct) << "error removing child from children list" << dendl;
 	ictx->owner_lock.put_read();
-        close_image(ictx);
+        ictx->state->close();
 	return r;
       }
 
       ictx->owner_lock.put_read();
-      close_image(ictx);
+      ictx->state->close();
 
       ldout(cct, 2) << "removing header..." << dendl;
       r = io_ctx.remove(header_oid);
@@ -2272,7 +2184,7 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
 		   << size << dendl;
     ictx->snap_lock.put_read();
 
-    int r = ictx_check(ictx);
+    int r = ictx->state->refresh_if_required();
     if (r < 0) {
       return r;
     }
@@ -2304,7 +2216,7 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
 		   << size << dendl;
     ictx->snap_lock.put_read();
 
-    int r = ictx_check(ictx, ictx->owner_lock);
+    int r = ictx->state->refresh_if_required(ictx->owner_lock);
     if (r < 0) {
       ctx->complete(r);
       return;
@@ -2327,7 +2239,7 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
   {
     ldout(ictx->cct, 20) << "snap_list " << ictx << dendl;
 
-    int r = ictx_check(ictx);
+    int r = ictx->state->refresh_if_required();
     if (r < 0)
       return r;
 
@@ -2348,289 +2260,12 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
   {
     ldout(ictx->cct, 20) << "snap_exists " << ictx << " " << snap_name << dendl;
 
-    int r = ictx_check(ictx);
+    int r = ictx->state->refresh_if_required();
     if (r < 0)
       return r;
 
     RWLock::RLocker l(ictx->snap_lock);
     return ictx->get_snap_id(snap_name) != CEPH_NOSNAP;
-  }
-
-  int ictx_check(ImageCtx *ictx) {
-    RWLock::RLocker owner_locker(ictx->owner_lock);
-    return ictx_check(ictx, ictx->owner_lock);
-  }
-
-  int ictx_check(ImageCtx *ictx, const RWLock &owner_lock)
-  {
-    assert(ictx->owner_lock.is_locked());
-    CephContext *cct = ictx->cct;
-    ldout(cct, 20) << "ictx_check " << ictx << dendl;
-
-    bool needs_refresh = false;
-    int refresh_seq;
-    {
-      Mutex::Locker refresh_locker(ictx->refresh_lock);
-      while (ictx->refresh_in_progress) {
-        ictx->refresh_cond.Wait(ictx->refresh_lock);
-      }
-
-      if (ictx->last_refresh != ictx->refresh_seq) {
-        ictx->refresh_in_progress = true;
-        needs_refresh = true;
-        refresh_seq = ictx->refresh_seq;
-      }
-    }
-
-    if (needs_refresh) {
-      int r = ictx_refresh(ictx);
-
-      Mutex::Locker refresh_locker(ictx->refresh_lock);
-      ictx->refresh_in_progress = false;
-      ictx->refresh_cond.Signal();
-
-      if (r < 0) {
-	lderr(cct) << "Error re-reading rbd header: " << cpp_strerror(-r)
-		   << dendl;
-        return r;
-      }
-      ictx->last_refresh = refresh_seq;
-    }
-    return 0;
-  }
-
-  int refresh_parent(ImageCtx *ictx) {
-    assert(ictx->cache_lock.is_locked());
-    assert(ictx->snap_lock.is_wlocked());
-    assert(ictx->parent_lock.is_wlocked());
-
-    // close the parent if it changed or this image no longer needs
-    // to read from it
-    int r;
-    if (ictx->parent) {
-      uint64_t overlap;
-      r = ictx->get_parent_overlap(ictx->snap_id, &overlap);
-      if (r < 0 && r != -ENOENT) {
-	return r;
-      }
-      if (r == -ENOENT || overlap == 0 ||
-	  ictx->parent->md_ctx.get_id() !=
-            ictx->get_parent_pool_id(ictx->snap_id) ||
-	  ictx->parent->id != ictx->get_parent_image_id(ictx->snap_id) ||
-	  ictx->parent->snap_id != ictx->get_parent_snap_id(ictx->snap_id)) {
-	ictx->clear_nonexistence_cache();
-	close_parent(ictx);
-      }
-    }
-
-    if (ictx->get_parent_pool_id(ictx->snap_id) > -1 && !ictx->parent) {
-      r = open_parent(ictx);
-      if (r < 0) {
-	lderr(ictx->cct) << "error opening parent snapshot: "
-			 << cpp_strerror(r) << dendl;
-	return r;
-      }
-    }
-
-    return 0;
-  }
-
-  int ictx_refresh(ImageCtx *ictx)
-  {
-    assert(ictx->owner_lock.is_locked());
-    RWLock::WLocker md_locker(ictx->md_lock);
-
-    CephContext *cct = ictx->cct;
-
-    ldout(cct, 20) << "ictx_refresh " << ictx << dendl;
-
-    ::SnapContext new_snapc;
-    bool new_snap = false;
-    vector<string> snap_names;
-    vector<uint64_t> snap_sizes;
-    vector<parent_info> snap_parents;
-    vector<uint8_t> snap_protection;
-    vector<uint64_t> snap_flags;
-    {
-      Mutex::Locker cache_locker(ictx->cache_lock);
-      RWLock::WLocker snap_locker(ictx->snap_lock);
-
-      {
-	int r;
-	RWLock::WLocker parent_locker(ictx->parent_lock);
-	ictx->lockers.clear();
-	if (ictx->old_format) {
-	  r = read_header(ictx->md_ctx, ictx->header_oid, &ictx->header, NULL);
-	  if (r < 0) {
-	    lderr(cct) << "Error reading header: " << cpp_strerror(r) << dendl;
-	    return r;
-	  }
-	  r = cls_client::old_snapshot_list(&ictx->md_ctx, ictx->header_oid,
-					    &snap_names, &snap_sizes, &new_snapc);
-	  if (r < 0) {
-	    lderr(cct) << "Error listing snapshots: " << cpp_strerror(r)
-		       << dendl;
-	    return r;
-	  }
-	  ClsLockType lock_type = LOCK_NONE;
-	  r = rados::cls::lock::get_lock_info(&ictx->md_ctx, ictx->header_oid,
-					      RBD_LOCK_NAME, &ictx->lockers,
-					      &lock_type, &ictx->lock_tag);
-
-	  // If EOPNOTSUPP, treat image as if there are no locks (we can't
-	  // query them).
-
-	  // Ugly: OSDs prior to eed28daaf8927339c2ecae1b1b06c1b63678ab03
-	  // return EIO when the class isn't present; should be EOPNOTSUPP.
-	  // Treat EIO or EOPNOTSUPP the same for now, as LOCK_NONE.  Blech.
-
-	  if (r < 0 && ((r != -EOPNOTSUPP) && (r != -EIO))) {
-	    lderr(cct) << "Error getting lock info: " << cpp_strerror(r)
-		       << dendl;
-	    return r;
-	  }
-	  ictx->exclusive_locked = (lock_type == LOCK_EXCLUSIVE);
-	  ictx->order = ictx->header.options.order;
-	  ictx->size = ictx->header.image_size;
-	  ictx->object_prefix = ictx->header.block_name;
-	  ictx->init_layout();
-	} else {
-	  do {
-	    uint64_t incompatible_features;
-	    bool read_only = ictx->read_only || ictx->snap_id != CEPH_NOSNAP;
-	    r = cls_client::get_mutable_metadata(&ictx->md_ctx, ictx->header_oid,
-						 read_only,
-						 &ictx->size, &ictx->features,
-						 &incompatible_features,
-						 &ictx->lockers,
-						 &ictx->exclusive_locked,
-						 &ictx->lock_tag,
-						 &new_snapc,
-						 &ictx->parent_md);
-	    if (r < 0) {
-	      lderr(cct) << "Error reading mutable metadata: " << cpp_strerror(r)
-			 << dendl;
-	      return r;
-	    }
-
-	    uint64_t unsupported = incompatible_features & ~RBD_FEATURES_ALL;
-	    if (unsupported) {
-	      lderr(ictx->cct) << "Image uses unsupported features: "
-			       << unsupported << dendl;
-	      return -ENOSYS;
-	    }
-
-	    r = cls_client::get_flags(&ictx->md_ctx, ictx->header_oid,
-				      &ictx->flags, new_snapc.snaps,
-				      &snap_flags);
-	    if (r == -EOPNOTSUPP || r == -EIO) {
-	      // Older OSD doesn't support RBD flags, need to assume the worst
-	      ldout(ictx->cct, 10) << "OSD does not support RBD flags"
-				   << "disabling object map optimizations"
-				   << dendl;
-	      ictx->flags = RBD_FLAG_OBJECT_MAP_INVALID;
-              if ((ictx->features & RBD_FEATURE_FAST_DIFF) != 0) {
-                ictx->flags |= RBD_FLAG_FAST_DIFF_INVALID;
-              }
-
-	      vector<uint64_t> default_flags(new_snapc.snaps.size(), ictx->flags);
-	      snap_flags.swap(default_flags);
-            } else if (r == -ENOENT) {
-              ldout(ictx->cct, 10) << "Image at invalid snapshot" << dendl;
-	      continue;
-            } else if (r < 0) {
-              lderr(cct) << "Error reading flags: " << cpp_strerror(r) << dendl;
-              return r;
-            }
-
-	    r = cls_client::snapshot_list(&(ictx->md_ctx), ictx->header_oid,
-					  new_snapc.snaps, &snap_names,
-                                          &snap_sizes, &snap_parents,
-                                          &snap_protection);
-	    // -ENOENT here means we raced with snapshot deletion
-	    if (r < 0 && r != -ENOENT) {
-	      lderr(ictx->cct) << "snapc = " << new_snapc << dendl;
-	      lderr(ictx->cct) << "Error listing snapshots: " << cpp_strerror(r)
-			       << dendl;
-	      return r;
-	    }
-	  } while (r == -ENOENT);
-	}
-
-	for (size_t i = 0; i < new_snapc.snaps.size(); ++i) {
-	  parent_info parent;
-	  if (!ictx->old_format)
-	    parent = snap_parents[i];
-	  vector<snap_t>::const_iterator it =
-	    find(ictx->snaps.begin(), ictx->snaps.end(), new_snapc.snaps[i].val);
-	  if (it == ictx->snaps.end()) {
-	    new_snap = true;
-	    ldout(cct, 20) << "new snapshot id=" << new_snapc.snaps[i].val
-			   << " name=" << snap_names[i]
-			   << " size=" << snap_sizes[i]
-			   << dendl;
-	  }
-	}
-
-	ictx->snaps.clear();
-	ictx->snap_info.clear();
-	ictx->snap_ids.clear();
-	for (size_t i = 0; i < new_snapc.snaps.size(); ++i) {
-	  uint64_t flags = ictx->old_format ? 0 : snap_flags[i];
-	  uint8_t protection_status = ictx->old_format ?
-	    (uint8_t)RBD_PROTECTION_STATUS_UNPROTECTED : snap_protection[i];
-	  parent_info parent;
-	  if (!ictx->old_format)
-	    parent = snap_parents[i];
-	  ictx->add_snap(snap_names[i], new_snapc.snaps[i].val, snap_sizes[i],
-			 parent, protection_status, flags);
-	}
-
-	r = refresh_parent(ictx);
-	if (r < 0)
-	  return r;
-      } // release parent_lock
-
-      if (!new_snapc.is_valid()) {
-	lderr(cct) << "image snap context is invalid!" << dendl;
-	return -EIO;
-      }
-
-      ictx->snapc = new_snapc;
-
-      if (ictx->snap_id != CEPH_NOSNAP &&
-	  ictx->get_snap_id(ictx->snap_name) != ictx->snap_id) {
-	lderr(cct) << "tried to read from a snapshot that no longer exists: "
-		   << ictx->snap_name << dendl;
-	ictx->snap_exists = false;
-      }
-
-      // TODO handle by new async refresh state machine
-      //ictx->object_map.refresh(ictx->snap_id);
-
-      ictx->data_ctx.selfmanaged_snap_set_write_ctx(ictx->snapc.seq, ictx->snaps);
-
-      // dynamically enable/disable journaling support
-      if ((ictx->features & RBD_FEATURE_JOURNALING) != 0 &&
-          ictx->image_watcher != NULL && ictx->journal == NULL &&
-          ictx->snap_name.empty()) {
-        ictx->open_journal();
-      } else if ((ictx->features & RBD_FEATURE_JOURNALING) == 0 &&
-                 ictx->journal != NULL) {
-        // TODO journal needs to be disabled via proxied request to avoid race
-        //      between deleting journal and appending journal events
-      }
-    } // release snap_lock and cache_lock
-
-    if (ictx->image_watcher != NULL) {
-      // TODO handled by new async refresh state machine
-      //ictx->image_watcher->refresh();
-    }
-
-    if (new_snap) {
-      ictx->flush();
-    }
-    return 0;
   }
 
   int snap_rollback(ImageCtx *ictx, const char *snap_name,
@@ -2640,7 +2275,7 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
     ldout(cct, 20) << "snap_rollback " << ictx << " snap = " << snap_name
 		   << dendl;
 
-    int r = ictx_check(ictx);
+    int r = ictx->state->refresh_if_required();
     if (r < 0)
       return r;
 
@@ -2756,14 +2391,14 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
 
     ImageCtx *dest = new librbd::ImageCtx(destname, "", NULL,
 					  dest_md_ctx, false);
-    r = open_image(dest);
+    r = dest->state->open();
     if (r < 0) {
       lderr(cct) << "failed to read newly created header" << dendl;
       return r;
     }
 
     r = copy(src, dest, prog_ctx);
-    int close_r = close_image(dest);
+    int close_r = dest->state->close();
     if (r == 0 && close_r < 0) {
       r = close_r;
     }
@@ -2877,29 +2512,6 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
     return r;
   }
 
-  // common snap_set functionality for snap_set and open_image
-
-  int _snap_set(ImageCtx *ictx, const char *snap_name)
-  {
-    RWLock::WLocker owner_locker(ictx->owner_lock);
-    RWLock::RLocker md_locker(ictx->md_lock);
-    Mutex::Locker cache_locker(ictx->cache_lock);
-    RWLock::WLocker snap_locker(ictx->snap_lock);
-    RWLock::WLocker parent_locker(ictx->parent_lock);
-    int r;
-    if ((snap_name != NULL) && (strlen(snap_name) != 0)) {
-      r = ictx->snap_set(snap_name);
-    } else {
-      ictx->snap_unset();
-      r = 0;
-    }
-    if (r < 0) {
-      return r;
-    }
-    refresh_parent(ictx);
-    return 0;
-  }
-
   int snap_set(ImageCtx *ictx, const char *snap_name)
   {
     ldout(ictx->cct, 20) << "snap_set " << ictx << " snap = "
@@ -2907,192 +2519,20 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
 
     // ignore return value, since we may be set to a non-existent
     // snapshot and the user is trying to fix that
-    ictx_check(ictx);
+    ictx->state->refresh_if_required();
 
-    int r;
-    bool snapshot_mode = (snap_name != NULL && strlen(snap_name) != 0);
-    if (snapshot_mode) {
-      {
-        RWLock::WLocker owner_locker(ictx->owner_lock);
-        // TODO handled by new async set snap state machine
-        //if (ictx->image_watcher != NULL &&
-        //    ictx->image_watcher->is_lock_owner()) {
-        //  r = ictx->image_watcher->release_lock();
-        //  if (r < 0) {
-        //    return r;
-        //  }
-        //}
-      }
+    C_SaferCond ctx;
+    std::string name(snap_name == nullptr ? "" : snap_name);
+    ictx->state->snap_set(name, &ctx);
 
-      ictx->cancel_async_requests();
-      {
-        RWLock::RLocker owner_locker(ictx->owner_lock);
-        r = ictx->flush();
-      }
-
-      {
-        RWLock::WLocker snap_locker(ictx->snap_lock);
-        if (ictx->journal != NULL) {
-          r = ictx->close_journal(false);
-          if (r < 0) {
-            return r;
-          }
-        }
-      }
-    }
-
-    r = _snap_set(ictx, snap_name);
+    int r = ctx.wait();
     if (r < 0) {
+      lderr(ictx->cct) << "failed to " << (name.empty() ? "un" : "") << "set "
+                       << "snapshot: " << cpp_strerror(r) << dendl;
       return r;
     }
 
-    {
-      RWLock::WLocker snap_locker(ictx->snap_lock);
-      if ((ictx->features & RBD_FEATURE_JOURNALING) != 0 &&
-          ictx->journal == NULL && !snapshot_mode) {
-        ictx->open_journal();
-      }
-    }
-
-    RWLock::RLocker owner_locker(ictx->owner_lock);
-    if (ictx->image_watcher != NULL) {
-      // TODO handled by new async set snap request state machine
-      //ictx->image_watcher->refresh();
-    }
-    return r;
-  }
-
-  int open_image(ImageCtx *ictx)
-  {
-    ldout(ictx->cct, 20) << "open_image: ictx = " << ictx
-			 << " name = '" << ictx->name
-			 << "' id = '" << ictx->id
-			 << "' snap_name = '"
-			 << ictx->snap_name << "'" << dendl;
-    int r = ictx->init_legacy();
-    if (r < 0)
-      goto err_close;
-
-    if (!ictx->read_only) {
-      r = ictx->register_watch();
-      if (r < 0) {
-        lderr(ictx->cct) << "error registering a watch: " << cpp_strerror(r)
-                         << dendl;
-        goto err_close;
-      }
-    }
-
-    {
-      RWLock::RLocker owner_locker(ictx->owner_lock);
-      r = ictx_refresh(ictx);
-    }
-    if (r < 0)
-      goto err_close;
-
-    if ((r = _snap_set(ictx, ictx->snap_name.c_str())) < 0)
-      goto err_close;
-
-    if (ictx->image_watcher != NULL) {
-      RWLock::RLocker owner_locker(ictx->owner_lock);
-      // TODO handled by new async open image state machine
-      //ictx->image_watcher->refresh();
-    }
-
     return 0;
-
-  err_close:
-    close_image(ictx);
-    return r;
-  }
-
-  int close_image(ImageCtx *ictx)
-  {
-    ldout(ictx->cct, 20) << "close_image " << ictx << dendl;
-
-    if (!ictx->read_only) {
-      // finish all incoming IO operations
-      ictx->aio_work_queue->drain();
-    }
-
-    int r = 0;
-    {
-      // release the lock (and flush all in-flight IO)
-      RWLock::WLocker owner_locker(ictx->owner_lock);
-      // TODO replaced by new async close request
-    }
-
-    assert(!ictx->aio_work_queue->writes_blocked() ||
-           ictx->aio_work_queue->writes_empty());
-
-    ictx->cancel_async_requests();
-    ictx->clear_pending_completions();
-    ictx->flush_async_operations();
-    ictx->readahead.wait_for_pending();
-
-    if (ictx->object_cacher) {
-      int flush_r = ictx->shutdown_cache(); // implicitly flushes
-      if (flush_r < 0) {
-        lderr(ictx->cct) << "error flushing IO: " << cpp_strerror(flush_r)
-                         << dendl;
-        if (r == 0) {
-          r = flush_r;
-        }
-      }
-    }
-
-    if (ictx->copyup_finisher != NULL) {
-      ictx->copyup_finisher->wait_for_empty();
-      ictx->copyup_finisher->stop();
-    }
-
-    if (ictx->journal != NULL) {
-      int close_r = ictx->close_journal(true);
-      if (close_r < 0 && r == 0) {
-        r = close_r;
-      }
-    }
-
-    ictx->op_work_queue->drain();
-
-    if (ictx->parent) {
-      RWLock::WLocker parent_locker(ictx->parent_lock);
-      int close_r = close_parent(ictx);
-      if (r == 0 && close_r < 0) {
-        r = close_r;
-      }
-    }
-
-    if (ictx->image_watcher) {
-      ictx->unregister_watch();
-    }
-
-    delete ictx;
-    return r;
-  }
-
-  int close_parent(ImageCtx *ictx)
-  {
-    assert(ictx->parent_lock.is_wlocked());
-    ImageCtx *parent_ictx = ictx->parent;
-
-    // AIO to the parent must be complete before closing
-    {
-      RWLock::RLocker owner_locker(parent_ictx->owner_lock);
-      parent_ictx->flush();
-    }
-    parent_ictx->readahead.wait_for_pending();
-    {
-      Mutex::Locker async_ops_locker(parent_ictx->async_ops_lock);
-      assert(parent_ictx->async_ops.empty());
-    }
-
-    // attempting to drain the work queues might result in deadlock
-    assert(parent_ictx->aio_work_queue->empty());
-    assert(parent_ictx->op_work_queue->empty());
-
-    int r = close_image(parent_ictx);
-    ictx->parent = NULL;
-    return r;
   }
 
   // 'flatten' child image by copying all parent's blocks
@@ -3101,7 +2541,7 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
     CephContext *cct = ictx->cct;
     ldout(cct, 20) << "flatten" << dendl;
 
-    int r = ictx_check(ictx);
+    int r = ictx->state->refresh_if_required();
     if (r < 0) {
       return r;
     }
@@ -3145,8 +2585,7 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
     ldout(cct, 20) << "flatten" << dendl;
 
     int r;
-    // ictx_check also updates parent data
-    if ((r = ictx_check(ictx, ictx->owner_lock)) < 0) {
+    if ((r = ictx->state->refresh_if_required(ictx->owner_lock)) < 0) {
       lderr(cct) << "ictx_check failed" << dendl;
       ctx->complete(r);
       return;
@@ -3197,7 +2636,7 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
     CephContext *cct = ictx->cct;
     ldout(cct, 10) << "rebuild_object_map" << dendl;
 
-    int r = ictx_check(ictx);
+    int r = ictx->state->refresh_if_required();
     if (r < 0) {
       return r;
     }
@@ -3235,7 +2674,7 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
       return;
     }
 
-    int r = ictx_check(ictx, ictx->owner_lock);
+    int r = ictx->state->refresh_if_required(ictx->owner_lock);
     if (r < 0) {
       ctx->complete(r);
       return;
@@ -3253,7 +2692,7 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
   {
     ldout(ictx->cct, 20) << "list_locks on image " << ictx << dendl;
 
-    int r = ictx_check(ictx);
+    int r = ictx->state->refresh_if_required();
     if (r < 0)
       return r;
 
@@ -3285,7 +2724,7 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
 			 << " cookie='" << cookie << "' tag='" << tag << "'"
 			 << dendl;
 
-    int r = ictx_check(ictx);
+    int r = ictx->state->refresh_if_required();
     if (r < 0)
       return r;
 
@@ -3309,8 +2748,7 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
     ldout(ictx->cct, 20) << "unlock image " << ictx
 			 << " cookie='" << cookie << "'" << dendl;
 
-
-    int r = ictx_check(ictx);
+    int r = ictx->state->refresh_if_required();
     if (r < 0)
       return r;
 
@@ -3329,7 +2767,7 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
     ldout(ictx->cct, 20) << "break_lock image " << ictx << " client='" << client
 			 << "' cookie='" << cookie << "'" << dendl;
 
-    int r = ictx_check(ictx);
+    int r = ictx->state->refresh_if_required();
     if (r < 0)
       return r;
 
@@ -3403,7 +2841,7 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
     ldout(ictx->cct, 20) << "read_iterate " << ictx << " off = " << off
 			 << " len = " << len << dendl;
 
-    int r = ictx_check(ictx);
+    int r = ictx->state->refresh_if_required();
     if (r < 0)
       return r;
 
@@ -3465,7 +2903,7 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
       ictx->flush();
     }
 
-    int r = ictx_check(ictx);
+    int r = ictx->state->refresh_if_required();
     if (r < 0) {
       return r;
     }
@@ -3513,7 +2951,7 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
     CephContext *cct = ictx->cct;
     ldout(cct, 20) << "flush " << ictx << dendl;
 
-    int r = ictx_check(ictx);
+    int r = ictx->state->refresh_if_required();
     if (r < 0) {
       return r;
     }
@@ -3532,7 +2970,7 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
     CephContext *cct = ictx->cct;
     ldout(cct, 20) << "invalidate_cache " << ictx << dendl;
 
-    int r = ictx_check(ictx);
+    int r = ictx->state->refresh_if_required();
     if (r < 0) {
       return r;
     }
@@ -3566,7 +3004,7 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
     CephContext *cct = ictx->cct;
     ldout(cct, 20) << "metadata_get " << ictx << " key=" << key << dendl;
 
-    int r = ictx_check(ictx);
+    int r = ictx->state->refresh_if_required();
     if (r < 0) {
       return r;
     }
@@ -3579,7 +3017,7 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
     CephContext *cct = ictx->cct;
     ldout(cct, 20) << "metadata_set " << ictx << " key=" << key << " value=" << value << dendl;
 
-    int r = ictx_check(ictx);
+    int r = ictx->state->refresh_if_required();
     if (r < 0) {
       return r;
     }
@@ -3594,7 +3032,7 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
     CephContext *cct = ictx->cct;
     ldout(cct, 20) << "metadata_remove " << ictx << " key=" << key << dendl;
 
-    int r = ictx_check(ictx);
+    int r = ictx->state->refresh_if_required();
     if (r < 0) {
       return r;
     }
@@ -3607,7 +3045,7 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
     CephContext *cct = ictx->cct;
     ldout(cct, 20) << "metadata_list " << ictx << dendl;
 
-    int r = ictx_check(ictx);
+    int r = ictx->state->refresh_if_required();
     if (r < 0) {
       return r;
     }
