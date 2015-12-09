@@ -13,6 +13,7 @@ Build-Depends: autoconf,
 	       libbz2-dev,
 	       cmake,
 	       cryptsetup-bin | cryptsetup,
+               cython,
                debhelper (>= 6.0.7~),
                default-jdk,
                git,
@@ -529,7 +530,7 @@ Description: Python libraries for the Ceph librados library
 Package: python-rbd
 Architecture: linux-any
 Section: python
-Depends: librbd1, ${misc:Depends}, ${python:Depends}
+Depends: librbd1 (>= ${binary:Version}), ${misc:Depends}, ${python:Depends}
 Replaces: python-ceph (<< 0.92-1223)
 Breaks: python-ceph (<< 0.92-1223)
 X-Python-Version: >= 2.6

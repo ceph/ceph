@@ -6,6 +6,7 @@ Makefile
 /.git_version
 /.libs
 /acconfig.h*
+/build
 /ceph
 /cephfs
 /crushtool
