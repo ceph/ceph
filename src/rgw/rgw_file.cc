@@ -285,7 +285,7 @@ int rgw_unlink(struct rgw_fs *rgw_fs, struct rgw_file_handle *parent_fh,
      * object to be deleted ("foo" vs. "foo/"), and as a side effect
      * can do no further work if no object existed */
     struct rgw_file_handle *fh;
-    rc = rgw_lookup(rgw_fs, parent_fh, name, &fh, 0 /* flags */);
+    rc = rgw_lookup(rgw_fs, parent_fh, name, &fh, RGW_LOOKUP_FLAG_NONE);
     if (! rc)  {
       /* rgw_fh ref+ */
       RGWFileHandle* rgw_fh = get_rgwfh(fh);
