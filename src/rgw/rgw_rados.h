@@ -864,9 +864,13 @@ struct RGWZoneParams : RGWSystemMetaObj {
 
   map<string, RGWZonePlacementInfo> placement_pools;
 
+  string realm_id;
+
   RGWZoneParams() : RGWSystemMetaObj() {}
   RGWZoneParams(const string& name) : RGWSystemMetaObj(name){}
   RGWZoneParams(const string& id, const string& name) : RGWSystemMetaObj(id, name) {}
+  RGWZoneParams(const string& id, const string& name, const string& _realm_id)
+    : RGWSystemMetaObj(id, name), realm_id(_realm_id) {}
 
   const string& get_pool_name(CephContext *cct);
   const string get_default_oid(bool old_format = false);
@@ -877,6 +881,8 @@ struct RGWZoneParams : RGWSystemMetaObj {
   int init(CephContext *_cct, RGWRados *_store, bool setup_obj = true,
 	   bool old_format = false);
   using RGWSystemMetaObj::init;
+  int read_default_id(string& default_id, bool old_format = false);
+  int set_as_default();
   int create_default(bool old_format = false);
   int create(bool exclusive = true);
   int fix_pool_names();
@@ -897,6 +903,7 @@ struct RGWZoneParams : RGWSystemMetaObj {
     ::encode(system_key, bl);
     ::encode(placement_pools, bl);
     ::encode(metadata_heap, bl);
+    ::encode(realm_id, bl);
     ENCODE_FINISH(bl);
   }
 
@@ -924,6 +931,9 @@ struct RGWZoneParams : RGWSystemMetaObj {
       ::decode(placement_pools, bl);
     if (struct_v >= 5)
       ::decode(metadata_heap, bl);
+    if (struct_v >= 6) {
+      ::decode(realm_id, bl);
+    }
     DECODE_FINISH(bl);
   }
   void dump(Formatter *f) const;

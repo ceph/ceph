@@ -2783,6 +2783,7 @@ int main(int argc, char **argv)
 
         zone.system_key.id = access_key;
         zone.system_key.key = secret_key;
+	zone.realm_id = realm_id;
 
 	ret = zone.create();
 	if (ret < 0) {
