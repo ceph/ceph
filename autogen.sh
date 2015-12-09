@@ -18,6 +18,10 @@ check_for_pkg_config() {
     exit 1
 }
 
+if [ x`uname -s` = xFreeBSD ]; then
+    . ./autogen_freebsd.sh
+fi
+
 if [ `which libtoolize` ]; then
     LIBTOOLIZE=libtoolize
 elif [ `which glibtoolize` ]; then
@@ -46,4 +50,5 @@ autoconf
 autoheader
 automake -a --add-missing -Wall
 ( cd src/gmock && autoreconf -fvi; )
+echo autogen.sh done
 exit

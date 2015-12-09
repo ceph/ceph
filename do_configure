@@ -1,0 +1,15 @@
+#!/bin/sh
+
+set -x
+
+if [ "$(uname)" = FreeBSD -a -f autogen_freebsd.sh ]; then
+	. ./autogen_freebsd.sh
+fi
+
+./configure \
+	${CONFIGURE_FLAGS} \
+	$*
+#
+# Left for later
+#
+
