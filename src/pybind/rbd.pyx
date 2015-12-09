@@ -1126,8 +1126,7 @@ cdef class Image(object):
         :raises: :class:`InvalidArgument`, :class:`IOError`,
                  :class:`ImageNotFound`
         """
-        if from_snapshot is not None and not isinstance(from_snapshot, str):
-            raise TypeError('client must be a string')
+        from_snapshot = cstr(from_snapshot, 'from_snapshot', opt=True)
         cdef:
             char *_from_snapshot = opt_str(from_snapshot)
             uint64_t _offset = offset, _length = length
@@ -1250,7 +1249,7 @@ written." % (self.name, ret, length))
         try:
             while True:
                 c_pools = <char *>realloc_chk(c_pools, pools_size)
-                c_images = <char *>realloc_chk(c_images, pools_size)
+                c_images = <char *>realloc_chk(c_images, images_size)
                 with nogil:
                     ret = rbd_list_children(self.image, c_pools, &pools_size,
                                             c_images, &images_size)
@@ -1293,7 +1292,7 @@ written." % (self.name, ret, length))
         try:
             while True:
                 c_clients = <char *>realloc_chk(c_clients, clients_size)
-                c_cookies = <char *>realloc_chk(c_cookies, clients_size)
+                c_cookies = <char *>realloc_chk(c_cookies, cookies_size)
                 c_addrs = <char *>realloc_chk(c_addrs, addrs_size)
                 c_tag = <char *>realloc_chk(c_tag, tag_size)
                 with nogil:
