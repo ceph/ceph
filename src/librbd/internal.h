@@ -141,18 +141,9 @@ namespace librbd {
                              const char *snap_name);
   int snap_is_protected(ImageCtx *ictx, const char *snap_name,
 			bool *is_protected);
-  int refresh_parent(ImageCtx *ictx);
-  int ictx_check(ImageCtx *ictx);
-  int ictx_check(ImageCtx *ictx, const RWLock &owner_lock);
-  int ictx_refresh(ImageCtx *ictx);
   int copy(ImageCtx *ictx, IoCtx& dest_md_ctx, const char *destname,
 	   ImageOptions& opts, ProgressContext &prog_ctx);
   int copy(ImageCtx *src, ImageCtx *dest, ProgressContext &prog_ctx);
-
-  int open_parent(ImageCtx *ictx);
-  int open_image(ImageCtx *ictx);
-  int close_image(ImageCtx *ictx);
-  int close_parent(ImageCtx *ictx);
 
   int flatten(ImageCtx *ictx, ProgressContext &prog_ctx);
 
