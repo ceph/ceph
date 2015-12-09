@@ -1612,27 +1612,6 @@ void RGWPutACLs_ObjStore_S3::send_response()
   dump_start(s);
 }
 
-void RGWPutLC_ObjStore_S3::send_response()
-{
-  if (ret)
-    set_req_state_err(s, ret);
-  dump_errno(s);
-  end_header(s, this, "application/xml");
-  dump_start(s);
-}
-
-void RGWDeleteLC_ObjStore_S3::send_response()
-{
-  if (ret == 0)
-      ret = STATUS_NO_CONTENT;
-  if (ret) {   
-    set_req_state_err(s, ret);
-  }
-  dump_errno(s);
-  end_header(s, this, "application/xml");
-  dump_start(s);
-}
-
 void RGWGetCORS_ObjStore_S3::send_response()
 {
   if (ret) {
@@ -2166,8 +2145,6 @@ RGWOp *RGWHandler_ObjStore_Bucket_S3::op_put()
     return new RGWPutCORS_ObjStore_S3;
   } else if (is_request_payment_op()) {
     return new RGWSetRequestPayment_ObjStore_S3;
-  } else if(is_lc_op()) {
-    return new RGWPutLC_ObjStore_S3;
   }
   return new RGWCreateBucket_ObjStore_S3;
 }
@@ -2176,8 +2153,6 @@ RGWOp *RGWHandler_ObjStore_Bucket_S3::op_delete()
 {
   if (is_cors_op()) {
     return new RGWDeleteCORS_ObjStore_S3;
-  } else if(is_lc_op()) {
-    return new RGWDeleteLC_ObjStore_S3;
   }
   return new RGWDeleteBucket_ObjStore_S3;
 }

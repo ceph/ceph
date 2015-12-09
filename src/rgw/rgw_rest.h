@@ -210,21 +210,6 @@ public:
   int get_params();
 };
 
-class RGWPutLC_ObjStore : public RGWPutLC {
-public:
-  RGWPutLC_ObjStore() {}
-  ~RGWPutLC_ObjStore() {}
-
-  int get_params();
-};
-
-class RGWDeleteLC_ObjStore : public RGWDeleteLC {
-public:
-  RGWDeleteLC_ObjStore() {}
-  ~RGWDeleteLC_ObjStore() {}
-
-};
-
 class RGWGetCORS_ObjStore : public RGWGetCORS {
 public:
   RGWGetCORS_ObjStore() {}

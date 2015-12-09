@@ -602,7 +602,6 @@ int RGWHTTPArgs::parse()
       }
 
       if ((name.compare("acl") == 0) ||
-          (name.compare("lifecycle") == 0) ||
           (name.compare("cors") == 0) ||
           (name.compare("location") == 0) ||
           (name.compare("logging") == 0) ||
