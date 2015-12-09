@@ -39,18 +39,19 @@ void Request<I>::send() {
 
 template <typename I>
 void Request<I>::finish(int r) {
-  AsyncRequest<I>::finish(r);
+  {
+    I &image_ctx = this->m_image_ctx;
+    RWLock::RLocker snap_locker(image_ctx.snap_lock);
+    if (m_tid != 0 && image_ctx.journal != NULL &&
+        !image_ctx.journal->is_journal_replaying()) {
+      // ops will be canceled / completed before closing journal
+      assert(image_ctx.journal->is_journal_ready());
 
-  I &image_ctx = this->m_image_ctx;
-  RWLock::RLocker snap_locker(image_ctx.snap_lock);
-  if (m_tid != 0 &&
-      image_ctx.journal != NULL &&
-      !image_ctx.journal->is_journal_replaying()) {
-    // ops will be canceled / completed before closing journal
-    assert(image_ctx.journal->is_journal_ready());
-
-    image_ctx.journal->commit_op_event(m_tid, r);
+      image_ctx.journal->commit_op_event(m_tid, r);
+    }
   }
+
+  AsyncRequest<I>::finish(r);
 }
 
 template <typename I>
