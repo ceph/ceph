@@ -46,7 +46,6 @@ public:
   int notify_rename(const std::string &image_name);
 
   void notify_acquired_lock();
-  void notify_release_lock();
   void notify_released_lock();
   void notify_request_lock();
 
@@ -68,7 +67,6 @@ private:
   enum TaskCode {
     TASK_CODE_ACQUIRED_LOCK,
     TASK_CODE_REQUEST_LOCK,
-    TASK_CODE_RELEASING_LOCK,
     TASK_CODE_RELEASED_LOCK,
     TASK_CODE_CANCEL_ASYNC_REQUESTS,
     TASK_CODE_REREGISTER_WATCH,

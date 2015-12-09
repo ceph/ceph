@@ -581,9 +581,7 @@ bool ImageWatcher::handle_payload(const RequestLockPayload &payload,
 
     ldout(m_image_ctx.cct, 10) << this << " queuing release of exclusive lock"
                                << dendl;
-    FunctionContext *ctx = new FunctionContext(
-      boost::bind(&ImageWatcher::notify_release_lock, this));
-    m_task_finisher->queue(TASK_CODE_RELEASING_LOCK, ctx);
+    m_image_ctx.exclusive_lock->release_lock(nullptr);
   }
   return true;
 }
