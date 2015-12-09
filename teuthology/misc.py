@@ -1282,7 +1282,7 @@ def is_in_dict(searchkey, searchval, d):
         return searchval == val
 
 
-def sh(command, log_limit=128):
+def sh(command, log_limit=1024):
     """
     Run the shell command and return the output in ascii (stderr and
     stdout).  If the command fails, raise an exception. The command
