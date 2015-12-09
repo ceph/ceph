@@ -503,36 +503,42 @@ namespace rgw {
     LookupFHResult lookup_fh(RGWFileHandle* parent, const char *name,
 			     const uint32_t cflags = RGWFileHandle::FLAG_NONE) {
 
+      using std::get;
+
       std::string sname(name);
       RGWFileHandle::FHCache::Latch lat;
       fh_key fhk = parent->make_fhk(sname);
       LookupFHResult fhr { nullptr, RGWFileHandle::FLAG_NONE };
-
-      using std::get;
 
       RGWFileHandle* fh =
 	fh_cache.find_latch(fhk.fh_hk.object /* partition selector*/,
 			    fhk /* key */, lat /* serializer */,
 			    RGWFileHandle::FHCache::FLAG_LOCK);
       /* LATCHED */
-      if ((! fh) &&
-	  (cflags & RGWFileHandle::FLAG_CREATE)) {
-	fh = new RGWFileHandle(this, get_inst(), parent, fhk, sname, cflags);
-	intrusive_ptr_add_ref(fh); /* sentinel ref */
-	fh_cache.insert_latched(fh, lat,
+      if (! fh) {
+	if (cflags & RGWFileHandle::FLAG_CREATE) {
+	  fh = new RGWFileHandle(this, get_inst(), parent, fhk, sname, cflags);
+	  intrusive_ptr_add_ref(fh); /* sentinel ref */
+	  fh_cache.insert_latched(fh, lat,
 				  RGWFileHandle::FHCache::FLAG_NONE);
-	if (cflags & RGWFileHandle::FLAG_PSEUDO)
-	  fh->set_pseudo();
-	get<1>(fhr) = RGWFileHandle::FLAG_CREATE;
+	  if (cflags & RGWFileHandle::FLAG_PSEUDO)
+	    fh->set_pseudo();
+	  get<1>(fhr) = RGWFileHandle::FLAG_CREATE;
+	} else {
+	  lat.lock->unlock(); /* !LATCHED */
+	  return fhr;
+	}
       }
 
       intrusive_ptr_add_ref(fh); /* call path/handle ref */
       lat.lock->unlock(); /* !LATCHED */
-
       get<0>(fhr) = fh;
 
       return fhr;
     }
+
+    LookupFHResult stat_bucket(RGWFileHandle* parent,
+			       const char *path, uint32_t flags);
 
     LookupFHResult stat_leaf(RGWFileHandle* parent, const char *path,
 			     uint32_t flags);
@@ -1236,87 +1242,145 @@ public:
 
 }; /* RGWStatObjRequest */
 
-  class RGWStatLeafRequest : public RGWLibRequest,
-			     public RGWListBucket /* RGWOp */
-  {
-  public:
-    const std::string& bucket;
-    std::string path;
-    bool matched;
+class RGWStatBucketRequest : public RGWLibRequest,
+			     public RGWStatBucket /* RGWOp */
+{
+public:
+  std::string uri;
+  bool matched;
 
-    RGWStatLeafRequest(CephContext* _cct, RGWUserInfo *_user,
-		       const std::string& _bucket, const std::string& _path)
-      : RGWLibRequest(_cct, _user), bucket(_bucket), path(_path),
-	matched(false) {
-      default_max = 2; // logical max {"foo", "foo/"}
-      magic = 79;
-      op = this;
+  RGWStatBucketRequest(CephContext* _cct, RGWUserInfo *_user,
+		       const std::string& _path)
+    : RGWLibRequest(_cct, _user), matched(false) {
+    uri = "/" + _path;
+    magic = 79;
+    op = this;
+  }
+
+  virtual bool only_bucket() { return false; }
+
+  virtual int op_init() {
+    // assign store, s, and dialect_handler
+    RGWObjectCtx* rados_ctx
+      = static_cast<RGWObjectCtx*>(get_state()->obj_ctx);
+    // framework promises to call op_init after parent init
+    assert(rados_ctx);
+    RGWOp::init(rados_ctx->store, get_state(), this);
+    op = this; // assign self as op: REQUIRED
+    return 0;
+  }
+
+  virtual int header_init() {
+
+    struct req_state* s = get_state();
+    s->info.method = "GET";
+    s->op = OP_GET;
+
+    /* XXX derp derp derp */
+    s->relative_uri = uri;
+    s->info.request_uri = uri; // XXX
+    s->info.effective_uri = uri;
+    s->info.request_params = "";
+    s->info.domain = ""; /* XXX ? */
+
+    // woo
+    s->user = user;
+
+    return 0;
+  }
+
+  virtual int get_params() {
+    return 0;
+  }
+
+  virtual void send_response() {
+    if (bucket.bucket.name.length() > 0)
+      matched = true;
+  }
+
+}; /* RGWStatBucketRequest */
+
+class RGWStatLeafRequest : public RGWLibRequest,
+			   public RGWListBucket /* RGWOp */
+{
+public:
+  const std::string& bucket;
+  std::string path;
+  bool matched;
+
+  RGWStatLeafRequest(CephContext* _cct, RGWUserInfo *_user,
+		     const std::string& _bucket, const std::string& _path)
+    : RGWLibRequest(_cct, _user), bucket(_bucket), path(_path),
+      matched(false) {
+    default_max = 2; // logical max {"foo", "foo/"}
+    magic = 80;
+    op = this;
+  }
+
+  virtual bool only_bucket() { return false; }
+
+  virtual int op_init() {
+    // assign store, s, and dialect_handler
+    RGWObjectCtx* rados_ctx
+      = static_cast<RGWObjectCtx*>(get_state()->obj_ctx);
+    // framework promises to call op_init after parent init
+    assert(rados_ctx);
+    RGWOp::init(rados_ctx->store, get_state(), this);
+    op = this; // assign self as op: REQUIRED
+    return 0;
+  }
+
+  virtual int header_init() {
+
+    struct req_state* s = get_state();
+    s->info.method = "GET";
+    s->op = OP_GET;
+
+    /* XXX derp derp derp */
+    std::string uri = "/" + bucket;
+    s->relative_uri = uri;
+    s->info.request_uri = uri; // XXX
+    s->info.effective_uri = uri;
+    s->info.request_params = "";
+    s->info.domain = ""; /* XXX ? */
+
+    // woo
+    s->user = user;
+
+    return 0;
+  }
+
+  virtual int get_params() {
+    // XXX S3
+    struct req_state* s = get_state();
+    list_versions = s->info.args.exists("versions");
+    if (!list_versions) {
+      marker = s->info.args.get("marker");
+    } else {
+      marker.name = s->info.args.get("key-marker");
+      marker.instance = s->info.args.get("version-id-marker");
     }
-
-    virtual bool only_bucket() { return false; }
-
-    virtual int op_init() {
-      // assign store, s, and dialect_handler
-      RGWObjectCtx* rados_ctx
-	= static_cast<RGWObjectCtx*>(get_state()->obj_ctx);
-      // framework promises to call op_init after parent init
-      assert(rados_ctx);
-      RGWOp::init(rados_ctx->store, get_state(), this);
-      op = this; // assign self as op: REQUIRED
-      return 0;
-    }
-
-    virtual int header_init() {
-
-      struct req_state* s = get_state();
-      s->info.method = "GET";
-      s->op = OP_GET;
-
-      /* XXX derp derp derp */
-      std::string uri = "/" + bucket;
-      s->relative_uri = uri;
-      s->info.request_uri = uri; // XXX
-      s->info.effective_uri = uri;
-      s->info.request_params = "";
-      s->info.domain = ""; /* XXX ? */
-
-      // woo
-      s->user = user;
-
-      return 0;
-    }
-
-    virtual int get_params() {
-      // XXX S3
-      struct req_state* s = get_state();
-      list_versions = s->info.args.exists("versions");
-      if (!list_versions) {
-	marker = s->info.args.get("marker");
-      } else {
-	marker.name = s->info.args.get("key-marker");
-	marker.instance = s->info.args.get("version-id-marker");
-      }
-      max_keys = default_max; // 2
-      prefix = path;
-      delimiter = "/";
+    max_keys = default_max; // 2
+    prefix = path;
+    delimiter = "/";
 #if 0 /* XXX? */
-      encoding_type = s->info.args.get("encoding-type");
+    encoding_type = s->info.args.get("encoding-type");
 #endif
-      return 0;
-    }
+    return 0;
+  }
 
-    virtual void send_response() {
-      for (const auto& iter : objs) {
-	path = iter.key.name;
-	matched = true;
-	break;
-      }
+  virtual void send_response() {
+    for (const auto& iter : objs) {
+      path = iter.key.name;
+      matched = true;
+      break;
     }
+  }
 
-    virtual void send_versioned_response() {
-      send_response();
-    }
-  }; /* RGWStatLeafRequest */
+  virtual void send_versioned_response() {
+    send_response();
+  }
+}; /* RGWStatLeafRequest */
 
 } /* namespace rgw */
 
