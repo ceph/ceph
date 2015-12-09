@@ -543,6 +543,12 @@ public:
     : type(other.type), pgid(other.pgid), removal_seq(other.removal_seq), _str(other._str) {
   }
 
+  coll_t(const coll_t& other, bool temp)
+    : type(TYPE_PG_TEMP), pgid(other.pgid), removal_seq(0) {
+      (void)temp;
+      calc_str();
+  }
+
   coll_t(coll_t&& other)
     : type(other.type), pgid(other.pgid), removal_seq(other.removal_seq), _str(std::move(other._str)) {
   }
