@@ -786,16 +786,18 @@ int BlueStore::_open_alloc()
     fm = NULL;
     return r;
   }
+
   alloc = Allocator::create("stupid");
-  r =  alloc->init(fm);
-  if (r < 0) {
-    delete alloc;
-    alloc = NULL;
-    fm->shutdown();
-    delete fm;
-    fm = NULL;
-    return r;
+  uint64_t num = 0, bytes = 0;
+  const map<uint64_t,uint64_t>& fl = fm->get_freelist();
+  for (auto p : fl) {
+    alloc->init_add_free(p.first, p.second);
+    ++num;
+    bytes += p.second;
   }
+  dout(10) << __func__ << " loaded " << pretty_si_t(bytes)
+	   << " in " << num << " extents"
+	   << dendl;
   return r;
 }
 

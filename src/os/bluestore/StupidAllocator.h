@@ -8,10 +8,7 @@
 #include "include/interval_set.h"
 #include "common/Mutex.h"
 
-class FreelistManager;
-
 class StupidAllocator : public Allocator {
-  FreelistManager *fm;
   Mutex lock;
 
   uint64_t num_free;     ///< total bytes in freelist
@@ -46,7 +43,7 @@ public:
 
   void dump(ostream& out);
 
-  int init(FreelistManager *f);
+  void init_add_free(uint64_t offset, uint64_t length);
   void shutdown();
 };
 
