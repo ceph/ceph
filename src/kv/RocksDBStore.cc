@@ -166,22 +166,6 @@ int RocksDBStore::create_and_open(ostream &out)
       return r;
     }
   }
-
-  // create tertiary paths
-  string wal_path = path + ".wal";
-  struct stat st;
-  int r = ::stat(wal_path.c_str(), &st);
-  if (r < 0)
-    r = -errno;
-  if (r == -ENOENT) {
-    unsigned slashoff = path.rfind('/');
-    string target = path.substr(slashoff + 1);
-    r = ::symlink(target.c_str(), wal_path.c_str());
-    if (r < 0) {
-      out << "failed to symlink " << wal_path << " to " << target;
-      return -errno;
-    }
-  }
   return do_open(out, true);
 }
 
@@ -195,7 +179,9 @@ int RocksDBStore::do_open(ostream &out, bool create_if_missing)
     return -EINVAL;
   }
   opt.create_if_missing = create_if_missing;
-  opt.wal_dir = path + ".wal";
+  if (g_conf->rocksdb_separate_wal_dir) {
+    opt.wal_dir = path + ".wal";
+  }
 
   if (g_conf->rocksdb_log_to_ceph_log) {
     opt.info_log.reset(new CephRocksdbLogger(g_ceph_context));

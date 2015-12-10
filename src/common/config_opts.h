@@ -765,6 +765,7 @@ OPTION(kinetic_hmac_key, OPT_STR, "asdfasdf") // kinetic key to authenticate wit
 OPTION(kinetic_use_ssl, OPT_BOOL, false) // whether to secure kinetic traffic with TLS
 
 
+OPTION(rocksdb_separate_wal_dir, OPT_BOOL, false) // use $path.wal for wal
 OPTION(rocksdb_log_to_ceph_log, OPT_BOOL, true)  // log to ceph log
 // rocksdb options that will be used for keyvaluestore(if backend is rocksdb)
 OPTION(keyvaluestore_rocksdb_options, OPT_STR, "")
