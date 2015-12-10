@@ -131,6 +131,11 @@ TEST(LibRGW, ENUMERATE1) {
 	  // descending
 	  uint64_t offset;
 	  bool eof; // XXX
+	  std::cout << "readdir in"
+		    << " bucket: " << elt.rgw_fh->bucket_name()
+		    << " object_name: " << elt.rgw_fh->object_name()
+		    << " full name: " << elt.rgw_fh->full_object_name()
+		    << std::endl;
 	  rc = rgw_readdir(fs, elt.fh, &offset, r1_cb, elt.fh, &eof);
 	  elt.state.readdir = true;
 	  ASSERT_EQ(rc, 0);
