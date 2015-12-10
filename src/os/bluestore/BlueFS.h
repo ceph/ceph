@@ -160,6 +160,9 @@ public:
   uint64_t get_total(unsigned id);
   uint64_t get_free(unsigned id);
 
+  /// get current extents that we own for given block device
+  int get_block_extents(unsigned id, interval_set<uint64_t> *extents);
+
   int open_for_write(
     const string& dir,
     const string& file,
