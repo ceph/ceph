@@ -554,7 +554,7 @@ int rgw_readdir(struct rgw_fs *rgw_fs,
     RGWListBucketsRequest req(cct, fs->get_user(), parent, rcb, cb_arg, offset);
     rc = librgw.get_fe()->execute_req(&req);
   } else {
-    string uri = "/" + parent->bucket_name() + "/";
+    // XXX finish marker handling
     rgw_obj_key marker{"", ""};
     RGWListBucketRequest req(cct, fs->get_user(), parent, rcb, cb_arg, offset);
     rc = librgw.get_fe()->execute_req(&req);
