@@ -961,24 +961,17 @@ int BlueFS::_flush_range(FileWriter *h, uint64_t offset, uint64_t length)
   return 0;
 }
 
-/*
-void BlueFS::_aio_finish(void *priv)
-{
-  FileWriter *h = static_cast<FileWriter*>(priv);
-  Mutex::Locker l(h->lock);
-  dout(10) << __func__ << " h " << h << " on " << h->file->fnode << dendl;
-  if (--h->num_aio_in_flight == 0) {
-    h->cond.Signal();
-  }
-}
-*/
-
 int BlueFS::_flush(FileWriter *h)
 {
   uint64_t length = h->buffer.length();
   uint64_t offset = h->pos;
   if (length == 0) {
-    dout(10) << __func__ << " " << h << " no dirty data on "
+    if (h->file->dirty) {
+      dout(10) << __func__ << " " << h << " no data, flushing metadata on "
+	       << h->file->fnode << dendl;
+      return _flush_log();
+    }
+    dout(10) << __func__ << " " << h << " no dirty data or metadata on "
 	     << h->file->fnode << dendl;
     return 0;
   }
