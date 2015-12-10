@@ -69,10 +69,10 @@ int main(int argc, char **argv)
 	int pos = 0;
 	int left = size;
 	while (left) {
-	  bufferptr bp;
-	  r = fs.read(h, pos, left, &bp, NULL);
+	  bufferlist bl;
+	  r = fs.read(h, &h->buf, pos, left, &bl, NULL);
 	  assert(r > 0);
-	  int rc = ::write(fd, bp.c_str(), r);
+	  int rc = bl.write_fd(fd);
 	  assert(rc == r);
 	  pos += r;
 	  left -= r;

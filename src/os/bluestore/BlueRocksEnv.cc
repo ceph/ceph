@@ -40,7 +40,7 @@ class BlueRocksSequentialFile : public rocksdb::SequentialFile {
   //
   // REQUIRES: External synchronization
   rocksdb::Status Read(size_t n, rocksdb::Slice* result, char* scratch) {
-    int r = fs->read(h, h->pos, n, NULL, scratch);
+    int r = fs->read(h, &h->buf, h->buf.pos, n, NULL, scratch);
     assert(r >= 0);
     *result = rocksdb::Slice(scratch, r);
     return rocksdb::Status::OK();
@@ -54,7 +54,7 @@ class BlueRocksSequentialFile : public rocksdb::SequentialFile {
   //
   // REQUIRES: External synchronization
   rocksdb::Status Skip(uint64_t n) {
-    h->skip(n);
+    h->buf.skip(n);
     return rocksdb::Status::OK();
   }
 
@@ -85,7 +85,8 @@ class BlueRocksRandomAccessFile : public rocksdb::RandomAccessFile {
   // Safe for concurrent use by multiple threads.
   rocksdb::Status Read(uint64_t offset, size_t n, rocksdb::Slice* result,
 		       char* scratch) const {
-    int r = fs->read(h, offset, n, NULL, scratch);
+    BlueFS::FileReaderBuffer buf(4096);
+    int r = fs->read(h, &buf, offset, n, NULL, scratch);
     assert (r >= 0);
     *result = rocksdb::Slice(scratch, r);
     return rocksdb::Status::OK();
@@ -125,9 +126,9 @@ class BlueRocksRandomAccessFile : public rocksdb::RandomAccessFile {
 
   void Hint(AccessPattern pattern) {
     if (pattern == RANDOM)
-      h->max_prefetch = 4096;
+      h->buf.max_prefetch = 4096;
     else if (pattern == SEQUENTIAL)
-      h->max_prefetch = g_conf->bluefs_max_prefetch;
+      h->buf.max_prefetch = g_conf->bluefs_max_prefetch;
   }
 
   // Remove any kind of caching of data from the offset to offset+length

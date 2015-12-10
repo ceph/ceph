@@ -84,28 +84,16 @@ public:
     }
   };
 
-  struct FileReader {
-    FileRef file;
+  struct FileReaderBuffer {
+    uint64_t bl_off;        ///< prefetch buffer logical offset
+    bufferlist bl;          ///< prefetch buffer
     uint64_t pos;           ///< current logical offset
     uint64_t max_prefetch;  ///< max allowed prefetch
-    bool ignore_eof;        ///< used when reading our log file
 
-    Mutex lock;       ///< lock (we serialize reads for now for RandomAccessFile)
-    uint64_t bl_off;  ///< prefetch buffer logical offset
-    bufferlist bl;    ///< prefetch buffer
-
-    FileReader(FileRef f, uint64_t mpf, bool ie = false)
-      : file(f),
+    FileReaderBuffer(uint64_t mpf)
+      : bl_off(0),
 	pos(0),
-	max_prefetch(mpf),
-	ignore_eof(ie),
-	lock("BlueFS::FileReader::lock"),
-	bl_off(0) {
-      file->num_readers.inc();
-    }
-    ~FileReader() {
-      file->num_readers.dec();
-    }
+	max_prefetch(mpf) {}
 
     uint64_t get_buf_end() {
       return bl_off + bl.length();
@@ -121,6 +109,22 @@ public:
     }
     void seek(uint64_t offset) {
       pos = offset;
+    }
+  };
+
+  struct FileReader {
+    FileRef file;
+    FileReaderBuffer buf;
+    bool ignore_eof;        ///< used when reading our log file
+
+    FileReader(FileRef f, uint64_t mpf, bool ie = false)
+      : file(f),
+	buf(mpf),
+	ignore_eof(ie) {
+      file->num_readers.inc();
+    }
+    ~FileReader() {
+      file->num_readers.dec();
     }
   };
 
@@ -174,6 +178,7 @@ private:
 
   int _read(
     FileReader *h,   ///< [in] read from here
+    FileReaderBuffer *buf, ///< [in] reader state
     uint64_t offset, ///< [in] offset
     size_t len,      ///< [in] this many bytes
     bufferlist *outbl,   ///< [out] optional: reference the result here
@@ -255,10 +260,12 @@ public:
     Mutex::Locker l(lock);
     _fsync(h);
   }
-  int read(FileReader *h, uint64_t offset, size_t len,
+  int read(FileReader *h, FileReaderBuffer *buf, uint64_t offset, size_t len,
 	   bufferlist *outbl, char *out) {
-    Mutex::Locker l(lock);
-    return _read(h, offset, len, outbl, out);
+    // no need to hold the global lock here; we only touch h and
+    // h->file, and read vs write or delete is already protected (via
+    // atomics and asserts).
+    return _read(h, buf, offset, len, outbl, out);
   }
   void invalidate_cache(FileRef f, uint64_t offset, uint64_t len) {
     Mutex::Locker l(lock);
