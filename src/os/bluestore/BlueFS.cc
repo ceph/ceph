@@ -1110,6 +1110,8 @@ int BlueFS::open_for_write(
     file_map[ino_last] = file;
     dir->file_map[filename] = file;
     ++file->refs;
+    log_t.op_file_update(file->fnode);
+    log_t.op_dir_link(dirname, filename, file->fnode.ino);
   } else {
     // overwrite existing file?
     if (!overwrite) {
@@ -1119,10 +1121,8 @@ int BlueFS::open_for_write(
       return -EEXIST;
     }
     file = q->second;
+    log_t.op_file_update(file->fnode);
   }
-
-  log_t.op_file_update(file->fnode);
-  log_t.op_dir_link(dirname, filename, file->fnode.ino);
 
   *h = new FileWriter(file);
   dout(10) << __func__ << " h " << *h << " on " << file->fnode << dendl;
