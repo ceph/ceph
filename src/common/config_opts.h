@@ -828,6 +828,7 @@ OPTION(bluefs_min_log_runway, OPT_U64, 1048576)  // alloc when we get this low
 OPTION(bluefs_max_log_runway, OPT_U64, 4194304)  // alloc this much at a time
 
 OPTION(bluestore_bluefs, OPT_BOOL, false)
+OPTION(bluestore_bluefs_mirror, OPT_BOOL, false) // mirror to normal Env for debug
 OPTION(bluestore_bluefs_initial_offset, OPT_U64,  1024*1024)
 OPTION(bluestore_bluefs_initial_length, OPT_U64, 65536*1024)
 OPTION(bluestore_bluefs_min_ratio, OPT_FLOAT, .01)
