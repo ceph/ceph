@@ -950,14 +950,18 @@ int BlueStore::_read_fsid(uuid_d *uuid)
 {
   char fsid_str[40];
   int ret = safe_read(fsid_fd, fsid_str, sizeof(fsid_str));
-  if (ret < 0)
+  if (ret < 0) {
+    derr << __func__ << " failed: " << cpp_strerror(ret) << dendl;
     return ret;
+  }
   if (ret > 36)
     fsid_str[36] = 0;
   else
     fsid_str[ret] = 0;
-  if (!uuid->parse(fsid_str))
+  if (!uuid->parse(fsid_str)) {
+    derr << __func__ << " unparsable uuid " << fsid_str << dendl;
     return -EINVAL;
+  }
   return 0;
 }
 
@@ -1031,14 +1035,48 @@ bool BlueStore::test_mount_in_use()
 
 int BlueStore::_open_db(bool create)
 {
+  int r;
   assert(!db);
   char fn[PATH_MAX];
   snprintf(fn, sizeof(fn), "%s/db", path.c_str());
 
+  string kv_backend;
+  if (create) {
+    kv_backend = g_conf->bluestore_backend;
+  } else {
+    r = read_meta("kv_backend", &kv_backend);
+    if (r < 0) {
+      derr << __func__ << " uanble to read 'kv_backend' meta" << dendl;
+      return -EIO;
+    }
+  }
+  dout(10) << __func__ << " kv_backend = " << kv_backend << dendl;
+
+  bool do_bluefs;
+  if (create) {
+    do_bluefs = g_conf->bluestore_bluefs;
+  } else {
+    string s;
+    r = read_meta("bluefs", &s);
+    if (r < 0) {
+      derr << __func__ << " unable to read 'bluefs' meta" << dendl;
+      return -EIO;
+    }
+    if (s == "1") {
+      do_bluefs = true;
+    } else if (s == "0") {
+      do_bluefs = false;
+    } else {
+      derr << __func__ << " bluefs = " << s << " : not 0 or 1, aborting" << dendl;
+      return -EIO;
+    }
+  }
+  dout(10) << __func__ << " bluefs = " << bluefs << dendl;
+
   rocksdb::Env *env = NULL;
-  if (g_conf->bluestore_bluefs) {
+  if (do_bluefs) {
     dout(10) << __func__ << " initializing bluefs" << dendl;
-    if (g_conf->bluestore_backend != "rocksdb") {
+    if (kv_backend != "rocksdb") {
       derr << " backend must be rocksdb to use bluefs" << dendl;
       return -EINVAL;
     }
@@ -1165,7 +1203,7 @@ int BlueStore::_open_db(bool create)
   }
 
   db = KeyValueDB::create(g_ceph_context,
-			  g_conf->bluestore_backend,
+			  kv_backend,
 			  fn,
 			  static_cast<void*>(env));
   if (!db) {
@@ -1177,11 +1215,10 @@ int BlueStore::_open_db(bool create)
     return -EIO;
   }
   string options;
-  if (g_conf->bluestore_backend == "rocksdb")
+  if (kv_backend == "rocksdb")
     options = g_conf->bluestore_rocksdb_options;
   db->init(options);
   stringstream err;
-  int r;
   if (create)
     r = db->create_and_open(err);
   else
@@ -1194,22 +1231,8 @@ int BlueStore::_open_db(bool create)
     db = NULL;
     return -EIO;
   }
-  dout(1) << __func__ << " opened " << g_conf->bluestore_backend
+  dout(1) << __func__ << " opened " << kv_backend
 	  << " path " << fn << " options " << options << dendl;
-
-  if (create) {
-    // blow it away
-    dout(1) << __func__ << " wiping by prefix" << dendl;
-    KeyValueDB::Transaction t = db->get_transaction();
-    t->rmkeys_by_prefix(PREFIX_SUPER);
-    t->rmkeys_by_prefix(PREFIX_COLL);
-    t->rmkeys_by_prefix(PREFIX_OBJ);
-    t->rmkeys_by_prefix(PREFIX_OVERLAY);
-    t->rmkeys_by_prefix(PREFIX_OMAP);
-    t->rmkeys_by_prefix(PREFIX_WAL);
-    t->rmkeys_by_prefix(PREFIX_ALLOC);
-    db->submit_transaction_sync(t);
-  }
   return 0;
 }
 
@@ -1500,6 +1523,13 @@ int BlueStore::mkfs()
     db->submit_transaction_sync(t);
   }
 
+  r = write_meta("kv_backend", g_conf->bluestore_backend);
+  if (r < 0)
+    goto out_close_alloc;
+  r = write_meta("bluefs", stringify((int)g_conf->bluestore_bluefs));
+  if (r < 0)
+    goto out_close_alloc;
+
   // indicate mkfs completion/success by writing the fsid file
   r = _write_fsid();
   if (r == 0)
@@ -1507,6 +1537,7 @@ int BlueStore::mkfs()
   else
     derr << __func__ << " error writing fsid: " << cpp_strerror(r) << dendl;
 
+ out_close_alloc:
   _close_alloc();
  out_close_db:
   _close_db();
