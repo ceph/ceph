@@ -151,7 +151,7 @@ public:
   WriteOp* get_writeop() {
     assert(!writeops.empty());
     WriteOp* op = &(writeops.front());
-    writeops.pop_front();
+    // writeops.pop_front();
     return op;
   }
   void stash(

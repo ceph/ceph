@@ -967,8 +967,8 @@ void ECBackend::handle_sub_read(
         // read overwrite data
         for (map<version_t, pair<uint64_t, uint64_t> >::iterator ow_iter =
             ow_info->begin(); ow_iter != ow_info->end(); ++ow_iter) {
-          pair<uint64_t, uint64_t> ver_off;
-          ver_off = sinfo.offset_len_to_stripe_bounds(ow_iter->second);
+          pair<uint64_t, uint64_t> &ver_off = ow_iter->second;
+          // ver_off = sinfo.offset_len_to_stripe_bounds(ow_iter->second);
           // no overlap
           if ( (j->get<0>() + j->get<1>() ) < ver_off.first
               || j->get<0>() > (ver_off.first + ver_off.second) )
@@ -979,8 +979,12 @@ void ECBackend::handle_sub_read(
           uint64_t _len = flag ? 
                 MIN(j->get<1>() - _off, ver_off.second) 
                 : MIN(j->get<1>(), ver_off.second - _off);
-          dout(0) << __func__ << " read " << i->first
+          dout(10) << __func__ << " read " << i->first
             << " version " << ow_iter->first
+            << " ver_off " << ver_off.first
+            << " ver_len " << ver_off.second
+            << " req_off " << j->get<0>()
+            << " req_len " << j->get<1>()
             << " off " << (flag ? ver_off.first : j->get<0>())
             << " len " << _len
             << dendl;
@@ -1461,7 +1465,8 @@ void ECBackend::submit_transaction(
   Op *op;
   if (ec_tran->offset_write) {
     op = &(tid_to_overwrite_map[tid]);
-    assert(!ongoing_write_tid.count(hoid));
+    // before submit transaction, will get on_disk_lock, so this check is not need
+    // assert(!ongoing_write_tid.count(hoid));
     ongoing_write_tid[hoid] = tid;
   }
   else
@@ -2039,12 +2044,17 @@ void ECBackend::continue_write_op(WriteOp *op)
       // prepare shard transaction
       pair<uint64_t, uint64_t> to_write = sinfo.offset_len_to_stripe_bounds(
         make_pair(op->off, op->len));
-      dout(0) << __func__ 
+      dout(10) << __func__ 
+          << " overwrite data " << op->version.version
           << " write_len " << to_write.second
           << " data_len " << target[0].length()
           << dendl;
         
       // set overwrite info
+      // overwrite info holds the true offset & length
+      // assume all the chunk has the same length
+      to_write.first = sinfo.logical_to_prev_chunk_offset(to_write.first);
+      to_write.second = target[0].length();
       assert(op->overwrite_info);
       op->overwrite_info->overwrite(
         op->version.version,
@@ -2067,7 +2077,7 @@ void ECBackend::continue_write_op(WriteOp *op)
         trans[i->shard].write(
           coll_t(spg_t(pgid, i->shard)),
           ghobject_t(op->hoid, op->version.version, i->shard),
-          sinfo.logical_to_prev_chunk_offset(to_write.first),
+          to_write.first,
           target[i->shard].length(),
           target[i->shard],
           op->fadvise_flags);
@@ -2164,8 +2174,16 @@ void ECBackend::handle_write_read_complete(
   int r = ECUtil::decode(sinfo, ec_impl, from, old_data);
   assert(r == 0);
   
+  pair<uint64_t, uint64_t> to_write;
+  to_write = sinfo.offset_len_to_stripe_bounds(make_pair(op->off, op->len));
+
+  dout(10) << __func__ << " decode done "
+      << " op_off " << op->off
+      << " op_len " << op->len
+      << " data_len " << op->bl.length()
+      << dendl;
   // apply write data
-  old_data->copy_in(op->off, op->len, op->bl.c_str());
+  old_data->copy_in(op->off - to_write.first, op->len, op->bl.c_str());
   
   // go into write state
   continue_write_op(op);
