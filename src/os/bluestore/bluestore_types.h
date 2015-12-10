@@ -12,8 +12,8 @@
  *
  */
 
-#ifndef CEPH_OSD_NEWSTORE_TYPES_H
-#define CEPH_OSD_NEWSTORE_TYPES_H
+#ifndef CEPH_OSD_BLUESTORE_BLUESTORE_TYPES_H
+#define CEPH_OSD_BLUESTORE_BLUESTORE_TYPES_H
 
 #include <ostream>
 #include "include/types.h"

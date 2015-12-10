@@ -9,8 +9,8 @@
  * Foundation.  See file COPYING.
  *
  */
-#ifndef CEPH_OS_NEWSTORE_ALLOCATOR_H
-#define CEPH_OS_NEWSTORE_ALLOCATOR_H
+#ifndef CEPH_OS_BLUESTORE_ALLOCATOR_H
+#define CEPH_OS_BLUESTORE_ALLOCATOR_H
 
 #include "kv/KeyValueDB.h"
 #include <ostream>
