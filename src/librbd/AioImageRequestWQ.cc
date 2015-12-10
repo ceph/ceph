@@ -7,6 +7,7 @@
 #include "librbd/AioImageRequest.h"
 #include "librbd/ExclusiveLock.h"
 #include "librbd/ImageCtx.h"
+#include "librbd/ImageState.h"
 #include "librbd/internal.h"
 #include "librbd/Utils.h"
 
@@ -22,7 +23,8 @@ AioImageRequestWQ::AioImageRequestWQ(ImageCtx *image_ctx, const string &name,
     m_image_ctx(*image_ctx),
     m_lock(util::unique_lock_name("AioImageRequestWQ::m_lock", this)),
     m_write_blockers(0), m_in_progress_writes(0), m_queued_writes(0),
-    m_in_flight_ops(0), m_shutdown(false), m_on_shutdown(nullptr) {
+    m_in_flight_ops(0), m_refresh_in_progress(false),
+    m_shutdown(false), m_on_shutdown(nullptr) {
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 5) << this << " " << ": ictx=" << image_ctx << dendl;
 }
@@ -261,23 +263,32 @@ void AioImageRequestWQ::unblock_writes() {
 
 void *AioImageRequestWQ::_void_dequeue() {
   AioImageRequest *peek_item = front();
-  if (peek_item == NULL) {
+  if (peek_item == NULL || m_refresh_in_progress) {
     return NULL;
   }
 
-  {
-    if (peek_item->is_write_op()) {
-      RWLock::RLocker locker(m_lock);
-      if (m_write_blockers > 0) {
-        return NULL;
-      }
-      m_in_progress_writes.inc();
+  if (peek_item->is_write_op()) {
+    RWLock::RLocker locker(m_lock);
+    if (m_write_blockers > 0) {
+      return NULL;
     }
+    m_in_progress_writes.inc();
   }
 
   AioImageRequest *item = reinterpret_cast<AioImageRequest *>(
     ThreadPool::PointerWQ<AioImageRequest>::_void_dequeue());
   assert(peek_item == item);
+
+  if (m_image_ctx.state->is_refresh_required()) {
+    ldout(m_image_ctx.cct, 15) << "image refresh required: delaying IO " << item
+                               << dendl;
+    m_refresh_in_progress = true;
+
+    get_pool_lock().Unlock();
+    m_image_ctx.state->refresh(new C_RefreshFinish(this, item));
+    get_pool_lock().Lock();
+    return NULL;
+  }
   return item;
 }
 
@@ -377,6 +388,21 @@ void AioImageRequestWQ::queue(AioImageRequest *req) {
 
   if (write_op && is_lock_required()) {
     m_image_ctx.exclusive_lock->request_lock(nullptr);
+  }
+}
+
+void AioImageRequestWQ::handle_refreshed(int r, AioImageRequest *req) {
+  CephContext *cct = m_image_ctx.cct;
+  ldout(cct, 15) << "resuming IO after image refresh: r=" << r << ", "
+                 << "req=" << req << dendl;
+  if (r < 0) {
+    req->fail(r);
+  } else {
+    process(req);
+    process_finish();
+
+    m_refresh_in_progress = false;
+    signal();
   }
 }
 
