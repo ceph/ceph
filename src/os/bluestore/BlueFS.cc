@@ -327,10 +327,8 @@ int BlueFS::_replay()
     uint64_t pos = log_reader->pos;
     bufferlist bl;
     {
-      bufferptr bp;
-      int r = _read(log_reader, pos, super.block_size, &bp, NULL);
+      int r = _read(log_reader, pos, super.block_size, &bl, NULL);
       assert(r == (int)super.block_size);
-      bl.append(bp);
     }
     uint64_t more = 0;
     uint64_t seq;
@@ -360,15 +358,15 @@ int BlueFS::_replay()
     }
     if (more) {
       dout(20) << __func__ << "  need " << more << " more bytes" << dendl;
-      bufferptr bp;
-      int r = _read(log_reader, pos + super.block_size, more, &bp, NULL);
+      bufferlist t;
+      int r = _read(log_reader, pos + super.block_size, more, &t, NULL);
       if (r < (int)more) {
 	dout(10) << __func__ << " " << pos << ": stop: len is "
 		 << bl.length() + more << ", which is past eof" << dendl;
 	break;
       }
       assert(r == (int)more);
-      bl.append(bp);
+      bl.claim_append(t);
     }
     bluefs_transaction_t t;
     try {
@@ -565,7 +563,7 @@ int BlueFS::_read(
   FileReader *h,  ///< [in] read from here
   uint64_t off,   ///< [in] offset
   size_t len,     ///< [in] this many bytes
-  bufferptr *bp,  ///< [out] optional: reference the result here
+  bufferlist *outbl,  ///< [out] optional: reference the result here
   char *out)      ///< [out] optional: or copy it here
 {
   Mutex::Locker l(h->lock);
@@ -573,51 +571,69 @@ int BlueFS::_read(
 	   << " from " << h->file->fnode << dendl;
   if (!h->ignore_eof &&
       off + len > h->file->fnode.size) {
-    len = h->file->fnode.size - off;
-    dout(20) << __func__ << " reaching eof, len clipped to " << len << dendl;
+    if (off > h->file->fnode.size)
+      len = 0;
+    else
+      len = h->file->fnode.size - off;
+    dout(20) << __func__ << " reaching (or past) eof, len clipped to "
+	     << len << dendl;
   }
-  if (len == 0)
-    return 0;
+  if (outbl)
+    outbl->clear();
 
-  int left;
-  if (off < h->bl_off || off >= h->get_buf_end()) {
-    h->bl.clear();
-    h->bl_off = off & super.block_mask();
-    uint64_t x_off = 0;
-    vector<bluefs_extent_t>::iterator p = h->file->fnode.seek(h->bl_off, &x_off);
-    uint64_t want = ROUND_UP_TO(len + (off & ~super.block_mask()),
-				super.block_size);
-    want = MAX(want, h->max_prefetch);
-    uint64_t l = MIN(p->length - x_off, want);
-    uint64_t eof_offset = ROUND_UP_TO(h->file->fnode.size, super.block_size);
-    if (!h->ignore_eof &&
-	h->bl_off + l > eof_offset) {
-      l = eof_offset - h->bl_off;
+  int ret = 0;
+  while (len > 0) {
+    int left;
+    if (off < h->bl_off || off >= h->get_buf_end()) {
+      h->bl.clear();
+      h->bl_off = off & super.block_mask();
+      uint64_t x_off = 0;
+      vector<bluefs_extent_t>::iterator p =
+	h->file->fnode.seek(h->bl_off, &x_off);
+      uint64_t want = ROUND_UP_TO(len + (off & ~super.block_mask()),
+				  super.block_size);
+      want = MAX(want, h->max_prefetch);
+      uint64_t l = MIN(p->length - x_off, want);
+      uint64_t eof_offset = ROUND_UP_TO(h->file->fnode.size, super.block_size);
+      if (!h->ignore_eof &&
+	  h->bl_off + l > eof_offset) {
+	l = eof_offset - h->bl_off;
+      }
+      dout(20) << __func__ << " fetching " << x_off << "~" << l << " of "
+	       << *p << dendl;
+      int r = bdev[p->bdev]->read(p->offset + x_off, l, &h->bl, ioc[p->bdev]);
+      assert(r == 0);
     }
-    dout(20) << __func__ << " fetching " << x_off << "~" << l << " of "
-	     << *p << dendl;
-    int r = bdev[p->bdev]->read(p->offset + x_off, l, &h->bl, ioc[p->bdev]);
-    assert(r == 0);
+    left = h->get_buf_remaining(off);
+    dout(20) << __func__ << " left " << left << " len " << len << dendl;
+
+    int r = MIN(len, left);
+    if (outbl) {
+      bufferlist t;
+      t.substr_of(h->bl, off - h->bl_off, r);
+      outbl->claim_append(t);
+    }
+    if (out) {
+      // NOTE: h->bl is normally a contiguous buffer so c_str() is free.
+      memcpy(out, h->bl.c_str() + off - h->bl_off, r);
+      out += r;
+    }
+
+    dout(30) << __func__ << " result chunk (" << r << " bytes):\n";
+    bufferlist t;
+    t.substr_of(h->bl, off - h->bl_off, r);
+    t.hexdump(*_dout);
+    *_dout << dendl;
+
+    off += r;
+    len -= r;
+    ret += r;
+    h->pos += r;
   }
-  left = h->get_buf_remaining(off);
-  dout(20) << __func__ << " left " << left << dendl;
 
-  int r = MIN(len, left);
-  // NOTE: h->bl is normally a contiguous buffer so c_str() is free.
-  if (bp)
-    *bp = bufferptr(h->bl.c_str() + off - h->bl_off, r);
-  if (out)
-    memcpy(out, h->bl.c_str() + off - h->bl_off, r);
-
-  dout(30) << __func__ << " result (" << r << " bytes):\n";
-  bufferlist t;
-  t.substr_of(h->bl, off - h->bl_off, r);
-  t.hexdump(*_dout);
-  *_dout << dendl;
-
-  h->pos = off + r;
-  dout(20) << __func__ << " got " << r << dendl;
-  return r;
+  dout(20) << __func__ << " got " << ret << dendl;
+  assert(!outbl || (int)outbl->length() == ret);
+  return ret;
 }
 
 void BlueFS::_invalidate_cache(FileRef f, uint64_t offset, uint64_t length)
