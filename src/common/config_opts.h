@@ -140,6 +140,7 @@ SUBSYS(bluestore, 1, 5)
 SUBSYS(bluefs, 1, 5)
 SUBSYS(bdev, 1, 5)
 SUBSYS(rocksdb, 4, 5)
+SUBSYS(kstore, 1, 5)
 
 OPTION(key, OPT_STR, "")
 OPTION(keyfile, OPT_STR, "")
@@ -873,6 +874,18 @@ OPTION(bluestore_o_direct, OPT_BOOL, true)
 OPTION(bluestore_aio, OPT_BOOL, true)
 OPTION(bluestore_aio_poll_ms, OPT_INT, 250)  // milliseconds
 OPTION(bluestore_aio_max_queue_depth, OPT_INT, 4096)
+
+OPTION(kstore_max_ops, OPT_U64, 512)
+OPTION(kstore_max_bytes, OPT_U64, 64*1024*1024)
+OPTION(kstore_backend, OPT_STR, "rocksdb")
+OPTION(kstore_rocksdb_options, OPT_STR, "compression=kNoCompression")
+OPTION(kstore_fsck_on_mount, OPT_BOOL, false)
+OPTION(kstore_nid_prealloc, OPT_U64, 1024)
+OPTION(kstore_sync_transaction, OPT_BOOL, false)
+OPTION(kstore_sync_submit_transaction, OPT_BOOL, false)
+OPTION(kstore_onode_map_size, OPT_U64, 1024)
+OPTION(kstore_cache_tails, OPT_BOOL, true)
+OPTION(kstore_default_stripe_size, OPT_INT, 65536)
 
 OPTION(filestore_omap_backend, OPT_STR, "leveldb")
 
