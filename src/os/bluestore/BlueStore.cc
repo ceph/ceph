@@ -71,6 +71,9 @@ const string PREFIX_ALLOC = "B";  // block allocator
 // superblock (always the second block of the device).
 #define BDEV_LABEL_BLOCK_SIZE  4096
 
+// for bluefs, label (4k) + bluefs super (4k), means we start at 8k.
+#define BLUEFS_START  8192
+
 /*
  * object name key structure
  *
@@ -677,6 +680,7 @@ BlueStore::BlueStore(CephContext *cct, const string& path)
   : ObjectStore(path),
     cct(cct),
     bluefs(NULL),
+    bluefs_shared_bdev(0),
     db(NULL),
     fs(NULL),
     bdev(NULL),
@@ -836,6 +840,31 @@ int BlueStore::_read_bdev_label(string path, bluestore_bdev_label_t *label)
   return 0;
 }
 
+int BlueStore::_check_or_set_bdev_label(
+  string path, uint64_t size, string desc, bool create)
+{
+  bluestore_bdev_label_t label;
+  if (create) {
+    label.osd_uuid = fsid;
+    label.size = size;
+    label.btime = ceph_clock_now(NULL);
+    label.description = desc;
+    int r = _write_bdev_label(path, label);
+    if (r < 0)
+      return r;
+  } else {
+    int r = _read_bdev_label(path, &label);
+    if (r < 0)
+      return r;
+    if (label.osd_uuid != fsid) {
+      derr << __func__ << " bdev " << path << " fsid " << label.osd_uuid
+	   << " does not match our fsid " << fsid << dendl;
+      return -EIO;
+    }
+  }
+  return 0;
+}
+
 int BlueStore::_open_bdev(bool create)
 {
   bluestore_bdev_label_t label;
@@ -846,25 +875,9 @@ int BlueStore::_open_bdev(bool create)
   if (r < 0)
     goto fail;
 
-  if (create) {
-    label.osd_uuid = fsid;
-    label.size = bdev->get_size();
-    label.btime = ceph_clock_now(NULL);
-    label.description = "main";
-    r = _write_bdev_label(p, label);
-    if (r < 0)
-      goto fail;
-  } else {
-    r = _read_bdev_label(p, &label);
-    if (r < 0)
-      goto fail;
-    if (label.osd_uuid != fsid) {
-      derr << __func__ << " bdev " << p << " fsid " << label.osd_uuid
-	   << " does not match our fsid " << fsid << dendl;
-      r = -EIO;
-      goto fail;
-    }
-  }
+  r = _check_or_set_bdev_label(p, bdev->get_size(), "main", create);
+  if (r < 0)
+    goto fail;
   return 0;
 
  fail:
@@ -1031,42 +1044,68 @@ int BlueStore::_open_db(bool create)
       return -EINVAL;
     }
     bluefs = new BlueFS;
+
     char bfn[PATH_MAX];
+    struct stat st;
+    int id = 0;
+
+    snprintf(bfn, sizeof(bfn), "%s/block.db", path.c_str());
+    if (::stat(bfn, &st) == 0) {
+      bluefs->add_block_device(id, bfn);
+      int r = _check_or_set_bdev_label(bfn, bluefs->get_block_device_size(id),
+				       "bluefs db", create);
+      if (r < 0)
+	return r;
+      if (create) {
+	bluefs->add_block_extent(
+	  id, BLUEFS_START,
+	  bluefs->get_block_device_size(id) - BLUEFS_START);
+      }
+      ++id;
+    }
+
     snprintf(bfn, sizeof(bfn), "%s/block", path.c_str());
-    bluefs->add_block_device(0, bfn);
+    bluefs->add_block_device(id, bfn);
     if (create) {
-      bluefs->add_block_extent(0, g_conf->bluestore_bluefs_initial_offset,
+      // note: we might waste a 4k block here if block.db is used, but it's
+      // simpler.
+      bluefs->add_block_extent(id, BLUEFS_START,
 			       g_conf->bluestore_bluefs_initial_length);
     }
-    snprintf(bfn, sizeof(bfn), "%s/block.wal", path.c_str());
-    struct stat st;
-    if (::stat(bfn, &st) == 0) {
-      bluefs->add_block_device(1, bfn);
-      // label in first 4k
-      bluestore_bdev_label_t label;
-      if (create) {
-	label.osd_uuid = fsid;
-	label.size = bluefs->get_block_device_size(1);
-	label.btime = ceph_clock_now(NULL);
-	label.description = "bluefs wal";
-	int r = _write_bdev_label(bfn, label);
-	if (r < 0)
-	  return r;
-	// reset belongs to bluefs
-	bluefs->add_block_extent(
-	  1, BDEV_LABEL_BLOCK_SIZE,
-	  bluefs->get_block_device_size(1) - BDEV_LABEL_BLOCK_SIZE);
-      } else {
-	int r = _read_bdev_label(bfn, &label);
-	if (r < 0)
-	  return r;
-	if (label.osd_uuid != fsid) {
-	  derr << __func__ << " bdev " << bfn << " fsid " << label.osd_uuid
-	       << " does not match our fsid " << fsid << dendl;
-	  return -EIO;
-	}
-      }
+    bluefs_shared_bdev = id;
+    ++id;
+    if (id == 2) {
+      // we have both block.db and block; tell rocksdb!
+      // note: the second (last) size value doesn't really matter
+      char db_paths[PATH_MAX*3];
+      snprintf(
+	db_paths, sizeof(db_paths), "%s/db,%lld %s/db.slow,%lld",
+	path.c_str(),
+	(unsigned long long)bluefs->get_block_device_size(0) * 95 / 100,
+	path.c_str(),
+	(unsigned long long)bluefs->get_block_device_size(1) * 95 / 100);
+      g_conf->set_val("rocksdb_db_paths", db_paths, false, false);
+      dout(10) << __func__ << " set rocksdb_db_paths to "
+	       << g_conf->rocksdb_db_paths << dendl;
     }
+
+    snprintf(bfn, sizeof(bfn), "%s/block.wal", path.c_str());
+    if (::stat(bfn, &st) == 0) {
+      bluefs->add_block_device(id, bfn);
+      int r = _check_or_set_bdev_label(bfn, bluefs->get_block_device_size(id),
+				       "bluefs wal", create);
+      if (r < 0)
+	return r;
+      if (create) {
+	bluefs->add_block_extent(
+	  id, BDEV_LABEL_BLOCK_SIZE,
+	  bluefs->get_block_device_size(id) - BDEV_LABEL_BLOCK_SIZE);
+      }
+      g_conf->set_val("rocksdb_separate_wal_dir", "true");
+    } else {
+      g_conf->set_val("rocksdb_separate_wal_dir", "false");
+    }
+
     if (create) {
       bluefs->mkfs(fsid);
     }
@@ -1076,12 +1115,14 @@ int BlueStore::_open_db(bool create)
       delete bluefs;
       return r;
     }
-    if (g_conf->bluestore_bluefs_mirror) {
+    if (g_conf->bluestore_bluefs_env_mirror) {
       rocksdb::Env *a = new BlueRocksEnv(bluefs);
       unique_ptr<rocksdb::Directory> dir;
       rocksdb::Env *b = rocksdb::Env::Default();
       if (create) {
-	string cmd = "rm -r " + path + "/db";
+	string cmd = "rm -rf " + path + "/db " +
+	  path + "/db.slow" +
+	  path + "/db.wal";
 	int r = system(cmd.c_str());
 	(void)r;
       }
@@ -1095,6 +1136,10 @@ int BlueStore::_open_db(bool create)
 
     if (create) {
       env->CreateDir(fn);
+      if (g_conf->rocksdb_separate_wal_dir)
+	env->CreateDir(string(fn) + ".wal");
+      if (g_conf->rocksdb_db_paths.length())
+	env->CreateDir(string(fn) + ".slow");
     }
   } else if (create) {
     int r = ::mkdir(fn, 0755);
@@ -1185,7 +1230,7 @@ int BlueStore::_reconcile_bluefs_freespace()
 {
   dout(10) << __func__ << dendl;
   interval_set<uint64_t> bset;
-  int r = bluefs->get_block_extents(0, &bset);
+  int r = bluefs->get_block_extents(bluefs_shared_bdev, &bset);
   assert(r == 0);
   if (bset == bluefs_extents) {
     dout(10) << __func__ << " we agree bluefs has " << bset << dendl;
@@ -1213,7 +1258,7 @@ int BlueStore::_reconcile_bluefs_freespace()
     for (interval_set<uint64_t>::iterator p = super_extra.begin();
 	 p != super_extra.end();
 	 ++p) {
-      bluefs->add_block_extent(0, p.get_start(), p.get_len());
+      bluefs->add_block_extent(bluefs_shared_bdev, p.get_start(), p.get_len());
     }
   }
 
@@ -1226,8 +1271,8 @@ int BlueStore::_balance_bluefs_freespace(vector<extent_t> *extents)
   assert(bluefs);
 
   // fixme: look at primary bdev only for now
-  uint64_t bluefs_total = bluefs->get_total(0);
-  uint64_t bluefs_free = bluefs->get_free(0);
+  uint64_t bluefs_total = bluefs->get_total(bluefs_shared_bdev);
+  uint64_t bluefs_free = bluefs->get_free(bluefs_shared_bdev);
   float bluefs_free_ratio = (float)bluefs_free / (float)bluefs_total;
 
   uint64_t my_free = alloc->get_free();
@@ -1307,7 +1352,7 @@ void BlueStore::_commit_bluefs_freespace(
 {
   dout(10) << __func__ << dendl;
   for (auto& p : bluefs_gift_extents) {
-    bluefs->add_block_extent(0, p.offset, p.length);
+    bluefs->add_block_extent(bluefs_shared_bdev, p.offset, p.length);
   }
 }
 
@@ -1330,6 +1375,43 @@ int BlueStore::_open_collections(int *errors)
       derr << __func__ << " unrecognized collection " << it->key() << dendl;
       if (errors)
 	(*errors)++;
+    }
+  }
+  return 0;
+}
+
+int BlueStore::_setup_block_symlink_or_file(
+  string name,
+  string path,
+  uint64_t size)
+{
+  dout(20) << __func__ << " name " << name << " path " << path
+	   << " size " << size << dendl;
+  if (path.length()) {
+    int r = ::symlinkat(path.c_str(), path_fd, name.c_str());
+    if (r < 0) {
+      r = -errno;
+      derr << __func__ << " failed to create " << name << " symlink to "
+	   << path << ": " << cpp_strerror(r) << dendl;
+      return r;
+    }
+  } else if (size) {
+    struct stat st;
+    int r = ::fstatat(path_fd, name.c_str(), &st, 0);
+    if (r < 0)
+      r = -errno;
+    if (r == -ENOENT) {
+      int fd = ::openat(path_fd, name.c_str(), O_CREAT|O_RDWR, 0644);
+      if (fd < 0) {
+	int r = -errno;
+	derr << __func__ << " faile to create " << name << " file: "
+	     << cpp_strerror(r) << dendl;
+	return r;
+      }
+      int r = ::ftruncate(fd, size);
+      assert(r == 0);
+      dout(1) << __func__ << " created " << name << " file with size "
+	      << pretty_si_t(size) << "B" << dendl;
     }
   }
   return 0;
@@ -1374,65 +1456,18 @@ int BlueStore::mkfs()
     goto out_close_fsid;
   }
 
-  // block symlink/file
-  if (g_conf->bluestore_block_path.length()) {
-    int r = ::symlinkat(g_conf->bluestore_block_path.c_str(), path_fd, "block");
-    if (r < 0) {
-      r = -errno;
-      derr << __func__ << " failed to create block symlink to "
-	   << g_conf->bluestore_block_path << ": " << cpp_strerror(r) << dendl;
-      goto out_close_fsid;
-    }
-  } else if (g_conf->bluestore_block_size) {
-    struct stat st;
-    int r = ::fstatat(path_fd, "block", &st, 0);
-    if (r < 0)
-      r = -errno;
-    if (r == -ENOENT) {
-      int fd = ::openat(path_fd, "block", O_CREAT|O_RDWR, 0644);
-      if (fd < 0) {
-	int r = -errno;
-	derr << __func__ << " faile to create block file: " << cpp_strerror(r)
-	     << dendl;
-	goto out_close_fsid;
-      }
-      int r = ::ftruncate(fd, g_conf->bluestore_block_size);
-      assert(r == 0);
-      dout(1) << __func__ << " created block file with size "
-	      << pretty_si_t(g_conf->bluestore_block_size) << "B" << dendl;
-    }
-  }
-
-  // block.wal symlink/file
-  if (g_conf->bluestore_block_wal_path.length()) {
-    int r = ::symlinkat(g_conf->bluestore_block_wal_path.c_str(), path_fd,
-			"block.wal");
-    if (r < 0) {
-      r = -errno;
-      derr << __func__ << " failed to create block.wal symlink to "
-	   << g_conf->bluestore_block_wal_path
-	   << ": " << cpp_strerror(r) << dendl;
-      goto out_close_fsid;
-    }
-  } else if (g_conf->bluestore_block_wal_size) {
-    struct stat st;
-    int r = ::fstatat(path_fd, "block.wal", &st, 0);
-    if (r < 0)
-      r = -errno;
-    if (r == -ENOENT) {
-      int fd = ::openat(path_fd, "block.wal", O_CREAT|O_RDWR, 0644);
-      if (fd < 0) {
-	int r = -errno;
-	derr << __func__ << " faile to create block.wal file: "
-	     << cpp_strerror(r) << dendl;
-	goto out_close_fsid;
-      }
-      int r = ::ftruncate(fd, g_conf->bluestore_block_wal_size);
-      assert(r == 0);
-      dout(1) << __func__ << " created block.wal file with size "
-	      << pretty_si_t(g_conf->bluestore_block_wal_size) << "B" << dendl;
-    }
-  }
+  r = _setup_block_symlink_or_file("block", g_conf->bluestore_block_path,
+				   g_conf->bluestore_block_size);
+  if (r < 0)
+    goto out_close_fsid;
+  r = _setup_block_symlink_or_file("block.wal", g_conf->bluestore_block_wal_path,
+				   g_conf->bluestore_block_wal_size);
+  if (r < 0)
+    goto out_close_fsid;
+  r = _setup_block_symlink_or_file("block.db", g_conf->bluestore_block_db_path,
+				   g_conf->bluestore_block_db_size);
+  if (r < 0)
+    goto out_close_fsid;
 
   r = _open_bdev(true);
   if (r < 0)
@@ -1452,12 +1487,10 @@ int BlueStore::mkfs()
     KeyValueDB::Transaction t = db->get_transaction();
     uint64_t reserved = 0;
     if (g_conf->bluestore_bluefs) {
-      reserved = g_conf->bluestore_bluefs_initial_offset +
-	g_conf->bluestore_bluefs_initial_length;
+      reserved = BLUEFS_START + g_conf->bluestore_bluefs_initial_length;
       dout(20) << __func__ << " reserved first " << reserved
 	       << " bytes for bluefs" << dendl;
-
-      bluefs_extents.insert(g_conf->bluestore_bluefs_initial_offset,
+      bluefs_extents.insert(BLUEFS_START,
 			    g_conf->bluestore_bluefs_initial_length);
       bufferlist bl;
       ::encode(bluefs_extents, bl);
@@ -1641,7 +1674,7 @@ int BlueStore::fsck()
     goto out_alloc;
 
   if (bluefs) {
-    used_blocks.insert(0, g_conf->bluestore_bluefs_initial_offset); // fixme
+    used_blocks.insert(0, BLUEFS_START);
     used_blocks.insert(bluefs_extents);
     r = bluefs->fsck();
     if (r < 0)

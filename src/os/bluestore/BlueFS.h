@@ -162,6 +162,21 @@ private:
   FileWriter *log_writer;     ///< writer for the log
   bluefs_transaction_t log_t; ///< pending, unwritten log transaction
 
+  /*
+   * - there can be from 1 to 3 block devices.
+   *
+   * - the first device always has the superblock.
+   *
+   * - if there is a dedicated db device, it is the first device, and the
+   *   second device is shared with bluestore.  the first device will be
+   *   db/, and the second device will be db.slow/.
+   *
+   * - if there is no dedicated db device, then the first device is shared, and
+   *   maps to the db/ directory.
+   *
+   * - a wal device, if present, it always the last device.  it should be
+   *   used for any files in the db.wal/ directory.
+   */
   vector<BlockDevice*> bdev;                  ///< block devices we can use
   vector<IOContext*> ioc;                     ///< IOContexts for bdevs
   vector<interval_set<uint64_t> > block_all;  ///< extents in bdev we own
