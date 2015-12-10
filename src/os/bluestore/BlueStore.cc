@@ -1772,7 +1772,7 @@ int BlueStore::_do_read(
     // extent?
     if (bp != bend && bp->first <= offset) {
       uint64_t x_off = offset - bp->first;
-      x_len = MIN(x_len, bp->second.length);
+      x_len = MIN(x_len, bp->second.length - x_off);
       if (!bp->second.has_flag(extent_t::FLAG_UNWRITTEN)) {
 	dout(30) << __func__ << " data " << bp->first << ": " << bp->second
 		 << " use " << x_off << "~" << x_len
