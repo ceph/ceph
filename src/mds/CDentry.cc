@@ -623,7 +623,7 @@ std::string CDentry::linkage_t::get_remote_d_type_string() const
 }
 
 void CDentry::scrub_initialize(CDir *parent, bool recurse, bool children,
-                        ScrubHeaderRefConst header,
+			       const ScrubHeaderRefConst& header,
                                Context *f)
 {
   if (!scrub_infop)

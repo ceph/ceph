@@ -264,6 +264,8 @@ public:
     /// my own (temporary) stamps and versions for each dirfrag we have
     std::map<frag_t, scrub_stamp_info_t> dirfrag_stamps;
 
+    ScrubHeaderRefConst header;
+
     scrub_info_t() : scrub_stamp_info_t(), last_scrub_dirty(false),
         scrub_in_progress(false) {}
   };
@@ -281,7 +283,7 @@ public:
    * @param scrub_version What version are we scrubbing at (usually, parent
    * directory's get_projected_version())
    */
-  void scrub_initialize(version_t scrub_version);
+  void scrub_initialize(const ScrubHeaderRefConst& header);
   /**
    * Get the next dirfrag to scrub. Gives you a frag_t in output param which
    * you must convert to a CDir (and possibly load off disk).
