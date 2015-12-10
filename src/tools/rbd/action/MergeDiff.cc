@@ -1,6 +1,10 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
+#define _LARGEFILE64_SOURCE
+#include <sys/types.h>
+#include <unistd.h>
+
 #include "tools/rbd/ArgumentTypes.h"
 #include "tools/rbd/Shell.h"
 #include "tools/rbd/Utils.h"
@@ -336,7 +340,8 @@ static int do_merge_diff(const char *first, const char *second,
           bufferptr bp = buffer::create(delta);
           r = safe_read_exact(fd, bp.c_str(), delta);
         } else {
-          r = lseek(fd, delta, SEEK_CUR);
+          off64_t l = lseek64(fd, delta, SEEK_CUR);
+          r = l < 0 ? -errno : 0;
         }
         if (r < 0) {
           std::cerr << "rbd: failed to skip first diff data" << std::endl;
