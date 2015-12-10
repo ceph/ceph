@@ -221,7 +221,7 @@ int rgw_mkdir(struct rgw_fs *rgw_fs,
 	      const char *name, mode_t mode, struct stat *st,
 	      struct rgw_file_handle **fh)
 {
-  int rc;
+  int rc, rc2;
 
   /* XXXX remove uri, deal with bucket names */
   string uri;
@@ -236,16 +236,15 @@ int rgw_mkdir(struct rgw_fs *rgw_fs,
   }
 
   LookupFHResult fhr;
-  RGWFileHandle* rgw_fh;
+  RGWFileHandle* rgw_fh = nullptr;
 
   if (parent->is_root()) {
     /* bucket */
-    fhr = fs->lookup_fh(parent, name);
-    rgw_fh = get<0>(fhr);
     uri += "/"; /* XXX */
     uri += name;
     RGWCreateBucketRequest req(cct, fs->get_user(), uri);
     rc = librgw.get_fe()->execute_req(&req);
+    rc2 = req.get_ret();
   } else {
     /* create an object representing the directory (naive version) */
     buffer::list bl;
@@ -255,10 +254,19 @@ int rgw_mkdir(struct rgw_fs *rgw_fs,
     RGWPutObjRequest req(cct, fs->get_user(), rgw_fh->bucket_name(),
 			 dir_name, bl);
     rc = librgw.get_fe()->execute_req(&req);
+    rc2 = req.get_ret();
   }
 
-  struct rgw_file_handle *rfh = rgw_fh->get_fh();
-  *fh = rfh;
+  if ((rc == 0) &&
+      (rc2 == 0)) {
+    fhr = fs->lookup_fh(parent, name, RGWFileHandle::FLAG_CREATE);
+    rgw_fh = get<0>(fhr);
+    if (rgw_fh) {
+      struct rgw_file_handle *rfh = rgw_fh->get_fh();
+      *fh = rfh;
+    } else
+      rc = -EIO;
+  }
 
   return rc;
 }
