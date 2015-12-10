@@ -776,7 +776,7 @@ public:
 		       (ix == size-1) ? true : false);
       ++ix;
     }
-    size = common_prefixes.size();
+    size += common_prefixes.size();
     for (auto& iter : common_prefixes) {
       std::string& pref = const_cast<std::string&>(iter.first);
       if (pref.back() == '/')
