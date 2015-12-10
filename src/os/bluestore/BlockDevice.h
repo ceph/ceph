@@ -8,30 +8,32 @@
 #include "include/interval_set.h"
 
 /// track in-flight io
-struct IOMap {
+struct IOContext {
+  void *priv;
+
   Mutex lock;
   Cond cond;
   interval_set<uint64_t> blocks;  ///< blocks with aio in flight
 
-  IOMap() : lock("IOMap::lock") {}
-};
-
-struct IOContext {
-  void *priv;
-  IOMap io_map;
-
   list<FS::aio_t> pending_aios;    ///< not yet submitted
-  list<FS::aio_t> submitted_aios;  ///< submitting or submitted
-  bufferlist aio_bl;  // just a pile of refs
-  atomic_t num_aio;
-  bool plug;
+  list<FS::aio_t> running_aios;    ///< submitting or submitted
+  int num_pending;
+  int num_running;
+  int num_reading;
 
-  IOContext(void *p) : priv(p), plug(false) {}
+  bufferlist pending_bl;  // just a pile of refs
+  bufferlist running_bl;  // just a pile of refs
+
+  IOContext(void *p)
+    : priv(p),
+      lock("IOContext::lock"),
+      num_pending(0),
+      num_running(0),
+      num_reading(0) {}
 
   bool has_aios() {
-    return
-      !pending_aios.empty() ||
-      !submitted_aios.empty();
+    Mutex::Locker l(lock);
+    return num_pending + num_running;
   }
 
   void aio_wait();
