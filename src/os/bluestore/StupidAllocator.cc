@@ -200,6 +200,7 @@ void StupidAllocator::dump(ostream& out)
 
 void StupidAllocator::init_add_free(uint64_t offset, uint64_t length)
 {
+  Mutex::Locker l(lock);
   dout(10) << __func__ << " " << offset << "~" << length << dendl;
   _insert_free(offset, length);
   num_free += length;
@@ -207,6 +208,7 @@ void StupidAllocator::init_add_free(uint64_t offset, uint64_t length)
 
 void StupidAllocator::init_rm_free(uint64_t offset, uint64_t length)
 {
+  Mutex::Locker l(lock);
   dout(10) << __func__ << " " << offset << "~" << length << dendl;
   interval_set<uint64_t> rm;
   rm.insert(offset, length);
