@@ -321,6 +321,7 @@ enum {
   OPT_MDLOG_LIST,
   OPT_MDLOG_TRIM,
   OPT_MDLOG_FETCH,
+  OPT_MDLOG_STATUS,
   OPT_BILOG_LIST,
   OPT_BILOG_TRIM,
   OPT_DATA_SYNC_STATUS,
@@ -658,6 +659,8 @@ static int get_cmd(const char *cmd, const char *prev_cmd, const char *prev_prev_
       return OPT_MDLOG_TRIM;
     if (strcmp(cmd, "fetch") == 0)
       return OPT_MDLOG_FETCH;
+    if (strcmp(cmd, "status") == 0)
+      return OPT_MDLOG_STATUS;
   } else if (strcmp(prev_cmd, "bilog") == 0) {
     if (strcmp(cmd, "list") == 0)
       return OPT_BILOG_LIST;
@@ -4324,6 +4327,29 @@ next:
       } while (truncated);
 
       meta_log->complete_list_entries(handle);
+
+      if (specified_shard_id)
+        break;
+    }
+  
+
+    formatter->close_section();
+    formatter->flush(cout);
+  }
+
+  if (opt_cmd == OPT_MDLOG_STATUS) {
+    int i = (specified_shard_id ? shard_id : 0);
+
+    RGWMetadataLog *meta_log = store->meta_mgr->get_log();
+    formatter->open_array_section("entries");
+    for (; i < g_ceph_context->_conf->rgw_md_log_max_shards; i++) {
+      void *handle;
+      list<cls_log_entry> entries;
+
+      RGWMetadataLogInfo info;
+      meta_log->get_info(i, &info);
+
+      ::encode_json("info", info, formatter);
 
       if (specified_shard_id)
         break;
