@@ -385,6 +385,9 @@ int BlockDevice::read(uint64_t off, uint64_t len, bufferlist *pbl, IOContext *io
   }
   pbl->clear();
   pbl->push_back(p);
+  dout(40) << "data: ";
+  pbl->hexdump(*_dout);
+  *_dout << dendl;
  out:
   Mutex::Locker l(ioc->lock);
   --ioc->num_reading;
