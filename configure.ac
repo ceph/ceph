@@ -819,6 +819,10 @@ AS_IF([test "x$with_librocksdb_static" = "xyes"],
 AM_CONDITIONAL(WITH_SLIBROCKSDB, [ test "x$with_librocksdb_static" = "xyes" ])
 AM_CONDITIONAL(WITH_LIBROCKSDB, [ test "x$with_librocksdb_static" = "xyes" -o "x$with_librocksdb" = "xyes" ])
 
+AS_IF([test "x$with_librocksdb_static" = "xyes"],
+	[AC_CHECK_HEADERS(bzlib.h, [],
+		[AC_MSG_FAILURE([bzlib.h (bzip2 library header ("bzlib.h"; required by --with-librocksdb-static) not found; try installing the bzip2-devel (or equivalent) package.])])])
+
 # error out if --with-jemalloc and --with-librocksdb_static as rocksdb uses tcmalloc
 if test "x$with_jemalloc" = "xyes"; then
 	if test "x$with_librocksdb_static" != "xno"; then
