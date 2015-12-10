@@ -48,7 +48,8 @@ def describe_tests(args):
 
 
 def output_results(headers, rows, output_format, hrule):
-    """Write the headers and rows given in the specified output format to
+    """
+    Write the headers and rows given in the specified output format to
     stdout.
     """
     if output_format == 'json':
@@ -72,7 +73,8 @@ def get_combinations(suite_dir, fields, subset,
                      limit, filter_in, filter_out,
                      include_facet, _isdir=os.path.isdir, _open=open,
                      _isfile=os.path.isfile, _listdir=os.listdir):
-    """Describes the combinations of a suite, optionally limiting
+    """
+    Describes the combinations of a suite, optionally limiting
     or filtering output based on the given parameters. Includes
     columns for the subsuite and facets when include_facet is True.
 
@@ -154,11 +156,13 @@ def get_combinations(suite_dir, fields, subset,
 
 
 def describe_suite(suite_dir, fields, include_facet, output_format):
-    """Describe a suite listing each subdirectory and file once as a separate
-    row.
+    """
+    Describe a suite listing each subdirectory and file once as a
+    separate row.
 
     Returns a tuple of (headers, rows) where both elements are lists
     of strings.
+
     """
     rows = tree_with_info(suite_dir, fields, include_facet, '', [],
                           output_format=output_format)
@@ -170,7 +174,8 @@ def describe_suite(suite_dir, fields, include_facet, output_format):
 
 
 def extract_info(file_name, fields, _isdir=os.path.isdir, _open=open):
-    """Read a yaml file and return a dictionary mapping the fields to the
+    """
+    Read a yaml file and return a dictionary mapping the fields to the
     values of those fields in the file.
 
     The returned dictionary will always contain all the provided
@@ -212,7 +217,8 @@ def extract_info(file_name, fields, _isdir=os.path.isdir, _open=open):
 
 
 def path_relative_to_suites(path):
-    """Attempt to trim the ceph-qa-suite root directory from the beginning
+    """
+    Attempt to trim the ceph-qa-suite root directory from the beginning
     of a path.
     """
     try:
@@ -225,7 +231,8 @@ def path_relative_to_suites(path):
 def tree_with_info(cur_dir, fields, include_facet, prefix, rows,
                    _listdir=os.listdir, _isdir=os.path.isdir,
                    _open=open, output_format='plain'):
-    """Gather fields from all files and directories in cur_dir.
+    """
+    Gather fields from all files and directories in cur_dir.
     Returns a list of strings for each path containing:
 
     1) the path relative to ceph-qa-suite/suites (or the basename with
