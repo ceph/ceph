@@ -48,7 +48,7 @@ public:
   /// an extent map, shared by a group of objects (clones)
   struct ObjectGroup {
     atomic_t nref;  ///< reference count
-    extent_ref_map_t m;
+    bluestore_extent_ref_map_t m;
   };
 
   /// an in-memory object
@@ -59,7 +59,7 @@ public:
     string key;     ///< key under PREFIX_OBJ where we are stored
     boost::intrusive::list_member_hook<> lru_item;
 
-    onode_t onode;  ///< metadata stored as value in kv store
+    bluestore_onode_t onode;  ///< metadata stored as value in kv store
     bool dirty;     // ???
     bool exists;
 
@@ -115,7 +115,7 @@ public:
   struct Collection {
     BlueStore *store;
     coll_t cid;
-    cnode_t cnode;
+    bluestore_cnode_t cnode;
     RWLock lock;
 
     // cache onodes on a per-collection basis to avoid lock
@@ -213,7 +213,7 @@ public:
     list<CollectionRef> removed_collections; ///< colls we removed
 
     boost::intrusive::list_member_hook<> wal_queue_item;
-    wal_transaction_t *wal_txn; ///< wal transaction (if any)
+    bluestore_wal_transaction_t *wal_txn; ///< wal transaction (if any)
     vector<OnodeRef> wal_op_onodes;
 
     interval_set<uint64_t> allocated, released;
@@ -472,8 +472,8 @@ private:
   int _open_super_meta();
 
   int _reconcile_bluefs_freespace();
-  int _balance_bluefs_freespace(vector<extent_t> *extents);
-  void _commit_bluefs_freespace(const vector<extent_t>& extents);
+  int _balance_bluefs_freespace(vector<bluestore_extent_t> *extents);
+  void _commit_bluefs_freespace(const vector<bluestore_extent_t>& extents);
 
   CollectionRef _get_collection(coll_t cid);
   void _queue_reap_collection(CollectionRef& c);
@@ -511,10 +511,10 @@ private:
     kv_stop = false;
   }
 
-  wal_op_t *_get_wal_op(TransContext *txc, OnodeRef o);
+  bluestore_wal_op_t *_get_wal_op(TransContext *txc, OnodeRef o);
   int _wal_apply(TransContext *txc);
   int _wal_finish(TransContext *txc);
-  int _do_wal_op(wal_op_t& wo, IOContext *ioc);
+  int _do_wal_op(bluestore_wal_op_t& wo, IOContext *ioc);
   int _wal_replay();
 
 public:
@@ -680,7 +680,7 @@ private:
 			const bufferlist& bl);
   int _do_write_overlays(TransContext *txc, OnodeRef o,
 			 uint64_t offset, uint64_t length);
-  void _do_read_all_overlays(wal_op_t& wo);
+  void _do_read_all_overlays(bluestore_wal_op_t& wo);
   void _pad_zeros(OnodeRef o, bufferlist *bl, uint64_t *offset, uint64_t *length,
 		  uint64_t block_size);
   int _do_allocate(TransContext *txc,

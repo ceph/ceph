@@ -112,12 +112,13 @@ TYPE(ObjectStore::Transaction)
 TYPE(SequencerPosition)
 
 #include "os/bluestore/bluestore_types.h"
-TYPE(cnode_t)
-TYPE(extent_t)
-TYPE(overlay_t)
-TYPE(onode_t)
-TYPE(wal_op_t)
-TYPE(wal_transaction_t)
+TYPE(bluestore_cnode_t)
+TYPE(bluestore_extent_t)
+TYPE(bluestore_extent_ref_map_t)
+TYPE(bluestore_overlay_t)
+TYPE(bluestore_onode_t)
+TYPE(bluestore_wal_op_t)
+TYPE(bluestore_wal_transaction_t)
 
 #include "common/hobject.h"
 TYPE(hobject_t)
