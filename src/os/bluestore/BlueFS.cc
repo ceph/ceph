@@ -1117,13 +1117,18 @@ int BlueFS::open_for_write(
     log_t.op_dir_link(dirname, filename, file->fnode.ino);
   } else {
     // overwrite existing file?
+    file = q->second;
     if (!overwrite) {
       dout(20) << __func__ << " dir " << dirname << " (" << dir
 	       << ") file " << filename
-	       << " already exists" << dendl;
-      return -EEXIST;
+	       << " already exists, overwriting" << dendl;
+    } else {
+      dout(20) << __func__ << " dir " << dirname << " (" << dir
+	       << ") file " << filename
+	       << " already exists, overwriting" << dendl;
+      file->fnode.size = 0;
     }
-    file = q->second;
+    file->fnode.mtime = ceph_clock_now(NULL);
     log_t.op_file_update(file->fnode);
   }
 
