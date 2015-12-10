@@ -47,7 +47,8 @@ LookupFHResult RGWLibFS::stat_bucket(RGWFileHandle* parent,
       (req.get_ret() == 0) &&
       (req.matched())) {
     fhr = lookup_fh(parent, path,
-		    RGWFileHandle::FLAG_CREATE|RGWFileHandle::FLAG_BUCKET);
+		    RGWFileHandle::FLAG_CREATE|
+		    RGWFileHandle::FLAG_BUCKET);
   }
   return fhr;
 }
@@ -77,16 +78,16 @@ LookupFHResult RGWLibFS::stat_leaf(RGWFileHandle* parent,
     break;
     case 1:
     {
-      RGWStatLeafRequest req(cct, get_user(), parent->bucket_name(),
-			     object_name);
+      RGWStatLeafRequest req(cct, get_user(), parent, object_name);
       int rc = librgw.get_fe()->execute_req(&req);
       if ((rc == 0) &&
 	  (req.get_ret() == 0)) {
 	if (req.matched) {
 	  fhr = lookup_fh(parent, path,
-			  (req.path.back() == '/') ?
-			  RGWFileHandle::FLAG_DIRECTORY :
-			  RGWFileHandle::FLAG_NONE);
+			  RGWFileHandle::FLAG_CREATE|
+			  ((req.path.back() == '/') ?
+			   RGWFileHandle::FLAG_DIRECTORY :
+			   RGWFileHandle::FLAG_NONE));
 	}
       }
     }
@@ -183,7 +184,7 @@ int rgw_create(struct rgw_fs *rgw_fs,
   RGWFileHandle* parent = get_rgwfh(parent_fh);
   if ((! parent) ||
       (parent->is_root()) ||
-      (parent->is_object())) {
+      (parent->is_file())) {
     /* bad parent */
     return -EINVAL;
   }
@@ -366,7 +367,7 @@ int rgw_lookup(struct rgw_fs *rgw_fs,
 
   RGWFileHandle* parent = get_rgwfh(parent_fh);
   if ((! parent) ||
-      (parent->is_object())) {
+      (! parent->is_dir())) {
     /* bad parent */
     return -EINVAL;
   }
@@ -579,7 +580,7 @@ int rgw_read(struct rgw_fs *rgw_fs,
   RGWLibFS *fs = static_cast<RGWLibFS*>(rgw_fs->fs_private);
   RGWFileHandle* rgw_fh = get_rgwfh(fh);
 
-  if (! rgw_fh->is_object())
+  if (! rgw_fh->is_file())
     return -EINVAL;
 
   size_t nread = 0;
@@ -619,7 +620,7 @@ int rgw_write(struct rgw_fs *rgw_fs,
   RGWLibFS *fs = static_cast<RGWLibFS*>(rgw_fs->fs_private);
   RGWFileHandle* rgw_fh = get_rgwfh(fh);
 
-  if (! rgw_fh->is_object())
+  if (! rgw_fh->is_file())
     return -EINVAL;
 
   /* XXXX testing only */
@@ -678,7 +679,7 @@ int rgw_readv(struct rgw_fs *rgw_fs,
   RGWLibFS *fs = static_cast<RGWLibFS*>(rgw_fs->fs_private);
   RGWFileHandle* rgw_fh = get_rgwfh(fh);
 
-  if (! rgw_fh->is_object())
+  if (! rgw_fh->is_file())
     return -EINVAL;
 
   buffer::list bl;
@@ -728,7 +729,7 @@ int rgw_readv(struct rgw_fs *rgw_fs,
   RGWLibFS *fs = static_cast<RGWLibFS*>(rgw_fs->fs_private);
   RGWFileHandle* rgw_fh = get_rgwfh(fh);
 
-  if (! rgw_fh->is_object())
+  if (! rgw_fh->is_file())
     return -EINVAL;
 
   buffer::list bl;
