@@ -76,6 +76,8 @@ private:
   void _aio_prepare(IOContext *ioc, uint64_t offset, uint64_t length);
   void _aio_finish(IOContext *ioc, uint64_t offset, uint64_t length);
 
+  int _lock();
+
 public:
   BlockDevice(aio_callback_t cb, void *cbpriv);
 

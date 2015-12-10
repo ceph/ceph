@@ -54,6 +54,20 @@ BlockDevice::BlockDevice(aio_callback_t cb, void *cbpriv)
   zeros.zero();
 }
 
+int BlockDevice::_lock()
+{
+  struct flock l;
+  memset(&l, 0, sizeof(l));
+  l.l_type = F_WRLCK;
+  l.l_whence = SEEK_SET;
+  l.l_start = 0;
+  l.l_len = 0;
+  int r = ::fcntl(fd, F_SETLK, &l);
+  if (r < 0)
+    return -errno;
+  return 0;
+}
+
 int BlockDevice::open(string path)
 {
   dout(1) << __func__ << " path " << path << dendl;
@@ -69,8 +83,16 @@ int BlockDevice::open(string path)
   aio = g_conf->bluestore_aio;
 #endif
 
+  int r = _lock();
+  if (r < 0) {
+    derr << __func__ << " failed to lock " << path << ": " << cpp_strerror(r)
+	 << dendl;
+    ::close(fd);
+    return r;
+  }
+
   struct stat st;
-  int r = ::fstat(fd, &st);
+  r = ::fstat(fd, &st);
   if (r < 0) {
     r = -errno;
     derr << __func__ << " fstat got " << cpp_strerror(r) << dendl;
