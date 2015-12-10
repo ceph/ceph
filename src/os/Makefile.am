@@ -99,4 +99,8 @@ noinst_LIBRARIES += libos_zfs.a
 noinst_HEADERS += os/ZFS.h
 endif
 
+ceph_bluefs_tool_SOURCES = os/bluestore/bluefs_tool.cc
+ceph_bluefs_tool_LDADD = $(LIBOS) $(CEPH_GLOBAL)
+bin_PROGRAMS += ceph-bluefs-tool
+
 endif # ENABLE_SERVER
