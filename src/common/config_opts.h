@@ -845,7 +845,7 @@ OPTION(bluestore_min_alloc_size, OPT_U32, 512*1024)
 OPTION(bluestore_onode_map_size, OPT_U32, 1024)   // onodes per collection
 OPTION(bluestore_cache_tails, OPT_BOOL, true)   // cache tail blocks in Onode
 OPTION(bluestore_backend, OPT_STR, "rocksdb")
-OPTION(bluestore_rocksdb_options, OPT_STR, "compression=kNoCompression,max_write_buffer_number=16,min_write_buffer_number_to_merge=6") //,recycle_log_file_num=16")
+OPTION(bluestore_rocksdb_options, OPT_STR, "compression=kNoCompression,max_write_buffer_number=16,min_write_buffer_number_to_merge=6,recycle_log_file_num=16")
 OPTION(bluestore_fsck_on_mount, OPT_BOOL, false)
 OPTION(bluestore_fail_eio, OPT_BOOL, true)
 OPTION(bluestore_sync_io, OPT_BOOL, false)  // perform initial io synchronously
