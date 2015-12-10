@@ -117,13 +117,12 @@ void AioImageRequest::send() {
                  << "completion=" << m_aio_comp <<  dendl;
 
   m_aio_comp->get();
-  int r = m_image_ctx.state->refresh_if_required(m_image_ctx.owner_lock);
-  if (r < 0) {
-    m_aio_comp->fail(cct, r);
-    return;
-  }
-
   send_request();
+}
+
+void AioImageRequest::fail(int r) {
+  m_aio_comp->get();
+  m_aio_comp->fail(m_image_ctx.cct, r);
 }
 
 void AioImageRead::send_request() {
