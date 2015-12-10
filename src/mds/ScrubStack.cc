@@ -58,7 +58,7 @@ void ScrubStack::pop_dentry(CDentry *dn)
 }
 
 void ScrubStack::_enqueue_dentry(CDentry *dn, CDir *parent, bool recursive,
-    bool children, ScrubHeaderRefConst header,
+    bool children, const ScrubHeaderRefConst& header,
     MDSInternalContextBase *on_finish, bool top)
 {
   dout(10) << __func__ << " with {" << *dn << "}"
@@ -73,7 +73,7 @@ void ScrubStack::_enqueue_dentry(CDentry *dn, CDir *parent, bool recursive,
 }
 
 void ScrubStack::enqueue_dentry(CDentry *dn, bool recursive, bool children,
-                                ScrubHeaderRefConst header,
+                                const ScrubHeaderRefConst& header,
                                  MDSInternalContextBase *on_finish, bool top)
 {
   _enqueue_dentry(dn, NULL, recursive, children, header, on_finish, top);
@@ -160,7 +160,7 @@ void ScrubStack::scrub_dir_dentry(CDentry *dn,
     // the stack... or actually is that right?  Should we perhaps
     // only see ourselves once on the way down and once on the way
     // back up again, and not do this?
-    in->scrub_initialize(in->get_version());
+    in->scrub_initialize(dn->scrub_info()->header);
   }
 
   list<frag_t> scrubbing_frags;
@@ -194,9 +194,6 @@ void ScrubStack::scrub_dir_dentry(CDentry *dn,
     } else {
       bool ready = get_next_cdir(in, &cur_dir);
       dout(20) << __func__ << " get_next_cdir ready=" << ready << dendl;
-      if (cur_dir) {
-        cur_dir->scrub_initialize();
-      }
 
       if (ready && cur_dir) {
         scrubbing_cdirs.push_back(cur_dir);
@@ -214,7 +211,8 @@ void ScrubStack::scrub_dir_dentry(CDentry *dn,
     bool frag_added_children = false;
     bool frag_terminal = true;
     bool frag_done = false;
-    scrub_dirfrag(cur_dir, &frag_added_children, &frag_terminal, &frag_done);
+    scrub_dirfrag(cur_dir, dn->scrub_info()->scrub_recursive,
+		  &frag_added_children, &frag_terminal, &frag_done);
     if (frag_done) {
       // FIXME is this right?  Can we end up hitting this more than
       // once and is that a problem?
@@ -314,8 +312,9 @@ void ScrubStack::scrub_dir_dentry_final(CDentry *dn)
   return;
 }
 
-void ScrubStack::scrub_dirfrag(CDir *dir, bool *added_children,
-                               bool *is_terminal, bool *done)
+void ScrubStack::scrub_dirfrag(CDir *dir, bool recursive,
+			       bool *added_children,
+			       bool *is_terminal, bool *done)
 {
   assert(dir != NULL);
 
@@ -323,6 +322,8 @@ void ScrubStack::scrub_dirfrag(CDir *dir, bool *added_children,
   *added_children = false;
   *is_terminal = false;
   *done = false;
+
+  const ScrubHeaderRefConst& header = dir->get_inode()->scrub_info()->header;
 
   if (!dir->scrub_info()->directory_scrubbing) {
     // Get the frag complete before calling
@@ -386,14 +387,12 @@ void ScrubStack::scrub_dirfrag(CDir *dir, bool *added_children,
     // never get random IO errors here.
     assert(r == 0);
 
-    CDentry *parent_dn = dir->get_inode()->get_parent_dn();
-    ScrubHeaderRefConst header = parent_dn->scrub_info()->header;
 
     // FIXME: Do I *really* need to construct a kick context for every
     // single dentry I'm going to scrub?
     _enqueue_dentry(dn,
         dir,
-        parent_dn->scrub_info()->scrub_recursive,
+	recursive,
         false,  // We are already recursing so scrub_children not meaningful
         header,
 	NULL,

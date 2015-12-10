@@ -79,7 +79,7 @@ public:
    *               was initiated
    */
   void enqueue_dentry_top(CDentry *dn, bool recursive, bool children,
-                          ScrubHeaderRefConst header,
+                          const ScrubHeaderRefConst& header,
                           MDSInternalContextBase *on_finish) {
     enqueue_dentry(dn, recursive, children, header, on_finish, true);
   }
@@ -87,7 +87,7 @@ public:
    * starting this one.
    */
   void enqueue_dentry_bottom(CDentry *dn, bool recursive, bool children,
-                             ScrubHeaderRefConst header,
+                             const ScrubHeaderRefConst& header,
                              MDSInternalContextBase *on_finish) {
     enqueue_dentry(dn, recursive, children, header, on_finish, false);
   }
@@ -98,10 +98,10 @@ private:
    * the given scrub params, and then try and kick off more scrubbing.
    */
   void enqueue_dentry(CDentry *dn, bool recursive, bool children,
-                      ScrubHeaderRefConst header,
+                      const ScrubHeaderRefConst& header,
                       MDSInternalContextBase *on_finish, bool top);
   void _enqueue_dentry(CDentry *dn, CDir *parent, bool recursive, bool children,
-                      ScrubHeaderRefConst header,
+                      const ScrubHeaderRefConst& header,
                        MDSInternalContextBase *on_finish, bool top);
   /**
    * Kick off as many scrubs as are appropriate, based on the current
@@ -175,8 +175,8 @@ private:
    * progress. Try again later.
    *
    */
-  void scrub_dirfrag(CDir *dir, bool *added_children, bool *is_terminal,
-		     bool *done);
+  void scrub_dirfrag(CDir *dir, bool recursive,
+		     bool *added_children, bool *is_terminal, bool *done);
   /**
    * Scrub a directory-representing dentry.
    *

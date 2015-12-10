@@ -3774,10 +3774,9 @@ void CInode::validate_disk_state(CInode::validated_data *results,
 
       // Whether we have a tag to apply depends on ScrubHeader (if one is
       // present)
-      if (in->get_parent_dn() != nullptr &&
-          in->get_parent_dn()->scrub_info()->header != nullptr) {
+      if (in->scrub_infop && in->scrub_infop->header) {
         // I'm a non-orphan, so look up my ScrubHeader via my linkage
-        const std::string &tag = in->get_parent_dn()->scrub_info()->header->tag;
+        const std::string &tag = in->scrub_infop->header->tag;
         // Rather than using the usual CInode::fetch_backtrace,
         // use a special variant that optionally writes a tag in the same
         // operation.
@@ -4155,10 +4154,9 @@ void CInode::scrub_maybe_delete_info()
   }
 }
 
-void CInode::scrub_initialize(version_t scrub_version)
+void CInode::scrub_initialize(const ScrubHeaderRefConst& header)
 {
-  dout(20) << __func__ << " with scrub_version "
-           << scrub_version << dendl;
+  dout(20) << __func__ << " with scrub_version " << get_version() << dendl;
   assert(!scrub_infop || !scrub_infop->scrub_in_progress);
   scrub_info();
   if (!scrub_infop)
@@ -4177,8 +4175,9 @@ void CInode::scrub_initialize(version_t scrub_version)
     }
   }
   scrub_infop->scrub_in_progress = true;
-  scrub_infop->scrub_start_version = scrub_version;
+  scrub_infop->scrub_start_version = get_version();
   scrub_infop->scrub_start_stamp = ceph_clock_now(g_ceph_context);
+  scrub_infop->header = header;
   // right now we don't handle remote inodes
 }
 
