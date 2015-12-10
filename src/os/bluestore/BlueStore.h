@@ -446,7 +446,7 @@ private:
   int _read_fsid(uuid_d *f);
   int _write_fsid();
   void _close_fsid();
-  int _open_bdev();
+  int _open_bdev(bool create);
   void _close_bdev();
   int _open_db(bool create);
   void _close_db();
@@ -454,6 +454,9 @@ private:
   void _close_alloc();
   int _open_collections(int *errors=0);
   void _close_collections();
+
+  int _write_bdev_label(string path, bluestore_bdev_label_t label);
+  static int _read_bdev_label(string path, bluestore_bdev_label_t *label);
 
   int _open_super_meta();
 
@@ -511,7 +514,7 @@ public:
   bool wants_journal() { return false; };
   bool allows_journal() { return false; };
 
-  int peek_journal_fsid(uuid_d *fsid);
+  static int get_block_device_fsid(const string& path, uuid_d *fsid);
 
   bool test_mount_in_use();
 
