@@ -132,6 +132,186 @@ ostream& operator<<(ostream& out, const extent_t& e)
   return out;
 }
 
+// extent_ref_map_t
+
+void extent_ref_map_t::add(uint64_t offset, uint32_t len, unsigned ref)
+{
+  map<uint64_t,record_t>::iterator p = ref_map.insert(
+    map<uint64_t,record_t>::value_type(offset, record_t(len, ref))).first;
+  _maybe_merge_left(p);
+  ++p;
+  if (p != ref_map.end())
+    _maybe_merge_left(p);
+  _check();
+}
+
+void extent_ref_map_t::_check()
+{
+  uint64_t pos = 0;
+  unsigned refs = 0;
+  for (const auto &p : ref_map) {
+    if (p.first < pos)
+      assert(0 == "overlap");
+    if (p.first == pos && p.second.refs == refs)
+      assert(0 == "unmerged");
+    pos = p.first + p.second.length;
+    refs = p.second.refs;
+  }
+}
+
+void extent_ref_map_t::_maybe_merge_left(map<uint64_t,record_t>::iterator& p)
+{
+  if (p == ref_map.begin())
+    return;
+  auto q = p;
+  --q;
+  if (q->second.refs == p->second.refs &&
+      q->first + q->second.length == p->first) {
+    q->second.length += p->second.length;
+    ref_map.erase(p);
+    p = q;
+  }
+}
+
+void extent_ref_map_t::get(uint64_t offset, uint32_t length)
+{
+  map<uint64_t,record_t>::iterator p = ref_map.lower_bound(offset);
+  if (p == ref_map.end() || p->first > offset) {
+    if (p == ref_map.begin()) {
+      assert(0 == "get on missing extent (nothing before)");
+    }
+    --p;
+    if (p->first + p->second.length <= offset) {
+      assert(0 == "get on missing extent (gap)");
+    }
+  }
+  if (p->first < offset) {
+    uint64_t left = p->first + p->second.length - offset;
+    p->second.length = offset - p->first;
+    p = ref_map.insert(map<uint64_t,record_t>::value_type(
+			 offset, record_t(left, p->second.refs))).first;
+  }
+  while (length > 0) {
+    assert(p->first == offset);
+    if (length < p->second.length) {
+      ref_map.insert(make_pair(offset + length,
+			       record_t(p->second.length - length,
+					p->second.refs)));
+      p->second.length = length;
+      ++p->second.refs;
+      _maybe_merge_left(p);
+      return;
+    }
+    ++p->second.refs;
+    offset += p->second.length;
+    length -= p->second.length;
+    _maybe_merge_left(p);
+    ++p;
+  }
+  if (p != ref_map.end())
+    _maybe_merge_left(p);
+  _check();
+}
+
+void extent_ref_map_t::put(uint64_t offset, uint32_t length,
+			   vector<extent_t> *release)
+{
+  map<uint64_t,record_t>::iterator p = ref_map.lower_bound(offset);
+  if (p == ref_map.end() || p->first > offset) {
+    if (p == ref_map.begin()) {
+      assert(0 == "put on missing extent (nothing before)");
+    }
+    --p;
+    if (p->first + p->second.length <= offset) {
+      assert(0 == "put on missing extent (gap)");
+    }
+  }
+  if (p->first < offset) {
+    uint64_t left = p->first + p->second.length - offset;
+    p->second.length = offset - p->first;
+    p = ref_map.insert(map<uint64_t,record_t>::value_type(
+			 offset, record_t(left, p->second.refs))).first;
+  }
+  while (length > 0) {
+    assert(p->first == offset);
+    if (length < p->second.length) {
+      ref_map.insert(make_pair(offset + length,
+			       record_t(p->second.length - length,
+					p->second.refs)));
+      if (p->second.refs > 1) {
+	p->second.length = length;
+	--p->second.refs;
+	_maybe_merge_left(p);
+      } else {
+	release->push_back(extent_t(p->first, length));
+	ref_map.erase(p);
+      }
+      return;
+    }
+    offset += p->second.length;
+    length -= p->second.length;
+    if (p->second.refs > 1) {
+      --p->second.refs;
+      _maybe_merge_left(p);
+      ++p;
+    } else {
+      release->push_back(extent_t(p->first, p->second.length));
+      ref_map.erase(p++);
+    }
+  }
+  if (p != ref_map.end())
+    _maybe_merge_left(p);
+  _check();
+}
+
+void extent_ref_map_t::encode(bufferlist& bl) const
+{
+  ENCODE_START(1, 1, bl);
+  ::encode(ref_map, bl);
+  ENCODE_FINISH(bl);
+}
+
+void extent_ref_map_t::decode(bufferlist::iterator& p)
+{
+  DECODE_START(1, p);
+  ::decode(ref_map, p);
+  DECODE_FINISH(p);
+}
+
+void extent_ref_map_t::dump(Formatter *f) const
+{
+  f->open_array_section("ref_map");
+  for (auto& p : ref_map) {
+    f->open_object_section("ref");
+    f->dump_unsigned("offset", p.first);
+    f->dump_unsigned("length", p.second.length);
+    f->dump_unsigned("refs", p.second.refs);
+    f->close_section();
+  }
+  f->close_section();
+}
+
+void extent_ref_map_t::generate_test_instances(list<extent_ref_map_t*>& o)
+{
+  o.push_back(new extent_ref_map_t);
+  o.push_back(new extent_ref_map_t);
+  o.back()->add(10, 10);
+  o.back()->add(30, 10, 3);
+  o.back()->get(15, 20);
+}
+
+ostream& operator<<(ostream& out, const extent_ref_map_t& m)
+{
+  out << "ref_map(";
+  for (auto p = m.ref_map.begin(); p != m.ref_map.end(); ++p) {
+    if (p != m.ref_map.begin())
+      out << ",";
+    out << p->first << "~" << p->second.length << "=" << p->second.refs;
+  }
+  out << ")";
+  return out;
+}
+
 // overlay_t
 
 void overlay_t::encode(bufferlist& bl) const
