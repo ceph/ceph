@@ -18,11 +18,28 @@
 #include <ostream>
 #include "include/types.h"
 #include "include/interval_set.h"
+#include "include/utime.h"
 #include "common/hobject.h"
 
 namespace ceph {
   class Formatter;
 }
+
+/// label for block device
+struct bluestore_bdev_label_t {
+  uuid_d osd_uuid;     ///< osd uuid
+  uint64_t size;       ///< device size
+  utime_t btime;       ///< birth time
+  string description;  ///< device description
+
+  void encode(bufferlist& bl) const;
+  void decode(bufferlist::iterator& p);
+  void dump(Formatter *f) const;
+  static void generate_test_instances(list<bluestore_bdev_label_t*>& o);
+};
+WRITE_CLASS_ENCODER(bluestore_bdev_label_t)
+
+ostream& operator<<(ostream& out, const bluestore_bdev_label_t& l);
 
 /// collection metadata
 struct cnode_t {

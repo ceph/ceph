@@ -201,17 +201,26 @@ private:
 
   void _invalidate_cache(FileRef f, uint64_t offset, uint64_t length);
 
-  int _open_super(uint64_t super_offset_a, uint64_t super_offset_b);
+  int _open_super();
   int _write_super();
   int _replay(); ///< replay journal
+
+  // always put the super in the second 4k block.  FIXME should this be
+  // block size independent?
+  unsigned get_super_offset() {
+    return 4096;
+  }
+  unsigned get_super_length() {
+    return 4096;
+  }
 
 public:
   BlueFS();
   ~BlueFS();
 
   // the super is always stored on bdev 0
-  int mkfs(uint64_t super_offset_a, uint64_t super_offset_b);
-  int mount(uint64_t super_offset_a, uint64_t super_offset_b);
+  int mkfs(uuid_d osd_uuid);
+  int mount();
   void umount();
 
   int fsck();

@@ -58,18 +58,15 @@ ostream& operator<<(ostream& out, const bluefs_fnode_t& file);
 
 
 struct bluefs_super_t {
-  uuid_d uuid;
+  uuid_d uuid;      ///< unique to this bluefs instance
+  uuid_d osd_uuid;  ///< matches the osd that owns us
   uint64_t version;
-  uint64_t super_a_offset;
-  uint64_t super_b_offset;
   uint32_t block_size;
 
   bluefs_fnode_t log_fnode;
 
   bluefs_super_t()
     : version(0),
-      super_a_offset(0),
-      super_b_offset(0),
       block_size(4096) { }
 
   uint64_t block_mask() const {

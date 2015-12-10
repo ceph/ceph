@@ -35,7 +35,7 @@ int main(int argc, char **argv)
     fs.add_block_device(i-1, args[i]);
   }
 
-  int r = fs.mount(0, 4096);
+  int r = fs.mount();
   assert(r == 0);
 
   vector<string> dirs;

@@ -14,6 +14,60 @@
 
 #include "bluestore_types.h"
 #include "common/Formatter.h"
+#include "include/stringify.h"
+
+// bluestore_bdev_label_t
+
+void bluestore_bdev_label_t::encode(bufferlist& bl) const
+{
+  // be slightly friendly to someone who looks at the device
+  bl.append("bluestore block device\n");
+  bl.append(stringify(osd_uuid));
+  bl.append("\n");
+  ENCODE_START(1, 1, bl);
+  ::encode(osd_uuid, bl);
+  ::encode(size, bl);
+  ::encode(btime, bl);
+  ::encode(description, bl);
+  ENCODE_FINISH(bl);
+}
+
+void bluestore_bdev_label_t::decode(bufferlist::iterator& p)
+{
+  p.advance(60); // see above
+  DECODE_START(1, p);
+  ::decode(osd_uuid, p);
+  ::decode(size, p);
+  ::decode(btime, p);
+  ::decode(description, p);
+  DECODE_FINISH(p);
+}
+
+void bluestore_bdev_label_t::dump(Formatter *f) const
+{
+  f->dump_stream("osd_uuid") << osd_uuid;
+  f->dump_unsigned("size", size);
+  f->dump_stream("btime") << btime;
+  f->dump_string("description", description);
+}
+
+void bluestore_bdev_label_t::generate_test_instances(
+  list<bluestore_bdev_label_t*>& o)
+{
+  o.push_back(new bluestore_bdev_label_t);
+  o.push_back(new bluestore_bdev_label_t);
+  o.back()->size = 123;
+  o.back()->btime = utime_t(4, 5);
+  o.back()->description = "fakey";
+}
+
+ostream& operator<<(ostream& out, const bluestore_bdev_label_t& l)
+{
+  return out << "bdev(osd_uuid " << l.osd_uuid
+	     << " size " << l.size
+	     << " btime " << l.btime
+	     << " desc " << l.description << ")";
+}
 
 // cnode_t
 

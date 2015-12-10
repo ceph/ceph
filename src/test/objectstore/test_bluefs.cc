@@ -36,10 +36,11 @@ void rm_temp_bdev(string f)
 TEST(BlueFS, mkfs) {
   uint64_t size = 1048476 * 128;
   string fn = get_temp_bdev(size);
+  uuid_d fsid;
   BlueFS fs;
   fs.add_block_device(0, fn);
   fs.add_block_extent(0, 1048576, size - 1048576);
-  fs.mkfs(0, 4096);
+  fs.mkfs(fsid);
   rm_temp_bdev(fn);
 }
 
@@ -49,8 +50,9 @@ TEST(BlueFS, mkfs_mount) {
   BlueFS fs;
   ASSERT_EQ(0, fs.add_block_device(0, fn));
   fs.add_block_extent(0, 1048576, size - 1048576);
-  ASSERT_EQ(0, fs.mkfs(0, 4096));
-  ASSERT_EQ(0, fs.mount(0, 4096));
+  uuid_d fsid;
+  ASSERT_EQ(0, fs.mkfs(fsid));
+  ASSERT_EQ(0, fs.mount());
   ASSERT_EQ(fs.get_total(0), size - 1048576);
   ASSERT_LT(fs.get_free(0), size - 1048576);
   fs.umount();
@@ -63,8 +65,9 @@ TEST(BlueFS, write_read) {
   BlueFS fs;
   ASSERT_EQ(0, fs.add_block_device(0, fn));
   fs.add_block_extent(0, 1048576, size - 1048576);
-  ASSERT_EQ(0, fs.mkfs(0, 4096));
-  ASSERT_EQ(0, fs.mount(0, 4096));
+  uuid_d fsid;
+  ASSERT_EQ(0, fs.mkfs(fsid));
+  ASSERT_EQ(0, fs.mount());
   {
     BlueFS::FileWriter *h;
     ASSERT_EQ(0, fs.mkdir("dir"));
@@ -98,8 +101,9 @@ TEST(BlueFS, small_appends) {
   BlueFS fs;
   ASSERT_EQ(0, fs.add_block_device(0, fn));
   fs.add_block_extent(0, 1048576, size - 1048576);
-  ASSERT_EQ(0, fs.mkfs(0, 4096));
-  ASSERT_EQ(0, fs.mount(0, 4096));
+  uuid_d fsid;
+  ASSERT_EQ(0, fs.mkfs(fsid));
+  ASSERT_EQ(0, fs.mount());
   {
     BlueFS::FileWriter *h;
     ASSERT_EQ(0, fs.mkdir("dir"));

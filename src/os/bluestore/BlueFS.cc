@@ -110,15 +110,16 @@ int BlueFS::get_block_extents(unsigned id, interval_set<uint64_t> *extents)
   return 0;
 }
 
-int BlueFS::mkfs(uint64_t super_offset_a, uint64_t super_offset_b)
+int BlueFS::mkfs(uuid_d osd_uuid)
 {
   dout(1) << __func__
-	  << " super offsets " << super_offset_a << " " << super_offset_b
+	  << " osd_uuid " << osd_uuid
 	  << dendl;
   assert(bdev.size() >= 1);
 
   _init_alloc();
 
+  super.osd_uuid = osd_uuid;
   super.uuid.generate_random();
   dout(1) << __func__ << " uuid " << super.uuid << dendl;
 
@@ -145,14 +146,9 @@ int BlueFS::mkfs(uint64_t super_offset_a, uint64_t super_offset_b)
   _flush_log();
 
   // write supers
-  super.version = 0;
-  super.super_a_offset = super_offset_a;
-  super.super_b_offset = super_offset_b;
+  super.version = 1;
   super.block_size = bdev[0]->get_block_size();
   super.log_fnode = log_file->fnode;
-  _write_super();
-  _flush_bdev();
-  super.version = 1;
   _write_super();
   _flush_bdev();
 
@@ -180,13 +176,12 @@ void BlueFS::_init_alloc()
   }
 }
 
-int BlueFS::mount(uint64_t super_offset_a, uint64_t super_offset_b)
+int BlueFS::mount()
 {
-  dout(1) << __func__ << " super offsets " << super_offset_a
-	  << " " << super_offset_b << dendl;
+  dout(1) << __func__ << dendl;
   assert(!bdev.empty());
 
-  int r = _open_super(super_offset_a, super_offset_b);
+  int r = _open_super();
   if (r < 0) {
     derr << __func__ << " failed to open super: " << cpp_strerror(r) << dendl;
     goto out;
@@ -257,82 +252,49 @@ int BlueFS::_write_super()
   ::encode(super, bl);
   uint32_t crc = bl.crc32c(-1);
   ::encode(crc, bl);
-  assert(bl.length() <= super.block_size);
-  bufferptr z(super.block_size - bl.length());
+  assert(bl.length() <= get_super_length());
+  bufferptr z(get_super_length() - bl.length());
   z.zero();
   bl.append(z);
   bl.rebuild();
 
-  uint64_t off = (super.version & 1) ?
-    super.super_b_offset : super.super_a_offset;
   IOContext ioc(NULL);
-  bdev[0]->aio_write(off, bl, &ioc);
+  bdev[0]->aio_write(get_super_offset(), bl, &ioc);
   bdev[0]->aio_submit(&ioc);
   ioc.aio_wait();
   dout(20) << __func__ << " v " << super.version << " crc " << crc
-	   << " offset " << off << dendl;
+	   << " offset " << get_super_offset() << dendl;
   return 0;
 }
 
-int BlueFS::_open_super(uint64_t super_offset_a, uint64_t super_offset_b)
+int BlueFS::_open_super()
 {
   dout(10) << __func__ << dendl;
 
-  bufferlist abl, bbl, t;
-  bluefs_super_t a, b;
-  uint32_t a_crc, b_crc, crc;
+  bufferlist bl, t;
+  uint32_t expected_crc, crc;
   int r;
 
-  r = bdev[0]->read(super_offset_a, bdev[0]->get_block_size(), &abl, ioc[0]);
-  if (r < 0)
-    return r;
-  r = bdev[0]->read(super_offset_b, bdev[0]->get_block_size(), &bbl, ioc[0]);
+  // always the second block
+  r = bdev[0]->read(get_super_offset(), get_super_length(),
+		    &bl, ioc[0]);
   if (r < 0)
     return r;
 
-  bufferlist::iterator p = abl.begin();
-  ::decode(a, p);
+  bufferlist::iterator p = bl.begin();
+  ::decode(super, p);
   {
     bufferlist t;
-    t.substr_of(abl, 0, p.get_off());
+    t.substr_of(bl, 0, p.get_off());
     crc = t.crc32c(-1);
   }
-  ::decode(a_crc, p);
-  if (crc != a_crc) {
-    derr << __func__ << " bad crc on superblock a, expected " << a_crc
+  ::decode(expected_crc, p);
+  if (crc != expected_crc) {
+    derr << __func__ << " bad crc on superblock, expected " << expected_crc
 	 << " != actual " << crc << dendl;
     return -EIO;
   }
-
-  p = bbl.begin();
-  ::decode(b, p);
-  {
-    bufferlist t;
-    t.substr_of(bbl, 0, p.get_off());
-    crc = t.crc32c(-1);
-  }
-  ::decode(b_crc, p);
-  if (crc != b_crc) {
-    derr << __func__ << " bad crc on superblock a, expected " << a_crc
-	 << " != actual " << crc << dendl;
-    return -EIO;
-  }
-
-  dout(10) << __func__ << " superblock a " << a.version
-	   << " b " << b.version
-	   << dendl;
-
-  if (a.version == b.version + 1) {
-    dout(10) << __func__ << " using a" << dendl;
-    super = a;
-  } else if (b.version == a.version + 1) {
-    dout(10) << __func__ << " using b" << dendl;
-    super = b;
-  } else {
-    derr << __func__ << " non-adjacent superblock versions "
-	 << a.version << " and " << b.version << dendl;
-    return -EIO;
-  }
+  dout(10) << __func__ << " superblock " << super.version << dendl;
   dout(10) << __func__ << " log_fnode " << super.log_fnode << dendl;
   return 0;
 }
@@ -492,9 +454,7 @@ int BlueFS::_replay()
 	  assert(q != dir_map.end());
 	  map<string,FileRef>::iterator r = q->second->file_map.find(filename);
 	  assert(r != q->second->file_map.end());
-	  if (--r->second->refs == 0) {
-	    file_map.erase(r->second->fnode.ino);
-	  }
+	  --r->second->refs;
 	  q->second->file_map.erase(r);
 	}
 	break;
@@ -566,6 +526,16 @@ int BlueFS::_replay()
 
   dout(10) << __func__ << " log file size was " << log_file->fnode.size << dendl;
   delete log_reader;
+
+  // verify file link counts are all >0
+  for (auto& p : file_map) {
+    if (p.second->refs == 0 &&
+	p.second->fnode.ino > 1) {
+      derr << __func__ << " file with link count 0: " << p.second->fnode
+	   << dendl;
+      return -EIO;
+    }
+  }
 
   dout(10) << __func__ << " done" << dendl;
   return 0;
