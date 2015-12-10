@@ -395,6 +395,12 @@ public:
     }
     void encode(bufferlist &bl) const;
     void decode(bufferlist::iterator &bl);
+    map<version_t, pair<uint64_t, uint64_t> >::iterator begin() {
+      return overwrite_history.begin();
+    }
+    map<version_t, pair<uint64_t, uint64_t> >::iterator end() {
+      return overwrite_history.end();
+    }
   };
   typedef ceph::shared_ptr<OverwriteInfo> OverwriteInfoRef;
 

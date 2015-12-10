@@ -3849,16 +3849,17 @@ struct FillInVerifyExtent : public Context {
       return;
     // whole object?  can we verify the checksum?
     if (maybe_crc && *r == size) {
-      uint32_t crc = outdatap->crc32c(-1);
-      if (maybe_crc != crc) {
-        osd->clog->error() << std::hex << " full-object read crc 0x" << crc
-			   << " != expected 0x" << *maybe_crc
-			   << std::dec << " on " << soid << "\n";
-        if (!(flags & CEPH_OSD_OP_FLAG_FAILOK)) {
-	  *rval = -EIO;
-	  *r = 0;
-	}
-      }
+      // FIXME: temp disable crc
+      // uint32_t crc = outdatap->crc32c(-1);
+      // if (maybe_crc != crc) {
+      //   osd->clog->error() << std::hex << " full-object read crc 0x" << crc
+      //   		   << " != expected 0x" << *maybe_crc
+      //   		   << std::dec << " on " << soid << "\n";
+      //   if (!(flags & CEPH_OSD_OP_FLAG_FAILOK)) {
+      //     *rval = -EIO;
+      //     *r = 0;
+      //   }
+      // }
     }
   }
 };
