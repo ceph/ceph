@@ -8,6 +8,7 @@
 
 /* internal header */
 #include <string.h>
+#include <sys/stat.h>
 
 #include <atomic>
 #include <mutex>
@@ -18,6 +19,9 @@
 #include "xxhash.h"
 #include "include/buffer.h"
 #include "common/cohort_lru.h"
+#include "rgw_common.h"
+#include "rgw_user.h"
+#include "rgw_lib.h"
 
 /* XXX
  * ASSERT_H somehow not defined after all the above (which bring
@@ -152,7 +156,7 @@ namespace rgw {
     uint32_t flags;
 
   public:
-    const static string root_name;
+    const static std::string root_name;
 
     static constexpr uint16_t MAX_DEPTH = 256;
 
@@ -318,6 +322,7 @@ namespace rgw {
     }
 
     void add_marker(uint64_t off, const std::string& marker) {
+      using std::get;
       directory* d = get<directory>(&variant_type);
       if (d) {
 	d->marker_cache.insert(
@@ -326,6 +331,7 @@ namespace rgw {
     }
 
     std::string find_marker(uint64_t off) { // XXX copy
+      using std::get;
       directory* d = get<directory>(&variant_type);
       if (d) {
 	const auto& iter = d->marker_cache.find(off);
