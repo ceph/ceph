@@ -362,7 +362,7 @@ int rgw_lookup(struct rgw_fs *rgw_fs,
 	      struct rgw_file_handle *parent_fh, const char* path,
 	      struct rgw_file_handle **fh, uint32_t flags)
 {
-  CephContext* cct = static_cast<CephContext*>(rgw_fs->rgw);
+  //CephContext* cct = static_cast<CephContext*>(rgw_fs->rgw);
   RGWLibFS *fs = static_cast<RGWLibFS*>(rgw_fs->fs_private);
 
   RGWFileHandle* parent = get_rgwfh(parent_fh);
