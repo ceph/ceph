@@ -11,7 +11,6 @@
 #include "kv/KeyValueDB.h"
 
 class FreelistManager {
-  KeyValueDB *db;
   std::string prefix;
   Mutex lock;
   uint64_t total_free;
@@ -20,7 +19,6 @@ class FreelistManager {
 
 public:
   FreelistManager() :
-    db(NULL),
     lock("FreelistManager::lock"),
     total_free(0) {
   }
