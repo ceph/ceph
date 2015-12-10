@@ -25,6 +25,7 @@ public:
     boost::intrusive::list_member_hook<> dirty_item;
 
     atomic_t num_readers, num_writers;
+    atomic_t num_reading;
 
     File()
       : RefCountedObject(0),
@@ -36,6 +37,7 @@ public:
     ~File() {
       assert(num_readers.read() == 0);
       assert(num_writers.read() == 0);
+      assert(num_reading.read() == 0);
     }
 
     friend void intrusive_ptr_add_ref(File *f) {
