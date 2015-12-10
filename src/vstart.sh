@@ -296,6 +296,8 @@ else
         debug journal = 20
         debug filestore = 20
         debug bluestore = 30
+        debug bluefs = 30
+        debug rocksdb = 10
         debug bdev = 20
         debug rgw = 20
         debug objclass = 20'
