@@ -92,8 +92,7 @@ function TEST_scrub_snaps() {
     rados -p $poolname rm obj4
     rados -p $poolname rm obj2
 
-    kill_daemons $dir KILL osd || return 1
-    sleep 5
+    kill_daemons $dir TERM osd || return 1
 
     # Don't need to ceph_objectstore_tool function because osd stopped
 
