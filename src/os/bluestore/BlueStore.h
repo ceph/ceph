@@ -45,6 +45,12 @@ public:
 
   class TransContext;
 
+  /// an extent map, shared by a group of objects (clones)
+  struct ObjectGroup {
+    atomic_t nref;  ///< reference count
+    extent_ref_map_t m;
+  };
+
   /// an in-memory object
   struct Onode {
     atomic_t nref;  ///< reference count
