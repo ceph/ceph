@@ -180,7 +180,7 @@ public:
     return scrub_infop;
   }
   void scrub_initialize(CDir *parent, bool recurse, bool children,
-                        ScrubHeaderRefConst header,
+                        const ScrubHeaderRefConst& header,
                         Context *f);
   void scrub_finished(Context **c);
   void scrub_children_finished() {
