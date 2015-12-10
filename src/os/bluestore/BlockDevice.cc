@@ -172,8 +172,11 @@ void BlockDevice::_aio_thread()
 	IOContext *ioc = static_cast<IOContext*>(aio[i]->priv);
 	Mutex::Locker l(ioc->lock);
 	--ioc->num_running;
-	dout(10) << __func__ << " finished aio " << aio[i] << " ioc " << ioc
+	int r = aio[i]->get_return_value();
+	dout(10) << __func__ << " finished aio " << aio[i] << " r " << r
+		 << " ioc " << ioc
 		 << " with " << ioc->num_running << " aios left" << dendl;
+	assert(r >= 0);
 	_aio_finish(ioc, aio[i]->offset, aio[i]->length);
 	if (ioc->num_running == 0) {
 	  ioc->running_bl.clear();

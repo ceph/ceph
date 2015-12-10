@@ -58,8 +58,9 @@ public:
     int fd;
     vector<iovec> iov;
     uint64_t offset, length;
+    int rval;
 
-    aio_t(void *p, int f) : priv(p), fd(f) {
+    aio_t(void *p, int f) : priv(p), fd(f), rval(-1000) {
       memset(&iocb, 0, sizeof(iocb));
     }
 
@@ -69,6 +70,10 @@ public:
       length = 0;
       for (unsigned u=0; u<iov.size(); ++u)
 	length += iov[u].iov_len;
+    }
+
+    int get_return_value() {
+      return rval;
     }
   };
 
@@ -127,6 +132,7 @@ public:
       }
       for (int i=0; i<r; ++i) {
 	paio[i] = (aio_t *)event[i].obj;
+	paio[i]->rval = event[i].res;
       }
       return r;
     }
