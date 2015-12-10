@@ -4271,16 +4271,25 @@ int BlueStore::_do_write(TransContext *txc,
       _pad_zeros(o, &bl, &offset, &length, block_size);
       assert(offset % block_size == 0);
       assert(length % block_size == 0);
-      // the trailing block is zeroed to the end
-      uint64_t from = MAX(ROUND_UP_TO(o->onode.size, block_size), bp->first);
-      if (offset > from) {
-	uint64_t x_off = from - bp->first;
-	uint64_t z_len = offset - from;
-	dout(20) << __func__ << " zero " << from << "~" << z_len
-		 << " x_off " << x_off << dendl;
-	bdev->aio_zero(bp->second.offset + x_off, z_len, &txc->ioc);
-      }
       uint64_t x_off = offset - bp->first;
+      if (bp->second.has_flag(extent_t::FLAG_UNWRITTEN)) {
+	if (x_off > 0) {
+	  // extent is unwritten; zero up until x_off
+	  dout(20) << __func__ << " zero " << bp->second.offset << "~" << x_off
+		   << dendl;
+	  bdev->aio_zero(bp->second.offset, x_off, &txc->ioc);
+	}
+      } else {
+	// the trailing block is zeroed from EOF to the end
+	uint64_t from = MAX(ROUND_UP_TO(o->onode.size, block_size), bp->first);
+	if (offset > from) {
+	  uint64_t zx_off = from - bp->first;
+	  uint64_t z_len = offset - from;
+	  dout(20) << __func__ << " zero " << from << "~" << z_len
+		   << " x_off " << zx_off << dendl;
+	  bdev->aio_zero(bp->second.offset + zx_off, z_len, &txc->ioc);
+	}
+      }
       dout(20) << __func__ << " write " << offset << "~" << length
 	       << " x_off " << x_off << dendl;
       bdev->aio_write(bp->second.offset + x_off, bl, &txc->ioc);
