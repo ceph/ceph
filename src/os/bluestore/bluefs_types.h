@@ -33,9 +33,10 @@ struct bluefs_fnode_t {
   uint64_t ino;
   uint64_t size;
   utime_t mtime;
+  uint8_t prefer_bdev;
   vector<bluefs_extent_t> extents;
 
-  bluefs_fnode_t() : ino(0), size(0) {}
+  bluefs_fnode_t() : ino(0), size(0), prefer_bdev(0) {}
 
   uint64_t get_allocated() const {
     uint64_t r = 0;

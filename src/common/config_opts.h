@@ -840,6 +840,8 @@ OPTION(bluestore_bluefs_max_free_fs_main_ratio, OPT_FLOAT, .8)
 OPTION(bluestore_bluefs_min_gift_ratio, OPT_FLOAT, 1)
 OPTION(bluestore_block_path, OPT_STR, "")
 OPTION(bluestore_block_size, OPT_U64, 10 * 1024*1024*1024)  // 10gb for testing
+OPTION(bluestore_block_wal_path, OPT_STR, "")
+OPTION(bluestore_block_wal_size, OPT_U64, 128 * 1024*1024)  // 128MB for testing
 OPTION(bluestore_max_dir_size, OPT_U32, 1000000)
 OPTION(bluestore_min_alloc_size, OPT_U32, 512*1024)
 OPTION(bluestore_onode_map_size, OPT_U32, 1024)   // onodes per collection

@@ -58,6 +58,11 @@ int BlueFS::add_block_device(unsigned id, string path)
   return 0;
 }
 
+uint64_t BlueFS::get_block_device_size(unsigned id)
+{
+  return bdev[id]->get_size();
+}
+
 void BlueFS::add_block_extent(unsigned id, uint64_t offset, uint64_t length)
 {
   Mutex::Locker l(lock);
@@ -120,7 +125,11 @@ int BlueFS::mkfs(uint64_t super_offset_a, uint64_t super_offset_b)
   // init log
   FileRef log_file = new File;
   log_file->fnode.ino = 1;
-  _allocate(0, g_conf->bluefs_max_log_runway, &log_file->fnode.extents);
+  if (bdev.size() >= 2)
+    log_file->fnode.prefer_bdev = 1;
+  _allocate(log_file->fnode.prefer_bdev,
+	    g_conf->bluefs_max_log_runway,
+	    &log_file->fnode.extents);
   log_writer = new FileWriter(log_file, bdev.size());
 
   // initial txn
@@ -762,7 +771,8 @@ void BlueFS::_compact_log()
   vector<bluefs_extent_t> old_extents;
   old_extents.swap(log_file->fnode.extents);
   while (log_file->fnode.get_allocated() < need) {
-    int r = _allocate(0, need - log_file->fnode.get_allocated(),
+    int r = _allocate(log_file->fnode.prefer_bdev,
+		      need - log_file->fnode.get_allocated(),
 		      &log_file->fnode.extents);
     assert(r == 0);
   }
@@ -811,7 +821,8 @@ int BlueFS::_flush_log()
   if (runway < g_conf->bluefs_min_log_runway) {
     dout(10) << __func__ << " allocating more log runway ("
 	     << runway << " remaining" << dendl;
-    int r = _allocate(0, g_conf->bluefs_max_log_runway,
+    int r = _allocate(log_writer->file->fnode.prefer_bdev,
+		      g_conf->bluefs_max_log_runway,
 		      &log_writer->file->fnode.extents);
     assert(r == 0);
     log_t.op_file_update(log_writer->file->fnode);
@@ -864,7 +875,9 @@ int BlueFS::_flush_range(FileWriter *h, uint64_t offset, uint64_t length)
 
   uint64_t allocated = h->file->fnode.get_allocated();
   if (allocated < offset + length) {
-    int r = _allocate(0, offset + length - allocated, &h->file->fnode.extents);
+    int r = _allocate(h->file->fnode.prefer_bdev,
+		      offset + length - allocated,
+		      &h->file->fnode.extents);
     if (r < 0)
       return r;
   }
@@ -930,7 +943,7 @@ int BlueFS::_flush_range(FileWriter *h, uint64_t offset, uint64_t length)
       z.zero();
       t.append(z);
     }
-    bdev[0]->aio_write(p->offset + x_off, t, h->iocv[0]);
+    bdev[p->bdev]->aio_write(p->offset + x_off, t, h->iocv[p->bdev]);
     bloff += x_len;
     length -= x_len;
     ++p;
@@ -1029,6 +1042,12 @@ int BlueFS::_allocate(unsigned id, uint64_t len, vector<bluefs_extent_t> *ev)
   uint64_t left = ROUND_UP_TO(len, g_conf->bluefs_alloc_size);
   int r = alloc[id]->reserve(left);
   if (r < 0) {
+    if (id) {
+      derr << __func__ << " failed to allocate " << left << " on bdev " << id
+	   << ", free " << alloc[id]->get_free()
+	   << "; fallback to bdev 0" << dendl;
+      return _allocate(0, len, ev);
+    }
     derr << __func__ << " failed to allocate " << left << " on bdev " << id
 	 << ", free " << alloc[id]->get_free() << dendl;
     return r;
@@ -1064,7 +1083,7 @@ int BlueFS::_preallocate(FileRef f, uint64_t off, uint64_t len)
   uint64_t allocated = f->fnode.get_allocated();
   if (off + len > allocated) {
     uint64_t want = off + len - allocated;
-    int r = _allocate(0, want, &f->fnode.extents);
+    int r = _allocate(f->fnode.prefer_bdev, want, &f->fnode.extents);
     if (r < 0)
       return r;
     log_t.op_file_update(f->fnode);

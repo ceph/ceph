@@ -937,6 +937,16 @@ int BlueStore::_open_db(bool create)
     if (create) {
       bluefs->add_block_extent(0, g_conf->bluestore_bluefs_initial_offset,
 			       g_conf->bluestore_bluefs_initial_length);
+    }
+    snprintf(bfn, sizeof(bfn), "%s/block.wal", path.c_str());
+    struct stat st;
+    if (::stat(bfn, &st) == 0) {
+      bluefs->add_block_device(1, bfn);
+      if (create) {
+	bluefs->add_block_extent(1, 0, bluefs->get_block_device_size(1));
+      }
+    }
+    if (create) {
       bluefs->mkfs(0, 4096);
     }
     int r = bluefs->mount(0, 4096);
@@ -1244,7 +1254,7 @@ int BlueStore::mkfs()
     dout(1) << __func__ << " fsid is already set to " << fsid << dendl;
   }
 
-  // block device
+  // block symlink/file
   if (g_conf->bluestore_block_path.length()) {
     int r = ::symlinkat(g_conf->bluestore_block_path.c_str(), path_fd, "block");
     if (r < 0) {
@@ -1270,6 +1280,37 @@ int BlueStore::mkfs()
       assert(r == 0);
       dout(1) << __func__ << " created block file with size "
 	      << pretty_si_t(g_conf->bluestore_block_size) << "B" << dendl;
+    }
+  }
+
+  // block.wal symlink/file
+  if (g_conf->bluestore_block_wal_path.length()) {
+    int r = ::symlinkat(g_conf->bluestore_block_wal_path.c_str(), path_fd,
+			"block.wal");
+    if (r < 0) {
+      r = -errno;
+      derr << __func__ << " failed to create block.wal symlink to "
+	   << g_conf->bluestore_block_wal_path
+	   << ": " << cpp_strerror(r) << dendl;
+      goto out_close_fsid;
+    }
+  } else if (g_conf->bluestore_block_wal_size) {
+    struct stat st;
+    int r = ::fstatat(path_fd, "block.wal", &st, 0);
+    if (r < 0)
+      r = -errno;
+    if (r == -ENOENT) {
+      int fd = ::openat(path_fd, "block.wal", O_CREAT|O_RDWR, 0644);
+      if (fd < 0) {
+	int r = -errno;
+	derr << __func__ << " faile to create block.wal file: "
+	     << cpp_strerror(r) << dendl;
+	goto out_close_fsid;
+      }
+      int r = ::ftruncate(fd, g_conf->bluestore_block_wal_size);
+      assert(r == 0);
+      dout(1) << __func__ << " created block.wal file with size "
+	      << pretty_si_t(g_conf->bluestore_block_wal_size) << "B" << dendl;
     }
   }
 
