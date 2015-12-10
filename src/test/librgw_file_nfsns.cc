@@ -98,8 +98,10 @@ TEST(LibRGW, MOUNT) {
 
 extern "C" {
   static bool r1_cb(const char* name, void *arg, uint64_t offset) {
+    struct rgw_file_handle* parent_fh
+      = static_cast<struct rgw_file_handle*>(arg);
     obj_stack.push(
-      obj_rec{name, nullptr, nullptr, nullptr});
+      obj_rec{name, nullptr, parent_fh, nullptr});
     return true; /* XXX */
   }
 }
@@ -129,8 +131,7 @@ TEST(LibRGW, ENUMERATE1) {
 	  // descending
 	  uint64_t offset;
 	  bool eof; // XXX
-	  rc = rgw_readdir(fs, elt.parent_fh, &offset, r1_cb,
-			   &obj_stack, &eof);
+	  rc = rgw_readdir(fs, elt.fh, &offset, r1_cb, elt.fh, &eof);
 	  elt.state.readdir = true;
 	  ASSERT_EQ(rc, 0);
 	  ASSERT_TRUE(eof);

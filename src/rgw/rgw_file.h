@@ -749,7 +749,7 @@ public:
     s->op = OP_GET;
 
     /* XXX derp derp derp */
-    string uri = "/" + rgw_fh->bucket_name() + "/";
+    std::string uri = "/" + rgw_fh->bucket_name() + "/";
     s->relative_uri = uri;
     s->info.request_uri = uri; // XXX
     s->info.effective_uri = uri;
@@ -1311,15 +1311,15 @@ class RGWStatLeafRequest : public RGWLibRequest,
 			   public RGWListBucket /* RGWOp */
 {
 public:
-  const std::string& bucket;
+  RGWFileHandle* rgw_fh;
   std::string path;
   bool matched;
 
   RGWStatLeafRequest(CephContext* _cct, RGWUserInfo *_user,
-		     const std::string& _bucket, const std::string& _path)
-    : RGWLibRequest(_cct, _user), bucket(_bucket), path(_path),
+		     RGWFileHandle* _rgw_fh, const std::string& _path)
+    : RGWLibRequest(_cct, _user), rgw_fh(_rgw_fh), path(_path),
       matched(false) {
-    default_max = 2; // logical max {"foo", "foo/"}
+    default_max = 1000; // logical max {"foo", "foo/"}
     magic = 80;
     op = this;
   }
@@ -1344,7 +1344,7 @@ public:
     s->op = OP_GET;
 
     /* XXX derp derp derp */
-    std::string uri = "/" + bucket;
+    std::string uri = "/" + rgw_fh->bucket_name() + "/";
     s->relative_uri = uri;
     s->info.request_uri = uri; // XXX
     s->info.effective_uri = uri;
@@ -1354,31 +1354,27 @@ public:
     // woo
     s->user = user;
 
+    prefix = rgw_fh->full_object_name();
+    delimiter = '/';
+
     return 0;
   }
 
   virtual int get_params() {
-    // XXX S3
-    struct req_state* s = get_state();
-    list_versions = s->info.args.exists("versions");
-    if (!list_versions) {
-      marker = s->info.args.get("marker");
-    } else {
-      marker.name = s->info.args.get("key-marker");
-      marker.instance = s->info.args.get("version-id-marker");
-    }
-    max_keys = default_max; // 2
-    prefix = path;
-    delimiter = "/";
-#if 0 /* XXX? */
-    encoding_type = s->info.args.get("encoding-type");
-#endif
+    max = default_max;
     return 0;
   }
 
   virtual void send_response() {
+    // try objects
     for (const auto& iter : objs) {
       path = iter.key.name;
+      matched = true;
+      return;
+    }
+    // try prefixes
+    for (auto& iter : common_prefixes) {
+      path = iter.first;
       matched = true;
       break;
     }
