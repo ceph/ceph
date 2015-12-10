@@ -1,6 +1,7 @@
 #!/bin/bash
 
 . "`dirname $0`/test-rgw-common.sh"
+. "`dirname $0`/test-rgw-meta-sync.sh"
 
 set -e
 
@@ -33,3 +34,5 @@ x $(start_ceph_cluster 2) -n
 # create new zone, start rgw
 init_zone_in_existing_zg 2 $realm_name $zg $zone1 $zone1_port $system_access_key $system_secret
 
+
+wait_for_meta_sync 1 2
