@@ -53,9 +53,8 @@ void bluefs_super_t::encode(bufferlist& bl) const
 {
   ENCODE_START(1, 1, bl);
   ::encode(uuid, bl);
+  ::encode(osd_uuid, bl);
   ::encode(version, bl);
-  ::encode(super_a_offset, bl);
-  ::encode(super_b_offset, bl);
   ::encode(block_size, bl);
   ::encode(log_fnode, bl);
   ENCODE_FINISH(bl);
@@ -65,9 +64,8 @@ void bluefs_super_t::decode(bufferlist::iterator& p)
 {
   DECODE_START(1, p);
   ::decode(uuid, p);
+  ::decode(osd_uuid, p);
   ::decode(version, p);
-  ::decode(super_a_offset, p);
-  ::decode(super_b_offset, p);
   ::decode(block_size, p);
   ::decode(log_fnode, p);
   DECODE_FINISH(p);
@@ -76,9 +74,8 @@ void bluefs_super_t::decode(bufferlist::iterator& p)
 void bluefs_super_t::dump(Formatter *f) const
 {
   f->dump_stream("uuid") << uuid;
+  f->dump_stream("osd_uuid") << osd_uuid;
   f->dump_unsigned("version", version);
-  f->dump_unsigned("super_a_offset", super_a_offset);
-  f->dump_unsigned("super_b_offset", super_b_offset);
   f->dump_unsigned("block_size", block_size);
   f->dump_object("log_fnode", log_fnode);
 }
@@ -89,15 +86,13 @@ void bluefs_super_t::generate_test_instances(list<bluefs_super_t*>& ls)
   ls.push_back(new bluefs_super_t);
   ls.back()->version = 1;
   ls.back()->block_size = 4096;
-  ls.back()->super_a_offset = 8192;
-  ls.back()->super_a_offset = 16384;
 }
 
 ostream& operator<<(ostream& out, const bluefs_super_t& s)
 {
   return out << "super(" << s.uuid
+	     << " osd " << s.osd_uuid
 	     << " v " << s.version
-	     << " loc " << s.super_a_offset << "," << s.super_b_offset
 	     << " block_size " << s.block_size
 	     << " log_fnode " << s.log_fnode
 	     << ")";
