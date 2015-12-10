@@ -254,7 +254,13 @@ class BlueRocksWritableFile : public rocksdb::WritableFile {
   // without waiting for completion.
   // Default implementation does nothing.
   rocksdb::Status RangeSync(off_t offset, off_t nbytes) {
-    fs->flush_range(h, offset, nbytes);
+    // round down to page boundaries
+    int partial = offset & 4095;
+    offset -= partial;
+    nbytes += partial;
+    nbytes &= ~4095;
+    if (nbytes)
+      fs->flush_range(h, offset, nbytes);
     return rocksdb::Status::OK();
   }
 

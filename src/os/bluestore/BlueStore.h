@@ -412,6 +412,8 @@ private:
   Throttle throttle_ops, throttle_bytes;          ///< submit to commit
   Throttle throttle_wal_ops, throttle_wal_bytes;  ///< submit to wal complete
 
+  interval_set<uint64_t> bluefs_extents;  ///< block extents owned by bluefs
+
   Mutex wal_lock;
   atomic64_t wal_seq;
   ThreadPool wal_tp;
@@ -455,11 +457,16 @@ private:
   int _open_collections(int *errors=0);
   void _close_collections();
 
+  int _open_super_meta();
+
+  int _reconcile_bluefs_freespace();
+  int _balance_bluefs_freespace(vector<extent_t> *extents);
+  void _commit_bluefs_freespace(const vector<extent_t>& extents);
+
   CollectionRef _get_collection(coll_t cid);
   void _queue_reap_collection(CollectionRef& c);
   void _reap_collections();
 
-  int _recover_next_nid();
   void _assign_nid(TransContext *txc, OnodeRef o);
 
   void _dump_onode(OnodeRef o);

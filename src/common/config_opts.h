@@ -830,6 +830,10 @@ OPTION(bluefs_max_log_runway, OPT_U64, 4194304)  // alloc this much at a time
 OPTION(bluestore_bluefs, OPT_BOOL, false)
 OPTION(bluestore_bluefs_initial_offset, OPT_U64,  1024*1024)
 OPTION(bluestore_bluefs_initial_length, OPT_U64, 65536*1024)
+OPTION(bluestore_bluefs_min_ratio, OPT_FLOAT, .01)
+OPTION(bluestore_bluefs_min_free_ratio, OPT_FLOAT, .1)
+OPTION(bluestore_bluefs_max_free_fs_main_ratio, OPT_FLOAT, .8)
+OPTION(bluestore_bluefs_min_gift_ratio, OPT_FLOAT, 1)
 OPTION(bluestore_block_path, OPT_STR, "")
 OPTION(bluestore_block_size, OPT_U64, 10 * 1024*1024*1024)  // 10gb for testing
 OPTION(bluestore_max_dir_size, OPT_U32, 1000000)
