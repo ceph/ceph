@@ -80,7 +80,7 @@ void PGMonitor::on_active()
   update_logger();
 
   if (mon->is_leader())
-    mon->clog->info() << "pgmap " << pg_map << dendl;
+    mon->clog->info() << "pgmap " << pg_map << "\n";
 }
 
 void PGMonitor::update_logger()
@@ -1486,7 +1486,7 @@ void PGMonitor::dump_pool_stats(stringstream &ss, Formatter *f, bool verbose)
   if (f)
     f->close_section();
   else {
-    ss << "POOLS:" << dendl;
+    ss << "POOLS:\n";
     tbl.set_indent(4);
     ss << tbl;
   }
@@ -1525,7 +1525,7 @@ void PGMonitor::dump_fs_stats(stringstream &ss, Formatter *f, bool verbose) cons
     }
     tbl << TextTable::endrow;
 
-    ss << "GLOBAL:" << dendl;
+    ss << "GLOBAL:\n";
     tbl.set_indent(4);
     ss << tbl;
   }
