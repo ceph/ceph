@@ -2,8 +2,20 @@ SHELL=/bin/bash
 D=/tmp/stampsdir
 VPATH=${D}
 
+# We want to extract the first listed IPv4 address!
+# Openstack will provide the addresses field in this format:
+# "net1-name=ip(, ip)+(; net2-name=ip(, ip)+)+"
+# Each IP may be v4 or v6 (including shortened forms and IPv4-mapped-IPv6 forms)
+# 1.2.3.4
+# 2001:db8:6050:ed4d:f816:3eff:fe48:3b36
+# 2001:db8::fe48:3b36
+# 2001:db8::1.2.3.4
+# Example long-form input:
+# private-network=10.10.10.69, 2001:db8:6050:ed4d:f816:3eff:fed1:d9f8;net-name2=2001:db8::fe48:3b36, 2001:db8::1.2.3.4, 1.2.3.4;
+# TODO: allow selection of the network instead of taking the first network
+# TODO: Support IPv6 in future
 define get_ip
-$$(openstack server show -f json $(1) | jq '.[] | select(.Field == "addresses") | .Value' | perl -pe 's/([\da-f]*:){7}[\da-f]*, //; s/.*?=([\d\.]+).*/$$1/')
+$$(openstack server show -f value -c addresses $(1) |perl -pe 's/^[^=]+=([^;]+).*/\1/g; s/[ ,]/\n/g; ' |grep -v -e ':' -e '^$$' |head -n1)
 endef
 
 MY_IP=$(shell hostname -I | cut -f1 -d' ')
