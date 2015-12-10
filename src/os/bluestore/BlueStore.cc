@@ -38,7 +38,6 @@
   TODO:
 
   * superblock, features
-  * statfs reports on block device only
   * bdev: smarter zeroing
   * zero overlay in onode?
   * discard
@@ -1969,16 +1968,6 @@ int BlueStore::statfs(struct statfs *buf)
   buf->f_bsize = bdev->get_block_size();
   buf->f_bfree = fm->get_total_free() / bdev->get_block_size();
   buf->f_bavail = buf->f_bfree;
-
-  /*
-  struct statfs fs;
-  if (::statfs(path.c_str(), &fs) < 0) {
-    int r = -errno;
-    assert(!g_conf->bluestore_fail_eio || r != -EIO);
-    return r;
-  }
-  */
-
   return 0;
 }
 
