@@ -82,6 +82,8 @@ void RGWMongoose::init_env(CephContext *cct)
 {
   env.init(cct);
   struct mg_request_info *info = mg_get_request_info(conn);
+  status_num = 0;
+
   if (!info)
     return;
 
