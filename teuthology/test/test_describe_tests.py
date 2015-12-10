@@ -118,7 +118,7 @@ class TestDescribeTests(object):
         rows = tree_with_info('basic', [], False, '', [],
                               self.fake_listdir, self.fake_isdir,
                               self.fake_open)
-        assert rows == [ [x] for x in expected_tree]
+        assert rows == [[x] for x in expected_tree]
 
     def test_single_filter(self):
         rows = tree_with_info('basic', ['desc'], False, '', [],
@@ -171,7 +171,6 @@ class TestDescribeTests(object):
                                      expected_rbd_features,
                                      expected_desc))
 
-
     def test_multiple_filters_with_facets(self):
         rows = tree_with_info('basic', ['desc', 'rbd_features'], True,
                               '', [], self.fake_listdir,
@@ -190,9 +189,11 @@ class TestDescribeTests(object):
                                      expected_desc))
 
     def test_combinations_only_facets(self):
-        headers, rows = get_combinations('basic', [], None, 1, None, None, True,
+        headers, rows = get_combinations('basic', [], None, 1, None,
+                                         None, True,
                                          self.fake_isdir, self.fake_open,
-                                         self.fake_isfile, self.fake_listdir)
+                                         self.fake_isfile,
+                                         self.fake_listdir)
         self.assert_expected_combo_headers(headers)
         assert rows == [['basic', 'install', 'fixed-1', 'rbd_api_tests']]
 
@@ -200,10 +201,15 @@ class TestDescribeTests(object):
         headers, rows = get_combinations('basic', ['desc', 'rbd_features'],
                                          None, 1, None, None, False,
                                          self.fake_isdir, self.fake_open,
-                                         self.fake_isfile, self.fake_listdir)
+                                         self.fake_isfile,
+                                         self.fake_listdir)
         assert headers == ['desc', 'rbd_features']
-        assert rows == [['install ceph\nsingle node cluster\nc/c++ librbd api tests with default settings',
-                         'default']]
+        descriptions = '\n'.join([
+            'install ceph',
+            'single node cluster',
+            'c/c++ librbd api tests with default settings',
+        ])
+        assert rows == [[descriptions, 'default']]
 
     def test_combinations_filter_in(self):
         headers, rows = get_combinations('basic', [], None, 0, ['old_format'],
@@ -211,7 +217,8 @@ class TestDescribeTests(object):
                                          self.fake_isdir, self.fake_open,
                                          self.fake_isfile, self.fake_listdir)
         self.assert_expected_combo_headers(headers)
-        assert rows == [['basic', 'install', 'fixed-1', 'rbd_api_tests_old_format']]
+        assert rows == [['basic', 'install', 'fixed-1',
+                         'rbd_api_tests_old_format']]
 
     def test_combinations_filter_out(self):
         headers, rows = get_combinations('basic', [], None, 0, None,
@@ -234,20 +241,25 @@ def test_extract_info_dir():
     info = extract_info('a/b.yaml', ['foo', 'bar'], fake_isdir, fake_open)
     assert info == {'foo': 'c', 'bar': ''}
 
+
 def check_parse_error(fs):
     _, _, fake_isdir, fake_open = make_fake_fstools(fs)
     with pytest.raises(ParseError):
         a = extract_info('a.yaml', ['a'], fake_isdir, fake_open)
         raise Exception(str(a))
 
+
 def test_extract_info_too_many_elements():
     check_parse_error({'a.yaml': 'meta: [{a: b}, {b: c}]'})
+
 
 def test_extract_info_not_a_list():
     check_parse_error({'a.yaml': 'meta: {a: b}'})
 
+
 def test_extract_info_not_a_dict():
     check_parse_error({'a.yaml': 'meta: [[a, b]]'})
+
 
 def test_extract_info_empty_file():
     simple_fs = {'a.yaml': ''}

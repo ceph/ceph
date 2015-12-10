@@ -10,11 +10,13 @@ import yaml
 from teuthology.exceptions import ParseError
 from teuthology.suite import build_matrix, combine_path
 
+
 def main(args):
     try:
         describe_tests(args)
     except ParseError:
         sys.exit(1)
+
 
 def describe_tests(args):
     suite_dir = os.path.abspath(args["<suite_dir>"])
@@ -44,6 +46,7 @@ def describe_tests(args):
 
     output_results(headers, rows, output_format, hrule)
 
+
 def output_results(headers, rows, output_format, hrule):
     """Write the headers and rows given in the specified output format to
     stdout.
@@ -63,6 +66,7 @@ def output_results(headers, rows, output_format, hrule):
         for row in rows:
             table.add_row(row)
         print(table)
+
 
 def get_combinations(suite_dir, fields, subset,
                      limit, filter_in, filter_out,
@@ -148,6 +152,7 @@ def get_combinations(suite_dir, fields, subset,
     return headers, sorted([[row.get(field, '') for field in headers]
                             for row in rows])
 
+
 def describe_suite(suite_dir, fields, include_facet, output_format):
     """Describe a suite listing each subdirectory and file once as a separate
     row.
@@ -162,6 +167,7 @@ def describe_suite(suite_dir, fields, include_facet, output_format):
     if include_facet:
         headers.append('facet')
     return headers + fields, rows
+
 
 def extract_info(file_name, fields, _isdir=os.path.isdir, _open=open):
     """Read a yaml file and return a dictionary mapping the fields to the
@@ -204,6 +210,7 @@ def extract_info(file_name, fields, _isdir=os.path.isdir, _open=open):
 
     return {field: meta[0].get(field, '') for field in fields}
 
+
 def path_relative_to_suites(path):
     """Attempt to trim the ceph-qa-suite root directory from the beginning
     of a path.
@@ -213,6 +220,7 @@ def path_relative_to_suites(path):
         return path[path.index(root) + len(root):]
     except ValueError:
         return path
+
 
 def tree_with_info(cur_dir, fields, include_facet, prefix, rows,
                    _listdir=os.listdir, _isdir=os.path.isdir,

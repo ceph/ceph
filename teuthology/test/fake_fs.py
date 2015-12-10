@@ -8,21 +8,21 @@ def make_fake_fstools(fake_filesystem):
     os.isdir() and os.isfile()
 
     An example fake_filesystem value:
-        >>> fake_fs = {
-            'a_directory': {
-                'another_directory': {
-                    'empty_file': None,
-                    'another_empty_file': None,
-                },
-                'random_file': None,
-                'yet_another_directory': {
-                    'empty_directory': {},
-                },
-                'file_with_contents': 'data',
-            },
+        >>> fake_fs = {\
+            'a_directory': {\
+                'another_directory': {\
+                    'empty_file': None,\
+                    'another_empty_file': None,\
+                },\
+                'random_file': None,\
+                'yet_another_directory': {\
+                    'empty_directory': {},\
+                },\
+                'file_with_contents': 'data',\
+            },\
         }
-
-        >>> fake_listdir = make_fake_listdir(fake_fs)
+        >>> fake_listdir, fake_isfile, _, _ = \
+                make_fake_fstools(fake_fs)
         >>> fake_listdir('a_directory/yet_another_directory')
         ['empty_directory']
         >>> fake_isfile('a_directory/yet_another_directory')
