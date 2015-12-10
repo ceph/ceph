@@ -40,6 +40,7 @@ public:
   }
 
   void send();
+  void fail(int r);
 
 protected:
   typedef std::list<AioObjectRequest *> AioObjectRequests;

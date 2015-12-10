@@ -6,8 +6,10 @@
 
 #include "include/Context.h"
 #include "include/atomic.h"
-#include "common/WorkQueue.h"
+#include "common/Cond.h"
 #include "common/RWLock.h"
+#include "common/WorkQueue.h"
+#include <list>
 
 namespace librbd {
 
@@ -57,6 +59,19 @@ protected:
 private:
   typedef std::list<Context *> Contexts;
 
+  struct C_RefreshFinish : public Context {
+    AioImageRequestWQ *aio_work_queue;
+    AioImageRequest *aio_image_request;
+
+    C_RefreshFinish(AioImageRequestWQ *aio_work_queue,
+                    AioImageRequest *aio_image_request)
+      : aio_work_queue(aio_work_queue), aio_image_request(aio_image_request) {
+    }
+    virtual void finish(int r) override {
+      aio_work_queue->handle_refreshed(r, aio_image_request);
+    }
+  };
+
   struct C_BlockedWrites : public Context {
     AioImageRequestWQ *aio_work_queue;
     C_BlockedWrites(AioImageRequestWQ *_aio_work_queue)
@@ -76,6 +91,8 @@ private:
   atomic_t m_queued_writes;
   atomic_t m_in_flight_ops;
 
+  bool m_refresh_in_progress;
+
   bool m_shutdown;
   Context *m_on_shutdown;
 
@@ -86,6 +103,7 @@ private:
   bool is_lock_required() const;
   void queue(AioImageRequest *req);
 
+  void handle_refreshed(int r, AioImageRequest *req);
   void handle_blocked_writes(int r);
 };
 
