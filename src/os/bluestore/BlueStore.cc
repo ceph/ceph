@@ -27,6 +27,9 @@
 #include "common/safe_io.h"
 #include "Allocator.h"
 #include "FreelistManager.h"
+#include "BlueFS.h"
+#include "BlueRocksEnv.h"
+
 
 #define dout_subsys ceph_subsys_bluestore
 
@@ -668,6 +671,7 @@ void aio_cb(void *priv, void *priv2)
 BlueStore::BlueStore(CephContext *cct, const string& path)
   : ObjectStore(path),
     cct(cct),
+    bluefs(NULL),
     db(NULL),
     fs(NULL),
     bdev(NULL),
@@ -712,6 +716,7 @@ BlueStore::~BlueStore()
   _shutdown_logger();
   assert(!mounted);
   assert(db == NULL);
+  assert(bluefs == NULL);
   assert(fsid_fd < 0);
 }
 
@@ -916,7 +921,35 @@ int BlueStore::_open_db(bool create)
   assert(!db);
   char fn[PATH_MAX];
   snprintf(fn, sizeof(fn), "%s/db", path.c_str());
-  if (create) {
+
+  void *env = NULL;
+  if (g_conf->bluestore_bluefs) {
+    dout(10) << __func__ << " initializing bluefs" << dendl;
+    if (g_conf->bluestore_backend != "rocksdb") {
+      derr << " backend must be rocksdb to use bluefs" << dendl;
+      return -EINVAL;
+    }
+    bluefs = new BlueFS;
+    char bfn[PATH_MAX];
+    snprintf(bfn, sizeof(bfn), "%s/block", path.c_str());
+    bluefs->add_block_device(0, bfn);
+    if (create) {
+      bluefs->add_block_extent(0, g_conf->bluestore_bluefs_initial_offset,
+			       g_conf->bluestore_bluefs_initial_length);
+      bluefs->mkfs(0, 4096);
+    }
+    int r = bluefs->mount(0, 4096);
+    if (r < 0) {
+      derr << __func__ << " failed bluefs mount: " << cpp_strerror(r) << dendl;
+      delete bluefs;
+      return r;
+    }
+    bluerocksenv = new BlueRocksEnv(bluefs);
+    env = static_cast<void*>(bluerocksenv);
+
+    // simplify the dir names, too, as "seen" by rocksdb
+    strcpy(fn, "db");
+  } else if (create) {
     int r = ::mkdir(fn, 0755);
     if (r < 0)
       r = -errno;
@@ -939,11 +972,16 @@ int BlueStore::_open_db(bool create)
       return r;
     }
   }
+
   db = KeyValueDB::create(g_ceph_context,
 			  g_conf->bluestore_backend,
-			  fn);
+			  fn,
+			  env);
   if (!db) {
     derr << __func__ << " error creating db" << dendl;
+    delete bluerocksenv;
+    bluefs->umount();
+    delete bluefs;
     delete db;
     db = NULL;
     return -EIO;
@@ -960,6 +998,9 @@ int BlueStore::_open_db(bool create)
     r = db->open(err);
   if (r) {
     derr << __func__ << " erroring opening db: " << err.str() << dendl;
+    delete bluerocksenv;
+    bluefs->umount();
+    delete bluefs;
     delete db;
     db = NULL;
     return -EIO;
@@ -988,6 +1029,13 @@ void BlueStore::_close_db()
   assert(db);
   delete db;
   db = NULL;
+  if (bluefs) {
+    delete bluerocksenv;
+    bluerocksenv = NULL;
+    bluefs->umount();
+    delete bluefs;
+    bluefs = NULL;
+  }
 }
 
 int BlueStore::_open_collections(int *errors)
@@ -1099,7 +1147,14 @@ int BlueStore::mkfs()
   {
     dout(20) << __func__ << " initializing freespace" << dendl;
     KeyValueDB::Transaction t = db->get_transaction();
-    fm->release(0, bdev->get_size(), t);
+    uint64_t reserved = 0;
+    if (g_conf->bluestore_bluefs) {
+      reserved = g_conf->bluestore_bluefs_initial_offset +
+	g_conf->bluestore_bluefs_initial_length;
+      dout(20) << __func__ << " reserved first " << reserved
+	       << " bytes for bluefs" << dendl;
+    }
+    fm->release(reserved, bdev->get_size() - reserved, t);
     db->submit_transaction_sync(t);
   }
 

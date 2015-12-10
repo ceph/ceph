@@ -137,6 +137,7 @@ SUBSYS(refs, 0, 0)
 SUBSYS(xio, 1, 5)
 SUBSYS(compressor, 1, 5)
 SUBSYS(bluestore, 1, 5)
+SUBSYS(bluefs, 1, 5)
 SUBSYS(bdev, 1, 5)
 SUBSYS(rocksdb, 4, 5)
 
@@ -821,8 +822,16 @@ OPTION(memstore_page_size, OPT_U64, 64 << 10)
 
 OPTION(bdev_debug_inflight_ios, OPT_BOOL, false)
 
+OPTION(bluefs_alloc_size, OPT_U64, 1048576)
+OPTION(bluefs_max_prefetch, OPT_U64, 1048576)
+OPTION(bluefs_min_log_runway, OPT_U64, 1048576)  // alloc when we get this low
+OPTION(bluefs_max_log_runway, OPT_U64, 4194304)  // alloc this much at a time
+
+OPTION(bluestore_bluefs, OPT_BOOL, false)
+OPTION(bluestore_bluefs_initial_offset, OPT_U64,  1024*1024)
+OPTION(bluestore_bluefs_initial_length, OPT_U64, 65536*1024)
 OPTION(bluestore_block_path, OPT_STR, "")
-OPTION(bluestore_block_size, OPT_U64, 0)  // 10gb for testing
+OPTION(bluestore_block_size, OPT_U64, 10 * 1024*1024*1024)  // 10gb for testing
 OPTION(bluestore_max_dir_size, OPT_U32, 1000000)
 OPTION(bluestore_min_alloc_size, OPT_U32, 512*1024)
 OPTION(bluestore_onode_map_size, OPT_U32, 1024)   // onodes per collection
