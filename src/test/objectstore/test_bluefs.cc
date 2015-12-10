@@ -82,9 +82,9 @@ TEST(BlueFS, write_read) {
   {
     BlueFS::FileReader *h;
     ASSERT_EQ(0, fs.open_for_read("dir", "file", &h));
-    bufferptr bp;
-    ASSERT_EQ(9, fs.read(h, 0, 1024, &bp, NULL));
-    ASSERT_EQ(0, strncmp("foobarbaz", bp.c_str(), 9));
+    bufferlist bl;
+    ASSERT_EQ(9, fs.read(h, 0, 1024, &bl, NULL));
+    ASSERT_EQ(0, strncmp("foobarbaz", bl.c_str(), 9));
     delete h;
   }
   fs.umount();
