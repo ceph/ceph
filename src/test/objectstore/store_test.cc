@@ -59,9 +59,9 @@ public:
       cerr << __func__ << ": objectstore type " << string(GetParam()) << " doesn't exist yet!" << std::endl;
       return;
     }
+    EXPECT_EQ(store_->mkfs(), 0);
+    EXPECT_EQ(store_->mount(), 0);
     store.reset(store_);
-    EXPECT_EQ(store->mkfs(), 0);
-    EXPECT_EQ(store->mount(), 0);
   }
 
   virtual void TearDown() {
