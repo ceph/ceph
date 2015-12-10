@@ -3476,12 +3476,12 @@ int BlueStore::queue_transactions(
   assert(posr);
   if (posr->p) {
     osr = static_cast<OpSequencer *>(posr->p.get());
-    dout(5) << __func__ << " existing " << osr << " " << *osr << dendl;
+    dout(10) << __func__ << " existing " << osr << " " << *osr << dendl;
   } else {
     osr = new OpSequencer;
     osr->parent = posr;
     posr->p = osr;
-    dout(5) << __func__ << " new " << osr << " " << *osr << dendl;
+    dout(10) << __func__ << " new " << osr << " " << *osr << dendl;
   }
 
   // prepare
