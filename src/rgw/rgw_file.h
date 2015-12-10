@@ -297,8 +297,11 @@ namespace rgw {
 	return fh_key(fhk.fh_hk.object, name.c_str());
       else {
 	std::vector<const std::string*> segments = { &name, &object_name() };
-	while (parent && !parent->is_bucket())
+	RGWFileHandle* tfh = parent.get();
+	while (tfh && !tfh->is_bucket()) {
 	   segments.push_back(&parent->object_name());
+	   tfh = tfh->parent.get();
+	}
 	/* hash path */
 	XXH64_state_t hs;
 	XXH64_reset(&hs, fh_key::seed);
