@@ -127,9 +127,9 @@ int StupidAllocator::allocate(
   dout(30) << __func__ << " got " << *offset << "~" << *length << " from bin "
 	   << bin << dendl;
 
-  free[bin].erase(p.get_start(), *length);
+  free[bin].erase(*offset, *length);
   uint64_t off, len;
-  if (p.get_start() && free[bin].contains(p.get_start() - 1, &off, &len)) {
+  if (*offset && free[bin].contains(*offset - 1, &off, &len)) {
     int newbin = _choose_bin(len);
     if (newbin != bin) {
       dout(30) << __func__ << " demoting " << off << "~" << len
@@ -138,7 +138,7 @@ int StupidAllocator::allocate(
       _insert_free(off, len);
     }
   }
-  if (free[bin].contains(p.get_start() + *length, &off, &len)) {
+  if (free[bin].contains(*offset + *length, &off, &len)) {
     int newbin = _choose_bin(len);
     if (newbin != bin) {
       dout(30) << __func__ << " demoting " << off << "~" << len
@@ -209,6 +209,7 @@ void StupidAllocator::init_rm_free(uint64_t offset, uint64_t length)
 {
   dout(10) << __func__ << " " << offset << "~" << length << dendl;
   interval_set<uint64_t> rm;
+  rm.insert(offset, length);
   for (unsigned i = 0; i < free.size() && !rm.empty(); ++i) {
     interval_set<uint64_t> overlap;
     overlap.intersection_of(rm, free[i]);
