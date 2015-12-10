@@ -315,6 +315,8 @@ rocksdb::Status BlueRocksEnv::NewSequentialFile(
   std::unique_ptr<rocksdb::SequentialFile>* result,
   const rocksdb::EnvOptions& options)
 {
+  if (fname[0] == '/')
+    return target()->NewSequentialFile(fname, result, options);
   std::string dir, file;
   split(fname, &dir, &file);
   BlueFS::FileReader *h;
@@ -382,15 +384,16 @@ rocksdb::Status BlueRocksEnv::NewDirectory(
   const std::string& name,
   std::unique_ptr<rocksdb::Directory>* result)
 {
-  int r = fs->dir_exists(name);
-  if (r < 0)
-    return err_to_status(r);
+  if (!fs->dir_exists(name))
+    return rocksdb::Status::IOError(name, strerror(-ENOENT));
   result->reset(new BlueRocksDirectory(fs));
   return rocksdb::Status::OK();
 }
 
 rocksdb::Status BlueRocksEnv::FileExists(const std::string& fname)
 {
+  if (fname[0] == '/')
+    return target()->FileExists(fname);
   std::string dir, file;
   split(fname, &dir, &file);
   if (fs->stat(dir, file, NULL, NULL) == 0)
@@ -404,7 +407,7 @@ rocksdb::Status BlueRocksEnv::GetChildren(
 {
   int r = fs->readdir(dir, result);
   if (r < 0)
-    return err_to_status(r);
+    return rocksdb::Status::IOError(dir, strerror(-ENOENT));//    return err_to_status(r);
   return rocksdb::Status::OK();
 }
 

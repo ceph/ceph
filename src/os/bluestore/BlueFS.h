@@ -79,9 +79,9 @@ public:
     uint64_t get_buf_end() {
       return bl_off + bl.length();
     }
-    uint64_t get_buf_remaining() {
-      if (bl_off + bl.length() > pos)
-	return bl_off + bl.length() - pos;
+    uint64_t get_buf_remaining(uint64_t p) {
+      if (p >= bl_off && p < bl_off + bl.length())
+	return bl_off + bl.length() - p;
       return 0;
     }
 
