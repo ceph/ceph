@@ -904,10 +904,10 @@ int BlueFS::_flush_range(FileWriter *h, uint64_t offset, uint64_t length)
 
   uint64_t bloff = 0;
   while (length > 0) {
-    uint64_t wlen = MIN(p->length, length);
+    uint64_t x_len = MIN(p->length - x_off, length);
     bufferlist t;
-    t.substr_of(bl, bloff, wlen);
-    unsigned tail = wlen & ~super.block_mask();
+    t.substr_of(bl, bloff, x_len);
+    unsigned tail = x_len & ~super.block_mask();
     if (tail) {
       dout(20) << __func__ << " caching tail of " << tail
 	       << " and padding block with zeros" << dendl;
@@ -917,8 +917,8 @@ int BlueFS::_flush_range(FileWriter *h, uint64_t offset, uint64_t length)
       t.append(z);
     }
     bdev[0]->aio_write(p->offset + x_off, t, ioc[0]);
-    bloff += wlen;
-    length -= wlen;
+    bloff += x_len;
+    length -= x_len;
     ++p;
     x_off = 0;
   }
