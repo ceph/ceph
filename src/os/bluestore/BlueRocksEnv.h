@@ -16,8 +16,10 @@ class BlueFS;
 class BlueRocksEnv : public rocksdb::EnvWrapper {
   void split(const std::string &fn, std::string *dir, std::string *file) {
     size_t slash = fn.rfind('/');
-    *dir = fn.substr(0, slash);
     *file = fn.substr(slash + 1);
+    while (slash && fn[slash-1] == '/')
+      --slash;
+    *dir = fn.substr(0, slash);
   }
 
 public:

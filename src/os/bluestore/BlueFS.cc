@@ -574,7 +574,8 @@ int BlueFS::_read(
   char *out)      ///< [out] optional: or copy it here
 {
   Mutex::Locker l(h->lock);
-  dout(10) << __func__ << " h " << h << " len " << len << dendl;
+  dout(10) << __func__ << " h " << h << " " << off << "~" << len
+	   << " from " << h->file->fnode << dendl;
   if (!h->ignore_eof &&
       off + len > h->file->fnode.size) {
     len = h->file->fnode.size - off;
@@ -589,7 +590,10 @@ int BlueFS::_read(
     h->bl_off = off & super.block_mask();
     uint64_t x_off = 0;
     vector<bluefs_extent_t>::iterator p = h->file->fnode.seek(h->bl_off, &x_off);
-    uint64_t l = MIN(p->length - x_off, h->max_prefetch);
+    uint64_t want = ROUND_UP_TO(len + (off & ~super.block_mask()),
+				super.block_size);
+    want = MAX(want, h->max_prefetch);
+    uint64_t l = MIN(p->length - x_off, want);
     uint64_t eof_offset = ROUND_UP_TO(h->file->fnode.size, super.block_size);
     if (!h->ignore_eof &&
 	h->bl_off + l > eof_offset) {
@@ -600,7 +604,8 @@ int BlueFS::_read(
     int r = bdev[p->bdev]->read(p->offset + x_off, l, &h->bl, ioc[p->bdev]);
     assert(r == 0);
   }
-  left = h->get_buf_remaining();
+  left = h->get_buf_remaining(off);
+  dout(20) << __func__ << " left " << left << dendl;
 
   int r = MIN(len, left);
   // NOTE: h->bl is normally a contiguous buffer so c_str() is free.
@@ -608,6 +613,13 @@ int BlueFS::_read(
     *bp = bufferptr(h->bl.c_str() + off - h->bl_off, r);
   if (out)
     memcpy(out, h->bl.c_str() + off - h->bl_off, r);
+
+  dout(30) << __func__ << " result (" << r << " bytes):\n";
+  bufferlist t;
+  t.substr_of(h->bl, off - h->bl_off, r);
+  t.hexdump(*_dout);
+  *_dout << dendl;
+
   h->pos = off + r;
   dout(20) << __func__ << " got " << r << dendl;
   return r;
@@ -731,6 +743,10 @@ int BlueFS::_flush_range(FileWriter *h, uint64_t offset, uint64_t length)
     dout(20) << " leaving " << h->buffer.length() << " unflushed" << dendl;
   }
   assert(bl.length() == length);
+
+  dout(30) << "dump:\n";
+  bl.hexdump(*_dout);
+  *_dout << dendl;
 
   h->pos = offset + length;
   h->tail_block.clear();
@@ -1073,9 +1089,10 @@ int BlueFS::rmdir(const string& dirname)
 bool BlueFS::dir_exists(const string& dirname)
 {
   Mutex::Locker l(lock);
-  dout(10) << __func__ << " " << dirname << dendl;
   map<string,Dir*>::iterator p = dir_map.find(dirname);
-  return p != dir_map.end();
+  bool exists = p != dir_map.end();
+  dout(10) << __func__ << " " << dirname << " = " << (int)exists << dendl;
+  return exists;
 }
 
 int BlueFS::stat(const string& dirname, const string& filename,
@@ -1163,10 +1180,12 @@ int BlueFS::readdir(const string& dirname, vector<string> *ls)
     return -ENOENT;
   }
   Dir *dir = p->second;
-  ls->reserve(dir->file_map.size());
+  ls->reserve(dir->file_map.size() + 2);
   for (auto q : dir->file_map) {
     ls->push_back(q.first);
   }
+  ls->push_back(".");
+  ls->push_back("..");
   return 0;
 }
 

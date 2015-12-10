@@ -29,6 +29,7 @@
 #include "FreelistManager.h"
 #include "BlueFS.h"
 #include "BlueRocksEnv.h"
+#include "MirrorEnv.h"
 
 
 #define dout_subsys ceph_subsys_bluestore
@@ -922,7 +923,7 @@ int BlueStore::_open_db(bool create)
   char fn[PATH_MAX];
   snprintf(fn, sizeof(fn), "%s/db", path.c_str());
 
-  void *env = NULL;
+  rocksdb::Env *env = NULL;
   if (g_conf->bluestore_bluefs) {
     dout(10) << __func__ << " initializing bluefs" << dendl;
     if (g_conf->bluestore_backend != "rocksdb") {
@@ -944,11 +945,25 @@ int BlueStore::_open_db(bool create)
       delete bluefs;
       return r;
     }
-    bluerocksenv = new BlueRocksEnv(bluefs);
-    env = static_cast<void*>(bluerocksenv);
+    if (g_conf->bluestore_bluefs_mirror) {
+      rocksdb::Env *a = new BlueRocksEnv(bluefs);
+      unique_ptr<rocksdb::Directory> dir;
+      rocksdb::Env *b = rocksdb::Env::Default();
+      if (create) {
+	string cmd = "rm -r " + path + "/db";
+	system(cmd.c_str());
+      }
+      env = new rocksdb::MirrorEnv(b, a);
+    } else {
+      env = new BlueRocksEnv(bluefs);
+    }
+
+    if (create) {
+      env->CreateDir(fn);
+    }
 
     // simplify the dir names, too, as "seen" by rocksdb
-    strcpy(fn, "db");
+    //strcpy(fn, "bluefs/db");
   } else if (create) {
     int r = ::mkdir(fn, 0755);
     if (r < 0)
@@ -976,10 +991,9 @@ int BlueStore::_open_db(bool create)
   db = KeyValueDB::create(g_ceph_context,
 			  g_conf->bluestore_backend,
 			  fn,
-			  env);
+			  static_cast<void*>(env));
   if (!db) {
     derr << __func__ << " error creating db" << dendl;
-    delete bluerocksenv;
     bluefs->umount();
     delete bluefs;
     delete db;
@@ -998,7 +1012,6 @@ int BlueStore::_open_db(bool create)
     r = db->open(err);
   if (r) {
     derr << __func__ << " erroring opening db: " << err.str() << dendl;
-    delete bluerocksenv;
     bluefs->umount();
     delete bluefs;
     delete db;
@@ -1030,8 +1043,6 @@ void BlueStore::_close_db()
   delete db;
   db = NULL;
   if (bluefs) {
-    delete bluerocksenv;
-    bluerocksenv = NULL;
     bluefs->umount();
     delete bluefs;
     bluefs = NULL;
