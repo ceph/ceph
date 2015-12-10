@@ -149,14 +149,20 @@ private:
 
   void _init_alloc();
 
+  void _pad_bl(bufferlist& bl);  ///< pad bufferlist to block size w/ zeros
+
   FileRef _get_file(uint64_t ino);
   void _drop_link(FileRef f);
 
   int _allocate(unsigned bdev, uint64_t len, vector<bluefs_extent_t> *ev);
   int _flush_range(FileWriter *h, uint64_t offset, uint64_t length);
   int _flush(FileWriter *h);
-  int _flush_log();
   void _fsync(FileWriter *h);
+
+  int _flush_log();
+  uint64_t _estimate_log_size();
+  void _maybe_compact_log();
+  void _compact_log();
 
   void _submit_bdev();
   void _flush_bdev();
@@ -185,6 +191,8 @@ public:
   int mkfs(uint64_t super_offset_a, uint64_t super_offset_b);
   int mount(uint64_t super_offset_a, uint64_t super_offset_b);
   void umount();
+
+  int fsck();
 
   uint64_t get_total(unsigned id);
   uint64_t get_free(unsigned id);

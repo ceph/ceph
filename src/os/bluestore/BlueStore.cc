@@ -951,19 +951,20 @@ int BlueStore::_open_db(bool create)
       rocksdb::Env *b = rocksdb::Env::Default();
       if (create) {
 	string cmd = "rm -r " + path + "/db";
-	system(cmd.c_str());
+	int r = system(cmd.c_str());
+	(void)r;
       }
       env = new rocksdb::MirrorEnv(b, a);
     } else {
       env = new BlueRocksEnv(bluefs);
+
+      // simplify the dir names, too, as "seen" by rocksdb
+      strcpy(fn, "db");
     }
 
     if (create) {
       env->CreateDir(fn);
     }
-
-    // simplify the dir names, too, as "seen" by rocksdb
-    //strcpy(fn, "bluefs/db");
   } else if (create) {
     int r = ::mkdir(fn, 0755);
     if (r < 0)
@@ -1468,9 +1469,23 @@ int BlueStore::fsck()
   if (r < 0)
     goto out_db;
 
+  r = _open_super_meta();
+  if (r < 0)
+    goto out_alloc;
+
   r = _open_collections(&errors);
   if (r < 0)
     goto out_alloc;
+
+  if (bluefs) {
+    used_blocks.insert(0, g_conf->bluestore_bluefs_initial_offset); // fixme
+    used_blocks.insert(bluefs_extents);
+    r = bluefs->fsck();
+    if (r < 0)
+      goto out_alloc;
+    if (r > 0)
+      errors += r;
+  }
 
   // walk collections, objects
   for (ceph::unordered_map<coll_t, CollectionRef>::iterator p = coll_map.begin();
