@@ -1174,15 +1174,24 @@ int BlueFS::readdir(const string& dirname, vector<string> *ls)
 {
   Mutex::Locker l(lock);
   dout(10) << __func__ << " " << dirname << dendl;
-  map<string,Dir*>::iterator p = dir_map.find(dirname);
-  if (p == dir_map.end()) {
-    dout(20) << __func__ << " dir " << dirname << " not found" << dendl;
-    return -ENOENT;
-  }
-  Dir *dir = p->second;
-  ls->reserve(dir->file_map.size() + 2);
-  for (auto q : dir->file_map) {
-    ls->push_back(q.first);
+  if (dirname.size() == 0) {
+    // list dirs
+    ls->reserve(dir_map.size() + 2);
+    for (auto q : dir_map) {
+      ls->push_back(q.first);
+    }
+  } else {
+    // list files in dir
+    map<string,Dir*>::iterator p = dir_map.find(dirname);
+    if (p == dir_map.end()) {
+      dout(20) << __func__ << " dir " << dirname << " not found" << dendl;
+      return -ENOENT;
+    }
+    Dir *dir = p->second;
+    ls->reserve(dir->file_map.size() + 2);
+    for (auto q : dir->file_map) {
+      ls->push_back(q.first);
+    }
   }
   ls->push_back(".");
   ls->push_back("..");
