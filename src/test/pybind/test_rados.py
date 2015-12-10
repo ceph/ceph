@@ -359,6 +359,15 @@ class TestIoctx(object):
         self.ioctx.remove_snap('foo')
         eq(list(self.ioctx.list_snaps()), [])
 
+    def test_snap_rollback(self):
+        self.ioctx.write("insnap", b"contents1")
+        self.ioctx.create_snap("snap1")
+        self.ioctx.remove_object("insnap")
+        self.ioctx.snap_rollback("insnap", "snap1")
+        eq(self.ioctx.read("insnap"), b"contents1")
+        self.ioctx.remove_snap("snap1")
+        self.ioctx.remove_object("insnap")
+
     def test_set_omap(self):
         keys = ("1", "2", "3", "4")
         values = (b"aaa", b"bbb", b"ccc", b"\x04\x04\x04\x04")

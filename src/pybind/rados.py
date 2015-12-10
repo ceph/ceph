@@ -1984,6 +1984,25 @@ returned %d, but should return zero on success." % (self.name, ret))
             raise make_ex(ret, "Failed to lookup snap %s" % snap_name)
         return Snap(self, snap_name, snap_id)
 
+    @requires(('oid', str_type), ('snap_name', str_type))
+    def snap_rollback(self, oid, snap_name):
+        """
+        Rollback an object to a snapshot
+
+        :param oid: the name of the object
+        :type oid: str
+        :param snap_name: the name of the snapshot
+        :type snap_name: str
+
+        :raises: :class:`TypeError`
+        :raises: :class:`Error`
+        """
+        self.require_ioctx_open()
+        ret = run_in_thread(self.librados.rados_ioctx_snap_rollback,
+                            (self.io, cstr(oid), cstr(snap_name)))
+        if (ret != 0):
+            raise make_ex(ret, "Failed to rollback %s" % oid)
+
     def get_last_version(self):
         """
         Return the version of the last object read or written to.
