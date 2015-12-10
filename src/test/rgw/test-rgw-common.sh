@@ -5,7 +5,8 @@ function var_to_python_json_index {
 }
 
 function json_extract {
-var=$(var_to_python_json_index $1)
+var=""
+[ "$1" != "" ] && var=$(var_to_python_json_index $1)
 shift
 python - <<END
 import json
@@ -29,7 +30,7 @@ python - <<END
 arr=$@
 s='( '
 for x in arr:
-    s += str(x$var) + ' '
+    s += '"' + str(x$var) + '" '
 s += ')'
 print s
 END
