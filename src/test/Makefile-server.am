@@ -64,6 +64,12 @@ ceph_test_filestore_SOURCES = test/filestore/TestFileStore.cc
 ceph_test_filestore_LDADD = $(LIBOS) $(UNITTEST_LDADD) $(CEPH_GLOBAL)
 ceph_test_filestore_CXXFLAGS = $(UNITTEST_CXXFLAGS)
 bin_DEBUGPROGRAMS += ceph_test_filestore
+
+ceph_test_bluefs_SOURCES = test/objectstore/test_bluefs.cc
+ceph_test_bluefs_LDADD = $(LIBOS) $(UNITTEST_LDADD) $(CEPH_GLOBAL)
+ceph_test_bluefs_CXXFLAGS = $(UNITTEST_CXXFLAGS)
+bin_DEBUGPROGRAMS += ceph_test_bluefs
+
 endif
 
 ceph_test_objectstore_workloadgen_SOURCES = \
