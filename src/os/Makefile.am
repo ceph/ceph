@@ -1,6 +1,7 @@
 libos_types_a_SOURCES = \
 	os/Transaction.cc \
-	os/bluestore/bluestore_types.cc
+	os/bluestore/bluestore_types.cc \
+	os/bluestore/bluefs_types.cc
 libos_types_a_CXXFLAGS = ${AM_CXXFLAGS}
 noinst_LIBRARIES += libos_types.a
 
@@ -12,8 +13,10 @@ libos_a_SOURCES = \
 	os/bluestore/kv.cc \
 	os/bluestore/Allocator.cc \
 	os/bluestore/BlockDevice.cc \
-	os/bluestore/FreelistManager.cc \
+	os/bluestore/BlueFS.cc \
+	os/bluestore/BlueRocksEnv.cc \
 	os/bluestore/BlueStore.cc \
+	os/bluestore/FreelistManager.cc \
 	os/bluestore/StupidAllocator.cc \
 	os/DBObjectMap.cc \
 	os/GenericObjectMap.cc \
@@ -43,21 +46,24 @@ if WITH_LIBZFS
 libos_a_SOURCES += os/ZFSFileStoreBackend.cc
 endif
 
+libos_a_CXXFLAGS = ${AM_CXXFLAGS} -I rocksdb/include -fPIC
 libos_a_LIBADD = libos_types.a libkv.a
+noinst_LIBRARIES += libos.a
 
 if WITH_LTTNG
 libos_a_LIBADD += $(LIBOS_TP)
 endif
 
-noinst_LIBRARIES += libos.a
-
 noinst_HEADERS += \
 	os/btrfs_ioctl.h \
 	os/chain_xattr.h \
+	os/bluestore/bluefs_types.h \
 	os/bluestore/bluestore_types.h \
 	os/bluestore/kv.h \
 	os/bluestore/Allocator.h \
 	os/bluestore/BlockDevice.h \
+	os/bluestore/BlueFS.h \
+	os/bluestore/BlueRocksEnv.h \
 	os/bluestore/BlueStore.h \
 	os/bluestore/FreelistManager.h \
 	os/bluestore/StupidAllocator.h \
