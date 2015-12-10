@@ -7,12 +7,13 @@
 #include <memory>
 #include <map>
 #include <deque>
+#include <queue>
 #include <mutex>
 #include <ostream>
 
 
+// dmClock namespace
 namespace dmc {
-
 
   struct RequestTag {
     double proportion;
@@ -71,22 +72,26 @@ namespace dmc {
     // typedef std::map<T,ClientInfo>::const_iterator client_ref;
 
     // client_ref find(const T& clientId) const;
-    ClientInfo find(const int& clientId) const {
+    ClientInfo* find(const int& clientId) const {
       auto it = map.find(clientId);
       if (it == map.cend()) {
-	return ClientInfo();
+	return null;
       } else {
-	return it->second;
+	return &it->second;
       }
     }
         
     void put(const T& clientId, const ClientInfo& info) {
       map[clientId] = info;
     }
+
+    void clear(const T& clientId) {
+      map.erase(clientId);
+    }
   };
 
     
-  template<typename T, typename R>
+  template<typename R>
   class ClientQueue {
 
     typedef typename std::unique_ptr<R> RequestRef;
@@ -98,13 +103,13 @@ namespace dmc {
       RequestRef request;
 
       Entry(RequestTag t, RequestRef&& r) :
-	tag(t), request(std::move(r))
+	tag(t), request(std::move(r)), serviced(false)
       {
 	// empty
       }
 
       Entry(Entry&& e) :
-	tag(e.tag), request(std::move(e.request))
+	tag(e.tag), request(std::move(e.request)), serviced(e.serviced)
       {
 	// empty
       }
@@ -116,10 +121,13 @@ namespace dmc {
 
     std::deque<Entry>  queue;
     mutable std::mutex queue_mutex;
+    boolean            idle;
 
   public:
 
-    const Entry* peek_front() const {
+    ClientQueue() : idle(false) {}
+
+    const Entry* peek() const {
       Guard g(queue_mutex);
       if (queue.empty()) {
 	return NULL;
@@ -134,7 +142,7 @@ namespace dmc {
       queue.pop_front();
     }
 
-    void append(RequestRef&& request) {
+    void push(RequestRef&& request) {
       std::lock_guard<std::mutex> guard(queue_mutex);
       queue.emplace_back(Entry(RequestTag(), std::move(request)));
     }
@@ -150,6 +158,15 @@ namespace dmc {
   // T is client identifier type, R is request type
   template<typename T, typename R>
   class PriorityQueue {
+
+    typedef typename ClientQueue<R>          CQueue;
+    typedef typename std::shared_ptr<CQueue> CQueueRef;
+
+    std::map<T,CQueueRef> clientMap;
+    std::priority_queue<CQueueRef> limitQ;
+    std::priority_queue<CQueueRef> proporitionQ;
+    std::priority_queue<CQueueRef> reservationQ;
+    
 
   }; // class PriorityQueue
 
