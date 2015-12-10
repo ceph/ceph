@@ -53,11 +53,20 @@ int BlueFS::add_block_device(unsigned id, string path)
 
 void BlueFS::add_block_extent(unsigned id, uint64_t offset, uint64_t length)
 {
+  Mutex::Locker l(lock);
   dout(1) << __func__ << " bdev " << id << " " << offset << "~" << length
 	  << dendl;
   assert(id < bdev.size());
   assert(bdev[id]->get_size() >= offset + length);
   block_all[id].insert(offset, length);
+
+  if (alloc.size()) {
+    log_t.op_alloc_add(id, offset, length);
+    int r = _flush_log();
+    assert(r == 0);
+    alloc[id]->init_add_free(offset, length);
+  }
+  dout(10) << __func__ << " done" << dendl;
 }
 
 uint64_t BlueFS::get_total(unsigned id)
@@ -77,6 +86,16 @@ uint64_t BlueFS::get_free(unsigned id)
   Mutex::Locker l(lock);
   assert(id < alloc.size());
   return alloc[id]->get_free();
+}
+
+int BlueFS::get_block_extents(unsigned id, interval_set<uint64_t> *extents)
+{
+  Mutex::Locker l(lock);
+  dout(10) << __func__ << " bdev " << id << dendl;
+  if (id >= block_all.size())
+    return -EINVAL;
+  *extents = block_all[id];
+  return 0;
 }
 
 int BlueFS::mkfs(uint64_t super_offset_a, uint64_t super_offset_b)

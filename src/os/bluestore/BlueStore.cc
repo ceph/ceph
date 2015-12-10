@@ -1038,6 +1038,136 @@ void BlueStore::_close_db()
   }
 }
 
+int BlueStore::_reconcile_bluefs_freespace()
+{
+  dout(10) << __func__ << dendl;
+  interval_set<uint64_t> bset;
+  int r = bluefs->get_block_extents(0, &bset);
+  assert(r == 0);
+  if (bset == bluefs_extents) {
+    dout(10) << __func__ << " we agree bluefs has " << bset << dendl;
+    return 0;
+  }
+  dout(10) << __func__ << " bluefs says " << bset << dendl;
+  dout(10) << __func__ << " super says  " << bluefs_extents << dendl;
+
+  interval_set<uint64_t> overlap;
+  overlap.intersection_of(bset, bluefs_extents);
+
+  bset.subtract(overlap);
+  if (!bset.empty()) {
+    derr << __func__ << " bluefs extra " << bset << dendl;
+    return -EIO;
+  }
+
+  interval_set<uint64_t> super_extra;
+  super_extra = bluefs_extents;
+  super_extra.subtract(overlap);
+  if (!super_extra.empty()) {
+    // This is normal: it can happen if we commit to give extents to
+    // bluefs and we crash before bluefs commits that it owns them.
+    dout(10) << __func__ << " super extra " << super_extra << dendl;
+    for (interval_set<uint64_t>::iterator p = super_extra.begin();
+	 p != super_extra.end();
+	 ++p) {
+      bluefs->add_block_extent(0, p.get_start(), p.get_len());
+    }
+  }
+
+  return 0;
+}
+
+int BlueStore::_balance_bluefs_freespace(vector<extent_t> *extents)
+{
+  int ret = 0;
+  assert(bluefs);
+
+  // fixme: look at primary bdev only for now
+  uint64_t bluefs_total = bluefs->get_total(0);
+  uint64_t bluefs_free = bluefs->get_free(0);
+  float bluefs_free_ratio = (float)bluefs_free / (float)bluefs_total;
+
+  uint64_t my_free = alloc->get_free();
+  uint64_t total = bdev->get_size();
+  float my_free_ratio = (float)my_free / (float)total;
+
+  dout(10) << __func__ << " bluefs " << pretty_si_t(bluefs_free)
+	   << " free of " << pretty_si_t(bluefs_total)
+	   << " free_ratio " << bluefs_free_ratio << dendl;
+  dout(10) << __func__ << " bluestore " << pretty_si_t(my_free)
+	   << " free of " << pretty_si_t(total)
+	   << " free_ratio " << my_free_ratio << dendl;
+
+  uint64_t gift = 0;
+  if (bluefs_free_ratio < g_conf->bluestore_bluefs_min_free_ratio &&
+      bluefs_free_ratio < my_free_ratio) {
+    // give it more
+    gift = g_conf->bluestore_bluefs_min_free_ratio * bluefs_total;
+    dout(10) << __func__ << " bluefs_free_ratio " << bluefs_free_ratio
+	     << " < min_free_ratio " << g_conf->bluestore_bluefs_min_free_ratio
+	     << ", should gift " << pretty_si_t(gift) << dendl;
+  }
+  float bluefs_ratio = (float)bluefs_total / (float)total;
+  if (bluefs_ratio < g_conf->bluestore_bluefs_min_ratio) {
+    uint64_t g = total * g_conf->bluestore_bluefs_min_ratio;
+    dout(10) << __func__ << " bluefs_ratio " << bluefs_ratio
+	     << " < min_ratio " << g_conf->bluestore_bluefs_min_ratio
+	     << ", should gift " << pretty_si_t(g) << dendl;
+    if (g > gift)
+      gift = g;
+  }
+
+  float fs_main_ratio = (float)bluefs_free / (float)my_free;
+  dout(10) << __func__ << " fs:main free ratio " << fs_main_ratio << dendl;
+
+  if (gift) {
+    float gift_ratio = (float)gift / (float)bluefs_free;
+    if (gift_ratio < g_conf->bluestore_bluefs_min_gift_ratio) {
+      dout(10) << __func__ << " proposed gift of " << pretty_si_t(gift)
+	       << " gift_ratio " << gift_ratio
+	       << " < min_gift_ratio " << g_conf->bluestore_bluefs_min_gift_ratio
+	       << dendl;
+    } else {
+      // round up to alloc size
+      uint64_t min_alloc_size = g_conf->bluestore_min_alloc_size;
+      gift = ROUND_UP_TO(gift, min_alloc_size);
+
+      // hard cap to fit into 32 bits
+      gift = MIN(gift, 1ull<<31);
+      dout(10) << __func__ << " gifting " << gift
+	     << " (" << pretty_si_t(gift) << ")" << dendl;
+
+      // fixme: just do one allocation to start...
+      int r = alloc->reserve(gift);
+      assert(r == 0);
+
+      extent_t e;
+      r =  alloc->allocate(MIN(gift, 1ull<<31), min_alloc_size, 0,
+			   &e.offset, &e.length);
+      if (r < 0)
+	return r;
+
+      dout(1) << __func__ << " gifting " << e << " to bluefs" << dendl;
+      extents->push_back(e);
+      ret = 1;
+    }
+  }
+
+// reclaim?
+#warning reclaim freespace from bluefs?
+
+  return ret;
+}
+
+void BlueStore::_commit_bluefs_freespace(
+  const vector<extent_t>& bluefs_gift_extents)
+{
+  dout(10) << __func__ << dendl;
+  for (auto p : bluefs_gift_extents) {
+    bluefs->add_block_extent(0, p.offset, p.length);
+  }
+}
+
 int BlueStore::_open_collections(int *errors)
 {
   KeyValueDB::Iterator it = db->get_iterator(PREFIX_COLL);
@@ -1153,6 +1283,13 @@ int BlueStore::mkfs()
 	g_conf->bluestore_bluefs_initial_length;
       dout(20) << __func__ << " reserved first " << reserved
 	       << " bytes for bluefs" << dendl;
+
+      bluefs_extents.insert(g_conf->bluestore_bluefs_initial_offset,
+			    g_conf->bluestore_bluefs_initial_length);
+      bufferlist bl;
+      ::encode(bluefs_extents, bl);
+      t->set(PREFIX_SUPER, "bluefs_extents", bl);
+      dout(20) << __func__ << " bluefs_extents " << bluefs_extents << dendl;
     }
     fm->release(reserved, bdev->get_size() - reserved, t);
     db->submit_transaction_sync(t);
@@ -1212,13 +1349,19 @@ int BlueStore::mount()
   if (r < 0)
     goto out_db;
 
-  r = _recover_next_nid();
+  r = _open_super_meta();
   if (r < 0)
     goto out_alloc;
 
   r = _open_collections();
   if (r < 0)
     goto out_alloc;
+
+  if (bluefs) {
+    r = _reconcile_bluefs_freespace();
+    if (r < 0)
+      goto out_alloc;
+  }
 
   finisher.start();
   wal_tp.start();
@@ -2506,17 +2649,34 @@ ObjectMap::ObjectMapIterator BlueStore::get_omap_iterator(
 // -----------------
 // write helpers
 
-int BlueStore::_recover_next_nid()
+int BlueStore::_open_super_meta()
 {
-  nid_max = 0;
-  bufferlist bl;
-  db->get(PREFIX_SUPER, "nid_max", &bl);
-  try {
-    ::decode(nid_max, bl);
-  } catch (buffer::error& e) {
+  // nid
+  {
+    nid_max = 0;
+    bufferlist bl;
+    db->get(PREFIX_SUPER, "nid_max", &bl);
+    try {
+      ::decode(nid_max, bl);
+    } catch (buffer::error& e) {
+    }
+    dout(10) << __func__ << " old nid_max " << nid_max << dendl;
+    nid_last = nid_max;
   }
-  dout(1) << __func__ << " old nid_max " << nid_max << dendl;
-  nid_last = nid_max;
+
+  // bluefs alloc
+  {
+    bluefs_extents.clear();
+    bufferlist bl;
+    db->get(PREFIX_SUPER, "bluefs_extents", &bl);
+    bufferlist::iterator p = bl.begin();
+    try {
+      ::decode(bluefs_extents, p);
+    }
+    catch (buffer::error& e) {
+    }
+    dout(10) << __func__ << " bluefs_extents " << bluefs_extents << dendl;
+  }
   return 0;
 }
 
@@ -2857,6 +3017,23 @@ void BlueStore::_kv_sync_thread()
 	alloc->release(p.get_start(), p.get_len());
       }
 
+      vector<extent_t> bluefs_gift_extents;
+      if (bluefs) {
+	int r = _balance_bluefs_freespace(&bluefs_gift_extents);
+	assert(r >= 0);
+	if (r > 0) {
+	  for (auto p : bluefs_gift_extents) {
+	    fm->allocate(p.offset, p.length, t);
+	    bluefs_extents.insert(p.offset, p.length);
+	  }
+	  bufferlist bl;
+	  ::encode(bluefs_extents, bl);
+	  dout(10) << __func__ << " bluefs_extents now " << bluefs_extents
+		   << dendl;
+	  t->set(PREFIX_SUPER, "bluefs_extents", bl);
+	}
+      }
+
       alloc->commit_start();
 
       // flush/barrier on block device
@@ -2911,6 +3088,12 @@ void BlueStore::_kv_sync_thread()
 
       // this is as good a place as any ...
       _reap_collections();
+
+      if (bluefs) {
+	if (!bluefs_gift_extents.empty()) {
+	  _commit_bluefs_freespace(bluefs_gift_extents);
+	}
+      }
 
       kv_lock.Lock();
     }
