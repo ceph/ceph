@@ -8,9 +8,9 @@
 
 #include <sstream>
 
-TEST(extent_ref_map_t, add)
+TEST(bluestore_extent_ref_map_t, add)
 {
-  extent_ref_map_t m;
+  bluestore_extent_ref_map_t m;
   m.add(10, 10);
   ASSERT_EQ(1, m.ref_map.size());
   cout << m << std::endl;
@@ -30,9 +30,9 @@ TEST(extent_ref_map_t, add)
   ASSERT_EQ(2, m.ref_map.size());
 }
 
-TEST(extent_ref_map_t, get)
+TEST(bluestore_extent_ref_map_t, get)
 {
-  extent_ref_map_t m;
+  bluestore_extent_ref_map_t m;
   m.add(00, 30);
   cout << m << std::endl;
   m.get(10, 10);
@@ -77,10 +77,10 @@ TEST(extent_ref_map_t, get)
   ASSERT_EQ(2, m.ref_map[28].refs);
 }
 
-TEST(extent_ref_map_t, put)
+TEST(bluestore_extent_ref_map_t, put)
 {
-  extent_ref_map_t m;
-  vector<extent_t> r;
+  bluestore_extent_ref_map_t m;
+  vector<bluestore_extent_t> r;
   m.add(10, 30, 1);
   m.put(10, 30, &r);
   cout << m << " " << r << std::endl;

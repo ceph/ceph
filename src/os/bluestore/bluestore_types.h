@@ -42,20 +42,20 @@ WRITE_CLASS_ENCODER(bluestore_bdev_label_t)
 ostream& operator<<(ostream& out, const bluestore_bdev_label_t& l);
 
 /// collection metadata
-struct cnode_t {
+struct bluestore_cnode_t {
   uint32_t bits;   ///< how many bits of coll pgid are significant
 
-  cnode_t(int b=0) : bits(b) {}
+  bluestore_cnode_t(int b=0) : bits(b) {}
 
   void encode(bufferlist& bl) const;
   void decode(bufferlist::iterator& p);
   void dump(Formatter *f) const;
-  static void generate_test_instances(list<cnode_t*>& o);
+  static void generate_test_instances(list<bluestore_cnode_t*>& o);
 };
-WRITE_CLASS_ENCODER(cnode_t)
+WRITE_CLASS_ENCODER(bluestore_cnode_t)
 
 /// extent: a byte extent back by the block device
-struct extent_t {
+struct bluestore_extent_t {
   enum {
     FLAG_UNWRITTEN = 1,   ///< extent is unwritten (and defined to be zero)
     FLAG_SHARED = 2,      ///< extent is shared by another object, and refcounted
@@ -66,7 +66,7 @@ struct extent_t {
   uint32_t length;
   uint32_t flags;  /// or reserved
 
-  extent_t(uint64_t o=0, uint32_t l=0, uint32_t f=0)
+  bluestore_extent_t(uint64_t o=0, uint32_t l=0, uint32_t f=0)
     : offset(o), length(l), flags(f) {}
 
   uint64_t end() const {
@@ -94,14 +94,14 @@ struct extent_t {
     ::decode(flags, p);
   }
   void dump(Formatter *f) const;
-  static void generate_test_instances(list<extent_t*>& o);
+  static void generate_test_instances(list<bluestore_extent_t*>& o);
 };
-WRITE_CLASS_ENCODER(extent_t)
+WRITE_CLASS_ENCODER(bluestore_extent_t)
 
-ostream& operator<<(ostream& out, const extent_t& bp);
+ostream& operator<<(ostream& out, const bluestore_extent_t& bp);
 
 /// extent_map: a map of reference counted extents
-struct extent_ref_map_t {
+struct bluestore_extent_ref_map_t {
   struct record_t {
     uint32_t length;
     uint32_t refs;
@@ -124,46 +124,46 @@ struct extent_ref_map_t {
 
   void add(uint64_t offset, uint32_t len, unsigned ref=2);
   void get(uint64_t offset, uint32_t len);
-  void put(uint64_t offset, uint32_t len, vector<extent_t> *release);
+  void put(uint64_t offset, uint32_t len, vector<bluestore_extent_t> *release);
 
   void encode(bufferlist& bl) const;
   void decode(bufferlist::iterator& p);
   void dump(Formatter *f) const;
-  static void generate_test_instances(list<extent_ref_map_t*>& o);
+  static void generate_test_instances(list<bluestore_extent_ref_map_t*>& o);
 };
-WRITE_CLASS_ENCODER(extent_ref_map_t::record_t)
-WRITE_CLASS_ENCODER(extent_ref_map_t)
+WRITE_CLASS_ENCODER(bluestore_extent_ref_map_t::record_t)
+WRITE_CLASS_ENCODER(bluestore_extent_ref_map_t)
 
-ostream& operator<<(ostream& out, const extent_ref_map_t& rm);
+ostream& operator<<(ostream& out, const bluestore_extent_ref_map_t& rm);
 
 
 /// overlay: a byte extent backed by kv pair, logically overlaying other content
-struct overlay_t {
+struct bluestore_overlay_t {
   uint64_t key;          ///< key (nid+key identify the kv pair in the kvdb)
   uint32_t value_offset; ///< offset in associated value for this extent
   uint32_t length;
 
-  overlay_t() : key(0), value_offset(0), length(0) {}
-  overlay_t(uint64_t k, uint32_t vo, uint32_t l)
+  bluestore_overlay_t() : key(0), value_offset(0), length(0) {}
+  bluestore_overlay_t(uint64_t k, uint32_t vo, uint32_t l)
     : key(k), value_offset(vo), length(l) {}
 
   void encode(bufferlist& bl) const;
   void decode(bufferlist::iterator& p);
   void dump(Formatter *f) const;
-  static void generate_test_instances(list<overlay_t*>& o);
+  static void generate_test_instances(list<bluestore_overlay_t*>& o);
 
 };
-WRITE_CLASS_ENCODER(overlay_t)
+WRITE_CLASS_ENCODER(bluestore_overlay_t)
 
-ostream& operator<<(ostream& out, const overlay_t& o);
+ostream& operator<<(ostream& out, const bluestore_overlay_t& o);
 
 /// onode: per-object metadata
-struct onode_t {
+struct bluestore_onode_t {
   uint64_t nid;                        ///< numeric id (locally unique)
   uint64_t size;                       ///< object size
   map<string, bufferptr> attrs;        ///< attrs
-  map<uint64_t, extent_t> block_map;   ///< block data
-  map<uint64_t,overlay_t> overlay_map; ///< overlay data (stored in db)
+  map<uint64_t, bluestore_extent_t> block_map;   ///< block data
+  map<uint64_t,bluestore_overlay_t> overlay_map; ///< overlay data (stored in db)
   map<uint64_t,uint16_t> overlay_refs; ///< overlay keys ref counts (if >1)
   uint32_t last_overlay_key;           ///< key for next overlay
   uint64_t omap_head;                  ///< id for omap root node
@@ -171,7 +171,7 @@ struct onode_t {
   uint32_t expected_object_size;
   uint32_t expected_write_size;
 
-  onode_t()
+  bluestore_onode_t()
     : nid(0),
       size(0),
       last_overlay_key(0),
@@ -179,8 +179,8 @@ struct onode_t {
       expected_object_size(0),
       expected_write_size(0) {}
 
-  map<uint64_t,extent_t>::iterator find_extent(uint64_t offset) {
-    map<uint64_t,extent_t>::iterator fp = block_map.lower_bound(offset);
+  map<uint64_t,bluestore_extent_t>::iterator find_extent(uint64_t offset) {
+    map<uint64_t,bluestore_extent_t>::iterator fp = block_map.lower_bound(offset);
     if (fp != block_map.begin()) {
       --fp;
       if (fp->first + fp->second.length <= offset) {
@@ -192,8 +192,8 @@ struct onode_t {
     return fp;
   }
 
-  map<uint64_t,extent_t>::iterator seek_extent(uint64_t offset) {
-    map<uint64_t,extent_t>::iterator fp = block_map.lower_bound(offset);
+  map<uint64_t,bluestore_extent_t>::iterator seek_extent(uint64_t offset) {
+    map<uint64_t,bluestore_extent_t>::iterator fp = block_map.lower_bound(offset);
     if (fp != block_map.begin()) {
       --fp;
       if (fp->first + fp->second.length <= offset) {
@@ -224,50 +224,52 @@ struct onode_t {
   void encode(bufferlist& bl) const;
   void decode(bufferlist::iterator& p);
   void dump(Formatter *f) const;
-  static void generate_test_instances(list<onode_t*>& o);
+  static void generate_test_instances(list<bluestore_onode_t*>& o);
 };
-WRITE_CLASS_ENCODER(onode_t)
+WRITE_CLASS_ENCODER(bluestore_onode_t)
 
 
 /// writeahead-logged op
-struct wal_op_t {
+struct bluestore_wal_op_t {
   typedef enum {
     OP_WRITE = 1,
     OP_ZERO = 4,
   } type_t;
   __u8 op;
-  extent_t extent;
+  bluestore_extent_t extent;
   bufferlist data;
   uint64_t nid;
-  vector<overlay_t> overlays;
+  vector<bluestore_overlay_t> overlays;
   vector<uint64_t> removed_overlays;
 
-  wal_op_t() : nid(0) {}
+  bluestore_wal_op_t() : nid(0) {}
 
   void encode(bufferlist& bl) const;
   void decode(bufferlist::iterator& p);
   void dump(Formatter *f) const;
-  static void generate_test_instances(list<wal_op_t*>& o);
+  static void generate_test_instances(list<bluestore_wal_op_t*>& o);
 };
-WRITE_CLASS_ENCODER(wal_op_t)
+WRITE_CLASS_ENCODER(bluestore_wal_op_t)
 
 
 /// writeahead-logged transaction
-struct wal_transaction_t {
+struct bluestore_wal_transaction_t {
   uint64_t seq;
-  list<wal_op_t> ops;
+  list<bluestore_wal_op_t> ops;
   interval_set<uint64_t> released;  ///< allocations to release after wal
 
   int64_t _bytes;  ///< cached byte count
 
-  wal_transaction_t() : _bytes(-1) {}
+  bluestore_wal_transaction_t() : _bytes(-1) {}
 
 #if 0
   no users for htis
   uint64_t get_bytes() {
     if (_bytes < 0) {
       _bytes = 0;
-      for (list<wal_op_t>::iterator p = ops.begin(); p != ops.end(); ++p) {
+      for (list<bluestore_wal_op_t>::iterator p = ops.begin();
+	   p != ops.end();
+	   ++p) {
 	_bytes += p->extent.length;
       }
     }
@@ -278,8 +280,8 @@ struct wal_transaction_t {
   void encode(bufferlist& bl) const;
   void decode(bufferlist::iterator& p);
   void dump(Formatter *f) const;
-  static void generate_test_instances(list<wal_transaction_t*>& o);
+  static void generate_test_instances(list<bluestore_wal_transaction_t*>& o);
 };
-WRITE_CLASS_ENCODER(wal_transaction_t)
+WRITE_CLASS_ENCODER(bluestore_wal_transaction_t)
 
 #endif
