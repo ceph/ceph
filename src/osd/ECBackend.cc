@@ -1703,7 +1703,7 @@ void ECBackend::start_remaining_read_op(
 }
 
 ECUtil::HashInfoRef ECBackend::get_hash_info(
-  const hobject_t &hoid, bool checks)
+  const hobject_t &hoid, bool checks, const map<string,bufferptr> *attrs)
 {
   dout(10) << __func__ << ": Getting attr on " << hoid << dendl;
   ECUtil::HashInfoRef ref = unstable_hashinfo_registry.lookup(hoid);
@@ -1719,12 +1719,25 @@ ECUtil::HashInfoRef ECBackend::get_hash_info(
     if (r >= 0) {
       dout(10) << __func__ << ": found on disk, size " << st.st_size << dendl;
       bufferlist bl;
-      r = store->getattr(
-	coll,
-	ghobject_t(hoid, ghobject_t::NO_GEN, get_parent()->whoami_shard().shard),
-	ECUtil::get_hinfo_key(),
-	bl);
-      if (r >= 0) {
+      if (attrs) {
+	map<string, bufferptr>::const_iterator k = attrs->find(ECUtil::get_hinfo_key());
+	if (k == attrs->end()) {
+	  dout(5) << __func__ << " " << hoid << " missing hinfo attr" << dendl;
+	} else {
+	  bl.push_back(k->second);
+	}
+      } else {
+	r = store->getattr(
+	  coll,
+	  ghobject_t(hoid, ghobject_t::NO_GEN, get_parent()->whoami_shard().shard),
+	  ECUtil::get_hinfo_key(),
+	  bl);
+	if (r < 0) {
+	  dout(5) << __func__ << ": getattr failed: " << cpp_strerror(r) << dendl;
+	  bl.clear(); // just in case
+	}
+      }
+      if (bl.length() > 0) {
 	bufferlist::iterator bp = bl.begin();
 	::decode(hinfo, bp);
 	if (checks && hinfo.get_total_chunk_size() != (uint64_t)st.st_size) {
@@ -2092,7 +2105,7 @@ void ECBackend::be_deep_scrub(
     return;
   }
 
-  ECUtil::HashInfoRef hinfo = get_hash_info(poid, false);
+  ECUtil::HashInfoRef hinfo = get_hash_info(poid, false, &o.attrs);
   if (!hinfo) {
     dout(0) << "_scan_list  " << poid << " could not retrieve hash info" << dendl;
     o.read_error = true;
