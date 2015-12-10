@@ -99,7 +99,8 @@ public:
 
   /// create a new instance
   static KeyValueDB *create(CephContext *cct, const std::string& type,
-			    const std::string& dir);
+			    const std::string& dir,
+			    void *p = NULL);
 
   /// test whether we can successfully initialize; may have side effects (e.g., create)
   static int test_init(const std::string& type, const std::string& dir);
