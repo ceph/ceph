@@ -888,7 +888,10 @@ int BlueFS::_allocate(unsigned id, uint64_t len, vector<bluefs_extent_t> *ev)
 				&e.offset, &e.length);
     if (r < 0)
       return r;
-    ev->push_back(e);
+    if (!ev->empty() && ev->back().end() == e.offset)
+      ev->back().length += e.length;
+    else
+      ev->push_back(e);
     if (e.length >= left)
       break;
     left -= e.length;
