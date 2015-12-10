@@ -37,7 +37,6 @@
 class Allocator;
 class FreelistManager;
 class BlueFS;
-class BlueRocksEnv;
 
 class BlueStore : public ObjectStore {
   // -----------------------------------------------------
@@ -392,7 +391,6 @@ public:
 private:
   CephContext *cct;
   BlueFS *bluefs;
-  BlueRocksEnv *bluerocksenv;
   KeyValueDB *db;
   FS *fs;
   BlockDevice *bdev;
