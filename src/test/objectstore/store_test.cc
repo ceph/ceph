@@ -137,6 +137,24 @@ TEST_P(StoreTest, SimpleRemount) {
     r = store->apply_transaction(&osr, t);
     ASSERT_EQ(r, 0);
   }
+  store->umount();
+  r = store->mount();
+  ASSERT_EQ(0, r);
+  {
+    ObjectStore::Transaction t;
+    t.create_collection(cid, 0);
+    r = store->apply_transaction(&osr, t);
+    ASSERT_EQ(r, 0);
+    bool exists = store->exists(cid, hoid);
+    ASSERT_TRUE(!exists);
+  }
+  {
+    ObjectStore::Transaction t;
+    t.remove_collection(cid);
+    cerr << "remove collection" << std::endl;
+    r = store->apply_transaction(&osr, t);
+    ASSERT_EQ(r, 0);
+  }
 }
 
 TEST_P(StoreTest, IORemount) {
@@ -1638,6 +1656,10 @@ public:
       obj = get_uniform_random_object();
     }
     bufferlist bl, result;
+    if (0) cout << " obj " << obj
+	 << " size " << contents[obj].data.length()
+	 << " offset " << offset
+	 << " len " << len << std::endl;
     r = store->read(cid, obj, offset, len, result);
     if (offset >= contents[obj].data.length()) {
       ASSERT_EQ(r, 0);
@@ -2769,7 +2791,8 @@ INSTANTIATE_TEST_CASE_P(
     "memstore",
     "filestore",
     "keyvaluestore",
-    "bluestore"));
+    "bluestore",
+    "kstore"));
 
 #else
 
@@ -2855,8 +2878,7 @@ int main(int argc, char **argv) {
   g_ceph_context->_conf->set_val("filestore_debug_disable_sharded_check", "true");
   g_ceph_context->_conf->set_val("filestore_fiemap", "true");
   g_ceph_context->_conf->set_val(
-    "enable_experimental_unrecoverable_data_corrupting_features",
-    "keyvaluestore, bluestore, rocksdb");
+    "enable_experimental_unrecoverable_data_corrupting_features", "*");
   g_ceph_context->_conf->apply_changes(NULL);
 
   ::testing::InitGoogleTest(&argc, argv);
