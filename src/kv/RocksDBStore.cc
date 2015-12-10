@@ -21,6 +21,7 @@
 using std::string;
 #include "common/perf_counters.h"
 #include "common/debug.h"
+#include "include/str_list.h"
 #include "include/str_map.h"
 #include "KeyValueDB.h"
 #include "RocksDBStore.h"
@@ -181,6 +182,28 @@ int RocksDBStore::do_open(ostream &out, bool create_if_missing)
   opt.create_if_missing = create_if_missing;
   if (g_conf->rocksdb_separate_wal_dir) {
     opt.wal_dir = path + ".wal";
+  }
+  if (g_conf->rocksdb_db_paths.length()) {
+    list<string> paths;
+    get_str_list(g_conf->rocksdb_db_paths, "; \t", paths);
+    for (auto& p : paths) {
+      size_t pos = p.find(',');
+      if (pos == std::string::npos) {
+	derr << __func__ << " invalid db path item " << p << " in "
+	     << g_conf->rocksdb_db_paths << dendl;
+	return -EINVAL;
+      }
+      string path = p.substr(0, pos);
+      string size_str = p.substr(pos + 1);
+      uint64_t size = atoll(size_str.c_str());
+      if (!size) {
+	derr << __func__ << " invalid db path item " << p << " in "
+	     << g_conf->rocksdb_db_paths << dendl;
+	return -EINVAL;
+      }
+      opt.db_paths.push_back(rocksdb::DbPath(path, size));
+      dout(10) << __func__ << " db_path " << path << " size " << size << dendl;
+    }
   }
 
   if (g_conf->rocksdb_log_to_ceph_log) {

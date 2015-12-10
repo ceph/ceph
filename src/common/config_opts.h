@@ -766,6 +766,7 @@ OPTION(kinetic_use_ssl, OPT_BOOL, false) // whether to secure kinetic traffic wi
 
 
 OPTION(rocksdb_separate_wal_dir, OPT_BOOL, false) // use $path.wal for wal
+OPTION(rocksdb_db_paths, OPT_STR, "")   // path,size( path,size)*
 OPTION(rocksdb_log_to_ceph_log, OPT_BOOL, true)  // log to ceph log
 // rocksdb options that will be used for keyvaluestore(if backend is rocksdb)
 OPTION(keyvaluestore_rocksdb_options, OPT_STR, "")
@@ -831,8 +832,7 @@ OPTION(bluefs_log_compact_min_ratio, OPT_FLOAT, 5.0)      // before we consider
 OPTION(bluefs_log_compact_min_size, OPT_U64, 16*1048576)  // before we consider
 
 OPTION(bluestore_bluefs, OPT_BOOL, false)
-OPTION(bluestore_bluefs_mirror, OPT_BOOL, false) // mirror to normal Env for debug
-OPTION(bluestore_bluefs_initial_offset, OPT_U64,  1024*1024)
+OPTION(bluestore_bluefs_env_mirror, OPT_BOOL, false) // mirror to normal Env for debug
 OPTION(bluestore_bluefs_initial_length, OPT_U64, 65536*1024)
 OPTION(bluestore_bluefs_min_ratio, OPT_FLOAT, .01)
 OPTION(bluestore_bluefs_min_free_ratio, OPT_FLOAT, .1)
@@ -840,6 +840,8 @@ OPTION(bluestore_bluefs_max_free_fs_main_ratio, OPT_FLOAT, .8)
 OPTION(bluestore_bluefs_min_gift_ratio, OPT_FLOAT, 1)
 OPTION(bluestore_block_path, OPT_STR, "")
 OPTION(bluestore_block_size, OPT_U64, 10 * 1024*1024*1024)  // 10gb for testing
+OPTION(bluestore_block_db_path, OPT_STR, "")
+OPTION(bluestore_block_db_size, OPT_U64, 64 * 1024*1024)  // 64MB for testing
 OPTION(bluestore_block_wal_path, OPT_STR, "")
 OPTION(bluestore_block_wal_size, OPT_U64, 128 * 1024*1024)  // 128MB for testing
 OPTION(bluestore_max_dir_size, OPT_U32, 1000000)

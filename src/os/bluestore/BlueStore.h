@@ -390,6 +390,7 @@ public:
 private:
   CephContext *cct;
   BlueFS *bluefs;
+  unsigned bluefs_shared_bdev;  ///< which bluefs bdev we are sharing
   KeyValueDB *db;
   FS *fs;
   BlockDevice *bdev;
@@ -455,8 +456,12 @@ private:
   int _open_collections(int *errors=0);
   void _close_collections();
 
+  int _setup_block_symlink_or_file(string name, string path, uint64_t size);
+
   int _write_bdev_label(string path, bluestore_bdev_label_t label);
   static int _read_bdev_label(string path, bluestore_bdev_label_t *label);
+  int _check_or_set_bdev_label(string path, uint64_t size, string desc,
+			       bool create);
 
   int _open_super_meta();
 
