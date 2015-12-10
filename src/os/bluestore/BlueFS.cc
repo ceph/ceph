@@ -111,7 +111,7 @@ int BlueFS::mkfs(uint64_t super_offset_a, uint64_t super_offset_b)
   dout(1) << __func__ << " uuid " << super.uuid << dendl;
 
   // init log
-  File *log_file = new File;
+  FileRef log_file = new File;
   log_file->fnode.ino = 1;
   _allocate(0, g_conf->bluefs_max_log_runway, &log_file->fnode.extents);
   log_writer = new FileWriter(log_file);
@@ -143,7 +143,6 @@ int BlueFS::mkfs(uint64_t super_offset_a, uint64_t super_offset_b)
   super = bluefs_super_t();
   delete log_writer;
   log_writer = NULL;
-  delete log_file;
   block_all.clear();
   alloc.clear();
 
@@ -218,9 +217,7 @@ void BlueFS::umount()
   }
   alloc.clear();
   block_all.clear();
-  for (auto p : file_map) {
-    delete p.second;
-  }
+  file_map.clear();
   for (auto p : dir_map) {
     delete p.second;
   }
@@ -319,7 +316,7 @@ int BlueFS::_replay()
   ino_last = 1;  // by the log
   log_seq = 0;
 
-  File *log_file = _get_file(1);
+  FileRef log_file = _get_file(1);
   log_file->fnode = super.log_fnode;
 
   FileReader *log_reader = new FileReader(
@@ -435,11 +432,11 @@ int BlueFS::_replay()
 	  dout(20) << __func__ << " " << pos << ":  op_dir_link "
 		   << " " << dirname << "/" << filename << " to " << ino
 		   << dendl;
-	  File *file = _get_file(ino);
+	  FileRef file = _get_file(ino);
 	  assert(file->fnode.ino);
 	  map<string,Dir*>::iterator q = dir_map.find(dirname);
 	  assert(q != dir_map.end());
-	  map<string,File*>::iterator r = q->second->file_map.find(filename);
+	  map<string,FileRef>::iterator r = q->second->file_map.find(filename);
 	  assert(r == q->second->file_map.end());
 	  q->second->file_map[filename] = file;
 	  ++file->refs;
@@ -455,7 +452,7 @@ int BlueFS::_replay()
 		   << " " << dirname << "/" << filename << dendl;
 	  map<string,Dir*>::iterator q = dir_map.find(dirname);
 	  assert(q != dir_map.end());
-	  map<string,File*>::iterator r = q->second->file_map.find(filename);
+	  map<string,FileRef>::iterator r = q->second->file_map.find(filename);
 	  assert(r != q->second->file_map.end());
 	  q->second->file_map.erase(r);
 	}
@@ -493,7 +490,7 @@ int BlueFS::_replay()
 	  ::decode(fnode, p);
 	  dout(20) << __func__ << " " << pos << ":  op_file_update "
 		   << " " << fnode << dendl;
-	  File *f = _get_file(fnode.ino);
+	  FileRef f = _get_file(fnode.ino);
 	  f->fnode = fnode;
 	  if (fnode.ino > ino_last) {
 	    ino_last = fnode.ino;
@@ -509,7 +506,6 @@ int BlueFS::_replay()
 		   << dendl;
 	  auto p = file_map.find(ino);
 	  assert(p != file_map.end());
-	  delete p->second;
 	  file_map.erase(p);
 	}
 	break;
@@ -534,12 +530,11 @@ int BlueFS::_replay()
   return 0;
 }
 
-BlueFS::File *BlueFS::_get_file(uint64_t ino)
+BlueFS::FileRef BlueFS::_get_file(uint64_t ino)
 {
-  File *f;
   auto p = file_map.find(ino);
   if (p == file_map.end()) {
-    f = new File;
+    FileRef f = new File;
     file_map[ino] = f;
     dout(30) << __func__ << " ino " << ino << " = " << f
 	     << " (new)" << dendl;
@@ -550,7 +545,7 @@ BlueFS::File *BlueFS::_get_file(uint64_t ino)
   }
 }
 
-void BlueFS::_drop_link(File *file)
+void BlueFS::_drop_link(FileRef file)
 {
   dout(20) << __func__ << " had refs " << file->refs
 	   << " on " << file->fnode << dendl;
@@ -562,7 +557,7 @@ void BlueFS::_drop_link(File *file)
       alloc[r.bdev]->release(r.offset, r.length);
     }
     file_map.erase(file->fnode.ino);
-    delete file;
+    file->deleted = true;
   }
 }
 
@@ -625,7 +620,7 @@ int BlueFS::_read(
   return r;
 }
 
-void BlueFS::_invalidate_cache(File *f, uint64_t offset, uint64_t length)
+void BlueFS::_invalidate_cache(FileRef f, uint64_t offset, uint64_t length)
 {
   dout(10) << __func__ << " file " << f->fnode
 	   << " " << offset << "~" << length << dendl;
@@ -691,6 +686,7 @@ int BlueFS::_flush_range(FileWriter *h, uint64_t offset, uint64_t length)
   dout(10) << __func__ << " " << h << " pos " << h->pos
 	   << " " << offset << "~" << length
 	   << " to " << h->file->fnode << dendl;
+  assert(!h->file->deleted);
 
   if (offset + length <= h->pos)
     return 0;
@@ -885,7 +881,7 @@ int BlueFS::_allocate(unsigned id, uint64_t len, vector<bluefs_extent_t> *ev)
   return 0;
 }
 
-int BlueFS::_preallocate(File *f, uint64_t off, uint64_t len)
+int BlueFS::_preallocate(FileRef f, uint64_t off, uint64_t len)
 {
   dout(10) << __func__ << " file " << f->fnode << " "
 	   << off << "~" << len << dendl;
@@ -940,8 +936,8 @@ int BlueFS::open_for_write(
     dir = p->second;
   }
 
-  File *file;
-  map<string,File*>::iterator q = dir->file_map.find(filename);
+  FileRef file;
+  map<string,FileRef>::iterator q = dir->file_map.find(filename);
   if (q == dir->file_map.end()) {
     if (overwrite) {
       dout(20) << __func__ << " dir " << dirname << " (" << dir
@@ -990,14 +986,14 @@ int BlueFS::open_for_read(
   }
   Dir *dir = p->second;
 
-  map<string,File*>::iterator q = dir->file_map.find(filename);
+  map<string,FileRef>::iterator q = dir->file_map.find(filename);
   if (q == dir->file_map.end()) {
     dout(20) << __func__ << " dir " << dirname << " (" << dir
 	     << ") file " << filename
 	     << " not found" << dendl;
     return -ENOENT;
   }
-  File *file = q->second;
+  File *file = q->second.get();
 
   *h = new FileReader(file, random ? 4096 : g_conf->bluefs_max_prefetch);
   dout(10) << __func__ << " h " << *h << " on " << file->fnode << dendl;
@@ -1017,14 +1013,14 @@ int BlueFS::rename(
     return -ENOENT;
   }
   Dir *old_dir = p->second;
-  map<string,File*>::iterator q = old_dir->file_map.find(old_filename);
+  map<string,FileRef>::iterator q = old_dir->file_map.find(old_filename);
   if (q == old_dir->file_map.end()) {
     dout(20) << __func__ << " dir " << old_dirname << " (" << old_dir
 	     << ") file " << old_filename
 	     << " not found" << dendl;
     return -ENOENT;
   }
-  File *file = q->second;
+  FileRef file = q->second;
 
   p = dir_map.find(new_dirname);
   if (p == dir_map.end()) {
@@ -1106,14 +1102,14 @@ int BlueFS::stat(const string& dirname, const string& filename,
     return -ENOENT;
   }
   Dir *dir = p->second;
-  map<string,File*>::iterator q = dir->file_map.find(filename);
+  map<string,FileRef>::iterator q = dir->file_map.find(filename);
   if (q == dir->file_map.end()) {
     dout(20) << __func__ << " dir " << dirname << " (" << dir
 	     << ") file " << filename
 	     << " not found" << dendl;
     return -ENOENT;
   }
-  File *file = q->second;
+  File *file = q->second.get();
   if (size)
     *size = file->fnode.size;
   if (mtime)
@@ -1132,7 +1128,7 @@ int BlueFS::lock_file(const string& dirname, const string& filename,
     return -ENOENT;
   }
   Dir *dir = p->second;
-  map<string,File*>::iterator q = dir->file_map.find(filename);
+  map<string,FileRef>::iterator q = dir->file_map.find(filename);
   File *file;
   if (q == dir->file_map.end()) {
     dout(20) << __func__ << " dir " << dirname << " (" << dir
@@ -1147,7 +1143,7 @@ int BlueFS::lock_file(const string& dirname, const string& filename,
     log_t.op_file_update(file->fnode);
     log_t.op_dir_link(dirname, filename, file->fnode.ino);
   } else {
-    file = q->second;
+    file = q->second.get();
   }
   if (file->locked) {
     dout(10) << __func__ << " already locked" << dendl;
@@ -1208,13 +1204,13 @@ int BlueFS::unlink(const string& dirname, const string& filename)
     return -ENOENT;
   }
   Dir *dir = p->second;
-  map<string,File*>::iterator q = dir->file_map.find(filename);
+  map<string,FileRef>::iterator q = dir->file_map.find(filename);
   if (q == dir->file_map.end()) {
     dout(20) << __func__ << " file " << dirname << "/" << filename
 	     << " not found" << dendl;
     return -ENOENT;
   }
-  File *file = q->second;
+  FileRef file = q->second;
   dir->file_map.erase(filename);
   log_t.op_dir_unlink(dirname, filename);
   _drop_link(file);

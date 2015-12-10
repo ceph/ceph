@@ -6,27 +6,47 @@
 #include "bluefs_types.h"
 #include "common/Mutex.h"
 #include "common/Cond.h"
+#include "common/RefCountedObj.h"
 #include "BlockDevice.h"
 
 #include "boost/intrusive/list.hpp"
+#include <boost/intrusive_ptr.hpp>
 
 class Allocator;
 
 class BlueFS {
 public:
-  struct File {
+  struct File : public RefCountedObject {
     bluefs_fnode_t fnode;
     int refs;
     bool dirty;
     bool locked;
+    bool deleted;
     boost::intrusive::list_member_hook<> dirty_item;
 
+    atomic_t num_readers, num_writers;
+
     File()
-      : refs(0),
+      : RefCountedObject(0),
+	refs(0),
 	dirty(false),
-	locked(false)
+	locked(false),
+	deleted(false)
       {}
+    ~File() {
+      assert(num_readers.read() == 0);
+      assert(num_writers.read() == 0);
+    }
+
+    friend void intrusive_ptr_add_ref(File *f) {
+      f->get();
+    }
+    friend void intrusive_ptr_release(File *f) {
+      f->put();
+    }
   };
+  typedef boost::intrusive_ptr<File> FileRef;
+
   typedef boost::intrusive::list<
       File,
       boost::intrusive::member_hook<
@@ -35,16 +55,21 @@ public:
 	&File::dirty_item> > dirty_file_list_t;
 
   struct Dir {
-    map<string,File*> file_map;
+    map<string,FileRef> file_map;
   };
 
   struct FileWriter {
-    File *file;
+    FileRef file;
     uint64_t pos;           ///< start offset for buffer
     bufferlist buffer;      ///< new data to write (at end of file)
     bufferlist tail_block;  ///< existing partial block at end of file, if any
 
-    FileWriter(File *f) : file(f), pos(0) {}
+    FileWriter(FileRef f) : file(f), pos(0) {
+      file->num_writers.inc();
+    }
+    ~FileWriter() {
+      file->num_writers.dec();
+    }
 
     void append(const char *buf, size_t len) {
       buffer.append(buf, len);
@@ -58,7 +83,7 @@ public:
   };
 
   struct FileReader {
-    File *file;
+    FileRef file;
     uint64_t pos;           ///< current logical offset
     uint64_t max_prefetch;  ///< max allowed prefetch
     bool ignore_eof;        ///< used when reading our log file
@@ -67,14 +92,18 @@ public:
     uint64_t bl_off;  ///< prefetch buffer logical offset
     bufferlist bl;    ///< prefetch buffer
 
-    FileReader(File *f, uint64_t mpf, bool ie = false)
+    FileReader(FileRef f, uint64_t mpf, bool ie = false)
       : file(f),
 	pos(0),
 	max_prefetch(mpf),
 	ignore_eof(ie),
 	lock("BlueFS::FileReader::lock"),
-	bl_off(0)
-      { }
+	bl_off(0) {
+      file->num_readers.inc();
+    }
+    ~FileReader() {
+      file->num_readers.dec();
+    }
 
     uint64_t get_buf_end() {
       return bl_off + bl.length();
@@ -94,8 +123,8 @@ public:
   };
 
   struct FileLock {
-    File *file;
-    FileLock(File *f) : file(f) {}
+    FileRef file;
+    FileLock(FileRef f) : file(f) {}
   };
 
 private:
@@ -103,9 +132,9 @@ private:
   Cond cond;
 
   // cache
-  map<string, Dir*> dir_map;                    ///< dirname -> Dir
-  ceph::unordered_map<uint64_t,File*> file_map; ///< ino -> File
-  dirty_file_list_t dirty_files;                ///< list of dirty files
+  map<string, Dir*> dir_map;                      ///< dirname -> Dir
+  ceph::unordered_map<uint64_t,FileRef> file_map; ///< ino -> File
+  dirty_file_list_t dirty_files;                  ///< list of dirty files
 
   bluefs_super_t super;       ///< latest superblock (as last written)
   uint64_t ino_last;          ///< last assigned ino (this one is in use)
@@ -120,8 +149,8 @@ private:
 
   void _init_alloc();
 
-  File *_get_file(uint64_t ino);
-  void _drop_link(File *f);
+  FileRef _get_file(uint64_t ino);
+  void _drop_link(FileRef f);
 
   int _allocate(unsigned bdev, uint64_t len, vector<bluefs_extent_t> *ev);
   int _flush_range(FileWriter *h, uint64_t offset, uint64_t length);
@@ -132,7 +161,7 @@ private:
   void _submit_bdev();
   void _flush_bdev();
 
-  int _preallocate(File *f, uint64_t off, uint64_t len);
+  int _preallocate(FileRef f, uint64_t off, uint64_t len);
   int _truncate(FileWriter *h, uint64_t off);
 
   int _read(
@@ -142,7 +171,7 @@ private:
     bufferptr *bp,   ///< [out] optional: reference the result here
     char *out);      ///< [out] optional: or copy it here
 
-  void _invalidate_cache(File *f, uint64_t offset, uint64_t length);
+  void _invalidate_cache(FileRef f, uint64_t offset, uint64_t length);
 
   int _open_super(uint64_t super_offset_a, uint64_t super_offset_b);
   int _write_super();
@@ -221,11 +250,11 @@ public:
     Mutex::Locker l(lock);
     return _read(h, offset, len, bp, out);
   }
-  void invalidate_cache(File *f, uint64_t offset, uint64_t len) {
+  void invalidate_cache(FileRef f, uint64_t offset, uint64_t len) {
     Mutex::Locker l(lock);
     _invalidate_cache(f, offset, len);
   }
-  int preallocate(File *f, uint64_t offset, uint64_t len) {
+  int preallocate(FileRef f, uint64_t offset, uint64_t len) {
     Mutex::Locker l(lock);
     return _preallocate(f, offset, len);
   }
