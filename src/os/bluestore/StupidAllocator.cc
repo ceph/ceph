@@ -4,15 +4,13 @@
 #include "StupidAllocator.h"
 #include "bluestore_types.h"
 #include "BlueStore.h"
-#include "FreelistManager.h"
 
 #define dout_subsys ceph_subsys_bluestore
 #undef dout_prefix
 #define dout_prefix *_dout << "stupidalloc "
 
 StupidAllocator::StupidAllocator()
-  : fm(NULL),
-    lock("StupicAllocator::lock"),
+  : lock("StupicAllocator::lock"),
     num_free(0),
     num_uncommitted(0),
     num_committing(0),
@@ -192,28 +190,13 @@ void StupidAllocator::dump(ostream& out)
        ++p) {
     dout(30) << __func__ << "  " << p.get_start() << "~" << p.get_len() << dendl;
   }
-  fm->dump();
 }
 
-int StupidAllocator::init(FreelistManager *f)
+void StupidAllocator::init_add_free(uint64_t offset, uint64_t length)
 {
-  dout(1) << __func__ << dendl;
-  fm = f;
-
-  // load state from freelist
-  unsigned num = 0;
-  const map<uint64_t,uint64_t>& fl = fm->get_freelist();
-  for (map<uint64_t,uint64_t>::const_iterator p = fl.begin(); p != fl.end(); ++p) {
-    dout(30) << "  " << p->first << "~" << p->second << dendl;
-    _insert_free(p->first, p->second);
-    ++num;
-    num_free += p->second;
-  }
-
-  dout(10) << __func__ << " loaded " << pretty_si_t(num_free)
-	   << " in " << num << " extents"
-	   << dendl;
-  return 0;
+  dout(10) << __func__ << " " << offset << "~" << length << dendl;
+  _insert_free(offset, length);
+  num_free += length;
 }
 
 void StupidAllocator::shutdown()
