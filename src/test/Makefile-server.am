@@ -70,6 +70,11 @@ ceph_test_bluefs_LDADD = $(LIBOS) $(UNITTEST_LDADD) $(CEPH_GLOBAL)
 ceph_test_bluefs_CXXFLAGS = $(UNITTEST_CXXFLAGS)
 bin_DEBUGPROGRAMS += ceph_test_bluefs
 
+ceph_test_bluestore_types_SOURCES = test/objectstore/test_bluestore_types.cc
+ceph_test_bluestore_types_LDADD = $(LIBOS) $(UNITTEST_LDADD) $(CEPH_GLOBAL)
+ceph_test_bluestore_types_CXXFLAGS = $(UNITTEST_CXXFLAGS)
+bin_DEBUGPROGRAMS += ceph_test_bluestore_types
+
 endif
 
 ceph_test_objectstore_workloadgen_SOURCES = \

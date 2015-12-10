@@ -58,7 +58,7 @@ WRITE_CLASS_ENCODER(cnode_t)
 struct extent_t {
   enum {
     FLAG_UNWRITTEN = 1,   ///< extent is unwritten (and defined to be zero)
-//    FLAG_SHARED = 2,    ///< extent is shared by another object, and read-only
+    FLAG_SHARED = 2,      ///< extent is shared by another object, and refcounted
   };
   static string get_flags_string(unsigned flags);
 
@@ -99,6 +99,43 @@ struct extent_t {
 WRITE_CLASS_ENCODER(extent_t)
 
 ostream& operator<<(ostream& out, const extent_t& bp);
+
+/// extent_map: a map of reference counted extents
+struct extent_ref_map_t {
+  struct record_t {
+    uint32_t length;
+    uint32_t refs;
+    record_t(uint32_t l=0, uint32_t r=0) : length(l), refs(r) {}
+    void encode(bufferlist& bl) const {
+      ::encode(length, bl);
+      ::encode(refs, bl);
+    }
+    void decode(bufferlist::iterator& p) {
+      ::decode(length, p);
+      ::decode(refs, p);
+    }
+  };
+  WRITE_CLASS_ENCODER(record_t)
+
+  map<uint64_t,record_t> ref_map;
+
+  void _check() const;
+  void _maybe_merge_left(map<uint64_t,record_t>::iterator& p);
+
+  void add(uint64_t offset, uint32_t len, unsigned ref=2);
+  void get(uint64_t offset, uint32_t len);
+  void put(uint64_t offset, uint32_t len, vector<extent_t> *release);
+
+  void encode(bufferlist& bl) const;
+  void decode(bufferlist::iterator& p);
+  void dump(Formatter *f) const;
+  static void generate_test_instances(list<extent_ref_map_t*>& o);
+};
+WRITE_CLASS_ENCODER(extent_ref_map_t::record_t)
+WRITE_CLASS_ENCODER(extent_ref_map_t)
+
+ostream& operator<<(ostream& out, const extent_ref_map_t& rm);
+
 
 /// overlay: a byte extent backed by kv pair, logically overlaying other content
 struct overlay_t {
@@ -144,7 +181,6 @@ struct onode_t {
 
   map<uint64_t,extent_t>::iterator find_extent(uint64_t offset) {
     map<uint64_t,extent_t>::iterator fp = block_map.lower_bound(offset);
-    fp = block_map.lower_bound(offset);
     if (fp != block_map.begin()) {
       --fp;
       if (fp->first + fp->second.length <= offset) {
@@ -158,7 +194,6 @@ struct onode_t {
 
   map<uint64_t,extent_t>::iterator seek_extent(uint64_t offset) {
     map<uint64_t,extent_t>::iterator fp = block_map.lower_bound(offset);
-    fp = block_map.lower_bound(offset);
     if (fp != block_map.begin()) {
       --fp;
       if (fp->first + fp->second.length <= offset) {
