@@ -230,6 +230,8 @@ namespace rgw {
 
     RGWLibFS* get_fs() { return fs; }
 
+    RGWFileHandle* get_parent() { return parent.get(); }
+
     int stat(struct stat *st) {
       /* partial Unix attrs */
       memset(st, 0, sizeof(struct stat));
@@ -344,7 +346,9 @@ namespace rgw {
     bool is_open() const { return flags & FLAG_OPEN; }
     bool is_root() const { return flags & FLAG_ROOT; }
     bool is_bucket() const { return flags & FLAG_BUCKET; }
-    bool is_object() const { return (fh.fh_type == RGW_FS_TYPE_FILE); }
+    bool is_object() const { return !is_bucket(); }
+    bool is_file() const { return (fh.fh_type == RGW_FS_TYPE_FILE); }
+    bool is_dir() const { return (fh.fh_type == RGW_FS_TYPE_DIRECTORY); }
     bool creating() const { return flags & FLAG_CREATE; }
     bool pseudo() const { return flags & FLAG_PSEUDO; }
 
