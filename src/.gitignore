@@ -58,6 +58,7 @@ Makefile
 /ceph-monstore-tool
 /ceph-osdomap-tool
 /ceph-kvstore-tool
+/ceph-bluefs-tool
 /ceph_ver.h
 /dev
 /get_command_descriptions
