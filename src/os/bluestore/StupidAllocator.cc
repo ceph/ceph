@@ -164,6 +164,12 @@ int StupidAllocator::release(
   return 0;
 }
 
+uint64_t StupidAllocator::get_free()
+{
+  Mutex::Locker l(lock);
+  return num_free;
+}
+
 void StupidAllocator::dump(ostream& out)
 {
   Mutex::Locker l(lock);
@@ -198,6 +204,24 @@ void StupidAllocator::init_add_free(uint64_t offset, uint64_t length)
   _insert_free(offset, length);
   num_free += length;
 }
+
+void StupidAllocator::init_rm_free(uint64_t offset, uint64_t length)
+{
+  dout(10) << __func__ << " " << offset << "~" << length << dendl;
+  interval_set<uint64_t> rm;
+  for (unsigned i = 0; i < free.size() && !rm.empty(); ++i) {
+    interval_set<uint64_t> overlap;
+    overlap.intersection_of(rm, free[i]);
+    if (!overlap.empty()) {
+      dout(20) << __func__ << " bin " << i << " rm " << overlap << dendl;
+      free[i].subtract(overlap);
+      rm.subtract(overlap);
+    }
+  }
+  assert(rm.empty());
+  num_free -= length;
+}
+
 
 void StupidAllocator::shutdown()
 {
