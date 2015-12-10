@@ -11,12 +11,11 @@
 #undef dout_prefix
 #define dout_prefix *_dout << "freelist "
 
-int FreelistManager::init(KeyValueDB *kvdb, string p)
+int FreelistManager::init(KeyValueDB *db, string p)
 {
   dout(1) << __func__ << " prefix " << p << dendl;
 
   // load state from kvstore
-  db = kvdb;
   prefix = p;
 
   KeyValueDB::Transaction txn = db->get_transaction();
