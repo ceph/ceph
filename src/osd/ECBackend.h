@@ -28,6 +28,8 @@
 #include "messages/MOSDECSubOpRead.h"
 #include "messages/MOSDECSubOpReadReply.h"
 
+const string OW_KEY = "ow_key";
+
 struct RecoveryMessages;
 class ECBackend : public PGBackend {
 public:
@@ -377,6 +379,80 @@ public:
   };
   friend ostream &operator<<(ostream &lhs, const Op &rhs);
 
+  class OverwriteInfo {
+    map<version_t, pair<uint64_t, uint64_t> > overwrite_history;
+  public:
+    void overwrite(version_t version, uint64_t off, uint64_t len) {
+      overwrite_history.insert(
+        make_pair(
+          version,
+          make_pair(off, len)));
+    }
+    void overwrite(version_t version, pair<uint64_t, uint64_t> to_write) {
+      overwrite_history.insert(
+        make_pair(
+          version, to_write));
+    }
+    void encode(bufferlist &bl) const;
+    void decode(bufferlist::iterator &bl);
+  };
+  typedef ceph::shared_ptr<OverwriteInfo> OverwriteInfoRef;
+
+  struct WriteOp : public Op {
+    uint64_t off;
+    uint64_t len;
+    uint32_t fadvise_flags;
+    bufferlist bl;
+
+    set<pg_shard_t> missing_on;
+    set<shard_id_t> missing_on_shards;
+
+    ObjectRecoveryInfo recovery_info;
+    ObjectRecoveryProgress recovery_progress;
+
+    bool pending_read;
+    enum state_t { IDLE, READING, WRITING, COMPLETE } state;
+
+    static const char* tostr(state_t state) {
+      switch (state) {
+      case ECBackend::WriteOp::IDLE:
+        return "IDLE";
+        break;
+      case ECBackend::WriteOp::READING:
+        return "READING";
+        break;
+      case ECBackend::WriteOp::WRITING:
+        return "WRITING";
+        break;
+      case ECBackend::WriteOp::COMPLETE:
+        return "COMPLETE";
+        break;
+      default:
+        assert(0);
+        return "";
+      }
+    }
+
+    // must be filled if state == WRITING
+    // map<shard_id_t, bufferlist> returned_data;
+    bufferlist returned_data;
+    map<string, bufferlist> xattrs;
+    ECUtil::HashInfoRef hinfo;
+    ObjectContextRef obc;
+    set<pg_shard_t> waiting_on_pushes;
+
+    // valid in state READING
+    pair<uint64_t, uint64_t> extent_requested;
+
+    // overwrite info
+    OverwriteInfoRef overwrite_info;
+
+    void dump(Formatter *f) const;
+
+    WriteOp() : pending_read(false), state(IDLE) {}
+  };
+  friend ostream &operator<<(ostream &lhs, const WriteOp &rhs);
+
   void continue_recovery_op(
     RecoveryOp &op,
     RecoveryMessages *m);
@@ -462,6 +538,23 @@ public:
   friend struct ReadCB;
   void check_op(Op *op);
   void start_write(Op *op);
+
+  friend struct OnOverwriteReadComplete;
+  void start_write2(Op *op);
+  void continue_write_op(WriteOp *op);
+  void handle_write_read_complete(
+    const hobject_t &hoid,
+    boost::tuple<uint64_t, uint64_t, map<pg_shard_t, bufferlist> > &to_read,
+    boost::optional<map<string, bufferlist> > attrs,
+    RecoveryMessages *m);
+
+  map<ceph_tid_t, WriteOp> tid_to_overwrite_map;
+  map<hobject_t, ceph_tid_t, hobject_t::BitwiseComparator> ongoing_write_tid;
+
+  // history overwrite
+  SharedPtrRegistry<hobject_t, OverwriteInfo, hobject_t::BitwiseComparator> overwrite_info_registry;
+  OverwriteInfoRef get_overwrite_info(const hobject_t &hoid);
+
 public:
   ECBackend(
     PGBackend::Listener *pg,
@@ -507,5 +600,6 @@ public:
     return sinfo.logical_to_next_chunk_offset(logical_size);
   }
 };
+WRITE_CLASS_ENCODER(ECBackend::OverwriteInfo);
 
 #endif

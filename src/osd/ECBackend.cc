@@ -137,6 +137,23 @@ ostream &operator<<(ostream &lhs, const ECBackend::Op &rhs)
   return lhs;
 }
 
+ostream &operator<<(ostream &lhs, const ECBackend::WriteOp &rhs)
+{
+  lhs << "Op(" << rhs.hoid
+      << " v=" << rhs.version
+      << " tt=" << rhs.trim_to
+      << " tid=" << rhs.tid
+      << " reqid=" << rhs.reqid;
+  if (rhs.client_op && rhs.client_op->get_req()) {
+    lhs << " client_op=";
+    rhs.client_op->get_req()->print(lhs);
+  }
+  lhs << " pending_commit=" << rhs.pending_commit
+      << " pending_apply=" << rhs.pending_apply
+      << ")";
+  return lhs;
+}
+
 ostream &operator<<(ostream &lhs, const ECBackend::RecoveryOp &rhs)
 {
   return lhs << "RecoveryOp("
@@ -203,6 +220,27 @@ struct OnRecoveryReadComplete :
     assert(res.errors.empty());
     assert(res.returned.size() == 1);
     pg->handle_recovery_read_complete(
+      hoid,
+      res.returned.back(),
+      res.attrs,
+      in.first);
+  }
+};
+
+struct OnOverwriteReadComplete :
+  public GenContext<pair<RecoveryMessages*, ECBackend::read_result_t& > &> {
+  ECBackend *pg;
+  hobject_t hoid;
+  set<int> want;
+  OnOverwriteReadComplete(ECBackend *pg, const hobject_t &hoid)
+    : pg(pg), hoid(hoid) {}
+  void finish(pair<RecoveryMessages *, ECBackend::read_result_t &> &in) {
+    ECBackend::read_result_t &res = in.second;
+    // FIXME???
+    assert(res.r == 0);
+    assert(res.errors.empty());
+    assert(res.returned.size() == 1);
+    pg->handle_write_read_complete(
       hoid,
       res.returned.back(),
       res.attrs,
@@ -983,19 +1021,32 @@ void ECBackend::handle_sub_write_reply(
   ECSubWriteReply &op)
 {
   map<ceph_tid_t, Op>::iterator i = tid_to_op_map.find(op.tid);
-  assert(i != tid_to_op_map.end());
+  // assert(i != tid_to_op_map.end());
+  Op *tid_op;
+  if (i == tid_to_op_map.end()) {
+    map<ceph_tid_t, WriteOp>::iterator i = tid_to_overwrite_map.find(op.tid);
+    assert(i != tid_to_overwrite_map.end());
+    tid_op = &(i->second);
+  } else {
+    tid_op = &(i->second);
+  }
   if (op.committed) {
-    assert(i->second.pending_commit.count(from));
-    i->second.pending_commit.erase(from);
+    // assert(i->second.pending_commit.count(from));
+    // i->second.pending_commit.erase(from);
+    assert(tid_op->pending_commit.count(from));
+    tid_op->pending_commit.erase(from);
     if (from != get_parent()->whoami_shard()) {
       get_parent()->update_peer_last_complete_ondisk(from, op.last_complete);
     }
   }
   if (op.applied) {
-    assert(i->second.pending_apply.count(from));
-    i->second.pending_apply.erase(from);
+    // assert(i->second.pending_apply.count(from));
+    // i->second.pending_apply.erase(from);
+    assert(tid_op->pending_apply.count(from));
+    tid_op->pending_apply.erase(from);
   }
-  check_op(&(i->second));
+  // check_op(&(i->second));
+  check_op(tid_op);
 }
 
 void ECBackend::handle_sub_read_reply(
@@ -1357,7 +1408,16 @@ void ECBackend::submit_transaction(
   )
 {
   assert(!tid_to_op_map.count(tid));
-  Op *op = &(tid_to_op_map[tid]);
+
+  ECTransaction *ec_tran = static_cast<ECTransaction*>(_t);
+  Op *op;
+  if (ec_tran->offset_write) {
+    op = &(tid_to_overwrite_map[tid]);
+    assert(!ongoing_write_tid.count(hoid));
+    ongoing_write_tid[hoid] = tid;
+  }
+  else
+    op = &(tid_to_op_map[tid]);
   op->hoid = hoid;
   op->version = at_version;
   op->trim_to = trim_to;
@@ -1371,7 +1431,8 @@ void ECBackend::submit_transaction(
   op->reqid = reqid;
   op->client_op = client_op;
   
-  op->t = static_cast<ECTransaction*>(_t);
+  // op->t = static_cast<ECTransaction*>(_t);
+  op->t = ec_tran;
 
   set<hobject_t, hobject_t::BitwiseComparator> need_hinfos;
   op->t->get_append_objects(&need_hinfos);
@@ -1414,7 +1475,10 @@ void ECBackend::submit_transaction(
   }
 
   dout(10) << __func__ << ": op " << *op << " starting" << dendl;
-  start_write(op);
+  if (ec_tran->offset_write)
+    start_write2(op);
+  else
+    start_write(op);
   writing.push_back(op);
   dout(10) << "onreadable_sync: " << op->on_local_applied_sync << dendl;
 }
@@ -1762,6 +1826,7 @@ void ECBackend::check_op(Op *op)
     dout(10) << __func__ << " Completing " << *op << dendl;
     writing.pop_front();
     tid_to_op_map.erase(op->tid);
+    tid_to_overwrite_map.erase(op->tid);
   }
   for (map<ceph_tid_t, Op>::iterator i = tid_to_op_map.begin();
        i != tid_to_op_map.end();
@@ -1838,6 +1903,265 @@ void ECBackend::start_write(Op *op) {
 	i->osd, r, get_parent()->get_epoch());
     }
   }
+}
+
+void ECBackend::start_write2(Op *_op)
+{
+  dout(10) << __func__ << _op->hoid << dendl;
+
+  list<pair<boost::tuple<uint64_t, uint64_t, uint32_t>,
+       pair<bufferlist*, Context*> > > to_read;
+
+  // copy the write op 
+  WriteOp *op = static_cast<WriteOp*>(_op);
+  op->off = op->t->get_writeop()->off;
+  op->len = op->t->get_writeop()->len;
+  op->fadvise_flags = op->t->get_writeop()->fadvise_flags;
+  op->bl.claim(op->t->get_writeop()->bl);
+
+  // get history overwrite info
+  op->overwrite_info = get_overwrite_info(op->hoid);
+
+  continue_write_op(op);
+  RecoveryMessages m;
+  // dispatch_recovery_messages(op, &m);
+}
+
+void ECBackend::continue_write_op(WriteOp *op)
+{
+  dout(10) << __func__ << *op << dendl;
+  switch (op->state) {
+    case WriteOp::IDLE: {
+      op->state = WriteOp::READING;
+      const hobject_t &hoid = op->hoid;
+      uint64_t off = op->t->get_writeop()->off;
+      uint64_t len = op->t->get_writeop()->len;
+      uint32_t flags = op->t->get_writeop()->fadvise_flags;
+      pair<uint64_t, uint64_t> tmp = sinfo.offset_len_to_stripe_bounds(make_pair(off, len));
+      list<boost::tuple<uint64_t, uint64_t, uint32_t> > to_read;
+      to_read.push_back(boost::make_tuple(tmp.first, tmp.second, flags));
+
+      set<int> want_to_read;
+      get_want_to_read_shards(&want_to_read);
+
+      set<pg_shard_t> shards;
+      int r = get_min_avail_to_read_shards(
+        hoid,
+        want_to_read,
+        false,
+        false,
+        &shards);
+      assert(r == 0);
+
+      OnOverwriteReadComplete *cb = new OnOverwriteReadComplete(
+        this, op->hoid);
+
+      map<hobject_t, read_request_t, hobject_t::BitwiseComparator> for_read_op;
+      for_read_op.insert(
+        make_pair(
+          hoid,
+          read_request_t(
+            hoid,
+            to_read,
+            shards,
+            false,
+            cb)));
+
+      start_read_op(
+        cct->_conf->osd_client_op_priority,
+        for_read_op,
+        OpRequestRef(),
+        false, false);
+
+      dout(10) << __func__ << ": IDLE return " << *op << dendl;
+      break;
+    }
+    case WriteOp::READING: {
+      op->state = WriteOp::WRITING;
+
+      // encode new bufferlist
+      set<int> want;
+      for (unsigned i = 0; i < ec_impl->get_chunk_count(); ++i) {
+        want.insert(i);
+      }
+      map<int, bufferlist> target;
+      int r = ECUtil::encode(sinfo, ec_impl, op->returned_data, want, &target);
+      assert(r == 0);
+
+      // prepare shard transaction
+      pair<uint64_t, uint64_t> to_write = sinfo.offset_len_to_stripe_bounds(
+        make_pair(op->off, op->len));
+      dout(0) << __func__ 
+          << " write_len " << to_write.second
+          << " data_len " << target[0].length()
+          << dendl;
+        
+      // set overwrite info
+      assert(op->overwrite_info);
+      op->overwrite_info->overwrite(
+        op->version.version,
+        to_write);
+
+      map<shard_id_t, ObjectStore::Transaction> trans;
+      pg_t pgid = get_parent()->get_info().pgid.pgid;
+      for (set<pg_shard_t>::const_iterator i =
+                get_parent()->get_actingbackfill_shards().begin();
+           i != get_parent()->get_actingbackfill_shards().end();
+           ++i) {
+        dout(0) << __func__ << " trans " << i->shard << dendl;
+        trans[i->shard];
+        trans[i->shard].set_use_tbl(parent->transaction_use_tbl());
+
+        op->pending_apply.insert(*i);
+        op->pending_commit.insert(*i);
+
+        // generate objectstore transaction
+        trans[i->shard].write(
+          coll_t(spg_t(pgid, i->shard)),
+          ghobject_t(op->hoid, op->version.version, i->shard),
+          sinfo.logical_to_prev_chunk_offset(to_write.first),
+          target[i->shard].length(),
+          target[i->shard],
+          op->fadvise_flags);
+        
+        bufferlist ow_buf;
+        ::encode(*(op->overwrite_info), ow_buf);
+        trans[i->shard].setattr(
+          coll_t(spg_t(pgid, i->shard)),
+          ghobject_t(op->hoid, ghobject_t::NO_GEN, i->shard),
+          OW_KEY,
+          ow_buf);
+
+        bool should_send = get_parent()->should_send_op(*i, op->hoid);
+        pg_stat_t stats =
+          should_send ?
+          get_info().stats :
+          parent->get_shard_info().find(*i)->second.stats;
+        
+        ECSubWrite sop(
+          get_parent()->whoami_shard(),
+          op->tid,
+          op->reqid,
+          op->hoid,
+          stats,
+          trans[i->shard],
+          op->version,
+          op->trim_to,
+          op->trim_rollback_to,
+          op->log_entries,
+          op->updated_hit_set_history,
+          op->temp_added,
+          op->temp_cleared);
+
+        if (*i == get_parent()->whoami_shard()) {
+          handle_sub_write(
+            get_parent()->whoami_shard(),
+            op->client_op,
+            sop,
+            op->on_local_applied_sync);
+          op->on_local_applied_sync = 0;
+        } else {
+          MOSDECSubOpWrite *r = new MOSDECSubOpWrite(sop);
+          r->set_priority(cct->_conf->osd_client_op_priority);
+          r->pgid = spg_t(get_parent()->primary_spg_t().pgid, i->shard);
+          r->map_epoch = get_parent()->get_epoch();
+          get_parent()->send_message_osd_cluster(
+            i->osd, r, get_parent()->get_epoch());
+        }
+
+      }
+
+      break;
+    }
+    case WriteOp::WRITING: {
+      break;
+    }
+    case RecoveryOp::COMPLETE:
+    default: {
+      assert(0);
+    };
+  }
+}
+
+void ECBackend::handle_write_read_complete(
+  const hobject_t &hoid,
+  boost::tuple<uint64_t, uint64_t, map<pg_shard_t, bufferlist> > &to_read,
+  boost::optional<map<string, bufferlist> > attrs,
+  RecoveryMessages *m)
+{
+  dout(10) << __func__ << ": returned " << hoid << " "
+       << "(" << to_read.get<0>()
+       << ", " << to_read.get<1>()
+       << ", " << to_read.get<2>()
+       << ")"
+       << dendl;
+
+  assert(ongoing_write_tid.count(hoid));
+  ceph_tid_t tid = ongoing_write_tid[hoid];
+  map<ceph_tid_t, WriteOp>::iterator iter = tid_to_overwrite_map.find(tid);
+  assert(iter != tid_to_overwrite_map.end());
+  WriteOp *op = &(iter->second);
+
+  // read data
+  map<int, bufferlist> from;
+  for(map<pg_shard_t, bufferlist>::iterator i = to_read.get<2>().begin();
+      i != to_read.get<2>().end();
+      ++i) {
+    from[i->first.shard].claim(i->second);
+  }  
+  // write data
+  bufferlist *old_data;
+  old_data = &(op->returned_data);
+  
+  int r = ECUtil::decode(sinfo, ec_impl, from, old_data);
+  assert(r == 0);
+  
+  // apply write data
+  old_data->copy_in(op->off, op->len, op->bl.c_str());
+  
+  // go into write state
+  continue_write_op(op);
+}
+
+void ECBackend::OverwriteInfo::encode(bufferlist& bl) const {
+  ENCODE_START(1, 1, bl);
+  ::encode(overwrite_history, bl);
+  ENCODE_FINISH(bl);
+}
+
+void ECBackend::OverwriteInfo::decode(bufferlist::iterator &bl) {
+  DECODE_START(1, bl);
+  ::decode(overwrite_history, bl);
+  DECODE_FINISH(bl);
+}
+
+ECBackend::OverwriteInfoRef ECBackend::get_overwrite_info(const hobject_t &hoid) {
+  dout(10) << __func__ << ": get overwrite info on " << hoid << dendl;
+  OverwriteInfoRef ref = overwrite_info_registry.lookup(hoid);
+  if (!ref) {
+    dout(10) << __func__ << ": not in cache " << hoid << dendl;
+    struct stat st;
+    int r = store->stat(
+      coll,
+      ghobject_t(hoid, ghobject_t::NO_GEN, get_parent()->whoami_shard().shard),
+      &st);
+    OverwriteInfo ow_info;
+    if (r >= 0) {
+      dout(10) << __func__ << ": found on disk, size " << st.st_size << dendl;
+      bufferlist bl;
+      r = store->getattr(
+        coll,
+        ghobject_t(hoid, ghobject_t::NO_GEN, get_parent()->whoami_shard().shard),
+        OW_KEY,
+        bl);
+      if (r >= 0) {
+        bufferlist::iterator bp = bl.begin();
+        ::decode(ow_info, bp);
+      }
+    }
+    ref = overwrite_info_registry.lookup_or_create(hoid, ow_info);
+  }
+  return ref;
 }
 
 int ECBackend::objects_read_sync(

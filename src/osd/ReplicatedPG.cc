@@ -4788,10 +4788,11 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	if (pool.info.has_flag(pg_pool_t::FLAG_WRITE_FADVISE_DONTNEED))
 	  op.flags = op.flags | CEPH_OSD_OP_FLAG_FADVISE_DONTNEED;
 
+        bool offset_write = false;
 	if (pool.info.requires_aligned_append() &&
 	    (op.extent.offset % pool.info.required_alignment() != 0)) {
-	  result = -EOPNOTSUPP;
-	  break;
+	  // result = -EOPNOTSUPP;
+	  // break;
 	}
 
 	if (!obs.exists) {
@@ -4803,11 +4804,14 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	} else if (op.extent.offset == oi.size) {
 	  ctx->mod_desc.append(oi.size);
 	} else {
-	  ctx->mod_desc.mark_unrollbackable();
+	  // ctx->mod_desc.mark_unrollbackable();
 	  if (pool.info.require_rollback()) {
-	    result = -EOPNOTSUPP;
-	    break;
-	  }
+            offset_write = true;
+            // result = -EOPNOTSUPP;
+	    // break;
+	  } else {
+	    ctx->mod_desc.mark_unrollbackable();
+          }
 	}
 
         if (seq && (seq > op.extent.truncate_seq) &&
@@ -4844,7 +4848,10 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	if (result < 0)
 	  break;
 	if (pool.info.require_rollback()) {
-	  t->append(soid, op.extent.offset, op.extent.length, osd_op.indata, op.flags);
+          if (offset_write)
+	    t->write(soid, op.extent.offset, op.extent.length, osd_op.indata, op.flags);
+          else
+	    t->append(soid, op.extent.offset, op.extent.length, osd_op.indata, op.flags);
 	} else {
 	  t->write(soid, op.extent.offset, op.extent.length, osd_op.indata, op.flags);
 	}
