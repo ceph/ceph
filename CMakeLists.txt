@@ -240,13 +240,12 @@ option(HAVE_LTTNG "LTTng tracing is enabled" ON)
 endif(${HAVE_LTTNG})
 
 #option for Babeltrace
-option(HAVE_BABELTRACE "Babeltrace libraries are enabled" ON)
-if(${HAVE_BABELTRACE})
+option(WITH_BABELTRACE "Babeltrace libraries are enabled" ON)
+if(WITH_BABELTRACE)
   find_package(babeltrace REQUIRED)
-  set(WITH_BABELTRACE ${BABELTRACE_FOUND})
   set(HAVE_BABELTRACE_BABELTRACE_H ${BABELTRACE_FOUND})
   set(HAVE_BABELTRACE_CTF_EVENTS_H ${BABELTRACE_FOUND})
-endif(${HAVE_BABELTRACE})
+endif(WITH_BABELTRACE)
 
 find_package(ZLIB REQUIRED)
 find_package(BZip2 REQUIRED)

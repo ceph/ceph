@@ -53,7 +53,7 @@ find_program(BABELTRACE_EXECUTABLE
 # handle the QUIETLY and REQUIRED arguments and set PRELUDE_FOUND to TRUE if
 # all listed variables are TRUE
 include(FindPackageHandleStandardArgs)
-FIND_PACKAGE_HANDLE_STANDARD_ARGS(BABELTRACE
+FIND_PACKAGE_HANDLE_STANDARD_ARGS(babeltrace
                                   REQUIRED_VARS BABELTRACE_INCLUDE_DIR BABELTRACE_LIBRARY_DIR)
 # VERSION FPHSA options not handled by CMake version < 2.8.2)
 #                                  VERSION_VAR)

@@ -235,9 +235,6 @@
 /* Defined if LTTNG */
 #cmakedefine WITH_LTTNG 1
 
-/* Defined if Babeltrace */
-#cmakedefine WITH_BABELTRACE 1
-
 /* Define to 1 if you have the <babeltrace/babeltrace.h> header file. */
 #cmakedefine HAVE_BABELTRACE_BABELTRACE_H 1
 
