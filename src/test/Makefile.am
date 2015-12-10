@@ -80,6 +80,7 @@ check_SCRIPTS += \
 	test/mon/mon-scrub.sh \
 	test/osd/osd-scrub-repair.sh \
 	test/osd/osd-config.sh \
+	test/osd/osd-reuse-id.sh \
 	test/osd/osd-bench.sh \
 	test/osd/osd-copy-from.sh \
 	test/mon/mon-handle-forward.sh \
