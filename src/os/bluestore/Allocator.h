@@ -36,7 +36,8 @@ public:
 
   virtual void dump(std::ostream& out) = 0;
 
-  virtual int init(FreelistManager *fm) = 0;
+  virtual void init_add_free(uint64_t offset, uint64_t length) = 0;
+
   virtual void shutdown() = 0;
 
   static Allocator *create(string type);
