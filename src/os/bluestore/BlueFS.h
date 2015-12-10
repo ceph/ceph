@@ -259,6 +259,7 @@ public:
   int compact();
 
   int add_block_device(unsigned bdev, string path);
+  uint64_t get_block_device_size(unsigned bdev);
 
   /// gift more block space
   void add_block_extent(unsigned bdev, uint64_t offset, uint64_t len);
