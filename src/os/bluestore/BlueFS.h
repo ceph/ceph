@@ -168,7 +168,7 @@ private:
     FileReader *h,   ///< [in] read from here
     uint64_t offset, ///< [in] offset
     size_t len,      ///< [in] this many bytes
-    bufferptr *bp,   ///< [out] optional: reference the result here
+    bufferlist *outbl,   ///< [out] optional: reference the result here
     char *out);      ///< [out] optional: or copy it here
 
   void _invalidate_cache(FileRef f, uint64_t offset, uint64_t length);
@@ -246,9 +246,9 @@ public:
     _fsync(h);
   }
   int read(FileReader *h, uint64_t offset, size_t len,
-	   bufferptr *bp, char *out) {
+	   bufferlist *outbl, char *out) {
     Mutex::Locker l(lock);
-    return _read(h, offset, len, bp, out);
+    return _read(h, offset, len, outbl, out);
   }
   void invalidate_cache(FileRef f, uint64_t offset, uint64_t len) {
     Mutex::Locker l(lock);
