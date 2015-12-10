@@ -67,6 +67,11 @@ const string PREFIX_OMAP = "M"; // u64 + keyname -> value
 const string PREFIX_WAL = "L";  // write ahead log
 const string PREFIX_ALLOC = "B";  // block allocator
 
+// write a label in the first block.  always use this size.  note that
+// bluefs makes a matching assumption about the location of its
+// superblock (always the second block of the device).
+#define BDEV_LABEL_BLOCK_SIZE  4096
+
 /*
  * object name key structure
  *
@@ -731,8 +736,13 @@ void BlueStore::_shutdown_logger()
   // XXX
 }
 
-int BlueStore::peek_journal_fsid(uuid_d *fsid)
+int BlueStore::get_block_device_fsid(const string& path, uuid_d *fsid)
 {
+  bluestore_bdev_label_t label;
+  int r = _read_bdev_label(path, &label);
+  if (r < 0)
+    return r;
+  *fsid = label.osd_uuid;
   return 0;
 }
 
@@ -760,16 +770,107 @@ void BlueStore::_close_path()
   fs = NULL;
 }
 
-int BlueStore::_open_bdev()
+int BlueStore::_write_bdev_label(string path, bluestore_bdev_label_t label)
 {
+  dout(10) << __func__ << " path " << path << " label " << label << dendl;
+  bufferlist bl;
+  ::encode(label, bl);
+  uint32_t crc = bl.crc32c(-1);
+  ::encode(crc, bl);
+  assert(bl.length() <= BDEV_LABEL_BLOCK_SIZE);
+  bufferptr z(BDEV_LABEL_BLOCK_SIZE - bl.length());
+  z.zero();
+  bl.append(z);
+
+  int fd = ::open(path.c_str(), O_WRONLY);
+  if (fd < 0) {
+    fd = errno;
+    derr << __func__ << " failed to open " << path << ": " << cpp_strerror(fd)
+	 << dendl;
+    return fd;
+  }
+  int r = bl.write_fd(fd);
+  if (r < 0) {
+    derr << __func__ << " failed to write to " << path
+	 << ": " << cpp_strerror(r) << dendl;
+  }
+  VOID_TEMP_FAILURE_RETRY(::close(fd));
+  return r;
+}
+
+int BlueStore::_read_bdev_label(string path, bluestore_bdev_label_t *label)
+{
+  dout(10) << __func__ << dendl;
+  int fd = ::open(path.c_str(), O_RDONLY);
+  if (fd < 0) {
+    fd = errno;
+    derr << __func__ << " failed to open " << path << ": " << cpp_strerror(fd)
+	 << dendl;
+    return fd;
+  }
+  bufferlist bl;
+  int r = bl.read_fd(fd, BDEV_LABEL_BLOCK_SIZE);
+  if (r < 0) {
+    derr << __func__ << " failed to read from " << path
+	 << ": " << cpp_strerror(r) << dendl;
+  }
+  VOID_TEMP_FAILURE_RETRY(::close(fd));
+
+  uint32_t crc, expected_crc;
+  bufferlist::iterator p = bl.begin();
+  try {
+    ::decode(*label, p);
+    bufferlist t;
+    t.substr_of(bl, 0, p.get_off());
+    crc = t.crc32c(-1);
+    ::decode(expected_crc, p);
+  }
+  catch (buffer::error& e) {
+    return -EINVAL;
+  }
+  if (crc != expected_crc) {
+    derr << __func__ << " bad crc on label, expected " << expected_crc
+	 << " != actual " << crc << dendl;
+    return -EIO;
+  }
+  dout(10) << __func__ << " got " << *label << dendl;
+  return 0;
+}
+
+int BlueStore::_open_bdev(bool create)
+{
+  bluestore_bdev_label_t label;
   assert(bdev == NULL);
   bdev = new BlockDevice(aio_cb, static_cast<void*>(this));
   string p = path + "/block";
   int r = bdev->open(p);
-  if (r < 0) {
-    delete bdev;
-    bdev = NULL;
+  if (r < 0)
+    goto fail;
+
+  if (create) {
+    label.osd_uuid = fsid;
+    label.size = bdev->get_size();
+    label.btime = ceph_clock_now(NULL);
+    label.description = "main";
+    r = _write_bdev_label(p, label);
+    if (r < 0)
+      goto fail;
+  } else {
+    r = _read_bdev_label(p, &label);
+    if (r < 0)
+      goto fail;
+    if (label.osd_uuid != fsid) {
+      derr << __func__ << " bdev " << p << " fsid " << label.osd_uuid
+	   << " does not match our fsid " << fsid << dendl;
+      r = -EIO;
+      goto fail;
+    }
   }
+  return 0;
+
+ fail:
+  delete bdev;
+  bdev = NULL;
   return r;
 }
 
@@ -910,7 +1011,7 @@ bool BlueStore::test_mount_in_use()
     goto out_path;
   r = _lock_fsid();
   if (r < 0)
-    ret = true; // if we can't lock, it is in used
+    ret = true; // if we can't lock, it is in use
   _close_fsid();
  out_path:
   _close_path();
@@ -942,14 +1043,35 @@ int BlueStore::_open_db(bool create)
     struct stat st;
     if (::stat(bfn, &st) == 0) {
       bluefs->add_block_device(1, bfn);
+      // label in first 4k
+      bluestore_bdev_label_t label;
       if (create) {
-	bluefs->add_block_extent(1, 0, bluefs->get_block_device_size(1));
+	label.osd_uuid = fsid;
+	label.size = bluefs->get_block_device_size(1);
+	label.btime = ceph_clock_now(NULL);
+	label.description = "bluefs wal";
+	int r = _write_bdev_label(bfn, label);
+	if (r < 0)
+	  return r;
+	// reset belongs to bluefs
+	bluefs->add_block_extent(
+	  1, BDEV_LABEL_BLOCK_SIZE,
+	  bluefs->get_block_device_size(1) - BDEV_LABEL_BLOCK_SIZE);
+      } else {
+	int r = _read_bdev_label(bfn, &label);
+	if (r < 0)
+	  return r;
+	if (label.osd_uuid != fsid) {
+	  derr << __func__ << " bdev " << bfn << " fsid " << label.osd_uuid
+	       << " does not match our fsid " << fsid << dendl;
+	  return -EIO;
+	}
       }
     }
     if (create) {
-      bluefs->mkfs(0, 4096);
+      bluefs->mkfs(fsid);
     }
-    int r = bluefs->mount(0, 4096);
+    int r = bluefs->mount();
     if (r < 0) {
       derr << __func__ << " failed bluefs mount: " << cpp_strerror(r) << dendl;
       delete bluefs;
@@ -1240,9 +1362,7 @@ int BlueStore::mkfs()
     } else {
       dout(1) << __func__ << " using provided fsid " << fsid << dendl;
     }
-    r = _write_fsid();
-    if (r < 0)
-      goto out_close_fsid;
+    // we'll write it last.
   } else {
     if (!fsid.is_zero() && fsid != old_fsid) {
       derr << __func__ << " on-disk fsid " << old_fsid
@@ -1251,7 +1371,8 @@ int BlueStore::mkfs()
       goto out_close_fsid;
     }
     fsid = old_fsid;
-    dout(1) << __func__ << " fsid is already set to " << fsid << dendl;
+    dout(1) << __func__ << " already created, fsid is " << fsid << dendl;
+    goto out_close_fsid;
   }
 
   // block symlink/file
@@ -1314,7 +1435,7 @@ int BlueStore::mkfs()
     }
   }
 
-  r = _open_bdev();
+  r = _open_bdev(true);
   if (r < 0)
     goto out_close_fsid;
 
@@ -1348,10 +1469,12 @@ int BlueStore::mkfs()
     db->submit_transaction_sync(t);
   }
 
-  // FIXME: superblock
-
-  dout(10) << __func__ << " success" << dendl;
-  r = 0;
+  // indicate mkfs completion/success by writing the fsid file
+  r = _write_fsid();
+  if (r == 0)
+    dout(10) << __func__ << " success" << dendl;
+  else
+    derr << __func__ << " error writing fsid: " << cpp_strerror(r) << dendl;
 
   _close_alloc();
  out_close_db:
@@ -1390,7 +1513,7 @@ int BlueStore::mount()
   if (r < 0)
     goto out_fsid;
 
-  r = _open_bdev();
+  r = _open_bdev(false);
   if (r < 0)
     goto out_fsid;
 
@@ -1498,7 +1621,7 @@ int BlueStore::fsck()
   if (r < 0)
     goto out_fsid;
 
-  r = _open_bdev();
+  r = _open_bdev(false);
   if (r < 0)
     goto out_fsid;
 
