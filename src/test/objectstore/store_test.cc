@@ -468,6 +468,53 @@ TEST_P(StoreTest, ManySmallWrite) {
   }
 }
 
+TEST_P(StoreTest, SmallSkipFront) {
+  ObjectStore::Sequencer osr("test");
+  int r;
+  coll_t cid;
+  ghobject_t a(hobject_t(sobject_t("Object 1", CEPH_NOSNAP)));
+  {
+    ObjectStore::Transaction t;
+    t.create_collection(cid, 0);
+    cerr << "Creating collection " << cid << std::endl;
+    r = store->apply_transaction(&osr, t);
+    ASSERT_EQ(r, 0);
+  }
+  {
+    ObjectStore::Transaction t;
+    t.touch(cid, a);
+    t.truncate(cid, a, 3000);
+    r = store->apply_transaction(&osr, t);
+    ASSERT_EQ(r, 0);
+  }
+  {
+    bufferlist bl;
+    bufferptr bp(4096);
+    memset(bp.c_str(), 1, 4096);
+    bl.append(bp);
+    ObjectStore::Transaction t;
+    t.write(cid, a, 4096, 4096, bl);
+    r = store->apply_transaction(&osr, t);
+    ASSERT_EQ(r, 0);
+  }
+  {
+    bufferlist bl;
+    ASSERT_EQ(8192, store->read(cid, a, 0, 8192, bl));
+    for (unsigned i=0; i<4096; ++i)
+      ASSERT_EQ(0, bl[i]);
+    for (unsigned i=4096; i<8192; ++i)
+      ASSERT_EQ(1, bl[i]);
+  }
+  {
+    ObjectStore::Transaction t;
+    t.remove(cid, a);
+    t.remove_collection(cid);
+    cerr << "Cleaning" << std::endl;
+    r = store->apply_transaction(&osr, t);
+    ASSERT_EQ(r, 0);
+  }
+}
+
 TEST_P(StoreTest, SmallSequentialUnaligned) {
   ObjectStore::Sequencer osr("test");
   int r;
