@@ -371,5 +371,5 @@ int BlockDevice::read(uint64_t off, uint64_t len, bufferlist *pbl, IOContext *io
   pbl->push_back(p);
  out:
   _aio_finish(ioc, off, len);
-  return r;
+  return r < 0 ? r : 0;
 }
