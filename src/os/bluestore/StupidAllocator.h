@@ -41,9 +41,13 @@ public:
   void commit_start();
   void commit_finish();
 
+  uint64_t get_free();
+
   void dump(ostream& out);
 
   void init_add_free(uint64_t offset, uint64_t length);
+  void init_rm_free(uint64_t offset, uint64_t length);
+
   void shutdown();
 };
 

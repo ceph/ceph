@@ -13,8 +13,8 @@
 #define CEPH_OS_NEWSTORE_ALLOCATOR_H
 
 #include "kv/KeyValueDB.h"
-
 #include <ostream>
+#include "include/assert.h"
 
 class FreelistManager;
 
@@ -37,6 +37,9 @@ public:
   virtual void dump(std::ostream& out) = 0;
 
   virtual void init_add_free(uint64_t offset, uint64_t length) = 0;
+  virtual void init_rm_free(uint64_t offset, uint64_t length) = 0;
+
+  virtual uint64_t get_free() = 0;
 
   virtual void shutdown() = 0;
 
