@@ -50,14 +50,32 @@ namespace {
     struct rgw_file_handle* parent_fh;
     RGWFileHandle* rgw_fh; // alias into fh
 
+    struct state {
+      bool readdir;
+      state() : readdir(false) {}
+    } state;
+
     obj_rec(string _name, struct rgw_file_handle* _fh,
 	    struct rgw_file_handle* _parent_fh, RGWFileHandle* _rgw_fh)
       : name(std::move(_name)), fh(_fh), parent_fh(_parent_fh),
 	rgw_fh(_rgw_fh) {}
+
+    friend ostream& operator<<(ostream& os, const obj_rec& rec);
   };
+
+  ostream& operator<<(ostream& os, const obj_rec& rec)
+  {
+    RGWFileHandle* rgw_fh = rec.rgw_fh;
+    if (rgw_fh) {
+      const char* type = rgw_fh->is_dir() ? "DIR " : "FILE ";
+      os << rec.name << ": "
+	 << type;
+    }
+    return os;
+  }
   
   std::stack<obj_rec> obj_stack;
-  std::deque<obj_rec> obj_queue;
+  std::deque<obj_rec> cleanup_queue;
 
   struct {
     int argc;
@@ -78,19 +96,18 @@ TEST(LibRGW, MOUNT) {
   ASSERT_NE(fs, nullptr);
 }
 
-#if 0
 extern "C" {
   static bool r1_cb(const char* name, void *arg, uint64_t offset) {
-    // don't need arg--it would point to fids1
-    buckets.push_back(fid_type(name, offset, nullptr /* handle */));
-    return true; /* XXX ? */
+    obj_stack.push(
+      obj_rec{name, nullptr, nullptr, nullptr});
+    return true; /* XXX */
   }
 }
-#endif
 
 TEST(LibRGW, ENUMERATE1) {
   int rc;
-  obj_stack.push(obj_rec{bucket_name, nullptr, nullptr, nullptr});
+  obj_stack.push(
+    obj_rec{bucket_name, nullptr, nullptr, nullptr});
   while (! obj_stack.empty()) {
     auto& elt = obj_stack.top();
     if (! elt.fh) {
@@ -100,19 +117,52 @@ TEST(LibRGW, ENUMERATE1) {
 		      RGW_LOOKUP_FLAG_NONE);
       ASSERT_EQ(rc, 0);
       ASSERT_NE(elt.fh, nullptr);
-      elt.parent_fh = parent_fh;
-      // what next? push?
+      elt.rgw_fh = get_rgwfh(elt.fh);
+      elt.parent_fh = elt.rgw_fh->get_parent()->get_fh();
+      ASSERT_EQ(elt.parent_fh, parent_fh);
+      continue;
     } else {
-      // we have a leaf in some state in top position
-      // 1. finish it?
-      // 2. print it?
-      // 3. push it onto obj_queue for cleanup
+      // we have a handle in some state in top position
+      switch(elt.fh->fh_type) {
+      case RGW_FS_TYPE_DIRECTORY:
+	if (! elt.state.readdir) {
+	  // descending
+	  uint64_t offset;
+	  bool eof; // XXX
+	  rc = rgw_readdir(fs, elt.parent_fh, &offset, r1_cb,
+			   &obj_stack, &eof);
+	  elt.state.readdir = true;
+	  ASSERT_EQ(rc, 0);
+	  ASSERT_TRUE(eof);
+	} else {
+	  // ascending
+	  std::cout << elt << std::endl;
+	  cleanup_queue.push_back(elt);
+	  obj_stack.pop();
+	}
+	break;
+      case RGW_FS_TYPE_FILE:
+	// ascending
+	std::cout << elt << std::endl;
+	cleanup_queue.push_back(elt);
+	obj_stack.pop();
+	break;
+      default:
+	abort();
+      };
     }
   }
 }
 
 TEST(LibRGW, CLEANUP) {
-  // do nothing
+  int rc;
+  for (auto& elt : cleanup_queue) {
+    if (elt.fh) {
+      rc = rgw_fh_rele(fs, elt.fh, 0 /* flags */);
+      ASSERT_EQ(rc, 0);
+    }
+  }
+  cleanup_queue.clear();
 }
 
 TEST(LibRGW, UMOUNT) {
