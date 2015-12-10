@@ -569,6 +569,7 @@ void BlueFS::_drop_link(FileRef file)
   --file->refs;
   if (file->refs == 0) {
     dout(20) << __func__ << " destroying " << file->fnode << dendl;
+    assert(file->num_reading.read() == 0);
     log_t.op_file_remove(file->fnode.ino);
     for (auto r : file->fnode.extents) {
       alloc[r.bdev]->release(r.offset, r.length);
@@ -588,6 +589,9 @@ int BlueFS::_read(
   Mutex::Locker l(h->lock);
   dout(10) << __func__ << " h " << h << " " << off << "~" << len
 	   << " from " << h->file->fnode << dendl;
+
+  h->file->num_reading.inc();
+
   if (!h->ignore_eof &&
       off + len > h->file->fnode.size) {
     if (off > h->file->fnode.size)
@@ -652,6 +656,7 @@ int BlueFS::_read(
 
   dout(20) << __func__ << " got " << ret << dendl;
   assert(!outbl || (int)outbl->length() == ret);
+  h->file->num_reading.dec();
   return ret;
 }
 
@@ -834,6 +839,7 @@ int BlueFS::_flush_range(FileWriter *h, uint64_t offset, uint64_t length)
 	   << " " << offset << "~" << length
 	   << " to " << h->file->fnode << dendl;
   assert(!h->file->deleted);
+  assert(h->file->num_readers.read() == 0);
 
   if (offset + length <= h->pos)
     return 0;
