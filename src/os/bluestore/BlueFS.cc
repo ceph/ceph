@@ -492,6 +492,9 @@ int BlueFS::_replay()
 	  assert(q != dir_map.end());
 	  map<string,FileRef>::iterator r = q->second->file_map.find(filename);
 	  assert(r != q->second->file_map.end());
+	  if (--r->second->refs == 0) {
+	    file_map.erase(r->second->fnode.ino);
+	  }
 	  q->second->file_map.erase(r);
 	}
 	break;
@@ -1306,6 +1309,8 @@ int BlueFS::stat(const string& dirname, const string& filename,
     return -ENOENT;
   }
   File *file = q->second.get();
+  dout(10) << __func__ << " " << dirname << "/" << filename
+	   << " " << file->fnode << dendl;
   if (size)
     *size = file->fnode.size;
   if (mtime)
