@@ -16,6 +16,7 @@
 #include <boost/range/adaptor/reversed.hpp>
 #include <boost/container/flat_map.hpp>
 #include <boost/variant.hpp>
+#include <boost/utility/string_ref.hpp>
 #include "xxhash.h"
 #include "include/buffer.h"
 #include "common/cohort_lru.h"
@@ -282,8 +283,8 @@ namespace rgw {
       int reserve = 0;
       RGWFileHandle* tfh = this;
       while (tfh && !tfh->is_bucket()) {
-	segments.push_back(&parent->object_name());
-	reserve += (1 + parent->object_name().length());
+	segments.push_back(&tfh->object_name());
+	reserve += (1 + tfh->object_name().length());
 	tfh = tfh->parent.get();
       }
       bool first = true;
@@ -302,10 +303,10 @@ namespace rgw {
       if (depth <= 1)
 	return fh_key(fhk.fh_hk.object, name.c_str());
       else {
-	std::vector<const std::string*> segments = { &name, &object_name() };
-	RGWFileHandle* tfh = parent.get();
+	std::vector<const std::string*> segments;
+	RGWFileHandle* tfh = this;
 	while (tfh && !tfh->is_bucket()) {
-	   segments.push_back(&parent->object_name());
+	   segments.push_back(&tfh->object_name());
 	   tfh = tfh->parent.get();
 	}
 	/* hash path */
@@ -644,7 +645,6 @@ public:
   }
 
   virtual int header_init() {
-
     struct req_state* s = get_state();
     s->info.method = "GET";
     s->op = OP_GET;
@@ -760,6 +760,8 @@ public:
     s->user = user;
 
     prefix = rgw_fh->full_object_name();
+    if (prefix.length() > 0)
+      prefix += "/";
     delimiter = '/';
 
     return 0;
@@ -782,19 +784,43 @@ public:
   }
 
   virtual void send_response() {
-    size_t size = objs.size();
-    for (const auto& iter : objs) {
+    size_t size = objs.size();for (const auto& iter : objs) {
+      size_t last_del = iter.key.name.find_last_of('/');
+      boost::string_ref sref;
+      if (last_del != string::npos)
+	sref = boost::string_ref{iter.key.name.substr(last_del+1)};
+      else
+	sref = boost::string_ref{iter.key.name};
+	
+      std::cout << "RGWListBucketRequest "
+		<< __func__ << " " << "list uri=" << uri << " "
+		<< " prefix=" << prefix << " "
+		<< " obj path=" << iter.key.name
+		<< " (" << sref << ")" << ""
+		<< std::endl;
       /* call me maybe */
-      this->operator()(iter.key.name, iter.key.name,
+      this->operator()(sref.data(), sref.data(),
 		       (ix == size-1) ? true : false);
       ++ix;
     }
     size += common_prefixes.size();
     for (auto& iter : common_prefixes) {
-      std::string& pref = const_cast<std::string&>(iter.first);
-      if (pref.back() == '/')
-	pref.pop_back();
-      this->operator()(pref, pref, (ix == size-1) ? true : false);
+      if (iter.first.back() == '/')
+	const_cast<std::string&>(iter.first).pop_back();
+
+      size_t last_del = iter.first.find_last_of('/');
+      boost::string_ref sref;
+      if (last_del != string::npos)
+	sref = boost::string_ref{iter.first.substr(last_del+1)};
+      else
+	sref = boost::string_ref{iter.first};
+
+      std::cout << "RGWListBucketRequest "
+		<< __func__ << " " << "list uri=" << uri << " "
+		<< " prefix=" << prefix << " "
+		<< " cpref=" << sref << " (not chomped)"
+		<< std::endl;
+      this->operator()(sref.data(), sref.data(), (ix == size-1) ? true : false);
       ++ix;
     }
   }
@@ -1366,15 +1392,26 @@ public:
   }
 
   virtual void send_response() {
+    struct req_state* s = get_state();
     // try objects
     for (const auto& iter : objs) {
       path = iter.key.name;
+      std::cout << "RGWStatLeafRequest "
+		<< __func__ << " " << "list uri=" << s->relative_uri << " "
+		<< " prefix=" << prefix << " "
+		<< " obj path=" << path << ""
+		<< std::endl;
       matched = true;
       return;
     }
     // try prefixes
     for (auto& iter : common_prefixes) {
       path = iter.first;
+      std::cout << "RGWStatLeafRequest "
+		<< __func__ << " " << "list uri=" << s->relative_uri << " "
+		<< " prefix=" << prefix << " "
+		<< " pref path=" << path << " (not chomped)"
+		<< std::endl;
       matched = true;
       break;
     }
