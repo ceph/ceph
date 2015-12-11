@@ -195,6 +195,7 @@ EXTRA_DIST += \
   rocksdb/include/rocksdb/types.h \
   rocksdb/include/rocksdb/utilities/db_ttl.h \
   rocksdb/include/rocksdb/utilities/document_db.h \
+  rocksdb/include/rocksdb/utilities/env_mirror.h \
   rocksdb/include/rocksdb/utilities/geo_db.h \
   rocksdb/include/rocksdb/utilities/json_document.h \
   rocksdb/include/rocksdb/utilities/leveldb_options.h \
@@ -683,6 +684,7 @@ EXTRA_DIST += \
   rocksdb/utilities/document/document_db_test.cc \
   rocksdb/utilities/document/json_document.cc \
   rocksdb/utilities/document/json_document_test.cc \
+  rocksdb/utilities/env_mirror.cc \
   rocksdb/utilities/geodb/geodb_impl.cc \
   rocksdb/utilities/geodb/geodb_impl.h \
   rocksdb/utilities/geodb/geodb_test.cc \
