@@ -3088,7 +3088,9 @@ bool CDir::scrub_local()
     scrub_infop->last_local.time = ceph_clock_now(g_ceph_context);
     scrub_infop->last_local.version = get_projected_version();
     scrub_infop->last_scrub_dirty = true;
-  } else {
+  } else if (inode->scrub_infop &&
+	     inode->scrub_infop->header &&
+	     inode->scrub_infop->header->repair) {
     cache->repair_dirfrag_stats(this, NULL);
   }
   return rval;

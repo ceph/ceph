@@ -3942,7 +3942,10 @@ next:
 	  !nest_info.same_sums(in->inode.rstat)) {
         results->raw_stats.error_str
 	  << "freshly-calculated rstats don't match existing ones";
-	in->mdcache->repair_inode_stats(in, NULL);
+	if (in->scrub_infop &&
+	    in->scrub_infop->header &&
+	    in->scrub_infop->header->repair)
+	  in->mdcache->repair_inode_stats(in, NULL);
 	goto next;
       }
       results->raw_stats.passed = true;
