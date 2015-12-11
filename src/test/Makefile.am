@@ -433,9 +433,11 @@ bin_DEBUGPROGRAMS += ceph_test_objectcacher_stress
 ceph_test_cfuse_cache_invalidate_SOURCES = test/test_cfuse_cache_invalidate.cc
 bin_DEBUGPROGRAMS += ceph_test_cfuse_cache_invalidate
 
+if LINUX
 ceph_test_get_blkdev_size_SOURCES = test/test_get_blkdev_size.cc
 ceph_test_get_blkdev_size_LDADD = $(LIBCOMMON)
 bin_DEBUGPROGRAMS += ceph_test_get_blkdev_size
+endif
 
 noinst_HEADERS += \
 	test/bench/backend.h \
