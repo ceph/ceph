@@ -1734,8 +1734,10 @@ bool MDSRankDispatcher::handle_asok_command(
     }
   } else if (command == "scrub_path") {
     string path;
+    vector<string> scrubop_vec;
+    cmd_getval(g_ceph_context, cmdmap, "scrubops", scrubop_vec);
     cmd_getval(g_ceph_context, cmdmap, "path", path);
-    command_scrub_path(f, path);
+    command_scrub_path(f, path, scrubop_vec);
   } else if (command == "tag path") {
     string path;
     cmd_getval(g_ceph_context, cmdmap, "path", path);
@@ -1874,12 +1876,20 @@ void MDSRankDispatcher::dump_sessions(const SessionFilter &filter, Formatter *f)
   f->close_section(); //sessions
 }
 
-void MDSRank::command_scrub_path(Formatter *f, const string& path)
+void MDSRank::command_scrub_path(Formatter *f, const string& path, vector<string>& scrubop_vec)
 {
+  bool recursive = false;
+  bool repair = false;
+  for (vector<string>::iterator i = scrubop_vec.begin() ; i != scrubop_vec.end(); ++i) {
+    if (*i == "recursive")
+      recursive = true;
+    else if (*i == "repair")
+      repair = true;
+  }
   C_SaferCond scond;
   {
     Mutex::Locker l(mds_lock);
-    mdcache->enqueue_scrub(path, "", false, f, &scond);
+    mdcache->enqueue_scrub(path, "", recursive, repair, f, &scond);
   }
   scond.wait();
   // scrub_dentry() finishers will dump the data for us; we're done!
@@ -1891,7 +1901,7 @@ void MDSRank::command_tag_path(Formatter *f,
   C_SaferCond scond;
   {
     Mutex::Locker l(mds_lock);
-    mdcache->enqueue_scrub(path, tag, true, f, &scond);
+    mdcache->enqueue_scrub(path, tag, true, false, f, &scond);
   }
   scond.wait();
 }
