@@ -262,7 +262,6 @@ void WBThrottle::clear_object(const ghobject_t &hoid)
 void WBThrottle::throttle()
 {
   Mutex::Locker l(lock);
-  while (!stopping && beyond_limit()) {
+  while (!stopping && need_flush())
     cond.Wait(lock);
-  }
 }
