@@ -2149,7 +2149,11 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
     for (; iter != nargs.end(); ++iter) {
       const string & oid = *iter;
       if (use_striper) {
-	ret = striper.remove(oid);
+	if (forcefull) {
+	  ret = striper.remove(oid, CEPH_OSD_FLAG_FULL_FORCE);
+	} else {
+	  ret = striper.remove(oid);
+	}
       } else {
 	if (forcefull) {
 	  ret = io_ctx.remove(oid, CEPH_OSD_FLAG_FULL_FORCE);
