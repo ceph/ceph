@@ -20,8 +20,7 @@ WRITE_RAW_ENCODER(RGWRealmNotify);
 
 /**
  * RGWRealmWatcher establishes a watch on the current RGWRealm's control object,
- * and responds to notifications by recreating RGWRados with the updated realm
- * configuration.
+ * and forwards notifications to registered observers.
  */
 class RGWRealmWatcher : public librados::WatchCtx2 {
  public:
