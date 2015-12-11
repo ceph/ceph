@@ -5,7 +5,6 @@
 
 set -e
 
-
 realm_name=earth
 zg=us
 zone1=${zg}-1
@@ -36,3 +35,9 @@ init_zone_in_existing_zg 2 $realm_name $zg $zone1 $zone1_port $system_access_key
 
 
 wait_for_meta_sync 1 2
+
+$(rgw_admin 1) user create --uid=user1 --display-name='user one' --secret=user1secret --access-key=USER1ACCESSKEY
+$(rgw_admin 1) user create --uid=user2 --display-name='user two' --secret=user2secret --access-key=USER2ACCESSKEY
+
+wait_for_meta_sync 1 2
+

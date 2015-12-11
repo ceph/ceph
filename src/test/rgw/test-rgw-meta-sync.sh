@@ -16,9 +16,9 @@ function get_metadata_sync_status {
 
   sync_markers=$(json_extract sync_status.markers $meta_sync_status_json)
 
-  # num_shards=$(python_array_len $sync_markers)
+  num_shards2=$(python_array_len $sync_markers)
 
-  # echo $num_shards
+  [ "$global_sync_status" == "sync" ] && assert $num_shards2 -eq $num_shards
 
   sync_states=$(project_python_array_field val.state $sync_markers)
   eval secondary_status=$(project_python_array_field val.marker $sync_markers)
