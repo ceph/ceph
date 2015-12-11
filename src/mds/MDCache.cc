@@ -11714,21 +11714,6 @@ void MDCache::scrub_dentry(const string& path, Formatter *f, Context *fin)
   scrub_dentry_work(mdr);
 }
 
-/**
- * The private data for an OP_ENQUEUE_SCRUB MDRequest
- */
-class EnqueueScrubParams
-{
-  public:
-  const bool recursive;
-  const bool children;
-  const std::string tag;
-  EnqueueScrubParams(bool r, bool c, const std::string &tag_)
-    : recursive(r), children(c), tag(tag_)
-  {}
-};
-
-
 void MDCache::scrub_dentry_work(MDRequestRef& mdr)
 {
   set<SimpleLock*> rdlocks, wrlocks, xlocks;
@@ -11750,45 +11735,50 @@ void MDCache::scrub_dentry_work(MDRequestRef& mdr)
   return;
 }
 
-
-class C_ScrubEnqueued : public Context
+class C_MDS_EnqueueScrub : public Context
 {
-public:
-  MDRequestRef mdr;
-  Context *on_finish;
   Formatter *formatter;
-  C_ScrubEnqueued(MDRequestRef& mdr,
-                  Context *fin, Formatter *f) :
-    mdr(mdr), on_finish(fin), formatter(f) {}
+  Context *on_finish;
+public:
+  ScrubHeaderRef header;
+  C_MDS_EnqueueScrub(Formatter *f, Context *fin) :
+    formatter(f), on_finish(fin), header(new ScrubHeader()) {}
+
+  Context *take_finisher() {
+    Context *fin = on_finish;
+    on_finish = NULL;
+    return fin;
+  }
 
   void finish(int r) {
-#if 0
-    if (r >= 0) { // we got into the scrubbing dump it
-      results.dump(formatter);
-    } else { // we failed the lookup or something; dump ourselves
+    if (r < 0) { // we failed the lookup or something; dump ourselves
       formatter->open_object_section("results");
       formatter->dump_int("return_code", r);
       formatter->close_section(); // results
     }
-#endif
-    on_finish->complete(r);
+    if (on_finish)
+      on_finish->complete(r);
   }
 };
 
 void MDCache::enqueue_scrub(
     const string& path,
     const std::string &tag,
+    bool recursive,
     Formatter *f, Context *fin)
 {
-  dout(10) << "scrub_dentry " << path << dendl;
+  dout(10) << __func__ << path << dendl;
   MDRequestRef mdr = request_start_internal(CEPH_MDS_OP_ENQUEUE_SCRUB);
   filepath fp(path.c_str());
   mdr->set_filepath(fp);
 
-  C_ScrubEnqueued *se = new C_ScrubEnqueued(mdr, fin, f);
-  mdr->internal_op_finish = se;
-  // TODO pass through tag/args
-  mdr->internal_op_private = new EnqueueScrubParams(true, true, tag);
+  C_MDS_EnqueueScrub *cs = new C_MDS_EnqueueScrub(f, fin);
+  ScrubHeaderRef &header = cs->header;
+  header->tag = tag;
+  header->recursive = recursive;
+  header->formatter = f;
+
+  mdr->internal_op_finish = cs;
   enqueue_scrub_work(mdr);
 }
 
@@ -11807,15 +11797,11 @@ void MDCache::enqueue_scrub_work(MDRequestRef& mdr)
     return;
 
   CDentry *dn = in->get_parent_dn();
-
   // We got to this inode by path, so it must have a parent
   assert(dn != NULL);
 
-  // Not setting a completion context here because we don't
-  // want to block asok caller on long running scrub
-  EnqueueScrubParams *args = static_cast<EnqueueScrubParams*>(
-      mdr->internal_op_private);
-  assert(args != NULL);
+  C_MDS_EnqueueScrub *cs = static_cast<C_MDS_EnqueueScrub*>(mdr->internal_op_finish);
+  ScrubHeaderRef &header = cs->header;
 
   // Cannot scrub same dentry twice at same time
   if (dn->scrub_info()->dentry_scrubbing) {
@@ -11823,16 +11809,16 @@ void MDCache::enqueue_scrub_work(MDRequestRef& mdr)
     return;
   }
 
-  ScrubHeaderRef header(new ScrubHeader());
-
-  header->tag = args->tag;
   header->origin = dn;
 
-  mds->scrubstack->enqueue_dentry_bottom(dn, true, true, header, NULL);
-  delete args;
-  mdr->internal_op_private = NULL;
+  // only set completion context for non-recursive scrub, because we don't 
+  // want to block asok caller on long running scrub
+  Context *fin = NULL;
+  if (!header->recursive)
+    fin = cs->take_finisher();
 
-  // Successfully enqueued
+  mds->scrubstack->enqueue_dentry_bottom(dn, header->recursive, false, header, fin);
+
   mds->server->respond_to_request(mdr, 0);
   return;
 }

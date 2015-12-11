@@ -59,7 +59,7 @@ void ScrubStack::pop_dentry(CDentry *dn)
 
 void ScrubStack::_enqueue_dentry(CDentry *dn, CDir *parent, bool recursive,
     bool children, const ScrubHeaderRefConst& header,
-    MDSInternalContextBase *on_finish, bool top)
+    Context *on_finish, bool top)
 {
   dout(10) << __func__ << " with {" << *dn << "}"
            << ", recursive=" << recursive << ", children=" << children
@@ -74,7 +74,7 @@ void ScrubStack::_enqueue_dentry(CDentry *dn, CDir *parent, bool recursive,
 
 void ScrubStack::enqueue_dentry(CDentry *dn, bool recursive, bool children,
                                 const ScrubHeaderRefConst& header,
-                                 MDSInternalContextBase *on_finish, bool top)
+                                Context *on_finish, bool top)
 {
   _enqueue_dentry(dn, NULL, recursive, children, header, on_finish, top);
   kick_off_scrubs();
@@ -425,6 +425,7 @@ void ScrubStack::_validate_inode_done(CDentry *dn, int r,
   assert(dn->scrub_info_p != NULL);
   dn->scrub_info_p->inode_validated = true;
 #endif
+  const ScrubHeaderRefConst header = dn->scrub_info()->header;
 
   Context *c = NULL;
   CInode *in = dn->get_projected_inode();
@@ -435,6 +436,16 @@ void ScrubStack::_validate_inode_done(CDentry *dn, int r,
     // For regular files, we never touch the scrub_info on the inode,
     // just the dentry.
     dn->scrub_finished(&c);
+  }
+
+  if (!header->recursive && dn == header->origin) {
+    if (r >= 0) { // we got into the scrubbing dump it
+      result.dump(header->formatter);
+    } else { // we failed the lookup or something; dump ourselves
+      header->formatter->open_object_section("results");
+      header->formatter->dump_int("return_code", r);
+      header->formatter->close_section(); // results
+    }
   }
   if (c) {
     finisher->queue(new MDSIOContextWrapper(mdcache->mds, c), 0);
