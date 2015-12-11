@@ -1,0 +1,8 @@
+roles:
+    - [client.0]
+tasks:
+- install:
+- workunit:
+    clients:
+      all:
+        - true.sh
