@@ -1453,6 +1453,7 @@ add_subdirectory(erasure-code EXCLUDE_FROM_ALL)
 #make check ends here
 
 if(${WITH_RADOSGW})
+  add_subdirectory(rgw)
   # test_cors
   set(test_cors_srcs test_cors.cc)
   add_executable(test_cors

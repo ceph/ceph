@@ -1394,6 +1394,7 @@ public:
     period_map.id = id;
   }
   void set_epoch(epoch_t epoch) { this->epoch = epoch; }
+  void set_realm_epoch(epoch_t epoch) { realm_epoch = epoch; }
 
   void set_predecessor(const string& predecessor)
   {
