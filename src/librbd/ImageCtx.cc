@@ -534,10 +534,17 @@ struct C_InvalidateCache : public Context {
     return 0;
   }
 
-  bool ImageCtx::test_features(uint64_t test_features) const
+  bool ImageCtx::test_features(uint64_t features) const
   {
     RWLock::RLocker l(snap_lock);
-    return ((features & test_features) == test_features);
+    return test_features(features, snap_lock);
+  }
+
+  bool ImageCtx::test_features(uint64_t in_features,
+                               const RWLock &in_snap_lock) const
+  {
+    assert(snap_lock.is_locked());
+    return ((features & in_features) == in_features);
   }
 
   int ImageCtx::get_flags(librados::snap_t _snap_id, uint64_t *_flags) const
@@ -555,12 +562,18 @@ struct C_InvalidateCache : public Context {
     return -ENOENT;
   }
 
-  bool ImageCtx::test_flags(uint64_t test_flags) const
+  bool ImageCtx::test_flags(uint64_t flags) const
   {
     RWLock::RLocker l(snap_lock);
+    return test_flags(flags, snap_lock);
+  }
+
+  bool ImageCtx::test_flags(uint64_t flags, const RWLock &in_snap_lock) const
+  {
+    assert(snap_lock.is_locked());
     uint64_t snap_flags;
     get_flags(snap_id, &snap_flags);
-    return ((snap_flags & test_flags) == test_flags);
+    return ((snap_flags & flags) == flags);
   }
 
   int ImageCtx::update_flags(snap_t in_snap_id, uint64_t flag, bool enabled)
@@ -1004,8 +1017,8 @@ struct C_InvalidateCache : public Context {
     ASSIGN_OPTION(journal_pool);
   }
 
-  ObjectMap *ImageCtx::create_object_map() {
-    return new ObjectMap(*this);
+  ObjectMap *ImageCtx::create_object_map(uint64_t snap_id) {
+    return new ObjectMap(*this, snap_id);
   }
 
   Journal *ImageCtx::create_journal() {
