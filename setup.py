@@ -60,6 +60,7 @@ setup(
                       # is resolved
                       'cliff-tablib', # required to get a Field/Value output from openstack server show
                       'python-openstackclient',
+                      'prettytable',
                       ],
 
 
@@ -84,6 +85,7 @@ setup(
             'teuthology-kill = scripts.kill:main',
             'teuthology-queue = scripts.queue:main',
             'teuthology-prune-logs = scripts.prune_logs:main',
+            'teuthology-describe-tests = scripts.describe_tests:main',
             ],
         },
 
