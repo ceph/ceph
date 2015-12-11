@@ -1347,9 +1347,21 @@ int OSDMap::apply_incremental(const Incremental &inc)
       osd_xinfo[i->first].down_stamp = modified;
     }
     if ((osd_state[i->first] & CEPH_OSD_EXISTS) &&
-	(s & CEPH_OSD_EXISTS))
+	(s & CEPH_OSD_EXISTS)) {
+      // osd is destroyed; clear out anything interesting.
       (*osd_uuid)[i->first] = uuid_d();
-    osd_state[i->first] ^= s;
+      osd_info[i->first] = osd_info_t();
+      osd_xinfo[i->first] = osd_xinfo_t();
+      osd_weight[i->first] = CEPH_OSD_IN;
+      set_primary_affinity(i->first, CEPH_OSD_DEFAULT_PRIMARY_AFFINITY);
+      osd_addrs->client_addr[i->first].reset(new entity_addr_t());
+      osd_addrs->cluster_addr[i->first].reset(new entity_addr_t());
+      osd_addrs->hb_front_addr[i->first].reset(new entity_addr_t());
+      osd_addrs->hb_back_addr[i->first].reset(new entity_addr_t());
+      osd_state[i->first] = 0;
+    } else {
+      osd_state[i->first] ^= s;
+    }
   }
   for (map<int32_t,entity_addr_t>::const_iterator i = inc.new_up_client.begin();
        i != inc.new_up_client.end();
