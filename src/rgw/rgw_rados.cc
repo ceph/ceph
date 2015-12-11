@@ -417,7 +417,6 @@ int RGWSystemMetaObj::read_default_id(string& default_id, bool old_format)
 
   int ret = read_default(default_info, get_default_oid(old_format));
   if (ret < 0) {
-    lderr(cct) << "error in read_default: " << cpp_strerror(-ret) << dendl;
     return ret;
   }
 
