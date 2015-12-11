@@ -227,11 +227,6 @@ void ScrubStack::scrub_dir_dentry(CDentry *dn,
   if (all_frags_done) {
     assert (!*added_children); // can't do this if children are still pending
 
-    if (!dn->scrub_info()->on_finish) {
-      scrubs_in_progress++;
-      dn->scrub_set_finisher(&scrub_kick);
-    }
-
     // OK, so now I can... fire off a validate on the dir inode, and
     // when it completes, come through here again, noticing that we've
     // set a flag to indicate the the validate happened, and 
@@ -301,6 +296,11 @@ void ScrubStack::scrub_dir_dentry_final(CDentry *dn)
   // FIXME: the magic-constructing scrub_info() is going to leave
   // an unneeded scrub_infop lying around here
   if (!dn->scrub_info()->dentry_children_done) {
+    if (!dn->scrub_info()->on_finish) {
+      scrubs_in_progress++;
+      dn->scrub_set_finisher(&scrub_kick);
+    }
+
     dn->scrub_children_finished();
     CInode *in = dn->get_projected_inode();
     C_InodeValidated *fin = new C_InodeValidated(mdcache->mds, this, dn);
