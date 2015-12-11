@@ -85,9 +85,9 @@ LookupFHResult RGWLibFS::stat_leaf(RGWFileHandle* parent,
 	if (req.matched) {
 	  fhr = lookup_fh(parent, path,
 			  RGWFileHandle::FLAG_CREATE|
-			  ((req.path.back() == '/') ?
-			   RGWFileHandle::FLAG_DIRECTORY :
-			   RGWFileHandle::FLAG_NONE));
+			  ((req.is_dir) ?
+			    RGWFileHandle::FLAG_DIRECTORY :
+			    RGWFileHandle::FLAG_NONE));
 	}
       }
     }

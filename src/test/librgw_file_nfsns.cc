@@ -68,7 +68,9 @@ namespace {
     RGWFileHandle* rgw_fh = rec.rgw_fh;
     if (rgw_fh) {
       const char* type = rgw_fh->is_dir() ? "DIR " : "FILE ";
-      os << rec.name << ": "
+      os << rec.rgw_fh->full_object_name()
+	 << " (" << rec.rgw_fh->object_name() << ", "
+	 << " " << rec.name << "): "
 	 << type;
     }
     return os;
@@ -100,6 +102,12 @@ extern "C" {
   static bool r1_cb(const char* name, void *arg, uint64_t offset) {
     struct rgw_file_handle* parent_fh
       = static_cast<struct rgw_file_handle*>(arg);
+    RGWFileHandle* rgw_fh = get_rgwfh(parent_fh);
+    std::cout << __func__
+	      << " bucket=" << rgw_fh->bucket_name()
+	      << " dir=" << rgw_fh->full_object_name()
+	      << " called back name=" << name
+	      << std::endl;
     obj_stack.push(
       obj_rec{name, nullptr, parent_fh, nullptr});
     return true; /* XXX */
@@ -134,7 +142,7 @@ TEST(LibRGW, ENUMERATE1) {
 	  std::cout << "readdir in"
 		    << " bucket: " << elt.rgw_fh->bucket_name()
 		    << " object_name: " << elt.rgw_fh->object_name()
-		    << " full name: " << elt.rgw_fh->full_object_name()
+		    << " full_name: " << elt.rgw_fh->full_object_name()
 		    << std::endl;
 	  rc = rgw_readdir(fs, elt.fh, &offset, r1_cb, elt.fh, &eof);
 	  elt.state.readdir = true;
