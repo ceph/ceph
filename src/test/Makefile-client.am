@@ -428,6 +428,50 @@ noinst_HEADERS += \
 	test/librbd/mock/MockReadahead.h \
 	test/librbd/object_map/mock/MockInvalidateRequest.h
 
+librbd_mirror_test_la_SOURCES = \
+	test/rbd_mirror/test_ClusterWatcher.cc \
+	test/rbd_mirror/test_PoolWatcher.cc
+librbd_mirror_test_la_CXXFLAGS = $(UNITTEST_CXXFLAGS)
+noinst_LTLIBRARIES += librbd_mirror_test.la
+
+unittest_rbd_mirror_SOURCES = \
+	test/rbd_mirror/test_main.cc
+unittest_rbd_mirror_CXXFLAGS = $(UNITTEST_CXXFLAGS)
+unittest_rbd_mirror_LDADD = \
+	librbd_mirror_test.la \
+	librados_test_stub.la \
+	librbd_mirror_internal.la \
+	librbd_internal.la \
+	librbd_api.la \
+	libjournal.la \
+	librados_internal.la \
+	libcls_rbd_client.la \
+	libcls_lock_client.la \
+	libcls_journal_client.la \
+	$(LIBRBD_TYPES) \
+	$(LIBRADOS) $(LIBOSDC) $(UNITTEST_LDADD) \
+	$(CEPH_GLOBAL) $(RADOS_TEST_LDADD)
+check_PROGRAMS += unittest_rbd_mirror
+
+ceph_test_rbd_mirror_SOURCES = \
+        test/rbd_mirror/test_main.cc
+ceph_test_rbd_mirror_CXXFLAGS = $(UNITTEST_CXXFLAGS)
+ceph_test_rbd_mirror_LDADD = \
+	librbd_mirror_test.la \
+	librbd_mirror_internal.la \
+	librbd_internal.la \
+	librbd_api.la \
+	libjournal.la \
+	librados_internal.la \
+	libcls_rbd_client.la \
+	libcls_lock_client.la \
+	libcls_journal_client.la \
+	$(LIBRBD_TYPES) \
+	librados_api.la $(LIBRADOS_DEPS) \
+	$(LIBOSDC) $(UNITTEST_LDADD) \
+	$(CEPH_GLOBAL) $(RADOS_TEST_LDADD)
+bin_DEBUGPROGRAMS += ceph_test_rbd_mirror
+
 if LINUX
 ceph_test_librbd_fsx_SOURCES = test/librbd/fsx.cc
 ceph_test_librbd_fsx_LDADD = \
