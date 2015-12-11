@@ -228,8 +228,11 @@ namespace librbd {
     void rm_snap(std::string in_snap_name, librados::snap_t id);
     uint64_t get_image_size(librados::snap_t in_snap_id) const;
     bool test_features(uint64_t test_features) const;
+    bool test_features(uint64_t test_features,
+                       const RWLock &in_snap_lock) const;
     int get_flags(librados::snap_t in_snap_id, uint64_t *flags) const;
     bool test_flags(uint64_t test_flags) const;
+    bool test_flags(uint64_t test_flags, const RWLock &in_snap_lock) const;
     int update_flags(librados::snap_t in_snap_id, uint64_t flag, bool enabled);
 
     const parent_info* get_parent_info(librados::snap_t in_snap_id) const;
@@ -269,7 +272,7 @@ namespace librbd {
 
     void apply_metadata_confs();
 
-    ObjectMap *create_object_map();
+    ObjectMap *create_object_map(uint64_t snap_id);
 
     Journal *create_journal();
     void open_journal();            // TODO remove
