@@ -304,9 +304,24 @@ test_xattr() {
     rm $V1 $V2
     cleanup
 }
+test_rmobj() {
+    p=`uuidgen`
+    ceph osd pool create $p 1
+    ceph osd pool set-quota $p max_objects 1
+    V1=`mktemp fooattrXXXXXXX`
+    rados put $OBJ $V1 -p $p
+    while ! ceph osd dump | grep 'full max_objects'
+    do
+	sleep 2
+    done
+    rados -p $p rm $OBJ --force-full
+    rados rmpool $p $p --yes-i-really-really-mean-it
+    rm $V1
+}
 
 test_xattr
 test_omap
+test_rmobj
 
 echo "SUCCESS!"
 exit 0
