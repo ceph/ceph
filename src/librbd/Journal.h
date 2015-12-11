@@ -10,7 +10,6 @@
 #include "include/unordered_map.h"
 #include "include/rados/librados.hpp"
 #include "common/Mutex.h"
-#include "common/Cond.h"
 #include "journal/Future.h"
 #include "journal/ReplayHandler.h"
 #include <algorithm>
@@ -51,11 +50,8 @@ public:
   bool is_journal_replaying() const;
 
   void wait_for_journal_ready(Context *on_ready);
-  void wait_for_journal_ready();
 
-  void open();  // TODO remove
   void open(Context *on_finish);
-  int close();  // TODO remove
   void close(Context *on_finish);
 
   uint64_t append_io_event(AioCompletion *aio_comp,
@@ -77,12 +73,42 @@ private:
   typedef std::list<Context *> Contexts;
   typedef interval_set<uint64_t> ExtentInterval;
 
+  /**
+   * @verbatim
+   *
+   * <start>
+   *    |
+   *    v
+   * UNINITIALIZED ---> INITIALIZING ---> REPLAYING ------> READY
+   *    |                 *  .  ^             *  .            |
+   *    |                 *  .  |             *  .            |
+   *    |                 *  .  |    (error)  *  . . . .      |
+   *    |                 *  .  |             *        .      |
+   *    |                 *  .  |             v        .      v
+   *    |                 *  .  |         RESTARTING   .    STOPPING
+   *    |                 *  .  |             |        .      |
+   *    |                 *  .  |             |        .      |
+   *    |       * * * * * *  .  \-------------/        .      |
+   *    |       * (error)    .                         .      |
+   *    |       *            .   . . . . . . . . . . . .      |
+   *    |       *            .   .                            |
+   *    |       v            v   v                            |
+   *    |     CLOSED <----- CLOSING <-------------------------/
+   *    |       |
+   *    |       v
+   *    \---> <finish>
+   *
+   * @endverbatim
+   */
   enum State {
     STATE_UNINITIALIZED,
     STATE_INITIALIZING,
     STATE_REPLAYING,
-    STATE_RECORDING,
-    STATE_STOPPING_RECORDING
+    STATE_RESTARTING_REPLAY,
+    STATE_READY,
+    STATE_STOPPING,
+    STATE_CLOSING,
+    STATE_CLOSED
   };
 
   struct Event {
@@ -118,6 +144,28 @@ private:
     }
   };
 
+  struct C_StopRecording : public Context {
+    Journal *journal;
+
+    C_StopRecording(Journal *_journal) : journal(_journal) {
+    }
+
+    virtual void finish(int r) {
+      journal->handle_recording_stopped(r);
+    }
+  };
+
+  struct C_DestroyJournaler : public Context {
+    Journal *journal;
+
+    C_DestroyJournaler(Journal *_journal) : journal(_journal) {
+    }
+
+    virtual void finish(int r) {
+      journal->handle_journal_destroyed(r);
+    }
+  };
+
   struct C_EventSafe : public Context {
     Journal *journal;
     uint64_t tid;
@@ -128,19 +176,6 @@ private:
 
     virtual void finish(int r) {
       journal->handle_event_safe(r, tid);
-    }
-  };
-
-  struct C_WaitForReady : public Context {
-    Journal *journal;
-    Context *on_ready;
-
-    C_WaitForReady(Journal *_journal, Context *_on_ready)
-      : journal(_journal), on_ready(_on_ready) {
-    }
-
-    virtual void finish(int r) {
-      journal->handle_wait_for_ready(on_ready);
     }
   };
 
@@ -168,9 +203,9 @@ private:
 
   ::journal::Journaler *m_journaler;
   mutable Mutex m_lock;
-  Cond m_cond;
   State m_state;
 
+  int m_error_result;
   Contexts m_wait_for_state_contexts;
 
   ReplayHandler m_replay_handler;
@@ -187,7 +222,8 @@ private:
   ::journal::Future wait_event(Mutex &lock, uint64_t tid, Context *on_safe);
 
   void create_journaler();
-  void destroy_journaler();
+  void destroy_journaler(int r);
+  void recreate_journaler(int r);
 
   void complete_event(Events::iterator it, int r);
 
@@ -196,18 +232,21 @@ private:
   void handle_replay_ready();
   void handle_replay_complete(int r);
 
+  void handle_recording_stopped(int r);
+
+  void handle_journal_destroyed(int r);
+
   void handle_event_safe(int r, uint64_t tid);
 
-  int stop_recording();
+  void stop_recording();
 
   void block_writes();
   void unblock_writes();
 
-  void flush_journal();
-  void transition_state(State state);
-  void wait_for_state_transition();
-  void schedule_wait_for_ready(Context *on_ready);
-  void handle_wait_for_ready(Context *on_ready);
+  void transition_state(State state, int r);
+
+  bool is_steady_state() const;
+  void wait_for_steady_state(Context *on_state);
 
   friend std::ostream &operator<<(std::ostream &os, const State &state);
 };

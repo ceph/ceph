@@ -2310,11 +2310,22 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
 	return -EROFS;
       }
 
+      ictx->snap_lock.get_read();
       if (ictx->journal != NULL) {
-        ictx->journal->wait_for_journal_ready();
+        C_SaferCond journal_ctx;
+        ictx->journal->wait_for_journal_ready(&journal_ctx);
+
+        ictx->snap_lock.put_read();
+        r = journal_ctx.wait();
+        if (r < 0) {
+          lderr(cct) << "Failed to initialize journal: " << cpp_strerror(r)
+                     << dendl;
+          return r;
+        }
+
+        ictx->snap_lock.get_read();
       }
 
-      ictx->snap_lock.get_read();
       new_size = ictx->get_image_size(snap_id);
       ictx->snap_lock.put_read();
     }

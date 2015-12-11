@@ -273,10 +273,7 @@ namespace librbd {
     void apply_metadata_confs();
 
     ObjectMap *create_object_map(uint64_t snap_id);
-
     Journal *create_journal();
-    void open_journal();            // TODO remove
-    int close_journal(bool force);  // TODO remove
 
     void clear_pending_completions();
   };
