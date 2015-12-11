@@ -1879,7 +1879,7 @@ void MDSRank::command_scrub_path(Formatter *f, const string& path)
   C_SaferCond scond;
   {
     Mutex::Locker l(mds_lock);
-    mdcache->scrub_dentry(path, f, &scond);
+    mdcache->enqueue_scrub(path, "", false, f, &scond);
   }
   scond.wait();
   // scrub_dentry() finishers will dump the data for us; we're done!
@@ -1891,7 +1891,7 @@ void MDSRank::command_tag_path(Formatter *f,
   C_SaferCond scond;
   {
     Mutex::Locker l(mds_lock);
-    mdcache->enqueue_scrub(path, tag, f, &scond);
+    mdcache->enqueue_scrub(path, tag, true, f, &scond);
   }
   scond.wait();
 }

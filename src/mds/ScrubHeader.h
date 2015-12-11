@@ -13,8 +13,11 @@ class CDentry;
  */
 class ScrubHeader {
 public:
-  std::string tag;
   CDentry *origin;
+  std::string tag;
+
+  bool recursive;
+  Formatter *formatter;
 };
 typedef ceph::shared_ptr<ScrubHeader> ScrubHeaderRef;
 typedef ceph::shared_ptr<const ScrubHeader> ScrubHeaderRefConst;
