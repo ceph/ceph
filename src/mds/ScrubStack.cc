@@ -143,18 +143,9 @@ void ScrubStack::scrub_dir_dentry(CDentry *dn,
   assert(dn != NULL);
   dout(10) << __func__ << *dn << dendl;
 
-  if (!dn->scrub_info()->scrub_children &&
-      !dn->scrub_info()->scrub_recursive) {
-    // TODO: we have to scrub the local dentry/inode, but nothing else
-  }
-
-  *added_children = false;
-  *terminal = false;
-  *done = false;
-
   CInode *in = dn->get_projected_inode();
   // FIXME: greg -- is get_version the appropriate version?  (i.e. is scrub_version
-  // meant to be an actual version that we're scrubbing, or something else?)
+  // // meant to be an actual version that we're scrubbing, or something else?)
   if (!in->scrub_info()->scrub_in_progress) {
     // We may come through here more than once on our way up and down
     // the stack... or actually is that right?  Should we perhaps
@@ -163,68 +154,76 @@ void ScrubStack::scrub_dir_dentry(CDentry *dn,
     in->scrub_initialize(dn->scrub_info()->header);
   }
 
-  list<frag_t> scrubbing_frags;
-  list<CDir*> scrubbing_cdirs;
-  in->scrub_dirfrags_scrubbing(&scrubbing_frags);
-  dout(20) << __func__ << " iterating over " << scrubbing_frags.size()
-    << " scrubbing frags" << dendl;
-  for (list<frag_t>::iterator i = scrubbing_frags.begin();
-      i != scrubbing_frags.end();
-      ++i) {
-    // turn frags into CDir *
-    CDir *dir = in->get_dirfrag(*i);
-    scrubbing_cdirs.push_back(dir);
-    dout(25) << __func__ << " got CDir " << *dir << " presently scrubbing" << dendl;
-  }
-
-
-  dout(20) << __func__ << " consuming from " << scrubbing_cdirs.size()
-    << " scrubbing cdirs" << dendl;
-
-  list<CDir*>::iterator i = scrubbing_cdirs.begin();
+  *added_children = false;
   bool all_frags_terminal = true;
   bool all_frags_done = true;
-  while (g_conf->mds_max_scrub_ops_in_progress > scrubs_in_progress) {
-    // select next CDir
-    CDir *cur_dir = NULL;
-    if (i != scrubbing_cdirs.end()) {
-      cur_dir = *i;
-      ++i;
-      dout(20) << __func__ << " got cur_dir = " << *cur_dir << dendl;
-    } else {
-      bool ready = get_next_cdir(in, &cur_dir);
-      dout(20) << __func__ << " get_next_cdir ready=" << ready << dendl;
 
-      if (ready && cur_dir) {
-        scrubbing_cdirs.push_back(cur_dir);
-      } else if (!ready) {
-        // We are waiting for load of a frag
-        all_frags_done = false;
-        all_frags_terminal = false;
-        break;
+  if (!dn->scrub_info()->scrub_children &&
+      !dn->scrub_info()->scrub_recursive) {
+    dout(20) << "!scrub_children and !scrub_recursive" << dendl;
+  } else {
+
+    list<frag_t> scrubbing_frags;
+    list<CDir*> scrubbing_cdirs;
+    in->scrub_dirfrags_scrubbing(&scrubbing_frags);
+    dout(20) << __func__ << " iterating over " << scrubbing_frags.size()
+      << " scrubbing frags" << dendl;
+    for (list<frag_t>::iterator i = scrubbing_frags.begin();
+	i != scrubbing_frags.end();
+	++i) {
+      // turn frags into CDir *
+      CDir *dir = in->get_dirfrag(*i);
+      scrubbing_cdirs.push_back(dir);
+      dout(25) << __func__ << " got CDir " << *dir << " presently scrubbing" << dendl;
+    }
+
+
+    dout(20) << __func__ << " consuming from " << scrubbing_cdirs.size()
+	     << " scrubbing cdirs" << dendl;
+
+    list<CDir*>::iterator i = scrubbing_cdirs.begin();
+    while (g_conf->mds_max_scrub_ops_in_progress > scrubs_in_progress) {
+      // select next CDir
+      CDir *cur_dir = NULL;
+      if (i != scrubbing_cdirs.end()) {
+	cur_dir = *i;
+	++i;
+	dout(20) << __func__ << " got cur_dir = " << *cur_dir << dendl;
       } else {
-        // Finished with all frags
-        break;
-      }
-    }
-    // scrub that CDir
-    bool frag_added_children = false;
-    bool frag_terminal = true;
-    bool frag_done = false;
-    scrub_dirfrag(cur_dir, dn->scrub_info()->scrub_recursive,
-		  &frag_added_children, &frag_terminal, &frag_done);
-    if (frag_done) {
-      // FIXME is this right?  Can we end up hitting this more than
-      // once and is that a problem?
-      cur_dir->inode->scrub_dirfrag_finished(cur_dir->frag);
-    }
-    *added_children |= frag_added_children;
-    all_frags_terminal = all_frags_terminal && frag_terminal;
-    all_frags_done = all_frags_done && frag_done;
-  }
+	bool ready = get_next_cdir(in, &cur_dir);
+	dout(20) << __func__ << " get_next_cdir ready=" << ready << dendl;
 
-  dout(20) << "finished looping; all_frags_terminal=" << all_frags_terminal
-           << ", all_frags_done=" << all_frags_done << dendl;
+	if (ready && cur_dir) {
+	  scrubbing_cdirs.push_back(cur_dir);
+	} else if (!ready) {
+	  // We are waiting for load of a frag
+	  all_frags_done = false;
+	  all_frags_terminal = false;
+	  break;
+	} else {
+	  // Finished with all frags
+	  break;
+	}
+      }
+      // scrub that CDir
+      bool frag_added_children = false;
+      bool frag_terminal = true;
+      bool frag_done = false;
+      scrub_dirfrag(cur_dir, dn->scrub_info()->scrub_recursive,
+	  &frag_added_children, &frag_terminal, &frag_done);
+      if (frag_done) {
+	// FIXME is this right?  Can we end up hitting this more than
+	// once and is that a problem?
+	cur_dir->inode->scrub_dirfrag_finished(cur_dir->frag);
+      }
+      *added_children |= frag_added_children;
+      all_frags_terminal = all_frags_terminal && frag_terminal;
+      all_frags_done = all_frags_done && frag_done;
+    }
+
+    dout(20) << "finished looping; all_frags_terminal=" << all_frags_terminal
+	     << ", all_frags_done=" << all_frags_done << dendl;
+  }
   if (all_frags_done) {
     assert (!*added_children); // can't do this if children are still pending
 
