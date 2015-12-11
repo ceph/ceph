@@ -695,7 +695,7 @@ TEST(BufferPtr, copy_out_bench) {
     }
     utime_t end = ceph_clock_now(NULL);
     cout << count << " fills of buffer len " << buflen
-	 << " with " << s << " byte copy_in in "
+	 << " with " << s << " byte(s) copy_out in "
 	 << (end - start) << std::endl;
   }
 }
@@ -729,7 +729,7 @@ TEST(BufferPtr, copy_in_bench) {
     }
     utime_t end = ceph_clock_now(NULL);
     cout << count << " fills of buffer len " << buflen
-	 << " with " << s << " byte copy_in in "
+	 << " with " << s << " byte(s) copy_in in "
 	 << (end - start) << std::endl;
   }
 }
