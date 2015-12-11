@@ -1,5 +1,13 @@
 #!/bin/bash
 
+function _assert {
+  src=$1; shift
+  lineno=$1; shift
+  [ "$@" ] || echo "$src: $lineno: assert failed: $@" || exit 1
+}
+
+assert="eval _assert \$BASH_SOURCE \$LINENO"
+
 function var_to_python_json_index {
   echo "['$1']" | sed "s/\./'\]\['/g"
 }
