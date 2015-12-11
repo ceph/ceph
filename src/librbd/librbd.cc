@@ -880,7 +880,7 @@ namespace librbd {
     ImageCtx *ictx = (ImageCtx *)ctx;
     tracepoint(librbd, diff_iterate_enter, ictx, ictx->name.c_str(),
                ictx->snap_name.c_str(), ictx->read_only, fromsnapname, ofs, len,
-               true, true);
+               true, false);
     int r = librbd::diff_iterate(ictx, fromsnapname, ofs, len, true, false, cb,
                                  arg);
     tracepoint(librbd, diff_iterate_exit, r);
@@ -2116,7 +2116,7 @@ extern "C" int rbd_diff_iterate(rbd_image_t image,
   librbd::ImageCtx *ictx = (librbd::ImageCtx *)image;
   tracepoint(librbd, diff_iterate_enter, ictx, ictx->name.c_str(),
              ictx->snap_name.c_str(), ictx->read_only, fromsnapname, ofs, len,
-             true, true);
+             true, false);
   int r = librbd::diff_iterate(ictx, fromsnapname, ofs, len, true, false, cb,
                                arg);
   tracepoint(librbd, diff_iterate_exit, r);
