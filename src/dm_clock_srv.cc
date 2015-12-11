@@ -7,13 +7,23 @@
 #include "dm_clock_srv.h"
 
 
-std::ostream& dmc::operator<<(std::ostream& out, const dmc::ClientInfo& client) {
+std::ostream& dmc::operator<<(std::ostream& out,
+			      const dmc::ClientInfo_old& client) {
   if (client.isUnset()) {
     out << "unset";
   } else {
     out << "{w:" << client.weight << " r:" << client.reservation <<
       " l:" << client.limit << " t:" << client.prevTag << "}";
   }
+  return out;
+}
+
+
+std::ostream& dmc::operator<<(std::ostream& out,
+			      const dmc::ClientInfo& client) {
+  out << "{w:" << client.weight <<
+    " r:" << client.reservation <<
+    " l:" << client.limit << "}";
   return out;
 }
 

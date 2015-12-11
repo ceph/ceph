@@ -12,7 +12,7 @@
 #include <deque>
 #include <queue>
 #include <mutex>
-#include <ostream>
+#include <iostream>
 
 #include <boost/heap/fibonacci_heap.hpp>
 // #include <boost/heap/heap_concepts.hpp>
@@ -21,10 +21,9 @@
 // dmClock namespace
 namespace dmc {
 
-  typedef double time;
-  const time no_time = 0.0;
+  typedef double Time;
 
-  inline double getTime() {
+  inline Time getTime() {
     struct timeval now;
     assert(0 == gettimeofday(&now, NULL));
     return now.tv_sec + (now.tv_usec / 1000000.0);
@@ -50,14 +49,25 @@ namespace dmc {
     double reservation;  // minimum
     double limit;        // maximum
 
+    friend std::ostream& operator<<(std::ostream&, const ClientInfo&);
+  };
+
+  struct ClientInfo_old {
+    double weight;       // proportional
+    double reservation;  // minimum
+    double limit;        // maximum
+
+    bool isIdle;
+
     RequestTag prevTag;
 
-    ClientInfo() : ClientInfo(-1.0, -1.0, -1.0) {}
+    ClientInfo_old() : ClientInfo_old(-1.0, -1.0, -1.0) {}
 
-    ClientInfo(double w, double r, double l) :
+    ClientInfo_old(double w, double r, double l) :
       weight(w),
       reservation(r),
-      limit(l)
+      limit(l),
+      isIdle(true)
     {
       // empty
     }
@@ -66,11 +76,11 @@ namespace dmc {
       return -1 == weight;
     }
 
-    friend std::ostream& operator<<(std::ostream&, const ClientInfo&);
+    friend std::ostream& operator<<(std::ostream&, const ClientInfo_old&);
   };
 
 
-  std::ostream& operator<<(std::ostream& out, const dmc::ClientInfo& client);
+  std::ostream& operator<<(std::ostream& out, const dmc::ClientInfo_old& client);
   std::ostream& operator<<(std::ostream& out, const dmc::RequestTag& tag);
 
 
@@ -80,14 +90,14 @@ namespace dmc {
 
   protected:
 
-    typename std::map<T,ClientInfo> map;
+    typename std::map<T,ClientInfo_old> map;
 
   public:
 
-    // typedef std::map<T,ClientInfo>::const_iterator client_ref;
+    // typedef std::map<T,ClientInfo_old>::const_iterator client_ref;
 
     // client_ref find(const T& clientId) const;
-    ClientInfo* find(const int& clientId) {
+    ClientInfo_old* find(const int& clientId) {
       auto it = map.find(clientId);
       if (it == map.cend()) {
 	return NULL;
@@ -96,7 +106,7 @@ namespace dmc {
       }
     }
         
-    void put(const T& clientId, const ClientInfo& info) {
+    void put(const T& clientId, const ClientInfo_old& info) {
       map[clientId] = info;
     }
 
@@ -170,10 +180,15 @@ namespace dmc {
   }; // class ClientQueue
 
 
-    
   // T is client identifier type, R is request type
   template<typename C, typename R>
   class PriorityQueue {
+
+  public:
+
+    typedef typename std::function<ClientInfo(C)> ClientInfoFunc;
+
+  protected:
 
     typedef ClientQueue<R>                   CQueue;
     typedef typename std::shared_ptr<CQueue> CQueueRef;
@@ -230,7 +245,7 @@ namespace dmc {
     };
 
 
-    ClientDB<C> clientDb;
+    ClientInfoFunc clientInfo;
 
     std::map<C,CQueueRef> clientMap;
     boost::heap::fibonacci_heap<CQueueRef,
@@ -242,7 +257,25 @@ namespace dmc {
       
   public:
 
-    void addRequest(R request, C client, time t = no_time) {
+    PriorityQueue(ClientInfoFunc _clientInfo) :
+      clientInfo(_clientInfo)
+    {
+      // empty
+    }
+
+    void test() {
+      std::cout << clientInfo(0) << std::endl;
+      std::cout << clientInfo(3) << std::endl;
+    }
+
+    void addRequest(R request, C client, Time time) {
+#if 0
+      ClientInfo_old* client = clientDB.find(client);
+      if (!client) {
+	
+      }
+#endif
+      
     }
 
   }; // class PriorityQueue

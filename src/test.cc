@@ -32,12 +32,25 @@ struct Request {
 typedef std::unique_ptr<Request> RequestRef;
 
 
+dmc::ClientInfo getClientInfo(int c) {
+  static dmc::ClientInfo info[] = {
+    {1.0, 100.0, 250.0},
+    {2.0, 100.0, 250.0},
+    {2.0, 100.0, 250.0},
+    {3.0,  50.0,   0.0},
+  };
+
+  return info[c];
+}
+
+
 int main(int argc, char* argv[]) {
 
   std::cout.precision(17);
   std::cout << "now: " << dmc::getTime() << std::endl;
   std::cout << "now: " << dmc::getTime() << std::endl;
-  
+
+#if 0
   dmc::ClientDB<int> client_db;
 
   client_db.put(0, dmc::ClientInfo(1.0, 100.0, 250.0));
@@ -73,8 +86,13 @@ int main(int argc, char* argv[]) {
     std::cout << e->request.get()->op << std::endl;
     client_queue.pop();
   }
+#endif
 
-
-  dmc::PriorityQueue<int, Request> priorityQueue;
+  auto f = std::function<dmc::ClientInfo(int)>(getClientInfo);
   
+  dmc::PriorityQueue<int,Request> priorityQueue(f);
+
+  priorityQueue.test();
+
+  std::cout << "done" << std::endl;
 }
