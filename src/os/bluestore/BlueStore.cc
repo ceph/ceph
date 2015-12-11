@@ -2509,7 +2509,7 @@ int BlueStore::fiemap(
       continue;
     }
 
-    unsigned x_len = len;
+    uint64_t x_len = len;
     if (op != oend &&
 	op->first > offset &&
 	op->first - offset < x_len) {
