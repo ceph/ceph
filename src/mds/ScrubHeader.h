@@ -17,6 +17,7 @@ public:
   std::string tag;
 
   bool recursive;
+  bool repair;
   Formatter *formatter;
 };
 typedef ceph::shared_ptr<ScrubHeader> ScrubHeaderRef;
