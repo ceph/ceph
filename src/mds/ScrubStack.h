@@ -80,7 +80,7 @@ public:
    */
   void enqueue_dentry_top(CDentry *dn, bool recursive, bool children,
                           const ScrubHeaderRefConst& header,
-                          MDSInternalContextBase *on_finish) {
+                          Context *on_finish) {
     enqueue_dentry(dn, recursive, children, header, on_finish, true);
   }
   /** Like enqueue_dentry_top, but we wait for all pending scrubs before
@@ -88,7 +88,7 @@ public:
    */
   void enqueue_dentry_bottom(CDentry *dn, bool recursive, bool children,
                              const ScrubHeaderRefConst& header,
-                             MDSInternalContextBase *on_finish) {
+                             Context *on_finish) {
     enqueue_dentry(dn, recursive, children, header, on_finish, false);
   }
 
@@ -99,10 +99,10 @@ private:
    */
   void enqueue_dentry(CDentry *dn, bool recursive, bool children,
                       const ScrubHeaderRefConst& header,
-                      MDSInternalContextBase *on_finish, bool top);
+                      Context *on_finish, bool top);
   void _enqueue_dentry(CDentry *dn, CDir *parent, bool recursive, bool children,
                       const ScrubHeaderRefConst& header,
-                       MDSInternalContextBase *on_finish, bool top);
+                      Context *on_finish, bool top);
   /**
    * Kick off as many scrubs as are appropriate, based on the current
    * state of the stack.
