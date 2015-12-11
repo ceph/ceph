@@ -53,6 +53,7 @@
 	debug paxos = 20
 	mon data avail warn = 5
 	mon reweight min pgs per osd = 4
+	mon osd reporter subtree level = osd
 
 [mds]
         mds debug scatterstat = true
