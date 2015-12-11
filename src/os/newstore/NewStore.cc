@@ -1419,7 +1419,7 @@ int NewStore::fiemap(
       continue;
     }
 
-    unsigned x_len = len;
+    uint64_t x_len = len;
     if (op != oend &&
 	op->first > offset &&
 	op->first - offset < x_len) {
@@ -1439,8 +1439,10 @@ int NewStore::fiemap(
       continue;
     }
     // we are seeing a hole, time to add an entry to fiemap.
-    m[start] = offset - start;
-    dout(20) << __func__ << " get fiemap entry, off =  " << start << " len=" << m[start] << dendl;
+    if (offset - start != 0) {
+      m[start] = offset - start;
+      dout(20) << __func__ << " get fiemap entry, off =  " << start << " len=" << m[start] << dendl;
+    }
     offset += x_len;
     start = offset;
     len -= x_len;
