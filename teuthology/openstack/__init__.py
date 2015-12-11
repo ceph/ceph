@@ -530,9 +530,9 @@ ssh access           : ssh {identity}{username}@{ip} # logs in /usr/share/nginx/
         know already.
         """
         try:
-            misc.sh("openstack server list")
+            misc.sh("openstack flavor list | tail -2")
         except subprocess.CalledProcessError:
-            log.exception("openstack server list")
+            log.exception("openstack flavor list")
             raise Exception("verify openrc.sh has been sourced")
         self.set_provider()
 
