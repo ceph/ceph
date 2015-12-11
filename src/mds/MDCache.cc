@@ -8842,9 +8842,6 @@ void MDCache::dispatch_request(MDRequestRef& mdr)
     case CEPH_MDS_OP_EXPORTDIR:
       migrator->dispatch_export_dir(mdr);
       break;
-    case CEPH_MDS_OP_VALIDATE:
-      scrub_dentry_work(mdr);
-      break;
     case CEPH_MDS_OP_ENQUEUE_SCRUB:
       enqueue_scrub_work(mdr);
       break;
@@ -11680,60 +11677,6 @@ void C_MDS_RetryRequest::finish(int r)
   cache->dispatch_request(mdr);
 }
 
-class C_scrub_dentry_finish : public Context {
-public:
-  CInode::validated_data results;
-  MDRequestRef mdr;
-  Context *on_finish;
-  Formatter *formatter;
-  C_scrub_dentry_finish(MDRequestRef& mdr,
-                        Context *fin, Formatter *f) :
-    mdr(mdr), on_finish(fin), formatter(f) {}
-
-  void finish(int r) {
-    if (r >= 0) { // we got into the scrubbing dump it
-      results.dump(formatter);
-    } else { // we failed the lookup or something; dump ourselves
-      formatter->open_object_section("results");
-      formatter->dump_int("return_code", r);
-      formatter->close_section(); // results
-    }
-    on_finish->complete(r);
-  }
-};
-
-void MDCache::scrub_dentry(const string& path, Formatter *f, Context *fin)
-{
-  dout(10) << "scrub_dentry " << path << dendl;
-  MDRequestRef mdr = request_start_internal(CEPH_MDS_OP_VALIDATE);
-  filepath fp(path.c_str());
-  mdr->set_filepath(fp);
-  C_scrub_dentry_finish *csd = new C_scrub_dentry_finish(mdr, fin, f);
-  mdr->internal_op_finish = csd;
-  mdr->internal_op_private = &csd->results;
-  scrub_dentry_work(mdr);
-}
-
-void MDCache::scrub_dentry_work(MDRequestRef& mdr)
-{
-  set<SimpleLock*> rdlocks, wrlocks, xlocks;
-  CInode *in = mds->server->rdlock_path_pin_ref(mdr, 0, rdlocks, true);
-  if (NULL == in)
-    return;
-
-  // TODO: Remove this restriction
-  assert(in->is_auth());
-
-  bool locked = mds->locker->acquire_locks(mdr, rdlocks, wrlocks, xlocks);
-  if (!locked)
-    return;
-
-  CInode::validated_data *vr =
-      static_cast<CInode::validated_data*>(mdr->internal_op_private);
-
-  in->validate_disk_state(vr, mdr, NULL);
-  return;
-}
 
 class C_MDS_EnqueueScrub : public Context
 {
