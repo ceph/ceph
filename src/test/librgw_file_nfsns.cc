@@ -25,6 +25,7 @@
 #include "common/ceph_argparse.h"
 #include "common/debug.h"
 #include "global/global_init.h"
+#include "include/assert.h"
 
 #define dout_subsys ceph_subsys_rgw
 
@@ -39,6 +40,7 @@ namespace {
   string access_key("");
   string secret_key("");
   struct rgw_fs *fs = nullptr;
+  CephContext* cct = nullptr;
 
   string bucket_name = "nfsroot";
 
@@ -69,8 +71,7 @@ namespace {
     if (rgw_fh) {
       const char* type = rgw_fh->is_dir() ? "DIR " : "FILE ";
       os << rec.rgw_fh->full_object_name()
-	 << " (" << rec.rgw_fh->object_name() << ", "
-	 << " " << rec.name << "): "
+	 << " (" << rec.rgw_fh->object_name() << "): "
 	 << type;
     }
     return os;
@@ -96,6 +97,8 @@ TEST(LibRGW, MOUNT) {
 		      secret_key.c_str(), &fs);
   ASSERT_EQ(ret, 0);
   ASSERT_NE(fs, nullptr);
+
+  cct = static_cast<RGWLibFS*>(fs->fs_private)->get_context();
 }
 
 extern "C" {
@@ -103,11 +106,11 @@ extern "C" {
     struct rgw_file_handle* parent_fh
       = static_cast<struct rgw_file_handle*>(arg);
     RGWFileHandle* rgw_fh = get_rgwfh(parent_fh);
-    std::cout << __func__
-	      << " bucket=" << rgw_fh->bucket_name()
-	      << " dir=" << rgw_fh->full_object_name()
-	      << " called back name=" << name
-	      << std::endl;
+    lsubdout(cct, rgw, 10) << __func__
+			   << " bucket=" << rgw_fh->bucket_name()
+			   << " dir=" << rgw_fh->full_object_name()
+			   << " called back name=" << name
+			   << dendl;
     obj_stack.push(
       obj_rec{name, nullptr, parent_fh, nullptr});
     return true; /* XXX */
@@ -123,9 +126,27 @@ TEST(LibRGW, ENUMERATE1) {
     if (! elt.fh) {
       struct rgw_file_handle* parent_fh = elt.parent_fh
 	? elt.parent_fh : fs->root_fh;
+      RGWFileHandle* pfh = get_rgwfh(parent_fh);
+      rgw::ignore(pfh);
+      lsubdout(cct, rgw, 10)
+	<< "rgw_lookup:"
+	<< " parent object_name()=" << pfh->object_name()
+	<< " parent full_object_name()=" << pfh->full_object_name()
+	<< " elt.name=" << elt.name
+	<< dendl;
       rc = rgw_lookup(fs, parent_fh, elt.name.c_str(), &elt.fh,
 		      RGW_LOOKUP_FLAG_NONE);
       ASSERT_EQ(rc, 0);
+      // XXXX
+      RGWFileHandle* efh = get_rgwfh(elt.fh);
+      rgw::ignore(efh);
+      lsubdout(cct, rgw, 10)
+	<< "rgw_lookup result:"
+	<< " elt object_name()=" << efh->object_name()
+	<< " elt full_object_name()=" << efh->full_object_name()
+	<< " elt.name=" << elt.name
+	<< dendl;
+
       ASSERT_NE(elt.fh, nullptr);
       elt.rgw_fh = get_rgwfh(elt.fh);
       elt.parent_fh = elt.rgw_fh->get_parent()->get_fh();
@@ -139,11 +160,12 @@ TEST(LibRGW, ENUMERATE1) {
 	  // descending
 	  uint64_t offset;
 	  bool eof; // XXX
-	  std::cout << "readdir in"
-		    << " bucket: " << elt.rgw_fh->bucket_name()
-		    << " object_name: " << elt.rgw_fh->object_name()
-		    << " full_name: " << elt.rgw_fh->full_object_name()
-		    << std::endl;
+	  lsubdout(cct, rgw, 10)
+	    << "readdir in"
+	    << " bucket: " << elt.rgw_fh->bucket_name()
+	    << " object_name: " << elt.rgw_fh->object_name()
+	    << " full_name: " << elt.rgw_fh->full_object_name()
+	    << dendl;
 	  rc = rgw_readdir(fs, elt.fh, &offset, r1_cb, elt.fh, &eof);
 	  elt.state.readdir = true;
 	  ASSERT_EQ(rc, 0);

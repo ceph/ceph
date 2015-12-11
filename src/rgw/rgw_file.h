@@ -512,11 +512,12 @@ namespace rgw {
     /* find or create an RGWFileHandle */
     LookupFHResult lookup_fh(RGWFileHandle* parent, const char *name,
 			     const uint32_t cflags = RGWFileHandle::FLAG_NONE) {
-
       using std::get;
 
       RGWFileHandle::FHCache::Latch lat;
+      std::string obj_name{name};
       std::string key_name{parent->make_key_name(name)};
+
       fh_key fhk = parent->make_fhk(key_name);
       LookupFHResult fhr { nullptr, RGWFileHandle::FLAG_NONE };
 
@@ -527,7 +528,7 @@ namespace rgw {
       /* LATCHED */
       if (! fh) {
 	if (cflags & RGWFileHandle::FLAG_CREATE) {
-	  fh = new RGWFileHandle(this, get_inst(), parent, fhk, key_name,
+	  fh = new RGWFileHandle(this, get_inst(), parent, fhk, obj_name,
 				 cflags);
 	  intrusive_ptr_add_ref(fh); /* sentinel ref */
 	  fh_cache.insert_latched(fh, lat,
@@ -790,13 +791,15 @@ public:
        * empty directory */
       if (sref=="")
 	continue;
-	
-      std::cout << "RGWListBucketRequest "
-		<< __func__ << " " << "list uri=" << s->relative_uri << " "
-		<< " prefix=" << prefix << " "
-		<< " obj path=" << iter.key.name
-		<< " (" << sref << ")" << ""
-		<< std::endl;
+
+      lsubdout(cct, rgw, 15) << "RGWListBucketRequest "
+			     << __func__ << " "
+			     << "list uri=" << s->relative_uri << " "
+			     << " prefix=" << prefix << " "
+			     << " obj path=" << iter.key.name
+			     << " (" << sref << ")" << ""
+			     << dendl;
+
       /* call me maybe */
       this->operator()(sref.data(), sref.data(),
 		       (ix == size-1) ? true : false);
@@ -814,11 +817,13 @@ public:
       else
 	sref = boost::string_ref{iter.first};
 
-      std::cout << "RGWListBucketRequest "
-		<< __func__ << " " << "list uri=" << s->relative_uri << " "
-		<< " prefix=" << prefix << " "
-		<< " cpref=" << sref << " (not chomped)"
-		<< std::endl;
+      lsubdout(cct, rgw, 15) << "RGWListBucketRequest "
+			     << __func__ << " "
+			     << "list uri=" << s->relative_uri << " "
+			     << " prefix=" << prefix << " "
+			     << " cpref=" << sref
+			     << dendl;
+
       this->operator()(sref.data(), sref.data(), (ix == size-1) ? true : false);
       ++ix;
     }
@@ -1399,11 +1404,12 @@ public:
     // try objects
     for (const auto& iter : objs) {
       auto& name = iter.key.name;
-      std::cout << "RGWStatLeafRequest "
-		<< __func__ << " " << "list uri=" << s->relative_uri << " "
-		<< " prefix=" << prefix << " "
-		<< " obj path=" << name << ""
-		<< std::endl;
+      lsubdout(cct, rgw, 15) << "RGWStatLeafRequest "
+			     << __func__ << " "
+			     << "list uri=" << s->relative_uri << " "
+			     << " prefix=" << prefix << " "
+			     << " obj path=" << name << ""
+			     << dendl;
       /* XXX is there a missing match-dir case (trailing '/')? */
       matched = true;
       return;
@@ -1411,11 +1417,12 @@ public:
     // try prefixes
     for (auto& iter : common_prefixes) {
       auto& name = iter.first;
-      std::cout << "RGWStatLeafRequest "
-		<< __func__ << " " << "list uri=" << s->relative_uri << " "
-		<< " prefix=" << prefix << " "
-		<< " pref path=" << name << " (not chomped)"
-		<< std::endl;
+      lsubdout(cct, rgw, 15) << "RGWStatLeafRequest "
+			     << __func__ << " "
+			     << "list uri=" << s->relative_uri << " "
+			     << " prefix=" << prefix << " "
+			     << " pref path=" << name << " (not chomped)"
+			     << dendl;
       matched = true;
       is_dir = true;
       break;
