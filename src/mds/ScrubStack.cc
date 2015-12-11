@@ -304,8 +304,7 @@ void ScrubStack::scrub_dir_dentry_final(CDentry *dn)
     dn->scrub_children_finished();
     CInode *in = dn->get_projected_inode();
     C_InodeValidated *fin = new C_InodeValidated(mdcache->mds, this, dn);
-    MDRequestRef null_mdr;
-    in->validate_disk_state(&fin->result, null_mdr, fin);
+    in->validate_disk_state(&fin->result, fin);
   }
 
   return;
@@ -410,8 +409,7 @@ void ScrubStack::scrub_file_dentry(CDentry *dn)
 
   // At this stage the DN is already past scrub_initialize, so
   // it's in the cache, it has PIN_SCRUBQUEUE and it is authpinned
-  MDRequestRef null_mdr;
-  in->validate_disk_state(&fin->result, null_mdr, fin);
+  in->validate_disk_state(&fin->result, fin);
 }
 
 void ScrubStack::_validate_inode_done(CDentry *dn, int r,
