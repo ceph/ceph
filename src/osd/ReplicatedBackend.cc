@@ -818,8 +818,9 @@ void ReplicatedBackend::be_deep_scrub(
     }
     ++keys_scanned;
 
-    dout(25) << "CRC key " << iter->key() << " value "
-	     << string(iter->value().c_str(), iter->value().length()) << dendl;
+    dout(25) << "CRC key " << iter->key() << " value:\n";
+    iter->value().hexdump(*_dout);
+    *_dout << dendl;
 
     ::encode(iter->key(), bl);
     ::encode(iter->value(), bl);
