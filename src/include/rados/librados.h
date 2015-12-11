@@ -615,6 +615,25 @@ CEPH_RADOS_API int rados_wait_for_latest_osdmap(rados_t cluster);
 CEPH_RADOS_API int rados_pool_list(rados_t cluster, char *buf, size_t len);
 
 /**
+ * List inconsistent placement groups of the given pool
+ *
+ * Gets a list of inconsistent placement groups as NULL-terminated strings.
+ * The placement group names will be placed in the supplied buffer one after
+ * another. After the last name, there will be two 0 types in a row.
+ *
+ * If len is too short to fit all the placement group entries we need, we  will
+ * fill as much as we can.
+ *
+ * @param cluster cluster handle
+ * @param pool pool ID
+ * @param buf output buffer
+ * @param len output buffer length
+ * @returns length of the buffer we would need to list all pools
+ */
+CEPH_RADOS_API int rados_inconsistent_pg_list(rados_t cluster, int64_t pool,
+					      char *buf, size_t len);
+
+/**
  * Get a configuration handle for a rados cluster handle
  *
  * This handle is valid only as long as the cluster handle is valid.

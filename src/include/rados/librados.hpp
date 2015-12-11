@@ -1117,6 +1117,17 @@ namespace librados
     IoCtxImpl *io_ctx_impl;
   };
 
+  struct PlacementGroupImpl;
+  struct CEPH_RADOS_API PlacementGroup {
+    PlacementGroup();
+    PlacementGroup(const PlacementGroup&);
+    ~PlacementGroup();
+    bool parse(const char*);
+    std::unique_ptr<PlacementGroupImpl> impl;
+  };
+
+  CEPH_RADOS_API std::ostream& operator<<(std::ostream&, const PlacementGroup&);
+
   class CEPH_RADOS_API Rados
   {
   public:
@@ -1184,6 +1195,15 @@ namespace librados
 		       std::map<std::string, stats_map>& stats);
     int cluster_stat(cluster_stat_t& result);
     int cluster_fsid(std::string *fsid);
+
+    /**
+     * List inconsistent placement groups in the given pool
+     *
+     * @param pool_id the pool id
+     * @param pgs [out] the inconsistent PGs
+     */
+    int get_inconsistent_pgs(int64_t pool_id,
+                             std::vector<PlacementGroup>* pgs);
 
     /// get/wait for the most recent osdmap
     int wait_for_latest_osdmap();
