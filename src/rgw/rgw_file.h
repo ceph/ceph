@@ -713,7 +713,6 @@ class RGWListBucketRequest : public RGWLibRequest,
 {
 public:
   RGWFileHandle* rgw_fh;
-  std::string uri;
   uint64_t* offset;
   void* cb_arg;
   rgw_readdir_cb rcb;
@@ -769,6 +768,7 @@ public:
 
   int operator()(const std::string& name, const std::string& marker,
 		 bool add_marker) {
+    /* hash offset of name in parent (short name) for NFS readdir cookie */
     uint64_t off = XXH64(name.c_str(), name.length(), fh_key::seed);
     *offset = off;
     /* update traversal cache */
@@ -784,6 +784,7 @@ public:
   }
 
   virtual void send_response() {
+    struct req_state* s = get_state();
     size_t size = objs.size();for (const auto& iter : objs) {
       size_t last_del = iter.key.name.find_last_of('/');
       boost::string_ref sref;
@@ -791,9 +792,14 @@ public:
 	sref = boost::string_ref{iter.key.name.substr(last_del+1)};
       else
 	sref = boost::string_ref{iter.key.name};
+
+      /* if we find a trailing slash in a -listing- the parent is an
+       * empty directory */
+      if (sref=="")
+	continue;
 	
       std::cout << "RGWListBucketRequest "
-		<< __func__ << " " << "list uri=" << uri << " "
+		<< __func__ << " " << "list uri=" << s->relative_uri << " "
 		<< " prefix=" << prefix << " "
 		<< " obj path=" << iter.key.name
 		<< " (" << sref << ")" << ""
@@ -816,7 +822,7 @@ public:
 	sref = boost::string_ref{iter.first};
 
       std::cout << "RGWListBucketRequest "
-		<< __func__ << " " << "list uri=" << uri << " "
+		<< __func__ << " " << "list uri=" << s->relative_uri << " "
 		<< " prefix=" << prefix << " "
 		<< " cpref=" << sref << " (not chomped)"
 		<< std::endl;
@@ -1340,11 +1346,12 @@ public:
   RGWFileHandle* rgw_fh;
   std::string path;
   bool matched;
+  bool is_dir;
 
   RGWStatLeafRequest(CephContext* _cct, RGWUserInfo *_user,
 		     RGWFileHandle* _rgw_fh, const std::string& _path)
     : RGWLibRequest(_cct, _user), rgw_fh(_rgw_fh), path(_path),
-      matched(false) {
+      matched(false), is_dir(false) {
     default_max = 1000; // logical max {"foo", "foo/"}
     magic = 80;
     op = this;
@@ -1381,6 +1388,9 @@ public:
     s->user = user;
 
     prefix = rgw_fh->full_object_name();
+    if (prefix.length() > 0)
+      prefix += "/";
+    prefix += path;
     delimiter = '/';
 
     return 0;
@@ -1395,24 +1405,26 @@ public:
     struct req_state* s = get_state();
     // try objects
     for (const auto& iter : objs) {
-      path = iter.key.name;
+      auto& name = iter.key.name;
       std::cout << "RGWStatLeafRequest "
 		<< __func__ << " " << "list uri=" << s->relative_uri << " "
 		<< " prefix=" << prefix << " "
-		<< " obj path=" << path << ""
+		<< " obj path=" << name << ""
 		<< std::endl;
+      /* XXX is there a missing match-dir case (trailing '/')? */
       matched = true;
       return;
     }
     // try prefixes
     for (auto& iter : common_prefixes) {
-      path = iter.first;
+      auto& name = iter.first;
       std::cout << "RGWStatLeafRequest "
 		<< __func__ << " " << "list uri=" << s->relative_uri << " "
 		<< " prefix=" << prefix << " "
-		<< " pref path=" << path << " (not chomped)"
+		<< " pref path=" << name << " (not chomped)"
 		<< std::endl;
       matched = true;
+      is_dir = true;
       break;
     }
   }
