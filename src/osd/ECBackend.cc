@@ -196,7 +196,8 @@ ECBackend::ECBackend(
   : PGBackend(pg, store, coll, ch),
     cct(cct),
     ec_impl(ec_impl),
-    sinfo(ec_impl->get_data_chunk_count(), stripe_width) {
+    sinfo(ec_impl->get_data_chunk_count(), stripe_width),
+    in_progress_write_lock("ECBackend::in_progress_write_lock") {
   assert((ec_impl->get_data_chunk_count() *
 	  ec_impl->get_chunk_size(stripe_width)) == stripe_width);
 }
@@ -1098,7 +1099,10 @@ void ECBackend::handle_sub_write_reply(
     tid_op->pending_apply.erase(from);
   }
   // check_op(&(i->second));
-  check_op(tid_op);
+  hobject_t hoid = tid_op->hoid;
+  if (check_op(tid_op)) {
+    continue_same_oid_write(hoid);
+  }
 }
 
 void ECBackend::handle_sub_read_reply(
@@ -1463,12 +1467,8 @@ void ECBackend::submit_transaction(
 
   ECTransaction *ec_tran = static_cast<ECTransaction*>(_t);
   Op *op;
-  if (ec_tran->offset_write) {
+  if (ec_tran->offset_write)
     op = &(tid_to_overwrite_map[tid]);
-    // before submit transaction, will get on_disk_lock, so this check is not need
-    // assert(!ongoing_write_tid.count(hoid));
-    ongoing_write_tid[hoid] = tid;
-  }
   else
     op = &(tid_to_op_map[tid]);
   op->hoid = hoid;
@@ -1528,6 +1528,16 @@ void ECBackend::submit_transaction(
   }
 
   dout(10) << __func__ << ": op " << *op << " starting" << dendl;
+
+  in_progress_write_lock.Lock();
+  in_progress_write_tid[hoid].push_back(tid);
+  if (in_progress_write_tid[hoid].size() > 1) {
+    dout(10) << __func__ << " tid " << tid << " is waiting" << dendl;
+    in_progress_write_lock.Unlock();
+    return;
+  }
+  in_progress_write_lock.Unlock();
+
   if (ec_tran->offset_write)
     start_write2(op);
   else
@@ -1861,7 +1871,7 @@ ECUtil::HashInfoRef ECBackend::get_hash_info(
   return ref;
 }
 
-void ECBackend::check_op(Op *op)
+bool ECBackend::check_op(Op *op)
 {
   if (op->pending_apply.empty() && op->on_all_applied) {
     dout(10) << __func__ << " Calling on_all_applied on " << *op << dendl;
@@ -1880,12 +1890,14 @@ void ECBackend::check_op(Op *op)
     writing.pop_front();
     tid_to_op_map.erase(op->tid);
     tid_to_overwrite_map.erase(op->tid);
+    return true;
   }
   for (map<ceph_tid_t, Op>::iterator i = tid_to_op_map.begin();
        i != tid_to_op_map.end();
        ++i) {
     dout(20) << __func__ << " tid " << i->first <<": " << i->second << dendl;
   }
+  return false;
 }
 
 void ECBackend::start_write(Op *op) {
@@ -2032,6 +2044,12 @@ void ECBackend::continue_write_op(WriteOp *op)
     case WriteOp::READING: {
       op->state = WriteOp::WRITING;
 
+      // update the write version
+      eversion_t now_e = get_parent()->get_version();
+      for (vector<pg_log_entry_t>::iterator i = op->log_entries.begin();
+           i != op->log_entries.end(); ++i) {
+        i->version = now_e;
+      }
       // encode new bufferlist
       set<int> want;
       for (unsigned i = 0; i < ec_impl->get_chunk_count(); ++i) {
@@ -2045,7 +2063,7 @@ void ECBackend::continue_write_op(WriteOp *op)
       pair<uint64_t, uint64_t> to_write = sinfo.offset_len_to_stripe_bounds(
         make_pair(op->off, op->len));
       dout(10) << __func__ 
-          << " overwrite data " << op->version.version
+          << " overwrite data " << now_e
           << " write_len " << to_write.second
           << " data_len " << target[0].length()
           << dendl;
@@ -2057,7 +2075,7 @@ void ECBackend::continue_write_op(WriteOp *op)
       to_write.second = target[0].length();
       assert(op->overwrite_info);
       op->overwrite_info->overwrite(
-        op->version.version,
+        now_e.version,
         to_write);
 
       map<shard_id_t, ObjectStore::Transaction> trans;
@@ -2076,7 +2094,7 @@ void ECBackend::continue_write_op(WriteOp *op)
         // generate objectstore transaction
         trans[i->shard].write(
           coll_t(spg_t(pgid, i->shard)),
-          ghobject_t(op->hoid, op->version.version, i->shard),
+          ghobject_t(op->hoid, now_e.version, i->shard),
           to_write.first,
           target[i->shard].length(),
           target[i->shard],
@@ -2103,7 +2121,7 @@ void ECBackend::continue_write_op(WriteOp *op)
           op->hoid,
           stats,
           trans[i->shard],
-          op->version,
+          now_e,
           op->trim_to,
           op->trim_rollback_to,
           op->log_entries,
@@ -2132,12 +2150,53 @@ void ECBackend::continue_write_op(WriteOp *op)
       break;
     }
     case WriteOp::WRITING: {
+      op->state = WriteOp::COMPLETE;
+      // in_progress_write_lock.Lock();
+      // in_progress_write_tid[op->hoid].pop_front();
+      // int remain_size = in_progress_write_write_tid[op->hoid].size();
+      // in_progress_write_lock.Unlock();
+      // // check whether remain waiting write
+      // if (remain_size > 0) {
+      //   ceph_tid_t tid = in_progress_write_tid[op->hoid].front();
+      //   assert(tid_to_overwrite_map.count(tid));
+      //   WriteOp *w_op = &(tid_to_overwrite_map[tid]);
+      //   start_write2(w_op);
+      // }
       break;
     }
-    case RecoveryOp::COMPLETE:
+    case WriteOp::COMPLETE:
     default: {
       assert(0);
     };
+  }
+}
+
+void ECBackend::continue_same_oid_write(const hobject_t &hoid) {
+  in_progress_write_lock.Lock();
+  in_progress_write_tid[hoid].pop_front();
+  int remain_size = in_progress_write_tid[hoid].size();
+  in_progress_write_lock.Unlock();
+  // check whether remain waiting write
+  if (remain_size > 0) {
+    ceph_tid_t tid = in_progress_write_tid[hoid].front();
+    assert(tid_to_overwrite_map.count(tid));
+
+    Op *next_op;
+    if (tid_to_overwrite_map.count(tid) > 0) {
+      next_op = &(tid_to_overwrite_map[tid]);
+      dout(10) << __func__ << ": op " << *next_op << " continuing" << dendl;
+      start_write2(next_op);
+    }
+    else if (tid_to_op_map.count(tid) > 0) {
+      next_op = &(tid_to_op_map[tid]);
+      dout(10) << __func__ << ": op " << *next_op << " continuing" << dendl;
+      start_write(next_op);
+    }
+    else {
+      assert(0);
+    }
+    writing.push_back(next_op);
+    dout(10) << "onreadable_sync: " << next_op->on_local_applied_sync << dendl;
   }
 }
 
@@ -2154,8 +2213,8 @@ void ECBackend::handle_write_read_complete(
        << ")"
        << dendl;
 
-  assert(ongoing_write_tid.count(hoid));
-  ceph_tid_t tid = ongoing_write_tid[hoid];
+  assert(in_progress_write_tid[hoid].size() > 0);
+  ceph_tid_t tid = in_progress_write_tid[hoid].front();
   map<ceph_tid_t, WriteOp>::iterator iter = tid_to_overwrite_map.find(tid);
   assert(iter != tid_to_overwrite_map.end());
   WriteOp *op = &(iter->second);

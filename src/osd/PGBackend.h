@@ -166,6 +166,8 @@
        const hobject_t &hoid,
        map<string, bufferlist> &attrs) = 0;
 
+     virtual eversion_t get_version() = 0;
+
      virtual void op_applied(
        const eversion_t &applied_version) = 0;
 

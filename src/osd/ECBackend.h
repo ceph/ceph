@@ -542,7 +542,7 @@ public:
 				    const map<string,bufferptr> *attr = NULL);
 
   friend struct ReadCB;
-  void check_op(Op *op);
+  bool check_op(Op *op);
   void start_write(Op *op);
 
   friend struct OnOverwriteReadComplete;
@@ -555,7 +555,9 @@ public:
     RecoveryMessages *m);
 
   map<ceph_tid_t, WriteOp> tid_to_overwrite_map;
-  map<hobject_t, ceph_tid_t, hobject_t::BitwiseComparator> ongoing_write_tid;
+  map<hobject_t, list<ceph_tid_t>, hobject_t::BitwiseComparator> in_progress_write_tid;
+  Mutex in_progress_write_lock;
+  void continue_same_oid_write(const hobject_t &hoid);
 
   // history overwrite
   SharedPtrRegistry<hobject_t, OverwriteInfo, hobject_t::BitwiseComparator> overwrite_info_registry;

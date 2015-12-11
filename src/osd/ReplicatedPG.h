@@ -382,6 +382,9 @@ public:
     map<string, bufferlist> &attrs) {
     return get_object_context(hoid, true, &attrs);
   }
+  eversion_t get_version() {
+    return get_next_version();
+  }
   void log_operation(
     const vector<pg_log_entry_t> &logv,
     boost::optional<pg_hit_set_history_t> &hset_history,
