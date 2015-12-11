@@ -409,6 +409,7 @@ if [ "$start_mon" -eq 1 ]; then
         osd crush chooseleaf type = 0
         osd pool default min size = 1
         osd failsafe full ratio = .99
+        mon osd reporter subtree level = osd
         mon osd full ratio = .99
         mon data avail warn = 10
         mon data avail crit = 1
