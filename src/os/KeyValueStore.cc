@@ -1193,8 +1193,10 @@ void KeyValueStore::_finish_op(OpSequencer *osr)
   if (o->onreadable_sync) {
     o->onreadable_sync->complete(0);
   }
-  op_finisher.queue(o->onreadable);
-  op_finisher.queue(to_queue);
+  if (o->onreadable)
+    op_finisher.queue(o->onreadable);
+  if (!to_queue.empty())
+    op_finisher.queue(to_queue);
   delete o;
 }
 
