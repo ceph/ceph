@@ -142,6 +142,10 @@ dofsumount=0
 verbose=0
 use_default_conf=1
 
+## set variables like cluster or conf
+[ -e /etc/sysconfig/ceph ] && . /etc/sysconfig/ceph
+[ -e /etc/default/ceph ] && . /etc/default/ceph
+
 
 while echo $1 | grep -q '^-'; do     # FIXME: why not '^-'?
 case $1 in
@@ -313,7 +317,7 @@ for name in $what; do
 	lockfile=""
     fi
 
-    get_conf asok "$run_dir/ceph-$type.$id.asok" "admin socket"
+    get_conf asok "$run_dir/$cluster-$type.$id.asok" "admin socket"
 
     case "$command" in
 	start)
@@ -431,8 +435,8 @@ for name in $what; do
 		# these keys.  it's also true for legacy installs
 		# via mkcephfs, which is fine too; there is no harm
 		# in creating these keys.
-		get_conf mon_data "/var/lib/ceph/mon/ceph-$id" "mon data"
-		if [ "$mon_data" = "/var/lib/ceph/mon/ceph-$id" -a "$asok" = "/var/run/ceph/ceph-mon.$id.asok" ]; then
+		get_conf mon_data "/var/lib/ceph/mon/$cluster-$id" "mon data"
+		if [ "$mon_data" = "/var/lib/ceph/mon/$cluster-$id" -a "$asok" = "/var/run/ceph/$cluster-mon.$id.asok" ]; then
 		    echo Starting ceph-create-keys on $host...
 		    cmd2="$SBINDIR/ceph-create-keys --cluster $cluster -i $id 2> /dev/null &"
 		    do_cmd "$cmd2"
