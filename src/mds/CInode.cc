@@ -3684,11 +3684,10 @@ void InodeStore::generate_test_instances(list<InodeStore*> &ls)
 }
 
 void CInode::validate_disk_state(CInode::validated_data *results,
-                                 MDRequestRef &mdr, MDSInternalContext *fin)
+                                 MDSInternalContext *fin)
 {
   class ValidationContinuation : public MDSContinuation {
   public:
-    MDRequestRef mdr;
     MDSInternalContext *fin;
     CInode *in;
     CInode::validated_data *results;
@@ -3702,17 +3701,10 @@ void CInode::validate_disk_state(CInode::validated_data *results,
       DIRFRAGS
     };
 
-    /**
-     * May set either mdr or fin, depending on whether caller is doing
-     * validation in a single MDRequest (i.e. asok) or caller is doing
-     * their own thing (i.e. ScrubStack)
-     */
     ValidationContinuation(CInode *i,
                            CInode::validated_data *data_r,
-                           MDRequestRef &_mdr,
                            MDSInternalContext *fin_) :
                              MDSContinuation(i->mdcache->mds->server),
-                             mdr(_mdr),
                              fin(fin_),
                              in(i),
                              results(data_r),
@@ -3963,9 +3955,7 @@ next:
 	  results->backtrace.passed &&
 	  results->inode.passed)
         results->passed_validation = true;
-      if (mdr) {
-        server->respond_to_request(mdr, get_rval());
-      } else if (fin) {
+      if (fin) {
         fin->complete(get_rval());
       }
       delete this;
@@ -3976,7 +3966,6 @@ next:
   dout(10) << "scrub starting validate_disk_state on " << *this << dendl;
   ValidationContinuation *vc = new ValidationContinuation(this,
                                                           results,
-                                                          mdr,
                                                           fin);
   vc->begin();
 }

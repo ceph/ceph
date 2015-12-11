@@ -1130,10 +1130,6 @@ public:
   }
 
 protected:
-  /**
-   * Scrub the named dentry only (skip the scrubstack)
-   */
-  void scrub_dentry_work(MDRequestRef& mdr);
   void flush_dentry_work(MDRequestRef& mdr);
   /**
    * Resolve path to a dentry and pass it onto the ScrubStack.
@@ -1148,7 +1144,6 @@ protected:
   void repair_dirfrag_stats_work(MDRequestRef& mdr);
   friend class C_MDC_RepairDirfragStats;
 public:
-  void scrub_dentry(const string& path, Formatter *f, Context *fin);
   void flush_dentry(const string& path, Context *fin);
   /**
    * Create and start an OP_ENQUEUE_SCRUB
