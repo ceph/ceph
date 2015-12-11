@@ -4,6 +4,9 @@
  * Copyright (C) 2015 Red Hat Inc.
  */
 
+#include <sys/time.h>
+#include <assert.h>
+
 #include <memory>
 #include <map>
 #include <deque>
@@ -11,9 +14,21 @@
 #include <mutex>
 #include <ostream>
 
+#include <boost/heap/fibonacci_heap.hpp>
+// #include <boost/heap/heap_concepts.hpp>
+
 
 // dmClock namespace
 namespace dmc {
+
+  typedef double time;
+  const time no_time = 0.0;
+
+  inline double getTime() {
+    struct timeval now;
+    assert(0 == gettimeofday(&now, NULL));
+    return now.tv_sec + (now.tv_usec / 1000000.0);
+  }
 
   struct RequestTag {
     double proportion;
@@ -154,19 +169,81 @@ namespace dmc {
     }
   }; // class ClientQueue
 
+
     
   // T is client identifier type, R is request type
-  template<typename T, typename R>
+  template<typename C, typename R>
   class PriorityQueue {
 
-    typedef ClientQueue<R>          CQueue;
+    typedef ClientQueue<R>                   CQueue;
     typedef typename std::shared_ptr<CQueue> CQueueRef;
 
-    std::map<T,CQueueRef> clientMap;
-    std::priority_queue<CQueueRef> limitQ;
-    std::priority_queue<CQueueRef> proporitionQ;
-    std::priority_queue<CQueueRef> reservationQ;
-    
+    struct ReservationCompare {
+      bool operator()(const CQueueRef& n1, const CQueueRef& n2) const {
+	auto q1 = n1->peek();
+	auto q2 = n2->peek();
+
+	if (q1) {
+	  if (q2) {
+	    return q1->tag.reservation < q2->tag.reservation;
+	  } else {
+	    return true;
+	  }
+	} else {
+	  return NULL == q2;
+	}
+      }
+    };
+
+    struct ProportionCompare {
+      bool operator()(const CQueueRef& n1, const CQueueRef& n2) const {
+	auto q1 = n1->peek();
+	auto q2 = n2->peek();
+
+	if (q1) {
+	  if (q2) {
+	    return q1->tag.priority < q2->tag.priority;
+	  } else {
+	    return true;
+	  }
+	} else {
+	  return NULL == q2;
+	}
+      }
+    };
+
+    struct LimitCompare {
+      bool operator()(const CQueueRef& n1, const CQueueRef& n2) const {
+	auto q1 = n1->peek();
+	auto q2 = n2->peek();
+
+	if (q1) {
+	  if (q2) {
+	    return q1->tag.limit < q2->tag.limit;
+	  } else {
+	    return true;
+	  }
+	} else {
+	  return NULL == q2;
+	}
+      }
+    };
+
+
+    ClientDB<C> clientDb;
+
+    std::map<C,CQueueRef> clientMap;
+    boost::heap::fibonacci_heap<CQueueRef,
+				boost::heap::compare<ReservationCompare>> resQ;
+    boost::heap::fibonacci_heap<CQueueRef,
+				boost::heap::compare<LimitCompare>> limQ;
+    boost::heap::fibonacci_heap<CQueueRef,
+				boost::heap::compare<ProportionCompare>> propQ;
+      
+  public:
+
+    void addRequest(R request, C client, time t = no_time) {
+    }
 
   }; // class PriorityQueue
 

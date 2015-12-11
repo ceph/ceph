@@ -33,6 +33,11 @@ typedef std::unique_ptr<Request> RequestRef;
 
 
 int main(int argc, char* argv[]) {
+
+  std::cout.precision(17);
+  std::cout << "now: " << dmc::getTime() << std::endl;
+  std::cout << "now: " << dmc::getTime() << std::endl;
+  
   dmc::ClientDB<int> client_db;
 
   client_db.put(0, dmc::ClientInfo(1.0, 100.0, 250.0));
@@ -40,15 +45,19 @@ int main(int argc, char* argv[]) {
   client_db.put(2, dmc::ClientInfo(2.0, 100.0, 250.0));
   client_db.put(3, dmc::ClientInfo(3.0,  50.0,   0.0));
 
-  auto c0 = client_db.find(0);
-  std::cout << "client 0: " << c0 << std::endl;
+  int ca[] = {0, 3, 6};
+  for (int c = 0; c < sizeof ca / sizeof ca[0]; ++c) {
+    auto cli = ca[c];
+    auto cl = client_db.find(cli);
+    std::cout << "client " << cli << ": ";
+    if (cl) {
+      std::cout << *cl;
+    } else {
+      std::cout << "undefined";
+    }
 
-  auto c3 = client_db.find(3);
-  std::cout << "client 0: " << c3 << std::endl;
-
-  auto c6 = client_db.find(6);
-  std::cout << "client 0: " << c6 << std::endl;
-
+    std::cout << std::endl;
+  }
 
   dmc::ClientQueue<Request> client_queue;
 
@@ -64,4 +73,8 @@ int main(int argc, char* argv[]) {
     std::cout << e->request.get()->op << std::endl;
     client_queue.pop();
   }
+
+
+  dmc::PriorityQueue<int, Request> priorityQueue;
+  
 }
