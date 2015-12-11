@@ -403,6 +403,7 @@ install(FILES include/rados/librados.h
   include/rados/rados_types.hpp
   include/rados/librados.hpp
   include/buffer.h
+  include/buffer_fwd.h
   include/page.h
   include/crc32c.h
   DESTINATION include/rados)

@@ -47,7 +47,7 @@
 
 #include "page.h"
 #include "crc32c.h"
-#include "include/buffer_fwd.h"
+#include "buffer_fwd.h"
 
 #ifdef __CEPH__
 # include "include/assert.h"
