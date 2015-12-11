@@ -1024,24 +1024,4 @@ struct C_InvalidateCache : public Context {
   Journal *ImageCtx::create_journal() {
     return new Journal(*this);
   }
-
-  void ImageCtx::open_journal() {
-    assert(journal == NULL);
-    journal = new Journal(*this);
-  }
-
-  int ImageCtx::close_journal(bool force) {
-    assert(journal != NULL);
-    int r = journal->close();
-    if (r < 0) {
-      lderr(cct) << "failed to flush journal: " << cpp_strerror(r) << dendl;
-      if (!force) {
-        return r;
-      }
-    }
-
-    delete journal;
-    journal = NULL;
-    return r;
-  }
 }
