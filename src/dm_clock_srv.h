@@ -72,10 +72,10 @@ namespace dmc {
     // typedef std::map<T,ClientInfo>::const_iterator client_ref;
 
     // client_ref find(const T& clientId) const;
-    ClientInfo* find(const int& clientId) const {
+    ClientInfo* find(const int& clientId) {
       auto it = map.find(clientId);
       if (it == map.cend()) {
-	return null;
+	return NULL;
       } else {
 	return &it->second;
       }
@@ -103,13 +103,13 @@ namespace dmc {
       RequestRef request;
 
       Entry(RequestTag t, RequestRef&& r) :
-	tag(t), request(std::move(r)), serviced(false)
+	tag(t), request(std::move(r))
       {
 	// empty
       }
 
       Entry(Entry&& e) :
-	tag(e.tag), request(std::move(e.request)), serviced(e.serviced)
+	tag(e.tag), request(std::move(e.request))
       {
 	// empty
       }
@@ -121,7 +121,7 @@ namespace dmc {
 
     std::deque<Entry>  queue;
     mutable std::mutex queue_mutex;
-    boolean            idle;
+    bool               idle;
 
   public:
 
@@ -159,7 +159,7 @@ namespace dmc {
   template<typename T, typename R>
   class PriorityQueue {
 
-    typedef typename ClientQueue<R>          CQueue;
+    typedef ClientQueue<R>          CQueue;
     typedef typename std::shared_ptr<CQueue> CQueueRef;
 
     std::map<T,CQueueRef> clientMap;

@@ -50,17 +50,17 @@ int main(int argc, char* argv[]) {
   std::cout << "client 0: " << c6 << std::endl;
 
 
-  dmc::ClientQueue<int,Request> client_queue;
+  dmc::ClientQueue<Request> client_queue;
 
   RequestRef r0a(new Request(0, 1, "foo"));
-  client_queue.append(std::move(r0a));
+  client_queue.push(std::move(r0a));
 
-  client_queue.append(RequestRef( new Request(0, 2, "bar")));
-  client_queue.append(RequestRef( new Request(0, 3, "baz")));
-  client_queue.append(RequestRef( new Request(0, 4, "bazzzzz")));
+  client_queue.push(RequestRef( new Request(0, 2, "bar")));
+  client_queue.push(RequestRef( new Request(0, 3, "baz")));
+  client_queue.push(RequestRef( new Request(0, 4, "bazzzzz")));
 
   while (!client_queue.empty()) {
-    auto e = client_queue.peek_front();
+    auto e = client_queue.peek();
     std::cout << e->request.get()->op << std::endl;
     client_queue.pop();
   }
