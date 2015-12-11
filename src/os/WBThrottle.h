@@ -136,6 +136,14 @@ private:
     else
       return true;
   }
+  bool need_flush() const {
+    if (cur_ios < io_limits.second &&
+	pending_wbs.size() < fd_limits.second &&
+	cur_size < size_limits.second)
+      return false;
+    else
+      return true;
+  }
 
 public:
   WBThrottle(CephContext *cct);
