@@ -299,28 +299,20 @@ namespace rgw {
       return path;
     }
 
+    inline std::string make_key_name(const char *name) {
+      std::string key_name{full_object_name()};
+      if (key_name.length() > 0)
+	key_name += "/";
+      key_name += name;
+      return key_name;
+    }
+
     fh_key make_fhk(const std::string& name) {
       if (depth <= 1)
 	return fh_key(fhk.fh_hk.object, name.c_str());
       else {
-	std::vector<const std::string*> segments;
-	RGWFileHandle* tfh = this;
-	while (tfh && !tfh->is_bucket()) {
-	   segments.push_back(&tfh->object_name());
-	   tfh = tfh->parent.get();
-	}
-	/* hash path */
-	XXH64_state_t hs;
-	XXH64_reset(&hs, fh_key::seed);
-	bool first = true;
-	for (auto& s : boost::adaptors::reverse(segments)) {
-	  if (! first)
-	    (void) XXH64_update(&hs, (void*) "/", 1);
-	  else
-	    first = false;
-	  (void) XXH64_update(&hs, s->c_str(), s->size());
-	}
-	return fh_key(fhk.fh_hk.object, XXH64_digest(&hs));
+	std::string key_name = make_key_name(name.c_str());
+	return fh_key(fhk.fh_hk.object, key_name.c_str());
       }
     }
 
@@ -523,9 +515,9 @@ namespace rgw {
 
       using std::get;
 
-      std::string sname(name);
       RGWFileHandle::FHCache::Latch lat;
-      fh_key fhk = parent->make_fhk(sname);
+      std::string key_name{parent->make_key_name(name)};
+      fh_key fhk = parent->make_fhk(key_name);
       LookupFHResult fhr { nullptr, RGWFileHandle::FLAG_NONE };
 
       RGWFileHandle* fh =
@@ -535,7 +527,8 @@ namespace rgw {
       /* LATCHED */
       if (! fh) {
 	if (cflags & RGWFileHandle::FLAG_CREATE) {
-	  fh = new RGWFileHandle(this, get_inst(), parent, fhk, sname, cflags);
+	  fh = new RGWFileHandle(this, get_inst(), parent, fhk, key_name,
+				 cflags);
 	  intrusive_ptr_add_ref(fh); /* sentinel ref */
 	  fh_cache.insert_latched(fh, lat,
 				  RGWFileHandle::FHCache::FLAG_NONE);
