@@ -936,6 +936,120 @@ void RGWOptionsCORS_ObjStore_SWIFT::send_response()
   end_header(s, NULL);
 }
 
+int RGWBulkDelete_ObjStore_SWIFT::get_data(list<RGWBulkDelete::acct_path_t>& items,
+                                           bool * const is_truncated)
+{
+  const size_t MAX_LINE_SIZE = 2048;
+
+  RGWClientIOStreamBuf ciosb(*s->cio, (size_t)s->cct->_conf->rgw_max_chunk_size);
+  istream cioin(&ciosb);
+
+  char buf[MAX_LINE_SIZE];
+  while (cioin.getline(buf, sizeof(buf))) {
+    string path_str(buf);
+
+    ldout(s->cct, 20) << "extracted Bulk Delete entry: " << path_str << dendl;
+
+    RGWBulkDelete::acct_path_t path;
+
+    /* We need to skip all slashes at the beginning in order to preserve
+     * compliance with Swift. */
+    const size_t start_pos = path_str.find_first_not_of('/');
+
+    if (string::npos != start_pos) {
+      /* Seperator is the first slash after the leading ones. */
+      const size_t sep_pos = path_str.find('/', start_pos);
+
+      if (string::npos != sep_pos) {
+        string bucket_name;
+        url_decode(path_str.substr(start_pos, sep_pos - start_pos), bucket_name);
+
+        string obj_name;
+        url_decode(path_str.substr(sep_pos + 1), obj_name);
+
+        path.bucket_name = bucket_name;
+        path.obj_key = obj_name;
+      } else {
+        /* It's guaranteed here that bucket name is at least one character
+         * long and is different than slash. */
+        url_decode(path_str.substr(start_pos), path.bucket_name);
+      }
+
+      items.push_back(path);
+    }
+
+    if (items.size() == MAX_CHUNK_ENTRIES) {
+      *is_truncated = true;
+      return 0;
+    }
+  }
+
+  *is_truncated = false;
+  return 0;
+}
+
+void RGWBulkDelete_ObjStore_SWIFT::send_response()
+{
+  set_req_state_err(s, ret);
+  dump_errno(s);
+  end_header(s, NULL);
+
+  s->formatter->open_object_section("delete");
+
+  const auto num_deleted = deleter->get_num_deleted();
+  const auto num_unfound = deleter->get_num_unfound();
+  const auto& failures = deleter->get_failures();
+
+  string resp_status;
+  string resp_body;
+
+  if (!failures.empty()) {
+    int reason = ERR_INVALID_REQUEST;
+    for (const auto fail_desc : failures) {
+      if (-ENOENT != fail_desc.err && -EACCES != fail_desc.err) {
+        reason = fail_desc.err;
+      }
+    }
+
+    rgw_err err;
+    set_req_state_err(err, reason, s->prot_flags);
+    dump_errno(err, resp_status);
+  } else if (0 == num_deleted && 0 == num_unfound) {
+    /* 400 Bad Request */
+    dump_errno(400, resp_status);
+    resp_body = "Invalid bulk delete.";
+  } else {
+    /* 200 OK */
+    dump_errno(200, resp_status);
+  }
+
+  encode_json("Number Deleted", num_deleted, s->formatter);
+  encode_json("Number Not Found", num_unfound, s->formatter);
+  encode_json("Response Body", resp_body, s->formatter);
+  encode_json("Response Status", resp_status, s->formatter);
+
+  s->formatter->open_array_section("Errors");
+  for (const auto fail_desc : failures) {
+    s->formatter->open_array_section("object");
+
+    stringstream ss_name;
+    ss_name << fail_desc.path;
+    encode_json("Name", ss_name.str(), s->formatter);
+
+    rgw_err err;
+    set_req_state_err(err, fail_desc.err, s->prot_flags);
+    string status;
+    dump_errno(err, status);
+    encode_json("Status", status, s->formatter);
+    s->formatter->close_section();
+  }
+  s->formatter->close_section();
+
+  s->formatter->close_section();
+
+  rgw_flush_formatter_and_reset(s, s->formatter);
+}
+
 RGWOp *RGWHandler_ObjStore_Service_SWIFT::op_get()
 {
   return new RGWListBuckets_ObjStore_SWIFT;
@@ -948,7 +1062,18 @@ RGWOp *RGWHandler_ObjStore_Service_SWIFT::op_head()
 
 RGWOp *RGWHandler_ObjStore_Service_SWIFT::op_post()
 {
+  if (s->info.args.exists("bulk-delete")) {
+    return new RGWBulkDelete_ObjStore_SWIFT;
+  }
   return new RGWPutMetadataAccount_ObjStore_SWIFT;
+}
+
+RGWOp *RGWHandler_ObjStore_Service_SWIFT::op_delete()
+{
+  if (s->info.args.exists("bulk-delete")) {
+    return new RGWBulkDelete_ObjStore_SWIFT;
+  }
+  return NULL;
 }
 
 RGWOp *RGWHandler_ObjStore_Bucket_SWIFT::get_obj_op(bool get_data)

@@ -983,7 +983,7 @@ struct rgw_obj_key {
     instance = i;
   }
 
-  bool empty() {
+  bool empty() const {
     return name.empty();
   }
   bool operator==(const rgw_obj_key& k) const {
@@ -1651,12 +1651,18 @@ extern string rgw_trim_quotes(const string& val);
 
 /** Check if the req_state's user has the necessary permissions
  * to do the requested action */
+extern bool verify_bucket_permission(struct req_state * s,
+                                     RGWAccessControlPolicy * bucket_acl,
+                                     int perm);
 extern bool verify_bucket_permission(struct req_state *s, int perm);
-extern bool verify_object_permission(struct req_state *s, RGWAccessControlPolicy *bucket_acl, RGWAccessControlPolicy *object_acl, int perm);
+extern bool verify_object_permission(struct req_state *s,
+                                     RGWAccessControlPolicy *bucket_acl,
+                                     RGWAccessControlPolicy *object_acl,
+                                     int perm);
 extern bool verify_object_permission(struct req_state *s, int perm);
 /** Convert an input URL into a sane object name
  * by converting %-escaped strings into characters, etc*/
-extern bool url_decode(string& src_str, string& dest_str, bool in_query = false);
+extern bool url_decode(const string& src_str, string& dest_str, bool in_query = false);
 extern void url_encode(const string& src, string& dst);
 
 extern void calc_hmac_sha1(const char *key, int key_len,
