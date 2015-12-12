@@ -44,6 +44,15 @@ from teuthology import misc
 
 log = logging.getLogger(__name__)
 
+def enforce_json_dictionary(something):
+    if type(something) is not types.DictType:
+        raise Exception(
+            'Please pip uninstall --yes cliff-tablib and try again.'
+            ' Details about this error can be found at'
+            ' https://bugs.launchpad.net/python-openstackclient/+bug/1510546'
+            ' you are encouraged to add a comment if you want it to be'
+            ' fixed.')
+
 class OpenStackInstance(object):
 
     def __init__(self, name_or_id, info=None):
@@ -56,10 +65,9 @@ class OpenStackInstance(object):
 
     def set_info(self):
         try:
-            info = json.loads(
+            self.info = json.loads(
                 misc.sh("openstack server show -f json " + self.name_or_id))
-            self.info = dict(map(
-                lambda p: (p['Field'].lower(), p['Value']), info))
+            enforce_json_dictionary(self.info)
         except CalledProcessError:
             self.info = None
 
@@ -214,13 +222,13 @@ class OpenStack(object):
         Get the value of a field from a result returned by the openstack
         command in json format.
 
-        :param result:  A list of dicts in a format similar to the output of
+        :param result:  A dictionary similar to the output of
                         'openstack server show'
         :param field:   The name of the field whose value to retrieve. Case is
                         ignored.
         """
-        filter_func = lambda v: v['Field'].lower() == field.lower()
-        return filter(filter_func, result)[0]['Value']
+        enforce_json_dictionary(result)
+        return result[field.lower()]
 
     def image_exists(self, image):
         """

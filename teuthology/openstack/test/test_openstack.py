@@ -38,9 +38,75 @@ import scripts.openstack
 
 class TestOpenStackInstance(object):
 
-    teuthology_instance = '[{"Field": "OS-DCF:diskConfig", "Value": "MANUAL"}, {"Field": "OS-EXT-AZ:availability_zone", "Value": "nova"}, {"Field": "OS-EXT-STS:power_state", "Value": 1}, {"Field": "OS-EXT-STS:task_state", "Value": null}, {"Field": "OS-EXT-STS:vm_state", "Value": "active"}, {"Field": "OS-SRV-USG:launched_at", "Value": "2015-11-12T14:18:42.000000"}, {"Field": "OS-SRV-USG:terminated_at", "Value": null}, {"Field": "accessIPv4", "Value": ""}, {"Field": "accessIPv6", "Value": ""}, {"Field": "addresses", "Value": "Ext-Net=167.114.233.32"}, {"Field": "config_drive", "Value": ""}, {"Field": "created", "Value": "2015-11-12T14:18:22Z"}, {"Field": "flavor", "Value": "eg-30 (3c1d6170-0097-4b5c-a3b3-adff1b7a86e0)"}, {"Field": "hostId", "Value": "b482bcc97b6b2a5b3569dc349e2b262219676ddf47a4eaf72e415131"}, {"Field": "id", "Value": "f3ca32d7-212b-458b-a0d4-57d1085af953"}, {"Field": "image", "Value": "teuthology-ubuntu-14.04 (4300a7ca-4fbd-4b34-a8d5-5a4ebf204df5)"}, {"Field": "key_name", "Value": "myself"}, {"Field": "name", "Value": "teuthology"}, {"Field": "os-extended-volumes:volumes_attached", "Value": [{"id": "627e2631-fbb3-48cd-b801-d29cd2a76f74"}, {"id": "09837649-0881-4ee2-a560-adabefc28764"}, {"id": "44e5175b-6044-40be-885a-c9ddfb6f75bb"}]}, {"Field": "progress", "Value": 0}, {"Field": "project_id", "Value": "131b886b156a4f84b5f41baf2fbe646c"}, {"Field": "properties", "Value": ""}, {"Field": "security_groups", "Value": [{"name": "teuthology"}]}, {"Field": "status", "Value": "ACTIVE"}, {"Field": "updated", "Value": "2015-11-12T14:18:42Z"}, {"Field": "user_id", "Value": "291dde1633154837be2693c6ffa6315c"}]'
+    teuthology_instance = """
+{
+  "OS-EXT-STS:task_state": null,
+  "addresses": "Ext-Net=167.114.233.32",
+  "image": "Ubuntu 14.04 (0d315a8d-75e3-418a-80e4-48e62d599627)",
+  "OS-EXT-STS:vm_state": "active",
+  "OS-SRV-USG:launched_at": "2015-08-17T12:22:13.000000",
+  "flavor": "vps-ssd-1 (164fcc7e-7771-414f-a607-b388cb7b7aa0)",
+  "id": "f3ca32d7-212b-458b-a0d4-57d1085af953",
+  "security_groups": [
+    {
+      "name": "default"
+    }
+  ],
+  "user_id": "3a075820e5d24fda96cd340b87fd94e9",
+  "OS-DCF:diskConfig": "AUTO",
+  "accessIPv4": "",
+  "accessIPv6": "",
+  "progress": 0,
+  "OS-EXT-STS:power_state": 1,
+  "project_id": "62cf1be03cec403c8ed8e64df55732ea",
+  "config_drive": "",
+  "status": "ACTIVE",
+  "updated": "2015-11-03T13:48:53Z",
+  "hostId": "bcdf964b6f724e573c07156ff85b4db1707f6f0969f571cf33e0468d",
+  "OS-SRV-USG:terminated_at": null,
+  "key_name": "loic",
+  "properties": "",
+  "OS-EXT-AZ:availability_zone": "nova",
+  "name": "mrdarkdragon",
+  "created": "2015-08-17T12:21:31Z",
+  "os-extended-volumes:volumes_attached": [{"id": "627e2631-fbb3-48cd-b801-d29cd2a76f74"}, {"id": "09837649-0881-4ee2-a560-adabefc28764"}, {"id": "44e5175b-6044-40be-885a-c9ddfb6f75bb"}]
+}
+    """
 
-    teuthology_instance_no_addresses = '[{"Field": "addresses", "Value": ""}, {"Field": "id", "Value": "f3ca32d7-212b-458b-a0d4-57d1085af953"}]'
+    teuthology_instance_no_addresses = """
+{
+  "OS-EXT-STS:task_state": null,
+  "addresses": "",
+  "image": "Ubuntu 14.04 (0d315a8d-75e3-418a-80e4-48e62d599627)",
+  "OS-EXT-STS:vm_state": "active",
+  "OS-SRV-USG:launched_at": "2015-08-17T12:22:13.000000",
+  "flavor": "vps-ssd-1 (164fcc7e-7771-414f-a607-b388cb7b7aa0)",
+  "id": "f3ca32d7-212b-458b-a0d4-57d1085af953",
+  "security_groups": [
+    {
+      "name": "default"
+    }
+  ],
+  "user_id": "3a075820e5d24fda96cd340b87fd94e9",
+  "OS-DCF:diskConfig": "AUTO",
+  "accessIPv4": "",
+  "accessIPv6": "",
+  "progress": 0,
+  "OS-EXT-STS:power_state": 1,
+  "project_id": "62cf1be03cec403c8ed8e64df55732ea",
+  "config_drive": "",
+  "status": "ACTIVE",
+  "updated": "2015-11-03T13:48:53Z",
+  "hostId": "bcdf964b6f724e573c07156ff85b4db1707f6f0969f571cf33e0468d",
+  "OS-SRV-USG:terminated_at": null,
+  "key_name": "loic",
+  "properties": "",
+  "OS-EXT-AZ:availability_zone": "nova",
+  "name": "mrdarkdragon",
+  "created": "2015-08-17T12:21:31Z",
+  "os-extended-volumes:volumes_attached": []
+}
+    """
 
     def test_init(self):
         with patch.multiple(
