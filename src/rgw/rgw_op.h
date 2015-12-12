@@ -1303,6 +1303,7 @@ public:
   virtual void put_op(RGWOp *op);
   virtual int read_permissions(RGWOp *op) = 0;
   virtual int authorize() = 0;
+  virtual int postauth_init() = 0;
 };
 
 #endif

@@ -194,6 +194,7 @@ public:
 
   int init(RGWRados *store, struct req_state *state, RGWClientIO *cio);
   int authorize();
+  int postauth_init();
 
   RGWAccessControlPolicy *alloc_policy() { return NULL; /* return new RGWAccessControlPolicy_SWIFT; */ }
   void free_policy(RGWAccessControlPolicy *policy) { delete policy; }

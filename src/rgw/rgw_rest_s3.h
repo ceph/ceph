@@ -379,6 +379,7 @@ public:
   virtual int authorize() {
     return RGW_Auth_S3::authorize(store, s);
   }
+  int postauth_init() { return 0; }
 };
 
 class RGWHandler_ObjStore_S3 : public RGWHandler_ObjStore {
@@ -396,6 +397,7 @@ public:
   virtual int authorize() {
     return RGW_Auth_S3::authorize(store, s);
   }
+  int postauth_init();
 };
 
 class RGWHandler_ObjStore_Service_S3 : public RGWHandler_ObjStore_S3 {

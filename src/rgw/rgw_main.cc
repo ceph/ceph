@@ -573,7 +573,7 @@ static int process_request(RGWRados *store, RGWREST *rest, RGWRequest *req, RGWC
 
   should_log = mgr->get_logging();
 
-  req->log(s, "getting op");
+  req->log_format(s, "getting op %d", s->op);
   op = handler->get_op(store);
   if (!op) {
     abort_early(s, NULL, -ERR_METHOD_NOT_ALLOWED);
@@ -585,6 +585,14 @@ static int process_request(RGWRados *store, RGWREST *rest, RGWRequest *req, RGWC
   ret = handler->authorize();
   if (ret < 0) {
     dout(10) << "failed to authorize request" << dendl;
+    abort_early(s, op, ret);
+    goto done;
+  }
+
+  req->log(s, "normalizing buckets and tenants");
+  ret = handler->postauth_init();
+  if (ret < 0) {
+    dout(10) << "failed to run post-auth init" << dendl;
     abort_early(s, op, ret);
     goto done;
   }

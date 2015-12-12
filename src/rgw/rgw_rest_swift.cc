@@ -1273,6 +1273,30 @@ int RGWHandler_ObjStore_SWIFT::authorize()
   return 0;
 }
 
+int RGWHandler_ObjStore_SWIFT::postauth_init()
+{
+
+  /* XXX Stub this until Swift Auth sets account into URL. */
+  s->bucket_tenant = s->user.user_id.tenant;
+  s->bucket_name = s->url_bucket;
+
+  dout(10) << "s->object=" << (!s->object.empty() ? s->object : rgw_obj_key("<NULL>"))
+           << " s->bucket=" << rgw_make_bucket_entry_name(s->bucket_tenant, s->bucket_name) << dendl;
+
+  int ret;
+  ret = validate_tenant_name(s->bucket_tenant);
+  if (ret)
+    return ret;
+  ret = validate_bucket_name(s->bucket_name);
+  if (ret)
+    return ret;
+  ret = validate_object_name(s->object.name);
+  if (ret)
+    return ret;
+
+  return 0;
+}
+
 int RGWHandler_ObjStore_SWIFT::validate_bucket_name(const string& bucket)
 {
   int ret = RGWHandler_ObjStore::validate_bucket_name(bucket);
@@ -1359,7 +1383,7 @@ int RGWHandler_ObjStore_SWIFT::init_from_header(struct req_state *s)
       s->formatter = new RGWFormatter_Plain;
       return -ERR_BAD_URL;
     }
-    first = req;
+    first = req; // XXX first is unused
   }
 
   string tenant_path;
@@ -1398,9 +1422,7 @@ int RGWHandler_ObjStore_SWIFT::init_from_header(struct req_state *s)
 
   s->info.effective_uri = "/" + first;
 
-  /* XXX Temporarily not parsing URL until Auth puts something in there. */
-  s->bucket_tenant = s->user.user_id.tenant;
-  s->bucket_name = first;
+  s->url_bucket = first;  /* Save bucket to tide us over until token is parsed. */
 
   if (req.size()) {
     s->object = rgw_obj_key(req, s->info.env->get("HTTP_X_OBJECT_VERSION_ID", "")); /* rgw swift extension */
@@ -1412,19 +1434,7 @@ int RGWHandler_ObjStore_SWIFT::init_from_header(struct req_state *s)
 
 int RGWHandler_ObjStore_SWIFT::init(RGWRados *store, struct req_state *s, RGWClientIO *cio)
 {
-  dout(10) << "s->object=" << (!s->object.empty() ? s->object : rgw_obj_key("<NULL>"))
-           << " s->bucket=" << rgw_make_bucket_entry_name(s->bucket_tenant, s->bucket_name) << dendl;
-
   int ret;
-  ret = validate_tenant_name(s->bucket_tenant);
-  if (ret)
-    return ret;
-  ret = validate_bucket_name(s->bucket_name);
-  if (ret)
-    return ret;
-  ret = validate_object_name(s->object.name);
-  if (ret)
-    return ret;
 
   const char *copy_source = s->info.env->get("HTTP_X_COPY_FROM");
   if (copy_source) {
@@ -1432,6 +1442,7 @@ int RGWHandler_ObjStore_SWIFT::init(RGWRados *store, struct req_state *s, RGWCli
     if (!result)
        return -ERR_BAD_URL;
     s->src_tenant_name = s->user.user_id.tenant;
+    /* XXX oops, we use user_id prematurely here too */
   }
 
   s->dialect = "swift";
@@ -1446,7 +1457,7 @@ int RGWHandler_ObjStore_SWIFT::init(RGWRados *store, struct req_state *s, RGWCli
     bool result = RGWCopyObj::parse_copy_location(req_dest, dest_bucket_name, dest_obj_key);
     if (!result)
        return -ERR_BAD_URL;
-    dest_tenant_name = s->user.user_id.tenant;
+    dest_tenant_name = s->user.user_id.tenant; /* XXX not available yet */
 
     string dest_object = dest_obj_key.name;
     if (dest_bucket_name != s->bucket_name) {
@@ -1479,8 +1490,9 @@ RGWHandler *RGWRESTMgr_SWIFT::get_handler(struct req_state *s)
   if (ret < 0)
     return NULL;
 
-  if (s->bucket_name.empty())
+  if (s->url_bucket.empty())
     return new RGWHandler_ObjStore_Service_SWIFT;
+
   if (s->object.empty())
     return new RGWHandler_ObjStore_Bucket_SWIFT;
 

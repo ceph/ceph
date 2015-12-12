@@ -1052,7 +1052,9 @@ struct req_state {
    uint32_t perm_mask;
    utime_t header_time;
 
-   /* Set once when req_state is initialized and not violated thereafter */
+   /* Keeps [[tenant]:]bucket until we parse the token. Don't use elsewhere. */
+   string url_bucket;
+   /* Set once when url_bucket is parsed and not violated thereafter. */
    string bucket_tenant;
    string bucket_name;
 
