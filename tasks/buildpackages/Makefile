@@ -49,12 +49,24 @@ ${PKG_REPO}:
 	flock --close ${D}/flock-$@.lock ${MAKE} flock-$@
 	touch ${D}/$@
 
+# Just because 'server create' return success does not mean it actually succeeded!
+# Check the server status before we proceed.
+# If it's a weird status, bail out and let the delete fire
+# eg: ERROR status can happen if there is no VM host without enough capacity for the request.
 ceph-${CEPH_PKG_TYPE}-${CEPH_DIST}-${CEPH_ARCH}-${CEPH_FLAVOR}-${CEPH_SHA1}: ${PKG_REPO}
 	openstack server create --image 'teuthology-${CEPH_OS_TYPE}-${CEPH_OS_VERSION}-${CEPH_ARCH}' ${OPENSTACK_NETWORK} --flavor ${BUILD_FLAVOR} --key-name teuthology --security-group teuthology --property ownedby=${MY_IP} --user-data ${CEPH_OS_TYPE}-${CEPH_OS_VERSION}-user-data.txt --wait $@
-	sleep 30
 	set -ex ; \
 	trap "openstack server delete --wait $@" EXIT ; \
+	for delay in 30 10 10 10 10 10 10 10 10 10 10 10 10 10 10 10 10 10 10 10 10 10 10 10 10 ; do \
+		status=$$(openstack server show -c status -f value $@) ; \
+		case $$status in \
+			ACTIVE) break ;; \
+			NOSTATE|*BUILD|*BOOT|*RESIZE) sleep $$delay ;; \
+			*) exit 1 ;; \
+		esac ; \
+	done ; \
 	ip=$(call get_ip,$@) ; \
+	test -n "$$ip" || exit ; \
 	for delay in 1 2 4 8 8 8 8 8 8 8 8 8 16 16 16 16 16 32 32 32 64 128 256 512 ; do if ssh -o 'ConnectTimeout=3' $$ip bash -c '"grep -q READYTORUN /var/log/cloud-init*.log"' ; then break ; else sleep $$delay ; fi ; done ; \
 	scp make-${CEPH_PKG_TYPE}.sh common.sh ubuntu@$$ip: ; \
 	packages_repository=$(call get_ip,${<F}) ; \
