@@ -100,7 +100,7 @@ def connect(user_at_host, host_key=None, keep_alive=False, timeout=60,
                     value = os.path.expanduser(value)
                 connect_args[arg_name] = value
 
-    log.info(connect_args)
+    log.debug(connect_args)
 
     if not retry:
         ssh.connect(**connect_args)
