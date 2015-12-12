@@ -4,9 +4,10 @@
 #include "MemoryModel.h"
 #include "common/config.h"
 #include "debug.h"
-#include <malloc.h>
-
 #include <fstream>
+#if defined(HAVE_MALLINFO)
+#include <malloc.h>
+#endif
 
 #define dout_subsys ceph_subsys_
 

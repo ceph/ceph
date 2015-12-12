@@ -204,7 +204,7 @@ void *ObjBencher::status_printer(void *_bencher) {
 
 int ObjBencher::aio_bench(
   int operation, int secondsToRun,
-  int concurrentios, size_t object_size, bool cleanup, const std::string& run_name, bool no_verify) {
+  int concurrentios, uint64_t object_size, bool cleanup, const std::string& run_name, bool no_verify) {
 
   if (concurrentios <= 0) 
     return -EINVAL;
@@ -322,7 +322,7 @@ static T vec_stddev(vector<T>& v)
   return sqrt(stddev);
 }
 
-int ObjBencher::fetch_bench_metadata(const std::string& metadata_file, size_t* object_size, int* num_objects, int* prevPid) {
+int ObjBencher::fetch_bench_metadata(const std::string& metadata_file, uint64_t* object_size, int* num_objects, int* prevPid) {
   int r = 0;
   bufferlist object_data;
 
@@ -1014,7 +1014,7 @@ int ObjBencher::rand_read_bench(int seconds_to_run, int num_objects, int concurr
 
 int ObjBencher::clean_up(const std::string& prefix, int concurrentios, const std::string& run_name) {
   int r = 0;
-  size_t object_size;
+  uint64_t object_size;
   int num_objects;
   int prevPid;
 

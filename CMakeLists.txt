@@ -179,8 +179,6 @@ endif(${WITH_TCMALLOC})
 
 find_package(keyutils REQUIRED)
 
-find_package(libuuid REQUIRED)
-
 find_package(libcurl REQUIRED)
 
 find_package(libedit REQUIRED)
