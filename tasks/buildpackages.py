@@ -14,8 +14,6 @@ import copy
 import logging
 import os
 import types
-from subprocess import check_call, check_output
-from teuthology import misc as teuthology
 from teuthology import packaging
 from teuthology import misc
 from teuthology.config import config as teuth_config
@@ -49,7 +47,7 @@ def apply_overrides(ctx, config):
     overrides = ctx.config.get('overrides')
     if overrides:
         install_overrides = overrides.get('install', {})
-        teuthology.deep_merge(config, install_overrides.get(project, {}))
+        misc.deep_merge(config, install_overrides.get(project, {}))
     return config
 
 def get_config_install(ctx, config):
@@ -99,7 +97,7 @@ def lookup_configs(ctx, node):
 
 def get_sha1(ref):
     url = teuth_config.get_ceph_git_url()
-    ls_remote = check_output("git ls-remote " + url + " " + ref, shell=True)
+    ls_remote = misc.sh("git ls-remote " + url + " " + ref)
     return ls_remote.split()[0]
 
 def task(ctx, config):
@@ -138,10 +136,9 @@ def task(ctx, config):
     dist = LocalGitbuilderProject()._get_distro(distro=os_type,
                                                 version=os_version)
     pkg_type = get_pkg_type(os_type)
-    check_call(
+    misc.sh(
         "flock --close /tmp/buildpackages " +
-        "make -C " + d + " " + os.environ['HOME'] + "/.ssh_agent",
-        shell=True)
+        "make -C " + d + " " + os.environ['HOME'] + "/.ssh_agent")
     for (flavor, tag, branch, sha1) in lookup_configs(ctx, ctx.config):
         if tag:
             sha1 = get_sha1(tag)
@@ -188,6 +185,6 @@ def task(ctx, config):
                " " + target +
                " ")
         log.info("buildpackages: " + cmd)
-        check_call(cmd, shell=True)
+        misc.sh(cmd)
     teuth_config.gitbuilder_host = openstack.get_ip('packages-repository', '')
     log.info('Finished buildpackages')
