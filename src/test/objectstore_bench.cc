@@ -222,6 +222,7 @@ int main(int argc, const char *argv[])
   // create a collection
   spg_t pg;
   const coll_t cid(pg);
+  if(!os->collection_exists(cid))
   {
     ObjectStore::Sequencer osr(__func__);
     ObjectStore::Transaction t;
@@ -283,6 +284,8 @@ int main(int argc, const char *argv[])
   ObjectStore::Transaction t;
   for (const auto &oid : oids)
     t.remove(cid, oid);
+  
+  t.remove_collection(cid);
   os->apply_transaction(&osr,t);
 
   os->umount();
