@@ -15,11 +15,15 @@
 #ifndef OP_QUEUE_H
 #define OP_QUEUE_H
 
-#include "common/Formatter.h"
+//#include "common/Formatter.h"
 #include "include/msgr.h"
 
 #include <list>
 #include <functional>
+
+namespace ceph {
+  class Formatter;
+}
 
 /**
  * Abstract class for all Op Queues

@@ -276,7 +276,13 @@ public:
   }
 
   T dequeue() final {
+    unsigned junk;
+    return dequeue(junk);
+  }
+
+  T dequeue(unsigned &missed) {
     assert(!empty());
+    missed = 0;
 
     if (!(high_queue.empty())) {
       T ret = high_queue.rbegin()->second.front().second;
@@ -309,6 +315,7 @@ public:
 	}
       }
       inc_dq();
+      ++missed;
     }
     T ret = dq->second.front().second;
     dq->second.pop_front();
