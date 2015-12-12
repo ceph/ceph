@@ -9,74 +9,44 @@
 
 #define dout_subsys ceph_subsys_rgw
 
-int RGWMongoose::write_data(const char *buf, int len)
+int RGWMongoose::write_data(const char * const buf, const int len)
 {
-  if (!header_done) {
-    header_data.append(buf, len);
-    return len;
+  const int ret = mg_write(conn, buf, len);
+  if (ret > 0) {
+    return ret;
   }
-  if (!sent_header) {
-    data.append(buf, len);
-    return len;
-  }
-  int r = mg_write(conn, buf, len);
-  if (r == 0) {
-    /* didn't send anything, error out */
-    return -EIO;
-  }
-  return r;
+
+  /* didn't send anything, error out */
+  dout(3) << "mg_write() returned " << ret << dendl;
+  return -EIO;
 }
 
-RGWMongoose::RGWMongoose(mg_connection *_conn, int _port) : conn(_conn), port(_port), header_done(false), sent_header(false), has_content_length(false),
-                                                 explicit_keepalive(false), explicit_conn_close(false)
+RGWMongoose::RGWMongoose(mg_connection *_conn, int _port)
+  : conn(_conn),
+    port(_port),
+    has_content_length(false),
+    explicit_keepalive(false),
+    explicit_conn_close(false)
 {
 }
 
-int RGWMongoose::read_data(char *buf, int len)
+int RGWMongoose::read_data(char * const buf, const int len)
 {
   return mg_read(conn, buf, len);
 }
 
-void RGWMongoose::flush()
+void RGWMongoose::flush(RGWClientIO& controller)
 {
+  /* NOP */
 }
 
-int RGWMongoose::complete_request()
-{
-  if (!sent_header) {
-    if (!has_content_length) {
-      header_done = false; /* let's go back to writing the header */
-
-      if (0 && data.length() == 0) {
-        has_content_length = true;
-        print("Transfer-Enconding: %s\r\n", "chunked");
-        data.append("0\r\n\r\n", sizeof("0\r\n\r\n")-1);
-      } else {
-        int r = send_content_length(data.length());
-        if (r < 0)
-	  return r;
-      }
-    }
-
-    complete_header();
-  }
-
-  if (data.length()) {
-    int r = write_data(data.c_str(), data.length());
-    if (r < 0)
-      return r;
-    data.clear();
-  }
-
-  return 0;
-}
-
-void RGWMongoose::init_env(CephContext *cct)
+void RGWMongoose::init_env(CephContext * const cct)
 {
   env.init(cct);
   struct mg_request_info *info = mg_get_request_info(conn);
-  if (!info)
+  if (!info) {
     return;
+  }
 
   for (int i = 0; i < info->num_headers; i++) {
     struct mg_request_info::mg_header *header = &info->http_headers[i];
@@ -136,73 +106,76 @@ void RGWMongoose::init_env(CephContext *cct)
   }
 }
 
-int RGWMongoose::send_status(const char *status, const char *status_name)
+int RGWMongoose::send_status(RGWClientIO& controller,
+                             const char * const status,
+                             const char * const status_name)
 {
-  char buf[128];
-
-  if (!status_name)
-    status_name = "";
-
-  snprintf(buf, sizeof(buf), "HTTP/1.1 %s %s\r\n", status, status_name);
-
-  bufferlist bl;
-  bl.append(buf);
-  bl.append(header_data);
-  header_data = bl;
-
-  int status_num = atoi(status);
+  const int status_num = atoi(status);
   mg_set_http_status(conn, status_num);
 
-  return 0;
+  return controller.print("HTTP/1.1 %s %s\r\n", status,
+          status_name ? status_name : "");
 }
 
-int RGWMongoose::send_100_continue()
+int RGWMongoose::send_100_continue(RGWClientIO& controller)
 {
   char buf[] = "HTTP/1.1 100 CONTINUE\r\n\r\n";
 
-  return mg_write(conn, buf, sizeof(buf) - 1);
+  return controller.write(buf, sizeof(buf) - 1);
 }
 
-static void dump_date_header(bufferlist &out)
+static int dump_date_header(RGWClientIO& controller)
 {
   char timestr[TIME_BUF_SIZE];
   const time_t gtime = time(NULL);
   struct tm result;
   struct tm const * const tmp = gmtime_r(&gtime, &result);
 
-  if (tmp == NULL)
-    return;
-
-  if (strftime(timestr, sizeof(timestr), "Date: %a, %d %b %Y %H:%M:%S %Z\r\n", tmp))
-    out.append(timestr);
-}
-
-int RGWMongoose::complete_header()
-{
-  header_done = true;
-
-  if (!has_content_length) {
+  if (tmp == NULL) {
     return 0;
   }
 
-  dump_date_header(header_data);
+  if (!strftime(timestr, sizeof(timestr),
+               "Date: %a, %d %b %Y %H:%M:%S %Z\r\n", tmp)) {
+    return 0;
+  }
 
-  if (explicit_keepalive)
-    header_data.append("Connection: Keep-Alive\r\n");
-  else if (explicit_conn_close)
-    header_data.append("Connection: close\r\n");
-
-  header_data.append("\r\n");
-
-  sent_header = true;
-
-  return write_data(header_data.c_str(), header_data.length());
+  return controller.print(timestr);
 }
 
-int RGWMongoose::send_content_length(uint64_t len)
+int RGWMongoose::complete_header(RGWClientIO& controller)
+{
+  const char CONN_KEEP_ALIVE[] = "Connection: Keep-Alive\r\n";
+  const char CONN_CLOSE[] = "Connection: close\r\n";
+  ssize_t rc;
+
+  if (!has_content_length) {
+    mg_enforce_close(conn);
+  }
+
+  rc = dump_date_header(controller);
+  if (rc < 0) {
+    dout(3) << "dump_date_header() returned " << rc << dendl;
+    return rc;
+  }
+
+  if (explicit_keepalive) {
+    rc = controller.write(CONN_KEEP_ALIVE, sizeof(CONN_KEEP_ALIVE) - 1);
+  } else if (explicit_conn_close) {
+    rc = controller.write(CONN_CLOSE, sizeof(CONN_CLOSE) - 1);
+  }
+  if (rc < 0) {
+    dout(3) << "sending conn state returned " << rc << dendl;
+    return rc;
+  }
+
+  return controller.print("\r\n");
+}
+
+int RGWMongoose::send_content_length(RGWClientIO& controller,
+                                     const uint64_t len)
 {
   has_content_length = true;
-  char buf[21];
-  snprintf(buf, sizeof(buf), "%" PRIu64, len);
-  return print("Content-Length: %s\r\n", buf);
+
+  return controller.print("Content-Length: %" PRIu64 "\r\n", len);
 }

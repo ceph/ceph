@@ -21,7 +21,7 @@ int RGWFCGX::read_data(char *buf, int len)
   return FCGX_GetStr(buf, len, fcgx->in);
 }
 
-void RGWFCGX::flush()
+void RGWFCGX::flush(RGWClientIO& controller)
 {
   FCGX_FFlush(fcgx->out);
 }
@@ -31,29 +31,31 @@ void RGWFCGX::init_env(CephContext *cct)
   env.init(cct, (char **)fcgx->envp);
 }
 
-int RGWFCGX::send_status(const char *status, const char *status_name)
+int RGWFCGX::send_status(RGWClientIO& controller,
+                         const char * const status,
+                         const char * const status_name)
 {
-  return print("Status: %s %s\r\n", status, status_name);
+  return controller.print("Status: %s %s\r\n", status, status_name);
 }
 
-int RGWFCGX::send_100_continue()
+int RGWFCGX::send_100_continue(RGWClientIO& controller)
 {
-  int r = send_status("100", "Continue");
+  int r = send_status(controller, "100", "Continue");
   if (r >= 0) {
-    flush();
+    flush(controller);
   }
   return r;
 }
 
-int RGWFCGX::send_content_length(uint64_t len)
+int RGWFCGX::send_content_length(RGWClientIO& controller,
+                                 const uint64_t len)
 {
   char buf[21];
   snprintf(buf, sizeof(buf), "%" PRIu64, len);
-  return print("Content-Length: %s\r\n", buf);
+  return controller.print("Content-Length: %s\r\n", buf);
 }
 
-int RGWFCGX::complete_header()
+int RGWFCGX::complete_header(RGWClientIO& controller)
 {
-  return print("\r\n");
+  return controller.print("\r\n");
 }
-
