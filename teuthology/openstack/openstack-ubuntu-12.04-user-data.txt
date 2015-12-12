@@ -16,4 +16,6 @@ packages:
  - wget
  - git
  - ntp
-final_message: "{up}, after $UPTIME seconds"
+runcmd:
+ - dpkg -l python wget git ntp >> /var/log/cloud-init-output.log
+ - echo "{up}" >> /var/log/cloud-init-output.log
