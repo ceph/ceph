@@ -46,8 +46,6 @@ rbd_SOURCES = \
 	tools/rbd/action/ImportDiff.cc \
 	tools/rbd/action/Info.cc \
 	tools/rbd/action/Journal.cc \
-	tools/rbd/action/Kernel.cc \
-	tools/rbd/action/Nbd.cc \
 	tools/rbd/action/List.cc \
 	tools/rbd/action/Lock.cc \
 	tools/rbd/action/MergeDiff.cc \
@@ -59,6 +57,11 @@ rbd_SOURCES = \
 	tools/rbd/action/Snap.cc \
 	tools/rbd/action/Status.cc \
 	tools/rbd/action/Watch.cc
+if LINUX
+rbd_SOURCES += \
+	tools/rbd/action/Kernel.cc \
+	tools/rbd/action/Nbd.cc
+endif # LINUX
 noinst_HEADERS += \
 	tools/rbd/ArgumentTypes.h \
 	tools/rbd/IndentStream.h \
@@ -67,11 +70,14 @@ noinst_HEADERS += \
 	tools/rbd/Utils.h
 rbd_LDADD = \
 	libjournal.la libcls_journal_client.la \
-	$(LIBKRBD) $(LIBRBD) $(LIBRBD_TYPES) $(LIBRADOS) $(CEPH_GLOBAL) \
+	$(LIBRBD) $(LIBRBD_TYPES) $(LIBRADOS) $(CEPH_GLOBAL) \
 	$(BOOST_REGEX_LIBS) $(BOOST_PROGRAM_OPTIONS_LIBS)
 if LINUX
+rbd_LDADD += $(LIBKRBD)
+endif # LINUX
 bin_PROGRAMS += rbd
 
+if LINUX
 rbd_nbd_SOURCES = tools/rbd_nbd/rbd-nbd.cc
 rbd_nbd_CXXFLAGS = $(AM_CXXFLAGS)
 rbd_nbd_LDADD = $(LIBRBD) $(LIBRADOS) $(CEPH_GLOBAL) $(BOOST_REGEX_LIBS)

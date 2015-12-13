@@ -5,6 +5,7 @@
 #include <sys/types.h>
 #include <unistd.h>
 
+#include "include/compat.h"
 #include "tools/rbd/ArgumentTypes.h"
 #include "tools/rbd/Shell.h"
 #include "tools/rbd/Utils.h"
