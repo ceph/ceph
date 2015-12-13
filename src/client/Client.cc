@@ -7700,7 +7700,7 @@ void Client::sync_write_commit(InodeRef& in)
 
   ldout(cct, 15) << "sync_write_commit unsafe_sync_write = " << unsafe_sync_write << dendl;
   if (unsafe_sync_write == 0 && unmounting) {
-    ldout(cct, 10) << "sync_write_comit -- no more unsafe writes, unmount can proceed" << dendl;
+    ldout(cct, 10) << "sync_write_commit -- no more unsafe writes, unmount can proceed" << dendl;
     mount_cond.Signal();
   }
 
