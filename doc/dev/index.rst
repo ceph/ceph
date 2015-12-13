@@ -20,10 +20,10 @@ it should serve as a reference for Ceph developers.
 
 We assume that readers are already familiar with Ceph (the distributed
 object store and file system designed to provide excellent performance,
-reliability and scalability). If not, please refer to the `project website`_ 
+reliability and scalability). If not, please refer to the `project website`_
 and especially the `publications list`_.
 
-.. _`project website`: http://ceph.com 
+.. _`project website`: http://ceph.com
 .. _`publications list`: https://ceph.com/resources/publications/
 
 Since this document is to be consumed by developers, who are assumed to
@@ -79,7 +79,7 @@ Unless stated otherwise, the Ceph source code is distributed under the terms of
 the LGPL2.1. For full details, see `the file COPYING in the top-level
 directory of the source-code tree`_.
 
-.. _`the file COPYING in the top-level directory of the source-code tree`: 
+.. _`the file COPYING in the top-level directory of the source-code tree`:
   https://github.com/ceph/ceph/blob/master/COPYING
 
 Source code repositories
@@ -132,7 +132,7 @@ sending a message to ``majordomo@vger.kernel.org`` with the line: ::
 
 in the body of the message.
 
-There are also `other Ceph-related mailing lists`_. 
+There are also `other Ceph-related mailing lists`_.
 
 .. _`other Ceph-related mailing lists`: https://ceph.com/resources/mailing-list-irc/
 
@@ -140,7 +140,7 @@ IRC
 ---
 
 In addition to mailing lists, the Ceph community also communicates in real
-time using `Internet Relay Chat`_.  
+time using `Internet Relay Chat`_.
 
 .. _`Internet Relay Chat`: http://www.irchelp.org/
 
@@ -150,11 +150,11 @@ client and a list of channels.
 Submitting patches
 ------------------
 
-The canonical instructions for submitting patches are contained in the 
+The canonical instructions for submitting patches are contained in the
 `the file CONTRIBUTING.rst in the top-level directory of the source-code
 tree`_. There may be some overlap between this guide and that file.
 
-.. _`the file CONTRIBUTING.rst in the top-level directory of the source-code tree`: 
+.. _`the file CONTRIBUTING.rst in the top-level directory of the source-code tree`:
   https://github.com/ceph/ceph/blob/master/CONTRIBUTING.rst
 
 All newcomers are encouraged to read that file carefully.
@@ -167,7 +167,7 @@ See instructions at :doc:`/install/build-ceph`.
 Development-mode cluster
 ------------------------
 
-You can start a development-mode Ceph cluster, after compiling the source, 
+You can start a development-mode Ceph cluster, after compiling the source,
 with:
 
 .. code::
@@ -185,14 +185,40 @@ Basic workflow
 .. epigraph::
 
     Without bugs, there would be no software, and without software, there would
-    be no software developers. 
+    be no software developers.
 
     --Unknown
-    
+
 Having already introduced the `Issue tracker`_ and the `Source code
 repositories`_, and having touched upon `Submitting patches`_, we now
 describe these in more detail in the context of basic Ceph development
 workflows.
+
+.. ditaa::
+
+            Upstream Code                       Your Local Environment
+
+           /----------\        git clone           /-------------\
+           |   Ceph   | -------------------------> | ceph/master |
+           \----------/                            \-------------/
+                ^                                    |
+                |                                    | git branch fix_1
+                | git merge                          |
+                |                                    v
+           /----------------\  git commit --amend   /-------------\
+           |  make check    |---------------------> | ceph/fix_1  |
+           | ceph--qa--suite|                       \-------------/
+           \----------------/                        |
+                ^                                    | fix changes
+                |                                    | make check
+                | review                             | ceph--workbench ceph--qa--suite
+                |                                    | git commit
+                |                                    v
+           /--------------\                        /-------------\
+           |   github     |<---------------------- | ceph/fix_1  |
+           | pull request |         git push       \-------------/
+           \--------------/
+
 
 Issue tracker conventions
 -------------------------
@@ -230,7 +256,7 @@ to the project: the *pull request*.
 Newcomers who are uncertain how to use pull requests may read
 `this GitHub pull request tutorial`_.
 
-.. _`this GitHub pull request tutorial`: 
+.. _`this GitHub pull request tutorial`:
    https://help.github.com/articles/using-pull-requests/
 
 For some ideas on what constitutes a "good" pull request, see
@@ -239,6 +265,50 @@ the `Git Commit Good Practice`_ article at the `OpenStack Project Wiki`_.
 .. _`Git Commit Good Practice`: https://wiki.openstack.org/wiki/GitCommitMessages
 .. _`OpenStack Project Wiki`: https://wiki.openstack.org/wiki/Main_Page
 
+
+Make check tests
+----------------
+
+After compiling Ceph, the ``make check`` command can be used to run a
+series of tests. They cover various aspects of Ceph and each of them
+must:
+
+* bind ports that do not conflict with other tests
+* not require root access
+* not require more than one machine to run
+* complete within a few minutes
+
+Integration tests
+-----------------
+
+When a test requires multiple machines, root access or lasts for a
+longer time (for example, to simulate a realistic Ceph deployment), it
+is deemed to be an integration test. Integration tests are defined in
+defined in the `ceph-qa-suite repository`_ and run with the
+`teuthology framework`_.
+
+A number of integration tests are run on a regular basis against the
+official Ceph repositories (on the master development branch and the
+stable branches). The results are visible at `sepia
+<http://pulpito.ceph.com/>`_ and `sepia.ovh
+<http://pulpito.ovh.sepia.ceph.com:8081/>`_ and are also reported on
+the `ceph-qa mailing list <http://ceph.com/resources/mailing-list-irc/>`_
+for analysis.
+
+Some Ceph developers have access to the hardware running these tests
+(either bare metal or OpenStack provisioned) and are allowed to
+schedule integration tests there (the developer nick shows in the test
+results URL).
+
+Ceph developers who have access to an OpenStack tenant can use the
+`ceph-workbench ceph-qa-suite`_ command to run integration tests and
+publish the results at http://teuthology-logs.public.ceph.com.  This
+allows reviewers to verify that changes to the code base do not cause
+regressions, or to analyze test failures when they do occur.
+
+.. _`ceph-qa-suite repository`: https://github.com/ceph/ceph-qa-suite
+.. _`teuthology framework`: https://github.com/ceph/teuthology
+.. _`ceph-workbench ceph-qa-suite`: http://ceph-workbench.readthedocs.org/
 
 Architecture
 ============
@@ -263,7 +333,7 @@ RADOS
 
 RADOS stands for "Reliable, Autonomic Distributed Object Store". In a Ceph
 cluster, all data are stored in objects, and RADOS is the component responsible
-for that. 
+for that.
 
 RADOS itself can be further broken down into Monitors, Object Storage Daemons
 (OSDs), and client APIs (librados). Monitors and OSDs are introduced at
@@ -305,4 +375,3 @@ file system is explained in more detail at :doc:`/cephfs/index`.
 .. Ceph is regularly built and packaged for a number of major Linux
 .. distributions. At the time of this writing, these included CentOS, Debian,
 .. Fedora, openSUSE, and Ubuntu.
-
