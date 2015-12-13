@@ -58,10 +58,12 @@ public:
     for (typename map<K, V, C>::iterator i = pinned.begin();
 	 i != pinned.end() && i->first <= e;
 	 pinned.erase(i++)) {
-      if (!contents.count(i->first))
+      typename ceph::unordered_map<K, typename list<pair<K, V> >::iterator, H>::iterator iter =
+        contents.find(i->first);
+      if (iter == contents.end())
 	_add(i->first, i->second);
       else
-	lru.splice(lru.begin(), lru, contents[i->first]);
+	lru.splice(lru.begin(), lru, iter->second);
     }
   }
 
@@ -83,15 +85,16 @@ public:
 
   bool lookup(K key, V *out) {
     Mutex::Locker l(lock);
-    typename list<pair<K, V> >::iterator loc = contents.count(key) ?
-      contents[key] : lru.end();
-    if (loc != lru.end()) {
-      *out = loc->second;
-      lru.splice(lru.begin(), lru, loc);
+    typename ceph::unordered_map<K, typename list<pair<K, V> >::iterator, H>::iterator i =
+      contents.find(key);
+    if (i != contents.end()) {
+      *out = i->second->second;
+      lru.splice(lru.begin(), lru, i->second);
       return true;
     }
-    if (pinned.count(key)) {
-      *out = pinned[key];
+    typename map<K, V, C>::iterator i_pinned = pinned.find(key);
+    if (i_pinned != pinned.end()) {
+      *out = i_pinned->second;
       return true;
     }
     return false;
