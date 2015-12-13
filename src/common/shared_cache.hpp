@@ -164,8 +164,9 @@ public:
     VPtr val; // release any ref we have after we drop the lock
     {
       Mutex::Locker l(lock);
-      if (weak_refs.count(key)) {
-	val = weak_refs[key].first.lock();
+      typename map<K, pair<WeakVPtr, V*>, C>::iterator i = weak_refs.find(key);
+      if (i != weak_refs.end()) {
+	val = i->second.first.lock();
       }
       lru_remove(key);
     }
@@ -175,11 +176,12 @@ public:
     VPtr val; // release any ref we have after we drop the lock
     {
       Mutex::Locker l(lock);
-      if (weak_refs.count(key)) {
-	val = weak_refs[key].first.lock();
+      typename map<K, pair<WeakVPtr, V*>, C>::iterator i = weak_refs.find(key);
+      if (i != weak_refs.end()) {
+	val = i->second.first.lock();
+        weak_refs.erase(i);
       }
       lru_remove(key);
-      weak_refs.erase(key);
     }
   }
 
