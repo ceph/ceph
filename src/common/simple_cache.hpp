@@ -20,12 +20,13 @@
 #include <memory>
 #include "common/Mutex.h"
 #include "common/Cond.h"
+#include "include/unordered_map.h"
 
-template <class K, class V, class C = std::less<K> >
+template <class K, class V, class C = std::less<K>, class H = std::hash<K> >
 class SimpleLRU {
   Mutex lock;
   size_t max_size;
-  map<K, typename list<pair<K, V> >::iterator, C> contents;
+  ceph::unordered_map<K, typename list<pair<K, V> >::iterator, H> contents;
   list<pair<K, V> > lru;
   map<K, V, C> pinned;
 
@@ -43,7 +44,9 @@ class SimpleLRU {
   }
 
 public:
-  SimpleLRU(size_t max_size) : lock("SimpleLRU::lock"), max_size(max_size) {}
+  SimpleLRU(size_t max_size) : lock("SimpleLRU::lock"), max_size(max_size) {
+    contents.rehash(max_size);
+  }
 
   void pin(K key, V val) {
     Mutex::Locker l(lock);
@@ -64,7 +67,7 @@ public:
 
   void clear(K key) {
     Mutex::Locker l(lock);
-    typename map<K, typename list<pair<K, V> >::iterator, C>::iterator i =
+    typename ceph::unordered_map<K, typename list<pair<K, V> >::iterator, H>::iterator i =
       contents.find(key);
     if (i == contents.end())
       return;
