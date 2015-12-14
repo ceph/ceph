@@ -42,7 +42,7 @@ protected:
   class Path {
   public:
     /// Returned path
-    string full_path;
+    string relative_path; //path which relative to collection directory.
     /// Ref to parent Index
     CollectionIndex* parent_ref;
     /// coll_t for parent Index
@@ -52,16 +52,16 @@ protected:
     Path(
       string path,                              ///< [in] Path to return.
       CollectionIndex* ref)  
-      : full_path(path), parent_ref(ref), parent_coll(parent_ref->coll()) {}
+      : relative_path(path), parent_ref(ref), parent_coll(parent_ref->coll()) {}
 
     /// Debugging Constructor
     Path(
       string path,                              ///< [in] Path to return.
       coll_t coll)                              ///< [in] collection
-      : full_path(path), parent_coll(coll) {}
+      : relative_path(path), parent_coll(coll) {}
       
     /// Getter for the stored path.
-    const char *path() const { return full_path.c_str(); }
+    const char *path() const { return relative_path.c_str(); }
 
     /// Getter for collection
     coll_t coll() const { return parent_coll; }
@@ -126,7 +126,7 @@ protected:
    */
   virtual int created(
     const ghobject_t &oid, ///< [in] Created object.
-    const char *path       ///< [in] Path to created object.
+    const char *path      ///< [in] Path to created object.
     ) = 0;
 
   /**
@@ -146,7 +146,7 @@ protected:
   virtual int lookup(
     const ghobject_t &oid, ///< [in] Object to lookup
     IndexedPath *path,	   ///< [out] Path to object
-    int *exist	           ///< [out] True if the object exists, else false
+    int *exist           ///< [out] True if the object exists, else false
     ) = 0;
 
   /**

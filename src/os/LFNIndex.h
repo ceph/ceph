@@ -571,8 +571,8 @@ private:
     ); ///< @return Demangled path component.
 
   /// Decompose full path into object name and filename.
-  int decompose_full_path(
-    const char *in,      ///< [in] Full path to object.
+  int decompose_relative_path(
+    const char *in,      ///< [in] Relative path to object.
     vector<string> *out, ///< [out] Path to object at in.
     ghobject_t *oid,	 ///< [out] Object at in.
     string *shortname	 ///< [out] Filename of object at in.

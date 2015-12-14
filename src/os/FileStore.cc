@@ -221,7 +221,7 @@ int FileStore::lfn_stat(coll_t cid, const ghobject_t& oid, struct stat *buf)
   r = lfn_find(oid, index, &path);
   if (r < 0)
     return r;
-  r = ::stat(path->path(), buf);
+  r = ::fstatat((index.index)->get_coll_fd(), path->path(), buf, 0);
   if (r < 0)
     r = -errno;
   return r;
@@ -284,7 +284,7 @@ int FileStore::lfn_open(coll_t cid,
     goto fail;
   }
 
-  r = ::open((*path)->path(), flags, 0644);
+  r = ::openat((*index)->get_coll_fd(), (*path)->path(), flags, 0644);
   if (r < 0) {
     r = -errno;
     dout(10) << "error opening file " << (*path)->path() << " with flags="
@@ -396,7 +396,8 @@ int FileStore::lfn_link(coll_t c, coll_t newcid, const ghobject_t& o, const ghob
 
     dout(25) << "lfn_link path_old: " << path_old << dendl;
     dout(25) << "lfn_link path_new: " << path_new << dendl;
-    r = ::link(path_old->path(), path_new->path());
+    r = ::linkat((index_old.index)->get_coll_fd(), path_old->path(),
+		  (index_new.index)->get_coll_fd(), path_new->path(), 0);
     if (r < 0)
       return -errno;
 
@@ -426,7 +427,8 @@ int FileStore::lfn_link(coll_t c, coll_t newcid, const ghobject_t& o, const ghob
 
     dout(25) << "lfn_link path_old: " << path_old << dendl;
     dout(25) << "lfn_link path_new: " << path_new << dendl;
-    r = ::link(path_old->path(), path_new->path());
+    r = ::linkat((index_old.index)->get_coll_fd(), path_old->path(),
+		  (index_old.index)->get_coll_fd(), path_new->path(), 0);
     if (r < 0)
       return -errno;
 
@@ -467,7 +469,7 @@ int FileStore::lfn_unlink(coll_t cid, const ghobject_t& o,
 
     if (!force_clear_omap) {
       struct stat st;
-      r = ::stat(path->path(), &st);
+      r = ::fstatat(index->get_coll_fd(), path->path(), &st, 0);
       if (r < 0) {
 	r = -errno;
 	if (r == -ENOENT) {

@@ -87,7 +87,7 @@ int LFNIndex::created(const ghobject_t &oid, const char *path)
   WRAP_RETRY(
   vector<string> path_comp;
   string short_name;
-  r = decompose_full_path(path, &path_comp, 0, &short_name);
+  r = decompose_relative_path(path, &path_comp, 0, &short_name);
   if (r < 0)
     goto out;
   r = lfn_created(path_comp, oid, short_name);
@@ -122,14 +122,16 @@ int LFNIndex::lookup(const ghobject_t &oid,
   WRAP_RETRY(
   vector<string> path;
   string short_name;
+  string relative_path;
   r = _lookup(oid, &path, &short_name, exist);
   if (r < 0)
     goto out;
-  string full_path = get_full_path(path, short_name);
+
+  relative_path = get_relative_path(path, short_name);
   struct stat buf;
   maybe_inject_failure();
-  r = ::stat(full_path.c_str(), &buf);
-  maybe_inject_failure();
+  r = ::fstatat(get_coll_fd(), relative_path.c_str(), &buf, 0);
+   maybe_inject_failure();
   if (r < 0) {
     if (errno == ENOENT) {
       *exist = 0;
@@ -140,7 +142,7 @@ int LFNIndex::lookup(const ghobject_t &oid,
   } else {
     *exist = 1;
   }
-  *out_path = IndexedPath(new Path(full_path, this));
+  *out_path = IndexedPath(new Path(relative_path, this));
   r = 0;
   );
 }
@@ -1355,10 +1357,10 @@ string LFNIndex::demangle_path_component(const string &component)
   return component.substr(SUBDIR_PREFIX.size(), component.size() - SUBDIR_PREFIX.size());
 }
 
-int LFNIndex::decompose_full_path(const char *in, vector<string> *out,
+int LFNIndex::decompose_relative_path(const char *in, vector<string> *out,
 				  ghobject_t *oid, string *shortname)
 {
-  const char *beginning = in + get_base_path().size();
+  const char *beginning = in + 1;
   const char *end = beginning;
   while (1) {
     end++;
