@@ -49,7 +49,6 @@ class DispatchQueue;
       Reader(Pipe *p) : pipe(p) {}
       void *entry() { pipe->reader(); return 0; }
     } reader_thread;
-    friend class Reader;
 
     /**
      * The Writer thread handles all writes to the socket (after startup).
@@ -61,7 +60,6 @@ class DispatchQueue;
       Writer(Pipe *p) : pipe(p) {}
       void *entry() { pipe->writer(); return 0; }
     } writer_thread;
-    friend class Writer;
 
     /**
      * The DelayedDelivery is for injecting delays into Message delivery off
@@ -126,7 +124,6 @@ class DispatchQueue;
        */
       void stop_fast_dispatching();
     } *delay_thread;
-    friend class DelayedDelivery;
 
   public:
     Pipe(SimpleMessenger *r, int st, PipeConnection *con);
