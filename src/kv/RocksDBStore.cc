@@ -145,9 +145,11 @@ int RocksDBStore::init(string _options_str)
   options_str = _options_str;
   rocksdb::Options opt;
   //try parse options
-  int r = ParseOptionsFromString(options_str, opt); 
-  if (r != 0) {
-    return -EINVAL;
+  if (options_str.length()) {
+    int r = ParseOptionsFromString(options_str, opt);
+    if (r != 0) {
+      return -EINVAL;
+    }
   }
   return 0;
 }
@@ -175,9 +177,11 @@ int RocksDBStore::do_open(ostream &out, bool create_if_missing)
   rocksdb::Options opt;
   rocksdb::Status status;
 
-  int r = ParseOptionsFromString(options_str, opt); 
-  if (r != 0) {
-    return -EINVAL;
+  if (options_str.length()) {
+    int r = ParseOptionsFromString(options_str, opt);
+    if (r != 0) {
+      return -EINVAL;
+    }
   }
   opt.create_if_missing = create_if_missing;
   if (g_conf->rocksdb_separate_wal_dir) {
