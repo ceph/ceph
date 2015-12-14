@@ -6,6 +6,7 @@
 
 #include "include/Context.h"
 #include "include/rados/librados.hpp"
+#include "common/Cond.h"
 #include "common/Mutex.h"
 #include "common/RefCountedObj.h"
 #include "journal/FutureImpl.h"
@@ -130,6 +131,9 @@ private:
   bool m_object_closed;
 
   bufferlist m_prefetch_bl;
+
+  bool m_in_flight_flushes;
+  Cond m_in_flight_flushes_cond;
 
   void handle_append_task();
   void cancel_append_task();
