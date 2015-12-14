@@ -880,6 +880,8 @@ int BlueStore::_open_bdev(bool create)
     goto fail;
   return 0;
 
+ fail_close:
+  bdev->close();
  fail:
   delete bdev;
   bdev = NULL;
