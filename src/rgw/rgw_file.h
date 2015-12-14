@@ -134,6 +134,9 @@ namespace rgw {
     /* const */ std::string name; /* XXX file or bucket name */
     /* const */ fh_key fhk;
 
+    using lock_guard = std::lock_guard<std::mutex>;
+    using unique_lock = std::unique_lock<std::mutex>;
+
     struct state {
       uint64_t dev;
       size_t size;
@@ -345,15 +348,22 @@ namespace rgw {
     bool creating() const { return flags & FLAG_CREATE; }
     bool pseudo() const { return flags & FLAG_PSEUDO; }
 
-    void open() {
-      flags |= FLAG_OPEN;
+    uint32_t open(uint32_t gsh_flags) {
+      lock_guard guard(mtx);
+      if (! (flags & FLAG_OPEN)) {
+	flags |= FLAG_OPEN;
+	return 0;
+      }
+      return EPERM;
     }
 
     void close() {
+      lock_guard guard(mtx);
       flags &= ~FLAG_OPEN;
     }
 
     void open_for_create() {
+      lock_guard guard(mtx);
       flags |= FLAG_CREATE;
     }
 
