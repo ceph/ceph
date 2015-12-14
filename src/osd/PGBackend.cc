@@ -675,7 +675,10 @@ void PGBackend::be_compare_scrubmaps(
 	update = MAYBE;
       }
       if (update != NO) {
-	utime_t age = now - auth_oi.local_mtime;
+	utime_t mtime = auth_oi.local_mtime;
+	if (mtime == utime_t())
+	  mtime = auth_oi.mtime;
+	utime_t age = now - mtime;
 	if (update == FORCE ||
 	    age > g_conf->osd_deep_scrub_update_digest_min_age) {
 	  dout(20) << __func__ << " will update digest on " << *k << dendl;
