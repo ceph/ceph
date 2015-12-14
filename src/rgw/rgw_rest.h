@@ -131,6 +131,12 @@ public:
   ~RGWStatBucket_ObjStore() {}
 };
 
+class RGWGetBucketWS_ObjStore : public RGWGetBucketWS {
+public:
+  RGWGetBucketWS_ObjStore() {}
+  ~RGWGetBucketWS_ObjStore() {}
+};
+
 class RGWCreateBucket_ObjStore : public RGWCreateBucket {
 public:
   RGWCreateBucket_ObjStore() {}
@@ -208,6 +214,26 @@ public:
   ~RGWPutACLs_ObjStore() {}
 
   int get_params();
+};
+
+class RGWGetWS_ObjStore : public RGWGetWS {
+public:
+  RGWGetWS_ObjStore() {}
+  ~RGWGetWS_ObjStore() {}
+};
+
+class RGWPutWS_ObjStore : public RGWPutWS {
+public:
+  RGWPutWS_ObjStore() {}
+  ~RGWPutWS_ObjStore() {}
+
+  int get_params();
+};
+
+class RGWDeleteWS_ObjStore : public RGWDeleteWS {
+public:
+  RGWDeleteWS_ObjStore() {}
+  ~RGWDeleteWS_ObjStore() {}
 };
 
 class RGWGetCORS_ObjStore : public RGWGetCORS {
