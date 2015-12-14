@@ -19,6 +19,10 @@
 
 #include <unistd.h>
 
+#include <boost/intrusive/list.hpp>
+#include <boost/intrusive/unordered_set.hpp>
+#include <boost/functional/hash.hpp>
+
 #include "include/assert.h"
 #include "include/unordered_map.h"
 #include "include/memory.h"
@@ -32,8 +36,6 @@
 #include "bluestore_types.h"
 #include "BlockDevice.h"
 
-#include "boost/intrusive/list.hpp"
-
 class Allocator;
 class FreelistManager;
 class BlueFS;
@@ -45,10 +47,61 @@ public:
 
   class TransContext;
 
-  /// an extent map, shared by a group of objects (clones)
-  struct ObjectGroup {
-    atomic_t nref;  ///< reference count
-    bluestore_extent_ref_map_t m;
+  /// an in-memory extent-map, shared by a group of objects (w/ same hash value)
+  struct EnodeSet;
+
+  struct Enode : public boost::intrusive::unordered_set_base_hook<> {
+    atomic_t nref;        ///< reference count
+    uint32_t hash;
+    string key;           ///< key under PREFIX_OBJ where we are stored
+    EnodeSet *enode_set;  ///< reference to the containing set
+
+    bluestore_extent_ref_map_t ref_map;
+
+    boost::intrusive::unordered_set_member_hook<> map_item;
+
+    Enode(uint32_t h, const string& k, EnodeSet *s)
+      : nref(0),
+	hash(h),
+	key(k),
+	enode_set(s) {}
+
+    void get() {
+      nref.inc();
+    }
+    void put();
+
+    friend void intrusive_ptr_add_ref(Enode *e) { e->get(); }
+    friend void intrusive_ptr_release(Enode *e) { e->put(); }
+
+    friend bool operator==(const Enode &l, const Enode &r) {
+      return l.hash == r.hash;
+    }
+    friend std::size_t hash_value(const Enode &e) {
+      return e.hash;
+    }
+  };
+  typedef boost::intrusive_ptr<Enode> EnodeRef;
+
+  /// hash of Enodes, by (object) hash value
+  struct EnodeSet {
+    typedef boost::intrusive::unordered_set<Enode>::bucket_type bucket_type;
+    typedef boost::intrusive::unordered_set<Enode>::bucket_traits bucket_traits;
+
+    unsigned num_buckets;
+    vector<bucket_type> buckets;
+
+    boost::intrusive::unordered_set<Enode> uset;
+
+    EnodeSet(unsigned n)
+      : num_buckets(n),
+	buckets(n),
+	uset(bucket_traits(buckets.data(), num_buckets)) {
+      assert(n > 0);
+    }
+    ~EnodeSet() {
+      assert(uset.empty());
+    }
   };
 
   /// an in-memory object
@@ -58,6 +111,8 @@ public:
     ghobject_t oid;
     string key;     ///< key under PREFIX_OBJ where we are stored
     boost::intrusive::list_member_hook<> lru_item;
+
+    EnodeRef enode;  ///< ref to Enode [optional]
 
     bluestore_onode_t onode;  ///< metadata stored as value in kv store
     bool dirty;     // ???
@@ -121,7 +176,10 @@ public:
     // contention.
     OnodeHashLRU onode_map;
 
+    EnodeSet enode_set;      ///< open Enodes
+
     OnodeRef get_onode(const ghobject_t& oid, bool create);
+    EnodeRef get_enode(uint32_t hash);
 
     bool contains(const ghobject_t& oid) {
       if (cid.is_meta())
@@ -204,6 +262,7 @@ public:
     uint64_t ops, bytes;
 
     set<OnodeRef> onodes;     ///< these onodes need to be updated/written
+    set<EnodeRef> enodes;     ///< these enodes need to be updated/written
     KeyValueDB::Transaction t; ///< then we will commit this
     Context *oncommit;         ///< signal on commit
     Context *onreadable;         ///< signal on readable
@@ -244,6 +303,9 @@ public:
 
     void write_onode(OnodeRef &o) {
       onodes.insert(o);
+    }
+    void write_enode(EnodeRef &e) {
+      enodes.insert(e);
     }
   };
 
@@ -516,6 +578,9 @@ private:
   int _wal_finish(TransContext *txc);
   int _do_wal_op(bluestore_wal_op_t& wo, IOContext *ioc);
   int _wal_replay();
+
+  // for fsck
+  int _verify_enode_shared(EnodeRef enode, vector<bluestore_extent_t>& v);
 
 public:
   BlueStore(CephContext *cct, const string& path);
