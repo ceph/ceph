@@ -510,9 +510,19 @@ int rgw_open(struct rgw_fs *rgw_fs,
 	     struct rgw_file_handle *fh, uint32_t flags)
 {
   RGWFileHandle* rgw_fh = get_rgwfh(fh);
-  rgw_fh->open(/* XXX */);
 
-  return 0;
+  /* XXX 
+   * need to track specific opens--at least read opens and
+   * a write open;  we need to know when a write open is returned,
+   * that closes a write transaction
+   *
+   * for now, we will support single-open only, it's preferable to
+   * anything we can otherwise do without access to the NFS state
+   */
+
+  // convert flags
+  uint32_t oflags = 0;
+  return rgw_fh->open(oflags);
 }
 
 /*
