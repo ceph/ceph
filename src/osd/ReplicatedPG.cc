@@ -5760,7 +5760,10 @@ void ReplicatedPG::finish_ctx(OpContext *ctx, int log_op_type, bool maintain_ssc
       ctx->snapset_obc->obs.oi.version = ctx->at_version;
       ctx->snapset_obc->obs.oi.last_reqid = ctx->reqid;
       ctx->snapset_obc->obs.oi.mtime = ctx->mtime;
-      ctx->snapset_obc->obs.oi.local_mtime = now;
+      if (pool.info.is_tier() || pool.info.has_tiers())
+	ctx->snapset_obc->obs.oi.local_mtime = now;
+      else
+	ctx->snapset_obc->obs.oi.local_mtime = utime_t();
 
       bufferlist bv(sizeof(ctx->new_obs.oi));
       ::encode(ctx->snapset_obc->obs.oi, bv);
@@ -5801,7 +5804,10 @@ void ReplicatedPG::finish_ctx(OpContext *ctx, int log_op_type, bool maintain_ssc
     if (ctx->mtime != utime_t()) {
       ctx->new_obs.oi.mtime = ctx->mtime;
       dout(10) << " set mtime to " << ctx->new_obs.oi.mtime << dendl;
-      ctx->new_obs.oi.local_mtime = now;
+      if (pool.info.is_tier() || pool.info.has_tiers())
+	ctx->new_obs.oi.local_mtime = now;
+      else
+	ctx->new_obs.oi.local_mtime = utime_t();
     } else {
       dout(10) << " mtime unchanged at " << ctx->new_obs.oi.mtime << dendl;
     }
