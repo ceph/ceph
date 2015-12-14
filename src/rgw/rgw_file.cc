@@ -314,8 +314,9 @@ int rgw_unlink(struct rgw_fs *rgw_fs, struct rgw_file_handle *parent_fh,
     if (! rc)  {
       /* rgw_fh ref+ */
       RGWFileHandle* rgw_fh = get_rgwfh(fh);
+      std::string oname = rgw_fh->full_object_name();
       RGWDeleteObjRequest req(cct, fs->get_user(), parent->bucket_name(),
-			      rgw_fh->full_object_name());
+			      oname);
       rc = librgw.get_fe()->execute_req(&req);
       /* release */
       (void) rgw_fh_rele(rgw_fs, fh, 0 /* flags */);
@@ -456,11 +457,10 @@ int rgw_getattr(struct rgw_fs *rgw_fs,
     if (rgw_fh->creating())
       goto done;
 
-    const std::string bname = rgw_fh->bucket_name();
-    const std::string oname = rgw_fh->object_name();
+    const std::string& bname = rgw_fh->bucket_name();
+    const std::string& oname = rgw_fh->object_name();
 
-    RGWStatObjRequest req(cct, fs->get_user(),
-			  rgw_fh->bucket_name(), rgw_fh->object_name(),
+    RGWStatObjRequest req(cct, fs->get_user(), bname, oname,
 			  RGWStatObjRequest::FLAG_NONE);
 
     int rc = librgw.get_fe()->execute_req(&req);
@@ -641,8 +641,9 @@ int rgw_write(struct rgw_fs *rgw_fs,
     buffer::create_static(length /* XXX size */, static_cast<char*>(buffer)));
 
   /* XXX */
+  std::string oname = rgw_fh->full_object_name();
   RGWPutObjRequest req(cct, fs->get_user(), rgw_fh->bucket_name(),
-		       rgw_fh->full_object_name(), bl);
+		       oname, bl);
 
   int rc = librgw.get_fe()->execute_req(&req);
 
@@ -752,8 +753,9 @@ int rgw_readv(struct rgw_fs *rgw_fs,
 			    static_cast<char*>(vio->vio_base)));
   }
 
+  std::string oname = rgw_fh->full_object_name();
   RGWPutObjRequest req(cct, fs->get_user(), rgw_fh->bucket_name(),
-		       rgw_fh->full_object_name(), bl);
+		       oname, bl);
 
   int rc = librgw.get_fe()->execute_req(&req);
 
