@@ -460,7 +460,7 @@ class CephFSMount(object):
     def get_osd_epoch(self):
         raise NotImplementedError()
 
-    def stat(self, fs_path):
+    def stat(self, fs_path, wait=True):
         """
         stat a file, and return the result as a dictionary like this:
         {
@@ -492,8 +492,11 @@ class CephFSMount(object):
                 indent=2)
             """).format(path=abs_path)
         proc = self._run_python(pyscript)
-        proc.wait()
-        return json.loads(proc.stdout.getvalue().strip())
+        if wait:
+            proc.wait()
+            return json.loads(proc.stdout.getvalue().strip())
+        else:
+            return proc
 
     def path_to_ino(self, fs_path):
         abs_path = os.path.join(self.mountpoint, fs_path)
