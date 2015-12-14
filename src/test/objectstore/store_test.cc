@@ -97,6 +97,9 @@ TEST_P(StoreTest, collect_metadata) {
   }
 }
 
+TEST_P(StoreTest, Trivial) {
+}
+
 TEST_P(StoreTest, TrivialRemount) {
   store->umount();
   int r = store->mount();
@@ -907,7 +910,8 @@ TEST_P(StoreTest, SimpleCloneTest) {
     r = store->apply_transaction(&osr, t);
     ASSERT_EQ(r, 0);
   }
-  ghobject_t hoid(hobject_t(sobject_t("Object 1", CEPH_NOSNAP)));
+  ghobject_t hoid(hobject_t(sobject_t("Object 1", CEPH_NOSNAP),
+			    "key", 123, -1, ""));
   bufferlist small, large, xlarge, newdata, attr;
   small.append("small");
   large.append("large");
@@ -923,7 +927,8 @@ TEST_P(StoreTest, SimpleCloneTest) {
     r = store->apply_transaction(&osr, t);
     ASSERT_EQ(r, 0);
   }
-  ghobject_t hoid2(hobject_t(sobject_t("Object 2", CEPH_NOSNAP)));
+  ghobject_t hoid2(hobject_t(sobject_t("Object 2", CEPH_NOSNAP),
+			     "key", 123, -1, ""));
   {
     ObjectStore::Transaction t;
     t.clone(cid, hoid, hoid2);
@@ -981,7 +986,8 @@ TEST_P(StoreTest, OmapCloneTest) {
     r = store->apply_transaction(&osr, t);
     ASSERT_EQ(r, 0);
   }
-  ghobject_t hoid(hobject_t(sobject_t("Object 1", CEPH_NOSNAP)));
+  ghobject_t hoid(hobject_t(sobject_t("Object 1", CEPH_NOSNAP),
+			    "key", 123, -1, ""));
   bufferlist small;
   small.append("small");
   map<string,bufferlist> km;
@@ -998,7 +1004,8 @@ TEST_P(StoreTest, OmapCloneTest) {
     r = store->apply_transaction(&osr, t);
     ASSERT_EQ(r, 0);
   }
-  ghobject_t hoid2(hobject_t(sobject_t("Object 2", CEPH_NOSNAP)));
+  ghobject_t hoid2(hobject_t(sobject_t("Object 2", CEPH_NOSNAP),
+			     "key", 123, -1, ""));
   {
     ObjectStore::Transaction t;
     t.clone(cid, hoid, hoid2);
