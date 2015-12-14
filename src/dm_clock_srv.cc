@@ -7,6 +7,7 @@
 #include "dm_clock_srv.h"
 
 
+#if 0
 std::ostream& dmc::operator<<(std::ostream& out,
 			      const dmc::ClientInfo_old& client) {
   if (client.isUnset()) {
@@ -17,6 +18,7 @@ std::ostream& dmc::operator<<(std::ostream& out,
   }
   return out;
 }
+#endif
 
 
 std::ostream& dmc::operator<<(std::ostream& out,

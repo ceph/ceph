@@ -26,6 +26,12 @@ struct Request {
   {
     // empty
   }
+
+  Request(const Request& r) :
+    Request(r.client, r.op, r.data)
+  {
+    // empty
+  }
 };
 
 
@@ -40,7 +46,11 @@ dmc::ClientInfo getClientInfo(int c) {
     {3.0,  50.0,   0.0},
   };
 
-  return info[c];
+  if (c < sizeof info / sizeof info[0]) {
+    return info[c];
+  } else {
+    return info[0]; // first item is default item
+  }
 }
 
 
@@ -87,6 +97,9 @@ int main(int argc, char* argv[]) {
     client_queue.pop();
   }
 #endif
+
+
+  dmc::ClientQueue<Request> cq;
 
   auto f = std::function<dmc::ClientInfo(int)>(getClientInfo);
   

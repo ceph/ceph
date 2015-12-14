@@ -34,8 +34,13 @@ namespace dmc {
     double reservation;
     double limit;
 
-    RequestTag() :
-      proportion(0), reservation(0), limit(0)
+    RequestTag(double p, double r, double l) :
+      proportion(p), reservation(r), limit(l)
+    {
+      // empty
+    }
+
+    RequestTag() : RequestTag(0, 0, 0)
     {
       // empty
     }
@@ -43,79 +48,36 @@ namespace dmc {
     friend std::ostream& operator<<(std::ostream&, const RequestTag&);
   };
 
+  std::ostream& operator<<(std::ostream& out, const dmc::RequestTag& tag);
 
   struct ClientInfo {
-    double weight;       // proportional
-    double reservation;  // minimum
-    double limit;        // maximum
+    const double weight;       // proportional
+    const double reservation;  // minimum
+    const double limit;        // maximum
 
-    friend std::ostream& operator<<(std::ostream&, const ClientInfo&);
-  };
+    // multiplicative inverses of above, which we use in calculations
+    // and don't want to recalculate repeatedlu
+    const double weight_inv;
+    const double reservation_inv;
+    const double limit_inv;
 
-  struct ClientInfo_old {
-    double weight;       // proportional
-    double reservation;  // minimum
-    double limit;        // maximum
-
-    bool isIdle;
-
-    RequestTag prevTag;
-
-    ClientInfo_old() : ClientInfo_old(-1.0, -1.0, -1.0) {}
-
-    ClientInfo_old(double w, double r, double l) :
-      weight(w),
-      reservation(r),
-      limit(l),
-      isIdle(true)
+    ClientInfo(double _weight, double _reservation, double _limit) :
+      weight(_weight),
+      reservation(_reservation),
+      limit(_limit),
+      weight_inv(1.0 / weight),
+      reservation_inv(1.0 / reservation),
+      limit_inv(1.0 / limit)
     {
       // empty
     }
 
-    bool isUnset() const {
-      return -1 == weight;
-    }
-
-    friend std::ostream& operator<<(std::ostream&, const ClientInfo_old&);
+    friend std::ostream& operator<<(std::ostream&, const ClientInfo&);
   };
 
-
-  std::ostream& operator<<(std::ostream& out, const dmc::ClientInfo_old& client);
-  std::ostream& operator<<(std::ostream& out, const dmc::RequestTag& tag);
+  std::ostream& operator<<(std::ostream& out, const dmc::ClientInfo& client);
 
 
-  // T is client identifier type
-  template<typename T>
-  class ClientDB {
-
-  protected:
-
-    typename std::map<T,ClientInfo_old> map;
-
-  public:
-
-    // typedef std::map<T,ClientInfo_old>::const_iterator client_ref;
-
-    // client_ref find(const T& clientId) const;
-    ClientInfo_old* find(const int& clientId) {
-      auto it = map.find(clientId);
-      if (it == map.cend()) {
-	return NULL;
-      } else {
-	return &it->second;
-      }
-    }
-        
-    void put(const T& clientId, const ClientInfo_old& info) {
-      map[clientId] = info;
-    }
-
-    void clear(const T& clientId) {
-      map.erase(clientId);
-    }
-  };
-
-    
   template<typename R>
   class ClientQueue {
 
@@ -144,6 +106,8 @@ namespace dmc {
 
     typedef typename std::lock_guard<std::mutex> Guard;
 
+    ClientInfo         info;
+    RequestTag         prev_tag;
     std::deque<Entry>  queue;
     mutable std::mutex queue_mutex;
     bool               idle;
@@ -151,6 +115,7 @@ namespace dmc {
   public:
 
     ClientQueue() : idle(false) {}
+    ClientQueue(const ClientInfo& _info) : info(_info), idle(false) {}
 
     const Entry* peek() const {
       Guard g(queue_mutex);
@@ -266,16 +231,32 @@ namespace dmc {
     void test() {
       std::cout << clientInfo(0) << std::endl;
       std::cout << clientInfo(3) << std::endl;
+      std::cout << clientInfo(99) << std::endl;
     }
 
-    void addRequest(R request, C client, Time time) {
-#if 0
-      ClientInfo_old* client = clientDB.find(client);
-      if (!client) {
-	
+    void addRequest(R request, C client_id, Time time) {
+      auto client_it = clientMap.find(client_id);
+      CQueueRef client;
+      if (clientMap.end() == client_it) {
+	ClientInfo ci = ClientInfo(client_id);
+	client = CQueueRef(new ClientQueue<R>(ci));
+      } else {
+	client = client_it->second;
       }
-#endif
-      
+
+      ClientInfo& info = client.get().info;
+      RequestTag& prev_tag = client.get().prev_tag;
+
+      RequestTag tag(std::max(time,
+			      prev_tag.proportion + 1.0 / info.weight),
+		     std::max(time,
+			      prev_tag.reservation + 1.0 / info.reservation),
+		     std::max(time,
+			      prev_tag.limit + 1.0 / info.limit));
+
+      typename ClientQueue<R>::RequestRef rr(new R(request));
+      typename ClientQueue<R>::Entry e(tag, rr);
+      client.push(e);
     }
 
   }; // class PriorityQueue
