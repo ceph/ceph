@@ -99,13 +99,14 @@ int main(int argc, char* argv[]) {
 #endif
 
 
-  dmc::ClientQueue<Request> cq;
+  dmc::ClientQueue<Request> cq(getClientInfo(0));
 
   auto f = std::function<dmc::ClientInfo(int)>(getClientInfo);
   
   dmc::PriorityQueue<int,Request> priorityQueue(f);
 
   priorityQueue.test();
+  priorityQueue.addRequest(Request(0, 17, "foobar"), 0, dmc::getTime());
 
   std::cout << "done" << std::endl;
 }

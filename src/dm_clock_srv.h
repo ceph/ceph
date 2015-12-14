@@ -81,9 +81,9 @@ namespace dmc {
   template<typename R>
   class ClientQueue {
 
-    typedef typename std::unique_ptr<R> RequestRef;
-
   public:
+
+    typedef typename std::unique_ptr<R> RequestRef;
 
     struct Entry {
       RequestTag tag;
@@ -114,8 +114,13 @@ namespace dmc {
 
   public:
 
+#if 0
     ClientQueue() : idle(false) {}
+#endif
     ClientQueue(const ClientInfo& _info) : info(_info), idle(false) {}
+
+    const ClientInfo& getInfo() const { return info; }
+    const RequestTag& getPrevTag() const { return prev_tag; }
 
     const Entry* peek() const {
       Guard g(queue_mutex);
@@ -210,7 +215,7 @@ namespace dmc {
     };
 
 
-    ClientInfoFunc clientInfo;
+    ClientInfoFunc clientInfoF;
 
     std::map<C,CQueueRef> clientMap;
     boost::heap::fibonacci_heap<CQueueRef,
@@ -222,30 +227,30 @@ namespace dmc {
       
   public:
 
-    PriorityQueue(ClientInfoFunc _clientInfo) :
-      clientInfo(_clientInfo)
+    PriorityQueue(ClientInfoFunc _clientInfoF) :
+      clientInfoF(_clientInfoF)
     {
       // empty
     }
 
     void test() {
-      std::cout << clientInfo(0) << std::endl;
-      std::cout << clientInfo(3) << std::endl;
-      std::cout << clientInfo(99) << std::endl;
+      std::cout << clientInfoF(0) << std::endl;
+      std::cout << clientInfoF(3) << std::endl;
+      std::cout << clientInfoF(99) << std::endl;
     }
 
     void addRequest(R request, C client_id, Time time) {
       auto client_it = clientMap.find(client_id);
       CQueueRef client;
       if (clientMap.end() == client_it) {
-	ClientInfo ci = ClientInfo(client_id);
+	ClientInfo ci = clientInfoF(client_id);
 	client = CQueueRef(new ClientQueue<R>(ci));
       } else {
 	client = client_it->second;
       }
 
-      ClientInfo& info = client.get().info;
-      RequestTag& prev_tag = client.get().prev_tag;
+      const ClientInfo& info = client->getInfo();
+      const RequestTag& prev_tag = client->getPrevTag();
 
       RequestTag tag(std::max(time,
 			      prev_tag.proportion + 1.0 / info.weight),
@@ -255,8 +260,9 @@ namespace dmc {
 			      prev_tag.limit + 1.0 / info.limit));
 
       typename ClientQueue<R>::RequestRef rr(new R(request));
-      typename ClientQueue<R>::Entry e(tag, rr);
-      client.push(e);
+      // typename ClientQueue<R>::Entry e(tag, std::move(rr));
+      bool was_empty = client->empty();
+      client->push(e);
     }
 
   }; // class PriorityQueue
