@@ -519,6 +519,8 @@ int rgw_open(struct rgw_fs *rgw_fs,
    * for now, we will support single-open only, it's preferable to
    * anything we can otherwise do without access to the NFS state
    */
+  if (! rgw_fh->is_file())
+    return -EISDIR;
 
   // convert flags
   uint32_t oflags = 0;
