@@ -36,6 +36,9 @@ std::ostream& operator<<(std::ostream& os,
   case SnapshotRollbackRequest<I>::STATE_ROLLBACK_OBJECTS:
     os << "ROLLBACK_OBJECTS";
     break;
+  case SnapshotRollbackRequest<I>::STATE_REFRESH_OBJECT_MAP:
+    os << "REFRESH_OBJECT_MAP";
+    break;
   case SnapshotRollbackRequest<I>::STATE_INVALIDATE_CACHE:
     os << "INVALIDATE_CACHE";
     break;
@@ -88,7 +91,13 @@ SnapshotRollbackRequest<I>::SnapshotRollbackRequest(I &image_ctx,
                                                     uint64_t snap_size,
                                                     ProgressContext &prog_ctx)
   : Request<I>(image_ctx, on_finish), m_snap_name(snap_name),
-    m_snap_id(snap_id), m_snap_size(snap_size), m_prog_ctx(prog_ctx) {
+    m_snap_id(snap_id), m_snap_size(snap_size), m_prog_ctx(prog_ctx),
+    m_object_map(nullptr) {
+}
+
+template <typename I>
+SnapshotRollbackRequest<I>::~SnapshotRollbackRequest() {
+  delete m_object_map;
 }
 
 template <typename I>
@@ -117,6 +126,9 @@ bool SnapshotRollbackRequest<I>::should_complete(int r) {
     send_rollback_objects();
     break;
   case STATE_ROLLBACK_OBJECTS:
+    finished = send_refresh_object_map();
+    break;
+  case STATE_REFRESH_OBJECT_MAP:
     finished = send_invalidate_cache();
     break;
   case STATE_INVALIDATE_CACHE:
@@ -203,9 +215,34 @@ void SnapshotRollbackRequest<I>::send_rollback_objects() {
 }
 
 template <typename I>
+bool SnapshotRollbackRequest<I>::send_refresh_object_map() {
+  I &image_ctx = this->m_image_ctx;
+  assert(image_ctx.owner_lock.is_locked());
+
+  if (image_ctx.object_map == nullptr) {
+    return send_invalidate_cache();
+  }
+
+  CephContext *cct = image_ctx.cct;
+  ldout(cct, 5) << this << " " << __func__ << dendl;
+  m_state = STATE_REFRESH_OBJECT_MAP;
+
+  m_object_map = image_ctx.create_object_map(CEPH_NOSNAP);
+
+  image_ctx.owner_lock.put_read();
+  Context *ctx = this->create_callback_context();
+  m_object_map->open(ctx);
+  image_ctx.owner_lock.get_read();
+
+  return false;
+}
+
+template <typename I>
 bool SnapshotRollbackRequest<I>::send_invalidate_cache() {
   I &image_ctx = this->m_image_ctx;
   assert(image_ctx.owner_lock.is_locked());
+
+  apply();
 
   if (image_ctx.object_cacher == NULL) {
     return true;
@@ -217,6 +254,17 @@ bool SnapshotRollbackRequest<I>::send_invalidate_cache() {
 
   image_ctx.invalidate_cache(this->create_callback_context());
   return false;
+}
+
+template <typename I>
+void SnapshotRollbackRequest<I>::apply() {
+  I &image_ctx = this->m_image_ctx;
+
+  assert(image_ctx.owner_lock.is_locked());
+  RWLock::WLocker snap_locker(image_ctx.snap_lock);
+  if (image_ctx.object_map != nullptr) {
+    std::swap(m_object_map, image_ctx.object_map);
+  }
 }
 
 } // namespace operation
