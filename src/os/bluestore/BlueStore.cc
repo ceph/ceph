@@ -1381,6 +1381,7 @@ void BlueStore::_commit_bluefs_freespace(
 
 int BlueStore::_open_collections(int *errors)
 {
+  assert(coll_map.empty());
   KeyValueDB::Iterator it = db->get_iterator(PREFIX_COLL);
   for (it->upper_bound(string());
        it->valid();
@@ -1638,6 +1639,7 @@ int BlueStore::umount()
 
   _sync();
   _reap_collections();
+  coll_map.clear();
 
   dout(20) << __func__ << " stopping kv thread" << dendl;
   _kv_stop();
@@ -1959,6 +1961,7 @@ int BlueStore::fsck()
     }
   }
 
+  coll_map.clear();
  out_alloc:
   _close_alloc();
  out_db:
