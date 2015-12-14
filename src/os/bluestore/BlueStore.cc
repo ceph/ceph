@@ -373,6 +373,7 @@ static int get_key_object(const string& key, ghobject_t *oid)
     if (r < 0)
       return -9;
     p += r + 1;
+    oid->hobj.set_key(okey);
   } else {
     // malformed
     return -7;
