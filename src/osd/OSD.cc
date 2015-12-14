@@ -3329,7 +3329,6 @@ void OSD::handle_pg_peering_evt(
 
       dout(10) << *parent << " is new" << dendl;
 
-      assert(service.splitting(pgid));
       peering_wait_for_split[pgid].push_back(evt);
 
       //parent->queue_peering_event(evt);
