@@ -344,6 +344,7 @@ static int get_key_object(const string& key, ghobject_t *oid)
     if (r < 0)
       return -9;
     p += r + 1;
+    oid->hobj.set_key(okey);
   } else {
     // malformed
     return -7;
@@ -877,6 +878,7 @@ void KStore::_close_db()
 
 int KStore::_open_collections(int *errors)
 {
+  assert(coll_map.empty());
   KeyValueDB::Iterator it = db->get_iterator(PREFIX_COLL);
   for (it->upper_bound(string());
        it->valid();
@@ -1339,7 +1341,7 @@ int KStore::fsck()
       ++errors;
     }
   }
-
+  coll_map.clear();
  out_alloc:
   _close_alloc();
  out_db:
