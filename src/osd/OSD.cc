@@ -6525,16 +6525,17 @@ void OSD::handle_osd_map(MOSDMap *m)
     osdmap_subscribe(osdmap->get_epoch()+1, true);
   }
   else if (do_shutdown) {
-    osd_lock.Unlock();
-    shutdown();
     if (network_error) {
+      Mutex::Locker l(heartbeat_lock);	
       map<int,pair<utime_t,entity_inst_t>>::iterator it = failure_pending.begin();
       while (it != failure_pending.end()) {
         dout(10) << "handle_osd_ping canceling in-flight failure report for osd." << it->first << dendl;
         send_still_alive(osdmap->get_epoch(), it->second.second);
         failure_pending.erase(it++);
       }
-    }
+    }	
+    osd_lock.Unlock();
+    shutdown();
     osd_lock.Lock();
   }
   else if (is_booting()) {
