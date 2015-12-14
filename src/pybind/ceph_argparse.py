@@ -1179,6 +1179,7 @@ def json_command(cluster, target=('mon', ''), prefix=None, argdict=None,
     """
     cmddict = {}
     if prefix:
+        prefix = ' '.join(str(prefix).strip().split())
         cmddict.update({'prefix': prefix})
     if argdict:
         cmddict.update(argdict)
