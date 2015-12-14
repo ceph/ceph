@@ -973,6 +973,7 @@ OPTION(rbd_request_timed_out_seconds, OPT_INT, 30) // number of seconds before m
 OPTION(rbd_skip_partial_discard, OPT_BOOL, false) // when trying to discard a range inside an object, set to true to skip zeroing the range.
 OPTION(rbd_enable_alloc_hint, OPT_BOOL, true) // when writing a object, it will issue a hint to osd backend to indicate the expected size object need
 OPTION(rbd_tracing, OPT_BOOL, false) // true if LTTng-UST tracepoints should be enabled
+OPTION(rbd_validate_pool, OPT_BOOL, true) // true if empty pools should be validated for RBD compatibility
 
 /*
  * The following options change the behavior for librbd's image creation methods that

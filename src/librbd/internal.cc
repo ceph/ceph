@@ -211,6 +211,41 @@ int invoke_async_request(ImageCtx *ictx, const std::string& request_type,
   return r;
 }
 
+int validate_pool(IoCtx &io_ctx, CephContext *cct) {
+  if (!cct->_conf->rbd_validate_pool) {
+    return 0;
+  }
+
+  int r = io_ctx.stat(RBD_DIRECTORY, NULL, NULL);
+  if (r == 0) {
+    return 0;
+  } else if (r < 0 && r != -ENOENT) {
+    lderr(cct) << "failed to stat RBD directory: " << cpp_strerror(r) << dendl;
+    return r;
+  }
+
+  // allocate a self-managed snapshot id if this a new pool to force
+  // self-managed snapshot mode
+  uint64_t snap_id;
+  r = io_ctx.selfmanaged_snap_create(&snap_id);
+  if (r == -EINVAL) {
+    lderr(cct) << "pool not configured for self-managed RBD snapshot support"
+               << dendl;
+    return r;
+  } else if (r < 0) {
+    lderr(cct) << "failed to allocate self-managed snapshot: "
+               << cpp_strerror(r) << dendl;
+    return r;
+  }
+
+  r = io_ctx.selfmanaged_snap_remove(snap_id);
+  if (r < 0) {
+    lderr(cct) << "failed to release self-managed snapshot " << snap_id
+               << ": " << cpp_strerror(r) << dendl;
+  }
+  return 0;
+}
+
 } // anonymous namespace
 
   const string id_obj_name(const string &name)
@@ -1000,8 +1035,14 @@ reprotect_and_return_err:
 		uint64_t size, int order)
   {
     CephContext *cct = (CephContext *)io_ctx.cct();
+
+    int r = validate_pool(io_ctx, cct);
+    if (r < 0) {
+      return r;
+    }
+
     ldout(cct, 2) << "adding rbd image to directory..." << dendl;
-    int r = tmap_set(io_ctx, imgname);
+    r = tmap_set(io_ctx, imgname);
     if (r < 0) {
       lderr(cct) << "error adding image to directory: " << cpp_strerror(r)
 		 << dendl;
@@ -1046,9 +1087,14 @@ reprotect_and_return_err:
 
     ceph_file_layout layout;
 
+    int r = validate_pool(io_ctx, cct);
+    if (r < 0) {
+      return r;
+    }
+
     id_obj = id_obj_name(imgname);
 
-    int r = io_ctx.create(id_obj, true);
+    r = io_ctx.create(id_obj, true);
     if (r < 0) {
       lderr(cct) << "error creating rbd id object: " << cpp_strerror(r)
 		 << dendl;
