@@ -81,6 +81,7 @@ authentication keyring.
 .. toctree:: 
 	:maxdepth: 1
 
+	POSIX compatibility <posix>
         CephFS Quotas <quota>
 	Using Ceph with Hadoop <hadoop>
 	libcephfs <../../api/libcephfs-java/>
