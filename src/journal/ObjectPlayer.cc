@@ -45,6 +45,7 @@ void ObjectPlayer::fetch(Context *on_finish) {
   C_Fetch *context = new C_Fetch(this, on_finish);
   librados::ObjectReadOperation op;
   op.read(m_read_off, 2 << m_order, &context->read_bl, NULL);
+  op.set_op_flags2(CEPH_OSD_OP_FLAG_FADVISE_DONTNEED);
 
   librados::AioCompletion *rados_completion =
     librados::Rados::aio_create_completion(context, utils::rados_ctx_callback,

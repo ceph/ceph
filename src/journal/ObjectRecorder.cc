@@ -299,6 +299,7 @@ void ObjectRecorder::send_appends(AppendBuffers *append_buffers) {
                      << dendl;
     it->first->set_flush_in_progress();
     op.append(it->second);
+    op.set_op_flags2(CEPH_OSD_OP_FLAG_FADVISE_DONTNEED);
     m_size += it->second.length();
   }
   m_in_flight_appends[append_tid].swap(*append_buffers);
