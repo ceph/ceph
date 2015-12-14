@@ -122,9 +122,18 @@ struct bluestore_extent_ref_map_t {
   void _check() const;
   void _maybe_merge_left(map<uint64_t,record_t>::iterator& p);
 
+  void clear() {
+    ref_map.clear();
+  }
+  bool empty() const {
+    return ref_map.empty();
+  }
+
   void add(uint64_t offset, uint32_t len, unsigned ref=2);
   void get(uint64_t offset, uint32_t len);
   void put(uint64_t offset, uint32_t len, vector<bluestore_extent_t> *release);
+
+  bool contains(uint64_t offset, uint32_t len) const;
 
   void encode(bufferlist& bl) const;
   void decode(bufferlist::iterator& p);
@@ -135,7 +144,18 @@ WRITE_CLASS_ENCODER(bluestore_extent_ref_map_t::record_t)
 WRITE_CLASS_ENCODER(bluestore_extent_ref_map_t)
 
 ostream& operator<<(ostream& out, const bluestore_extent_ref_map_t& rm);
-
+static inline bool operator==(const bluestore_extent_ref_map_t::record_t& l,
+			      const bluestore_extent_ref_map_t::record_t& r) {
+  return l.length == r.length && l.refs == r.refs;
+}
+static inline bool operator==(const bluestore_extent_ref_map_t& l,
+			      const bluestore_extent_ref_map_t& r) {
+  return l.ref_map == r.ref_map;
+}
+static inline bool operator!=(const bluestore_extent_ref_map_t& l,
+			      const bluestore_extent_ref_map_t& r) {
+  return !(l == r);
+}
 
 /// overlay: a byte extent backed by kv pair, logically overlaying other content
 struct bluestore_overlay_t {
