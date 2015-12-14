@@ -2447,6 +2447,22 @@ target_link_libraries(test_librgw_file_nfsns
   ${CMAKE_DL_LIBS}
   )
 
+# librgw_file_aw (nfs write transaction [atomic write] tests)
+add_executable(test_librgw_file_aw
+  librgw_file_aw.cc
+  $<TARGET_OBJECTS:heap_profiler_objs>
+  )
+set_target_properties(test_librgw_file_aw PROPERTIES COMPILE_FLAGS
+  ${UNITTEST_CXX_FLAGS})
+target_link_libraries(test_librgw_file_aw
+  rgw
+  librados
+  ${UNITTEST_LIBS}
+  ${EXTRALIBS}
+  ${ALLOC_LIBS}
+  ${CMAKE_DL_LIBS}
+  )
+
 if(${HAVE_LIBFUSE})
   add_executable(test_cfuse_cache_invalidate
     test_cfuse_cache_invalidate.cc
