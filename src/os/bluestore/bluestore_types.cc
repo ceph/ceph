@@ -269,6 +269,33 @@ void bluestore_extent_ref_map_t::put(uint64_t offset, uint32_t length,
   _check();
 }
 
+bool bluestore_extent_ref_map_t::contains(uint64_t offset, uint32_t length) const
+{
+  map<uint64_t,record_t>::const_iterator p = ref_map.lower_bound(offset);
+  if (p == ref_map.end() || p->first > offset) {
+    if (p == ref_map.begin()) {
+      return false; // nothing before
+    }
+    --p;
+    if (p->first + p->second.length <= offset) {
+      return false; // gap
+    }
+  }
+  while (length > 0) {
+    if (p == ref_map.end())
+      return false;
+    if (p->first > offset)
+      return false;
+    if (p->first + p->second.length >= offset + length)
+      return true;
+    uint64_t overlap = p->first + p->second.length - offset;
+    offset += overlap;
+    length -= overlap;
+    ++p;
+  }
+  return true;
+}
+
 void bluestore_extent_ref_map_t::encode(bufferlist& bl) const
 {
   ENCODE_START(1, 1, bl);
