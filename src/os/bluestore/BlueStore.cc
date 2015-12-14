@@ -3503,6 +3503,23 @@ int BlueStore::_do_wal_op(bluestore_wal_op_t& wo, IOContext *ioc)
   }
   break;
 
+  case bluestore_wal_op_t::OP_COPY:
+  {
+    dout(20) << __func__ << " copy " << wo.extent << " from " << wo.src_extent
+	     << dendl;
+    assert((wo.extent.offset & ~block_mask) == 0);
+    assert((wo.extent.length & ~block_mask) == 0);
+    assert(wo.extent.length == wo.src_extent.length);
+    assert((wo.src_extent.offset & ~block_mask) == 0);
+    bufferlist bl;
+    int r = bdev->read(wo.src_extent.offset, wo.src_extent.length, &bl, ioc,
+		       true);
+    assert(r >= 0);
+    assert(bl.length() == wo.extent.length);
+    bdev->aio_write(wo.extent.offset, bl, ioc, true);
+  }
+  break;
+
   case bluestore_wal_op_t::OP_ZERO:
   {
     dout(20) << __func__ << " zero " << wo.extent << dendl;
