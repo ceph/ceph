@@ -4225,7 +4225,16 @@ void object_info_t::encode(bufferlist& bl) const
        ++i) {
     old_watchers.insert(make_pair(i->first.second, i->second));
   }
-  ENCODE_START(15, 8, bl);
+
+  // kludge to reduce xattr size for most rbd objects
+  int ev = 15;
+  if (!(flags & FLAG_OMAP_DIGEST) &&
+      !(flags & FLAG_DATA_DIGEST) &&
+      local_mtime == utime_t()) {
+    ev = 13;
+  }
+
+  ENCODE_START(ev, 8, bl);
   ::encode(soid, bl);
   ::encode(myoloc, bl);	//Retained for compatibility
   ::encode((__u32)0, bl); // was category, no longer used
@@ -4250,9 +4259,13 @@ void object_info_t::encode(bufferlist& bl) const
   ::encode(watchers, bl);
   __u32 _flags = flags;
   ::encode(_flags, bl);
-  ::encode(local_mtime, bl);
-  ::encode(data_digest, bl);
-  ::encode(omap_digest, bl);
+  if (ev >= 14) {
+    ::encode(local_mtime, bl);
+  }
+  if (ev >= 15) {
+    ::encode(data_digest, bl);
+    ::encode(omap_digest, bl);
+  }
   ENCODE_FINISH(bl);
 }
 
