@@ -13,8 +13,14 @@ usage_exit() {
 instance=$1
 shift
 
+vstart_path=`dirname $0`
+
 root_path=`dirname $0`
 root_path=`(cd $root_path; pwd)`
+
+if [ -e CMakeCache.txt ]; then
+    root_path=$PWD
+fi
 RUN_ROOT_PATH=${root_path}/run
 CLUSTERS_LIST=$RUN_ROOT_PATH/.clusters.list
 
@@ -42,4 +48,4 @@ mkdir -p $VSTART_DEST
 echo "Cluster dest path: $VSTART_DEST"
 echo "monitors base port: $CEPH_PORT"
 
-$root_path/vstart.sh "$@"
+$vstart_path/vstart.sh "$@"
