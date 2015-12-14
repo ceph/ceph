@@ -206,6 +206,7 @@ TEST(LibRGW, PUT_OBJECT) {
     struct iovec *iov = &iovs[ix];
     // quick check
     sprintf(static_cast<char*>(iov->iov_base), "::hi mom (%d)", ix);
+    iov->iov_len = 14;
     int ret = rgw_write(fs, object_fh, offset, iov->iov_len, &nbytes,
 			iov->iov_base);
     offset += iov->iov_len;
@@ -228,13 +229,13 @@ TEST(LibRGW, GET_OBJECT) {
   uint64_t nread;
   off_t offset = 0;
   struct iovec *iovs = zp_set1.get_iovs();
-  for (int ix : {2, 3}) {
+  for (int ix : {2 , 3}) {
     struct iovec *iov = &iovs[ix];
     int ret = rgw_read(fs, object_fh, offset, iov[ix-2].iov_len, &nread,
 		       iov->iov_base);
     offset += iov->iov_len;
     ASSERT_EQ(ret, 0);
-    ASSERT_EQ(nread, iov[ix-2].iov_len);
+    ASSERT_EQ(nread, iovs[ix-2].iov_len);
     std::cout << "read: " << static_cast<char*>(iov->iov_base) << std::endl;
   }
 }
