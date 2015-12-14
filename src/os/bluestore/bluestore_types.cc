@@ -107,6 +107,11 @@ string bluestore_extent_t::get_flags_string(unsigned flags)
       s += '+';
     s += "unwritten";
   }
+  if (flags & FLAG_SHARED) {
+    if (s.length())
+      s += '+';
+    s += "shared";
+  }
   return s;
 }
 
@@ -444,6 +449,7 @@ void bluestore_wal_op_t::encode(bufferlist& bl) const
   ENCODE_START(1, 1, bl);
   ::encode(op, bl);
   ::encode(extent, bl);
+  ::encode(src_extent, bl);
   ::encode(nid, bl);
   ::encode(overlays, bl);
   if (!overlays.size()) {
@@ -458,6 +464,7 @@ void bluestore_wal_op_t::decode(bufferlist::iterator& p)
   DECODE_START(1, p);
   ::decode(op, p);
   ::decode(extent, p);
+  ::decode(src_extent, p);
   ::decode(nid, p);
   ::decode(overlays, p);
   if (!overlays.size()) {
@@ -471,6 +478,7 @@ void bluestore_wal_op_t::dump(Formatter *f) const
 {
   f->dump_unsigned("op", (int)op);
   f->dump_object("extent", extent);
+  f->dump_object("src_extent", src_extent);
   f->dump_unsigned("nid", nid);
   f->open_array_section("overlays");
   for (vector<bluestore_overlay_t>::const_iterator p = overlays.begin();
@@ -493,6 +501,8 @@ void bluestore_wal_op_t::generate_test_instances(list<bluestore_wal_op_t*>& o)
   o.back()->op = OP_WRITE;
   o.back()->extent.offset = 1;
   o.back()->extent.length = 2;
+  o.back()->src_extent.offset = 10000;
+  o.back()->src_extent.length = 2;
   o.back()->data.append("my data");
   o.back()->nid = 3;
   o.back()->overlays.push_back(bluestore_overlay_t());

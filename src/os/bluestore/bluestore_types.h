@@ -233,10 +233,12 @@ WRITE_CLASS_ENCODER(bluestore_onode_t)
 struct bluestore_wal_op_t {
   typedef enum {
     OP_WRITE = 1,
+    OP_COPY = 2,
     OP_ZERO = 4,
   } type_t;
   __u8 op;
   bluestore_extent_t extent;
+  bluestore_extent_t src_extent;
   bufferlist data;
   uint64_t nid;
   vector<bluestore_overlay_t> overlays;
