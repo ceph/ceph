@@ -169,6 +169,23 @@ private:
     virtual void finish(int r);
   };
 
+  struct C_ProcessPayload : public Context {
+    ImageWatcher *image_watcher;
+    uint64_t notify_id;
+    uint64_t handle;
+    watch_notify::Payload payload;
+
+    C_ProcessPayload(ImageWatcher *image_watcher_, uint64_t notify_id_,
+                     uint64_t handle_, const watch_notify::Payload &payload)
+      : image_watcher(image_watcher_), notify_id(notify_id_), handle(handle_),
+        payload(payload) {
+    }
+
+    virtual void finish(int r) override {
+      image_watcher->process_payload(notify_id, handle, payload, r);
+    }
+  };
+
   struct HandlePayloadVisitor : public boost::static_visitor<void> {
     ImageWatcher *image_watcher;
     uint64_t notify_id;
@@ -265,6 +282,8 @@ private:
                       C_NotifyAck *ctx);
   bool handle_payload(const watch_notify::UnknownPayload& payload,
                       C_NotifyAck *ctx);
+  void process_payload(uint64_t notify_id, uint64_t handle,
+                       const watch_notify::Payload &payload, int r);
 
   void handle_notify(uint64_t notify_id, uint64_t handle, bufferlist &bl);
   void handle_error(uint64_t cookie, int err);
