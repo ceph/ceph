@@ -97,11 +97,10 @@ libcommon_internal_la_SOURCES += \
         common/aix_errno.cc
 endif
 
-if WITH_RBD
+# used by RBD and FileStore
 if LINUX
 libcommon_internal_la_SOURCES += \
 	common/blkdev.cc
-endif
 endif
 
 if ENABLE_XIO
