@@ -673,6 +673,10 @@ inline ostream& operator<<(ostream& out, const ceph_object_layout &ol)
 
 
 // compound rados version type
+/* WARNING: If add member in eversion_t, please make sure the encode/decode function
+ * work well. For little-endian machine, we should make sure there is no padding
+ * in 32-bit machine and 64-bit machine.
+ */
 class eversion_t {
 public:
   version_t version;
@@ -705,12 +709,20 @@ public:
   string get_key_name() const;
 
   void encode(bufferlist &bl) const {
+#if defined(CEPH_LITTLE_ENDIAN)
+    bl.append((char *)this, sizeof(version_t) + sizeof(epoch_t));
+#else
     ::encode(version, bl);
     ::encode(epoch, bl);
+#endif
   }
   void decode(bufferlist::iterator &bl) {
+#if defined(CEPH_LITTLE_ENDIAN)
+    bl.copy(sizeof(version_t) + sizeof(epoch_t), (char *)this);
+#else
     ::decode(version, bl);
     ::decode(epoch, bl);
+#endif
   }
   void decode(bufferlist& bl) {
     bufferlist::iterator p = bl.begin();
