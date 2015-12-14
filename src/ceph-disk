@@ -3,6 +3,7 @@
 # Copyright (C) 2014 Inktank <info@inktank.com>
 # Copyright (C) 2014 Cloudwatt <libre.licensing@cloudwatt.com>
 # Copyright (C) 2014 Catalyst.net Ltd
+# Copyright (C) 2015 SanDisk Corp.
 #
 # Author: Loic Dachary <loic@dachary.org>
 #
@@ -35,6 +36,8 @@ import time
 import shlex
 import pwd
 import grp
+import zlib
+import struct
 
 """
 Prepare:
@@ -617,7 +620,7 @@ def get_partition_base(dev):
     # find the base
     for basename in os.listdir('/sys/block'):
         if os.path.exists(os.path.join('/sys/block', basename, name)):
-            return '/dev/' + basename
+            return basename, '/dev/' + basename
     raise Error('no parent device for partition', dev)
 
 def is_partition_mpath(dev):
@@ -634,7 +637,7 @@ def get_partition_base_mpath(dev):
     assert slaves
     name_path = os.path.join(slave_path, slaves[0], 'dm', 'name')
     name = open(name_path, 'r').read().strip()
-    return os.path.join('/dev/mapper', name)
+    return slaves[0], os.path.join('/dev/mapper', name)
 
 def is_partition(dev):
     """
@@ -2816,9 +2819,9 @@ def main_destroy(args):
     dev_path = target_dev['path']
     journal_part_uuid = target_dev['journal_uuid']
     if target_dev['ptype'] == MPATH_OSD_UUID:
-        base_dev = get_partition_base_mpath(dev_path)
+        base_name, base_dev = get_partition_base_mpath(dev_path)
     else:
-        base_dev = get_partition_base(dev_path)
+        base_name, base_dev = get_partition_base(dev_path)
 
     # Before osd deactivate, we cannot destroy it
     status_code = _check_osd_status(args.cluster, osd_id)
@@ -3048,18 +3051,154 @@ def get_dev_fs(dev):
 def split_dev_base_partnum(dev):
     if is_mpath(dev):
         partnum = partnum_mpath(dev)
-        base = get_partition_base_mpath(dev)
+        basename, basedev = get_partition_base_mpath(dev)
     else:
         b = block_path(dev)
         partnum = open(os.path.join(b, 'partition')).read().strip()
-        base = get_partition_base(dev)
-    return (base, partnum)
+        basename, basedev = get_partition_base(dev)
+    return (basename, basedev, partnum)
 
 def get_partition_type(part):
-    return get_sgdisk_partition_info(part, 'Partition GUID code: (\S+)')
+    ptype, puuid =  get_disk_partition_info(part)
+    return ptype
 
 def get_partition_uuid(part):
-    return get_sgdisk_partition_info(part, 'Partition unique GUID: (\S+)')
+    ptype, puuid =  get_disk_partition_info(part)
+    return puuid
+
+def get_disk_partition_info(dev):
+    (basename, basedev, partnum) = split_dev_base_partnum(dev)
+    hw_sector_sz = get_sys_hw_sector_size(os.path.join('/sys/block', basename))
+    return rawread_partition_guids(basedev, int(partnum), hw_sector_sz)
+
+"""
+Get the hardware sector size of the block device
+"""
+def get_sys_hw_sector_size(sys_node):
+    sys_queue_node = os.path.join(sys_node, 'queue')
+    LOG.debug('Getting HW sector size for: %s', sys_queue_node)
+    sect_size = read_one_line(sys_queue_node, 'hw_sector_size')
+    if sect_size:
+        return long(sect_size)
+
+    # Default to 512bytes
+    LOG.warning('Failed to get sector size, Default to 512bytes')
+    return 512
+
+def rawread_partition_guids(base_dev, part_num, hw_sector_sz):
+
+    LOG.debug('RawRead GPT: Device=%s Partition=%i HW-Sector=%i', base_dev,
+                part_num, hw_sector_sz)
+    # Location of the GTP Header on the disk
+    gpt_hdr_sector = long(1)
+    # standard 'EFI part' gpt signature
+    gpt_hdr_efi_signature = 0x5452415020494645
+
+    """
+    GPT Header Format, Header encompasses the full sector
+    however, we want only the first 92 bytes
+    Also, the GPT header is written in little-endian format!
+    See: http://en.wikipedia.org/wiki/GUID_Partition_Table#Partition_entries
+    """
+
+    struct_gpt_hdr_format = '<QIIIIQQQQ16sQIII'
+
+    gpt_hdr_offset = hw_sector_sz * gpt_hdr_sector
+    fd = os.open(base_dev, os.O_RDONLY)
+    try:
+        os.lseek(fd, gpt_hdr_offset, os.SEEK_SET)
+    except Exception as error:
+        LOG.debug('failed to open Dev %s: Error: %s' % (base_dev, str(error)))
+        os.close(fd)
+        return None, None
+
+    read_sz = hw_sector_sz
+    try:
+        gpt_hdr_raw = os.read(fd, read_sz)
+    except Exception as error:
+        LOG.debug('failed to read Dev %s: Error: %s' % (base_dev, str(error)))
+        os.close(fd)
+        return None, None
+
+    gpt_hdr = struct.unpack_from(struct_gpt_hdr_format, gpt_hdr_raw)
+
+    gpt_signature = gpt_hdr[0]
+    LOG.debug('GPT-Signature %lx', gpt_signature)
+
+    if gpt_signature != gpt_hdr_efi_signature:
+        LOG.debug('Not a GPT partition!')
+        os.close(fd)
+        return None, None
+
+    sz_hdr      = gpt_hdr[2]
+    hdr_crc     = gpt_hdr[3]
+    nr_part_ent = gpt_hdr[11]
+    sz_part_ent = gpt_hdr[12]
+    tbl_crc     = gpt_hdr[13]
+    offset_part_ent_table = gpt_hdr[10] * hw_sector_sz
+
+    # Verify header CRC
+    offset_crc_start = 16
+    offset_crc_end   = 20
+    verify_hdr = gpt_hdr_raw[:offset_crc_start] + struct.pack('=I', 0x00) +  gpt_hdr_raw[offset_crc_end:sz_hdr]
+    cal_hdr_crc = zlib.crc32(verify_hdr) & 0xffffffff
+    LOG.debug('GPT Header CRC: %X Calculated = %X', hdr_crc, cal_hdr_crc)
+    if hdr_crc != cal_hdr_crc:
+        LOG.info('Corrupt GPT header on %s', base_dev)
+        os.close(fd)
+        return None, None
+
+    if nr_part_ent == 0 or sz_part_ent == 0:
+        LOG.debug('BAD GPT Entries: Num PartEnt: %i Size PartEnt=%i', nr_part_ent, sz_part_ent)
+        os.close(fd)
+        return None, None
+
+    LOG.debug('offset_part_ent_table=%u nr_part_ent= %u sz_part_ent=%u',
+        offset_part_ent_table, nr_part_ent, sz_part_ent)
+
+    part_index = part_num - 1
+    if part_index >= nr_part_ent:
+        os.close(fd)
+        return None, None
+
+    # get to the partition sector
+
+    try:
+        os.lseek(fd, offset_part_ent_table, os.SEEK_SET)
+    except Exception as error:
+        os.close(fd)
+        return None, None
+
+    sz_part_ent_table   = nr_part_ent * sz_part_ent
+    try:
+        gpt_part_ent_table = os.read(fd, sz_part_ent_table)
+    except Exception as error:
+        os.close(fd)
+        return None, None
+
+    # verify part table CRC
+    cal_tbl_crc = zlib.crc32(gpt_part_ent_table) & 0xffffffff
+    LOG.debug('GPT Part Table CRC: %X Calculated: %X', tbl_crc, cal_tbl_crc)
+    if tbl_crc != cal_tbl_crc:
+        LOG.debug('Corrupt GPT part table on %s', base_dev)
+        os.close(fd)
+        return None, None
+
+    offset_part_ent = part_index * sz_part_ent
+
+    # Decode part entry
+    struct_gpt_part_entry_format  = '<16s16sQQQ'
+    part_ent = struct.unpack_from(struct_gpt_part_entry_format,
+        gpt_part_ent_table, offset_part_ent)
+
+    ptype_guid = str(uuid.UUID(bytes_le = part_ent[0]))
+    part_guid  = str(uuid.UUID(bytes_le = part_ent[1]))
+    LOG.debug('PTYPE GUID: %s', ptype_guid)
+    LOG.debug('PART GUID: %s' , part_guid)
+
+    os.close(fd)
+    # All ok
+    return ptype_guid, part_guid
 
 def get_sgdisk_partition_info(dev, regexp):
     (base, partnum) = split_dev_base_partnum(dev)
