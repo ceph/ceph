@@ -783,6 +783,16 @@ bool ImageWatcher::handle_payload(const UnknownPayload &payload,
   return true;
 }
 
+void ImageWatcher::process_payload(uint64_t notify_id, uint64_t handle,
+                                   const Payload &payload, int r) {
+  if (r < 0) {
+    bufferlist out_bl;
+    acknowledge_notify(notify_id, handle, out_bl);
+  } else {
+    apply_visitor(HandlePayloadVisitor(this, notify_id, handle), payload);
+  }
+}
+
 void ImageWatcher::handle_notify(uint64_t notify_id, uint64_t handle,
 				 bufferlist &bl) {
   NotifyMessage notify_message;
@@ -800,8 +810,13 @@ void ImageWatcher::handle_notify(uint64_t notify_id, uint64_t handle,
     }
   }
 
-  apply_visitor(HandlePayloadVisitor(this, notify_id, handle),
-		notify_message.payload);
+  // if an image refresh is required, refresh before processing the request
+  if (m_image_ctx.state->is_refresh_required()) {
+    m_image_ctx.state->refresh(new C_ProcessPayload(this, notify_id, handle,
+                                                    notify_message.payload));
+  } else {
+    process_payload(notify_id, handle, notify_message.payload, 0);
+  }
 }
 
 void ImageWatcher::handle_error(uint64_t handle, int err) {

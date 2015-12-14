@@ -807,12 +807,6 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
     ldout(ictx->cct, 20) << "snap_create_helper " << ictx << " " << snap_name
                          << dendl;
 
-    int r = ictx->state->refresh_if_required(ictx->owner_lock);
-    if (r < 0) {
-      ctx->complete(r);
-      return;
-    }
-
     operation::SnapshotCreateRequest<> *req =
       new operation::SnapshotCreateRequest<>(*ictx, ctx, snap_name);
     req->send();
@@ -878,12 +872,6 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
     ldout(ictx->cct, 20) << "snap_remove_helper " << ictx << " " << snap_name
                          << dendl;
 
-    int r = ictx->state->refresh_if_required(ictx->owner_lock);
-    if (r < 0) {
-      ctx->complete(r);
-      return;
-    }
-
     uint64_t snap_id;
     {
       RWLock::RLocker snap_locker(ictx->snap_lock);
@@ -895,7 +883,7 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
       }
 
       bool is_protected;
-      r = ictx->is_snap_protected(snap_id, &is_protected);
+      int r = ictx->is_snap_protected(snap_id, &is_protected);
       if (r < 0) {
         ctx->complete(r);
         return;
@@ -971,12 +959,6 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
     ldout(ictx->cct, 20) << __func__ << " " << ictx << " from "
                          << src_snap_id << " to " << dst_name << dendl;
 
-    int r = ictx->state->refresh_if_required(ictx->owner_lock);
-    if (r < 0) {
-      ctx->complete(r);
-      return;
-    }
-
     operation::SnapshotRenameRequest<> *req =
       new operation::SnapshotRenameRequest<>(*ictx, ctx, src_snap_id, dst_name);
     req->send();
@@ -1043,12 +1025,6 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
 
     ldout(ictx->cct, 20) << "snap_protect_helper " << ictx << " " << snap_name
                          << dendl;
-
-    int r = ictx->state->refresh_if_required(ictx->owner_lock);
-    if (r < 0) {
-      ctx->complete(r);
-      return;
-    }
 
     operation::SnapshotProtectRequest<> *request =
       new operation::SnapshotProtectRequest<>(*ictx, ctx, snap_name);
@@ -1118,12 +1094,6 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
 
     ldout(ictx->cct, 20) << "snap_unprotect_helper " << ictx << " " << snap_name
                          << dendl;
-
-    int r = ictx->state->refresh_if_required(ictx->owner_lock);
-    if (r < 0) {
-      ctx->complete(r);
-      return;
-    }
 
     operation::SnapshotUnprotectRequest<> *request =
       new operation::SnapshotUnprotectRequest<>(*ictx, ctx, snap_name);
@@ -1737,12 +1707,6 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
     ldout(ictx->cct, 20) << "rename_helper " << ictx << " " << dstname
                          << dendl;
 
-    int r = ictx->state->refresh_if_required(ictx->owner_lock);
-    if (r < 0) {
-      ctx->complete(r);
-      return;
-    }
-
     operation::RenameRequest<> *req =
       new operation::RenameRequest<>(*ictx, ctx, dstname);
     req->send();
@@ -1804,136 +1768,138 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
       return -EINVAL;
     }
 
-    RWLock::RLocker owner_locker(ictx->owner_lock);
-    RWLock::WLocker md_locker(ictx->md_lock);
-    r = ictx->flush();
-    if (r < 0) {
-      return r;
-    }
-
-    if ((features & RBD_FEATURES_MUTABLE) != features) {
-      lderr(cct) << "cannot update immutable features" << dendl;
-      return -EINVAL;
-    } else if (features == 0) {
-      lderr(cct) << "update requires at least one feature" << dendl;
-      return -EINVAL;
-    }
-
-    RWLock::WLocker snap_locker(ictx->snap_lock);
-    uint64_t new_features;
-    if (enabled) {
-      features &= ~ictx->features;
-      new_features = ictx->features | features;
-    } else {
-      features &= ictx->features;
-      new_features = ictx->features & ~features;
-    }
-
-    if (features == 0) {
-      return 0;
-    }
-
-    uint64_t features_mask = features;
-    uint64_t disable_flags = 0;
-    if (enabled) {
-      uint64_t enable_flags = 0;
-
-      if ((features & RBD_FEATURE_OBJECT_MAP) != 0) {
-        if ((new_features & RBD_FEATURE_EXCLUSIVE_LOCK) == 0) {
-          lderr(cct) << "cannot enable object map" << dendl;
-          return -EINVAL;
-        }
-        enable_flags |= RBD_FLAG_OBJECT_MAP_INVALID;
-        features_mask |= RBD_FEATURE_EXCLUSIVE_LOCK;
-      }
-      if ((features & RBD_FEATURE_FAST_DIFF) != 0) {
-        if ((new_features & RBD_FEATURE_OBJECT_MAP) == 0) {
-          lderr(cct) << "cannot enable fast diff" << dendl;
-          return -EINVAL;
-        }
-        enable_flags |= RBD_FLAG_FAST_DIFF_INVALID;
-        features_mask |= (RBD_FEATURE_OBJECT_MAP | RBD_FEATURE_EXCLUSIVE_LOCK);
-      }
-      if ((features & RBD_FEATURE_JOURNALING) != 0) {
-        if ((new_features & RBD_FEATURE_EXCLUSIVE_LOCK) == 0) {
-          lderr(cct) << "cannot enable journaling" << dendl;
-          return -EINVAL;
-        }
-        features_mask |= RBD_FEATURE_EXCLUSIVE_LOCK;
-
-        r = Journal::create(ictx->md_ctx, ictx->id, ictx->journal_order,
-			    ictx->journal_splay_width,
-			    ictx->journal_pool);
-        if (r < 0) {
-          lderr(cct) << "error creating image journal: " << cpp_strerror(r)
-                     << dendl;
-          return r;
-        }
-      }
-
-      if (enable_flags != 0) {
-        r = update_all_flags(ictx, enable_flags, enable_flags);
-        if (r < 0) {
-          return r;
-        }
-      }
-    } else {
-      if ((features & RBD_FEATURE_EXCLUSIVE_LOCK) != 0) {
-        if ((new_features & RBD_FEATURE_OBJECT_MAP) != 0 ||
-            (new_features & RBD_FEATURE_JOURNALING) != 0) {
-          lderr(cct) << "cannot disable exclusive lock" << dendl;
-          return -EINVAL;
-        }
-        features_mask |= RBD_FEATURE_OBJECT_MAP;
-      }
-      if ((features & RBD_FEATURE_OBJECT_MAP) != 0) {
-        if ((new_features & RBD_FEATURE_FAST_DIFF) != 0) {
-          lderr(cct) << "cannot disable object map" << dendl;
-          return -EINVAL;
-        }
-
-        disable_flags = RBD_FLAG_OBJECT_MAP_INVALID;
-        r = remove_object_map(ictx);
-        if (r < 0) {
-          lderr(cct) << "failed to remove object map" << dendl;
-          return r;
-        }
-      }
-      if ((features & RBD_FEATURE_FAST_DIFF) != 0) {
-        disable_flags = RBD_FLAG_FAST_DIFF_INVALID;
-      }
-      if ((features & RBD_FEATURE_JOURNALING) != 0) {
-        r = Journal::remove(ictx->md_ctx, ictx->id);
-        if (r < 0) {
-          lderr(cct) << "error removing image journal: " << cpp_strerror(r)
-                     << dendl;
-          return r;
-        }
-      }
-    }
-
-    ldout(cct, 10) << "update_features: features=" << new_features << ", mask="
-                   << features_mask << dendl;
-    r = librbd::cls_client::set_features(&ictx->md_ctx, ictx->header_oid,
-                                         new_features, features_mask);
-    if (r < 0) {
-      lderr(cct) << "failed to update features: " << cpp_strerror(r)
-                 << dendl;
-      return r;
-    }
-    if (((ictx->features & RBD_FEATURE_OBJECT_MAP) == 0) &&
-      ((features & RBD_FEATURE_OBJECT_MAP) != 0)) {
-      r = create_object_map(ictx);
-      if (r < 0) {
-        lderr(cct) << "failed to create object map" << dendl;
-        return r;
-      }
-    }
-
-    if (disable_flags != 0) {
-      r = update_all_flags(ictx, 0, disable_flags);
+    {
+      RWLock::RLocker owner_locker(ictx->owner_lock);
+      RWLock::WLocker md_locker(ictx->md_lock);
+      r = ictx->flush();
       if (r < 0) {
         return r;
+      }
+
+      if ((features & RBD_FEATURES_MUTABLE) != features) {
+        lderr(cct) << "cannot update immutable features" << dendl;
+        return -EINVAL;
+      } else if (features == 0) {
+        lderr(cct) << "update requires at least one feature" << dendl;
+        return -EINVAL;
+      }
+
+      RWLock::WLocker snap_locker(ictx->snap_lock);
+      uint64_t new_features;
+      if (enabled) {
+        features &= ~ictx->features;
+        new_features = ictx->features | features;
+      } else {
+        features &= ictx->features;
+        new_features = ictx->features & ~features;
+      }
+
+      if (features == 0) {
+        return 0;
+      }
+
+      uint64_t features_mask = features;
+      uint64_t disable_flags = 0;
+      if (enabled) {
+        uint64_t enable_flags = 0;
+
+        if ((features & RBD_FEATURE_OBJECT_MAP) != 0) {
+          if ((new_features & RBD_FEATURE_EXCLUSIVE_LOCK) == 0) {
+            lderr(cct) << "cannot enable object map" << dendl;
+            return -EINVAL;
+          }
+          enable_flags |= RBD_FLAG_OBJECT_MAP_INVALID;
+          features_mask |= RBD_FEATURE_EXCLUSIVE_LOCK;
+        }
+        if ((features & RBD_FEATURE_FAST_DIFF) != 0) {
+          if ((new_features & RBD_FEATURE_OBJECT_MAP) == 0) {
+            lderr(cct) << "cannot enable fast diff" << dendl;
+            return -EINVAL;
+          }
+          enable_flags |= RBD_FLAG_FAST_DIFF_INVALID;
+          features_mask |= (RBD_FEATURE_OBJECT_MAP | RBD_FEATURE_EXCLUSIVE_LOCK);
+        }
+        if ((features & RBD_FEATURE_JOURNALING) != 0) {
+          if ((new_features & RBD_FEATURE_EXCLUSIVE_LOCK) == 0) {
+            lderr(cct) << "cannot enable journaling" << dendl;
+            return -EINVAL;
+          }
+          features_mask |= RBD_FEATURE_EXCLUSIVE_LOCK;
+
+          r = Journal::create(ictx->md_ctx, ictx->id, ictx->journal_order,
+  			    ictx->journal_splay_width,
+  			    ictx->journal_pool);
+          if (r < 0) {
+            lderr(cct) << "error creating image journal: " << cpp_strerror(r)
+                       << dendl;
+            return r;
+          }
+        }
+
+        if (enable_flags != 0) {
+          r = update_all_flags(ictx, enable_flags, enable_flags);
+          if (r < 0) {
+            return r;
+          }
+        }
+      } else {
+        if ((features & RBD_FEATURE_EXCLUSIVE_LOCK) != 0) {
+          if ((new_features & RBD_FEATURE_OBJECT_MAP) != 0 ||
+              (new_features & RBD_FEATURE_JOURNALING) != 0) {
+            lderr(cct) << "cannot disable exclusive lock" << dendl;
+            return -EINVAL;
+          }
+          features_mask |= RBD_FEATURE_OBJECT_MAP;
+        }
+        if ((features & RBD_FEATURE_OBJECT_MAP) != 0) {
+          if ((new_features & RBD_FEATURE_FAST_DIFF) != 0) {
+            lderr(cct) << "cannot disable object map" << dendl;
+            return -EINVAL;
+          }
+
+          disable_flags = RBD_FLAG_OBJECT_MAP_INVALID;
+          r = remove_object_map(ictx);
+          if (r < 0) {
+            lderr(cct) << "failed to remove object map" << dendl;
+            return r;
+          }
+        }
+        if ((features & RBD_FEATURE_FAST_DIFF) != 0) {
+          disable_flags = RBD_FLAG_FAST_DIFF_INVALID;
+        }
+        if ((features & RBD_FEATURE_JOURNALING) != 0) {
+          r = Journal::remove(ictx->md_ctx, ictx->id);
+          if (r < 0) {
+            lderr(cct) << "error removing image journal: " << cpp_strerror(r)
+                       << dendl;
+            return r;
+          }
+        }
+      }
+
+      ldout(cct, 10) << "update_features: features=" << new_features << ", "
+                     << "mask=" << features_mask << dendl;
+      r = librbd::cls_client::set_features(&ictx->md_ctx, ictx->header_oid,
+                                           new_features, features_mask);
+      if (r < 0) {
+        lderr(cct) << "failed to update features: " << cpp_strerror(r)
+                   << dendl;
+        return r;
+      }
+      if (((ictx->features & RBD_FEATURE_OBJECT_MAP) == 0) &&
+        ((features & RBD_FEATURE_OBJECT_MAP) != 0)) {
+        r = create_object_map(ictx);
+        if (r < 0) {
+          lderr(cct) << "failed to create object map" << dendl;
+          return r;
+        }
+      }
+
+      if (disable_flags != 0) {
+        r = update_all_flags(ictx, 0, disable_flags);
+        if (r < 0) {
+          return r;
+        }
       }
     }
 
@@ -2215,12 +2181,6 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
     ldout(cct, 20) << "async_resize " << ictx << " " << ictx->size << " -> "
 		   << size << dendl;
     ictx->snap_lock.put_read();
-
-    int r = ictx->state->refresh_if_required(ictx->owner_lock);
-    if (r < 0) {
-      ctx->complete(r);
-      return;
-    }
 
     {
       RWLock::RLocker snap_locker(ictx->snap_lock);
@@ -2595,13 +2555,6 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
     CephContext *cct = ictx->cct;
     ldout(cct, 20) << "flatten" << dendl;
 
-    int r;
-    if ((r = ictx->state->refresh_if_required(ictx->owner_lock)) < 0) {
-      lderr(cct) << "ictx_check failed" << dendl;
-      ctx->complete(r);
-      return;
-    }
-
     uint64_t object_size;
     uint64_t overlap_objects;
     ::SnapContext snapc;
@@ -2630,7 +2583,7 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
 
       snapc = ictx->snapc;
       assert(ictx->parent != NULL);
-      r = ictx->get_parent_overlap(CEPH_NOSNAP, &overlap);
+      int r = ictx->get_parent_overlap(CEPH_NOSNAP, &overlap);
       assert(r == 0);
       assert(overlap <= ictx->size);
 
@@ -2682,12 +2635,6 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
     }
     if (!ictx->test_features(RBD_FEATURE_OBJECT_MAP)) {
       ctx->complete(-EINVAL);
-      return;
-    }
-
-    int r = ictx->state->refresh_if_required(ictx->owner_lock);
-    if (r < 0) {
-      ctx->complete(r);
       return;
     }
 
@@ -2744,12 +2691,16 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
      * checks that we think we will succeed. But for now, let's not
      * duplicate that code.
      */
-    RWLock::RLocker locker(ictx->md_lock);
-    r = rados::cls::lock::lock(&ictx->md_ctx, ictx->header_oid, RBD_LOCK_NAME,
-			       exclusive ? LOCK_EXCLUSIVE : LOCK_SHARED,
-			       cookie, tag, "", utime_t(), 0);
-    if (r < 0)
-      return r;
+    {
+      RWLock::RLocker locker(ictx->md_lock);
+      r = rados::cls::lock::lock(&ictx->md_ctx, ictx->header_oid, RBD_LOCK_NAME,
+			         exclusive ? LOCK_EXCLUSIVE : LOCK_SHARED,
+			         cookie, tag, "", utime_t(), 0);
+      if (r < 0) {
+        return r;
+      }
+    }
+
     notify_change(ictx->md_ctx, ictx->header_oid, ictx);
     return 0;
   }
@@ -2763,11 +2714,15 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
     if (r < 0)
       return r;
 
-    RWLock::RLocker locker(ictx->md_lock);
-    r = rados::cls::lock::unlock(&ictx->md_ctx, ictx->header_oid,
-				 RBD_LOCK_NAME, cookie);
-    if (r < 0)
-      return r;
+    {
+      RWLock::RLocker locker(ictx->md_lock);
+      r = rados::cls::lock::unlock(&ictx->md_ctx, ictx->header_oid,
+				   RBD_LOCK_NAME, cookie);
+      if (r < 0) {
+        return r;
+      }
+    }
+
     notify_change(ictx->md_ctx, ictx->header_oid, ictx);
     return 0;
   }
@@ -2815,7 +2770,7 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
       if (client_address.empty()) {
         return -ENOENT;
       }
-      
+
       RWLock::RLocker locker(ictx->md_lock);
       librados::Rados rados(ictx->md_ctx);
       r = rados.blacklist_add(client_address,
