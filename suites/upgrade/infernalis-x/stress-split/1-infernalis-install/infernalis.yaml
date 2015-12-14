@@ -1,0 +1,8 @@
+meta:
+- desc: install ceph/infernalis latest
+tasks:
+- install:
+    branch: infernalis
+- print: "**** done install infernalis"
+- ceph:
+- print: "**** done ceph"
