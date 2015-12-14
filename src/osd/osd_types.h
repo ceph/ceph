@@ -2959,7 +2959,7 @@ struct object_info_t {
   }
   void new_object() {
     set_data_digest(-1);
-    set_omap_digest(-1);
+    clear_omap_digest();
   }
 
   void encode(bufferlist& bl) const;

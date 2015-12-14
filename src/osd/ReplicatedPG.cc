@@ -6515,7 +6515,10 @@ void ReplicatedPG::finish_copyfrom(OpContext *ctx)
   obs.oi.user_version = ctx->user_at_version;
 
   obs.oi.set_data_digest(cb->results->data_digest);
-  obs.oi.set_omap_digest(cb->results->omap_digest);
+  if (obs.oi.is_omap())
+    obs.oi.set_omap_digest(cb->results->omap_digest);
+  else
+    obs.oi.clear_omap_digest();
 
   obs.oi.truncate_seq = cb->results->truncate_seq;
   obs.oi.truncate_size = cb->results->truncate_size;
@@ -6700,6 +6703,8 @@ void ReplicatedPG::finish_promote(int r, CopyResults *results,
       tctx->new_obs.oi.set_data_digest(results->data_digest);
     if (results->has_omap)
       tctx->new_obs.oi.set_omap_digest(results->omap_digest);
+    else
+      tctx->new_obs.oi.clear_omap_digest();
     tctx->new_obs.oi.truncate_seq = results->truncate_seq;
     tctx->new_obs.oi.truncate_size = results->truncate_size;
 
@@ -11421,7 +11426,10 @@ void ReplicatedPG::_scrub(
     ctx->at_version = get_next_version();
     ctx->mtime = utime_t();      // do not update mtime
     ctx->new_obs.oi.set_data_digest(p->second.first);
-    ctx->new_obs.oi.set_omap_digest(p->second.second);
+    if (ctx->new_obs.oi.is_omap())
+      ctx->new_obs.oi.set_omap_digest(p->second.second);
+    else
+      ctx->new_obs.oi.clear_omap_digest();
     finish_ctx(ctx, pg_log_entry_t::MODIFY, true, true);
     ctx->on_finish = new C_ScrubDigestUpdated(this);
     simple_repop_submit(repop);
