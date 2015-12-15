@@ -878,7 +878,9 @@ if(${WITH_RBD})
     librbd/AsyncRequest.cc
     librbd/CopyupRequest.cc
     librbd/DiffIterate.cc
+    librbd/ExclusiveLock.cc
     librbd/ImageCtx.cc
+    librbd/ImageState.cc
     librbd/ImageWatcher.cc
     librbd/internal.cc
     librbd/Journal.cc
@@ -888,12 +890,23 @@ if(${WITH_RBD})
     librbd/LibrbdAdminSocketHook.cc
     librbd/LibrbdWriteback.cc
     librbd/ObjectMap.cc
+    librbd/Utils.cc
+    librbd/exclusive_lock/AcquireRequest.cc
+    librbd/exclusive_lock/ReleaseRequest.cc
+    librbd/image/CloseRequest.cc
+    librbd/image/OpenRequest.cc
+    librbd/image/RefreshParentRequest.cc
+    librbd/image/RefreshRequest.cc
+    librbd/image/SetSnapRequest.cc
     librbd/object_map/InvalidateRequest.cc
+    librbd/object_map/LockRequest.cc
     librbd/object_map/Request.cc
+    librbd/object_map/RefreshRequest.cc
     librbd/object_map/ResizeRequest.cc
     librbd/object_map/SnapshotCreateRequest.cc
     librbd/object_map/SnapshotRemoveRequest.cc
     librbd/object_map/SnapshotRollbackRequest.cc
+    librbd/object_map/UnlockRequest.cc
     librbd/object_map/UpdateRequest.cc
     librbd/operation/FlattenRequest.cc
     librbd/operation/RebuildObjectMapRequest.cc

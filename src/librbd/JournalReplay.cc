@@ -150,8 +150,8 @@ void JournalReplay::handle_event(const journal::UnknownEvent &event,
 
 AioCompletion *JournalReplay::create_aio_completion(Context *on_safe) {
   Mutex::Locker locker(m_lock);
-  AioCompletion *aio_comp = aio_create_completion_internal(
-    this, &aio_completion_callback);
+  AioCompletion *aio_comp = AioCompletion::create(this, aio_completion_callback,
+                                                  nullptr);
   m_aio_completions.insert(std::pair<AioCompletion*,Context*>(
 			     aio_comp, on_safe));
   return aio_comp;

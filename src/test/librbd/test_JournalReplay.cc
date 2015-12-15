@@ -6,6 +6,7 @@
 #include "librbd/AioCompletion.h"
 #include "librbd/AioImageRequest.h"
 #include "librbd/AioImageRequestWQ.h"
+#include "librbd/ExclusiveLock.h"
 #include "librbd/ImageCtx.h"
 #include "librbd/ImageWatcher.h"
 #include "librbd/Journal.h"
@@ -17,38 +18,13 @@ void register_test_journal_replay() {
 class TestJournalReplay : public TestFixture {
 public:
 
-  struct Listener : public librbd::ImageWatcher::Listener{
-    Mutex lock;
-    Cond cond;
-
-    Listener() : lock("TestJournalReplay::Listener::lock") {
-    }
-    virtual bool handle_requested_lock() {
-      return true;
-    }
-    virtual void handle_releasing_lock() {
-    }
-    virtual void handle_lock_updated(
-        librbd::ImageWatcher::LockUpdateState state) {
-      Mutex::Locker locker(lock);
-      cond.Signal();
-    }
-  };
-
-  void wait_for_lock_owner(librbd::ImageCtx *ictx) {
-    Listener listener;
-    ictx->image_watcher->register_listener(&listener);
+  int when_acquired_lock(librbd::ImageCtx *ictx) {
+    C_SaferCond lock_ctx;
     {
-      RWLock::RLocker owner_locker(ictx->owner_lock);
-      while (!ictx->image_watcher->is_lock_owner()) {
-        ictx->owner_lock.put_read();
-        listener.lock.Lock();
-        listener.cond.Wait(listener.lock);
-        listener.lock.Unlock();
-        ictx->owner_lock.get_read();
-      }
+      RWLock::WLocker owner_locker(ictx->owner_lock);
+      ictx->exclusive_lock->request_lock(&lock_ctx);
     }
-    ictx->image_watcher->unregister_listener(&listener);
+    return lock_ctx.wait();
   }
 };
 
@@ -59,7 +35,6 @@ TEST_F(TestJournalReplay, AioDiscardEvent) {
   librbd::ImageCtx *ictx;
   ASSERT_EQ(0, open_image(m_image_name, &ictx));
   ictx->features &= ~RBD_FEATURE_JOURNALING;
-  ASSERT_EQ(0, ictx->close_journal(true));
 
   std::string payload(4096, '1');
   librbd::AioCompletion *aio_comp = new librbd::AioCompletion();
@@ -84,14 +59,7 @@ TEST_F(TestJournalReplay, AioDiscardEvent) {
 
   // inject a discard operation into the journal
   ASSERT_EQ(0, open_image(m_image_name, &ictx));
-  {
-    RWLock::WLocker owner_locker(ictx->owner_lock);
-    ictx->image_watcher->request_lock();
-  }
-  wait_for_lock_owner(ictx);
-
-  ictx->journal->open();
-  ictx->journal->wait_for_journal_ready();
+  ASSERT_EQ(0, when_acquired_lock(ictx));
 
   librbd::journal::EventEntry event_entry(
     librbd::journal::AioDiscardEvent(0, payload.size()));
@@ -100,11 +68,10 @@ TEST_F(TestJournalReplay, AioDiscardEvent) {
     RWLock::RLocker owner_locker(ictx->owner_lock);
     ictx->journal->append_io_event(NULL, event_entry, requests, 0, 0, true);
   }
-  ASSERT_EQ(0, ictx->journal->close());
 
   // re-open the journal so that it replays the new entry
-  ictx->journal->open();
-  ictx->journal->wait_for_journal_ready();
+  ASSERT_EQ(0, open_image(m_image_name, &ictx));
+  ASSERT_EQ(0, when_acquired_lock(ictx));
 
   aio_comp = new librbd::AioCompletion();
   ictx->aio_work_queue->aio_read(aio_comp, 0, read_payload.size(),
@@ -120,14 +87,7 @@ TEST_F(TestJournalReplay, AioWriteEvent) {
   // inject a write operation into the journal
   librbd::ImageCtx *ictx;
   ASSERT_EQ(0, open_image(m_image_name, &ictx));
-  {
-    RWLock::WLocker owner_locker(ictx->owner_lock);
-    ictx->image_watcher->request_lock();
-  }
-  wait_for_lock_owner(ictx);
-
-  ictx->journal->open();
-  ictx->journal->wait_for_journal_ready();
+  ASSERT_EQ(0, when_acquired_lock(ictx));
 
   std::string payload(4096, '1');
   bufferlist payload_bl;
@@ -139,11 +99,10 @@ TEST_F(TestJournalReplay, AioWriteEvent) {
     RWLock::RLocker owner_locker(ictx->owner_lock);
     ictx->journal->append_io_event(NULL, event_entry, requests, 0, 0, true);
   }
-  ASSERT_EQ(0, ictx->journal->close());
 
   // re-open the journal so that it replays the new entry
-  ictx->journal->open();
-  ictx->journal->wait_for_journal_ready();
+  ASSERT_EQ(0, open_image(m_image_name, &ictx));
+  ASSERT_EQ(0, when_acquired_lock(ictx));
 
   std::string read_payload(4096, '\0');
   librbd::AioCompletion *aio_comp = new librbd::AioCompletion();
@@ -159,15 +118,9 @@ TEST_F(TestJournalReplay, AioFlushEvent) {
 
   // inject a flush operation into the journal
   librbd::ImageCtx *ictx;
-  ASSERT_EQ(0, open_image(m_image_name, &ictx));
-  {
-    RWLock::WLocker owner_locker(ictx->owner_lock);
-    ictx->image_watcher->request_lock();
-  }
-  wait_for_lock_owner(ictx);
 
-  ictx->journal->open();
-  ictx->journal->wait_for_journal_ready();
+  ASSERT_EQ(0, open_image(m_image_name, &ictx));
+  ASSERT_EQ(0, when_acquired_lock(ictx));
 
   librbd::journal::AioFlushEvent aio_flush_event;
   librbd::journal::EventEntry event_entry(aio_flush_event);
@@ -176,7 +129,6 @@ TEST_F(TestJournalReplay, AioFlushEvent) {
     RWLock::RLocker owner_locker(ictx->owner_lock);
     ictx->journal->append_io_event(NULL, event_entry, requests, 0, 0, true);
   }
-  ASSERT_EQ(0, ictx->journal->close());
 
   // start an AIO write op
   librbd::Journal *journal = ictx->journal;
@@ -192,8 +144,8 @@ TEST_F(TestJournalReplay, AioFlushEvent) {
   ictx->journal = journal;
 
   // re-open the journal so that it replays the new entry
-  ictx->journal->open();
-  ictx->journal->wait_for_journal_ready();
+  ASSERT_EQ(0, open_image(m_image_name, &ictx));
+  ASSERT_EQ(0, when_acquired_lock(ictx));
 
   ASSERT_TRUE(aio_comp->is_complete());
   ASSERT_EQ(0, aio_comp->wait_for_complete());

@@ -4,6 +4,7 @@
 #include "test/librbd/test_mock_fixture.h"
 #include "test/librbd/test_support.h"
 #include "test/librados_test_stub/MockTestMemIoCtxImpl.h"
+#include "librbd/ImageState.h"
 #include "librbd/internal.h"
 #include "librbd/ObjectMap.h"
 #include "librbd/object_map/SnapshotRollbackRequest.h"
@@ -66,7 +67,7 @@ TEST_F(TestMockObjectMapSnapshotRollbackRequest, Success) {
   librbd::ImageCtx *ictx;
   ASSERT_EQ(0, open_image(m_image_name, &ictx));
   ASSERT_EQ(0, librbd::snap_create(ictx, "snap1"));
-  ASSERT_EQ(0, librbd::ictx_check(ictx));
+  ASSERT_EQ(0, ictx->state->refresh_if_required());
 
   uint64_t snap_id = ictx->snap_info.rbegin()->first;
   expect_read_map(ictx, snap_id, 0);
@@ -87,7 +88,7 @@ TEST_F(TestMockObjectMapSnapshotRollbackRequest, ReadMapError) {
   librbd::ImageCtx *ictx;
   ASSERT_EQ(0, open_image(m_image_name, &ictx));
   ASSERT_EQ(0, librbd::snap_create(ictx, "snap1"));
-  ASSERT_EQ(0, librbd::ictx_check(ictx));
+  ASSERT_EQ(0, ictx->state->refresh_if_required());
 
   uint64_t snap_id = ictx->snap_info.rbegin()->first;
   expect_read_map(ictx, snap_id, -ENOENT);
@@ -115,7 +116,7 @@ TEST_F(TestMockObjectMapSnapshotRollbackRequest, WriteMapError) {
   librbd::ImageCtx *ictx;
   ASSERT_EQ(0, open_image(m_image_name, &ictx));
   ASSERT_EQ(0, librbd::snap_create(ictx, "snap1"));
-  ASSERT_EQ(0, librbd::ictx_check(ictx));
+  ASSERT_EQ(0, ictx->state->refresh_if_required());
 
   uint64_t snap_id = ictx->snap_info.rbegin()->first;
   expect_read_map(ictx, snap_id, 0);

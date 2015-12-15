@@ -4,6 +4,8 @@
 #include "librbd/DiffIterate.h"
 #include "librbd/ImageCtx.h"
 #include "librbd/internal.h"
+#include "librbd/ObjectMap.h"
+#include "librbd/Utils.h"
 #include "include/rados/librados.hpp"
 #include "include/interval_set.h"
 #include "common/errno.h"
@@ -61,7 +63,7 @@ public:
   void send() {
     C_OrderedThrottle *ctx = m_diff_context.throttle.start_op(this);
     librados::AioCompletion *rados_completion =
-      librados::Rados::aio_create_completion(ctx, NULL, rados_ctx_cb);
+      util::create_rados_safe_callback(ctx);
 
     librados::ObjectReadOperation op;
     op.list_snaps(&m_snap_set, &m_snap_ret);

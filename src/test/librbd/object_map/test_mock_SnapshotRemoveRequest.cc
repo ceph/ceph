@@ -5,7 +5,9 @@
 #include "test/librbd/test_support.h"
 #include "test/librados_test_stub/MockTestMemIoCtxImpl.h"
 #include "common/bit_vector.hpp"
+#include "librbd/ImageState.h"
 #include "librbd/internal.h"
+#include "librbd/ObjectMap.h"
 #include "librbd/object_map/SnapshotRemoveRequest.h"
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
@@ -75,7 +77,7 @@ TEST_F(TestMockObjectMapSnapshotRemoveRequest, Success) {
   librbd::ImageCtx *ictx;
   ASSERT_EQ(0, open_image(m_image_name, &ictx));
   ASSERT_EQ(0, librbd::snap_create(ictx, "snap1"));
-  ASSERT_EQ(0, librbd::ictx_check(ictx));
+  ASSERT_EQ(0, ictx->state->refresh_if_required());
 
   uint64_t snap_id = ictx->snap_info.rbegin()->first;
   if (ictx->test_features(RBD_FEATURE_FAST_DIFF)) {
@@ -104,7 +106,7 @@ TEST_F(TestMockObjectMapSnapshotRemoveRequest, LoadMapError) {
   librbd::ImageCtx *ictx;
   ASSERT_EQ(0, open_image(m_image_name, &ictx));
   ASSERT_EQ(0, librbd::snap_create(ictx, "snap1"));
-  ASSERT_EQ(0, librbd::ictx_check(ictx));
+  ASSERT_EQ(0, ictx->state->refresh_if_required());
 
   uint64_t snap_id = ictx->snap_info.rbegin()->first;
   expect_load_map(ictx, snap_id, -EINVAL);
@@ -131,7 +133,7 @@ TEST_F(TestMockObjectMapSnapshotRemoveRequest, RemoveSnapshotMissing) {
   librbd::ImageCtx *ictx;
   ASSERT_EQ(0, open_image(m_image_name, &ictx));
   ASSERT_EQ(0, librbd::snap_create(ictx, "snap1"));
-  ASSERT_EQ(0, librbd::ictx_check(ictx));
+  ASSERT_EQ(0, ictx->state->refresh_if_required());
 
   uint64_t snap_id = ictx->snap_info.rbegin()->first;
   expect_load_map(ictx, snap_id, 0);
@@ -158,7 +160,7 @@ TEST_F(TestMockObjectMapSnapshotRemoveRequest, RemoveSnapshotError) {
   librbd::ImageCtx *ictx;
   ASSERT_EQ(0, open_image(m_image_name, &ictx));
   ASSERT_EQ(0, librbd::snap_create(ictx, "snap1"));
-  ASSERT_EQ(0, librbd::ictx_check(ictx));
+  ASSERT_EQ(0, ictx->state->refresh_if_required());
 
   uint64_t snap_id = ictx->snap_info.rbegin()->first;
   expect_load_map(ictx, snap_id, 0);
@@ -186,7 +188,7 @@ TEST_F(TestMockObjectMapSnapshotRemoveRequest, RemoveMapMissing) {
   librbd::ImageCtx *ictx;
   ASSERT_EQ(0, open_image(m_image_name, &ictx));
   ASSERT_EQ(0, librbd::snap_create(ictx, "snap1"));
-  ASSERT_EQ(0, librbd::ictx_check(ictx));
+  ASSERT_EQ(0, ictx->state->refresh_if_required());
 
   uint64_t snap_id = ictx->snap_info.rbegin()->first;
   if (ictx->test_features(RBD_FEATURE_FAST_DIFF)) {
@@ -215,7 +217,7 @@ TEST_F(TestMockObjectMapSnapshotRemoveRequest, RemoveMapError) {
   librbd::ImageCtx *ictx;
   ASSERT_EQ(0, open_image(m_image_name, &ictx));
   ASSERT_EQ(0, librbd::snap_create(ictx, "snap1"));
-  ASSERT_EQ(0, librbd::ictx_check(ictx));
+  ASSERT_EQ(0, ictx->state->refresh_if_required());
 
   uint64_t snap_id = ictx->snap_info.rbegin()->first;
   if (ictx->test_features(RBD_FEATURE_FAST_DIFF)) {
@@ -244,7 +246,7 @@ TEST_F(TestMockObjectMapSnapshotRemoveRequest, ScrubCleanObjects) {
   librbd::ImageCtx *ictx;
   ASSERT_EQ(0, open_image(m_image_name, &ictx));
   ASSERT_EQ(0, librbd::snap_create(ictx, "snap1"));
-  ASSERT_EQ(0, librbd::ictx_check(ictx));
+  ASSERT_EQ(0, ictx->state->refresh_if_required());
 
   uint64_t snap_id = ictx->snap_info.rbegin()->first;
 

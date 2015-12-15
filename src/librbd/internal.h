@@ -68,11 +68,6 @@ namespace librbd {
     }
   };
 
-  const std::string id_obj_name(const std::string &name);
-  const std::string header_name(const std::string &image_id);
-  const std::string old_header_name(const std::string &image_name);
-  std::string unique_lock_name(const std::string &name, void *address);
-
   int detect_format(librados::IoCtx &io_ctx, const std::string &name,
 		    bool *old_format, uint64_t *size);
 
@@ -146,18 +141,9 @@ namespace librbd {
                              const char *snap_name);
   int snap_is_protected(ImageCtx *ictx, const char *snap_name,
 			bool *is_protected);
-  int refresh_parent(ImageCtx *ictx);
-  int ictx_check(ImageCtx *ictx);
-  int ictx_check(ImageCtx *ictx, const RWLock &owner_lock);
-  int ictx_refresh(ImageCtx *ictx);
   int copy(ImageCtx *ictx, IoCtx& dest_md_ctx, const char *destname,
 	   ImageOptions& opts, ProgressContext &prog_ctx);
   int copy(ImageCtx *src, ImageCtx *dest, ProgressContext &prog_ctx);
-
-  int open_parent(ImageCtx *ictx);
-  int open_image(ImageCtx *ictx);
-  int close_image(ImageCtx *ictx);
-  int close_parent(ImageCtx *ictx);
 
   int flatten(ImageCtx *ictx, ProgressContext &prog_ctx);
 
@@ -229,16 +215,6 @@ namespace librbd {
   int mirror_peer_set_cluster(IoCtx& io_ctx, const std::string &cluster_uuid,
                               const std::string &cluster_name);
 
-  AioCompletion *aio_create_completion();
-  AioCompletion *aio_create_completion(void *cb_arg, callback_t cb_complete);
-  AioCompletion *aio_create_completion_internal(void *cb_arg,
-						callback_t cb_complete);
-
-  // raw callbacks
-  void rados_req_cb(rados_completion_t cb, void *arg);
-  void rados_ctx_cb(rados_completion_t cb, void *arg);
-  void rbd_req_cb(completion_t cb, void *arg);
-  void rbd_ctx_cb(completion_t cb, void *arg);
 }
 
 #endif

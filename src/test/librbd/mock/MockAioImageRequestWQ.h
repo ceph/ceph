@@ -11,6 +11,8 @@ namespace librbd {
 struct MockAioImageRequestWQ {
   MOCK_METHOD1(block_writes, void(Context *));
   MOCK_METHOD0(unblock_writes, void());
+
+  MOCK_CONST_METHOD0(writes_empty, bool());
 };
 
 } // namespace librbd

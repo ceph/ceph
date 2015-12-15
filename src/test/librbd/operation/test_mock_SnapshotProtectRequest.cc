@@ -6,6 +6,7 @@
 #include "test/librbd/mock/MockImageCtx.h"
 #include "test/librados_test_stub/MockTestMemIoCtxImpl.h"
 #include "common/bit_vector.hpp"
+#include "librbd/ImageState.h"
 #include "librbd/internal.h"
 #include "librbd/operation/SnapshotProtectRequest.h"
 #include "gmock/gmock.h"
@@ -61,7 +62,7 @@ TEST_F(TestMockOperationSnapshotProtectRequest, Success) {
   librbd::ImageCtx *ictx;
   ASSERT_EQ(0, open_image(m_image_name, &ictx));
   ASSERT_EQ(0, librbd::snap_create(ictx, "snap1"));
-  ASSERT_EQ(0, librbd::ictx_check(ictx));
+  ASSERT_EQ(0, ictx->state->refresh_if_required());
 
   MockImageCtx mock_image_ctx(*ictx);
 
@@ -88,7 +89,7 @@ TEST_F(TestMockOperationSnapshotProtectRequest, GetSnapIdMissing) {
   librbd::ImageCtx *ictx;
   ASSERT_EQ(0, open_image(m_image_name, &ictx));
   ASSERT_EQ(0, librbd::snap_create(ictx, "snap1"));
-  ASSERT_EQ(0, librbd::ictx_check(ictx));
+  ASSERT_EQ(0, ictx->state->refresh_if_required());
 
   MockImageCtx mock_image_ctx(*ictx);
 
@@ -113,7 +114,7 @@ TEST_F(TestMockOperationSnapshotProtectRequest, IsSnapProtectedError) {
   librbd::ImageCtx *ictx;
   ASSERT_EQ(0, open_image(m_image_name, &ictx));
   ASSERT_EQ(0, librbd::snap_create(ictx, "snap1"));
-  ASSERT_EQ(0, librbd::ictx_check(ictx));
+  ASSERT_EQ(0, ictx->state->refresh_if_required());
 
   MockImageCtx mock_image_ctx(*ictx);
 
@@ -139,7 +140,7 @@ TEST_F(TestMockOperationSnapshotProtectRequest, SnapAlreadyProtected) {
   librbd::ImageCtx *ictx;
   ASSERT_EQ(0, open_image(m_image_name, &ictx));
   ASSERT_EQ(0, librbd::snap_create(ictx, "snap1"));
-  ASSERT_EQ(0, librbd::ictx_check(ictx));
+  ASSERT_EQ(0, ictx->state->refresh_if_required());
 
   MockImageCtx mock_image_ctx(*ictx);
 
@@ -165,7 +166,7 @@ TEST_F(TestMockOperationSnapshotProtectRequest, SetProtectionStateError) {
   librbd::ImageCtx *ictx;
   ASSERT_EQ(0, open_image(m_image_name, &ictx));
   ASSERT_EQ(0, librbd::snap_create(ictx, "snap1"));
-  ASSERT_EQ(0, librbd::ictx_check(ictx));
+  ASSERT_EQ(0, ictx->state->refresh_if_required());
 
   MockImageCtx mock_image_ctx(*ictx);
 
