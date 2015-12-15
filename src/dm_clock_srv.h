@@ -15,7 +15,10 @@
 #include <iostream>
 
 #include <boost/heap/fibonacci_heap.hpp>
-// #include <boost/heap/heap_concepts.hpp>
+#include <boost/heap/heap_concepts.hpp>
+
+
+namespace heap = boost::heap;
 
 
 // dmClock namespace
@@ -87,16 +90,17 @@ namespace dmc {
 
     struct Entry {
       RequestTag tag;
+      bool       handled;
       RequestRef request;
 
       Entry(RequestTag t, RequestRef&& r) :
-	tag(t), request(std::move(r))
+	tag(t), handled(false), request(std::move(r))
       {
 	// empty
       }
 
       Entry(Entry&& e) :
-	tag(e.tag), request(std::move(e.request))
+	tag(e.tag), handled(e.handled), request(std::move(e.request))
       {
 	// empty
       }
@@ -105,7 +109,10 @@ namespace dmc {
   protected:
 
     typedef typename std::lock_guard<std::mutex> Guard;
-
+    typedef typename std::shared_ptr<ClientQueue<R>> HeapEntry;
+    typedef typename heap::fibonacci_heap<HeapEntry,
+					  heap::compare<dmc::PriorityQueue::ReservationCompare>>::handle_type HeapHandle;
+    
     ClientInfo         info;
     RequestTag         prev_tag;
     std::deque<Entry>  queue;
@@ -113,6 +120,12 @@ namespace dmc {
     bool               idle;
 
   public:
+
+    // perhaps these should be protected
+    HeapHandle         prop_handle;
+    HeapHandle         res_handle;
+    HeapHandle         lim_handle;
+    HeapHandle         ready_handle;
 
     ClientQueue(const ClientInfo& _info) : info(_info), idle(false) {}
 
@@ -235,18 +248,26 @@ namespace dmc {
     CanHandleRequestFunc canHandleF;
     HandleRequestFunc handleF;
 
+
+    typedef typename std::lock_guard<std::mutex> Guard;
+
+    mutable std::mutex data_mutex;
+
+
     // stable mappiing between client ids and client queues
     std::map<C,CQueueRef> clientMap;
 
 
     // four heaps that maintain the earliest request by each of the
     // tag components
-    boost::heap::fibonacci_heap<CQueueRef,
-				boost::heap::compare<ReservationCompare>> resQ;
-    boost::heap::fibonacci_heap<CQueueRef,
-				boost::heap::compare<LimitCompare>> limQ;
-    boost::heap::fibonacci_heap<CQueueRef,
-				boost::heap::compare<ProportionCompare>> propQ;
+    heap::fibonacci_heap<CQueueRef,
+			 heap::compare<ReservationCompare>> resQ;
+    heap::fibonacci_heap<CQueueRef,
+			 heap::compare<LimitCompare>> limQ;
+    heap::fibonacci_heap<CQueueRef,
+			 heap::compare<ProportionCompare>> propQ;
+    heap::fibonacci_heap<CQueueRef,
+			 :heap::compare<ProportionCompare>> readyQ;
 
   public:
 
@@ -266,25 +287,62 @@ namespace dmc {
       std::cout << clientInfoF(99) << std::endl;
     }
 
+    
     void addRequest(R request, C client_id, Time time) {
+      Guard g(data_mutex);
+
       auto client_it = clientMap.find(client_id);
       CQueueRef client;
+      bool add_to_queues = false;
       if (clientMap.end() == client_it) {
 	ClientInfo ci = clientInfoF(client_id);
 	client = CQueueRef(new ClientQueue<R>(ci));
 	clientMap[client_id] = client;
+	add_to_queues = true;
       } else {
 	client = client_it->second;
       }
 
       typename ClientQueue<R>::RequestRef req_ref(new R(request));
-      bool was_empty = client->empty();
+      // bool was_empty = client->empty();
       client->push(std::move(req_ref), time);
-      if (was_empty) {
-	resQ.push(client);
+      if (add_to_queues) {
+	auto h = resQ.push(client);
+	(*h)->res_handle = h;
+	
 	limQ.push(client);
 	propQ.push(client);
       }
+
+      scheduleRequest();
+    }
+
+
+  protected:
+
+    // data_mutex should be held when called
+    void scheduleRequest() {
+      if (!canHandleF()) {
+	return;
+      }
+
+      if (!resQ.empty()) {
+	auto top = resQ.top()->peek();
+	while (top && top->handled) {
+	  resQ.pop();
+
+	  auto handle = resQ.s_handle_from_iterator(resQ.begin());
+	
+	  resQ.update(handle);
+
+	  top = resQ.top()->peek();
+	}
+      } // resQ not empty
+    }
+
+    void requestComplete() {
+      Guard g(data_mutex);
+      scheduleRequest();
     }
 
   }; // class PriorityQueue
