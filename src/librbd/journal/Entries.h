@@ -1,8 +1,8 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
-#ifndef CEPH_LIBRBD_JOURNAL_TYPES_H
-#define CEPH_LIBRBD_JOURNAL_TYPES_H
+#ifndef CEPH_LIBRBD_JOURNAL_ENTRIES_H
+#define CEPH_LIBRBD_JOURNAL_ENTRIES_H
 
 #include "include/int_types.h"
 #include "include/buffer.h"
@@ -281,4 +281,4 @@ std::ostream &operator<<(std::ostream &out,
 
 WRITE_CLASS_ENCODER(librbd::journal::EventEntry);
 
-#endif // CEPH_LIBRBD_JOURNAL_TYPES_H
+#endif // CEPH_LIBRBD_JOURNAL_ENTRIES_H
