@@ -819,7 +819,7 @@ void RGWDeleteObj_ObjStore_SWIFT::send_response()
       bulkdelete_respond(0, 1, {}, s->prot_flags, *s->formatter);
     } else {
       RGWBulkDelete::acct_path_t path;
-      path.bucket_name = s->bucket_name_str;
+      path.bucket_name = s->bucket_name;
       path.obj_key = s->object;
 
       RGWBulkDelete::fail_desc_t fail_desc;

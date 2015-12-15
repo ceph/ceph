@@ -140,7 +140,6 @@ std::ostream& RGWFormatter_Plain::dump_stream(const char *name)
 void RGWFormatter_Plain::dump_format_va(const char *name, const char *ns, bool quoted, const char *fmt, va_list ap)
 {
   char buf[LARGE_SIZE];
-  const char *format;
 
   struct plain_stack_entry& entry = stack.back();
 
