@@ -271,6 +271,108 @@ done:
   return (ret < 0 ? ret : s->err.ret);
 } /* process_request */
 
+int start_continued_request(RGWLibContinuedReq* req)
+{
+  int ret = 0;
+
+  dout(1) << "====== " << __func__
+	  << " starting new continued request req=" << hex << req << dec
+	  << " ======" << dendl;
+
+  /*
+   * invariant: valid requests are derived from RGWOp--well-formed
+   * requests should have assigned RGWRequest::op in their descendant
+   * constructor--if not, the compiler can find it, at the cost of
+   * a runtime check
+   */
+  RGWOp *op = (req->op) ? req->op : dynamic_cast<RGWOp*>(req);
+  if (! op) {
+    dout(1) << "failed to derive cognate RGWOp (invalid op?)" << dendl;
+    return -EINVAL;
+  }
+
+  struct req_state* s = req->get_state();
+
+  /* XXXX the below stanza can be completely internalized--req has
+   * all these objects */
+
+#if 0
+  /* XXX and -then- stash req_state pointers everywhere they are needed */
+  ret = req->init(rgw_env, &rados_ctx, io, s);
+  if (ret < 0) {
+    dout(10) << "failed to initialize request" << dendl;
+    abort_req(s, op, ret);
+    goto done;
+  }
+#endif
+
+  /* req is-a RGWOp, currently initialized separately */
+  ret = req->op_init();
+  if (ret < 0) {
+    dout(10) << "failed to initialize RGWOp" << dendl;
+    abort_req(s, op, ret);
+    goto done;
+  }
+
+  /* XXX authorize does less here then in the REST path, e.g.,
+   * the user's info is cached, but still incomplete */
+  req->log(s, "authorizing");
+  ret = req->authorize();
+  if (ret < 0) {
+    dout(10) << "failed to authorize request" << dendl;
+    abort_req(s, op, ret);
+    goto done;
+  }
+
+  req->log(s, "reading op permissions");
+  ret = req->read_permissions(op);
+  if (ret < 0) {
+    abort_req(s, op, ret);
+    goto done;
+  }
+
+  req->log(s, "init op");
+  ret = op->init_processing();
+  if (ret < 0) {
+    abort_req(s, op, ret);
+    goto done;
+  }
+
+  req->log(s, "verifying op mask");
+  ret = op->verify_op_mask();
+  if (ret < 0) {
+    abort_req(s, op, ret);
+    goto done;
+  }
+
+  req->log(s, "verifying op permissions");
+  ret = op->verify_permission();
+  if (ret < 0) {
+    if (s->system_request) {
+      dout(2) << "overriding permissions due to system operation" << dendl;
+    } else {
+      abort_req(s, op, ret);
+      goto done;
+    }
+  }
+
+  req->log(s, "verifying op params");
+  ret = op->verify_params();
+  if (ret < 0) {
+    abort_req(s, op, ret);
+    goto done;
+  }
+
+  op->pre_exec();
+
+done:
+  return ret;
+}
+
+int finish_continued_request(RGWLibContinuedReq* req)
+{
+}
+
 int RGWLibFrontend::init()
 {
   pprocess = new RGWLibProcess(g_ceph_context, &env,

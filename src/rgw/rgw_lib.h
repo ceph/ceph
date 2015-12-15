@@ -38,6 +38,8 @@ public:
   int stop();
 };
 
+extern RGWLib librgw;
+
 /* request interface */
 
 class RGWLibIO : public RGWClientIO
@@ -146,6 +148,30 @@ public:
 
 }; /* RGWLibRequest */
 
+class RGWLibContinuedReq : public RGWLibRequest {
+  RGWLibIO io_ctx;
+  struct req_state rstate;
+  RGWObjectCtx rados_ctx;
+public:
+
+RGWLibContinuedReq(CephContext* _cct, RGWUserInfo* _user)
+  :  RGWLibRequest(_cct, _user), rstate(_cct, &io_ctx.get_env(), _user),
+     rados_ctx(librgw.get_store(), &rstate)
+    {
+      io_ctx.init(_cct);
+
+      /* XXX for now, use "";  could be a legit hostname, or, in future,
+       * perhaps a tenant (Yehuda) */
+      io_ctx.get_env().set("HTTP_HOST", "");
+    }
+
+  virtual int execute() final { abort(); }
+  virtual int exec_start() = 0;
+  virtual int exec_continue() = 0;
+  virtual int exec_finish() = 0;
+
+}; /* RGWLibContinuedReq */
+
 class RGWLibProcess : public RGWProcess {
     RGWAccessKey access_key;
 public:
@@ -165,10 +191,15 @@ public:
     req_wq.queue(req);
   } /* enqueue_req */
 
+  /* "regular" requests */
   void handle_request(RGWRequest* req); // async handler, deletes req
   int process_request(RGWLibRequest* req);
   int process_request(RGWLibRequest* req, RGWLibIO* io);
   void set_access_key(RGWAccessKey& key) { access_key = key; }
+
+  /* requests w/continue semantics */
+  int start_continued_request(RGWLibContinuedReq* req);
+  int finish_continued_request(RGWLibContinuedReq* req);
 }; /* RGWLibProcess */
 
 class RGWLibFrontend : public RGWProcessFrontend {
