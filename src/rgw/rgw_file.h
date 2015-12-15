@@ -47,6 +47,7 @@ namespace rgw {
 
   class RGWLibFS;
   class RGWFileHandle;
+  class RGWWriteRequest;
 
   typedef boost::intrusive_ptr<RGWFileHandle> RGWFHRef;
 
@@ -148,6 +149,9 @@ namespace rgw {
     } state;
 
     struct file {
+      RGWWriteRequest* write_req;
+      file() : write_req(nullptr) {}
+      ~file();
     };
 
     struct directory {
@@ -356,6 +360,9 @@ namespace rgw {
       }
       return EPERM;
     }
+
+    int write(uint64_t off, size_t len, size_t *nbytes, void *buffer);
+    int write_finish();
 
     void close() {
       lock_guard guard(mtx);
@@ -1454,14 +1461,15 @@ class RGWWriteRequest : public RGWLibContinuedReq,
 public:
   const std::string& bucket_name;
   const std::string& obj_name;
-  buffer::list& bl; /* XXX */
+  buffer::list bl;
+  off_t last_off;
+  off_t next_off;
   size_t bytes_written;
 
   RGWWriteRequest(CephContext* _cct, RGWUserInfo *_user,
-		  const std::string& _bname, const std::string& _oname,
-		  buffer::list& _bl)
+		  const std::string& _bname, const std::string& _oname)
     : RGWLibContinuedReq(_cct, _user), bucket_name(_bname), obj_name(_oname),
-      bl(_bl), bytes_written(0) {
+      last_off(0), next_off(0), bytes_written(0) {
     magic = 81;
     op = this;
   }
@@ -1532,11 +1540,19 @@ public:
     return len;
   }
 
+  void put_data(off_t off, buffer::list& _bl) {
+    next_off = off;
+    bl.claim(_bl);
+  }
+
   virtual int exec_start() {
     return 0;
   }
 
   virtual int exec_continue() {
+    if (next_off != last_off)
+      return -EIO;
+    /* XXX consume bl */
     return 0;
   }
 
