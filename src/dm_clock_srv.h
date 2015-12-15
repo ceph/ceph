@@ -114,9 +114,6 @@ namespace dmc {
 
   public:
 
-#if 0
-    ClientQueue() : idle(false) {}
-#endif
     ClientQueue(const ClientInfo& _info) : info(_info), idle(false) {}
 
     const ClientInfo& getInfo() const { return info; }
@@ -137,9 +134,17 @@ namespace dmc {
       queue.pop_front();
     }
 
-    void push(RequestRef&& request) {
+    void push(RequestRef&& request, Time time) {
       std::lock_guard<std::mutex> guard(queue_mutex);
-      queue.emplace_back(Entry(RequestTag(), std::move(request)));
+      queue.emplace_back(
+	Entry(
+	  RequestTag(std::max(time,
+			      prev_tag.proportion + 1.0 / info.weight),
+		     std::max(time,
+			      prev_tag.reservation + 1.0 / info.reservation),
+		     std::max(time,
+			      prev_tag.limit + 1.0 / info.limit)),
+	  std::move(request)));
     }
 
     // can only be called when queue is not empty
@@ -187,7 +192,7 @@ namespace dmc {
 
 	if (q1) {
 	  if (q2) {
-	    return q1->tag.priority < q2->tag.priority;
+	    return q1->tag.proportion < q2->tag.proportion;
 	  } else {
 	    return true;
 	  }
@@ -217,7 +222,12 @@ namespace dmc {
 
     ClientInfoFunc clientInfoF;
 
+    // stable mappiing between client ids and client queues
     std::map<C,CQueueRef> clientMap;
+
+
+    // four heaps that maintain the earliest request by each of the
+    // tag components
     boost::heap::fibonacci_heap<CQueueRef,
 				boost::heap::compare<ReservationCompare>> resQ;
     boost::heap::fibonacci_heap<CQueueRef,
@@ -245,24 +255,19 @@ namespace dmc {
       if (clientMap.end() == client_it) {
 	ClientInfo ci = clientInfoF(client_id);
 	client = CQueueRef(new ClientQueue<R>(ci));
+	clientMap[client_id] = client;
       } else {
 	client = client_it->second;
       }
 
-      const ClientInfo& info = client->getInfo();
-      const RequestTag& prev_tag = client->getPrevTag();
-
-      RequestTag tag(std::max(time,
-			      prev_tag.proportion + 1.0 / info.weight),
-		     std::max(time,
-			      prev_tag.reservation + 1.0 / info.reservation),
-		     std::max(time,
-			      prev_tag.limit + 1.0 / info.limit));
-
-      typename ClientQueue<R>::RequestRef rr(new R(request));
-      // typename ClientQueue<R>::Entry e(tag, std::move(rr));
+      typename ClientQueue<R>::RequestRef req_ref(new R(request));
       bool was_empty = client->empty();
-      client->push(e);
+      client->push(std::move(req_ref), time);
+      if (was_empty) {
+	resQ.push(client);
+	limQ.push(client);
+	propQ.push(client);
+      }
     }
 
   }; // class PriorityQueue

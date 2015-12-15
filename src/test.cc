@@ -60,45 +60,6 @@ int main(int argc, char* argv[]) {
   std::cout << "now: " << dmc::getTime() << std::endl;
   std::cout << "now: " << dmc::getTime() << std::endl;
 
-#if 0
-  dmc::ClientDB<int> client_db;
-
-  client_db.put(0, dmc::ClientInfo(1.0, 100.0, 250.0));
-  client_db.put(1, dmc::ClientInfo(2.0, 100.0, 250.0));
-  client_db.put(2, dmc::ClientInfo(2.0, 100.0, 250.0));
-  client_db.put(3, dmc::ClientInfo(3.0,  50.0,   0.0));
-
-  int ca[] = {0, 3, 6};
-  for (int c = 0; c < sizeof ca / sizeof ca[0]; ++c) {
-    auto cli = ca[c];
-    auto cl = client_db.find(cli);
-    std::cout << "client " << cli << ": ";
-    if (cl) {
-      std::cout << *cl;
-    } else {
-      std::cout << "undefined";
-    }
-
-    std::cout << std::endl;
-  }
-
-  dmc::ClientQueue<Request> client_queue;
-
-  RequestRef r0a(new Request(0, 1, "foo"));
-  client_queue.push(std::move(r0a));
-
-  client_queue.push(RequestRef( new Request(0, 2, "bar")));
-  client_queue.push(RequestRef( new Request(0, 3, "baz")));
-  client_queue.push(RequestRef( new Request(0, 4, "bazzzzz")));
-
-  while (!client_queue.empty()) {
-    auto e = client_queue.peek();
-    std::cout << e->request.get()->op << std::endl;
-    client_queue.pop();
-  }
-#endif
-
-
   dmc::ClientQueue<Request> cq(getClientInfo(0));
 
   auto f = std::function<dmc::ClientInfo(int)>(getClientInfo);
