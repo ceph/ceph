@@ -18,6 +18,7 @@
 
 #include "common/errno.h"
 #include "ReplicatedBackend.h"
+#include "CompressBackend.h"
 #include "ECBackend.h"
 #include "PGBackend.h"
 #include "OSD.h"
@@ -293,7 +294,7 @@ PGBackend *PGBackend::build_pg_backend(
       &ec_impl,
       &ss);
     assert(ec_impl);
-    return new ECBackend(
+    return new CompressedECBackend(
       l,
       coll,
       store,

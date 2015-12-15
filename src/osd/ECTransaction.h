@@ -19,6 +19,7 @@
 #include "PGBackend.h"
 #include "osd_types.h"
 #include "ECUtil.h"
+#include "CompressContext.h"
 #include <boost/optional/optional_io.hpp>
 #include "erasure-code/ErasureCodeInterface.h"
 
@@ -193,11 +194,12 @@ public:
       boost::apply_visitor(vis, *i);
     }
   }
-  void get_append_objects(
-     set<hobject_t, hobject_t::BitwiseComparator> *out) const;
+  void get_append_objects( set<hobject_t, hobject_t::BitwiseComparator> *out )const;
   void generate_transactions(
     map<hobject_t, ECUtil::HashInfoRef, hobject_t::BitwiseComparator> &hash_infos,
     ErasureCodeInterfaceRef &ecimpl,
+    map<hobject_t, CompressContextRef, hobject_t::BitwiseComparator> &compress_infos,
+    const char* compression_method,
     pg_t pgid,
     const ECUtil::stripe_info_t &sinfo,
     map<shard_id_t, ObjectStore::Transaction> *transactions,
