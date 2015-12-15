@@ -140,6 +140,8 @@ RGWFileHandle::file::~file()
 int RGWWriteRequest::exec_start() {
   struct req_state* s = get_state();
 
+  need_calc_md5 = (obj_manifest == NULL);
+
   perfcounter->inc(l_rgw_put);
   op_ret = -EINVAL;
 
@@ -169,6 +171,73 @@ done:
   return op_ret;
 } /* exec_start */
 
+int RGWWriteRequest::exec_continue()
+{
+  struct req_state* s = get_state();
+  op_ret = 0;
+
+#if 0 // TODO: check offsets
+  if (next_off != last_off)
+    return -EIO;
+#endif
+  size_t len = data.length();
+  if (! len)
+    return 0;
+
+  /* XXX won't see multipart */
+  bool need_to_wait = (ofs == 0) && multipart;
+  bufferlist orig_data;
+
+  if (need_to_wait) {
+    orig_data = data;
+  }
+
+  op_ret = put_data_and_throttle(processor, data, ofs,
+				 (need_calc_md5 ? &hash : NULL), need_to_wait);
+  if (op_ret < 0) {
+    if (!need_to_wait || op_ret != -EEXIST) {
+      ldout(s->cct, 20) << "processor->thottle_data() returned ret="
+			<< op_ret << dendl;
+      goto done;
+    }
+
+    ldout(s->cct, 5) << "NOTICE: processor->throttle_data() returned -EEXIST, need to restart write" << dendl;
+
+    /* restore original data */
+    data.swap(orig_data);
+
+    /* restart processing with different oid suffix */
+    dispose_processor(processor);
+    processor = select_processor(*static_cast<RGWObjectCtx *>(s->obj_ctx),
+				 &multipart);
+
+    string oid_rand;
+    char buf[33];
+    gen_rand_alphanumeric(get_store()->ctx(), buf, sizeof(buf) - 1);
+    oid_rand.append(buf);
+
+    op_ret = processor->prepare(get_store(), &oid_rand);
+    if (op_ret < 0) {
+      ldout(s->cct, 0) << "ERROR: processor->prepare() returned "
+		       << op_ret << dendl;
+      goto done;
+    }
+
+    op_ret = put_data_and_throttle(processor, data, ofs, NULL, false);
+    if (op_ret < 0) {
+      goto done;
+    }
+  }
+  bytes_written += len;
+
+done:
+  return op_ret;
+} /* exec_continue */
+
+int RGWWriteRequest::exec_finish()
+{
+  return 0;
+} /* exec_finish */
 
 /* librgw */
 extern "C" {
