@@ -361,7 +361,17 @@ void ECBackend::handle_recovery_read_complete(
     from[i->first.shard].claim(i->second);
   }
   dout(10) << __func__ << ": " << from << dendl;
-  ECUtil::decode(sinfo, ec_impl, from, target);
+  if (ECUtil::decode(sinfo, ec_impl, from, target) != 0) {
+    derr << __func__ << ": inconsistent shard sizes " << hoid << " "
+	 << " the offending shard must be manually removed "
+	 << " after verifying there are enough shards to recover "
+	 << "(" << to_read.get<0>()
+	 << ", " << to_read.get<1>()
+	 << ", " << to_read.get<2>()
+	 << ")"
+	 << dendl;
+    assert(0);
+  }
   if (attrs) {
     op.xattrs.swap(*attrs);
 
