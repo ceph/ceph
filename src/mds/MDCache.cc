@@ -11740,20 +11740,16 @@ void MDCache::enqueue_scrub_work(MDRequestRef& mdr)
   if (!locked)
     return;
 
-  CDentry *dn = in->get_parent_dn();
-  // We got to this inode by path, so it must have a parent
-  assert(dn != NULL);
-
   C_MDS_EnqueueScrub *cs = static_cast<C_MDS_EnqueueScrub*>(mdr->internal_op_finish);
   ScrubHeaderRef &header = cs->header;
 
   // Cannot scrub same dentry twice at same time
-  if (dn->scrub_info()->dentry_scrubbing) {
+  if (in->scrub_info()->scrub_in_progress) {
     mds->server->respond_to_request(mdr, -EBUSY);
     return;
   }
 
-  header->origin = dn;
+  header->origin = in;
 
   // only set completion context for non-recursive scrub, because we don't 
   // want to block asok caller on long running scrub
@@ -11761,7 +11757,7 @@ void MDCache::enqueue_scrub_work(MDRequestRef& mdr)
   if (!header->recursive)
     fin = cs->take_finisher();
 
-  mds->scrubstack->enqueue_dentry_bottom(dn, header->recursive, false, header, fin);
+  mds->scrubstack->enqueue_inode_bottom(in, header, fin);
 
   mds->server->respond_to_request(mdr, 0);
   return;
