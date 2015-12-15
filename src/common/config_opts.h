@@ -138,6 +138,7 @@ SUBSYS(xio, 1, 5)
 SUBSYS(compressor, 1, 5)
 SUBSYS(newstore, 1, 5)
 SUBSYS(rocksdb, 4, 5)
+SUBSYS(leveldb, 4, 5)
 
 OPTION(key, OPT_STR, "")
 OPTION(keyfile, OPT_STR, "")
@@ -747,6 +748,7 @@ OPTION(threadpool_default_timeout, OPT_INT, 60)
 // default wait time for an empty queue before pinging the hb timeout
 OPTION(threadpool_empty_queue_max_wait, OPT_INT, 2)
 
+OPTION(leveldb_log_to_ceph_log, OPT_BOOL, true)
 OPTION(leveldb_write_buffer_size, OPT_U64, 8 *1024*1024) // leveldb write buffer size
 OPTION(leveldb_cache_size, OPT_U64, 128 *1024*1024) // leveldb cache size
 OPTION(leveldb_block_size, OPT_U64, 0) // leveldb block size
