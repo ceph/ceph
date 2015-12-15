@@ -22,6 +22,7 @@ struct MockImageCtx {
   MockImageCtx(librbd::ImageCtx &image_ctx)
     : image_ctx(&image_ctx),
       cct(image_ctx.cct),
+      snap_id(image_ctx.snap_id),
       snapc(image_ctx.snapc),
       snaps(image_ctx.snaps),
       snap_info(image_ctx.snap_info),
@@ -45,7 +46,14 @@ struct MockImageCtx {
       exclusive_lock(NULL), journal(NULL),
       concurrent_management_ops(image_ctx.concurrent_management_ops),
       blacklist_on_break_lock(image_ctx.blacklist_on_break_lock),
-      blacklist_expire_seconds(image_ctx.blacklist_expire_seconds)
+      blacklist_expire_seconds(image_ctx.blacklist_expire_seconds),
+      journal_order(image_ctx.journal_order),
+      journal_splay_width(image_ctx.journal_splay_width),
+      journal_commit_age(image_ctx.journal_commit_age),
+      journal_object_flush_interval(image_ctx.journal_object_flush_interval),
+      journal_object_flush_bytes(image_ctx.journal_object_flush_bytes),
+      journal_object_flush_age(image_ctx.journal_object_flush_age),
+      journal_pool(image_ctx.journal_pool)
   {
     md_ctx.dup(image_ctx.md_ctx);
     data_ctx.dup(image_ctx.data_ctx);
@@ -110,6 +118,7 @@ struct MockImageCtx {
   ImageCtx *image_ctx;
   CephContext *cct;
 
+  uint64_t snap_id;
   ::SnapContext snapc;
   std::vector<librados::snap_t> snaps;
   std::map<librados::snap_t, SnapInfo> snap_info;
@@ -139,6 +148,7 @@ struct MockImageCtx {
   xlist<AsyncRequest<MockImageCtx>*> async_requests;
   std::list<Context*> async_requests_waiters;
 
+
   MockAioImageRequestWQ *aio_work_queue;
   MockContextWQ *op_work_queue;
 
@@ -154,6 +164,13 @@ struct MockImageCtx {
   int concurrent_management_ops;
   bool blacklist_on_break_lock;
   uint32_t blacklist_expire_seconds;
+  uint8_t journal_order;
+  uint8_t journal_splay_width;
+  double journal_commit_age;
+  int journal_object_flush_interval;
+  uint64_t journal_object_flush_bytes;
+  double journal_object_flush_age;
+  std::string journal_pool;
 };
 
 } // namespace librbd
