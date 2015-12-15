@@ -28,11 +28,8 @@ You should have a full copy of the Ceph repository.
 Install the Required Tools
 --------------------------
 
-If you do not have Sphinx and its dependencies installed, a list of
-dependencies will appear in the output. Install the dependencies on
-your system, and then execute the build.
-
-To run Sphinx, at least the following are required:
+To build the Ceph documentation, the following packages are required on
+Ubuntu 14.04:
 
 - ``python-dev``
 - ``python-pip``
@@ -42,11 +39,14 @@ To run Sphinx, at least the following are required:
 - ``doxygen``
 - ``ditaa``
 - ``graphviz``
+- ``ant``
+- ``cython``
+- ``librbd-dev``
 
 Execute ``apt-get install`` for each dependency that isn't installed
 on your host.::
 
-	sudo apt-get install python-dev python-pip python-virtualenv libxml2-dev libxslt-dev doxygen ditaa graphviz ant
+	sudo apt-get install python-dev python-pip python-virtualenv libxml2-dev libxslt-dev doxygen ditaa graphviz ant cython librbd-dev
 
 
 
