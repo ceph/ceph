@@ -6,7 +6,7 @@
 
 #include "librbd/AsyncRequest.h"
 #include "include/Context.h"
-#include "librbd/JournalTypes.h"
+#include "librbd/journal/Entries.h"
 
 namespace librbd {
 

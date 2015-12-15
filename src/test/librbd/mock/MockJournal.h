@@ -5,8 +5,8 @@
 #define CEPH_TEST_LIBRBD_MOCK_JOURNAL_H
 
 #include "gmock/gmock.h"
-#include "librbd/JournalTypes.h"
 #include "librbd/Journal.h"
+#include "librbd/journal/Entries.h"
 
 namespace librbd {
 

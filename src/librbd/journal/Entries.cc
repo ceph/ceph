@@ -1,7 +1,7 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
-#include "librbd/JournalTypes.h"
+#include "librbd/journal/Entries.h"
 #include "include/assert.h"
 #include "include/stringify.h"
 #include "common/Formatter.h"

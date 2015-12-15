@@ -1,5 +1,5 @@
 librbd_types_la_SOURCES = \
-	librbd/JournalTypes.cc \
+	librbd/journal/Entries.cc \
 	librbd/WatchNotifyTypes.cc
 noinst_LTLIBRARIES += librbd_types.la
 
@@ -23,7 +23,6 @@ librbd_internal_la_SOURCES = \
 	librbd/ImageWatcher.cc \
 	librbd/internal.cc \
 	librbd/Journal.cc \
-	librbd/JournalReplay.cc \
 	librbd/LibrbdAdminSocketHook.cc \
 	librbd/LibrbdWriteback.cc \
 	librbd/ObjectMap.cc \
@@ -35,6 +34,7 @@ librbd_internal_la_SOURCES = \
 	librbd/image/RefreshParentRequest.cc \
 	librbd/image/RefreshRequest.cc \
 	librbd/image/SetSnapRequest.cc \
+	librbd/journal/Replay.cc \
 	librbd/object_map/InvalidateRequest.cc \
 	librbd/object_map/LockRequest.cc \
 	librbd/object_map/Request.cc \
@@ -97,8 +97,6 @@ noinst_HEADERS += \
 	librbd/ImageWatcher.h \
 	librbd/internal.h \
 	librbd/Journal.h \
-	librbd/JournalReplay.h \
-	librbd/JournalTypes.h \
 	librbd/LibrbdAdminSocketHook.h \
 	librbd/LibrbdWriteback.h \
 	librbd/ObjectMap.h \
@@ -114,6 +112,8 @@ noinst_HEADERS += \
 	librbd/image/RefreshParentRequest.h \
 	librbd/image/RefreshRequest.h \
 	librbd/image/SetSnapRequest.h \
+	librbd/journal/Replay.h \
+	librbd/journal/Entries.h \
 	librbd/object_map/InvalidateRequest.h \
 	librbd/object_map/LockRequest.h \
 	librbd/object_map/Request.h \

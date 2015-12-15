@@ -1,7 +1,7 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
-#include "librbd/JournalReplay.h"
+#include "librbd/journal/Replay.h"
 #include "librbd/AioCompletion.h"
 #include "librbd/AioImageRequest.h"
 #include "librbd/ImageCtx.h"
@@ -9,19 +9,20 @@
 
 #define dout_subsys ceph_subsys_rbd
 #undef dout_prefix
-#define dout_prefix *_dout << "librbd::JournalReplay: "
+#define dout_prefix *_dout << "librbd::journal::Replay: "
 
 namespace librbd {
+namespace journal {
 
-JournalReplay::JournalReplay(ImageCtx &image_ctx)
-  : m_image_ctx(image_ctx), m_lock("JournalReplay::m_lock"), m_ret_val(0) {
+Replay::Replay(ImageCtx &image_ctx)
+  : m_image_ctx(image_ctx), m_lock("Replay::m_lock"), m_ret_val(0) {
 }
 
-JournalReplay::~JournalReplay() {
+Replay::~Replay() {
   assert(m_aio_completions.empty());
 }
 
-int JournalReplay::process(bufferlist::iterator it, Context *on_safe) {
+int Replay::process(bufferlist::iterator it, Context *on_safe) {
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 20) << this << " " << __func__ << dendl;
 
@@ -38,7 +39,7 @@ int JournalReplay::process(bufferlist::iterator it, Context *on_safe) {
   return 0;
 }
 
-int JournalReplay::flush() {
+int Replay::flush() {
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 20) << this << " " << __func__ << dendl;
 
@@ -49,7 +50,7 @@ int JournalReplay::flush() {
   return m_ret_val;
 }
 
-void JournalReplay::handle_event(const journal::AioDiscardEvent &event,
+void Replay::handle_event(const journal::AioDiscardEvent &event,
 				 Context *on_safe) {
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 20) << this << " " << __func__ << ": AIO discard event" << dendl;
@@ -59,7 +60,7 @@ void JournalReplay::handle_event(const journal::AioDiscardEvent &event,
                                event.length);
 }
 
-void JournalReplay::handle_event(const journal::AioWriteEvent &event,
+void Replay::handle_event(const journal::AioWriteEvent &event,
 				 Context *on_safe) {
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 20) << this << " " << __func__ << ": AIO write event" << dendl;
@@ -70,7 +71,7 @@ void JournalReplay::handle_event(const journal::AioWriteEvent &event,
                              data.c_str(), 0);
 }
 
-void JournalReplay::handle_event(const journal::AioFlushEvent &event,
+void Replay::handle_event(const journal::AioFlushEvent &event,
 				 Context *on_safe) {
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 20) << this << " " << __func__ << ": AIO flush event" << dendl;
@@ -79,76 +80,76 @@ void JournalReplay::handle_event(const journal::AioFlushEvent &event,
   AioImageRequest::aio_flush(&m_image_ctx, aio_comp);
 }
 
-  void JournalReplay::handle_event(const journal::OpFinishEvent &event,
+  void Replay::handle_event(const journal::OpFinishEvent &event,
 				   Context *on_safe) {
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 20) << this << " " << __func__ << ": Op finish event" << dendl;
 }
 
-void JournalReplay::handle_event(const journal::SnapCreateEvent &event,
+void Replay::handle_event(const journal::SnapCreateEvent &event,
 				 Context *on_safe) {
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 20) << this << " " << __func__ << ": Snap create event" << dendl;
 }
 
-void JournalReplay::handle_event(const journal::SnapRemoveEvent &event,
+void Replay::handle_event(const journal::SnapRemoveEvent &event,
 				 Context *on_safe) {
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 20) << this << " " << __func__ << ": Snap remove event" << dendl;
 }
 
-void JournalReplay::handle_event(const journal::SnapRenameEvent &event,
+void Replay::handle_event(const journal::SnapRenameEvent &event,
 				 Context *on_safe) {
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 20) << this << " " << __func__ << ": Snap rename event" << dendl;
 }
 
-void JournalReplay::handle_event(const journal::SnapProtectEvent &event,
+void Replay::handle_event(const journal::SnapProtectEvent &event,
 				 Context *on_safe) {
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 20) << this << " " << __func__ << ": Snap protect event" << dendl;
 }
 
-void JournalReplay::handle_event(const journal::SnapUnprotectEvent &event,
+void Replay::handle_event(const journal::SnapUnprotectEvent &event,
 				 Context *on_safe) {
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 20) << this << " " << __func__ << ": Snap unprotect event"
                  << dendl;
 }
 
-void JournalReplay::handle_event(const journal::SnapRollbackEvent &event,
+void Replay::handle_event(const journal::SnapRollbackEvent &event,
 				 Context *on_safe) {
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 20) << this << " " << __func__ << ": Snap rollback start event"
                  << dendl;
 }
 
-void JournalReplay::handle_event(const journal::RenameEvent &event,
+void Replay::handle_event(const journal::RenameEvent &event,
 				 Context *on_safe) {
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 20) << this << " " << __func__ << ": Rename event" << dendl;
 }
 
-void JournalReplay::handle_event(const journal::ResizeEvent &event,
+void Replay::handle_event(const journal::ResizeEvent &event,
 				 Context *on_safe) {
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 20) << this << " " << __func__ << ": Resize start event" << dendl;
 }
 
-void JournalReplay::handle_event(const journal::FlattenEvent &event,
+void Replay::handle_event(const journal::FlattenEvent &event,
 				 Context *on_safe) {
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 20) << this << " " << __func__ << ": Flatten start event" << dendl;
 }
 
-void JournalReplay::handle_event(const journal::UnknownEvent &event,
+void Replay::handle_event(const journal::UnknownEvent &event,
 				 Context *on_safe) {
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 20) << this << " " << __func__ << ": unknown event" << dendl;
   on_safe->complete(0);
 }
 
-AioCompletion *JournalReplay::create_aio_completion(Context *on_safe) {
+AioCompletion *Replay::create_aio_completion(Context *on_safe) {
   Mutex::Locker locker(m_lock);
   AioCompletion *aio_comp = AioCompletion::create(this, aio_completion_callback,
                                                   nullptr);
@@ -157,7 +158,7 @@ AioCompletion *JournalReplay::create_aio_completion(Context *on_safe) {
   return aio_comp;
 }
 
-void JournalReplay::handle_aio_completion(AioCompletion *aio_comp) {
+void Replay::handle_aio_completion(AioCompletion *aio_comp) {
   Mutex::Locker locker(m_lock);
 
   AioCompletions::iterator it = m_aio_completions.find(aio_comp);
@@ -181,12 +182,13 @@ void JournalReplay::handle_aio_completion(AioCompletion *aio_comp) {
     m_cond.Signal();
 }
 
-void JournalReplay::aio_completion_callback(completion_t cb, void *arg) {
-  JournalReplay *journal_replay = reinterpret_cast<JournalReplay *>(arg);
+void Replay::aio_completion_callback(completion_t cb, void *arg) {
+  Replay *replay = reinterpret_cast<Replay *>(arg);
   AioCompletion *aio_comp = reinterpret_cast<AioCompletion *>(cb);
 
-  journal_replay->handle_aio_completion(aio_comp);
+  replay->handle_aio_completion(aio_comp);
   aio_comp->release();
 }
 
+} // namespace journal
 } // namespace librbd

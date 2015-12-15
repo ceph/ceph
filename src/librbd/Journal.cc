@@ -7,8 +7,8 @@
 #include "librbd/AioObjectRequest.h"
 #include "librbd/ExclusiveLock.h"
 #include "librbd/ImageCtx.h"
-#include "librbd/JournalReplay.h"
-#include "librbd/JournalTypes.h"
+#include "librbd/journal/Entries.h"
+#include "librbd/journal/Replay.h"
 #include "librbd/Utils.h"
 #include "journal/Journaler.h"
 #include "journal/ReplayEntry.h"
@@ -498,7 +498,7 @@ void Journal::handle_initialized(int r) {
   }
 
   transition_state(STATE_REPLAYING, 0);
-  m_journal_replay = new JournalReplay(m_image_ctx);
+  m_journal_replay = new journal::Replay(m_image_ctx);
   m_journaler->start_replay(&m_replay_handler);
 }
 
