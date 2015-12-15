@@ -1444,6 +1444,115 @@ public:
   }
 }; /* RGWStatLeafRequest */
 
+/*
+  put object
+*/
+
+class RGWWriteRequest : public RGWLibContinuedReq,
+			public RGWPutObj /* RGWOp */
+{
+public:
+  const std::string& bucket_name;
+  const std::string& obj_name;
+  buffer::list& bl; /* XXX */
+  size_t bytes_written;
+
+  RGWWriteRequest(CephContext* _cct, RGWUserInfo *_user,
+		  const std::string& _bname, const std::string& _oname,
+		  buffer::list& _bl)
+    : RGWLibContinuedReq(_cct, _user), bucket_name(_bname), obj_name(_oname),
+      bl(_bl), bytes_written(0) {
+    magic = 81;
+    op = this;
+  }
+
+  virtual bool only_bucket() { return true; }
+
+  virtual int op_init() {
+    // assign store, s, and dialect_handler
+    RGWObjectCtx* rados_ctx
+      = static_cast<RGWObjectCtx*>(get_state()->obj_ctx);
+    // framework promises to call op_init after parent init
+    assert(rados_ctx);
+    RGWOp::init(rados_ctx->store, get_state(), this);
+    op = this; // assign self as op: REQUIRED
+    return 0;
+  }
+
+  virtual int header_init() {
+
+    struct req_state* s = get_state();
+    s->info.method = "PUT";
+    s->op = OP_PUT;
+
+    /* XXX derp derp derp */
+    std::string uri = make_uri(bucket_name, obj_name);
+    s->relative_uri = uri;
+    s->info.request_uri = uri; // XXX
+    s->info.effective_uri = uri;
+    s->info.request_params = "";
+    s->info.domain = ""; /* XXX ? */
+
+    /* XXX required in RGWOp::execute() */
+    s->content_length = bl.length();
+
+    // woo
+    s->user = user;
+
+    return 0;
+  }
+
+  virtual RGWPutObjProcessor *select_processor(RGWObjectCtx& obj_ctx,
+					       bool *is_multipart) {
+    struct req_state* s = get_state();
+    uint64_t part_size = s->cct->_conf->rgw_obj_stripe_size;
+    RGWPutObjProcessor_Atomic *processor =
+      new RGWPutObjProcessor_Atomic(obj_ctx, s->bucket_info, s->bucket,
+				    s->object.name, part_size, s->req_id,
+				    s->bucket_info.versioning_enabled());
+    processor->set_olh_epoch(olh_epoch);
+    processor->set_version_id(version_id);
+    return processor;
+  }
+
+  virtual int get_params() {
+    struct req_state* s = get_state();
+    RGWAccessControlPolicy_S3 s3policy(s->cct);
+    /* we don't have (any) headers, so just create canned ACLs */
+    int ret = s3policy.create_canned(s->owner, s->bucket_owner, s->canned_acl);
+    policy = s3policy;
+    return ret;
+  }
+
+  virtual int get_data(buffer::list& _bl) {
+    /* XXX for now, use sharing semantics */
+    _bl.claim(bl);
+    uint32_t len = _bl.length();
+    bytes_written += len;
+    return len;
+  }
+
+  virtual int exec_start() {
+    return 0;
+  }
+
+  virtual int exec_continue() {
+    return 0;
+  }
+
+  virtual int exec_finish() {
+    return 0;
+  }
+
+  virtual void send_response() {}
+
+  virtual int verify_params() {
+    if (bl.length() > cct->_conf->rgw_max_put_size)
+      return -ERR_TOO_LARGE;
+    return 0;
+  }
+}; /* RGWWriteRequest */
+
 } /* namespace rgw */
 
 #endif /* RGW_FILE_H */
