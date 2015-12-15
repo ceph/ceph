@@ -3,6 +3,7 @@
 #include "librbd/AsyncRequest.h"
 #include "librbd/ImageCtx.h"
 #include "librbd/internal.h"
+#include "librbd/Utils.h"
 #include "common/WorkQueue.h"
 #include <boost/bind.hpp>
 
@@ -28,19 +29,18 @@ void AsyncRequest<T>::async_complete(int r) {
 
 template <typename T>
 librados::AioCompletion *AsyncRequest<T>::create_callback_completion() {
-  return librados::Rados::aio_create_completion(create_callback_context(),
-						NULL, rados_ctx_cb);
+  return util::create_rados_safe_callback(this);
 }
 
 template <typename T>
 Context *AsyncRequest<T>::create_callback_context() {
-  return new FunctionContext(boost::bind(&AsyncRequest<T>::complete, this, _1));
+  return util::create_context_callback(this);
 }
 
 template <typename T>
 Context *AsyncRequest<T>::create_async_callback_context() {
-  return new FunctionContext(boost::bind(&AsyncRequest<T>::async_complete, this,
-                                         _1));;
+  return util::create_context_callback<AsyncRequest<T>,
+                                       &AsyncRequest<T>::async_complete>(this);
 }
 
 template <typename T>
@@ -51,9 +51,19 @@ void AsyncRequest<T>::start_request() {
 
 template <typename T>
 void AsyncRequest<T>::finish_request() {
-  Mutex::Locker async_ops_locker(m_image_ctx.async_ops_lock);
-  assert(m_xlist_item.remove_myself());
-  m_image_ctx.async_requests_cond.Signal();
+  decltype(m_image_ctx.async_requests_waiters) waiters;
+  {
+    Mutex::Locker async_ops_locker(m_image_ctx.async_ops_lock);
+    assert(m_xlist_item.remove_myself());
+
+    if (m_image_ctx.async_requests.empty()) {
+      waiters = std::move(m_image_ctx.async_requests_waiters);
+    }
+  }
+
+  for (auto ctx : waiters) {
+    ctx->complete(0);
+  }
 }
 
 } // namespace librbd

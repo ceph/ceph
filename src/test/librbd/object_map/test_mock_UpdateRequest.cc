@@ -5,7 +5,9 @@
 #include "test/librbd/test_support.h"
 #include "test/librados_test_stub/MockTestMemIoCtxImpl.h"
 #include "common/bit_vector.hpp"
+#include "librbd/ImageState.h"
 #include "librbd/internal.h"
+#include "librbd/ObjectMap.h"
 #include "librbd/object_map/UpdateRequest.h"
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
@@ -168,7 +170,7 @@ TEST_F(TestMockObjectMapUpdateRequest, RebuildSnapOnDisk) {
   librbd::ImageCtx *ictx;
   ASSERT_EQ(0, open_image(m_image_name, &ictx));
   ASSERT_EQ(0, librbd::snap_create(ictx, "snap1"));
-  ASSERT_EQ(0, librbd::ictx_check(ictx));
+  ASSERT_EQ(0, ictx->state->refresh_if_required());
   ASSERT_EQ(CEPH_NOSNAP, ictx->snap_id);
 
   uint64_t snap_id = ictx->snap_info.rbegin()->first;

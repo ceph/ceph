@@ -7,6 +7,7 @@
 #include "include/rados/librados.hpp"
 #include "librbd/ImageCtx.h"
 #include "librbd/internal.h"
+#include "librbd/Utils.h"
 
 #define dout_subsys ceph_subsys_rbd
 #undef dout_prefix
@@ -46,10 +47,10 @@ template <typename I>
 RenameRequest<I>::RenameRequest(I &image_ctx, Context *on_finish,
 				const std::string &dest_name)
   : Request<I>(image_ctx, on_finish), m_dest_name(dest_name),
-    m_source_oid(image_ctx.old_format ? old_header_name(image_ctx.name) :
-                                        id_obj_name(image_ctx.name)),
-    m_dest_oid(image_ctx.old_format ? old_header_name(dest_name) :
-                                      id_obj_name(dest_name)) {
+    m_source_oid(image_ctx.old_format ? util::old_header_name(image_ctx.name) :
+                                        util::id_obj_name(image_ctx.name)),
+    m_dest_oid(image_ctx.old_format ? util::old_header_name(dest_name) :
+                                      util::id_obj_name(dest_name)) {
 }
 
 template <typename I>

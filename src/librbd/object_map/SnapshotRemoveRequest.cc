@@ -72,6 +72,10 @@ bool SnapshotRemoveRequest::should_complete(int r) {
   bool finished = false;
   switch (m_state) {
   case STATE_LOAD_MAP:
+    if (r == 0) {
+      bufferlist::iterator it = m_out_bl.begin();
+      r = cls_client::object_map_load_finish(&it, &m_snap_object_map);
+    }
     if (r < 0) {
       RWLock::WLocker snap_locker(m_image_ctx.snap_lock);
       send_invalidate_next_map();
@@ -108,8 +112,14 @@ void SnapshotRemoveRequest::send_load_map() {
                 << dendl;
   m_state = STATE_LOAD_MAP;
 
-  cls_client::object_map_load(&m_image_ctx.md_ctx, snap_oid,
-                              &m_snap_object_map, create_callback_context());
+  librados::ObjectReadOperation op;
+  cls_client::object_map_load_start(&op);
+
+  librados::AioCompletion *rados_completion = create_callback_completion();
+  int r = m_image_ctx.md_ctx.aio_operate(snap_oid, rados_completion, &op,
+                                         &m_out_bl);
+  assert(r == 0);
+  rados_completion->release();
 }
 
 void SnapshotRemoveRequest::send_remove_snapshot() {
@@ -138,9 +148,9 @@ void SnapshotRemoveRequest::send_invalidate_next_map() {
   ldout(cct, 5) << this << " " << __func__ << dendl;
   m_state = STATE_INVALIDATE_NEXT_MAP;
 
-  InvalidateRequest *req = new InvalidateRequest(m_image_ctx, m_next_snap_id,
-                                                 true,
-                                                 create_callback_context());
+  InvalidateRequest<> *req = new InvalidateRequest<>(m_image_ctx,
+                                                     m_next_snap_id, true,
+                                                     create_callback_context());
   req->send();
 }
 

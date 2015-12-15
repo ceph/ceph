@@ -125,8 +125,7 @@ TEST_F(TestJournalEntries, AioWrite) {
 
   std::string buffer(512, '1');
   C_SaferCond cond_ctx;
-  librbd::AioCompletion *c =
-    librbd::aio_create_completion_internal(&cond_ctx, librbd::rbd_ctx_cb);
+  librbd::AioCompletion *c = librbd::AioCompletion::create(&cond_ctx);
   c->get();
   ictx->aio_work_queue->aio_write(c, 123, buffer.size(), buffer.c_str(), 0);
   ASSERT_EQ(0, c->wait_for_complete());
@@ -163,8 +162,7 @@ TEST_F(TestJournalEntries, AioDiscard) {
   ASSERT_TRUE(journaler != NULL);
 
   C_SaferCond cond_ctx;
-  librbd::AioCompletion *c =
-    librbd::aio_create_completion_internal(&cond_ctx, librbd::rbd_ctx_cb);
+  librbd::AioCompletion *c = librbd::AioCompletion::create(&cond_ctx);
   c->get();
   ictx->aio_work_queue->aio_discard(c, 123, 234);
   ASSERT_EQ(0, c->wait_for_complete());
@@ -197,8 +195,7 @@ TEST_F(TestJournalEntries, AioFlush) {
   ASSERT_TRUE(journaler != NULL);
 
   C_SaferCond cond_ctx;
-  librbd::AioCompletion *c =
-    librbd::aio_create_completion_internal(&cond_ctx, librbd::rbd_ctx_cb);
+  librbd::AioCompletion *c = librbd::AioCompletion::create(&cond_ctx);
   c->get();
   ictx->aio_work_queue->aio_flush(c);
   ASSERT_EQ(0, c->wait_for_complete());

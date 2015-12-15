@@ -353,11 +353,17 @@ noinst_LTLIBRARIES += librbd_test.la
 unittest_librbd_SOURCES = \
         test/librbd/test_main.cc \
 	test/librbd/test_mock_fixture.cc \
+	test/librbd/test_mock_ExclusiveLock.cc \
+	test/librbd/exclusive_lock/test_mock_AcquireRequest.cc \
+	test/librbd/exclusive_lock/test_mock_ReleaseRequest.cc \
 	test/librbd/object_map/test_mock_InvalidateRequest.cc \
+	test/librbd/object_map/test_mock_LockRequest.cc \
+	test/librbd/object_map/test_mock_RefreshRequest.cc \
 	test/librbd/object_map/test_mock_ResizeRequest.cc \
 	test/librbd/object_map/test_mock_SnapshotCreateRequest.cc \
 	test/librbd/object_map/test_mock_SnapshotRemoveRequest.cc \
 	test/librbd/object_map/test_mock_SnapshotRollbackRequest.cc \
+	test/librbd/object_map/test_mock_UnlockRequest.cc \
 	test/librbd/object_map/test_mock_UpdateRequest.cc \
 	test/librbd/operation/test_mock_SnapshotCreateRequest.cc \
 	test/librbd/operation/test_mock_SnapshotProtectRequest.cc \
@@ -400,10 +406,13 @@ noinst_HEADERS += \
 	test/librbd/test_support.h \
 	test/librbd/mock/MockAioImageRequestWQ.h \
 	test/librbd/mock/MockContextWQ.h \
+	test/librbd/mock/MockExclusiveLock.h \
 	test/librbd/mock/MockImageCtx.h \
 	test/librbd/mock/MockImageWatcher.h \
 	test/librbd/mock/MockJournal.h \
-	test/librbd/mock/MockObjectMap.h
+	test/librbd/mock/MockObjectMap.h \
+	test/librbd/mock/MockReadahead.h \
+	test/librbd/object_map/mock/MockInvalidateRequest.h
 
 if LINUX
 ceph_test_librbd_fsx_SOURCES = test/librbd/fsx.cc

@@ -4,7 +4,9 @@
 #include "librbd/AioImageRequest.h"
 #include "librbd/AioCompletion.h"
 #include "librbd/AioObjectRequest.h"
+#include "librbd/ExclusiveLock.h"
 #include "librbd/ImageCtx.h"
+#include "librbd/ImageState.h"
 #include "librbd/ImageWatcher.h"
 #include "librbd/internal.h"
 #include "librbd/Journal.h"
@@ -115,13 +117,12 @@ void AioImageRequest::send() {
                  << "completion=" << m_aio_comp <<  dendl;
 
   m_aio_comp->get();
-  int r = ictx_check(&m_image_ctx, m_image_ctx.owner_lock);
-  if (r < 0) {
-    m_aio_comp->fail(cct, r);
-    return;
-  }
-
   send_request();
+}
+
+void AioImageRequest::fail(int r) {
+  m_aio_comp->get();
+  m_aio_comp->fail(m_image_ctx.cct, r);
 }
 
 void AioImageRead::send_request() {
@@ -247,8 +248,6 @@ void AbstractAioImageWrite::send_request() {
                   !m_image_ctx.journal->is_journal_replaying());
   }
 
-  assert(!m_image_ctx.image_watcher->is_lock_supported() ||
-          m_image_ctx.image_watcher->is_lock_owner());
 
   m_aio_comp->set_request_count(
     m_image_ctx.cct, object_extents.size() +

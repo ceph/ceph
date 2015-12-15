@@ -4,10 +4,12 @@
 #include "librbd/operation/TrimRequest.h"
 #include "librbd/AsyncObjectThrottle.h"
 #include "librbd/AioObjectRequest.h"
+#include "librbd/ExclusiveLock.h"
 #include "librbd/ImageCtx.h"
 #include "librbd/ImageWatcher.h"
 #include "librbd/internal.h"
 #include "librbd/ObjectMap.h"
+#include "librbd/Utils.h"
 #include "common/ContextCompletion.h"
 #include "common/dout.h"
 #include "common/errno.h"
@@ -38,8 +40,8 @@ public:
   virtual int send() {
     I &image_ctx = this->m_image_ctx;
     assert(image_ctx.owner_lock.is_locked());
-    assert(!image_ctx.image_watcher->is_lock_supported() ||
-           image_ctx.image_watcher->is_lock_owner());
+    assert(image_ctx.exclusive_lock == nullptr ||
+           image_ctx.exclusive_lock->is_lock_owner());
 
     string oid = image_ctx.get_object_name(m_object_no);
     ldout(image_ctx.cct, 10) << "removing (with copyup) " << oid << dendl;
@@ -66,17 +68,22 @@ public:
   virtual int send() {
     I &image_ctx = this->m_image_ctx;
     assert(image_ctx.owner_lock.is_locked());
-    assert(!image_ctx.image_watcher->is_lock_supported() ||
-           image_ctx.image_watcher->is_lock_owner());
-    if (!image_ctx.object_map.object_may_exist(m_object_no)) {
-      return 1;
+    assert(image_ctx.exclusive_lock == nullptr ||
+           image_ctx.exclusive_lock->is_lock_owner());
+
+    {
+      RWLock::RLocker snap_locker(image_ctx.snap_lock);
+      if (image_ctx.object_map != nullptr &&
+          !image_ctx.object_map->object_may_exist(m_object_no)) {
+        return 1;
+      }
     }
 
     string oid = image_ctx.get_object_name(m_object_no);
     ldout(image_ctx.cct, 10) << "removing " << oid << dendl;
 
     librados::AioCompletion *rados_completion =
-      librados::Rados::aio_create_completion(this, NULL, rados_ctx_cb);
+      util::create_rados_safe_callback(this);
     int r = image_ctx.data_ctx.aio_remove(oid, rados_completion);
     assert(r == 0);
     rados_completion->release();
@@ -168,8 +175,8 @@ template <typename I>
 void TrimRequest<I>::send_copyup_objects() {
   I &image_ctx = this->m_image_ctx;
   assert(image_ctx.owner_lock.is_locked());
-  assert(!image_ctx.image_watcher->is_lock_supported() ||
-         image_ctx.image_watcher->is_lock_owner());
+  assert(image_ctx.exclusive_lock == nullptr ||
+         image_ctx.exclusive_lock->is_lock_owner());
 
   if (m_delete_start >= m_num_objects) {
     send_clean_boundary();
@@ -249,7 +256,7 @@ void TrimRequest<I>::send_pre_remove() {
   bool remove_objects = false;
   {
     RWLock::RLocker snap_locker(image_ctx.snap_lock);
-    if (!image_ctx.object_map.enabled()) {
+    if (image_ctx.object_map == nullptr) {
       remove_objects = true;
     } else {
       ldout(image_ctx.cct, 5) << this << " send_pre_remove: "
@@ -257,14 +264,14 @@ void TrimRequest<I>::send_pre_remove() {
 				<< " num_objects=" << m_num_objects << dendl;
       m_state = STATE_PRE_REMOVE;
 
-      assert(image_ctx.image_watcher->is_lock_owner());
+      assert(image_ctx.exclusive_lock->is_lock_owner());
 
       // flag the objects as pending deletion
       Context *ctx = this->create_callback_context();
       RWLock::WLocker object_map_locker(image_ctx.object_map_lock);
-      if (!image_ctx.object_map.aio_update(m_delete_start, m_num_objects,
-					     OBJECT_PENDING, OBJECT_EXISTS,
-                                             ctx)) {
+      if (!image_ctx.object_map->aio_update(m_delete_start, m_num_objects,
+					    OBJECT_PENDING, OBJECT_EXISTS,
+                                            ctx)) {
         delete ctx;
         remove_objects = true;
       }
@@ -286,7 +293,7 @@ void TrimRequest<I>::send_post_remove() {
   bool clean_boundary = false;
   {
     RWLock::RLocker snap_locker(image_ctx.snap_lock);
-    if (!image_ctx.object_map.enabled()) {
+    if (image_ctx.object_map == nullptr) {
       clean_boundary = true;
     } else {
       ldout(image_ctx.cct, 5) << this << " send_post_remove: "
@@ -294,14 +301,14 @@ void TrimRequest<I>::send_post_remove() {
           		        << " num_objects=" << m_num_objects << dendl;
       m_state = STATE_POST_REMOVE;
 
-      assert(image_ctx.image_watcher->is_lock_owner());
+      assert(image_ctx.exclusive_lock->is_lock_owner());
 
       // flag the pending objects as removed
       Context *ctx = this->create_callback_context();
       RWLock::WLocker object_map_locker(image_ctx.object_map_lock);
-      if (!image_ctx.object_map.aio_update(m_delete_start, m_num_objects,
-					     OBJECT_NONEXISTENT,
-					     OBJECT_PENDING, ctx)) {
+      if (!image_ctx.object_map->aio_update(m_delete_start, m_num_objects,
+					    OBJECT_NONEXISTENT,
+					    OBJECT_PENDING, ctx)) {
         delete ctx;
 	clean_boundary = true;
       }
@@ -326,8 +333,8 @@ void TrimRequest<I>::send_clean_boundary() {
   }
 
   // should have been canceled prior to releasing lock
-  assert(!image_ctx.image_watcher->is_lock_supported() ||
-         image_ctx.image_watcher->is_lock_owner());
+  assert(image_ctx.exclusive_lock == nullptr ||
+         image_ctx.exclusive_lock->is_lock_owner());
   uint64_t delete_len = m_delete_off - m_new_size;
   ldout(image_ctx.cct, 5) << this << " send_clean_boundary: "
 			    << " delete_off=" << m_delete_off

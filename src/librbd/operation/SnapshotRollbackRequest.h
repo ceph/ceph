@@ -5,6 +5,7 @@
 #define CEPH_LIBRBD_OPERATION_SNAPSHOT_ROLLBACK_REQUEST_H
 
 #include "librbd/operation/Request.h"
+#include "librbd/ImageCtx.h"
 #include "librbd/internal.h"
 #include <string>
 
@@ -34,13 +35,16 @@ public:
    *  . . . . > STATE_ROLLBACK_OBJECT_MAP
    *  .               |
    *  .               v
-   *  . . . . > STATE_ROLLBACK_OBJECTS . . .
-   *                  |                    .
-   *                  v                    .
-   *            STATE_INVALIDATE_CACHE     .
-   *                  |                    .
-   *                  v                    .
-   *              <finish> < . . . . . . . .
+   *  . . . . > STATE_ROLLBACK_OBJECTS . . . . . . . . . . .
+   *                  |                                    .
+   *                  v                                    .
+   *            STATE_REFRESH_OBJECT_MAP  (skip if object  .
+   *                  |                    map disabled)   .
+   *                  v                                    .
+   *            STATE_INVALIDATE_CACHE                     .
+   *                  |                                    .
+   *                  v                                    .
+   *              <finish> < . . . . . . . . . . . . . . . .
    *
    * @endverbatim
    *
@@ -52,12 +56,14 @@ public:
     STATE_RESIZE_IMAGE,
     STATE_ROLLBACK_OBJECT_MAP,
     STATE_ROLLBACK_OBJECTS,
+    STATE_REFRESH_OBJECT_MAP,
     STATE_INVALIDATE_CACHE
   };
 
   SnapshotRollbackRequest(ImageCtxT &image_ctx, Context *on_finish,
                           const std::string &snap_name, uint64_t snap_id,
                           uint64_t snap_size, ProgressContext &prog_ctx);
+  virtual ~SnapshotRollbackRequest();
 
 protected:
   virtual void send_op();
@@ -76,11 +82,15 @@ private:
   NoOpProgressContext m_no_op_prog_ctx;
   State m_state;
 
+  decltype(ImageCtxT::object_map) m_object_map;
+
   void send_resize_image();
   void send_rollback_object_map();
   void send_rollback_objects();
+  bool send_refresh_object_map();
   bool send_invalidate_cache();
 
+  void apply();
 };
 
 } // namespace operation

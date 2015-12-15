@@ -2826,15 +2826,15 @@ TEST_F(TestLibRBD, RebuildObjectMapViaLockOwner)
   librbd::Image image1;
   ASSERT_EQ(0, rbd.open(ioctx, image1, name.c_str(), NULL));
 
-  uint64_t flags;
-  ASSERT_EQ(0, image1.get_flags(&flags));
-  ASSERT_TRUE((flags & RBD_FLAG_OBJECT_MAP_INVALID) != 0);
-
   bool lock_owner;
   bl.clear();
   ASSERT_EQ(0, image1.write(0, 0, bl));
   ASSERT_EQ(0, image1.is_exclusive_lock_owner(&lock_owner));
   ASSERT_TRUE(lock_owner);
+
+  uint64_t flags;
+  ASSERT_EQ(0, image1.get_flags(&flags));
+  ASSERT_TRUE((flags & RBD_FLAG_OBJECT_MAP_INVALID) != 0);
 
   librbd::Image image2;
   ASSERT_EQ(0, rbd.open(ioctx, image2, name.c_str(), NULL));
@@ -3406,6 +3406,12 @@ TEST_F(TestLibRBD, RebuildObjectMap)
   librbd::Image image1;
   ASSERT_EQ(0, rbd.open(ioctx, image1, name.c_str(), NULL));
 
+  bool lock_owner;
+  bl.clear();
+  ASSERT_EQ(0, image1.write(0, 0, bl));
+  ASSERT_EQ(0, image1.is_exclusive_lock_owner(&lock_owner));
+  ASSERT_TRUE(lock_owner);
+
   uint64_t flags;
   ASSERT_EQ(0, image1.get_flags(&flags));
   ASSERT_TRUE((flags & RBD_FLAG_OBJECT_MAP_INVALID) != 0);
@@ -3429,7 +3435,7 @@ TEST_F(TestLibRBD, RebuildObjectMap)
 
 TEST_F(TestLibRBD, RebuildNewObjectMap)
 {
-  REQUIRE_FEATURE(RBD_FEATURE_LAYERING);
+  REQUIRE_FEATURE(RBD_FEATURE_OBJECT_MAP);
 
   rados_ioctx_t ioctx;
   rados_ioctx_create(_cluster, m_pool_name.c_str(), &ioctx);

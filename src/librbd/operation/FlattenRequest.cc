@@ -4,6 +4,7 @@
 #include "librbd/operation/FlattenRequest.h"
 #include "librbd/AioObjectRequest.h"
 #include "librbd/AsyncObjectThrottle.h"
+#include "librbd/ExclusiveLock.h"
 #include "librbd/ImageCtx.h"
 #include "librbd/ImageWatcher.h"
 #include "librbd/ObjectMap.h"
@@ -34,8 +35,8 @@ public:
     assert(image_ctx.owner_lock.is_locked());
     CephContext *cct = image_ctx.cct;
 
-    if (image_ctx.image_watcher->is_lock_supported() &&
-        !image_ctx.image_watcher->is_lock_owner()) {
+    if (image_ctx.exclusive_lock != nullptr &&
+        !image_ctx.exclusive_lock->is_lock_owner()) {
       ldout(cct, 1) << "lost exclusive lock during flatten" << dendl;
       return -ERESTART;
     }
@@ -121,8 +122,8 @@ bool FlattenRequest<I>::send_update_header() {
   m_state = STATE_UPDATE_HEADER;
 
   // should have been canceled prior to releasing lock
-  assert(!image_ctx.image_watcher->is_lock_supported() ||
-         image_ctx.image_watcher->is_lock_owner());
+  assert(image_ctx.exclusive_lock == nullptr ||
+         image_ctx.exclusive_lock->is_lock_owner());
 
   {
     RWLock::RLocker parent_locker(image_ctx.parent_lock);
@@ -138,8 +139,8 @@ bool FlattenRequest<I>::send_update_header() {
 
   // remove parent from this (base) image
   librados::ObjectWriteOperation op;
-  if (image_ctx.image_watcher->is_lock_supported()) {
-    image_ctx.image_watcher->assert_header_locked(&op);
+  if (image_ctx.exclusive_lock != nullptr) {
+    image_ctx.exclusive_lock->assert_header_locked(&op);
   }
   cls_client::remove_parent(&op);
 
@@ -158,8 +159,8 @@ bool FlattenRequest<I>::send_update_children() {
   CephContext *cct = image_ctx.cct;
 
   // should have been canceled prior to releasing lock
-  assert(!image_ctx.image_watcher->is_lock_supported() ||
-         image_ctx.image_watcher->is_lock_owner());
+  assert(image_ctx.exclusive_lock == nullptr ||
+         image_ctx.exclusive_lock->is_lock_owner());
 
   // if there are no snaps, remove from the children object as well
   // (if snapshots remain, they have their own parent info, and the child

@@ -5,12 +5,14 @@
 #include "common/dout.h"
 #include "common/errno.h"
 #include "librbd/AsyncObjectThrottle.h"
+#include "librbd/ExclusiveLock.h"
 #include "librbd/ImageCtx.h"
 #include "librbd/ImageWatcher.h"
 #include "librbd/internal.h"
 #include "librbd/ObjectMap.h"
 #include "librbd/operation/ResizeRequest.h"
 #include "librbd/operation/TrimRequest.h"
+#include "librbd/Utils.h"
 #include <boost/lambda/bind.hpp>
 #include <boost/lambda/construct.hpp>
 
@@ -83,12 +85,10 @@ private:
     ldout(image_ctx.cct, 5) << m_oid << " C_VerifyObject::send_list_snaps"
                             << dendl;
 
-    librados::AioCompletion *comp = librados::Rados::aio_create_completion(
-      this, NULL, rados_ctx_cb);
-
     librados::ObjectReadOperation op;
     op.list_snaps(&m_snap_set, &m_snap_list_ret);
 
+    librados::AioCompletion *comp = util::create_rados_safe_callback(this);
     int r = m_io_ctx.aio_operate(m_oid, comp, &op, NULL);
     assert(r == 0);
     comp->release();
@@ -142,11 +142,14 @@ private:
     CephContext *cct = image_ctx.cct;
 
     // should have been canceled prior to releasing lock
-    assert(!image_ctx.image_watcher->is_lock_supported() ||
-           image_ctx.image_watcher->is_lock_owner());
+    assert(image_ctx.exclusive_lock == nullptr ||
+           image_ctx.exclusive_lock->is_lock_owner());
+
+    RWLock::RLocker snap_locker(image_ctx.snap_lock);
+    assert(image_ctx.object_map != nullptr);
 
     RWLock::WLocker l(image_ctx.object_map_lock);
-    uint8_t state = image_ctx.object_map[m_object_no];
+    uint8_t state = (*image_ctx.object_map)[m_object_no];
     if (state == OBJECT_EXISTS && new_state == OBJECT_NONEXISTENT &&
         m_snap_id == CEPH_NOSNAP) {
       // might be writing object to OSD concurrently
@@ -157,7 +160,7 @@ private:
       ldout(cct, 15) << m_oid << " C_VerifyObject::update_object_map "
                      << static_cast<uint32_t>(state) << "->"
                      << static_cast<uint32_t>(new_state) << dendl;
-      image_ctx.object_map[m_object_no] = new_state;
+      (*image_ctx.object_map)[m_object_no] = new_state;
     }
     return true;
   }
@@ -234,15 +237,14 @@ void RebuildObjectMapRequest<I>::send_resize_object_map() {
   assert(m_image_ctx.owner_lock.is_locked());
   CephContext *cct = m_image_ctx.cct;
 
-  uint64_t num_objects;
-  uint64_t size;
-  {
-    RWLock::RLocker l(m_image_ctx.snap_lock);
-    size = get_image_size();
-    num_objects = Striper::get_num_objects(m_image_ctx.layout, size);
-  }
+  m_image_ctx.snap_lock.get_read();
+  assert(m_image_ctx.object_map != nullptr);
 
-  if (m_image_ctx.object_map.size() == num_objects) {
+  uint64_t size = get_image_size();
+  uint64_t num_objects = Striper::get_num_objects(m_image_ctx.layout, size);
+
+  if (m_image_ctx.object_map->size() == num_objects) {
+    m_image_ctx.snap_lock.put_read();
     send_verify_objects();
     return;
   }
@@ -251,10 +253,12 @@ void RebuildObjectMapRequest<I>::send_resize_object_map() {
   m_state = STATE_RESIZE_OBJECT_MAP;
 
   // should have been canceled prior to releasing lock
-  assert(!m_image_ctx.image_watcher->is_lock_supported() ||
-         m_image_ctx.image_watcher->is_lock_owner());
-  m_image_ctx.object_map.aio_resize(size, OBJECT_NONEXISTENT,
-                                    this->create_callback_context());
+  assert(m_image_ctx.exclusive_lock == nullptr ||
+         m_image_ctx.exclusive_lock->is_lock_owner());
+
+  m_image_ctx.object_map->aio_resize(size, OBJECT_NONEXISTENT,
+                                     this->create_callback_context());
+  m_image_ctx.snap_lock.put_read();
 }
 
 template <typename I>
@@ -264,8 +268,8 @@ void RebuildObjectMapRequest<I>::send_trim_image() {
   RWLock::RLocker l(m_image_ctx.owner_lock);
 
   // should have been canceled prior to releasing lock
-  assert(!m_image_ctx.image_watcher->is_lock_supported() ||
-         m_image_ctx.image_watcher->is_lock_owner());
+  assert(m_image_ctx.exclusive_lock == nullptr ||
+         m_image_ctx.exclusive_lock->is_lock_owner());
   ldout(cct, 5) << this << " send_trim_image" << dendl;
   m_state = STATE_TRIM_IMAGE;
 
@@ -273,9 +277,11 @@ void RebuildObjectMapRequest<I>::send_trim_image() {
   uint64_t orig_size;
   {
     RWLock::RLocker l(m_image_ctx.snap_lock);
+    assert(m_image_ctx.object_map != nullptr);
+
     new_size = get_image_size();
     orig_size = m_image_ctx.get_object_size() *
-                m_image_ctx.object_map.size();
+                m_image_ctx.object_map->size();
   }
   TrimRequest<I> *req = new TrimRequest<I>(m_image_ctx,
                                            this->create_callback_context(),
@@ -323,9 +329,12 @@ void RebuildObjectMapRequest<I>::send_save_object_map() {
   m_state = STATE_SAVE_OBJECT_MAP;
 
   // should have been canceled prior to releasing lock
-  assert(!m_image_ctx.image_watcher->is_lock_supported() ||
-         m_image_ctx.image_watcher->is_lock_owner());
-  m_image_ctx.object_map.aio_save(this->create_callback_context());
+  assert(m_image_ctx.exclusive_lock == nullptr ||
+         m_image_ctx.exclusive_lock->is_lock_owner());
+
+  RWLock::RLocker snap_locker(m_image_ctx.snap_lock);
+  assert(m_image_ctx.object_map != nullptr);
+  m_image_ctx.object_map->aio_save(this->create_callback_context());
 }
 
 template <typename I>
@@ -333,15 +342,15 @@ void RebuildObjectMapRequest<I>::send_update_header() {
   assert(m_image_ctx.owner_lock.is_locked());
 
   // should have been canceled prior to releasing lock
-  assert(!m_image_ctx.image_watcher->is_lock_supported() ||
-         m_image_ctx.image_watcher->is_lock_owner());
+  assert(m_image_ctx.exclusive_lock == nullptr ||
+         m_image_ctx.exclusive_lock->is_lock_owner());
 
   ldout(m_image_ctx.cct, 5) << this << " send_update_header" << dendl;
   m_state = STATE_UPDATE_HEADER;
 
   librados::ObjectWriteOperation op;
-  if (m_image_ctx.image_watcher->is_lock_supported()) {
-    m_image_ctx.image_watcher->assert_header_locked(&op);
+  if (m_image_ctx.exclusive_lock != nullptr) {
+    m_image_ctx.exclusive_lock->assert_header_locked(&op);
   }
 
   uint64_t flags = RBD_FLAG_OBJECT_MAP_INVALID | RBD_FLAG_FAST_DIFF_INVALID;

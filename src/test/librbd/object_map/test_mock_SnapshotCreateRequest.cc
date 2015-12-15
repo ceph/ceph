@@ -6,6 +6,7 @@
 #include "test/librados_test_stub/MockTestMemIoCtxImpl.h"
 #include "common/bit_vector.hpp"
 #include "librbd/internal.h"
+#include "librbd/ObjectMap.h"
 #include "librbd/object_map/SnapshotCreateRequest.h"
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
