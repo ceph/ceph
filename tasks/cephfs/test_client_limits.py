@@ -11,7 +11,6 @@ from teuthology.orchestra.run import CommandFailedError
 from tasks.cephfs.cephfs_test_case import CephFSTestCase, needs_trimming
 from tasks.cephfs.fuse_mount import FuseMount
 import os
-import time
 
 
 log = logging.getLogger(__name__)
@@ -29,23 +28,6 @@ CAP_RECALL_MIN = 100
 class TestClientLimits(CephFSTestCase):
     REQUIRE_KCLIENT_REMOTE = True
     CLIENTS_REQUIRED = 2
-
-    def wait_for_health(self, pattern, timeout):
-        """
-        Wait until 'ceph health' contains a single message matching the pattern
-        """
-        def seen_health_warning():
-            health = self.fs.mon_manager.get_mon_health()
-            summary_strings = [s['summary'] for s in health['summary']]
-            if len(summary_strings) == 0:
-                log.debug("Not expected number of summary strings ({0})".format(summary_strings))
-                return False
-            elif len(summary_strings) == 1 and pattern in summary_strings[0]:
-                return True
-            else:
-                raise RuntimeError("Unexpected health messages: {0}".format(summary_strings))
-
-        self.wait_until_true(seen_health_warning, timeout)
 
     def _test_client_pin(self, use_subdir):
         """
