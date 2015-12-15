@@ -534,6 +534,16 @@ rbdfs_create(const char *path, mode_t mode, struct fuse_file_info *fi)
 	return r;
 }
 
+int rbdfs_rename(const char *path, const char *destname)
+{
+    const char *srcname = NULL;
+    if (strcmp(path, "/") == 0)
+        return -EINVAL;
+
+    srcname = path + 1;
+    return rbd_rename(ioctx, srcname, destname + 1);
+}
+
 int
 rbdfs_utime(const char *path, struct utimbuf *utime)
 {
@@ -678,7 +688,7 @@ const static struct fuse_operations rbdfs_oper = {
   unlink:     rbdfs_unlink,
   rmdir:      0,
   symlink:    0,
-  rename:     0,
+  rename:     rbdfs_rename,
   link:       0,
   chmod:      0,
   chown:      0,
