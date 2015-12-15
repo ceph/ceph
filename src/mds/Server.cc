@@ -4157,6 +4157,7 @@ void Server::handle_set_vxattr(MDRequestRef& mdr, CInode *cur,
 	return;
       }
 
+      xlocks.insert(&cur->filelock);
       if (!mds->locker->acquire_locks(mdr, rdlocks, wrlocks, xlocks))
 	return;
 
@@ -4166,7 +4167,6 @@ void Server::handle_set_vxattr(MDRequestRef& mdr, CInode *cur,
         }
       }
 
-      xlocks.insert(&cur->filelock);
       pi = cur->project_inode();
       int64_t old_pool = pi->layout.fl_pg_pool;
       pi->add_old_pool(old_pool);
