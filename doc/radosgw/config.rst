@@ -40,30 +40,10 @@ the node containing the gateway instance.
 
 See `User Management`_ for additional details on Ceph authentication.
 
-#. Create a keyring for the gateway::
-
-	sudo ceph-authtool --create-keyring /etc/ceph/ceph.client.radosgw.keyring
-	sudo chmod +r /etc/ceph/ceph.client.radosgw.keyring
-	
-
 #. Generate a Ceph Object Gateway user name and key for each instance. For
    exemplary purposes, we will use the name ``gateway`` after ``client.radosgw``:: 
 
-	sudo ceph-authtool /etc/ceph/ceph.client.radosgw.keyring -n client.radosgw.gateway --gen-key
-
-
-#. Add capabilities to the key. See `Configuration Reference - Pools`_ for details
-   on the effect of write permissions for the monitor and creating pools. ::
-
-	sudo ceph-authtool -n client.radosgw.gateway --cap osd 'allow rwx' --cap mon 'allow rwx' /etc/ceph/ceph.client.radosgw.keyring
-
-
-#. Once you have created a keyring and key to enable the Ceph Object Gateway 
-   with access to the Ceph Storage Cluster, add the key to your 
-   Ceph Storage Cluster. For example::
-
-	sudo ceph -k /etc/ceph/ceph.client.admin.keyring auth add client.radosgw.gateway -i /etc/ceph/ceph.client.radosgw.keyring
-
+        sudo ceph auth get-or-create client.radosgw.gateway osd 'allow rwx' mon 'allow rwx' -o /etc/ceph/ceph.client.radosgw.keyring
 
 #. Distribute the keyring to the node with the gateway instance. ::
 
