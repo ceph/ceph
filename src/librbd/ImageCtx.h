@@ -5,6 +5,7 @@
 
 #include "include/int_types.h"
 
+#include <list>
 #include <map>
 #include <set>
 #include <string>
@@ -28,7 +29,6 @@
 #include "cls/rbd/cls_rbd_client.h"
 #include "librbd/AsyncRequest.h"
 #include "librbd/LibrbdWriteback.h"
-#include "librbd/ObjectMap.h"
 #include "librbd/SnapInfo.h"
 #include "librbd/parent_types.h"
 
@@ -40,13 +40,16 @@ class PerfCounters;
 namespace librbd {
 
   struct ImageCtx;
+  class AioCompletion;
   class AioImageRequestWQ;
   class AsyncOperation;
   class CopyupRequest;
-  class LibrbdAdminSocketHook;
+  template <typename> class ExclusiveLock;
+  template <typename> class ImageState;
   class ImageWatcher;
   class Journal;
-  class AioCompletion;
+  class LibrbdAdminSocketHook;
+  class ObjectMap;
 
   namespace operation {
   template <typename> class ResizeRequest;
@@ -77,14 +80,12 @@ namespace librbd {
     IoCtx data_ctx, md_ctx;
     ImageWatcher *image_watcher;
     Journal *journal;
-    int refresh_seq;    ///< sequence for refresh requests
-    int last_refresh;   ///< last completed refresh
 
     /**
      * Lock ordering:
      *
      * owner_lock, md_lock, cache_lock, snap_lock, parent_lock,
-     * refresh_lock, object_map_lock, async_op_lock
+     * object_map_lock, async_op_lock
      */
     RWLock owner_lock; // protects exclusive lock leadership updates
     RWLock md_lock; // protects access to the mutable image metadata that
@@ -97,9 +98,9 @@ namespace librbd {
                    // lock_tag
                    // lockers
     Mutex cache_lock; // used as client_lock for the ObjectCacher
-    RWLock snap_lock; // protects snapshot-related member variables, features, and flags
+    RWLock snap_lock; // protects snapshot-related member variables,
+                      // features (and associated helper classes), and flags
     RWLock parent_lock; // protects parent_md and parent
-    Mutex refresh_lock; // protects refresh_seq and last_refresh
     RWLock object_map_lock; // protects object map updates and object_map itself
     Mutex async_ops_lock; // protects async_ops and async_requests
     Mutex copyup_list_lock; // protects copyup_waiting_list
@@ -134,9 +135,11 @@ namespace librbd {
 
     xlist<AsyncOperation*> async_ops;
     xlist<AsyncRequest<>*> async_requests;
-    Cond async_requests_cond;
+    std::list<Context*> async_requests_waiters;
 
-    ObjectMap object_map;
+    ImageState<ImageCtx> *state;
+    ExclusiveLock<ImageCtx> *exclusive_lock;
+    ObjectMap *object_map;
 
     atomic_t async_request_seq;
 
@@ -147,9 +150,6 @@ namespace librbd {
     EventSocket event_socket;
 
     ContextWQ *op_work_queue;
-
-    Cond refresh_cond;
-    bool refresh_in_progress;
 
     // Configuration
     static const string METADATA_CONF_PREFIX;
@@ -196,7 +196,7 @@ namespace librbd {
     ImageCtx(const std::string &image_name, const std::string &image_id,
 	     const char *snap, IoCtx& p, bool read_only);
     ~ImageCtx();
-    int init();
+    void init();
     void init_layout();
     void perf_start(std::string name);
     void perf_stop();
@@ -228,8 +228,11 @@ namespace librbd {
     void rm_snap(std::string in_snap_name, librados::snap_t id);
     uint64_t get_image_size(librados::snap_t in_snap_id) const;
     bool test_features(uint64_t test_features) const;
+    bool test_features(uint64_t test_features,
+                       const RWLock &in_snap_lock) const;
     int get_flags(librados::snap_t in_snap_id, uint64_t *flags) const;
     bool test_flags(uint64_t test_flags) const;
+    bool test_flags(uint64_t test_flags, const RWLock &in_snap_lock) const;
     int update_flags(librados::snap_t in_snap_id, uint64_t flag, bool enabled);
 
     const parent_info* get_parent_info(librados::snap_t in_snap_id) const;
@@ -246,9 +249,8 @@ namespace librbd {
 			uint64_t off, Context *onfinish, int fadvise_flags,
                         uint64_t journal_tid);
     void user_flushed();
-    int flush_cache();
     void flush_cache(Context *onfinish);
-    int shutdown_cache();
+    void shut_down_cache(Context *on_finish);
     int invalidate_cache(bool purge_on_error=false);
     void invalidate_cache(Context *on_finish);
     void clear_nonexistence_cache();
@@ -264,10 +266,15 @@ namespace librbd {
     void flush(Context *on_safe);
 
     void cancel_async_requests();
+    void cancel_async_requests(Context *on_finish);
+
+    void flush_copyup(Context *on_finish);
+
     void apply_metadata_confs();
 
-    void open_journal();
-    int close_journal(bool force);
+    ObjectMap *create_object_map(uint64_t snap_id);
+    Journal *create_journal();
+
     void clear_pending_completions();
   };
 }

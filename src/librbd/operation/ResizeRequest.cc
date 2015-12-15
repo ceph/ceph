@@ -2,6 +2,7 @@
 // vim: ts=8 sw=2 smarttab
 
 #include "librbd/operation/ResizeRequest.h"
+#include "librbd/ExclusiveLock.h"
 #include "librbd/ImageCtx.h"
 #include "librbd/ImageWatcher.h"
 #include "librbd/internal.h"
@@ -196,7 +197,10 @@ template <typename I>
 void ResizeRequest<I>::send_grow_object_map() {
   I &image_ctx = this->m_image_ctx;
   assert(image_ctx.owner_lock.is_locked());
-  if (!image_ctx.object_map.enabled()) {
+
+  image_ctx.snap_lock.get_read();
+  if (image_ctx.object_map == nullptr) {
+    image_ctx.snap_lock.put_read();
     send_update_header();
     return;
   }
@@ -207,18 +211,22 @@ void ResizeRequest<I>::send_grow_object_map() {
   m_state = STATE_GROW_OBJECT_MAP;
 
   // should have been canceled prior to releasing lock
-  assert(!image_ctx.image_watcher->is_lock_supported() ||
-         image_ctx.image_watcher->is_lock_owner());
+  assert(image_ctx.exclusive_lock == nullptr ||
+         image_ctx.exclusive_lock->is_lock_owner());
 
-  image_ctx.object_map.aio_resize(m_new_size, OBJECT_NONEXISTENT,
-				  this->create_callback_context());
+  image_ctx.object_map->aio_resize(m_new_size, OBJECT_NONEXISTENT,
+				   this->create_callback_context());
+  image_ctx.snap_lock.put_read();
 }
 
 template <typename I>
 bool ResizeRequest<I>::send_shrink_object_map() {
   I &image_ctx = this->m_image_ctx;
   assert(image_ctx.owner_lock.is_locked());
-  if (!image_ctx.object_map.enabled() || m_new_size > m_original_size) {
+
+  image_ctx.snap_lock.get_read();
+  if (image_ctx.object_map == nullptr || m_new_size > m_original_size) {
+    image_ctx.snap_lock.put_read();
     return true;
   }
 
@@ -228,11 +236,12 @@ bool ResizeRequest<I>::send_shrink_object_map() {
   m_state = STATE_SHRINK_OBJECT_MAP;
 
   // should have been canceled prior to releasing lock
-  assert(!image_ctx.image_watcher->is_lock_supported() ||
-         image_ctx.image_watcher->is_lock_owner());
+  assert(image_ctx.exclusive_lock == nullptr ||
+         image_ctx.exclusive_lock->is_lock_owner());
 
-  image_ctx.object_map.aio_resize(m_new_size, OBJECT_NONEXISTENT,
-				  this->create_callback_context());
+  image_ctx.object_map->aio_resize(m_new_size, OBJECT_NONEXISTENT,
+				   this->create_callback_context());
+  image_ctx.snap_lock.put_read();
   return false;
 }
 
@@ -247,8 +256,8 @@ void ResizeRequest<I>::send_update_header() {
   m_state = STATE_UPDATE_HEADER;
 
   // should have been canceled prior to releasing lock
-  assert(!image_ctx.image_watcher->is_lock_supported() ||
-         image_ctx.image_watcher->is_lock_owner());
+  assert(image_ctx.exclusive_lock == nullptr ||
+         image_ctx.exclusive_lock->is_lock_owner());
 
   librados::ObjectWriteOperation op;
   if (image_ctx.old_format) {
@@ -258,8 +267,8 @@ void ResizeRequest<I>::send_update_header() {
     bl.append(reinterpret_cast<const char*>(&m_new_size), sizeof(m_new_size));
     op.write(offsetof(rbd_obj_header_ondisk, image_size), bl);
   } else {
-    if (image_ctx.image_watcher->is_lock_supported()) {
-      image_ctx.image_watcher->assert_header_locked(&op);
+    if (image_ctx.exclusive_lock != nullptr) {
+      image_ctx.exclusive_lock->assert_header_locked(&op);
     }
     cls_client::set_size(&op, m_new_size);
   }

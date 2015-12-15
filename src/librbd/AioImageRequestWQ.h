@@ -5,9 +5,11 @@
 #define CEPH_LIBRBD_AIO_IMAGE_REQUEST_WQ_H
 
 #include "include/Context.h"
+#include "include/atomic.h"
+#include "common/Cond.h"
+#include "common/RWLock.h"
 #include "common/WorkQueue.h"
-#include "common/Mutex.h"
-#include "librbd/ImageWatcher.h"
+#include <list>
 
 namespace librbd {
 
@@ -35,20 +37,20 @@ public:
   using ThreadPool::PointerWQ<AioImageRequest>::empty;
 
   inline bool writes_empty() const {
-    Mutex::Locker locker(m_lock);
-    return (m_queued_writes == 0);
+    RWLock::RLocker locker(m_lock);
+    return (m_queued_writes.read() == 0);
   }
 
   inline bool writes_blocked() const {
-    Mutex::Locker locker(m_lock);
+    RWLock::RLocker locker(m_lock);
     return (m_write_blockers > 0);
   }
+
+  void shut_down(Context *on_shutdown);
 
   void block_writes();
   void block_writes(Context *on_blocked);
   void unblock_writes();
-
-  void register_lock_listener();
 
 protected:
   virtual void *_void_dequeue();
@@ -57,17 +59,16 @@ protected:
 private:
   typedef std::list<Context *> Contexts;
 
-  struct LockListener : public ImageWatcher::Listener {
+  struct C_RefreshFinish : public Context {
     AioImageRequestWQ *aio_work_queue;
-    LockListener(AioImageRequestWQ *_aio_work_queue)
-      : aio_work_queue(_aio_work_queue) {
-    }
+    AioImageRequest *aio_image_request;
 
-    virtual bool handle_requested_lock() {
-      return true;
+    C_RefreshFinish(AioImageRequestWQ *aio_work_queue,
+                    AioImageRequest *aio_image_request)
+      : aio_work_queue(aio_work_queue), aio_image_request(aio_image_request) {
     }
-    virtual void handle_lock_updated(ImageWatcher::LockUpdateState state) {
-      aio_work_queue->handle_lock_updated(state);
+    virtual void finish(int r) override {
+      aio_work_queue->handle_refreshed(r, aio_image_request);
     }
   };
 
@@ -83,20 +84,26 @@ private:
   };
 
   ImageCtx &m_image_ctx;
-  mutable Mutex m_lock;
+  mutable RWLock m_lock;
   Contexts m_write_blocker_contexts;
   uint32_t m_write_blockers;
-  uint32_t m_in_progress_writes;
-  uint32_t m_queued_writes;
+  atomic_t m_in_progress_writes;
+  atomic_t m_queued_writes;
+  atomic_t m_in_flight_ops;
 
-  LockListener m_lock_listener;
-  bool m_blocking_writes;
+  bool m_refresh_in_progress;
+
+  bool m_shutdown;
+  Context *m_on_shutdown;
+
+  int start_in_flight_op(AioCompletion *c);
+  void finish_in_flight_op();
 
   bool is_journal_required() const;
   bool is_lock_required() const;
   void queue(AioImageRequest *req);
 
-  void handle_lock_updated(ImageWatcher::LockUpdateState state);
+  void handle_refreshed(int r, AioImageRequest *req);
   void handle_blocked_writes(int r);
 };
 
