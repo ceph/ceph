@@ -100,6 +100,43 @@ LookupFHResult RGWLibFS::stat_leaf(RGWFileHandle* parent,
   return fhr;
 } /* RGWLibFS::stat_leaf */
 
+int RGWFileHandle::write(uint64_t off, size_t len, size_t *bytes_written,
+			void *buffer)
+{
+  using std::get;
+  lock_guard guard(mtx);
+
+  int rc = 0;
+  buffer::list bl;
+  bl.push_back(
+    buffer::create_static(len, static_cast<char*>(buffer)));
+
+  file* f = get<file>(&variant_type);
+  if (! f->write_req) {
+    /* start */
+    std::string object_name = full_object_name();
+    f->write_req =
+      new RGWWriteRequest(fs->get_context(), fs->get_user(), bucket_name(),
+			  object_name);
+    rc = librgw.get_fe()->start_req(f->write_req);
+  }
+
+  f->write_req->put_data(off, bl);
+  rc = f->write_req->exec_continue();
+
+  size_t min_size = off + len;
+  if (min_size > get_size())
+    set_size(min_size);
+
+  *bytes_written = (rc == 0) ? len : 0;
+  return rc;
+} /* RGWFileHandle::write */
+
+RGWFileHandle::file::~file()
+{
+  delete write_req;
+}
+
 /* librgw */
 extern "C" {
 
@@ -633,28 +670,12 @@ int rgw_write(struct rgw_fs *rgw_fs,
   RGWFileHandle* rgw_fh = get_rgwfh(fh);
 
   if (! rgw_fh->is_file())
-    return -EINVAL;
+    return -EISDIR;
 
-  /* XXXX testing only */
-  buffer::list bl;
-  bl.push_back(
-    buffer::create_static(length /* XXX size */, static_cast<char*>(buffer)));
+  if (! rgw_fh->is_open())
+    return -EPERM;
 
-  /* XXX */
-  std::string oname = rgw_fh->full_object_name();
-  RGWPutObjRequest req(cct, fs->get_user(), rgw_fh->bucket_name(),
-		       oname, bl);
-
-  int rc = librgw.get_fe()->execute_req(&req);
-
-  /* XXX move into request */
-  size_t min_size = offset+length;
-  if (min_size > rgw_fh->get_size())
-    rgw_fh->set_size(min_size);
-
-  *bytes_written = (rc == 0) ? req.bytes_written : 0;
-
-  return rc;
+  return rgw_fh->write(offset, length, bytes_written, buffer);
 }
 
 /*

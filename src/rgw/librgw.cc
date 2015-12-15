@@ -271,9 +271,10 @@ done:
   return (ret < 0 ? ret : s->err.ret);
 } /* process_request */
 
-int start_continued_request(RGWLibContinuedReq* req)
+int RGWLibProcess::start_request(RGWLibContinuedReq* req)
 {
   int ret = 0;
+  int op_ret = 0;
 
   dout(1) << "====== " << __func__
 	  << " starting new continued request req=" << hex << req << dec
@@ -366,12 +367,15 @@ int start_continued_request(RGWLibContinuedReq* req)
   op->pre_exec();
   req->exec_start();
 
+  op_ret = op->get_ret();
+
 done:
-  return ret;
+  return (ret < 0 ? ret : s->err.ret);
 }
 
-int finish_continued_request(RGWLibContinuedReq* req)
+int RGWLibProcess::finish_request(RGWLibContinuedReq* req)
 {
+  return 0;
 }
 
 int RGWLibFrontend::init()
