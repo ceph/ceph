@@ -112,6 +112,16 @@ string bluestore_extent_t::get_flags_string(unsigned flags)
       s += '+';
     s += "shared";
   }
+  if (flags & FLAG_COW_HEAD) {
+    if (s.length())
+      s += '+';
+    s += "cow_head";
+  }
+  if (flags & FLAG_COW_TAIL) {
+    if (s.length())
+      s += '+';
+    s += "cow_tail";
+  }
   return s;
 }
 
