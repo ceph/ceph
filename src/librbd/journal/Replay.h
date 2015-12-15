@@ -20,9 +20,13 @@ class ImageCtx;
 
 namespace journal {
 
+template <typename ImageCtxT = ImageCtx>
 class Replay {
 public:
-  Replay(ImageCtx &image_ctx);
+  static Replay *create(ImageCtxT &image_ctx) {
+    return new Replay(image_ctx);
+  }
+
   ~Replay();
 
   int process(bufferlist::iterator it, Context *on_safe = NULL);
@@ -45,13 +49,15 @@ private:
     }
   };
 
-  ImageCtx &m_image_ctx;
+  ImageCtxT &m_image_ctx;
 
   Mutex m_lock;
   Cond m_cond;
 
   AioCompletions m_aio_completions;
   int m_ret_val;
+
+  Replay(ImageCtxT &image_ctx);
 
   void handle_event(const AioDiscardEvent &event, Context *on_safe);
   void handle_event(const AioWriteEvent &event, Context *on_safe);
@@ -76,5 +82,7 @@ private:
 
 } // namespace journal
 } // namespace librbd
+
+extern template class librbd::journal::Replay<librbd::ImageCtx>;
 
 #endif // CEPH_LIBRBD_JOURNAL_REPLAY_H

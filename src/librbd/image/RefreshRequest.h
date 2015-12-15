@@ -18,10 +18,7 @@ class Context;
 
 namespace librbd {
 
-template <typename> class ExclusiveLock;
 class ImageCtx;
-class Journal;
-class ObjectMap;
 
 namespace image {
 
