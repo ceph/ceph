@@ -26,10 +26,10 @@ namespace librbd {
 class AioCompletion;
 class AioObjectRequest;
 class ImageCtx;
-class JournalReplay;
 
 namespace journal {
 class EventEntry;
+class Replay;
 }
 
 class Journal {
@@ -217,7 +217,7 @@ private:
 
   bool m_blocking_writes;
 
-  JournalReplay *m_journal_replay;
+  journal::Replay *m_journal_replay;
 
   ::journal::Future wait_event(Mutex &lock, uint64_t tid, Context *on_safe);
 
