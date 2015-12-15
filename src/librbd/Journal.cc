@@ -22,6 +22,9 @@
 
 namespace librbd {
 
+using util::create_async_context_callback;
+using util::create_context_callback;
+
 namespace {
 
 const std::string CLIENT_DESCRIPTION = "master image";
@@ -47,12 +50,16 @@ struct SetOpRequestTid : public boost::static_visitor<void> {
   }
 };
 
+template <typename ImageCtxT>
 struct C_ReplayCommitted : public Context {
-  ::journal::Journaler *journaler;
-  ::journal::ReplayEntry replay_entry;
+  typedef journal::TypeTraits<ImageCtxT> TypeTraits;
+  typedef typename TypeTraits::Journaler Journaler;
+  typedef typename TypeTraits::ReplayEntry ReplayEntry;
 
-  C_ReplayCommitted(::journal::Journaler *journaler,
-		    ::journal::ReplayEntry &&replay_entry) :
+  Journaler *journaler;
+  ReplayEntry replay_entry;
+
+  C_ReplayCommitted(Journaler *journaler, ReplayEntry &&replay_entry) :
     journaler(journaler), replay_entry(std::move(replay_entry)) {
   }
   virtual void finish(int r) {
@@ -75,8 +82,14 @@ std::ostream &operator<<(std::ostream &os,
   case Journal<I>::STATE_REPLAYING:
     os << "Replaying";
     break;
+  case Journal<I>::STATE_FLUSHING_RESTART:
+    os << "FlushingRestart";
+    break;
   case Journal<I>::STATE_RESTARTING_REPLAY:
     os << "RestartingReplay";
+    break;
+  case Journal<I>::STATE_FLUSHING_REPLAY:
+    os << "FlushingReplay";
     break;
   case Journal<I>::STATE_READY:
     os << "Ready";
@@ -144,8 +157,7 @@ int Journal<I>::create(librados::IoCtx &io_ctx, const std::string &image_id,
     pool_id = data_io_ctx.get_id();
   }
 
-  ::journal::Journaler journaler(io_ctx, image_id, "",
-				 cct->_conf->rbd_journal_commit_age);
+  Journaler journaler(io_ctx, image_id, "", cct->_conf->rbd_journal_commit_age);
 
   int r = journaler.create(order, splay_width, pool_id);
   if (r < 0) {
@@ -166,8 +178,7 @@ int Journal<I>::remove(librados::IoCtx &io_ctx, const std::string &image_id) {
   CephContext *cct = reinterpret_cast<CephContext *>(io_ctx.cct());
   ldout(cct, 5) << __func__ << ": image=" << image_id << dendl;
 
-  ::journal::Journaler journaler(io_ctx, image_id, "",
-				 cct->_conf->rbd_journal_commit_age);
+  Journaler journaler(io_ctx, image_id, "", cct->_conf->rbd_journal_commit_age);
 
   bool journal_exists;
   int r = journaler.exists(&journal_exists);
@@ -202,8 +213,7 @@ int Journal<I>::reset(librados::IoCtx &io_ctx, const std::string &image_id) {
   CephContext *cct = reinterpret_cast<CephContext *>(io_ctx.cct());
   ldout(cct, 5) << __func__ << ": image=" << image_id << dendl;
 
-  ::journal::Journaler journaler(io_ctx, image_id, "",
-				 cct->_conf->rbd_journal_commit_age);
+  Journaler journaler(io_ctx, image_id, "", cct->_conf->rbd_journal_commit_age);
 
   C_SaferCond cond;
   journaler.init(&cond);
@@ -308,7 +318,7 @@ uint64_t Journal<I>::append_io_event(AioCompletion *aio_comp,
   bufferlist bl;
   ::encode(event_entry, bl);
 
-  ::journal::Future future;
+  Future future;
   uint64_t tid;
   {
     Mutex::Locker locker(m_lock);
@@ -442,7 +452,7 @@ void Journal<I>::flush_event(uint64_t tid, Context *on_safe) {
   ldout(cct, 20) << this << " " << __func__ << ": tid=" << tid << ", "
                  << "on_safe=" << on_safe << dendl;
 
-  ::journal::Future future;
+  Future future;
   {
     Mutex::Locker event_locker(m_event_lock);
     future = wait_event(m_lock, tid, on_safe);
@@ -464,8 +474,8 @@ void Journal<I>::wait_event(uint64_t tid, Context *on_safe) {
 }
 
 template <typename I>
-::journal::Future Journal<I>::wait_event(Mutex &lock, uint64_t tid,
-                                         Context *on_safe) {
+typename Journal<I>::Future Journal<I>::wait_event(Mutex &lock, uint64_t tid,
+                                                   Context *on_safe) {
   assert(m_event_lock.is_locked());
   CephContext *cct = m_image_ctx.cct;
 
@@ -474,7 +484,7 @@ template <typename I>
     // journal entry already safe
     ldout(cct, 20) << "journal entry already safe" << dendl;
     m_image_ctx.op_work_queue->queue(on_safe, 0);
-    return ::journal::Future();
+    return Future();
   }
 
   Event &event = it->second;
@@ -492,9 +502,11 @@ void Journal<I>::create_journaler() {
   assert(m_journaler == NULL);
 
   transition_state(STATE_INITIALIZING, 0);
-  m_journaler = new ::journal::Journaler(m_image_ctx.md_ctx, m_image_ctx.id, "",
-                                         m_image_ctx.journal_commit_age);
-  m_journaler->init(new C_InitJournal(this));
+  m_journaler = new Journaler(m_image_ctx.md_ctx, m_image_ctx.id, "",
+                              m_image_ctx.journal_commit_age);
+  m_journaler->init(create_async_context_callback(
+    m_image_ctx, create_context_callback<
+      Journal<I>, &Journal<I>::handle_initialized>(this)));
 }
 
 template <typename I>
@@ -508,7 +520,8 @@ void Journal<I>::destroy_journaler(int r) {
   m_journal_replay = NULL;
 
   transition_state(STATE_CLOSING, r);
-  m_image_ctx.op_work_queue->queue(new C_DestroyJournaler(this), 0);
+  m_image_ctx.op_work_queue->queue(create_context_callback<
+    Journal<I>, &Journal<I>::handle_journal_destroyed>(this), 0);
 }
 
 template <typename I>
@@ -517,13 +530,15 @@ void Journal<I>::recreate_journaler(int r) {
   ldout(cct, 20) << this << " " << __func__ << ": r=" << r << dendl;
 
   assert(m_lock.is_locked());
-  assert(m_state == STATE_REPLAYING);
+  assert(m_state == STATE_FLUSHING_RESTART ||
+         m_state == STATE_FLUSHING_REPLAY);
 
   delete m_journal_replay;
   m_journal_replay = NULL;
 
   transition_state(STATE_RESTARTING_REPLAY, r);
-  m_image_ctx.op_work_queue->queue(new C_DestroyJournaler(this), 0);
+  m_image_ctx.op_work_queue->queue(create_context_callback<
+    Journal<I>, &Journal<I>::handle_journal_destroyed>(this), 0);
 }
 
 template <typename I>
@@ -572,7 +587,7 @@ void Journal<I>::handle_replay_ready() {
   }
 
   while (true) {
-    ::journal::ReplayEntry replay_entry;
+    ReplayEntry replay_entry;
     if (!m_journaler->try_pop_front(&replay_entry)) {
       return;
     }
@@ -580,21 +595,24 @@ void Journal<I>::handle_replay_ready() {
     m_lock.Unlock();
     bufferlist data = replay_entry.get_data();
     bufferlist::iterator it = data.begin();
-    int r = m_journal_replay->process(
-      it, new C_ReplayCommitted(m_journaler, std::move(replay_entry)));
+
+    Context *on_commit = new C_ReplayCommitted<I>(m_journaler,
+                                                  std::move(replay_entry));
+    int r = m_journal_replay->process(it, on_commit);
     m_lock.Lock();
 
     if (r < 0) {
       lderr(cct) << "failed to replay journal entry: " << cpp_strerror(r)
                  << dendl;
+      delete on_commit;
+
       m_journaler->stop_replay();
 
-      if (m_close_pending) {
-        destroy_journaler(r);
-        return;
-      }
-
-      recreate_journaler(r);
+      transition_state(STATE_FLUSHING_RESTART, r);
+      m_journal_replay->flush(create_async_context_callback(
+        m_image_ctx, create_context_callback<
+          Journal<I>, &Journal<I>::handle_flushing_restart>(this)));
+      return;
     }
   }
 }
@@ -611,31 +629,62 @@ void Journal<I>::handle_replay_complete(int r) {
 
     ldout(cct, 20) << this << " " << __func__ << dendl;
     m_journaler->stop_replay();
-
-    if (r == 0) {
-      r = m_journal_replay->flush();
-    }
-
     if (r < 0) {
-      lderr(cct) << this << " " << __func__ << ": r=" << r << dendl;
-      recreate_journaler(r);
+      transition_state(STATE_FLUSHING_RESTART, r);
+      m_journal_replay->flush(create_async_context_callback(
+        m_image_ctx, create_context_callback<
+          Journal<I>, &Journal<I>::handle_flushing_restart>(this)));
       return;
     }
 
-    delete m_journal_replay;
-    m_journal_replay = NULL;
-
-    if (m_close_pending) {
-      destroy_journaler(0);
-      return;
-    }
-
-    m_error_result = 0;
-    m_journaler->start_append(m_image_ctx.journal_object_flush_interval,
-			      m_image_ctx.journal_object_flush_bytes,
-			      m_image_ctx.journal_object_flush_age);
-    transition_state(STATE_READY, 0);
+    transition_state(STATE_FLUSHING_REPLAY, 0);
+    m_journal_replay->flush(create_async_context_callback(
+      m_image_ctx, create_context_callback<
+        Journal<I>, &Journal<I>::handle_flushing_replay>(this)));
   }
+}
+
+template <typename I>
+void Journal<I>::handle_flushing_restart(int r) {
+  CephContext *cct = m_image_ctx.cct;
+  ldout(cct, 20) << this << " " << __func__ << ": r=" << r << dendl;
+
+  Mutex::Locker locker(m_lock);
+  assert(m_state == STATE_FLUSHING_RESTART);
+  if (m_close_pending) {
+    destroy_journaler(r);
+    return;
+  }
+
+  recreate_journaler(r);
+}
+
+template <typename I>
+void Journal<I>::handle_flushing_replay(int r) {
+  CephContext *cct = m_image_ctx.cct;
+  ldout(cct, 20) << this << " " << __func__ << ": r=" << r << dendl;
+
+  Mutex::Locker locker(m_lock);
+  assert(m_state == STATE_FLUSHING_REPLAY);
+  if (m_close_pending) {
+    destroy_journaler(r);
+    return;
+  }
+
+  if (r < 0) {
+    lderr(cct) << this << " " << __func__ << ": r=" << r << dendl;
+    recreate_journaler(r);
+    return;
+  }
+
+  delete m_journal_replay;
+  m_journal_replay = NULL;
+
+  m_error_result = 0;
+  m_journaler->start_append(m_image_ctx.journal_object_flush_interval,
+			    m_image_ctx.journal_object_flush_bytes,
+			    m_image_ctx.journal_object_flush_age);
+  transition_state(STATE_READY, 0);
 }
 
 template <typename I>
@@ -730,25 +779,8 @@ void Journal<I>::stop_recording() {
   transition_state(STATE_STOPPING, 0);
 
   m_journaler->stop_append(util::create_async_context_callback(
-    m_image_ctx, new C_StopRecording(this)));
-}
-
-template <typename I>
-void Journal<I>::block_writes() {
-  assert(m_lock.is_locked());
-  if (!m_blocking_writes) {
-    m_blocking_writes = true;
-    m_image_ctx.aio_work_queue->block_writes();
-  }
-}
-
-template <typename I>
-void Journal<I>::unblock_writes() {
-  assert(m_lock.is_locked());
-  if (m_blocking_writes) {
-    m_blocking_writes = false;
-    m_image_ctx.aio_work_queue->unblock_writes();
-  }
+    m_image_ctx, create_context_callback<
+      Journal<I>, &Journal<I>::handle_recording_stopped>(this)));
 }
 
 template <typename I>
@@ -780,7 +812,9 @@ bool Journal<I>::is_steady_state() const {
   case STATE_UNINITIALIZED:
   case STATE_INITIALIZING:
   case STATE_REPLAYING:
+  case STATE_FLUSHING_RESTART:
   case STATE_RESTARTING_REPLAY:
+  case STATE_FLUSHING_REPLAY:
   case STATE_STOPPING:
   case STATE_CLOSING:
     break;

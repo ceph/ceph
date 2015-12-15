@@ -20,6 +20,7 @@
 class Context;
 namespace journal {
 class Journaler;
+class ReplayEntry;
 }
 
 namespace librbd {
@@ -29,9 +30,19 @@ class AioObjectRequest;
 class ImageCtx;
 
 namespace journal {
+
 class EventEntry;
 template <typename> class Replay;
-}
+
+template <typename ImageCtxT>
+struct TypeTraits {
+  typedef ::journal::Journaler Journaler;
+  typedef ::journal::Future Future;
+  typedef ::journal::ReplayEntry ReplayEntry;
+};
+
+} // namespace journal
+
 
 template <typename ImageCtxT = ImageCtx>
 class Journal {
@@ -42,21 +53,25 @@ public:
    * <start>
    *    |
    *    v
-   * UNINITIALIZED ---> INITIALIZING ---> REPLAYING ------> READY
-   *    |                 *  .  ^             *  .            |
-   *    |                 *  .  |             *  .            |
-   *    |                 *  .  |    (error)  *  . . . .      |
-   *    |                 *  .  |             *        .      |
-   *    |                 *  .  |             v        .      v
-   *    |                 *  .  |         RESTARTING   .    STOPPING
-   *    |                 *  .  |             |        .      |
-   *    |                 *  .  |             |        .      |
-   *    |       * * * * * *  .  \-------------/        .      |
-   *    |       * (error)    .                         .      |
-   *    |       *            .   . . . . . . . . . . . .      |
-   *    |       *            .   .                            |
-   *    |       v            v   v                            |
-   *    |     CLOSED <----- CLOSING <-------------------------/
+   * UNINITIALIZED ---> INITIALIZING ---> REPLAYING ------> FLUSHING ---> READY
+   *    |                 *  .  ^             *  .              *           |
+   *    |                 *  .  |             *  .              *           |
+   *    |                 *  .  |    (error)  *  . . . . . . .  *           |
+   *    |                 *  .  |             *              .  *           |
+   *    |                 *  .  |             v              .  *           |
+   *    |                 *  .  |         FLUSHING_RESTART   .  *           |
+   *    |                 *  .  |             |              .  *           |
+   *    |                 *  .  |             |              .  *           |
+   *    |                 *  .  |             v              .  *           v
+   *    |                 *  .  |         RESTARTING  < * * * * *       STOPPING
+   *    |                 *  .  |             |              .              |
+   *    |                 *  .  |             |              .              |
+   *    |       * * * * * *  .  \-------------/              .              |
+   *    |       * (error)    .                               .              |
+   *    |       *            .   . . . . . . . . . . . . . . .              |
+   *    |       *            .   .                                          |
+   *    |       v            v   v                                          |
+   *    |     CLOSED <----- CLOSING <---------------------------------------/
    *    |       |
    *    |       v
    *    \---> <finish>
@@ -67,7 +82,9 @@ public:
     STATE_UNINITIALIZED,
     STATE_INITIALIZING,
     STATE_REPLAYING,
+    STATE_FLUSHING_RESTART,
     STATE_RESTARTING_REPLAY,
+    STATE_FLUSHING_REPLAY,
     STATE_READY,
     STATE_STOPPING,
     STATE_CLOSING,
@@ -110,11 +127,19 @@ public:
   void wait_event(uint64_t tid, Context *on_safe);
 
 private:
+  ImageCtxT &m_image_ctx;
+
+  // mock unit testing support
+  typedef journal::TypeTraits<ImageCtxT> TypeTraits;
+  typedef typename TypeTraits::Journaler Journaler;
+  typedef typename TypeTraits::Future Future;
+  typedef typename TypeTraits::ReplayEntry ReplayEntry;
+
   typedef std::list<Context *> Contexts;
   typedef interval_set<uint64_t> ExtentInterval;
 
   struct Event {
-    ::journal::Future future;
+    Future future;
     AioCompletion *aio_comp;
     AioObjectRequests aio_object_requests;
     Contexts on_safe_contexts;
@@ -124,7 +149,7 @@ private:
 
     Event() : aio_comp(NULL) {
     }
-    Event(const ::journal::Future &_future, AioCompletion *_aio_comp,
+    Event(const Future &_future, AioCompletion *_aio_comp,
           const AioObjectRequests &_requests, uint64_t offset, size_t length)
       : future(_future), aio_comp(_aio_comp), aio_object_requests(_requests),
         safe(false), ret_val(0) {
@@ -133,40 +158,8 @@ private:
       }
     }
   };
+
   typedef ceph::unordered_map<uint64_t, Event> Events;
-
-  struct C_InitJournal : public Context {
-    Journal *journal;
-
-    C_InitJournal(Journal *_journal) : journal(_journal) {
-    }
-
-    virtual void finish(int r) {
-      journal->handle_initialized(r);
-    }
-  };
-
-  struct C_StopRecording : public Context {
-    Journal *journal;
-
-    C_StopRecording(Journal *_journal) : journal(_journal) {
-    }
-
-    virtual void finish(int r) {
-      journal->handle_recording_stopped(r);
-    }
-  };
-
-  struct C_DestroyJournaler : public Context {
-    Journal *journal;
-
-    C_DestroyJournaler(Journal *_journal) : journal(_journal) {
-    }
-
-    virtual void finish(int r) {
-      journal->handle_journal_destroyed(r);
-    }
-  };
 
   struct C_EventSafe : public Context {
     Journal *journal;
@@ -201,9 +194,7 @@ private:
     }
   };
 
-  ImageCtxT &m_image_ctx;
-
-  ::journal::Journaler *m_journaler;
+  Journaler *m_journaler;
   mutable Mutex m_lock;
   State m_state;
 
@@ -221,7 +212,7 @@ private:
 
   journal::Replay<ImageCtxT> *m_journal_replay;
 
-  ::journal::Future wait_event(Mutex &lock, uint64_t tid, Context *on_safe);
+  Future wait_event(Mutex &lock, uint64_t tid, Context *on_safe);
 
   void create_journaler();
   void destroy_journaler(int r);
@@ -234,6 +225,9 @@ private:
   void handle_replay_ready();
   void handle_replay_complete(int r);
 
+  void handle_flushing_restart(int r);
+  void handle_flushing_replay(int r);
+
   void handle_recording_stopped(int r);
 
   void handle_journal_destroyed(int r);
@@ -241,9 +235,6 @@ private:
   void handle_event_safe(int r, uint64_t tid);
 
   void stop_recording();
-
-  void block_writes();
-  void unblock_writes();
 
   void transition_state(State state, int r);
 
