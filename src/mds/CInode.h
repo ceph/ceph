@@ -171,6 +171,7 @@ public:
   static const int PIN_EXPORTINGCAPS =    22;
   static const int PIN_DIRTYPARENT =      23;
   static const int PIN_DIRWAITER =        24;
+  static const int PIN_SCRUBQUEUE =       25;
 
   const char *pin_name(int p) const {
     switch (p) {
@@ -195,6 +196,7 @@ public:
     case PIN_DIRTYRSTAT: return "dirtyrstat";
     case PIN_DIRTYPARENT: return "dirtyparent";
     case PIN_DIRWAITER: return "dirwaiter";
+    case PIN_SCRUBQUEUE: return "scrubqueue";
     default: return generic_pin_name(p);
     }
   }
@@ -259,15 +261,22 @@ public:
 
   class scrub_info_t : public scrub_stamp_info_t {
   public:
+    CDentry *scrub_parent;
+    Context *on_finish;
+
     bool last_scrub_dirty; /// are our stamps dirty with respect to disk state?
     bool scrub_in_progress; /// are we currently scrubbing?
+    bool children_scrubbed;
+
     /// my own (temporary) stamps and versions for each dirfrag we have
     std::map<frag_t, scrub_stamp_info_t> dirfrag_stamps;
 
     ScrubHeaderRefConst header;
 
-    scrub_info_t() : scrub_stamp_info_t(), last_scrub_dirty(false),
-        scrub_in_progress(false) {}
+    scrub_info_t() : scrub_stamp_info_t(),
+	scrub_parent(NULL), on_finish(NULL),
+	last_scrub_dirty(false), scrub_in_progress(false),
+	children_scrubbed(false) {}
   };
 
   const scrub_info_t *scrub_info() const{
@@ -283,7 +292,8 @@ public:
    * @param scrub_version What version are we scrubbing at (usually, parent
    * directory's get_projected_version())
    */
-  void scrub_initialize(const ScrubHeaderRefConst& header);
+  void scrub_initialize(CDentry *scrub_parent,
+			const ScrubHeaderRefConst& header, Context *f);
   /**
    * Get the next dirfrag to scrub. Gives you a frag_t in output param which
    * you must convert to a CDir (and possibly load off disk).
@@ -315,6 +325,16 @@ public:
    * be complete()ed.
    */
   void scrub_finished(Context **c);
+  /**
+   * Report to the CInode that alldirfrags it owns have been scrubbed.
+   */
+  void scrub_children_finished() {
+    scrub_infop->children_scrubbed = true;
+  }
+  void scrub_set_finisher(Context *c) {
+    assert(!scrub_infop->on_finish);
+    scrub_infop->on_finish = c;
+  }
 
 private:
   /**
@@ -600,6 +620,7 @@ public:
   elist<CInode*>::item item_dirty_dirfrag_dir;
   elist<CInode*>::item item_dirty_dirfrag_nest;
   elist<CInode*>::item item_dirty_dirfrag_dirfragtree;
+  elist<CInode*>::item item_scrub;
 
 public:
   int auth_pin_freeze_allowance;
