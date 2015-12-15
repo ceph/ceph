@@ -7,11 +7,12 @@
 #include "include/int_types.h"
 #include "include/buffer_fwd.h"
 #include "include/rbd/librbd.hpp"
-#include "common/Cond.h"
 #include "common/Mutex.h"
 #include "librbd/journal/Entries.h"
 #include <boost/variant.hpp>
 #include <map>
+
+class Context;
 
 namespace librbd {
 
@@ -30,7 +31,7 @@ public:
   ~Replay();
 
   int process(bufferlist::iterator it, Context *on_safe = NULL);
-  int flush();
+  void flush(Context *on_finish);
 
 private:
   typedef std::map<AioCompletion*,Context*> AioCompletions;
@@ -52,9 +53,9 @@ private:
   ImageCtxT &m_image_ctx;
 
   Mutex m_lock;
-  Cond m_cond;
 
   AioCompletions m_aio_completions;
+  Context *m_flush_ctx;
   int m_ret_val;
 
   Replay(ImageCtxT &image_ctx);

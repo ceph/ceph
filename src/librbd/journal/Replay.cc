@@ -16,7 +16,8 @@ namespace journal {
 
 template <typename I>
 Replay<I>::Replay(I &image_ctx)
-  : m_image_ctx(image_ctx), m_lock("Replay<I>::m_lock"), m_ret_val(0) {
+  : m_image_ctx(image_ctx), m_lock("Replay<I>::m_lock"), m_flush_ctx(nullptr),
+    m_ret_val(0) {
 }
 
 template <typename I>
@@ -43,15 +44,20 @@ int Replay<I>::process(bufferlist::iterator it, Context *on_safe) {
 }
 
 template <typename I>
-int Replay<I>::flush() {
+void Replay<I>::flush(Context *on_finish) {
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 20) << this << " " << __func__ << dendl;
 
-  Mutex::Locker locker(m_lock);
-  while (!m_aio_completions.empty()) {
-    m_cond.Wait(m_lock);
+  {
+    Mutex::Locker locker(m_lock);
+    assert(m_flush_ctx == nullptr);
+    m_flush_ctx = on_finish;
+
+    if (!m_aio_completions.empty()) {
+      return;
+    }
   }
-  return m_ret_val;
+  on_finish->complete(m_ret_val);
 }
 
 template <typename I>
@@ -179,27 +185,36 @@ AioCompletion *Replay<I>::create_aio_completion(Context *on_safe) {
 
 template <typename I>
 void Replay<I>::handle_aio_completion(AioCompletion *aio_comp) {
-  Mutex::Locker locker(m_lock);
+  Context *on_finish = nullptr;
+  {
+    Mutex::Locker locker(m_lock);
 
-  AioCompletions::iterator it = m_aio_completions.find(aio_comp);
-  assert(it != m_aio_completions.end());
+    AioCompletions::iterator it = m_aio_completions.find(aio_comp);
+    assert(it != m_aio_completions.end());
 
-  int r = aio_comp->get_return_value();
+    int r = aio_comp->get_return_value();
 
-  CephContext *cct = m_image_ctx.cct;
-  ldout(cct, 20) << this << " " << __func__ << ": aio_comp=" << aio_comp << ", "
-                 << "r=" << r << dendl;
+    CephContext *cct = m_image_ctx.cct;
+    ldout(cct, 20) << this << " " << __func__ << ": "
+                   << "aio_comp=" << aio_comp << ", "
+                   << "r=" << r << dendl;
 
-  Context *on_safe = it->second;
-  on_safe->complete(r);
+    Context *on_safe = it->second;
+    on_safe->complete(r);
 
-  if (r < 0 && m_ret_val == 0) {
-    m_ret_val = r;
+    if (r < 0 && m_ret_val == 0) {
+      m_ret_val = r;
+    }
+
+    m_aio_completions.erase(it);
+    if (m_aio_completions.empty()) {
+      on_finish = m_flush_ctx;
+    }
   }
 
-  m_aio_completions.erase(it);
-  if (m_aio_completions.empty())
-    m_cond.Signal();
+  if (on_finish != nullptr) {
+    on_finish->complete(m_ret_val);
+  }
 }
 
 template <typename I>
