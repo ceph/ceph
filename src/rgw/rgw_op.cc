@@ -2107,53 +2107,6 @@ void RGWPutObj::pre_exec()
   rgw_bucket_object_pre_exec(s);
 }
 
-static int put_data_and_throttle(RGWPutObjProcessor *processor, bufferlist& data, off_t ofs,
-                                 MD5 *hash, bool need_to_wait)
-{
-  bool again;
-
-  do {
-    void *handle;
-
-    int ret = processor->handle_data(data, ofs, hash, &handle, &again);
-    if (ret < 0)
-      return ret;
-
-    ret = processor->throttle_data(handle, need_to_wait);
-    if (ret < 0)
-      return ret;
-
-    need_to_wait = false; /* the need to wait only applies to the first iteration */
-  } while (again);
-
-  return 0;
-}
-
-static int get_system_versioning_params(req_state *s, uint64_t *olh_epoch, string *version_id)
-{
-  if (!s->system_request) {
-    return 0;
-  }
-
-  if (olh_epoch) {
-    string epoch_str = s->info.args.get(RGW_SYS_PARAM_PREFIX "versioned-epoch");
-    if (!epoch_str.empty()) {
-      string err;
-      *olh_epoch = strict_strtol(epoch_str.c_str(), 10, &err);
-      if (!err.empty()) {
-        ldout(s->cct, 0) << "failed to parse versioned-epoch param" << dendl;
-        return -EINVAL;
-      }
-    }
-  }
-
-  if (version_id) {
-    *version_id = s->info.args.get(RGW_SYS_PARAM_PREFIX "version-id");
-  }
-
-  return 0;
-}
-
 static void encode_delete_at_attr(time_t delete_at, map<string, bufferlist>& attrs)
 {
   if (delete_at == 0) {

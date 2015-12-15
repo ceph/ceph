@@ -1461,15 +1461,18 @@ class RGWWriteRequest : public RGWLibContinuedReq,
 public:
   const std::string& bucket_name;
   const std::string& obj_name;
+  RGWPutObjProcessor *processor;
   buffer::list bl;
   off_t last_off;
   off_t next_off;
   size_t bytes_written;
+  bool multipart;
 
   RGWWriteRequest(CephContext* _cct, RGWUserInfo *_user,
 		  const std::string& _bname, const std::string& _oname)
     : RGWLibContinuedReq(_cct, _user), bucket_name(_bname), obj_name(_oname),
-      last_off(0), next_off(0), bytes_written(0) {
+      processor(nullptr), last_off(0), next_off(0), bytes_written(0),
+      multipart(false) {
     magic = 81;
     op = this;
   }
@@ -1545,9 +1548,7 @@ public:
     bl.claim(_bl);
   }
 
-  virtual int exec_start() {
-    return 0;
-  }
+  virtual int exec_start();
 
   virtual int exec_continue() {
     if (next_off != last_off)
