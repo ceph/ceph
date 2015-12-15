@@ -165,6 +165,8 @@ RGWLibContinuedReq(CephContext* _cct, RGWUserInfo* _user)
       io_ctx.get_env().set("HTTP_HOST", "");
     }
 
+  inline RGWRados* get_store() { return store; }
+
   virtual int execute() final { abort(); }
   virtual int exec_start() = 0;
   virtual int exec_continue() = 0;
