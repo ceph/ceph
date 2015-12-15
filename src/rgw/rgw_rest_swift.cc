@@ -558,12 +558,45 @@ int RGWPutObj_ObjStore_SWIFT::get_params()
 
   policy.create_default(s->user.user_id, s->user.display_name);
 
-  obj_manifest = s->info.env->get("HTTP_X_OBJECT_MANIFEST");
-
   int r = get_delete_at_param(s, &delete_at);
   if (r < 0) {
     ldout(s->cct, 5) << "ERROR: failed to get Delete-At param" << dendl;
     return r;
+  }
+
+  dlo_manifest = s->info.env->get("HTTP_X_OBJECT_MANIFEST");
+  bool exists;
+  string multipart_manifest = s->info.args.get("multipart-manifest", &exists);
+  if (exists) {
+    if (multipart_manifest != "put") {
+      ldout(s->cct, 5) << "invalid multipart-manifest http param: " << multipart_manifest << dendl;
+      return -EINVAL;
+    }
+
+#define MAX_SLO_ENTRY_SIZE (1024 + 128) // 1024 - max obj name, 128 - enough extra for other info
+    uint64_t max_len = s->cct->_conf->rgw_max_slo_entries * MAX_SLO_ENTRY_SIZE;
+    
+    slo_info = new RGWSLOInfo;
+    
+    int r = rgw_rest_get_json_input_keep_data(s->cct, s, slo_info->entries, max_len, &slo_info->raw_data, &slo_info->raw_data_len);
+    if (r < 0) {
+      ldout(s->cct, 5) << "failed to read input for slo r=" << r << dendl;
+      return r;
+    }
+
+    if ((int64_t)slo_info->entries.size() > s->cct->_conf->rgw_max_slo_entries) {
+      ldout(s->cct, 5) << "too many entries in slo request: " << slo_info->entries.size() << dendl;
+      return -EINVAL;
+    }
+
+    uint64_t total_size = 0;
+    for (vector<rgw_slo_entry>::iterator iter = slo_info->entries.begin(); iter != slo_info->entries.end(); ++iter) {
+      total_size += iter->size_bytes;
+      ldout(s->cct, 20) << "slo_part: " << iter->path << " size=" << iter->size_bytes << dendl;
+    }
+    slo_info->total_size = total_size;
+
+    ofs = slo_info->raw_data_len;
   }
 
   return RGWPutObj_ObjStore::get_params();
@@ -679,6 +712,8 @@ int RGWPutMetadataObject_ObjStore_SWIFT::get_params()
   }
 
   placement_rule = s->info.env->get("HTTP_X_STORAGE_POLICY", "");
+  dlo_manifest = s->info.env->get("HTTP_X_OBJECT_MANIFEST");
+
   return 0;
 }
 
@@ -696,16 +731,107 @@ void RGWPutMetadataObject_ObjStore_SWIFT::send_response()
   rgw_flush_formatter_and_reset(s, s->formatter);
 }
 
+static void bulkdelete_respond(const unsigned num_deleted,
+                               const unsigned int num_unfound,
+                               const std::list<RGWBulkDelete::fail_desc_t>& failures,
+                               const int prot_flags,                  /* in  */
+                               ceph::Formatter& formatter)            /* out */
+{
+  formatter.open_object_section("delete");
+
+  string resp_status;
+  string resp_body;
+
+  if (!failures.empty()) {
+    int reason = ERR_INVALID_REQUEST;
+    for (const auto fail_desc : failures) {
+      if (-ENOENT != fail_desc.err && -EACCES != fail_desc.err) {
+        reason = fail_desc.err;
+      }
+    }
+
+    rgw_err err;
+    set_req_state_err(err, reason, prot_flags);
+    dump_errno(err, resp_status);
+  } else if (0 == num_deleted && 0 == num_unfound) {
+    /* 400 Bad Request */
+    dump_errno(400, resp_status);
+    resp_body = "Invalid bulk delete.";
+  } else {
+    /* 200 OK */
+    dump_errno(200, resp_status);
+  }
+
+  formatter.dump_int("Number Deleted", num_deleted);
+  formatter.dump_int("Number Not Found", num_unfound);
+  formatter.dump_string("Response Body", resp_body);
+  formatter.dump_string("Response Status", resp_status);
+  formatter.open_array_section("Errors");
+  for (const auto fail_desc : failures) {
+    formatter.open_array_section("object");
+
+    stringstream ss_name;
+    ss_name << fail_desc.path;
+    formatter.dump_string("Name", ss_name.str());
+
+    rgw_err err;
+    set_req_state_err(err, fail_desc.err, prot_flags);
+    string status;
+    dump_errno(err, status);
+    formatter.dump_string("Status", status);
+    formatter.close_section();
+  }
+  formatter.close_section();
+
+  formatter.close_section();
+}
+
+int RGWDeleteObj_ObjStore_SWIFT::get_params()
+{
+  const string& mm = s->info.args.get("multipart-manifest");
+  multipart_delete = (mm.compare("delete") == 0);
+
+  return RGWDeleteObj_ObjStore::get_params();
+}
+
 void RGWDeleteObj_ObjStore_SWIFT::send_response()
 {
   int r = ret;
-  if (!r)
+
+  if (multipart_delete) {
+    r = 0;
+  } else if(!r) {
     r = STATUS_NO_CONTENT;
+  }
 
   set_req_state_err(s, r);
   dump_errno(s);
   end_header(s, this);
+
+  if (multipart_delete) {
+    if (deleter) {
+      bulkdelete_respond(deleter->get_num_deleted(),
+                         deleter->get_num_unfound(),
+                         deleter->get_failures(),
+                         s->prot_flags,
+                         *s->formatter);
+    } else if (-ENOENT == ret) {
+      bulkdelete_respond(0, 1, {}, s->prot_flags, *s->formatter);
+    } else {
+      RGWBulkDelete::acct_path_t path;
+      path.bucket_name = s->bucket_name_str;
+      path.obj_key = s->object;
+
+      RGWBulkDelete::fail_desc_t fail_desc;
+      fail_desc.err = ret;
+      fail_desc.path = path;
+
+      bulkdelete_respond(0, 0, { fail_desc }, s->prot_flags, *s->formatter);
+    }
+  }
+
   rgw_flush_formatter_and_reset(s, s->formatter);
+
 }
 
 static void get_contype_from_attrs(map<string, bufferlist>& attrs,
@@ -885,6 +1011,9 @@ int RGWGetObj_ObjStore_SWIFT::send_response_data(bufferlist& bl, off_t bl_ofs, o
   dump_content_length(s, total_len);
   dump_last_modified(s, lastmod);
   s->cio->print("X-Timestamp: %lld.00000\r\n", (long long)lastmod);
+  if (is_slo) {
+    s->cio->print("X-Static-Large-Object: True\r\n");
+  }
 
   if (!ret) {
     map<string, bufferlist>::iterator iter = attrs.find(RGW_ATTR_ETAG);
@@ -936,6 +1065,62 @@ void RGWOptionsCORS_ObjStore_SWIFT::send_response()
   end_header(s, NULL);
 }
 
+int RGWBulkDelete_ObjStore_SWIFT::get_data(list<RGWBulkDelete::acct_path_t>& items,
+                                           bool * const is_truncated)
+{
+  const size_t MAX_LINE_SIZE = 2048;
+
+  RGWClientIOStreamBuf ciosb(*s->cio, (size_t)s->cct->_conf->rgw_max_chunk_size);
+  istream cioin(&ciosb);
+
+  char buf[MAX_LINE_SIZE];
+  while (cioin.getline(buf, sizeof(buf))) {
+    string path_str(buf);
+
+    ldout(s->cct, 20) << "extracted Bulk Delete entry: " << path_str << dendl;
+
+    RGWBulkDelete::acct_path_t path;
+
+    const size_t sep_pos = path_str.find('/');
+    if (string::npos == sep_pos) {
+      url_decode(path_str, path.bucket_name);
+    } else {
+      string bucket_name;
+      url_decode(path_str.substr(0, sep_pos), bucket_name);
+
+      string obj_name;
+      url_decode(path_str.substr(sep_pos + 1), obj_name);
+
+      path.bucket_name = bucket_name;
+      path.obj_key = obj_name;
+    }
+
+    items.push_back(path);
+
+    if (items.size() == MAX_CHUNK_ENTRIES) {
+      *is_truncated = true;
+      return 0;
+    }
+  }
+
+  *is_truncated = false;
+  return 0;
+}
+
+void RGWBulkDelete_ObjStore_SWIFT::send_response()
+{
+  set_req_state_err(s, ret);
+  dump_errno(s);
+  end_header(s, NULL);
+
+  bulkdelete_respond(deleter->get_num_deleted(),
+                     deleter->get_num_unfound(),
+                     deleter->get_failures(),
+                     s->prot_flags,
+                     *s->formatter);
+  rgw_flush_formatter_and_reset(s, s->formatter);
+}
+
 RGWOp *RGWHandler_ObjStore_Service_SWIFT::op_get()
 {
   return new RGWListBuckets_ObjStore_SWIFT;
@@ -948,7 +1133,18 @@ RGWOp *RGWHandler_ObjStore_Service_SWIFT::op_head()
 
 RGWOp *RGWHandler_ObjStore_Service_SWIFT::op_post()
 {
+  if (s->info.args.exists("bulk-delete")) {
+    return new RGWBulkDelete_ObjStore_SWIFT;
+  }
   return new RGWPutMetadataAccount_ObjStore_SWIFT;
+}
+
+RGWOp *RGWHandler_ObjStore_Service_SWIFT::op_delete()
+{
+  if (s->info.args.exists("bulk-delete")) {
+    return new RGWBulkDelete_ObjStore_SWIFT;
+  }
+  return NULL;
 }
 
 RGWOp *RGWHandler_ObjStore_Bucket_SWIFT::get_obj_op(bool get_data)
