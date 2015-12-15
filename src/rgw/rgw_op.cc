@@ -1020,7 +1020,8 @@ int RGWGetObj::handle_slo_manifest(bufferlist& bl)
         RGWBucketInfo bucket_info;
         map<string, bufferlist> bucket_attrs;
         RGWObjectCtx obj_ctx(store);
-        int r = store->get_bucket_info(obj_ctx, bucket_name, bucket_info, NULL, &bucket_attrs);
+        int r = store->get_bucket_info(obj_ctx, s->user.user_id.tenant,
+              bucket_name, bucket_info, NULL, &bucket_attrs);
         if (r < 0) {
           ldout(s->cct, 0) << "could not get bucket info for bucket=" << bucket_name << dendl;
           return r;
@@ -2729,9 +2730,9 @@ int RGWDeleteObj::handle_slo_manifest(bufferlist& bl)
     items.push_back(path);
   }
 
-  /* Request removal of the manifet object itself. */
+  /* Request removal of the manifest object itself. */
   RGWBulkDelete::acct_path_t path;
-  path.bucket_name = s->bucket_name_str;
+  path.bucket_name = s->bucket_name;
   path.obj_key = s->object;
   items.push_back(path);
 
@@ -4125,7 +4126,8 @@ bool RGWBulkDelete::Deleter::delete_single(const acct_path_t& path)
 
   RGWBucketInfo binfo;
   map<string, bufferlist> battrs;
-  ret = store->get_bucket_info(obj_ctx, path.bucket_name, binfo, NULL, &battrs);
+  ret = store->get_bucket_info(obj_ctx, s->user.user_id.tenant,
+      path.bucket_name, binfo, NULL, &battrs);
   if (ret < 0) {
     goto binfo_fail;
   }
@@ -4162,7 +4164,7 @@ bool RGWBulkDelete::Deleter::delete_single(const acct_path_t& path)
 
     ret = store->delete_bucket(binfo.bucket, ot);
     if (0 == ret) {
-      ret = rgw_unlink_bucket(store, binfo.owner, binfo.bucket.name, false);
+      ret = rgw_unlink_bucket(store, binfo.owner, binfo.bucket.tenant, binfo.bucket.name, false);
       if (ret < 0) {
         ldout(s->cct, 0) << "WARNING: failed to unlink bucket: ret=" << ret << dendl;
       }
