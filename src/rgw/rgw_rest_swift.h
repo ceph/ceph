@@ -125,6 +125,7 @@ public:
   RGWDeleteObj_ObjStore_SWIFT() {}
   ~RGWDeleteObj_ObjStore_SWIFT() {}
 
+  int get_params();
   bool need_object_expiration() { return true; }
   void send_response();
 };
@@ -167,6 +168,16 @@ public:
   void send_response();
 };
 
+class RGWBulkDelete_ObjStore_SWIFT : public RGWBulkDelete_ObjStore {
+public:
+  RGWBulkDelete_ObjStore_SWIFT() {}
+  ~RGWBulkDelete_ObjStore_SWIFT() {}
+
+  int get_data(std::list<RGWBulkDelete::acct_path_t>& items,
+               bool * is_truncated);
+  void send_response();
+};
+
 class RGWHandler_ObjStore_SWIFT : public RGWHandler_ObjStore {
   friend class RGWRESTMgr_SWIFT;
 protected:
@@ -193,6 +204,7 @@ protected:
   RGWOp *op_get();
   RGWOp *op_head();
   RGWOp *op_post();
+  RGWOp *op_delete();
 public:
   RGWHandler_ObjStore_Service_SWIFT() {}
   virtual ~RGWHandler_ObjStore_Service_SWIFT() {}

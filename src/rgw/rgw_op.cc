@@ -659,7 +659,11 @@ bool RGWOp::generate_cors_headers(string& origin, string& method, string& header
   return true;
 }
 
-int RGWGetObj::read_user_manifest_part(rgw_bucket& bucket, RGWObjEnt& ent, RGWAccessControlPolicy *bucket_policy, off_t start_ofs, off_t end_ofs)
+int RGWGetObj::read_user_manifest_part(rgw_bucket& bucket,
+                                       const RGWObjEnt& ent,
+                                       RGWAccessControlPolicy * const bucket_policy,
+                                       const off_t start_ofs,
+                                       const off_t end_ofs)
 {
   ldout(s->cct, 20) << "user manifest obj=" << ent.key.name << "[" << ent.key.instance << "]" << dendl;
 
@@ -683,6 +687,7 @@ int RGWGetObj::read_user_manifest_part(rgw_bucket& bucket, RGWObjEnt& ent, RGWAc
   RGWRados::Object op_target(store, s->bucket_info, obj_ctx, part);
   RGWRados::Object::Read read_op(&op_target);
 
+  read_op.conds.if_match = ent.etag.c_str();
   read_op.params.attrs = &attrs;
   read_op.params.obj_size = &obj_size;
   read_op.params.perr = &s->err;
@@ -714,7 +719,6 @@ int RGWGetObj::read_user_manifest_part(rgw_bucket& bucket, RGWObjEnt& ent, RGWAc
 
     off_t len = bl.length();
     cur_ofs += len;
-    ofs += len;
     ret = 0;
     perfcounter->tinc(l_rgw_get_lat,
                       (ceph_clock_now(s->cct) - start_time));
@@ -726,14 +730,25 @@ int RGWGetObj::read_user_manifest_part(rgw_bucket& bucket, RGWObjEnt& ent, RGWAc
   return 0;
 }
 
-static int iterate_user_manifest_parts(CephContext *cct, RGWRados *store, off_t ofs, off_t end,
-                                       rgw_bucket& bucket, string& obj_prefix, RGWAccessControlPolicy *bucket_policy,
-                                       uint64_t *ptotal_len,
-                                       int (*cb)(rgw_bucket& bucket, RGWObjEnt& ent, RGWAccessControlPolicy *bucket_policy,
-                                                 off_t start_ofs, off_t end_ofs, void *param), void *cb_param)
+static int iterate_user_manifest_parts(CephContext * const cct,
+                                       RGWRados * const store,
+                                       const off_t ofs,
+                                       const off_t end,
+                                       rgw_bucket& bucket,
+                                       const string& obj_prefix,
+                                       RGWAccessControlPolicy * const bucket_policy,
+                                       uint64_t * const ptotal_len,
+                                       uint64_t * const pobj_size,
+                                       int (*cb)(rgw_bucket& bucket,
+                                                 const RGWObjEnt& ent,
+                                                 RGWAccessControlPolicy * const bucket_policy,
+                                                 off_t start_ofs,
+                                                 off_t end_ofs,
+                                                 void *param),
+                                       void * const cb_param)
 {
   uint64_t obj_ofs = 0, len_count = 0;
-  bool found_start = false, found_end = false;
+  bool found_start = false, found_end = false, handled_end = false;
   string delim;
   bool is_truncated;
   vector<RGWObjEnt> objs;
@@ -754,7 +769,7 @@ static int iterate_user_manifest_parts(CephContext *cct, RGWRados *store, off_t 
 
     vector<RGWObjEnt>::iterator viter;
 
-    for (viter = objs.begin(); viter != objs.end() && !found_end; ++viter) {
+    for (viter = objs.begin(); viter != objs.end(); ++viter) {
       RGWObjEnt& ent = *viter;
       uint64_t cur_total_len = obj_ofs;
       uint64_t start_ofs = 0, end_ofs = ent.size;
@@ -774,28 +789,119 @@ static int iterate_user_manifest_parts(CephContext *cct, RGWRados *store, off_t 
       perfcounter->tinc(l_rgw_get_lat,
                        (ceph_clock_now(cct) - start_time));
 
-      if (found_start) {
+      if (found_start && !handled_end) {
         len_count += end_ofs - start_ofs;
 
         if (cb) {
           r = cb(bucket, ent, bucket_policy, start_ofs, end_ofs, cb_param);
-          if (r < 0)
+          if (r < 0) {
             return r;
+          }
         }
       }
 
+      handled_end = found_end;
       start_time = ceph_clock_now(cct);
     }
-  } while (is_truncated && !found_end);
+  } while (is_truncated);
 
-  if (ptotal_len)
+  if (ptotal_len) {
     *ptotal_len = len_count;
+  }
+  if (pobj_size) {
+    *pobj_size = obj_ofs;
+  }
 
   return 0;
 }
 
-static int get_obj_user_manifest_iterate_cb(rgw_bucket& bucket, RGWObjEnt& ent, RGWAccessControlPolicy *bucket_policy, off_t start_ofs, off_t end_ofs,
-                                       void *param)
+struct rgw_slo_part {
+  RGWAccessControlPolicy *bucket_policy;
+  rgw_bucket bucket;
+  string obj_name;
+  uint64_t size;
+  string etag;
+
+  rgw_slo_part() : bucket_policy(NULL), size(0) {}
+};
+
+static int iterate_slo_parts(CephContext *cct,
+                             RGWRados *store,
+                             off_t ofs,
+                             off_t end,
+                             map<uint64_t, rgw_slo_part>& slo_parts,
+                             int (*cb)(rgw_bucket& bucket,
+                                       const RGWObjEnt& ent,
+                                       RGWAccessControlPolicy *bucket_policy,
+                                       off_t start_ofs,
+                                       off_t end_ofs,
+                                       void *param),
+                             void *cb_param)
+{
+  bool found_start = false, found_end = false;
+  string delim;
+  vector<RGWObjEnt> objs;
+
+  if (slo_parts.empty()) {
+    return 0;
+  }
+
+
+  utime_t start_time = ceph_clock_now(cct);
+
+  map<uint64_t, rgw_slo_part>::iterator iter = slo_parts.upper_bound(ofs);
+  if (iter != slo_parts.begin()) {
+    --iter;
+  }
+
+  uint64_t obj_ofs = iter->first;
+
+  for (; iter != slo_parts.end() && !found_end; ++iter) {
+    rgw_slo_part& part = iter->second;
+    RGWObjEnt ent;
+
+    ent.key.name = part.obj_name;
+    ent.size = part.size;
+    ent.etag = part.etag;
+
+    uint64_t cur_total_len = obj_ofs;
+    uint64_t start_ofs = 0, end_ofs = ent.size;
+
+    if (!found_start && cur_total_len + ent.size > (uint64_t)ofs) {
+      start_ofs = ofs - obj_ofs;
+      found_start = true;
+    }
+
+    obj_ofs += ent.size;
+
+    if (!found_end && obj_ofs > (uint64_t)end) {
+      end_ofs = end - cur_total_len + 1;
+      found_end = true;
+    }
+
+    perfcounter->tinc(l_rgw_get_lat,
+                      (ceph_clock_now(cct) - start_time));
+
+    if (found_start) {
+      if (cb) {
+        int r = cb(part.bucket, ent, part.bucket_policy, start_ofs, end_ofs, cb_param);
+        if (r < 0)
+          return r;
+      }
+    }
+
+    start_time = ceph_clock_now(cct);
+  }
+
+  return 0;
+}
+
+static int get_obj_user_manifest_iterate_cb(rgw_bucket& bucket,
+                                            const RGWObjEnt& ent,
+                                            RGWAccessControlPolicy * const bucket_policy,
+                                            const off_t start_ofs,
+                                            const off_t end_ofs,
+                                            void * const param)
 {
   RGWGetObj *op = static_cast<RGWGetObj *>(param);
   return op->read_user_manifest_part(bucket, ent, bucket_policy, start_ofs, end_ofs);
@@ -847,11 +953,12 @@ int RGWGetObj::handle_user_manifest(const char *prefix)
   }
 
   /* dry run to find out total length */
-  int r = iterate_user_manifest_parts(s->cct, store, ofs, end, bucket, obj_prefix, bucket_policy, &total_len, NULL, NULL);
-  if (r < 0)
+  int r = iterate_user_manifest_parts(s->cct, store, ofs, end,
+        bucket, obj_prefix, bucket_policy, &total_len, &s->obj_size,
+        NULL, NULL);
+  if (r < 0) {
     return r;
-
-  s->obj_size = total_len;
+  }
 
   if (!get_data) {
     bufferlist bl;
@@ -859,9 +966,116 @@ int RGWGetObj::handle_user_manifest(const char *prefix)
     return 0;
   }
 
-  r = iterate_user_manifest_parts(s->cct, store, ofs, end, bucket, obj_prefix, bucket_policy, NULL, get_obj_user_manifest_iterate_cb, (void *)this);
-  if (r < 0)
+  r = iterate_user_manifest_parts(s->cct, store, ofs, end,
+        bucket, obj_prefix, bucket_policy, NULL, NULL,
+        get_obj_user_manifest_iterate_cb, (void *)this);
+  if (r < 0) {
     return r;
+  }
+
+  return 0;
+}
+
+int RGWGetObj::handle_slo_manifest(bufferlist& bl)
+{
+  RGWSLOInfo slo_info;
+  bufferlist::iterator bliter = bl.begin();
+  try {
+    ::decode(slo_info, bliter);
+  } catch (buffer::error& err) {
+    ldout(s->cct, 0) << "ERROR: failed to decode slo manifest" << dendl;
+    return -EIO;
+  }
+  ldout(s->cct, 2) << "RGWGetObj::handle_slo_manifest()" << dendl;
+
+  list<RGWAccessControlPolicy> allocated_policies;
+  map<string, RGWAccessControlPolicy *> policies;
+  map<string, rgw_bucket> buckets;
+
+  map<uint64_t, rgw_slo_part> slo_parts;
+
+  total_len = 0;
+
+  for (vector<rgw_slo_entry>::iterator iter = slo_info.entries.begin(); iter != slo_info.entries.end(); ++iter) {
+    string& path = iter->path;
+    int pos = path.find('/', 1); /* skip first / */
+    if (pos < 0)
+      return -EINVAL;
+
+    string bucket_name = path.substr(1, pos - 1);
+    string obj_name = path.substr(pos + 1);
+
+    rgw_bucket bucket;
+    RGWAccessControlPolicy *bucket_policy;
+
+    if (bucket_name.compare(s->bucket.name) != 0) {
+      map<string, RGWAccessControlPolicy *>::iterator piter = policies.find(bucket_name);
+      if (piter != policies.end()) {
+        bucket_policy = piter->second;
+        bucket = buckets[bucket_name];
+      } else {
+        allocated_policies.push_back(RGWAccessControlPolicy(s->cct));
+        RGWAccessControlPolicy& _bucket_policy = allocated_policies.back();
+
+        RGWBucketInfo bucket_info;
+        map<string, bufferlist> bucket_attrs;
+        RGWObjectCtx obj_ctx(store);
+        int r = store->get_bucket_info(obj_ctx, bucket_name, bucket_info, NULL, &bucket_attrs);
+        if (r < 0) {
+          ldout(s->cct, 0) << "could not get bucket info for bucket=" << bucket_name << dendl;
+          return r;
+        }
+        bucket = bucket_info.bucket;
+        rgw_obj_key no_obj;
+        bucket_policy = &_bucket_policy;
+        r = read_policy(store, s, bucket_info, bucket_attrs, bucket_policy, bucket, no_obj);
+        if (r < 0) {
+          ldout(s->cct, 0) << "failed to read bucket policy for bucket " << bucket << dendl;
+          return r;
+        }
+        buckets[bucket_name] = bucket;
+        policies[bucket_name] = bucket_policy;
+      }
+    } else {
+      bucket = s->bucket;
+      bucket_policy = s->bucket_acl;
+    }
+
+    rgw_slo_part part;
+    part.bucket_policy = bucket_policy;
+    part.bucket = bucket;
+    part.obj_name = obj_name;
+    part.size = iter->size_bytes;
+    part.etag = iter->etag;
+    ldout(s->cct, 20) << "slo_part: ofs=" << ofs
+                      << " bucket=" << part.bucket
+                      << " obj=" << part.obj_name
+                      << " size=" << part.size
+                      << " etag=" << part.etag
+                      << dendl;
+
+    slo_parts[total_len] = part;
+    total_len += part.size;
+  }
+
+  s->obj_size = slo_info.total_size;
+  ldout(s->cct, 20) << "s->obj_size=" << s->obj_size << dendl;
+
+  if (ofs < 0) {
+    ofs = total_len - std::min(-ofs, static_cast<off_t>(total_len));
+  }
+
+  if (end < 0 || end >= static_cast<off_t>(total_len)) {
+    end = total_len - 1;
+  }
+
+  total_len = end - ofs + 1;
+
+  int r = iterate_slo_parts(s->cct, store, ofs, end, slo_parts,
+        get_obj_user_manifest_iterate_cb, (void *)this);
+  if (r < 0) {
+    return r;
+  }
 
   return 0;
 }
@@ -991,6 +1205,16 @@ void RGWGetObj::execute()
     ret = handle_user_manifest(attr_iter->second.c_str());
     if (ret < 0) {
       ldout(s->cct, 0) << "ERROR: failed to handle user manifest ret=" << ret << dendl;
+    }
+    return;
+  }
+  attr_iter = attrs.find(RGW_ATTR_SLO_MANIFEST);
+  if (attr_iter != attrs.end()) {
+    is_slo = true;
+    ret = handle_slo_manifest(attr_iter->second);
+    if (ret < 0) {
+      ldout(s->cct, 0) << "ERROR: failed to handle slo manifest ret=" << ret << dendl;
+      goto done_err;
     }
     return;
   }
@@ -1829,6 +2053,33 @@ static void encode_delete_at_attr(time_t delete_at, map<string, bufferlist>& att
   attrs[RGW_ATTR_DELETE_AT] = delatbl;
 }
 
+static int encode_dlo_manifest_attr(const char * const dlo_manifest,
+                                    map<string, bufferlist>& attrs)
+{
+  string dm = dlo_manifest;
+
+  if (dm.find('/') == string::npos) {
+    return -EINVAL;
+  }
+
+  bufferlist manifest_bl;
+  manifest_bl.append(dlo_manifest, strlen(dlo_manifest) + 1);
+  attrs[RGW_ATTR_USER_MANIFEST] = manifest_bl;
+
+  return 0;
+}
+
+static void complete_etag(MD5& hash, string *etag)
+{
+  char etag_buf[CEPH_CRYPTO_MD5_DIGESTSIZE];
+  char etag_buf_str[CEPH_CRYPTO_MD5_DIGESTSIZE * 2 + 16];
+
+  hash.Final((byte *)etag_buf);
+  buf_to_hex((const unsigned char *)etag_buf, CEPH_CRYPTO_MD5_DIGESTSIZE, etag_buf_str);
+
+  *etag = etag_buf_str;
+}
+
 void RGWPutObj::execute()
 {
   RGWPutObjProcessor *processor = NULL;
@@ -1843,7 +2094,7 @@ void RGWPutObj::execute()
   map<string, string>::iterator iter;
   bool multipart;
 
-  bool need_calc_md5 = (obj_manifest == NULL);
+  bool need_calc_md5 = (dlo_manifest == NULL) && (slo_info == NULL);
 
 
   perfcounter->inc(l_rgw_put);
@@ -1967,6 +2218,7 @@ void RGWPutObj::execute()
     goto done;
   }
   s->obj_size = ofs;
+
   perfcounter->inc(l_rgw_put_b, s->obj_size);
 
   ret = store->check_quota(s->bucket_owner.get_id(), s->bucket,
@@ -1978,48 +2230,41 @@ void RGWPutObj::execute()
 
   if (need_calc_md5) {
     processor->complete_hash(&hash);
-    hash.Final(m);
+  }
+  hash.Final(m);
 
-    buf_to_hex(m, CEPH_CRYPTO_MD5_DIGESTSIZE, calc_md5);
-    etag = calc_md5;
+  buf_to_hex(m, CEPH_CRYPTO_MD5_DIGESTSIZE, calc_md5);
+  etag = calc_md5;
 
-    if (supplied_md5_b64 && strcmp(calc_md5, supplied_md5)) {
-      ret = -ERR_BAD_DIGEST;
-      goto done;
-    }
+  if (supplied_md5_b64 && strcmp(calc_md5, supplied_md5)) {
+    ret = -ERR_BAD_DIGEST;
+    goto done;
   }
 
   policy.encode(aclbl);
 
   attrs[RGW_ATTR_ACL] = aclbl;
-  if (obj_manifest) {
-    bufferlist manifest_bl;
-    string manifest_obj_prefix;
-    string manifest_bucket;
 
-    char etag_buf[CEPH_CRYPTO_MD5_DIGESTSIZE];
-    char etag_buf_str[CEPH_CRYPTO_MD5_DIGESTSIZE * 2 + 16];
-
-    manifest_bl.append(obj_manifest, strlen(obj_manifest) + 1);
-    attrs[RGW_ATTR_USER_MANIFEST] = manifest_bl;
-    user_manifest_parts_hash = &hash;
-    string prefix_str = obj_manifest;
-    int pos = prefix_str.find('/');
-    if (pos < 0) {
-      ldout(s->cct, 0) << "bad user manifest, missing slash separator: " << obj_manifest << dendl;
+  if (dlo_manifest) {
+    ret = encode_dlo_manifest_attr(dlo_manifest, attrs);
+    if (ret < 0) {
+      ldout(s->cct, 0) << "bad user manifest: " << dlo_manifest << dendl;
       goto done;
     }
-
-    manifest_bucket = prefix_str.substr(0, pos);
-    manifest_obj_prefix = prefix_str.substr(pos + 1);
-
-    hash.Final((byte *)etag_buf);
-    buf_to_hex((const unsigned char *)etag_buf, CEPH_CRYPTO_MD5_DIGESTSIZE, etag_buf_str);
-
-    ldout(s->cct, 0) << __func__ << ": calculated md5 for user manifest: " << etag_buf_str << dendl;
-
-    etag = etag_buf_str;
+    complete_etag(hash, &etag);
+    ldout(s->cct, 10) << __func__ << ": calculated md5 for user manifest: " << etag << dendl;
   }
+
+  if (slo_info) {
+    bufferlist manifest_bl;
+    ::encode(*slo_info, manifest_bl);
+    attrs[RGW_ATTR_SLO_MANIFEST] = manifest_bl;
+
+    hash.Update((byte *)slo_info->raw_data, slo_info->raw_data_len);
+    complete_etag(hash, &etag);
+    ldout(s->cct, 10) << __func__ << ": calculated md5 for user manifest: " << etag << dendl;
+  }
+
   if (supplied_etag && etag.compare(supplied_etag) != 0) {
     ret = -ERR_UNPROCESSABLE_ENTITY;
     goto done;
@@ -2035,6 +2280,15 @@ void RGWPutObj::execute()
 
   rgw_get_request_metadata(s->cct, s->info, attrs);
   encode_delete_at_attr(delete_at, attrs);
+
+  /* Add a custom metadata to expose the information whether an object
+   * is an SLO or not. Appending the attribute must be performed AFTER
+   * processing any input from user in order to prohibit overwriting. */
+  if (slo_info) {
+    bufferlist slo_userindicator_bl;
+    ::encode("True", slo_userindicator_bl);
+    attrs[RGW_ATTR_SLO_UINDICATOR] = slo_userindicator_bl;
+  }
 
   ret = processor->complete(etag, &mtime, 0, attrs, delete_at, if_match, if_nomatch);
 
@@ -2423,7 +2677,70 @@ void RGWPutMetadataObject::execute()
   populate_with_generic_attrs(s, attrs);
   encode_delete_at_attr(delete_at, attrs);
 
+  if (dlo_manifest) {
+    ret = encode_dlo_manifest_attr(dlo_manifest, attrs);
+    if (ret < 0) {
+      ldout(s->cct, 0) << "bad user manifest: " << dlo_manifest << dendl;
+      return;
+    }
+  }
+
   ret = store->set_attrs(s->obj_ctx, obj, attrs, &rmattrs, NULL);
+}
+
+int RGWDeleteObj::handle_slo_manifest(bufferlist& bl)
+{
+  RGWSLOInfo slo_info;
+  bufferlist::iterator bliter = bl.begin();
+  try {
+    ::decode(slo_info, bliter);
+  } catch (buffer::error& err) {
+    ldout(s->cct, 0) << "ERROR: failed to decode slo manifest" << dendl;
+    return -EIO;
+  }
+
+  try {
+    deleter = std::unique_ptr<RGWBulkDelete::Deleter>(\
+          new RGWBulkDelete::Deleter(store, s));
+  } catch (std::bad_alloc) {
+    return -ENOMEM;
+  }
+
+  list<RGWBulkDelete::acct_path_t> items;
+  for (const auto& iter : slo_info.entries) {
+    const string& path_str = iter.path;
+
+    const size_t sep_pos = path_str.find('/', 1 /* skip first slash */);
+    if (string::npos == sep_pos) {
+      return -EINVAL;
+    }
+
+    RGWBulkDelete::acct_path_t path;
+
+    string bucket_name;
+    url_decode(path_str.substr(1, sep_pos - 1), bucket_name);
+
+    string obj_name;
+    url_decode(path_str.substr(sep_pos + 1), obj_name);
+
+    path.bucket_name = bucket_name;
+    path.obj_key = obj_name;
+
+    items.push_back(path);
+  }
+
+  /* Request removal of the manifet object itself. */
+  RGWBulkDelete::acct_path_t path;
+  path.bucket_name = s->bucket_name_str;
+  path.obj_key = s->object;
+  items.push_back(path);
+
+  int ret = deleter->delete_chunk(items);
+  if (ret < 0) {
+    return ret;
+  }
+
+  return 0;
 }
 
 int RGWDeleteObj::verify_permission()
@@ -2443,16 +2760,37 @@ void RGWDeleteObj::execute()
 {
   ret = -EINVAL;
   rgw_obj obj(s->bucket, s->object);
-  map<string, bufferlist> orig_attrs;
+  map<string, bufferlist> attrs;
+
+  ret = get_params();
+  if (ret < 0) {
+    return;
+  }
 
   if (!s->object.empty()) {
-    if (need_object_expiration()) {
+    if (need_object_expiration() || multipart_delete) {
       /* check if obj exists, read orig attrs */
-      ret = get_obj_attrs(store, s, obj, orig_attrs);
+      ret = get_obj_attrs(store, s, obj, attrs);
       if (ret < 0) {
         return;
       }
     }
+
+    if (multipart_delete) {
+      const auto slo_attr = attrs.find(RGW_ATTR_SLO_MANIFEST);
+
+      if (slo_attr != attrs.end()) {
+        ret = handle_slo_manifest(slo_attr->second);
+        if (ret < 0) {
+          ldout(s->cct, 0) << "ERROR: failed to handle slo manifest ret=" << ret << dendl;
+        }
+      } else {
+        ret = -ERR_NOT_SLO_MANIFEST;
+      }
+
+      return;
+    }
+
     RGWObjectCtx *obj_ctx = static_cast<RGWObjectCtx *>(s->obj_ctx);
 
     obj_ctx->set_atomic(obj);
@@ -2464,6 +2802,7 @@ void RGWDeleteObj::execute()
     if (ret < 0) {
       return;
     }
+
     del_op.params.bucket_owner = s->bucket_owner.get_id();
     del_op.params.versioning_status = s->bucket_info.versioning_status();
     del_op.params.obj_owner = s->owner;
@@ -2476,7 +2815,7 @@ void RGWDeleteObj::execute()
 
     /* Check whether the object has expired. Swift API documentation
      * stands that we should return 404 Not Found in such case. */
-    if (need_object_expiration() && object_is_expired(orig_attrs)) {
+    if (need_object_expiration() && object_is_expired(attrs)) {
       ret = -ENOENT;
       return;
     }
@@ -3737,6 +4076,197 @@ error:
   free(data);
   return;
 
+}
+
+bool RGWBulkDelete::Deleter::verify_permission(RGWBucketInfo& binfo,
+                                               map<string, bufferlist>& battrs,
+                                               rgw_obj& obj,
+                                               ACLOwner& bucket_owner /* out */)
+{
+  int ret = 0;
+
+  RGWAccessControlPolicy bacl(store->ctx());
+  rgw_obj_key no_obj;
+  ret = read_policy(store, s, binfo, battrs, &bacl, binfo.bucket, no_obj);
+  if (ret < 0) {
+    return false;
+  }
+
+  RGWAccessControlPolicy oacl(s->cct);
+  ret = read_policy(store, s, binfo, battrs, &oacl, binfo.bucket, s->object);
+  if (ret < 0) {
+    return false;
+  }
+
+  bucket_owner = bacl.get_owner();
+
+  return verify_object_permission(s, &bacl, &oacl, RGW_PERM_WRITE);
+}
+
+bool RGWBulkDelete::Deleter::verify_permission(RGWBucketInfo& binfo,
+                                               map<string, bufferlist>& battrs)
+{
+  int ret = 0;
+
+  RGWAccessControlPolicy bacl(store->ctx());
+  rgw_obj_key no_obj;
+  ret = read_policy(store, s, binfo, battrs, &bacl, binfo.bucket, no_obj);
+  if (ret < 0) {
+    return false;
+  }
+
+  return verify_bucket_permission(s, &bacl, RGW_PERM_WRITE);
+}
+
+bool RGWBulkDelete::Deleter::delete_single(const acct_path_t& path)
+{
+  int ret = 0;
+  auto& obj_ctx = *static_cast<RGWObjectCtx *>(s->obj_ctx);
+
+  RGWBucketInfo binfo;
+  map<string, bufferlist> battrs;
+  ret = store->get_bucket_info(obj_ctx, path.bucket_name, binfo, NULL, &battrs);
+  if (ret < 0) {
+    goto binfo_fail;
+  }
+
+  if (!path.obj_key.empty()) {
+    rgw_obj obj(binfo.bucket, path.obj_key);
+    obj_ctx.set_atomic(obj);
+
+    RGWRados::Object del_target(store, binfo, obj_ctx, obj);
+    RGWRados::Object::Delete del_op(&del_target);
+
+    ACLOwner owner;
+    if (!verify_permission(binfo, battrs, obj, owner)) {
+      ret = -EACCES;
+      goto auth_fail;
+    }
+
+    del_op.params.bucket_owner = binfo.owner;
+    del_op.params.versioning_status = binfo.versioning_status();
+    del_op.params.obj_owner = owner;
+
+    ret = del_op.delete_obj();
+    if (ret < 0) {
+      goto delop_fail;
+    }
+  } else {
+    RGWObjVersionTracker ot;
+    ot.read_version = binfo.ep_objv;
+
+    if (!verify_permission(binfo, battrs)) {
+      ret = -EACCES;
+      goto auth_fail;
+    }
+
+    ret = store->delete_bucket(binfo.bucket, ot);
+    if (0 == ret) {
+      ret = rgw_unlink_bucket(store, binfo.owner, binfo.bucket.name, false);
+      if (ret < 0) {
+        ldout(s->cct, 0) << "WARNING: failed to unlink bucket: ret=" << ret << dendl;
+      }
+    }
+    if (ret < 0) {
+      goto delop_fail;
+    }
+
+    if (!store->region.is_master) {
+      bufferlist in_data;
+      JSONParser jp;
+      ret = forward_request_to_master(s, &ot.read_version, store, in_data, &jp);
+      if (ret < 0) {
+        if (ret == -ENOENT) { /* adjust error,
+                               we want to return with NoSuchBucket and not NoSuchKey */
+          ret = -ERR_NO_SUCH_BUCKET;
+        }
+        goto delop_fail;
+      }
+    }
+  }
+
+  num_deleted++;
+  return true;
+
+
+binfo_fail:
+    if (-ENOENT == ret) {
+      ldout(store->ctx(), 20) << "cannot find bucket = " << path.bucket_name << dendl;
+      num_unfound++;
+    } else {
+      ldout(store->ctx(), 20) << "cannot get bucket info, ret = " << ret << dendl;
+
+      fail_desc_t failed_item = {
+        .err  = ret,
+        .path = path
+      };
+      failures.push_back(failed_item);
+    }
+    return false;
+
+auth_fail:
+    ldout(store->ctx(), 20) << "wrong auth for " << path << dendl;
+    {
+      fail_desc_t failed_item = {
+        .err  = ret,
+        .path = path
+      };
+      failures.push_back(failed_item);
+    }
+    return false;
+
+delop_fail:
+    if (-ENOENT == ret) {
+      ldout(store->ctx(), 20) << "cannot find entry " << path << dendl;
+      num_unfound++;
+    } else {
+      fail_desc_t failed_item = {
+        .err  = ret,
+        .path = path
+      };
+      failures.push_back(failed_item);
+    }
+    return false;
+}
+
+bool RGWBulkDelete::Deleter::delete_chunk(const std::list<acct_path_t>& paths)
+{
+  ldout(store->ctx(), 20) << "in delete_chunk" << dendl;
+  for (auto path : paths) {
+    ldout(store->ctx(), 20) << "bulk deleting path: " << path << dendl;
+    delete_single(path);
+  }
+
+  return true;
+}
+
+int RGWBulkDelete::verify_permission()
+{
+  return 0;
+}
+
+void RGWBulkDelete::pre_exec()
+{
+  rgw_bucket_object_pre_exec(s);
+}
+
+void RGWBulkDelete::execute()
+{
+  deleter = std::unique_ptr<Deleter>(new Deleter(store, s));
+
+  bool is_truncated = false;
+  do {
+    list<RGWBulkDelete::acct_path_t> items;
+
+    int ret = get_data(items, &is_truncated);
+    if (ret < 0) {
+      return;
+    }
+
+    ret = deleter->delete_chunk(items);
+  } while (!ret && is_truncated);
+
+  return;
 }
 
 RGWHandler::~RGWHandler()
