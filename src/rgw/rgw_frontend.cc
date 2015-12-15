@@ -5,6 +5,9 @@
 
 #include "include/str_list.h"
 
+#include "include/assert.h"
+
+
 #define dout_subsys ceph_subsys_rgw
 
 
