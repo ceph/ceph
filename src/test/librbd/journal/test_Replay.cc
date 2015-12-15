@@ -63,7 +63,7 @@ TEST_F(TestJournalReplay, AioDiscardEvent) {
 
   librbd::journal::EventEntry event_entry(
     librbd::journal::AioDiscardEvent(0, payload.size()));
-  librbd::Journal::AioObjectRequests requests;
+  librbd::Journal<>::AioObjectRequests requests;
   {
     RWLock::RLocker owner_locker(ictx->owner_lock);
     ictx->journal->append_io_event(NULL, event_entry, requests, 0, 0, true);
@@ -94,7 +94,7 @@ TEST_F(TestJournalReplay, AioWriteEvent) {
   payload_bl.append(payload);
   librbd::journal::EventEntry event_entry(
     librbd::journal::AioWriteEvent(0, payload.size(), payload_bl));
-  librbd::Journal::AioObjectRequests requests;
+  librbd::Journal<>::AioObjectRequests requests;
   {
     RWLock::RLocker owner_locker(ictx->owner_lock);
     ictx->journal->append_io_event(NULL, event_entry, requests, 0, 0, true);
@@ -124,14 +124,14 @@ TEST_F(TestJournalReplay, AioFlushEvent) {
 
   librbd::journal::AioFlushEvent aio_flush_event;
   librbd::journal::EventEntry event_entry(aio_flush_event);
-  librbd::Journal::AioObjectRequests requests;
+  librbd::Journal<>::AioObjectRequests requests;
   {
     RWLock::RLocker owner_locker(ictx->owner_lock);
     ictx->journal->append_io_event(NULL, event_entry, requests, 0, 0, true);
   }
 
   // start an AIO write op
-  librbd::Journal *journal = ictx->journal;
+  librbd::Journal<> *journal = ictx->journal;
   ictx->journal = NULL;
 
   std::string payload(m_image_size, '1');
