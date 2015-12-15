@@ -6551,6 +6551,18 @@ done:
 					      get_last_committed() + 1));
     return true;
 
+  } else if (prefix == "osd blacklist clear") {
+    pending_inc.new_blacklist.clear();
+    std::list<std::pair<entity_addr_t,utime_t > > blacklist;
+    osdmap.get_blacklist(&blacklist);
+    for (const auto &entry : blacklist) {
+      pending_inc.old_blacklist.push_back(entry.first);
+    }
+    ss << " removed all blacklist entries";
+    getline(ss, rs);
+    wait_for_finished_proposal(op, new Monitor::C_Command(mon, op, 0, rs,
+                                              get_last_committed() + 1));
+    return true;
   } else if (prefix == "osd blacklist") {
     string addrstr;
     cmd_getval(g_ceph_context, cmdmap, "addr", addrstr);
