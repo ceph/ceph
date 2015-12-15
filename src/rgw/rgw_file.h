@@ -1462,11 +1462,13 @@ public:
   const std::string& bucket_name;
   const std::string& obj_name;
   RGWPutObjProcessor *processor;
-  buffer::list bl;
+  buffer::list data;
+  MD5 hash;
   off_t last_off;
   off_t next_off;
   size_t bytes_written;
   bool multipart;
+  bool need_calc_md5;
 
   RGWWriteRequest(CephContext* _cct, RGWUserInfo *_user,
 		  const std::string& _bname, const std::string& _oname)
@@ -1504,9 +1506,6 @@ public:
     s->info.request_params = "";
     s->info.domain = ""; /* XXX ? */
 
-    /* XXX required in RGWOp::execute() */
-    s->content_length = bl.length();
-
     // woo
     s->user = user;
 
@@ -1537,7 +1536,7 @@ public:
 
   virtual int get_data(buffer::list& _bl) {
     /* XXX for now, use sharing semantics */
-    _bl.claim(bl);
+    _bl.claim(data);
     uint32_t len = _bl.length();
     bytes_written += len;
     return len;
@@ -1545,27 +1544,16 @@ public:
 
   void put_data(off_t off, buffer::list& _bl) {
     next_off = off;
-    bl.claim(_bl);
+    data.claim(_bl);
   }
 
   virtual int exec_start();
-
-  virtual int exec_continue() {
-    if (next_off != last_off)
-      return -EIO;
-    /* XXX consume bl */
-    return 0;
-  }
-
-  virtual int exec_finish() {
-    return 0;
-  }
+  virtual int exec_continue();
+  virtual int exec_finish();
 
   virtual void send_response() {}
 
   virtual int verify_params() {
-    if (bl.length() > cct->_conf->rgw_max_put_size)
-      return -ERR_TOO_LARGE;
     return 0;
   }
 }; /* RGWWriteRequest */
