@@ -198,8 +198,8 @@ public:
   void set_access_key(RGWAccessKey& key) { access_key = key; }
 
   /* requests w/continue semantics */
-  int start_continued_request(RGWLibContinuedReq* req);
-  int finish_continued_request(RGWLibContinuedReq* req);
+  int start_request(RGWLibContinuedReq* req);
+  int finish_request(RGWLibContinuedReq* req);
 }; /* RGWLibProcess */
 
 class RGWLibFrontend : public RGWProcessFrontend {
@@ -215,6 +215,14 @@ public:
 
   inline int execute_req(RGWLibRequest* req) {
     return static_cast<RGWLibProcess*>(pprocess)->process_request(req); // !async
+  }
+
+  inline int start_req(RGWLibContinuedReq* req) {
+    return static_cast<RGWLibProcess*>(pprocess)->start_request(req);
+  }
+
+  inline int finish_req(RGWLibContinuedReq* req) {
+    return static_cast<RGWLibProcess*>(pprocess)->finish_request(req);
   }
 
 }; /* RGWLibFrontend */
