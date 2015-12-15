@@ -283,9 +283,9 @@ Integration tests
 
 When a test requires multiple machines, root access or lasts for a
 longer time (for example, to simulate a realistic Ceph deployment), it
-is deemed to be an integration test. Integration tests are defined in
-defined in the `ceph-qa-suite repository`_ and run with the
-`teuthology framework`_.
+is deemed to be an integration test. Integration tests are defined
+in the `ceph-qa-suite repository`_ and run with the `teuthology
+framework`_.
 
 A number of integration tests are run on a regular basis against the
 official Ceph repositories (on the master development branch and the
