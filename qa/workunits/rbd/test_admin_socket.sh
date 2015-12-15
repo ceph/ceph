@@ -114,15 +114,19 @@ function rbd_watch_end()
 
 wait_for_clean
 
+pool="rbd"
 image=testimg$$
 ceph_admin="ceph --admin-daemon $(rbd_watch_asok ${image})"
 
-rbd create --size 128 ${image}
+rbd create --size 128 ${pool}/${image}
 
 # check rbd cache commands are present in help output
+rbd_cache_flush="rbd cache flush ${pool}/${image}"
+rbd_cache_invalidate="rbd cache invalidate ${pool}/${image}"
+
 rbd_watch_start ${image}
-${ceph_admin} help | fgrep "rbd cache flush ${image}"
-${ceph_admin} help | fgrep "rbd cache invalidate ${image}"
+${ceph_admin} help | fgrep "${rbd_cache_flush}"
+${ceph_admin} help | fgrep "${rbd_cache_invalidate}"
 rbd_watch_end ${image}
 
 # test rbd cache commands with disabled and enabled cache
@@ -133,12 +137,12 @@ for conf_rbd_cache in false true; do
     rbd_watch_start ${image}
 
     rbd_check_perfcounter ${image} flush 0
-    ${ceph_admin} rbd cache flush ${image}
+    ${ceph_admin} ${rbd_cache_flush}
     # 'flush' counter should increase regardless if cache is enabled
     rbd_check_perfcounter ${image} flush 1
 
     rbd_check_perfcounter ${image} invalidate_cache 0
-    ${ceph_admin} rbd cache invalidate ${image}
+    ${ceph_admin} ${rbd_cache_invalidate}
     # 'invalidate_cache' counter should increase regardless if cache is enabled
     rbd_check_perfcounter ${image} invalidate_cache 1
 
