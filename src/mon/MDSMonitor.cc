@@ -1749,6 +1749,9 @@ int MDSMonitor::filesystem_command(
       if (r == 0)
 	ss << "removed data pool " << poolid << " from mdsmap";
     }
+  } else if (prefix == "mds get_max_mds") {
+    int64_t maxmds = pending_mdsmap.max_mds;
+    ss << "max_mds = " << maxmds;
   } else {
     ss << "unrecognized command";
     return -ENOSYS;
