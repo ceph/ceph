@@ -2,7 +2,7 @@
 #ifndef SCRUB_HEADER_H_
 #define SCRUB_HEADER_H_
 
-class CDentry;
+class CInode;
 
 /**
  * Externally input parameters for a scrub, associated with the root
@@ -13,7 +13,7 @@ class CDentry;
  */
 class ScrubHeader {
 public:
-  CDentry *origin;
+  CInode *origin;
   std::string tag;
 
   bool recursive;

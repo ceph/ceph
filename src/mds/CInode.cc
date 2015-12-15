@@ -4146,7 +4146,8 @@ void CInode::scrub_maybe_delete_info()
   }
 }
 
-void CInode::scrub_initialize(const ScrubHeaderRefConst& header)
+void CInode::scrub_initialize(CDentry *scrub_parent,
+			      const ScrubHeaderRefConst& header, Context *f)
 {
   dout(20) << __func__ << " with scrub_version " << get_version() << dendl;
   assert(!scrub_infop || !scrub_infop->scrub_in_progress);
@@ -4166,10 +4167,17 @@ void CInode::scrub_initialize(const ScrubHeaderRefConst& header)
       scrub_infop->dirfrag_stamps[*i];
     }
   }
+
+  if (scrub_parent)
+    scrub_parent->get(CDentry::PIN_SCRUBPARENT);
+  scrub_infop->scrub_parent = scrub_parent;
+  scrub_infop->on_finish = f;
   scrub_infop->scrub_in_progress = true;
+  scrub_infop->children_scrubbed = false;
+  scrub_infop->header = header;
+
   scrub_infop->scrub_start_version = get_version();
   scrub_infop->scrub_start_stamp = ceph_clock_now(g_ceph_context);
-  scrub_infop->header = header;
   // right now we don't handle remote inodes
 }
 
@@ -4248,9 +4256,24 @@ void CInode::scrub_finished(Context **c) {
     }
     assert(i->second.last_scrub_version == i->second.scrub_start_version);
   }
+
   scrub_infop->last_scrub_version = scrub_infop->scrub_start_version;
   scrub_infop->last_scrub_stamp = scrub_infop->scrub_start_stamp;
   scrub_infop->last_scrub_dirty = true;
   scrub_infop->scrub_in_progress = false;
-  parent->scrub_finished(c);
+
+  if (scrub_infop->scrub_parent) {
+    CDentry *dn = scrub_infop->scrub_parent;
+    scrub_infop->scrub_parent = NULL;
+    dn->dir->scrub_dentry_finished(dn);
+    dn->put(CDentry::PIN_SCRUBPARENT);
+  }
+
+  *c = scrub_infop->on_finish;
+
+  if (scrub_infop->header && scrub_infop->header->origin == this) {
+    // We are at the point that a tagging scrub was initiated
+    LogChannelRef clog = mdcache->mds->clog;
+    clog->info() << "scrub complete with tag '" << scrub_infop->header->tag << "'";
+  }
 }
