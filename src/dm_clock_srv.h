@@ -1,4 +1,4 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 /*
  * Copyright (C) 2015 Red Hat Inc.
@@ -160,8 +160,19 @@ namespace dmc {
   class PriorityQueue {
 
   public:
+    typedef typename std::unique_ptr<R> RequestRef;
 
-    typedef typename std::function<ClientInfo(C)> ClientInfoFunc;
+    // a function that can be called to look up client information
+    typedef typename std::function<ClientInfo(C)>       ClientInfoFunc;
+
+    // a function to see whether the server can handle another request
+    typedef typename std::function<bool(void)>          CanHandleRequestFunc;
+
+    // a function to submit a request to the server; the second
+    // parameter is a callback when it's completed
+    typedef
+    typename std::function<void(RequestRef,
+				std::function<void()>)> HandleRequestFunc;
 
   protected:
 
@@ -221,6 +232,8 @@ namespace dmc {
 
 
     ClientInfoFunc clientInfoF;
+    CanHandleRequestFunc canHandleF;
+    HandleRequestFunc handleF;
 
     // stable mappiing between client ids and client queues
     std::map<C,CQueueRef> clientMap;
@@ -234,11 +247,15 @@ namespace dmc {
 				boost::heap::compare<LimitCompare>> limQ;
     boost::heap::fibonacci_heap<CQueueRef,
 				boost::heap::compare<ProportionCompare>> propQ;
-      
+
   public:
 
-    PriorityQueue(ClientInfoFunc _clientInfoF) :
-      clientInfoF(_clientInfoF)
+    PriorityQueue(ClientInfoFunc _clientInfoF,
+		  CanHandleRequestFunc _canHandleF,
+		  HandleRequestFunc _handleF) :
+      clientInfoF(_clientInfoF),
+      canHandleF(_canHandleF),
+      handleF(_handleF)
     {
       // empty
     }
@@ -272,5 +289,5 @@ namespace dmc {
 
   }; // class PriorityQueue
 
-    
+
 } // namespace dmc

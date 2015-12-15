@@ -54,6 +54,19 @@ dmc::ClientInfo getClientInfo(int c) {
 }
 
 
+bool canHandleReq() {
+  return true;
+}
+
+
+void handleReq(std::unique_ptr<Request>&& request_ref,
+	       std::function<void()> callback) {
+  RequestRef mine = std::move(request_ref);
+  sleep(10);
+  callback();
+}
+
+
 int main(int argc, char* argv[]) {
 
   std::cout.precision(17);
@@ -62,9 +75,12 @@ int main(int argc, char* argv[]) {
 
   dmc::ClientQueue<Request> cq(getClientInfo(0));
 
-  auto f = std::function<dmc::ClientInfo(int)>(getClientInfo);
+  auto f1 = std::function<dmc::ClientInfo(int)>(getClientInfo);
+  auto f2 = std::function<bool()>(canHandleReq);
+  auto f3 = std::function<void(std::unique_ptr<Request>&&,
+			       std::function<void()>)>(handleReq);
   
-  dmc::PriorityQueue<int,Request> priorityQueue(f);
+  dmc::PriorityQueue<int,Request> priorityQueue(f1, f2, f3);
 
   priorityQueue.test();
   priorityQueue.addRequest(Request(0, 17, "foobar"), 0, dmc::getTime());
