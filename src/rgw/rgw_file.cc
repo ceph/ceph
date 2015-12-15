@@ -137,6 +137,39 @@ RGWFileHandle::file::~file()
   delete write_req;
 }
 
+int RGWWriteRequest::exec_start() {
+  struct req_state* s = get_state();
+
+  perfcounter->inc(l_rgw_put);
+  op_ret = -EINVAL;
+
+  // XXX check this
+  if (s->object.empty()) {
+    goto done;
+  }
+
+  op_ret = get_params();
+  if (op_ret < 0)
+    goto done;
+
+  op_ret = get_system_versioning_params(s, &olh_epoch, &version_id);
+  if (op_ret < 0) {
+    goto done;
+  }
+
+  /* user-supplied MD5 check skipped (not supplied) */
+  /* early quota check skipped--we don't have size yet */
+  /* skipping user-supplied etag--we might have one in future, but
+   * like data it and other attrs would arrive after open */
+  processor = select_processor(*static_cast<RGWObjectCtx *>(s->obj_ctx),
+			       &multipart);
+  op_ret = processor->prepare(get_store(), NULL);
+
+done:
+  return op_ret;
+} /* exec_start */
+
+
 /* librgw */
 extern "C" {
 

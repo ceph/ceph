@@ -1331,4 +1331,56 @@ public:
 
 extern int rgw_build_bucket_policies(RGWRados* store, struct req_state* s);
 
+static inline int put_data_and_throttle(RGWPutObjProcessor *processor,
+					bufferlist& data, off_t ofs,
+					MD5 *hash, bool need_to_wait)
+{
+  bool again;
+
+  do {
+    void *handle;
+
+    int ret = processor->handle_data(data, ofs, hash, &handle, &again);
+    if (ret < 0)
+      return ret;
+
+    ret = processor->throttle_data(handle, need_to_wait);
+    if (ret < 0)
+      return ret;
+
+    need_to_wait = false; /* the need to wait only applies to the first
+			   * iteration */
+  } while (again);
+
+  return 0;
+} /* put_data_and_throttle */
+
+static inline int get_system_versioning_params(req_state *s,
+					      uint64_t *olh_epoch,
+					      string *version_id)
+{
+  if (!s->system_request) {
+    return 0;
+  }
+
+  if (olh_epoch) {
+    string epoch_str = s->info.args.get(RGW_SYS_PARAM_PREFIX "versioned-epoch");
+    if (!epoch_str.empty()) {
+      string err;
+      *olh_epoch = strict_strtol(epoch_str.c_str(), 10, &err);
+      if (!err.empty()) {
+        lsubdout(s->cct, rgw, 0) << "failed to parse versioned-epoch param"
+				 << dendl;
+        return -EINVAL;
+      }
+    }
+  }
+
+  if (version_id) {
+    *version_id = s->info.args.get(RGW_SYS_PARAM_PREFIX "version-id");
+  }
+
+  return 0;
+} /* get_system_versioning_params */
+
 #endif /* CEPH_RGW_OP_H */
