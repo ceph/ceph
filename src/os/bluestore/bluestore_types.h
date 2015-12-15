@@ -59,6 +59,8 @@ struct bluestore_extent_t {
   enum {
     FLAG_UNWRITTEN = 1,   ///< extent is unwritten (and defined to be zero)
     FLAG_SHARED = 2,      ///< extent is shared by another object, and refcounted
+    FLAG_COW_HEAD = 4,    ///< extent has pending wal OP_COPY for head
+    FLAG_COW_TAIL = 8,    ///< extent has pending wal OP_COPY for tail
   };
   static string get_flags_string(unsigned flags);
 
