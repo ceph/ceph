@@ -47,7 +47,7 @@ namespace librbd {
   template <typename> class ExclusiveLock;
   template <typename> class ImageState;
   class ImageWatcher;
-  class Journal;
+  template <typename> class Journal;
   class LibrbdAdminSocketHook;
   class ObjectMap;
 
@@ -79,7 +79,7 @@ namespace librbd {
     std::string snap_name;
     IoCtx data_ctx, md_ctx;
     ImageWatcher *image_watcher;
-    Journal *journal;
+    Journal<ImageCtx> *journal;
 
     /**
      * Lock ordering:
@@ -270,7 +270,7 @@ namespace librbd {
     void apply_metadata_confs();
 
     ObjectMap *create_object_map(uint64_t snap_id);
-    Journal *create_journal();
+    Journal<ImageCtx> *create_journal();
 
     void clear_pending_completions();
   };

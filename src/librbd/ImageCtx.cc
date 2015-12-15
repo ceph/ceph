@@ -1004,7 +1004,7 @@ struct C_InvalidateCache : public Context {
     return new ObjectMap(*this, snap_id);
   }
 
-  Journal *ImageCtx::create_journal() {
-    return new Journal(*this);
+  Journal<ImageCtx> *ImageCtx::create_journal() {
+    return new Journal<ImageCtx>(*this);
   }
 }

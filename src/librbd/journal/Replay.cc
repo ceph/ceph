@@ -14,15 +14,18 @@
 namespace librbd {
 namespace journal {
 
-Replay::Replay(ImageCtx &image_ctx)
-  : m_image_ctx(image_ctx), m_lock("Replay::m_lock"), m_ret_val(0) {
+template <typename I>
+Replay<I>::Replay(I &image_ctx)
+  : m_image_ctx(image_ctx), m_lock("Replay<I>::m_lock"), m_ret_val(0) {
 }
 
-Replay::~Replay() {
+template <typename I>
+Replay<I>::~Replay() {
   assert(m_aio_completions.empty());
 }
 
-int Replay::process(bufferlist::iterator it, Context *on_safe) {
+template <typename I>
+int Replay<I>::process(bufferlist::iterator it, Context *on_safe) {
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 20) << this << " " << __func__ << dendl;
 
@@ -39,7 +42,8 @@ int Replay::process(bufferlist::iterator it, Context *on_safe) {
   return 0;
 }
 
-int Replay::flush() {
+template <typename I>
+int Replay<I>::flush() {
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 20) << this << " " << __func__ << dendl;
 
@@ -50,8 +54,9 @@ int Replay::flush() {
   return m_ret_val;
 }
 
-void Replay::handle_event(const journal::AioDiscardEvent &event,
-				 Context *on_safe) {
+template <typename I>
+void Replay<I>::handle_event(const journal::AioDiscardEvent &event,
+                             Context *on_safe) {
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 20) << this << " " << __func__ << ": AIO discard event" << dendl;
 
@@ -60,8 +65,9 @@ void Replay::handle_event(const journal::AioDiscardEvent &event,
                                event.length);
 }
 
-void Replay::handle_event(const journal::AioWriteEvent &event,
-				 Context *on_safe) {
+template <typename I>
+void Replay<I>::handle_event(const journal::AioWriteEvent &event,
+                             Context *on_safe) {
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 20) << this << " " << __func__ << ": AIO write event" << dendl;
 
@@ -71,8 +77,9 @@ void Replay::handle_event(const journal::AioWriteEvent &event,
                              data.c_str(), 0);
 }
 
-void Replay::handle_event(const journal::AioFlushEvent &event,
-				 Context *on_safe) {
+template <typename I>
+void Replay<I>::handle_event(const journal::AioFlushEvent &event,
+			     Context *on_safe) {
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 20) << this << " " << __func__ << ": AIO flush event" << dendl;
 
@@ -80,76 +87,88 @@ void Replay::handle_event(const journal::AioFlushEvent &event,
   AioImageRequest::aio_flush(&m_image_ctx, aio_comp);
 }
 
-  void Replay::handle_event(const journal::OpFinishEvent &event,
-				   Context *on_safe) {
+template <typename I>
+void Replay<I>::handle_event(const journal::OpFinishEvent &event,
+                             Context *on_safe) {
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 20) << this << " " << __func__ << ": Op finish event" << dendl;
 }
 
-void Replay::handle_event(const journal::SnapCreateEvent &event,
-				 Context *on_safe) {
+template <typename I>
+void Replay<I>::handle_event(const journal::SnapCreateEvent &event,
+			     Context *on_safe) {
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 20) << this << " " << __func__ << ": Snap create event" << dendl;
 }
 
-void Replay::handle_event(const journal::SnapRemoveEvent &event,
-				 Context *on_safe) {
+template <typename I>
+void Replay<I>::handle_event(const journal::SnapRemoveEvent &event,
+			     Context *on_safe) {
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 20) << this << " " << __func__ << ": Snap remove event" << dendl;
 }
 
-void Replay::handle_event(const journal::SnapRenameEvent &event,
-				 Context *on_safe) {
+template <typename I>
+void Replay<I>::handle_event(const journal::SnapRenameEvent &event,
+			     Context *on_safe) {
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 20) << this << " " << __func__ << ": Snap rename event" << dendl;
 }
 
-void Replay::handle_event(const journal::SnapProtectEvent &event,
-				 Context *on_safe) {
+template <typename I>
+void Replay<I>::handle_event(const journal::SnapProtectEvent &event,
+			     Context *on_safe) {
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 20) << this << " " << __func__ << ": Snap protect event" << dendl;
 }
 
-void Replay::handle_event(const journal::SnapUnprotectEvent &event,
-				 Context *on_safe) {
+template <typename I>
+void Replay<I>::handle_event(const journal::SnapUnprotectEvent &event,
+			     Context *on_safe) {
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 20) << this << " " << __func__ << ": Snap unprotect event"
                  << dendl;
 }
 
-void Replay::handle_event(const journal::SnapRollbackEvent &event,
-				 Context *on_safe) {
+template <typename I>
+void Replay<I>::handle_event(const journal::SnapRollbackEvent &event,
+			     Context *on_safe) {
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 20) << this << " " << __func__ << ": Snap rollback start event"
                  << dendl;
 }
 
-void Replay::handle_event(const journal::RenameEvent &event,
-				 Context *on_safe) {
+template <typename I>
+void Replay<I>::handle_event(const journal::RenameEvent &event,
+			     Context *on_safe) {
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 20) << this << " " << __func__ << ": Rename event" << dendl;
 }
 
-void Replay::handle_event(const journal::ResizeEvent &event,
-				 Context *on_safe) {
+template <typename I>
+void Replay<I>::handle_event(const journal::ResizeEvent &event,
+			     Context *on_safe) {
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 20) << this << " " << __func__ << ": Resize start event" << dendl;
 }
 
-void Replay::handle_event(const journal::FlattenEvent &event,
-				 Context *on_safe) {
+template <typename I>
+void Replay<I>::handle_event(const journal::FlattenEvent &event,
+			     Context *on_safe) {
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 20) << this << " " << __func__ << ": Flatten start event" << dendl;
 }
 
-void Replay::handle_event(const journal::UnknownEvent &event,
-				 Context *on_safe) {
+template <typename I>
+void Replay<I>::handle_event(const journal::UnknownEvent &event,
+			     Context *on_safe) {
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 20) << this << " " << __func__ << ": unknown event" << dendl;
   on_safe->complete(0);
 }
 
-AioCompletion *Replay::create_aio_completion(Context *on_safe) {
+template <typename I>
+AioCompletion *Replay<I>::create_aio_completion(Context *on_safe) {
   Mutex::Locker locker(m_lock);
   AioCompletion *aio_comp = AioCompletion::create(this, aio_completion_callback,
                                                   nullptr);
@@ -158,7 +177,8 @@ AioCompletion *Replay::create_aio_completion(Context *on_safe) {
   return aio_comp;
 }
 
-void Replay::handle_aio_completion(AioCompletion *aio_comp) {
+template <typename I>
+void Replay<I>::handle_aio_completion(AioCompletion *aio_comp) {
   Mutex::Locker locker(m_lock);
 
   AioCompletions::iterator it = m_aio_completions.find(aio_comp);
@@ -182,7 +202,8 @@ void Replay::handle_aio_completion(AioCompletion *aio_comp) {
     m_cond.Signal();
 }
 
-void Replay::aio_completion_callback(completion_t cb, void *arg) {
+template <typename I>
+void Replay<I>::aio_completion_callback(completion_t cb, void *arg) {
   Replay *replay = reinterpret_cast<Replay *>(arg);
   AioCompletion *aio_comp = reinterpret_cast<AioCompletion *>(cb);
 
@@ -192,3 +213,5 @@ void Replay::aio_completion_callback(completion_t cb, void *arg) {
 
 } // namespace journal
 } // namespace librbd
+
+template class librbd::journal::Replay<librbd::ImageCtx>;

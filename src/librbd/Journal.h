@@ -13,6 +13,7 @@
 #include "journal/Future.h"
 #include "journal/ReplayHandler.h"
 #include <algorithm>
+#include <iosfwd>
 #include <list>
 #include <string>
 
@@ -29,50 +30,12 @@ class ImageCtx;
 
 namespace journal {
 class EventEntry;
-class Replay;
+template <typename> class Replay;
 }
 
+template <typename ImageCtxT = ImageCtx>
 class Journal {
 public:
-  typedef std::list<AioObjectRequest *> AioObjectRequests;
-
-  Journal(ImageCtx &image_ctx);
-  ~Journal();
-
-  static bool is_journal_supported(ImageCtx &image_ctx);
-  static int create(librados::IoCtx &io_ctx, const std::string &image_id,
-		    uint8_t order, uint8_t splay_width,
-		    const std::string &object_pool);
-  static int remove(librados::IoCtx &io_ctx, const std::string &image_id);
-  static int reset(librados::IoCtx &io_ctx, const std::string &image_id);
-
-  bool is_journal_ready() const;
-  bool is_journal_replaying() const;
-
-  void wait_for_journal_ready(Context *on_ready);
-
-  void open(Context *on_finish);
-  void close(Context *on_finish);
-
-  uint64_t append_io_event(AioCompletion *aio_comp,
-                           const journal::EventEntry &event_entry,
-                           const AioObjectRequests &requests,
-                           uint64_t offset, size_t length,
-                           bool flush_entry);
-  void commit_io_event(uint64_t tid, int r);
-  void commit_io_event_extent(uint64_t tid, uint64_t offset, uint64_t length,
-                              int r);
-
-  uint64_t append_op_event(journal::EventEntry &event_entry);
-  void commit_op_event(uint64_t tid, int r);
-
-  void flush_event(uint64_t tid, Context *on_safe);
-  void wait_event(uint64_t tid, Context *on_safe);
-
-private:
-  typedef std::list<Context *> Contexts;
-  typedef interval_set<uint64_t> ExtentInterval;
-
   /**
    * @verbatim
    *
@@ -110,6 +73,45 @@ private:
     STATE_CLOSING,
     STATE_CLOSED
   };
+
+  typedef std::list<AioObjectRequest *> AioObjectRequests;
+
+  Journal(ImageCtxT &image_ctx);
+  ~Journal();
+
+  static bool is_journal_supported(ImageCtxT &image_ctx);
+  static int create(librados::IoCtx &io_ctx, const std::string &image_id,
+		    uint8_t order, uint8_t splay_width,
+		    const std::string &object_pool);
+  static int remove(librados::IoCtx &io_ctx, const std::string &image_id);
+  static int reset(librados::IoCtx &io_ctx, const std::string &image_id);
+
+  bool is_journal_ready() const;
+  bool is_journal_replaying() const;
+
+  void wait_for_journal_ready(Context *on_ready);
+
+  void open(Context *on_finish);
+  void close(Context *on_finish);
+
+  uint64_t append_io_event(AioCompletion *aio_comp,
+                           const journal::EventEntry &event_entry,
+                           const AioObjectRequests &requests,
+                           uint64_t offset, size_t length,
+                           bool flush_entry);
+  void commit_io_event(uint64_t tid, int r);
+  void commit_io_event_extent(uint64_t tid, uint64_t offset, uint64_t length,
+                              int r);
+
+  uint64_t append_op_event(journal::EventEntry &event_entry);
+  void commit_op_event(uint64_t tid, int r);
+
+  void flush_event(uint64_t tid, Context *on_safe);
+  void wait_event(uint64_t tid, Context *on_safe);
+
+private:
+  typedef std::list<Context *> Contexts;
+  typedef interval_set<uint64_t> ExtentInterval;
 
   struct Event {
     ::journal::Future future;
@@ -199,7 +201,7 @@ private:
     }
   };
 
-  ImageCtx &m_image_ctx;
+  ImageCtxT &m_image_ctx;
 
   ::journal::Journaler *m_journaler;
   mutable Mutex m_lock;
@@ -217,7 +219,7 @@ private:
 
   bool m_blocking_writes;
 
-  journal::Replay *m_journal_replay;
+  journal::Replay<ImageCtxT> *m_journal_replay;
 
   ::journal::Future wait_event(Mutex &lock, uint64_t tid, Context *on_safe);
 
@@ -225,7 +227,7 @@ private:
   void destroy_journaler(int r);
   void recreate_journaler(int r);
 
-  void complete_event(Events::iterator it, int r);
+  void complete_event(typename Events::iterator it, int r);
 
   void handle_initialized(int r);
 
@@ -247,10 +249,10 @@ private:
 
   bool is_steady_state() const;
   void wait_for_steady_state(Context *on_state);
-
-  friend std::ostream &operator<<(std::ostream &os, const State &state);
 };
 
 } // namespace librbd
+
+extern template class librbd::Journal<librbd::ImageCtx>;
 
 #endif // CEPH_LIBRBD_JOURNAL_H

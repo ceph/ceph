@@ -1278,8 +1278,8 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
         goto err_remove_object_map;
       }
 
-      r = Journal::create(io_ctx, id, journal_order, journal_splay_width,
-			  journal_pool);
+      r = Journal<>::create(io_ctx, id, journal_order, journal_splay_width,
+			    journal_pool);
       if (r < 0) {
         lderr(cct) << "error creating journal: " << cpp_strerror(r) << dendl;
         goto err_remove_object_map;
@@ -1843,9 +1843,9 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
           }
           features_mask |= RBD_FEATURE_EXCLUSIVE_LOCK;
 
-          r = Journal::create(ictx->md_ctx, ictx->id, ictx->journal_order,
-  			    ictx->journal_splay_width,
-  			    ictx->journal_pool);
+          r = Journal<>::create(ictx->md_ctx, ictx->id, ictx->journal_order,
+  			        ictx->journal_splay_width,
+  			        ictx->journal_pool);
           if (r < 0) {
             lderr(cct) << "error creating image journal: " << cpp_strerror(r)
                        << dendl;
@@ -1885,7 +1885,7 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
           disable_flags = RBD_FLAG_FAST_DIFF_INVALID;
         }
         if ((features & RBD_FEATURE_JOURNALING) != 0) {
-          r = Journal::remove(ictx->md_ctx, ictx->id);
+          r = Journal<>::remove(ictx->md_ctx, ictx->id);
           if (r < 0) {
             lderr(cct) << "error removing image journal: " << cpp_strerror(r)
                        << dendl;
@@ -2121,7 +2121,7 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
       }
     }
     if (!old_format) {
-      r = Journal::remove(io_ctx, id);
+      r = Journal<>::remove(io_ctx, id);
       if (r < 0 && r != -ENOENT) {
         lderr(cct) << "error removing image journal" << dendl;
         return r;
