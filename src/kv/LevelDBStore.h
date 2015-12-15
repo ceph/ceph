@@ -45,12 +45,17 @@ enum {
   l_leveldb_last,
 };
 
+extern leveldb::Logger *create_leveldb_ceph_logger();
+
+class CephLevelDBLogger;
+
 /**
  * Uses LevelDB to implement the KeyValueDB interface
  */
 class LevelDBStore : public KeyValueDB {
   CephContext *cct;
   PerfCounters *logger;
+  CephLevelDBLogger *ceph_logger;
   string path;
   boost::scoped_ptr<leveldb::Cache> db_cache;
 #ifdef HAVE_LEVELDB_FILTER_POLICY
@@ -148,6 +153,7 @@ public:
   LevelDBStore(CephContext *c, const string &path) :
     cct(c),
     logger(NULL),
+    ceph_logger(NULL),
     path(path),
     db_cache(NULL),
 #ifdef HAVE_LEVELDB_FILTER_POLICY
