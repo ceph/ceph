@@ -364,6 +364,7 @@ int start_continued_request(RGWLibContinuedReq* req)
   }
 
   op->pre_exec();
+  req->exec_start();
 
 done:
   return ret;
