@@ -1242,6 +1242,7 @@ def zap(dev):
     """
     Destroy the partition table and content of a given disk.
     """
+    dev = os.path.realpath(dev)
     dmode = os.stat(dev).st_mode
     if not stat.S_ISBLK(dmode) or is_partition(dev):
         raise Error('not full block device; cannot zap', dev)
