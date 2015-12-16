@@ -1219,9 +1219,24 @@ def update_partition(dev, description):
     group changes etc. are complete.
     """
     LOG.debug('Calling partprobe on %s device %s', description, dev)
-    command_check_call(['udevadm', 'settle'])
-    command_check_call(['partprobe', dev])
-    command_check_call(['udevadm', 'settle'])
+    partprobe_ok = False
+    error = 'unknown error'
+    for i in (1, 2, 3, 4, 5):
+        command_check_call(['udevadm', 'settle', '--timeout=600'])
+        try:
+            _check_output(['partprobe', dev])
+            partprobe_ok = True
+            break
+        except subprocess.CalledProcessError as e:
+            error = e.output
+            if ('unable to inform the kernel' not in error and
+                'Device or resource busy' not in error):
+                raise
+            LOG.debug('partprobe %s failed : %s (ignored, waiting 60s)' % (dev, error))
+            time.sleep(60)
+    if not partprobe_ok:
+        raise Error('partprobe %s failed : %s' % (dev, error))
+    command_check_call(['udevadm', 'settle', '--timeout=600'])
 
 def zap(dev):
     """
