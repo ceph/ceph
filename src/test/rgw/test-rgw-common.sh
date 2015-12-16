@@ -65,7 +65,7 @@ function start_ceph_cluster {
 }
 
 function rgw_admin {
-  [ $# -ne 1 ] && echo "rgw_admin() needs 1 param" && exit 1
+  [ $# -lt 1 ] && echo "rgw_admin() needs 1 param" && exit 1
 
   echo "$mrun c$1 radosgw-admin"
 }
@@ -102,21 +102,28 @@ function init_first_zone {
 }
 
 function init_zone_in_existing_zg {
-  [ $# -ne 7 ] && echo "init_zone_in_existing_zg() needs 7 params" && exit 1
+  [ $# -ne 8 ] && echo "init_zone_in_existing_zg() needs 8 params" && exit 1
 
   id=$1
   realm=$2
   zg=$3
   zone=$4
-  port=$5
+  zone1_port=$5
+  port=$6
 
-  access_key=$6
-  secret=$7
+  access_key=$7
+  secret=$8
 
-  x $(rgw_admin $id) realm pull --url=http://localhost:$zone1_port --access-key=${system_access_key} --secret=${system_secret} --default
+  x $(rgw_admin $id) realm pull --url=http://localhost:$zone1_port --access-key=${access_key} --secret=${secret} --default
   x $(rgw_admin $id) zonegroup default --rgw-zonegroup=$zg
-  x $(rgw_admin $id) zone create --rgw-zonegroup=$zg --rgw-zone=$zone2 --access-key=${system_access_key} --secret=${system_secret} --endpoints=http://localhost:$zone2_port
+  x $(rgw_admin $id) zone create --rgw-zonegroup=$zg --rgw-zone=$zone --access-key=${access_key} --secret=${secret} --endpoints=http://localhost:$port
   x $(rgw_admin $id) period update --commit
 
-  x $(rgw $id $zone2_port) --rgw-zone=$zone2
+  x $(rgw $id $port) --rgw-zone=$zone
+}
+
+function call_rgw_admin {
+  c=$1
+  shift
+  x $(rgw_admin $c) "$@"
 }
