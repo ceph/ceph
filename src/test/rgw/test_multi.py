@@ -1,6 +1,9 @@
 import subprocess
 import os
 
+import random
+import string
+
 
 mstart_path = os.getenv('MSTART_PATH')
 if mstart_path is None:
@@ -103,7 +106,11 @@ class RGWRealm:
 
         bash(tpath('test-rgw-call.sh', 'wait_for_meta_sync', self.master_index + 1, cluster_index + 1, self.realm))
 
+def gen_access_key():
+     return ''.join(random.SystemRandom().choice(string.ascii_uppercase + string.digits) for _ in range(16))
 
+def gen_secret():
+     return ''.join(random.SystemRandom().choice(string.ascii_uppercase + string.ascii_lowercase + string.digits) for _ in range(32))
 
 class RGWMulti:
     def __init__(self, num_clusters):
@@ -116,7 +123,7 @@ class RGWMulti:
         self.base_port = 8000
 
     def setup(self):
-        credentials = RGWRealmCredentials('1234567890', 'pencil')
+        credentials = RGWRealmCredentials(gen_access_key(), gen_secret())
         realm = RGWRealm('earth', credentials, 0)
 
         self.clusters[0].start()
