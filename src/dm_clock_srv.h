@@ -110,8 +110,6 @@ namespace dmc {
 
     typedef typename std::lock_guard<std::mutex> Guard;
     typedef typename std::shared_ptr<ClientQueue<R>> HeapEntry;
-    typedef typename heap::fibonacci_heap<HeapEntry,
-					  heap::compare<dmc::PriorityQueue::ReservationCompare>>::handle_type HeapHandle;
     
     ClientInfo         info;
     RequestTag         prev_tag;
@@ -120,12 +118,6 @@ namespace dmc {
     bool               idle;
 
   public:
-
-    // perhaps these should be protected
-    HeapHandle         prop_handle;
-    HeapHandle         res_handle;
-    HeapHandle         lim_handle;
-    HeapHandle         ready_handle;
 
     ClientQueue(const ClientInfo& _info) : info(_info), idle(false) {}
 
@@ -267,7 +259,7 @@ namespace dmc {
     heap::fibonacci_heap<CQueueRef,
 			 heap::compare<ProportionCompare>> propQ;
     heap::fibonacci_heap<CQueueRef,
-			 :heap::compare<ProportionCompare>> readyQ;
+			 heap::compare<ProportionCompare>> readyQ;
 
   public:
 
@@ -307,9 +299,7 @@ namespace dmc {
       // bool was_empty = client->empty();
       client->push(std::move(req_ref), time);
       if (add_to_queues) {
-	auto h = resQ.push(client);
-	(*h)->res_handle = h;
-	
+	resQ.push(client);
 	limQ.push(client);
 	propQ.push(client);
       }
