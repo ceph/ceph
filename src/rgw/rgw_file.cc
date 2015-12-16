@@ -112,6 +112,9 @@ int RGWFileHandle::write(uint64_t off, size_t len, size_t *bytes_written,
     buffer::create_static(len, static_cast<char*>(buffer)));
 
   file* f = get<file>(&variant_type);
+  if (! f)
+    return EISDIR;
+
   if (! f->write_req) {
     /* start */
     std::string object_name = full_object_name();
@@ -138,7 +141,7 @@ int RGWFileHandle::close()
 
   int rc = 0;
   file* f = get<file>(&variant_type);
-  if (! f->write_req) {
+  if (f && (f->write_req)) {
     rc = librgw.get_fe()->finish_req(f->write_req);
     if (! rc) {
       rc = f->write_req->get_ret();
