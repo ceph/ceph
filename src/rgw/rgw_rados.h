@@ -789,8 +789,8 @@ public:
     store = _store;
   }
   int init(CephContext *_cct, RGWRados *_store, bool setup_obj = true, bool old_format = false);
-  int read_default_id(string& default_id, bool old_format = false);
-  int set_as_default();
+  virtual int read_default_id(string& default_id, bool old_format = false);
+  virtual int set_as_default();
   int delete_default();
   virtual int create(bool exclusive = true);
   int delete_obj(bool old_format = false);
@@ -801,7 +801,7 @@ public:
   int write(bool exclusive);
 
   virtual const string& get_pool_name(CephContext *cct) = 0;
-  virtual const string& get_default_oid(bool old_format = false) = 0;
+  virtual const string get_default_oid(bool old_format = false) = 0;
   virtual const string& get_names_oid_prefix() = 0;
   virtual const string& get_info_oid_prefix(bool old_format = false) = 0;
   virtual const string& get_predefined_name(CephContext *cct) = 0;
@@ -864,12 +864,16 @@ struct RGWZoneParams : RGWSystemMetaObj {
 
   map<string, RGWZonePlacementInfo> placement_pools;
 
+  string realm_id;
+
   RGWZoneParams() : RGWSystemMetaObj() {}
   RGWZoneParams(const string& name) : RGWSystemMetaObj(name){}
   RGWZoneParams(const string& id, const string& name) : RGWSystemMetaObj(id, name) {}
+  RGWZoneParams(const string& id, const string& name, const string& _realm_id)
+    : RGWSystemMetaObj(id, name), realm_id(_realm_id) {}
 
   const string& get_pool_name(CephContext *cct);
-  const string& get_default_oid(bool old_format = false);
+  const string get_default_oid(bool old_format = false);
   const string& get_names_oid_prefix();
   const string& get_info_oid_prefix(bool old_format = false);
   const string& get_predefined_name(CephContext *cct);
@@ -877,6 +881,8 @@ struct RGWZoneParams : RGWSystemMetaObj {
   int init(CephContext *_cct, RGWRados *_store, bool setup_obj = true,
 	   bool old_format = false);
   using RGWSystemMetaObj::init;
+  int read_default_id(string& default_id, bool old_format = false);
+  int set_as_default();
   int create_default(bool old_format = false);
   int create(bool exclusive = true);
   int fix_pool_names();
@@ -897,6 +903,7 @@ struct RGWZoneParams : RGWSystemMetaObj {
     ::encode(system_key, bl);
     ::encode(placement_pools, bl);
     ::encode(metadata_heap, bl);
+    ::encode(realm_id, bl);
     ENCODE_FINISH(bl);
   }
 
@@ -924,6 +931,9 @@ struct RGWZoneParams : RGWSystemMetaObj {
       ::decode(placement_pools, bl);
     if (struct_v >= 5)
       ::decode(metadata_heap, bl);
+    if (struct_v >= 6) {
+      ::decode(realm_id, bl);
+    }
     DECODE_FINISH(bl);
   }
   void dump(Formatter *f) const;
@@ -1120,13 +1130,15 @@ struct RGWZoneGroup : public RGWSystemMetaObj {
     DECODE_FINISH(bl);
   }
 
+  int read_default_id(string& default_id, bool old_format = false);
+  int set_as_default();
   int create_default(bool old_format = false);
   int equals(const string& other_zonegroup) const;
   int add_zone(const RGWZoneParams& zone_params, bool *is_master, bool *read_only, const list<string>& endpoints);
   int remove_zone(const RGWZoneParams& zone_params);
   int rename_zone(const RGWZoneParams& zone_params);
   const string& get_pool_name(CephContext *cct);
-  const string& get_default_oid(bool old_region_format = false);
+  const string get_default_oid(bool old_region_format = false);
   const string& get_info_oid_prefix(bool old_region_format = false);
   const string& get_names_oid_prefix();
   const string& get_predefined_name(CephContext *cct);
@@ -1263,8 +1275,6 @@ class RGWPeriod;
 
 class RGWRealm : public RGWSystemMetaObj
 {
-  string master_zonegroup;
-  map<string, RGWZoneGroup> zonegroups;
   string current_period;
 
   int create_control();
@@ -1278,8 +1288,6 @@ public:
   void encode(bufferlist& bl) const {
     ENCODE_START(1, 1, bl);
     RGWSystemMetaObj::encode(bl);
-    ::encode(master_zonegroup, bl);
-    ::encode(zonegroups, bl);
     ::encode(current_period, bl);
     ENCODE_FINISH(bl);
   }
@@ -1287,8 +1295,6 @@ public:
   void decode(bufferlist::iterator& bl) {
     DECODE_START(1, bl);
     RGWSystemMetaObj::decode(bl);
-    ::decode(master_zonegroup, bl);
-    ::decode(zonegroups, bl);
     ::decode(current_period, bl);
     DECODE_FINISH(bl);
   }
@@ -1296,7 +1302,7 @@ public:
   int create(bool exclusive = true);
   int delete_obj();
   const string& get_pool_name(CephContext *cct);
-  const string& get_default_oid(bool old_format = false);
+  const string get_default_oid(bool old_format = false);
   const string& get_names_oid_prefix();
   const string& get_info_oid_prefix(bool old_format = false);
   const string& get_predefined_name(CephContext *cct);

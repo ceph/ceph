@@ -2783,6 +2783,7 @@ int main(int argc, char **argv)
 
         zone.system_key.id = access_key;
         zone.system_key.key = secret_key;
+	zone.realm_id = realm_id;
 
 	ret = zone.create();
 	if (ret < 0) {
@@ -2978,7 +2979,20 @@ int main(int argc, char **argv)
 	  cerr << "failed to list zones: " << cpp_strerror(-ret) << std::endl;
 	  return -ret;
 	}
+
+	RGWZoneParams zone;
+	ret = zone.init(g_ceph_context, store, false);
+	if (ret < 0) {
+	  cerr << "failed to init zone: " << cpp_strerror(-ret) << std::endl;
+	  return -ret;
+	}
+	string default_zone;
+	ret = zone.read_default_id(default_zone);
+	if (ret < 0 && ret != -ENOENT) {
+	  cerr << "could not determine default zone: " << cpp_strerror(-ret) << std::endl;
+	}
 	formatter->open_object_section("zones_list");
+	encode_json("default_info", default_zone, formatter);
 	encode_json("zones", zones, formatter);
 	formatter->close_section();
 	formatter->flush(cout);
@@ -3312,6 +3326,22 @@ int main(int argc, char **argv)
     return 0;
   case OPT_PERIOD_PULL:
     {
+      if (remote.empty() && url.empty() ) {
+	/* use realm master zonegroup as remote */
+	RGWRealm realm(realm_id, realm_name);
+	int ret = realm.init(g_ceph_context, store);
+	if (ret < 0) {
+	  cerr << "failed to init realm: " << cpp_strerror(-ret) << std::endl;
+	  return ret;
+	}
+	RGWPeriod current_period(realm.get_current_period());
+	ret = current_period.init(g_ceph_context, store);
+	if (ret < 0) {
+	  cerr << "failed to init current period: " << cpp_strerror(-ret) << std::endl;
+	  return ret;
+	}
+	remote = current_period.get_master_zonegroup();
+      }
       RGWPeriod period;
       int ret = do_period_pull(remote, url, access_key, secret_key,
                                realm_id, realm_name, period_id, period_epoch,
