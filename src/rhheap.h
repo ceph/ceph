@@ -150,26 +150,13 @@ namespace rh {
       return iterator(*this, count);
     }
 
-    void display() const {
-      std::cout << "{";
-      if (count) {
-	std::cout << data[0];
-      }
-      for (int i = 1; i < count; i++) {
-	std::cout << ", " << data[i];
-      }
-      std::cout << "}" << std::endl;
-    }
-
-#if 0
-    template<typename U>
-    friend std::ostream& operator<<(std::ostream&, const U&);
-#endif
+    template<typename T1, typename T2>
+    friend std::ostream& operator<<(std::ostream&, const Heap<T1,T2>&);
   }; // class Heap
 
-#if 0
-  template<typename T>
-  std::ostream& operator<<(std::ostream& out, const T& h) {
+  
+  template<typename T1, typename T2>
+  std::ostream& operator<<(std::ostream& out, const Heap<T1,T2>& h) {
     out << "{";
     if (h.count) {
       out << h.data[0];
@@ -180,6 +167,4 @@ namespace rh {
     out << "}";
     return out;
   }
-#endif
-
 } // namespace
