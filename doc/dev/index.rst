@@ -211,7 +211,7 @@ workflows.
            \----------------/                        |
                 ^                                    | fix changes
                 |                                    | make check
-                | review                             | ceph--workbench ceph--qa--suite
+                | review                             | teuthology-suite
                 |                                    | git commit
                 |                                    v
            /--------------\                        /-------------\
@@ -309,6 +309,266 @@ regressions, or to analyze test failures when they do occur.
 .. _`ceph-qa-suite repository`: https://github.com/ceph/ceph-qa-suite
 .. _`teuthology framework`: https://github.com/ceph/teuthology
 .. _`ceph-workbench ceph-qa-suite`: http://ceph-workbench.readthedocs.org/
+
+Integration tests : ceph-qa-suite
+=================================
+
+This is an introduction to integration tests. A detailed description
+of each option is available from ``teuthology-suite --help``.
+
+Reading a standalone integration test
+-------------------------------------
+
+A test is defined by yaml files found in the ``suites`` subdirectory
+of the `ceph-qa-suite repository`_ and implemented by python code
+found in the ``tasks`` subdirectory. Here is a commented example using
+`rados/singleton/all/admin-socket.yaml  <https://github.com/ceph/ceph-qa-suite/blob/master/suites/rados/singleton/all/admin-socket.yaml>`_ ::
+
+      roles:
+      - - mon.a
+        - osd.0
+        - osd.1
+      tasks:
+      - install:
+      - ceph:
+      - admin_socket:
+          osd.0:
+            version:
+            git_version:
+            help:
+            config show:
+            config set filestore_dump_file /tmp/foo:
+            perf dump:
+            perf schema:
+
+The ``roles`` array determines the composition of the cluster (how
+many MONs, OSDs, etc.) on which this test is designed to run, as well
+as how these roles will be distributed over the machines in the
+testing cluster. In this case, there is only one element in the
+top-level array: therefore, only one machine is allocated to the
+test. The nested array declares that this machine shall run a MON with
+id ``a`` (that is the ``mon.a`` in the list of roles) and two OSDs
+(``osd.0`` and ``osd.1``).
+
+The body of the test is in the ``tasks`` array: each element is
+evaluated in order and runs the corresponding python file found in the
+``tasks`` subdirectory of the `teuthology repository`_ or
+`ceph-qa-suite repository`_. The `install
+<https://github.com/ceph/teuthology/blob/master/teuthology/task/install.py>`_
+task comes first and installs the Ceph packages on each machine (as
+defined by the ``roles`` array). A full description of the ``install``
+task is `found in the python file
+<https://github.com/ceph/teuthology/blob/master/teuthology/task/install.py#L1146>`_.
+
+The `ceph task
+<https://github.com/ceph/ceph-qa-suite/blob/master/tasks/ceph.py#L1232>`_
+starts OSDs and MONs as required by the ``roles`` array. It will start
+one MON (``mon.a``) and two OSDs (``osd.0`` and ``osd.1``), on the same machine.
+
+Once the Ceph cluster is healthy, the `admin_socket task
+<https://github.com/ceph/ceph-qa-suite/blob/master/tasks/admin_socket.py#L18>`_
+starts. The parameter of the ``admin_socket`` task (and any other
+task) is a structure which is interpreted as documented in the
+task. In this example the parameters are a set of commands to be sent
+to the admin socket of ``osd.0``. The task verifies that each of them returns
+on success (i.e. exit code zero).
+
+This test can be run with::
+
+  teuthology-suite --suite rados/singleton/all/admin-socket.yaml
+
+How are tests built from directories ?
+--------------------------------------
+
+Most tests are not a single file but the concatenation of files
+collected from a tree. For instance, the `ceph-disk suite
+<https://github.com/ceph/ceph-qa-suite/tree/master/suites/ceph-disk/>`_
+is as follows::
+
+  directory: ceph-disk/basic
+      file: %
+      directory: distros
+         file: centos_7.0.yaml
+         file: ubuntu_14.04.yaml
+      directory: tasks
+         file: ceph-disk.yaml
+
+This is interpreted as two tests:
+
+* the concatenation of centos_7.0.yaml and ceph-disk.yaml
+* the concatenation of ubuntu_14.04.yaml and ceph-disk.yaml
+
+Meaning the task found in ``ceph-disk.yaml`` is intended to run on
+both CentOS 7.0 and Ubuntu 14.04.
+
+The special file percent (``%``) is interpreted as a requirement to
+generate tests combining all files found in the current directory and
+in its direct subdirectories. Without the file percent, the
+``ceph-disk`` tree would create three independant tests:
+
+* ceph-disk/basic/distros/centos_7.0.yaml
+* ceph-disk/basic/distros/ubuntu_14.04.yaml
+* ceph-disk/basic/distros/ceph-disk.yaml
+
+To share parts of the test description between suites, the special
+file plus (``+``) can be used to concatenate them. For instance::
+
+  directory: rbd/thrash
+    file: %
+    directory: clusters
+      file: +
+      file: fixed-2.yaml
+      file: openstack.yaml
+    directory: workloads
+      file: rbd_api_tests_copy_on_read.yaml
+      file: rbd_api_tests.yaml
+
+creates two tests:
+
+* rbd/thrash/{clusters/fixed-2.yaml, clusters/openstack.yaml,
+  workloads/rbd_api_tests_copy_on_read.yaml}
+* rbd/thrash/{clusters/fixed-2.yaml, clusters/openstack.yaml,
+  workloads/rbd_api_tests.yaml}
+
+Because of the special file plus (``+``), ``fixed-2.yaml`` and
+``openstack.yaml`` are concatenated together and treated as a single
+file. Without the special file plus, they would have been combined
+with the files from the workloads directory to create four tests:
+
+* rbd/thrash/{clusters/openstack.yaml, workloads/rbd_api_tests_copy_on_read.yaml}
+* rbd/thrash/{clusters/openstack.yaml, workloads/rbd_api_tests.yaml}
+* rbd/thrash/{clusters/fixed-2.yaml, workloads/rbd_api_tests_copy_on_read.yaml}
+* rbd/thrash/{clusters/fixed-2.yaml, workloads/rbd_api_tests.yaml}
+
+The ``clusters/fixed-2.yaml`` file is shared among many suites to
+define the following ``roles``::
+
+  roles:
+  - [mon.a, mon.c, osd.0, osd.1, osd.2, client.0]
+  - [mon.b, osd.3, osd.4, osd.5, client.1]
+
+The tests generated from the ``ceph-disk`` directory can be run with::
+
+  teuthology-suite --suite ceph-disk
+
+.. _`teuthology repository`: https://github.com/ceph/teuthology/
+
+Test descriptions are unique identifiers
+----------------------------------------
+
+Each test is uniquely identified by its description which is made of
+the names of all files concatenated together. For instance the test::
+
+  ceph-disk/basic/{distros/centos_7.0.yaml tasks/ceph-disk.yaml}
+
+is the concatenation of the files:
+
+* ceph-disk/basic/distros/centos_7.0.yaml
+* ceph-disk/basic/tasks/ceph-disk.yaml
+
+Filtering tests by their description
+------------------------------------
+
+When a few jobs fail and need to be run again, the ``--filter`` option
+will select the tests with a matching description. For instance if the
+``rados`` suite fails the `all/peer.yaml <https://github.com/ceph/ceph-qa-suite/blob/master/suites/rados/singleton/all/peer.yaml>`_ test, the following will only run the tests that contain this file::
+
+  teuthology-suite --suite rados --filter all/peer.yaml
+
+The ``--filter-out`` option does the opposite (it matches test that do
+not contain a given string), and can be combined with the ``--filter``
+option.
+
+Both --filter and --filter-out take a comma-separated list of strings (which
+means comma are implicitly forbidden in filenames found in the
+`ceph-qa-suite repository`_). For instance::
+
+  teuthology-suite --suite rados --filter all/peer.yaml,all/rest-api.yaml
+
+will run tests that contain either
+`all/peer.yaml <https://github.com/ceph/ceph-qa-suite/blob/master/suites/rados/singleton/all/peer.yaml>`_
+or
+`all/rest-api.yaml <https://github.com/ceph/ceph-qa-suite/blob/master/suites/rados/singleton/all/rest-api.yaml>`_
+
+Each string is looked up anywhere in the test description and has to
+be an exact match: they are not regular expressions.
+
+Reducing the number of tests
+----------------------------
+
+The rados suite generates thousands of tests out of a few hundred
+files. For instance all tests in the `rados/thrash suite <https://github.com/ceph/ceph-qa-suite/tree/master/suites/rados/thrash>`_ run for ``ext4``, ``xfs`` and ``btrfs`` because they are combined (the ``%`` file system)
+with the `fs directory <https://github.com/ceph/ceph-qa-suite/tree/master/suites/rados/thrash/fs>`_
+
+All these tests are required before a Ceph release is published but it
+is too much when verifying a contribution can be merged without
+risking a trivial regression. The --subset option can be used to
+reduce the number of tests that are triggered. For instance::
+
+  teuthology-suite --suite rados --subset 0/4000
+
+will run as few tests as possible. The tradeoff is that some tests
+will only run on ``ext4`` and not on ``btrfs``, but all files in the
+suite will be in at least one test.
+
+The ``--limit`` option only runs the first ``N`` tests in the suite:
+this is however rarely useful because there is no way to control which test
+will be first.
+
+Inventory
+---------
+
+The ``suites`` directory of the `ceph-qa-suite repository`_ contains
+all the integration tests, for all the Ceph components.
+
+`ceph-deploy <https://github.com/ceph/ceph-qa-suite/tree/master/suites/ceph-deploy>`_
+  install a Ceph cluster with `ceph-deploy`_
+
+`ceph-disk <https://github.com/ceph/ceph-qa-suite/tree/master/suites/ceph-disk>`_
+  verify init scripts (upstart etc.) and udev integration with
+  `ceph-disk`_, with and without dmcrypt support.
+
+`dummy <https://github.com/ceph/ceph-qa-suite/tree/master/suites/dummy>`_
+  get a machine, do nothing and return success (commonly used to
+  verify the integration testing infrastructure works as expected)
+  expected
+
+`fs <https://github.com/ceph/ceph-qa-suite/tree/master/suites/fs>`_
+  test CephFS
+
+`kcephfs <https://github.com/ceph/ceph-qa-suite/tree/master/suites/kcephfs>`_
+  test the CephFS kernel module
+
+`krbd <https://github.com/ceph/ceph-qa-suite/tree/master/suites/krbd>`_
+  test the RBD kernel module
+
+`powercycle <https://github.com/ceph/ceph-qa-suite/tree/master/suites/powercycle>`_
+  verify the Ceph cluster behaves when machines are powered off
+  and on again
+
+`rados <https://github.com/ceph/ceph-qa-suite/tree/master/suites/rados>`_
+  run Ceph clusters including OSDs and MONs, under various conditions of
+  stress
+
+`rbd <https://github.com/ceph/ceph-qa-suite/tree/master/suites/rbd>`_
+  run RBD tests using actual Ceph clusters, with and without qemu
+
+`rgw <https://github.com/ceph/ceph-qa-suite/tree/master/suites/rgw>`_
+  run RGW tests using actual Ceph clusters
+
+`smoke <https://github.com/ceph/ceph-qa-suite/tree/master/suites/smoke>`_
+  run test that exercise the Ceph API with an actual Ceph cluster
+
+`teuthology <https://github.com/ceph/ceph-qa-suite/tree/master/suites/teuthology>`_
+  verify that teuthology can run integration tests, with and without OpenStack
+
+`upgrade <https://github.com/ceph/ceph-qa-suite/tree/master/suites/upgrade>`_
+  for various versions of Ceph, verify that upgrades can happen
+  without disrupting an ongoing workload
+
+.. _`ceph-qa-suite repository`: https://github.com/ceph/ceph-qa-suite/
+.. _`ceph-deploy`: ../../man/8/ceph-deploy
+.. _`ceph-disk`: ../../man/8/ceph-disk
 
 Architecture
 ============
