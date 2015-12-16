@@ -448,14 +448,16 @@ typename Journal<I>::Future Journal<I>::wait_event(Mutex &lock, uint64_t tid,
   CephContext *cct = m_image_ctx.cct;
 
   typename Events::iterator it = m_events.find(tid);
-  if (it == m_events.end() || it->second.safe) {
+  assert(it != m_events.end());
+
+  Event &event = it->second;
+  if (event.safe) {
     // journal entry already safe
     ldout(cct, 20) << "journal entry already safe" << dendl;
-    m_image_ctx.op_work_queue->queue(on_safe, 0);
+    m_image_ctx.op_work_queue->queue(on_safe, event.ret_val);
     return Future();
   }
 
-  Event &event = it->second;
   event.on_safe_contexts.push_back(on_safe);
   return event.future;
 }
@@ -518,8 +520,20 @@ void Journal<I>::complete_event(typename Events::iterator it, int r) {
   ldout(cct, 20) << this << " " << __func__ << ": tid=" << it->first << " "
                  << "r=" << r << dendl;
 
-  m_journaler->committed(it->second.future);
-  if (it->second.safe) {
+  Event &event = it->second;
+  if (r < 0) {
+    // event recorded to journal but failed to update disk, we cannot
+    // commit this IO event. this event must be replayed.
+    assert(event.safe);
+    lderr(cct) << "failed to commit IO to disk, replay required: "
+               << cpp_strerror(r) << dendl;
+  }
+
+  event.committed_io = true;
+  if (event.safe) {
+    if (r >= 0) {
+      m_journaler->committed(event.future);
+    }
     m_events.erase(it);
   }
 }
@@ -696,7 +710,6 @@ void Journal<I>::handle_event_safe(int r, uint64_t tid) {
   ldout(cct, 20) << this << " " << __func__ << ": r=" << r << ", "
                  << "tid=" << tid << dendl;
 
-  // TODO: ensure this callback never sees a failure
   AioCompletion *aio_comp;
   AioObjectRequests aio_object_requests;
   Contexts on_safe_contexts;
@@ -710,7 +723,14 @@ void Journal<I>::handle_event_safe(int r, uint64_t tid) {
     aio_object_requests.swap(event.aio_object_requests);
     on_safe_contexts.swap(event.on_safe_contexts);
 
-    if (event.pending_extents.empty()) {
+    if (r < 0 || event.committed_io) {
+      // failed journal write so IO won't be sent -- or IO extent was
+      // overwritten by future IO operations so this was a no-op IO event
+      event.ret_val = r;
+      m_journaler->committed(event.future);
+    }
+
+    if (event.committed_io) {
       m_events.erase(it);
     } else {
       event.safe = true;
