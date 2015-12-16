@@ -113,7 +113,7 @@ int RGWFileHandle::write(uint64_t off, size_t len, size_t *bytes_written,
 
   file* f = get<file>(&variant_type);
   if (! f)
-    return EISDIR;
+    return -EISDIR;
 
   if (! f->write_req) {
     /* start */
