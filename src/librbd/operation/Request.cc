@@ -10,7 +10,7 @@ namespace operation {
 
 template <typename I>
 Request<I>::Request(I &image_ctx, Context *on_finish)
-  : AsyncRequest<I>(image_ctx, on_finish), m_tid(0) {
+  : AsyncRequest<I>(image_ctx, on_finish) {
 }
 
 template <typename I>
@@ -29,8 +29,9 @@ void Request<I>::send() {
         return;
       }
 
-      journal::EventEntry event_entry(create_event());
-      m_tid = image_ctx.journal->append_op_event(event_entry);
+      m_op_tid = image_ctx.journal->allocate_op_tid();
+      journal::EventEntry event_entry(create_event(m_op_tid));
+      image_ctx.journal->append_op_event(m_op_tid, event_entry);
     }
   }
 
@@ -42,12 +43,12 @@ void Request<I>::finish(int r) {
   {
     I &image_ctx = this->m_image_ctx;
     RWLock::RLocker snap_locker(image_ctx.snap_lock);
-    if (m_tid != 0 && image_ctx.journal != NULL &&
+    if (m_op_tid != 0 && image_ctx.journal != NULL &&
         !image_ctx.journal->is_journal_replaying()) {
       // ops will be canceled / completed before closing journal
       assert(image_ctx.journal->is_journal_ready());
 
-      image_ctx.journal->commit_op_event(m_tid, r);
+      image_ctx.journal->commit_op_event(m_op_tid, r);
     }
   }
 

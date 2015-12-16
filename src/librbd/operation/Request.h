@@ -25,7 +25,7 @@ protected:
   virtual void finish(int r);
   virtual void send_op() = 0;
 
-  virtual journal::Event create_event() const = 0;
+  virtual journal::Event create_event(uint64_t op_tid) const = 0;
 
 private:
   struct C_WaitForJournalReady : public Context {
@@ -39,7 +39,7 @@ private:
     }
   };
 
-  uint64_t m_tid;
+  uint64_t m_op_tid = 0;
 
   void handle_journal_ready();
 };

@@ -19,7 +19,8 @@ struct MockJournal {
   MOCK_METHOD1(open, void(Context *));
   MOCK_METHOD1(close, void(Context *));
 
-  MOCK_METHOD1(append_op_event, uint64_t(journal::EventEntry&));
+  MOCK_METHOD0(allocate_op_tid, uint64_t());
+  MOCK_METHOD2(append_op_event, void(uint64_t, journal::EventEntry&));
   MOCK_METHOD2(commit_op_event, void(uint64_t, int));
 };
 
