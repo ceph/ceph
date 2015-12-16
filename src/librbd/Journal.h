@@ -147,19 +147,19 @@ private:
 
   struct Event {
     Future future;
-    AioCompletion *aio_comp;
+    AioCompletion *aio_comp = nullptr;
     AioObjectRequests aio_object_requests;
     Contexts on_safe_contexts;
     ExtentInterval pending_extents;
-    bool safe;
-    int ret_val;
+    bool committed_io = false;
+    bool safe = false;
+    int ret_val = 0;
 
-    Event() : aio_comp(NULL) {
+    Event() {
     }
     Event(const Future &_future, AioCompletion *_aio_comp,
           const AioObjectRequests &_requests, uint64_t offset, size_t length)
-      : future(_future), aio_comp(_aio_comp), aio_object_requests(_requests),
-        safe(false), ret_val(0) {
+      : future(_future), aio_comp(_aio_comp), aio_object_requests(_requests) {
       if (length > 0) {
         pending_extents.insert(offset, length);
       }
