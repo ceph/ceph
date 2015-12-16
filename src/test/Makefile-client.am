@@ -19,6 +19,14 @@ ceph_dencoder_CFLAGS += -fno-var-tracking-assignments
 ceph_dencoder_CXXFLAGS += -fno-var-tracking-assignments
 endif
 
+if WITH_RBD
+ceph_dencoder_CXXFLAGS += -DWITH_RBD
+endif
+if WITH_RADOSGW
+ceph_dencoder_CXXFLAGS += -DWITH_RADOSGW
+endif
+
+
 bin_PROGRAMS += ceph-dencoder
 
 
