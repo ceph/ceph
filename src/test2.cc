@@ -8,6 +8,7 @@
 
 #include "crimson/heap.h"
 
+
 namespace c = crimson;
 
 
@@ -17,8 +18,15 @@ struct Less {
   }
 };
 
+struct More {
+  bool operator()(const int& l, const int& r) {
+    return l > r;
+  }
+};
 
-void myDisplay(c::Heap<int, Less> h) {
+
+template<typename T, typename C>
+void myDisplay(c::Heap<T, C>& h) {
   for (auto i = h.begin(); i != h.end(); ++i) {
     std::cout << *i << " ";
   }
@@ -26,14 +34,17 @@ void myDisplay(c::Heap<int, Less> h) {
 }
 
 
-void addToHeap(c::Heap<int, Less>& h, int data[], int count) {
+template<typename T, typename C>
+void addToHeap(c::Heap<T, C>& h, T data[], int count) {
   for (int i = 0; i < count; ++i) {
     h.push(data[i]);
   }
 }
 
 
-void destructiveDisplay(c::Heap<int, Less>& h) {
+template<typename T, typename C>
+void destructiveDisplay(c::Heap<T, C>& h) {
+  C compare;
     int item = h.top();
     h.pop();
     std::cout << item;
@@ -41,7 +52,7 @@ void destructiveDisplay(c::Heap<int, Less>& h) {
       int next = h.top();
       h.pop();
       std::cout << ", " << next;
-      if (item > next) {
+      if (compare(next, item)) {
 	std::cout << "*";
       }
       item = next;
@@ -50,8 +61,9 @@ void destructiveDisplay(c::Heap<int, Less>& h) {
 }
 
 
+template<typename C>
 void test(int data[], int count) {
-  c::Heap<int, Less> h;
+  c::Heap<int, C> h;
 
   addToHeap(h, data, count);
 
@@ -69,6 +81,21 @@ void test(int data[], int count) {
 }
 
 
+void testIncrease(int data[], int count) {
+  c::Heap<int,Less> h1;
+  addToHeap(h1, data, count);
+  int j = 0;
+  for (auto i = h1.begin(); i != h1.end(); ++i, ++j) {
+    if (j == count/2) {
+      (*i) = -1;
+      i.increase();
+    }
+  }
+  std::cout << h1 << std::endl;
+  destructiveDisplay(h1);
+}
+
+
 #define COUNT(i) ((sizeof i) / (sizeof i[0]))
 
 int main(int argc, char* argv[]) {
@@ -79,22 +106,16 @@ int main(int argc, char* argv[]) {
   int d5[] = {4};
   int d6[] = {};
 
-  test(d1, COUNT(d1));
-  test(d2, COUNT(d2));
-  test(d3, COUNT(d3));
-  test(d4, COUNT(d4));
-  test(d5, COUNT(d5));
-  test(d6, COUNT(d6));
+  test<Less>(d1, COUNT(d1));
+  test<Less>(d2, COUNT(d2));
+  test<Less>(d3, COUNT(d3));
+  test<Less>(d4, COUNT(d4));
+  test<Less>(d5, COUNT(d5));
+  test<Less>(d6, COUNT(d6));
 
-  c::Heap<int,Less> h1;
-  addToHeap(h1, d1, COUNT(d1));
-  int j = 0;
-  for (auto i = h1.begin(); i != h1.end(); ++i, ++j) {
-    if (j == COUNT(d1)/2) {
-      (*i) = -1;
-      i.increase();
-    }
-  }
-  std::cout << h1 << std::endl;
-  destructiveDisplay(h1);
+  test<More>(d1, COUNT(d1));
+  test<More>(d2, COUNT(d2));
+
+  testIncrease(d1, COUNT(d1));
+  testIncrease(d2, COUNT(d2));
 }
