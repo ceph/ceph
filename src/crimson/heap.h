@@ -7,7 +7,17 @@
 #include <vector>
 #include <ostream>
 
-namespace rh {
+#include "assert.h"
+
+namespace crimson {
+  
+  /*
+   * T : type of data held in the heap.
+   * 
+   * C : class that implements operator() with two arguments and
+   * returns a boolean when the first argument is greater than (higher
+   * in priority than) the second.
+   */
   template<typename T, typename C>
   class Heap {
 
@@ -52,6 +62,11 @@ namespace rh {
       T& operator*() {
 	return heap.data[index];
       }
+
+      // the item this iterator refers to 
+      void increase() {
+	heap.siftUp(index);
+      }
     }; // class iterator
 
     friend iterator;
@@ -62,9 +77,29 @@ namespace rh {
     int count;
     C comparator;
 
-    int parent(int i) { return (i - 1) / 2; }
-    int lhs(int i) { return 2*i + 1; }
-    int rhs(int i) { return 2*i + 2; }
+    // parent(0) should be a negative value, which it is due to
+    // truncating towards negative infinity
+    static int parent(int i) { return (i - 1) / 2; }
+
+    static int lhs(int i) { return 2*i + 1; }
+
+    static int rhs(int i) { return 2*i + 2; }
+
+    void siftUp(int i) {
+      assert(i < count);
+
+      while (i > 0) {
+	int pi = parent(i);
+	if (comparator(data[pi], data[i])) {
+	  break;
+	}
+
+	T temp = data[pi];
+	data[pi] = data[i];
+	data[i] = temp;
+	i = pi;
+      }
+    }
 
     void siftDown(int i) {
       while (i < count) {
@@ -114,17 +149,7 @@ namespace rh {
     void push(T item) {
       int i = count++;
       data.push_back(item);
-      while (i > 0) {
-	int pi = parent(i);
-	if (comparator(data[pi], data[i])) {
-	  break;
-	}
-
-	T temp = data[pi];
-	data[pi] = data[i];
-	data[i] = temp;
-	i = pi;
-      }
+      siftUp(i);
     }
 
     void pop() {

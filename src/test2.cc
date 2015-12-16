@@ -6,7 +6,9 @@
 
 #include <iostream>
 
-#include "rhheap.h"
+#include "crimson/heap.h"
+
+namespace c = crimson;
 
 
 struct Less {
@@ -16,7 +18,7 @@ struct Less {
 };
 
 
-void myDisplay(rh::Heap<int, Less> h) {
+void myDisplay(c::Heap<int, Less> h) {
   for (auto i = h.begin(); i != h.end(); ++i) {
     std::cout << *i << " ";
   }
@@ -24,23 +26,14 @@ void myDisplay(rh::Heap<int, Less> h) {
 }
 
 
-void test(int data[], int count) {
-  rh::Heap<int, Less> h;
-
+void addToHeap(c::Heap<int, Less>& h, int data[], int count) {
   for (int i = 0; i < count; ++i) {
     h.push(data[i]);
   }
+}
 
-  std::cout << "======" << std::endl;
 
-  std::cout << h << std::endl;
-  myDisplay(h);
-
-  if (!h.empty()) {
-    h.top() = 5;
-    h.updateTop();
-    std::cout << h << std::endl;
-
+void destructiveDisplay(c::Heap<int, Less>& h) {
     int item = h.top();
     h.pop();
     std::cout << item;
@@ -54,6 +47,24 @@ void test(int data[], int count) {
       item = next;
     }
     std::cout << std::endl;
+}
+
+
+void test(int data[], int count) {
+  c::Heap<int, Less> h;
+
+  addToHeap(h, data, count);
+
+  std::cout << "======" << std::endl;
+
+  std::cout << h << std::endl;
+  myDisplay(h);
+
+  if (!h.empty()) {
+    h.top() = 5;
+    h.updateTop();
+    std::cout << h << std::endl;
+    destructiveDisplay(h);
   }
 }
 
@@ -74,4 +85,16 @@ int main(int argc, char* argv[]) {
   test(d4, COUNT(d4));
   test(d5, COUNT(d5));
   test(d6, COUNT(d6));
+
+  c::Heap<int,Less> h1;
+  addToHeap(h1, d1, COUNT(d1));
+  int j = 0;
+  for (auto i = h1.begin(); i != h1.end(); ++i, ++j) {
+    if (j == COUNT(d1)/2) {
+      (*i) = -1;
+      i.increase();
+    }
+  }
+  std::cout << h1 << std::endl;
+  destructiveDisplay(h1);
 }
