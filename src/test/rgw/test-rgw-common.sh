@@ -46,7 +46,7 @@ END
 
 
 x() {
-  echo "x " "$@"
+  # echo "x " "$@"
   eval "$@"
 }
 
