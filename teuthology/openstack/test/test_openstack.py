@@ -280,15 +280,16 @@ openstack keypair delete {key_name} || true
         teuthology.teuthology_suite = 'echo --'
 
         teuthology.main()
-        assert 'Ubuntu 14.04' in teuthology.ssh("lsb_release -a")
-        variables = teuthology.ssh("grep 'substituded variables' /var/log/cloud-init.log")
-        assert "nworkers=" + str(args.simultaneous_jobs) in variables
-        assert "username=" + teuthology.username in variables
-        assert "upload=--archive-upload user@archive:/tmp" in variables
-        assert "clone=git clone" in variables
-        assert os.environ['OS_AUTH_URL'] in variables
-
-        assert " ".join(teuthology_argv) in caplog.text()
+        assert 0 == teuthology.ssh("lsb_release -a")
+        assert 0 == teuthology.ssh("grep 'substituded variables' /var/log/cloud-init.log")
+        l = caplog.text()
+        assert 'Ubuntu 14.04' in l
+        assert "nworkers=" + str(args.simultaneous_jobs) in l
+        assert "username=" + teuthology.username in l
+        assert "upload=--archive-upload user@archive:/tmp" in l
+        assert "clone=git clone" in l
+        assert os.environ['OS_AUTH_URL'] in l
+        assert " ".join(teuthology_argv) in l
 
         if self.can_create_floating_ips:
             ip = teuthology.get_floating_ip(self.name)

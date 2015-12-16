@@ -1,9 +1,11 @@
 import argparse
+from datetime import datetime
 
 from mock import patch
 from ..orchestra import cluster
 from .. import misc
 from ..config import config
+import subprocess
 
 import pytest
 
@@ -24,11 +26,28 @@ def test_sh_truncate(caplog):
 
 
 def test_sh_fail(caplog):
-    with pytest.raises(Exception) as excinfo:
+    with pytest.raises(subprocess.CalledProcessError) as excinfo:
         misc.sh("/bin/echo -n AB ; /bin/echo C ; exit 111", 2) == "ABC\n"
     assert excinfo.value.returncode == 111
-    assert "failed with ABC" in caplog.text()
+    for record in caplog.records():
+        if record.levelname == 'ERROR':
+            assert ('replay full' in record.message or
+                    'ABC\n' == record.message)
 
+def test_sh_progress(caplog):
+    misc.sh("echo AB ; sleep 5 ; /bin/echo C", 2) == "ABC\n"
+    records = caplog.records()
+    assert ':sh: ' in records[0].message
+    assert 'AB' == records[1].message
+    assert 'C' == records[2].message
+    #
+    # With a sleep 5 between the first and the second message,
+    # there must be at least 2 seconds between the log record
+    # of the first message and the log record of the second one
+    #
+    t1 = datetime.strptime(records[1].asctime.split(',')[0], "%Y-%m-%d %H:%M:%S")
+    t2 = datetime.strptime(records[2].asctime.split(',')[0], "%Y-%m-%d %H:%M:%S")
+    assert (t2 - t1).total_seconds() > 2
 
 def test_wait_until_osds_up():
     ctx = argparse.Namespace()

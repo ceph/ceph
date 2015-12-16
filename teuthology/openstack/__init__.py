@@ -341,11 +341,11 @@ class OpenStack(object):
                     volume['Display Name'].startswith('target'))
         return filter(select, all)
 
-    def cloud_init_wait(self):
+    def cloud_init_wait(self, instance):
         """
         Wait for cloud-init to complete on the name_or_ip OpenStack instance.
         """
-        ip = self.instance.get_floating_ip_or_ip()
+        ip = instance.get_floating_ip_or_ip()
         log.debug('cloud_init_wait ' + ip)
         client_args = {
             'user_at_host': '@'.join((self.username, ip)),
@@ -355,15 +355,13 @@ class OpenStack(object):
         if self.key_filename:
             log.debug("using key " + self.key_filename)
             client_args['key_filename'] = self.key_filename
-        with safe_while(sleep=30, tries=100,
+        with safe_while(sleep=30, tries=30,
                         action="cloud_init_wait " + ip) as proceed:
             success = False
             # CentOS 6.6 logs in /var/log/clout-init-output.log
             # CentOS 7.0 logs in /var/log/clout-init.log
-            all_done = ("tail /var/log/cloud-init*.log ; " +
-                        " test -f /tmp/init.out && tail /tmp/init.out ; " +
-                        " grep '" + self.up_string + "' " +
-                        "/var/log/cloud-init*.log")
+            tail = ("tail --follow=name --retry"
+                        " /var/log/cloud-init*.log /tmp/init.out")
             while proceed():
                 try:
                     client = connection.connect(**client_args)
@@ -391,24 +389,28 @@ class OpenStack(object):
                             continue
                     log.exception('cloud_init_wait ' + ip)
                     raise
-                log.debug('cloud_init_wait ' + all_done)
+                log.debug('cloud_init_wait ' + tail)
                 try:
-                    stdin, stdout, stderr = client.exec_command(all_done)
-                    stdout.channel.settimeout(5)
-                    out = stdout.read()
-                    log.debug('cloud_init_wait stdout ' + all_done + ' ' + out)
+                    # get the I/O channel to iterate line by line
+                    transport = client.get_transport()
+                    channel = transport.open_session()
+                    channel.get_pty()
+                    channel.settimeout(240)
+                    output = channel.makefile('r', 1)
+                    channel.exec_command(tail)
+                    for line in iter(output.readline, b''):
+                        log.info(line.strip())
+                        if self.up_string in line:
+                            success = True
+                            break
                 except socket.timeout as e:
                     client.close()
-                    log.debug('cloud_init_wait socket.timeout ' + all_done)
+                    log.debug('cloud_init_wait socket.timeout ' + tail)
                     continue
                 except socket.error as e:
                     client.close()
-                    log.debug('cloud_init_wait socket.error ' + str(e) + ' ' + all_done)
+                    log.debug('cloud_init_wait socket.error ' + str(e) + ' ' + tail)
                     continue
-                log.debug('cloud_init_wait stderr ' + all_done +
-                          ' ' + stderr.read())
-                if stdout.channel.recv_exit_status() == 0:
-                    success = True
                 client.close()
                 if success:
                     break
@@ -444,24 +446,16 @@ class TeuthologyOpenStack(OpenStack):
         self.verify_openstack()
         self.setup()
         if self.args.suite:
+            if self.args.wait:
+                self.reminders()
             self.run_suite()
-        if self.args.key_filename:
-            identity = '-i ' + self.args.key_filename + ' '
-        else:
-            identity = ''
-        if self.args.upload:
-            upload = 'upload to    : ' + self.args.archive_upload
-        else:
-            upload = ''
-        log.info("""
-pulpito web interface: http://{ip}:8081/
-ssh access           : ssh {identity}{username}@{ip} # logs in /usr/share/nginx/html
-{upload}""".format(ip=self.instance.get_floating_ip_or_ip(),
-                   username=self.username,
-                   identity=identity,
-                   upload=upload))
+            self.reminders()
         if self.args.teardown:
-            self.teardown()
+            if self.args.suite and not self.args.wait:
+                log.error("it does not make sense to teardown a cluster"
+                          " right after a suite is scheduled")
+            else:
+                self.teardown()
 
     def run_suite(self):
         """
@@ -490,6 +484,23 @@ ssh access           : ssh {identity}{username}@{ip} # logs in /usr/share/nginx/
             " ".join(map(lambda x: "'" + x + "'", argv))
         )
         print self.ssh(command)
+
+    def reminders(self):
+        if self.args.key_filename:
+            identity = '-i ' + self.args.key_filename + ' '
+        else:
+            identity = ''
+        if self.args.upload:
+            upload = 'upload to            : ' + self.args.archive_upload
+        else:
+            upload = ''
+        log.info("""
+pulpito web interface: http://{ip}:8081/
+ssh access           : ssh {identity}{username}@{ip} # logs in /usr/share/nginx/html
+{upload}""".format(ip=self.instance.get_floating_ip_or_ip(),
+                   username=self.username,
+                   identity=identity,
+                   upload=upload))
 
     def setup(self):
         self.instance = OpenStackInstance(self.args.name)
@@ -523,17 +534,17 @@ ssh access           : ssh {identity}{username}@{ip} # logs in /usr/share/nginx/
             log.debug("ssh overriding key with " + self.key_filename)
             client_args['key_filename'] = self.key_filename
         client = connection.connect(**client_args)
-        stdin, stdout, stderr = client.exec_command(command)
-        stdout.channel.settimeout(300)
-        out = ''
-        try:
-            out = stdout.read()
-            log.debug('ssh stdout ' + command + ' ' + out)
-        except Exception:
-            log.exception('ssh ' + command + ' failed')
-        err = stderr.read()
-        log.debug('ssh stderr ' + command + ' ' + err)
-        return out + ' ' + err
+        # get the I/O channel to iterate line by line
+        transport = client.get_transport()
+        channel = transport.open_session()
+        channel.get_pty()
+        channel.settimeout(900)
+        output = channel.makefile('r', 1)
+        log.debug(":ssh@" + ip + ":" + command)
+        channel.exec_command(command)
+        for line in iter(output.readline, b''):
+            log.info(line.strip())
+        return channel.recv_exit_status()
 
     def verify_openstack(self):
         """
@@ -699,7 +710,7 @@ openstack security group rule create --proto udp --dst-port 53 teuthology # dns
         """
         Remove the floating ip from instance_id and delete it.
         """
-        ip = TeuthologyOpenStack.get_floating_ip(instance_id)
+        ip = OpenStackInstance(instance_id).get_floating_ip()
         if not ip:
             return
         misc.sh("openstack ip floating remove " + ip + " " + instance_id)
@@ -725,7 +736,7 @@ openstack security group rule create --proto udp --dst-port 53 teuthology # dns
         os.unlink(user_data)
         self.instance = OpenStackInstance(self.args.name)
         self.associate_floating_ip(self.instance['id'])
-        return self.cloud_init_wait()
+        return self.cloud_init_wait(self.instance)
 
     def teardown(self):
         """
