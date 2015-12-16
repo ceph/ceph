@@ -50,6 +50,6 @@ done
 
 i=2
 while [ $i -le $num_clusters ]; do
-  wait_for_meta_sync 1 $i
+  wait_for_meta_sync 1 $i $realm_name
 done
 
