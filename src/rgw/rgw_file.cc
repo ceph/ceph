@@ -132,6 +132,30 @@ int RGWFileHandle::write(uint64_t off, size_t len, size_t *bytes_written,
   return rc;
 } /* RGWFileHandle::write */
 
+int RGWFileHandle::close()
+{
+  lock_guard guard(mtx);
+
+  int rc = 0;
+  file* f = get<file>(&variant_type);
+  if (! f->write_req) {
+    rc = librgw.get_fe()->finish_req(f->write_req);
+    if (! rc) {
+      rc = f->write_req->get_ret();
+      if (! rc) {
+	/* update stats */
+	set_size(f->write_req->bytes_written);
+	// XXX mtime
+      }
+    }
+    delete f->write_req;
+    f->write_req = nullptr;
+  }
+
+  flags &= ~FLAG_OPEN;
+  return rc;
+} /* RGWFileHandle::close */
+
 RGWFileHandle::file::~file()
 {
   delete write_req;
@@ -140,7 +164,8 @@ RGWFileHandle::file::~file()
 int RGWWriteRequest::exec_start() {
   struct req_state* s = get_state();
 
-  need_calc_md5 = (obj_manifest == NULL);
+  // XXX check this
+  need_calc_md5 = (dlo_manifest == NULL) && (slo_info == NULL);
 
   perfcounter->inc(l_rgw_put);
   op_ret = -EINVAL;
@@ -673,12 +698,12 @@ int rgw_close(struct rgw_fs *rgw_fs,
 	      struct rgw_file_handle *fh, uint32_t flags)
 {
   RGWFileHandle* rgw_fh = get_rgwfh(fh);
-  rgw_fh->close(/* XXX */);
+  int rc = rgw_fh->close(/* XXX */);
 
   if (flags & RGW_CLOSE_FLAG_RELE)
     rgw_fh->rele();
 
-  return 0;
+  return rc;
 }
 
 int rgw_readdir(struct rgw_fs *rgw_fs,
@@ -767,8 +792,6 @@ int rgw_write(struct rgw_fs *rgw_fs,
 	      struct rgw_file_handle *fh, uint64_t offset,
 	      size_t length, size_t *bytes_written, void *buffer)
 {
-  CephContext* cct = static_cast<CephContext*>(rgw_fs->rgw);
-  RGWLibFS *fs = static_cast<RGWLibFS*>(rgw_fs->fs_private);
   RGWFileHandle* rgw_fh = get_rgwfh(fh);
 
   if (! rgw_fh->is_file())

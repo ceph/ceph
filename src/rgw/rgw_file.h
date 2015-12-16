@@ -363,11 +363,7 @@ namespace rgw {
 
     int write(uint64_t off, size_t len, size_t *nbytes, void *buffer);
     int write_finish();
-
-    void close() {
-      lock_guard guard(mtx);
-      flags &= ~FLAG_OPEN;
-    }
+    int close();
 
     void open_for_create() {
       lock_guard guard(mtx);
