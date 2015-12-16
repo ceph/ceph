@@ -2846,7 +2846,7 @@ def main_destroy(args):
     # Check zap flag. If we found zap flag, we need to find device for
     # destroy this osd data.
     if args.zap is True:
-        # earse the osd data
+        # erase the osd data
         LOG.info("Prepare to zap the device %s" % base_dev)
         zap(base_dev)
 
