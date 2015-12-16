@@ -1259,16 +1259,17 @@ public:
   MixedGenerator(int64_t p) : seq(0), poolid(p) {}
   ghobject_t create_object(gen_type *gen) {
     char buf[100];
-    snprintf(buf, sizeof(buf), "%u", seq);
-
-    boost::uniform_int<> true_false(0, 1);
+    snprintf(buf, sizeof(buf), "OBJ_%u", seq);
     string name(buf);
+
+    /*
+    boost::uniform_int<> true_false(0, 1);
     if (true_false(*gen)) {
       // long
       for (int i = 0; i < 100; ++i) name.append("aaaaa");
     } else if (true_false(*gen)) {
       name = "DIR_" + name;
-    }
+      }*/
 
     // hash
     //boost::binomial_distribution<uint32_t> bin(0xFFFFFF, 0.5);
