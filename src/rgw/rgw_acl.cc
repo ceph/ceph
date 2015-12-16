@@ -170,7 +170,18 @@ void ACLOwner::dump(Formatter *f) const
 
 void ACLPermission::dump(Formatter *f) const
 {
-  f->dump_int("flags", flags);
+  if ((flags & RGW_PERM_FULL_CONTROL) == RGW_PERM_FULL_CONTROL) {
+    f->dump_string("permission", "full_control");
+  } else {
+    if (flags & RGW_PERM_READ)
+      f->dump_string("permission", "read");
+    if (flags & RGW_PERM_WRITE)
+      f->dump_string("permission", "write");
+    if (flags & RGW_PERM_READ_ACP)
+      f->dump_string("permission", "read_acp");
+    if (flags & RGW_PERM_WRITE_ACP)
+      f->dump_string("permission", "write_acp");
+  }
 }
 
 void ACLGranteeType::dump(Formatter *f) const
@@ -191,7 +202,7 @@ void ACLGrant::dump(Formatter *f) const
   permission.dump(f);
   f->close_section();
 
-  f->dump_string("name", name);
+  f->dump_string("display_name", name);
   f->dump_int("group", (int)group);
 }
 
