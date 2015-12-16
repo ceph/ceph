@@ -42,6 +42,7 @@ if test "$(uname)" = FreeBSD ; then
         misc/e2fsprogs-libuuid \
         textproc/expat2 \
         textproc/libxml2 \
+        textproc/starlet \
         emulators/fuse \
         java/junit \
         lang/python27 \
