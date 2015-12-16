@@ -11,6 +11,51 @@ namespace rh {
   template<typename T, typename C>
   class Heap {
 
+  public:
+    
+    class iterator {
+
+      friend Heap<T,C>;
+
+      Heap<T,C>& heap;
+      int        index;
+
+      iterator(Heap<T,C>& _heap, int _index) :
+	heap(_heap),
+	index(_index)
+      {
+	// empty
+      }
+
+    public:
+
+      iterator(iterator&& other) :
+	heap(other.heap),
+	index(other.index)
+      {
+	// empty
+      }
+
+      iterator& operator++() {
+	++index;
+	return *this;
+      }
+
+      bool operator==(const iterator& other) const {
+	return index == other.index;
+      }
+
+      bool operator!=(const iterator& other) const {
+	return !(*this == other);
+      }
+
+      T& operator*() {
+	return heap.data[index];
+      }
+    }; // class iterator
+
+    friend iterator;
+
   protected:
 
     std::vector<T> data;
@@ -31,18 +76,18 @@ namespace rh {
 	    if (ri < count && comparator(data[ri], data[li])) {
 	      T temp = data[i];
 	      data[i] = data[ri];
-	      data[ri] = data[i];
+	      data[ri] = temp;
 	      i = ri;
 	    } else {
 	      T temp = data[i];
 	      data[i] = data[li];
-	      data[li] = data[i];
+	      data[li] = temp;
 	      i = li;
 	    }
 	  } else if (ri < count && comparator(data[ri], data[i])) {
 	    T temp = data[i];
 	    data[i] = data[ri];
-	    data[ri] = data[i];
+	    data[ri] = temp;
 	    i = ri;
 	  } else {
 	    break;
@@ -64,7 +109,7 @@ namespace rh {
 
     bool empty() const { return 0 == count; }
 
-    T top() const { return data[0]; }
+    T& top() { return data[0]; }
 
     void push(T item) {
       int i = count++;
@@ -84,13 +129,25 @@ namespace rh {
 
     void pop() {
       data[0] = data[--count];
-      // data.resize(count);
+      data.resize(count);
+      siftDown(0);
+    }
+
+    void updateTop() {
       siftDown(0);
     }
 
     void clear() {
       count = 0;
       data.resize(0);
+    }
+
+    iterator begin() {
+      return iterator(*this, 0);
+    }
+
+    iterator end() {
+      return iterator(*this, count);
     }
 
     void display() const {

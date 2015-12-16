@@ -16,6 +16,14 @@ struct Less {
 };
 
 
+void myDisplay(rh::Heap<int, Less> h) {
+  for (auto i = h.begin(); i != h.end(); ++i) {
+    std::cout << *i << ", ";
+  }
+  std::cout << std::endl;
+}
+
+
 void test(int data[], int count) {
   rh::Heap<int, Less> h;
 
@@ -23,9 +31,16 @@ void test(int data[], int count) {
     h.push(data[i]);
   }
 
+  std::cout << "======" << std::endl;
+
   h.display();
+  myDisplay(h);
 
   if (!h.empty()) {
+    h.top() = 5;
+    h.updateTop();
+    h.display();
+
     int item = h.top();
     h.pop();
     std::cout << item;
