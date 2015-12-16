@@ -1457,9 +1457,10 @@ public:
     wait_for_ready();
 
     ghobject_t old_obj;
+    int max = 20;
     do {
       old_obj = get_uniform_random_object();
-    } while (contents[old_obj].data.length());
+    } while (--max && !contents[old_obj].data.length());
     available_objects.erase(old_obj);
     ghobject_t new_obj = object_gen->create_object(rng);
     available_objects.erase(new_obj);
