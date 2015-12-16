@@ -510,6 +510,7 @@ private:
   /* API Contract Fulfilment */
   int execute_add(RGWUserAdminOpState& op_state, std::string *err_msg, bool defer_save);
   int execute_remove(RGWUserAdminOpState& op_state, std::string *err_msg, bool defer_save);
+  int remove_subuser_keys(RGWUserAdminOpState& op_state, std::string *err_msg, bool defer_save);
 
   int add(RGWUserAdminOpState& op_state, std::string *err_msg, bool defer_save);
   int remove(RGWUserAdminOpState& op_state, std::string *err_msg, bool defer_save);
