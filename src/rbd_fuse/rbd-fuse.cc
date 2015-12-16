@@ -18,6 +18,7 @@
 #include <unistd.h>
 #include <getopt.h>
 #include <assert.h>
+#include <string>
 
 #if defined(__FreeBSD__)
 #include <sys/param.h>
@@ -537,11 +538,26 @@ rbdfs_create(const char *path, mode_t mode, struct fuse_file_info *fi)
 int rbdfs_rename(const char *path, const char *destname)
 {
     const char *srcname = NULL;
+    const char *extra[] = {" ", "@", "/"};
+    std::string image_dest_name(destname + 1);
+    
+    // check image dest name
+    if (image_dest_name.empty())
+        return -EINVAL;
+
+    unsigned int sz = sizeof(extra) / sizeof(const char*);
+    for (unsigned int i = 0; i < sz; i++)
+    {
+        std::string ex(extra[i]);
+        if (std::string::npos != image_dest_name.find(ex))
+            return -EINVAL;
+    }
+
     if (strcmp(path, "/") == 0)
         return -EINVAL;
 
     srcname = path + 1;
-    return rbd_rename(ioctx, srcname, destname + 1);
+    return rbd_rename(ioctx, srcname, image_dest_name.c_str());
 }
 
 int
