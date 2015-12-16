@@ -5,6 +5,7 @@
 #define CEPH_LIBRBD_JOURNAL_H
 
 #include "include/int_types.h"
+#include "include/atomic.h"
 #include "include/Context.h"
 #include "include/interval_set.h"
 #include "include/unordered_map.h"
@@ -120,11 +121,17 @@ public:
   void commit_io_event_extent(uint64_t tid, uint64_t offset, uint64_t length,
                               int r);
 
-  uint64_t append_op_event(journal::EventEntry &event_entry);
-  void commit_op_event(uint64_t tid, int r);
+  void append_op_event(uint64_t op_tid, journal::EventEntry &event_entry);
+  void commit_op_event(uint64_t op_tid, int r);
 
   void flush_event(uint64_t tid, Context *on_safe);
   void wait_event(uint64_t tid, Context *on_safe);
+
+  uint64_t allocate_op_tid() {
+    uint64_t op_tid = m_op_tid.inc();
+    assert(op_tid != 0);
+    return op_tid;
+  }
 
 private:
   ImageCtxT &m_image_ctx;
@@ -207,6 +214,8 @@ private:
   Mutex m_event_lock;
   uint64_t m_event_tid;
   Events m_events;
+
+  atomic_t m_op_tid;
 
   bool m_blocking_writes;
 

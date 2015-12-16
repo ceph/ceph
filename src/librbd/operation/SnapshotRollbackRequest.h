@@ -69,8 +69,8 @@ protected:
   virtual void send_op();
   virtual bool should_complete(int r);
 
-  virtual journal::Event create_event() const {
-    return journal::SnapRollbackEvent(0, m_snap_name);
+  virtual journal::Event create_event(uint64_t op_tid) const {
+    return journal::SnapRollbackEvent(op_tid, m_snap_name);
   }
 
 private:
