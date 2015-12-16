@@ -1,9 +1,11 @@
 import subprocess
 import os
-
+import json
 import random
 import string
-
+import argparse
+import sys
+import time
 
 mstart_path = os.getenv('MSTART_PATH')
 if mstart_path is None:
@@ -82,7 +84,9 @@ class RGWCluster:
         mstop(self.cluster_id, 'radosgw')
 
     def rgw_admin(self, cmd):
-        print bash(tpath('test-rgw-call.sh', 'call_rgw_admin', self.cluster_num, cmd))
+        s = bash(tpath('test-rgw-call.sh', 'call_rgw_admin', self.cluster_num, cmd))
+        print s
+        return s
 
 class RGWRealm:
     def __init__(self, realm, credentials, master_index):
@@ -100,11 +104,57 @@ class RGWRealm:
                        self.realm, zg, zone_name, first_zone_port, port,
                        self.credentials.access_key, self.credentials.secret))
 
-    def meta_checkpoint(self, cluster_index):
-        if cluster_index == self.master_index:
+    def meta_sync_status(self, cluster):
+        if cluster.cluster_num == self.master_index:
+            return None
+
+        meta_sync_status_json=cluster.rgw_admin('--rgw-realm=' + self.realm + ' metadata sync status')
+        print 'm=', meta_sync_status_json
+        meta_sync_status = json.loads(meta_sync_status_json)
+        
+        global_sync_status=meta_sync_status['sync_status']['info']['status']
+        num_shards=meta_sync_status['sync_status']['info']['num_shards']
+
+        sync_markers=meta_sync_status['sync_status']['markers']
+        print 'sync_markers=', sync_markers
+        assert(num_shards == len(sync_markers))
+
+        markers={}
+        for i in xrange(num_shards):
+            markers[i] = sync_markers[i]['val']['marker']
+
+        return (num_shards, markers)
+
+    def meta_master_log_status(self, master_cluster):
+        mdlog_status_json=master_cluster.rgw_admin('--rgw-realm=' + self.realm + ' mdlog status')
+        mdlog_status = json.loads(mdlog_status_json)
+
+        markers={}
+        i = 0
+        for s in mdlog_status:
+            markers[i] = s['marker']
+            i += 1
+
+        return markers
+
+    def meta_checkpoint(self, master_cluster, cluster):
+        if cluster.cluster_num == self.master_index:
             return
 
-        bash(tpath('test-rgw-call.sh', 'wait_for_meta_sync', self.master_index + 1, cluster_index + 1, self.realm))
+        while True:
+            log_status = self.meta_master_log_status(master_cluster)
+            (num_shards, sync_status) = self.meta_sync_status(cluster)
+
+            print 'log_status', log_status
+            print 'sync_status', sync_status
+
+            if (log_status == sync_status):
+                break
+
+            time.sleep(5)
+
+
+        bash(tpath('test-rgw-call.sh', 'wait_for_meta_sync', self.master_index + 1, cluster.cluster_num, self.realm))
 
 def gen_access_key():
      return ''.join(random.SystemRandom().choice(string.ascii_uppercase + string.digits) for _ in range(16))
@@ -122,25 +172,37 @@ class RGWMulti:
 
         self.base_port = 8000
 
-    def setup(self):
+    def setup(self, bootstrap):
         credentials = RGWRealmCredentials(gen_access_key(), gen_secret())
         realm = RGWRealm('earth', credentials, 0)
 
-        self.clusters[0].start()
-        realm.init_zone(self.clusters[0], 'us', 'us-1', self.base_port)
+        if bootstrap:
+            self.clusters[0].start()
+            realm.init_zone(self.clusters[0], 'us', 'us-1', self.base_port)
+
+            for i in xrange(1, self.num_clusters):
+                self.clusters[i].start()
+                realm.init_zone(self.clusters[i], 'us', 'us-' + str(i + 1), self.base_port + i, first_zone_port=self.base_port)
 
         for i in xrange(1, self.num_clusters):
-            self.clusters[i].start()
-            realm.init_zone(self.clusters[i], 'us', 'us-' + str(i + 1), self.base_port + i, first_zone_port=self.base_port)
-
-        for i in xrange(1, self.num_clusters):
-            realm.meta_checkpoint(i)
+            print 'before status:', realm.meta_sync_status(self.clusters[i])
+            realm.meta_checkpoint(self.clusters[0], self.clusters[i])
+            print 'after status:', realm.meta_sync_status(self.clusters[i])
+            print 'master status:', realm.meta_master_log_status(self.clusters[0])
 
 
 def main():
-    rgw_multi = RGWMulti(2)
+    parser = argparse.ArgumentParser(
+            description='Add bucket lifecycle configuration',
+            usage='obo bucket lifecycle add <bucket>')
 
-    rgw_multi.setup()
+    parser.add_argument('--num-zones', type=int, default=2)
+    parser.add_argument('--no-bootstrap', action='store_true')
+
+    args = parser.parse_args(sys.argv[1:])
+    rgw_multi = RGWMulti(int(args.num_zones))
+
+    rgw_multi.setup(not args.no_bootstrap)
 
 if __name__ == "__main__":
     main()
