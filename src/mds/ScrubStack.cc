@@ -99,21 +99,12 @@ void ScrubStack::kick_off_scrubs()
       // it's a regular file, symlink, or hard link
       pop_dentry(cur); // we only touch it this once, so remove from stack
 
-      if (curi->is_file()) {
-	if (!cur->scrub_info()->on_finish) {
-	  scrubs_in_progress++;
-	  cur->scrub_set_finisher(&scrub_kick);
-	}
-        scrub_file_dentry(cur);
-        can_continue = true;
-      } else {
-        // drat, we don't do anything with these yet :(
-        dout(5) << "skipping scrub on non-dir, non-file dentry "
-                << *cur << dendl;
-	Context *c = NULL;
-	cur->scrub_finished(&c);
-	assert(c == NULL);
+      if (!cur->scrub_info()->on_finish) {
+	scrubs_in_progress++;
+	cur->scrub_set_finisher(&scrub_kick);
       }
+      scrub_file_dentry(cur);
+      can_continue = true;
     } else {
       bool completed; // it's done, so pop it off the stack
       bool terminal; // not done, but we can start ops on other directories
