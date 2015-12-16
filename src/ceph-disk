@@ -272,7 +272,7 @@ def is_upstart():
     """
     Detect whether upstart is running
     """
-    (out, _) = command(['init', '--version'])
+    (out, err, _) = command(['init', '--version'])
     if 'upstart' in out:
         return True
     return False
@@ -355,9 +355,10 @@ def command(arguments, **kwargs):
     process = subprocess.Popen(
         arguments,
         stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
         **kwargs)
-    out, _ = process.communicate()
-    return out, process.returncode
+    out, err = process.communicate()
+    return out, err, process.returncode
 
 
 def command_check_call(arguments):
@@ -894,11 +895,11 @@ def path_set_context(path):
            )
 
 def _check_output(args=None, **kwargs):
-    out, ret = command(args, **kwargs)
+    out, err, ret = command(args, **kwargs)
     if ret:
         cmd = args[0]
         error = subprocess.CalledProcessError(ret, cmd)
-        error.output = out
+        error.output = out + err
         raise error
     return out
 
@@ -912,7 +913,7 @@ def get_conf(cluster, variable):
     :return: The variable value or None.
     """
     try:
-        out, ret = command(
+        out, err, ret = command(
             [
                 'ceph-conf',
                 '--cluster={cluster}'.format(
@@ -925,7 +926,7 @@ def get_conf(cluster, variable):
             close_fds=True,
             )
     except OSError as e:
-        raise Error('error executing ceph-conf', e)
+        raise Error('error executing ceph-conf', e, err)
     if ret == 1:
         # config entry not found
         return None
@@ -1697,17 +1698,17 @@ def prepare_dev(
                             os.path.basename(rawdev)])
 
 def check_journal_reqs(args):
-    _, allows_journal = command([
+    _, _, allows_journal = command([
         'ceph-osd', '--check-allows-journal',
         '-i', '0',
         '--cluster', args.cluster,
     ])
-    _, wants_journal = command([
+    _, _, wants_journal = command([
         'ceph-osd', '--check-wants-journal',
         '-i', '0',
         '--cluster', args.cluster,
     ])
-    _, needs_journal = command([
+    _, _, needs_journal = command([
         'ceph-osd', '--check-needs-journal',
         '-i', '0',
         '--cluster', args.cluster,
@@ -2590,7 +2591,7 @@ def _check_osd_status(cluster, osd_id):
     LOG.info("Checking osd id: %s ..." % osd_id)
     found = False
     status_code = 0
-    out, ret = command(
+    out, err, ret = command(
             [
                 'ceph',
                 'osd',
@@ -3031,7 +3032,7 @@ def get_oneliner(base, name):
 
 
 def get_dev_fs(dev):
-    fscheck, _ = command(
+    fscheck, _, _ = command(
         [
             'blkid',
             '-s',
@@ -3063,7 +3064,7 @@ def get_partition_uuid(part):
 
 def get_sgdisk_partition_info(dev, regexp):
     (base, partnum) = split_dev_base_partnum(dev)
-    out, _ = command(['sgdisk', '-i', partnum, base])
+    out, _, _ = command(['sgdisk', '-i', partnum, base])
     for line in out.splitlines():
         m = re.match(regexp, line)
         if m:
