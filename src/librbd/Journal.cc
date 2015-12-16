@@ -13,8 +13,6 @@
 #include "journal/Journaler.h"
 #include "journal/ReplayEntry.h"
 #include "common/errno.h"
-#include <boost/utility/enable_if.hpp>
-#include <boost/type_traits/is_base_of.hpp>
 
 #define dout_subsys ceph_subsys_rbd
 #undef dout_prefix
@@ -28,27 +26,6 @@ using util::create_context_callback;
 namespace {
 
 const std::string CLIENT_DESCRIPTION = "master image";
-
-struct SetOpRequestTid : public boost::static_visitor<void> {
-  uint64_t tid;
-
-  SetOpRequestTid(uint64_t _tid) : tid(_tid) {
-  }
-
-  template <typename Event>
-  typename boost::enable_if<boost::is_base_of<journal::OpEventBase, Event>,
-                            void>::type
-  operator()(Event &event) const {
-    event.tid = tid;
-  }
-
-  template <typename Event>
-  typename boost::disable_if<boost::is_base_of<journal::OpEventBase, Event>,
-                            void>::type
-  operator()(Event &event) const {
-    assert(false);
-  }
-};
 
 template <typename ImageCtxT>
 struct C_ReplayCommitted : public Context {
@@ -401,37 +378,29 @@ void Journal<I>::commit_io_event_extent(uint64_t tid, uint64_t offset,
 }
 
 template <typename I>
-uint64_t Journal<I>::append_op_event(journal::EventEntry &event_entry) {
+void Journal<I>::append_op_event(uint64_t op_tid,
+                                 journal::EventEntry &event_entry) {
   assert(m_image_ctx.owner_lock.is_locked());
 
-  uint64_t tid;
+  bufferlist bl;
+  ::encode(event_entry, bl);
   {
     Mutex::Locker locker(m_lock);
     assert(m_state == STATE_READY);
-
-    Mutex::Locker event_locker(m_event_lock);
-    tid = ++m_event_tid;
-    assert(tid != 0);
-
-    // inject the generated tid into the provided event entry
-    boost::apply_visitor(SetOpRequestTid(tid), event_entry.event);
-
-    bufferlist bl;
-    ::encode(event_entry, bl);
     m_journaler->committed(m_journaler->append("", bl));
   }
 
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 10) << this << " " << __func__ << ": "
-                 << "event=" << event_entry.get_event_type() << ", "
-                 << "tid=" << tid << dendl;
-  return tid;
+                 << "op_tid=" << op_tid << ", "
+                 << "event=" << event_entry.get_event_type() << dendl;
 }
 
 template <typename I>
 void Journal<I>::commit_op_event(uint64_t tid, int r) {
   CephContext *cct = m_image_ctx.cct;
-  ldout(cct, 10) << this << " " << __func__ << ": tid=" << tid << dendl;
+  ldout(cct, 10) << this << " " << __func__ << ": tid=" << tid << ", "
+                 << "r=" << r << dendl;
 
   journal::EventEntry event_entry((journal::OpFinishEvent(tid, r)));
 
@@ -441,7 +410,6 @@ void Journal<I>::commit_op_event(uint64_t tid, int r) {
   {
     Mutex::Locker locker(m_lock);
     assert(m_state == STATE_READY);
-
     m_journaler->committed(m_journaler->append("", bl));
   }
 }
