@@ -1554,11 +1554,13 @@ void ReplicatedPG::do_op(OpRequestRef& op)
       info.history.last_epoch_marked_full > m->get_map_epoch()) {
     dout(10) << __func__ << " discarding op sent before full " << m << " "
 	     << *m << dendl;
+    osd->reply_op_error(op, -ENOSPC);
     return;
   }
   if (!m->get_source().is_mds() && osd->check_failsafe_full()) {
     dout(10) << __func__ << " fail-safe full check failed, dropping request"
 	     << dendl;
+    osd->reply_op_error(op, -ENOSPC);
     return;
   }
   int64_t poolid = get_pgid().pool();
