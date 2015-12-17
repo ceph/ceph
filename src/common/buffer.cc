@@ -1695,6 +1695,8 @@ static simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZER;
       return tmp.c_str() + off;
     }
 
+    last_p = begin();  // we modified _buffers
+
     return curbuf->c_str() + off;
   }
 
