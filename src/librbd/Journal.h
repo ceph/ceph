@@ -113,7 +113,7 @@ public:
   void close(Context *on_finish);
 
   uint64_t append_io_event(AioCompletion *aio_comp,
-                           const journal::EventEntry &event_entry,
+                           journal::EventEntry &&event_entry,
                            const AioObjectRequests &requests,
                            uint64_t offset, size_t length,
                            bool flush_entry);
@@ -121,8 +121,9 @@ public:
   void commit_io_event_extent(uint64_t tid, uint64_t offset, uint64_t length,
                               int r);
 
-  void append_op_event(uint64_t op_tid, journal::EventEntry &event_entry);
-  void commit_op_event(uint64_t op_tid, int r);
+  void append_op_event(uint64_t op_tid, journal::EventEntry &&event_entry,
+                       Context *on_safe);
+  void commit_op_event(uint64_t tid, int r);
 
   void flush_event(uint64_t tid, Context *on_safe);
   void wait_event(uint64_t tid, Context *on_safe);
@@ -168,16 +169,32 @@ private:
 
   typedef ceph::unordered_map<uint64_t, Event> Events;
 
-  struct C_EventSafe : public Context {
+  struct C_IOEventSafe : public Context {
     Journal *journal;
     uint64_t tid;
 
-    C_EventSafe(Journal *_journal, uint64_t _tid)
+    C_IOEventSafe(Journal *_journal, uint64_t _tid)
       : journal(_journal), tid(_tid) {
     }
 
     virtual void finish(int r) {
-      journal->handle_event_safe(r, tid);
+      journal->handle_io_event_safe(r, tid);
+    }
+  };
+
+  struct C_OpEventSafe : public Context {
+    Journal *journal;
+    uint64_t tid;
+    Future future;
+    Context *on_safe;
+
+    C_OpEventSafe(Journal *journal, uint64_t tid, const Future &future,
+                  Context *on_safe)
+      : journal(journal), tid(tid), future(future), on_safe(on_safe) {
+    }
+
+    virtual void finish(int r) {
+      journal->handle_op_event_safe(r, tid, future, on_safe);
     }
   };
 
@@ -241,7 +258,9 @@ private:
 
   void handle_journal_destroyed(int r);
 
-  void handle_event_safe(int r, uint64_t tid);
+  void handle_io_event_safe(int r, uint64_t tid);
+  void handle_op_event_safe(int r, uint64_t tid, const Future &future,
+                            Context *on_safe);
 
   void stop_recording();
 

@@ -17,9 +17,12 @@ template <typename ImageCtxT = ImageCtx>
 class TrimRequest : public AsyncRequest<ImageCtxT>
 {
 public:
-  TrimRequest(ImageCtxT &image_ctx, Context *on_finish,
-	      uint64_t original_size, uint64_t new_size,
-	      ProgressContext &prog_ctx);
+  static TrimRequest *create(ImageCtxT &image_ctx, Context *on_finish,
+                             uint64_t original_size, uint64_t new_size,
+                             ProgressContext &prog_ctx) {
+    return new TrimRequest(image_ctx, on_finish, original_size, new_size,
+                           prog_ctx);
+  }
 
   virtual void send();
 
@@ -79,6 +82,10 @@ private:
   uint64_t m_delete_off;
   uint64_t m_new_size;
   ProgressContext &m_prog_ctx;
+
+  TrimRequest(ImageCtxT &image_ctx, Context *on_finish,
+	      uint64_t original_size, uint64_t new_size,
+	      ProgressContext &prog_ctx);
 
   void send_copyup_objects();
   void send_remove_objects();
