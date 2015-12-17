@@ -94,9 +94,11 @@ void JournalMetadata::shutdown() {
   m_ioctx.aio_flush();
 }
 
-int JournalMetadata::register_client(const std::string &description) {
+  int JournalMetadata::register_client(const std::string &description,
+				       const bufferlist &payload) {
   ldout(m_cct, 10) << __func__ << ": " << m_client_id << dendl;
-  int r = client::client_register(m_ioctx, m_oid, m_client_id, description);
+  int r = client::client_register(m_ioctx, m_oid, m_client_id, description,
+				  payload);
   if (r < 0) {
     lderr(m_cct) << "failed to register journal client '" << m_client_id
                  << "': " << cpp_strerror(r) << dendl;

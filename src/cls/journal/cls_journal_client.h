@@ -32,9 +32,11 @@ void set_minimum_set(librados::ObjectWriteOperation *op, uint64_t object_set);
 void set_active_set(librados::ObjectWriteOperation *op, uint64_t object_set);
 
 void client_register(librados::ObjectWriteOperation *op,
-                     const std::string &id, const std::string &description);
+                     const std::string &id, const std::string &description,
+                     const bufferlist &payload = bufferlist());
 int client_register(librados::IoCtx &ioctx, const std::string &oid,
-                    const std::string &id, const std::string &description);
+                    const std::string &id, const std::string &description,
+                    const bufferlist &payload = bufferlist());
 int client_unregister(librados::IoCtx &ioctx, const std::string &oid,
                       const std::string &id);
 void client_commit(librados::ObjectWriteOperation *op, const std::string &id,

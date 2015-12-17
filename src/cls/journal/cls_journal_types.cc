@@ -96,6 +96,7 @@ void Client::encode(bufferlist& bl) const {
   ::encode(id, bl);
   ::encode(description, bl);
   ::encode(commit_position, bl);
+  ::encode(payload, bl);
   ENCODE_FINISH(bl);
 }
 
@@ -104,6 +105,7 @@ void Client::decode(bufferlist::iterator& iter) {
   ::decode(id, iter);
   ::decode(description, iter);
   ::decode(commit_position, iter);
+  ::decode(payload, iter);
   DECODE_FINISH(iter);
 }
 
