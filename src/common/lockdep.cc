@@ -34,7 +34,7 @@ namespace std {
 
 /******* Constants **********/
 #define lockdep_dout(v) lsubdout(g_lockdep_ceph_ctx, lockdep, v)
-#define MAX_LOCKS  2000   // increase me as needed
+#define MAX_LOCKS  4096   // increase me as needed
 #define BACKTRACE_SKIP 2
 
 /******* Globals **********/
