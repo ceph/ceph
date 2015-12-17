@@ -272,7 +272,7 @@ class Ansible(Task):
                         self.failure_log.name,
                     )
                 )
-                failures = fail_log
+                failures = fail_log.read().replace('\n', '')
 
         if failures:
             self._archive_failures()
