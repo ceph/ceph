@@ -67,8 +67,8 @@ void Replay<I>::handle_event(const journal::AioDiscardEvent &event,
   ldout(cct, 20) << this << " " << __func__ << ": AIO discard event" << dendl;
 
   AioCompletion *aio_comp = create_aio_completion(on_safe);
-  AioImageRequest::aio_discard(&m_image_ctx, aio_comp, event.offset,
-                               event.length);
+  AioImageRequest<I>::aio_discard(&m_image_ctx, aio_comp, event.offset,
+                                  event.length);
 }
 
 template <typename I>
@@ -79,8 +79,8 @@ void Replay<I>::handle_event(const journal::AioWriteEvent &event,
 
   bufferlist data = event.data;
   AioCompletion *aio_comp = create_aio_completion(on_safe);
-  AioImageRequest::aio_write(&m_image_ctx, aio_comp, event.offset, event.length,
-                             data.c_str(), 0);
+  AioImageRequest<I>::aio_write(&m_image_ctx, aio_comp, event.offset,
+                                event.length, data.c_str(), 0);
 }
 
 template <typename I>
@@ -90,7 +90,7 @@ void Replay<I>::handle_event(const journal::AioFlushEvent &event,
   ldout(cct, 20) << this << " " << __func__ << ": AIO flush event" << dendl;
 
   AioCompletion *aio_comp = create_aio_completion(on_safe);
-  AioImageRequest::aio_flush(&m_image_ctx, aio_comp);
+  AioImageRequest<I>::aio_flush(&m_image_ctx, aio_comp);
 }
 
 template <typename I>
