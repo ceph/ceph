@@ -57,19 +57,22 @@ LibrbdAdminSocketHook::LibrbdAdminSocketHook(ImageCtx *ictx) :
   admin_socket(ictx->cct->get_admin_socket()) {
 
   std::string command;
+  std::string imagename;
   int r;
 
-  command = "rbd cache flush " + ictx->name;
+  imagename = ictx->md_ctx.get_pool_name() + "/" + ictx->name;
+  command = "rbd cache flush " + imagename;
+
   r = admin_socket->register_command(command, command, this,
-				     "flush rbd image " + ictx->name +
+				     "flush rbd image " + imagename +
 				     " cache");
   if (r == 0) {
     commands[command] = new FlushCacheCommand(ictx);
   }
 
-  command = "rbd cache invalidate " + ictx->name;
+  command = "rbd cache invalidate " + imagename;
   r = admin_socket->register_command(command, command, this,
-				     "invalidate rbd image " + ictx->name +
+				     "invalidate rbd image " + imagename + 
 				     " cache");
   if (r == 0) {
     commands[command] = new InvalidateCacheCommand(ictx);

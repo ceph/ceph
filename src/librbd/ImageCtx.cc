@@ -163,13 +163,14 @@ struct C_InvalidateCache : public Context {
       readahead(),
       total_bytes_read(0), copyup_finisher(NULL),
       state(new ImageState<>(this)), exclusive_lock(nullptr),
-      object_map(nullptr), aio_work_queue(NULL), op_work_queue(NULL),
-      asok_hook(new LibrbdAdminSocketHook(this))
+      object_map(nullptr), aio_work_queue(NULL), op_work_queue(NULL)
   {
     md_ctx.dup(p);
     data_ctx.dup(p);
     if (snap)
       snap_name = snap;
+
+    asok_hook = new LibrbdAdminSocketHook(this);
 
     memset(&header, 0, sizeof(header));
     memset(&layout, 0, sizeof(layout));
