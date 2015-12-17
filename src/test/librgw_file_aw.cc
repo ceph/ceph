@@ -37,6 +37,7 @@ namespace {
   string secret_key("");
   struct rgw_fs *fs = nullptr;
 
+  bool do_create = false;
   bool do_delete = false;
   bool do_verify = false;
   bool do_hexdump = false;
@@ -175,10 +176,12 @@ TEST(LibRGW, MOUNT) {
 }
 
 TEST(LibRGW, CREATE_BUCKET) {
-  struct stat st;
-  struct rgw_file_handle *fh;
-  int ret = rgw_mkdir(fs, fs->root_fh, bucket_name.c_str(), 755, &st, &fh);
-  ASSERT_EQ(ret, 0);
+  if (do_create) {
+    struct stat st;
+    struct rgw_file_handle *fh;
+    int ret = rgw_mkdir(fs, fs->root_fh, bucket_name.c_str(), 755, &st, &fh);
+    ASSERT_EQ(ret, 0);
+  }
 }
 
 TEST(LibRGW, LOOKUP_BUCKET) {
@@ -318,6 +321,9 @@ int main(int argc, char *argv[])
     } else if (ceph_argparse_flag(args, arg_iter, "--verify",
 					    (char*) nullptr)) {
       do_verify = true;
+    } else if (ceph_argparse_flag(args, arg_iter, "--create",
+					    (char*) nullptr)) {
+      do_create = true;
     } else if (ceph_argparse_flag(args, arg_iter, "--delete",
 					    (char*) nullptr)) {
       do_delete = true;
