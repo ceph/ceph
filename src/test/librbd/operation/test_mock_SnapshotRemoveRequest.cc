@@ -36,13 +36,13 @@ public:
       return r;
     }
 
-    r = librbd::snap_create(ictx, snap_name);
+    r = snap_create(*ictx, snap_name);
     if (r < 0) {
       return r;
     }
 
-    r = librbd::snap_protect(ictx, snap_name);
-     if (r < 0) {
+    r = snap_protect(*ictx, snap_name);
+    if (r < 0) {
       return r;
     }
     close_image(ictx);
@@ -119,7 +119,7 @@ public:
 TEST_F(TestMockOperationSnapshotRemoveRequest, Success) {
   librbd::ImageCtx *ictx;
   ASSERT_EQ(0, open_image(m_image_name, &ictx));
-  ASSERT_EQ(0, librbd::snap_create(ictx, "snap1"));
+  ASSERT_EQ(0, snap_create(*ictx, "snap1"));
   ASSERT_EQ(0, ictx->state->refresh_if_required());
 
   MockImageCtx mock_image_ctx(*ictx);
@@ -169,10 +169,10 @@ TEST_F(TestMockOperationSnapshotRemoveRequest, FlattenedCloneRemovesChild) {
 
   librbd::ImageCtx *ictx;
   ASSERT_EQ(0, open_image(clone_name, &ictx));
-  ASSERT_EQ(0, librbd::snap_create(ictx, "snap1"));
+  ASSERT_EQ(0, snap_create(*ictx, "snap1"));
 
   librbd::NoOpProgressContext prog_ctx;
-  ASSERT_EQ(0, librbd::flatten(ictx, prog_ctx));
+  ASSERT_EQ(0, flatten(*ictx, prog_ctx));
   ASSERT_EQ(0, ictx->state->refresh_if_required());
 
   MockImageCtx mock_image_ctx(*ictx);
@@ -213,7 +213,7 @@ TEST_F(TestMockOperationSnapshotRemoveRequest, ObjectMapSnapRemoveError) {
 
   librbd::ImageCtx *ictx;
   ASSERT_EQ(0, open_image(m_image_name, &ictx));
-  ASSERT_EQ(0, librbd::snap_create(ictx, "snap1"));
+  ASSERT_EQ(0, snap_create(*ictx, "snap1"));
   ASSERT_EQ(0, ictx->state->refresh_if_required());
 
   MockImageCtx mock_image_ctx(*ictx);
@@ -242,7 +242,7 @@ TEST_F(TestMockOperationSnapshotRemoveRequest, ObjectMapSnapRemoveError) {
 TEST_F(TestMockOperationSnapshotRemoveRequest, RemoveChildParentError) {
   librbd::ImageCtx *ictx;
   ASSERT_EQ(0, open_image(m_image_name, &ictx));
-  ASSERT_EQ(0, librbd::snap_create(ictx, "snap1"));
+  ASSERT_EQ(0, snap_create(*ictx, "snap1"));
   ASSERT_EQ(0, ictx->state->refresh_if_required());
 
   MockImageCtx mock_image_ctx(*ictx);
@@ -288,10 +288,10 @@ TEST_F(TestMockOperationSnapshotRemoveRequest, RemoveChildError) {
     return SUCCEED();
   }
 
-  ASSERT_EQ(0, librbd::snap_create(ictx, "snap1"));
+  ASSERT_EQ(0, snap_create(*ictx, "snap1"));
 
   librbd::NoOpProgressContext prog_ctx;
-  ASSERT_EQ(0, librbd::flatten(ictx, prog_ctx));
+  ASSERT_EQ(0, flatten(*ictx, prog_ctx));
   ASSERT_EQ(0, ictx->state->refresh_if_required());
 
   MockImageCtx mock_image_ctx(*ictx);
@@ -321,7 +321,7 @@ TEST_F(TestMockOperationSnapshotRemoveRequest, RemoveChildError) {
 TEST_F(TestMockOperationSnapshotRemoveRequest, RemoveSnapError) {
   librbd::ImageCtx *ictx;
   ASSERT_EQ(0, open_image(m_image_name, &ictx));
-  ASSERT_EQ(0, librbd::snap_create(ictx, "snap1"));
+  ASSERT_EQ(0, snap_create(*ictx, "snap1"));
   ASSERT_EQ(0, ictx->state->refresh_if_required());
 
   MockImageCtx mock_image_ctx(*ictx);
