@@ -1526,6 +1526,7 @@ public:
 
   void getattrs() {
     ghobject_t obj;
+    map<string, bufferlist> expected;
     {
       Mutex::Locker locker(lock);
       if (!can_unlink())
@@ -1538,13 +1539,14 @@ public:
         if (!--retry)
           return ;
       } while (contents[obj].attrs.empty());
+      expected = contents[obj].attrs;
     }
     map<string, bufferlist> attrs;
     int r = store->getattrs(cid, obj, attrs);
     ASSERT_TRUE(r == 0);
-    ASSERT_TRUE(attrs.size() == contents[obj].attrs.size());
-    for (map<string, bufferlist>::iterator it = contents[obj].attrs.begin();
-         it != contents[obj].attrs.end(); ++it) {
+    ASSERT_TRUE(attrs.size() == expected.size());
+    for (map<string, bufferlist>::iterator it = expected.begin();
+         it != expected.end(); ++it) {
       ASSERT_TRUE(it->second.contents_equal(attrs[it->first]));
     }
   }
@@ -1553,6 +1555,7 @@ public:
     ghobject_t obj;
     int r;
     int retry;
+    map<string, bufferlist> expected;
     {
       Mutex::Locker locker(lock);
       if (!can_unlink())
@@ -1565,10 +1568,11 @@ public:
         if (!--retry)
           return ;
       } while (contents[obj].attrs.empty());
+      expected = contents[obj].attrs;
     }
-    boost::uniform_int<> u(0, contents[obj].attrs.size()-1);
+    boost::uniform_int<> u(0, expected.size()-1);
     retry = u(*rng);
-    map<string, bufferlist>::iterator it = contents[obj].attrs.begin();
+    map<string, bufferlist>::iterator it = expected.begin();
     while (retry) {
       retry--;
       ++it;
@@ -1660,6 +1664,7 @@ public:
       swap(offset, len);
 
     ghobject_t obj;
+    bufferlist expected;
     int r;
     {
       Mutex::Locker locker(lock);
@@ -1668,22 +1673,23 @@ public:
       wait_for_ready();
 
       obj = get_uniform_random_object();
+      expected = contents[obj].data;
     }
     bufferlist bl, result;
     if (0) cout << " obj " << obj
-	 << " size " << contents[obj].data.length()
+	 << " size " << expected.length()
 	 << " offset " << offset
 	 << " len " << len << std::endl;
     r = store->read(cid, obj, offset, len, result);
-    if (offset >= contents[obj].data.length()) {
+    if (offset >= expected.length()) {
       ASSERT_EQ(r, 0);
     } else {
-      size_t max_len = contents[obj].data.length() - offset;
+      size_t max_len = expected.length() - offset;
       if (len > max_len)
         len = max_len;
       assert(len == result.length());
       ASSERT_EQ(len, result.length());
-      contents[obj].data.copy(offset, len, bl);
+      expected.copy(offset, len, bl);
       ASSERT_EQ(r, (int)len);
       if (!result.contents_equal(bl)) {
 	cout << "result:\n";
@@ -1789,6 +1795,7 @@ public:
 
   void stat() {
     ghobject_t hoid;
+    uint64_t expected;
     {
       Mutex::Locker locker(lock);
       if (!can_unlink())
@@ -1797,12 +1804,13 @@ public:
       in_flight_objects.insert(hoid);
       available_objects.erase(hoid);
       ++in_flight;
+      expected = contents[hoid].data.length();
     }
     struct stat buf;
     int r = store->stat(cid, hoid, &buf);
     ASSERT_EQ(0, r);
-    assert(buf.st_size == contents[hoid].data.length());
-    ASSERT_TRUE(buf.st_size == contents[hoid].data.length());
+    assert((uint64_t)buf.st_size == expected);
+    ASSERT_TRUE((uint64_t)buf.st_size == expected);
     {
       Mutex::Locker locker(lock);
       --in_flight;
