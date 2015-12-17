@@ -135,7 +135,7 @@ void Formatter::dump_format_unquoted(const char *name, const char *fmt, ...)
 // -----------------------
 
 JSONFormatter::JSONFormatter(bool p)
-: m_pretty(p), m_is_pending_string(false)
+: m_pretty(p), m_is_pending_string(false), cook(c)
 {
   reset();
 }
@@ -178,9 +178,9 @@ void JSONFormatter::print_comma(json_formatter_stack_entry_d& entry)
 
 void JSONFormatter::print_quoted_string(const std::string& s)
 {
-  int len = escape_json_attr_len(s.c_str(), s.size());
+  int len = escape_json_attr_len(s.c_str(), s.size(), static_cast<int>(cook));
   char escaped[len];
-  escape_json_attr(s.c_str(), s.size(), escaped);
+  escape_json_attr(s.c_str(), s.size(), escaped, static_cast<int>(cook));
   m_ss << '\"' << escaped << '\"';
 }
 

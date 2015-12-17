@@ -172,7 +172,7 @@ void authorization_message_result::dump(Formatter *f) const
 void authorization_message_response::dump(Formatter *f) const
 {
   char encoded_uuid[38];
-  JSONFormatter message(true);
+  JSONFormatter message(true, JSONFormatter::SmartHtml);
   stringstream ss;
 
   request_id.print(encoded_uuid);
