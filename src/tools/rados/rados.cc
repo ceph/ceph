@@ -84,7 +84,7 @@ void usage(ostream& out)
 "   put <obj-name> [infile]          write object\n"
 "   truncate <obj-name> length       truncate object\n"
 "   create <obj-name>                create object\n"
-"   rm <obj-name> ...                remove object(s)\n"
+"   rm <obj-name> ...[--force-full]  [force no matter full or not]remove object(s)\n"
 "   cp <obj-name> [target-obj]       copy object\n"
 "   clonedata <src-obj> <dst-obj>    clone object data\n"
 "   listxattr <obj-name>\n"
@@ -1239,7 +1239,7 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
 
   std::string run_name;
   std::string prefix;
-
+  bool forcefull = false;
   Formatter *formatter = NULL;
   bool pretty_format = false;
   const char *output = NULL;
@@ -1281,6 +1281,11 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
   i = opts.find("run-name");
   if (i != opts.end()) {
     run_name = i->second;
+  }
+
+  i = opts.find("force-full");
+  if (i != opts.end()) {
+    forcefull = true;
   }
   i = opts.find("prefix");
   if (i != opts.end()) {
@@ -2161,9 +2166,17 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
     for (; iter != nargs.end(); ++iter) {
       const string & oid = *iter;
       if (use_striper) {
-	ret = striper.remove(oid);
+	if (forcefull) {
+	  ret = striper.remove(oid, CEPH_OSD_FLAG_FULL_FORCE);
+	} else {
+	  ret = striper.remove(oid);
+	}
       } else {
-	ret = io_ctx.remove(oid);
+	if (forcefull) {
+	  ret = io_ctx.remove(oid, CEPH_OSD_FLAG_FULL_FORCE);
+	} else {
+	  ret = io_ctx.remove(oid);
+	}
       }
       if (ret < 0) {
         string name = (nspace.size() ? nspace + "/" : "" ) + oid;
@@ -2946,6 +2959,8 @@ int main(int argc, const char **argv)
       exit(0);
     } else if (ceph_argparse_flag(args, i, "-f", "--force", (char*)NULL)) {
       opts["force"] = "true";
+    } else if (ceph_argparse_flag(args, i, "--force-full", (char*)NULL)) {
+      opts["force-full"] = "true";
     } else if (ceph_argparse_flag(args, i, "-d", "--delete-after", (char*)NULL)) {
       opts["delete-after"] = "true";
     } else if (ceph_argparse_flag(args, i, "-C", "--create", "--create-pool",
