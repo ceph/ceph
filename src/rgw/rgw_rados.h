@@ -17,6 +17,7 @@
 #include "rgw_log.h"
 #include "rgw_metadata.h"
 #include "rgw_meta_sync_status.h"
+#include "rgw_period_puller.h"
 
 class RGWWatcher;
 class SafeTimer;
@@ -1868,6 +1869,11 @@ public:
   const RGWQuotaInfo& get_user_quota() {
     return current_period.get_config().user_quota;
   }
+
+  // pulls missing periods for period_history
+  std::unique_ptr<RGWPeriodPuller> period_puller;
+  // maintains a connected history of periods
+  std::unique_ptr<RGWPeriodHistory> period_history;
 
   RGWMetadataManager *meta_mgr;
 

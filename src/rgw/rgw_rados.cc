@@ -1267,7 +1267,7 @@ int RGWPeriod::commit(RGWRealm& realm, const RGWPeriod& current_period)
   ldout(cct, 20) << __func__ << " realm " << realm.get_id() << " period " << current_period.get_id() << dendl;
   // gateway must be in the master zone to commit
   if (master_zone != store->get_zone_params().get_id()) {
-    lderr(cct) << "period commit sent to zone " << store->get_zone_params().get_id()
+    lderr(cct) << "period commit on zone " << store->get_zone_params().get_id()
         << ", not period's master zone " << master_zone << dendl;
     return -EINVAL;
   }
@@ -1312,7 +1312,7 @@ int RGWPeriod::commit(RGWRealm& realm, const RGWPeriod& current_period)
     realm.notify_new_period(*this);
     return 0;
   }
-  // period must be based on predecessor's current epoch
+  // period must be based on current epoch
   if (epoch != current_period.get_epoch()) {
     lderr(cct) << "period epoch " << epoch << " does not match "
         "predecessor epoch " << current_period.get_epoch() << dendl;
@@ -3590,6 +3590,10 @@ int RGWRados::init_complete()
 
   finisher = new Finisher(cct);
   finisher->start();
+
+  period_puller.reset(new RGWPeriodPuller(this));
+  period_history.reset(new RGWPeriodHistory(cct, period_puller.get(),
+                                            current_period));
 
   if (need_watch_notify()) {
     ret = init_watch();
