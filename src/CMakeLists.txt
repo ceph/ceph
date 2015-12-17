@@ -1171,6 +1171,7 @@ if(${WITH_RADOSGW})
     rgw/rgw_data_sync.cc
     rgw/rgw_dencoder.cc
     rgw/rgw_period_history.cc
+    rgw/rgw_period_puller.cc
     rgw/rgw_period_pusher.cc
     rgw/rgw_realm_reloader.cc
     rgw/rgw_realm_watcher.cc
