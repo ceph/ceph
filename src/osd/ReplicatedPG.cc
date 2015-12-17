@@ -5760,7 +5760,10 @@ void ReplicatedPG::finish_ctx(OpContext *ctx, int log_op_type, bool maintain_ssc
       ctx->snapset_obc->obs.oi.version = ctx->at_version;
       ctx->snapset_obc->obs.oi.last_reqid = ctx->reqid;
       ctx->snapset_obc->obs.oi.mtime = ctx->mtime;
-      ctx->snapset_obc->obs.oi.local_mtime = now;
+      if (pool.info.is_tier() || pool.info.has_tiers())
+	ctx->snapset_obc->obs.oi.local_mtime = now;
+      else
+	ctx->snapset_obc->obs.oi.local_mtime = utime_t();
 
       bufferlist bv(sizeof(ctx->new_obs.oi));
       ::encode(ctx->snapset_obc->obs.oi, bv);
@@ -5801,7 +5804,10 @@ void ReplicatedPG::finish_ctx(OpContext *ctx, int log_op_type, bool maintain_ssc
     if (ctx->mtime != utime_t()) {
       ctx->new_obs.oi.mtime = ctx->mtime;
       dout(10) << " set mtime to " << ctx->new_obs.oi.mtime << dendl;
-      ctx->new_obs.oi.local_mtime = now;
+      if (pool.info.is_tier() || pool.info.has_tiers())
+	ctx->new_obs.oi.local_mtime = now;
+      else
+	ctx->new_obs.oi.local_mtime = utime_t();
     } else {
       dout(10) << " mtime unchanged at " << ctx->new_obs.oi.mtime << dendl;
     }
@@ -6515,7 +6521,10 @@ void ReplicatedPG::finish_copyfrom(OpContext *ctx)
   obs.oi.user_version = ctx->user_at_version;
 
   obs.oi.set_data_digest(cb->results->data_digest);
-  obs.oi.set_omap_digest(cb->results->omap_digest);
+  if (obs.oi.is_omap())
+    obs.oi.set_omap_digest(cb->results->omap_digest);
+  else
+    obs.oi.clear_omap_digest();
 
   obs.oi.truncate_seq = cb->results->truncate_seq;
   obs.oi.truncate_size = cb->results->truncate_size;
@@ -6700,6 +6709,8 @@ void ReplicatedPG::finish_promote(int r, CopyResults *results,
       tctx->new_obs.oi.set_data_digest(results->data_digest);
     if (results->has_omap)
       tctx->new_obs.oi.set_omap_digest(results->omap_digest);
+    else
+      tctx->new_obs.oi.clear_omap_digest();
     tctx->new_obs.oi.truncate_seq = results->truncate_seq;
     tctx->new_obs.oi.truncate_size = results->truncate_size;
 
@@ -11421,7 +11432,10 @@ void ReplicatedPG::_scrub(
     ctx->at_version = get_next_version();
     ctx->mtime = utime_t();      // do not update mtime
     ctx->new_obs.oi.set_data_digest(p->second.first);
-    ctx->new_obs.oi.set_omap_digest(p->second.second);
+    if (ctx->new_obs.oi.is_omap())
+      ctx->new_obs.oi.set_omap_digest(p->second.second);
+    else
+      ctx->new_obs.oi.clear_omap_digest();
     finish_ctx(ctx, pg_log_entry_t::MODIFY, true, true);
     ctx->on_finish = new C_ScrubDigestUpdated(this);
     simple_repop_submit(repop);
