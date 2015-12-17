@@ -50,6 +50,7 @@ namespace librbd {
   template <typename> class Journal;
   class LibrbdAdminSocketHook;
   class ObjectMap;
+  template <typename> class Operations;
 
   namespace operation {
   template <typename> class ResizeRequest;
@@ -137,10 +138,10 @@ namespace librbd {
     std::list<Context*> async_requests_waiters;
 
     ImageState<ImageCtx> *state;
+    Operations<ImageCtx> *operations;
+
     ExclusiveLock<ImageCtx> *exclusive_lock;
     ObjectMap *object_map;
-
-    atomic_t async_request_seq;
 
     xlist<operation::ResizeRequest<ImageCtx>*> resize_reqs;
 
