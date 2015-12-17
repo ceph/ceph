@@ -24,8 +24,6 @@ public:
     if (should_complete(r)) {
       r = filter_return_code(r);
       finish(r);
-      finish_request();
-      m_on_finish->complete(r);
       delete this;
     }
   }
@@ -41,7 +39,6 @@ public:
 
 protected:
   ImageCtxT &m_image_ctx;
-  Context *m_on_finish;
 
   librados::AioCompletion *create_callback_completion();
   Context *create_callback_context();
@@ -55,8 +52,12 @@ protected:
   }
 
   virtual void finish(int r) {
+    finish_request();
+    m_on_finish->complete(r);
   }
+
 private:
+  Context *m_on_finish;
   bool m_canceled;
   typename xlist<AsyncRequest<ImageCtxT> *>::item m_xlist_item;
 

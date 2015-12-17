@@ -239,7 +239,7 @@ bool Journal<I>::is_journal_replaying() const {
 
 template <typename I>
 void Journal<I>::wait_for_journal_ready(Context *on_ready) {
-  on_ready = util::create_async_context_callback(m_image_ctx, on_ready);
+  on_ready = create_async_context_callback(m_image_ctx, on_ready);
 
   Mutex::Locker locker(m_lock);
   if (m_state == STATE_READY) {
@@ -254,7 +254,7 @@ void Journal<I>::open(Context *on_finish) {
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 20) << this << " " << __func__ << dendl;
 
-  on_finish = util::create_async_context_callback(m_image_ctx, on_finish);
+  on_finish = create_async_context_callback(m_image_ctx, on_finish);
 
   Mutex::Locker locker(m_lock);
   assert(m_state == STATE_UNINITIALIZED);
@@ -267,7 +267,7 @@ void Journal<I>::close(Context *on_finish) {
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 20) << this << " " << __func__ << dendl;
 
-  on_finish = util::create_async_context_callback(m_image_ctx, on_finish);
+  on_finish = create_async_context_callback(m_image_ctx, on_finish);
 
   Mutex::Locker locker(m_lock);
   assert(m_state != STATE_UNINITIALIZED);
@@ -286,7 +286,7 @@ void Journal<I>::close(Context *on_finish) {
 
 template <typename I>
 uint64_t Journal<I>::append_io_event(AioCompletion *aio_comp,
-                                     const journal::EventEntry &event_entry,
+                                     journal::EventEntry &&event_entry,
                                      const AioObjectRequests &requests,
                                      uint64_t offset, size_t length,
                                      bool flush_entry) {
@@ -301,12 +301,11 @@ uint64_t Journal<I>::append_io_event(AioCompletion *aio_comp,
     Mutex::Locker locker(m_lock);
     assert(m_state == STATE_READY);
 
-    future = m_journaler->append("", bl);
-
     Mutex::Locker event_locker(m_event_lock);
     tid = ++m_event_tid;
     assert(tid != 0);
 
+    future = m_journaler->append("", bl);
     m_events[tid] = Event(future, aio_comp, requests, offset, length);
   }
 
@@ -318,7 +317,7 @@ uint64_t Journal<I>::append_io_event(AioCompletion *aio_comp,
                  << "length=" << length << ", "
                  << "flush=" << flush_entry << ", tid=" << tid << dendl;
 
-  Context *on_safe = new C_EventSafe(this, tid);
+  Context *on_safe = new C_IOEventSafe(this, tid);
   if (flush_entry) {
     future.flush(on_safe);
   } else {
@@ -379,16 +378,22 @@ void Journal<I>::commit_io_event_extent(uint64_t tid, uint64_t offset,
 
 template <typename I>
 void Journal<I>::append_op_event(uint64_t op_tid,
-                                 journal::EventEntry &event_entry) {
+                                 journal::EventEntry &&event_entry,
+                                 Context *on_safe) {
   assert(m_image_ctx.owner_lock.is_locked());
 
   bufferlist bl;
   ::encode(event_entry, bl);
+
+  Future future;
   {
     Mutex::Locker locker(m_lock);
     assert(m_state == STATE_READY);
-    m_journaler->committed(m_journaler->append("", bl));
+    future = m_journaler->append("", bl);
   }
+
+  on_safe = create_async_context_callback(m_image_ctx, on_safe);
+  future.flush(new C_OpEventSafe(this, op_tid, future, on_safe));
 
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 10) << this << " " << __func__ << ": "
@@ -397,21 +402,24 @@ void Journal<I>::append_op_event(uint64_t op_tid,
 }
 
 template <typename I>
-void Journal<I>::commit_op_event(uint64_t tid, int r) {
+void Journal<I>::commit_op_event(uint64_t op_tid, int r) {
   CephContext *cct = m_image_ctx.cct;
-  ldout(cct, 10) << this << " " << __func__ << ": tid=" << tid << ", "
+  ldout(cct, 10) << this << " " << __func__ << ": op_tid=" << op_tid << ", "
                  << "r=" << r << dendl;
 
-  journal::EventEntry event_entry((journal::OpFinishEvent(tid, r)));
+  journal::EventEntry event_entry((journal::OpFinishEvent(op_tid, r)));
 
   bufferlist bl;
   ::encode(event_entry, bl);
 
+  Future future;
   {
     Mutex::Locker locker(m_lock);
     assert(m_state == STATE_READY);
-    m_journaler->committed(m_journaler->append("", bl));
+    future = m_journaler->append("", bl);
   }
+
+  future.flush(new C_OpEventSafe(this, op_tid, future, nullptr));
 }
 
 template <typename I>
@@ -458,7 +466,8 @@ typename Journal<I>::Future Journal<I>::wait_event(Mutex &lock, uint64_t tid,
     return Future();
   }
 
-  event.on_safe_contexts.push_back(on_safe);
+  event.on_safe_contexts.push_back(create_async_context_callback(m_image_ctx,
+                                                                 on_safe));
   return event.future;
 }
 
@@ -705,10 +714,16 @@ void Journal<I>::handle_journal_destroyed(int r) {
 }
 
 template <typename I>
-void Journal<I>::handle_event_safe(int r, uint64_t tid) {
+void Journal<I>::handle_io_event_safe(int r, uint64_t tid) {
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 20) << this << " " << __func__ << ": r=" << r << ", "
                  << "tid=" << tid << dendl;
+
+  // journal will be flushed before closing
+  assert(m_state == STATE_READY);
+  if (r < 0) {
+    lderr(cct) << "failed to commit IO event: "  << cpp_strerror(r) << dendl;
+  }
 
   AioCompletion *aio_comp;
   AioObjectRequests aio_object_requests;
@@ -755,6 +770,25 @@ void Journal<I>::handle_event_safe(int r, uint64_t tid) {
   for (Contexts::iterator it = on_safe_contexts.begin();
        it != on_safe_contexts.end(); ++it) {
     (*it)->complete(r);
+  }
+}
+
+template <typename I>
+void Journal<I>::handle_op_event_safe(int r, uint64_t tid, const Future &future,
+                                      Context *on_safe) {
+  CephContext *cct = m_image_ctx.cct;
+  ldout(cct, 20) << this << " " << __func__ << ": r=" << r << ", "
+                 << "tid=" << tid << dendl;
+
+  // journal will be flushed before closing
+  assert(m_state == STATE_READY);
+  if (r < 0) {
+    lderr(cct) << "failed to commit op event: "  << cpp_strerror(r) << dendl;
+  }
+
+  m_journaler->committed(future);
+  if (on_safe != nullptr) {
+    on_safe->complete(r);
   }
 }
 
