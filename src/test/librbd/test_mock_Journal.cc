@@ -5,11 +5,13 @@
 #include "test/librbd/test_support.h"
 #include "test/librbd/mock/MockImageCtx.h"
 #include "librbd/Journal.h"
+#include "librbd/journal/Entries.h"
 #include "librbd/journal/Replay.h"
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
 #include <functional>
 #include <list>
+#include <boost/scope_exit.hpp>
 
 namespace journal {
 
@@ -223,6 +225,7 @@ using ::testing::InSequence;
 using ::testing::Invoke;
 using ::testing::MatcherCast;
 using ::testing::Return;
+using ::testing::SaveArg;
 using ::testing::SetArgPointee;
 using ::testing::WithArg;
 using namespace std::placeholders;
@@ -329,6 +332,25 @@ public:
                   .Times(m_commit_contexts.size());
   }
 
+  void expect_append_journaler(::journal::MockJournaler &mock_journaler) {
+    EXPECT_CALL(mock_journaler, append(_, _))
+                  .WillOnce(Return(::journal::MockFutureProxy()));
+  }
+
+  void expect_wait_future(::journal::MockFuture &mock_future,
+                          Context **on_safe) {
+    EXPECT_CALL(mock_future, wait(_))
+                  .WillOnce(SaveArg<0>(on_safe));
+  }
+
+  void expect_future_committed(::journal::MockJournaler &mock_journaler) {
+    EXPECT_CALL(mock_journaler, committed(MatcherCast<const ::journal::MockFutureProxy&>(_)));
+  }
+
+  void expect_future_is_valid(::journal::MockFuture &mock_future) {
+    EXPECT_CALL(mock_future, is_valid()).WillOnce(Return(false));
+  }
+
   int when_open(MockJournal &mock_journal) {
     C_SaferCond ctx;
     mock_journal.open(&ctx);
@@ -348,8 +370,44 @@ public:
     return ctx.wait();
   }
 
+  uint64_t when_append_io_event(MockImageCtx &mock_image_ctx,
+                                MockJournal &mock_journal,
+                                AioCompletion *aio_comp = nullptr) {
+    RWLock::RLocker owner_locker(mock_image_ctx.owner_lock);
+    return mock_journal.append_io_event(
+      aio_comp, journal::EventEntry{journal::AioFlushEvent{}}, {}, 0, 0, false);
+  }
+
   void save_commit_context(Context *ctx) {
     m_commit_contexts.push_back(ctx);
+  }
+
+  void open_journal(MockImageCtx &mock_image_ctx, MockJournal &mock_journal,
+                    ::journal::MockJournaler &mock_journaler) {
+    expect_op_work_queue(mock_image_ctx);
+
+    InSequence seq;
+    expect_construct_journaler(mock_journaler);
+    expect_init_journaler(mock_journaler, 0);
+    expect_start_replay(
+      mock_image_ctx, mock_journaler, {
+        std::bind(&invoke_replay_complete, _1, 0)
+      });
+
+    MockJournalReplay mock_journal_replay;
+    expect_stop_replay(mock_journaler);
+    expect_flush_replay(mock_journal_replay, 0);
+    expect_start_append(mock_journaler);
+    ASSERT_EQ(0, when_open(mock_journal));
+
+    expect_committed(mock_journaler);
+    when_commit_replay(0);
+  }
+
+  void close_journal(MockJournal &mock_journal,
+                     ::journal::MockJournaler &mock_journaler) {
+    expect_stop_append(mock_journaler, 0);
+    ASSERT_EQ(0, when_close(mock_journal));
   }
 
   static void invoke_replay_ready(::journal::ReplayHandler *handler) {
@@ -583,7 +641,144 @@ TEST_F(TestMockJournal, StopError) {
   ASSERT_EQ(-EINVAL, when_close(mock_journal));
 }
 
+TEST_F(TestMockJournal, EventAndIOCommitOrder) {
+  REQUIRE_FEATURE(RBD_FEATURE_JOURNALING);
 
+  librbd::ImageCtx *ictx;
+  ASSERT_EQ(0, open_image(m_image_name, &ictx));
 
+  MockImageCtx mock_image_ctx(*ictx);
+  MockJournal mock_journal(mock_image_ctx);
+  ::journal::MockJournaler mock_journaler;
+  open_journal(mock_image_ctx, mock_journal, mock_journaler);
+  BOOST_SCOPE_EXIT_ALL(&) {
+    close_journal(mock_journal, mock_journaler);
+  };
+
+  ::journal::MockFuture mock_future;
+  Context *on_journal_safe1;
+  expect_append_journaler(mock_journaler);
+  expect_wait_future(mock_future, &on_journal_safe1);
+  ASSERT_EQ(1U, when_append_io_event(mock_image_ctx, mock_journal));
+
+  Context *on_journal_safe2;
+  expect_append_journaler(mock_journaler);
+  expect_wait_future(mock_future, &on_journal_safe2);
+  ASSERT_EQ(2U, when_append_io_event(mock_image_ctx, mock_journal));
+
+  // commit journal event followed by IO event (standard)
+  on_journal_safe1->complete(0);
+  expect_future_committed(mock_journaler);
+  mock_journal.commit_io_event(1U, 0);
+
+  // commit IO event followed by journal event (cache overwrite)
+  mock_journal.commit_io_event(2U, 0);
+  expect_future_committed(mock_journaler);
+
+  C_SaferCond event_ctx;
+  mock_journal.wait_event(2U, &event_ctx);
+  on_journal_safe2->complete(0);
+  ASSERT_EQ(0, event_ctx.wait());
+}
+
+TEST_F(TestMockJournal, EventCommitError) {
+  REQUIRE_FEATURE(RBD_FEATURE_JOURNALING);
+
+  librbd::ImageCtx *ictx;
+  ASSERT_EQ(0, open_image(m_image_name, &ictx));
+
+  MockImageCtx mock_image_ctx(*ictx);
+  MockJournal mock_journal(mock_image_ctx);
+  ::journal::MockJournaler mock_journaler;
+  open_journal(mock_image_ctx, mock_journal, mock_journaler);
+  BOOST_SCOPE_EXIT_ALL(&) {
+    close_journal(mock_journal, mock_journaler);
+  };
+
+  AioCompletion *comp = new AioCompletion();
+  comp->get();
+
+  ::journal::MockFuture mock_future;
+  Context *on_journal_safe;
+  expect_append_journaler(mock_journaler);
+  expect_wait_future(mock_future, &on_journal_safe);
+  ASSERT_EQ(1U, when_append_io_event(mock_image_ctx, mock_journal, comp));
+
+  // commit the event in the journal w/o waiting writeback
+  expect_future_committed(mock_journaler);
+  on_journal_safe->complete(-EINVAL);
+  ASSERT_EQ(0, comp->wait_for_complete());
+  ASSERT_EQ(-EINVAL, comp->get_return_value());
+  comp->put();
+
+  // cache should receive the error after attempting writeback
+  expect_future_is_valid(mock_future);
+  C_SaferCond flush_ctx;
+  mock_journal.flush_event(1U, &flush_ctx);
+  ASSERT_EQ(-EINVAL, flush_ctx.wait());
+}
+
+TEST_F(TestMockJournal, EventCommitErrorWithPendingWriteback) {
+  REQUIRE_FEATURE(RBD_FEATURE_JOURNALING);
+
+  librbd::ImageCtx *ictx;
+  ASSERT_EQ(0, open_image(m_image_name, &ictx));
+
+  MockImageCtx mock_image_ctx(*ictx);
+  MockJournal mock_journal(mock_image_ctx);
+  ::journal::MockJournaler mock_journaler;
+  open_journal(mock_image_ctx, mock_journal, mock_journaler);
+  BOOST_SCOPE_EXIT_ALL(&) {
+    close_journal(mock_journal, mock_journaler);
+  };
+
+  AioCompletion *comp = new AioCompletion();
+  comp->get();
+
+  ::journal::MockFuture mock_future;
+  Context *on_journal_safe;
+  expect_append_journaler(mock_journaler);
+  expect_wait_future(mock_future, &on_journal_safe);
+  ASSERT_EQ(1U, when_append_io_event(mock_image_ctx, mock_journal, comp));
+
+  expect_future_is_valid(mock_future);
+  C_SaferCond flush_ctx;
+  mock_journal.flush_event(1U, &flush_ctx);
+
+  // commit the event in the journal w/ waiting cache writeback
+  expect_future_committed(mock_journaler);
+  on_journal_safe->complete(-EINVAL);
+  ASSERT_EQ(0, comp->wait_for_complete());
+  ASSERT_EQ(-EINVAL, comp->get_return_value());
+  comp->put();
+
+  // cache should receive the error if waiting
+  ASSERT_EQ(-EINVAL, flush_ctx.wait());
+}
+
+TEST_F(TestMockJournal, IOCommitError) {
+  REQUIRE_FEATURE(RBD_FEATURE_JOURNALING);
+
+  librbd::ImageCtx *ictx;
+  ASSERT_EQ(0, open_image(m_image_name, &ictx));
+
+  MockImageCtx mock_image_ctx(*ictx);
+  MockJournal mock_journal(mock_image_ctx);
+  ::journal::MockJournaler mock_journaler;
+  open_journal(mock_image_ctx, mock_journal, mock_journaler);
+  BOOST_SCOPE_EXIT_ALL(&) {
+    close_journal(mock_journal, mock_journaler);
+  };
+
+  ::journal::MockFuture mock_future;
+  Context *on_journal_safe;
+  expect_append_journaler(mock_journaler);
+  expect_wait_future(mock_future, &on_journal_safe);
+  ASSERT_EQ(1U, when_append_io_event(mock_image_ctx, mock_journal));
+
+  // failed IO remains uncommitted in journal
+  on_journal_safe->complete(0);
+  mock_journal.commit_io_event(1U, -EINVAL);
+}
 
 } // namespace librbd
