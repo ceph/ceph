@@ -115,6 +115,14 @@ struct librados::IoCtxImpl {
   uint32_t nlist_seek(Objecter::NListContext *context, uint32_t pos);
   int list(Objecter::ListContext *context, int max_entries);
   uint32_t list_seek(Objecter::ListContext *context, uint32_t pos);
+  void object_list_slice(
+    const hobject_t start,
+    const hobject_t finish,
+    const size_t n,
+    const size_t m,
+    hobject_t *split_start,
+    hobject_t *split_finish);
+
   int create(const object_t& oid, bool exclusive);
   int write(const object_t& oid, bufferlist& bl, size_t len, uint64_t off);
   int append(const object_t& oid, bufferlist& bl, size_t len);
