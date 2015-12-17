@@ -66,31 +66,46 @@ namespace crimson {
       double reservation;
       double limit;
 
-      RequestTag(double p, double r, double l) :
-	proportion(p), reservation(r), limit(l)
-      {
-	// empty
-      }
-
       RequestTag(const RequestTag& prev_tag,
 		 const ClientInfo& client,
 		 Time time) :
-	proportion(std::max(time,
-			    prev_tag.proportion + client.weight_inv)),
-	reservation(std::max(time,
-			     prev_tag.reservation + client.reservation_inv)),
-	limit(std::max(time,
-		       prev_tag.limit + client.limit_inv))
+
+	proportion(tagCalc(time, prev_tag.proportion, client.weight_inv)),
+	reservation(tagCalc(time, prev_tag.reservation, client.reservation_inv)),
+	limit(tagCalc(time, prev_tag.limit, client.limit_inv))
       {
 	// empty
       }
 
+      // copy constructor
       RequestTag(const RequestTag& other) :
 	proportion(other.proportion),
 	reservation(other.reservation),
 	limit(other.limit)
       {
 	// empty
+      }
+
+      RequestTag() :
+	proportion(0.0), reservation(0.0), limit(0.0)
+      {
+	// empty
+      }
+
+    private:
+
+      RequestTag(double p, double r, double l) :
+	proportion(p), reservation(r), limit(l)
+      {
+	// empty
+      }
+
+      static double tagCalc(Time time, double prev, double increment) {
+	if (0.0 == increment) {
+	  return 0.0;
+	} else {
+	  return std::max(time, prev + increment);
+	}
       }
 
 #if 0
@@ -105,53 +120,6 @@ namespace crimson {
 
     std::ostream& operator<<(std::ostream& out,
 			     const crimson::dmclock::RequestTag& tag);
-
-#if 0
-
-    template<typename C, typename R>
-    class ClientQueue{
-
-    protected:
-
-      typedef typename std::lock_guard<std::mutex> Guard;
-      typedef typename std::shared_ptr<ClientQueue<R>> HeapEntry;
-    
-
-    public:
-
-      ClientQueue(const ClientInfo& _info) : info(_info), idle(false) {}
-
-      const ClientInfo& getInfo() const { return info; }
-      const RequestTag& getPrevTag() const { return prev_tag; }
-
-      const Entry* peek() const {
-	Guard g(queue_mutex);
-	if (queue.empty()) {
-	  return NULL;
-	} else {
-	  return &queue.front();
-	}
-      }
-
-      // can only be called when queue is not empty
-      void pop() {
-	Guard g(queue_mutex);
-	queue.pop_front();
-      }
-
-      void push(RequestRef&& request, Time time) {
-	std::lock_guard<std::mutex> guard(queue_mutex);
-	queue.emplace_back(
-      }
-
-      // can only be called when queue is not empty
-      bool empty() const {
-	Guard g(queue_mutex);
-	return queue.empty();
-      }
-    }; // class ClientQueue
-
-#endif
 
     // T is client identifier type, R is request type
     template<typename C, typename R>
@@ -205,6 +173,7 @@ namespace crimson {
 #endif
       }; // struct Entry
 
+      typedef std::shared_ptr<Entry> EntryRef;
   
     public:
 
@@ -223,49 +192,23 @@ namespace crimson {
     protected:
 
       struct ReservationCompare {
-	bool operator()(const Entry& n1, const Entry& n2) const {
-	  return n1.tag.reservation < n2.tag.reservation;
+	bool operator()(const EntryRef& n1, const EntryRef& n2) const {
+	  return n1->tag.reservation < n2->tag.reservation;
 	}
       };
 
-#define NOT_YET 0
-
-#if NOT_YET
       struct ProportionCompare {
-	bool operator()(const CQueueRef& n1, const CQueueRef& n2) const {
-	  auto q1 = n1->peek();
-	  auto q2 = n2->peek();
-
-	  if (q1) {
-	    if (q2) {
-	      return q1->tag.proportion < q2->tag.proportion;
-	    } else {
-	      return true;
-	    }
-	  } else {
-	    return NULL == q2;
-	  }
+	bool operator()(const EntryRef& n1, const EntryRef& n2) const {
+	  return n1->tag.proportion < n2->tag.proportion;
 	}
       };
 
       struct LimitCompare {
-	bool operator()(const CQueueRef& n1, const CQueueRef& n2) const {
-	  auto q1 = n1->peek();
-	  auto q2 = n2->peek();
-
-	  if (q1) {
-	    if (q2) {
-	      return q1->tag.limit < q2->tag.limit;
-	    } else {
-	      return true;
-	    }
-	  } else {
-	    return NULL == q2;
-	  }
+	bool operator()(const EntryRef& n1, const EntryRef& n2) const {
+	  return n1->tag.limit < n2->tag.limit;
 	}
       };
 
-#endif
 
       ClientInfoFunc clientInfoF;
       CanHandleRequestFunc canHandleF;
@@ -280,20 +223,17 @@ namespace crimson {
       // stable mappiing between client ids and client queues
       std::map<C,ClientRec> clientMap;
 
-      typedef std::shared_ptr<Entry> EntryRef;
-
       // four heaps that maintain the earliest request by each of the
       // tag components
       c::Heap<EntryRef, ReservationCompare> resQ;
+      c::Heap<EntryRef, ProportionCompare> propQ;
 
-#if NOT_YET
-      heap::fibonacci_heap<CQueueRef,
-			   heap::compare<LimitCompare>> limQ;
-      heap::fibonacci_heap<CQueueRef,
-			   heap::compare<ProportionCompare>> propQ;
-      heap::fibonacci_heap<CQueueRef,
-			   heap::compare<ProportionCompare>> readyQ;
-#endif
+      // AKA not-ready queue
+      c::Heap<EntryRef, LimitCompare> limQ;
+
+      // for entries whose limit is passed and that'll be sorted by
+      // their proportion tag
+      c::Heap<EntryRef, ProportionCompare> readyQ;
 
     public:
 
@@ -307,20 +247,24 @@ namespace crimson {
 	// empty
       }
 
-      void test() {
-	std::cout << clientInfoF(0) << std::endl;
-	std::cout << clientInfoF(3) << std::endl;
-	std::cout << clientInfoF(99) << std::endl;
+
+      void addRequest(const R& request,
+		      const C& client_id,
+		      const Time& time) {
+	addRequest(RequestRef(new R(request)), client_id, time);
+	// addRequest(std::unique_ptr<R>(new R(request)), client_id, time);
       }
 
 
-      void addRequest(RequestRef&& request, C client_id, Time time) {
+      void addRequest(RequestRef&& request,
+		      const C& client_id,
+		      const Time& time) {
 	Guard g(data_mutex);
 
 	auto client_it = clientMap.find(client_id);
 	if (clientMap.end() == client_it) {
 	  ClientInfo ci = clientInfoF(client_id);
-	  clientMap[client_id] = ClientRec(ci);
+	  clientMap.emplace(client_id, ClientRec(ci));
 	  client_it = clientMap.find(client_id);
 	}
 
@@ -331,19 +275,22 @@ namespace crimson {
 
 	EntryRef entry(new Entry(client_id,
 				 RequestTag(client_it->second.prev_tag,
+					    client_it->second.info,
 					    time),
 				 std::move(request)));
-
-#if NOT_YET
-	typename ClientQueue<R>::RequestRef req_ref(new R(request));
-	// bool was_empty = client->empty();
-	client->push(std::move(req_ref), time);
-	if (add_to_queues) {
-	  resQ.push(client);
-	  limQ.push(client);
-	  propQ.push(client);
+	if (0.0 != entry->tag.reservation) {
+	  resQ.push(entry);
 	}
-#endif
+
+	if (0.0 == entry->tag.limit) {
+	  readyQ.push(entry);
+	} else {
+	  limQ.push(entry);
+	}
+
+	if (0.0 != entry->tag.proportion) {
+	  propQ.push(entry);
+	}
 
 	scheduleRequest();
       }
@@ -356,8 +303,17 @@ namespace crimson {
 	  return;
 	}
 
+	Time now = getTime();
+
+	while (!resQ.empty()) {
+	  if (resQ.top()->handled) {
+	    resQ.pop();
+	  }
+	}
+
+#if 0
 	if (!resQ.empty()) {
-	  auto top = resQ.top()->peek();
+	  auto top = resQ.top();
 	  while (top && top->handled) {
 	    resQ.pop();
 
@@ -368,6 +324,7 @@ namespace crimson {
 	    top = resQ.top()->peek();
 	  }
 	} // resQ not empty
+#endif
       }
 
       void requestComplete() {

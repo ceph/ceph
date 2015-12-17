@@ -85,11 +85,7 @@ int main(int argc, char* argv[]) {
   
   dmc::PriorityQueue<int,Request> priorityQueue(f1, f2, f3);
 
-#if 0
-  priorityQueue.test();
-
   priorityQueue.addRequest(Request(0, 17, "foobar"), 0, dmc::getTime());
-#endif
 
   std::cout << "done" << std::endl;
 }
