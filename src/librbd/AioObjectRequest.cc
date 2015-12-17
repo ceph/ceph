@@ -281,8 +281,8 @@ namespace librbd {
 			   << " extents " << parent_extents
 			   << dendl;
     RWLock::RLocker owner_locker(m_ictx->parent->owner_lock);
-    AioImageRequest::aio_read(m_ictx->parent, m_parent_completion,
-                              parent_extents, NULL, &m_read_data, 0);
+    AioImageRequest<>::aio_read(m_ictx->parent, m_parent_completion,
+                                parent_extents, NULL, &m_read_data, 0);
   }
 
   /** write **/
