@@ -978,6 +978,7 @@ if(${WITH_RBD})
     librbd/LibrbdAdminSocketHook.cc
     librbd/LibrbdWriteback.cc
     librbd/ObjectMap.cc
+    librbd/Operations.cc
     librbd/Utils.cc
     librbd/exclusive_lock/AcquireRequest.cc
     librbd/exclusive_lock/ReleaseRequest.cc
