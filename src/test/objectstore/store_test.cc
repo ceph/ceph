@@ -1636,17 +1636,19 @@ public:
 
     filled_byte_array(bl, len);
 
-    if (contents[new_obj].data.length() <= offset) {
-      contents[new_obj].data.append_zero(offset-contents[new_obj].data.length());
-      contents[new_obj].data.append(bl);
+    bufferlist& data = contents[new_obj].data;
+    if (data.length() <= offset) {
+      data.append_zero(offset-data.length());
+      data.append(bl);
     } else {
       bufferlist value;
-      contents[new_obj].data.copy(0, offset, value);
+      assert(data.length() > offset);
+      data.copy(0, offset, value);
       value.append(bl);
-      if (value.length() < contents[new_obj].data.length())
-        contents[new_obj].data.copy(value.length(),
-                                    contents[new_obj].data.length()-value.length(), value);
-      value.swap(contents[new_obj].data);
+      if (value.length() < data.length())
+        data.copy(value.length(),
+		  data.length()-value.length(), value);
+      value.swap(data);
     }
 
     t->write(cid, new_obj, offset, len, bl);
@@ -1725,11 +1727,12 @@ public:
     t->truncate(cid, obj, len);
     ++in_flight;
     in_flight_objects.insert(obj);
-    if (contents[obj].data.length() <= len)
-      contents[obj].data.append_zero(len - contents[obj].data.length());
+    bufferlist& data = contents[obj].data;
+    if (data.length() <= len)
+      data.append_zero(len - data.length());
     else {
-      contents[obj].data.copy(0, len, bl);
-      bl.swap(contents[obj].data);
+      data.copy(0, len, bl);
+      bl.swap(data);
     }
 
     return store->queue_transaction(osr, t, new C_SyntheticOnReadable(this, t, obj));
