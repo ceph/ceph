@@ -2775,8 +2775,6 @@ int OSDMap::build_simple_crush_map_from_conf(CephContext *cct,
 
   crush.create();
 
-  set<string> hosts, racks;
-
   // root
   int root_type = _build_crush_types(crush);
   int rootid;
@@ -2814,9 +2812,6 @@ int OSDMap::build_simple_crush_map_from_conf(CephContext *cct,
       host = "unknownhost";
     if (rack.length() == 0)
       rack = "unknownrack";
-
-    hosts.insert(host);
-    racks.insert(rack);
 
     map<string,string> loc;
     loc["host"] = host;
