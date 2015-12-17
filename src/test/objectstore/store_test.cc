@@ -922,6 +922,7 @@ TEST_P(StoreTest, SimpleCloneTest) {
     t.setattr(cid, hoid, "attr1", small);
     t.setattr(cid, hoid, "attr2", large);
     t.setattr(cid, hoid, "attr3", xlarge);
+    t.write(cid, hoid, 0, small.length(), small);
     t.write(cid, hoid, 10, small.length(), small);
     cerr << "Creating object and set attr " << hoid << std::endl;
     r = store->apply_transaction(&osr, t);
@@ -946,6 +947,11 @@ TEST_P(StoreTest, SimpleCloneTest) {
     ASSERT_TRUE(newdata.contents_equal(large));
 
     newdata.clear();
+    r = store->read(cid, hoid, 0, 5, newdata);
+    ASSERT_EQ(r, 5);
+    ASSERT_TRUE(newdata.contents_equal(small));
+
+    newdata.clear();
     r = store->read(cid, hoid2, 10, 5, newdata);
     ASSERT_EQ(r, 5);
     ASSERT_TRUE(newdata.contents_equal(small));
@@ -963,6 +969,207 @@ TEST_P(StoreTest, SimpleCloneTest) {
     r = store->getattr(cid, hoid, "attr1", attr);
     ASSERT_EQ(r, 0);
     ASSERT_TRUE(attr.contents_equal(large));
+  }
+  {
+    ObjectStore::Transaction t;
+    t.remove(cid, hoid);
+    t.remove(cid, hoid2);
+    ASSERT_EQ(0u, store->apply_transaction(&osr, t));
+  }
+  {
+    bufferlist final;
+    bufferptr p(16384);
+    memset(p.c_str(), 1, p.length());
+    bufferlist pl;
+    pl.append(p);
+    final.append(p);
+    ObjectStore::Transaction t;
+    t.write(cid, hoid, 0, pl.length(), pl);
+    t.clone(cid, hoid, hoid2);
+    bufferptr a(4096);
+    memset(a.c_str(), 2, a.length());
+    bufferlist al;
+    al.append(a);
+    final.append(a);
+    t.write(cid, hoid, pl.length(), a.length(), al);
+    r = store->apply_transaction(&osr, t);
+    ASSERT_EQ(r, 0);
+    bufferlist rl;
+    ASSERT_EQ((int)final.length(),
+	      store->read(cid, hoid, 0, final.length(), rl));
+    ASSERT_TRUE(final.contents_equal(rl));
+  }
+  {
+    ObjectStore::Transaction t;
+    t.remove(cid, hoid);
+    t.remove(cid, hoid2);
+    ASSERT_EQ(0u, store->apply_transaction(&osr, t));
+  }
+  {
+    bufferlist final;
+    bufferptr p(16384);
+    memset(p.c_str(), 111, p.length());
+    bufferlist pl;
+    pl.append(p);
+    final.append(p);
+    ObjectStore::Transaction t;
+    t.write(cid, hoid, 0, pl.length(), pl);
+    t.clone(cid, hoid, hoid2);
+    bufferptr z(4096);
+    z.zero();
+    final.append(z);
+    bufferptr a(4096);
+    memset(a.c_str(), 112, a.length());
+    bufferlist al;
+    al.append(a);
+    final.append(a);
+    t.write(cid, hoid, pl.length() + z.length(), a.length(), al);
+    r = store->apply_transaction(&osr, t);
+    ASSERT_EQ(r, 0);
+    bufferlist rl;
+    ASSERT_EQ((int)final.length(),
+	      store->read(cid, hoid, 0, final.length(), rl));
+    ASSERT_TRUE(final.contents_equal(rl));
+  }
+  {
+    ObjectStore::Transaction t;
+    t.remove(cid, hoid);
+    t.remove(cid, hoid2);
+    ASSERT_EQ(0u, store->apply_transaction(&osr, t));
+  }
+  {
+    bufferlist final;
+    bufferptr p(16000);
+    memset(p.c_str(), 5, p.length());
+    bufferlist pl;
+    pl.append(p);
+    final.append(p);
+    ObjectStore::Transaction t;
+    t.write(cid, hoid, 0, pl.length(), pl);
+    t.clone(cid, hoid, hoid2);
+    bufferptr z(1000);
+    z.zero();
+    final.append(z);
+    bufferptr a(8000);
+    memset(a.c_str(), 6, a.length());
+    bufferlist al;
+    al.append(a);
+    final.append(a);
+    t.write(cid, hoid, 17000, a.length(), al);
+    ASSERT_EQ(0u, store->apply_transaction(&osr, t));
+    bufferlist rl;
+    ASSERT_EQ((int)final.length(),
+	      store->read(cid, hoid, 0, final.length(), rl));
+    /*cout << "expected:\n";
+    final.hexdump(cout);
+    cout << "got:\n";
+    rl.hexdump(cout);*/
+    ASSERT_TRUE(final.contents_equal(rl));
+  }
+  {
+    ObjectStore::Transaction t;
+    t.remove(cid, hoid);
+    t.remove(cid, hoid2);
+    ASSERT_EQ(0u, store->apply_transaction(&osr, t));
+  }
+  {
+    bufferptr p(1048576);
+    memset(p.c_str(), 3, p.length());
+    bufferlist pl;
+    pl.append(p);
+    ObjectStore::Transaction t;
+    t.write(cid, hoid, 0, pl.length(), pl);
+    t.clone(cid, hoid, hoid2);
+    bufferptr a(65536);
+    memset(a.c_str(), 4, a.length());
+    bufferlist al;
+    al.append(a);
+    t.write(cid, hoid, a.length(), a.length(), al);
+    ASSERT_EQ(0u, store->apply_transaction(&osr, t));
+    bufferlist rl;
+    bufferlist final;
+    final.substr_of(pl, 0, al.length());
+    final.append(al);
+    bufferlist end;
+    end.substr_of(pl, al.length()*2, pl.length() - al.length()*2);
+    final.append(end);
+    ASSERT_EQ((int)final.length(),
+	      store->read(cid, hoid, 0, final.length(), rl));
+    /*cout << "expected:\n";
+    final.hexdump(cout);
+    cout << "got:\n";
+    rl.hexdump(cout);*/
+    ASSERT_TRUE(final.contents_equal(rl));
+  }
+  {
+    ObjectStore::Transaction t;
+    t.remove(cid, hoid);
+    t.remove(cid, hoid2);
+    ASSERT_EQ(0u, store->apply_transaction(&osr, t));
+  }
+  {
+    bufferptr p(65536);
+    memset(p.c_str(), 7, p.length());
+    bufferlist pl;
+    pl.append(p);
+    ObjectStore::Transaction t;
+    t.write(cid, hoid, 0, pl.length(), pl);
+    t.clone(cid, hoid, hoid2);
+    bufferptr a(4096);
+    memset(a.c_str(), 8, a.length());
+    bufferlist al;
+    al.append(a);
+    t.write(cid, hoid, 32768, a.length(), al);
+    ASSERT_EQ(0u, store->apply_transaction(&osr, t));
+    bufferlist rl;
+    bufferlist final;
+    final.substr_of(pl, 0, 32768);
+    final.append(al);
+    bufferlist end;
+    end.substr_of(pl, final.length(), pl.length() - final.length());
+    final.append(end);
+    ASSERT_EQ((int)final.length(),
+	      store->read(cid, hoid, 0, final.length(), rl));
+    /*cout << "expected:\n";
+    final.hexdump(cout);
+    cout << "got:\n";
+    rl.hexdump(cout);*/
+    ASSERT_TRUE(final.contents_equal(rl));
+  }
+  {
+    ObjectStore::Transaction t;
+    t.remove(cid, hoid);
+    t.remove(cid, hoid2);
+    ASSERT_EQ(0u, store->apply_transaction(&osr, t));
+  }
+  {
+    bufferptr p(65536);
+    memset(p.c_str(), 9, p.length());
+    bufferlist pl;
+    pl.append(p);
+    ObjectStore::Transaction t;
+    t.write(cid, hoid, 0, pl.length(), pl);
+    t.clone(cid, hoid, hoid2);
+    bufferptr a(4096);
+    memset(a.c_str(), 10, a.length());
+    bufferlist al;
+    al.append(a);
+    t.write(cid, hoid, 33768, a.length(), al);
+    ASSERT_EQ(0u, store->apply_transaction(&osr, t));
+    bufferlist rl;
+    bufferlist final;
+    final.substr_of(pl, 0, 33768);
+    final.append(al);
+    bufferlist end;
+    end.substr_of(pl, final.length(), pl.length() - final.length());
+    final.append(end);
+    ASSERT_EQ((int)final.length(),
+	      store->read(cid, hoid, 0, final.length(), rl));
+    /*cout << "expected:\n";
+    final.hexdump(cout);
+    cout << "got:\n";
+    rl.hexdump(cout);*/
+    ASSERT_TRUE(final.contents_equal(rl));
   }
   {
     ObjectStore::Transaction t;
