@@ -1008,6 +1008,12 @@ function test_mon_osd()
   expect_false "ceph osd blacklist $bl/-1"
   expect_false "ceph osd blacklist $bl/foo"
 
+  # Test `clear`
+  ceph osd blacklist add $bl
+  ceph osd blacklist ls | grep $bl
+  ceph osd blacklist clear
+  expect_false "ceph osd blacklist ls | grep $bl"
+
   #
   # osd crush
   #
