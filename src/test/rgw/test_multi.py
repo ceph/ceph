@@ -14,6 +14,8 @@ import boto.s3.connection
 
 import inspect
 
+from nose.tools import eq_ as eq
+
 def lineno():
     return inspect.currentframe().f_back.f_lineno
 
@@ -106,7 +108,7 @@ class RGWCluster:
         mstop(self.cluster_id)
 
     def start_rgw(port):
-        mrgw(self.cluster_id, port)
+        mrgw(self.cluster_id, port, '--debug-rgw=20 --debug-ms=1')
 
     def stop_rgw(self):
         mstop(self.cluster_id, 'radosgw')
@@ -170,6 +172,11 @@ class RGWRealm:
             return None
         return self.zones[num]
 
+    def get_zones(self):
+        for (k, zone) in self.zones.iteritems():
+            yield zone
+
+
     def num_zones(self):
         return self.total_zones
 
@@ -219,14 +226,12 @@ class RGWRealm:
             log('len(log_status)=', len(log_status), ' len(sync_status=', len(sync_status))
             return False
 
-        i = 0
         msg =  ''
-        for l, s in zip(log_status, sync_status):
+        for i, l, s in zip(log_status, log_status.itervalues(), sync_status.itervalues()):
             if l > s:
                 if len(s) != 0:
                     msg += ', '
-                msg += 'shard=' + str(i) + ' master=' + ' target=' + s
-            i += 1
+                msg += 'shard=' + str(i) + ' master=' + l + ' target=' + s
 
         if len(msg) > 0:
             log('cluster ', cluster.cluster_id, ' behind master: ', msg)
@@ -243,6 +248,9 @@ class RGWRealm:
         while True:
             log_status = self.meta_master_log_status(self.master_cluster)
             (num_shards, sync_status) = self.meta_sync_status(cluster)
+
+            log('log_status=', log_status)
+            log('sync_status=', sync_status)
 
             if self.compare_meta_status(cluster, log_status, sync_status):
                 break
@@ -294,8 +302,12 @@ class RGWMulti:
         self.base_port = 8000
 
     def setup(self, bootstrap):
-        credentials = RGWRealmCredentials(gen_access_key(), gen_secret())
-        realm = RGWRealm('earth', credentials, self.clusters, 0)
+        global realm
+        global realm_credentials
+        global user
+
+        realm_credentials = RGWRealmCredentials(gen_access_key(), gen_secret())
+        realm = RGWRealm('earth', realm_credentials, self.clusters, 0)
 
         if bootstrap:
             log('bootstapping clusters')
@@ -314,16 +326,37 @@ class RGWMulti:
         user = RGWUser('tester', '"Test User"', gen_access_key(), gen_secret())
         realm.create_user(user)
 
-
-        zone = realm.get_zone(0)
-        conn = zone.get_connection(user)
-
-        log('create bucket')
-        bucket = conn.create_bucket('mybucket')
-
         realm.meta_checkpoint()
 
-def main(parse_args):
+def check_all_buckets_exist(zone, buckets):
+    conn = zone.get_connection(user)
+
+    for b in buckets:
+        try:
+            conn.get_bucket(b)
+        except:
+            log('zone ', zone.zone_name, ' does not contain bucket ', b)
+            return False
+
+    return True
+
+def test_create_bucket():
+    i = 0
+    buckets = []
+    for zone in realm.get_zones():
+        conn = zone.get_connection(user)
+        log('create bucket')
+        bucket_name = 'buck-{i}'.format(i=i)
+        bucket = conn.create_bucket(bucket_name)
+        buckets.append(bucket_name)
+        i += 1
+
+    realm.meta_checkpoint()
+
+    for zone in realm.get_zones():
+        assert check_all_buckets_exist(zone, buckets)
+
+def init(parse_args):
     cfg = ConfigParser.RawConfigParser({
                                          'num_zones': 2,
                                          'no_bootstrap': 'false',
@@ -354,12 +387,15 @@ def main(parse_args):
         argv = sys.argv[1:]
 
     args = parser.parse_args(argv)
+
+    global rgw_multi
+
     rgw_multi = RGWMulti(int(args.num_zones))
 
     rgw_multi.setup(not args.no_bootstrap)
 
 def setup_module():
-    main(False)
+    init(False)
 
 if __name__ == "__main__":
-    main(True)
+    init(True)
