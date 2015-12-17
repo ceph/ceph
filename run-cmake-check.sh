@@ -48,8 +48,6 @@ function run() {
 	$DRY_RUN ./install-deps.sh || return 1
     fi
     $DRY_RUN ./autogen.sh || return 1
-    $DRY_RUN ./configure "$@" --disable-static --with-radosgw --with-debug --without-lttng \
-             CC="ccache gcc" CXX="ccache g++" CFLAGS="-Wall -g" CXXFLAGS="-Wall -g" || return 1
     $DRY_RUN mkdir build
     $DRY_RUN cd build
     $DRY_RUN cmake ../    
