@@ -1612,7 +1612,7 @@ int NewStore::collection_list(
       if (!it->valid())
 	dout(20) << __func__ << " iterator not valid (end of db?)" << dendl;
       else
-	dout(20) << __func__ << " key " << it->key() << " > " << end << dendl;
+	dout(20) << __func__ << " key " << it->key() << " > " << pend << dendl;
       if (temp) {
 	if (end.hobj.is_temp()) {
 	  break;
