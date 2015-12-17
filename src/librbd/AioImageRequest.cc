@@ -311,7 +311,8 @@ uint64_t AioImageWrite::append_journal_event(
   bl.append(m_buf, m_len);
 
   journal::EventEntry event_entry(journal::AioWriteEvent(m_off, m_len, bl));
-  uint64_t tid = m_image_ctx.journal->append_io_event(m_aio_comp, event_entry,
+  uint64_t tid = m_image_ctx.journal->append_io_event(m_aio_comp,
+                                                      std::move(event_entry),
                                                       requests, m_off, m_len,
                                                       synchronous);
   if (m_image_ctx.object_cacher == NULL) {
@@ -371,7 +372,8 @@ void AioImageWrite::update_stats(size_t length) {
 uint64_t AioImageDiscard::append_journal_event(
     const AioObjectRequests &requests, bool synchronous) {
   journal::EventEntry event_entry(journal::AioDiscardEvent(m_off, m_len));
-  uint64_t tid = m_image_ctx.journal->append_io_event(m_aio_comp, event_entry,
+  uint64_t tid = m_image_ctx.journal->append_io_event(m_aio_comp,
+                                                      std::move(event_entry),
                                                       requests, m_off, m_len,
                                                       synchronous);
   m_aio_comp->associate_journal_event(tid);

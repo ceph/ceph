@@ -351,7 +351,7 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
 
     C_SaferCond ctx;
     ictx->snap_lock.get_read();
-    operation::TrimRequest<> *req = new operation::TrimRequest<>(
+    operation::TrimRequest<> *req = operation::TrimRequest<>::create(
       *ictx, &ctx, ictx->size, newsize, prog_ctx);
     ictx->snap_lock.put_read();
     req->send();
