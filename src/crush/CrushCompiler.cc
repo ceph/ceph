@@ -213,7 +213,7 @@ int CrushCompiler::decompile(ostream &out)
   for (int i=0; n; i++) {
     const char *name = crush.get_type_name(i);
     if (!name) {
-      if (i == 0) out << "type 0 device\n";
+      if (i == 0) out << "type 0 osd\n";
       continue;
     }
     n--;
