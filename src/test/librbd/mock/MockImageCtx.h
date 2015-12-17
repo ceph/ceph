@@ -18,6 +18,10 @@
 
 namespace librbd {
 
+namespace operation {
+template <typename> class ResizeRequest;
+}
+
 struct MockImageCtx {
   MockImageCtx(librbd::ImageCtx &image_ctx)
     : image_ctx(&image_ctx),
@@ -106,6 +110,7 @@ struct MockImageCtx {
   MOCK_METHOD1(flush, void(Context *));
   MOCK_METHOD1(flush_copyup, void(Context *));
 
+  MOCK_METHOD1(invalidate_cache, void(Context *));
   MOCK_METHOD1(shut_down_cache, void(Context *));
 
   MOCK_CONST_METHOD1(test_features, bool(uint64_t test_features));
@@ -145,6 +150,7 @@ struct MockImageCtx {
 
   ceph_file_layout layout;
 
+  xlist<operation::ResizeRequest<MockImageCtx>*> resize_reqs;
   xlist<AsyncRequest<MockImageCtx>*> async_requests;
   std::list<Context*> async_requests_waiters;
 

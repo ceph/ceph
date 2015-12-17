@@ -374,6 +374,7 @@ unittest_librbd_SOURCES = \
 	test/librbd/object_map/test_mock_SnapshotRollbackRequest.cc \
 	test/librbd/object_map/test_mock_UnlockRequest.cc \
 	test/librbd/object_map/test_mock_UpdateRequest.cc \
+	test/librbd/operation/test_mock_ResizeRequest.cc \
 	test/librbd/operation/test_mock_SnapshotCreateRequest.cc \
 	test/librbd/operation/test_mock_SnapshotProtectRequest.cc \
 	test/librbd/operation/test_mock_SnapshotRemoveRequest.cc \
