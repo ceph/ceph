@@ -1471,7 +1471,11 @@ public:
     ++in_flight;
     in_flight_objects.insert(old_obj);
 
-    contents[new_obj] = contents[old_obj];
+    // *copy* the data buffer, since we may modify it later.
+    contents[new_obj].attrs = contents[old_obj].attrs;
+    contents[new_obj].data.clear();
+    contents[new_obj].data.append(contents[old_obj].data.c_str(),
+				  contents[old_obj].data.length());
     return store->queue_transaction(osr, t, new C_SyntheticOnClone(this, t, old_obj, new_obj));
   }
 
