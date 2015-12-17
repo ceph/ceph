@@ -7,6 +7,9 @@ import argparse
 import sys
 import time
 
+import boto
+import boto.s3.connection
+
 import inspect
 
 def lineno():
@@ -114,6 +117,24 @@ class RGWCluster:
         (s, retcode) = bash(tpath('test-rgw-call.sh', 'call_rgw_admin', self.cluster_num, '--rgw-cache-enabled=false ' + cmd), check_retcode)
         return (s, retcode)
 
+class RGWZone:
+    def __init__(self, realm, zg, zone_name, port):
+        self.realm = realm
+        self.zg = zg
+        self.zone_name = zone_name
+        self.port = port
+        self.connection = None
+
+    def get_connection(self, user):
+        if self.connection is None:
+            self.connection = boto.connect_s3(aws_access_key_id = user.access_key,
+                                          aws_secret_access_key = user.secret,
+                                          host = 'localhost',
+                                          port = self.port,
+                                          is_secure = False,
+                                          calling_format = boto.s3.connection.OrdinaryCallingFormat())
+        return self.connection
+
 class RGWRealm:
     def __init__(self, realm, credentials, clusters, master_index):
         self.realm = realm
@@ -121,6 +142,8 @@ class RGWRealm:
         self.clusters = clusters
         self.master_index = master_index
         self.master_cluster = clusters[master_index]
+        self.zones = {}
+        self.total_zones = 0
 
     def init_zone(self, cluster, zg, zone_name, port, first_zone_port=0):
         if first_zone_port == 0:
@@ -131,6 +154,22 @@ class RGWRealm:
             bash(tpath('test-rgw-call.sh', 'init_zone_in_existing_zg', cluster.cluster_num,
                        self.realm, zg, zone_name, first_zone_port, port,
                        self.credentials.access_key, self.credentials.secret))
+
+        self.add_zone(zg, zone_name, port)
+
+    def add_zone(self, zg, zone_name, port):
+        zone = RGWZone(self.realm, zg, zone_name, port)
+        self.zones[self.total_zones] = zone
+        self.total_zones += 1
+
+
+    def get_zone(self, num):
+        if num >= self.total_zones:
+            return None
+        return self.zones[num]
+
+    def num_zones(self):
+        return self.total_zones
 
     def meta_sync_status(self, cluster):
         if cluster.cluster_num == self.master_cluster.cluster_num:
@@ -264,11 +303,23 @@ class RGWMulti:
             for i in xrange(1, self.num_clusters):
                 self.clusters[i].start()
                 realm.init_zone(self.clusters[i], 'us', 'us-' + str(i + 1), self.base_port + i, first_zone_port=self.base_port)
+        else:
+            for i in xrange(0, self.num_clusters):
+                realm.add_zone('us', 'us-' + str(i + 1), self.base_port + i)
 
         realm.meta_checkpoint()
 
         user = RGWUser('tester', '"Test User"', gen_access_key(), gen_secret())
         realm.create_user(user)
+
+
+        zone = realm.get_zone(0)
+        conn = zone.get_connection(user)
+
+        log('create bucket')
+        bucket = conn.create_bucket('mybucket')
+
+        realm.meta_checkpoint()
 
 
 
