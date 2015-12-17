@@ -602,15 +602,15 @@ if(${WITH_ROCKSDB})
 include(ExternalProject)
 ExternalProject_Add(rocksdb
   SOURCE_DIR ${CMAKE_SOURCE_DIR}/src/rocksdb
-  CONFIGURE_COMMAND autoreconf -fvi && ./configure
+  CONFIGURE_COMMAND true
   BINARY_DIR ${CMAKE_SOURCE_DIR}/src/rocksdb 
-  BUILD_COMMAND EXTRA_CXXFLAGS=fPIC PORTABLE=1 make VERBOSE=1
-  INSTALL_COMMAND make install 
+  BUILD_COMMAND EXTRA_CXXFLAGS=-fPIC PORTABLE=1 make VERBOSE=1 static_lib
+  INSTALL_COMMAND true
 )
 
 #For now only building rocksdb statically
 add_library(librocksdb STATIC IMPORTED)
-set_property(TARGET librocksdb PROPERTY IMPORTED_LOCATION ${CMAKE_SOURCE_DIR}/src/rocksdb/.libs/librocksdb.a) 
+set_property(TARGET librocksdb PROPERTY IMPORTED_LOCATION ${CMAKE_SOURCE_DIR}/src/rocksdb/librocksdb.a) 
 set_property(TARGET librocksdb PROPERTY INTERFACE_LINK_LIBRARIES z bz2 snappy)
 add_dependencies(librocksdb rocksdb)
 endif(${WITH_ROCKSDB})

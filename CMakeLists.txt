@@ -252,7 +252,7 @@ set(HAVE_LIBROCKSDB ${WITH_ROCKSDB})
 
 #option for LTTng
 option(HAVE_LTTNG "LTTng tracing is enabled" ON)
-  if(${HAVE_LTTNG})
+if(${HAVE_LTTNG})
   find_package(lttng-ust REQUIRED)
   set(WITH_LTTNG ${LTTNG_FOUND})
 endif(${HAVE_LTTNG})

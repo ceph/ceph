@@ -1,17 +1,5 @@
-add_custom_command(OUTPUT 
-  ${CMAKE_SOURCE_DIR}/src/tracing/librados.c
-  ${CMAKE_SOURCE_DIR}/src/tracing/osd.c
-  ${CMAKE_SOURCE_DIR}/src/tracing/pg.c
-  ${CMAKE_SOURCE_DIR}/src/tracing/oprequest.c
-  ${CMAKE_SOURCE_DIR}/src/tracing/librbd.c
-  ${CMAKE_SOURCE_DIR}/src/tracing/objectstore.c
-  DEPENDS 
-  ${CMAKE_SOURCE_DIR}/src/tracing/librados.tp 
-  ${CMAKE_SOURCE_DIR}/src/tracing/librbd.tp 
-  ${CMAKE_SOURCE_DIR}/src/tracing/objectstore.tp 
-  ${CMAKE_SOURCE_DIR}/src/tracing/oprequest.tp
-  ${CMAKE_SOURCE_DIR}/src/tracing/osd.tp
-  ${CMAKE_SOURCE_DIR}/src/tracing/pg.tp
+add_custom_target(lttng_gen_tp
+  ALL
   COMMAND 
   lttng-gen-tp tracing/librados.tp -o tracing/librados.h -o tracing/librados.c && 
   lttng-gen-tp tracing/librbd.tp -o tracing/librbd.h -o tracing/librbd.c && 
@@ -27,16 +15,24 @@ add_library(libosd_tp
   osd.c
   pg.c)
 target_link_libraries(libosd_tp lttng-ust dl)
-target_compile_definitions(libosd_tp PUBLIC "-DTRACEPOINT_PROBE_DYNAMIC_LINKAGE")
+target_include_directories(libosd_tp PUBLIC ${CMAKE_SOURCE_DIR}/src/tracing)
+add_dependencies(libosd_tp lttng_gen_tp)
+set_target_properties(libosd_tp PROPERTIES OUTPUT_NAME osd_tp VERSION 1.0.0 SOVERSION 1)
 
 add_library(librados_tp librados.c)
 target_link_libraries(librados_tp lttng-ust dl)
-target_compile_definitions(librados_tp PUBLIC "-DTRACEPOINT_PROBE_DYNAMIC_LINKAGE")
+target_include_directories(librados_tp PUBLIC ${CMAKE_SOURCE_DIR}/src/tracing)
+add_dependencies(librados_tp lttng_gen_tp)
+set_target_properties(librados_tp PROPERTIES OUTPUT_NAME rados_tp VERSION 2.0.0 SOVERSION 2)
 
 add_library(librbd_tp librbd.c)
 target_link_libraries(librbd_tp lttng-ust dl)
-target_compile_definitions(librbd_tp PUBLIC "-DTRACEPOINT_PROBE_DYNAMIC_LINKAGE")
+target_include_directories(librbd_tp PUBLIC ${CMAKE_SOURCE_DIR}/src/tracing)
+add_dependencies(librbd_tp lttng_gen_tp)
+set_target_properties(librbd_tp PROPERTIES OUTPUT_NAME rbd_tp VERSION 1.0.0 SOVERSION 1)
 
 add_library(libos_tp objectstore.c)
 target_link_libraries(libos_tp lttng-ust dl)
-target_compile_definitions(libos_tp PUBLIC "-DTRACEPOINT_PROBE_DYNAMIC_LINKAGE")
+target_include_directories(libos_tp PUBLIC ${CMAKE_SOURCE_DIR}/src/tracing)
+add_dependencies(libos_tp lttng_gen_tp)
+set_target_properties(libos_tp PROPERTIES OUTPUT_NAME os_tp VERSION 1.0.0 SOVERSION 1)
