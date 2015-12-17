@@ -33,13 +33,17 @@ void escape_xml_attr(const char *buf, char *out);
 /* Returns the length of a buffer that would be needed to escape 'buf'
  * as an JSON attrribute
  */
-int escape_json_attr_len(const char *buf, int src_len);
+int escape_json_attr_len(const char *buf, int src_len, int cooked);
 
 /* Escapes 'buf' as an JSON attribute. Assumes that 'out' is at least long
  * enough to fit the output. You can find out the required length by calling
  * escape_json_attr_len first.
+ * cooked: 0=always, 1=least, 2=SmartHTML
+ *	controls whether / is escaped...
+ * json doesn't require this, but because people embed json in html/xml and
+ * embedding things that look like xml tags in json can confuse this.
  */
-void escape_json_attr(const char *buf, int src_len, char *out);
+void escape_json_attr(const char *buf, int src_len, char *out, int cooked);
 
 /* Note: we escape control characters. Although the XML spec doesn't actually
  * require this, Amazon does it in their XML responses.

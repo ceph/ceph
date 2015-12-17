@@ -54,12 +54,12 @@ TEST(EscapeXml, Utf8) {
   ASSERT_EQ(escape_xml_attrs((const char*)cc2), (const char*)cc2_out);
 }
 
-static std::string escape_json_attrs(const char *str)
+static std::string escape_json_attrs(const char *str, int cooked = 0)
 {
   int src_len = strlen(str);
-  int len = escape_json_attr_len(str, src_len);
+  int len = escape_json_attr_len(str, src_len, cooked);
   char out[len];
-  escape_json_attr(str, src_len, out);
+  escape_json_attr(str, src_len, out, cooked);
   return out;
 }
 
@@ -80,6 +80,12 @@ TEST(EscapeJson, Escapes1) {
       "Some 'single' \\\"quotes\\\" here");
   ASSERT_EQ(escape_json_attrs("tabs\tand\tnewlines\n, oh my"),
       "tabs\\tand\\tnewlines\\n, oh my");
+  ASSERT_EQ(escape_json_attrs(
+      "JSON calls a slash / backslash a solidus / </br>reverse solidus", 1),
+      "JSON calls a slash / backslash a solidus / </br>reverse solidus");
+  ASSERT_EQ(escape_json_attrs(
+      "JSON calls a slash / backslash a solidus / </br>reverse solidus", 2),
+      "JSON calls a slash / backslash a solidus / <\\/br>reverse solidus");
 }
 
 TEST(EscapeJson, ControlChars) {
