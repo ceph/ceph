@@ -854,15 +854,12 @@ int rgw_read(struct rgw_fs *rgw_fs,
   if (! rgw_fh->is_file())
     return -EINVAL;
 
-  size_t nread = 0;
-
-  /* XXX testing only */
-  buffer::list bl;
   RGWGetObjRequest req(cct, fs->get_user(), rgw_fh->bucket_name(),
-		      rgw_fh->object_name(), offset, length, bl);
+		       rgw_fh->object_name(), offset, length,
+		       buffer);
 
   int rc = librgw.get_fe()->execute_req(&req);
-
+#if 0
   if (! rc) {
     uint64_t off = 0;
     for (auto& bp : bl.buffers()) {
@@ -874,8 +871,11 @@ int rgw_read(struct rgw_fs *rgw_fs,
 	break;
     }
   }
-
-  *bytes_read = nread;
+#endif
+  if ((rc == 0) &&
+      (req.get_ret() == 0)) {
+    *bytes_read = req.nread;
+  }
 
   return rc;
 }
@@ -936,13 +936,15 @@ int rgw_readv(struct rgw_fs *rgw_fs,
   if (! rgw_fh->is_file())
     return -EINVAL;
 
+  int rc = 0;
+#if 0 /* XXX */
   buffer::list bl;
   RGWGetObjRequest req(cct, fs->get_user(), rgw_fh->bucket_name(),
 		      rgw_fh->object_name(), uio->uio_offset, uio->uio_resid,
 		      bl);
   req.do_hexdump = false;
 
-  int rc = librgw.get_fe()->execute_req(&req);
+  rc = librgw.get_fe()->execute_req(&req);
 
   if (! rc) {
     RGWReadV* rdv = static_cast<RGWReadV*>(
@@ -969,7 +971,7 @@ int rgw_readv(struct rgw_fs *rgw_fs,
       ++ix;
     }
   }
-
+#endif
   return rc;
 }
 
