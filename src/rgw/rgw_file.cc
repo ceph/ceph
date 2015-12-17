@@ -142,7 +142,8 @@ int RGWFileHandle::close()
   int rc = 0;
   file* f = get<file>(&variant_type);
   if (f && (f->write_req)) {
-    rc = librgw.get_fe()->finish_req(f->write_req);
+    rc = f->write_req->exec_finish();
+    // rc = librgw.get_fe()->finish_req(f->write_req); // XXX
     if (! rc) {
       rc = f->write_req->get_ret();
       if (! rc) {

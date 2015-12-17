@@ -204,8 +204,8 @@ namespace rgw {
   public:
     RGWFileHandle(RGWLibFS* fs, uint32_t fs_inst, RGWFileHandle* _parent,
 		  const fh_key& _fhk, std::string& _name, uint32_t _flags)
-      : bucket(nullptr), parent(_parent), name(std::move(_name)), fhk(_fhk),
-	flags(_flags) {
+      : refcnt(0), fs(fs), bucket(nullptr), parent(_parent),
+	name(std::move(_name)), fhk(_fhk), flags(_flags) {
 
       if (parent->is_root()) {
 	fh.fh_type = RGW_FS_TYPE_DIRECTORY;
@@ -1472,6 +1472,12 @@ public:
     : RGWLibContinuedReq(_cct, _user), bucket_name(_bname), obj_name(_oname),
       rgw_fh(_fh), processor(nullptr), last_off(0), next_off(0),
       bytes_written(0), multipart(false) {
+
+    int ret = header_init();
+    if (ret == 0) {
+      ret = init_from_header(get_state());
+    }
+
     magic = 81;
     op = this;
   }
@@ -1540,7 +1546,7 @@ public:
   }
 
   void put_data(off_t off, buffer::list& _bl) {
-    next_off = off;
+    ofs = off;
     data.claim(_bl);
   }
 
