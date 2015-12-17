@@ -207,7 +207,7 @@ void Paxos::handle_collect(MonOpRequestRef op)
   state = STATE_RECOVERING;
 
   if (collect->first_committed > last_committed+1) {
-    dout(5) << __func__
+    dout(2) << __func__
             << " leader's lowest version is too high for our last committed"
             << " (theirs: " << collect->first_committed
             << "; ours: " << last_committed << ") -- bootstrap!" << dendl;
