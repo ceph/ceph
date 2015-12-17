@@ -190,7 +190,7 @@ namespace libradosstriper
      * during deletion (same EBUSY return code)
      */
     int remove(const std::string& soid);
-
+    int remove(const std::string& soid, int flags);
     /**
      * Resizes a striped object
      * the truncation can not happen if any I/O is ongoing (it

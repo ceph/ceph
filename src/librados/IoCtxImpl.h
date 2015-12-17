@@ -127,6 +127,7 @@ struct librados::IoCtxImpl {
   int sparse_read(const object_t& oid, std::map<uint64_t,uint64_t>& m,
 		  bufferlist& bl, size_t len, uint64_t off);
   int remove(const object_t& oid);
+  int remove(const object_t& oid, int flags);
   int stat(const object_t& oid, uint64_t *psize, time_t *pmtime);
   int trunc(const object_t& oid, uint64_t size);
 
