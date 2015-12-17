@@ -877,7 +877,7 @@ int BlueStore::_open_bdev(bool create)
 
   r = _check_or_set_bdev_label(p, bdev->get_size(), "main", create);
   if (r < 0)
-    goto fail;
+    goto fail_close;
   return 0;
 
  fail_close:
