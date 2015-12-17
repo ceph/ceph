@@ -1332,6 +1332,15 @@ public:
         state->available_objects.insert(hoid);
       --(state->in_flight);
       state->cond.Signal();
+
+      bufferlist r2;
+      r = state->store->read(state->cid, hoid, 0, state->contents[hoid].data.length(), r2);
+      if (!state->contents[hoid].data.contents_equal(r2)) {
+	dump_bl_mismatch(state->contents[hoid].data, r2);
+	assert(0 == "mismatch in OnReadable");
+        ASSERT_TRUE(state->contents[hoid].data.contents_equal(r2));
+      }
+      state->cond.Signal();
     }
   };
 
