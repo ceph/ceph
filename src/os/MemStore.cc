@@ -1024,9 +1024,9 @@ int MemStore::_remove(coll_t cid, const ghobject_t& oid)
   auto i = c->object_hash.find(oid);
   if (i == c->object_hash.end())
     return -ENOENT;
+  used_bytes -= i->second->get_size();
   c->object_hash.erase(i);
   c->object_map.erase(oid);
-  used_bytes -= i->second->get_size();
 
   return 0;
 }
