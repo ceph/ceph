@@ -77,39 +77,46 @@ struct C_FlushJournalCommit : public Context {
 
 } // anonymous namespace
 
-void AioImageRequest::aio_read(
-    ImageCtx *ictx, AioCompletion *c,
+template <typename I>
+void AioImageRequest<I>::aio_read(
+    I *ictx, AioCompletion *c,
     const std::vector<std::pair<uint64_t,uint64_t> > &extents,
     char *buf, bufferlist *pbl, int op_flags) {
   AioImageRead req(*ictx, c, extents, buf, pbl, op_flags);
   req.send();
 }
 
-void AioImageRequest::aio_read(ImageCtx *ictx, AioCompletion *c, uint64_t off,
-                               size_t len, char *buf, bufferlist *pbl,
-                               int op_flags) {
+template <typename I>
+void AioImageRequest<I>::aio_read(I *ictx, AioCompletion *c,
+                                  uint64_t off, size_t len, char *buf,
+                                  bufferlist *pbl, int op_flags) {
   AioImageRead req(*ictx, c, off, len, buf, pbl, op_flags);
   req.send();
 }
 
-void AioImageRequest::aio_write(ImageCtx *ictx, AioCompletion *c, uint64_t off,
-                                size_t len, const char *buf, int op_flags) {
+template <typename I>
+void AioImageRequest<I>::aio_write(I *ictx, AioCompletion *c,
+                                   uint64_t off, size_t len, const char *buf,
+                                   int op_flags) {
   AioImageWrite req(*ictx, c, off, len, buf, op_flags);
   req.send();
 }
 
-void AioImageRequest::aio_discard(ImageCtx *ictx, AioCompletion *c,
-                                  uint64_t off, uint64_t len) {
+template <typename I>
+void AioImageRequest<I>::aio_discard(I *ictx, AioCompletion *c,
+                                     uint64_t off, uint64_t len) {
   AioImageDiscard req(*ictx, c, off, len);
   req.send();
 }
 
-void AioImageRequest::aio_flush(ImageCtx *ictx, AioCompletion *c) {
+template <typename I>
+void AioImageRequest<I>::aio_flush(I *ictx, AioCompletion *c) {
   AioImageFlush req(*ictx, c);
   req.send();
 }
 
-void AioImageRequest::send() {
+template <typename I>
+void AioImageRequest<I>::send() {
   assert(m_image_ctx.owner_lock.is_locked());
 
   CephContext *cct = m_image_ctx.cct;
@@ -120,7 +127,8 @@ void AioImageRequest::send() {
   send_request();
 }
 
-void AioImageRequest::fail(int r) {
+template <typename I>
+void AioImageRequest<I>::fail(int r) {
   m_aio_comp->get();
   m_aio_comp->fail(m_image_ctx.cct, r);
 }
@@ -466,3 +474,5 @@ void AioImageFlush::send_request() {
 }
 
 } // namespace librbd
+
+template class librbd::AioImageRequest<librbd::ImageCtx>;
