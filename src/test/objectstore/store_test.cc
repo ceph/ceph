@@ -539,6 +539,20 @@ public:
   }
 };
 
+static void dump_bl_mismatch(bufferlist& expected, bufferlist& actual)
+{
+  cout << __func__ << std::endl;
+  unsigned offset = 0;
+  while (expected[offset] == actual[offset])
+    ++offset;
+  cout << "--- buffer mismatch at offset 0x" << std::hex << offset << std::dec
+       << std::endl;
+  cout << "--- expected:\n";
+  expected.hexdump(cout);
+  cout << "--- actual:\n";
+  actual.hexdump(cout);
+}
+
 class SyntheticWorkloadState {
   struct Object {
     bufferlist data;
@@ -639,6 +653,8 @@ public:
       bufferlist r2;
       r = state->store->read(state->cid, noid, 0, state->contents[noid].data.length(), r2);
       if (!state->contents[noid].data.contents_equal(r2)) {
+	dump_bl_mismatch(state->contents[noid].data, r2);
+	assert(0 == " mismatch after clone");
         ASSERT_TRUE(state->contents[noid].data.contents_equal(r2));
       }
       state->cond.Signal();
@@ -989,7 +1005,15 @@ public:
       ASSERT_EQ(len, result.length());
       expected.copy(offset, len, bl);
       ASSERT_EQ(r, (int)len);
-      ASSERT_TRUE(result.contents_equal(bl));
+      if (!result.contents_equal(bl)) {
+	cout << " obj " << obj
+	 << " size " << expected.length()
+	 << " offset " << offset
+	 << " len " << len << std::endl;
+	dump_bl_mismatch(bl, result);
+	assert(0 == "mismatch after read");
+	ASSERT_TRUE(result.contents_equal(bl));
+      }
     }
   }
 
