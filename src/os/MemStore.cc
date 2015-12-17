@@ -1556,10 +1556,10 @@ int MemStore::PageSetObject::clone(Object *src, uint64_t srcoff,
                   dst_page->data + dbegin - dst_page->offset);
       }
       dst_pages.clear(); // drop page refs
-      srcoff += count;
-      dstoff += count;
-      len -= count;
     }
+    srcoff += count;
+    dstoff += count;
+    len -= count;
     tls_pages.clear(); // drop page refs
   }
 
