@@ -26,6 +26,7 @@ librbd_internal_la_SOURCES = \
 	librbd/LibrbdAdminSocketHook.cc \
 	librbd/LibrbdWriteback.cc \
 	librbd/ObjectMap.cc \
+	librbd/Operations.cc \
 	librbd/Utils.cc \
 	librbd/exclusive_lock/AcquireRequest.cc \
 	librbd/exclusive_lock/ReleaseRequest.cc \
@@ -100,6 +101,7 @@ noinst_HEADERS += \
 	librbd/LibrbdAdminSocketHook.h \
 	librbd/LibrbdWriteback.h \
 	librbd/ObjectMap.h \
+	librbd/Operations.h \
 	librbd/parent_types.h \
 	librbd/SnapInfo.h \
 	librbd/TaskFinisher.h \
