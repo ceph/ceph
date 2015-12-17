@@ -17,6 +17,7 @@ setup(
          'archive-key.pub',
          'openstack-centos-6.5-user-data.txt',
          'openstack-centos-7.0-user-data.txt',
+         'openstack-centos-7.1-user-data.txt',
          'openstack-debian-8.0-user-data.txt',
          'openstack-opensuse-user-data.txt',
          'openstack-teuthology.cron',
