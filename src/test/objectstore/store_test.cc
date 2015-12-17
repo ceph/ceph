@@ -1468,20 +1468,12 @@ public:
     char buf[100];
     snprintf(buf, sizeof(buf), "OBJ_%u", seq);
     string name(buf);
-
-    /*
-    boost::uniform_int<> true_false(0, 1);
-    if (true_false(*gen)) {
-      // long
-      for (int i = 0; i < 100; ++i) name.append("aaaaa");
-    } else if (true_false(*gen)) {
-      name = "DIR_" + name;
-      }*/
-
-    // hash
-    //boost::binomial_distribution<uint32_t> bin(0xFFFFFF, 0.5);
     ++seq;
-    return ghobject_t(hobject_t(name, string(), rand() & 2 ? CEPH_NOSNAP : rand(), rand() & 0xFF, poolid, ""));
+    return ghobject_t(
+      hobject_t(
+	name, string(), rand() & 2 ? CEPH_NOSNAP : rand(),
+	seq % 16, // use smaller set of hash values so clone can work
+	poolid, ""));
   }
 };
 
@@ -1709,6 +1701,8 @@ public:
     } while (--max && !contents[old_obj].data.length());
     available_objects.erase(old_obj);
     ghobject_t new_obj = object_gen->create_object(rng);
+    // make the hash match
+    new_obj.hobj.set_hash(old_obj.hobj.get_hash());
     available_objects.erase(new_obj);
 
     ObjectStore::Transaction *t = new ObjectStore::Transaction;
