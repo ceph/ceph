@@ -66,7 +66,8 @@ TEST_F(TestJournalReplay, AioDiscardEvent) {
   librbd::Journal<>::AioObjectRequests requests;
   {
     RWLock::RLocker owner_locker(ictx->owner_lock);
-    ictx->journal->append_io_event(NULL, event_entry, requests, 0, 0, true);
+    ictx->journal->append_io_event(NULL, std::move(event_entry), requests, 0, 0,
+                                   true);
   }
 
   // re-open the journal so that it replays the new entry
@@ -97,7 +98,8 @@ TEST_F(TestJournalReplay, AioWriteEvent) {
   librbd::Journal<>::AioObjectRequests requests;
   {
     RWLock::RLocker owner_locker(ictx->owner_lock);
-    ictx->journal->append_io_event(NULL, event_entry, requests, 0, 0, true);
+    ictx->journal->append_io_event(NULL, std::move(event_entry), requests, 0, 0,
+                                   true);
   }
 
   // re-open the journal so that it replays the new entry
@@ -127,7 +129,8 @@ TEST_F(TestJournalReplay, AioFlushEvent) {
   librbd::Journal<>::AioObjectRequests requests;
   {
     RWLock::RLocker owner_locker(ictx->owner_lock);
-    ictx->journal->append_io_event(NULL, event_entry, requests, 0, 0, true);
+    ictx->journal->append_io_event(NULL, std::move(event_entry), requests, 0, 0,
+                                   true);
   }
 
   // start an AIO write op
