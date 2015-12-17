@@ -4,6 +4,7 @@
  * Copyright (C) 2015 Red Hat Inc.
  */
 
+
 #include <sys/time.h>
 #include <assert.h>
 
@@ -16,14 +17,10 @@
 
 #include "crimson/heap.h"
 
-// #include <boost/heap/fibonacci_heap.hpp>
-// #include <boost/heap/heap_concepts.hpp>
-
 
 namespace c = crimson;
 
 
-// dmClock namespace
 namespace crimson {
   namespace dmclock {
 
@@ -35,27 +32,6 @@ namespace crimson {
       return now.tv_sec + (now.tv_usec / 1000000.0);
     }
 
-    struct RequestTag {
-      double proportion;
-      double reservation;
-      double limit;
-
-      RequestTag(double p, double r, double l) :
-	proportion(p), reservation(r), limit(l)
-      {
-	// empty
-      }
-
-      RequestTag() : RequestTag(0, 0, 0)
-      {
-	// empty
-      }
-
-      friend std::ostream& operator<<(std::ostream&, const RequestTag&);
-    };
-
-    std::ostream& operator<<(std::ostream& out,
-			     const crimson::dmclock::RequestTag& tag);
 
     struct ClientInfo {
       const double weight;       // proportional
@@ -81,9 +57,54 @@ namespace crimson {
 
       friend std::ostream& operator<<(std::ostream&, const ClientInfo&);
     }; // class ClientInfo
-
     std::ostream& operator<<(std::ostream& out,
 			     const crimson::dmclock::ClientInfo& client);
+
+
+    struct RequestTag {
+      double proportion;
+      double reservation;
+      double limit;
+
+      RequestTag(double p, double r, double l) :
+	proportion(p), reservation(r), limit(l)
+      {
+	// empty
+      }
+
+      RequestTag(const RequestTag& prev_tag,
+		 const ClientInfo& client,
+		 Time time) :
+	proportion(std::max(time,
+			    prev_tag.proportion + client.weight_inv)),
+	reservation(std::max(time,
+			     prev_tag.reservation + client.reservation_inv)),
+	limit(std::max(time,
+		       prev_tag.limit + client.limit_inv))
+      {
+	// empty
+      }
+
+      RequestTag(const RequestTag& other) :
+	proportion(other.proportion),
+	reservation(other.reservation),
+	limit(other.limit)
+      {
+	// empty
+      }
+
+#if 0
+      RequestTag() : RequestTag(0, 0, 0)
+      {
+	// empty
+      }
+#endif
+
+      friend std::ostream& operator<<(std::ostream&, const RequestTag&);
+    };
+
+    std::ostream& operator<<(std::ostream& out,
+			     const crimson::dmclock::RequestTag& tag);
 
 #if 0
 
@@ -121,14 +142,6 @@ namespace crimson {
       void push(RequestRef&& request, Time time) {
 	std::lock_guard<std::mutex> guard(queue_mutex);
 	queue.emplace_back(
-	  Entry(
-	    RequestTag(std::max(time,
-				prev_tag.proportion + 1.0 / info.weight),
-		       std::max(time,
-				prev_tag.reservation + 1.0 / info.reservation),
-		       std::max(time,
-				prev_tag.limit + 1.0 / info.limit)),
-	    std::move(request)));
       }
 
       // can only be called when queue is not empty
@@ -144,41 +157,56 @@ namespace crimson {
     template<typename C, typename R>
     class PriorityQueue {
 
+    public:
+
+      typedef typename std::unique_ptr<R> RequestRef;
+
+    protected:
+
       class ClientRec {
 	friend PriorityQueue<C,R>;
 
 	ClientInfo         info;
 	RequestTag         prev_tag;
 	bool               idle;
+
+	ClientRec(const ClientInfo& _info) :
+	  info(_info),
+	  idle(true)
+	{
+	  // empty
+	}
       }; // class ClientRec
+
 
       class Entry {
 	friend PriorityQueue<C,R>;
 
-	typedef typename std::unique_ptr<R> RequestRef;
-
-	C client;
+	C          client;
 	RequestTag tag;
-	bool       handled;
 	RequestRef request;
+	bool       handled;
 
-	Entry(RequestTag t, RequestRef&& r) :
-	  tag(t), handled(false), request(std::move(r))
+	Entry(C _client, RequestTag _tag, RequestRef&& _request) :
+	  client(_client),
+	  tag(_tag),
+	  request(std::move(_request)),
+	  handled(false)
 	{
 	  // empty
 	}
 
+#if 0
 	Entry(Entry&& e) :
 	  tag(e.tag), handled(e.handled), request(std::move(e.request))
 	{
 	  // empty
 	}
+#endif
       }; // struct Entry
 
   
     public:
-
-      typedef typename std::unique_ptr<R> RequestRef;
 
       // a function that can be called to look up client information
       typedef typename std::function<ClientInfo(C)>       ClientInfoFunc;
@@ -193,11 +221,6 @@ namespace crimson {
 				  std::function<void()>)> HandleRequestFunc;
 
     protected:
-
-#if 0
-      typedef ClientQueue<R>                   CQueue;
-      typedef typename std::shared_ptr<CQueue> CQueueRef;
-#endif
 
       struct ReservationCompare {
 	bool operator()(const Entry& n1, const Entry& n2) const {
@@ -244,7 +267,6 @@ namespace crimson {
 
 #endif
 
-
       ClientInfoFunc clientInfoF;
       CanHandleRequestFunc canHandleF;
       HandleRequestFunc handleF;
@@ -256,12 +278,13 @@ namespace crimson {
 
 
       // stable mappiing between client ids and client queues
-      std::map<C,ClientInfo> clientMap;
+      std::map<C,ClientRec> clientMap;
 
+      typedef std::shared_ptr<Entry> EntryRef;
 
       // four heaps that maintain the earliest request by each of the
       // tag components
-      c::Heap<Entry, ReservationCompare> resQ;
+      c::Heap<EntryRef, ReservationCompare> resQ;
 
 #if NOT_YET
       heap::fibonacci_heap<CQueueRef,
@@ -291,22 +314,27 @@ namespace crimson {
       }
 
 
-#if NOT_YET
-      void addRequest(R request, C client_id, Time time) {
+      void addRequest(RequestRef&& request, C client_id, Time time) {
 	Guard g(data_mutex);
 
 	auto client_it = clientMap.find(client_id);
-	CQueueRef client;
-	bool add_to_queues = false;
 	if (clientMap.end() == client_it) {
 	  ClientInfo ci = clientInfoF(client_id);
-	  client = CQueueRef(new ClientQueue<R>(ci));
-	  clientMap[client_id] = client;
-	  add_to_queues = true;
-	} else {
-	  client = client_it->second;
+	  clientMap[client_id] = ClientRec(ci);
+	  client_it = clientMap.find(client_id);
 	}
 
+	if (client_it->second.idle) {
+	  std::cout << "Request for idle client; do something." << std::endl;
+	  client_it->second.idle = false;
+	}
+
+	EntryRef entry(new Entry(client_id,
+				 RequestTag(client_it->second.prev_tag,
+					    time),
+				 std::move(request)));
+
+#if NOT_YET
 	typename ClientQueue<R>::RequestRef req_ref(new R(request));
 	// bool was_empty = client->empty();
 	client->push(std::move(req_ref), time);
@@ -315,10 +343,10 @@ namespace crimson {
 	  limQ.push(client);
 	  propQ.push(client);
 	}
+#endif
 
 	scheduleRequest();
       }
-#endif
 
     protected:
 
