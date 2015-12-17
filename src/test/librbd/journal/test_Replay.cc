@@ -141,8 +141,8 @@ TEST_F(TestJournalReplay, AioFlushEvent) {
   librbd::AioCompletion *aio_comp = new librbd::AioCompletion();
   {
     RWLock::RLocker owner_lock(ictx->owner_lock);
-    librbd::AioImageRequest::aio_write(ictx, aio_comp, 0, payload.size(),
-                                       payload.c_str(), 0);
+    librbd::AioImageRequest<>::aio_write(ictx, aio_comp, 0, payload.size(),
+                                         payload.c_str(), 0);
   }
   ictx->journal = journal;
 

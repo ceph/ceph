@@ -10,6 +10,7 @@
 #include "test/librbd/mock/MockImageWatcher.h"
 #include "test/librbd/mock/MockJournal.h"
 #include "test/librbd/mock/MockObjectMap.h"
+#include "test/librbd/mock/MockOperations.h"
 #include "test/librbd/mock/MockReadahead.h"
 #include "common/RWLock.h"
 #include "common/WorkQueue.h"
@@ -46,7 +47,8 @@ struct MockImageCtx {
       layout(image_ctx.layout),
       aio_work_queue(new MockAioImageRequestWQ()),
       op_work_queue(new MockContextWQ()),
-      parent(NULL), image_watcher(NULL), object_map(NULL),
+      parent(NULL), operations(new MockOperations()),
+      image_watcher(NULL), object_map(NULL),
       exclusive_lock(NULL), journal(NULL),
       concurrent_management_ops(image_ctx.concurrent_management_ops),
       blacklist_on_break_lock(image_ctx.blacklist_on_break_lock),
@@ -72,6 +74,7 @@ struct MockImageCtx {
     image_ctx->md_ctx.aio_flush();
     image_ctx->data_ctx.aio_flush();
     image_ctx->op_work_queue->drain();
+    delete operations;
     delete image_watcher;
     delete op_work_queue;
     delete aio_work_queue;
@@ -161,6 +164,7 @@ struct MockImageCtx {
   MockReadahead readahead;
 
   MockImageCtx *parent;
+  MockOperations *operations;
 
   MockImageWatcher *image_watcher;
   MockObjectMap *object_map;
