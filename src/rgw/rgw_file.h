@@ -1457,6 +1457,7 @@ class RGWWriteRequest : public RGWLibContinuedReq,
 public:
   const std::string& bucket_name;
   const std::string& obj_name;
+  RGWFileHandle* rgw_fh;
   RGWPutObjProcessor *processor;
   buffer::list data;
   MD5 hash;
@@ -1466,11 +1467,11 @@ public:
   bool multipart;
   bool need_calc_md5;
 
-  RGWWriteRequest(CephContext* _cct, RGWUserInfo *_user,
+  RGWWriteRequest(CephContext* _cct, RGWUserInfo *_user, RGWFileHandle* _fh,
 		  const std::string& _bname, const std::string& _oname)
     : RGWLibContinuedReq(_cct, _user), bucket_name(_bname), obj_name(_oname),
-      processor(nullptr), last_off(0), next_off(0), bytes_written(0),
-      multipart(false) {
+      rgw_fh(_fh), processor(nullptr), last_off(0), next_off(0),
+      bytes_written(0), multipart(false) {
     magic = 81;
     op = this;
   }

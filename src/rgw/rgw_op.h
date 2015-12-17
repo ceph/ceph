@@ -18,6 +18,12 @@
 #include <set>
 #include <map>
 
+#include "common/armor.h"
+#include "common/mime.h"
+#include "common/utf8.h"
+#include "common/ceph_json.h"
+#include "common/utf8.h"
+
 #include "rgw_common.h"
 #include "rgw_rados.h"
 #include "rgw_user.h"
@@ -25,6 +31,8 @@
 #include "rgw_acl.h"
 #include "rgw_cors.h"
 #include "rgw_quota.h"
+
+#include "include/assert.h"
 
 using namespace std;
 
@@ -1382,5 +1390,97 @@ static inline int get_system_versioning_params(req_state *s,
 
   return 0;
 } /* get_system_versioning_params */
+
+static inline void format_xattr(std::string &xattr)
+{
+  /* If the extended attribute is not valid UTF-8, we encode it using
+   * quoted-printable encoding.
+   */
+  if ((check_utf8(xattr.c_str(), xattr.length()) != 0) ||
+      (check_for_control_characters(xattr.c_str(), xattr.length()) != 0)) {
+    static const char MIME_PREFIX_STR[] = "=?UTF-8?Q?";
+    static const int MIME_PREFIX_LEN = sizeof(MIME_PREFIX_STR) - 1;
+    static const char MIME_SUFFIX_STR[] = "?=";
+    static const int MIME_SUFFIX_LEN = sizeof(MIME_SUFFIX_STR) - 1;
+    int mlen = mime_encode_as_qp(xattr.c_str(), NULL, 0);
+    char *mime = new char[MIME_PREFIX_LEN + mlen + MIME_SUFFIX_LEN + 1];
+    strcpy(mime, MIME_PREFIX_STR);
+    mime_encode_as_qp(xattr.c_str(), mime + MIME_PREFIX_LEN, mlen);
+    strcpy(mime + MIME_PREFIX_LEN + (mlen - 1), MIME_SUFFIX_STR);
+    xattr.assign(mime);
+    delete [] mime;
+  }
+} /* format_xattr */
+
+/**
+ * Get the HTTP request metadata out of the req_state as a
+ * map(<attr_name, attr_contents>, where attr_name is RGW_ATTR_PREFIX.HTTP_NAME)
+ * s: The request state
+ * attrs: will be filled up with attrs mapped as <attr_name, attr_contents>
+ *
+ */
+static inline void rgw_get_request_metadata(CephContext *cct,
+					    struct req_info& info,
+					    map<string, bufferlist>& attrs,
+					    const bool allow_empty_attrs = true)
+{
+  map<string, string>::iterator iter;
+  for (iter = info.x_meta_map.begin(); iter != info.x_meta_map.end(); ++iter) {
+    const string &name(iter->first);
+    string &xattr(iter->second);
+
+    if (allow_empty_attrs || !xattr.empty()) {
+      lsubdout(cct, rgw, 10) << "x>> " << name << ":" << xattr << dendl;
+      format_xattr(xattr);
+      string attr_name(RGW_ATTR_PREFIX);
+      attr_name.append(name);
+      map<string, bufferlist>::value_type v(attr_name, bufferlist());
+      std::pair < map<string, bufferlist>::iterator, bool >
+	rval(attrs.insert(v));
+      bufferlist& bl(rval.first->second);
+      bl.append(xattr.c_str(), xattr.size() + 1);
+    }
+  }
+} /* rgw_get_request_metadata */
+
+static inline void encode_delete_at_attr(time_t delete_at,
+					map<string, bufferlist>& attrs)
+{
+  if (delete_at == 0) {
+    return;
+  }
+
+  bufferlist delatbl;
+  ::encode(utime_t(delete_at, 0), delatbl);
+  attrs[RGW_ATTR_DELETE_AT] = delatbl;
+} /* encode_delete_at_attr */
+
+static inline int encode_dlo_manifest_attr(const char * const dlo_manifest,
+					  map<string, bufferlist>& attrs)
+{
+  string dm = dlo_manifest;
+
+  if (dm.find('/') == string::npos) {
+    return -EINVAL;
+  }
+
+  bufferlist manifest_bl;
+  manifest_bl.append(dlo_manifest, strlen(dlo_manifest) + 1);
+  attrs[RGW_ATTR_USER_MANIFEST] = manifest_bl;
+
+  return 0;
+} /* encode_dlo_manifest_attr */
+
+static inline void complete_etag(MD5& hash, string *etag)
+{
+  char etag_buf[CEPH_CRYPTO_MD5_DIGESTSIZE];
+  char etag_buf_str[CEPH_CRYPTO_MD5_DIGESTSIZE * 2 + 16];
+
+  hash.Final((byte *)etag_buf);
+  buf_to_hex((const unsigned char *)etag_buf, CEPH_CRYPTO_MD5_DIGESTSIZE,
+	    etag_buf_str);
+
+  *etag = etag_buf_str;
+} /* complete_etag */
 
 #endif /* CEPH_RGW_OP_H */
