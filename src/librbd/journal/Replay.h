@@ -6,13 +6,13 @@
 
 #include "include/int_types.h"
 #include "include/buffer_fwd.h"
+#include "include/Context.h"
+#include "include/unordered_map.h"
 #include "include/rbd/librbd.hpp"
 #include "common/Mutex.h"
 #include "librbd/journal/Entries.h"
 #include <boost/variant.hpp>
 #include <map>
-
-class Context;
 
 namespace librbd {
 
@@ -28,13 +28,24 @@ public:
     return new Replay(image_ctx);
   }
 
+  Replay(ImageCtxT &image_ctx);
   ~Replay();
 
   int process(bufferlist::iterator it, Context *on_safe = NULL);
   void flush(Context *on_finish);
 
 private:
+  typedef ceph::unordered_map<Context *, Context *> OpContexts;
   typedef std::map<AioCompletion*,Context*> AioCompletions;
+
+  struct C_OpOnFinish : public Context {
+    Replay *replay;
+    C_OpOnFinish(Replay *replay) : replay(replay) {
+    }
+    virtual void finish(int r) override {
+      replay->handle_op_context_callback(this, r);
+    }
+  };
 
   struct EventVisitor : public boost::static_visitor<void> {
     Replay *replay;
@@ -54,11 +65,10 @@ private:
 
   Mutex m_lock;
 
+  OpContexts m_op_contexts;
   AioCompletions m_aio_completions;
   Context *m_flush_ctx;
   int m_ret_val;
-
-  Replay(ImageCtxT &image_ctx);
 
   void handle_event(const AioDiscardEvent &event, Context *on_safe);
   void handle_event(const AioWriteEvent &event, Context *on_safe);
@@ -74,6 +84,9 @@ private:
   void handle_event(const ResizeEvent &event, Context *on_safe);
   void handle_event(const FlattenEvent &event, Context *on_safe);
   void handle_event(const UnknownEvent &event, Context *on_safe);
+
+  Context *create_op_context_callback(Context *on_safe);
+  void handle_op_context_callback(Context *on_op_finish, int r);
 
   AioCompletion *create_aio_completion(Context *on_safe);
   void handle_aio_completion(AioCompletion *aio_comp);
