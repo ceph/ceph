@@ -527,7 +527,7 @@ int main(int argc, const char **argv)
 
   bufferlist magicbl;
   err = store->get(Monitor::MONITOR_NAME, "magic", magicbl);
-  if (!magicbl.length()) {
+  if (err || !magicbl.length()) {
     derr << "unable to read magic from mon data" << dendl;
     prefork.exit(1);
   }
