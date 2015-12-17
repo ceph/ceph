@@ -1303,6 +1303,16 @@ public:
   Mutex lock;
   Cond cond;
 
+  struct EnterExit {
+    const char *msg;
+    EnterExit(const char *m) : msg(m) {
+      //cout << pthread_self() << " enter " << msg << std::endl;
+    }
+    ~EnterExit() {
+      //cout << pthread_self() << " exit " << msg << std::endl;
+    }
+  };
+
   class C_SyntheticOnReadable : public Context {
   public:
     SyntheticWorkloadState *state;
@@ -1314,6 +1324,7 @@ public:
 
     void finish(int r) {
       Mutex::Locker locker(state->lock);
+      EnterExit ee("onreadable finish");
       ASSERT_TRUE(state->in_flight_objects.count(hoid));
       ASSERT_EQ(r, 0);
       state->in_flight_objects.erase(hoid);
@@ -1336,6 +1347,7 @@ public:
 
     void finish(int r) {
       Mutex::Locker locker(state->lock);
+      EnterExit ee("clone finish");
       ASSERT_TRUE(state->in_flight_objects.count(oid));
       ASSERT_EQ(r, 0);
       state->in_flight_objects.erase(oid);
@@ -1435,6 +1447,7 @@ public:
 
   int touch() {
     Mutex::Locker locker(lock);
+    EnterExit ee("touch");
     if (!can_create())
       return -ENOSPC;
     wait_for_ready();
@@ -1451,6 +1464,7 @@ public:
 
   int clone() {
     Mutex::Locker locker(lock);
+    EnterExit ee("clone");
     if (!can_unlink())
       return -ENOENT;
     if (!can_create())
@@ -1481,6 +1495,7 @@ public:
 
   int setattrs() {
     Mutex::Locker locker(lock);
+    EnterExit ee("setattrs");
     if (!can_unlink())
       return -ENOENT;
     wait_for_ready();
@@ -1525,10 +1540,12 @@ public:
   }
 
   void getattrs() {
+    EnterExit ee("getattrs");
     ghobject_t obj;
     map<string, bufferlist> expected;
     {
       Mutex::Locker locker(lock);
+      EnterExit ee("getattrs locked");
       if (!can_unlink())
         return ;
       wait_for_ready();
@@ -1552,12 +1569,14 @@ public:
   }
 
   void getattr() {
+    EnterExit ee("getattr");
     ghobject_t obj;
     int r;
     int retry;
     map<string, bufferlist> expected;
     {
       Mutex::Locker locker(lock);
+      EnterExit ee("getattr locked");
       if (!can_unlink())
         return ;
       wait_for_ready();
@@ -1586,6 +1605,7 @@ public:
 
   int rmattr() {
     Mutex::Locker locker(lock);
+    EnterExit ee("rmattr");
     if (!can_unlink())
       return -ENOENT;
     wait_for_ready();
@@ -1618,6 +1638,7 @@ public:
 
   int write() {
     Mutex::Locker locker(lock);
+    EnterExit ee("write");
     if (!can_unlink())
       return -ENOENT;
     wait_for_ready();
@@ -1658,6 +1679,7 @@ public:
   }
 
   void read() {
+    EnterExit ee("read");
     boost::uniform_int<> u1(0, max_object_len/2);
     boost::uniform_int<> u2(0, max_object_len);
     uint64_t offset = u1(*rng);
@@ -1670,6 +1692,7 @@ public:
     int r;
     {
       Mutex::Locker locker(lock);
+      EnterExit ee("read locked");
       if (!can_unlink())
         return ;
       wait_for_ready();
@@ -1712,6 +1735,7 @@ public:
 
   int truncate() {
     Mutex::Locker locker(lock);
+    EnterExit ee("truncate");
     if (!can_unlink())
       return -ENOENT;
     wait_for_ready();
@@ -1740,6 +1764,7 @@ public:
 
   void scan() {
     Mutex::Locker locker(lock);
+    EnterExit ee("scan");
     while (in_flight)
       cond.Wait(lock);
     vector<ghobject_t> objects;
@@ -1797,10 +1822,12 @@ public:
   }
 
   void stat() {
+    EnterExit ee("stat");
     ghobject_t hoid;
     uint64_t expected;
     {
       Mutex::Locker locker(lock);
+      EnterExit ee("stat lock1");
       if (!can_unlink())
         return ;
       hoid = get_uniform_random_object();
@@ -1816,6 +1843,7 @@ public:
     ASSERT_TRUE((uint64_t)buf.st_size == expected);
     {
       Mutex::Locker locker(lock);
+      EnterExit ee("stat lock2");
       --in_flight;
       cond.Signal();
       in_flight_objects.erase(hoid);
@@ -1825,6 +1853,7 @@ public:
 
   int unlink() {
     Mutex::Locker locker(lock);
+    EnterExit ee("unlink");
     if (!can_unlink())
       return -ENOENT;
     ghobject_t to_remove = get_uniform_random_object();
@@ -1839,6 +1868,7 @@ public:
 
   int zero() {
     Mutex::Locker locker(lock);
+    EnterExit ee("zero");
     if (!can_unlink())
       return -ENOENT;
     wait_for_ready();
