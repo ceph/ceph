@@ -8359,13 +8359,14 @@ void OSD::ShardedOpWQ::_enqueue(pair<PGRef, PGQueueable> item) {
   unsigned cost = item.second.get_cost();
   sdata->sdata_op_ordering_lock.Lock();
  
-  if (priority >= CEPH_MSG_PRIO_LOW)
-    sdata->pqueue.enqueue_strict(
-      item.second.get_owner(), priority, item);
+  if (priority >= CEPH_MSG_PRIO_HIGH)
+    sdata->pqueue.enqueue(item.second.get_owner(),
+			  item, priority, 0,
+			  CEPH_OP_QUEUE_BACK,
+			  CEPH_OP_CLASS_STRICT);
   else
-    sdata->pqueue.enqueue(
-      item.second.get_owner(),
-      priority, cost, item);
+    sdata->pqueue.enqueue(item.second.get_owner(),
+			  item, priority, cost);
   sdata->sdata_op_ordering_lock.Unlock();
 
   sdata->sdata_lock.Lock();
@@ -8388,15 +8389,15 @@ void OSD::ShardedOpWQ::_enqueue_front(pair<PGRef, PGQueueable> item) {
   }
   unsigned priority = item.second.get_priority();
   unsigned cost = item.second.get_cost();
-  if (priority >= CEPH_MSG_PRIO_LOW)
-    sdata->pqueue.enqueue_strict_front(
-      item.second.get_owner(),
-      priority, item);
+  if (priority >= CEPH_MSG_PRIO_HIGH)
+    sdata->pqueue.enqueue(item.second.get_owner(),
+			  item, priority, 0,
+			  CEPH_OP_QUEUE_FRONT,
+			  CEPH_OP_CLASS_STRICT);
   else
-    sdata->pqueue.enqueue_front(
-      item.second.get_owner(),
-      priority, cost, item);
-
+    sdata->pqueue.enqueue(item.second.get_owner(),
+			  item, priority, cost,
+			  CEPH_OP_QUEUE_FRONT);
   sdata->sdata_op_ordering_lock.Unlock();
   sdata->sdata_lock.Lock();
   sdata->sdata_cond.SignalOne();

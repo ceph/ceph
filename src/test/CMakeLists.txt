@@ -488,6 +488,18 @@ target_link_libraries(unittest_prioritized_queue global
 set_target_properties(unittest_prioritized_queue
   PROPERTIES COMPILE_FLAGS ${UNITTEST_CXX_FLAGS})
 
+# unittest_wrr_queue
+add_executable(unittest_wrr_queue EXCLUDE_FROM_ALL
+  common/test_wrr_queue.cc
+  $<TARGET_OBJECTS:heap_profiler_objs>
+  )
+add_test(unittest_wrr_queue unittest_wrr_queue)
+add_dependencies(check unittest_wrr_queue)
+target_link_libraries(unittest_wrr_queue global
+  ${BLKID_LIBRARIES} ${CMAKE_DL_LIBS} ${TCMALLOC_LIBS} ${UNITTEST_LIBS})
+set_target_properties(unittest_wrr_queue
+  PROPERTIES COMPILE_FLAGS ${UNITTEST_CXX_FLAGS})
+
 # unittest_str_map
 add_executable(unittest_str_map EXCLUDE_FROM_ALL
   common/test_str_map.cc

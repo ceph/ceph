@@ -83,12 +83,11 @@ void DispatchQueue::enqueue(Message *m, int priority, uint64_t id)
   Mutex::Locker l(lock);
   ldout(cct,20) << "queue " << m << " prio " << priority << dendl;
   add_arrival(m);
-  if (priority >= CEPH_MSG_PRIO_LOW) {
-    mqueue.enqueue_strict(
-        id, priority, QueueItem(m));
+  if (priority >= CEPH_MSG_PRIO_HIGH) {
+    mqueue.enqueue(id, QueueItem(m), priority, 0, CEPH_OP_QUEUE_BACK,
+		   CEPH_OP_CLASS_STRICT);
   } else {
-    mqueue.enqueue(
-        id, priority, m->get_cost(), QueueItem(m));
+    mqueue.enqueue(id, QueueItem(m), priority, m->get_cost());
   }
   cond.Signal();
 }
@@ -125,12 +124,11 @@ void DispatchQueue::run_local_delivery()
     } else {
       Mutex::Locker l(lock);
       add_arrival(m);
-      if (priority >= CEPH_MSG_PRIO_LOW) {
-        mqueue.enqueue_strict(
-            0, priority, QueueItem(m));
+      if (priority >= CEPH_MSG_PRIO_HIGH) {
+        mqueue.enqueue(0, QueueItem(m), priority, 0, CEPH_OP_QUEUE_BACK,
+		       CEPH_OP_CLASS_STRICT);
       } else {
-        mqueue.enqueue(
-            0, priority, m->get_cost(), QueueItem(m));
+        mqueue.enqueue(0, QueueItem(m), priority, m->get_cost());
       }
       cond.Signal();
     }

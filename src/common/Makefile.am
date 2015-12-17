@@ -177,7 +177,10 @@ noinst_HEADERS += \
 	common/Preforker.h \
 	common/SloppyCRCMap.h \
 	common/WorkQueue.h \
+	common/OpQueue.h \
 	common/PrioritizedQueue.h \
+	common/WrrQueue.h \
+	common/WPQueue.h \
 	common/ceph_argparse.h \
 	common/ceph_context.h \
 	common/xattr.h \

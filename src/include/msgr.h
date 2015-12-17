@@ -167,6 +167,10 @@ struct ceph_msg_header {
 #define CEPH_MSG_PRIO_DEFAULT 127
 #define CEPH_MSG_PRIO_HIGH    196
 #define CEPH_MSG_PRIO_HIGHEST 255
+#define CEPH_OP_CLASS_STRICT  0
+#define CEPH_OP_CLASS_NORMAL  5
+#define CEPH_OP_QUEUE_BACK    0
+#define CEPH_OP_QUEUE_FRONT   1
 
 /*
  * follows data payload
