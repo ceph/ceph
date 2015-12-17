@@ -7,6 +7,8 @@ import argparse
 import sys
 import time
 
+import ConfigParser
+
 import boto
 import boto.s3.connection
 
@@ -321,20 +323,43 @@ class RGWMulti:
 
         realm.meta_checkpoint()
 
+def main(parse_args):
+    cfg = ConfigParser.RawConfigParser({
+                                         'num_zones': 2,
+                                         'no_bootstrap': 'false',
+                                         })
+    try:
+        path = os.environ['RGW_MULTI_TEST_CONF']
+    except KeyError:
+        path = tpath('test_multi.conf')
 
+    try:
+        with file(path) as f:
+            cfg.readfp(f)
+    except:
+        print 'WARNING: error reading test config. Path can be set through the RGW_MULTI_TEST_CONF env variable'
+        pass
 
-def main():
     parser = argparse.ArgumentParser(
-            description='Add bucket lifecycle configuration',
-            usage='obo bucket lifecycle add <bucket>')
+            description='Run rgw multi-site tests',
+            usage='test_multi [--num-zones <num>] [--no-bootstrap]')
 
-    parser.add_argument('--num-zones', type=int, default=2)
-    parser.add_argument('--no-bootstrap', action='store_true')
+    section = 'DEFAULT'
+    parser.add_argument('--num-zones', type=int, default=cfg.getint(section, 'num_zones'))
+    parser.add_argument('--no-bootstrap', action='store_true', default=cfg.getboolean(section, 'no_bootstrap'))
 
-    args = parser.parse_args(sys.argv[1:])
+    argv = []
+
+    if parse_args:
+        argv = sys.argv[1:]
+
+    args = parser.parse_args(argv)
     rgw_multi = RGWMulti(int(args.num_zones))
 
     rgw_multi.setup(not args.no_bootstrap)
 
+def setup_module():
+    main(False)
+
 if __name__ == "__main__":
-    main()
+    main(True)
