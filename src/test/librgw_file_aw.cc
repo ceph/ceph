@@ -233,6 +233,7 @@ TEST(LibRGW, GET_OBJECT) {
     struct iovec *iov = &iovs[ix];
     int ret = rgw_read(fs, object_fh, offset, iovs[ix-2].iov_len, &nread,
 		       iov->iov_base);
+    iov->iov_len = nread;
     offset += iov->iov_len;
     ASSERT_EQ(ret, 0);
     ASSERT_EQ(nread, iovs[ix-2].iov_len);
