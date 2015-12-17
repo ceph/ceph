@@ -550,7 +550,7 @@ int libradosstriper::RadosStriperImpl::stat(const std::string& soid, uint64_t *p
   return 0;
 }
 
-int libradosstriper::RadosStriperImpl::remove(const std::string& soid)
+int libradosstriper::RadosStriperImpl::remove(const std::string& soid, int flags)
 {
   std::string firstObjOid = getObjectId(soid, 0);
   try {
@@ -591,11 +591,15 @@ int libradosstriper::RadosStriperImpl::remove(const std::string& soid)
     // delete rados objects in reverse order
     int rcr = 0;
     for (int i = nb_objects-1; i >= 0; i--) {
-      rcr = m_ioCtx.remove(getObjectId(soid, i));
+      if (flags == 0) {
+        rcr = m_ioCtx.remove(getObjectId(soid, i));
+      } else {
+        rcr = m_ioCtx.remove(getObjectId(soid, i), flags);  
+      }
       if (rcr < 0 and -ENOENT != rcr) {
         lderr(cct()) << "RadosStriperImpl::remove : deletion incomplete for " << soid
-  		   << ", as " << getObjectId(soid, i) << " could not be deleted (rc=" << rc << ")"
-  		   << dendl;
+		     << ", as " << getObjectId(soid, i) << " could not be deleted (rc=" << rc << ")"
+		     << dendl;
         break;
       }
     }
@@ -605,6 +609,7 @@ int libradosstriper::RadosStriperImpl::remove(const std::string& soid)
     // errror caught when trying to take the exclusive lock
     return e.m_code;
   }
+
 }
 
 int libradosstriper::RadosStriperImpl::trunc(const std::string& soid, uint64_t size)
