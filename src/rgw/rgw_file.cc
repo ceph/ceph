@@ -119,8 +119,8 @@ int RGWFileHandle::write(uint64_t off, size_t len, size_t *bytes_written,
     /* start */
     std::string object_name = full_object_name();
     f->write_req =
-      new RGWWriteRequest(fs->get_context(), fs->get_user(), bucket_name(),
-			  object_name);
+      new RGWWriteRequest(fs->get_context(), fs->get_user(), this,
+			  bucket_name(), object_name);
     rc = librgw.get_fe()->start_req(f->write_req);
   }
 
@@ -264,7 +264,98 @@ done:
 
 int RGWWriteRequest::exec_finish()
 {
-  return 0;
+  bufferlist bl, aclbl;
+  map<string, bufferlist> attrs;
+  map<string, string>::iterator iter;
+  char calc_md5[CEPH_CRYPTO_MD5_DIGESTSIZE * 2 + 1];
+  unsigned char m[CEPH_CRYPTO_MD5_DIGESTSIZE];
+  struct req_state* s = get_state();
+
+  s->obj_size = ofs; // XXX check ofs
+  perfcounter->inc(l_rgw_put_b, s->obj_size);
+
+  op_ret = get_store()->check_quota(s->bucket_owner.get_id(), s->bucket,
+				    user_quota, bucket_quota, s->obj_size);
+  if (op_ret < 0) {
+    goto done;
+  }
+
+  if (need_calc_md5) {
+    processor->complete_hash(&hash);
+  }
+  hash.Final(m);
+
+  buf_to_hex(m, CEPH_CRYPTO_MD5_DIGESTSIZE, calc_md5);
+  etag = calc_md5;
+
+#if 0 /* XXX only in PostObj currently */
+  if (supplied_md5_b64 && strcmp(calc_md5, supplied_md5)) {
+    op_ret = -ERR_BAD_DIGEST;
+    goto done;
+  }
+#endif
+
+  policy.encode(aclbl);
+
+  attrs[RGW_ATTR_ACL] = aclbl;
+
+  /* XXX most of the following cases won't currently arise */
+  if (unlikely(!! dlo_manifest)) {
+    op_ret = encode_dlo_manifest_attr(dlo_manifest, attrs);
+    if (op_ret < 0) {
+      ldout(s->cct, 0) << "bad user manifest: " << dlo_manifest << dendl;
+      goto done;
+    }
+    complete_etag(hash, &etag);
+    ldout(s->cct, 10) << __func__ << ": calculated md5 for user manifest: "
+		      << etag << dendl;
+  }
+
+  if (unlikely(!! slo_info)) {
+    bufferlist manifest_bl;
+    ::encode(*slo_info, manifest_bl);
+    attrs[RGW_ATTR_SLO_MANIFEST] = manifest_bl;
+
+    hash.Update((byte *)slo_info->raw_data, slo_info->raw_data_len);
+    complete_etag(hash, &etag);
+    ldout(s->cct, 10) << __func__ << ": calculated md5 for user manifest: "
+		      << etag << dendl;
+  }
+
+  if (supplied_etag && etag.compare(supplied_etag) != 0) {
+    op_ret = -ERR_UNPROCESSABLE_ENTITY;
+    goto done;
+  }
+  bl.append(etag.c_str(), etag.size() + 1);
+  attrs[RGW_ATTR_ETAG] = bl;
+
+  for (iter = s->generic_attrs.begin(); iter != s->generic_attrs.end();
+       ++iter) {
+    bufferlist& attrbl = attrs[iter->first];
+    const string& val = iter->second;
+    attrbl.append(val.c_str(), val.size() + 1);
+  }
+
+  rgw_get_request_metadata(s->cct, s->info, attrs);
+  encode_delete_at_attr(delete_at, attrs);
+
+  /* Add a custom metadata to expose the information whether an object
+   * is an SLO or not. Appending the attribute must be performed AFTER
+   * processing any input from user in order to prohibit overwriting. */
+  if (unlikely(!! slo_info)) {
+    bufferlist slo_userindicator_bl;
+    ::encode("True", slo_userindicator_bl);
+    attrs[RGW_ATTR_SLO_UINDICATOR] = slo_userindicator_bl;
+  }
+
+  op_ret = processor->complete(etag, &mtime, 0, attrs, delete_at, if_match,
+			       if_nomatch);
+
+done:
+  dispose_processor(processor);
+  perfcounter->tinc(l_rgw_put_lat,
+                   (ceph_clock_now(s->cct) - s->time));
+  return op_ret;
 } /* exec_finish */
 
 /* librgw */

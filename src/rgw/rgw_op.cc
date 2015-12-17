@@ -119,57 +119,6 @@ done:
   return r;
 }
 
-static void format_xattr(std::string &xattr)
-{
-  /* If the extended attribute is not valid UTF-8, we encode it using quoted-printable
-   * encoding.
-   */
-  if ((check_utf8(xattr.c_str(), xattr.length()) != 0) ||
-      (check_for_control_characters(xattr.c_str(), xattr.length()) != 0)) {
-    static const char MIME_PREFIX_STR[] = "=?UTF-8?Q?";
-    static const int MIME_PREFIX_LEN = sizeof(MIME_PREFIX_STR) - 1;
-    static const char MIME_SUFFIX_STR[] = "?=";
-    static const int MIME_SUFFIX_LEN = sizeof(MIME_SUFFIX_STR) - 1;
-    int mlen = mime_encode_as_qp(xattr.c_str(), NULL, 0);
-    char *mime = new char[MIME_PREFIX_LEN + mlen + MIME_SUFFIX_LEN + 1];
-    strcpy(mime, MIME_PREFIX_STR);
-    mime_encode_as_qp(xattr.c_str(), mime + MIME_PREFIX_LEN, mlen);
-    strcpy(mime + MIME_PREFIX_LEN + (mlen - 1), MIME_SUFFIX_STR);
-    xattr.assign(mime);
-    delete [] mime;
-  }
-}
-
-/**
- * Get the HTTP request metadata out of the req_state as a
- * map(<attr_name, attr_contents>, where attr_name is RGW_ATTR_PREFIX.HTTP_NAME)
- * s: The request state
- * attrs: will be filled up with attrs mapped as <attr_name, attr_contents>
- *
- */
-static void rgw_get_request_metadata(CephContext *cct,
-                                     struct req_info& info,
-                                     map<string, bufferlist>& attrs,
-                                     const bool allow_empty_attrs = true)
-{
-  map<string, string>::iterator iter;
-  for (iter = info.x_meta_map.begin(); iter != info.x_meta_map.end(); ++iter) {
-    const string &name(iter->first);
-    string &xattr(iter->second);
-
-    if (allow_empty_attrs || !xattr.empty()) {
-      ldout(cct, 10) << "x>> " << name << ":" << xattr << dendl;
-      format_xattr(xattr);
-      string attr_name(RGW_ATTR_PREFIX);
-      attr_name.append(name);
-      map<string, bufferlist>::value_type v(attr_name, bufferlist());
-      std::pair < map<string, bufferlist>::iterator, bool > rval(attrs.insert(v));
-      bufferlist& bl(rval.first->second);
-      bl.append(xattr.c_str(), xattr.size() + 1);
-    }
-  }
-}
-
 static int decode_policy(CephContext *cct, bufferlist& bl, RGWAccessControlPolicy *policy)
 {
   bufferlist::iterator iter = bl.begin();
@@ -2105,44 +2054,6 @@ void RGWPutObj::dispose_processor(RGWPutObjProcessor *processor)
 void RGWPutObj::pre_exec()
 {
   rgw_bucket_object_pre_exec(s);
-}
-
-static void encode_delete_at_attr(time_t delete_at, map<string, bufferlist>& attrs)
-{
-  if (delete_at == 0) {
-    return;
-  }
-
-  bufferlist delatbl;
-  ::encode(utime_t(delete_at, 0), delatbl);
-  attrs[RGW_ATTR_DELETE_AT] = delatbl;
-}
-
-static int encode_dlo_manifest_attr(const char * const dlo_manifest,
-                                    map<string, bufferlist>& attrs)
-{
-  string dm = dlo_manifest;
-
-  if (dm.find('/') == string::npos) {
-    return -EINVAL;
-  }
-
-  bufferlist manifest_bl;
-  manifest_bl.append(dlo_manifest, strlen(dlo_manifest) + 1);
-  attrs[RGW_ATTR_USER_MANIFEST] = manifest_bl;
-
-  return 0;
-}
-
-static void complete_etag(MD5& hash, string *etag)
-{
-  char etag_buf[CEPH_CRYPTO_MD5_DIGESTSIZE];
-  char etag_buf_str[CEPH_CRYPTO_MD5_DIGESTSIZE * 2 + 16];
-
-  hash.Final((byte *)etag_buf);
-  buf_to_hex((const unsigned char *)etag_buf, CEPH_CRYPTO_MD5_DIGESTSIZE, etag_buf_str);
-
-  *etag = etag_buf_str;
 }
 
 void RGWPutObj::execute()
