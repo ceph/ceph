@@ -34,6 +34,7 @@ public:
 
 protected:
   virtual void finish();
+  using AsyncRequest<>::finish;
 
 private:
   ceph::BitVector<2> *m_object_map;
