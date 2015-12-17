@@ -273,8 +273,6 @@ done:
 
 int RGWLibProcess::start_request(RGWLibContinuedReq* req)
 {
-  int ret = 0;
-  int op_ret = 0;
 
   dout(1) << "====== " << __func__
 	  << " starting new continued request req=" << hex << req << dec
@@ -294,21 +292,8 @@ int RGWLibProcess::start_request(RGWLibContinuedReq* req)
 
   struct req_state* s = req->get_state();
 
-  /* XXXX the below stanza can be completely internalized--req has
-   * all these objects */
-
-#if 0
-  /* XXX and -then- stash req_state pointers everywhere they are needed */
-  ret = req->init(rgw_env, &rados_ctx, io, s);
-  if (ret < 0) {
-    dout(10) << "failed to initialize request" << dendl;
-    abort_req(s, op, ret);
-    goto done;
-  }
-#endif
-
   /* req is-a RGWOp, currently initialized separately */
-  ret = req->op_init();
+  int ret = req->op_init();
   if (ret < 0) {
     dout(10) << "failed to initialize RGWOp" << dendl;
     abort_req(s, op, ret);
@@ -367,15 +352,27 @@ int RGWLibProcess::start_request(RGWLibContinuedReq* req)
   op->pre_exec();
   req->exec_start();
 
-  op_ret = op->get_ret();
-
 done:
   return (ret < 0 ? ret : s->err.ret);
 }
 
 int RGWLibProcess::finish_request(RGWLibContinuedReq* req)
 {
-  return 0;
+  RGWOp *op = (req->op) ? req->op : dynamic_cast<RGWOp*>(req);
+  if (! op) {
+    dout(1) << "failed to derive cognate RGWOp (invalid op?)" << dendl;
+    return -EINVAL;
+  }
+
+  int ret = req->exec_finish();
+  int op_ret = op->get_ret();
+
+  dout(1) << "====== " << __func__
+	  << " finishing continued request req=" << hex << req << dec
+	  << " op status=" << op_ret
+	  << " ======" << dendl;
+
+  return ret;
 }
 
 int RGWLibFrontend::init()

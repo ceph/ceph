@@ -231,7 +231,7 @@ TEST(LibRGW, GET_OBJECT) {
   struct iovec *iovs = zp_set1.get_iovs();
   for (int ix : {2 , 3}) {
     struct iovec *iov = &iovs[ix];
-    int ret = rgw_read(fs, object_fh, offset, iov[ix-2].iov_len, &nread,
+    int ret = rgw_read(fs, object_fh, offset, iovs[ix-2].iov_len, &nread,
 		       iov->iov_base);
     offset += iov->iov_len;
     ASSERT_EQ(ret, 0);
