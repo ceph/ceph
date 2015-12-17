@@ -1066,14 +1066,16 @@ class RGWGetObjRequest : public RGWLibRequest,
 public:
   const std::string& bucket_name;
   const std::string& obj_name;
-  buffer::list& bl;
+  void *ulp_buffer;
+  size_t nread;
+  size_t read_len;
   bool do_hexdump = false;
 
   RGWGetObjRequest(CephContext* _cct, RGWUserInfo *_user,
 		  const std::string& _bname, const std::string& _oname,
-		  uint64_t off, uint64_t len, buffer::list& _bl)
+		  uint64_t off, uint64_t len, void *_ulp_buffer)
     : RGWLibRequest(_cct, _user), bucket_name(_bname), obj_name(_oname),
-      bl(_bl) {
+      ulp_buffer(_ulp_buffer), nread(0), read_len(len) {
     magic = 76;
     op = this;
 
@@ -1084,8 +1086,6 @@ public:
     RGWGetObj::ofs = off;
     RGWGetObj::end = off + len;
   }
-
-  buffer::list& get_bl() { return bl; }
 
   virtual bool only_bucket() { return false; }
 
@@ -1124,17 +1124,26 @@ public:
     return 0;
   }
 
-  virtual int send_response_data(ceph::buffer::list& _bl, off_t s_off,
+  virtual int send_response_data(ceph::buffer::list& bl, off_t s_off,
 				off_t e_off) {
-    /* XXX deal with offsets */
     if (do_hexdump) {
       dout(15) << __func__ << " s_off " << s_off
-	       << " e_off " << e_off << " len " << _bl.length()
+	       << " e_off " << e_off << " len " << bl.length()
 	       << " ";
-      _bl.hexdump(*_dout);
+      bl.hexdump(*_dout);
       *_dout << dendl;
     }
-    bl.claim_append(_bl);
+    uint64_t off = 0;
+    for (auto& bp : bl.buffers()) {
+      if (nread >= read_len)
+	break;
+      size_t bytes = std::min(std::min(read_len, size_t(bp.length())),
+			      size_t(e_off));
+      memcpy(static_cast<char*>(ulp_buffer)+off, bp.c_str()+s_off, bytes);
+      nread += bytes;
+      off += bytes;
+      s_off -= bytes;
+    }
     return 0;
   }
 
