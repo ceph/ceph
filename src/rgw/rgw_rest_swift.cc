@@ -1,8 +1,12 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
+#include "include/assert.h"
+
 #include "common/Formatter.h"
 #include "common/utf8.h"
+#include "common/ceph_json.h"
+
 #include "rgw_swift.h"
 #include "rgw_rest_swift.h"
 #include "rgw_acl_swift.h"

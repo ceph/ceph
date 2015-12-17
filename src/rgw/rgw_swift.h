@@ -5,6 +5,8 @@
 #ifndef CEPH_RGW_SWIFT_H
 #define CEPH_RGW_SWIFT_H
 
+#include "include/assert.h"
+
 #include "rgw_common.h"
 #include "common/Cond.h"
 
