@@ -98,11 +98,17 @@ void AuthMonitor::create_initial()
     KeyRing keyring;
     bufferlist bl;
     int ret = mon->store->get("mkfs", "keyring", bl);
-    assert(ret == 0);
-    bufferlist::iterator p = bl.begin();
-    ::decode(keyring, p);
+    // fail hard only if there's an error we're not expecting to see
+    assert((ret == 0) || (ret == -ENOENT));
+    
+    // try importing only if there's a key
+    if (ret == 0) {
+      KeyRing keyring;
+      bufferlist::iterator p = bl.begin();
 
-    import_keyring(keyring);
+      ::decode(keyring, p);
+      import_keyring(keyring);
+    }
   }
 
   max_global_id = MIN_GLOBAL_ID;
