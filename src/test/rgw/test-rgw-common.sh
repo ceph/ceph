@@ -1,5 +1,7 @@
 #!/bin/bash
 
+rgw_flags="--debug-rgw=20 --debug-ms=1"
+
 function _assert {
   src=$1; shift
   lineno=$1; shift
@@ -73,7 +75,7 @@ function rgw_admin {
 function rgw {
   [ $# -ne 2 ] && echo "rgw() needs 2 params" && exit 1
 
-  echo "$root_path/mrgw.sh c$1 $2"
+  echo "$root_path/mrgw.sh c$1 $2 $rgw_flags"
 }
 
 function init_first_zone {
