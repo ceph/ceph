@@ -59,6 +59,7 @@ librgw_la_SOURCES =  \
 	rgw/rgw_quota.cc \
 	rgw/rgw_dencoder.cc \
 	rgw/rgw_period_history.cc \
+	rgw/rgw_period_puller.cc \
 	rgw/rgw_period_pusher.cc \
 	rgw/rgw_realm_reloader.cc \
 	rgw/rgw_realm_watcher.cc \
@@ -203,6 +204,7 @@ noinst_HEADERS += \
 	rgw/rgw_keystone.h \
 	rgw/rgw_period_history.h \
 	rgw/rgw_period_pusher.h \
+	rgw/rgw_period_puller.h \
 	rgw/rgw_realm_reloader.h \
 	rgw/rgw_realm_watcher.h \
 	rgw/rgw_civetweb.h \
