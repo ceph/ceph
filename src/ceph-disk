@@ -3076,19 +3076,29 @@ def split_dev_base_partnum(dev):
     return (base, partnum)
 
 def get_partition_type(part):
-    return get_sgdisk_partition_info(part, 'Partition GUID code: (\S+)')
+    return get_blkid_partition_info(part, 'ID_PART_ENTRY_TYPE')
 
 def get_partition_uuid(part):
-    return get_sgdisk_partition_info(part, 'Partition unique GUID: (\S+)')
+    return get_blkid_partition_info(part, 'ID_PART_ENTRY_UUID')
 
-def get_sgdisk_partition_info(dev, regexp):
-    (base, partnum) = split_dev_base_partnum(dev)
-    out, _, _ = command(['sgdisk', '-i', partnum, base])
+def get_blkid_partition_info(dev, what=None):
+    out, _, _ = command(
+        [
+            'blkid',
+            '-o',
+            'udev',
+            '-p',
+            dev,
+        ]
+    )
+    p = {}
     for line in out.splitlines():
-        m = re.match(regexp, line)
-        if m:
-            return m.group(1).lower()
-    return None
+        (key, value) = line.split('=')
+        p[key] = value
+    if what:
+        return p.get(what)
+    else:
+        return p
 
 def more_osd_info(path, uuid_map, desc):
     desc['ceph_fsid'] = get_oneliner(path, 'ceph_fsid')
