@@ -1705,6 +1705,7 @@ void ReplicatedBackend::submit_push_data(
   }
 
   if (first) {
+  	//remove是容忍失败的，所以这样写没关系
     t->remove(coll, ghobject_t(target_oid));
     t->touch(coll, ghobject_t(target_oid));
     t->truncate(coll, ghobject_t(target_oid), recovery_info.size);
@@ -1734,6 +1735,7 @@ void ReplicatedBackend::submit_push_data(
       dout(10) << __func__ << ": Removing oid "
 	       << target_oid << " from the temp collection" << dendl;
       clear_temp_obj(target_oid);
+	  //remove是容忍失败的，所以这样写没关系
       t->remove(coll, ghobject_t(recovery_info.soid));
       t->collection_move_rename(coll, ghobject_t(target_oid),
 				coll, ghobject_t(recovery_info.soid));
