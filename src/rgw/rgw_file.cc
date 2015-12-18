@@ -100,6 +100,11 @@ LookupFHResult RGWLibFS::stat_leaf(RGWFileHandle* parent,
   return fhr;
 } /* RGWLibFS::stat_leaf */
 
+bool RGWFileHandle::reclaim() {
+  fs->fh_cache.remove(fh.fh_hk.object, this, cohort::lru::FLAG_NONE);
+  return true;
+} /* RGWFileHandle::reclaim */
+
 int RGWFileHandle::write(uint64_t off, size_t len, size_t *bytes_written,
 			void *buffer)
 {
@@ -637,7 +642,7 @@ int rgw_lookup(struct rgw_fs *rgw_fs,
   if (parent->is_root()) {
     /* special: lookup on root itself */
     if (strcmp(path, "/") == 0) {
-      rgw_fh = parent->ref();
+      rgw_fh = fs->ref(parent);
     } else {
       fhr = fs->stat_bucket(parent, path, RGWFileHandle::FLAG_NONE);
       rgw_fh = get<0>(fhr);
@@ -687,8 +692,9 @@ int rgw_lookup_handle(struct rgw_fs *rgw_fs, struct rgw_fh_hk *fh_hk,
 int rgw_fh_rele(struct rgw_fs *rgw_fs, struct rgw_file_handle *fh,
 		uint32_t flags)
 {
+  RGWLibFS *fs = static_cast<RGWLibFS*>(rgw_fs->fs_private);
   RGWFileHandle* rgw_fh = get_rgwfh(fh);
-  rgw_fh->rele();
+  fs->unref(rgw_fh);
 
   return 0;
 }
@@ -791,11 +797,12 @@ int rgw_open(struct rgw_fs *rgw_fs,
 int rgw_close(struct rgw_fs *rgw_fs,
 	      struct rgw_file_handle *fh, uint32_t flags)
 {
+  RGWLibFS *fs = static_cast<RGWLibFS*>(rgw_fs->fs_private);
   RGWFileHandle* rgw_fh = get_rgwfh(fh);
   int rc = rgw_fh->close(/* XXX */);
 
   if (flags & RGW_CLOSE_FLAG_RELE)
-    rgw_fh->rele();
+    fs->unref(rgw_fh);
 
   return rc;
 }
