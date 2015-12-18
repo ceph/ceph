@@ -44,7 +44,9 @@ setup(
                       'httplib2',
                       'paramiko < 1.8',
                       'pexpect',
-                      'requests >= 2.3.0',
+                      # We have to block requests 2.9.0 because of:
+                      # https://bugs.launchpad.net/nova/+bug/1526413
+                      'requests >= 2.3.0, != 2.9.0',
                       'raven',
                       'web.py',
                       'docopt',
