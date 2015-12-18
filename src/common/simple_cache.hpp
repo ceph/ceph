@@ -20,12 +20,13 @@
 #include <memory>
 #include "common/Mutex.h"
 #include "common/Cond.h"
+#include "include/unordered_map.h"
 
-template <class K, class V, class C = std::less<K> >
+template <class K, class V, class C = std::less<K>, class H = std::hash<K> >
 class SimpleLRU {
   Mutex lock;
   size_t max_size;
-  map<K, typename list<pair<K, V> >::iterator, C> contents;
+  ceph::unordered_map<K, typename list<pair<K, V> >::iterator, H> contents;
   list<pair<K, V> > lru;
   map<K, V, C> pinned;
 
@@ -43,7 +44,9 @@ class SimpleLRU {
   }
 
 public:
-  SimpleLRU(size_t max_size) : lock("SimpleLRU::lock"), max_size(max_size) {}
+  SimpleLRU(size_t max_size) : lock("SimpleLRU::lock"), max_size(max_size) {
+    contents.rehash(max_size);
+  }
 
   void pin(K key, V val) {
     Mutex::Locker l(lock);
@@ -55,16 +58,18 @@ public:
     for (typename map<K, V, C>::iterator i = pinned.begin();
 	 i != pinned.end() && i->first <= e;
 	 pinned.erase(i++)) {
-      if (!contents.count(i->first))
+      typename ceph::unordered_map<K, typename list<pair<K, V> >::iterator, H>::iterator iter =
+        contents.find(i->first);
+      if (iter == contents.end())
 	_add(i->first, i->second);
       else
-	lru.splice(lru.begin(), lru, contents[i->first]);
+	lru.splice(lru.begin(), lru, iter->second);
     }
   }
 
   void clear(K key) {
     Mutex::Locker l(lock);
-    typename map<K, typename list<pair<K, V> >::iterator, C>::iterator i =
+    typename ceph::unordered_map<K, typename list<pair<K, V> >::iterator, H>::iterator i =
       contents.find(key);
     if (i == contents.end())
       return;
@@ -80,15 +85,16 @@ public:
 
   bool lookup(K key, V *out) {
     Mutex::Locker l(lock);
-    typename list<pair<K, V> >::iterator loc = contents.count(key) ?
-      contents[key] : lru.end();
-    if (loc != lru.end()) {
-      *out = loc->second;
-      lru.splice(lru.begin(), lru, loc);
+    typename ceph::unordered_map<K, typename list<pair<K, V> >::iterator, H>::iterator i =
+      contents.find(key);
+    if (i != contents.end()) {
+      *out = i->second->second;
+      lru.splice(lru.begin(), lru, i->second);
       return true;
     }
-    if (pinned.count(key)) {
-      *out = pinned[key];
+    typename map<K, V, C>::iterator i_pinned = pinned.find(key);
+    if (i_pinned != pinned.end()) {
+      *out = i_pinned->second;
       return true;
     }
     return false;
