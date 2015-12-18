@@ -246,7 +246,7 @@ static bool rgw_find_host_in_domains(const string& host, string *domain, string 
   return false;
 }
 
-static void dump_status(struct req_state *s, const char *status, const char *status_name)
+static void dump_status(struct req_state *s, int status, const char *status_name)
 {
   int r = s->cio->send_status(status, status_name);
   if (r < 0) {
@@ -305,16 +305,12 @@ void set_req_state_err(struct req_state *s, int err_no)
 
 void dump_errno(struct req_state *s)
 {
-  char buf[32];
-  snprintf(buf, sizeof(buf), "%d", s->err.http_ret);
-  dump_status(s, buf, http_status_names[s->err.http_ret]);
+  dump_status(s, s->err.http_ret, http_status_names[s->err.http_ret]);
 }
 
-void dump_errno(struct req_state *s, int err)
+void dump_errno(struct req_state *s, int http_ret)
 {
-  char buf[32];
-  snprintf(buf, sizeof(buf), "%d", err);
-  dump_status(s, buf, http_status_names[s->err.http_ret]);
+  dump_status(s, http_ret, http_status_names[http_ret]);
 }
 
 void dump_string_header(struct req_state *s, const char *name, const char *val)
