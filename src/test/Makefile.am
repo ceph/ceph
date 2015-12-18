@@ -81,6 +81,7 @@ check_SCRIPTS += \
 	test/osd/osd-scrub-repair.sh \
 	test/osd/osd-scrub-snaps.sh \
 	test/osd/osd-config.sh \
+	test/osd/osd-reuse-id.sh \
 	test/osd/osd-bench.sh \
 	test/osd/osd-reactivate.sh \
 	test/osd/osd-copy-from.sh \
