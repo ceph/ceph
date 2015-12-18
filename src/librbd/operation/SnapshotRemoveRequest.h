@@ -52,7 +52,8 @@ public:
     STATE_REMOVE_OBJECT_MAP,
     STATE_REMOVE_CHILD,
     STATE_REMOVE_SNAP,
-    STATE_RELEASE_SNAP_ID
+    STATE_RELEASE_SNAP_ID,
+    STATE_ERROR
   };
 
   SnapshotRemoveRequest(ImageCtxT &image_ctx, Context *on_finish,
