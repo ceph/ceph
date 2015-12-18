@@ -168,6 +168,10 @@ unittest_prioritized_queue_CXXFLAGS = $(UNITTEST_CXXFLAGS)
 unittest_prioritized_queue_LDADD = $(UNITTEST_LDADD) $(CEPH_GLOBAL)
 check_TESTPROGRAMS += unittest_prioritized_queue
 
+unittest_weighted_priority_queue_SOURCES = test/common/test_weighted_priority_queue.cc
+unittest_weighted_priority_queue_CXXFLAGS = $(UNITTEST_CXXFLAGS)
+unittest_weighted_priority_queue_LDADD = $(UNITTEST_LDADD) $(CEPH_GLOBAL)
+check_TESTPROGRAMS += unittest_weighted_priority_queue
 
 unittest_str_map_SOURCES = test/common/test_str_map.cc
 unittest_str_map_CXXFLAGS = $(UNITTEST_CXXFLAGS)
