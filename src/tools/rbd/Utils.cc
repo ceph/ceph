@@ -328,7 +328,7 @@ int get_image_options(const boost::program_options::variables_map &vm,
     object_size = vm[at::IMAGE_OBJECT_SIZE].as<uint64_t>();
     order = std::round(std::log2(object_size)); 
   } else {
-    order = 22;
+    order = g_conf->rbd_default_order;
   }
 
   if (vm.count(at::IMAGE_FEATURES)) {
