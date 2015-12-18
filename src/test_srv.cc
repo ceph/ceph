@@ -30,10 +30,10 @@ void TestServer::run(double time, std::function<void()> done) {
 }
 
 
-void TestServer::post(std::function<void()> done) {
+void TestServer::post(double delay, std::function<void()> done) {
   Guard g(mtx);
   ++active_threads;
-  std::thread t(&TestServer::run, this, 0.003, done);
+  std::thread t(&TestServer::run, this, delay, done);
   t.detach();
 }
 

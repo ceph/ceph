@@ -54,7 +54,7 @@ dmc::ClientInfo getClientInfo(int c) {
   static dmc::ClientInfo info[] = {
     {1.0, 100.0, 250.0},
     {2.0, 100.0, 250.0},
-    {2.0, 100.0, 250.0},
+    {2.0,  50.0, 250.0},
     {3.0,  50.0,   0.0},
   };
 
@@ -78,10 +78,12 @@ void handleReq(std::unique_ptr<Request>&& request_ref,
   uint32_t op = req->op;
   // std:: cout << "scheduling " << client << std::endl;
   
-  testServer->post([=] {
-      callback();
-      std:: cout << "finished " << client << " / " << op << std::endl;
-    });
+  testServer->post(0.1,
+		   [=] {
+		     callback();
+		     std:: cout << "finished " << client << " / " << op <<
+		       std::endl;
+		   });
 }
 
 
@@ -102,7 +104,7 @@ int main(int argc, char* argv[]) {
   std::cout << "queue created" << std::endl;
 
   for (int i = 0; i < 1000; ++i) {
-    int client = i % 3;
+    int client = i % 4;
     priorityQueue.addRequest(Request(client, i, "foobar"),
 			     client,
 			     dmc::getTime());

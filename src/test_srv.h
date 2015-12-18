@@ -23,7 +23,7 @@ public:
 
   virtual ~TestServer();
 
-  void post(std::function<void()> done);
+  void post(double delay, std::function<void()> done);
 
   bool hasAvailThread();
 
