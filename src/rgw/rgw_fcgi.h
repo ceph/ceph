@@ -27,7 +27,7 @@ protected:
   int complete_request() { return 0; }
   int send_content_length(uint64_t len);
 public:
-  RGWFCGX(FCGX_Request *_fcgx) : fcgx(_fcgx) {}
+  RGWFCGX(FCGX_Request *_fcgx) : fcgx(_fcgx), status_num(0) {}
   void flush();
 };
 
