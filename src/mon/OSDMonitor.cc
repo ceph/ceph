@@ -1564,7 +1564,7 @@ bool OSDMonitor::can_mark_down(int i)
   int up = osdmap.get_num_up_osds() - pending_inc.get_net_marked_down(&osdmap);
   float up_ratio = (float)up / (float)num_osds;
   if (up_ratio < g_conf->mon_osd_min_up_ratio) {
-    dout(5) << "can_mark_down current up_ratio " << up_ratio << " < min "
+    dout(2) << "can_mark_down current up_ratio " << up_ratio << " < min "
 	    << g_conf->mon_osd_min_up_ratio
 	    << ", will not mark osd." << i << " down" << dendl;
     return false;
