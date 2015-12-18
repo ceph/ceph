@@ -787,6 +787,7 @@ rm -rf $RPM_BUILD_ROOT
 %{_bindir}/ceph-mon
 %{_bindir}/ceph-mds
 %{_bindir}/ceph-objectstore-tool
+%{_bindir}/ceph-bluefs-tool
 %{_bindir}/ceph-osd
 %{_bindir}/ceph-detect-init
 %{_bindir}/librados-config
