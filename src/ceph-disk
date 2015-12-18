@@ -2664,6 +2664,13 @@ def _remove_osd_directory_files(mounted_path, cluster):
 
 
 def main_deactivate(args):
+    activate_lock.acquire()  # noqa
+    try:
+        main_deactivate_locked(args)
+    finally:
+        activate_lock.release()  # noqa
+
+def main_deactivate_locked(args):
     osd_id = args.deactivate_by_id
     path = args.path
     target_dev = None
@@ -2724,8 +2731,6 @@ def main_deactivate(args):
     # we remove the crypt map and device mapper (if dmcrypt is True)
     if dmcrypt:
         dmcrypt_unmap(part_uuid)
-
-    return
 
 ###########################
 
