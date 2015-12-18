@@ -145,21 +145,21 @@ void RGWMongoose::init_env(CephContext *cct)
   }
 }
 
-int RGWMongoose::send_status(const char *status, const char *status_name)
+int RGWMongoose::send_status(int status, const char *status_name)
 {
   char buf[128];
 
   if (!status_name)
     status_name = "";
 
-  snprintf(buf, sizeof(buf), "HTTP/1.1 %s %s\r\n", status, status_name);
+  snprintf(buf, sizeof(buf), "HTTP/1.1 %d %s\r\n", status, status_name);
 
   bufferlist bl;
   bl.append(buf);
   bl.append(header_data);
   header_data = bl;
 
-  status_num = atoi(status);
+  status_num = status;
   mg_set_http_status(conn, status_num);
 
   return 0;

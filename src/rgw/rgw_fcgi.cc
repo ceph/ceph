@@ -31,15 +31,15 @@ void RGWFCGX::init_env(CephContext *cct)
   env.init(cct, (char **)fcgx->envp);
 }
 
-int RGWFCGX::send_status(const char *status, const char *status_name)
+int RGWFCGX::send_status(int status, const char *status_name)
 {
-  status_num = atoi(status);
-  return print("Status: %s %s\r\n", status, status_name);
+  status_num = status;
+  return print("Status: %d %s\r\n", status, status_name);
 }
 
 int RGWFCGX::send_100_continue()
 {
-  int r = send_status("100", "Continue");
+  int r = send_status(100, "Continue");
   if (r >= 0) {
     flush();
   }
