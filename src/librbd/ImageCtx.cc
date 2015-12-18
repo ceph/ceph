@@ -870,6 +870,7 @@ struct C_InvalidateCache : public Context {
   }
 
   void ImageCtx::flush_copyup(Context *on_finish) {
+    on_finish = util::create_async_context_callback(*this, on_finish);
     if (copyup_finisher == nullptr) {
       on_finish->complete(0);
       return;
