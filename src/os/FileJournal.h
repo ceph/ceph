@@ -291,6 +291,7 @@ private:
   Mutex write_lock;
   bool write_stop;
   bool aio_stop;
+  bool padding_ahead;
 
   Cond commit_cond;
 
@@ -309,7 +310,8 @@ private:
 
   void queue_completions_thru(uint64_t seq);
 
-  int check_for_full(uint64_t seq, off64_t pos, off64_t size);
+  int check_for_full(off64_t pos, off64_t size, bool skip_full=false);
+  int prepare_padding_entry(bufferlist& bl, off64_t& queue_pos);
   int prepare_multi_write(bufferlist& bl, uint64_t& orig_ops, uint64_t& orig_bytee);
   int prepare_single_write(bufferlist& bl, off64_t& queue_pos, uint64_t& orig_ops, uint64_t& orig_bytes);
   void do_write(bufferlist& bl);
@@ -388,6 +390,7 @@ private:
     write_lock("FileJournal::write_lock", false, true, false, g_ceph_context),
     write_stop(true),
     aio_stop(true),
+    padding_ahead(g_conf->osd_journal_padding_ahead),
     write_thread(this),
     write_finish_thread(this) {
 
@@ -443,7 +446,8 @@ private:
   enum read_entry_result {
     SUCCESS,
     FAILURE,
-    MAYBE_CORRUPT
+    MAYBE_CORRUPT,
+    SKIP //this entry is padding entry
   };
 
   /**

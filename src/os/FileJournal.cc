@@ -630,6 +630,7 @@ int FileJournal::_fdump(Formatter &f, bool simple)
   while (1) {
     bufferlist bl;
     off64_t pos = next_pos;
+    uint64_t pre_seq = seq;
 
     if (!pos) {
       dout(2) << "_dump -- not readable" << dendl;
@@ -643,7 +644,11 @@ int FileJournal::_fdump(Formatter &f, bool simple)
       &bl,
       &seq,
       &ss);
-    if (result != SUCCESS) {
+    if (result == SKIP) {
+      seq = pre_seq;
+      ss.clear();
+      continue;
+    } else if (result != SUCCESS) {
       if (seq < header.committed_up_to) {
         dout(2) << "Unable to read past sequence " << seq
 	    << " but header indicates the journal has committed up through "
@@ -823,10 +828,10 @@ void FileJournal::write_header_sync()
   dout(20) << __func__ << " finish" << dendl;
 }
 
-int FileJournal::check_for_full(uint64_t seq, off64_t pos, off64_t size)
+int FileJournal::check_for_full(off64_t pos, off64_t size, bool skip_full)
 {
   // already full?
-  if (full_state != FULL_NOTFULL)
+  if (!skip_full && full_state != FULL_NOTFULL)
     return -ENOSPC;
 
   // take 1 byte off so that we only get pos == header.start on EMPTY, never on FULL.
@@ -864,6 +869,45 @@ int FileJournal::check_for_full(uint64_t seq, off64_t pos, off64_t size)
     dout(0) << "JOURNAL TOO SMALL: continuing, but slow: item " << size << " > journal " << max << " (usable)" << dendl;
 
   return -ENOSPC;
+}
+
+int FileJournal::prepare_padding_entry(bufferlist& bl, off64_t& queue_pos)
+{
+  unsigned head_size = sizeof(entry_header_t);
+  off64_t base_size = 2*head_size + bl.length();
+
+  unsigned pad = ROUND_UP_TO(base_size, header.alignment) - base_size;
+
+  int r = check_for_full(queue_pos, pad + 2*head_size, true);
+  if (r < 0)
+    return r;   // ENOSPC or EAGAIN
+
+  // add to write buffer
+  dout(15) << "prepare_padding_entry " <<  "will write len " << bl.length()
+    << " padding data " << pad << " at pos " << queue_pos << dendl;
+
+  // add it this entry
+  entry_header_t h;
+  memset(&h, 0, sizeof(h));
+  //using seq = 0 && pre_pad/post_pad = 0xFFFF indicate the padding entry.
+  h.pre_pad = h.post_pad = 0xFFFF;
+  h.len = pad;
+  h.magic1 = queue_pos;
+  h.magic2 = entry_header_t::make_magic(0, h.len, header.get_fsid64());
+  h.crc32c = 0; // No need to calc crc for padding entry
+
+  bufferptr padding = buffer::create(2*head_size + pad);
+  // header
+  padding.copy_in(0, sizeof(h), (const char*)&h);
+  // footer
+  padding.copy_in(sizeof(h) + pad, sizeof(h), (const char*)&h);
+  bl.append(padding);
+
+  queue_pos += 2*head_size + pad;
+  if (queue_pos >= header.max_size)
+    queue_pos = queue_pos + get_top() - header.max_size;
+
+  return 0;
 }
 
 int FileJournal::prepare_multi_write(bufferlist& bl, uint64_t& orig_ops, uint64_t& orig_bytes)
@@ -917,6 +961,10 @@ int FileJournal::prepare_multi_write(bufferlist& bl, uint64_t& orig_ops, uint64_
     }
   }
 
+  if (!padding_ahead && bl.length() % header.alignment) {
+    int r = prepare_padding_entry(bl, queue_pos);
+    assert(r != -ENOSPC);
+  }
   dout(20) << "prepare_multi_write queue_pos now " << queue_pos << dendl;
   assert((write_pos + bl.length() == queue_pos) ||
          (write_pos + bl.length() - header.max_size + get_top() == queue_pos));
@@ -976,7 +1024,9 @@ int FileJournal::prepare_single_write(bufferlist& bl, off64_t& queue_pos, uint64
   bufferlist &ebl = next_write.bl;
   off64_t size = ebl.length();
 
-  int r = check_for_full(seq, queue_pos, size);
+  // We hope add padding entry for multi entries. The padding size must be in
+  // [0, 0, 2 * head_size + header.aligment - 1]
+  int r = check_for_full(queue_pos, size + 2 * header.alignment);
   if (r < 0)
     return r;   // ENOSPC or EAGAIN
 
@@ -1027,7 +1077,12 @@ void FileJournal::align_bl(off64_t pos, bufferlist& bl)
   // make sure list segments are page aligned
   if (directio && (!bl.is_aligned(block_size) ||
 		   !bl.is_n_align_sized(CEPH_MINIMUM_BLOCK_SIZE))) {
-    assert(0 == "bl should be align");
+    if (padding_ahead) {
+      assert(0 == "bl should be align");
+    } else {
+      bl.rebuild_aligned(CEPH_MINIMUM_BLOCK_SIZE);
+      dout(10) << __func__ << " total memcopy: " << bl.get_memcopy_count() << dendl;
+    }
     if ((bl.length() & (CEPH_MINIMUM_BLOCK_SIZE - 1)) != 0 ||
 	(pos & (CEPH_MINIMUM_BLOCK_SIZE - 1)) != 0)
       dout(0) << "rebuild_page_aligned failed, " << bl << dendl;
@@ -1595,10 +1650,17 @@ int FileJournal::prepare_entry(list<ObjectStore::Transaction*>& tls, bufferlist*
   unsigned head_size = sizeof(entry_header_t);
   off64_t base_size = 2*head_size + bl.length();
   memset(&h, 0, sizeof(h));
-  if (data_align >= 0)
-    h.pre_pad = ((unsigned int)data_align - (unsigned int)head_size) & ~CEPH_PAGE_MASK;
-  off64_t size = ROUND_UP_TO(base_size + h.pre_pad, header.alignment);
-  unsigned post_pad = size - base_size - h.pre_pad;
+  off64_t size = 0;
+  unsigned post_pad = 0;
+  if (padding_ahead) {
+    if (data_align >= 0)
+      h.pre_pad = ((unsigned int)data_align - (unsigned int)head_size) & ~CEPH_PAGE_MASK;
+    size = ROUND_UP_TO(base_size + h.pre_pad, header.alignment);
+    post_pad = size - base_size - h.pre_pad;
+  } else {
+    // non padding_ahead mode, the post_pad and pre_pad are 0
+    size = base_size;
+  }
   h.len = bl.length();
   h.post_pad = post_pad;
   h.crc32c = bl.crc32c(0);
@@ -1620,7 +1682,15 @@ int FileJournal::prepare_entry(list<ObjectStore::Transaction*>& tls, bufferlist*
   }
   // footer
   ebl.append((const char*)&h, sizeof(h));
-  ebl.rebuild_aligned(CEPH_MINIMUM_BLOCK_SIZE);
+  if (padding_ahead) {
+    ebl.rebuild_aligned(CEPH_MINIMUM_BLOCK_SIZE);
+  } else if (ebl.length() <= (unsigned)g_conf->journal_align_min_size) {
+    // Transaction encoding would introduce memory fragmentation. If the write
+    // entry is small enought, we rebuild it which would copy it into a single block.
+    // so that the align_bl in journal write thread would be more fast.
+    // (the rebuild function may call buffer::raw destructor.)
+    ebl.rebuild();
+  }
   tbl->claim(ebl);
   return h.len;
 }
@@ -1822,12 +1892,18 @@ int FileJournal::make_writeable()
   if (r < 0)
     return r;
 
-  if (read_pos > 0)
-    write_pos = read_pos;
-  else
+  //After read_pos, all space can write so we can skip some to make
+  //write_pos aligned w/ header.alignment.
+  if (read_pos > 0) {
+    write_pos = ROUND_UP_TO(read_pos, header.alignment);
+    if (write_pos >= header.max_size)
+      write_pos = get_top();
+  } else {
     write_pos = get_top();
+  }
   read_pos = 0;
 
+  assert(write_pos % header.alignment == 0);
   must_write_header = true;
   start_writer();
   return 0;
@@ -1893,6 +1969,20 @@ bool FileJournal::read_entry(
     &bl,
     &seq,
     &ss);
+
+  if (result == SKIP) {
+    read_pos = next_pos;
+    pos = read_pos;
+    seq = next_seq;
+    ss.clear();
+
+    result = do_read_entry(
+      pos,
+      &next_pos,
+      &bl,
+      &seq,
+      &ss);
+  }
   if (result == SUCCESS) {
     journalq.push_back( pair<uint64_t,off64_t>(seq, pos));
     if (next_seq > seq) {
@@ -1909,7 +1999,8 @@ bool FileJournal::read_entry(
   if (seq && seq < header.committed_up_to) {
     derr << "Unable to read past sequence " << seq
 	 << " but header indicates the journal has committed up through "
-	 << header.committed_up_to << ", journal is corrupt" << dendl;
+	 << header.committed_up_to << ", journal is corrupt"
+         << ", err msg "<< ss.str() << dendl;
     if (g_conf->journal_ignore_corruption) {
       if (corrupt)
 	*corrupt = true;
@@ -1942,11 +2033,12 @@ FileJournal::read_entry_result FileJournal::do_read_entry(
   entry_header_t *h;
   bufferlist hbl;
   off64_t _next_pos;
+  bool is_padding_entry = false;
   wrap_read_bl(cur_pos, sizeof(*h), &hbl, &_next_pos);
   h = reinterpret_cast<entry_header_t *>(hbl.c_str());
 
   if (!h->check_magic(cur_pos, header.get_fsid64())) {
-    dout(25) << "read_entry " << init_pos
+    dout(10) << "read_entry " << init_pos
 	     << " : bad header magic, end of journal" << dendl;
     if (ss)
       *ss << "bad header magic";
@@ -1955,6 +2047,11 @@ FileJournal::read_entry_result FileJournal::do_read_entry(
     return MAYBE_CORRUPT;
   }
   cur_pos = _next_pos;
+
+  if (h->seq == 0 && h->pre_pad == 0xFFFF && h->post_pad == 0xFFFF) {
+    h->pre_pad = h->post_pad = 0;
+    is_padding_entry = true;
+  }
 
   // pad + body + pad
   if (h->pre_pad)
@@ -1971,6 +2068,9 @@ FileJournal::read_entry_result FileJournal::do_read_entry(
   bufferlist fbl;
   wrap_read_bl(cur_pos, sizeof(*f), &fbl, &cur_pos);
   f = reinterpret_cast<entry_header_t *>(fbl.c_str());
+  if (is_padding_entry) {
+    h->pre_pad = h->post_pad = 0xFFFF;
+  }
   if (memcmp(f, h, sizeof(*f))) {
     if (ss)
       *ss << "bad footer magic, partial entry";
@@ -1981,11 +2081,14 @@ FileJournal::read_entry_result FileJournal::do_read_entry(
 
   if ((header.flags & header_t::FLAG_CRC) ||   // if explicitly enabled (new journal)
       h->crc32c != 0) {                        // newer entry in old journal
-    uint32_t actual_crc = bl->crc32c(0);
-    if (actual_crc != h->crc32c) {
+    uint32_t actual_crc = 0;
+    if (!is_padding_entry) {
+      actual_crc = bl->crc32c(0);
+    }
+    if (h->crc32c != actual_crc) {
       if (ss)
 	*ss << "header crc (" << h->crc32c
-	    << ") doesn't match body crc (" << actual_crc << ")";
+	  << ") doesn't match body crc (" << actual_crc << ")";
       if (next_pos)
 	*next_pos = cur_pos;
       return MAYBE_CORRUPT;
@@ -1993,9 +2096,10 @@ FileJournal::read_entry_result FileJournal::do_read_entry(
   }
 
   // yay!
-  dout(2) << "read_entry " << init_pos << " : seq " << h->seq
-	  << " " << h->len << " bytes"
-	  << dendl;
+  if (!is_padding_entry)
+    dout(2) << "read_entry " << init_pos << " : seq " << h->seq
+      << " " << h->len << " bytes"
+      << dendl;
 
   // ok!
   if (seq)
@@ -2007,9 +2111,10 @@ FileJournal::read_entry_result FileJournal::do_read_entry(
 
   if (_h)
     *_h = *h;
-
-  assert(cur_pos % header.alignment == 0);
-  return SUCCESS;
+  if (is_padding_entry)
+    return SKIP;
+  else
+    return SUCCESS;
 }
 
 void FileJournal::throttle()
@@ -2042,6 +2147,8 @@ void FileJournal::get_header(
       h);
     if (result == FAILURE || result == MAYBE_CORRUPT)
       assert(0);
+    if (result == SKIP)
+      continue;
     if (seq == wanted_seq) {
       if (_pos)
 	*_pos = pos;
