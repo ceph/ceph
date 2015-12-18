@@ -142,15 +142,9 @@ int RGWFileHandle::close()
   int rc = 0;
   file* f = get<file>(&variant_type);
   if (f && (f->write_req)) {
-    rc = f->write_req->exec_finish();
-    // rc = librgw.get_fe()->finish_req(f->write_req); // XXX
+    rc = librgw.get_fe()->finish_req(f->write_req);
     if (! rc) {
       rc = f->write_req->get_ret();
-      if (! rc) {
-	/* update stats */
-	set_size(f->write_req->bytes_written);
-	// XXX mtime
-      }
     }
     delete f->write_req;
     f->write_req = nullptr;
@@ -351,6 +345,11 @@ int RGWWriteRequest::exec_finish()
 
   op_ret = processor->complete(etag, &mtime, 0, attrs, delete_at, if_match,
 			       if_nomatch);
+  if (! op_ret) {
+    /* update stats */
+    rgw_fh->set_mtime({mtime, 0});
+    rgw_fh->set_size(bytes_written);
+  }
 
 done:
   dispose_processor(processor);
