@@ -164,13 +164,6 @@ namespace crimson {
 	  // empty
 	}
 
-#if 0
-	Entry(Entry&& e) :
-	  tag(e.tag), handled(e.handled), request(std::move(e.request))
-	{
-	  // empty
-	}
-#endif
       }; // struct Entry
 
       typedef std::shared_ptr<Entry> EntryRef;
@@ -325,7 +318,6 @@ namespace crimson {
     protected:
 
       void requestComplete() {
-	std::cout << "requestCompleted called" << std::endl;
 	Guard g(data_mutex);
 	scheduleRequest();
       }
