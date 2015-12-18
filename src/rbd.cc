@@ -8,6 +8,7 @@
  * LGPL2.  See file COPYING.
  *
  */
+#define _LARGEFILE64_SOURCE
 #include "include/int_types.h"
 
 #include "mon/MonClient.h"
@@ -42,6 +43,7 @@
 #include <sstream>
 #include <stdlib.h>
 #include <sys/types.h>
+#include <unistd.h>
 #include <time.h>
 #include "include/memory.h"
 #include <sys/ioctl.h>
@@ -2048,7 +2050,8 @@ static int do_merge_diff(const char *first, const char *second, const char *path
           if (r < 0)
             goto done;
         } else {
-          r = lseek(fd, delta, SEEK_CUR);
+          off64_t l = lseek64(fd, delta, SEEK_CUR);
+          r = l < 0 ? -errno : 0;
           if(r < 0)
             goto done;
         }
