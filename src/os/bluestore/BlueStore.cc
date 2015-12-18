@@ -5477,6 +5477,11 @@ int BlueStore::_clone(TransContext *txc,
   dout(15) << __func__ << " " << c->cid << " " << old_oid << " -> "
 	   << new_oid << dendl;
   int r = 0;
+  if (old_oid.hobj.get_hash() != new_oid.hobj.get_hash()) {
+    derr << __func__ << " mismatched hash on " << old_oid << " and " << new_oid
+	 << dendl;
+    return -EINVAL;
+  }
 
   RWLock::WLocker l(c->lock);
   bufferlist bl;
