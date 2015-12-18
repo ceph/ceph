@@ -2508,7 +2508,8 @@ void OSD::clear_temp_objects()
 	break;
       vector<ghobject_t>::iterator q;
       for (q = objects.begin(); q != objects.end(); ++q) {
-	if (q->hobj.is_temp()) {
+	// Hammer set pool for temps to -1, so check for clean-up
+	if (q->hobj.is_temp() || (q->hobj.pool == -1)) {
 	  temps.push_back(*q);
 	} else {
 	  break;
