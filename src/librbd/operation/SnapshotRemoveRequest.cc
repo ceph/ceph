@@ -34,6 +34,9 @@ std::ostream& operator<<(std::ostream& os,
   case SnapshotRemoveRequest<I>::STATE_RELEASE_SNAP_ID:
     os << "RELEASE_SNAP_ID";
     break;
+  case SnapshotRemoveRequest<I>::STATE_ERROR:
+    os << "STATE_ERROR";
+    break;
   default:
     os << "UNKNOWN (" << static_cast<uint32_t>(state) << ")";
     break;
@@ -127,6 +130,8 @@ void SnapshotRemoveRequest<I>::send_remove_child() {
     int r = image_ctx.get_parent_spec(m_snap_id, &our_pspec);
     if (r < 0) {
       lderr(cct) << "failed to retrieve parent spec" << dendl;
+      m_state = STATE_ERROR;
+
       this->async_complete(r);
       return;
     }
