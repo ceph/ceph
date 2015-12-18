@@ -568,10 +568,9 @@ void PGBackend::be_compare_scrubmaps(
       be_select_auth_object(*k, maps, okseed, &auth_oi);
     list<pg_shard_t> auth_list;
     if (auth == maps.end()) {
-      dout(10) << __func__ << ": unable to find any auth object" << dendl;
       ++shallow_errors;
-      errorstream << pgid << " shard " << j->first
-		  << ": soid failed to pick suitable auth object\n";
+      errorstream << pgid.pgid << " soid " << *k
+		  << ": failed to pick suitable auth object\n";
       continue;
     }
     auth_list.push_back(auth->first);
