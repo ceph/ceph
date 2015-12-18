@@ -16,14 +16,17 @@ import inspect
 
 from nose.tools import eq_ as eq
 
-def lineno():
-    return inspect.currentframe().f_back.f_lineno
+num_buckets = 0
+run_prefix=''.join(random.SystemRandom().choice(string.ascii_lowercase) for _ in range(6))
 
 mstart_path = os.getenv('MSTART_PATH')
 if mstart_path is None:
     mstart_path = os.path.normpath(os.path.dirname(os.path.realpath(__file__)) + '/../..') + '/'
 
 test_path = os.path.normpath(os.path.dirname(os.path.realpath(__file__))) + '/'
+
+def lineno():
+    return inspect.currentframe().f_back.f_lineno
 
 def log(*params):
     s = '>>> '
@@ -291,6 +294,12 @@ def gen_access_key():
 def gen_secret():
      return ''.join(random.SystemRandom().choice(string.ascii_uppercase + string.ascii_lowercase + string.digits) for _ in range(32))
 
+def gen_bucket_name():
+    global num_buckets
+
+    num_buckets += 1
+    return run_prefix + '-' + str(num_buckets)
+
 class RGWMulti:
     def __init__(self, num_clusters):
         self.num_clusters = num_clusters
@@ -340,21 +349,77 @@ def check_all_buckets_exist(zone, buckets):
 
     return True
 
-def test_create_bucket():
-    i = 0
+def check_all_buckets_dont_exist(zone, buckets):
+    conn = zone.get_connection(user)
+
+    for b in buckets:
+        try:
+            conn.get_bucket(b)
+        except:
+            continue
+
+        log('zone ', zone.zone_name, ' contains bucket ', b)
+        return False
+
+    return True
+
+def create_bucket_per_zone():
     buckets = []
+    zone_bucket = {}
     for zone in realm.get_zones():
         conn = zone.get_connection(user)
-        log('create bucket')
-        bucket_name = 'buck-{i}'.format(i=i)
+        bucket_name = gen_bucket_name()
+        log('create bucket zone=', zone.zone_name, ' name=', bucket_name)
         bucket = conn.create_bucket(bucket_name)
         buckets.append(bucket_name)
-        i += 1
+        zone_bucket[zone] = bucket
+
+    return buckets, zone_bucket
+
+def test_create_bucket():
+    buckets, _ = create_bucket_per_zone()
+    realm.meta_checkpoint()
+
+    for zone in realm.get_zones():
+        assert check_all_buckets_exist(zone, buckets)
+
+def test_recreate_bucket():
+    buckets, _ = create_bucket_per_zone()
+    realm.meta_checkpoint()
+
+    for zone in realm.get_zones():
+        assert check_all_buckets_exist(zone, buckets)
+
+    # recreate buckets on all zones, make sure they weren't removed
+    for zone in realm.get_zones():
+        for bucket_name in buckets:
+            conn = zone.get_connection(user)
+            bucket = conn.create_bucket(bucket_name)
+
+    for zone in realm.get_zones():
+        assert check_all_buckets_exist(zone, buckets)
 
     realm.meta_checkpoint()
 
     for zone in realm.get_zones():
         assert check_all_buckets_exist(zone, buckets)
+
+def test_remove_bucket():
+    buckets, zone_bucket = create_bucket_per_zone()
+    realm.meta_checkpoint()
+
+    for zone in realm.get_zones():
+        assert check_all_buckets_exist(zone, buckets)
+
+    for zone, bucket_name in zone_bucket.iteritems():
+        conn = zone.get_connection(user)
+        conn.delete_bucket(bucket_name)
+
+    realm.meta_checkpoint()
+
+    for zone in realm.get_zones():
+        assert check_all_buckets_dont_exist(zone, buckets)
+
 
 def init(parse_args):
     cfg = ConfigParser.RawConfigParser({
@@ -393,6 +458,7 @@ def init(parse_args):
     rgw_multi = RGWMulti(int(args.num_zones))
 
     rgw_multi.setup(not args.no_bootstrap)
+
 
 def setup_module():
     init(False)
