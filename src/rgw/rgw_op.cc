@@ -4275,10 +4275,10 @@ RGWHandler::~RGWHandler()
 {
 }
 
-int RGWHandler::init(RGWRados *_store, struct req_state *_s, RGWClientIO *cio)
+int RGWHandler::init(RGWRados *_store, struct req_init_state *t, RGWClientIO *cio)
 {
   store = _store;
-  s = _s;
+  s = t->s; /* XXX need to get rid of this, too implicit in get_op() */
 
   return 0;
 }

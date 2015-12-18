@@ -1297,13 +1297,13 @@ protected:
 public:
   RGWHandler() : store(NULL), s(NULL) {}
   virtual ~RGWHandler();
-  virtual int init(RGWRados *store, struct req_state *_s, RGWClientIO *cio);
+  virtual int init(RGWRados *store, struct req_init_state *t, RGWClientIO *cio);
 
   virtual RGWOp *get_op(RGWRados *store);
   virtual void put_op(RGWOp *op);
   virtual int read_permissions(RGWOp *op) = 0;
   virtual int authorize() = 0;
-  virtual int postauth_init() = 0;
+  virtual int postauth_init(struct req_init_state *t) = 0;
 };
 
 #endif

@@ -350,6 +350,7 @@ public:
   int read_permissions(RGWOp *op);
 
   virtual int authorize() = 0;
+  // virtual int postauth_init(struct req_init_state *t) = 0;
 };
 
 class RGWHandler_ObjStore_SWIFT;
@@ -371,7 +372,7 @@ public:
   void register_default_mgr(RGWRESTMgr *mgr);
 
   virtual RGWRESTMgr *get_resource_mgr(struct req_state *s, const string& uri, string *out_uri);
-  virtual RGWHandler *get_handler(struct req_state *s) { return NULL; }
+  virtual RGWHandler *get_handler(struct req_init_state *t) { return NULL; }
   virtual void put_handler(RGWHandler *handler) { delete handler; }
 
   void set_logging(bool _should_log) { should_log = _should_log; }
@@ -384,7 +385,7 @@ class RGWREST {
   static int preprocess(struct req_state *s, RGWClientIO *cio);
 public:
   RGWREST() {}
-  RGWHandler *get_handler(RGWRados *store, struct req_state *s, RGWClientIO *cio,
+  RGWHandler *get_handler(RGWRados *store, struct req_init_state *t, RGWClientIO *cio,
 			  RGWRESTMgr **pmgr, int *init_error);
   void put_handler(RGWHandler *handler) {
     mgr.put_handler(handler);

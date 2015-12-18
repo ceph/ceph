@@ -375,17 +375,17 @@ public:
 
   virtual int validate_object_name(const string& bucket) { return 0; }
 
-  virtual int init(RGWRados *store, struct req_state *state, RGWClientIO *cio);
+  virtual int init(RGWRados *store, struct req_init_state *t, RGWClientIO *cio);
   virtual int authorize() {
     return RGW_Auth_S3::authorize(store, s);
   }
-  int postauth_init() { return 0; }
+  int postauth_init(struct req_init_state *t) { return 0; }
 };
 
 class RGWHandler_ObjStore_S3 : public RGWHandler_ObjStore {
   friend class RGWRESTMgr_S3;
 public:
-  static int init_from_header(struct req_state *s, int default_formatter, bool configurable_format);
+  static int init_from_header(struct req_init_state *t, int default_formatter, bool configurable_format);
 
   RGWHandler_ObjStore_S3() : RGWHandler_ObjStore() {}
   virtual ~RGWHandler_ObjStore_S3() {}
@@ -393,11 +393,11 @@ public:
   int validate_bucket_name(const string& bucket, bool relaxed_names);
   using RGWHandler_ObjStore::validate_bucket_name;
   
-  virtual int init(RGWRados *store, struct req_state *state, RGWClientIO *cio);
+  virtual int init(RGWRados *store, struct req_init_state *t, RGWClientIO *cio);
   virtual int authorize() {
     return RGW_Auth_S3::authorize(store, s);
   }
-  int postauth_init();
+  int postauth_init(struct req_init_state *t);
 };
 
 class RGWHandler_ObjStore_Service_S3 : public RGWHandler_ObjStore_S3 {
@@ -465,7 +465,7 @@ public:
   RGWRESTMgr_S3() {}
   virtual ~RGWRESTMgr_S3() {}
 
-  virtual RGWHandler *get_handler(struct req_state *s);
+  virtual RGWHandler *get_handler(struct req_init_state *t);
 };
 
 

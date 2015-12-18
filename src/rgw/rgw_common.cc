@@ -175,6 +175,8 @@ req_state::req_state(CephContext *_cct, class RGWEnv *e) : cct(_cct), cio(NULL),
   local_source = false;
 
   obj_ctx = NULL;
+
+  init_state.s = this;
 }
 
 req_state::~req_state() {

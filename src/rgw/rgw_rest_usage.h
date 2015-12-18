@@ -26,7 +26,7 @@ public:
   RGWRESTMgr_Usage() {}
   virtual ~RGWRESTMgr_Usage() {}
 
-  RGWHandler *get_handler(struct req_state *s) {
+  RGWHandler *get_handler(struct req_init_state *t) {
     return new RGWHandler_Usage;
   }
 };

@@ -552,6 +552,7 @@ static int process_request(RGWRados *store, RGWREST *rest, RGWRequest *req, RGWC
   struct req_state rstate(g_ceph_context, &rgw_env);
 
   struct req_state *s = &rstate;
+  struct req_init_state *t = &rstate.init_state;
 
   RGWObjectCtx rados_ctx(store, s);
   s->obj_ctx = &rados_ctx;
@@ -565,7 +566,7 @@ static int process_request(RGWRados *store, RGWREST *rest, RGWRequest *req, RGWC
   int init_error = 0;
   bool should_log = false;
   RGWRESTMgr *mgr;
-  RGWHandler *handler = rest->get_handler(store, s, client_io, &mgr, &init_error);
+  RGWHandler *handler = rest->get_handler(store, t, client_io, &mgr, &init_error);
   if (init_error != 0) {
     abort_early(s, NULL, init_error);
     goto done;
@@ -590,7 +591,7 @@ static int process_request(RGWRados *store, RGWREST *rest, RGWRequest *req, RGWC
   }
 
   req->log(s, "normalizing buckets and tenants");
-  ret = handler->postauth_init();
+  ret = handler->postauth_init(t);
   if (ret < 0) {
     dout(10) << "failed to run post-auth init" << dendl;
     abort_early(s, op, ret);

@@ -231,13 +231,14 @@ done:
   end_header(s);
 }
 
-int RGWHandler_SWIFT_Auth::init(RGWRados *store, struct req_state *state, RGWClientIO *cio)
+int RGWHandler_SWIFT_Auth::init(RGWRados *store, struct req_init_state *t, RGWClientIO *cio)
 {
+  struct req_state *state = t->s;
   state->dialect = "swift-auth";
   state->formatter = new JSONFormatter;
   state->format = RGW_FORMAT_JSON;
 
-  return RGWHandler::init(store, state, cio);
+  return RGWHandler::init(store, t, cio);
 }
 
 int RGWHandler_SWIFT_Auth::authorize()

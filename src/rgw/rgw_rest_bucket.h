@@ -28,7 +28,7 @@ public:
   RGWRESTMgr_Bucket() {}
   virtual ~RGWRESTMgr_Bucket() {}
 
-  RGWHandler *get_handler(struct req_state *s) {
+  RGWHandler *get_handler(struct req_init_state *t) {
     return new RGWHandler_Bucket;
   }
 };

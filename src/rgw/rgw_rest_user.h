@@ -28,7 +28,7 @@ public:
   RGWRESTMgr_User() {}
   virtual ~RGWRESTMgr_User() {}
 
-  RGWHandler *get_handler(struct req_state *s) {
+  RGWHandler *get_handler(struct req_init_state *t) {
     return new RGWHandler_User;
   }
 };

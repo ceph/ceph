@@ -27,9 +27,9 @@ public:
   ~RGWHandler_SWIFT_Auth() {}
   RGWOp *op_get();
 
-  int init(RGWRados *store, struct req_state *state, RGWClientIO *cio);
+  int init(RGWRados *store, struct req_init_state *t, RGWClientIO *cio);
   int authorize();
-  int postauth_init() { return 0; }
+  int postauth_init(struct req_init_state *t) { return 0; }
   int read_permissions(RGWOp *op) { return 0; }
 
   virtual RGWAccessControlPolicy *alloc_policy() { return NULL; }
@@ -44,7 +44,7 @@ public:
   virtual RGWRESTMgr *get_resource_mgr(struct req_state *s, const string& uri, string *out_uri) {
     return this;
   }
-  virtual RGWHandler *get_handler(struct req_state *s) {
+  virtual RGWHandler *get_handler(struct req_init_state *t) {
     return new RGWHandler_SWIFT_Auth;
   }
 };
