@@ -858,19 +858,6 @@ int rgw_read(struct rgw_fs *rgw_fs,
 		       buffer);
 
   int rc = librgw.get_fe()->execute_req(&req);
-#if 0
-  if (! rc) {
-    uint64_t off = 0;
-    for (auto& bp : bl.buffers()) {
-      size_t bytes = std::min(length, size_t(bp.length()));
-      memcpy(static_cast<char*>(buffer)+off, bp.c_str(), bytes);
-      nread += bytes;
-      off += bytes;
-      if (off >= length)
-	break;
-    }
-  }
-#endif
   if ((rc == 0) &&
       (req.get_ret() == 0)) {
     *bytes_read = req.nread;
