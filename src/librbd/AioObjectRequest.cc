@@ -6,6 +6,7 @@
 #include "common/errno.h"
 #include "common/Mutex.h"
 #include "common/RWLock.h"
+#include "common/WorkQueue.h"
 
 #include "librbd/AioObjectRequest.h"
 #include "librbd/AioCompletion.h"
@@ -205,16 +206,16 @@ namespace librbd {
     ldout(m_ictx->cct, 20) << "send " << this << " " << m_oid << " "
                            << m_object_off << "~" << m_object_len << dendl;
 
-    // send read request to parent if the object doesn't exist locally
-    bool non_existent = false;
     {
       RWLock::RLocker snap_locker(m_ictx->snap_lock);
-      non_existent = (m_ictx->object_map != nullptr &&
-                      !m_ictx->object_map->object_may_exist(m_object_no));
-    }
-    if (non_existent) {
-      complete(-ENOENT);
-      return;
+
+      // send read request to parent if the object doesn't exist locally
+      if (m_ictx->object_map != nullptr &&
+          !m_ictx->object_map->object_may_exist(m_object_no)) {
+        m_ictx->op_work_queue->queue(util::create_context_callback<
+          AioObjectRequest>(this), -ENOENT);
+        return;
+      }
     }
 
     librados::ObjectReadOperation op;
