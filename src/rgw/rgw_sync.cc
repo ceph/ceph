@@ -935,10 +935,10 @@ int RGWMetaSyncSingleEntryCR::operate() {
 
       if (sync_status == -ENOENT) {
 #warning remove entry from local
-        return set_cr_done();
+        break;
       }
 
-      if (sync_status == -EAGAIN && (tries < NUM_TRANSIENT_ERROR_RETRIES - 1)) {
+      if ((sync_status == -EAGAIN || sync_status == -ECANCELED) && (tries < NUM_TRANSIENT_ERROR_RETRIES - 1)) {
         ldout(sync_env->cct, 20) << *this << ": failed to fetch remote metadata: " << section << ":" << key << ", will retry" << dendl;
         continue;
       }
@@ -953,7 +953,17 @@ int RGWMetaSyncSingleEntryCR::operate() {
       break;
     }
 
-    yield call(new RGWMetaStoreEntryCR(sync_env, raw_key, md_bl));
+    retcode = 0;
+    if (sync_status != -ENOENT) {
+      for (tries = 0; tries < NUM_TRANSIENT_ERROR_RETRIES; tries++) {
+        yield call(new RGWMetaStoreEntryCR(sync_env, raw_key, md_bl));
+        if ((retcode == -EAGAIN || retcode == -ECANCELED) && (tries < NUM_TRANSIENT_ERROR_RETRIES - 1)) {
+          ldout(sync_env->cct, 20) << *this << ": failed to store metadata: " << section << ":" << key << ", got retcode=" << retcode << dendl;
+          continue;
+        }
+        break;
+      }
+    }
 
     sync_status = retcode;
 
