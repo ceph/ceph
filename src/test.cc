@@ -10,9 +10,14 @@
 #include <iostream>
 
 #include "dm_clock_srv.h"
+#include "test_srv.h"
 
 
 namespace dmc = crimson::dmclock;
+
+
+TestServer* testServer;
+
 
 
 struct Request {
@@ -62,17 +67,21 @@ dmc::ClientInfo getClientInfo(int c) {
 
 
 bool canHandleReq() {
-  std::cout << "canHandleReq called" << std::endl;
-  return true;
+  return testServer->hasAvailThread();
 }
 
 
 void handleReq(std::unique_ptr<Request>&& request_ref,
 	       std::function<void()> callback) {
-  std::cout << "handleReq called" << std::endl;
-  RequestRef mine = std::move(request_ref);
-  sleep(2);
-  callback();
+  std::unique_ptr<Request> req(std::move(request_ref));
+  int client = req->client;
+  uint32_t op = req->op;
+  // std:: cout << "scheduling " << client << std::endl;
+  
+  testServer->post([=] {
+      callback();
+      std:: cout << "finished " << client << " / " << op << std::endl;
+    });
 }
 
 
@@ -85,16 +94,26 @@ int main(int argc, char* argv[]) {
   auto f2 = std::function<bool()>(canHandleReq);
   auto f3 = std::function<void(std::unique_ptr<Request>&&,
 			       std::function<void()>)>(handleReq);
-  
+
+  testServer = new TestServer(5);
+
   dmc::PriorityQueue<int,Request> priorityQueue(f1, f2, f3);
 
   std::cout << "queue created" << std::endl;
 
-  priorityQueue.addRequest(Request(0, 17, "foobar"), 0, dmc::getTime());
+  for (int i = 0; i < 1000; ++i) {
+    int client = i % 3;
+    priorityQueue.addRequest(Request(client, i, "foobar"),
+			     client,
+			     dmc::getTime());
+  }
 
   std::cout << "request added" << std::endl;
 
   priorityQueue.markAsIdle(1);
+
+  sleep(60);
+  delete testServer;
 
   std::cout << "done" << std::endl;
 }
