@@ -1201,6 +1201,11 @@ OPTION(rgw_thread_pool_size, OPT_INT, 100)
 OPTION(rgw_num_control_oids, OPT_INT, 8)
 OPTION(rgw_num_rados_handles, OPT_U32, 1)
 
+OPTION(rgw_nfs_lru_lanes, OPT_INT, 5)
+OPTION(rgw_nfs_lru_lane_hiwat, OPT_INT, 911)
+OPTION(rgw_nfs_fhcache_partitions, OPT_INT, 3)
+OPTION(rgw_nfs_fhcache_size, OPT_INT, 2017) /* 3*2017=6051 */
+
 OPTION(rgw_zone, OPT_STR, "") // zone name
 OPTION(rgw_zone_root_pool, OPT_STR, ".rgw.root")    // pool where zone specific info is stored
 OPTION(rgw_region, OPT_STR, "") // region name
