@@ -93,6 +93,7 @@ int remove_object_map(ImageCtx *ictx) {
   r = ictx->md_ctx.remove(ObjectMap::object_map_name(ictx->id, CEPH_NOSNAP));
   if (r < 0 && r != -ENOENT) {
     lderr(cct) << "failed to remove object map: " << cpp_strerror(r) << dendl;
+    return r;
   }
   return 0;
 }
