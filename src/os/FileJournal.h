@@ -66,16 +66,26 @@ public:
 
   Mutex writeq_lock;
   Cond writeq_cond;
-  deque<write_item> writeq;
+  list<write_item> writeq;
   bool writeq_empty();
   write_item &peek_write();
   void pop_write();
+  void batch_pop_write(list<write_item> &items);
+  void batch_unpop_write(list<write_item> &items);
 
   Mutex completions_lock;
-  deque<completion_item> completions;
+  list<completion_item> completions;
   bool completions_empty() {
     Mutex::Locker l(completions_lock);
     return completions.empty();
+  }
+  void batch_pop_completions(list<completion_item> &items) {
+    Mutex::Locker l(completions_lock);
+    completions.swap(items);
+  }
+  void batch_unpop_completions(list<completion_item> &items) {
+    Mutex::Locker l(completions_lock);
+    completions.splice(completions.begin(), items);
   }
   completion_item completion_peek_front() {
     Mutex::Locker l(completions_lock);
@@ -311,7 +321,8 @@ private:
 
   int check_for_full(uint64_t seq, off64_t pos, off64_t size);
   int prepare_multi_write(bufferlist& bl, uint64_t& orig_ops, uint64_t& orig_bytee);
-  int prepare_single_write(bufferlist& bl, off64_t& queue_pos, uint64_t& orig_ops, uint64_t& orig_bytes);
+  int prepare_single_write(write_item &next_write, bufferlist& bl, off64_t& queue_pos,
+    uint64_t& orig_ops, uint64_t& orig_bytes);
   void do_write(bufferlist& bl);
 
   void write_finish_thread_entry();
