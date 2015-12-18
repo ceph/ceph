@@ -4498,21 +4498,23 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	name[op.xattr.name_len + 1] = 0;
 	
 	bufferlist xattr;
-	if (op.op == CEPH_OSD_OP_CMPXATTR)
-	  result = getattr_maybe_cache(
-	    ctx->obc,
-	    name,
-	    &xattr);
-	else
-	  result = getattr_maybe_cache(
-	    src_obc,
-	    name,
-	    &xattr);
-	if (result < 0 && result != -ENODATA)
-	  break;
-	
-	ctx->delta_stats.num_rd++;
-	ctx->delta_stats.num_rd_kb += SHIFT_ROUND_UP(xattr.length(), 10);
+	if (obs.exists) {
+	  if (op.op == CEPH_OSD_OP_CMPXATTR)
+	    result = getattr_maybe_cache(
+		ctx->obc,
+		name,
+		&xattr);
+	  else
+	    result = getattr_maybe_cache(
+		src_obc,
+		name,
+		&xattr);
+	  if (result < 0 && result != -ENODATA)
+	    break;
+
+	  ctx->delta_stats.num_rd++;
+	  ctx->delta_stats.num_rd_kb += SHIFT_ROUND_UP(xattr.length(), 10);
+	}
 
 	switch (op.xattr.cmp_mode) {
 	case CEPH_OSD_CMPXATTR_MODE_STRING:
