@@ -1499,11 +1499,11 @@ class SyntheticWorkloadState {
 public:
   static const unsigned max_in_flight = 16;
   static const unsigned max_objects = 3000;
-  static const unsigned max_object_len = 1024 * 40;
   static const unsigned max_attr_size = 5;
   static const unsigned max_attr_name_len = 100;
   static const unsigned max_attr_value_len = 1024 * 4;
   coll_t cid;
+  unsigned max_object_len;
   unsigned in_flight;
   map<ghobject_t, Object, ghobject_t::BitwiseComparator> contents;
   set<ghobject_t, ghobject_t::BitwiseComparator> available_objects;
@@ -1608,8 +1608,10 @@ public:
 			 ObjectGenerator *gen,
 			 gen_type *rng,
 			 ObjectStore::Sequencer *osr,
-			 coll_t cid)
-    : cid(cid), in_flight(0), object_gen(gen), rng(rng), store(store), osr(osr),
+			 coll_t cid,
+			 unsigned max_size)
+    : cid(cid), max_object_len(max_size),
+      in_flight(0), object_gen(gen), rng(rng), store(store), osr(osr),
       lock("State lock") {}
 
   int init() {
@@ -2130,7 +2132,7 @@ TEST_P(StoreTest, Synthetic) {
   gen_type rng(time(NULL));
   coll_t cid(spg_t(pg_t(0,555), shard_id_t::NO_SHARD));
 
-  SyntheticWorkloadState test_obj(store.get(), &gen, &rng, &osr, cid);
+  SyntheticWorkloadState test_obj(store.get(), &gen, &rng, &osr, cid, 400*1024);
   test_obj.init();
   for (int i = 0; i < 1000; ++i) {
     if (!(i % 500)) cerr << "seeding object " << i << std::endl;
@@ -2171,7 +2173,7 @@ TEST_P(StoreTest, AttrSynthetic) {
   gen_type rng(time(NULL));
   coll_t cid(spg_t(pg_t(0,447),shard_id_t::NO_SHARD));
 
-  SyntheticWorkloadState test_obj(store.get(), &gen, &rng, &osr, cid);
+  SyntheticWorkloadState test_obj(store.get(), &gen, &rng, &osr, cid, 40*1024);
   test_obj.init();
   for (int i = 0; i < 500; ++i) {
     if (!(i % 10)) cerr << "seeding object " << i << std::endl;
