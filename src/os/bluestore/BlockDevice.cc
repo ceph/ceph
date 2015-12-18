@@ -224,12 +224,15 @@ void BlockDevice::_aio_thread()
 		 << " ioc " << ioc
 		 << " with " << left << " aios left" << dendl;
 	assert(r >= 0);
+	// sample waiter count before doing callback (which may
+	// destroy this ioc).
+	int waiting = ioc->num_waiting.read();
 	if (left == 0) {
 	  if (ioc->priv) {
 	    aio_callback(aio_callback_priv, ioc->priv);
 	  }
 	}
-	if (ioc->num_waiting.read()) {
+	if (waiting) {
 	  dout(20) << __func__ << " waking waiter" << dendl;
 	  Mutex::Locker l(ioc->lock);
 	  ioc->cond.Signal();
