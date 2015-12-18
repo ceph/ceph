@@ -49,8 +49,8 @@ private:
    * SHUTDOWN_CACHE
    *    |
    *    v
-   * FLUSH_COPYUP
-   *    |
+   * FLUSH_COPYUP (skip if copyup
+   *    |          disabled)
    *    v
    * FLUSH_OP_WORK_QUEUE  . . . . .
    *    |                         .
