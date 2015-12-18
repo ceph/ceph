@@ -355,8 +355,15 @@ int get_image_options(const boost::program_options::variables_map &vm,
     std::cerr << "must specify both (or neither) of stripe-unit and stripe-count"
               << std::endl;
     return -EINVAL;
-  } else if ((stripe_unit || stripe_count) &&
-             (stripe_unit != (1ull << order) && stripe_count != 1)) {
+  } else if (stripe_unit || stripe_count) {
+    if ((1ull << order) % stripe_unit || stripe_unit >= (1ull << order)) {
+      std::cerr << "stripe unit is not a factor of the object size" << std::endl;
+      return -EINVAL;
+    }
+    if (stripe_count == 1) {
+      std::cerr << "stripe count not allowed to be 1" << std::endl;
+      return -EINVAL;
+    }
     features |= RBD_FEATURE_STRIPINGV2;
   } else {
     features &= ~RBD_FEATURE_STRIPINGV2;
