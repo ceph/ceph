@@ -322,6 +322,7 @@ add_dependencies(check ceph-mds)
 add_dependencies(check monmaptool)
 add_dependencies(check ceph-osd)
 add_dependencies(check ceph-dencoder)
+add_dependencies(check ceph-objectstore-tool)
 
 add_test(NAME osd_config COMMAND bash ${CMAKE_SOURCE_DIR}/src/test/osd/osd-config.sh WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/src)
 add_dependencies(check osd_config)
@@ -354,8 +355,8 @@ add_dependencies(check cephtool_test_rados)
 add_test(NAME cephtool_test_mon COMMAND bash ${CMAKE_SOURCE_DIR}/src/test/cephtool-test-mon.sh WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/src)
 add_dependencies(check cephtool_test_mon)
 
-add_test(NAME ceph_objectstore_tool COMMAND python ${CMAKE_SOURCE_DIR}/src/test/ceph_objectstore_tool.py WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/src)
-add_dependencies(check ceph_objectstore_tool)
+add_test(NAME ceph_objectstore_tool_py COMMAND python ${CMAKE_SOURCE_DIR}/src/test/ceph_objectstore_tool.py WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/src)
+add_dependencies(check ceph_objectstore_tool_py)
 
 add_test(NAME osd_mark_down COMMAND bash ${CMAKE_SOURCE_DIR}/src/test/osd/osd-markdown.sh)
 add_dependencies(check osd-markdown)
@@ -380,7 +381,7 @@ add_executable(unittest_blkdev EXCLUDE_FROM_ALL
   common/test_blkdev.cc
   $<TARGET_OBJECTS:heap_profiler_objs>
   )
-add_test(unittest_blkdev unittest_blkdev)
+add_test(NAME unittest_blkdev COMMAND ./unittest_blkdev WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/src)
 add_dependencies(check unittest_blkdev)
 target_link_libraries(unittest_blkdev
   global
@@ -417,6 +418,7 @@ add_dependencies(check misc)
 add_test(NAME test_ceph_daemon COMMAND python ${CMAKE_SOURCE_DIR}/src/test/pybind/test_ceph_daemon.py WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/src/test/pybind)
 add_dependencies(check test_ceph_daemon)
 
+set(CTEST_ENVIROMENT "PYTHONPATH=$PYTHONPATH:${CMAKE_SOURCE_DIR}/src/pybind")
 add_test(NAME test_ceph_argparse_py COMMAND python ${CMAKE_SOURCE_DIR}/src/test/pybind/test_ceph_argparse.py WORKING_DIRECTORY ${CMAKE_BINARY_DIR}/src/test)
 add_dependencies(check test_ceph_argparse_py)
 
@@ -1429,19 +1431,20 @@ set_target_properties(unittest_async_compressor PROPERTIES COMPILE_FLAGS
 add_custom_target(symlinks  COMMAND
   mkdir -p ${CMAKE_SOURCE_DIR}/src/.libs &&
   ln -sf ${CMAKE_BINARY_DIR}/src/libcephfs.so.1 ${CMAKE_SOURCE_DIR}/src/.libs &&
-  ln -sf ${CMAKE_BINARY_DIR}/ceph ${CMAKE_SOURCE_DIR}/src/ &&
-  ln -sf ${CMAKE_BINARY_DIR}/src/ceph-mon ${CMAKE_SOURCE_DIR}/src/ &&
-  ln -sf ${CMAKE_BINARY_DIR}/src/ceph-osd ${CMAKE_SOURCE_DIR}/src/ &&
+  cp ${CMAKE_BINARY_DIR}/ceph ${CMAKE_SOURCE_DIR}/src/ &&
+  cp ${CMAKE_BINARY_DIR}/src/ceph-mon ${CMAKE_SOURCE_DIR}/src/ &&
+  cp ${CMAKE_BINARY_DIR}/src/ceph-osd ${CMAKE_SOURCE_DIR}/src/ &&
   ln -sf ${CMAKE_BINARY_DIR}/src/ceph-mds ${CMAKE_SOURCE_DIR}/src/ &&
-  ln -sf ${CMAKE_BINARY_DIR}/src/ceph-conf ${CMAKE_SOURCE_DIR}/src/ &&
+  cp ${CMAKE_BINARY_DIR}/src/ceph-conf ${CMAKE_SOURCE_DIR}/src/ &&
   ln -sf ${CMAKE_BINARY_DIR}/src/ceph-dencoder ${CMAKE_SOURCE_DIR}/src/ &&
   ln -sf ${CMAKE_BINARY_DIR}/src/rados ${CMAKE_SOURCE_DIR}/src/ &&
   ln -sf ${CMAKE_BINARY_DIR}/src/monmaptool ${CMAKE_SOURCE_DIR}/src/ &&
   ln -sf ${CMAKE_BINARY_DIR}/src/crushtool ${CMAKE_SOURCE_DIR}/src/ &&
   ln -sf ${CMAKE_BINARY_DIR}/src/ceph-authtool ${CMAKE_SOURCE_DIR}/src &&
-  ln -sf ${CMAKE_BINARY_DIR}/src/test/unittest_librbd ${CMAKE_SOURCE_DIR}/src
-  ln -sf ${CMAKE_SOURCE_DIR}/src/pybind/ceph_daemon.py ${CMAKE_SOURCE_DIR}/src/test/pybind
-  ln -sf ${CMAKE_SOURCE_DIR}/src/pybind/ceph_argparse.py ${CMAKE_SOURCE_DIR}/src/test/pybind
+  ln -sf ${CMAKE_BINARY_DIR}/src/test/unittest_librbd ${CMAKE_SOURCE_DIR}/src &&
+  ln -sf ${CMAKE_BINARY_DIR}/src/test/unittest_blkdev ${CMAKE_SOURCE_DIR}/src &&
+  ln -sf ${CMAKE_BINARY_DIR}/src/ceph-objectstore-tool ${CMAKE_SOURCE_DIR}/src &&
+  ln -sf ${CMAKE_SOURCE_DIR}/qa/workunits/rados/test_rados_tool.sh ${CMAKE_SOURCE_DIR}/src/test
   COMMENT "Symlinks for test scripts have been created")
 
 add_subdirectory(erasure-code EXCLUDE_FROM_ALL)

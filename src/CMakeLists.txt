@@ -444,6 +444,22 @@ add_executable(ceph_radosacl tools/radosacl.cc)
 target_link_libraries(ceph_radosacl librados global)
 install(TARGETS ceph_radosacl DESTINATION bin/debug)
 
+add_executable(ceph-osdomap-tool tools/ceph_osdomap_tool.cc)
+target_link_libraries(ceph-osdomap-tool os global ${Boost_PROGRAM_OPTIONS_LIBRARY})
+install(TARGETS ceph-osdomap-tool DESTINATION bin)
+
+add_executable(ceph-monstore-tool tools/ceph_monstore_tool.cc)
+target_link_libraries(ceph-monstore-tool os global ${Boost_PROGRAM_OPTIONS_LIBRARY})
+install(TARGETS ceph-monstore-tool DESTINATION bin)
+
+add_executable(ceph-objectstore-tool 
+  tools/ceph_objectstore_tool.cc
+  tools/RadosDump.cc
+  $<TARGET_OBJECTS:common_util_obj>
+  $<TARGET_OBJECTS:heap_profiler_objs>)
+target_link_libraries(ceph-objectstore-tool tcmalloc osd os global ${Boost_PROGRAM_OPTIONS_LIBRARY} dl)
+install(TARGETS ceph-objectstore-tool DESTINATION bin)
+
 set(rados_srcs
   tools/rados/rados.cc
   tools/RadosDump.cc
@@ -766,11 +782,17 @@ install(TARGETS crushtool DESTINATION bin)
 # Support/Tools
 add_subdirectory(gmock)
 add_subdirectory(test)
+
 set(cephfs_srcs cephfs.cc)
 add_executable(cephfstool ${cephfs_srcs})
 target_link_libraries(cephfstool common ${EXTRALIBS})
 set_target_properties(cephfstool PROPERTIES OUTPUT_NAME cephfs)
 install(TARGETS cephfstool DESTINATION bin)
+
+add_executable(ceph-kvstore-tool tools/ceph_kvstore_tool.cc)
+target_link_libraries(ceph-kvstore-tool os global ${UNITTEST_CXX_FLAGS})
+install(TARGETS ceph-kvstore-tool DESTINATION bin)
+
 
 set(compressor_srcs 
   compressor/Compressor.cc
