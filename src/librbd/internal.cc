@@ -1549,12 +1549,18 @@ int invoke_async_request(ImageCtx *ictx, const std::string& request_type,
     p_imctx->snap_lock.get_read();
     p_features = p_imctx->features;
     size = p_imctx->get_image_size(p_imctx->snap_id);
-    p_imctx->is_snap_protected(p_imctx->snap_id, &snap_protected);
+    r = p_imctx->is_snap_protected(p_imctx->snap_id, &snap_protected);
     p_imctx->snap_lock.put_read();
 
     if ((p_features & RBD_FEATURE_LAYERING) != RBD_FEATURE_LAYERING) {
       lderr(cct) << "parent image must support layering" << dendl;
       r = -ENOSYS;
+      goto err_close_parent;
+    }
+    
+    if (r < 0) {
+      // we lost the race with snap removal?
+      lderr(cct) << "unable to locate parent's snapshot" << dendl;
       goto err_close_parent;
     }
 
