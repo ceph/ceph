@@ -375,7 +375,7 @@ uint64_t AioImageDiscard::append_journal_event(
 
 uint32_t AioImageDiscard::get_cache_request_count(bool journaling) const {
   // extra completion request is required for tracking journal commit
-  return (journaling ? 1 : 0);
+  return (m_image_ctx.object_cacher != nullptr && journaling ? 1 : 0);
 }
 
 void AioImageDiscard::send_cache_requests(const ObjectExtents &object_extents,
