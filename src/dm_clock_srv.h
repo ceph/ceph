@@ -193,18 +193,21 @@ namespace crimson {
 
       struct ReservationCompare {
 	bool operator()(const EntryRef& n1, const EntryRef& n2) const {
+	  assert(n1->tag.reservation > 0 && n2->tag.reservation > 0);
 	  return n1->tag.reservation < n2->tag.reservation;
 	}
       };
 
       struct ProportionCompare {
 	bool operator()(const EntryRef& n1, const EntryRef& n2) const {
+	  assert(n1->tag.proportion > 0 && n2->tag.proportion > 0);
 	  return n1->tag.proportion < n2->tag.proportion;
 	}
       };
 
       struct LimitCompare {
 	bool operator()(const EntryRef& n1, const EntryRef& n2) const {
+	  assert(n1->tag.limit > 0 && n2->tag.limit > 0);
 	  return n1->tag.limit < n2->tag.limit;
 	}
       };
@@ -235,14 +238,21 @@ namespace crimson {
       // their proportion tag
       c::Heap<EntryRef, ProportionCompare> readyQ;
 
+      // if all reservations are met and all other requestes are under
+      // limit, this will allow the request next in terms of
+      // proportion to still get issued
+      bool allowLimitBreak;
+
     public:
 
       PriorityQueue(ClientInfoFunc _clientInfoF,
 		    CanHandleRequestFunc _canHandleF,
-		    HandleRequestFunc _handleF) :
+		    HandleRequestFunc _handleF,
+		    bool _allowLimitBreak = false) :
 	clientInfoF(_clientInfoF),
 	canHandleF(_canHandleF),
-	handleF(_handleF)
+	handleF(_handleF),
+	allowLimitBreak(_allowLimitBreak)
       {
 	// empty
       }
@@ -297,6 +307,43 @@ namespace crimson {
 
     protected:
 
+      void requestComplete() {
+	Guard g(data_mutex);
+	scheduleRequest();
+      }
+
+      void reduceReservationTags(C client_id) {
+	auto client_it = clientMap.find(client_id);
+	assert(clientMap.end() != client_it);
+	double reduction = client_it->second.info.reservation_inv;
+	for (auto i = resQ.begin(); i != resQ.end(); ++i) {
+	  if ((*i)->client == client_id) {
+	    (*i)->tag.reservation -= reduction;
+	    i.increase();
+	  }
+	}
+      }
+
+
+      template<typename K>
+      bool scheduleFromHeap(Heap<EntryRef, K>& heap) {
+	while (!heap.empty() && heap.top()->handled) {
+	  heap.pop();
+	}
+
+	if (!heap.empty()) {
+	  auto top = heap.top();
+	  handleF(std::move(top->request),
+		  std::bind(&PriorityQueue::requestComplete, this));
+	  top->handled = true;
+	  heap.pop();
+	  return true;
+	} else {
+	  return false;
+	}
+      }
+
+
       // data_mutex should be held when called
       void scheduleRequest() {
 	if (!canHandleF()) {
@@ -305,33 +352,70 @@ namespace crimson {
 
 	Time now = getTime();
 
-	while (!resQ.empty()) {
-	  if (resQ.top()->handled) {
+	// try constraint (reservation) based scheduling
+
+	while (!resQ.empty() && resQ.top()->handled) {
+	  resQ.pop();
+	}
+	if (!resQ.empty()) {
+	  auto top = resQ.top();
+	  if (top->tag.reservation <= now) {
+	    handleF(std::move(top->request),
+		    std::bind(&PriorityQueue::requestComplete, this));
+	    top->handled = true;
 	    resQ.pop();
+	    return;
 	  }
 	}
 
-#if 0
-	if (!resQ.empty()) {
-	  auto top = resQ.top();
-	  while (top && top->handled) {
-	    resQ.pop();
+	// no existing reservations before now, so try weight-based
+	// scheduling
 
-	    auto handle = resQ.s_handle_from_iterator(resQ.begin());
-	
-	    resQ.update(handle);
-
-	    top = resQ.top()->peek();
+	// all items that are within limit are eligible based on
+	// priority
+	while (!limQ.empty()) {
+	  auto top = limQ.top();
+	  if (top->handled) {
+	    limQ.pop();
+	  } else if (top->tag.limit <= now) {
+	    readyQ.push(top);
+	    limQ.pop();
+	  } else {
+	    break;
 	  }
-	} // resQ not empty
-#endif
+	}
+
+	while (!readyQ.empty() && readyQ.top()->handled) {
+	  readyQ.pop();
+	}
+	if (!readyQ.empty()) {
+	  auto top = readyQ.top();
+	  handleF(std::move(top->request),
+		  std::bind(&PriorityQueue::requestComplete, this));
+	  top->handled = true;
+	  readyQ.pop();
+	  reduceReservationTags(top->client);
+	  return;
+	}
+
+	if (allowLimitBreak) {
+	  while (!propQ.empty() && propQ.top()->handled) {
+	    propQ.pop();
+	  }
+	  if (!propQ.empty()) {
+	    auto top = propQ.top();
+	    handleF(std::move(top->request),
+		    std::bind(&PriorityQueue::requestComplete, this));
+	    top->handled = true;
+	    propQ.pop();
+	    reduceReservationTags(top->client);
+	    return;
+	  }
+	}
+
+	// nothing scheduled
       }
 
-      void requestComplete() {
-	Guard g(data_mutex);
-	scheduleRequest();
-      }
-  
     }; // class PriorityQueue
 
   } // namespace dmclock
