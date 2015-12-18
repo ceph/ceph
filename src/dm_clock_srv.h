@@ -258,6 +258,14 @@ namespace crimson {
       }
 
 
+      void markAsIdle(const C& client_id) {
+	auto client_it = clientMap.find(client_id);
+	if (clientMap.end() != client_it) {
+	  client_it->second.idle = true;
+	}
+      }
+
+
       void addRequest(const R& request,
 		      const C& client_id,
 		      const Time& time) {
@@ -279,7 +287,16 @@ namespace crimson {
 	}
 
 	if (client_it->second.idle) {
-	  std::cout << "Request for idle client; do something." << std::endl;
+	  while (!propQ.empty() && propQ.top()->handled) {
+	    propQ.pop();
+	  }
+	  if (!propQ.empty()) {
+	    double min_prop_tag = propQ.top()->tag.proportion;
+	    double reduction = min_prop_tag - time;
+	    for (auto i = propQ.begin(); i != propQ.end(); ++i) {
+	      (*i)->tag.proportion -= reduction;
+	    }
+	  }
 	  client_it->second.idle = false;
 	}
 

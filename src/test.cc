@@ -73,7 +73,6 @@ void handleReq(std::unique_ptr<Request>&& request_ref,
 
 
 int main(int argc, char* argv[]) {
-
   std::cout.precision(17);
   std::cout << "now: " << dmc::getTime() << std::endl;
   std::cout << "now: " << dmc::getTime() << std::endl;
@@ -86,6 +85,8 @@ int main(int argc, char* argv[]) {
   dmc::PriorityQueue<int,Request> priorityQueue(f1, f2, f3);
 
   priorityQueue.addRequest(Request(0, 17, "foobar"), 0, dmc::getTime());
+
+  priorityQueue.markAsIdle(1);
 
   std::cout << "done" << std::endl;
 }
