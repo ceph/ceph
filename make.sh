@@ -7,8 +7,10 @@ fail() {
     exit 1
 }
 
-g++ -std=c++11 -I /usr/local/include -c src/dm_clock_srv.cc || fail
-g++ -std=c++11 -I /usr/local/include -c src/test.cc         || fail
-g++ -o test dm_clock_srv.o test.o                           || fail
+cflags="-g -O0"
+
+g++ -std=c++11 $cflags -I /usr/local/include -c src/dm_clock_srv.cc || fail
+g++ -std=c++11 $cflags -I /usr/local/include -c src/test.cc         || fail
+g++ $cflags -o test dm_clock_srv.o test.o                           || fail
 
 echo "Succeeded!"
