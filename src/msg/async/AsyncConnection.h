@@ -122,7 +122,7 @@ class AsyncConnection : public Connection {
 
   ostream& _conn_prefix(std::ostream *_dout);
 
-  bool is_connected() {
+  bool is_connected() override {
     Mutex::Locker l(lock);
     return state >= STATE_OPEN && state <= STATE_OPEN_TAG_CLOSE;
   }
@@ -136,11 +136,11 @@ class AsyncConnection : public Connection {
   }
   // Only call when AsyncConnection first construct
   void accept(int sd);
-  int send_message(Message *m);
+  int send_message(Message *m) override;
 
-  void send_keepalive();
-  void mark_down();
-  void mark_disposable() {
+  void send_keepalive() override;
+  void mark_down() override;
+  void mark_disposable() override {
     Mutex::Locker l(lock);
     policy.lossy = true;
   }
