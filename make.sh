@@ -11,6 +11,7 @@ cflags="-g -O0"
 
 g++ -std=c++11 $cflags -I /usr/local/include -c src/dm_clock_srv.cc || fail
 g++ -std=c++11 $cflags -I /usr/local/include -c src/test.cc         || fail
-g++ $cflags -o test dm_clock_srv.o test.o                           || fail
+g++ -std=c++11 $cflags -I /usr/local/include -c src/test_srv.cc     || fail
+g++ $cflags -pthread -o test dm_clock_srv.o test_srv.o test.o       || fail
 
 echo "Succeeded!"
