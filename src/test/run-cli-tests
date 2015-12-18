@@ -41,7 +41,11 @@ mkdir -p "$FAKE_HOME"
 # cram doesn't like seeing the same foo.t basename twice on the same
 # run, so run it once per directory
 FAILED=0
-for tool in "$SRCDIR"/cli/*; do
+TOOLS=`ls -d "$SRCDIR"/cli/* | grep -v cli/rbd`
+
+echo Running tests on: $TOOLS
+
+for tool in $TOOLS; do
     toolname="$(basename "$tool")"
     install -d -m0755 -- "$BUILDDIR/cli/$toolname"
     if ! env -i \
