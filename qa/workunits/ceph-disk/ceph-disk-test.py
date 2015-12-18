@@ -30,6 +30,7 @@
 #  sudo /usr/sbin/ceph-disk -v trigger /dev/vdb1 # activates if vdb1 is data
 #
 import argparse
+import fcntl
 import json
 import logging
 import configobj
@@ -43,6 +44,21 @@ import time
 import uuid
 
 LOG = logging.getLogger('CephDisk')
+
+class filelock(object):
+    def __init__(self, fn):
+        self.fn = fn
+        self.fd = None
+
+    def acquire(self):
+        assert not self.fd
+        self.fd = file(self.fn, 'w')
+        fcntl.lockf(self.fd, fcntl.LOCK_EX)
+
+    def release(self):
+        assert self.fd
+        fcntl.lockf(self.fd, fcntl.LOCK_UN)
+        self.fd = None
 
 class CephDisk:
 
@@ -127,6 +143,9 @@ class CephDisk:
         raise Exception("journal for uuid = " + uuid + " not found in " + str(disks))
 
     def destroy_osd(self, uuid):
+        STATEDIR = '/var/lib/ceph'
+        activate_lock = filelock(STATEDIR + '/tmp/ceph-disk.activate.lock')
+        activate_lock.acquire()
         id = self.sh("ceph osd create " + uuid).strip()
         self.helper("control_osd stop " + id + " || true")
         self.wait_for_osd_down(uuid)
@@ -155,6 +174,7 @@ class CephDisk:
         ceph auth del osd.{id}
         ceph osd crush rm osd.{id}
         """.format(id=id))
+        activate_lock.release()
 
     @staticmethod
     def osd_up_predicate(osds, uuid):
