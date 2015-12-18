@@ -248,23 +248,28 @@ void AbstractAioImageWrite::send_request() {
                   !m_image_ctx.journal->is_journal_replaying());
   }
 
+  if (!object_extents.empty()) {
+    m_aio_comp->set_request_count(
+      cct, object_extents.size() + get_cache_request_count(journaling));
 
-  m_aio_comp->set_request_count(
-    m_image_ctx.cct, object_extents.size() +
-    get_cache_request_count(journaling));
+    AioObjectRequests requests;
+    send_object_requests(object_extents, snapc,
+                         (journaling ? &requests : nullptr));
 
-  AioObjectRequests requests;
-  send_object_requests(object_extents, snapc, (journaling ? &requests : NULL));
+    if (journaling) {
+      // in-flight ops are flushed prior to closing the journal
+      assert(m_image_ctx.journal != NULL);
+      journal_tid = append_journal_event(requests, m_synchronous);
+    }
 
-  if (journaling) {
-    // in-flight ops are flushed prior to closing the journal
-    assert(m_image_ctx.journal != NULL);
-    journal_tid = append_journal_event(requests, m_synchronous);
+    if (m_image_ctx.object_cacher != NULL) {
+      send_cache_requests(object_extents, journal_tid);
+    }
+  } else {
+    // no IO to perform -- fire completion
+    m_aio_comp->unblock(cct);
   }
 
-  if (m_image_ctx.object_cacher != NULL) {
-    send_cache_requests(object_extents, journal_tid);
-  }
   update_stats(clip_len);
   m_aio_comp->put();
 }
