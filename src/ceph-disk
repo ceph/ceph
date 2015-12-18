@@ -2440,6 +2440,28 @@ def get_partition_type(part):
 
 
 def get_partition_uuid(dev):
+    #
+    # blkid is prefered
+    #
+    what = 'ID_PART_ENTRY_UUID'
+    out, _ = command(
+        [
+            'blkid',
+            '-o',
+            'udev',
+            '-p',
+            dev,
+        ]
+    )
+    p = {}
+    for line in out.splitlines():
+        (key, value) = line.split('=')
+        p[key] = value
+    if what in p:
+        return p[what]
+    #
+    # if blkid does not deliver, fallback to sgdisk
+    #
     (base, partnum) = split_dev_base_partnum(dev)
     out, _ = command(['sgdisk', '-i', partnum, base])
     for line in out.splitlines():
