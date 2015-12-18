@@ -2283,6 +2283,7 @@ int RGWRunBucketSyncCoroutine::operate()
 
         call(new RGWMetaSyncSingleEntryCR(&sync_env, raw_key,
                                           string() /* no marker */,
+                                          MDLOG_STATUS_COMPLETE,
                                           NULL /* no marker tracker */));
       }
       if (retcode < 0) {
