@@ -174,7 +174,7 @@ namespace crimson {
       }; // struct Entry
 
       typedef std::shared_ptr<Entry> EntryRef;
-  
+
     public:
 
       // a function that can be called to look up client information
@@ -325,9 +325,11 @@ namespace crimson {
     protected:
 
       void requestComplete() {
+	std::cout << "requestCompleted called" << std::endl;
 	Guard g(data_mutex);
 	scheduleRequest();
       }
+
 
       void reduceReservationTags(C client_id) {
 	auto client_it = clientMap.find(client_id);
@@ -342,21 +344,25 @@ namespace crimson {
       }
 
 
+      // data_mutex should be held when called; furthermore, the heap
+      // should not be empty and the top element of the heap should
+      // not be already handled
       template<typename K>
-      bool scheduleFromHeap(Heap<EntryRef, K>& heap) {
+      void submitTopRequest(Heap<EntryRef, K>& heap) {
+	auto top = heap.top();
+	top->handled = true;
+	heap.pop();
+
+	handleF(std::move(top->request),
+		std::bind(&PriorityQueue::requestComplete, this));
+      }
+
+      
+      // data_mutex should be held when called
+      template<typename K>
+      void prepQueue(Heap<EntryRef, K>& heap) {
 	while (!heap.empty() && heap.top()->handled) {
 	  heap.pop();
-	}
-
-	if (!heap.empty()) {
-	  auto top = heap.top();
-	  handleF(std::move(top->request),
-		  std::bind(&PriorityQueue::requestComplete, this));
-	  top->handled = true;
-	  heap.pop();
-	  return true;
-	} else {
-	  return false;
 	}
       }
 
@@ -371,18 +377,10 @@ namespace crimson {
 
 	// try constraint (reservation) based scheduling
 
-	while (!resQ.empty() && resQ.top()->handled) {
-	  resQ.pop();
-	}
-	if (!resQ.empty()) {
-	  auto top = resQ.top();
-	  if (top->tag.reservation <= now) {
-	    handleF(std::move(top->request),
-		    std::bind(&PriorityQueue::requestComplete, this));
-	    top->handled = true;
-	    resQ.pop();
-	    return;
-	  }
+	prepQueue(resQ);
+	if (!resQ.empty() && resQ.top()->tag.reservation <= now) {
+	  submitTopRequest(resQ);
+	  return;
 	}
 
 	// no existing reservations before now, so try weight-based
@@ -402,36 +400,25 @@ namespace crimson {
 	  }
 	}
 
-	while (!readyQ.empty() && readyQ.top()->handled) {
-	  readyQ.pop();
-	}
+	prepQueue(readyQ);
 	if (!readyQ.empty()) {
-	  auto top = readyQ.top();
-	  handleF(std::move(top->request),
-		  std::bind(&PriorityQueue::requestComplete, this));
-	  top->handled = true;
-	  readyQ.pop();
-	  reduceReservationTags(top->client);
+	  submitTopRequest(readyQ);
 	  return;
 	}
 
 	if (allowLimitBreak) {
-	  while (!propQ.empty() && propQ.top()->handled) {
-	    propQ.pop();
-	  }
+	  prepQueue(propQ);
 	  if (!propQ.empty()) {
-	    auto top = propQ.top();
-	    handleF(std::move(top->request),
-		    std::bind(&PriorityQueue::requestComplete, this));
-	    top->handled = true;
-	    propQ.pop();
-	    reduceReservationTags(top->client);
+	    submitTopRequest(propQ);
+	    reduceReservationTags(propQ.top()->client);
 	    return;
 	  }
 	}
 
 	// nothing scheduled
-      }
+      } // scheduleRequest
+
+
 
     }; // class PriorityQueue
 

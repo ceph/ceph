@@ -44,6 +44,8 @@ typedef std::unique_ptr<Request> RequestRef;
 
 
 dmc::ClientInfo getClientInfo(int c) {
+  std::cout << "getClientInfo called" << std::endl;
+
   static dmc::ClientInfo info[] = {
     {1.0, 100.0, 250.0},
     {2.0, 100.0, 250.0},
@@ -60,14 +62,16 @@ dmc::ClientInfo getClientInfo(int c) {
 
 
 bool canHandleReq() {
+  std::cout << "canHandleReq called" << std::endl;
   return true;
 }
 
 
 void handleReq(std::unique_ptr<Request>&& request_ref,
 	       std::function<void()> callback) {
+  std::cout << "handleReq called" << std::endl;
   RequestRef mine = std::move(request_ref);
-  sleep(10);
+  sleep(2);
   callback();
 }
 
@@ -84,7 +88,11 @@ int main(int argc, char* argv[]) {
   
   dmc::PriorityQueue<int,Request> priorityQueue(f1, f2, f3);
 
+  std::cout << "queue created" << std::endl;
+
   priorityQueue.addRequest(Request(0, 17, "foobar"), 0, dmc::getTime());
+
+  std::cout << "request added" << std::endl;
 
   priorityQueue.markAsIdle(1);
 
