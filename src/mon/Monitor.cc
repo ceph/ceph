@@ -3088,19 +3088,19 @@ void Monitor::forward_request_leader(MonOpRequestRef op)
 struct AnonConnection : public Connection {
   AnonConnection(CephContext *cct) : Connection(cct, NULL) {}
 
-  int send_message(Message *m) {
+  int send_message(Message *m) override {
     assert(!"send_message on anonymous connection");
   }
-  void send_keepalive() {
+  void send_keepalive() override {
     assert(!"send_keepalive on anonymous connection");
   }
-  void mark_down() {
+  void mark_down() override {
     // silently ignore
   }
-  void mark_disposable() {
+  void mark_disposable() override {
     // silengtly ignore
   }
-  bool is_connected() { return false; }
+  bool is_connected() override { return false; }
 };
 
 //extract the original message and put it into the regular dispatch function
