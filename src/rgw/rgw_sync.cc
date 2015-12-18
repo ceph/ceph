@@ -1765,6 +1765,9 @@ int RGWCloneMetaLogCoroutine::state_receive_rest_response()
   truncated = ((int)data.entries.size() == max_entries);
 
   if (data.entries.empty()) {
+    if (new_marker) {
+      *new_marker = marker;
+    }
     return set_cr_done();
   }
 
