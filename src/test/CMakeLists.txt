@@ -1,3 +1,7 @@
+if(WITH_FIO)
+  add_subdirectory(fio)
+endif()
+
 # test_timers
 add_executable(test_timers
   TestTimers.cc

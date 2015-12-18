@@ -1,0 +1,5 @@
+add_library(fio_ceph_objectstore SHARED fio_ceph_objectstore.cc)
+target_include_directories(fio_ceph_objectstore PUBLIC ${FIO_INCLUDE_DIR})
+set_target_properties(fio_ceph_objectstore PROPERTIES COMPILE_FLAGS "-std=gnu++11")
+target_link_libraries(fio_ceph_objectstore os global ${CRYPTO_LIBS} ${EXTRA_LIBS})
+install(TARGETS fio_ceph_objectstore DESTINATION lib)
