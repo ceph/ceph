@@ -2169,6 +2169,7 @@ int BlueStore::_do_read(
   dout(20) << __func__ << " " << offset << "~" << length << " size "
 	   << o->onode.size << dendl;
   bl.clear();
+  _dump_onode(o);
 
   if (offset > o->onode.size) {
     r = 0;
@@ -2226,7 +2227,6 @@ int BlueStore::_do_read(
       offset += x_len;
       continue;
     }
-
     unsigned x_len = length;
     if (op != oend &&
 	op->first > offset &&
@@ -2270,6 +2270,11 @@ int BlueStore::_do_read(
 	++bp;
       }
       continue;
+    }
+    if (bp != bend &&
+	bp->first > offset &&
+	bp->first - offset < x_len) {
+      x_len = bp->first - offset;
     }
 
     // zero.
