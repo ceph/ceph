@@ -2447,7 +2447,7 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
 
     CephContext *cct = src->cct;
     if (dest_size < src_size) {
-      lderr(cct) << " src size " << src_size << " >= dest size "
+      lderr(cct) << " src size " << src_size << " > dest size "
 		 << dest_size << dendl;
       return -EINVAL;
     }
