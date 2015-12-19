@@ -246,4 +246,7 @@
 /* res_query is thread safe */
 #cmakedefine HAVE_THREAD_SAFE_RES_QUERY
 
+/* Define if HAVE_REENTRANT_STRSIGNAL */
+#cmakedefine HAVE_REENTRANT_STRSIGNAL
+
 #endif /* CONFIG_H */
