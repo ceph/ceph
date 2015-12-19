@@ -284,7 +284,7 @@ namespace cohort {
 
 	~Partition() {
 	  if (csz)
-	    delete[] cache;
+	    ::operator delete(cache);
 	}
       };
 
@@ -323,7 +323,7 @@ namespace cohort {
 	  Partition& p = part[ix];
 	  if (csz) {
 	    p.csz = csz;
-	    p.cache = (T**) calloc(csz, sizeof(T*));
+	    p.cache = (T**) ::operator new(csz * sizeof(T*));
 	  }
 	  locks.push_back(&p.lock);
 	}
