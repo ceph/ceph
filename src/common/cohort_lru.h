@@ -66,6 +66,8 @@ namespace cohort {
 
       Object() : lru_flags(FLAG_NONE), lru_refcnt(0), lru_adj(0) {}
 
+      uint32_t get_refcnt() const { return lru_refcnt; }
+
       virtual bool reclaim() = 0;
 
       virtual ~Object() {}

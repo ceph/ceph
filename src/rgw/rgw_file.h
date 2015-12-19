@@ -666,6 +666,12 @@ namespace rgw {
 	ObjUnref(RGWLibFS* fs) : fs(fs) {}
 	void operator()(RGWFileHandle* fh) const {
 	  fs->fh_lru.unref(fh, cohort::lru::FLAG_NONE);
+
+	  lsubdout(fs->get_context(), rgw, 5)
+	    << __func__
+	    << fh->name
+	    << " refs=" << fh->get_refcnt()
+	    << dendl;
 	}
       };
 

@@ -73,6 +73,7 @@ LookupFHResult RGWLibFS::stat_leaf(RGWFileHandle* parent,
       if ((rc == 0) &&
 	  (req.get_ret() == 0)) {
 	fhr = lookup_fh(parent, path, RGWFileHandle::FLAG_NONE);
+	goto done;
       }
     }
     break;
@@ -97,6 +98,7 @@ LookupFHResult RGWLibFS::stat_leaf(RGWFileHandle* parent,
       break;
     }
   }
+done:
   return fhr;
 } /* RGWLibFS::stat_leaf */
 
