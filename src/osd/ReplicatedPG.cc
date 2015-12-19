@@ -1363,6 +1363,7 @@ ReplicatedPG::ReplicatedPG(OSDService *o, OSDMapRef curmap,
     pgbackend->get_is_readable_predicate(),
     pgbackend->get_is_recoverable_predicate());
   snap_trimmer_machine.initiate();
+  repop_map.rehash(g_conf->osd_client_message_cap/_pool.info.get_pg_num() * g_conf->osd_pg_op_threshold_ratio);
 }
 
 void ReplicatedPG::get_src_oloc(const object_t& oid, const object_locator_t& oloc, object_locator_t& src_oloc)
