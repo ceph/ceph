@@ -110,8 +110,9 @@ int stress_test(uint64_t num_ops, uint64_t num_objs,
       else
 	assert(r == 0);
     } else {
-      ObjectCacher::OSDWrite *wr = obc.prepare_write(snapc, bl, utime_t(), 0,
-                                                     ++journal_tid);
+      ObjectCacher::OSDWrite *wr = obc.prepare_write(snapc, bl,
+						     ceph::real_time::min(), 0,
+						     ++journal_tid);
       wr->extents.push_back(op->extent);
       lock.Lock();
       obc.writex(wr, &object_set, NULL);

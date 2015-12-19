@@ -229,17 +229,19 @@ namespace librbd {
 			  objectx);
     uint64_t object_overlap = m_ictx->prune_parent_extents(objectx, overlap);
     bool may = object_overlap > 0;
-    ldout(m_ictx->cct, 10) << "may_copy_on_write " << oid << " " << read_off << "~" << read_len << " = " << may << dendl;
+    ldout(m_ictx->cct, 10) << "may_copy_on_write " << oid << " " << read_off
+			   << "~" << read_len << " = " << may << dendl;
     return may;
   }
 
   ceph_tid_t LibrbdWriteback::write(const object_t& oid,
-			       const object_locator_t& oloc,
-			       uint64_t off, uint64_t len,
-			       const SnapContext& snapc,
-			       const bufferlist &bl, utime_t mtime,
-			       uint64_t trunc_size, __u32 trunc_seq,
-			       ceph_tid_t journal_tid, Context *oncommit)
+				    const object_locator_t& oloc,
+				    uint64_t off, uint64_t len,
+				    const SnapContext& snapc,
+				    const bufferlist &bl,
+				    ceph::real_time mtime, uint64_t trunc_size,
+				    __u32 trunc_seq, ceph_tid_t journal_tid,
+				    Context *oncommit)
   {
     assert(m_ictx->owner_lock.is_locked());
     uint64_t object_no = oid_to_object_no(oid.name, m_ictx->object_prefix);
@@ -253,12 +255,12 @@ namespace librbd {
     assert(journal_tid == 0 || m_ictx->journal != NULL);
     if (journal_tid != 0) {
       m_ictx->journal->flush_event(
-        journal_tid, new C_WriteJournalCommit(m_ictx, oid.name, object_no, off,
-                                              bl, snapc, req_comp,
-                                              journal_tid));
+	journal_tid, new C_WriteJournalCommit(m_ictx, oid.name, object_no, off,
+					      bl, snapc, req_comp,
+					      journal_tid));
     } else {
-      AioObjectWrite *req = new AioObjectWrite(m_ictx, oid.name, object_no, off,
-                                               bl, snapc, req_comp);
+      AioObjectWrite *req = new AioObjectWrite(m_ictx, oid.name, object_no,
+					       off, bl, snapc, req_comp);
       req->send();
     }
     return ++m_tid;
@@ -266,7 +268,8 @@ namespace librbd {
 
 
   void LibrbdWriteback::overwrite_extent(const object_t& oid, uint64_t off,
-                                         uint64_t len, ceph_tid_t journal_tid) {
+					 uint64_t len,
+					 ceph_tid_t journal_tid) {
     typedef std::vector<std::pair<uint64_t,uint64_t> > Extents;
 
     assert(m_ictx->owner_lock.is_locked());
@@ -277,11 +280,11 @@ namespace librbd {
 
     Extents file_extents;
     Striper::extent_to_file(m_ictx->cct, &m_ictx->layout, object_no, off,
-                            len, file_extents);
+			    len, file_extents);
     for (Extents::iterator it = file_extents.begin();
-         it != file_extents.end(); ++it) {
+	 it != file_extents.end(); ++it) {
       m_ictx->journal->commit_io_event_extent(journal_tid, it->first,
-                                              it->second, 0);
+					      it->second, 0);
     }
   }
 

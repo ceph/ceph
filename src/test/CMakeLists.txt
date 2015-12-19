@@ -536,6 +536,25 @@ target_link_libraries(unittest_sloppy_crc_map global
 set_target_properties(unittest_sloppy_crc_map
   PROPERTIES COMPILE_FLAGS ${UNITTEST_CXX_FLAGS})
 
+# unittest_time
+set(unittest_time_srcs
+  common/test_time.cc
+  ${CMAKE_SOURCE_DIR}/src/common/ceph_time.cc
+  )
+add_executable(unittest_time
+  ${unittest_time_srcs}
+  $<TARGET_OBJECTS:heap_profiler_objs>
+  )
+target_link_libraries(unittest_time
+  global
+  ${BLKID_LIBRARIES}
+  ${CMAKE_DL_LIBS}
+  ${TCMALLOC_LIBS}
+  ${UNITTEST_LIBS}
+  )
+set_target_properties(unittest_time
+  PROPERTIES COMPILE_FLAGS ${UNITTEST_CXX_FLAGS})
+
 # unittest_util
 add_executable(unittest_util EXCLUDE_FROM_ALL
   common/test_util.cc
