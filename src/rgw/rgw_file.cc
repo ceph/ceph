@@ -836,7 +836,7 @@ int rgw_readdir(struct rgw_fs *rgw_fs,
   } else {
     // XXX finish marker handling
     rgw_obj_key marker{"", ""};
-    RGWListBucketRequest req(cct, fs->get_user(), parent, rcb, cb_arg, offset);
+    RGWReaddirRequest req(cct, fs->get_user(), parent, rcb, cb_arg, offset);
     rc = librgw.get_fe()->execute_req(&req);
 
     /* XXX update link count (incorrectly) */
@@ -863,9 +863,9 @@ int rgw_read(struct rgw_fs *rgw_fs,
   if (! rgw_fh->is_file())
     return -EINVAL;
 
-  RGWGetObjRequest req(cct, fs->get_user(), rgw_fh->bucket_name(),
-		       rgw_fh->object_name(), offset, length,
-		       buffer);
+  RGWReadRequest req(cct, fs->get_user(), rgw_fh->bucket_name(),
+		    rgw_fh->object_name(), offset, length,
+		    buffer);
 
   int rc = librgw.get_fe()->execute_req(&req);
   if ((rc == 0) &&

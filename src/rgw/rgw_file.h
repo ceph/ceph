@@ -19,6 +19,7 @@
 #include <boost/utility/string_ref.hpp>
 #include "xxhash.h"
 #include "include/buffer.h"
+#include "common/sstring.hh"
 #include "common/cohort_lru.h"
 #include "rgw_common.h"
 #include "rgw_user.h"
@@ -135,6 +136,10 @@ namespace rgw {
     using lock_guard = std::lock_guard<std::mutex>;
     using unique_lock = std::unique_lock<std::mutex>;
 
+    /* median file name length (HPC) has been found to be 16,
+     * w/90% of file names <= 31 (Yifan Wang, CMU) */
+    using dirent_string = basic_sstring<char, uint16_t, 32>;
+
     struct state {
       uint64_t dev;
       size_t size;
@@ -152,7 +157,9 @@ namespace rgw {
     };
 
     struct directory {
-      flat_map<uint64_t, std::string> marker_cache;
+      uint32_t flags;
+      flat_map<uint64_t, dirent_string> marker_cache;
+      directory() : flags(0) {}
     };
 
     boost::variant<file, directory> variant_type;
@@ -325,10 +332,11 @@ namespace rgw {
       directory* d = get<directory>(&variant_type);
       if (d) {
 	d->marker_cache.insert(
-	  flat_map<uint64_t, std::string>::value_type(off, marker));
+	  flat_map<uint64_t, dirent_string>::value_type(off, marker.c_str()));
       }
     }
 
+    /* XXX */
     std::string find_marker(uint64_t off) { // XXX copy
       using std::get;
       directory* d = get<directory>(&variant_type);
@@ -794,8 +802,8 @@ public:
   read directory content (bucket objects)
 */
 
-class RGWListBucketRequest : public RGWLibRequest,
-			     public RGWListBucket /* RGWOp */
+class RGWReaddirRequest : public RGWLibRequest,
+			  public RGWListBucket /* RGWOp */
 {
 public:
   RGWFileHandle* rgw_fh;
@@ -804,9 +812,9 @@ public:
   rgw_readdir_cb rcb;
   size_t ix;
 
-  RGWListBucketRequest(CephContext* _cct, RGWUserInfo *_user,
-		      RGWFileHandle* _rgw_fh, rgw_readdir_cb _rcb,
-		      void* _cb_arg, uint64_t* _offset)
+  RGWReaddirRequest(CephContext* _cct, RGWUserInfo *_user,
+		    RGWFileHandle* _rgw_fh, rgw_readdir_cb _rcb,
+		    void* _cb_arg, uint64_t* _offset)
     : RGWLibRequest(_cct, _user), rgw_fh(_rgw_fh), offset(_offset),
       cb_arg(_cb_arg), rcb(_rcb), ix(0) {
     RGWListBucket::marker = {rgw_fh->find_marker(*offset), ""};
@@ -853,7 +861,7 @@ public:
   }
 
   int operator()(const std::string& name, const std::string& marker,
-		 bool add_marker) {
+		bool add_marker) {
     /* hash offset of name in parent (short name) for NFS readdir cookie */
     uint64_t off = XXH64(name.c_str(), name.length(), fh_key::seed);
     *offset = off;
@@ -872,6 +880,10 @@ public:
   virtual void send_response() {
     struct req_state* s = get_state();
     size_t size = objs.size();for (const auto& iter : objs) {
+
+      std::cout << "readdir objects prefix: " << prefix
+		<< " obj: " << iter.key.name << std::endl;
+
       size_t last_del = iter.key.name.find_last_of('/');
       boost::string_ref sref;
       if (last_del != string::npos)
@@ -884,7 +896,7 @@ public:
       if (sref=="")
 	continue;
 
-      lsubdout(cct, rgw, 15) << "RGWListBucketRequest "
+      lsubdout(cct, rgw, 15) << "RGWReaddirRequest "
 			     << __func__ << " "
 			     << "list uri=" << s->relative_uri << " "
 			     << " prefix=" << prefix << " "
@@ -899,6 +911,12 @@ public:
     }
     size += common_prefixes.size();
     for (auto& iter : common_prefixes) {
+
+      std::cout << "readdir common prefixes prefix: " << prefix
+		<< " iter first: " << iter.first
+		<< " iter second: " << iter.second
+		<< std::endl;
+
       if (iter.first.back() == '/')
 	const_cast<std::string&>(iter.first).pop_back();
 
@@ -909,7 +927,7 @@ public:
       else
 	sref = boost::string_ref{iter.first};
 
-      lsubdout(cct, rgw, 15) << "RGWListBucketRequest "
+      lsubdout(cct, rgw, 15) << "RGWReaddirRequest "
 			     << __func__ << " "
 			     << "list uri=" << s->relative_uri << " "
 			     << " prefix=" << prefix << " "
@@ -927,7 +945,7 @@ public:
 
   bool eof() { return ssize_t(ix) < RGWListBucket::max; }
 
-}; /* RGWListBucketRequest */
+}; /* RGWReaddirRequest */
 
 /*
   create bucket
@@ -1139,8 +1157,8 @@ public:
   get object
 */
 
-class RGWGetObjRequest : public RGWLibRequest,
-			 public RGWGetObj /* RGWOp */
+class RGWReadRequest : public RGWLibRequest,
+		       public RGWGetObj /* RGWOp */
 {
 public:
   const std::string& bucket_name;
@@ -1150,9 +1168,9 @@ public:
   size_t read_len;
   bool do_hexdump = false;
 
-  RGWGetObjRequest(CephContext* _cct, RGWUserInfo *_user,
-		  const std::string& _bname, const std::string& _oname,
-		  uint64_t off, uint64_t len, void *_ulp_buffer)
+  RGWReadRequest(CephContext* _cct, RGWUserInfo *_user,
+		const std::string& _bname, const std::string& _oname,
+		uint64_t off, uint64_t len, void *_ulp_buffer)
     : RGWLibRequest(_cct, _user), bucket_name(_bname), obj_name(_oname),
       ulp_buffer(_ulp_buffer), nread(0), read_len(len) {
     magic = 76;
