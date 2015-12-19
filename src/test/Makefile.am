@@ -85,6 +85,7 @@ check_SCRIPTS += \
 	test/osd/osd-bench.sh \
 	test/osd/osd-reactivate.sh \
 	test/osd/osd-copy-from.sh \
+	test/osd/osd-markdown.sh \
 	test/mon/mon-handle-forward.sh \
 	test/libradosstriper/rados-striper.sh \
 	test/test_objectstore_memstore.sh

@@ -346,6 +346,9 @@ add_dependencies(check osd_pool_create)
 add_test(NAME osd_copy_from COMMAND bash ${CMAKE_SOURCE_DIR}/src/test/osd/osd-copy-from.sh)
 add_dependencies(check osd_copy_from)
 
+add_test(NAME osd_mark_down COMMAND bash ${CMAKE_SOURCE_DIR}/src/test/osd/osd-markdown.sh)
+add_dependencies(check osd-markdown)
+
 add_test(NAME mon_handle_forward COMMAND bash ${CMAKE_SOURCE_DIR}/src/test/mon/mon-handle-forward.sh)
 add_dependencies(check mon_handle_forward)
 
