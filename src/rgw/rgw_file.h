@@ -327,12 +327,12 @@ namespace rgw {
       }
     }
 
-    void add_marker(uint64_t off, const std::string& marker) {
+    void add_marker(uint64_t off, const boost::string_ref& marker) {
       using std::get;
       directory* d = get<directory>(&variant_type);
       if (d) {
 	d->marker_cache.insert(
-	  flat_map<uint64_t, dirent_string>::value_type(off, marker.c_str()));
+	  flat_map<uint64_t, dirent_string>::value_type(off, marker.data()));
       }
     }
 
@@ -769,12 +769,11 @@ public:
     if (!sent_data)
       return;
     map<string, RGWBucketEnt>& m = buckets.get_buckets();
-    size_t size = m.size();
     for (const auto& iter : m) {
-      const std::string& marker = iter.first;
+      boost::string_ref marker{iter.first};
       const RGWBucketEnt& ent = iter.second;
       /* call me maybe */
-      this->operator()(ent.bucket.name, marker, (ix == size-1) ? true : false);
+      this->operator()(ent.bucket.name, marker);
       ++ix;
     }
   } /* send_response_data */
@@ -783,14 +782,13 @@ public:
     // do nothing
   }
 
-  int operator()(const std::string& name, const std::string& marker,
-		 bool add_marker) {
-    uint64_t off = XXH64(name.c_str(), name.length(), fh_key::seed);
+  int operator()(const boost::string_ref& name,
+		const boost::string_ref& marker) {
+    uint64_t off = XXH64(name.data(), name.length(), fh_key::seed);
     *offset = off;
     /* update traversal cache */
-    if (add_marker)
-      rgw_fh->add_marker(off, marker);
-    rcb(name.c_str(), cb_arg, (*offset)++);
+    rgw_fh->add_marker(off, marker);
+    rcb(name.data(), cb_arg, (*offset)++);
     return 0;
   }
 
@@ -860,15 +858,14 @@ public:
     return 0;
   }
 
-  int operator()(const std::string& name, const std::string& marker,
-		bool add_marker) {
+  int operator()(const boost::string_ref& name,
+		const boost::string_ref& marker) {
     /* hash offset of name in parent (short name) for NFS readdir cookie */
-    uint64_t off = XXH64(name.c_str(), name.length(), fh_key::seed);
+    uint64_t off = XXH64(name.data(), name.length(), fh_key::seed);
     *offset = off;
     /* update traversal cache */
-    if (add_marker)
-      rgw_fh->add_marker(off, marker);
-    rcb(name.c_str(), cb_arg, off);
+    rgw_fh->add_marker(off, marker);
+    rcb(name.data(), cb_arg, off);
     return 0;
   }
 
@@ -879,7 +876,7 @@ public:
 
   virtual void send_response() {
     struct req_state* s = get_state();
-    size_t size = objs.size();for (const auto& iter : objs) {
+    for (const auto& iter : objs) {
 
       std::cout << "readdir objects prefix: " << prefix
 		<< " obj: " << iter.key.name << std::endl;
@@ -905,11 +902,9 @@ public:
 			     << dendl;
 
       /* call me maybe */
-      this->operator()(sref.data(), sref.data(),
-		       (ix == size-1) ? true : false);
+      this->operator()(sref, sref);
       ++ix;
     }
-    size += common_prefixes.size();
     for (auto& iter : common_prefixes) {
 
       std::cout << "readdir common prefixes prefix: " << prefix
@@ -934,7 +929,7 @@ public:
 			     << " cpref=" << sref
 			     << dendl;
 
-      this->operator()(sref.data(), sref.data(), (ix == size-1) ? true : false);
+      this->operator()(sref, sref);
       ++ix;
     }
   }
