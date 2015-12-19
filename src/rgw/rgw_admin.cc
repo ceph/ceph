@@ -136,10 +136,12 @@ void _usage()
   cerr << "  mdlog list                 list metadata log\n";
   cerr << "  mdlog trim                 trim metadata log (use start-date, end-date or\n";
   cerr << "                             start-marker, end-marker)\n";
+  cerr << "  mdlog status               read metadata log status\n";
   cerr << "  bilog list                 list bucket index log\n";
   cerr << "  bilog trim                 trim bucket index log (use start-marker, end-marker)\n";
   cerr << "  datalog list               list data log\n";
   cerr << "  datalog trim               trim data log\n";
+  cerr << "  datalog status             read data log status\n";
   cerr << "  opstate list               list stateful operations entries (use client_id,\n";
   cerr << "                             op_id, object)\n";
   cerr << "  opstate set                set state on an entry (use client_id, op_id, object, state)\n";
@@ -337,6 +339,7 @@ enum {
   OPT_DATA_SYNC_INIT,
   OPT_DATA_SYNC_RUN,
   OPT_DATALOG_LIST,
+  OPT_DATALOG_STATUS,
   OPT_DATALOG_TRIM,
   OPT_OPSTATE_LIST,
   OPT_OPSTATE_SET,
@@ -685,6 +688,8 @@ static int get_cmd(const char *cmd, const char *prev_cmd, const char *prev_prev_
       return OPT_DATALOG_LIST;
     if (strcmp(cmd, "trim") == 0)
       return OPT_DATALOG_TRIM;
+    if (strcmp(cmd, "status") == 0)
+      return OPT_DATALOG_STATUS;
   } else if ((prev_prev_cmd && strcmp(prev_prev_cmd, "data") == 0) &&
 	     (strcmp(prev_cmd, "sync") == 0)) {
     if (strcmp(cmd, "status") == 0)
@@ -4788,6 +4793,27 @@ next:
       }
       formatter->flush(cout);
     } while (truncated && count < max_entries);
+
+    formatter->close_section();
+    formatter->flush(cout);
+  }
+  
+  if (opt_cmd == OPT_DATALOG_STATUS) {
+    RGWDataChangesLog *log = store->data_log;
+    int i = (specified_shard_id ? shard_id : 0);
+
+    formatter->open_array_section("entries");
+    for (; i < g_ceph_context->_conf->rgw_data_log_num_shards; i++) {
+      list<cls_log_entry> entries;
+
+      RGWDataChangesLogInfo info;
+      log->get_info(i, &info);
+
+      ::encode_json("info", info, formatter);
+
+      if (specified_shard_id)
+        break;
+    }
 
     formatter->close_section();
     formatter->flush(cout);
