@@ -44,8 +44,12 @@ namespace rocksdb{
   class Slice;
   class WriteBatch;
   class Iterator;
+  class Logger;
   struct Options;
 }
+
+extern rocksdb::Logger *create_rocksdb_ceph_logger();
+
 /**
  * Uses RocksDB to implement the KeyValueDB interface
  */
