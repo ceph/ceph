@@ -287,6 +287,23 @@ function remove_crontab() {
     crontab -r
 }
 
+function setup_ceph_workbench() {
+    local url=$1
+    local branch=$2
+
+    (
+        cd $HOME
+        source teuthology/virtualenv/bin/activate
+        if test "$url" ; then
+            git clone -b $branch $url
+            cd ceph-workbench
+            python setup.py install
+        else
+            pip install ceph-workbench
+        fi
+    )
+}
+
 function get_or_create_keypair() {
     local keypair=$1
 
@@ -452,8 +469,11 @@ function main() {
     local flavor_select
     local keypair=teuthology
     local archive_upload
+    local ceph_workbench_git_url
+    local ceph_workbench_branch
 
     local do_setup_keypair=false
+    local do_ceph_workbench=false
     local do_create_config=false
     local do_setup_dnsmasq=false
     local do_install_packages=false
@@ -490,6 +510,14 @@ function main() {
                 shift
                 archive_upload=$1
                 ;;
+            --ceph-workbench-git-url)
+                shift
+                ceph_workbench_git_url=$1
+                ;;
+            --ceph-workbench-branch)
+                shift
+                ceph_workbench_branch=$1
+                ;;
             --install)
                 do_install_packages=true
                 ;;
@@ -498,6 +526,9 @@ function main() {
                 ;;
             --setup-keypair)
                 do_setup_keypair=true
+                ;;
+            --setup-ceph-workbench)
+                do_ceph_workbench=true
                 ;;
             --setup-dnsmasq)
                 do_setup_dnsmasq=true
@@ -513,6 +544,7 @@ function main() {
                 ;;
             --setup-all)
                 do_install_packages=true
+                do_ceph_workbench=true
                 do_create_config=true
                 do_setup_keypair=true
                 do_setup_dnsmasq=true
@@ -566,6 +598,10 @@ function main() {
         setup_bashrc || return 1
         setup_bootscript $nworkers || return 1
         setup_crontab || return 1
+    fi
+
+    if $do_ceph_workbench ; then
+        setup_ceph_workbench $ceph_workbench_git_url $ceph_workbench_branch || return 1
     fi
 
     if $do_setup_keypair ; then

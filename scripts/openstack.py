@@ -218,6 +218,15 @@ def get_openstack_parser():
         default=os.getenv('TEUTH_BRANCH', 'master'),
     )
     parser.add_argument(
+        '--ceph-workbench-git-url',
+        help="git clone url for ceph-workbench",
+    )
+    parser.add_argument(
+        '--ceph-workbench-branch',
+        help="use this ceph-workbench branch instead of master",
+        default='master',
+    )
+    parser.add_argument(
         '--upload',
         action='store_true', default=False,
         help='upload archives to an rsync server',

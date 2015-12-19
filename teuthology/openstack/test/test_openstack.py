@@ -1639,6 +1639,8 @@ openstack keypair delete {key_name} || true
         argv = (self.options +
                 ['--teuthology-git-url', 'TEUTHOLOGY_URL',
                  '--teuthology-branch', 'TEUTHOLOGY_BRANCH',
+                 '--ceph-workbench-git-url', 'CEPH_WORKBENCH_URL',
+                 '--ceph-workbench-branch', 'CEPH_WORKBENCH_BRANCH',
                  '--upload',
                  '--archive-upload', archive_upload] +
                 teuthology_argv)
@@ -1659,6 +1661,9 @@ openstack keypair delete {key_name} || true
         assert "nworkers=" + str(args.simultaneous_jobs) in l
         assert "username=" + teuthology.username in l
         assert "upload=--archive-upload user@archive:/tmp" in l
+        assert ("ceph_workbench="
+                " --ceph-workbench-branch CEPH_WORKBENCH_BRANCH"
+                " --ceph-workbench-git-url CEPH_WORKBENCH_URL") in l
         assert "clone=git clone -b TEUTHOLOGY_BRANCH TEUTHOLOGY_URL" in l
         assert os.environ['OS_AUTH_URL'] in l
         assert " ".join(teuthology_argv) in l

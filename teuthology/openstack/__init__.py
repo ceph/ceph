@@ -728,6 +728,8 @@ class TeuthologyOpenStack(OpenStack):
                                     '--suite-branch',
                                     '--ceph-repo',
                                     '--ceph',
+                                    '--ceph-workbench-branch',
+                                    '--ceph-workbench-git-url',
                                     '--archive-upload',
                                     '--archive-upload-url',
                                     '--key-name',
@@ -933,16 +935,24 @@ ssh access           : ssh {identity}{username}@{ip} # logs in /usr/share/nginx/
             clone = ("git clone -b {branch} {url}".format(
                 branch=self.args.teuthology_branch,
                 url=self.args.teuthology_git_url))
+        ceph_workbench = ''
+        if self.args.ceph_workbench_git_url:
+            ceph_workbench += (" --ceph-workbench-branch " +
+                               self.args.ceph_workbench_branch)
+            ceph_workbench += (" --ceph-workbench-git-url " +
+                               self.args.ceph_workbench_git_url)
         log.debug("OPENRC = " + openrc + " " +
                   "TEUTHOLOGY_USERNAME = " + self.username + " " +
                   "CLONE_OPENSTACK = " + clone + " " +
                   "UPLOAD = " + upload + " " +
+                  "CEPH_WORKBENCH = " + ceph_workbench + " " +
                   "NWORKERS = " + str(self.args.simultaneous_jobs))
         content = (template.
                    replace('OPENRC', openrc).
                    replace('TEUTHOLOGY_USERNAME', self.username).
                    replace('CLONE_OPENSTACK', clone).
                    replace('UPLOAD', upload).
+                   replace('CEPH_WORKBENCH', ceph_workbench).
                    replace('NWORKERS', str(self.args.simultaneous_jobs)))
         open(path, 'w').write(content)
         log.debug("get_user_data: " + content + " written to " + path)
