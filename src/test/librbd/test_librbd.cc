@@ -668,21 +668,28 @@ TEST_F(TestLibRBD, TestCreateLsDeleteSnapPP)
     
     ASSERT_EQ(0, create_image_pp(rbd, ioctx, name.c_str(), size, &order));
     ASSERT_EQ(0, rbd.open(ioctx, image, name.c_str(), NULL));
-
-    ASSERT_FALSE(image.snap_exists("snap1"));
+   
+    bool exists;
+    ASSERT_EQ(0, image.snap_exists2("snap1", &exists));
+    ASSERT_FALSE(exists);
     ASSERT_EQ(0, image.snap_create("snap1"));
-    ASSERT_TRUE(image.snap_exists("snap1"));
+    ASSERT_EQ(0, image.snap_exists2("snap1", &exists));
+    ASSERT_TRUE(exists);
     ASSERT_EQ(1, test_ls_snaps(image, 1, "snap1", size));
     ASSERT_EQ(0, image.resize(size2));
-    ASSERT_FALSE(image.snap_exists("snap2"));
+    ASSERT_EQ(0, image.snap_exists2("snap2", &exists));
+    ASSERT_FALSE(exists);
     ASSERT_EQ(0, image.snap_create("snap2"));
-    ASSERT_TRUE(image.snap_exists("snap2"));
+    ASSERT_EQ(0, image.snap_exists2("snap2", &exists));
+    ASSERT_TRUE(exists);
     ASSERT_EQ(2, test_ls_snaps(image, 2, "snap1", size, "snap2", size2));
     ASSERT_EQ(0, image.snap_remove("snap1"));
-    ASSERT_FALSE(image.snap_exists("snap1"));
+    ASSERT_EQ(0, image.snap_exists2("snap1", &exists));
+    ASSERT_FALSE(exists);
     ASSERT_EQ(1, test_ls_snaps(image, 1, "snap2", size2));
     ASSERT_EQ(0, image.snap_remove("snap2"));
-    ASSERT_FALSE(image.snap_exists("snap2"));
+    ASSERT_EQ(0, image.snap_exists2("snap2", &exists));
+    ASSERT_FALSE(exists);
     ASSERT_EQ(0, test_ls_snaps(image, 0));
   }
 
@@ -704,25 +711,34 @@ TEST_F(TestLibRBD, TestCreateLsRenameSnapPP)
     
     ASSERT_EQ(0, create_image_pp(rbd, ioctx, name.c_str(), size, &order));
     ASSERT_EQ(0, rbd.open(ioctx, image, name.c_str(), NULL));
-
-    ASSERT_FALSE(image.snap_exists("snap1"));
+    
+    bool exists;
+    ASSERT_EQ(0, image.snap_exists2("snap1", &exists));
+    ASSERT_FALSE(exists);
     ASSERT_EQ(0, image.snap_create("snap1"));
-    ASSERT_TRUE(image.snap_exists("snap1"));
+    ASSERT_EQ(0, image.snap_exists2("snap1", &exists));
+    ASSERT_TRUE(exists);
     ASSERT_EQ(1, test_ls_snaps(image, 1, "snap1", size));
     ASSERT_EQ(0, image.resize(size2));
-    ASSERT_FALSE(image.snap_exists("snap2"));
+    ASSERT_EQ(0, image.snap_exists2("snap2", &exists));
+    ASSERT_FALSE(exists);
     ASSERT_EQ(0, image.snap_create("snap2"));
-    ASSERT_TRUE(image.snap_exists("snap2"));
+    ASSERT_EQ(0, image.snap_exists2("snap2", &exists));
+    ASSERT_TRUE(exists);
     ASSERT_EQ(2, test_ls_snaps(image, 2, "snap1", size, "snap2", size2));
     ASSERT_EQ(0, image.snap_rename("snap1","snap1-rename"));
     ASSERT_EQ(2, test_ls_snaps(image, 2, "snap1-rename", size, "snap2", size2));
-    ASSERT_FALSE(image.snap_exists("snap1"));
-    ASSERT_TRUE(image.snap_exists("snap1-rename"));
+    ASSERT_EQ(0, image.snap_exists2("snap1", &exists));
+    ASSERT_FALSE(exists);
+    ASSERT_EQ(0, image.snap_exists2("snap1-rename", &exists));
+    ASSERT_TRUE(exists);
     ASSERT_EQ(0, image.snap_remove("snap1-rename"));
     ASSERT_EQ(0, image.snap_rename("snap2","snap2-rename"));
     ASSERT_EQ(1, test_ls_snaps(image, 1, "snap2-rename", size2));
-    ASSERT_FALSE(image.snap_exists("snap2"));
-    ASSERT_TRUE(image.snap_exists("snap2-rename"));
+    ASSERT_EQ(0, image.snap_exists2("snap2", &exists));
+    ASSERT_FALSE(exists);
+    ASSERT_EQ(0, image.snap_exists2("snap2-rename", &exists));
+    ASSERT_TRUE(exists);
     ASSERT_EQ(0, image.snap_remove("snap2-rename"));
     ASSERT_EQ(0, test_ls_snaps(image, 0));
   }
@@ -2909,8 +2925,11 @@ TEST_F(TestLibRBD, SnapCreateViaLockOwner)
   ASSERT_FALSE(lock_owner);
 
   ASSERT_EQ(0, image2.snap_create("snap1"));
-  ASSERT_TRUE(image1.snap_exists("snap1"));
-  ASSERT_TRUE(image2.snap_exists("snap1"));
+  bool exists;
+  ASSERT_EQ(0, image1.snap_exists2("snap1", &exists));
+  ASSERT_TRUE(exists);
+  ASSERT_EQ(0, image2.snap_exists2("snap1", &exists));
+  ASSERT_TRUE(exists);
 
   ASSERT_EQ(0, image1.is_exclusive_lock_owner(&lock_owner));
   ASSERT_TRUE(lock_owner);
@@ -2947,8 +2966,11 @@ TEST_F(TestLibRBD, SnapRemoveViaLockOwner)
   ASSERT_FALSE(lock_owner);
 
   ASSERT_EQ(0, image2.snap_remove("snap1"));
-  ASSERT_FALSE(image1.snap_exists("snap1"));
-  ASSERT_FALSE(image2.snap_exists("snap1"));
+  bool exists;
+  ASSERT_EQ(0, image1.snap_exists2("snap1", &exists));
+  ASSERT_FALSE(exists);
+  ASSERT_EQ(0, image2.snap_exists2("snap1", &exists));
+  ASSERT_FALSE(exists);
 
   ASSERT_EQ(0, image1.is_exclusive_lock_owner(&lock_owner));
   ASSERT_TRUE(lock_owner);
@@ -2985,8 +3007,11 @@ TEST_F(TestLibRBD, SnapRenameViaLockOwner)
   ASSERT_FALSE(lock_owner);
 
   ASSERT_EQ(0, image2.snap_rename("snap1", "snap1-rename"));
-  ASSERT_TRUE(image1.snap_exists("snap1-rename"));
-  ASSERT_TRUE(image2.snap_exists("snap1-rename"));
+  bool exists;
+  ASSERT_EQ(0, image1.snap_exists2("snap1-rename", &exists));
+  ASSERT_TRUE(exists);
+  ASSERT_EQ(0, image2.snap_exists2("snap1-rename", &exists));
+  ASSERT_TRUE(exists);
 
   ASSERT_EQ(0, image1.is_exclusive_lock_owner(&lock_owner));
   ASSERT_TRUE(lock_owner);
