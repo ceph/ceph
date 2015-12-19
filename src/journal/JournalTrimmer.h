@@ -22,7 +22,7 @@ public:
                  const JournalMetadataPtr &journal_metadata);
   ~JournalTrimmer();
 
-  int remove_objects();
+  int remove_objects(bool force);
   void committed(uint64_t commit_tid);
 
 private:

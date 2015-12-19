@@ -2870,9 +2870,7 @@ def get_journal_osd_uuid(path):
         out = _check_output(
             args=[
                 'ceph-osd',
-                '-i', '0',   # this is ignored
-                '--get-journal-uuid',
-                '--osd-journal',
+                '--get-device-fsid',
                 path,
                 ],
             close_fds=True,

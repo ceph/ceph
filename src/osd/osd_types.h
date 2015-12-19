@@ -63,6 +63,14 @@
 /// max recovery priority for MBackfillReserve
 #define OSD_RECOVERY_PRIORITY_MAX 255u
 
+/// base recovery priority for MBackfillReserve
+#define OSD_RECOVERY_PRIORITY_BASE 230u
+
+/// base backfill priority for MBackfillReserve (degraded PG)
+#define OSD_BACKFILL_DEGRADED_PRIORITY_BASE 200u
+
+/// base backfill priority for MBackfillReserve
+#define OSD_BACKFILL_PRIORITY_BASE 1u
 
 typedef hobject_t collection_list_handle_t;
 
@@ -347,6 +355,9 @@ struct pg_t {
   bool contains(int bits, const ghobject_t& oid) {
     return oid.match(bits, ps());
   }
+
+  hobject_t get_hobj_start() const;
+  hobject_t get_hobj_end(unsigned pg_num) const;
 
   void encode(bufferlist& bl) const {
     __u8 v = 1;
@@ -665,6 +676,10 @@ inline ostream& operator<<(ostream& out, const ceph_object_layout &ol)
 
 
 // compound rados version type
+/* WARNING: If add member in eversion_t, please make sure the encode/decode function
+ * work well. For little-endian machine, we should make sure there is no padding
+ * in 32-bit machine and 64-bit machine.
+ */
 class eversion_t {
 public:
   version_t version;
@@ -697,12 +712,20 @@ public:
   string get_key_name() const;
 
   void encode(bufferlist &bl) const {
+#if defined(CEPH_LITTLE_ENDIAN)
+    bl.append((char *)this, sizeof(version_t) + sizeof(epoch_t));
+#else
     ::encode(version, bl);
     ::encode(epoch, bl);
+#endif
   }
   void decode(bufferlist::iterator &bl) {
+#if defined(CEPH_LITTLE_ENDIAN)
+    bl.copy(sizeof(version_t) + sizeof(epoch_t), (char *)this);
+#else
     ::decode(version, bl);
     ::decode(epoch, bl);
+#endif
   }
   void decode(bufferlist& bl) {
     bufferlist::iterator p = bl.begin();
@@ -902,6 +925,8 @@ public:
     SCRUB_MIN_INTERVAL,
     SCRUB_MAX_INTERVAL,
     DEEP_SCRUB_INTERVAL,
+    RECOVERY_PRIORITY,
+    RECOVERY_OP_PRIORITY
   };
 
   enum type_t {
@@ -1425,6 +1450,11 @@ ostream& operator<<(ostream& out, const pg_pool_t& p);
  * a summation of object stats
  *
  * This is just a container for object stats; we don't know what for.
+ *
+ * If you add members in object_stat_sum_t, you should make sure there are
+ * not padding among these members.
+ * You should also modify the padding_check function.
+
  */
 struct object_stat_sum_t {
   /**************************************************************************
@@ -1437,22 +1467,22 @@ struct object_stat_sum_t {
   int64_t num_object_copies;  // num_objects * num_replicas
   int64_t num_objects_missing_on_primary;
   int64_t num_objects_degraded;
-  int64_t num_objects_misplaced;
   int64_t num_objects_unfound;
   int64_t num_rd;
   int64_t num_rd_kb;
   int64_t num_wr;
   int64_t num_wr_kb;
   int64_t num_scrub_errors;	// total deep and shallow scrub errors
-  int64_t num_shallow_scrub_errors;
-  int64_t num_deep_scrub_errors;
   int64_t num_objects_recovered;
   int64_t num_bytes_recovered;
   int64_t num_keys_recovered;
+  int64_t num_shallow_scrub_errors;
+  int64_t num_deep_scrub_errors;
   int64_t num_objects_dirty;
   int64_t num_whiteouts;
   int64_t num_objects_omap;
   int64_t num_objects_hit_set_archive;
+  int64_t num_objects_misplaced;
   int64_t num_bytes_hit_set_archive;
   int64_t num_flush;
   int64_t num_flush_kb;
@@ -1464,23 +1494,25 @@ struct object_stat_sum_t {
   int32_t num_evict_mode_some;  // 1 when in evict some mode, otherwise 0
   int32_t num_evict_mode_full;  // 1 when in evict full mode, otherwise 0
   int64_t num_objects_pinned;
+  int64_t num_objects_missing;
 
   object_stat_sum_t()
     : num_bytes(0),
       num_objects(0), num_object_clones(0), num_object_copies(0),
       num_objects_missing_on_primary(0), num_objects_degraded(0),
-      num_objects_misplaced(0),
       num_objects_unfound(0),
       num_rd(0), num_rd_kb(0), num_wr(0), num_wr_kb(0),
-      num_scrub_errors(0), num_shallow_scrub_errors(0),
-      num_deep_scrub_errors(0),
+      num_scrub_errors(0),
       num_objects_recovered(0),
       num_bytes_recovered(0),
       num_keys_recovered(0),
+      num_shallow_scrub_errors(0),
+      num_deep_scrub_errors(0),
       num_objects_dirty(0),
       num_whiteouts(0),
       num_objects_omap(0),
       num_objects_hit_set_archive(0),
+      num_objects_misplaced(0),
       num_bytes_hit_set_archive(0),
       num_flush(0),
       num_flush_kb(0),
@@ -1489,7 +1521,8 @@ struct object_stat_sum_t {
       num_promote(0),
       num_flush_mode_high(0), num_flush_mode_low(0),
       num_evict_mode_some(0), num_evict_mode_full(0),
-      num_objects_pinned(0)
+      num_objects_pinned(0),
+      num_objects_missing(0)
   {}
 
   void floor(int64_t f) {
@@ -1499,6 +1532,7 @@ struct object_stat_sum_t {
     FLOOR(num_object_clones);
     FLOOR(num_object_copies);
     FLOOR(num_objects_missing_on_primary);
+    FLOOR(num_objects_missing);
     FLOOR(num_objects_degraded);
     FLOOR(num_objects_misplaced);
     FLOOR(num_objects_unfound);
@@ -1544,6 +1578,7 @@ struct object_stat_sum_t {
     SPLIT(num_object_clones);
     SPLIT(num_object_copies);
     SPLIT(num_objects_missing_on_primary);
+    SPLIT(num_objects_missing);
     SPLIT(num_objects_degraded);
     SPLIT(num_objects_misplaced);
     SPLIT(num_objects_unfound);
@@ -1592,6 +1627,46 @@ struct object_stat_sum_t {
   void sub(const object_stat_sum_t& o);
 
   void dump(Formatter *f) const;
+  void padding_check() {
+    static_assert(
+      sizeof(object_stat_sum_t) ==
+        sizeof(num_bytes) +
+        sizeof(num_objects) +
+        sizeof(num_object_clones) +
+        sizeof(num_object_copies) +
+        sizeof(num_objects_missing_on_primary) +
+        sizeof(num_objects_degraded) +
+        sizeof(num_objects_unfound) +
+        sizeof(num_rd) +
+        sizeof(num_rd_kb) +
+        sizeof(num_wr) +
+        sizeof(num_wr_kb) +
+        sizeof(num_scrub_errors) +
+        sizeof(num_objects_recovered) +
+        sizeof(num_bytes_recovered) +
+        sizeof(num_keys_recovered) +
+        sizeof(num_shallow_scrub_errors) +
+        sizeof(num_deep_scrub_errors) +
+        sizeof(num_objects_dirty) +
+        sizeof(num_whiteouts) +
+        sizeof(num_objects_omap) +
+        sizeof(num_objects_hit_set_archive) +
+        sizeof(num_objects_misplaced) +
+        sizeof(num_bytes_hit_set_archive) +
+        sizeof(num_flush) +
+        sizeof(num_flush_kb) +
+        sizeof(num_evict) +
+        sizeof(num_evict_kb) +
+        sizeof(num_promote) +
+        sizeof(num_flush_mode_high) +
+        sizeof(num_flush_mode_low) +
+        sizeof(num_evict_mode_some) +
+        sizeof(num_evict_mode_full) +
+        sizeof(num_objects_pinned) +
+        sizeof(num_objects_missing)
+      ,
+      "object_stat_sum_t have padding");
+  }
   void encode(bufferlist& bl) const;
   void decode(bufferlist::iterator& bl);
   static void generate_test_instances(list<object_stat_sum_t*>& o);

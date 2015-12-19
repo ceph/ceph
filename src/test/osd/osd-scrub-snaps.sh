@@ -92,8 +92,7 @@ function TEST_scrub_snaps() {
     rados -p $poolname rm obj4
     rados -p $poolname rm obj2
 
-    kill_daemons $dir KILL osd || return 1
-    sleep 5
+    kill_daemons $dir TERM osd || return 1
 
     # Don't need to ceph_objectstore_tool function because osd stopped
 
@@ -151,7 +150,10 @@ function TEST_scrub_snaps() {
     wait_for_clean || return 1
 
     local pgid="${poolid}.0"
-    pg_scrub "$pgid" || return 1
+    if ! pg_scrub "$pgid" ; then
+        cat $dir/osd.0.log
+        return 1
+    fi
     grep 'log_channel' $dir/osd.0.log
 
     for i in `seq 1 7`

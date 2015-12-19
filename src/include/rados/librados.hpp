@@ -151,6 +151,29 @@ namespace librados
     std::pair<std::string, std::string> cur_obj;
   };
 
+  class CEPH_RADOS_API ObjectCursor
+  {
+    public:
+    ObjectCursor();
+    ObjectCursor(const ObjectCursor &rhs);
+    ~ObjectCursor();
+    bool operator<(const ObjectCursor &rhs);
+    void set(rados_object_list_cursor c);
+
+    friend class IoCtx;
+
+    protected:
+    rados_object_list_cursor c_cursor;
+  };
+
+  class CEPH_RADOS_API ObjectItem
+  {
+    public:
+    std::string oid;
+    std::string nspace;
+    std::string locator;
+  };
+
   /// DEPRECATED; do not use
   class CEPH_RADOS_API WatchCtx {
   public:
@@ -679,6 +702,7 @@ namespace librados
                    size_t len);
     int read(const std::string& oid, bufferlist& bl, size_t len, uint64_t off);
     int remove(const std::string& oid);
+    int remove(const std::string& oid, int flags);
     int trunc(const std::string& oid, uint64_t size);
     int mapext(const std::string& o, uint64_t off, size_t len, std::map<uint64_t,uint64_t>& m);
     int sparse_read(const std::string& o, std::map<uint64_t,uint64_t>& m, bufferlist& bl, size_t len, uint64_t off);
@@ -802,6 +826,21 @@ namespace librados
     ObjectIterator objects_begin(uint32_t start_hash_position) __attribute__ ((deprecated));
     /// Iterator indicating the end of a pool
     const ObjectIterator& objects_end() const __attribute__ ((deprecated));
+
+    ObjectCursor object_list_begin();
+    ObjectCursor object_list_end();
+    bool object_list_is_end(const ObjectCursor &oc);
+    int object_list(const ObjectCursor &start, const ObjectCursor &finish,
+                    const size_t result_count,
+                    std::vector<ObjectItem> *result,
+                    ObjectCursor *next);
+    void object_list_slice(
+        const ObjectCursor start,
+        const ObjectCursor finish,
+        const size_t n,
+        const size_t m,
+        ObjectCursor *split_start,
+        ObjectCursor *split_finish);
 
     /**
      * List available hit set objects

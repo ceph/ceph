@@ -5,7 +5,7 @@
 #define CEPH_LIBRBD_AIO_IMAGE_REQUEST_H
 
 #include "include/int_types.h"
-#include "include/buffer.h"
+#include "include/buffer_fwd.h"
 #include "common/snap_types.h"
 #include "osd/osd_types.h"
 #include "librbd/AioCompletion.h"
@@ -40,6 +40,7 @@ public:
   }
 
   void send();
+  void fail(int r);
 
 protected:
   typedef std::list<AioObjectRequest *> AioObjectRequests;
@@ -108,6 +109,9 @@ protected:
 
   virtual void send_request();
 
+  virtual uint32_t get_cache_request_count(bool journaling) const {
+    return 0;
+  }
   virtual void send_cache_requests(const ObjectExtents &object_extents,
                                    uint64_t journal_tid) = 0;
 
@@ -177,6 +181,7 @@ protected:
     return "aio_discard";
   }
 
+  virtual uint32_t get_cache_request_count(bool journaling) const override;
   virtual void send_cache_requests(const ObjectExtents &object_extents,
                                    uint64_t journal_tid);
 

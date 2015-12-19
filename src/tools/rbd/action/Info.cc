@@ -171,6 +171,14 @@ static int do_show_info(const char *imgname, librbd::Image& image,
     }
   }
 
+  if (features & RBD_FEATURE_JOURNALING) {
+    if (f) {
+      f->dump_string("journal", utils::image_id(image));
+    } else {
+      std::cout << "\tjournal: " << utils::image_id(image) << std::endl;
+    }
+  }
+
   if (f) {
     f->close_section();
     f->flush(std::cout);

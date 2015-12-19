@@ -14,7 +14,7 @@
 #include <string>
 #include <map>
 
-#include "include/buffer.h"
+#include "include/buffer_fwd.h"
 
 namespace ceph {
 
@@ -41,12 +41,7 @@ namespace ceph {
     virtual ~Formatter();
 
     virtual void flush(std::ostream& os) = 0;
-    void flush(bufferlist &bl)
-    {
-      std::stringstream os;
-      flush(os);
-      bl.append(os.str());
-    }
+    void flush(bufferlist &bl);
     virtual void reset() = 0;
 
     virtual void open_array_section(const char *name) = 0;
@@ -133,7 +128,7 @@ namespace ceph {
   class XMLFormatter : public Formatter {
   public:
     static const char *XML_1_DTD;
-    XMLFormatter(bool pretty = false);
+    XMLFormatter(bool pretty = false, bool lowercased_underscored = false);
 
     void flush(std::ostream& os);
     void reset();
@@ -165,6 +160,7 @@ namespace ceph {
     std::stringstream m_ss, m_pending_string;
     std::deque<std::string> m_sections;
     bool m_pretty;
+    bool m_lowercased_underscored;
     std::string m_pending_string_name;
   };
 

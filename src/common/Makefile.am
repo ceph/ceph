@@ -68,7 +68,10 @@ libcommon_internal_la_SOURCES = \
 	common/Readahead.cc \
 	common/Cycles.cc \
 	common/ContextCompletion.cc \
-	common/TracepointProvider.cc
+	common/TracepointProvider.cc \
+	common/PluginRegistry.cc
+
+common/PluginRegistry.cc: ./ceph_ver.h
 
 if ENABLE_SERVER
 libcommon_internal_la_SOURCES += \
@@ -81,7 +84,8 @@ endif
 
 if LINUX
 libcommon_internal_la_SOURCES += \
-	common/linux_version.c 
+	common/linux_version.c \
+	common/blkdev.cc
 endif
 
 if SOLARIS
@@ -98,13 +102,6 @@ if FREEBSD
 libcommon_internal_la_SOURCES += \
        common/freebsd_version.c \
        common/blkdev.cc
-endif
-
-if WITH_RBD
-if LINUX
-libcommon_internal_la_SOURCES += \
-	common/blkdev.cc
-endif
 endif
 
 if ENABLE_XIO
@@ -266,7 +263,8 @@ noinst_HEADERS += \
 	common/SubProcess.h \
 	common/valgrind.h \
 	common/TracepointProvider.h \
-	common/event_socket.h
+	common/event_socket.h \
+	common/PluginRegistry.h
 
 if ENABLE_XIO
 noinst_HEADERS += \

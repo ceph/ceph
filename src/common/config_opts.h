@@ -69,6 +69,8 @@ OPTION(mon_cluster_log_file_level, OPT_STR, "info")
 
 OPTION(enable_experimental_unrecoverable_data_corrupting_features, OPT_STR, "")
 
+OPTION(plugin_dir, OPT_STR, CEPH_PKGLIBDIR)
+
 OPTION(xio_trace_mempool, OPT_BOOL, false) // mempool allocation counters
 OPTION(xio_trace_msgcnt, OPT_BOOL, false) // incoming/outgoing msg counters
 OPTION(xio_trace_xcon, OPT_BOOL, false) // Xio message encode/decode trace
@@ -276,7 +278,8 @@ OPTION(mon_sync_debug_leader, OPT_INT, -1) // monitor to be used as the sync lea
 OPTION(mon_sync_debug_provider, OPT_INT, -1) // monitor to be used as the sync provider
 OPTION(mon_sync_debug_provider_fallback, OPT_INT, -1) // monitor to be used as fallback if sync provider fails
 OPTION(mon_inject_sync_get_chunk_delay, OPT_DOUBLE, 0)  // inject N second delay on each get_chunk request
-OPTION(mon_osd_min_down_reporters, OPT_INT, 2)   // number of OSDs who need to report a down OSD for it to count
+OPTION(mon_osd_min_down_reporters, OPT_INT, 2)   // number of OSDs from different subtrees who need to report a down OSD for it to count
+OPTION(mon_osd_reporter_subtree_level , OPT_STR, "host")   // in which level of parent bucket the reporters are counted
 OPTION(mon_osd_force_trim_to, OPT_INT, 0)   // force mon to trim maps to this point, regardless of min_last_epoch_clean (dangerous, use with care)
 OPTION(mon_mds_force_trim_to, OPT_INT, 0)   // force mon to trim mdsmaps to this point (dangerous, use with care)
 
@@ -900,6 +903,8 @@ OPTION(filestore_fsync_flushes_journal_data, OPT_BOOL, false)
 OPTION(filestore_fiemap, OPT_BOOL, false)     // (try to) use fiemap
 OPTION(filestore_seek_data_hole, OPT_BOOL, false)     // (try to) use seek_data/hole
 OPTION(filestore_fadvise, OPT_BOOL, true)
+//collect device partition information for management application to use
+OPTION(filestore_collect_device_partition_information, OPT_BOOL, true)
 
 // (try to) use extsize for alloc hint NOTE: extsize seems to trigger
 // data corruption in xfs prior to kernel 3.5.  filestore will
@@ -992,6 +997,7 @@ OPTION(rbd_request_timed_out_seconds, OPT_INT, 30) // number of seconds before m
 OPTION(rbd_skip_partial_discard, OPT_BOOL, false) // when trying to discard a range inside an object, set to true to skip zeroing the range.
 OPTION(rbd_enable_alloc_hint, OPT_BOOL, true) // when writing a object, it will issue a hint to osd backend to indicate the expected size object need
 OPTION(rbd_tracing, OPT_BOOL, false) // true if LTTng-UST tracepoints should be enabled
+OPTION(rbd_validate_pool, OPT_BOOL, true) // true if empty pools should be validated for RBD compatibility
 
 /*
  * The following options change the behavior for librbd's image creation methods that
@@ -1018,6 +1024,17 @@ OPTION(rbd_default_features, OPT_INT, 3) // only applies to format 2 images
 					 // +4 for exclusive lock, +8 for object map
 
 OPTION(rbd_default_map_options, OPT_STR, "") // default rbd map -o / --options
+
+/**
+ * RBD journal options.
+ */
+OPTION(rbd_journal_order, OPT_U32, 24) // bits to shift to compute journal object max size, between 12 and 64
+OPTION(rbd_journal_splay_width, OPT_U32, 4) // number of active journal objects
+OPTION(rbd_journal_commit_age, OPT_DOUBLE, 5) // commit time interval, seconds
+OPTION(rbd_journal_object_flush_interval, OPT_INT, 0) // maximum number of pending commits per journal object
+OPTION(rbd_journal_object_flush_bytes, OPT_INT, 0) // maximum number of pending bytes per journal object
+OPTION(rbd_journal_object_flush_age, OPT_DOUBLE, 0) // maximum age (in seconds) for pending commits
+OPTION(rbd_journal_pool, OPT_STR, "") // pool for journal objects
 
 OPTION(nss_db_path, OPT_STR, "") // path to nss db
 
@@ -1152,6 +1169,8 @@ OPTION(rgw_user_default_quota_max_size, OPT_LONGLONG, -1) // Max size of object 
 
 OPTION(rgw_multipart_min_part_size, OPT_INT, 5 * 1024 * 1024) // min size for each part (except for last one) in multipart upload
 OPTION(rgw_multipart_part_upload_limit, OPT_INT, 10000) // parts limit in multipart upload
+
+OPTION(rgw_max_slo_entries, OPT_INT, 1000) // default number of max entries in slo
 
 OPTION(rgw_olh_pending_timeout_sec, OPT_INT, 3600) // time until we retire a pending olh change
 OPTION(rgw_user_max_buckets, OPT_U32, 1000) // global option to set max buckets count for all user

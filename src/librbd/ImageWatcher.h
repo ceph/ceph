@@ -26,41 +26,11 @@ template <typename T> class TaskFinisher;
 
 class ImageWatcher {
 public:
-  enum LockUpdateState {
-    LOCK_UPDATE_STATE_NOT_SUPPORTED,
-    LOCK_UPDATE_STATE_LOCKED,
-    LOCK_UPDATE_STATE_RELEASING,
-    LOCK_UPDATE_STATE_UNLOCKED,
-    LOCK_UPDATE_STATE_NOTIFICATION
-  };
-
-  struct Listener {
-    virtual ~Listener() {}
-
-    virtual bool handle_requested_lock() = 0;
-    virtual void handle_lock_updated(LockUpdateState lock_update_state) = 0;
-  };
-
   ImageWatcher(ImageCtx& image_ctx);
   ~ImageWatcher();
 
-  bool is_lock_supported() const;
-  bool is_lock_supported(const RWLock &snap_lock) const;
-  bool is_lock_owner() const;
-
-  void register_listener(Listener *listener);
-  void unregister_listener(Listener *listener);
-
   int register_watch();
   int unregister_watch();
-
-  int refresh();
-
-  int try_lock();
-  void request_lock();
-  int release_lock();
-
-  void assert_header_locked(librados::ObjectWriteOperation *op);
 
   int notify_flatten(uint64_t request_id, ProgressContext &prog_ctx);
   int notify_resize(uint64_t request_id, uint64_t size,
@@ -75,18 +45,19 @@ public:
                                 ProgressContext &prog_ctx);
   int notify_rename(const std::string &image_name);
 
-  void notify_lock_state();
+  void notify_acquired_lock();
+  void notify_released_lock();
+  void notify_request_lock();
+
   static void notify_header_update(librados::IoCtx &io_ctx,
                                    const std::string &oid);
 
+  uint64_t get_watch_handle() const {
+    RWLock::RLocker watch_locker(m_watch_lock);
+    return m_watch_handle;
+  }
+
 private:
-
-  enum LockOwnerState {
-    LOCK_OWNER_STATE_NOT_LOCKED,
-    LOCK_OWNER_STATE_LOCKED,
-    LOCK_OWNER_STATE_RELEASING
-  };
-
   enum WatchState {
     WATCH_STATE_UNREGISTERED,
     WATCH_STATE_REGISTERED,
@@ -96,7 +67,6 @@ private:
   enum TaskCode {
     TASK_CODE_ACQUIRED_LOCK,
     TASK_CODE_REQUEST_LOCK,
-    TASK_CODE_RELEASING_LOCK,
     TASK_CODE_RELEASED_LOCK,
     TASK_CODE_CANCEL_ASYNC_REQUESTS,
     TASK_CODE_REREGISTER_WATCH,
@@ -104,7 +74,6 @@ private:
     TASK_CODE_ASYNC_PROGRESS
   };
 
-  typedef std::list<Listener *> Listeners;
   typedef std::pair<Context *, ProgressContext *> AsyncRequest;
 
   class Task {
@@ -200,6 +169,23 @@ private:
     virtual void finish(int r);
   };
 
+  struct C_ProcessPayload : public Context {
+    ImageWatcher *image_watcher;
+    uint64_t notify_id;
+    uint64_t handle;
+    watch_notify::Payload payload;
+
+    C_ProcessPayload(ImageWatcher *image_watcher_, uint64_t notify_id_,
+                     uint64_t handle_, const watch_notify::Payload &payload)
+      : image_watcher(image_watcher_), notify_id(notify_id_), handle(handle_),
+        payload(payload) {
+    }
+
+    virtual void finish(int r) override {
+      image_watcher->process_payload(notify_id, handle, payload, r);
+    }
+  };
+
   struct HandlePayloadVisitor : public boost::static_visitor<void> {
     ImageWatcher *image_watcher;
     uint64_t notify_id;
@@ -223,20 +209,10 @@ private:
 
   ImageCtx &m_image_ctx;
 
-  RWLock m_watch_lock;
+  mutable RWLock m_watch_lock;
   WatchCtx m_watch_ctx;
   uint64_t m_watch_handle;
   WatchState m_watch_state;
-
-  Mutex m_refresh_lock;
-  bool m_lock_supported;
-
-  LockOwnerState m_lock_owner_state;
-
-  Mutex m_listeners_lock;
-  Cond m_listeners_cond;
-  Listeners m_listeners;
-  bool m_listeners_in_use;
 
   TaskFinisher<Task> *m_task_finisher;
 
@@ -247,27 +223,13 @@ private:
   Mutex m_owner_client_id_lock;
   watch_notify::ClientId m_owner_client_id;
 
-  std::string encode_lock_cookie() const;
-  static bool decode_lock_cookie(const std::string &cookie, uint64_t *handle);
-
-  int get_lock_owner_info(entity_name_t *locker, std::string *cookie,
-                          std::string *address, uint64_t *handle);
-  int lock();
-  int unlock();
-  bool try_request_lock();
-
   void schedule_cancel_async_requests();
   void cancel_async_requests();
 
   void set_owner_client_id(const watch_notify::ClientId &client_id);
   watch_notify::ClientId get_client_id();
 
-  void notify_acquired_lock();
-  void notify_release_lock();
-  void notify_released_lock();
-
   void schedule_request_lock(bool use_timer, int timer_delay = -1);
-  void notify_request_lock();
 
   int notify_lock_owner(bufferlist &bl);
 
@@ -320,14 +282,14 @@ private:
                       C_NotifyAck *ctx);
   bool handle_payload(const watch_notify::UnknownPayload& payload,
                       C_NotifyAck *ctx);
+  void process_payload(uint64_t notify_id, uint64_t handle,
+                       const watch_notify::Payload &payload, int r);
 
   void handle_notify(uint64_t notify_id, uint64_t handle, bufferlist &bl);
   void handle_error(uint64_t cookie, int err);
   void acknowledge_notify(uint64_t notify_id, uint64_t handle, bufferlist &out);
 
   void reregister_watch();
-
-  void notify_listeners_updated_lock(LockUpdateState lock_update_state);
 };
 
 } // namespace librbd

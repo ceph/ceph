@@ -936,7 +936,10 @@ void ReplicatedPG::do_pg_op(OpRequestRef op)
 	}
 
 	hobject_t next;
-	hobject_t current = response.handle;
+	hobject_t lower_bound = response.handle;
+        dout(10) << " pgnls lower_bound " << lower_bound << dendl;
+
+	hobject_t current = lower_bound;
 	osr->flush();
 	int r = pgbackend->objects_list_partial(
 	  current,
@@ -984,6 +987,9 @@ void ReplicatedPG::do_pg_op(OpRequestRef op)
 	    assert(!lcand.is_max());
 	    ++ls_iter;
 	  }
+
+          dout(10) << " pgnls candidate 0x" << std::hex << candidate.get_hash()
+            << " vs lower bound 0x" << lower_bound.get_hash() << dendl;
 
 	  if (cmp(candidate, next, get_sort_bitwise()) >= 0) {
 	    break;
@@ -1036,18 +1042,37 @@ void ReplicatedPG::do_pg_op(OpRequestRef op)
 	  if (filter && !pgls_filter(filter, candidate, filter_out))
 	    continue;
 
+          dout(20) << "pgnls item 0x" << std::hex
+            << candidate.get_hash()
+            << ", rev 0x" << hobject_t::_reverse_bits(candidate.get_hash())
+            << std::dec << " "
+            << candidate.oid.name << dendl;
+
 	  librados::ListObjectImpl item;
 	  item.nspace = candidate.get_namespace();
 	  item.oid = candidate.oid.name;
 	  item.locator = candidate.get_key();
 	  response.entries.push_back(item);
 	}
+
 	if (next.is_max() &&
 	    missing_iter == pg_log.get_missing().missing.end() &&
 	    ls_iter == sentries.end()) {
 	  result = 1;
-	}
-	response.handle = next;
+
+	  if (get_osdmap()->test_flag(CEPH_OSDMAP_SORTBITWISE)) {
+	    // Set response.handle to the start of the next PG
+	    // according to the object sort order.  Only do this if
+	    // the cluster is in bitwise mode; with legacy nibblewise
+	    // sort PGs don't always cover contiguous ranges of the
+	    // hash order.
+	    response.handle = info.pgid.pgid.get_hobj_end(
+	      pool.info.get_pg_num());
+	  }
+	} else {
+          response.handle = next;
+        }
+        dout(10) << "pgls handle=" << response.handle << dendl;
 	::encode(response, osd_op.outdata);
 	if (filter)
 	  ::encode(filter_out, osd_op.outdata);
@@ -3127,7 +3152,7 @@ void ReplicatedPG::do_backfill(OpRequestRef op)
 	get_osdmap()->get_epoch(),
 	m->query_epoch,
 	spg_t(info.pgid.pgid, primary.shard));
-      reply->set_priority(cct->_conf->osd_recovery_op_priority);
+      reply->set_priority(get_recovery_op_priority());
       osd->send_message_osd_cluster(reply, m->get_connection());
       queue_peering_event(
 	CephPeeringEvtRef(
@@ -10199,7 +10224,7 @@ int ReplicatedPG::recover_primary(int max, ThreadPool::TPHandle &handle)
 	++skipped;
       } else {
 	int r = recover_missing(
-	  soid, need, cct->_conf->osd_recovery_op_priority, h);
+	  soid, need, get_recovery_op_priority(), h);
 	switch (r) {
 	case PULL_YES:
 	  ++started;
@@ -10222,7 +10247,7 @@ int ReplicatedPG::recover_primary(int max, ThreadPool::TPHandle &handle)
       pg_log.set_last_requested(v);
   }
  
-  pgbackend->run_recovery_op(h, cct->_conf->osd_recovery_op_priority);
+  pgbackend->run_recovery_op(h, get_recovery_op_priority());
   return started;
 }
 
@@ -10364,7 +10389,7 @@ int ReplicatedPG::recover_replicas(int max, ThreadPool::TPHandle &handle)
     }
   }
 
-  pgbackend->run_recovery_op(h, cct->_conf->osd_recovery_op_priority);
+  pgbackend->run_recovery_op(h, get_recovery_op_priority());
   return started;
 }
 
@@ -10709,7 +10734,7 @@ int ReplicatedPG::recover_backfill(
     prep_backfill_object_push(to_push[i].get<0>(), to_push[i].get<1>(),
 	    to_push[i].get<2>(), to_push[i].get<3>(), h);
   }
-  pgbackend->run_recovery_op(h, cct->_conf->osd_recovery_op_priority);
+  pgbackend->run_recovery_op(h, get_recovery_op_priority());
 
   dout(5) << "backfill_pos is " << backfill_pos << dendl;
   for (set<hobject_t, hobject_t::Comparator>::iterator i = backfills_in_flight.begin();

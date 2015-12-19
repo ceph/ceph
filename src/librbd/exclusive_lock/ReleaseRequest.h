@@ -1,0 +1,81 @@
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
+// vim: ts=8 sw=2 smarttab
+
+#ifndef CEPH_LIBRBD_EXCLUSIVE_LOCK_RELEASE_REQUEST_H
+#define CEPH_LIBRBD_EXCLUSIVE_LOCK_RELEASE_REQUEST_H
+
+#include "include/int_types.h"
+#include "librbd/ImageCtx.h"
+#include <string>
+
+class Context;
+
+namespace librbd {
+
+class ImageCtx;
+class Journal;
+
+namespace exclusive_lock {
+
+template <typename ImageCtxT = ImageCtx>
+class ReleaseRequest {
+public:
+  static ReleaseRequest* create(ImageCtxT &image_ctx, const std::string &cookie,
+                                Context *on_finish);
+
+  void send();
+
+private:
+  /**
+   * @verbatim
+   *
+   * <start>
+   *    |
+   *    v
+   * CANCEL_OP_REQUESTS . . . . . . . . . . . .
+   *    |                                     .
+   *    v                                     .
+   * CLOSE_JOURNAL                            .
+   *    |                (journal disabled,   .
+   *    v                 object map enabled) .
+   * UNLOCK_OBJECT_MAP  < . . . . . . . . . . .
+   *    |                                     .
+   *    v               (object map disabled) .
+   * UNLOCK < . . . . . . . . . . . . . . . . .
+   *    |
+   *    v
+   * <finish>
+   *
+   * @endverbatim
+   */
+
+  ReleaseRequest(ImageCtxT &image_ctx, const std::string &cookie,
+                 Context *on_finish);
+
+  ImageCtxT &m_image_ctx;
+  std::string m_cookie;
+  Context *m_on_finish;
+
+  decltype(m_image_ctx.object_map) m_object_map;
+  decltype(m_image_ctx.journal) m_journal;
+
+  void send_cancel_op_requests();
+  Context *handle_cancel_op_requests(int *ret_val);
+
+  void send_close_journal();
+  Context *handle_close_journal(int *ret_val);
+
+  void send_unlock_object_map();
+  Context *handle_unlock_object_map(int *ret_val);
+
+  void send_unlock();
+  Context *handle_unlock(int *ret_val);
+
+};
+
+} // namespace exclusive_lock
+} // namespace librbd
+
+extern template class librbd::exclusive_lock::ReleaseRequest<librbd::ImageCtx>;
+
+#endif // CEPH_LIBRBD_EXCLUSIVE_LOCK_RELEASE_REQUEST_H

@@ -57,6 +57,7 @@ protected:
 
   virtual void finish() {
   }
+  using AsyncRequest<>::finish;
 
 private:
   State m_state;

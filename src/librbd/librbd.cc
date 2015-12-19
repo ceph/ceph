@@ -28,6 +28,7 @@
 #include "librbd/AioImageRequestWQ.h"
 #include "cls/rbd/cls_rbd_client.h"
 #include "librbd/ImageCtx.h"
+#include "librbd/ImageState.h"
 #include "librbd/internal.h"
 #include "librbd/LibrbdWriteback.h"
 
@@ -120,12 +121,13 @@ namespace librbd {
     tracepoint(librbd, open_image_enter, ictx, ictx->name.c_str(), ictx->id.c_str(), ictx->snap_name.c_str(), ictx->read_only);
 
     if (image.ctx != NULL) {
-      close_image(reinterpret_cast<ImageCtx*>(image.ctx));
+      reinterpret_cast<ImageCtx*>(image.ctx)->state->close();
       image.ctx = NULL;
     }
 
-    int r = librbd::open_image(ictx);
+    int r = ictx->state->open();
     if (r < 0) {
+      delete ictx;
       tracepoint(librbd, open_image_exit, r);
       return r;
     }
@@ -143,12 +145,13 @@ namespace librbd {
     tracepoint(librbd, open_image_enter, ictx, ictx->name.c_str(), ictx->id.c_str(), ictx->snap_name.c_str(), ictx->read_only);
 
     if (image.ctx != NULL) {
-      close_image(reinterpret_cast<ImageCtx*>(image.ctx));
+      reinterpret_cast<ImageCtx*>(image.ctx)->state->close();
       image.ctx = NULL;
     }
 
-    int r = librbd::open_image(ictx);
+    int r = ictx->state->open();
     if (r < 0) {
+      delete ictx;
       tracepoint(librbd, open_image_exit, r);
       return r;
     }
@@ -277,12 +280,45 @@ namespace librbd {
     return r;
   }
 
+  int RBD::mirror_is_enabled(IoCtx& io_ctx, bool *enabled) {
+    return librbd::mirror_is_enabled(io_ctx, enabled);
+  }
+
+  int RBD::mirror_set_enabled(IoCtx& io_ctx, bool enabled) {
+    return librbd::mirror_set_enabled(io_ctx, enabled);
+  }
+
+  int RBD::mirror_peer_add(IoCtx& io_ctx, const std::string &cluster_uuid,
+                           const std::string &cluster_name,
+                           const std::string &client_name) {
+    return librbd::mirror_peer_add(io_ctx, cluster_uuid, cluster_name,
+                                   client_name);
+  }
+
+  int RBD::mirror_peer_remove(IoCtx& io_ctx, const std::string &cluster_uuid) {
+    return librbd::mirror_peer_remove(io_ctx, cluster_uuid);
+  }
+
+  int RBD::mirror_peer_list(IoCtx& io_ctx, std::vector<mirror_peer_t> *peers) {
+    return librbd::mirror_peer_list(io_ctx, peers);
+  }
+
+  int RBD::mirror_peer_set_client(IoCtx& io_ctx,
+                                  const std::string &cluster_uuid,
+                                  const std::string &client_name) {
+    return librbd::mirror_peer_set_client(io_ctx, cluster_uuid, client_name);
+  }
+
+  int RBD::mirror_peer_set_cluster(IoCtx& io_ctx,
+                                   const std::string &cluster_uuid,
+                                   const std::string &cluster_name) {
+    return librbd::mirror_peer_set_cluster(io_ctx, cluster_uuid, cluster_name);
+  }
+
   RBD::AioCompletion::AioCompletion(void *cb_arg, callback_t complete_cb)
   {
-    librbd::AioCompletion *c = librbd::aio_create_completion(cb_arg,
-							     complete_cb);
-    pc = (void *)c;
-    c->rbd_comp = this;
+    pc = reinterpret_cast<void*>(librbd::AioCompletion::create(
+      cb_arg, complete_cb, this));
   }
 
   bool RBD::AioCompletion::is_complete()
@@ -389,8 +425,10 @@ namespace librbd {
     if (ctx) {
       ImageCtx *ictx = (ImageCtx *)ctx;
       tracepoint(librbd, close_image_enter, ictx, ictx->name.c_str(), ictx->id.c_str());
-      r = close_image(ictx);
+
+      r = ictx->state->close();
       ctx = NULL;
+
       tracepoint(librbd, close_image_exit, r);
     }
     return r;
@@ -845,7 +883,7 @@ namespace librbd {
     ImageCtx *ictx = (ImageCtx *)ctx;
     tracepoint(librbd, diff_iterate_enter, ictx, ictx->name.c_str(),
                ictx->snap_name.c_str(), ictx->read_only, fromsnapname, ofs, len,
-               true, true);
+               true, false);
     int r = librbd::diff_iterate(ictx, fromsnapname, ofs, len, true, false, cb,
                                  arg);
     tracepoint(librbd, diff_iterate_exit, r);
@@ -1129,6 +1167,91 @@ extern "C" void rbd_image_options_clear(rbd_image_options_t opts)
 extern "C" int rbd_image_options_is_empty(rbd_image_options_t opts)
 {
   return librbd::image_options_is_empty(opts);
+}
+
+/* pool mirroring */
+extern "C" int rbd_mirror_is_enabled(rados_ioctx_t p, bool *enabled) {
+  librados::IoCtx io_ctx;
+  librados::IoCtx::from_rados_ioctx_t(p, io_ctx);
+  int r = librbd::mirror_is_enabled(io_ctx, enabled);
+  if (r < 0) {
+    return r;
+  }
+  return 0;
+}
+
+extern "C" int rbd_mirror_set_enabled(rados_ioctx_t p, bool enabled) {
+  librados::IoCtx io_ctx;
+  librados::IoCtx::from_rados_ioctx_t(p, io_ctx);
+  return librbd::mirror_set_enabled(io_ctx, enabled);
+}
+
+extern "C" int rbd_mirror_peer_add(rados_ioctx_t p,
+                                   const char *cluster_uuid,
+                                   const char *cluster_name,
+                                   const char *client_name) {
+  librados::IoCtx io_ctx;
+  librados::IoCtx::from_rados_ioctx_t(p, io_ctx);
+  return librbd::mirror_peer_add(io_ctx, cluster_uuid, cluster_name,
+                                 client_name);
+}
+
+extern "C" int rbd_mirror_peer_remove(rados_ioctx_t p,
+                                      const char *cluster_name) {
+  librados::IoCtx io_ctx;
+  librados::IoCtx::from_rados_ioctx_t(p, io_ctx);
+  int r = librbd::mirror_peer_remove(io_ctx, cluster_name);
+  return r;
+}
+
+extern "C" int rbd_mirror_peer_list(rados_ioctx_t p,
+                                    rbd_mirror_peer_t *peers, int *max_peers) {
+  librados::IoCtx io_ctx;
+  librados::IoCtx::from_rados_ioctx_t(p, io_ctx);
+
+  std::vector<librbd::mirror_peer_t> peer_vector;
+  int r = librbd::mirror_peer_list(io_ctx, &peer_vector);
+  if (r < 0) {
+    return r;
+  }
+
+  if (*max_peers < static_cast<int>(peer_vector.size())) {
+    *max_peers = static_cast<int>(peer_vector.size());
+    return -ERANGE;
+  }
+
+  for (int i = 0; i < static_cast<int>(peer_vector.size()); ++i) {
+    peers[i].cluster_uuid = strdup(peer_vector[i].cluster_uuid.c_str());
+    peers[i].cluster_name = strdup(peer_vector[i].cluster_name.c_str());
+    peers[i].client_name = strdup(peer_vector[i].client_name.c_str());
+  }
+  *max_peers = static_cast<int>(peer_vector.size());
+  return 0;
+}
+
+extern "C" void rbd_mirror_peer_list_cleanup(rbd_mirror_peer_t *peers,
+                                             int max_peers) {
+  for (int i = 0; i < max_peers; ++i) {
+    free(peers[i].cluster_uuid);
+    free(peers[i].cluster_name);
+    free(peers[i].client_name);
+  }
+}
+
+extern "C" int rbd_mirror_peer_set_client(rados_ioctx_t p,
+                                          const char *cluster_uuid,
+                                          const char *client_name) {
+  librados::IoCtx io_ctx;
+  librados::IoCtx::from_rados_ioctx_t(p, io_ctx);
+  return librbd::mirror_peer_set_client(io_ctx, cluster_uuid, client_name);
+}
+
+extern "C" int rbd_mirror_peer_set_cluster(rados_ioctx_t p,
+                                           const char *cluster_uuid,
+                                           const char *cluster_name) {
+  librados::IoCtx io_ctx;
+  librados::IoCtx::from_rados_ioctx_t(p, io_ctx);
+  return librbd::mirror_peer_set_cluster(io_ctx, cluster_uuid, cluster_name);
 }
 
 /* images */
@@ -1421,9 +1544,13 @@ extern "C" int rbd_open(rados_ioctx_t p, const char *name, rbd_image_t *image,
   librbd::ImageCtx *ictx = new librbd::ImageCtx(name, "", snap_name, io_ctx,
 						false);
   tracepoint(librbd, open_image_enter, ictx, ictx->name.c_str(), ictx->id.c_str(), ictx->snap_name.c_str(), ictx->read_only);
-  int r = librbd::open_image(ictx);
-  if (r >= 0)
+
+  int r = ictx->state->open();
+  if (r < 0) {
+    delete ictx;
+  } else {
     *image = (rbd_image_t)ictx;
+  }
   tracepoint(librbd, open_image_exit, r);
   return r;
 }
@@ -1437,18 +1564,24 @@ extern "C" int rbd_open_read_only(rados_ioctx_t p, const char *name,
   librbd::ImageCtx *ictx = new librbd::ImageCtx(name, "", snap_name, io_ctx,
 						true);
   tracepoint(librbd, open_image_enter, ictx, ictx->name.c_str(), ictx->id.c_str(), ictx->snap_name.c_str(), ictx->read_only);
-  int r = librbd::open_image(ictx);
-  if (r >= 0)
+
+  int r = ictx->state->open();
+  if (r < 0) {
+    delete ictx;
+  } else {
     *image = (rbd_image_t)ictx;
+  }
   tracepoint(librbd, open_image_exit, r);
   return r;
 }
 
 extern "C" int rbd_close(rbd_image_t image)
 {
-  librbd::ImageCtx *ctx = (librbd::ImageCtx *)image;
-  tracepoint(librbd, close_image_enter, ctx, ctx->name.c_str(), ctx->id.c_str());
-  int r = librbd::close_image(ctx);
+  librbd::ImageCtx *ictx = (librbd::ImageCtx *)image;
+  tracepoint(librbd, close_image_enter, ictx, ictx->name.c_str(), ictx->id.c_str());
+
+  int r = ictx->state->close();
+
   tracepoint(librbd, close_image_exit, r);
   return r;
 }
@@ -1996,7 +2129,7 @@ extern "C" int rbd_diff_iterate(rbd_image_t image,
   librbd::ImageCtx *ictx = (librbd::ImageCtx *)image;
   tracepoint(librbd, diff_iterate_enter, ictx, ictx->name.c_str(),
              ictx->snap_name.c_str(), ictx->read_only, fromsnapname, ofs, len,
-             true, true);
+             true, false);
   int r = librbd::diff_iterate(ictx, fromsnapname, ofs, len, true, false, cb,
                                arg);
   tracepoint(librbd, diff_iterate_exit, r);

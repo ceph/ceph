@@ -718,6 +718,10 @@ int KeyValueStore::mkfs()
     delete store;
   }
 
+  ret = write_meta("type", "keyvaluestore");
+  if (ret < 0)
+    goto close_fsid_fd;
+
   dout(1) << "mkfs done in " << basedir << dendl;
   ret = 0;
 
@@ -1189,8 +1193,10 @@ void KeyValueStore::_finish_op(OpSequencer *osr)
   if (o->onreadable_sync) {
     o->onreadable_sync->complete(0);
   }
-  op_finisher.queue(o->onreadable);
-  op_finisher.queue(to_queue);
+  if (o->onreadable)
+    op_finisher.queue(o->onreadable);
+  if (!to_queue.empty())
+    op_finisher.queue(to_queue);
   delete o;
 }
 

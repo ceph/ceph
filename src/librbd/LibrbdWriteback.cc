@@ -12,12 +12,14 @@
 #include "include/rbd/librbd.hpp"
 
 #include "librbd/AioObjectRequest.h"
+#include "librbd/ExclusiveLock.h"
 #include "librbd/ImageCtx.h"
 #include "librbd/internal.h"
 #include "librbd/LibrbdWriteback.h"
 #include "librbd/AioCompletion.h"
 #include "librbd/ObjectMap.h"
 #include "librbd/Journal.h"
+#include "librbd/Utils.h"
 
 #include "include/assert.h"
 
@@ -156,7 +158,7 @@ namespace librbd {
                      << "journal committed: sending write request" << dendl;
 
       RWLock::RLocker owner_locker(image_ctx->owner_lock);
-      assert(image_ctx->image_watcher->is_lock_owner());
+      assert(image_ctx->exclusive_lock->is_lock_owner());
 
       request_sent = true;
       AioObjectWrite *req = new AioObjectWrite(image_ctx, oid, object_no, off,
@@ -187,18 +189,21 @@ namespace librbd {
                                      &m_lock);
 
     {
-      if (!m_ictx->object_map.object_may_exist(object_no)) {
+      RWLock::RLocker snap_locker(m_ictx->snap_lock);
+      if (m_ictx->object_map != nullptr &&
+          !m_ictx->object_map->object_may_exist(object_no)) {
 	m_finisher->queue(req, -ENOENT);
 	return;
       }
     }
 
-    librados::AioCompletion *rados_completion =
-      librados::Rados::aio_create_completion(req, context_cb, NULL);
     librados::ObjectReadOperation op;
     op.read(off, len, pbl, NULL);
     op.set_op_flags2(op_flags);
     int flags = m_ictx->get_read_flags(snapid);
+
+    librados::AioCompletion *rados_completion =
+      util::create_rados_ack_callback(req);
     int r = m_ictx->data_ctx.aio_operate(oid.name, rados_completion, &op,
 					 flags, NULL);
     rados_completion->release();

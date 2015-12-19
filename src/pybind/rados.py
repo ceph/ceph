@@ -1667,6 +1667,37 @@ returned %d, but should return zero on success." % (self.name, ret))
             raise make_ex(ret, "Ioctx.read(%s): failed to read %s" % (self.name, key))
         return ctypes.string_at(ret_buf, ret)
 
+    @requires(('key', str_type), ('cls', str_type), ('method', str_type), ('data', bytes))
+    def execute(self, key, cls, method, data, length=8192):
+        """
+        Execute an OSD class method on an object.
+
+        :param key: name of the object
+        :type key: str
+        :param cls: name of the object class
+        :type cls: str
+        :param method: name of the method
+        :type method: str
+        :param data: input data
+        :type data: bytes
+        :param length: size of output buffer in bytes (default=8291)
+        :type length: int
+
+        :raises: :class:`TypeError`
+        :raises: :class:`Error`
+        :returns: (ret, method output)
+        """
+        self.require_ioctx_open()
+        ret_buf = create_string_buffer(length)
+        ret = run_in_thread(self.librados.rados_exec,
+                (self.io, cstr(key), cstr(cls), cstr(method),
+                    c_char_p(data), c_size_t(len(data)), ret_buf,
+                    c_size_t(length)))
+        if ret < 0:
+            raise make_ex(ret, "Ioctx.exec(%s): failed to exec %s:%s on %s" %
+                    (self.name, cls, method, key))
+        return ret, ctypes.string_at(ret_buf, min(ret, length))
+
     def get_stats(self):
         """
         Get pool usage statistics
@@ -1952,6 +1983,25 @@ returned %d, but should return zero on success." % (self.name, ret))
         if (ret != 0):
             raise make_ex(ret, "Failed to lookup snap %s" % snap_name)
         return Snap(self, snap_name, snap_id)
+
+    @requires(('oid', str_type), ('snap_name', str_type))
+    def snap_rollback(self, oid, snap_name):
+        """
+        Rollback an object to a snapshot
+
+        :param oid: the name of the object
+        :type oid: str
+        :param snap_name: the name of the snapshot
+        :type snap_name: str
+
+        :raises: :class:`TypeError`
+        :raises: :class:`Error`
+        """
+        self.require_ioctx_open()
+        ret = run_in_thread(self.librados.rados_ioctx_snap_rollback,
+                            (self.io, cstr(oid), cstr(snap_name)))
+        if (ret != 0):
+            raise make_ex(ret, "Failed to rollback %s" % oid)
 
     def get_last_version(self):
         """

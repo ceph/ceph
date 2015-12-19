@@ -32,6 +32,7 @@
 #include "include/str_list.h"
 #include "common/Mutex.h"
 #include "common/Cond.h"
+#include "common/PluginRegistry.h"
 
 #include <iostream>
 #include <pthread.h>
@@ -413,6 +414,7 @@ CephContext::CephContext(uint32_t module_type_, int init_flags_)
     _heartbeat_map(NULL),
     _crypto_none(NULL),
     _crypto_aes(NULL),
+    _plugin_registry(NULL),
     _lockdep_obs(NULL),
     _cct_perf(NULL)
 {
@@ -437,6 +439,8 @@ CephContext::CephContext(uint32_t module_type_, int init_flags_)
  
   _admin_socket = new AdminSocket(this);
   _heartbeat_map = new HeartbeatMap(this);
+
+  _plugin_registry = new PluginRegistry(this);
 
   _admin_hook = new CephContextHook(this);
   _admin_socket->register_command("perfcounters_dump", "perfcounters_dump", _admin_hook, "");
@@ -473,6 +477,8 @@ CephContext::~CephContext()
     delete _cct_perf;
     _cct_perf = NULL;
   }
+
+  delete _plugin_registry;
 
   _admin_socket->unregister_command("perfcounters_dump");
   _admin_socket->unregister_command("perf dump");

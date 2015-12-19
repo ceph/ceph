@@ -24,10 +24,18 @@ public:
       this, this, pool_id, pool_name, get_pool(pool_name));
   }
 
+  MOCK_METHOD2(blacklist_add, int(const std::string& client_address,
+                                  uint32_t expire_seconds));
+  int do_blacklist_add(const std::string& client_address,
+                       uint32_t expire_seconds) {
+    return TestMemRadosClient::blacklist_add(client_address, expire_seconds);
+  }
+
   void default_to_dispatch() {
     using namespace ::testing;
 
     ON_CALL(*this, create_ioctx(_, _)).WillByDefault(Invoke(this, &MockTestMemRadosClient::do_create_ioctx));
+    ON_CALL(*this, blacklist_add(_, _)).WillByDefault(Invoke(this, &MockTestMemRadosClient::do_blacklist_add));
   }
 };
 
