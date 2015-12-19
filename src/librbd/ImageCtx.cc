@@ -679,10 +679,8 @@ struct C_InvalidateCache : public Context {
 				uint64_t off, Context *onfinish,
 				int fadvise_flags, uint64_t journal_tid) {
     snap_lock.get_read();
-    ObjectCacher::OSDWrite *wr = object_cacher->prepare_write(snapc, bl,
-							      utime_t(),
-                                                              fadvise_flags,
-                                                              journal_tid);
+    ObjectCacher::OSDWrite *wr = object_cacher->prepare_write(
+      snapc, bl, ceph::real_time::min(), fadvise_flags, journal_tid);
     snap_lock.put_read();
     ObjectExtent extent(o, 0, off, len, 0);
     extent.oloc.pool = data_ctx.get_id();

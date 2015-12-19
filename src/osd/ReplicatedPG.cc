@@ -2586,12 +2586,11 @@ void ReplicatedPG::do_proxy_write(OpRequestRef op, const hobject_t& missing_oid)
 
   C_ProxyWrite_Commit *fin = new C_ProxyWrite_Commit(
       this, soid, get_last_peering_reset(), pwop);
-  ceph_tid_t tid = osd->objecter->mutate(soid.oid, oloc, obj_op,
-				         snapc, pwop->mtime,
-					 flags, NULL,
-					 new C_OnFinisher(fin, &osd->objecter_finisher),
-				         &pwop->user_version,
-					 pwop->reqid);
+  ceph_tid_t tid = osd->objecter->mutate(
+    soid.oid, oloc, obj_op, snapc,
+    ceph::real_clock::from_ceph_timespec(pwop->mtime),
+    flags, NULL, new C_OnFinisher(fin, &osd->objecter_finisher),
+    &pwop->user_version, pwop->reqid);
   fin->tid = tid;
   pwop->objecter_tid = tid;
   proxywrite_ops[tid] = pwop;
@@ -7789,7 +7788,7 @@ int ReplicatedPG::start_flush(
       base_oloc,
       o,
       dsnapc,
-      oi.mtime,
+      ceph::real_clock::from_ceph_timespec(oi.mtime),
       (CEPH_OSD_FLAG_IGNORE_OVERLAY |
        CEPH_OSD_FLAG_ORDERSNAP |
        CEPH_OSD_FLAG_ENFORCE_SNAPC),
@@ -7805,7 +7804,7 @@ int ReplicatedPG::start_flush(
       base_oloc,
       o,
       dsnapc2,
-      oi.mtime,
+      ceph::real_clock::from_ceph_timespec(oi.mtime),
       (CEPH_OSD_FLAG_IGNORE_OVERLAY |
        CEPH_OSD_FLAG_ORDERSNAP |
        CEPH_OSD_FLAG_ENFORCE_SNAPC),
@@ -7840,11 +7839,11 @@ int ReplicatedPG::start_flush(
   C_Flush *fin = new C_Flush(this, soid, get_last_peering_reset());
 
   ceph_tid_t tid = osd->objecter->mutate(
-    soid.oid, base_oloc, o, snapc, oi.mtime,
+    soid.oid, base_oloc, o, snapc,
+    ceph::real_clock::from_ceph_timespec(oi.mtime),
     CEPH_OSD_FLAG_IGNORE_OVERLAY | CEPH_OSD_FLAG_ENFORCE_SNAPC,
-    NULL,
-    new C_OnFinisher(fin,
-		     &osd->objecter_finisher));
+    NULL, new C_OnFinisher(fin,
+			   &osd->objecter_finisher));
   /* we're under the pg lock and fin->finish() is grabbing that */
   fin->tid = tid;
   fop->objecter_tid = tid;
