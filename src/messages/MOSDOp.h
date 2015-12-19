@@ -179,6 +179,9 @@ private:
 public:
   void set_version(eversion_t v) { reassert_version = v; }
   void set_mtime(utime_t mt) { mtime = mt; }
+  void set_mtime(ceph::real_time mt) {
+    mtime = ceph::real_clock::to_timespec(mt);
+  }
 
   // ops
   void add_simple_op(int o, uint64_t off, uint64_t len) {

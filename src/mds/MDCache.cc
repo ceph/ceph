@@ -6114,7 +6114,7 @@ void MDCache::_truncate_inode(CInode *in, LogSegment *ls)
   dout(10) << "_truncate_inode  snapc " << snapc << " on " << *in << dendl;
   filer.truncate(in->inode.ino, &in->inode.layout, *snapc,
 		 pi->truncate_size, pi->truncate_from-pi->truncate_size,
-		 pi->truncate_seq, utime_t(), 0,
+		 pi->truncate_seq, ceph::real_time::min(), 0,
 		 0, new C_OnFinisher(new C_IO_MDC_TruncateFinish(this, in,
 								       ls),
 					   mds->finisher));
@@ -11101,7 +11101,8 @@ void MDCache::_fragment_committed(dirfrag_t basedirfrag, list<CDir*>& resultfrag
       dout(10) << " removing orphan dirfrag " << oid << dendl;
       op.remove();
     }
-    mds->objecter->mutate(oid, oloc, op, nullsnapc, ceph_clock_now(g_ceph_context),
+    mds->objecter->mutate(oid, oloc, op, nullsnapc,
+			  ceph::real_clock::now(g_ceph_context),
 			  0, NULL, gather.new_sub());
   }
 

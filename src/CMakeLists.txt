@@ -217,6 +217,7 @@ set(libcommon_files
   common/escape.c
   common/io_priority.cc
   common/Clock.cc
+  common/ceph_time.cc
   common/Throttle.cc
   common/Timer.cc
   common/Finisher.cc
