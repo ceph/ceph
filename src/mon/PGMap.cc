@@ -1044,8 +1044,12 @@ void PGMap::recovery_summary(Formatter *f, list<string> *psl,
                              const pool_stat_t& delta_sum) const
 {
   if (delta_sum.stats.sum.num_objects_degraded && delta_sum.stats.sum.num_object_copies > 0) {
-    double pc = (double)delta_sum.stats.sum.num_objects_degraded /
-      (double)delta_sum.stats.sum.num_object_copies * (double)100.0;
+    double pc;
+    if (delta_sum.stats.sum.num_object_copies > 0)
+      pc = (double)delta_sum.stats.sum.num_objects_degraded /
+	(double)delta_sum.stats.sum.num_object_copies * (double)100.0;
+    else
+      pc = 0.0;
     char b[20];
     snprintf(b, sizeof(b), "%.3lf", pc);
     if (f) {
@@ -1060,8 +1064,12 @@ void PGMap::recovery_summary(Formatter *f, list<string> *psl,
     }
   }
   if (delta_sum.stats.sum.num_objects_misplaced && delta_sum.stats.sum.num_object_copies > 0) {
-    double pc = (double)delta_sum.stats.sum.num_objects_misplaced /
-      (double)delta_sum.stats.sum.num_object_copies * (double)100.0;
+    double pc;
+    if (delta_sum.stats.sum.num_object_copies > 0)
+      pc = (double)delta_sum.stats.sum.num_objects_misplaced /
+	(double)delta_sum.stats.sum.num_object_copies * (double)100.0;
+    else
+      pc = 0.0;
     char b[20];
     snprintf(b, sizeof(b), "%.3lf", pc);
     if (f) {
@@ -1076,8 +1084,12 @@ void PGMap::recovery_summary(Formatter *f, list<string> *psl,
     }
   }
   if (delta_sum.stats.sum.num_objects_unfound && delta_sum.stats.sum.num_objects) {
-    double pc = (double)delta_sum.stats.sum.num_objects_unfound /
-      (double)delta_sum.stats.sum.num_objects * (double)100.0;
+    double pc;
+    if (delta_sum.stats.sum.num_objects > 0)
+      pc = (double)delta_sum.stats.sum.num_objects_unfound /
+	(double)delta_sum.stats.sum.num_objects * (double)100.0;
+    else
+      pc = 0.0;
     char b[20];
     snprintf(b, sizeof(b), "%.3lf", pc);
     if (f) {
