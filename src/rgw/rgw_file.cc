@@ -402,6 +402,7 @@ extern "C" {
 int rgw_umount(struct rgw_fs *rgw_fs)
 {
   RGWLibFS *fs = static_cast<RGWLibFS*>(rgw_fs->fs_private);
+  fs->close();
   delete fs;
   return 0;
 }
@@ -922,6 +923,7 @@ void rgw_readv_rele(struct rgw_uio *uio, uint32_t flags)
 int rgw_readv(struct rgw_fs *rgw_fs,
 	      struct rgw_file_handle *fh, rgw_uio *uio)
 {
+#if 0 /* XXX */
   CephContext* cct = static_cast<CephContext*>(rgw_fs->rgw);
   RGWLibFS *fs = static_cast<RGWLibFS*>(rgw_fs->fs_private);
   RGWFileHandle* rgw_fh = get_rgwfh(fh);
@@ -930,7 +932,7 @@ int rgw_readv(struct rgw_fs *rgw_fs,
     return -EINVAL;
 
   int rc = 0;
-#if 0 /* XXX */
+
   buffer::list bl;
   RGWGetObjRequest req(cct, fs->get_user(), rgw_fh->bucket_name(),
 		      rgw_fh->object_name(), uio->uio_offset, uio->uio_resid,
@@ -964,8 +966,11 @@ int rgw_readv(struct rgw_fs *rgw_fs,
       ++ix;
     }
   }
-#endif
+
   return rc;
+#else
+  return 0;
+#endif
 }
 
 /*
