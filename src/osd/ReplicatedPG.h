@@ -21,6 +21,7 @@
 #include <boost/tuple/tuple.hpp>
 
 #include "include/assert.h" 
+#include "include/unordered_map.h"
 #include "common/cmdparse.h"
 
 #include "HitSet.h"
@@ -886,7 +887,7 @@ protected:
   // replica ops
   // [primary|tail]
   xlist<RepGather*> repop_queue;
-  map<ceph_tid_t, RepGather*> repop_map;
+  ceph::unordered_map<ceph_tid_t, RepGather*> repop_map;
 
   friend class C_OSD_RepopApplied;
   friend class C_OSD_RepopCommit;
