@@ -3179,17 +3179,20 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
 	 ++p) {
       total_bytes += p->second;
     }
+    
     ictx->md_lock.get_write();
     bool abort = ictx->readahead_disable_after_bytes != 0 &&
       ictx->total_bytes_read > ictx->readahead_disable_after_bytes;
+    if (abort) {
+      ictx->md_lock.put_write();
+      return;
+    }
     ictx->total_bytes_read += total_bytes;
     ictx->snap_lock.get_read();
     uint64_t image_size = ictx->get_image_size(ictx->snap_id);
     ictx->snap_lock.put_read();
     ictx->md_lock.put_write();
-    if (abort) {
-      return;
-    }
+    
     pair<uint64_t, uint64_t> readahead_extent = ictx->readahead.update(image_extents, image_size);
     uint64_t readahead_offset = readahead_extent.first;
     uint64_t readahead_length = readahead_extent.second;
