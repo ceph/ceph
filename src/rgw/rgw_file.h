@@ -526,7 +526,8 @@ namespace rgw {
 		 cct->_conf->rgw_nfs_fhcache_size),
 	fh_lru(cct->_conf->rgw_nfs_lru_lanes,
 	       cct->_conf->rgw_nfs_lru_lane_hiwat),
-	uid(_uid), key(_user_id, _key) {
+	uid(_uid), key(_user_id, _key),
+	flags(0) {
 
       /* no bucket may be named rgw_fs_inst-(.*) */
       fsid = RGWFileHandle::root_name + "rgw_fs_inst-" +
@@ -565,6 +566,9 @@ namespace rgw {
 	return fhr;
 
       RGWFileHandle::FHCache::Latch lat;
+      memset(&lat, 0, sizeof(lat)); // XXXX testing
+
+
       std::string obj_name{name};
       std::string key_name{parent->make_key_name(name)};
 
@@ -857,9 +861,10 @@ public:
     return 0;
   }
 
-  int operator()(const boost::string_ref& name,
-		const boost::string_ref& marker) {
+  int operator()(const boost::string_ref name,
+		const boost::string_ref marker) {
     /* hash offset of name in parent (short name) for NFS readdir cookie */
+    std::string sname{name};
     uint64_t off = XXH64(name.data(), name.length(), fh_key::seed);
     *offset = off;
     /* update traversal cache */
@@ -877,15 +882,15 @@ public:
     struct req_state* s = get_state();
     for (const auto& iter : objs) {
 
-      std::cout << "readdir objects prefix: " << prefix
-		<< " obj: " << iter.key.name << std::endl;
+      boost::string_ref sref {iter.key.name};
 
-      size_t last_del = iter.key.name.find_last_of('/');
-      boost::string_ref sref;
+      std::cout << "readdir objects prefix: " << prefix
+		<< " obj: " << sref << std::endl;
+
+      size_t last_del = sref.find_last_of('/');
       if (last_del != string::npos)
-	sref = boost::string_ref{iter.key.name.substr(last_del+1)};
-      else
-	sref = boost::string_ref{iter.key.name};
+	sref = sref.substr(last_del+1);
+
 
       /* if we find a trailing slash in a -listing- the parent is an
        * empty directory */
@@ -914,12 +919,11 @@ public:
       if (iter.first.back() == '/')
 	const_cast<std::string&>(iter.first).pop_back();
 
-      size_t last_del = iter.first.find_last_of('/');
-      boost::string_ref sref;
+      boost::string_ref sref{iter.first};
+
+      size_t last_del = sref.find_last_of('/');
       if (last_del != string::npos)
-	sref = boost::string_ref{iter.first.substr(last_del+1)};
-      else
-	sref = boost::string_ref{iter.first};
+	sref = sref.substr(last_del+1);
 
       lsubdout(cct, rgw, 15) << "RGWReaddirRequest "
 			     << __func__ << " "
