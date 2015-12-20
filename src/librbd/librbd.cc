@@ -816,7 +816,27 @@ namespace librbd {
   bool Image::snap_exists(const char *snap_name)
   {
     ImageCtx *ictx = (ImageCtx *)ctx;
-    return librbd::snap_exists(ictx, snap_name);
+    tracepoint(librbd, snap_exists_enter, ictx, ictx->name.c_str(), 
+      ictx->snap_name.c_str(), ictx->read_only, snap_name);
+    bool exists; 
+    int r = librbd::snap_exists(ictx, snap_name, &exists);
+    tracepoint(librbd, snap_exists_exit, r, exists);
+    if (r < 0) {
+      // lie to caller since we don't know the real answer yet.
+      return false;
+    }
+    return exists;
+  }
+
+  // A safer verion of snap_exists.
+  int Image::snap_exists2(const char *snap_name, bool *exists)
+  {
+    ImageCtx *ictx = (ImageCtx *)ctx;
+    tracepoint(librbd, snap_exists_enter, ictx, ictx->name.c_str(), 
+      ictx->snap_name.c_str(), ictx->read_only, snap_name);
+    int r = librbd::snap_exists(ictx, snap_name, exists);
+    tracepoint(librbd, snap_exists_exit, r, *exists);
+    return r;
   }
 
   int Image::snap_set(const char *snap_name)
