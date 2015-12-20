@@ -123,7 +123,7 @@ static int getxattr_len(const char *fn, const char *name)
   return total;
 }
 
-int chain_getxattr(const char *fn, const char *name, void *val, size_t size)
+int chain_getxattr(const char *fn, const char *name, void *val, size_t size, int *orig_chunks)
 {
   int i = 0, pos = 0;
   char raw_name[CHAIN_XATTR_MAX_NAME_LEN * 2 + 16];
@@ -170,6 +170,9 @@ int chain_getxattr(const char *fn, const char *name, void *val, size_t size)
       }
     }
   }
+  if (orig_chunks && ret > 0) {
+    *orig_chunks = i;
+  }
   return ret;
 }
 
@@ -194,7 +197,7 @@ static int chain_fgetxattr_len(int fd, const char *name)
   return total;
 }
 
-int chain_fgetxattr(int fd, const char *name, void *val, size_t size)
+int chain_fgetxattr(int fd, const char *name, void *val, size_t size, int *orig_chunks)
 {
   int i = 0, pos = 0;
   char raw_name[CHAIN_XATTR_MAX_NAME_LEN * 2 + 16];
@@ -241,6 +244,9 @@ int chain_fgetxattr(int fd, const char *name, void *val, size_t size)
       }
     }
   }
+  if (orig_chunks && ret > 0) {
+    *orig_chunks = i;
+  }
   return ret;
 }
 
@@ -256,7 +262,7 @@ static int get_xattr_block_size(size_t size)
   return CHAIN_XATTR_MAX_BLOCK_LEN;
 }
 
-int chain_setxattr(const char *fn, const char *name, const void *val, size_t size, bool onechunk)
+int chain_setxattr(const char *fn, const char *name, const void *val, size_t size, int orig_chunks)
 {
   int i = 0, pos = 0;
   char raw_name[CHAIN_XATTR_MAX_NAME_LEN * 2 + 16];
@@ -278,21 +284,23 @@ int chain_setxattr(const char *fn, const char *name, const void *val, size_t siz
     i++;
   } while (size);
 
-  if (ret >= 0 && !onechunk) {
-    int r;
-    do {
-      get_raw_xattr_name(name, i, raw_name, sizeof(raw_name));
-      r = sys_removexattr(fn, raw_name);
-      if (r < 0 && r != -ENODATA)
-	ret = r;
-      i++;
-    } while (r != -ENODATA);
+  if (ret >= 0) {
+    if (orig_chunks <= 0 || orig_chunks > i) {
+      int r;
+      do {
+        get_raw_xattr_name(name, i, raw_name, sizeof(raw_name));
+        r = sys_removexattr(fn, raw_name);
+        if (r < 0 && r != -ENOATTR)
+          ret = r;
+        i++;
+      } while (r != -ENOATTR);
+    }
   }
   
   return ret;
 }
 
-int chain_fsetxattr(int fd, const char *name, const void *val, size_t size, bool onechunk)
+int chain_fsetxattr(int fd, const char *name, const void *val, size_t size, int orig_chunks)
 {
   int i = 0, pos = 0;
   char raw_name[CHAIN_XATTR_MAX_NAME_LEN * 2 + 16];
@@ -314,15 +322,17 @@ int chain_fsetxattr(int fd, const char *name, const void *val, size_t size, bool
     i++;
   } while (size);
 
-  if (ret >= 0 && !onechunk) {
-    int r;
-    do {
-      get_raw_xattr_name(name, i, raw_name, sizeof(raw_name));
-      r = sys_fremovexattr(fd, raw_name);
-      if (r < 0 && r != -ENODATA)
-	ret = r;
-      i++;
-    } while (r != -ENODATA);
+  if (ret >= 0) {
+    if (orig_chunks <= 0 || orig_chunks > i) {
+      int r;
+      do {
+        get_raw_xattr_name(name, i, raw_name, sizeof(raw_name));
+        r = sys_fremovexattr(fd, raw_name);
+        if (r < 0 && r != -ENOATTR)
+          ret = r;
+        i++;
+      } while (r != -ENOATTR);
+    }
   }
   
   return ret;

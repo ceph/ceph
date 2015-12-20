@@ -37,7 +37,7 @@ static int set_version(const char *path, uint32_t version) {
   bufferlist bl;
   ::encode(version, bl);
   return chain_setxattr(path, "user.cephos.collection_version", bl.c_str(), 
-		     bl.length(), true);
+		     bl.length(), 1);
 }
 
 static int get_version(const char *path, uint32_t *version) {
