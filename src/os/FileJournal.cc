@@ -389,7 +389,7 @@ int FileJournal::create()
 
   bp = prepare_header();
   if (TEMP_FAILURE_RETRY(::pwrite(fd, bp.c_str(), bp.length(), 0)) < 0) {
-    ret = errno;
+    ret = -errno;
     derr << "FileJournal::create : create write header error "
          << cpp_strerror(ret) << dendl;
     goto close_fd;
@@ -398,13 +398,14 @@ int FileJournal::create()
   // zero first little bit, too.
   ret = posix_memalign(&buf, block_size, block_size);
   if (ret) {
+    ret = -ret;
     derr << "FileJournal::create: failed to allocate " << block_size
 	 << " bytes of memory: " << cpp_strerror(ret) << dendl;
     goto close_fd;
   }
   memset(buf, 0, block_size);
   if (TEMP_FAILURE_RETRY(::pwrite(fd, buf, block_size, get_top())) < 0) {
-    ret = errno;
+    ret = -errno;
     derr << "FileJournal::create: error zeroing first " << block_size
 	 << " bytes " << cpp_strerror(ret) << dendl;
     goto free_buf;
@@ -427,10 +428,9 @@ free_buf:
   buf = 0;
 close_fd:
   if (TEMP_FAILURE_RETRY(::close(fd)) < 0) {
-    ret = errno;
+    ret = -errno;
     derr << "FileJournal::create: error closing fd: " << cpp_strerror(ret)
 	 << dendl;
-    goto done;
   }
 done:
   fd = -1;
