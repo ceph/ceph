@@ -538,7 +538,7 @@ rbdfs_create(const char *path, mode_t mode, struct fuse_file_info *fi)
 int rbdfs_rename(const char *path, const char *destname)
 {
     const char *srcname = NULL;
-    const char *extra[] = {" ", "@", "/"};
+    const char *extra[] = {"@", "/"};
     std::string image_dest_name(destname + 1);
     
     // check image dest name
