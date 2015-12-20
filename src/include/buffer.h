@@ -154,7 +154,7 @@ namespace buffer CEPH_BUFFER_API {
   raw* create_unshareable(unsigned len);
 
 #if defined(HAVE_XIO)
-  static raw* create_msg(unsigned len, char *buf, XioDispatchHook *m_hook);
+  raw* create_msg(unsigned len, char *buf, XioDispatchHook *m_hook);
 #endif
 
   /*
