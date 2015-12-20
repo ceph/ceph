@@ -889,7 +889,7 @@ public:
 
       size_t last_del = sref.find_last_of('/');
       if (last_del != string::npos)
-	sref = sref.substr(last_del+1);
+	sref.remove_prefix(last_del+1);
 
 
       /* if we find a trailing slash in a -listing- the parent is an
@@ -916,6 +916,9 @@ public:
 		<< " iter second: " << iter.second
 		<< std::endl;
 
+      /* it's safest to modify the element in place--a suffix-modifying
+       * string_ref operation is problematic since ULP rgw_file callers
+       * will ultimately need a c-string */
       if (iter.first.back() == '/')
 	const_cast<std::string&>(iter.first).pop_back();
 
@@ -923,7 +926,7 @@ public:
 
       size_t last_del = sref.find_last_of('/');
       if (last_del != string::npos)
-	sref = sref.substr(last_del+1);
+	sref.remove_prefix(last_del+1);
 
       lsubdout(cct, rgw, 15) << "RGWReaddirRequest "
 			     << __func__ << " "
