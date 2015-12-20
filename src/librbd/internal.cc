@@ -1157,7 +1157,7 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
       if (remove_r < 0) {
 	lderr(cct) << "Could not remove image from directory after "
 		   << "header creation failed: "
-		   << cpp_strerror(r) << dendl;
+		   << cpp_strerror(remove_r) << dendl;
       }
       return r;
     }
