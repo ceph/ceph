@@ -17,6 +17,7 @@
 #define CEPH_DISPATCHER_H
 
 #include "include/buffer_fwd.h"
+#include "include/assert.h"
 
 class Messenger;
 class Message;
