@@ -324,6 +324,7 @@ namespace cohort {
 	  if (csz) {
 	    p.csz = csz;
 	    p.cache = (T**) ::operator new(csz * sizeof(T*));
+	    memset(p.cache, 0, csz * sizeof(T*));
 	  }
 	  locks.push_back(&p.lock);
 	}
