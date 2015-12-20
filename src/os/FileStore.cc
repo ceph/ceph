@@ -4001,6 +4001,35 @@ int FileStore::_fgetattrs(int fd, map<string, pair<bufferptr, int>>& aset)
   return 0;
 }
 
+int FileStore::_fgetattrs_chunks(int fd, map<string, int>& aset)
+{
+  // get attr list
+  char names1[100];
+  int len = chain_flistxattr(fd, names1, sizeof(names1)-1, &aset);
+  char *names2 = 0;
+  if (len == -ERANGE) {
+    len = chain_flistxattr(fd, 0, 0);
+    if (len < 0) {
+      assert(!m_filestore_fail_eio || len != -EIO);
+      return len;
+    }
+    dout(10) << " -ERANGE, len is " << len << dendl;
+    names2 = new char[len+1];
+    len = chain_flistxattr(fd, names2, len, &aset);
+    dout(10) << " -ERANGE, got " << len << dendl;
+    if (len < 0) {
+      assert(!m_filestore_fail_eio || len != -EIO);
+      delete[] names2;
+      return len;
+    }
+  } else if (len < 0) {
+    assert(!m_filestore_fail_eio || len != -EIO);
+    return len;
+  }
+  delete[] names2;
+  return 0;
+}
+
 int FileStore::_fsetattr(int fd, const string& name, bufferptr& bp, int chunks)
 {
   char n[CHAIN_XATTR_MAX_NAME_LEN];
@@ -4191,7 +4220,7 @@ int FileStore::_setattrs(coll_t cid, const ghobject_t& oid, map<string,bufferptr
 {
   map<string, bufferlist> omap_set;
   set<string> omap_remove;
-  map<string, pair<bufferptr, int>> inline_set;
+  map<string, int> inline_set;
   FDRef fd;
   int spill_out = -1;
   bool incomplete_inline = false;
@@ -4208,7 +4237,7 @@ int FileStore::_setattrs(coll_t cid, const ghobject_t& oid, map<string,bufferptr
   else
     spill_out = 1;
 
-  r = _fgetattrs(**fd, inline_set);
+  r = _fgetattrs_chunks(**fd, inline_set);
   incomplete_inline = (r == -E2BIG);
   assert(!m_filestore_fail_eio || r != -EIO);
   dout(15) << "setattrs " << cid << "/" << oid
@@ -4245,12 +4274,12 @@ int FileStore::_setattrs(coll_t cid, const ghobject_t& oid, map<string,bufferptr
     }
     if (spill_out)
       omap_remove.insert(p->first);
-    map<string, pair<bufferptr, int>>::iterator iter_inline = inline_set.find(p->first);
-    if (iter_inline != inline_set.end() && iter_inline->second.second > 0) {
-      r = _fsetattr(**fd, p->first, p->second, iter_inline->second.second);
+    map<string, int>::iterator iter_inline = inline_set.find(p->first);
+    if (iter_inline != inline_set.end() && iter_inline->second > 0) {
+      r = _fsetattr(**fd, p->first, p->second, iter_inline->second);
     } else {
       // this is new attr, we do not know the number of chunk for this attr
-      inline_set.insert(make_pair(p->first, make_pair(p->second, -1)));
+      inline_set.insert(make_pair(p->first, -1));
       r = _fsetattr(**fd, p->first, p->second, -1);
     }
     if (r < 0)
@@ -4339,7 +4368,7 @@ int FileStore::_rmattrs(coll_t cid, const ghobject_t& oid,
 {
   dout(15) << "rmattrs " << cid << "/" << oid << dendl;
 
-  map<string, pair<bufferptr, int>> aset;
+  map<string, int> aset;
   FDRef fd;
   set<string> omap_attrs;
   Index index;
@@ -4356,9 +4385,9 @@ int FileStore::_rmattrs(coll_t cid, const ghobject_t& oid,
     spill_out = false;
   }
 
-  r = _fgetattrs(**fd, aset);
+  r = _fgetattrs_chunks(**fd, aset);
   if (r >= 0) {
-    for (map<string, pair<bufferptr, int>>::iterator p = aset.begin(); p != aset.end(); ++p) {
+    for (map<string, int>::iterator p = aset.begin(); p != aset.end(); ++p) {
       char n[CHAIN_XATTR_MAX_NAME_LEN];
       get_attrname(p->first.c_str(), n, CHAIN_XATTR_MAX_NAME_LEN);
       r = chain_fremovexattr(**fd, n);

@@ -5,8 +5,11 @@
 #define __CEPH_OSD_CHAIN_XATTR_H
 
 #include "common/xattr.h"
+#include <map>
 
 #include <errno.h>
+
+using namespace std;
 
 #if defined(__linux__)
 #include <linux/limits.h>
@@ -81,8 +84,8 @@ int chain_fgetxattr(int fd, const char *name, void *val, size_t size, int* orig_
 // orig_chunks < 0 means we do not know the number of chunks for this attr
 int chain_setxattr(const char *fn, const char *name, const void *val, size_t size, int orig_chunks = -1);
 int chain_fsetxattr(int fd, const char *name, const void *val, size_t size, int orig_chunks = -1);
-int chain_listxattr(const char *fn, char *names, size_t len);
-int chain_flistxattr(int fd, char *names, size_t len);
+int chain_listxattr(const char *fn, char *names, size_t len, map<string, int> *chunks = NULL);
+int chain_flistxattr(int fd, char *names, size_t len, map<string, int> *chunks = NULL);
 int chain_removexattr(const char *fn, const char *name);
 int chain_fremovexattr(int fd, const char *name);
 
