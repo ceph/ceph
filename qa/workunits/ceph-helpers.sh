@@ -118,7 +118,7 @@ function test_setup() {
 function teardown() {
     local dir=$1
     kill_daemons $dir KILL
-    if [ `uname` = Linux ] && [ $(stat -f -c '%T' .) == "btrfs" ]; then
+    if [ X`uname`X == X"Linux"X ] && [ $(stat -f -c '%T' .) == "btrfs" ]; then
         __teardown_btrfs $dir
     fi
     rm -fr $dir
