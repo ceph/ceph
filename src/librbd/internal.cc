@@ -2223,7 +2223,7 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
     return 0;
   }
 
-  bool snap_exists(ImageCtx *ictx, const char *snap_name)
+  int snap_exists(ImageCtx *ictx, const char *snap_name, bool *exists)
   {
     ldout(ictx->cct, 20) << "snap_exists " << ictx << " " << snap_name << dendl;
 
@@ -2232,7 +2232,8 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
       return r;
 
     RWLock::RLocker l(ictx->snap_lock);
-    return ictx->get_snap_id(snap_name) != CEPH_NOSNAP;
+    *exists = ictx->get_snap_id(snap_name) != CEPH_NOSNAP; 
+    return 0;
   }
 
   int snap_rollback(ImageCtx *ictx, const char *snap_name,
