@@ -380,23 +380,32 @@ int chain_fremovexattr(int fd, const char *name)
 
 int chain_listxattr(const char *fn, char *names, size_t len, map<string, int> *chunks) {
   int r;
+  size_t total_len = 0;
 
+  // char[512] is big for most case
+  char rawnames[512];
+  char *full_buf = rawnames;
   if (!len)
     return sys_listxattr(fn, names, len) * 2;
 
-  r = sys_listxattr(fn, 0, 0);
-  if (r < 0)
+  r = sys_listxattr(fn, full_buf, sizeof(rawnames));
+  if (r < 0 && r != -ERANGE)
     return r;
+  if (r == -ERANGE) { // the rawnames is too small to hold the result
+    r = sys_listxattr(fn, 0, 0);
+    if (r < 0)
+      return r;
 
-  size_t total_len = r * 2; // should be enough
-  char *full_buf = (char *)malloc(total_len);
-  if (!full_buf)
-    return -ENOMEM;
+    total_len = r * 2; // should be enough
+    full_buf = (char *)malloc(total_len);
+    if (!full_buf)
+      return -ENOMEM;
 
-  r = sys_listxattr(fn, full_buf, total_len);
-  if (r < 0) {
-    free(full_buf);
-    return r;
+    r = sys_listxattr(fn, full_buf, total_len);
+    if (r < 0) {
+      free(full_buf);
+      return r;
+    }
   }
 
   char *p = full_buf;
@@ -425,7 +434,8 @@ int chain_listxattr(const char *fn, char *names, size_t len, map<string, int> *c
   r = dest - names;
 
 done:
-  free(full_buf);
+  if (total_len)
+    free(full_buf);
   return r;
 }
 
@@ -435,22 +445,33 @@ int chain_flistxattr(int fd, char *names, size_t len, map<string, int> *chunks) 
   const char * end;
   char *dest;
   char *dest_end;
+  size_t total_len = 0;
+
+  // char[512] is big for most case
+  char rawnames[512];
+  char *full_buf = rawnames;
 
   if (!len)
     return sys_flistxattr(fd, names, len) * 2;
 
-  r = sys_flistxattr(fd, 0, 0);
-  if (r < 0)
+  r = sys_flistxattr(fd, full_buf, sizeof(rawnames));
+  if (r < 0 && r != -ERANGE)
     return r;
+  if (r == -ERANGE) { // the rawnames is too small to hold the result
+    r = sys_flistxattr(fd, 0, 0);
+    if (r < 0)
+      return r;
 
-  size_t total_len = r * 2; // should be enough
-  char *full_buf = (char *)malloc(total_len);
-  if (!full_buf)
-    return -ENOMEM;
+    total_len = r * 2; // should be enough
+    full_buf = (char *)malloc(total_len);
+    if (!full_buf)
+      return -ENOMEM;
 
-  r = sys_flistxattr(fd, full_buf, total_len);
-  if (r < 0)
-    goto done;
+    r = sys_flistxattr(fd, full_buf, total_len);
+    if (r < 0) {
+      goto done;
+    }
+  }
 
   p = full_buf;
   end = full_buf + r;
@@ -478,6 +499,7 @@ int chain_flistxattr(int fd, char *names, size_t len, map<string, int> *chunks) 
   r = dest - names;
 
 done:
-  free(full_buf);
+  if (total_len)
+    free(full_buf);
   return r;
 }
