@@ -596,6 +596,11 @@ public:
     uint64_t old_size,
     ObjectStore::Transaction *t);
 
+  void rollback_ec_overwrite(
+    const hobject_t &hoid,
+    version_t write_version,
+    ObjectStore::Transaction *t);
+
   bool scrub_supported() { return true; }
   bool auto_repair_supported() const { return true; }
 

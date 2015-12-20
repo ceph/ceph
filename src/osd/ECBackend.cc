@@ -2501,6 +2501,16 @@ void ECBackend::rollback_append(
       old_size));
 }
 
+void ECBackend::rollback_ec_overwrite(
+  const hobject_t &hoid,
+  version_t write_version,
+  ObjectStore::Transaction *t)
+{
+  t->remove(
+    coll,
+    ghobject_t(hoid, write_version, get_parent()->whoami_shard().shard));
+}
+
 void ECBackend::be_deep_scrub(
   const hobject_t &poid,
   uint32_t seed,

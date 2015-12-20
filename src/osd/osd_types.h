@@ -2362,6 +2362,7 @@ public:
     virtual void rmobject(version_t old_version) {}
     virtual void create() {}
     virtual void update_snaps(set<snapid_t> &old_snaps) {}
+    virtual void ec_overwrite(version_t write_version) {}
     virtual ~Visitor() {}
   };
   void visit(Visitor *visitor) const;
@@ -2371,7 +2372,8 @@ public:
     SETATTRS = 2,
     DELETE = 3,
     CREATE = 4,
-    UPDATE_SNAPS = 5
+    UPDATE_SNAPS = 5,
+    EC_OVERWRITE = 6
   };
   ObjectModDesc() : can_local_rollback(true), rollback_info_completed(false) {}
   void claim(ObjectModDesc &other) {
@@ -2445,6 +2447,14 @@ public:
     ENCODE_START(1, 1, bl);
     append_id(UPDATE_SNAPS);
     ::encode(old_snaps, bl);
+    ENCODE_FINISH(bl);
+  }
+  void ec_overwrite(version_t write_version) {
+    if (!can_local_rollback || rollback_info_completed)
+      return;
+    ENCODE_START(1, 1, bl);
+    append_id(EC_OVERWRITE);
+    ::encode(write_version, bl);
     ENCODE_FINISH(bl);
   }
 

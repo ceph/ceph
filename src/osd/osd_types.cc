@@ -3272,6 +3272,12 @@ void ObjectModDesc::visit(Visitor *visitor) const
 	visitor->update_snaps(snaps);
 	break;
       }
+      case EC_OVERWRITE: {
+        version_t write_version;
+        ::decode(write_version, bp);
+        visitor->ec_overwrite(write_version);
+        break;
+      }
       default:
 	assert(0 == "Invalid rollback code");
       }
