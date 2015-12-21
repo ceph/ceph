@@ -184,7 +184,7 @@ static int read_key(cls_method_context_t hctx, const string &key, T *out)
   int r = cls_cxx_map_get_val(hctx, key, &bl);
   if (r < 0) {
     if (r != -ENOENT) {
-      CLS_ERR("error reading omap key %s: %d", key.c_str(), r);
+      CLS_ERR("error reading omap key %s: %s", key.c_str(), cpp_strerror(r).c_str());
     }
     return r;
   }
@@ -515,7 +515,7 @@ int set_size(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
   ::encode(size, sizebl);
   r = cls_cxx_map_set_val(hctx, "size", &sizebl);
   if (r < 0) {
-    CLS_ERR("error writing snapshot metadata: %d", r);
+    CLS_ERR("error writing snapshot metadata: %s", cpp_strerror(r).c_str());
     return r;
   }
 
@@ -534,7 +534,7 @@ int set_size(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
       ::encode(parent, parentbl);
       r = cls_cxx_map_set_val(hctx, "parent", &parentbl);
       if (r < 0) {
-	CLS_ERR("error writing parent: %d", r);
+	CLS_ERR("error writing parent: %s", cpp_strerror(r).c_str());
 	return r;
       }
     }
@@ -672,7 +672,7 @@ int set_protection_status(cls_method_context_t hctx, bufferlist *in,
   ::encode(snap, snapshot_bl);
   r = cls_cxx_map_set_val(hctx, snapshot_key, &snapshot_bl);
   if (r < 0) {
-    CLS_ERR("error writing snapshot metadata: %d", r);
+    CLS_ERR("error writing snapshot metadata: %s", cpp_strerror(r).c_str());
     return r;
   }
 
@@ -782,14 +782,14 @@ int set_stripe_unit_count(cls_method_context_t hctx, bufferlist *in, bufferlist 
   ::encode(stripe_unit, bl);
   r = cls_cxx_map_set_val(hctx, "stripe_unit", &bl);
   if (r < 0) {
-    CLS_ERR("error writing stripe_unit metadata: %d", r);
+    CLS_ERR("error writing stripe_unit metadata: %s", cpp_strerror(r).c_str());
     return r;
   }
 
   ::encode(stripe_count, bl2);
   r = cls_cxx_map_set_val(hctx, "stripe_count", &bl2);
   if (r < 0) {
-    CLS_ERR("error writing stripe_count metadata: %d", r);
+    CLS_ERR("error writing stripe_count metadata: %s", cpp_strerror(r).c_str());
     return r;
   }
 
@@ -1048,7 +1048,7 @@ int set_parent(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
   ::encode(parent, parentbl);
   r = cls_cxx_map_set_val(hctx, "parent", &parentbl);
   if (r < 0) {
-    CLS_ERR("error writing parent: %d", r);
+    CLS_ERR("error writing parent: %s", cpp_strerror(r).c_str());
     return r;
   }
 
@@ -1132,7 +1132,7 @@ int remove_parent(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 
   r = cls_cxx_map_remove_key(hctx, "parent");
   if (r < 0) {
-    CLS_ERR("error removing parent: %d", r);
+    CLS_ERR("error removing parent: %s", cpp_strerror(r).c_str());
     return r;
   }
   return 0;
@@ -1227,7 +1227,7 @@ int add_child(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
   // get current child list for parent, if any
   r = read_key(hctx, key, &children);
   if ((r < 0) && (r != -ENOENT)) {
-    CLS_LOG(20, "add_child: omap read failed: %d", r);
+    CLS_LOG(20, "add_child: omap read failed: %s", cpp_strerror(r).c_str());
     return r;
   }
 
@@ -1243,7 +1243,7 @@ int add_child(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
   ::encode(children, childbl);
   r = cls_cxx_map_set_val(hctx, key, &childbl);
   if (r < 0)
-    CLS_LOG(20, "add_child: omap write failed: %d", r);
+    CLS_LOG(20, "add_child: omap write failed: %s", cpp_strerror(r).c_str());
   return r;
 }
 
@@ -1283,7 +1283,7 @@ int remove_child(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
   // is an error (how can we remove something that doesn't exist?)
   r = read_key(hctx, key, &children);
   if (r < 0) {
-    CLS_LOG(20, "remove_child: read omap failed: %d", r);
+    CLS_LOG(20, "remove_child: read omap failed: %s", cpp_strerror(r).c_str());
     return r;
   }
 
@@ -1298,14 +1298,14 @@ int remove_child(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
   if (children.empty()) {
     r = cls_cxx_map_remove_key(hctx, key);
     if (r < 0)
-      CLS_LOG(20, "remove_child: remove key failed: %d", r);
+      CLS_LOG(20, "remove_child: remove key failed: %s", cpp_strerror(r).c_str());
   } else {
     // write back shortened children list
     bufferlist childbl;
     ::encode(children, childbl);
     r = cls_cxx_map_set_val(hctx, key, &childbl);
     if (r < 0)
-      CLS_LOG(20, "remove_child: write omap failed: %d ", r);
+      CLS_LOG(20, "remove_child: write omap failed: %s", cpp_strerror(r).c_str());
   }
   return r;
 }
@@ -1342,7 +1342,7 @@ int get_children(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
   r = read_key(hctx, key, &children);
   if (r < 0) {
     if (r != -ENOENT)
-      CLS_LOG(20, "get_children: read omap failed: %d", r);
+      CLS_LOG(20, "get_children: read omap failed: %s", cpp_strerror(r).c_str());
     return r;
   }
   ::encode(children, *out);
@@ -1563,7 +1563,7 @@ int snapshot_add(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
   vals[snapshot_key] = snap_metabl;
   r = cls_cxx_map_set_vals(hctx, &vals);
   if (r < 0) {
-    CLS_ERR("error writing snapshot metadata: %d", r);
+    CLS_ERR("error writing snapshot metadata: %s", cpp_strerror(r).c_str());
     return r;
   }
 
@@ -1641,7 +1641,7 @@ int snapshot_rename(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 
   r = cls_cxx_map_set_val(hctx, src_snap_key, &snap_metabl);
   if (r < 0) {
-    CLS_ERR("error writing snapshot metadata: %d", r);
+    CLS_ERR("error writing snapshot metadata: %s", cpp_strerror(r).c_str());
     return r;
   }
 
@@ -1685,7 +1685,7 @@ int snapshot_remove(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 
   r = cls_cxx_map_remove_key(hctx, snapshot_key);
   if (r < 0) {
-    CLS_ERR("error writing snapshot metadata: %d", r);
+    CLS_ERR("error writing snapshot metadata: %s", cpp_strerror(r).c_str());
     return r;
   }
 
@@ -1753,7 +1753,7 @@ int get_id(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
   bufferlist read_bl;
   r = cls_cxx_read(hctx, 0, size, &read_bl);
   if (r < 0) {
-    CLS_ERR("get_id: could not read id: %d", r);
+    CLS_ERR("get_id: could not read id: %s", cpp_strerror(r).c_str());
     return r;
   }
 
@@ -1875,12 +1875,12 @@ static int dir_remove_image_helper(cls_method_context_t hctx,
   int r = read_key(hctx, name_key, &stored_id);
   if (r < 0) {
     if (r != -ENOENT)
-      CLS_ERR("error reading name to id mapping: %d", r);
+      CLS_ERR("error reading name to id mapping: %s", cpp_strerror(r).c_str());
     return r;
   }
   r = read_key(hctx, id_key, &stored_name);
   if (r < 0) {
-    CLS_ERR("error reading id to name mapping: %d", r);
+    CLS_ERR("error reading id to name mapping: %s", cpp_strerror(r).c_str());
     return r;
   }
 
@@ -1893,13 +1893,13 @@ static int dir_remove_image_helper(cls_method_context_t hctx,
 
   r = cls_cxx_map_remove_key(hctx, name_key);
   if (r < 0) {
-    CLS_ERR("error removing name: %d", r);
+    CLS_ERR("error removing name: %s", cpp_strerror(r).c_str());
     return r;
   }
 
   r = cls_cxx_map_remove_key(hctx, id_key);
   if (r < 0) {
-    CLS_ERR("error removing id: %d", r);
+    CLS_ERR("error removing id: %s", cpp_strerror(r).c_str());
     return r;
   }
 
@@ -1970,7 +1970,7 @@ int dir_get_id(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
   int r = read_key(hctx, dir_key_for_name(name), &id);
   if (r < 0) {
     if (r != -ENOENT)
-      CLS_ERR("error reading id for name '%s': %d", name.c_str(), r);
+      CLS_ERR("error reading id for name '%s': %s", name.c_str(), cpp_strerror(r).c_str());
     return r;
   }
   ::encode(id, *out);
@@ -2003,7 +2003,7 @@ int dir_get_name(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
   string name;
   int r = read_key(hctx, dir_key_for_id(id), &name);
   if (r < 0) {
-    CLS_ERR("error reading name for id '%s': %d", id.c_str(), r);
+    CLS_ERR("error reading name for id '%s': %s", id.c_str(), cpp_strerror(r).c_str());
     return r;
   }
   ::encode(name, *out);
@@ -2047,7 +2047,7 @@ int dir_list(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
     r = cls_cxx_map_get_vals(hctx, last_read, RBD_DIR_NAME_KEY_PREFIX,
 			     max_read, &vals);
     if (r < 0) {
-      CLS_ERR("error reading directory by name: %d", r);
+      CLS_ERR("error reading directory by name: %s", cpp_strerror(r).c_str());
       return r;
     }
 
@@ -2093,7 +2093,7 @@ int dir_add_image(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 {
   int r = cls_cxx_create(hctx, false);
   if (r < 0) {
-    CLS_ERR("could not create directory: error %d", r);
+    CLS_ERR("could not create directory: %s", cpp_strerror(r).c_str());
     return r;
   }
 
@@ -2552,7 +2552,7 @@ int metadata_set(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
   }
   int r = cls_cxx_map_set_vals(hctx, &raw_data);
   if (r < 0) {
-    CLS_ERR("error writing metadata: %d", r);
+    CLS_ERR("error writing metadata: %s", cpp_strerror(r).c_str());
     return r;
   }
 
@@ -2581,7 +2581,7 @@ int metadata_remove(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 
   int r = cls_cxx_map_remove_key(hctx, metadata_key_for_name(key));
   if (r < 0) {
-    CLS_ERR("error remove metadata: %d", r);
+    CLS_ERR("error remove metadata: %s", cpp_strerror(r).c_str());
     return r;
   }
 
@@ -2612,7 +2612,7 @@ int metadata_get(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 
   int r = cls_cxx_map_get_val(hctx, metadata_key_for_name(key), &value);
   if (r < 0) {
-    CLS_ERR("error get metadata: %d", r);
+    CLS_ERR("error get metadata: %s", cpp_strerror(r).c_str());
     return r;
   }
 
