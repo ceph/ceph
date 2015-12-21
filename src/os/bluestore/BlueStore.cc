@@ -1755,7 +1755,7 @@ int BlueStore::fsck()
 	}
 	// blocks
 	for (auto& b : o->onode.block_map) {
-	  if (used_blocks.contains(b.second.offset, b.second.length)) {
+	  if (used_blocks.intersects(b.second.offset, b.second.length)) {
 	    derr << " " << oid << " extent " << b.first << ": " << b.second
 		 << " already allocated" << dendl;
 	    ++errors;
@@ -1946,7 +1946,7 @@ int BlueStore::fsck()
     const map<uint64_t,uint64_t>& free = fm->get_freelist();
     for (map<uint64_t,uint64_t>::const_iterator p = free.begin();
 	 p != free.end(); ++p) {
-      if (used_blocks.contains(p->first, p->second)) {
+      if (used_blocks.intersects(p->first, p->second)) {
 	derr << __func__ << " free extent " << p->first << "~" << p->second
 	     << " intersects allocated blocks" << dendl;
 	++errors;
