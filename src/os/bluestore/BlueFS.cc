@@ -100,6 +100,29 @@ uint64_t BlueFS::get_free(unsigned id)
   return alloc[id]->get_free();
 }
 
+void BlueFS::get_usage(vector<pair<uint64_t,uint64_t>> *usage)
+{
+  Mutex::Locker l(lock);
+  usage->resize(bdev.size());
+  for (unsigned id = 0; id < bdev.size(); ++id) {
+    uint64_t total = 0;
+    interval_set<uint64_t>& p = block_all[id];
+    for (interval_set<uint64_t>::iterator q = p.begin(); q != p.end(); ++q) {
+      total += q.get_len();
+    }
+    (*usage)[id].first = alloc[id]->get_free();
+    (*usage)[id].second = total;
+    uint64_t used = (total - (*usage)[id].first) * 100 / total;
+    dout(10) << __func__ << " bdev " << id
+	     << " free " << (*usage)[id].first
+	     << " (" << pretty_si_t((*usage)[id].first) << "B)"
+	     << " / " << (*usage)[id].second
+	     << " (" << pretty_si_t((*usage)[id].second) << "B)"
+	     << ", used " << used << "%"
+	     << dendl;
+  }
+}
+
 int BlueFS::get_block_extents(unsigned id, interval_set<uint64_t> *extents)
 {
   Mutex::Locker l(lock);
