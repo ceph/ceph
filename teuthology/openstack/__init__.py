@@ -265,6 +265,7 @@ class OpenStack(object):
             disk_format = 'qcow2'
         misc.sh("glance image-create --property ownedby=teuthology " +
                 " --disk-format=" + disk_format + " --container-format=bare " +
+                " --visibility private" +
                 " --file " + image + " --name " + self.image_name(name))
 
     def image(self, os_type, os_version):
