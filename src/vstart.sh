@@ -324,7 +324,9 @@ fi
 if [ "$bluestore" -eq 1 ]; then
     COSDMEMSTORE='
 	osd objectstore = bluestore
-	bluestore fsck on mount = true'
+	bluestore fsck on mount = true
+	bluestore block db size = 67108864
+	bluestore block wal size = 134217728'
 fi
 
 # lockdep everywhere?
