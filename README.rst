@@ -334,25 +334,6 @@ An OpenStack tenant with access to the nova and cinder API. If the
 cinder API is not available, some jobs won't run because they expect
 volumes attached to each instance.
 
-Apply for an OpenStack account
-------------------------------
-
-* Send a mail to `Loic Dachary <mailto:loic@dachary.org>`_
-* Store the credentials sent to you in $HOME/openrc.sh
-
-Setup OpenStack at Enter Cloud Suite
-------------------------------------
-
-* create an account and `login the dashboard <https://dashboard.entercloudsuite.com/>`_
-* `create an Ubuntu 14.04 instance
-  <https://dashboard.entercloudsuite.com/console/index#/launch-instance>`_
-  with 1GB RAM and a public IP and destroy it immediately afterwards.
-* get $HOME/openrc.sh from `the horizon dashboard <https://horizon.entercloudsuite.com/project/access_and_security/?tab=access_security_tabs__api_access_tab>`_
-
-The creation/destruction of an instance via the dashboard is the
-shortest path to create the network, subnet and router that would
-otherwise need to be created via the neutron API.
-
 Setup OpenStack at OVH
 ----------------------
 
@@ -360,18 +341,6 @@ Each instance has a public IP by default.
 
 * `create an account <https://www.ovh.com/fr/support/new_nic.xml>`_
 * get $HOME/openrc.sh from `the horizon dashboard <https://horizon.cloud.ovh.net/project/access_and_security/?tab=access_security_tabs__api_access_tab>`_
-
-Setup OpenStack at Rackspace
-----------------------------
-
-There is no support for security groups. To workaround that
-limitation, the setup instructions must be run from an instance that
-is within the Rackspace OpenStack cluster already so it has permission
-to communicate with the instances it creates.
-
-* `create an account <https://www.rackspace.com/cloud/servers>`_
-* make sure your environment contains the requires OS_* variables for
-  ``openstack server list`` to run.
 
 Setup
 -----
