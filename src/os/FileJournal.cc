@@ -1048,6 +1048,13 @@ void FileJournal::align_bl(off64_t pos, bufferlist& bl)
   // make sure list segments are page aligned
   if (directio && (!bl.is_aligned(block_size) ||
 		   !bl.is_n_align_sized(CEPH_MINIMUM_BLOCK_SIZE))) {
+    derr << " bl.is_aligned(block_size) " << bl.is_aligned(block_size)  
+      << " bl.is_n_align_sized(CEPH_MINIMUM_BLOCK_SIZE) " << bl.is_n_align_sized(CEPH_MINIMUM_BLOCK_SIZE)
+      << dendl;
+    derr << " block_size " << block_size << " CEPH_MINIMUM_BLOCK_SIZE "
+      << CEPH_MINIMUM_BLOCK_SIZE << " CEPH_PAGE_SIZE " << CEPH_PAGE_SIZE
+      << " header.alignment " << header.alignment
+      << " bl " << bl << dendl;
     assert(0 == "bl should be align");
     if ((bl.length() & (CEPH_MINIMUM_BLOCK_SIZE - 1)) != 0 ||
 	(pos & (CEPH_MINIMUM_BLOCK_SIZE - 1)) != 0)
@@ -1641,7 +1648,7 @@ int FileJournal::prepare_entry(list<ObjectStore::Transaction*>& tls, bufferlist*
   }
   // footer
   ebl.append((const char*)&h, sizeof(h));
-  ebl.rebuild_aligned(CEPH_MINIMUM_BLOCK_SIZE);
+  ebl.rebuild_aligned_size_and_memory(CEPH_MINIMUM_BLOCK_SIZE, header.alignment);
   tbl->claim(ebl);
   return h.len;
 }
