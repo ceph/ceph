@@ -46,7 +46,8 @@
 #include "rgw_lib_frontend.h"
 
 #include <errno.h>
-#include <sstream>
+#include <chrono>
+#include <thread>
 #include <string>
 #include <string.h>
 #include <mutex>
@@ -79,7 +80,24 @@ namespace rgw {
 
   void RGWLibProcess::run()
   {
-    /* XXX */
+    while (! shutdown) {
+      std::cout << "RGWLibProcess GC" << std::endl;
+      unique_lock uniq(mtx);
+    restart:
+      int cur_gen = gen;
+      for (auto iter = mounted_fs.begin(); iter != mounted_fs.end();
+	   ++iter) {
+	RGWLibFS* fs = iter->first->ref();
+	uniq.unlock();
+	fs->gc();
+	fs->rele();
+	uniq.lock();
+	if (cur_gen != gen)
+	  goto restart; /* invalidated */
+      }
+      uniq.unlock();
+      std::this_thread::sleep_for(std::chrono::seconds(120));
+    }
   }
 
   void RGWLibProcess::handle_request(RGWRequest* r)

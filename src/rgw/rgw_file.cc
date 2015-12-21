@@ -105,6 +105,36 @@ namespace rgw {
     return fhr;
   } /* RGWLibFS::stat_leaf */
 
+  void RGWLibFS::close()
+  {
+    flags |= FLAG_CLOSED;
+
+    class ObjUnref
+    {
+      RGWLibFS* fs;
+    public:
+      ObjUnref(RGWLibFS* fs) : fs(fs) {}
+      void operator()(RGWFileHandle* fh) const {
+	lsubdout(fs->get_context(), rgw, 5)
+	  << __func__
+	  << fh->name
+	  << " before ObjUnref refs=" << fh->get_refcnt()
+	  << dendl;
+	fs->fh_lru.unref(fh, cohort::lru::FLAG_NONE);
+      }
+    };
+
+    /* force cache drain, forces objects to evict */
+    fh_cache.drain(ObjUnref(this),
+		  RGWFileHandle::FHCache::FLAG_LOCK);
+    librgw.get_fe()->get_process()->unregister_fs(this);
+    rele();
+  } /* RGWLibFS::close */
+
+  void RGWLibFS::gc()
+  {
+  } /* RGWLibFS::gc */
+
   bool RGWFileHandle::reclaim() {
     fs->fh_cache.remove(fh.fh_hk.object, this, cohort::lru::FLAG_NONE);
     return true;
@@ -391,6 +421,9 @@ extern "C" {
     delete new_fs;
     return -EINVAL;
   }
+
+  /* register fs for shared gc */
+  librgw.get_fe()->get_process()->register_fs(new_fs);
 
   struct rgw_fs *fs = new_fs->get_fs();
   fs->rgw = rgw;
