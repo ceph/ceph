@@ -40,7 +40,8 @@ void IOContext::aio_wait()
 #define dout_prefix *_dout << "bdev(" << path << ") "
 
 BlockDevice::BlockDevice(aio_callback_t cb, void *cbpriv)
-  : fd(-1),
+  : fd_direct(-1),
+    fd_buffered(-1),
     size(0), block_size(0),
     fs(NULL), aio(false), dio(false),
     debug_lock("BlockDevice::debug_lock"),
@@ -62,7 +63,7 @@ int BlockDevice::_lock()
   l.l_whence = SEEK_SET;
   l.l_start = 0;
   l.l_len = 0;
-  int r = ::fcntl(fd, F_SETLK, &l);
+  int r = ::fcntl(fd_direct, F_SETLK, &l);
   if (r < 0)
     return -errno;
   return 0;
@@ -70,46 +71,46 @@ int BlockDevice::_lock()
 
 int BlockDevice::open(string path)
 {
+  int r = 0;
   dout(1) << __func__ << " path " << path << dendl;
 
-  fd = ::open(path.c_str(), O_RDWR | O_DIRECT);
-  if (fd < 0) {
+  fd_direct = ::open(path.c_str(), O_RDWR | O_DIRECT);
+  if (fd_direct < 0) {
     int r = -errno;
     derr << __func__ << " open got: " << cpp_strerror(r) << dendl;
     return r;
   }
+  fd_buffered = ::open(path.c_str(), O_RDWR);
+  if (fd_buffered < 0) {
+    r = -errno;
+    derr << __func__ << " open got: " << cpp_strerror(r) << dendl;
+    goto out_direct;
+  }
   dio = true;
-#ifdef HAVE_LIBAIO
   aio = g_conf->bdev_aio;
   if (!aio) {
     assert(0 == "non-aio not supported");
   }
-#endif
 
-  int r = _lock();
+  r = _lock();
   if (r < 0) {
     derr << __func__ << " failed to lock " << path << ": " << cpp_strerror(r)
 	 << dendl;
-    ::close(fd);
-    return r;
+    goto out_fail;
   }
 
   struct stat st;
-  r = ::fstat(fd, &st);
+  r = ::fstat(fd_direct, &st);
   if (r < 0) {
     r = -errno;
     derr << __func__ << " fstat got " << cpp_strerror(r) << dendl;
-    VOID_TEMP_FAILURE_RETRY(::close(fd));
-    fd = -1;
-    return r;
+    goto out_fail;
   }
   if (S_ISBLK(st.st_mode)) {
     int64_t s;
-    r = get_block_device_size(fd, &s);
+    r = get_block_device_size(fd_direct, &s);
     if (r < 0) {
-      VOID_TEMP_FAILURE_RETRY(::close(fd));
-      fd = -1;
-      return r;
+      goto out_fail;
     }
     size = s;
   } else {
@@ -117,7 +118,7 @@ int BlockDevice::open(string path)
   }
   block_size = st.st_blksize;
 
-  fs = FS::create_by_fd(fd);
+  fs = FS::create_by_fd(fd_direct);
   assert(fs);
 
   r = _aio_start();
@@ -130,15 +131,26 @@ int BlockDevice::open(string path)
 	  << " (" << pretty_si_t(block_size) << "B)"
 	  << dendl;
   return 0;
+
+ out_fail:
+  ::close(fd_buffered);
+  fd_buffered = -1;
+ out_direct:
+  ::close(fd_direct);
+  fd_direct = -1;
+  return r;
 }
 
 void BlockDevice::close()
 {
   dout(1) << __func__ << dendl;
   _aio_stop();
-  assert(fd >= 0);
-  VOID_TEMP_FAILURE_RETRY(::close(fd));
-  fd = -1;
+  assert(fd_direct >= 0);
+  VOID_TEMP_FAILURE_RETRY(::close(fd_direct));
+  fd_direct = -1;
+  assert(fd_buffered >= 0);
+  VOID_TEMP_FAILURE_RETRY(::close(fd_buffered));
+  fd_buffered = -1;
 }
 
 int BlockDevice::flush()
@@ -153,7 +165,7 @@ int BlockDevice::flush()
     assert(0 == "bdev_inject_crash");
   }
   utime_t start = ceph_clock_now(NULL);
-  int r = ::fdatasync(fd);
+  int r = ::fdatasync(fd_direct);
   utime_t end = ceph_clock_now(NULL);
   utime_t dur = end - start;
   if (r < 0) {
@@ -307,7 +319,8 @@ void BlockDevice::aio_submit(IOContext *ioc)
 int BlockDevice::aio_write(
   uint64_t off,
   bufferlist &bl,
-  IOContext *ioc)
+  IOContext *ioc,
+  bool buffered)
 {
   uint64_t len = bl.length();
   dout(10) << __func__ << " " << off << "~" << len << dendl;
@@ -329,8 +342,8 @@ int BlockDevice::aio_write(
   _aio_log_start(ioc, off, bl.length());
 
 #ifdef HAVE_LIBAIO
-  if (aio && dio) {
-    ioc->pending_aios.push_back(FS::aio_t(ioc, fd));
+  if (aio && dio && !buffered) {
+    ioc->pending_aios.push_back(FS::aio_t(ioc, fd_direct));
     ioc->num_pending.inc();
     FS::aio_t& aio = ioc->pending_aios.back();
     if (g_conf->bdev_inject_crash &&
@@ -354,9 +367,16 @@ int BlockDevice::aio_write(
 #endif
   {
     dout(2) << __func__ << " write to " << off << "~" << len << dendl;
+    if (g_conf->bdev_inject_crash &&
+	rand() % g_conf->bdev_inject_crash == 0) {
+      derr << __func__ << " bdev_inject_crash: dropping io " << off << "~" << len
+	   << dendl;
+      return 0;
+    }
     vector<iovec> iov;
     bl.prepare_iov(&iov);
-    int r = ::pwritev(fd, &iov[0], iov.size(), off);
+    int r = ::pwritev(buffered ? fd_buffered : fd_direct,
+		      &iov[0], iov.size(), off);
     if (r < 0) {
       derr << __func__ << " pwritev error: " << cpp_strerror(r) << dendl;
       return r;
@@ -389,10 +409,12 @@ int BlockDevice::aio_zero(
   bufferlist foo;
   // note: this works with aio only becaues the actual buffer is
   // this->zeros, which is page-aligned and never freed.
-  return aio_write(off, bl, ioc);
+  return aio_write(off, bl, ioc, false);
 }
 
-int BlockDevice::read(uint64_t off, uint64_t len, bufferlist *pbl, IOContext *ioc)
+int BlockDevice::read(uint64_t off, uint64_t len, bufferlist *pbl,
+		      IOContext *ioc,
+		      bool buffered)
 {
   dout(10) << __func__ << " " << off << "~" << len << dendl;
   assert(off % block_size == 0);
@@ -405,7 +427,8 @@ int BlockDevice::read(uint64_t off, uint64_t len, bufferlist *pbl, IOContext *io
   ioc->num_reading.inc();;
 
   bufferptr p = buffer::create_page_aligned(len);
-  int r = ::pread(fd, p.c_str(), len, off);
+  int r = ::pread(buffered ? fd_buffered : fd_direct,
+		  p.c_str(), len, off);
   if (r < 0) {
     r = -errno;
     goto out;
