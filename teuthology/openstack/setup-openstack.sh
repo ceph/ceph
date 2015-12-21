@@ -413,20 +413,6 @@ function install_packages() {
 
 CAT=${CAT:-cat}
 
-function set_nameserver() {
-    local subnet_id=$1
-    local nameserver=$2
-
-    eval local current_nameserver=$(neutron subnet-show -f json $subnet_id | jq '.[] | select(.Field == "dns_nameservers") | .Value'    )
-
-    if test "$current_nameserver" = "$nameserver" ; then
-        echo "OK nameserver is $nameserver"
-    else
-        neutron subnet-update --dns-nameserver $nameserver $subnet_id || return 1
-        echo "CHANGED nameserver from $current_nameserver to $nameserver"
-    fi
-}
-
 function verify_openstack() {
     if ! openstack server list > /dev/null ; then
         echo ERROR: the credentials from ~/openrc.sh are not working >&2
