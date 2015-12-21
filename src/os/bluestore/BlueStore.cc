@@ -3225,27 +3225,39 @@ void BlueStore::_kv_sync_thread()
       // one transaction to force a sync
       KeyValueDB::Transaction t = db->get_transaction();
 
-      // allocations.  consolidate before submitting to freelist so that
-      // we avoid redundant kv ops.
-      interval_set<uint64_t> allocated, released;
+      // allocations and deallocations
+      interval_set<uint64_t> released;
       for (std::deque<TransContext *>::iterator it = kv_committing.begin();
 	   it != kv_committing.end();
 	   ++it) {
 	TransContext *txc = *it;
-	allocated.insert(txc->allocated);
-	if (txc->wal_txn) {
+	if (txc->wal_txn)
 	  dout(20) << __func__ << " txc " << txc
 		   << " allocated " << txc->allocated
 		   << " (will release " << txc->released << " after wal)"
 		   << dendl;
-	  txc->wal_txn->released.swap(txc->released);
-	  assert(txc->released.empty());
-	} else {
+	else
 	  dout(20) << __func__ << " txc " << *it
 		   << " allocated " << txc->allocated
 		   << " released " << txc->released
 		   << dendl;
-	  released.insert((*it)->released);
+	for (interval_set<uint64_t>::iterator p = txc->allocated.begin();
+	     p != txc->allocated.end();
+	     ++p) {
+	  fm->allocate(p.get_start(), p.get_len(), txc->t);
+	}
+	if (txc->wal_txn) {
+	  txc->wal_txn->released.swap(txc->released);
+	  assert(txc->released.empty());
+	} else {
+	  released.insert(txc->released);
+	  for (interval_set<uint64_t>::iterator p = txc->released.begin();
+	       p != txc->released.end();
+	       ++p) {
+	    dout(20) << __func__ << " release " << p.get_start()
+		     << "~" << p.get_len() << dendl;
+	    fm->release(p.get_start(), p.get_len(), txc->t);
+	  }
 	}
       }
       for (std::deque<TransContext *>::iterator it = wal_cleaning.begin();
@@ -3257,21 +3269,21 @@ void BlueStore::_kv_sync_thread()
 		   << " (post-wal) released " << txc->wal_txn->released
 		   << dendl;
 	  released.insert(txc->wal_txn->released);
+	  for (interval_set<uint64_t>::iterator p =
+		 txc->wal_txn->released.begin();
+	       p != txc->wal_txn->released.end();
+	       ++p) {
+	    dout(20) << __func__ << " release " << p.get_start()
+		     << "~" << p.get_len() << dendl;
+	    fm->release(p.get_start(), p.get_len(), t);
+	  }
 	}
-      }
-      for (interval_set<uint64_t>::iterator p = allocated.begin();
-	   p != allocated.end();
-	   ++p) {
-	dout(20) << __func__ << " alloc " << p.get_start() << "~" << p.get_len()
-		 << dendl;
-	fm->allocate(p.get_start(), p.get_len(), t);
       }
       for (interval_set<uint64_t>::iterator p = released.begin();
 	   p != released.end();
 	   ++p) {
 	dout(20) << __func__ << " release " << p.get_start()
 		 << "~" << p.get_len() << dendl;
-	fm->release(p.get_start(), p.get_len(), t);
 	alloc->release(p.get_start(), p.get_len());
       }
 
