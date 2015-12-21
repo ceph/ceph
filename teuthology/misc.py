@@ -1201,6 +1201,11 @@ def get_system_type(remote, distro=False, version=False):
         return "rpm"
     return system_value
 
+def get_pkg_type(os_type):
+    if os_type in ('centos', 'fedora', 'opensuse', 'rhel', 'sles'):
+        return 'rpm'
+    else:
+        return 'deb'
 
 def get_distro(ctx):
     """
