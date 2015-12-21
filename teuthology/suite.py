@@ -613,7 +613,7 @@ def schedule_suite(job_config,
             args=arg
         )
 
-        if dry_run:
+        if dry_run and config.suite_verify_ceph_hash:
             full_job_config = dict()
             deep_merge(full_job_config, job_config.to_dict())
             deep_merge(full_job_config, parsed_yaml)
