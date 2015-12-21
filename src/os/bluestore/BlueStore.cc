@@ -2161,6 +2161,14 @@ int BlueStore::_do_read(
   int r;
   IOContext ioc(NULL);   // FIXME?
 
+  // generally, don't buffer anything, unless the client explicitly requests
+  // it.
+  bool buffered = false;
+  if (op_flags & CEPH_OSD_OP_FLAG_FADVISE_WILLNEED) {
+    dout(20) << __func__ << " will do buffered read" << dendl;
+    buffered = true;
+  }
+
   dout(20) << __func__ << " " << offset << "~" << length << " size "
 	   << o->onode.size << dendl;
   bl.clear();
@@ -2243,7 +2251,7 @@ int BlueStore::_do_read(
 	uint64_t r_len = ROUND_UP_TO(x_len + front_extra, block_size);
 	dout(30) << __func__ << "  reading " << r_off << "~" << r_len << dendl;
 	bufferlist t;
-	r = bdev->read(r_off + bp->second.offset, r_len, &t, &ioc);
+	r = bdev->read(r_off + bp->second.offset, r_len, &t, &ioc, buffered);
 	if (r < 0) {
 	  goto out;
 	}
@@ -3439,7 +3447,7 @@ int BlueStore::_do_wal_op(bluestore_wal_op_t& wo, IOContext *ioc)
       offset = offset & block_mask;
       dout(20) << __func__ << "  reading initial partial block "
 	       << offset << "~" << block_size << dendl;
-      bdev->read(offset, block_size, &first, ioc);
+      bdev->read(offset, block_size, &first, ioc, true);
       bufferlist t;
       t.substr_of(first, 0, first_len);
       t.claim_append(bl);
@@ -3453,7 +3461,7 @@ int BlueStore::_do_wal_op(bluestore_wal_op_t& wo, IOContext *ioc)
       } else {
 	dout(20) << __func__ << "  reading trailing partial block "
 		 << last_offset << "~" << block_size << dendl;
-	bdev->read(last_offset, block_size, &last, ioc);
+	bdev->read(last_offset, block_size, &last, ioc, true);
       }
       bufferlist t;
       uint64_t endoff = wo.extent.end() & ~block_mask;
@@ -3461,7 +3469,7 @@ int BlueStore::_do_wal_op(bluestore_wal_op_t& wo, IOContext *ioc)
       bl.claim_append(t);
     }
     assert((bl.length() & ~block_mask) == 0);
-    bdev->aio_write(offset, bl, ioc);
+    bdev->aio_write(offset, bl, ioc, false);
   }
   break;
 
@@ -3476,10 +3484,10 @@ int BlueStore::_do_wal_op(bluestore_wal_op_t& wo, IOContext *ioc)
       uint64_t first_offset = offset & block_mask;
       dout(20) << __func__ << "  reading initial partial block "
 	       << first_offset << "~" << block_size << dendl;
-      bdev->read(first_offset, block_size, &first, ioc);
+      bdev->read(first_offset, block_size, &first, ioc, true);
       size_t z_len = MIN(block_size - first_len, length);
       memset(first.c_str() + first_len, 0, z_len);
-      bdev->aio_write(first_offset, first, ioc);
+      bdev->aio_write(first_offset, first, ioc, false);
       offset += block_size - first_len;
       length -= z_len;
     }
@@ -3497,9 +3505,9 @@ int BlueStore::_do_wal_op(bluestore_wal_op_t& wo, IOContext *ioc)
       bufferlist last;
       dout(20) << __func__ << "  reading trailing partial block "
 	       << offset << "~" << block_size << dendl;
-      bdev->read(offset, block_size, &last, ioc);
+      bdev->read(offset, block_size, &last, ioc, true);
       memset(last.c_str(), 0, length);
-      bdev->aio_write(offset, last, ioc);
+      bdev->aio_write(offset, last, ioc, false);
     }
   }
   break;
@@ -4457,6 +4465,12 @@ int BlueStore::_do_write(TransContext *txc,
     return 0;
   }
 
+  bool buffered = false;
+  if (fadvise_flags & CEPH_OSD_OP_FLAG_FADVISE_WILLNEED) {
+    dout(20) << __func__ << " will do buffered write" << dendl;
+    buffered = true;
+  }
+
   uint64_t block_size = bdev->get_block_size();
   const uint64_t block_mask = ~(block_size - 1);
   uint64_t min_alloc_size = g_conf->bluestore_min_alloc_size;
@@ -4540,7 +4554,7 @@ int BlueStore::_do_write(TransContext *txc,
       }
       dout(20) << __func__ << " write " << offset << "~" << length
 	       << " x_off " << x_off << dendl;
-      bdev->aio_write(bp->second.offset + x_off, bl, &txc->ioc);
+      bdev->aio_write(bp->second.offset + x_off, bl, &txc->ioc, buffered);
       bp->second.clear_flag(bluestore_extent_t::FLAG_UNWRITTEN);
       ++bp;
       continue;
@@ -4582,7 +4596,7 @@ int BlueStore::_do_write(TransContext *txc,
       uint64_t x_off = offset - bp->first;
       dout(20) << __func__ << " write " << offset << "~" << length
 	       << " x_off " << x_off << dendl;
-      bdev->aio_write(bp->second.offset + x_off, bl, &txc->ioc);
+      bdev->aio_write(bp->second.offset + x_off, bl, &txc->ioc, buffered);
       ++bp;
       continue;
     }
@@ -4608,7 +4622,7 @@ int BlueStore::_do_write(TransContext *txc,
       uint64_t x_off = offset - bp->first;
       dout(20) << __func__ << " write " << offset << "~" << length
 	       << " x_off " << x_off << dendl;
-      bdev->aio_write(bp->second.offset + x_off, bl, &txc->ioc);
+      bdev->aio_write(bp->second.offset + x_off, bl, &txc->ioc, buffered);
       if (offset + length < bp->first + bp->second.length &&
 	  offset + length <= o->onode.size) {
 	uint64_t end = offset + length;
