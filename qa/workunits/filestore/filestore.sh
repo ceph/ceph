@@ -44,7 +44,7 @@ function EXT4_test() {
 }
 
 function main() {
-    local dir=$(mktemp --directory)
+    local dir=$(mktemp -d)
 
     trap "sudo umount $dir/mountpoint || true ; rm -fr $dir" EXIT QUIT INT
 
