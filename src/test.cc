@@ -10,39 +10,15 @@
 #include <iostream>
 
 #include "dm_clock_srv.h"
-#include "test_srv.h"
+#include "test_request.h"
+#include "test_server.h"
+
 
 
 namespace dmc = crimson::dmclock;
 
 
 TestServer* testServer;
-
-
-
-struct Request {
-  int client;
-  uint32_t op;
-  std::string data;
-
-  Request(int c, uint32_t o, const char* d) :
-    Request(c, o, std::string(d))
-  {
-    // empty
-  }
-
-  Request(int c, uint32_t o, std::string d) :
-    client(c), op(o), data(d)
-  {
-    // empty
-  }
-
-  Request(const Request& r) :
-    Request(r.client, r.op, r.data)
-  {
-    // empty
-  }
-};
 
 
 typedef std::unique_ptr<Request> RequestRef;
@@ -76,7 +52,6 @@ void handleReq(std::unique_ptr<Request>&& request_ref,
   std::unique_ptr<Request> req(std::move(request_ref));
   int client = req->client;
   uint32_t op = req->op;
-  // std:: cout << "scheduling " << client << std::endl;
   
   testServer->post(0.1,
 		   [=] {
@@ -103,9 +78,11 @@ int main(int argc, char* argv[]) {
 
   std::cout << "queue created" << std::endl;
 
-  for (int i = 0; i < 1000; ++i) {
+  for (uint32_t i = 0; i < 1000; ++i) {
+    static uint32_t op = 12;
     int client = i % 4;
-    priorityQueue.addRequest(Request(client, i, "foobar"),
+    uint32_t epoch = i / 4;
+    priorityQueue.addRequest(Request(client, epoch, op),
 			     client,
 			     dmc::getTime());
   }
