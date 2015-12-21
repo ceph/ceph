@@ -295,8 +295,8 @@ else
         debug monc = 20
         debug journal = 20
         debug filestore = 20
-        debug bluestore = 30
-        debug bluefs = 30
+        debug bluestore = 20
+        debug bluefs = 20
         debug rocksdb = 10
         debug bdev = 20
         debug rgw = 20
@@ -466,7 +466,6 @@ $DAEMONOPTS
         osd class dir = $OBJCLASS_PATH
         osd scrub load threshold = 2000.0
         osd debug op order = true
-        bluestore block size = 10737418240
         filestore wbthrottle xfs ios start flusher = 10
         filestore wbthrottle xfs ios hard limit = 20
         filestore wbthrottle xfs inodes hard limit = 30
