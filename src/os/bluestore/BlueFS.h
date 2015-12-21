@@ -191,7 +191,7 @@ private:
 
   int _allocate(unsigned bdev, uint64_t len, vector<bluefs_extent_t> *ev);
   int _flush_range(FileWriter *h, uint64_t offset, uint64_t length);
-  int _flush(FileWriter *h);
+  int _flush(FileWriter *h, bool force);
   void _fsync(FileWriter *h);
 
   int _flush_log();
@@ -290,7 +290,7 @@ public:
 
   void flush(FileWriter *h) {
     Mutex::Locker l(lock);
-    _flush(h);
+    _flush(h, false);
   }
   void flush_range(FileWriter *h, uint64_t offset, uint64_t length) {
     Mutex::Locker l(lock);
