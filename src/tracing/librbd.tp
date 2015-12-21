@@ -1217,6 +1217,32 @@ TRACEPOINT_EVENT(librbd, snap_is_protected_exit,
     )
 )
 
+TRACEPOINT_EVENT(librbd, snap_exists_enter,
+    TP_ARGS(
+        void*, imagectx,
+        const char*, name,
+        const char*, snap_name,
+        char, read_only,
+        const char*, snap_name_to_check),
+    TP_FIELDS(
+        ctf_integer_hex(void*, imagectx, imagectx)
+        ctf_string(name, name)
+        ctf_string(snap_name, snap_name)
+        ctf_integer(char, read_only, read_only)
+        ctf_string(snap_name_to_check, snap_name_to_check)
+    )
+)
+
+TRACEPOINT_EVENT(librbd, snap_exists_exit,
+    TP_ARGS(
+        int, retval,
+        int, exists),
+    TP_FIELDS(
+        ctf_integer(int, retval, retval)
+        ctf_integer(int, exists, exists)
+    )
+)
+
 TRACEPOINT_EVENT(librbd, snap_set_enter,
     TP_ARGS(
         void*, imagectx,

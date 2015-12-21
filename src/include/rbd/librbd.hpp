@@ -206,7 +206,9 @@ public:
 
   /* snapshots */
   int snap_list(std::vector<snap_info_t>& snaps);
-  bool snap_exists(const char *snapname);
+  /* DEPRECATED; use snap_exists2 */
+  bool snap_exists(const char *snapname) __attribute__ ((deprecated));
+  int snap_exists2(const char *snapname, bool *exists);
   int snap_create(const char *snapname);
   int snap_remove(const char *snapname);
   int snap_rollback(const char *snap_name);
