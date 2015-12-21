@@ -144,8 +144,7 @@ class OpenStackInstance(object):
         if not self.ip:
             self.ip = self.get_floating_ip()
             if not self.ip:
-                self.ip = re.findall('([\d.]+)$',
-                                     self.get_addresses())[0]
+                self.ip = self.get_ip('')
         return self.ip
 
     def destroy(self):
