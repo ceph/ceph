@@ -16,7 +16,7 @@
 # When debugging these tests (must be root), here are a few useful commands:
 #
 #  export PATH=..:$PATH
-#  ln -sf /home/ubuntu/ceph/src/ceph-disk /usr/sbin/ceph-disk
+#  ln -sf /home/ubuntu/ceph/src/ceph-disk $(which ceph-disk)
 #  ln -sf /home/ubuntu/ceph/udev/95-ceph-osd.rules /lib/udev/rules.d/95-ceph-osd.rules
 #  ln -sf /home/ubuntu/ceph/systemd/ceph-disk@.service /usr/lib/systemd/system/ceph-disk@.service
 #  ceph-disk.conf will be silently ignored if it is a symbolic link or a hard link /var/log/upstart for logs
@@ -60,9 +60,25 @@ class CephDisk:
 
     @staticmethod
     def sh(command):
-        output = subprocess.check_output(command, shell=True)
-        LOG.debug("sh: " + command + ": " + output)
-        return output.strip()
+        LOG.debug(":sh: " + command)
+        proc = subprocess.Popen(
+            args=command,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            shell=True,
+            bufsize=1)
+        lines = []
+        with proc.stdout:
+            for line in iter(proc.stdout.readline, b''):
+                line = line.decode('utf-8')
+                lines.append(line)
+                LOG.debug(str(line.strip()))
+        if proc.wait() != 0:
+            raise subprocess.CalledProcessError(
+                returncode=proc.returncode,
+                cmd=command
+            )
+        return "".join(lines)
 
     def unused_disks(self, pattern='[vs]d.'):
         names = filter(
@@ -116,10 +132,11 @@ class CephDisk:
             "journal for uuid = " + uuid + " not found in " + str(disks))
 
     def destroy_osd(self, uuid):
-        id = self.sh("ceph osd create " + uuid)
+        id = self.sh("ceph osd create " + uuid).strip()
         self.sh("""
-        ceph-disk deactivate --deactivate-by-id {id}
-        ceph-disk destroy --destroy-by-id {id} --zap
+        set -xe
+        ceph-disk --verbose deactivate --deactivate-by-id {id}
+        ceph-disk --verbose destroy --destroy-by-id {id} --zap
         """.format(id=id))
 
     @staticmethod
@@ -171,7 +188,7 @@ class TestCephDisk(object):
     def setup_class(self):
         logging.basicConfig(level=logging.DEBUG)
         c = CephDisk()
-        if c.sh("lsb_release -si") == 'CentOS':
+        if c.sh("lsb_release -si").strip() == 'CentOS':
             c.helper("install multipath-tools device-mapper-multipath")
         c.conf['global']['osd journal size'] = 100
         c.save_conf()
@@ -188,17 +205,17 @@ class TestCephDisk(object):
         have_journal = True
         disk = c.unused_disks()[0]
         osd_uuid = str(uuid.uuid1())
-        c.sh("ceph-disk zap " + disk)
-        c.sh("ceph-disk prepare --osd-uuid " + osd_uuid +
+        c.sh("ceph-disk --verbose zap " + disk)
+        c.sh("ceph-disk --verbose prepare --osd-uuid " + osd_uuid +
              " " + disk)
         c.wait_for_osd_up(osd_uuid)
         device = json.loads(c.sh("ceph-disk list --format json " + disk))[0]
         assert len(device['partitions']) == 2
         c.check_osd_status(osd_uuid, have_journal)
         data_partition = c.get_osd_partition(osd_uuid)
-        c.sh("ceph-disk deactivate " + data_partition['path'])
+        c.sh("ceph-disk --verbose deactivate " + data_partition['path'])
         c.wait_for_osd_down(osd_uuid)
-        c.sh("ceph-disk activate " + data_partition['path'] + " --reactivate")
+        c.sh("ceph-disk --verbose activate " + data_partition['path'] + " --reactivate")
         # check again
         c.wait_for_osd_up(osd_uuid)
         device = json.loads(c.sh("ceph-disk list --format json " + disk))[0]
@@ -211,7 +228,7 @@ class TestCephDisk(object):
         c = CephDisk()
         disk = c.unused_disks()[0]
         osd_uuid = str(uuid.uuid1())
-        c.sh("ceph-disk prepare --osd-uuid " + osd_uuid + " " + disk)
+        c.sh("ceph-disk --verbose prepare --osd-uuid " + osd_uuid + " " + disk)
         c.wait_for_osd_up(osd_uuid)
         c.check_osd_status(osd_uuid)
         c.destroy_osd(osd_uuid)
@@ -220,14 +237,14 @@ class TestCephDisk(object):
         c = CephDisk()
         disk = c.unused_disks()[0]
         osd_uuid = str(uuid.uuid1())
-        c.sh("ceph-disk prepare --osd-uuid " + osd_uuid + " " + disk)
+        c.sh("ceph-disk --verbose prepare --osd-uuid " + osd_uuid + " " + disk)
         c.wait_for_osd_up(osd_uuid)
         partition = c.get_osd_partition(osd_uuid)
         assert partition['type'] == 'data'
         assert partition['state'] == 'active'
-        c.sh("ceph-disk deactivate " + partition['path'])
+        c.sh("ceph-disk --verbose deactivate " + partition['path'])
         c.wait_for_osd_down(osd_uuid)
-        c.sh("ceph-disk destroy " + partition['path'] + " --zap")
+        c.sh("ceph-disk --verbose destroy " + partition['path'] + " --zap")
 
     def test_deactivate_reactivate_dmcrypt_plain(self):
         c = CephDisk()
@@ -246,7 +263,7 @@ class TestCephDisk(object):
         disk = c.unused_disks()[0]
         osd_uuid = str(uuid.uuid1())
         journal_uuid = str(uuid.uuid1())
-        c.sh("ceph-disk zap " + disk)
+        c.sh("ceph-disk --verbose zap " + disk)
         c.sh("ceph-disk --verbose prepare " +
              " --osd-uuid " + osd_uuid +
              " --journal-uuid " + journal_uuid +
@@ -255,9 +272,9 @@ class TestCephDisk(object):
         c.wait_for_osd_up(osd_uuid)
         c.check_osd_status(osd_uuid, have_journal)
         data_partition = c.get_osd_partition(osd_uuid)
-        c.sh("ceph-disk deactivate " + data_partition['path'])
+        c.sh("ceph-disk --verbose deactivate " + data_partition['path'])
         c.wait_for_osd_down(osd_uuid)
-        c.sh("ceph-disk activate " + data_partition['path'] +
+        c.sh("ceph-disk --verbose activate " + data_partition['path'] +
              " --reactivate" + " --dmcrypt")
         # check again
         c.wait_for_osd_up(osd_uuid)
@@ -281,7 +298,7 @@ class TestCephDisk(object):
         disk = c.unused_disks()[0]
         osd_uuid = str(uuid.uuid1())
         journal_uuid = str(uuid.uuid1())
-        c.sh("ceph-disk zap " + disk)
+        c.sh("ceph-disk --verbose zap " + disk)
         c.sh("ceph-disk --verbose prepare " +
              " --osd-uuid " + osd_uuid +
              " --journal-uuid " + journal_uuid +
@@ -295,10 +312,10 @@ class TestCephDisk(object):
         c = CephDisk()
         disk = c.unused_disks()[0]
         osd_uuid = str(uuid.uuid1())
-        c.sh("ceph-disk zap " + disk)
+        c.sh("ceph-disk --verbose zap " + disk)
         c.conf['global']['osd objectstore'] = 'memstore'
         c.save_conf()
-        c.sh("ceph-disk prepare --osd-uuid " + osd_uuid +
+        c.sh("ceph-disk --verbose prepare --osd-uuid " + osd_uuid +
              " " + disk)
         c.wait_for_osd_up(osd_uuid)
         device = json.loads(c.sh("ceph-disk list --format json " + disk))[0]
@@ -316,8 +333,8 @@ class TestCephDisk(object):
         have_journal = True
         disk = c.unused_disks()[0]
         osd_uuid = str(uuid.uuid1())
-        c.sh("ceph-disk zap " + disk)
-        c.sh("ceph-disk prepare --osd-uuid " + osd_uuid +
+        c.sh("ceph-disk --verbose zap " + disk)
+        c.sh("ceph-disk --verbose prepare --osd-uuid " + osd_uuid +
              " " + disk)
         c.wait_for_osd_up(osd_uuid)
         device = json.loads(c.sh("ceph-disk list --format json " + disk))[0]
@@ -333,8 +350,8 @@ class TestCephDisk(object):
         tempdir = tempfile.mkdtemp()
         symlink = os.path.join(tempdir, 'osd')
         os.symlink(disk, symlink)
-        c.sh("ceph-disk zap " + symlink)
-        c.sh("ceph-disk prepare --osd-uuid " + osd_uuid +
+        c.sh("ceph-disk --verbose zap " + symlink)
+        c.sh("ceph-disk --verbose prepare --osd-uuid " + osd_uuid +
              " " + symlink)
         c.wait_for_osd_up(osd_uuid)
         device = json.loads(c.sh("ceph-disk list --format json " + symlink))[0]
@@ -346,7 +363,7 @@ class TestCephDisk(object):
         assert journal_partition
         c.helper("pool_read_write")
         c.destroy_osd(osd_uuid)
-        c.sh("ceph-disk zap " + symlink)
+        c.sh("ceph-disk --verbose zap " + symlink)
         os.unlink(symlink)
         os.rmdir(tempdir)
 
@@ -358,7 +375,7 @@ class TestCephDisk(object):
         osd_uuid = self.activate_separated_journal(data_disk, journal_disk)
         c.helper("pool_read_write 1")  # 1 == pool size
         c.destroy_osd(osd_uuid)
-        c.sh("ceph-disk zap " + data_disk + " " + journal_disk)
+        c.sh("ceph-disk --verbose zap " + data_disk + " " + journal_disk)
 
     def test_activate_separated_journal_dev_is_symlink(self):
         c = CephDisk()
@@ -374,7 +391,7 @@ class TestCephDisk(object):
             data_symlink, journal_symlink)
         c.helper("pool_read_write 1")  # 1 == pool size
         c.destroy_osd(osd_uuid)
-        c.sh("ceph-disk zap " + data_symlink + " " + journal_symlink)
+        c.sh("ceph-disk --verbose zap " + data_symlink + " " + journal_symlink)
         os.unlink(data_symlink)
         os.unlink(journal_symlink)
         os.rmdir(tempdir)
@@ -383,7 +400,7 @@ class TestCephDisk(object):
         c = CephDisk()
         have_journal = True
         osd_uuid = str(uuid.uuid1())
-        c.sh("ceph-disk prepare --osd-uuid " + osd_uuid +
+        c.sh("ceph-disk --verbose prepare --osd-uuid " + osd_uuid +
              " " + data_disk + " " + journal_disk)
         c.wait_for_osd_up(osd_uuid)
         device = json.loads(
@@ -415,7 +432,7 @@ class TestCephDisk(object):
         c.helper("pool_read_write 2")  # 2 == pool size
         c.destroy_osd(osd_uuid)
         c.destroy_osd(other_osd_uuid)
-        c.sh("ceph-disk zap " + data_disk + " " +
+        c.sh("ceph-disk --verbose zap " + data_disk + " " +
              journal_disk + " " + other_data_disk)
 
     #
@@ -433,12 +450,12 @@ class TestCephDisk(object):
         journal_partition = c.get_journal_partition(osd_uuid)
         journal_path = journal_partition['path']
         c.destroy_osd(osd_uuid)
-        c.sh("ceph-disk zap " + data_disk)
+        c.sh("ceph-disk --verbose zap " + data_disk)
         osd_uuid = str(uuid.uuid1())
         #
         # Create another OSD with the journal partition of the previous OSD
         #
-        c.sh("ceph-disk prepare --osd-uuid " + osd_uuid +
+        c.sh("ceph-disk --verbose prepare --osd-uuid " + osd_uuid +
              " " + data_disk + " " + journal_path)
         c.helper("pool_read_write 1")  # 1 == pool size
         c.wait_for_osd_up(osd_uuid)
@@ -452,11 +469,11 @@ class TestCephDisk(object):
         #
         assert journal_partition['path'] == journal_path
         c.destroy_osd(osd_uuid)
-        c.sh("ceph-disk zap " + data_disk + " " + journal_disk)
+        c.sh("ceph-disk --verbose zap " + data_disk + " " + journal_disk)
 
     def test_activate_multipath(self):
         c = CephDisk()
-        if c.sh("lsb_release -si") != 'CentOS':
+        if c.sh("lsb_release -si").strip() != 'CentOS':
             pytest.skip(
                 "see issue https://bugs.launchpad.net/ubuntu/+source/multipath-tools/+bug/1488688")
         c.ensure_sd()
@@ -475,8 +492,8 @@ class TestCephDisk(object):
         # Prepare the multipath device
         #
         osd_uuid = str(uuid.uuid1())
-        c.sh("ceph-disk zap " + multipath)
-        c.sh("ceph-disk prepare --osd-uuid " + osd_uuid +
+        c.sh("ceph-disk --verbose zap " + multipath)
+        c.sh("ceph-disk --verbose prepare --osd-uuid " + osd_uuid +
              " " + multipath)
         c.wait_for_osd_up(osd_uuid)
         device = json.loads(
