@@ -1955,6 +1955,10 @@ int BlueStore::fsck()
       if (used_blocks.intersects(p->first, p->second)) {
 	derr << __func__ << " free extent " << p->first << "~" << p->second
 	     << " intersects allocated blocks" << dendl;
+	interval_set<uint64_t> free, overlap;
+	free.insert(p->first, p->second);
+	overlap.intersection_of(free, used_blocks);
+	derr << __func__ << " overlap: " << overlap << dendl;
 	++errors;
 	continue;
       }
