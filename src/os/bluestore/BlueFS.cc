@@ -754,7 +754,8 @@ void BlueFS::_compact_log()
   log_file->fnode.size = bl.length();
   log_writer = new FileWriter(log_file, bdev.size());
   log_writer->append(bl);
-  _flush(log_writer);
+  int r = _flush(log_writer, true);
+  assert(r == 0);
 
   dout(10) << __func__ << " writing super" << dendl;
   super.log_fnode = log_file->fnode;
@@ -811,7 +812,7 @@ int BlueFS::_flush_log()
   log_t.seq = 0;  // just so debug output is less confusing
 
   _flush_bdev();
-  int r = _flush(log_writer);
+  int r = _flush(log_writer, true);
   assert(r == 0);
   _flush_bdev();
 
@@ -930,10 +931,17 @@ int BlueFS::_flush_range(FileWriter *h, uint64_t offset, uint64_t length)
   return 0;
 }
 
-int BlueFS::_flush(FileWriter *h)
+int BlueFS::_flush(FileWriter *h, bool force)
 {
   uint64_t length = h->buffer.length();
   uint64_t offset = h->pos;
+  if (!force &&
+      length < g_conf->bluefs_min_flush_size) {
+    dout(10) << __func__ << " " << h << " ignoring, length " << length
+	     << " < min_flush_size " << g_conf->bluefs_min_flush_size
+	     << dendl;
+    return 0;
+  }
   if (length == 0) {
     if (h->file->dirty) {
       dout(10) << __func__ << " " << h << " no data, flushing metadata on "
@@ -965,7 +973,7 @@ int BlueFS::_truncate(FileWriter *h, uint64_t offset)
     assert(0 == "actually this shouldn't happen");
   }
   if (h->buffer.length()) {
-    int r = _flush(h);
+    int r = _flush(h, true);
     if (r < 0)
       return r;
   }
@@ -984,7 +992,7 @@ int BlueFS::_truncate(FileWriter *h, uint64_t offset)
 void BlueFS::_fsync(FileWriter *h)
 {
   dout(10) << __func__ << " " << h << " " << h->file->fnode << dendl;
-  _flush(h);
+  _flush(h, true);
   if (h->file->dirty) {
     _flush_log();
     assert(!h->file->dirty);
