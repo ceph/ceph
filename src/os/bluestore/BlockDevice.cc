@@ -44,7 +44,7 @@ BlockDevice::BlockDevice(aio_callback_t cb, void *cbpriv)
     size(0), block_size(0),
     fs(NULL), aio(false), dio(false),
     debug_lock("BlockDevice::debug_lock"),
-    aio_queue(g_conf->bluestore_aio_max_queue_depth),
+    aio_queue(g_conf->bdev_aio_max_queue_depth),
     aio_callback(cb),
     aio_callback_priv(cbpriv),
     aio_stop(false),
@@ -80,7 +80,10 @@ int BlockDevice::open(string path)
   }
   dio = true;
 #ifdef HAVE_LIBAIO
-  aio = g_conf->bluestore_aio;
+  aio = g_conf->bdev_aio;
+  if (!aio) {
+    assert(0 == "non-aio not supported");
+  }
 #endif
 
   int r = _lock();
@@ -163,7 +166,7 @@ int BlockDevice::flush()
 
 int BlockDevice::_aio_start()
 {
-  if (g_conf->bluestore_aio) {
+  if (g_conf->bdev_aio) {
     dout(10) << __func__ << dendl;
     int r = aio_queue.init();
     if (r < 0)
@@ -175,7 +178,7 @@ int BlockDevice::_aio_start()
 
 void BlockDevice::_aio_stop()
 {
-  if (g_conf->bluestore_aio) {
+  if (g_conf->bdev_aio) {
     dout(10) << __func__ << dendl;
     aio_stop = true;
     aio_thread.join();
@@ -191,7 +194,7 @@ void BlockDevice::_aio_thread()
     dout(40) << __func__ << " polling" << dendl;
     int max = 16;
     FS::aio_t *aio[max];
-    int r = aio_queue.get_next_completed(g_conf->bluestore_aio_poll_ms,
+    int r = aio_queue.get_next_completed(g_conf->bdev_aio_poll_ms,
 					 aio, max);
     if (r < 0) {
       derr << __func__ << " got " << cpp_strerror(r) << dendl;
