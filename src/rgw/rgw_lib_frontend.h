@@ -6,6 +6,8 @@
 
 #include <boost/container/flat_map.hpp>
 
+#include <boost/container/flat_map.hpp>
+
 #include "rgw_lib.h"
 #include "rgw_file.h"
 
@@ -13,13 +15,38 @@ namespace rgw {
 
   class RGWLibProcess : public RGWProcess {
     RGWAccessKey access_key;
+    std::mutex mtx;
+    int gen;
+    bool shutdown;
+
+    typedef flat_map<RGWLibFS*, RGWLibFS*> FSMAP;
+    FSMAP mounted_fs;
+
+    using lock_guard = std::lock_guard<std::mutex>;
+    using unique_lock = std::unique_lock<std::mutex>;
+
   public:
     RGWLibProcess(CephContext* cct, RGWProcessEnv* pe, int num_threads,
 		  RGWFrontendConfig* _conf) :
-      RGWProcess(cct, pe, num_threads, _conf) {}
+      RGWProcess(cct, pe, num_threads, _conf), gen(0), shutdown(false) {}
 
     void run();
     void checkpoint();
+
+    void register_fs(RGWLibFS* fs) {
+      lock_guard guard(mtx);
+      mounted_fs.insert(FSMAP::value_type(fs, fs));
+      ++gen;
+    }
+
+    void unregister_fs(RGWLibFS* fs) {
+      lock_guard guard(mtx);
+      FSMAP::iterator it = mounted_fs.find(fs);
+      if (it != mounted_fs.end()) {
+	mounted_fs.erase(it);
+	++gen;
+      }
+    }
 
     void enqueue_req(RGWLibRequest* req) {
 
@@ -48,6 +75,10 @@ namespace rgw {
       : RGWProcessFrontend(pe, _conf) {}
 		
     int init();
+
+    RGWLibProcess* get_process() {
+      return static_cast<RGWLibProcess*>(pprocess);
+    }
 
     inline void enqueue_req(RGWLibRequest* req) {
       static_cast<RGWLibProcess*>(pprocess)->enqueue_req(req); // async

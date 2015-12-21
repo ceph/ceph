@@ -691,31 +691,8 @@ namespace rgw {
 
     RGWUserInfo* get_user() { return &user; }
 
-    void close() {
-
-      flags |= FLAG_CLOSED;
-
-      class ObjUnref
-      {
-	RGWLibFS* fs;
-      public:
-	ObjUnref(RGWLibFS* fs) : fs(fs) {}
-	void operator()(RGWFileHandle* fh) const {
-	  lsubdout(fs->get_context(), rgw, 5)
-	    << __func__
-	    << fh->name
-	    << " before ObjUnref refs=" << fh->get_refcnt()
-	    << dendl;
-	  fs->fh_lru.unref(fh, cohort::lru::FLAG_NONE);
-	}
-      };
-
-      /* force cache drain, forces objects to evict */
-      fh_cache.drain(ObjUnref(this),
-		     RGWFileHandle::FHCache::FLAG_LOCK);
-
-      /* XXX unref this */
-    }
+    void close();
+    void gc();
   }; /* RGWLibFS */
 
 static inline std::string make_uri(const std::string& bucket_name,
