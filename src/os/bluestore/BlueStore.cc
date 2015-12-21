@@ -1564,6 +1564,10 @@ int BlueStore::mount()
     int rc = fsck();
     if (rc < 0)
       return rc;
+    if (rc > 0) {
+      derr << __func__ << " fsck found " << rc << " errors" << dendl;
+      return -EIO;
+    }
   }
 
   int r = _open_path();
