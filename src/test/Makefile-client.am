@@ -285,6 +285,11 @@ ceph_test_rados_api_lock_LDADD = $(LIBRADOS) $(UNITTEST_LDADD) $(RADOS_TEST_LDAD
 ceph_test_rados_api_lock_CXXFLAGS = $(UNITTEST_CXXFLAGS)
 bin_DEBUGPROGRAMS += ceph_test_rados_api_lock
 
+ceph_test_rados_api_tmap_migrate_SOURCES = test/librados/tmap_migrate.cc tools/cephfs/DataScan.cc tools/cephfs/MDSUtility.cc
+ceph_test_rados_api_tmap_migrate_LDADD = $(LIBRADOS) $(UNITTEST_LDADD) $(LIBMDS) libcls_cephfs_client.la  $(CEPH_GLOBAL) $(RADOS_TEST_LDADD)
+ceph_test_rados_api_tmap_migrate_CXXFLAGS = $(UNITTEST_CXXFLAGS)
+bin_DEBUGPROGRAMS += ceph_test_rados_api_tmap_migrate
+
 
 ceph_test_stress_watch_SOURCES = test/test_stress_watch.cc
 ceph_test_stress_watch_LDADD = \
