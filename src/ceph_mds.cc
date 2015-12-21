@@ -213,8 +213,10 @@ int main(int argc, const char **argv)
     r = mds->init(shadow);
   else
     r = mds->init();
-  if (r < 0)
+  if (r < 0) {
+    msgr->wait();
     goto shutdown;
+  }
 
   // set up signal handlers, now that we've daemonized/forked.
   init_async_signal_handler();
