@@ -11,7 +11,22 @@ setup(
     packages=find_packages(),
     package_data={
      'teuthology.task': ['valgrind.supp', 'adjust-ulimits', 'edit_sudoers.sh', 'daemon-helper'],
-     'teuthology': ['ceph.conf.template'],
+     'teuthology.task': ['valgrind.supp', 'adjust-ulimits', 'edit_sudoers.sh', 'daemon-helper'],
+     'teuthology.openstack': [
+         'archive-key',
+         'archive-key.pub',
+         'openstack-centos-6.5-user-data.txt',
+         'openstack-centos-7.0-user-data.txt',
+         'openstack-debian-8.0-user-data.txt',
+         'openstack-opensuse-user-data.txt',
+         'openstack-teuthology.cron',
+         'openstack-teuthology.init',
+         'openstack-ubuntu-12.04-user-data.txt',
+         'openstack-ubuntu-14.04-user-data.txt',
+         'openstack-user-data.txt',
+         'openstack.yaml',
+         'setup-openstack.sh'
+     ],
     },
     author='Inktank Storage, Inc.',
     author_email='ceph-qa@ceph.com',
