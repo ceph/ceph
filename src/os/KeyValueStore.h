@@ -559,28 +559,28 @@ class KeyValueStore : public ObjectStore,
                      uint64_t offset, size_t len, const bufferlist& bl,
                      BufferTransaction &t, uint32_t fadvise_flags = 0);
 
-  bool exists(coll_t cid, const ghobject_t& oid);
-  int stat(coll_t cid, const ghobject_t& oid, struct stat *st,
+  bool exists(const coll_t& cid, const ghobject_t& oid);
+  int stat(const coll_t& cid, const ghobject_t& oid, struct stat *st,
            bool allow_eio = false);
-  int read(coll_t cid, const ghobject_t& oid, uint64_t offset, size_t len,
+  int read(const coll_t& cid, const ghobject_t& oid, uint64_t offset, size_t len,
            bufferlist& bl, uint32_t op_flags = 0, bool allow_eio = false);
-  int fiemap(coll_t cid, const ghobject_t& oid, uint64_t offset, size_t len,
+  int fiemap(const coll_t& cid, const ghobject_t& oid, uint64_t offset, size_t len,
              bufferlist& bl);
 
-  int _touch(coll_t cid, const ghobject_t& oid, BufferTransaction &t);
-  int _write(coll_t cid, const ghobject_t& oid, uint64_t offset, size_t len,
+  int _touch(const coll_t& cid, const ghobject_t& oid, BufferTransaction &t);
+  int _write(const coll_t& cid, const ghobject_t& oid, uint64_t offset, size_t len,
              const bufferlist& bl, BufferTransaction &t, uint32_t fadvise_flags = 0);
-  int _zero(coll_t cid, const ghobject_t& oid, uint64_t offset, size_t len,
+  int _zero(const coll_t& cid, const ghobject_t& oid, uint64_t offset, size_t len,
             BufferTransaction &t);
-  int _truncate(coll_t cid, const ghobject_t& oid, uint64_t size,
+  int _truncate(const coll_t& cid, const ghobject_t& oid, uint64_t size,
                 BufferTransaction &t);
-  int _clone(coll_t cid, const ghobject_t& oldoid, const ghobject_t& newoid,
+  int _clone(const coll_t& cid, const ghobject_t& oldoid, const ghobject_t& newoid,
              BufferTransaction &t);
-  int _clone_range(coll_t cid, const ghobject_t& oldoid,
+  int _clone_range(const coll_t& cid, const ghobject_t& oldoid,
                    const ghobject_t& newoid, uint64_t srcoff,
                    uint64_t len, uint64_t dstoff, BufferTransaction &t);
-  int _remove(coll_t cid, const ghobject_t& oid, BufferTransaction &t);
-  int _set_alloc_hint(coll_t cid, const ghobject_t& oid,
+  int _remove(const coll_t& cid, const ghobject_t& oid, BufferTransaction &t);
+  int _set_alloc_hint(const coll_t& cid, const ghobject_t& oid,
                       uint64_t expected_object_size,
                       uint64_t expected_write_size,
                       BufferTransaction &t);
@@ -591,53 +591,53 @@ class KeyValueStore : public ObjectStore,
   uuid_d get_fsid() { return fsid; }
 
   // attrs
-  int getattr(coll_t cid, const ghobject_t& oid, const char *name,
+  int getattr(const coll_t& cid, const ghobject_t& oid, const char *name,
               bufferptr &bp);
-  int getattrs(coll_t cid, const ghobject_t& oid, map<string,bufferptr>& aset);
+  int getattrs(const coll_t& cid, const ghobject_t& oid, map<string,bufferptr>& aset);
 
-  int _setattrs(coll_t cid, const ghobject_t& oid,
+  int _setattrs(const coll_t& cid, const ghobject_t& oid,
                 map<string, bufferptr>& aset, BufferTransaction &t);
-  int _rmattr(coll_t cid, const ghobject_t& oid, const char *name,
+  int _rmattr(const coll_t& cid, const ghobject_t& oid, const char *name,
               BufferTransaction &t);
-  int _rmattrs(coll_t cid, const ghobject_t& oid, BufferTransaction &t);
+  int _rmattrs(const coll_t& cid, const ghobject_t& oid, BufferTransaction &t);
 
   // collections
-  int _collection_hint_expected_num_objs(coll_t cid, uint32_t pg_num,
+  int _collection_hint_expected_num_objs(const coll_t& cid, uint32_t pg_num,
       uint64_t num_objs) const { return 0; }
-  int _create_collection(coll_t c, BufferTransaction &t);
-  int _destroy_collection(coll_t c, BufferTransaction &t);
-  int _collection_add(coll_t c, coll_t ocid, const ghobject_t& oid,
+  int _create_collection(const coll_t& c, BufferTransaction &t);
+  int _destroy_collection(const coll_t& c, BufferTransaction &t);
+  int _collection_add(const coll_t& c, const coll_t& ocid, const ghobject_t& oid,
                       BufferTransaction &t);
-  int _collection_move_rename(coll_t oldcid, const ghobject_t& oldoid,
+  int _collection_move_rename(const coll_t& oldcid, const ghobject_t& oldoid,
                               coll_t c, const ghobject_t& o,
                               BufferTransaction &t);
   int _collection_remove_recursive(const coll_t &cid,
                                    BufferTransaction &t);
   int list_collections(vector<coll_t>& ls);
-  bool collection_exists(coll_t c);
-  bool collection_empty(coll_t c);
-  int collection_list(coll_t c, ghobject_t start, ghobject_t end,
+  bool collection_exists(const coll_t& c);
+  bool collection_empty(const coll_t& c);
+  int collection_list(const coll_t& c, ghobject_t start, ghobject_t end,
 		      bool sort_bitwise, int max,
 		      vector<ghobject_t> *ls, ghobject_t *next);
-  int collection_version_current(coll_t c, uint32_t *version);
+  int collection_version_current(const coll_t& c, uint32_t *version);
 
   // omap (see ObjectStore.h for documentation)
-  int omap_get(coll_t c, const ghobject_t &oid, bufferlist *header,
+  int omap_get(const coll_t& c, const ghobject_t &oid, bufferlist *header,
                map<string, bufferlist> *out);
   int omap_get_header(
-    coll_t c,
+    const coll_t& c,
     const ghobject_t &oid,
     bufferlist *out,
     bool allow_eio = false);
-  int omap_get_keys(coll_t c, const ghobject_t &oid, set<string> *keys);
-  int omap_get_values(coll_t c, const ghobject_t &oid, const set<string> &keys,
+  int omap_get_keys(const coll_t& c, const ghobject_t &oid, set<string> *keys);
+  int omap_get_values(const coll_t& c, const ghobject_t &oid, const set<string> &keys,
                       map<string, bufferlist> *out);
-  int omap_check_keys(coll_t c, const ghobject_t &oid, const set<string> &keys,
+  int omap_check_keys(const coll_t& c, const ghobject_t &oid, const set<string> &keys,
                       set<string> *out);
-  ObjectMap::ObjectMapIterator get_omap_iterator(coll_t c,
+  ObjectMap::ObjectMapIterator get_omap_iterator(const coll_t& c,
                                                  const ghobject_t &oid);
 
-  int check_get_rc(const coll_t cid, const ghobject_t& oid, int r, bool is_equal_size);
+  int check_get_rc(const coll_t& cid, const ghobject_t& oid, int r, bool is_equal_size);
   void dump_start(const std::string &file);
   void dump_stop();
   void dump_transactions(list<ObjectStore::Transaction*>& ls, uint64_t seq,
@@ -647,21 +647,21 @@ class KeyValueStore : public ObjectStore,
   void _inject_failure() {}
 
   // omap
-  int _omap_clear(coll_t cid, const ghobject_t &oid,
+  int _omap_clear(const coll_t& cid, const ghobject_t &oid,
                   BufferTransaction &t);
-  int _omap_setkeys(coll_t cid, const ghobject_t &oid,
+  int _omap_setkeys(const coll_t& cid, const ghobject_t &oid,
                     map<string, bufferlist> &aset,
                     BufferTransaction &t);
-  int _omap_rmkeys(coll_t cid, const ghobject_t &oid, const set<string> &keys,
+  int _omap_rmkeys(const coll_t& cid, const ghobject_t &oid, const set<string> &keys,
                    BufferTransaction &t);
-  int _omap_rmkeyrange(coll_t cid, const ghobject_t &oid,
+  int _omap_rmkeyrange(const coll_t& cid, const ghobject_t &oid,
                        const string& first, const string& last,
                        BufferTransaction &t);
-  int _omap_setheader(coll_t cid, const ghobject_t &oid, const bufferlist &bl,
+  int _omap_setheader(const coll_t& cid, const ghobject_t &oid, const bufferlist &bl,
                       BufferTransaction &t);
-  int _split_collection(coll_t cid, uint32_t bits, uint32_t rem, coll_t dest,
+  int _split_collection(const coll_t& cid, uint32_t bits, uint32_t rem, coll_t dest,
                         BufferTransaction &t);
-  int _split_collection_create(coll_t cid, uint32_t bits, uint32_t rem,
+  int _split_collection_create(const coll_t& cid, uint32_t bits, uint32_t rem,
                                coll_t dest, BufferTransaction &t){
     return 0;
   }
