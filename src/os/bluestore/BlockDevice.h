@@ -44,7 +44,7 @@ public:
   typedef void (*aio_callback_t)(void *handle, void *aio);
 
 private:
-  int fd;
+  int fd_direct, fd_buffered;
   uint64_t size;
   uint64_t block_size;
   string path;
@@ -91,10 +91,12 @@ public:
   }
 
   int read(uint64_t off, uint64_t len, bufferlist *pbl,
-	   IOContext *ioc);
+	   IOContext *ioc,
+	   bool buffered);
 
   int aio_write(uint64_t off, bufferlist& bl,
-		IOContext *ioc);
+		IOContext *ioc,
+		bool buffered);
   int aio_zero(uint64_t off, uint64_t len,
 	       IOContext *ioc);
   int flush();
