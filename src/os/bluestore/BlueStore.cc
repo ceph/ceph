@@ -1297,9 +1297,13 @@ int BlueStore::_balance_bluefs_freespace(vector<bluestore_extent_t> *extents)
   int ret = 0;
   assert(bluefs);
 
+  vector<pair<uint64_t,uint64_t>> bluefs_usage;  // <free, total> ...
+  bluefs->get_usage(&bluefs_usage);
+  assert(bluefs_usage.size() > bluefs_shared_bdev);
+
   // fixme: look at primary bdev only for now
-  uint64_t bluefs_total = bluefs->get_total(bluefs_shared_bdev);
-  uint64_t bluefs_free = bluefs->get_free(bluefs_shared_bdev);
+  uint64_t bluefs_free = bluefs_usage[bluefs_shared_bdev].first;
+  uint64_t bluefs_total = bluefs_usage[bluefs_shared_bdev].second;
   float bluefs_free_ratio = (float)bluefs_free / (float)bluefs_total;
 
   uint64_t my_free = alloc->get_free();
