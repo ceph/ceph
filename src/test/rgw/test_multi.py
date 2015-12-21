@@ -6,6 +6,7 @@ import string
 import argparse
 import sys
 import time
+import itertools
 
 import ConfigParser
 
@@ -314,7 +315,7 @@ class RGWRealm:
 
     def compare_data_status(self, target_zone, source_zone, log_status, sync_status):
         if len(log_status) != len(sync_status):
-            log('len(log_status)=', len(log_status), ' len(sync_status=', len(sync_status))
+            log('len(log_status)=', len(log_status), ' len(sync_status)=', len(sync_status))
             return False
 
         msg =  ''
@@ -502,6 +503,67 @@ def test_bucket_remove():
     for zone in realm.get_zones():
         assert check_all_buckets_dont_exist(zone, buckets)
 
+def get_bucket(zone, bucket_name):
+    conn = zone.get_connection(user)
+    return conn.get_bucket(bucket_name)
+
+def get_key(zone, bucket_name, obj_name):
+    b = get_bucket(zone, bucket_name)
+    return b.get_key(obj_name)
+
+def check_object_eq(k1, k2, check_extra = True):
+    assert k1
+    assert k2
+    log('comparing key name=', k1.name)
+    eq(k1.name, k2.name)
+    eq(k1.get_contents_as_string(), k2.get_contents_as_string())
+    eq(k1.metadata, k2.metadata)
+    eq(k1.cache_control, k2.cache_control)
+    eq(k1.content_type, k2.content_type)
+    eq(k1.content_encoding, k2.content_encoding)
+    eq(k1.content_disposition, k2.content_disposition)
+    eq(k1.content_language, k2.content_language)
+    eq(k1.etag, k2.etag)
+    # eq(k1.last_modified, k2.last_modified)
+    if check_extra:
+        eq(k1.owner.id, k2.owner.id)
+        eq(k1.owner.display_name, k2.owner.display_name)
+    eq(k1.storage_class, k2.storage_class)
+    eq(k1.size, k2.size)
+    eq(k1.version_id, k2.version_id)
+    eq(k1.encrypted, k2.encrypted)
+
+def check_bucket_eq(zone1, zone2, bucket_name):
+    log('comparing bucket=', bucket_name, ' zones={', zone1.zone_name, ', ', zone2.zone_name, '}')
+    b1 = get_bucket(zone1, bucket_name)
+    b2 = get_bucket(zone2, bucket_name)
+
+    log('bucket1 objects:')
+    for o in b1.get_all_versions():
+        log('o=', o.name)
+    log('bucket2 objects:')
+    for o in b2.get_all_versions():
+        log('o=', o.name)
+
+    for k1, k2 in itertools.izip_longest(b1.get_all_versions(), b2.get_all_versions()):
+        if k1 is None:
+            log('failure: key=', k2.name, ' is missing from zone=', zone1.zone_name)
+            assert False
+        if k2 is None:
+            log('failure: key=', k1.name, ' is missing from zone=', zone2.zone_name)
+            assert False
+
+        check_object_eq(k1, k2)
+
+        # now get the keys through a HEAD operation, verify that the available data is the same
+        k1_head = b1.get_key(k1.name)
+        k2_head = b2.get_key(k2.name)
+
+        check_object_eq(k1_head, k2_head, False)
+
+    log('success, bucket identical: bucket=', bucket_name, ' zones={', zone1.zone_name, ', ', zone2.zone_name, '}')
+
+
 def test_object_sync():
     buckets, zone_bucket = create_bucket_per_zone()
 
@@ -527,11 +589,9 @@ def test_object_sync():
 
     for source_zone, bucket_name in zone_bucket.iteritems():
         for target_zone in all_zones:
-            realm.zone_data_checkpoint(target_zone, source_zone)
-            conn = target_zone.get_connection(user)
-            b = conn.get_bucket(bucket_name)
-            k = b.get_key(objname)
-            eq(k.get_contents_as_string(), content)
+            if source_zone.zone_name == target_zone.zone_name:
+                continue
+            check_bucket_eq(source_zone, target_zone, bucket_name)
             
 
 def init(parse_args):
