@@ -281,7 +281,7 @@ int BlueFS::_write_super()
   bl.rebuild();
 
   IOContext ioc(NULL);
-  bdev[0]->aio_write(get_super_offset(), bl, &ioc);
+  bdev[0]->aio_write(get_super_offset(), bl, &ioc, false);
   bdev[0]->aio_submit(&ioc);
   ioc.aio_wait();
   dout(20) << __func__ << " v " << super.version << " crc " << crc
@@ -299,7 +299,7 @@ int BlueFS::_open_super()
 
   // always the second block
   r = bdev[0]->read(get_super_offset(), get_super_length(),
-		    &bl, ioc[0]);
+		    &bl, ioc[0], false);
   if (r < 0)
     return r;
 
@@ -640,7 +640,8 @@ int BlueFS::_read(
       }
       dout(20) << __func__ << " fetching " << x_off << "~" << l << " of "
 	       << *p << dendl;
-      int r = bdev[p->bdev]->read(p->offset + x_off, l, &buf->bl, ioc[p->bdev]);
+      int r = bdev[p->bdev]->read(p->offset + x_off, l, &buf->bl, ioc[p->bdev],
+				  true);
       assert(r == 0);
     }
     left = buf->get_buf_remaining(off);
@@ -948,7 +949,7 @@ int BlueFS::_flush_range(FileWriter *h, uint64_t offset, uint64_t length)
       z.zero();
       t.append(z);
     }
-    bdev[p->bdev]->aio_write(p->offset + x_off, t, h->iocv[p->bdev]);
+    bdev[p->bdev]->aio_write(p->offset + x_off, t, h->iocv[p->bdev], false);
     bloff += x_len;
     length -= x_len;
     ++p;
