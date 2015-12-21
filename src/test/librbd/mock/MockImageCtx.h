@@ -12,6 +12,7 @@
 #include "test/librbd/mock/MockObjectMap.h"
 #include "test/librbd/mock/MockReadahead.h"
 #include "common/RWLock.h"
+#include "common/WorkQueue.h"
 #include "librbd/ImageCtx.h"
 #include "gmock/gmock.h"
 
@@ -56,6 +57,7 @@ struct MockImageCtx {
 
   ~MockImageCtx() {
     wait_for_async_requests();
+    image_ctx->op_work_queue->drain();
     delete image_watcher;
     delete op_work_queue;
     delete aio_work_queue;
