@@ -847,20 +847,29 @@ int BlueFS::_flush_range(FileWriter *h, uint64_t offset, uint64_t length)
   assert(offset <= h->file->fnode.size);
 
   uint64_t allocated = h->file->fnode.get_allocated();
+
+  // do not bother to dirty the file if we are overwriting
+  // previously allocated extents.
+  bool must_dirty = false;
   if (allocated < offset + length) {
     int r = _allocate(h->file->fnode.prefer_bdev,
 		      offset + length - allocated,
 		      &h->file->fnode.extents);
     if (r < 0)
       return r;
+    must_dirty = true;
   }
-  if (h->file->fnode.size < offset + length)
+  if (h->file->fnode.size < offset + length) {
     h->file->fnode.size = offset + length;
-  h->file->fnode.mtime = ceph_clock_now(NULL);
-  log_t.op_file_update(h->file->fnode);
-  if (!h->file->dirty) {
-    h->file->dirty = true;
-    dirty_files.push_back(*h->file);
+    must_dirty = true;
+  }
+  if (must_dirty) {
+    h->file->fnode.mtime = ceph_clock_now(NULL);
+    log_t.op_file_update(h->file->fnode);
+    if (!h->file->dirty) {
+      h->file->dirty = true;
+      dirty_files.push_back(*h->file);
+    }
   }
   dout(20) << __func__ << " file now " << h->file->fnode << dendl;
 
@@ -994,6 +1003,8 @@ void BlueFS::_fsync(FileWriter *h)
   dout(10) << __func__ << " " << h << " " << h->file->fnode << dendl;
   _flush(h, true);
   if (h->file->dirty) {
+    dout(20) << __func__ << " file metadata is dirty, flushing log on "
+	     << h->file->fnode << dendl;
     _flush_log();
     assert(!h->file->dirty);
   }
