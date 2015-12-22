@@ -83,14 +83,6 @@ int MemStore::_save()
   if (r < 0)
     return r;
 
-  if (sharded) {
-   string fn = path + "/sharded";
-    bufferlist bl;
-    int r = bl.write_file(fn.c_str());
-    if (r < 0)
-      return r;
-  }
-
   return 0;
 }
 
@@ -171,11 +163,6 @@ int MemStore::_load()
     coll_map[*q] = c;
     used_bytes += c->used_bytes();
   }
-
-  fn = path + "/sharded";
-  struct stat st;
-  if (::stat(fn.c_str(), &st) == 0)
-    set_allow_sharded_objects();
 
   dump_all();
 

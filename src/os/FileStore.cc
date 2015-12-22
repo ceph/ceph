@@ -232,9 +232,6 @@ int FileStore::lfn_open(coll_t cid,
 			FDRef *outfd,
                         Index *index)
 {
-  assert(get_allow_sharded_objects() ||
-	 ( oid.shard_id == shard_id_t::NO_SHARD &&
-	   oid.generation == ghobject_t::NO_GEN ));
   assert(outfd);
   int r = 0;
   bool need_lock = true;
@@ -1167,22 +1164,6 @@ int FileStore::read_superblock()
   bufferlist::iterator i = bl.begin();
   ::decode(superblock, i);
   return 0;
-}
-
-void FileStore::set_allow_sharded_objects()
-{
-  if (!get_allow_sharded_objects()) {
-    superblock.compat_features.incompat.insert(CEPH_FS_FEATURE_INCOMPAT_SHARDS);
-    int ret = write_superblock();
-    assert(ret == 0);	//Should we return error and make caller handle it?
-  }
-  return;
-}
-
-bool FileStore::get_allow_sharded_objects()
-{
-  return g_conf->filestore_debug_disable_sharded_check ||
-    superblock.compat_features.incompat.contains(CEPH_FS_FEATURE_INCOMPAT_SHARDS);
 }
 
 int FileStore::update_version_stamp()
