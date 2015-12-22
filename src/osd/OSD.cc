@@ -6645,7 +6645,6 @@ void OSD::handle_osd_map(MOSDMap *m)
   }
   else if (do_shutdown) {
     osd_lock.Unlock();
-    shutdown();
     if (network_error) {
       map<int,pair<utime_t,entity_inst_t>>::iterator it = failure_pending.begin();
       while (it != failure_pending.end()) {
@@ -6654,6 +6653,7 @@ void OSD::handle_osd_map(MOSDMap *m)
         failure_pending.erase(it++);
       }
     }
+    shutdown();
     osd_lock.Lock();
   }
   else if (is_preboot()) {
