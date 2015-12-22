@@ -455,3 +455,17 @@ int BlockDevice::read(uint64_t off, uint64_t len, bufferlist *pbl,
   }
   return r < 0 ? r : 0;
 }
+
+int BlockDevice::invalidate_cache(uint64_t off, uint64_t len)
+{
+  dout(5) << __func__ << " " << off << "~" << len << dendl;
+  assert(off % block_size == 0);
+  assert(len % block_size == 0);
+  int r = posix_fadvise(fd_buffered, off, len, POSIX_FADV_DONTNEED);
+  if (r < 0) {
+    r = -errno;
+    derr << __func__ << " " << off << "~" << len << " error: "
+	 << cpp_strerror(r) << dendl;
+  }
+  return r;
+}
