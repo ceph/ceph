@@ -69,8 +69,9 @@ int BlockDevice::_lock()
   return 0;
 }
 
-int BlockDevice::open(string path)
+int BlockDevice::open(string p)
 {
+  path = p;
   int r = 0;
   dout(1) << __func__ << " path " << path << dendl;
 
@@ -151,6 +152,7 @@ void BlockDevice::close()
   assert(fd_buffered >= 0);
   VOID_TEMP_FAILURE_RETRY(::close(fd_buffered));
   fd_buffered = -1;
+  path.clear();
 }
 
 int BlockDevice::flush()
