@@ -496,9 +496,18 @@ void KStore::OnodeHashLRU::rename(const ghobject_t& old_oid,
     lru.erase(p);
     onode_map.erase(pn);
   }
-  onode_map.insert(make_pair(new_oid, po->second));
-  _touch(po->second);
-  onode_map.erase(po);
+  OnodeRef o = po->second;
+
+  // install a non-existent onode it its place
+  po->second.reset(new Onode(old_oid, o->key));
+  po->second->exists = false;
+  lru.push_back(*po->second);
+
+  // fix oid, key
+  onode_map.insert(make_pair(new_oid, o));
+  _touch(o);
+  o->oid = new_oid;
+  get_object_key(new_oid, &o->key);
 }
 
 bool KStore::OnodeHashLRU::get_next(
@@ -3618,15 +3627,9 @@ int KStore::_rename(TransContext *txc,
       return r;
   }
 
-  get_object_key(old_oid, &old_key);
-  get_object_key(new_oid, &new_key);
-
-  c->onode_map.rename(old_oid, new_oid);
-  oldo->oid = new_oid;
-  oldo->key = new_key;
-
-  txc->t->rmkey(PREFIX_OBJ, old_key);
+  txc->t->rmkey(PREFIX_OBJ, oldo->key);
   txc->write_onode(oldo);
+  c->onode_map.rename(old_oid, new_oid);  // this adjusts oldo->{oid,key}
   r = 0;
 
  out:
