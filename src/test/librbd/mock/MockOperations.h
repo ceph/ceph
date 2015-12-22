@@ -16,9 +16,10 @@ struct MockOperations {
   MOCK_METHOD2(rebuild_object_map, void(ProgressContext &prog_ctx,
                                         Context *on_finish));
   MOCK_METHOD2(rename, void(const char *dstname, Context *on_finish));
-  MOCK_METHOD3(resize, void(uint64_t size, ProgressContext &prog_ctx,
-                            Context *on_finish));
-  MOCK_METHOD2(snap_create, void(const char *snap_name, Context *on_finish));
+  MOCK_METHOD4(resize, void(uint64_t size, ProgressContext &prog_ctx,
+                            Context *on_finish, uint64_t journal_op_tid));
+  MOCK_METHOD3(snap_create, void(const char *snap_name, Context *on_finish,
+                                 uint64_t journal_op_tid));
   MOCK_METHOD2(snap_remove, void(const char *snap_name, Context *on_finish));
   MOCK_METHOD3(snap_rename, void(uint64_t src_snap_id, const char *snap_name,
                                  Context *on_finish));
