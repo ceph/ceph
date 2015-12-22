@@ -910,9 +910,6 @@ public:
 
       boost::string_ref sref {iter.key.name};
 
-      std::cout << "readdir objects prefix: " << prefix
-		<< " obj: " << sref << std::endl;
-
       size_t last_del = sref.find_last_of('/');
       if (last_del != string::npos)
 	sref.remove_prefix(last_del+1);
@@ -936,11 +933,6 @@ public:
       ++ix;
     }
     for (auto& iter : common_prefixes) {
-
-      std::cout << "readdir common prefixes prefix: " << prefix
-		<< " iter first: " << iter.first
-		<< " iter second: " << iter.second
-		<< std::endl;
 
       /* it's safest to modify the element in place--a suffix-modifying
        * string_ref operation is problematic since ULP rgw_file callers
