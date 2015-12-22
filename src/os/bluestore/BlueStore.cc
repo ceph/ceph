@@ -5475,6 +5475,7 @@ int BlueStore::_do_remove(
     _do_omap_clear(txc, o->onode.omap_head);
   }
   o->exists = false;
+  o->onode = bluestore_onode_t();
   txc->onodes.erase(o);
   txc->t->rmkey(PREFIX_OBJ, o->key);
   return 0;
