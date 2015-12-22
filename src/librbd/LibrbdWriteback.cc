@@ -5,8 +5,8 @@
 
 #include "common/ceph_context.h"
 #include "common/dout.h"
-#include "common/Finisher.h"
 #include "common/Mutex.h"
+#include "common/WorkQueue.h"
 #include "include/Context.h"
 #include "include/rados/librados.hpp"
 #include "include/rbd/librbd.hpp"
@@ -168,14 +168,7 @@ namespace librbd {
   };
 
   LibrbdWriteback::LibrbdWriteback(ImageCtx *ictx, Mutex& lock)
-    : m_finisher(new Finisher(ictx->cct)), m_tid(0), m_lock(lock), m_ictx(ictx)
-  {
-    m_finisher->start();
-  }
-
-  LibrbdWriteback::~LibrbdWriteback() {
-    m_finisher->stop();
-    delete m_finisher;
+    : m_tid(0), m_lock(lock), m_ictx(ictx) {
   }
 
   void LibrbdWriteback::read(const object_t& oid, uint64_t object_no,
@@ -192,7 +185,7 @@ namespace librbd {
       RWLock::RLocker snap_locker(m_ictx->snap_lock);
       if (m_ictx->object_map != nullptr &&
           !m_ictx->object_map->object_may_exist(object_no)) {
-	m_finisher->queue(req, -ENOENT);
+        m_ictx->op_work_queue->queue(req, -ENOENT);
 	return;
       }
     }
