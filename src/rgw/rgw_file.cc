@@ -62,9 +62,24 @@ namespace rgw {
   {
     /* find either-of <object_name>, <object_name/>, only one of
      * which should exist;  atomicity? */
-    LookupFHResult fhr{nullptr, 0};
-    std::string object_name{path};
+    using std::get;
 
+    LookupFHResult fhr{nullptr, 0};
+    RGWFileHandle::directory* d = parent->get_directory();
+    if (! d->name_cache.empty()) {
+      RGWFileHandle::dirent_string name{path};
+      const auto& diter = d->name_cache.find(name);
+      if (diter != d->name_cache.end()) {
+	fhr = lookup_fh(parent, path,
+			RGWFileHandle::FLAG_CREATE|
+			((diter->second == RGW_FS_TYPE_DIRECTORY) ?
+			  RGWFileHandle::FLAG_DIRECTORY :
+			  RGWFileHandle::FLAG_NONE));
+	if (get<0>(fhr))
+	  return fhr;
+      }
+    }
+    std::string object_name{path};
     for (auto ix : { 0, 1 }) {
       switch (ix) {
       case 0:
