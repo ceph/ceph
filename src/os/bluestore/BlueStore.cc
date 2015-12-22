@@ -5194,12 +5194,32 @@ int BlueStore::_zero(TransContext *txc,
   RWLock::WLocker l(c->lock);
   EnodeRef enode;
   OnodeRef o = c->get_onode(oid, true);
+  _dump_onode(o);
   _assign_nid(txc, o);
 
   // overlay
   _do_overlay_trim(txc, o, offset, length);
 
+  uint64_t block_size = bdev->get_block_size();
   map<uint64_t,bluestore_extent_t>::iterator bp = o->onode.seek_extent(offset);
+
+  // zero tail of previous existing extent?
+  // (this happens if the old eof was partway through a previous extent,
+  // and we implicitly zero the rest of it by writing to a larger offset.)
+  if (offset > o->onode.size) {
+    uint64_t end = ROUND_UP_TO(o->onode.size, block_size);
+    map<uint64_t, bluestore_extent_t>::iterator pp = o->onode.find_extent(end);
+    if (offset > end &&
+	pp != o->onode.block_map.end()) {
+      uint64_t x_off = end - pp->first;
+      uint64_t x_len = pp->second.length - x_off;
+      dout(10) << __func__ << " zero tail " << x_off << "~" << x_len
+	       << " of prior extent " << pp->first << ": " << pp->second
+	       << dendl;
+      bdev->aio_zero(pp->second.offset + x_off, x_len, &txc->ioc);
+    }
+  }
+
   while (bp != o->onode.block_map.end()) {
     if (bp->first >= offset + length)
       break;
