@@ -3433,6 +3433,9 @@ int BlueStore::_do_wal_op(bluestore_wal_op_t& wo, IOContext *ioc)
   // read all the overlay data first for apply
   _do_read_all_overlays(wo);
 
+  // NOTE: we are doing all reads and writes buffered so that we can
+  // avoid worrying about multiple RMW cycles over the same blocks.
+
   switch (wo.op) {
   case bluestore_wal_op_t::OP_WRITE:
   {
@@ -3469,7 +3472,7 @@ int BlueStore::_do_wal_op(bluestore_wal_op_t& wo, IOContext *ioc)
       bl.claim_append(t);
     }
     assert((bl.length() & ~block_mask) == 0);
-    bdev->aio_write(offset, bl, ioc, false);
+    bdev->aio_write(offset, bl, ioc, true);
   }
   break;
 
@@ -3487,7 +3490,7 @@ int BlueStore::_do_wal_op(bluestore_wal_op_t& wo, IOContext *ioc)
       bdev->read(first_offset, block_size, &first, ioc, true);
       size_t z_len = MIN(block_size - first_len, length);
       memset(first.c_str() + first_len, 0, z_len);
-      bdev->aio_write(first_offset, first, ioc, false);
+      bdev->aio_write(first_offset, first, ioc, true);
       offset += block_size - first_len;
       length -= z_len;
     }
@@ -3507,7 +3510,7 @@ int BlueStore::_do_wal_op(bluestore_wal_op_t& wo, IOContext *ioc)
 	       << offset << "~" << block_size << dendl;
       bdev->read(offset, block_size, &last, ioc, true);
       memset(last.c_str(), 0, length);
-      bdev->aio_write(offset, last, ioc, false);
+      bdev->aio_write(offset, last, ioc, true);
     }
   }
   break;
