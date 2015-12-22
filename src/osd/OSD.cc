@@ -6703,14 +6703,13 @@ void OSD::check_osdmap_features(ObjectStore *fs)
     }
 
     if ((features & CEPH_FEATURE_OSD_ERASURE_CODES) &&
-	!fs->get_allow_sharded_objects()) {
+	!superblock.compat_features.incompat.contains(CEPH_OSD_FEATURE_INCOMPAT_SHARDS)) {
       dout(0) << __func__ << " enabling on-disk ERASURE CODES compat feature" << dendl;
       superblock.compat_features.incompat.insert(CEPH_OSD_FEATURE_INCOMPAT_SHARDS);
       ObjectStore::Transaction *t = new ObjectStore::Transaction;
       write_superblock(*t);
       int err = store->queue_transaction_and_cleanup(service.meta_osr.get(), t);
       assert(err == 0);
-      fs->set_allow_sharded_objects();
     }
   }
 }

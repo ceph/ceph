@@ -1269,14 +1269,6 @@ int ObjectStoreTool::do_import(ObjectStore *store, OSDSuperblock& sb,
 
     cerr << "Export has incompatible features set " << unsupported << std::endl;
 
-    // If shards setting the issue, then inform user what they can do about it.
-    if (unsupported.incompat.contains(CEPH_OSD_FEATURE_INCOMPAT_SHARDS)) {
-      cerr << std::endl;
-      cerr << "OSD requires sharding to be enabled" << std::endl;
-      cerr << std::endl;
-      cerr << "If you wish to import, first do 'ceph-objectstore-tool...--op set-allow-sharded-objects'" << std::endl;
-      return -EINVAL;
-    }
     // Let them import if they specify the --force option
     if (!force)
         return 11;  // Positive return means exit status
@@ -2238,7 +2230,7 @@ int main(int argc, char **argv)
     ("pgid", po::value<string>(&pgidstr),
      "PG id, mandatory for info, log, remove, export, rm-past-intervals, mark-complete")
     ("op", po::value<string>(&op),
-     "Arg is one of [info, log, remove, export, import, list, fix-lost, list-pgs, rm-past-intervals, set-allow-sharded-objects, dump-journal, dump-super, meta-list, "
+     "Arg is one of [info, log, remove, export, import, list, fix-lost, list-pgs, rm-past-intervals, dump-journal, dump-super, meta-list, "
 	 "get-osdmap, set-osdmap, get-inc-osdmap, set-inc-osdmap, mark-complete]")
     ("epoch", po::value<unsigned>(&epoch),
      "epoch# for get-osdmap and get-inc-osdmap, the current epoch in use if not specified")
@@ -2482,8 +2474,6 @@ int main(int argc, char **argv)
     myexit(1);
   }
 
-  bool fs_sharded_objects = fs->get_allow_sharded_objects();
-
   vector<coll_t> ls;
   vector<coll_t>::iterator it;
   CompatSet supported;
@@ -2509,13 +2499,6 @@ int main(int argc, char **argv)
   if (debug) {
     cerr << "Cluster fsid=" << superblock.cluster_fsid << std::endl;
   }
-
-#ifdef INTERNAL_TEST2
-  fs->set_allow_sharded_objects();
-  assert(fs->get_allow_sharded_objects());
-  fs_sharded_objects = true;
-  superblock.compat_features.incompat.insert(CEPH_OSD_FEATURE_INCOMPAT_SHARDS);
-#endif
 
   if (debug) {
     cerr << "Supported features: " << supported << std::endl;
@@ -2629,96 +2612,6 @@ int main(int argc, char **argv)
     cerr << "Must provide pgid" << std::endl;
     usage(desc);
     ret = 1;
-    goto out;
-  }
-
-  if (op == "set-allow-sharded-objects") {
-    // This could only happen if we backport changes to an older release
-    if (!supported.incompat.contains(CEPH_OSD_FEATURE_INCOMPAT_SHARDS)) {
-      cerr << "Can't enable sharded objects in this release" << std::endl;
-      ret = 1;
-      goto out;
-    }
-    if (superblock.compat_features.incompat.contains(CEPH_OSD_FEATURE_INCOMPAT_SHARDS) &&
-        fs_sharded_objects) {
-      cerr << "Sharded objects already fully enabled" << std::endl;
-      ret = 0;
-      goto out;
-    }
-    OSDMap curmap;
-    bufferlist bl;
-    ret = get_osdmap(fs, superblock.current_epoch, curmap, bl);
-    if (ret) {
-        cerr << "Can't find local OSDMap" << std::endl;
-        goto out;
-    }
-
-    // Based on OSDMonitor::check_cluster_features()
-    // XXX: The up state of osds in the last map isn't
-    // as important from a non-running osd.  I'm using
-    // get_all_osds() instead.  An osd which was never
-    // upgraded and never removed would be flagged here.
-    stringstream unsupported_ss;
-    int unsupported_count = 0;
-    uint64_t features = CEPH_FEATURE_OSD_ERASURE_CODES;
-    set<int32_t> all_osds;
-    curmap.get_all_osds(all_osds);
-    for (set<int32_t>::iterator it = all_osds.begin();
-         it != all_osds.end(); ++it) {
-        const osd_xinfo_t &xi = curmap.get_xinfo(*it);
-#ifdef INTERNAL_TEST3
-        // Force one of the OSDs to not have support for erasure codes
-        if (unsupported_count == 0)
-            ((osd_xinfo_t &)xi).features &= ~features;
-#endif
-        if ((xi.features & features) != features) {
-            if (unsupported_count > 0)
-                unsupported_ss << ", ";
-            unsupported_ss << "osd." << *it;
-            unsupported_count ++;
-        }
-    }
-
-    if (unsupported_count > 0) {
-        cerr << "ERASURE_CODES feature unsupported by: "
-           << unsupported_ss.str() << std::endl;
-        ret = 1;
-        goto out;
-    }
-
-    if (!dry_run) {
-      superblock.compat_features.incompat.insert(CEPH_OSD_FEATURE_INCOMPAT_SHARDS);
-      ObjectStore::Transaction t;
-      bl.clear();
-      ::encode(superblock, bl);
-      t.write(coll_t::meta(), OSD_SUPERBLOCK_POBJECT, 0, bl.length(), bl);
-      ret = fs->apply_transaction(osr, t);
-      if (ret < 0) {
-        cerr << "Error writing OSD superblock: " << cpp_strerror(ret) << std::endl;
-        goto out;
-      }
-
-      fs->set_allow_sharded_objects();
-    }
-    cout << "Enabled on-disk sharded objects" << std::endl;
-
-    ret = 0;
-    goto out;
-  }
-
-  // If there was a crash as an OSD was transitioning to sharded objects
-  // and hadn't completed a set_allow_sharded_objects().
-  // This utility does not want to attempt to finish that transition.
-  if (superblock.compat_features.incompat.contains(CEPH_OSD_FEATURE_INCOMPAT_SHARDS) != fs_sharded_objects) {
-    // An OSD should never have call set_allow_sharded_objects() before
-    // updating its own OSD features.
-    if (fs_sharded_objects)
-      cerr << "FileStore sharded but OSD not set, Corruption?" << std::endl;
-    else
-      cerr << "Found incomplete transition to sharded objects" << std::endl;
-    cerr << std::endl;
-    cerr << "Use --op set-allow-sharded-objects to repair" << std::endl;
-    ret = -EINVAL;
     goto out;
   }
 
@@ -2904,7 +2797,7 @@ int main(int argc, char **argv)
   // If not an object command nor any of the ops handled below, then output this usage
   // before complaining about a bad pgid
   if (!vm.count("objcmd") && op != "export" && op != "info" && op != "log" && op != "rm-past-intervals" && op != "mark-complete") {
-    cerr << "Must provide --op (info, log, remove, export, import, list, fix-lost, list-pgs, rm-past-intervals, set-allow-sharded-objects, dump-journal, dump-super, meta-list, "
+    cerr << "Must provide --op (info, log, remove, export, import, list, fix-lost, list-pgs, rm-past-intervals, dump-journal, dump-super, meta-list, "
       "get-osdmap, set-osdmap, get-inc-osdmap, set-inc-osdmap, mark-complete)"
 	 << std::endl;
     usage(desc);
