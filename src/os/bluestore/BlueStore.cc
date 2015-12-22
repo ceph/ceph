@@ -771,6 +771,7 @@ BlueStore::BlueStore(CephContext *cct, const string& path)
     wal_seq(0),
     wal_tp(cct,
 	   "BlueStore::wal_tp",
+           "tp_wal",
 	   cct->_conf->bluestore_wal_threads,
 	   "bluestore_wal_threads"),
     wal_wq(this,
@@ -1690,7 +1691,7 @@ int BlueStore::mount()
 
   finisher.start();
   wal_tp.start();
-  kv_sync_thread.create();
+  kv_sync_thread.create("bstore_kv_sync");
 
   r = _wal_replay();
   if (r < 0)

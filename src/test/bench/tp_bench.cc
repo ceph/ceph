@@ -173,7 +173,7 @@ int main(int argc, char **argv)
     if (*i == 'q') {
       ThreadPool *tp =
 	new ThreadPool(
-	  g_ceph_context, ss.str(), vm["num-threads"].as<unsigned>(), 0);
+	  g_ceph_context, ss.str(), "tp_test",  vm["num-threads"].as<unsigned>(), 0);
       wqs.push_back(
 	new WQWrapper(
 	  new PassAlong(tp, wqs.back()),

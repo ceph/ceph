@@ -259,7 +259,7 @@ bool RGWGC::going_down()
 void RGWGC::start_processor()
 {
   worker = new GCWorker(cct, this);
-  worker->create();
+  worker->create("rgw_gc");
 }
 
 void RGWGC::stop_processor()

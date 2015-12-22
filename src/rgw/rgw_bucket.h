@@ -375,7 +375,7 @@ public:
     }
 
     renew_thread = new ChangesRenewThread(cct, this);
-    renew_thread->create();
+    renew_thread->create("rgw_dt_lg_renew");
   }
 
   ~RGWDataChangesLog();

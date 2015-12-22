@@ -236,7 +236,7 @@ int main(int argc, char **argv)
   for (vector<ceph::shared_ptr<Bencher> >::iterator i = benchers.begin();
        i != benchers.end();
        ++i) {
-    (*i)->create();
+    (*i)->create("bencher");
   }
   for (vector<ceph::shared_ptr<Bencher> >::iterator i = benchers.begin();
        i != benchers.end();

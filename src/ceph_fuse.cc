@@ -244,7 +244,7 @@ int main(int argc, const char **argv, const char *envp[]) {
 
     cerr << "ceph-fuse[" << getpid() << "]: starting fuse" << std::endl;
     tester.init(cfuse, client);
-    tester.create();
+    tester.create("tester");
     r = cfuse->loop();
     tester.join(&tester_rp);
     tester_r = static_cast<int>(reinterpret_cast<uint64_t>(tester_rp));

@@ -62,7 +62,7 @@ void SafeTimer::init()
 {
   ldout(cct,10) << "init" << dendl;
   thread = new SafeTimerThread(this);
-  thread->create();
+  thread->create("safe_timer");
 }
 
 void SafeTimer::shutdown()

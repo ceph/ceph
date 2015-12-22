@@ -691,10 +691,10 @@ void FileJournal::start_writer()
 {
   write_stop = false;
   aio_stop = false;
-  write_thread.create();
+  write_thread.create("journal_write");
 #ifdef HAVE_LIBAIO
   if (aio)
-    write_finish_thread.create();
+    write_finish_thread.create("journal_wrt_fin");
 #endif
 }
 

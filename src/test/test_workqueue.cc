@@ -8,7 +8,7 @@
 
 TEST(WorkQueue, StartStop)
 {
-  ThreadPool tp(g_ceph_context, "foo", 10, "");
+  ThreadPool tp(g_ceph_context, "foo", "tp_foo", 10, "");
   
   tp.start();
   tp.pause();
@@ -21,7 +21,7 @@ TEST(WorkQueue, StartStop)
 
 TEST(WorkQueue, Resize)
 {
-  ThreadPool tp(g_ceph_context, "bar", 2, "osd_op_threads");
+  ThreadPool tp(g_ceph_context, "bar", "tp_bar", 2, "osd_op_threads");
   
   tp.start();
 
