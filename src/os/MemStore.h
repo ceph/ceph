@@ -344,8 +344,7 @@ public:
       coll_lock("MemStore::coll_lock"),
       apply_lock("MemStore::apply_lock"),
       finisher(cct),
-      used_bytes(0),
-      sharded(false) {}
+      used_bytes(0) {}
   ~MemStore() { }
 
   bool test_mount_in_use() {
@@ -374,14 +373,6 @@ public:
   }
   bool needs_journal() {
     return false;
-  }
-
-  bool sharded;
-  void set_allow_sharded_objects() {
-    sharded = true;
-  }
-  bool get_allow_sharded_objects() {
-    return sharded;
   }
 
   int statfs(struct statfs *buf);
