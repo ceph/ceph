@@ -180,13 +180,17 @@ class Downburst(object):
 
         user_info = {
             'user': self.user,
+            # Remove the user's password so console logins are possible
+            'runcmd': [
+                ['passwd', '-d', self.user],
+            ]
         }
         # On CentOS/RHEL/Fedora, write the correct mac address
         if os_type in ['centos', 'rhel', 'fedora']:
-            user_info['runcmd'] = [
+            user_info['runcmd'].extend([
                 ['sed', '-ie', 's/HWADDR=".*"/HWADDR="%s"/' % mac_address,
                  '/etc/sysconfig/network-scripts/ifcfg-eth0'],
-            ]
+            ])
         user_fd = tempfile.NamedTemporaryFile(delete=False)
         yaml.safe_dump(user_info, user_fd)
         self.user_path = user_fd.name
