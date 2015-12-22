@@ -70,38 +70,6 @@ public:
                   .Times(1);
   }
 
-  void expect_is_journal_replaying(MockJournal &mock_journal) {
-    EXPECT_CALL(mock_journal, is_journal_replaying()).WillOnce(Return(false));
-  }
-
-  void expect_is_journal_ready(MockJournal &mock_journal) {
-    EXPECT_CALL(mock_journal, is_journal_ready()).WillOnce(Return(true));
-  }
-
-  void expect_allocate_op_tid(MockImageCtx &mock_image_ctx) {
-    if (mock_image_ctx.journal != nullptr) {
-      EXPECT_CALL(*mock_image_ctx.journal, allocate_op_tid())
-                    .WillOnce(Return(1U));
-    }
-  }
-
-  void expect_append_op_event(MockImageCtx &mock_image_ctx, int r) {
-    if (mock_image_ctx.journal != nullptr) {
-      expect_is_journal_replaying(*mock_image_ctx.journal);
-      expect_allocate_op_tid(mock_image_ctx);
-      EXPECT_CALL(*mock_image_ctx.journal, append_op_event_mock(_, _, _))
-                    .WillOnce(WithArg<2>(CompleteContext(r, mock_image_ctx.image_ctx->op_work_queue)));
-    }
-  }
-
-  void expect_commit_op_event(MockImageCtx &mock_image_ctx, int r) {
-    if (mock_image_ctx.journal != nullptr) {
-      expect_is_journal_replaying(*mock_image_ctx.journal);
-      expect_is_journal_ready(*mock_image_ctx.journal);
-      EXPECT_CALL(*mock_image_ctx.journal, commit_op_event(1U, r));
-    }
-  }
-
   void expect_is_lock_owner(MockImageCtx &mock_image_ctx) {
     if (mock_image_ctx.exclusive_lock != nullptr) {
       EXPECT_CALL(*mock_image_ctx.exclusive_lock, is_lock_owner())
@@ -159,31 +127,18 @@ public:
                   .WillOnce(WithArg<2>(CompleteContext(0, mock_image_ctx.image_ctx->op_work_queue)));
   }
 
-  int when_resize(MockImageCtx &mock_image_ctx, uint64_t new_size) {
+  int when_resize(MockImageCtx &mock_image_ctx, uint64_t new_size,
+                  uint64_t journal_op_tid, bool disable_journal) {
     C_SaferCond cond_ctx;
     librbd::NoOpProgressContext prog_ctx;
     MockResizeRequest *req = new MockResizeRequest(
-      mock_image_ctx, &cond_ctx, new_size, prog_ctx);
+      mock_image_ctx, &cond_ctx, new_size, prog_ctx, journal_op_tid,
+      disable_journal);
     {
       RWLock::RLocker owner_locker(mock_image_ctx.owner_lock);
       req->send();
     }
     return cond_ctx.wait();
-  }
-
-  void initialize_features(ImageCtx *ictx, MockImageCtx &mock_image_ctx,
-                           MockExclusiveLock &mock_exclusive_lock,
-                           MockJournal &mock_journal,
-                           MockObjectMap &mock_object_map) {
-    if (ictx->test_features(RBD_FEATURE_EXCLUSIVE_LOCK)) {
-      mock_image_ctx.exclusive_lock = &mock_exclusive_lock;
-    }
-    if (ictx->test_features(RBD_FEATURE_JOURNALING)) {
-      mock_image_ctx.journal = &mock_journal;
-    }
-    if (ictx->test_features(RBD_FEATURE_OBJECT_MAP)) {
-      mock_image_ctx.object_map = &mock_object_map;
-    }
   }
 };
 
@@ -203,7 +158,7 @@ TEST_F(TestMockOperationResizeRequest, NoOpSuccess) {
   expect_append_op_event(mock_image_ctx, 0);
   expect_unblock_writes(mock_image_ctx);
   expect_commit_op_event(mock_image_ctx, 0);
-  ASSERT_EQ(0, when_resize(mock_image_ctx, ictx->size));
+  ASSERT_EQ(0, when_resize(mock_image_ctx, ictx->size, 0, false));
 }
 
 TEST_F(TestMockOperationResizeRequest, GrowSuccess) {
@@ -226,7 +181,7 @@ TEST_F(TestMockOperationResizeRequest, GrowSuccess) {
   expect_update_header(mock_image_ctx, 0);
   expect_commit_op_event(mock_image_ctx, 0);
   expect_unblock_writes(mock_image_ctx);
-  ASSERT_EQ(0, when_resize(mock_image_ctx, ictx->size * 2));
+  ASSERT_EQ(0, when_resize(mock_image_ctx, ictx->size * 2, 0, false));
 }
 
 TEST_F(TestMockOperationResizeRequest, ShrinkSuccess) {
@@ -253,7 +208,7 @@ TEST_F(TestMockOperationResizeRequest, ShrinkSuccess) {
   expect_commit_op_event(mock_image_ctx, 0);
   expect_shrink_object_map(mock_image_ctx);
   expect_unblock_writes(mock_image_ctx);
-  ASSERT_EQ(0, when_resize(mock_image_ctx, ictx->size / 2));
+  ASSERT_EQ(0, when_resize(mock_image_ctx, ictx->size / 2, 0, false));
 }
 
 TEST_F(TestMockOperationResizeRequest, PreBlockWritesError) {
@@ -270,7 +225,7 @@ TEST_F(TestMockOperationResizeRequest, PreBlockWritesError) {
   InSequence seq;
   expect_block_writes(mock_image_ctx, -EINVAL);
   expect_unblock_writes(mock_image_ctx);
-  ASSERT_EQ(-EINVAL, when_resize(mock_image_ctx, ictx->size));
+  ASSERT_EQ(-EINVAL, when_resize(mock_image_ctx, ictx->size, 0, false));
 }
 
 TEST_F(TestMockOperationResizeRequest, TrimError) {
@@ -292,7 +247,7 @@ TEST_F(TestMockOperationResizeRequest, TrimError) {
   MockTrimRequest mock_trim_request;
   expect_trim(mock_image_ctx, mock_trim_request, -EINVAL);
   expect_commit_op_event(mock_image_ctx, -EINVAL);
-  ASSERT_EQ(-EINVAL, when_resize(mock_image_ctx, ictx->size / 2));
+  ASSERT_EQ(-EINVAL, when_resize(mock_image_ctx, ictx->size / 2, 0, false));
 }
 
 TEST_F(TestMockOperationResizeRequest, InvalidateCacheError) {
@@ -315,7 +270,7 @@ TEST_F(TestMockOperationResizeRequest, InvalidateCacheError) {
   expect_trim(mock_image_ctx, mock_trim_request, 0);
   expect_invalidate_cache(mock_image_ctx, -EINVAL);
   expect_commit_op_event(mock_image_ctx, -EINVAL);
-  ASSERT_EQ(-EINVAL, when_resize(mock_image_ctx, ictx->size / 2));
+  ASSERT_EQ(-EINVAL, when_resize(mock_image_ctx, ictx->size / 2, 0, false));
 }
 
 TEST_F(TestMockOperationResizeRequest, PostBlockWritesError) {
@@ -337,7 +292,7 @@ TEST_F(TestMockOperationResizeRequest, PostBlockWritesError) {
   expect_block_writes(mock_image_ctx, -EINVAL);
   expect_unblock_writes(mock_image_ctx);
   expect_commit_op_event(mock_image_ctx, -EINVAL);
-  ASSERT_EQ(-EINVAL, when_resize(mock_image_ctx, ictx->size * 2));
+  ASSERT_EQ(-EINVAL, when_resize(mock_image_ctx, ictx->size * 2, 0, false));
 }
 
 TEST_F(TestMockOperationResizeRequest, UpdateHeaderError) {
@@ -360,7 +315,7 @@ TEST_F(TestMockOperationResizeRequest, UpdateHeaderError) {
   expect_update_header(mock_image_ctx, -EINVAL);
   expect_unblock_writes(mock_image_ctx);
   expect_commit_op_event(mock_image_ctx, -EINVAL);
-  ASSERT_EQ(-EINVAL, when_resize(mock_image_ctx, ictx->size * 2));
+  ASSERT_EQ(-EINVAL, when_resize(mock_image_ctx, ictx->size * 2, 0, false));
 }
 
 TEST_F(TestMockOperationResizeRequest, JournalAppendError) {
@@ -380,7 +335,24 @@ TEST_F(TestMockOperationResizeRequest, JournalAppendError) {
   expect_block_writes(mock_image_ctx, 0);
   expect_append_op_event(mock_image_ctx, -EINVAL);
   expect_unblock_writes(mock_image_ctx);
-  ASSERT_EQ(-EINVAL, when_resize(mock_image_ctx, ictx->size));
+  ASSERT_EQ(-EINVAL, when_resize(mock_image_ctx, ictx->size, 0, false));
+}
+
+TEST_F(TestMockOperationResizeRequest, JournalDisabled) {
+  librbd::ImageCtx *ictx;
+  ASSERT_EQ(0, open_image(m_image_name, &ictx));
+
+  MockImageCtx mock_image_ctx(*ictx);
+  MockExclusiveLock mock_exclusive_lock;
+  MockJournal mock_journal;
+  MockObjectMap mock_object_map;
+  initialize_features(ictx, mock_image_ctx, mock_exclusive_lock, mock_journal,
+                      mock_object_map);
+
+  InSequence seq;
+  expect_block_writes(mock_image_ctx, 0);
+  expect_unblock_writes(mock_image_ctx);
+  ASSERT_EQ(0, when_resize(mock_image_ctx, ictx->size, 0, true));
 }
 
 } // namespace operation

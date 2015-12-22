@@ -30,6 +30,7 @@ struct MockJournal {
   }
 
   MOCK_METHOD2(commit_op_event, void(uint64_t, int));
+  MOCK_METHOD2(replay_op_ready, void(uint64_t, Context *));
 };
 
 } // namespace librbd

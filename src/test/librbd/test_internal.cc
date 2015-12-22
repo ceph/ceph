@@ -321,7 +321,7 @@ TEST_F(TestInternal, CancelAsyncResize) {
     size -= MIN(size, 1<<18);
     {
       RWLock::RLocker l(ictx->owner_lock);
-      ictx->operations->resize(size, prog_ctx, &ctx);
+      ictx->operations->resize(size, prog_ctx, &ctx, 0);
     }
 
     // try to interrupt the in-progress resize
@@ -369,7 +369,7 @@ TEST_F(TestInternal, MultipleResize) {
 
     RWLock::RLocker l(ictx->owner_lock);
     contexts.push_back(new C_SaferCond());
-    ictx->operations->resize(new_size, prog_ctx, contexts.back());
+    ictx->operations->resize(new_size, prog_ctx, contexts.back(), 0);
   }
 
   for (uint32_t i = 0; i < contexts.size(); ++i) {
@@ -595,7 +595,8 @@ TEST_F(TestInternal, ResizeCopyup)
 
   // verify full / partial object removal properly copyup
   librbd::NoOpProgressContext no_op;
-  ASSERT_EQ(0, ictx2->operations->resize(m_image_size - (1 << order) - 32, no_op));
+  ASSERT_EQ(0, ictx2->operations->resize(m_image_size - (1 << order) - 32,
+                                         no_op));
   ASSERT_EQ(0, librbd::snap_set(ictx2, "snap1"));
 
   {
