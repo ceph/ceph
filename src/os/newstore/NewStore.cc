@@ -3458,6 +3458,8 @@ int NewStore::_do_write(TransContext *txc,
       dout(20) << __func__ << " create " << f.fid << " writing "
 	       << offset << "~" << length << dendl;
     } else {
+      if(o->onode.overlay_map.size() != 0)
+           goto WAL;
       // append (possibly with gap)
       assert(o->onode.data_map.size() == 1);
       fragment_t &f = o->onode.data_map.rbegin()->second;
@@ -3547,7 +3549,7 @@ int NewStore::_do_write(TransContext *txc,
     r = 0;
     goto out;
   }
-
+WAL:
   if (true) {
     // WAL
     assert(o->onode.data_map.size() == 1);
