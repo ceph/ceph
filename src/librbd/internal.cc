@@ -770,6 +770,7 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
   int snap_create(ImageCtx *ictx, const char *snap_name)
   {
     ldout(ictx->cct, 20) << "snap_create " << ictx << " " << snap_name << dendl;
+    uint64_t snap_nums = 0;    
 
     if (ictx->read_only) {
       return -EROFS;
@@ -781,6 +782,12 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
 
     {
       RWLock::RLocker l(ictx->snap_lock);
+      snap_list_nums(ictx, &snap_nums);
+      ldout(ictx->cct, 20) << "snap_nums: " << snap_nums << dendl;
+      if (ictx->cct->_conf->rbd_snap_max_nums <= snap_nums) {
+        lderr(ictx->cct) << "snap_create " << ictx << " " << "snap more than max: " << ictx->cct->_conf->rbd_snap_max_nums << dendl;
+        return -EDQUOT;
+      }
       if (ictx->get_snap_id(snap_name) != CEPH_NOSNAP) {
         return -EEXIST;
       }
@@ -2220,6 +2227,14 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
       snaps.push_back(info);
     }
 
+    return 0;
+  }
+  
+  int snap_list_nums(ImageCtx *ictx, uint64_t *snap_nums)
+  {
+    ldout(ictx->cct, 20) << "snap_list " << ictx << dendl;
+   
+    *snap_nums = ictx->snap_info.size();
     return 0;
   }
 
