@@ -1818,6 +1818,9 @@ public:
   virtual bool test_mount_in_use() = 0;
   virtual int mount() = 0;
   virtual int umount() = 0;
+  virtual int fsck() {
+    return -EOPNOTSUPP;
+  }
   virtual unsigned get_max_object_name_length() = 0;
   virtual unsigned get_max_attr_name_length() = 0;
   virtual int mkfs() = 0;  // wipe
