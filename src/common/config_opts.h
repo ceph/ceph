@@ -890,6 +890,7 @@ OPTION(bluestore_clone_cow, OPT_BOOL, true)  // do copy-on-write for clones
 OPTION(bluestore_debug_misc, OPT_BOOL, false)
 OPTION(bluestore_debug_no_reuse_blocks, OPT_BOOL, false)
 OPTION(bluestore_debug_small_allocations, OPT_INT, 0)
+OPTION(bluestore_debug_freelist, OPT_BOOL, false)
 
 OPTION(kstore_max_ops, OPT_U64, 512)
 OPTION(kstore_max_bytes, OPT_U64, 64*1024*1024)
