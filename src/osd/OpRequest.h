@@ -59,6 +59,8 @@ struct OpRequest : public TrackedOp {
   bool check_rmw(int flag);
   bool may_read();
   bool may_write();
+  bool may_delete();
+  bool may_class_write();
   bool may_cache();
   bool includes_pg_op();
   bool need_read_cap();
@@ -70,6 +72,7 @@ struct OpRequest : public TrackedOp {
   bool need_skip_promote();
   void set_read();
   void set_write();
+  void set_delete();
   void set_cache();
   void set_class_read();
   void set_class_write();
