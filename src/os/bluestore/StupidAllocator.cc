@@ -124,6 +124,15 @@ int StupidAllocator::allocate(
  found:
   *offset = p.get_start();
   *length = MIN(MAX(alloc_unit, need_size), p.get_len());
+  if (g_conf->bluestore_debug_small_allocations) {
+    uint64_t max =
+      alloc_unit * (rand() % g_conf->bluestore_debug_small_allocations);
+    if (max && *length > max) {
+      dout(10) << __func__ << " shortening allocation of " << *length << " -> "
+	       << max << " due to debug_small_allocations" << dendl;
+      *length = max;
+    }
+  }
   dout(30) << __func__ << " got " << *offset << "~" << *length << " from bin "
 	   << bin << dendl;
 
