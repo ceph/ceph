@@ -142,7 +142,7 @@ void MDSRankDispatcher::init()
   // who is interested in it.
   handle_osd_map();
 
-  progress_thread.create();
+  progress_thread.create("mds_rank_progr");
 
   finisher->start();
 }

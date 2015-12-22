@@ -262,8 +262,8 @@ public:
     if (!started) {
       started = true;
 
-      reader_thread.create();
-      writer_thread.create();
+      reader_thread.create("rbd_reader");
+      writer_thread.create("rbd_writer");
     }
   }
 

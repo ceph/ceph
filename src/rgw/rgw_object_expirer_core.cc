@@ -218,7 +218,7 @@ bool RGWObjectExpirer::going_down()
 void RGWObjectExpirer::start_processor()
 {
   worker = new OEWorker(store->ctx(), this);
-  worker->create();
+  worker->create("rgw_obj_expirer");
 }
 
 void RGWObjectExpirer::stop_processor()

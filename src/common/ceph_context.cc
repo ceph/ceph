@@ -547,7 +547,7 @@ void CephContext::start_service_thread()
     return;
   }
   _service_thread = new CephContextServiceThread(this);
-  _service_thread->create();
+  _service_thread->create("service");
   ceph_spin_unlock(&_service_thread_lock);
 
   // make logs flush on_exit()

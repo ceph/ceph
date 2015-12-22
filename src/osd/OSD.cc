@@ -482,7 +482,7 @@ void OSDService::init()
   watch_timer.init();
   agent_timer.init();
 
-  agent_thread.create();
+  agent_thread.create("osd_srv_agent");
 }
 
 void OSDService::final_init()
@@ -1553,12 +1553,12 @@ OSD::OSD(CephContext *cct_, ObjectStore *store_,
   asok_hook(NULL),
   osd_compat(get_osd_compat_set()),
   state(STATE_INITIALIZING),
-  osd_tp(cct, "OSD::osd_tp", cct->_conf->osd_op_threads, "osd_op_threads"),
-  osd_op_tp(cct, "OSD::osd_op_tp", 
+  osd_tp(cct, "OSD::osd_tp", "tp_osd", cct->_conf->osd_op_threads, "osd_op_threads"),
+  osd_op_tp(cct, "OSD::osd_op_tp", "tp_osd_tp",
     cct->_conf->osd_op_num_threads_per_shard * cct->_conf->osd_op_num_shards),
-  recovery_tp(cct, "OSD::recovery_tp", cct->_conf->osd_recovery_threads, "osd_recovery_threads"),
-  disk_tp(cct, "OSD::disk_tp", cct->_conf->osd_disk_threads, "osd_disk_threads"),
-  command_tp(cct, "OSD::command_tp", 1),
+  recovery_tp(cct, "OSD::recovery_tp", "tp_osd_recov", cct->_conf->osd_recovery_threads, "osd_recovery_threads"),
+  disk_tp(cct, "OSD::disk_tp", "tp_osd_disk", cct->_conf->osd_disk_threads, "osd_disk_threads"),
+  command_tp(cct, "OSD::command_tp", "tp_osd_cmd",  1),
   paused_recovery(false),
   session_waiting_lock("OSD::session_waiting_lock"),
   heartbeat_lock("OSD::heartbeat_lock"),
@@ -1960,7 +1960,7 @@ int OSD::init()
   set_disk_tp_priority();
 
   // start the heartbeat
-  heartbeat_thread.create();
+  heartbeat_thread.create("osd_srv_heartbt");
 
   // tick
   tick_timer.add_event_after(cct->_conf->osd_heartbeat_interval, new C_Tick(this));

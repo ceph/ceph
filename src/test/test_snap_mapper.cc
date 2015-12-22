@@ -167,7 +167,7 @@ private:
 
 public:
   PausyAsyncMap() : lock("PausyAsyncMap"), doer(this) {
-    doer.create();
+    doer.create("doer");
   }
   ~PausyAsyncMap() {
     doer.join();
