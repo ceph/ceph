@@ -3133,6 +3133,7 @@ int KStore::_do_remove(TransContext *txc,
     _do_omap_clear(txc, o->onode.omap_head);
   }
   o->exists = false;
+  o->onode = kstore_onode_t();
   txc->onodes.erase(o);
   get_object_key(o->oid, &key);
   txc->t->rmkey(PREFIX_OBJ, key);
