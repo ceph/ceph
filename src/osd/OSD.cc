@@ -6629,7 +6629,7 @@ void OSD::handle_osd_map(MOSDMap *m)
   // yay!
   consume_map();
 
-  if (is_active() || is_waiting_for_healthy())
+  if (!do_shutdown && (is_active() || is_waiting_for_healthy()))
     maybe_update_heartbeat_peers();
 
   if (!is_active()) {
