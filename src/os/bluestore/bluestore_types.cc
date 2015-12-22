@@ -487,6 +487,8 @@ void bluestore_wal_op_t::encode(bufferlist& bl) const
   ::encode(op, bl);
   ::encode(extent, bl);
   ::encode(src_extent, bl);
+  ::encode(src_rmw_head, bl);
+  ::encode(src_rmw_tail, bl);
   ::encode(nid, bl);
   ::encode(overlays, bl);
   if (!overlays.size()) {
@@ -502,6 +504,8 @@ void bluestore_wal_op_t::decode(bufferlist::iterator& p)
   ::decode(op, p);
   ::decode(extent, p);
   ::decode(src_extent, p);
+  ::decode(src_rmw_head, p);
+  ::decode(src_rmw_tail, p);
   ::decode(nid, p);
   ::decode(overlays, p);
   if (!overlays.size()) {
@@ -516,6 +520,8 @@ void bluestore_wal_op_t::dump(Formatter *f) const
   f->dump_unsigned("op", (int)op);
   f->dump_object("extent", extent);
   f->dump_object("src_extent", src_extent);
+  f->dump_unsigned("src_rmw_head", src_rmw_head);
+  f->dump_unsigned("src_rmw_tail", src_rmw_tail);
   f->dump_unsigned("nid", nid);
   f->open_array_section("overlays");
   for (vector<bluestore_overlay_t>::const_iterator p = overlays.begin();
@@ -540,6 +546,8 @@ void bluestore_wal_op_t::generate_test_instances(list<bluestore_wal_op_t*>& o)
   o.back()->extent.length = 2;
   o.back()->src_extent.offset = 10000;
   o.back()->src_extent.length = 2;
+  o.back()->src_rmw_head = 22;
+  o.back()->src_rmw_tail = 88;
   o.back()->data.append("my data");
   o.back()->nid = 3;
   o.back()->overlays.push_back(bluestore_overlay_t());
