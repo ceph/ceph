@@ -66,21 +66,25 @@ void Replay<I>::flush(Context *on_finish) {
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 20) << this << " " << __func__ << dendl;
 
+  AioCompletion *flush_comp = nullptr;
   OpTids cancel_op_tids;
   on_finish = util::create_async_context_callback(
     m_image_ctx, on_finish);
 
   {
-    RWLock::RLocker owner_locker(m_image_ctx.owner_lock);
     Mutex::Locker locker(m_lock);
 
     // safely commit any remaining AIO modify operations
     if (m_in_flight_aio != 0) {
-      flush_aio();
+      flush_comp = create_aio_flush_completion(nullptr, nullptr);;
     }
 
+    // cancel ops that are waiting to start
     for (auto &op_event_pair : m_op_events) {
-      cancel_op_tids.push_back(op_event_pair.first);
+      const OpEvent &op_event = op_event_pair.second;
+      if (op_event.on_start_ready == nullptr) {
+        cancel_op_tids.push_back(op_event_pair.first);
+      }
     }
 
     assert(m_flush_ctx == nullptr);
@@ -89,12 +93,50 @@ void Replay<I>::flush(Context *on_finish) {
     }
   }
 
+  // execute the following outside of lock scope
+  if (flush_comp != nullptr) {
+    RWLock::RLocker owner_locker(m_image_ctx.owner_lock);
+    AioImageRequest<I>::aio_flush(&m_image_ctx, flush_comp);
+  }
   for (auto op_tid : cancel_op_tids) {
     handle_op_complete(op_tid, -ERESTART);
   }
   if (on_finish != nullptr) {
     on_finish->complete(0);
   }
+}
+
+template <typename I>
+void Replay<I>::replay_op_ready(uint64_t op_tid, Context *on_resume) {
+  CephContext *cct = m_image_ctx.cct;
+  ldout(cct, 20) << this << " " << __func__ << ": op_tid=" << op_tid << dendl;
+
+  auto op_it = m_op_events.find(op_tid);
+  assert(op_it != m_op_events.end());
+
+  OpEvent &op_event = op_it->second;
+  assert(op_event.op_in_progress &&
+         op_event.on_op_finish_event == nullptr &&
+         op_event.on_finish_ready == nullptr &&
+         op_event.on_finish_safe == nullptr);
+
+  // resume processing replay events
+  Context *on_start_ready = nullptr;
+  std::swap(on_start_ready, op_event.on_start_ready);
+  on_start_ready->complete(0);
+
+  // cancel has been requested -- send error to paused state machine
+  if (m_flush_ctx != nullptr) {
+    m_image_ctx.op_work_queue->queue(on_resume, -ERESTART);
+    return;
+  }
+
+  // resume the op state machine once the associated OpFinishEvent
+  // is processed
+  op_event.on_op_finish_event = new FunctionContext(
+    [on_resume](int r) {
+      on_resume->complete(r);
+    });
 }
 
 template <typename I>
@@ -109,8 +151,11 @@ void Replay<I>::handle_event(const journal::AioDiscardEvent &event,
   AioImageRequest<I>::aio_discard(&m_image_ctx, aio_comp, event.offset,
                                   event.length);
   if (flush_required) {
-    Mutex::Locker locker(m_lock);
-    flush_aio();
+    m_lock.Lock();
+    AioCompletion *flush_comp = create_aio_flush_completion(nullptr, nullptr);
+    m_lock.Unlock();
+
+    AioImageRequest<I>::aio_flush(&m_image_ctx, flush_comp);
   }
 }
 
@@ -127,8 +172,11 @@ void Replay<I>::handle_event(const journal::AioWriteEvent &event,
   AioImageRequest<I>::aio_write(&m_image_ctx, aio_comp, event.offset,
                                 event.length, data.c_str(), 0);
   if (flush_required) {
-    Mutex::Locker locker(m_lock);
-    flush_aio();
+    m_lock.Lock();
+    AioCompletion *flush_comp = create_aio_flush_completion(nullptr, nullptr);
+    m_lock.Unlock();
+
+    AioImageRequest<I>::aio_flush(&m_image_ctx, flush_comp);
   }
 }
 
@@ -153,6 +201,7 @@ void Replay<I>::handle_event(const journal::OpFinishEvent &event,
   ldout(cct, 20) << this << " " << __func__ << ": Op finish event: "
                  << "op_tid=" << event.op_tid << dendl;
 
+  bool op_in_progress;
   Context *on_op_finish_event = nullptr;
   {
     Mutex::Locker locker(m_lock);
@@ -169,20 +218,23 @@ void Replay<I>::handle_event(const journal::OpFinishEvent &event,
     assert(op_event.on_finish_safe == nullptr);
     op_event.on_finish_ready = on_ready;
     op_event.on_finish_safe = on_safe;
+    op_in_progress = op_event.op_in_progress;
     std::swap(on_op_finish_event, op_event.on_op_finish_event);
   }
 
   if (event.r < 0) {
-    // TODO handle snap create / resize
-
-    // journal recorded failure of op -- no-op the operation
-    delete on_op_finish_event;
-    handle_op_complete(event.op_tid, 0);
+    if (op_in_progress) {
+      // bubble the error up to the in-progress op to cancel it
+      on_op_finish_event->complete(event.r);
+    } else {
+      // op hasn't been started -- no-op the event
+      delete on_op_finish_event;
+      handle_op_complete(event.op_tid, 0);
+    }
     return;
   }
 
-  // apply the op now -- each op is responsible for filtering the
-  // recorded result to know if the op completed successfully
+  // journal recorded success -- apply the op now
   on_op_finish_event->complete(0);
 }
 
@@ -192,12 +244,19 @@ void Replay<I>::handle_event(const journal::SnapCreateEvent &event,
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 20) << this << " " << __func__ << ": Snap create event" << dendl;
 
-  // TODO not-ready until state machine lets us know
+  Mutex::Locker locker(m_lock);
   OpEvent *op_event;
   Context *on_op_complete = create_op_context_callback(event.op_tid, on_safe,
                                                        &op_event);
 
-  m_image_ctx.operations->snap_create(event.snap_name.c_str(), on_op_complete);
+  m_image_ctx.operations->snap_create(event.snap_name.c_str(), on_op_complete,
+                                      event.op_tid);
+
+  // do not process more events until the state machine is ready
+  // since it will affect IO
+  op_event->op_in_progress = true;
+  op_event->on_start_ready = util::create_async_context_callback(
+    m_image_ctx, on_ready);
 }
 
 template <typename I>
@@ -323,13 +382,19 @@ void Replay<I>::handle_event(const journal::ResizeEvent &event,
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 20) << this << " " << __func__ << ": Resize start event" << dendl;
 
-  // TODO not-ready until state machine lets us know
+  Mutex::Locker locker(m_lock);
   OpEvent *op_event;
   Context *on_op_complete = create_op_context_callback(event.op_tid, on_safe,
                                                        &op_event);
 
   m_image_ctx.operations->resize(event.size, no_op_progress_callback,
-                                 on_op_complete);
+                                 on_op_complete, event.op_tid);
+
+  // do not process more events until the state machine is ready
+  // since it will affect IO
+  op_event->op_in_progress = true;
+  op_event->on_start_ready = util::create_async_context_callback(
+    m_image_ctx, on_ready);
 }
 
 template <typename I>
@@ -357,14 +422,6 @@ void Replay<I>::handle_event(const journal::UnknownEvent &event,
   ldout(cct, 20) << this << " " << __func__ << ": unknown event" << dendl;
   on_ready->complete(0);
   on_safe->complete(0);
-}
-
-template <typename I>
-void Replay<I>::flush_aio() {
-  assert(m_lock.is_locked());
-
-  AioCompletion *aio_comp = create_aio_flush_completion(nullptr, nullptr);
-  AioImageRequest<I>::aio_flush(&m_image_ctx, aio_comp);
 }
 
 template <typename I>
@@ -458,13 +515,12 @@ void Replay<I>::handle_op_complete(uint64_t op_tid, int r) {
     op_event = std::move(op_it->second);
     m_op_events.erase(op_it);
 
-    // TODO handle paused snap create / resize
-
     if (m_op_events.empty() && m_in_flight_aio == 0) {
       on_flush = m_flush_ctx;
     }
   }
 
+  assert(op_event.on_start_ready == nullptr);
   assert((op_event.on_finish_ready != nullptr &&
           op_event.on_finish_safe != nullptr) || r == -ERESTART);
 

@@ -17,8 +17,16 @@ namespace operation {
 template <typename ImageCtxT = ImageCtx>
 class ResizeRequest : public Request<ImageCtxT> {
 public:
+  static ResizeRequest *create(ImageCtxT &image_ctx, Context *on_finish,
+                               uint64_t new_size, ProgressContext &prog_ctx,
+                               uint64_t journal_op_tid, bool disable_journal) {
+    return new ResizeRequest(image_ctx, on_finish, new_size, prog_ctx,
+                             journal_op_tid, disable_journal);
+  }
+
   ResizeRequest(ImageCtxT &image_ctx, Context *on_finish, uint64_t new_size,
-                ProgressContext &prog_ctx);
+                ProgressContext &prog_ctx, uint64_t journal_op_tid,
+                bool disable_journal);
   virtual ~ResizeRequest();
 
   inline bool shrinking() const {
@@ -101,6 +109,7 @@ private:
   ProgressContext &m_prog_ctx;
   uint64_t m_new_parent_overlap;
   bool m_shrink_size_visible = false;
+  bool m_disable_journal = false;
 
   typename xlist<ResizeRequest<ImageCtxT>*>::item m_xlist_item;
 
