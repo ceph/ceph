@@ -2159,6 +2159,8 @@ int BlueStore::statfs(struct statfs *buf)
   buf->f_bsize = bdev->get_block_size();
   buf->f_bfree = fm->get_total_free() / bdev->get_block_size();
   buf->f_bavail = buf->f_bfree;
+  dout(20) << __func__ << " free " << pretty_si_t(buf->f_bfree * buf->f_bsize)
+	   << " / " << pretty_si_t(buf->f_blocks * buf->f_bsize) << dendl;
   return 0;
 }
 
