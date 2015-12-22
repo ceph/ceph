@@ -28,6 +28,7 @@
 #include "common/ceph_crypto.h"
 
 #include "CollectionIndex.h"
+#include "include/compat.h"
 
 /** 
  * LFNIndex also encapsulates logic for manipulating
@@ -123,6 +124,7 @@ protected:
 private:
   string lfn_attribute, lfn_alt_attribute;
   coll_t collection;
+  int fd; //indicate the file descriptor for this coll
 
 public:
   /// Constructor
@@ -138,7 +140,7 @@ public:
       error_injection_on(_error_injection_probability != 0),
       error_injection_probability(_error_injection_probability),
       last_failure(0), current_failure(0),
-      collection(collection) {
+      collection(collection), fd(-1) {
     if (index_version == HASH_INDEX_TAG) {
       lfn_attribute = LFN_ATTR;
     } else {
@@ -152,7 +154,12 @@ public:
   coll_t coll() const { return collection; }
 
   /// Virtual destructor
-  virtual ~LFNIndex() {}
+  virtual ~LFNIndex() {
+    if (fd >= 0) {
+      VOID_TEMP_FAILURE_RETRY(::close(fd));
+      fd = -1;
+    }
+  }
 
   /// @see CollectionIndex
   int init();
@@ -212,6 +219,15 @@ public:
       );
   }
 
+  /// return the file descriptor of this coll.
+  int get_coll_fd() const {
+    return fd;
+  }
+
+  void open_coll() {
+    fd = ::open(base_path.c_str(), O_RDONLY);
+    assert(fd >= 0);
+  }
 
 protected:
   virtual int _init() = 0;
@@ -423,7 +439,7 @@ private:
    * @param [in] path Path in which to get filename for oid.
    * @param [in] oid Object for which to get filename.
    * @param [out] mangled_name Filename for oid, pass NULL if not needed.
-   * @param [out] full_path Fullpath for oid, pass NULL if not needed.
+   * @param [out] relative_path Relativepath for oid which relative to coll_t, pass NULL if not needed.
    * @param [out] exists 1 if the file exists, 0 otherwise, pass NULL if 
    * not needed
    * @return Error Code, 0 on success.
@@ -432,7 +448,7 @@ private:
     const vector<string> &path,
     const ghobject_t &oid,
     string *mangled_name,
-    string *full_path,
+    string *relative_path,
     int *exists
     );
 
@@ -527,11 +543,22 @@ private:
     const vector<string> &rel ///< [in] The subdir.
     ); ///< @return Full path to rel.
 
+  /// Get relative path the subdir
+  string get_relative_path_subdir(
+    const vector<string> &rel ///< [in] The subdir.
+    ); ///< @return relative path to rel.
+
   /// Get full path to object
   string get_full_path(
     const vector<string> &rel, ///< [in] Path to object.
     const string &name	       ///< [in] Filename of object.
     ); ///< @return Fullpath to object at name in rel.
+
+  /// Get relative path to object
+  string get_relative_path(
+    const vector<string> &rel, ///< [in] Path to object.
+    const string &name	       ///< [in] Filename of object.
+    ); ///< @return Relativepath to object at name in rel.
 
   /// Get mangled path component
   string mangle_path_component(
@@ -544,8 +571,8 @@ private:
     ); ///< @return Demangled path component.
 
   /// Decompose full path into object name and filename.
-  int decompose_full_path(
-    const char *in,      ///< [in] Full path to object.
+  int decompose_relative_path(
+    const char *in,      ///< [in] Relative path to object.
     vector<string> *out, ///< [out] Path to object at in.
     ghobject_t *oid,	 ///< [out] Object at in.
     string *shortname	 ///< [out] Filename of object at in.

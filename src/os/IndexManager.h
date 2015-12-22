@@ -91,6 +91,12 @@ public:
    * @return error code
    */
   int init_index(coll_t c, const char *path, uint32_t filestore_version);
+
+  /**
+   * Remove index for collection c
+   * @param [in] c Collection for which to remove
+   */
+  void remove_index(coll_t c);
 };
 
 #endif

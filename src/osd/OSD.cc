@@ -1386,7 +1386,9 @@ int OSD::mkfs(CephContext *cct, ObjectStore *store, const string &dev,
 
     OSDSuperblock sb;
     bufferlist sbbl;
-    ret = store->read(coll_t::meta(), OSD_SUPERBLOCK_POBJECT, 0, 0, sbbl);
+    ret = -ENOENT;
+    if (store->collection_exists(coll_t::meta()))
+	ret = store->read(coll_t::meta(), OSD_SUPERBLOCK_POBJECT, 0, 0, sbbl);
     if (ret >= 0) {
       /* if we already have superblock, check content of superblock */
       dout(0) << " have superblock" << dendl;
