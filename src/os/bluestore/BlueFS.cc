@@ -681,7 +681,19 @@ void BlueFS::_invalidate_cache(FileRef f, uint64_t offset, uint64_t length)
 {
   dout(10) << __func__ << " file " << f->fnode
 	   << " " << offset << "~" << length << dendl;
-#warning implement _invalidate_cache
+  if (offset & ~super.block_mask()) {
+    offset &= super.block_mask();
+    length = ROUND_UP_TO(length, super.block_size);
+  }
+  uint64_t x_off = 0;
+  vector<bluefs_extent_t>::iterator p = f->fnode.seek(offset, &x_off);
+  while (length > 0 && p != f->fnode.extents.end()) {
+    uint64_t x_len = MIN(p->length - x_off, length);
+    bdev[p->bdev]->invalidate_cache(p->offset + x_off, x_len);
+    dout(20) << "  " << x_off << "~" << x_len << " of " << *p << dendl;
+    offset += x_len;
+    length -= x_len;
+  }
 }
 
 uint64_t BlueFS::_estimate_log_size()
