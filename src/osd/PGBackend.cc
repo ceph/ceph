@@ -650,9 +650,9 @@ void PGBackend::be_compare_scrubmaps(
 	  auth_oi.omap_digest != auth_object.omap_digest) {
 	++deep_errors;
 	errorstream << pgid << " recorded omap digest 0x"
-		    << std::hex << auth_oi.data_digest << " != on disk 0x"
-		    << auth_object.digest << std::dec << " on " << auth_oi.soid
-		    << "\n";
+		    << std::hex << auth_oi.omap_digest << " != on disk 0x"
+		    << auth_object.omap_digest << std::dec
+		    << " on " << auth_oi.soid << "\n";
 	if (repair)
 	  update = FORCE;
       }
