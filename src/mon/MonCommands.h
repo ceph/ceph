@@ -383,6 +383,9 @@ COMMAND("fs reset " \
 COMMAND("fs ls ", \
 	"list filesystems", \
 	"fs", "r", "cli,rest")
+COMMAND("mds get_max_mds ", \
+        "get max MDS index", "mds", "r", "cli,rest")
+
 /*
  * Monmap commands
  */
