@@ -5470,16 +5470,13 @@ int BlueStore::_do_remove(
   CollectionRef& c,
   OnodeRef o)
 {
-  string key;
   _do_truncate(txc, c, o, 0);
-  o->exists = false;
   if (o->onode.omap_head) {
     _do_omap_clear(txc, o->onode.omap_head);
   }
   o->exists = false;
   txc->onodes.erase(o);
-  get_object_key(o->oid, &key);
-  txc->t->rmkey(PREFIX_OBJ, key);
+  txc->t->rmkey(PREFIX_OBJ, o->key);
   return 0;
 }
 
