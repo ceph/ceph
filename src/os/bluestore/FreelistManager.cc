@@ -87,6 +87,21 @@ void FreelistManager::dump()
   }
 }
 
+void FreelistManager::_audit()
+{
+  assert(lock.is_locked());
+  uint64_t sum = 0;
+  for (auto& p : kv_free) {
+    sum += p.second;
+  }
+  if (total_free != sum) {
+    derr << __func__ << " sum " << sum << " != total_free " << total_free
+	 << dendl;
+    derr << kv_free << dendl;
+    assert(0 == "freelistmanager bug");
+  }
+}
+
 int FreelistManager::allocate(
   uint64_t offset, uint64_t length,
   KeyValueDB::Transaction txn)
@@ -155,7 +170,8 @@ int FreelistManager::allocate(
     }
     p->second = newlen;
   }
-
+  if (g_conf->bluestore_debug_freelist)
+    _audit();
   return 0;
 }
 
@@ -221,5 +237,8 @@ int FreelistManager::release(
   dout(20) << __func__ << "  set " << offset << "~" << length << dendl;
 
   kv_free[offset] = length;
+
+  if (g_conf->bluestore_debug_freelist)
+    _audit();
   return 0;
 }
