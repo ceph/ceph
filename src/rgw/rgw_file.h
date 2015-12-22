@@ -817,7 +817,7 @@ public:
     *offset = off;
     /* update traversal cache */
     rgw_fh->add_marker(off, marker, RGW_FS_TYPE_DIRECTORY);
-    rcb(name.data(), cb_arg, (*offset)++);
+    rcb(name.data(), cb_arg, off);
     return 0;
   }
 
