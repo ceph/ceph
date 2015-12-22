@@ -319,12 +319,13 @@ XioMessenger::XioMessenger(CephContext *cct, entity_name_t name,
       xio_set_opt(NULL, XIO_OPTLEVEL_ACCELIO, XIO_OPTNAME_MAX_INLINE_XIO_HEADER,
                  &xopt, sizeof(xopt));
 
+      size_t queue_depth = cct->_conf->xio_queue_depth;
       struct xio_mempool_config mempool_config = {
         6,
         {
-          {1024,  0,  cct->_conf->xio_queue_depth,  262144},
-          {4096,  0,  cct->_conf->xio_queue_depth,  262144},
-          {16384, 0,  cct->_conf->xio_queue_depth,  262144},
+          {1024,  0,  queue_depth,  262144},
+          {4096,  0,  queue_depth,  262144},
+          {16384, 0,  queue_depth,  262144},
           {65536, 0,  128,  65536},
           {262144, 0,  32,  16384},
           {1048576, 0, 8,  8192}
