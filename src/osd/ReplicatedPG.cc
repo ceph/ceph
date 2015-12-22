@@ -10906,7 +10906,7 @@ bool ReplicatedPG::start_recovery_ops(
     if (recovering.empty() &&
             state_test(PG_STATE_BACKFILL) &&
             !backfill_targets.empty() && started < max &&
-            missing.num_missing() == 0 &&
+            missing.num_missing() == 0 && //做backfill的时候,本地的missing已经是空的了
             waiting_on_backfill.empty())
     {
         if (get_osdmap()->test_flag(CEPH_OSDMAP_NOBACKFILL))
@@ -11546,7 +11546,7 @@ int ReplicatedPG::recover_backfill(
                 sent_scan = true;
             }
         }
-
+        //获取replica的对象信息，缩小范围?
         // Count simultaneous scans as a single op and let those complete
         if (sent_scan)
         {
@@ -11611,6 +11611,7 @@ int ReplicatedPG::recover_backfill(
                 pg_shard_t bt = *i;
                 BackfillInterval& pbi = peer_backfill_info[bt];
                 // Find all check peers that have the wrong version
+                //对比一把，可以不恢复的就不恢复
                 if (check == backfill_info.begin && check == pbi.begin)
                 {
                     if (pbi.objects.begin()->second != obj_v)

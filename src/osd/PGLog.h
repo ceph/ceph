@@ -602,6 +602,8 @@ public:
 
     void recover_got(hobject_t oid, eversion_t v, pg_info_t &info)
     {
+        //¶ÔÓÚÈ«Á¿»Ö¸´¶øÑÔ£¬missingÊÇ¿ÕµÄå 
+        //ÕâÑùÔõÃ´¸üĞÂlast_complete
         if (missing.is_missing(oid, v))
         {
             missing.got(oid, v);

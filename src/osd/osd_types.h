@@ -1863,6 +1863,7 @@ struct pg_info_t {
 
   eversion_t log_tail;         ///< oldest log entry.
 
+ //在backfill期间更新，参考set_last_backfill
   hobject_t last_backfill;     ///< objects >= this and < last_complete may be missing
   bool last_backfill_bitwise;  ///< true if last_backfill reflects a bitwise (vs nibblewise) sort
 

@@ -1858,7 +1858,7 @@ void PG::activate(ObjectStore::Transaction& t,
                 m->log.copy_up_to(pg_log.get_log(), cct->_conf->osd_min_pg_log_entries);
                 m->info.log_tail = m->log.tail;
                 pi.log_tail = m->log.tail;  // sigh...
-
+                //如果要做backfill,那么peer_missing可以清空了
                 pm.clear();
             }
             else
@@ -7260,7 +7260,7 @@ boost::statechart::result PG::RecoveryState::Stray::react(const MLogRec& logevt)
         PGLogEntryHandler rollbacker;
         pg->pg_log.claim_log_and_clear_rollback_info(msg->log, &rollbacker);
         rollbacker.apply(pg, t);
-
+        //对于需要做backfill的replica，是不需要merge pglog的
         pg->pg_log.reset_backfill();
     }
     else

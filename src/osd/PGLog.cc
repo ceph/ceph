@@ -706,6 +706,7 @@ void PGLog::merge_log(ObjectStore::Transaction& t,
             pg_log_entry_t &ne = *p;
             dout(20) << "merge_log " << ne << dendl;
             log.index(ne);
+			//如果 > last_backfill,那么后面还会扫描到，不用加到missing
             if (cmp(ne.soid, info.last_backfill, info.last_backfill_bitwise) <= 0)
             {
                 missing.add_next_event(ne);

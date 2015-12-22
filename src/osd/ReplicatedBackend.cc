@@ -1705,6 +1705,7 @@ void ReplicatedBackend::submit_push_data(
   }
 
   if (first) {
+  	//remove是允许失败的，所以就算oid不存在也没关系
     t->remove(coll, ghobject_t(target_oid));
     t->touch(coll, ghobject_t(target_oid));
     t->truncate(coll, ghobject_t(target_oid), recovery_info.size);
