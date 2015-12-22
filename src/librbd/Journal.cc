@@ -27,23 +27,6 @@ namespace {
 
 const std::string CLIENT_DESCRIPTION = "master image";
 
-template <typename ImageCtxT>
-struct C_ReplayCommitted : public Context {
-  typedef journal::TypeTraits<ImageCtxT> TypeTraits;
-  typedef typename TypeTraits::Journaler Journaler;
-  typedef typename TypeTraits::ReplayEntry ReplayEntry;
-
-  Journaler *journaler;
-  ReplayEntry replay_entry;
-
-  C_ReplayCommitted(Journaler *journaler, ReplayEntry &&replay_entry) :
-    journaler(journaler), replay_entry(std::move(replay_entry)) {
-  }
-  virtual void finish(int r) {
-    journaler->committed(replay_entry);
-  }
-};
-
 } // anonymous namespace
 
 template <typename I>
@@ -569,78 +552,100 @@ void Journal<I>::handle_initialized(int r) {
 
 template <typename I>
 void Journal<I>::handle_replay_ready() {
-  CephContext *cct = m_image_ctx.cct;
-  ldout(cct, 20) << this << " " << __func__ << dendl;
-
-  Mutex::Locker locker(m_lock);
-  if (m_state != STATE_REPLAYING) {
-    return;
-  }
-
-  while (true) {
-    ReplayEntry replay_entry;
-    if (!m_journaler->try_pop_front(&replay_entry)) {
-      return;
-    }
-
-    m_lock.Unlock();
-    bufferlist data = replay_entry.get_data();
-    bufferlist::iterator it = data.begin();
-
-    Context *on_commit = new C_ReplayCommitted<I>(m_journaler,
-                                                  std::move(replay_entry));
-    int r = m_journal_replay->process(it, on_commit);
-    m_lock.Lock();
-
-    if (r < 0) {
-      lderr(cct) << "failed to replay journal entry: " << cpp_strerror(r)
-                 << dendl;
-      delete on_commit;
-
-      m_journaler->stop_replay();
-
-      transition_state(STATE_FLUSHING_RESTART, r);
-      m_journal_replay->flush(create_async_context_callback(
-        m_image_ctx, create_context_callback<
-          Journal<I>, &Journal<I>::handle_flushing_restart>(this)));
-      return;
-    }
-  }
-}
-
-template <typename I>
-void Journal<I>::handle_replay_complete(int r) {
-  CephContext *cct = m_image_ctx.cct;
-
+  ReplayEntry replay_entry;
   {
     Mutex::Locker locker(m_lock);
     if (m_state != STATE_REPLAYING) {
       return;
     }
 
+    CephContext *cct = m_image_ctx.cct;
     ldout(cct, 20) << this << " " << __func__ << dendl;
-    m_journaler->stop_replay();
-    if (r < 0) {
-      transition_state(STATE_FLUSHING_RESTART, r);
-      m_journal_replay->flush(create_async_context_callback(
-        m_image_ctx, create_context_callback<
-          Journal<I>, &Journal<I>::handle_flushing_restart>(this)));
+    if (!m_journaler->try_pop_front(&replay_entry)) {
       return;
     }
+  }
 
+  bufferlist data = replay_entry.get_data();
+  bufferlist::iterator it = data.begin();
+  Context *on_ready = create_context_callback<
+      Journal<I>, &Journal<I>::handle_replay_process_ready>(this);
+  Context *on_commit = new C_ReplayProcessSafe(this, std::move(replay_entry));
+
+  m_journal_replay->process(&it, on_ready, on_commit);
+}
+
+template <typename I>
+void Journal<I>::handle_replay_complete(int r) {
+  CephContext *cct = m_image_ctx.cct;
+
+  Mutex::Locker locker(m_lock);
+  if (m_state != STATE_REPLAYING) {
+    return;
+  }
+
+  ldout(cct, 20) << this << " " << __func__ << ": r=" << r << dendl;
+  m_journaler->stop_replay();
+  if (r < 0) {
+    transition_state(STATE_FLUSHING_RESTART, r);
+
+    m_journal_replay->flush(create_context_callback<
+      Journal<I>, &Journal<I>::handle_flushing_restart>(this));
+  } else {
     transition_state(STATE_FLUSHING_REPLAY, 0);
-    m_journal_replay->flush(create_async_context_callback(
-      m_image_ctx, create_context_callback<
-        Journal<I>, &Journal<I>::handle_flushing_replay>(this)));
+
+    m_journal_replay->flush(create_context_callback<
+      Journal<I>, &Journal<I>::handle_flushing_replay>(this));
+  }
+}
+
+template <typename I>
+void Journal<I>::handle_replay_process_ready(int r) {
+  // journal::Replay is ready for more events -- attempt to pop another
+  CephContext *cct = m_image_ctx.cct;
+  ldout(cct, 20) << this << " " << __func__ << dendl;
+
+  assert(r == 0);
+  handle_replay_ready();
+}
+
+template <typename I>
+void Journal<I>::handle_replay_process_safe(ReplayEntry replay_entry, int r) {
+  Mutex::Locker locker(m_lock);
+
+  CephContext *cct = m_image_ctx.cct;
+  ldout(cct, 20) << this << " " << __func__ << ": r=" << r << dendl;
+  if (r < 0) {
+    lderr(cct) << "failed to commit journal event to disk: " << cpp_strerror(r)
+               << dendl;
+
+    if (m_state == STATE_REPLAYING) {
+      // abort the replay if we have an error
+      m_journaler->stop_replay();
+      transition_state(STATE_FLUSHING_RESTART, r);
+
+      m_journal_replay->flush(create_context_callback<
+        Journal<I>, &Journal<I>::handle_flushing_restart>(this));
+      return;
+    } else if (m_state == STATE_FLUSHING_REPLAY) {
+      // end-of-replay flush in-progress -- we need to restart replay
+      transition_state(STATE_FLUSHING_RESTART, r);
+      return;
+    }
+  } else {
+    // only commit the entry if written successfully
+    m_journaler->committed(replay_entry);
   }
 }
 
 template <typename I>
 void Journal<I>::handle_flushing_restart(int r) {
-  CephContext *cct = m_image_ctx.cct;
-  ldout(cct, 20) << this << " " << __func__ << ": r=" << r << dendl;
-
   Mutex::Locker locker(m_lock);
+
+  CephContext *cct = m_image_ctx.cct;
+  ldout(cct, 20) << this << " " << __func__ << dendl;
+
+  assert(r == 0);
   assert(m_state == STATE_FLUSHING_RESTART);
   if (m_close_pending) {
     destroy_journaler(r);
@@ -652,19 +657,19 @@ void Journal<I>::handle_flushing_restart(int r) {
 
 template <typename I>
 void Journal<I>::handle_flushing_replay(int r) {
+  Mutex::Locker locker(m_lock);
+
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 20) << this << " " << __func__ << ": r=" << r << dendl;
 
-  Mutex::Locker locker(m_lock);
-  assert(m_state == STATE_FLUSHING_REPLAY);
+  assert(r == 0);
+  assert(m_state == STATE_FLUSHING_REPLAY || m_state == STATE_FLUSHING_RESTART);
   if (m_close_pending) {
     destroy_journaler(r);
     return;
-  }
-
-  if (r < 0) {
-    lderr(cct) << this << " " << __func__ << ": r=" << r << dendl;
-    recreate_journaler(r);
+  } else if (m_state == STATE_FLUSHING_RESTART) {
+    // failed to replay one-or-more events -- restart
+    recreate_journaler(0);
     return;
   }
 
