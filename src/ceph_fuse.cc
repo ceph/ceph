@@ -48,7 +48,6 @@ static void fuse_usage()
   if (fuse_parse_cmdline(&args, NULL, NULL, NULL) == -1) {
     derr << "fuse_parse_cmdline failed." << dendl;
     fuse_opt_free_args(&args);
-    free(argv);
   }
 
   assert(args.allocated);  // Checking fuse has realloc'd args so we can free newargv
