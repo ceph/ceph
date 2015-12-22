@@ -988,12 +988,7 @@ int BlueFS::_flush(FileWriter *h, bool force)
     return 0;
   }
   if (length == 0) {
-    if (h->file->dirty) {
-      dout(10) << __func__ << " " << h << " no data, flushing metadata on "
-	       << h->file->fnode << dendl;
-      return _flush_log();
-    }
-    dout(10) << __func__ << " " << h << " no dirty data or metadata on "
+    dout(10) << __func__ << " " << h << " no dirty data on "
 	     << h->file->fnode << dendl;
     return 0;
   }
