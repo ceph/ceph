@@ -12,6 +12,7 @@
 #include "include/rados/librados.hpp"
 #include "common/Mutex.h"
 #include "journal/Future.h"
+#include "journal/ReplayEntry.h"
 #include "journal/ReplayHandler.h"
 #include <algorithm>
 #include <iosfwd>
@@ -21,7 +22,6 @@
 class Context;
 namespace journal {
 class Journaler;
-class ReplayEntry;
 }
 
 namespace librbd {
@@ -198,6 +198,18 @@ private:
     }
   };
 
+  struct C_ReplayProcessSafe : public Context {
+    Journal *journal;
+    ReplayEntry replay_entry;
+
+    C_ReplayProcessSafe(Journal *journal, ReplayEntry &&replay_entry) :
+      journal(journal), replay_entry(std::move(replay_entry)) {
+    }
+    virtual void finish(int r) {
+      journal->handle_replay_process_safe(replay_entry, r);
+    }
+  };
+
   struct ReplayHandler : public ::journal::ReplayHandler {
     Journal *journal;
     ReplayHandler(Journal *_journal) : journal(_journal) {
@@ -250,6 +262,8 @@ private:
 
   void handle_replay_ready();
   void handle_replay_complete(int r);
+  void handle_replay_process_ready(int r);
+  void handle_replay_process_safe(ReplayEntry replay_entry, int r);
 
   void handle_flushing_restart(int r);
   void handle_flushing_replay(int r);
