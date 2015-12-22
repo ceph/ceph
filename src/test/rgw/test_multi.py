@@ -511,6 +511,10 @@ def get_key(zone, bucket_name, obj_name):
     b = get_bucket(zone, bucket_name)
     return b.get_key(obj_name)
 
+def new_key(zone, bucket_name, obj_name):
+    b = get_bucket(zone, bucket_name)
+    return b.new_key(obj_name)
+
 def check_object_eq(k1, k2, check_extra = True):
     assert k1
     assert k2
@@ -576,21 +580,18 @@ def test_object_sync():
 
     # don't wait for meta sync just yet
     for zone, bucket_name in zone_bucket.iteritems():
-        conn = zone.get_connection(user)
-        b = conn.get_bucket(bucket_name)
-        k = b.new_key(objname)
+        k = new_key(zone, bucket_name, objname)
         k.set_contents_from_string(content)
 
-    realm.meta_checkpoint()
-
-    for zone in realm.get_zones():
-        assert check_all_buckets_exist(zone, buckets)
-
+    # no need for meta checkpoint, we'll use data checkpoint instead
 
     for source_zone, bucket_name in zone_bucket.iteritems():
         for target_zone in all_zones:
             if source_zone.zone_name == target_zone.zone_name:
                 continue
+
+            realm.zone_data_checkpoint(target_zone, source_zone)
+
             check_bucket_eq(source_zone, target_zone, bucket_name)
             
 
