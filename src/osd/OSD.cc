@@ -6629,7 +6629,7 @@ void OSD::handle_osd_map(MOSDMap *m)
   // yay!
   consume_map();
 
-  if (is_active() || is_waiting_for_healthy())
+  if (!do_shutdown && (is_active() || is_waiting_for_healthy()))
     maybe_update_heartbeat_peers();
 
   if (!is_active()) {
@@ -6645,7 +6645,6 @@ void OSD::handle_osd_map(MOSDMap *m)
   }
   else if (do_shutdown) {
     osd_lock.Unlock();
-    shutdown();
     if (network_error) {
       map<int,pair<utime_t,entity_inst_t>>::iterator it = failure_pending.begin();
       while (it != failure_pending.end()) {
@@ -6654,6 +6653,7 @@ void OSD::handle_osd_map(MOSDMap *m)
         failure_pending.erase(it++);
       }
     }
+    shutdown();
     osd_lock.Lock();
   }
   else if (is_preboot()) {
