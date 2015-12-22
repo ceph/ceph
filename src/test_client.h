@@ -11,19 +11,28 @@
 
 class TestClient {
 
-    int iops_goal;
-    int outstanding_ops_allowed;
-    int outstanding_ops;
-    
+  int iops_goal; // per second
+  int outstanding_ops_allowed;
+  int outstanding_ops;
 
+  std::mutex mtx;
+  std::condition_variable cv;
+  std::thread thread;
+
+  typedef std::lock_guard<std::mutex> Guard;
+  
+    
 public:
 
-    TestClient() :
-    {
-        // empty
-    }
+  TestClient(int _iops_goal, int _outstanding_ops_allowed);
 
-    void submitResponse() {
-        
-    }
+  virtual ~TestClient();
+
+  void submitResponse();
+
+  void waitForDone();
+
+protected:
+
+  void run();
 };

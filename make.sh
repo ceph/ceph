@@ -1,6 +1,6 @@
 #!/bin/bash
 
-source="dm_clock_srv.cc test_server.cc test.cc"
+source="dm_clock_srv.cc test_server.cc test_client.cc test.cc"
 
 fail() {
     echo "Failed."
