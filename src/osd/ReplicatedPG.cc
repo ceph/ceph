@@ -11474,7 +11474,7 @@ bool ReplicatedPG::agent_work(int start_max, int agent_flush_quota)
   assert(base_pool);
 
   int ls_min = 1;
-  int ls_max = 10; // FIXME?
+  int ls_max = cct->_conf->osd_pool_default_cache_max_evict_check_size;
 
   // list some objects.  this conveniently lists clones (oldest to
   // newest) before heads... the same order we want to flush in.
