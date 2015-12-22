@@ -4185,6 +4185,11 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	  data_bl.claim_append(tmpbl);
 	  last = miter->first + r;
         }
+        
+        if (r < 0) {
+          result = r;
+          break;
+        }
 
 	// verify trailing hole?
 	if (cct->_conf->osd_verify_sparse_read_holes) {
@@ -4199,11 +4204,6 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	    }
 	  }
 	}
-
-        if (r < 0) {
-          result = r;
-          break;
-        }
 
 	// Why SPARSE_READ need checksum? In fact, librbd always use sparse-read. 
 	// Maybe at first, there is no much whole objects. With continued use, more and more whole object exist.
