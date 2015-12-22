@@ -174,7 +174,7 @@ int BlockDevice::flush()
     r = -errno;
     derr << __func__ << " fdatasync got: " << cpp_strerror(r) << dendl;
   }
-  dout(10) << __func__ << " done in " << dur << dendl;;
+  dout(5) << __func__ << " in " << dur << dendl;;
   return r;
 }
 
@@ -325,7 +325,7 @@ int BlockDevice::aio_write(
   bool buffered)
 {
   uint64_t len = bl.length();
-  dout(10) << __func__ << " " << off << "~" << len << dendl;
+  dout(20) << __func__ << " " << off << "~" << len << dendl;
   assert(off % block_size == 0);
   assert(len % block_size == 0);
   assert(len > 0);
@@ -364,11 +364,11 @@ int BlockDevice::aio_write(
       aio.bl.claim_append(bl);
       aio.pwritev(off);
     }
-    dout(2) << __func__ << " prepared aio " << &aio << dendl;
+    dout(5) << __func__ << " " << off << "~" << len << " aio " << &aio << dendl;
   } else
 #endif
   {
-    dout(2) << __func__ << " write to " << off << "~" << len << dendl;
+    dout(5) << __func__ << " " << off << "~" << len << " buffered" << dendl;
     if (g_conf->bdev_inject_crash &&
 	rand() % g_conf->bdev_inject_crash == 0) {
       derr << __func__ << " bdev_inject_crash: dropping io " << off << "~" << len
@@ -392,7 +392,7 @@ int BlockDevice::aio_zero(
   uint64_t len,
   IOContext *ioc)
 {
-  dout(10) << __func__ << " " << off << "~" << len << dendl;
+  dout(5) << __func__ << " " << off << "~" << len << dendl;
   assert(off % block_size == 0);
   assert(len % block_size == 0);
   assert(len > 0);
@@ -418,7 +418,7 @@ int BlockDevice::read(uint64_t off, uint64_t len, bufferlist *pbl,
 		      IOContext *ioc,
 		      bool buffered)
 {
-  dout(10) << __func__ << " " << off << "~" << len << dendl;
+  dout(5) << __func__ << " " << off << "~" << len << dendl;
   assert(off % block_size == 0);
   assert(len % block_size == 0);
   assert(len > 0);
