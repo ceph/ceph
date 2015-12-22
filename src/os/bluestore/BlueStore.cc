@@ -3322,7 +3322,8 @@ void BlueStore::_kv_sync_thread()
 	   ++p) {
 	dout(20) << __func__ << " release " << p.get_start()
 		 << "~" << p.get_len() << dendl;
-	alloc->release(p.get_start(), p.get_len());
+	if (!g_conf->bluestore_debug_no_reuse_blocks)
+	  alloc->release(p.get_start(), p.get_len());
       }
 
       vector<bluestore_extent_t> bluefs_gift_extents;
