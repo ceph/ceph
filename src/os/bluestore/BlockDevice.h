@@ -101,6 +101,8 @@ public:
 	       IOContext *ioc);
   int flush();
 
+  // for managing buffered readers/writers
+  int invalidate_cache(uint64_t off, uint64_t len);
   int open(string path);
   void close();
 };
