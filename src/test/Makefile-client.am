@@ -379,6 +379,7 @@ unittest_librbd_SOURCES = \
 	test/librbd/operation/test_mock_SnapshotCreateRequest.cc \
 	test/librbd/operation/test_mock_SnapshotProtectRequest.cc \
 	test/librbd/operation/test_mock_SnapshotRemoveRequest.cc \
+	test/librbd/operation/test_mock_SnapshotRollbackRequest.cc \
 	test/librbd/operation/test_mock_SnapshotUnprotectRequest.cc
 unittest_librbd_CXXFLAGS = $(UNITTEST_CXXFLAGS) -DTEST_LIBRBD_INTERNALS
 unittest_librbd_LDADD = \

@@ -31,6 +31,7 @@ struct MockImageCtx {
       snapc(image_ctx.snapc),
       snaps(image_ctx.snaps),
       snap_info(image_ctx.snap_info),
+      object_cacher(image_ctx.object_cacher),
       old_format(image_ctx.old_format),
       read_only(image_ctx.read_only),
       owner_lock("owner_lock"),
@@ -94,6 +95,8 @@ struct MockImageCtx {
     ctx.wait();
   }
 
+  MOCK_CONST_METHOD1(get_object_name, std::string(uint64_t));
+  MOCK_CONST_METHOD0(get_current_size, uint64_t());
   MOCK_CONST_METHOD1(get_image_size, uint64_t(librados::snap_t));
   MOCK_CONST_METHOD1(get_snap_id, librados::snap_t(std::string in_snap_name));
   MOCK_CONST_METHOD1(get_snap_info, const SnapInfo*(librados::snap_t));
@@ -131,6 +134,7 @@ struct MockImageCtx {
   std::vector<librados::snap_t> snaps;
   std::map<librados::snap_t, SnapInfo> snap_info;
 
+  ObjectCacher *object_cacher;
 
   bool old_format;
   bool read_only;
