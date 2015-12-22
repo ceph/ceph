@@ -124,6 +124,7 @@ public:
   void append_op_event(uint64_t op_tid, journal::EventEntry &&event_entry,
                        Context *on_safe);
   void commit_op_event(uint64_t tid, int r);
+  void replay_op_ready(uint64_t op_tid, Context *on_resume);
 
   void flush_event(uint64_t tid, Context *on_safe);
   void wait_event(uint64_t tid, Context *on_safe);

@@ -406,6 +406,18 @@ void Journal<I>::commit_op_event(uint64_t op_tid, int r) {
 }
 
 template <typename I>
+void Journal<I>::replay_op_ready(uint64_t op_tid, Context *on_resume) {
+  CephContext *cct = m_image_ctx.cct;
+  ldout(cct, 10) << this << " " << __func__ << ": op_tid=" << op_tid << dendl;
+
+  {
+    Mutex::Locker locker(m_lock);
+    assert(m_journal_replay != nullptr);
+    m_journal_replay->replay_op_ready(op_tid, on_resume);
+  }
+}
+
+template <typename I>
 void Journal<I>::flush_event(uint64_t tid, Context *on_safe) {
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 20) << this << " " << __func__ << ": tid=" << tid << ", "

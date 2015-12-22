@@ -20,7 +20,8 @@ namespace operation {
 template <typename ImageCtxT = ImageCtx>
 class Request : public AsyncRequest<ImageCtxT> {
 public:
-  Request(ImageCtxT &image_ctx, Context *on_finish);
+  Request(ImageCtxT &image_ctx, Context *on_finish,
+          uint64_t journal_op_tid = 0);
 
   virtual void send();
 
@@ -37,11 +38,18 @@ protected:
   bool append_op_event(T *request) {
     ImageCtxT &image_ctx = this->m_image_ctx;
 
+    assert(can_affect_io());
     RWLock::RLocker owner_locker(image_ctx.owner_lock);
     RWLock::RLocker snap_locker(image_ctx.snap_lock);
-    if (image_ctx.journal != NULL &&
-        !image_ctx.journal->is_journal_replaying()) {
-      append_op_event(util::create_context_callback<T, MF>(request));
+    if (image_ctx.journal != NULL) {
+      Context *ctx = util::create_context_callback<T, MF>(request);
+      if (image_ctx.journal->is_journal_replaying()) {
+        assert(m_op_tid != 0);
+        m_appended_op_event = true;
+        image_ctx.journal->replay_op_ready(m_op_tid, ctx);
+      } else {
+        append_op_event(ctx);
+      }
       return true;
     }
     return false;
