@@ -579,8 +579,9 @@ template <typename I>
 void Journal<I>::handle_replay_complete(int r) {
   CephContext *cct = m_image_ctx.cct;
 
-  Mutex::Locker locker(m_lock);
+  m_lock.Lock();
   if (m_state != STATE_REPLAYING) {
+    m_lock.Unlock();
     return;
   }
 
@@ -588,11 +589,13 @@ void Journal<I>::handle_replay_complete(int r) {
   m_journaler->stop_replay();
   if (r < 0) {
     transition_state(STATE_FLUSHING_RESTART, r);
+    m_lock.Unlock();
 
     m_journal_replay->flush(create_context_callback<
       Journal<I>, &Journal<I>::handle_flushing_restart>(this));
   } else {
     transition_state(STATE_FLUSHING_REPLAY, 0);
+    m_lock.Unlock();
 
     m_journal_replay->flush(create_context_callback<
       Journal<I>, &Journal<I>::handle_flushing_replay>(this));
