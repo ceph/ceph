@@ -4379,6 +4379,8 @@ void BlueStore::_do_read_all_overlays(bluestore_wal_op_t& wo)
 
 void BlueStore::_dump_onode(OnodeRef o)
 {
+  if (!g_conf->subsys.should_gather(ceph_subsys_bluestore, 30))
+    return;
   dout(30) << __func__ << " " << o
 	   << " nid " << o->onode.nid
 	   << " size " << o->onode.size
