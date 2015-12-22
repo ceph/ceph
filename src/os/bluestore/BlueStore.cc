@@ -508,16 +508,27 @@ void BlueStore::OnodeHashLRU::rename(const ghobject_t& old_oid,
   ceph::unordered_map<ghobject_t,OnodeRef>::iterator po, pn;
   po = onode_map.find(old_oid);
   pn = onode_map.find(new_oid);
+  assert(po != pn);
 
   assert(po != onode_map.end());
   if (pn != onode_map.end()) {
+    dout(30) << __func__ << "  removing target " << pn->second << dendl;
     lru_list_t::iterator p = lru.iterator_to(*pn->second);
     lru.erase(p);
     onode_map.erase(pn);
   }
-  onode_map.insert(make_pair(new_oid, po->second));
-  _touch(po->second);
-  onode_map.erase(po);
+  OnodeRef o = po->second;
+
+  // install a non-existent onode at old location
+  po->second.reset(new Onode(old_oid, o->key));
+  po->second->exists = false;
+  lru.push_back(*po->second);
+
+  // add at new position and fix oid, key
+  onode_map.insert(make_pair(new_oid, o));
+  _touch(o);
+  o->oid = new_oid;
+  get_object_key(new_oid, &o->key);
 }
 
 bool BlueStore::OnodeHashLRU::get_next(
@@ -5422,15 +5433,9 @@ int BlueStore::_rename(TransContext *txc,
       return r;
   }
 
-  get_object_key(old_oid, &old_key);
-  get_object_key(new_oid, &new_key);
-
-  c->onode_map.rename(old_oid, new_oid);
-  oldo->oid = new_oid;
-  oldo->key = new_key;
-
-  txc->t->rmkey(PREFIX_OBJ, old_key);
+  txc->t->rmkey(PREFIX_OBJ, oldo->key);
   txc->write_onode(oldo);
+  c->onode_map.rename(old_oid, new_oid);  // this adjusts oldo->{oid,key}
   r = 0;
 
  out:
