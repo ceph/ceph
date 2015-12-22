@@ -1948,6 +1948,27 @@ int BlueStore::fsck()
     }
   }
 
+  dout(1) << __func__ << " checking wal events" << dendl;
+  {
+    it = db->get_iterator(PREFIX_WAL);
+    for (it->lower_bound(string()); it->valid(); it->next()) {
+      bufferlist bl = it->value();
+      bufferlist::iterator p = bl.begin();
+      bluestore_wal_transaction_t wt;
+      try {
+	::decode(wt, p);
+      } catch (buffer::error& e) {
+	derr << __func__ << " failed to decode wal txn "
+	     << pretty_binary_string(it->key()) << dendl;
+	return -EIO;
+      }
+      dout(20) << __func__ << "  wal " << wt.seq
+	       << " ops " << wt.ops.size()
+	       << " released " << wt.released << dendl;
+      used_blocks.insert(wt.released);
+    }
+  }
+
   dout(1) << __func__ << " checking freelist vs allocated" << dendl;
   {
     const map<uint64_t,uint64_t>& free = fm->get_freelist();
