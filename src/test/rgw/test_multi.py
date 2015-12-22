@@ -17,6 +17,8 @@ import inspect
 
 from nose.tools import eq_ as eq
 
+log_level = 20
+
 num_buckets = 0
 run_prefix=''.join(random.SystemRandom().choice(string.ascii_lowercase) for _ in range(6))
 
@@ -29,7 +31,10 @@ test_path = os.path.normpath(os.path.dirname(os.path.realpath(__file__))) + '/'
 def lineno():
     return inspect.currentframe().f_back.f_lineno
 
-def log(*params):
+def log(level, *params):
+    if level > log_level:
+        return
+
     s = '>>> '
     for p in params:
         if p:
@@ -62,10 +67,10 @@ def tpath(bin, *params):
     return s
 
 def bash(cmd, check_retcode = True):
-    log('running cmd: ', cmd)
+    log(5, 'running cmd: ', cmd)
     process = subprocess.Popen(cmd.split(), stdout=subprocess.PIPE)
     s = process.communicate()[0]
-    log('command returned status=', process.returncode, ' stdout=', s)
+    log(20, 'command returned status=', process.returncode, ' stdout=', s)
     if check_retcode:
         assert(process.returncode == 0)
     return (s, process.returncode)
@@ -201,14 +206,14 @@ class RGWRealm:
 
             assert(retcode == 2) # ENOENT
 
-        log('current meta sync status=', meta_sync_status_json)
+        log(20, 'current meta sync status=', meta_sync_status_json)
         sync_status = json.loads(meta_sync_status_json)
         
         global_sync_status=sync_status['sync_status']['info']['status']
         num_shards=sync_status['sync_status']['info']['num_shards']
 
         sync_markers=sync_status['sync_status']['markers']
-        log('sync_markers=', sync_markers)
+        log(20, 'sync_markers=', sync_markers)
         assert(num_shards == len(sync_markers))
 
         markers={}
@@ -227,13 +232,13 @@ class RGWRealm:
             markers[i] = s['marker']
             i += 1
 
-        log('master meta markers=', markers)
+        log(20, 'master meta markers=', markers)
 
         return markers
 
     def compare_meta_status(self, zone, log_status, sync_status):
         if len(log_status) != len(sync_status):
-            log('len(log_status)=', len(log_status), ' len(sync_status=', len(sync_status))
+            log(10, 'len(log_status)=', len(log_status), ' len(sync_status=', len(sync_status))
             return False
 
         msg =  ''
@@ -244,7 +249,7 @@ class RGWRealm:
                 msg += 'shard=' + str(i) + ' master=' + l + ' target=' + s
 
         if len(msg) > 0:
-            log('zone ', zone.zone_name, ' behind master: ', msg)
+            log(1, 'zone ', zone.zone_name, ' behind master: ', msg)
             return False
 
         return True
@@ -253,14 +258,14 @@ class RGWRealm:
         if zone.zone_name == self.master_zone.zone_name:
             return
 
-        log('starting meta checkpoint for zone=', zone.zone_name)
+        log(10, 'starting meta checkpoint for zone=', zone.zone_name)
 
         while True:
             log_status = self.meta_master_log_status(self.master_zone)
             (num_shards, sync_status) = self.meta_sync_status(zone)
 
-            log('log_status=', log_status)
-            log('sync_status=', sync_status)
+            log(20, 'log_status=', log_status)
+            log(20, 'sync_status=', sync_status)
 
             if self.compare_meta_status(zone, log_status, sync_status):
                 break
@@ -268,10 +273,10 @@ class RGWRealm:
             time.sleep(5)
 
 
-        log('finish meta checkpoint for zone=', zone.zone_name)
+        log(10, 'finish meta checkpoint for zone=', zone.zone_name)
 
     def meta_checkpoint(self):
-        log('meta checkpoint')
+        log(5, 'meta checkpoint')
         for z in self.get_zones():
             self.zone_meta_checkpoint(z)
 
@@ -286,14 +291,14 @@ class RGWRealm:
 
             assert(retcode == 2) # ENOENT
 
-        log('current data sync status=', data_sync_status_json)
+        log(20, 'current data sync status=', data_sync_status_json)
         sync_status = json.loads(data_sync_status_json)
         
         global_sync_status=sync_status['sync_status']['info']['status']
         num_shards=sync_status['sync_status']['info']['num_shards']
 
         sync_markers=sync_status['sync_status']['markers']
-        log('sync_markers=', sync_markers)
+        log(20, 'sync_markers=', sync_markers)
         assert(num_shards == len(sync_markers))
 
         markers={}
@@ -313,13 +318,13 @@ class RGWRealm:
             markers[i] = s['marker']
             i += 1
 
-        log('data markers for zone=', source_zone.zone_name, ' markers=', markers)
+        log(20, 'data markers for zone=', source_zone.zone_name, ' markers=', markers)
 
         return markers
 
     def compare_data_status(self, target_zone, source_zone, log_status, sync_status):
         if len(log_status) != len(sync_status):
-            log('len(log_status)=', len(log_status), ' len(sync_status)=', len(sync_status))
+            log(10, 'len(log_status)=', len(log_status), ' len(sync_status)=', len(sync_status))
             return False
 
         msg =  ''
@@ -330,7 +335,7 @@ class RGWRealm:
                 msg += 'shard=' + str(i) + ' master=' + l + ' target=' + s
 
         if len(msg) > 0:
-            log('data of zone ', target_zone.zone_name, ' behind zone ', source_zone.zone_name, ': ', msg)
+            log(1, 'data of zone ', target_zone.zone_name, ' behind zone ', source_zone.zone_name, ': ', msg)
             return False
 
         return True
@@ -339,25 +344,25 @@ class RGWRealm:
         if target_zone.zone_name == source_zone.zone_name:
             return
 
-        log('starting data checkpoint for target_zone=', target_zone.zone_name, ' source_zone=', source_zone.zone_name)
+        log(10, 'starting data checkpoint for target_zone=', target_zone.zone_name, ' source_zone=', source_zone.zone_name)
 
         while True:
             log_status = self.data_source_log_status(source_zone)
             (num_shards, sync_status) = self.data_sync_status(target_zone, source_zone)
 
-            log('log_status=', log_status)
-            log('sync_status=', sync_status)
+            log(20, 'log_status=', log_status)
+            log(20, 'sync_status=', sync_status)
 
             if self.compare_data_status(target_zone, source_zone, log_status, sync_status):
                 break
 
             time.sleep(5)
 
-        log('finished data checkpoint for target_zone=', target_zone.zone_name, ' source_zone=', source_zone.zone_name)
+        log(10, 'finished data checkpoint for target_zone=', target_zone.zone_name, ' source_zone=', source_zone.zone_name)
 
 
     def create_user(self, user, wait_meta = True):
-        log('creating user uid=', user.uid)
+        log(5, 'creating user uid=', user.uid)
         cmd = build_cmd('--uid', user.uid, '--display-name', user.display_name,
                         '--access-key', user.access_key, '--secret', user.secret)
         self.master_cluster.rgw_admin('--rgw-realm=' + self.realm + ' user create ' + cmd)
@@ -406,7 +411,7 @@ class RGWMulti:
         realm = RGWRealm('earth', realm_credentials, self.clusters, 0)
 
         if bootstrap:
-            log('bootstapping clusters')
+            log(1, 'bootstapping clusters')
             self.clusters[0].start()
             realm.init_zone(self.clusters[0], 'us', 'us-1', self.base_port)
 
@@ -431,7 +436,7 @@ def check_all_buckets_exist(zone, buckets):
         try:
             conn.get_bucket(b)
         except:
-            log('zone ', zone.zone_name, ' does not contain bucket ', b)
+            log(0, 'zone ', zone.zone_name, ' does not contain bucket ', b)
             return False
 
     return True
@@ -445,7 +450,7 @@ def check_all_buckets_dont_exist(zone, buckets):
         except:
             continue
 
-        log('zone ', zone.zone_name, ' contains bucket ', b)
+        log(0, 'zone ', zone.zone_name, ' contains bucket ', b)
         return False
 
     return True
@@ -456,7 +461,7 @@ def create_bucket_per_zone():
     for zone in realm.get_zones():
         conn = zone.get_connection(user)
         bucket_name = gen_bucket_name()
-        log('create bucket zone=', zone.zone_name, ' name=', bucket_name)
+        log(1, 'create bucket zone=', zone.zone_name, ' name=', bucket_name)
         bucket = conn.create_bucket(bucket_name)
         buckets.append(bucket_name)
         zone_bucket[zone] = bucket
@@ -522,7 +527,7 @@ def new_key(zone, bucket_name, obj_name):
 def check_object_eq(k1, k2, check_extra = True):
     assert k1
     assert k2
-    log('comparing key name=', k1.name)
+    log(10, 'comparing key name=', k1.name)
     eq(k1.name, k2.name)
     eq(k1.get_contents_as_string(), k2.get_contents_as_string())
     eq(k1.metadata, k2.metadata)
@@ -542,23 +547,23 @@ def check_object_eq(k1, k2, check_extra = True):
     eq(k1.encrypted, k2.encrypted)
 
 def check_bucket_eq(zone1, zone2, bucket_name):
-    log('comparing bucket=', bucket_name, ' zones={', zone1.zone_name, ', ', zone2.zone_name, '}')
+    log(10, 'comparing bucket=', bucket_name, ' zones={', zone1.zone_name, ', ', zone2.zone_name, '}')
     b1 = get_bucket(zone1, bucket_name)
     b2 = get_bucket(zone2, bucket_name)
 
-    log('bucket1 objects:')
+    log(20, 'bucket1 objects:')
     for o in b1.get_all_versions():
-        log('o=', o.name)
-    log('bucket2 objects:')
+        log(20, 'o=', o.name)
+    log(20, 'bucket2 objects:')
     for o in b2.get_all_versions():
-        log('o=', o.name)
+        log(20, 'o=', o.name)
 
     for k1, k2 in itertools.izip_longest(b1.get_all_versions(), b2.get_all_versions()):
         if k1 is None:
-            log('failure: key=', k2.name, ' is missing from zone=', zone1.zone_name)
+            log(0, 'failure: key=', k2.name, ' is missing from zone=', zone1.zone_name)
             assert False
         if k2 is None:
-            log('failure: key=', k1.name, ' is missing from zone=', zone2.zone_name)
+            log(0, 'failure: key=', k1.name, ' is missing from zone=', zone2.zone_name)
             assert False
 
         check_object_eq(k1, k2)
@@ -569,7 +574,7 @@ def check_bucket_eq(zone1, zone2, bucket_name):
 
         check_object_eq(k1_head, k2_head, False)
 
-    log('success, bucket identical: bucket=', bucket_name, ' zones={', zone1.zone_name, ', ', zone2.zone_name, '}')
+    log(5, 'success, bucket identical: bucket=', bucket_name, ' zones={', zone1.zone_name, ', ', zone2.zone_name, '}')
 
 
 def test_object_sync():
@@ -587,7 +592,7 @@ def test_object_sync():
         k = new_key(zone, bucket_name, objname)
         k.set_contents_from_string(content)
 
-    # no need for meta checkpoint, we'll use data checkpoint instead
+    realm.meta_checkpoint()
 
     for source_zone, bucket_name in zone_bucket.iteritems():
         for target_zone in all_zones:
@@ -603,6 +608,7 @@ def init(parse_args):
     cfg = ConfigParser.RawConfigParser({
                                          'num_zones': 2,
                                          'no_bootstrap': 'false',
+                                         'log_level': 20,
                                          })
     try:
         path = os.environ['RGW_MULTI_TEST_CONF']
@@ -623,6 +629,7 @@ def init(parse_args):
     section = 'DEFAULT'
     parser.add_argument('--num-zones', type=int, default=cfg.getint(section, 'num_zones'))
     parser.add_argument('--no-bootstrap', action='store_true', default=cfg.getboolean(section, 'no_bootstrap'))
+    parser.add_argument('--log-level', type=int, default=cfg.getint(section, 'log_level'))
 
     argv = []
 
@@ -630,6 +637,9 @@ def init(parse_args):
         argv = sys.argv[1:]
 
     args = parser.parse_args(argv)
+
+    global log_level
+    log_level = args.log_level
 
     global rgw_multi
 
