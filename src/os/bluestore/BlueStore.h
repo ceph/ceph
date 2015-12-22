@@ -105,7 +105,6 @@ public:
     void add(const ghobject_t& oid, OnodeRef o);
     void _touch(OnodeRef o);
     OnodeRef lookup(const ghobject_t& o);
-    void remove(const ghobject_t& o);
     void rename(const ghobject_t& old_oid, const ghobject_t& new_oid);
     void clear();
     bool get_next(const ghobject_t& after, pair<ghobject_t,OnodeRef> *next);
