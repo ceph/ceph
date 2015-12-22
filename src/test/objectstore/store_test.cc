@@ -3192,6 +3192,8 @@ int main(int argc, char **argv) {
   g_ceph_context->_conf->set_val("filestore_fiemap", "true");
   g_ceph_context->_conf->set_val("bluestore_fsck_on_mount", "true");
   g_ceph_context->_conf->set_val("bluestore_fsck_on_umount", "true");
+  g_ceph_context->_conf->set_val("bluestore_debug_misc", "true");
+  g_ceph_context->_conf->set_val("bluestore_debug_small_allocations", "4");
   g_ceph_context->_conf->set_val(
     "enable_experimental_unrecoverable_data_corrupting_features", "*");
   g_ceph_context->_conf->apply_changes(NULL);
