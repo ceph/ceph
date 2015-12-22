@@ -155,13 +155,16 @@ class Downburst(object):
         """
         config_fd = tempfile.NamedTemporaryFile(delete=False)
 
+        os_type = self.os_type.lower()
+        mac_address = self.status['mac_address']
+
         file_info = {
             'disk-size': '100G',
             'ram': '1.9G',
             'cpus': 1,
             'networks': [
-                {'source': 'front', 'mac': self.status['mac_address']}],
-            'distro': self.os_type.lower(),
+                {'source': 'front', 'mac': mac_address}],
+            'distro': os_type,
             'distroversion': self.os_version,
             'additional-disks': 3,
             'additional-disks-size': '200G',
@@ -178,6 +181,12 @@ class Downburst(object):
         user_info = {
             'user': self.user,
         }
+        # On CentOS/RHEL/Fedora, write the correct mac address
+        if os_type in ['centos', 'rhel', 'fedora']:
+            user_info['runcmd'] = [
+                ['sed', '-ie', 's/HWADDR=".*"/HWADDR="%s"/' % mac_address,
+                 '/etc/sysconfig/network-scripts/ifcfg-eth0'],
+            ]
         user_fd = tempfile.NamedTemporaryFile(delete=False)
         yaml.safe_dump(user_info, user_fd)
         self.user_path = user_fd.name
