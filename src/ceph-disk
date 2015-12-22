@@ -246,7 +246,7 @@ def is_upstart():
     """
     Detect whether upstart is running
     """
-    (out, _) = command(['init', '--version'])
+    (out, err, _) = command(['init', '--version'])
     if 'upstart' in out:
         return True
     return False
@@ -329,9 +329,10 @@ def command(arguments, **kwargs):
     process = subprocess.Popen(
         arguments,
         stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
         **kwargs)
-    out, _ = process.communicate()
-    return out, process.returncode
+    out, err = process.communicate()
+    return out, err, process.returncode
 
 
 def command_check_call(arguments):
@@ -868,11 +869,11 @@ def path_set_context(path):
            )
 
 def _check_output(args=None, **kwargs):
-    out, ret = command(args, **kwargs)
+    out, err, ret = command(args, **kwargs)
     if ret:
         cmd = args[0]
         error = subprocess.CalledProcessError(ret, cmd)
-        error.output = out
+        error.output = out + err
         raise error
     return out
 
@@ -886,7 +887,7 @@ def get_conf(cluster, variable):
     :return: The variable value or None.
     """
     try:
-        out, ret = command(
+        out, err, ret = command(
             [
                 'ceph-conf',
                 '--cluster={cluster}'.format(
@@ -899,7 +900,7 @@ def get_conf(cluster, variable):
             close_fds=True,
             )
     except OSError as e:
-        raise Error('error executing ceph-conf', e)
+        raise Error('error executing ceph-conf', e, err)
     if ret == 1:
         # config entry not found
         return None
@@ -1189,6 +1190,7 @@ def get_free_partition_index(dev):
 
     if not lines:
         raise Error('parted failed to output anything')
+    LOG.debug('get_free_partition_index: analyzing ' + lines)
     if ('CHS;' not in lines and
         'CYL;' not in lines and
         'BYT;' not in lines):
@@ -1217,14 +1219,30 @@ def update_partition(dev, description):
     group changes etc. are complete.
     """
     LOG.debug('Calling partprobe on %s device %s', description, dev)
-    command_check_call(['udevadm', 'settle'])
-    command_check_call(['partprobe', dev])
-    command_check_call(['udevadm', 'settle'])
+    partprobe_ok = False
+    error = 'unknown error'
+    for i in (1, 2, 3, 4, 5):
+        command_check_call(['udevadm', 'settle', '--timeout=600'])
+        try:
+            _check_output(['partprobe', dev])
+            partprobe_ok = True
+            break
+        except subprocess.CalledProcessError as e:
+            error = e.output
+            if ('unable to inform the kernel' not in error and
+                'Device or resource busy' not in error):
+                raise
+            LOG.debug('partprobe %s failed : %s (ignored, waiting 60s)' % (dev, error))
+            time.sleep(60)
+    if not partprobe_ok:
+        raise Error('partprobe %s failed : %s' % (dev, error))
+    command_check_call(['udevadm', 'settle', '--timeout=600'])
 
 def zap(dev):
     """
     Destroy the partition table and content of a given disk.
     """
+    dev = os.path.realpath(dev)
     dmode = os.stat(dev).st_mode
     if not stat.S_ISBLK(dmode) or is_partition(dev):
         raise Error('not full block device; cannot zap', dev)
@@ -1671,17 +1689,17 @@ def prepare_dev(
                             os.path.basename(rawdev)])
 
 def check_journal_reqs(args):
-    _, allows_journal = command([
+    _, _, allows_journal = command([
         'ceph-osd', '--check-allows-journal',
         '-i', '0',
         '--cluster', args.cluster,
     ])
-    _, wants_journal = command([
+    _, _, wants_journal = command([
         'ceph-osd', '--check-wants-journal',
         '-i', '0',
         '--cluster', args.cluster,
     ])
-    _, needs_journal = command([
+    _, _, needs_journal = command([
         'ceph-osd', '--check-needs-journal',
         '-i', '0',
         '--cluster', args.cluster,
@@ -2642,7 +2660,7 @@ def get_oneliner(base, name):
 
 
 def get_dev_fs(dev):
-    fscheck, _ = command(
+    fscheck, _, _ = command(
         [
             'blkid',
             '-s',
@@ -2667,19 +2685,29 @@ def split_dev_base_partnum(dev):
     return (base, partnum)
 
 def get_partition_type(part):
-    return get_sgdisk_partition_info(part, 'Partition GUID code: (\S+)')
+    return get_blkid_partition_info(part, 'ID_PART_ENTRY_TYPE')
 
 def get_partition_uuid(part):
-    return get_sgdisk_partition_info(part, 'Partition unique GUID: (\S+)')
+    return get_blkid_partition_info(part, 'ID_PART_ENTRY_UUID')
 
-def get_sgdisk_partition_info(dev, regexp):
-    (base, partnum) = split_dev_base_partnum(dev)
-    out, _ = command(['sgdisk', '-i', partnum, base])
+def get_blkid_partition_info(dev, what=None):
+    out, _, _ = command(
+        [
+            'blkid',
+            '-o',
+            'udev',
+            '-p',
+            dev,
+        ]
+    )
+    p = {}
     for line in out.splitlines():
-        m = re.match(regexp, line)
-        if m:
-            return m.group(1).lower()
-    return None
+        (key, value) = line.split('=')
+        p[key] = value
+    if what:
+        return p.get(what)
+    else:
+        return p
 
 def more_osd_info(path, uuid_map, desc):
     desc['ceph_fsid'] = get_oneliner(path, 'ceph_fsid')

@@ -27,7 +27,7 @@ if ! which py.test > /dev/null; then
     exit 1
 fi
 
-sudo env PATH=$(dirname $0)/..:$PATH py.test -v $(dirname $0)/ceph-disk-test.py
+sudo env PATH=$(dirname $0)/..:$PATH py.test -s -v $(dirname $0)/ceph-disk-test.py
 result=$?
 
 # own whatever was created as a side effect of the py.test run
