@@ -203,8 +203,8 @@ namespace rgw {
 
   private:
     RGWFileHandle(RGWLibFS* _fs, uint32_t fs_inst)
-      : fs(_fs), bucket(nullptr), parent(nullptr), depth(0),
-	flags(FLAG_ROOT)
+      : fs(_fs), bucket(nullptr), parent(nullptr), variant_type{directory()},
+	depth(0), flags(FLAG_ROOT)
       {
 	/* root */
 	fh.fh_type = RGW_FS_TYPE_DIRECTORY;
@@ -231,12 +231,18 @@ namespace rgw {
 
       if (parent->is_root()) {
 	fh.fh_type = RGW_FS_TYPE_DIRECTORY;
+	variant_type = directory();
 	flags |= FLAG_BUCKET;
       } else {
 	bucket = (parent->flags & FLAG_BUCKET) ? parent
 	  : parent->bucket;
-	fh.fh_type = (flags & FLAG_DIRECTORY) ? RGW_FS_TYPE_DIRECTORY
-	  : RGW_FS_TYPE_FILE;
+	if (flags & FLAG_DIRECTORY) {
+	  fh.fh_type = RGW_FS_TYPE_DIRECTORY;
+	  variant_type = directory();
+	} else {
+	  fh.fh_type = RGW_FS_TYPE_FILE;
+	  variant_type = file();
+	}
       }
 
       depth = parent->depth + 1;
@@ -250,6 +256,10 @@ namespace rgw {
 
     const fh_key& get_key() const {
       return fhk;
+    }
+
+    directory* get_directory() {
+      return get<directory>(&variant_type);
     }
 
     size_t get_size() const { return state.size; }
