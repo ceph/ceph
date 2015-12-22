@@ -156,7 +156,8 @@ class RGWRealm:
         self.cluster = None
 
     def init_zone(self, cluster, zg, zone_name, port, first_zone_port=0):
-        if first_zone_port == 0:
+        is_master = (first_zone_port == 0)
+        if is_master:
             bash(tpath('test-rgw-call.sh', 'init_first_zone', cluster.cluster_num,
                        self.realm, zg, zone_name, port,
                        self.credentials.access_key, self.credentials.secret))
@@ -165,12 +166,15 @@ class RGWRealm:
                        self.realm, zg, zone_name, first_zone_port, port,
                        self.credentials.access_key, self.credentials.secret))
 
-        self.add_zone(cluster, zg, zone_name, port)
+        self.add_zone(cluster, zg, zone_name, port, is_master)
 
-    def add_zone(self, cluster, zg, zone_name, port):
+    def add_zone(self, cluster, zg, zone_name, port, is_master):
         zone = RGWZone(self.realm, cluster, zg, zone_name, port)
         self.zones[self.total_zones] = zone
         self.total_zones += 1
+
+        if is_master:
+            self.master_zone = zone
 
 
     def get_zone(self, num):
@@ -186,12 +190,12 @@ class RGWRealm:
     def num_zones(self):
         return self.total_zones
 
-    def meta_sync_status(self, cluster):
-        if cluster.cluster_num == self.master_cluster.cluster_num:
+    def meta_sync_status(self, zone):
+        if zone.zone_name == self.master_zone.zone_name:
             return None
 
         while True:
-            (meta_sync_status_json, retcode)=cluster.rgw_admin_ro('--rgw-realm=' + self.realm + ' metadata sync status', check_retcode = False)
+            (meta_sync_status_json, retcode) = zone.cluster.rgw_admin_ro('--rgw-realm=' + self.realm + ' metadata sync status', check_retcode = False)
             if retcode == 0:
                 break
 
@@ -213,8 +217,8 @@ class RGWRealm:
 
         return (num_shards, markers)
 
-    def meta_master_log_status(self, master_cluster):
-        (mdlog_status_json, retcode)=master_cluster.rgw_admin_ro('--rgw-realm=' + self.realm + ' mdlog status')
+    def meta_master_log_status(self, master_zone):
+        (mdlog_status_json, retcode) = master_zone.cluster.rgw_admin_ro('--rgw-realm=' + self.realm + ' mdlog status')
         mdlog_status = json.loads(mdlog_status_json)
 
         markers={}
@@ -227,7 +231,7 @@ class RGWRealm:
 
         return markers
 
-    def compare_meta_status(self, cluster, log_status, sync_status):
+    def compare_meta_status(self, zone, log_status, sync_status):
         if len(log_status) != len(sync_status):
             log('len(log_status)=', len(log_status), ' len(sync_status=', len(sync_status))
             return False
@@ -240,43 +244,43 @@ class RGWRealm:
                 msg += 'shard=' + str(i) + ' master=' + l + ' target=' + s
 
         if len(msg) > 0:
-            log('cluster ', cluster.cluster_id, ' behind master: ', msg)
+            log('zone ', zone.zone_name, ' behind master: ', msg)
             return False
 
         return True
 
-    def cluster_meta_checkpoint(self, cluster):
-        if cluster.cluster_num == self.master_cluster.cluster_num:
+    def zone_meta_checkpoint(self, zone):
+        if zone.zone_name == self.master_zone.zone_name:
             return
 
-        log('starting meta checkpoint for cluster=', cluster.cluster_id)
+        log('starting meta checkpoint for zone=', zone.zone_name)
 
         while True:
-            log_status = self.meta_master_log_status(self.master_cluster)
-            (num_shards, sync_status) = self.meta_sync_status(cluster)
+            log_status = self.meta_master_log_status(self.master_zone)
+            (num_shards, sync_status) = self.meta_sync_status(zone)
 
             log('log_status=', log_status)
             log('sync_status=', sync_status)
 
-            if self.compare_meta_status(cluster, log_status, sync_status):
+            if self.compare_meta_status(zone, log_status, sync_status):
                 break
 
             time.sleep(5)
 
 
-        log('finish meta checkpoint for cluster=', cluster.cluster_id)
+        log('finish meta checkpoint for zone=', zone.zone_name)
 
     def meta_checkpoint(self):
         log('meta checkpoint')
-        for (index, c) in self.clusters.iteritems():
-            self.cluster_meta_checkpoint(c)
+        for z in self.get_zones():
+            self.zone_meta_checkpoint(z)
 
     def data_sync_status(self, target_zone, source_zone):
         if target_zone.zone_name == source_zone.zone_name:
             return None
 
         while True:
-            (data_sync_status_json, retcode)=target_zone.cluster.rgw_admin_ro('--rgw-realm=' + self.realm + ' data sync status --source-zone=' + source_zone.zone_name, check_retcode = False)
+            (data_sync_status_json, retcode) = target_zone.cluster.rgw_admin_ro('--rgw-realm=' + self.realm + ' data sync status --source-zone=' + source_zone.zone_name, check_retcode = False)
             if retcode == 0:
                 break
 
@@ -411,7 +415,7 @@ class RGWMulti:
                 realm.init_zone(self.clusters[i], 'us', 'us-' + str(i + 1), self.base_port + i, first_zone_port=self.base_port)
         else:
             for i in xrange(0, self.num_clusters):
-                realm.add_zone(self.clusters[i], 'us', 'us-' + str(i + 1), self.base_port + i)
+                realm.add_zone(self.clusters[i], 'us', 'us-' + str(i + 1), self.base_port + i, (i == 0))
 
         realm.meta_checkpoint()
 
