@@ -57,13 +57,13 @@
  *
  */
 
-const string PREFIX_SUPER = "S"; // field -> value
-const string PREFIX_COLL = "C"; // collection name -> (nothing)
-const string PREFIX_OBJ = "O";  // object name -> onode
-const string PREFIX_OVERLAY = "V"; // u64 + offset -> value
-const string PREFIX_OMAP = "M"; // u64 + keyname -> value
-const string PREFIX_WAL = "L";  // write ahead log
-const string PREFIX_ALLOC = "B";  // block allocator
+const string PREFIX_SUPER = "S";   // field -> value
+const string PREFIX_COLL = "C";    // collection name -> cnode_t
+const string PREFIX_OBJ = "O";     // object name -> onode_t
+const string PREFIX_OVERLAY = "V"; // u64 + offset -> data
+const string PREFIX_OMAP = "M";    // u64 + keyname -> value
+const string PREFIX_WAL = "L";     // id -> wal_transaction_t
+const string PREFIX_ALLOC = "B";   // u64 offset -> u64 length (freelist)
 
 // write a label in the first block.  always use this size.  note that
 // bluefs makes a matching assumption about the location of its
