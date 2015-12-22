@@ -615,16 +615,7 @@ public:
     return 0;
   }
 
-private:
-  bool sharded;
 public:
-  void set_allow_sharded_objects() {
-    sharded = true;
-  }
-  bool get_allow_sharded_objects() {
-    return sharded;
-  }
-
   int statfs(struct statfs *buf);
 
   bool exists(coll_t cid, const ghobject_t& oid);

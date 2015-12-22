@@ -516,20 +516,6 @@ class KeyValueStore : public ObjectStore,
     return false;
   }
 
-  /**
-   ** set_allow_sharded_objects()
-   **
-   ** Before sharded ghobject_t can be specified this function must be called
-   **/
-  void set_allow_sharded_objects() {}
-
-  /**
-   ** get_allow_sharded_objects()
-   **
-   ** return value: true if set_allow_sharded_objects() called, otherwise false
-   **/
-  bool get_allow_sharded_objects() {return false;}
-
   void collect_metadata(map<string,string> *pm);
 
   int statfs(struct statfs *buf);

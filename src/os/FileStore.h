@@ -448,22 +448,6 @@ public:
   int update_version_stamp();
   int upgrade();
 
-  /**
-   * set_allow_sharded_objects()
-   *
-   * Before sharded ghobject_t can be specified this function must be called
-   *
-   * Once this function is called the FileStore is not mountable by prior releases
-   */
-  void set_allow_sharded_objects();
-
-  /**
-   * get_allow_sharded_objects()
-   *
-   * return value: true if set_allow_sharded_objects() called, otherwise false
-   */
-  bool get_allow_sharded_objects();
-
   bool can_sort_nibblewise() {
     return true;    // i support legacy sort order
   }
