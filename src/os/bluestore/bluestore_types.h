@@ -261,12 +261,13 @@ struct bluestore_wal_op_t {
   __u8 op;
   bluestore_extent_t extent;
   bluestore_extent_t src_extent;
+  uint64_t src_rmw_head, src_rmw_tail;
   bufferlist data;
   uint64_t nid;
   vector<bluestore_overlay_t> overlays;
   vector<uint64_t> removed_overlays;
 
-  bluestore_wal_op_t() : nid(0) {}
+  bluestore_wal_op_t() : src_rmw_head(0), src_rmw_tail(0), nid(0) {}
 
   void encode(bufferlist& bl) const;
   void decode(bufferlist::iterator& p);

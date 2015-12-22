@@ -546,7 +546,10 @@ private:
   void _dump_onode(OnodeRef o);
 
   TransContext *_txc_create(OpSequencer *osr);
-  void _txc_release(TransContext *txc, uint64_t offset, uint64_t length);
+  void _txc_release(TransContext *txc, CollectionRef& c,
+		    EnodeRef& enode, uint32_t hash,
+		    uint64_t offset, uint64_t length,
+		    bool shared);
   int _txc_add_transaction(TransContext *txc, Transaction *t);
   int _txc_finalize(OpSequencer *osr, TransContext *txc);
   void _txc_state_proc(TransContext *txc);
@@ -732,8 +735,6 @@ private:
 	     bufferlist& bl,
 	     uint32_t fadvise_flags);
   bool _can_overlay_write(OnodeRef o, uint64_t length);
-  int _do_overlay_clear(TransContext *txc,
-			OnodeRef o);
   int _do_overlay_trim(TransContext *txc,
 		       OnodeRef o,
 		       uint64_t offset,
@@ -743,17 +744,27 @@ private:
 			uint64_t offset,
 			uint64_t length,
 			const bufferlist& bl);
-  int _do_write_overlays(TransContext *txc, OnodeRef o,
+  int _do_write_overlays(TransContext *txc, CollectionRef& c, OnodeRef o,
 			 uint64_t offset, uint64_t length);
   void _do_read_all_overlays(bluestore_wal_op_t& wo);
   void _pad_zeros(OnodeRef o, bufferlist *bl, uint64_t *offset, uint64_t *length,
 		  uint64_t block_size);
+  void _pad_zeros_head(OnodeRef o, bufferlist *bl,
+		       uint64_t *offset, uint64_t *length,
+		       uint64_t block_size);
+  void _pad_zeros_tail(OnodeRef o, bufferlist *bl,
+		       uint64_t offset, uint64_t *length,
+		       uint64_t block_size);
   int _do_allocate(TransContext *txc,
+		   CollectionRef& c,
 		   OnodeRef o,
 		   uint64_t offset, uint64_t length,
 		   uint32_t fadvise_flags,
-		   bool allow_overlay);
+		   bool allow_overlay,
+		   uint64_t *rmw_cow_head,
+		   uint64_t *rmw_cow_tail);
   int _do_write(TransContext *txc,
+		CollectionRef &c,
 		OnodeRef o,
 		uint64_t offset, uint64_t length,
 		bufferlist& bl,
@@ -761,11 +772,16 @@ private:
   int _touch(TransContext *txc,
 	     CollectionRef& c,
 	     const ghobject_t& oid);
+  int _do_write_zero(TransContext *txc,
+		     CollectionRef &c,
+		     OnodeRef o,
+		     uint64_t offset, uint64_t length);
   int _zero(TransContext *txc,
 	    CollectionRef& c,
 	    const ghobject_t& oid,
 	    uint64_t offset, size_t len);
   int _do_truncate(TransContext *txc,
+		   CollectionRef& c,
 		   OnodeRef o,
 		   uint64_t offset);
   int _truncate(TransContext *txc,
@@ -776,6 +792,7 @@ private:
 	      CollectionRef& c,
 	      const ghobject_t& oid);
   int _do_remove(TransContext *txc,
+		 CollectionRef& c,
 		 OnodeRef o);
   int _setattr(TransContext *txc,
 	       CollectionRef& c,
