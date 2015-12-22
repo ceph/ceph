@@ -550,8 +550,6 @@ public:
 
     CopyFromCallback *copy_cb;
 
-    hobject_t new_temp_oid, discard_temp_oid;  ///< temp objects we should start/stop tracking
-
     // pending xattr updates
     map<ObjectContextRef,
 	map<string, boost::optional<bufferlist> > > pending_attrs;

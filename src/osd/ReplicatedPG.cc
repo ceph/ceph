@@ -7110,9 +7110,6 @@ void ReplicatedPG::process_copy_chunk(hobject_t oid, ceph_tid_t tid, int r)
     }
     ObjectContextRef tempobc = get_object_context(cop->results.temp_oid, true);
     RepGather *repop = simple_repop_create(tempobc);
-    if (cop->temp_cursor.is_initial()) {
-      repop->ctx->new_temp_oid = cop->results.temp_oid;
-    }
     _write_copy_chunk(cop, repop->ctx->op_t);
     simple_repop_submit(repop);
     dout(10) << __func__ << " fetching more" << dendl;
@@ -7320,9 +7317,7 @@ void ReplicatedPG::finish_copyfrom(OpContext *ctx)
     ctx->delta_stats.num_objects++;
     obs.exists = true;
   }
-  if (cb->is_temp_obj_used()) {
-    ctx->discard_temp_oid = cb->results->temp_oid;
-  }
+
   ctx->op_t->append(cb->results->final_tx);
   delete cb->results->final_tx;
   cb->results->final_tx = NULL;
@@ -7507,9 +7502,7 @@ void ReplicatedPG::finish_promote(int r, CopyResults *results,
     tctx->op_t->append(results->final_tx);
     delete results->final_tx;
     results->final_tx = NULL;
-    if (results->started_temp_obj) {
-      tctx->discard_temp_oid = results->temp_oid;
-    }
+
     tctx->new_obs.oi.size = results->object_size;
     tctx->new_obs.oi.user_version = results->user_version;
     // Don't care src object whether have data or omap digest
