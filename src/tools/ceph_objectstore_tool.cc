@@ -2229,7 +2229,7 @@ int main(int argc, char **argv)
     ("pgid", po::value<string>(&pgidstr),
      "PG id, mandatory for info, log, remove, export, rm-past-intervals, mark-complete")
     ("op", po::value<string>(&op),
-     "Arg is one of [info, log, remove, export, import, list, fix-lost, list-pgs, rm-past-intervals, dump-journal, dump-super, meta-list, "
+     "Arg is one of [info, log, remove, fsck, export, import, list, fix-lost, list-pgs, rm-past-intervals, dump-journal, dump-super, meta-list, "
 	 "get-osdmap, set-osdmap, get-inc-osdmap, set-inc-osdmap, mark-complete]")
     ("epoch", po::value<unsigned>(&epoch),
      "epoch# for get-osdmap and get-inc-osdmap, the current epoch in use if not specified")
@@ -2329,7 +2329,7 @@ int main(int argc, char **argv)
     usage(desc);
     myexit(1);
   }
-  if (op != "list" && vm.count("op") && vm.count("object")) {
+  if (op != "list" && op != "fsck" && vm.count("op") && vm.count("object")) {
     cerr << "Can't specify both --op and object command syntax" << std::endl;
     usage(desc);
     myexit(1);
@@ -2460,6 +2460,20 @@ int main(int argc, char **argv)
            << std::endl;
     }
     myexit(1);
+  }
+
+  if (op == "fsck") {
+    int r = fs->fsck();
+    if (r < 0) {
+      cerr << "fsck failed: " << cpp_strerror(r) << std::endl;
+      exit(1);
+    }
+    if (r > 0) {
+      cerr << "fsck found " << r << " errors" << std::endl;
+      exit(1);
+    }
+    cout << "fsck found no errors" << std::endl;
+    exit(0);
   }
 
   ObjectStore::Sequencer *osr = new ObjectStore::Sequencer(__func__);
@@ -2796,7 +2810,7 @@ int main(int argc, char **argv)
   // If not an object command nor any of the ops handled below, then output this usage
   // before complaining about a bad pgid
   if (!vm.count("objcmd") && op != "export" && op != "info" && op != "log" && op != "rm-past-intervals" && op != "mark-complete") {
-    cerr << "Must provide --op (info, log, remove, export, import, list, fix-lost, list-pgs, rm-past-intervals, dump-journal, dump-super, meta-list, "
+    cerr << "Must provide --op (info, log, remove, fsck, export, import, list, fix-lost, list-pgs, rm-past-intervals, dump-journal, dump-super, meta-list, "
       "get-osdmap, set-osdmap, get-inc-osdmap, set-inc-osdmap, mark-complete)"
 	 << std::endl;
     usage(desc);
