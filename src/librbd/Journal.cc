@@ -728,7 +728,7 @@ void Journal<I>::handle_io_event_safe(int r, uint64_t tid) {
                  << "tid=" << tid << dendl;
 
   // journal will be flushed before closing
-  assert(m_state == STATE_READY);
+  assert(m_state == STATE_READY || m_state == STATE_STOPPING);
   if (r < 0) {
     lderr(cct) << "failed to commit IO event: "  << cpp_strerror(r) << dendl;
   }
@@ -789,7 +789,7 @@ void Journal<I>::handle_op_event_safe(int r, uint64_t tid, const Future &future,
                  << "tid=" << tid << dendl;
 
   // journal will be flushed before closing
-  assert(m_state == STATE_READY);
+  assert(m_state == STATE_READY || m_state == STATE_STOPPING);
   if (r < 0) {
     lderr(cct) << "failed to commit op event: "  << cpp_strerror(r) << dendl;
   }
