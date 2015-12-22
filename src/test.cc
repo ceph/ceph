@@ -21,7 +21,7 @@ namespace dmc = crimson::dmclock;
 TestServer* testServer;
 
 
-typedef std::unique_ptr<Request> RequestRef;
+typedef std::unique_ptr<TestRequest> TestRequestRef;
 
 
 dmc::ClientInfo getClientInfo(int c) {
@@ -47,9 +47,9 @@ bool canHandleReq() {
 }
 
 
-void handleReq(std::unique_ptr<Request>&& request_ref,
+void handleReq(std::unique_ptr<TestRequest>&& request_ref,
 	       std::function<void()> callback) {
-  std::unique_ptr<Request> req(std::move(request_ref));
+  std::unique_ptr<TestRequest> req(std::move(request_ref));
   int client = req->client;
   uint32_t op = req->op;
   
@@ -69,12 +69,12 @@ int main(int argc, char* argv[]) {
 
   auto f1 = std::function<dmc::ClientInfo(int)>(getClientInfo);
   auto f2 = std::function<bool()>(canHandleReq);
-  auto f3 = std::function<void(std::unique_ptr<Request>&&,
+  auto f3 = std::function<void(std::unique_ptr<TestRequest>&&,
 			       std::function<void()>)>(handleReq);
 
   testServer = new TestServer(5);
 
-  dmc::PriorityQueue<int,Request> priorityQueue(f1, f2, f3);
+  dmc::PriorityQueue<int,TestRequest> priorityQueue(f1, f2, f3);
 
   std::cout << "queue created" << std::endl;
 
@@ -82,7 +82,7 @@ int main(int argc, char* argv[]) {
     static uint32_t op = 12;
     int client = i % 4;
     uint32_t epoch = i / 4;
-    priorityQueue.addRequest(Request(client, epoch, op),
+    priorityQueue.addRequest(TestRequest(client, epoch, op),
 			     client,
 			     dmc::getTime());
   }

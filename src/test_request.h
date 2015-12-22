@@ -18,7 +18,7 @@ struct TestRequest {
   }
 
   TestRequest(const TestRequest& r) :
-    Request(r.client, r.epoch, r.op)
+    TestRequest(r.client, r.epoch, r.op)
   {
     // empty
   }
