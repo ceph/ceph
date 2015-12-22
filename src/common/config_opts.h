@@ -857,6 +857,7 @@ OPTION(bluestore_cache_tails, OPT_BOOL, true)   // cache tail blocks in Onode
 OPTION(bluestore_backend, OPT_STR, "rocksdb")
 OPTION(bluestore_rocksdb_options, OPT_STR, "compression=kNoCompression,max_write_buffer_number=16,min_write_buffer_number_to_merge=3,recycle_log_file_num=16")
 OPTION(bluestore_fsck_on_mount, OPT_BOOL, false)
+OPTION(bluestore_fsck_on_umount, OPT_BOOL, false)
 OPTION(bluestore_fail_eio, OPT_BOOL, true)
 OPTION(bluestore_sync_io, OPT_BOOL, false)  // perform initial io synchronously
 OPTION(bluestore_sync_transaction, OPT_BOOL, false)  // perform kv txn synchronously
