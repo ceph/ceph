@@ -7,13 +7,14 @@
 #include "include/int_types.h"
 #include "include/buffer_fwd.h"
 #include "include/Context.h"
-#include "include/unordered_set.h"
-#include "include/unordered_map.h"
 #include "include/rbd/librbd.hpp"
 #include "common/Mutex.h"
 #include "librbd/journal/Entries.h"
 #include <boost/variant.hpp>
 #include <list>
+#include <set>
+#include <unordered_set>
+#include <unordered_map>
 
 namespace librbd {
 
@@ -36,16 +37,26 @@ public:
   void flush(Context *on_finish);
 
 private:
-  typedef std::list<Context *> Contexts;
-  typedef ceph::unordered_set<Context *> ContextSet;
-  typedef ceph::unordered_map<Context *, Context *> OpContexts;
+  struct OpEvent {
+    Context *on_op_finish_event = nullptr;
+    Context *on_start_safe = nullptr;
+    Context *on_finish_ready = nullptr;
+    Context *on_finish_safe = nullptr;
+  };
 
-  struct C_OpOnFinish : public Context {
+  typedef std::list<uint64_t> OpTids;
+  typedef std::list<Context *> Contexts;
+  typedef std::unordered_set<Context *> ContextSet;
+  typedef std::unordered_map<uint64_t, OpEvent> OpEvents;
+
+  struct C_OpOnComplete : public Context {
     Replay *replay;
-    C_OpOnFinish(Replay *replay) : replay(replay) {
+    uint64_t op_tid;
+    C_OpOnComplete(Replay *replay, uint64_t op_tid)
+      : replay(replay), op_tid(op_tid) {
     }
     virtual void finish(int r) override {
-      replay->handle_op_context_callback(this, r);
+      replay->handle_op_complete(op_tid, r);
     }
   };
 
@@ -97,7 +108,7 @@ private:
   Contexts m_aio_modify_unsafe_contexts;
   ContextSet m_aio_modify_safe_contexts;
 
-  OpContexts m_op_contexts;
+  OpEvents m_op_events;
 
   Context *m_flush_ctx = nullptr;
   Context *m_on_aio_ready = nullptr;
@@ -136,8 +147,9 @@ private:
   void handle_aio_flush_complete(Context *on_flush_safe, Contexts &on_safe_ctxs,
                                  int r);
 
-  Context *create_op_context_callback(Context *on_safe);
-  void handle_op_context_callback(Context *on_op_finish, int r);
+  Context *create_op_context_callback(uint64_t op_tid, Context *on_safe,
+                                      OpEvent **op_event);
+  void handle_op_complete(uint64_t op_tid, int r);
 
   AioCompletion *create_aio_modify_completion(Context *on_ready,
                                               Context *on_safe,
