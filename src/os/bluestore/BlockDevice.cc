@@ -183,8 +183,10 @@ int BlockDevice::_aio_start()
   if (g_conf->bdev_aio) {
     dout(10) << __func__ << dendl;
     int r = aio_queue.init();
-    if (r < 0)
+    if (r < 0) {
+      derr << __func__ << " failed: " << cpp_strerror(r) << dendl;
       return r;
+    }
     aio_thread.create();
   }
   return 0;
