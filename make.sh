@@ -1,17 +1,23 @@
 #!/bin/bash
 
-# server_src="src/dm_clock_srv.cc src/test.cc"
+source="dm_clock_srv.cc test_server.cc test.cc"
 
 fail() {
     echo "Failed!"
     exit 1
 }
 
+obj() {
+    echo $1 | sed 's/\.[^.]*$/.o/'
+}
+
 cflags="-g -O0"
 
-g++ -std=c++11 $cflags -I /usr/local/include -c src/dm_clock_srv.cc || fail
-g++ -std=c++11 $cflags -I /usr/local/include -c src/test.cc         || fail
-g++ -std=c++11 $cflags -I /usr/local/include -c src/test_srv.cc     || fail
-g++ $cflags -pthread -o test dm_clock_srv.o test_srv.o test.o       || fail
+obj=""
+for s in $source ; do
+    g++ -std=c++11 $cflags -I /usr/local/include -c -o obj/`obj $s` src/$s || fail
+    obj="$obj `obj $s`"
+done
+g++ $cflags -pthread -o test $obj       || fail
 
 echo "Succeeded!"

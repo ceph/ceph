@@ -6,7 +6,7 @@
 
 #include <unistd.h>
 
-#include "test_srv.h"
+#include "test_server.h"
 
 
 TestServer::TestServer(int _thread_pool_size) :
