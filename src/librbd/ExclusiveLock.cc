@@ -434,6 +434,7 @@ template <typename I>
 void ExclusiveLock<I>::send_shutdown() {
   assert(m_lock.is_locked());
   if (m_state == STATE_UNLOCKED) {
+    m_state = STATE_SHUTTING_DOWN;
     m_image_ctx.aio_work_queue->unblock_writes();
     m_image_ctx.op_work_queue->queue(util::create_context_callback<
       ExclusiveLock<I>, &ExclusiveLock<I>::complete_shutdown>(this), 0);

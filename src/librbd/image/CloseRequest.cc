@@ -185,6 +185,11 @@ void CloseRequest<I>::handle_shut_down_cache(int r) {
 
 template <typename I>
 void CloseRequest<I>::send_flush_copyup() {
+  if (m_image_ctx->copyup_finisher == nullptr) {
+    send_flush_op_work_queue();
+    return;
+  }
+
   CephContext *cct = m_image_ctx->cct;
   ldout(cct, 10) << this << " " << __func__ << dendl;
 
@@ -196,6 +201,8 @@ template <typename I>
 void CloseRequest<I>::handle_flush_copyup(int r) {
   CephContext *cct = m_image_ctx->cct;
   ldout(cct, 10) << this << " " << __func__ << ": r=" << r << dendl;
+
+  m_image_ctx->copyup_finisher->stop();
   send_flush_op_work_queue();
 }
 
