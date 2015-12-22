@@ -61,9 +61,10 @@ struct C_RemoveSnapId: public Context {
 template <typename I>
 SnapshotCreateRequest<I>::SnapshotCreateRequest(I &image_ctx,
                                                 Context *on_finish,
-                                                const std::string &snap_name)
-  : Request<I>(image_ctx, on_finish), m_snap_name(snap_name), m_ret_val(0),
-    m_snap_id(CEPH_NOSNAP) {
+                                                const std::string &snap_name,
+                                                uint64_t journal_op_tid)
+  : Request<I>(image_ctx, on_finish, journal_op_tid), m_snap_name(snap_name),
+    m_ret_val(0), m_snap_id(CEPH_NOSNAP) {
 }
 
 template <typename I>

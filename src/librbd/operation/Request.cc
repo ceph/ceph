@@ -16,8 +16,8 @@ namespace librbd {
 namespace operation {
 
 template <typename I>
-Request<I>::Request(I &image_ctx, Context *on_finish)
-  : AsyncRequest<I>(image_ctx, on_finish) {
+Request<I>::Request(I &image_ctx, Context *on_finish, uint64_t journal_op_tid)
+  : AsyncRequest<I>(image_ctx, on_finish), m_op_tid(journal_op_tid) {
 }
 
 template <typename I>

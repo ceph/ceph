@@ -26,10 +26,12 @@ using util::create_rados_safe_callback;
 
 template <typename I>
 ResizeRequest<I>::ResizeRequest(I &image_ctx, Context *on_finish,
-                                uint64_t new_size, ProgressContext &prog_ctx)
-  : Request<I>(image_ctx, on_finish),
+                                uint64_t new_size, ProgressContext &prog_ctx,
+                                uint64_t journal_op_tid, bool disable_journal)
+  : Request<I>(image_ctx, on_finish, journal_op_tid),
     m_original_size(0), m_new_size(new_size), m_prog_ctx(prog_ctx),
-    m_new_parent_overlap(0), m_xlist_item(this)
+    m_new_parent_overlap(0), m_disable_journal(disable_journal),
+    m_xlist_item(this)
 {
 }
 
@@ -113,9 +115,8 @@ Context *ResizeRequest<I>::handle_pre_block_writes(int *result) {
 template <typename I>
 Context *ResizeRequest<I>::send_append_op_event() {
   I &image_ctx = this->m_image_ctx;
-  if (!this->template append_op_event<
+  if (m_disable_journal || !this->template append_op_event<
         ResizeRequest<I>, &ResizeRequest<I>::handle_append_op_event>(this)) {
-    m_shrink_size_visible = true;
     return send_grow_object_map();
   }
 
@@ -130,7 +131,6 @@ Context *ResizeRequest<I>::handle_append_op_event(int *result) {
   CephContext *cct = image_ctx.cct;
   ldout(cct, 5) << this << " " << __func__ << ": r=" << *result << dendl;
 
-  m_shrink_size_visible = true;
   if (*result < 0) {
     lderr(cct) << "failed to commit journal entry: " << cpp_strerror(*result)
                << dendl;
@@ -204,9 +204,16 @@ template <typename I>
 Context *ResizeRequest<I>::send_grow_object_map() {
   I &image_ctx = this->m_image_ctx;
 
+  {
+    RWLock::WLocker snap_locker(image_ctx.snap_lock);
+    m_shrink_size_visible = true;
+  }
   image_ctx.aio_work_queue->unblock_writes();
+
   if (m_original_size == m_new_size) {
-    this->commit_op_event(0);
+    if (!m_disable_journal) {
+      this->commit_op_event(0);
+    }
     return this->create_context_finisher();
   } else if (m_new_size < m_original_size) {
     send_trim_image();
@@ -367,7 +374,9 @@ Context *ResizeRequest<I>::handle_update_header(int *result) {
     return this->create_context_finisher();
   }
 
-  this->commit_op_event(0);
+  if (!m_disable_journal) {
+    this->commit_op_event(0);
+  }
   return send_shrink_object_map();
 }
 

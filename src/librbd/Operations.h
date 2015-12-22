@@ -31,10 +31,12 @@ public:
   void rename(const char *dstname, Context *on_finish);
 
   int resize(uint64_t size, ProgressContext& prog_ctx);
-  void resize(uint64_t size, ProgressContext &prog_ctx, Context *on_finish);
+  void resize(uint64_t size, ProgressContext &prog_ctx, Context *on_finish,
+              uint64_t journal_op_tid);
 
   int snap_create(const char *snap_name);
-  void snap_create(const char *snap_name, Context *on_finish);
+  void snap_create(const char *snap_name, Context *on_finish,
+                   uint64_t journal_op_tid);
 
   int snap_rollback(const char *snap_name, ProgressContext& prog_ctx);
   void snap_rollback(const char *snap_name, ProgressContext& prog_ctx,

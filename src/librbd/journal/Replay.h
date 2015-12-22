@@ -36,9 +36,13 @@ public:
   void process(bufferlist::iterator *it, Context *on_ready, Context *on_safe);
   void flush(Context *on_finish);
 
+  void replay_op_ready(uint64_t op_tid, Context *on_resume);
+
 private:
   struct OpEvent {
+    bool op_in_progress = false;
     Context *on_op_finish_event = nullptr;
+    Context *on_start_ready = nullptr;
     Context *on_start_safe = nullptr;
     Context *on_finish_ready = nullptr;
     Context *on_finish_safe = nullptr;
@@ -142,7 +146,6 @@ private:
   void handle_event(const UnknownEvent &event, Context *on_ready,
                     Context *on_safe);
 
-  void flush_aio();
   void handle_aio_modify_complete(Context *on_safe, int r);
   void handle_aio_flush_complete(Context *on_flush_safe, Contexts &on_safe_ctxs,
                                  int r);

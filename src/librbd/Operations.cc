@@ -248,7 +248,7 @@ int Operations<I>::resize(uint64_t size, ProgressContext& prog_ctx) {
   uint64_t request_id = m_async_request_seq.inc();
   r = invoke_async_request("resize", false,
                            boost::bind(&Operations<I>::resize, this,
-                                       size, boost::ref(prog_ctx), _1),
+                                       size, boost::ref(prog_ctx), _1, 0),
                            boost::bind(&ImageWatcher::notify_resize,
                                        m_image_ctx.image_watcher, request_id,
                                        size, boost::ref(prog_ctx)));
@@ -261,7 +261,7 @@ int Operations<I>::resize(uint64_t size, ProgressContext& prog_ctx) {
 
 template <typename I>
 void Operations<I>::resize(uint64_t size, ProgressContext &prog_ctx,
-                           Context *on_finish) {
+                           Context *on_finish, uint64_t journal_op_tid) {
   assert(m_image_ctx.owner_lock.is_locked());
   assert(m_image_ctx.exclusive_lock == nullptr ||
          m_image_ctx.exclusive_lock->is_lock_owner());
@@ -282,7 +282,7 @@ void Operations<I>::resize(uint64_t size, ProgressContext &prog_ctx,
   }
 
   operation::ResizeRequest<I> *req = new operation::ResizeRequest<I>(
-    m_image_ctx, on_finish, size, prog_ctx);
+    m_image_ctx, on_finish, size, prog_ctx, journal_op_tid, false);
   req->send();
 }
 
@@ -309,7 +309,7 @@ int Operations<I>::snap_create(const char *snap_name) {
 
   r = invoke_async_request("snap_create", true,
                            boost::bind(&Operations<I>::snap_create, this,
-                                       snap_name, _1),
+                                       snap_name, _1, 0),
                            boost::bind(&ImageWatcher::notify_snap_create,
                                        m_image_ctx.image_watcher, snap_name));
   if (r < 0 && r != -EEXIST) {
@@ -322,7 +322,8 @@ int Operations<I>::snap_create(const char *snap_name) {
 }
 
 template <typename I>
-void Operations<I>::snap_create(const char *snap_name, Context *on_finish) {
+void Operations<I>::snap_create(const char *snap_name, Context *on_finish,
+                                uint64_t journal_op_tid) {
   assert(m_image_ctx.owner_lock.is_locked());
   assert(m_image_ctx.exclusive_lock == nullptr ||
          m_image_ctx.exclusive_lock->is_lock_owner());
@@ -332,7 +333,8 @@ void Operations<I>::snap_create(const char *snap_name, Context *on_finish) {
                 << dendl;
 
   operation::SnapshotCreateRequest<I> *req =
-    new operation::SnapshotCreateRequest<I>(m_image_ctx, on_finish, snap_name);
+    new operation::SnapshotCreateRequest<I>(m_image_ctx, on_finish, snap_name,
+                                            journal_op_tid);
   req->send();
 }
 

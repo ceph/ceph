@@ -653,7 +653,7 @@ bool ImageWatcher::handle_payload(const ResizePayload &payload,
       ldout(m_image_ctx.cct, 10) << this << " remote resize request: "
 				 << payload.async_request_id << " "
 				 << payload.size << dendl;
-      m_image_ctx.operations->resize(payload.size, *prog_ctx, ctx);
+      m_image_ctx.operations->resize(payload.size, *prog_ctx, ctx, 0);
     }
 
     ::encode(ResponseMessage(r), ack_ctx->out);
@@ -670,7 +670,7 @@ bool ImageWatcher::handle_payload(const SnapCreatePayload &payload,
 			       << payload.snap_name << dendl;
 
     m_image_ctx.operations->snap_create(payload.snap_name.c_str(),
-                                        new C_ResponseMessage(ack_ctx));
+                                        new C_ResponseMessage(ack_ctx), 0);
     return false;
   }
   return true;
