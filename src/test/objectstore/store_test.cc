@@ -2623,6 +2623,42 @@ TEST_P(StoreTest, TwoHash) {
   ASSERT_EQ(r, 0);
 }
 
+TEST_P(StoreTest, Rename) {
+  ObjectStore::Sequencer osr("test");
+  coll_t cid(spg_t(pg_t(0, 2122),shard_id_t::NO_SHARD));
+  ghobject_t srcoid(hobject_t("src_oid", "", CEPH_NOSNAP, 0, 0, ""));
+  ghobject_t dstoid(hobject_t("dest_oid", "", CEPH_NOSNAP, 0, 0, ""));
+  bufferlist data;
+  data.append("foo");
+  int r;
+  {
+    ObjectStore::Transaction t;
+    t.create_collection(cid, 0);
+    t.write(cid, srcoid, 0, data.length(), data);
+    r = store->apply_transaction(&osr, t);
+    ASSERT_EQ(r, 0);
+  }
+  ASSERT_TRUE(store->exists(cid, srcoid));
+  {
+    ObjectStore::Transaction t;
+    t.collection_move_rename(cid, srcoid, cid, dstoid);
+    t.write(cid, srcoid, 0, data.length(), data);
+    t.setattr(cid, srcoid, "attr", data);
+    r = store->apply_transaction(&osr, t);
+    ASSERT_EQ(r, 0);
+  }
+  ASSERT_TRUE(store->exists(cid, srcoid));
+  ASSERT_TRUE(store->exists(cid, dstoid));
+  {
+    ObjectStore::Transaction t;
+    t.remove(cid, dstoid);
+    t.remove(cid, srcoid);
+    t.remove_collection(cid);
+    r = store->apply_transaction(&osr, t);
+    ASSERT_EQ(r, 0);
+  }
+}
+
 TEST_P(StoreTest, MoveRename) {
   ObjectStore::Sequencer osr("test");
   coll_t cid(spg_t(pg_t(0, 212),shard_id_t::NO_SHARD));
