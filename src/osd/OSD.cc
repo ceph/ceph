@@ -8813,6 +8813,7 @@ int OSD::init_op_flags(OpRequestRef& op)
       if (m->ops.size() == 1) {
 	op->set_skip_promote();
       }
+      op->set_delete();
       break;
 
     case CEPH_OSD_OP_CACHE_TRY_FLUSH:
