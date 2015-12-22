@@ -613,7 +613,7 @@ class ObjectCacher {
   ~ObjectCacher();
 
   void start() {
-    flusher_thread.create();
+    flusher_thread.create("flusher");
   }
   void stop() {
     assert(flusher_thread.is_started());

@@ -344,7 +344,7 @@ void WorkerPool::start()
 {
   if (!started) {
     for (uint64_t i = 0; i < workers.size(); ++i) {
-      workers[i]->create();
+      workers[i]->create("ms_async_worker");
     }
     started = true;
   }
