@@ -750,7 +750,7 @@ acceptable values.
 Client
 ------
 
-``mon client hung interval``
+``mon client hunt interval``
 
 :Description: The client will try a new monitor every ``N`` seconds until it
               establishes a connection.
