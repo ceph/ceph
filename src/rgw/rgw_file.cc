@@ -155,6 +155,35 @@ namespace rgw {
     return true;
   } /* RGWFileHandle::reclaim */
 
+  int RGWFileHandle::readdir(rgw_readdir_cb rcb, void *cb_arg, uint64_t *offset,
+			     bool *eof)
+  {
+    int rc = 0;
+    CephContext* cct = fs->get_context();
+    if (is_root()) {
+      RGWListBucketsRequest req(cct, fs->get_user(), this, rcb, cb_arg,
+				offset);
+      rc = librgw.get_fe()->execute_req(&req);
+      if (! rc) {
+	lock_guard guard(mtx);
+	(void) clock_gettime(CLOCK_MONOTONIC_COARSE, &state.atime);
+	*eof = req.eof();
+      }
+    } else {
+      // XXX finish marker handling
+      rgw_obj_key marker{"", ""};
+      RGWReaddirRequest req(cct, fs->get_user(), this, rcb, cb_arg, offset);
+      rc = librgw.get_fe()->execute_req(&req);
+      if (! rc) {
+	lock_guard guard(mtx);
+	/* XXX update link count (incorrectly) */
+	parent->set_nlink(3 + *offset);
+	*eof = req.eof();
+      }
+    }
+    return rc;
+  } /* RGWFileHandle::readdir */
+
   int RGWFileHandle::write(uint64_t off, size_t len, size_t *bytes_written,
 			   void *buffer)
   {
@@ -867,39 +896,13 @@ int rgw_readdir(struct rgw_fs *rgw_fs,
 		struct rgw_file_handle *parent_fh, uint64_t *offset,
 		rgw_readdir_cb rcb, void *cb_arg, bool *eof)
 {
-  int rc;
-
-  RGWLibFS *fs = static_cast<RGWLibFS*>(rgw_fs->fs_private);
-  CephContext* cct = static_cast<CephContext*>(rgw_fs->rgw);
-
-  /* TODO:
-   * deal with markers (continuation)
-   * deal with authorization
-   * consider non-default tenancy/user and bucket layouts
-   */
   RGWFileHandle* parent = get_rgwfh(parent_fh);
   if (! parent) {
     /* bad parent */
     return -EINVAL;
   }
-
-  if (parent->is_root()) {
-    RGWListBucketsRequest req(cct, fs->get_user(), parent, rcb, cb_arg, offset);
-    rc = librgw.get_fe()->execute_req(&req);
-  } else {
-    // XXX finish marker handling
-    rgw_obj_key marker{"", ""};
-    RGWReaddirRequest req(cct, fs->get_user(), parent, rcb, cb_arg, offset);
-    rc = librgw.get_fe()->execute_req(&req);
-
-    /* XXX update link count (incorrectly) */
-    parent->set_nlink(3 + *offset);
-  }
-
-  /* XXXX request MUST set this */
-  *eof = true; // XXX move into RGGWListBucket(s)Request
-
-  return rc;
+  int rc = parent->readdir(rcb, cb_arg, offset, eof);
+  return -rc;
 }
 
 /*
