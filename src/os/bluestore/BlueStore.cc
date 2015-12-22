@@ -1739,6 +1739,16 @@ int BlueStore::umount()
   _close_bdev();
   _close_fsid();
   _close_path();
+
+  if (g_conf->bluestore_fsck_on_umount) {
+    int rc = fsck();
+    if (rc < 0)
+      return rc;
+    if (rc > 0) {
+      derr << __func__ << " fsck found " << rc << " errors" << dendl;
+      return -EIO;
+    }
+  }
   return 0;
 }
 
