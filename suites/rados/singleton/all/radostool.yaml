@@ -10,6 +10,7 @@ tasks:
     - wrongly marked me down
     - had wrong client addr
     - had wrong cluster addr
+    - reached quota
 - workunit:
     clients:
       all:
