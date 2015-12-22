@@ -641,12 +641,15 @@ BlueStore::OnodeRef BlueStore::Collection::get_onode(
   Onode *on;
   if (v.length() == 0) {
     assert(r == -ENOENT);
-    if (!create)
+    if (!g_conf->bluestore_debug_misc &&
+	!create)
       return OnodeRef();
 
     // new
     on = new Onode(oid, key);
     on->dirty = true;
+    if (g_conf->bluestore_debug_misc && !create)
+      on->exists = on->dirty = false;
   } else {
     // loaded
     assert(r >=0);
