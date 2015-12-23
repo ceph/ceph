@@ -13,6 +13,8 @@
 #include <condition_variable>
 #include <thread>
 
+#include "test_request.h"
+
 
 class TestClient {
   typedef std::function<void(const TestRequest&,

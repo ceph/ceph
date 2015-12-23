@@ -9,13 +9,11 @@
 #include <memory>
 #include <iostream>
 
-#include "dm_clock_srv.h"
-#include "test_request.h"
 #include "test_server.h"
+#include "test_client.h"
 
 
-
-namespace dmc = crimson::dmclock;
+using namespace std::placeholders;
 
 
 TestServer* testServer;
@@ -27,6 +25,19 @@ std::mutex cout_mtx;
 typedef typename std::lock_guard<std::mutex> Guard;
 
 
+#define COUNT(array) (sizeof(array) / sizeof(array[0]))
+
+
+static dmc::ClientInfo client_info[] = {
+  {1.0, 100.0, 250.0},
+  {2.0, 100.0, 250.0},
+  {2.0,  50.0, 100.0},
+  {3.0,  50.0,   0.0},
+};
+
+
+static int client_goals[] = {150, 150, 150, 150}; // in IOPS
+
 
 dmc::ClientInfo getClientInfo(int c) {
   {
@@ -34,14 +45,7 @@ dmc::ClientInfo getClientInfo(int c) {
     std::cout << "getClientInfo called" << std::endl;
   }
 
-  static dmc::ClientInfo info[] = {
-    {1.0, 100.0, 250.0},
-    {2.0, 100.0, 250.0},
-    {2.0,  50.0, 250.0},
-    {3.0,  50.0,   0.0},
-  };
-
-  if (c < sizeof info / sizeof info[0]) {
+  if (c < COUNT(client_info)) {
     return info[c];
   } else {
     return info[0]; // first item is default item
@@ -49,6 +53,7 @@ dmc::ClientInfo getClientInfo(int c) {
 }
 
 
+#if 0
 bool canHandleReq() {
   return testServer->hasAvailThread();
 }
@@ -69,42 +74,40 @@ void handleReq(std::unique_ptr<TestRequest>&& request_ref,
 		   });
 }
 
+#endif
+
 
 int main(int argc, char* argv[]) {
-  std::cout.precision(17);
-  std::cout << "now: " << dmc::getTime() << std::endl;
-  std::cout << "now: " << dmc::getTime() << std::endl;
-
-  auto f1 = std::function<dmc::ClientInfo(int)>(getClientInfo);
+  auto client_info_f = std::function<dmc::ClientInfo(int)>(getClientInfo);
+#if 0
   auto f2 = std::function<bool()>(canHandleReq);
   auto f3 = std::function<void(std::unique_ptr<TestRequest>&&,
 			       std::function<void()>)>(handleReq);
+#endif
 
-testServer = new TestServer(5);
+  assert(COUNT(client_info) == COUNT(client_goals));
 
-dmc::PriorityQueue<int,TestRequest> priorityQueue(f1, f2, f3);
+  TestServer server(300, 7);
 
-std::cout << "queue created" << std::endl;
+  TestClient** clients = new TestClient*[clientCount()];
+  for (int i = 0; i < COUNT(client_info); ++i) {
+    clients[i] = new TestClient(i,
+				std::bind(&TestServer::post, &testServer, _1, _2),
+				client_goals[i] * 60,
+				4);
+				
+  }
 
-for (uint32_t i = 0; i < 1000; ++i) {
-  static uint32_t op = 12;
-  int client = i % 4;
-  uint32_t epoch = i / 4;
-  priorityQueue.addRequest(TestRequest(client, epoch, op),
-			   client,
-			   dmc::getTime());
-}
+  
 
-{
-  Guard g(cout_mtx);
-  std::cout << "request added" << std::endl;
-}
+  for (int i = 0; i < COUNT(client_info); ++i) {
+    clients[i]->waitForDone();
+    delete clients[i];
+  }
+  delete[] clients;
 
-priorityQueue.markAsIdle(1);
-
-sleep(10);
-delete testServer;
-
-Guard g(cout_mtx);
-std::cout << "done" << std::endl;
+  {
+    Guard g(cout_mtx);
+    std::cout << "done" << std::endl;
+  }
 }

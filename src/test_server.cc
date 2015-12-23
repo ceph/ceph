@@ -9,13 +9,16 @@
 #include "test_server.h"
 
 
+using namespace std::placeholders;
+
+
 TestServer::TestServer(int _thread_pool_size,
 		       const std::function<ClientInfo(int)>& _clientInfoF) :
   active_threads(0),
   thread_pool_size(_thread_pool_size),
   queue(_clientInfoF,
 	std::bind(&TestServer::hasAvailThread, this),
-	std::bind(&TestServer::innerPost, this))
+	std::bind(&TestServer::innerPost, this, _1, _2))
 {
   // empty
 }
@@ -58,4 +61,10 @@ void TestServer::post(const TestRequest& request,
 bool TestServer::hasAvailThread() {
   Guard g(mtx);
   return active_threads <= thread_pool_size;
+}
+
+
+void TestServer::innerPost(std::unique_ptr<TestRequest> request,
+			   std::function<void()> done) {
+  assert(0);
 }

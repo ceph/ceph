@@ -22,12 +22,12 @@ using crimson::dmclock::ClientInfo;
 
 class TestServer {
 
-  PriorityQueue<int,TestRequest> queue;
-  int        active_threads;
-  int        thread_pool_size;
-  std::mutex mtx;
-
   typedef typename std::lock_guard<std::mutex> Guard;
+
+  PriorityQueue<int,TestRequest> queue;
+  int                            active_threads;
+  int                            thread_pool_size;
+  std::mutex                     mtx;
 
 public:
 
@@ -45,7 +45,8 @@ public:
 protected:
 
   // void innerPost(const TestRequest& request, std::function<void()> done);
-  void innerPost(std::unique_ptr<TestRequest> request, std::function<void()> done);
+  void innerPost(std::unique_ptr<TestRequest> request,
+		 std::function<void()> done);
 	     
   void run(double time, std::function<void()> done);
 };
