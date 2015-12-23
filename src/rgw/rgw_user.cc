@@ -850,7 +850,7 @@ int RGWAccessKeyPool::check_op(RGWUserAdminOpState& op_state,
   if (key_type == KEY_TYPE_S3 && !op_state.will_gen_access() && 
       op_state.get_access_key().empty()) {
     set_err_msg(err_msg, "empty access key");
-    return -EINVAL;
+    return -ERR_INVALID_ACCESS_KEY;
   }
 
   // don't check for secret key because we may be doing a removal
@@ -958,7 +958,7 @@ int RGWAccessKeyPool::generate_key(RGWUserAdminOpState& op_state, std::string *e
     id = op_state.build_default_swift_kid();
     if (id.empty()) {
       set_err_msg(err_msg, "empty swift access key");
-      return -EINVAL;
+      return -ERR_INVALID_ACCESS_KEY;
     }
 
     // check that the access key doesn't exist
@@ -1001,7 +1001,7 @@ int RGWAccessKeyPool::modify_key(RGWUserAdminOpState& op_state, std::string *err
     id = op_state.get_access_key();
     if (id.empty()) {
       set_err_msg(err_msg, "no access key specified");
-      return -EINVAL;
+      return -ERR_INVALID_ACCESS_KEY;
     }
     break;
   case KEY_TYPE_SWIFT:
@@ -1018,7 +1018,7 @@ int RGWAccessKeyPool::modify_key(RGWUserAdminOpState& op_state, std::string *err
 
   if (!op_state.has_existing_key()) {
     set_err_msg(err_msg, "key does not exist");
-    return -EINVAL;
+    return -ERR_INVALID_ACCESS_KEY;
   }
 
   key_pair.first = id;
@@ -1139,7 +1139,7 @@ int RGWAccessKeyPool::execute_remove(RGWUserAdminOpState& op_state, std::string 
 
   if (!op_state.has_existing_key()) {
     set_err_msg(err_msg, "unable to find access key");
-    return -EINVAL;
+    return -ERR_INVALID_ACCESS_KEY;
   }
 
   if (key_type == KEY_TYPE_S3) {
@@ -1149,13 +1149,13 @@ int RGWAccessKeyPool::execute_remove(RGWUserAdminOpState& op_state, std::string 
   } else {
     keys_map = NULL;
     set_err_msg(err_msg, "invalid access key");
-    return -EINVAL;
+    return -ERR_INVALID_ACCESS_KEY;
   }
 
   kiter = keys_map->find(id);
   if (kiter == keys_map->end()) {
     set_err_msg(err_msg, "key not found");
-    return -EINVAL;
+    return -ERR_INVALID_ACCESS_KEY;
   }
 
   rgw_remove_key_index(store, kiter->second);
