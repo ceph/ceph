@@ -275,6 +275,7 @@ Context *RefreshRequest<I>::handle_v2_get_flags(int *result) {
   }
   if (*result == -EOPNOTSUPP) {
     // Older OSD doesn't support RBD flags, need to assume the worst
+    *result = 0;
     ldout(cct, 10) << "OSD does not support RBD flags, disabling object map "
                    << "optimizations" << dendl;
     m_flags = RBD_FLAG_OBJECT_MAP_INVALID;
