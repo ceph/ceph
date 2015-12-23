@@ -68,7 +68,6 @@ noinst_HEADERS += \
 	os/bluestore/BlueStore.h \
 	os/bluestore/FreelistManager.h \
 	os/bluestore/StupidAllocator.h \
-	os/btrfs_ioctl.h \
 	os/filestore/chain_xattr.h \
 	os/filestore/BtrfsFileStoreBackend.h \
 	os/filestore/CollectionIndex.h \
@@ -86,6 +85,7 @@ noinst_HEADERS += \
 	os/filestore/WBThrottle.h \
 	os/filestore/XfsFileStoreBackend.h \
 	os/filestore/ZFSFileStoreBackend.h
+	os/fs/btrfs_ioctl.h \
 	os/fs/FS.h \
 	os/fs/XFS.h \
 	os/keyvaluestore/GenericObjectMap.h \
