@@ -58,10 +58,19 @@ int StupidAllocator::reserve(uint64_t need)
   Mutex::Locker l(lock);
   dout(10) << __func__ << " need " << need << " num_free " << num_free
 	   << " num_reserved " << num_reserved << dendl;
-  if (need > num_free - num_reserved)
+  if ((int64_t)need > num_free - num_reserved)
     return -ENOSPC;
   num_reserved += need;
   return 0;
+}
+
+void StupidAllocator::unreserve(uint64_t unused)
+{
+  Mutex::Locker l(lock);
+  dout(10) << __func__ << " unused " << unused << " num_free " << num_free
+	   << " num_reserved " << num_reserved << dendl;
+  assert(unused >= num_reserved);
+  num_reserved -= unused;
 }
 
 int StupidAllocator::allocate(

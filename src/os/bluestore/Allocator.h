@@ -23,6 +23,7 @@ public:
   virtual ~Allocator() {}
 
   virtual int reserve(uint64_t need) = 0;
+  virtual void unreserve(uint64_t unused) = 0;
 
   virtual int allocate(
     uint64_t need_size, uint64_t alloc_unit, int64_t hint,
