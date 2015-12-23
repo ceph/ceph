@@ -150,7 +150,7 @@ This downloads the object ``perl_poetry.pdf`` and saves it in
 
 	GetObjectRequest request = new GetObjectRequest();
 	request.BucketName = "my-new-bucket";
-	request.Key        = "perl_poetry.pdf"
+	request.Key        = "perl_poetry.pdf";
 	GetObjectResponse response = client.GetObject(request);
 	response.WriteResponseStreamToFile("C:\\Users\\larry\\Documents\\perl_poetry.pdf");
 
