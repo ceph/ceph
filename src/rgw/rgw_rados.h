@@ -627,6 +627,7 @@ struct RGWObjState {
   bool keep_tail;
   bool is_olh;
   bufferlist olh_tag;
+  uint64_t pg_ver;
 
   /* important! don't forget to update copy constructor */
 
@@ -635,7 +636,8 @@ struct RGWObjState {
   map<string, bufferlist> attrset;
   RGWObjState() : is_atomic(false), has_attrs(0), exists(false),
                   size(0), mtime(0), epoch(0), fake_tag(false), has_manifest(false),
-                  has_data(false), prefetch_data(false), keep_tail(false), is_olh(false) {}
+                  has_data(false), prefetch_data(false), keep_tail(false), is_olh(false),
+                  pg_ver(0) {}
   RGWObjState(const RGWObjState& rhs) {
     obj = rhs.obj;
     is_atomic = rhs.is_atomic;
@@ -662,6 +664,7 @@ struct RGWObjState {
     keep_tail = rhs.keep_tail;
     is_olh = rhs.is_olh;
     objv_tracker = rhs.objv_tracker;
+    pg_ver = rhs.pg_ver;
   }
 
   bool get_attr(string name, bufferlist& dest) {
@@ -671,19 +674,6 @@ struct RGWObjState {
       return true;
     }
     return false;
-  }
-
-  void clear() {
-    has_attrs = false;
-    exists = false;
-    fake_tag = false;
-    epoch = 0;
-    size = 0;
-    mtime = 0;
-    obj_tag.clear();
-    shadow_obj.clear();
-    attrset.clear();
-    data.clear();
   }
 };
 

@@ -7427,7 +7427,7 @@ int RGWRados::get_obj_state_impl(RGWObjectCtx *rctx, rgw_obj& obj, RGWObjState *
       s->has_manifest = true;
       s->size = s->manifest.get_obj_size();
     } catch (buffer::error& err) {
-      ldout(cct, 20) << "ERROR: couldn't decode manifest" << dendl;
+      ldout(cct, 0) << "ERROR: couldn't decode manifest" << dendl;
       return -EIO;
     }
     ldout(cct, 10) << "manifest: total_size = " << s->manifest.get_obj_size() << dendl;
@@ -7445,6 +7445,15 @@ int RGWRados::get_obj_state_impl(RGWObjectCtx *rctx, rgw_obj& obj, RGWObjState *
        */
       generate_fake_tag(cct, s->attrset, s->manifest, manifest_bl, s->obj_tag);
       s->fake_tag = true;
+    }
+  }
+  bufferlist pg_ver_bl = s->attrset[RGW_ATTR_PG_VER];
+  if (pg_ver_bl.length()) {
+    bufferlist::iterator pgbl = pg_ver_bl.begin();
+    try {
+      ::decode(s->pg_ver, pgbl);
+    } catch (buffer::error& err) {
+      ldout(cct, 0) << "ERROR: couldn't decode pg ver attr for object " << s->obj << ", non-critical error, ignoring" << dendl;
     }
   }
   if (s->obj_tag.length())

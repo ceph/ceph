@@ -114,6 +114,18 @@ int RGWGetObj_ObjStore_S3::send_response_data(bufferlist& bl, off_t bl_ofs, off_
   if (s->system_request && lastmod) {
     /* we end up dumping mtime in two different methods, a bit redundant */
     dump_epoch_header(s, "Rgwx-Mtime", lastmod);
+    uint64_t pg_ver = 0;
+    map<string, bufferlist>::iterator iter = attrs.find(RGW_ATTR_PG_VER);
+    bufferlist& bl = iter->second;
+    if (bl.length() > 0) {
+      bufferlist::iterator bliter = bl.begin();
+      try {
+        ::decode(pg_ver, bliter);
+      } catch (buffer::error& err) {
+        ldout(s->cct, 0) << "ERROR: failed to decode pg ver attr" << dendl;
+      }
+    }
+    s->cio->print("Rgwx-Obj-PG-Ver: %lld\r\n", (long long)pg_ver);
   }
 
   dump_content_length(s, total_len);
