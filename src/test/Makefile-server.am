@@ -217,6 +217,11 @@ unittest_pageset_LDADD = $(UNITTEST_LDADD)
 unittest_pageset_CXXFLAGS = $(UNITTEST_CXXFLAGS)
 check_TESTPROGRAMS += unittest_pageset
 
+unittest_compresscontext_SOURCES = test/osd/TestCompressContext.cc
+unittest_compresscontext_CXXFLAGS = $(UNITTEST_CXXFLAGS)
+unittest_compresscontext_LDADD = $(LIBOSD) $(UNITTEST_LDADD) $(CEPH_GLOBAL)
+check_TESTPROGRAMS += unittest_compresscontext
+
 endif # WITH_OSD
 
 if WITH_SLIBROCKSDB

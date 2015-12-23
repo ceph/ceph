@@ -1,9 +1,11 @@
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 /*
  * Ceph distributed storage system
  *
+ * Copyright (C) 2015 Mirantis, Inc.
  *
- * Author: Igor Fedotov <ifed@mirantis.com>
+ * Author: Igor Fedotov <ifedotov@mirantis.com>
  *
  *  This library is free software; you can redistribute it and/or
  *  modify it under the terms of the GNU Lesser General Public
@@ -239,6 +241,9 @@ class CompressContextTester : public CompressContext {
   void testAppendAndFlush() {
     clear();
 
+    std::string key;
+    offset_to_key(0,key);
+
     EXPECT_FALSE(need_flush());
     //putting three blocks into the map
     append_block(0, 8 * 1024, "some_compression", 4 * 1024);
@@ -250,14 +255,13 @@ class CompressContextTester : public CompressContext {
     map<string, boost::optional<bufferlist> > rollback_attrs;
     map<string, bufferlist> attrs;
     flush_for_rollback(&rollback_attrs);
-    EXPECT_EQ(rollback_attrs.size(), 1u);
+    EXPECT_EQ(rollback_attrs.size(), 2u);
+    EXPECT_EQ(rollback_attrs[key], boost::optional<bufferlist>() );
     EXPECT_EQ(rollback_attrs[ECUtil::get_cinfo_master_key()], boost::optional<bufferlist>());
 
     flush(&attrs);
-    EXPECT_EQ(attrs.size(), 2u);
-    std::string key;
     MasterRecord mrec = get_master_record();
-    offset_to_key(0,key);
+    EXPECT_EQ(attrs.size(), 2u);
     EXPECT_EQ(attrs[key].length(), mrec.block_info_record_length*3 + mrec.block_info_recordset_header_length);
     EXPECT_GT(attrs[ECUtil::get_cinfo_master_key()].length(), 0u);
     EXPECT_FALSE(need_flush());
@@ -268,11 +272,17 @@ class CompressContextTester : public CompressContext {
     EXPECT_EQ(rollback_attrs[key], attrs[key]);
     EXPECT_EQ(rollback_attrs[ECUtil::get_cinfo_master_key()], attrs[ECUtil::get_cinfo_master_key()]);
 
+    flush_for_rollback(&rollback_attrs);
+    EXPECT_EQ(rollback_attrs.size(), 2u);
+    EXPECT_EQ(rollback_attrs[key], attrs[key]);
+    EXPECT_EQ(rollback_attrs[ECUtil::get_cinfo_master_key()], attrs[ECUtil::get_cinfo_master_key()]);
+
     clear();
     EXPECT_EQ(get_compressed_size(), 0u);
     rollback_attrs.clear();
     flush_for_rollback(&rollback_attrs);
-    EXPECT_EQ(rollback_attrs.size(), 1u);
+    EXPECT_EQ(rollback_attrs.size(), 2u);
+    EXPECT_EQ(rollback_attrs[key], boost::optional<bufferlist>() );
     EXPECT_EQ(rollback_attrs[ECUtil::get_cinfo_master_key()], boost::optional<bufferlist>());
 
     setup_for_append_or_recovery(attrs);
@@ -281,6 +291,13 @@ class CompressContextTester : public CompressContext {
     flush_for_rollback(&rollback_attrs);
     EXPECT_EQ(rollback_attrs.size(), 2u);
     EXPECT_EQ(rollback_attrs[key], attrs[key]);
+    EXPECT_EQ(rollback_attrs[ECUtil::get_cinfo_master_key()], attrs[ECUtil::get_cinfo_master_key()]);
+
+    rollback_attrs.clear();
+    flush_for_rollback(&rollback_attrs); 
+    EXPECT_EQ(rollback_attrs.size(), 2u);
+    EXPECT_EQ(rollback_attrs[key], attrs[key]);
+
     EXPECT_EQ(rollback_attrs[ECUtil::get_cinfo_master_key()], attrs[ECUtil::get_cinfo_master_key()]);
 
     //verifying context content encoded in attrs
@@ -418,6 +435,71 @@ class CompressContextTester : public CompressContext {
         ++i;
       }
     }
+
+    //
+    //verify 'partial' rollback and subsequent functioning, i.e. some compression metadata is left in attributes but it shouldn't be used due to proper master record value
+    //
+    clear();
+    attrs.clear();
+    rollback_attrs.clear();
+    setup_for_append_or_recovery( attrs );
+    offs = 0;
+    append_block(offs, 8 * 1024, "some_compression", 4 * 1024);
+    offs+= 8*1024;
+    append_block(offs, 4 * 1024, "some_compression", 4 * 1024);
+    offs+= 4*1024;
+    flush( &attrs );
+
+    offset_to_key(0, key );
+    setup_for_append_or_recovery( attrs );
+    flush_for_rollback(&rollback_attrs);
+    EXPECT_EQ(rollback_attrs.size(), 2u);
+    EXPECT_EQ(rollback_attrs[key], attrs[key] );
+    EXPECT_EQ(rollback_attrs[ECUtil::get_cinfo_master_key()], attrs[ECUtil::get_cinfo_master_key()]);
+
+    append_block(offs, MAX_STRIPES_PER_BLOCKSET* 4096 - 12*1024, "some_compression", 4 * 1024);
+    append_block(offs + MAX_STRIPES_PER_BLOCKSET* 4096 - 12*1024, 8*1024, "some_compression", 4 * 1024);
+    flush(&attrs);
+    EXPECT_EQ(attrs.size(), 3u);
+    EXPECT_NE(rollback_attrs[key], attrs[key] );
+    EXPECT_NE(rollback_attrs[ECUtil::get_cinfo_master_key()], attrs[ECUtil::get_cinfo_master_key()]);
+    attrs[key] = *rollback_attrs[key]; //doing rollback
+    attrs[ECUtil::get_cinfo_master_key()]=*rollback_attrs[ECUtil::get_cinfo_master_key()];
+
+    setup_for_read(attrs, 0, 12*1024-1);
+    EXPECT_EQ( 2u, get_blocks_count() );
+    pair<uint64_t, uint64_t> res = offset_len_to_compressed_block( pair<uint64_t, uint64_t>(0, 1));
+    pair<uint64_t, uint64_t> expected(0, 4*1024);
+    EXPECT_EQ( res, expected );
+    res = offset_len_to_compressed_block( pair<uint64_t, uint64_t>(0, 8*1024));
+    expected = pair<uint64_t, uint64_t>(0, 4*1024);
+    EXPECT_EQ( res, expected );
+
+    setup_for_read(attrs, 8*1024, 9*1024);
+    EXPECT_EQ( 1u, get_blocks_count() );
+    res = offset_len_to_compressed_block( pair<uint64_t, uint64_t>(8192, 4*1024));
+    expected = pair<uint64_t, uint64_t>(4*1024, 4*1024);
+    EXPECT_EQ( res, expected );
+    res = offset_len_to_compressed_block( pair<uint64_t, uint64_t>(8192 + 120, 8));
+    expected = pair<uint64_t, uint64_t>(4*1024, 4*1024);
+    EXPECT_EQ( res, expected );
+
+    setup_for_read(attrs, 8*1024-1, 8*1024 -1 + 1*1024);
+    EXPECT_EQ( 2u, get_blocks_count() );
+    res = offset_len_to_compressed_block( pair<uint64_t, uint64_t>(8191, 4097));
+    expected = pair<uint64_t, uint64_t>(0, 8*1024);
+    EXPECT_EQ( res, expected );
+
+    res = offset_len_to_compressed_block( pair<uint64_t, uint64_t>(8191, 1));
+    expected = pair<uint64_t, uint64_t>(0, 4*1024);
+    EXPECT_EQ( res, expected );
+
+    setup_for_append_or_recovery( attrs );
+    append_block(offs, MAX_STRIPES_PER_BLOCKSET* 4096 - 12*1024, "some_compression", 4 * 1024);
+    offs+=MAX_STRIPES_PER_BLOCKSET* 4096 - 12*1024;
+    flush(&attrs);
+    EXPECT_EQ(attrs.size(), 3u);
+
   }
   void testCompressSimple(TestCompressor* compressor) {
     hobject_t oid;
@@ -448,13 +530,13 @@ class CompressContextTester : public CompressContext {
     EXPECT_TRUE(s1 == std::string(out_res.c_str(), out_res.length()));
     EXPECT_EQ(compressor->decompress_calls, 1u);
 
-    //single block compress attempt - bypassed, followed by another successful compression
+    ////multiple block compress attempts - the first has no benefit(bypassed), followed by successful and failed blocks
     clear();
     out.clear();
     out_res.clear();
     compressor->reset(TestCompressor::COMPRESS_NO_BENEFIT);
     offs=0;
-    try_compress(TestCompressor::method_name(), oid, in, &offs, &out);
+    try_compress(TestCompressor::method_name(), oid, in, &offs, &out); //bypassed block
     EXPECT_EQ(r, 0);
     EXPECT_EQ(in.length(), out.length());
     EXPECT_EQ(get_compressed_size(), in.length());
@@ -476,9 +558,15 @@ class CompressContextTester : public CompressContext {
     compressor->reset(TestCompressor::COMPRESS);
     setup_for_append_or_recovery(attrs);
 
+    mrec = get_master_record();
+    EXPECT_EQ(mrec.current_original_pos, in.length());
+    EXPECT_EQ(mrec.current_compressed_pos, in.length());
+    EXPECT_EQ(mrec.methods.size(), 0u);
+    EXPECT_NE(mrec.block_info_record_length, 0u);
+    EXPECT_NE(mrec.block_info_recordset_header_length, 0u);
     EXPECT_EQ(get_compressed_size(), out_res.length());
     offs=in.length();
-    try_compress(TestCompressor::method_name(), oid, in, &offs, &out);
+    try_compress(TestCompressor::method_name(), oid, in, &offs, &out); //successfully compressed block
     EXPECT_EQ(r, 0);
     EXPECT_GT(in.length(), out.length());
     EXPECT_EQ(get_compressed_size(), out_res.length()+out.length());
@@ -492,11 +580,64 @@ class CompressContextTester : public CompressContext {
     EXPECT_EQ(mrec.methods.size(), 1u);
     EXPECT_NE(mrec.block_info_record_length, 0u);
     EXPECT_NE(mrec.block_info_recordset_header_length, 0u);
-
     out_res.append(out);
-    out.clear();
 
-    //multiple (fixed-size) blocks  compress
+    compressor->reset(TestCompressor::NO_COMPRESS);
+    offs=in.length()*2;
+    try_compress(TestCompressor::method_name(), oid, in, &offs, &out); //failed block compression
+    EXPECT_EQ(r, 0);
+    EXPECT_EQ(in.length(), out.length());
+    EXPECT_EQ(get_compressed_size(), out_res.length()+out.length());
+    EXPECT_EQ(offs, out_res.length());
+    EXPECT_EQ(compressor->compress_calls, 1u);
+
+    flush(&attrs);
+    mrec = get_master_record();
+    EXPECT_EQ(mrec.current_original_pos, in.length()*3);
+    EXPECT_EQ(mrec.current_compressed_pos, get_compressed_size());
+    EXPECT_EQ(mrec.methods.size(), 1u);
+    EXPECT_NE(mrec.block_info_record_length, 0u);
+    EXPECT_NE(mrec.block_info_recordset_header_length, 0u);
+    out_res.append(out);
+
+    out.swap(out_res);
+    out_res.clear();
+    compressor->reset(TestCompressor::NO_COMPRESS);
+    clear();
+    offs = 0;
+    setup_for_read(attrs, offs, s1.size());
+    r = try_decompress(oid, offs, s1.size(), out, &out_res);
+    EXPECT_EQ(r, 0);
+    EXPECT_TRUE(s1 == std::string(out_res.c_str()));
+    EXPECT_EQ(compressor->decompress_calls, 0u);
+
+    //reading two bytes: the first one from uncompressed block and the second one from compressed block
+    out_res.clear();
+    compressor->reset(TestCompressor::NO_COMPRESS);
+    offs = s1.size()-1;
+    setup_for_read(attrs, offs, offs+2);
+    r = try_decompress(oid, offs, 2, out, &out_res);
+    EXPECT_EQ(r, 0);
+    EXPECT_EQ( out_res.length(), 2u);
+    EXPECT_TRUE('a' == out_res[0]);
+    EXPECT_TRUE('a' == out_res[1]);
+    EXPECT_EQ(compressor->decompress_calls, 1u);
+
+    //reading a block starting at the last byte of the first block and finishing at the first byte of the last block
+    out_res.clear();
+    compressor->reset(TestCompressor::NO_COMPRESS);
+    offs = s1.size()-1;
+    setup_for_read(attrs, offs, offs + s1.size() + 2);
+    r = try_decompress(oid, offs, s1.size() + 2, out, &out_res);
+    EXPECT_EQ(r, 0);
+    EXPECT_EQ( out_res.length(), s1.size() + 2u);
+    EXPECT_TRUE('a' == out_res[0]);
+    EXPECT_TRUE('a' == out_res[1]);
+    EXPECT_TRUE('a' == out_res[s1.size()]);
+    EXPECT_TRUE('a' == out_res[s1.size()+1]);
+    EXPECT_EQ(compressor->decompress_calls, 1u);
+
+    ////multiple (fixed-size) blocks  compress
     vector< pair<uint64_t, uint64_t> >block_info; //compressed block offset, size
     clear();
     out_res.clear();
@@ -575,7 +716,7 @@ class CompressContextTester : public CompressContext {
       EXPECT_EQ(compressor->decompress_calls, 2u);
     }
 
-    //multiple blocks (variable sizes) compress
+    ////multiple blocks (variable sizes) compress
     block_info.clear();
     clear();
     out_res.clear();
@@ -622,10 +763,6 @@ class CompressContextTester : public CompressContext {
     mrec = get_master_record();
     EXPECT_NE(mrec.block_info_record_length, 0u);
     EXPECT_NE(mrec.block_info_recordset_header_length, 0u);
-    /*unsigned recsets = total_blocks / RECS_PER_RECORDSET +
-		       (total_blocks % RECS_PER_RECORDSET ? 1 : 0);
-
-    unsigned attrs_len = 0;*/
     unsigned records=0;
     for( uint64_t o = 0; o<offs4append; o+=STRIPE_WIDTH*MAX_STRIPES_PER_BLOCKSET){
       string key;
