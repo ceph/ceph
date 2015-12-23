@@ -36,7 +36,7 @@ This also prints out the bucket name and creation date of each bucket.
 
 .. code-block:: csharp
 
-	ListBucketResponse response = client.ListBuckets();
+	ListBucketsResponse response = client.ListBuckets();
 	foreach (S3Bucket b in response.Buckets)
 	{
 		Console.WriteLine("{0}\t{1}", b.BucketName, b.CreationDate);
