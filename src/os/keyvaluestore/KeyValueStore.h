@@ -28,7 +28,7 @@ using namespace std;
 
 #include "include/assert.h"
 
-#include "ObjectStore.h"
+#include "os/ObjectStore.h"
 
 #include "common/WorkQueue.h"
 #include "common/Finisher.h"

@@ -28,11 +28,11 @@ libos_a_SOURCES = \
 	os/filestore/LFNIndex.cc \
 	os/filestore/WBThrottle.cc \
 	os/fs/FS.cc \
+	os/keyvaluestore/GenericObjectMap.cc \
+	os/keyvaluestore/KeyValueStore.cc \
 	os/kstore/kv.cc \
 	os/kstore/KStore.cc \
 	os/memstore/MemStore.cc \
-	os/GenericObjectMap.cc \
-	os/KeyValueStore.cc \
 	os/ObjectStore.cc
 
 if LINUX
@@ -88,13 +88,13 @@ noinst_HEADERS += \
 	os/filestore/ZFSFileStoreBackend.h
 	os/fs/FS.h \
 	os/fs/XFS.h \
+	os/keyvaluestore/GenericObjectMap.h \
+	os/keyvaluestore/KeyValueStore.h \
 	os/kstore/kstore_types.h \
 	os/kstore/KStore.h \
 	os/kstore/kv.h \
 	os/memstore/MemStore.h \
 	os/memstore/PageSet.h \
-	os/GenericObjectMap.h \
-	os/KeyValueStore.h \
 	os/ObjectMap.h \
 	os/ObjectStore.h
 

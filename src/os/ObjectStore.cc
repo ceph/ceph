@@ -20,7 +20,7 @@
 
 #include "filestore/FileStore.h"
 #include "memstore/MemStore.h"
-#include "KeyValueStore.h"
+#include "keyvaluestore/KeyValueStore.h"
 #if defined(HAVE_LIBAIO)
 #include "bluestore/BlueStore.h"
 #endif
