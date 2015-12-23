@@ -32,7 +32,7 @@ TestClient::~TestClient() {
 
 void TestClient::run() {
   auto request_complete =
-    std::bind<void()>(&TestClient::submitResponse, this);
+    std::bind(&TestClient::submitResponse, this);
   std::chrono::microseconds delay((int) (0.5 + 1000000.0 / iops_goal));
   auto now = std::chrono::high_resolution_clock::now();
 
