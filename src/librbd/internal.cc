@@ -719,7 +719,7 @@ int invoke_async_request(ImageCtx *ictx, const std::string& request_type,
                                            snap_name),
                                boost::bind(&ImageWatcher::notify_snap_remove,
                                            ictx->image_watcher, snap_name));
-      if (r < 0 && r != -EEXIST) {
+      if (r < 0 && r != -ENOENT) {
         return r;
       }
     } else {
