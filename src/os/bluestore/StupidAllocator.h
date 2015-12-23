@@ -11,10 +11,10 @@
 class StupidAllocator : public Allocator {
   Mutex lock;
 
-  uint64_t num_free;     ///< total bytes in freelist
-  uint64_t num_uncommitted;
-  uint64_t num_committing;
-  uint64_t num_reserved; ///< reserved bytes
+  int64_t num_free;     ///< total bytes in freelist
+  int64_t num_uncommitted;
+  int64_t num_committing;
+  int64_t num_reserved; ///< reserved bytes
 
   vector<interval_set<uint64_t> > free;        ///< leading-edge copy
   interval_set<uint64_t> uncommitted; ///< released but not yet usable
