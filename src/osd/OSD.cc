@@ -1366,88 +1366,79 @@ int OSD::mkfs(CephContext *cct, ObjectStore *store, const string &dev,
 
   ceph::shared_ptr<ObjectStore::Sequencer> osr(
     new ObjectStore::Sequencer("mkfs"));
+  OSDSuperblock sb;
+  bufferlist sbbl;
+  C_SaferCond waiter;
 
-  try {
-    // if we are fed a uuid for this osd, use it.
-    store->set_fsid(cct->_conf->osd_uuid);
+  // if we are fed a uuid for this osd, use it.
+  store->set_fsid(cct->_conf->osd_uuid);
 
-    ret = store->mkfs();
-    if (ret) {
-      derr << "OSD::mkfs: ObjectStore::mkfs failed with error " << ret << dendl;
-      goto free_store;
+  ret = store->mkfs();
+  if (ret) {
+    derr << "OSD::mkfs: ObjectStore::mkfs failed with error " << ret << dendl;
+    goto free_store;
+  }
+
+  ret = store->mount();
+  if (ret) {
+    derr << "OSD::mkfs: couldn't mount ObjectStore: error " << ret << dendl;
+    goto free_store;
+  }
+
+  ret = store->read(coll_t::meta(), OSD_SUPERBLOCK_POBJECT, 0, 0, sbbl);
+  if (ret >= 0) {
+    /* if we already have superblock, check content of superblock */
+    dout(0) << " have superblock" << dendl;
+    bufferlist::iterator p;
+    p = sbbl.begin();
+    ::decode(sb, p);
+    if (whoami != sb.whoami) {
+      derr << "provided osd id " << whoami << " != superblock's " << sb.whoami
+	   << dendl;
+      ret = -EINVAL;
+      goto umount_store;
     }
-
-    ret = store->mount();
-    if (ret) {
-      derr << "OSD::mkfs: couldn't mount ObjectStore: error " << ret << dendl;
-      goto free_store;
+    if (fsid != sb.cluster_fsid) {
+      derr << "provided cluster fsid " << fsid
+	   << " != superblock's " << sb.cluster_fsid << dendl;
+      ret = -EINVAL;
+      goto umount_store;
     }
-
-    OSDSuperblock sb;
-    bufferlist sbbl;
-    ret = store->read(coll_t::meta(), OSD_SUPERBLOCK_POBJECT, 0, 0, sbbl);
-    if (ret >= 0) {
-      /* if we already have superblock, check content of superblock */
-      dout(0) << " have superblock" << dendl;
-      bufferlist::iterator p;
-      p = sbbl.begin();
-      ::decode(sb, p);
-      if (whoami != sb.whoami) {
-	derr << "provided osd id " << whoami << " != superblock's " << sb.whoami << dendl;
-	ret = -EINVAL;
-	goto umount_store;
-      }
-      if (fsid != sb.cluster_fsid) {
-	derr << "provided cluster fsid " << fsid << " != superblock's " << sb.cluster_fsid << dendl;
-	ret = -EINVAL;
-	goto umount_store;
-      }
-    } else {
-      // create superblock
-      if (fsid.is_zero()) {
-	derr << "must specify cluster fsid" << dendl;
-	ret = -EINVAL;
-	goto umount_store;
-      }
-
-      sb.cluster_fsid = fsid;
-      sb.osd_fsid = store->get_fsid();
-      sb.whoami = whoami;
-      sb.compat_features = get_osd_initial_compat_set();
-
-      bufferlist bl;
-      ::encode(sb, bl);
-
-      ObjectStore::Transaction t;
-      t.create_collection(coll_t::meta(), 0);
-      t.write(coll_t::meta(), OSD_SUPERBLOCK_POBJECT, 0, bl.length(), bl);
-      ret = store->apply_transaction(osr.get(), t);
-      if (ret) {
-	derr << "OSD::mkfs: error while writing OSD_SUPERBLOCK_POBJECT: "
-	     << "apply_transaction returned " << ret << dendl;
-	goto umount_store;
-      }
-    }
-
-    C_SaferCond waiter;
-    if (!osr->flush_commit(&waiter)) {
-      waiter.wait();
-    }
-
-    ret = write_meta(store, sb.cluster_fsid, sb.osd_fsid, whoami);
-    if (ret) {
-      derr << "OSD::mkfs: failed to write fsid file: error " << ret << dendl;
+  } else {
+    // create superblock
+    if (fsid.is_zero()) {
+      derr << "must specify cluster fsid" << dendl;
+      ret = -EINVAL;
       goto umount_store;
     }
 
+    sb.cluster_fsid = fsid;
+    sb.osd_fsid = store->get_fsid();
+    sb.whoami = whoami;
+    sb.compat_features = get_osd_initial_compat_set();
+
+    bufferlist bl;
+    ::encode(sb, bl);
+
+    ObjectStore::Transaction t;
+    t.create_collection(coll_t::meta(), 0);
+    t.write(coll_t::meta(), OSD_SUPERBLOCK_POBJECT, 0, bl.length(), bl);
+    ret = store->apply_transaction(osr.get(), t);
+    if (ret) {
+      derr << "OSD::mkfs: error while writing OSD_SUPERBLOCK_POBJECT: "
+	   << "apply_transaction returned " << ret << dendl;
+      goto umount_store;
+    }
   }
-  catch (const std::exception &se) {
-    derr << "OSD::mkfs: caught exception " << se.what() << dendl;
-    ret = 1000;
+
+  if (!osr->flush_commit(&waiter)) {
+    waiter.wait();
   }
-  catch (...) {
-    derr << "OSD::mkfs: caught unknown exception." << dendl;
-    ret = 1000;
+
+  ret = write_meta(store, sb.cluster_fsid, sb.osd_fsid, whoami);
+  if (ret) {
+    derr << "OSD::mkfs: failed to write fsid file: error " << ret << dendl;
+    goto umount_store;
   }
 
 umount_store:
