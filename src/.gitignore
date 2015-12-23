@@ -44,7 +44,6 @@ Makefile
 /ceph_rgw_multiparser
 /ceph_scratchtool
 /ceph_scratchtoolpp
-/ceph_streamtest
 /ceph_test_*
 /ceph_tpbench
 /ceph_xattr_bench
