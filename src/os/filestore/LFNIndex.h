@@ -1,4 +1,4 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 /*
  * Ceph - scalable distributed file system
@@ -7,9 +7,9 @@
  *
  * This is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public
- * License version 2.1, as published by the Free Software 
+ * License version 2.1, as published by the Free Software
  * Foundation.  See file COPYING.
- * 
+ *
  */
 
 
@@ -29,19 +29,19 @@
 
 #include "CollectionIndex.h"
 
-/** 
+/**
  * LFNIndex also encapsulates logic for manipulating
  * subdirectories of of a collection as well as the long filename
  * logic.
  *
  * The protected methods provide machinery for derived classes to
  * manipulate subdirectories and objects.
- *  
+ *
  * The virtual methods are to be overridden to provide the actual
  * hashed layout.
- *  
+ *
  * User must call created when an object is created.
- *  
+ *
  * Syncronization: Calling code must ensure that there are no object
  * creations or deletions during the lifetime of a Path object (except
  * of an object at that path).
@@ -72,7 +72,7 @@
   return -1;					\
   }						\
 
-  
+
 
 class LFNIndex : public CollectionIndex {
   /// Hash digest output size.
@@ -131,7 +131,7 @@ public:
     const char *base_path, ///< [in] path to Index root
     uint32_t index_version,
     double _error_injection_probability=0)
-    : CollectionIndex(collection), 
+    : CollectionIndex(collection),
       base_path(base_path),
       index_version(index_version),
       error_injection_enabled(false),
@@ -199,7 +199,7 @@ public:
     uint32_t bits,                              //< [in] bits to check
     CollectionIndex* dest                       //< [in] destination index
     ) = 0;
-  
+
   /// @see CollectionIndex
   int split(
     uint32_t match,
@@ -285,17 +285,17 @@ protected:
    * @return Error Code, 0 on success.
    */
   int remove_objects(
-    const vector<string> &dir,             
+    const vector<string> &dir,
     const map<string, ghobject_t> &to_remove,
     map<string, ghobject_t> *remaining
     );
-	
 
-  /** 
+
+  /**
    * Moves contents of from into to.
    *
    * Invalidates mangled names in to.  If interupted, all objects will be
-   * present in to before objects are removed from from.  Ignores EEXIST 
+   * present in to before objects are removed from from.  Ignores EEXIST
    * while linking into to.
    * @return Error Code, 0 on success
    */
@@ -304,7 +304,7 @@ protected:
     const vector<string> &to    ///< [in] Dest subdirectory.
     );
 
-  /** 
+  /**
    * Remove an object from from.
    *
    * Invalidates mangled names in from.
@@ -317,7 +317,7 @@ protected:
 
   /**
    * Gets the filename corresponding to oid in from.
-   * 
+   *
    * The filename may differ between subdirectories.  Furthermore,
    * file creations ore removals in from may invalidate the name.
    * @return Error code on failure, 0 on success
@@ -394,7 +394,7 @@ protected:
   /// Read into attr_value atribute attr_name on path.
   int get_attr_path(
     const vector<string> &path, ///< [in] Path to read.
-    const string &attr_name, 	///< [in] Attribute to read. 
+    const string &attr_name, 	///< [in] Attribute to read.
     bufferlist &attr_value	///< [out] Attribute value read.
     );
 
@@ -453,7 +453,7 @@ private:
   ///Transate a file into and ghobject_t.
   int lfn_translate(
     const vector<string> &path, ///< [in] Path containing the file.
-    const string &short_name,	///< [in] Filename to translate. 
+    const string &short_name,	///< [in] Filename to translate.
     ghobject_t *out		///< [out] Object found.
     ); ///< @return Negative error code on error, 0 if not an object, 1 else
 

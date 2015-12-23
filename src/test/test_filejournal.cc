@@ -8,11 +8,11 @@
 #include "global/global_init.h"
 #include "common/config.h"
 #include "common/Finisher.h"
-#include "os/FileJournal.h"
+#include "os/filestore/FileJournal.h"
 #include "include/Context.h"
 #include "common/Mutex.h"
 #include "common/safe_io.h"
-#include "os/JournalingObjectStore.h"
+#include "os/filestore/JournalingObjectStore.h"
 
 Finisher *finisher;
 Cond sync_cond;

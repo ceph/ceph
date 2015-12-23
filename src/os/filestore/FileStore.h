@@ -1,4 +1,4 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 /*
  * Ceph - scalable distributed file system
@@ -7,9 +7,9 @@
  *
  * This is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public
- * License version 2.1, as published by the Free Software 
+ * License version 2.1, as published by the Free Software
  * Foundation.  See file COPYING.
- * 
+ *
  */
 
 
@@ -28,7 +28,7 @@ using namespace std;
 
 #include "include/assert.h"
 
-#include "ObjectStore.h"
+#include "os/ObjectStore.h"
 #include "JournalingObjectStore.h"
 
 #include "common/Timer.h"
@@ -37,7 +37,7 @@ using namespace std;
 #include "common/Mutex.h"
 #include "HashIndex.h"
 #include "IndexManager.h"
-#include "ObjectMap.h"
+#include "os/ObjectMap.h"
 #include "SequencerPosition.h"
 #include "FDCache.h"
 #include "WBThrottle.h"
@@ -124,7 +124,7 @@ private:
   std::string current_op_seq_fn;
   std::string omap_dir;
   uuid_d fsid;
-  
+
   size_t blk_size;            ///< fs block size
 
   int fsid_fd, op_fd, basedir_fd, current_fd;
@@ -151,10 +151,10 @@ private:
 
   // ObjectMap
   boost::scoped_ptr<ObjectMap> object_map;
-  
+
   // helper fns
   int get_cdir(coll_t cid, char *s, int len);
-  
+
   /// read a uuid from fd
   int read_fsid(int fd, uuid_d *uuid);
 
@@ -200,7 +200,7 @@ private:
     Sequencer *parent;
     Mutex apply_lock;  // for apply mutual exclusion
     int id;
-    
+
     /// get_max_uncompleted
     bool _get_max_uncompleted(
       uint64_t *seq ///< [out] max uncompleted seq
@@ -392,7 +392,7 @@ private:
   PerfCounters *logger;
 
 public:
-  int lfn_find(const ghobject_t& oid, const Index& index, 
+  int lfn_find(const ghobject_t& oid, const Index& index,
                                   IndexedPath *path = NULL);
   int lfn_truncate(coll_t cid, const ghobject_t& oid, off_t length);
   int lfn_stat(coll_t cid, const ghobject_t& oid, struct stat *buf);
@@ -416,7 +416,7 @@ public:
 
   int _detect_fs();
   int _sanity_check_fs();
-  
+
   bool test_mount_in_use();
   int read_op_seq(uint64_t *seq);
   int write_op_seq(int, uint64_t seq);
