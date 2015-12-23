@@ -9,8 +9,11 @@
 #define _TEST_SERVER_H
 
 
-#include <mutex>
 #include <thread>
+#include <mutex>
+#include <condition_variable>
+#include <chrono>
+#include <deque>
 
 #include "dm_clock_srv.h"
 #include "test_request.h"
@@ -23,14 +26,19 @@ using crimson::dmclock::ClientInfo;
 class TestServer {
 
   typedef typename std::lock_guard<std::mutex> Guard;
+  typedef std::pair<std::unique_ptr<TestRequest>,std::function<void()>> QueueItem;
 
-  PriorityQueue<int,TestRequest> queue;
+  PriorityQueue<int,TestRequest> priority_queue;
   int                            iops;
   int                            thread_pool_size;
 
   int                            active_threads;
-  std::mutex                     mtx;
   bool                           finishing;
+  std::chrono::microseconds      op_time;
+
+  std::mutex                     inner_queue_mtx;
+  std::condition_variable        inner_queue_cv;
+  std::deque<QueueItem>          inner_queue;
 
 public:
 
@@ -50,9 +58,9 @@ protected:
 
   // void innerPost(const TestRequest& request, std::function<void()> done);
   void innerPost(std::unique_ptr<TestRequest> request,
-		 std::function<void()> done);
+		 std::function<void()> notify_server_done);
 	     
-  void run(double time, std::function<void()> done);
+  void run();
 };
 
 

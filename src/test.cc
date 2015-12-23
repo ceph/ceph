@@ -89,7 +89,7 @@ int main(int argc, char* argv[]) {
 				4);
   }
 
-  // clients are running here
+  // clients are now running
 
   // wait for all clients to finish
   for (int i = 0; i < client_count; ++i) {

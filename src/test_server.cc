@@ -12,18 +12,25 @@
 using namespace std::placeholders;
 
 
+typedef std::unique_lock<std::mutex> Lock;
+
+
 TestServer::TestServer(int _iops,
 		       int _thread_pool_size,
 		       const std::function<ClientInfo(int)>& _clientInfoF) :
-  queue(_clientInfoF,
-	std::bind(&TestServer::hasAvailThread, this),
-	std::bind(&TestServer::innerPost, this, _1, _2)),
+  priority_queue(_clientInfoF,
+		 std::bind(&TestServer::hasAvailThread, this),
+		 std::bind(&TestServer::innerPost, this, _1, _2)),
   iops(_iops),
   thread_pool_size(_thread_pool_size),
   active_threads(0),
   finishing(false)
 {
-  // empty
+#if 0
+    std::chrono::microseconds op_time((int) (0.5 + 1000000.0 / iops / thread_pool_size));
+#endif
+    op_time = std::chrono::microseconds((int) (0.5 +
+					       1000000.0 / iops / thread_pool_size));
 }
 
 
@@ -32,11 +39,30 @@ TestServer::~TestServer() {
 }
 
 
-void TestServer::run(double time, std::function<void()> done) {
-  usleep((useconds_t) (1000000 * time));
-  done();
-  Guard g(mtx);
-  --active_threads;
+void TestServer::run() {
+  std::chrono::seconds delay(1);
+  Lock l(inner_queue_mtx);
+  while(!finishing) {
+    while(inner_queue.size() == 0 && !finishing) {
+      inner_queue_cv.wait_for(l, delay);
+    }
+    if (inner_queue.size() > 0) {
+      auto item = std::move(inner_queue.front());
+      inner_queue.pop_front();
+      l.unlock();
+
+      // simulation operation by sleeping; then call function to
+      // notify server of completion
+      std::this_thread::sleep_for(op_time);
+      item.second();
+
+      l.lock();
+    } else {
+      // since finishing and queue is empty, end thread
+      l.unlock();
+      return;
+    }
+  }
 }
 
 
@@ -62,12 +88,13 @@ void TestServer::post(const TestRequest& request,
 
 
 bool TestServer::hasAvailThread() {
-  Guard g(mtx);
-  return active_threads <= thread_pool_size;
+  Lock l(inner_queue_mtx);
+  return inner_queue.size() <= thread_pool_size;
 }
 
 
 void TestServer::innerPost(std::unique_ptr<TestRequest> request,
-			   std::function<void()> done) {
-  assert(0);
+			   std::function<void()> notify_server_done) {
+  Lock l(inner_queue_mtx);
+  inner_queue.emplace_back(QueueItem(std::move(request), notify_server_done));
 }
