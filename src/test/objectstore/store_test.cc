@@ -1182,6 +1182,74 @@ TEST_P(StoreTest, SimpleCloneTest) {
   }
 }
 
+TEST_P(StoreTest, OmapSimple) {
+  ObjectStore::Sequencer osr("test");
+  int r;
+  coll_t cid;
+  {
+    ObjectStore::Transaction t;
+    t.create_collection(cid, 0);
+    cerr << "Creating collection " << cid << std::endl;
+    r = store->apply_transaction(&osr, t);
+    ASSERT_EQ(r, 0);
+  }
+  ghobject_t hoid(hobject_t(sobject_t("omap_obj", CEPH_NOSNAP),
+			    "key", 123, -1, ""));
+  bufferlist small;
+  small.append("small");
+  map<string,bufferlist> km;
+  km["foo"] = small;
+  km["bar"].append("asdfjkasdkjdfsjkafskjsfdj");
+  bufferlist header;
+  header.append("this is a header");
+  {
+    ObjectStore::Transaction t;
+    t.touch(cid, hoid);
+    t.omap_setkeys(cid, hoid, km);
+    t.omap_setheader(cid, hoid, header);
+    cerr << "Creating object and set omap " << hoid << std::endl;
+    r = store->apply_transaction(&osr, t);
+    ASSERT_EQ(r, 0);
+  }
+  // get header, keys
+  {
+    bufferlist h;
+    map<string,bufferlist> r;
+    store->omap_get(cid, hoid, &h, &r);
+    ASSERT_TRUE(h.contents_equal(header));
+    ASSERT_EQ(r.size(), km.size());
+    cout << "r: " << r << std::endl;
+  }
+  // test iterator with seek_to_first
+  {
+    map<string,bufferlist> r;
+    ObjectMap::ObjectMapIterator iter = store->get_omap_iterator(cid, hoid);
+    for (iter->seek_to_first(); iter->valid(); iter->next(false)) {
+      r[iter->key()] = iter->value();
+    }
+    cout << "r: " << r << std::endl;
+    ASSERT_EQ(r.size(), km.size());
+  }
+  // test iterator with initial lower_bound
+  {
+    map<string,bufferlist> r;
+    ObjectMap::ObjectMapIterator iter = store->get_omap_iterator(cid, hoid);
+    for (iter->lower_bound(string()); iter->valid(); iter->next(false)) {
+      r[iter->key()] = iter->value();
+    }
+    cout << "r: " << r << std::endl;
+    ASSERT_EQ(r.size(), km.size());
+  }
+  {
+    ObjectStore::Transaction t;
+    t.remove(cid, hoid);
+    t.remove_collection(cid);
+    cerr << "Cleaning" << std::endl;
+    r = store->apply_transaction(&osr, t);
+    ASSERT_EQ(r, 0);
+  }
+}
+
 TEST_P(StoreTest, OmapCloneTest) {
   ObjectStore::Sequencer osr("test");
   int r;
