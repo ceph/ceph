@@ -105,6 +105,20 @@ public:
    * @returns number of requests being hold after this
    */
   int64_t put(int64_t c = 1);
+   /**
+   * reset the zero to the stock
+   */
+  void reset() {
+    Mutex::Locker l(lock);
+    if (c) {
+      if (!cond.empty())
+        cond.front()->SignalOne();
+      count.set(0);
+      if (logger) {
+        logger->set(l_throttle_val, count.read());
+      }
+    }
+  }
   bool should_wait(int64_t c) const {
     return _should_wait(c);
   }
