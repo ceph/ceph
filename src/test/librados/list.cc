@@ -693,7 +693,7 @@ TEST_F(LibRadosList, EnumerateObjects) {
     memset(results, 0, sizeof(rados_object_list_item) * 12);
     int r = rados_object_list(ioctx,
             c, rados_object_list_end(ioctx),
-            12, results, &c);
+            12, NULL, 0, results, &c);
     ASSERT_GE(r, 0);
     for (int i = 0; i < r; ++i) {
       std::string oid(results[i].oid, results[i].oid_length);
@@ -761,7 +761,7 @@ TEST_F(LibRadosList, EnumerateObjectsSplit) {
         memset(results, 0, sizeof(rados_object_list_item) * 12);
         int r = rados_object_list(ioctx,
                 c, shard_end,
-                12, results, &c);
+                12, NULL, 0, results, &c);
         ASSERT_GE(r, 0);
         for (int i = 0; i < r; ++i) {
           std::string oid(results[i].oid, results[i].oid_length);
@@ -806,7 +806,7 @@ TEST_F(LibRadosListPP, EnumerateObjectsPP) {
   while(!ioctx.object_list_is_end(c))
   {
     std::vector<ObjectItem> result;
-    int r = ioctx.object_list(c, end, 12, &result, &c);
+    int r = ioctx.object_list(c, end, 12, {}, &result, &c);
     ASSERT_GE(r, 0);
     ASSERT_EQ(r, (int)result.size());
     for (int i = 0; i < r; ++i) {
@@ -861,7 +861,7 @@ TEST_F(LibRadosListPP, EnumerateObjectsSplitPP) {
       while(c < shard_end)
       {
         std::vector<ObjectItem> result;
-        int r = ioctx.object_list(c, shard_end, 12, &result, &c);
+        int r = ioctx.object_list(c, shard_end, 12, {}, &result, &c);
         ASSERT_GE(r, 0);
 
         for (const auto & i : result) {
@@ -904,6 +904,54 @@ TEST_F(LibRadosListNP, ListObjectsError) {
   rados_objects_list_close(ctx);
   rados_ioctx_destroy(ioctx);
   rados_shutdown(cluster);
+}
+
+TEST_F(LibRadosListPP, EnumerateObjectsFilterPP) {
+  char buf[128];
+  memset(buf, 0xcc, sizeof(buf));
+  bufferlist obj_content;
+  obj_content.append(buf, sizeof(buf));
+
+  std::string target_str = "content";
+
+  // Write xattr bare, no ::encod'ing
+  bufferlist target_val;
+  target_val.append(target_str);
+  bufferlist nontarget_val;
+  nontarget_val.append("rhubarb");
+
+  ASSERT_EQ(0, ioctx.write("has_xattr", obj_content, obj_content.length(), 0));
+  ASSERT_EQ(0, ioctx.write("has_wrong_xattr", obj_content, obj_content.length(), 0));
+  ASSERT_EQ(0, ioctx.write("no_xattr", obj_content, obj_content.length(), 0));
+
+  ASSERT_EQ(0, ioctx.setxattr("has_xattr", "theattr", target_val));
+  ASSERT_EQ(0, ioctx.setxattr("has_wrong_xattr", "theattr", nontarget_val));
+
+  bufferlist filter_bl;
+  std::string filter_name = "plain";
+  ::encode(filter_name, filter_bl);
+  ::encode("_theattr", filter_bl);
+  ::encode(target_str, filter_bl);
+
+  ObjectCursor c = ioctx.object_list_begin();
+  ObjectCursor end = ioctx.object_list_end();
+  bool foundit = false;
+  while(!ioctx.object_list_is_end(c))
+  {
+    std::vector<ObjectItem> result;
+    int r = ioctx.object_list(c, end, 12, filter_bl, &result, &c);
+    ASSERT_GE(r, 0);
+    ASSERT_EQ(r, result.size());
+    for (int i = 0; i < r; ++i) {
+      auto oid = result[i].oid;
+      // We should only see the object that matches the filter
+      ASSERT_EQ(oid, "has_xattr");
+      // We should only see it once
+      ASSERT_FALSE(foundit);
+      foundit = true;
+    }
+  }
+  ASSERT_TRUE(foundit);
 }
 
 #pragma GCC diagnostic pop
