@@ -25,7 +25,7 @@
 #include "common/Finisher.h"
 #include "common/RefCountedObj.h"
 #include "common/RWLock.h"
-#include "ObjectStore.h"
+#include "os/ObjectStore.h"
 #include "PageSet.h"
 #include "include/assert.h"
 
