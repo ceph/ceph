@@ -46,6 +46,7 @@ struct crush_grammar : public grammar<crush_grammar>
     _step_take,
     _step_set_chooseleaf_tries,
     _step_set_chooseleaf_vary_r,
+    _step_set_chooseleaf_stable,
     _step_set_choose_tries,
     _step_set_choose_local_tries,
     _step_set_choose_local_fallback_tries,
@@ -84,6 +85,7 @@ struct crush_grammar : public grammar<crush_grammar>
     rule<ScannerT, parser_context<>, parser_tag<_step_set_choose_local_fallback_tries> >    step_set_choose_local_fallback_tries;
     rule<ScannerT, parser_context<>, parser_tag<_step_set_chooseleaf_tries> >    step_set_chooseleaf_tries;
     rule<ScannerT, parser_context<>, parser_tag<_step_set_chooseleaf_vary_r> >    step_set_chooseleaf_vary_r;
+    rule<ScannerT, parser_context<>, parser_tag<_step_set_chooseleaf_stable> >    step_set_chooseleaf_stable;
     rule<ScannerT, parser_context<>, parser_tag<_step_choose> >    step_choose;
     rule<ScannerT, parser_context<>, parser_tag<_step_chooseleaf> >      step_chooseleaf;
     rule<ScannerT, parser_context<>, parser_tag<_step_emit> >      step_emit;
@@ -128,6 +130,7 @@ struct crush_grammar : public grammar<crush_grammar>
       step_set_choose_local_fallback_tries = str_p("set_choose_local_fallback_tries") >> posint;
       step_set_chooseleaf_tries = str_p("set_chooseleaf_tries") >> posint;
       step_set_chooseleaf_vary_r = str_p("set_chooseleaf_vary_r") >> posint;
+      step_set_chooseleaf_stable = str_p("set_chooseleaf_stable") >> posint;
       step_choose = str_p("choose")
 	>> ( str_p("indep") | str_p("firstn") )
 	>> integer
@@ -143,6 +146,7 @@ struct crush_grammar : public grammar<crush_grammar>
 				step_set_choose_local_fallback_tries |
 				step_set_chooseleaf_tries |
 				step_set_chooseleaf_vary_r |
+				step_set_chooseleaf_stable |
 				step_choose |
 				step_chooseleaf |
 				step_emit );

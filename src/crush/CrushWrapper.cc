@@ -78,6 +78,32 @@ bool CrushWrapper::has_v4_buckets() const
   return false;
 }
 
+bool CrushWrapper::has_v5_rules() const
+{
+  for (unsigned i=0; i<crush->max_rules; i++) {
+    if (is_v5_rule(i)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+bool CrushWrapper::is_v5_rule(unsigned ruleid) const
+{
+  // check rule for use of SET_CHOOSELEAF_STABLE step
+  if (ruleid >= crush->max_rules)
+    return false;
+  crush_rule *r = crush->rules[ruleid];
+  if (!r)
+    return false;
+  for (unsigned j=0; j<r->len; j++) {
+    if (r->steps[j].op == CRUSH_RULE_SET_CHOOSELEAF_STABLE) {
+      return true;
+    }
+  }
+  return false;
+}
+
 int CrushWrapper::can_rename_item(const string& srcname,
                                   const string& dstname,
                                   ostream *ss) const
@@ -1184,6 +1210,7 @@ void CrushWrapper::encode(bufferlist& bl, bool lean) const
   ::encode(crush->chooseleaf_vary_r, bl);
   ::encode(crush->straw_calc_version, bl);
   ::encode(crush->allowed_bucket_algs, bl);
+  ::encode(crush->chooseleaf_stable, bl);
 }
 
 static void decode_32_or_64_string_map(map<int32_t,string>& m, bufferlist::iterator& blp)
@@ -1272,6 +1299,9 @@ void CrushWrapper::decode(bufferlist::iterator& blp)
     }
     if (!blp.end()) {
       ::decode(crush->allowed_bucket_algs, blp);
+    }
+    if (!blp.end()) {
+      ::decode(crush->chooseleaf_stable, blp);
     }
     finalize();
   }
@@ -1519,11 +1549,14 @@ void CrushWrapper::dump_tunables(Formatter *f) const
   f->dump_int("choose_total_tries", get_choose_total_tries());
   f->dump_int("chooseleaf_descend_once", get_chooseleaf_descend_once());
   f->dump_int("chooseleaf_vary_r", get_chooseleaf_vary_r());
+  f->dump_int("chooseleaf_stable", get_chooseleaf_stable());
   f->dump_int("straw_calc_version", get_straw_calc_version());
   f->dump_int("allowed_bucket_algs", get_allowed_bucket_algs());
 
   // be helpful about it
-  if (has_hammer_tunables())
+  if (has_jewel_tunables())
+    f->dump_string("profile", "jewel");
+  else if (has_hammer_tunables())
     f->dump_string("profile", "hammer");
   else if (has_firefly_tunables())
     f->dump_string("profile", "firefly");
@@ -1538,10 +1571,12 @@ void CrushWrapper::dump_tunables(Formatter *f) const
 
   f->dump_int("require_feature_tunables", (int)has_nondefault_tunables());
   f->dump_int("require_feature_tunables2", (int)has_nondefault_tunables2());
-  f->dump_int("require_feature_tunables3", (int)has_nondefault_tunables3());
   f->dump_int("has_v2_rules", (int)has_v2_rules());
+  f->dump_int("require_feature_tunables3", (int)has_nondefault_tunables3());
   f->dump_int("has_v3_rules", (int)has_v3_rules());
   f->dump_int("has_v4_buckets", (int)has_v4_buckets());
+  f->dump_int("require_feature_tunables5", (int)has_nondefault_tunables5());
+  f->dump_int("has_v5_rules", (int)has_v5_rules());
 }
 
 void CrushWrapper::dump_rules(Formatter *f) const
