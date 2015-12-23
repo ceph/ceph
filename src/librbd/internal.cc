@@ -1157,7 +1157,7 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
       if (remove_r < 0) {
 	lderr(cct) << "Could not remove image from directory after "
 		   << "header creation failed: "
-		   << cpp_strerror(r) << dendl;
+		   << cpp_strerror(remove_r) << dendl;
       }
       return r;
     }
@@ -1293,7 +1293,7 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
     remove_r = io_ctx.remove(header_oid);
     if (remove_r < 0) {
       lderr(cct) << "error cleaning up image header after creation failed: "
-		 << dendl;
+		 << cpp_strerror(remove_r) << dendl;
     }
   err_remove_from_dir:
     remove_r = cls_client::dir_remove_image(&io_ctx, RBD_DIRECTORY,
@@ -1610,7 +1610,7 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
 
     r = cls_client::metadata_list(&p_ioctx, p_imctx->header_oid, "", 0, &pairs);
     if (r < 0 && r != -EOPNOTSUPP && r != -EIO) {
-      lderr(cct) << "couldn't list metadata: " << r << dendl;
+      lderr(cct) << "couldn't list metadata: " << cpp_strerror(r) << dendl;
       goto err_remove_child;
     } else if (r == 0 && !pairs.empty()) {
       r = cls_client::metadata_set(&c_ioctx, c_imctx->header_oid, pairs);
@@ -2448,7 +2448,7 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
 
     CephContext *cct = src->cct;
     if (dest_size < src_size) {
-      lderr(cct) << " src size " << src_size << " >= dest size "
+      lderr(cct) << " src size " << src_size << " > dest size "
 		 << dest_size << dendl;
       return -EINVAL;
     }
@@ -2457,12 +2457,12 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
 
     r = cls_client::metadata_list(&src->md_ctx, src->header_oid, "", 0, &pairs);
     if (r < 0 && r != -EOPNOTSUPP && r != -EIO) {
-      lderr(cct) << "couldn't list metadata: " << r << dendl;
+      lderr(cct) << "couldn't list metadata: " << cpp_strerror(r) << dendl;
       return r;
     } else if (r == 0 && !pairs.empty()) {
       r = cls_client::metadata_set(&dest->md_ctx, dest->header_oid, pairs);
       if (r < 0) {
-        lderr(cct) << "couldn't set metadata: " << r << dendl;
+        lderr(cct) << "couldn't set metadata: " << cpp_strerror(r) << dendl;
         return r;
       }
     }
@@ -3180,17 +3180,20 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
 	 ++p) {
       total_bytes += p->second;
     }
+    
     ictx->md_lock.get_write();
     bool abort = ictx->readahead_disable_after_bytes != 0 &&
       ictx->total_bytes_read > ictx->readahead_disable_after_bytes;
+    if (abort) {
+      ictx->md_lock.put_write();
+      return;
+    }
     ictx->total_bytes_read += total_bytes;
     ictx->snap_lock.get_read();
     uint64_t image_size = ictx->get_image_size(ictx->snap_id);
     ictx->snap_lock.put_read();
     ictx->md_lock.put_write();
-    if (abort) {
-      return;
-    }
+    
     pair<uint64_t, uint64_t> readahead_extent = ictx->readahead.update(image_extents, image_size);
     uint64_t readahead_offset = readahead_extent.first;
     uint64_t readahead_length = readahead_extent.second;
