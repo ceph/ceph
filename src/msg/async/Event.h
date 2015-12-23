@@ -152,6 +152,8 @@ class EventCenter {
   pthread_t get_owner() const { return owner; }
   unsigned get_id() const { return idx; }
 
+  EventDriver *get_driver() { return driver; }
+
   // Used by internal thread
   int create_file_event(int fd, int mask, EventCallbackRef ctxt);
   uint64_t create_time_event(uint64_t milliseconds, EventCallbackRef ctxt);
