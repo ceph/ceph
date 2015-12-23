@@ -1,4 +1,4 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 /*
  * Ceph - scalable distributed file system
@@ -7,9 +7,9 @@
  *
  * This is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public
- * License version 2.1, as published by the Free Software 
+ * License version 2.1, as published by the Free Software
  * Foundation.  See file COPYING.
- * 
+ *
  */
 
 
@@ -214,7 +214,7 @@ public:
     uint32_t pre_pad, post_pad;
     uint64_t magic1;
     uint64_t magic2;
-    
+
     static uint64_t make_magic(uint64_t seq, uint32_t len, uint64_t fsid) {
       return (fsid ^ seq ^ len);
     }
@@ -291,7 +291,7 @@ private:
   deque<pair<uint64_t, off64_t> > journalq;  // track seq offsets, so we can trim later.
   uint64_t writing_seq;
 
-  
+
   // throttle
   Throttle throttle_ops, throttle_bytes;
 
@@ -389,7 +389,7 @@ private:
     aio_ctx(0),
     aio_num(0), aio_bytes(0),
 #endif
-    last_committed_seq(0), 
+    last_committed_seq(0),
     journaled_since_start(0),
     full_state(FULL_NOTFULL),
     fd(-1),

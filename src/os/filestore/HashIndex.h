@@ -1,4 +1,4 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 /*
  * Ceph - scalable distributed file system
@@ -7,9 +7,9 @@
  *
  * This is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public
- * License version 2.1, as published by the Free Software 
+ * License version 2.1, as published by the Free Software
  * Foundation.  See file COPYING.
- * 
+ *
  */
 
 #ifndef CEPH_HASHINDEX_H
@@ -36,15 +36,15 @@ extern string reverse_hexdigit_bits_string(string l);
  *            - F - 0
  * @endverbatim
  *
- * A file is located at the longest existing directory from the root 
+ * A file is located at the longest existing directory from the root
  * given by the hex characters in the hash beginning with the least
  * significant.
- * 
+ *
  * ex: ghobject_t("object", CEPH_NO_SNAP, 0xA4CEE0D2)
  * would be located in (root)/2/D/0/
- * 
+ *
  * Subdirectories are created when the number of objects in a directory
- * exceed (abs(merge_threshhold)) * 16 * split_multiplier.  The number of objects in a directory 
+ * exceed (abs(merge_threshhold)) * 16 * split_multiplier.  The number of objects in a directory
  * is encoded as subdir_info_s in an xattr on the directory.
  */
 class HashIndex : public LFNIndex {
@@ -74,7 +74,7 @@ private:
     uint32_t hash_level; ///< Hashlevel of subdir.
 
     subdir_info_s() : objs(0), subdirs(0), hash_level(0) {}
-    
+
     void encode(bufferlist &bl) const
     {
       __u8 v = 1;
@@ -83,7 +83,7 @@ private:
       ::encode(subdirs, bl);
       ::encode(hash_level, bl);
     }
-    
+
     void decode(bufferlist::iterator &bl)
     {
       __u8 v;
@@ -103,7 +103,7 @@ private:
     int op;
     vector<string> path;
 
-    InProgressOp(int op, const vector<string> &path) 
+    InProgressOp(int op, const vector<string> &path)
       : op(op), path(path) {}
 
     InProgressOp(bufferlist::iterator &bl) {
@@ -129,8 +129,8 @@ private:
       ::decode(path, bl);
     }
   };
-    
-    
+
+
 public:
   /// Constructor.
   HashIndex(
@@ -292,9 +292,9 @@ private:
     uint32_t match,             ///< [in] bits to match
     unsigned *mkdirred          ///< [in,out] path[:mkdirred] has been mkdirred
     );
-    
 
-  /** 
+
+  /**
    * Get string representation of ghobject_t/hash
    *
    * e.g: 0x01234567 -> "76543210"

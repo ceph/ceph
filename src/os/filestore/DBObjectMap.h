@@ -11,13 +11,15 @@
 #include "include/memory.h"
 #include <boost/scoped_ptr.hpp>
 
-#include "ObjectMap.h"
+#include "os/ObjectMap.h"
 #include "kv/KeyValueDB.h"
 #include "osd/osd_types.h"
 #include "common/Mutex.h"
 #include "common/Cond.h"
 #include "common/simple_cache.hpp"
 #include <boost/optional/optional_io.hpp>
+
+#include "SequencerPosition.h"
 
 /**
  * DBObjectMap: Implements ObjectMap in terms of KeyValueDB
@@ -505,7 +507,7 @@ private:
   void _set_header(Header header, const bufferlist &bl,
 		   KeyValueDB::Transaction t);
 
-  /** 
+  /**
    * Removes header seq lock and possibly object lock
    * once Header is out of scope
    * @see lookup_parent
