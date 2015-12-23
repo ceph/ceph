@@ -167,7 +167,6 @@ BuildRequires:	libatomic-ops-devel
 %if 0%{?_with_systemd}
 Requires:	systemd
 %endif
-BuildRequires:  bzip2-devel
 BuildRequires:	nss-devel
 BuildRequires:	keyutils-libs-devel
 BuildRequires:	libatomic_ops-devel
