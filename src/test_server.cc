@@ -9,9 +9,13 @@
 #include "test_server.h"
 
 
-TestServer::TestServer(int _thread_pool_size) :
+TestServer::TestServer(int _thread_pool_size,
+		       const std::function<ClientInfo(int)>& _clientInfoF) :
   active_threads(0),
-  thread_pool_size(_thread_pool_size)
+  thread_pool_size(_thread_pool_size),
+  queue(_clientInfoF,
+	std::bind(&TestServer::hasAvailThread, this),
+	std::bind(&TestServer::innerPost, this))
 {
   // empty
 }
@@ -30,12 +34,14 @@ void TestServer::run(double time, std::function<void()> done) {
 }
 
 
+#if 0
 void TestServer::post(double delay, std::function<void()> done) {
   Guard g(mtx);
   ++active_threads;
   std::thread t(&TestServer::run, this, delay, done);
   t.detach();
 }
+#endif
 
 
 void TestServer::post(const TestRequest& request,

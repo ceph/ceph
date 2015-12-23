@@ -17,6 +17,7 @@
 
 
 using crimson::dmclock::PriorityQueue;
+using crimson::dmclock::ClientInfo;
 
 
 class TestServer {
@@ -30,17 +31,22 @@ class TestServer {
 
 public:
 
-  TestServer(int _thread_pool_size);
+  // TestServer(int _thread_pool_size);
+  TestServer(int _thread_pool_size,
+	     const std::function<ClientInfo(int)>& _clientInfoF);
 
   virtual ~TestServer();
 
-  void post(double delay, std::function<void()> done);
+  // void post(double delay, std::function<void()> done);
   void post(const TestRequest& request, std::function<void()> done);
 
   bool hasAvailThread();
 
 protected:
 
+  // void innerPost(const TestRequest& request, std::function<void()> done);
+  void innerPost(std::unique_ptr<TestRequest> request, std::function<void()> done);
+	     
   void run(double time, std::function<void()> done);
 };
 
