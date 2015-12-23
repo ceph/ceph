@@ -34,6 +34,8 @@
 #include "common/debug.h"
 #include "common/config.h"
 
+#include "compressor/AsyncCompressor.h"
+
 // monitor internal
 #define MSG_MON_SCRUB              64
 #define MSG_MON_ELECTION           65
@@ -222,8 +224,11 @@ protected:
   ConnectionRef connection;
 
   uint32_t magic;
+  bool compress_done;
 
   bi::list_member_hook<> dispatch_q;
+
+  uint64_t front_compress_id, middle_compress_id, data_compress_id;
 
 public:
   class CompletionHook : public Context {
@@ -262,7 +267,8 @@ protected:
 public:
   Message()
     : connection(NULL),
-      magic(0),
+      magic(0), compress_done(false),
+      front_compress_id(0), middle_compress_id(0), data_compress_id(0),
       completion_hook(NULL),
       byte_throttler(NULL),
       msg_throttler(NULL),
@@ -272,7 +278,8 @@ public:
   }
   Message(int t, int version=1, int compat_version=0)
     : connection(NULL),
-      magic(0),
+      magic(0), compress_done(false),
+      front_compress_id(0), middle_compress_id(0), data_compress_id(0),
       completion_hook(NULL),
       byte_throttler(NULL),
       msg_throttler(NULL),
@@ -283,6 +290,7 @@ public:
     header.compat_version = compat_version;
     header.priority = 0;  // undef
     header.data_off = 0;
+    header.flags = 0;
     memset(&footer, 0, sizeof(footer));
   }
 
@@ -456,11 +464,18 @@ public:
 
   virtual void dump(Formatter *f) const;
 
-  void encode(uint64_t features, int crcflags);
+  void encode(uint64_t features);
+  void try_compress(CephContext *cct, AsyncCompressor *compressor,
+                    uint8_t compress_flags);
+  int ready_compress(CephContext *cct, AsyncCompressor *compressor);
+  void calc_crc(int crcflags);
+  static bool verify_crc(CephContext *cct, int crcflags, ceph_msg_header &header,
+                        ceph_msg_footer &footer, bufferlist &front,
+                        bufferlist &middle, bufferlist &data);
 };
 typedef boost::intrusive_ptr<Message> MessageRef;
 
-extern Message *decode_message(CephContext *cct, int crcflags,
+extern Message *decode_message(CephContext *cct,
 			       ceph_msg_header &header,
 			       ceph_msg_footer& footer, bufferlist& front,
 			       bufferlist& middle, bufferlist& data);

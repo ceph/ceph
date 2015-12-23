@@ -1780,6 +1780,9 @@ void Pipe::writer()
 	  m->get();
 	}
 
+        if (msgr->cct->_conf->ms_compress)
+          m->try_compress(msgr->cct, msgr->compressor, CEPH_MSG_HEADER_FLAGS_COMPRESS_ALL);
+
 	// associate message with Connection (for benefit of encode_payload)
 	m->set_connection(connection_state.get());
 
@@ -1792,8 +1795,12 @@ void Pipe::writer()
 	  ldout(msgr->cct,20) << "writer half-reencoding " << m->get_seq() << " features " << features
 			      << " " << m << " " << *m << dendl;
 
+        int r = m->ready_compress(msgr->cct, msgr->compressor);
+        assert(r >= 0);
+
 	// encode and copy out of *m
-	m->encode(features, msgr->crcflags);
+        m->encode(features);
+        m->calc_crc(msgr->crcflags);
 
 	// prepare everything
 	const ceph_msg_header& header = m->get_header();
@@ -1936,6 +1943,7 @@ int Pipe::read_message(Message **pm, AuthSessionHandler* auth_handler)
   int aborted;
   Message *message;
   utime_t recv_stamp = ceph_clock_now(msgr->cct);
+  uint64_t front_decompress_id = 0, middle_decompress_id = 0, data_decompress_id = 0;
 
   if (policy.throttler_messages) {
     ldout(msgr->cct,10) << "reader wants " << 1 << " message from policy throttler "
@@ -1973,6 +1981,16 @@ int Pipe::read_message(Message **pm, AuthSessionHandler* auth_handler)
       goto out_dethrottle;
     front.push_back(bp);
     ldout(msgr->cct,20) << "reader got front " << front.length() << dendl;
+    // try decompress front
+    if (connection_state->has_feature(CEPH_FEATURE_MSG_COMPRESS) &&
+        header.flags & CEPH_MSG_HEADER_FLAGS_COMPRESS_FRONT) {
+      ldout(msgr->cct, 20) << "decompressing incoming message" << dendl;
+      ldout(msgr->cct, 20) << __func__ << " BEFORE decompression:\n"
+                                       << " front_len=" << front.length()
+                                       << " header.front_len=" << header.front_len
+                                       << dendl;
+      front_decompress_id = msgr->compressor->async_decompress(front);
+    }
   }
 
   // read middle
@@ -1983,6 +2001,16 @@ int Pipe::read_message(Message **pm, AuthSessionHandler* auth_handler)
       goto out_dethrottle;
     middle.push_back(bp);
     ldout(msgr->cct,20) << "reader got middle " << middle.length() << dendl;
+    // try decompress middle
+    if (connection_state->has_feature(CEPH_FEATURE_MSG_COMPRESS) &&
+        header.flags & CEPH_MSG_HEADER_FLAGS_COMPRESS_MIDDLE) {
+      ldout(msgr->cct, 20) << "decompressing incoming message" << dendl;
+      ldout(msgr->cct, 20) << __func__ << " BEFORE decompression:\n"
+                                       << " middle_len=" << middle.length()
+                                       << " header.middle_len=" << header.middle_len
+                                       << dendl;
+      middle_decompress_id = msgr->compressor->async_decompress(middle);
+    }
   }
 
 
@@ -2041,6 +2069,16 @@ int Pipe::read_message(Message **pm, AuthSessionHandler* auth_handler)
 	left -= got;
       } // else we got a signal or something; just loop.
     }
+    // try decompress data
+    if (connection_state->has_feature(CEPH_FEATURE_MSG_COMPRESS) &&
+        header.flags & CEPH_MSG_HEADER_FLAGS_COMPRESS_DATA) {
+      ldout(msgr->cct, 20) << "decompressing incoming message" << dendl;
+      ldout(msgr->cct, 20) << __func__ << " BEFORE decompression:\n"
+                                       << " data_len=" << data.length()
+                                       << " header.data_len=" << header.data_len
+                                       << dendl;
+      data_decompress_id = msgr->compressor->async_decompress(data);
+    }
   }
 
   // footer
@@ -2069,7 +2107,34 @@ int Pipe::read_message(Message **pm, AuthSessionHandler* auth_handler)
 
   ldout(msgr->cct,20) << "reader got " << front.length() << " + " << middle.length() << " + " << data.length()
 	   << " byte message" << dendl;
-  message = decode_message(msgr->cct, msgr->crcflags, header, footer, front, middle, data);
+
+  // verify crc
+  if (Message::verify_crc(msgr->cct, msgr->crcflags, header,
+                          footer, front, middle, data)) {
+    goto out_dethrottle;
+  }
+
+  bool finished;
+  if (front_decompress_id) {
+    ret = msgr->compressor->get_decompress_data(front_decompress_id, front, true, &finished);
+    if (ret < 0) {
+      goto out_dethrottle;
+    }
+  }
+  if (middle_decompress_id) {
+    ret = msgr->compressor->get_decompress_data(middle_decompress_id, middle, true, &finished);
+    if (ret < 0) {
+      goto out_dethrottle;
+    }
+  }
+  if (data_decompress_id) {
+    ret = msgr->compressor->get_decompress_data(data_decompress_id, data, true, &finished);
+    if (ret < 0) {
+      goto out_dethrottle;
+    }
+  }
+
+  message = decode_message(msgr->cct, header, footer, front, middle, data);
   if (!message) {
     ret = -EINVAL;
     goto out_dethrottle;
@@ -2406,14 +2471,17 @@ int Pipe::write_message(const ceph_msg_header& header, const ceph_msg_footer& fo
     msglen += sizeof(footer);
     msg.msg_iovlen++;
   } else {
-    if (msgr->crcflags & MSG_CRC_HEADER) {
+    if ((footer.flags & CEPH_MSG_FOOTER_NOHEADERCRC) == 0) {
       old_footer.front_crc = footer.front_crc;
       old_footer.middle_crc = footer.middle_crc;
     } else {
-	old_footer.front_crc = old_footer.middle_crc = 0;
+      old_footer.front_crc = old_footer.middle_crc = 0;
     }
-    old_footer.data_crc = msgr->crcflags & MSG_CRC_DATA ? footer.data_crc : 0;
-    old_footer.flags = footer.flags;   
+    if ((footer.flags & CEPH_MSG_FOOTER_NODATACRC) == 0)
+      old_footer.data_crc = footer.data_crc;
+    else
+      old_footer.data_crc = 0;
+    old_footer.flags = footer.flags;
     msgvec[msg.msg_iovlen].iov_base = (char*)&old_footer;
     msgvec[msg.msg_iovlen].iov_len = sizeof(old_footer);
     msglen += sizeof(old_footer);

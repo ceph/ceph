@@ -666,6 +666,7 @@ void AsyncConnection::process()
           data.clear();
           recv_stamp = ceph_clock_now(async_msgr->cct);
           current_header = header;
+          front_decompress_id = middle_decompress_id = data_decompress_id = 0;
           state = STATE_OPEN_MESSAGE_THROTTLE_MESSAGE;
           break;
         }
@@ -737,6 +738,17 @@ void AsyncConnection::process()
 
             ldout(async_msgr->cct, 20) << __func__ << " got front " << front.length() << dendl;
           }
+
+          // try decompress front
+          if (has_feature(CEPH_FEATURE_MSG_COMPRESS) &&
+              current_header.flags & CEPH_MSG_HEADER_FLAGS_COMPRESS_FRONT) {
+            ldout(async_msgr->cct, 20) << "decompressing incoming message" << dendl;
+            ldout(async_msgr->cct, 20) << __func__ << " BEFORE decompression:\n"
+                                                   << " front_len=" << front.length()
+                                                   << " header.front_len=" << current_header.front_len
+                                                   << dendl;
+            front_decompress_id = async_msgr->compressor->async_decompress(front);
+          }
           state = STATE_OPEN_MESSAGE_READ_MIDDLE;
           break;
         }
@@ -760,6 +772,16 @@ void AsyncConnection::process()
             ldout(async_msgr->cct, 20) << __func__ << " got middle " << middle.length() << dendl;
           }
 
+          // try decompress middle
+          if (has_feature(CEPH_FEATURE_MSG_COMPRESS) &&
+              current_header.flags & CEPH_MSG_HEADER_FLAGS_COMPRESS_MIDDLE) {
+            ldout(async_msgr->cct, 20) << "decompressing incoming message" << dendl;
+            ldout(async_msgr->cct, 20) << __func__ << " BEFORE decompression:\n"
+                                                   << " middle_len=" << middle.length()
+                                                   << " header.middle_len=" << current_header.middle_len
+                                                   << dendl;
+            middle_decompress_id = async_msgr->compressor->async_decompress(middle);
+          }
           state = STATE_OPEN_MESSAGE_READ_DATA_PREPARE;
           break;
         }
@@ -811,8 +833,20 @@ void AsyncConnection::process()
             msg_left -= read;
           }
 
-          if (msg_left == 0)
+          if (msg_left == 0) {
             state = STATE_OPEN_MESSAGE_READ_FOOTER_AND_DISPATCH;
+
+            // try decompress data
+            if (has_feature(CEPH_FEATURE_MSG_COMPRESS) &&
+                current_header.flags & CEPH_MSG_HEADER_FLAGS_COMPRESS_DATA) {
+              ldout(async_msgr->cct, 20) << "decompressing incoming message" << dendl;
+              ldout(async_msgr->cct, 20) << __func__ << " BEFORE decompression:\n"
+                                                    << " data_len=" << data.length()
+                                                    << " header.data_len=" << current_header.data_len
+                                                    << dendl;
+              data_decompress_id = async_msgr->compressor->async_decompress(data);
+            }
+          }
 
           break;
         }
@@ -847,16 +881,42 @@ void AsyncConnection::process()
             footer.flags = old_footer.flags;
           }
           int aborted = (footer.flags & CEPH_MSG_FOOTER_COMPLETE) == 0;
+
           ldout(async_msgr->cct, 10) << __func__ << " aborted = " << aborted << dendl;
           if (aborted) {
             ldout(async_msgr->cct, 0) << __func__ << " got " << front.length() << " + " << middle.length() << " + " << data.length()
-                                << " byte message.. ABORTED" << dendl;
+                                      << " byte message.. ABORTED" << dendl;
+            goto fail;
+          }
+          ldout(async_msgr->cct, 20) << __func__ << " got " << front.length() << " + " << middle.length()
+                              << " + " << data.length() << " byte message" << dendl;
+
+          // verify crc
+          if (Message::verify_crc(msgr->cct, msgr->crcflags, current_header,
+                                  footer, front, middle, data)) {
             goto fail;
           }
 
-          ldout(async_msgr->cct, 20) << __func__ << " got " << front.length() << " + " << middle.length()
-                              << " + " << data.length() << " byte message" << dendl;
-          Message *message = decode_message(async_msgr->cct, async_msgr->crcflags, current_header, footer, front, middle, data);
+          bool finished;
+          if (front_decompress_id) {
+            r = async_msgr->compressor->get_decompress_data(front_decompress_id, front, true, &finished);
+            if (r < 0) {
+              goto fail;
+            }
+          }
+          if (middle_decompress_id) {
+            r = async_msgr->compressor->get_decompress_data(middle_decompress_id, middle, true, &finished);
+            if (r < 0) {
+              goto fail;
+            }
+          }
+          if (data_decompress_id) {
+            r = async_msgr->compressor->get_decompress_data(data_decompress_id, data, true, &finished);
+            if (r < 0) {
+              goto fail;
+            }
+          }
+          Message *message = decode_message(async_msgr->cct, current_header, footer, front, middle, data);
           if (!message) {
             ldout(async_msgr->cct, 1) << __func__ << " decode message failed " << dendl;
             goto fail;
@@ -865,7 +925,6 @@ void AsyncConnection::process()
           //
           //  Check the signature if one should be present.  A zero return indicates success. PLR
           //
-
           if (session_security.get() == NULL) {
             ldout(async_msgr->cct, 10) << __func__ << " no session security set" << dendl;
           } else {
@@ -875,6 +934,7 @@ void AsyncConnection::process()
               goto fail;
             }
           }
+
           message->set_byte_throttler(policy.throttler_bytes);
           message->set_message_throttler(policy.throttler_messages);
 
@@ -2031,6 +2091,8 @@ int AsyncConnection::send_message(Message *m)
    return 0;
   }
 
+  if (async_msgr->cct->_conf->ms_compress)
+    m->try_compress(async_msgr->cct, async_msgr->compressor, CEPH_MSG_HEADER_FLAGS_COMPRESS_DATA);
   // we don't want to consider local message here, it's too lightweight which
   // may disturb users
   logger->inc(l_msgr_send_messages);
@@ -2292,8 +2354,12 @@ void AsyncConnection::prepare_send_message(uint64_t features, Message *m, buffer
     ldout(async_msgr->cct, 20) << __func__ << " half-reencoding features "
                                << features << " " << m << " " << *m << dendl;
 
+  int r = m->ready_compress(async_msgr->cct, async_msgr->compressor);
+  assert(r >= 0);
+
   // encode and copy out of *m
-  m->encode(features, msgr->crcflags);
+  m->encode(features);
+  m->calc_crc(async_msgr->crcflags);
 
   bl.append(m->get_payload());
   bl.append(m->get_middle());
@@ -2366,14 +2432,17 @@ int AsyncConnection::write_message(Message *m, bufferlist& bl)
   if (has_feature(CEPH_FEATURE_MSG_AUTH)) {
     complete_bl.append((char*)&footer, sizeof(footer));
   } else {
-    if (msgr->crcflags & MSG_CRC_HEADER) {
+    if ((footer.flags & CEPH_MSG_FOOTER_NOHEADERCRC) == 0) {
       old_footer.front_crc = footer.front_crc;
       old_footer.middle_crc = footer.middle_crc;
-      old_footer.data_crc = footer.data_crc;
     } else {
-       old_footer.front_crc = old_footer.middle_crc = 0;
+      old_footer.front_crc = old_footer.middle_crc = 0;
     }
-    old_footer.data_crc = msgr->crcflags & MSG_CRC_DATA ? footer.data_crc : 0;
+    if ((footer.flags & CEPH_MSG_FOOTER_NODATACRC) == 0)
+      old_footer.data_crc = footer.data_crc;
+    else
+      old_footer.data_crc = 0;
+
     old_footer.flags = footer.flags;
     complete_bl.append((char*)&old_footer, sizeof(old_footer));
   }

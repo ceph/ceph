@@ -21,6 +21,7 @@
 #include "common/Mutex.h"
 #include "common/Cond.h"
 #include "common/ceph_argparse.h"
+#include "compressor/AsyncCompressor.h"
 #include "global/global_init.h"
 #include "msg/Dispatcher.h"
 #include "msg/msg_types.h"
@@ -292,6 +293,45 @@ TEST_P(MessengerTest, NameAddrTest) {
   MPing *m = new MPing();
   ConnectionRef conn = client_msgr->get_connection(server_msgr->get_myinst());
   {
+    ASSERT_EQ(conn->send_message(m), 0);
+    Mutex::Locker l(cli_dispatcher.lock);
+    while (!cli_dispatcher.got_new)
+      cli_dispatcher.cond.Wait(cli_dispatcher.lock);
+    cli_dispatcher.got_new = false;
+  }
+  ASSERT_TRUE(static_cast<Session*>(conn->get_priv())->get_count() == 1);
+  ASSERT_TRUE(conn->get_peer_addr() == server_msgr->get_myaddr());
+  ConnectionRef server_conn = server_msgr->get_connection(client_msgr->get_myinst());
+  // Make should server_conn is the one we already accepted from client,
+  // so it means client_msgr has the same addr when server connection has
+  ASSERT_TRUE(static_cast<Session*>(conn->get_priv())->get_count() == 1);
+  server_msgr->shutdown();
+  client_msgr->shutdown();
+  server_msgr->wait();
+  client_msgr->wait();
+}
+
+TEST_P(MessengerTest, CompressionTest) {
+  FakeDispatcher cli_dispatcher(false), srv_dispatcher(true);
+  entity_addr_t bind_addr;
+  bind_addr.parse("127.0.0.1");
+  server_msgr->bind(bind_addr);
+  server_msgr->add_dispatcher_head(&srv_dispatcher);
+  server_msgr->start();
+
+  client_msgr->add_dispatcher_head(&cli_dispatcher);
+  client_msgr->start();
+
+  MPing *m = new MPing();
+  ConnectionRef conn = client_msgr->get_connection(server_msgr->get_myinst());
+  {
+    bufferlist bl;
+    string s("abcdefghijklmnopqrstuvwxyz");
+    for (int i = 0; i < 1024*30; i++)
+      bl.append(s);
+    m->set_data(bl);
+    m->try_compress(g_ceph_context, client_msgr->compressor, CEPH_MSG_HEADER_FLAGS_COMPRESS_ALL);
+
     ASSERT_EQ(conn->send_message(m), 0);
     Mutex::Locker l(cli_dispatcher.lock);
     while (!cli_dispatcher.got_new)
