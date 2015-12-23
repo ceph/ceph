@@ -1,8 +1,8 @@
 libos_types_a_SOURCES = \
-	os/Transaction.cc \
 	os/bluestore/bluestore_types.cc \
 	os/bluestore/bluefs_types.cc \
-	os/kstore/kstore_types.cc
+	os/kstore/kstore_types.cc \
+	os/Transaction.cc
 libos_types_a_CXXFLAGS = ${AM_CXXFLAGS}
 noinst_LIBRARIES += libos_types.a
 
@@ -41,8 +41,8 @@ endif
 
 if WITH_LIBXFS
 libos_a_SOURCES += \
-    os/fs/XFS.cc \
-    os/filestore/XfsFileStoreBackend.cc
+    os/filestore/XfsFileStoreBackend.cc \
+    os/fs/XFS.cc
 endif
 
 if WITH_LIBZFS
