@@ -366,6 +366,10 @@ int get_image_options(const boost::program_options::variables_map &vm,
     }
     features |= RBD_FEATURE_STRIPINGV2;
   } else {
+    if (features_specified && ((features & RBD_FEATURE_STRIPINGV2) != 0)) {
+      std::cerr << "must specify both of stripe-unit and stripe-count when specify striping features" << std::endl;
+      return -EINVAL;
+    }
     features &= ~RBD_FEATURE_STRIPINGV2;
   }
 
