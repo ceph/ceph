@@ -30,6 +30,7 @@ public:
   ~StupidAllocator();
 
   int reserve(uint64_t need);
+  void unreserve(uint64_t unused);
 
   int allocate(
     uint64_t need_size, uint64_t alloc_unit, int64_t hint,
