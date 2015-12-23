@@ -53,6 +53,7 @@ const static struct rgw_http_errors RGW_HTTP_ERRORS[] = {
     { ERR_USER_EXIST, 409, "UserAlreadyExists" },
     { ERR_EMAIL_EXIST, 409, "EmailExists" },
     { ERR_KEY_EXIST, 409, "KeyExists"},
+    { ERR_INVALID_SECRET_KEY, 400, "InvalidSecretKey"},
     { ENOTEMPTY, 409, "BucketNotEmpty" },
     { ERR_PRECONDITION_FAILED, 412, "PreconditionFailed" },
     { ERANGE, 416, "InvalidRange" },
