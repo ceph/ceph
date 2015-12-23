@@ -30,7 +30,11 @@ function rebuild()
   clear_all
   echo Starting test $testno
   ((testno++))
-  rbd create $gen --size 100 --object-size $1 --stripe-unit $2 --stripe-count $3 --image-format $4
+  if [[ "$2" -lt "$1" ]] && [[ "$3" -gt "1" ]]; then
+    rbd create $gen --size 100 --object-size $1 --stripe-unit $2 --stripe-count $3 --image-format $4
+  else
+    rbd create $gen --size 100 --object-size $1 --image-format $4
+  fi
   rbd create $out --size 1 --object-size 524288
   mkdir -p mnt diffs
   # lttng has atexit handlers that need to be fork/clone aware
