@@ -1077,8 +1077,10 @@ int BlueFS::_allocate(unsigned id, uint64_t len, vector<bluefs_extent_t> *ev)
     e.bdev = id;
     int r = alloc[id]->allocate(left, g_conf->bluefs_alloc_size, hint,
 				&e.offset, &e.length);
-    if (r < 0)
+    if (r < 0) {
+      assert(0 == "allocate failed... wtf");
       return r;
+    }
     if (!ev->empty() && ev->back().end() == e.offset)
       ev->back().length += e.length;
     else
