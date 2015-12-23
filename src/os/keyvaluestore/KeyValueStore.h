@@ -28,7 +28,7 @@ using namespace std;
 
 #include "include/assert.h"
 
-#include "ObjectStore.h"
+#include "os/ObjectStore.h"
 
 #include "common/WorkQueue.h"
 #include "common/Finisher.h"
@@ -321,7 +321,7 @@ class KeyValueStore : public ObjectStore,
    public:
     Sequencer *parent;
     Mutex apply_lock;  // for apply mutual exclusion
-    
+
     /// get_max_uncompleted
     bool _get_max_uncompleted(
       uint64_t *seq ///< [out] max uncompleted seq

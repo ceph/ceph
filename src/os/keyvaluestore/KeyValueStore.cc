@@ -577,7 +577,7 @@ KeyValueStore::~KeyValueStore()
   g_ceph_context->get_perfcounters_collection()->remove(perf_logger);
 
   delete perf_logger;
-  
+
   if (m_keyvaluestore_do_dump) {
     dump_stop();
   }
@@ -908,7 +908,7 @@ int KeyValueStore::mount()
       goto close_fsid_fd;
     }
   }
-  
+
   superblock.backend = g_conf->keyvaluestore_backend;
   ret = read_superblock();
   if (ret < 0) {
@@ -1130,7 +1130,7 @@ void KeyValueStore::op_queue_reserve_throttle(Op *o, ThreadPool::TPHandle *handl
   if (throttle_ops.should_wait(1) ||
     (throttle_bytes.get_current()      // let single large ops through!
     && throttle_bytes.should_wait(o->bytes))) {
-    dout(2) << "waiting " << throttle_ops.get_current() + 1 << " > " << max_ops << " ops || " 
+    dout(2) << "waiting " << throttle_ops.get_current() + 1 << " > " << max_ops << " ops || "
       << throttle_bytes.get_current() + o->bytes << " > " << max_bytes << dendl;
   }
   throttle_ops.get();
@@ -1911,7 +1911,7 @@ int KeyValueStore::_generic_write(StripObjectMap::StripObjectHeaderRef header,
 
   int r = t.get_buffer_keys(header, OBJECT_STRIP_PREFIX, keys, &out);
   r = check_get_rc(header->cid, header->oid, r, keys.size() == out.size());
-  if (r < 0) 
+  if (r < 0)
     return r;
 
   uint64_t bl_offset = 0;
@@ -2018,7 +2018,7 @@ int KeyValueStore::_zero(coll_t cid, const ghobject_t& oid, uint64_t offset,
         lookup_keys.insert(key);
         off_len[key] = make_pair(iter->offset, iter->len);
       }
-    }    
+    }
   }
   r = t.get_buffer_keys(header, OBJECT_STRIP_PREFIX,
                         lookup_keys, &values);
