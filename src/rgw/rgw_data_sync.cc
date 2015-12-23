@@ -975,6 +975,7 @@ public:
             ldout(store->ctx(), 20) << __func__ << ":" << __LINE__ << ": shard_id=" << shard_id << " log_entry: " << log_iter->log_id << ":" << log_iter->log_timestamp << ":" << log_iter->entry.key << dendl;
             if (!marker_tracker->index_key_to_marker(log_iter->entry.key, log_iter->log_id)) {
               ldout(store->ctx(), 20) << __func__ << ": skipping sync of entry: " << log_iter->log_id << ":" << log_iter->entry.key << " sync already in progress for bucket shard" << dendl;
+              marker_tracker->try_update_high_marker(log_iter->log_id, 0, log_iter->log_timestamp);
               continue;
             }
             if (!marker_tracker->start(log_iter->log_id, 0, log_iter->log_timestamp)) {
@@ -2126,6 +2127,11 @@ class RGWBucketShardIncrementalSyncCR : public RGWCoroutine {
   RGWContinuousLeaseCR *lease_cr;
   string status_oid;
 
+  string name;
+  string instance;
+  string ns;
+
+
 
 public:
   RGWBucketShardIncrementalSyncCR(RGWHTTPManager *_mgr, RGWAsyncRadosProcessor *_async_rados,
@@ -2195,10 +2201,25 @@ int RGWBucketShardIncrementalSyncCR::operate()
       }
       entries_iter = list_result.begin();
       for (; entries_iter != list_result.end(); ++entries_iter) {
-        key = rgw_obj_key(entries_iter->object, entries_iter->instance);
         entry = &(*entries_iter);
-        set_status() << "got entry.id=" << entry->id << " key=" << key << " op=" << (int)entry->op;
         inc_marker.position = entry->id;
+
+        if (!rgw_obj::parse_raw_oid(entries_iter->object, &name, &instance, &ns)) {
+          set_status() << "parse_raw_oid() on " << entries_iter->object << " returned false, skipping entry";
+          ldout(store->ctx(), 20) << "parse_raw_oid() on " << entries_iter->object << " returned false, skipping entry" << dendl;
+          continue;
+        }
+
+        ldout(store->ctx(), 20) << "parsed entry: iter->object=" << entries_iter->object << " iter->instance=" << entries_iter->instance << " name=" << name << " instance=" << instance << " ns=" << ns << dendl;
+
+        if (!ns.empty()) {
+          set_status() << "skipping entry in namespace: " << entries_iter->object;
+          ldout(store->ctx(), 20) << "skipping entry in namespace: " << entries_iter->object << dendl;
+          continue;
+        }
+
+        key = rgw_obj_key(name, entries_iter->instance);
+        set_status() << "got entry.id=" << entry->id << " key=" << key << " op=" << (int)entry->op;
         if (entry->op == CLS_RGW_OP_CANCEL) {
           set_status() << "canceled operation, skipping";
           ldout(store->ctx(), 20) << "[inc sync] skipping object: " << bucket_name << ":" << bucket_id << ":" << shard_id << "/" << key << ": canceled operation" << dendl;
@@ -2223,6 +2244,7 @@ int RGWBucketShardIncrementalSyncCR::operate()
         if (!marker_tracker->index_key_to_marker(key, entry->op, entry->id)) {
           set_status() << "can't do op, sync already in progress for object";
           ldout(store->ctx(), 20) << __func__ << ": skipping sync of entry: " << entry->id << ":" << key << " sync already in progress for object" << dendl;
+          marker_tracker->try_update_high_marker(entry->id, 0, entries_iter->timestamp);
           continue;
         }
         // yield {

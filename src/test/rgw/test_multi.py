@@ -584,13 +584,14 @@ def test_object_sync():
     for z in zone_bucket:
         all_zones.append(z)
 
-    objname = 'myobj'
+    objnames = [ 'myobj', '_myobj', ':', '&' ]
     content = 'asdasd'
 
     # don't wait for meta sync just yet
     for zone, bucket_name in zone_bucket.iteritems():
-        k = new_key(zone, bucket_name, objname)
-        k.set_contents_from_string(content)
+        for objname in objnames:
+            k = new_key(zone, bucket_name, objname)
+            k.set_contents_from_string(content)
 
     realm.meta_checkpoint()
 
