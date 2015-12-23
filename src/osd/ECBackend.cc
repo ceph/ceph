@@ -88,7 +88,7 @@ ostream &operator<<(ostream &lhs, const ECBackend::read_result_t &rhs)
   } else {
     lhs << ", noattrs";
   }
-  return lhs << ", returned=" << rhs.returned;
+  return lhs << ", returned=" << rhs.returned << ")";
 }
 
 ostream &operator<<(ostream &lhs, const ECBackend::ReadOp &rhs)
@@ -150,7 +150,8 @@ ostream &operator<<(ostream &lhs, const ECBackend::RecoveryOp &rhs)
 	     << " obc refcount=" << rhs.obc.use_count()
 	     << " state=" << ECBackend::RecoveryOp::tostr(rhs.state)
 	     << " waiting_on_pushes=" << rhs.waiting_on_pushes
-	     << " extent_requested=" << rhs.extent_requested;
+	     << " extent_requested=" << rhs.extent_requested
+	     << ")";
 }
 
 void ECBackend::RecoveryOp::dump(Formatter *f) const
