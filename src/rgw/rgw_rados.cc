@@ -5648,6 +5648,9 @@ int RGWRados::Object::Write::write_meta(uint64_t size,
       acl_bl = bl;
     }
   }
+  if (attrs.find(RGW_ATTR_PG_VER) == attrs.end()) {
+    cls_rgw_obj_store_pg_ver(op, RGW_ATTR_PG_VER);
+  }
 
   if (!op.size())
     return 0;
@@ -6404,6 +6407,7 @@ int RGWRados::copy_obj(RGWObjectCtx& obj_ctx,
 
   set_copy_attrs(src_attrs, attrs, attrs_mod);
   attrs.erase(RGW_ATTR_ID_TAG);
+  attrs.erase(RGW_ATTR_PG_VER);
 
   RGWObjManifest manifest;
   RGWObjState *astate = NULL;
