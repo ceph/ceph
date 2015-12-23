@@ -882,7 +882,7 @@ int RGWAccessKeyPool::generate_key(RGWUserAdminOpState& op_state, std::string *e
 
   if (op_state.has_existing_key()) {
     set_err_msg(err_msg, "cannot create existing key");
-    return -EEXIST;
+    return -ERR_KEY_EXIST;
   }
 
   if (!gen_access) {
@@ -894,13 +894,13 @@ int RGWAccessKeyPool::generate_key(RGWUserAdminOpState& op_state, std::string *e
     case KEY_TYPE_SWIFT:
       if (rgw_get_user_info_by_swift(store, id, duplicate_check) >= 0) {
         set_err_msg(err_msg, "existing swift key in RGW system:" + id);
-        return -EEXIST;
+        return -ERR_KEY_EXIST;
       }
       break;
     case KEY_TYPE_S3:
       if (rgw_get_user_info_by_access_key(store, id, duplicate_check) >= 0) {
         set_err_msg(err_msg, "existing S3 key in RGW system:" + id);
-        return -EEXIST;
+        return -ERR_KEY_EXIST;
       }
     }
   }
@@ -964,7 +964,7 @@ int RGWAccessKeyPool::generate_key(RGWUserAdminOpState& op_state, std::string *e
     // check that the access key doesn't exist
     if (rgw_get_user_info_by_swift(store, id, duplicate_check) >= 0) {
       set_err_msg(err_msg, "cannot create existing swift key");
-      return -EEXIST;
+      return -ERR_KEY_EXIST;
     }
   }
 
@@ -1839,7 +1839,7 @@ int RGWUser::execute_add(RGWUserAdminOpState& op_state, std::string *err_msg)
       ret = -ERR_EMAIL_EXIST;
     } else if (op_state.found_by_key) {
       set_err_msg(err_msg, "duplicate key provided");
-      ret = -EEXIST;
+      ret = -ERR_KEY_EXIST;
     } else {
       set_err_msg(err_msg, "user: " + op_state.user_id.to_str() + " exists");
       ret = -EEXIST;
