@@ -5,6 +5,10 @@
  */
 
 
+#ifndef _TEST_SERVER_H
+#define _TEST_SERVER_H
+
+
 #include <mutex>
 #include <thread>
 
@@ -34,3 +38,6 @@ protected:
 
   void run(double time, std::function<void()> done);
 };
+
+
+#endif // _TEST_SERVER_H

@@ -4,6 +4,11 @@
  * Copyright (C) 2015 Red Hat Inc.
  */
 
+
+#ifndef _TEST_CLIENT_H
+#define _TEST_CLIENT_H
+
+
 #include <mutex>
 #include <condition_variable>
 #include <thread>
@@ -45,3 +50,6 @@ protected:
 
   void run();
 };
+
+
+#endif // _TEST_CLIENT_H

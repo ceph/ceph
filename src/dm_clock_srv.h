@@ -5,6 +5,10 @@
  */
 
 
+#ifndef _DM_CLOCK_SRV_H
+#define _DM_CLOCK_SRV_H
+
+
 #include <sys/time.h>
 #include <assert.h>
 
@@ -416,3 +420,6 @@ namespace crimson {
 
   } // namespace dmclock
 } // namespace crimson
+
+
+#endif // _DM_CLOCK_SRV_H

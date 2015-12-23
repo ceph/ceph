@@ -5,6 +5,9 @@
  */
 
 
+#ifndef _TEST_REQUEST_H
+#define _TEST_REQUEST_H
+
 
 struct TestRequest {
   int client;
@@ -23,3 +26,6 @@ struct TestRequest {
     // empty
   }
 }; // struct TestRequest
+
+
+#endif // _TEST_REQUEST_H
