@@ -127,17 +127,17 @@ This makes the object ``hello.txt`` to be publicly readable, and
 
 .. code-block:: csharp
 
-	SetACLRequest request = new SetACLRequest();
+	PutACLRequest request = new PutACLRequest();
 	request.BucketName = "my-new-bucket";
 	request.Key        = "hello.txt";
 	request.CannedACL  = S3CannedACL.PublicRead;
-	client.SetACL(request);
+	client.PutACL(request);
 
-	SetACLRequest request2 = new SetACLRequest();
+	PutACLRequest request2 = new PutACLRequest();
 	request2.BucketName = "my-new-bucket";
 	request2.Key        = "secret_plans.txt";
 	request2.CannedACL  = S3CannedACL.Private;
-	client.SetACL(request2);
+	client.PutACL(request2);
 
 
 Download an Object (to a file)
