@@ -10,6 +10,7 @@
 
 
 using namespace std::placeholders;
+namespace dmc = crimson::dmclock;
 
 
 typedef std::unique_lock<std::mutex> Lock;
@@ -66,24 +67,10 @@ void TestServer::run() {
 }
 
 
-#if 0
-void TestServer::post(double delay, std::function<void()> done) {
-  Guard g(mtx);
-  ++active_threads;
-  std::thread t(&TestServer::run, this, delay, done);
-  t.detach();
-}
-#endif
-
-
 void TestServer::post(const TestRequest& request,
 		      std::function<void()> done) {
-#if 0
-  Guard g(mtx);
-  ++active_threads;
-  std::thread t(&TestServer::run, this, delay, done);
-  t.detach();
-#endif
+  auto now = dmc::getTime();
+  priority_queue.addRequest(request, request.client, now);
 }
 
 

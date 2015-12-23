@@ -28,4 +28,18 @@ struct TestRequest {
 }; // struct TestRequest
 
 
+struct TestResponse {
+  int      server;
+  uint32_t epoch;
+
+  TestResponse(int _server,
+	       uint32_t _epoch) :
+    server(_server),
+    epoch(_epoch)
+  {
+    // empty
+  }
+};
+
+
 #endif // _TEST_REQUEST_H

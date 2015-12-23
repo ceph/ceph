@@ -267,7 +267,6 @@ namespace crimson {
 		      const C& client_id,
 		      const Time& time) {
 	addRequest(RequestRef(new R(request)), client_id, time);
-	// addRequest(std::unique_ptr<R>(new R(request)), client_id, time);
       }
 
 
