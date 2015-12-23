@@ -18,7 +18,7 @@
 #include "common/Formatter.h"
 #include "common/safe_io.h"
 
-#include "FileStore.h"
+#include "filestore/FileStore.h"
 #include "MemStore.h"
 #include "KeyValueStore.h"
 #if defined(HAVE_LIBAIO)

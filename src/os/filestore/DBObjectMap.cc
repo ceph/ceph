@@ -10,7 +10,7 @@
 #include "include/memory.h"
 #include <vector>
 
-#include "ObjectMap.h"
+#include "os/ObjectMap.h"
 #include "kv/KeyValueDB.h"
 #include "DBObjectMap.h"
 #include <errno.h>

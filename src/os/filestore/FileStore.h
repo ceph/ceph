@@ -28,7 +28,7 @@ using namespace std;
 
 #include "include/assert.h"
 
-#include "ObjectStore.h"
+#include "os/ObjectStore.h"
 #include "JournalingObjectStore.h"
 
 #include "common/Timer.h"
@@ -37,7 +37,7 @@ using namespace std;
 #include "common/Mutex.h"
 #include "HashIndex.h"
 #include "IndexManager.h"
-#include "ObjectMap.h"
+#include "os/ObjectMap.h"
 #include "SequencerPosition.h"
 #include "FDCache.h"
 #include "WBThrottle.h"
