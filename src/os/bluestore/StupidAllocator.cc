@@ -158,7 +158,7 @@ int StupidAllocator::allocate(
   }
 
   num_free -= *length;
-  num_reserved -= need_size;
+  num_reserved -= *length;
   assert(num_free >= 0);
   assert(num_reserved >= 0);
   last_alloc = *offset + *length;
