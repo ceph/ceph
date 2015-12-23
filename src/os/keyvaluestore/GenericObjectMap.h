@@ -25,7 +25,7 @@
 #include <boost/scoped_ptr.hpp>
 
 #include "include/memory.h"
-#include "ObjectMap.h"
+#include "os/ObjectMap.h"
 #include "kv/KeyValueDB.h"
 #include "osd/osd_types.h"
 #include "common/Mutex.h"
