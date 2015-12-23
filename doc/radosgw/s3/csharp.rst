@@ -112,7 +112,7 @@ This creates a file ``hello.txt`` with the string ``"Hello World!"``
 .. code-block:: csharp
 
 	PutObjectRequest request = new PutObjectRequest();
-	request.Bucket      = "my-new-bucket";
+	request.BucketName  = "my-new-bucket";
 	request.Key         = "hello.txt";
 	request.ContentType = "text/plain";
 	request.ContentBody = "Hello World!";
