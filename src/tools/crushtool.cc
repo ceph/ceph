@@ -146,6 +146,8 @@ void usage()
   cout << "                         set chooseleaf to (not) retry the recursive descent\n";
   cout << "   --set-chooseleaf-vary-r <0|1>\n";
   cout << "                         set chooseleaf to (not) vary r based on parent\n";
+  cout << "   --set-chooseleaf-stable <0|1>\n";
+  cout << "                         set chooseleaf firstn to (not) return stable results\n";
   cout << "\n";
   cout << "Options for the modifications stage\n";
   cout << "\n";
@@ -255,6 +257,7 @@ int main(int argc, const char **argv)
   int choose_total_tries = -1;
   int chooseleaf_descend_once = -1;
   int chooseleaf_vary_r = -1;
+  int chooseleaf_stable = -1;
   int straw_calc_version = -1;
   int allowed_bucket_algs = -1;
 
@@ -337,6 +340,9 @@ int main(int argc, const char **argv)
       adjust = true;
     } else if (ceph_argparse_witharg(args, i, &chooseleaf_vary_r, err,
 				     "--set_chooseleaf_vary_r", (char*)NULL)) {
+      adjust = true;
+    } else if (ceph_argparse_witharg(args, i, &chooseleaf_stable, err,
+				     "--set_chooseleaf_stable", (char*)NULL)) {
       adjust = true;
     } else if (ceph_argparse_witharg(args, i, &straw_calc_version, err,
 				     "--set_straw_calc_version", (char*)NULL)) {
@@ -736,6 +742,10 @@ int main(int argc, const char **argv)
   }
   if (chooseleaf_vary_r >= 0) {
     crush.set_chooseleaf_vary_r(chooseleaf_vary_r);
+    modified = true;
+  }
+  if (chooseleaf_stable >= 0) {
+    crush.set_chooseleaf_stable(chooseleaf_stable);
     modified = true;
   }
   if (straw_calc_version >= 0) {
