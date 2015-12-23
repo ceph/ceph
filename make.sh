@@ -23,12 +23,12 @@ fi
     
 obj=""
 for s in $source ; do
-    echo "Compiling ${s}."
+    echo "Compiling ${s}"
     g++ $cflags -I /usr/local/include -c -o obj/`obj $s` src/$s || fail
     obj="$obj obj/`obj $s`"
 done
 
-echo "Linking ${obj}."
+echo "linking ${obj}"
 g++ $lflags -o test $obj || fail
 
 echo "Succeeded!"
