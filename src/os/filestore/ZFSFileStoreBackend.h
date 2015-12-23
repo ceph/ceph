@@ -6,7 +6,7 @@
 
 #ifdef HAVE_LIBZFS
 #include "GenericFileStoreBackend.h"
-#include "ZFS.h"
+#include "os/fs/ZFS.h"
 
 class ZFSFileStoreBackend : public GenericFileStoreBackend {
 private:
