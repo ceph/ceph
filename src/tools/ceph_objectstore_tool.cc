@@ -25,7 +25,6 @@
 #include "global/global_init.h"
 
 #include "os/ObjectStore.h"
-#include "os/FileStore.h"
 #include "os/FileJournal.h"
 
 #include "osd/PGLog.h"
