@@ -8,6 +8,8 @@
 #include <mutex>
 #include <thread>
 
+#include "test_request.h"
+
 
 class TestServer {
 
@@ -24,6 +26,7 @@ public:
   virtual ~TestServer();
 
   void post(double delay, std::function<void()> done);
+  void post(const TestRequest& request, std::function<void()> done);
 
   bool hasAvailThread();
 

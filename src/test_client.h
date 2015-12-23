@@ -4,13 +4,17 @@
  * Copyright (C) 2015 Red Hat Inc.
  */
 
-
 #include <mutex>
 #include <thread>
+
+#include "test_server.h"
 
 
 class TestClient {
 
+  int id;
+  TestServer& server;
+  int ops_to_run;
   int iops_goal; // per second
   int outstanding_ops_allowed;
   int outstanding_ops;
@@ -24,7 +28,11 @@ class TestClient {
     
 public:
 
-  TestClient(int _iops_goal, int _outstanding_ops_allowed);
+  TestClient(int _id,
+	     TestServer& _server,
+	     int _ops_to_run,
+	     int _iops_goal,
+	     int _outstanding_ops_allowed);
 
   virtual ~TestClient();
 

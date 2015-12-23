@@ -38,6 +38,17 @@ void TestServer::post(double delay, std::function<void()> done) {
 }
 
 
+void TestServer::post(const TestRequest& request,
+		      std::function<void()> done) {
+#if 0
+  Guard g(mtx);
+  ++active_threads;
+  std::thread t(&TestServer::run, this, delay, done);
+  t.detach();
+#endif
+}
+
+
 bool TestServer::hasAvailThread() {
   Guard g(mtx);
   return active_threads <= thread_pool_size;
