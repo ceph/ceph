@@ -1521,7 +1521,7 @@ int RGWUserCapPool::init(RGWUserAdminOpState& op_state)
   caps = op_state.get_caps_obj();
   if (!caps) {
     caps_allowed = false;
-    return -EINVAL;
+    return -ERR_INVALID_CAP;
   }
 
   caps_allowed = true;
@@ -1551,7 +1551,7 @@ int RGWUserCapPool::add(RGWUserAdminOpState& op_state, std::string *err_msg, boo
 
   if (caps_str.empty()) {
     set_err_msg(err_msg, "empty user caps");
-    return -EINVAL;
+    return -ERR_INVALID_CAP;
   }
 
   int r = caps->add_from_string(caps_str);
@@ -1592,7 +1592,7 @@ int RGWUserCapPool::remove(RGWUserAdminOpState& op_state, std::string *err_msg, 
 
   if (caps_str.empty()) {
     set_err_msg(err_msg, "empty user caps");
-    return -EINVAL;
+    return -ERR_INVALID_CAP;
   }
 
   int r = caps->remove_from_string(caps_str);
