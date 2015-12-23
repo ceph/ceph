@@ -221,6 +221,13 @@ public:
     return true;
   }
 
+  void try_update_high_marker(const T& pos, int index_pos, const utime_t& timestamp) {
+    if (!(pos <= high_marker)) {
+      high_marker = pos;
+      high_entry = marker_entry(index_pos, timestamp);
+    }
+  }
+
   RGWCoroutine *finish(const T& pos) {
     if (pending.empty()) {
       /* can happen, due to a bug that ended up with multiple objects with the same name and version
