@@ -25,14 +25,18 @@ class TestServer {
   typedef typename std::lock_guard<std::mutex> Guard;
 
   PriorityQueue<int,TestRequest> queue;
-  int                            active_threads;
+  int                            iops;
   int                            thread_pool_size;
+
+  int                            active_threads;
   std::mutex                     mtx;
+  bool                           finishing;
 
 public:
 
   // TestServer(int _thread_pool_size);
-  TestServer(int _thread_pool_size,
+  TestServer(int iops,
+	     int _thread_pool_size,
 	     const std::function<ClientInfo(int)>& _clientInfoF);
 
   virtual ~TestServer();

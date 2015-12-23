@@ -12,13 +12,16 @@
 using namespace std::placeholders;
 
 
-TestServer::TestServer(int _thread_pool_size,
+TestServer::TestServer(int _iops,
+		       int _thread_pool_size,
 		       const std::function<ClientInfo(int)>& _clientInfoF) :
-  active_threads(0),
-  thread_pool_size(_thread_pool_size),
   queue(_clientInfoF,
 	std::bind(&TestServer::hasAvailThread, this),
-	std::bind(&TestServer::innerPost, this, _1, _2))
+	std::bind(&TestServer::innerPost, this, _1, _2)),
+  iops(_iops),
+  thread_pool_size(_thread_pool_size),
+  active_threads(0),
+  finishing(false)
 {
   // empty
 }

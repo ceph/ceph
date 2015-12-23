@@ -15,6 +15,8 @@
 
 using namespace std::placeholders;
 
+namespace dmc = crimson::dmclock;
+
 
 TestServer* testServer;
 
@@ -45,19 +47,12 @@ dmc::ClientInfo getClientInfo(int c) {
     std::cout << "getClientInfo called" << std::endl;
   }
 
-  if (c < COUNT(client_info)) {
-    return info[c];
-  } else {
-    return info[0]; // first item is default item
-  }
+  assert(c < COUNT(client_info));
+  return client_info[c];
 }
 
 
 #if 0
-bool canHandleReq() {
-  return testServer->hasAvailThread();
-}
-
 
 void handleReq(std::unique_ptr<TestRequest>&& request_ref,
 	       std::function<void()> callback) {
@@ -78,29 +73,26 @@ void handleReq(std::unique_ptr<TestRequest>&& request_ref,
 
 
 int main(int argc, char* argv[]) {
-  auto client_info_f = std::function<dmc::ClientInfo(int)>(getClientInfo);
-#if 0
-  auto f2 = std::function<bool()>(canHandleReq);
-  auto f3 = std::function<void(std::unique_ptr<TestRequest>&&,
-			       std::function<void()>)>(handleReq);
-#endif
-
   assert(COUNT(client_info) == COUNT(client_goals));
+  const int client_count = COUNT(client_info);
 
-  TestServer server(300, 7);
+  auto client_info_f = std::function<dmc::ClientInfo(int)>(getClientInfo);
 
-  TestClient** clients = new TestClient*[clientCount()];
-  for (int i = 0; i < COUNT(client_info); ++i) {
+  TestServer server(300, 7, client_info_f);
+
+  TestClient** clients = new TestClient*[client_count];
+  for (int i = 0; i < client_count; ++i) {
     clients[i] = new TestClient(i,
-				std::bind(&TestServer::post, &testServer, _1, _2),
+				std::bind(&TestServer::post, &server, _1, _2),
 				client_goals[i] * 60,
+				client_goals[i],
 				4);
-				
   }
 
-  
+  // clients are running here
 
-  for (int i = 0; i < COUNT(client_info); ++i) {
+  // wait for all clients to finish
+  for (int i = 0; i < client_count; ++i) {
     clients[i]->waitForDone();
     delete clients[i];
   }
