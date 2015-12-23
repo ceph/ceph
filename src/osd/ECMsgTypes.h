@@ -102,10 +102,12 @@ struct ECSubRead {
   ceph_tid_t tid;
   map<hobject_t, list<boost::tuple<uint64_t, uint64_t, uint32_t> >, hobject_t::BitwiseComparator> to_read;
   set<hobject_t, hobject_t::BitwiseComparator> attrs_to_read;
+  bool fd_load;
   void encode(bufferlist &bl, uint64_t features) const;
   void decode(bufferlist::iterator &bl);
   void dump(Formatter *f) const;
   static void generate_test_instances(list<ECSubRead*>& o);
+  ECSubRead() : fd_load(false) {}
 };
 WRITE_CLASS_ENCODER_FEATURES(ECSubRead)
 

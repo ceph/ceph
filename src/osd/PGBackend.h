@@ -555,6 +555,9 @@
 		pair<bufferlist*, Context*> > > &to_read,
      Context *on_complete, bool fast_read = false) = 0;
 
+   virtual void warmup_object_fd(
+     const hobject_t &hoid, OpRequestRef op, bool fast_read) {}
+
    virtual bool scrub_supported() { return false; }
    virtual bool auto_repair_supported() const { return false; }
    void be_scan_list(
