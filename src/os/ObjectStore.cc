@@ -19,7 +19,7 @@
 #include "common/safe_io.h"
 
 #include "filestore/FileStore.h"
-#include "MemStore.h"
+#include "memstore/MemStore.h"
 #include "KeyValueStore.h"
 #if defined(HAVE_LIBAIO)
 #include "bluestore/BlueStore.h"

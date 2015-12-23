@@ -166,7 +166,7 @@ int MemStore::_load()
 
   dump_all();
 
-  return 0;  
+  return 0;
 }
 
 void MemStore::set_fsid(uuid_d u)
@@ -333,7 +333,7 @@ int MemStore::fiemap(coll_t cid, const ghobject_t& oid,
   map<uint64_t, uint64_t> m;
   m[offset] = l;
   ::encode(m, bl);
-  return 0;  
+  return 0;
 }
 
 int MemStore::getattr(coll_t cid, const ghobject_t& oid,
@@ -623,7 +623,7 @@ void MemStore::_do_transaction(Transaction& t)
 	r = _touch(cid, oid);
       }
       break;
-      
+
     case Transaction::OP_WRITE:
       {
         coll_t cid = i.get_cid(op->cid);
@@ -636,7 +636,7 @@ void MemStore::_do_transaction(Transaction& t)
 	r = _write(cid, oid, off, len, bl, fadvise_flags);
       }
       break;
-      
+
     case Transaction::OP_ZERO:
       {
         coll_t cid = i.get_cid(op->cid);
@@ -646,13 +646,13 @@ void MemStore::_do_transaction(Transaction& t)
 	r = _zero(cid, oid, off, len);
       }
       break;
-      
+
     case Transaction::OP_TRIMCACHE:
       {
         // deprecated, no-op
       }
       break;
-      
+
     case Transaction::OP_TRUNCATE:
       {
         coll_t cid = i.get_cid(op->cid);
@@ -661,7 +661,7 @@ void MemStore::_do_transaction(Transaction& t)
 	r = _truncate(cid, oid, off);
       }
       break;
-      
+
     case Transaction::OP_REMOVE:
       {
         coll_t cid = i.get_cid(op->cid);
@@ -669,7 +669,7 @@ void MemStore::_do_transaction(Transaction& t)
 	r = _remove(cid, oid);
       }
       break;
-      
+
     case Transaction::OP_SETATTR:
       {
         coll_t cid = i.get_cid(op->cid);
@@ -682,7 +682,7 @@ void MemStore::_do_transaction(Transaction& t)
 	r = _setattrs(cid, oid, to_set);
       }
       break;
-      
+
     case Transaction::OP_SETATTRS:
       {
         coll_t cid = i.get_cid(op->cid);
@@ -709,7 +709,7 @@ void MemStore::_do_transaction(Transaction& t)
 	r = _rmattrs(cid, oid);
       }
       break;
-      
+
     case Transaction::OP_CLONE:
       {
         coll_t cid = i.get_cid(op->cid);
