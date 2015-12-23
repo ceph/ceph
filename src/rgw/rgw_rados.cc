@@ -1582,18 +1582,22 @@ int RGWZoneParams::set_as_default()
 }
 
 void RGWPeriodMap::encode(bufferlist& bl) const {
-  ENCODE_START(1, 1, bl);
+  ENCODE_START(2, 1, bl);
   ::encode(id, bl);
   ::encode(zonegroups, bl);
   ::encode(master_zonegroup, bl);
+  ::encode(short_zone_ids, bl);
   ENCODE_FINISH(bl);
 }
 
 void RGWPeriodMap::decode(bufferlist::iterator& bl) {
-  DECODE_START(1, bl);
+  DECODE_START(2, bl);
   ::decode(id, bl);
   ::decode(zonegroups, bl);
   ::decode(master_zonegroup, bl);
+  if (struct_v >= 2) {
+    ::decode(short_zone_ids, bl);
+  }
   DECODE_FINISH(bl);
 
   zonegroups_by_api.clear();
@@ -1633,7 +1637,33 @@ int RGWPeriodMap::update(const RGWZoneGroup& zonegroup)
     master_zonegroup = "";
   }
 
+  for (auto iter : zonegroups) {
+    for (auto i : iter.second.zones) {
+      string& zone_id = i.second.id;
+      if (short_zone_ids.find(zone_id) == short_zone_ids.end()) {
+        uint32_t short_id;
+
+        unsigned char md5[CEPH_CRYPTO_MD5_DIGESTSIZE];
+        MD5 hash;
+        hash.Update((const byte *)zone_id.c_str(), zone_id.size());
+        hash.Final(md5);
+        memcpy((char *)&short_id, md5, sizeof(short_id));
+
+        short_zone_ids[i.second.id] = short_id;
+      }
+    }
+  }
+
   return 0;
+}
+
+uint32_t RGWPeriodMap::get_zone_short_id(const string& zone_id) const
+{
+  auto i = short_zone_ids.find(zone_id);
+  if (i == short_zone_ids.end()) {
+    return 0;
+  }
+  return i->second;
 }
 
 int RGWZoneGroupMap::read(CephContext *cct, RGWRados *store)
@@ -3538,6 +3568,8 @@ int RGWRados::init_complete()
     lderr(cct) << "Cannot find zone id=" << zone_params.get_id() << " (name=" << zone_params.get_name() << ")" << dendl;
     return -EINVAL;
   }
+
+  zone_short_id = current_period.get_map().get_zone_short_id(zone_params.get_id());
 
   init_unique_trans_id_deps();
 

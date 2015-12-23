@@ -841,6 +841,7 @@ void RGWPeriodMap::dump(Formatter *f) const
 {
   encode_json("id", id, f);
   encode_json_map("zonegroups", zonegroups, f);
+  encode_json("short_zone_ids", short_zone_ids, f);
 }
 
 static void decode_zonegroups(map<string, RGWZoneGroup>& zonegroups, JSONObj *o)
@@ -862,6 +863,7 @@ void RGWPeriodMap::decode_json(JSONObj *obj)
   if (master_zonegroup.empty()) {
     JSONDecoder::decode_json("master_region", master_zonegroup, obj);
   }
+  JSONDecoder::decode_json("short_zone_ids", short_zone_ids, obj);
 }
 
 

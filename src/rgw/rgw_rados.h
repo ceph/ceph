@@ -1144,6 +1144,7 @@ struct RGWPeriodMap
   string id;
   map<string, RGWZoneGroup> zonegroups;
   map<string, RGWZoneGroup> zonegroups_by_api;
+  map<string, uint32_t> short_zone_ids;
 
   string master_zonegroup;
 
@@ -1159,6 +1160,8 @@ struct RGWPeriodMap
     zonegroups.clear();
     zonegroups_by_api.clear();
   }
+
+  uint32_t get_zone_short_id(const string& zone_id) const;
 };
 WRITE_CLASS_ENCODER(RGWPeriodMap)
 
@@ -1760,6 +1763,7 @@ protected:
   RGWZoneGroup zonegroup;
   RGWZone zone_public_config; /* external zone params, e.g., entrypoints, log flags, etc. */  
   RGWZoneParams zone_params; /* internal zone params, e.g., rados pools */
+  uint32_t zone_short_id;
 
   RGWPeriod current_period;
 public:
@@ -1779,6 +1783,7 @@ public:
                quota_handler(NULL),
                finisher(NULL),
                cr_registry(NULL),
+               zone_short_id(0),
                rest_master_conn(NULL),
                meta_mgr(NULL), data_log(NULL) {}
 
@@ -1841,6 +1846,10 @@ public:
   }
   RGWZone& get_zone() {
     return zone_public_config;
+  }
+
+  uint32_t get_zone_short_id() const {
+    return zone_short_id;
   }
 
   const RGWQuotaInfo& get_bucket_quota() {
