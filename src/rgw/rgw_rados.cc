@@ -1649,6 +1649,10 @@ int RGWPeriodMap::update(const RGWZoneGroup& zonegroup)
         hash.Final(md5);
         memcpy((char *)&short_id, md5, sizeof(short_id));
 
+        if (short_id == 0) {
+          ++short_id;
+        }
+
         short_zone_ids[i.second.id] = short_id;
       }
     }
@@ -5684,6 +5688,12 @@ int RGWRados::Object::Write::write_meta(uint64_t size,
     cls_rgw_obj_store_pg_ver(op, RGW_ATTR_PG_VER);
   }
 
+  if (attrs.find(RGW_ATTR_SOURCE_ZONE) == attrs.end()) {
+    bufferlist bl;
+    ::encode(store->get_zone_short_id(), bl);
+    op.setxattr(RGW_ATTR_SOURCE_ZONE, bl);
+  }
+
   if (!op.size())
     return 0;
 
@@ -6440,6 +6450,7 @@ int RGWRados::copy_obj(RGWObjectCtx& obj_ctx,
   set_copy_attrs(src_attrs, attrs, attrs_mod);
   attrs.erase(RGW_ATTR_ID_TAG);
   attrs.erase(RGW_ATTR_PG_VER);
+  attrs.erase(RGW_ATTR_SOURCE_ZONE);
 
   RGWObjManifest manifest;
   RGWObjState *astate = NULL;

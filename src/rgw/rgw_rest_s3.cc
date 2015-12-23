@@ -78,6 +78,28 @@ int RGWGetObj_ObjStore_S3::send_response_data_error()
   return send_response_data(bl, 0 , 0);
 }
 
+template <class T>
+int decode_attr_bl_single_value(map<string, bufferlist>& attrs, const char *attr_name, T *result, T def_val)
+{
+  map<string, bufferlist>::iterator iter = attrs.find(attr_name);
+  if (iter == attrs.end()) {
+    *result = def_val;
+    return 0;
+  }
+  bufferlist& bl = iter->second;
+  if (bl.length() == 0) {
+    *result = def_val;
+    return 0;
+  }
+  bufferlist::iterator bliter = bl.begin();
+  try {
+    ::decode(*result, bliter);
+  } catch (buffer::error& err) {
+    return -EIO;
+  }
+  return 0;
+}
+
 int RGWGetObj_ObjStore_S3::send_response_data(bufferlist& bl, off_t bl_ofs, off_t bl_len)
 {
   const char *content_type = NULL;
@@ -114,18 +136,21 @@ int RGWGetObj_ObjStore_S3::send_response_data(bufferlist& bl, off_t bl_ofs, off_
   if (s->system_request && lastmod) {
     /* we end up dumping mtime in two different methods, a bit redundant */
     dump_epoch_header(s, "Rgwx-Mtime", lastmod);
-    uint64_t pg_ver = 0;
-    map<string, bufferlist>::iterator iter = attrs.find(RGW_ATTR_PG_VER);
-    bufferlist& bl = iter->second;
-    if (bl.length() > 0) {
-      bufferlist::iterator bliter = bl.begin();
-      try {
-        ::decode(pg_ver, bliter);
-      } catch (buffer::error& err) {
-        ldout(s->cct, 0) << "ERROR: failed to decode pg ver attr" << dendl;
-      }
+    uint64_t pg_ver;
+    int r = decode_attr_bl_single_value(attrs, RGW_ATTR_PG_VER, &pg_ver, (uint64_t)0);
+    if (r < 0) {
+      ldout(s->cct, 0) << "ERROR: failed to decode pg ver attr, ignoring" << dendl;
     }
     s->cio->print("Rgwx-Obj-PG-Ver: %lld\r\n", (long long)pg_ver);
+
+    uint32_t source_zone_short_id;
+    r = decode_attr_bl_single_value(attrs, RGW_ATTR_SOURCE_ZONE, &source_zone_short_id, (uint32_t)0);
+    if (r < 0) {
+      ldout(s->cct, 0) << "ERROR: failed to decode pg ver attr, ignoring" << dendl;
+    }
+    if (source_zone_short_id != 0) {
+      s->cio->print("Rgwx-Source-Zone-Short-Id: %lld\r\n", (long long)source_zone_short_id);
+    }
   }
 
   dump_content_length(s, total_len);
