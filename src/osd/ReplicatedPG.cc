@@ -1360,7 +1360,7 @@ void ReplicatedPG::do_request(
 	     << " flushes_in_progress pending "
 	     << "waiting for active on " << op << dendl;
     waiting_for_peered.push_back(op);
-    op->mark_delayed("waiting for peered");
+    op->mark_delayed("waiting for peered : flushes_in_progress > 0");
     return;
   }
 
