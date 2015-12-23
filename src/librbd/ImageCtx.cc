@@ -208,6 +208,11 @@ void _flush_async_operations(ImageCtx *ictx, Context *on_finish) {
     }
     delete[] format_string;
 
+    md_ctx.aio_flush();
+    data_ctx.aio_flush();
+    op_work_queue->drain();
+    aio_work_queue->drain();
+
     delete op_work_queue;
     delete aio_work_queue;
   }

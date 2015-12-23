@@ -47,6 +47,9 @@ struct MockImageCtx {
   }
 
   ~MockImageCtx() {
+    image_ctx->md_ctx.aio_flush();
+    image_ctx->data_ctx.aio_flush();
+    image_ctx->op_work_queue->drain();
     delete image_watcher;
     delete op_work_queue;
     delete aio_work_queue;
