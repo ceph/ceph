@@ -30,7 +30,6 @@
 #include "BlueFS.h"
 #include "BlueRocksEnv.h"
 
-
 #define dout_subsys ceph_subsys_bluestore
 
 /*
@@ -2749,12 +2748,13 @@ int BlueStore::collection_list(
 
 // omap reads
 
-BlueStore::OmapIteratorImpl::OmapIteratorImpl(CollectionRef c, OnodeRef o, KeyValueDB::Iterator it)
+BlueStore::OmapIteratorImpl::OmapIteratorImpl(
+  CollectionRef c, OnodeRef o, KeyValueDB::Iterator it)
   : c(c), o(o), it(it)
 {
   RWLock::RLocker l(c->lock);
   if (o->onode.omap_head) {
-    get_omap_header(o->onode.omap_head, &head);
+    get_omap_key(o->onode.omap_head, string(), &head);
     get_omap_tail(o->onode.omap_head, &tail);
     it->lower_bound(head);
   }
@@ -2943,15 +2943,10 @@ int BlueStore::omap_get_keys(
   {
     KeyValueDB::Iterator it = db->get_iterator(PREFIX_OMAP);
     string head, tail;
-    get_omap_header(o->onode.omap_head, &head);
+    get_omap_key(o->onode.omap_head, string(), &head);
     get_omap_tail(o->onode.omap_head, &tail);
     it->lower_bound(head);
     while (it->valid()) {
-      if (it->key() == head) {
-	dout(30) << __func__ << "  skipping head" << dendl;
-	it->next();
-	continue;
-      }
       if (it->key() >= tail) {
 	dout(30) << __func__ << "  reached tail" << dendl;
 	break;
