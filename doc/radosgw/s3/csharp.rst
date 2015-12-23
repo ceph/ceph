@@ -21,7 +21,7 @@ This creates a connection so that you can interact with the server.
 	AmazonS3Config config = new AmazonS3Config();
 	config.ServiceURL = "objects.dreamhost.com";
 
-	AmazonS3 client = Amazon.AWSClientFactory.CreateAmazonS3Client(
+	AmazonS3Client s3Client = new AmazonS3Client(
 		accessKey,
 		secretKey,
 		config
