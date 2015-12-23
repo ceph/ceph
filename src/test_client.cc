@@ -10,12 +10,12 @@
 
 
 TestClient::TestClient(int _id,
-		       TestServer& _server,
+		       const SubmitFunc& _submit_f,
 		       int _ops_to_run,
 		       int _iops_goal,
 		       int _outstanding_ops_allowed) :
   id(_id),
-  server(_server),
+  submit_f(_submit_f),
   ops_to_run(_ops_to_run),
   iops_goal(_iops_goal),
   outstanding_ops_allowed(_outstanding_ops_allowed)
@@ -30,15 +30,16 @@ TestClient::~TestClient() {
   }
 }
 
+
 void TestClient::run() {
   auto request_complete =
     std::bind(&TestClient::submitResponse, this);
   std::chrono::microseconds delay((int) (0.5 + 1000000.0 / iops_goal));
   auto now = std::chrono::high_resolution_clock::now();
 
+  std::unique_lock<std::mutex> lock(mtx);
   for (int i = 0; i < ops_to_run; ++i) {
     auto when = now + delay;
-    std::unique_lock<std::mutex> lock(mtx);
     while ((now = std::chrono::high_resolution_clock::now()) < when) {
       cv.wait_until(lock, when);
     }
@@ -46,8 +47,15 @@ void TestClient::run() {
       cv.wait(lock);
     }
     TestRequest req(id, i, 12);
-    server.post(req, request_complete);
+    submit_f(req, request_complete);
+    ++outstanding_ops;
   }
+
+  while (outstanding_ops > 0) {
+    cv.wait(lock);
+  }
+
+  // all requests have been serviced
 }
 
 void TestClient::submitResponse() {

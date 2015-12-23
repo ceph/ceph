@@ -13,13 +13,15 @@
 #include <condition_variable>
 #include <thread>
 
-#include "test_server.h"
-
 
 class TestClient {
+  typedef std::function<void(const TestRequest&,
+			     std::function<void()>)> SubmitFunc;
+
+  typedef std::lock_guard<std::mutex> Guard;
 
   int id;
-  TestServer& server;
+  SubmitFunc submit_f;
   int ops_to_run;
   int iops_goal; // per second
   int outstanding_ops_allowed;
@@ -28,14 +30,11 @@ class TestClient {
   std::mutex mtx;
   std::condition_variable cv;
   std::thread thread;
-
-  typedef std::lock_guard<std::mutex> Guard;
-  
     
 public:
 
   TestClient(int _id,
-	     TestServer& _server,
+	     const SubmitFunc& _submit_f,
 	     int _ops_to_run,
 	     int _iops_goal,
 	     int _outstanding_ops_allowed);
