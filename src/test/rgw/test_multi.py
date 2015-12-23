@@ -603,8 +603,46 @@ def test_object_sync():
             realm.zone_data_checkpoint(target_zone, source_zone)
 
             check_bucket_eq(source_zone, target_zone, bucket_name)
-            
 
+def test_object_delete():
+    buckets, zone_bucket = create_bucket_per_zone()
+
+    all_zones = []
+    for z in zone_bucket:
+        all_zones.append(z)
+
+    objname = 'myobj'
+    content = 'asdasd'
+
+    # don't wait for meta sync just yet
+    for zone, bucket_name in zone_bucket.iteritems():
+        k = new_key(zone, bucket_name, objname)
+        k.set_contents_from_string(content)
+
+    realm.meta_checkpoint()
+
+    # check object exists
+    for source_zone, bucket_name in zone_bucket.iteritems():
+        for target_zone in all_zones:
+            if source_zone.zone_name == target_zone.zone_name:
+                continue
+
+            realm.zone_data_checkpoint(target_zone, source_zone)
+
+            check_bucket_eq(source_zone, target_zone, bucket_name)
+
+    # check object removal
+    for source_zone, bucket_name in zone_bucket.iteritems():
+        k = get_key(source_zone, bucket_name, objname)
+        k.delete()
+        for target_zone in all_zones:
+            if source_zone.zone_name == target_zone.zone_name:
+                continue
+
+            realm.zone_data_checkpoint(target_zone, source_zone)
+
+            check_bucket_eq(source_zone, target_zone, bucket_name)
+        
 def init(parse_args):
     cfg = ConfigParser.RawConfigParser({
                                          'num_zones': 2,
