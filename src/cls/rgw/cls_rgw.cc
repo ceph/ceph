@@ -36,6 +36,7 @@ cls_method_handle_t h_rgw_bucket_read_olh_log;
 cls_method_handle_t h_rgw_bucket_trim_olh_log;
 cls_method_handle_t h_rgw_bucket_clear_olh;
 cls_method_handle_t h_rgw_obj_remove;
+cls_method_handle_t h_rgw_obj_store_pg_ver;
 cls_method_handle_t h_rgw_obj_check_attrs_prefix;
 cls_method_handle_t h_rgw_obj_check_mtime;
 cls_method_handle_t h_rgw_bi_get_op;
@@ -1987,6 +1988,30 @@ static int rgw_obj_remove(cls_method_context_t hctx, bufferlist *in, bufferlist 
   return 0;
 }
 
+static int rgw_obj_store_pg_ver(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
+{
+  // decode request
+  rgw_cls_obj_store_pg_ver_op op;
+  bufferlist::iterator iter = in->begin();
+  try {
+    ::decode(op, iter);
+  } catch (buffer::error& err) {
+    CLS_LOG(0, "ERROR: %s(): failed to decode request", __func__);
+    return -EINVAL;
+  }
+
+  bufferlist bl;
+  uint64_t ver = cls_current_version(hctx);
+  ::encode(ver, bl);
+  int ret = cls_cxx_setxattr(hctx, op.attr.c_str(), &bl);
+  if (ret < 0) {
+    CLS_LOG(0, "ERROR: %s(): cls_cxx_setxattr (attr=%s) returned %d", __func__, op.attr.c_str(), ret);
+    return ret;
+  }
+
+  return 0;
+}
+
 static int rgw_obj_check_attrs_prefix(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 {
   // decode request
@@ -3133,6 +3158,7 @@ void __cls_init()
   cls_register_cxx_method(h_class, "bucket_clear_olh", CLS_METHOD_RD | CLS_METHOD_WR, rgw_bucket_clear_olh, &h_rgw_bucket_clear_olh);
 
   cls_register_cxx_method(h_class, "obj_remove", CLS_METHOD_RD | CLS_METHOD_WR, rgw_obj_remove, &h_rgw_obj_remove);
+  cls_register_cxx_method(h_class, "obj_store_pg_ver", CLS_METHOD_WR, rgw_obj_store_pg_ver, &h_rgw_obj_store_pg_ver);
   cls_register_cxx_method(h_class, "obj_check_attrs_prefix", CLS_METHOD_RD, rgw_obj_check_attrs_prefix, &h_rgw_obj_check_attrs_prefix);
   cls_register_cxx_method(h_class, "obj_check_mtime", CLS_METHOD_RD, rgw_obj_check_mtime, &h_rgw_obj_check_mtime);
 

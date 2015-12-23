@@ -208,6 +208,15 @@ void cls_rgw_remove_obj(librados::ObjectWriteOperation& o, list<string>& keep_at
   o.exec("rgw", "obj_remove", in);
 }
 
+void cls_rgw_obj_store_pg_ver(librados::ObjectWriteOperation& o, const string& attr)
+{
+  bufferlist in;
+  struct rgw_cls_obj_store_pg_ver_op call;
+  call.attr = attr;
+  ::encode(call, in);
+  o.exec("rgw", "obj_store_pg_ver", in);
+}
+
 void cls_rgw_obj_check_attrs_prefix(librados::ObjectOperation& o, const string& prefix, bool fail_if_exist)
 {
   bufferlist in;
