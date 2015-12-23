@@ -19,7 +19,6 @@
 #include <sys/mount.h>
 #include "os/ObjectStore.h"
 #include "os/filestore/FileStore.h"
-#include "os/KeyValueStore.h"
 #include "include/Context.h"
 #include "common/ceph_argparse.h"
 #include "global/global_init.h"

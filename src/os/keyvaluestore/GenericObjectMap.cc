@@ -71,7 +71,7 @@ static void append_escaped(const string &in, string *out)
 
 static bool append_unescaped(string::const_iterator begin,
                              string::const_iterator end,
-                             string *out) 
+                             string *out)
 {
   for (string::const_iterator i = begin; i != end; ++i) {
     if (*i == '%') {
@@ -460,7 +460,7 @@ int GenericObjectMap::GenericObjectMapIteratorImpl::in_complete_region(
 }
 
 /**
- * Moves parent_iter to the next position both out of the complete_region and 
+ * Moves parent_iter to the next position both out of the complete_region and
  * not equal to key_iter.  Then, we set cur_iter to parent_iter if valid and
  * less than key_iter and key_iter otherwise.
  */
