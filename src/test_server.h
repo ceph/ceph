@@ -12,11 +12,16 @@
 #include <mutex>
 #include <thread>
 
+#include "dm_clock_srv.h"
 #include "test_request.h"
+
+
+using crimson::dmclock::PriorityQueue;
 
 
 class TestServer {
 
+  PriorityQueue<int,TestRequest> queue;
   int        active_threads;
   int        thread_pool_size;
   std::mutex mtx;
