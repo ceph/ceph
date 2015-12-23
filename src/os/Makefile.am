@@ -9,7 +9,6 @@ noinst_LIBRARIES += libos_types.a
 if ENABLE_SERVER
 
 libos_a_SOURCES = \
-	os/chain_xattr.cc \
 	os/fs/FS.cc \
 	os/bluestore/kv.cc \
 	os/bluestore/Allocator.cc \
@@ -19,34 +18,35 @@ libos_a_SOURCES = \
 	os/bluestore/BlueStore.cc \
 	os/bluestore/FreelistManager.cc \
 	os/bluestore/StupidAllocator.cc \
+	os/filestore/chain_xattr.cc \
+	os/filestore/DBObjectMap.cc \
+	os/filestore/FileJournal.cc \
+	os/filestore/FileStore.cc \
+	os/filestore/GenericFileStoreBackend.cc \
+	os/filestore/HashIndex.cc \
+	os/filestore/IndexManager.cc \
+	os/filestore/JournalingObjectStore.cc \
+	os/filestore/LFNIndex.cc \
+	os/filestore/WBThrottle.cc \
 	os/kstore/kv.cc \
 	os/kstore/KStore.cc \
-	os/DBObjectMap.cc \
 	os/GenericObjectMap.cc \
-	os/FileJournal.cc \
-	os/FileStore.cc \
-	os/GenericFileStoreBackend.cc \
-	os/HashIndex.cc \
-	os/IndexManager.cc \
-	os/JournalingObjectStore.cc \
-	os/LFNIndex.cc \
 	os/MemStore.cc \
 	os/KeyValueStore.cc \
-	os/ObjectStore.cc \
-	os/WBThrottle.cc
+	os/ObjectStore.cc
 
 if LINUX
-libos_a_SOURCES += os/BtrfsFileStoreBackend.cc
+libos_a_SOURCES += os/filestore/BtrfsFileStoreBackend.cc
 endif
 
 if WITH_LIBXFS
 libos_a_SOURCES += \
     os/fs/XFS.cc \
-    os/XfsFileStoreBackend.cc
+    os/filestore/XfsFileStoreBackend.cc
 endif
 
 if WITH_LIBZFS
-libos_a_SOURCES += os/ZFSFileStoreBackend.cc
+libos_a_SOURCES += os/filestore/ZFSFileStoreBackend.cc
 endif
 
 libos_a_CXXFLAGS = ${AM_CXXFLAGS} -I rocksdb/include -fPIC
@@ -58,8 +58,6 @@ libos_a_LIBADD += $(LIBOS_TP)
 endif
 
 noinst_HEADERS += \
-	os/btrfs_ioctl.h \
-	os/chain_xattr.h \
 	os/bluestore/bluefs_types.h \
 	os/bluestore/bluestore_types.h \
 	os/bluestore/kv.h \
@@ -70,33 +68,35 @@ noinst_HEADERS += \
 	os/bluestore/BlueStore.h \
 	os/bluestore/FreelistManager.h \
 	os/bluestore/StupidAllocator.h \
+	os/btrfs_ioctl.h \
+	os/filestore/chain_xattr.h \
+	os/filestore/BtrfsFileStoreBackend.h \
+	os/filestore/CollectionIndex.h \
+	os/filestore/DBObjectMap.h \
+	os/filestore/FileJournal.h \
+	os/filestore/FileStore.h \
+	os/filestore/FDCache.h \
+	os/filestore/GenericFileStoreBackend.h \
+	os/filestore/HashIndex.h \
+	os/filestore/IndexManager.h \
+	os/filestore/Journal.h \
+	os/filestore/JournalingObjectStore.h \
+	os/filestore/LFNIndex.h \
+	os/filestore/SequencerPosition.h \
+	os/filestore/WBThrottle.h \
+	os/filestore/XfsFileStoreBackend.h \
+	os/filestore/ZFSFileStoreBackend.h
 	os/kstore/kstore_types.h \
 	os/kstore/KStore.h \
 	os/kstore/kv.h \
-	os/BtrfsFileStoreBackend.h \
-	os/CollectionIndex.h \
-	os/DBObjectMap.h \
 	os/GenericObjectMap.h \
-	os/FileJournal.h \
-	os/FileStore.h \
-	os/FDCache.h \
 	os/fs/FS.h \
 	os/fs/XFS.h \
-	os/GenericFileStoreBackend.h \
-	os/HashIndex.h \
-	os/IndexManager.h \
-	os/Journal.h \
-	os/JournalingObjectStore.h \
-	os/LFNIndex.h \
 	os/MemStore.h \
 	os/KeyValueStore.h \
 	os/ObjectMap.h \
 	os/ObjectStore.h \
-	os/PageSet.h \
-	os/SequencerPosition.h \
-	os/WBThrottle.h \
-	os/XfsFileStoreBackend.h \
-	os/ZFSFileStoreBackend.h
+	os/PageSet.h
 
 if WITH_LIBZFS
 libos_zfs_a_SOURCES = os/ZFS.cc

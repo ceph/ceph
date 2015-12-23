@@ -3,7 +3,7 @@
 
 #include "acconfig.h"
 
-#include "os/WBThrottle.h"
+#include "os/filestore/WBThrottle.h"
 #include "common/perf_counters.h"
 
 WBThrottle::WBThrottle(CephContext *cct) :
@@ -141,7 +141,7 @@ bool WBThrottle::get_next_should_flush(
     return false;
   assert(!pending_wbs.empty());
   ghobject_t obj(pop_object());
-  
+
   ceph::unordered_map<ghobject_t, pair<PendingWB, FDRef> >::iterator i =
     pending_wbs.find(obj);
   *next = boost::make_tuple(obj, i->second.second, i->second.first);

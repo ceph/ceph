@@ -7,8 +7,8 @@
 #include "include/buffer.h"
 #include "test/ObjectMap/KeyValueDBMemory.h"
 #include "kv/KeyValueDB.h"
-#include "os/DBObjectMap.h"
-#include "os/HashIndex.h"
+#include "os/filestore/DBObjectMap.h"
+#include "os/filestore/HashIndex.h"
 #include <sys/types.h>
 #include "global/global_init.h"
 #include "common/ceph_argparse.h"

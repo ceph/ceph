@@ -1,4 +1,4 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 /*
  * Ceph - scalable distributed file system
@@ -7,9 +7,9 @@
  *
  * This is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public
- * License version 2.1, as published by the Free Software 
+ * License version 2.1, as published by the Free Software
  * Foundation.  See file COPYING.
- * 
+ *
  */
 
 #include <string>
@@ -44,8 +44,8 @@ const string LFNIndex::LFN_ATTR = "user.cephos.lfn";
 const string LFNIndex::PHASH_ATTR_PREFIX = "user.cephos.phash.";
 const string LFNIndex::SUBDIR_PREFIX = "DIR_";
 const string LFNIndex::FILENAME_COOKIE = "long";
-const int LFNIndex::FILENAME_PREFIX_LEN =  FILENAME_SHORT_LEN - FILENAME_HASH_LEN - 
-								FILENAME_COOKIE.size() - 
+const int LFNIndex::FILENAME_PREFIX_LEN =  FILENAME_SHORT_LEN - FILENAME_HASH_LEN -
+								FILENAME_COOKIE.size() -
 								FILENAME_EXTRA;
 void LFNIndex::maybe_inject_failure()
 {
@@ -220,8 +220,8 @@ int LFNIndex::remove_objects(const vector<string> &dir,
 	 i != holes.end();
 	 ++i) {
       if (candidate == chain.rend() || *i > candidate->first) {
-	string remove_path_name = 
-	  get_full_path(dir, lfn_get_short_name(to_clean->second, *i)); 
+	string remove_path_name =
+	  get_full_path(dir, lfn_get_short_name(to_clean->second, *i));
 	maybe_inject_failure();
 	int r = ::unlink(remove_path_name.c_str());
 	maybe_inject_failure();
@@ -360,7 +360,7 @@ int LFNIndex::move_object(
 }
 
 
-static int get_hobject_from_oinfo(const char *dir, const char *file, 
+static int get_hobject_from_oinfo(const char *dir, const char *file,
 				  ghobject_t *o)
 {
   char path[PATH_MAX];
@@ -420,7 +420,7 @@ int LFNIndex::list_objects(const vector<string> &to_list, int max_objs,
 	}
 	if (index_version == HASH_INDEX_TAG)
 	  get_hobject_from_oinfo(to_list_path.c_str(), short_name.c_str(), &obj);
-	  
+
 	out->insert(pair<string, ghobject_t>(short_name, obj));
 	++listed;
       } else {
@@ -505,7 +505,7 @@ int LFNIndex::path_exists(const vector<string> &to_check, int *exists)
 }
 
 int LFNIndex::add_attr_path(const vector<string> &path,
-			    const string &attr_name, 
+			    const string &attr_name,
 			    bufferlist &attr_value)
 {
   string full_path = get_full_path_subdir(path);
@@ -516,7 +516,7 @@ int LFNIndex::add_attr_path(const vector<string> &path,
 }
 
 int LFNIndex::get_attr_path(const vector<string> &path,
-			    const string &attr_name, 
+			    const string &attr_name,
 			    bufferlist &attr_value)
 {
   string full_path = get_full_path_subdir(path);
@@ -550,7 +550,7 @@ int LFNIndex::remove_attr_path(const vector<string> &path,
   maybe_inject_failure();
   return chain_removexattr(full_path.c_str(), mangled_attr_name.c_str());
 }
-  
+
 string LFNIndex::lfn_generate_object_name_keyless(const ghobject_t &oid)
 {
   char s[FILENAME_MAX_LEN];
@@ -568,7 +568,7 @@ string LFNIndex::lfn_generate_object_name_keyless(const ghobject_t &oid)
   while (*i && t < end) {
     if (*i == '\\') {
       *t++ = '\\';
-      *t++ = '\\';      
+      *t++ = '\\';
     } else if (*i == '.' && i == oid.hobj.oid.name.c_str()) {  // only escape leading .
       *t++ = '\\';
       *t++ = '.';
@@ -592,7 +592,7 @@ string LFNIndex::lfn_generate_object_name_keyless(const ghobject_t &oid)
 }
 
 static void append_escaped(string::const_iterator begin,
-			   string::const_iterator end, 
+			   string::const_iterator end,
 			   string *out)
 {
   for (string::const_iterator i = begin; i != end; ++i) {
@@ -709,7 +709,7 @@ string LFNIndex::lfn_generate_object_name_poolless(const ghobject_t &oid)
   return full_name;
 }
 
-int LFNIndex::lfn_get_name(const vector<string> &path, 
+int LFNIndex::lfn_get_name(const vector<string> &path,
 			   const ghobject_t &oid,
 			   string *mangled_name, string *out_path,
 			   int *hardlink)
@@ -863,8 +863,8 @@ int LFNIndex::lfn_unlink(const vector<string> &path,
     return 0;
   }
   string subdir_path = get_full_path_subdir(path);
-  
-  
+
+
   int i = 0;
   for ( ; ; ++i) {
     string candidate = lfn_get_short_name(oid, i);
@@ -993,9 +993,9 @@ static int parse_object(const char *s, ghobject_t& o)
       o.hobj.snap = CEPH_NOSNAP;
     else if (strncmp(bar+1, "snapdir", 7) == 0)
       o.hobj.snap = CEPH_SNAPDIR;
-    else 
+    else
       o.hobj.snap = strtoull(bar+1, NULL, 16);
-      
+
     uint32_t hobject_hash_input;
     sscanf(hash, "_%X", &hobject_hash_input);
     o.hobj.set_hash(hobject_hash_input);
@@ -1019,7 +1019,7 @@ bool LFNIndex::lfn_parse_object_name_keyless(const string &long_name, ghobject_t
 }
 
 static bool append_unescaped(string::const_iterator begin,
-			     string::const_iterator end, 
+			     string::const_iterator end,
 			     string *out)
 {
   for (string::const_iterator i = begin; i != end; ++i) {

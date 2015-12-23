@@ -1,4 +1,4 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 /*
  * Ceph - scalable distributed file system
@@ -7,9 +7,9 @@
  *
  * This is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public
- * License version 2.1, as published by the Free Software 
+ * License version 2.1, as published by the Free Software
  * Foundation.  See file COPYING.
- * 
+ *
  */
 
 #include "include/types.h"
@@ -275,7 +275,7 @@ int HashIndex::col_split_level(
     if (r < 0)
       return r;
   }
-       
+
 
   r = to.set_info(path, to_info);
   if (r < 0)
@@ -635,7 +635,7 @@ bool HashIndex::must_merge(const subdir_info_s &info) {
 bool HashIndex::must_split(const subdir_info_s &info) {
   return (info.hash_level < (unsigned)MAX_HASH_LEVEL &&
 	  info.objs > ((unsigned)(abs(merge_threshold)) * 16 * split_multiplier));
-			    
+
 }
 
 int HashIndex::initiate_merge(const vector<string> &path, subdir_info_s info) {

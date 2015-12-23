@@ -1,4 +1,4 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 /*
  * Ceph - scalable distributed file system
@@ -7,9 +7,9 @@
  *
  * This is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public
- * License version 2.1, as published by the Free Software 
+ * License version 2.1, as published by the Free Software
  * Foundation.  See file COPYING.
- * 
+ *
  */
 
 #ifndef OS_COLLECTIONINDEX_H
@@ -28,7 +28,7 @@
  */
 class CollectionIndex {
 protected:
-  /** 
+  /**
    * Object encapsulating a returned path.
    *
    * A path to an object (existent or non-existent) becomes invalid
@@ -51,7 +51,7 @@ protected:
     /// Normal Constructor
     Path(
       string path,                              ///< [in] Path to return.
-      CollectionIndex* ref)  
+      CollectionIndex* ref)
       : full_path(path), parent_ref(ref), parent_coll(parent_ref->coll()) {}
 
     /// Debugging Constructor
@@ -59,7 +59,7 @@ protected:
       string path,                              ///< [in] Path to return.
       coll_t coll)                              ///< [in] collection
       : full_path(path), parent_coll(coll) {}
-      
+
     /// Getter for the stored path.
     const char *path() const { return full_path.c_str(); }
 
@@ -99,7 +99,7 @@ protected:
   virtual coll_t coll() const = 0;
 
 
-  /** 
+  /**
    * Initializes the index.
    *
    * @return Error Code, 0 for success
@@ -177,7 +177,7 @@ protected:
   virtual int prep_delete() { return 0; }
 
   CollectionIndex(coll_t collection):
-    access_lock_name ("CollectionIndex::access_lock::" + collection.to_str()), 
+    access_lock_name ("CollectionIndex::access_lock::" + collection.to_str()),
     access_lock(access_lock_name.c_str()) {}
 
   /*

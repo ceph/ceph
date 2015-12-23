@@ -288,7 +288,7 @@ int chain_setxattr(const char *fn, const char *name, const void *val, size_t siz
       i++;
     } while (r != -ENODATA);
   }
-  
+
   return ret;
 }
 
@@ -324,7 +324,7 @@ int chain_fsetxattr(int fd, const char *name, const void *val, size_t size, bool
       i++;
     } while (r != -ENODATA);
   }
-  
+
   return ret;
 }
 

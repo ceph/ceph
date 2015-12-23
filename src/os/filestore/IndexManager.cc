@@ -1,4 +1,4 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 /*
  * Ceph - scalable distributed file system
@@ -7,9 +7,9 @@
  *
  * This is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public
- * License version 2.1, as published by the Free Software 
+ * License version 2.1, as published by the Free Software
  * Foundation.  See file COPYING.
- * 
+ *
  */
 
 #include "include/memory.h"
@@ -36,13 +36,13 @@
 static int set_version(const char *path, uint32_t version) {
   bufferlist bl;
   ::encode(version, bl);
-  return chain_setxattr(path, "user.cephos.collection_version", bl.c_str(), 
+  return chain_setxattr(path, "user.cephos.collection_version", bl.c_str(),
 		     bl.length(), true);
 }
 
 static int get_version(const char *path, uint32_t *version) {
   bufferptr bp(PATH_MAX);
-  int r = chain_getxattr(path, "user.cephos.collection_version", 
+  int r = chain_getxattr(path, "user.cephos.collection_version",
 		      bp.c_str(), bp.length());
   if (r < 0) {
     if (r != -ENOENT) {
@@ -62,7 +62,7 @@ static int get_version(const char *path, uint32_t *version) {
 
 IndexManager::~IndexManager() {
 
-  for (ceph::unordered_map<coll_t, CollectionIndex* > ::iterator it = col_indices.begin(); 
+  for (ceph::unordered_map<coll_t, CollectionIndex* > ::iterator it = col_indices.begin();
        it != col_indices.end(); ++it) {
 
     delete it->second;

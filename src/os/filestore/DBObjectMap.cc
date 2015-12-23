@@ -10,7 +10,7 @@
 #include "include/memory.h"
 #include <vector>
 
-#include "ObjectMap.h"
+#include "os/ObjectMap.h"
 #include "kv/KeyValueDB.h"
 #include "DBObjectMap.h"
 #include <errno.h>
@@ -390,7 +390,7 @@ int DBObjectMap::DBObjectMapIteratorImpl::in_complete_region(const string &to_te
 }
 
 /**
- * Moves parent_iter to the next position both out of the complete_region and 
+ * Moves parent_iter to the next position both out of the complete_region and
  * not equal to key_iter.  Then, we set cur_iter to parent_iter if valid and
  * less than key_iter and key_iter otherwise.
  */

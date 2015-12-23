@@ -15,7 +15,7 @@
 #include <iostream>
 #include <sstream>
 #include <boost/scoped_ptr.hpp>
-#include "os/FileStore.h"
+#include "os/filestore/FileStore.h"
 #include "global/global_init.h"
 #include "common/ceph_argparse.h"
 #include "common/debug.h"

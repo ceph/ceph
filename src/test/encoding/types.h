@@ -108,7 +108,7 @@ TYPE(HitSet::Params)
 #include "os/ObjectStore.h"
 TYPE(ObjectStore::Transaction)
 
-#include "os/SequencerPosition.h"
+#include "os/filestore/SequencerPosition.h"
 TYPE(SequencerPosition)
 
 #include "os/bluestore/bluestore_types.h"
@@ -144,7 +144,7 @@ TYPE(MonCap)
 #include "mon/mon_types.h"
 TYPE(LevelDBStoreStats)
 
-#include "os/DBObjectMap.h"
+#include "os/filestore/DBObjectMap.h"
 TYPE(DBObjectMap::_Header)
 TYPE(DBObjectMap::State)
 
