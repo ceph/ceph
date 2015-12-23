@@ -58,7 +58,7 @@ class EventCallback {
   virtual ~EventCallback() {}       // we want a virtual destructor!!!
 };
 
-typedef ceph::shared_ptr<EventCallback> EventCallbackRef;
+typedef EventCallback* EventCallbackRef;
 
 struct FiredFileEvent {
   int fd;
