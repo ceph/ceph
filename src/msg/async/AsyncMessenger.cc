@@ -50,16 +50,6 @@ static ostream& _prefix(std::ostream *_dout, WorkerPool *p) {
 }
 
 
-class C_processor_accept : public EventCallback {
-  Processor *pro;
-
- public:
-  C_processor_accept(Processor *p): pro(p) {}
-  void do_request(int id) {
-    pro->accept();
-  }
-};
-
 
 /*******************
  * Processor
@@ -232,8 +222,7 @@ int Processor::start(Worker *w)
   // start thread
   if (listen_sd >= 0) {
     worker = w;
-    w->center.create_file_event(listen_sd, EVENT_READABLE,
-                                EventCallbackRef(new C_processor_accept(this)));
+    w->center.create_file_event(listen_sd, EVENT_READABLE, listen_handler);
   }
 
   return 0;

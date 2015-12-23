@@ -147,6 +147,7 @@ class C_clean_handler : public EventCallback {
   C_clean_handler(AsyncConnectionRef c): conn(c) {}
   void do_request(int id) {
     conn->cleanup_handler();
+    delete this;
   }
 };
 
@@ -183,13 +184,13 @@ AsyncConnection::AsyncConnection(CephContext *cct, AsyncMessenger *m, EventCente
     recv_start(0), recv_end(0), got_bad_auth(false), authorizer(NULL), replacing(false),
     is_reset_from_peer(false), once_ready(false), state_buffer(NULL), state_offset(0), net(cct), center(c)
 {
-  read_handler.reset(new C_handle_read(this));
-  write_handler.reset(new C_handle_write(this));
-  reset_handler.reset(new C_handle_reset(async_msgr, this));
-  remote_reset_handler.reset(new C_handle_remote_reset(async_msgr, this));
-  connect_handler.reset(new C_deliver_connect(async_msgr, this));
-  local_deliver_handler.reset(new C_local_deliver(this));
-  wakeup_handler.reset(new C_time_wakeup(this));
+  read_handler = new C_handle_read(this);
+  write_handler = new C_handle_write(this);
+  reset_handler = new C_handle_reset(async_msgr, this);
+  remote_reset_handler = new C_handle_remote_reset(async_msgr, this);
+  connect_handler = new C_deliver_connect(async_msgr, this);
+  local_deliver_handler = new C_local_deliver(this);
+  wakeup_handler = new C_time_wakeup(this);
   memset(msgvec, 0, sizeof(msgvec));
   // double recv_max_prefetch see "read_until"
   recv_buf = new char[2*recv_max_prefetch];
