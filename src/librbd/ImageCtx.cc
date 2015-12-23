@@ -212,6 +212,8 @@ struct C_InvalidateCache : public Context {
     }
     delete[] format_string;
 
+    md_ctx.aio_flush();
+    data_ctx.aio_flush();
     op_work_queue->drain();
     aio_work_queue->drain();
 
