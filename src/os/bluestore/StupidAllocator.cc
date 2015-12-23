@@ -27,8 +27,7 @@ StupidAllocator::~StupidAllocator()
 unsigned StupidAllocator::_choose_bin(uint64_t orig_len)
 {
   uint64_t len = orig_len / g_conf->bluestore_min_alloc_size;
-  assert(len);
-  int bin = -1;
+  int bin = 0;
   while (len && bin + 1 < (int)free.size()) {
     len >>= 1;
     bin++;
@@ -69,8 +68,21 @@ void StupidAllocator::unreserve(uint64_t unused)
   Mutex::Locker l(lock);
   dout(10) << __func__ << " unused " << unused << " num_free " << num_free
 	   << " num_reserved " << num_reserved << dendl;
-  assert(unused >= num_reserved);
+  assert((int64_t)unused >= num_reserved);
   num_reserved -= unused;
+}
+
+/// return the effective length of the extent if we align to alloc_unit
+static uint64_t aligned_len(interval_set<uint64_t>::iterator p,
+			    uint64_t alloc_unit)
+{
+  uint64_t skew = p.get_start() % alloc_unit;
+  if (skew)
+    skew = alloc_unit - skew;
+  if (skew > p.get_len())
+    return 0;
+  else
+    return p.get_len() - skew;
 }
 
 int StupidAllocator::allocate(
@@ -95,8 +107,11 @@ int StupidAllocator::allocate(
   if (hint) {
     for (bin = orig_bin; bin < (int)free.size(); ++bin) {
       p = free[bin].lower_bound(hint);
-      if (p != free[bin].end()) {
-	goto found;
+      while (p != free[bin].end()) {
+	if (aligned_len(p, alloc_unit) >= need_size) {
+	  goto found;
+	}
+	++p;
       }
     }
   }
@@ -104,26 +119,35 @@ int StupidAllocator::allocate(
   // search up (from origin)
   for (bin = orig_bin; bin < (int)free.size(); ++bin) {
     p = free[bin].begin();
-    if (p != free[bin].end()) {
-      goto found;
+    while (p != free[bin].end()) {
+      if (aligned_len(p, alloc_unit) >= need_size) {
+	goto found;
+      }
+      ++p;
     }
   }
 
   // search down (hint)
   if (hint) {
-    for (bin = orig_bin-1; bin >= 0; --bin) {
+    for (bin = orig_bin; bin >= 0; --bin) {
       p = free[bin].lower_bound(hint);
-      if (p != free[bin].end()) {
-	goto found;
+      while (p != free[bin].end()) {
+	if (aligned_len(p, alloc_unit) >= alloc_unit) {
+	  goto found;
+	}
+	++p;
       }
     }
   }
 
   // search down (origin)
-  for (bin = orig_bin-1; bin >= 0; --bin) {
+  for (bin = orig_bin; bin >= 0; --bin) {
     p = free[bin].begin();
-    if (p != free[bin].end()) {
-      goto found;
+    while (p != free[bin].end()) {
+      if (aligned_len(p, alloc_unit) >= alloc_unit) {
+	goto found;
+      }
+      ++p;
     }
   }
 
@@ -131,8 +155,11 @@ int StupidAllocator::allocate(
   return -ENOSPC;
 
  found:
-  *offset = p.get_start();
-  *length = MIN(MAX(alloc_unit, need_size), p.get_len());
+  uint64_t skew = p.get_start() % alloc_unit;
+  if (skew)
+    skew = alloc_unit - skew;
+  *offset = p.get_start() + skew;
+  *length = MIN(MAX(alloc_unit, need_size), p.get_len() - skew);
   if (g_conf->bluestore_debug_small_allocations) {
     uint64_t max =
       alloc_unit * (rand() % g_conf->bluestore_debug_small_allocations);
@@ -147,7 +174,7 @@ int StupidAllocator::allocate(
 
   free[bin].erase(*offset, *length);
   uint64_t off, len;
-  if (*offset && free[bin].contains(*offset - 1, &off, &len)) {
+  if (*offset && free[bin].contains(*offset - skew - 1, &off, &len)) {
     int newbin = _choose_bin(len);
     if (newbin != bin) {
       dout(30) << __func__ << " demoting " << off << "~" << len
