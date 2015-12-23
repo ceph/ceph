@@ -65,7 +65,7 @@ bool DataScan::parse_kwarg(
     dout(4) << "Using local file output to '" << val << "'" << dendl;
     driver = new LocalFileDriver(val, data_io);
     return true;
-  } else if (arg == std::string("-n")) {
+  } else if (arg == std::string("--worker_n")) {
     std::string err;
     n = strict_strtoll(val.c_str(), 10, &err);
     if (!err.empty()) {
@@ -74,7 +74,7 @@ bool DataScan::parse_kwarg(
       return false;
     }
     return true;
-  } else if (arg == std::string("-m")) {
+  } else if (arg == std::string("--worker_m")) {
     std::string err;
     m = strict_strtoll(val.c_str(), 10, &err);
     if (!err.empty()) {
@@ -400,39 +400,21 @@ int parse_oid(const std::string &oid, uint64_t *inode_no, uint64_t *obj_id)
   return 0;
 }
 
-// Pending sharded pgls & add in progress mechanism for that
-#undef SHARDEDPGLS
 
 int DataScan::scan_extents()
 {
-#ifdef SHARDED_PGLS
-  float progress = 0.0;
-  librados::NObjectIterator i = data_io.nobjects_begin(n, m);
-#else
-  librados::NObjectIterator i = data_io.nobjects_begin();
-#endif
-
-  librados::NObjectIterator i_end = data_io.nobjects_end();
-  int r = 0;
-
-  for (; i != i_end; ++i) {
-    const std::string oid = i->get_oid();
-#ifdef SHARDED_PGLS
-    if (i.get_progress() != progress) {
-      if (int(i.get_progress() * 100) / 5 != int(progress * 100) / 5) {
-        std::cerr << percentify(i.get_progress()) << "%" << std::endl;
-      }
-      progress = i.get_progress();
-    }
-#endif
-
+  return forall_objects(data_io, false, [this](
+        std::string const &oid,
+        uint64_t obj_name_ino,
+        uint64_t obj_name_offset) -> int
+  {
     // Read size
     uint64_t size;
     time_t mtime;
-    r = data_io.stat(oid, &size, &mtime);
+    int r = data_io.stat(oid, &size, &mtime);
     if (r != 0) {
       dout(4) << "Cannot stat '" << oid << "': skipping" << dendl;
-      continue;
+      return r;
     }
 
     // I need to keep track of
@@ -445,61 +427,132 @@ int DataScan::scan_extents()
     //  and the actual size (offset of last object + size of highest ID seen)
     //
     //  This logic doesn't take account of striping.
-    uint64_t inode_no = 0;
-    uint64_t obj_id = 0;
-    r = parse_oid(oid, &inode_no, &obj_id);
-    if (r != 0) {
-      dout(4) << "Bad object name '" << oid << "' skipping" << dendl;
-      continue;
-    }
-
-    int r = ClsCephFSClient::accumulate_inode_metadata(
+    r = ClsCephFSClient::accumulate_inode_metadata(
         data_io,
-        inode_no,
-        obj_id,
+        obj_name_ino,
+        obj_name_offset,
         size,
         mtime);
     if (r < 0) {
       derr << "Failed to accumulate metadata data from '"
         << oid << "': " << cpp_strerror(r) << dendl;
-      continue;
+      return r;
+    }
+
+    return r;
+  });
+}
+
+int DataScan::probe_filter(librados::IoCtx &ioctx)
+{
+  bufferlist filter_bl;
+  ClsCephFSClient::build_tag_filter("test", &filter_bl);
+  librados::ObjectCursor range_i;
+  librados::ObjectCursor range_end;
+
+  std::vector<librados::ObjectItem> tmp_result;
+  librados::ObjectCursor tmp_next;
+  int r = ioctx.object_list(ioctx.object_list_begin(), ioctx.object_list_end(),
+                            1, filter_bl, &tmp_result, &tmp_next);
+
+  return r >= 0;
+}
+
+int DataScan::forall_objects(
+    librados::IoCtx &ioctx,
+    bool untagged_only,
+    std::function<int(std::string, uint64_t, uint64_t)> handler
+    )
+{
+  librados::ObjectCursor range_i;
+  librados::ObjectCursor range_end;
+  ioctx.object_list_slice(
+      ioctx.object_list_begin(),
+      ioctx.object_list_end(),
+      n,
+      m,
+      &range_i,
+      &range_end);
+
+
+  bufferlist filter_bl;
+
+  bool legacy_filtering = false;
+  if (untagged_only) {
+    // probe to deal with older OSDs that don't support
+    // the cephfs pgls filtering mode
+    legacy_filtering = !probe_filter(ioctx);
+    if (!legacy_filtering) {
+      ClsCephFSClient::build_tag_filter(filter_tag, &filter_bl);
     }
   }
 
-  return 0;
+  int r = 0;
+  while(range_i < range_end) {
+    std::vector<librados::ObjectItem> result;
+    int r = ioctx.object_list(range_i, range_end, 1,
+                                filter_bl, &result, &range_i);
+    if (r < 0) {
+      derr << "Unexpected error listing objects: " << cpp_strerror(r) << dendl;
+      return r;
+    }
+
+    for (const auto &i : result) {
+      const std::string &oid = i.oid;
+      uint64_t obj_name_ino = 0;
+      uint64_t obj_name_offset = 0;
+      r = parse_oid(oid, &obj_name_ino, &obj_name_offset);
+      if (r != 0) {
+        dout(4) << "Bad object name '" << oid << "', skipping" << dendl;
+        continue;
+      }
+
+      if (untagged_only && legacy_filtering) {
+        dout(20) << "Applying filter to " << oid << dendl;
+
+        // We are only interested in 0th objects during this phase: we touched
+        // the other objects during scan_extents
+        if (obj_name_offset != 0) {
+          dout(20) << "Non-zeroth object" << dendl;
+          continue;
+        }
+
+        bufferlist scrub_tag_bl;
+        int r = ioctx.getxattr(oid, "scrub_tag", scrub_tag_bl);
+        if (r >= 0) {
+          std::string read_tag;
+          bufferlist::iterator q = scrub_tag_bl.begin();
+          try {
+            ::decode(read_tag, q);
+            if (read_tag == filter_tag) {
+              dout(20) << "skipping " << oid << " because it has the filter_tag"
+                       << dendl;
+              continue;
+            }
+          } catch (const buffer::error &err) {
+          }
+          dout(20) << "read non-matching tag '" << read_tag << "'" << dendl;
+        } else {
+          dout(20) << "no tag read (" << r << ")" << dendl;
+        }
+
+      } else if (untagged_only) {
+        assert(obj_name_offset == 0);
+        dout(20) << "OSD matched oid " << oid << dendl;
+      }
+
+      int this_oid_r = handler(oid, obj_name_ino, obj_name_offset);
+      if (r == 0 && this_oid_r < 0) {
+        r = this_oid_r;
+      }
+    }
+  }
+
+  return r;
 }
 
 int DataScan::scan_inodes()
 {
-#ifdef SHARDED_PGLS
-  float progress = 0.0;
-  librados::NObjectIterator i = data_io.nobjects_begin(n, m);
-#else
-  librados::NObjectIterator i;
-  bool legacy_filtering = false;
-
-  bufferlist filter_bl;
-  ClsCephFSClient::build_tag_filter(filter_tag, &filter_bl);
-
-  // try/catch to deal with older OSDs that don't support
-  // the cephfs pgls filtering mode
-  try {
-    i = data_io.nobjects_begin(filter_bl);
-    dout(4) << "OSDs accepted cephfs object filtering" << dendl;
-  } catch (const std::runtime_error &e) {
-    // A little unfriendly, librados raises std::runtime_error
-    // on pretty much any unhandled I/O return value, such as
-    // the OSD saying -EINVAL because of our use of a filter
-    // mode that it doesn't know about.
-    std::cerr << "OSDs do not support cephfs object filtering: using "
-                 "(slower) fallback mode" << std::endl;
-    legacy_filtering = true;
-    i = data_io.nobjects_begin();
-  }
-
-#endif
-  librados::NObjectIterator i_end = data_io.nobjects_end();
-
   bool roots_present;
   int r = driver->check_roots(&roots_present);
   if (r != 0) {
@@ -514,77 +567,31 @@ int DataScan::scan_inodes()
     return -EIO;
   }
 
-  for (; i != i_end; ++i) {
-    const std::string oid = i->get_oid();
-#ifdef SHARDED_PGLS
-    if (i.get_progress() != progress) {
-      if (int(i.get_progress() * 100) / 5 != int(progress * 100) / 5) {
-        std::cerr << percentify(i.get_progress()) << "%" << std::endl;
-      }
-      progress = i.get_progress();
-    }
-#endif
-
-    uint64_t obj_name_ino = 0;
-    uint64_t obj_name_offset = 0;
-    r = parse_oid(oid, &obj_name_ino, &obj_name_offset);
-    if (r != 0) {
-      dout(4) << "Bad object name '" << oid << "', skipping" << dendl;
-      continue;
-    }
-
-    if (legacy_filtering) {
-      dout(20) << "Applying filter to " << oid << dendl;
-
-      // We are only interested in 0th objects during this phase: we touched
-      // the other objects during scan_extents
-      if (obj_name_offset != 0) {
-        dout(20) << "Non-zeroth object" << dendl;
-        continue;
-      }
-
-      bufferlist scrub_tag_bl;
-      int r = data_io.getxattr(oid, "scrub_tag", scrub_tag_bl);
-      if (r >= 0) {
-        std::string read_tag;
-        bufferlist::iterator q = scrub_tag_bl.begin();
-	try {
-	  ::decode(read_tag, q);
-	  if (read_tag == filter_tag) {
-	    dout(20) << "skipping " << oid << " because it has the filter_tag"
-		     << dendl;
-	    continue;
-	  }
-	} catch (const buffer::error &err) {
-	}
-	dout(20) << "read non-matching tag '" << read_tag << "'" << dendl;
-      } else {
-        dout(20) << "no tag read (" << r << ")" << dendl;
-      }
-
-    } else {
-      assert(obj_name_offset == 0);
-      dout(20) << "OSD matched oid " << oid << dendl;
-    }
+  return forall_objects(data_io, true, [this](
+        std::string const &oid,
+        uint64_t obj_name_ino,
+        uint64_t obj_name_offset) -> int
+  {
+    int r = 0;
 
     AccumulateResult accum_res;
     inode_backtrace_t backtrace;
     ceph_file_layout loaded_layout = g_default_file_layout;
-    int r = ClsCephFSClient::fetch_inode_accumulate_result(
+    r = ClsCephFSClient::fetch_inode_accumulate_result(
         data_io, oid, &backtrace, &loaded_layout, &accum_res);
 
     if (r == -EINVAL) {
       dout(4) << "Accumulated metadata missing from '"
               << oid << ", did you run scan_extents?" << dendl;
-      continue;
-    } else  if (r < 0) {
+      return r;
+    } else if (r < 0) {
       dout(4) << "Unexpected error loading accumulated metadata from '"
               << oid << "': " << cpp_strerror(r) << dendl;
       // FIXME: this creates situation where if a client has a corrupt
       // backtrace/layout, we will fail to inject it.  We should (optionally)
       // proceed if the backtrace/layout is corrupt but we have valid
       // accumulated metadata.
-      continue;
+      return r;
     }
 
     const time_t file_mtime = accum_res.max_mtime;
@@ -672,15 +679,15 @@ int DataScan::scan_inodes()
           time_t omtime(0);
           r = data_io.stat(std::string(buf), &osize, &omtime);
           if (r == 0) {
-	    if (osize > 0) {
-	      // Upper bound within this object
-	      uint64_t upper_size = (osize - 1) / guessed_layout.fl_stripe_unit
-		* (guessed_layout.fl_stripe_unit * guessed_layout.fl_stripe_count)
-		+ (i % guessed_layout.fl_stripe_count)
-		* guessed_layout.fl_stripe_unit + (osize - 1)
-		% guessed_layout.fl_stripe_unit + 1;
-	      incomplete_size = MAX(incomplete_size, upper_size);
-	    }
+            if (osize > 0) {
+              // Upper bound within this object
+              uint64_t upper_size = (osize - 1) / guessed_layout.fl_stripe_unit
+                * (guessed_layout.fl_stripe_unit * guessed_layout.fl_stripe_count)
+                + (i % guessed_layout.fl_stripe_count)
+                * guessed_layout.fl_stripe_unit + (osize - 1)
+                % guessed_layout.fl_stripe_unit + 1;
+              incomplete_size = MAX(incomplete_size, upper_size);
+            }
           } else if (r == -ENOENT) {
             // Absent object, treat as size 0 and ignore.
           } else {
@@ -691,7 +698,7 @@ int DataScan::scan_inodes()
         if (r != 0 && r != -ENOENT) {
           derr << "Unexpected error checking size of ino 0x" << std::hex
                << obj_name_ino << std::dec << ": " << cpp_strerror(r) << dendl;
-          continue;
+          return r;
         }
         file_size = complete_objs * guessed_layout.fl_object_size
                     + incomplete_size;
@@ -760,37 +767,15 @@ int DataScan::scan_inodes()
         }
       }
     }
-  }
 
-  return 0;
+    return r;
+  });
 }
+
+
 
 int DataScan::scan_frags()
 {
-  librados::NObjectIterator i;
-  bool legacy_filtering = false;
-
-  bufferlist filter_bl;
-  ClsCephFSClient::build_tag_filter(filter_tag, &filter_bl);
-
-  // try/catch to deal with older OSDs that don't support
-  // the cephfs pgls filtering mode
-  try {
-    i = metadata_io.nobjects_begin(filter_bl);
-    dout(4) << "OSDs accepted cephfs object filtering" << dendl;
-  } catch (const std::runtime_error &e) {
-    // A little unfriendly, librados raises std::runtime_error
-    // on pretty much any unhandled I/O return value, such as
-    // the OSD saying -EINVAL because of our use of a filter
-    // mode that it doesn't know about.
-    std::cerr << "OSDs do not support cephfs object filtering: using "
-                 "(slower) fallback mode" << std::endl;
-    legacy_filtering = true;
-    i = metadata_io.nobjects_begin();
-  }
-
-  librados::NObjectIterator i_end = metadata_io.nobjects_end();
-
   bool roots_present;
   int r = driver->check_roots(&roots_present);
   if (r != 0) {
@@ -805,14 +790,16 @@ int DataScan::scan_frags()
     return -EIO;
   }
 
-  for (; i != i_end; ++i) {
-    const std::string oid = i->get_oid();
-    uint64_t obj_name_ino = 0;
-    uint64_t obj_name_offset = 0;
+  return forall_objects(metadata_io, true, [this](
+        std::string const &oid,
+        uint64_t obj_name_ino,
+        uint64_t obj_name_offset) -> int
+  {
+    int r = 0;
     r = parse_oid(oid, &obj_name_ino, &obj_name_offset);
     if (r != 0) {
       dout(4) << "Bad object name '" << oid << "', skipping" << dendl;
-      continue;
+      return r;
     }
 
     if (obj_name_ino < (1ULL << 40)) {
@@ -820,39 +807,7 @@ int DataScan::scan_frags()
       // orphaned then we should be resetting them some other
       // way
       dout(10) << "Skipping system ino " << obj_name_ino << dendl;
-      continue;
-    }
-
-    if (legacy_filtering) {
-      dout(20) << "Applying filter to " << oid << dendl;
-
-      // We are only interested in 0th objects during this phase: we touched
-      // the other objects during scan_extents
-      if (obj_name_offset != 0) {
-        dout(20) << "Non-zeroth object" << dendl;
-        continue;
-      }
-
-      bufferlist scrub_tag_bl;
-      int r = metadata_io.getxattr(oid, "scrub_tag", scrub_tag_bl);
-      if (r >= 0) {
-        std::string read_tag;
-        bufferlist::iterator q = scrub_tag_bl.begin();
-        ::decode(read_tag, q);
-        if (read_tag == filter_tag) {
-          dout(20) << "skipping " << oid << " because it has the filter_tag"
-                   << dendl;
-          continue;
-        } else {
-          dout(20) << "read non-matching tag '" << read_tag << "'" << dendl;
-        }
-      } else {
-        dout(20) << "no tag read (" << r << ")" << dendl;
-      }
-
-    } else {
-      assert(obj_name_offset == 0);
-      dout(20) << "OSD matched oid " << oid << dendl;
+      return 0;
     }
 
     AccumulateResult accum_res;
@@ -872,10 +827,10 @@ int DataScan::scan_frags()
     librados::ObjectReadOperation op;
     op.getxattr("parent", &parent_bl, &parent_r);
     op.getxattr("layout", &layout_bl, &layout_r);
-    int r = metadata_io.operate(oid, &op, &op_bl);
+    r = metadata_io.operate(oid, &op, &op_bl);
     if (r != 0 && r != -ENODATA) {
       derr << "Unexpected error reading backtrace: " << cpp_strerror(parent_r) << dendl;
-      continue;
+      return r;
     }
 
     if (parent_r != -ENODATA) {
@@ -885,7 +840,7 @@ int DataScan::scan_frags()
       } catch (buffer::error &e) {
         dout(4) << "Corrupt backtrace on '" << oid << "': " << e << dendl;
         if (!force_corrupt) {
-          continue;
+          return -EINVAL;
         } else {
           // Treat backtrace as absent: we'll inject into lost+found
           backtrace = inode_backtrace_t();
@@ -900,7 +855,7 @@ int DataScan::scan_frags()
       } catch (buffer::error &e) {
         dout(4) << "Corrupt layout on '" << oid << "': " << e << dendl;
         if (!force_corrupt) {
-          continue;
+          return -EINVAL;
         }
       }
     }
@@ -925,7 +880,7 @@ int DataScan::scan_frags()
         fnode.fragstat.nfiles = 1;
         fnode.fragstat.nsubdirs = 0;
       } else {
-        continue;
+        return r;
       }
     }
 
@@ -974,9 +929,9 @@ int DataScan::scan_frags()
         }
       }
     }
-  }
 
-  return 0;
+    return r;
+  });
 }
 
 int MetadataTool::read_fnode(
@@ -1429,7 +1384,7 @@ int MetadataDriver::find_or_create_dirfrag(
     object_t frag_oid = InodeStore::get_object_name(ino, fragment, "");
     op.omap_set_header(fnode_bl);
     r = metadata_io.operate(frag_oid.name, &op);
-    if (r == -EOVERFLOW) {
+    if (r == -EOVERFLOW || r == -EEXIST) {
       // Someone else wrote it (see case A above)
       dout(10) << "Dirfrag creation race: 0x" << std::hex
         << ino << " " << fragment << std::dec << dendl;
