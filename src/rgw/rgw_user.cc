@@ -1013,7 +1013,7 @@ int RGWAccessKeyPool::modify_key(RGWUserAdminOpState& op_state, std::string *err
     break;
   default:
     set_err_msg(err_msg, "invalid key type");
-    return -EINVAL;
+    return -ERR_INVALID_KEY_TYPE;
   }
 
   if (!op_state.has_existing_key()) {
