@@ -29,7 +29,7 @@
 #include "include/assert.h"
 
 #ifndef __CYGWIN__
-#include "os/btrfs_ioctl.h"
+#include "os/fs/btrfs_ioctl.h"
 #endif
 
 #include <iostream>
