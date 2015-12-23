@@ -3059,6 +3059,12 @@ TEST_F(TestLibRBD, RebuildObjectMap)
   librbd::Image image1;
   ASSERT_EQ(0, rbd.open(ioctx, image1, name.c_str(), NULL));
 
+  bool lock_owner;
+  bl.clear();
+  ASSERT_EQ(0, image1.write(0, 0, bl));
+  ASSERT_EQ(0, image1.is_exclusive_lock_owner(&lock_owner));
+  ASSERT_TRUE(lock_owner);
+
   uint64_t flags;
   ASSERT_EQ(0, image1.get_flags(&flags));
   ASSERT_TRUE((flags & RBD_FLAG_OBJECT_MAP_INVALID) != 0);
