@@ -55,6 +55,7 @@ const static struct rgw_http_errors RGW_HTTP_ERRORS[] = {
     { ERR_KEY_EXIST, 409, "KeyExists"},
     { ERR_INVALID_SECRET_KEY, 400, "InvalidSecretKey"},
     { ERR_INVALID_KEY_TYPE, 400, "InvalidKeyType"},
+    { ERR_INVALID_CAP, 400, "InvalidCapability"},
     { ENOTEMPTY, 409, "BucketNotEmpty" },
     { ERR_PRECONDITION_FAILED, 412, "PreconditionFailed" },
     { ERANGE, 416, "InvalidRange" },
