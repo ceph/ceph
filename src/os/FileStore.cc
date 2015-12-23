@@ -5229,7 +5229,12 @@ int FileStore::_omap_setkeys(coll_t cid, const ghobject_t &hoid,
 			     const SequencerPosition &spos) {
   dout(15) << __func__ << " " << cid << "/" << hoid << dendl;
   Index index;
-  int r = get_index(cid, &index);
+  int r;
+  //treat pgmeta as a logical object, skip to check exist
+  if (hoid.is_pgmeta())
+    goto skip;
+
+  r = get_index(cid, &index);
   if (r < 0) {
     dout(20) << __func__ << " get_index got " << cpp_strerror(r) << dendl;
     return r;
@@ -5243,6 +5248,7 @@ int FileStore::_omap_setkeys(coll_t cid, const ghobject_t &hoid,
       return r;
     }
   }
+skip:
   r = object_map->set_keys(hoid, aset, &spos);
   dout(20) << __func__ << " " << cid << "/" << hoid << " = " << r << dendl;
   return r;
@@ -5253,7 +5259,12 @@ int FileStore::_omap_rmkeys(coll_t cid, const ghobject_t &hoid,
 			    const SequencerPosition &spos) {
   dout(15) << __func__ << " " << cid << "/" << hoid << dendl;
   Index index;
-  int r = get_index(cid, &index);
+  int r;
+  //treat pgmeta as a logical object, skip to check exist
+  if (hoid.is_pgmeta())
+    goto skip;
+
+  r = get_index(cid, &index);
   if (r < 0)
     return r;
   {
@@ -5263,6 +5274,7 @@ int FileStore::_omap_rmkeys(coll_t cid, const ghobject_t &hoid,
     if (r < 0)
       return r;
   }
+skip:
   r = object_map->rm_keys(hoid, keys, &spos);
   if (r < 0 && r != -ENOENT)
     return r;
