@@ -9,7 +9,6 @@ noinst_LIBRARIES += libos_types.a
 if ENABLE_SERVER
 
 libos_a_SOURCES = \
-	os/fs/FS.cc \
 	os/bluestore/kv.cc \
 	os/bluestore/Allocator.cc \
 	os/bluestore/BlockDevice.cc \
@@ -28,10 +27,11 @@ libos_a_SOURCES = \
 	os/filestore/JournalingObjectStore.cc \
 	os/filestore/LFNIndex.cc \
 	os/filestore/WBThrottle.cc \
+	os/fs/FS.cc \
 	os/kstore/kv.cc \
 	os/kstore/KStore.cc \
+	os/memstore/MemStore.cc \
 	os/GenericObjectMap.cc \
-	os/MemStore.cc \
 	os/KeyValueStore.cc \
 	os/ObjectStore.cc
 
@@ -86,17 +86,17 @@ noinst_HEADERS += \
 	os/filestore/WBThrottle.h \
 	os/filestore/XfsFileStoreBackend.h \
 	os/filestore/ZFSFileStoreBackend.h
+	os/fs/FS.h \
+	os/fs/XFS.h \
 	os/kstore/kstore_types.h \
 	os/kstore/KStore.h \
 	os/kstore/kv.h \
+	os/memstore/MemStore.h \
+	os/memstore/PageSet.h \
 	os/GenericObjectMap.h \
-	os/fs/FS.h \
-	os/fs/XFS.h \
-	os/MemStore.h \
 	os/KeyValueStore.h \
 	os/ObjectMap.h \
-	os/ObjectStore.h \
-	os/PageSet.h
+	os/ObjectStore.h
 
 if WITH_LIBZFS
 libos_zfs_a_SOURCES = os/ZFS.cc

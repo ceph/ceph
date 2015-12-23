@@ -1,4 +1,4 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 /*
  * Ceph - scalable distributed file system
@@ -7,9 +7,9 @@
  *
  * This is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public
- * License version 2.1, as published by the Free Software 
+ * License version 2.1, as published by the Free Software
  * Foundation.  See file COPYING.
- * 
+ *
  */
 
 
@@ -25,7 +25,7 @@
 #include "common/Finisher.h"
 #include "common/RefCountedObj.h"
 #include "common/RWLock.h"
-#include "ObjectStore.h"
+#include "os/ObjectStore.h"
 #include "PageSet.h"
 #include "include/assert.h"
 
@@ -77,7 +77,7 @@ public:
 	f->open_object_section("xattr");
 	f->dump_string("name", p->first);
 	f->dump_int("length", p->second.length());
-	f->close_section();	
+	f->close_section();
       }
       f->close_section();
 
@@ -88,7 +88,7 @@ public:
 	f->open_object_section("pair");
 	f->dump_string("key", p->first);
 	f->dump_int("length", p->second.length());
-	f->close_section();	
+	f->close_section();
       }
       f->close_section();
     }
@@ -269,7 +269,7 @@ private:
     }
     bool valid() {
       std::lock_guard<std::mutex>(o->omap_mutex);
-      return it != o->omap.end();      
+      return it != o->omap.end();
     }
     int next(bool validate=true) {
       std::lock_guard<std::mutex>(o->omap_mutex);
