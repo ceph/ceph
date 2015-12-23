@@ -42,9 +42,20 @@ public:
   boost::scoped_ptr<ObjectStore> store;
 
   StoreTest() : store(0) {}
+
+  void rm_r(string path) {
+    string cmd = string("rm -r ") + path;
+    cout << "==> " << cmd << std::endl;
+    int r = ::system(cmd.c_str());
+    if (r) {
+      cerr << "failed with exit code " << r
+	   << ", continuing anyway" << std::endl;
+    }
+  }
+
   virtual void SetUp() {
     int r = ::mkdir("store_test_temp_dir", 0777);
-    if (r < 0 && errno != EEXIST) {
+    if (r < 0) {
       r = -errno;
       cerr << __func__ << ": unable to create store_test_temp_dir" << ": " << cpp_strerror(r) << std::endl;
       return;
@@ -64,8 +75,10 @@ public:
   }
 
   virtual void TearDown() {
-    if (store)
+    if (store) {
       store->umount();
+      rm_r("store_test_temp_dir");
+    }
   }
 };
 
