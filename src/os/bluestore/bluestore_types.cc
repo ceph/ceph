@@ -338,7 +338,7 @@ void bluestore_extent_ref_map_t::generate_test_instances(list<bluestore_extent_r
   o.push_back(new bluestore_extent_ref_map_t);
   o.push_back(new bluestore_extent_ref_map_t);
   o.back()->add(10, 10);
-  o.back()->add(30, 10, 3);
+  o.back()->add(20, 20, 3);
   o.back()->get(15, 20);
 }
 
