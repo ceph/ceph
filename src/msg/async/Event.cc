@@ -199,10 +199,10 @@ void EventCenter::delete_file_event(int fd, int mask)
   }
 
   if (mask & EVENT_READABLE && event->read_cb) {
-    event->read_cb.reset();
+    event->read_cb = nullptr;
   }
   if (mask & EVENT_WRITABLE && event->write_cb) {
-    event->write_cb.reset();
+    event->write_cb = nullptr;
   }
 
   event->mask = event->mask & (~mask);
