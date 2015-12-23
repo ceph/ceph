@@ -1836,12 +1836,15 @@ int RGWUser::execute_add(RGWUserAdminOpState& op_state, std::string *err_msg)
 
     if (op_state.found_by_email) {
       set_err_msg(err_msg, "email: " + user_email + " exists");
+      ret = -ERR_EMAIL_EXIST;
     } else if (op_state.found_by_key) {
       set_err_msg(err_msg, "duplicate key provided");
+      ret = -EEXIST;
     } else {
       set_err_msg(err_msg, "user: " + op_state.user_id.to_str() + " exists");
+      ret = -EEXIST;
     }
-    return -EEXIST;
+    return ret;
   }
 
   // fail if the user_info has already been populated
@@ -2066,7 +2069,7 @@ int RGWUser::execute_modify(RGWUserAdminOpState& op_state, std::string *err_msg)
       ret = rgw_get_user_info_by_email(store, op_email, duplicate_check);
       if (ret >= 0 && duplicate_check.user_id.compare(user_id) != 0) {
         set_err_msg(err_msg, "cannot add duplicate email");
-        return -EEXIST;
+        return -ERR_EMAIL_EXIST;
       }
     }
     user_info.user_email = op_email;
