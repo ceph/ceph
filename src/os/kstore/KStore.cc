@@ -1548,10 +1548,8 @@ int KStore::_do_read(
 
   stripe_off = offset % stripe_size;
   while (length > 0) {
-    string key;
-    get_data_key(o->onode.nid, offset - stripe_off, &key);
     bufferlist stripe;
-    db->get(PREFIX_DATA, key, &stripe);
+    _do_read_stripe(o, offset - stripe_off, &stripe);
     dout(30) << __func__ << " stripe " << offset - stripe_off << " got "
 	     << stripe.length() << dendl;
     unsigned swant = MIN(stripe_size - stripe_off, length);
@@ -2297,8 +2295,10 @@ void KStore::_txc_finish(TransContext *txc)
 	     << dendl;
     assert((*p)->flush_txns.count(txc));
     (*p)->flush_txns.erase(txc);
-    if ((*p)->flush_txns.empty())
+    if ((*p)->flush_txns.empty()) {
       (*p)->flush_cond.Signal();
+      (*p)->clear_pending_stripes();
+    }
   }
 
   // clear out refs
@@ -2860,6 +2860,36 @@ void KStore::_pad_zeros(
   *_dout << dendl;
 }
 
+void KStore::_do_read_stripe(OnodeRef o, uint64_t offset, bufferlist *pbl)
+{
+  map<uint64_t,bufferlist>::iterator p = o->pending_stripes.find(offset);
+  if (p == o->pending_stripes.end()) {
+    string key;
+    get_data_key(o->onode.nid, offset, &key);
+    db->get(PREFIX_DATA, key, pbl);
+    o->pending_stripes[offset] = *pbl;
+  } else {
+    *pbl = p->second;
+  }
+}
+
+void KStore::_do_write_stripe(TransContext *txc, OnodeRef o,
+			      uint64_t offset, bufferlist& bl)
+{
+  o->pending_stripes[offset] = bl;
+  string key;
+  get_data_key(o->onode.nid, offset, &key);
+  txc->t->set(PREFIX_DATA, key, bl);
+}
+
+void KStore::_do_remove_stripe(TransContext *txc, OnodeRef o, uint64_t offset)
+{
+  o->pending_stripes.erase(offset);
+  string key;
+  get_data_key(o->onode.nid, offset, &key);
+  txc->t->rmkey(PREFIX_DATA, key);
+}
+
 int KStore::_do_write(TransContext *txc,
 			OnodeRef o,
 			uint64_t offset, uint64_t length,
@@ -2892,20 +2922,16 @@ int KStore::_do_write(TransContext *txc,
     if (offset_rem == 0 && end_rem == 0) {
       bufferlist bl;
       bl.substr_of(orig_bl, bl_off, stripe_size);
-      string key;
-      get_data_key(o->onode.nid, offset, &key);
       dout(30) << __func__ << " full stripe " << offset << dendl;
-      txc->t->set(PREFIX_DATA, key, bl);
+      _do_write_stripe(txc, o, offset, bl);
       offset += stripe_size;
       length -= stripe_size;
       bl_off += stripe_size;
       continue;
     }
     uint64_t stripe_off = offset - offset_rem;
-    string key;
-    get_data_key(o->onode.nid, stripe_off, &key);
     bufferlist prev;
-    db->get(PREFIX_DATA, key, &prev);
+    _do_read_stripe(o, stripe_off, &prev);
     dout(20) << __func__ << " read previous stripe " << stripe_off
 	     << ", got " << prev.length() << dendl;
     bufferlist bl;
@@ -2942,7 +2968,7 @@ int KStore::_do_write(TransContext *txc,
     dout(30) << " writing:\n";
     bl.hexdump(*_dout);
     *_dout << dendl;
-    txc->t->set(PREFIX_DATA, key, bl);
+    _do_write_stripe(txc, o, stripe_off, bl);
     offset += use;
     length -= use;
   }
@@ -2998,11 +3024,9 @@ int KStore::_zero(TransContext *txc,
     uint64_t pos = offset;
     uint64_t stripe_off = pos % stripe_size;
     while (pos < offset + length) {
-      string key;
-      get_data_key(o->onode.nid, pos - stripe_off, &key);
       if (stripe_off || end - pos < stripe_size) {
 	bufferlist stripe;
-	db->get(PREFIX_DATA, key, &stripe);
+	_do_read_stripe(o, pos - stripe_off, &stripe);
 	dout(30) << __func__ << " stripe " << pos - stripe_off << " got "
 		 << stripe.length() << dendl;
 	bufferlist bl;
@@ -3024,12 +3048,12 @@ int KStore::_zero(TransContext *txc,
 	    bl.claim_append(t);
 	  }
 	}
-	txc->t->set(PREFIX_DATA, key, bl);
+	_do_write_stripe(txc, o, pos - stripe_off, bl);
 	pos += stripe_size - stripe_off;
 	stripe_off = 0;
       } else {
 	dout(20) << __func__ << " rm stripe " << pos << dendl;
-	txc->t->rmkey(PREFIX_DATA, key);
+	_do_remove_stripe(txc, o, pos - stripe_off);
 	pos += stripe_size;
       }
     }
@@ -3056,23 +3080,21 @@ int KStore::_do_truncate(TransContext *txc, OnodeRef o, uint64_t offset)
     uint64_t pos = offset;
     uint64_t stripe_off = pos % stripe_size;
     while (pos < o->onode.size) {
-      string key;
-      get_data_key(o->onode.nid, pos - stripe_off, &key);
       if (stripe_off) {
 	bufferlist stripe;
-	db->get(PREFIX_DATA, key, &stripe);
+	_do_read_stripe(o, pos - stripe_off, &stripe);
 	dout(30) << __func__ << " stripe " << pos - stripe_off << " got "
 		 << stripe.length() << dendl;
 	bufferlist t;
 	t.substr_of(stripe, 0, MIN(stripe_off, stripe.length()));
-	txc->t->set(PREFIX_DATA, key, t);
+	_do_write_stripe(txc, o, pos - stripe_off, t);
 	dout(20) << __func__ << " truncated stripe " << pos - stripe_off
 		 << " to " << t.length() << dendl;
 	pos += stripe_size - stripe_off;
 	stripe_off = 0;
       } else {
 	dout(20) << __func__ << " rm stripe " << pos << dendl;
-	txc->t->rmkey(PREFIX_DATA, key);
+	_do_remove_stripe(txc, o, pos - stripe_off);
 	pos += stripe_size;
       }
     }
