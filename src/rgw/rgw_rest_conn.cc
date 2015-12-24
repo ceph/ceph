@@ -106,9 +106,18 @@ static void set_date_header(const time_t *t, map<string, string>& headers, const
   headers["HTTP_IF_MODIFIED_SINCE"] = s.str();
 }
 
+template <class T>
+static void set_header(T val, map<string, string>& headers, const string& header_name)
+{
+  stringstream s;
+  s << val;
+  headers[header_name] = s.str();
+}
+
 
 int RGWRESTConn::get_obj(const rgw_user& uid, req_info *info /* optional */, rgw_obj& obj,
                          const time_t *mod_ptr, const time_t *unmod_ptr,
+                         uint32_t mod_zone_id, uint64_t mod_pg_ver,
                          bool prepend_metadata, RGWGetDataCB *cb, RGWRESTStreamReadRequest **req)
 {
   string url;
@@ -147,6 +156,12 @@ int RGWRESTConn::get_obj(const rgw_user& uid, req_info *info /* optional */, rgw
 
   set_date_header(mod_ptr, extra_headers, "HTTP_IF_MODIFIED_SINCE");
   set_date_header(unmod_ptr, extra_headers, "HTTP_IF_UNMODIFIED_SINCE");
+  if (mod_zone_id != 0) {
+    set_header(mod_zone_id, extra_headers, "HTTP_DEST_ZONE_SHORT_ID");
+  }
+  if (mod_pg_ver != 0) {
+    set_header(mod_pg_ver, extra_headers, "HTTP_DEST_PG_VER");
+  }
 
   return (*req)->get_obj(key, extra_headers, obj);
 }

@@ -92,6 +92,7 @@ public:
 
   int get_obj(const rgw_user& uid, req_info *info /* optional */, rgw_obj& obj,
               const time_t *mod_ptr, const time_t *unmod_ptr,
+              uint32_t mod_zone_id, uint64_t mod_pg_ver,
               bool prepend_metadata, RGWGetDataCB *cb, RGWRESTStreamReadRequest **req);
   int complete_request(RGWRESTStreamReadRequest *req, string& etag, time_t *mtime, map<string, string>& attrs);
 
