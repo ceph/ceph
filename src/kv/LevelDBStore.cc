@@ -267,6 +267,7 @@ int LevelDBStore::get(const string &prefix,
 		  const string &key,
 		  bufferlist *value)
 {
+  assert(value && (value->length() == 0));
   utime_t start = ceph_clock_now(g_ceph_context);
   int r = 0;
   KeyValueDB::Iterator it = get_iterator(prefix);
