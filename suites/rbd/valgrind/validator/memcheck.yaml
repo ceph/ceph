@@ -1,0 +1,4 @@
+overrides:
+  workunit:
+    env:
+      VALGRIND: "memcheck"
