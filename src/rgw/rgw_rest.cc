@@ -647,6 +647,11 @@ int RGWGetObj_ObjStore::get_params()
   if_match = s->info.env->get("HTTP_IF_MATCH");
   if_nomatch = s->info.env->get("HTTP_IF_NONE_MATCH");
 
+  if (s->system_request) {
+    mod_zone_id = s->info.env->get_int("HTTP_DEST_ZONE_SHORT_ID", 0);
+    mod_pg_ver = s->info.env->get_int("HTTP_DEST_PG_VER", 0);
+  }
+
   return 0;
 }
 

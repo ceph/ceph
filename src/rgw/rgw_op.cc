@@ -981,6 +981,8 @@ void RGWGetObj::execute()
 
   read_op.conds.mod_ptr = mod_ptr;
   read_op.conds.unmod_ptr = unmod_ptr;
+  read_op.conds.mod_zone_id = mod_zone_id;
+  read_op.conds.mod_pg_ver = mod_pg_ver;
   read_op.conds.if_match = if_match;
   read_op.conds.if_nomatch = if_nomatch;
   read_op.params.attrs = &attrs;

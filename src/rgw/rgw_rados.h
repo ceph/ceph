@@ -628,6 +628,7 @@ struct RGWObjState {
   bool is_olh;
   bufferlist olh_tag;
   uint64_t pg_ver;
+  uint32_t zone_short_id;
 
   /* important! don't forget to update copy constructor */
 
@@ -637,7 +638,7 @@ struct RGWObjState {
   RGWObjState() : is_atomic(false), has_attrs(0), exists(false),
                   size(0), mtime(0), epoch(0), fake_tag(false), has_manifest(false),
                   has_data(false), prefetch_data(false), keep_tail(false), is_olh(false),
-                  pg_ver(0) {}
+                  pg_ver(0), zone_short_id(0) {}
   RGWObjState(const RGWObjState& rhs) {
     obj = rhs.obj;
     is_atomic = rhs.is_atomic;
@@ -2097,11 +2098,14 @@ public:
       struct ConditionParams {
         const time_t *mod_ptr;
         const time_t *unmod_ptr;
+        uint32_t mod_zone_id;
+        uint64_t mod_pg_ver;
         const char *if_match;
         const char *if_nomatch;
         
         ConditionParams() : 
-                 mod_ptr(NULL), unmod_ptr(NULL), if_match(NULL), if_nomatch(NULL) {}
+                 mod_ptr(NULL), unmod_ptr(NULL), mod_zone_id(0), mod_pg_ver(0),
+                 if_match(NULL), if_nomatch(NULL) {}
       } conds;
 
       struct Params {

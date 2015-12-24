@@ -6113,6 +6113,49 @@ int RGWRados::rewrite_obj(RGWBucketInfo& dest_bucket_info, rgw_obj& obj)
   return copy_obj_data(rctx, dest_bucket_info, read_op, end, obj, obj, max_chunk_size, NULL, mtime, attrset, RGW_OBJ_CATEGORY_MAIN, 0, 0, NULL, NULL, NULL, NULL);
 }
 
+struct obj_time_weight {
+  time_t mtime;
+  uint32_t zone_short_id;
+  uint64_t pg_ver;
+
+  obj_time_weight() : mtime(0), zone_short_id(0), pg_ver(0) {}
+
+  bool operator<(const obj_time_weight& rhs) {
+    if (mtime > rhs.mtime) {
+      return false;
+    }
+    if (mtime < rhs.mtime) {
+      return true;
+    }
+    if (zone_short_id != rhs.zone_short_id) {
+      return (zone_short_id < rhs.zone_short_id);
+    }
+    return (pg_ver < rhs.pg_ver);
+  }
+
+  void init(const time_t& _mtime, uint32_t _short_id, uint64_t _pg_ver) {
+    mtime = _mtime;
+    zone_short_id = _short_id;
+    pg_ver = _pg_ver;
+  }
+
+  void init(RGWObjState *state) {
+    mtime = state->mtime;
+    zone_short_id = state->zone_short_id;
+    pg_ver = state->pg_ver;
+  }
+};
+
+inline ostream& operator<<(ostream& out, const obj_time_weight &o) {
+  out << o.mtime;
+
+  if (o.zone_short_id != 0 || o.pg_ver != 0) {
+    out << "[zid=" << o.zone_short_id << ", pgv=" << o.pg_ver << "]";
+  }
+
+  return out;
+}
+
 int RGWRados::fetch_remote_obj(RGWObjectCtx& obj_ctx,
                const rgw_user& user_id,
                const string& client_id,
@@ -6149,6 +6192,7 @@ int RGWRados::fetch_remote_obj(RGWObjectCtx& obj_ctx,
   map<string, bufferlist> src_attrs;
   int i;
   append_rand_alpha(cct, tag, tag, 32);
+  obj_time_weight set_mtime_weight;
 
   RGWPutObjProcessor_Atomic processor(obj_ctx,
                                       dest_bucket_info, dest_obj.bucket, dest_obj.get_orig_obj(),
@@ -6201,8 +6245,9 @@ int RGWRados::fetch_remote_obj(RGWObjectCtx& obj_ctx,
 
   RGWObjState *dest_state = NULL;
 
-  time_t dest_mtime;
   const time_t *pmod = mod_ptr;
+
+  obj_time_weight dest_mtime_weight;
 
   if (copy_if_newer) {
     /* need to get mtime for destination */
@@ -6211,13 +6256,15 @@ int RGWRados::fetch_remote_obj(RGWObjectCtx& obj_ctx,
       return ret;
 
     if (dest_state->exists) {
-      dest_mtime = dest_state->mtime;
-      pmod = &dest_mtime;
+      dest_mtime_weight.init(dest_state);
+      pmod = &dest_mtime_weight.mtime;
     }
   }
 
  
-  ret = conn->get_obj(user_id, info, src_obj, pmod, unmod_ptr, true, &cb, &in_stream_req);
+  ret = conn->get_obj(user_id, info, src_obj, pmod, unmod_ptr,
+                      dest_mtime_weight.zone_short_id, dest_mtime_weight.pg_ver,
+                      true, &cb, &in_stream_req);
   if (ret < 0) {
     goto set_err_state;
   }
@@ -6274,6 +6321,21 @@ int RGWRados::fetch_remote_obj(RGWObjectCtx& obj_ctx,
     attrs = src_attrs;
   }
 
+  if (copy_if_newer) {
+    uint64_t pg_ver = 0;
+    auto i = attrs.find(RGW_ATTR_PG_VER);
+    if (i != attrs.end() && i->second.length() > 0) {
+      bufferlist::iterator iter = i->second.begin();
+      try {
+        ::decode(pg_ver, iter);
+      } catch (buffer::error& err) {
+        ldout(ctx(), 0) << "ERROR: failed to decode pg ver attribute, ignoring" << dendl;
+        /* non critical error */
+      }
+    }
+    set_mtime_weight.init(set_mtime, get_zone_short_id(), pg_ver);
+  }
+
 #define MAX_COMPLETE_RETRY 100
   for (i = 0; i < MAX_COMPLETE_RETRY; i++) {
     ret = cb.complete(etag, mtime, set_mtime, attrs, delete_at);
@@ -6288,8 +6350,9 @@ int RGWRados::fetch_remote_obj(RGWObjectCtx& obj_ctx,
         ldout(cct, 0) << "ERROR: " << __func__ << ": get_err_state() returned ret=" << ret << dendl;
         goto set_err_state;
       }
+      dest_mtime_weight.init(dest_state);
       if (!dest_state->exists ||
-        dest_state->mtime < set_mtime) {
+        dest_mtime_weight < set_mtime_weight) {
         ldout(cct, 20) << "retrying writing object mtime=" << set_mtime << " dest_state->mtime=" << dest_state->mtime << " dest_state->exists=" << dest_state->exists << dendl;
         continue;
       } else {
@@ -7490,13 +7553,28 @@ int RGWRados::get_obj_state_impl(RGWObjectCtx *rctx, rgw_obj& obj, RGWObjState *
       s->fake_tag = true;
     }
   }
-  bufferlist pg_ver_bl = s->attrset[RGW_ATTR_PG_VER];
-  if (pg_ver_bl.length()) {
-    bufferlist::iterator pgbl = pg_ver_bl.begin();
-    try {
-      ::decode(s->pg_ver, pgbl);
-    } catch (buffer::error& err) {
-      ldout(cct, 0) << "ERROR: couldn't decode pg ver attr for object " << s->obj << ", non-critical error, ignoring" << dendl;
+  map<string, bufferlist>::iterator aiter = s->attrset.find(RGW_ATTR_PG_VER);
+  if (aiter != s->attrset.end()) {
+    bufferlist& pg_ver_bl = aiter->second;
+    if (pg_ver_bl.length()) {
+      bufferlist::iterator pgbl = pg_ver_bl.begin();
+      try {
+        ::decode(s->pg_ver, pgbl);
+      } catch (buffer::error& err) {
+        ldout(cct, 0) << "ERROR: couldn't decode pg ver attr for object " << s->obj << ", non-critical error, ignoring" << dendl;
+      }
+    }
+  }
+  aiter = s->attrset.find(RGW_ATTR_SOURCE_ZONE);
+  if (aiter != s->attrset.end()) {
+    bufferlist& zone_short_id_bl = aiter->second;
+    if (zone_short_id_bl.length()) {
+      bufferlist::iterator zbl = zone_short_id_bl.begin();
+      try {
+        ::decode(s->zone_short_id, zbl);
+      } catch (buffer::error& err) {
+        ldout(cct, 0) << "ERROR: couldn't decode zone short id attr for object " << s->obj << ", non-critical error, ignoring" << dendl;
+      }
     }
   }
   if (s->obj_tag.length())
@@ -8027,18 +8105,23 @@ int RGWRados::Object::Read::prepare(int64_t *pofs, int64_t *pend)
 
   /* Convert all times go GMT to make them compatible */
   if (conds.mod_ptr || conds.unmod_ptr) {
-    time_t ctime = astate->mtime;
+    obj_time_weight src_weight;
+    src_weight.init(astate);
+
+    obj_time_weight dest_weight;
 
     if (conds.mod_ptr) {
-      ldout(cct, 10) << "If-Modified-Since: " << *conds.mod_ptr << " Last-Modified: " << ctime << dendl;
-      if (ctime <= *conds.mod_ptr) {
+      dest_weight.init(*conds.mod_ptr, conds.mod_zone_id, conds.mod_pg_ver);
+      ldout(cct, 10) << "If-Modified-Since: " << dest_weight << " Last-Modified: " << src_weight << dendl;
+      if (!(dest_weight < src_weight)) {
         return -ERR_NOT_MODIFIED;
       }
     }
 
     if (conds.unmod_ptr) {
-      ldout(cct, 10) << "If-UnModified-Since: " << *conds.unmod_ptr << " Last-Modified: " << ctime << dendl;
-      if (ctime > *conds.unmod_ptr) {
+      dest_weight.init(*conds.unmod_ptr, conds.mod_zone_id, conds.mod_pg_ver);
+      ldout(cct, 10) << "If-UnModified-Since: " << dest_weight << " Last-Modified: " << src_weight << dendl;
+      if (dest_weight < src_weight) {
         return -ERR_PRECONDITION_FAILED;
       }
     }

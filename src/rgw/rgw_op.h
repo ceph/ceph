@@ -123,6 +123,8 @@ protected:
   const char *if_unmod;
   const char *if_match;
   const char *if_nomatch;
+  uint32_t mod_zone_id;
+  uint64_t mod_pg_ver;
   off_t ofs;
   uint64_t total_len;
   off_t start;
@@ -149,6 +151,8 @@ public:
     if_unmod = NULL;
     if_match = NULL;
     if_nomatch = NULL;
+    mod_zone_id = 0;
+    mod_pg_ver = 0;
     start = 0;
     ofs = 0;
     total_len = 0;
