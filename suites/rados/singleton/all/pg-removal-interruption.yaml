@@ -17,6 +17,9 @@ tasks:
       - ceph tell osd.0 injectargs -- --osd-inject-failure-on-pg-removal
       - ceph osd pool delete foo foo --yes-i-really-really-mean-it
 - ceph.wait_for_failure: [osd.0]
+- exec:
+    client.0:
+      - sudo ceph osd down 0
 - ceph.restart: [osd.0]
 - exec:
     client.0:
