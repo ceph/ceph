@@ -1554,34 +1554,35 @@ int KStore::_do_read(
     db->get(PREFIX_DATA, key, &stripe);
     dout(30) << __func__ << " stripe " << offset - stripe_off << " got "
 	     << stripe.length() << dendl;
-    unsigned slen = MIN(stripe_size, length);
+    unsigned swant = MIN(stripe_size - stripe_off, length);
     if (stripe.length()) {
-      if (slen == stripe.length()) {
+      if (swant == stripe.length()) {
 	bl.claim_append(stripe);
 	dout(30) << __func__ << " taking full stripe" << dendl;
       } else {
 	unsigned l = 0;
 	if (stripe_off < stripe.length()) {
-	  assert(bl.length() == 0);
-	  l = MIN(stripe.length() - stripe_off, slen);
-	  bl.substr_of(stripe, stripe_off, l);
+	  l = MIN(stripe.length() - stripe_off, swant);
+	  bufferlist t;
+	  t.substr_of(stripe, stripe_off, l);
+	  bl.claim_append(t);
 	  dout(30) << __func__ << " taking " << stripe_off << "~" << l << dendl;
 	}
-	if (l < slen) {
-	  bufferptr z(slen - l);
+	if (l < swant) {
+	  bufferptr z(swant - l);
 	  z.zero();
 	  bl.append(z);
 	  dout(30) << __func__ << " adding " << z.length() << " zeros" << dendl;
 	}
       }
     } else {
-      dout(30) << __func__ << " generating zeros 0~" << slen << dendl;
-      bufferptr z(slen);
+      dout(30) << __func__ << " generating " << swant << " zeros" << dendl;
+      bufferptr z(swant);
       z.zero();
       bl.append(z);
     }
-    offset += slen;
-    length -= slen;
+    offset += swant;
+    length -= swant;
     stripe_off = 0;
   }
   r = bl.length();
