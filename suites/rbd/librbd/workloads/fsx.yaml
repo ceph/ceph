@@ -1,4 +1,4 @@
 tasks:
 - rbd_fsx:
     clients: [client.0]
-    ops: 5000
+    ops: 20000

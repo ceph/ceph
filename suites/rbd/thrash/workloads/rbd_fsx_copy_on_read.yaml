@@ -1,7 +1,7 @@
 tasks:
 - rbd_fsx:
     clients: [client.0]
-    ops: 2000
+    ops: 6000
 overrides:
   ceph:
     conf:
