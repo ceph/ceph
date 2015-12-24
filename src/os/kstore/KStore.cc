@@ -1527,7 +1527,7 @@ int KStore::_do_read(
   uint64_t stripe_off;
 
   dout(20) << __func__ << " " << offset << "~" << length << " size "
-	   << o->onode.size << dendl;
+	   << o->onode.size << " nid " << o->onode.nid << dendl;
   bl.clear();
 
   if (offset > o->onode.size) {
@@ -2176,7 +2176,7 @@ void KStore::_assign_nid(TransContext *txc, OnodeRef o)
     return;
   Mutex::Locker l(nid_lock);
   o->onode.nid = ++nid_last;
-  dout(20) << __func__ << " " << o->onode.nid << dendl;
+  dout(20) << __func__ << " " << o->oid << " nid " << o->onode.nid << dendl;
   if (nid_last > nid_max) {
     nid_max += g_conf->kstore_nid_prealloc;
     bufferlist bl;
@@ -2871,7 +2871,7 @@ int KStore::_do_write(TransContext *txc,
   dout(20) << __func__
 	   << " " << o->oid << " " << offset << "~" << length
 	   << " - have " << o->onode.size
-	   << " bytes" << dendl;
+	   << " bytes, nid " << o->onode.nid << dendl;
   _dump_onode(o);
   o->exists = true;
 
