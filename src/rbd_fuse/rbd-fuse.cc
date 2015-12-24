@@ -523,41 +523,59 @@ rbdfs_destroy(void *unused)
 	rados_shutdown(cluster);
 }
 
-// return -errno on error.  fi->fh is not set until open time
-
 int
-rbdfs_create(const char *path, mode_t mode, struct fuse_file_info *fi)
+rbdfs_checkname(const char *checkname)
 {
-	int r;
-	int order = imageorder;
-
-	r = rbd_create2(ioctx, path+1, imagesize, imagefeatures, &order);
-	return r;
-}
-
-int rbdfs_rename(const char *path, const char *destname)
-{
-    const char *srcname = NULL;
     const char *extra[] = {"@", "/"};
-    std::string image_dest_name(destname + 1);
+    std::string strCheckName(checkname);
     
-    // check image dest name
-    if (image_dest_name.empty())
+    if (strCheckName.empty())
         return -EINVAL;
 
     unsigned int sz = sizeof(extra) / sizeof(const char*);
     for (unsigned int i = 0; i < sz; i++)
     {
         std::string ex(extra[i]);
-        if (std::string::npos != image_dest_name.find(ex))
+        if (std::string::npos != strCheckName.find(ex))
             return -EINVAL;
+    }
+
+    return 0;
+}
+
+// return -errno on error.  fi->fh is not set until open time
+
+int
+rbdfs_create(const char *path, mode_t mode, struct fuse_file_info *fi)
+{
+         int r;
+         int order = imageorder;
+
+         r = rbdfs_checkname(path+1);
+         if (r != 0)
+         {
+            return r;  
+         }
+
+         r = rbd_create2(ioctx, path+1, imagesize, imagefeatures, &order);
+         return r;
+}
+
+int
+rbdfs_rename(const char *path, const char *destname)
+{
+    int r;
+
+    r = rbdfs_checkname(destname+1);
+    if (r != 0)
+    {
+      return r;
     }
 
     if (strcmp(path, "/") == 0)
         return -EINVAL;
 
-    srcname = path + 1;
-    return rbd_rename(ioctx, srcname, image_dest_name.c_str());
+    return rbd_rename(ioctx, path+1, destname+1);
 }
 
 int
