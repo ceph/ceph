@@ -122,7 +122,7 @@ namespace rgw {
 
   void RGWLibFS::close()
   {
-    flags |= FLAG_CLOSED;
+    state.flags |= FLAG_CLOSED;
 
     class ObjUnref
     {
@@ -148,6 +148,60 @@ namespace rgw {
 
   void RGWLibFS::gc()
   {
+    using std::get;
+    using directory = RGWFileHandle::directory;
+
+    static constexpr uint32_t max_ev = 24;
+    static constexpr uint16_t expire_s = 300; /* 5m */
+
+    struct timespec now;
+    event_vector ve;
+    bool stop = false;
+    std::deque<event> &events = state.events;
+    (void) clock_gettime(CLOCK_MONOTONIC_COARSE, &now);
+
+    do {
+      {
+	lock_guard guard(state.mtx); /* LOCKED */
+	uint32_t _max_ev =
+	  (events.size() < 500) ? max_ev : (events.size() / 4);
+	for (uint32_t ix = 0; (ix < _max_ev) && (events.size() > 0); ++ix) {
+	  event& ev = events.front();
+	  if (ev.ts.tv_sec < (now.tv_sec + expire_s)) {
+	    stop = true;
+	    break;
+	  }
+	  ve.push_back(ev);
+	  events.pop_front();
+	}
+      } /* anon */
+      /* !LOCKED */
+      for (auto& ev : ve) {
+	if (likely(ev.t == event::type::READDIR)) {
+	  RGWFileHandle* rgw_fh = lookup_handle(ev.fhk.fh_hk);
+	  if (rgw_fh) {
+	    RGWFileHandle::directory* d;
+	    if (unlikely(! rgw_fh->is_dir())) {
+	      lsubdout(get_context(), rgw, 0)
+		<< __func__
+		<< " BUG non-directory found with READDIR event "
+		<< "(" << rgw_fh->bucket_name() << ","
+		<< rgw_fh->object_name() << ")"
+		<< dendl;
+	      goto rele;
+	    }
+	    /* clear state */
+	    d = get<directory>(&rgw_fh->variant_type);
+	    if (d) {
+	      lock_guard guard(rgw_fh->mtx);
+	      d->clear_state();
+	    }
+	  rele:
+	    unref(rgw_fh);
+	  } /* rgw_fh */
+	} /* event::type::READDIR */
+      } /* ev */
+    } while (! stop);
   } /* RGWLibFS::gc */
 
   bool RGWFileHandle::reclaim() {
@@ -158,27 +212,36 @@ namespace rgw {
   int RGWFileHandle::readdir(rgw_readdir_cb rcb, void *cb_arg, uint64_t *offset,
 			     bool *eof)
   {
+    using event = RGWLibFS::event;
     int rc = 0;
+    struct timespec now;
     CephContext* cct = fs->get_context();
+    directory* d = parent->get_directory(); /* already type-checked */
+
+    (void) clock_gettime(CLOCK_MONOTONIC_COARSE, &now); /* !LOCKED */
+
+    // XXXX finish marker handling
     if (is_root()) {
       RGWListBucketsRequest req(cct, fs->get_user(), this, rcb, cb_arg,
 				offset);
       rc = librgw.get_fe()->execute_req(&req);
       if (! rc) {
-	lock_guard guard(mtx);
-	(void) clock_gettime(CLOCK_MONOTONIC_COARSE, &state.atime);
+	parent->set_nlink(3 + d->name_cache.size());
+	state.atime = now;
 	*eof = req.eof();
+	event ev(event::type::READDIR, get_key(), state.atime);
+	fs->state.push_event(ev);
       }
     } else {
-      // XXX finish marker handling
       rgw_obj_key marker{"", ""};
       RGWReaddirRequest req(cct, fs->get_user(), this, rcb, cb_arg, offset);
       rc = librgw.get_fe()->execute_req(&req);
       if (! rc) {
-	lock_guard guard(mtx);
-	/* XXX update link count (incorrectly) */
-	parent->set_nlink(3 + *offset);
+	state.atime = now;
+	parent->set_nlink(3 + d->name_cache.size());
 	*eof = req.eof();
+	event ev(event::type::READDIR, get_key(), state.atime);
+	fs->state.push_event(ev);
       }
     }
     return rc;
