@@ -5,4 +5,3 @@ tasks:
         - rbd/test_librbd.sh
     env:
       RBD_FEATURES: "1"
-      VALGRIND: "memcheck"
