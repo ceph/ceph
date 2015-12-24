@@ -51,6 +51,7 @@ const static struct rgw_http_errors RGW_HTTP_ERRORS[] = {
     { ETIMEDOUT, 408, "RequestTimeout" },
     { EEXIST, 409, "BucketAlreadyExists" },
     { ERR_USER_EXIST, 409, "UserAlreadyExists" },
+    { ERR_KEY_EXIST, 409, "AccessKeyAlreadyExists" },
     { ENOTEMPTY, 409, "BucketNotEmpty" },
     { ERR_PRECONDITION_FAILED, 412, "PreconditionFailed" },
     { ERANGE, 416, "InvalidRange" },
