@@ -705,7 +705,7 @@ bool PG::_calc_past_interval_range(epoch_t *start, epoch_t *end, epoch_t oldest_
         // PG must be imported, so let's calculate the whole range.
         *end = osdmap_ref->get_epoch();
     }
-    //从前(大)往后找(小epoch)
+
     // Do we already have the intervals we want?
     map<epoch_t,pg_interval_t>::const_iterator pif = past_intervals.begin();
     if (pif != past_intervals.end())

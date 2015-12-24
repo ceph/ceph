@@ -603,7 +603,9 @@ public:
     void recover_got(hobject_t oid, eversion_t v, pg_info_t &info)
     {
         //¶ÔÓÚÈ«Á¿»Ö¸´¶øÑÔ£¬missingÊÇ¿ÕµÄå 
-        //ÕâÑùÔõÃ´¸üĞÂlast_complete
+        //ÕâÑùÔõÃ´¸üĞÂlast_complete? 
+        //if missing is null, update when activate
+        //else update here when recovery.
         if (missing.is_missing(oid, v))
         {
             missing.got(oid, v);

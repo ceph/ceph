@@ -1773,6 +1773,9 @@ struct pg_history_t {
    * must have been a clean interval between e and now and that we cannot be
    * in the active set during the interval containing e.
    */
+  //除了这三个，其他成员在history merge的时候都会取大的值
+  //这三个值不参与merge，same_up_since与same_primary_since用的地方很少，几乎不怎么使用。
+  //主本和副本是单独更新这这个成员的
   epoch_t same_up_since;       // same acting set since
   epoch_t same_interval_since;   // same acting AND up set since
   epoch_t same_primary_since;  // same primary at least back through this epoch.
