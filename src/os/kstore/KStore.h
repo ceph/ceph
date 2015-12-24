@@ -59,6 +59,8 @@ public:
     uint64_t tail_offset;
     bufferlist tail_bl;
 
+    map<uint64_t,bufferlist> pending_stripes;  ///< unwritten stripes
+
     Onode(const ghobject_t& o, const string& k);
 
     void flush();
@@ -73,6 +75,9 @@ public:
     void clear_tail() {
       tail_offset = 0;
       tail_bl.clear();
+    }
+    void clear_pending_stripes() {
+      pending_stripes.clear();
     }
   };
   typedef boost::intrusive_ptr<Onode> OnodeRef;
@@ -356,6 +361,11 @@ private:
     kv_sync_thread.join();
     kv_stop = false;
   }
+
+  void _do_read_stripe(OnodeRef o, uint64_t offset, bufferlist *pbl);
+  void _do_write_stripe(TransContext *txc, OnodeRef o,
+			uint64_t offset, bufferlist& bl);
+  void _do_remove_stripe(TransContext *txc, OnodeRef o, uint64_t offset);
 
 public:
   KStore(CephContext *cct, const string& path);
