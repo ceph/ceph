@@ -366,6 +366,7 @@ int RocksDBStore::get(
     const string &key,
     bufferlist *out)
 {
+  assert(out && (out->length() == 0));
   utime_t start = ceph_clock_now(g_ceph_context);
   int r = 0;
   KeyValueDB::Iterator it = get_iterator(prefix);
