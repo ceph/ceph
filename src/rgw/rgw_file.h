@@ -9,11 +9,14 @@
 /* internal header */
 #include <string.h>
 #include <sys/stat.h>
+#include <stdint.h>
 
 #include <atomic>
 #include <mutex>
 #include <vector>
 #include <deque>
+#include <algorithm>
+#include <functional>
 #include <boost/intrusive_ptr.hpp>
 #include <boost/range/adaptor/reversed.hpp>
 #include <boost/container/flat_map.hpp>
@@ -173,9 +176,13 @@ namespace rgw {
 
       directory() : flags(FLAG_NONE) {}
 
-      void set_overflow() {
+      void clear_state() {
 	marker_cache.clear();
 	name_cache.clear();
+      }
+
+      void set_overflow() {
+	clear_state();
 	flags |= FLAG_OVERFLOW;
       }
     };
@@ -551,7 +558,33 @@ namespace rgw {
 
     static atomic<uint32_t> fs_inst;
     std::string fsid;
-    uint32_t flags;
+
+    using lock_guard = std::lock_guard<std::mutex>;
+    using unique_lock = std::unique_lock<std::mutex>;
+
+    struct event
+    {
+      enum class type : uint8_t { READDIR } ;
+      type t;
+      const fh_key fhk;
+      struct timespec ts;
+      event(type t, const fh_key& k, const struct timespec& ts)
+	: t(t), fhk(k), ts(ts) {}
+    };
+
+    using event_vector = /* boost::small_vector<event, 16> */
+      std::vector<event>;
+
+    struct state {
+      std::mutex mtx;
+      std::atomic<uint32_t> flags;
+      std::deque<event> events;
+      state() : flags(0) {}
+      void push_event(const event& ev) {
+	lock_guard guard(mtx);
+	events.push_back(ev);
+      }
+    } state;
 
     friend class RGWFileHandle;
 
@@ -567,8 +600,7 @@ namespace rgw {
 		 cct->_conf->rgw_nfs_fhcache_size),
 	fh_lru(cct->_conf->rgw_nfs_lru_lanes,
 	       cct->_conf->rgw_nfs_lru_lane_hiwat),
-	uid(_uid), key(_user_id, _key),
-	flags(0) {
+	uid(_uid), key(_user_id, _key) {
 
       /* no bucket may be named rgw_fs_inst-(.*) */
       fsid = RGWFileHandle::root_name + "rgw_fs_inst-" +
@@ -623,7 +655,7 @@ namespace rgw {
 
       LookupFHResult fhr { nullptr, RGWFileHandle::FLAG_NONE };
 
-      if (flags & FLAG_CLOSED)
+      if (state.flags & FLAG_CLOSED)
 	return fhr;
 
       RGWFileHandle::FHCache::Latch lat;
@@ -688,7 +720,7 @@ namespace rgw {
     /* find existing RGWFileHandle */
     RGWFileHandle* lookup_handle(struct rgw_fh_hk fh_hk) {
 
-      if (flags & FLAG_CLOSED)
+      if (state.flags & FLAG_CLOSED)
 	return nullptr;
 
       RGWFileHandle::FHCache::Latch lat;
