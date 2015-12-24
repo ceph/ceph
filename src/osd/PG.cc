@@ -2972,30 +2972,37 @@ void PG::append_log(
     add_log_entry(*p);
   }
 
-  PGLogEntryHandler handler;
-  if (!transaction_applied) {
-    pg_log.clear_can_rollback_to(&handler);
-    t.register_on_applied(
-      new C_UpdateLastRollbackInfoTrimmedToApplied(
-	this,
-	get_osdmap()->get_epoch(),
-	info.last_update));
-  } else if (trim_rollback_to > pg_log.get_rollback_trimmed_to()) {
-    pg_log.trim_rollback_info(
-      trim_rollback_to,
-      &handler);
-    t.register_on_applied(
-      new C_UpdateLastRollbackInfoTrimmedToApplied(
-	this,
-	get_osdmap()->get_epoch(),
-	trim_rollback_to));
+  PGLogEntryHandler* handler = NULL;
+  if (pool.info.require_rollback()) {
+    handler = new PGLogEntryHandler();
+  }
+  if (handler) {
+    if (!transaction_applied) {
+      pg_log.clear_can_rollback_to(handler);
+      t.register_on_applied(
+        new C_UpdateLastRollbackInfoTrimmedToApplied(
+          this,
+          get_osdmap()->get_epoch(),
+          info.last_update));
+    } else if (trim_rollback_to > pg_log.get_rollback_trimmed_to()) {
+      pg_log.trim_rollback_info(
+        trim_rollback_to,
+        handler);
+      t.register_on_applied(
+        new C_UpdateLastRollbackInfoTrimmedToApplied(
+          this,
+          get_osdmap()->get_epoch(),
+          trim_rollback_to));
+    }
   }
 
-  pg_log.trim(&handler, trim_to, info);
+  pg_log.trim(handler, trim_to, info);
 
-  dout(10) << __func__ << ": trimming to " << trim_rollback_to
-	   << " entries " << handler.to_trim << dendl;
-  handler.apply(this, &t);
+  if (handler) {
+    dout(10) << __func__ << ": trimming to " << trim_rollback_to
+	     << " entries " << handler->to_trim << dendl;
+    handler->apply(this, &t);
+  }
 
   // update the local pg, pg log
   dirty_info = true;

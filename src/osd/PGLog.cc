@@ -96,9 +96,11 @@ void PGLog::IndexedLog::trim(
 		    << " on " << *this << dendl;
   }
 
-  if (s > can_rollback_to)
-    can_rollback_to = s;
-  advance_rollback_info_trimmed_to(s, handler);
+  if (handler) {
+    if (s > can_rollback_to)
+      can_rollback_to = s;
+    advance_rollback_info_trimmed_to(s, handler);
+  }
 
   while (!log.empty()) {
     pg_log_entry_t &e = *log.begin();
