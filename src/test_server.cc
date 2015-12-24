@@ -25,7 +25,8 @@ TestServer::TestServer(int _iops,
   iops(_iops),
   thread_pool_size(_thread_pool_size),
   active_threads(0),
-  finishing(false)
+  finishing(false),
+  inner_queue_2(thread_pool_size)
 {
 #if 0
     std::chrono::microseconds op_time((int) (0.5 + 1000000.0 / iops / thread_pool_size));
