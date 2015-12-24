@@ -8108,8 +8108,6 @@ void OSD::handle_op(OpRequestRef& op, OSDMapRef& osdmap)
     return;
   }
 
-  // set up a map send if the Op gets blocked for some reason
-  send_map_on_destruct share_map(this, m, osdmap, m->get_map_epoch());
   Session *client_session =
       static_cast<Session*>(m->get_connection()->get_priv());
   epoch_t last_sent_epoch;
@@ -8118,7 +8116,7 @@ void OSD::handle_op(OpRequestRef& op, OSDMapRef& osdmap)
     last_sent_epoch = client_session->last_sent_epoch;
     client_session->sent_epoch_lock.unlock();
   }
-  share_map.should_send = service.should_share_map(
+  bool should_send = service.should_share_map(
       m->get_source(), m->get_connection().get(), m->get_map_epoch(),
       osdmap, client_session ? &last_sent_epoch : NULL);
   if (client_session) {
@@ -8149,12 +8147,14 @@ void OSD::handle_op(OpRequestRef& op, OSDMapRef& osdmap)
 
   PG *pg = get_pg_or_queue_for_pg(pgid, op);
   if (pg) {
-    op->send_map_update = share_map.should_send;
+    op->send_map_update = should_send;
     op->sent_epoch = m->get_map_epoch();
     enqueue_op(pg, op);
-    share_map.should_send = false;
     return;
   }
+  // set up a map send if the Op gets blocked for some reason
+  send_map_on_destruct share_map(this, m, osdmap, m->get_map_epoch());
+  share_map.should_send = should_send;
 
   // ok, we didn't have the PG.  let's see if it's our fault or the client's.
 
