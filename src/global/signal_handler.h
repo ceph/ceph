@@ -22,6 +22,8 @@
 
 typedef void (*signal_handler_t)(int);
 
+typedef void (*signal_siginfo_handler_t)(int,siginfo_t *, void *);
+
 #ifndef HAVE_REENTRANT_STRSIGNAL
 # define sig_str(signum) sys_siglist[signum]
 #else
@@ -49,8 +51,8 @@ void queue_async_signal(int signum);
 /// install a safe, async, callback for the given signal
 void register_async_signal_handler(int signum, signal_handler_t handler);
 void register_async_signal_handler_oneshot(int signum, signal_handler_t handler);
-
+void register_async_signalinfo_handler(int signum, signal_siginfo_handler_t siginfo_handler);
 /// uninstall a safe async signal callback
 void unregister_async_signal_handler(int signum, signal_handler_t handler);
-
+void unregister_async_signalinfo_handler(int signum, signal_siginfo_handler_t siginfo_handler);
 #endif
