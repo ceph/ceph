@@ -1035,6 +1035,7 @@ int KStore::umount()
 
   _sync();
   _reap_collections();
+  coll_map.clear();
 
   dout(20) << __func__ << " stopping kv thread" << dendl;
   _kv_stop();
