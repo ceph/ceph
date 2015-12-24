@@ -507,6 +507,7 @@ class MonitorDBStore
   }
 
   int get(const string& prefix, const string& key, bufferlist& bl) {
+    assert(bl.length() == 0);
     return db->get(prefix, key, &bl);
   }
 
