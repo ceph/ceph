@@ -260,13 +260,19 @@ int FileStore::lfn_open(coll_t cid,
   int fd, exist;
   assert(NULL != (*index).index);
   if (need_lock) {
+    if (create)
     ((*index).index)->access_lock.get_write();
+    else
+    ((*index).index)->access_lock.get_read();
   }
   if (!replaying) {
     *outfd = fdcache.lookup(oid);
     if (*outfd) {
       if (need_lock) {
-        ((*index).index)->access_lock.put_write();
+	if (create)
+	  ((*index).index)->access_lock.put_write();
+	else
+	  ((*index).index)->access_lock.put_read();
       }
       return 0;
     }
@@ -319,16 +325,14 @@ int FileStore::lfn_open(coll_t cid,
     *outfd = FDRef(new FDCache::FD(fd));
   }
 
+  r = 0;
+
+fail:
   if (need_lock) {
-    ((*index).index)->access_lock.put_write();
-  }
-
-  return 0;
-
- fail:
-
-  if (need_lock) {
-    ((*index).index)->access_lock.put_write();
+    if (create)
+      ((*index).index)->access_lock.put_write();
+    else
+      ((*index).index)->access_lock.put_read();
   }
 
   assert(!m_filestore_fail_eio || r != -EIO);
