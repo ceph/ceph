@@ -2142,6 +2142,27 @@ int librados::Rados::pool_reverse_lookup(int64_t id, std::string *name)
   return client->pool_get_name(id, name);
 }
 
+int librados::Rados::get_inconsistent_pgs(list<string>& pgs)
+{
+  string cmd = "{\"prefix\": \"pg get_inconsistent_pgs\"}";
+  bufferlist inbl;
+  bufferlist outbl;
+  string outs;
+  int r = mon_command(cmd, inbl, &outbl, &outs);
+
+  if (outbl.length() > 0) {
+    string pgs_str(outbl.c_str(), outbl.length());
+    std::size_t pos = 0;
+    std::size_t found = pgs_str.find_first_of('\n');
+    while (found != std::string::npos) {
+      pgs.push_back(pgs_str.substr(pos, found-pos));
+      pos = found+1;
+      found = pgs_str.find_first_of('\n', pos);
+    }
+  }
+  return r;
+}
+
 int librados::Rados::mon_command(string cmd, const bufferlist& inbl,
 				 bufferlist *outbl, string *outs)
 {
