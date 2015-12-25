@@ -4994,7 +4994,11 @@ COMMAND("pg " \
 	"name=offset,type=CephString,req=false",
 	"list missing objects on this pg, perhaps starting at an offset given in JSON",
 	"osd", "r", "cli")
-
+COMMAND("pg " \
+	"name=pgid,type=CephPgid " \
+	"name=cmd,type=CephChoices,strings=get_inconsistent_objects",
+	"list all inconsistent objects on this pg",
+	"osd", "r", "cli")
 // new form: tell <pgid> <cmd> for both cli and rest 
 
 COMMAND("query",
@@ -5153,7 +5157,8 @@ void OSD::do_command(Connection *con, ceph_tid_t tid, vector<string>& cmd, buffe
 	   (cmd_getval(cct, cmdmap, "pgid", pgidstr) &&
 	     (prefix == "query" ||
 	      prefix == "mark_unfound_lost" ||
-	      prefix == "list_missing")
+	      prefix == "list_missing" ||
+	      prefix == "get_inconsistent_objects")
 	   )) {
     pg_t pgid;
 

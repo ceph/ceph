@@ -851,6 +851,16 @@ int ReplicatedPG::do_command(cmdmap_t cmdmap, ostream& ss,
     f->close_section();
     f->flush(odata);
     return 0;
+  }
+  else if (command == "get_inconsistent_objects") {
+    set<string> out;
+    scrub_result.get_all_keys(&out);
+    f->open_array_section("all_inconsistent_objects");
+    for (set<string>::const_iterator p = out.begin(); p != out.end(); p++)
+      f->dump_string("inconsistent_object", *p);
+    f->close_section();
+    f->flush(odata);
+    return 0;
   };
 
   ss << "unknown pg command " << prefix;
