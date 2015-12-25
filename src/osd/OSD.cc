@@ -149,6 +149,7 @@
 #define dout_prefix _prefix(_dout, whoami, get_osdmap_epoch())
 
 const double OSD::OSD_TICK_INTERVAL = 1.0;
+const ghobject_t OSD::scrubresult_oid = ghobject_t(hobject_t(sobject_t(object_t("scrubresult"), 0)));
 
 static ostream& _prefix(std::ostream* _dout, int whoami, epoch_t epoch) {
   return *_dout << "osd." << whoami << " " << epoch << " ";
@@ -1902,6 +1903,16 @@ int OSD::init()
     dout(10) << "init creating/touching snapmapper object" << dendl;
     ObjectStore::Transaction t;
     t.touch(coll_t::meta(), OSD::make_snapmapper_oid());
+    r = store->apply_transaction(service.meta_osr.get(), t);
+    if (r < 0)
+      goto out;
+  }
+
+  // make sure pg scrub result object exists
+  if (!store->exists(coll_t::meta(), OSD::scrubresult_oid)) {
+    dout(10) << "init creating/touching scrub result object" << dendl;
+    ObjectStore::Transaction t;
+    t.touch(coll_t::meta(), OSD::scrubresult_oid);
     r = store->apply_transaction(service.meta_osr.get(), t);
     if (r < 0)
       goto out;

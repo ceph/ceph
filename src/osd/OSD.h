@@ -1149,6 +1149,8 @@ public:
 	0)));
   }
 
+  static const ghobject_t scrubresult_oid;
+
   static ghobject_t make_pg_log_oid(spg_t pg) {
     stringstream ss;
     ss << "pglog_" << pg;

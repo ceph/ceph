@@ -191,6 +191,8 @@ protected:
   CephContext *cct;
   OSDriver osdriver;
   SnapMapper snap_mapper;
+  OSDriver osdriver_scrub;
+  PGScrubResult scrub_result;
 
   virtual PGBackend *get_pgbackend() = 0;
 public:
