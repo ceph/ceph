@@ -1621,6 +1621,28 @@ bool PGMonitor::preprocess_command(MonOpRequestRef op)
     pg_map.encode(rdata);
     ss << "got pgmap version " << pg_map.version;
     r = 0;
+  } else if (prefix == "pg get_inconsistent_pgs") {
+    set<pg_t> pgs;
+    pg_map.get_inconsistent_pgs(pgs);
+    if (pgs.empty()) {
+      ss << "no inconsistent pg";
+    } else {
+      if (f) {
+	f->open_array_section("inconsistent pgs");
+        for (set<pg_t>::const_iterator p = pgs.begin(); p != pgs.end(); p++)
+	  f->dump_stream("pgid") << *p;
+	f->close_section();
+	f->flush(ds);
+      } else {
+	set<pg_t>::const_iterator p = pgs.begin();
+	ds << *p++;
+	for (; p != pgs.end(); p++) {
+	  ds << "\n" << *p;
+	}
+        ss << "got " << pgs.size() << " inconsistent pg(s)";
+      }
+    }
+    r = 0;
   } else if (prefix == "pg dump") {
     string val;
     vector<string> dumpcontents;

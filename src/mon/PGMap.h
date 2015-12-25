@@ -271,6 +271,8 @@ public:
 
   void dirty_all(Incremental& inc);
 
+  void get_inconsistent_pgs(set<pg_t>& pgs) const;
+
   void dump(Formatter *f) const; 
   void dump_basic(Formatter *f) const;
   void dump_pg_stats(Formatter *f, bool brief) const;

@@ -1838,6 +1838,10 @@ struct pg_stat_t {
   }
 
   bool is_acting_osd(int32_t osd, bool primary) const;
+
+  bool is_inconsistent() const {
+    return state & PG_STATE_INCONSISTENT;
+  }
   void dump(Formatter *f) const;
   void dump_brief(Formatter *f) const;
   void encode(bufferlist &bl) const;
