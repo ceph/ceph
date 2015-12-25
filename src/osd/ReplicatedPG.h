@@ -479,6 +479,8 @@ public:
     osd_reqid_t reqid;
     vector<OSDOp> &ops;
 
+    vector<async_opvec_control *> ctx_opvec_controls;
+
     const ObjectState *obs; // Old objectstate
     const SnapSet *snapset; // Old snapset
 
@@ -628,9 +630,11 @@ public:
 	snapset = &obc->ssc->snapset;
       }
     }
+
     OpContext(OpRequestRef _op, osd_reqid_t _reqid,
               vector<OSDOp>& _ops, ReplicatedPG *_pg) :
-      op(_op), reqid(_reqid), ops(_ops), obs(NULL), snapset(0),
+      op(_op), reqid(_reqid), ops(_ops),
+      obs(NULL), snapset(0),
       modify(false), user_modify(false), undirty(false), cache_evict(false),
       ignore_cache(false), ignore_log_op_stats(false),
       bytes_written(0), bytes_read(0), user_at_version(0),
@@ -652,6 +656,7 @@ public:
 	snapset = &obc->ssc->snapset;
       }
     }
+
     ~OpContext() {
       assert(!op_t);
       assert(lock_to_release == NONE);
@@ -665,7 +670,19 @@ public:
 	delete i->second.second;
       }
       assert(on_finish == NULL);
+
+      // delete the async_opvec_controls
+      while (!ctx_opvec_controls.empty()) {
+        async_opvec_control *opvec_control = ctx_opvec_controls.back();
+        ctx_opvec_controls.pop_back();
+
+        // Here we just free all the opvec_controls since we allocated those;
+        // the OSDOp's are allocated and freed in the same way as for
+        // synchronous operation.
+        delete opvec_control;
+      }
     }
+
     void finish(int r) {
       if (on_finish) {
 	on_finish->complete(r);
@@ -674,6 +691,7 @@ public:
     }
   };
   friend struct OpContext;
+  void execute_ctx_continue(OpContext *ctx, int result);
 
   /*
    * State on the PG primary associated with the replicated mutation
@@ -1476,7 +1494,11 @@ public:
 
   RepGather *trim_object(const hobject_t &coid);
   void snap_trimmer(epoch_t e);
-  int do_osd_ops(OpContext *ctx, vector<OSDOp>& ops);
+
+  int do_osd_ops(OpContext *ctx, vector<OSDOp>& ops,
+                 osd_op_callback_t callback = NULL);
+  void osd_op_call_completion(OpContext *ctx, OSDOp *osd_op, bool asyncmode, int result);
+  int prepare_transaction_continue(OpContext *ctx, int result, bool async_call);
 
   int _get_tmap(OpContext *ctx, bufferlist *header, bufferlist *vals);
   int do_tmap2omap(OpContext *ctx, unsigned flags);

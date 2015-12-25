@@ -592,7 +592,14 @@ int main(int argc, const char **argv)
                 g_conf->osd_data,
                 g_conf->osd_journal);
 
-  int err = osd->pre_init();
+  int err = store->create_read_completion_threads();
+  if (err < 0) {
+    derr << TEXT_RED << " ** ERROR: store create read completion threads failed: " << cpp_strerror(-err)
+	 << TEXT_NORMAL << dendl;
+    return 1;
+  }
+
+  err = osd->pre_init();
   if (err < 0) {
     derr << TEXT_RED << " ** ERROR: osd pre_init failed: " << cpp_strerror(-err)
 	 << TEXT_NORMAL << dendl;

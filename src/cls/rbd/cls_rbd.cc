@@ -1740,6 +1740,50 @@ int copyup(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
  * @param id the id stored in the object
  * @returns 0 on success, negative error code on failure
  */
+
+void get_id_async_callback(cls_method_context_t hctx, OSDOp *osd_op, bool asyncmode, int read_status)
+{
+  OSDOp *parent = osd_op->parent_op;
+  int retval = read_status;
+  string id;
+
+  assert(parent);
+  if (retval >= 0) {
+    try {
+      bufferlist::iterator iter = osd_op->outdata.begin();
+      ::decode(id, iter);
+    } catch (const buffer::error &err) {
+      retval = -EIO;
+    }
+  }
+
+  if (retval >= 0)
+    ::encode(id, parent->outdata);
+
+  osd_op->parent_op_callback(hctx, parent, asyncmode, retval);
+  delete osd_op;
+}
+
+int get_id_async(cls_method_context_t hctx, OSDOp& parent, cls_method_cxx_cb_t cb)
+{
+  uint64_t size;
+  int r = cls_cxx_stat(hctx, &size, NULL);
+  if (r < 0)
+    return r;
+
+  if (size == 0)
+    return -ENOENT;
+
+  OSDOp *osd_op = new OSDOp(&parent, cb);
+  r = cls_cxx_read_async(hctx, 0, size, &osd_op->outdata, *osd_op, get_id_async_callback);
+  if (r < 0) {
+    CLS_ERR("get_id: could not read id: %d", r);
+    return r;
+  }
+
+  return 0;
+}
+
 int get_id(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 {
   uint64_t size;
@@ -3343,7 +3387,7 @@ void __cls_init()
   /* methods for the rbd_id.$image_name objects */
   cls_register_cxx_method(h_class, "get_id",
 			  CLS_METHOD_RD,
-			  get_id, &h_get_id);
+			  get_id, &h_get_id, get_id_async);
   cls_register_cxx_method(h_class, "set_id",
 			  CLS_METHOD_RD | CLS_METHOD_WR,
 			  set_id, &h_set_id);

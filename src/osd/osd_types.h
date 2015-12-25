@@ -3873,6 +3873,10 @@ struct ScrubMap {
 WRITE_CLASS_ENCODER(ScrubMap::object)
 WRITE_CLASS_ENCODER(ScrubMap)
 
+struct OSDOp;
+struct async_opvec_control;
+// Callback function for OSDOp asynchronous completion.
+typedef void (*osd_op_callback_t)(void *ctx, OSDOp *osd_op, bool async_mode, int result);
 
 struct OSDOp {
   ceph_osd_op op;
@@ -3881,7 +3885,20 @@ struct OSDOp {
   bufferlist indata, outdata;
   int32_t rval;
 
-  OSDOp() : rval(0) {
+  bool async_done;
+  int async_result;
+
+  struct OSDOp *parent_op;
+  osd_op_callback_t parent_op_callback;
+  async_opvec_control *opvec_control;
+
+  OSDOp() : rval(0), async_done(false), parent_op(0), opvec_control(0) {
+    memset(&op, 0, sizeof(ceph_osd_op));
+  }
+
+  OSDOp(OSDOp *parent_op_arg, osd_op_callback_t poc) :
+    rval(0), async_done(false),
+    parent_op(parent_op_arg), parent_op_callback(poc) {
     memset(&op, 0, sizeof(ceph_osd_op));
   }
 
@@ -3922,6 +3939,78 @@ struct OSDOp {
 };
 
 ostream& operator<<(ostream& out, const OSDOp& op);
+
+// Tracks if all OSDOps have completed.
+struct async_opvec_control {
+  bool callbacks_locked;      // whether callbacks are allowed/blocked.
+  osd_op_callback_t callback;
+  vector<OSDOp *> peer_ops;
+  bool lock_used;
+  Mutex *async_lock;
+
+  //
+  // Add the OSDOp to the given opvec_control. This is needed for
+  // the OSDOp's async completion handling.
+  //
+  void add_osd_op(struct OSDOp *osd_op)
+  {
+    peer_ops.push_back(osd_op);
+    osd_op->opvec_control = this;
+  }
+
+  // Check if all ops in an opvec are complete. If so, return the
+  // callback in the opvec_control. Holds a lock over all async
+  // completions for that OpContext.
+  osd_op_callback_t
+  check_completion(bool async_mode, int *result, OSDOp *osd_op = NULL)
+  {
+    if (lock_used)
+      async_lock->Lock();
+    osd_op_callback_t cb = NULL;
+
+    if (osd_op) {
+      osd_op->async_done = true;
+      osd_op->async_result = *result;
+    }
+
+    if (callbacks_locked)
+      goto out;
+
+    *result = 0;
+    for (vector<OSDOp *>::iterator p = peer_ops.begin(); p != peer_ops.end(); ++p) {
+      OSDOp *cur = *p;
+      if (!cur->async_done)
+        goto out;
+
+      if (cur->async_result < 0 && *result == 0)
+        *result = cur->async_result;
+    }
+
+    cb = callback;
+    // Ensure callback executed only once for the vector.
+    callback = NULL;
+
+  out:
+    if (lock_used)
+      async_lock->Unlock();
+    return cb;
+  }
+
+  async_opvec_control(bool use_lock, osd_op_callback_t cb): callback(cb), lock_used(use_lock)
+  {
+    if (lock_used) {
+      async_lock = new Mutex("async_opvec_lock");
+      callbacks_locked = true;
+    } else
+      callbacks_locked = false;
+  }
+
+  ~async_opvec_control()
+  {
+    if (lock_used)
+      delete async_lock;
+  }
+};
 
 struct watch_item_t {
   entity_name_t name;

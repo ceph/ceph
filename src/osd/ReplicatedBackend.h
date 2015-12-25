@@ -162,6 +162,12 @@ public:
                Context *on_complete,
                bool fast_read = false);
 
+  void objects_read_async_use_aio(
+    const hobject_t &hoid,
+    const list<pair<boost::tuple<uint64_t, uint64_t, uint32_t>,
+	       pair<bufferlist*, Context*> > > &to_read,
+    Context *on_complete);
+
 private:
   // push
   struct PushInfo {

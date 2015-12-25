@@ -44,6 +44,10 @@ using namespace std;
 
 #include "include/uuid.h"
 
+#ifdef HAVE_LIBAIO
+#include <libaio.h>
+#endif
+#include "common/errno.h"
 
 // from include/linux/falloc.h:
 #ifndef FALLOC_FL_PUNCH_HOLE
@@ -180,6 +184,7 @@ private:
       return 0;
     }
   } sync_thread;
+  bool async_read_avail;
 
   // -- op workqueue --
   struct Op {
@@ -376,6 +381,70 @@ private:
     }
   } op_wq;
 
+#define MAX_READ_EVENTS (1024)
+  // See struct aio_info
+  struct read_aio {
+    struct iocb iocb;
+    FDRef fd;
+    bufferlist *bl;
+    bufferptr bptr;
+    bool done;
+    uint32_t op_flags;
+
+    uint64_t off, len;
+    const ghobject_t& oid;
+    Context *context;
+    int status;
+
+    read_aio(FDRef fd_arg, bufferlist *b, uint64_t o, uint64_t s,
+             uint32_t opflags, const ghobject_t& oid_arg,
+             Context *context_arg)
+      : fd(fd_arg), bl(b), done(false),
+        op_flags(opflags), off(o), len(b->length()), oid(oid_arg),
+        context(context_arg), status(0)
+    {
+      memset((void*)&iocb, 0, sizeof(iocb));
+    }
+    ~read_aio() {
+    }
+  };
+
+  class ReadCompletionThread : public Thread {
+    unsigned magic;
+    FileStore *fs;
+  public:
+    io_context_t read_aio_ctx;
+    bool active;
+    ReadCompletionThread(FileStore *fs_arg) :
+      magic(0xdeadbeac), fs(fs_arg), active(true)
+    {
+      read_aio_ctx = 0;
+      int r = io_setup(MAX_READ_EVENTS, &read_aio_ctx);
+      if (r < 0) {
+        derr << "ReadCompletionThread: unable to set up io_context for " << this << " " <<
+          cpp_strerror(r) << dendl;
+      }
+    }
+
+    void * entry() {
+      fs->read_finish_thread_entry(this);
+      magic = ~(0xdeadbeac);
+      derr << "ReadCompletionThread: " << this << "  exit " << dendl;
+      return 0;
+    };
+  };
+
+  list<ReadCompletionThread*> read_completion_threads;
+  list<ReadCompletionThread *>::iterator next_read_submit_thread;
+  Mutex read_completion_threads_lock;
+
+  void read_finish_thread_entry(ReadCompletionThread *rct);
+  void async_read_finish(read_aio *rio);
+  void read_aio_bl(FDRef fdref, bufferlist* bl, bufferptr* bptr,
+                   off64_t& pos, size_t len, Context *ctx, uint32_t op_flags,
+                   const ghobject_t &oid);
+  int rio_num, rio_bytes;
+
   void _do_op(OpSequencer *o, ThreadPool::TPHandle &handle);
   void _finish_op(OpSequencer *o);
   Op *build_op(list<Transaction*>& tls,
@@ -392,6 +461,17 @@ private:
   PerfCounters *logger;
 
 public:
+  int create_read_completion_threads();
+  int async_read_dispatch(
+    Context *ctx,
+    const coll_t *cid,
+    const ghobject_t& oid,
+    uint64_t offset,
+    size_t len,
+    bufferlist* bl,
+    uint32_t op_flags,
+    bool allow_eio);
+
   int lfn_find(const ghobject_t& oid, const Index& index, 
                                   IndexedPath *path = NULL);
   int lfn_truncate(coll_t cid, const ghobject_t& oid, off_t length);
@@ -549,6 +629,10 @@ public:
     bufferlist& bl,
     uint32_t op_flags = 0,
     bool allow_eio = false);
+
+  bool async_read_capable() {return async_read_avail;}
+  //bool async_read_capable() {return false;}
+
   int _do_fiemap(int fd, uint64_t offset, size_t len,
                  map<uint64_t, uint64_t> *m);
   int _do_seek_hole_data(int fd, uint64_t offset, size_t len,
@@ -729,6 +813,7 @@ private:
   int m_filestore_sloppy_crc_block_size;
   uint64_t m_filestore_max_alloc_hint_size;
   long m_fs_type;
+  int m_filestore_async_threads;
 
   //Determined xattr handling based on fs type
   void set_xattr_limits_via_conf();

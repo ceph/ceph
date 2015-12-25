@@ -274,6 +274,7 @@ struct AsyncReadCallback : public GenContext<ThreadPool::TPHandle&> {
     delete c;
   }
 };
+
 void ReplicatedBackend::objects_read_async(
   const hobject_t &hoid,
   const list<pair<boost::tuple<uint64_t, uint64_t, uint32_t>,
@@ -306,6 +307,25 @@ void ReplicatedBackend::objects_read_async(
       new AsyncReadCallback(r, on_complete)));
 }
 
+void ReplicatedBackend::objects_read_async_use_aio(
+  const hobject_t &hoid,
+  const list<pair<boost::tuple<uint64_t, uint64_t, uint32_t>,
+		  pair<bufferlist*, Context*> > > &to_read,
+  Context *on_complete)
+{
+  int r = 0;
+  for (list<pair<boost::tuple<uint64_t, uint64_t, uint32_t>,
+		 pair<bufferlist*, Context*> > >::const_iterator i =
+	   to_read.begin();
+       i != to_read.end() && r >= 0;
+       ++i) {
+    int _s = store->async_read_dispatch(on_complete, &coll, ghobject_t(hoid), i->first.get<0>(),
+			 i->first.get<1>(), i->second.first,
+			 i->first.get<2>());
+    if (_s < 0)
+      r = _s;
+  }
+}
 
 class RPGTransaction : public PGBackend::PGTransaction {
   coll_t coll;

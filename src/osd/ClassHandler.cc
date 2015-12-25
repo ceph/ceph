@@ -209,14 +209,18 @@ ClassHandler::ClassMethod *ClassHandler::ClassData::register_method(const char *
 
 ClassHandler::ClassMethod *ClassHandler::ClassData::register_cxx_method(const char *mname,
                                                                         int flags,
-									cls_method_cxx_call_t func)
+									cls_method_cxx_call_t func,
+                                                                        cls_method_cxx_async_call_t asyncfunc)
 {
   /* no need for locking, called under the class_init mutex */
   dout(10) << "register_cxx_method " << name << "." << mname << " flags " << flags << " " << (void*)func << dendl;
   ClassMethod& method = methods_map[mname];
   method.cxx_func = func;
+  method.cxx_async_func = asyncfunc;
   method.name = mname;
   method.flags = flags;
+  if (asyncfunc != NULL)
+    method.flags |= CLS_METHOD_ASYNC;
   method.cls = this;
   return &method;
 }
@@ -297,3 +301,13 @@ int ClassHandler::ClassMethod::exec(cls_method_context_t ctx, bufferlist& indata
   return ret;
 }
 
+// Execute the asynchronous handler
+int ClassHandler::ClassMethod::exec_async(cls_method_context_t ctx,
+                                          OSDOp& osd_op, cls_method_cxx_cb_t cxx_callback)
+{
+  if (cxx_async_func) {
+    // C++ call async version
+    return cxx_async_func(ctx, osd_op, cxx_callback);
+  }
+  return -EOPNOTSUPP;
+}
