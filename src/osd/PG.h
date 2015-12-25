@@ -1073,6 +1073,7 @@ public:
       epoch_start(0),
       active(false), queue_snap_trim(false),
       waiting_on(0), shallow_errors(0), deep_errors(0), fixed(0),
+      t(new ObjectStore::Transaction()),
       must_scrub(false), must_deep_scrub(false), must_repair(false),
       auto_repair(false),
       num_digest_updates_pending(0),
@@ -1100,6 +1101,7 @@ public:
     OpRequestRef active_rep_scrub;
     utime_t scrub_reg_stamp;  // stamp we registered for
 
+    ObjectStore::Transaction *t;
     // flags to indicate explicitly requested scrubs (by admin)
     bool must_scrub, must_deep_scrub, must_repair;
 
@@ -1210,6 +1212,8 @@ public:
       missing.clear();
       authoritative.clear();
       num_digest_updates_pending = 0;
+      delete t;
+      t = new ObjectStore::Transaction();
     }
 
   } scrubber;
