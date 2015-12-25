@@ -4999,6 +4999,12 @@ COMMAND("pg " \
 	"name=cmd,type=CephChoices,strings=get_inconsistent_objects",
 	"list all inconsistent objects on this pg",
 	"osd", "r", "cli")
+COMMAND("pg " \
+	"name=pgid,type=CephPgid " \
+	"name=cmd,type=CephChoices,strings=get_inconsistent_info " \
+	"name=object,type=CephString",
+	"get inconsistent info of <object> on this pg",
+	"osd", "r", "cli")
 // new form: tell <pgid> <cmd> for both cli and rest 
 
 COMMAND("query",
@@ -5158,7 +5164,8 @@ void OSD::do_command(Connection *con, ceph_tid_t tid, vector<string>& cmd, buffe
 	     (prefix == "query" ||
 	      prefix == "mark_unfound_lost" ||
 	      prefix == "list_missing" ||
-	      prefix == "get_inconsistent_objects")
+	      prefix == "get_all_inconsistent_objects" ||
+	      prefix == "get_inconsistent_info")
 	   )) {
     pg_t pgid;
 

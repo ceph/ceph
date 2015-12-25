@@ -861,6 +861,22 @@ int ReplicatedPG::do_command(cmdmap_t cmdmap, ostream& ss,
     f->close_section();
     f->flush(odata);
     return 0;
+  }
+  else if (command == "get_inconsistent_info") {
+    string object;
+    cmd_getval(cct, cmdmap, "object", object);
+    PGScrubResult::object_scrub_info_t out;
+    int r = scrub_result.get_object_scrub_info(object, &out);
+    if (r == -ENOENT) {
+      ss << object << " has not inconsistent info";
+      return -ENOENT;
+    } else if (r < 0) {
+      ss << "can't get inconsistent info of " << object;
+      return -EINVAL;
+    }
+    out.dump(f.get());
+    f->flush(odata);
+    return 0;
   };
 
   ss << "unknown pg command " << prefix;
