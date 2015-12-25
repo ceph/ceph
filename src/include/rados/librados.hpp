@@ -1102,7 +1102,7 @@ namespace librados
 
     void locator_set_key(const std::string& key);
     void set_namespace(const std::string& nspace);
-
+    void set_scrub_read_shard(const int64_t osd);
     int64_t get_id();
 
     uint32_t get_object_hash_position(const std::string& oid);

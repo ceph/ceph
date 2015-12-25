@@ -1920,6 +1920,11 @@ void librados::IoCtx::set_namespace(const string& nspace)
   io_ctx_impl->oloc.nspace = nspace;
 }
 
+void librados::IoCtx::set_scrub_read_shard(const int64_t osd)
+{
+  io_ctx_impl->osd = osd;
+}
+
 int64_t librados::IoCtx::get_id()
 {
   return io_ctx_impl->get_id();

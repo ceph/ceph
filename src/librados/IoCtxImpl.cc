@@ -142,7 +142,8 @@ struct C_aio_notify_Ack : public Context {
 
 librados::IoCtxImpl::IoCtxImpl() :
   ref_cnt(0), client(NULL), poolid(0), assert_ver(0), last_objver(0),
-  notify_timeout(30), aio_write_list_lock("librados::IoCtxImpl::aio_write_list_lock"),
+  notify_timeout(30), osd(-1),
+  aio_write_list_lock("librados::IoCtxImpl::aio_write_list_lock"),
   aio_write_seq(0), cached_pool_names_lock("librados::IoCtxImpl::cached_pool_names_lock"),
   objecter(NULL)
 {
@@ -153,7 +154,8 @@ librados::IoCtxImpl::IoCtxImpl(RadosClient *c, Objecter *objecter,
   : ref_cnt(0), client(c), poolid(poolid), snap_seq(s),
     assert_ver(0), last_objver(0),
     notify_timeout(c->cct->_conf->client_notify_timeout),
-    oloc(poolid), aio_write_list_lock("librados::IoCtxImpl::aio_write_list_lock"),
+    oloc(poolid), osd(-1),
+    aio_write_list_lock("librados::IoCtxImpl::aio_write_list_lock"),
     aio_write_seq(0), cached_pool_names_lock("librados::IoCtxImpl::cached_pool_names_lock"),
     objecter(objecter)
 {
@@ -664,6 +666,10 @@ int librados::IoCtxImpl::operate_read(const object_t& oid,
   Objecter::Op *objecter_op = objecter->prepare_read_op(oid, oloc,
 	                                      *o, snap_seq, pbl, flags,
 	                                      onack, &ver);
+  if (osd >= 0) {
+    objecter_op->target.flags |= CEPH_OSD_FLAG_SCRUB_READS;
+    objecter_op->target.osd = osd;
+  }
   objecter->op_submit(objecter_op);
 
   mylock.Lock();

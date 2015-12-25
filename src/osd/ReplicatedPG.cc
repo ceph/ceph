@@ -1550,7 +1550,8 @@ void ReplicatedPG::do_op(OpRequestRef& op)
     }
   }
 
-  if ((m->get_flags() & (CEPH_OSD_FLAG_BALANCE_READS |
+  if ((m->get_flags() & (CEPH_OSD_FLAG_SCRUB_READS |
+			 CEPH_OSD_FLAG_BALANCE_READS |
 			 CEPH_OSD_FLAG_LOCALIZE_READS)) &&
       op->may_read() &&
       !(op->may_write() || op->may_cache())) {
@@ -1787,7 +1788,8 @@ void ReplicatedPG::do_op(OpRequestRef& op)
     // we have to wait for the object.
     if (is_primary() ||
 	(!(m->has_flag(CEPH_OSD_FLAG_BALANCE_READS)) &&
-	 !(m->has_flag(CEPH_OSD_FLAG_LOCALIZE_READS)))) {
+	 !(m->has_flag(CEPH_OSD_FLAG_LOCALIZE_READS)) &&
+	 !(m->has_flag(CEPH_OSD_FLAG_SCRUB_READS)))) {
       // missing the specific snap we need; requeue and wait.
       assert(!op->may_write()); // only happens on a read/cache
       wait_for_unreadable_object(missing_oid, op);
