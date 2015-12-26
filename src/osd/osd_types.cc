@@ -3404,6 +3404,90 @@ void ObjectModDesc::decode(bufferlist::iterator &_bl)
   DECODE_FINISH(_bl);
 }
 
+void ObjectCleanRegions::trim()
+{
+  while (clean_offsets.num_intervals() > max_num_intervals) {
+    typename interval_set<uint64_t>::iterator shortest_interval = clean_offsets.begin();
+    if (shortest_interval == clean_offsets.end())
+      break;
+    for (typename interval_set<uint64_t>::iterator it = clean_offsets.begin();
+	 it != clean_offsets.end();
+	 ++it) {
+      if (it.get_len() < shortest_interval.get_len())
+	shortest_interval = it;
+    }
+    clean_offsets.erase(shortest_interval);
+  }
+}
+
+void ObjectCleanRegions::merge(const ObjectCleanRegions &other)
+{
+  clean_offsets.intersection_of(other.clean_offsets);
+  clean_omap = clean_omap && other.clean_omap;
+  trim();
+}
+
+void ObjectCleanRegions::mark_data_region_dirty(uint64_t offset, uint64_t len)
+{
+  interval_set<uint64_t> clean_region;
+  clean_region.insert(0, (uint64_t)-1);
+  clean_region.erase(offset, len);
+  clean_offsets.intersection_of(clean_region);
+  trim();
+}
+
+void ObjectCleanRegions::mark_omap_dirty()
+{
+  clean_omap = false;
+}
+
+interval_set<uint64_t> ObjectCleanRegions::get_dirty_regions() const
+{
+   interval_set<uint64_t> dirty_region;
+   dirty_region.insert(0, (uint64_t)-1);
+   dirty_region.subtract(clean_offsets);
+   return dirty_region;
+}
+
+bool ObjectCleanRegions::omap_is_dirty() const
+{
+  return !clean_omap;
+}
+
+void ObjectCleanRegions::encode(bufferlist &bl) const
+{
+  ::encode(clean_offsets, bl);
+  ::encode(clean_omap, bl);
+}
+
+void ObjectCleanRegions::decode(bufferlist::iterator &bl)
+{
+  ::decode(clean_offsets, bl);
+  ::decode(clean_omap, bl);
+}
+
+void ObjectCleanRegions::dump(Formatter *f) const
+{
+  f->open_object_section("object_clean_regions");
+  f->dump_stream("clean_offsets") << clean_offsets;
+  f->dump_bool("clean_omap", clean_omap);
+  f->close_section();
+}
+
+void ObjectCleanRegions::generate_test_instances(list<ObjectCleanRegions*>& o)
+{
+  o.push_back(new ObjectCleanRegions());
+  o.push_back(new ObjectCleanRegions());
+  o.back()->mark_data_region_dirty(4096, 40960);
+  o.back()->mark_omap_dirty();
+}
+
+ostream& operator<<(ostream& out, const ObjectCleanRegions& ocr)
+{
+  return out << "clean_offsets: " << ocr.clean_offsets
+	     << ", clean_omap: " << ocr.clean_omap;
+}
+
 // -- pg_log_entry_t --
 
 string pg_log_entry_t::get_key_name() const
@@ -3434,7 +3518,7 @@ void pg_log_entry_t::decode_with_checksum(bufferlist::iterator& p)
 
 void pg_log_entry_t::encode(bufferlist &bl) const
 {
-  ENCODE_START(11, 4, bl);
+  ENCODE_START(12, 4, bl);
   ::encode(op, bl);
   ::encode(soid, bl);
   ::encode(version, bl);
@@ -3461,12 +3545,13 @@ void pg_log_entry_t::encode(bufferlist &bl) const
   ::encode(extra_reqids, bl);
   if (op == ERROR)
     ::encode(return_code, bl);
+  ::encode(clean_regions, bl);
   ENCODE_FINISH(bl);
 }
 
 void pg_log_entry_t::decode(bufferlist::iterator &bl)
 {
-  DECODE_START_LEGACY_COMPAT_LEN(11, 4, 4, bl);
+  DECODE_START_LEGACY_COMPAT_LEN(12, 4, 4, bl);
   ::decode(op, bl);
   if (struct_v < 2) {
     sobject_t old_soid;
@@ -3517,6 +3602,12 @@ void pg_log_entry_t::decode(bufferlist::iterator &bl)
     ::decode(extra_reqids, bl);
   if (struct_v >= 11 && op == ERROR)
     ::decode(return_code, bl);
+  if (struct_v >= 12) {
+    ::decode(clean_regions, bl);
+  } else {
+    clean_regions.mark_data_region_dirty(0, (uint64_t)-1);
+    clean_regions.mark_omap_dirty();
+  }
   DECODE_FINISH(bl);
 }
 
@@ -3557,6 +3648,11 @@ void pg_log_entry_t::dump(Formatter *f) const
   {
     f->open_object_section("mod_desc");
     mod_desc.dump(f);
+    f->close_section();
+  }
+  {
+    f->open_object_section("clean_regions");
+    clean_regions.dump(f);
     f->close_section();
   }
 }
@@ -3765,12 +3861,12 @@ ostream& pg_log_t::print(ostream& out) const
 }
 
 // -- pg_missing_t --
-
 ostream& operator<<(ostream& out, const pg_missing_item& i)
 {
   out << i.need;
   if (i.have != eversion_t())
     out << "(" << i.have << ")";
+  out << " " << i.clean_regions;
   return out;
 }
 

@@ -86,6 +86,7 @@
 #define CEPH_FEATURE_FS_FILE_LAYOUT_V2       (1ULL<<58) /* file_layout_t */
 #define CEPH_FEATURE_FS_BTIME                (1ULL<<59) /* btime */
 #define CEPH_FEATURE_FS_CHANGE_ATTR          (1ULL<<59) /* change_attr */
+#define CEPH_OSD_PARTIAL_RECOVERY  (1ULL<<60) /* recover partial extents for objects */
 
 #define CEPH_FEATURE_RESERVED2 (1ULL<<61)  /* slow down, we are almost out... */
 #define CEPH_FEATURE_RESERVED  (1ULL<<62)  /* DO NOT USE THIS ... last bit! */
@@ -184,6 +185,7 @@ static inline unsigned long long ceph_sanitize_features(unsigned long long f) {
 	 CEPH_FEATURE_SERVER_KRAKEN |	\
 	 CEPH_FEATURE_FS_BTIME |			 \
 	 CEPH_FEATURE_FS_CHANGE_ATTR |			 \
+	 CEPH_OSD_PARTIAL_RECOVERY |	 \
 	 0ULL)
 
 #define CEPH_FEATURES_SUPPORTED_DEFAULT  CEPH_FEATURES_ALL
