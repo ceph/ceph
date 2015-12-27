@@ -83,6 +83,38 @@ public:
       (in.first - off) + in.second);
     return make_pair(off, len);
   }
+  map<int, pair<uint64_t, uint64_t>> offset_len_to_chunk_offset(
+    pair<uint64_t, uint64_t> in, int chunk_count) const {
+    pair<uint64_t, uint64_t> bounds = offset_len_to_stripe_bounds(in);
+    pair<uint64_t, uint64_t> chunk_off_len = aligned_offset_len_to_chunk(bounds);
+
+    map<int, pair<uint64_t, uint64_t>> chunk_offsets;
+    // data chunk
+    for (int i = 0; i < (int)stripe_size; ++i) {
+      pair<uint64_t, uint64_t> tmp = make_pair(bounds.first + chunk_size * i, 0);
+      // find the chunk start
+      while (tmp.first < in.first && tmp.first < bounds.first + bounds.second) {
+        tmp.first += stripe_width;
+      }
+      // find the chunk end
+      if (tmp.first < in.second && tmp.first < bounds.first + bounds.second) {
+        uint64_t tmp_end = tmp.first + chunk_size;
+        tmp.second += chunk_size;
+        while (tmp_end < in.second) {
+          tmp.second += chunk_size;
+          tmp_end += stripe_width;
+        }
+      }
+      tmp.first = aligned_logical_offset_to_chunk_offset(
+        logical_to_prev_stripe_offset(tmp.first));
+      chunk_offsets.insert(make_pair(i, tmp));
+    }
+    // parity chunk
+    for (int i = (int)stripe_size; i < chunk_count; ++i) {
+      chunk_offsets.insert(make_pair(i, chunk_off_len));
+    }
+    return chunk_offsets;
+  }
 };
 
 int decode(

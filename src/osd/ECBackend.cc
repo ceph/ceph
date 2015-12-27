@@ -966,9 +966,16 @@ void ECBackend::handle_sub_read(
         dout(20) << __func__ << " read request=" << j->get<1>() << " r=" << r << " len=" << bl.length() << dendl;
 
         // read overwrite data
+        const vector<int> &chunk_mapping = ec_impl->get_chunk_mapping();
+        int pg_shard = (int)get_parent()->whoami_shard().shard;
+        int shard_id = pg_shard >= (int)chunk_mapping.size() ? pg_shard : chunk_mapping[pg_shard];
+
         for (map<version_t, pair<uint64_t, uint64_t> >::iterator ow_iter =
             ow_info->begin(); ow_iter != ow_info->end(); ++ow_iter) {
-          pair<uint64_t, uint64_t> &ver_off = ow_iter->second;
+          map<int, pair<uint64_t, uint64_t>> shards_to_write =
+            sinfo.offset_len_to_chunk_offset(ow_iter->second, ec_impl->get_chunk_count());
+
+          pair<uint64_t, uint64_t> &ver_off = shards_to_write[shard_id];
           // ver_off = sinfo.offset_len_to_stripe_bounds(ow_iter->second);
           // no overlap
           if ( (j->get<0>() + j->get<1>() ) < ver_off.first
@@ -2060,19 +2067,27 @@ void ECBackend::continue_write_op(WriteOp *op)
       assert(r == 0);
 
       // prepare shard transaction
-      pair<uint64_t, uint64_t> to_write = sinfo.offset_len_to_stripe_bounds(
-        make_pair(op->off, op->len));
+      pair<uint64_t, uint64_t> to_write = make_pair(op->off, op->len);
+      pair<uint64_t, uint64_t> to_write_bound = sinfo.offset_len_to_stripe_bounds(to_write);
+      pair<uint64_t, uint64_t> to_write_chunk = sinfo.aligned_offset_len_to_chunk(to_write_bound);
+      map<int, pair<uint64_t, uint64_t>> shards_to_write =
+        sinfo.offset_len_to_chunk_offset(to_write, ec_impl->get_chunk_count());
       dout(10) << __func__ 
           << " overwrite data " << now_e
           << " write_len " << to_write.second
           << " data_len " << target[0].length()
+          << " shard_to_write length " << shards_to_write.size()
+          << " data_chunk_count " << ec_impl->get_data_chunk_count()
+          << " strip_size " << sinfo.get_stripe_width() << sinfo.get_chunk_size()
           << dendl;
-        
+
+      const vector<int> &chunk_mapping = ec_impl->get_chunk_mapping();
+              
       // set overwrite info
       // overwrite info holds the true offset & length
       // assume all the chunk has the same length
-      to_write.first = sinfo.logical_to_prev_chunk_offset(to_write.first);
-      to_write.second = target[0].length();
+      // to_write.first = sinfo.logical_to_prev_chunk_offset(to_write.first);
+      // to_write.second = target[0].length();
       assert(op->overwrite_info);
       op->overwrite_info->overwrite(
         now_e.version,
@@ -2091,14 +2106,29 @@ void ECBackend::continue_write_op(WriteOp *op)
         op->pending_apply.insert(*i);
         op->pending_commit.insert(*i);
 
-        // generate objectstore transaction
-        trans[i->shard].write(
-          coll_t(spg_t(pgid, i->shard)),
-          ghobject_t(op->hoid, now_e.version, i->shard),
-          to_write.first,
-          target[i->shard].length(),
-          target[i->shard],
-          op->fadvise_flags);
+        // check if this shard has write data
+        int shard_id = i->shard >= (int)chunk_mapping.size() ? i->shard : chunk_mapping[i->shard];
+        assert(shards_to_write.count(shard_id));
+        pair<uint64_t, uint64_t> real_write_offset = shards_to_write[shard_id];
+        dout(10) << __func__ << " shard " << shard_id
+                 << " osd " << i->osd
+                 << " real_write_offset " << real_write_offset.first - to_write_chunk.first
+                 << " real_write_len " << real_write_offset.second
+                 << " buffer len " << target[i->shard].length()
+                 << dendl;
+          
+        if (real_write_offset.second) {
+          bufferlist bl;
+          bl.substr_of(target[i->shard], real_write_offset.first - to_write_chunk.first, real_write_offset.second);
+          // generate objectstore transaction
+          trans[i->shard].write(
+            coll_t(spg_t(pgid, i->shard)),
+            ghobject_t(op->hoid, now_e.version, i->shard),
+            to_write.first,
+            bl.length(),
+            bl,
+            op->fadvise_flags);
+        }
         
         bufferlist ow_buf;
         ::encode(*(op->overwrite_info), ow_buf);
