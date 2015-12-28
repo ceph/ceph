@@ -10,6 +10,7 @@
 #include "rgw_bucket.h"
 #include "rgw_keystone.h"
 #include "rgw_basic_types.h"
+#include "rgw_op.h"
 
 #include "common/ceph_json.h"
 #include "common/Formatter.h"
@@ -1093,3 +1094,10 @@ void rgw_meta_sync_status::dump(Formatter *f) const {
   encode_json("info", sync_info, f);
   encode_json("markers", sync_markers, f);
 }
+
+void rgw_slo_entry::decode_json(JSONObj *obj)
+{
+  JSONDecoder::decode_json("path", path, obj);
+  JSONDecoder::decode_json("etag", etag, obj);
+  JSONDecoder::decode_json("size_bytes", size_bytes, obj);
+};

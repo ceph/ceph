@@ -115,7 +115,7 @@ function test_setup() {
 #
 function teardown() {
     local dir=$1
-    kill_daemons $dir
+    kill_daemons $dir KILL
     if [ $(stat -f -c '%T' .) == "btrfs" ]; then
         __teardown_btrfs $dir
     fi
@@ -149,12 +149,15 @@ function test_teardown() {
 # Kill all daemons for which a .pid file exists in **dir**.  Each
 # daemon is sent a **signal** and kill_daemons waits for it to exit
 # during a few minutes. By default all daemons are killed. If a
-# **name_prefix** is provided, only the daemons matching it are
-# killed.
+# **name_prefix** is provided, only the daemons for which a pid
+# file is found matching the prefix are killed. See run_osd and
+# run_mon for more information about the name conventions for
+# the pid files.
 #
-# Send KILL to all daemons : kill_daemons $dir
-# Send TERM to all daemons : kill_daemons $dir TERM
-# Send TERM to all osds : kill_daemons $dir TERM osd
+# Send TERM to all daemons : kill_daemons $dir
+# Send KILL to all daemons : kill_daemons $dir KILL
+# Send KILL to all osds : kill_daemons $dir KILL osd
+# Send KILL to osd 1 : kill_daemons $dir KILL osd.1
 #
 # If a daemon is sent the TERM signal and does not terminate
 # within a few minutes, it will still be running even after
@@ -172,18 +175,18 @@ function test_teardown() {
 # sleep intervals can be specified as **delays** and defaults
 # to:
 #
-#  0 1 1 1 2 3 5 5 5 10 10 20 60
+#  0 1 1 1 2 3 5 5 5 10 10 20 60 60 60 120
 #
 # This sequence is designed to not require a sleep time (0) if the
 # machine is fast enough and the daemon terminates in a fraction of a
 # second. The increasing sleep numbers should give plenty of time for
 # the daemon to die even on the slowest running machine. If a daemon
-# takes more than two minutes to stop (the sum of all sleep times),
+# takes more than a few minutes to stop (the sum of all sleep times),
 # there probably is no point in waiting more and a number of things
 # are likely to go wrong anyway: better give up and return on error.
 #
 # @param dir path name of the environment
-# @param signal name of the first signal (defaults to KILL)
+# @param signal name of the first signal (defaults to TERM)
 # @param name_prefix only kill match daemons (defaults to all)
 # @params delays sequence of sleep times before failure
 # @return 0 on success, 1 on error
@@ -192,9 +195,9 @@ function kill_daemons() {
     local trace=$(shopt -q -o xtrace && echo true || echo false)
     $trace && shopt -u -o xtrace
     local dir=$1
-    local signal=${2:-KILL}
+    local signal=${2:-TERM}
     local name_prefix=$3 # optional, osd, mon, osd.1
-    local delays=${4:-0 0 1 1 1 2 3 5 5 5 10 10 20 60}
+    local delays=${4:-0 0 1 1 1 2 3 5 5 5 10 10 20 60 60 60 120}
 
     local status=0
     for pidfile in $(find $dir 2>/dev/null | grep $name_prefix'[^/]*\.pid') ; do
@@ -224,15 +227,23 @@ function test_kill_daemons() {
     setup $dir || return 1
     run_mon $dir a --osd_pool_default_size=1 || return 1
     run_osd $dir 0 || return 1
+    #
     # sending signal 0 won't kill the daemon
     # waiting just for one second instead of the default schedule
     # allows us to quickly verify what happens when kill fails 
     # to stop the daemon (i.e. it must return false)
+    #
     ! kill_daemons $dir 0 osd 1 || return 1
+    #
+    # killing just the osd and verify the mon still is responsive
+    #
     kill_daemons $dir TERM osd || return 1
     ceph osd dump | grep "osd.0 down" || return 1
+    #
+    # kill the mon and verify it cannot be reached
+    #
     kill_daemons $dir TERM || return 1
-    ! ceph --connect-timeout 1 status || return 1
+    ! ceph --connect-timeout 60 status || return 1
     teardown $dir || return 1
 }
 
@@ -440,6 +451,42 @@ function test_run_osd() {
 #######################################################################
 
 ##
+# Shutdown and remove all traces of the osd by the name osd.**id**.
+#
+# The OSD is shutdown with the TERM signal. It is then removed from
+# the auth list, crush map, osd map etc and the files associated with
+# it are also removed.
+#
+# @param dir path name of the environment
+# @param id osd identifier
+# @return 0 on success, 1 on error
+#
+function destroy_osd() {
+    local dir=$1
+    local id=$2
+
+    kill_daemons $dir TERM osd.$id || return 1
+    ceph osd out osd.$id || return 1
+    ceph auth del osd.$id || return 1
+    ceph osd crush remove osd.$id || return 1
+    ceph osd rm $id || return 1
+    rm -fr $dir/$id
+}
+
+function test_destroy_osd() {
+    local dir=$1
+
+    setup $dir || return 1
+    run_mon $dir a || return 1
+    run_osd $dir 0 || return 1
+    destroy_osd $dir 0 || return 1
+    ! ceph osd dump | grep "osd.$id " || return 1
+    teardown $dir || return 1
+}
+
+#######################################################################
+
+##
 # Run (activate) an osd by the name osd.**id** with data in
 # **dir**/**id**.  The logs can be found in **dir**/osd.**id**.log,
 # the pid file is **dir**/osd.**id**.pid and the admin socket is
@@ -491,6 +538,7 @@ function activate_osd() {
     ceph_args+=" --osd-backfill-full-ratio=.99"
     ceph_args+=" --osd-failsafe-full-ratio=.99"
     ceph_args+=" --osd-journal-size=100"
+    ceph_args+=" --osd-scrub-load-threshold=2000"
     ceph_args+=" --osd-data=$osd_data"
     ceph_args+=" --chdir="
     ceph_args+=" --erasure-code-dir=.libs"
@@ -1204,8 +1252,40 @@ function test_erasure_code_plugin_exists() {
 #######################################################################
 
 ##
+# Display all log files from **dir** on stdout.
+#
+# @param dir directory in which all data is stored
+#
+
+function display_logs() {
+    local dir=$1
+
+    find $dir -maxdepth 1 -name '*.log' | \
+        while read file ; do
+            echo "======================= $file"
+            cat $file
+        done
+}
+
+function test_display_logs() {
+    local dir=$1
+
+    setup $dir || return 1
+    run_mon $dir a || return 1
+    kill_daemons $dir || return 1
+    display_logs $dir > $dir/log.out
+    grep --quiet mon.a.log $dir/log.out || return 1
+    teardown $dir || return 1
+}
+
+#######################################################################
+
+##
 # Call the **run** function (which must be defined by the caller) with
 # the **dir** argument followed by the caller argument list.
+#
+# If the **run** function returns on error, all logs found in **dir**
+# are displayed for diagnostic purposes.
 #
 # **teardown** function is called when the **run** function returns
 # (on success or on error), to cleanup leftovers. The CEPH_CONF is set
@@ -1239,6 +1319,7 @@ function main() {
     if run $dir "$@" ; then
         code=0
     else
+        display_logs $dir
         code=1
     fi
     teardown $dir || return 1

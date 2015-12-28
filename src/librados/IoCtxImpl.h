@@ -115,6 +115,14 @@ struct librados::IoCtxImpl {
   uint32_t nlist_seek(Objecter::NListContext *context, uint32_t pos);
   int list(Objecter::ListContext *context, int max_entries);
   uint32_t list_seek(Objecter::ListContext *context, uint32_t pos);
+  void object_list_slice(
+    const hobject_t start,
+    const hobject_t finish,
+    const size_t n,
+    const size_t m,
+    hobject_t *split_start,
+    hobject_t *split_finish);
+
   int create(const object_t& oid, bool exclusive);
   int write(const object_t& oid, bufferlist& bl, size_t len, uint64_t off);
   int append(const object_t& oid, bufferlist& bl, size_t len);
@@ -127,6 +135,7 @@ struct librados::IoCtxImpl {
   int sparse_read(const object_t& oid, std::map<uint64_t,uint64_t>& m,
 		  bufferlist& bl, size_t len, uint64_t off);
   int remove(const object_t& oid);
+  int remove(const object_t& oid, int flags);
   int stat(const object_t& oid, uint64_t *psize, time_t *pmtime);
   int trunc(const object_t& oid, uint64_t size);
 
@@ -159,7 +168,7 @@ struct librados::IoCtxImpl {
   struct C_aio_stat_Ack : public Context {
     librados::AioCompletionImpl *c;
     time_t *pmtime;
-    utime_t mtime;
+    ceph::real_time mtime;
     C_aio_stat_Ack(AioCompletionImpl *_c, time_t *pm);
     void finish(int r);
   };

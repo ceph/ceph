@@ -815,37 +815,39 @@ int ReplicatedPG::do_command(cmdmap_t cmdmap, ostream& ss,
     }
     f->dump_int("num_missing", missing.num_missing());
     f->dump_int("num_unfound", get_num_unfound());
-    map<hobject_t,pg_missing_t::item, hobject_t::ComparatorWithDefault>::const_iterator p = missing.missing.upper_bound(offset);
+    const map<hobject_t, pg_missing_t::item, hobject_t::BitwiseComparator> &needs_recovery_map =
+      missing_loc.get_needs_recovery();
+    map<hobject_t, pg_missing_t::item, hobject_t::BitwiseComparator>::const_iterator p =
+      needs_recovery_map.upper_bound(offset);
     {
       f->open_array_section("objects");
       int32_t num = 0;
       bufferlist bl;
-      while (p != missing.missing.end() && num < cct->_conf->osd_command_max_records) {
-	f->open_object_section("object");
-	{
-	  f->open_object_section("oid");
-	  p->first.dump(f.get());
-	  f->close_section();
-	}
-	p->second.dump(f.get());  // have, need keys
-	{
-	  f->open_array_section("locations");
-	  if (missing_loc.needs_recovery(p->first)) {
-	    for (set<pg_shard_t>::iterator r =
-		   missing_loc.get_locations(p->first).begin();
-		 r != missing_loc.get_locations(p->first).end();
-		 ++r)
-	      f->dump_stream("shard") << *r;
+      for (; p != needs_recovery_map.end() && num < cct->_conf->osd_command_max_records; ++p) {
+        if (missing_loc.is_unfound(p->first)) {
+	  f->open_object_section("object");
+	  {
+	    f->open_object_section("oid");
+	    p->first.dump(f.get());
+	    f->close_section();
+	  }
+          p->second.dump(f.get()); // have, need keys
+	  {
+	    f->open_array_section("locations");
+            for (set<pg_shard_t>::iterator r =
+                missing_loc.get_locations(p->first).begin();
+                r != missing_loc.get_locations(p->first).end();
+                ++r)
+              f->dump_stream("shard") << *r;
+	    f->close_section();
 	  }
 	  f->close_section();
-	}
-	f->close_section();
-	++p;
-	num++;
+	  num++;
+        }
       }
       f->close_section();
     }
-    f->dump_int("more", p != missing.missing.end());
+    f->dump_int("more", p != needs_recovery_map.end());
     f->close_section();
     f->flush(odata);
     return 0;
@@ -936,7 +938,10 @@ void ReplicatedPG::do_pg_op(OpRequestRef op)
 	}
 
 	hobject_t next;
-	hobject_t current = response.handle;
+	hobject_t lower_bound = response.handle;
+        dout(10) << " pgnls lower_bound " << lower_bound << dendl;
+
+	hobject_t current = lower_bound;
 	osr->flush();
 	int r = pgbackend->objects_list_partial(
 	  current,
@@ -984,6 +989,9 @@ void ReplicatedPG::do_pg_op(OpRequestRef op)
 	    assert(!lcand.is_max());
 	    ++ls_iter;
 	  }
+
+          dout(10) << " pgnls candidate 0x" << std::hex << candidate.get_hash()
+            << " vs lower bound 0x" << lower_bound.get_hash() << dendl;
 
 	  if (cmp(candidate, next, get_sort_bitwise()) >= 0) {
 	    break;
@@ -1036,18 +1044,37 @@ void ReplicatedPG::do_pg_op(OpRequestRef op)
 	  if (filter && !pgls_filter(filter, candidate, filter_out))
 	    continue;
 
+          dout(20) << "pgnls item 0x" << std::hex
+            << candidate.get_hash()
+            << ", rev 0x" << hobject_t::_reverse_bits(candidate.get_hash())
+            << std::dec << " "
+            << candidate.oid.name << dendl;
+
 	  librados::ListObjectImpl item;
 	  item.nspace = candidate.get_namespace();
 	  item.oid = candidate.oid.name;
 	  item.locator = candidate.get_key();
 	  response.entries.push_back(item);
 	}
+
 	if (next.is_max() &&
 	    missing_iter == pg_log.get_missing().missing.end() &&
 	    ls_iter == sentries.end()) {
 	  result = 1;
-	}
-	response.handle = next;
+
+	  if (get_osdmap()->test_flag(CEPH_OSDMAP_SORTBITWISE)) {
+	    // Set response.handle to the start of the next PG
+	    // according to the object sort order.  Only do this if
+	    // the cluster is in bitwise mode; with legacy nibblewise
+	    // sort PGs don't always cover contiguous ranges of the
+	    // hash order.
+	    response.handle = info.pgid.pgid.get_hobj_end(
+	      pool.info.get_pg_num());
+	  }
+	} else {
+          response.handle = next;
+        }
+        dout(10) << "pgls handle=" << response.handle << dendl;
 	::encode(response, osd_op.outdata);
 	if (filter)
 	  ::encode(filter_out, osd_op.outdata);
@@ -1338,6 +1365,7 @@ ReplicatedPG::ReplicatedPG(OSDService *o, OSDMapRef curmap,
     pgbackend->get_is_readable_predicate(),
     pgbackend->get_is_recoverable_predicate());
   snap_trimmer_machine.initiate();
+  repop_map.rehash(g_conf->osd_client_message_cap/_pool.info.get_pg_num() * g_conf->osd_pg_op_threshold_ratio);
 }
 
 void ReplicatedPG::get_src_oloc(const object_t& oid, const object_locator_t& oloc, object_locator_t& src_oloc)
@@ -2560,12 +2588,11 @@ void ReplicatedPG::do_proxy_write(OpRequestRef op, const hobject_t& missing_oid)
 
   C_ProxyWrite_Commit *fin = new C_ProxyWrite_Commit(
       this, soid, get_last_peering_reset(), pwop);
-  ceph_tid_t tid = osd->objecter->mutate(soid.oid, oloc, obj_op,
-				         snapc, pwop->mtime,
-					 flags, NULL,
-					 new C_OnFinisher(fin, &osd->objecter_finisher),
-				         &pwop->user_version,
-					 pwop->reqid);
+  ceph_tid_t tid = osd->objecter->mutate(
+    soid.oid, oloc, obj_op, snapc,
+    ceph::real_clock::from_ceph_timespec(pwop->mtime),
+    flags, NULL, new C_OnFinisher(fin, &osd->objecter_finisher),
+    &pwop->user_version, pwop->reqid);
   fin->tid = tid;
   pwop->objecter_tid = tid;
   proxywrite_ops[tid] = pwop;
@@ -3127,7 +3154,7 @@ void ReplicatedPG::do_backfill(OpRequestRef op)
 	get_osdmap()->get_epoch(),
 	m->query_epoch,
 	spg_t(info.pgid.pgid, primary.shard));
-      reply->set_priority(cct->_conf->osd_recovery_op_priority);
+      reply->set_priority(get_recovery_op_priority());
       osd->send_message_osd_cluster(reply, m->get_connection());
       queue_peering_event(
 	CephPeeringEvtRef(
@@ -7763,7 +7790,7 @@ int ReplicatedPG::start_flush(
       base_oloc,
       o,
       dsnapc,
-      oi.mtime,
+      ceph::real_clock::from_ceph_timespec(oi.mtime),
       (CEPH_OSD_FLAG_IGNORE_OVERLAY |
        CEPH_OSD_FLAG_ORDERSNAP |
        CEPH_OSD_FLAG_ENFORCE_SNAPC),
@@ -7779,7 +7806,7 @@ int ReplicatedPG::start_flush(
       base_oloc,
       o,
       dsnapc2,
-      oi.mtime,
+      ceph::real_clock::from_ceph_timespec(oi.mtime),
       (CEPH_OSD_FLAG_IGNORE_OVERLAY |
        CEPH_OSD_FLAG_ORDERSNAP |
        CEPH_OSD_FLAG_ENFORCE_SNAPC),
@@ -7814,11 +7841,11 @@ int ReplicatedPG::start_flush(
   C_Flush *fin = new C_Flush(this, soid, get_last_peering_reset());
 
   ceph_tid_t tid = osd->objecter->mutate(
-    soid.oid, base_oloc, o, snapc, oi.mtime,
+    soid.oid, base_oloc, o, snapc,
+    ceph::real_clock::from_ceph_timespec(oi.mtime),
     CEPH_OSD_FLAG_IGNORE_OVERLAY | CEPH_OSD_FLAG_ENFORCE_SNAPC,
-    NULL,
-    new C_OnFinisher(fin,
-		     &osd->objecter_finisher));
+    NULL, new C_OnFinisher(fin,
+			   &osd->objecter_finisher));
   /* we're under the pg lock and fin->finish() is grabbing that */
   fin->tid = tid;
   fop->objecter_tid = tid;
@@ -9594,6 +9621,8 @@ void ReplicatedPG::on_shutdown()
   deleting = true;
 
   clear_scrub_reserved();
+  scrub_clear_state();
+
   unreg_next_scrub();
   cancel_copy_ops(false);
   cancel_flush_ops(false);
@@ -10199,7 +10228,7 @@ int ReplicatedPG::recover_primary(int max, ThreadPool::TPHandle &handle)
 	++skipped;
       } else {
 	int r = recover_missing(
-	  soid, need, cct->_conf->osd_recovery_op_priority, h);
+	  soid, need, get_recovery_op_priority(), h);
 	switch (r) {
 	case PULL_YES:
 	  ++started;
@@ -10222,7 +10251,7 @@ int ReplicatedPG::recover_primary(int max, ThreadPool::TPHandle &handle)
       pg_log.set_last_requested(v);
   }
  
-  pgbackend->run_recovery_op(h, cct->_conf->osd_recovery_op_priority);
+  pgbackend->run_recovery_op(h, get_recovery_op_priority());
   return started;
 }
 
@@ -10364,7 +10393,7 @@ int ReplicatedPG::recover_replicas(int max, ThreadPool::TPHandle &handle)
     }
   }
 
-  pgbackend->run_recovery_op(h, cct->_conf->osd_recovery_op_priority);
+  pgbackend->run_recovery_op(h, get_recovery_op_priority());
   return started;
 }
 
@@ -10709,7 +10738,7 @@ int ReplicatedPG::recover_backfill(
     prep_backfill_object_push(to_push[i].get<0>(), to_push[i].get<1>(),
 	    to_push[i].get<2>(), to_push[i].get<3>(), h);
   }
-  pgbackend->run_recovery_op(h, cct->_conf->osd_recovery_op_priority);
+  pgbackend->run_recovery_op(h, get_recovery_op_priority());
 
   dout(5) << "backfill_pos is " << backfill_pos << dendl;
   for (set<hobject_t, hobject_t::Comparator>::iterator i = backfills_in_flight.begin();
@@ -11449,7 +11478,7 @@ bool ReplicatedPG::agent_work(int start_max, int agent_flush_quota)
   assert(base_pool);
 
   int ls_min = 1;
-  int ls_max = 10; // FIXME?
+  int ls_max = cct->_conf->osd_pool_default_cache_max_evict_check_size;
 
   // list some objects.  this conveniently lists clones (oldest to
   // newest) before heads... the same order we want to flush in.

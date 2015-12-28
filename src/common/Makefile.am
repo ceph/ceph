@@ -14,6 +14,7 @@ libcommon_internal_la_SOURCES = \
 	common/cmdparse.cc \
 	common/escape.c \
 	common/io_priority.cc \
+	common/ceph_time.cc \
 	common/Clock.cc \
 	common/Throttle.cc \
 	common/Timer.cc \
@@ -68,7 +69,10 @@ libcommon_internal_la_SOURCES = \
 	common/Readahead.cc \
 	common/Cycles.cc \
 	common/ContextCompletion.cc \
-	common/TracepointProvider.cc
+	common/TracepointProvider.cc \
+	common/PluginRegistry.cc
+
+common/PluginRegistry.cc: ./ceph_ver.h
 
 if ENABLE_SERVER
 libcommon_internal_la_SOURCES += \
@@ -94,11 +98,10 @@ libcommon_internal_la_SOURCES += \
         common/aix_errno.cc
 endif
 
-if WITH_RBD
+# used by RBD and FileStore
 if LINUX
 libcommon_internal_la_SOURCES += \
 	common/blkdev.cc
-endif
 endif
 
 if ENABLE_XIO
@@ -260,7 +263,10 @@ noinst_HEADERS += \
 	common/SubProcess.h \
 	common/valgrind.h \
 	common/TracepointProvider.h \
-	common/event_socket.h
+	common/event_socket.h \
+	common/PluginRegistry.h \
+	common/ceph_time.h \
+	common/ceph_timer.h
 
 if ENABLE_XIO
 noinst_HEADERS += \

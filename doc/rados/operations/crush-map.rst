@@ -1016,10 +1016,41 @@ CRUSH_TUNABLES3
    start with a non-zero value of r, based on how many attempts the
    parent has already made.  Legacy default is 0, but with this value
    CRUSH is sometimes unable to find a mapping.  The optimal value (in
-   terms of computational cost and correctness) is 1.  However, for
-   legacy clusters that have lots of existing data, changing from 0 to
-   1 will cause a lot of data to move; a value of 4 or 5 will allow
-   CRUSH to find a valid mapping but will make less data move.
+   terms of computational cost and correctness) is 1.
+
+   For existing clusters that have lots of existing data, changing
+   from 0 to 1 will cause a lot of data to move; a value of 4 or 5
+   will allow CRUSH to find a valid mapping but will make less data
+   move.
+
+CRUSH_V4
+--------
+
+ * Bucket type ``straw2``: The new ``straw2`` bucket type fixes
+   several limitations in the original ``straw`` bucket.
+   Specifically, the old ``straw`` buckets would change some mappings
+   that should have changed when a weight was adjusted, while
+   ``straw2`` achieves the original goal of only changing mappings to
+   or from the bucket item whose weight has changed.
+
+   Changing an existing bucket from ``straw`` to ``straw2`` is
+   possible but will result in a reasonably small amount of data
+   movement, depending on how much the bucket item weights vary from
+   each other.  When the weights are all the same no data will move,
+   and when item weights vary significantly there will be more
+   movement.
+
+CRUSH_TUNABLES5
+---------------
+
+ * ``chooseleaf_stable``: Whether a recursive chooseleaf attempt will
+   use a better value for an inner loop that greatly reduces the number
+   of mapping changes when an OSD is marked out.  The legacy value is 0,
+   while the new value of 1 uses the new approach.
+
+   Changing this value on an existing cluster will result in a very
+   large amount of data movement as almost every PG mapping is likely
+   to change.
 
 
 Which client versions support CRUSH_TUNABLES
@@ -1040,6 +1071,18 @@ Which client versions support CRUSH_TUNABLES3
 
  * v0.78 (firefly) or later
  * Linux kernel version v3.15 or later (for the file system and RBD kernel clients)
+
+Which client versions support CRUSH_V4
+--------------------------------------
+
+ * v0.94 (hammer) or later
+ * Linux kernel version v4.1 or later (for the file system and RBD kernel clients)
+
+Which client versions support CRUSH_TUNABLES5
+---------------------------------------------
+
+ * v10.0.2 (jewel) or later
+ * Linux kernel version v4.5 or later (for the file system and RBD kernel clients)
 
 Warning when tunables are non-optimal
 -------------------------------------

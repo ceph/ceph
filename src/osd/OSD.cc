@@ -1573,7 +1573,7 @@ OSD::OSD(CephContext *cct_, ObjectStore *store_,
   session_waiting_lock("OSD::session_waiting_lock"),
   heartbeat_lock("OSD::heartbeat_lock"),
   heartbeat_stop(false), heartbeat_update_lock("OSD::heartbeat_update_lock"),
-  heartbeat_need_update(true), heartbeat_epoch(0),
+  heartbeat_need_update(true),
   hbclient_messenger(hb_clientm),
   hb_front_server_messenger(hb_front_serverm),
   hb_back_server_messenger(hb_back_serverm),
@@ -1648,7 +1648,7 @@ void cls_initialize(ClassHandler *ch);
 void OSD::handle_signal(int signum)
 {
   assert(signum == SIGINT || signum == SIGTERM);
-  derr << "*** Got signal " << sys_siglist[signum] << " ***" << dendl;
+  derr << "*** Got signal " << sig_str(signum) << " ***" << dendl;
   shutdown();
 }
 
@@ -2244,6 +2244,8 @@ void OSD::create_logger()
   osd_plb.add_u64(l_osd_buf, "buffer_bytes", "Total allocated buffer size");       // total ceph::buffer bytes
   osd_plb.add_u64(l_osd_history_alloc_bytes, "history_alloc_Mbytes");       // total ceph::buffer bytes in history
   osd_plb.add_u64(l_osd_history_alloc_num, "history_alloc_num");       // total ceph::buffer num in history
+  osd_plb.add_u64(l_osd_cached_crc, "cached_crc", "Total number getting crc from crc_cache"); // total ceph::buffer buffer_cached_crc_adjusted
+  osd_plb.add_u64(l_osd_cached_crc_adjusted, "cached_crc_adjusted", "Total number getting crc from crc_cache with adjusting"); // total ceph::buffer buffer_cached_crc_adjusted
 
   osd_plb.add_u64(l_osd_pg, "numpg", "Placement groups");   // num pgs
   osd_plb.add_u64(l_osd_pg_primary, "numpg_primary", "Placement groups for which this osd is primary"); // num primary pgs
@@ -3536,7 +3538,6 @@ void OSD::maybe_update_heartbeat_peers()
 
   dout(10) << "maybe_update_heartbeat_peers updating" << dendl;
 
-  heartbeat_epoch = osdmap->get_epoch();
 
   // build heartbeat from set
   if (is_active()) {
@@ -3962,6 +3963,8 @@ void OSD::tick()
   logger->set(l_osd_buf, buffer::get_total_alloc());
   logger->set(l_osd_history_alloc_bytes, SHIFT_ROUND_UP(buffer::get_history_alloc_bytes(), 20));
   logger->set(l_osd_history_alloc_num, buffer::get_history_alloc_num());
+  logger->set(l_osd_cached_crc, buffer::get_cached_crc());
+  logger->set(l_osd_cached_crc_adjusted, buffer::get_cached_crc_adjusted());
 
   if (is_active() || is_waiting_for_healthy()) {
     map_lock.get_read();
@@ -5947,6 +5950,8 @@ void OSD::_dispatch(Message *m)
   logger->set(l_osd_buf, buffer::get_total_alloc());
   logger->set(l_osd_history_alloc_bytes, SHIFT_ROUND_UP(buffer::get_history_alloc_bytes(), 20));
   logger->set(l_osd_history_alloc_num, buffer::get_history_alloc_num());
+  logger->set(l_osd_cached_crc, buffer::get_cached_crc());
+  logger->set(l_osd_cached_crc_adjusted, buffer::get_cached_crc_adjusted());
 
   switch (m->get_type()) {
 
@@ -6082,9 +6087,10 @@ OSDService::ScrubJob::ScrubJob(const spg_t& pg, const utime_t& timestamp,
       pool_scrub_max_interval : g_conf->osd_scrub_max_interval;
 
     sched_time += scrub_min_interval;
-    if (g_conf->osd_scrub_interval_randomize_ratio > 0) {
-      sched_time += rand() % (int)(scrub_min_interval *
-				   g_conf->osd_scrub_interval_randomize_ratio);
+    int divisor = scrub_min_interval *
+      g_conf->osd_scrub_interval_randomize_ratio;
+    if (divisor > 0) {
+      sched_time += rand() % divisor;
     }
     deadline += scrub_max_interval;
   }
@@ -6177,7 +6183,7 @@ void OSD::sched_scrub()
 
       if (scrub.sched_time > now) {
 	// save ourselves some effort
-	dout(10) << "sched_scrub " << scrub.pgid << " schedued at " << scrub.sched_time
+	dout(10) << "sched_scrub " << scrub.pgid << " scheduled at " << scrub.sched_time
 		 << " > " << now << dendl;
 	break;
       }
@@ -6554,6 +6560,18 @@ void OSD::handle_osd_map(MOSDMap *m)
         epoch_t bind_epoch = osdmap->get_epoch();
         service.set_epochs(NULL,&up_epoch, &bind_epoch);
 	do_restart = true;
+
+	//add markdown log
+	utime_t now = ceph_clock_now(g_ceph_context);
+	utime_t grace = utime_t(g_conf->osd_max_markdown_period, 0);
+	osd_markdown_log.push_back(now);
+	//clear all out-of-date log
+	while (!osd_markdown_log.empty() && osd_markdown_log.front() + grace < now)
+	  osd_markdown_log.pop_front();
+	if ((int)osd_markdown_log.size() > g_conf->osd_max_markdown_count) {
+	  do_restart = false;
+	  do_shutdown = true;
+	}
 
 	start_waiting_for_healthy();
 
@@ -7509,12 +7527,12 @@ void OSD::handle_pg_trim(OpRequestRef op)
     dout(10) << " don't have pg " << m->pgid << dendl;
   } else {
     PG *pg = _lookup_lock_pg(m->pgid);
+    assert(pg);
     if (m->epoch < pg->info.history.same_interval_since) {
       dout(10) << *pg << " got old trim to " << m->trim_to << ", ignoring" << dendl;
       pg->unlock();
       return;
     }
-    assert(pg);
 
     if (pg->is_primary()) {
       // peer is informing us of their last_complete_ondisk

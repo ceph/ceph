@@ -422,6 +422,7 @@ if [ "$start_mon" -eq 1 ]; then
         osd crush chooseleaf type = 0
         osd pool default min size = 1
         osd failsafe full ratio = .99
+        mon osd reporter subtree level = osd
         mon osd full ratio = .99
         mon data avail warn = 10
         mon data avail crit = 1
@@ -473,7 +474,7 @@ $DAEMONOPTS
         osd journal size = 100
         osd class tmp = out
         osd class dir = $OBJCLASS_PATH
-        osd scrub load threshold = 5.0
+        osd scrub load threshold = 2000.0
         osd debug op order = true
         filestore wbthrottle xfs ios start flusher = 10
         filestore wbthrottle xfs ios hard limit = 20

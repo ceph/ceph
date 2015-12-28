@@ -134,6 +134,8 @@ void MonCapGrant::expand_profile(EntityName name) const
     profile_grants.push_back(MonCapGrant("mds", MON_CAP_ALL));
     profile_grants.push_back(MonCapGrant("mon", MON_CAP_R));
     profile_grants.push_back(MonCapGrant("osd", MON_CAP_R));
+    // This command grant is checked explicitly in MRemoveSnaps handling
+    profile_grants.push_back(MonCapGrant("osd pool rmsnap"));
     profile_grants.push_back(MonCapGrant("log", MON_CAP_W));
   }
   if (profile == "osd" || profile == "mds" || profile == "mon") {

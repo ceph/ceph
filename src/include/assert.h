@@ -26,12 +26,6 @@ class CephContext;
 namespace ceph {
 
 struct BackTrace;
-
-struct FailedAssertion {
-  BackTrace *backtrace;
-  FailedAssertion(BackTrace *bt) : backtrace(bt) {}
-};
-
 #endif
 
 

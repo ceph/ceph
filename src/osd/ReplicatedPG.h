@@ -21,6 +21,7 @@
 #include <boost/tuple/tuple.hpp>
 
 #include "include/assert.h" 
+#include "include/unordered_map.h"
 #include "common/cmdparse.h"
 
 #include "HitSet.h"
@@ -74,7 +75,7 @@ public:
    * CopyResults stores the object metadata of interest to a copy initiator.
    */
   struct CopyResults {
-    utime_t mtime; ///< the copy source's mtime
+    ceph::real_time mtime; ///< the copy source's mtime
     uint64_t object_size; ///< the copied object's size
     bool started_temp_obj; ///< true if the callback needs to delete temp object
     hobject_t temp_oid;    ///< temp object (if any)
@@ -515,7 +516,7 @@ public:
       }
     };
     list<NotifyAck> notify_acks;
-    
+
     uint64_t bytes_written, bytes_read;
 
     utime_t mtime;
@@ -886,7 +887,7 @@ protected:
   // replica ops
   // [primary|tail]
   xlist<RepGather*> repop_queue;
-  map<ceph_tid_t, RepGather*> repop_map;
+  ceph::unordered_map<ceph_tid_t, RepGather*> repop_map;
 
   friend class C_OSD_RepopApplied;
   friend class C_OSD_RepopCommit;
@@ -1491,6 +1492,11 @@ private:
   hobject_t generate_temp_object();  ///< generate a new temp object name
   /// generate a new temp object name (for recovery)
   hobject_t get_temp_recovery_object(eversion_t version, snapid_t snap);
+  int get_recovery_op_priority() const {
+      int pri = 0;
+      pool.info.opts.get(pool_opts_t::RECOVERY_OP_PRIORITY, &pri);
+      return  pri > 0 ? pri : cct->_conf->osd_recovery_op_priority;
+  }
   void log_missing(unsigned missing,
 			const boost::optional<hobject_t> &head,
 			LogChannelRef clog,

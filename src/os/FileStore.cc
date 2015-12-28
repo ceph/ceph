@@ -123,13 +123,12 @@ static CompatSet get_fs_supported_compat_set() {
   return compat;
 }
 
-
-int FileStore::peek_journal_fsid(uuid_d *fsid)
+int FileStore::get_block_device_fsid(const string& path, uuid_d *fsid)
 {
   // make sure we don't try to use aio or direct_io (and get annoying
   // error messages from failing to do so); performance implications
   // should be irrelevant for this use
-  FileJournal j(*fsid, 0, 0, journalpath.c_str(), false, false);
+  FileJournal j(*fsid, 0, 0, path.c_str(), false, false);
   return j.peek_fsid(*fsid);
 }
 
@@ -675,8 +674,12 @@ void FileStore::collect_metadata(map<string,string> *pm)
   ss << "0x" << std::hex << m_fs_type << std::dec;
   (*pm)["filestore_f_type"] = ss.str();
 
-  rc = get_device_by_uuid(get_fsid(), "PARTUUID", partition_path,
-        dev_node);
+  if (g_conf->filestore_collect_device_partition_information) {
+    rc = get_device_by_uuid(get_fsid(), "PARTUUID", partition_path,
+          dev_node);
+  } else {
+    rc = -EINVAL;
+  }
 
   switch (rc) {
     case -EOPNOTSUPP:
@@ -924,6 +927,10 @@ int FileStore::mkfs()
 
   // journal?
   ret = mkjournal();
+  if (ret)
+    goto close_fsid_fd;
+
+  ret = write_meta("type", "filestore");
   if (ret)
     goto close_fsid_fd;
 
@@ -5222,7 +5229,12 @@ int FileStore::_omap_setkeys(coll_t cid, const ghobject_t &hoid,
 			     const SequencerPosition &spos) {
   dout(15) << __func__ << " " << cid << "/" << hoid << dendl;
   Index index;
-  int r = get_index(cid, &index);
+  int r;
+  //treat pgmeta as a logical object, skip to check exist
+  if (hoid.is_pgmeta())
+    goto skip;
+
+  r = get_index(cid, &index);
   if (r < 0) {
     dout(20) << __func__ << " get_index got " << cpp_strerror(r) << dendl;
     return r;
@@ -5236,6 +5248,7 @@ int FileStore::_omap_setkeys(coll_t cid, const ghobject_t &hoid,
       return r;
     }
   }
+skip:
   r = object_map->set_keys(hoid, aset, &spos);
   dout(20) << __func__ << " " << cid << "/" << hoid << " = " << r << dendl;
   return r;
@@ -5246,7 +5259,12 @@ int FileStore::_omap_rmkeys(coll_t cid, const ghobject_t &hoid,
 			    const SequencerPosition &spos) {
   dout(15) << __func__ << " " << cid << "/" << hoid << dendl;
   Index index;
-  int r = get_index(cid, &index);
+  int r;
+  //treat pgmeta as a logical object, skip to check exist
+  if (hoid.is_pgmeta())
+    goto skip;
+
+  r = get_index(cid, &index);
   if (r < 0)
     return r;
   {
@@ -5256,6 +5274,7 @@ int FileStore::_omap_rmkeys(coll_t cid, const ghobject_t &hoid,
     if (r < 0)
       return r;
   }
+skip:
   r = object_map->rm_keys(hoid, keys, &spos);
   if (r < 0 && r != -ENOENT)
     return r;

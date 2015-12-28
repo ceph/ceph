@@ -69,6 +69,8 @@ OPTION(mon_cluster_log_file_level, OPT_STR, "info")
 
 OPTION(enable_experimental_unrecoverable_data_corrupting_features, OPT_STR, "")
 
+OPTION(plugin_dir, OPT_STR, CEPH_PKGLIBDIR)
+
 OPTION(xio_trace_mempool, OPT_BOOL, false) // mempool allocation counters
 OPTION(xio_trace_msgcnt, OPT_BOOL, false) // incoming/outgoing msg counters
 OPTION(xio_trace_xcon, OPT_BOOL, false) // Xio message encode/decode trace
@@ -135,6 +137,8 @@ SUBSYS(refs, 0, 0)
 SUBSYS(xio, 1, 5)
 SUBSYS(compressor, 1, 5)
 SUBSYS(newstore, 1, 5)
+SUBSYS(rocksdb, 4, 5)
+SUBSYS(leveldb, 4, 5)
 
 OPTION(key, OPT_STR, "")
 OPTION(keyfile, OPT_STR, "")
@@ -276,7 +280,8 @@ OPTION(mon_sync_debug_leader, OPT_INT, -1) // monitor to be used as the sync lea
 OPTION(mon_sync_debug_provider, OPT_INT, -1) // monitor to be used as the sync provider
 OPTION(mon_sync_debug_provider_fallback, OPT_INT, -1) // monitor to be used as fallback if sync provider fails
 OPTION(mon_inject_sync_get_chunk_delay, OPT_DOUBLE, 0)  // inject N second delay on each get_chunk request
-OPTION(mon_osd_min_down_reporters, OPT_INT, 2)   // number of OSDs who need to report a down OSD for it to count
+OPTION(mon_osd_min_down_reporters, OPT_INT, 2)   // number of OSDs from different subtrees who need to report a down OSD for it to count
+OPTION(mon_osd_reporter_subtree_level , OPT_STR, "host")   // in which level of parent bucket the reporters are counted
 OPTION(mon_osd_force_trim_to, OPT_INT, 0)   // force mon to trim maps to this point, regardless of min_last_epoch_clean (dangerous, use with care)
 OPTION(mon_mds_force_trim_to, OPT_INT, 0)   // force mon to trim mdsmaps to this point (dangerous, use with care)
 
@@ -550,6 +555,7 @@ OPTION(osd_max_write_size, OPT_INT, 90)
 OPTION(osd_max_pgls, OPT_U64, 1024) // max number of pgls entries to return
 OPTION(osd_client_message_size_cap, OPT_U64, 500*1024L*1024L) // client data allowed in-memory (in bytes)
 OPTION(osd_client_message_cap, OPT_U64, 100)              // num client messages allowed in-memory
+OPTION(osd_pg_op_threshold_ratio, OPT_U64, 2)             // the expected maximum op over the average number of ops per pg
 OPTION(osd_pg_bits, OPT_INT, 6)  // bits per osd
 OPTION(osd_pgp_bits, OPT_INT, 6)  // bits per osd
 OPTION(osd_crush_chooseleaf_type, OPT_INT, 1) // 1 = host
@@ -590,6 +596,7 @@ OPTION(osd_pool_default_cache_target_dirty_high_ratio, OPT_FLOAT, .6)
 OPTION(osd_pool_default_cache_target_full_ratio, OPT_FLOAT, .8)
 OPTION(osd_pool_default_cache_min_flush_age, OPT_INT, 0)  // seconds
 OPTION(osd_pool_default_cache_min_evict_age, OPT_INT, 0)  // seconds
+OPTION(osd_pool_default_cache_max_evict_check_size, OPT_INT, 10)  // max size to check for eviction
 OPTION(osd_hit_set_min_size, OPT_INT, 1000)  // min target size for a HitSet
 OPTION(osd_hit_set_max_size, OPT_INT, 100000)  // max target size for a HitSet
 OPTION(osd_hit_set_namespace, OPT_STR, ".ceph-internal") // rados namespace for hit_set tracking
@@ -610,6 +617,10 @@ OPTION(osd_map_message_max, OPT_INT, 100)  // max maps per MOSDMap message
 OPTION(osd_map_share_max_epochs, OPT_INT, 100)  // cap on # of inc maps we send to peers, clients
 OPTION(osd_inject_bad_map_crc_probability, OPT_FLOAT, 0)
 OPTION(osd_inject_failure_on_pg_removal, OPT_BOOL, false)
+// shutdown the OSD if stuatus flipping more than max_markdown_count times in recent max_markdown_period seconds
+OPTION(osd_max_markdown_period , OPT_INT, 600)
+OPTION(osd_max_markdown_count, OPT_INT, 5)
+
 OPTION(osd_op_threads, OPT_INT, 2)    // 0 == no threading
 OPTION(osd_peering_wq_batch_size, OPT_U64, 20)
 OPTION(osd_op_pq_max_tokens_per_priority, OPT_U64, 4194304)
@@ -743,6 +754,7 @@ OPTION(threadpool_default_timeout, OPT_INT, 60)
 // default wait time for an empty queue before pinging the hb timeout
 OPTION(threadpool_empty_queue_max_wait, OPT_INT, 2)
 
+OPTION(leveldb_log_to_ceph_log, OPT_BOOL, true)
 OPTION(leveldb_write_buffer_size, OPT_U64, 8 *1024*1024) // leveldb write buffer size
 OPTION(leveldb_cache_size, OPT_U64, 128 *1024*1024) // leveldb cache size
 OPTION(leveldb_block_size, OPT_U64, 0) // leveldb block size
@@ -760,6 +772,7 @@ OPTION(kinetic_hmac_key, OPT_STR, "asdfasdf") // kinetic key to authenticate wit
 OPTION(kinetic_use_ssl, OPT_BOOL, false) // whether to secure kinetic traffic with TLS
 
 
+OPTION(rocksdb_log_to_ceph_log, OPT_BOOL, true)  // log to ceph log
 // rocksdb options that will be used for keyvaluestore(if backend is rocksdb)
 OPTION(keyvaluestore_rocksdb_options, OPT_STR, "")
 // rocksdb options that will be used for omap(if omap_backend is rocksdb)
@@ -900,6 +913,8 @@ OPTION(filestore_fsync_flushes_journal_data, OPT_BOOL, false)
 OPTION(filestore_fiemap, OPT_BOOL, false)     // (try to) use fiemap
 OPTION(filestore_seek_data_hole, OPT_BOOL, false)     // (try to) use seek_data/hole
 OPTION(filestore_fadvise, OPT_BOOL, true)
+//collect device partition information for management application to use
+OPTION(filestore_collect_device_partition_information, OPT_BOOL, true)
 
 // (try to) use extsize for alloc hint NOTE: extsize seems to trigger
 // data corruption in xfs prior to kernel 3.5.  filestore will
@@ -992,6 +1007,7 @@ OPTION(rbd_request_timed_out_seconds, OPT_INT, 30) // number of seconds before m
 OPTION(rbd_skip_partial_discard, OPT_BOOL, false) // when trying to discard a range inside an object, set to true to skip zeroing the range.
 OPTION(rbd_enable_alloc_hint, OPT_BOOL, true) // when writing a object, it will issue a hint to osd backend to indicate the expected size object need
 OPTION(rbd_tracing, OPT_BOOL, false) // true if LTTng-UST tracepoints should be enabled
+OPTION(rbd_validate_pool, OPT_BOOL, true) // true if empty pools should be validated for RBD compatibility
 
 /*
  * The following options change the behavior for librbd's image creation methods that
@@ -1018,6 +1034,17 @@ OPTION(rbd_default_features, OPT_INT, 3) // only applies to format 2 images
 					 // +4 for exclusive lock, +8 for object map
 
 OPTION(rbd_default_map_options, OPT_STR, "") // default rbd map -o / --options
+
+/**
+ * RBD journal options.
+ */
+OPTION(rbd_journal_order, OPT_U32, 24) // bits to shift to compute journal object max size, between 12 and 64
+OPTION(rbd_journal_splay_width, OPT_U32, 4) // number of active journal objects
+OPTION(rbd_journal_commit_age, OPT_DOUBLE, 5) // commit time interval, seconds
+OPTION(rbd_journal_object_flush_interval, OPT_INT, 0) // maximum number of pending commits per journal object
+OPTION(rbd_journal_object_flush_bytes, OPT_INT, 0) // maximum number of pending bytes per journal object
+OPTION(rbd_journal_object_flush_age, OPT_DOUBLE, 0) // maximum age (in seconds) for pending commits
+OPTION(rbd_journal_pool, OPT_STR, "") // pool for journal objects
 
 OPTION(nss_db_path, OPT_STR, "") // path to nss db
 
@@ -1160,6 +1187,8 @@ OPTION(rgw_user_default_quota_max_size, OPT_LONGLONG, -1) // Max size of object 
 
 OPTION(rgw_multipart_min_part_size, OPT_INT, 5 * 1024 * 1024) // min size for each part (except for last one) in multipart upload
 OPTION(rgw_multipart_part_upload_limit, OPT_INT, 10000) // parts limit in multipart upload
+
+OPTION(rgw_max_slo_entries, OPT_INT, 1000) // default number of max entries in slo
 
 OPTION(rgw_olh_pending_timeout_sec, OPT_INT, 3600) // time until we retire a pending olh change
 OPTION(rgw_user_max_buckets, OPT_U32, 1000) // global option to set max buckets count for all user

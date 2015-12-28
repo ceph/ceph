@@ -41,12 +41,6 @@ bool operator>(const MemStore::CollectionRef& l,
 }
 
 
-int MemStore::peek_journal_fsid(uuid_d *fsid)
-{
-  *fsid = uuid_d();
-  return 0;
-}
-
 int MemStore::mount()
 {
   int r = _load();
@@ -227,6 +221,10 @@ int MemStore::mkfs()
   set<coll_t> collections;
   ::encode(collections, bl);
   r = bl.write_file(fn.c_str());
+  if (r < 0)
+    return r;
+
+  r = write_meta("type", "memstore");
   if (r < 0)
     return r;
 
@@ -1026,9 +1024,9 @@ int MemStore::_remove(coll_t cid, const ghobject_t& oid)
   auto i = c->object_hash.find(oid);
   if (i == c->object_hash.end())
     return -ENOENT;
+  used_bytes -= i->second->get_size();
   c->object_hash.erase(i);
   c->object_map.erase(oid);
-  used_bytes -= i->second->get_size();
 
   return 0;
 }
@@ -1558,10 +1556,10 @@ int MemStore::PageSetObject::clone(Object *src, uint64_t srcoff,
                   dst_page->data + dbegin - dst_page->offset);
       }
       dst_pages.clear(); // drop page refs
-      srcoff += count;
-      dstoff += count;
-      len -= count;
     }
+    srcoff += count;
+    dstoff += count;
+    len -= count;
     tls_pages.clear(); // drop page refs
   }
 

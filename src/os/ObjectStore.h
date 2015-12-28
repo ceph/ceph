@@ -114,6 +114,16 @@ public:
 			     const string& journal,
 			     osflagbits_t flags = 0);
 
+  /**
+   * probe a block device to learn the uuid of the owning OSD
+   *
+   * @param cct cct
+   * @param path path to device
+   * @param fsid [out] osd uuid
+   */
+  static int probe_block_device_fsid(const string& path,
+				     uuid_d *fsid);
+
   Logger *logger;
 
   /**
@@ -1825,11 +1835,6 @@ public:
   virtual int statfs(struct statfs *buf) = 0;
 
   virtual void collect_metadata(map<string,string> *pm) { }
-
-  /**
-   * check the journal uuid/fsid, without opening
-   */
-  virtual int peek_journal_fsid(uuid_d *fsid) = 0;
 
   /**
    * write_meta - write a simple configuration key out-of-band

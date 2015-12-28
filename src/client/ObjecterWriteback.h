@@ -30,13 +30,15 @@ class ObjecterWriteback : public WritebackHandler {
   }
 
   virtual ceph_tid_t write(const object_t& oid, const object_locator_t& oloc,
-                           uint64_t off, uint64_t len, const SnapContext& snapc,
-                           const bufferlist &bl, utime_t mtime,
-                           uint64_t trunc_size, __u32 trunc_seq,
-                           ceph_tid_t journal_tid, Context *oncommit) {
+			   uint64_t off, uint64_t len,
+			   const SnapContext& snapc, const bufferlist &bl,
+			   ceph::real_time mtime, uint64_t trunc_size,
+			   __u32 trunc_seq, ceph_tid_t journal_tid,
+			   Context *oncommit) {
     return m_objecter->write_trunc(oid, oloc, off, len, snapc, bl, mtime, 0,
 				   trunc_size, trunc_seq, NULL,
-				   new C_OnFinisher(new C_Lock(m_lock, oncommit),
+				   new C_OnFinisher(new C_Lock(m_lock,
+							       oncommit),
 						    m_finisher));
   }
 

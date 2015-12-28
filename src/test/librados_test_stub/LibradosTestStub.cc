@@ -661,6 +661,19 @@ void ObjectReadOperation::list_snaps(snap_set_t *out_snaps, int *prval) {
   o->ops.push_back(op);
 }
 
+void ObjectReadOperation::list_watchers(std::list<obj_watch_t> *out_watchers,
+                                        int *prval) {
+  TestObjectOperationImpl *o = reinterpret_cast<TestObjectOperationImpl*>(impl);
+
+  ObjectOperationTestImpl op = boost::bind(&TestIoCtxImpl::list_watchers, _1,
+                                           _2, out_watchers);
+  if (prval != NULL) {
+    op = boost::bind(save_operation_result,
+                     boost::bind(op, _1, _2, _3, _4), prval);
+  }
+  o->ops.push_back(op);
+}
+
 void ObjectReadOperation::read(size_t off, uint64_t len, bufferlist *pbl,
                                int *prval) {
   TestObjectOperationImpl *o = reinterpret_cast<TestObjectOperationImpl*>(impl);
@@ -690,6 +703,19 @@ void ObjectReadOperation::sparse_read(uint64_t off, uint64_t len,
   } else {
     op = boost::bind(&TestIoCtxImpl::sparse_read, _1, _2, off, len, m, _3);
   }
+
+  if (prval != NULL) {
+    op = boost::bind(save_operation_result,
+                     boost::bind(op, _1, _2, _3, _4), prval);
+  }
+  o->ops.push_back(op);
+}
+
+void ObjectReadOperation::stat(uint64_t *psize, time_t *pmtime, int *prval) {
+  TestObjectOperationImpl *o = reinterpret_cast<TestObjectOperationImpl*>(impl);
+
+  ObjectOperationTestImpl op = boost::bind(&TestIoCtxImpl::stat, _1, _2,
+                                           psize, pmtime);
 
   if (prval != NULL) {
     op = boost::bind(save_operation_result,
@@ -794,6 +820,11 @@ int Rados::blacklist_add(const std::string& client_address,
 config_t Rados::cct() {
   TestRadosClient *impl = reinterpret_cast<TestRadosClient*>(client);
   return reinterpret_cast<config_t>(impl->cct());
+}
+
+int Rados::cluster_fsid(std::string* fsid) {
+  *fsid = "00000000-1111-2222-3333-444444444444";
+  return 0;
 }
 
 int Rados::conf_set(const char *option, const char *value) {

@@ -4,6 +4,7 @@
 #include "librbd/operation/SnapshotRemoveRequest.h"
 #include "common/dout.h"
 #include "common/errno.h"
+#include "librbd/ExclusiveLock.h"
 #include "librbd/ImageCtx.h"
 #include "librbd/ImageWatcher.h"
 #include "librbd/ObjectMap.h"
@@ -32,6 +33,9 @@ std::ostream& operator<<(std::ostream& os,
     break;
   case SnapshotRemoveRequest<I>::STATE_RELEASE_SNAP_ID:
     os << "RELEASE_SNAP_ID";
+    break;
+  case SnapshotRemoveRequest<I>::STATE_ERROR:
+    os << "STATE_ERROR";
     break;
   default:
     os << "UNKNOWN (" << static_cast<uint32_t>(state) << ")";
@@ -99,12 +103,12 @@ void SnapshotRemoveRequest<I>::send_remove_object_map() {
   {
     RWLock::WLocker snap_locker(image_ctx.snap_lock);
     RWLock::RLocker object_map_locker(image_ctx.object_map_lock);
-    if (image_ctx.object_map.enabled(image_ctx.object_map_lock)) {
+    if (image_ctx.object_map != nullptr) {
       CephContext *cct = image_ctx.cct;
       ldout(cct, 5) << this << " " << __func__ << dendl;
       m_state = STATE_REMOVE_OBJECT_MAP;
 
-      image_ctx.object_map.snapshot_remove(
+      image_ctx.object_map->snapshot_remove(
         m_snap_id, this->create_callback_context());
       return;
     }
@@ -126,6 +130,8 @@ void SnapshotRemoveRequest<I>::send_remove_child() {
     int r = image_ctx.get_parent_spec(m_snap_id, &our_pspec);
     if (r < 0) {
       lderr(cct) << "failed to retrieve parent spec" << dendl;
+      m_state = STATE_ERROR;
+
       this->async_complete(r);
       return;
     }
@@ -164,8 +170,9 @@ void SnapshotRemoveRequest<I>::send_remove_snap() {
   if (image_ctx.old_format) {
     cls_client::old_snapshot_remove(&op, m_snap_name);
   } else {
-    if (image_ctx.image_watcher->is_lock_owner()) {
-      image_ctx.image_watcher->assert_header_locked(&op);
+    if (image_ctx.exclusive_lock != nullptr &&
+        image_ctx.exclusive_lock->is_lock_owner()) {
+      image_ctx.exclusive_lock->assert_header_locked(&op);
     }
     cls_client::snapshot_remove(&op, m_snap_id);
   }
@@ -189,8 +196,8 @@ void SnapshotRemoveRequest<I>::send_release_snap_id() {
   m_state = STATE_RELEASE_SNAP_ID;
 
   // TODO add async version of selfmanaged_snap_remove
-  image_ctx.md_ctx.selfmanaged_snap_remove(m_snap_id);
-  this->async_complete(0);
+  int r = image_ctx.md_ctx.selfmanaged_snap_remove(m_snap_id);
+  this->async_complete(r);
 }
 
 template <typename I>

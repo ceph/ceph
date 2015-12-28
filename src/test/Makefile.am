@@ -81,9 +81,11 @@ check_SCRIPTS += \
 	test/osd/osd-scrub-repair.sh \
 	test/osd/osd-scrub-snaps.sh \
 	test/osd/osd-config.sh \
+	test/osd/osd-reuse-id.sh \
 	test/osd/osd-bench.sh \
 	test/osd/osd-reactivate.sh \
 	test/osd/osd-copy-from.sh \
+	test/osd/osd-markdown.sh \
 	test/mon/mon-handle-forward.sh \
 	test/libradosstriper/rados-striper.sh \
 	test/test_objectstore_memstore.sh
@@ -188,6 +190,11 @@ unittest_sloppy_crc_map_SOURCES = test/common/test_sloppy_crc_map.cc
 unittest_sloppy_crc_map_CXXFLAGS = $(UNITTEST_CXXFLAGS)
 unittest_sloppy_crc_map_LDADD = $(UNITTEST_LDADD) $(CEPH_GLOBAL)
 check_TESTPROGRAMS += unittest_sloppy_crc_map
+
+unittest_time_SOURCES = test/common/test_time.cc
+unittest_time_CXXFLAGS = $(UNITTEST_CXXFLAGS)
+unittest_time_LDADD = $(LIBCOMMON) -lm $(UNITTEST_LDADD) $(CRYPTO_LIBS) $(EXTRALIBS)
+check_TESTPROGRAMS += unittest_time
 
 unittest_util_SOURCES = test/common/test_util.cc
 unittest_util_CXXFLAGS = $(UNITTEST_CXXFLAGS)
@@ -433,9 +440,11 @@ bin_DEBUGPROGRAMS += ceph_test_objectcacher_stress
 ceph_test_cfuse_cache_invalidate_SOURCES = test/test_cfuse_cache_invalidate.cc
 bin_DEBUGPROGRAMS += ceph_test_cfuse_cache_invalidate
 
+if LINUX
 ceph_test_get_blkdev_size_SOURCES = test/test_get_blkdev_size.cc
 ceph_test_get_blkdev_size_LDADD = $(LIBCOMMON)
 bin_DEBUGPROGRAMS += ceph_test_get_blkdev_size
+endif
 
 noinst_HEADERS += \
 	test/bench/backend.h \

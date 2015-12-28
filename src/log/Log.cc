@@ -21,6 +21,7 @@
 
 #define PREALLOC 1000000
 
+
 namespace ceph {
 namespace log {
 
@@ -167,12 +168,32 @@ void Log::submit_entry(Entry *e)
   pthread_mutex_unlock(&m_queue_mutex);
 }
 
+
 Entry *Log::create_entry(int level, int subsys)
 {
   if (true) {
     return new Entry(ceph_clock_now(NULL),
 		   pthread_self(),
 		   level, subsys);
+  } else {
+    // kludge for perf testing
+    Entry *e = m_recent.dequeue();
+    e->m_stamp = ceph_clock_now(NULL);
+    e->m_thread = pthread_self();
+    e->m_prio = level;
+    e->m_subsys = subsys;
+    return e;
+  }
+}
+
+Entry *Log::create_entry(int level, int subsys, size_t* expected_size)
+{
+  if (true) {
+    size_t size = __atomic_load_n(expected_size, __ATOMIC_RELAXED);
+    void *ptr = ::operator new(sizeof(Entry) + size);
+    return new(ptr) Entry(ceph_clock_now(NULL),
+       pthread_self(), level, subsys,
+       reinterpret_cast<char*>(ptr) + sizeof(Entry), size, expected_size);
   } else {
     // kludge for perf testing
     Entry *e = m_recent.dequeue();
@@ -217,6 +238,7 @@ void Log::_flush(EntryQueue *t, EntryQueue *requeue, bool crash)
     bool do_syslog = m_syslog_crash >= e->m_prio && should_log;
     bool do_stderr = m_stderr_crash >= e->m_prio && should_log;
 
+    e->hint_size();
     if (do_fd || do_syslog || do_stderr) {
       size_t buflen = 0;
       char buf[80 + e->size()];
@@ -234,7 +256,7 @@ void Log::_flush(EntryQueue *t, EntryQueue *requeue, bool crash)
       }
 
       if (do_syslog) {
-        syslog(LOG_USER, "%s", buf);
+        syslog(LOG_USER|LOG_DEBUG, "%s", buf);
       }
 
       if (do_stderr) {
@@ -262,7 +284,7 @@ void Log::_log_message(const char *s, bool crash)
       cerr << "problem writing to " << m_log_file << ": " << cpp_strerror(r) << std::endl;
   }
   if ((crash ? m_syslog_crash : m_syslog_log) >= 0) {
-    syslog(LOG_USER, "%s", s);
+    syslog(LOG_USER|LOG_DEBUG, "%s", s);
   }
   
   if ((crash ? m_stderr_crash : m_stderr_log) >= 0) {
@@ -287,7 +309,7 @@ void Log::dump_recent()
 
   EntryQueue old;
   _log_message("--- begin dump of recent events ---", true);
-  _flush(&m_recent, &old, true);  
+  _flush(&m_recent, &old, true);
 
   char buf[4096];
   _log_message("--- logging levels ---", true);

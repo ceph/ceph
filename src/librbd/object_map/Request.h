@@ -34,6 +34,7 @@ protected:
     return 0;
   }
   virtual void finish() = 0;
+  using AsyncRequest<>::finish;
 
 private:
   /**

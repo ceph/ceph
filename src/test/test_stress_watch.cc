@@ -18,7 +18,6 @@
 
 
 using namespace librados;
-using ceph::buffer;
 using std::map;
 using std::ostringstream;
 using std::string;

@@ -112,6 +112,8 @@ enum {
   l_osd_buf,
   l_osd_history_alloc_bytes,
   l_osd_history_alloc_num,
+  l_osd_cached_crc,
+  l_osd_cached_crc_adjusted,
 
   l_osd_pg,
   l_osd_pg_primary,
@@ -1522,7 +1524,6 @@ private:
   bool heartbeat_stop;
   Mutex heartbeat_update_lock; // orders under heartbeat_lock
   bool heartbeat_need_update;   ///< true if we need to refresh our heartbeat peers
-  epoch_t heartbeat_epoch;      ///< last epoch we updated our heartbeat peers
   map<int,HeartbeatInfo> heartbeat_peers;  ///< map of osd id to HeartbeatInfo
   utime_t last_mon_heartbeat;
   Messenger *hbclient_messenger;
@@ -1832,6 +1833,7 @@ private:
   utime_t         had_map_since;
   RWLock          map_lock;
   list<OpRequestRef>  waiting_for_osdmap;
+  deque<utime_t> osd_markdown_log;
 
   friend struct send_map_on_destruct;
 

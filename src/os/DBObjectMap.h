@@ -2,7 +2,7 @@
 #ifndef DBOBJECTMAP_DB_H
 #define DBOBJECTMAP_DB_H
 
-#include "include/buffer.h"
+#include "include/buffer_fwd.h"
 #include <set>
 #include <map>
 #include <string>

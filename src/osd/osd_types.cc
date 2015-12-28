@@ -522,6 +522,30 @@ pg_t pg_t::get_parent() const
   return retval;
 }
 
+hobject_t pg_t::get_hobj_start() const
+{
+  return hobject_t(object_t(), string(), CEPH_NOSNAP, m_seed, m_pool,
+		   string());
+}
+
+hobject_t pg_t::get_hobj_end(unsigned pg_num) const
+{
+  // note: this assumes a bitwise sort; with the legacy nibblewise
+  // sort a PG did not always cover a single contiguous range of the
+  // (bit-reversed) hash range.
+  unsigned bits = get_split_bits(pg_num);
+  uint64_t rev_start = hobject_t::_reverse_bits(m_seed);
+  uint64_t rev_end = (rev_start | (0xffffffff >> bits)) + 1;
+  if (rev_end >= 0x100000000) {
+    assert(rev_end == 0x100000000);
+    return hobject_t::get_max();
+  } else {
+    return hobject_t(object_t(), string(), CEPH_NOSNAP,
+		   hobject_t::_reverse_bits(rev_end), m_pool,
+		   string());
+  }
+}
+
 void pg_t::dump(Formatter *f) const
 {
   f->dump_unsigned("pool", m_pool);
@@ -900,7 +924,11 @@ static opt_mapping_t opt_mapping = boost::assign::map_list_of
 	   ("scrub_max_interval", pool_opts_t::opt_desc_t(
 	     pool_opts_t::SCRUB_MAX_INTERVAL, pool_opts_t::DOUBLE))
 	   ("deep_scrub_interval", pool_opts_t::opt_desc_t(
-	     pool_opts_t::DEEP_SCRUB_INTERVAL, pool_opts_t::DOUBLE));
+	     pool_opts_t::DEEP_SCRUB_INTERVAL, pool_opts_t::DOUBLE))
+           ("recovery_priority", pool_opts_t::opt_desc_t(
+             pool_opts_t::RECOVERY_PRIORITY, pool_opts_t::INT))
+           ("recovery_op_priority", pool_opts_t::opt_desc_t(
+             pool_opts_t::RECOVERY_OP_PRIORITY, pool_opts_t::INT));
 
 bool pool_opts_t::is_opt_name(const std::string& name) {
     return opt_mapping.find(name) != opt_mapping.end();
@@ -1752,6 +1780,7 @@ void object_stat_sum_t::dump(Formatter *f) const
   f->dump_int("num_object_clones", num_object_clones);
   f->dump_int("num_object_copies", num_object_copies);
   f->dump_int("num_objects_missing_on_primary", num_objects_missing_on_primary);
+  f->dump_int("num_objects_missing", num_objects_missing);
   f->dump_int("num_objects_degraded", num_objects_degraded);
   f->dump_int("num_objects_misplaced", num_objects_misplaced);
   f->dump_int("num_objects_unfound", num_objects_unfound);
@@ -1784,7 +1813,10 @@ void object_stat_sum_t::dump(Formatter *f) const
 
 void object_stat_sum_t::encode(bufferlist& bl) const
 {
-  ENCODE_START(14, 3, bl);
+  ENCODE_START(15, 3, bl);
+#if defined(CEPH_LITTLE_ENDIAN)
+  bl.append((char *)(&num_bytes), sizeof(object_stat_sum_t));
+#else
   ::encode(num_bytes, bl);
   ::encode(num_objects, bl);
   ::encode(num_object_clones, bl);
@@ -1818,103 +1850,119 @@ void object_stat_sum_t::encode(bufferlist& bl) const
   ::encode(num_evict_mode_some, bl);
   ::encode(num_evict_mode_full, bl);
   ::encode(num_objects_pinned, bl);
+  ::encode(num_objects_missing, bl);
+#endif
   ENCODE_FINISH(bl);
 }
 
 void object_stat_sum_t::decode(bufferlist::iterator& bl)
 {
+  bool decode_finish = false;
   DECODE_START_LEGACY_COMPAT_LEN(14, 3, 3, bl);
-  ::decode(num_bytes, bl);
-  if (struct_v < 3) {
-    uint64_t num_kb;
-    ::decode(num_kb, bl);
+#if defined(CEPH_LITTLE_ENDIAN)
+  if (struct_v >= 15) {
+    bl.copy(sizeof(object_stat_sum_t), (char*)(&num_bytes));
+    decode_finish = true;
   }
-  ::decode(num_objects, bl);
-  ::decode(num_object_clones, bl);
-  ::decode(num_object_copies, bl);
-  ::decode(num_objects_missing_on_primary, bl);
-  ::decode(num_objects_degraded, bl);
-  if (struct_v >= 2)
-    ::decode(num_objects_unfound, bl);
-  ::decode(num_rd, bl);
-  ::decode(num_rd_kb, bl);
-  ::decode(num_wr, bl);
-  ::decode(num_wr_kb, bl);
-  if (struct_v >= 4)
-    ::decode(num_scrub_errors, bl);
-  else
-    num_scrub_errors = 0;
-  if (struct_v >= 5) {
-    ::decode(num_objects_recovered, bl);
-    ::decode(num_bytes_recovered, bl);
-    ::decode(num_keys_recovered, bl);
-  } else {
-    num_objects_recovered = 0;
-    num_bytes_recovered = 0;
-    num_keys_recovered = 0;
-  }
-  if (struct_v >= 6) {
-    ::decode(num_shallow_scrub_errors, bl);
-    ::decode(num_deep_scrub_errors, bl);
-  } else {
-    num_shallow_scrub_errors = 0;
-    num_deep_scrub_errors = 0;
-  }
-  if (struct_v >= 7) {
-    ::decode(num_objects_dirty, bl);
-    ::decode(num_whiteouts, bl);
-  } else {
-    num_objects_dirty = 0;
-    num_whiteouts = 0;
-  }
-  if (struct_v >= 8) {
-    ::decode(num_objects_omap, bl);
-  } else {
-    num_objects_omap = 0;
-  }
-  if (struct_v >= 9) {
-    ::decode(num_objects_hit_set_archive, bl);
-  } else {
-    num_objects_hit_set_archive = 0;
-  }
-  if (struct_v >= 10) {
-    ::decode(num_objects_misplaced, bl);
-  } else {
-    num_objects_misplaced = 0;
-  }
-  if (struct_v >= 11) {
-    ::decode(num_bytes_hit_set_archive, bl);
-  } else {
-    num_bytes_hit_set_archive = 0;
-  }
-  if (struct_v >= 12) {
-    ::decode(num_flush, bl);
-    ::decode(num_flush_kb, bl);
-    ::decode(num_evict, bl);
-    ::decode(num_evict_kb, bl);
-    ::decode(num_promote, bl);
-  } else {
-    num_flush = 0;
-    num_flush_kb = 0;
-    num_evict = 0;
-    num_evict_kb = 0;
-    num_promote = 0;
-  }
-  if (struct_v >= 13) {
-    ::decode(num_flush_mode_high, bl);
-    ::decode(num_flush_mode_low, bl);
-    ::decode(num_evict_mode_some, bl);
-    ::decode(num_evict_mode_full, bl);
-  } else {
-    num_flush_mode_high = 0;
-    num_flush_mode_low = 0;
-    num_evict_mode_some = 0;
-    num_evict_mode_full = 0;
-  }
-  if (struct_v >= 14) {
-    ::decode(num_objects_pinned, bl);
-  } else {
-    num_objects_pinned = 0;
+#endif
+  if (!decode_finish) {
+    ::decode(num_bytes, bl);
+    if (struct_v < 3) {
+      uint64_t num_kb;
+      ::decode(num_kb, bl);
+    }
+    ::decode(num_objects, bl);
+    ::decode(num_object_clones, bl);
+    ::decode(num_object_copies, bl);
+    ::decode(num_objects_missing_on_primary, bl);
+    ::decode(num_objects_degraded, bl);
+    if (struct_v >= 2)
+      ::decode(num_objects_unfound, bl);
+    ::decode(num_rd, bl);
+    ::decode(num_rd_kb, bl);
+    ::decode(num_wr, bl);
+    ::decode(num_wr_kb, bl);
+    if (struct_v >= 4)
+      ::decode(num_scrub_errors, bl);
+    else
+      num_scrub_errors = 0;
+    if (struct_v >= 5) {
+      ::decode(num_objects_recovered, bl);
+      ::decode(num_bytes_recovered, bl);
+      ::decode(num_keys_recovered, bl);
+    } else {
+      num_objects_recovered = 0;
+      num_bytes_recovered = 0;
+      num_keys_recovered = 0;
+    }
+    if (struct_v >= 6) {
+      ::decode(num_shallow_scrub_errors, bl);
+      ::decode(num_deep_scrub_errors, bl);
+    } else {
+      num_shallow_scrub_errors = 0;
+      num_deep_scrub_errors = 0;
+    }
+    if (struct_v >= 7) {
+      ::decode(num_objects_dirty, bl);
+      ::decode(num_whiteouts, bl);
+    } else {
+      num_objects_dirty = 0;
+      num_whiteouts = 0;
+    }
+    if (struct_v >= 8) {
+      ::decode(num_objects_omap, bl);
+    } else {
+      num_objects_omap = 0;
+    }
+    if (struct_v >= 9) {
+      ::decode(num_objects_hit_set_archive, bl);
+    } else {
+      num_objects_hit_set_archive = 0;
+    }
+    if (struct_v >= 10) {
+      ::decode(num_objects_misplaced, bl);
+    } else {
+      num_objects_misplaced = 0;
+    }
+    if (struct_v >= 11) {
+      ::decode(num_bytes_hit_set_archive, bl);
+    } else {
+      num_bytes_hit_set_archive = 0;
+    }
+    if (struct_v >= 12) {
+      ::decode(num_flush, bl);
+      ::decode(num_flush_kb, bl);
+      ::decode(num_evict, bl);
+      ::decode(num_evict_kb, bl);
+      ::decode(num_promote, bl);
+    } else {
+      num_flush = 0;
+      num_flush_kb = 0;
+      num_evict = 0;
+      num_evict_kb = 0;
+      num_promote = 0;
+    }
+    if (struct_v >= 13) {
+      ::decode(num_flush_mode_high, bl);
+      ::decode(num_flush_mode_low, bl);
+      ::decode(num_evict_mode_some, bl);
+      ::decode(num_evict_mode_full, bl);
+    } else {
+      num_flush_mode_high = 0;
+      num_flush_mode_low = 0;
+      num_evict_mode_some = 0;
+      num_evict_mode_full = 0;
+    }
+    if (struct_v >= 14) {
+      ::decode(num_objects_pinned, bl);
+    } else {
+      num_objects_pinned = 0;
+    }
+    if (struct_v >= 15) {
+      ::decode(num_objects_missing, bl);
+    } else {
+      num_objects_missing = 0;
+    }
   }
   DECODE_FINISH(bl);
 }
@@ -1928,6 +1976,7 @@ void object_stat_sum_t::generate_test_instances(list<object_stat_sum_t*>& o)
   a.num_object_clones = 4;
   a.num_object_copies = 5;
   a.num_objects_missing_on_primary = 6;
+  a.num_objects_missing = 123;
   a.num_objects_degraded = 7;
   a.num_objects_unfound = 8;
   a.num_rd = 9; a.num_rd_kb = 10;
@@ -1963,6 +2012,7 @@ void object_stat_sum_t::add(const object_stat_sum_t& o)
   num_object_clones += o.num_object_clones;
   num_object_copies += o.num_object_copies;
   num_objects_missing_on_primary += o.num_objects_missing_on_primary;
+  num_objects_missing += o.num_objects_missing;
   num_objects_degraded += o.num_objects_degraded;
   num_objects_misplaced += o.num_objects_misplaced;
   num_rd += o.num_rd;
@@ -2000,6 +2050,7 @@ void object_stat_sum_t::sub(const object_stat_sum_t& o)
   num_object_clones -= o.num_object_clones;
   num_object_copies -= o.num_object_copies;
   num_objects_missing_on_primary -= o.num_objects_missing_on_primary;
+  num_objects_missing -= o.num_objects_missing;
   num_objects_degraded -= o.num_objects_degraded;
   num_objects_misplaced -= o.num_objects_misplaced;
   num_rd -= o.num_rd;
@@ -2038,6 +2089,7 @@ bool operator==(const object_stat_sum_t& l, const object_stat_sum_t& r)
     l.num_object_clones == r.num_object_clones &&
     l.num_object_copies == r.num_object_copies &&
     l.num_objects_missing_on_primary == r.num_objects_missing_on_primary &&
+    l.num_objects_missing == r.num_objects_missing &&
     l.num_objects_degraded == r.num_objects_degraded &&
     l.num_objects_misplaced == r.num_objects_misplaced &&
     l.num_objects_unfound == r.num_objects_unfound &&

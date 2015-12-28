@@ -346,6 +346,9 @@ add_dependencies(check osd_pool_create)
 add_test(NAME osd_copy_from COMMAND bash ${CMAKE_SOURCE_DIR}/src/test/osd/osd-copy-from.sh)
 add_dependencies(check osd_copy_from)
 
+add_test(NAME osd_mark_down COMMAND bash ${CMAKE_SOURCE_DIR}/src/test/osd/osd-markdown.sh)
+add_dependencies(check osd-markdown)
+
 add_test(NAME mon_handle_forward COMMAND bash ${CMAKE_SOURCE_DIR}/src/test/mon/mon-handle-forward.sh)
 add_dependencies(check mon_handle_forward)
 
@@ -534,6 +537,25 @@ add_dependencies(check unittest_sloppy_crc_map)
 target_link_libraries(unittest_sloppy_crc_map global
   ${BLKID_LIBRARIES} ${CMAKE_DL_LIBS} ${TCMALLOC_LIBS} ${UNITTEST_LIBS})
 set_target_properties(unittest_sloppy_crc_map
+  PROPERTIES COMPILE_FLAGS ${UNITTEST_CXX_FLAGS})
+
+# unittest_time
+set(unittest_time_srcs
+  common/test_time.cc
+  ${CMAKE_SOURCE_DIR}/src/common/ceph_time.cc
+  )
+add_executable(unittest_time
+  ${unittest_time_srcs}
+  $<TARGET_OBJECTS:heap_profiler_objs>
+  )
+target_link_libraries(unittest_time
+  global
+  ${BLKID_LIBRARIES}
+  ${CMAKE_DL_LIBS}
+  ${TCMALLOC_LIBS}
+  ${UNITTEST_LIBS}
+  )
+set_target_properties(unittest_time
   PROPERTIES COMPILE_FLAGS ${UNITTEST_CXX_FLAGS})
 
 # unittest_util

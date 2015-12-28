@@ -4,7 +4,7 @@
 #define ROCKS_DB_STORE_H
 
 #include "include/types.h"
-#include "include/buffer.h"
+#include "include/buffer_fwd.h"
 #include "KeyValueDB.h"
 #include <set>
 #include <map>
@@ -44,8 +44,12 @@ namespace rocksdb{
   class Slice;
   class WriteBatch;
   class Iterator;
+  class Logger;
   struct Options;
 }
+
+extern rocksdb::Logger *create_rocksdb_ceph_logger();
+
 /**
  * Uses RocksDB to implement the KeyValueDB interface
  */

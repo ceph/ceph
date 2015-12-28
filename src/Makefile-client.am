@@ -50,8 +50,6 @@ bin_SCRIPTS += \
 	rbd-replay-many \
         rbdmap
 
-python_PYTHON += pybind/rbd.py
-
 libkrbd_la_SOURCES = krbd.cc
 libkrbd_la_LIBADD = $(LIBSECRET) $(LIBCOMMON) -lblkid -ludev
 if LINUX

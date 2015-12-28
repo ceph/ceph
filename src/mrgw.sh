@@ -13,6 +13,7 @@ shift 2
 
 run_root=$script_root/run/$name
 pidfile=$run_root/out/radosgw.${port}.pid
+
 asokfile=$run_root/out/radosgw.${port}.asok
 
 $script_root/mstop.sh $name radosgw $port

@@ -411,6 +411,10 @@ public:
     }
 
     virtual void process(T *item) = 0;
+    void process_finish() {
+      Mutex::Locker locker(m_pool->_lock);
+      _void_process_finish(nullptr);
+    }
 
     T *front() {
       assert(m_pool->_lock.is_locked());
@@ -422,6 +426,9 @@ public:
     void signal() {
       Mutex::Locker pool_locker(m_pool->_lock);
       m_pool->_cond.SignalOne();
+    }
+    Mutex &get_pool_lock() {
+      return m_pool->_lock;
     }
   private:
     ThreadPool *m_pool;

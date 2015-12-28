@@ -10,7 +10,7 @@
 #include <string>
 #include <vector>
 
-#include "include/buffer.h"
+#include "include/buffer_fwd.h"
 #include "include/rbd/librbd.hpp"
 #include "include/rbd_types.h"
 
@@ -68,16 +68,12 @@ namespace librbd {
     }
   };
 
-  const std::string id_obj_name(const std::string &name);
-  const std::string header_name(const std::string &image_id);
-  const std::string old_header_name(const std::string &image_name);
-  std::string unique_lock_name(const std::string &name, void *address);
-
   int detect_format(librados::IoCtx &io_ctx, const std::string &name,
 		    bool *old_format, uint64_t *size);
 
   bool has_parent(int64_t parent_pool_id, uint64_t off, uint64_t overlap);
 
+  std::string image_option_name(int optname);
   void image_options_create(rbd_image_options_t* opts);
   void image_options_create_ref(rbd_image_options_t* opts,
 				rbd_image_options_t orig);
@@ -130,7 +126,7 @@ namespace librbd {
   int snap_create(ImageCtx *ictx, const char *snap_name);
   void snap_create_helper(ImageCtx *ictx, Context* ctx, const char *snap_name);
   int snap_list(ImageCtx *ictx, std::vector<snap_info_t>& snaps);
-  bool snap_exists(ImageCtx *ictx, const char *snap_name);
+  int snap_exists(ImageCtx *ictx, const char *snap_name, bool *exists);
   int snap_rollback(ImageCtx *ictx, const char *snap_name,
 		    ProgressContext& prog_ctx);
   int snap_remove(ImageCtx *ictx, const char *snap_name);
@@ -145,18 +141,9 @@ namespace librbd {
                              const char *snap_name);
   int snap_is_protected(ImageCtx *ictx, const char *snap_name,
 			bool *is_protected);
-  int refresh_parent(ImageCtx *ictx);
-  int ictx_check(ImageCtx *ictx);
-  int ictx_check(ImageCtx *ictx, const RWLock &owner_lock);
-  int ictx_refresh(ImageCtx *ictx);
   int copy(ImageCtx *ictx, IoCtx& dest_md_ctx, const char *destname,
 	   ImageOptions& opts, ProgressContext &prog_ctx);
   int copy(ImageCtx *src, ImageCtx *dest, ProgressContext &prog_ctx);
-
-  int open_parent(ImageCtx *ictx);
-  int open_image(ImageCtx *ictx);
-  int close_image(ImageCtx *ictx);
-  int close_parent(ImageCtx *ictx);
 
   int flatten(ImageCtx *ictx, ProgressContext &prog_ctx);
 
@@ -216,16 +203,18 @@ namespace librbd {
   int metadata_set(ImageCtx *ictx, const std::string &key, const std::string &value);
   int metadata_remove(ImageCtx *ictx, const std::string &key);
 
-  AioCompletion *aio_create_completion();
-  AioCompletion *aio_create_completion(void *cb_arg, callback_t cb_complete);
-  AioCompletion *aio_create_completion_internal(void *cb_arg,
-						callback_t cb_complete);
+  int mirror_is_enabled(IoCtx& io_ctx, bool *enabled);
+  int mirror_set_enabled(IoCtx& io_ctx, bool enabled);
+  int mirror_peer_add(IoCtx& io_ctx, const std::string &cluster_uuid,
+                      const std::string &cluster_name,
+                      const std::string &client_name);
+  int mirror_peer_remove(IoCtx& io_ctx, const std::string &cluster_uuid);
+  int mirror_peer_list(IoCtx& io_ctx, std::vector<mirror_peer_t> *peers);
+  int mirror_peer_set_client(IoCtx& io_ctx, const std::string &cluster_uuid,
+                             const std::string &client_name);
+  int mirror_peer_set_cluster(IoCtx& io_ctx, const std::string &cluster_uuid,
+                              const std::string &cluster_name);
 
-  // raw callbacks
-  void rados_req_cb(rados_completion_t cb, void *arg);
-  void rados_ctx_cb(rados_completion_t cb, void *arg);
-  void rbd_req_cb(completion_t cb, void *arg);
-  void rbd_ctx_cb(completion_t cb, void *arg);
 }
 
 #endif

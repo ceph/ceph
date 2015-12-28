@@ -293,7 +293,8 @@ void PG::proc_master_log(
   if (oinfo.last_epoch_started > info.last_epoch_started)
     info.last_epoch_started = oinfo.last_epoch_started;
   info.history.merge(oinfo.history);
-  assert(info.last_epoch_started >= info.history.last_epoch_started);
+  assert(cct->_conf->osd_find_best_info_ignore_history_les ||
+	 info.last_epoch_started >= info.history.last_epoch_started);
 
   peer_missing[from].swap(omissing);
 }
@@ -953,12 +954,10 @@ map<pg_shard_t, pg_info_t>::const_iterator PG::find_best_info(
        ++i) {
     if (!cct->_conf->osd_find_best_info_ignore_history_les &&
 	max_last_epoch_started_found < i->second.history.last_epoch_started) {
-      min_last_update_acceptable = eversion_t::max();
       max_last_epoch_started_found = i->second.history.last_epoch_started;
     }
     if (!i->second.is_incomplete() &&
 	max_last_epoch_started_found < i->second.last_epoch_started) {
-      min_last_update_acceptable = eversion_t::max();
       max_last_epoch_started_found = i->second.last_epoch_started;
     }
   }
@@ -2079,26 +2078,33 @@ void PG::mark_clean()
 unsigned PG::get_recovery_priority()
 {
   // a higher value -> a higher priority
-  return OSD_RECOVERY_PRIORITY_MAX;
+
+  int pool_recovery_priority = 0;
+  pool.info.opts.get(pool_opts_t::RECOVERY_PRIORITY, &pool_recovery_priority);
+
+  unsigned ret = OSD_RECOVERY_PRIORITY_BASE + pool_recovery_priority;
+  if (ret > OSD_RECOVERY_PRIORITY_MAX)
+    ret = OSD_RECOVERY_PRIORITY_MAX;
+  return ret;
 }
 
 unsigned PG::get_backfill_priority()
 {
   // a higher value -> a higher priority
 
-  // undersized: 200 + num missing replicas
+  unsigned ret = OSD_BACKFILL_PRIORITY_BASE;
   if (is_undersized()) {
+    // undersized: OSD_BACKFILL_DEGRADED_PRIORITY_BASE + num missing replicas
     assert(pool.info.size > actingset.size());
-    return 200 + (pool.info.size - actingset.size());
-  }
+    ret = OSD_BACKFILL_DEGRADED_PRIORITY_BASE + (pool.info.size - actingset.size());
 
-  // degraded: baseline degraded
-  if (is_degraded()) {
-    return 200;
+  } else if (is_degraded()) {
+    // degraded: baseline degraded
+    ret = OSD_BACKFILL_DEGRADED_PRIORITY_BASE;
   }
+  assert (ret < OSD_RECOVERY_PRIORITY_MAX);
 
-  // baseline
-  return 1;
+  return ret;
 }
 
 void PG::finish_recovery(list<Context*>& tfin)
@@ -2274,6 +2280,8 @@ void PG::split_into(pg_t child_pgid, PG *child, unsigned split_bits)
   split_ops(child, split_bits);
   _split_into(child_pgid, child, split_bits);
 
+  child->on_new_interval();
+
   child->dirty_info = true;
   child->dirty_big_info = true;
   dirty_info = true;
@@ -2440,6 +2448,19 @@ void PG::_update_calc_stats()
       pg_log.get_missing().num_missing();
     degraded += pg_log.get_missing().num_missing();
 
+    // num_objects_missing on each peer
+    for (map<pg_shard_t, pg_info_t>::iterator pi =
+        peer_info.begin();
+        pi != peer_info.end();
+        ++pi) {
+      map<pg_shard_t, pg_missing_t>::const_iterator pm =
+        peer_missing.find(pi->first);
+      if (pm != peer_missing.end()) {
+        pi->second.stats.stats.sum.num_objects_missing =
+          pm->second.num_missing();
+      }
+    }
+
     assert(!acting.empty());
     for (set<pg_shard_t>::iterator i = actingset.begin();
 	 i != actingset.end();
@@ -2545,7 +2566,7 @@ void PG::publish_stats_to_osd()
   if (pg_stats_publish_valid && info.stats == pg_stats_publish &&
       info.stats.last_fresh > cutoff) {
     dout(15) << "publish_stats_to_osd " << pg_stats_publish.reported_epoch
-	     << ": no change since" << dendl;
+	     << ": no change since " << info.stats.last_fresh << dendl;
   } else {
     // update our stat summary and timestamps
     info.stats.reported_epoch = get_osdmap()->get_epoch();
@@ -3776,7 +3797,6 @@ void PG::replica_scrub(
   if (last_update_applied < msg->scrub_to) {
     dout(10) << "waiting for last_update_applied to catch up" << dendl;
     scrubber.active_rep_scrub = op;
-    msg->get();
     return;
   }
 
@@ -6651,6 +6671,12 @@ boost::statechart::result PG::RecoveryState::Active::react(const QueryState& q)
     q.f->open_object_section("scrub");
     q.f->dump_stream("scrubber.epoch_start") << pg->scrubber.epoch_start;
     q.f->dump_int("scrubber.active", pg->scrubber.active);
+    q.f->dump_string("scrubber.state", Scrubber::state_string(pg->scrubber.state));
+    q.f->dump_stream("scrubber.start") << pg->scrubber.start;
+    q.f->dump_stream("scrubber.end") << pg->scrubber.end;
+    q.f->dump_stream("scrubber.subset_last_update") << pg->scrubber.subset_last_update;
+    q.f->dump_bool("scrubber.deep", pg->scrubber.deep);
+    q.f->dump_int("scrubber.seed", pg->scrubber.seed);
     q.f->dump_int("scrubber.waiting_on", pg->scrubber.waiting_on);
     {
       q.f->open_array_section("scrubber.waiting_on_whom");
