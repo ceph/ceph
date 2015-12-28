@@ -548,6 +548,7 @@ int Monitor::preinit()
 
   int r = sanitize_options();
   if (r < 0) {
+    lock.Unlock();
     derr << "option sanitization failed!" << dendl;
     return r;
   }
@@ -638,6 +639,7 @@ int Monitor::preinit()
               << "'mon_force_quorum_join' is set -- allowing boot" << dendl;
     } else {
       derr << "commit suicide!" << dendl;
+      lock.Unlock();
       return -ENOENT;
     }
   }
