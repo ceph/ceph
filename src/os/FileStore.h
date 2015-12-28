@@ -50,6 +50,10 @@ using namespace std;
 # define FALLOC_FL_PUNCH_HOLE 0x2
 #endif
 
+#ifndef FALLOC_FL_ZERO_RANGE
+#define FALLOC_FL_ZERO_RANGE 0x10
+#endif
+
 #if defined(__linux__)
 # ifndef BTRFS_SUPER_MAGIC
 #define BTRFS_SUPER_MAGIC 0x9123683E
