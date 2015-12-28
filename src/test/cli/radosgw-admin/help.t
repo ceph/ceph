@@ -86,10 +86,12 @@
     mdlog list                 list metadata log
     mdlog trim                 trim metadata log (use start-date, end-date or
                                start-marker, end-marker)
+    mdlog status               read metadata log status
     bilog list                 list bucket index log
     bilog trim                 trim bucket index log (use start-marker, end-marker)
     datalog list               list data log
     datalog trim               trim data log
+    datalog status             read data log status
     opstate list               list stateful operations entries (use client_id,
                                op_id, object)
     opstate set                set state on an entry (use client_id, op_id, object, state)
