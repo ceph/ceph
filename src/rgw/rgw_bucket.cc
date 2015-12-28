@@ -1552,7 +1552,11 @@ public:
   int put(RGWRados *store, string& entry, RGWObjVersionTracker& objv_tracker,
           time_t mtime, JSONObj *obj, sync_type_t sync_type) {
     RGWBucketEntryPoint be, old_be;
-    decode_json_obj(be, obj);
+    try {
+      decode_json_obj(be, obj);
+    } catch (JSONDecoder::err& e) {
+      return -EINVAL;
+    }
 
     time_t orig_mtime;
     map<string, bufferlist> attrs;
@@ -1712,7 +1716,11 @@ public:
   int put(RGWRados *store, string& oid, RGWObjVersionTracker& objv_tracker,
           time_t mtime, JSONObj *obj, sync_type_t sync_type) {
     RGWBucketCompleteInfo bci, old_bci;
-    decode_json_obj(bci, obj);
+    try {
+      decode_json_obj(bci, obj);
+    } catch (JSONDecoder::err& e) {
+      return -EINVAL;
+    }
 
     time_t orig_mtime;
     RGWObjectCtx obj_ctx(store);
