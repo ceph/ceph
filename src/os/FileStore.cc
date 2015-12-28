@@ -3275,22 +3275,30 @@ int FileStore::_zero(coll_t cid, const ghobject_t& oid, uint64_t offset, size_t 
   if (ret < 0) {
     goto out;
   }
-
-  // first try fallocate
-  ret = fallocate(**fd, FALLOC_FL_PUNCH_HOLE, offset, len);
-  if (ret < 0)
+  struct stat st;
+  ret = fstat(**fd, &st);
+  if (ret < 0) {
     ret = -errno;
-  lfn_close(fd);
-
-  if (ret >= 0 && m_filestore_sloppy_crc) {
-    int rc = backend->_crc_update_zero(**fd, offset, len);
-    assert(rc >= 0);
+    lfn_close(fd);
+    goto out;
   }
+  // first try fallocate
+  if (offset + len <= (uint64_t)st.st_size) {
+    ret = fallocate(**fd, FALLOC_FL_PUNCH_HOLE|FALLOC_FL_KEEP_SIZE, offset, len);
+    if (ret < 0)
+      ret = -errno;
+    lfn_close(fd);
 
-  if (ret == 0)
-    goto out;  // yay!
-  if (ret != -EOPNOTSUPP)
-    goto out;  // some other error
+    if (ret >= 0 && m_filestore_sloppy_crc) {
+      int rc = backend->_crc_update_zero(**fd, offset, len);
+      assert(rc >= 0);
+    }
+
+    if (ret == 0)
+      goto out;  // yay!
+    if (ret != -EOPNOTSUPP)
+      goto out;  // some other error
+  }
 # endif
 #endif
 

@@ -46,10 +46,12 @@ using namespace std;
 
 
 // from include/linux/falloc.h:
+#ifndef FALLOC_FL_KEEP_SIZE
+# define FALLOC_FL_KEEP_SIZE 0x1
+#endif
 #ifndef FALLOC_FL_PUNCH_HOLE
 # define FALLOC_FL_PUNCH_HOLE 0x2
 #endif
-
 #if defined(__linux__)
 # ifndef BTRFS_SUPER_MAGIC
 #define BTRFS_SUPER_MAGIC 0x9123683E
