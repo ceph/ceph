@@ -53,5 +53,5 @@ find_package_handle_standard_args(blkid DEFAULT_MSG BLKID_LIBRARIES BLKID_INCLUD
 
 mark_as_advanced(
   BLKID_LIBRARY
-  BLKID_I
+  BLKID_INCLUDE_DIR
 )

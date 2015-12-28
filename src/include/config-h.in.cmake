@@ -235,6 +235,21 @@
 /* Defined if XIO */
 #cmakedefine HAVE_XIO
 
+/* Defined if LTTNG */
+#cmakedefine WITH_LTTNG 1
+
+/* Defined if Babeltrace */
+#cmakedefine WITH_BABELTRACE 1
+
+/* Define to 1 if you have the <babeltrace/babeltrace.h> header file. */
+#cmakedefine HAVE_BABELTRACE_BABELTRACE_H 1
+
+/* Define to 1 if you have the <babeltrace/ctf/events.h> header file. */
+#cmakedefine HAVE_BABELTRACE_CTF_EVENTS_H 1
+
+/* Defined if you have librocksdb enabled */
+#cmakedefine HAVE_LIBROCKSDB
+
 /* Defined if new gperftools */
 #cmakedefine HAVE_GPERFTOOLS_HEAP_PROFILER_H
 #cmakedefine HAVE_GPERFTOOLS_MALLOC_EXTENSION_H
@@ -248,5 +263,8 @@
 
 /* Define if HAVE_REENTRANT_STRSIGNAL */
 #cmakedefine HAVE_REENTRANT_STRSIGNAL
+
+/* Defined if curl headers define curl_multi_wait() */
+#cmakedefine HAVE_CURL_MULTI_WAIT 1
 
 #endif /* CONFIG_H */
