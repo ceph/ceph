@@ -156,7 +156,7 @@ class BlueRocksWritableFile : public rocksdb::WritableFile {
  public:
   BlueRocksWritableFile(BlueFS *fs, BlueFS::FileWriter *h) : fs(fs), h(h) {}
   ~BlueRocksWritableFile() {
-    delete h;
+    fs->close_writer(h);
   }
 
   // Indicates if the class makes use of unbuffered I/O

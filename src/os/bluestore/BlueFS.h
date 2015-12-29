@@ -82,9 +82,7 @@ public:
     }
     ~FileWriter() {
       file->num_writers.dec();
-      for (auto p : iocv) {
-	delete p;
-      }
+      assert(iocv.empty());  // caller must call BlueFS::close_writer()
     }
 
     void append(const char *buf, size_t len) {
@@ -182,6 +180,8 @@ private:
   vector<interval_set<uint64_t> > block_all;  ///< extents in bdev we own
   vector<Allocator*> alloc;                   ///< allocators for bdevs
 
+  vector<IOContext*> ioc_reap_queue;          ///< iocs from closed writers
+
   void _init_alloc();
   void _stop_alloc();
 
@@ -221,6 +221,8 @@ private:
   int _write_super();
   int _replay(); ///< replay journal
 
+  void _close_writer(FileWriter *h);
+
   // always put the super in the second 4k block.  FIXME should this be
   // block size independent?
   unsigned get_super_offset() {
@@ -259,6 +261,11 @@ public:
     const string& file,
     FileReader **h,
     bool random = false);
+
+  void close_writer(FileWriter *h) {
+    Mutex::Locker l(lock);
+    _close_writer(h);
+  }
 
   int rename(const string& old_dir, const string& old_file,
 	     const string& new_dir, const string& new_file);

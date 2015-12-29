@@ -176,7 +176,7 @@ int BlueFS::mkfs(uuid_d osd_uuid)
 
   // clean up
   super = bluefs_super_t();
-  delete log_writer;
+  _close_writer(log_writer);
   log_writer = NULL;
   block_all.clear();
   _stop_alloc();
@@ -251,10 +251,17 @@ int BlueFS::mount()
 void BlueFS::umount()
 {
   dout(1) << __func__ << dendl;
+
   sync_metadata();
 
-  delete log_writer;
+  _close_writer(log_writer);
   log_writer = NULL;
+  // manually clean up it's iocs
+  for (auto p : ioc_reap_queue) {
+    delete p;
+  }
+  ioc_reap_queue.clear();
+
   block_all.clear();
   _stop_alloc();
   file_map.clear();
@@ -791,7 +798,7 @@ void BlueFS::_compact_log()
     assert(r == 0);
   }
 
-  delete log_writer;
+  _close_writer(log_writer);
 
   log_file->fnode.size = bl.length();
   log_writer = new FileWriter(log_file, bdev.size());
@@ -1123,12 +1130,17 @@ void BlueFS::sync_metadata()
   }
   dout(10) << __func__ << dendl;
   utime_t start = ceph_clock_now(NULL);
+  vector<IOContext*> iocv;
+  iocv.swap(ioc_reap_queue);
   for (auto p : alloc) {
     p->commit_start();
   }
   _flush_log();
   for (auto p : alloc) {
     p->commit_finish();
+  }
+  for (auto p : iocv) {
+    delete p;
   }
   utime_t end = ceph_clock_now(NULL);
   utime_t dur = end - start;
@@ -1210,6 +1222,20 @@ int BlueFS::open_for_write(
   *h = new FileWriter(file, bdev.size());
   dout(10) << __func__ << " h " << *h << " on " << file->fnode << dendl;
   return 0;
+}
+
+void BlueFS::_close_writer(FileWriter *h)
+{
+  dout(10) << __func__ << " " << h << dendl;
+  for (auto i : h->iocv) {
+    if (i->has_aios()) {
+      ioc_reap_queue.push_back(i);
+    } else {
+      delete i;
+    }
+  }
+  h->iocv.clear();
+  delete h;
 }
 
 int BlueFS::open_for_read(
