@@ -103,7 +103,7 @@ static void set_date_header(const time_t *t, map<string, string>& headers, const
   stringstream s;
   utime_t tm = utime_t(*t, 0);
   tm.asctime(s);
-  headers["HTTP_IF_MODIFIED_SINCE"] = s.str();
+  headers[header_name] = s.str();
 }
 
 template <class T>
