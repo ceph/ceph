@@ -8270,3 +8270,10 @@ bool Server::waiting_for_reconnect(client_t c) const
 {
   return client_reconnect_gather.count(c) > 0;
 }
+
+void Server::dump_reconnect_status(Formatter *f) const
+{
+  f->open_object_section("reconnect_status");
+  f->dump_stream("client_reconnect_gather") << client_reconnect_gather;
+  f->close_section();
+}
