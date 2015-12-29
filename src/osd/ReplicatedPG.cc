@@ -2381,7 +2381,7 @@ void ReplicatedPG::do_proxy_read(OpRequestRef op)
 		 m->get_pg().ps(),
 		 m->get_object_locator().get_pool(),
 		 m->get_object_locator().nspace);
-  unsigned flags = CEPH_OSD_FLAG_IGNORE_CACHE | CEPH_OSD_FLAG_IGNORE_OVERLAY;
+  unsigned flags = CEPH_OSD_FLAG_IGNORE_OVERLAY;
 
   // pass through some original flags that make sense.
   //  - leave out redirection and balancing flags since we are
@@ -2576,7 +2576,7 @@ void ReplicatedPG::do_proxy_write(OpRequestRef op, const hobject_t& missing_oid)
 		 m->get_pg().ps(),
 		 m->get_object_locator().get_pool(),
 		 m->get_object_locator().nspace);
-  unsigned flags = CEPH_OSD_FLAG_IGNORE_CACHE | CEPH_OSD_FLAG_IGNORE_OVERLAY;
+  unsigned flags = CEPH_OSD_FLAG_IGNORE_OVERLAY;
   dout(10) << __func__ << " Start proxy write for " << *m << dendl;
 
   ProxyWriteOpRef pwop(new ProxyWriteOp(op, soid, m->ops, m->get_reqid()));
@@ -2747,7 +2747,6 @@ void ReplicatedPG::promote_object(ObjectContextRef obc,
   my_oloc.pool = pool.info.tier_of;
 
   unsigned flags = CEPH_OSD_COPY_FROM_FLAG_IGNORE_OVERLAY |
-                   CEPH_OSD_COPY_FROM_FLAG_IGNORE_CACHE |
                    CEPH_OSD_COPY_FROM_FLAG_MAP_SNAP_CLONE |
                    CEPH_OSD_COPY_FROM_FLAG_RWORDERED;
   start_copy(cb, obc, obc->obs.oi.soid, my_oloc, 0, flags,
