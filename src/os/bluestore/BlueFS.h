@@ -67,16 +67,12 @@ public:
     bufferlist tail_block;  ///< existing partial block at end of file, if any
 
     Mutex lock;
-    /*Cond cond;
-    bool num_aio_in_flight;
-    */
     vector<IOContext*> iocv;  ///< one for each bdev
 
     FileWriter(FileRef f, unsigned num_bdev)
       : file(f),
 	pos(0),
-	lock("BlueFS::FileWriter::lock") { //,
-	//num_aio_in_flight(0) {
+	lock("BlueFS::FileWriter::lock") {
       file->num_writers.inc();
       iocv.resize(num_bdev);
       for (unsigned i = 0; i < num_bdev; ++i) {
@@ -85,6 +81,9 @@ public:
     }
     ~FileWriter() {
       file->num_writers.dec();
+      for (auto p : iocv) {
+	delete p;
+      }
     }
 
     void append(const char *buf, size_t len) {
