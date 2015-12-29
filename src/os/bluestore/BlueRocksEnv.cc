@@ -30,6 +30,9 @@ class BlueRocksSequentialFile : public rocksdb::SequentialFile {
   BlueFS::FileReader *h;
  public:
   BlueRocksSequentialFile(BlueFS *fs, BlueFS::FileReader *h) : fs(fs), h(h) {}
+  ~BlueRocksSequentialFile() {
+    delete h;
+  }
 
   // Read up to "n" bytes from the file.  "scratch[0..n-1]" may be
   // written by this routine.  Sets "*result" to the data that was
@@ -73,6 +76,9 @@ class BlueRocksRandomAccessFile : public rocksdb::RandomAccessFile {
   BlueFS::FileReader *h;
  public:
   BlueRocksRandomAccessFile(BlueFS *fs, BlueFS::FileReader *h) : fs(fs), h(h) {}
+  ~BlueRocksRandomAccessFile() {
+    delete h;
+  }
 
   // Read up to "n" bytes from the file starting at "offset".
   // "scratch[0..n-1]" may be written by this routine.  Sets "*result"
@@ -149,6 +155,9 @@ class BlueRocksWritableFile : public rocksdb::WritableFile {
   BlueFS::FileWriter *h;
  public:
   BlueRocksWritableFile(BlueFS *fs, BlueFS::FileWriter *h) : fs(fs), h(h) {}
+  ~BlueRocksWritableFile() {
+    delete h;
+  }
 
   // Indicates if the class makes use of unbuffered I/O
   /*bool UseOSBuffer() const {
@@ -200,7 +209,6 @@ class BlueRocksWritableFile : public rocksdb::WritableFile {
 	return err_to_status(r);
     }
 
-    delete h;
     return rocksdb::Status::OK();
   }
 
@@ -297,6 +305,8 @@ class BlueRocksFileLock : public rocksdb::FileLock {
   BlueFS *fs;
   BlueFS::FileLock *lock;
   BlueRocksFileLock(BlueFS *fs, BlueFS::FileLock *l) : fs(fs), lock(l) { }
+  ~BlueRocksFileLock() {
+  }
 };
 
 
@@ -513,6 +523,7 @@ rocksdb::Status BlueRocksEnv::UnlockFile(rocksdb::FileLock* lock)
   int r = fs->unlock_file(l->lock);
   if (r < 0)
     return err_to_status(r);
+  delete lock;
   return rocksdb::Status::OK();
 }
 
