@@ -61,6 +61,44 @@ if FREEBSD
 libmsg_la_SOURCES += msg/async/EventKqueue.h
 endif
 
+if HAVE_DPDK
+libmsg_la_SOURCES += \
+	msg/async/dpdk/ARP.cc \
+	msg/async/dpdk/DPDK.cc \
+	msg/async/dpdk/dpdk_rte.cc \
+	msg/async/dpdk/DPDKStack.cc \
+	msg/async/dpdk/EventDPDK.cc \
+	msg/async/dpdk/IP.cc \
+	msg/async/dpdk/Packet.cc \
+	msg/async/dpdk/TCP.cc
+
+noinst_HEADERS += \
+	msg/async/dpdk/ARP.h \
+	msg/async/dpdk/array_map.h \
+	msg/async/dpdk/byteorder.h \
+	msg/async/dpdk/circular_buffer.h \
+	msg/async/dpdk/const.h \
+	msg/async/dpdk/deleter.h \
+	msg/async/dpdk/DPDK.h \
+	msg/async/dpdk/dpdk_rte.h \
+	msg/async/dpdk/DPDKStack.h \
+	msg/async/dpdk/ethernet.h \
+	msg/async/dpdk/EventDPDK.h \
+	msg/async/dpdk/GenericSocket.h \
+	msg/async/dpdk/IP.h \
+	msg/async/dpdk/IPChecksum.h \
+	msg/async/dpdk/Packet.h \
+	msg/async/dpdk/PacketUtil.h \
+	msg/async/dpdk/queue.h \
+	msg/async/dpdk/shared_ptr.h \
+	msg/async/dpdk/stream.h \
+	msg/async/dpdk/TCP.h \
+	msg/async/dpdk/toeplitz.h \
+	msg/async/dpdk/transfer.h \
+	msg/async/dpdk/unaligned.h \
+	msg/async/dpdk/UserspaceEvent.h
+endif
+
 if ENABLE_XIO
 libmsg_la_SOURCES += \
 	msg/xio/QueueStrategy.cc \
