@@ -262,6 +262,10 @@ RocksDBStore::~RocksDBStore()
 
   // Ensure db is destroyed before dependent db_cache and filterpolicy
   delete db;
+
+  if (priv) {
+    delete static_cast<rocksdb::Env*>(priv);
+  }
 }
 
 void RocksDBStore::close()
