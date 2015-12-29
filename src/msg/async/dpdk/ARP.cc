@@ -33,10 +33,10 @@
  *
  */
 
-#include "arp.h"
+#include "ARP.h"
 
 arp_for_protocol::arp_for_protocol(arp& a, uint16_t proto_num)
-        : _arp(a), _proto_num(proto_num)
+    : _arp(a), _proto_num(proto_num)
 {
   _arp.add(proto_num, this);
 }
@@ -47,23 +47,23 @@ arp_for_protocol::~arp_for_protocol()
 }
 
 arp::arp(interface* netif) : _netif(netif), _proto(netif, eth_protocol_num::arp, [this] { return get_packet(); }),
-        _rx_packets(
-                _proto.receive(
-                        [this] (packet p, ethernet_address ea) {
-                          return process_packet(std::move(p), ea);
-                        },
-                        [this](forward_hash& out_hash_data, packet& p, size_t off) {
-                          return forward(out_hash_data, p, off);
-                        }
-                )
-        )
+                             _rx_packets(
+                                 _proto.receive(
+                                     [this] (packet p, ethernet_address ea) {
+                                       return process_packet(std::move(p), ea);
+                                     },
+                                     [this](forward_hash& out_hash_data, packet& p, size_t off) {
+                                       return forward(out_hash_data, p, off);
+                                     }
+                                 )
+                             )
 {}
 
 Tub<l3_protocol::l3packet> arp::get_packet()
 {
   Tub<l3_protocol::l3packet> p;
   if (!_packetq.empty()) {
-    p = std::move(_packetq.front());
+    p.construct(_packetq.front());
     _packetq.pop_front();
   }
   return p;

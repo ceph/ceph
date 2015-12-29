@@ -38,6 +38,7 @@
 #define CEPH_MSG_ARP_H_
 
 #include <unordered_map>
+#include <functional>
 
 #include "ethernet.h"
 
@@ -53,7 +54,7 @@ class arp_for_protocol {
  public:
   arp_for_protocol(arp& a, uint16_t proto_num);
   virtual ~arp_for_protocol();
-  virtual future<> received(packet p) = 0;
+  virtual int received(packet p) = 0;
   virtual bool forward(forward_hash& out_hash_data, packet& p, size_t off) { return false; }
 };
 
@@ -84,7 +85,7 @@ class arp {
   friend class arp_for;
 };
 
-using resolution_cb = std::function<void (const ethernet_address &dst, int r);
+using resolution_cb = std::function<void (const ethernet_address&, int)>;
 
 template <typename L3>
 class arp_for : public arp_for_protocol {
@@ -123,12 +124,12 @@ class arp_for : public arp_for_protocol {
   std::unordered_map<l3addr, resolution> _in_progress;
  private:
   packet make_query_packet(l3addr paddr);
-  virtual future<> received(packet p) override;
-  future<> handle_request(arp_hdr* ah);
+  virtual int received(packet p) override;
+  int handle_request(arp_hdr* ah);
   l2addr l2self() { return _arp.l2self(); }
   void send(l2addr to, packet p);
  public:
-  future<> send_query(const l3addr& paddr);
+  void send_query(const l3addr& paddr);
   explicit arp_for(arp& a) : arp_for_protocol(a, L3::arp_protocol_type()) {
     _table[L3::broadcast_address()] = ethernet::broadcast_address();
   }
@@ -162,10 +163,9 @@ void arp_for<L3>::send(l2addr to, packet p) {
 }
 
 template <typename L3>
-future<>
-arp_for<L3>::send_query(const l3addr& paddr) {
+void arp_for<L3>::send_query(const l3addr& paddr) {
   send(ethernet::broadcast_address(), make_query_packet(paddr));
-  return make_ready_future<>();
+  return 0;
 }
 
 class arp_error : public std::runtime_error {
@@ -241,30 +241,28 @@ void arp_for<L3>::learn(l2addr hwaddr, l3addr paddr) {
 }
 
 template <typename L3>
-future<>
-arp_for<L3>::received(packet p) {
+int arp_for<L3>::received(packet p) {
   auto ah = p.get_header<arp_hdr>();
   if (!ah) {
-    return make_ready_future<>();
+    return 0;
   }
   auto h = ntoh(*ah);
   if (h.hlen != sizeof(l2addr) || h.plen != sizeof(l3addr)) {
-    return make_ready_future<>();
+    return 0;
   }
   switch (h.oper) {
     case op_request:
       return handle_request(&h);
     case op_reply:
       arp_learn(h.sender_hwaddr, h.sender_paddr);
-      return make_ready_future<>();
+      return 0;
     default:
-      return make_ready_future<>();
+      return 0;
   }
 }
 
 template <typename L3>
-future<>
-arp_for<L3>::handle_request(arp_hdr* ah) {
+int arp_for<L3>::handle_request(arp_hdr* ah) {
   if (ah->target_paddr == _l3self
       && _l3self != L3::broadcast_address()) {
     ah->oper = op_reply;
@@ -275,7 +273,7 @@ arp_for<L3>::handle_request(arp_hdr* ah) {
     *ah = hton(*ah);
     send(ah->target_hwaddr, packet(reinterpret_cast<char*>(ah), sizeof(*ah)));
   }
-  return make_ready_future<>();
+  return 0;
 }
 
 #endif /* CEPH_MSG_ARP_H_ */

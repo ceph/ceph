@@ -20,12 +20,9 @@
  * Copyright (C) 2014 Cloudius Systems, Ltd.
  */
 
-#include "tcp.hh"
-#include "tcp-stack.hh"
-#include "ip.hh"
-#include "core/align.hh"
-#include "core/future.hh"
-#include "native-stack-impl.hh"
+#include "TCP.h"
+#include "IP.h"
+#include "DPDKStack.h"
 
 void tcp_option::parse(uint8_t* beg, uint8_t* end) {
 	while (beg < end) {
@@ -129,7 +126,7 @@ uint8_t tcp_option::get_size(bool syn_on, bool ack_on) {
 }
 
 ipv4_tcp::ipv4_tcp(ipv4& inet)
-				: _inet_l4(inet), _tcp(std::make_unique<tcp<ipv4_traits>>(_inet_l4)) {
+		: _inet_l4(inet), _tcp(std::make_unique<tcp<ipv4_traits>>(_inet_l4)) {
 }
 
 ipv4_tcp::~ipv4_tcp() {
@@ -145,7 +142,7 @@ bool ipv4_tcp::forward(forward_hash& out_hash_data, packet& p, size_t off) {
 
 server_socket tcpv4_listen(tcp<ipv4_traits>& tcpv4, uint16_t port, listen_options opts) {
 	return server_socket(std::make_unique<native_server_socket_impl<tcp<ipv4_traits>>>(
-					tcpv4, port, opts));
+			tcpv4, port, opts));
 }
 
 connected_socket tcpv4_connect(tcp<ipv4_traits>& tcpv4, socket_address sa) {

@@ -61,7 +61,7 @@ struct offload_info {
   bool reassembled = false;
   uint16_t tso_seg_size = 0;
   // HW stripped VLAN header (CPU order)
-  std::experimental::optional<uint16_t> vlan_tci;
+  Tub<uint16_t> vlan_tci;
 };
 
 // Zero-copy friendly packet class
@@ -134,7 +134,7 @@ class Packet {
       n->_nr_frags = old->_nr_frags;
       n->headroom = old->headroom;
       n->_offload_info = old->_offload_info;
-      n->rss_hash = old->rss_hash;
+      n->rss_hash.construct(old->rss_hash);
       std::copy(old->frags, old->frags + old->_nr_frags, n->frags);
       old->copy_internal_fragment_to(n.get());
       return std::move(n);
@@ -285,8 +285,8 @@ public:
   Tub<uint32_t> rss_hash() {
     return impl->rss_hash;
   }
-  Tub<uint32_t> set_rss_hash(uint32_t hash) {
-    return impl->rss_hash = hash;
+  void set_rss_hash(uint32_t hash) {
+    return impl->rss_hash.construct(hash);
   }
 private:
   void linearize(size_t at_frag, size_t desired_size);

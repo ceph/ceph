@@ -33,9 +33,10 @@
 // uninitialized storage for unoccupied elements (and thus move/copy
 // constructors instead of move/copy assignments, which are less efficient).
 
-#include "transfer.hh"
 #include <memory>
 #include <algorithm>
+
+#include "transfer.h"
 
 template <typename T, typename Alloc = std::allocator<T>>
 class circular_buffer {
@@ -183,36 +184,27 @@ class circular_buffer {
 };
 
 template <typename T, typename Alloc>
-inline
-size_t
-circular_buffer<T, Alloc>::mask(size_t idx) const {
+inline size_t circular_buffer<T, Alloc>::mask(size_t idx) const {
   return idx & (_impl.capacity - 1);
 }
 
 template <typename T, typename Alloc>
-inline
-bool
-circular_buffer<T, Alloc>::empty() const {
+inline bool circular_buffer<T, Alloc>::empty() const {
   return _impl.begin == _impl.end;
 }
 
 template <typename T, typename Alloc>
-inline
-size_t
-circular_buffer<T, Alloc>::size() const {
+inline size_t circular_buffer<T, Alloc>::size() const {
   return _impl.end - _impl.begin;
 }
 
 template <typename T, typename Alloc>
-inline
-size_t
-circular_buffer<T, Alloc>::capacity() const {
+inline size_t circular_buffer<T, Alloc>::capacity() const {
   return _impl.capacity;
 }
 
 template <typename T, typename Alloc>
-inline
-circular_buffer<T, Alloc>::circular_buffer(circular_buffer&& x)
+inline circular_buffer<T, Alloc>::circular_buffer(circular_buffer&& x)
     : _impl(std::move(x._impl)) {
   x._impl = {};
 }

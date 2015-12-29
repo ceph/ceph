@@ -43,7 +43,6 @@
 #include "IP.h"
 #include "DPDK.h"
 #include "proxy.hh"
-#include "dhcp.hh"
 
 #define dout_subsys ceph_subsys_dpdk
 
@@ -75,7 +74,7 @@ interface::interface(CephContext *c, std::shared_ptr<device> dev, unsigned cpuid
         eh->src_mac = _hw_address;
         eh->eth_proto = uint16_t(l3pv.proto_num);
         *eh = hton(*eh);
-        p = std::move(l3pv.p);
+        p.construct(l3pv.p);
         return p;
       }
     }
@@ -163,8 +162,12 @@ static std::unique_ptr<NetWorkStack> create(CephContext *cct, unsigned i) {
   static Mutex lock("DPDKStack::lock");
   static Cond cond;
   if (i == 0) {
+    dpdk::eal::cpuset cpus;
+    cpus[0] = true;
+
+    dpdk::eal::init(cpus, cct);
     int cores = cct->_conf->ms_dpdk_num_cores;
-    stacks = new std::unique_ptr<NetWorkStack>[cores];
+    stacks = new NetWorkStack[cores];
     std::unique_ptr<device> dev;
 
     // Hardcoded port index 0.
@@ -177,7 +180,7 @@ static std::unique_ptr<NetWorkStack> create(CephContext *cct, unsigned i) {
     std::shared_ptr<device> sdev(dev.release());
     for (unsigned i = 0; i < cct->_conf->ms_dpdk_num_cores; i++) {
       if (i < sdev->hw_queues_count()) {
-        auto qp = sdev->init_local_queue(cct->_conf->ms_dpdk_hugepages, i);
+        auto qp = sdev->init_local_queue(stacks[i]->center, cct->_conf->ms_dpdk_hugepages, i);
         std::map<unsigned, float> cpu_weights;
         for (unsigned j = sdev->hw_queues_count() + qid % sdev->hw_queues_count();
              j < cct->_conf->ms_dpdk_num_cores; j+= sdev->hw_queues_count())
@@ -192,9 +195,8 @@ static std::unique_ptr<NetWorkStack> create(CephContext *cct, unsigned i) {
       }
     }
     sdev->init_port_fini();
-    for (unsigned i = 0; i < smp::count; i++) {
-      stacks[i] = std::unique_ptr<NetWorkStack>(std::make_unique<DPDKStack>(cct, std::move(dev)));
-    }
+    for (unsigned i = 0; i < cct->_conf->ms_dpdk_num_cores; i++)
+      stacks[i] = std::make_unique<DPDKStack>(cct, std::move(dev)).get();
     Mutex::Locker l(lock);
     created = true;
     cond.Signal();
@@ -210,17 +212,9 @@ static std::unique_ptr<NetWorkStack> create(CephContext *cct, unsigned i) {
 DPDKStack::DPDKStack(CephContext *cct, std::shared_ptr<device> dev, unsigned i)
     : NetWorkStack(cct), _netif(cct, std::move(dev), i), _inet(cct, &_netif), cpu_id(i)
 {
-  _dhcp = cct->_conf->ms_dpdk_host_ipv4_addr.empty()
-          && cct->_conf->ms_dpdk_gateway_ipv4_addr.empty()
-          && cct->_conf->ms_dpdk_netmask_ipv4_addr.empty()
-          && cct->_conf->ms_dpdk_dhcp;
-  if (!_dhcp) {
-    _inet.set_host_address(ipv4_address(_dhcp ? 0 : cct->_conf->ms_dpdk_host_ipv4_addr));
-    _inet.set_gw_address(ipv4_address(cct->_conf->ms_dpdk_gateway_ipv4_addr));
-    _inet.set_netmask_address(ipv4_address(cct->_conf->ms_dpdk_netmask_ipv4_addr));
-  }
-
-  native_network_stack::ready_promise.set_value(std::unique_ptr<network_stack>(std::make_unique<native_network_stack>(opts, std::move(dev))));
+  _inet.set_host_address(ipv4_address(cct->_conf->ms_dpdk_host_ipv4_addr));
+  _inet.set_gw_address(ipv4_address(cct->_conf->ms_dpdk_gateway_ipv4_addr));
+  _inet.set_netmask_address(ipv4_address(cct->_conf->ms_dpdk_netmask_ipv4_addr));
 }
 
 server_socket DPDKStack::listen(socket_address sa, listen_options opts) {
@@ -232,80 +226,6 @@ connected_socket DPDKStack::connect(socket_address sa, socket_address local) {
   // FIXME: local is ignored since native stack does not support multiple IPs yet
   assert(sa.as_posix_sockaddr().sa_family == AF_INET);
   return tcpv4_connect(_inet.get_tcp(), sa);
-}
-
-using namespace std::chrono_literals;
-
-void DPDKStack::run_dhcp(bool is_renew, const dhcp::lease& res) {
-  assert(cpu_id == 0);
-  lw_shared_ptr<dhcp> d = make_lw_shared<dhcp>(_inet);
-
-  // Hijack the ip-stack.
-  for (unsigned i = 0; i < cct->_conf->ms_dpdk_num_cores; i++)
-    stacks[i]->set_ipv4_packet_filter(d->get_ipv4_filter());
-
-  dhcp::result_type fut = is_renew ? d->renew(res) : d->discover();
-
-  for (unsigned i = 0; i < cct->_conf->ms_dpdk_num_cores; i++)
-    stacks[i]->set_ipv4_packet_filter(nullptr);
-  on_dhcp(fut.first, fut.second, is_renew);
-}
-
-class C_handle_dhcp_renew : public EventCallback {
-  DPDKStack *stack;
-  bool success;
-  const dhcp::lease res;
-
- public:
-  C_handle_dhcp_renew(DPDKStack *s, bool success, const dhcp::lease & res): stack(s), success(success), res(res) {}
-  void do_request(int fd_or_id) {
-    stack->on_dhcp(success, res);
-    delete this;
-  }
-};
-
-class C_handle_dhcp_run : public EventCallback {
-  DPDKStack *stack;
-  bool is_renew;
-  const dhcp::lease res;
-
- public:
-  C_handle_dhcp_run(DPDKStack *s, const dhcp::lease & res, bool is_renew): stack(s), res(res), is_renew(is_renew) {}
-  void do_request(int fd_or_id) {
-    stack->run_dhcp(is_renew, res);
-    delete this;
-  }
-};
-
-
-void DPDKStack::on_dhcp(bool success, const dhcp::lease & res) {
-  if (success) {
-    _inet.set_host_address(res.ip);
-    _inet.set_gw_address(res.gateway);
-    _inet.set_netmask_address(res.netmask);
-  }
-  if (cpu_id == 0) {
-    // And listenthe other cpus, which, in the case of initial discovery,
-    // will be waiting for us.
-    for (unsigned i = 1; i < cct->_conf->ms_dpdk_num_cores; i++)
-      stacks[i]->center->dispatch_event_external(new C_handle_dhcp_renew(success, res));
-  }
-  if (success) {
-    center->create_time_event(
-        std::chrono::duration_cast<std::chrono::milliseconds>(res.lease_time).count(), new C_handle_dhcp_run(true, res));
-  }
-}
-
-void DPDKStack::initialize() {
-  if (!_dhcp) {
-    return ;
-  }
-
-  // Only run actual discover on main cpu.
-  // All other cpus must simply for main thread to complete and signal them.
-  if (cpu_id == 0) {
-    run_dhcp();
-  }
 }
 
 class C_arp_learn : public EventCallback {

@@ -19,6 +19,10 @@
 #include "common/errno.h"
 #include "Event.h"
 
+#ifdef HAVE_DPDK
+#include "dpdk/EventDPDK.h"
+#endif
+
 #ifdef HAVE_EPOLL
 #include "EventEpoll.h"
 #else
@@ -55,6 +59,46 @@ class C_handle_notify : public EventCallback {
 #undef dout_prefix
 #define dout_prefix _event_prefix(_dout)
 
+/**
+ * Construct a Poller.
+ *
+ * \param center
+ *      EventCenter object through which the poller will be invoked (defaults
+ *      to the global #RAMCloud::center object).
+ * \param pollerName
+ *      Human readable name that can be printed out in debugging messages
+ *      about the poller. The name of the superclass is probably sufficient
+ *      for most cases.
+ */
+EventCenter::Poller::Poller(EventCenter* center, const string& name)
+    : owner(center), poller_ame(name), slot(owner->pollers.size())
+{
+  owner->pollers.push_back(this);
+}
+
+/**
+ * Destroy a Poller.
+ */
+EventCenter::Poller::~Poller()
+{
+  if (slot < 0) {
+    return;
+  }
+
+  // Erase this Poller from the vector by overwriting it with the
+  // poller that used to be the last one in the vector.
+  //
+  // Note: this approach is reentrant (it is safe to delete a
+  // poller from a poller callback, which means that the poll
+  // method is in the middle of scanning the list of all pollers;
+  // the worst that will happen is that the poller that got moved
+  // may not be invoked in the current scan).
+  owner->pollers[slot] = owner->pollers.back();
+  owner->pollers[slot]->slot = slot;
+  owner->pollers.pop_back();
+  slot = -1;
+}
+
 ostream& EventCenter::_event_prefix(std::ostream *_dout)
 {
   return *_dout << "Event(" << this << " owner=" << get_owner() << " nevent=" << nevent
@@ -67,6 +111,13 @@ int EventCenter::init(int n)
 {
   // can't init multi times
   assert(nevent == 0);
+
+  driver = nullptr;
+  if (cct->_conf->ms_dpdk_enable) {
+#ifdef HAVE_DPDK
+    driver = new DPDKDriver(cct);
+#endif
+  } else {
 #ifdef HAVE_EPOLL
   driver = new EpollDriver(cct);
 #else
@@ -76,6 +127,7 @@ int EventCenter::init(int n)
   driver = new SelectDriver(cct);
 #endif
 #endif
+  }
 
   if (!driver) {
     lderr(cct) << __func__ << " failed to create event driver " << dendl;
@@ -260,6 +312,10 @@ void EventCenter::delete_time_event(uint64_t id)
 
 void EventCenter::wakeup()
 {
+  // No need to wake up since we never sleep
+  if (!pollers.empty())
+    return ;
+
   if (already_wakeup.compare_and_swap(0, 1)) {
     ldout(cct, 1) << __func__ << dendl;
     char buf[1];
@@ -319,12 +375,9 @@ int EventCenter::process_events(int timeout_microseconds)
   bool trigger_time = false;
   auto now = clock_type::now();
 
-  // If exists external events, don't block
-  if (external_num_events.load()) {
-    tv.tv_sec = 0;
-    tv.tv_usec = 0;
-    next_time = now;
-  } else {
+  bool blocking = pollers.empty() && !external_num_events.load() ? &tv : nullptr;
+  // If exists external events or exists poller, don't block
+  if (blocking) {
     clock_type::time_point shortest;
     shortest = now + std::chrono::microseconds(timeout_microseconds); 
 
@@ -345,9 +398,16 @@ int EventCenter::process_events(int timeout_microseconds)
     tv.tv_sec = timeout_microseconds / 1000000;
     tv.tv_usec = timeout_microseconds % 1000000;
     next_time = shortest;
+    ldout(cct, 10) << __func__ << " wait second " << tv.tv_sec << " usec " << tv.tv_usec << dendl;
+  } else {
+    map<utime_t, list<TimeEvent> >::iterator it = time_events.begin();
+    if (it != time_events.end() && shortest >= it->first)
+      trigger_time = true;
+    tv.tv_sec = 0;
+    tv.tv_usec = 0;
+    next_time = now;
   }
 
-  ldout(cct, 10) << __func__ << " wait second " << tv.tv_sec << " usec " << tv.tv_usec << dendl;
   vector<FiredFileEvent> fired_events;
   numevents = driver->event_wait(fired_events, &tv);
   for (int j = 0; j < numevents; j++) {
@@ -396,6 +456,15 @@ int EventCenter::process_events(int timeout_microseconds)
       }
     }
   }
+
+  if (!numevents && !blocking) {
+    for (uint32_t i = 0; i < pollers.size(); i++)
+      numevents += pollers[i]->poll();
+  }
+
+  if (numevents == 0)
+    _mm_pause();
+
   return numevents;
 }
 

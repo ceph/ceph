@@ -15,8 +15,6 @@
  * specific language governing permissions and limitations
  * under the License.
  */
-#ifdef HAVE_DPDK
-
 #include "DPDK.h"
 #include "dpdk_rte.h"
 #include <rte_pci.h>
@@ -25,7 +23,7 @@ namespace dpdk {
 
 bool eal::initialized = false;
 
-void eal::init(cpuset cpus, boost::program_options::variables_map opts)
+void eal::init(cpuset cpus, CephContext *c)
 {
     if (initialized) {
         return;
@@ -36,21 +34,21 @@ void eal::init(cpuset cpus, boost::program_options::variables_map opts)
 
     // TODO: Inherit these from the app parameters - "opts"
     std::vector<std::vector<char>> args {
-        string2vector(opts["argv0"].as<std::string>()),
+        string2vector(string("ceph").as<std::string>()),
         string2vector("-c"), string2vector(mask.str()),
         string2vector("-n"), string2vector("1")
     };
 
-    std::experimental::optional<std::string> hugepages_path;
-    if (opts.count("hugepages")) {
-        hugepages_path = opts["hugepages"].as<std::string>();
+    Tub<std::string> hugepages_path;
+    if (!c->_conf->ms_dpdk_hugepages.empty()) {
+        hugepages_path.construct(c->_conf->ms_dpdk_hugepages.as<std::string>());
     }
 
     // If "hugepages" is not provided and DPDK PMD drivers mode is requested -
     // use the default DPDK huge tables configuration.
     if (hugepages_path) {
         args.push_back(string2vector("--huge-dir"));
-        args.push_back(string2vector(hugepages_path.value()));
+        args.push_back(string2vector(*hugepages_path));
 
         //
         // We don't know what is going to be our networking configuration so we
@@ -63,12 +61,9 @@ void eal::init(cpuset cpus, boost::program_options::variables_map opts)
 
         args.push_back(string2vector("-m"));
         args.push_back(string2vector(size_MB_str.str()));
-    } else if (!opts.count("dpdk-pmd")) {
+    } else if (!c->_conf->ms_dpdk_pmd.empty()) {
         args.push_back(string2vector("--no-huge"));
     }
-#ifdef HAVE_OSV
-    args.push_back(string2vector("--no-shconf"));
-#endif
 
     std::vector<char*> cargs;
 
@@ -82,11 +77,6 @@ void eal::init(cpuset cpus, boost::program_options::variables_map opts)
     }
 
     initialized = true;
-}
-
-uint32_t __attribute__((weak)) qp_mempool_obj_size(bool hugetlbfs_membackend)
-{
-    return 0;
 }
 
 size_t eal::mem_size(int num_cpus, bool hugetlbfs_membackend)
@@ -107,5 +97,3 @@ size_t eal::mem_size(int num_cpus, bool hugetlbfs_membackend)
 }
 
 } // namespace dpdk
-
-#endif // HAVE_DPDK

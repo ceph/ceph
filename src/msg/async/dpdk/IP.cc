@@ -307,7 +307,7 @@ Tub<l3_protocol::l3packet> ipv4::get_packet() {
 
   Tub<l3_protocol::l3packet> p;
   if (!_packetq.empty()) {
-    p = std::move(_packetq.front());
+    p.construct(_packetq.front());
     _packetq.pop_front();
   }
   return p;

@@ -33,23 +33,13 @@
  *
  */
 
-#ifdef HAVE_DPDK
+#include <cstddef>
+#include <getopt>
+#include <malloc>
 
-#define dout_subsys ceph_subsys_dpdk
-
-#include "util/function_input_iterator.hh"
-#include "util/transform_iterator.hh"
 #include <atomic>
 #include <vector>
 #include <queue>
-#include "IP.h"
-#include "const.h"
-#include "dpdk_rte.h"
-#include "DPDK.h"
-#include "toeplitz.h"
-
-#include <getopt>
-#include <malloc>
 
 #include <rte_config.h>
 #include <rte_common.h>
@@ -58,6 +48,14 @@
 #include <rte_ethdev.h>
 #include <rte_cycles.h>
 #include <rte_memzone.h>
+
+#include "IP.h"
+#include "const.h"
+#include "dpdk_rte.h"
+#include "DPDK.h"
+#include "toeplitz.h"
+
+#define dout_subsys ceph_subsys_dpdk
 
 #if RTE_VERSION <= RTE_VERSION_NUM(2,0,0,16)
 
@@ -459,10 +457,10 @@ void DPDKQueuePair::configure_proxies(const std::map<unsigned, float>& cpu_weigh
     return;
   }
   register_packet_provider([this] {
-    Tub<packet> p;
+    Tub<Packet> p;
     if (!_proxy_packetq.empty()) {
-    p = std::move(_proxy_packetq.front());
-    _proxy_packetq.pop_front();
+      p.construct(_proxy_packetq.front());
+      _proxy_packetq.pop_front();
     }
     return p;
   });
@@ -637,21 +635,20 @@ void DPDKDevice::check_port_link_status()
 }
 
 template <bool HugetlbfsMemBackend>
-DPDKQueuePair<HugetlbfsMemBackend>::DPDKQueuePair(DPDKDevice* dev, uint8_t qid)
-  : _tx_poller([this] { return poll_tx(); }), _dev(dev), _qid(qid),
-  _rx_gc_poller([&] { return rx_gc(); }),
-  _tx_buf_factory(qid),
-  _tx_gc_poller([&] { return _tx_buf_factory.gc(); })
+DPDKQueuePair<HugetlbfsMemBackend>::DPDKQueuePair(EventCenter *c, DPDKDevice* dev, uint8_t qid)
+  : _tx_poller(this), _dev(dev), center(c), _qid(qid),
+    _rx_gc_poller(this), _tx_buf_factory(qid),
+    _tx_gc_poller(this)
 {
   if (!init_rx_mbuf_pool()) {
     rte_exit(EXIT_FAILURE, "Cannot initialize mbuf pools\n");
   }
 
-  static_assert(offsetof(class tx_buf, private_end) -
-                offsetof(class tx_buf, private_start) <= RTE_PKTMBUF_HEADROOM,
+  static_assert(offsetof(tx_buf, private_end) -
+                offsetof(tx_buf, private_start) <= RTE_PKTMBUF_HEADROOM,
                 "RTE_PKTMBUF_HEADROOM is less than DPDKQueuePair::tx_buf size! "
                 "Increase the headroom size in the DPDK configuration");
-  static_assert(offsetof(class tx_buf, _mbuf) == 0,
+  static_assert(offsetof(tx_buf, _mbuf) == 0,
                 "There is a pad at the beginning of the tx_buf before _mbuf "
                 "field!");
   static_assert((inline_mbuf_data_size & (inline_mbuf_data_size - 1)) == 0,
@@ -668,8 +665,8 @@ DPDKQueuePair<HugetlbfsMemBackend>::DPDKQueuePair(DPDKDevice* dev, uint8_t qid)
     rte_exit(EXIT_FAILURE, "Cannot initialize tx queue\n");
   }
 
-  string name(std::string("queue") + std::to_string(qid)),
-         PerfCountersBuilder plb(cct, name, l_dpdk_qp_first, l_dpdk_qp_last);
+  string name(std::string("queue") + std::to_string(qid));
+  PerfCountersBuilder plb(cct, name, l_dpdk_qp_first, l_dpdk_qp_last);
 
   plb.add_u64_counter(l_dpdk_qp_rx_packets, "dpdk_receive_packets", "DPDK received packets");
   plb.add_u64_counter(l_dpdk_qp_tx_packets, "dpdk_send_packets", "DPDK sendd packets");
@@ -723,12 +720,11 @@ inline bool DPDKQueuePair::poll_tx() {
 
 template <bool HugetlbfsMemBackend>
 void DPDKQueuePair<HugetlbfsMemBackend>::rx_start() {
-  _rx_poller = reactor::poller([&] { return poll_rx_once(); });
+  _rx_poller.construct(this);
 }
 
 template<>
-inline std::experimental::optional<packet>
-DPDKQueuePair<false>::from_mbuf_lro(rte_mbuf* m)
+inline Tub<Packet> DPDKQueuePair<false>::from_mbuf_lro(rte_mbuf* m)
 {
   //
   // Try to allocate a buffer for the whole packet's data.
@@ -736,6 +732,7 @@ DPDKQueuePair<false>::from_mbuf_lro(rte_mbuf* m)
   // If we succeed - copy the data into this buffer, create a packet based on
   // this buffer and return the mbuf to its pool.
   //
+  Tub<Packet> p;
   auto pkt_len = rte_pktmbuf_pkt_len(m);
   char* buf = (char*)malloc(pkt_len);
   if (buf) {
@@ -751,18 +748,17 @@ DPDKQueuePair<false>::from_mbuf_lro(rte_mbuf* m)
 
     rte_pktmbuf_free(m);
 
-    return packet(fragment{buf, pkt_len}, make_free_deleter(buf));
+    p.construct((fragment{buf, pkt_len}, make_free_deleter(buf)));
   }
 
   // Drop if allocation failed
   rte_pktmbuf_free(m);
 
-  return std::experimental::nullopt;
+  return p;
 }
 
 template<>
-inline std::experimental::optional<packet>
-DPDKQueuePair<false>::from_mbuf(rte_mbuf* m)
+inline Tub<Packet> DPDKQueuePair<false>::from_mbuf(rte_mbuf* m)
 {
   if (!_dev->hw_features_ref().rx_lro || rte_pktmbuf_is_contiguous(m)) {
     //
@@ -773,17 +769,19 @@ DPDKQueuePair<false>::from_mbuf(rte_mbuf* m)
     //
     auto len = rte_pktmbuf_data_len(m);
     char* buf = (char*)malloc(len);
+    Tub<Packet> p;
 
     if (!buf) {
       // Drop if allocation failed
       rte_pktmbuf_free(m);
 
-      return std::experimental::nullopt;
+      return p;
     } else {
       rte_memcpy(buf, rte_pktmbuf_mtod(m, char*), len);
       rte_pktmbuf_free(m);
 
-      return packet(fragment{buf, len}, make_free_deleter(buf));
+      p.construct((fragment{buf, len}, make_free_deleter(buf)));
+      return p;
     }
   } else {
     return from_mbuf_lro(m);
@@ -791,8 +789,7 @@ DPDKQueuePair<false>::from_mbuf(rte_mbuf* m)
 }
 
 template<>
-inline std::experimental::optional<packet>
-DPDKQueuePair<true>::from_mbuf_lro(rte_mbuf* m)
+inline Tub<Packet> DPDKQueuePair<true>::from_mbuf_lro(rte_mbuf* m)
 {
   _frags.clear();
   _bufs.clear();
@@ -804,17 +801,15 @@ DPDKQueuePair<true>::from_mbuf_lro(rte_mbuf* m)
     _bufs.push_back(data);
   }
 
-  return packet(_frags.begin(), _frags.end(),
-                make_deleter(deleter(),
-                             [bufs_vec = std::move(_bufs)] {
-                             for (auto&& b : bufs_vec) {
-                             free(b);
-                             }
-                             }));
+  Tub<Packet> p;
+  p.construct(
+      _frags.begin(), _frags.end(),
+      make_deleter(deleter(), [_bufs] { for (auto&& b : bufs_vec) { free(b); } }));
+  return p;
 }
 
 template<>
-inline std::experimental::optional<packet> DPDKQueuePair<true>::from_mbuf(rte_mbuf* m)
+inline Tub<Packet> DPDKQueuePair<true>::from_mbuf(rte_mbuf* m)
 {
   _rx_free_pkts.push_back(m);
   _num_rx_free_segs += m->nb_segs;
@@ -822,8 +817,9 @@ inline std::experimental::optional<packet> DPDKQueuePair<true>::from_mbuf(rte_mb
   if (!_dev->hw_features_ref().rx_lro || rte_pktmbuf_is_contiguous(m)) {
     char* data = rte_pktmbuf_mtod(m, char*);
 
-    return packet(fragment{data, rte_pktmbuf_data_len(m)},
-                  make_free_deleter(data));
+    Tub<Packet> p;
+    p.construct(fragment{data, rte_pktmbuf_data_len(m)}, make_free_deleter(data));
+    return p;
   } else {
     return from_mbuf_lro(m);
   }
@@ -1012,31 +1008,3 @@ std::unique_ptr<DPDKDevice> create_dpdk_net_device(
   return std::make_unique<DPDKDevice>(cct, port_idx, num_queues, use_lro,
                                       enable_fc);
 }
-
-boost::program_options::options_description
-get_dpdk_net_options_description()
-{
-  boost::program_options::options_description opts(
-      "DPDK net options");
-
-  opts.add_options()
-      ("hw-fc",
-       boost::program_options::value<std::string>()->default_value("on"),
-       "Enable HW Flow Control (on / off)");
-#if 0
-  opts.add_options()
-      ("csum-offload",
-       boost::program_options::value<std::string>()->default_value("on"),
-       "Enable checksum offload feature (on / off)")
-      ("tso",
-       boost::program_options::value<std::string>()->default_value("on"),
-       "Enable TCP segment offload feature (on / off)")
-      ("ufo",
-       boost::program_options::value<std::string>()->default_value("on"),
-       "Enable UDP fragmentation offload feature (on / off)")
-      ;
-#endif
-  return opts;
-}
-
-#endif // HAVE_DPDK

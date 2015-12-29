@@ -36,10 +36,11 @@
 #ifndef CEPH_MSG_CHECKSUM_H_
 #define CEPH_MSG_CHECKSUM_H_
 
-#include "Packet.h"
 #include <cstdint>
 #include <cstddef>
 #include <arpa/inet.h>
+
+#include "Packet.h"
 
 uint16_t ip_checksum(const void* data, size_t len);
 

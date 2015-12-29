@@ -380,23 +380,23 @@ private:
     }
     void start_retransmit_timer() {
       if (retransmit_fd)
-        center->delete_time_event(retransmit_fd);
+        center->delete_time_event(*retransmit_fd);
       retransmit_fd.construct(center->create_time_event(_rto.to_nsec()*1000, retransmit_event));
     };
     void stop_retransmit_timer() {
       if (retransmit_fd) {
-        center->delete_time_event(retransmit_fd);
+        center->delete_time_event(*retransmit_fd);
         retransmit_fd.destroy();
       }
     };
     void start_persist_timer() {
       if (persist_fd)
-        center->delete_time_event(persist_fd);
+        center->delete_time_event(*persist_fd);
       persist_fd.construct(center->create_time_event(_persist_time_out.to_nsec()*1000, persist_event));
     };
     void stop_persist_timer() {
       if (persist_fd) {
-        center->delete_time_event(persist_fd);
+        center->delete_time_event(*persist_fd);
         persist_fd.destroy();
       }
     };
@@ -591,10 +591,8 @@ public:
     }
     Tub<connection> accept() {
       Tub<connection> c;
-      if (!_q.empty()) {
-        c.construct();
-        c = std::move(_q.pop());
-      }
+      if (!_q.empty())
+        c.construct(_q.pop());
       return c;
     }
 
@@ -629,9 +627,9 @@ tcp<InetTraits>::tcp(inet_type& inet, EventCenter *cen)
     Tub<typename InetTraits::l4packet> l4p;
     auto c = _poll_tcbs.size();
     if (!_packetq.empty() && (!(tcb_polled % 128) || c == 0)) {
-      l4p = std::move(_packetq.front());
+      l4p.construct(_packetq.front());
       _packetq.pop_front();
-      _queue_space.put(l4p.value().p.len());
+      _queue_space.put(*l4p.p.len());
     } else {
       while (c--) {
         tcb_polled++;
@@ -641,7 +639,7 @@ tcp<InetTraits>::tcp(inet_type& inet, EventCenter *cen)
         _poll_tcbs.pop_front();
         l4p = tcb->get_packet();
         if (l4p) {
-          l4p.value().e_dst = dst;
+          *l4p.e_dst = dst;
           break;
         }
       }
@@ -830,11 +828,11 @@ template <typename InetTraits>
 tcp<InetTraits>::tcb::~tcb()
 {
   if (_delayed_ack_fd)
-    center->delete_time_event(_delayed_ack_fd);
+    center->delete_time_event(*_delayed_ack_fd);
   if (retransmit_fd)
-    center->delete_time_event(retransmit_fd);
+    center->delete_time_event(*retransmit_fd);
   if (persist_fd)
-    center->delete_time_event(persist_fd);
+    center->delete_time_event(*persist_fd);
   delete delayed_ack_event;
   delete retransmit_event;
   delete persist_event;
@@ -1576,7 +1574,7 @@ void tcp<InetTraits>::tcb::output_one(bool data_retransmit) {
       _snd.data.emplace_back(unacked_segment{std::move(clone),
                                              len, nr_transmits, now});
     }
-    if (retransmit_fd >= 0) {
+    if (retransmit_fd) {
       start_retransmit_timer();
     }
   }
@@ -1617,7 +1615,7 @@ Tub<Packet> tcp<InetTraits>::tcb::read() {
 
   p.construct();
   for (auto&& q : _rcv.data) {
-    p.append(std::move(q));
+    p->append(std::move(q));
   }
   _rcv.data.clear();
   return p;
@@ -1702,7 +1700,7 @@ bool tcp<InetTraits>::tcb::should_send_ack(uint16_t seg_len) {
   if (seg_len > _rcv.mss) {
     _nr_full_seg_received = 0;
     if (_delayed_ack_fd) {
-      center->delete_time_event(_delayed_ack_fd);
+      center->delete_time_event(*_delayed_ack_fd);
       _delayed_ack_fd.destroy();
     }
     return true;
@@ -1713,7 +1711,7 @@ bool tcp<InetTraits>::tcb::should_send_ack(uint16_t seg_len) {
     if (_nr_full_seg_received++ >= 1) {
       _nr_full_seg_received = 0;
       if (_delayed_ack_fd) {
-        center->delete_time_event(_delayed_ack_fd);
+        center->delete_time_event(*_delayed_ack_fd);
         _delayed_ack_fd.destroy();
       }
       return true;
@@ -1735,7 +1733,7 @@ bool tcp<InetTraits>::tcb::should_send_ack(uint16_t seg_len) {
 template <typename InetTraits>
 void tcp<InetTraits>::tcb::clear_delayed_ack() {
   if (_delayed_ack_fd) {
-    center->delete_time_event(_delayed_ack_fd);
+    center->delete_time_event(*_delayed_ack_fd);
     _delayed_ack_fd.destroy();
   }
 }
@@ -1950,13 +1948,14 @@ Tub<typename InetTraits::l4packet> tcp<InetTraits>::tcb::get_packet() {
     output_one();
   }
 
+  Tub<typename InetTraits::l4packet> p;
   if (in_state(CLOSED)) {
-    return Tub<typename InetTraits::l4packet>();
+    return p;
   }
 
   assert(!_packetq.empty());
 
-  auto p = std::move(_packetq.front());
+  p.construct(_packetq.front());
   _packetq.pop_front();
   if (!_packetq.empty() || (_snd.dupacks < 3 && can_send() > 0)) {
     // If there are packets to send in the queue or tcb is allowed to send
@@ -1964,7 +1963,7 @@ Tub<typename InetTraits::l4packet> tcp<InetTraits>::tcb::get_packet() {
     // is an indication that an segment is lost, stop sending more in this case.
     output();
   }
-  return std::move(p);
+  return p;
 }
 
 template <typename InetTraits>
@@ -1991,5 +1990,13 @@ constexpr std::chrono::milliseconds tcp<InetTraits>::tcb::_rto_clk_granularity;
 
 template <typename InetTraits>
 typename tcp<InetTraits>::tcb::isn_secret tcp<InetTraits>::tcb::_isn_secret;
+
+class listen_options;
+class server_socket;
+class connected_socket;
+
+server_socket tcpv4_listen(tcp<ipv4_traits>& tcpv4, uint16_t port, listen_options opts);
+
+connected_socket tcpv4_connect(tcp<ipv4_traits>& tcpv4, socket_address sa);
 
 #endif /* TCP_HH_ */

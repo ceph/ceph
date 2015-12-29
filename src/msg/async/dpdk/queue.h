@@ -54,21 +54,6 @@ class queue {
   // Returns true when the queue is full.
   bool full() const;
 
-  // Returns a future<> that becomes available when pop() or consume()
-  // can be called.
-  future<> not_empty();
-
-  // Returns a future<> that becomes available when push() can be called.
-  future<> not_full();
-
-  // Pops element now or when ther is some. Returns a future that becomes
-  // available when some element is available.
-  future<T> pop_eventually();
-
-  // Pushes the element now or when there is room. Returns a future<> which
-  // resolves when data was pushed.
-  future<> push_eventually(T&& data);
-
   size_t size() const { return _q.size(); }
 
   // Destroy any items in the queue
@@ -101,30 +86,6 @@ inline T queue<T>::pop() {
   return data;
 }
 
-template <typename T>
-inline future<T> queue<T>::pop_eventually() {
-  if (empty()) {
-    return not_empty().then([this] {
-      return make_ready_future<T>(pop());
-    });
-  } else {
-    return make_ready_future<T>(pop());
-  }
-}
-
-template <typename T>
-inline future<> queue<T>::push_eventually(T&& data) {
-  if (full()) {
-    return not_full().then([this, data = std::move(data)] () mutable {
-      _q.push(std::move(data));
-      notify_not_empty();
-    });
-  } else {
-    _q.push(std::move(data));
-    notify_not_empty();
-    return make_ready_future<>();
-  }
-}
 
 template <typename T>
 template <typename Func>
@@ -142,14 +103,12 @@ bool queue<T>::consume(Func&& func) {
 }
 
 template <typename T>
-inline
-bool queue<T>::empty() const {
+inline bool queue<T>::empty() const {
   return _q.empty();
 }
 
 template <typename T>
-inline
-bool queue<T>::full() const {
+inline bool queue<T>::full() const {
   return _q.size() == _max;
 }
 

@@ -33,13 +33,14 @@
  *
  */
 
-#ifdef HAVE_DPDK
-
 #ifndef CEPH_DPDK_DEV_H
 #define CEPH_DPDK_DEV_H
 
 #include <memory>
 #include <functional>
+
+#include "common/Tub.h"
+#include "msg/async/Event.h"
 
 std::unique_ptr<DPDKDevice> create_dpdk_net_device(
         uint8_t port_idx = 0, uint8_t num_queues = 1,
@@ -204,12 +205,12 @@ class DPDKDevice {
   }
   const rss_key_type& rss_key() const { return _rss_key; }
   uint16_t hw_queues_count() { return _num_queues; }
-  std::unique_ptr<qp> init_local_queue(string hugepages, uint16_t qid) override {
+  std::unique_ptr<qp> init_local_queue(EventCenter *center, string hugepages, uint16_t qid) override {
     std::unique_ptr<qp> qp;
     if (!hugepages.empty())
-      qp = std::make_unique<DPDKQueuePair<true>>(this, qid);
+      qp = std::make_unique<DPDKQueuePair<true>>(center, this, qid);
     else
-      qp = std::make_unique<DPDKQueuePair<false>>(this, qid);
+      qp = std::make_unique<DPDKQueuePair<false>>(center, this, qid);
 
     return std::move(qp);
   }
@@ -232,7 +233,7 @@ class DPDKDevice {
     return reta[hash % reta.size()];
   }
 
-  net::hw_features& hw_features_ref() { return _hw_features; }
+  hw_features& hw_features_ref() { return _hw_features; }
 
   const rte_eth_rxconf* def_rx_conf() const {
     return &_dev_info.default_rxconf;
@@ -927,7 +928,7 @@ class DPDKQueuePair {
               // to call the "packet"'s destructor and reset the
               // "optional" state to "nonengaged".
               //
-              _p = std::experimental::nullopt;
+              _p.destroy();
 
           } else if (!_is_zc) {
               return;
@@ -952,14 +953,14 @@ class DPDKQueuePair {
           }
       }
 
-      void set_packet(packet&& p) {
-          _p = std::move(p);
+      void set_packet(Packet&& p) {
+          _p.constrct(p);
       }
 
       private:
       struct rte_mbuf _mbuf;
       MARKER private_start;
-      std::experimental::optional<packet> _p;
+      Tub<Packet> _p;
       phys_addr_t _buf_physaddr;
       uint16_t _data_off;
       // TRUE if underlying mbuf has been used in the zero-copy flow
@@ -1122,7 +1123,7 @@ class DPDKQueuePair {
         std::unique_ptr<void, free_deleter> _xmem;
     };
 
-public:
+ public:
     explicit DPDKQueuePair(DPDKDevice* dev, uint8_t qid);
 
     void rx_start();
@@ -1144,7 +1145,7 @@ public:
 
     DPDKDevice& port() const { return *_dev; }
     tx_buf* get_tx_buf() { return _tx_buf_factory.get(); }
-private:
+ private:
   template <class Func>
     uint32_t _send(circular_buffer<packet>& pb, Func packet_to_tx_buf_p) {
       if (_tx_burst.size() == 0) {
@@ -1279,7 +1280,7 @@ private:
    * @return a "optional" object representing the newly received data if in an
    *         "engaged" state or an error if in a "disengaged" state.
    */
-  std::experimental::optional<packet> from_mbuf(rte_mbuf* m);
+  Tub<Packet> from_mbuf(rte_mbuf* m);
 
   /**
    * Transform an LRO rte_mbuf cluster into the "packet" object.
@@ -1288,20 +1289,31 @@ private:
    * @return a "optional" object representing the newly received LRO packet if
    *         in an "engaged" state or an error if in a "disengaged" state.
    */
-  std::experimental::optional<packet> from_mbuf_lro(rte_mbuf* m);
+  Tub<Packet> from_mbuf_lro(rte_mbuf* m);
 
  private:
-  using packet_provider_type = std::function<std::experimental::optional<packet> ()>;
+  using packet_provider_type = std::function<Tub<Packet> ()>;
   std::vector<packet_provider_type> _pkt_providers;
   Tub<std::array<uint8_t, 128>> _sw_reta;
   circular_buffer<packet> _proxy_packetq;
   stream<Packet> _rx_stream;
-  reactor::poller _tx_poller;
+  class DPDKTXPoller : public EventCenter::Poller {
+    DPDKQueuePair *qp;
+
+   public:
+    explicit DPDKTXPoller(DPDKQueuePair *qp)
+      : EventCenter::Poller(qp->center, "DPDK::DPDKTXPoller"), qp(pp) {}
+
+    virtual int poll() {
+      return qp->poll_tx();
+    }
+  } _tx_poller;
   circular_buffer<packet> _tx_packetq;
 
   qp_stats _stats;
   PerfCounters *perf_logger;
   DPDKDevice* _dev;
+  EventCenter *center;
   uint8_t _qid;
   rte_mempool *_pktmbuf_pool_rx;
   std::vector<rte_mbuf*> _rx_free_pkts;
@@ -1309,18 +1321,47 @@ private:
   std::vector<fragment> _frags;
   std::vector<char*> _bufs;
   size_t _num_rx_free_segs = 0;
-  reactor::poller _rx_gc_poller;
+  class DPDKRXBGCPoller : public EventCenter::Poller {
+    DPDKQueuePair *qp;
+
+   public:
+    explicit DPDKRXPoller(DPDKQueuePair *qp)
+      : EventCenter::Poller(qp->center, "DPDK::DPDKRXGCPoller"), qp(pp) {}
+
+    virtual int poll() {
+      return qp->rx_gc();
+    }
+  } _rx_gc_poller;
   std::unique_ptr<void, free_deleter> _rx_xmem;
   tx_buf_factory _tx_buf_factory;
-  std::experimental::optional<reactor::poller> _rx_poller;
-  reactor::poller _tx_gc_poller;
+  class DPDKRXPoller : public EventCenter::Poller {
+    DPDKQueuePair *qp;
+
+   public:
+    explicit DPDKRXPoller(DPDKQueuePair *qp)
+      : EventCenter::Poller(qp->center, "DPDK::DPDKRXPoller"), qp(pp) {}
+
+    virtual int poll() {
+      return qp->poll_rx_once();
+    }
+  };
+  Tub<DPDKRXPoller> _rx_poller;
+  class DPDKTXGCPoller : public EventCenter::Poller {
+    DPDKQueuePair *qp;
+
+   public:
+    explicit DPDKRXPoller(DPDKQueuePair *qp)
+      : EventCenter::Poller(qp->center, "DPDK::DPDKTXPoller"), qp(pp) {}
+
+    virtual int poll() {
+      return qp->_tx_buf_factory.gc();
+    }
+  } _tx_gc_poller;
   std::vector<rte_mbuf*> _tx_burst;
   uint16_t _tx_burst_idx = 0;
   static constexpr phys_addr_t page_mask = ~(memory::page_size - 1);
 };
 
-
-boost::program_options::options_description get_dpdk_net_options_description();
 
 /**
  * @return Number of bytes needed for mempool objects of each QP.
@@ -1328,5 +1369,3 @@ boost::program_options::options_description get_dpdk_net_options_description();
 uint32_t qp_mempool_obj_size(bool hugetlbfs_membackend);
 
 #endif // CEPH_DPDK_DEV_H
-
-#endif // HAVE_DPDK

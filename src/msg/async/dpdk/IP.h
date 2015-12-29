@@ -194,7 +194,7 @@ class icmp {
     _inet.register_packet_provider([this] {
       Tub<ipv4_traits::l4packet> l4p;
       if (!_packetq.empty()) {
-        l4p = std::move(_packetq.front());
+        l4p.construct(_packetq.front());
         _packetq.pop_front();
         _queue_space.put(l4p.value().p.len());
       }
@@ -263,9 +263,10 @@ class ipv4 {
   using proto_type = uint16_t;
   static address_type broadcast_address() { return ipv4_address(0xffffffff); }
   static proto_type arp_protocol_type() { return proto_type(eth_protocol_num::ipv4); }
- private:
   CephContext *cct;
   EventCenter *center;
+
+ private:
   interface* _netif;
   std::vector<ipv4_traits::packet_provider_type> _pkt_providers;
   Tub<uint64_t> frag_timefd;

@@ -23,8 +23,9 @@
 #undef dout_prefix
 #define dout_prefix *_dout << "DPDKDriver."
 
-int DPDKDriver::init(int nevent)
+int DPDKDriver::init(EventCenter *c, int nevent)
 {
+	stack = DPDKStack::create(cct, c->cpu_id());
 	return 0;
 }
 

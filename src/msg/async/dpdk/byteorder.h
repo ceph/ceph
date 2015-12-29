@@ -43,10 +43,10 @@
 #include "unaligned.h"
 
 inline uint64_t ntohq(uint64_t v) {
-  return __builtin_bswap64(v);
+    return __builtin_bswap64(v);
 }
 inline uint64_t htonq(uint64_t v) {
-  return __builtin_bswap64(v);
+    return __builtin_bswap64(v);
 }
 
 inline void ntoh() {}
@@ -88,36 +88,30 @@ inline std::ostream& operator<<(std::ostream& os, const unaligned<T>& v) {
     return os << x;
 }
 
-inline
-void ntoh_inplace() {}
-inline
-void hton_inplace() {};
+inline void ntoh_inplace() {}
+inline void hton_inplace() {};
 
 template <typename First, typename... Rest>
-inline
-void ntoh_inplace(First& first, Rest&... rest) {
+inline void ntoh_inplace(First& first, Rest&... rest) {
     first = ntoh(first);
     ntoh_inplace(std::forward<Rest&>(rest)...);
 }
 
 template <typename First, typename... Rest>
-inline
-void hton_inplace(First& first, Rest&... rest) {
+inline void hton_inplace(First& first, Rest&... rest) {
     first = hton(first);
     hton_inplace(std::forward<Rest&>(rest)...);
 }
 
 template <class T>
-inline
-T ntoh(const T& x) {
+inline T ntoh(const T& x) {
     T tmp = x;
     tmp.adjust_endianness([] (auto&&... what) { ntoh_inplace(std::forward<decltype(what)&>(what)...); });
     return tmp;
 }
 
 template <class T>
-inline
-T hton(const T& x) {
+inline T hton(const T& x) {
     T tmp = x;
     tmp.adjust_endianness([] (auto&&... what) { hton_inplace(std::forward<decltype(what)&>(what)...); });
     return tmp;
