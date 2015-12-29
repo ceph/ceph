@@ -657,7 +657,7 @@ fi
 
 if [ "$ec" -eq 1 ]; then
     $SUDO $CEPH_ADM <<EOF
-osd erasure-code-profile set ec-profile m=2 k=1
+osd erasure-code-profile set ec-profile m=2 k=2
 osd pool create ec 8 8 erasure ec-profile
 quit
 EOF
