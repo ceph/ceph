@@ -7763,6 +7763,16 @@ bool OSDMonitor::_check_become_tier(
     return false;
   }
 
+  if (tier_pool->has_tiers()) {
+    *ss << "may cause cyclic tiering, always set multiple tiering in the order of cold, warm, hot ...";
+    *ss << "pool '" << tier_pool_name << "' has following tier(s) already:";
+    for (set<uint64_t>::const_iterator it = tier_pool->tiers.begin();
+         it != tier_pool->tiers.end(); it++)
+      *ss << " '" << osdmap.get_pool_name(*it) << "'";
+    *err = -EINVAL;
+    return false;
+  }
+
   if (base_pool->tiers.count(tier_pool_id)) {
     assert(tier_pool->tier_of == base_pool_id);
     *err = 0;
