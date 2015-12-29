@@ -2655,8 +2655,10 @@ int BlueStore::collection_list(
   if (!pnext)
     pnext = &static_next;
 
-  if (start == ghobject_t::get_max())
+  if (start == ghobject_t::get_max() ||
+      start.hobj == hobject_t::get_max()) {
     goto out;
+  }
   get_coll_key_range(cid, c->cnode.bits, &temp_start_key, &temp_end_key,
 		     &start_key, &end_key);
   dout(20) << __func__
@@ -2666,7 +2668,9 @@ int BlueStore::collection_list(
 	   << " to " << pretty_binary_string(end_key)
 	   << " start " << start << dendl;
   it = db->get_iterator(PREFIX_OBJ);
-  if (start == ghobject_t() || start == cid.get_min_hobj()) {
+  if (start == ghobject_t() ||
+      start.hobj == hobject_t() ||
+      start == cid.get_min_hobj()) {
     it->upper_bound(temp_start_key);
     temp = true;
   } else {
