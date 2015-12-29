@@ -28,7 +28,7 @@ public:
     atomic_t num_reading;
 
     File()
-      : RefCountedObject(0),
+      : RefCountedObject(NULL, 0),
 	refs(0),
 	dirty(false),
 	locked(false),
@@ -38,6 +38,7 @@ public:
       assert(num_readers.read() == 0);
       assert(num_writers.read() == 0);
       assert(num_reading.read() == 0);
+      assert(!locked);
     }
 
     friend void intrusive_ptr_add_ref(File *f) {
@@ -182,6 +183,7 @@ private:
   vector<Allocator*> alloc;                   ///< allocators for bdevs
 
   void _init_alloc();
+  void _stop_alloc();
 
   void _pad_bl(bufferlist& bl);  ///< pad bufferlist to block size w/ zeros
 
