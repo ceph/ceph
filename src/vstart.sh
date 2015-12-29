@@ -659,7 +659,6 @@ if [ "$ec" -eq 1 ]; then
     $SUDO $CEPH_ADM <<EOF
 osd erasure-code-profile set ec-profile m=2 k=2
 osd pool create ec 8 8 erasure ec-profile
-quit
 EOF
 fi
 
@@ -673,7 +672,6 @@ osd pool create ${p}-cache 8
 osd tier add $p ${p}-cache
 osd tier cache-mode ${p}-cache writeback
 osd tier set-overlay $p ${p}-cache
-quit
 EOF
     done
 }
@@ -690,7 +688,6 @@ do_hitsets() {
 osd pool set $pool hit_set_type $type
 osd pool set $pool hit_set_count 8
 osd pool set $pool hit_set_period 30
-quit
 EOF
     done
 }
