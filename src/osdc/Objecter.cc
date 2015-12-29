@@ -1213,6 +1213,7 @@ void Objecter::handle_osd_map(MOSDMap *m)
 	monc->renew_subs();
       }
     }
+    tier_map_setup();
   }
 
   bool pauserd = osdmap->test_flag(CEPH_OSDMAP_PAUSERD);
