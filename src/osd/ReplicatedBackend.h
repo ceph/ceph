@@ -298,7 +298,8 @@ private:
     PushOp *pop, bool cache_dont_need = true);
   void prep_push(ObjectContextRef obc,
 		 const hobject_t& oid, pg_shard_t dest,
-		 PushOp *op);
+		 PushOp *op,
+		 bool cache_dont_need);
   void prep_push(ObjectContextRef obc,
 		 const hobject_t& soid, pg_shard_t peer,
 		 eversion_t version,
