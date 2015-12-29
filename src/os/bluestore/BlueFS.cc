@@ -179,7 +179,7 @@ int BlueFS::mkfs(uuid_d osd_uuid)
   delete log_writer;
   log_writer = NULL;
   block_all.clear();
-  alloc.clear();
+  _stop_alloc();
 
   dout(10) << __func__ << " success" << dendl;
   return 0;
@@ -196,6 +196,15 @@ void BlueFS::_init_alloc()
       alloc[id]->init_add_free(q.get_start(), q.get_len());
     }
   }
+}
+
+void BlueFS::_stop_alloc()
+{
+  dout(20) << __func__ << dendl;
+  for (auto p : alloc) {
+    delete p;
+  }
+  alloc.clear();
 }
 
 int BlueFS::mount()
@@ -246,11 +255,8 @@ void BlueFS::umount()
 
   delete log_writer;
   log_writer = NULL;
-  for (auto p : alloc) {
-    delete p;
-  }
-  alloc.clear();
   block_all.clear();
+  _stop_alloc();
   file_map.clear();
   for (auto& p : dir_map) {
     delete p.second;
