@@ -452,7 +452,52 @@ function test_tiering()
   ceph osd pool delete basepoolB basepoolB --yes-i-really-really-mean-it
   ceph osd pool delete basepoolA basepoolA --yes-i-really-really-mean-it
 }
+function test_multiple_tiering()
+{
+  ceph osd pool create basepool 2 2
+  ceph osd pool create cachepool_1st 2 2
+  ceph osd pool create cachepool_2st 2 2
+  ceph osd tier add-cache basepool cachepool_1st 10
+  ceph osd tier add-cache cachepool_1st cachepool_2st 10
+  bp_id=`ceph osd dump | grep "pool.*'basepool'" 2>&1 | awk '{print $2}'`
+  cp1_id=`ceph osd dump | grep "pool.*'cachepool_1st'" 2>&1 | awk '{print $2}'`
+  cp2_id=`ceph osd dump | grep "pool.*'cachepool_2st'" 2>&1 | awk '{print $2}'`
+  ceph osd dump | grep "pool.*'basepool'" 2>&1 | grep "tiers $cp1_id" | \
+  grep "write_tier $cp1_id" | grep "read_tier $cp1_id" >> /dev/null
 
+  ceph osd dump | grep "pool.*'cachepool_1st'" 2>&1 | grep "tiers $cp2_id" | \
+  grep "write_tier $cp2_id" | grep "read_tier $cp2_id" >> /dev/null
+
+  ceph osd tier cache-mode cachepool_1st forward
+  ceph osd tier cache-mode cachepool_2st forward
+  ceph osd tier cache-mode cachepool_1st writeback
+
+  expect_false ceph osd pool delete cachepool_2st cachepool_2st --yes-i-really-really-mean-it
+  expect_false ceph osd pool delete cachepool_1st cachepool_1st --yes-i-really-really-mean-it
+  expect_false ceph osd pool delete basepool basepool --yes-i-really-really-mean-it
+
+  ceph osd tier remove-overlay cachepool_1st
+  ceph osd tier cache-mode cachepool_2st readonly
+  ceph osd tier remove-overlay basepool
+  expect_false ceph osd tier cache-mode cachepool_1st readonly
+  ceph osd tier cache-mode cachepool_1st forward
+  ceph osd tier cache-mode cachepool_1st readonly
+  ceph osd tier cache-mode cachepool_2st writeback
+  ceph osd tier set-overlay cachepool_1st cachepool_2st
+
+  ceph osd tier remove-overlay cachepool_1st
+  ceph osd tier remove cachepool_1st cachepool_2st
+  ceph osd tier remove basepool cachepool_1st
+
+  ceph osd tier add-cache cachepool_1st cachepool_2st 10
+  expect_false ceph osd tier add-cache basepool cachepool_1st 10
+  ceph osd tier remove-overlay cachepool_1st
+  ceph osd tier remove cachepool_1st cachepool_2st
+
+  ceph osd pool delete basepool basepool --yes-i-really-really-mean-it
+  ceph osd pool delete cachepool_1st cachepool_1st --yes-i-really-really-mean-it
+  ceph osd pool delete cachepool_2st cachepool_2st --yes-i-really-really-mean-it
+}
 function test_auth()
 {
   ceph auth add client.xx mon allow osd "allow *"
@@ -1771,6 +1816,7 @@ set +x
 MON_TESTS+=" mon_injectargs"
 MON_TESTS+=" mon_injectargs_SI"
 MON_TESTS+=" tiering"
+MON_TESTS+=" multiple_tiering"
 MON_TESTS+=" auth"
 MON_TESTS+=" auth_profiles"
 MON_TESTS+=" mon_misc"
