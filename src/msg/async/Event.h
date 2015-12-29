@@ -123,6 +123,7 @@ class EventCenter {
   NetHandler net;
   pthread_t owner = 0;
   EventCallbackRef notify_handler;
+  unsigned id = 0;
 
   int process_time_events();
   FileEvent *_get_file_event(int fd) {
@@ -148,6 +149,7 @@ class EventCenter {
   int init(int nevent);
   void set_owner();
   pthread_t get_owner() { return owner; }
+  unsigned cpu_id() { return id; }
 
   EventDriver *get_driver() { return driver; }
 
