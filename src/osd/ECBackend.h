@@ -379,7 +379,7 @@ public:
   };
   friend ostream &operator<<(ostream &lhs, const Op &rhs);
 
-  class OverwriteInfo {
+  struct OverwriteInfo {
     map<version_t, pair<uint64_t, uint64_t> > overwrite_history;
   public:
     void overwrite(version_t version, uint64_t off, uint64_t len) {

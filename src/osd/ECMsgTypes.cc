@@ -175,11 +175,12 @@ void ECSubRead::encode(bufferlist &bl, uint64_t features) const
     return;
   }
 
-  ENCODE_START(2, 2, bl);
+  ENCODE_START(3, 2, bl);
   ::encode(from, bl);
   ::encode(tid, bl);
   ::encode(to_read, bl);
   ::encode(attrs_to_read, bl);
+  ::encode(recovery_read, bl);
   ENCODE_FINISH(bl);
 }
 
@@ -204,6 +205,8 @@ void ECSubRead::decode(bufferlist::iterator &bl)
     ::decode(to_read, bl);
   }
   ::decode(attrs_to_read, bl);
+  if (struct_v >= 3) 
+    ::decode(recovery_read, bl);
   DECODE_FINISH(bl);
 }
 
@@ -276,23 +279,26 @@ void ECSubRead::generate_test_instances(list<ECSubRead*>& o)
 
 void ECSubReadReply::encode(bufferlist &bl) const
 {
-  ENCODE_START(1, 1, bl);
+  ENCODE_START(2, 1, bl);
   ::encode(from, bl);
   ::encode(tid, bl);
   ::encode(buffers_read, bl);
   ::encode(attrs_read, bl);
   ::encode(errors, bl);
+  ::encode(recovery_buffers_read, bl);
   ENCODE_FINISH(bl);
 }
 
 void ECSubReadReply::decode(bufferlist::iterator &bl)
 {
-  DECODE_START(1, bl);
+  DECODE_START(2, bl);
   ::decode(from, bl);
   ::decode(tid, bl);
   ::decode(buffers_read, bl);
   ::decode(attrs_read, bl);
   ::decode(errors, bl);
+  if (struct_v >= 2)
+    ::decode(recovery_buffers_read, bl);
   DECODE_FINISH(bl);
 }
 

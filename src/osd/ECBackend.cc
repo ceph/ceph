@@ -931,6 +931,9 @@ void ECBackend::handle_sub_read(
   ECSubReadReply *reply)
 {
   shard_id_t shard = get_parent()->whoami_shard().shard;
+  const vector<int> &chunk_mapping = ec_impl->get_chunk_mapping();
+  int shard_id = shard >= (int)chunk_mapping.size() ? shard : chunk_mapping[shard];
+
   for(map<hobject_t, list<boost::tuple<uint64_t, uint64_t, uint32_t> >, hobject_t::BitwiseComparator>::iterator i =
         op.to_read.begin();
       i != op.to_read.end();
@@ -966,10 +969,6 @@ void ECBackend::handle_sub_read(
         dout(20) << __func__ << " read request=" << j->get<1>() << " r=" << r << " len=" << bl.length() << dendl;
 
         // read overwrite data
-        const vector<int> &chunk_mapping = ec_impl->get_chunk_mapping();
-        int pg_shard = (int)get_parent()->whoami_shard().shard;
-        int shard_id = pg_shard >= (int)chunk_mapping.size() ? pg_shard : chunk_mapping[pg_shard];
-
         for (map<version_t, pair<uint64_t, uint64_t> >::iterator ow_iter =
             ow_info->begin(); ow_iter != ow_info->end(); ++ow_iter) {
           map<int, pair<uint64_t, uint64_t>> shards_to_write =
@@ -1071,6 +1070,61 @@ error:
       reply->buffers_read.erase(*i);
       reply->errors[*i] = r;
     }
+  }
+  for (map<hobject_t, list<version_t> >::iterator i = op.recovery_read.begin();
+       i != op.recovery_read.end();
+       ++i) {
+    int r = 0;
+    OverwriteInfoRef ow_info = get_overwrite_info(i->first);
+    for (list<version_t>::iterator j = i->second.begin();
+         j != i->second.end(); ++j) {
+      bufferlist bl;
+      if (*j == UINT64_MAX) {
+        r = store->read(
+          coll,
+          ghobject_t(i->first, ghobject_t::NO_GEN, shard),
+          0, 0, bl, 0,
+          true); // Allow EIO return 
+      } else {
+        map<version_t, pair<uint64_t, uint64_t> >::const_iterator it = 
+          ow_info->overwrite_history.find(*j);
+        assert(it != ow_info->end());
+        map<int, pair<uint64_t, uint64_t>> shards_to_write =
+          sinfo.offset_len_to_chunk_offset(it->second, ec_impl->get_chunk_count());
+        pair<uint64_t, uint64_t> &ver_off = shards_to_write[shard_id];
+
+        if (ver_off.second > 0) {
+          r = store->read(
+            coll,
+            ghobject_t(i->first, *j, shard),
+            ver_off.first,
+            ver_off.second,
+            bl,
+            0,
+            true);
+        }
+      }
+      if (r < 0) {
+        get_parent()->clog_error() << __func__
+                 << ": Error " << r
+                 << " recovery eading "
+                 << i->first;
+        dout(5) << __func__ << ": Error " << r
+          << " reading " << i->first << dendl;
+        goto recovery_error;
+      } else {
+        dout(20) << __func__ << " recovery read request=" << *j << " r=" << r << " len=" << bl.length() << dendl;
+        reply->recovery_buffers_read[i->first].push_back(
+          make_pair(
+            *j,
+            bl)
+          );
+      }
+    }
+    continue;
+recovery_error:
+    reply->recovery_buffers_read.erase(i->first);
+    reply->errors[i->first] = r;
   }
   reply->from = get_parent()->whoami_shard();
   reply->tid = op.tid;
