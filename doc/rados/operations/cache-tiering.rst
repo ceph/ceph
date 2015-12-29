@@ -400,6 +400,25 @@ disable and remove it.
 	ceph osd tier remove cold-storage hot-storage
 
 
+Setting mutiple cache tiering
+-----------------------------
+
+If there are more than two pools with different performance,
+e.g. pool A < pool B < pool C, we can set B as a cache of
+A, then set C as a cache of B. To prevent cyclic tiering,
+the multiple tiering must be specified in the bottom-up order,
+cold_pool as base of warm_pool, warm_pool as base of hot_pool.
+Instead, if one pool (warm_pool) have tiers (hot_pool) already,
+setting it as cache pool for another (cold_pool) is invalid. ::
+
+	ceph osd tier add {storagepool} {slowcachepool}
+	ceph osd tier add {slowcachepool} {fastcachepool}
+
+   For example (these two commands must in following order)::
+
+	ceph osd tier add cold-storage warm-storage
+	ceph osd tier add warm-storage hot-storage
+
 .. _Create a Pool: ../pools#create-a-pool
 .. _Pools - Set Pool Values: ../pools#set-pool-values
 .. _Placing Different Pools on Different OSDs: ../crush-map/#placing-different-pools-on-different-osds
