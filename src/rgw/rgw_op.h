@@ -782,6 +782,7 @@ public:
     : ret(0),
       delete_marker(false),
       multipart_delete(false),
+      unmod_since(0),
       deleter(nullptr) {
   }
 
