@@ -146,12 +146,19 @@ void BlockDevice::close()
 {
   dout(1) << __func__ << dendl;
   _aio_stop();
+
+  assert(fs);
+  delete fs;
+  fs = NULL;
+
   assert(fd_direct >= 0);
   VOID_TEMP_FAILURE_RETRY(::close(fd_direct));
   fd_direct = -1;
+
   assert(fd_buffered >= 0);
   VOID_TEMP_FAILURE_RETRY(::close(fd_buffered));
   fd_buffered = -1;
+
   path.clear();
 }
 
