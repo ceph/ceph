@@ -2641,10 +2641,10 @@ int Objecter::_calc_target(op_target_t *t, epoch_t *last_force_resend,
 
   if (need_check_tiering &&
       (t->flags & CEPH_OSD_FLAG_IGNORE_OVERLAY) == 0) {
-    if (is_read && pi->has_read_tier())
-      t->target_oloc.pool = pi->read_tier;
-    if (is_write && pi->has_write_tier())
-      t->target_oloc.pool = pi->write_tier;
+    if (is_read)
+      t->target_oloc.pool = get_read_tier(t->target_oloc.pool);
+    if (is_write)
+      t->target_oloc.pool = get_write_tier(t->target_oloc.pool);
   }
 
   pg_t pgid;
