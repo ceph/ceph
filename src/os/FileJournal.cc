@@ -1646,6 +1646,7 @@ void FileJournal::submit_entry(uint64_t seq, bufferlist& e, uint32_t orig_len,
 	  << " len " << e.length()
 	  << " (" << oncommit << ")" << dendl;
   assert(e.length() > 0);
+  bool signal = false;
 
   throttle_ops.take(1);
   throttle_bytes.take(orig_len);
@@ -1665,8 +1666,10 @@ void FileJournal::submit_entry(uint64_t seq, bufferlist& e, uint32_t orig_len,
       completion_item(
 	seq, oncommit, ceph_clock_now(g_ceph_context), osd_op));
     if (writeq.empty())
-      writeq_cond.Signal();
+      signal = true;
     writeq.push_back(write_item(seq, e, orig_len, osd_op));
+    if (signal)
+      writeq_cond.Signal();
   }
 }
 
