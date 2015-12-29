@@ -19,6 +19,7 @@
 #include <map>
 #include <memory>
 #include <sstream>
+#include <stack>
 
 #include "include/types.h"
 #include "include/buffer.h"
@@ -1825,6 +1826,72 @@ public:
   bool _osdmap_has_pool_full() const;
 
   bool target_should_be_paused(op_target_t *op);
+
+  unordered_map<int64_t,pair<int64_t, int64_t> > tier_map;
+
+  void tier_map_setup() {
+    assert(rwlock.is_wlocked());
+    unordered_map<int64_t,pair<int64_t, int64_t> > new_tier_map;
+    const map<int64_t,pg_pool_t>& pools = osdmap->get_pools();
+    vector<int64_t> container;
+    container.reserve(pools.size()*2);
+    stack<int64_t,vector<int64_t> > stack(container);
+
+    for (map<int64_t,pg_pool_t>::const_iterator it = pools.begin(); it != pools.end(); ++it) {
+      if (!new_tier_map.count(it->first))
+        stack.push(it->first);
+      while (!stack.empty()) {
+        int64_t top = stack.top();
+
+        if (new_tier_map.count(top)) {
+          stack.pop();
+          continue;
+        }
+
+        int64_t read_tier = -1;
+        int64_t write_tier = -1;
+
+        if (pools.find(top)->second.has_read_tier()) {
+          int64_t next = pools.find(top)->second.read_tier;
+          if (new_tier_map.count(next))
+            read_tier = new_tier_map[next].first;
+          else
+            stack.push(next);
+        } else {
+          read_tier = top;
+        }
+
+        if (pools.find(top)->second.has_write_tier()) {
+          int64_t next = pools.find(top)->second.write_tier;
+          if (new_tier_map.count(next))
+            write_tier = new_tier_map[next].second;
+          else
+            stack.push(next);
+        } else {
+          write_tier = top;
+        }
+
+        if (write_tier != -1 && read_tier != -1) {
+          new_tier_map.insert(pair<int64_t,pair<int64_t,int64_t> >(top, pair<int64_t,int64_t>(read_tier,write_tier)));
+          stack.pop();
+        }
+      }
+    }
+    tier_map.swap(new_tier_map);
+  }
+
+  int64_t get_read_tier(int64_t basepool) {
+    assert(rwlock.is_locked());
+    assert(tier_map.count(basepool));
+    return tier_map[basepool].first;
+  }
+
+  int64_t get_write_tier(int64_t basepool) {
+    assert(rwlock.is_locked());
+    assert(tier_map.count(basepool));
+    return tier_map[basepool].second;
+  }
+
   int _calc_target(op_target_t *t, epoch_t *last_force_resend = 0,
 		   bool any_change = false);
   int _map_session(op_target_t *op, OSDSession **s,
