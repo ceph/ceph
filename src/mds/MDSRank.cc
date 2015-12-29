@@ -2230,6 +2230,30 @@ bool MDSRank::command_dirfrag_ls(
   return true;
 }
 
+void MDSRank::dump_status(Formatter *f) const
+{
+  if (state == MDSMap::STATE_REPLAY ||
+      state == MDSMap::STATE_STANDBY_REPLAY) {
+    mdlog->dump_replay_status(f);
+  } else if (state == MDSMap::STATE_RESOLVE) {
+    mdcache->dump_resolve_status(f);
+  } else if (state == MDSMap::STATE_RECONNECT) {
+    server->dump_reconnect_status(f);
+  } else if (state == MDSMap::STATE_REJOIN) {
+    mdcache->dump_rejoin_status(f);
+  } else if (state == MDSMap::STATE_CLIENTREPLAY) {
+    dump_clientreplay_status(f);
+  }
+}
+
+void MDSRank::dump_clientreplay_status(Formatter *f) const
+{
+  f->open_object_section("clientreplay_status");
+  f->dump_unsigned("clientreplay_queue", replay_queue.size());
+  f->dump_unsigned("active_replay", mdcache->get_num_client_requests());
+  f->close_section();
+}
+
 void MDSRankDispatcher::update_log_config()
 {
   map<string,string> log_to_monitors;

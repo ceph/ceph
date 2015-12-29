@@ -2652,6 +2652,13 @@ ESubtreeMap *MDCache::create_subtree_map()
   return le;
 }
 
+void MDCache::dump_resolve_status(Formatter *f) const
+{
+  f->open_object_section("resolve_status");
+  f->dump_stream("resolve_gather") << resolve_gather;
+  f->dump_stream("resolve_ack_gather") << resolve_gather;
+  f->close_section();
+}
 
 void MDCache::resolve_start(MDSInternalContext *resolve_done_)
 {
@@ -3848,6 +3855,15 @@ void MDCache::recalc_auth_bits(bool replay)
  * - replica discards changes any time the scatterlock syncs, and
  *   after recovery.
  */
+
+void MDCache::dump_rejoin_status(Formatter *f) const
+{
+  f->open_object_section("rejoin_status");
+  f->dump_stream("rejoin_gather") << rejoin_gather;
+  f->dump_stream("rejoin_ack_gather") << rejoin_ack_gather;
+  f->dump_unsigned("num_opening_inodes", cap_imports_num_opening);
+  f->close_section();
+}
 
 void MDCache::rejoin_start(MDSInternalContext *rejoin_done_)
 {
