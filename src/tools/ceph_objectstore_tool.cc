@@ -2331,9 +2331,7 @@ int main(int argc, char **argv)
     myexit(1);
   }
   if (type == "filestore" && !vm.count("journal-path")) {
-    cerr << "Must provide --journal-path" << std::endl;
-    usage(desc);
-    myexit(1);
+    jpath = dpath + "/journal";
   }
   if (!vm.count("op") && !vm.count("object")) {
     cerr << "Must provide --op or object command..." << std::endl;
