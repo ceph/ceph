@@ -141,7 +141,7 @@ endif(HAVE_XIO)
 
 if(HAVE_DPDK)
   set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -I${DPDK_INCLUDE_DIR}")
-  list(APPEND EXTRALIBS ${DPDK_LIBRARY} pthread)
+  list(APPEND EXTRALIBS ${DPDK_LIBRARY})
 endif(HAVE_DPDK)
 
 # sort out which allocator to use
