@@ -105,8 +105,17 @@
 /// format of the extension of rados objects created for a given striped object
 #define RADOS_OBJECT_EXTENSION_FORMAT ".%016llx"
 
-/// default object layout (external declaration)
-extern ceph_file_layout g_default_file_layout;
+/// default object layout
+struct ceph_file_layout default_file_layout = {
+ fl_stripe_unit: init_le32(1<<22),
+ fl_stripe_count: init_le32(1),
+ fl_object_size: init_le32(1<<22),
+ fl_cas_hash: init_le32(0),
+ fl_object_stripe_unit: init_le32(0),
+ fl_unused: init_le32(-1),
+ fl_pg_pool : init_le32(-1),
+};
+
 
 ///////////////////////// CompletionData /////////////////////////////
 
@@ -204,7 +213,7 @@ libradosstriper::RadosStriperImpl::RadosExclusiveLock::~RadosExclusiveLock() {
 
 libradosstriper::RadosStriperImpl::RadosStriperImpl(librados::IoCtx& ioctx, librados::IoCtxImpl *ioctx_impl) :
   m_refCnt(0),lock("RadosStriper Refcont", false, false), m_radosCluster(ioctx), m_ioCtx(ioctx), m_ioCtxImpl(ioctx_impl),
-  m_layout(g_default_file_layout) {}
+  m_layout(default_file_layout) {}
 
 ///////////////////////// layout /////////////////////////////
 
