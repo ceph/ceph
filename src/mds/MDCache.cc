@@ -4414,7 +4414,7 @@ void MDCache::handle_cache_rejoin_weak(MMDSCacheRejoin *weak)
 
       if (ack) {
 	acked_inodes.insert(in->vino());
-	ack->add_inode_base(in);
+	ack->add_inode_base(in, mds->mdsmap->get_up_features());
 	bufferlist bl;
 	in->_encode_locks_state_for_rejoin(bl, from);
 	ack->add_inode_locks(in, inonce, bl);
@@ -4435,7 +4435,7 @@ void MDCache::handle_cache_rejoin_weak(MMDSCacheRejoin *weak)
     
     if (ack) {
       acked_inodes.insert(in->vino());
-      ack->add_inode_base(in);
+      ack->add_inode_base(in, mds->mdsmap->get_up_features());
       bufferlist bl;
       in->_encode_locks_state_for_rejoin(bl, from);
       ack->add_inode_locks(in, inonce, bl);
@@ -4453,7 +4453,7 @@ void MDCache::handle_cache_rejoin_weak(MMDSCacheRejoin *weak)
       assert(in);
       dout(10) << " including base inode (due to potential scatterlock update) " << *in << dendl;
       acked_inodes.insert(in->vino());
-      ack->add_inode_base(in);
+      ack->add_inode_base(in, mds->mdsmap->get_up_features());
     }
 
     rejoin_scour_survivor_replicas(from, ack, acked_inodes, gather_locks);
@@ -5890,7 +5890,7 @@ void MDCache::rejoin_send_acks()
 	for (compact_map<mds_rank_t,unsigned>::iterator r = in->replicas_begin();
 	     r != in->replicas_end();
 	     ++r) {
-	  ack[r->first]->add_inode_base(in);
+	  ack[r->first]->add_inode_base(in, mds->mdsmap->get_up_features());
 	  bufferlist bl;
 	  in->_encode_locks_state_for_rejoin(bl, r->first);
 	  ack[r->first]->add_inode_locks(in, ++r->second, bl);
@@ -5907,7 +5907,7 @@ void MDCache::rejoin_send_acks()
     for (compact_map<mds_rank_t,unsigned>::iterator r = root->replicas_begin();
 	 r != root->replicas_end();
 	 ++r) {
-      ack[r->first]->add_inode_base(root);
+      ack[r->first]->add_inode_base(root, mds->mdsmap->get_up_features());
       bufferlist bl;
       root->_encode_locks_state_for_rejoin(bl, r->first);
       ack[r->first]->add_inode_locks(root, ++r->second, bl);
@@ -5916,7 +5916,7 @@ void MDCache::rejoin_send_acks()
     for (compact_map<mds_rank_t,unsigned>::iterator r = myin->replicas_begin();
 	 r != myin->replicas_end();
 	 ++r) {
-      ack[r->first]->add_inode_base(myin);
+      ack[r->first]->add_inode_base(myin, mds->mdsmap->get_up_features());
       bufferlist bl;
       myin->_encode_locks_state_for_rejoin(bl, r->first);
       ack[r->first]->add_inode_locks(myin, ++r->second, bl);
@@ -5930,7 +5930,7 @@ void MDCache::rejoin_send_acks()
     for (compact_map<mds_rank_t,unsigned>::iterator r = in->replicas_begin();
 	 r != in->replicas_end();
 	 ++r)
-      ack[r->first]->add_inode_base(in);
+      ack[r->first]->add_inode_base(in, mds->mdsmap->get_up_features());
   }
 
   // send acks
@@ -9516,7 +9516,7 @@ void MDCache::handle_discover(MDiscover *dis)
 
     // add root
     reply->starts_with = MDiscoverReply::INODE;
-    replicate_inode(cur, from, reply->trace);
+    replicate_inode(cur, from, reply->trace, mds->mdsmap->get_up_features());
     dout(10) << "added base " << *cur << dendl;
   }
   else {
@@ -9741,7 +9741,7 @@ void MDCache::handle_discover(MDiscover *dis)
     CInode *next = dnl->get_inode();
     assert(next->is_auth());
     
-    replicate_inode(next, from, reply->trace);
+    replicate_inode(next, from, reply->trace, mds->mdsmap->get_up_features());
     dout(7) << "handle_discover added inode " << *next << dendl;
     
     // descend, keep going.
@@ -10020,10 +10020,11 @@ CInode *MDCache::add_replica_inode(bufferlist::iterator& p, CDentry *dn, list<MD
  
 void MDCache::replicate_stray(CDentry *straydn, mds_rank_t who, bufferlist& bl)
 {
-  replicate_inode(get_myin(), who, bl);
+  uint64_t features = mds->mdsmap->get_up_features();
+  replicate_inode(get_myin(), who, bl, features);
   replicate_dir(straydn->get_dir()->inode->get_parent_dn()->get_dir(), who, bl);
   replicate_dentry(straydn->get_dir()->inode->get_parent_dn(), who, bl);
-  replicate_inode(straydn->get_dir()->inode, who, bl);
+  replicate_inode(straydn->get_dir()->inode, who, bl, features);
   replicate_dir(straydn->get_dir(), who, bl);
   replicate_dentry(straydn, who, bl);
 }
@@ -10150,7 +10151,8 @@ void MDCache::send_dentry_link(CDentry *dn, MDRequestRef& mdr)
 				     dn->name, dnl->is_primary());
     if (dnl->is_primary()) {
       dout(10) << "  primary " << *dnl->get_inode() << dendl;
-      replicate_inode(dnl->get_inode(), p->first, m->bl);
+      replicate_inode(dnl->get_inode(), p->first, m->bl,
+		      mds->mdsmap->get_up_features());
     } else if (dnl->is_remote()) {
       inodeno_t ino = dnl->get_remote_ino();
       __u8 d_type = dnl->get_remote_d_type();

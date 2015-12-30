@@ -970,7 +970,7 @@ void CInode::store(MDSInternalContextBase *fin)
   bufferlist bl;
   string magic = CEPH_FS_ONDISK_MAGIC;
   ::encode(magic, bl);
-  encode_store(bl);
+  encode_store(bl, mdcache->mds->mdsmap->get_up_features());
 
   // write it.
   SnapContext snapc;
@@ -1294,7 +1294,8 @@ void CInode::verify_diri_backtrace(bufferlist &bl, int err)
 // parent dir
 
 
-void InodeStoreBase::encode_bare(bufferlist &bl, const bufferlist *snap_blob) const
+void InodeStoreBase::encode_bare(bufferlist &bl, uint64_t features,
+				 const bufferlist *snap_blob) const
 {
   ::encode(inode, bl);
   if (is_symlink())
@@ -1310,18 +1311,20 @@ void InodeStoreBase::encode_bare(bufferlist &bl, const bufferlist *snap_blob) co
   ::encode(damage_flags, bl);
 }
 
-void InodeStoreBase::encode(bufferlist &bl, const bufferlist *snap_blob) const
+void InodeStoreBase::encode(bufferlist &bl, uint64_t features,
+			    const bufferlist *snap_blob) const
 {
   ENCODE_START(6, 4, bl);
-  encode_bare(bl, snap_blob);
+  encode_bare(bl, features, snap_blob);
   ENCODE_FINISH(bl);
 }
 
-void CInode::encode_store(bufferlist& bl)
+void CInode::encode_store(bufferlist& bl, uint64_t features)
 {
   bufferlist snap_blob;
   encode_snap_blob(snap_blob);
-  InodeStoreBase::encode(bl, &snap_blob);
+  InodeStoreBase::encode(bl, mdcache->mds->mdsmap->get_up_features(),
+			 &snap_blob);
 }
 
 void InodeStoreBase::decode_bare(bufferlist::iterator &bl,
@@ -3370,7 +3373,7 @@ void CInode::encode_cap_message(MClientCaps *m, Capability *cap)
 
 
 
-void CInode::_encode_base(bufferlist& bl)
+void CInode::_encode_base(bufferlist& bl, uint64_t features)
 {
   ::encode(first, bl);
   ::encode(inode, bl);
@@ -3486,8 +3489,8 @@ void CInode::_decode_locks_rejoin(bufferlist::iterator& p, list<MDSInternalConte
 
 void CInode::encode_export(bufferlist& bl)
 {
-  ENCODE_START(5, 4, bl)
-  _encode_base(bl);
+  ENCODE_START(5, 4, bl);
+  _encode_base(bl, mdcache->mds->mdsmap->get_up_features());
 
   ::encode(state, bl);
 
