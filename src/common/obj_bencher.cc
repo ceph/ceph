@@ -102,8 +102,8 @@ void *ObjBencher::status_printer(void *_bencher) {
           << setw(10) << "finished"
           << setw(10) << "avg MB/s"
           << setw(10) << "cur MB/s"
-          << setw(10) << "last lat"
-          << setw(10) << "avg lat" << std::endl;
+          << setw(12) << "last lat(s)"
+          << setw(12) << "avg lat(s)" << std::endl;
     }
     if (cycleSinceChange)
       bandwidth = (double)(data.finished - previous_writes)
@@ -153,8 +153,8 @@ void *ObjBencher::status_printer(void *_bencher) {
           << setw(10) << data.finished
           << setw(10) << avg_bandwidth
           << setw(10) << bandwidth
-          << setw(10) << (double)data.cur_latency
-          << setw(10) << data.avg_latency << std::endl;
+          << setw(12) << (double)data.cur_latency
+          << setw(12) << data.avg_latency << std::endl;
       } else {
         formatter->dump_format("sec", "%d", i);
         formatter->dump_format("cur_ops", "%d", data.in_flight);
@@ -175,8 +175,8 @@ void *ObjBencher::status_printer(void *_bencher) {
           << setw(10) << data.finished
           << setw(10) << avg_bandwidth
           << setw(10) << '0'
-          << setw(10) << '-'
-          << setw(10) << data.avg_latency << std::endl;
+          << setw(12) << '-'
+          << setw(12) << data.avg_latency << std::endl;
       } else {
         formatter->dump_format("sec", "%d", i);
         formatter->dump_format("cur_ops", "%d", data.in_flight);
@@ -525,10 +525,10 @@ int ObjBencher::write_bench(int secondsToRun,
        << "Stddev IOPS:            " << vec_stddev(data.history.iops) << std::endl
        << "Max IOPS:               " << data.idata.max_iops << std::endl
        << "Min IOPS:               " << data.idata.min_iops << std::endl
-       << "Average Latency:        " << data.avg_latency << std::endl
-       << "Stddev Latency:         " << vec_stddev(data.history.latency) << std::endl
-       << "Max latency:            " << data.max_latency << std::endl
-       << "Min latency:            " << data.min_latency << std::endl;
+       << "Average Latency(s):     " << data.avg_latency << std::endl
+       << "Stddev Latency(s):      " << vec_stddev(data.history.latency) << std::endl
+       << "Max latency(s):         " << data.max_latency << std::endl
+       << "Min latency(s):         " << data.min_latency << std::endl;
   } else {
     formatter->dump_format("total_time_run", "%f", (double)timePassed);
     formatter->dump_format("total_writes_made", "%d", data.finished);
@@ -760,9 +760,9 @@ int ObjBencher::seq_read_bench(int seconds_to_run, int num_objects, int concurre
        << "Stddev IOPS:          " << vec_stddev(data.history.iops) << std::endl
        << "Max IOPS:             " << data.idata.max_iops << std::endl
        << "Min IOPS:             " << data.idata.min_iops << std::endl
-       << "Average Latency:      " << data.avg_latency << std::endl
-       << "Max latency:          " << data.max_latency << std::endl
-       << "Min latency:          " << data.min_latency << std::endl;
+       << "Average Latency(s):   " << data.avg_latency << std::endl
+       << "Max latency(s):       " << data.max_latency << std::endl
+       << "Min latency(s):       " << data.min_latency << std::endl;
   } else {
     formatter->dump_format("total_time_run", "%f", (double)runtime);
     formatter->dump_format("total_reads_made", "%d", data.finished);
@@ -984,9 +984,9 @@ int ObjBencher::rand_read_bench(int seconds_to_run, int num_objects, int concurr
        << "Stddev IOPS:          " << vec_stddev(data.history.iops) << std::endl
        << "Max IOPS:             " << data.idata.max_iops << std::endl
        << "Min IOPS:             " << data.idata.min_iops << std::endl
-       << "Average Latency:      " << data.avg_latency << std::endl
-       << "Max latency:          " << data.max_latency << std::endl
-       << "Min latency:          " << data.min_latency << std::endl;
+       << "Average Latency(s):   " << data.avg_latency << std::endl
+       << "Max latency(s):       " << data.max_latency << std::endl
+       << "Min latency(s):       " << data.min_latency << std::endl;
   } else {
     formatter->dump_format("total_time_run", "%f", (double)runtime);
     formatter->dump_format("total_reads_made", "%d", data.finished);
