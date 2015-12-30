@@ -234,6 +234,9 @@ struct ltstr
 };
 
 
+namespace ceph {
+  class Formatter;
+}
 
 #include "encoding.h"
 
