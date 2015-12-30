@@ -21,8 +21,7 @@
 #include "common/debug.h"
 #include "test/common/ObjectContents.h"
 #include "FileStoreTracker.h"
-#include "os/LevelDBStore.h"
-#include "os/KeyValueDB.h"
+#include "kv/KeyValueDB.h"
 #include "os/ObjectStore.h"
 
 void usage(const string &name) {
@@ -63,19 +62,21 @@ int main(int argc, char **argv) {
   bool start_new = false;
   if (string(args[0]) == string("new")) start_new = true;
 
-  LevelDBStore *_db = new LevelDBStore(g_ceph_context, db_path);
+  KeyValueDB *_db = KeyValueDB::create(g_ceph_context, "leveldb", db_path);
   assert(!_db->create_and_open(std::cerr));
   boost::scoped_ptr<KeyValueDB> db(_db);
   boost::scoped_ptr<ObjectStore> store(new FileStore(store_path, store_dev));
 
+  ObjectStore::Sequencer osr(__func__);
+  coll_t coll(spg_t(pg_t(0,12),shard_id_t::NO_SHARD));
 
   if (start_new) {
     std::cerr << "mkfs" << std::endl;
     assert(!store->mkfs());
     ObjectStore::Transaction t;
     assert(!store->mount());
-    t.create_collection(coll_t("coll"));
-    store->apply_transaction(t);
+    t.create_collection(coll, 0);
+    store->apply_transaction(&osr, t);
   } else {
     assert(!store->mount());
   }
@@ -86,7 +87,7 @@ int main(int argc, char **argv) {
   for (unsigned i = 0; i < 10; ++i) {
     stringstream stream;
     stream << "Object_" << i;
-    tracker.verify("coll", stream.str(), true);
+    tracker.verify(coll, stream.str(), true);
     objects.insert(stream.str());
   }
 
@@ -95,19 +96,19 @@ int main(int argc, char **argv) {
     for (unsigned j = 0; j < 100; ++j) {
       int val = rand() % 100;
       if (val < 30) {
-	t.write("coll", *rand_choose(objects));
+	t.write(coll, *rand_choose(objects));
       } else if (val < 60) {
-	t.clone("coll", *rand_choose(objects),
+	t.clone(coll, *rand_choose(objects),
 		*rand_choose(objects));
       } else if (val < 70) {
-	t.remove("coll", *rand_choose(objects));
+	t.remove(coll, *rand_choose(objects));
       } else {
-	t.clone_range("coll", *rand_choose(objects),
+	t.clone_range(coll, *rand_choose(objects),
 		      *rand_choose(objects));
       }
     }
     tracker.submit_transaction(t);
-    tracker.verify("coll", *rand_choose(objects));
+    tracker.verify(coll, *rand_choose(objects));
   }
   return 0;
 }

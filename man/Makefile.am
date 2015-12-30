@@ -1,6 +1,6 @@
 AUTOMAKE_OPTIONS = gnu
 
-EXTRA_DIST = conf.py
+EXTRA_DIST = conf.py ceph_selinux.8
 
 dist_man_MANS = 
 
@@ -21,7 +21,7 @@ $(dist_man_MANS): sphinx-build.stamp
 # in a tree populated from dist tarball, the $(top_srcdir)/doc is not included
 sphinx-build.stamp:
 	if [ -d $(top_srcdir)/doc/man ] ; then \
-		${SPHINX_BUILD} -b man -d doctrees -c . $(top_srcdir)/doc/man $(top_builddir)/man; \
+		${SPHINX_BUILD} -b man -d doctrees -c $(top_srcdir)/man $(top_srcdir)/doc/man $(top_builddir)/man; \
 	fi
 
 clean-local:

@@ -18,7 +18,6 @@
 #include "include/unordered_map.h"
 #include <boost/tuple/tuple.hpp>
 #include "include/memory.h"
-#include "include/buffer.h"
 #include "common/Formatter.h"
 #include "common/hobject.h"
 #include "include/interval_set.h"
@@ -129,6 +128,23 @@ private:
   FS fs;
 
   void set_from_conf();
+  bool beyond_limit() const {
+    if (cur_ios < io_limits.first &&
+	pending_wbs.size() < fd_limits.first &&
+	cur_size < size_limits.first)
+      return false;
+    else
+      return true;
+  }
+  bool need_flush() const {
+    if (cur_ios < io_limits.second &&
+	pending_wbs.size() < fd_limits.second &&
+	cur_size < size_limits.second)
+      return false;
+    else
+      return true;
+  }
+
 public:
   WBThrottle(CephContext *cct);
   ~WBThrottle();

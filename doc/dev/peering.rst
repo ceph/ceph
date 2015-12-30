@@ -155,7 +155,7 @@ The high level process is for the current PG primary to:
      interesting *acting sets*, and confirm that we are still the
      primary).
 
-  2. generate a list of *past intervals* since *last epoch started*.
+  #. generate a list of *past intervals* since *last epoch started*.
      Consider the subset of those for which *up_thru* was greater than
      the first interval epoch by the last interval epoch's OSD map; that is,
      the subset for which *peering* could have completed before the *acting
@@ -164,18 +164,18 @@ The high level process is for the current PG primary to:
      Successful *peering* will require that we be able to contact at
      least one OSD from each of *past interval*'s *acting set*.
 
-  3. ask every node in that list for its *PG info*, which includes the most
+  #. ask every node in that list for its *PG info*, which includes the most
      recent write made to the PG, and a value for *last epoch started*.  If
      we learn about a *last epoch started* that is newer than our own, we can
      prune older *past intervals* and reduce the peer OSDs we need to contact.
 
-  5. if anyone else has (in its PG log) operations that I do not have,
+  #. if anyone else has (in its PG log) operations that I do not have,
      instruct them to send me the missing log entries so that the primary's
      *PG log* is up to date (includes the newest write)..
 
-  5. for each member of the current *acting set*:
+  #. for each member of the current *acting set*:
 
-     a) ask it for copies of all PG log entries since *last epoch start*
+     a. ask it for copies of all PG log entries since *last epoch start*
 	so that I can verify that they agree with mine (or know what
 	objects I will be telling it to delete).
 
@@ -193,47 +193,47 @@ The high level process is for the current PG primary to:
 	any OSD that stores data from a divergent update to delete the
 	affected (and now deemed to be apocryphal) objects.
 
-     b) ask it for its *missing set* (object updates recorded
+     #. ask it for its *missing set* (object updates recorded
 	in its PG log, but for which it does not have the new data).
 	This is the list of objects that must be fully replicated
 	before we can accept writes.
 
-  6. at this point, the primary's PG log contains an *authoritative history* of
+  #. at this point, the primary's PG log contains an *authoritative history* of
      the placement group, and the OSD now has sufficient
      information to bring any other OSD in the *acting set* up to date.
 
-  7. if the primary's *up_thru* value in the current OSD map is not greater than
+  #. if the primary's *up_thru* value in the current OSD map is not greater than
      or equal to the first epoch in the *current interval*, send a request to the
      monitor to update it, and wait until receive an updated OSD map that reflects
      the change.
 
-  8. for each member of the current *acting set*:
+  #. for each member of the current *acting set*:
 
-     a) send them log updates to bring their PG logs into agreement with
+     a. send them log updates to bring their PG logs into agreement with
 	my own (*authoritative history*) ... which may involve deciding
 	to delete divergent objects.
 
-     b) await acknowledgment that they have persisted the PG log entries.
+     #. await acknowledgment that they have persisted the PG log entries.
 
-  9. at this point all OSDs in the *acting set* agree on all of the meta-data,
+  #. at this point all OSDs in the *acting set* agree on all of the meta-data,
      and would (in any future *peering*) return identical accounts of all
      updates.
 
-     a) start accepting client write operations (because we have unanimous
+     a. start accepting client write operations (because we have unanimous
 	agreement on the state of the objects into which those updates are
 	being accepted).  Note, however, that if a client tries to write to an
         object it will be promoted to the front of the recovery queue, and the
         write willy be applied after it is fully replicated to the current *acting set*.
 
-     b) update the *last epoch started* value in our local *PG info*, and instruct
+     #. update the *last epoch started* value in our local *PG info*, and instruct
 	other *active set* OSDs to do the same.
 
-     c) start pulling object data updates that other OSDs have, but I do not.  We may
+     #. start pulling object data updates that other OSDs have, but I do not.  We may
 	need to query OSDs from additional *past intervals* prior to *last epoch started*
 	(the last time *peering* completed) and following *last epoch clean* (the last epoch that
 	recovery completed) in order to find copies of all objects.
 
-     d) start pushing object data updates to other OSDs that do not yet have them.
+     #. start pushing object data updates to other OSDs that do not yet have them.
 
 	We push these updates from the primary (rather than having the replicas
 	pull them) because this allows the primary to ensure that a replica has
@@ -242,7 +242,7 @@ The high level process is for the current PG primary to:
 	the data to multiple replicas.  If each replica did its own pulls,
 	the data might have to be read multiple times.
 
- 10. once all replicas store the all copies of all objects (that
+  #. once all replicas store the all copies of all objects (that
      existed prior to the start of this epoch) we can update *last
      epoch clean* in the *PG info*, and we can dismiss all of the
      *stray* replicas, allowing them to delete their copies of objects

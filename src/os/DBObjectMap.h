@@ -2,7 +2,7 @@
 #ifndef DBOBJECTMAP_DB_H
 #define DBOBJECTMAP_DB_H
 
-#include "include/buffer.h"
+#include "include/buffer_fwd.h"
 #include <set>
 #include <map>
 #include <string>
@@ -12,7 +12,7 @@
 #include <boost/scoped_ptr.hpp>
 
 #include "ObjectMap.h"
-#include "KeyValueDB.h"
+#include "kv/KeyValueDB.h"
 #include "osd/osd_types.h"
 #include "common/Mutex.h"
 #include "common/Cond.h"
@@ -68,7 +68,7 @@ public:
    * Set of headers currently in use
    */
   set<uint64_t> in_use;
-  set<ghobject_t> map_header_in_use;
+  set<ghobject_t, ghobject_t::BitwiseComparator> map_header_in_use;
 
   /**
    * Takes the map_header_in_use entry in constructor, releases in
@@ -327,7 +327,7 @@ private:
   /// Implicit lock on Header->seq
   typedef ceph::shared_ptr<_Header> Header;
   Mutex cache_lock;
-  SimpleLRU<ghobject_t, _Header> caches;
+  SimpleLRU<ghobject_t, _Header, ghobject_t::BitwiseComparator> caches;
 
   string map_header_key(const ghobject_t &oid);
   string header_key(uint64_t seq);
@@ -347,7 +347,7 @@ private:
     int upper_bound(const string &after) { return 0; }
     int lower_bound(const string &to) { return 0; }
     bool valid() { return false; }
-    int next() { assert(0); return 0; }
+    int next(bool validate=true) { assert(0); return 0; }
     string key() { assert(0); return ""; }
     bufferlist value() { assert(0); return bufferlist(); }
     int status() { return 0; }
@@ -385,7 +385,7 @@ private:
     int upper_bound(const string &after);
     int lower_bound(const string &to);
     bool valid();
-    int next();
+    int next(bool validate=true);
     string key();
     bufferlist value();
     int status();

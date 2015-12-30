@@ -6,16 +6,15 @@
 #include "include/int_types.h"
 
 #include <deque>
-#include <iostream>
+#include <iosfwd>
 #include <list>
 #include <vector>
-#include <ostream>
 #include <sstream>
 #include <stdarg.h>
 #include <string>
 #include <map>
 
-#include "include/buffer.h"
+#include "include/buffer_fwd.h"
 
 namespace ceph {
 
@@ -42,12 +41,7 @@ namespace ceph {
     virtual ~Formatter();
 
     virtual void flush(std::ostream& os) = 0;
-    void flush(bufferlist &bl)
-    {
-      std::stringstream os;
-      flush(os);
-      bl.append(os.str());
-    }
+    void flush(bufferlist &bl);
     virtual void reset() = 0;
 
     virtual void open_array_section(const char *name) = 0;
@@ -62,6 +56,12 @@ namespace ceph {
     virtual void dump_bool(const char *name, bool b)
     {
       dump_format_unquoted(name, "%s", (b ? "true" : "false"));
+    }
+    template<typename T>
+    void dump_object(const char *name, const T& foo) {
+      open_object_section(name);
+      foo.dump(this);
+      close_section();
     }
     virtual std::ostream& dump_stream(const char *name) = 0;
     virtual void dump_format_va(const char *name, const char *ns, bool quoted, const char *fmt, va_list ap) = 0;
@@ -128,7 +128,7 @@ namespace ceph {
   class XMLFormatter : public Formatter {
   public:
     static const char *XML_1_DTD;
-    XMLFormatter(bool pretty = false);
+    XMLFormatter(bool pretty = false, bool lowercased_underscored = false);
 
     void flush(std::ostream& os);
     void reset();
@@ -160,6 +160,7 @@ namespace ceph {
     std::stringstream m_ss, m_pending_string;
     std::deque<std::string> m_sections;
     bool m_pretty;
+    bool m_lowercased_underscored;
     std::string m_pending_string_name;
   };
 

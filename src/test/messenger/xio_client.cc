@@ -117,7 +117,7 @@ int main(int argc, const char **argv)
 	messenger = new XioMessenger(g_ceph_context,
 				     entity_name_t::MON(-1),
 				     "xio_client",
-				     0 /* nonce */,
+				     0 /* nonce */, XIO_ALL_FEATURES,
 				     dstrategy);
 
 	// enable timing prints

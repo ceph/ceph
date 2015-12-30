@@ -29,19 +29,16 @@
 #undef dout_prefix
 #define dout_prefix *_dout << "ceph_test_objectstore_state "
 
-const coll_t TestObjectStoreState::META_COLL("meta");
-const coll_t TestObjectStoreState::TEMP_COLL("temp");
-
 void TestObjectStoreState::init(int colls, int objs)
 {
   dout(5) << "init " << colls << " colls " << objs << " objs" << dendl;
 
+  ObjectStore::Sequencer osr(__func__);
   ObjectStore::Transaction *t;
   t = new ObjectStore::Transaction;
 
-  t->create_collection(META_COLL);
-  t->create_collection(TEMP_COLL);
-  m_store->apply_transaction(*t);
+  t->create_collection(coll_t::meta(), 0);
+  m_store->apply_transaction(&osr, *t);
 
   wait_for_ready();
 
@@ -50,10 +47,10 @@ void TestObjectStoreState::init(int colls, int objs)
     int coll_id = i;
     coll_entry_t *entry = coll_create(coll_id);
     dout(5) << "init create collection " << entry->m_coll.to_str()
-        << " meta " << entry->m_meta_obj.oid.name << dendl;
+        << " meta " << entry->m_meta_obj << dendl;
 
     t = new ObjectStore::Transaction;
-    t->create_collection(entry->m_coll);
+    t->create_collection(entry->m_coll, 32);
     bufferlist hint;
     uint32_t pg_num = colls;
     uint64_t num_objs = uint64_t(objs / colls);
@@ -61,11 +58,11 @@ void TestObjectStoreState::init(int colls, int objs)
     ::encode(num_objs, hint);
     t->collection_hint(entry->m_coll, ObjectStore::Transaction::COLL_HINT_EXPECTED_NUM_OBJECTS, hint);
     dout(5) << "give collection hint, number of objects per collection: " << num_objs << dendl;
-    t->touch(META_COLL, entry->m_meta_obj);
+    t->touch(coll_t::meta(), entry->m_meta_obj);
 
     for (int i = 0; i < objs; i++) {
       hobject_t *obj = entry->touch_obj(i + baseid);
-      t->touch(entry->m_coll, *obj);
+      t->touch(entry->m_coll, ghobject_t(*obj));
       ceph_assert(i + baseid == m_num_objects);
       m_num_objects++;
     }

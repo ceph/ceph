@@ -67,6 +67,8 @@ class NObjectIteratorImpl {
     /// move the iterator to a given hash position.  this may (will!) be rounded to the nearest pg.
     uint32_t seek(uint32_t pos);
 
+    void set_filter(const bufferlist &bl);
+
   private:
     NObjectIteratorImpl(ObjListCtx *ctx_);
     void get_next();

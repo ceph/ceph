@@ -19,8 +19,10 @@
 
 #include <set>
 
+#include "osdc/Filer.h"
+
 class CInode;
-class MDS;
+class MDSRank;
 class PerfCounters;
 
 class RecoveryQueue {
@@ -28,7 +30,7 @@ public:
   void enqueue(CInode *in);
   void advance();
   void prioritize(CInode *in);   ///< do this inode now/soon
-  RecoveryQueue(MDS *mds_) : mds(mds_), logger(NULL) {}
+  RecoveryQueue(MDSRank *mds_);
 
   void set_logger(PerfCounters *p) {logger=p;}
 
@@ -39,8 +41,9 @@ private:
   std::set<CInode*> file_recover_queue_front;  ///< elevated priority items
   std::set<CInode*> file_recovering;
   void _recovered(CInode *in, int r, uint64_t size, utime_t mtime);
-  MDS *mds;
+  MDSRank *mds;
   PerfCounters *logger;
+  Filer filer;
 
   friend class C_MDC_Recover;
 };

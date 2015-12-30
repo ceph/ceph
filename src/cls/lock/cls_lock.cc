@@ -29,6 +29,8 @@
 
 #include "global/global_context.h"
 
+#include "include/compat.h"
+
 
 using namespace rados::cls::lock;
 
@@ -517,10 +519,10 @@ void __cls_init()
 
   cls_register("lock", &h_class);
   cls_register_cxx_method(h_class, "lock",
-                          CLS_METHOD_RD | CLS_METHOD_WR,
+                          CLS_METHOD_RD | CLS_METHOD_WR | CLS_METHOD_PROMOTE,
                           lock_op, &h_lock_op);
   cls_register_cxx_method(h_class, "unlock",
-                          CLS_METHOD_RD | CLS_METHOD_WR,
+                          CLS_METHOD_RD | CLS_METHOD_WR | CLS_METHOD_PROMOTE,
                           unlock_op, &h_unlock_op);
   cls_register_cxx_method(h_class, "break_lock",
                           CLS_METHOD_RD | CLS_METHOD_WR,
@@ -532,7 +534,7 @@ void __cls_init()
                           CLS_METHOD_RD,
                           list_locks, &h_list_locks);
   cls_register_cxx_method(h_class, "assert_locked",
-                          CLS_METHOD_RD,
+                          CLS_METHOD_RD | CLS_METHOD_PROMOTE,
                           assert_locked, &h_assert_locked);
 
   return;

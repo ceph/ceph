@@ -20,10 +20,12 @@
 #include "common/config.h"
 #include "common/errno.h"
 #include "common/strtol.h"
-
+#include "global/global_context.h"
 #include "global/global_init.h"
 #include "include/stringify.h"
-#include "os/LevelDBStore.h"
+#include "include/utime.h"
+#include "common/Clock.h"
+#include "kv/KeyValueDB.h"
 
 using namespace std;
 
@@ -33,8 +35,8 @@ class StoreTool
   string store_path;
 
   public:
-  StoreTool(const string &path) : store_path(path) {
-    LevelDBStore *db_ptr = new LevelDBStore(g_ceph_context, store_path);
+  StoreTool(string type, const string &path) : store_path(path) {
+    KeyValueDB *db_ptr = KeyValueDB::create(g_ceph_context, type, path);
     assert(!db_ptr->open(std::cerr));
     db.reset(db_ptr);
   }
@@ -139,7 +141,8 @@ class StoreTool
     return (ret == 0);
   }
 
-  int copy_store_to(const string &other_path, const int num_keys_per_tx) {
+  int copy_store_to(string type, const string &other_path,
+		    const int num_keys_per_tx) {
 
     if (num_keys_per_tx <= 0) {
       std::cerr << "must specify a number of keys/tx > 0" << std::endl;
@@ -147,8 +150,8 @@ class StoreTool
     }
 
     // open or create a leveldb store at @p other_path
-    LevelDBStore other(g_ceph_context, other_path);
-    int err = other.create_and_open(std::cerr);
+    KeyValueDB *other = KeyValueDB::create(g_ceph_context, type, other_path);
+    int err = other->create_and_open(std::cerr);
     if (err < 0)
       return err;
 
@@ -163,7 +166,7 @@ class StoreTool
     do {
       int num_keys = 0;
 
-      KeyValueDB::Transaction tx = other.get_transaction();
+      KeyValueDB::Transaction tx = other->get_transaction();
 
 
       while (it->valid() && num_keys < num_keys_per_tx) {
@@ -181,7 +184,7 @@ class StoreTool
       total_keys += num_keys;
 
       if (num_keys > 0)
-        other.submit_transaction_sync(tx);
+        other->submit_transaction_sync(tx);
 
       utime_t cur_duration = ceph_clock_now(g_ceph_context) - started_at;
       std::cout << "ts = " << cur_duration << "s, copied " << total_keys
@@ -206,7 +209,7 @@ class StoreTool
 
 void usage(const char *pname)
 {
-  std::cerr << "Usage: " << pname << " <store path> command [args...]\n"
+  std::cerr << "Usage: " << pname << " <leveldb|rocksdb|...> <store path> command [args...]\n"
     << "\n"
     << "Commands:\n"
     << "  list [prefix]\n"
@@ -233,20 +236,21 @@ int main(int argc, const char *argv[])
   common_init_finish(g_ceph_context);
 
 
-  if (args.size() < 2) {
+  if (args.size() < 3) {
     usage(argv[0]);
     return 1;
   }
 
-  string path(args[0]);
-  string cmd(args[1]);
+  string type(args[0]);
+  string path(args[1]);
+  string cmd(args[2]);
 
-  StoreTool st(path);
+  StoreTool st(type, path);
 
   if (cmd == "list" || cmd == "list-crc") {
     string prefix;
-    if (argc > 3)
-      prefix = argv[3];
+    if (argc > 4)
+      prefix = argv[4];
 
     bool do_crc = (cmd == "list-crc");
 
@@ -254,13 +258,13 @@ int main(int argc, const char *argv[])
 
   } else if (cmd == "exists") {
     string key;
-    if (argc < 4) {
+    if (argc < 5) {
       usage(argv[0]);
       return 1;
     }
-    string prefix(argv[3]);
-    if (argc > 4)
-      key = argv[4];
+    string prefix(argv[4]);
+    if (argc > 5)
+      key = argv[5];
 
     bool ret = st.exists(prefix, key);
     std::cout << "(" << prefix << ", " << key << ") "
@@ -269,12 +273,12 @@ int main(int argc, const char *argv[])
     return (ret ? 0 : 1);
 
   } else if (cmd == "get") {
-    if (argc < 5) {
+    if (argc < 6) {
       usage(argv[0]);
       return 1;
     }
-    string prefix(argv[3]);
-    string key(argv[4]);
+    string prefix(argv[4]);
+    string key(argv[5]);
 
     bool exists = false;
     bufferlist bl = st.get(prefix, key, exists);
@@ -285,22 +289,25 @@ int main(int argc, const char *argv[])
     }
     std::cout << std::endl;
 
-    if (argc >= 6) {
-      string subcmd(argv[5]);
-      string out(argv[6]);
-
+    if (argc >= 7) {
+      string subcmd(argv[6]);
       if (subcmd != "out") {
         std::cerr << "unrecognized subcmd '" << subcmd << "'"
                   << std::endl;
         return 1;
       }
+      if (argc < 8) {
+        std::cerr << "output path not specified" << std::endl;
+        return 1;
+      }
+      string out(argv[7]);
 
       if (out.empty()) {
         std::cerr << "unspecified out file" << std::endl;
         return 1;
       }
 
-      int err = bl.write_file(argv[6], 0644);
+      int err = bl.write_file(argv[7], 0644);
       if (err < 0) {
         std::cerr << "error writing value to '" << out << "': "
                   << cpp_strerror(err) << std::endl;
@@ -313,12 +320,12 @@ int main(int argc, const char *argv[])
     }
 
   } else if (cmd == "crc") {
-    if (argc < 5) {
+    if (argc < 6) {
       usage(argv[0]);
       return 1;
     }
-    string prefix(argv[3]);
-    string key(argv[4]);
+    string prefix(argv[4]);
+    string key(argv[5]);
 
     bool exists = false;
     bufferlist bl = st.get(prefix, key, exists);
@@ -332,15 +339,15 @@ int main(int argc, const char *argv[])
   } else if (cmd == "get-size") {
     std::cout << "estimated store size: " << st.get_size() << std::endl;
 
-    if (argc < 4)
+    if (argc < 5)
       return 0;
 
-    if (argc < 5) {
+    if (argc < 6) {
       usage(argv[0]);
       return 1;
     }
-    string prefix(argv[3]);
-    string key(argv[4]);
+    string prefix(argv[4]);
+    string key(argv[5]);
 
     bool exists = false;
     bufferlist bl = st.get(prefix, key, exists);
@@ -353,25 +360,25 @@ int main(int argc, const char *argv[])
               << ") size " << si_t(bl.length()) << std::endl;
 
   } else if (cmd == "set") {
-    if (argc < 7) {
+    if (argc < 8) {
       usage(argv[0]);
       return 1;
     }
-    string prefix(argv[3]);
-    string key(argv[4]);
-    string subcmd(argv[5]);
+    string prefix(argv[4]);
+    string key(argv[5]);
+    string subcmd(argv[6]);
 
     bufferlist val;
     string errstr;
     if (subcmd == "ver") {
-      version_t v = (version_t) strict_strtoll(argv[6], 10, &errstr);
+      version_t v = (version_t) strict_strtoll(argv[7], 10, &errstr);
       if (!errstr.empty()) {
         std::cerr << "error reading version: " << errstr << std::endl;
         return 1;
       }
       ::encode(v, val);
     } else if (subcmd == "in") {
-      int ret = val.read_file(argv[6], &errstr);
+      int ret = val.read_file(argv[7], &errstr);
       if (ret < 0 || !errstr.empty()) {
         std::cerr << "error reading file: " << errstr << std::endl;
         return 1;
@@ -390,21 +397,21 @@ int main(int argc, const char *argv[])
     }
   } else if (cmd == "store-copy") {
     int num_keys_per_tx = 128; // magic number that just feels right.
-    if (argc < 4) {
+    if (argc < 5) {
       usage(argv[0]);
       return 1;
-    } else if (argc > 4) {
+    } else if (argc > 5) {
       string err;
-      num_keys_per_tx = strict_strtol(argv[4], 10, &err);
+      num_keys_per_tx = strict_strtol(argv[5], 10, &err);
       if (!err.empty()) {
         std::cerr << "invalid num_keys_per_tx: " << err << std::endl;
         return 1;
       }
     }
 
-    int ret = st.copy_store_to(argv[3], num_keys_per_tx);
+    int ret = st.copy_store_to(argv[1], argv[4], num_keys_per_tx);
     if (ret < 0) {
-      std::cerr << "error copying store to path '" << argv[3]
+      std::cerr << "error copying store to path '" << argv[4]
                 << "': " << cpp_strerror(ret) << std::endl;
       return 1;
     }

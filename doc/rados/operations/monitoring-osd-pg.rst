@@ -118,7 +118,7 @@ arise, don't panic. Common examples include:
 - You added or removed an OSD. Then, CRUSH reassigned the placement group to 
   other OSDs--thereby changing the composition of the Acting Set and spawning
   the migration of data with a "backfill" process.
-- An OSD was ``down``, was restared, and is now ``recovering``.
+- An OSD was ``down``, was restarted, and is now ``recovering``.
 - An OSD in the Acting Set is ``down`` or unable to service requests, 
   and another OSD has temporarily assumed its duties.
 
@@ -230,9 +230,9 @@ few cases:
    Placement group IDs consist of the pool number (not pool name) followed 
    by a period (.) and the placement group ID--a hexadecimal number. You
    can view pool numbers and their names from the output of ``ceph osd 
-   lspools``. The default pool names ``data``, ``metadata`` and ``rbd`` 
-   correspond to pool numbers ``0``, ``1`` and ``2`` respectively. A fully 
-   qualified placement group ID has the following form::
+   lspools``. For example, the default pool ``rbd`` corresponds to
+   pool number ``0``. A fully qualified placement group ID has the
+   following form::
    
    	{pool-num}.{pg-id}
    

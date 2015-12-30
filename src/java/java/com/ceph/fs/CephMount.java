@@ -94,7 +94,11 @@ public class CephMount {
    * finding or linking in the shared JNI library.
    */
   static {
-    CephNativeLoader.checkLoaded();
+    loadLibrary();
+  }
+
+  static synchronized void loadLibrary() {
+    CephNativeLoader.getInstance().loadLibrary();
   }
 
   /*

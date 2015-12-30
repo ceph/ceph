@@ -28,7 +28,7 @@ public:
     int m_id;
     spg_t m_pgid;
     coll_t m_coll;
-    hobject_t m_meta_obj;
+    ghobject_t m_meta_obj;
     ObjectStore::Sequencer m_osr;
     map<int, hobject_t*> m_objects;
     int m_next_object_id;
@@ -37,7 +37,7 @@ public:
       : m_id(i),
 	m_pgid(pg_t(i, 1), shard_id_t::NO_SHARD),
 	m_coll(m_pgid),
-      m_meta_obj(sobject_t(object_t(meta_obj_buf), CEPH_NOSNAP)),
+	m_meta_obj(hobject_t(sobject_t(object_t(meta_obj_buf), CEPH_NOSNAP))),
       m_osr(coll_buf), m_next_object_id(0) {
     }
     ~coll_entry_t();
@@ -55,10 +55,6 @@ public:
     hobject_t *get_obj(int id, bool remove);
     hobject_t *get_obj_at(int pos, bool remove, int *key = NULL);
   };
-
-  /* kept in upper case for consistency with coll_t's */
-  static const coll_t META_COLL;
-  static const coll_t TEMP_COLL;
 
  protected:
   boost::shared_ptr<ObjectStore> m_store;

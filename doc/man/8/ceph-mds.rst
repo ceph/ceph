@@ -47,6 +47,17 @@ Options
 
    Debug mode: like ``-f``, but also send all log output to stderr.
 
+.. option:: --setuser userorgid
+
+   Set uid after starting.  If a username is specified, the user
+   record is looked up to get a uid and a gid, and the gid is also set
+   as well, unless --setgroup is also specified.
+
+.. option:: --setgroup grouporgid
+
+   Set gid after starting.  If a group name is specified the group
+   record is looked up to get a gid.
+
 .. option:: -c ceph.conf, --conf=ceph.conf
 
    Use *ceph.conf* configuration file instead of the default

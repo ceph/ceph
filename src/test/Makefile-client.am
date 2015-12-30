@@ -29,7 +29,7 @@ libradostest_la_SOURCES = \
 	test/librados/TestCase.cc
 noinst_LTLIBRARIES += libradostest.la
 libradostest_la_CXXFLAGS = $(UNITTEST_CXXFLAGS)
-RADOS_TEST_LDADD = libradostest.la
+RADOS_TEST_LDADD = libradostest.la $(LIBCOMMON) $(CRYPTO_LIBS)
 
 ceph_test_rados_SOURCES = \
 	test/osd/TestRados.cc \
@@ -67,6 +67,10 @@ bin_DEBUGPROGRAMS += ceph_smalliobench
 ceph_omapbench_SOURCES = test/omap_bench.cc
 ceph_omapbench_LDADD = $(LIBRADOS) $(CEPH_GLOBAL)
 bin_DEBUGPROGRAMS += ceph_omapbench
+
+ceph_objectstore_bench_SOURCES = test/objectstore_bench.cc
+ceph_objectstore_bench_LDADD = $(LIBOS) $(CEPH_GLOBAL)
+bin_DEBUGPROGRAMS += ceph_objectstore_bench
 
 if LINUX
 ceph_kvstorebench_SOURCES = \
@@ -127,7 +131,8 @@ bin_DEBUGPROGRAMS += ceph_multi_stress_watch
 ceph_test_cls_rbd_SOURCES = test/cls_rbd/test_cls_rbd.cc
 ceph_test_cls_rbd_LDADD = \
 	$(LIBRADOS) libcls_rbd_client.la libcls_lock_client.la \
-	$(LIBCOMMON) $(UNITTEST_LDADD) $(RADOS_TEST_LDADD)
+	$(LIBCOMMON) $(UNITTEST_LDADD) $(RADOS_TEST_LDADD) $(CRYPTO_LIBS) \
+	$(EXTRALIBS)
 ceph_test_cls_rbd_CXXFLAGS = $(UNITTEST_CXXFLAGS)
 bin_DEBUGPROGRAMS += ceph_test_cls_rbd
 
@@ -172,10 +177,24 @@ ceph_test_cls_hello_LDADD = \
 ceph_test_cls_hello_CXXFLAGS = $(UNITTEST_CXXFLAGS)
 bin_DEBUGPROGRAMS += ceph_test_cls_hello
 
+ceph_test_cls_numops_SOURCES = test/cls_numops/test_cls_numops.cc
+ceph_test_cls_numops_LDADD = \
+    $(LIBRADOS) libcls_numops_client.la \
+    $(UNITTEST_LDADD) $(CEPH_GLOBAL) $(RADOS_TEST_LDADD)
+ceph_test_cls_numops_CXXFLAGS = $(UNITTEST_CXXFLAGS)
+bin_DEBUGPROGRAMS += ceph_test_cls_numops
+
+ceph_test_cls_journal_SOURCES = test/cls_journal/test_cls_journal.cc
+ceph_test_cls_journal_LDADD = \
+        libcls_journal_client.la $(LIBRADOS) \
+        $(LIBCOMMON) $(CRYPTO_LIBS) $(UNITTEST_LDADD) $(RADOS_TEST_LDADD) -luuid
+ceph_test_cls_journal_CXXFLAGS = $(UNITTEST_CXXFLAGS)
+bin_DEBUGPROGRAMS += ceph_test_cls_journal
+
 ceph_test_rados_api_cmd_SOURCES = test/librados/cmd.cc
 ceph_test_rados_api_cmd_LDADD = \
 	$(LIBCOMMON) $(LIBRADOS) $(CRYPTO_LIBS) \
-	$(UNITTEST_LDADD) $(RADOS_TEST_LDADD) -luuid
+	$(UNITTEST_LDADD) $(RADOS_TEST_LDADD)
 ceph_test_rados_api_cmd_CXXFLAGS = $(UNITTEST_CXXFLAGS)
 bin_DEBUGPROGRAMS += ceph_test_rados_api_cmd
 
@@ -270,6 +289,9 @@ librados_test_stub_la_SOURCES = \
 	test/librados_test_stub/TestRadosClient.cc \
 	test/librados_test_stub/TestWatchNotify.cc
 noinst_HEADERS += \
+	test/librados_test_stub/LibradosTestStub.h \
+	test/librados_test_stub/MockTestMemIoCtxImpl.h \
+	test/librados_test_stub/MockTestMemRadosClient.h \
 	test/librados_test_stub/TestClassHandler.h \
 	test/librados_test_stub/TestRadosClient.h \
 	test/librados_test_stub/TestMemRadosClient.h \
@@ -278,6 +300,24 @@ noinst_HEADERS += \
 	test/librados_test_stub/TestIoCtxImpl.h
 noinst_LTLIBRARIES += librados_test_stub.la
 
+unittest_journal_SOURCES = \
+	test/journal/test_main.cc \
+        test/journal/test_Entry.cc \
+	test/journal/test_FutureImpl.cc \
+	test/journal/test_Journaler.cc \
+	test/journal/test_JournalMetadata.cc \
+	test/journal/test_JournalPlayer.cc \
+	test/journal/test_JournalRecorder.cc \
+	test/journal/test_JournalTrimmer.cc \
+	test/journal/test_ObjectPlayer.cc \
+	test/journal/test_ObjectRecorder.cc \
+	test/journal/RadosTestFixture.cc
+unittest_journal_CXXFLAGS = $(UNITTEST_CXXFLAGS)
+unittest_journal_LDADD = \
+	libjournal.la libcls_journal_client.la \
+	librados_test_stub.la librados_internal.la \
+	$(UNITTEST_LDADD) $(CEPH_GLOBAL) $(RADOS_TEST_LDADD) $(LIBRADOS)
+check_TESTPROGRAMS += unittest_journal
 
 if WITH_RBD
 ceph_smalliobenchrbd_SOURCES = \
@@ -303,25 +343,42 @@ librbd_test_la_SOURCES = \
 	test/librbd/test_support.cc \
 	test/librbd/test_librbd.cc \
 	test/librbd/test_ImageWatcher.cc \
-	test/librbd/test_internal.cc
+	test/librbd/test_internal.cc \
+	test/librbd/test_JournalEntries.cc \
+	test/librbd/test_JournalReplay.cc \
+	test/librbd/test_ObjectMap.cc
 librbd_test_la_CXXFLAGS = $(UNITTEST_CXXFLAGS)
 noinst_LTLIBRARIES += librbd_test.la
 
 unittest_librbd_SOURCES = \
-        test/librbd/test_main.cc
+        test/librbd/test_main.cc \
+	test/librbd/test_mock_fixture.cc \
+	test/librbd/test_mock_ExclusiveLock.cc \
+	test/librbd/exclusive_lock/test_mock_AcquireRequest.cc \
+	test/librbd/exclusive_lock/test_mock_ReleaseRequest.cc \
+	test/librbd/object_map/test_mock_InvalidateRequest.cc \
+	test/librbd/object_map/test_mock_LockRequest.cc \
+	test/librbd/object_map/test_mock_RefreshRequest.cc \
+	test/librbd/object_map/test_mock_ResizeRequest.cc \
+	test/librbd/object_map/test_mock_SnapshotCreateRequest.cc \
+	test/librbd/object_map/test_mock_SnapshotRemoveRequest.cc \
+	test/librbd/object_map/test_mock_SnapshotRollbackRequest.cc \
+	test/librbd/object_map/test_mock_UnlockRequest.cc \
+	test/librbd/object_map/test_mock_UpdateRequest.cc \
+	test/librbd/operation/test_mock_SnapshotCreateRequest.cc \
+	test/librbd/operation/test_mock_SnapshotProtectRequest.cc \
+	test/librbd/operation/test_mock_SnapshotRemoveRequest.cc \
+	test/librbd/operation/test_mock_SnapshotUnprotectRequest.cc
 unittest_librbd_CXXFLAGS = $(UNITTEST_CXXFLAGS) -DTEST_LIBRBD_INTERNALS
 unittest_librbd_LDADD = \
 	librbd_test.la librbd_api.la librbd_internal.la $(LIBRBD_TYPES) \
 	libcls_rbd_client.la libcls_lock_client.la \
+	libjournal.la libcls_journal_client.la \
 	librados_test_stub.la librados_internal.la \
-	$(LIBOSDC) $(UNITTEST_LDADD) \
+	$(LIBRADOS) $(LIBOSDC) $(UNITTEST_LDADD) \
 	$(CEPH_GLOBAL) $(RADOS_TEST_LDADD)
 check_PROGRAMS += unittest_librbd
 check_SCRIPTS += test/run-rbd-unit-tests.sh
-
-if VALGRIND_ENABLED
-check_SCRIPTS += test/run-rbd-valgrind-unit-tests.sh
-endif
 
 ceph_test_librbd_SOURCES = \
         test/librbd/test_main.cc
@@ -329,6 +386,7 @@ ceph_test_librbd_CXXFLAGS = $(UNITTEST_CXXFLAGS) -DTEST_LIBRBD_INTERNALS
 ceph_test_librbd_LDADD = \
 	librbd_test.la librbd_api.la librbd_internal.la $(LIBRBD_TYPES) \
 	libcls_rbd_client.la libcls_lock_client.la \
+	libjournal.la libcls_journal_client.la \
 	librados_api.la $(LIBRADOS_DEPS) $(UNITTEST_LDADD) \
 	$(CEPH_GLOBAL) $(RADOS_TEST_LDADD)
 bin_DEBUGPROGRAMS += ceph_test_librbd
@@ -339,21 +397,28 @@ ceph_test_librbd_api_SOURCES = \
 	test/librbd/test_main.cc
 ceph_test_librbd_api_CXXFLAGS = $(UNITTEST_CXXFLAGS)
 ceph_test_librbd_api_LDADD = \
-	$(LIBRBD) $(LIBRADOS) $(UNITTEST_LDADD) \
-	$(CEPH_GLOBAL) $(RADOS_TEST_LDADD)
+	$(LIBRBD) $(LIBRADOS) $(LIBCOMMON) $(UNITTEST_LDADD) $(RADOS_TEST_LDADD)
 bin_DEBUGPROGRAMS += ceph_test_librbd_api
 
-if WITH_LTTNG
-unittest_librbd_LDADD += $(LIBRBD_TP)
-ceph_test_librbd_LDADD += $(LIBRBD_TP)
-ceph_test_librbd_api_LDADD += $(LIBRBD_TP)
-endif
+noinst_HEADERS += \
+	test/librbd/test_fixture.h \
+	test/librbd/test_mock_fixture.h \
+	test/librbd/test_support.h \
+	test/librbd/mock/MockAioImageRequestWQ.h \
+	test/librbd/mock/MockContextWQ.h \
+	test/librbd/mock/MockExclusiveLock.h \
+	test/librbd/mock/MockImageCtx.h \
+	test/librbd/mock/MockImageWatcher.h \
+	test/librbd/mock/MockJournal.h \
+	test/librbd/mock/MockObjectMap.h \
+	test/librbd/mock/MockReadahead.h \
+	test/librbd/object_map/mock/MockInvalidateRequest.h
 
 if LINUX
 ceph_test_librbd_fsx_SOURCES = test/librbd/fsx.cc
 ceph_test_librbd_fsx_LDADD = \
 	$(LIBKRBD) $(LIBRBD) $(LIBRADOS) \
-	$(CRYPTO_LIBS) $(PTHREAD_LIBS) -luuid
+	$(CRYPTO_LIBS) $(PTHREAD_LIBS)
 ceph_test_librbd_fsx_CXXFLAGS = $(UNITTEST_CXXFLAGS)
 bin_DEBUGPROGRAMS += ceph_test_librbd_fsx
 endif
@@ -432,8 +497,12 @@ ceph_test_libcephfs_SOURCES = \
 	test/libcephfs/readdir_r_cb.cc \
 	test/libcephfs/caps.cc \
 	test/libcephfs/multiclient.cc \
-	test/libcephfs/flock.cc
-ceph_test_libcephfs_LDADD = $(LIBCEPHFS) $(UNITTEST_LDADD)
+	test/libcephfs/access.cc
+if LINUX
+ceph_test_libcephfs_SOURCES += test/libcephfs/flock.cc
+endif # LINUX
+
+ceph_test_libcephfs_LDADD = $(LIBRADOS) $(LIBCEPHFS) $(LIBCOMMON) $(UNITTEST_LDADD)
 ceph_test_libcephfs_CXXFLAGS = $(UNITTEST_CXXFLAGS)
 bin_DEBUGPROGRAMS += ceph_test_libcephfs
 
@@ -442,7 +511,6 @@ unittest_encoding_SOURCES = test/encoding.cc
 ceph_test_c_headers_SOURCES = test/test_c_headers.c
 ceph_test_c_headers_LDADD = $(LIBRADOS) $(LIBCEPHFS)
 ceph_test_c_headers_CFLAGS = $(AM_CFLAGS) \
-	-Werror \
 	-Wstrict-prototypes \
 	-Wredundant-decls \
 	-Wall \
@@ -457,9 +525,11 @@ ceph_test_c_headers_CFLAGS = $(AM_CFLAGS) \
 	-Wformat-y2k \
 	-Winit-self \
 	-Wignored-qualifiers \
-	-Wold-style-declaration \
 	-Wold-style-definition \
 	-Wtype-limits
+if !CLANG
+ceph_test_c_headers_CFLAGS += -Werror -Wold-style-declaration
+endif # !CLANG
 bin_DEBUGPROGRAMS += ceph_test_c_headers
 
 endif # WITH_CEPHFS
@@ -497,7 +567,7 @@ ceph_test_cors_SOURCES = test/test_cors.cc
 ceph_test_cors_LDADD = \
 	$(LIBRADOS) $(LIBRGW) $(CEPH_GLOBAL) \
 	$(UNITTEST_LDADD) \
-	-lcurl -luuid -lexpat
+	-lcurl -lexpat
 ceph_test_cors_CXXFLAGS = $(UNITTEST_CXXFLAGS)
 bin_DEBUGPROGRAMS += ceph_test_cors
 
@@ -505,16 +575,25 @@ ceph_test_rgw_manifest_SOURCES = test/rgw/test_rgw_manifest.cc
 ceph_test_rgw_manifest_LDADD = \
 	$(LIBRADOS) $(LIBRGW) $(LIBRGW_DEPS) $(CEPH_GLOBAL) \
 	$(UNITTEST_LDADD) $(CRYPTO_LIBS) \
-	-lcurl -luuid -lexpat
+	-lcurl -lexpat
 
 ceph_test_rgw_manifest_CXXFLAGS = $(UNITTEST_CXXFLAGS)
 bin_DEBUGPROGRAMS += ceph_test_rgw_manifest
+
+ceph_test_rgw_obj_SOURCES = test/rgw/test_rgw_obj.cc
+ceph_test_rgw_obj_LDADD = \
+	$(LIBRADOS) $(LIBRGW) $(LIBRGW_DEPS) $(CEPH_GLOBAL) \
+	$(UNITTEST_LDADD) $(CRYPTO_LIBS) \
+	-lcurl -luuid -lexpat
+
+ceph_test_rgw_obj_CXXFLAGS = $(UNITTEST_CXXFLAGS)
+bin_DEBUGPROGRAMS += ceph_test_rgw_obj
 
 ceph_test_cls_rgw_meta_SOURCES = test/test_rgw_admin_meta.cc
 ceph_test_cls_rgw_meta_LDADD = \
 	$(LIBRADOS) $(LIBRGW) $(CEPH_GLOBAL) \
 	$(UNITTEST_LDADD) $(CRYPTO_LIBS) \
-	-lcurl -luuid -lexpat \
+	-lcurl -lexpat \
 	libcls_version_client.a libcls_log_client.a \
 	libcls_statelog_client.a libcls_refcount_client.la \
 	libcls_rgw_client.la libcls_user_client.a libcls_lock_client.la
@@ -525,7 +604,7 @@ ceph_test_cls_rgw_log_SOURCES = test/test_rgw_admin_log.cc
 ceph_test_cls_rgw_log_LDADD = \
 	$(LIBRADOS) $(LIBRGW) $(CEPH_GLOBAL) \
 	$(UNITTEST_LDADD) $(CRYPTO_LIBS) \
-	-lcurl -luuid -lexpat \
+	-lcurl -lexpat \
 	libcls_version_client.a libcls_log_client.a \
 	libcls_statelog_client.a libcls_refcount_client.la \
 	libcls_rgw_client.la libcls_user_client.a libcls_lock_client.la
@@ -536,8 +615,8 @@ ceph_test_cls_rgw_opstate_SOURCES = test/test_rgw_admin_opstate.cc
 ceph_test_cls_rgw_opstate_LDADD = \
 	$(LIBRADOS) $(LIBRGW) $(CEPH_GLOBAL) \
 	$(UNITTEST_LDADD) $(CRYPTO_LIBS) \
-	-lcurl -luuid -lexpat \
-	libcls_version_client.a libcls_log_client.a \
+	-lcurl -lexpat \
+	libcls_version_client.a libcls_log_client.a  libcls_timeindex_client.a \
 	libcls_statelog_client.a libcls_refcount_client.la \
 	libcls_rgw_client.la libcls_user_client.a libcls_lock_client.la \
 	$(LIBRADOS)

@@ -27,8 +27,6 @@
 /librbd1
 /radosgw-dbg
 /radosgw
-/rest-bench-dbg
-/rest-bench
 /python-ceph
 /python-rados
 /python-rbd

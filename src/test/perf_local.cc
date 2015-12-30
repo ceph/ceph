@@ -35,7 +35,9 @@
 // * Create a new entry for the test in the #tests table.
 #include <vector>
 #include <sched.h>
-#if defined(__x86_64__) || defined(__amd64__)
+
+#include "acconfig.h"
+#ifdef HAVE_SSE
 #include <xmmintrin.h>
 #endif
 
@@ -379,6 +381,7 @@ double cond_ping_pong()
 // probably pick worse values.
 double div32()
 {
+#if defined(__i386__) || defined(__x86_64__)
   int count = 1000000;
   uint64_t start = Cycles::rdtsc();
   // NB: Expect an x86 processor exception is there's overflow.
@@ -395,6 +398,9 @@ double div32()
   }
   uint64_t stop = Cycles::rdtsc();
   return Cycles::to_seconds(stop - start)/count;
+#else
+  return -1;
+#endif
 }
 
 // Measure the cost of a 64-bit divide. Divides don't take a constant
@@ -403,6 +409,7 @@ double div32()
 // probably pick worse values.
 double div64()
 {
+#if defined(__x86_64__) || defined(__amd64__)
   int count = 1000000;
   // NB: Expect an x86 processor exception is there's overflow.
   uint64_t start = Cycles::rdtsc();
@@ -419,6 +426,9 @@ double div64()
   }
   uint64_t stop = Cycles::rdtsc();
   return Cycles::to_seconds(stop - start)/count;
+#else
+  return -1;
+#endif
 }
 
 // Measure the cost of calling a non-inlined function.
@@ -514,6 +524,9 @@ double memcpy_shared(size_t size)
 {
   int count = 1000000;
   char src[size], dst[size];
+
+  memset(src, 0, sizeof(src));
+
   uint64_t start = Cycles::rdtsc();
   for (int i = 0; i < count; i++) {
     memcpy(dst, src, size);
@@ -596,6 +609,7 @@ double perf_cycles_to_nanoseconds()
 }
 
 
+#ifdef HAVE_SSE
 /**
  * Prefetch the cache lines containing [object, object + numBytes) into the
  * processor's caches.
@@ -608,17 +622,17 @@ double perf_cycles_to_nanoseconds()
  */
 static inline void prefetch(const void *object, uint64_t num_bytes)
 {
-#if defined(__x86_64__) || defined(__amd64__)
     uint64_t offset = reinterpret_cast<uint64_t>(object) & 0x3fUL;
     const char* p = reinterpret_cast<const char*>(object) - offset;
     for (uint64_t i = 0; i < offset + num_bytes; i += 64)
         _mm_prefetch(p + i, _MM_HINT_T0);
-#endif
 }
+#endif
 
 // Measure the cost of the prefetch instruction.
 double perf_prefetch()
 {
+#ifdef HAVE_SSE
   uint64_t total_ticks = 0;
   int count = 10;
   char buf[16 * 64];
@@ -647,8 +661,12 @@ double perf_prefetch()
     total_ticks += stop - start;
   }
   return Cycles::to_seconds(total_ticks) / count / 16;
+#else
+  return -1;
+#endif
 }
 
+#if defined(__x86_64__)
 /**
  * This function is used to seralize machine instructions so that no
  * instructions that appear after it in the current thread can run before any
@@ -664,9 +682,11 @@ static inline void serialize() {
         : "=a" (eax), "=b" (ebx), "=c" (ecx), "=d" (edx)
         : "a" (1U));
 }
+#endif
 
 // Measure the cost of cpuid
 double perf_serialize() {
+#if defined(__x86_64__)
   int count = 1000000;
   uint64_t start = Cycles::rdtsc();
   for (int i = 0; i < count; i++) {
@@ -674,11 +694,15 @@ double perf_serialize() {
   }
   uint64_t stop = Cycles::rdtsc();
   return Cycles::to_seconds(stop - start)/count;
+#else
+  return -1;
+#endif
 }
 
 // Measure the cost of an lfence instruction.
 double lfence()
 {
+#ifdef HAVE_SSE2
   int count = 1000000;
   uint64_t start = Cycles::rdtsc();
   for (int i = 0; i < count; i++) {
@@ -686,11 +710,15 @@ double lfence()
   }
   uint64_t stop = Cycles::rdtsc();
   return Cycles::to_seconds(stop - start)/count;
+#else
+  return -1;
+#endif
 }
 
 // Measure the cost of an sfence instruction.
 double sfence()
 {
+#ifdef HAVE_SSE
   int count = 1000000;
   uint64_t start = Cycles::rdtsc();
   for (int i = 0; i < count; i++) {
@@ -698,6 +726,9 @@ double sfence()
   }
   uint64_t stop = Cycles::rdtsc();
   return Cycles::to_seconds(stop - start)/count;
+#else
+  return -1;
+#endif
 }
 
 // Measure the cost of acquiring and releasing a SpinLock (assuming the
@@ -757,7 +788,7 @@ double perf_timer()
     timer.cancel_event(c[i]);
   }
   uint64_t stop = Cycles::rdtsc();
-  delete c;
+  delete[] c;
   return Cycles::to_seconds(stop - start)/count;
 }
 
@@ -968,7 +999,9 @@ void run_test(TestInfo& info)
 {
   double secs = info.func();
   int width = printf("%-24s ", info.name);
-  if (secs < 1.0e-06) {
+  if (secs == -1) {
+    width += printf(" architecture nonsupport ");
+  } else if (secs < 1.0e-06) {
     width += printf("%8.2fns", 1e09*secs);
   } else if (secs < 1.0e-03) {
     width += printf("%8.2fus", 1e06*secs);

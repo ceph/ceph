@@ -89,7 +89,7 @@ Install ceph-deploy
 
 To install ``ceph-deploy``, execute the following:: 
 
-	wget -q -O- 'https://ceph.com/git/?p=ceph.git;a=blob_plain;f=keys/release.asc' | sudo apt-key add -
+	wget -q -O- 'https://download.ceph.com/keys/release.asc' | sudo apt-key add -
 	echo deb http://ceph.com/debian-dumpling/ $(lsb_release -sc) main | sudo tee /etc/apt/sources.list.d/ceph.list
 	sudo apt-get update	
 	sudo apt-get install ceph-deploy
@@ -106,4 +106,4 @@ connections, traffic forwarding, etc. to allow what you need).
 Once you have completed this pre-flight checklist, you are ready to begin using
 ``ceph-deploy``.
 
-.. _OS Recommendations: ../../../install/os-recommendations
+.. _OS Recommendations: ../../../start/os-recommendations

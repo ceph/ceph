@@ -1,0 +1,11 @@
+# begin crush map
+
+# devices
+
+# types
+
+# buckets
+
+# rules
+
+# end crush map

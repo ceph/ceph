@@ -256,7 +256,7 @@ void inline_data_t::decode(bufferlist::iterator &p)
  */
 void inode_t::encode(bufferlist &bl) const
 {
-  ENCODE_START(11, 6, bl);
+  ENCODE_START(13, 6, bl);
 
   ::encode(ino, bl);
   ::encode(rdev, bl);
@@ -298,12 +298,17 @@ void inode_t::encode(bufferlist &bl) const
   ::encode(inline_data, bl);
   ::encode(quota, bl);
 
+  ::encode(stray_prior_path, bl);
+
+  ::encode(last_scrub_version, bl);
+  ::encode(last_scrub_stamp, bl);
+
   ENCODE_FINISH(bl);
 }
 
 void inode_t::decode(bufferlist::iterator &p)
 {
-  DECODE_START_LEGACY_COMPAT_LEN(11, 6, 6, p);
+  DECODE_START_LEGACY_COMPAT_LEN(13, 6, 6, p);
 
   ::decode(ino, p);
   ::decode(rdev, p);
@@ -368,6 +373,15 @@ void inode_t::decode(bufferlist::iterator &p)
   if (struct_v >= 11)
     ::decode(quota, p);
 
+  if (struct_v >= 12) {
+    ::decode(stray_prior_path, p);
+  }
+
+  if (struct_v >= 13) {
+    ::decode(last_scrub_version, p);
+    ::decode(last_scrub_stamp, p);
+  }
+
   DECODE_FINISH(p);
 }
 
@@ -430,6 +444,8 @@ void inode_t::dump(Formatter *f) const
   f->dump_unsigned("file_data_version", file_data_version);
   f->dump_unsigned("xattr_version", xattr_version);
   f->dump_unsigned("backtrace_version", backtrace_version);
+
+  f->dump_string("stray_prior_path", stray_prior_path);
 }
 
 void inode_t::generate_test_instances(list<inode_t*>& ls)
@@ -443,6 +459,7 @@ void inode_t::generate_test_instances(list<inode_t*>& ls)
 int inode_t::compare(const inode_t &other, bool *divergent) const
 {
   assert(ino == other.ino);
+  *divergent = false;
   if (version == other.version) {
     if (rdev != other.rdev ||
         ctime != other.ctime ||
@@ -551,25 +568,39 @@ void old_inode_t::generate_test_instances(list<old_inode_t*>& ls)
  */
 void fnode_t::encode(bufferlist &bl) const
 {
-  ENCODE_START(2, 2, bl);
+  ENCODE_START(4, 3, bl);
   ::encode(version, bl);
   ::encode(snap_purged_thru, bl);
   ::encode(fragstat, bl);
   ::encode(accounted_fragstat, bl);
   ::encode(rstat, bl);
   ::encode(accounted_rstat, bl);
+  ::encode(damage_flags, bl);
+  ::encode(recursive_scrub_version, bl);
+  ::encode(recursive_scrub_stamp, bl);
+  ::encode(localized_scrub_version, bl);
+  ::encode(localized_scrub_stamp, bl);
   ENCODE_FINISH(bl);
 }
 
 void fnode_t::decode(bufferlist::iterator &bl)
 {
-  DECODE_START_LEGACY_COMPAT_LEN(2, 2, 2, bl);
+  DECODE_START_LEGACY_COMPAT_LEN(3, 2, 2, bl);
   ::decode(version, bl);
   ::decode(snap_purged_thru, bl);
   ::decode(fragstat, bl);
   ::decode(accounted_fragstat, bl);
   ::decode(rstat, bl);
   ::decode(accounted_rstat, bl);
+  if (struct_v >= 3) {
+    ::decode(damage_flags, bl);
+  }
+  if (struct_v >= 4) {
+    ::decode(recursive_scrub_version, bl);
+    ::decode(recursive_scrub_stamp, bl);
+    ::decode(localized_scrub_version, bl);
+    ::decode(localized_scrub_stamp, bl);
+  }
   DECODE_FINISH(bl);
 }
 
@@ -660,18 +691,20 @@ void old_rstat_t::generate_test_instances(list<old_rstat_t*>& ls)
  */
 void session_info_t::encode(bufferlist& bl) const
 {
-  ENCODE_START(4, 3, bl);
+  ENCODE_START(6, 3, bl);
   ::encode(inst, bl);
   ::encode(completed_requests, bl);
   ::encode(prealloc_inos, bl);   // hacky, see below.
   ::encode(used_inos, bl);
   ::encode(client_metadata, bl);
+  ::encode(completed_flushes, bl);
+  ::encode(auth_name, bl);
   ENCODE_FINISH(bl);
 }
 
 void session_info_t::decode(bufferlist::iterator& p)
 {
-  DECODE_START_LEGACY_COMPAT_LEN(4, 2, 2, p);
+  DECODE_START_LEGACY_COMPAT_LEN(6, 2, 2, p);
   ::decode(inst, p);
   if (struct_v <= 2) {
     set<ceph_tid_t> s;
@@ -689,6 +722,12 @@ void session_info_t::decode(bufferlist::iterator& p)
   used_inos.clear();
   if (struct_v >= 4) {
     ::decode(client_metadata, p);
+  }
+  if (struct_v >= 5) {
+    ::decode(completed_flushes, p);
+  }
+  if (struct_v >= 6) {
+    ::decode(auth_name, p);
   }
   DECODE_FINISH(p);
 }
@@ -1078,3 +1117,9 @@ void MDSCacheObject::dump_states(Formatter *f) const
   if (state_test(STATE_REJOINUNDEF))
     f->dump_string("state", "rejoinundef");
 }
+
+void ceph_file_layout_wrapper::dump(Formatter *f) const
+{
+  ::dump(static_cast<const ceph_file_layout&>(*this), f);
+}
+

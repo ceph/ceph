@@ -24,7 +24,11 @@
 #include "include/str_list.h"
 
 #define PLUGIN_PREFIX "libec_"
+#if defined(DARWIN)
+#define PLUGIN_SUFFIX ".dylib"
+#else
 #define PLUGIN_SUFFIX ".so"
+#endif
 #define PLUGIN_INIT_FUNCTION "__erasure_code_init"
 #define PLUGIN_VERSION_FUNCTION "__erasure_code_version"
 
@@ -84,6 +88,7 @@ ErasureCodePlugin *ErasureCodePluginRegistry::get(const std::string &name)
 }
 
 int ErasureCodePluginRegistry::factory(const std::string &plugin_name,
+				       const std::string &directory,
 				       ErasureCodeProfile &profile,
 				       ErasureCodeInterfaceRef *erasure_code,
 				       ostream *ss)
@@ -94,15 +99,22 @@ int ErasureCodePluginRegistry::factory(const std::string &plugin_name,
     plugin = get(plugin_name);
     if (plugin == 0) {
       loading = true;
-      assert(profile.count("directory") != 0);
-      int r = load(plugin_name, profile.find("directory")->second, &plugin, ss);
+      int r = load(plugin_name, directory, &plugin, ss);
       loading = false;
       if (r != 0)
 	return r;
     }
   }
 
-  return plugin->factory(profile, erasure_code, ss);
+  int r = plugin->factory(directory, profile, erasure_code, ss);
+  if (r)
+    return r;
+  if (profile != (*erasure_code)->get_profile()) {
+    *ss << __func__ << " profile " << profile << " != get_profile() "
+	<< (*erasure_code)->get_profile() << std::endl;
+    return -EINVAL;
+  }
+  return 0;
 }
 
 static const char *an_older_version() {

@@ -60,7 +60,8 @@ GenericFileStoreBackend::GenericFileStoreBackend(FileStore *fs):
   seek_data_hole(false),
   m_filestore_fiemap(g_conf->filestore_fiemap),
   m_filestore_seek_data_hole(g_conf->filestore_seek_data_hole),
-  m_filestore_fsync_flushes_journal_data(g_conf->filestore_fsync_flushes_journal_data) {}
+  m_filestore_fsync_flushes_journal_data(g_conf->filestore_fsync_flushes_journal_data),
+  m_filestore_splice(false) {}
 
 int GenericFileStoreBackend::detect_features()
 {
@@ -161,6 +162,27 @@ int GenericFileStoreBackend::detect_features()
 #endif
   }
 
+  //splice detection
+#ifdef CEPH_HAVE_SPLICE
+  if (!m_filestore_splice) {
+    int pipefd[2];
+    loff_t off_in = 0;
+    int r;
+    if ((r = pipe(pipefd)) < 0)
+      dout(0) << "detect_features: splice  pipe met error " << cpp_strerror(errno) << dendl;
+    else {
+      lseek(fd, 0, SEEK_SET);
+      r = splice(fd, &off_in, pipefd[1], NULL, 10, 0);
+      if (!(r < 0 && errno == EINVAL)) {
+	m_filestore_splice = true;
+	dout(0) << "detect_features: splice is supported" << dendl;
+      } else
+	dout(0) << "detect_features: splice is NOT supported" << dendl;
+      close(pipefd[0]);
+      close(pipefd[1]);
+    }
+  }
+#endif
   ::unlink(fn);
   VOID_TEMP_FAILURE_RETRY(::close(fd));
 
@@ -259,11 +281,15 @@ int GenericFileStoreBackend::do_fiemap(int fd, off_t start, size_t len, struct f
   fiemap->fm_length = len + start % CEPH_PAGE_SIZE;
   fiemap->fm_flags = FIEMAP_FLAG_SYNC; /* flush extents to disk if needed */
 
+#if defined(DARWIN) || defined(__FreeBSD__)
+  ret = -ENOTSUP;
+  goto done_err;
+#else
   if (ioctl(fd, FS_IOC_FIEMAP, fiemap) < 0) {
     ret = -errno;
     goto done_err;
   }
-
+#endif
   size = sizeof(struct fiemap_extent) * (fiemap->fm_mapped_extents);
 
   _realloc_fiemap = (struct fiemap *)realloc(fiemap, sizeof(struct fiemap) + size);
@@ -279,12 +305,16 @@ int GenericFileStoreBackend::do_fiemap(int fd, off_t start, size_t len, struct f
   fiemap->fm_extent_count = fiemap->fm_mapped_extents;
   fiemap->fm_mapped_extents = 0;
 
+#if defined(DARWIN) || defined(__FreeBSD__)
+  ret = -ENOTSUP;
+  goto done_err;
+#else
   if (ioctl(fd, FS_IOC_FIEMAP, fiemap) < 0) {
     ret = -errno;
     goto done_err;
   }
   *pfiemap = fiemap;
-
+#endif
   return 0;
 
 done_err:

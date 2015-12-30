@@ -18,12 +18,11 @@
 #include <stdint.h>
 #include <stdio.h>
 
-#include <iostream>
+#include <iosfwd>
 #include <iomanip>
 using namespace std;
 
 #include "include/unordered_map.h"
-#include "include/hash_namespace.h"
 
 #include "hash.h"
 #include "encoding.h"
@@ -75,7 +74,7 @@ inline ostream& operator<<(ostream& out, const object_t& o) {
   return out << o.name;
 }
 
-CEPH_HASH_NAMESPACE_START
+namespace std {
   template<> struct hash<object_t> {
     size_t operator()(const object_t& r) const { 
       //static hash<string> H;
@@ -83,7 +82,7 @@ CEPH_HASH_NAMESPACE_START
       return ceph_str_hash_linux(r.name.c_str(), r.name.length());
     }
   };
-CEPH_HASH_NAMESPACE_END
+} // namespace std
 
 
 struct file_object_t {
@@ -176,7 +175,7 @@ inline bool operator<=(const sobject_t &l, const sobject_t &r) {
 inline ostream& operator<<(ostream& out, const sobject_t &o) {
   return out << o.oid << "/" << o.snap;
 }
-CEPH_HASH_NAMESPACE_START
+namespace std {
   template<> struct hash<sobject_t> {
     size_t operator()(const sobject_t &r) const {
       static hash<object_t> H;
@@ -184,6 +183,6 @@ CEPH_HASH_NAMESPACE_START
       return H(r.oid) ^ I(r.snap);
     }
   };
-CEPH_HASH_NAMESPACE_END
+} // namespace std
 
 #endif

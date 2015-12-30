@@ -105,7 +105,7 @@ bool ObjectCache::chain_cache_entry(list<rgw_cache_entry_info *>& cache_info_ent
   for (liter = cache_entry_list.begin(); liter != cache_entry_list.end(); ++liter) {
     ObjectCacheEntry *entry = *liter;
 
-    entry->chained_entries.push_back(make_pair<RGWChainedCache *, string>(chained_entry->cache, chained_entry->key));
+    entry->chained_entries.push_back(make_pair(chained_entry->cache, chained_entry->key));
   }
 
   return true;

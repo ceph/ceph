@@ -42,11 +42,11 @@
 #define EVENT_NOOP        51
 
 
-#include "include/buffer.h"
+#include "include/buffer_fwd.h"
 #include "include/Context.h"
 #include "include/utime.h"
 
-class MDS;
+class MDSRank;
 class LogSegment;
 class EMetaBlob;
 
@@ -109,7 +109,7 @@ public:
   /*** recovery ***/
   /* replay() - replay given event.  this is idempotent.
    */
-  virtual void replay(MDS *m) { assert(0); }
+  virtual void replay(MDSRank *m) { assert(0); }
 
   /**
    * If the subclass embeds a MetaBlob, return it here so that

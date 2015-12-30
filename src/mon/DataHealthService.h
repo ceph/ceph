@@ -33,7 +33,7 @@ class DataHealthService :
   map<entity_inst_t,DataStats> stats;
   int last_warned_percent;
 
-  void handle_tell(MMonHealth *m);
+  void handle_tell(MonOpRequestRef op);
   int update_store_stats(DataStats &ours);
   int update_stats();
   void share_stats();
@@ -45,11 +45,7 @@ class DataHealthService :
 
 protected:
   virtual void service_tick();
-  virtual bool service_dispatch(Message *m) {
-    assert(0 == "We should never reach this; only the function below");
-    return false;
-  }
-  virtual bool service_dispatch(MMonHealth *m);
+  virtual bool service_dispatch_op(MonOpRequestRef op);
   virtual void service_shutdown() { }
 
   virtual void start_epoch();

@@ -54,6 +54,9 @@
 #include "include/str_map.h"
 #include <errno.h>
 
+#include "common/TrackedOp.h"
+#include "mon/MonOpRequest.h"
+
 
 #define CEPH_MON_PROTOCOL     13 /* cluster internal */
 
@@ -243,11 +246,47 @@ private:
    *
    * Verify all mons are storing identical content
    */
+  int scrub_start();
   int scrub();
-  void handle_scrub(MMonScrub *m);
-  void _scrub(ScrubResult *r);
+  void handle_scrub(MonOpRequestRef op);
+  bool _scrub(ScrubResult *r,
+              pair<string,string> *start,
+              int *num_keys);
+  void scrub_check_results();
+  void scrub_timeout();
   void scrub_finish();
   void scrub_reset();
+  void scrub_update_interval(int secs);
+
+  struct C_Scrub : public Context {
+    Monitor *mon;
+    C_Scrub(Monitor *m) : mon(m) { }
+    void finish(int r) {
+      mon->scrub_start();
+    }
+  };
+  struct C_ScrubTimeout : public Context {
+    Monitor *mon;
+    C_ScrubTimeout(Monitor *m) : mon(m) { }
+    void finish(int r) {
+      mon->scrub_timeout();
+    }
+  };
+  Context *scrub_event;       ///< periodic event to trigger scrub (leader)
+  Context *scrub_timeout_event;  ///< scrub round timeout (leader)
+  void scrub_event_start();
+  void scrub_event_cancel();
+  void scrub_reset_timeout();
+  void scrub_cancel_timeout();
+
+  struct ScrubState {
+    pair<string,string> last_key; ///< last scrubbed key
+    bool finished;
+
+    ScrubState() : finished(false) { }
+    virtual ~ScrubState() { }
+  };
+  ceph::shared_ptr<ScrubState> scrub_state; ///< keeps track of current scrub
 
   /**
    * @defgroup Monitor_h_sync Synchronization
@@ -411,18 +450,18 @@ private:
    *
    * @param m Sync message with operation type MMonSync::OP_START_CHUNKS
    */
-  void handle_sync(MMonSync *m);
+  void handle_sync(MonOpRequestRef op);
 
-  void _sync_reply_no_cookie(MMonSync *m);
+  void _sync_reply_no_cookie(MonOpRequestRef op);
 
-  void handle_sync_get_cookie(MMonSync *m);
-  void handle_sync_get_chunk(MMonSync *m);
-  void handle_sync_finish(MMonSync *m);
+  void handle_sync_get_cookie(MonOpRequestRef op);
+  void handle_sync_get_chunk(MonOpRequestRef op);
+  void handle_sync_finish(MonOpRequestRef op);
 
-  void handle_sync_cookie(MMonSync *m);
-  void handle_sync_forward(MMonSync *m);
-  void handle_sync_chunk(MMonSync *m);
-  void handle_sync_no_cookie(MMonSync *m);
+  void handle_sync_cookie(MonOpRequestRef op);
+  void handle_sync_forward(MonOpRequestRef op);
+  void handle_sync_chunk(MonOpRequestRef op);
+  void handle_sync_no_cookie(MonOpRequestRef op);
 
   /**
    * @} // Synchronization
@@ -487,9 +526,9 @@ private:
   health_status_t timecheck_status(ostringstream &ss,
                                    const double skew_bound,
                                    const double latency);
-  void handle_timecheck_leader(MTimeCheck *m);
-  void handle_timecheck_peon(MTimeCheck *m);
-  void handle_timecheck(MTimeCheck *m);
+  void handle_timecheck_leader(MonOpRequestRef op);
+  void handle_timecheck_peon(MonOpRequestRef op);
+  void handle_timecheck(MonOpRequestRef op);
   /**
    * @}
    */
@@ -520,7 +559,7 @@ private:
   /**
    * Handle ping messages from others.
    */
-  void handle_ping(MPing *m);
+  void handle_ping(MonOpRequestRef op);
 
   Context *probe_timeout_event;  // for probing
 
@@ -635,9 +674,9 @@ public:
   void send_latest_monmap(Connection *con);
 
   // messages
-  void handle_get_version(MMonGetVersion *m);
-  void handle_subscribe(MMonSubscribe *m);
-  void handle_mon_get_map(MMonGetMap *m);
+  void handle_get_version(MonOpRequestRef op);
+  void handle_subscribe(MonOpRequestRef op);
+  void handle_mon_get_map(MonOpRequestRef op);
 
   static void _generate_command_map(map<string,cmd_vartype>& cmdmap,
                                     map<string,string> &param_str_map);
@@ -650,10 +689,10 @@ public:
   void get_mon_status(Formatter *f, ostream& ss);
   void _quorum_status(Formatter *f, ostream& ss);
   bool _add_bootstrap_peer_hint(string cmd, cmdmap_t& cmdmap, ostream& ss);
-  void handle_command(class MMonCommand *m);
-  void handle_route(MRoute *m);
+  void handle_command(MonOpRequestRef op);
+  void handle_route(MonOpRequestRef op);
 
-  void handle_mon_metadata(MMonMetadata *m);
+  void handle_mon_metadata(MonOpRequestRef op);
   int get_mon_metadata(int mon, Formatter *f, ostream& err);
   int print_nodes(Formatter *f, ostream& err);
   map<int, Metadata> metadata;
@@ -720,11 +759,11 @@ public:
                              Formatter *f);
   void get_cluster_status(stringstream &ss, Formatter *f);
 
-  void reply_command(MMonCommand *m, int rc, const string &rs, version_t version);
-  void reply_command(MMonCommand *m, int rc, const string &rs, bufferlist& rdata, version_t version);
+  void reply_command(MonOpRequestRef op, int rc, const string &rs, version_t version);
+  void reply_command(MonOpRequestRef op, int rc, const string &rs, bufferlist& rdata, version_t version);
 
 
-  void handle_probe(MMonProbe *m);
+  void handle_probe(MonOpRequestRef op);
   /**
    * Handle a Probe Operation, replying with our name, quorum and known versions.
    *
@@ -739,8 +778,8 @@ public:
    *
    * @param m A Probe message, with an operation of type Probe.
    */
-  void handle_probe_probe(MMonProbe *m);
-  void handle_probe_reply(MMonProbe *m);
+  void handle_probe_probe(MonOpRequestRef op);
+  void handle_probe_reply(MonOpRequestRef op);
 
   // request routing
   struct RoutedRequest {
@@ -750,6 +789,7 @@ public:
     ConnectionRef con;
     uint64_t con_features;
     entity_inst_t client_inst;
+    MonOpRequestRef op;
 
     RoutedRequest() : tid(0), session(NULL), con_features(0) {}
     ~RoutedRequest() {
@@ -760,38 +800,39 @@ public:
   uint64_t routed_request_tid;
   map<uint64_t, RoutedRequest*> routed_requests;
   
-  void forward_request_leader(PaxosServiceMessage *req);
-  void handle_forward(MForward *m);
+  void forward_request_leader(MonOpRequestRef op);
+  void handle_forward(MonOpRequestRef op);
   void try_send_message(Message *m, const entity_inst_t& to);
-  void send_reply(PaxosServiceMessage *req, Message *reply);
-  void no_reply(PaxosServiceMessage *req);
+  void send_reply(MonOpRequestRef op, Message *reply);
+  void no_reply(MonOpRequestRef op);
   void resend_routed_requests();
   void remove_session(MonSession *s);
   void remove_all_sessions();
-  void waitlist_or_zap_client(Message *m);
+  void waitlist_or_zap_client(MonOpRequestRef op);
 
   void send_command(const entity_inst_t& inst,
 		    const vector<string>& com);
 
 public:
-  struct C_Command : public Context {
+  struct C_Command : public C_MonOp {
     Monitor *mon;
-    MMonCommand *m;
     int rc;
     string rs;
     bufferlist rdata;
     version_t version;
-    C_Command(Monitor *_mm, MMonCommand *_m, int r, string s, version_t v) :
-      mon(_mm), m(_m), rc(r), rs(s), version(v){}
-    C_Command(Monitor *_mm, MMonCommand *_m, int r, string s, bufferlist rd, version_t v) :
-      mon(_mm), m(_m), rc(r), rs(s), rdata(rd), version(v){}
-    void finish(int r) {
+    C_Command(Monitor *_mm, MonOpRequestRef _op, int r, string s, version_t v) :
+      C_MonOp(_op), mon(_mm), rc(r), rs(s), version(v){}
+    C_Command(Monitor *_mm, MonOpRequestRef _op, int r, string s, bufferlist rd, version_t v) :
+      C_MonOp(_op), mon(_mm), rc(r), rs(s), rdata(rd), version(v){}
+
+    virtual void _finish(int r) {
+      MMonCommand *m = static_cast<MMonCommand*>(op->get_req());
       if (r >= 0) {
         ostringstream ss;
-        if (!m->get_connection()) {
+        if (!op->get_req()->get_connection()) {
           ss << "connection dropped for command ";
         } else {
-          MonSession *s = m->get_session();
+          MonSession *s = op->get_session();
 
           // if client drops we may not have a session to draw information from.
           if (s) {
@@ -804,28 +845,29 @@ public:
         ss << "cmd='" << m->cmd << "': finished";
 
         mon->audit_clog->info() << ss.str();
-	mon->reply_command(m, rc, rs, rdata, version);
+	mon->reply_command(op, rc, rs, rdata, version);
       }
       else if (r == -ECANCELED)
-	m->put();
+        return;
       else if (r == -EAGAIN)
-	mon->_ms_dispatch(m);
+	mon->dispatch_op(op);
       else
 	assert(0 == "bad C_Command return value");
     }
   };
 
  private:
-  class C_RetryMessage : public Context {
+  class C_RetryMessage : public C_MonOp {
     Monitor *mon;
-    Message *msg;
   public:
-    C_RetryMessage(Monitor *m, Message *ms) : mon(m), msg(ms) {}
-    void finish(int r) {
+    C_RetryMessage(Monitor *m, MonOpRequestRef op) :
+      C_MonOp(op), mon(m) { }
+
+    virtual void _finish(int r) {
       if (r == -EAGAIN || r >= 0)
-	mon->_ms_dispatch(msg);
+        mon->dispatch_op(op);
       else if (r == -ECANCELED)
-	msg->put();
+        return;
       else
 	assert(0 == "bad C_RetryMessage return value");
     }
@@ -840,8 +882,7 @@ public:
     lock.Unlock();
     return true;
   }
-  // dissociate message handling from session and connection logic
-  void dispatch(MonSession *s, Message *m, const bool src_is_mon);
+  void dispatch_op(MonOpRequestRef op);
   //mon_caps is used for un-connected messages from monitors
   MonCap * mon_caps;
   bool ms_get_authorizer(int dest_type, AuthAuthorizer **authorizer, bool force_new);
@@ -865,6 +906,8 @@ public:
   static void read_features_off_disk(MonitorDBStore *store, CompatSet *read_features);
   void read_features();
   void write_features(MonitorDBStore::TransactionRef t);
+
+  OpTracker op_tracker;
 
  public:
   Monitor(CephContext *cct_, string nm, MonitorDBStore *s,
@@ -933,6 +976,7 @@ public:
 #define CEPH_MON_FEATURE_INCOMPAT_OSD_ERASURE_CODES CompatSet::Feature(4, "support erasure code pools")
 #define CEPH_MON_FEATURE_INCOMPAT_OSDMAP_ENC CompatSet::Feature(5, "new-style osdmap encoding")
 #define CEPH_MON_FEATURE_INCOMPAT_ERASURE_CODE_PLUGINS_V2 CompatSet::Feature(6, "support isa/lrc erasure code")
+#define CEPH_MON_FEATURE_INCOMPAT_ERASURE_CODE_PLUGINS_V3 CompatSet::Feature(7, "support shec erasure code")
 // make sure you add your feature to Monitor::get_supported_features
 
 long parse_pos_long(const char *s, ostream *pss = NULL);
@@ -946,10 +990,11 @@ struct MonCommand {
   uint64_t flags;
 
   // MonCommand flags
-  enum {
-    FLAG_NOFORWARD = (1 << 0),
-  };
-
+  static const uint64_t FLAG_NONE       = 0;
+  static const uint64_t FLAG_NOFORWARD  = 1 << 0;
+  static const uint64_t FLAG_OBSOLETE   = 1 << 1;
+  static const uint64_t FLAG_DEPRECATED = 1 << 2;
+  
   bool has_flag(uint64_t flag) const { return (flags & flag) != 0; }
   void set_flag(uint64_t flag) { flags |= flag; }
   void unset_flag(uint64_t flag) { flags &= ~flag; }
@@ -974,9 +1019,21 @@ struct MonCommand {
     ::decode(availability, bl);
   }
   bool is_compat(const MonCommand* o) const {
-    return cmdstring == o->cmdstring && helpstring == o->helpstring &&
+    return cmdstring == o->cmdstring &&
 	module == o->module && req_perms == o->req_perms &&
 	availability == o->availability;
+  }
+
+  bool is_noforward() const {
+    return has_flag(MonCommand::FLAG_NOFORWARD);
+  }
+
+  bool is_obsolete() const {
+    return has_flag(MonCommand::FLAG_OBSOLETE);
+  }
+
+  bool is_deprecated() const {
+    return has_flag(MonCommand::FLAG_DEPRECATED);
   }
 
   static void encode_array(const MonCommand *cmds, int size, bufferlist &bl) {

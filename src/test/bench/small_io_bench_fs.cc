@@ -134,6 +134,7 @@ int main(int argc, char **argv)
 
   FileStore fs(vm["filestore-path"].as<string>(),
 	       vm["journal-path"].as<string>());
+  ObjectStore::Sequencer osr(__func__);
 
   if (fs.mkfs() < 0) {
     cout << "mkfs failed" << std::endl;
@@ -168,17 +169,16 @@ int main(int argc, char **argv)
   }
 
   for (uint64_t num = 0; num < vm["num-colls"].as<unsigned>(); ++num) {
-    stringstream coll;
-    coll << "collection_" << num;
-    std::cout << "collection " << coll.str() << std::endl;
+    spg_t pgid(pg_t(num, 0), shard_id_t::NO_SHARD);
+    std::cout << "collection " << pgid << std::endl;
     ObjectStore::Transaction t;
-    t.create_collection(coll_t(coll.str()));
-    fs.apply_transaction(t);
+    t.create_collection(coll_t(pgid), 0);
+    fs.apply_transaction(&osr, t);
   }
   {
     ObjectStore::Transaction t;
-    t.create_collection(coll_t(string("meta")));
-    fs.apply_transaction(t);
+    t.create_collection(coll_t(), 0);
+    fs.apply_transaction(&osr, t);
   }
 
   vector<ceph::shared_ptr<Bencher> > benchers(
@@ -189,10 +189,10 @@ int main(int argc, char **argv)
     set<string> objects;
     for (uint64_t num = 0; num < vm["num-objects"].as<unsigned>(); ++num) {
       unsigned col_num = num % vm["num-colls"].as<unsigned>();
-      stringstream coll, obj;
-      coll << "collection_" << col_num;
+      spg_t pgid(pg_t(col_num, 0), shard_id_t::NO_SHARD);
+      stringstream obj;
       obj << "obj_" << num << "_bencher_" << (i - benchers.begin());
-      objects.insert(coll.str() + string("/") + obj.str());
+      objects.insert(coll_t(pgid).to_str() + string("/") + obj.str());
     }
     Distribution<
       boost::tuple<string, uint64_t, uint64_t, Bencher::OpType> > *gen = 0;

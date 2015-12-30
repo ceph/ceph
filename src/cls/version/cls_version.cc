@@ -15,6 +15,7 @@
 #include "common/Clock.h"
 
 #include "global/global_context.h"
+#include "include/compat.h"
 
 CLS_VER(1,0)
 CLS_NAME(version)

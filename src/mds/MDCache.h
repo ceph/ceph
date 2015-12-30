@@ -21,6 +21,7 @@
 #include "include/filepath.h"
 #include "include/elist.h"
 
+#include "osdc/Filer.h"
 #include "CInode.h"
 #include "CDentry.h"
 #include "CDir.h"
@@ -36,7 +37,7 @@
 
 class PerfCounters;
 
-class MDS;
+class MDSRank;
 class Session;
 class Migrator;
 
@@ -116,7 +117,7 @@ static const int PREDIRTY_SHALLOW = 4; // only go to immediate parent (for easie
 class MDCache {
  public:
   // my master
-  MDS *mds;
+  MDSRank *mds;
 
   // -- my cache --
   LRU lru;   // dentry lru for expiring items from cache
@@ -138,6 +139,8 @@ class MDCache {
   set<CInode*> base_inodes;
 
   PerfCounters *logger;
+
+  Filer filer;
 
 public:
   void advance_stray() {
@@ -458,7 +461,7 @@ public:
   }
   void cancel_ambiguous_import(CDir *);
   void finish_ambiguous_import(dirfrag_t dirino);
-  void resolve_start();
+  void resolve_start(MDSInternalContext *resolve_done_);
   void send_resolves();
   void send_slave_resolves();
   void send_subtree_resolves();
@@ -488,7 +491,7 @@ protected:
   map<inodeno_t,mds_rank_t> cap_export_targets; // ino -> auth mds
 
   map<inodeno_t,map<client_t,map<mds_rank_t,ceph_mds_cap_reconnect> > > cap_imports;  // ino -> client -> frommds -> capex
-  map<inodeno_t,filepath> cap_import_paths;
+  map<inodeno_t,int> cap_imports_dirty;
   set<inodeno_t> cap_imports_missing;
   int cap_imports_num_opening;
   
@@ -517,8 +520,10 @@ protected:
     if (rejoins_pending)
       rejoin_send_rejoins();
   }
+  MDSInternalContext *rejoin_done;
+  MDSInternalContext *resolve_done;
 public:
-  void rejoin_start();
+  void rejoin_start(MDSInternalContext *rejoin_done_);
   void rejoin_gather_finish();
   void rejoin_send_rejoins();
   void rejoin_export_caps(inodeno_t ino, client_t client, ceph_mds_cap_reconnect& capinfo,
@@ -529,7 +534,6 @@ public:
   void rejoin_recovered_caps(inodeno_t ino, client_t client, cap_reconnect_t& icr, 
 			     mds_rank_t frommds=MDS_RANK_NONE) {
     cap_imports[ino][client][frommds] = icr.capinfo;
-    cap_import_paths[ino] = filepath(icr.path, (uint64_t)icr.capinfo.pathbase);
   }
   ceph_mds_cap_reconnect *get_replay_cap_reconnect(inodeno_t ino, client_t client) {
     if (cap_imports.count(ino) &&
@@ -543,6 +547,9 @@ public:
     assert(cap_imports[ino].size() == 1);
     assert(cap_imports[ino][client].size() == 1);
     cap_imports.erase(ino);
+  }
+  void set_reconnect_dirty_caps(inodeno_t ino, int dirty) {
+    cap_imports_dirty[ino] |= dirty;
   }
 
   // [reconnect/rejoin caps]
@@ -615,7 +622,7 @@ public:
   Migrator *migrator;
 
  public:
-  MDCache(MDS *m);
+  MDCache(MDSRank *m);
   ~MDCache();
   
   // debug
@@ -889,7 +896,8 @@ protected:
     int64_t pool;
     list<MDSInternalContextBase*> waiters;
     open_ino_info_t() : checking(MDS_RANK_NONE), auth_hint(MDS_RANK_NONE),
-      check_peers(true), fetch_backtrace(true), discover(false) {}
+      check_peers(true), fetch_backtrace(true), discover(false),
+      want_replica(false), want_xlocked(false), tid(0), pool(-1) {}
   };
   ceph_tid_t open_ino_last_tid;
   map<inodeno_t,open_ino_info_t> opening_inodes;
@@ -1020,7 +1028,7 @@ private:
     utime_t last_cum_auth_pins_change;
     int last_cum_auth_pins;
     int num_remote_waiters;	// number of remote authpin waiters
-    fragment_info_t() : all_frozen(false), last_cum_auth_pins(0), num_remote_waiters(0) {}
+    fragment_info_t() : bits(0), all_frozen(false), last_cum_auth_pins(0), num_remote_waiters(0) {}
     bool is_fragmenting() { return !resultfrags.empty(); }
   };
   map<dirfrag_t,fragment_info_t> fragments;
@@ -1088,6 +1096,7 @@ public:
   void discard_delayed_expire(CDir *dir);
 
   void notify_mdsmap_changed();
+  void notify_osdmap_changed();
 
 protected:
   void dump_cache(const char *fn, Formatter *f);
@@ -1108,10 +1117,31 @@ public:
     while (n--) ++p;
     return p->second;
   }
+
   void scrub_dentry(const string& path, Formatter *f, Context *fin);
+  /**
+   * Scrub the named dentry only (skip the scrubstack)
+   */
   void scrub_dentry_work(MDRequestRef& mdr);
+
   void flush_dentry(const string& path, Context *fin);
   void flush_dentry_work(MDRequestRef& mdr);
+
+  /**
+   * Create and start an OP_ENQUEUE_SCRUB
+   */
+  void enqueue_scrub(const string& path, const std::string &tag,
+                     Formatter *f, Context *fin);
+
+  /**
+   * Resolve path to a dentry and pass it onto the ScrubStack.
+   *
+   * TODO: return enough information to the original mdr formatter
+   * and completion that they can subsequeuntly check the progress of
+   * this scrub (we won't block them on a whole scrub as it can take a very
+   * long time)
+   */
+  void enqueue_scrub_work(MDRequestRef& mdr);
 };
 
 class C_MDS_RetryRequest : public MDSInternalContext {

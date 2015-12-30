@@ -50,13 +50,13 @@ public:
   struct write_item {
     uint64_t seq;
     bufferlist bl;
-    int alignment;
+    uint32_t orig_len;
     TrackedOpRef tracked_op;
-    write_item(uint64_t s, bufferlist& b, int al, TrackedOpRef opref) :
-      seq(s), alignment(al), tracked_op(opref) {
+    write_item(uint64_t s, bufferlist& b, int ol, TrackedOpRef opref) :
+      seq(s), orig_len(ol), tracked_op(opref) {
       bl.claim(b, buffer::list::CLAIM_ALLOW_NONSHAREABLE); // potential zero-copy
     }
-    write_item() : seq(0), alignment(0) {}
+    write_item() : seq(0), orig_len(0) {}
   };
 
   Mutex finisher_lock;
@@ -66,16 +66,26 @@ public:
 
   Mutex writeq_lock;
   Cond writeq_cond;
-  deque<write_item> writeq;
+  list<write_item> writeq;
   bool writeq_empty();
   write_item &peek_write();
   void pop_write();
+  void batch_pop_write(list<write_item> &items);
+  void batch_unpop_write(list<write_item> &items);
 
   Mutex completions_lock;
-  deque<completion_item> completions;
+  list<completion_item> completions;
   bool completions_empty() {
     Mutex::Locker l(completions_lock);
     return completions.empty();
+  }
+  void batch_pop_completions(list<completion_item> &items) {
+    Mutex::Locker l(completions_lock);
+    completions.swap(items);
+  }
+  void batch_unpop_completions(list<completion_item> &items) {
+    Mutex::Locker l(completions_lock);
+    completions.splice(completions.begin(), items);
   }
   completion_item completion_peek_front() {
     Mutex::Locker l(completions_lock);
@@ -88,7 +98,9 @@ public:
     completions.pop_front();
   }
 
-  void submit_entry(uint64_t seq, bufferlist& bl, int alignment,
+  int prepare_entry(list<ObjectStore::Transaction*>& tls, bufferlist* tbl);
+
+  void submit_entry(uint64_t seq, bufferlist& bl, uint32_t orig_len,
 		    Context *oncommit,
 		    TrackedOpRef osd_op = TrackedOpRef());
   /// End protected by finisher_lock
@@ -135,7 +147,7 @@ public:
     }
 
     uint64_t get_fsid64() const {
-      return *(uint64_t*)&fsid.uuid[0];
+      return *(uint64_t*)fsid.bytes();
     }
 
     void encode(bufferlist& bl) const {
@@ -163,8 +175,8 @@ public:
 	flags = 0;
 	uint64_t tfsid;
 	::decode(tfsid, bl);
-	*(uint64_t*)&fsid.uuid[0] = tfsid;
-	*(uint64_t*)&fsid.uuid[8] = tfsid;
+	*(uint64_t*)&fsid.bytes()[0] = tfsid;
+	*(uint64_t*)&fsid.bytes()[8] = tfsid;
 	::decode(block_size, bl);
 	::decode(alignment, bl);
 	::decode(max_size, bl);
@@ -203,14 +215,13 @@ public:
     uint64_t magic1;
     uint64_t magic2;
     
-    void make_magic(off64_t pos, uint64_t fsid) {
-      magic1 = pos;
-      magic2 = fsid ^ seq ^ len;
+    static uint64_t make_magic(uint64_t seq, uint32_t len, uint64_t fsid) {
+      return (fsid ^ seq ^ len);
     }
     bool check_magic(off64_t pos, uint64_t fsid) {
       return
-	magic1 == (uint64_t)pos &&
-	magic2 == (fsid ^ seq ^ len);
+    magic1 == (uint64_t)pos &&
+    magic2 == (fsid ^ seq ^ len);
     }
   } __attribute__((__packed__, aligned(4)));
 
@@ -220,7 +231,6 @@ private:
   string fn;
 
   char *zero_buf;
-
   off64_t max_size;
   size_t block_size;
   bool directio, aio, force_aio;
@@ -311,7 +321,8 @@ private:
 
   int check_for_full(uint64_t seq, off64_t pos, off64_t size);
   int prepare_multi_write(bufferlist& bl, uint64_t& orig_ops, uint64_t& orig_bytee);
-  int prepare_single_write(bufferlist& bl, off64_t& queue_pos, uint64_t& orig_ops, uint64_t& orig_bytes);
+  int prepare_single_write(write_item &next_write, bufferlist& bl, off64_t& queue_pos,
+    uint64_t& orig_ops, uint64_t& orig_bytes);
   void do_write(bufferlist& bl);
 
   void write_finish_thread_entry();
@@ -383,8 +394,8 @@ private:
     full_state(FULL_NOTFULL),
     fd(-1),
     writing_seq(0),
-    throttle_ops(g_ceph_context, "filestore_ops", g_conf->journal_queue_max_ops),
-    throttle_bytes(g_ceph_context, "filestore_bytes", g_conf->journal_queue_max_bytes),
+    throttle_ops(g_ceph_context, "journal_ops", g_conf->journal_queue_max_ops),
+    throttle_bytes(g_ceph_context, "journal_bytes", g_conf->journal_queue_max_bytes),
     write_lock("FileJournal::write_lock", false, true, false, g_ceph_context),
     write_stop(true),
     aio_stop(true),

@@ -41,4 +41,7 @@ crush_make_straw_bucket(struct crush_map *map,
 			int *items,
 			int *weights);
 
+extern int crush_addition_is_unsafe(__u32 a, __u32 b);
+extern int crush_multiplication_is_unsafe(__u32  a, __u32 b);
+
 #endif

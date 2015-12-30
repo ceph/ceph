@@ -93,7 +93,9 @@ public:
   int get_fsid(std::string *s);
   int64_t lookup_pool(const char *name);
   bool pool_requires_alignment(int64_t pool_id);
+  int pool_requires_alignment2(int64_t pool_id, bool *requires);
   uint64_t pool_required_alignment(int64_t pool_id);
+  int pool_required_alignment2(int64_t pool_id, uint64_t *alignment);
   int pool_get_auid(uint64_t pool_id, unsigned long long *auid);
   int pool_get_name(uint64_t pool_id, std::string *auid);
 
@@ -101,9 +103,15 @@ public:
   int get_pool_stats(std::list<string>& ls, map<string,::pool_stat_t>& result);
   int get_fs_stats(ceph_statfs& result);
 
-  int pool_create(string& name, unsigned long long auid=0, __u8 crush_rule=0);
+  /*
+  -1 was set as the default value and monitor will pickup the right crush rule with below order:
+    a) osd pool default crush replicated ruleset
+    b) the first ruleset in crush ruleset
+    c) error out if no value find
+  */
+  int pool_create(string& name, unsigned long long auid=0, int16_t crush_rule=-1);
   int pool_create_async(string& name, PoolAsyncCompletionImpl *c, unsigned long long auid=0,
-			__u8 crush_rule=0);
+			int16_t crush_rule=-1);
   int pool_get_base_tier(int64_t pool_id, int64_t* base_tier);
   int pool_delete(const char *name);
 

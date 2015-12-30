@@ -1,7 +1,11 @@
 #ifndef CEPH_CRUSH_CRUSH_H
 #define CEPH_CRUSH_CRUSH_H
 
-#include "include/int_types.h"
+#ifdef __KERNEL__
+# include <linux/types.h>
+#else
+# include "crush_compat.h"
+#endif
 
 /*
  * CRUSH is a pseudo-random data distribution algorithm that
@@ -20,8 +24,8 @@
 #define CRUSH_MAGIC 0x00010000ul   /* for detecting algorithm revisions */
 
 #define CRUSH_MAX_DEPTH 10  /* max crush hierarchy depth */
-#define CRUSH_MAX_RULESET (1<<8) /*max crush ruleset number*/
-#define CRUSH_MAX_RULES	CRUSH_MAX_RULESET /*max crush rules, shold be the same as max rulesets*/
+#define CRUSH_MAX_RULESET (1<<8)  /* max crush ruleset number */
+#define CRUSH_MAX_RULES CRUSH_MAX_RULESET  /* should be the same as max rulesets */
 
 #define CRUSH_MAX_DEVICE_WEIGHT (100u * 0x10000u)
 #define CRUSH_MAX_BUCKET_WEIGHT (65535u * 0x10000u)
@@ -55,7 +59,8 @@ enum {
 	CRUSH_RULE_SET_CHOOSELEAF_TRIES = 9, /* override chooseleaf_descend_once */
 	CRUSH_RULE_SET_CHOOSE_LOCAL_TRIES = 10,
 	CRUSH_RULE_SET_CHOOSE_LOCAL_FALLBACK_TRIES = 11,
-	CRUSH_RULE_SET_CHOOSELEAF_VARY_R = 12
+	CRUSH_RULE_SET_CHOOSELEAF_VARY_R = 12,
+	CRUSH_RULE_SET_CHOOSELEAF_STABLE = 13
 };
 
 /*
@@ -187,7 +192,7 @@ struct crush_map {
 	/* choose local attempts using a fallback permutation before
 	 * re-descent */
 	__u32 choose_local_fallback_tries;
-	/* choose attempts before giving up */ 
+	/* choose attempts before giving up */
 	__u32 choose_total_tries;
 	/* attempt chooseleaf inner descent once for firstn mode; on
 	 * reject retry outer descent.  Note that this does *not*
@@ -201,6 +206,12 @@ struct crush_map {
 	 * mappings line up a bit better with previous mappings. */
 	__u8 chooseleaf_vary_r;
 
+	/* if true, it makes chooseleaf firstn to return stable results (if
+	 * no local retry) so that data migrations would be optimal when some
+	 * device fails. */
+	__u8 chooseleaf_stable;
+
+#ifndef __KERNEL__
 	/*
 	 * version 0 (original) of straw_calc has various flaws.  version 1
 	 * fixes a few of them.
@@ -217,13 +228,12 @@ struct crush_map {
 	__u32 allowed_bucket_algs;
 
 	__u32 *choose_tries;
+#endif
 };
 
 
 /* crush.c */
 extern int crush_get_bucket_item_weight(const struct crush_bucket *b, int pos);
-extern int crush_addition_is_unsafe(__u32 a, __u32 b);
-extern int crush_multiplication_is_unsafe(__u32  a, __u32 b);
 extern void crush_destroy_bucket_uniform(struct crush_bucket_uniform *b);
 extern void crush_destroy_bucket_list(struct crush_bucket_list *b);
 extern void crush_destroy_bucket_tree(struct crush_bucket_tree *b);

@@ -37,7 +37,8 @@ int ceph_file_layout_is_valid(const struct ceph_file_layout *layout)
 
 int ceph_flags_to_mode(int flags)
 {
-	int mode = 0;
+	/* because CEPH_FILE_MODE_PIN is zero, so mode = -1 is error */
+	int mode = -1;
 
 #ifdef O_DIRECTORY  /* fixme */
 	if ((flags & O_DIRECTORY) == O_DIRECTORY)

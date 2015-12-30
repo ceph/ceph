@@ -29,6 +29,7 @@
 #define CEPH_INO_ROOT   1
 #define CEPH_INO_CEPH   2       /* hidden .ceph dir */
 #define CEPH_INO_DOTDOT 3	/* used by ceph fuse for parent (..) */
+#define CEPH_INO_LOST_AND_FOUND 4	/* reserved ino for use in recovery */
 
 /* arbitrary limit on max # of monitors (cluster of 3 is typical) */
 #define CEPH_MAX_MON   31
@@ -245,6 +246,7 @@ struct ceph_mon_subscribe_ack {
 #define CEPH_MDS_STATE_STARTING    -7  /* up, starting previously stopped mds */
 #define CEPH_MDS_STATE_STANDBY_REPLAY -8 /* up, tailing active node's journal */
 #define CEPH_MDS_STATE_REPLAYONCE   -9 /* up, replaying an active node's journal */
+#define CEPH_MDS_STATE_NULL         -10
 
 #define CEPH_MDS_STATE_REPLAY       8  /* up, replaying journal. */
 #define CEPH_MDS_STATE_RESOLVE      9  /* up, disambiguating distributed
@@ -349,7 +351,8 @@ enum {
 	CEPH_MDS_OP_FRAGMENTDIR= 0x01500,
 	CEPH_MDS_OP_EXPORTDIR  = 0x01501,
 	CEPH_MDS_OP_VALIDATE   = 0x01502,
-	CEPH_MDS_OP_FLUSH      = 0x01503
+	CEPH_MDS_OP_FLUSH      = 0x01503,
+	CEPH_MDS_OP_ENQUEUE_SCRUB = 0x01504
 };
 
 extern const char *ceph_mds_op_name(int op);
@@ -407,6 +410,7 @@ union ceph_mds_request_args {
 	} __attribute__ ((packed)) open;
 	struct {
 		__le32 flags;
+		__le32 osdmap_epoch; 	    /* use for set file/dir layout */
 	} __attribute__ ((packed)) setxattr;
 	struct {
 		struct ceph_file_layout layout;

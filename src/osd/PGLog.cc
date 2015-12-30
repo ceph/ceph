@@ -22,8 +22,6 @@
 
 #define dout_subsys ceph_subsys_osd
 
-static coll_t META_COLL("meta");
-
 //////////////////// PGLog::IndexedLog ////////////////////
 
 void PGLog::IndexedLog::advance_rollback_info_trimmed_to(
@@ -212,7 +210,7 @@ void PGLog::proc_replica_log(
     we will send the peer enough log to arrive at the same state.
   */
 
-  for (map<hobject_t, pg_missing_t::item>::iterator i = omissing.missing.begin();
+  for (map<hobject_t, pg_missing_t::item, hobject_t::BitwiseComparator>::iterator i = omissing.missing.begin();
        i != omissing.missing.end();
        ++i) {
     dout(20) << " before missing " << i->first << " need " << i->second.need
@@ -338,7 +336,7 @@ void PGLog::_merge_object_divergent_entries(
   dout(10) << __func__ << ": merging hoid " << hoid
 	   << " entries: " << entries << dendl;
 
-  if (hoid > info.last_backfill) {
+  if (cmp(hoid, info.last_backfill, info.last_backfill_bitwise) > 0) {
     dout(10) << __func__ << ": hoid " << hoid << " after last_backfill"
 	     << dendl;
     return;
@@ -567,7 +565,7 @@ void PGLog::merge_log(ObjectStore::Transaction& t,
   // The logs must overlap.
   assert(log.head >= olog.tail && olog.head >= log.tail);
 
-  for (map<hobject_t, pg_missing_t::item>::iterator i = missing.missing.begin();
+  for (map<hobject_t, pg_missing_t::item, hobject_t::BitwiseComparator>::iterator i = missing.missing.begin();
        i != missing.missing.end();
        ++i) {
     dout(20) << "pg_missing_t sobject: " << i->first << dendl;
@@ -583,6 +581,7 @@ void PGLog::merge_log(ObjectStore::Transaction& t,
     dout(10) << "merge_log extending tail to " << olog.tail << dendl;
     list<pg_log_entry_t>::iterator from = olog.log.begin();
     list<pg_log_entry_t>::iterator to;
+    eversion_t last;
     for (to = from;
 	 to != olog.log.end();
 	 ++to) {
@@ -590,12 +589,10 @@ void PGLog::merge_log(ObjectStore::Transaction& t,
 	break;
       log.index(*to);
       dout(15) << *to << dendl;
+      last = to->version;
     }
-      
-    if (to == olog.log.end())
-      mark_dirty_to(oinfo.last_update);
-    else
-      mark_dirty_to(to->version);
+    mark_dirty_to(last);
+
     // splice into our log.
     log.log.splice(log.log.begin(),
 		   olog.log, from, to);
@@ -646,7 +643,7 @@ void PGLog::merge_log(ObjectStore::Transaction& t,
       pg_log_entry_t &ne = *p;
       dout(20) << "merge_log " << ne << dendl;
       log.index(ne);
-      if (ne.soid <= info.last_backfill) {
+      if (cmp(ne.soid, info.last_backfill, info.last_backfill_bitwise) <= 0) {
 	missing.add_next_event(ne);
 	if (ne.is_delete())
 	  rollbacker->remove(ne.soid);
@@ -742,7 +739,8 @@ void PGLog::check() {
 void PGLog::write_log(
   ObjectStore::Transaction& t,
   map<string,bufferlist> *km,
-  const coll_t& coll, const ghobject_t &log_oid)
+  const coll_t& coll, const ghobject_t &log_oid,
+  bool require_rollback)
 {
   if (is_dirty()) {
     dout(5) << "write_log with: "
@@ -762,6 +760,7 @@ void PGLog::write_log(
       trimmed,
       dirty_divergent_priors,
       !touched_log,
+      require_rollback,
       (pg_log_debug ? &log_keys_debug : 0));
     undirty();
   } else {
@@ -774,13 +773,14 @@ void PGLog::write_log(
     map<string,bufferlist> *km,
     pg_log_t &log,
     const coll_t& coll, const ghobject_t &log_oid,
-    map<eversion_t, hobject_t> &divergent_priors)
+    map<eversion_t, hobject_t> &divergent_priors,
+    bool require_rollback)
 {
   _write_log(
     t, km, log, coll, log_oid,
     divergent_priors, eversion_t::max(), eversion_t(), eversion_t(),
     set<eversion_t>(),
-    true, true, 0);
+    true, true, require_rollback, 0);
 }
 
 void PGLog::_write_log(
@@ -795,6 +795,7 @@ void PGLog::_write_log(
   const set<eversion_t> &trimmed,
   bool dirty_divergent_priors,
   bool touch_log,
+  bool require_rollback,
   set<string> *log_keys_debug
   )
 {
@@ -827,7 +828,7 @@ void PGLog::_write_log(
   }
 
   for (list<pg_log_entry_t>::iterator p = log.log.begin();
-       p != log.log.end() && p->version < dirty_to;
+       p != log.log.end() && p->version <= dirty_to;
        ++p) {
     bufferlist bl(sizeof(*p) * 2);
     p->encode_with_checksum(bl);
@@ -859,8 +860,10 @@ void PGLog::_write_log(
     //dout(10) << "write_log: writing divergent_priors" << dendl;
     ::encode(divergent_priors, (*km)["divergent_priors"]);
   }
-  ::encode(log.can_rollback_to, (*km)["can_rollback_to"]);
-  ::encode(log.rollback_info_trimmed_to, (*km)["rollback_info_trimmed_to"]);
+  if (require_rollback) {
+    ::encode(log.can_rollback_to, (*km)["can_rollback_to"]);
+    ::encode(log.rollback_info_trimmed_to, (*km)["rollback_info_trimmed_to"]);
+  }
 
   if (!to_remove.empty())
     t.omap_rmkeys(coll, log_oid, to_remove);
@@ -890,7 +893,7 @@ void PGLog::read_log(ObjectStore *store, coll_t pg_coll,
   log.rollback_info_trimmed_to = eversion_t();
   ObjectMap::ObjectMapIterator p = store->get_omap_iterator(log_coll, log_oid);
   if (p) {
-    for (p->seek_to_first(); p->valid() ; p->next()) {
+    for (p->seek_to_first(); p->valid() ; p->next(false)) {
       // non-log pgmeta_oid keys are prefixed with _; skip those
       if (p->key()[0] == '_')
 	continue;
@@ -931,12 +934,13 @@ void PGLog::read_log(ObjectStore *store, coll_t pg_coll,
     dout(10) << "read_log checking for missing items over interval (" << info.last_complete
 	     << "," << info.last_update << "]" << dendl;
 
-    set<hobject_t> did;
+    set<hobject_t, hobject_t::BitwiseComparator> did;
     for (list<pg_log_entry_t>::reverse_iterator i = log.log.rbegin();
 	 i != log.log.rend();
 	 ++i) {
       if (i->version <= info.last_complete) break;
-      if (i->soid > info.last_backfill) continue;
+      if (cmp(i->soid, info.last_backfill, info.last_backfill_bitwise) > 0)
+	continue;
       if (did.count(i->soid)) continue;
       did.insert(i->soid);
       
@@ -964,7 +968,8 @@ void PGLog::read_log(ObjectStore *store, coll_t pg_coll,
 	 i != divergent_priors.rend();
 	 ++i) {
       if (i->first <= info.last_complete) break;
-      if (i->second > info.last_backfill) continue;
+      if (cmp(i->second, info.last_backfill, info.last_backfill_bitwise) > 0)
+	continue;
       if (did.count(i->second)) continue;
       did.insert(i->second);
       bufferlist bv;

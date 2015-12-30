@@ -39,7 +39,7 @@ class MOSDOpReply : public Message {
   pg_t pgid;
   vector<OSDOp> ops;
   int64_t flags;
-  int32_t result;
+  errorcode32_t result;
   eversion_t bad_replay_version;
   eversion_t replay_version;
   version_t user_version;
@@ -169,6 +169,7 @@ public:
       }
       ::encode_nohead(oid.name, payload);
     } else {
+      header.version = HEAD_VERSION;
       ::encode(oid, payload);
       ::encode(pgid, payload);
       ::encode(flags, payload);
@@ -193,7 +194,32 @@ public:
   }
   virtual void decode_payload() {
     bufferlist::iterator p = payload.begin();
-    if (header.version < 2) {
+
+    // Always keep here the newest version of decoding order/rule
+    if (header.version == HEAD_VERSION) {
+	::decode(oid, p);
+	::decode(pgid, p);
+	::decode(flags, p);
+	::decode(result, p);
+	::decode(bad_replay_version, p);
+	::decode(osdmap_epoch, p);
+
+	__u32 num_ops = ops.size();
+	::decode(num_ops, p);
+	ops.resize(num_ops);
+	for (unsigned i = 0; i < num_ops; i++)
+	::decode(ops[i].op, p);
+	::decode(retry_attempt, p);
+
+	for (unsigned i = 0; i < num_ops; ++i)
+	::decode(ops[i].rval, p);
+
+	OSDOp::split_osd_op_vector_out_data(ops, data);
+
+	::decode(replay_version, p);
+	::decode(user_version, p);
+	::decode(redirect, p);
+    } else if (header.version < 2) {
       ceph_osd_reply_head head;
       ::decode(head, p);
       ops.resize(head.num_ops);
@@ -202,7 +228,7 @@ public:
       }
       ::decode_nohead(head.object_len, oid.name, p);
       pgid = pg_t(head.layout.ol_pgid);
-      result = head.result;
+      result = (int32_t)head.result;
       flags = head.flags;
       replay_version = head.reassert_version;
       user_version = replay_version.version;

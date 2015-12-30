@@ -143,8 +143,9 @@
 #include <map>
 #include <set>
 #include <vector>
+#include <iostream>
 #include "include/memory.h"
-#include "include/buffer.h"
+#include "include/buffer_fwd.h"
 
 class CrushWrapper;
 
@@ -153,6 +154,20 @@ using namespace std;
 namespace ceph {
 
   typedef map<std::string,std::string> ErasureCodeProfile;
+
+  inline ostream& operator<<(ostream& out, const ErasureCodeProfile& profile) {
+    out << "{";
+    for (ErasureCodeProfile::const_iterator it = profile.begin();
+	 it != profile.end();
+	 ++it) {
+      if (it != profile.begin()) out << ",";
+      out << it->first << "=" << it->second;
+    }
+    out << "}";
+    return out;
+  }
+
+
   class ErasureCodeInterface {
   public:
     virtual ~ErasureCodeInterface() {}
@@ -172,6 +187,14 @@ namespace ceph {
      * @return 0 on success or a negative errno on error.
      */
     virtual int init(ErasureCodeProfile &profile, ostream *ss) = 0;
+
+    /**
+     * Return the profile that was used to initialize the instance
+     * with the **init** method.
+     *
+     * @return the profile in use by the instance
+     */
+    virtual const ErasureCodeProfile &get_profile() const = 0;
 
     /**
      * Create a new ruleset in **crush** under the name **name**,

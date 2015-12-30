@@ -17,7 +17,7 @@
 
 #include "osdc/Objecter.h"
 #include "osdc/Filer.h"
-#include "mds/MDS.h"
+#include "mds/MDSRank.h"
 #include "mds/MDCache.h"
 #include "mds/MDLog.h"
 #include "mds/CDir.h"
@@ -30,14 +30,14 @@
 #define dout_subsys ceph_subsys_mds
 #undef dout_prefix
 #define dout_prefix _prefix(_dout, mds)
-static ostream& _prefix(std::ostream *_dout, MDS *mds) {
+static ostream& _prefix(std::ostream *_dout, MDSRank *mds) {
   return *_dout << "mds." << mds->get_nodeid() << ".cache.strays ";
 }
 
 class StrayManagerIOContext : public virtual MDSIOContextBase {
 protected:
   StrayManager *sm;
-  virtual MDS *get_mds()
+  virtual MDSRank *get_mds()
   {
     return sm->mds;
   }
@@ -49,7 +49,7 @@ public:
 class StrayManagerContext : public virtual MDSInternalContextBase {
 protected:
   StrayManager *sm;
-  virtual MDS *get_mds()
+  virtual MDSRank *get_mds()
   {
     return sm->mds;
   }
@@ -94,7 +94,7 @@ void StrayManager::purge(CDentry *dn, uint32_t op_allowance)
   C_GatherBuilder gather(
     g_ceph_context,
     new C_OnFinisher(new C_IO_PurgeStrayPurged(
-        this, dn, false, op_allowance), &mds->finisher));
+        this, dn, false, op_allowance), mds->finisher));
 
   if (in->is_dir()) {
     object_locator_t oloc(mds->mdsmap->get_metadata_pool());
@@ -107,8 +107,9 @@ void StrayManager::purge(CDentry *dn, uint32_t op_allowance)
          ++p) {
       object_t oid = CInode::get_object_name(in->inode.ino, *p, "");
       dout(10) << __func__ << " remove dirfrag " << oid << dendl;
-      mds->objecter->remove(oid, oloc, nullsnapc, ceph_clock_now(g_ceph_context),
-                            0, NULL, gather.new_sub());
+      mds->objecter->remove(oid, oloc, nullsnapc,
+			    ceph::real_clock::now(g_ceph_context),
+			    0, NULL, gather.new_sub());
     }
     assert(gather.has_subs());
     gather.activate();
@@ -139,9 +140,9 @@ void StrayManager::purge(CDentry *dn, uint32_t op_allowance)
       uint64_t num = (to + period - 1) / period;
       dout(10) << __func__ << " 0~" << to << " objects 0~" << num
 	       << " snapc " << snapc << " on " << *in << dendl;
-      mds->filer->purge_range(in->inode.ino, &in->inode.layout, *snapc,
-			      0, num, ceph_clock_now(g_ceph_context), 0,
-			      gather.new_sub());
+      filer.purge_range(in->inode.ino, &in->inode.layout, *snapc,
+			0, num, ceph::real_clock::now(g_ceph_context), 0,
+			gather.new_sub());
     }
   }
 
@@ -152,7 +153,8 @@ void StrayManager::purge(CDentry *dn, uint32_t op_allowance)
     object_locator_t oloc(pi->layout.fl_pg_pool);
     dout(10) << __func__ << " remove backtrace object " << oid
 	     << " pool " << oloc.pool << " snapc " << snapc << dendl;
-    mds->objecter->remove(oid, oloc, *snapc, ceph_clock_now(g_ceph_context), 0,
+    mds->objecter->remove(oid, oloc, *snapc,
+			  ceph::real_clock::now(g_ceph_context), 0,
 			  NULL, gather.new_sub());
   }
   // remove old backtrace objects
@@ -162,7 +164,8 @@ void StrayManager::purge(CDentry *dn, uint32_t op_allowance)
     object_locator_t oloc(*p);
     dout(10) << __func__ << " remove backtrace object " << oid
 	     << " old pool " << *p << " snapc " << snapc << dendl;
-    mds->objecter->remove(oid, oloc, *snapc, ceph_clock_now(g_ceph_context), 0,
+    mds->objecter->remove(oid, oloc, *snapc,
+			  ceph::real_clock::now(g_ceph_context), 0,
 			  NULL, gather.new_sub());
   }
   assert(gather.has_subs());
@@ -520,7 +523,7 @@ struct C_MDC_EvalStray : public StrayManagerContext {
   }
 };
 
-bool StrayManager::eval_stray(CDentry *dn, bool delay)
+bool StrayManager::__eval_stray(CDentry *dn, bool delay)
 {
   dout(10) << "eval_stray " << *dn << dendl;
   CDentry::linkage_t *dnl = dn->get_projected_linkage();
@@ -551,7 +554,7 @@ bool StrayManager::eval_stray(CDentry *dn, bool delay)
     // past snaprealm parents imply snapped dentry remote links.
     // only important for directories.  normal file data snaps are handled
     // by the object store.
-    if (in->snaprealm && in->snaprealm->has_past_parents()) {
+    if (in->snaprealm) {
       if (!in->snaprealm->have_past_parents_open() &&
           !in->snaprealm->open_parents(new C_MDC_EvalStray(this, dn))) {
         return false;
@@ -572,6 +575,17 @@ bool StrayManager::eval_stray(CDentry *dn, bool delay)
         for (list<CDir*>::iterator p = ls.begin(); p != ls.end(); ++p) {
           (*p)->try_remove_dentries_for_stray();
         }
+      }
+
+      if (!in->remote_parents.empty()) {
+	// unlink any stale remote snap dentry.
+	for (compact_set<CDentry*>::iterator p = in->remote_parents.begin();
+	     p != in->remote_parents.end(); ) {
+	  CDentry *remote_dn = *p;
+	  ++p;
+	  assert(remote_dn->last != CEPH_NOSNAP);
+	  remote_dn->unlink_remote(remote_dn->get_linkage());
+	}
       }
     }
     if (dn->is_replicated()) {
@@ -631,6 +645,18 @@ bool StrayManager::eval_stray(CDentry *dn, bool delay)
     eval_remote_stray(dn, NULL);
     return false;
   }
+}
+
+bool StrayManager::eval_stray(CDentry *dn, bool delay)
+{
+  // avoid nested eval_stray
+  if (dn->state_test(CDentry::STATE_EVALUATINGSTRAY))
+      return false;
+
+  dn->state_set(CDentry::STATE_EVALUATINGSTRAY);
+  bool ret = __eval_stray(dn, delay);
+  dn->state_clear(CDentry::STATE_EVALUATINGSTRAY);
+  return ret;
 }
 
 void StrayManager::eval_remote_stray(CDentry *stray_dn, CDentry *remote_dn)
@@ -724,14 +750,15 @@ void StrayManager::migrate_stray(CDentry *dn, mds_rank_t to)
   mds->send_message_mds(req, to);
 }
 
-  StrayManager::StrayManager(MDS *mds)
+StrayManager::StrayManager(MDSRank *mds)
   : delayed_eval_stray(member_offset(CDentry, item_stray)),
     mds(mds), logger(NULL),
     ops_in_flight(0), files_purging(0),
-    num_strays(0), num_strays_purging(0), num_strays_delayed(0)
+    max_purge_ops(0), 
+    num_strays(0), num_strays_purging(0), num_strays_delayed(0),
+    filer(mds->objecter, mds->finisher)
 {
   assert(mds != NULL);
-  update_op_limit();
 }
 
 void StrayManager::abort_queue()
@@ -770,7 +797,7 @@ void StrayManager::truncate(CDentry *dn, uint32_t op_allowance)
   C_GatherBuilder gather(
     g_ceph_context,
     new C_OnFinisher(new C_IO_PurgeStrayPurged(this, dn, true, 0),
-		     &mds->finisher));
+		     mds->finisher));
 
   SnapRealm *realm = in->find_snaprealm();
   assert(realm);
@@ -789,16 +816,16 @@ void StrayManager::truncate(CDentry *dn, uint32_t op_allowance)
     uint64_t num = (to - 1) / period;
     dout(10) << __func__ << " 0~" << to << " objects 0~" << num
       << " snapc " << snapc << " on " << *in << dendl;
-    mds->filer->purge_range(in->ino(), &in->inode.layout, *snapc,
-			    1, num, ceph_clock_now(g_ceph_context),
-			    0, gather.new_sub());
+    filer.purge_range(in->ino(), &in->inode.layout, *snapc,
+		      1, num, ceph::real_clock::now(g_ceph_context),
+		      0, gather.new_sub());
   }
 
   // keep backtrace object
   if (period && to > 0) {
-    mds->filer->zero(in->ino(), &in->inode.layout, *snapc,
-		     0, period, ceph_clock_now(g_ceph_context),
-		     0, true, NULL, gather.new_sub());
+    filer.zero(in->ino(), &in->inode.layout, *snapc,
+	       0, period, ceph::real_clock::now(g_ceph_context),
+	       0, true, NULL, gather.new_sub());
   }
 
   assert(gather.has_subs());
@@ -843,12 +870,21 @@ void StrayManager::handle_conf_change(const struct md_config_t *conf,
 void StrayManager::update_op_limit()
 {
   const OSDMap *osdmap = mds->objecter->get_osdmap_read();
+  assert(osdmap != NULL);
 
   // Number of PGs across all data pools
   uint64_t pg_count = 0;
   const std::set<int64_t> &data_pools = mds->mdsmap->get_data_pools();
   for (std::set<int64_t>::iterator i = data_pools.begin();
        i != data_pools.end(); ++i) {
+    if (osdmap->get_pg_pool(*i) == NULL) {
+      // It is possible that we have an older OSDMap than MDSMap, because
+      // we don't start watching every OSDMap until after MDSRank is
+      // initialized
+      dout(4) << __func__ << " data pool " << *i
+              << " not found in OSDMap" << dendl;
+      continue;
+    }
     pg_count += osdmap->get_pg_num(*i);
   }
 

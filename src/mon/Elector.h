@@ -25,6 +25,7 @@ using namespace std;
 #include "include/Context.h"
 
 #include "common/Timer.h"
+#include "mon/MonOpRequest.h"
 
 class Monitor;
 
@@ -270,7 +271,7 @@ class Elector {
    *
    * @param m A message sent by another participant in the quorum.
    */
-  void handle_propose(class MMonElection *m);
+  void handle_propose(MonOpRequestRef op);
   /**
    * Handle a message from some other participant Acking us as the Leader.
    *
@@ -293,7 +294,7 @@ class Elector {
    *
    * @param m A message with an operation type of OP_ACK
    */
-  void handle_ack(class MMonElection *m);
+  void handle_ack(MonOpRequestRef op);
   /**
    * Handle a message from some other participant declaring Victory.
    *
@@ -314,7 +315,7 @@ class Elector {
    *
    * @param m A message with an operation type of OP_VICTORY
    */
-  void handle_victory(class MMonElection *m);
+  void handle_victory(MonOpRequestRef op);
   /**
    * Send a nak to a peer who's out of date, containing information about why.
    *
@@ -326,7 +327,7 @@ class Elector {
    * @param m A message from a monitor not supporting required features. We
    * take ownership of the reference.
    */
-  void nak_old_peer(class MMonElection *m);
+  void nak_old_peer(MonOpRequestRef op);
   /**
    * Handle a message from some other participant declaring
    * we cannot join the quorum.
@@ -339,7 +340,7 @@ class Elector {
    *
    * @param m A message with an operation type of OP_NAK
    */
-  void handle_nak(class MMonElection *m);
+  void handle_nak(MonOpRequestRef op);
   
  public:
   /**
@@ -398,7 +399,7 @@ class Elector {
    *
    * @param m A received message
    */
-  void dispatch(Message *m);
+  void dispatch(MonOpRequestRef op);
 
   /**
    * Call an election.

@@ -4,7 +4,7 @@
 #define FILESTORE_TRACKER_H
 #include "test/common/ObjectContents.h"
 #include "os/FileStore.h"
-#include "os/KeyValueDB.h"
+#include "kv/KeyValueDB.h"
 #include <boost/scoped_ptr.hpp>
 #include <list>
 #include <map>
@@ -18,7 +18,7 @@ class FileStoreTracker {
   uint64_t restart_seq;
 
   struct OutTransaction {
-    list<pair<pair<string, string>, uint64_t> > *in_flight;
+    list<pair<pair<coll_t, string>, uint64_t> > *in_flight;
     ObjectStore::Transaction *t;
   };
 public:
@@ -36,9 +36,9 @@ public:
     list<Op*> ops;
     class Write : public Op {
     public:
-      string coll;
+      coll_t coll;
       string oid;
-      Write(const string &coll,
+      Write(const coll_t &coll,
 	    const string &oid)
 	: coll(coll), oid(oid) {}
       void operator()(FileStoreTracker *harness,
@@ -48,10 +48,10 @@ public:
     };
     class CloneRange : public Op {
     public:
-      string coll;
+      coll_t coll;
       string from;
       string to;
-      CloneRange(const string &coll,
+      CloneRange(const coll_t &coll,
 		 const string &from,
 		 const string &to)
 	: coll(coll), from(from), to(to) {}
@@ -63,10 +63,10 @@ public:
     };
     class Clone : public Op {
     public:
-      string coll;
+      coll_t coll;
       string from;
       string to;
-      Clone(const string &coll,
+      Clone(const coll_t &coll,
 		 const string &from,
 		 const string &to)
 	: coll(coll), from(from), to(to) {}
@@ -78,9 +78,9 @@ public:
     };
     class Remove: public Op {
     public:
-      string coll;
+      coll_t coll;
       string obj;
-      Remove(const string &coll,
+      Remove(const coll_t &coll,
 	     const string &obj)
 	: coll(coll), obj(obj) {}
       void operator()(FileStoreTracker *harness,
@@ -90,18 +90,18 @@ public:
       }
     };
   public:
-    void write(const string &coll, const string &oid) {
+    void write(const coll_t &coll, const string &oid) {
       ops.push_back(new Write(coll, oid));
     }
-    void clone_range(const string &coll, const string &from,
+    void clone_range(const coll_t &coll, const string &from,
 		     const string &to) {
       ops.push_back(new CloneRange(coll, from, to));
     }
-    void clone(const string &coll, const string &from,
+    void clone(const coll_t &coll, const string &from,
 	       const string &to) {
       ops.push_back(new Clone(coll, from, to));
     }
-    void remove(const string &coll, const string &oid) {
+    void remove(const coll_t &coll, const string &oid) {
       ops.push_back(new Remove(coll, oid));
     }
     friend class FileStoreTracker;
@@ -109,27 +109,27 @@ public:
 
   int init();
   void submit_transaction(Transaction &t);
-  void verify(const string &coll,
+  void verify(const coll_t &coll,
 	      const string &from,
 	      bool on_start = false);
 
 private:
-  ObjectContents get_current_content(const pair<string, string> &obj);
-  pair<uint64_t, uint64_t> get_valid_reads(const pair<string, string> &obj);
-  ObjectContents get_content(const pair<string, string> &obj, uint64_t version);
+  ObjectContents get_current_content(const pair<coll_t, string> &obj);
+  pair<uint64_t, uint64_t> get_valid_reads(const pair<coll_t, string> &obj);
+  ObjectContents get_content(const pair<coll_t, string> &obj, uint64_t version);
 
-  void committed(const pair<string, string> &obj, uint64_t seq);
-  void applied(const pair<string, string> &obj, uint64_t seq);
-  uint64_t set_content(const pair<string, string> &obj, ObjectContents &content);
+  void committed(const pair<coll_t, string> &obj, uint64_t seq);
+  void applied(const pair<coll_t, string> &obj, uint64_t seq);
+  uint64_t set_content(const pair<coll_t, string> &obj, ObjectContents &content);
 
   // ObjectContents Operations
-  void write(const pair<string, string> &obj, OutTransaction *out);
-  void remove(const pair<string, string> &obj, OutTransaction *out);
-  void clone_range(const pair<string, string> &from,
-		   const pair<string, string> &to,
+  void write(const pair<coll_t, string> &obj, OutTransaction *out);
+  void remove(const pair<coll_t, string> &obj, OutTransaction *out);
+  void clone_range(const pair<coll_t, string> &from,
+		   const pair<coll_t, string> &to,
 		   OutTransaction *out);
-  void clone(const pair<string, string> &from,
-	     const pair<string, string> &to,
+  void clone(const pair<coll_t, string> &from,
+	     const pair<coll_t, string> &to,
 	     OutTransaction *out);
   friend class OnApplied;
   friend class OnCommitted;

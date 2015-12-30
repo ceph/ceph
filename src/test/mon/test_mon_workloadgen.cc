@@ -244,8 +244,7 @@ class ClientStub : public TestStub
       return err;
     }
 
-    messenger.reset(Messenger::create(cct, cct->_conf->ms_type, entity_name_t::CLIENT(-1),
-				      "stubclient", getpid()));
+    messenger.reset(Messenger::create_client_messenger(cct, "stubclient"));
     assert(messenger.get() != NULL);
 
     messenger->set_default_policy(
@@ -936,7 +935,7 @@ void handle_test_signal(int signum)
   if ((signum != SIGINT) && (signum != SIGTERM))
     return;
 
-  std::cerr << "*** Got signal " << sys_siglist[signum] << " ***" << std::endl;
+  std::cerr << "*** Got signal " << sig_str(signum) << " ***" << std::endl;
   Mutex::Locker l(shutdown_lock);
   if (shutdown_timer) {
     shutdown_timer->cancel_all_events();

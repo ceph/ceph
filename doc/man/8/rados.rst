@@ -57,6 +57,11 @@ Options
 
   Set the block size for put/get ops and for write benchmarking.
 
+.. option:: --striper
+
+   Uses the striping API of rados rather than the default one.
+   Available for stat, get, put, truncate, rm, ls and all xattr related operation
+
 
 Global commands
 ===============

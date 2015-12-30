@@ -9,24 +9,24 @@ int ECUtil::decode(
   ErasureCodeInterfaceRef &ec_impl,
   map<int, bufferlist> &to_decode,
   bufferlist *out) {
-
-  uint64_t total_chunk_size = to_decode.begin()->second.length();
-
   assert(to_decode.size());
-  assert(total_chunk_size % sinfo.get_chunk_size() == 0);
+
+  uint64_t total_data_size = to_decode.begin()->second.length();
+  assert(total_data_size % sinfo.get_chunk_size() == 0);
+
   assert(out);
   assert(out->length() == 0);
 
   for (map<int, bufferlist>::iterator i = to_decode.begin();
        i != to_decode.end();
        ++i) {
-    assert(i->second.length() == total_chunk_size);
+    assert(i->second.length() == total_data_size);
   }
 
-  if (total_chunk_size == 0)
+  if (total_data_size == 0)
     return 0;
 
-  for (uint64_t i = 0; i < total_chunk_size; i += sinfo.get_chunk_size()) {
+  for (uint64_t i = 0; i < total_data_size; i += sinfo.get_chunk_size()) {
     map<int, bufferlist> chunks;
     for (map<int, bufferlist>::iterator j = to_decode.begin();
 	 j != to_decode.end();
@@ -47,19 +47,18 @@ int ECUtil::decode(
   ErasureCodeInterfaceRef &ec_impl,
   map<int, bufferlist> &to_decode,
   map<int, bufferlist*> &out) {
-
-  uint64_t total_chunk_size = to_decode.begin()->second.length();
-
   assert(to_decode.size());
-  assert(total_chunk_size % sinfo.get_chunk_size() == 0);
+
+  uint64_t total_data_size = to_decode.begin()->second.length();
+  assert(total_data_size % sinfo.get_chunk_size() == 0);
 
   for (map<int, bufferlist>::iterator i = to_decode.begin();
        i != to_decode.end();
        ++i) {
-    assert(i->second.length() == total_chunk_size);
+    assert(i->second.length() == total_data_size);
   }
 
-  if (total_chunk_size == 0)
+  if (total_data_size == 0)
     return 0;
 
   set<int> need;
@@ -71,7 +70,7 @@ int ECUtil::decode(
     need.insert(i->first);
   }
 
-  for (uint64_t i = 0; i < total_chunk_size; i += sinfo.get_chunk_size()) {
+  for (uint64_t i = 0; i < total_data_size; i += sinfo.get_chunk_size()) {
     map<int, bufferlist> chunks;
     for (map<int, bufferlist>::iterator j = to_decode.begin();
 	 j != to_decode.end();
@@ -92,7 +91,7 @@ int ECUtil::decode(
   for (map<int, bufferlist*>::iterator i = out.begin();
        i != out.end();
        ++i) {
-    assert(i->second->length() == total_chunk_size);
+    assert(i->second->length() == total_data_size);
   }
   return 0;
 }
@@ -136,6 +135,22 @@ int ECUtil::encode(
       logical_size);
   }
   return 0;
+}
+
+void ECUtil::HashInfo::append(uint64_t old_size,
+			      map<int, bufferlist> &to_append) {
+  assert(to_append.size() == cumulative_shard_hashes.size());
+  assert(old_size == total_chunk_size);
+  uint64_t size_to_append = to_append.begin()->second.length();
+  for (map<int, bufferlist>::iterator i = to_append.begin();
+       i != to_append.end();
+       ++i) {
+    assert(size_to_append == i->second.length());
+    assert((unsigned)i->first < cumulative_shard_hashes.size());
+    uint32_t new_hash = i->second.crc32c(cumulative_shard_hashes[i->first]);
+    cumulative_shard_hashes[i->first] = new_hash;
+  }
+  total_chunk_size += size_to_append;
 }
 
 void ECUtil::HashInfo::encode(bufferlist &bl) const

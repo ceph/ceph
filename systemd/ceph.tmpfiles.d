@@ -1,1 +1,1 @@
-d /var/run/ceph 0755 root root -
+d /run/ceph 0770 ceph ceph -

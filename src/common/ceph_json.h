@@ -1,7 +1,7 @@
 #ifndef CEPH_JSON_H
 #define CEPH_JSON_H
 
-#include <iostream>
+#include <iosfwd>
 #include <include/types.h>
 #include <list>
 
@@ -198,7 +198,7 @@ void decode_json_obj(multimap<K, V>& m, JSONObj *obj)
     JSONObj *o = *iter;
     JSONDecoder::decode_json("key", key, o);
     JSONDecoder::decode_json("val", val, o);
-    m.insert(make_pair<K, V>(key, val));
+    m.insert(make_pair(key, val));
   }
 }
 

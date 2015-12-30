@@ -29,12 +29,11 @@
 #include "include/compat.h"
 #include "include/color.h"
 
+#include <pwd.h>
+#include <grp.h>
+
 #include <errno.h>
 #include <deque>
-#ifdef WITH_LTTNG
-#include <lttng/ust.h>
-#endif
-
 
 #define dout_subsys ceph_subsys_
 
@@ -120,8 +119,6 @@ void global_init(std::vector < const char * > *alt_def_args,
 {
   global_pre_init(alt_def_args, args, module_type, code_env, flags);
 
-  g_lockdep = g_ceph_context->_conf->lockdep;
-
   // signal stuff
   int siglist[] = { SIGPIPE, 0 };
   block_signals(siglist, NULL);
@@ -132,24 +129,119 @@ void global_init(std::vector < const char * > *alt_def_args,
   if (g_conf->log_flush_on_exit)
     g_ceph_context->_log->set_flush_on_exit();
 
+  // consider --setuser root a no-op, even if we're not root
+  if (getuid() != 0) {
+    if (g_conf->setuser.length()) {
+      cerr << "ignoring --setuser " << g_conf->setuser << " since I am not root"
+	   << std::endl;
+      g_conf->set_val("setuser", "", false, false);
+    }
+    if (g_conf->setgroup.length()) {
+      cerr << "ignoring --setgroup " << g_conf->setgroup
+	   << " since I am not root" << std::endl;
+      g_conf->set_val("setgroup", "", false, false);
+    }
+  }
+
+  // drop privileges?
+  if (g_conf->setgroup.length() ||
+      g_conf->setuser.length()) {
+    uid_t uid = 0;  // zero means no change; we can only drop privs here.
+    gid_t gid = 0;
+    if (g_conf->setuser.length()) {
+      uid = atoi(g_conf->setuser.c_str());
+      if (!uid) {
+	char buf[4096];
+	struct passwd pa;
+	struct passwd *p = 0;
+	getpwnam_r(g_conf->setuser.c_str(), &pa, buf, sizeof(buf), &p);
+	if (!p) {
+	  cerr << "unable to look up user '" << g_conf->setuser << "'"
+	       << std::endl;
+	  exit(1);
+	}
+	uid = p->pw_uid;
+	gid = p->pw_gid;
+      }
+    }
+    if (g_conf->setgroup.length() > 0) {
+      gid = atoi(g_conf->setgroup.c_str());
+      if (!gid) {
+	char buf[4096];
+	struct group gr;
+	struct group *g = 0;
+	getgrnam_r(g_conf->setgroup.c_str(), &gr, buf, sizeof(buf), &g);
+	if (!g) {
+	  cerr << "unable to look up group '" << g_conf->setgroup << "'"
+	       << std::endl;
+	  exit(1);
+	}
+	gid = g->gr_gid;
+      }
+    }
+    if ((uid || gid) &&
+	g_conf->setuser_match_path.length()) {
+      struct stat st;
+      int r = ::stat(g_conf->setuser_match_path.c_str(), &st);
+      if (r < 0) {
+	r = -errno;
+	cerr << "unable to stat setuser_match_path "
+	     << g_conf->setuser_match_path
+	     << ": " << cpp_strerror(r) << std::endl;
+	exit(1);
+      }
+      if ((uid && uid != st.st_uid) ||
+	  (gid && gid != st.st_gid)) {
+	cerr << "WARNING: will not setuid/gid: " << g_conf->setuser_match_path
+	     << " owned by " << st.st_uid << ":" << st.st_gid
+	     << " and not requested " << uid << ":" << gid
+	     << std::endl;
+	uid = 0;
+	gid = 0;
+      } else {
+	dout(10) << "setuser_match_path "
+		 << g_conf->setuser_match_path << " owned by "
+		 << st.st_uid << ":" << st.st_gid << ", doing setuid/gid"
+		 << dendl;
+      }
+    }
+    if (setgid(gid) != 0) {
+      int r = errno;
+      cerr << "unable to setgid " << gid << ": " << cpp_strerror(r)
+	   << std::endl;
+      exit(1);
+    }
+    if (setuid(uid) != 0) {
+      int r = errno;
+      cerr << "unable to setuid " << uid << ": " << cpp_strerror(r)
+	   << std::endl;
+      exit(1);
+    }
+    dout(0) << "set uid:gid to " << uid << ":" << gid << dendl;
+  }
+
   if (g_conf->run_dir.length() &&
       code_env == CODE_ENVIRONMENT_DAEMON &&
       !(flags & CINIT_FLAG_NO_DAEMON_ACTIONS)) {
     int r = ::mkdir(g_conf->run_dir.c_str(), 0755);
     if (r < 0 && errno != EEXIST) {
       r = -errno;
-      derr << "warning: unable to create " << g_conf->run_dir << ": " << cpp_strerror(r) << dendl;
+      cerr << "warning: unable to create " << g_conf->run_dir << ": " << cpp_strerror(r) << std::endl;
     }
   }
 
-  if (g_lockdep) {
-    lockdep_register_ceph_context(g_ceph_context);
-  }
   register_assert_context(g_ceph_context);
 
   // call all observers now.  this has the side-effect of configuring
   // and opening the log file immediately.
   g_conf->call_all_observers();
+
+  // test leak checking
+  if (g_conf->debug_deliberately_leak_memory) {
+    derr << "deliberately leaking some memory" << dendl;
+    char *s = new char[1234567];
+    (void)s;
+  }
 
   if (code_env == CODE_ENVIRONMENT_DAEMON && !(flags & CINIT_FLAG_NO_DAEMON_ACTIONS))
     output_ceph_version();
@@ -165,7 +257,7 @@ static void pidfile_remove_void(void)
   pidfile_remove();
 }
 
-int global_init_prefork(CephContext *cct, int flags)
+int global_init_prefork(CephContext *cct)
 {
   if (g_code_env != CODE_ENVIRONMENT_DAEMON)
     return -1;
@@ -187,16 +279,12 @@ int global_init_prefork(CephContext *cct, int flags)
   return 0;
 }
 
-void global_init_daemonize(CephContext *cct, int flags)
+void global_init_daemonize(CephContext *cct)
 {
-  if (global_init_prefork(cct, flags) < 0)
+  if (global_init_prefork(cct) < 0)
     return;
 
-#ifdef WITH_LTTNG
-  sigset_t sigset;
-  ust_before_fork(&sigset);
-#endif
-
+#if !defined(_AIX)
   int ret = daemon(1, 1);
   if (ret) {
     ret = errno;
@@ -205,11 +293,11 @@ void global_init_daemonize(CephContext *cct, int flags)
     exit(1);
   }
 
-#ifdef WITH_LTTNG
-  ust_after_fork_child(&sigset);
-#endif
   global_init_postfork_start(cct);
-  global_init_postfork_finish(cct, flags);
+  global_init_postfork_finish(cct);
+#else
+# warning daemon not supported on aix
+#endif
 }
 
 void global_init_postfork_start(CephContext *cct)
@@ -248,13 +336,13 @@ void global_init_postfork_start(CephContext *cct)
   pidfile_write(g_conf);
 }
 
-void global_init_postfork_finish(CephContext *cct, int flags)
+void global_init_postfork_finish(CephContext *cct)
 {
   /* We only close stderr once the caller decides the daemonization
    * process is finished.  This way we can allow error messages to be
    * propagated in a manner that the user is able to see.
    */
-  if (!(flags & CINIT_FLAG_NO_CLOSE_STDERR)) {
+  if (!(cct->get_init_flags() & CINIT_FLAG_NO_CLOSE_STDERR)) {
     int ret = global_init_shutdown_stderr(cct);
     if (ret) {
       derr << "global_init_daemonize: global_init_shutdown_stderr failed with "

@@ -85,7 +85,7 @@ class test_helper {
     string *resp_data;
     unsigned resp_code;
   public:
-    test_helper() : resp_data(NULL){
+    test_helper() : curl_inst(NULL), resp_data(NULL), resp_code(0) {
       curl_global_init(CURL_GLOBAL_ALL);
     }
     ~test_helper(){
@@ -325,9 +325,7 @@ int run_rgw_admin(string& cmd, string& resp) {
       argv[loop++] = (char *)(*it).c_str();
     }
     argv[loop] = NULL;
-    close(1);
-    stdout = fopen(RGW_ADMIN_RESP_PATH, "w+");
-    if (!stdout) {
+    if (!freopen(RGW_ADMIN_RESP_PATH, "w+", stdout)) {
       cout << "Unable to open stdout file" << std::endl;
     }
     execv((g_test->get_rgw_admin_path()).c_str(), argv); 

@@ -46,6 +46,8 @@
 
 class ErasureCodeLrc : public ErasureCode {
 public:
+  static const string DEFAULT_KML;
+
   struct Layer {
     Layer(string _chunks_map) : chunks_map(_chunks_map) { }
     ErasureCodeInterfaceRef erasure_code;
@@ -72,8 +74,9 @@ public:
   };
   vector<Step> ruleset_steps;
 
-  ErasureCodeLrc() :
-    chunk_count(0), data_chunk_count(0), ruleset_root("default")
+  ErasureCodeLrc(const std::string &dir)
+    : directory(dir),
+      chunk_count(0), data_chunk_count(0), ruleset_root("default")
   {
     ruleset_steps.push_back(Step("chooseleaf", "host", 0));
   }

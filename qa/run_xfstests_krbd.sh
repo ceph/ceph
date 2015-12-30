@@ -11,7 +11,7 @@ set -x
 SCRIPT="run_xfstests.sh"
 
 if [ -z "${URL_BASE}" ]; then
-	URL_BASE="https://ceph.com/git/?p=ceph.git;a=blob_plain;f=qa"
+	URL_BASE="https://git.ceph.com/?p=ceph.git;a=blob_plain;f=qa"
 fi
 
 cd "${TESTDIR}"
@@ -45,6 +45,8 @@ cat > "${EXPUNGE}" <<-!
 	generic/204	# stripe size throws off test's math for when to
 			#  expect ENOSPC
 	generic/231 # broken for disk and rbd by xfs kernel commit 4162bb
+	generic/247 # race between DIO and mmap writes
+               # see (https://lists.01.org/pipermail/lkp/2015-March/002459.html)
 
 	shared/272	# not for xfs
 	shared/289	# not for xfs

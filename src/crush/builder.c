@@ -1465,3 +1465,23 @@ int crush_reweight_bucket(struct crush_map *crush, struct crush_bucket *b)
 
 /***************************/
 
+/* methods to check for safe arithmetic operations */
+
+int crush_addition_is_unsafe(__u32 a, __u32 b)
+{
+	if ((((__u32)(-1)) - b) < a)
+		return 1;
+	else
+		return 0;
+}
+
+int crush_multiplication_is_unsafe(__u32  a, __u32 b)
+{
+	/* prevent division by zero */
+	if (!b)
+		return 1;
+	if ((((__u32)(-1)) / b) < a)
+		return 1;
+	else
+		return 0;
+}

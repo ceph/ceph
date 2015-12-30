@@ -8,6 +8,7 @@
 
 #include "../include/types.h"
 #include "msg/msg_types.h"
+#include "common/hobject.h"
 
 extern "C" {
 #endif
@@ -21,9 +22,10 @@ int __cls_ver_min = min;
 int __cls_name__## name = 0; \
 const char *__cls_name = #name;
 
-#define CLS_METHOD_RD		0x1
-#define CLS_METHOD_WR		0x2
-#define CLS_METHOD_PUBLIC	0x4
+#define CLS_METHOD_RD       0x1 /// method executes read operations
+#define CLS_METHOD_WR       0x2 /// method executes write operations
+#define CLS_METHOD_PUBLIC   0x4 /// unused
+#define CLS_METHOD_PROMOTE  0x8 /// method cannot be proxied to base tier
 
 
 #define CLS_LOG(level, fmt, ...)					\
@@ -34,6 +36,7 @@ void __cls_init();
 
 typedef void *cls_handle_t;
 typedef void *cls_method_handle_t;
+typedef void *cls_filter_handle_t;
 typedef void *cls_method_context_t;
 typedef int (*cls_method_call_t)(cls_method_context_t ctx,
 				 char *indata, int datalen,
@@ -70,6 +73,7 @@ extern int cls_unregister(cls_handle_t);
 extern int cls_register_method(cls_handle_t hclass, const char *method, int flags,
                         cls_method_call_t class_call, cls_method_handle_t *handle);
 extern int cls_unregister_method(cls_method_handle_t handle);
+extern void cls_unregister_filter(cls_filter_handle_t handle);
 
 
 
@@ -94,8 +98,46 @@ extern void class_fini(void);
 typedef int (*cls_method_cxx_call_t)(cls_method_context_t ctx,
 				     class buffer::list *inbl, class buffer::list *outbl);
 
+class PGLSFilter {
+protected:
+  string xattr;
+public:
+  PGLSFilter();
+  virtual ~PGLSFilter();
+  virtual bool filter(const hobject_t &obj, bufferlist& xattr_data,
+                      bufferlist& outdata) = 0;
+
+  /**
+   * Arguments passed from the RADOS client.  Implementations must
+   * handle any encoding errors, and return an appropriate error code,
+   * or 0 on valid input.
+   */
+  virtual int init(bufferlist::iterator &params) = 0;
+
+  /**
+   * xattr key, or empty string.  If non-empty, this xattr will be fetched
+   * and the value passed into ::filter
+   */
+   virtual string& get_xattr() { return xattr; }
+
+  /**
+   * If true, objects without the named xattr (if xattr name is not empty)
+   * will be rejected without calling ::filter
+   */
+  virtual bool reject_empty_xattr() { return true; }
+};
+
+// Classes expose a filter constructor that returns a subclass of PGLSFilter
+typedef PGLSFilter* (*cls_cxx_filter_factory_t)();
+
+
 extern int cls_register_cxx_method(cls_handle_t hclass, const char *method, int flags,
 				   cls_method_cxx_call_t class_call, cls_method_handle_t *handle);
+
+extern int cls_register_cxx_filter(cls_handle_t hclass,
+                                   const std::string &filter_name,
+				   cls_cxx_filter_factory_t fn,
+                                   cls_filter_handle_t *handle=NULL);
 
 extern int cls_cxx_create(cls_method_context_t hctx, bool exclusive);
 extern int cls_cxx_remove(cls_method_context_t hctx);

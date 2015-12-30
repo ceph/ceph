@@ -23,6 +23,7 @@
 #include "erasure-code/jerasure/ErasureCodeJerasure.h"
 #include "common/ceph_argparse.h"
 #include "global/global_context.h"
+#include "common/config.h"
 #include "gtest/gtest.h"
 
 template <typename T>
@@ -40,6 +41,18 @@ typedef ::testing::Types<
   ErasureCodeJerasureLiber8tion
 > JerasureTypes;
 TYPED_TEST_CASE(ErasureCodeTest, JerasureTypes);
+
+TYPED_TEST(ErasureCodeTest, sanity_check_k)
+{
+  TypeParam jerasure;
+  ErasureCodeProfile profile;
+  profile["k"] = "1";
+  profile["m"] = "1";
+  profile["packetsize"] = "8";
+  ostringstream errors;
+  EXPECT_EQ(-EINVAL, jerasure.init(profile, &errors));
+  EXPECT_NE(std::string::npos, errors.str().find("must be >= 2"));
+}
 
 TYPED_TEST(ErasureCodeTest, encode_decode)
 {
@@ -350,6 +363,8 @@ int main(int argc, char **argv)
 
   global_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT, CODE_ENVIRONMENT_UTILITY, 0);
   common_init_finish(g_ceph_context);
+
+  g_conf->set_val("erasure_code_dir", ".libs", false, false);
 
   ::testing::InitGoogleTest(&argc, argv);
   return RUN_ALL_TESTS();

@@ -28,7 +28,7 @@ public:
   void decode(bufferlist::iterator& bl);
   void dump(Formatter *f) const {}
 
-  void replay(MDS *mds);
+  void replay(MDSRank *mds);
 };
 
 #endif

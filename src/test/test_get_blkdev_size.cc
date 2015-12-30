@@ -5,6 +5,7 @@
 #include <inttypes.h>
 #include <sys/types.h>
 #include <sys/stat.h>
+#include "include/uuid.h"
 #include "common/blkdev.h"
 
 int main(int argc, char **argv)

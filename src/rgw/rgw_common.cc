@@ -99,7 +99,7 @@ is_err() const
 
 
 req_info::req_info(CephContext *cct, class RGWEnv *e) : env(e) {
-  method = env->get("REQUEST_METHOD");
+  method = env->get("REQUEST_METHOD", "");
   script_uri = env->get("SCRIPT_URI", cct->_conf->rgw_script_uri.c_str());
   request_uri = env->get("REQUEST_URI", cct->_conf->rgw_request_uri.c_str());
   int pos = request_uri.find('?');
@@ -109,7 +109,22 @@ req_info::req_info(CephContext *cct, class RGWEnv *e) : env(e) {
   } else {
     request_params = env->get("QUERY_STRING", "");
   }
-  host = env->get("HTTP_HOST");
+  host = env->get("HTTP_HOST", "");
+
+  // strip off any trailing :port from host (added by CrossFTP and maybe others)
+  size_t colon_offset = host.find_last_of(':');
+  if (colon_offset != string::npos) {
+    bool all_digits = true;
+    for (unsigned i = colon_offset + 1; i < host.size(); ++i) {
+      if (!isdigit(host[i])) {
+	all_digits = false;
+	break;
+      }
+    }
+    if (all_digits) {
+      host.resize(colon_offset);
+    }
+  }
 }
 
 void req_info::rebuild_from(req_info& src)
@@ -156,7 +171,6 @@ req_state::req_state(CephContext *_cct, class RGWEnv *e) : cct(_cct), cio(NULL),
   bucket_exists = false;
   has_bad_meta = false;
   length = NULL;
-  copy_source = NULL;
   http_auth = NULL;
   local_source = false;
 
@@ -182,6 +196,7 @@ struct str_len meta_prefixes[] = { STR_LEN_ENTRY("HTTP_X_AMZ"),
                                    STR_LEN_ENTRY("HTTP_X_RGW"),
                                    STR_LEN_ENTRY("HTTP_X_OBJECT"),
                                    STR_LEN_ENTRY("HTTP_X_CONTAINER"),
+                                   STR_LEN_ENTRY("HTTP_X_ACCOUNT"),
                                    {NULL, 0} };
 
 
@@ -341,18 +356,17 @@ bool parse_iso8601(const char *s, struct tm *t)
   }
   string str;
   trim_whitespace(p, str);
-  if (str.size() == 1 && str[0] == 'Z')
+  int len = str.size();
+
+  if (len == 1 && str[0] == 'Z')
     return true;
 
-  if (str.size() != 5) {
-    return false;
-  }
   if (str[0] != '.' ||
-      str[str.size() - 1] != 'Z')
+      str[len - 1] != 'Z')
     return false;
 
   uint32_t ms;
-  int r = stringtoul(str.substr(1, 3), &ms);
+  int r = stringtoul(str.substr(1, len - 2), &ms);
   if (r < 0)
     return false;
 
@@ -403,9 +417,6 @@ void calc_hmac_sha1(const char *key, int key_len,
   HMACSHA1 hmac((const unsigned char *)key, key_len);
   hmac.Update((const unsigned char *)msg, msg_len);
   hmac.Final((unsigned char *)dest);
-  
-  char hex_str[(CEPH_CRYPTO_HMACSHA1_DIGESTSIZE * 2) + 1];
-  buf_to_hex((unsigned char *)dest, CEPH_CRYPTO_HMACSHA1_DIGESTSIZE, hex_str);
 }
 
 int gen_rand_base64(CephContext *cct, char *dest, int size) /* size should be the required string size + 1 */
@@ -428,7 +439,7 @@ int gen_rand_base64(CephContext *cct, char *dest, int size) /* size should be th
   }
   tmp_dest[ret] = '\0';
   memcpy(dest, tmp_dest, size);
-  dest[size] = '\0';
+  dest[size-1] = '\0';
 
   return 0;
 }
@@ -525,6 +536,26 @@ int gen_rand_alphanumeric_no_underscore(CephContext *cct, char *dest, int size) 
   return 0;
 }
 
+static const char alphanum_plain_table[]="ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
+
+int gen_rand_alphanumeric_plain(CephContext *cct, char *dest, int size) /* size should be the required string size + 1 */
+{
+  int ret = get_random_bytes(dest, size);
+  if (ret < 0) {
+    lderr(cct) << "cannot get random bytes: " << cpp_strerror(-ret) << dendl;
+    return ret;
+  }
+
+  int i;
+  for (i=0; i<size - 1; i++) {
+    int pos = (unsigned)dest[i];
+    dest[i] = alphanum_plain_table[pos % (sizeof(alphanum_plain_table) - 1)];
+  }
+  dest[i] = '\0';
+
+  return 0;
+}
+
 int NameVal::parse()
 {
   int delim_pos = str.find('=');
@@ -581,6 +612,7 @@ int RGWHTTPArgs::parse()
           (name.compare("versionId") == 0) ||
           (name.compare("versions") == 0) ||
           (name.compare("versioning") == 0) ||
+          (name.compare("requestPayment") == 0) ||
           (name.compare("torrent") == 0)) {
         sub_resources[name] = val;
       } else if (name[0] == 'r') { // root of all evil
@@ -671,26 +703,70 @@ void RGWHTTPArgs::get_bool(const char *name, bool *val, bool def_val)
   }
 }
 
-bool verify_bucket_permission(struct req_state *s, int perm)
+bool verify_requester_payer_permission(struct req_state *s)
 {
-  if (!s->bucket_acl)
+  if (!s->bucket_info.requester_pays)
+    return true;
+
+  if (s->bucket_info.owner == s->user.user_id)
+    return true;
+
+  const char *request_payer = s->info.env->get("HTTP_X_AMZ_REQUEST_PAYER");
+  if (!request_payer) {
+    bool exists;
+    request_payer = s->info.args.get("x-amz-request-payer", &exists).c_str();
+    if (!exists) {
+      return false;
+    }
+  }
+
+  if (strcasecmp(request_payer, "requester") == 0) {
+    return true;
+  }
+
+  return false;
+}
+
+bool verify_bucket_permission(struct req_state * const s,
+                              RGWAccessControlPolicy * const bucket_acl,
+                              const int perm)
+{
+  if (!bucket_acl)
     return false;
 
   if ((perm & (int)s->perm_mask) != perm)
     return false;
 
-  return s->bucket_acl->verify_permission(s->user.user_id, perm, perm);
+  if (!verify_requester_payer_permission(s))
+    return false;
+
+  return bucket_acl->verify_permission(s->user.user_id, perm, perm);
 }
 
-static inline bool check_deferred_bucket_acl(struct req_state *s, uint8_t deferred_check, int perm)
+bool verify_bucket_permission(struct req_state * const s, const int perm)
 {
-  return (s->defer_to_bucket_acls == deferred_check && verify_bucket_permission(s, perm));
+  return verify_bucket_permission(s, s->bucket_acl, perm);
 }
 
-bool verify_object_permission(struct req_state *s, RGWAccessControlPolicy *bucket_acl, RGWAccessControlPolicy *object_acl, int perm)
+static inline bool check_deferred_bucket_acl(struct req_state * const s,
+                                             RGWAccessControlPolicy * const bucket_acl,
+                                             const uint8_t deferred_check,
+                                             const int perm)
 {
-  if (check_deferred_bucket_acl(s, RGW_DEFER_TO_BUCKET_ACLS_RECURSE, perm) ||
-      check_deferred_bucket_acl(s, RGW_DEFER_TO_BUCKET_ACLS_FULL_CONTROL, RGW_PERM_FULL_CONTROL)) {
+  if (!verify_requester_payer_permission(s))
+    return false;
+
+  return (s->defer_to_bucket_acls == deferred_check \
+              && verify_bucket_permission(s, bucket_acl, perm));
+}
+
+bool verify_object_permission(struct req_state * const s,
+                              RGWAccessControlPolicy * const bucket_acl,
+                              RGWAccessControlPolicy * const object_acl,
+                              const int perm)
+{
+  if (check_deferred_bucket_acl(s, bucket_acl, RGW_DEFER_TO_BUCKET_ACLS_RECURSE, perm) ||
+      check_deferred_bucket_acl(s, bucket_acl, RGW_DEFER_TO_BUCKET_ACLS_FULL_CONTROL, RGW_PERM_FULL_CONTROL)) {
     return true;
   }
 
@@ -752,7 +828,7 @@ static char hex_to_num(char c)
   return hex_table.to_num(c);
 }
 
-bool url_decode(string& src_str, string& dest_str, bool in_query)
+bool url_decode(const string& src_str, string& dest_str, bool in_query)
 {
   const char *src = src_str.c_str();
   char dest[src_str.size() + 1];
@@ -933,7 +1009,7 @@ int RGWUserCaps::get_cap(const string& cap, string& type, uint32_t *pperm)
     trim_whitespace(cap.substr(0, pos), type);
   }
 
-  if (type.size() == 0)
+  if (!is_valid_cap_type(type))
     return -EINVAL;
 
   string cap_perm;
@@ -1093,6 +1169,27 @@ int RGWUserCaps::check_cap(const string& cap, uint32_t perm)
   return 0;
 }
 
+bool RGWUserCaps::is_valid_cap_type(const string& tp)
+{
+  static const char *cap_type[] = { "user",
+                                    "users",
+                                    "buckets",
+                                    "metadata",
+                                    "usage",
+                                    "zone",
+                                    "bilog",
+                                    "mdlog",
+                                    "datalog",
+                                    "opstate" };
+
+  for (unsigned int i = 0; i < sizeof(cap_type) / sizeof(char *); ++i) {
+    if (tp.compare(cap_type[i]) == 0) {
+      return true;
+    }
+  }
+
+  return false;
+}
 
 static struct rgw_name_to_flag op_type_mapping[] = { {"*",  RGW_OP_TYPE_ALL},
                   {"read",  RGW_OP_TYPE_READ},

@@ -1185,9 +1185,9 @@ Object Watch/Notify
 -------------------
 
 A client can register a persistent interest with an object and keep a session to
-the primary OSD open. The client can send a notification message and payload to
+the primary OSD open. The client can send a notification message and a payload to
 all watchers and receive notification when the watchers receive the
-notification. This enables a client to use any object a
+notification. This enables a client to use any object as a
 synchronization/communication channel.
 
 

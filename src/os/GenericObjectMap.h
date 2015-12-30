@@ -26,7 +26,7 @@
 
 #include "include/memory.h"
 #include "ObjectMap.h"
-#include "KeyValueDB.h"
+#include "kv/KeyValueDB.h"
 #include "osd/osd_types.h"
 #include "common/Mutex.h"
 #include "common/Cond.h"
@@ -117,7 +117,7 @@ class GenericObjectMap {
   bool check(std::ostream &out);
 
   /// Util, list all objects, there must be no other concurrent access
-  int list_objects(const coll_t &cid, ghobject_t start, int max,
+  int list_objects(const coll_t &cid, ghobject_t start, ghobject_t end, int max,
                    vector<ghobject_t> *objs, ///< [out] objects
                    ghobject_t *next);
 
@@ -240,6 +240,7 @@ class GenericObjectMap {
   int rm_keys(
     const Header header,
     const string &prefix,
+    const set<string> &buffered_keys,
     const set<string> &to_clear,
     KeyValueDB::Transaction t
     );
@@ -297,7 +298,7 @@ private:
     int upper_bound(const string &after) { return 0; }
     int lower_bound(const string &to) { return 0; }
     bool valid() { return false; }
-    int next() { assert(0); return 0; }
+    int next(bool validate=true) { assert(0); return 0; }
     string key() { assert(0); return ""; }
     bufferlist value() { assert(0); return bufferlist(); }
     int status() { return 0; }
@@ -336,7 +337,7 @@ private:
     int upper_bound(const string &after);
     int lower_bound(const string &to);
     bool valid();
-    int next();
+    int next(bool validate=true);
     string key();
     bufferlist value();
     int status();

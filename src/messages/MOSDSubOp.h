@@ -69,7 +69,7 @@ public:
   map<string,bufferlist> attrset;
 
   interval_set<uint64_t> data_subset;
-  map<hobject_t, interval_set<uint64_t> > clone_subsets;
+  map<hobject_t, interval_set<uint64_t>, hobject_t::BitwiseComparator> clone_subsets;
 
   bool first, complete;
 
@@ -171,6 +171,8 @@ public:
       pg_trim_rollback_to = pg_trim_to;
     }
   }
+
+  void finish_decode() { }
 
   virtual void encode_payload(uint64_t features) {
     ::encode(map_epoch, payload);

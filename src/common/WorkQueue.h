@@ -18,11 +18,13 @@
 #include "Mutex.h"
 #include "Cond.h"
 #include "Thread.h"
+#include "include/unordered_map.h"
 #include "common/config_obs.h"
 #include "common/HeartbeatMap.h"
 
 class CephContext;
 
+/// Pool of threads that share work submitted to multiple work queues.
 class ThreadPool : public md_config_obs_t {
   CephContext *cct;
   string name;
@@ -54,6 +56,7 @@ public:
   };
 private:
 
+  /// Basic interface to a work queue used by the worker threads.
   struct WorkQueue_ {
     string name;
     time_t timeout_interval, suicide_interval;
@@ -61,10 +64,20 @@ private:
       : name(n), timeout_interval(ti), suicide_interval(sti)
     { }
     virtual ~WorkQueue_() {}
+    /// Remove all work items from the queue.
     virtual void _clear() = 0;
+    /// Check whether there is anything to do.
     virtual bool _empty() = 0;
+    /// Get the next work item to process.
     virtual void *_void_dequeue() = 0;
+    /** @brief Process the work item.
+     * This function will be called several times in parallel
+     * and must therefore be thread-safe. */
     virtual void _void_process(void *item, TPHandle &handle) = 0;
+    /** @brief Synchronously finish processing a work item.
+     * This function is called after _void_process with the global thread pool lock held,
+     * so at most one copy will execute simultaneously for a given thread pool.
+     * It can be used for non-thread-safe finalization. */
     virtual void _void_process_finish(void *) = 0;
   };
 
@@ -80,6 +93,9 @@ private:
 			  const std::set <std::string> &changed);
 
 public:
+  /** @brief Work queue that processes several submitted items at once.
+   * The queue will automatically add itself to the thread pool on construction
+   * and remove itself on destruction. */
   template<class T>
   class BatchWorkQueue : public WorkQueue_ {
     ThreadPool *pool;
@@ -87,12 +103,9 @@ public:
     virtual bool _enqueue(T *) = 0;
     virtual void _dequeue(T *) = 0;
     virtual void _dequeue(list<T*> *) = 0;
-    virtual void _process(const list<T*> &) { assert(0); }
-    virtual void _process(const list<T*> &items, TPHandle &handle) {
-      _process(items);
-    }
     virtual void _process_finish(const list<T*> &) {}
 
+    // virtual methods from WorkQueue_ below
     void *_void_dequeue() {
       list<T*> *out(new list<T*>);
       _dequeue(out);
@@ -109,6 +122,12 @@ public:
     void _void_process_finish(void *p) {
       _process_finish(*(list<T*>*)p);
       delete (list<T*> *)p;
+    }
+
+  protected:
+    virtual void _process(const list<T*> &) { assert(0); }
+    virtual void _process(const list<T*> &items, TPHandle &handle) {
+      _process(items);
     }
 
   public:
@@ -155,6 +174,12 @@ public:
     }
 
   };
+
+  /** @brief Templated by-value work queue.
+   * Skeleton implementation of a queue that processes items submitted by value.
+   * This is useful if the items are single primitive values or very small objects
+   * (a few bytes). The queue will automatically add itself to the thread pool on
+   * construction and remove itself on destruction. */
   template<typename T, typename U = T>
   class WorkQueueVal : public WorkQueue_ {
     Mutex _lock;
@@ -165,10 +190,6 @@ public:
     virtual void _enqueue_front(T) = 0;
     virtual bool _empty() = 0;
     virtual U _dequeue() = 0;
-    virtual void _process(U) { assert(0); }
-    virtual void _process(U u, TPHandle &) {
-      _process(u);
-    }
     virtual void _process_finish(U) {}
 
     void *_void_dequeue() {
@@ -235,20 +256,30 @@ public:
     void unlock() {
       pool->unlock();
     }
+    virtual void _process(U) { assert(0); }
+    virtual void _process(U u, TPHandle &) {
+      _process(u);
+    }
   };
+
+  /** @brief Template by-pointer work queue.
+   * Skeleton implementation of a queue that processes items of a given type submitted as pointers.
+   * This is useful when the work item are large or include dynamically allocated memory. The queue
+   * will automatically add itself to the thread pool on construction and remove itself on
+   * destruction. */
   template<class T>
   class WorkQueue : public WorkQueue_ {
     ThreadPool *pool;
     
+    /// Add a work item to the queue.
     virtual bool _enqueue(T *) = 0;
+    /// Dequeue a previously submitted work item.
     virtual void _dequeue(T *) = 0;
+    /// Dequeue a work item and return the original submitted pointer.
     virtual T *_dequeue() = 0;
-    virtual void _process(T *t) { assert(0); }
-    virtual void _process(T *t, TPHandle &) {
-      _process(t);
-    }
     virtual void _process_finish(T *) {}
-    
+
+    // implementation of virtual methods from WorkQueue_
     void *_void_dequeue() {
       return (void *)_dequeue();
     }
@@ -257,6 +288,13 @@ public:
     }
     void _void_process_finish(void *p) {
       _process_finish(static_cast<T *>(p));
+    }
+
+  protected:
+    /// Process a work item. Called from the worker threads.
+    virtual void _process(T *t) { assert(0); }
+    virtual void _process(T *t, TPHandle &) {
+      _process(t);
     }
 
   public:
@@ -285,6 +323,10 @@ public:
       pool->_lock.Unlock();
     }
 
+    Mutex &get_lock() {
+      return pool->_lock;
+    }
+
     void lock() {
       pool->lock();
     }
@@ -299,12 +341,100 @@ public:
     void _wake() {
       pool->_wake();
     }
+    void _wait() {
+      pool->_wait();
+    }
     void drain() {
       pool->drain(this);
     }
 
   };
 
+  template<typename T>
+  class PointerWQ : public WorkQueue_ {
+  public:
+    PointerWQ(string n, time_t ti, time_t sti, ThreadPool* p)
+      : WorkQueue_(n, ti, sti), m_pool(p), m_processing(0) {
+      m_pool->add_work_queue(this);
+    }
+    ~PointerWQ() {
+      m_pool->remove_work_queue(this);
+      assert(m_processing == 0);
+    }
+    void drain() {
+      {
+        // if this queue is empty and not processing, don't wait for other
+        // queues to finish processing
+        Mutex::Locker l(m_pool->_lock);
+        if (m_processing == 0 && m_items.empty()) {
+          return;
+        }
+      }
+      m_pool->drain(this);
+    }
+    void queue(T *item) {
+      Mutex::Locker l(m_pool->_lock);
+      m_items.push_back(item);
+      m_pool->_cond.SignalOne();
+    }
+    bool empty() {
+      Mutex::Locker l(m_pool->_lock);
+      return _empty();
+    }
+  protected:
+    virtual void _clear() {
+      assert(m_pool->_lock.is_locked());
+      m_items.clear();
+    }
+    virtual bool _empty() {
+      assert(m_pool->_lock.is_locked());
+      return m_items.empty();
+    }
+    virtual void *_void_dequeue() {
+      assert(m_pool->_lock.is_locked());
+      if (m_items.empty()) {
+        return NULL;
+      }
+
+      ++m_processing;
+      T *item = m_items.front();
+      m_items.pop_front();
+      return item;
+    }
+    virtual void _void_process(void *item, ThreadPool::TPHandle &handle) {
+      process(reinterpret_cast<T *>(item));
+    }
+    virtual void _void_process_finish(void *item) {
+      assert(m_pool->_lock.is_locked());
+      assert(m_processing > 0);
+      --m_processing;
+    }
+
+    virtual void process(T *item) = 0;
+    void process_finish() {
+      Mutex::Locker locker(m_pool->_lock);
+      _void_process_finish(nullptr);
+    }
+
+    T *front() {
+      assert(m_pool->_lock.is_locked());
+      if (m_items.empty()) {
+        return NULL;
+      }
+      return m_items.front();
+    }
+    void signal() {
+      Mutex::Locker pool_locker(m_pool->_lock);
+      m_pool->_cond.SignalOne();
+    }
+    Mutex &get_pool_lock() {
+      return m_pool->_lock;
+    }
+  private:
+    ThreadPool *m_pool;
+    std::list<T *> m_items;
+    uint32_t m_processing;
+  };
 private:
   vector<WorkQueue_*> work_queues;
   int last_work_queue;
@@ -340,10 +470,12 @@ public:
   
   /// assign a work queue to this thread pool
   void add_work_queue(WorkQueue_* wq) {
+    Mutex::Locker l(_lock);
     work_queues.push_back(wq);
   }
   /// remove a work queue from this thread pool
   void remove_work_queue(WorkQueue_* wq) {
+    Mutex::Locker l(_lock);
     unsigned i = 0;
     while (work_queues[i] != wq)
       i++;
@@ -376,6 +508,9 @@ public:
     Mutex::Locker l(_lock);
     _cond.Signal();
   }
+  void _wait() {
+    _cond.Wait(_lock);
+  }
 
   /// start thread pool thread
   void start();
@@ -387,7 +522,10 @@ public:
   void pause_new();
   /// resume work in thread pool.  must match each pause() call 1:1 to resume.
   void unpause();
-  /// wait for all work to complete
+  /** @brief Wait until work completes.
+   * If the parameter is NULL, blocks until all threads are idle.
+   * If it is not NULL, blocks until the given work queue does not have
+   * any items left to process. */
   void drain(WorkQueue_* wq = 0);
 
   /// set io priority
@@ -417,6 +555,7 @@ public:
     _queue.pop_front();
     return c;
   }
+  using ThreadPool::WorkQueueVal<GenContext<ThreadPool::TPHandle&>*>::_process;
   void _process(GenContext<ThreadPool::TPHandle&> *c, ThreadPool::TPHandle &tp) {
     c->complete(tp);
   }
@@ -433,35 +572,46 @@ public:
   }
 };
 
-class ContextWQ : public ThreadPool::WorkQueueVal<Context *> {
+/// Work queue that asynchronously completes contexts (executes callbacks).
+/// @see Finisher
+class ContextWQ : public ThreadPool::PointerWQ<Context> {
 public:
   ContextWQ(const string &name, time_t ti, ThreadPool *tp)
-    : ThreadPool::WorkQueueVal<Context *>(name, ti, 0, tp) {}
-
-  void queue(Context *ctx) {
-    ThreadPool::WorkQueueVal<Context *>::queue(ctx);
+    : ThreadPool::PointerWQ<Context>(name, ti, 0, tp),
+      m_lock("ContextWQ::m_lock") {
   }
 
+  void queue(Context *ctx, int result = 0) {
+    if (result != 0) {
+      Mutex::Locker locker(m_lock);
+      m_context_results[ctx] = result;
+    }
+    ThreadPool::PointerWQ<Context>::queue(ctx);
+  }
 protected:
-  virtual void _enqueue(Context *item) {
-    _queue.push_back(item);
+  virtual void _clear() {
+    ThreadPool::PointerWQ<Context>::_clear();
+
+    Mutex::Locker locker(m_lock);
+    m_context_results.clear();
   }
-  virtual void _enqueue_front(Context *item) {
-    _queue.push_front(item);
-  }
-  virtual bool _empty() {
-    return _queue.empty();
-  }
-  virtual Context *_dequeue() {
-    Context *item = _queue.front();
-    _queue.pop_front();
-    return item;
-  }
-  virtual void _process(Context *item) {
-    item->complete(0);
+
+  virtual void process(Context *ctx) {
+    int result = 0;
+    {
+      Mutex::Locker locker(m_lock);
+      ceph::unordered_map<Context *, int>::iterator it =
+        m_context_results.find(ctx);
+      if (it != m_context_results.end()) {
+        result = it->second;
+        m_context_results.erase(it);
+      }
+    }
+    ctx->complete(result);
   }
 private:
-  list<Context *> _queue;
+  Mutex m_lock;
+  ceph::unordered_map<Context*, int> m_context_results;
 };
 
 class ShardedThreadPool {

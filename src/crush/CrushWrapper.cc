@@ -78,6 +78,32 @@ bool CrushWrapper::has_v4_buckets() const
   return false;
 }
 
+bool CrushWrapper::has_v5_rules() const
+{
+  for (unsigned i=0; i<crush->max_rules; i++) {
+    if (is_v5_rule(i)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+bool CrushWrapper::is_v5_rule(unsigned ruleid) const
+{
+  // check rule for use of SET_CHOOSELEAF_STABLE step
+  if (ruleid >= crush->max_rules)
+    return false;
+  crush_rule *r = crush->rules[ruleid];
+  if (!r)
+    return false;
+  for (unsigned j=0; j<r->len; j++) {
+    if (r->steps[j].op == CRUSH_RULE_SET_CHOOSELEAF_STABLE) {
+      return true;
+    }
+  }
+  return false;
+}
+
 int CrushWrapper::can_rename_item(const string& srcname,
                                   const string& dstname,
                                   ostream *ss) const
@@ -832,7 +858,7 @@ int CrushWrapper::adjust_item_weight_in_loc(CephContext *cct, int id, int weight
 
 int CrushWrapper::adjust_subtree_weight(CephContext *cct, int id, int weight)
 {
-  ldout(cct, 5) << "adjust_item_weight " << id << " weight " << weight << dendl;
+  ldout(cct, 5) << __func__ << " " << id << " weight " << weight << dendl;
   crush_bucket *b = get_bucket(id);
   if (IS_ERR(b))
     return PTR_ERR(b);
@@ -842,16 +868,22 @@ int CrushWrapper::adjust_subtree_weight(CephContext *cct, int id, int weight)
   while (!q.empty()) {
     b = q.front();
     q.pop_front();
+    int local_changed = 0;
     for (unsigned i=0; i<b->size; ++i) {
       int n = b->items[i];
       if (n >= 0) {
 	crush_bucket_adjust_item_weight(crush, b, n, weight);
+	++changed;
+	++local_changed;
       } else {
 	crush_bucket *sub = get_bucket(n);
 	if (IS_ERR(sub))
 	  continue;
 	q.push_back(sub);
       }
+    }
+    if (local_changed) {
+      adjust_item_weight(cct, b->id, b->weight);
     }
   }
   return changed;
@@ -1178,6 +1210,7 @@ void CrushWrapper::encode(bufferlist& bl, bool lean) const
   ::encode(crush->chooseleaf_vary_r, bl);
   ::encode(crush->straw_calc_version, bl);
   ::encode(crush->allowed_bucket_algs, bl);
+  ::encode(crush->chooseleaf_stable, bl);
 }
 
 static void decode_32_or_64_string_map(map<int32_t,string>& m, bufferlist::iterator& blp)
@@ -1266,6 +1299,9 @@ void CrushWrapper::decode(bufferlist::iterator& blp)
     }
     if (!blp.end()) {
       ::decode(crush->allowed_bucket_algs, blp);
+    }
+    if (!blp.end()) {
+      ::decode(crush->chooseleaf_stable, blp);
     }
     finalize();
   }
@@ -1456,6 +1492,56 @@ void CrushWrapper::dump(Formatter *f) const
   f->close_section();
 }
 
+namespace {
+  // depth first walker
+  class TreeDumper {
+    typedef CrushTreeDumper::Item Item;
+    const CrushWrapper *crush;
+  public:
+    TreeDumper(const CrushWrapper *crush)
+      : crush(crush) {}
+
+    void dump(Formatter *f) {
+      set<int> roots;
+      crush->find_roots(roots);
+      for (set<int>::iterator root = roots.begin(); root != roots.end(); ++root) {
+	dump_item(Item(*root, 0, crush->get_bucket_weightf(*root)), f);
+      }
+    }
+
+  private:
+    void dump_item(const Item& qi, Formatter* f) {
+      if (qi.is_bucket()) {
+	f->open_object_section("bucket");
+	CrushTreeDumper::dump_item_fields(crush, qi, f);
+	dump_bucket_children(qi, f);
+	f->close_section();
+      } else {
+	f->open_object_section("device");
+	CrushTreeDumper::dump_item_fields(crush, qi, f);
+	f->close_section();
+      }
+    }
+
+    void dump_bucket_children(const Item& parent, Formatter* f) {
+      f->open_array_section("items");
+      const int max_pos = crush->get_bucket_size(parent.id);
+      for (int pos = 0; pos < max_pos; pos++) {
+	int id = crush->get_bucket_item(parent.id, pos);
+	float weight = crush->get_bucket_item_weightf(parent.id, pos);
+	dump_item(Item(id, parent.depth + 1, weight), f);
+      }
+      f->close_section();
+    }
+  };
+}
+
+void CrushWrapper::dump_tree(Formatter *f) const
+{
+  assert(f);
+  TreeDumper(this).dump(f);
+}
+
 void CrushWrapper::dump_tunables(Formatter *f) const
 {
   f->dump_int("choose_local_tries", get_choose_local_tries());
@@ -1463,11 +1549,14 @@ void CrushWrapper::dump_tunables(Formatter *f) const
   f->dump_int("choose_total_tries", get_choose_total_tries());
   f->dump_int("chooseleaf_descend_once", get_chooseleaf_descend_once());
   f->dump_int("chooseleaf_vary_r", get_chooseleaf_vary_r());
+  f->dump_int("chooseleaf_stable", get_chooseleaf_stable());
   f->dump_int("straw_calc_version", get_straw_calc_version());
   f->dump_int("allowed_bucket_algs", get_allowed_bucket_algs());
 
   // be helpful about it
-  if (has_hammer_tunables())
+  if (has_jewel_tunables())
+    f->dump_string("profile", "jewel");
+  else if (has_hammer_tunables())
     f->dump_string("profile", "hammer");
   else if (has_firefly_tunables())
     f->dump_string("profile", "firefly");
@@ -1482,10 +1571,12 @@ void CrushWrapper::dump_tunables(Formatter *f) const
 
   f->dump_int("require_feature_tunables", (int)has_nondefault_tunables());
   f->dump_int("require_feature_tunables2", (int)has_nondefault_tunables2());
-  f->dump_int("require_feature_tunables3", (int)has_nondefault_tunables3());
   f->dump_int("has_v2_rules", (int)has_v2_rules());
+  f->dump_int("require_feature_tunables3", (int)has_nondefault_tunables3());
   f->dump_int("has_v3_rules", (int)has_v3_rules());
   f->dump_int("has_v4_buckets", (int)has_v4_buckets());
+  f->dump_int("require_feature_tunables5", (int)has_nondefault_tunables5());
+  f->dump_int("has_v5_rules", (int)has_v5_rules());
 }
 
 void CrushWrapper::dump_rules(Formatter *f) const

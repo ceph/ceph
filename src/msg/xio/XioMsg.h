@@ -183,11 +183,11 @@ public:
   XioMsgHdr hdr;
   xio_msg_ex req_0;
   xio_msg_ex* req_arr;
-  struct xio_mempool_obj mp_this;
+  struct xio_reg_mem mp_this;
   atomic_t nrefs;
 
 public:
-  XioMsg(Message *_m, XioConnection *_xcon, struct xio_mempool_obj& _mp,
+  XioMsg(Message *_m, XioConnection *_xcon, struct xio_reg_mem& _mp,
 	 int _ex_cnt) :
     XioSubmit(XioSubmit::OUTGOING_MSG, _xcon),
     m(_m), hdr(m->get_header(), m->get_footer()),
@@ -215,7 +215,7 @@ public:
   void put(int n) {
     int refs = nrefs.sub(n);
     if (refs == 0) {
-      struct xio_mempool_obj *mp = &this->mp_this;
+      struct xio_reg_mem *mp = &this->mp_this;
       this->~XioMsg();
       xpool_free(sizeof(XioMsg), mp);
     }
@@ -281,10 +281,10 @@ private:
   friend class XioConnection;
   friend class XioMessenger;
 public:
-  struct xio_mempool_obj mp_this;
+  struct xio_reg_mem mp_this;
 
   XioDispatchHook(XioConnection *_xcon, Message *_m, XioInSeq& _msg_seq,
-		    struct xio_mempool_obj& _mp) :
+		    struct xio_reg_mem& _mp) :
     CompletionHook(_m),
     xcon(_xcon->get()),
     msg_seq(_msg_seq),
@@ -319,7 +319,7 @@ public:
        */
       if (!cl_flag && release_msgs())
 	return;
-      struct xio_mempool_obj *mp = &this->mp_this;
+      struct xio_reg_mem *mp = &this->mp_this;
       this->~XioDispatchHook();
       xpool_free(sizeof(XioDispatchHook), mp);
     }
@@ -351,10 +351,10 @@ private:
   XioConnection* xcon;
 
 public:
-  struct xio_mempool_obj mp_this;
+  struct xio_reg_mem mp_this;
 
   XioMarkDownHook(
-    XioConnection* _xcon, Message *_m, struct xio_mempool_obj& _mp) :
+    XioConnection* _xcon, Message *_m, struct xio_reg_mem& _mp) :
     CompletionHook(_m), xcon(_xcon->get()), mp_this(_mp)
     { }
 
@@ -362,7 +362,7 @@ public:
 
   virtual void finish(int r) {
     xcon->put();
-    struct xio_mempool_obj *mp = &this->mp_this;
+    struct xio_reg_mem *mp = &this->mp_this;
     this->~XioMarkDownHook();
     xio_mempool_free(mp);
   }

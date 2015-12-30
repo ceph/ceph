@@ -39,7 +39,7 @@ CephContext *common_preinit(const CephInitParameters &iparams,
   g_code_env = code_env;
 
   // Create a configuration object
-  CephContext *cct = new CephContext(iparams.module_type);
+  CephContext *cct = new CephContext(iparams.module_type, flags);
 
   md_config_t *conf = cct->_conf;
   // add config observers here
@@ -113,15 +113,10 @@ void complain_about_parse_errors(CephContext *cct,
 
 /* Please be sure that this can safely be called multiple times by the
  * same application. */
-void common_init_finish(CephContext *cct, int flags)
+void common_init_finish(CephContext *cct)
 {
-  ceph::crypto::init(cct);
+  cct->init_crypto();
 
-  if (!(flags & CINIT_FLAG_NO_DAEMON_ACTIONS))
+  if (!(cct->get_init_flags() & CINIT_FLAG_NO_DAEMON_ACTIONS))
     cct->start_service_thread();
-
-  if (cct->_conf->lockdep) {
-    g_lockdep = true;
-    lockdep_register_ceph_context(cct);
-  }
 }

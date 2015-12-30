@@ -48,14 +48,14 @@ public:
 };
 
 TEST(AdminSocket, Teardown) {
-  std::auto_ptr<AdminSocket>
+  std::unique_ptr<AdminSocket>
       asokc(new AdminSocket(g_ceph_context));
   AdminSocketTest asoct(asokc.get());
   ASSERT_EQ(true, asoct.shutdown());
 }
 
 TEST(AdminSocket, TeardownSetup) {
-  std::auto_ptr<AdminSocket>
+  std::unique_ptr<AdminSocket>
       asokc(new AdminSocket(g_ceph_context));
   AdminSocketTest asoct(asokc.get());
   ASSERT_EQ(true, asoct.shutdown());
@@ -64,7 +64,7 @@ TEST(AdminSocket, TeardownSetup) {
 }
 
 TEST(AdminSocket, SendHelp) {
-  std::auto_ptr<AdminSocket>
+  std::unique_ptr<AdminSocket>
       asokc(new AdminSocket(g_ceph_context));
   AdminSocketTest asoct(asokc.get());
   ASSERT_EQ(true, asoct.shutdown());
@@ -96,7 +96,7 @@ TEST(AdminSocket, SendHelp) {
 }
 
 TEST(AdminSocket, SendNoOp) {
-  std::auto_ptr<AdminSocket>
+  std::unique_ptr<AdminSocket>
       asokc(new AdminSocket(g_ceph_context));
   AdminSocketTest asoct(asokc.get());
   ASSERT_EQ(true, asoct.shutdown());
@@ -127,7 +127,7 @@ class MyTest : public AdminSocketHook {
 };
 
 TEST(AdminSocket, RegisterCommand) {
-  std::auto_ptr<AdminSocket>
+  std::unique_ptr<AdminSocket>
       asokc(new AdminSocket(g_ceph_context));
   AdminSocketTest asoct(asokc.get());
   ASSERT_EQ(true, asoct.shutdown());
@@ -159,7 +159,7 @@ class MyTest2 : public AdminSocketHook {
 };
 
 TEST(AdminSocket, RegisterCommandPrefixes) {
-  std::auto_ptr<AdminSocket>
+  std::unique_ptr<AdminSocket>
       asokc(new AdminSocket(g_ceph_context));
   AdminSocketTest asoct(asokc.get());
   ASSERT_EQ(true, asoct.shutdown());
@@ -202,7 +202,7 @@ public:
 
 TEST(AdminSocketClient, Ping) {
   string path = get_rand_socket_path();
-  std::auto_ptr<AdminSocket>
+  std::unique_ptr<AdminSocket>
       asokc(new AdminSocket(g_ceph_context));
   AdminSocketClient client(path);
   // no socket
@@ -217,7 +217,12 @@ TEST(AdminSocketClient, Ping) {
   {
     bool ok;
     std::string result = client.ping(&ok);
-    EXPECT_NE(std::string::npos, result.find("Connection refused"));
+#if defined(__APPLE__) || defined(__FreeBSD__)
+    const char* errmsg = "Socket operation on non-socket";
+#else
+    const char* errmsg = "Connection refused";
+#endif
+    EXPECT_NE(std::string::npos, result.find(errmsg));
     ASSERT_FALSE(ok);
   }
   // a daemon is connected to the socket
@@ -251,7 +256,7 @@ TEST(AdminSocketClient, Ping) {
 
 TEST(AdminSocket, bind_and_listen) {
   string path = get_rand_socket_path();
-  std::auto_ptr<AdminSocket>
+  std::unique_ptr<AdminSocket>
       asokc(new AdminSocket(g_ceph_context));
 
   AdminSocketTest asoct(asokc.get());

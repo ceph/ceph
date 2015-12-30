@@ -24,6 +24,7 @@
 #include "erasure-code/isa/xor_op.h"
 #include "common/ceph_argparse.h"
 #include "global/global_context.h"
+#include "common/config.h"
 #include "gtest/gtest.h"
 
 ErasureCodeIsaTableCache tcache;
@@ -364,6 +365,17 @@ TEST_F(IsaErasureCodeTest, encode)
     EXPECT_EQ(0, Isa.encode(want_to_encode, in, &encoded));
     EXPECT_EQ(1u, encoded.size());
   }
+}
+
+TEST_F(IsaErasureCodeTest, sanity_check_k)
+{
+  ErasureCodeIsaDefault Isa(tcache);
+  ErasureCodeProfile profile;
+  profile["k"] = "1";
+  profile["m"] = "1";
+  ostringstream errors;
+  EXPECT_EQ(-EINVAL, Isa.init(profile, &errors));
+  EXPECT_NE(std::string::npos, errors.str().find("must be >= 2"));
 }
 
 bool
@@ -949,6 +961,8 @@ int main(int argc, char **argv)
 
   global_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT, CODE_ENVIRONMENT_UTILITY, 0);
   common_init_finish(g_ceph_context);
+
+  g_conf->set_val("erasure_code_dir", ".libs", false, false);
 
   ::testing::InitGoogleTest(&argc, argv);
   return RUN_ALL_TESTS();

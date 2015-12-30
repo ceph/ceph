@@ -6,7 +6,7 @@
 
 You can configure Ceph OSD Daemons in the Ceph configuration file, but Ceph OSD
 Daemons can use the default values and a very minimal configuration. A minimal
-Ceph OSD Daemon configuration sets ``osd journal size`` and ``osd host``,  and
+Ceph OSD Daemon configuration sets ``osd journal size`` and ``host``,  and
 uses default values for nearly everything else.
 
 Ceph OSD Daemons are numerically identified in incremental fashion, beginning
@@ -19,7 +19,7 @@ with ``0`` using the following convention. ::
 In a configuration file, you may specify settings for all Ceph OSD Daemons in
 the cluster by adding configuration settings to the ``[osd]`` section of your
 configuration file. To add settings directly to a specific Ceph OSD Daemon
-(e.g., ``osd host``), enter  it in an OSD-specific section of your configuration
+(e.g., ``host``), enter  it in an OSD-specific section of your configuration
 file. For example:
 
 .. code-block:: ini
@@ -28,10 +28,10 @@ file. For example:
 		osd journal size = 1024
 	
 	[osd.0]
-		osd host = osd-host-a
+		host = osd-host-a
 		
 	[osd.1]
-		osd host = osd-host-b
+		host = osd-host-b
 
 
 .. index:: OSD; config settings
@@ -219,6 +219,23 @@ scrubbing operations.
 :Type: 32-bit Int
 :Default: ``1`` 
 
+``osd scrub begin hour``
+
+:Description: The time of day for the lower bound when a scheduled scrub can be
+              performed.
+:Type: Integer in the range of 0 to 24
+:Default: ``0``
+
+
+``osd scrub end hour``
+
+:Description: The time of day for the upper bound when a scheduled scrub can be
+              performed. Along with ``osd scrub begin hour``, they define a time
+              window, in which the scrubs can happen. But a scrub will be performed
+              no matter the time window allows or not, as long as the placement
+              group's scrub interval exceeds ``osd scrub max interval``.
+:Type: Integer in the range of 0 to 24
+:Default: ``24``
 
 ``osd scrub thread timeout`` 
 
@@ -272,6 +289,17 @@ scrubbing operations.
 :Type: Float
 :Default: Once per week.  ``60*60*24*7``
 
+
+``osd scrub interval randomize ratio``
+
+:Description: Add a random delay to ``osd scrub min interval`` when scheduling
+              the next scrub job for a placement group. The delay is a random
+              value less than ``osd scrub min interval`` \*
+              ``osd scrub interval randomized ratio``. So the default setting
+              practically randomly spreads the scrubs out in the allowed time
+              window of ``[1, 1.5]`` \* ``osd scrub min interval``.
+:Type: Float
+:Default: ``0.5``
 
 ``osd deep scrub stride``
 

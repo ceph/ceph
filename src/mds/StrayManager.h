@@ -16,8 +16,9 @@
 
 #include "include/elist.h"
 #include <list>
+#include "osdc/Filer.h"
 
-class MDS;
+class MDSRank;
 class PerfCounters;
 class CInode;
 class CDentry;
@@ -41,7 +42,7 @@ class StrayManager : public md_config_obs_t
   std::list<QueuedStray> ready_for_purge;
 
   // Global references for doing I/O
-  MDS *mds;
+  MDSRank *mds;
   PerfCounters *logger;
 
   // Throttled allowances
@@ -55,6 +56,8 @@ class StrayManager : public md_config_obs_t
   uint64_t num_strays;
   uint64_t num_strays_purging;
   uint64_t num_strays_delayed;
+
+  Filer filer;
 
   void truncate(CDentry *dn, uint32_t op_allowance);
 
@@ -130,24 +133,6 @@ class StrayManager : public md_config_obs_t
    */
   void reintegrate_stray(CDentry *dn, CDentry *rlink);
 
-  // My public interface is for consumption by MDCache
-  public:
-  StrayManager(MDS *mds);
-  void set_logger(PerfCounters *l) {logger = l;}
-
-  /**
-   * Where eval_stray was previously invoked with delay=true, call
-   * eval_stray again for any dentries that were put on the
-   * delayed_eval_stray list as a result of the original call.
-   *
-   * Used so that various places can call eval_stray(delay=true) during
-   * an operation to identify dentries of interest, and then call
-   * this function later during trim in order to do the final
-   * evaluation (and resulting actions) while not in the middle of another
-   * metadata operation.
-   */
-  void advance_delayed();
-
   /**
    * Evaluate a stray dentry for purging or reintegration.
    *
@@ -161,7 +146,27 @@ class StrayManager : public md_config_obs_t
    * @returns true if the dentry will be purged (caller should never
    *          take more refs after this happens), else false.
    */
+  bool __eval_stray(CDentry *dn, bool delay=false);
+
+  // My public interface is for consumption by MDCache
+  public:
+  StrayManager(MDSRank *mds);
+  void set_logger(PerfCounters *l) {logger = l;}
+
   bool eval_stray(CDentry *dn, bool delay=false);
+
+  /**
+   * Where eval_stray was previously invoked with delay=true, call
+   * eval_stray again for any dentries that were put on the
+   * delayed_eval_stray list as a result of the original call.
+   *
+   * Used so that various places can call eval_stray(delay=true) during
+   * an operation to identify dentries of interest, and then call
+   * this function later during trim in order to do the final
+   * evaluation (and resulting actions) while not in the middle of another
+   * metadata operation.
+   */
+  void advance_delayed();
 
   /**
    * When a metadata op touches a remote dentry that points to

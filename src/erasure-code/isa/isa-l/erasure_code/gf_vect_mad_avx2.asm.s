@@ -31,6 +31,8 @@
 ;;; gf_vect_mad_avx2(len, vec, vec_i, mul_array, src, dest);
 ;;;
 
+%include "reg_sizes.asm"
+
 %ifidn __OUTPUT_FORMAT__, win64
  %define arg0   rcx
  %define arg0.w ecx
@@ -197,13 +199,5 @@ endproc_frame
 
 section .data
 
-%macro slversion 4
-global %1_slver_%2%3%4
-global %1_slver
-%1_slver:
-%1_slver_%2%3%4:
-	dw 0x%4
-	db 0x%3, 0x%2
-%endmacro
 ;;;       func             core, ver, snum
-slversion gf_vect_mad_avx2, 04,  00,  0202
+slversion gf_vect_mad_avx2, 04,  01,  0202

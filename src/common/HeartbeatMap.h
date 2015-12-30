@@ -68,6 +68,12 @@ class HeartbeatMap {
   // touch cct->_conf->heartbeat_file if is_healthy()
   void check_touch_file();
 
+  // get the number of unhealthy workers
+  int get_unhealthy_workers() const;
+
+  // get the number of total workers
+  int get_total_workers() const;
+
   HeartbeatMap(CephContext *cct);
   ~HeartbeatMap();
 
@@ -76,6 +82,8 @@ class HeartbeatMap {
   RWLock m_rwlock;
   time_t m_inject_unhealthy_until;
   std::list<heartbeat_handle_d*> m_workers;
+  atomic_t m_unhealthy_workers;
+  atomic_t m_total_workers;
 
   bool _check(const heartbeat_handle_d *h, const char *who, time_t now);
 };

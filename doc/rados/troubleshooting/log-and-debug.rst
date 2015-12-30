@@ -34,8 +34,11 @@ Runtime
 If you would like to see the configuration settings at runtime, you must log
 in to a host with a running daemon and execute the following:: 
 
-	ceph --admin-daemon {/path/to/admin/socket} config show | less	
-	ceph --admin-daemon /var/run/ceph/ceph-osd.0.asok config show | less
+	ceph daemon {daemon-name} config show | less
+
+For example,::
+
+  ceph daemon osd.0 config show | less
 
 To activate Ceph's debugging output (*i.e.*, ``dout()``) at runtime,  use the
 ``ceph tell`` command to inject arguments into the runtime configuration:: 
@@ -44,17 +47,17 @@ To activate Ceph's debugging output (*i.e.*, ``dout()``) at runtime,  use the
 	
 Replace ``{daemon-type}`` with one of ``osd``, ``mon`` or ``mds``. You may apply
 the runtime setting to all daemons of a particular type with ``*``, or specify
-a specific daemon's ID (i.e., its number or letter). For example, to increase
+a specific daemon's ID. For example, to increase
 debug logging for a ``ceph-osd`` daemon named ``osd.0``, execute the following:: 
 
 	ceph tell osd.0 injectargs --debug-osd 0/5
 
 The ``ceph tell`` command goes through the monitors. If you cannot bind to the
 monitor, you can still make the change by logging into the host of the daemon
-whose configuration you'd like to change using ``ceph --admin-daemon``.
+whose configuration you'd like to change using ``ceph daemon``.
 For example:: 
 
-	sudo ceph --admin-daemon /var/run/ceph/ceph-osd.0.asok config set debug_osd 0/5
+	sudo ceph daemon osd.0 config set debug_osd 0/5
 
 See `Subsystem, Log and Debug Settings`_ for details on available settings.
 
@@ -151,7 +154,7 @@ verbose. In general, the logs in-memory are not sent to the output log unless:
 
 - a fatal signal is raised or
 - an ``assert`` in source code is triggered or
-- upon requested. Please consult document on admin socket for more details.
+- upon requested. Please consult `document on admin socket <http://docs.ceph.com/docs/master/man/8/ceph/#daemon>`_ for more details.
 
 A debug logging setting can take a single value for the log level and the
 memory level, which sets them both as the same value. For example, if you

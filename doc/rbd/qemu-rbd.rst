@@ -45,7 +45,7 @@ commands as the default ``client.admin`` user unless you expressly specify
 another Ceph configuration file path or another user. When specifying a user,
 QEMU uses the ``ID`` rather than the full ``TYPE:ID``. See `User Management -
 User`_ for details. Do not prepend the client type (i.e., ``client.``) to the
-beginning of the user  ID, or you will receive an authentication error. You
+beginning of the user  ``ID``, or you will receive an authentication error. You
 should have the key for the ``admin`` user or the key of another user you
 specify with the ``:id={user}`` option in a keyring file stored in default path
 (i.e., ``/etc/ceph`` or the local directory with appropriate file ownership and

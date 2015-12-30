@@ -19,7 +19,7 @@ Filesystem clients.
   information to Ceph Monitors by checking other Ceph OSD Daemons for a 
   heartbeat. A Ceph Storage Cluster requires at least two Ceph OSD Daemons to 
   achieve an ``active + clean`` state when the cluster makes two copies of your
-  data (Ceph makes 2 copies by default, but you can adjust it).
+  data (Ceph makes 3 copies by default, but you can adjust it).
   
 - **Monitors**: A :term:`Ceph Monitor` maintains maps of the cluster state, 
   including the monitor map, the OSD map, the Placement Group (PG) map, and the

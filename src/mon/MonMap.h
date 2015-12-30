@@ -159,6 +159,7 @@ class MonMap {
   entity_inst_t get_inst(const string& n) {
     assert(mon_addr.count(n));
     int m = get_rank(n);
+    assert(m >= 0); // vector can't take negative indicies
     entity_inst_t i;
     i.addr = rank_addr[m];
     i.name = entity_name_t::MON(m);

@@ -20,7 +20,6 @@
 #include "include/types.h"
 #include "include/blobhash.h"
 #include "include/encoding.h"
-#include "include/hash_namespace.h"
 
 namespace ceph {
   class Formatter;
@@ -133,7 +132,7 @@ inline std::ostream& operator<<(std::ostream& out, const ceph_entity_name& addr)
   return out << *(const entity_name_t*)&addr;
 }
 
-CEPH_HASH_NAMESPACE_START
+namespace std {
   template<> struct hash< entity_name_t >
   {
     size_t operator()( const entity_name_t &m ) const
@@ -141,7 +140,7 @@ CEPH_HASH_NAMESPACE_START
       return rjhash32(m.type() ^ m.num());
     }
   };
-CEPH_HASH_NAMESPACE_END
+} // namespace std
 
 
 
@@ -152,22 +151,52 @@ CEPH_HASH_NAMESPACE_END
  * ipv4 for now.
  */
 
+#if defined(__linux__) || defined(DARWIN) || defined(__FreeBSD__)
 /*
- * encode sockaddr.ss_family in big endian
+ * encode sockaddr.ss_family as network byte order 
  */
 static inline void encode(const sockaddr_storage& a, bufferlist& bl) {
   struct sockaddr_storage ss = a;
-#if !defined(__FreeBSD__)
+#if defined(DARWIN) || defined(__FreeBSD__)
+  unsigned short *ss_family = reinterpret_cast<unsigned short*>(&ss);
+  *ss_family = htons(a.ss_family);
+#else
   ss.ss_family = htons(ss.ss_family);
 #endif
   ::encode_raw(ss, bl);
 }
 static inline void decode(sockaddr_storage& a, bufferlist::iterator& bl) {
   ::decode_raw(a, bl);
-#if !defined(__FreeBSD__)
+#if defined(DARWIN) || defined(__FreeBSD__)
+  unsigned short *ss_family = reinterpret_cast<unsigned short *>(&a);
+  a.ss_family = ntohs(*ss_family);
+  a.ss_len = 0;
+#else
   a.ss_family = ntohs(a.ss_family);
 #endif
 }
+#endif
+
+// define a wire format for sockaddr that matches Linux's.
+struct ceph_sockaddr_storage {
+  __le16 ss_family;
+  __u8 __ss_padding[128 - sizeof(__le16)];
+
+  void encode(bufferlist& bl) const {
+    struct ceph_sockaddr_storage ss = *this;
+    ss.ss_family = htons(ss.ss_family);
+    ::encode_raw(ss, bl);
+  }
+
+  void decode(bufferlist::iterator& bl) {
+    struct ceph_sockaddr_storage ss;
+    ::decode_raw(ss, bl);
+    ss.ss_family = ntohs(ss.ss_family);
+    *this = ss;
+  }
+} __attribute__ ((__packed__));
+
+WRITE_CLASS_ENCODER(ceph_sockaddr_storage)
 
 struct entity_addr_t {
   __u32 type;
@@ -324,15 +353,37 @@ struct entity_addr_t {
 
   bool parse(const char *s, const char **end = 0);
 
+  // Right now, these only deal with sockaddr_storage that have only family and content.
+  // Apparently on BSD there is also an ss_len that we need to handle; this requires
+  // broader study
+
+
   void encode(bufferlist& bl) const {
     ::encode(type, bl);
     ::encode(nonce, bl);
+#if defined(__linux__) || defined(DARWIN) || defined(__FreeBSD__)
     ::encode(addr, bl);
+#else
+    ceph_sockaddr_storage wireaddr;
+    ::memset(&wireaddr, '\0', sizeof(wireaddr));
+    unsigned copysize = MIN(sizeof(wireaddr), sizeof(addr));
+    // ceph_sockaddr_storage is in host byte order
+    ::memcpy(&wireaddr, &addr, copysize);
+    ::encode(wireaddr, bl);
+#endif
   }
   void decode(bufferlist::iterator& bl) {
     ::decode(type, bl);
     ::decode(nonce, bl);
+#if defined(__linux__) || defined(DARWIN) || defined(__FreeBSD__)
     ::decode(addr, bl);
+#else
+    ceph_sockaddr_storage wireaddr;
+    ::memset(&wireaddr, '\0', sizeof(wireaddr));
+    ::decode(wireaddr, bl);
+    unsigned copysize = MIN(sizeof(wireaddr), sizeof(addr));
+    ::memcpy(&addr, &wireaddr, copysize);
+#endif
   }
 
   void dump(Formatter *f) const;
@@ -353,7 +404,7 @@ inline bool operator<=(const entity_addr_t& a, const entity_addr_t& b) { return 
 inline bool operator>(const entity_addr_t& a, const entity_addr_t& b) { return memcmp(&a, &b, sizeof(a)) > 0; }
 inline bool operator>=(const entity_addr_t& a, const entity_addr_t& b) { return memcmp(&a, &b, sizeof(a)) >= 0; }
 
-CEPH_HASH_NAMESPACE_START
+namespace std {
   template<> struct hash< entity_addr_t >
   {
     size_t operator()( const entity_addr_t& x ) const
@@ -362,7 +413,7 @@ CEPH_HASH_NAMESPACE_START
       return H((const char*)&x, sizeof(x));
     }
   };
-CEPH_HASH_NAMESPACE_END
+} // namespace std
 
 
 /*
@@ -407,7 +458,7 @@ inline bool operator<=(const entity_inst_t& a, const entity_inst_t& b) {
 inline bool operator>(const entity_inst_t& a, const entity_inst_t& b) { return b < a; }
 inline bool operator>=(const entity_inst_t& a, const entity_inst_t& b) { return b <= a; }
 
-CEPH_HASH_NAMESPACE_START
+namespace std {
   template<> struct hash< entity_inst_t >
   {
     size_t operator()( const entity_inst_t& x ) const
@@ -417,7 +468,7 @@ CEPH_HASH_NAMESPACE_START
       return H(x.name) ^ I(x.addr);
     }
   };
-CEPH_HASH_NAMESPACE_END
+} // namespace std
 
 
 inline ostream& operator<<(ostream& out, const entity_inst_t &i)

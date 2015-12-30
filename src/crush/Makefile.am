@@ -16,9 +16,10 @@ noinst_HEADERS += \
 	crush/CrushWrapper.i \
 	crush/builder.h \
 	crush/crush.h \
+	crush/crush_compat.h \
+	crush/crush_ln_table.h \
 	crush/grammar.h \
 	crush/hash.h \
-	crush/crush_ln_table.h \
 	crush/mapper.h \
 	crush/sample.txt \
 	crush/types.h

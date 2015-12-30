@@ -18,7 +18,11 @@
 
 test -d dev/osd0/. && test -e dev/sudo && SUDO="sudo"
 
-[ -z "$CEPH_BIN" ] && CEPH_BIN=.
+if [ -e CMakeCache.txt ]; then
+  [ -z "$CEPH_BIN" ] && CEPH_BIN=src
+else
+  [ -z "$CEPH_BIN" ] && CEPH_BIN=.
+fi
 
 MYUID=$(id -u)
 MYNAME=$(id -nu)

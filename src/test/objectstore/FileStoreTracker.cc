@@ -8,16 +8,16 @@
 
 class OnApplied : public Context {
   FileStoreTracker *tracker;
-  list<pair<pair<string, string>, uint64_t> > in_flight;
+  list<pair<pair<coll_t, string>, uint64_t> > in_flight;
   ObjectStore::Transaction *t;
 public:
   OnApplied(FileStoreTracker *tracker,
-	    list<pair<pair<string, string>, uint64_t> > in_flight,
+	    list<pair<pair<coll_t, string>, uint64_t> > in_flight,
 	    ObjectStore::Transaction *t)
     : tracker(tracker), in_flight(in_flight), t(t) {}
 
   void finish(int r) {
-    for (list<pair<pair<string, string>, uint64_t> >::iterator i =
+    for (list<pair<pair<coll_t, string>, uint64_t> >::iterator i =
 	   in_flight.begin();
 	 i != in_flight.end();
 	 ++i) {
@@ -29,14 +29,14 @@ public:
 
 class OnCommitted : public Context {
   FileStoreTracker *tracker;
-  list<pair<pair<string, string>, uint64_t> > in_flight;
+  list<pair<pair<coll_t, string>, uint64_t> > in_flight;
 public:
   OnCommitted(FileStoreTracker *tracker,
-	      list<pair<pair<string, string>, uint64_t> > in_flight)
+	      list<pair<pair<coll_t, string>, uint64_t> > in_flight)
     : tracker(tracker), in_flight(in_flight) {}
 
   void finish(int r) {
-    for (list<pair<pair<string, string>, uint64_t> >::iterator i =
+    for (list<pair<pair<coll_t, string>, uint64_t> >::iterator i =
 	   in_flight.begin();
 	 i != in_flight.end();
 	 ++i) {
@@ -67,7 +67,7 @@ int FileStoreTracker::init()
 
 void FileStoreTracker::submit_transaction(Transaction &t)
 {
-  list<pair<pair<string, string>, uint64_t> > in_flight;
+  list<pair<pair<coll_t, string>, uint64_t> > in_flight;
   OutTransaction out;
   out.t = new ObjectStore::Transaction;
   out.in_flight = &in_flight;
@@ -82,7 +82,7 @@ void FileStoreTracker::submit_transaction(Transaction &t)
     new OnCommitted(this, in_flight));
 }
 
-void FileStoreTracker::write(const pair<string, string> &obj,
+void FileStoreTracker::write(const pair<coll_t, string> &obj,
 			     OutTransaction *out)
 {
   Mutex::Locker l(lock);
@@ -104,14 +104,14 @@ void FileStoreTracker::write(const pair<string, string> &obj,
     to_write.append(*iter);
   }
   out->t->write(coll_t(obj.first),
-		hobject_t(sobject_t(obj.second, CEPH_NOSNAP)),
+		ghobject_t(hobject_t(sobject_t(obj.second, CEPH_NOSNAP))),
 		offset,
 		len,
 		to_write);
   out->in_flight->push_back(make_pair(obj, set_content(obj, contents)));
 }
 
-void FileStoreTracker::remove(const pair<string, string> &obj,
+void FileStoreTracker::remove(const pair<coll_t, string> &obj,
 			      OutTransaction *out)
 {
   std::cerr << "Deleting " << obj << std::endl;
@@ -120,13 +120,13 @@ void FileStoreTracker::remove(const pair<string, string> &obj,
   if (!old_contents.exists())
     return;
   out->t->remove(coll_t(obj.first),
-		 hobject_t(sobject_t(obj.second, CEPH_NOSNAP)));
+		 ghobject_t(hobject_t(sobject_t(obj.second, CEPH_NOSNAP))));
   ObjectContents contents;
   out->in_flight->push_back(make_pair(obj, set_content(obj, contents)));
 }
 
-void FileStoreTracker::clone_range(const pair<string, string> &from,
-				   const pair<string, string> &to,
+void FileStoreTracker::clone_range(const pair<coll_t, string> &from,
+				   const pair<coll_t, string> &to,
 				   OutTransaction *out) {
   Mutex::Locker l(lock);
   std::cerr << "CloningRange " << from << " to " << to << std::endl;
@@ -148,16 +148,16 @@ void FileStoreTracker::clone_range(const pair<string, string> &from,
   interval_to_clone.insert(offset, len);
   to_contents.clone_range(from_contents, interval_to_clone);
   out->t->clone_range(coll_t(from.first),
-		      hobject_t(sobject_t(from.second, CEPH_NOSNAP)),
-		      hobject_t(sobject_t(to.second, CEPH_NOSNAP)),
+		      ghobject_t(hobject_t(sobject_t(from.second, CEPH_NOSNAP))),
+		      ghobject_t(hobject_t(sobject_t(to.second, CEPH_NOSNAP))),
 		      offset,
 		      len,
 		      offset);
   out->in_flight->push_back(make_pair(to, set_content(to, to_contents)));
 }
 
-void FileStoreTracker::clone(const pair<string, string> &from,
-			     const pair<string, string> &to,
+void FileStoreTracker::clone(const pair<coll_t, string> &from,
+			     const pair<coll_t, string> &to,
 			     OutTransaction *out) {
   Mutex::Locker l(lock);
   std::cerr << "Cloning " << from << " to " << to << std::endl;
@@ -173,24 +173,24 @@ void FileStoreTracker::clone(const pair<string, string> &from,
 
   if (to_contents.exists())
     out->t->remove(coll_t(to.first),
-		   hobject_t(sobject_t(to.second, CEPH_NOSNAP)));
+		   ghobject_t(hobject_t(sobject_t(to.second, CEPH_NOSNAP))));
   out->t->clone(coll_t(from.first),
-		hobject_t(sobject_t(from.second, CEPH_NOSNAP)),
-		hobject_t(sobject_t(to.second, CEPH_NOSNAP)));
+		ghobject_t(hobject_t(sobject_t(from.second, CEPH_NOSNAP))),
+		ghobject_t(hobject_t(sobject_t(to.second, CEPH_NOSNAP))));
   out->in_flight->push_back(make_pair(to, set_content(to, from_contents)));
 }
 
 
-string obj_to_prefix(const pair<string, string> &obj) {
+string obj_to_prefix(const pair<coll_t, string> &obj) {
   string sep;
   sep.push_back('^');
-  return obj.first + sep + obj.second + "_CONTENTS_";
+  return obj.first.to_str() + sep + obj.second + "_CONTENTS_";
 }
 
-string obj_to_meta_prefix(const pair<string, string> &obj) {
+string obj_to_meta_prefix(const pair<coll_t, string> &obj) {
   string sep;
   sep.push_back('^');
-  return obj.first + sep + obj.second;
+  return obj.first.to_str() + sep + obj.second;
 }
 
 string seq_to_key(uint64_t seq) {
@@ -232,7 +232,7 @@ void decode(ObjStatus &obj, bufferlist::iterator &bl) {
 }
 
 
-ObjStatus get_obj_status(const pair<string, string> &obj,
+ObjStatus get_obj_status(const pair<coll_t, string> &obj,
 			 KeyValueDB *db)
 {
   set<string> to_get;
@@ -247,7 +247,7 @@ ObjStatus get_obj_status(const pair<string, string> &obj,
   return retval;
 }
 
-void set_obj_status(const pair<string, string> &obj,
+void set_obj_status(const pair<coll_t, string> &obj,
 		    const ObjStatus &status,
 		    KeyValueDB::Transaction t)
 {
@@ -256,7 +256,7 @@ void set_obj_status(const pair<string, string> &obj,
   t->set(obj_to_meta_prefix(obj), to_set);
 }
 
-void _clean_forward(const pair<string, string> &obj,
+void _clean_forward(const pair<coll_t, string> &obj,
 		    uint64_t last_valid,
 		    KeyValueDB *db)
 {
@@ -272,7 +272,7 @@ void _clean_forward(const pair<string, string> &obj,
 }
 
 
-void FileStoreTracker::verify(const string &coll, const string &obj,
+void FileStoreTracker::verify(const coll_t &coll, const string &obj,
 			      bool on_start) {
   Mutex::Locker l(lock);
   std::cerr << "Verifying " << make_pair(coll, obj) << std::endl;
@@ -281,7 +281,7 @@ void FileStoreTracker::verify(const string &coll, const string &obj,
   std::cerr << "valid_reads is " << valid_reads << std::endl;
   bufferlist contents;
   int r = store->read(coll_t(coll),
-		      hobject_t(sobject_t(obj, CEPH_NOSNAP)),
+		      ghobject_t(hobject_t(sobject_t(obj, CEPH_NOSNAP))),
 		      0,
 		      2*SIZE,
 		      contents);
@@ -333,7 +333,7 @@ void FileStoreTracker::verify(const string &coll, const string &obj,
 }
 
 ObjectContents FileStoreTracker::get_current_content(
-  const pair<string, string> &obj)
+  const pair<coll_t, string> &obj)
 {
   KeyValueDB::Iterator iter = db->get_iterator(
     obj_to_prefix(obj));
@@ -351,7 +351,7 @@ ObjectContents FileStoreTracker::get_current_content(
 }
 
 ObjectContents FileStoreTracker::get_content(
-  const pair<string, string> &obj, uint64_t version)
+  const pair<coll_t, string> &obj, uint64_t version)
 {
   set<string> to_get;
   map<string, bufferlist> got;
@@ -368,7 +368,7 @@ ObjectContents FileStoreTracker::get_content(
 }
 
 pair<uint64_t, uint64_t> FileStoreTracker::get_valid_reads(
-  const pair<string, string> &obj)
+  const pair<coll_t, string> &obj)
 {
   pair<uint64_t, uint64_t> bounds = make_pair(0,1);
   KeyValueDB::Iterator iter = db->get_iterator(
@@ -387,7 +387,7 @@ pair<uint64_t, uint64_t> FileStoreTracker::get_valid_reads(
   return bounds;
 }
 
-void clear_obsolete(const pair<string, string> &obj,
+void clear_obsolete(const pair<coll_t, string> &obj,
 		    const ObjStatus &status,
 		    KeyValueDB *db,
 		    KeyValueDB::Transaction t)
@@ -401,7 +401,7 @@ void clear_obsolete(const pair<string, string> &obj,
   t->rmkeys(obj_to_prefix(obj), to_remove);
 }
 
-void FileStoreTracker::committed(const pair<string, string> &obj,
+void FileStoreTracker::committed(const pair<coll_t, string> &obj,
 				 uint64_t seq) {
   Mutex::Locker l(lock);
   ObjStatus status = get_obj_status(obj, db);
@@ -413,7 +413,7 @@ void FileStoreTracker::committed(const pair<string, string> &obj,
   db->submit_transaction(t);
 }
 
-void FileStoreTracker::applied(const pair<string, string> &obj,
+void FileStoreTracker::applied(const pair<coll_t, string> &obj,
 			       uint64_t seq) {
   Mutex::Locker l(lock);
   std::cerr << "Applied " << obj << " version " << seq << std::endl;
@@ -427,7 +427,7 @@ void FileStoreTracker::applied(const pair<string, string> &obj,
 }
 
 
-uint64_t FileStoreTracker::set_content(const pair<string, string> &obj,
+uint64_t FileStoreTracker::set_content(const pair<coll_t, string> &obj,
 				       ObjectContents &content) {
   KeyValueDB::Transaction t = db->get_transaction();
   KeyValueDB::Iterator iter = db->get_iterator(

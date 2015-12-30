@@ -7,6 +7,7 @@
 #include "test/librados_test_stub/TestWatchNotify.h"
 #include "librados/AioCompletionImpl.h"
 #include "include/assert.h"
+#include "common/valgrind.h"
 #include "objclass/objclass.h"
 #include <boost/bind.hpp>
 #include <errno.h>
@@ -17,9 +18,9 @@ TestIoCtxImpl::TestIoCtxImpl() : m_client(NULL) {
   get();
 }
 
-TestIoCtxImpl::TestIoCtxImpl(TestRadosClient &client, int64_t pool_id,
+TestIoCtxImpl::TestIoCtxImpl(TestRadosClient *client, int64_t pool_id,
                              const std::string& pool_name)
-  : m_client(&client), m_pool_id(pool_id), m_pool_name(pool_name),
+  : m_client(client), m_pool_id(pool_id), m_pool_name(pool_name),
     m_snap_seq(CEPH_NOSNAP)
 {
   m_client->get();
@@ -37,6 +38,7 @@ TestIoCtxImpl::TestIoCtxImpl(const TestIoCtxImpl& rhs)
 }
 
 TestIoCtxImpl::~TestIoCtxImpl() {
+  assert(m_pending_ops.read() == 0);
 }
 
 void TestObjectOperationImpl::get() {
@@ -45,7 +47,11 @@ void TestObjectOperationImpl::get() {
 
 void TestObjectOperationImpl::put() {
   if (m_refcount.dec() == 0) {
+    ANNOTATE_HAPPENS_AFTER(&m_refcount);
+    ANNOTATE_HAPPENS_BEFORE_FORGET_ALL(&m_refcount);
     delete this;
+  } else {
+    ANNOTATE_HAPPENS_BEFORE(&m_refcount);
   }
 }
 
@@ -85,14 +91,24 @@ void TestIoCtxImpl::aio_flush_async(AioCompletionImpl *c) {
   m_client->flush_aio_operations(c);
 }
 
+void TestIoCtxImpl::aio_notify(const std::string& oid, AioCompletionImpl *c,
+                               bufferlist& bl, uint64_t timeout_ms,
+                               bufferlist *pbl) {
+  m_pending_ops.inc();
+  c->get();
+  C_AioNotify *ctx = new C_AioNotify(this, c);
+  m_client->get_watch_notify().aio_notify(oid, bl, timeout_ms, pbl, ctx);
+}
+
 int TestIoCtxImpl::aio_operate(const std::string& oid, TestObjectOperationImpl &ops,
                                AioCompletionImpl *c, SnapContext *snap_context,
                                int flags) {
   // TODO flags for now
   ops.get();
+  m_pending_ops.inc();
   m_client->add_aio_operation(oid, true, boost::bind(
     &TestIoCtxImpl::execute_aio_operations, this, oid, &ops,
-    reinterpret_cast<bufferlist*>(NULL),
+    reinterpret_cast<bufferlist*>(0),
     snap_context != NULL ? *snap_context : m_snapc), c);
   return 0;
 }
@@ -103,22 +119,23 @@ int TestIoCtxImpl::aio_operate_read(const std::string& oid,
                                     bufferlist *pbl) {
   // TODO ignoring flags for now
   ops.get();
+  m_pending_ops.inc();
   m_client->add_aio_operation(oid, true, boost::bind(
     &TestIoCtxImpl::execute_aio_operations, this, oid, &ops, pbl, m_snapc), c);
   return 0;
 }
 
-int TestIoCtxImpl::exec(const std::string& oid, TestClassHandler &handler,
+int TestIoCtxImpl::exec(const std::string& oid, TestClassHandler *handler,
                         const char *cls, const char *method,
                         bufferlist& inbl, bufferlist* outbl,
                         const SnapContext &snapc) {
-  cls_method_cxx_call_t call = handler.get_method(cls, method);
+  cls_method_cxx_call_t call = handler->get_method(cls, method);
   if (call == NULL) {
     return -ENOSYS;
   }
 
   return (*call)(reinterpret_cast<cls_method_context_t>(
-    handler.get_method_context(this, oid, snapc).get()), &inbl, outbl);
+    handler->get_method_context(this, oid, snapc).get()), &inbl, outbl);
 }
 
 int TestIoCtxImpl::list_watchers(const std::string& o,
@@ -141,9 +158,10 @@ int TestIoCtxImpl::operate(const std::string& oid, TestObjectOperationImpl &ops)
   AioCompletionImpl *comp = new AioCompletionImpl();
 
   ops.get();
+  m_pending_ops.inc();
   m_client->add_aio_operation(oid, false, boost::bind(
     &TestIoCtxImpl::execute_aio_operations, this, oid, &ops,
-    reinterpret_cast<bufferlist*>(NULL), m_snapc), comp);
+    reinterpret_cast<bufferlist*>(0), m_snapc), comp);
 
   comp->wait_for_safe();
   int ret = comp->get_return_value();
@@ -156,6 +174,7 @@ int TestIoCtxImpl::operate_read(const std::string& oid, TestObjectOperationImpl 
   AioCompletionImpl *comp = new AioCompletionImpl();
 
   ops.get();
+  m_pending_ops.inc();
   m_client->add_aio_operation(oid, false, boost::bind(
     &TestIoCtxImpl::execute_aio_operations, this, oid, &ops, pbl,
     m_snapc), comp);
@@ -242,13 +261,21 @@ int TestIoCtxImpl::unwatch(uint64_t handle) {
 
 int TestIoCtxImpl::watch(const std::string& o, uint64_t *handle,
                          librados::WatchCtx *ctx, librados::WatchCtx2 *ctx2) {
-  return m_client->get_watch_notify().watch(o, handle, ctx, ctx2);
+  return m_client->get_watch_notify().watch(o, get_instance_id(), handle, ctx,
+                                            ctx2);
+}
+
+int TestIoCtxImpl::execute_operation(const std::string& oid,
+                                     const Operation &operation) {
+  TestRadosClient::Transaction transaction(m_client, oid);
+  return operation(this, oid);
 }
 
 int TestIoCtxImpl::execute_aio_operations(const std::string& oid,
                                           TestObjectOperationImpl *ops,
                                           bufferlist *pbl,
                                           const SnapContext &snapc) {
+  TestRadosClient::Transaction transaction(m_client, oid);
   int ret = 0;
   for (ObjectOperations::iterator it = ops->ops.begin();
        it != ops->ops.end(); ++it) {
@@ -257,8 +284,15 @@ int TestIoCtxImpl::execute_aio_operations(const std::string& oid,
       break;
     }
   }
+  m_pending_ops.dec();
   ops->put();
   return ret;
+}
+
+void TestIoCtxImpl::handle_aio_notify_complete(AioCompletionImpl *c, int r) {
+  m_pending_ops.dec();
+
+  m_client->finish_aio_completion(c, r);
 }
 
 } // namespace librados

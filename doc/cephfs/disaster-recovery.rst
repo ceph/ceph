@@ -108,3 +108,55 @@ that it would overwrite any existing root inode on disk and orphan any existing 
 contrast, the 'reset' command will leave rank 0 in 'active' state such that the next MDS
 daemon to claim the rank will go ahead and use the existing in-RADOS metadata.
 
+Recovery from missing metadata objects
+--------------------------------------
+
+Depending on what objects are missing or corrupt, you may need to
+run various commands to regenerate default versions of the
+objects.
+
+::
+
+    # Session table
+    cephfs-table-tool 0 reset session
+    # SnapServer
+    cephfs-table-tool 0 reset snap
+    # InoTable
+    cephfs-table-tool 0 reset inode
+    # Journal
+    cephfs-journal-tool --rank=0 journal reset
+    # Root inodes ("/" and MDS directory)
+    cephfs-data-scan init
+
+Finally, you can regenerate metadata objects for missing files
+and directories based on the contents of a data pool.  This is
+a two-phase process.  First, scanning *all* objects to calculate
+size and mtime metadata for inodes.  Second, scanning the first
+object from every file to collect this metadata and inject
+it into the metadata pool.
+
+::
+
+    cephfs-data-scan scan_extents <data pool>
+    cephfs-data-scan scan_inodes <data pool>
+
+This command may take a very long time if there are many
+files or very large files in the data pool.  To accelerate
+the process, run multiple instances of the tool.  Decide on
+a number of workers, and pass each worker a number within
+the range 0-(N_workers - 1), like so:
+
+::
+
+    # Worker 0
+    cephfs-data-scan scan_extents <data pool> 0 1
+    # Worker 1
+    cephfs-data-scan scan_extents <data pool> 1 1
+
+    # Worker 0
+    cephfs-data-scan scan_inodes <data pool> 0 1
+    # Worker 1
+    cephfs-data-scan scan_inodes <data pool> 1 1
+
+It is important to ensure that all workers have completed the
+scan_extents phase before any workers enter the scan_inodes phase.

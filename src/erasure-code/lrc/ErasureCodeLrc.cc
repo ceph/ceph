@@ -225,9 +225,8 @@ int ErasureCodeLrc::layers_init(ostream *ss)
       layer.profile["plugin"] = "jerasure";
     if (layer.profile.find("technique") == layer.profile.end())
       layer.profile["technique"] = "reed_sol_van";
-    if (layer.profile.find("directory") == layer.profile.end())
-      layer.profile["directory"] = directory;
     int err = registry.factory(layer.profile["plugin"],
+			       directory,
 			       layer.profile,
 			       &layer.erasure_code,
 			       ss);
@@ -273,27 +272,26 @@ int ErasureCodeLrc::parse(ErasureCodeProfile &profile,
   if (r)
     return r;
 
-  if (profile.count("directory") != 0)
-    directory = profile.find("directory")->second;
-
   return parse_ruleset(profile, ss);
 }
+
+const string ErasureCodeLrc::DEFAULT_KML("-1");
 
 int ErasureCodeLrc::parse_kml(ErasureCodeProfile &profile,
 			      ostream *ss)
 {
   int err = ErasureCode::parse(profile, ss);
-  const int DEFAULT = -1;
+  const int DEFAULT_INT = -1;
   int k, m, l;
-  err |= to_int("k", profile, &k, DEFAULT, ss);
-  err |= to_int("m", profile, &m, DEFAULT, ss);
-  err |= to_int("l", profile, &l, DEFAULT, ss);
+  err |= to_int("k", profile, &k, DEFAULT_KML, ss);
+  err |= to_int("m", profile, &m, DEFAULT_KML, ss);
+  err |= to_int("l", profile, &l, DEFAULT_KML, ss);
 
-  if (k == DEFAULT && m == DEFAULT && l == DEFAULT)
-    return 0;
+  if (k == DEFAULT_INT && m == DEFAULT_INT && l == DEFAULT_INT)
+    return err;
 
-  if ((k != DEFAULT || m != DEFAULT || l != DEFAULT) &&
-      (k == DEFAULT || m == DEFAULT || l == DEFAULT)) {
+  if ((k != DEFAULT_INT || m != DEFAULT_INT || l != DEFAULT_INT) &&
+      (k == DEFAULT_INT || m == DEFAULT_INT || l == DEFAULT_INT)) {
     *ss << "All of k, m, l must be set or none of them in "
 	<< profile << std::endl;
     return ERROR_LRC_ALL_OR_NOTHING;
@@ -382,16 +380,16 @@ int ErasureCodeLrc::parse_kml(ErasureCodeProfile &profile,
     ruleset_steps.push_back(Step("chooseleaf", ruleset_failure_domain, 0));
   }
 
-  return 0;
+  return err;
 }
 
 int ErasureCodeLrc::parse_ruleset(ErasureCodeProfile &profile,
 				  ostream *ss)
 {
-  ErasureCodeProfile::const_iterator parameter;
-  parameter = profile.find("ruleset-root");
-  if (parameter != profile.end())
-    ruleset_root = parameter->second;
+  int err = 0;
+  err |= to_string("ruleset-root", profile,
+		   &ruleset_root,
+		   "default", ss);
 
   if (profile.count("ruleset-steps") != 0) {
     ruleset_steps.clear();
@@ -518,7 +516,22 @@ int ErasureCodeLrc::init(ErasureCodeProfile &profile,
   }
   chunk_count = mapping.length();
 
-  return layers_sanity_checks(description_string, ss);
+  r = layers_sanity_checks(description_string, ss);
+  if (r)
+    return r;
+
+  //
+  // When initialized with kml, the profile parameters
+  // that were generated should not be stored because
+  // they would otherwise be exposed to the caller.
+  //
+  if (profile.find("l") != profile.end() &&
+      profile.find("l")->second != DEFAULT_KML) {
+    profile.erase("mapping");
+    profile.erase("layers");
+  }
+  ErasureCode::init(profile, ss);
+  return 0;
 }
 
 set<int> ErasureCodeLrc::get_erasures(const set<int> &want,

@@ -250,7 +250,7 @@ static string xio_uri_from_entity(const string &type,
 
 /* XioMessenger */
 XioMessenger::XioMessenger(CephContext *cct, entity_name_t name,
-			   string mname, uint64_t _nonce,
+			   string mname, uint64_t _nonce, uint64_t features,
 			   DispatchStrategy *ds)
   : SimplePolicyMessenger(cct, name, mname, _nonce),
     nsessions(0),
@@ -312,22 +312,23 @@ XioMessenger::XioMessenger(CephContext *cct, entity_name_t name,
                  &xopt, sizeof(xopt));
 
       /* and set threshold for buffer callouts */
-      xopt = 16384;
-      xio_set_opt(NULL, XIO_OPTLEVEL_ACCELIO, XIO_OPTNAME_MAX_INLINE_DATA,
+      xopt = max(cct->_conf->xio_max_send_inline, 512);
+      xio_set_opt(NULL, XIO_OPTLEVEL_ACCELIO, XIO_OPTNAME_MAX_INLINE_XIO_DATA,
                  &xopt, sizeof(xopt));
       xopt = 216;
-      xio_set_opt(NULL, XIO_OPTLEVEL_ACCELIO, XIO_OPTNAME_MAX_INLINE_HEADER,
+      xio_set_opt(NULL, XIO_OPTLEVEL_ACCELIO, XIO_OPTNAME_MAX_INLINE_XIO_HEADER,
                  &xopt, sizeof(xopt));
 
+      size_t queue_depth = cct->_conf->xio_queue_depth;
       struct xio_mempool_config mempool_config = {
         6,
         {
-          {1024,  0,  4096,  262144},
-          {4096,  0,  4096,  262144},
-          {16384, 0,  4096,  262144},
-          {65536, 0,  1024,  65536},
-          {262144, 0,  512,  16384},
-          {1048576, 0, 128,  8192}
+          {1024,  0,  queue_depth,  262144},
+          {4096,  0,  queue_depth,  262144},
+          {16384, 0,  queue_depth,  262144},
+          {65536, 0,  128,  65536},
+          {262144, 0,  32,  16384},
+          {1048576, 0, 8,  8192}
         }
       };
       xio_set_opt(NULL,
@@ -341,22 +342,22 @@ XioMessenger::XioMessenger(CephContext *cct, entity_name_t name,
 	xio_mempool_create(-1 /* nodeid */,
 			   XIO_MEMPOOL_FLAG_REGULAR_PAGES_ALLOC);
 
-      (void) xio_mempool_add_allocator(xio_msgr_noreg_mpool, 64,
+      (void) xio_mempool_add_slab(xio_msgr_noreg_mpool, 64,
 				       cct->_conf->xio_mp_min,
 				       cct->_conf->xio_mp_max_64,
-				       XMSG_MEMPOOL_QUANTUM);
-      (void) xio_mempool_add_allocator(xio_msgr_noreg_mpool, 256,
+				       XMSG_MEMPOOL_QUANTUM, 0);
+      (void) xio_mempool_add_slab(xio_msgr_noreg_mpool, 256,
 				       cct->_conf->xio_mp_min,
 				       cct->_conf->xio_mp_max_256,
-				       XMSG_MEMPOOL_QUANTUM);
-      (void) xio_mempool_add_allocator(xio_msgr_noreg_mpool, 1024,
+				       XMSG_MEMPOOL_QUANTUM, 0);
+      (void) xio_mempool_add_slab(xio_msgr_noreg_mpool, 1024,
 				       cct->_conf->xio_mp_min,
 				       cct->_conf->xio_mp_max_1k,
-				       XMSG_MEMPOOL_QUANTUM);
-      (void) xio_mempool_add_allocator(xio_msgr_noreg_mpool, getpagesize(),
+				       XMSG_MEMPOOL_QUANTUM, 0);
+      (void) xio_mempool_add_slab(xio_msgr_noreg_mpool, getpagesize(),
 				       cct->_conf->xio_mp_min,
 				       cct->_conf->xio_mp_max_page,
-				       XMSG_MEMPOOL_QUANTUM);
+				       XMSG_MEMPOOL_QUANTUM, 0);
 
       /* initialize ops singleton */
       xio_msgr_ops.on_session_event = on_session_event;
@@ -379,6 +380,9 @@ XioMessenger::XioMessenger(CephContext *cct, entity_name_t name,
   /* update class instance count */
   nInstances.inc();
 
+  local_features = features;
+  loop_con->set_features(features);
+
 } /* ctor */
 
 int XioMessenger::pool_hint(uint32_t dsize) {
@@ -386,9 +390,9 @@ int XioMessenger::pool_hint(uint32_t dsize) {
     return 0;
 
   /* if dsize is already present, returns -EEXIST */
-  return xio_mempool_add_allocator(xio_msgr_noreg_mpool, dsize, 0,
+  return xio_mempool_add_slab(xio_msgr_noreg_mpool, dsize, 0,
 				   cct->_conf->xio_mp_max_hint,
-				   XMSG_MEMPOOL_QUANTUM);
+				   XMSG_MEMPOOL_QUANTUM, 0);
 }
 
 void XioMessenger::learned_addr(const entity_addr_t &peer_addr_for_me)
@@ -458,6 +462,7 @@ int XioMessenger::session_event(struct xio_session *session,
 
     /* notify hook */
     this->ms_deliver_handle_connect(xcon);
+    this->ms_deliver_handle_fast_connect(xcon);
   }
   break;
 
@@ -509,10 +514,6 @@ int XioMessenger::session_event(struct xio_session *session,
   }
   break;
   case XIO_SESSION_CONNECTION_ERROR_EVENT:
-    ldout(cct,2) << xio_session_event_types[event_data->event]
-      << " user_context " << event_data->conn_user_context << dendl;
-    /* informational (Eyal)*/
-    break;
   case XIO_SESSION_CONNECTION_CLOSED_EVENT: /* orderly discon */
   case XIO_SESSION_CONNECTION_DISCONNECTED_EVENT: /* unexpected discon */
   case XIO_SESSION_CONNECTION_REFUSED_EVENT:
@@ -659,7 +660,7 @@ xio_place_buffers(buffer::list& bl, XioMsg *xmsg, struct xio_msg*& req,
       //break;
     default:
     {
-      struct xio_mempool_obj *mp = get_xio_mp(*pb);
+      struct xio_reg_mem *mp = get_xio_mp(*pb);
       iov->mr = (mp) ? mp->mr : NULL;
     }
       break;
@@ -775,7 +776,7 @@ int XioMessenger::_send_message(Message *m, const entity_inst_t& dest)
 static inline XioMsg* pool_alloc_xio_msg(Message *m, XioConnection *xcon,
   int ex_cnt)
 {
-  struct xio_mempool_obj mp_mem;
+  struct xio_reg_mem mp_mem;
   int e = xpool_alloc(xio_msgr_noreg_mpool, sizeof(XioMsg), &mp_mem);
   if (!!e)
     return NULL;
@@ -1071,7 +1072,7 @@ void XioMessenger::mark_down_all()
 static inline XioMarkDownHook* pool_alloc_markdown_hook(
   XioConnection *xcon, Message *m)
 {
-  struct xio_mempool_obj mp_mem;
+  struct xio_reg_mem mp_mem;
   int e = xio_mempool_alloc(xio_msgr_noreg_mpool,
 			    sizeof(XioMarkDownHook), &mp_mem);
   if (!!e)

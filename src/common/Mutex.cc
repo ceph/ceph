@@ -17,14 +17,15 @@
 #include "common/perf_counters.h"
 #include "common/ceph_context.h"
 #include "common/config.h"
+#include "include/stringify.h"
 #include "include/utime.h"
 #include "common/Clock.h"
 
-Mutex::Mutex(const char *n, bool r, bool ld,
+Mutex::Mutex(const std::string &n, bool r, bool ld,
 	     bool bt,
 	     CephContext *cct) :
-  name(n), id(-1), recursive(r), lockdep(ld), backtrace(bt),
-  nlock(0), locked_by(0), cct(cct), logger(0)
+  name(n), id(-1), recursive(r), lockdep(ld), backtrace(bt), nlock(0),
+  locked_by(0), cct(cct), logger(0)
 {
   if (cct) {
     PerfCountersBuilder b(cct, string("mutex-") + name,
@@ -42,7 +43,7 @@ Mutex::Mutex(const char *n, bool r, bool ld,
     pthread_mutexattr_settype(&attr, PTHREAD_MUTEX_RECURSIVE);
     pthread_mutex_init(&_m,&attr);
     pthread_mutexattr_destroy(&attr);
-    if (g_lockdep)
+    if (lockdep && g_lockdep)
       _register();
   }
   else if (lockdep) {
@@ -55,6 +56,7 @@ Mutex::Mutex(const char *n, bool r, bool ld,
     pthread_mutexattr_init(&attr);
     pthread_mutexattr_settype(&attr, PTHREAD_MUTEX_ERRORCHECK);
     pthread_mutex_init(&_m, &attr);
+    pthread_mutexattr_destroy(&attr);
     if (g_lockdep)
       _register();
   }
@@ -74,24 +76,32 @@ Mutex::~Mutex() {
     cct->get_perfcounters_collection()->remove(logger);
     delete logger;
   }
+  if (lockdep && g_lockdep) {
+    lockdep_unregister(id);
+  }
 }
 
 void Mutex::Lock(bool no_lockdep) {
-  utime_t start;
   int r;
 
   if (lockdep && g_lockdep && !no_lockdep) _will_lock();
 
-  if (TryLock()) {
-    goto out;
-  }
-
-  if (logger && cct && cct->_conf->mutex_perf_counter)
+  if (logger && cct && cct->_conf->mutex_perf_counter) {
+    utime_t start;
+    // instrumented mutex enabled
     start = ceph_clock_now(cct);
-  r = pthread_mutex_lock(&_m);
-  if (logger && cct && cct->_conf->mutex_perf_counter)
+    if (TryLock()) {
+      goto out;
+    }
+
+    r = pthread_mutex_lock(&_m);
+
     logger->tinc(l_mutex_wait,
 		 ceph_clock_now(cct) - start);
+  } else {
+    r = pthread_mutex_lock(&_m);
+  }
+
   assert(r == 0);
   if (lockdep && g_lockdep) _locked();
   _post_lock();

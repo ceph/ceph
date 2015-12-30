@@ -20,15 +20,14 @@ extern "C" {
 #include <stdint.h>
 #include "libxio.h"
 }
-#include <iostream>
 #include <vector>
 #include "include/atomic.h"
 #include "common/likely.h"
 
 
 static inline int xpool_alloc(struct xio_mempool *pool, uint64_t size,
-			      struct xio_mempool_obj* mp);
-static inline void xpool_free(uint64_t size, struct xio_mempool_obj* mp);
+			      struct xio_reg_mem* mp);
+static inline void xpool_free(uint64_t size, struct xio_reg_mem* mp);
 
 using ceph::atomic_t;
 
@@ -43,7 +42,7 @@ public:
   static const int MB = 8;
 
   struct xio_piece {
-    struct xio_mempool_obj mp[1];
+    struct xio_reg_mem mp[1];
     struct xio_piece *next;
     int s;
     char payload[MB];
@@ -67,7 +66,7 @@ public:
   void *alloc(size_t _s)
     {
 	void *r;
-	struct xio_mempool_obj mp[1];
+	struct xio_reg_mem mp[1];
 	struct xio_piece *x;
 	int e = xpool_alloc(handle, (sizeof(struct xio_piece)-MB) + _s, mp);
 	if (e) {
@@ -108,24 +107,7 @@ public:
     }
   }
 
-  void dump(const char* tag, uint64_t serial) {
-    std::cout
-      << tag << " #" << serial << ": "
-      << "pool objs: "
-      << "64: " << ctr_set[SLAB_64].read() << " "
-      << "256: " << ctr_set[SLAB_256].read() << " "
-      << "1024: " << ctr_set[SLAB_1024].read() << " "
-      << "page: " << ctr_set[SLAB_PAGE].read() << " "
-      << "max: " << ctr_set[SLAB_MAX].read() << " "
-      << "overflow: " << ctr_set[SLAB_OVERFLOW].read() << " "
-      << std::endl;
-    std::cout
-      << tag << " #" << serial << ": "
-      << " msg objs: "
-      << "in: " << hook_cnt.read() << " "
-      << "out: " << msg_cnt.read() << " "
-      << std::endl;
-  }
+  void dump(const char* tag, uint64_t serial);
 
   void inc(uint64_t size) {
     if (size <= 64) {
@@ -198,7 +180,7 @@ public:
 extern XioPoolStats xp_stats;
 
 static inline int xpool_alloc(struct xio_mempool *pool, uint64_t size,
-			      struct xio_mempool_obj* mp)
+			      struct xio_reg_mem* mp)
 {
   // try to allocate from the xio pool
   int r = xio_mempool_alloc(pool, size, mp);
@@ -216,7 +198,7 @@ static inline int xpool_alloc(struct xio_mempool *pool, uint64_t size,
   return 0;
 }
 
-static inline void xpool_free(uint64_t size, struct xio_mempool_obj* mp)
+static inline void xpool_free(uint64_t size, struct xio_reg_mem* mp)
 {
   if (mp->length) {
     if (unlikely(XioPool::trace_mempool))

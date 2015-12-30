@@ -12,7 +12,9 @@
  * 
  */
 
+#include <sys/types.h>
 #include <sys/socket.h>
+#include <netinet/in.h>
 #include <netinet/ip.h>
 #include <netinet/tcp.h>
 #include <sys/uio.h>
@@ -32,42 +34,28 @@
 #include "auth/cephx/CephxProtocol.h"
 #include "auth/AuthSessionHandler.h"
 
+#include "include/sock_compat.h"
+
 // Constant to limit starting sequence number to 2^31.  Nothing special about it, just a big number.  PLR
 #define SEQ_MASK  0x7fffffff 
 #define dout_subsys ceph_subsys_ms
 
 #undef dout_prefix
-#define dout_prefix _pipe_prefix(_dout)
-ostream& Pipe::_pipe_prefix(std::ostream *_dout) {
-  return *_dout << "-- " << msgr->get_myinst().addr << " >> " << peer_addr << " pipe(" << this
-		<< " sd=" << sd << " :" << port
-		<< " s=" << state
-		<< " pgs=" << peer_global_seq
-		<< " cs=" << connect_seq
-		<< " l=" << policy.lossy
-		<< " c=" << connection_state
-		<< ").";
+#define dout_prefix *_dout << *this
+ostream& Pipe::_pipe_prefix(std::ostream &out) const {
+  return out << "-- " << msgr->get_myinst().addr << " >> " << peer_addr << " pipe(" << this
+	     << " sd=" << sd << " :" << port
+             << " s=" << state
+             << " pgs=" << peer_global_seq
+             << " cs=" << connect_seq
+             << " l=" << policy.lossy
+             << " c=" << connection_state
+             << ").";
 }
 
-/*
- * This optimization may not be available on all platforms (e.g. OSX).
- * Apparently a similar approach based on TCP_CORK can be used.
- */
-#ifndef MSG_MORE
-# define MSG_MORE 0
-#endif
-
-/*
- * On BSD SO_NOSIGPIPE can be set via setsockopt to block SIGPIPE.
- */
-#ifndef MSG_NOSIGNAL
-# define MSG_NOSIGNAL 0
-# ifdef SO_NOSIGPIPE
-#  define CEPH_USE_SO_NOSIGPIPE
-# else
-#  error "Cannot block SIGPIPE!"
-# endif
-#endif
+ostream& operator<<(ostream &out, const Pipe &pipe) {
+  return pipe._pipe_prefix(out);
+}
 
 /**************************************
  * Pipe
@@ -181,7 +169,7 @@ void Pipe::join_reader()
 
 void Pipe::DelayedDelivery::discard()
 {
-  lgeneric_subdout(pipe->msgr->cct, ms, 20) << pipe->_pipe_prefix(_dout) << "DelayedDelivery::discard" << dendl;
+  lgeneric_subdout(pipe->msgr->cct, ms, 20) << *pipe << "DelayedDelivery::discard" << dendl;
   Mutex::Locker l(delay_lock);
   while (!delay_queue.empty()) {
     Message *m = delay_queue.front().second;
@@ -193,7 +181,7 @@ void Pipe::DelayedDelivery::discard()
 
 void Pipe::DelayedDelivery::flush()
 {
-  lgeneric_subdout(pipe->msgr->cct, ms, 20) << pipe->_pipe_prefix(_dout) << "DelayedDelivery::flush" << dendl;
+  lgeneric_subdout(pipe->msgr->cct, ms, 20) << *pipe << "DelayedDelivery::flush" << dendl;
   Mutex::Locker l(delay_lock);
   flush_count = delay_queue.size();
   delay_cond.Signal();
@@ -202,11 +190,11 @@ void Pipe::DelayedDelivery::flush()
 void *Pipe::DelayedDelivery::entry()
 {
   Mutex::Locker locker(delay_lock);
-  lgeneric_subdout(pipe->msgr->cct, ms, 20) << pipe->_pipe_prefix(_dout) << "DelayedDelivery::entry start" << dendl;
+  lgeneric_subdout(pipe->msgr->cct, ms, 20) << *pipe << "DelayedDelivery::entry start" << dendl;
 
   while (!stop_delayed_delivery) {
     if (delay_queue.empty()) {
-      lgeneric_subdout(pipe->msgr->cct, ms, 30) << pipe->_pipe_prefix(_dout) << "DelayedDelivery::entry sleeping on delay_cond because delay queue is empty" << dendl;
+      lgeneric_subdout(pipe->msgr->cct, ms, 30) << *pipe << "DelayedDelivery::entry sleeping on delay_cond because delay queue is empty" << dendl;
       delay_cond.Wait(delay_lock);
       continue;
     }
@@ -216,11 +204,11 @@ void *Pipe::DelayedDelivery::entry()
     if (!flush_count &&
         (release > ceph_clock_now(pipe->msgr->cct) &&
          (delay_msg_type.empty() || m->get_type_name() == delay_msg_type))) {
-      lgeneric_subdout(pipe->msgr->cct, ms, 10) << pipe->_pipe_prefix(_dout) << "DelayedDelivery::entry sleeping on delay_cond until " << release << dendl;
+      lgeneric_subdout(pipe->msgr->cct, ms, 10) << *pipe << "DelayedDelivery::entry sleeping on delay_cond until " << release << dendl;
       delay_cond.WaitUntil(delay_lock, release);
       continue;
     }
-    lgeneric_subdout(pipe->msgr->cct, ms, 10) << pipe->_pipe_prefix(_dout) << "DelayedDelivery::entry dequeuing message " << m << " for delivery, past " << release << dendl;
+    lgeneric_subdout(pipe->msgr->cct, ms, 10) << *pipe << "DelayedDelivery::entry dequeuing message " << m << " for delivery, past " << release << dendl;
     delay_queue.pop_front();
     if (flush_count > 0) {
       --flush_count;
@@ -245,7 +233,7 @@ void *Pipe::DelayedDelivery::entry()
     }
     active_flush = false;
   }
-  lgeneric_subdout(pipe->msgr->cct, ms, 20) << pipe->_pipe_prefix(_dout) << "DelayedDelivery::entry stop" << dendl;
+  lgeneric_subdout(pipe->msgr->cct, ms, 20) << *pipe << "DelayedDelivery::entry stop" << dendl;
   return NULL;
 }
 
@@ -839,7 +827,7 @@ void Pipe::set_socket_options()
   }
 
   // block ESIGPIPE
-#ifdef CEPH_USE_SO_NOSIGPIPE
+#if defined(SO_NOSIGPIPE)
   int val = 1;
   int r = ::setsockopt(sd, SOL_SOCKET, SO_NOSIGPIPE, (void*)&val, sizeof(val));
   if (r) {
@@ -850,7 +838,7 @@ void Pipe::set_socket_options()
 
   int prio = msgr->get_socket_priority();
   if (prio >= 0) {
-    int r;
+    int r = -1;
 #ifdef IPTOS_CLASS_CS6
     int iptos = IPTOS_CLASS_CS6;
     r = ::setsockopt(sd, IPPROTO_IP, IP_TOS, &iptos, sizeof(iptos));
@@ -859,14 +847,18 @@ void Pipe::set_socket_options()
                          << ": " << cpp_strerror(errno) << dendl;
     }
 #endif
+#if defined(SO_PRIORITY) 
     // setsockopt(IPTOS_CLASS_CS6) sets the priority of the socket as 0.
     // See http://goo.gl/QWhvsD and http://goo.gl/laTbjT
     // We need to call setsockopt(SO_PRIORITY) after it.
+#if defined(__linux__)
     r = ::setsockopt(sd, SOL_SOCKET, SO_PRIORITY, &prio, sizeof(prio));
+#endif
     if (r < 0) {
       ldout(msgr->cct,0) << "couldn't set SO_PRIORITY to " << prio
                          << ": " << cpp_strerror(errno) << dendl;
     }
+#endif
   }
 }
 
@@ -909,6 +901,9 @@ int Pipe::connect()
   }
 
   recv_reset();
+
+  set_socket_options();
+
   // connect!
   ldout(msgr->cct,10) << "connecting to " << peer_addr << dendl;
   rc = ::connect(sd, (sockaddr*)&peer_addr.addr, peer_addr.addr_size());
@@ -917,8 +912,6 @@ int Pipe::connect()
 	     << ", " << cpp_strerror(errno) << dendl;
     goto fail;
   }
-
-  set_socket_options();
 
   // verify banner
   // FIXME: this should be non-blocking, or in some other way verify the banner as we get it.
@@ -944,7 +937,12 @@ int Pipe::connect()
 
   // identify peer
   {
+#if defined(__linux__) || defined(DARWIN) || defined(__FreeBSD__)
     bufferptr p(sizeof(paddr) * 2);
+#else
+    int wirelen = sizeof(__u32) * 2 + sizeof(ceph_sockaddr_storage);
+    bufferptr p(wirelen * 2);
+#endif
     addrbl.push_back(p);
   }
   if (tcp_read(addrbl.c_str(), addrbl.length()) < 0) {
@@ -1524,8 +1522,9 @@ void Pipe::reader()
     }
 
     if (tag == CEPH_MSGR_TAG_KEEPALIVE) {
-      ldout(msgr->cct,20) << "reader got KEEPALIVE" << dendl;
+      ldout(msgr->cct,2) << "reader got KEEPALIVE" << dendl;
       pipe_lock.Lock();
+      connection_state->set_last_keepalive(ceph_clock_now(NULL));
       continue;
     }
     if (tag == CEPH_MSGR_TAG_KEEPALIVE2) {
@@ -1540,14 +1539,15 @@ void Pipe::reader()
       } else {
 	send_keepalive_ack = true;
 	keepalive_ack_stamp = utime_t(t);
-	ldout(msgr->cct,20) << "reader got KEEPALIVE2 " << keepalive_ack_stamp
-			    << dendl;
+	ldout(msgr->cct,2) << "reader got KEEPALIVE2 " << keepalive_ack_stamp
+			   << dendl;
+	connection_state->set_last_keepalive(ceph_clock_now(NULL));
 	cond.Signal();
       }
       continue;
     }
     if (tag == CEPH_MSGR_TAG_KEEPALIVE2_ACK) {
-      ldout(msgr->cct,20) << "reader got KEEPALIVE_ACK" << dendl;
+      ldout(msgr->cct,2) << "reader got KEEPALIVE_ACK" << dendl;
       struct ceph_timespec t;
       int rc = tcp_read((char*)&t, sizeof(t));
       pipe_lock.Lock();
@@ -1555,7 +1555,7 @@ void Pipe::reader()
 	ldout(msgr->cct,2) << "reader couldn't read KEEPALIVE2 stamp " << cpp_strerror(errno) << dendl;
 	fault(true);
       } else {
-	connection_state->last_keepalive_ack = utime_t(t);
+	connection_state->set_last_keepalive_ack(utime_t(t));
       }
       continue;
     }
@@ -2124,8 +2124,73 @@ int Pipe::read_message(Message **pm, AuthSessionHandler* auth_handler)
   return ret;
 }
 
+/* 
+ SIGPIPE suppression - for platforms without SO_NOSIGPIPE or MSG_NOSIGNAL
+  http://krokisplace.blogspot.in/2010/02/suppressing-sigpipe-in-library.html 
+  http://www.microhowto.info/howto/ignore_sigpipe_without_affecting_other_threads_in_a_process.html 
+*/
+void Pipe::suppress_sigpipe()
+{
+#if !defined(MSG_NOSIGNAL) && !defined(SO_NOSIGPIPE)
+  /*
+    We want to ignore possible SIGPIPE that we can generate on write.
+    SIGPIPE is delivered *synchronously* and *only* to the thread
+    doing the write.  So if it is reported as already pending (which
+    means the thread blocks it), then we do nothing: if we generate
+    SIGPIPE, it will be merged with the pending one (there's no
+    queuing), and that suits us well.  If it is not pending, we block
+    it in this thread (and we avoid changing signal action, because it
+    is per-process).
+  */
+  sigset_t pending;
+  sigemptyset(&pending);
+  sigpending(&pending);
+  sigpipe_pending = sigismember(&pending, SIGPIPE);
+  if (!sigpipe_pending) {
+    sigset_t blocked;
+    sigemptyset(&blocked);
+    pthread_sigmask(SIG_BLOCK, &sigpipe_mask, &blocked);
+
+    /* Maybe is was blocked already?  */
+    sigpipe_unblock = ! sigismember(&blocked, SIGPIPE);
+  }
+#endif  /* !defined(MSG_NOSIGNAL) && !defined(SO_NOSIGPIPE) */
+}
+
+
+void Pipe::restore_sigpipe()
+{
+#if !defined(MSG_NOSIGNAL) && !defined(SO_NOSIGPIPE)
+  /*
+    If SIGPIPE was pending already we do nothing.  Otherwise, if it
+    become pending (i.e., we generated it), then we sigwait() it (thus
+    clearing pending status).  Then we unblock SIGPIPE, but only if it
+    were us who blocked it.
+  */
+  if (!sigpipe_pending) {
+    sigset_t pending;
+    sigemptyset(&pending);
+    sigpending(&pending);
+    if (sigismember(&pending, SIGPIPE)) {
+      /*
+        Protect ourselves from a situation when SIGPIPE was sent
+        by the user to the whole process, and was delivered to
+        other thread before we had a chance to wait for it.
+      */
+      static const struct timespec nowait = { 0, 0 };
+      TEMP_FAILURE_RETRY(sigtimedwait(&sigpipe_mask, NULL, &nowait));
+    }
+
+    if (sigpipe_unblock)
+      pthread_sigmask(SIG_UNBLOCK, &sigpipe_mask, NULL);
+  }
+#endif  /* !defined(MSG_NOSIGNAL) && !defined(SO_NOSIGPIPE) */
+}
+
+
 int Pipe::do_sendmsg(struct msghdr *msg, int len, bool more)
 {
+  suppress_sigpipe();
   while (len > 0) {
     if (0) { // sanity
       int l = 0;
@@ -2134,16 +2199,23 @@ int Pipe::do_sendmsg(struct msghdr *msg, int len, bool more)
       assert(l == len);
     }
 
-    int r = ::sendmsg(sd, msg, MSG_NOSIGNAL | (more ? MSG_MORE : 0));
+    int r;
+#if defined(MSG_NOSIGNAL)
+    r = ::sendmsg(sd, msg, MSG_NOSIGNAL | (more ? MSG_MORE : 0));
+#else
+    r = ::sendmsg(sd, msg, (more ? MSG_MORE : 0));
+#endif
     if (r == 0) 
       ldout(msgr->cct,10) << "do_sendmsg hmm do_sendmsg got r==0!" << dendl;
     if (r < 0) { 
       ldout(msgr->cct,1) << "do_sendmsg error " << cpp_strerror(errno) << dendl;
+      restore_sigpipe();
       return -1;
     }
     if (state == STATE_CLOSED) {
       ldout(msgr->cct,10) << "do_sendmsg oh look, state == CLOSED, giving up" << dendl;
       errno = EINTR;
+      restore_sigpipe();
       return -1; // close enough
     }
 
@@ -2168,6 +2240,7 @@ int Pipe::do_sendmsg(struct msghdr *msg, int len, bool more)
       }
     }
   }
+  restore_sigpipe();
   return 0;
 }
 
@@ -2531,8 +2604,15 @@ int Pipe::tcp_write(const char *buf, int len)
 
   //lgeneric_dout(cct, DBL) << "tcp_write writing " << len << dendl;
   assert(len > 0);
+  suppress_sigpipe();
+
   while (len > 0) {
-    int did = ::send( sd, buf, len, MSG_NOSIGNAL );
+    int did;
+#if defined(MSG_NOSIGNAL)
+    did = ::send( sd, buf, len, MSG_NOSIGNAL );
+#else
+    did = ::send( sd, buf, len, 0);
+#endif
     if (did < 0) {
       //lgeneric_dout(cct, 1) << "tcp_write error did = " << did << " " << cpp_strerror(errno) << dendl;
       //lgeneric_derr(cct, 1) << "tcp_write error did = " << did << " " << cpp_strerror(errno) << dendl;
@@ -2542,5 +2622,7 @@ int Pipe::tcp_write(const char *buf, int len)
     buf += did;
     //lgeneric_dout(cct, DBL) << "tcp_write did " << did << ", " << len << " left" << dendl;
   }
+  restore_sigpipe();
+
   return 0;
 }

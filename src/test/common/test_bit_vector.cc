@@ -11,6 +11,7 @@
 #include <gtest/gtest.h>
 #include <cmath>
 #include "common/bit_vector.hpp"
+#include <boost/assign/list_of.hpp>
 
 using namespace ceph;
 
@@ -87,8 +88,9 @@ TYPED_TEST(BitVectorTest, get_set) {
 TYPED_TEST(BitVectorTest, get_buffer_extents) {
   typename TestFixture::bit_vector_t bit_vector;
 
+  uint64_t element_count = 2 * CEPH_PAGE_SIZE + 51;
   uint64_t elements_per_byte = 8 / bit_vector.BIT_COUNT;
-  bit_vector.resize((2 * CEPH_PAGE_SIZE + 51) * elements_per_byte);
+  bit_vector.resize(element_count * elements_per_byte);
 
   uint64_t offset = (CEPH_PAGE_SIZE + 11) * elements_per_byte;
   uint64_t length = (CEPH_PAGE_SIZE + 31) * elements_per_byte;
@@ -96,7 +98,7 @@ TYPED_TEST(BitVectorTest, get_buffer_extents) {
   uint64_t byte_length;
   bit_vector.get_data_extents(offset, length, &byte_offset, &byte_length);
   ASSERT_EQ(CEPH_PAGE_SIZE, byte_offset);
-  ASSERT_EQ(2 * CEPH_PAGE_SIZE, byte_length);
+  ASSERT_EQ(CEPH_PAGE_SIZE + (element_count % CEPH_PAGE_SIZE), byte_length);
 
   bit_vector.get_data_extents(1, 1, &byte_offset, &byte_length);
   ASSERT_EQ(0U, byte_offset);
@@ -128,7 +130,7 @@ TYPED_TEST(BitVectorTest, partial_decode_encode) {
   typename TestFixture::bit_vector_t bit_vector;
 
   uint64_t elements_per_byte = 8 / bit_vector.BIT_COUNT;
-  bit_vector.resize(5111 * elements_per_byte);
+  bit_vector.resize(9161 * elements_per_byte);
   for (uint64_t i = 0; i < bit_vector.size(); ++i) {
     bit_vector[i] = i % 4;
   }
@@ -148,38 +150,54 @@ TYPED_TEST(BitVectorTest, partial_decode_encode) {
   bufferlist::iterator footer_it = footer_bl.begin();
   bit_vector.decode_footer(footer_it);
 
-  uint64_t byte_offset;
-  uint64_t byte_length;
-  bit_vector.get_data_extents(0, 1, &byte_offset, &byte_length); 
+  typedef std::pair<uint64_t, uint64_t> Extent;
+  typedef std::list<Extent> Extents;
 
-  bufferlist data_bl;
-  data_bl.substr_of(bl, bit_vector.get_header_length() + byte_offset,
-		    byte_length);
-  bufferlist::iterator data_it = data_bl.begin();
-  bit_vector.decode_data(data_it, byte_offset);
+  Extents extents = boost::assign::list_of(
+    std::make_pair(0, 1))(
+    std::make_pair((CEPH_PAGE_SIZE * elements_per_byte) - 2, 4))(
+    std::make_pair((CEPH_PAGE_SIZE * elements_per_byte) + 2, 2))(
+    std::make_pair((2 * CEPH_PAGE_SIZE * elements_per_byte) - 2, 4))(
+    std::make_pair((2 * CEPH_PAGE_SIZE * elements_per_byte) + 2, 2))(
+    std::make_pair(2, 2 * CEPH_PAGE_SIZE));
+  for (Extents::iterator it = extents.begin(); it != extents.end(); ++it) {
+    uint64_t element_offset = it->first;
+    uint64_t element_length = it->second;
+    uint64_t byte_offset;
+    uint64_t byte_length;
+    bit_vector.get_data_extents(element_offset, element_length, &byte_offset,
+                                &byte_length);
 
-  bit_vector[0] = 3;
+    bufferlist data_bl;
+    data_bl.substr_of(bl, bit_vector.get_header_length() + byte_offset,
+		      byte_length);
+    bufferlist::iterator data_it = data_bl.begin();
+    bit_vector.decode_data(data_it, byte_offset);
 
-  data_bl.clear();
-  bit_vector.encode_data(data_bl, byte_offset, byte_length);
+    data_bl.clear();
+    bit_vector.encode_data(data_bl, byte_offset, byte_length);
 
-  footer_bl.clear();
-  bit_vector.encode_footer(footer_bl);
+    footer_bl.clear();
+    bit_vector.encode_footer(footer_bl);
 
-  bufferlist updated_bl;
-  updated_bl.substr_of(bl, 0, bit_vector.get_header_length() + byte_offset);
-  updated_bl.append(data_bl);
+    bufferlist updated_bl;
+    updated_bl.substr_of(bl, 0, bit_vector.get_header_length() + byte_offset);
+    updated_bl.append(data_bl);
 
-  uint64_t tail_data_offset = bit_vector.get_header_length() + byte_offset +
-			      byte_length;
-  data_bl.substr_of(bl, tail_data_offset,
-		    bit_vector.get_footer_offset() - tail_data_offset);
-  updated_bl.append(data_bl);
-  updated_bl.append(footer_bl);
-  ASSERT_EQ(bl.length(), updated_bl.length());
+    if (byte_offset + byte_length < bit_vector.get_footer_offset()) {
+      uint64_t tail_data_offset = bit_vector.get_header_length() + byte_offset +
+                                  byte_length;
+      data_bl.substr_of(bl, tail_data_offset,
+		        bit_vector.get_footer_offset() - tail_data_offset);
+      updated_bl.append(data_bl);
+    }
 
-  bufferlist::iterator updated_it = updated_bl.begin();
-  ::decode(bit_vector, updated_it); 
+    updated_bl.append(footer_bl);
+    ASSERT_EQ(bl, updated_bl);
+
+    bufferlist::iterator updated_it = updated_bl.begin();
+    ::decode(bit_vector, updated_it);
+  }
 }
 
 TYPED_TEST(BitVectorTest, header_crc) {

@@ -25,7 +25,7 @@
 
 #define dout_subsys ceph_subsys_mds
 
-void Resetter::reset(int rank)
+int Resetter::reset(int rank)
 {
   Mutex mylock("Resetter::reset::lock");
   Cond cond;
@@ -37,7 +37,7 @@ void Resetter::reset(int rank)
   if (jp_load_result != 0) {
     std::cerr << "Error loading journal: " << cpp_strerror(jp_load_result) <<
       ", pass --force to forcibly reset this journal" << std::endl;
-    return;
+    return jp_load_result;
   }
 
   Journaler journaler(jp.front,
@@ -58,19 +58,12 @@ void Resetter::reset(int rank)
     if (r == -ENOENT) {
       cerr << "journal does not exist on-disk. Did you set a bad rank?"
 	   << std::endl;
-      std::cerr << "Error loading journal: " << cpp_strerror(jp_load_result) <<
+      std::cerr << "Error loading journal: " << cpp_strerror(r) <<
         ", pass --force to forcibly reset this journal" << std::endl;
-      std::cerr << "Falling back to hard reset..." << std::endl;
-      r = reset_hard(rank);
-      if (r != 0) {
-        std::cerr << "Hard reset failed: " << cpp_strerror(r) << std::endl;
-      } else {
-        std::cerr << "Hard reset successful." << std::endl;
-      }
-      return;
+      return r;
     } else {
-      cerr << "got error " << r << "from Journaler, failling" << std::endl;
-      return;
+      cerr << "got error " << r << "from Journaler, failing" << std::endl;
+      return r;
     }
   }
 
@@ -100,14 +93,20 @@ void Resetter::reset(int rank)
   mylock.Unlock();
     
   lock.Lock();
-  assert(r == 0);
+  if (r != 0) {
+    return r;
+  }
 
   r = _write_reset_event(&journaler);
-  assert(r == 0);
+  if (r != 0) {
+    return r;
+  }
 
   lock.Unlock();
 
   cout << "done" << std::endl;
+
+  return 0;
 }
 
 int Resetter::reset_hard(int rank)

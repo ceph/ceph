@@ -14,7 +14,11 @@
 #include "osd/osd_types.h"
 
 #ifdef WITH_LTTNG
+#define TRACEPOINT_DEFINE
+#define TRACEPOINT_PROBE_DYNAMIC_LINKAGE
 #include "tracing/oprequest.h"
+#undef TRACEPOINT_PROBE_DYNAMIC_LINKAGE
+#undef TRACEPOINT_DEFINE
 #else
 #define tracepoint(...)
 #endif
@@ -80,6 +84,7 @@ void OpRequest::_unregistered() {
 }
 
 bool OpRequest::check_rmw(int flag) {
+  assert(rmw_flags != 0);
   return rmw_flags & flag;
 }
 bool OpRequest::may_read() { return need_read_cap() || need_class_read_cap(); }
@@ -100,6 +105,9 @@ bool OpRequest::need_class_write_cap() {
 }
 bool OpRequest::need_promote() {
   return check_rmw(CEPH_OSD_RMW_FLAG_FORCE_PROMOTE);
+}
+bool OpRequest::need_skip_handle_cache() {
+  return check_rmw(CEPH_OSD_RMW_FLAG_SKIP_HANDLE_CACHE);
 }
 bool OpRequest::need_skip_promote() {
   return check_rmw(CEPH_OSD_RMW_FLAG_SKIP_PROMOTE);
@@ -122,6 +130,7 @@ void OpRequest::set_class_write() { set_rmw_flags(CEPH_OSD_RMW_FLAG_CLASS_WRITE)
 void OpRequest::set_pg_op() { set_rmw_flags(CEPH_OSD_RMW_FLAG_PGOP); }
 void OpRequest::set_cache() { set_rmw_flags(CEPH_OSD_RMW_FLAG_CACHE); }
 void OpRequest::set_promote() { set_rmw_flags(CEPH_OSD_RMW_FLAG_FORCE_PROMOTE); }
+void OpRequest::set_skip_handle_cache() { set_rmw_flags(CEPH_OSD_RMW_FLAG_SKIP_HANDLE_CACHE); }
 void OpRequest::set_skip_promote() { set_rmw_flags(CEPH_OSD_RMW_FLAG_SKIP_PROMOTE); }
 
 void OpRequest::mark_flag_point(uint8_t flag, const string& s) {

@@ -28,7 +28,6 @@
 #include "include/buffer.h"
 
 #include "IndexManager.h"
-#include "FlatIndex.h"
 #include "HashIndex.h"
 #include "CollectionIndex.h"
 
@@ -38,7 +37,7 @@ static int set_version(const char *path, uint32_t version) {
   bufferlist bl;
   ::encode(version, bl);
   return chain_setxattr(path, "user.cephos.collection_version", bl.c_str(), 
-		     bl.length());
+		     bl.length(), true);
 }
 
 static int get_version(const char *path, uint32_t *version) {
@@ -95,10 +94,7 @@ int IndexManager::build_index(coll_t c, const char *path, CollectionIndex **inde
       return r;
 
     switch (version) {
-    case CollectionIndex::FLAT_INDEX_TAG: {
-      *index = new FlatIndex(c, path);
-      return 0;
-    }
+    case CollectionIndex::FLAT_INDEX_TAG:
     case CollectionIndex::HASH_INDEX_TAG: // fall through
     case CollectionIndex::HASH_INDEX_TAG_2: // fall through
     case CollectionIndex::HOBJECT_WITH_POOL: {

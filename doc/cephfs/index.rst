@@ -15,16 +15,16 @@ and Swift APIs, or native bindings (librados).
 
 .. ditaa::
             +-----------------------+  +------------------------+
-            | CephFS Kernel Object  |  |      CephFS FUSE       |
-            +-----------------------+  +------------------------+            
-
-            +---------------------------------------------------+
-            |            CephFS Library (libcephfs)             |
-            +---------------------------------------------------+
-
-            +---------------------------------------------------+
-            |      Ceph Storage Cluster Protocol (librados)     |
-            +---------------------------------------------------+
+            |                       |  |      CephFS FUSE       |
+            |                       |  +------------------------+
+            |                       |
+            |                       |  +------------------------+
+            |  CephFS Kernel Object |  |     CephFS Library     |
+            |                       |  +------------------------+
+            |                       |
+            |                       |  +------------------------+
+            |                       |  |        librados        |
+            +-----------------------+  +------------------------+
 
             +---------------+ +---------------+ +---------------+
             |      OSDs     | |      MDSs     | |    Monitors   |
@@ -81,6 +81,8 @@ authentication keyring.
 .. toctree:: 
 	:maxdepth: 1
 
+	POSIX compatibility <posix>
+        CephFS Quotas <quota>
 	Using Ceph with Hadoop <hadoop>
 	libcephfs <../../api/libcephfs-java/>
 	cephfs-journal-tool <cephfs-journal-tool>
@@ -89,6 +91,7 @@ authentication keyring.
 	Handling full filesystems <full>
 	Troubleshooting <troubleshooting>
 	Disaster recovery <disaster-recovery>
+	Client authentication <client-auth>
 
 .. raw:: html
 

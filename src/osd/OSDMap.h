@@ -125,7 +125,7 @@ public:
     int32_t new_flags;
 
     // full (rare)
-    bufferlist fullmap;  // in leiu of below.
+    bufferlist fullmap;  // in lieu of below.
     bufferlist crush;
 
     // incremental
@@ -212,7 +212,10 @@ private:
 
   uint32_t flags;
 
-  int num_osd;         // not saved
+  int num_osd;         // not saved; see calc_num_osds
+  int num_up_osd;      // not saved; see calc_num_osds
+  int num_in_osd;      // not saved; see calc_num_osds
+
   int32_t max_osd;
   vector<uint8_t> osd_state;
 
@@ -260,13 +263,13 @@ private:
 
   friend class OSDMonitor;
   friend class PGMonitor;
-  friend class MDS;
 
  public:
   OSDMap() : epoch(0), 
 	     pool_max(-1),
 	     flags(0),
-	     num_osd(0), max_osd(0),
+	     num_osd(0), num_up_osd(0), num_in_osd(0),
+	     max_osd(0),
 	     osd_addrs(new addrs_s),
 	     pg_temp(new map<pg_t,vector<int32_t> >),
 	     primary_temp(new map<pg_t,int32_t>),
@@ -330,18 +333,23 @@ public:
   unsigned get_num_osds() const {
     return num_osd;
   }
+  unsigned get_num_up_osds() const {
+    return num_up_osd;
+  }
+  unsigned get_num_in_osds() const {
+    return num_in_osd;
+  }
+  /// recalculate cached values for get_num{,_up,_in}_osds
   int calc_num_osds();
 
   void get_all_osds(set<int32_t>& ls) const;
   void get_up_osds(set<int32_t>& ls) const;
-  unsigned get_num_up_osds() const;
-  unsigned get_num_in_osds() const;
   unsigned get_num_pg_temp() const {
     return pg_temp->size();
   }
 
   int get_flags() const { return flags; }
-  int test_flag(int f) const { return flags & f; }
+  bool test_flag(int f) const { return flags & f; }
   void set_flag(int f) { flags |= f; }
   void clear_flag(int f) { flags &= ~f; }
 
@@ -428,6 +436,10 @@ public:
 
   bool is_up(int osd) const {
     return exists(osd) && (osd_state[osd] & CEPH_OSD_UP);
+  }
+
+  bool has_been_up_since(int osd, epoch_t epoch) const {
+    return is_up(osd) && get_up_from(osd) <= epoch;
   }
 
   bool is_down(int osd) const {
@@ -739,14 +751,16 @@ public:
     return p->second.get_size();
   }
   int get_pg_type(pg_t pg) const {
-    assert(pools.count(pg.pool()));
-    return pools.find(pg.pool())->second.get_type();
+    map<int64_t,pg_pool_t>::const_iterator p = pools.find(pg.pool());
+    assert(p != pools.end());
+    return p->second.get_type();
   }
 
 
   pg_t raw_pg_to_pg(pg_t pg) const {
-    assert(pools.count(pg.pool()));
-    return pools.find(pg.pool())->second.raw_pg_to_pg(pg);
+    map<int64_t,pg_pool_t>::const_iterator p = pools.find(pg.pool());
+    assert(p != pools.end());
+    return p->second.raw_pg_to_pg(pg);
   }
 
   // pg -> acting primary osd
@@ -842,13 +856,12 @@ public:
   void print_pools(ostream& out) const;
   void print_summary(Formatter *f, ostream& out) const;
   void print_oneline_summary(ostream& out) const;
-  void print_tree(ostream *out, Formatter *f) const;
+  void print_tree(Formatter *f, ostream *out) const;
 
   string get_flag_string() const;
   static string get_flag_string(unsigned flags);
   static void dump_erasure_code_profiles(const map<string,map<string,string> > &profiles,
 					 Formatter *f);
-  void dump_json(ostream& out) const;
   void dump(Formatter *f) const;
   static void generate_test_instances(list<OSDMap*>& o);
   bool check_new_blacklist_entries() const { return new_blacklist_entries; }

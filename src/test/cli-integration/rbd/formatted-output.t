@@ -15,11 +15,15 @@ create
   $ rbd create -s 512 --image-format 2 bar
   $ rbd create -s 2048 --image-format 2 baz
   $ rbd create -s 1 --image-format 1 quux
+  $ rbd create -s 1G --image-format 2 quuy
 
 snapshot
 ========
   $ rbd snap create bar@snap
   $ rbd resize -s 1024 bar
+  
+  Resizing image: 100% complete...done.
+  $ rbd resize -s 2G  quuy
   
   Resizing image: 100% complete...done.
   $ rbd snap create bar@snap2
@@ -31,7 +35,7 @@ clone
   $ rbd clone bar@snap rbd_other/child
   $ rbd snap create rbd_other/child@snap
   $ rbd flatten rbd_other/child 2> /dev/null
-  $ rbd bench-write rbd_other/child --io-pattern seq --io-total 1 > /dev/null 2>&1
+  $ rbd bench-write rbd_other/child --io-pattern seq --io-total 1B > /dev/null 2>&1
 
 lock
 ====
@@ -375,12 +379,14 @@ whenever it is run. grep -v to ignore it, but still work on other distros.
   quux
   bar
   baz
+  quuy
   $ rbd list --format json | python -mjson.tool | sed 's/,$/, /'
   [
       "foo", 
       "quux", 
       "bar", 
-      "baz"
+      "baz", 
+      "quuy"
   ]
   $ rbd list --format xml | xml_pp 2>&1 | grep -v '^new version at /usr/bin/xml_pp'
   <images>
@@ -388,6 +394,7 @@ whenever it is run. grep -v to ignore it, but still work on other distros.
     <name>quux</name>
     <name>bar</name>
     <name>baz</name>
+    <name>quuy</name>
   </images>
   $ rbd list -l
   NAME       SIZE PARENT FMT PROT LOCK 
@@ -398,6 +405,7 @@ whenever it is run. grep -v to ignore it, but still work on other distros.
   bar@snap   512M          2 yes       
   bar@snap2 1024M          2           
   baz       2048M          2      shr  
+  quuy      2048M          2           
   $ rbd list -l --format json | python -mjson.tool | sed 's/,$/, /'
   [
       {
@@ -441,6 +449,11 @@ whenever it is run. grep -v to ignore it, but still work on other distros.
           "format": 2, 
           "image": "baz", 
           "lock_type": "shared", 
+          "size": 2147483648
+      }, 
+      {
+          "format": 2, 
+          "image": "quuy", 
           "size": 2147483648
       }
   ]
@@ -488,6 +501,11 @@ whenever it is run. grep -v to ignore it, but still work on other distros.
       <size>2147483648</size>
       <format>2</format>
       <lock_type>shared</lock_type>
+    </image>
+    <image>
+      <image>quuy</image>
+      <size>2147483648</size>
+      <format>2</format>
     </image>
   </images>
   $ rbd list rbd_other
@@ -677,13 +695,13 @@ whenever it is run. grep -v to ignore it, but still work on other distros.
       <size>536870912</size>
     </snapshot>
   </snapshots>
-  $ rbd disk-usage rbd_other
+  $ rbd disk-usage --pool rbd_other
   warning: fast-diff map is not enabled for child. operation may be slow.
   NAME       PROVISIONED  USED 
   child@snap        512M     0 
   child             512M 4096k 
   <TOTAL>           512M 4096k 
-  $ rbd disk-usage rbd_other --format json | python -mjson.tool | sed 's/,$/, /'
+  $ rbd disk-usage --pool rbd_other --format json | python -mjson.tool | sed 's/,$/, /'
   warning: fast-diff map is not enabled for child. operation may be slow.
   {
       "images": [
@@ -702,7 +720,7 @@ whenever it is run. grep -v to ignore it, but still work on other distros.
       "total_provisioned_size": 536870912, 
       "total_used_size": 4194304
   }
-  $ rbd disk-usage rbd_other --format xml | xml_pp 2>&1 | grep -v '^new version at /usr/bin/xml_pp'
+  $ rbd disk-usage --pool rbd_other --format xml | xml_pp 2>&1 | grep -v '^new version at /usr/bin/xml_pp'
   warning: fast-diff map is not enabled for child. operation may be slow.
   <stats>
     <images>
@@ -731,6 +749,7 @@ whenever it is run. grep -v to ignore it, but still work on other distros.
   $ rbd rm foo 2> /dev/null
   $ rbd rm bar 2> /dev/null
   $ rbd rm quux 2> /dev/null
+  $ rbd rm quuy 2> /dev/null
   $ rbd rm baz 2> /dev/null
   $ ceph osd pool delete rbd_other rbd_other --yes-i-really-really-mean-it
   pool 'rbd_other' removed

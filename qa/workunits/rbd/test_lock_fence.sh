@@ -6,7 +6,7 @@ LOCKID=rbdrw
 RBDRW=rbdrw.py
 CEPH_REF=${CEPH_REF:-master}
 
-wget -O $RBDRW "https://ceph.com/git/?p=ceph.git;a=blob_plain;hb=$CEPH_REF;f=src/test/librbd/rbdrw.py"
+wget -O $RBDRW "https://git.ceph.com/?p=ceph.git;a=blob_plain;hb=$CEPH_REF;f=src/test/librbd/rbdrw.py"
 
 rbd create $IMAGE --size 10 --image-format 2 --image-shared || exit 1
 

@@ -42,7 +42,9 @@
 #include "include/krbd.h"
 #include "include/rados/librados.h"
 #include "include/rbd/librbd.h"
-#include "common/ceph_crypto.h"
+
+#include "common/SubProcess.h"
+#include "common/safe_io.h"
 
 #define NUMPRINTCOLUMNS 32	/* # columns of data to print on each line */
 
@@ -256,8 +258,8 @@ get_random(void)
 struct rbd_ctx {
 	const char *name;	/* image name */
 	rbd_image_t image;	/* image handle */
-	const char *krbd_name;	/* image /dev/rbd<id> name */
-	int krbd_fd;		/* image /dev/rbd<id> fd */
+	const char *krbd_name;	/* image /dev/rbd<id> name */ /* reused for nbd test */
+	int krbd_fd;		/* image /dev/rbd<id> fd */ /* reused for nbd test */
 };
 
 #define RBD_CTX_INIT	(struct rbd_ctx) { NULL, NULL, NULL, -1 }
@@ -551,7 +553,7 @@ krbd_open(const char *name, struct rbd_ctx *ctx)
 	if (ret < 0)
 		return ret;
 
-	ret = krbd_map(krbd, pool, name, NULL, NULL, &devnode);
+	ret = krbd_map(krbd, pool, name, "", "", &devnode);
 	if (ret < 0) {
 		prt("krbd_map(%s) failed\n", name);
 		return ret;
@@ -628,7 +630,7 @@ krbd_write(struct rbd_ctx *ctx, uint64_t off, size_t len, const char *buf)
 }
 
 int
-__krbd_flush(struct rbd_ctx *ctx)
+__krbd_flush(struct rbd_ctx *ctx, bool invalidate)
 {
 	int ret;
 
@@ -636,13 +638,26 @@ __krbd_flush(struct rbd_ctx *ctx)
 		return 0;
 
 	/*
-	 * fsync(2) on the block device does not sync the filesystem
-	 * mounted on top of it, but that's OK - we control the entire
-	 * lifetime of the block device and write directly to it.
+	 * BLKFLSBUF will sync the filesystem on top of the device (we
+	 * don't care about that here, since we write directly to it),
+	 * write out any dirty buffers and invalidate the buffer cache.
+	 * It won't do a hardware cache flush.
+	 *
+	 * fsync() will write out any dirty buffers and do a hardware
+	 * cache flush (which we don't care about either, because for
+	 * krbd it's a noop).  It won't try to empty the buffer cache
+	 * nor poke the filesystem before writing out.
+	 *
+	 * Given that, for our purposes, fsync is a flush, while
+	 * BLKFLSBUF is a flush+invalidate.
 	 */
-	if (fsync(ctx->krbd_fd) < 0) {
+        if (invalidate)
+		ret = ioctl(ctx->krbd_fd, BLKFLSBUF, NULL);
+	else
+		ret = fsync(ctx->krbd_fd);
+	if (ret < 0) {
 		ret = -errno;
-		prt("fsync failed\n");
+		prt("%s failed\n", invalidate ? "BLKFLSBUF" : "fsync");
 		return ret;
 	}
 
@@ -652,7 +667,7 @@ __krbd_flush(struct rbd_ctx *ctx)
 int
 krbd_flush(struct rbd_ctx *ctx)
 {
-	return __krbd_flush(ctx);
+	return __krbd_flush(ctx, false);
 }
 
 int
@@ -662,16 +677,22 @@ krbd_discard(struct rbd_ctx *ctx, uint64_t off, uint64_t len)
 	int ret;
 
 	/*
-	 * BLKDISCARD doesn't affect dirty pages.  This means we can't
-	 * rely on discarded sectors to match good_buf (i.e. contain
-	 * zeros) without a preceding cache flush:
+	 * BLKDISCARD goes straight to disk and doesn't do anything
+	 * about dirty buffers.  This means we need to flush so that
 	 *
 	 *   write 0..3M
 	 *   discard 1..2M
 	 *
-	 * results in "data data data" rather than "data 0000 data".
+	 * results in "data 0000 data" rather than "data data data" on
+	 * disk and invalidate so that
+	 *
+	 *   discard 1..2M
+	 *   read 0..3M
+	 *
+	 * returns "data 0000 data" rather than "data data data" in
+	 * case 1..2M was cached.
 	 */
-	ret = __krbd_flush(ctx);
+	ret = __krbd_flush(ctx, true);
 	if (ret < 0)
 		return ret;
 
@@ -693,10 +714,9 @@ int
 krbd_get_size(struct rbd_ctx *ctx, uint64_t *size)
 {
 	uint64_t bytes;
-	int ret;
 
 	if (ioctl(ctx->krbd_fd, BLKGETSIZE64, &bytes) < 0) {
-		ret = -errno;
+		int ret = -errno;
 		prt("BLKGETSIZE64 failed\n");
 		return ret;
 	}
@@ -718,16 +738,16 @@ krbd_resize(struct rbd_ctx *ctx, uint64_t size)
 	 * which ends up calling invalidate_bdev(), which invalidates
 	 * clean pages and does nothing about dirty pages beyond the
 	 * new size.  The preceding cache flush makes sure those pages
-	 * are invalidated, which is what we need on shrink:
+	 * are invalidated, which is what we need on shrink so that
 	 *
 	 *  write 0..1M
 	 *  resize 0
 	 *  resize 2M
-	 *  write 1..2M
+	 *  read 0..2M
 	 *
-	 * results in "data data" rather than "0000 data".
+	 * returns "0000 0000" rather than "data 0000".
 	 */
-	ret = __krbd_flush(ctx);
+	ret = __krbd_flush(ctx, false);
 	if (ret < 0)
 		return ret;
 
@@ -741,7 +761,7 @@ krbd_clone(struct rbd_ctx *ctx, const char *src_snapname,
 {
 	int ret;
 
-	ret = __krbd_flush(ctx);
+	ret = __krbd_flush(ctx, false);
 	if (ret < 0)
 		return ret;
 
@@ -754,7 +774,7 @@ krbd_flatten(struct rbd_ctx *ctx)
 {
 	int ret;
 
-	ret = __krbd_flush(ctx);
+	ret = __krbd_flush(ctx, false);
 	if (ret < 0)
 		return ret;
 
@@ -771,6 +791,127 @@ const struct rbd_operations krbd_operations = {
 	krbd_get_size,
 	krbd_resize,
 	krbd_clone,
+	krbd_flatten,
+};
+
+int
+nbd_open(const char *name, struct rbd_ctx *ctx)
+{
+	int r;
+	int fd;
+	char dev[4096];
+	char *devnode;
+
+	SubProcess process("rbd-nbd", SubProcess::KEEP, SubProcess::PIPE);
+	process.add_cmd_arg("map");
+	std::string img;
+	img.append(pool);
+	img.append("/");
+	img.append(name);
+	process.add_cmd_arg(img.c_str());
+
+	r = __librbd_open(name, ctx);
+	if (r < 0)
+		return r;
+
+        r = process.spawn();
+        if (r < 0) {
+		prt("nbd_open failed to run rbd-nbd error: %s\n", process.err());
+		return r;
+        }
+	r = safe_read(process.get_stdout(), dev, sizeof(dev));
+	if (r < 0) {
+		prt("nbd_open failed to get nbd device path\n");
+		return r;
+	}
+	for (int i = 0; i < r; ++i)
+	  if (dev[i] == 10 || dev[i] == 13)
+	    dev[i] = 0;
+	dev[r] = 0;
+	r = process.join();
+	if (r) {
+		prt("rbd-nbd failed with error: %s", process.err());
+		return -EINVAL;
+	}
+
+	devnode = strdup(dev);
+	if (!devnode)
+		return -ENOMEM;
+
+	fd = open(devnode, O_RDWR | o_direct);
+	if (fd < 0) {
+		r = -errno;
+		prt("open(%s) failed\n", devnode);
+		return r;
+	}
+
+	ctx->krbd_name = devnode;
+	ctx->krbd_fd = fd;
+
+	return 0;
+}
+
+int
+nbd_close(struct rbd_ctx *ctx)
+{
+	int r;
+
+	assert(ctx->krbd_name && ctx->krbd_fd >= 0);
+
+	if (close(ctx->krbd_fd) < 0) {
+		r = -errno;
+		prt("close(%s) failed\n", ctx->krbd_name);
+		return r;
+	}
+
+	SubProcess process("rbd-nbd");
+	process.add_cmd_arg("unmap");
+	process.add_cmd_arg(ctx->krbd_name);
+
+        r = process.spawn();
+        if (r < 0) {
+		prt("nbd_close failed to run rbd-nbd error: %s\n", process.err());
+		return r;
+        }
+	r = process.join();
+	if (r) {
+		prt("rbd-nbd failed with error: %d", process.err());
+		return -EINVAL;
+	}
+
+	free((void *)ctx->krbd_name);
+
+	ctx->krbd_name = NULL;
+	ctx->krbd_fd = -1;
+
+	return __librbd_close(ctx);
+}
+
+int
+nbd_clone(struct rbd_ctx *ctx, const char *src_snapname,
+	  const char *dst_imagename, int *order, int stripe_unit,
+	  int stripe_count)
+{
+	int ret;
+
+	ret = __krbd_flush(ctx, false);
+	if (ret < 0)
+		return ret;
+
+	return __librbd_clone(ctx, src_snapname, dst_imagename, order,
+			      stripe_unit, stripe_count, false);
+}
+
+const struct rbd_operations nbd_operations = {
+	nbd_open,
+	nbd_close,
+	krbd_read,
+	krbd_write,
+	krbd_flush,
+	krbd_discard,
+	krbd_get_size,
+	krbd_resize,
+	nbd_clone,
 	krbd_flatten,
 };
 
@@ -974,25 +1115,22 @@ report_failure(int status)
 void
 check_buffers(char *good_buf, char *temp_buf, unsigned offset, unsigned size)
 {
-	unsigned char c, t;
-	unsigned i = 0;
-	unsigned n = 0;
-	unsigned op = 0;
-	unsigned bad = 0;
-
 	if (memcmp(good_buf + offset, temp_buf, size) != 0) {
+		unsigned i = 0;
+		unsigned n = 0;
+
 		prt("READ BAD DATA: offset = 0x%x, size = 0x%x, fname = %s\n",
 		    offset, size, iname);
 		prt("OFFSET\tGOOD\tBAD\tRANGE\n");
 		while (size > 0) {
-			c = good_buf[offset];
-			t = temp_buf[i];
+			unsigned char c = good_buf[offset];
+			unsigned char t = temp_buf[i];
 			if (c != t) {
 			        if (n < 16) {
-					bad = short_at(&temp_buf[i]);
+					unsigned bad = short_at(&temp_buf[i]);
 				        prt("0x%5x\t0x%04x\t0x%04x", offset,
 				            short_at(&good_buf[offset]), bad);
-					op = temp_buf[offset & 1 ? i+1 : i];
+					unsigned op = temp_buf[offset & 1 ? i+1 : i];
 				        prt("\t0x%5x\n", n);
 					if (op)
 						prt("operation# (mod 256) for "
@@ -1810,6 +1948,7 @@ usage(void)
 #endif
 "	-H: do not use punch hole calls\n\
 	-K: enable krbd mode (use -t and -h too)\n\
+	-M: enable rbd-nbd mode (use -t and -h too)\n\
 	-L: fsxLite - no file creations & no file size changes\n\
 	-N numops: total # operations to do (default infinity)\n\
 	-O: use oplen (see -o flag) for every op (default random)\n\
@@ -1996,13 +2135,13 @@ main(int argc, char **argv)
 
 	setvbuf(stdout, (char *)0, _IOLBF, 0); /* line buffered stdout */
 
-	while ((ch = getopt(argc, argv, "b:c:dfh:l:m:no:p:qr:s:t:w:xyACD:FHKLN:OP:RS:UWZ"))
+	while ((ch = getopt(argc, argv, "b:c:dfh:l:m:no:p:qr:s:t:w:xyACD:FHKMLN:OP:RS:UWZ"))
 	       != EOF)
 		switch (ch) {
 		case 'b':
 			simulatedopcount = getnum(optarg, &endp);
 			if (!quiet)
-				fprintf(stdout, "Will begin at operation %ld\n",
+				fprintf(stdout, "Will begin at operation %lu\n",
 					simulatedopcount);
 			if (simulatedopcount == 0)
 				usage();
@@ -2029,9 +2168,12 @@ main(int argc, char **argv)
 				usage();
 			break;
 		case 'l':
-			maxfilelen = getnum(optarg, &endp);
-			if (maxfilelen <= 0)
-				usage();
+			{
+				int _num = getnum(optarg, &endp);
+				if (_num <= 0)
+					usage();
+				maxfilelen = _num;
+			}
 			break;
 		case 'm':
 			monitorstart = getnum(optarg, &endp);
@@ -2109,6 +2251,10 @@ main(int argc, char **argv)
 			prt("krbd mode enabled\n");
 			ops = &krbd_operations;
 			break;
+		case 'M':
+			prt("rbd-nbd mode enabled\n");
+			ops = &nbd_operations;
+			break;
 		case 'L':
 			prt("lite mode not supported for rbd\n");
 			exit(1);
@@ -2132,7 +2278,8 @@ main(int argc, char **argv)
 				prt("file name to long\n");
 				exit(1);
 			}
-			strncpy(logfile, dirpath, sizeof(logfile));
+			strncpy(logfile, dirpath, sizeof(logfile)-1);
+			logfile[sizeof(logfile)-1] = '\0';
 			if (strlen(logfile) < sizeof(logfile)-2) {
 				strcat(logfile, "/");
 			} else {
@@ -2335,7 +2482,6 @@ main(int argc, char **argv)
 	krbd_destroy(krbd);
 	rados_shutdown(cluster);
 
-        ceph::crypto::shutdown();
 	free(original_buf);
 	free(good_buf);
 	free(temp_buf);

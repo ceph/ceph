@@ -463,10 +463,10 @@ int libradosstriper::RadosStriperImpl::aio_read(const std::string& soid,
   
   // create a completion object and transfer ownership of extents and resultbl
   vector<bufferlist> *resultbl = new vector<bufferlist>(extents->size());
-  c->is_read = true;
-  c->io = m_ioCtxImpl;
   ReadCompletionData *cdata = new ReadCompletionData(this, soid, lockCookie, c,
 						     bl, extents, resultbl);
+  c->is_read = true;
+  c->io = m_ioCtxImpl;
   libradosstriper::MultiAioCompletionImpl *nc = new libradosstriper::MultiAioCompletionImpl;
   nc->set_complete_callback(cdata, striper_read_aio_req_complete);
   // go through the extents
@@ -550,7 +550,7 @@ int libradosstriper::RadosStriperImpl::stat(const std::string& soid, uint64_t *p
   return 0;
 }
 
-int libradosstriper::RadosStriperImpl::remove(const std::string& soid)
+int libradosstriper::RadosStriperImpl::remove(const std::string& soid, int flags)
 {
   std::string firstObjOid = getObjectId(soid, 0);
   try {
@@ -591,11 +591,15 @@ int libradosstriper::RadosStriperImpl::remove(const std::string& soid)
     // delete rados objects in reverse order
     int rcr = 0;
     for (int i = nb_objects-1; i >= 0; i--) {
-      rcr = m_ioCtx.remove(getObjectId(soid, i));
+      if (flags == 0) {
+        rcr = m_ioCtx.remove(getObjectId(soid, i));
+      } else {
+        rcr = m_ioCtx.remove(getObjectId(soid, i), flags);  
+      }
       if (rcr < 0 and -ENOENT != rcr) {
         lderr(cct()) << "RadosStriperImpl::remove : deletion incomplete for " << soid
-  		   << ", as " << getObjectId(soid, i) << " could not be deleted (rc=" << rc << ")"
-  		   << dendl;
+		     << ", as " << getObjectId(soid, i) << " could not be deleted (rc=" << rc << ")"
+		     << dendl;
         break;
       }
     }
@@ -605,6 +609,7 @@ int libradosstriper::RadosStriperImpl::remove(const std::string& soid)
     // errror caught when trying to take the exclusive lock
     return e.m_code;
   }
+
 }
 
 int libradosstriper::RadosStriperImpl::trunc(const std::string& soid, uint64_t size)

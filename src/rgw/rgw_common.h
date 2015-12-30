@@ -28,6 +28,7 @@
 #include "include/types.h"
 #include "include/utime.h"
 #include "rgw_acl.h"
+#include "rgw_basic_types.h"
 #include "rgw_cors.h"
 #include "rgw_quota.h"
 #include "rgw_string.h"
@@ -65,10 +66,18 @@ using ceph::crypto::MD5;
 #define RGW_ATTR_CONTENT_ENC	RGW_ATTR_PREFIX "content_encoding"
 #define RGW_ATTR_CONTENT_LANG	RGW_ATTR_PREFIX "content_language"
 #define RGW_ATTR_EXPIRES	RGW_ATTR_PREFIX "expires"
+#define RGW_ATTR_DELETE_AT 	RGW_ATTR_PREFIX "delete_at"
 #define RGW_ATTR_ID_TAG    	RGW_ATTR_PREFIX "idtag"
 #define RGW_ATTR_SHADOW_OBJ    	RGW_ATTR_PREFIX "shadow_name"
 #define RGW_ATTR_MANIFEST    	RGW_ATTR_PREFIX "manifest"
 #define RGW_ATTR_USER_MANIFEST  RGW_ATTR_PREFIX "user_manifest"
+#define RGW_ATTR_SLO_MANIFEST   RGW_ATTR_PREFIX "slo_manifest"
+/* Information whether an object is SLO or not must be exposed to
+ * user through custom HTTP header named X-Static-Large-Object. */
+#define RGW_ATTR_SLO_UINDICATOR RGW_ATTR_META_PREFIX "static-large-object"
+
+#define RGW_ATTR_TEMPURL_KEY1   RGW_ATTR_META_PREFIX "temp-url-key"
+#define RGW_ATTR_TEMPURL_KEY2   RGW_ATTR_META_PREFIX "temp-url-key-2"
 
 #define RGW_ATTR_OLH_PREFIX     RGW_ATTR_PREFIX "olh."
 
@@ -80,7 +89,6 @@ using ceph::crypto::MD5;
 #define RGW_BUCKETS_OBJ_SUFFIX ".buckets"
 
 #define RGW_MAX_PENDING_CHUNKS  16
-#define RGW_MAX_PUT_SIZE        (5ULL*1024*1024*1024)
 #define RGW_MIN_MULTIPART_SIZE (5ULL*1024*1024)
 
 #define RGW_FORMAT_PLAIN        0
@@ -146,8 +154,11 @@ using ceph::crypto::MD5;
 #define ERR_SIGNATURE_NO_MATCH   2027
 #define ERR_INVALID_ACCESS_KEY   2028
 #define ERR_MALFORMED_XML        2029
+#define ERR_USER_EXIST           2030
+#define ERR_NOT_SLO_MANIFEST     2031
 #define ERR_USER_SUSPENDED       2100
 #define ERR_INTERNAL_ERROR       2200
+#define ERR_NOT_IMPLEMENTED      2201
 
 #ifndef UINT32_MAX
 #define UINT32_MAX (0xffffffffu)
@@ -195,6 +206,7 @@ extern int gen_rand_alphanumeric(CephContext *cct, char *dest, int size);
 extern int gen_rand_alphanumeric_lower(CephContext *cct, char *dest, int size);
 extern int gen_rand_alphanumeric_upper(CephContext *cct, char *dest, int size);
 extern int gen_rand_alphanumeric_no_underscore(CephContext *cct, char *dest, int size);
+extern int gen_rand_alphanumeric_plain(CephContext *cct, char *dest, int size);
 
 extern int gen_rand_alphanumeric_lower(CephContext *cct, string *str, int length);
 
@@ -425,6 +437,7 @@ public:
      DECODE_FINISH(bl);
   }
   int check_cap(const string& cap, uint32_t perm);
+  bool is_valid_cap_type(const string& tp);
   void dump(Formatter *f) const;
   void dump(Formatter *f, const char *name) const;
 
@@ -440,7 +453,7 @@ void decode_json_obj(obj_version& v, JSONObj *obj);
 struct RGWUserInfo
 {
   uint64_t auid;
-  string user_id;
+  rgw_user user_id;
   string display_name;
   string user_email;
   map<string, RGWAccessKey> access_keys;
@@ -460,7 +473,7 @@ struct RGWUserInfo
   RGWUserInfo() : auid(0), suspended(0), max_buckets(RGW_DEFAULT_MAX_BUCKETS), op_mask(RGW_OP_TYPE_ALL), system(0) {}
 
   void encode(bufferlist& bl) const {
-     ENCODE_START(16, 9, bl);
+     ENCODE_START(17, 9, bl);
      ::encode(auid, bl);
      string access_key;
      string secret_key;
@@ -484,7 +497,7 @@ struct RGWUserInfo
      }
      ::encode(swift_name, bl);
      ::encode(swift_key, bl);
-     ::encode(user_id, bl);
+     ::encode(user_id.id, bl);
      ::encode(access_keys, bl);
      ::encode(subusers, bl);
      ::encode(suspended, bl);
@@ -498,10 +511,11 @@ struct RGWUserInfo
      ::encode(bucket_quota, bl);
      ::encode(temp_url_keys, bl);
      ::encode(user_quota, bl);
+     ::encode(user_id.tenant, bl);
      ENCODE_FINISH(bl);
   }
   void decode(bufferlist::iterator& bl) {
-     DECODE_START_LEGACY_COMPAT_LEN_32(16, 9, 9, bl);
+     DECODE_START_LEGACY_COMPAT_LEN_32(17, 9, 9, bl);
      if (struct_v >= 2) ::decode(auid, bl);
      else auid = CEPH_AUTH_UID_DEFAULT;
      string access_key;
@@ -516,14 +530,15 @@ struct RGWUserInfo
     }
     ::decode(display_name, bl);
     ::decode(user_email, bl);
+    /* We populate swift_keys map later nowadays, but we have to decode. */
     string swift_name;
     string swift_key;
     if (struct_v >= 3) ::decode(swift_name, bl);
     if (struct_v >= 4) ::decode(swift_key, bl);
     if (struct_v >= 5)
-      ::decode(user_id, bl);
+      ::decode(user_id.id, bl);
     else
-      user_id = access_key;
+      user_id.id = access_key;
     if (struct_v >= 6) {
       ::decode(access_keys, bl);
       ::decode(subusers, bl);
@@ -548,7 +563,6 @@ struct RGWUserInfo
     } else {
       op_mask = RGW_OP_TYPE_ALL;
     }
-    system = 0;
     if (struct_v >= 13) {
       ::decode(system, bl);
       ::decode(default_placement, bl);
@@ -563,25 +577,22 @@ struct RGWUserInfo
     if (struct_v >= 16) {
       ::decode(user_quota, bl);
     }
+    if (struct_v >= 17) {
+      ::decode(user_id.tenant, bl);
+    } else {
+      user_id.tenant.clear();
+    }
     DECODE_FINISH(bl);
   }
   void dump(Formatter *f) const;
   static void generate_test_instances(list<RGWUserInfo*>& o);
 
   void decode_json(JSONObj *obj);
-
-  void clear() {
-    user_id.clear();
-    display_name.clear();
-    user_email.clear();
-    auid = CEPH_AUTH_UID_DEFAULT;
-    access_keys.clear();
-    suspended = 0;
-  }
 };
 WRITE_CLASS_ENCODER(RGWUserInfo)
 
 struct rgw_bucket {
+  std::string tenant;
   std::string name;
   std::string data_pool;
   std::string data_extra_pool; /* if not set, then we should use data_pool instead */
@@ -607,8 +618,8 @@ struct rgw_bucket {
     data_pool = index_pool = n;
     marker = "";
   }
-  rgw_bucket(const char *n, const char *dp, const char *ip, const char *m, const char *id, const char *h) :
-    name(n), data_pool(dp), index_pool(ip), marker(m), bucket_id(id) {}
+  rgw_bucket(const char *t, const char *n, const char *dp, const char *ip, const char *m, const char *id, const char *h) :
+    tenant(t), name(n), data_pool(dp), index_pool(ip), marker(m), bucket_id(id) {}
 
   void convert(cls_user_bucket *b) {
     b->name = name;
@@ -620,17 +631,18 @@ struct rgw_bucket {
   }
 
   void encode(bufferlist& bl) const {
-     ENCODE_START(7, 3, bl);
+     ENCODE_START(8, 3, bl);
     ::encode(name, bl);
     ::encode(data_pool, bl);
     ::encode(marker, bl);
     ::encode(bucket_id, bl);
     ::encode(index_pool, bl);
     ::encode(data_extra_pool, bl);
+    ::encode(tenant, bl);
     ENCODE_FINISH(bl);
   }
   void decode(bufferlist::iterator& bl) {
-    DECODE_START_LEGACY_COMPAT_LEN(7, 3, 3, bl);
+    DECODE_START_LEGACY_COMPAT_LEN(8, 3, 3, bl);
     ::decode(name, bl);
     ::decode(data_pool, bl);
     if (struct_v >= 2) {
@@ -652,6 +664,9 @@ struct rgw_bucket {
     }
     if (struct_v >= 7) {
       ::decode(data_extra_pool, bl);
+    }
+    if (struct_v >= 8) {
+      ::decode(tenant, bl);
     }
     DECODE_FINISH(bl);
   }
@@ -765,7 +780,7 @@ struct RGWBucketInfo
   };
 
   rgw_bucket bucket;
-  string owner;
+  rgw_user owner;
   uint32_t flags;
   string region;
   time_t creation_time;
@@ -787,10 +802,12 @@ struct RGWBucketInfo
   // Represents the shard number for blind bucket.
   const static uint32_t NUM_SHARDS_BLIND_BUCKET;
 
+  bool requester_pays;
+
   void encode(bufferlist& bl) const {
-     ENCODE_START(11, 4, bl);
+     ENCODE_START(13, 4, bl);
      ::encode(bucket, bl);
-     ::encode(owner, bl);
+     ::encode(owner.id, bl);
      ::encode(flags, bl);
      ::encode(region, bl);
      uint64_t ct = (uint64_t)creation_time;
@@ -800,13 +817,18 @@ struct RGWBucketInfo
      ::encode(quota, bl);
      ::encode(num_shards, bl);
      ::encode(bucket_index_shard_hash_type, bl);
+     ::encode(requester_pays, bl);
+     ::encode(owner.tenant, bl);
      ENCODE_FINISH(bl);
   }
   void decode(bufferlist::iterator& bl) {
-    DECODE_START_LEGACY_COMPAT_LEN_32(9, 4, 4, bl);
+    DECODE_START_LEGACY_COMPAT_LEN_32(13, 4, 4, bl);
      ::decode(bucket, bl);
-     if (struct_v >= 2)
-       ::decode(owner, bl);
+     if (struct_v >= 2) {
+       string s;
+       ::decode(s, bl);
+       owner.from_str(s);
+     }
      if (struct_v >= 3)
        ::decode(flags, bl);
      if (struct_v >= 5)
@@ -826,6 +848,10 @@ struct RGWBucketInfo
        ::decode(num_shards, bl);
      if (struct_v >= 11)
        ::decode(bucket_index_shard_hash_type, bl);
+     if (struct_v >= 12)
+       ::decode(requester_pays, bl);
+     if (struct_v >= 13)
+       ::decode(owner.tenant, bl);
      DECODE_FINISH(bl);
   }
   void dump(Formatter *f) const;
@@ -837,14 +863,14 @@ struct RGWBucketInfo
   int versioning_status() { return flags & (BUCKET_VERSIONED | BUCKET_VERSIONS_SUSPENDED); }
   bool versioning_enabled() { return versioning_status() == BUCKET_VERSIONED; }
 
-  RGWBucketInfo() : flags(0), creation_time(0), has_instance_obj(false), num_shards(0), bucket_index_shard_hash_type(MOD) {}
+  RGWBucketInfo() : flags(0), creation_time(0), has_instance_obj(false), num_shards(0), bucket_index_shard_hash_type(MOD), requester_pays(false) {}
 };
 WRITE_CLASS_ENCODER(RGWBucketInfo)
 
 struct RGWBucketEntryPoint
 {
   rgw_bucket bucket;
-  string owner;
+  rgw_user owner;
   time_t creation_time;
   bool linked;
 
@@ -854,17 +880,18 @@ struct RGWBucketEntryPoint
   RGWBucketEntryPoint() : creation_time(0), linked(false), has_bucket_info(false) {}
 
   void encode(bufferlist& bl) const {
-    ENCODE_START(8, 8, bl);
+    ENCODE_START(9, 8, bl);
     ::encode(bucket, bl);
-    ::encode(owner, bl);
+    ::encode(owner.id, bl);
     ::encode(linked, bl);
     uint64_t ctime = (uint64_t)creation_time;
     ::encode(ctime, bl);
+    ::encode(owner, bl);
     ENCODE_FINISH(bl);
   }
   void decode(bufferlist::iterator& bl) {
     bufferlist::iterator orig_iter = bl;
-    DECODE_START_LEGACY_COMPAT_LEN_32(8, 4, 4, bl);
+    DECODE_START_LEGACY_COMPAT_LEN_32(9, 4, 4, bl);
     if (struct_v < 8) {
       /* ouch, old entry, contains the bucket info itself */
       old_bucket_info.decode(orig_iter);
@@ -873,11 +900,14 @@ struct RGWBucketEntryPoint
     }
     has_bucket_info = false;
     ::decode(bucket, bl);
-    ::decode(owner, bl);
+    ::decode(owner.id, bl);
     ::decode(linked, bl);
     uint64_t ctime;
     ::decode(ctime, bl);
     creation_time = (uint64_t)ctime;
+    if (struct_v >= 9) {
+      ::decode(owner, bl);
+    }
     DECODE_FINISH(bl);
   }
 
@@ -909,7 +939,7 @@ struct req_info {
   RGWHTTPArgs args;
   map<string, string> x_meta_map;
 
-  const char *host;
+  string host;
   const char *method;
   string script_uri;
   string request_uri;
@@ -934,6 +964,10 @@ struct rgw_obj_key {
     set(n, i);
   }
 
+  rgw_obj_key(const cls_rgw_obj_key& k) {
+    set(k);
+  }
+
   void set(const cls_rgw_obj_key& k) {
     name = k.name;
     instance = k.instance;
@@ -954,7 +988,7 @@ struct rgw_obj_key {
     instance = i;
   }
 
-  bool empty() {
+  bool empty() const {
     return name.empty();
   }
   bool operator==(const rgw_obj_key& k) const {
@@ -1018,9 +1052,13 @@ struct req_state {
    uint32_t perm_mask;
    utime_t header_time;
 
+   /* Set once when req_state is initialized and not violated thereafter */
+   string bucket_tenant;
+   string bucket_name;
+
    rgw_bucket bucket;
-   string bucket_name_str;
    rgw_obj_key object;
+   string src_tenant_name;
    string src_bucket_name;
    rgw_obj_key src_object;
    ACLOwner bucket_owner;
@@ -1043,7 +1081,6 @@ struct req_state {
 
    string canned_acl;
    bool has_acl_header;
-   const char *copy_source;
    const char *http_auth;
    bool local_source; /* source is local */
 
@@ -1061,6 +1098,8 @@ struct req_state {
 
    string req_id;
 
+   string trans_id;
+
    req_info info;
 
    req_state(CephContext *_cct, class RGWEnv *e);
@@ -1071,7 +1110,7 @@ struct req_state {
 struct RGWObjEnt {
   rgw_obj_key key;
   std::string ns;
-  std::string owner;
+  rgw_user owner;
   std::string owner_display_name;
   uint64_t size;
   utime_t mtime;
@@ -1183,8 +1222,7 @@ public:
     init(b, o);
   }
   rgw_obj(rgw_bucket& b, const rgw_obj_key& k) : in_extra_data(false) {
-    init(b, k.name);
-    set_instance(k.instance);
+    from_index_key(b, k);
   }
   void init(rgw_bucket& b, const std::string& o) {
     bucket = b;
@@ -1234,7 +1272,7 @@ public:
      * having object locator at all for most objects but the ones that started with underscore as
      * these were escaped.
      */
-    if (orig_obj[0] == '_') {
+    if (orig_obj[0] == '_' && ns.empty()) {
       loc = orig_obj;
     }
   }
@@ -1293,6 +1331,29 @@ public:
     return string(buf) + orig_obj;
   };
 
+  void from_index_key(rgw_bucket& b, const rgw_obj_key& key) {
+    if (key.name[0] != '_') {
+      init(b, key.name);
+      set_instance(key.instance);
+      return;
+    }
+    if (key.name[1] == '_') {
+      init(b, key.name.substr(1));
+      set_instance(key.instance);
+      return;
+    }
+    ssize_t pos = key.name.find('_', 1);
+    if (pos < 0) {
+      /* shouldn't happen, just use key */
+      init(b, key.name);
+      set_instance(key.instance);
+      return;
+    }
+
+    init_ns(b, key.name.substr(pos + 1), key.name.substr(1, pos -1));
+    set_instance(key.instance);
+  }
+
   void get_index_key(rgw_obj_key *key) const {
     key->name = get_index_key_name();
     key->instance = instance;
@@ -1320,31 +1381,46 @@ public:
    * part of the given namespace, it returns false.
    */
   static bool translate_raw_obj_to_obj_in_ns(string& obj, string& instance, string& ns) {
-    if (ns.empty()) {
-      if (obj[0] != '_')
-        return true;
-
-      if (obj.size() >= 2 && obj[1] == '_') {
-        obj = obj.substr(1);
+    if (obj[0] != '_') {
+      if (ns.empty()) {
         return true;
       }
-
       return false;
     }
 
-    if (obj[0] != '_' || obj.size() < 3) // for namespace, min size would be 3: _x_
+    string obj_ns;
+    bool ret = parse_raw_oid(obj, &obj, &instance, &obj_ns);
+    if (!ret) {
+      return ret;
+    }
+
+    return (ns == obj_ns);
+  }
+
+  static bool parse_raw_oid(const string& oid, string *obj_name, string *obj_instance, string *obj_ns) {
+    obj_instance->clear();
+    obj_ns->clear();
+    if (oid[0] != '_') {
+      *obj_name = oid;
+      return true;
+    }
+
+    if (oid.size() >= 2 && oid[1] == '_') {
+      *obj_name = oid.substr(1);
+      return true;
+    }
+
+    if (oid[0] != '_' || oid.size() < 3) // for namespace, min size would be 3: _x_
       return false;
 
-    int pos = obj.find('_', 1);
+    int pos = oid.find('_', 1);
     if (pos <= 1) // if it starts with __, it's not in our namespace
       return false;
 
-    string obj_ns = obj.substr(1, pos - 1);
-    parse_ns_field(obj_ns, instance);
-    if (obj_ns.compare(ns) != 0)
-        return false;
+    *obj_ns = oid.substr(1, pos - 1);
+    parse_ns_field(*obj_ns, *obj_instance);
 
-    obj = obj.substr(pos + 1);
+    *obj_name = oid.substr(pos + 1);
     return true;
   }
 
@@ -1366,6 +1442,11 @@ public:
     size_t pos = obj.find('_', 1);
     if (pos == string::npos) {
       return false;
+    }
+
+    if (obj[1] == '_') {
+      obj = obj.substr(1);
+      return true;
     }
 
     size_t period_pos = obj.find('.');
@@ -1412,7 +1493,11 @@ public:
     if (struct_v >= 4)
       ::decode(instance, bl);
     if (ns.empty() && instance.empty()) {
-      orig_obj = object;
+      if (object[0] != '_') {
+        orig_obj = object;
+      } else {
+	orig_obj = object.substr(1);
+      }
     } else {
       if (struct_v >= 5) {
         ::decode(orig_obj, bl);
@@ -1571,12 +1656,18 @@ extern string rgw_trim_quotes(const string& val);
 
 /** Check if the req_state's user has the necessary permissions
  * to do the requested action */
+extern bool verify_bucket_permission(struct req_state * s,
+                                     RGWAccessControlPolicy * bucket_acl,
+                                     int perm);
 extern bool verify_bucket_permission(struct req_state *s, int perm);
-extern bool verify_object_permission(struct req_state *s, RGWAccessControlPolicy *bucket_acl, RGWAccessControlPolicy *object_acl, int perm);
+extern bool verify_object_permission(struct req_state *s,
+                                     RGWAccessControlPolicy *bucket_acl,
+                                     RGWAccessControlPolicy *object_acl,
+                                     int perm);
 extern bool verify_object_permission(struct req_state *s, int perm);
 /** Convert an input URL into a sane object name
  * by converting %-escaped strings into characters, etc*/
-extern bool url_decode(string& src_str, string& dest_str, bool in_query = false);
+extern bool url_decode(const string& src_str, string& dest_str, bool in_query = false);
 extern void url_encode(const string& src, string& dst);
 
 extern void calc_hmac_sha1(const char *key, int key_len,

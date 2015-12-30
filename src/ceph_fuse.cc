@@ -34,16 +34,34 @@ using namespace std;
 #include "global/global_init.h"
 #include "common/safe_io.h"
        
-#ifndef DARWIN
-#include <envz.h>
-#endif // DARWIN
-
 #include <sys/types.h>
 #include <fcntl.h>
 
+#include <fuse.h>
+
+static void fuse_usage()
+{
+  const char **argv = (const char **) malloc((2) * sizeof(char *));
+  argv[0] = "ceph-fuse";
+  argv[1] = "-h";
+  struct fuse_args args = FUSE_ARGS_INIT(2, (char**)argv);
+  if (fuse_parse_cmdline(&args, NULL, NULL, NULL) == -1) {
+    derr << "fuse_parse_cmdline failed." << dendl;
+    fuse_opt_free_args(&args);
+  }
+
+  assert(args.allocated);  // Checking fuse has realloc'd args so we can free newargv
+  free(argv);
+}
 void usage()
 {
-  cerr << "usage: ceph-fuse [-m mon-ip-addr:mon-port] <mount point>" << std::endl;
+  cout <<
+"usage: ceph-fuse [-m mon-ip-addr:mon-port] <mount point> [OPTIONS]\n"
+"  --client_mountpoint/-r <root_directory>\n"
+"                    use root_directory as the mounted root, rather than the full Ceph tree.\n"
+"\n";
+  fuse_usage();
+  generic_client_usage();
 }
 
 int main(int argc, const char **argv, const char *envp[]) {
@@ -61,6 +79,9 @@ int main(int argc, const char **argv, const char *envp[]) {
     } else if (ceph_argparse_flag(args, i, "--localize-reads", (char*)NULL)) {
       cerr << "setting CEPH_OSD_FLAG_LOCALIZE_READS" << std::endl;
       filer_flags |= CEPH_OSD_FLAG_LOCALIZE_READS;
+    } else if (ceph_argparse_flag(args, i, "-h", "--help", (char*)NULL)) {
+      usage();
+      assert(0);
     } else {
       ++i;
     }
@@ -103,13 +124,12 @@ int main(int argc, const char **argv, const char *envp[]) {
   }
 
   if (childpid == 0) {
+    if (restart_log)
+      g_ceph_context->_log->start();
     common_init_finish(g_ceph_context);
 
     //cout << "child, mounting" << std::endl;
     ::close(fd[0]);
-
-    if (restart_log)
-      g_ceph_context->_log->start();
 
     class RemountTest : public Thread {
     public:
@@ -122,6 +142,7 @@ int main(int argc, const char **argv, const char *envp[]) {
       }
       virtual ~RemountTest() {}
       virtual void *entry() {
+#if defined(__linux__)
 	int ver = get_linux_version();
 	assert(ver != 0);
 	bool can_invalidate_dentries = g_conf->client_try_dentry_invalidate &&
@@ -151,6 +172,9 @@ int main(int argc, const char **argv, const char *envp[]) {
 	  }
 	}
 	return reinterpret_cast<void*>(tr);
+#else
+	return reinterpret_cast<void*>(0);
+#endif
       }
     } tester;
 
@@ -168,9 +192,7 @@ int main(int argc, const char **argv, const char *envp[]) {
       goto out_mc_start_failed;
 
     // start up network
-    messenger = Messenger::create(g_ceph_context, g_conf->ms_type,
-				  entity_name_t::CLIENT(), "client",
-				  getpid());
+    messenger = Messenger::create_client_messenger(g_ceph_context, "client");
     messenger->set_default_policy(Messenger::Policy::lossy_client(0, 0));
     messenger->set_policy(entity_name_t::TYPE_MDS,
 			  Messenger::Policy::lossless_client(0, 0));
@@ -206,8 +228,10 @@ int main(int argc, const char **argv, const char *envp[]) {
 
     // start up fuse
     // use my argc, argv (make sure you pass a mount point!)
-    r = client->mount(g_conf->client_mountpoint.c_str());
+    r = client->mount(g_conf->client_mountpoint.c_str(), g_ceph_context->_conf->fuse_require_active_mds);
     if (r < 0) {
+      if (r == CEPH_FUSE_NO_MDS_UP)
+        cerr << "ceph-fuse[" << getpid() << "]: probably no MDS server is up?" << std::endl;
       cerr << "ceph-fuse[" << getpid() << "]: ceph mount failed with " << cpp_strerror(-r) << std::endl;
       goto out_shutdown;
     }

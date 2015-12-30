@@ -7,6 +7,11 @@ dist_man_MANS += \
 	ceph-rest-api.8 \
 	ceph-debugpack.8
 
+if WITH_SELINUX
+dist_man_MANS += \
+	ceph_selinux.8
+endif
+
 if WITH_MON
 dist_man_MANS += \
 	ceph-mon.8 \

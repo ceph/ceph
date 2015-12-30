@@ -178,6 +178,7 @@ int XioConnection::passive_setup()
 
   /* notify hook */
   msgr->ms_deliver_handle_accept(this);
+  msgr->ms_deliver_handle_fast_accept(this);
 
   /* try to insert in conns_entity_map */
   msgr->try_insert(this);
@@ -187,7 +188,7 @@ int XioConnection::passive_setup()
 static inline XioDispatchHook* pool_alloc_xio_dispatch_hook(
   XioConnection *xcon, Message *m, XioInSeq& msg_seq)
 {
-  struct xio_mempool_obj mp_mem;
+  struct xio_reg_mem mp_mem;
   int e = xpool_alloc(xio_msgr_noreg_mpool,
 		      sizeof(XioDispatchHook), &mp_mem);
   if (!!e)

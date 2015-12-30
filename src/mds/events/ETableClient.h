@@ -42,7 +42,7 @@ struct ETableClient : public LogEvent {
   }  
 
   //void update_segment();
-  void replay(MDS *mds);  
+  void replay(MDSRank *mds);  
 };
 
 #endif

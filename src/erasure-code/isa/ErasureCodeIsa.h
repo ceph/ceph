@@ -33,6 +33,9 @@
 #include <list>
 // -----------------------------------------------------------------------------
 
+#define DEFAULT_RULESET_ROOT "default"
+#define DEFAULT_RULESET_FAILURE_DOMAIN "host"
+
 class ErasureCodeIsa : public ErasureCode {
 public:
 
@@ -56,8 +59,8 @@ public:
   w(0),
   tcache(_tcache),
   technique(_technique),
-  ruleset_root("default"),
-  ruleset_failure_domain("host")
+  ruleset_root(DEFAULT_RULESET_ROOT),
+  ruleset_failure_domain(DEFAULT_RULESET_FAILURE_DOMAIN)
   {
   }
 
@@ -105,11 +108,11 @@ public:
 
   virtual unsigned get_alignment() const = 0;
 
-  virtual int parse(ErasureCodeProfile &profile,
-                    ostream *ss) = 0;
-
   virtual void prepare() = 0;
 
+ private:
+  virtual int parse(ErasureCodeProfile &profile,
+                    ostream *ss) = 0;
 };
 
 // -----------------------------------------------------------------------------
@@ -120,8 +123,8 @@ private:
 
 public:
 
-  static const int DEFAULT_K = 7;
-  static const int DEFAULT_M = 3;
+  static const std::string DEFAULT_K;
+  static const std::string DEFAULT_M;
 
   unsigned char* encode_coeff; // encoding coefficient
   unsigned char* encode_tbls; // encoding table
@@ -154,12 +157,11 @@ public:
 
   virtual unsigned get_alignment() const;
 
-  virtual int parse(ErasureCodeProfile &profile,
-                    ostream *ss);
-
   virtual void prepare();
 
-
+ private:
+  virtual int parse(ErasureCodeProfile &profile,
+                    ostream *ss);
 };
 
 #endif

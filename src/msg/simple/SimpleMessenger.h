@@ -79,9 +79,10 @@ public:
    * @param name The name to assign ourselves
    * _nonce A unique ID to use for this SimpleMessenger. It should not
    * be a value that will be repeated if the daemon restarts.
+   * features The local features bits for the local_connection
    */
   SimpleMessenger(CephContext *cct, entity_name_t name,
-		  string mname, uint64_t _nonce);
+		  string mname, uint64_t _nonce, uint64_t features);
 
   /**
    * Destroy the SimpleMessenger. Pretty simple since all the work is done
@@ -331,6 +332,7 @@ public:
 
   /// con used for sending messages to ourselves
   ConnectionRef local_connection;
+  uint64_t local_features;
 
   /**
    * @defgroup SimpleMessenger internals
@@ -369,7 +371,7 @@ public:
   int get_proto_version(int peer_type, bool connect);
 
   /**
-   * Fill in the address and peer type for the local connection, which
+   * Fill in the features, address and peer type for the local connection, which
    * is used for delivering messages back to ourself.
    */
   void init_local_connection();

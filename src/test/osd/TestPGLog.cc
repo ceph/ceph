@@ -93,7 +93,7 @@ public:
     pg_missing_t init;
     pg_missing_t final;
 
-    set<hobject_t> toremove;
+    set<hobject_t, hobject_t::BitwiseComparator> toremove;
     list<pg_log_entry_t> torollback;
 
   private:
@@ -154,7 +154,7 @@ public:
   };
 
   struct LogHandler : public PGLog::LogEntryHandler {
-    set<hobject_t> removed;
+    set<hobject_t, hobject_t::BitwiseComparator> removed;
     list<pg_log_entry_t> rolledback;
     
     void rollback(
@@ -198,8 +198,8 @@ public:
     }
 
     {
-      set<hobject_t>::const_iterator titer = tcase.toremove.begin();
-      set<hobject_t>::const_iterator hiter = handler.removed.begin();
+      set<hobject_t, hobject_t::BitwiseComparator>::const_iterator titer = tcase.toremove.begin();
+      set<hobject_t, hobject_t::BitwiseComparator>::const_iterator hiter = handler.removed.begin();
       for (; titer != tcase.toremove.end(); ++titer, ++hiter) {
 	EXPECT_EQ(*titer, *hiter);
       }
@@ -291,9 +291,8 @@ TEST_F(PGLogTest, rewind_divergent_log) {
 
     log.tail = eversion_t(2, 1);
     TestHandler h(remove_snap);
-    EXPECT_THROW(rewind_divergent_log(t, eversion_t(1, 1), info, &h,
-				      dirty_info, dirty_big_info),
-		 FailedAssertion);
+    EXPECT_DEATH(rewind_divergent_log(t, eversion_t(1, 1), info, &h,
+				      dirty_info, dirty_big_info), "");
   }
 
   /*        +----------------+
@@ -1200,8 +1199,8 @@ TEST_F(PGLogTest, merge_log) {
     olog.tail = eversion_t(1, 1);
 
     TestHandler h(remove_snap);
-    ASSERT_THROW(merge_log(t, oinfo, olog, fromosd, info, &h,
-                           dirty_info, dirty_big_info), FailedAssertion);
+    ASSERT_DEATH(merge_log(t, oinfo, olog, fromosd, info, &h,
+			   dirty_info, dirty_big_info), "");
   }
 
   /*        +--------------------------+
@@ -1264,8 +1263,8 @@ TEST_F(PGLogTest, merge_log) {
     }
 
     TestHandler h(remove_snap);
-    EXPECT_THROW(merge_log(t, oinfo, olog, fromosd, info, &h,
-                           dirty_info, dirty_big_info), FailedAssertion);
+    EXPECT_DEATH(merge_log(t, oinfo, olog, fromosd, info, &h,
+			   dirty_info, dirty_big_info), "");
   }
 }
 

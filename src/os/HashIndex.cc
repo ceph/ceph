@@ -25,6 +25,69 @@
 const string HashIndex::SUBDIR_ATTR = "contents";
 const string HashIndex::IN_PROGRESS_OP_TAG = "in_progress_op";
 
+/// hex digit to integer value
+int hex_to_int(char c)
+{
+  if (c >= '0' && c <= '9')
+    return c - '0';
+  if (c >= 'A' && c <= 'F')
+    return c - 'A' + 10;
+  assert(0);
+}
+
+/// int value to hex digit
+char int_to_hex(int v)
+{
+  assert(v < 16);
+  if (v < 10)
+    return '0' + v;
+  return 'A' + v - 10;
+}
+
+/// reverse bits in a nibble (0..15)
+int reverse_nibble_bits(int in)
+{
+  assert(in < 16);
+  return
+    ((in & 8) >> 3) |
+    ((in & 4) >> 1) |
+    ((in & 2) << 1) |
+    ((in & 1) << 3);
+}
+
+/// reverse nibble bits in a hex digit
+char reverse_hexdigit_bits(char c)
+{
+  return int_to_hex(reverse_nibble_bits(hex_to_int(c)));
+}
+
+/// reverse nibble bits in a hex string
+string reverse_hexdigit_bits_string(string s)
+{
+  for (unsigned i=0; i<s.size(); ++i)
+    s[i] = reverse_hexdigit_bits(s[i]);
+  return s;
+}
+
+/// compare hex digit (as length 1 string) bitwise
+bool cmp_hexdigit_bitwise(const string& l, const string& r)
+{
+  assert(l.length() == 1 && r.length() == 1);
+  int lv = hex_to_int(l[0]);
+  int rv = hex_to_int(r[0]);
+  assert(lv < 16);
+  assert(rv < 16);
+  return reverse_nibble_bits(lv) < reverse_nibble_bits(rv);
+}
+
+/// compare hex digit string bitwise
+bool cmp_hexdigit_string_bitwise(const string& l, const string& r)
+{
+  string ll = reverse_hexdigit_bits_string(l);
+  string rr = reverse_hexdigit_bits_string(r);
+  return ll < rr;
+}
+
 int HashIndex::cleanup() {
   bufferlist bl;
   int r = get_attr_path(vector<string>(), IN_PROGRESS_OP_TAG, bl);
@@ -71,7 +134,7 @@ int HashIndex::reset_attr(
   if (!exists)
     return 0;
   map<string, ghobject_t> objects;
-  set<string> subdirs;
+  vector<string> subdirs;
   r = list_objects(path, 0, 0, &objects);
   if (r < 0)
     return r;
@@ -98,7 +161,7 @@ int HashIndex::col_split_level(
    * bits of the hash represented by the subdir path with inbits, match passed
    * in.
    */
-  set<string> subdirs;
+  vector<string> subdirs;
   int r = from.list_subdirs(path, &subdirs);
   if (r < 0)
     return r;
@@ -108,7 +171,7 @@ int HashIndex::col_split_level(
     return r;
 
   set<string> to_move;
-  for (set<string>::iterator i = subdirs.begin();
+  for (vector<string>::iterator i = subdirs.begin();
        i != subdirs.end();
        ++i) {
     uint32_t bits = 0;
@@ -320,15 +383,10 @@ int HashIndex::_lookup(const ghobject_t &oid,
   return get_mangled_name(*path, oid, mangled_name, exists_out);
 }
 
-int HashIndex::_collection_list(vector<ghobject_t> *ls) {
-  vector<string> path;
-  return list_by_hash(path, 0, 0, 0, 0, ls);
-}
-
 int HashIndex::_collection_list_partial(const ghobject_t &start,
-					int min_count,
+					const ghobject_t &end,
+					bool sort_bitwise,
 					int max_count,
-					snapid_t seq,
 					vector<ghobject_t> *ls,
 					ghobject_t *next) {
   vector<string> path;
@@ -336,8 +394,8 @@ int HashIndex::_collection_list_partial(const ghobject_t &start,
   if (!next)
     next = &_next;
   *next = start;
-  dout(20) << "_collection_list_partial " << start << " " << min_count << "-" << max_count << " ls.size " << ls->size() << dendl;
-  return list_by_hash(path, min_count, max_count, seq, next, ls);
+  dout(20) << __func__ << " start:" << start << " end:" << end << "-" << max_count << " ls.size " << ls->size() << dendl;
+  return list_by_hash(path, end, sort_bitwise, max_count, next, ls);
 }
 
 int HashIndex::prep_delete() {
@@ -382,7 +440,7 @@ int HashIndex::pre_split_folder(uint32_t pg_num, uint64_t expected_num_objs)
     return 0;
 
   spg_t spgid;
-  if (!c.is_pg_prefix(spgid))
+  if (!c.is_pg_prefix(&spgid))
     return -EINVAL;
   const ps_t ps = spgid.pgid.ps();
 
@@ -418,6 +476,7 @@ int HashIndex::pre_split_folder(uint32_t pg_num, uint64_t expected_num_objs)
   // the below logic is inspired by rados.h#ceph_stable_mod,
   // it basically determines how many sub-folders should we
   // create for splitting
+  assert(pg_num_bits > 0); // otherwise BAD_SHIFT
   if (((1 << (pg_num_bits - 1)) | ps) >= pg_num) {
     ++split_bits;
   }
@@ -430,6 +489,7 @@ int HashIndex::pre_split_folder(uint32_t pg_num, uint64_t expected_num_objs)
     leavies = leavies >> 4;
   }
   for (uint32_t i = 0; i < subs; ++i) {
+    assert(split_bits <= 4); // otherwise BAD_SHIFT
     int v = tmp_id | (i << ((4 - split_bits) % 4));
     paths.push_back(to_hex(v));
     ret = create_path(paths);
@@ -446,7 +506,7 @@ int HashIndex::pre_split_folder(uint32_t pg_num, uint64_t expected_num_objs)
 int HashIndex::init_split_folder(vector<string> &path, uint32_t hash_level)
 {
   // Get the number of sub directories for the current path
-  set<string> subdirs;
+  vector<string> subdirs;
   int ret = list_subdirs(path, &subdirs);
   if (ret < 0)
     return ret;
@@ -461,7 +521,7 @@ int HashIndex::init_split_folder(vector<string> &path, uint32_t hash_level)
     return ret;
 
   // Do the same for subdirs
-  set<string>::const_iterator iter;
+  vector<string>::const_iterator iter;
   for (iter = subdirs.begin(); iter != subdirs.end(); ++iter) {
     path.push_back(*iter);
     ret = init_split_folder(path, hash_level + 1);
@@ -490,7 +550,7 @@ int HashIndex::recursive_create_path(vector<string>& path, int level)
 }
 
 int HashIndex::recursive_remove(const vector<string> &path) {
-  set<string> subdirs;
+  vector<string> subdirs;
   int r = list_subdirs(path, &subdirs);
   if (r < 0)
     return r;
@@ -501,7 +561,7 @@ int HashIndex::recursive_remove(const vector<string> &path) {
   if (!objects.empty())
     return -ENOTEMPTY;
   vector<string> subdir(path);
-  for (set<string>::iterator i = subdirs.begin();
+  for (vector<string>::iterator i = subdirs.begin();
        i != subdirs.end();
        ++i) {
     subdir.push_back(*i);
@@ -632,10 +692,12 @@ int HashIndex::complete_split(const vector<string> &path, subdir_info_s info) {
   r = list_objects(path, 0, 0, &objects);
   if (r < 0)
     return r;
-  set<string> subdirs;
-  r = list_subdirs(path, &subdirs);
+  vector<string> subdirs_vec;
+  r = list_subdirs(path, &subdirs_vec);
   if (r < 0)
     return r;
+  set<string> subdirs;
+  subdirs.insert(subdirs_vec.begin(), subdirs_vec.end());
   map<string, map<string, ghobject_t> > mapped;
   map<string, ghobject_t> moved;
   int num_moved = 0;
@@ -727,7 +789,7 @@ int HashIndex::complete_split(const vector<string> &path, subdir_info_s info) {
 void HashIndex::get_path_components(const ghobject_t &oid,
 				    vector<string> *path) {
   char buf[MAX_HASH_LEVEL + 1];
-  snprintf(buf, sizeof(buf), "%.*X", MAX_HASH_LEVEL, (uint32_t)oid.hobj.get_filestore_key());
+  snprintf(buf, sizeof(buf), "%.*X", MAX_HASH_LEVEL, (uint32_t)oid.hobj.get_nibblewise_key());
 
   // Path components are the hex characters of oid.hobj.hash, least
   // significant first
@@ -764,96 +826,166 @@ uint32_t HashIndex::hash_prefix_to_hash(string prefix) {
   return hash;
 }
 
-int HashIndex::get_path_contents_by_hash(const vector<string> &path,
-					 const string *lower_bound,
-					 const ghobject_t *next_object,
-					 const snapid_t *seq,
-					 set<string> *hash_prefixes,
-					 set<pair<string, ghobject_t> > *objects) {
-  set<string> subdirs;
+int HashIndex::get_path_contents_by_hash_bitwise(
+  const vector<string> &path,
+  const ghobject_t *next_object,
+  set<string, CmpHexdigitStringBitwise> *hash_prefixes,
+  set<pair<string, ghobject_t>, CmpPairBitwise> *objects)
+{
   map<string, ghobject_t> rev_objects;
   int r;
+  r = list_objects(path, 0, 0, &rev_objects);
+  if (r < 0)
+    return r;
+  // bitwise sort
+  for (map<string, ghobject_t>::iterator i = rev_objects.begin();
+       i != rev_objects.end();
+       ++i) {
+    if (next_object && cmp_bitwise(i->second, *next_object) < 0)
+      continue;
+    string hash_prefix = get_path_str(i->second);
+    hash_prefixes->insert(hash_prefix);
+    objects->insert(pair<string, ghobject_t>(hash_prefix, i->second));
+  }
+  vector<string> subdirs;
+  r = list_subdirs(path, &subdirs);
+  if (r < 0)
+    return r;
+
+  // sort subdirs bitwise (by reversing hex digit nibbles)
+  std::sort(subdirs.begin(), subdirs.end(), cmp_hexdigit_bitwise);
+
+  // Local to this function, we will convert the prefix strings
+  // (previously simply the reversed hex digits) to also have each
+  // digit's nibbles reversed.  This will make the strings sort
+  // bitwise.
+  string cur_prefix;
+  for (vector<string>::const_iterator i = path.begin();
+       i != path.end();
+       ++i) {
+    cur_prefix.append(reverse_hexdigit_bits_string(*i));
+  }
+  string next_object_string;
+  if (next_object)
+    next_object_string = reverse_hexdigit_bits_string(get_path_str(*next_object));
+  for (vector<string>::iterator i = subdirs.begin();
+       i != subdirs.end();
+       ++i) {
+    string candidate = cur_prefix + reverse_hexdigit_bits_string(*i);
+    if (next_object) {
+      if (next_object->is_max())
+	continue;
+      if (candidate < next_object_string.substr(0, candidate.size()))
+	continue;
+    }
+    // re-reverse the hex digit nibbles for the caller
+    hash_prefixes->insert(reverse_hexdigit_bits_string(candidate));
+  }
+  return 0;
+}
+
+int HashIndex::get_path_contents_by_hash_nibblewise(
+  const vector<string> &path,
+  const ghobject_t *next_object,
+  set<string> *hash_prefixes,
+  set<pair<string, ghobject_t>, CmpPairNibblewise > *objects)
+{
+  map<string, ghobject_t> rev_objects;
+  int r;
+  r = list_objects(path, 0, 0, &rev_objects);
+  if (r < 0)
+    return r;
+
+  for (map<string, ghobject_t>::iterator i = rev_objects.begin();
+       i != rev_objects.end();
+       ++i) {
+    string hash_prefix = get_path_str(i->second);
+    if (next_object && cmp_nibblewise(i->second, *next_object) < 0)
+      continue;
+    hash_prefixes->insert(hash_prefix);
+    objects->insert(pair<string, ghobject_t>(hash_prefix, i->second));
+  }
+
+  vector<string> subdirs;
+  r = list_subdirs(path, &subdirs);
+  if (r < 0)
+    return r;
+
+  // sort nibblewise (string sort of (reversed) hex digits)
+  std::sort(subdirs.begin(), subdirs.end());
+
   string cur_prefix;
   for (vector<string>::const_iterator i = path.begin();
        i != path.end();
        ++i) {
     cur_prefix.append(*i);
   }
-  r = list_objects(path, 0, 0, &rev_objects);
-  if (r < 0)
-    return r;
-  for (map<string, ghobject_t>::iterator i = rev_objects.begin();
-       i != rev_objects.end();
-       ++i) {
-    string hash_prefix = get_path_str(i->second);
-    if (lower_bound && hash_prefix < *lower_bound)
-      continue;
-    if (next_object && i->second < *next_object)
-      continue;
-    if (seq && i->second.hobj.snap < *seq)
-      continue;
-    hash_prefixes->insert(hash_prefix);
-    objects->insert(pair<string, ghobject_t>(hash_prefix, i->second));
-  }
-  r = list_subdirs(path, &subdirs);
-  if (r < 0)
-    return r;
-  for (set<string>::iterator i = subdirs.begin();
+  string next_object_string;
+  if (next_object)
+    next_object_string = get_path_str(*next_object);
+
+  for (vector<string>::iterator i = subdirs.begin();
        i != subdirs.end();
        ++i) {
     string candidate = cur_prefix + *i;
-    if (lower_bound && candidate < lower_bound->substr(0, candidate.size()))
-      continue;
-    if (next_object &&
-        (next_object->is_max() ||
-	 candidate < get_path_str(*next_object).substr(0, candidate.size())))
-      continue;
+    if (next_object) {
+      if (next_object->is_max())
+	continue;
+      if (candidate < next_object_string.substr(0, candidate.size()))
+	continue;
+    }
     hash_prefixes->insert(cur_prefix + *i);
   }
   return 0;
 }
 
 int HashIndex::list_by_hash(const vector<string> &path,
-			    int min_count,
+			    const ghobject_t &end,
+			    bool sort_bitwise,
 			    int max_count,
-			    snapid_t seq,
 			    ghobject_t *next,
-			    vector<ghobject_t> *out) {
+			    vector<ghobject_t> *out)
+{
   assert(out);
+  if (sort_bitwise)
+    return list_by_hash_bitwise(path, end, max_count, next, out);
+  else
+    return list_by_hash_nibblewise(path, end, max_count, next, out);
+}
+
+int HashIndex::list_by_hash_bitwise(
+  const vector<string> &path,
+  const ghobject_t& end,
+  int max_count,
+  ghobject_t *next,
+  vector<ghobject_t> *out)
+{
   vector<string> next_path = path;
   next_path.push_back("");
-  set<string> hash_prefixes;
-  set<pair<string, ghobject_t> > objects;
-  int r = get_path_contents_by_hash(path,
-				    NULL,
-				    next,
-				    &seq,
-				    &hash_prefixes,
-				    &objects);
+  set<string, CmpHexdigitStringBitwise> hash_prefixes;
+  set<pair<string, ghobject_t>, CmpPairBitwise> objects;
+  int r = get_path_contents_by_hash_bitwise(path,
+					    next,
+					    &hash_prefixes,
+					    &objects);
   if (r < 0)
     return r;
-  dout(20) << " prefixes " << hash_prefixes << dendl;
-  for (set<string>::iterator i = hash_prefixes.begin();
+  for (set<string, CmpHexdigitStringBitwise>::iterator i = hash_prefixes.begin();
        i != hash_prefixes.end();
        ++i) {
-    set<pair<string, ghobject_t> >::iterator j = objects.lower_bound(
+    dout(20) << __func__ << " prefix " << *i << dendl;
+    set<pair<string, ghobject_t>, CmpPairBitwise>::iterator j = objects.lower_bound(
       make_pair(*i, ghobject_t()));
     if (j == objects.end() || j->first != *i) {
-      if (min_count > 0 && out->size() > (unsigned)min_count) {
-	if (next)
-	  *next = ghobject_t(hobject_t("", "", CEPH_NOSNAP, hash_prefix_to_hash(*i), -1, ""));
-	return 0;
-      }
       *(next_path.rbegin()) = *(i->rbegin());
       ghobject_t next_recurse;
       if (next)
 	next_recurse = *next;
-      r = list_by_hash(next_path,
-		       min_count,
-		       max_count,
-		       seq,
-		       &next_recurse,
-		       out);
+      r = list_by_hash_bitwise(next_path,
+			       end,
+			       max_count,
+			       &next_recurse,
+			       out);
 
       if (r < 0)
 	return r;
@@ -869,7 +1001,13 @@ int HashIndex::list_by_hash(const vector<string> &path,
 	    *next = j->second;
 	  return 0;
 	}
-	if (!next || j->second >= *next) {
+	if (cmp_bitwise(j->second, end) >= 0) {
+	  if (next)
+	    *next = ghobject_t::get_max();
+	  return 0;
+	}
+	if (!next || cmp_bitwise(j->second, *next) >= 0) {
+	  dout(20) << __func__ << " prefix " << *i << " ob " << j->second << dendl;
 	  out->push_back(j->second);
 	}
 	++j;
@@ -877,6 +1015,71 @@ int HashIndex::list_by_hash(const vector<string> &path,
     }
   }
   if (next)
-    *next = ghobject_t(hobject_t::get_max());
+    *next = ghobject_t::get_max();
+  return 0;
+}
+
+int HashIndex::list_by_hash_nibblewise(
+  const vector<string> &path,
+  const ghobject_t& end,
+  int max_count,
+  ghobject_t *next,
+  vector<ghobject_t> *out)
+{
+  vector<string> next_path = path;
+  next_path.push_back("");
+  set<string> hash_prefixes;
+  set<pair<string, ghobject_t>, CmpPairNibblewise> objects;
+  int r = get_path_contents_by_hash_nibblewise(path,
+					       next,
+					       &hash_prefixes,
+					       &objects);
+  if (r < 0)
+    return r;
+  for (set<string>::iterator i = hash_prefixes.begin();
+       i != hash_prefixes.end();
+       ++i) {
+    dout(20) << __func__ << " prefix " << *i << dendl;
+    set<pair<string, ghobject_t>, CmpPairNibblewise >::iterator j =
+      objects.lower_bound(make_pair(*i, ghobject_t()));
+    if (j == objects.end() || j->first != *i) {
+      *(next_path.rbegin()) = *(i->rbegin());
+      ghobject_t next_recurse;
+      if (next)
+	next_recurse = *next;
+      r = list_by_hash_nibblewise(next_path,
+				  end,
+				  max_count,
+				  &next_recurse,
+				  out);
+
+      if (r < 0)
+	return r;
+      if (!next_recurse.is_max()) {
+	if (next)
+	  *next = next_recurse;
+	return 0;
+      }
+    } else {
+      while (j != objects.end() && j->first == *i) {
+	if (max_count > 0 && out->size() == (unsigned)max_count) {
+	  if (next)
+	    *next = j->second;
+	  return 0;
+	}
+	if (cmp_nibblewise(j->second, end) >= 0) {
+	  if (next)
+	    *next = ghobject_t::get_max();
+	  return 0;
+	}
+	if (!next || cmp_nibblewise(j->second, *next) >= 0) {
+	  out->push_back(j->second);
+	}
+	++j;
+      }
+    }
+  }
+  if (next)
+    *next = ghobject_t::get_max();
   return 0;
 }
