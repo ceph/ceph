@@ -2309,7 +2309,19 @@ int main(int argc, char **argv)
     ceph_options.push_back(i->c_str());
   }
 
-  if (!vm.count("type")) {
+  char fn[PATH_MAX];
+  snprintf(fn, sizeof(fn), "%s/type", dpath.c_str());
+  int fd = ::open(fn, O_RDONLY);
+  if (fd >= 0) {
+    bufferlist bl;
+    bl.read_fd(fd, 64);
+    if (bl.length()) {
+      type = string(bl.c_str(), bl.length() - 1);  // drop \n
+      //cout << "object store type is " << type << std::endl;
+    }
+    ::close(fd);
+  }
+  if (!vm.count("type") && type == "") {
     type = "filestore";
   }
   if (!vm.count("data-path") &&
