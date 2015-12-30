@@ -4619,21 +4619,22 @@ bool PG::may_need_replay(const OSDMapRef osdmap) const
       // does this osd appear to have survived through the end of the
       // interval?
       if (pinfo) {
-	if (pinfo->up_from <= interval.first && pinfo->up_thru > interval.last) {
-	  dout(10) << "may_need_replay  osd." << o
-		   << " up_from " << pinfo->up_from << " up_thru " << pinfo->up_thru
-		   << " survived the interval" << dendl;
-	  any_survived_interval = true;
-	}
-	else if (pinfo->up_from <= interval.first &&
-		 (std::find(acting.begin(), acting.end(), o) != acting.end() ||
-		  std::find(up.begin(), up.end(), o) != up.end())) {
-	  dout(10) << "may_need_replay  osd." << o
-		   << " up_from " << pinfo->up_from << " and is in acting|up,"
-		   << " assumed to have survived the interval" << dendl;
-	  // (if it hasn't, we will rebuild PriorSet)
-	  any_survived_interval = true;
-	}
+	if (pinfo->up_from <= interval.first) {
+          if (pinfo->up_thru > interval.last) {
+	    dout(10) << "may_need_replay  osd." << o
+		     << " up_from " << pinfo->up_from << " up_thru " << pinfo->up_thru
+		     << " survived the interval" << dendl;
+	    any_survived_interval = true;
+	  }
+	  else if (std::find(acting.begin(), acting.end(), o) != acting.end() ||
+		   std::find(up.begin(), up.end(), o) != up.end()) {
+	    dout(10) << "may_need_replay  osd." << o
+	     	     << " up_from " << pinfo->up_from << " and is in acting|up,"
+		     << " assumed to have survived the interval" << dendl;
+	    // (if it hasn't, we will rebuild PriorSet)
+	    any_survived_interval = true;
+	  }
+        }  
 	else if (pinfo->up_from > interval.last &&
 		 pinfo->last_clean_begin <= interval.first &&
 		 pinfo->last_clean_end > interval.last) {
