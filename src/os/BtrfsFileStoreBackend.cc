@@ -492,6 +492,9 @@ int BtrfsFileStoreBackend::syncfs()
   return ret;
 }
 
+/*
+ * returned written number  don't count the returned number by ioctl(BTRFS_IOC_CLONE_RANGE).
+ */
 int BtrfsFileStoreBackend::clone_range(int from, int to, uint64_t srcoff, uint64_t len, uint64_t dstoff)
 {
   dout(20) << "clone_range: " << srcoff << "~" << len << " to " << dstoff << dendl;
@@ -540,7 +543,7 @@ int BtrfsFileStoreBackend::clone_range(int from, int to, uint64_t srcoff, uint64
   a.dest_offset = dstoffclone;
   err = ::ioctl(to, BTRFS_IOC_CLONE_RANGE, &a);
   if (err >= 0) {
-    r += err;
+    r += 0; //expect this.It don't do anycopy in kernel.
   } else if (errno == EINVAL) {
     // Still failed, might be compressed
     dout(20) << "clone_range: failed CLONE_RANGE call with -EINVAL, using copy" << dendl;

@@ -182,6 +182,9 @@ private:
   } sync_thread;
 
   // -- op workqueue --
+  enum {
+    OP_SKIP_WBTHROTTLE = 1, //this Op can skip wbthrottle limit.
+  };
   struct Op {
     utime_t start;
     uint64_t op;
@@ -189,6 +192,7 @@ private:
     Context *onreadable, *onreadable_sync;
     uint64_t ops, bytes;
     TrackedOpRef osd_op;
+    uint32_t flags;
   };
   class OpSequencer : public Sequencer_impl {
     Mutex qlock; // to protect q, for benefit of flush (peek/dequeue also protected by lock)
@@ -815,6 +819,10 @@ public:
   virtual bool has_fiemap() = 0;
   virtual bool has_seek_data_hole() = 0;
   virtual int do_fiemap(int fd, off_t start, size_t len, struct fiemap **pfiemap) = 0;
+  /*
+   * Return the really written number. For btrfs, it maybe use ioctl(BTRFS_IOC_CLONE_RANGE).
+   * We don't count this case. For do this, make clone_range into control of wbthrottle of filestore.
+   */
   virtual int clone_range(int from, int to, uint64_t srcoff, uint64_t len, uint64_t dstoff) = 0;
   virtual int set_alloc_hint(int fd, uint64_t hint) = 0;
   virtual bool has_splice() const = 0;
