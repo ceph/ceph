@@ -187,7 +187,7 @@ TYPE_FEATUREFUL(file_layout_t)
 TYPE(ceph_file_layout_wrapper)
 
 #include "mds/CInode.h"
-TYPE(InodeStore)
+TYPE_FEATUREFUL(InodeStore)
 
 #include "mds/MDSMap.h"
 TYPE_FEATUREFUL(MDSMap)

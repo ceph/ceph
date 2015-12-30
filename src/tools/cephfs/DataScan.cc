@@ -289,7 +289,7 @@ int MetadataDriver::inject_unlinked_inode(
   // Serialize
   bufferlist inode_bl;
   ::encode(std::string(CEPH_FS_ONDISK_MAGIC), inode_bl);
-  inode.encode(inode_bl);
+  inode.encode(inode_bl, CEPH_FEATURES_SUPPORTED_DEFAULT);
 
   // Write
   r = metadata_io.write_full(oid.name, inode_bl);
@@ -1430,7 +1430,7 @@ int MetadataDriver::inject_linkage(
   bufferlist dentry_bl;
   ::encode(snap, dentry_bl);
   ::encode('I', dentry_bl);
-  inode.encode_bare(dentry_bl);
+  inode.encode_bare(dentry_bl, CEPH_FEATURES_SUPPORTED_DEFAULT);
 
   // Write out
   std::map<std::string, bufferlist> vals;

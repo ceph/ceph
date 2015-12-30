@@ -960,7 +960,7 @@ int JournalTool::replay_offline(EMetaBlob const &metablob, bool const dry_run)
     inode_bl.clear();
     std::string magic = CEPH_FS_ONDISK_MAGIC;
     ::encode(magic, inode_bl);
-    inode.encode(inode_bl);
+    inode.encode(inode_bl, CEPH_FEATURES_SUPPORTED_DEFAULT);
 
     if (!dry_run) {
       r = io.write_full(root_oid.name, inode_bl);
@@ -1043,7 +1043,7 @@ int JournalTool::replay_offline(EMetaBlob const &metablob, bool const dry_run)
       inode.snap_blob = fb.snapbl;
       inode.symlink = fb.symlink;
       inode.old_inodes = fb.old_inodes;
-      inode.encode_bare(dentry_bl);
+      inode.encode_bare(dentry_bl, CEPH_FEATURES_SUPPORTED_DEFAULT);
       
       vals[key] = dentry_bl;
       if (!dry_run) {
@@ -1184,9 +1184,9 @@ void JournalTool::encode_fullbit_as_inode(
 
   // Serialize InodeStore
   if (bare) {
-    new_inode.encode_bare(*out_bl);
+    new_inode.encode_bare(*out_bl, CEPH_FEATURES_SUPPORTED_DEFAULT);
   } else {
-    new_inode.encode(*out_bl);
+    new_inode.encode(*out_bl, CEPH_FEATURES_SUPPORTED_DEFAULT);
   }
 }
 
