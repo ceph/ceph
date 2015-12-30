@@ -209,6 +209,8 @@ protected:
 
   bool inline_data_enabled;
 
+  uint64_t cached_up_features;
+
 public:
   CompatSet compat;
 
@@ -228,7 +230,8 @@ public:
       max_mds(0),
       ever_allowed_snaps(false),
       explicitly_allowed_snaps(false),
-      inline_data_enabled(false)
+      inline_data_enabled(false),
+      cached_up_features(0)
   { }
 
   bool get_inline_data_enabled() { return inline_data_enabled; }
@@ -353,15 +356,23 @@ public:
 
   // features
   uint64_t get_up_features() {
-    uint64_t f = 0;
-    for (std::map<mds_rank_t, mds_gid_t>::const_iterator p = up.begin();
-	 p != up.end();
-	 ++p) {
-      std::map<mds_gid_t, mds_info_t>::const_iterator q = mds_info.find(p->second);
-      assert(q != mds_info.end());
-      f |= q->second.mds_features;
+    if (!cached_up_features) {
+      bool first = true;
+      for (std::map<mds_rank_t, mds_gid_t>::const_iterator p = up.begin();
+	   p != up.end();
+	   ++p) {
+	std::map<mds_gid_t, mds_info_t>::const_iterator q =
+	  mds_info.find(p->second);
+	assert(q != mds_info.end());
+	if (first) {
+	  cached_up_features = q->second.mds_features;
+	  first = false;
+	} else {
+	  cached_up_features &= q->second.mds_features;
+	}
+      }
     }
-    return f;
+    return cached_up_features;
   }
 
   /**
