@@ -986,7 +986,20 @@ int BlueFS::_flush_range(FileWriter *h, uint64_t offset, uint64_t length)
     }
   }
   dout(20) << __func__ << " h " << h << " pos now " << h->pos << dendl;
+  _flush_wait(h);
   return 0;
+}
+
+void BlueFS::_flush_wait(FileWriter *h)
+{
+  dout(10) << __func__ << " " << h << dendl;
+  utime_t start = ceph_clock_now(NULL);
+  for (auto p : h->iocv) {
+    p->aio_wait();
+  }
+  utime_t end = ceph_clock_now(NULL);
+  utime_t dur = end - start;
+  dout(10) << __func__ << " " << h << " done in " << dur << dendl;
 }
 
 int BlueFS::_flush(FileWriter *h, bool force)
