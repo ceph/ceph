@@ -1608,6 +1608,9 @@ int BlueStore::mkfs()
   r = write_meta("bluefs", stringify((int)g_conf->bluestore_bluefs));
   if (r < 0)
     goto out_close_alloc;
+  r = write_meta("type", "bluestore");
+  if (r < 0)
+    goto out_close_alloc;
 
   // indicate mkfs completion/success by writing the fsid file
   r = _write_fsid();
