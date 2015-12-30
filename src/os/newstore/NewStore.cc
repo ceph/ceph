@@ -750,6 +750,7 @@ int NewStore::_write_fsid()
   }
   r = ::fsync(fsid_fd);
   if (r < 0) {
+    r = -errno;
     derr << __func__ << " fsid fsync failed: " << cpp_strerror(r) << dendl;
     return r;
   }
@@ -3596,6 +3597,7 @@ int NewStore::_clean_fid_tail_fd(const fragment_t& f, int fd)
 	     << dendl;
     r = ::ftruncate(fd, f.length);
     if (r < 0) {
+      r = -errno;
       derr << __func__ << " failed to ftruncate " << f.fid << ": "
 	   << cpp_strerror(r) << dendl;
       return r;
