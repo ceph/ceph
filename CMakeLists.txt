@@ -294,6 +294,12 @@ if(WITH_XIO)
 set(HAVE_XIO ${XIO_FOUND})
 endif(WITH_XIO)
 
+option(WITH_DPDK "Enable DPDK messaging" ON)
+if(WITH_DPDK)
+find_package(dpdk)
+set(HAVE_DPDK ${DPDK_FOUND})
+endif(WITH_DPDK)
+
 #option for RGW
 option(WITH_RADOSGW "Rados Gateway is enabled" ON)
 

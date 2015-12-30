@@ -30,4 +30,3 @@ if(DPDK_FOUND)
     ${DPDK_rte_mempool_LIBRARY}
     ${DPDK_rte_ring_LIBRARY})
 endif(DPDK_FOUND)
-
