@@ -221,19 +221,6 @@ OPTION(ms_dpdk_num_queues, OPT_INT, 2)
 // Weighing of a hardware network queue relative to a software queue (0=no work, 1=equal share)")
 OPTION(ms_dpdk_hw_queue_weight, OPT_FLOAT, 1)
 
-
-OPTION(inject_early_sigterm, OPT_BOOL, false)
-OPTION(ms_dpdk_dhcp, OPT_BOOL, true)
-OPTION(ms_dpdk_host_ipv4_addr, OPT_STR, "")
-OPTION(ms_dpdk_gateway_ipv4_addr, OPT_STR, "")
-OPTION(ms_dpdk_netmask_ipv4_addr, OPT_STR, "")
-OPTION(ms_dpdk_num_queues, OPT_INT, 2)
-OPTION(ms_dpdk_lro, OPT_BOOL, true)
-OPTION(ms_dpdk_hw_flow_control, OPT_BOOL, true)
-// Weighing of a hardware network queue relative to a software queue (0=no work, 1=equal share)")
-OPTION(ms_dpdk_hw_queue_weight, OPT_FLOAT, 1)
-
-
 OPTION(inject_early_sigterm, OPT_BOOL, false)
 
 OPTION(mon_data, OPT_STR, "/var/lib/ceph/mon/$cluster-$id")
