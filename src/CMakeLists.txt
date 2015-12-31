@@ -430,12 +430,7 @@ install(FILES include/rados/librados.h
   DESTINATION include/rados)
 install(TARGETS librados DESTINATION lib)
 
-set(libradosstriper_srcs
-  libradosstriper/libradosstriper.cc
-  libradosstriper/RadosStriperImpl.cc
-  libradosstriper/MultiAioCompletionImpl.cc)
-add_library(libradosstriper ${libradosstriper_srcs})
-target_link_libraries(libradosstriper librados cls_lock_client)
+add_subdirectory(libradosstriper)
 
 set(rados_srcs
   tools/rados/rados.cc
