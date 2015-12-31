@@ -876,6 +876,17 @@ TEST(BufferListIterator, constructors) {
   }
 }
 
+TEST(BufferListIterator, empty_create_append_copy) {
+  bufferlist bl, bl2, bl3, out;
+  bl2.append("bar");
+  bl.swap(bl2);
+  bl2.append("xxx");
+  bl.append(bl2);
+  bl.rebuild();
+  bl.copy(0, 6, out);
+  ASSERT_TRUE(out.contents_equal(bl));
+}
+
 TEST(BufferListIterator, operator_equal) {
   bufferlist bl;
   bl.append("ABC", 3);
