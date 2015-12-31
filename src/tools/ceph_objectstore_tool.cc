@@ -413,8 +413,7 @@ int finish_remove_pgs(ObjectStore *store)
     spg_t pgid;
 
     if (it->is_temp(&pgid) ||
-	it->is_removal(&pgid) ||
-	(it->is_pg(&pgid) && PG::_has_removal_flag(store, pgid))) {
+       (it->is_pg(&pgid) && PG::_has_removal_flag(store, pgid))) {
       cout << "finish_remove_pgs " << *it << " removing " << pgid << std::endl;
       OSD::recursive_remove_collection(store, pgid, *it);
       continue;

@@ -518,7 +518,6 @@ class coll_t {
     TYPE_LEGACY_TEMP = 1,  /* no longer used */
     TYPE_PG = 2,
     TYPE_PG_TEMP = 3,
-    TYPE_PG_REMOVAL = 4,   /* note: deprecated, not encoded */
   };
   type_t type;
   spg_t pgid;
@@ -575,7 +574,7 @@ public:
     return type == TYPE_META;
   }
   bool is_pg_prefix(spg_t *pgid_) const {
-    if (type == TYPE_PG || type == TYPE_PG_TEMP || type == TYPE_PG_REMOVAL) {
+    if (type == TYPE_PG || type == TYPE_PG_TEMP) {
       *pgid_ = pgid;
       return true;
     }
@@ -596,16 +595,6 @@ public:
   }
   bool is_temp(spg_t *pgid_) const {
     if (type == TYPE_PG_TEMP) {
-      *pgid_ = pgid;
-      return true;
-    }
-    return false;
-  }
-  bool is_removal() const {
-    return type == TYPE_PG_REMOVAL;
-  }
-  bool is_removal(spg_t *pgid_) const {
-    if (type == TYPE_PG_REMOVAL) {
       *pgid_ = pgid;
       return true;
     }
