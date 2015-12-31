@@ -582,7 +582,7 @@ set(ceph_mon_srcs
   common/TextTable.cc)
 add_executable(ceph-mon ${ceph_mon_srcs} $<TARGET_OBJECTS:heap_profiler_objs>)
 add_dependencies(ceph-mon erasure_code_plugins)
-target_link_libraries(ceph-mon mon boost_thread common os global ${EXTRALIBS}
+      target_link_libraries(ceph-mon mon ${Boost_THREAD_LIBRARY} common os global ${EXTRALIBS}
   ${CMAKE_DL_LIBS} ${ALLOC_LIBS})
 install(TARGETS ceph-mon DESTINATION bin)
 
@@ -744,7 +744,7 @@ if(${WITH_MDS})
     $<TARGET_OBJECTS:heap_profiler_objs>
     $<TARGET_OBJECTS:common_util_obj>)
   target_link_libraries(ceph-mds mds osdc ${CMAKE_DL_LIBS} global
-    ${ALLOC_LIBS} boost_thread)
+    ${ALLOC_LIBS} ${Boost_THREAD_LIBRARY})
   install(TARGETS ceph-mds DESTINATION bin)
 endif(${WITH_MDS})
 
@@ -1018,7 +1018,7 @@ if(${WITH_RBD})
     $<TARGET_OBJECTS:heap_profiler_objs>)
   set_target_properties(rbd PROPERTIES OUTPUT_NAME rbd)
   target_link_libraries(rbd librbd librados global common keyutils udev
-    boost_regex boost_program_options
+    ${Boost_REGEX_LIBRARY} ${Boost_PROGRAM_OPTIONS_LIBRARY} 
     ${BLKID_LIBRARIES} ${CMAKE_DL_LIBS} ${ALLOC_LIBS})
   install(TARGETS rbd DESTINATION bin)
   install(PROGRAMS ${CMAKE_SOURCE_DIR}/src/ceph-rbdnamer DESTINATION bin)
