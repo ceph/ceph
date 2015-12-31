@@ -89,10 +89,10 @@ void NetHandler::set_close_on_exec(int sd)
   }
 }
 
-void NetHandler::set_socket_options(int sd)
+void NetHandler::set_socket_options(int sd, bool nodelay, int size)
 {
   // disable Nagle algorithm?
-  if (cct->_conf->ms_tcp_nodelay) {
+  if (nodelay) {
     int flag = 1;
     int r = ::setsockopt(sd, IPPROTO_TCP, TCP_NODELAY, (char*)&flag, sizeof(flag));
     if (r < 0) {
@@ -100,8 +100,7 @@ void NetHandler::set_socket_options(int sd)
       ldout(cct, 0) << "couldn't set TCP_NODELAY: " << cpp_strerror(r) << dendl;
     }
   }
-  if (cct->_conf->ms_tcp_rcvbuf) {
-    int size = cct->_conf->ms_tcp_rcvbuf;
+  if (size) {
     int r = ::setsockopt(sd, SOL_SOCKET, SO_RCVBUF, (void*)&size, sizeof(size));
     if (r < 0)  {
       r = -errno;
