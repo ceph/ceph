@@ -566,7 +566,7 @@ struct inode_t {
     old_pools.insert(l);
   }
 
-  void encode(bufferlist &bl) const;
+  void encode(bufferlist &bl, uint64_t features) const;
   void decode(bufferlist::iterator& bl);
   void dump(Formatter *f) const;
   static void generate_test_instances(list<inode_t*>& ls);
@@ -586,7 +586,7 @@ struct inode_t {
 private:
   bool older_is_consistent(const inode_t &other) const;
 };
-WRITE_CLASS_ENCODER(inode_t)
+WRITE_CLASS_ENCODER_FEATURES(inode_t)
 
 
 /*
@@ -597,12 +597,12 @@ struct old_inode_t {
   inode_t inode;
   std::map<string,bufferptr> xattrs;
 
-  void encode(bufferlist &bl) const;
+  void encode(bufferlist &bl, uint64_t features) const;
   void decode(bufferlist::iterator& bl);
   void dump(Formatter *f) const;
   static void generate_test_instances(list<old_inode_t*>& ls);
 };
-WRITE_CLASS_ENCODER(old_inode_t)
+WRITE_CLASS_ENCODER_FEATURES(old_inode_t)
 
 
 /*

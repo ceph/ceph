@@ -236,7 +236,7 @@ void inline_data_t::decode(bufferlist::iterator &p)
 /*
  * inode_t
  */
-void inode_t::encode(bufferlist &bl) const
+void inode_t::encode(bufferlist &bl, uint64_t features) const
 {
   ENCODE_START(13, 6, bl);
 
@@ -502,11 +502,11 @@ bool inode_t::older_is_consistent(const inode_t &other) const
 /*
  * old_inode_t
  */
-void old_inode_t::encode(bufferlist& bl) const
+void old_inode_t::encode(bufferlist& bl, uint64_t features) const
 {
   ENCODE_START(2, 2, bl);
   ::encode(first, bl);
-  ::encode(inode, bl);
+  ::encode(inode, bl, features);
   ::encode(xattrs, bl);
   ENCODE_FINISH(bl);
 }
