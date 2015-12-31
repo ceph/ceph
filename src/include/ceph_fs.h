@@ -489,27 +489,6 @@ struct ceph_mds_reply_cap {
 #define CEPH_CAP_FLAG_AUTH	(1 << 0)	/* cap is issued by auth mds */
 #define CEPH_CAP_FLAG_RELEASE	(1 << 1)        /* ask client to release the cap */
 
-/* inode record, for bundling with mds reply */
-struct ceph_mds_reply_inode {
-	__le64 ino;
-	__le64 snapid;
-	__le32 rdev;
-	__le64 version;                /* inode version */
-	__le64 xattr_version;          /* version for xattr blob */
-	struct ceph_mds_reply_cap cap; /* caps issued for this inode */
-	struct ceph_file_layout layout;
-	struct ceph_timespec ctime, mtime, atime;
-	__le32 time_warp_seq;
-	__le64 size, max_size, truncate_size;
-	__le32 truncate_seq;
-	__le32 mode, uid, gid;
-	__le32 nlink;
-	__le64 files, subdirs, rbytes, rfiles, rsubdirs;  /* dir stats */
-	struct ceph_timespec rctime;
-	struct ceph_frag_tree_head fragtree;  /* (must be at end of struct) */
-} __attribute__ ((packed));
-/* followed by frag array, symlink string, dir layout, xattr blob */
-
 /* reply_lease follows dname, and reply_inode */
 struct ceph_mds_reply_lease {
 	__le16 mask;            /* lease type(s) */
