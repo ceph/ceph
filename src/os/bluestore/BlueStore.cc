@@ -1513,6 +1513,7 @@ int BlueStore::_setup_block_symlink_or_file(
       assert(r == 0);
       dout(1) << __func__ << " created " << name << " file with size "
 	      << pretty_si_t(size) << "B" << dendl;
+      VOID_TEMP_FAILURE_RETRY(::close(fd));
     }
   }
   return 0;
