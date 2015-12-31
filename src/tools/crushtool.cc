@@ -623,6 +623,7 @@ int main(int argc, const char **argv)
       crush.set_item_name(i, "osd." + stringify(i));
     }
 
+    crush.set_type_name(0, "osd");
     int type = 1;
     for (vector<layer_t>::iterator p = layers.begin(); p != layers.end(); ++p, type++) {
       layer_t &l = *p;
