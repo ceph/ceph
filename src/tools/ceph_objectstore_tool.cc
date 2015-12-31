@@ -2318,7 +2318,7 @@ int main(int argc, char **argv)
     bl.read_fd(fd, 64);
     if (bl.length()) {
       type = string(bl.c_str(), bl.length() - 1);  // drop \n
-      cout << "object store type is " << type << std::endl;
+      //cout << "object store type is " << type << std::endl;
     }
     ::close(fd);
   }
