@@ -171,11 +171,23 @@ endif(${WITH_GPERFTOOLS})
 
 find_package(snappy REQUIRED)
 
-option(WITH_TCMALLOC "Use TCMalloc as Allocator" ON)
-if(${WITH_TCMALLOC})
-find_package(tcmalloc REQUIRED)
-set(HAVE_LIBTCMALLOC ${Tcmalloc_FOUND})
-endif(${WITH_TCMALLOC})
+#if allocator is set on command line make sure it matches below strings
+if(ALLOCATOR)
+  if(${ALLOCATOR} STREQUAL "tcmalloc")
+    find_package(tcmalloc REQUIRED)
+    set(HAVE_LIBTCMALLOC ${Tcmalloc_FOUND})
+  elseif(${ALLOCATOR} STREQUAL "jemalloc")
+    find_package(JeMalloc REQUIRED)
+  endif()
+else(ALLOCATOR)
+  find_package(tcmalloc)
+  set(HAVE_LIBTCMALLOC ${Tcmalloc_FOUND})
+  find_package(JeMalloc)
+  if(NOT Tcmalloc_FOUND AND NOT JEMALLOC_FOUND)
+    message(WARNING "tcmalloc and jemalloc not found, falling back to libc")
+    set(ALLOCATOR "libc")
+  endif(NOT Tcmalloc_FOUND AND NOT JEMALLOC_FOUND)
+endif(ALLOCATOR)
 
 find_package(keyutils REQUIRED)
 
