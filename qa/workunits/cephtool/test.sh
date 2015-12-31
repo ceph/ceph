@@ -1037,6 +1037,7 @@ function test_mon_osd()
     ceph osd set $f
     ceph osd unset $f
   done
+  ceph osd set sortbitwise  # new backends can't handle nibblewise
   expect_false ceph osd set bogus
   expect_false ceph osd unset bogus
 
