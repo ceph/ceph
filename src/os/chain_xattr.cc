@@ -123,7 +123,7 @@ static int getxattr_len(const char *fn, const char *name)
   return total;
 }
 
-int chain_getxattr(const char *fn, const char *name, void *val, size_t size)
+int chain_getxattr(const char *fn, const char *name, void *val, size_t size, int *orig_chunks)
 {
   int i = 0, pos = 0;
   char raw_name[CHAIN_XATTR_MAX_NAME_LEN * 2 + 16];
@@ -170,6 +170,9 @@ int chain_getxattr(const char *fn, const char *name, void *val, size_t size)
       }
     }
   }
+  if (orig_chunks && ret > 0) {
+    *orig_chunks = i;
+  }
   return ret;
 }
 
@@ -194,7 +197,7 @@ static int chain_fgetxattr_len(int fd, const char *name)
   return total;
 }
 
-int chain_fgetxattr(int fd, const char *name, void *val, size_t size)
+int chain_fgetxattr(int fd, const char *name, void *val, size_t size, int *orig_chunks)
 {
   int i = 0, pos = 0;
   char raw_name[CHAIN_XATTR_MAX_NAME_LEN * 2 + 16];
@@ -241,6 +244,9 @@ int chain_fgetxattr(int fd, const char *name, void *val, size_t size)
       }
     }
   }
+  if (orig_chunks && ret > 0) {
+    *orig_chunks = i;
+  }
   return ret;
 }
 
@@ -256,7 +262,7 @@ static int get_xattr_block_size(size_t size)
   return CHAIN_XATTR_MAX_BLOCK_LEN;
 }
 
-int chain_setxattr(const char *fn, const char *name, const void *val, size_t size, bool onechunk)
+int chain_setxattr(const char *fn, const char *name, const void *val, size_t size, int orig_chunks)
 {
   int i = 0, pos = 0;
   char raw_name[CHAIN_XATTR_MAX_NAME_LEN * 2 + 16];
@@ -278,21 +284,23 @@ int chain_setxattr(const char *fn, const char *name, const void *val, size_t siz
     i++;
   } while (size);
 
-  if (ret >= 0 && !onechunk) {
-    int r;
-    do {
-      get_raw_xattr_name(name, i, raw_name, sizeof(raw_name));
-      r = sys_removexattr(fn, raw_name);
-      if (r < 0 && r != -ENODATA)
-	ret = r;
-      i++;
-    } while (r != -ENODATA);
+  if (ret >= 0) {
+    if (orig_chunks <= 0 || orig_chunks > i) {
+      int r;
+      do {
+        get_raw_xattr_name(name, i, raw_name, sizeof(raw_name));
+        r = sys_removexattr(fn, raw_name);
+        if (r < 0 && r != -ENOATTR)
+          ret = r;
+        i++;
+      } while (r != -ENOATTR);
+    }
   }
   
   return ret;
 }
 
-int chain_fsetxattr(int fd, const char *name, const void *val, size_t size, bool onechunk)
+int chain_fsetxattr(int fd, const char *name, const void *val, size_t size, int orig_chunks)
 {
   int i = 0, pos = 0;
   char raw_name[CHAIN_XATTR_MAX_NAME_LEN * 2 + 16];
@@ -314,15 +322,17 @@ int chain_fsetxattr(int fd, const char *name, const void *val, size_t size, bool
     i++;
   } while (size);
 
-  if (ret >= 0 && !onechunk) {
-    int r;
-    do {
-      get_raw_xattr_name(name, i, raw_name, sizeof(raw_name));
-      r = sys_fremovexattr(fd, raw_name);
-      if (r < 0 && r != -ENODATA)
-	ret = r;
-      i++;
-    } while (r != -ENODATA);
+  if (ret >= 0) {
+    if (orig_chunks <= 0 || orig_chunks > i) {
+      int r;
+      do {
+        get_raw_xattr_name(name, i, raw_name, sizeof(raw_name));
+        r = sys_fremovexattr(fd, raw_name);
+        if (r < 0 && r != -ENOATTR)
+          ret = r;
+        i++;
+      } while (r != -ENOATTR);
+    }
   }
   
   return ret;
@@ -368,25 +378,34 @@ int chain_fremovexattr(int fd, const char *name)
 
 // listxattr
 
-int chain_listxattr(const char *fn, char *names, size_t len) {
+int chain_listxattr(const char *fn, char *names, size_t len, map<string, int> *chunks) {
   int r;
+  size_t total_len = 0;
 
+  // char[512] is big for most case
+  char rawnames[512];
+  char *full_buf = rawnames;
   if (!len)
     return sys_listxattr(fn, names, len) * 2;
 
-  r = sys_listxattr(fn, 0, 0);
-  if (r < 0)
+  r = sys_listxattr(fn, full_buf, sizeof(rawnames));
+  if (r < 0 && r != -ERANGE)
     return r;
+  if (r == -ERANGE) { // the rawnames is too small to hold the result
+    r = sys_listxattr(fn, 0, 0);
+    if (r < 0)
+      return r;
 
-  size_t total_len = r * 2; // should be enough
-  char *full_buf = (char *)malloc(total_len);
-  if (!full_buf)
-    return -ENOMEM;
+    total_len = r * 2; // should be enough
+    full_buf = (char *)malloc(total_len);
+    if (!full_buf)
+      return -ENOMEM;
 
-  r = sys_listxattr(fn, full_buf, total_len);
-  if (r < 0) {
-    free(full_buf);
-    return r;
+    r = sys_listxattr(fn, full_buf, total_len);
+    if (r < 0) {
+      free(full_buf);
+      return r;
+    }
   }
 
   char *p = full_buf;
@@ -407,37 +426,52 @@ int chain_listxattr(const char *fn, char *names, size_t len) {
       strcpy(dest, name);
       dest += name_len + 1;
     }
+    if (chunks && (strncmp(name, "user.ceph.", 10) == 0)) {
+      (*chunks)[name + 10]++;
+    }
     p += attr_len + 1;
   }
   r = dest - names;
 
 done:
-  free(full_buf);
+  if (total_len)
+    free(full_buf);
   return r;
 }
 
-int chain_flistxattr(int fd, char *names, size_t len) {
+int chain_flistxattr(int fd, char *names, size_t len, map<string, int> *chunks) {
   int r;
   char *p;
   const char * end;
   char *dest;
   char *dest_end;
+  size_t total_len = 0;
+
+  // char[512] is big for most case
+  char rawnames[512];
+  char *full_buf = rawnames;
 
   if (!len)
     return sys_flistxattr(fd, names, len) * 2;
 
-  r = sys_flistxattr(fd, 0, 0);
-  if (r < 0)
+  r = sys_flistxattr(fd, full_buf, sizeof(rawnames));
+  if (r < 0 && r != -ERANGE)
     return r;
+  if (r == -ERANGE) { // the rawnames is too small to hold the result
+    r = sys_flistxattr(fd, 0, 0);
+    if (r < 0)
+      return r;
 
-  size_t total_len = r * 2; // should be enough
-  char *full_buf = (char *)malloc(total_len);
-  if (!full_buf)
-    return -ENOMEM;
+    total_len = r * 2; // should be enough
+    full_buf = (char *)malloc(total_len);
+    if (!full_buf)
+      return -ENOMEM;
 
-  r = sys_flistxattr(fd, full_buf, total_len);
-  if (r < 0)
-    goto done;
+    r = sys_flistxattr(fd, full_buf, total_len);
+    if (r < 0) {
+      goto done;
+    }
+  }
 
   p = full_buf;
   end = full_buf + r;
@@ -457,11 +491,15 @@ int chain_flistxattr(int fd, char *names, size_t len) {
       strcpy(dest, name);
       dest += name_len + 1;
     }
+    if (chunks && (strncmp(name, "user.ceph.", 10) == 0)) {
+      (*chunks)[name + 10]++;
+    }
     p += attr_len + 1;
   }
   r = dest - names;
 
 done:
-  free(full_buf);
+  if (total_len)
+    free(full_buf);
   return r;
 }
