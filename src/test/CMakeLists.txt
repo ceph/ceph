@@ -89,7 +89,6 @@ target_link_libraries(test_keys mon global ${CMAKE_DL_LIBS} ${TCMALLOC_LIBS})
 add_executable(get_command_descriptions
   common/get_command_descriptions.cc
   ${CMAKE_SOURCE_DIR}/src/common/TextTable.cc
-  $<TARGET_OBJECTS:os_mon_objs>
   $<TARGET_OBJECTS:heap_profiler_objs>
   )
 target_link_libraries(get_command_descriptions
@@ -1258,37 +1257,6 @@ target_link_libraries(unittest_snap_mapper osd global ${CMAKE_DL_LIBS}
 set_target_properties(unittest_snap_mapper PROPERTIES COMPILE_FLAGS
   ${UNITTEST_CXX_FLAGS})
 
-#TODO: rocksdb unittests
-if(WITH_SLIBROCKSDB)
-# unittest_rocksdb_option_static
-add_executable(unittest_rocksdb_option_static EXCLUDE_FROM_ALL
-  objectstore/TestRocksdbOptionParse.cc
-  $<TARGET_OBJECTS:heap_profiler_objs>
-  )
-add_test(unittest_rocksdb_option_static unittest_rocksdb_option_static)
-add_dependencies(check unittest_rocksdb_option_static)
-target_link_libraries(unittest_rocksdb_option_static os librocksdb global ${CMAKE_DL_LIBS}
-  ${BLKID_LIBRARIES} ${TCMALLOC_LIBS} ${UNITTEST_LIBS})
-set(UNITTEST_ROCKSDB_STATIC_FLAGS "-std=gnu++11 -Irocksdb/include")
-set_target_properties(unittest_rocksdb_option_static PROPERTIES COMPILE_FLAGS
-  ${UNITTEST_CXX_FLAGS} ${LIBROCKSDB_CFLAGS} ${AM_CXXFLAGS} ${UNITTEST_ROCKSDB_STATIC_FLAGS})
-endif(WITH_SLIBROCKSDB)
-
-if(WITH_DLIBROCKSDB)
-# unittest_rocksdb_option
-add_executable(unittest_rocksdb_option EXCLUDE_FROM_ALL
-  objectstore/TestRocksdbOptionParse.cc
-  $<TARGET_OBJECTS:heap_profiler_objs>
-  )
-add_test(unittest_rocksdb_option_static unittest_rocksdb_option)
-add_dependencies(check unittest_rocksdb_option)
-target_link_libraries(unittest_rocksdb_option os rocksdb global ${CMAKE_DL_LIBS}
-  ${BLKID_LIBRARIES} ${TCMALLOC_LIBS} ${UNITTEST_LIBS})
-set(UNITTEST_ROCKSDB_FLAGS "-std=gnu++11")
-set_target_properties(unittest_rocksdb_option_static PROPERTIES COMPILE_FLAGS
-  ${UNITTEST_CXX_FLAGS} ${LIBROCKSDB_CFLAGS} ${AM_CXXFLAGS} ${UNITTEST_ROCKSDB_STATIC_FLAGS})
-endif(WITH_DLIBROCKSDB)
-
 # unittest_mds_authcap
 add_executable(unittest_mds_authcap EXCLUDE_FROM_ALL
   mds/TestMDSAuthCaps.cc
@@ -1440,6 +1408,33 @@ target_link_libraries(unittest_async_compressor
   ${TCMALLOC_LIBS}
   ${UNITTEST_LIBS})
 set_target_properties(unittest_async_compressor PROPERTIES COMPILE_FLAGS
+  ${UNITTEST_CXX_FLAGS})
+
+# unittest_rocksdb_option
+add_executable(unittest_rocksdb_option EXCLUDE_FROM_ALL
+  objectstore/TestRocksdbOptionParse.cc
+  $<TARGET_OBJECTS:heap_profiler_objs>
+  )
+add_test(unittest_rocksdb_option unittest_rocksdb_option)
+add_dependencies(check unittest_rocksdb_option)
+target_link_libraries(unittest_rocksdb_option global os rocksdb ${CMAKE_DL_LIBS}
+  ${BLKID_LIBRARIES} ${TCMALLOC_LIBS} ${UNITTEST_LIBS})
+set_target_properties(unittest_rocksdb_option PROPERTIES COMPILE_FLAGS ${UNITTEST_CXX_FLAGS})
+
+# unittest_bluefs
+add_executable(unittest_bluefs EXCLUDE_FROM_ALL objectstore/test_bluefs.cc)
+add_test(unittest_bluefs unittest_bluefs)
+add_dependencies(check unittest_bluefs)
+target_link_libraries(unittest_bluefs os global ${UNITTEST_LIBS})
+set_target_properties(unittest_bluefs PROPERTIES COMPILE_FLAGS
+  ${UNITTEST_CXX_FLAGS})
+
+# unittest_bluestore_types
+add_executable(unittest_bluestore_types EXCLUDE_FROM_ALL objectstore/test_bluestore_types.cc)
+add_test(unittest_bluestore_types unittest_bluestore_types)
+add_dependencies(check unittest_bluestore_types)
+target_link_libraries(unittest_bluestore_types os global ${UNITTEST_LIBS})
+set_target_properties(unittest_bluestore_types PROPERTIES COMPILE_FLAGS
   ${UNITTEST_CXX_FLAGS})
 
 add_subdirectory(erasure-code EXCLUDE_FROM_ALL)

@@ -558,7 +558,7 @@ set(common_util_src
   common/util.cc)
 add_library(common_util_obj OBJECT ${common_util_src})
 add_library(mon STATIC ${lib_mon_srcs} $<TARGET_OBJECTS:mon_common_objs>
-  $<TARGET_OBJECTS:os_mon_objs> $<TARGET_OBJECTS:osd_mon_objs>
+  $<TARGET_OBJECTS:kv_objs> $<TARGET_OBJECTS:osd_mon_objs>
   $<TARGET_OBJECTS:common_util_obj>)
 
 set(ceph_mon_srcs
@@ -576,10 +576,6 @@ if(${HAVE_XFS})
     os/filestore/XfsFileStoreBackend.cc
     os/fs/XFS.cc)
 endif(${HAVE_XFS})
-set(libkv_srcs
-  kv/LevelDBStore.cc
-  kv/RocksDBStore.cc
-  kv/KeyValueDB.cc)
 set(libos_srcs
   os/ObjectStore.cc
   os/Transaction.cc
@@ -611,24 +607,28 @@ set(libos_srcs
   os/bluestore/FreelistManager.cc
   os/bluestore/StupidAllocator.cc
   os/fs/FS.cc
-  ${libkv_srcs}
   ${libos_xfs_srcs})
 
-add_custom_command(OUTPUT "${CMAKE_SOURCE_DIR}/src/rocksdb/librocksdb.a"
-    COMMAND cd ${CMAKE_SOURCE_DIR}/src/rocksdb && EXTRA_CXXFLAGS=-fPIC PORTABLE=1 make static_lib)
+# make rocksdb statically
+add_custom_target(build_rocksdb
+    COMMAND 
+    EXTRA_CXXFLAGS=-fPIC PORTABLE=1 make static_lib
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/src/rocksdb
+    COMMENT "rocksdb building")
 
-set(os_mon_files
-  kv/LevelDBStore.cc)
-add_library(os_mon_objs OBJECT ${os_mon_files})
-add_library(os STATIC ${libos_srcs}
-    $<TARGET_OBJECTS:os_mon_objs>
-    "${CMAKE_SOURCE_DIR}/src/rocksdb/librocksdb.a")
-target_link_libraries(os bz2 z "${CMAKE_SOURCE_DIR}/src/rocksdb/librocksdb.a")
+# add a dummy target to attach librocksdb.a and it's include_directories
+add_library(rocksdb INTERFACE)
+set_target_properties(rocksdb PROPERTIES INTERFACE_LINK_LIBRARIES "${CMAKE_SOURCE_DIR}/src/rocksdb/librocksdb.a") 
+add_dependencies(rocksdb build_rocksdb)
+target_include_directories(rocksdb INTERFACE "${CMAKE_SOURCE_DIR}/src/rocksdb/include")
+
+add_subdirectory(kv)
+
+add_library(os STATIC ${libos_srcs} $<TARGET_OBJECTS:kv_objs>)
 if(${HAVE_LIBAIO})
   target_link_libraries(os aio)
 endif(${HAVE_LIBAIO})
-target_link_libraries(os leveldb snappy)
-target_include_directories(os PUBLIC "${CMAKE_SOURCE_DIR}/src/rocksdb/include")
+target_link_libraries(os kv leveldb snappy rocksdb)
 
 set(cls_references_files objclass/class_api.cc)
 add_library(cls_references_objs OBJECT ${cls_references_files})
