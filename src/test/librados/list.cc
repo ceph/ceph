@@ -19,6 +19,7 @@ typedef RadosTestNS LibRadosList;
 typedef RadosTestPPNS LibRadosListPP;
 typedef RadosTestECNS LibRadosListEC;
 typedef RadosTestECPPNS LibRadosListECPP;
+typedef RadosTestNP LibRadosListNP;
 
 TEST_F(LibRadosList, ListObjects) {
   char buf[128];
@@ -881,6 +882,28 @@ TEST_F(LibRadosListPP, EnumerateObjectsSplitPP) {
     ASSERT_TRUE(saw_obj.count(stringify(i)));
   }
   ASSERT_EQ(n_objects, saw_obj.size());
+}
+
+TEST_F(LibRadosListNP, ListObjectsError) {
+  std::string pool_name;
+  rados_t cluster;
+  rados_ioctx_t ioctx;
+  pool_name = get_temp_pool_name();
+  ASSERT_EQ("", create_one_pool(pool_name, &cluster));
+  ASSERT_EQ(0, rados_ioctx_create(cluster, pool_name.c_str(), &ioctx));
+  char buf[128];
+  memset(buf, 0xcc, sizeof(buf));
+  rados_ioctx_set_namespace(ioctx, "");
+  ASSERT_EQ(0, rados_write(ioctx, "foo", buf, sizeof(buf), 0));
+  ASSERT_EQ(0, rados_pool_delete(cluster, pool_name.c_str()));
+  
+  rados_list_ctx_t ctx;
+  ASSERT_EQ(0, rados_objects_list_open(ioctx, &ctx));
+  const char *entry;
+  ASSERT_EQ(-ENOENT, rados_objects_list_next(ctx, &entry, NULL));
+  rados_objects_list_close(ctx);
+  rados_ioctx_destroy(ioctx);
+  rados_shutdown(cluster);
 }
 
 #pragma GCC diagnostic pop

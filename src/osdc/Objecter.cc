@@ -3372,13 +3372,18 @@ void Objecter::list_nobjects(NListContext *list_context, Context *onfinish)
     // release the listing context's budget once all
     // OPs (in the session) are finished
     put_nlist_context_budget(list_context);
-
     onfinish->complete(0);
     return;
   }
 
   rwlock.get_read();
   const pg_pool_t *pool = osdmap->get_pg_pool(list_context->pool_id);
+  if (!pool) { // pool is gone
+    rwlock.unlock();
+    put_nlist_context_budget(list_context);
+    onfinish->complete(-ENOENT);
+    return;
+  }
   int pg_num = pool->get_pg_num();
   rwlock.unlock();
 
@@ -3523,13 +3528,18 @@ void Objecter::list_objects(ListContext *list_context, Context *onfinish)
     // release the listing context's budget once all
     // OPs (in the session) are finished
     put_list_context_budget(list_context);
-
     onfinish->complete(0);
     return;
   }
 
   rwlock.get_read();
   const pg_pool_t *pool = osdmap->get_pg_pool(list_context->pool_id);
+  if (!pool) { // pool is gone
+    rwlock.unlock();
+    put_list_context_budget(list_context);
+    onfinish->complete(-ENOENT);
+    return;
+  }
   int pg_num = pool->get_pg_num();
   rwlock.unlock();
 
