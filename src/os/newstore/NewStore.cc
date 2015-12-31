@@ -2091,6 +2091,7 @@ int NewStore::_create_fid(TransContext *txc, fid_t *fid, unsigned flags)
 	r = -errno;
 	derr << __func__ << " cannot open created " << path << "/fragments/"
 	     << s << ": " << cpp_strerror(r) << dendl;
+        return r;
       }
 
       fid_max = fid_last;
