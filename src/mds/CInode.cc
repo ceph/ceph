@@ -3082,18 +3082,8 @@ int CInode::encode_inodestat(bufferlist& bl, Session *session,
     }
   }
   
-  /*
-   * note: encoding matches struct ceph_client_reply_inode
-   */
-  struct ceph_mds_reply_inode e;
-  memset(&e, 0, sizeof(e));
-  e.ino = oi->ino;
-  e.snapid = snapid;  // 0 -> NOSNAP
-  e.rdev = oi->rdev;
-
   // "fake" a version that is old (stable) version, +1 if projected.
-  e.version = (oi->version * 2) + is_projected();
-
+  version_t version = (oi->version * 2) + is_projected();
 
   Capability *cap = get_client_cap(client);
   bool pfile = filelock.is_xlocked_by_client(client) || get_loner() == client;
@@ -3105,87 +3095,80 @@ int CInode::encode_inodestat(bufferlist& bl, Session *session,
   bool plocal = versionlock.get_last_wrlock_client() == client;
   bool ppolicy = policylock.is_xlocked_by_client(client) || get_loner()==client;
   
-  inode_t *i = (pfile|pauth|plink|pxattr|plocal) ? pi : oi;
-  i->ctime.encode_timeval(&e.ctime);
+  inode_t *any_i = (pfile|pauth|plink|pxattr|plocal) ? pi : oi;
   
-  dout(20) << " pfile " << pfile << " pauth " << pauth << " plink " << plink << " pxattr " << pxattr
+  dout(20) << " pfile " << pfile << " pauth " << pauth
+	   << " plink " << plink << " pxattr " << pxattr
 	   << " plocal " << plocal
-	   << " ctime " << i->ctime
+	   << " ctime " << any_i->ctime
 	   << " valid=" << valid << dendl;
 
   // file
-  i = pfile ? pi:oi;
+  inode_t *file_i = pfile ? pi:oi;
+  ceph_file_layout layout;
   if (is_dir()) {
-    e.layout = (ppolicy ? pi : oi)->layout;
+    layout = (ppolicy ? pi : oi)->layout;
   } else {
-    e.layout = i->layout;
+    layout = file_i->layout;
   }
-  e.size = i->size;
-  e.truncate_seq = i->truncate_seq;
-  e.truncate_size = i->truncate_size;
-  i->mtime.encode_timeval(&e.mtime);
-  i->atime.encode_timeval(&e.atime);
-  e.time_warp_seq = i->time_warp_seq;
 
   // max_size is min of projected, actual
-  e.max_size = MIN(oi->client_ranges.count(client) ? oi->client_ranges[client].range.last : 0,
-		   pi->client_ranges.count(client) ? pi->client_ranges[client].range.last : 0);
-
-  e.files = i->dirstat.nfiles;
-  e.subdirs = i->dirstat.nsubdirs;
+  uint64_t max_size =
+    MIN(oi->client_ranges.count(client) ?
+	oi->client_ranges[client].range.last : 0,
+	pi->client_ranges.count(client) ?
+	pi->client_ranges[client].range.last : 0);
 
   // inline data
   version_t inline_version = 0;
   bufferlist inline_data;
-  if (i->inline_data.version == CEPH_INLINE_NONE) {
+  if (file_i->inline_data.version == CEPH_INLINE_NONE) {
     inline_version = CEPH_INLINE_NONE;
   } else if ((!cap && !no_caps) ||
-	     (cap && cap->client_inline_version < i->inline_data.version) ||
+	     (cap && cap->client_inline_version < file_i->inline_data.version) ||
 	     (getattr_caps & CEPH_CAP_FILE_RD)) { // client requests inline data
-    inline_version = i->inline_data.version;
-    if (i->inline_data.length() > 0)
-      inline_data = i->inline_data.get_data();
+    inline_version = file_i->inline_data.version;
+    if (file_i->inline_data.length() > 0)
+      inline_data = file_i->inline_data.get_data();
   }
 
   // nest (do same as file... :/)
-  i->rstat.rctime.encode_timeval(&e.rctime);
-  e.rbytes = i->rstat.rbytes;
-  e.rfiles = i->rstat.rfiles;
-  e.rsubdirs = i->rstat.rsubdirs;
   if (cap) {
-    cap->last_rbytes = i->rstat.rbytes;
-    cap->last_rsize = i->rstat.rsize();
+    cap->last_rbytes = file_i->rstat.rbytes;
+    cap->last_rsize = file_i->rstat.rsize();
   }
 
   // auth
-  i = pauth ? pi:oi;
-  e.mode = i->mode;
-  e.uid = i->uid;
-  e.gid = i->gid;
+  inode_t *auth_i = pauth ? pi:oi;
 
   // link
-  i = plink ? pi:oi;
-  e.nlink = i->nlink;
+  inode_t *link_i = plink ? pi:oi;
   
   // xattr
-  i = pxattr ? pi:oi;
+  inode_t *xattr_i = pxattr ? pi:oi;
 
   // xattr
   bufferlist xbl;
+  version_t xattr_version;
   if ((!cap && !no_caps) ||
-      (cap && cap->client_xattr_version < i->xattr_version) ||
+      (cap && cap->client_xattr_version < xattr_i->xattr_version) ||
       (getattr_caps & CEPH_CAP_XATTR_SHARED)) { // client requests xattrs
     if (!pxattrs)
       pxattrs = pxattr ? get_projected_xattrs() : &xattrs;
     ::encode(*pxattrs, xbl);
-    e.xattr_version = i->xattr_version;
+    xattr_version = xattr_i->xattr_version;
   } else {
-    e.xattr_version = 0;
+    xattr_version = 0;
   }
   
   // do we have room?
   if (max_bytes) {
-    unsigned bytes = sizeof(e);
+    unsigned bytes = 8 + 8 + 4 + 8 + 8 + sizeof(ceph_mds_reply_cap) +
+      sizeof(struct ceph_file_layout) +
+      sizeof(struct ceph_timespec) * 3 +
+      4 + 8 + 8 + 8 + 4 + 4 + 4 + 4 + 4 +
+      8 + 8 + 8 + 8 + 8 + sizeof(struct ceph_timespec) +
+      4;
     bytes += sizeof(__u32);
     bytes += (sizeof(__u32) + sizeof(__u32)) * dirfragtree._splits.size();
     bytes += sizeof(__u32) + symlink.length();
@@ -3197,6 +3180,7 @@ int CInode::encode_inodestat(bufferlist& bl, Session *session,
 
 
   // encode caps
+  struct ceph_mds_reply_cap ecap;
   if (snapid != CEPH_NOSNAP) {
     /*
      * snapped inodes (files or dirs) only get read-only caps.  always
@@ -3212,12 +3196,12 @@ int CInode::encode_inodestat(bufferlist& bl, Session *session,
      * tracks caps per-snap and the mds does either per-interval or
      * multiversion.
      */
-    e.cap.caps = valid ? get_caps_allowed_by_type(CAP_ANY) : CEPH_STAT_CAP_INODE;
+    ecap.caps = valid ? get_caps_allowed_by_type(CAP_ANY) : CEPH_STAT_CAP_INODE;
     if (last == CEPH_NOSNAP || is_any_caps())
-      e.cap.caps = e.cap.caps & get_caps_allowed_for_client(client);
-    e.cap.seq = 0;
-    e.cap.mseq = 0;
-    e.cap.realm = 0;
+      ecap.caps = ecap.caps & get_caps_allowed_for_client(client);
+    ecap.seq = 0;
+    ecap.mseq = 0;
+    ecap.realm = 0;
   } else {
     if (!no_caps && valid && !cap) {
       // add a new cap
@@ -3239,28 +3223,29 @@ int CInode::encode_inodestat(bufferlist& bl, Session *session,
       cap->set_last_issue();
       cap->set_last_issue_stamp(ceph_clock_now(g_ceph_context));
       cap->clear_new();
-      e.cap.caps = issue;
-      e.cap.wanted = cap->wanted();
-      e.cap.cap_id = cap->get_cap_id();
-      e.cap.seq = cap->get_last_seq();
-      dout(10) << "encode_inodestat issuing " << ccap_string(issue) << " seq " << cap->get_last_seq() << dendl;
-      e.cap.mseq = cap->get_mseq();
-      e.cap.realm = realm->inode->ino();
+      ecap.caps = issue;
+      ecap.wanted = cap->wanted();
+      ecap.cap_id = cap->get_cap_id();
+      ecap.seq = cap->get_last_seq();
+      dout(10) << "encode_inodestat issuing " << ccap_string(issue)
+	       << " seq " << cap->get_last_seq() << dendl;
+      ecap.mseq = cap->get_mseq();
+      ecap.realm = realm->inode->ino();
     } else {
       if (cap)
 	cap->clear_new();
-      e.cap.cap_id = 0;
-      e.cap.caps = 0;
-      e.cap.seq = 0;
-      e.cap.mseq = 0;
-      e.cap.realm = 0;
-      e.cap.wanted = 0;
+      ecap.cap_id = 0;
+      ecap.caps = 0;
+      ecap.seq = 0;
+      ecap.mseq = 0;
+      ecap.realm = 0;
+      ecap.wanted = 0;
     }
   }
-  e.cap.flags = is_auth() ? CEPH_CAP_FLAG_AUTH:0;
-  dout(10) << "encode_inodestat caps " << ccap_string(e.cap.caps)
-	   << " seq " << e.cap.seq << " mseq " << e.cap.mseq
-	   << " xattrv " << e.xattr_version << " len " << xbl.length()
+  ecap.flags = is_auth() ? CEPH_CAP_FLAG_AUTH : 0;
+  dout(10) << "encode_inodestat caps " << ccap_string(ecap.caps)
+	   << " seq " << ecap.seq << " mseq " << ecap.mseq
+	   << " xattrv " << xattr_version << " len " << xbl.length()
 	   << dendl;
 
   if (inline_data.length() && cap) {
@@ -3277,25 +3262,55 @@ int CInode::encode_inodestat(bufferlist& bl, Session *session,
   // include those xattrs?
   if (xbl.length() && cap) {
     if ((cap->pending() | getattr_caps) & CEPH_CAP_XATTR_SHARED) {
-      dout(10) << "including xattrs version " << i->xattr_version << dendl;
-      cap->client_xattr_version = i->xattr_version;
+      dout(10) << "including xattrs version " << xattr_i->xattr_version << dendl;
+      cap->client_xattr_version = xattr_i->xattr_version;
     } else {
-      dout(10) << "dropping xattrs version " << i->xattr_version << dendl;
+      dout(10) << "dropping xattrs version " << xattr_i->xattr_version << dendl;
       xbl.clear(); // no xattrs .. XXX what's this about?!?
-      e.xattr_version = 0;
+      xattr_version = 0;
     }
   }
 
-  // encode
-  e.fragtree.nsplits = dirfragtree._splits.size();
-  ::encode(e, bl);
+  /*
+   * note: encoding matches MClientReply::InodeStat
+   */
+  ::encode(oi->ino, bl);
+  ::encode(snapid, bl);
+  ::encode(oi->rdev, bl);
+  ::encode(version, bl);
 
-  dirfragtree.encode_nohead(bl);
+  ::encode(xattr_version, bl);
+
+  ::encode(ecap, bl);
+
+  ::encode(layout, bl);
+  ::encode(any_i->ctime, bl);
+  ::encode(file_i->mtime, bl);
+  ::encode(file_i->atime, bl);
+  ::encode(file_i->time_warp_seq, bl);
+  ::encode(file_i->size, bl);
+  ::encode(max_size, bl);
+  ::encode(file_i->truncate_size, bl);
+  ::encode(file_i->truncate_seq, bl);
+
+  ::encode(auth_i->mode, bl);
+  ::encode((uint32_t)auth_i->uid, bl);
+  ::encode((uint32_t)auth_i->gid, bl);
+
+  ::encode(link_i->nlink, bl);
+
+  ::encode(file_i->dirstat.nfiles, bl);
+  ::encode(file_i->dirstat.nsubdirs, bl);
+  ::encode(file_i->rstat.rbytes, bl);
+  ::encode(file_i->rstat.rfiles, bl);
+  ::encode(file_i->rstat.rsubdirs, bl);
+  ::encode(file_i->rstat.rctime, bl);
+
+  dirfragtree.encode(bl);
 
   ::encode(symlink, bl);
   if (session->connection->has_feature(CEPH_FEATURE_DIRLAYOUTHASH)) {
-    i = pfile ? pi : oi;
-    ::encode(i->dir_layout, bl);
+    ::encode(file_i->dir_layout, bl);
   }
   ::encode(xbl, bl);
   if (session->connection->has_feature(CEPH_FEATURE_MDS_INLINE_DATA)) {
@@ -3303,8 +3318,8 @@ int CInode::encode_inodestat(bufferlist& bl, Session *session,
     ::encode(inline_data, bl);
   }
   if (session->connection->has_feature(CEPH_FEATURE_MDS_QUOTA)) {
-    i = ppolicy ? pi : oi;
-    ::encode(i->quota, bl);
+    inode_t *policy_i = ppolicy ? pi : oi;
+    ::encode(policy_i->quota, bl);
   }
 
   return valid;
