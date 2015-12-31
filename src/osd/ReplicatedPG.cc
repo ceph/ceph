@@ -4789,7 +4789,6 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	if (pool.info.has_flag(pg_pool_t::FLAG_WRITE_FADVISE_DONTNEED))
 	  op.flags = op.flags | CEPH_OSD_OP_FLAG_FADVISE_DONTNEED;
 
-        bool offset_write = false;
 	if (pool.info.requires_aligned_append() &&
 	    (op.extent.offset % pool.info.required_alignment() != 0)) {
 	  // result = -EOPNOTSUPP;
@@ -4807,7 +4806,7 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	} else {
 	  // ctx->mod_desc.mark_unrollbackable();
 	  if (pool.info.require_rollback()) {
-            offset_write = true;
+            ctx->ec_overwrite = true;
             // result = -EOPNOTSUPP;
 	    // break;
 	  } else {
@@ -4849,7 +4848,7 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	if (result < 0)
 	  break;
 	if (pool.info.require_rollback()) {
-          if (offset_write)
+          if (ctx->ec_overwrite)
 	    t->write(soid, op.extent.offset, op.extent.length, osd_op.indata, op.flags);
           else
 	    t->append(soid, op.extent.offset, op.extent.length, osd_op.indata, op.flags);
@@ -6432,9 +6431,11 @@ int ReplicatedPG::prepare_transaction(OpContext *ctx)
   if (soid.snap == CEPH_NOSNAP)
     make_writeable(ctx);
 
-  finish_ctx(ctx,
-	     ctx->new_obs.exists ? pg_log_entry_t::MODIFY :
-	     pg_log_entry_t::DELETE);
+  int log_op_type = ctx->new_obs.exists ? pg_log_entry_t::MODIFY : 
+                    pg_log_entry_t::DELETE;
+  if (ctx->ec_overwrite)
+    log_op_type = pg_log_entry_t::EC_OVERWRITE;
+  finish_ctx(ctx, log_op_type);
 
   return result;
 }

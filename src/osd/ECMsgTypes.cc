@@ -181,6 +181,7 @@ void ECSubRead::encode(bufferlist &bl, uint64_t features) const
   ::encode(to_read, bl);
   ::encode(attrs_to_read, bl);
   ::encode(recovery_read, bl);
+  ::encode(for_recovery, bl);
   ENCODE_FINISH(bl);
 }
 
@@ -205,8 +206,10 @@ void ECSubRead::decode(bufferlist::iterator &bl)
     ::decode(to_read, bl);
   }
   ::decode(attrs_to_read, bl);
-  if (struct_v >= 3) 
+  if (struct_v >= 3) {
     ::decode(recovery_read, bl);
+    ::decode(for_recovery, bl);
+  }
   DECODE_FINISH(bl);
 }
 

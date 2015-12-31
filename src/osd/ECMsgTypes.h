@@ -103,6 +103,7 @@ struct ECSubRead {
   map<hobject_t, list<boost::tuple<uint64_t, uint64_t, uint32_t> >, hobject_t::BitwiseComparator> to_read;
   set<hobject_t, hobject_t::BitwiseComparator> attrs_to_read;
   map<hobject_t, list<version_t>, hobject_t::BitwiseComparator> recovery_read;
+  bool for_recovery;
   void encode(bufferlist &bl, uint64_t features) const;
   void decode(bufferlist::iterator &bl);
   void dump(Formatter *f) const;

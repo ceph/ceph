@@ -5153,7 +5153,7 @@ void PushOp::generate_test_instances(list<PushOp*> &o)
 
 void PushOp::encode(bufferlist &bl) const
 {
-  ENCODE_START(1, 1, bl);
+  ENCODE_START(2, 1, bl);
   ::encode(soid, bl);
   ::encode(version, bl);
   ::encode(data, bl);
@@ -5164,12 +5164,13 @@ void PushOp::encode(bufferlist &bl) const
   ::encode(recovery_info, bl);
   ::encode(after_progress, bl);
   ::encode(before_progress, bl);
+  ::encode(ec_overwrite, bl);
   ENCODE_FINISH(bl);
 }
 
 void PushOp::decode(bufferlist::iterator &bl)
 {
-  DECODE_START(1, bl);
+  DECODE_START(2, bl);
   ::decode(soid, bl);
   ::decode(version, bl);
   ::decode(data, bl);
@@ -5180,6 +5181,8 @@ void PushOp::decode(bufferlist::iterator &bl)
   ::decode(recovery_info, bl);
   ::decode(after_progress, bl);
   ::decode(before_progress, bl);
+  if (struct_v >= 2)
+    ::decode(ec_overwrite, bl);
   DECODE_FINISH(bl);
 }
 

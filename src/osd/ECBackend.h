@@ -200,6 +200,7 @@ private:
     eversion_t v;
     set<pg_shard_t> missing_on;
     set<shard_id_t> missing_on_shards;
+    list<version_t> missing_on_overwrite_version;
 
     ObjectRecoveryInfo recovery_info;
     ObjectRecoveryProgress recovery_progress;
@@ -229,6 +230,7 @@ private:
 
     // must be filled if state == WRITING
     map<shard_id_t, bufferlist> returned_data;
+    map<version_t, map<shard_id_t, bufferlist> > recovery_returned_data;
     map<string, bufferlist> xattrs;
     ECUtil::HashInfoRef hinfo;
     ObjectContextRef obc;
@@ -273,10 +275,12 @@ public:
     list<
       boost::tuple<
 	uint64_t, uint64_t, map<pg_shard_t, bufferlist> > > returned;
+    list<boost::tuple<version_t, map<pg_shard_t, bufferlist> > > recovery_returned;
     read_result_t() : r(0) {}
   };
   struct read_request_t {
     const list<boost::tuple<uint64_t, uint64_t, uint32_t> > to_read;
+    const list<version_t> recovery_read;
     const set<pg_shard_t> need;
     const bool want_attrs;
     GenContext<pair<RecoveryMessages *, read_result_t& > &> *cb;
@@ -287,6 +291,16 @@ public:
       bool want_attrs,
       GenContext<pair<RecoveryMessages *, read_result_t& > &> *cb)
       : to_read(to_read), need(need), want_attrs(want_attrs),
+        cb(cb) {}
+    read_request_t(
+      const hobject_t &hoid,
+      const list<boost::tuple<uint64_t, uint64_t, uint32_t> > &to_read,
+      const list<version_t> &recovery_read,
+      const set<pg_shard_t> &need,
+      bool want_attrs,
+      GenContext<pair<RecoveryMessages *, read_result_t& > &> *cb)
+      : to_read(to_read), recovery_read(recovery_read), 
+        need(need), want_attrs(want_attrs),
 	cb(cb) {}
   };
   friend ostream &operator<<(ostream &lhs, const read_request_t &rhs);
@@ -469,6 +483,7 @@ public:
     const hobject_t &hoid,
     boost::tuple<uint64_t, uint64_t, map<pg_shard_t, bufferlist> > &to_read,
     boost::optional<map<string, bufferlist> > attrs,
+    list<boost::tuple<version_t, map<pg_shard_t, bufferlist> > > &recovery_read,
     RecoveryMessages *m);
   void handle_recovery_push(
     PushOp &op,

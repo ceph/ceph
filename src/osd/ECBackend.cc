@@ -224,6 +224,7 @@ struct OnRecoveryReadComplete :
       hoid,
       res.returned.back(),
       res.attrs,
+      res.recovery_returned,
       in.first);
   }
 };
@@ -256,6 +257,7 @@ struct RecoveryMessages {
     ECBackend *ec,
     const hobject_t &hoid, uint64_t off, uint64_t len,
     const set<pg_shard_t> &need,
+    const list<version_t> &recovery_read,
     bool attrs) {
     list<boost::tuple<uint64_t, uint64_t, uint32_t> > to_read;
     to_read.push_back(boost::make_tuple(off, len, 0));
@@ -266,6 +268,7 @@ struct RecoveryMessages {
 	ECBackend::read_request_t(
 	  hoid,
 	  to_read,
+          recovery_read,
 	  need,
 	  attrs,
 	  new OnRecoveryReadComplete(
@@ -287,7 +290,14 @@ void ECBackend::handle_recovery_push(
 
   bool oneshot = op.before_progress.first && op.after_progress.data_complete;
   ghobject_t tobj;
-  if (oneshot) {
+  if (op.ec_overwrite) {
+    // recovery overwrite data, go into object with version
+    tobj = ghobject_t(op.soid, op.version.version,
+                      get_parent()->whoami_shard().shard);
+    dout(10) << __func__ << ": Adding oid "
+             << tobj.hobj << " version " << tobj.generation << dendl;
+  }
+  else if (oneshot) {
     tobj = ghobject_t(op.soid, ghobject_t::NO_GEN,
 		      get_parent()->whoami_shard().shard);
   } else {
@@ -302,6 +312,8 @@ void ECBackend::handle_recovery_push(
     }
   }
 
+  // now, overwrite data will recovery in first run
+  // if change, fix me
   if (op.before_progress.first) {
     m->t.remove(coll, tobj);
     m->t.touch(coll, tobj);
@@ -322,7 +334,10 @@ void ECBackend::handle_recovery_push(
     assert(op.data.length() == 0);
   }
 
-  if (op.before_progress.first) {
+  if (op.ec_overwrite) {
+    // nothing to do
+  }
+  else if (op.before_progress.first) {
     assert(op.attrset.count(string("_")));
     m->t.setattrs(
       coll,
@@ -330,7 +345,10 @@ void ECBackend::handle_recovery_push(
       op.attrset);
   }
 
-  if (op.after_progress.data_complete && !oneshot) {
+  if (op.ec_overwrite) {
+    // nothing to do
+  }
+  else if (op.after_progress.data_complete && !oneshot) {
     dout(10) << __func__ << ": Removing oid "
 	     << tobj.hobj << " from the temp collection" << dendl;
     clear_temp_obj(tobj.hobj);
@@ -341,7 +359,10 @@ void ECBackend::handle_recovery_push(
       coll, ghobject_t(
 	op.soid, ghobject_t::NO_GEN, get_parent()->whoami_shard().shard));
   }
-  if (op.after_progress.data_complete) {
+  if (op.ec_overwrite) {
+    // nothing to do
+  }
+  else if (op.after_progress.data_complete) {
     if ((get_parent()->pgb_is_primary())) {
       assert(recovery_ops.count(op.soid));
       assert(recovery_ops[op.soid].obc);
@@ -363,8 +384,13 @@ void ECBackend::handle_recovery_push(
 	&m->t);
     }
   }
-  m->push_replies[get_parent()->primary_shard()].push_back(PushReplyOp());
-  m->push_replies[get_parent()->primary_shard()].back().soid = op.soid;
+  if (op.ec_overwrite) {
+    // nothing to do
+  }
+  else {
+    m->push_replies[get_parent()->primary_shard()].push_back(PushReplyOp());
+    m->push_replies[get_parent()->primary_shard()].back().soid = op.soid;
+  }
 }
 
 void ECBackend::handle_recovery_push_reply(
@@ -384,6 +410,7 @@ void ECBackend::handle_recovery_read_complete(
   const hobject_t &hoid,
   boost::tuple<uint64_t, uint64_t, map<pg_shard_t, bufferlist> > &to_read,
   boost::optional<map<string, bufferlist> > attrs,
+  list<boost::tuple<version_t, map<pg_shard_t, bufferlist> > > &recovery_read,
   RecoveryMessages *m)
 {
   dout(10) << __func__ << ": returned " << hoid << " "
@@ -440,6 +467,31 @@ void ECBackend::handle_recovery_read_complete(
       ::decode(hinfo, bp);
     }
     op.hinfo = unstable_hashinfo_registry.lookup_or_create(hoid, hinfo);
+  }
+  dout(10) << __func__ << " get recovery_read size "
+           << recovery_read.size() << dendl;
+  for (list<boost::tuple<version_t, map<pg_shard_t, bufferlist> > >::iterator it =
+      recovery_read.begin();
+    it != recovery_read.end();
+    ++it) {
+    assert(op.recovery_returned_data.empty());
+    map<int, bufferlist*> target;
+    for (set<shard_id_t>::iterator i = op.missing_on_shards.begin();
+         i != op.missing_on_shards.end();
+         ++i) {
+      target[*i] = &(op.recovery_returned_data[it->get<0>()][*i]);
+    }
+    map<int, bufferlist> from;
+    for(map<pg_shard_t, bufferlist>::iterator i = it->get<1>().begin();
+        i != it->get<1>().end();
+        ++i) {
+      from[i->first.shard].claim(i->second);
+      dout(0) << __func__ << " from " << i->first.shard
+              << " lenght " << from[i->first.shard].length()
+              << dendl;
+    }
+    int r = ECUtil::decode(sinfo, ec_impl, from, target);
+    assert(r == 0);
   }
   assert(op.xattrs.size());
   assert(op.obc);
@@ -549,12 +601,16 @@ void ECBackend::continue_recovery_op(
 	recovery_ops.erase(op.hoid);
 	return;
       }
+      list<version_t> recovery_read;
+      if (op.recovery_progress.first)
+        recovery_read = op.missing_on_overwrite_version;
       m->read(
 	this,
 	op.hoid,
 	op.recovery_progress.data_recovered_to,
 	recovery_max_chunk,
 	to_read,
+        recovery_read,
 	op.recovery_progress.first);
       op.extent_requested = make_pair(op.recovery_progress.data_recovered_to,
 				      recovery_max_chunk);
@@ -575,6 +631,7 @@ void ECBackend::continue_recovery_op(
 	    op.obc->obs.oi.size);
 	after_progress.data_complete = true;
       }
+      map<shard_id_t, pg_shard_t> shard_to_pg;
       for (set<pg_shard_t>::iterator mi = op.missing_on.begin();
 	   mi != op.missing_on.end();
 	   ++mi) {
@@ -606,11 +663,55 @@ void ECBackend::continue_recovery_op(
 	pop.recovery_info = op.recovery_info;
 	pop.before_progress = op.recovery_progress;
 	pop.after_progress = after_progress;
+
+        shard_to_pg.insert(make_pair(mi->shard, *mi));  
+
 	if (*mi != get_parent()->primary_shard())
 	  get_parent()->begin_peer_recover(
 	    *mi,
 	    op.hoid);
       }
+
+      const vector<int> &chunk_mapping = ec_impl->get_chunk_mapping();
+      OverwriteInfoRef ow_info;
+      if (op.recovery_returned_data.size() > 0)
+        ow_info = get_overwrite_info(op.hoid);
+      dout(10) << __func__ << " need recovery version size "
+               << op.recovery_returned_data.size() << dendl;
+      for (map<version_t, map<shard_id_t, bufferlist> >::iterator it =
+             op.recovery_returned_data.begin();
+           it != op.recovery_returned_data.end();
+           ++it) {
+        map<int, pair<uint64_t, uint64_t>> shards_to_write =
+          sinfo.offset_len_to_chunk_offset(ow_info->overwrite_history[it->first],
+                                           (int)ec_impl->get_chunk_count());
+        for (map<shard_id_t, bufferlist>::iterator i =
+               it->second.begin();
+            i != it->second.end();
+            ++i) {
+          int shard_id = i->first >= (int)chunk_mapping.size() ?
+            i->first : chunk_mapping[i->first];
+          pair<uint64_t, uint64_t> &ver_off = shards_to_write[shard_id];
+          if (ver_off.second == 0) {
+            // this shard no need recovery
+            continue;
+          }
+          assert(shard_to_pg.count(shard_id_t(shard_id)));
+          pg_shard_t &shard = shard_to_pg[shard_id_t(shard_id)];
+          m->pushes[shard].push_back(PushOp());
+          PushOp &pop = m->pushes[shard].back();
+          pop.soid = op.hoid;
+          pop.version = eversion_t(op.v.epoch, it->first);
+          pop.data = i->second;
+          pop.ec_overwrite = true;
+          if (pop.data.length())
+            pop.data_included.insert(ver_off.first, ver_off.second);
+          pop.recovery_info = op.recovery_info;
+          pop.before_progress = op.recovery_progress;
+          pop.after_progress = after_progress;
+        }
+      }
+
       op.returned_data.clear();
       op.waiting_on_pushes = op.missing_on;
       op.recovery_progress = after_progress;
@@ -680,6 +781,29 @@ void ECBackend::recover_object(
   ObjectContextRef obc,
   RecoveryHandle *_h)
 {
+  // get missing shards oldest have version
+  eversion_t min_have_v = eversion_t::max();
+  map<pg_shard_t, eversion_t> shards_have;
+  for (set<pg_shard_t>::const_iterator i =
+         get_parent()->get_actingbackfill_shards().begin();
+       i != get_parent()->get_actingbackfill_shards().end();
+       ++i) {
+    if (get_parent()->get_shard_missing(*i).is_missing(hoid)) {
+      shards_have[*i] = get_parent()->get_shard_missing_object_have(*i, hoid);
+      if (shards_have[*i] < min_have_v)
+        min_have_v = shards_have[*i];
+    }
+  }
+  // TODO: now we do not support recovery from some version
+  min_have_v = eversion_t(0U, 0U);
+
+  // scan the pg log check need recovery version
+  // in future, maybe we can only recovery missing version, not whole object
+  list<pg_log_entry_t>::const_reverse_iterator log_reverse_it = 
+    get_parent()->get_log().get_log().log.rbegin();
+  while (log_reverse_it->version > v) ++log_reverse_it;
+  assert(log_reverse_it->version == v);
+
   ECRecoveryHandle *h = static_cast<ECRecoveryHandle*>(_h);
   h->ops.push_back(RecoveryOp());
   h->ops.back().v = v;
@@ -692,16 +816,43 @@ void ECBackend::recover_object(
     h->ops.back().recovery_info.oi = obc->obs.oi;
   }
   h->ops.back().recovery_progress.omap_complete = true;
-  for (set<pg_shard_t>::const_iterator i =
-	 get_parent()->get_actingbackfill_shards().begin();
-       i != get_parent()->get_actingbackfill_shards().end();
-       ++i) {
-    dout(10) << "checking " << *i << dendl;
-    if (get_parent()->get_shard_missing(*i).is_missing(hoid)) {
-      h->ops.back().missing_on.insert(*i);
-      h->ops.back().missing_on_shards.insert(i->shard);
+  // for (set<pg_shard_t>::const_iterator i =
+  //        get_parent()->get_actingbackfill_shards().begin();
+  //      i != get_parent()->get_actingbackfill_shards().end();
+  //      ++i) {
+  //   dout(10) << "checking " << *i << dendl;
+  //   if (get_parent()->get_shard_missing(*i).is_missing(hoid)) {
+  //     h->ops.back().missing_on.insert(*i);
+  //     h->ops.back().missing_on_shards.insert(i->shard);
+  //   }
+  // }
+  for (map<pg_shard_t, eversion_t>::iterator it = shards_have.begin();
+       it != shards_have.end(); ++it) {
+    if (it->second < h->ops.back().v) {
+      h->ops.back().missing_on.insert(it->first);
+      h->ops.back().missing_on_shards.insert(it->first.shard);
     }
   }
+  for (; log_reverse_it != get_parent()->get_log().get_log().log.rend() 
+       && log_reverse_it->version > min_have_v;
+       ++log_reverse_it) {
+    if (log_reverse_it->soid != hoid) {
+      continue;
+    }
+    if (!log_reverse_it->mod_desc.can_rollback()) {
+      // this log and before has been apply, no need recovery overwrite
+      break;
+    }
+    if (!log_reverse_it->is_ec_overwrite()) {
+      // only ec overwrite before head version need extra recovery
+      continue;
+    }
+    h->ops.back().missing_on_overwrite_version.push_back(log_reverse_it->version.version);
+  }
+  dout(10) << __func__ << " min have version " << min_have_v
+           << " find need recovery version size "
+           << h->ops.back().missing_on_overwrite_version.size() << dendl;
+
   dout(10) << __func__ << ": built op " << h->ops.back() << dendl;
 }
 
@@ -968,55 +1119,59 @@ void ECBackend::handle_sub_read(
       } else {
         dout(20) << __func__ << " read request=" << j->get<1>() << " r=" << r << " len=" << bl.length() << dendl;
 
-        // read overwrite data
-        for (map<version_t, pair<uint64_t, uint64_t> >::iterator ow_iter =
-            ow_info->begin(); ow_iter != ow_info->end(); ++ow_iter) {
-          map<int, pair<uint64_t, uint64_t>> shards_to_write =
-            sinfo.offset_len_to_chunk_offset(ow_iter->second, ec_impl->get_chunk_count());
+        if (op.for_recovery) {
+        }
+        else {
+          // read overwrite data
+          for (map<version_t, pair<uint64_t, uint64_t> >::iterator ow_iter =
+              ow_info->begin(); ow_iter != ow_info->end(); ++ow_iter) {
+            map<int, pair<uint64_t, uint64_t>> shards_to_write =
+              sinfo.offset_len_to_chunk_offset(ow_iter->second, ec_impl->get_chunk_count());
 
-          pair<uint64_t, uint64_t> &ver_off = shards_to_write[shard_id];
-          // ver_off = sinfo.offset_len_to_stripe_bounds(ow_iter->second);
-          // no overlap
-          if ( (j->get<0>() + j->get<1>() ) < ver_off.first
-              || j->get<0>() > (ver_off.first + ver_off.second) )
-            continue;
+            pair<uint64_t, uint64_t> &ver_off = shards_to_write[shard_id];
+            // ver_off = sinfo.offset_len_to_stripe_bounds(ow_iter->second);
+            // no overlap
+            if ( (j->get<0>() + j->get<1>() ) < ver_off.first
+                || j->get<0>() > (ver_off.first + ver_off.second) )
+              continue;
 
-          bool flag = ver_off.first > j->get<0>();
-          uint64_t _off = flag ? (ver_off.first - j->get<0>()) : (j->get<0>() - ver_off.first); 
-          uint64_t _len = flag ? 
-                MIN(j->get<1>() - _off, ver_off.second) 
-                : MIN(j->get<1>(), ver_off.second - _off);
-          dout(10) << __func__ << " read " << i->first
-            << " version " << ow_iter->first
-            << " ver_off " << ver_off.first
-            << " ver_len " << ver_off.second
-            << " req_off " << j->get<0>()
-            << " req_len " << j->get<1>()
-            << " off " << (flag ? ver_off.first : j->get<0>())
-            << " len " << _len
-            << dendl;
-          bufferlist ver_bl;
-          r = store->read(
-            coll,
-            ghobject_t(i->first, ow_iter->first, shard),
-            flag ? ver_off.first : j->get<0>(),
-            _len,
-            ver_bl, j->get<2>(),
-            true);
-          if (r < 0) {
-            // TODO: shard did not write
-            get_parent()->clog_error() << __func__
-                                   << ": Error " << r
-                                   << " reading "
-                                   << i->first;
-            dout(5) << __func__ << ": Error " << r
-                    << " reading " << i->first << dendl;
-            goto error;
-          } else {
-            bl.copy_in(
-              flag ? _off : 0,
+            bool flag = ver_off.first > j->get<0>();
+            uint64_t _off = flag ? (ver_off.first - j->get<0>()) : (j->get<0>() - ver_off.first); 
+            uint64_t _len = flag ? 
+                  MIN(j->get<1>() - _off, ver_off.second) 
+                  : MIN(j->get<1>(), ver_off.second - _off);
+            dout(10) << __func__ << " read " << i->first
+              << " version " << ow_iter->first
+              << " ver_off " << ver_off.first
+              << " ver_len " << ver_off.second
+              << " req_off " << j->get<0>()
+              << " req_len " << j->get<1>()
+              << " off " << (flag ? ver_off.first : j->get<0>())
+              << " len " << _len
+              << dendl;
+            bufferlist ver_bl;
+            r = store->read(
+              coll,
+              ghobject_t(i->first, ow_iter->first, shard),
+              flag ? ver_off.first : j->get<0>(),
               _len,
-              ver_bl.c_str()); 
+              ver_bl, j->get<2>(),
+              true);
+            if (r < 0) {
+              // TODO: shard did not write
+              get_parent()->clog_error() << __func__
+                                     << ": Error " << r
+                                     << " reading "
+                                     << i->first;
+              dout(5) << __func__ << ": Error " << r
+                      << " reading " << i->first << dendl;
+              goto error;
+            } else {
+              bl.copy_in(
+                flag ? _off : 0,
+                _len,
+                ver_bl.c_str()); 
+            }
           }
         }
 
@@ -1075,51 +1230,75 @@ error:
        i != op.recovery_read.end();
        ++i) {
     int r = 0;
+    bufferlist total_bl;
     OverwriteInfoRef ow_info = get_overwrite_info(i->first);
+
+    r = store->read(
+      coll,
+      ghobject_t(i->first, ghobject_t::NO_GEN, shard),
+      0, 0,
+      total_bl, 0,
+      true); // Allow EIO return
+    if (r < 0) {
+      get_parent()->clog_error() << __func__
+               << ": Error " << r
+               << " reading "
+               << i->first;
+      dout(5) << __func__ << ": Error " << r
+        << " reading " << i->first << dendl;
+      goto recovery_error;
+    } 
+    dout(0) << __func__ << " read total object size "
+            << total_bl.length() << dendl;
+
     for (list<version_t>::iterator j = i->second.begin();
          j != i->second.end(); ++j) {
       bufferlist bl;
-      if (*j == UINT64_MAX) {
+      map<version_t, pair<uint64_t, uint64_t> >::const_iterator it = 
+        ow_info->overwrite_history.find(*j);
+      assert(it != ow_info->end());
+      map<int, pair<uint64_t, uint64_t>> shards_to_write =
+        sinfo.offset_len_to_chunk_offset(it->second, ec_impl->get_chunk_count());
+      pair<uint64_t, uint64_t> &ver_off = shards_to_write[shard_id];
+
+      if (ver_off.second > 0) {
         r = store->read(
           coll,
-          ghobject_t(i->first, ghobject_t::NO_GEN, shard),
-          0, 0, bl, 0,
-          true); // Allow EIO return 
-      } else {
-        map<version_t, pair<uint64_t, uint64_t> >::const_iterator it = 
-          ow_info->overwrite_history.find(*j);
-        assert(it != ow_info->end());
-        map<int, pair<uint64_t, uint64_t>> shards_to_write =
-          sinfo.offset_len_to_chunk_offset(it->second, ec_impl->get_chunk_count());
-        pair<uint64_t, uint64_t> &ver_off = shards_to_write[shard_id];
-
-        if (ver_off.second > 0) {
-          r = store->read(
-            coll,
-            ghobject_t(i->first, *j, shard),
-            ver_off.first,
-            ver_off.second,
-            bl,
-            0,
-            true);
+          ghobject_t(i->first, *j, shard),
+          ver_off.first,
+          ver_off.second,
+          bl,
+          0,
+          true);
+        if (r < 0) {
+          get_parent()->clog_error() << __func__
+                   << ": Error " << r
+                   << " recovery eading "
+                   << i->first;
+          dout(5) << __func__ << ": Error " << r
+            << " reading " << i->first << dendl;
+          goto recovery_error;
         }
+        total_bl.copy_in(ver_off.first, ver_off.second, bl);
+      } else { // if this shard didn't involved in overwrite
+        // total_bl.copy(ver_off.first, ver_off.second, bl);
+        int shards_write_len = 0;
+        for (map<int, pair<uint64_t, uint64_t>>::iterator it = 
+               shards_to_write.begin();
+             it != shards_to_write.end();
+             ++it) {
+          if (it->second.second > 0) {
+            shards_write_len = it->second.second;
+            break;
+          }
+        }
+        assert(shards_write_len);
+        bl.substr_of(total_bl, ver_off.first, shards_write_len);
       }
-      if (r < 0) {
-        get_parent()->clog_error() << __func__
-                 << ": Error " << r
-                 << " recovery eading "
-                 << i->first;
-        dout(5) << __func__ << ": Error " << r
-          << " reading " << i->first << dendl;
-        goto recovery_error;
-      } else {
-        dout(20) << __func__ << " recovery read request=" << *j << " r=" << r << " len=" << bl.length() << dendl;
-        reply->recovery_buffers_read[i->first].push_back(
-          make_pair(
-            *j,
-            bl)
-          );
-      }
+
+      dout(10) << __func__ << " recovery read request=" << *j << " r=" << r << " len=" << bl.length() << dendl;
+      reply->recovery_buffers_read[i->first].push_back(
+        make_pair(*j, bl));
     }
     continue;
 recovery_error:
@@ -1218,6 +1397,33 @@ void ECBackend::handle_sub_read_reply(
     }
     rop.complete[i->first].attrs = map<string, bufferlist>();
     (*(rop.complete[i->first].attrs)).swap(i->second);
+  }
+  dout(10) << __func__ << " recovery_buffers_read size "
+           << op.recovery_buffers_read.size() << dendl;
+  for (map<hobject_t, list<pair<version_t, bufferlist> >, hobject_t::BitwiseComparator>::iterator i =
+         op.recovery_buffers_read.begin();
+       i != op.recovery_buffers_read.end();
+       ++i) {
+    assert(!op.errors.count(i->first));
+    if (!rop.to_read.count(i->first)) {
+      // 
+      dout(20) << __func__ << " recovery_read skipping" << dendl;
+      continue;
+    }
+    list<version_t>::const_iterator req_iter =
+      rop.to_read.find(i->first)->second.recovery_read.begin();
+    list<boost::tuple<version_t, map<pg_shard_t, bufferlist> > >::iterator riter = 
+      rop.complete[i->first].recovery_returned.begin();
+    for (list<pair<version_t, bufferlist> >::iterator j = i->second.begin();
+         j != i->second.end();
+         ++j, ++req_iter, ++riter) {
+      assert(req_iter != rop.to_read.find(i->first)->second.recovery_read.end());
+      assert(riter != rop.complete[i->first].recovery_returned.end());
+      assert(*req_iter == j->first);
+      riter->get<1>()[from].claim(j->second);
+      dout(0) << __func__ << " recovery returned length "
+              << j->second.length() << " " << riter->get<1>()[from].length() << dendl;
+    }
   }
   for (map<hobject_t, int, hobject_t::BitwiseComparator>::iterator i = op.errors.begin();
        i != op.errors.end();
@@ -1757,6 +1963,8 @@ void ECBackend::start_read_op(
     list<boost::tuple<
       uint64_t, uint64_t, map<pg_shard_t, bufferlist> > > &reslist =
       op.complete[i->first].returned;
+    list<boost::tuple<version_t, map<pg_shard_t, bufferlist> > > &recovery_reslist =
+      op.complete[i->first].recovery_returned;
     bool need_attrs = i->second.want_attrs;
     for (set<pg_shard_t>::const_iterator j = i->second.need.begin();
 	 j != i->second.need.end();
@@ -1788,6 +1996,18 @@ void ECBackend::start_read_op(
       }
       assert(!need_attrs);
     }
+    for (list<version_t>::const_iterator j = 
+           i->second.recovery_read.begin(); 
+         j != i->second.recovery_read.end();
+         ++j) {
+      recovery_reslist.push_back(
+        boost::make_tuple(*j, map<pg_shard_t, bufferlist>()));
+      for (set<pg_shard_t>::const_iterator k = i->second.need.begin();
+           k != i->second.need.end();
+           ++k) {
+        messages[*k].recovery_read[i->first].push_back(*j);
+      }
+    }
   }
 
   for (map<pg_shard_t, ECSubRead>::iterator i = messages.begin();
@@ -1796,6 +2016,7 @@ void ECBackend::start_read_op(
     op.in_progress.insert(i->first);
     shard_to_read_map[i->first].insert(op.tid);
     i->second.tid = tid;
+    i->second.for_recovery = for_recovery;
     MOSDECSubOpRead *msg = new MOSDECSubOpRead;
     msg->set_priority(priority);
     msg->pgid = spg_t(
@@ -2178,7 +2399,7 @@ void ECBackend::continue_write_op(WriteOp *op)
           trans[i->shard].write(
             coll_t(spg_t(pgid, i->shard)),
             ghobject_t(op->hoid, now_e.version, i->shard),
-            to_write.first,
+            real_write_offset.first,
             bl.length(),
             bl,
             op->fadvise_flags);

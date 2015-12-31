@@ -2502,6 +2502,7 @@ struct pg_log_entry_t {
     LOST_MARK = 7,   // lost new version, now EIO
     PROMOTE = 8,     // promoted object from another tier
     CLEAN = 9,       // mark an object clean
+    EC_OVERWRITE = 10,  // ec overwrite, belong to MODIFY
   };
   static const char *get_op_name(int op) {
     switch (op) {
@@ -2523,6 +2524,8 @@ struct pg_log_entry_t {
       return "l_mark  ";
     case CLEAN:
       return "clean   ";
+    case EC_OVERWRITE:
+      return "ec_overwrite";
     default:
       return "unknown ";
     }
@@ -2557,13 +2560,14 @@ struct pg_log_entry_t {
      {}
       
   bool is_clone() const { return op == CLONE; }
-  bool is_modify() const { return op == MODIFY; }
+  bool is_modify() const { return op == MODIFY || op == EC_OVERWRITE; }
   bool is_promote() const { return op == PROMOTE; }
   bool is_clean() const { return op == CLEAN; }
   bool is_backlog() const { return op == BACKLOG; }
   bool is_lost_revert() const { return op == LOST_REVERT; }
   bool is_lost_delete() const { return op == LOST_DELETE; }
   bool is_lost_mark() const { return op == LOST_MARK; }
+  bool is_ec_overwrite() const { return op == EC_OVERWRITE; }
 
   bool is_update() const {
     return
@@ -3850,6 +3854,7 @@ struct PushOp {
   bufferlist omap_header;
   map<string, bufferlist> omap_entries;
   map<string, bufferlist> attrset;
+  bool ec_overwrite;
 
   ObjectRecoveryInfo recovery_info;
   ObjectRecoveryProgress before_progress;

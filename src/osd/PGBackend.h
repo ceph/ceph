@@ -143,6 +143,12 @@
        assert(m);
        return *m;
      }
+     virtual const eversion_t &get_shard_missing_object_have(pg_shard_t peer, hobject_t hoid) const {
+       const pg_missing_t &m = get_shard_missing(peer);
+       map<hobject_t, pg_missing_t::item>::const_iterator it = m.missing.find(hoid);
+       assert(it != m.missing.end());
+       return it->second.have;
+     }
 
      virtual const map<pg_shard_t, pg_info_t> &get_shard_info() const = 0;
      virtual const pg_info_t &get_shard_info(pg_shard_t peer) const {
