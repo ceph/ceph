@@ -1402,6 +1402,7 @@ static simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZER;
     if (nb.length())
       _buffers.push_back(nb);
     invalidate_crc();
+    last_p = begin();
   }
 
   void buffer::list::rebuild_aligned(unsigned align)
@@ -1449,6 +1450,7 @@ static simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZER;
       }
       _buffers.insert(p, unaligned._buffers.front());
     }
+    last_p = begin();
   }
   
   void buffer::list::rebuild_page_aligned()
@@ -1692,6 +1694,8 @@ static simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZER;
       _buffers.insert(curbuf, tmp._buffers.front());
       return tmp.c_str() + off;
     }
+
+    last_p = begin();  // we modified _buffers
 
     return curbuf->c_str() + off;
   }
