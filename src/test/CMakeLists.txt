@@ -1636,6 +1636,9 @@ add_executable(unittest_librbd EXCLUDE_FROM_ALL
 add_dependencies(check unittest_librbd)
 set_target_properties(unittest_librbd PROPERTIES COMPILE_FLAGS
   ${UNITTEST_CXX_FLAGS})
+if(${WITH_LTTNG})
+  target_link_libraries(unittest_librbd librbd_tp)
+endif(${WITH_LTTNG})
 target_link_libraries(unittest_librbd
   librbd
   librados
