@@ -309,6 +309,7 @@ set(libcommon_files
   common/address_helper.cc
   common/linux_version.c
   common/TracepointProvider.cc
+  common/Cycles.cc
   osdc/Striper.cc
   osdc/Objecter.cc
   ${arch_files}
