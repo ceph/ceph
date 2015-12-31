@@ -723,7 +723,7 @@ int NewStore::_open_fsid(bool create)
 
 int NewStore::_read_fsid(uuid_d *uuid)
 {
-  char fsid_str[40];
+  char fsid_str[40] = {0};
   int ret = safe_read(fsid_fd, fsid_str, sizeof(fsid_str));
   if (ret < 0)
     return ret;
