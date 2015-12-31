@@ -789,7 +789,7 @@ install(TARGETS monmaptool DESTINATION bin)
 set(osdomaptool_srcs
   tools/osdmaptool.cc)
 add_executable(osdmaptool ${osdomaptool_srcs})
-target_link_libraries(osdmaptool global ${CMAKE_DL_LIBS})
+target_link_libraries(osdmaptool global)
 install(TARGETS osdmaptool DESTINATION bin)
 
 set(ceph_authtool_srcs
