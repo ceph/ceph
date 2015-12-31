@@ -61,6 +61,24 @@ class ipv4_l4;
 template <typename InetTraits>
 class tcp;
 
+struct ipv4_addr {
+  uint32_t ip;
+  uint16_t port;
+
+  ipv4_addr() : ip(0), port(0) {}
+  ipv4_addr(uint32_t ip, uint16_t port) : ip(ip), port(port) {}
+  ipv4_addr(uint16_t port) : ip(0), port(port) {}
+  ipv4_addr(const std::string &addr);
+  ipv4_addr(const std::string &addr, uint16_t port);
+
+  ipv4_addr(const entity_addr_t &addr) {
+    ip = ntoh(addr.in4_addr().sin_addr.s_addr);
+    port = addr.get_port();
+  }
+
+  ipv4_addr(entity_addr_t &&addr) : ipv4_addr(addr) {}
+};
+
 struct ipv4_address {
   ipv4_address() : ip(0) {}
   explicit ipv4_address(uint32_t ip) : ip(ip) {}

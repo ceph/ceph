@@ -140,13 +140,13 @@ bool ipv4_tcp::forward(forward_hash& out_hash_data, packet& p, size_t off) {
 	return _tcp->forward(out_hash_data, p, off);
 }
 
-server_socket tcpv4_listen(tcp<ipv4_traits>& tcpv4, uint16_t port, listen_options opts) {
-	return server_socket(std::make_unique<native_server_socket_impl<tcp<ipv4_traits>>>(
+ServerSocket tcpv4_listen(tcp<ipv4_traits>& tcpv4, uint16_t port, socket_options opts) {
+	return ServerSocket(std::make_unique<DPDKServerSocketImpl<tcp<ipv4_traits>>>(
 			tcpv4, port, opts));
 }
 
-connected_socket tcpv4_connect(tcp<ipv4_traits>& tcpv4, socket_address sa) {
-	auto conn = tcpv4.connect(sa);
-	std::unique_ptr<connected_socket_impl> csi(new native_connected_socket_impl<tcp<ipv4_traits>>(std::move(conn)));
-	return connected_socket(std::move(csi));
+ConnectedSocket tcpv4_connect(tcp<ipv4_traits>& tcpv4, const entity_addr_t &addr) {
+	auto conn = tcpv4.connect(addr);
+	std::unique_ptr<ConnectedSocketImpl> csi(new NativeConnectedSocketImpl<tcp<ipv4_traits>>(std::move(conn)));
+	return ConnectedSocket(std::move(csi));
 }

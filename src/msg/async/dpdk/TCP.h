@@ -606,10 +606,10 @@ public:
   };
  public:
   explicit tcp(inet_type& inet);
-  void received(packet p, ipaddr from, ipaddr to);
+  void received(Packet p, ipaddr from, ipaddr to);
   bool forward(forward_hash& out_hash_data, Packet& p, size_t off);
   listener listen(uint16_t port, size_t queue_length = 100);
-  connection connect(socket_address sa);
+  connection connect(const entity_addr_t &addr);
   const hw_features& hw_features() const { return _inet._inet.hw_features(); }
 private:
   void send_packet_without_tcb(ipaddr from, ipaddr to, Packet p);
@@ -654,12 +654,12 @@ auto tcp<InetTraits>::listen(uint16_t port, size_t queue_length) -> listener {
 }
 
 template <typename InetTraits>
-typename tcp<InetTraits>::connection tcp<InetTraits>::connect(socket_address sa) {
+typename tcp<InetTraits>::connection tcp<InetTraits>::connect(const entity_addr_t &addr) {
   uint16_t src_port;
   connid id;
   auto src_ip = _inet._inet.host_address();
   auto dst_ip = ipv4_address(sa);
-  auto dst_port = ntoh(sa.u.in.sin_port);
+  auto dst_port = addr.get_port();
 
   do {
     src_port = _port_dist(_e);
@@ -1992,11 +1992,11 @@ template <typename InetTraits>
 typename tcp<InetTraits>::tcb::isn_secret tcp<InetTraits>::tcb::_isn_secret;
 
 class listen_options;
-class server_socket;
-class connected_socket;
+class ServerSocket;
+class ConnectedSocket;
 
-server_socket tcpv4_listen(tcp<ipv4_traits>& tcpv4, uint16_t port, listen_options opts);
+ServerSocket tcpv4_listen(tcp<ipv4_traits>& tcpv4, uint16_t port, socket_options opts);
 
-connected_socket tcpv4_connect(tcp<ipv4_traits>& tcpv4, socket_address sa);
+ConnectedSocket tcpv4_connect(tcp<ipv4_traits>& tcpv4, const entity_addr_t &addr);
 
 #endif /* TCP_HH_ */
