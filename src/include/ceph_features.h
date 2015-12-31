@@ -175,6 +175,7 @@ static inline unsigned long long ceph_sanitize_features(unsigned long long f) {
 	 CEPH_FEATURE_MON_ROUTE_OSDMAP |	 \
 	 CEPH_FEATURE_CRUSH_TUNABLES5 |	    \
 	 CEPH_FEATURE_SERVER_JEWEL |  \
+	 CEPH_FEATURE_FS_FILE_LAYOUT_V2 |		 \
 	 0ULL)
 
 #define CEPH_FEATURES_SUPPORTED_DEFAULT  CEPH_FEATURES_ALL

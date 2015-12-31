@@ -3113,15 +3113,15 @@ void Client::send_cap(Inode *in, MetaSession *session, Cap *cap,
     m->head.xattr_version = in->xattr_version;
   }
   
-  m->head.layout = in->layout;
-  m->head.size = in->size;
-  m->head.max_size = in->max_size;
-  m->head.truncate_seq = in->truncate_seq;
-  m->head.truncate_size = in->truncate_size;
-  in->mtime.encode_timeval(&m->head.mtime);
-  in->atime.encode_timeval(&m->head.atime);
-  in->ctime.encode_timeval(&m->head.ctime);
-  m->head.time_warp_seq = in->time_warp_seq;
+  m->layout = in->layout;
+  m->size = in->size;
+  m->max_size = in->max_size;
+  m->truncate_seq = in->truncate_seq;
+  m->truncate_size = in->truncate_size;
+  m->mtime = in->mtime;
+  m->atime = in->atime;
+  m->ctime = in->ctime;
+  m->time_warp_seq = in->time_warp_seq;
     
   if (flush & CEPH_CAP_FILE_WR) {
     m->inline_version = in->inline_version;
@@ -3395,15 +3395,15 @@ void Client::flush_snaps(Inode *in, bool all_again, CapSnap *again)
     m->head.gid = capsnap->gid;
     m->head.mode = capsnap->mode;
 
-    m->head.size = capsnap->size;
+    m->size = capsnap->size;
 
     m->head.xattr_version = capsnap->xattr_version;
     ::encode(capsnap->xattrs, m->xattrbl);
 
-    capsnap->ctime.encode_timeval(&m->head.ctime);
-    capsnap->mtime.encode_timeval(&m->head.mtime);
-    capsnap->atime.encode_timeval(&m->head.atime);
-    m->head.time_warp_seq = capsnap->time_warp_seq;
+    m->ctime = capsnap->ctime;
+    m->mtime = capsnap->mtime;
+    m->atime = capsnap->atime;
+    m->time_warp_seq = capsnap->time_warp_seq;
 
     if (capsnap->dirty & CEPH_CAP_FILE_WR) {
       m->inline_version = in->inline_version;
