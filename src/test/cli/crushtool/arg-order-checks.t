@@ -79,7 +79,7 @@
   device 24 osd.24
   
   # types
-  type 0 device
+  type 0 osd
   type 1 node
   type 2 rack
   type 3 root
