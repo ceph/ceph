@@ -793,6 +793,7 @@ void PG::generate_past_intervals()
         if (new_interval)
         {
             dout(10) << debug.str() << dendl;
+			//已经有了一个interval,计算下一个
             same_interval_since = cur_epoch;
         }
     }

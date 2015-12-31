@@ -2789,7 +2789,7 @@ bool pg_interval_t::check_new_interval(
 	pgid)) {
     pg_interval_t& i = (*past_intervals)[same_interval_since];
     i.first = same_interval_since;
-    i.last = osdmap->get_epoch() - 1;
+    i.last = osdmap->get_epoch() - 1; //也就是lastmap的版本
     assert(i.first <= i.last);
     i.acting = old_acting;
     i.up = old_up;
@@ -2817,6 +2817,9 @@ bool pg_interval_t::check_new_interval(
 	     << " up_from " << lastmap->get_up_from(i.primary)
 	     << " last_epoch_clean " << last_epoch_clean
 	     << std::endl;
+	 //一般来说i.first是>= up_from
+	 //在peering成功,进入Active之前如果up_thru小于same_since,update up_thru.
+	 //这样下一次的new interval判断就知道是maybe_went_rw
       if (lastmap->get_up_thru(i.primary) >= i.first &&
 	  lastmap->get_up_from(i.primary) <= i.first) {
 	i.maybe_went_rw = true;

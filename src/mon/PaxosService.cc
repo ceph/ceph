@@ -184,7 +184,7 @@ void PaxosService::propose_pending()
   dout(10) << "propose_pending" << dendl;
   assert(have_pending);
   assert(!proposing);
-  assert(mon->is_leader());
+  assert(mon->is_leader());//必须只有leader才能发起PaxosService的propose
   assert(is_active());
 
   if (proposal_timer) {
@@ -332,6 +332,8 @@ void PaxosService::shutdown()
 
 void PaxosService::maybe_trim()
 {
+  //只有leader才能writeable
+  //只有leader能发起邋錚axosService的提案
   if (!is_writeable())
     return;
 

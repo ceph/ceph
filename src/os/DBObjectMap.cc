@@ -802,6 +802,8 @@ int DBObjectMap::scan(Header header,
   return 0;
 }
 
+//obj是header，header不存在才叫 ENOENT
+// key不存在返回的错误一般是-1
 int DBObjectMap::get_values(const ghobject_t &oid,
 			    const set<string> &keys,
 			    map<string, bufferlist> *out)
