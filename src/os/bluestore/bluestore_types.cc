@@ -440,6 +440,7 @@ void bluestore_onode_t::dump(Formatter *f) const
     f->dump_unsigned("len", p->second.length());
     f->close_section();
   }
+  f->close_section();
   f->open_object_section("block_map");
   for (map<uint64_t, bluestore_extent_t>::const_iterator p = block_map.begin();
        p != block_map.end(); ++p) {
