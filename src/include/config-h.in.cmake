@@ -241,6 +241,9 @@
 /* Defined if XIO */
 #cmakedefine HAVE_XIO
 
+/* Defined if LTTNG */
+#cmakedefine WITH_LTTNG 1
+
 /* Defined if you have librocksdb enabled */
 #cmakedefine HAVE_LIBROCKSDB
 
