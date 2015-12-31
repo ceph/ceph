@@ -432,6 +432,35 @@ install(TARGETS librados DESTINATION lib)
 
 add_subdirectory(libradosstriper)
 
+add_executable(ceph_scratchtool tools/scratchtool.c)
+target_link_libraries(ceph_scratchtool librados global)
+install(TARGETS ceph_scratchtool DESTINATION bin/debug)
+
+add_executable(ceph_scratchtoolpp tools/scratchtoolpp.cc)
+target_link_libraries(ceph_scratchtoolpp librados global)
+install(TARGETS ceph_scratchtoolpp DESTINATION bin/debug)
+
+add_executable(ceph_radosacl tools/radosacl.cc)
+target_link_libraries(ceph_radosacl librados global)
+install(TARGETS ceph_radosacl DESTINATION bin/debug)
+
+add_executable(ceph-osdomap-tool tools/ceph_osdomap_tool.cc)
+target_link_libraries(ceph-osdomap-tool os global ${Boost_PROGRAM_OPTIONS_LIBRARY})
+install(TARGETS ceph-osdomap-tool DESTINATION bin)
+
+add_executable(ceph-monstore-tool tools/ceph_monstore_tool.cc)
+target_link_libraries(ceph-monstore-tool os global ${Boost_PROGRAM_OPTIONS_LIBRARY})
+install(TARGETS ceph-monstore-tool DESTINATION bin)
+
+add_executable(ceph-objectstore-tool 
+  tools/ceph_objectstore_tool.cc
+  tools/RadosDump.cc
+  $<TARGET_OBJECTS:common_util_obj>
+  $<TARGET_OBJECTS:heap_profiler_objs>)
+target_link_libraries(ceph-objectstore-tool tcmalloc osd os global ${Boost_PROGRAM_OPTIONS_LIBRARY} dl)
+install(TARGETS ceph-objectstore-tool DESTINATION bin)
+
+
 set(rados_srcs
   tools/rados/rados.cc
   tools/RadosDump.cc
@@ -770,6 +799,14 @@ set(compressor_srcs
 add_library(compressor STATIC ${compressor_srcs})
 target_link_libraries(compressor common snappy)
 
+add_executable(ceph-client-debug tools/ceph-client-debug.cc)
+target_link_libraries(ceph-client-debug cephfs librados global common)
+install(TARGETS ceph-client-debug DESTINATION bin/debug)
+
+add_executable(ceph-kvstore-tool tools/ceph_kvstore_tool.cc)
+target_link_libraries(ceph-kvstore-tool os global ${UNITTEST_CXX_FLAGS})
+install(TARGETS ceph-kvstore-tool DESTINATION bin)
+
 #set(ceph_srcs tools/ceph.cc tools/common.cc)
 #add_executable(ceph ${ceph_srcs})
 #target_link_libraries(ceph global ${LIBEDIT_LIBS})
@@ -791,6 +828,12 @@ set(osdomaptool_srcs
 add_executable(osdmaptool ${osdomaptool_srcs})
 target_link_libraries(osdmaptool global)
 install(TARGETS osdmaptool DESTINATION bin)
+
+set(ceph_psim_srcs
+  tools/psim.cc)
+add_executable(ceph-psim ${ceph_psim_srcs})
+target_link_libraries(ceph-psim global)
+install(TARGETS ceph-psim DESTINATION bin)
 
 set(ceph_authtool_srcs
   tools/ceph_authtool.cc)
