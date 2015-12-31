@@ -2150,6 +2150,27 @@ int librados::Rados::mon_command(string cmd, const bufferlist& inbl,
   return client->mon_command(cmdvec, inbl, outbl, outs);
 }
 
+int librados::Rados::osd_command(int osdid, std::string cmd, const bufferlist& inbl,
+                                 bufferlist *outbl, std::string *outs)
+{
+  vector<string> cmdvec;
+  cmdvec.push_back(cmd);
+  return client->osd_command(osdid, cmdvec, inbl, outbl, outs);
+}
+
+int librados::Rados::pg_command(const char *pgstr, std::string cmd, const bufferlist& inbl,
+                                bufferlist *outbl, std::string *outs)
+{
+  vector<string> cmdvec;
+  cmdvec.push_back(cmd);
+
+  pg_t pgid;
+  if (!pgid.parse(pgstr))
+    return -EINVAL;
+
+  return client->pg_command(pgid, cmdvec, inbl, outbl, outs);
+}
+
 int librados::Rados::ioctx_create(const char *name, IoCtx &io)
 {
   rados_ioctx_t p;
