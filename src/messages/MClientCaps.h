@@ -20,12 +20,20 @@
 
 
 class MClientCaps : public Message {
-  static const int HEAD_VERSION = 7;
+  static const int HEAD_VERSION = 8;
   static const int COMPAT_VERSION = 1;
 
  public:
-  struct ceph_mds_caps head;
+  struct ceph_mds_caps_head head;
+
+  uint64_t size, max_size, truncate_size;
+  uint32_t truncate_seq;
+  utime_t mtime, atime, ctime;
+  ceph_file_layout layout;
+  uint32_t time_warp_seq;
+
   struct ceph_mds_cap_peer peer;
+
   bufferlist snapbl;
   bufferlist xattrbl;
   bufferlist flockbl;
@@ -49,16 +57,18 @@ class MClientCaps : public Message {
   inodeno_t get_realm() { return inodeno_t(head.realm); }
   uint64_t get_cap_id() { return head.cap_id; }
 
-  uint64_t get_size() { return head.size;  }
-  uint64_t get_max_size() { return head.max_size;  }
-  __u32 get_truncate_seq() { return head.truncate_seq; }
-  uint64_t get_truncate_size() { return head.truncate_size; }
-  utime_t get_ctime() { return utime_t(head.ctime); }
-  utime_t get_mtime() { return utime_t(head.mtime); }
-  utime_t get_atime() { return utime_t(head.atime); }
-  __u32 get_time_warp_seq() { return head.time_warp_seq; }
+  uint64_t get_size() { return size;  }
+  uint64_t get_max_size() { return max_size;  }
+  __u32 get_truncate_seq() { return truncate_seq; }
+  uint64_t get_truncate_size() { return truncate_size; }
+  utime_t get_ctime() { return ctime; }
+  utime_t get_mtime() { return mtime; }
+  utime_t get_atime() { return atime; }
+  __u32 get_time_warp_seq() { return time_warp_seq; }
 
-  ceph_file_layout& get_layout() { return head.layout; }
+  const ceph_file_layout& get_layout() {
+    return layout;
+  }
 
   int       get_migrate_seq() { return head.migrate_seq; }
   int       get_op() { return head.op; }
@@ -72,14 +82,15 @@ class MClientCaps : public Message {
   void set_caps(int c) { head.caps = c; }
   void set_wanted(int w) { head.wanted = w; }
 
-  void set_max_size(uint64_t ms) { head.max_size = ms; }
+  void set_max_size(uint64_t ms) { max_size = ms; }
 
   void set_migrate_seq(unsigned m) { head.migrate_seq = m; }
   void set_op(int o) { head.op = o; }
 
-  void set_size(loff_t s) { head.size = s; }
-  void set_mtime(const utime_t &t) { t.encode_timeval(&head.mtime); }
-  void set_atime(const utime_t &t) { t.encode_timeval(&head.atime); }
+  void set_size(loff_t s) { size = s; }
+  void set_mtime(const utime_t &t) { mtime = t; }
+  void set_ctime(const utime_t &t) { ctime = t; }
+  void set_atime(const utime_t &t) { atime = t; }
 
   void set_cap_peer(uint64_t id, ceph_seq_t seq, ceph_seq_t mseq, int mds, int flags) {
     peer.cap_id = id;
@@ -163,12 +174,12 @@ public:
     if (head.migrate_seq)
       out << " mseq " << head.migrate_seq;
 
-    out << " size " << head.size << "/" << head.max_size;
-    if (head.truncate_seq)
-      out << " ts " << head.truncate_seq;
-    out << " mtime " << utime_t(head.mtime);
-    if (head.time_warp_seq)
-      out << " tws " << head.time_warp_seq;
+    out << " size " << size << "/" << max_size;
+    if (truncate_seq)
+      out << " ts " << truncate_seq;
+    out << " mtime " << mtime;
+    if (time_warp_seq)
+      out << " tws " << time_warp_seq;
 
     if (head.xattr_version)
       out << " xattrs(v=" << head.xattr_version << " l=" << xattrbl.length() << ")";
@@ -179,6 +190,36 @@ public:
   void decode_payload() {
     bufferlist::iterator p = payload.begin();
     ::decode(head, p);
+    if (header.version < 8) {
+      ceph_mds_caps_body_legacy body;
+      ::decode(body, p);
+      if (head.op == CEPH_CAP_OP_EXPORT) {
+	peer = body.peer;
+      } else {
+	size = body.size;
+	max_size = body.max_size;
+	truncate_size = body.truncate_size;
+	mtime = utime_t(body.mtime);
+	atime = utime_t(body.atime);
+	ctime = utime_t(body.ctime);
+	layout = body.layout;
+	time_warp_seq = body.time_warp_seq;
+      }
+    } else {
+      if (head.op == CEPH_CAP_OP_EXPORT) {
+	::decode(peer, p);
+      } else {
+	::decode(size, p);
+	::decode(max_size, p);
+	::decode(truncate_size, p);
+	::decode(truncate_seq, p);
+	::decode(mtime, p);
+	::decode(atime, p);
+	::decode(ctime, p);
+	::decode(layout, p);
+	::decode(time_warp_seq, p);
+      }
+    }
     ::decode_nohead(head.snap_trace_len, snapbl, p);
 
     assert(middle.length() == head.xattr_len);
@@ -192,8 +233,6 @@ public:
     if (header.version >= 3) {
       if (head.op == CEPH_CAP_OP_IMPORT)
 	::decode(peer, p);
-      else if (head.op == CEPH_CAP_OP_EXPORT)
-	memcpy(&peer, &head.peer, sizeof(peer));
     }
 
     if (header.version >= 4) {
@@ -219,11 +258,39 @@ public:
     head.snap_trace_len = snapbl.length();
     head.xattr_len = xattrbl.length();
 
-    // record peer in unused fields of cap export message
-    if ((features & CEPH_FEATURE_EXPORT_PEER) && head.op == CEPH_CAP_OP_EXPORT)
-      memcpy(&head.peer, &peer, sizeof(peer));
-
     ::encode(head, payload);
+    if (features & CEPH_FEATURE_FS_FILE_LAYOUT_V2) {
+      if (head.op == CEPH_CAP_OP_EXPORT) {
+	::encode(peer, payload);
+      } else {
+	::encode(size, payload);
+	::encode(max_size, payload);
+	::encode(truncate_size, payload);
+	::encode(truncate_seq, payload);
+	::encode(mtime, payload);
+	::encode(atime, payload);
+	::encode(ctime, payload);
+	::encode(layout, payload, features);
+	::encode(time_warp_seq, payload);
+      }
+    } else {
+      header.version = 7;
+      ceph_mds_caps_body_legacy body;
+      if (head.op == CEPH_CAP_OP_EXPORT) {
+	body.peer = peer;
+      } else {
+	body.size = size;
+	body.max_size = max_size;
+	body.truncate_size = truncate_size;
+	body.truncate_seq = truncate_seq;
+	mtime.encode_timeval(&body.mtime);
+	atime.encode_timeval(&body.atime);
+	ctime.encode_timeval(&body.ctime);
+	body.layout = layout;
+	body.time_warp_seq = time_warp_seq;
+      }
+      ::encode(body, payload);
+    }
     ::encode_nohead(snapbl, payload);
 
     middle = xattrbl;

@@ -3339,20 +3339,20 @@ void CInode::encode_cap_message(MClientCaps *m, Capability *cap)
   inode_t *oi = &inode;
   inode_t *pi = get_projected_inode();
   inode_t *i = (pfile|pauth|plink|pxattr) ? pi : oi;
-  i->ctime.encode_timeval(&m->head.ctime);
-  
+
   dout(20) << "encode_cap_message pfile " << pfile
 	   << " pauth " << pauth << " plink " << plink << " pxattr " << pxattr
 	   << " ctime " << i->ctime << dendl;
 
   i = pfile ? pi:oi;
-  m->head.layout = i->layout;
-  m->head.size = i->size;
-  m->head.truncate_seq = i->truncate_seq;
-  m->head.truncate_size = i->truncate_size;
-  i->mtime.encode_timeval(&m->head.mtime);
-  i->atime.encode_timeval(&m->head.atime);
-  m->head.time_warp_seq = i->time_warp_seq;
+  m->layout = i->layout;
+  m->size = i->size;
+  m->truncate_seq = i->truncate_seq;
+  m->truncate_size = i->truncate_size;
+  m->mtime = i->mtime;
+  m->atime = i->atime;
+  m->ctime = i->ctime;
+  m->time_warp_seq = i->time_warp_seq;
 
   if (cap->client_inline_version < i->inline_data.version) {
     m->inline_version = cap->client_inline_version = i->inline_data.version;
@@ -3365,7 +3365,7 @@ void CInode::encode_cap_message(MClientCaps *m, Capability *cap)
   // max_size is min of projected, actual.
   uint64_t oldms = oi->client_ranges.count(client) ? oi->client_ranges[client].range.last : 0;
   uint64_t newms = pi->client_ranges.count(client) ? pi->client_ranges[client].range.last : 0;
-  m->head.max_size = MIN(oldms, newms);
+  m->max_size = MIN(oldms, newms);
 
   i = pauth ? pi:oi;
   m->head.mode = i->mode;
