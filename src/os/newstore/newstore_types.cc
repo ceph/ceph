@@ -184,6 +184,7 @@ void onode_t::dump(Formatter *f) const
     f->dump_unsigned("len", p->second.length());
     f->close_section();
   }
+  f->close_section();
   f->open_object_section("data_map");
   for (map<uint64_t, fragment_t>::const_iterator p = data_map.begin();
        p != data_map.end(); ++p) {
