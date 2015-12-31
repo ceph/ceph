@@ -2903,8 +2903,8 @@ void OSD::load_pgs()
        it != ls.end();
        ++it) {
     spg_t pgid;
-    if (it->is_temp(&pgid) || it->is_removal(&pgid) ||
-        (it->is_pg(&pgid) && PG::_has_removal_flag(store, pgid))) {
+    if (it->is_temp(&pgid) ||
+       (it->is_pg(&pgid) && PG::_has_removal_flag(store, pgid))) {
       dout(10) << "load_pgs " << *it << " clearing temp" << dendl;
       recursive_remove_collection(store, pgid, *it);
       continue;
