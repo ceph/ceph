@@ -605,6 +605,10 @@ void BlueFS::_drop_link(FileRef file)
     }
     file_map.erase(file->fnode.ino);
     file->deleted = true;
+    if (file->dirty) {
+      file->dirty = false;
+      dirty_files.erase(dirty_files.iterator_to(*file));
+    }
   }
 }
 
