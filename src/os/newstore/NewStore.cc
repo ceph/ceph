@@ -3187,7 +3187,7 @@ int NewStore::_do_overlay_clear(TransContext *txc,
   while (p != o->onode.overlay_map.end()) {
     dout(20) << __func__ << " rm " << p->first << " " << p->second << dendl;
     string key;
-    get_overlay_key(o->onode.nid, p->first, &key);
+    get_overlay_key(o->onode.nid,  p->second.key, &key);
     txc->t->rmkey(PREFIX_OVERLAY, key);
     o->onode.overlay_map.erase(p++);
   }
@@ -3227,7 +3227,7 @@ int NewStore::_do_overlay_trim(TransContext *txc,
 	       << dendl;
       if (o->onode.shared_overlays.count(p->second.key) == 0) {
 	string key;
-	get_overlay_key(o->onode.nid, p->first, &key);
+	get_overlay_key(o->onode.nid, p->second.key, &key);
 	txc->t->rmkey(PREFIX_OVERLAY, key);
       }
       o->onode.overlay_map.erase(p++);
