@@ -723,7 +723,7 @@ int NewStore::_open_fsid(bool create)
 
 int NewStore::_read_fsid(uuid_d *uuid)
 {
-  char fsid_str[40];
+  char fsid_str[40] = {0};
   int ret = safe_read(fsid_fd, fsid_str, sizeof(fsid_str));
   if (ret < 0)
     return ret;
@@ -750,6 +750,7 @@ int NewStore::_write_fsid()
   }
   r = ::fsync(fsid_fd);
   if (r < 0) {
+    r = -errno;
     derr << __func__ << " fsid fsync failed: " << cpp_strerror(r) << dendl;
     return r;
   }
@@ -812,8 +813,6 @@ int NewStore::_open_db(bool create)
 			  fn);
   if (!db) {
     derr << __func__ << " error creating db" << dendl;
-    delete db;
-    db = NULL;
     return -EIO;
   }
   string options;
@@ -2092,6 +2091,7 @@ int NewStore::_create_fid(TransContext *txc, fid_t *fid, unsigned flags)
 	r = -errno;
 	derr << __func__ << " cannot open created " << path << "/fragments/"
 	     << s << ": " << cpp_strerror(r) << dendl;
+        return r;
       }
 
       fid_max = fid_last;
@@ -3596,6 +3596,7 @@ int NewStore::_clean_fid_tail_fd(const fragment_t& f, int fd)
 	     << dendl;
     r = ::ftruncate(fd, f.length);
     if (r < 0) {
+      r = -errno;
       derr << __func__ << " failed to ftruncate " << f.fid << ": "
 	   << cpp_strerror(r) << dendl;
       return r;
@@ -3825,7 +3826,7 @@ int NewStore::_truncate(TransContext *txc,
 
   RWLock::WLocker l(c->lock);
   OnodeRef o = c->get_onode(oid, false);
-  if (!o->exists) {
+  if (!o || !o->exists) {
     r = -ENOENT;
     goto out;
   }
