@@ -416,6 +416,9 @@ if(${ENABLE_SHARED})
   set_target_properties(librados PROPERTIES OUTPUT_NAME rados VERSION 2.0.0
     SOVERSION 2)
 endif(${ENABLE_SHARED})
+
+add_library(librados_api STATIC common/buffer.cc librados/librados.cc)
+
 install(FILES include/rados/librados.h
   include/rados/rados_types.h
   include/rados/rados_types.hpp
