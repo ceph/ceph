@@ -240,6 +240,9 @@ unittest_log_SOURCES = log/test.cc
 unittest_log_LDADD = $(LIBCOMMON) $(UNITTEST_LDADD)
 unittest_log_CXXFLAGS = $(UNITTEST_CXXFLAGS) -O2
 check_TESTPROGRAMS += unittest_log
+if FREEBSD
+    unittest_log_LDADD += -lexecinfo
+endif
 
 unittest_throttle_SOURCES = test/common/Throttle.cc
 unittest_throttle_LDADD = $(UNITTEST_LDADD) $(CEPH_GLOBAL)
@@ -295,6 +298,9 @@ unittest_xlist_SOURCES = test/test_xlist.cc
 unittest_xlist_LDADD = $(UNITTEST_LDADD) $(LIBCOMMON)
 unittest_xlist_CXXFLAGS = $(UNITTEST_CXXFLAGS)
 check_TESTPROGRAMS += unittest_xlist
+if FREEBSD
+    unittest_xlist_LDADD += -lexecinfo
+endif
 
 unittest_crc32c_SOURCES = test/common/test_crc32c.cc
 unittest_crc32c_LDADD = $(UNITTEST_LDADD) $(CEPH_GLOBAL)
@@ -398,6 +404,9 @@ unittest_texttable_SOURCES = test/test_texttable.cc
 unittest_texttable_LDADD = $(LIBCOMMON) $(UNITTEST_LDADD)
 unittest_texttable_CXXFLAGS = $(UNITTEST_CXXFLAGS)
 check_TESTPROGRAMS += unittest_texttable
+if FREEBSD
+    unittest_texttable_LDADD += -lexecinfo
+endif
 
 unittest_on_exit_SOURCES = test/on_exit.cc
 unittest_on_exit_LDADD = $(PTHREAD_LIBS)
@@ -421,7 +430,7 @@ check_TESTPROGRAMS += unittest_bit_vector
 unittest_subprocess_SOURCES = test/test_subprocess.cc
 unittest_subprocess_LDADD = $(LIBCOMMON) $(UNITTEST_LDADD)
 unittest_subprocess_CXXFLAGS = $(UNITTEST_CXXFLAGS)
-check_PROGRAMS += unittest_subprocess
+# check_PROGRAMS += unittest_subprocess
 
 unittest_async_compressor_SOURCES = test/common/test_async_compressor.cc
 unittest_async_compressor_CXXFLAGS = $(UNITTEST_CXXFLAGS)

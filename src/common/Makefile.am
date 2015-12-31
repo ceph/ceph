@@ -85,7 +85,8 @@ endif
 
 if LINUX
 libcommon_internal_la_SOURCES += \
-	common/linux_version.c 
+	common/linux_version.c \
+	common/blkdev.cc
 endif
 
 if SOLARIS
@@ -98,10 +99,10 @@ libcommon_internal_la_SOURCES += \
         common/aix_errno.cc
 endif
 
-# used by RBD and FileStore
-if LINUX
+if FREEBSD
 libcommon_internal_la_SOURCES += \
-	common/blkdev.cc
+       common/freebsd_version.c \
+       common/blkdev.cc
 endif
 
 if ENABLE_XIO

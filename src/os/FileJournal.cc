@@ -33,9 +33,12 @@
 #include <sys/mount.h>
 
 #include "common/blkdev.h"
+#if defined(__linux__)
 #include "common/linux_version.h"
+#endif
 
 #if defined(__FreeBSD__)
+#include "common/freebsd_version.h"
 #define O_DSYNC O_SYNC
 #endif
 
@@ -204,6 +207,7 @@ void FileJournal::_check_disk_write_cache() const
     }
 
     // is our kernel new enough?
+#if defined(__linux__)
     int ver = get_linux_version();
     if (ver == 0) {
       dout(10) << "_check_disk_write_cache: get_linux_version failed" << dendl;
@@ -221,6 +225,10 @@ void FileJournal::_check_disk_write_cache() const
 	 << TEXT_NORMAL
 	 << dendl;
     break;
+#endif
+#if defined(__FreeBSD__)
+    int ver = get_freebsd_version();
+#endif
   }
 
 close_f:

@@ -4,7 +4,11 @@
 #include "MemoryModel.h"
 #include "common/config.h"
 #include "debug.h"
+#include <stdlib.h>
+
+#if defined(HAVE_MALLINFO)
 #include <malloc.h>
+#endif
 
 #include <fstream>
 
