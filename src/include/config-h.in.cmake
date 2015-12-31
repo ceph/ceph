@@ -81,8 +81,14 @@
 /* Define to 1 if you have the `snappy' library (-lsnappy). */
 #cmakedefine HAVE_LIBSNAPPY 1
 
+/* Define if you have jemalloc */
+#cmakedefine HAVE_LIBJEMALLOC
+
 /* Define if you have tcmalloc */
 #cmakedefine HAVE_LIBTCMALLOC
+
+/* Define if you have tcmalloc */
+#cmakedefine HAVE_LIBTCMALLOC_MINIMAL
 
 /* Define to 1 if you have the <memory.h> header file. */
 #cmakedefine HAVE_MEMORY_H 1
