@@ -4203,7 +4203,7 @@ int BlueStore::_do_overlay_trim(TransContext *txc,
 	       << dendl;
       if (o->onode.put_overlay_ref(p->second.key)) {
 	string key;
-	get_overlay_key(o->onode.nid, p->first, &key);
+	get_overlay_key(o->onode.nid, p->second.key, &key);
 	txc->t->rmkey(PREFIX_OVERLAY, key);
       }
       o->onode.overlay_map.erase(p++);
@@ -4304,7 +4304,7 @@ int BlueStore::_do_write_overlays(TransContext *txc,
 
 	if (o->onode.put_overlay_ref(p->second.key)) {
 	  string key;
-	  get_overlay_key(o->onode.nid, p->first, &key);
+	  get_overlay_key(o->onode.nid, p->second.key, &key);
 	  txc->t->rmkey(PREFIX_OVERLAY, key);
 	}
 	o->onode.overlay_map.erase(p++);
@@ -4322,7 +4322,7 @@ int BlueStore::_do_write_overlays(TransContext *txc,
 
 	if (o->onode.put_overlay_ref(p->second.key)) {
 	  string key;
-	  get_overlay_key(o->onode.nid, p->first, &key);
+	  get_overlay_key(o->onode.nid, p->second.key, &key);
 	  txc->t->rmkey(PREFIX_OVERLAY, key);
 	}
 	o->onode.overlay_map.erase(p++);
