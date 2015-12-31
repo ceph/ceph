@@ -46,10 +46,6 @@
 
 #define dout_subsys ceph_subsys_dpdk
 
-void add_native_net_options_description(boost::program_options::options_description &opts) {
-  opts.add(get_dpdk_net_options_description());
-}
-
 interface::interface(CephContext *c, std::shared_ptr<device> dev, unsigned cpuid)
     : cct(c), _dev(dev),
       _rx(_dev->receive(
@@ -217,15 +213,16 @@ DPDKStack::DPDKStack(CephContext *cct, std::shared_ptr<device> dev, unsigned i)
   _inet.set_netmask_address(ipv4_address(cct->_conf->ms_dpdk_netmask_ipv4_addr));
 }
 
-server_socket DPDKStack::listen(socket_address sa, listen_options opts) {
+int listen(const entity_addr_t &sa, const listen_options &opt, ServerSocket *sock) {
   assert(sa.as_posix_sockaddr().sa_family == AF_INET);
-  return tcpv4_listen(_inet.get_tcp(), ntohs(sa.as_posix_sockaddr_in().sin_port), opts);
+  assert(sock);
+  *sock = tcpv4_listen(_inet.get_tcp(), sa.get_port(), opt);
+  return 0;
 }
 
-connected_socket DPDKStack::connect(socket_address sa, socket_address local) {
-  // FIXME: local is ignored since native stack does not support multiple IPs yet
-  assert(sa.as_posix_sockaddr().sa_family == AF_INET);
-  return tcpv4_connect(_inet.get_tcp(), sa);
+int DPDKStack::connect(const entity_addr_t &addr, const SocketOptions &opts, ConnectedSocket *socket) {
+  assert(addr.get_family() == AF_INET);
+  return tcpv4_connect(_inet.get_tcp(), addr);
 }
 
 class C_arp_learn : public EventCallback {

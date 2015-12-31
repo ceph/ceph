@@ -99,49 +99,52 @@ class l3_protocol {
 
 
 template <typename Protocol>
-class native_connected_socket_impl;
+class NativeConnectedSocketImpl;
 
-// native_server_socket_impl
+// DPDKServerSocketImpl
 template <typename Protocol>
-class native_server_socket_impl : public server_socket_impl {
+class DPDKServerSocketImpl : public ServerSocketImpl {
   typename Protocol::listener _listener;
  public:
-  native_server_socket_impl(Protocol& proto, uint16_t port, listen_options opt);
-  virtual int accept(connected_socket *s) override;
+  DPDKServerSocketImpl(Protocol& proto, uint16_t port, listen_options opt);
+  virtual int accept(ConnectedSocket *s) override;
   virtual void abort_accept() override;
 };
 
 template <typename Protocol>
-native_server_socket_impl<Protocol>::native_server_socket_impl(
+DPDKServerSocketImpl<Protocol>::DPDKServerSocketImpl(
         Protocol& proto, uint16_t port, listen_options opt)
         : _listener(proto.listen(port)) {}
 
 template <typename Protocol>
-int native_server_socket_impl<Protocol>::accept(connected_socket *s) {
+int DPDKServerSocketImpl<Protocol>::accept(ConnectedSocket *s) {
   if (_listener.errno() < 0)
     return _listener.errno();
   auto c = _listener.accept();
   if (c)
     return -EAGAIN;
-  *s = std::make_unique<native_connected_socket_impl<Protocol>>(std::move(conn));
+  *s = std::make_unique<NativeConnectedSocketImpl<Protocol>>(std::move(conn));
   return 0;
 }
 
 template <typename Protocol>
-void native_server_socket_impl<Protocol>::abort_accept() {
+void DPDKServerSocketImpl<Protocol>::abort_accept() {
   _listener.abort_accept();
 }
 
-// native_connected_socket_impl
+// NativeConnectedSocketImpl
 template <typename Protocol>
-class native_connected_socket_impl : public connected_socket_impl {
+class NativeConnectedSocketImpl : public ConnectedSocketImpl {
   typename Protocol::connection _conn;
   size_t _cur_frag = 0;
   Packet _buf;
 
  public:
-  explicit native_connected_socket_impl(typename Protocol::connection conn)
+  explicit NativeConnectedSocketImpl(typename Protocol::connection conn)
           : _conn(std::move(conn)) {}
+  virtual int connected() override {
+    return 1;
+  }
   virtual int read(char *buf, size_t len) override {
     if (_conn.errno() <= 0)
       return _conn.errno();
@@ -187,8 +190,8 @@ class native_connected_socket_impl : public connected_socket_impl {
   }
   // FIXME need to impl close
   virtual void close() override { return ; }
-  virtual void set_nodelay(bool nodelay) override {}
-  virtual bool get_nodelay() const override { return true; }
+  virtual int set_nodelay() override { return 0; }
+  virtual int set_rcvbuf(size_t s) override { return 0; }
 };
 
 class interface {
@@ -226,7 +229,7 @@ class interface {
 };
 
 static NetWorkStack* stacks[];
-// DPDKStack
+
 class DPDKStack : public NetWorkStack {
   static bool created = false;
 
@@ -243,13 +246,13 @@ class DPDKStack : public NetWorkStack {
 
  public:
   explicit DPDKStack(CephContext *cct, std::shared_ptr<device> dev, unsigned i);
-  virtual server_socket listen(socket_address sa, listen_options opt) override;
-  virtual connected_socket connect(socket_address sa, socket_address local) override;
+  virtual int listen(const entity_addr_t &sa, const listen_options &opt, ServerSocket *sock) override;
+  virtual int connect(const entity_addr_t &addr, const SocketOptions &opts, ConnectedSocket *socket) override;
   static std::unique_ptr<NetWorkStack> create(CephContext *cct, unsigned i);
   void arp_learn(ethernet_address l2, ipv4_address l3) {
     _inet.learn(l2, l3);
   }
-  friend class native_server_socket_impl<tcp4>;
+  friend class DPDKServerSocketImpl<tcp4>;
 };
 
 #endif

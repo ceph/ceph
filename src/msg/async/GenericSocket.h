@@ -23,22 +23,21 @@
 #ifndef CEPH_GENERICSOCKET_H
 #define CEPH_GENERICSOCKET_H
 
-class connected_socket_impl {
+class ConnectedSocketImpl {
  public:
-  virtual ~connected_socket_impl() {}
+  virtual ~ConnectedSocketImpl() {}
+  virtual int is_connected() = 0;
   virtual int read(char*, size_t) = 0;
   virtual int sendmsg(struct msghdr &msg, size_t len, bool more) = 0;
   virtual void shutdown() = 0;
   virtual void close() = 0;
-  virtual void set_nodelay(bool nodelay) = 0;
-  virtual bool get_nodelay() const = 0;
 };
 
 /// \cond internal
-class server_socket_impl {
+class ServerSocketImpl {
  public:
-  virtual ~server_socket_impl() {}
-  virtual int accept(connected_socket) = 0;
+  virtual ~ServerSocketImpl() {}
+  virtual int accept(ConnectedSocket) = 0;
   virtual void abort_accept() = 0;
 };
 /// \endcond
@@ -48,21 +47,26 @@ class server_socket_impl {
 
 /// A TCP (or other stream-based protocol) connection.
 ///
-/// A \c connected_socket represents a full-duplex stream between
+/// A \c ConnectedSocket represents a full-duplex stream between
 /// two endpoints, a local endpoint and a remote endpoint.
-class connected_socket {
-  std::unique_ptr<connected_socket_impl> _csi;
+class ConnectedSocket {
+  std::unique_ptr<ConnectedSocketImpl> _csi;
+
  public:
-  /// Constructs a \c connected_socket not corresponding to a connection
-  connected_socket() {};
+  /// Constructs a \c ConnectedSocket not corresponding to a connection
+  ConnectedSocket() {};
   /// \cond internal
-  explicit connected_socket(std::unique_ptr<connected_socket_impl> csi)
-          : _csi(std::move(csi)) {}
+  explicit ConnectedSocket(std::unique_ptr<ConnectedSocketImpl> csi)
+      : _csi(std::move(csi)) {}
   /// \endcond
-  /// Moves a \c connected_socket object.
-  connected_socket(connected_socket&& cs) = default;
-  /// Move-assigns a \c connected_socket object.
-  connected_socket& operator=(connected_socket&& cs) = default;
+  /// Moves a \c ConnectedSocket object.
+  ConnectedSocket(ConnectedSocket&& cs) = default;
+  /// Move-assigns a \c ConnectedSocket object.
+  ConnectedSocket& operator=(ConnectedSocket&& cs) = default;
+
+  int is_connected() {
+    return _csi->is_connected();
+  }
   /// Gets the input stream.
   ///
   /// Gets an object returning data sent from the remote endpoint.
@@ -74,16 +78,6 @@ class connected_socket {
   /// Gets an object that sends data to the remote endpoint.
   int sendmsg(struct msghdr &msg, size_t len, bool more) {
     return _csi->sendmsg(msg, len, more);
-  }
-  /// Sets the TCP_NODELAY option (disabling Nagle's algorithm)
-  void set_nodelay(bool nodelay) {
-    return _csi->set_nodelay(nodelay);
-  }
-  /// Gets the TCP_NODELAY option (Nagle's algorithm)
-  ///
-  /// \return whether the nodelay option is enabled or not
-  bool get_nodelay() const {
-    return _csi->get_nodelay();
   }
   /// Disables output to the socket.
   ///
@@ -107,5 +101,59 @@ class connected_socket {
   /// Equivalent to \ref shutdown_input() and \ref shutdown_output().
 };
 /// @}
+
+/// \addtogroup networking-module
+/// @{
+
+/// A listening socket, waiting to accept incoming network connections.
+class ServerSocket {
+  std::unique_ptr<ServerSocketImpl> _ssi;
+ public:
+  /// Constructs a \c ServerSocket not corresponding to a connection
+  ServerSocket() {}
+  /// \cond internal
+  explicit ServerSocket(std::unique_ptr<ServerSocketImpl> ssi)
+      : _ssi(std::move(ssi)) {}
+  /// \endcond
+  /// Moves a \c ServerSocket object.
+  ServerSocket(ServerSocket&& ss) = default;
+  /// Move-assigns a \c ServerSocket object.
+  ServerSocket& operator=(ServerSocket&& cs) = default;
+
+  /// Accepts the next connection to successfully connect to this socket.
+  ///
+  /// \Accepts a \ref ConnectedSocket representing the connection, and
+  ///          a \ref entity_addr_t describing the remote endpoint.
+  int accept(ConnectedSocket *sock, entity_addr_t *out) {
+    return _ssi->accept();
+  }
+
+  /// Stops any \ref accept() in progress.
+  ///
+  /// Current and future \ref accept() calls will terminate immediately
+  /// with an error.
+  void abort_accept() {
+    return _ssi->abort_accept();
+  }
+};
+/// @}
+
+struct SocketOptions {
+  bool nonblock = true;
+  bool nodelay = true;
+  int rcbuf_size = 0;
+};
+
+class NetworkStack {
+ public:
+  CephContext *cct;
+
+  NetworkStack(CephContext *c): cct(c) {}
+  virtual ~NetworkStack() {}
+  virtual int listen(const entity_addr_t &addr, const SocketOptions &opts, ServerSocket *) = 0;
+  // FIXME: local parameter assumes ipv4 for now, fix when adding other AF
+  virtual int connect(const entity_addr_t &addr, const SocketOptions &opts, ConnectedSocket *socket) = 0;
+  virtual void initialize() {}
+};
 
 #endif //CEPH_GENERICSOCKET_H
