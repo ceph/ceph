@@ -520,7 +520,7 @@ endif(${WITH_RADOSGW})
 if(${WITH_RBD})
   set(DENCODER_EXTRALIBS
       ${DENCODER_EXTRALIBS}
-      librbd_replay_types)
+      rbd_replay_types)
 endif(${WITH_RBD})
 target_link_libraries(ceph-dencoder
   librados
@@ -544,6 +544,7 @@ target_link_libraries(ceph-dencoder
   blkid
   udev
   keyutils
+  rbd_replay
   ${EXTRALIBS}
   ${ALLOC_LIBS}
   ${CMAKE_DL_LIBS}
@@ -1022,35 +1023,7 @@ if(${WITH_RBD})
   install(TARGETS rbd DESTINATION bin)
   install(PROGRAMS ${CMAKE_SOURCE_DIR}/src/ceph-rbdnamer DESTINATION bin)
   install(PROGRAMS ${CMAKE_SOURCE_DIR}/src/rbdmap DESTINATION bin)
-
-  set(librbd_replay_types_srcs
-      rbd_replay/ActionTypes.cc)
-  add_library(librbd_replay_types STATIC ${librbd_replay_types_srcs})
-
-  set(librbd_replay_srcs
-      rbd_replay/actions.cc
-      rbd_replay/BufferReader.cc
-      rbd_replay/ImageNameMap.cc
-      rbd_replay/PendingIO.cc
-      rbd_replay/rbd_loc.cc
-      rbd_replay/Replayer.cc)
-  add_library(librbd_replay STATIC ${librbd_replay_srcs})
-  target_link_libraries(librbd_replay PRIVATE librbd_replay_types librbd librados global udev)
-
-  add_executable(rbd_replay
-    rbd_replay/rbd-replay.cc
-    $<TARGET_OBJECTS:parse_secret_objs>
-    )
-  target_link_libraries(rbd_replay librbd librados global librbd_replay keyutils)
-  install(TARGETS rbd_replay DESTINATION bin)
-
-  set(librbd_replay_ios_srcs
-      rbd_replay/ios.cc)
-  add_library(librbd_replay_ios STATIC ${librbd_replay_ios_srcs})
-  target_link_libraries(librbd_replay_ios librbd librados global)
-
-  install(TARGETS librbd_replay librbd_replay_ios DESTINATION lib)
-
+  add_subdirectory(rbd_replay)
 endif(${WITH_RBD})
 
 # RadosGW
