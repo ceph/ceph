@@ -97,32 +97,31 @@ struct DirStat {
 
 struct InodeStat {
   vinodeno_t vino;
+  uint32_t rdev;
   version_t version;
+  version_t xattr_version;
   ceph_mds_reply_cap cap;
-
   ceph_file_layout layout;
-  unsigned mode, uid, gid, nlink, rdev;
-  loff_t size, max_size;
-  version_t truncate_seq;
-  uint64_t truncate_size;
   utime_t ctime, mtime, atime;
-  version_t time_warp_seq;
-  bufferlist inline_data;
-  version_t inline_version;
-
+  uint32_t time_warp_seq;
+  uint64_t size, max_size;
+  uint64_t truncate_size;
+  uint32_t truncate_seq;
+  uint32_t mode, uid, gid, nlink;
   frag_info_t dirstat;
   nest_info_t rstat;
-  
-  string  symlink;   // symlink content (if symlink)
-  fragtree_t dirfragtree;
 
-  version_t xattr_version;
-  bufferlist xattrbl;
+  fragtree_t dirfragtree;
+  string  symlink;   // symlink content (if symlink)
 
   ceph_dir_layout dir_layout;
 
+  bufferlist xattrbl;
+
+  bufferlist inline_data;
+  version_t inline_version;
+
   quota_info_t quota;
-  //map<string, bufferptr> xattrs;
 
  public:
   InodeStat() {}
@@ -131,36 +130,33 @@ struct InodeStat {
   }
 
   void decode(bufferlist::iterator &p, uint64_t features) {
-    struct ceph_mds_reply_inode e;
-    ::decode(e, p);
-    vino.ino = inodeno_t(e.ino);
-    vino.snapid = snapid_t(e.snapid);
-    version = e.version;
-    layout = e.layout;
-    cap = e.cap;
-    size = e.size;
-    max_size = e.max_size;
-    truncate_seq = e.truncate_seq;
-    truncate_size = e.truncate_size;
-    ctime.decode_timeval(&e.ctime);
-    mtime.decode_timeval(&e.mtime);
-    atime.decode_timeval(&e.atime);
-    time_warp_seq = e.time_warp_seq;
-    mode = e.mode;
-    uid = e.uid;
-    gid = e.gid;
-    nlink = e.nlink;
-    rdev = e.rdev;
+    ::decode(vino.ino, p);
+    ::decode(vino.snapid, p);
+    ::decode(rdev, p);
+    ::decode(version, p);
+    ::decode(xattr_version, p);
+    ::decode(cap, p);
+    ::decode(layout, p);
+    ::decode(ctime, p);
+    ::decode(mtime, p);
+    ::decode(atime, p);
+    ::decode(time_warp_seq, p);
+    ::decode(size, p);
+    ::decode(max_size, p);
+    ::decode(truncate_size, p);
+    ::decode(truncate_seq, p);
+    ::decode(mode, p);
+    ::decode(uid, p);
+    ::decode(gid, p);
+    ::decode(nlink, p);
+    ::decode(dirstat.nfiles, p);
+    ::decode(dirstat.nsubdirs, p);
+    ::decode(rstat.rbytes, p);
+    ::decode(rstat.rfiles, p);
+    ::decode(rstat.rsubdirs, p);
+    ::decode(rstat.rctime, p);
 
-    dirstat.nfiles = e.files;
-    dirstat.nsubdirs = e.subdirs;
-
-    rstat.rctime.decode_timeval(&e.rctime);
-    rstat.rbytes = e.rbytes;
-    rstat.rfiles = e.rfiles;
-    rstat.rsubdirs = e.rsubdirs;
-
-    dirfragtree.decode_nohead(e.fragtree.nsplits, p);
+    ::decode(dirfragtree, p);
 
     ::decode(symlink, p);
     
@@ -169,7 +165,6 @@ struct InodeStat {
     else
       memset(&dir_layout, 0, sizeof(dir_layout));
 
-    xattr_version = e.xattr_version;
     ::decode(xattrbl, p);
 
     if (features & CEPH_FEATURE_MDS_INLINE_DATA) {
