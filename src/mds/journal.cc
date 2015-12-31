@@ -406,7 +406,7 @@ void EMetaBlob::fullbit::encode(bufferlist& bl, uint64_t features) const {
   ::encode(dnfirst, bl);
   ::encode(dnlast, bl);
   ::encode(dnv, bl);
-  ::encode(inode, bl);
+  ::encode(inode, bl, features);
   ::encode(xattrs, bl);
   if (inode.is_symlink())
     ::encode(symlink, bl);

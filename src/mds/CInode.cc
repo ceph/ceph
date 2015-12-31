@@ -1297,7 +1297,7 @@ void CInode::verify_diri_backtrace(bufferlist &bl, int err)
 void InodeStoreBase::encode_bare(bufferlist &bl, uint64_t features,
 				 const bufferlist *snap_blob) const
 {
-  ::encode(inode, bl);
+  ::encode(inode, bl, features);
   if (is_symlink())
     ::encode(symlink, bl);
   ::encode(dirfragtree, bl);
@@ -1306,7 +1306,7 @@ void InodeStoreBase::encode_bare(bufferlist &bl, uint64_t features,
     ::encode(*snap_blob, bl);
   else
     ::encode(bufferlist(), bl);
-  ::encode(old_inodes, bl);
+  ::encode(old_inodes, bl, features);
   ::encode(oldest_snap, bl);
   ::encode(damage_flags, bl);
 }
@@ -3391,11 +3391,11 @@ void CInode::encode_cap_message(MClientCaps *m, Capability *cap)
 void CInode::_encode_base(bufferlist& bl, uint64_t features)
 {
   ::encode(first, bl);
-  ::encode(inode, bl);
+  ::encode(inode, bl, features);
   ::encode(symlink, bl);
   ::encode(dirfragtree, bl);
   ::encode(xattrs, bl);
-  ::encode(old_inodes, bl);
+  ::encode(old_inodes, bl, features);
   ::encode(damage_flags, bl);
   encode_snap(bl);
 }
