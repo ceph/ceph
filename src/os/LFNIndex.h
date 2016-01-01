@@ -175,7 +175,7 @@ public:
   int lookup(
     const ghobject_t &oid,
     IndexedPath *path,
-    int *exist
+    int *hardlink
     );
 
   /// @see CollectionIndex;
@@ -326,7 +326,7 @@ protected:
     const vector<string> &from, ///< [in] Subdirectory
     const ghobject_t &oid,	///< [in] Object
     string *mangled_name,	///< [out] Filename
-    int *exists			///< [out] 1 if the file exists, else 0
+    int *hardlink		///< [out] hardlink for this file, hardlink=0 mean no-exist
     );
 
   /// do move subdir from from to dest
@@ -424,7 +424,7 @@ private:
    * @param [in] oid Object for which to get filename.
    * @param [out] mangled_name Filename for oid, pass NULL if not needed.
    * @param [out] full_path Fullpath for oid, pass NULL if not needed.
-   * @param [out] exists 1 if the file exists, 0 otherwise, pass NULL if 
+   * @param [out] hardlink of this file, 0 mean no-exist, pass NULL if
    * not needed
    * @return Error Code, 0 on success.
    */
@@ -433,7 +433,7 @@ private:
     const ghobject_t &oid,
     string *mangled_name,
     string *full_path,
-    int *exists
+    int *hardlink
     );
 
   /// Adjusts path contents when oid is created at name mangled_name.
