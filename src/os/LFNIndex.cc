@@ -115,29 +115,15 @@ int LFNIndex::unlink(const ghobject_t &oid)
 
 int LFNIndex::lookup(const ghobject_t &oid,
 		     IndexedPath *out_path,
-		     int *exist)
+		     int *hardlink)
 {
   WRAP_RETRY(
   vector<string> path;
   string short_name;
-  r = _lookup(oid, &path, &short_name, exist);
+  r = _lookup(oid, &path, &short_name, hardlink);
   if (r < 0)
     goto out;
   string full_path = get_full_path(path, short_name);
-  struct stat buf;
-  maybe_inject_failure();
-  r = ::stat(full_path.c_str(), &buf);
-  maybe_inject_failure();
-  if (r < 0) {
-    if (errno == ENOENT) {
-      *exist = 0;
-    } else {
-      r = -errno;
-      goto out;
-    }
-  } else {
-    *exist = 1;
-  }
   *out_path = IndexedPath(new Path(full_path, this));
   r = 0;
   );
@@ -313,14 +299,16 @@ int LFNIndex::remove_object(const vector<string> &from,
   maybe_inject_failure();
   if (r < 0)
     return r;
+  if (exist == 0)
+    return -ENOENT;
   return lfn_unlink(from, oid, short_name);
 }
 
 int LFNIndex::get_mangled_name(const vector<string> &from,
 			       const ghobject_t &oid,
-			       string *mangled_name, int *exists)
+			       string *mangled_name, int *hardlink)
 {
-  return lfn_get_name(from, oid, mangled_name, 0, exists);
+  return lfn_get_name(from, oid, mangled_name, 0, hardlink);
 }
 
 int LFNIndex::move_subdir(
@@ -724,7 +712,7 @@ string LFNIndex::lfn_generate_object_name_poolless(const ghobject_t &oid)
 int LFNIndex::lfn_get_name(const vector<string> &path, 
 			   const ghobject_t &oid,
 			   string *mangled_name, string *out_path,
-			   int *exists)
+			   int *hardlink)
 {
   string subdir_path = get_full_path_subdir(path);
   string full_name = lfn_generate_object_name(oid);
@@ -735,18 +723,18 @@ int LFNIndex::lfn_get_name(const vector<string> &path,
       *mangled_name = full_name;
     if (out_path)
       *out_path = get_full_path(path, full_name);
-    if (exists) {
+    if (hardlink) {
       struct stat buf;
       string full_path = get_full_path(path, full_name);
       maybe_inject_failure();
       r = ::stat(full_path.c_str(), &buf);
       if (r < 0) {
 	if (errno == ENOENT)
-	  *exists = 0;
+	  *hardlink = 0;
 	else
 	  return -errno;
       } else {
-	*exists = 1;
+	*hardlink = buf.st_nlink;
       }
     }
     return 0;
@@ -776,8 +764,8 @@ int LFNIndex::lfn_get_name(const vector<string> &path,
 	*mangled_name = candidate;
       if (out_path)
 	*out_path = candidate_path;
-      if (exists)
-	*exists = 0;
+      if (hardlink)
+	*hardlink = 0;
       return 0;
     }
     assert(r > 0);
@@ -787,8 +775,11 @@ int LFNIndex::lfn_get_name(const vector<string> &path,
 	*mangled_name = candidate;
       if (out_path)
 	*out_path = candidate_path;
-      if (exists)
-	*exists = 1;
+      if (hardlink) {
+	struct stat st;
+	r = ::stat(candidate_path.c_str(), &st);
+	*hardlink = st.st_nlink;
+      }
       return 0;
     }
     r = chain_getxattr(candidate_path.c_str(), get_alt_lfn_attr().c_str(),
@@ -818,8 +809,8 @@ int LFNIndex::lfn_get_name(const vector<string> &path,
 	  *mangled_name = candidate;
 	if (out_path)
 	  *out_path = candidate_path;
-	if (exists)
-	  *exists = 1;
+	if (hardlink)
+	  *hardlink = st.st_nlink;
 	return 0;
       }
     }
