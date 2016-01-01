@@ -706,6 +706,7 @@ class TestCephDiskDeactivateAndDestroy(unittest.TestCase):
                 ceph_disk,
                 list_devices=lambda dev:fake_device,
                 ):
+            ceph_disk.setup_statedir(ceph_disk.STATEDIR)
             self.assertRaises(Exception, ceph_disk.main_deactivate, args)
 
         #
@@ -730,6 +731,7 @@ class TestCephDiskDeactivateAndDestroy(unittest.TestCase):
                 _check_osd_status=lambda cluster, osd_id: 2,
                 _mark_osd_out=lambda cluster, osd_id: True
                 ):
+            ceph_disk.setup_statedir(ceph_disk.STATEDIR)
             ceph_disk.main_deactivate(args)
 
         #
@@ -751,6 +753,7 @@ class TestCephDiskDeactivateAndDestroy(unittest.TestCase):
                 list_devices=lambda dev:fake_device,
                 _check_osd_status=lambda cluster, osd_id: 0,
                 ):
+            ceph_disk.setup_statedir(ceph_disk.STATEDIR)
             ceph_disk.main_deactivate(args)
 
         #
@@ -787,6 +790,7 @@ class TestCephDiskDeactivateAndDestroy(unittest.TestCase):
                 unmount=lambda path: True,
                 dmcrypt_unmap=lambda part_uuid: True,
                 ):
+            ceph_disk.setup_statedir(ceph_disk.STATEDIR)
             ceph_disk.main_deactivate(args)
 
         #
@@ -821,6 +825,7 @@ class TestCephDiskDeactivateAndDestroy(unittest.TestCase):
                 unmount=lambda path: True,
                 dmcrypt_unmap=lambda part_uuid: True,
                 ):
+            ceph_disk.setup_statedir(ceph_disk.STATEDIR)
             ceph_disk.main_deactivate(args)
 
     def test_mark_out_out(self):
