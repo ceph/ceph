@@ -2308,6 +2308,7 @@ int OSD::shutdown()
       p->second->osr->flush();
     }
   }
+  clear_pg_stat_queue();
   
   // finish ops
   op_shardedwq.drain(); // should already be empty except for lagard PGs
