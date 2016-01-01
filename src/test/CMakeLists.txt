@@ -13,19 +13,12 @@ add_executable(test_signal_handlers
 target_link_libraries(test_signal_handlers global ${BLKID_LIBRARIES} ${CMAKE_DL_LIBS}
   ${ALLOC_LIBS})
 
-# test_msgr
-add_executable(test_msgr
-  testmsgr.cc
-  $<TARGET_OBJECTS:heap_profiler_objs>
-  )
-target_link_libraries(test_msgr global ${BLKID_LIBRARIES} ${CMAKE_DL_LIBS} ${ALLOC_LIBS})
-
 # test_crypt
-add_executable(test_crypt
+add_executable(test_crypto
   testcrypto.cc
   $<TARGET_OBJECTS:heap_profiler_objs>
   )
-target_link_libraries(test_crypt
+target_link_libraries(test_crypto
   global
   ${CRYPTO_LIBS}
   m
@@ -34,6 +27,19 @@ target_link_libraries(test_crypt
   ${CMAKE_DL_LIBS}
   ${ALLOC_LIBS}
   )
+
+add_executable(test_build_libcommon buildtest_skeleton.cc)
+target_link_libraries(test_build_libcommon common pthread ${CRYPTO_LIBS} ${EXTRALIBS})
+
+add_executable(test_build_librgw buildtest_skeleton.cc)
+target_link_libraries(test_build_librgw rgw_a global pthread ${CRYPTO_LIBS} ${EXTRALIBS})
+
+# From src/test/Makefile-client.am: I dont get this one... testing the osdc build but link in libcephfs?
+add_executable(test_build_libcephfs buildtest_skeleton.cc)
+target_link_libraries(test_build_libcephfs cephfs expat pthread ${CRYPTO_LIBS} ${EXTRALIBS})
+
+add_executable(test_build_librados buildtest_skeleton.cc)
+target_link_libraries(test_build_librados librados pthread ${CRYPTO_LIBS} ${EXTRALIBS} osdc osd os common cls_lock_client ${BLKID_LIBRARIES} ${ALLOC_LIBS})
 
 # test_rados
 add_executable(test_rados 
@@ -165,7 +171,6 @@ if (${WITH_RBD})
     os
     global
     ${Boost_PROGRAM_OPTIONS_LIBRARY}
-    blkid
     udev
     ${BLKID_LIBRARIES}
     ${CMAKE_DL_LIBS}
@@ -182,7 +187,7 @@ add_executable(tpbench
   ${tpbench_srcs}
   $<TARGET_OBJECTS:heap_profiler_objs>
   )
-target_link_libraries(tpbench librados ${Boost_PROGRAM_OPTIONS_LIBRARY} os global
+target_link_libraries(tpbench librados ${Boost_PROGRAM_OPTIONS_LIBRARY} global
   ${BLKID_LIBRARIES} ${CMAKE_DL_LIBS} ${ALLOC_LIBS})
 
 # omapbench
@@ -196,7 +201,6 @@ add_executable(omapbench
 target_link_libraries(omapbench
   librados
   ${Boost_PROGRAM_OPTIONS_LIBRARY}
-  os
   global
   ${BLKID_LIBRARIES}
   ${CMAKE_DL_LIBS}
@@ -218,7 +222,7 @@ target_link_libraries(kvstorebench librados global ${BLKID_LIBRARIES} ${CMAKE_DL
 # ceph_objectstore_bench
 add_executable(ceph_objectstore_bench objectstore_bench.cc
   $<TARGET_OBJECTS:heap_profiler_objs>)
-target_link_libraries(ceph_objectstore_bench global os ${ALLOC_LIBS})
+target_link_libraries(ceph_objectstore_bench global ${BLKID_LIBRARIES} os ${ALLOC_LIBS})
 
 ## System tests
 
@@ -293,120 +297,161 @@ target_link_libraries(bench_log global pthread rt ${BLKID_LIBRARIES} ${CMAKE_DL_
 
 ## Unit tests
 #make check starts here
-add_custom_target(symlinks  COMMAND
-  ln -sf ${CMAKE_SOURCE_DIR}/src/test/ ${CMAKE_BINARY_DIR}/src/test/ &&
-  ln -sf ${CMAKE_BINARY_DIR}/src/ceph-mon ${CMAKE_BINARY_DIR}/src/test/ &&
-  ln -sf ${CMAKE_BINARY_DIR}/ceph ${CMAKE_BINARY_DIR}/src/test/ &&
-  ln -sf ${CMAKE_BINARY_DIR}/src/ceph-authtool ${CMAKE_BINARY_DIR}/src/test/ &&
-  ln -sf ${CMAKE_BINARY_DIR}/src/ceph-conf ${CMAKE_BINARY_DIR}/src/test/ &&
-  ln -sf ${CMAKE_BINARY_DIR}/src/ceph-osd ${CMAKE_BINARY_DIR}/src/test/ &&
-  ln -sf ${CMAKE_SOURCE_DIR}/src/ceph-disk ${CMAKE_BINARY_DIR}/src/test/ &&
-  ln -sf ${CMAKE_SOURCE_DIR}/qa/ ${CMAKE_BINARY_DIR}/src/
-  COMMENT "Symlinks for test scripts have been created")
-add_dependencies(check symlinks)
+set(UNITTEST_LIBS gmock_main gmock gtest ${PTHREAD_LIBS})
+set(UNITTEST_CXX_FLAGS "-I${CMAKE_SOURCE_DIR}/src/gmock/include -I${CMAKE_BINARY_DIR}/src/gmock/include -I${CMAKE_SOURCE_DIR}/src/gmock/gtest/include -I${CMAKE_BINARY_DIR}/src/gmock/gtest/include -fno-strict-aliasing")
 
-add_test(NAME unittest_bufferlist_shell COMMAND bash ${CMAKE_SOURCE_DIR}/src/unittest_bufferlist.sh)
-add_dependencies(check unittest_bufferlist_shell)
+#following dependencies are run inside make check unit tests
+add_dependencies(check 
+  ceph-mon
+  ceph
+  ceph-authtool
+  get_command_descriptions
+  crushtool
+  ceph-conf
+  rados
+  ceph-mds
+  monmaptool
+  ceph-osd
+  ceph-dencoder
+  ceph-objectstore-tool)
 
-add_test(NAME run_tox COMMAND bash ${CMAKE_SOURCE_DIR}/src/ceph-detect-init/run-tox.sh)
-add_dependencies(check run_tox)
+add_test(NAME test_helpers COMMAND bash ${CMAKE_SOURCE_DIR}/src/test/test-ceph-helpers.sh WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/src)
+add_dependencies(check test_helpers)
 
-add_test(NAME cephtool_test_osd COMMAND bash ${CMAKE_SOURCE_DIR}/src/test/cephtool-test-osd.sh)
-add_dependencies(check cephtool_test_osd)
-
-add_test(NAME check_generated COMMAND bash ${CMAKE_SOURCE_DIR}/src/test/encoding/check-generated.sh)
-add_dependencies(check check_generated)
-
-add_test(NAME cephtool_test_rados COMMAND bash ${CMAKE_SOURCE_DIR}/src/test/cephtool-test-rados.sh)
-add_dependencies(check cephtool_test_rados)
-
-add_test(NAME run_rbd_unit_tests COMMAND bash ${CMAKE_SOURCE_DIR}/src/test/run-rbd-unit-tests.sh)
-add_dependencies(check run_rbd_unit_tests)
-
-add_test(NAME mkfs COMMAND bash	${CMAKE_SOURCE_DIR}/src/test/mon/mkfs.sh)
-add_dependencies(check mkfs)
-
-add_test(NAME misc COMMAND bash ${CMAKE_SOURCE_DIR}/src/test/mon/misc.sh)
-add_dependencies(check misc)
-
-add_test(NAME osd_config COMMAND bash ${CMAKE_SOURCE_DIR}/src/test/osd/osd-config.sh)
+add_test(NAME osd_config COMMAND bash ${CMAKE_SOURCE_DIR}/src/test/osd/osd-config.sh WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/src)
 add_dependencies(check osd_config)
 
-add_test(NAME osd_pool_create COMMAND bash ${CMAKE_SOURCE_DIR}/src/test/mon/osd-pool-create.sh)
-add_dependencies(check osd_pool_create)
-
-add_test(NAME osd_copy_from COMMAND bash ${CMAKE_SOURCE_DIR}/src/test/osd/osd-copy-from.sh)
+add_test(NAME osd_copy_from COMMAND bash ${CMAKE_SOURCE_DIR}/src/test/osd/osd-copy-from.sh WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/src)
 add_dependencies(check osd_copy_from)
+
+add_test(NAME osd_crush COMMAND bash ${CMAKE_SOURCE_DIR}/src/test/mon/osd-crush.sh WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/src)
+add_dependencies(check osd_crush)
+
+add_test(NAME rados_striper COMMAND bash ${CMAKE_SOURCE_DIR}/src/test/libradosstriper/rados-striper.sh WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/src)
+add_dependencies(check rados_striper)
+
+add_test(NAME osd_bench COMMAND bash ${CMAKE_SOURCE_DIR}/src/test/osd/osd-bench.sh WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/src)
+add_dependencies(check osd_bench)
+
+add_test(NAME test_erasure_code COMMAND bash ${CMAKE_SOURCE_DIR}/src/test/erasure-code/test-erasure-code.sh WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/src)
+add_dependencies(check test_erasure_code)
+
+add_test(NAME test_erasure_eio COMMAND bash ${CMAKE_SOURCE_DIR}/src/test/erasure-code/test-erasure-eio.sh WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/src)
+add_dependencies(check test_erasure_eio)
+
+#osd_scrub_repair is hanging for unknown reasons
+#add_test(NAME osd_scrub_repair COMMAND bash ${CMAKE_SOURCE_DIR}/src/test/osd/osd-scrub-repair.sh WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/src)
+#add_dependencies(check osd_scrub_repair)
+
+add_test(NAME cephtool_test_rados COMMAND bash ${CMAKE_SOURCE_DIR}/src/test/cephtool-test-rados.sh WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/src)
+add_dependencies(check cephtool_test_rados)
+
+add_test(NAME cephtool_test_mon COMMAND bash ${CMAKE_SOURCE_DIR}/src/test/cephtool-test-mon.sh WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/src)
+add_dependencies(check cephtool_test_mon)
+
+add_test(NAME ceph_objectstore_tool_py COMMAND python ${CMAKE_SOURCE_DIR}/src/test/ceph_objectstore_tool.py WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/src)
+add_dependencies(check ceph_objectstore_tool_py)
 
 add_test(NAME osd_mark_down COMMAND bash ${CMAKE_SOURCE_DIR}/src/test/osd/osd-markdown.sh)
 add_dependencies(check osd-markdown)
 
-add_test(NAME mon_handle_forward COMMAND bash ${CMAKE_SOURCE_DIR}/src/test/mon/mon-handle-forward.sh)
-add_dependencies(check mon_handle_forward)
-
-add_test(NAME osd_erasure_code_profile COMMAND bash ${CMAKE_SOURCE_DIR}/src/test/mon/osd-erasure-code-profile.sh)
-add_dependencies(check osd_erasure_code_profile)
-
-add_test(NAME osd_crush COMMAND bash ${CMAKE_SOURCE_DIR}/src/test/mon/osd-crush.sh)
-add_dependencies(check osd_crush)
-
-add_test(NAME mon_scrub COMMAND bash ${CMAKE_SOURCE_DIR}/src/test/mon/mon-scrub.sh)
-add_dependencies(check mon_scrub)
-
-add_test(NAME mon_ping COMMAND bash ${CMAKE_SOURCE_DIR}/src/test/mon/mon-ping.sh)
-add_dependencies(check mon_ping)
-
-add_test(NAME test_ceph_daemon COMMAND python ${CMAKE_SOURCE_DIR}/src/test/pybind/test_ceph_daemon.py)
-add_dependencies(check test_ceph_daemon)
-
-add_test(NAME rados_striper COMMAND bash ${CMAKE_SOURCE_DIR}/src/test/libradosstriper/rados-striper.sh)
-add_dependencies(check rados_striper)
-
-add_test(NAME osd_bench COMMAND bash ${CMAKE_SOURCE_DIR}/src/test/osd/osd-bench.sh)
-add_dependencies(check osd_bench)
-
-add_test(NAME osd_reactivate COMMAND bash ${CMAKE_SOURCE_DIR}/src/test/osd/osd-reactivate.sh)
-add_dependencies(check osd_reactivate)
-
-add_test(NAME test_erasure_code COMMAND bash ${CMAKE_SOURCE_DIR}/src/test/erasure-code/test-erasure-code.sh)
-add_dependencies(check test_erasure_code)
-
-add_test(NAME cephtool_test_mds COMMAND bash ${CMAKE_SOURCE_DIR}/src/test/cephtool-test-mds.sh)
-add_dependencies(check cephtool_test_mds)
-
-add_test(NAME test_ceph_argparse_py COMMAND python ${CMAKE_SOURCE_DIR}/src/test/pybind/test_ceph_argparse.py)
-add_dependencies(check test_ceph_argparse_py)
-
-add_test(NAME test_erasure_eio COMMAND bash ${CMAKE_SOURCE_DIR}/src/test/erasure-code/test-erasure-eio.sh)
-add_dependencies(check test_erasure_eio)
-
-add_test(NAME ceph_disk COMMAND bash ${CMAKE_SOURCE_DIR}/src/test/ceph-disk.sh)
+add_test(NAME ceph_disk COMMAND bash ${CMAKE_SOURCE_DIR}/src/test/ceph-disk.sh WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/src)
 add_dependencies(check ceph_disk)
 
-add_test(NAME readable COMMAND bash ${CMAKE_SOURCE_DIR}/src/test/encoding/readable.sh)
+# unittest_admin_socket
+add_executable(unittest_admin_socket EXCLUDE_FROM_ALL
+  admin_socket.cc
+  $<TARGET_OBJECTS:heap_profiler_objs>
+  )
+add_test(unittest_admin_socket unittest_admin_socket)
+add_dependencies(check unittest_admin_socket)
+target_link_libraries(unittest_admin_socket global ${CMAKE_DL_LIBS}
+  ${ALLOC_LIBS} ${UNITTEST_LIBS})
+set_target_properties(unittest_admin_socket PROPERTIES COMPILE_FLAGS
+  ${UNITTEST_CXX_FLAGS})
+
+# unittest_blkdev
+add_executable(unittest_blkdev EXCLUDE_FROM_ALL
+  common/test_blkdev.cc
+  $<TARGET_OBJECTS:heap_profiler_objs>
+  )
+add_test(NAME unittest_blkdev COMMAND ./unittest_blkdev WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/src)
+add_dependencies(check unittest_blkdev)
+target_link_libraries(unittest_blkdev
+  global
+  ${BLKID_LIBRARIES}
+  ${CMAKE_DL_LIBS}
+  ${ALLOC_LIBS}
+  ${UNITTEST_LIBS})
+set_target_properties(unittest_blkdev PROPERTIES COMPILE_FLAGS
+  ${UNITTEST_CXX_FLAGS})
+
+# unittest_chain_xattr
+add_executable(unittest_chain_xattr EXCLUDE_FROM_ALL
+  objectstore/chain_xattr.cc
+  $<TARGET_OBJECTS:heap_profiler_objs>
+  )
+add_test(unittest_chain_xattr unittest_chain_xattr) 
+add_dependencies(check unittest_chain_xattr)
+target_link_libraries(unittest_chain_xattr
+  os
+  global
+  ${CMAKE_DL_LIBS}
+  ${ALLOC_LIBS}
+  ${UNITTEST_LIBS}
+  )
+set_target_properties(unittest_chain_xattr PROPERTIES COMPILE_FLAGS
+  ${UNITTEST_CXX_FLAGS})
+
+add_test(NAME mkfs COMMAND bash	${CMAKE_SOURCE_DIR}/src/test/mon/mkfs.sh WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/src)
+add_dependencies(check mkfs)
+
+add_test(NAME misc COMMAND bash ${CMAKE_SOURCE_DIR}/src/test/mon/misc.sh WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/src)
+add_dependencies(check misc)
+
+add_test(NAME test_ceph_daemon COMMAND python ${CMAKE_SOURCE_DIR}/src/test/pybind/test_ceph_daemon.py WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/src/test/pybind)
+add_dependencies(check test_ceph_daemon)
+
+set(CTEST_ENVIROMENT "PYTHONPATH=$PYTHONPATH:${CMAKE_SOURCE_DIR}/src/pybind")
+add_test(NAME test_ceph_argparse_py COMMAND python ${CMAKE_SOURCE_DIR}/src/test/pybind/test_ceph_argparse.py WORKING_DIRECTORY ${CMAKE_BINARY_DIR}/src/test)
+add_dependencies(check test_ceph_argparse_py)
+
+add_test(NAME unittest_bufferlist_shell COMMAND bash ${CMAKE_SOURCE_DIR}/src/unittest_bufferlist.sh)
+add_dependencies(check unittest_bufferlist_shell)
+
+add_test(NAME osd_reactivate COMMAND bash ${CMAKE_SOURCE_DIR}/src/test/osd/osd-reactivate.sh WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/src)
+add_dependencies(check osd_reactivate)
+
+add_test(NAME run_tox COMMAND bash ${CMAKE_SOURCE_DIR}/src/ceph-detect-init/run-tox.sh WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/src)
+add_dependencies(check run_tox)
+
+add_test(NAME cephtool_test_osd COMMAND bash ${CMAKE_SOURCE_DIR}/src/test/cephtool-test-osd.sh WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/src)
+add_dependencies(check cephtool_test_osd)
+
+add_test(NAME check_generated COMMAND bash ${CMAKE_SOURCE_DIR}/src/test/encoding/check-generated.sh WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/src)
+add_dependencies(check check_generated)
+
+add_test(NAME run_rbd_unit_tests COMMAND bash ${CMAKE_SOURCE_DIR}/src/test/run-rbd-unit-tests.sh WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/src)
+add_dependencies(check run_rbd_unit_tests)
+
+add_test(NAME osd_pool_create COMMAND bash ${CMAKE_SOURCE_DIR}/src/test/mon/osd-pool-create.sh WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/src)
+add_dependencies(check osd_pool_create)
+
+add_test(NAME mon_handle_forward COMMAND bash ${CMAKE_SOURCE_DIR}/src/test/mon/mon-handle-forward.sh WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/src)
+add_dependencies(check mon_handle_forward)
+
+add_test(NAME osd_erasure_code_profile COMMAND bash ${CMAKE_SOURCE_DIR}/src/test/mon/osd-erasure-code-profile.sh WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/src)
+add_dependencies(check osd_erasure_code_profile)
+
+add_test(NAME cephtool_test_mds COMMAND bash ${CMAKE_SOURCE_DIR}/src/test/cephtool-test-mds.sh WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/src)
+add_dependencies(check cephtool_test_mds)
+
+add_test(NAME readable COMMAND bash ${CMAKE_SOURCE_DIR}/src/test/encoding/readable.sh WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/src)
 add_dependencies(check readable)
 
-add_test(NAME ceph_objectstore_tool COMMAND python ${CMAKE_SOURCE_DIR}/src/test/ceph_objectstore_tool.py)
-add_dependencies(check ceph_objectstore_tool)
-
-add_test(NAME test_ceph_helpers COMMAND bash ${CMAKE_SOURCE_DIR}/src/test/test-ceph-helpers.sh)
-add_dependencies(check test_ceph_helpers)
-
-add_test(NAME cephtool_test_mon COMMAND bash ${CMAKE_SOURCE_DIR}/src/test/cephtool-test-mon.sh)
-add_dependencies(check cephtool_test_mon)
-
-add_test(NAME encode_decode_non_regression COMMAND bash ${CMAKE_SOURCE_DIR}/qa/workunits/erasure-code/encode-decode-non-regression.sh)
+add_test(NAME encode_decode_non_regression COMMAND bash ${CMAKE_SOURCE_DIR}/qa/workunits/erasure-code/encode-decode-non-regression.sh WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/src)
 add_dependencies(check encode_decode_non_regression)
 
-add_test(NAME osd_scrub_repair COMMAND bash ${CMAKE_SOURCE_DIR}/src/osd/osd-scrub-repair.sh)
-add_dependencies(check osd_scrub_repair)
-
-set(UNITTEST_LIBS gtest_main ${PTHREAD_LIBS})
-set(UNITTEST_CXX_FLAGS "${CMAKE_CXX_FLAGS} -I${CMAKE_SOURCE_DIR}/src/gtest/include -I${CMAKE_BINARY_DIR}/src/gtest/include -fno-strict-aliasing")
-
-set(UNITTEST_LIBS gmock_main gmock gtest ${PTHREAD_LIBS})
-set(UNITTEST_CXX_FLAGS "-I${CMAKE_SOURCE_DIR}/src/gmock/include -I${CMAKE_BINARY_DIR}/src/gmock/include -I${CMAKE_SOURCE_DIR}/src/gmock/gtest/include -I${CMAKE_BINARY_DIR}/src/gmock/gtest/include -fno-strict-aliasing")
-  
 # unittest_encoding
 add_executable(unittest_encoding EXCLUDE_FROM_ALL
   encoding.cc
@@ -414,7 +459,6 @@ add_executable(unittest_encoding EXCLUDE_FROM_ALL
   )
 add_test(unittest_encoding unittest_encoding)
 add_dependencies(check unittest_encoding)
-#target_link_libraries(unittest_encoding librados global ${Boost_FILESYSTEM_LIBRARY}
 target_link_libraries(unittest_encoding cephfs librados pthread rt m ${BLKID_LIBRARIES} ${CMAKE_DL_LIBS} ${ALLOC_LIBS} ${UNITTEST_LIBS})
 set_target_properties(unittest_encoding
   PROPERTIES COMPILE_FLAGS ${UNITTEST_CXX_FLAGS})
@@ -430,22 +474,6 @@ target_link_libraries(unittest_addrs cephfs librados pthread rt m
   ${BLKID_LIBRARIES} ${CMAKE_DL_LIBS} ${ALLOC_LIBS} ${UNITTEST_LIBS})
 set_target_properties(unittest_addrs
   PROPERTIES COMPILE_FLAGS ${UNITTEST_CXX_FLAGS})
-
-# unittest_blkdev
-add_executable(unittest_blkdev EXCLUDE_FROM_ALL
-  common/test_blkdev.cc
-  $<TARGET_OBJECTS:heap_profiler_objs>
-  )
-add_test(unittest_blkdev unittest_blkdev)
-add_dependencies(check unittest_blkdev)
-target_link_libraries(unittest_blkdev
-  global
-  ${BLKID_LIBRARIES}
-  ${CMAKE_DL_LIBS}
-  ${ALLOC_LIBS}
-  ${UNITTEST_LIBS})
-set_target_properties(unittest_blkdev PROPERTIES COMPILE_FLAGS
-  ${UNITTEST_CXX_FLAGS})
 
 # unittest_bloom_filter
 add_executable(unittest_bloom_filter EXCLUDE_FROM_ALL
@@ -908,18 +936,6 @@ target_link_libraries(unittest_perf_counters global ${CMAKE_DL_LIBS}
 set_target_properties(unittest_perf_counters PROPERTIES COMPILE_FLAGS
   ${UNITTEST_CXX_FLAGS})
 
-# unittest_admin_socket
-add_executable(unittest_admin_socket EXCLUDE_FROM_ALL
-  admin_socket.cc
-  $<TARGET_OBJECTS:heap_profiler_objs>
-  )
-add_test(unittest_admin_socket unittest_admin_socket)
-add_dependencies(check unittest_admin_socket)
-target_link_libraries(unittest_admin_socket global ${CMAKE_DL_LIBS}
-  ${ALLOC_LIBS} ${UNITTEST_LIBS})
-set_target_properties(unittest_admin_socket PROPERTIES COMPILE_FLAGS
-  ${UNITTEST_CXX_FLAGS})
-
 # unittest_ceph_crypto
 add_executable(unittest_ceph_crypto EXCLUDE_FROM_ALL
   ceph_crypto.cc
@@ -1014,25 +1030,6 @@ add_dependencies(check unittest_context)
 target_link_libraries(unittest_context global ${CMAKE_DL_LIBS}
   ${ALLOC_LIBS} ${UNITTEST_LIBS})
 set_target_properties(unittest_context PROPERTIES COMPILE_FLAGS
-  ${UNITTEST_CXX_FLAGS})
-
-# unittest_chain_xattr
-add_executable(unittest_chain_xattr EXCLUDE_FROM_ALL
-  objectstore/chain_xattr.cc
-  $<TARGET_OBJECTS:heap_profiler_objs>
-  )
-set_target_properties(unittest_chain_xattr PROPERTIES COMPILE_FLAGS
-  ${UNITTEST_CXX_FLAGS})
-add_test(unittest_chain_xattr unittest_chain_xattr)
-add_dependencies(check unittest_chain_xattr)
-target_link_libraries(unittest_chain_xattr
-  os
-  global
-  ${CMAKE_DL_LIBS}
-  ${ALLOC_LIBS}
-  ${UNITTEST_LIBS}
-  )
-set_target_properties(unittest_chain_xattr PROPERTIES COMPILE_FLAGS
   ${UNITTEST_CXX_FLAGS})
 
 # unittest_safe_io
@@ -1148,8 +1145,8 @@ target_link_libraries(unittest_rbd_replay
   librbd
   librados
   global
-  librbd_replay
-  librbd_replay_ios
+  rbd_replay
+  rbd_replay_ios
   keyutils
   ${BLKID_LIBRARIES}
   ${CMAKE_DL_LIBS}
@@ -1389,8 +1386,8 @@ set_target_properties(unittest_subprocess PROPERTIES COMPILE_FLAGS
 
 # unittest_pageset
 add_executable(unittest_pageset EXCLUDE_FROM_ALL test_pageset.cc)
-add_test(unittest_subprocess unittest_subprocess)
-add_dependencies(check unittest_subprocess)
+add_test(unittest_pageset unittest_pageset)
+add_dependencies(check unittest_pageset)
 target_link_libraries(unittest_pageset ${UNITTEST_LIBS})
 set_target_properties(unittest_pageset PROPERTIES COMPILE_FLAGS
   ${UNITTEST_CXX_FLAGS})
@@ -1437,8 +1434,9 @@ add_dependencies(check unittest_bluestore_types)
 target_link_libraries(unittest_bluestore_types os global ${UNITTEST_LIBS})
 set_target_properties(unittest_bluestore_types PROPERTIES COMPILE_FLAGS
   ${UNITTEST_CXX_FLAGS})
-
+  
 add_subdirectory(erasure-code EXCLUDE_FROM_ALL)
+
 #make check ends here
 
 if(${WITH_RADOSGW})
@@ -1621,6 +1619,15 @@ add_executable(multi_stress_watch
 target_link_libraries(multi_stress_watch librados global radostest
   ${BLKID_LIBRARIES} ${CMAKE_DL_LIBS} ${ALLOC_LIBS})
 
+set(librados_test_stub_srcs
+  librados_test_stub/LibradosTestStub.cc
+  librados_test_stub/TestClassHandler.cc
+  librados_test_stub/TestIoCtxImpl.cc
+  librados_test_stub/TestMemIoCtxImpl.cc
+  librados_test_stub/TestMemRadosClient.cc
+  librados_test_stub/TestRadosClient.cc)
+add_library(librados_test_stub STATIC ${librados_test_stub_srcs})
+  
 # unittest_librbd
 add_executable(unittest_librbd EXCLUDE_FROM_ALL
   librbd/test_librbd.cc
@@ -1642,6 +1649,10 @@ endif(${WITH_LTTNG})
 target_link_libraries(unittest_librbd
   librbd
   librados
+  journal
+  cls_journal_client
+  librados_api
+  librados_test_stub
   ${UNITTEST_LIBS}
   global
   ${CMAKE_DL_LIBS}
@@ -1830,6 +1841,21 @@ target_link_libraries(test_cls_hello
   ${UNITTEST_LIBS}
   )
 
+add_executable(test_cls_numops cls_numops/test_cls_numops.cc)
+set_target_properties(test_cls_numops PROPERTIES COMPILE_FLAGS
+  ${UNITTEST_CXX_FLAGS})
+target_link_libraries(test_cls_numops 
+  librados 
+  global
+  cls_numops_client 
+  ${EXTRALIBS}
+  ${BLKID_LIBRARIES}
+  ${ALLOC_LIBS}
+  ${CMAKE_DL_LIBS}
+  radostest
+  ${UNITTEST_LIBS} 
+  )
+
 if(${WITH_RADOSGW})
   add_executable(test_cls_rgw
     cls_rgw/test_cls_rgw.cc
@@ -1848,6 +1874,58 @@ if(${WITH_RADOSGW})
     ${CMAKE_DL_LIBS}
     radostest)
 endif(${WITH_RADOSGW})
+
+# test_async_driver
+add_executable(test_async_driver
+  msgr/test_async_driver.cc
+  $<TARGET_OBJECTS:heap_profiler_objs>
+  )
+set_target_properties(test_async_driver PROPERTIES COMPILE_FLAGS
+  ${UNITTEST_CXX_FLAGS})
+target_link_libraries(test_async_driver os global ${BLKID_LIBRARIES} ${CMAKE_DL_LIBS} ${ALLOC_LIBS} ${UNITTEST_LIBS})
+
+# test_msgr
+add_executable(test_msgr
+  msgr/test_msgr.cc
+  $<TARGET_OBJECTS:heap_profiler_objs>
+  )
+set_target_properties(test_msgr PROPERTIES COMPILE_FLAGS
+  ${UNITTEST_CXX_FLAGS})
+target_link_libraries(test_msgr os global ${BLKID_LIBRARIES} ${CMAKE_DL_LIBS} ${ALLOC_LIBS} ${UNITTEST_LIBS})
+
+#test_mon_msg
+add_executable(test_mon_msg mon/test-mon-msg.cc)
+set_target_properties(test_mon_msg PROPERTIES COMPILE_FLAGS
+  ${UNITTEST_CXX_FLAGS})
+target_link_libraries(test_mon_msg os osdc global ${UNITTEST_LIBS})
+
+#test_perf_local
+add_executable(test_perf_local 
+  perf_local.cc
+  perf_helper.cc)
+#INTEL_SSE & INTEL_SSE2 flags
+set(PERF_LOCAL_FLAGS "${CMAKE_CXX_FLAGS} -msse -msse2") 
+set_target_properties(test_perf_local PROPERTIES COMPILE_FLAGS
+  ${PERF_LOCAL_FLAGS})
+target_link_libraries(test_perf_local os global ${UNITTEST_LIBS})
+
+#test_perf_objectstore
+add_executable(test_perf_objectstore objectstore/ObjectStoreTransactionBenchmark.cc)
+set_target_properties(test_perf_objectstore PROPERTIES COMPILE_FLAGS
+  ${UNITTEST_CXX_FLAGS})
+target_link_libraries(test_perf_objectstore os osdc global ${UNITTEST_LIBS})
+
+#test_perf_msgr_server
+add_executable(test_perf_msgr_server msgr/perf_msgr_server.cc)
+set_target_properties(test_perf_msgr_server PROPERTIES COMPILE_FLAGS
+  ${UNITTEST_CXX_FLAGS})
+target_link_libraries(test_perf_msgr_server os global ${UNITTEST_LIBS})
+
+#test_perf_msgr_client
+add_executable(test_perf_msgr_client msgr/perf_msgr_client.cc)
+set_target_properties(test_perf_msgr_client PROPERTIES COMPILE_FLAGS
+  ${UNITTEST_CXX_FLAGS})
+target_link_libraries(test_perf_msgr_client os global ${UNITTEST_LIBS})
 
 add_executable(test_mon_workloadgen
   mon/test_mon_workloadgen.cc
@@ -1980,6 +2058,38 @@ set_target_properties(test_rados_api_lock PROPERTIES COMPILE_FLAGS
 target_link_libraries(test_rados_api_lock
   librados ${UNITTEST_LIBS} ${ALLOC_LIBS} radostest)
 
+add_executable(test_rados_api_tier
+  librados/tier.cc
+  $<TARGET_OBJECTS:heap_profiler_objs>
+  )
+set_target_properties(test_rados_api_tier PROPERTIES COMPILE_FLAGS
+  ${UNITTEST_CXX_FLAGS})
+target_link_libraries(test_rados_api_tier
+  global librados ${UNITTEST_LIBS} ${ALLOC_LIBS} ${Boost_SYSTEM_LIBRARY} radostest)
+
+add_executable(test_rados_api_snapshots
+  librados/snapshots.cc
+  $<TARGET_OBJECTS:heap_profiler_objs>
+  )
+set_target_properties(test_rados_api_snapshots PROPERTIES COMPILE_FLAGS
+  ${UNITTEST_CXX_FLAGS})
+target_link_libraries(test_rados_api_snapshots
+  librados ${UNITTEST_LIBS} ${ALLOC_LIBS} radostest)
+
+add_library(rados_striper_test STATIC libradosstriper/TestCase.cc)
+target_link_libraries(rados_striper_test radostest)
+set_target_properties(rados_striper_test PROPERTIES COMPILE_FLAGS
+  ${UNITTEST_CXX_FLAGS})
+
+add_executable(test_rados_api_striping
+  libradosstriper/striping.cc
+  $<TARGET_OBJECTS:heap_profiler_objs>
+  )
+target_link_libraries(test_rados_api_striping librados libradosstriper 
+  ${UNITTEST_LIBS} ${ALLOC_LIBS} rados_striper_test)
+set_target_properties(test_rados_api_striping PROPERTIES COMPILE_FLAGS
+  ${UNITTEST_CXX_FLAGS})
+
 if(${WITH_CEPHFS})
   add_executable(test_libcephfs
     libcephfs/test.cc
@@ -2047,6 +2157,12 @@ target_link_libraries(test_objectstore_workloadgen
   ${ALLOC_LIBS}
   ${CMAKE_DL_LIBS}
   )
+
+#test_filestore
+add_executable(test_filestore filestore/TestFileStore.cc)
+set_target_properties(test_filestore PROPERTIES COMPILE_FLAGS
+  ${UNITTEST_CXX_FLAGS})
+target_link_libraries(test_filestore os global ${UNITTEST_LIBS})
 
 add_executable(test_filestore_idempotent
   objectstore/test_idempotent.cc
