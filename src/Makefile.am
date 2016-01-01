@@ -18,6 +18,7 @@ include arch/Makefile.am
 include auth/Makefile.am
 include brag/Makefile.am
 include ceph-detect-init/Makefile.am
+include ceph-disk/Makefile.am
 include crush/Makefile.am
 include kv/Makefile.am
 include mon/Makefile.am
@@ -106,7 +107,6 @@ EXTRA_DIST += \
 	$(srcdir)/upstart/radosgw-all-starter.conf \
 	$(srcdir)/upstart/rbdmap.conf \
 	ceph.in \
-	ceph-disk \
 	ceph-disk-udev \
 	ceph-create-keys \
 	ceph-rest-api \

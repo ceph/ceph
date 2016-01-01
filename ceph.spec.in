@@ -863,6 +863,7 @@ rm -rf $RPM_BUILD_ROOT
 %config %{_sysconfdir}/sysconfig/SuSEfirewall2.d/services/ceph-osd-mds
 %endif
 %{python_sitelib}/ceph_detect_init*
+%{python_sitelib}/ceph_disk*
 %{_mandir}/man8/ceph-deploy.8*
 %{_mandir}/man8/ceph-detect-init.8*
 %{_mandir}/man8/ceph-disk.8*
