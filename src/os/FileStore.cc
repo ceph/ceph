@@ -457,28 +457,20 @@ int FileStore::lfn_unlink(coll_t cid, const ghobject_t& o,
 
   {
     IndexedPath path;
-    int exist;
-    r = index->lookup(o, &path, &exist);
+    int hardlink;
+    r = index->lookup(o, &path, &hardlink);
     if (r < 0) {
       assert(!m_filestore_fail_eio || r != -EIO);
       return r;
     }
 
     if (!force_clear_omap) {
-      struct stat st;
-      r = ::stat(path->path(), &st);
-      if (r < 0) {
-	r = -errno;
-	if (r == -ENOENT) {
+      if (hardlink == 0) {
 	  wbthrottle.clear_object(o); // should be only non-cache ref
 	  fdcache.clear(o);
-	} else {
-	  assert(!m_filestore_fail_eio || r != -EIO);
-	}
-	dout(25) << __func__ << " stat failed " << cpp_strerror(r) << dendl;
-	return r;
-      } else if (st.st_nlink == 1) {
-	force_clear_omap = true;
+	  return 0;
+      } else if (hardlink == 1) {
+	  force_clear_omap = true;
       }
     }
     if (force_clear_omap) {
