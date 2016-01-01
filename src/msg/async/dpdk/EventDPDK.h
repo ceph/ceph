@@ -21,7 +21,7 @@
 
 class DPDKDriver : public EventDriver {
   CephContext *cct;
-  std::unique_ptr<NetWorkStack> stack;
+  std::unique_ptr<NetworkStack> stack;
 
  public:
   UserspaceEventManager manager;

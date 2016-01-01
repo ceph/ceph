@@ -22,10 +22,6 @@
 
 class interface;
 
-struct listen_options {
-  bool reuse_address = false;
-};
-
 class forward_hash {
   uint8_t data[64];
   size_t end_idx = 0;
@@ -228,15 +224,14 @@ class interface {
   friend class l3_protocol;
 };
 
-static NetWorkStack* stacks[];
+static NetworkStack* stacks[];
 
-class DPDKStack : public NetWorkStack {
+class DPDKStack : public NetworkStack {
   static bool created = false;
 
   interface _netif;
   ipv4 _inet;
   EventCenter *center;
-  timer<> _timer;
   unsigned cores;
   unsigned cpu_id;
 
@@ -249,7 +244,7 @@ class DPDKStack : public NetWorkStack {
   explicit DPDKStack(CephContext *cct, std::shared_ptr<device> dev, unsigned cores, unsigned i);
   virtual int listen(const entity_addr_t &sa, const listen_options &opt, ServerSocket *sock) override;
   virtual int connect(const entity_addr_t &addr, const SocketOptions &opts, ConnectedSocket *socket) override;
-  static std::unique_ptr<NetWorkStack> create(CephContext *cct, unsigned i);
+  static std::unique_ptr<NetworkStack> create(CephContext *cct, unsigned i);
   void arp_learn(ethernet_address l2, ipv4_address l3) {
     _inet.learn(l2, l3);
   }

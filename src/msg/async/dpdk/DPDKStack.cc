@@ -154,7 +154,7 @@ void interface::dispatch_packet(unsigned cpuid, Packet p) {
   }
 }
 
-static std::unique_ptr<NetWorkStack> create(CephContext *cct, unsigned i) {
+static std::unique_ptr<NetworkStack> create(CephContext *cct, unsigned i) {
   static Mutex lock("DPDKStack::lock");
   static Cond cond;
   if (i == 0) {
@@ -163,7 +163,7 @@ static std::unique_ptr<NetWorkStack> create(CephContext *cct, unsigned i) {
 
     dpdk::eal::init(cpus, cct);
     int cores = cct->_conf->ms_dpdk_num_cores;
-    stacks = new NetWorkStack[cores];
+    stacks = new NetworkStack[cores];
     std::unique_ptr<device> dev;
 
     // Hardcoded port index 0.
@@ -208,7 +208,7 @@ static std::unique_ptr<NetWorkStack> create(CephContext *cct, unsigned i) {
 }
 
 DPDKStack::DPDKStack(CephContext *cct, std::shared_ptr<device> dev, unsigned i)
-    : NetWorkStack(cct), _netif(cct, std::move(dev), i), _inet(cct, &_netif),
+    : NetworkStack(cct), _netif(cct, std::move(dev), i), _inet(cct, &_netif),
       cores(), cpu_id(i)
 {
   _inet.set_host_address(ipv4_address(cct->_conf->ms_dpdk_host_ipv4_addr));

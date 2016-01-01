@@ -22,7 +22,7 @@
 
 #include "GenericSocket.h"
 
-class PosixNetworkStack : public NetWorkStack {
+class PosixNetworkStack : public NetworkStack {
   NetHandler handler;
  public:
   explicit PosixNetworkStack(CephContext *c): NetworkStack(c), _reuseport(false) {}

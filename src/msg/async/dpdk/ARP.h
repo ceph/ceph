@@ -116,7 +116,7 @@ class arp_for : public arp_for_protocol {
   };
   struct resolution {
     std::vector<resolution_cb> _waiters;
-    timer<> _timeout_timer;
+    uint64_t timeout_fd;
   };
  private:
   l3addr _l3self = L3::broadcast_address();
@@ -213,7 +213,8 @@ void arp_for<L3>::wait(const l3addr& paddr, resolution_cb &&cb) {
   auto& res = first_request ? _in_progress[paddr] : j->second;
 
   if (first_request) {
-    center->create_time_event(1*1000*1000, new C_handle_arp_timeout(this, res, paddr));
+    res.timeout_fd = center->create_time_event(
+        1*1000*1000, new C_handle_arp_timeout(this, res, paddr));
     send_query(paddr);
   }
 
@@ -232,16 +233,16 @@ void arp_for<L3>::learn(l2addr hwaddr, l3addr paddr) {
   auto i = _in_progress.find(paddr);
   if (i != _in_progress.end()) {
     auto& res = i->second;
-    res._timeout_timer.cancel();
+    center->delete_time_event(res.timeout_fd);
     for (auto &&pr : res._waiters) {
-      pr.set_value(hwaddr);
+      pr(hwaddr, 0);
     }
     _in_progress.erase(i);
   }
 }
 
 template <typename L3>
-int arp_for<L3>::received(packet p) {
+int arp_for<L3>::received(Packet p) {
   auto ah = p.get_header<arp_hdr>();
   if (!ah) {
     return 0;
