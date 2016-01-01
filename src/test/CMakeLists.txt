@@ -327,6 +327,12 @@ add_dependencies(check osd_copy_from)
 add_test(NAME osd_crush COMMAND bash ${CMAKE_SOURCE_DIR}/src/test/mon/osd-crush.sh WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/src)
 add_dependencies(check osd_crush)
 
+add_test(NAME ceph_disk_tox COMMAND bash ${CMAKE_SOURCE_DIR}/src/ceph-disk/run-tox.sh)
+add_dependencies(check ceph_disk_tox)
+
+add_test(NAME cephtool_test_osd COMMAND bash ${CMAKE_SOURCE_DIR}/src/test/cephtool-test-osd.sh)
+add_dependencies(check cephtool_test_osd)
+
 add_test(NAME rados_striper COMMAND bash ${CMAKE_SOURCE_DIR}/src/test/libradosstriper/rados-striper.sh WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/src)
 add_dependencies(check rados_striper)
 

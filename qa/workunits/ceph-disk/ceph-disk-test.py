@@ -17,7 +17,7 @@
 #
 #  export PATH=..:$PATH
 #  ceph-disk.sh # run once to prepare the environment as it would be by teuthology
-#  ln -sf /home/ubuntu/ceph/src/ceph-disk $(which ceph-disk)
+#  ln -sf /home/ubuntu/ceph/src/ceph-disk/ceph_disk/main.py $(which ceph-disk)
 #  ln -sf /home/ubuntu/ceph/udev/95-ceph-osd.rules /lib/udev/rules.d/95-ceph-osd.rules
 #  ln -sf /home/ubuntu/ceph/systemd/ceph-disk@.service /usr/lib/systemd/system/ceph-disk@.service
 #  ceph-disk.conf will be silently ignored if it is a symbolic link or a hard link /var/log/upstart for logs

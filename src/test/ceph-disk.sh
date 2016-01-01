@@ -154,7 +154,6 @@ function tweak_path() {
 
     $tweaker test_activate_dir || return 1
 
-    [ -f $DIR/used-ceph-conf ] || return 1
     [ -f $DIR/used-ceph-osd ] || return 1
 
     teardown
