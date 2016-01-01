@@ -89,7 +89,7 @@ struct ipv4_address {
     ip = addr.ip;
   }
 
-  unaligned<uint32_t> ip;
+  uint32_t ip;
 
   template <typename Adjuster>
   auto adjust_endianness(Adjuster a) { return a(ip); }
@@ -109,8 +109,8 @@ std::ostream& operator<<(std::ostream& os, ipv4_address a);
 namespace std {
 
   template <>
-  struct hash<net::ipv4_address> {
-    size_t operator()(net::ipv4_address a) const { return a.ip; }
+  struct hash<ipv4_address> {
+    size_t operator()(ipv4_address a) const { return a.ip; }
   };
 
 }
@@ -128,7 +128,7 @@ struct ipv4_traits {
   static void tcp_pseudo_header_checksum(checksummer& csum, ipv4_address src, ipv4_address dst, uint16_t len) {
     csum.sum_many(src.ip.raw, dst.ip.raw, uint8_t(0), uint8_t(ip_protocol_num::tcp), len);
   }
-  static constexpr uint8_t ip_hdr_len_min = net::ipv4_hdr_len_min;
+  static constexpr uint8_t ip_hdr_len_min = ipv4_hdr_len_min;
 };
 
 template <ip_protocol_num ProtoNum>
@@ -194,8 +194,8 @@ struct icmp_hdr {
   };
   msg_type type;
   uint8_t code;
-  unaligned<uint16_t> csum;
-  unaligned<uint32_t> rest;
+  uint16_t csum;
+  uint32_t rest;
   template <typename Adjuster>
   auto adjust_endianness(Adjuster a) {
     return a(csum);
@@ -383,7 +383,7 @@ class ipv4 {
   tcp<ipv4_traits>& get_tcp() { return *_tcp._tcp; }
   void register_l4(proto_type id, ip_protocol* handler);
   const hw_features& hw_features() const { return _netif->hw_features(); }
-  static bool needs_frag(Packet& p, ip_protocol_num proto_num, net::hw_features hw_features) {
+  static bool needs_frag(Packet& p, ip_protocol_num proto_num, hw_features hw_features) {
     if (p.len() + ipv4_hdr_len_min <= hw_features.mtu)
       return false;
 
@@ -424,13 +424,13 @@ struct ip_hdr {
   uint8_t ver : 4;
   uint8_t dscp : 6;
   uint8_t ecn : 2;
-  unaligned<uint16_t> len;
-  unaligned<uint16_t> id;
-  unaligned<uint16_t> frag;
+  uint16_t len;
+  uint16_t id;
+  uint16_t frag;
   enum class frag_bits : uint8_t { mf = 13, df = 14, reserved = 15, offset_shift = 3 };
   uint8_t ttl;
   uint8_t ip_proto;
-  unaligned<uint16_t> csum;
+  uint16_t csum;
   ipv4_address src_ip;
   ipv4_address dst_ip;
   uint8_t options[0];

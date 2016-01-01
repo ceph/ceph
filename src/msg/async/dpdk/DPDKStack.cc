@@ -169,7 +169,9 @@ static std::unique_ptr<NetWorkStack> create(CephContext *cct, unsigned i) {
     // Hardcoded port index 0.
     // TODO: Inherit it from the opts
     dev = create_dpdk_net_device(
-        cct, 0, cct->_conf->ms_dpdk_num_queues, cct->_conf->ms_dpdk_lro,
+        cct, 0, cct->_conf->ms_dpdk_num_queues,
+        cores,
+        cct->_conf->ms_dpdk_lro,
         cct->_conf->ms_dpdk_hw_flow_control);
 
     auto sem = std::make_shared<semaphore>(0);
@@ -192,7 +194,7 @@ static std::unique_ptr<NetWorkStack> create(CephContext *cct, unsigned i) {
     }
     sdev->init_port_fini();
     for (unsigned i = 0; i < cct->_conf->ms_dpdk_num_cores; i++)
-      stacks[i] = std::make_unique<DPDKStack>(cct, std::move(dev)).get();
+      stacks[i] = std::make_unique<DPDKStack>(cct, std::move(dev).get(), cores, i);
     Mutex::Locker l(lock);
     created = true;
     cond.Signal();
@@ -206,7 +208,8 @@ static std::unique_ptr<NetWorkStack> create(CephContext *cct, unsigned i) {
 }
 
 DPDKStack::DPDKStack(CephContext *cct, std::shared_ptr<device> dev, unsigned i)
-    : NetWorkStack(cct), _netif(cct, std::move(dev), i), _inet(cct, &_netif), cpu_id(i)
+    : NetWorkStack(cct), _netif(cct, std::move(dev), i), _inet(cct, &_netif),
+      cores(), cpu_id(i)
 {
   _inet.set_host_address(ipv4_address(cct->_conf->ms_dpdk_host_ipv4_addr));
   _inet.set_gw_address(ipv4_address(cct->_conf->ms_dpdk_gateway_ipv4_addr));
@@ -241,7 +244,7 @@ class C_arp_learn : public EventCallback {
 
 void arp_learn(ethernet_address l2, ipv4_address l3)
 {
-  for (unsigned i = 0; i < smp::count; i++) {
+  for (unsigned i = 0; i < cores; i++) {
     stacks[i]->center->create_external_event(
         new C_arp_learn(stacks[i], l2, l3));
   }

@@ -95,10 +95,11 @@ enum {
 class DPDKDevice {
  public:
   CephContext *cct;
-  std::unique_ptr<qp*[]> _queues;
+  std::unique_ptr<DPDKQueuePair*[]> _queues;
   size_t _rss_table_bits = 0;
   uint8_t _port_idx;
   uint16_t _num_queues;
+  unsigned  cores;
   hw_features _hw_features;
   uint8_t _queues_ready = 0;
   unsigned _home_cpu;
@@ -154,17 +155,17 @@ class DPDKDevice {
 
  public:
   DPDKDevice(CephContext *c, uint8_t port_idx, uint16_t num_queues,
-             bool use_lro, bool enable_fc):
-      cct(c), _port_idx(port_idx), _num_queues(num_queues),
+             unsigned cores, bool use_lro, bool enable_fc):
+      cct(c), _port_idx(port_idx), _num_queues(num_queues), cores(cores),
       _home_cpu(0), _use_lro(use_lro),
       _enable_fc(enable_fc) {
-    _queues = std::make_unique<std::unique_ptr<DPDKQueuePair>[]>(smp::count);
+    _queues = std::make_unique<DPDKQueuePair*[]>(cores);
     /* now initialise the port we will use */
     int ret = init_port_start();
     if (ret != 0) {
       rte_exit(EXIT_FAILURE, "Cannot initialise port %u\n", _port_idx);
     }
-    string name(std::string("port") + std::to_string(qid)),
+    string name(std::string("port") + std::to_string(qid));
     PerfCountersBuilder plb(cct, name, l_dpdk_dev_first, l_dpdk_dev_last);
 
     plb.add_u64_counter(l_dpdk_dev_rx_mcast, "dpdk_device_receive_multicast_packets", "DPDK received multicast packets");
@@ -200,12 +201,12 @@ class DPDKDevice {
 
     return mac.addr_bytes;
   }
-  net::hw_features hw_features() override {
+  hw_features hw_features() {
     return _hw_features;
   }
   const rss_key_type& rss_key() const { return _rss_key; }
   uint16_t hw_queues_count() { return _num_queues; }
-  std::unique_ptr<qp> init_local_queue(EventCenter *center, string hugepages, uint16_t qid) override {
+  std::unique_ptr<qp> init_local_queue(EventCenter *center, string hugepages, uint16_t qid) {
     std::unique_ptr<qp> qp;
     if (!hugepages.empty())
       qp = std::make_unique<DPDKQueuePair<true>>(center, this, qid);
@@ -687,7 +688,7 @@ class DPDKQueuePair {
       }
 
       /**
-       * Zero-copy handling of a single net::fragment.
+       * Zero-copy handling of a single fragment.
        *
        * @param do_one_buf Functor responsible for a single rte_mbuf
        *                   handling
@@ -748,7 +749,7 @@ class DPDKQueuePair {
       }
 
       /**
-       * Zero-copy handling of a single net::fragment.
+       * Zero-copy handling of a single fragment.
        *
        * @param qp DPDKQueuePair handle (in)
        * @param frag Fragment to copy (in)
@@ -766,7 +767,7 @@ class DPDKQueuePair {
       }
 
       /**
-       * Copies one net::fragment into the cluster of rte_mbuf's.
+       * Copies one fragment into the cluster of rte_mbuf's.
        *
        * @param qp DPDKQueuePair handle (in)
        * @param frag Fragment to copy (in)
@@ -1266,7 +1267,7 @@ class DPDKQueuePair {
   bool poll_rx_once();
 
   /**
-   * Translates an rte_mbuf's into net::packet and feeds them to _rx_stream.
+   * Translates an rte_mbuf's into packet and feeds them to _rx_stream.
    *
    * @param bufs An array of received rte_mbuf's
    * @param count Number of buffers in the bufs[]
@@ -1321,11 +1322,11 @@ class DPDKQueuePair {
   std::vector<fragment> _frags;
   std::vector<char*> _bufs;
   size_t _num_rx_free_segs = 0;
-  class DPDKRXBGCPoller : public EventCenter::Poller {
+  class DPDKRXGCPoller : public EventCenter::Poller {
     DPDKQueuePair *qp;
 
    public:
-    explicit DPDKRXPoller(DPDKQueuePair *qp)
+    explicit DPDKRXGCPoller(DPDKQueuePair *qp)
       : EventCenter::Poller(qp->center, "DPDK::DPDKRXGCPoller"), qp(pp) {}
 
     virtual int poll() {
@@ -1350,8 +1351,8 @@ class DPDKQueuePair {
     DPDKQueuePair *qp;
 
    public:
-    explicit DPDKRXPoller(DPDKQueuePair *qp)
-      : EventCenter::Poller(qp->center, "DPDK::DPDKTXPoller"), qp(pp) {}
+    explicit DPDKTXGCPoller(DPDKQueuePair *qp)
+      : EventCenter::Poller(qp->center, "DPDK::DPDKTXGCPoller"), qp(pp) {}
 
     virtual int poll() {
       return qp->_tx_buf_factory.gc();

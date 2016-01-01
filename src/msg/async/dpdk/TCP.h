@@ -44,22 +44,6 @@
 
 struct tcp_hdr;
 
-inline auto tcp_error(int err) {
-  return std::system_error(err, std::system_category());
-}
-
-inline auto tcp_reset_error() {
-  return tcp_error(ECONNRESET);
-};
-
-inline auto tcp_connect_error() {
-  return tcp_error(ECONNABORTED);
-}
-
-inline auto tcp_refused_error() {
-  return tcp_error(ECONNREFUSED);
-};
-
 enum class tcp_state : uint16_t {
   CLOSED          = (1 << 0),
   LISTEN          = (1 << 1),
@@ -78,13 +62,6 @@ inline tcp_state operator|(tcp_state s1, tcp_state s2) {
   return tcp_state(uint16_t(s1) | uint16_t(s2));
 }
 
-template <typename... Args>
-void tcp_debug(const char* fmt, Args&&... args) {
-#if TCP_DEBUG
-  print(fmt, std::forward<Args>(args)...);
-#endif
-}
-
 struct tcp_option {
   // The kind and len field are fixed and defined in TCP protocol
   enum class option_kind: uint8_t { mss = 2, win_scale = 3, sack = 4, timestamps = 8,  nop = 1, eol = 0 };
@@ -92,7 +69,7 @@ struct tcp_option {
   struct mss {
     option_kind kind = option_kind::mss;
     option_len len = option_len::mss;
-    packed<uint16_t> mss;
+    uint16_t mss;
     template <typename Adjuster>
     void adjust_endianness(Adjuster a) { a(mss); }
   } __attribute__((packed));
@@ -108,8 +85,8 @@ struct tcp_option {
   struct timestamps {
     option_kind kind = option_kind::timestamps;
     option_len len = option_len::timestamps;
-    packed<uint32_t> t1;
-    packed<uint32_t> t2;
+    uint32_t t1;
+    uint32_t t2;
     template <typename Adjuster>
     void adjust_endianness(Adjuster a) { a(t1, t2); }
   } __attribute__((packed));
@@ -170,10 +147,10 @@ inline bool operator<=(tcp_seq s, tcp_seq q) { return !(s > q); }
 inline bool operator>=(tcp_seq s, tcp_seq q) { return !(s < q); }
 
 struct tcp_hdr {
-  packed<uint16_t> src_port;
-  packed<uint16_t> dst_port;
-  packed<tcp_seq> seq;
-  packed<tcp_seq> ack;
+  uint16_t src_port;
+  uint16_t dst_port;
+  tcp_seq seq;
+  tcp_seq ack;
   uint8_t rsvd1 : 4;
   uint8_t data_offset : 4;
   uint8_t f_fin : 1;
@@ -183,9 +160,9 @@ struct tcp_hdr {
   uint8_t f_ack : 1;
   uint8_t f_urg : 1;
   uint8_t rsvd2 : 2;
-  packed<uint16_t> window;
-  packed<uint16_t> checksum;
-  packed<uint16_t> urgent;
+  uint16_t window;
+  uint16_t checksum;
+  uint16_t urgent;
 
   template <typename Adjuster>
   void adjust_endianness(Adjuster a) { a(src_port, dst_port, seq, ack, window, checksum, urgent); }
@@ -196,14 +173,14 @@ using tcp_packet_merger = packet_merger<tcp_seq, tcp_tag>;
 
 template <typename InetTraits>
 class tcp {
-public:
+ public:
   using ipaddr = typename InetTraits::address_type;
   using inet_type = typename InetTraits::inet_type;
   using connid = l4connid<InetTraits>;
   using connid_hash = typename connid::connid_hash;
   class connection;
   class listener;
-private:
+ private:
   class tcb;
 
   class tcb : public enable_lw_shared_from_this<tcb> {
@@ -366,7 +343,7 @@ private:
     tcp_state& state() {
       return _state;
     }
-  private:
+   private:
     void respond_with_reset(tcp_hdr* th);
     bool merge_out_of_order();
     void insert_out_of_order(tcp_seq seq, Packet p);
@@ -439,7 +416,7 @@ private:
     }
     void queue_packet(packet p) {
       _packetq.emplace_back(
-              typename InetTraits::l4packet{_foreign_ip, std::move(p)});
+          typename InetTraits::l4packet{_foreign_ip, std::move(p)});
     }
     void signal_data_received() {
       manager.notify(fd);
@@ -535,10 +512,10 @@ private:
   Throttle _queue_space;
   // Limit number of data queued into send queue
   Throttle user_queue_space = {212992};
-public:
+ public:
   class connection {
     lw_shared_ptr<tcb> _tcb;
-  public:
+   public:
     explicit connection(lw_shared_ptr<tcb> tcbp) : _tcb(std::move(tcbp)) { _tcb->_conn = this; }
     connection(const connection&) = delete;
     connection(connection&& x) noexcept : _tcb(std::move(x._tcb)) {
@@ -573,14 +550,14 @@ public:
     uint16_t _port;
     int16_t errno;
     queue<connection> _q;
-  private:
+   private:
     listener(tcp& t, uint16_t port, size_t queue_length)
-            : _tcp(t), _port(port), _q(queue_length) {
+        : _tcp(t), _port(port), _q(queue_length) {
       _tcp._listening.emplace(_port, this);
     }
-  public:
+   public:
     listener(listener&& x)
-            : _tcp(x._tcp), _port(x._port), _q(std::move(x._q)) {
+        : _tcp(x._tcp), _port(x._port), _q(std::move(x._q)) {
       _tcp._listening[_port] = this;
       x._port = 0;
     }
@@ -611,7 +588,7 @@ public:
   listener listen(uint16_t port, size_t queue_length = 100);
   connection connect(const entity_addr_t &addr);
   const hw_features& hw_features() const { return _inet._inet.hw_features(); }
-private:
+ private:
   void send_packet_without_tcb(ipaddr from, ipaddr to, Packet p);
   void respond_with_reset(tcp_hdr* rth, ipaddr local_ip, ipaddr foreign_ip);
   friend class listener;
@@ -619,9 +596,9 @@ private:
 
 template <typename InetTraits>
 tcp<InetTraits>::tcp(inet_type& inet, EventCenter *cen)
-        : _inet(inet), center(cen), _e(_rd()),
-          _queue_space(inet.cct, "DPDK::tcp::queue_space", 212992),
-          user_queue_space(inet.cct, "DPDK::tcp::user_queue_space", 212992) {
+    : _inet(inet), center(cen), _e(_rd()),
+      _queue_space(inet.cct, "DPDK::tcp::queue_space", 212992),
+      user_queue_space(inet.cct, "DPDK::tcp::user_queue_space", 212992) {
   int tcb_polled = 0u;
   _inet.register_packet_provider([this, tcb_polled] () mutable {
     Tub<typename InetTraits::l4packet> l4p;
@@ -815,14 +792,14 @@ class C_handle_persist : public EventCallback {
 
 template <typename InetTraits>
 tcp<InetTraits>::tcb::tcb(tcp& t, connid id)
-        : _tcp(t), _local_ip(id.local_ip) , _foreign_ip(id.foreign_ip),
-          _local_port(id.local_port), _foreign_port(id.foreign_port),
-          center(t.center),
-          manager(static_cast<DPDKDriver>(t.center->get_driver()).manager),
-          fd(manager.get_eventfd()),
-          delayed_ack_event(new C_handle_delayed_ack(this)),
-          retransmit_event(new C_handle_retransmit(this)),
-          persist_event(new C_handle_persist(this)) {}
+    : _tcp(t), _local_ip(id.local_ip) , _foreign_ip(id.foreign_ip),
+      _local_port(id.local_port), _foreign_port(id.foreign_port),
+      center(t.center),
+      manager(static_cast<DPDKDriver>(t.center->get_driver()).manager),
+      fd(manager.get_eventfd()),
+      delayed_ack_event(new C_handle_delayed_ack(this)),
+      retransmit_event(new C_handle_retransmit(this)),
+      persist_event(new C_handle_persist(this)) {}
 
 template <typename InetTraits>
 tcp<InetTraits>::tcb::~tcb()
@@ -1178,8 +1155,8 @@ void tcp<InetTraits>::tcb::input_handle_other_state(tcp_hdr* th, Packet p) {
     }
     auto update_window = [this, th, seg_seq, seg_ack] {
       ldout(cct, 20) << __func__ << "window update seg_seq=" << seg_seq
-                     << " seg_ack=" << seg_ack << " old window=" << th->window
-                     << " new window=" << _snd.window_scale << dendl;
+      << " seg_ack=" << seg_ack << " old window=" << th->window
+      << " new window=" << _snd.window_scale << dendl;
       _snd.window = th->window << _snd.window_scale;
       _snd.wl1 = seg_seq;
       _snd.wl2 = seg_ack;
@@ -1787,7 +1764,7 @@ void tcp<InetTraits>::tcb::trim_receive_data_after_window() {
 
 template <typename InetTraits>
 void tcp<InetTraits>::tcb::persist() {
-  tcp_debug("persist timer fired\n");
+  ldout(cct, 20) << __func__ << " persist timer fired" < dendl;
   // Send 1 byte packet to probe peer's window size
   _snd.window_probe = true;
   output_one();
@@ -1980,18 +1957,18 @@ template <typename InetTraits>
 constexpr uint16_t tcp<InetTraits>::tcb::_max_nr_retransmit;
 
 template <typename InetTraits>
-constexpr std::chrono::milliseconds tcp<InetTraits>::tcb::_rto_min;
+constexpr utime_t tcp<InetTraits>::tcb::_rto_min;
 
 template <typename InetTraits>
-constexpr std::chrono::milliseconds tcp<InetTraits>::tcb::_rto_max;
+constexpr utime_t tcp<InetTraits>::tcb::_rto_max;
 
 template <typename InetTraits>
-constexpr std::chrono::milliseconds tcp<InetTraits>::tcb::_rto_clk_granularity;
+constexpr utime_t tcp<InetTraits>::tcb::_rto_clk_granularity;
 
 template <typename InetTraits>
 typename tcp<InetTraits>::tcb::isn_secret tcp<InetTraits>::tcb::_isn_secret;
 
-class listen_options;
+class socket_options;
 class ServerSocket;
 class ConnectedSocket;
 

@@ -276,7 +276,7 @@ void ipv4::send(ipv4_address to, ip_protocol_num proto_num, packet p, ethernet_a
     auto mtu = hw_features().mtu;
 
     while (remaining) {
-      auto can_send = std::min(uint16_t(mtu - net::ipv4_hdr_len_min), remaining);
+      auto can_send = std::min(uint16_t(mtu - ipv4_hdr_len_min), remaining);
       remaining -= can_send;
       auto pkt = p.share(offset, can_send);
       send_pkt(pkt, remaining, offset);

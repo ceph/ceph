@@ -40,8 +40,6 @@
 #include <iosfwd>
 #include <utility>
 
-#include "unaligned.h"
-
 inline uint64_t ntohq(uint64_t v) {
     return __builtin_bswap64(v);
 }
@@ -69,24 +67,6 @@ inline int32_t ntoh(int32_t x) { return ntohl(x); }
 inline int32_t hton(int32_t x) { return htonl(x); }
 inline int64_t ntoh(int64_t x) { return ntohq(x); }
 inline int64_t hton(int64_t x) { return htonq(x); }
-
-template <typename T>
-inline T ntoh(const unaligned<T>& x) {
-    T v = x;
-    return ntoh(v);
-}
-
-template <typename T>
-inline T hton(const unaligned<T>& x) {
-    T v = x;
-    return hton(v);
-}
-
-template <typename T>
-inline std::ostream& operator<<(std::ostream& os, const unaligned<T>& v) {
-    auto x = v.raw;
-    return os << x;
-}
 
 inline void ntoh_inplace() {}
 inline void hton_inplace() {};

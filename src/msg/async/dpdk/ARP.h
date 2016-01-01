@@ -66,8 +66,8 @@ class arp {
   circular_buffer<l3_protocol::l3packet> _packetq;
  private:
   struct arp_hdr {
-    packed<uint16_t> htype;
-    packed<uint16_t> ptype;
+    uint16_t htype;
+    uint16_t ptype;
 
     template <typename Adjuster>
     void adjust_endianness(Adjuster a) { return a(htype, ptype); }
@@ -99,11 +99,11 @@ class arp_for : public arp_for_protocol {
     op_reply = 2,
   };
   struct arp_hdr {
-    packed<uint16_t> htype;
-    packed<uint16_t> ptype;
+    uint16_t htype;
+    uint16_t ptype;
     uint8_t hlen;
     uint8_t plen;
-    packed<uint16_t> oper;
+    uint16_t oper;
     l2addr sender_hwaddr;
     l3addr sender_paddr;
     l2addr target_hwaddr;

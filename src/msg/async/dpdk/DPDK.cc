@@ -248,7 +248,7 @@ int DPDKDevice::init_port_start()
   // Set RSS mode: enable RSS if seastar is configured with more than 1 CPU.
   // Even if port has a single queue we still want the RSS feature to be
   // available in order to make HW calculate RSS hash for us.
-  if (smp::count > 1) {
+  if (cores > 1) {
     if (_dev_info.hash_key_size == 40) {
       _rss_key = default_rsskey_40bytes;
     } else if (_dev_info.hash_key_size == 52) {

@@ -66,7 +66,7 @@ struct hw_features {
   // Maximum Transmission Unit
   uint16_t mtu = 1500;
   // Maximun packet len when TCP/UDP offload is enabled
-  uint16_t max_packet_len = net::ip_packet_len_max - net::eth_hdr_len;
+  uint16_t max_packet_len = ip_packet_len_max - eth_hdr_len;
 };
 
 
@@ -214,7 +214,7 @@ class interface {
  public:
   explicit interface(CephContext *cct, std::shared_ptr<device> dev, unsigned cpuid);
   ethernet_address hw_address() { return _hw_address; }
-  const net::hw_features& hw_features() const { return _hw_features; }
+  const hw_features& hw_features() const { return _hw_features; }
   subscription<Packet, ethernet_address> register_l3(
       eth_protocol_num proto_num,
       std::function<int (Packet, ethernet_address)> next,
@@ -237,6 +237,7 @@ class DPDKStack : public NetWorkStack {
   ipv4 _inet;
   EventCenter *center;
   timer<> _timer;
+  unsigned cores;
   unsigned cpu_id;
 
   void set_ipv4_packet_filter(ip_packet_filter* filter) {
@@ -245,7 +246,7 @@ class DPDKStack : public NetWorkStack {
   using tcp4 = tcp<ipv4_traits>;
 
  public:
-  explicit DPDKStack(CephContext *cct, std::shared_ptr<device> dev, unsigned i);
+  explicit DPDKStack(CephContext *cct, std::shared_ptr<device> dev, unsigned cores, unsigned i);
   virtual int listen(const entity_addr_t &sa, const listen_options &opt, ServerSocket *sock) override;
   virtual int connect(const entity_addr_t &addr, const SocketOptions &opts, ConnectedSocket *socket) override;
   static std::unique_ptr<NetWorkStack> create(CephContext *cct, unsigned i);
