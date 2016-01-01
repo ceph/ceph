@@ -1365,7 +1365,6 @@ ReplicatedPG::ReplicatedPG(OSDService *o, OSDMapRef curmap,
     pgbackend->get_is_readable_predicate(),
     pgbackend->get_is_recoverable_predicate());
   snap_trimmer_machine.initiate();
-  repop_map.rehash(g_conf->osd_client_message_cap/_pool.info.get_pg_num() * g_conf->osd_pg_op_threshold_ratio);
 }
 
 void ReplicatedPG::get_src_oloc(const object_t& oid, const object_locator_t& oloc, object_locator_t& src_oloc)
@@ -8363,10 +8362,9 @@ ReplicatedPG::RepGather *ReplicatedPG::new_repop(OpContext *ctx, ObjectContextRe
   repop->start = ceph_clock_now(cct);
 
   repop_queue.push_back(&repop->queue_item);
-  repop_map[repop->rep_tid] = repop;
   repop->get();
 
-  osd->logger->set(l_osd_op_wip, repop_map.size());
+  osd->logger->inc(l_osd_op_wip);
 
   return repop;
 }
@@ -8382,10 +8380,9 @@ void ReplicatedPG::remove_repop(RepGather *repop)
     dout(20) << " snapset_obc " << *repop->ctx->snapset_obc << dendl;
   release_op_ctx_locks(repop->ctx);
   repop->ctx->finish(0);  // FIXME: return value here is sloppy
-  repop_map.erase(repop->rep_tid);
   repop->put();
 
-  osd->logger->set(l_osd_op_wip, repop_map.size());
+  osd->logger->dec(l_osd_op_wip);
 }
 
 ReplicatedPG::RepGather *ReplicatedPG::simple_repop_create(ObjectContextRef obc)
@@ -9554,7 +9551,6 @@ void ReplicatedPG::apply_and_flush_repops(bool requeue)
     remove_repop(repop);
   }
 
-  assert(repop_map.empty());
   assert(repop_queue.empty());
 
   if (requeue) {
