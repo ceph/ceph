@@ -855,7 +855,7 @@ class TestCephDiskDeactivateAndDestroy(unittest.TestCase):
         fake_data = '{"osds":[{"osd":0,"up":1,"in":1},{"osd":1,"up":1,"in":1}]}'
 
         def return_fake_value(cmd):
-            return fake_data, 0
+            return fake_data, '', 0
 
         with patch.multiple(
                 ceph_disk,
@@ -870,7 +870,7 @@ class TestCephDiskDeactivateAndDestroy(unittest.TestCase):
         fake_data = '{"osds":[{"osd":0,"up":1,"in":1},{"osd":5566,"up":1,"in":1}]}'
 
         def return_fake_value(cmd):
-            return fake_data, 0
+            return fake_data, '', 0
 
         with patch.multiple(
                 ceph_disk,
