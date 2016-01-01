@@ -798,14 +798,9 @@ public:
 
   // -- tids --
   // for ops i issue
-  ceph_tid_t last_tid;
-  Mutex tid_lock;
+  atomic_t last_tid;
   ceph_tid_t get_tid() {
-    ceph_tid_t t;
-    tid_lock.Lock();
-    t = ++last_tid;
-    tid_lock.Unlock();
-    return t;
+    return (ceph_tid_t)last_tid.inc();
   }
 
   // -- backfill_reservation --
