@@ -1422,16 +1422,3 @@ class TestCephDiskDeactivateAndDestroy(unittest.TestCase):
 def raise_command_error(*args):
     e = subprocess.CalledProcessError('aaa', 'bbb', 'ccc')
     raise e
-
-
-def path_exists(target_paths=None):
-    """
-    A quick helper that enforces a check for the existence of a path. Since we
-    are dealing with fakes, we allow to pass in a list of paths that are OK to
-    return True, otherwise return False.
-    """
-    target_paths = target_paths or []
-
-    def exists(path):
-        return path in target_paths
-    return exists
