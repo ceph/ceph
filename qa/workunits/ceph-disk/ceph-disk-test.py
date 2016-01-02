@@ -36,6 +36,12 @@
 #  udevadm control --reload # when changing the udev rules
 #  sudo /usr/sbin/ceph-disk -v trigger /dev/vdb1 # activates if vdb1 is data
 #
+#  integration tests coverage
+#  pip install coverage
+#  perl -pi -e 's|"ceph-disk |"coverage run --source=/usr/sbin/ceph-disk --append /usr/sbin/ceph-disk |' ceph-disk-test.py
+#  rm -f .coverage ; py.test -s -v ceph-disk-test.py
+#  coverage report --show-missing
+#
 import argparse
 import json
 import logging
