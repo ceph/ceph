@@ -316,13 +316,13 @@ class AsyncConnection : public Connection {
     mark_down();
   }
   void cleanup_handler() {
-    read_handler.reset();
-    write_handler.reset();
-    reset_handler.reset();
-    remote_reset_handler.reset();
-    connect_handler.reset();
-    local_deliver_handler.reset();
-    wakeup_handler.reset();
+    delete read_handler;
+    delete write_handler;
+    delete reset_handler;
+    delete remote_reset_handler;
+    delete connect_handler;
+    delete local_deliver_handler;
+    delete wakeup_handler;
   }
   PerfCounters *get_perf_counter() {
     return logger;
