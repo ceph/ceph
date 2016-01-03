@@ -3852,7 +3852,9 @@ void PG::scrub(epoch_t queued, ThreadPool::TPHandle &handle)
     unlock();
     utime_t t;
     t.set_from_double(g_conf->osd_scrub_sleep);
+    handle.suspend_tp_timeout();
     t.sleep();
+    handle.reset_tp_timeout();
     lock();
     dout(20) << __func__ << " slept for " << t << dendl;
   }
