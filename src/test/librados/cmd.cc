@@ -242,15 +242,11 @@ TEST(LibRadosCmd, WatchLog) {
   }
   ASSERT_TRUE(l.contains("onexx"));
 
-  /*
-    changing the subscribe level is currently broken.
-
   cmd[0] = (char *)"{\"prefix\":\"log\", \"logtext\":[\"twoxx\"]}";
   ASSERT_EQ(0, rados_monitor_log(cluster, "err", log_cb, &l));
   ASSERT_EQ(0, rados_mon_command(cluster, (const char **)cmd, 1, "", 0, &buf, &buflen, &st, &stlen));
   sleep(2);
   ASSERT_FALSE(l.contains("twoxx"));
-  */
 
   ASSERT_EQ(0, rados_monitor_log(cluster, "info", log_cb, &l));
   cmd[0] = (char *)"{\"prefix\":\"log\", \"logtext\":[\"threexx\"]}";
