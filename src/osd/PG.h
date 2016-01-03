@@ -206,7 +206,6 @@ protected:
   Mutex map_lock;
   list<OpRequestRef> waiting_for_map;
   OSDMapRef osdmap_ref;
-  OSDMapRef last_persisted_osdmap_ref;
   PGPool pool;
 
   void queue_op(OpRequestRef& op);
@@ -2056,6 +2055,7 @@ public:
 
   bool do_sort_bitwise;
   epoch_t last_epoch;
+  epoch_t last_persisted_epoch;
 
  public:
   const spg_t&      get_pgid() const { return pg_id; }
