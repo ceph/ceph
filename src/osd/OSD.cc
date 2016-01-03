@@ -6868,7 +6868,7 @@ void OSD::consume_map()
 
   // remove any PGs which we no longer host from the session waiting_for_pg lists
   set<spg_t> pgs_to_check;
-  get_pgs_with_waiting_sessions(&pgs_to_check);
+  get_pgs_with_waiting_sessions(pgs_to_check);
   for (set<spg_t>::iterator p = pgs_to_check.begin();
        p != pgs_to_check.end();
        ++p) {

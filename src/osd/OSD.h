@@ -1454,13 +1454,13 @@ public:
       (*i)->get();
     }
   }
-  void get_pgs_with_waiting_sessions(set<spg_t> *pgs) {
+  void get_pgs_with_waiting_sessions(set<spg_t> &pgs) {
     Mutex::Locker l(session_waiting_lock);
     for (map<spg_t, set<Session*> >::iterator i =
 	   session_waiting_for_pg.begin();
 	 i != session_waiting_for_pg.end();
 	 ++i) {
-      pgs->insert(i->first);
+      pgs.insert(i->first);
     }
   }
 
