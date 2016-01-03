@@ -4,8 +4,7 @@ import os
 import unittest
 from unittest import suite, loader, case
 from teuthology.task import interactive
-from tasks.cephfs.filesystem import Filesystem
-
+from tasks.cephfs.filesystem import Filesystem, MDSCluster
 
 log = logging.getLogger(__name__)
 
@@ -116,6 +115,7 @@ def task(ctx, config):
 
     """
     fs = Filesystem(ctx)
+    mds_cluster = MDSCluster(ctx)
 
     # Mount objects, sorted by ID
     mounts = [v for k, v in sorted(ctx.mounts.items(), lambda a, b: cmp(a[0], b[0]))]
