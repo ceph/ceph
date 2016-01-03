@@ -223,15 +223,15 @@ class TestMultiFilesystems(CephFSTestCase):
         log.info("Using MDS daemons: {0}".format(use_daemons))
 
         def set_standby_for(leader, follower, replay):
-            self.set_conf("mds.{0}".format(follower), "standby_for_name", leader)
+            self.set_conf("mds.{0}".format(follower), "mds_standby_for_name", leader)
             if replay:
-                self.set_conf("mds.{0}".format(follower), "standby_replay", "true")
+                self.set_conf("mds.{0}".format(follower), "mds_standby_replay", "true")
 
         # Configure two pairs of MDSs that are standby for each other
         set_standby_for(mds_a, mds_b, True)
-        set_standby_for(mds_b, mds_a, True)
+        set_standby_for(mds_b, mds_a, False)
         set_standby_for(mds_c, mds_d, True)
-        set_standby_for(mds_d, mds_c, True)
+        set_standby_for(mds_d, mds_c, False)
 
         # Create FS alpha and get mds_a to come up as active
         fs_a = self.mds_cluster.get_filesystem("alpha")
