@@ -285,7 +285,7 @@ test_omap() {
 
 test_xattr() {
     cleanup
-    $RADOS_TOOL -p $POOL put $OBJ /etc/pass
+    $RADOS_TOOL -p $POOL put $OBJ /etc/passwd
     V1=`mktemp fooattrXXXXXXX`
     V2=`mktemp fooattrXXXXXXX`
     echo -n fooval > $V1
