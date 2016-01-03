@@ -1,4 +1,4 @@
-# Try to find spdk
+# Try to find dpdk
 #
 # Once done, this will define
 #

@@ -223,7 +223,7 @@ endif(HAVE_XIO)
 
 set(dpdk_common_srcs)
 if(HAVE_DPDK)
-  list(APPEND xio_common_srcs
+  list(APPEND dpdk_common_srcs
     msg/async/dpdk/ARP.cc
 	msg/async/dpdk/DPDK.cc
 	msg/async/dpdk/dpdk_rte.cc
