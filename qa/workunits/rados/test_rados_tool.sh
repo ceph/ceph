@@ -277,7 +277,7 @@ test_omap() {
 	else
             echo -n "$i" | $RADOS_TOOL -p $POOL setomapval $OBJ $i
 	fi
-        $RADOS_TOOL -p $POOL getomapval $OBJ $i | grep -q "\\: $i\$"
+        $RADOS_TOOL -p $POOL getomapval $OBJ $i | grep -q "|$i|\$"
     done
     $RADOS_TOOL -p $POOL listomapvals $OBJ | grep -c value | grep 600
     cleanup
