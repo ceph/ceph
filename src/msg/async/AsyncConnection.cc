@@ -1331,7 +1331,7 @@ ssize_t AsyncConnection::_process_connection()
         if (net.set_nonblock(sd) < 0)
           goto fail;
 
-        net.set_socket_options(sd);
+        net.set_socket_options(sd, async_msgr->cct->_conf->ms_tcp_nodelay, async_msgr->cct->_conf->ms_tcp_rcvbuf);
         net.set_priority(sd, async_msgr->get_socket_priority());
 
         bl.append(CEPH_BANNER, strlen(CEPH_BANNER));
