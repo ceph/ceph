@@ -836,6 +836,8 @@ void ReplicatedBackend::be_deep_scrub(
   //Store final calculated CRC32 of omap header & key/values
   o.omap_digest = oh.digest();
   o.omap_digest_present = true;
+  dout(20) << __func__ << "  " << poid << " omap_digest "
+	   << std::hex << o.omap_digest << std::dec << dendl;
 }
 
 void ReplicatedBackend::_do_push(OpRequestRef op)
