@@ -573,32 +573,32 @@ install(TARGETS ceph-mon DESTINATION bin)
 # OSD
 if(${HAVE_XFS})
   set(libos_xfs_srcs
-    os/XfsFileStoreBackend.cc
+    os/filestore/XfsFileStoreBackend.cc
     os/fs/XFS.cc)
 endif(${HAVE_XFS})
 set(libkv_srcs
   kv/LevelDBStore.cc
   kv/KeyValueDB.cc)
 set(libos_srcs
-  os/FileJournal.cc
-  os/FileStore.cc
-  os/chain_xattr.cc
   os/ObjectStore.cc
-  os/JournalingObjectStore.cc
-  os/LFNIndex.cc
-  os/IndexManager.cc
-  os/DBObjectMap.cc 
   os/Transaction.cc
-  os/WBThrottle.cc
-  os/GenericFileStoreBackend.cc
-  os/BtrfsFileStoreBackend.cc
-  os/ZFSFileStoreBackend.cc
-  os/KeyValueStore.cc
-  os/MemStore.cc
-  os/GenericObjectMap.cc
-  os/HashIndex.cc
-  os/newstore/NewStore.cc
-  os/newstore/newstore_types.cc
+  os/filestore/chain_xattr.cc
+  os/filestore/BtrfsFileStoreBackend.cc
+  os/filestore/DBObjectMap.cc
+  os/filestore/FileJournal.cc
+  os/filestore/FileStore.cc
+  os/filestore/GenericFileStoreBackend.cc
+  os/filestore/JournalingObjectStore.cc
+  os/filestore/HashIndex.cc
+  os/filestore/IndexManager.cc
+  os/filestore/LFNIndex.cc
+  os/filestore/WBThrottle.cc
+  os/filestore/ZFSFileStoreBackend.cc
+  os/keyvaluestore/GenericObjectMap.cc
+  os/keyvaluestore/KeyValueStore.cc
+  os/memstore/MemStore.cc
+  os/bluestore/BlueStore.cc
+  os/bluestore/bluestore_types.cc
   os/fs/FS.cc
   ${libkv_srcs}
   ${libos_xfs_srcs})
