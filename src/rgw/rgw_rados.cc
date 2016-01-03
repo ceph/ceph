@@ -716,7 +716,7 @@ int RGWRealm::create(bool exclusive)
       return ret;
     }
   }
-  ret = set_current_period(period.get_id());
+  ret = set_current_period(period);
   if (ret < 0) {
     return ret;
   }
@@ -783,28 +783,25 @@ const string& RGWRealm::get_info_oid_prefix(bool old_format)
   return realm_info_oid_prefix;
 }
 
-int RGWRealm::set_current_period(const string& period_id) {
-  /* check to see period id is valid */
-  RGWPeriod new_current(period_id);
-  int ret = new_current.init(cct, store, id, name);
-  if (ret < 0) {
-    ldout(cct, 0) << "Error init new period id " << period_id << " : " << cpp_strerror(-ret) << dendl;
-    return ret;
+int RGWRealm::set_current_period(RGWPeriod& period)
+{
+  // update realm epoch to match the period's
+  if (epoch >= period.get_realm_epoch()) {
+    lderr(cct) << "ERROR: set_current_period with old realm epoch "
+        << period.get_realm_epoch() << ", current epoch=" << epoch << dendl;
+    return -EINVAL;
   }
-  new_current.set_predecessor(current_period);
 
-  ret = new_current.store_info(false);
-  if (ret < 0) {
-    return ret;
-  }
-  current_period = period_id;
-  ret = update();
+  epoch = period.get_realm_epoch();
+  current_period = period.get_id();
+
+  int ret = update();
   if (ret < 0) {
     ldout(cct, 0) << "ERROR: period update: " << cpp_strerror(-ret) << dendl;
     return ret;
   }
 
-  ret = new_current.reflect();
+  ret = period.reflect();
   if (ret < 0) {
     ldout(cct, 0) << "ERROR: period.reflect(): " << cpp_strerror(-ret) << dendl;
     return ret;
@@ -1216,6 +1213,7 @@ void RGWPeriod::fork()
   predecessor_uuid = id;
   id = get_staging_id(realm_id);
   period_map.reset();
+  realm_epoch++;
 }
 
 void RGWPeriod::update(const RGWZoneGroupMap& map)
@@ -1279,23 +1277,30 @@ int RGWPeriod::commit(RGWRealm& realm, const RGWPeriod& current_period)
         << dendl;
     return -EINVAL;
   }
+  // realm epoch must be 1 greater than current period
+  if (realm_epoch != current_period.get_realm_epoch() + 1) {
+    lderr(cct) << "period's realm epoch " << realm_epoch
+        << " does not come directly after current realm epoch "
+        << current_period.get_realm_epoch() << dendl;
+    return -EINVAL;
+  }
   // did the master zone change?
   if (master_zone != current_period.get_master_zone()) {
-    // create with a new period id
-    int r = create(true);
-    if (r < 0) {
-      lderr(cct) << "failed to create new period: " << cpp_strerror(-r) << dendl;
-      return r;
-    }
     // store the current metadata sync status in the period
-    r = update_sync_status();
+    int r = update_sync_status();
     if (r < 0) {
       lderr(cct) << "failed to update metadata sync status: "
           << cpp_strerror(-r) << dendl;
       return r;
     }
+    // create an object with a new period id
+    r = create(true);
+    if (r < 0) {
+      lderr(cct) << "failed to create new period: " << cpp_strerror(-r) << dendl;
+      return r;
+    }
     // set as current period
-    r = realm.set_current_period(id);
+    r = realm.set_current_period(*this);
     if (r < 0) {
       lderr(cct) << "failed to update realm's current period: "
           << cpp_strerror(-r) << dendl;
@@ -1316,6 +1321,7 @@ int RGWPeriod::commit(RGWRealm& realm, const RGWPeriod& current_period)
   set_id(current_period.get_id());
   set_epoch(current_period.get_epoch() + 1);
   set_predecessor(current_period.get_predecessor());
+  realm_epoch = current_period.get_realm_epoch();
   // write the period to rados
   int r = store_info(false);
   if (r < 0) {
