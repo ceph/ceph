@@ -1818,6 +1818,9 @@ public:
   virtual bool test_mount_in_use() = 0;
   virtual int mount() = 0;
   virtual int umount() = 0;
+  virtual int fsck() {
+    return -EOPNOTSUPP;
+  }
   virtual unsigned get_max_object_name_length() = 0;
   virtual unsigned get_max_attr_name_length() = 0;
   virtual int mkfs() = 0;  // wipe
@@ -1825,8 +1828,6 @@ public:
   virtual bool needs_journal() = 0;  //< requires a journal
   virtual bool wants_journal() = 0;  //< prefers a journal
   virtual bool allows_journal() = 0; //< allows a journal
-  virtual void set_allow_sharded_objects() = 0;
-  virtual bool get_allow_sharded_objects() = 0;
 
   virtual bool can_sort_nibblewise() {
     return false;   // assume a backend cannot, unless it says otherwise

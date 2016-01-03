@@ -57,13 +57,31 @@ public:
     void *priv;
     int fd;
     vector<iovec> iov;
+    uint64_t offset, length;
+    int rval;
+    bufferlist bl;  ///< write payload (so that it remains stable for duration)
 
-    aio_t(void *p, int f) : priv(p), fd(f) {
+    aio_t(void *p, int f) : priv(p), fd(f), rval(-1000) {
       memset(&iocb, 0, sizeof(iocb));
     }
 
-    void pwritev(uint64_t offset) {
+    void pwritev(uint64_t _offset) {
+      offset = _offset;
       io_prep_pwritev(&iocb, fd, &iov[0], iov.size(), offset);
+      length = 0;
+      for (unsigned u=0; u<iov.size(); ++u)
+	length += iov[u].iov_len;
+    }
+    void pread(uint64_t _offset, uint64_t len) {
+      offset = _offset;
+      length = len;
+      bufferptr p = buffer::create_page_aligned(length);
+      bl.append(p);
+      io_prep_pread(&iocb, fd, p.c_str(), length, offset);
+    }
+
+    int get_return_value() {
+      return rval;
     }
   };
 
@@ -122,6 +140,7 @@ public:
       }
       for (int i=0; i<r; ++i) {
 	paio[i] = (aio_t *)event[i].obj;
+	paio[i]->rval = event[i].res;
       }
       return r;
     }

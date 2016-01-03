@@ -277,7 +277,7 @@ test_omap() {
 	else
             echo -n "$i" | $RADOS_TOOL -p $POOL setomapval $OBJ $i
 	fi
-        $RADOS_TOOL -p $POOL getomapval $OBJ $i | grep -q "\\: $i\$"
+        $RADOS_TOOL -p $POOL getomapval $OBJ $i | grep -q "|$i|\$"
     done
     $RADOS_TOOL -p $POOL listomapvals $OBJ | grep -c value | grep 600
     cleanup
@@ -285,7 +285,7 @@ test_omap() {
 
 test_xattr() {
     cleanup
-    $RADOS_TOOL -p $POOL put $OBJ /etc/pass
+    $RADOS_TOOL -p $POOL put $OBJ /etc/passwd
     V1=`mktemp fooattrXXXXXXX`
     V2=`mktemp fooattrXXXXXXX`
     echo -n fooval > $V1

@@ -71,13 +71,6 @@ target_link_libraries(test_rewrite_latency common
   ${TCMALLOC_LIBS}
   ${CMAKE_THREAD_LIBS_INIT} ${CRYPTO_LIBS} m ${EXTRALIBS})
 
-# streamtest
-add_executable(streamtest
-  streamtest.cc
-  $<TARGET_OBJECTS:heap_profiler_objs>
-  )
-target_link_libraries(streamtest os global ${BLKID_LIBRARIES} ${CMAKE_DL_LIBS} ${TCMALLOC_LIBS})
-
 # test_trans
 add_executable(test_trans
   test_trans.cc
