@@ -20,7 +20,7 @@
 #include "Event.h"
 
 #ifdef HAVE_DPDK
-#include "dpdk/EventDPDK.h"
+#include "msg/async/dpdk/EventDPDK.h"
 #endif
 
 #ifdef HAVE_EPOLL

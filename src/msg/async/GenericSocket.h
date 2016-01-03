@@ -33,11 +33,13 @@ class ConnectedSocketImpl {
   virtual void close() = 0;
 };
 
+class ConnectedSocket;
+
 /// \cond internal
 class ServerSocketImpl {
  public:
   virtual ~ServerSocketImpl() {}
-  virtual int accept(ConnectedSocket) = 0;
+  virtual int accept(ConnectedSocket *sock, entity_addr_t *out);
   virtual void abort_accept() = 0;
 };
 /// \endcond
@@ -125,7 +127,7 @@ class ServerSocket {
   /// \Accepts a \ref ConnectedSocket representing the connection, and
   ///          a \ref entity_addr_t describing the remote endpoint.
   int accept(ConnectedSocket *sock, entity_addr_t *out) {
-    return _ssi->accept();
+    return _ssi->accept(sock, out);
   }
 
   /// Stops any \ref accept() in progress.

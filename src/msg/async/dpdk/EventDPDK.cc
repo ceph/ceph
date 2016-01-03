@@ -16,7 +16,6 @@
 
 #include "common/errno.h"
 #include "EventDPDK.h"
-#include "UserspaceEvent.h.h"
 
 #define dout_subsys ceph_subsys_ms
 

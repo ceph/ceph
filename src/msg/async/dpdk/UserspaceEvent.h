@@ -16,11 +16,10 @@
 #ifndef CEPH_USERSPACEEVENT_H
 #define CEPH_USERSPACEEVENT_H
 
+#include <errno.h>
 #include <vector>
-#include <errno>
 
 #include "common/Tub.h"
-#include "msg/async/Event.h"
 
 class UserspaceEventManager {
 	struct UserspaceFDImpl {
@@ -58,7 +57,7 @@ class UserspaceEventManager {
 	}
 
 	int listen(int fd, int mask) {
-		if (fd > fds.size())
+		if ((size_t)fd > fds.size())
 			return -ENOENT;
 
 		Tub<UserspaceFDImpl> impl = fds[fd];
@@ -78,7 +77,7 @@ class UserspaceEventManager {
 	}
 
 	int unlisten(int fd, int mask) {
-			if (fd > fds.size())
+			if ((size_t)fd > fds.size())
 			return -ENOENT;
 
 		Tub<UserspaceFDImpl> impl = fds[fd];
@@ -92,7 +91,7 @@ class UserspaceEventManager {
 			return 0;
 		}
 		if (impl->waiting_idx) {
-      if (max_wait_idx == fd)
+      if (max_wait_idx == (uint32_t)fd)
         --max_wait_idx;
 			waiting_fds[fd] = -1;
 			--waiting_size;
@@ -100,7 +99,7 @@ class UserspaceEventManager {
 	}
 
 	int notify(int fd, int mask = EVENT_READABLE, int errno = 0) {
-		if (fd > fds.size())
+		if ((size_t)fd > fds.size())
 			return -ENOENT;
 
 		Tub<UserspaceFDImpl> impl = fds[fd];
@@ -122,12 +121,12 @@ class UserspaceEventManager {
 	}
 
 	void close(int fd) {
-		if (fd > fds.size())
-			return -ENOENT;
+		if ((size_t)fd > fds.size())
+			return ;
 
 		Tub<UserspaceFDImpl> impl = fds[fd];
 		if (!impl)
-			return -ENOENT;
+			return ;
 
 		if (fd == max_fd)
 			--max_fd;
@@ -136,7 +135,7 @@ class UserspaceEventManager {
 
 		if (impl->activating_mask) {
 			assert(impl->waiting_idx);
-      if (max_wait_idx == fd)
+      if (max_wait_idx == (uint32_t)fd)
         --max_wait_idx;
 			waiting_fds[fd] = -1;
 			--waiting_size;
@@ -145,7 +144,8 @@ class UserspaceEventManager {
 	}
 
 	int poll(int *events, int *masks, int num_events, struct timeval *tp) {
-    int fd, i, min_events = MIN(num_events, waiting_size);
+    int fd;
+    uint32_t i, min_events = MIN(num_events, waiting_size);
 		for (i = 0; i < min_events; ++i) {
       fd = waiting_fds[i];
 			if (fd == -1)
