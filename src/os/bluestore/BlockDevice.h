@@ -17,6 +17,8 @@
 #ifndef CEPH_OS_BLUESTORE_BLOCKDEVICE_H
 #define CEPH_OS_BLUESTORE_BLOCKDEVICE_H
 
+#include "os/fs/FS.h"
+
 /// track in-flight io
 struct IOContext {
   void *priv;
@@ -52,10 +54,11 @@ struct IOContext {
 
 class BlockDevice {
 public:
+  virtual ~BlockDevice() {}
   typedef void (*aio_callback_t)(void *handle, void *aio);
 
-  static BlockDevice *create(CephContext *cct, const string& type,
-                             aio_callback_t cb, void *cbpriv);
+  static BlockDevice *create(
+      const string& type, aio_callback_t cb, void *cbpriv);
 
   virtual void aio_submit(IOContext *ioc) = 0;
 
