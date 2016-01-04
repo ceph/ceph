@@ -852,6 +852,16 @@ OPTION(bdev_aio, OPT_BOOL, true)
 OPTION(bdev_aio_poll_ms, OPT_INT, 250)  // milliseconds
 OPTION(bdev_aio_max_queue_depth, OPT_INT, 32)
 
+// Define the whitelist of NVMe controllers to initialize.
+// Users can use 'lspci -vvv -d 8086:0953 | grep "Device Serial Number"' to
+// get the serial number of Intel(R) Fultondale NVMe controllers.
+OPTION(bdev_nvme_serial_number, OPT_STR, "")
+// if yes, osd will unbind all NVMe devices from kernel driver and bind them
+// to the uio_pci_generic driver. The purpose is to prevent the case where
+// NVMe driver is loaded while osd is running.
+OPTION(bdev_nvme_unbind_from_kernel, OPT_BOOL, false)
+OPTION(bdev_nvme_retry_count, OPT_INT, -1) // -1 means by default which is 4
+
 OPTION(bluefs_alloc_size, OPT_U64, 1048576)
 OPTION(bluefs_max_prefetch, OPT_U64, 1048576)
 OPTION(bluefs_min_log_runway, OPT_U64, 1048576)  // alloc when we get this low
