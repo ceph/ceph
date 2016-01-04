@@ -2462,7 +2462,7 @@ int main(int argc, char **argv)
 
   ObjectStore *fs = ObjectStore::create(g_ceph_context, type, dpath, jpath, flags);
   if (fs == NULL) {
-    cerr << "Must provide --type (filestore, memstore, keyvaluestore)" << std::endl;
+    cerr << "Need a valid --type e.g. filestore, memstore, keyvaluestore" << std::endl;
     if (type == "keyvaluestore") {
       cerr << "Add \"keyvaluestore\" to "
            << "enable_experimental_unrecoverable_data_corrupting_features"
