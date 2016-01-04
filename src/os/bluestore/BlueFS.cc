@@ -608,6 +608,51 @@ void BlueFS::_drop_link(FileRef file)
   }
 }
 
+int BlueFS::_read_random(
+  FileReader *h,         ///< [in] read from here
+  uint64_t off,          ///< [in] offset
+  size_t len,            ///< [in] this many bytes
+  char *out)             ///< [out] optional: or copy it here
+{
+  dout(10) << __func__ << " h " << h << " " << off << "~" << len
+	   << " from " << h->file->fnode << dendl;
+
+  h->file->num_reading.inc();
+
+  if (!h->ignore_eof &&
+      off + len > h->file->fnode.size) {
+    if (off > h->file->fnode.size)
+      len = 0;
+    else
+      len = h->file->fnode.size - off;
+    dout(20) << __func__ << " reaching (or past) eof, len clipped to "
+	     << len << dendl;
+  }
+
+  int ret = 0;
+  while (len > 0) {
+    uint64_t x_off = 0;
+    vector<bluefs_extent_t>::iterator p = h->file->fnode.seek(off, &x_off);
+    uint64_t l = MIN(p->length - x_off, len);
+    if (!h->ignore_eof &&
+	off + l > h->file->fnode.size) {
+      l = h->file->fnode.size - off;
+    }
+    dout(20) << __func__ << " read buffered " << x_off << "~" << l << " of "
+	       << *p << dendl;
+    int r = bdev[p->bdev]->read_buffered(p->offset + x_off, l, out);
+    assert(r == 0);
+    off += l;
+    len -= l;
+    ret += l;
+    out += l;
+  }
+
+  dout(20) << __func__ << " got " << ret << dendl;
+  h->file->num_reading.dec();
+  return ret;
+}
+
 int BlueFS::_read(
   FileReader *h,         ///< [in] read from here
   FileReaderBuffer *buf, ///< [in] reader state
