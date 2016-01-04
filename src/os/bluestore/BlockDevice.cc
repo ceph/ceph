@@ -14,7 +14,7 @@
  *
  */
 
-#include "BlockDevice.h"
+#include "KernelDevice.h"
 #if defined(HAVE_SPDK)
 #include "NVMEDevice.h"
 #endif
