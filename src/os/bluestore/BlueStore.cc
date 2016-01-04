@@ -897,6 +897,7 @@ int BlueStore::_read_bdev_label(string path, bluestore_bdev_label_t *label)
   }
   catch (buffer::error& e) {
     derr << __func__ << " unable to decode label at offset " << p.get_off()
+	 << ": " << e.what()
 	 << dendl;
     return -EINVAL;
   }
