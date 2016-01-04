@@ -17,8 +17,6 @@
 #ifndef CEPH_OS_BLUESTORE_NVMEDEVICE
 #define CEPH_OS_BLUESTORE_NVMEDEVICE
 
-#include "include/interval_set.h"
-
 #include "BlockDevice.h"
 
 class NVMEDevice : public BlockDevice {
