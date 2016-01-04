@@ -2316,7 +2316,11 @@ int main(int argc, char **argv)
     bufferlist bl;
     bl.read_fd(fd, 64);
     if (bl.length()) {
-      type = string(bl.c_str(), bl.length() - 1);  // drop \n
+      string dp_type = string(bl.c_str(), bl.length() - 1);  // drop \n
+      if (vm.count("type") && dp_type != "" && type != dp_type)
+        cerr << "WARNING: Ignoring type \"" << type << "\" - found data-path type \""
+             << dp_type << "\"" << std::endl;
+      type = dp_type;
       //cout << "object store type is " << type << std::endl;
     }
     ::close(fd);
