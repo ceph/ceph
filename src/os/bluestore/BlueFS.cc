@@ -256,11 +256,6 @@ void BlueFS::umount()
 
   _close_writer(log_writer);
   log_writer = NULL;
-  // manually clean up it's iocs
-  for (auto p : ioc_reap_queue) {
-    delete p;
-  }
-  ioc_reap_queue.clear();
 
   block_all.clear();
   _stop_alloc();
@@ -1147,17 +1142,12 @@ void BlueFS::sync_metadata()
   }
   dout(10) << __func__ << dendl;
   utime_t start = ceph_clock_now(NULL);
-  vector<IOContext*> iocv;
-  iocv.swap(ioc_reap_queue);
   for (auto p : alloc) {
     p->commit_start();
   }
   _flush_log();
   for (auto p : alloc) {
     p->commit_finish();
-  }
-  for (auto p : iocv) {
-    delete p;
   }
   utime_t end = ceph_clock_now(NULL);
   utime_t dur = end - start;
@@ -1244,12 +1234,8 @@ int BlueFS::open_for_write(
 void BlueFS::_close_writer(FileWriter *h)
 {
   dout(10) << __func__ << " " << h << dendl;
-  for (auto i : h->iocv) {
-    if (i->has_aios()) {
-      ioc_reap_queue.push_back(i);
-    } else {
-      delete i;
-    }
+  for (unsigned i=0; i<bdev.size(); ++i) {
+    bdev[i]->queue_reap_ioc(h->iocv[i]);
   }
   h->iocv.clear();
   delete h;

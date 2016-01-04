@@ -45,6 +45,7 @@ BlockDevice::BlockDevice(aio_callback_t cb, void *cbpriv)
     size(0), block_size(0),
     fs(NULL), aio(false), dio(false),
     debug_lock("BlockDevice::debug_lock"),
+    ioc_reap_lock("BlockDevice::ioc_reap_lock"),
     aio_queue(g_conf->bdev_aio_max_queue_depth),
     aio_callback(cb),
     aio_callback_priv(cbpriv),
@@ -246,6 +247,15 @@ void BlockDevice::_aio_thread()
 	  }
 	}
       }
+    }
+    if (ioc_reap_count.read()) {
+      Mutex::Locker l(ioc_reap_lock);
+      for (auto p : ioc_reap_queue) {
+	dout(20) << __func__ << " reap ioc " << p << dendl;
+	delete p;
+      }
+      ioc_reap_queue.clear();
+      ioc_reap_count.dec();
     }
   }
   dout(10) << __func__ << " end" << dendl;
@@ -476,4 +486,12 @@ int BlockDevice::invalidate_cache(uint64_t off, uint64_t len)
 	 << cpp_strerror(r) << dendl;
   }
   return r;
+}
+
+void BlockDevice::queue_reap_ioc(IOContext *ioc)
+{
+  Mutex::Locker l(ioc_reap_lock);
+  if (ioc_reap_count.read() == 0)
+    ioc_reap_count.inc();
+  ioc_reap_queue.push_back(ioc);
 }
