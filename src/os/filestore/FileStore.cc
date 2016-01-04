@@ -202,6 +202,7 @@ int FileStore::lfn_truncate(coll_t cid, const ghobject_t& oid, off_t length)
     int rc = backend->_crc_update_truncate(**fd, length);
     assert(rc >= 0);
   }
+  lfn_close(fd);
   assert(!m_filestore_fail_eio || r != -EIO);
   return r;
 }
@@ -3136,11 +3137,13 @@ int FileStore::fiemap(coll_t cid, const ghobject_t& oid,
     r = _do_fiemap(**fd, offset, len, &exomap);
   }
 
-done:
+  lfn_close(fd);
+
   if (r >= 0) {
-    lfn_close(fd);
     ::encode(exomap, bl);
   }
+
+done:
 
   dout(10) << "fiemap " << cid << "/" << oid << " " << offset << "~" << len << " = " << r << " num_extents=" << exomap.size() << " " << exomap << dendl;
   assert(!m_filestore_fail_eio || r != -EIO);
@@ -4104,6 +4107,8 @@ int FileStore::getattrs(coll_t cid, const ghobject_t& oid, map<string,bufferptr>
     spill_out = false;
 
   r = _fgetattrs(**fd, aset);
+  lfn_close(fd);
+  fd = FDRef(); // defensive
   if (r < 0) {
     goto out;
   }
@@ -5145,10 +5150,10 @@ int FileStore::_collection_move_rename(coll_t oldcid, const ghobject_t& oldoid,
       r = lfn_open(c, o, 0, &fd);
 
     // close guard on object so we don't do this again
-    if (r == 0)
+    if (r == 0) {
       _close_replay_guard(**fd, spos);
-
-    lfn_close(fd);
+      lfn_close(fd);
+    }
   }
 
   dout(10) << __func__ << " " << c << "/" << o << " from " << oldcid << "/" << oldoid
