@@ -176,7 +176,6 @@ struct C_InvalidateCache : public Context {
       snap_name = snap;
 
     memset(&header, 0, sizeof(header));
-    memset(&layout, 0, sizeof(layout));
 
     ThreadPoolSingleton *thread_pool_singleton;
     cct->lookup_or_create_singleton_object<ThreadPoolSingleton>(
@@ -308,11 +307,11 @@ struct C_InvalidateCache : public Context {
     alignments.push_back(stripe_unit); // stripe unit
     readahead.set_alignments(alignments);
 
-    memset(&layout, 0, sizeof(layout));
-    layout.fl_stripe_unit = stripe_unit;
-    layout.fl_stripe_count = stripe_count;
-    layout.fl_object_size = 1ull << order;
-    layout.fl_pg_pool = data_ctx.get_id();  // FIXME: pool id overflow?
+    layout = file_layout_t();
+    layout.stripe_unit = stripe_unit;
+    layout.stripe_count = stripe_count;
+    layout.object_size = 1ull << order;
+    layout.pool_id = data_ctx.get_id();  // FIXME: pool id overflow?
 
     delete[] format_string;
     size_t len = object_prefix.length() + 16;
@@ -325,7 +324,7 @@ struct C_InvalidateCache : public Context {
 
     ldout(cct, 10) << "init_layout stripe_unit " << stripe_unit
 		   << " stripe_count " << stripe_count
-		   << " object_size " << layout.fl_object_size
+		   << " object_size " << layout.object_size
 		   << " prefix " << object_prefix
 		   << " format " << format_string
 		   << dendl;

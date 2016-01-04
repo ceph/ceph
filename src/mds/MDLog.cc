@@ -1038,7 +1038,7 @@ void MDLog::_reformat_journal(JournalPointer const &jp_in, Journaler *old_journa
   Journaler *new_journal = new Journaler(jp.back, mds->mdsmap->get_metadata_pool(),
       CEPH_FS_ONDISK_MAGIC, mds->objecter, logger, l_mdl_jlat, &mds->timer, mds->finisher);
   dout(4) << "Writing new journal header " << jp.back << dendl;
-  ceph_file_layout new_layout = old_journal->get_layout();
+  file_layout_t new_layout = old_journal->get_layout();
   new_journal->set_writeable();
   new_journal->create(&new_layout, g_conf->mds_journal_format);
 

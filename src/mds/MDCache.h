@@ -170,11 +170,11 @@ public:
 
   unsigned max_dir_commit_size;
 
-  static ceph_file_layout gen_default_file_layout(const MDSMap &mdsmap);
-  static ceph_file_layout gen_default_log_layout(const MDSMap &mdsmap);
+  static file_layout_t gen_default_file_layout(const MDSMap &mdsmap);
+  static file_layout_t gen_default_log_layout(const MDSMap &mdsmap);
 
-  ceph_file_layout default_file_layout;
-  ceph_file_layout default_log_layout;
+  file_layout_t default_file_layout;
+  file_layout_t default_log_layout;
 
   void register_perfcounters();
 

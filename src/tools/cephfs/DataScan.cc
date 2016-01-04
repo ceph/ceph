@@ -279,8 +279,8 @@ int MetadataDriver::inject_unlinked_inode(
 
   // Force layout to default: should we let users override this so that
   // they don't have to mount the filesystem to correct it?
-  inode.inode.layout = g_default_file_layout;
-  inode.inode.layout.fl_pg_pool = data_pool_id;
+  inode.inode.layout = file_layout_t::get_default();
+  inode.inode.layout.pool_id = data_pool_id;
 
   // Assume that we will get our stats wrong, and that we may
   // be ignoring dirfrags that exist
@@ -576,7 +576,7 @@ int DataScan::scan_inodes()
 
     AccumulateResult accum_res;
     inode_backtrace_t backtrace;
-    ceph_file_layout loaded_layout = g_default_file_layout;
+    file_layout_t loaded_layout = file_layout_t::get_default();
     r = ClsCephFSClient::fetch_inode_accumulate_result(
         data_io, oid, &backtrace, &loaded_layout, &accum_res);
 
@@ -600,12 +600,12 @@ int DataScan::scan_inodes()
 
     // This is the layout we will use for injection, populated either
     // from loaded_layout or from best guesses
-    ceph_file_layout guessed_layout;
-    guessed_layout.fl_pg_pool = data_pool_id;
+    file_layout_t guessed_layout;
+    guessed_layout.pool_id = data_pool_id;
 
     // Calculate file_size, guess the layout
     if (accum_res.ceiling_obj_index > 0) {
-      uint32_t chunk_size = g_default_file_layout.fl_object_size;
+      uint32_t chunk_size = file_layout_t::get_default().object_size;
       // When there are multiple objects, the largest object probably
       // indicates the chunk size.  But not necessarily, because files
       // can be sparse.  Only make this assumption if size seen
@@ -614,46 +614,46 @@ int DataScan::scan_inodes()
         chunk_size = accum_res.max_obj_size;
       }
 
-      if (loaded_layout.fl_pg_pool == uint32_t(-1)) {
+      if (loaded_layout.pool_id == -1) {
         // If no stashed layout was found, guess it
-        guessed_layout.fl_object_size = chunk_size;
-        guessed_layout.fl_stripe_unit = chunk_size;
-        guessed_layout.fl_stripe_count = 1;
-      } else if (!ceph_file_layout_is_valid(&loaded_layout) ||
-          loaded_layout.fl_object_size < accum_res.max_obj_size) {
+        guessed_layout.object_size = chunk_size;
+        guessed_layout.stripe_unit = chunk_size;
+        guessed_layout.stripe_count = 1;
+      } else if (!loaded_layout.is_valid() ||
+          loaded_layout.object_size < accum_res.max_obj_size) {
         // If the max size seen exceeds what the stashed layout claims, then
         // disbelieve it.  Guess instead.  Same for invalid layouts on disk.
         dout(4) << "bogus xattr layout on 0x" << std::hex << obj_name_ino
                 << std::dec << ", ignoring in favour of best guess" << dendl;
-        guessed_layout.fl_object_size = chunk_size;
-        guessed_layout.fl_stripe_unit = chunk_size;
-        guessed_layout.fl_stripe_count = 1;
+        guessed_layout.object_size = chunk_size;
+        guessed_layout.stripe_unit = chunk_size;
+        guessed_layout.stripe_count = 1;
       } else {
         // We have a stashed layout that we can't disprove, so apply it
         guessed_layout = loaded_layout;
         dout(20) << "loaded layout from xattr:"
-          << " os: " << guessed_layout.fl_object_size
-          << " sc: " << guessed_layout.fl_stripe_count
-          << " su: " << guessed_layout.fl_stripe_unit
+          << " os: " << guessed_layout.object_size
+          << " sc: " << guessed_layout.stripe_count
+          << " su: " << guessed_layout.stripe_unit
           << dendl;
         // User might have transplanted files from a pool with a different
         // ID, so whatever the loaded_layout says, we'll force the injected
         // layout to point to the pool we really read from
-        guessed_layout.fl_pg_pool = data_pool_id;
+        guessed_layout.pool_id = data_pool_id;
       }
 
-      if (guessed_layout.fl_stripe_count == 1) {
+      if (guessed_layout.stripe_count == 1) {
         // Unstriped file: simple chunking
-        file_size = guessed_layout.fl_object_size * accum_res.ceiling_obj_index
+        file_size = guessed_layout.object_size * accum_res.ceiling_obj_index
                     + accum_res.ceiling_obj_size;
       } else {
-        // Striped file: need to examine the last fl_stripe_count objects
+        // Striped file: need to examine the last stripe_count objects
         // in the file to determine the size.
 
         // How many complete (i.e. not last stripe) objects?
         uint64_t complete_objs = 0;
-        if (accum_res.ceiling_obj_index > guessed_layout.fl_stripe_count - 1) {
-          complete_objs = (accum_res.ceiling_obj_index / guessed_layout.fl_stripe_count) * guessed_layout.fl_stripe_count;
+        if (accum_res.ceiling_obj_index > guessed_layout.stripe_count - 1) {
+          complete_objs = (accum_res.ceiling_obj_index / guessed_layout.stripe_count) * guessed_layout.stripe_count;
         } else {
           complete_objs = 0;
         }
@@ -681,11 +681,11 @@ int DataScan::scan_inodes()
           if (r == 0) {
             if (osize > 0) {
               // Upper bound within this object
-              uint64_t upper_size = (osize - 1) / guessed_layout.fl_stripe_unit
-                * (guessed_layout.fl_stripe_unit * guessed_layout.fl_stripe_count)
-                + (i % guessed_layout.fl_stripe_count)
-                * guessed_layout.fl_stripe_unit + (osize - 1)
-                % guessed_layout.fl_stripe_unit + 1;
+              uint64_t upper_size = (osize - 1) / guessed_layout.stripe_unit
+                * (guessed_layout.stripe_unit * guessed_layout.stripe_count)
+                + (i % guessed_layout.stripe_count)
+                * guessed_layout.stripe_unit + (osize - 1)
+                % guessed_layout.stripe_unit + 1;
               incomplete_size = MAX(incomplete_size, upper_size);
             }
           } else if (r == -ENOENT) {
@@ -700,16 +700,16 @@ int DataScan::scan_inodes()
                << obj_name_ino << std::dec << ": " << cpp_strerror(r) << dendl;
           return r;
         }
-        file_size = complete_objs * guessed_layout.fl_object_size
+        file_size = complete_objs * guessed_layout.object_size
                     + incomplete_size;
       }
     } else {
       file_size = accum_res.ceiling_obj_size;
-      if (loaded_layout.fl_pg_pool == uint32_t(-1)
-          || loaded_layout.fl_object_size < accum_res.max_obj_size) {
+      if (loaded_layout.pool_id < 0
+          || loaded_layout.object_size < accum_res.max_obj_size) {
         // No layout loaded, or inconsistent layout, use default
-        guessed_layout = g_default_file_layout;
-        guessed_layout.fl_pg_pool = data_pool_id;
+        guessed_layout = file_layout_t::get_default();
+        guessed_layout.pool_id = data_pool_id;
       } else {
         guessed_layout = loaded_layout;
       }
@@ -815,8 +815,7 @@ int DataScan::scan_frags()
 
     // Default to inherit layout (i.e. no explicit layout on dir) which is
     // expressed as a zeroed layout struct (see inode_t::has_layout)
-    ceph_file_layout loaded_layout;
-    memset(&loaded_layout, 0, sizeof(loaded_layout));
+    file_layout_t loaded_layout;
 
     int parent_r = 0;
     bufferlist parent_bl;
@@ -1027,8 +1026,7 @@ int MetadataDriver::inject_lost_and_found(
 
     // To have a directory not specify a layout, give it zeros (see
     // inode_t::has_layout)
-    ceph_file_layout inherit_layout;
-    memset(&inherit_layout, 0, sizeof(inherit_layout));
+    file_layout_t inherit_layout;
 
     // Construct LF inode
     build_dir_dentry(CEPH_INO_LOST_AND_FOUND, 1, 0, inherit_layout, &lf_ino);
@@ -1531,7 +1529,8 @@ int LocalFileDriver::inject_with_backtrace(
     if (is_file) {
       // FIXME: inject_data won't cope with interesting (i.e. striped)
       // layouts (need a librados-compatible Filer to read these)
-      inject_data(path_builder, dentry.inode.size, dentry.inode.layout.fl_object_size, bt.ino);
+      inject_data(path_builder, dentry.inode.size,
+		  dentry.inode.layout.object_size, bt.ino);
     } else {
       int r = mkdir(path_builder.c_str(), 0755);
       if (r != 0 && r != -EPERM) {
@@ -1558,7 +1557,8 @@ int LocalFileDriver::inject_lost_and_found(
   }
   
   std::string file_path = lf_path + "/" + lost_found_dname(ino);
-  return inject_data(file_path, dentry.inode.size, dentry.inode.layout.fl_object_size, ino);
+  return inject_data(file_path, dentry.inode.size,
+		     dentry.inode.layout.object_size, ino);
 }
 
 int LocalFileDriver::init_roots(int64_t data_pool_id)
@@ -1598,7 +1598,7 @@ int LocalFileDriver::check_roots(bool *result)
 
 void MetadataTool::build_file_dentry(
     inodeno_t ino, uint64_t file_size, time_t file_mtime,
-    const ceph_file_layout &layout, InodeStore *out)
+    const file_layout_t &layout, InodeStore *out)
 {
   assert(out != NULL);
 
@@ -1626,7 +1626,7 @@ void MetadataTool::build_file_dentry(
 
 void MetadataTool::build_dir_dentry(
     inodeno_t ino, uint64_t nfiles,
-    time_t mtime, const ceph_file_layout &layout, InodeStore *out)
+    time_t mtime, const file_layout_t &layout, InodeStore *out)
 {
   assert(out != NULL);
 

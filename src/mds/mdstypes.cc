@@ -256,7 +256,7 @@ void inode_t::encode(bufferlist &bl, uint64_t features) const
   }
 
   ::encode(dir_layout, bl);
-  ::encode(layout, bl);
+  ::encode(layout, bl, features);
   ::encode(size, bl);
   ::encode(truncate_seq, bl);
   ::encode(truncate_size, bl);
@@ -381,9 +381,7 @@ void inode_t::dump(Formatter *f) const
   ::dump(dir_layout, f);
   f->close_section();
 
-  f->open_object_section("layout");
-  ::dump(layout, f);
-  f->close_section();
+  f->dump_object("layout", layout);
 
   f->open_array_section("old_pools");
   for (compact_set<int64_t>::const_iterator i = old_pools.begin();
@@ -1100,8 +1098,4 @@ void MDSCacheObject::dump_states(Formatter *f) const
     f->dump_string("state", "rejoinundef");
 }
 
-void ceph_file_layout_wrapper::dump(Formatter *f) const
-{
-  ::dump(static_cast<const ceph_file_layout&>(*this), f);
-}
 

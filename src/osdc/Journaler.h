@@ -130,14 +130,14 @@ public:
     uint64_t unused_field;
     uint64_t write_pos;
     string magic;
-    ceph_file_layout layout; //< The mapping from byte stream offsets
+    file_layout_t layout; //< The mapping from byte stream offsets
 			     //  to RADOS objects
     stream_format_t stream_format; //< The encoding of LogEvents
 				   //  within the journal byte stream
 
     Header(const char *m="") :
       trimmed_pos(0), expire_pos(0), unused_field(0), write_pos(0), magic(m),
-      stream_format(-1) {memset(&layout, 0, sizeof(layout));
+      stream_format(-1) {
     }
 
     void encode(bufferlist &bl) const {
@@ -147,7 +147,7 @@ public:
       ::encode(expire_pos, bl);
       ::encode(unused_field, bl);
       ::encode(write_pos, bl);
-      ::encode(layout, bl);
+      ::encode(layout, bl, 0);  // encode in legacy format
       ::encode(stream_format, bl);
       ENCODE_FINISH(bl);
     }
@@ -175,16 +175,7 @@ public:
 	f->dump_unsigned("expire_pos", expire_pos);
 	f->dump_unsigned("trimmed_pos", trimmed_pos);
 	f->dump_unsigned("stream_format", stream_format);
-	f->open_object_section("layout");
-	{
-	  f->dump_unsigned("stripe_unit", layout.fl_stripe_unit);
-	  f->dump_unsigned("stripe_count", layout.fl_stripe_count);
-	  f->dump_unsigned("object_size", layout.fl_object_size);
-	  f->dump_unsigned("cas_hash", layout.fl_cas_hash);
-	  f->dump_unsigned("object_stripe_unit", layout.fl_object_stripe_unit);
-	  f->dump_unsigned("pg_pool", layout.fl_pg_pool);
-	}
-	f->close_section(); // layout
+	f->dump_object("layout", layout);
       }
       f->close_section(); // journal_header
     }
@@ -223,7 +214,7 @@ private:
   inodeno_t ino;
   int64_t pg_pool;
   bool readonly;
-  ceph_file_layout layout;
+  file_layout_t layout;
   uint32_t stream_format;
   JournalStream journal_stream;
 
@@ -281,7 +272,7 @@ private:
   friend class C_WriteHead;
 
   void _reread_head(Context *onfinish);
-  void _set_layout(ceph_file_layout const *l);
+  void _set_layout(file_layout_t const *l);
   list<Context*> waitfor_recover;
   void _read_head(Context *on_finish, bufferlist *bl);
   void _finish_read_head(int r, bufferlist& bl);
@@ -416,7 +407,6 @@ public:
     expire_pos(0), trimming_pos(0), trimmed_pos(0), readable(false),
     write_iohint(0), stopping(false)
   {
-    memset(&layout, 0, sizeof(layout));
   }
 
   /* reset
@@ -452,7 +442,7 @@ public:
   // Asynchronous operations
   // =======================
   void erase(Context *completion);
-  void create(ceph_file_layout *layout, stream_format_t const sf);
+  void create(file_layout_t *layout, stream_format_t const sf);
   void recover(Context *onfinish);
   void reread_head(Context *onfinish);
   void reread_head_and_probe(Context *onfinish);
@@ -463,7 +453,7 @@ public:
 
   // Synchronous setters
   // ===================
-  void set_layout(ceph_file_layout const *l);
+  void set_layout(file_layout_t const *l);
   void set_readonly();
   void set_writeable();
   void set_write_pos(int64_t p) {
@@ -513,9 +503,9 @@ public:
   // ===================
   // TODO: need some locks on reads for true safety
   uint64_t get_layout_period() const {
-    return (uint64_t)layout.fl_stripe_count * (uint64_t)layout.fl_object_size;
+    return layout.get_period();
   }
-  ceph_file_layout& get_layout() { return layout; }
+  file_layout_t& get_layout() { return layout; }
   bool is_active() { return state == STATE_ACTIVE; }
   int get_error() { return error; }
   bool is_readonly() { return readonly; }

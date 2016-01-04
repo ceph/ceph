@@ -29,7 +29,7 @@ class MClientCaps : public Message {
   uint64_t size, max_size, truncate_size;
   uint32_t truncate_seq;
   utime_t mtime, atime, ctime;
-  ceph_file_layout layout;
+  file_layout_t layout;
   uint32_t time_warp_seq;
 
   struct ceph_mds_cap_peer peer;
@@ -66,7 +66,7 @@ class MClientCaps : public Message {
   utime_t get_atime() { return atime; }
   __u32 get_time_warp_seq() { return time_warp_seq; }
 
-  const ceph_file_layout& get_layout() {
+  const file_layout_t& get_layout() {
     return layout;
   }
 
@@ -202,7 +202,7 @@ public:
 	mtime = utime_t(body.mtime);
 	atime = utime_t(body.atime);
 	ctime = utime_t(body.ctime);
-	layout = body.layout;
+	layout.from_legacy(body.layout);
 	time_warp_seq = body.time_warp_seq;
       }
     } else {
@@ -286,7 +286,7 @@ public:
 	mtime.encode_timeval(&body.mtime);
 	atime.encode_timeval(&body.atime);
 	ctime.encode_timeval(&body.ctime);
-	body.layout = layout;
+	layout.to_legacy(&body.layout);
 	body.time_warp_seq = time_warp_seq;
       }
       ::encode(body, payload);

@@ -57,7 +57,6 @@ int main(int argc, char **argv)
       snprintf(foo, sizeof(foo), "%d.%d", f, b);
       object_t oid(foo);
       ceph_object_layout l = osdmap.make_object_layout(oid, 0, nspace);
-	//osdmap.file_to_object_layout(oid, g_default_file_layout);
       vector<int> osds;
       pg_t pgid = pg_t(l.ol_pgid);
       //pgid.u.ps = f * 4 + b;

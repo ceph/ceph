@@ -54,7 +54,7 @@ int ClsCephFSClient::fetch_inode_accumulate_result(
   librados::IoCtx &ctx,
   const std::string &oid,
   inode_backtrace_t *backtrace,
-  ceph_file_layout *layout,
+  file_layout_t *layout,
   AccumulateResult *result)
 {
   assert(backtrace != NULL);

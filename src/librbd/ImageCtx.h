@@ -122,7 +122,7 @@ namespace librbd {
     uint64_t stripe_unit, stripe_count;
     uint64_t flags;
 
-    ceph_file_layout layout;
+    file_layout_t layout;
 
     ObjectCacher *object_cacher;
     LibrbdWriteback *writeback_handler;

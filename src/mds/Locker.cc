@@ -155,7 +155,7 @@ void Locker::include_snap_rdlocks(set<SimpleLock*>& rdlocks, CInode *in)
 }
 
 void Locker::include_snap_rdlocks_wlayout(set<SimpleLock*>& rdlocks, CInode *in,
-                                  ceph_file_layout **layout)
+					  file_layout_t **layout)
 {
   //rdlock ancestor snaps
   CInode *t = in;
