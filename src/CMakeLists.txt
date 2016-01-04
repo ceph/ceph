@@ -611,6 +611,7 @@ if(${HAVE_LIBAIO})
   target_link_libraries(os aio)
 endif(${HAVE_LIBAIO})
 target_link_libraries(os leveldb snappy)
+target_include_directories(os PUBLIC "${CMAKE_SOURCE_DIR}/src/rocksdb/include")
 
 set(cls_references_files objclass/class_api.cc)
 add_library(cls_references_objs OBJECT ${cls_references_files})
