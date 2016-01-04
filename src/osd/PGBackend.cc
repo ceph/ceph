@@ -367,6 +367,7 @@ enum scrub_error_type PGBackend::be_compare_scrub_objects(
   const object_info_t& auth_oi,
   bool okseed,
   const ScrubMap::object &candidate,
+  PGScrubResult::inconsistent_info_t &ii,
   ostream &errorstream)
 {
   enum scrub_error_type error = CLEAN;
@@ -374,10 +375,12 @@ enum scrub_error_type PGBackend::be_compare_scrub_objects(
     // This can occur on stat() of a shallow scrub, but in that case size will
     // be invalid, and this will be over-ridden below.
     error = DEEP_ERROR;
+    ii.errors |= PGScrubResult::inconsistent_info_t::READ_ERROR;
     errorstream << "candidate had a read error";
   }
   if (auth.digest_present && candidate.digest_present) {
     if (auth.digest != candidate.digest) {
+      ii.errors |= PGScrubResult::inconsistent_info_t::DIGEST_MISMATCH;
       if (error != CLEAN)
         errorstream << ", ";
       error = DEEP_ERROR;
@@ -392,6 +395,7 @@ enum scrub_error_type PGBackend::be_compare_scrub_objects(
   }
   if (auth.omap_digest_present && candidate.omap_digest_present) {
     if (auth.omap_digest != candidate.omap_digest) {
+      ii.errors |= PGScrubResult::inconsistent_info_t::OMAP_DIGEST_MISMATCH;
       if (error != CLEAN)
         errorstream << ", ";
       error = DEEP_ERROR;
@@ -407,6 +411,7 @@ enum scrub_error_type PGBackend::be_compare_scrub_objects(
   // Shallow error takes precendence because this will be seen by
   // both types of scrubs.
   if (auth.size != candidate.size) {
+    ii.errors |= PGScrubResult::inconsistent_info_t::SIZE_MISMATCH;
     if (error != CLEAN)
       errorstream << ", ";
     error = SHALLOW_ERROR;
@@ -420,11 +425,15 @@ enum scrub_error_type PGBackend::be_compare_scrub_objects(
        i != auth.attrs.end();
        ++i) {
     if (!candidate.attrs.count(i->first)) {
+      ii.errors |= PGScrubResult::inconsistent_info_t::ATTR_MISSING;
+      ii.attr_missing.insert(i->first);
       if (error != CLEAN)
         errorstream << ", ";
       error = SHALLOW_ERROR;
       errorstream << "missing attr " << i->first;
     } else if (candidate.attrs.find(i->first)->second.cmp(i->second)) {
+      ii.errors |= PGScrubResult::inconsistent_info_t::ATTR_MISMATCH;
+      ii.attr_mismatch.insert(i->first);
       if (error != CLEAN)
         errorstream << ", ";
       error = SHALLOW_ERROR;
@@ -435,10 +444,27 @@ enum scrub_error_type PGBackend::be_compare_scrub_objects(
        i != candidate.attrs.end();
        ++i) {
     if (!auth.attrs.count(i->first)) {
+      ii.errors |= PGScrubResult::inconsistent_info_t::ATTR_EXTRA;
+      ii.attr_extra.insert(i->first);
       if (error != CLEAN)
         errorstream << ", ";
       error = SHALLOW_ERROR;
       errorstream << "extra attr " << i->first;
+    }
+  }
+  ii.errors |= PGScrubResult::inconsistent_info_t::OI_CORRUPTION;
+  map<string, bufferptr>::const_iterator i = candidate.attrs.find(OI_ATTR);
+  if (i != candidate.attrs.end()) {
+    bufferlist bl;
+    bl.push_back(i->second);
+    object_info_t oi;
+    try {
+      bufferlist::iterator bp = bl.begin();
+      ::decode(oi, bp);
+      ii.version = oi.version;
+      ii.errors &= ~PGScrubResult::inconsistent_info_t::OI_CORRUPTION;
+    } catch (...) {
+      dout(10) << __func__ << " corrupt oi attr" << dendl;
     }
   }
   return error;
@@ -544,6 +570,7 @@ void PGBackend::be_compare_scrubmaps(
   map<hobject_t, set<pg_shard_t>, hobject_t::BitwiseComparator> &missing,
   map<hobject_t, set<pg_shard_t>, hobject_t::BitwiseComparator> &inconsistent,
   map<hobject_t, list<pg_shard_t>, hobject_t::BitwiseComparator> &authoritative,
+  map<hobject_t, PGScrubResult::object_scrub_info_t, hobject_t::BitwiseComparator> &result,
   map<hobject_t, pair<uint32_t,uint32_t>, hobject_t::BitwiseComparator> &missing_digest,
   int &shallow_errors, int &deep_errors,
   const spg_t& pgid,
@@ -567,23 +594,27 @@ void PGBackend::be_compare_scrubmaps(
        k != master_set.end();
        ++k) {
     object_info_t auth_oi;
+    PGScrubResult::object_scrub_info_t osi;
     map<pg_shard_t, ScrubMap *>::const_iterator auth =
       be_select_auth_object(*k, maps, okseed, &auth_oi);
     list<pg_shard_t> auth_list;
     if (auth == maps.end()) {
       dout(10) << __func__ << ": unable to find any auth object" << dendl;
       ++shallow_errors;
+      osi.no_auth = true;
+      result[*k] = osi;
       errorstream << pgid << " shard " << j->first
 		  << ": soid failed to pick suitable auth object\n";
       continue;
     }
+    osi.version = auth_oi.version;
     auth_list.push_back(auth->first);
-
     ScrubMap::object& auth_object = auth->second->objects[*k];
     set<pg_shard_t> cur_missing;
     set<pg_shard_t> cur_inconsistent;
     bool clean = true;
     for (j = maps.begin(); j != maps.end(); ++j) {
+      PGScrubResult::inconsistent_info_t ii;
       if (j == auth)
 	continue;
       if (j->second->objects.count(*k)) {
@@ -595,6 +626,7 @@ void PGBackend::be_compare_scrubmaps(
 				   auth_oi,
 				   okseed,
 				   j->second->objects[*k],
+				   ii,
 				   ss);
         if (error != CLEAN) {
 	  clean = false;
@@ -603,6 +635,7 @@ void PGBackend::be_compare_scrubmaps(
 	    ++shallow_errors;
           else
 	    ++deep_errors;
+	  osi.inconsistent[j->first] = ii;
 	  errorstream << pgid << " shard " << j->first << ": soid " << *k
 		      << " " << ss.str() << "\n";
 	} else {
@@ -618,12 +651,15 @@ void PGBackend::be_compare_scrubmaps(
     }
     if (!cur_missing.empty()) {
       missing[*k] = cur_missing;
+      osi.missing = cur_missing;
     }
     if (!cur_inconsistent.empty()) {
       inconsistent[*k] = cur_inconsistent;
     }
     if (!cur_inconsistent.empty() || !cur_missing.empty()) {
       authoritative[*k] = auth_list;
+      osi.auth.insert(auth_list.begin(), auth_list.end());
+      result[*k] = osi;
     }
 
     if (okseed &&

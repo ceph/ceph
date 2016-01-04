@@ -123,6 +123,7 @@
 
 COMMAND("pg stat", "show placement group status.", "pg", "r", "cli,rest")
 COMMAND("pg getmap", "get binary pg map to -o/stdout", "pg", "r", "cli,rest")
+COMMAND("pg get_inconsistent_pgs", "get inconsistent pgs", "pg", "r", "cli,rest")
 COMMAND("pg send_pg_creates", "trigger pg creates to be issued",\
 	"pg", "rw", "cli,rest")
 COMMAND("pg dump " \

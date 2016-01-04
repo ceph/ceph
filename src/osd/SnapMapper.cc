@@ -317,3 +317,192 @@ int SnapMapper::get_snaps(
     snaps->swap(out.snaps);
   return 0;
 }
+string PGScrubResult::inconsistent_info_t::object_errors_string(bool deep) const
+{
+  ostringstream oss;
+  if (errors & READ_ERROR)
+    oss << "read_error+";
+  if (errors & SIZE_MISMATCH)
+    oss << "size_mismatch+";
+  if (errors & ATTR_MISMATCH) {
+    oss << "attr_mismatch[";
+    set<string>::const_iterator p = attr_mismatch.begin();
+    oss << *p;
+    for (p++; p != attr_mismatch.end(); p++)
+      oss << ", " << *p;
+    oss << "]+";
+  }
+  if (errors & ATTR_MISSING) {
+    oss << "attr_missing[";
+    set<string>::const_iterator p = attr_missing.begin();
+    oss << *p;
+    for (p++; p != attr_missing.end(); p++)
+      oss << ", " << *p;
+    oss << "]+";
+  }
+  if (errors & ATTR_EXTRA) {
+    oss << "attr_extra[";
+    set<string>::const_iterator p = attr_extra.begin();
+    oss << *p;
+    for (p++; p != attr_extra.end(); p++)
+      oss << ", " << *p;
+    oss << "]+";
+  }
+  if (errors & OI_CORRUPTION)
+    oss << "oi_corruption+";
+  if (deep) {
+    if (errors & DIGEST_MISMATCH)
+      oss << "digest_mismatch+";
+    if (errors & OMAP_DIGEST_MISMATCH)
+      oss << "omap_digest_mismatch+";
+  }
+  string ret(oss.str());
+  if (ret.length() > 0)
+    ret.resize(ret.length()-1);
+  return ret;
+}
+
+void PGScrubResult::inconsistent_info_t::encode(bufferlist &bl) const
+{
+  ::encode(errors, bl);
+  ::encode(version, bl);
+  ::encode(attr_mismatch, bl);
+  ::encode(attr_missing, bl);
+  ::encode(attr_extra, bl);
+}
+
+void PGScrubResult::inconsistent_info_t::decode(bufferlist::iterator &bp)
+{
+  ::decode(errors, bp);
+  ::decode(version, bp);
+  ::decode(attr_mismatch, bp);
+  ::decode(attr_missing, bp);
+  ::decode(attr_extra, bp);
+}
+
+void PGScrubResult::object_scrub_info_t::encode(bufferlist &bl) const
+{
+  ::encode(hoid, bl);
+  ::encode(epoch, bl);
+  ::encode(time, bl);
+  ::encode(deep, bl);
+  ::encode(no_auth, bl);
+  ::encode(version, bl);
+  ::encode(auth, bl);
+  ::encode(missing, bl);
+  ::encode(inconsistent, bl);
+}
+
+void PGScrubResult::object_scrub_info_t::decode(bufferlist::iterator &bp)
+{
+  ::decode(hoid, bp);
+  ::decode(epoch, bp);
+  ::decode(time, bp);
+  ::decode(deep, bp);
+  ::decode(no_auth, bp);
+  ::decode(version, bp);
+  ::decode(auth, bp);
+  ::decode(missing, bp);
+  ::decode(inconsistent, bp);
+}
+
+void PGScrubResult::object_scrub_info_t::dump(Formatter *f) const
+{
+  f->dump_stream("hoid") << hoid;
+  f->dump_unsigned("epoch", epoch);
+  f->dump_stream("time") << time;
+  f->dump_bool("deep-scrub", deep);
+  f->dump_bool("no_auth", no_auth);
+  f->dump_stream("eversion") << version;
+  f->open_array_section("auth");
+  for (set<pg_shard_t>::const_iterator p = auth.begin(); p != auth.end(); p++)
+    f->dump_stream("pg_shard") << *p;
+  f->close_section();
+  f->open_array_section("missing");
+  for (set<pg_shard_t>::const_iterator p = missing.begin(); p != missing.end(); p++)
+    f->dump_stream("pg_shard") << *p;
+  f->close_section();
+  f->open_array_section("inconsistent");
+  for (map<pg_shard_t, inconsistent_info_t>::const_iterator p = inconsistent.begin(); p != inconsistent.end(); p++) {
+    f->dump_stream("pg_shard") << p->first;
+    f->dump_string("inconsistent_info", p->second.object_errors_string(deep));
+  }
+  f->close_section();
+}
+
+string PGScrubResult::to_key(const hobject_t &oid)
+{
+  stringstream ss;
+  ss << prefix << oid;
+  return ss.str();
+}
+
+void PGScrubResult::set_object_scrub_info(
+  const hobject_t &oid,
+  const object_scrub_info_t &in,
+  MapCacher::Transaction<string, bufferlist> *t)
+{
+  map<string, bufferlist> to_set;
+  bufferlist bl;
+  ::encode(in, bl);
+  to_set[to_key(oid)] = bl;
+  backend.set_keys(to_set, t);
+}
+
+int PGScrubResult::get_object_scrub_info(
+  const hobject_t &oid,
+  object_scrub_info_t *out)
+{
+  string key = to_key(oid);
+  return get_object_scrub_info(key, out);
+}
+
+int PGScrubResult::get_object_scrub_info(
+  const string &oid,
+  object_scrub_info_t *out)
+{
+  set<string> keys;
+  map<string, bufferlist> got;
+  keys.insert(oid);
+  int r = backend.get_keys(keys, &got);
+  if (r < 0)
+    return r;
+  if (got.empty())
+    return -ENOENT;
+  if (out) {
+    bufferlist::iterator bp = got.begin()->second.begin();
+    ::decode(*out, bp);
+  }
+  return 0;
+}
+
+void PGScrubResult::clear_object_scrub_info(
+  const hobject_t &oid,
+  MapCacher::Transaction<string, bufferlist> *t)
+{
+  set<string> to_remove;
+  to_remove.insert(to_key(oid));
+  backend.remove_keys(to_remove, t);
+}
+
+int PGScrubResult::get_all_keys(set<string> *out)
+{
+  string list_after(prefix);
+  pair<string, bufferlist> next;
+  int r = backend.get_next(list_after, &next);
+  while (r == 0) {
+    if (next.first.compare(0, prefix.size(), prefix) != 0)
+      break;
+    out->insert(next.first);
+    list_after = next.first;
+    r = backend.get_next(list_after, &next);
+  }
+  return 0;
+}
+
+void  PGScrubResult::clear_all(MapCacher::Transaction<string, bufferlist> *t)
+{
+  set<string> keys;
+  get_all_keys(&keys);
+  backend.remove_keys(keys, t);
+}

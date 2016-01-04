@@ -687,6 +687,15 @@ void PGMap::dirty_all(Incremental& inc)
   }
 }
 
+void PGMap::get_inconsistent_pgs(set<pg_t>& pgs) const
+{
+  for (ceph::unordered_map<pg_t, pg_stat_t>::const_iterator p = pg_stat.begin(); p !=pg_stat.end(); ++p) {
+    if (p->second.is_inconsistent()) {
+      pgs.insert(p->first);
+    }
+  }
+}
+
 void PGMap::dump(Formatter *f) const
 {
   dump_basic(f);

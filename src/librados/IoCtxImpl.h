@@ -39,6 +39,7 @@ struct librados::IoCtxImpl {
   version_t last_objver;
   uint32_t notify_timeout;
   object_locator_t oloc;
+  int64_t osd;
 
   Mutex aio_write_list_lock;
   ceph_tid_t aio_write_seq;

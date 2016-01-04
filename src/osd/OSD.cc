@@ -149,6 +149,7 @@
 #define dout_prefix _prefix(_dout, whoami, get_osdmap_epoch())
 
 const double OSD::OSD_TICK_INTERVAL = 1.0;
+const ghobject_t OSD::scrubresult_oid = ghobject_t(hobject_t(sobject_t(object_t("scrubresult"), 0)));
 
 static ostream& _prefix(std::ostream* _dout, int whoami, epoch_t epoch) {
   return *_dout << "osd." << whoami << " " << epoch << " ";
@@ -1892,6 +1893,16 @@ int OSD::init()
     dout(10) << "init creating/touching snapmapper object" << dendl;
     ObjectStore::Transaction t;
     t.touch(coll_t::meta(), OSD::make_snapmapper_oid());
+    r = store->apply_transaction(service.meta_osr.get(), t);
+    if (r < 0)
+      goto out;
+  }
+
+  // make sure pg scrub result object exists
+  if (!store->exists(coll_t::meta(), OSD::scrubresult_oid)) {
+    dout(10) << "init creating/touching scrub result object" << dendl;
+    ObjectStore::Transaction t;
+    t.touch(coll_t::meta(), OSD::scrubresult_oid);
     r = store->apply_transaction(service.meta_osr.get(), t);
     if (r < 0)
       goto out;
@@ -4973,7 +4984,24 @@ COMMAND("pg " \
 	"name=offset,type=CephString,req=false",
 	"list missing objects on this pg, perhaps starting at an offset given in JSON",
 	"osd", "r", "cli")
-
+COMMAND("pg " \
+	"name=pgid,type=CephPgid " \
+	"name=cmd,type=CephChoices,strings=get_inconsistent_objects",
+	"list all inconsistent objects on this pg",
+	"osd", "r", "cli")
+COMMAND("pg " \
+	"name=pgid,type=CephPgid " \
+	"name=cmd,type=CephChoices,strings=get_inconsistent_info " \
+	"name=object,type=CephString",
+	"get inconsistent info of <object> on this pg",
+	"osd", "r", "cli")
+COMMAND("pg " \
+	"name=pgid,type=CephPgid " \
+	"name=cmd,type=CephChoices,strings=repair_object " \
+	"name=osd,type=CephOsdName " \
+	"name=object,type=CephString",
+	"repair object",
+	"osd", "r", "cli")
 // new form: tell <pgid> <cmd> for both cli and rest 
 
 COMMAND("query",
@@ -5132,7 +5160,10 @@ void OSD::do_command(Connection *con, ceph_tid_t tid, vector<string>& cmd, buffe
 	   (cmd_getval(cct, cmdmap, "pgid", pgidstr) &&
 	     (prefix == "query" ||
 	      prefix == "mark_unfound_lost" ||
-	      prefix == "list_missing")
+	      prefix == "list_missing" ||
+	      prefix == "get_all_inconsistent_objects" ||
+	      prefix == "get_inconsistent_info" ||
+	      prefix == "repair_object")
 	   )) {
     pg_t pgid;
 

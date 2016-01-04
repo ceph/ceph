@@ -230,4 +230,85 @@ public:
 };
 WRITE_CLASS_ENCODER(SnapMapper::object_snaps)
 
+class PGScrubResult {
+public:
+  struct inconsistent_info_t {
+    enum {
+      READ_ERROR = 1<<0,
+      SIZE_MISMATCH = 1<<1,
+      ATTR_MISMATCH = 1<<2,
+      ATTR_MISSING = 1<<3,
+      ATTR_EXTRA = 1<<4,
+      OI_CORRUPTION = 1<<5,
+      DIGEST_MISMATCH = 1<<6,
+      OMAP_DIGEST_MISMATCH = 1<<7,
+    };
+    string object_errors_string(bool deep) const;
+
+    uint32_t errors;
+    eversion_t version;
+    set<string> attr_mismatch;
+    set<string> attr_missing;
+    set<string> attr_extra;
+
+    inconsistent_info_t() : errors(0) {}
+    void encode(bufferlist &bl) const;
+    void decode(bufferlist::iterator &bp);
+  };
+
+  struct object_scrub_info_t {
+    hobject_t hoid;
+    epoch_t epoch;
+    utime_t time;
+    bool deep;
+    bool no_auth;
+    eversion_t version;
+    set<pg_shard_t> auth;
+    set<pg_shard_t> missing;
+    map<pg_shard_t, inconsistent_info_t> inconsistent;
+
+    void dump(Formatter *f) const;
+    void encode(bufferlist &bl) const;
+    void decode(bufferlist::iterator &bp);
+  };
+
+  PGScrubResult(
+    MapCacher::StoreDriver<string, bufferlist> *driver,
+    const pg_t& pgid
+    )
+    : backend(driver), prefix(make_prefix(pgid)) {}
+
+  void set_object_scrub_info(
+    const hobject_t &oid,
+    const object_scrub_info_t &in,
+    MapCacher::Transaction<string, bufferlist> *t);
+
+  int get_object_scrub_info(const hobject_t &oid, object_scrub_info_t *out);
+
+  int get_object_scrub_info(const string &oid, object_scrub_info_t *out);
+
+  void clear_object_scrub_info(
+    const hobject_t &oid,
+    MapCacher::Transaction<string, bufferlist> *t);
+
+  int get_all_keys(set<string> *out);
+
+  void clear_all(MapCacher::Transaction<string, bufferlist> *t);
+
+private:
+  MapCacher::MapCacher<string, bufferlist> backend;
+  string prefix;
+
+  static string make_prefix(const pg_t &pgid) {
+    stringstream ss;
+    ss << pgid << "_";
+    return ss.str();
+  }
+
+  string to_key(const hobject_t &in);
+};
+WRITE_CLASS_ENCODER(PGScrubResult::inconsistent_info_t)
+WRITE_CLASS_ENCODER(PGScrubResult::object_scrub_info_t)
+
+
 #endif

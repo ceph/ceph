@@ -2726,7 +2726,15 @@ int Objecter::_calc_target(op_target_t *t, epoch_t *last_force_resend,
     } else {
       int osd;
       bool read = is_read && !is_write;
-      if (read && (t->flags & CEPH_OSD_FLAG_BALANCE_READS)) {
+      if (read && (t->flags & CEPH_OSD_FLAG_SCRUB_READS)) {
+        if (find(acting.begin(), acting.end(), t->osd) == acting.end()) {
+	  t->osd = -1;
+	  return RECALC_OP_TARGET_POOL_DNE;
+	}
+	osd = t->osd;
+	if (osd != acting_primary)
+	  t->used_replica = true;
+      } else if (read && (t->flags & CEPH_OSD_FLAG_BALANCE_READS)) {
 	int p = rand() % acting.size();
 	if (p)
 	  t->used_replica = true;

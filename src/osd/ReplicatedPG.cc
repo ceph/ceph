@@ -851,6 +851,95 @@ int ReplicatedPG::do_command(cmdmap_t cmdmap, ostream& ss,
     f->close_section();
     f->flush(odata);
     return 0;
+  }
+  else if (command == "get_inconsistent_objects") {
+    set<string> out;
+    scrub_result.get_all_keys(&out);
+    f->open_array_section("all_inconsistent_objects");
+    for (set<string>::const_iterator p = out.begin(); p != out.end(); p++)
+      f->dump_string("inconsistent_object", *p);
+    f->close_section();
+    f->flush(odata);
+    return 0;
+  }
+  else if (command == "get_inconsistent_info") {
+    string object;
+    cmd_getval(cct, cmdmap, "object", object);
+    PGScrubResult::object_scrub_info_t out;
+    int r = scrub_result.get_object_scrub_info(object, &out);
+    if (r == -ENOENT) {
+      ss << object << " has not inconsistent info";
+      return -ENOENT;
+    } else if (r < 0) {
+      ss << "can't get inconsistent info of " << object;
+      return -EINVAL;
+    }
+    out.dump(f.get());
+    f->flush(odata);
+    return 0;
+  }
+  else if (command == "repair_object") {
+    if (is_ec_pg()) {
+      ss << "can't repair object in ec pool";
+      return -EINVAL;
+    }
+    string objstr;
+    int64_t osdid;
+    cmd_getval(cct, cmdmap, "object", objstr);
+    cmd_getval(cct, cmdmap, "osd", osdid);
+    PGScrubResult::object_scrub_info_t osi;
+    int r = scrub_result.get_object_scrub_info(objstr, &osi);
+    if (r == -ENOENT) {
+      ss << objstr << " isn't in scrub result, you can't repair it";
+      return -ENOENT;
+    } else if (r < 0) {
+      ss << "can't get scrub result of " << objstr;
+      return -EINVAL;
+    }
+    hobject_t hoid = osi.hoid;
+    pg_shard_t auth(osdid);
+    if (actingbackfill.find(auth) == actingbackfill.end()) {
+      ss << "osd." << osdid << " has not " << objstr;
+      return -EINVAL;
+    }
+    eversion_t version;
+    set<pg_shard_t>::const_iterator i;
+    map<pg_shard_t, PGScrubResult::inconsistent_info_t>::const_iterator j;
+    if ((i = osi.auth.find(auth)) != osi.auth.end()) {
+      version = osi.version;
+    } else if ((j = osi.inconsistent.find(auth)) != osi.inconsistent.end()) {
+      if (j->second.errors & PGScrubResult::inconsistent_info_t::OI_CORRUPTION) {
+        ss << objstr << " in osd." << osdid << " OI_CORRUPTION";
+	return -EINVAL;
+      } else if (j->second.errors & PGScrubResult::inconsistent_info_t::READ_ERROR) {
+        ss << objstr << " in osd." << osdid << " READ_ERROR";
+	return -EINVAL;
+      } else {
+        version = j->second.version;
+      }
+    } else {
+      ss << objstr << " in osd." << osdid << " is missing";
+      return -EINVAL;
+    }
+    for (set<pg_shard_t>::const_iterator p = actingbackfill.begin(); p != actingbackfill.end(); p++) {
+      if (*p == auth) continue;
+      if (*p != primary) {
+	peer_missing[*p].add(hoid, version, eversion_t());
+      } else {
+	pg_log.missing_add(hoid, version, eversion_t());
+	pg_log.set_last_requested(0);
+	missing_loc.add_missing(hoid, version, eversion_t());
+	missing_loc.add_location(hoid, auth);
+      }
+    }
+    queue_peering_event(
+      CephPeeringEvtRef(
+	new CephPeeringEvt(
+	  get_osdmap()->get_epoch(),
+	  get_osdmap()->get_epoch(),
+	  DoRecovery())));
+    ss << "start repair " << objstr;
+    return 0;
   };
 
   ss << "unknown pg command " << prefix;
@@ -1523,7 +1612,8 @@ void ReplicatedPG::do_op(OpRequestRef& op)
     }
   }
 
-  if ((m->get_flags() & (CEPH_OSD_FLAG_BALANCE_READS |
+  if ((m->get_flags() & (CEPH_OSD_FLAG_SCRUB_READS |
+			 CEPH_OSD_FLAG_BALANCE_READS |
 			 CEPH_OSD_FLAG_LOCALIZE_READS)) &&
       op->may_read() &&
       !(op->may_write() || op->may_cache())) {
@@ -1760,7 +1850,8 @@ void ReplicatedPG::do_op(OpRequestRef& op)
     // we have to wait for the object.
     if (is_primary() ||
 	(!(m->has_flag(CEPH_OSD_FLAG_BALANCE_READS)) &&
-	 !(m->has_flag(CEPH_OSD_FLAG_LOCALIZE_READS)))) {
+	 !(m->has_flag(CEPH_OSD_FLAG_LOCALIZE_READS)) &&
+	 !(m->has_flag(CEPH_OSD_FLAG_SCRUB_READS)))) {
       // missing the specific snap we need; requeue and wait.
       assert(!op->may_write()); // only happens on a read/cache
       wait_for_unreadable_object(missing_oid, op);

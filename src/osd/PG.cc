@@ -184,6 +184,8 @@ PG::PG(OSDService *o, OSDMapRef curmap,
     p.get_split_bits(curmap->get_pg_num(_pool.id)),
     _pool.id,
     p.shard),
+  osdriver_scrub(osd->store, coll_t(), OSD::scrubresult_oid),
+  scrub_result(&osdriver_scrub, p.pgid),
   map_lock("PG::map_lock"),
   osdmap_ref(curmap), pool(_pool),
   _lock("PG::_lock"),
@@ -3988,6 +3990,11 @@ void PG::chunky_scrub(ThreadPool::TPHandle &handle)
         scrubber.epoch_start = info.history.same_interval_since;
         scrubber.active = true;
 
+	{
+          OSDriver::OSTransaction _t(osdriver_scrub.get_transaction(scrubber.t));
+          scrub_result.clear_all(&_t);
+	}
+
 	osd->inc_scrubs_active(scrubber.reserved);
 	if (scrubber.reserved) {
 	  scrubber.reserved = false;
@@ -4232,6 +4239,7 @@ void PG::scrub_compare_maps()
   // construct authoritative scrub map for type specific scrubbing
   ScrubMap authmap(scrubber.primary_scrubmap);
   map<hobject_t, pair<uint32_t, uint32_t>, hobject_t::BitwiseComparator> missing_digest;
+  map<hobject_t, PGScrubResult::object_scrub_info_t, hobject_t::BitwiseComparator> result;
 
   if (acting.size() > 1) {
     dout(10) << __func__ << "  comparing replica scrub maps" << dendl;
@@ -4267,12 +4275,28 @@ void PG::scrub_compare_maps()
       scrubber.missing,
       scrubber.inconsistent,
       authoritative,
+      result,
       missing_digest,
       scrubber.shallow_errors,
       scrubber.deep_errors,
       info.pgid, acting,
       ss);
     dout(2) << ss.str() << dendl;
+
+    if(!(state_test(PG_STATE_REPAIR)))
+    {
+      OSDriver::OSTransaction _t(osdriver_scrub.get_transaction(scrubber.t));
+      map<hobject_t, PGScrubResult::object_scrub_info_t,
+        hobject_t::BitwiseComparator>::iterator p = result.begin();
+
+      for (; p != result.end(); p++) {
+        p->second.hoid = p->first;
+	p->second.epoch = get_osdmap()->get_epoch();
+	p->second.time = ceph_clock_now(cct);
+	p->second.deep = state_test(PG_STATE_DEEP_SCRUB);
+	scrub_result.set_object_scrub_info(p->first, p->second, &_t);
+      }
+    }
 
     if (!ss.str().empty()) {
       osd->clog->error(ss);
@@ -4371,6 +4395,14 @@ void PG::scrub_finish()
 
   // type-specific finish (can tally more errors)
   _scrub_finish();
+
+  if (!(scrubber.t->empty()))
+  {
+    int r = osd->store->apply_transaction(osr.get(), *(scrubber.t));
+    if (r != 0)
+      derr << __func__ << ": apply_transaction got " << cpp_strerror(r)
+	   << dendl;
+  }
 
   bool has_error = scrub_process_inconsistent();
 

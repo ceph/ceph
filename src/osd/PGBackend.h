@@ -566,6 +566,7 @@
      const object_info_t& auth_oi,
      bool okseed,
      const ScrubMap::object &candidate,
+     PGScrubResult::inconsistent_info_t &ii,
      ostream &errorstream);
    map<pg_shard_t, ScrubMap *>::const_iterator be_select_auth_object(
      const hobject_t &obj,
@@ -579,6 +580,7 @@
      map<hobject_t, set<pg_shard_t>, hobject_t::BitwiseComparator> &missing,
      map<hobject_t, set<pg_shard_t>, hobject_t::BitwiseComparator> &inconsistent,
      map<hobject_t, list<pg_shard_t>, hobject_t::BitwiseComparator> &authoritative,
+     map<hobject_t, PGScrubResult::object_scrub_info_t, hobject_t::BitwiseComparator> &result,
      map<hobject_t, pair<uint32_t,uint32_t>, hobject_t::BitwiseComparator> &missing_digest,
      int &shallow_errors, int &deep_errors,
      const spg_t& pgid,

@@ -1102,7 +1102,7 @@ namespace librados
 
     void locator_set_key(const std::string& key);
     void set_namespace(const std::string& nspace);
-
+    void set_scrub_read_shard(const int64_t osd);
     int64_t get_id();
 
     uint32_t get_object_hash_position(const std::string& oid);
@@ -1159,6 +1159,8 @@ namespace librados
     int pool_reverse_lookup(int64_t id, std::string *name);
 
     uint64_t get_instance_id();
+
+    int get_inconsistent_pgs(std::list<std::string>& pgs);
 
     int mon_command(std::string cmd, const bufferlist& inbl,
 		    bufferlist *outbl, std::string *outs);
