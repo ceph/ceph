@@ -58,5 +58,6 @@ tasks:
       metadata-only: true
 - s3tests:
     client.0:
+      force-branch: ceph-master
       idle_timeout: 300
       rgw_server: client.0
