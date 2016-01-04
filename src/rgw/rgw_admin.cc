@@ -1721,6 +1721,7 @@ int main(int argc, char **argv)
   bucket_op.set_object(object);
   bucket_op.set_check_objects(check_objects);
   bucket_op.set_delete_children(delete_child_objects);
+  bucket_op.set_fix_index(fix);
 
   // required to gather errors from operations
   std::string err_msg;
