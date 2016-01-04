@@ -1605,16 +1605,7 @@ int FileStore::mount()
 	     << "wasn't configured?" << dendl;
       }
 
-      // stop sync thread
-      lock.Lock();
-      stop = true;
-      sync_cond.Signal();
-      lock.Unlock();
-      sync_thread.join();
-
-      wbthrottle.stop();
-
-      goto close_current_fd;
+      goto stop_sync;
     }
   }
 
@@ -1623,7 +1614,7 @@ int FileStore::mount()
     if (g_conf->filestore_debug_omap_check && !object_map->check(err2)) {
       derr << err2.str() << dendl;
       ret = -EINVAL;
-      goto close_current_fd;
+      goto stop_sync;
     }
   }
 
@@ -1654,6 +1645,15 @@ int FileStore::mount()
   // all okay.
   return 0;
 
+stop_sync:
+  // stop sync thread
+  lock.Lock();
+  stop = true;
+  sync_cond.Signal();
+  lock.Unlock();
+  sync_thread.join();
+
+  wbthrottle.stop();
 close_current_fd:
   VOID_TEMP_FAILURE_RETRY(::close(current_fd));
   current_fd = -1;
