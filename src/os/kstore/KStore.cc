@@ -855,8 +855,6 @@ int KStore::_open_db(bool create)
 			  fn);
   if (!db) {
     derr << __func__ << " error creating db" << dendl;
-    delete db;
-    db = NULL;
     return -EIO;
   }
   string options;
