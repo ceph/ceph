@@ -2552,7 +2552,11 @@ public:
           time_t mtime, JSONObj *obj, sync_type_t sync_mode) {
     RGWUserCompleteInfo uci;
 
-    decode_json_obj(uci, obj);
+    try {
+      decode_json_obj(uci, obj);
+    } catch (JSONDecoder::err& e) {
+      return -EINVAL;
+    }
 
     map<string, bufferlist> *pattrs = NULL;
     if (uci.has_attrs) {
