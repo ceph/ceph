@@ -219,9 +219,9 @@ else()
 	endif(NSS_FOUND)
 endif(CRYPTOPP_FOUND)
 
-option(WITH_XIO "Enable XIO messaging" ON)
+option(WITH_XIO "Enable XIO messaging" OFF)
 if(WITH_XIO)
-find_package(xio)
+  find_package(xio REQUIRED)
 set(HAVE_XIO ${Xio_FOUND})
 endif(WITH_XIO)
 
