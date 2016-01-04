@@ -262,6 +262,7 @@ def task(ctx, config):
     - install:
     - ceph:
         log-whitelist:
+          - 'candidate had a stat error'
           - 'candidate had a read error'
           - 'deep-scrub 0 missing, 1 inconsistent objects'
           - 'deep-scrub 0 missing, 4 inconsistent objects'
