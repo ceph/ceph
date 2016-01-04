@@ -1600,6 +1600,8 @@ int BlueStore::mkfs()
       ::encode(bluefs_extents, bl);
       t->set(PREFIX_SUPER, "bluefs_extents", bl);
       dout(20) << __func__ << " bluefs_extents " << bluefs_extents << dendl;
+    } else {
+      reserved = BLUEFS_START;
     }
     fm->release(reserved, bdev->get_size() - reserved, t);
     db->submit_transaction_sync(t);
@@ -1836,8 +1838,8 @@ int BlueStore::fsck()
   if (r < 0)
     goto out_alloc;
 
+  used_blocks.insert(0, BLUEFS_START);
   if (bluefs) {
-    used_blocks.insert(0, BLUEFS_START);
     used_blocks.insert(bluefs_extents);
     r = bluefs->fsck();
     if (r < 0)
