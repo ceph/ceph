@@ -22,6 +22,9 @@
 /// track in-flight io
 struct IOContext {
   void *priv;
+#ifdef HAVE_SPDK
+  void *backend;
+#endif
 
   Mutex lock;
   Cond cond;
