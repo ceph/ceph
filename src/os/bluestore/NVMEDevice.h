@@ -19,6 +19,8 @@
 
 #include <pciaccess.h>
 
+// since _Static_assert introduced in c11
+#define _Static_assert static_assert
 #include "spdk/nvme.h"
 
 #include "BlockDevice.h"
