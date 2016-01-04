@@ -931,7 +931,7 @@ int BlueStore::_open_bdev(bool create)
 {
   bluestore_bdev_label_t label;
   assert(bdev == NULL);
-  bdev = new BlockDevice(aio_cb, static_cast<void*>(this));
+  bdev = BlockDevice::create(g_conf->bdev_backend_type, aio_cb, static_cast<void*>(this));
   string p = path + "/block";
   int r = bdev->open(p);
   if (r < 0)
