@@ -232,7 +232,7 @@ void NVMEDevice::close()
 int NVMEDevice::flush()
 {
   dout(10) << __func__ << " start" << dendl;
-  return r;
+  return 0;
 }
 
 int NVMEDevice::_aio_start()
@@ -345,5 +345,5 @@ int NVMEDevice::read(uint64_t off, uint64_t len, bufferlist *pbl,
 int NVMEDevice::invalidate_cache(uint64_t off, uint64_t len)
 {
   dout(5) << __func__ << " " << off << "~" << len << dendl;
-  return r;
+  return 0;
 }

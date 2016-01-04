@@ -22,9 +22,6 @@
 #include "BlockDevice.h"
 
 class NVMEDevice : public BlockDevice {
-  typedef void (*aio_callback_t)(void *handle, void *aio);
-
- private:
   /**
    * points to pinned, physically contiguous memory region;
    * contains 4KB IDENTIFY structure for controller which is
