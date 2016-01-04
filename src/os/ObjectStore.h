@@ -446,6 +446,11 @@ public:
 
     bool use_tbl;   //use_tbl for encode/decode
     bufferlist tbl;
+    // Because encode ghobject and map struct is CPU-intensive.
+    // So we cache the result of encode these struct. We should ensure
+    // that we donot modify the tnx after get_encoded_bytes. If modify
+    // it, we should reset the coll_object_tbl.
+    mutable bufferlist coll_object_tbl;
 
     map<coll_t, __le32> coll_index;
     map<ghobject_t, __le32, ghobject_t::BitwiseComparator> object_index;
@@ -530,7 +535,12 @@ public:
       return use_tbl;
     }
 
+    void reset_coll_object_tbl() {
+      coll_object_tbl.clear();
+    }
+
     void swap(Transaction& other) {
+      coll_object_tbl.swap(other.coll_object_tbl);
       std::swap(data, other.data);
       std::swap(on_applied, other.on_applied);
       std::swap(on_commit, other.on_commit);
@@ -650,6 +660,8 @@ public:
     }
     /// Append the operations of the parameter to this Transaction. Those operations are removed from the parameter Transaction
     void append(Transaction& other) {
+      coll_object_tbl.clear();
+      other.coll_object_tbl.clear();
       assert(use_tbl == other.use_tbl);
 
       data.ops += other.data.ops;
@@ -709,13 +721,14 @@ public:
       else {
         //layout: data_bl + op_bl + coll_index + object_index + data
         //TODO: maybe we need better way to get encoded bytes;
-        bufferlist bl;
-        ::encode(coll_index, bl);
-        ::encode(object_index, bl);
+        if (!coll_object_tbl.length()) {
+          ::encode(coll_index, coll_object_tbl);
+          ::encode(object_index, coll_object_tbl);
+        }
 
         return data_bl.length() +
           op_bl.length() +
-          bl.length() +
+          coll_object_tbl.length() +
           sizeof(data);
       }
     }
@@ -892,6 +905,7 @@ private:
      * form of seat belts for the decoder.
      */
     Op* _get_next_op() {
+      assert(!coll_object_tbl.length());
       if (op_ptr.length() == 0 || op_ptr.offset() >= op_ptr.length()) {
         op_ptr = bufferptr(sizeof(Op) * OPS_PER_PTR);
       }
@@ -1636,8 +1650,13 @@ public:
         ENCODE_START(9, 9, bl);
         ::encode(data_bl, bl);
         ::encode(op_bl, bl);
-        ::encode(coll_index, bl);
-        ::encode(object_index, bl);
+        if (coll_object_tbl.length()) {
+          // calling claim_append to reset the coll_object_tbl
+          bl.claim_append(coll_object_tbl);
+        } else {
+          ::encode(coll_index, bl);
+          ::encode(object_index, bl);
+        }
         data.encode(bl);
         ENCODE_FINISH(bl);
       }
@@ -1770,6 +1789,15 @@ public:
     tls.back()->register_on_commit(ondisk);
     tls.back()->register_on_applied_sync(onreadable_sync);
     return queue_transactions(osr, tls, op, handle);
+  }
+
+  // reset the coll_object_tbl
+  void reset_coll_object_tbl(list<Transaction*>& tls) {
+    for (list<Transaction*>::iterator it = tls.begin();
+         it != tls.end();
+         ++it) {
+      (*it)->reset_coll_object_tbl();
+    }
   }
 
   virtual int queue_transactions(

@@ -1062,6 +1062,7 @@ int KeyValueStore::queue_transactions(Sequencer *posr, list<Transaction*> &tls,
   }
 
   Op *o = build_op(tls, ondisk, onreadable, onreadable_sync, osd_op);
+  reset_coll_object_tbl(o->tls);
   op_queue_reserve_throttle(o, handle);
   if (m_keyvaluestore_do_dump)
     dump_transactions(o->tls, o->op, osr);

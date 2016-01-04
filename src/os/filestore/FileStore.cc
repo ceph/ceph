@@ -1933,6 +1933,7 @@ int FileStore::queue_transactions(Sequencer *posr, list<Transaction*> &tls,
     delete ondisk;
     delete onreadable;
     delete onreadable_sync;
+    reset_coll_object_tbl(tls);
     return 0;
   }
 
@@ -1995,6 +1996,8 @@ int FileStore::queue_transactions(Sequencer *posr, list<Transaction*> &tls,
 
   if (!journal) {
     Op *o = build_op(tls, onreadable, onreadable_sync, osd_op);
+    // do not call encode transaction, so reset_coll_object_tbl manually.
+    reset_coll_object_tbl(o->tls);
     dout(5) << __func__ << " (no journal) " << o << " " << tls << dendl;
 
     op_queue_reserve_throttle(o, handle);
