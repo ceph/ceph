@@ -60,7 +60,7 @@ static void io_complete(void *ctx, const struct nvme_completion *completion) {
 
 // ----------------
 #undef dout_prefix
-#define dout_prefix *_dout << "bdev(" << path << ") "
+#define dout_prefix *_dout << "bdev(" << name << ") "
 
 NVMEDevice::NVMEDevice(aio_callback_t cb, void *cbpriv)
     : aio_queue(g_conf->bdev_aio_max_queue_depth),
@@ -217,6 +217,7 @@ int NVMEDevice::open(string p)
   assert(r == 0);
   r = _aio_start();
   assert(r == 0);
+  name = pci_device_get_device_name(pci_dev);
   return 0;
 }
 

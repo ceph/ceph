@@ -34,6 +34,7 @@ class NVMEDevice : public BlockDevice {
   nvme_namespace	*ns;
 	uint64_t blocklen;
   int unbindfromkernel = 0;
+  string name;
 
   uint64_t size;
   uint64_t block_size;
