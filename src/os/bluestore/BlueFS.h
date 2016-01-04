@@ -180,8 +180,6 @@ private:
   vector<interval_set<uint64_t> > block_all;  ///< extents in bdev we own
   vector<Allocator*> alloc;                   ///< allocators for bdevs
 
-  vector<IOContext*> ioc_reap_queue;          ///< iocs from closed writers
-
   void _init_alloc();
   void _stop_alloc();
 
