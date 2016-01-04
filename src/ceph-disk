@@ -1617,6 +1617,11 @@ def prepare_dev(
     if is_partition(data):
         LOG.debug('OSD data device %s is a partition', data)
         rawdev = data
+
+        ptype = get_partition_type(rawdev)
+        if ptype != ptype_osd:
+                LOG.warning('incorrect partition UUID: %s, expected %s'
+                            % (ptype, ptype_osd))
     else:
         LOG.debug('Creating osd partition on %s', data)
         try:
