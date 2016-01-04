@@ -266,8 +266,14 @@ LIBOSD += $(LIBOSD_TYPES) $(LIBOS_TYPES)
 # libkv/libos linking order is ornery
 if WITH_SLIBROCKSDB
 LIBKV += rocksdb/librocksdb.a
+if HAVE_BZLIB
+LIBKV += -lbz2
 endif
-LIBKV += -lbz2 -lz -lleveldb -lsnappy
+if HAVE_LZ4
+LIBKV += -llz4
+endif
+endif # WITH_SLIBROCKSDB
+LIBKV += -lz -lleveldb -lsnappy
 LIBOS += $(LIBOS_TYPES) $(LIBKV)
 
 LIBMON += $(LIBMON_TYPES)
