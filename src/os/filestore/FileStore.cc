@@ -3436,7 +3436,7 @@ int FileStore::_do_copy_range(int from, int to, uint64_t srcoff, uint64_t len, u
   if (backend->has_splice()) {
     int pipefd[2];
     if (pipe(pipefd) < 0) {
-      r = errno;
+      r = -errno;
       derr << " pipe " << " got " << cpp_strerror(r) << dendl;
       return r;
     }
@@ -3477,13 +3477,13 @@ int FileStore::_do_copy_range(int from, int to, uint64_t srcoff, uint64_t len, u
 
     actual = ::lseek64(from, srcoff, SEEK_SET);
     if (actual != (int64_t)srcoff) {
-      r = errno;
+      r = -errno;
       derr << "lseek64 to " << srcoff << " got " << cpp_strerror(r) << dendl;
       return r;
     }
     actual = ::lseek64(to, dstoff, SEEK_SET);
     if (actual != (int64_t)dstoff) {
-      r = errno;
+      r = -errno;
       derr << "lseek64 to " << dstoff << " got " << cpp_strerror(r) << dendl;
       return r;
     }
