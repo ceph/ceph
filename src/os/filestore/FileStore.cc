@@ -821,7 +821,7 @@ int FileStore::mkfs()
       goto close_fsid_fd;
     }
     if (::fsync(fsid_fd) < 0) {
-      ret = errno;
+      ret = -errno;
       derr << "mkfs: close failed: can't write fsid: "
 	   << cpp_strerror(ret) << dendl;
       goto close_fsid_fd;
