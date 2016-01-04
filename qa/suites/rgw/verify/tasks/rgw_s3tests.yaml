@@ -8,5 +8,5 @@ tasks:
       valgrind: [--tool=memcheck]
 - s3tests:
     client.0:
-      force-branch: ceph-master
+      force-branch: ceph-jewel
       rgw_server: client.0
