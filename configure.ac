@@ -721,6 +721,32 @@ if test "x$enable_xio" = x"yes"; then
    AC_SUBST(XIO_LIBS)
 fi
 
+#
+# SPDK
+#
+AC_ARG_ENABLE(spdk,
+    [AC_HELP_STRING([--with-spdk], [build Ceph SPDK Support])], [], [with_spdk=no])
+
+AM_CONDITIONAL(HAVE_SPDK, [test "x$with_spdk" = "xyes"])
+
+if test "x$with_spdk" = x"yes"; then
+   AC_CHECK_HEADER([spdk/nvme.h], [], AC_MSG_ERROR([Cannot find header 'spdk/nvme.h'.]))
+   AC_CHECK_LIB([spdk_nvme], [nvme_attach], [], AC_MSG_FAILURE([SPDK nvme_attach not found]))
+
+   SPDK_LIBS="-lspdk_nvme"
+   AC_SUBST(SPDK_LIBS)
+fi
+
+#
+# FreeBSD has it in base.
+#
+if test x"$freebsd" != x"yes" -a x"$with_radosgw" = x"yes"; then
+PKG_CHECK_MODULES([LIBEDIT], [libedit >= 2.11],
+                [], AC_MSG_FAILURE([No usable version of libedit found.]))
+else
+	LIBEDIT_LIBS="-ledit"
+fi
+
 #libatomic-ops? You want it!
 AC_ARG_WITH([libatomic-ops],
             [AS_HELP_STRING([--without-libatomic-ops],
