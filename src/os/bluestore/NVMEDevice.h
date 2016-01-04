@@ -17,6 +17,10 @@
 #ifndef CEPH_OS_BLUESTORE_NVMEDEVICE
 #define CEPH_OS_BLUESTORE_NVMEDEVICE
 
+#include <pciaccess.h>
+
+#include "spdk/nvme.h"
+
 #include "BlockDevice.h"
 
 class NVMEDevice : public BlockDevice {
