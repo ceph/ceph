@@ -54,30 +54,30 @@ class NVMEDevice : public BlockDevice {
  public:
   NVMEDevice(aio_callback_t cb, void *cbpriv);
 
-  void aio_submit(IOContext *ioc) {}
+  void aio_submit(IOContext *ioc) override {}
 
-  uint64_t get_size() const {
+  uint64_t get_size() const override {
     return size;
   }
-  uint64_t get_block_size() const {
+  uint64_t get_block_size() const override {
     return block_size;
   }
 
   int read(uint64_t off, uint64_t len, bufferlist *pbl,
            IOContext *ioc,
-           bool buffered);
+           bool buffered) override;
 
   int aio_write(uint64_t off, bufferlist& bl,
                 IOContext *ioc,
-                bool buffered);
+                bool buffered) override ;
   int aio_zero(uint64_t off, uint64_t len,
-               IOContext *ioc);
-  int flush();
+               IOContext *ioc) override;
+  int flush() override;
 
   // for managing buffered readers/writers
-  int invalidate_cache(uint64_t off, uint64_t len);
-  int open(string path);
-  void close();
+  int invalidate_cache(uint64_t off, uint64_t len) override;
+  int open(string path) override;
+  void close() override;
 };
 
 #endif
