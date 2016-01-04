@@ -9988,6 +9988,9 @@ size_t Client::_vxattrcb_layout(Inode *in, char *val, size_t size)
 	r += snprintf(val + r, size - r, "%" PRIu64,
 		      (uint64_t)in->layout.pool_id);
     });
+  if (in->layout.pool_ns.length())
+    r += snprintf(val + r, size - r, " pool_namespace=%s",
+		  in->layout.pool_ns.c_str());
   return r;
 }
 size_t Client::_vxattrcb_layout_stripe_unit(Inode *in, char *val, size_t size)
@@ -10013,6 +10016,10 @@ size_t Client::_vxattrcb_layout_pool(Inode *in, char *val, size_t size)
 	r = snprintf(val, size, "%" PRIu64, (uint64_t)in->layout.pool_id);
     });
   return r;
+}
+size_t Client::_vxattrcb_layout_pool_namespace(Inode *in, char *val, size_t size)
+{
+  return snprintf(val, size, "%s", in->layout.pool_ns.c_str());
 }
 size_t Client::_vxattrcb_dir_entries(Inode *in, char *val, size_t size)
 {
@@ -10088,6 +10095,7 @@ const Client::VXattr Client::_dir_vxattrs[] = {
   XATTR_LAYOUT_FIELD(dir, layout, stripe_count),
   XATTR_LAYOUT_FIELD(dir, layout, object_size),
   XATTR_LAYOUT_FIELD(dir, layout, pool),
+  XATTR_LAYOUT_FIELD(dir, layout, pool_namespace),
   XATTR_NAME_CEPH(dir, entries),
   XATTR_NAME_CEPH(dir, files),
   XATTR_NAME_CEPH(dir, subdirs),
@@ -10120,6 +10128,7 @@ const Client::VXattr Client::_file_vxattrs[] = {
   XATTR_LAYOUT_FIELD(file, layout, stripe_count),
   XATTR_LAYOUT_FIELD(file, layout, object_size),
   XATTR_LAYOUT_FIELD(file, layout, pool),
+  XATTR_LAYOUT_FIELD(file, layout, pool_namespace),
   { name: "" }     /* Required table terminator */
 };
 
