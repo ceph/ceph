@@ -3143,7 +3143,6 @@ int KStore::_do_remove(TransContext *txc,
 		       OnodeRef o)
 {
   string key;
-  o->exists = false;
 
   _do_truncate(txc, o, 0);
 
