@@ -990,6 +990,8 @@ int FileStore::read_fsid(int fd, uuid_d *uuid)
 
   if (ret > 36)
     fsid_str[36] = 0;
+  else
+    fsid_str[ret] = 0;
   if (!uuid->parse(fsid_str))
     return -EINVAL;
   return 0;
