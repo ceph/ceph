@@ -39,6 +39,7 @@
 #include "IPChecksum.h"
 #include "IP.h"
 #include "const.h"
+#include "byteorder.h"
 #include "shared_ptr.h"
 #include "PacketUtil.h"
 
@@ -70,8 +71,11 @@ struct tcp_option {
     option_kind kind = option_kind::mss;
     option_len len = option_len::mss;
     uint16_t mss;
-    template <typename Adjuster>
-    void adjust_endianness(Adjuster a) { a(mss); }
+    struct mss hton() {
+      struct mss m = *this;
+      m.mss = hton(mss);
+      return m;
+    }
   } __attribute__((packed));
   struct win_scale {
     option_kind kind = option_kind::win_scale;
@@ -87,8 +91,6 @@ struct tcp_option {
     option_len len = option_len::timestamps;
     uint32_t t1;
     uint32_t t2;
-    template <typename Adjuster>
-    void adjust_endianness(Adjuster a) { a(t1, t2); }
   } __attribute__((packed));
   struct nop {
     option_kind kind = option_kind::nop;
@@ -164,8 +166,29 @@ struct tcp_hdr {
   uint16_t checksum;
   uint16_t urgent;
 
-  template <typename Adjuster>
-  void adjust_endianness(Adjuster a) { a(src_port, dst_port, seq, ack, window, checksum, urgent); }
+  tcp_hdr hton() {
+    tcp_hdr hdr = *this;
+    hdr.src_port = hton(src_port);
+    hdr.dst_port = hton(dst_port);
+    hdr.seq = hton(seq);
+    hdr.ack = hton(ack);
+    hdr.window = hton(window);
+    hdr.checksum = hton(checksum);
+    hdr.urgent = hton(urgent);
+    return hdr;
+  }
+
+  tcp_hdr ntoh() {
+    tcp_hdr hdr = *this;
+    hdr.src_port = ntoh(src_port);
+    hdr.dst_port = ntoh(dst_port);
+    hdr.seq = ntoh(seq);
+    hdr.ack = ntoh(ack);
+    hdr.window = ntoh(window);
+    hdr.checksum = ntoh(checksum);
+    hdr.urgent = ntoh(urgent);
+    return hdr;
+  }
 } __attribute__((packed));
 
 struct tcp_tag {};
@@ -679,7 +702,7 @@ void tcp<InetTraits>::received(Packet p, ipaddr from, ipaddr to) {
       return;
     }
   }
-  auto h = ntoh(*th);
+  auto h = th->ntoh();
   auto id = connid{to, from, h.dst_port, h.src_port};
   auto tcbi = _tcbs.find(id);
   lw_shared_ptr<tcb> tcbp;
@@ -843,7 +866,7 @@ void tcp<InetTraits>::respond_with_reset(tcp_hdr* rth, ipaddr local_ip, ipaddr f
   th->f_rst = true;
   th->data_offset = sizeof(*th) / 4;
   th->checksum = 0;
-  *th = hton(*th);
+  *th = th->hton();
 
   checksummer csum;
   offload_info oi;
@@ -1500,7 +1523,7 @@ void tcp<InetTraits>::tcb::output_one(bool data_retransmit) {
 
   // Add tcp options
   _option.fill(th, options_size);
-  *th = hton(*th);
+  *th = th->hton();
 
   offload_info oi;
   checksummer csum;

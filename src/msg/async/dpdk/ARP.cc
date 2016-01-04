@@ -91,7 +91,7 @@ void arp::del(uint16_t proto_num)
 
 int arp::process_packet(packet p, ethernet_address from)
 {
-  auto ah = ntoh(*p.get_header<arp_hdr>());
+  auto ah = p.get_header<arp_hdr>()->ntoh();
   auto i = _arp_for_protocol.find(ah.ptype);
   if (i != _arp_for_protocol.end()) {
     i->second->received(std::move(p));

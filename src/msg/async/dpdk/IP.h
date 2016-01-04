@@ -46,13 +46,14 @@
 #include <list>
 #include <chrono>
 
+#include "msg/async/Event.h"
+
 #include "array_map.h"
 #include "ARP.h"
 #include "IPChecksum.h"
 #include "const.h"
 #include "PacketUtil.h"
 #include "toeplitz.h"
-#include "Event.h"
 
 class ipv4;
 template <ip_protocol_num ProtoNum>
@@ -91,8 +92,16 @@ struct ipv4_address {
 
   uint32_t ip;
 
-  template <typename Adjuster>
-  auto adjust_endianness(Adjuster a) { return a(ip); }
+  ipv4_address hton() {
+    ipv4_address addr = *this;
+    addr.ip = hton(ip);
+    return addr;
+  }
+  ipv4_address ntoh() {
+    ipv4_address addr = *this;
+    addr.ip = ntoh(ip);
+    return addr;
+  }
 
   friend bool operator==(ipv4_address x, ipv4_address y) {
     return x.ip == y.ip;
@@ -196,10 +205,6 @@ struct icmp_hdr {
   uint8_t code;
   uint16_t csum;
   uint32_t rest;
-  template <typename Adjuster>
-  auto adjust_endianness(Adjuster a) {
-    return a(csum);
-  }
 } __attribute__((packed));
 
 
@@ -434,10 +439,27 @@ struct ip_hdr {
   ipv4_address src_ip;
   ipv4_address dst_ip;
   uint8_t options[0];
-  template <typename Adjuster>
-  auto adjust_endianness(Adjuster a) {
-    return a(len, id, frag, csum, src_ip, dst_ip);
+  ip_hdr hton() {
+    ip_hdr hdr = *this;
+    hdr.len = hton(len);
+    hdr.id = hton(id);
+    hdr.frag = hton(frag);
+    hdr.csum = hton(csum);
+    hdr.src_ip = hton(src_ip);
+    hdr.dst_ip = hton(dst_ip);
+    return hdr;
   }
+  ip_hdr ntoh() {
+    ip_hdr hdr = *this;
+    hdr.len = ntoh(len);
+    hdr.id = ntoh(id);
+    hdr.frag = ntoh(frag);
+    hdr.csum = ntoh(csum);
+    hdr.src_ip = ntoh(src_ip);
+    hdr.dst_ip = ntoh(dst_ip);
+    return hdr;
+  }
+
   bool mf() { return frag & (1 << uint8_t(frag_bits::mf)); }
   bool df() { return frag & (1 << uint8_t(frag_bits::df)); }
   uint16_t offset() { return frag << uint8_t(frag_bits::offset_shift); }

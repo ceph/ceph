@@ -82,7 +82,7 @@ uint8_t tcp_option::fill(tcp_hdr* th, uint8_t options_size) {
 			mss->mss = _local_mss;
 			off += mss->len;
 			size += mss->len;
-			*mss = hton(*mss);
+			*mss = mss->hton();
 		}
 		if (_win_scale_received || !ack_on) {
 			auto win_scale = new (off) tcp_option::win_scale;

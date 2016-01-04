@@ -40,7 +40,9 @@
 #include <unordered_map>
 #include <functional>
 
+#include "DPDKStack.h"
 #include "ethernet.h"
+#include "Packet.h"
 
 class arp;
 class arp_for_protocol;
@@ -54,23 +56,20 @@ class arp_for_protocol {
  public:
   arp_for_protocol(arp& a, uint16_t proto_num);
   virtual ~arp_for_protocol();
-  virtual int received(packet p) = 0;
-  virtual bool forward(forward_hash& out_hash_data, packet& p, size_t off) { return false; }
+  virtual int received(Packet p) = 0;
+  virtual bool forward(forward_hash& out_hash_data, Packet& p, size_t off) { return false; }
 };
 
 class arp {
   interface* _netif;
   l3_protocol _proto;
-  subscription<packet, ethernet_address> _rx_packets;
+  subscription<Packet, ethernet_address> _rx_packets;
   std::unordered_map<uint16_t, arp_for_protocol*> _arp_for_protocol;
   circular_buffer<l3_protocol::l3packet> _packetq;
  private:
   struct arp_hdr {
     uint16_t htype;
     uint16_t ptype;
-
-    template <typename Adjuster>
-    void adjust_endianness(Adjuster a) { return a(htype, ptype); }
   };
  public:
   explicit arp(interface* netif);
@@ -109,9 +108,15 @@ class arp_for : public arp_for_protocol {
     l2addr target_hwaddr;
     l3addr target_paddr;
 
-    template <typename Adjuster>
-    void adjust_endianness(Adjuster a) {
-      a(htype, ptype, oper, sender_hwaddr, sender_paddr, target_hwaddr, target_paddr);
+    arp_hdr ntoh() {
+      arp_hdr hdr = *this;
+      hdr.htype = htype;
+      hdr.ptype = ptype;
+      hdr.oper = oper;
+      hdr.sender_hwaddr = sender_hwaddr;
+      hdr.sender_paddr = sender_paddr;
+      hdr.target_hwaddr = target_hwaddr;
+      hdr.target_paddr = target_paddr;
     }
   };
   struct resolution {
@@ -153,7 +158,7 @@ arp_for<L3>::make_query_packet(l3addr paddr) {
   hdr.sender_paddr = _l3self;
   hdr.target_hwaddr = ethernet::broadcast_address();
   hdr.target_paddr = paddr;
-  hdr = hton(hdr);
+  hdr = hdr.hton();
   return packet(reinterpret_cast<char*>(&hdr), sizeof(hdr));
 }
 
@@ -247,7 +252,7 @@ int arp_for<L3>::received(Packet p) {
   if (!ah) {
     return 0;
   }
-  auto h = ntoh(*ah);
+  auto h = ah->ntoh();
   if (h.hlen != sizeof(l2addr) || h.plen != sizeof(l3addr)) {
     return 0;
   }
@@ -271,7 +276,7 @@ int arp_for<L3>::handle_request(arp_hdr* ah) {
     ah->target_paddr = ah->sender_paddr;
     ah->sender_hwaddr = l2self();
     ah->sender_paddr = _l3self;
-    *ah = hton(*ah);
+    *ah = ah->hton();
     send(ah->target_hwaddr, packet(reinterpret_cast<char*>(ah), sizeof(*ah)));
   }
   return 0;

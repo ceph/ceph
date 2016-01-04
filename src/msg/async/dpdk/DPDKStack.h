@@ -16,9 +16,13 @@
 #define CEPH_MSG_DPDKSTACK_H
 
 #include <functional>
-#include "common/ceph_context.h"
 
-#include "GenericSocket.h"
+#include "common/ceph_context.h"
+#include "common/Tub.h"
+
+#include "msg/async/GenericSocket.h"
+#include "const.h"
+#include "Packet.h"
 
 class interface;
 

@@ -69,7 +69,7 @@ interface::interface(CephContext *c, std::shared_ptr<device> dev, unsigned cpuid
         eh->dst_mac = l3pv.to;
         eh->src_mac = _hw_address;
         eh->eth_proto = uint16_t(l3pv.proto_num);
-        *eh = hton(*eh);
+        *eh = eh->hton();
         p.construct(l3pv.p);
         return p;
       }

@@ -42,9 +42,6 @@
 #include "common/Tub.h"
 #include "msg/async/Event.h"
 
-std::unique_ptr<DPDKDevice> create_dpdk_net_device(
-        uint8_t port_idx = 0, uint8_t num_queues = 1,
-        bool use_lro = true, bool enable_fc = true);
 
 struct port_stats {
   port_stats() : rx{}, tx{} {}
@@ -255,6 +252,9 @@ class DPDKDevice {
   }
 };
 
+std::unique_ptr<DPDKDevice> create_dpdk_net_device(
+        uint8_t port_idx = 0, uint8_t num_queues = 1,
+        bool use_lro = true, bool enable_fc = true);
 
 struct qp_stats_good {
   /**

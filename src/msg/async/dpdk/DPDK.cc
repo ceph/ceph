@@ -34,8 +34,6 @@
  */
 
 #include <cstddef>
-#include <getopt>
-#include <malloc>
 
 #include <atomic>
 #include <vector>

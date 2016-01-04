@@ -23,6 +23,8 @@
 #ifndef CEPH_GENERICSOCKET_H
 #define CEPH_GENERICSOCKET_H
 
+#include "msg/msg_types.h"
+
 class ConnectedSocketImpl {
  public:
   virtual ~ConnectedSocketImpl() {}

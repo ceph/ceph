@@ -94,7 +94,7 @@ bool ipv4::forward(forward_hash& out_hash_data, Packet& p, size_t off)
   out_hash_data.push_back(iph->src_ip.ip);
   out_hash_data.push_back(iph->dst_ip.ip);
 
-  auto h = ntoh(*iph);
+  auto h = iph->ntoh();
   auto l4 = _l4[h.ip_proto];
   if (l4) {
     if (h.mf() == false && h.offset() == 0) {
@@ -121,7 +121,7 @@ int ipv4::handle_received_packet(packet p, ethernet_address from) {
     }
   }
 
-  auto h = ntoh(*iph);
+  auto h = iph->ntoh();
   unsigned ip_len = h.len;
   unsigned ip_hdr_len = h.ihl * 4;
   unsigned pkt_len = p.len();
@@ -256,7 +256,7 @@ void ipv4::send(ipv4_address to, ip_protocol_num proto_num, packet p, ethernet_a
     iph->csum = 0;
     iph->src_ip = _host_address;
     iph->dst_ip = to;
-    *iph = hton(*iph);
+    *iph = iph->hton();
 
     if (hw_features().tx_csum_ip_offload) {
       iph->csum = 0;
