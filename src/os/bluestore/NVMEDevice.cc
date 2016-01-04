@@ -52,8 +52,8 @@ static void io_complete(void *ctx, const struct nvme_completion *completion) {
     assert(0);
   }
 
-  IOContext *ioc = ctx;
-  NVMEDevice *device = ioc->backend;
+  IOContext *ioc = (IOContext*)ctx;
+  NVMEDevice *device = (NVMEDevice*)ioc->backend;
   if (ioc->priv) {
     device->aio_callback(device->_callback_priv, ioc->priv);
   }
@@ -64,7 +64,8 @@ static void io_complete(void *ctx, const struct nvme_completion *completion) {
 #define dout_prefix *_dout << "bdev(" << name << ") "
 
 NVMEDevice::NVMEDevice(aio_callback_t cb, void *cbpriv)
-    : aio_queue(g_conf->bdev_aio_max_queue_depth),
+    : ctrlr(nullptr),
+      ns(nullptr),
       aio_stop(false),
       aio_thread(this),
       aio_callback(cb),
@@ -74,26 +75,11 @@ NVMEDevice::NVMEDevice(aio_callback_t cb, void *cbpriv)
   zeros.zero();
 }
 
-int NVMEDevice::_lock()
-{
-  struct flock l;
-  memset(&l, 0, sizeof(l));
-  l.l_type = F_WRLCK;
-  l.l_whence = SEEK_SET;
-  l.l_start = 0;
-  l.l_len = 0;
-  int r = ::fcntl(fd_direct, F_SETLK, &l);
-  if (r < 0)
-    return -errno;
-  return 0;
-}
-
 int NVMEDevice::open(string p)
 {
   int r = 0;
-  dout(1) << __func__ << " path " << path << dendl;
+  dout(1) << __func__ << " path " << p << dendl;
 
-  nvme_device *dev;
   pci_device *pci_dev;
 
   pci_system_init();
@@ -133,7 +119,7 @@ int NVMEDevice::open(string p)
       continue;
     }
 
-    if (sn_tag.compare(sn_tag, serial_number, 16)) {
+    if (sn_tag.compare(serial_number, 16)) {
       dout(10) << __func__ << " device serial number not match " << serial_number << dendl;
       continue;
     }
@@ -177,7 +163,7 @@ int NVMEDevice::open(string p)
     pci_device_probe(pci_dev);
 
     ctrlr = nvme_attach(pci_dev);
-    if (!dev->ctrlr) {
+    if (!ctrlr) {
       derr << __func__ << " device attach nvme failed" << dendl;
       r = -1;
       return r;
@@ -215,7 +201,7 @@ void NVMEDevice::close()
   dout(1) << __func__ << dendl;
   nvme_unregister_io_thread();
   _aio_stop();
-  path.clear();
+  name.clear();
 }
 
 int NVMEDevice::flush()

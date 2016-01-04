@@ -21,6 +21,7 @@
 
 // since _Static_assert introduced in c11
 #define _Static_assert static_assert
+#include "spdk/pci.h"
 #include "spdk/nvme.h"
 
 #include "BlockDevice.h"
@@ -33,7 +34,6 @@ class NVMEDevice : public BlockDevice {
    */
   nvme_controller *ctrlr;
   nvme_namespace	*ns;
-	uint64_t blocklen;
   int unbindfromkernel = 0;
   string name;
 
@@ -41,6 +41,7 @@ class NVMEDevice : public BlockDevice {
   uint64_t block_size;
 
   bool aio_stop;
+  bufferptr zeros;
 
   struct AioCompletionThread : public Thread {
     NVMEDevice *bdev;

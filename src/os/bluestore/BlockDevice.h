@@ -17,6 +17,7 @@
 #ifndef CEPH_OS_BLUESTORE_BLOCKDEVICE_H
 #define CEPH_OS_BLUESTORE_BLOCKDEVICE_H
 
+#include "acconfig.h"
 #include "os/fs/FS.h"
 
 /// track in-flight io
