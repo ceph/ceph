@@ -179,15 +179,15 @@ namespace crimson {
     public:
 
       // a function that can be called to look up client information
-      typedef typename std::function<ClientInfo(C)>       ClientInfoFunc;
+      typedef typename std::function<ClientInfo(C)>     ClientInfoFunc;
 
       // a function to see whether the server can handle another request
-      typedef typename std::function<bool(void)>          CanHandleRequestFunc;
+      typedef typename std::function<bool(void)>        CanHandleRequestFunc;
 
       // a function to submit a request to the server; the second
       // parameter is a callback when it's completed
-      typedef typename std::function<void(RequestRef, std::function<void()>)>
-      HandleRequestFunc;
+      typedef typename std::function<void(RequestRef)> HandleRequestFunc;
+
 
     protected:
 
@@ -321,13 +321,14 @@ namespace crimson {
 	scheduleRequest();
       }
 
-    protected:
 
-      void requestComplete() {
+      void requestCompleted() {
 	Guard g(data_mutex);
 	scheduleRequest();
       }
 
+
+    protected:
 
       void reduceReservationTags(C client_id) {
 	auto client_it = clientMap.find(client_id);
@@ -351,8 +352,7 @@ namespace crimson {
 	top->handled = true;
 	heap.pop();
 
-	handleF(std::move(top->request),
-		std::bind(&PriorityQueue::requestComplete, this));
+	handleF(std::move(top->request));
       }
 
 

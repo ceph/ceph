@@ -17,8 +17,6 @@
 #include "dm_clock_srv.h"
 #include "test_request.h"
 
-#include "crimson/queue.h"
-
 
 using crimson::dmclock::PriorityQueue;
 using crimson::dmclock::ClientInfo;
@@ -26,8 +24,8 @@ using crimson::dmclock::ClientInfo;
 
 class TestServer {
 
-  typedef std::lock_guard<std::mutex> Guard;
-  typedef std::pair<std::unique_ptr<TestRequest>,std::function<void()>> QueueItem;
+  typedef std::lock_guard<std::mutex>  Guard;
+  typedef std::unique_ptr<TestRequest> QueueItem;
 
   PriorityQueue<int,TestRequest> priority_queue;
   int                            iops;
@@ -37,10 +35,11 @@ class TestServer {
   bool                           finishing;
   std::chrono::microseconds      op_time;
 
-  crimson::Queue<QueueItem>      inner_queue_2;
   std::mutex                     inner_queue_mtx;
   std::condition_variable        inner_queue_cv;
   std::deque<QueueItem>          inner_queue;
+
+  std::thread*                   threads;
 
 public:
 
@@ -52,15 +51,13 @@ public:
   virtual ~TestServer();
 
   // void post(double delay, std::function<void()> done);
-  void post(const TestRequest& request, std::function<void()> done);
+  void post(const TestRequest& request);
 
   bool hasAvailThread();
 
 protected:
 
-  // void innerPost(const TestRequest& request, std::function<void()> done);
-  void innerPost(std::unique_ptr<TestRequest> request,
-		 std::function<void()> notify_server_done);
+  void innerPost(std::unique_ptr<TestRequest> request);
 	     
-  void run();
+  void run(std::chrono::milliseconds wait_delay);
 }; // class TestServer

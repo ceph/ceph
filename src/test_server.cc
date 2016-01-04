@@ -21,34 +21,44 @@ TestServer::TestServer(int _iops,
 		       const std::function<ClientInfo(int)>& _clientInfoF) :
   priority_queue(_clientInfoF,
 		 std::bind(&TestServer::hasAvailThread, this),
-		 std::bind(&TestServer::innerPost, this, _1, _2)),
+		 std::bind(&TestServer::innerPost, this, _1)),
   iops(_iops),
   thread_pool_size(_thread_pool_size),
-  active_threads(0),
-  finishing(false),
-  inner_queue_2(thread_pool_size)
+  finishing(false)
 {
-#if 0
-    std::chrono::microseconds op_time((int) (0.5 + 1000000.0 / iops / thread_pool_size));
-#endif
-    op_time = std::chrono::microseconds((int) (0.5 +
-					       1000000.0 / iops / thread_pool_size));
+    op_time =
+      std::chrono::microseconds((int) (0.5 +
+				       thread_pool_size * 1000000.0 / iops));
+
+    std::chrono::milliseconds delay(1000);
+    threads = new std::thread[thread_pool_size];
+    for (int i = 0; i < thread_pool_size; ++i) {
+      threads[i] = std::thread(&TestServer::run, this, delay);
+    }
 }
 
 
 TestServer::~TestServer() {
-  // empty
+  Lock l(inner_queue_mtx);
+  finishing = true;
+  inner_queue_cv.notify_all();
+  l.unlock();
+
+  for (int i = 0; i < thread_pool_size; ++i) {
+    threads[i].join();
+  }
+
+  delete[] threads;
 }
 
 
-void TestServer::run() {
-  std::chrono::seconds delay(1);
+void TestServer::run(std::chrono::milliseconds wait_delay) {
   Lock l(inner_queue_mtx);
-  while(!finishing) {
-    while(inner_queue.size() == 0 && !finishing) {
-      inner_queue_cv.wait_for(l, delay);
+  while(true) {
+    while(inner_queue.empty() && !finishing) {
+      inner_queue_cv.wait_for(l, wait_delay);
     }
-    if (inner_queue.size() > 0) {
+    if (!inner_queue.empty()) {
       auto item = std::move(inner_queue.front());
       inner_queue.pop_front();
       l.unlock();
@@ -56,7 +66,10 @@ void TestServer::run() {
       // simulation operation by sleeping; then call function to
       // notify server of completion
       std::this_thread::sleep_for(op_time);
-      item.second();
+
+      // send response
+
+      priority_queue.requestCompleted();
 
       l.lock(); // in prep for next iteration of loop
     } else {
@@ -68,8 +81,7 @@ void TestServer::run() {
 }
 
 
-void TestServer::post(const TestRequest& request,
-		      std::function<void()> done) {
+void TestServer::post(const TestRequest& request) {
   auto now = dmc::getTime();
   priority_queue.addRequest(request, request.client, now);
 }
@@ -81,8 +93,8 @@ bool TestServer::hasAvailThread() {
 }
 
 
-void TestServer::innerPost(std::unique_ptr<TestRequest> request,
-			   std::function<void()> notify_server_done) {
+void TestServer::innerPost(std::unique_ptr<TestRequest> request) {
   Lock l(inner_queue_mtx);
-  inner_queue.emplace_back(QueueItem(std::move(request), notify_server_done));
+  assert(!finishing);
+  inner_queue.emplace_back(std::move(request));
 }

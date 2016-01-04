@@ -52,26 +52,6 @@ dmc::ClientInfo getClientInfo(int c) {
 }
 
 
-#if 0
-
-void handleReq(std::unique_ptr<TestRequest>&& request_ref,
-	       std::function<void()> callback) {
-  std::unique_ptr<TestRequest> req(std::move(request_ref));
-  int client = req->client;
-  uint32_t op = req->op;
-
-  testServer->post(0.1,
-		   [=] {
-		     callback();
-		     Guard g(cout_mtx);
-		     std::cout << "finished " << client << " / " <<
-		       op << std::endl;
-		   });
-}
-
-#endif
-
-
 int main(int argc, char* argv[]) {
   assert(COUNT(client_info) == COUNT(client_goals));
   const int client_count = COUNT(client_info);
@@ -83,7 +63,7 @@ int main(int argc, char* argv[]) {
   TestClient** clients = new TestClient*[client_count];
   for (int i = 0; i < client_count; ++i) {
     clients[i] = new TestClient(i,
-				std::bind(&TestServer::post, &server, _1, _2),
+				std::bind(&TestServer::post, &server, _1),
 				client_goals[i] * 60,
 				client_goals[i],
 				4);
