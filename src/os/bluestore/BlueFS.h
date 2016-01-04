@@ -127,11 +127,13 @@ public:
   struct FileReader {
     FileRef file;
     FileReaderBuffer buf;
+    bool random;
     bool ignore_eof;        ///< used when reading our log file
 
-    FileReader(FileRef f, uint64_t mpf, bool ie = false)
+    FileReader(FileRef f, uint64_t mpf, bool rand, bool ie)
       : file(f),
 	buf(mpf),
+	random(rand),
 	ignore_eof(ie) {
       file->num_readers.inc();
     }
