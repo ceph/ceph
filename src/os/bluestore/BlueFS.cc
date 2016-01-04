@@ -340,6 +340,7 @@ int BlueFS::_replay()
 
   FileReader *log_reader = new FileReader(
     log_file, g_conf->bluefs_alloc_size,
+    false,  // !random
     true);  // ignore eof
   while (true) {
     assert((log_reader->buf.pos & ~super.block_mask()) == 0);
@@ -1266,7 +1267,8 @@ int BlueFS::open_for_read(
   }
   File *file = q->second.get();
 
-  *h = new FileReader(file, random ? 4096 : g_conf->bluefs_max_prefetch);
+  *h = new FileReader(file, random ? 4096 : g_conf->bluefs_max_prefetch,
+		      random, false);
   dout(10) << __func__ << " h " << *h << " on " << file->fnode << dendl;
   return 0;
 }
