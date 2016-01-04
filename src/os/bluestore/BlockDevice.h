@@ -52,10 +52,12 @@ struct IOContext {
 
 class BlockDevice {
 public:
+  typedef void (*aio_callback_t)(void *handle, void *aio);
+
   static BlockDevice *create(CephContext *cct, const string& type,
                              aio_callback_t cb, void *cbpriv);
 
-  virtual aio_submit(IOContext *ioc) = 0;
+  virtual void aio_submit(IOContext *ioc) = 0;
 
   virtual uint64_t get_size() const = 0;
   virtual uint64_t get_block_size() const = 0;

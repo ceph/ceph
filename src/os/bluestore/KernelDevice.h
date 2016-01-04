@@ -21,10 +21,6 @@
 #include "BlockDevice.h"
 
 class KernelDevice : public BlockDevice {
-public:
-  typedef void (*aio_callback_t)(void *handle, void *aio);
-
-private:
   int fd_direct, fd_buffered;
   uint64_t size;
   uint64_t block_size;
