@@ -830,6 +830,7 @@ private:
   size_t _vxattrcb_layout_stripe_count(Inode *in, char *val, size_t size);
   size_t _vxattrcb_layout_object_size(Inode *in, char *val, size_t size);
   size_t _vxattrcb_layout_pool(Inode *in, char *val, size_t size);
+  size_t _vxattrcb_layout_pool_namespace(Inode *in, char *val, size_t size);
   size_t _vxattrcb_dir_entries(Inode *in, char *val, size_t size);
   size_t _vxattrcb_dir_files(Inode *in, char *val, size_t size);
   size_t _vxattrcb_dir_subdirs(Inode *in, char *val, size_t size);
