@@ -385,13 +385,13 @@ void CInode::pop_and_dirty_projected_inode(LogSegment *ls)
   assert(!projected_nodes.empty());
   dout(15) << "pop_and_dirty_projected_inode " << projected_nodes.front()->inode
 	   << " v" << projected_nodes.front()->inode->version << dendl;
-  int64_t old_pool = inode.layout.fl_pg_pool;
+  int64_t old_pool = inode.layout.pool_id;
 
   mark_dirty(projected_nodes.front()->inode->version, ls);
   inode = *projected_nodes.front()->inode;
 
   if (inode.is_backtrace_updated())
-    _mark_dirty_parent(ls, old_pool != inode.layout.fl_pg_pool);
+    _mark_dirty_parent(ls, old_pool != inode.layout.pool_id);
 
   map<string,bufferptr> *px = projected_nodes.front()->xattrs;
   if (px) {
@@ -1147,7 +1147,7 @@ void CInode::store_backtrace(MDSInternalContextBase *fin, int op_prio)
   if (is_dir()) {
     pool = mdcache->mds->mdsmap->get_metadata_pool();
   } else {
-    pool = inode.layout.fl_pg_pool;
+    pool = inode.layout.pool_id;
   }
 
   inode_backtrace_t bt;
@@ -1161,7 +1161,7 @@ void CInode::store_backtrace(MDSInternalContextBase *fin, int op_prio)
   op.setxattr("parent", parent_bl);
 
   bufferlist layout_bl;
-  ::encode(inode.layout, layout_bl);
+  ::encode(inode.layout, layout_bl, mdcache->mds->mdsmap->get_up_features());
   op.setxattr("layout", layout_bl);
 
   SnapContext snapc;
@@ -1233,7 +1233,7 @@ void CInode::fetch_backtrace(Context *fin, bufferlist *backtrace)
   if (is_dir())
     pool = mdcache->mds->mdsmap->get_metadata_pool();
   else
-    pool = inode.layout.fl_pg_pool;
+    pool = inode.layout.pool_id;
 
   mdcache->fetch_backtrace(inode.ino, pool, *backtrace, fin);
 }
@@ -1435,7 +1435,7 @@ void CInode::encode_lock_state(int type, bufferlist& bl)
       ::encode(inode.atime, bl);
       ::encode(inode.time_warp_seq, bl);
       if (!is_dir()) {
-	::encode(inode.layout, bl);
+	::encode(inode.layout, bl, mdcache->mds->mdsmap->get_up_features());
 	::encode(inode.size, bl);
 	::encode(inode.truncate_seq, bl);
 	::encode(inode.truncate_size, bl);
@@ -1530,7 +1530,7 @@ void CInode::encode_lock_state(int type, bufferlist& bl)
   case CEPH_LOCK_IPOLICY:
     if (inode.is_dir()) {
       ::encode(inode.version, bl);
-      ::encode(inode.layout, bl);
+      ::encode(inode.layout, bl, mdcache->mds->mdsmap->get_up_features());
       ::encode(inode.quota, bl);
     }
     break;
@@ -3105,7 +3105,7 @@ int CInode::encode_inodestat(bufferlist& bl, Session *session,
 
   // file
   inode_t *file_i = pfile ? pi:oi;
-  ceph_file_layout layout;
+  file_layout_t layout;
   if (is_dir()) {
     layout = (ppolicy ? pi : oi)->layout;
   } else {
@@ -3283,7 +3283,7 @@ int CInode::encode_inodestat(bufferlist& bl, Session *session,
 
   ::encode(ecap, bl);
 
-  ::encode(layout, bl);
+  ::encode(layout, bl, session->connection->get_features());
   ::encode(any_i->ctime, bl);
   ::encode(file_i->mtime, bl);
   ::encode(file_i->atime, bl);
@@ -3716,7 +3716,7 @@ void CInode::validate_disk_state(CInode::validated_data *results,
       if (in->is_dir())
         pool = in->mdcache->mds->mdsmap->get_metadata_pool();
       else
-        pool = in->inode.layout.fl_pg_pool;
+        pool = in->inode.layout.pool_id;
 
       object_t oid = CInode::get_object_name(in->ino(), frag_t(), "");
 
@@ -3812,7 +3812,7 @@ void CInode::validate_disk_state(CInode::validated_data *results,
       if (in->is_dir())
         pool = in->mdcache->mds->mdsmap->get_metadata_pool();
       else
-        pool = in->inode.layout.fl_pg_pool;
+        pool = in->inode.layout.pool_id;
       inode_backtrace_t& memory_backtrace = results->backtrace.memory_value;
       in->build_backtrace(pool, memory_backtrace);
       bool equivalent, divergent;

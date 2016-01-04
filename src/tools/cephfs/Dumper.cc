@@ -204,7 +204,7 @@ int Dumper::undump(const char *dump_file)
   } else {
     // Old format dump, any untrimmed objects before expire_pos will
     // be discarded as trash.
-    trimmed_pos = start - (start % g_default_file_layout.fl_object_size);
+    trimmed_pos = start - (start % file_layout_t::get_default().object_size);
   }
 
   if (trimmed_pos > start) {
@@ -234,8 +234,8 @@ int Dumper::undump(const char *dump_file)
   h.stream_format = format;
   h.magic = CEPH_FS_ONDISK_MAGIC;
 
-  h.layout = g_default_file_layout;
-  h.layout.fl_pg_pool = mdsmap->get_metadata_pool();
+  h.layout = file_layout_t::get_default();
+  h.layout.pool_id = mdsmap->get_metadata_pool();
   
   bufferlist hbl;
   ::encode(h, hbl);
@@ -267,7 +267,7 @@ int Dumper::undump(const char *dump_file)
    * will be taken care of during normal operation by Journaler's
    * prezeroing behaviour */
   {
-    uint32_t const object_size = h.layout.fl_object_size;
+    uint32_t const object_size = h.layout.object_size;
     assert(object_size > 0);
     uint64_t const last_obj = h.write_pos / object_size;
     uint64_t const purge_count = 2;

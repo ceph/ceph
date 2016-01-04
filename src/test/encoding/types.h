@@ -184,7 +184,6 @@ TYPE(quota_info_t)
 
 #include "include/fs_types.h"
 TYPE_FEATUREFUL(file_layout_t)
-TYPE(ceph_file_layout_wrapper)
 
 #include "mds/CInode.h"
 TYPE_FEATUREFUL(InodeStore)

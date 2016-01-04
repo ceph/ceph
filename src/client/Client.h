@@ -994,8 +994,8 @@ public:
   int lazyio_synchronize(int fd, loff_t offset, size_t count);
 
   // expose file layout
-  int describe_layout(const char *path, ceph_file_layout* layout);
-  int fdescribe_layout(int fd, ceph_file_layout* layout);
+  int describe_layout(const char *path, file_layout_t* layout);
+  int fdescribe_layout(int fd, file_layout_t* layout);
   int get_file_stripe_address(int fd, loff_t offset, vector<entity_addr_t>& address);
   int get_file_extent_osds(int fd, loff_t off, loff_t *len, vector<int>& osds);
   int get_osd_addr(int osd, entity_addr_t& addr);
@@ -1064,11 +1064,11 @@ public:
 		struct stat *attr, Inode **out, Fh **fhp, int uid = -1,
 		int gid = -1);
   int ll_read_block(Inode *in, uint64_t blockid, char *buf,  uint64_t offset,
-		    uint64_t length, ceph_file_layout* layout);
+		    uint64_t length, file_layout_t* layout);
 
   int ll_write_block(Inode *in, uint64_t blockid,
 		     char* buf, uint64_t offset,
-		     uint64_t length, ceph_file_layout* layout,
+		     uint64_t length, file_layout_t* layout,
 		     uint64_t snapseq, uint32_t sync);
   int ll_commit_blocks(Inode *in, uint64_t offset, uint64_t length);
 
@@ -1077,7 +1077,7 @@ public:
   int ll_listxattr_chunks(Inode *in, char *names, size_t size,
 			  int *cookie, int *eol, int uid, int gid);
   uint32_t ll_stripe_unit(Inode *in);
-  int ll_file_layout(Inode *in, ceph_file_layout *layout);
+  int ll_file_layout(Inode *in, file_layout_t *layout);
   uint64_t ll_snap_seq(Inode *in);
 
   int ll_read(Fh *fh, loff_t off, loff_t len, bufferlist *bl);
@@ -1090,14 +1090,14 @@ public:
   int ll_getlk(Fh *fh, struct flock *fl, uint64_t owner);
   int ll_setlk(Fh *fh, struct flock *fl, uint64_t owner, int sleep);
   int ll_flock(Fh *fh, int cmd, uint64_t owner);
-  int ll_file_layout(Fh *fh, ceph_file_layout *layout);
+  int ll_file_layout(Fh *fh, file_layout_t *layout);
   void ll_interrupt(void *d);
   bool ll_handle_umask() {
     return acl_type != NO_ACL;
   }
 
   int ll_get_stripe_osd(struct Inode *in, uint64_t blockno,
-			ceph_file_layout* layout);
+			file_layout_t* layout);
   uint64_t ll_get_internal_offset(struct Inode *in, uint64_t blockno);
 
   int ll_num_osds(void);

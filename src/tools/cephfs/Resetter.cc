@@ -126,7 +126,7 @@ int Resetter::reset_hard(int rank)
     objecter, 0, 0, &timer, &finisher);
   journaler.set_writeable();
 
-  ceph_file_layout default_log_layout = MDCache::gen_default_log_layout(*mdsmap);
+  file_layout_t default_log_layout = MDCache::gen_default_log_layout(*mdsmap);
   journaler.create(&default_log_layout, g_conf->mds_journal_format);
 
   C_SaferCond cond;

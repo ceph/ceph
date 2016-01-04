@@ -142,7 +142,7 @@ class MetadataTool
    */
   void build_file_dentry(
     inodeno_t ino, uint64_t file_size, time_t file_mtime,
-    const ceph_file_layout &layout,
+    const file_layout_t &layout,
     InodeStore *out);
 
   /**
@@ -151,7 +151,7 @@ class MetadataTool
   void build_dir_dentry(
     inodeno_t ino, uint64_t nfiles,
     time_t mtime,
-    const ceph_file_layout &layout,
+    const file_layout_t &layout,
     InodeStore *out);
 
   /**

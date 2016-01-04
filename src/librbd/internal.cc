@@ -762,7 +762,7 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
     ostringstream oss;
     CephContext *cct = (CephContext *)io_ctx.cct();
 
-    ceph_file_layout layout;
+    file_layout_t layout;
 
     int r = validate_pool(io_ctx, cct);
     if (r < 0) {
@@ -825,14 +825,14 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
         goto err_remove_header;
       }
 
-      memset(&layout, 0, sizeof(layout));
-      layout.fl_object_size = 1ull << order;
+      layout = file_layout_t();
+      layout.object_size = 1ull << order;
       if (stripe_unit == 0 || stripe_count == 0) {
-        layout.fl_stripe_unit = layout.fl_object_size;
-        layout.fl_stripe_count = 1;
+        layout.stripe_unit = layout.object_size;
+        layout.stripe_count = 1;
       } else {
-        layout.fl_stripe_unit = stripe_unit;
-        layout.fl_stripe_count = stripe_count;
+        layout.stripe_unit = stripe_unit;
+        layout.stripe_count = stripe_count;
       }
 
       librados::ObjectWriteOperation op;

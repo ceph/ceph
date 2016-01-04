@@ -100,8 +100,6 @@
 
 using namespace std;
 
-extern struct ceph_file_layout g_default_file_layout;
-
 #include "common/config.h"
 #include "include/assert.h"
 
@@ -212,9 +210,6 @@ MDCache::MDCache(MDSRank *m) :
   lru.lru_set_midpoint(g_conf->mds_cache_mid);
 
   decayrate.set_halflife(g_conf->mds_decay_halflife);
-
-  memset(&default_file_layout, 0, sizeof(default_file_layout));
-  memset(&default_log_layout, 0, sizeof(default_log_layout));
 
   did_shutdown_log_cap = false;
 }
@@ -327,23 +322,21 @@ void MDCache::remove_inode(CInode *o)
   delete o; 
 }
 
-ceph_file_layout MDCache::gen_default_file_layout(const MDSMap &mdsmap)
+file_layout_t MDCache::gen_default_file_layout(const MDSMap &mdsmap)
 {
-  ceph_file_layout result = g_default_file_layout;
-  result.fl_pg_pool = mdsmap.get_first_data_pool();
-
+  file_layout_t result = file_layout_t::get_default();
+  result.pool_id = mdsmap.get_first_data_pool();
   return result;
 }
 
-ceph_file_layout MDCache::gen_default_log_layout(const MDSMap &mdsmap)
+file_layout_t MDCache::gen_default_log_layout(const MDSMap &mdsmap)
 {
-  ceph_file_layout result = g_default_file_layout;
-  result.fl_pg_pool = mdsmap.get_metadata_pool();
+  file_layout_t result = file_layout_t::get_default();
+  result.pool_id = mdsmap.get_metadata_pool();
   if (g_conf->mds_log_segment_size > 0) {
-    result.fl_object_size = g_conf->mds_log_segment_size;
-    result.fl_stripe_unit = g_conf->mds_log_segment_size;
+    result.object_size = g_conf->mds_log_segment_size;
+    result.stripe_unit = g_conf->mds_log_segment_size;
   }
-
   return result;
 }
 
@@ -351,7 +344,6 @@ void MDCache::init_layouts()
 {
   default_file_layout = gen_default_file_layout(*(mds->mdsmap));
   default_log_layout = gen_default_log_layout(*(mds->mdsmap));
-
 }
 
 void MDCache::create_unlinked_system_inode(CInode *in, inodeno_t ino,
@@ -369,7 +361,6 @@ void MDCache::create_unlinked_system_inode(CInode *in, inodeno_t ino,
 
   memset(&in->inode.dir_layout, 0, sizeof(in->inode.dir_layout));
   if (in->inode.is_dir()) {
-    memset(&in->inode.layout, 0, sizeof(in->inode.layout));
     in->inode.dir_layout.dl_dir_hash = g_conf->mds_default_dir_hash;
     ++in->inode.rstat.rsubdirs;
   } else {
@@ -404,7 +395,7 @@ CInode *MDCache::create_root_inode()
   i->inode.uid = g_conf->mds_root_ino_uid;
   i->inode.gid = g_conf->mds_root_ino_gid;
   i->inode.layout = default_file_layout;
-  i->inode.layout.fl_pg_pool = mds->mdsmap->get_first_data_pool();
+  i->inode.layout.pool_id = mds->mdsmap->get_first_data_pool();
   return i;
 }
 
@@ -1721,8 +1712,8 @@ void MDCache::journal_dirty_inode(MutationImpl *mut, EMetaBlob *metablob, CInode
     if (!dn->get_projected_linkage()->is_null())  // no need to cow a null dentry
       journal_cow_dentry(mut, metablob, dn, follows);
     if (in->get_projected_inode()->is_backtrace_updated()) {
-      bool dirty_pool = in->get_projected_inode()->layout.fl_pg_pool !=
-			in->get_previous_projected_inode()->layout.fl_pg_pool;
+      bool dirty_pool = in->get_projected_inode()->layout.pool_id !=
+			in->get_previous_projected_inode()->layout.pool_id;
       metablob->add_primary_dentry(dn, in, true, true, dirty_pool);
     } else {
       metablob->add_primary_dentry(dn, in, true);
@@ -8557,7 +8548,7 @@ void MDCache::open_ino(inodeno_t ino, int64_t pool, MDSInternalContextBase* fin,
     info.want_replica = want_replica;
     info.want_xlocked = want_xlocked;
     info.tid = ++open_ino_last_tid;
-    info.pool = pool >= 0 ? pool : default_file_layout.fl_pg_pool;
+    info.pool = pool >= 0 ? pool : default_file_layout.pool_id;
     info.waiters.push_back(fin);
     do_open_ino(ino, info, 0);
   }
