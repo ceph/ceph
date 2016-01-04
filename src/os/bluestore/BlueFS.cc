@@ -908,6 +908,7 @@ int BlueFS::_flush_log()
   _flush_bdev();
   int r = _flush(log_writer, true);
   assert(r == 0);
+  _flush_wait(log_writer);
   _flush_bdev();
 
   // clean dirty files
@@ -1031,7 +1032,6 @@ int BlueFS::_flush_range(FileWriter *h, uint64_t offset, uint64_t length)
     }
   }
   dout(20) << __func__ << " h " << h << " pos now " << h->pos << dendl;
-  _flush_wait(h);
   return 0;
 }
 
@@ -1104,6 +1104,7 @@ void BlueFS::_fsync(FileWriter *h)
 {
   dout(10) << __func__ << " " << h << " " << h->file->fnode << dendl;
   _flush(h, true);
+  _flush_wait(h);
   if (h->file->dirty) {
     dout(20) << __func__ << " file metadata is dirty, flushing log on "
 	     << h->file->fnode << dendl;
