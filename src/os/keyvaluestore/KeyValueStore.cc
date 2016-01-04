@@ -945,7 +945,7 @@ int KeyValueStore::mount()
       derr << "KeyValueStore::mount backend type "
 	   << superblock.backend << " error" << dendl;
       ret = -1;
-      goto close_fsid_fd;
+      goto close_current_fd;
 
     }
 
