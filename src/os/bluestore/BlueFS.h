@@ -320,7 +320,6 @@ public:
     // no need to hold the global lock here; we only touch h and
     // h->file, and read vs write or delete is already protected (via
     // atomics and asserts).
-    Mutex::Locker l(lock);
     return _read(h, buf, offset, len, outbl, out);
   }
   int read_random(FileReader *h, uint64_t offset, size_t len,
