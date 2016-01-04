@@ -53,5 +53,5 @@ find_package_handle_standard_args(udev DEFAULT_MSG UDEV_LIBRARIES UDEV_INCLUDE_D
 
 mark_as_advanced(
   UDEV_LIBRARY
-  UDEV_I
+  UDEV_INCLUDE_DIR
 )
