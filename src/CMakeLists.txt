@@ -578,6 +578,7 @@ if(${HAVE_XFS})
 endif(${HAVE_XFS})
 set(libkv_srcs
   kv/LevelDBStore.cc
+  kv/RocksDBStore.cc
   kv/KeyValueDB.cc)
 set(libos_srcs
   os/ObjectStore.cc
@@ -597,20 +598,37 @@ set(libos_srcs
   os/keyvaluestore/GenericObjectMap.cc
   os/keyvaluestore/KeyValueStore.cc
   os/memstore/MemStore.cc
+  os/kstore/KStore.cc
+  os/kstore/kstore_types.cc
+  os/bluestore/kv.cc
+  os/bluestore/Allocator.cc
+  os/bluestore/BlockDevice.cc
+  os/bluestore/BlueFS.cc
+  os/bluestore/bluefs_types.cc
+  os/bluestore/BlueRocksEnv.cc
   os/bluestore/BlueStore.cc
   os/bluestore/bluestore_types.cc
+  os/bluestore/FreelistManager.cc
+  os/bluestore/StupidAllocator.cc
   os/fs/FS.cc
   ${libkv_srcs}
   ${libos_xfs_srcs})
 
+add_custom_command(OUTPUT "${CMAKE_SOURCE_DIR}/src/rocksdb/librocksdb.a"
+    COMMAND cd ${CMAKE_SOURCE_DIR}/src/rocksdb && EXTRA_CXXFLAGS=-fPIC PORTABLE=1 make static_lib)
+
 set(os_mon_files
   kv/LevelDBStore.cc)
 add_library(os_mon_objs OBJECT ${os_mon_files})
-add_library(os STATIC ${libos_srcs} $<TARGET_OBJECTS:os_mon_objs>)
+add_library(os STATIC ${libos_srcs}
+    $<TARGET_OBJECTS:os_mon_objs>
+    "${CMAKE_SOURCE_DIR}/src/rocksdb/librocksdb.a")
+target_link_libraries(os bz2 z "${CMAKE_SOURCE_DIR}/src/rocksdb/librocksdb.a")
 if(${HAVE_LIBAIO})
   target_link_libraries(os aio)
 endif(${HAVE_LIBAIO})
 target_link_libraries(os leveldb snappy)
+target_include_directories(os PUBLIC "${CMAKE_SOURCE_DIR}/src/rocksdb/include")
 
 set(cls_references_files objclass/class_api.cc)
 add_library(cls_references_objs OBJECT ${cls_references_files})
