@@ -5,8 +5,7 @@
  */
 
 
-#ifndef _TEST_SERVER_H
-#define _TEST_SERVER_H
+#pragma once
 
 
 #include <thread>
@@ -25,7 +24,7 @@ using crimson::dmclock::ClientInfo;
 
 class TestServer {
 
-  typedef typename std::lock_guard<std::mutex> Guard;
+  typedef std::lock_guard<std::mutex> Guard;
   typedef std::pair<std::unique_ptr<TestRequest>,std::function<void()>> QueueItem;
 
   PriorityQueue<int,TestRequest> priority_queue;
@@ -61,7 +60,4 @@ protected:
 		 std::function<void()> notify_server_done);
 	     
   void run();
-};
-
-
-#endif // _TEST_SERVER_H
+}; // class TestServer

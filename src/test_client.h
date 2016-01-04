@@ -5,8 +5,7 @@
  */
 
 
-#ifndef _TEST_CLIENT_H
-#define _TEST_CLIENT_H
+#pragma once
 
 
 #include <mutex>
@@ -50,7 +49,4 @@ public:
 protected:
 
   void run();
-};
-
-
-#endif // _TEST_CLIENT_H
+}; // class TestClient

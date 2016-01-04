@@ -5,8 +5,7 @@
  */
 
 
-#ifndef _TEST_REQUEST_H
-#define _TEST_REQUEST_H
+#pragma once
 
 
 struct TestRequest {
@@ -39,7 +38,4 @@ struct TestResponse {
   {
     // empty
   }
-};
-
-
-#endif // _TEST_REQUEST_H
+}; // class TestResponse

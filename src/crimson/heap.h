@@ -4,10 +4,15 @@
  * Copyright (C) 2015 Red Hat Inc.
  */
 
+
+#pragma once
+
+
 #include <vector>
 #include <ostream>
 
 #include "assert.h"
+
 
 namespace crimson {
   

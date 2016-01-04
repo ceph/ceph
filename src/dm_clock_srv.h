@@ -5,8 +5,7 @@
  */
 
 
-#ifndef _DM_CLOCK_SRV_H
-#define _DM_CLOCK_SRV_H
+#pragma once
 
 
 #include <sys/time.h>
@@ -61,6 +60,8 @@ namespace crimson {
 
       friend std::ostream& operator<<(std::ostream&, const ClientInfo&);
     }; // class ClientInfo
+
+
     std::ostream& operator<<(std::ostream& out,
 			     const crimson::dmclock::ClientInfo& client);
 
@@ -120,10 +121,12 @@ namespace crimson {
 #endif
 
       friend std::ostream& operator<<(std::ostream&, const RequestTag&);
-    };
+    }; // class RequestTag
+
 
     std::ostream& operator<<(std::ostream& out,
 			     const crimson::dmclock::RequestTag& tag);
+
 
     // T is client identifier type, R is request type
     template<typename C, typename R>
@@ -170,6 +173,7 @@ namespace crimson {
 
       }; // struct Entry
 
+
       typedef std::shared_ptr<Entry> EntryRef;
 
     public:
@@ -182,9 +186,8 @@ namespace crimson {
 
       // a function to submit a request to the server; the second
       // parameter is a callback when it's completed
-      typedef
-      typename std::function<void(RequestRef,
-				  std::function<void()>)> HandleRequestFunc;
+      typedef typename std::function<void(RequestRef, std::function<void()>)>
+      HandleRequestFunc;
 
     protected:
 
@@ -352,10 +355,10 @@ namespace crimson {
 		std::bind(&PriorityQueue::requestComplete, this));
       }
 
-      
+
       // data_mutex should be held when called
       template<typename K>
-      void prepQueue(Heap<EntryRef, K>& heap) {
+      void prepareQueue(Heap<EntryRef, K>& heap) {
 	while (!heap.empty() && heap.top()->handled) {
 	  heap.pop();
 	}
@@ -372,7 +375,7 @@ namespace crimson {
 
 	// try constraint (reservation) based scheduling
 
-	prepQueue(resQ);
+	prepareQueue(resQ);
 	if (!resQ.empty() && resQ.top()->tag.reservation <= now) {
 	  submitTopRequest(resQ);
 	  return;
@@ -395,14 +398,14 @@ namespace crimson {
 	  }
 	}
 
-	prepQueue(readyQ);
+	prepareQueue(readyQ);
 	if (!readyQ.empty()) {
 	  submitTopRequest(readyQ);
 	  return;
 	}
 
 	if (allowLimitBreak) {
-	  prepQueue(propQ);
+	  prepareQueue(propQ);
 	  if (!propQ.empty()) {
 	    submitTopRequest(propQ);
 	    reduceReservationTags(propQ.top()->client);
@@ -412,13 +415,6 @@ namespace crimson {
 
 	// nothing scheduled
       } // scheduleRequest
-
-
-
     }; // class PriorityQueue
-
   } // namespace dmclock
 } // namespace crimson
-
-
-#endif // _DM_CLOCK_SRV_H

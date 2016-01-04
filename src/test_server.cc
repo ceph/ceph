@@ -57,7 +57,7 @@ void TestServer::run() {
       std::this_thread::sleep_for(op_time);
       item.second();
 
-      l.lock();
+      l.lock(); // in prep for next iteration of loop
     } else {
       // since finishing and queue is empty, end thread
       l.unlock();
