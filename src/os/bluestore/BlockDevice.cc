@@ -474,6 +474,30 @@ int BlockDevice::read(uint64_t off, uint64_t len, bufferlist *pbl,
   return r < 0 ? r : 0;
 }
 
+int BlockDevice::read_buffered(uint64_t off, uint64_t len, char *buf)
+{
+  dout(5) << __func__ << " " << off << "~" << len << dendl;
+  assert(len > 0);
+  assert(off < size);
+  assert(off + len <= size);
+
+  int r = ::pread(fd_buffered, buf, len, off);
+  if (r < 0) {
+    r = -errno;
+    goto out;
+  }
+  assert(r == len);
+
+  dout(40) << "data: ";
+  bufferlist bl;
+  bl.append(buf, len);
+  bl.hexdump(*_dout);
+  *_dout << dendl;
+
+ out:
+  return r < 0 ? r : 0;
+}
+
 int BlockDevice::invalidate_cache(uint64_t off, uint64_t len)
 {
   dout(5) << __func__ << " " << off << "~" << len << dendl;

@@ -97,6 +97,7 @@ public:
   int read(uint64_t off, uint64_t len, bufferlist *pbl,
 	   IOContext *ioc,
 	   bool buffered);
+  int read_buffered(uint64_t off, uint64_t len, char *buf);
 
   int aio_write(uint64_t off, bufferlist& bl,
 		IOContext *ioc,
