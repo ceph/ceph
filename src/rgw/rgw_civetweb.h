@@ -19,6 +19,7 @@ class RGWMongoose : public RGWClientIO
   bufferlist data;
 
   int port;
+  int sport;
 
   bool header_done;
   bool sent_header;
@@ -38,7 +39,7 @@ public:
   int complete_request();
   int send_content_length(uint64_t len);
 
-  RGWMongoose(mg_connection *_conn, int _port);
+  RGWMongoose(mg_connection *_conn, int _port, int _sport);
   void flush();
 };
 

@@ -346,6 +346,15 @@ Ceph configuration file, the default value will be set automatically.
 :Type: Boolean
 :Default: ``false``
 
+
+``rgw frontends``
+
+:Description: Radosgw web server conf, civetweb use:
+              rgw frontends="civetweb port=80 sport=443 ssl_certificate=/root/server.pem"
+              port is http port, sport is https port, ssl_certificate is the certificate for https.
+:Type: String
+:Default: ``fastcgi, civetweb port=7480``
+
 Regions
 =======
 
