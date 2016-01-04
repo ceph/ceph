@@ -1008,7 +1008,7 @@ if(${WITH_RBD})
     $<TARGET_OBJECTS:osdc_rbd_objs>
     $<TARGET_OBJECTS:common_util_obj>)
   target_link_libraries(librbd PRIVATE librados common journal
-    cls_lock_client cls_rbd_client cls_journal_client
+    cls_lock_client cls_rbd_client cls_journal_client udev
     ${CMAKE_DL_LIBS})
   if(${WITH_LTTNG})
     target_link_libraries(librbd PUBLIC librbd_tp)
