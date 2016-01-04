@@ -17,6 +17,8 @@
 #include "dm_clock_srv.h"
 #include "test_request.h"
 
+#include "crimson/queue.h"
+
 
 using crimson::dmclock::PriorityQueue;
 using crimson::dmclock::ClientInfo;
@@ -31,10 +33,11 @@ class TestServer {
   int                            iops;
   int                            thread_pool_size;
 
-  int                            active_threads;
+  // int                            active_threads;
   bool                           finishing;
   std::chrono::microseconds      op_time;
 
+  crimson::Queue<QueueItem>      inner_queue_2;
   std::mutex                     inner_queue_mtx;
   std::condition_variable        inner_queue_cv;
   std::deque<QueueItem>          inner_queue;
