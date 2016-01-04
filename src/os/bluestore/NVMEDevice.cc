@@ -21,12 +21,12 @@
 #include <fcntl.h>
 #include <unistd.h>
 
-#include "NVMEDevice.h"
 #include "include/types.h"
 #include "include/compat.h"
 #include "common/errno.h"
 #include "common/debug.h"
-#include "common/blkdev.h"
+
+#include "NVMEDevice.h"
 
 #define dout_subsys ceph_subsys_bdev
 #undef dout_prefix
@@ -87,24 +87,13 @@ int NVMEDevice::_lock()
   return 0;
 }
 
-struct nvme_whitelist {
-  const char *sn;
-  int id;
-};
-
 int NVMEDevice::open(string p)
 {
   int r = 0;
   dout(1) << __func__ << " path " << path << dendl;
 
-  config_section *sp;
   nvme_device *dev;
   pci_device *pci_dev;
-  const char *sn_tag, *id_tag, *val;
-  int id_tag_i, id = -1;
-  int i, num_whitelist_controllers = 0;
-  int controllers_remaining;
-  nvme_whitelist whitelist[NVME_MAX_CONTROLLERS];
 
   pci_system_init();
 
@@ -123,7 +112,6 @@ int NVMEDevice::open(string p)
   if (nvme_retry_count < 0)
     nvme_retry_count = NVME_DEFAULT_RETRY_COUNT;
 
-  /* Init the whitelist */
   string sn_tag = g_conf->bdev_nvme_serial_number;
   if (sn_tag.empty()) {
     int r = -ENOENT;
