@@ -38,8 +38,6 @@ class NVMEDevice : public BlockDevice {
   uint64_t size;
   uint64_t block_size;
 
-  aio_callback_t aio_callback;
-  void *aio_callback_priv;
   bool aio_stop;
 
   struct AioCompletionThread : public Thread {
@@ -56,6 +54,9 @@ class NVMEDevice : public BlockDevice {
   void _aio_stop();
 
  public:
+  aio_callback_t aio_callback;
+  void *aio_callback_priv;
+
   NVMEDevice(aio_callback_t cb, void *cbpriv);
 
   void aio_submit(IOContext *ioc) override {}

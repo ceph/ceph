@@ -52,9 +52,10 @@ static void io_complete(void *ctx, const struct nvme_completion *completion) {
     assert(0);
   }
 
-  IOContext *ioc;
+  IOContext *ioc = ctx;
+  NVMEDevice *device = ioc->backend;
   if (ioc->priv) {
-    aio_callback(aio_callback_priv, ioc->priv);
+    device->aio_callback(device->_callback_priv, ioc->priv);
   }
 }
 
@@ -64,10 +65,10 @@ static void io_complete(void *ctx, const struct nvme_completion *completion) {
 
 NVMEDevice::NVMEDevice(aio_callback_t cb, void *cbpriv)
     : aio_queue(g_conf->bdev_aio_max_queue_depth),
-      aio_callback(cb),
-      aio_callback_priv(cbpriv),
       aio_stop(false),
-      aio_thread(this)
+      aio_thread(this),
+      aio_callback(cb),
+      aio_callback_priv(cbpriv)
 {
   zeros = buffer::create_page_aligned(1048576);
   zeros.zero();
@@ -269,8 +270,9 @@ int NVMEDevice::aio_write(
     bl.rebuild();
   }
 
+  ioc->backend = this;
   int rc = nvme_ns_cmd_write(ns, bl.c_str(), off,
-                         bl.length()/block_size, io_complete, ioc->priv);
+                         bl.length()/block_size, io_complete, ioc);
   if (rc < 0) {
     derr << __func__ << " failed to do write command" << dendl;
     return rc;
@@ -318,7 +320,8 @@ int NVMEDevice::read(uint64_t off, uint64_t len, bufferlist *pbl,
   assert(off + len <= size);
 
   bufferptr p = buffer::create_page_aligned(len);
-  int r = nvme_ns_cmd_read(ns, p.c_str(), off, len / block_size, io_complete, ioc->priv);
+  ioc->backend = this;
+  int r = nvme_ns_cmd_read(ns, p.c_str(), off, len / block_size, io_complete, ioc);
   if (r < 0) {
     r = -errno;
     derr << __func__ << " failed to read" << dendl;
