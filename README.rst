@@ -222,13 +222,17 @@ Some of the more important / commonly used tasks include:
   the test configuration to cause it to install any branch, SHA, archive or
   URL. The following are valid parameters.
 
-- ``branch``: specify a branch (firefly, giant...)
-- ``flavor``: specify a flavor (next, unstable...). Flavors can be thought of
-  as subsets of branches.  Sometimes (unstable, for example) they may have a
-  predefined meaning.
-- ``project``: specify a project (ceph, samba...)
-- ``sha1``: install the build with this sha1 value.
-- ``tag``: specify a tag/identifying text for this build (v47.2, v48.1...)
+  - ``branch``: specify a branch (firefly, giant...)
+
+  - ``flavor``: specify a flavor (next, unstable...). Flavors can be thought of
+    as subsets of branches.  Sometimes (unstable, for example) they may have a
+    predefined meaning.
+
+  - ``project``: specify a project (ceph, samba...)
+
+  - ``sha1``: install the build with this sha1 value.
+
+  - ``tag``: specify a tag/identifying text for this build (v47.2, v48.1...)
 
 * ``ceph``: Bring up Ceph
 
