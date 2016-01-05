@@ -1025,7 +1025,7 @@ def get_or_create_dmcrypt_key(
         raise Error('unable to read or create dm-crypt key', path)
 
 
-def dmcrypt_map(
+def _dmcrypt_map(
     rawdev,
     keypath,
     _uuid,
@@ -1642,7 +1642,7 @@ def prepare_dev(
 
     dev = None
     if osd_dm_keypath:
-        dev = dmcrypt_map(
+        dev = _dmcrypt_map(
                 rawdev=rawdev,
                 keypath=osd_dm_keypath,
                 _uuid=osd_uuid,
@@ -2224,6 +2224,27 @@ def detect_fstype(
     fstype = must_be_one_line(fstype)
     return fstype
 
+def dmcrypt_map(dev, dmcrypt_key_dir):
+    ptype = get_partition_type(dev)
+    if ptype in [DMCRYPT_OSD_UUID, DMCRYPT_JOURNAL_UUID]:
+        luks = False
+        cryptsetup_parameters = ['--key-size', '256']
+    elif ptype in [DMCRYPT_LUKS_OSD_UUID, DMCRYPT_LUKS_JOURNAL_UUID]:
+        luks = True
+        cryptsetup_parameters = []
+    else:
+        raise Error('--dmcrypt called for dev %s with invalid ptype %s'
+                    % (dev, ptype))
+    part_uuid = get_partition_uuid(dev)
+    dmcrypt_key_path = get_dmcrypt_key_path(part_uuid, dmcrypt_key_dir, luks)
+    return _dmcrypt_map(
+        rawdev=dev,
+        keypath=dmcrypt_key_path,
+        _uuid=part_uuid,
+        cryptsetup_parameters=cryptsetup_parameters,
+        luks=luks,
+        format_dev=False,
+    )
 
 def mount_activate(
     dev,
@@ -2235,29 +2256,8 @@ def mount_activate(
     ):
 
     if dmcrypt:
-            # dev corresponds to a dmcrypt cyphertext device - map it before
-            # proceeding.
-            rawdev = dev
-            ptype = get_partition_type(rawdev)
-            if ptype in [DMCRYPT_OSD_UUID]:
-                luks = False
-                cryptsetup_parameters = ['--key-size', '256']
-            elif ptype in [DMCRYPT_LUKS_OSD_UUID]:
-                luks = True
-                cryptsetup_parameters = []
-            else:
-                raise Error('activate --dmcrypt called for invalid dev %s' % (dev))
-            part_uuid = get_partition_uuid(rawdev)
-            dmcrypt_key_path = get_dmcrypt_key_path(part_uuid, dmcrypt_key_dir, luks)
-            dev = dmcrypt_map(
-                    rawdev=rawdev,
-                    keypath=dmcrypt_key_path,
-                    _uuid=part_uuid,
-                    cryptsetup_parameters=cryptsetup_parameters,
-                    luks=luks,
-                    format_dev=False,
-                    )
-
+        part_uuid = get_partition_uuid(dev)
+        dev = dmcrypt_map(dev, dmcrypt_key_dir)
     try:
         fstype = detect_fstype(dev=dev)
     except (subprocess.CalledProcessError,
@@ -2922,28 +2922,7 @@ def main_activate_journal(args):
     activate_lock.acquire()  # noqa
     try:
         if args.dmcrypt:
-            # journal dev corresponds to a dmcrypt cyphertext device - map
-            # it before proceeding.
-            rawdev = args.dev
-            ptype = get_partition_type(rawdev)
-            if ptype in [DMCRYPT_JOURNAL_UUID]:
-                luks = False
-                cryptsetup_parameters = ['--key-size', '256']
-            elif ptype in [DMCRYPT_LUKS_JOURNAL_UUID]:
-                luks = True
-                cryptsetup_parameters = []
-            else:
-                raise Error('activate-journal --dmcrypt called for invalid dev %s' % (rawdev))
-            part_uuid = get_partition_uuid(rawdev)
-            dmcrypt_key_path = get_dmcrypt_key_path(part_uuid, args.dmcrypt_key_dir, luks)
-            dev = dmcrypt_map(
-                    rawdev=rawdev,
-                    keypath=dmcrypt_key_path,
-                    _uuid=part_uuid,
-                    cryptsetup_parameters=cryptsetup_parameters,
-                    luks=luks,
-                    format_dev=False,
-                    )
+            dev = dmcrypt_map(args.dev, args.dmcrypt_key_dir)
         else:
             dev = args.dev
 
