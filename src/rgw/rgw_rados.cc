@@ -1305,7 +1305,6 @@ class RGWWatcher : public librados::WatchCtx2 {
         watcher->reinit();
       }
   };
-  shared_ptr<C_ReinitWatch> reinit_watch;
 public:
   RGWWatcher(RGWRados *r, int i, const string& o) : rados(r), index(i), oid(o), watch_handle(0) {}
   void handle_notify(uint64_t notify_id,
@@ -1326,8 +1325,7 @@ public:
     lderr(rados->ctx()) << "RGWWatcher::handle_error cookie " << cookie
 			<< " err " << cpp_strerror(err) << dendl;
     rados->remove_watcher(index);
-    reinit_watch.reset(new C_ReinitWatch(this));
-    rados->schedule_context(reinit_watch.get());
+    rados->schedule_context(new C_ReinitWatch(this));
   }
 
   void reinit() {
