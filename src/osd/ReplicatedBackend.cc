@@ -758,14 +758,18 @@ void ReplicatedBackend::be_deep_scrub(
 
   uint32_t fadvise_flags = CEPH_OSD_OP_FLAG_FADVISE_SEQUENTIAL | CEPH_OSD_OP_FLAG_FADVISE_DONTNEED;
 
-  while ( (r = store->read(
-             coll,
-             ghobject_t(
-               poid, ghobject_t::NO_GEN, get_parent()->whoami_shard().shard),
-             pos,
-             cct->_conf->osd_deep_scrub_stride, bl,
-             fadvise_flags, true)) > 0) {
+  while (true) {
     handle.reset_tp_timeout();
+    r = store->read(
+	  coll,
+	  ghobject_t(
+	    poid, ghobject_t::NO_GEN, get_parent()->whoami_shard().shard),
+	  pos,
+	  cct->_conf->osd_deep_scrub_stride, bl,
+	  fadvise_flags, true);
+    if (r <= 0)
+      break;
+
     h << bl;
     pos += bl.length();
     bl.clear();
