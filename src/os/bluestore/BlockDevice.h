@@ -59,6 +59,9 @@ private:
   vector<IOContext*> ioc_reap_queue;
   atomic_t ioc_reap_count;
 
+  Mutex flush_lock;
+  atomic_t io_since_flush;
+
   FS::aio_queue_t aio_queue;
   aio_callback_t aio_callback;
   void *aio_callback_priv;
