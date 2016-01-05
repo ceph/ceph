@@ -1213,9 +1213,7 @@ int KeyValueStore::_do_transactions(list<Transaction*> &tls, uint64_t op_seq,
   for (list<Transaction*>::iterator p = tls.begin();
        p != tls.end();
        ++p, trans_num++) {
-    r = _do_transaction(**p, bt, handle);
-    if (r < 0)
-      break;
+    _do_transaction(**p, bt, handle);
     if (handle)
       handle->reset_tp_timeout();
   }
@@ -1228,7 +1226,7 @@ int KeyValueStore::_do_transactions(list<Transaction*> &tls, uint64_t op_seq,
   return r;
 }
 
-unsigned KeyValueStore::_do_transaction(Transaction& transaction,
+void KeyValueStore::_do_transaction(Transaction& transaction,
                                         BufferTransaction &t,
                                         ThreadPool::TPHandle *handle)
 {
@@ -1600,8 +1598,6 @@ unsigned KeyValueStore::_do_transaction(Transaction& transaction,
 
     op_num++;
   }
-
-  return 0;  // FIXME count errors
 }
 
 
