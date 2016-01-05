@@ -307,7 +307,7 @@ int MemStore::read(
   if (offset >= o->get_size())
     return 0;
   size_t l = len;
-  if (l == 0)  // note: len == 0 means read the entire object
+  if (l == 0 && offset == 0)  // note: len == 0 means read the entire object
     l = o->get_size();
   else if (offset + l > o->get_size())
     l = o->get_size() - offset;
