@@ -88,6 +88,7 @@ class TestNuke(object):
         ctx.teuthology_config = config
         ctx.dry_run = False
         name = 'target1'
+        uuid = 'UUID1'
         now = datetime.datetime.strftime(datetime.datetime.now(),
                                          "%Y-%m-%d %H:%M:%S.%f")
         #
@@ -144,7 +145,10 @@ class TestNuke(object):
                 unlock_one=DEFAULT,
                 ) as m:
             nuke.stale_openstack_nodes(ctx, {
-                name: { 'name': name, },
+                uuid: {
+                    'ID': uuid,
+                    'Name': name, 
+                },
             }, {
                 name: { 'locked_since': ancient,
                         'machine_type': 'openstack', },
@@ -156,6 +160,7 @@ class TestNuke(object):
         ctx.teuthology_config = config
         ctx.dry_run = False
         name = 'target1'
+        uuid = 'UUID1'
         #
         # An instance created a second ago is left untouched,
         # even when it is not locked.
@@ -168,7 +173,7 @@ class TestNuke(object):
                 destroy=DEFAULT,
                 ) as m:
             nuke.stale_openstack_instances(ctx, {
-                name: { 'id': 'UUID', },
+                uuid: { 'Name': name, },
             }, {
             })
             m['destroy'].assert_not_called()
@@ -183,7 +188,7 @@ class TestNuke(object):
                 destroy=DEFAULT,
                 ) as m:
             nuke.stale_openstack_instances(ctx, {
-                name: { 'id': 'UUID', },
+                uuid: { 'Name': name, },
             }, {
                 misc.canonicalize_hostname(name, user=None): {},
             })
@@ -199,7 +204,7 @@ class TestNuke(object):
                 destroy=DEFAULT,
                 ) as m:
             nuke.stale_openstack_instances(ctx, {
-                name: { 'id': 'UUID', },
+                uuid: { 'Name': name, },
             }, {
                 misc.canonicalize_hostname(name, user=None): {},
             })
@@ -216,7 +221,7 @@ class TestNuke(object):
                 destroy=DEFAULT,
                 ) as m:
             nuke.stale_openstack_instances(ctx, {
-                name: { 'id': 'UUID', },
+                uuid: { 'Name': name, },
             }, {
             })
             m['destroy'].assert_called_with()
@@ -232,7 +237,7 @@ class TestNuke(object):
                 destroy=DEFAULT,
                 ) as m:
             nuke.stale_openstack_instances(ctx, {
-                name: { 'id': 'UUID', },
+                uuid: { 'Name': name, },
             }, {
                 misc.canonicalize_hostname(name, user=None): {},
             })
