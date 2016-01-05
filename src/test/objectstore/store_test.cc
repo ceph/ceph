@@ -215,6 +215,39 @@ TEST_P(StoreTest, IORemount) {
   }
 }
 
+TEST_P(StoreTest, FiemapEmpty) {
+  ObjectStore::Sequencer osr("test");
+  coll_t cid;
+  int r = 0;
+  ghobject_t oid(hobject_t(sobject_t("fiemap_object", CEPH_NOSNAP)));
+  {
+    ObjectStore::Transaction t;
+    t.create_collection(cid, 0);
+    t.touch(cid, oid);
+    t.truncate(cid, oid, 100000);
+    r = store->apply_transaction(&osr, t);
+    ASSERT_EQ(r, 0);
+  }
+  {
+    bufferlist bl;
+    store->fiemap(cid, oid, 0, 100000, bl);
+    map<uint64_t,uint64_t> m, e;
+    bufferlist::iterator p = bl.begin();
+    ::decode(m, p);
+    cout << " got " << m << std::endl;
+    e[0] = 100000;
+    EXPECT_TRUE(m == e || m.empty());
+  }
+  {
+    ObjectStore::Transaction t;
+    t.remove(cid, oid);
+    t.remove_collection(cid);
+    cerr << "remove collection" << std::endl;
+    r = store->apply_transaction(&osr, t);
+    ASSERT_EQ(r, 0);
+  }
+}
+
 TEST_P(StoreTest, SimpleMetaColTest) {
   ObjectStore::Sequencer osr("test");
   coll_t cid;
