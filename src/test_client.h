@@ -8,29 +8,42 @@
 #pragma once
 
 
+#include <atomic>
 #include <mutex>
 #include <condition_variable>
 #include <thread>
 
+#include "crimson/queue.h"
+
 #include "test_request.h"
 
 
-class TestClient {
-  typedef std::function<void(const TestRequest&,
-			     std::function<void()>)> SubmitFunc;
+namespace c = crimson;
 
-  typedef std::lock_guard<std::mutex> Guard;
+
+class TestClient {
+  typedef std::function<void(const TestRequest&)> SubmitFunc;
+
+  typedef std::unique_lock<std::mutex> Guard;
 
   int id;
   SubmitFunc submit_f;
   int ops_to_run;
   int iops_goal; // per second
   int outstanding_ops_allowed;
-  int outstanding_ops;
 
-  std::mutex mtx;
-  std::condition_variable cv;
-  std::thread thread;
+  std::atomic_ulong        outstanding_ops;
+  std::atomic_bool         requests_complete;
+
+  std::deque<TestResponse> resp_queue;
+
+  std::mutex               mtx_req;
+  std::condition_variable  cv_req;
+  std::thread              thd_req;
+
+  std::mutex               mtx_resp;
+  std::condition_variable  cv_resp;
+  std::thread              thd_resp;
     
 public:
 
@@ -42,11 +55,12 @@ public:
 
   virtual ~TestClient();
 
-  void submitResponse();
+  void submitResponse(TestResponse&&);
 
   void waitForDone();
 
 protected:
 
-  void run();
+  void run_req();
+  void run_resp();
 }; // class TestClient

@@ -73,7 +73,6 @@ int main(int argc, char* argv[]) {
 
   // wait for all clients to finish
   for (int i = 0; i < client_count; ++i) {
-    clients[i]->waitForDone();
     delete clients[i];
   }
   delete[] clients;
