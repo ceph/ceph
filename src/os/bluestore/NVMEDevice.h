@@ -29,11 +29,11 @@ extern "C" {
 #include "spdk/pci.h"
 #include "spdk/nvme.h"
 
-#include "BlockDevice.h"
-
 #ifdef __cplusplus
 }
 #endif
+
+#include "BlockDevice.h"
 
 class NVMEDevice : public BlockDevice {
   /**
@@ -48,21 +48,9 @@ class NVMEDevice : public BlockDevice {
   uint64_t size;
   uint64_t block_size;
 
-  bool aio_stop;
   bufferptr zeros;
 
-  struct AioCompletionThread : public Thread {
-    NVMEDevice *bdev;
-    AioCompletionThread(NVMEDevice *b) : bdev(b) {}
-    void *entry() {
-      bdev->_aio_thread();
-      return NULL;
-    }
-  } aio_thread;
-
-  void _aio_thread();
-  int _aio_start();
-  void _aio_stop();
+  static void init();
 
  public:
   aio_callback_t aio_callback;
@@ -70,7 +58,7 @@ class NVMEDevice : public BlockDevice {
 
   NVMEDevice(aio_callback_t cb, void *cbpriv);
 
-  void aio_submit(IOContext *ioc) override {}
+  void aio_submit(IOContext *ioc) override;
 
   uint64_t get_size() const override {
     return size;

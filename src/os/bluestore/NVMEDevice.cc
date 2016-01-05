@@ -31,6 +31,7 @@
 #include "include/compat.h"
 #include "common/errno.h"
 #include "common/debug.h"
+#include "common/Initialize.h"
 
 #include "NVMEDevice.h"
 
@@ -60,6 +61,7 @@ static void io_complete(void *ctx, const struct nvme_completion *completion) {
 
   IOContext *ioc = (IOContext*)ctx;
   NVMEDevice *device = (NVMEDevice*)ioc->backend;
+  ioc->done = true;
   if (ioc->priv) {
     device->aio_callback(device->aio_callback_priv, ioc->priv);
   }
@@ -72,8 +74,6 @@ static void io_complete(void *ctx, const struct nvme_completion *completion) {
 NVMEDevice::NVMEDevice(aio_callback_t cb, void *cbpriv)
     : ctrlr(nullptr),
       ns(nullptr),
-      aio_stop(false),
-      aio_thread(this),
       aio_callback(cb),
       aio_callback_priv(cbpriv)
 {
@@ -87,23 +87,28 @@ static char *ealargs[] = {
     "-n 4",
 };
 
-int NVMEDevice::open(string p)
+void NVMEDevice::init()
 {
-  int r = 0;
-  dout(1) << __func__ << " path " << p << dendl;
-
-  pci_device *pci_dev;
-
-  r = rte_eal_init(sizeof(ealargs) / sizeof(ealargs[0]), (char **)(void *)(uintptr_t)ealargs);
+  int r = rte_eal_init(sizeof(ealargs) / sizeof(ealargs[0]), (char **)(void *)(uintptr_t)ealargs);
   if (r < 0) {
     derr << __func__ << " init dpdk failed" << dendl;
-    return r;
+    assert(0);
   }
 
   if (request_mempool == NULL) {
     derr << __func__ << " could not initialize request mempool" << dendl;
-    return -1;
+    assert(0);
   }
+}
+
+int NVMEDevice::open(string p)
+{
+  static Initialize _(NVMEDevice::init);
+
+  int r = 0;
+  dout(1) << __func__ << " path " << p << dendl;
+
+  pci_device *pci_dev;
 
   pci_system_init();
 
@@ -145,13 +150,14 @@ int NVMEDevice::open(string p)
       continue;
     }
 
+    name = pci_device_get_device_name(pci_dev) ? pci_device_get_device_name(pci_dev) : "Unknown";
     if (pci_device_has_kernel_driver(pci_dev)) {
       if (!pci_device_has_uio_driver(pci_dev)) {
         /*NVMe kernel driver case*/
         if (g_conf->bdev_nvme_unbind_from_kernel) {
           r =  pci_device_switch_to_uio_driver(pci_dev);
           if (r < 0) {
-            derr << __func__ << " device " << pci_device_get_device_name(pci_dev) << " " << pci_dev->bus
+            derr << __func__ << " device " << name << " " << pci_dev->bus
                  << ":" << pci_dev->dev << ":" << pci_dev->func
                  << " switch to uio driver failed" << dendl;
             return r;
@@ -165,7 +171,7 @@ int NVMEDevice::open(string p)
     } else {
       r =  pci_device_bind_uio_driver(pci_dev, PCI_UIO_DRIVER);
       if (r < 0) {
-        derr << __func__ << " device " << pci_device_get_device_name(pci_dev) << " " << pci_dev->bus
+        derr << __func__ << " device " << name << " " << pci_dev->bus
              << ":" << pci_dev->dev << ":" << pci_dev->func
              << " bind to uio driver failed" << dendl;
         return r;
@@ -175,7 +181,7 @@ int NVMEDevice::open(string p)
     /* Claim the device in case conflict with other ids process */
     r =  pci_device_claim(pci_dev);
     if (r < 0) {
-      derr << __func__ << " device " << pci_device_get_device_name(pci_dev) << " " << pci_dev->bus
+      derr << __func__ << " device " << name << " " << pci_dev->bus
            << ":" << pci_dev->dev << ":" << pci_dev->func
            << " claim failed" << dendl;
       return r;
@@ -217,10 +223,6 @@ int NVMEDevice::open(string p)
           << " block_size " << block_size << " (" << pretty_si_t(block_size)
           << "B)" << dendl;
 
-  r = nvme_register_io_thread();
-  assert(r == 0);
-  r = _aio_start();
-  assert(r == 0);
   name = pci_device_get_device_name(pci_dev);
   return 0;
 }
@@ -229,7 +231,6 @@ void NVMEDevice::close()
 {
   dout(1) << __func__ << dendl;
   nvme_unregister_io_thread();
-  _aio_stop();
   name.clear();
 }
 
@@ -239,31 +240,12 @@ int NVMEDevice::flush()
   return 0;
 }
 
-int NVMEDevice::_aio_start()
+void NVMEDevice::aio_submit(IOContext *ioc)
 {
-  dout(10) << __func__ << dendl;
-  aio_thread.create();
-  return 0;
-}
-
-void NVMEDevice::_aio_stop()
-{
-  dout(10) << __func__ << dendl;
-  aio_stop = true;
-  aio_thread.join();
-  aio_stop = false;
-}
-
-void NVMEDevice::_aio_thread()
-{
-  dout(10) << __func__ << " start" << dendl;
-  while (!aio_stop) {
-    dout(40) << __func__ << " polling" << dendl;
-
-	  nvme_ctrlr_process_io_completions(ctrlr, 0);
-
+  while (!ioc->done) {
+    nvme_ctrlr_process_io_completions(ctrlr, 0);
+    usleep(50);
   }
-  dout(10) << __func__ << " end" << dendl;
 }
 
 int NVMEDevice::aio_write(
@@ -341,6 +323,10 @@ int NVMEDevice::read(uint64_t off, uint64_t len, bufferlist *pbl,
     r = -errno;
     derr << __func__ << " failed to read" << dendl;
     return r;
+  }
+  while (!ioc->done) {
+    nvme_ctrlr_process_io_completions(ctrlr, 0);
+    usleep(50);
   }
   pbl->clear();
   pbl->push_back(p);
