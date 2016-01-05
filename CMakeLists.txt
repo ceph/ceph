@@ -77,6 +77,7 @@ CHECK_INCLUDE_FILES("fcgios.h" FASTCGI_FASTCGIOS_DIR)
 CHECK_INCLUDE_FILES("fcgi_stdio.h" HAVE_FASTCGI_STDIO_H)
 CHECK_INCLUDE_FILES("openssl/ssl.h" HAVE_SSL_H)
 CHECK_INCLUDE_FILES("keyutils.h" HAVE_KEYUTILS_H)
+CHECK_INCLUDE_FILES("execinfo.h" HAVE_EXECINFO_H)
 
 include(CheckSymbolExists)
 CHECK_SYMBOL_EXISTS(__u8 "sys/types.h;linux/types.h" HAVE___U8)
@@ -99,6 +100,8 @@ if(${ENABLE_SHARED})
 else(${ENABLE_SHARED})
  set(CEPH_SHARED STATIC)
 endif(${ENABLE_SHARED})
+
+find_package(execinfo)
 
 find_package(udev REQUIRED)
 set(HAVE_UDEV ${UDEV_FOUND})
