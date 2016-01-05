@@ -2701,7 +2701,6 @@ def main_deactivate_locked(args):
     osd_id = target_dev['whoami']
     part_type = target_dev['ptype']
     mounted_path = target_dev['mount']
-    part_uuid = target_dev['uuid']
     if part_type == DMCRYPT_OSD_UUID or \
        part_type == DMCRYPT_LUKS_OSD_UUID:
         dmcrypt = True
@@ -2733,9 +2732,10 @@ def main_deactivate_locked(args):
     unmount(mounted_path)
     LOG.info("Umount `%s` successfully.", mounted_path)
 
-    # we remove the crypt map and device mapper (if dmcrypt is True)
     if dmcrypt:
-        dmcrypt_unmap(part_uuid)
+        dmcrypt_unmap(target_dev['uuid'])
+        if 'journal_uuid' in target_dev:
+            dmcrypt_unmap(target_dev['journal_uuid'])
 
 ###########################
 
@@ -2967,6 +2967,7 @@ def main_activate_journal(args):
             init=args.mark_init,
             dmcrypt=args.dmcrypt,
             dmcrypt_key_dir=args.dmcrypt_key_dir,
+            reactivate=args.reactivate,
             )
 
         start_daemon(
@@ -3861,6 +3862,11 @@ def make_activate_journal_parser(subparsers):
         metavar='KEYDIR',
         default='/etc/ceph/dmcrypt-keys',
         help='directory where dm-crypt keys are stored',
+        )
+    activate_journal_parser.add_argument(
+        '--reactivate',
+        action='store_true', default=False,
+        help='activate the deactived OSD',
         )
     activate_journal_parser.set_defaults(
         activate_key_template='{statedir}/bootstrap-osd/{cluster}.keyring',
