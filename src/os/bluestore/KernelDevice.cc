@@ -8,7 +8,7 @@
 #include <fcntl.h>
 #include <unistd.h>
 
-#include "BlockDevice.h"
+#include "KernelDevice.h"
 #include "include/types.h"
 #include "include/compat.h"
 #include "common/errno.h"
@@ -39,14 +39,14 @@ void IOContext::aio_wait()
 #undef dout_prefix
 #define dout_prefix *_dout << "bdev(" << path << ") "
 
-BlockDevice::BlockDevice(aio_callback_t cb, void *cbpriv)
+KernelDevice::KernelDevice(aio_callback_t cb, void *cbpriv)
   : fd_direct(-1),
     fd_buffered(-1),
     size(0), block_size(0),
     fs(NULL), aio(false), dio(false),
-    debug_lock("BlockDevice::debug_lock"),
-    ioc_reap_lock("BlockDevice::ioc_reap_lock"),
-    flush_lock("BlockDevice::flush_lock"),
+    debug_lock("KernelDevice::debug_lock"),
+    ioc_reap_lock("KernelDevice::ioc_reap_lock"),
+    flush_lock("KernelDevice::flush_lock"),
     aio_queue(g_conf->bdev_aio_max_queue_depth),
     aio_callback(cb),
     aio_callback_priv(cbpriv),
@@ -57,7 +57,7 @@ BlockDevice::BlockDevice(aio_callback_t cb, void *cbpriv)
   zeros.zero();
 }
 
-int BlockDevice::_lock()
+int KernelDevice::_lock()
 {
   struct flock l;
   memset(&l, 0, sizeof(l));
@@ -71,7 +71,7 @@ int BlockDevice::_lock()
   return 0;
 }
 
-int BlockDevice::open(string p)
+int KernelDevice::open(string p)
 {
   path = p;
   int r = 0;
@@ -153,7 +153,7 @@ int BlockDevice::open(string p)
   return r;
 }
 
-void BlockDevice::close()
+void KernelDevice::close()
 {
   dout(1) << __func__ << dendl;
   _aio_stop();
@@ -173,7 +173,7 @@ void BlockDevice::close()
   path.clear();
 }
 
-int BlockDevice::flush()
+int KernelDevice::flush()
 {
   // serialize flushers, so that we can avoid weird io_since_flush
   // races (w/ multipler flushers).
@@ -204,7 +204,7 @@ int BlockDevice::flush()
   return r;
 }
 
-int BlockDevice::_aio_start()
+int KernelDevice::_aio_start()
 {
   if (g_conf->bdev_aio) {
     dout(10) << __func__ << dendl;
@@ -218,7 +218,7 @@ int BlockDevice::_aio_start()
   return 0;
 }
 
-void BlockDevice::_aio_stop()
+void KernelDevice::_aio_stop()
 {
   if (g_conf->bdev_aio) {
     dout(10) << __func__ << dendl;
@@ -229,7 +229,7 @@ void BlockDevice::_aio_stop()
   }
 }
 
-void BlockDevice::_aio_thread()
+void KernelDevice::_aio_thread()
 {
   dout(10) << __func__ << " start" << dendl;
   while (!aio_stop) {
@@ -279,7 +279,7 @@ void BlockDevice::_aio_thread()
   dout(10) << __func__ << " end" << dendl;
 }
 
-void BlockDevice::_aio_log_start(
+void KernelDevice::_aio_log_start(
   IOContext *ioc,
   uint64_t offset,
   uint64_t length)
@@ -297,7 +297,7 @@ void BlockDevice::_aio_log_start(
   }
 }
 
-void BlockDevice::_aio_log_finish(
+void KernelDevice::_aio_log_finish(
   IOContext *ioc,
   uint64_t offset,
   uint64_t length)
@@ -309,7 +309,7 @@ void BlockDevice::_aio_log_finish(
   }
 }
 
-void BlockDevice::aio_submit(IOContext *ioc)
+void KernelDevice::aio_submit(IOContext *ioc)
 {
   dout(20) << __func__ << " ioc " << ioc
 	   << " pending " << ioc->num_pending.read()
@@ -357,7 +357,7 @@ void BlockDevice::aio_submit(IOContext *ioc)
   }
 }
 
-int BlockDevice::aio_write(
+int KernelDevice::aio_write(
   uint64_t off,
   bufferlist &bl,
   IOContext *ioc,
@@ -432,7 +432,7 @@ int BlockDevice::aio_write(
   return 0;
 }
 
-int BlockDevice::aio_zero(
+int KernelDevice::aio_zero(
   uint64_t off,
   uint64_t len,
   IOContext *ioc)
@@ -457,7 +457,7 @@ int BlockDevice::aio_zero(
   return aio_write(off, bl, ioc, false);
 }
 
-int BlockDevice::read(uint64_t off, uint64_t len, bufferlist *pbl,
+int KernelDevice::read(uint64_t off, uint64_t len, bufferlist *pbl,
 		      IOContext *ioc,
 		      bool buffered)
 {
@@ -496,7 +496,7 @@ int BlockDevice::read(uint64_t off, uint64_t len, bufferlist *pbl,
   return r < 0 ? r : 0;
 }
 
-int BlockDevice::read_buffered(uint64_t off, uint64_t len, char *buf)
+int KernelDevice::read_buffered(uint64_t off, uint64_t len, char *buf)
 {
   dout(5) << __func__ << " " << off << "~" << len << dendl;
   assert(len > 0);
@@ -527,7 +527,7 @@ int BlockDevice::read_buffered(uint64_t off, uint64_t len, char *buf)
   return r < 0 ? r : 0;
 }
 
-int BlockDevice::invalidate_cache(uint64_t off, uint64_t len)
+int KernelDevice::invalidate_cache(uint64_t off, uint64_t len)
 {
   dout(5) << __func__ << " " << off << "~" << len << dendl;
   assert(off % block_size == 0);
@@ -541,7 +541,7 @@ int BlockDevice::invalidate_cache(uint64_t off, uint64_t len)
   return r;
 }
 
-void BlockDevice::queue_reap_ioc(IOContext *ioc)
+void KernelDevice::queue_reap_ioc(IOContext *ioc)
 {
   Mutex::Locker l(ioc_reap_lock);
   if (ioc_reap_count.read() == 0)

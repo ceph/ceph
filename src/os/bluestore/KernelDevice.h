@@ -1,45 +1,15 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
-#ifndef CEPH_OS_BLUESTORE_BLOCKDEVICE
-#define CEPH_OS_BLUESTORE_BLOCKDEVICE
+#ifndef CEPH_OS_BLUESTORE_KERNELDEVICE_H
+#define CEPH_OS_BLUESTORE_KERNELDEVICE_H
 
 #include "os/fs/FS.h"
 #include "include/interval_set.h"
 
-/// track in-flight io
-struct IOContext {
-  void *priv;
+#include "BlockDevice.h"
 
-  Mutex lock;
-  Cond cond;
-  //interval_set<uint64_t> blocks;  ///< blocks with aio in flight
-
-  list<FS::aio_t> pending_aios;    ///< not yet submitted
-  list<FS::aio_t> running_aios;    ///< submitting or submitted
-  atomic_t num_pending;
-  atomic_t num_running;
-  atomic_t num_reading;
-  atomic_t num_waiting;
-
-  IOContext(void *p)
-    : priv(p),
-      lock("IOContext::lock")
-    {}
-
-  // no copying
-  IOContext(const IOContext& other);
-  IOContext &operator=(const IOContext& other);
-
-  bool has_aios() {
-    Mutex::Locker l(lock);
-    return num_pending.read() + num_running.read();
-  }
-
-  void aio_wait();
-};
-
-class BlockDevice {
+class KernelDevice : public BlockDevice {
 public:
   typedef void (*aio_callback_t)(void *handle, void *aio);
 
@@ -68,8 +38,8 @@ private:
   bool aio_stop;
 
   struct AioCompletionThread : public Thread {
-    BlockDevice *bdev;
-    AioCompletionThread(BlockDevice *b) : bdev(b) {}
+    KernelDevice *bdev;
+    AioCompletionThread(KernelDevice *b) : bdev(b) {}
     void *entry() {
       bdev->_aio_thread();
       return NULL;
@@ -86,7 +56,7 @@ private:
   int _lock();
 
 public:
-  BlockDevice(aio_callback_t cb, void *cbpriv);
+  KernelDevice(aio_callback_t cb, void *cbpriv);
 
   void aio_submit(IOContext *ioc);
 

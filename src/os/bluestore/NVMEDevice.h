@@ -19,41 +19,11 @@
 
 #include "include/interval_set.h"
 
-/// track in-flight io
-struct IOContext {
-  void *priv;
+#include "BlockDevice.h"
 
-  Mutex lock;
-  Cond cond;
-  //interval_set<uint64_t> blocks;  ///< blocks with aio in flight
+class NVMEDevice : public BlockDevice {
+  typedef void (*aio_callback_t)(void *handle, void *aio);
 
-  list<FS::aio_t> pending_aios;    ///< not yet submitted
-  list<FS::aio_t> running_aios;    ///< submitting or submitted
-  atomic_t num_pending;
-  atomic_t num_running;
-  atomic_t num_reading;
-  atomic_t num_waiting;
-
-  IOContext(void *p)
-      : priv(p),
-        lock("IOContext::lock")
-  {}
-
-  // no copying
-  IOContext(const IOContext& other);
-  IOContext &operator=(const IOContext& other);
-
-  bool has_aios() {
-    Mutex::Locker l(lock);
-    return num_pending.read() + num_running.read();
-  }
-
-  void aio_wait();
-};
-
-typedef void (*blockdev_completion_cb)(void *ref, int status);
-
-class NVMEDevice {
  private:
   /**
    * points to pinned, physically contiguous memory region;
