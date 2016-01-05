@@ -52,7 +52,6 @@ static void usage()
   generic_server_usage();
 }
 
-static Preforker forker;
 static std::string devpath, poolname("rbd"), imgname, snapname;
 static bool readonly = false;
 static int nbds_max = 0;
@@ -463,10 +462,30 @@ static int do_map()
 
   int fd[2];
   int nbd;
-  int null_fd = -1;
 
   uint8_t old_format;
   librbd::image_info_t info;
+
+  Preforker forker;
+
+  if (global_init_prefork(g_ceph_context) >= 0) {
+    std::string err;
+    if (forker.prefork(err) < 0) {
+      cerr << err << std::endl;
+      return EXIT_FAILURE;
+    }
+
+    if (forker.is_parent()) {
+      if (forker.parent_wait(err) < 0) {
+	cerr << err << std::endl;
+	return EXIT_FAILURE;
+      }
+      return 0;
+    }
+  }
+
+  common_init_finish(g_ceph_context);
+  global_init_chdir(g_ceph_context);
 
   if (socketpair(AF_UNIX, SOCK_STREAM, 0, fd) == -1) {
     r = -errno;
@@ -589,22 +608,12 @@ static int do_map()
     if (r < 0)
       goto close_nbd;
 
-    if (g_conf->daemonize) {
-      r = open("/dev/null", O_RDWR);
-      if (r < 0)
-        goto close_watcher;
-      null_fd = r;
-    }
-
     cout << devpath << std::endl;
 
     if (g_conf->daemonize) {
       forker.daemonize();
-
-      ::dup2(null_fd, STDIN_FILENO);
-      ::dup2(null_fd, STDOUT_FILENO);
-      ::dup2(null_fd, STDERR_FILENO);
-      close(null_fd);
+      global_init_postfork_start(g_ceph_context);
+      global_init_postfork_finish(g_ceph_context);
     }
 
     {
@@ -615,7 +624,6 @@ static int do_map()
       server.stop();
     }
 
-close_watcher:
     io_ctx.unwatch2(watcher);
   }
 
@@ -632,11 +640,16 @@ close_ret:
   image.close();
   io_ctx.close();
   rados.shutdown();
+
+  forker.exit(r < 0 ? EXIT_FAILURE : 0);
+  // Unreachable;
   return r;
 }
 
 static int do_unmap()
 {
+  common_init_finish(g_ceph_context);
+
   int nbd = open_device(devpath.c_str());
   if (nbd < 0) {
     cerr << "rbd-nbd: failed to open device: " << devpath << std::endl;
@@ -676,6 +689,8 @@ static int do_list_mapped_devices()
   char path[64];
   int m = 0;
   int fd[2];
+
+  common_init_finish(g_ceph_context);
 
   if (socketpair(AF_UNIX, SOCK_STREAM, 0, fd) == -1) {
     int r = -errno;
@@ -783,8 +798,6 @@ static int rbd_nbd(int argc, const char *argv[])
 
   switch (cmd) {
     case Connect:
-      common_init_finish(g_ceph_context);
-
       if (imgname.empty()) {
         cerr << "rbd-nbd: image name was not specified" << std::endl;
         return EXIT_FAILURE;
@@ -814,19 +827,5 @@ static int rbd_nbd(int argc, const char *argv[])
 
 int main(int argc, const char *argv[])
 {
-  std::string err;
-
-  if (forker.prefork(err) < 0) {
-    cerr << err << std::endl;
-    return EXIT_FAILURE;
-  }
-
-  if (forker.is_child()) {
-    forker.exit(rbd_nbd(argc, argv));
-  } else if (forker.parent_wait(err) < 0) {
-    cerr << err << std::endl;
-    return EXIT_FAILURE;
-  } else {
-    return 0;
-  }
+  return rbd_nbd(argc, argv);
 }
