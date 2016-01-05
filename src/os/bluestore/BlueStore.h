@@ -278,9 +278,6 @@ public:
 
     IOContext ioc;
 
-    Mutex lock;
-    Cond cond;
-
     CollectionRef first_collection;  ///< first referenced collection
 
     TransContext(OpSequencer *o)
@@ -292,8 +289,7 @@ public:
 	onreadable(NULL),
 	onreadable_sync(NULL),
 	wal_txn(NULL),
-	ioc(this),
-	lock("BlueStore::TransContext::lock") {
+	ioc(this) {
       //cout << "txc new " << this << std::endl;
     }
     ~TransContext() {
