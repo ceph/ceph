@@ -1,3 +1,6 @@
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
+// vim: ts=8 sw=2 smarttab
+
 #include "include/int_types.h"
 
 #include <stdio.h>
@@ -20,6 +23,7 @@
 
 #include "mon/MonClient.h"
 #include "common/config.h"
+#include "common/dout.h"
 
 #include "common/errno.h"
 #include "common/module.h"
@@ -31,15 +35,21 @@
 #include "include/rados/librados.hpp"
 #include "include/rbd/librbd.hpp"
 
+#define dout_subsys ceph_subsys_rbd
+#undef dout_prefix
+#define dout_prefix *_dout << "rbd-nbd: "
+
 static void usage()
 {
   std::cout << "Usage: rbd-nbd [options] map <image-or-snap-spec>  Map a image to nbd device\n"
             << "               unmap <device path>                 Unmap nbd device\n"
             << "               list-mapped                         List mapped nbd devices\n"
-            << "Options: --device <device path>                    Specify nbd device path\n"
-            << "         --read-only                               Map readonly\n"
-            << "         --nbds_max <limit>                        Override for module param\n"
+            << "Options:\n"
+            << "  --device <device path>                    Specify nbd device path\n"
+            << "  --read-only                               Map readonly\n"
+            << "  --nbds_max <limit>                        Override for module param\n"
             << std::endl;
+  generic_server_usage();
 }
 
 static Preforker forker;
@@ -100,6 +110,8 @@ private:
     {}
   };
 
+  friend std::ostream &operator<<(std::ostream &os, const IOContext &ctx);
+
   Mutex lock;
   Cond cond;
   xlist<IOContext*> io_pending;
@@ -155,6 +167,9 @@ private:
 
     IOContext *ctx = reinterpret_cast<IOContext *>(arg);
     int ret = aio_completion->get_return_value();
+
+    dout(20) << __func__ << ": " << *ctx << dendl;
+
     if (ret > 0)
       ret = 0;
     ctx->reply.error = htonl(ret);
@@ -168,11 +183,20 @@ private:
     while (!terminated.read()) {
       ceph::unique_ptr<IOContext> ctx(new IOContext());
       ctx->server = this;
-      if (safe_read_exact(fd, &ctx->request, sizeof(struct nbd_request)) < 0)
-        return;
 
-      if (ctx->request.magic != htonl(NBD_REQUEST_MAGIC))
-        return;
+      dout(20) << __func__ << ": waiting for nbd request" << dendl;
+
+      int r = safe_read_exact(fd, &ctx->request, sizeof(struct nbd_request));
+      if (r < 0) {
+	derr << "failed to read nbd request header: " << cpp_strerror(errno)
+	     << dendl;
+	return;
+      }
+
+      if (ctx->request.magic != htonl(NBD_REQUEST_MAGIC)) {
+	derr << "invalid nbd request header" << dendl;
+	return;
+      }
 
       ctx->request.from = ntohll(ctx->request.from);
       ctx->request.type = ntohl(ctx->request.type);
@@ -183,14 +207,21 @@ private:
 
       ctx->command = ctx->request.type & 0x0000ffff;
 
+      dout(20) << *ctx << ": start" << dendl;
+
       switch (ctx->command)
       {
         case NBD_CMD_DISC:
+	  dout(0) << "disconnect request received" << dendl;
           return;
         case NBD_CMD_WRITE:
           bufferptr ptr(ctx->request.len);
-          if (safe_read_exact(fd, ptr.c_str(), ctx->request.len) < 0)
+	  r = safe_read_exact(fd, ptr.c_str(), ctx->request.len);
+          if (r < 0) {
+	    derr << *ctx << ": failed to read nbd request data: "
+		 << cpp_strerror(errno) << dendl;
             return;
+	  }
           ctx->data.push_back(ptr);
           break;
       }
@@ -213,25 +244,42 @@ private:
           image.aio_discard(pctx->request.from, pctx->request.len, c);
           break;
         default:
+	  derr << *pctx << ": invalid request command" << dendl;
           return;
       }
     }
+    dout(20) << __func__ << ": terminated" << dendl;
   }
 
   void writer_entry()
   {
     while (!terminated.read()) {
+      dout(20) << __func__ << ": waiting for io request" << dendl;
       ceph::unique_ptr<IOContext> ctx(wait_io_finish());
-      if (!ctx)
+      if (!ctx) {
+	dout(20) << __func__ << ": no io requests, terminating" << dendl;
         return;
-
-      if (safe_write(fd, &ctx->reply, sizeof(struct nbd_reply)) < 0)
-        return;
-      if (ctx->command == NBD_CMD_READ && ctx->reply.error == htonl(0)) {
-        if (ctx->data.write_fd(fd) < 0)
-          return;
       }
+
+      dout(20) << __func__ << ": got: " << *ctx << dendl;
+
+      int r = safe_write(fd, &ctx->reply, sizeof(struct nbd_reply));
+      if (r < 0) {
+	derr << *ctx << ": failed to write reply header: " << cpp_strerror(r)
+	     << dendl;
+        return;
+      }
+      if (ctx->command == NBD_CMD_READ && ctx->reply.error == htonl(0)) {
+	r = ctx->data.write_fd(fd);
+        if (r < 0) {
+	  derr << *ctx << ": failed to write replay data: " << cpp_strerror(r)
+	       << dendl;
+          return;
+	}
+      }
+      dout(20) << *ctx << ": finish" << dendl;
     }
+    dout(20) << __func__ << ": terminated" << dendl;
   }
 
   class ThreadHelper : public Thread
@@ -260,6 +308,8 @@ public:
   void start()
   {
     if (!started) {
+      dout(10) << __func__ << ": starting" << dendl;
+
       started = true;
 
       reader_thread.create();
@@ -270,6 +320,8 @@ public:
   void stop()
   {
     if (started) {
+      dout(10) << __func__ << ": terminating" << dendl;
+
       shutdown();
 
       reader_thread.join();
@@ -287,6 +339,34 @@ public:
   }
 };
 
+std::ostream &operator<<(std::ostream &os, const NBDServer::IOContext &ctx) {
+
+  os << "[" << std::hex << ntohll(*((uint64_t *)ctx.request.handle));
+
+  switch (ctx.command)
+  {
+  case NBD_CMD_WRITE:
+    os << " WRITE ";
+    break;
+  case NBD_CMD_READ:
+    os << " READ ";
+    break;
+  case NBD_CMD_FLUSH:
+    os << " FLUSH ";
+    break;
+  case NBD_CMD_TRIM:
+    os << " TRIM ";
+    break;
+  default:
+    os << " UNKNOW(" << ctx.command << ") ";
+    break;
+  }
+
+  os << ctx.request.from << "~" << ctx.request.len << " "
+     << ntohl(ctx.reply.error) << "]";
+
+  return os;
+}
 
 class NBDWatchCtx : public librados::WatchCtx2
 {
@@ -322,11 +402,11 @@ public:
 
       if (new_size != size) {
         if (ioctl(fd, BLKFLSBUF, NULL) < 0)
-          std::cerr << "rbd-nbd: invalidate page cache failed status: " << cpp_strerror(errno) << std::endl;
+            derr << "invalidate page cache failed: " << cpp_strerror(errno) << dendl;
         if (ioctl(fd, NBD_SET_SIZE, new_size) < 0)
-          std::cerr << "rbd-nbd: resize failed status: " << cpp_strerror(errno) << std::endl;
+            derr << "resize failed: " << cpp_strerror(errno) << dendl;
         if (image.invalidate_cache() < 0)
-          std::cerr << "rbd-nbd: invalidate rbd cache failed" << std::endl;
+            derr << "invalidate rbd cache failed" << dendl;
         size = new_size;
       }
     }
@@ -585,14 +665,17 @@ static int parse_imgpath(const std::string &imgpath)
   return 0;
 }
 
-static void list_mapped_devices()
+static int do_list_mapped_devices()
 {
   char path[64];
   int m = 0;
   int fd[2];
 
-  if (socketpair(AF_UNIX, SOCK_STREAM, 0, fd) == -1)
-    return;
+  if (socketpair(AF_UNIX, SOCK_STREAM, 0, fd) == -1) {
+    int r = -errno;
+    cerr << "rbd-nbd: socketpair failed: " << cpp_strerror(-r) << std::endl;
+    return r;
+  }
 
   while (true) {
     snprintf(path, sizeof(path), "/dev/nbd%d", m);
@@ -609,6 +692,8 @@ static void list_mapped_devices()
 
   close(fd[0]);
   close(fd[1]);
+
+  return 0;
 }
 
 static int rbd_nbd(int argc, const char *argv[])
@@ -709,7 +794,9 @@ static int rbd_nbd(int argc, const char *argv[])
         return EXIT_FAILURE;
       break;
     case List:
-      list_mapped_devices();
+      r = do_list_mapped_devices();
+      if (r < 0)
+        return EXIT_FAILURE;
       break;
     default:
       usage();
