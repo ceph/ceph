@@ -479,11 +479,13 @@ struct rgw_bi_log_entry {
   uint64_t index_ver;
   string tag;
   uint16_t bilog_flags;
+  string owner; /* only being set if it's a delete marker */
+  string owner_display_name; /* only being set if it's a delete marker */
 
   rgw_bi_log_entry() : op(CLS_RGW_OP_UNKNOWN), state(CLS_RGW_STATE_PENDING_MODIFY), index_ver(0), bilog_flags(0) {}
 
   void encode(bufferlist &bl) const {
-    ENCODE_START(2, 1, bl);
+    ENCODE_START(3, 1, bl);
     ::encode(id, bl);
     ::encode(object, bl);
     ::encode(timestamp, bl);
@@ -496,6 +498,8 @@ struct rgw_bi_log_entry {
     encode_packed_val(index_ver, bl);
     ::encode(instance, bl);
     ::encode(bilog_flags, bl);
+    ::encode(owner, bl);
+    ::encode(owner_display_name, bl);
     ENCODE_FINISH(bl);
   }
   void decode(bufferlist::iterator &bl) {
@@ -514,6 +518,10 @@ struct rgw_bi_log_entry {
     if (struct_v >= 2) {
       ::decode(instance, bl);
       ::decode(bilog_flags, bl);
+    }
+    if (struct_v >= 3) {
+      ::decode(owner, bl);
+      ::decode(owner_display_name, bl);
     }
     DECODE_FINISH(bl);
   }
