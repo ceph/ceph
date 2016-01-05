@@ -24,7 +24,7 @@
 struct IOContext {
   void *priv;
 #ifdef HAVE_SPDK
-  void *backend_priv;
+  void *backend_priv = nullptr;
 #endif
 
   Mutex lock;

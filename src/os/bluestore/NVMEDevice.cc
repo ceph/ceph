@@ -50,6 +50,7 @@ static void io_complete(void *t, const struct nvme_completion *completion) {
     assert(!nvme_completion_is_error(completion));
     // check waiting count before doing callback (which may
     // destroy this ioc).
+    dout(20) << __func__ << " write op successfully, left " << left << dendl;
     if (!left) {
       ctx->backend_priv = nullptr;
       if (ctx->num_waiting.read()) {
@@ -65,6 +66,7 @@ static void io_complete(void *t, const struct nvme_completion *completion) {
   } else {
     assert(task->command == IOCommand::READ_COMMAND);
     ctx->num_reading.dec();
+    dout(20) << __func__ << " read op successfully" << dendl;
     if (nvme_completion_is_error(completion))
       task->read_code = -1; // FIXME
     else
@@ -265,8 +267,10 @@ void NVMEDevice::_aio_thread()
   Task *t;
   int r = 0;
   const int max = 16;
+  uint64_t lba_off, lba_count;
   while (!aio_stop) {
     dout(40) << __func__ << " polling" << dendl;
+    t = nullptr;
     {
       Mutex::Locker l(queue_lock);
       if (!task_queue.empty()) {
@@ -280,7 +284,10 @@ void NVMEDevice::_aio_thread()
         case IOCommand::WRITE_COMMAND:
         {
           while (t) {
-            r = nvme_ns_cmd_write(ns, t->buf, t->offset, t->len / block_size, io_complete, t);
+            lba_off = t->offset / block_size;
+            lba_count = t->len / block_size;
+            dout(20) << __func__ << " write command issued " << lba_off << "~" << lba_count << dendl;
+            r = nvme_ns_cmd_write(ns, t->buf, lba_off, lba_count, io_complete, t);
             if (r < 0) {
               t->ctx->backend_priv = nullptr;
               rte_free(t->buf);
@@ -294,7 +301,10 @@ void NVMEDevice::_aio_thread()
         }
         case IOCommand::READ_COMMAND:
         {
-          r = nvme_ns_cmd_read(ns, t->buf, t->offset, t->len / block_size, io_complete, t);
+          dout(20) << __func__ << " read command issueed " << lba_off << "~" << lba_count << dendl;
+          lba_off = t->offset / block_size;
+          lba_count = t->len / block_size;
+          r = nvme_ns_cmd_read(ns, t->buf, lba_off, lba_count, io_complete, t);
           if (r < 0) {
             derr << __func__ << " failed to read" << dendl;
             t->ctx->num_reading.dec();
@@ -341,7 +351,7 @@ int NVMEDevice::aio_write(
     bool buffered)
 {
   uint64_t len = bl.length();
-  dout(20) << __func__ << " " << off << "~" << len << dendl;
+  dout(20) << __func__ << " " << off << "~" << len << " ioc " << ioc << dendl;
   assert(off % block_size == 0);
   assert(len % block_size == 0);
   assert(len > 0);
@@ -355,13 +365,13 @@ int NVMEDevice::aio_write(
     return r;
 	}
 
-  t->buf = rte_malloc(NULL, bl.length(), block_size);
+  t->buf = rte_malloc(NULL, len, block_size);
 	if (t->buf == NULL) {
 		derr << __func__ << " task->buf rte_malloc failed" << dendl;
     rte_mempool_put(task_pool, t);
     return -ENOMEM;
 	}
-  bl.copy(0, bl.length(), static_cast<char*>(t->buf));
+  bl.copy(0, len, static_cast<char*>(t->buf));
 
   t->ctx = ioc;
   t->command = IOCommand::WRITE_COMMAND;
@@ -411,7 +421,7 @@ int NVMEDevice::read(uint64_t off, uint64_t len, bufferlist *pbl,
                      IOContext *ioc,
                      bool buffered)
 {
-  dout(5) << __func__ << " " << off << "~" << len << dendl;
+  dout(5) << __func__ << " " << off << "~" << len << " ioc " << ioc << dendl;
   assert(off % block_size == 0);
   assert(len % block_size == 0);
   assert(len > 0);
@@ -454,7 +464,7 @@ int NVMEDevice::read(uint64_t off, uint64_t len, bufferlist *pbl,
   pbl->clear();
   pbl->push_back(p);
   r = t->read_code;
-  rte_free(t);
+  rte_free(t->buf);
 
  out:
   rte_mempool_put(task_pool, t);
