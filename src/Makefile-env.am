@@ -233,6 +233,10 @@ if WITH_LIBZFS
 LIBOS += libos_zfs.a -lzfs
 endif # WITH_LIBZFS
 
+if WITH_SPDK
+LIBOS += -lpciaccess -lspdk_nvme -lspdk_util -lspdk_memory -lrte_eal -lrte_mempool -lrte_ring
+endif # WITH_SPDK
+
 if WITH_TCMALLOC_MINIMAL
 LIBPERFGLUE += -ltcmalloc_minimal
 endif # WITH_TCMALLOC_MINIMAL

@@ -120,9 +120,8 @@ noinst_LIBRARIES += libos_zfs.a
 noinst_HEADERS += os/fs/ZFS.h
 endif
 
-if HAVE_SPDK
+if WITH_SPDK
 libos_a_CXXFLAGS = ${AM_CXXFLAGS} -I ${with_spdk}/include -fPIC
-libos_a_LIBADD += "-lspdk_nvme -lpciaccess -lpthread -lrte_eal -lrte_mempool -lrte_ring"
 libos_a_SOURCES += os/bluestore/NVMEDevice.cc
 noinst_HEADERS += os/bluestore/NVMEDevice.h
 endif
