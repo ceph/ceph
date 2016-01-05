@@ -47,7 +47,7 @@ BlockDevice *BlockDevice::create(const string& type, aio_callback_t cb, void *cb
   }
 #if defined(HAVE_SPDK)
   if (type == "ust-nvme") {
-    return new NVMEDeivce(cb, cbpriv);
+    return new NVMEDevice(cb, cbpriv);
   }
 #endif
 
