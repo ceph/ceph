@@ -46,6 +46,7 @@ BlockDevice::BlockDevice(aio_callback_t cb, void *cbpriv)
     fs(NULL), aio(false), dio(false),
     debug_lock("BlockDevice::debug_lock"),
     ioc_reap_lock("BlockDevice::ioc_reap_lock"),
+    flush_lock("BlockDevice::flush_lock"),
     aio_queue(g_conf->bdev_aio_max_queue_depth),
     aio_callback(cb),
     aio_callback_priv(cbpriv),
@@ -165,7 +166,15 @@ void BlockDevice::close()
 
 int BlockDevice::flush()
 {
+  // serialize flushers, so that we can avoid weird io_since_flush
+  // races (w/ multipler flushers).
+  Mutex::Locker l(flush_lock);
+  if (io_since_flush.read() == 0) {
+    dout(10) << __func__ << " no-op (no ios since last flush)" << dendl;
+    return 0;
+  }
   dout(10) << __func__ << " start" << dendl;
+  io_since_flush.set(0);
   if (g_conf->bdev_inject_crash) {
     // sleep for a moment to give other threads a chance to submit or
     // wait on io that races with a flush.
@@ -409,6 +418,8 @@ int BlockDevice::aio_write(
       ::sync_file_range(fd_buffered, off, len, SYNC_FILE_RANGE_WRITE);
     }
   }
+
+  io_since_flush.set(1);
   return 0;
 }
 
