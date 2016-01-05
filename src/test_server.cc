@@ -18,10 +18,12 @@ typedef std::unique_lock<std::mutex> Lock;
 
 TestServer::TestServer(int _iops,
 		       int _thread_pool_size,
-		       const std::function<ClientInfo(int)>& _clientInfoF) :
+		       const std::function<ClientInfo(int)>& _clientInfoF,
+		       const ClientResponseFunc& _clientResponseF) :
   priority_queue(_clientInfoF,
 		 std::bind(&TestServer::hasAvailThread, this),
 		 std::bind(&TestServer::innerPost, this, _1)),
+  clientResponseF(_clientResponseF),
   iops(_iops),
   thread_pool_size(_thread_pool_size),
   finishing(false)
@@ -59,18 +61,18 @@ void TestServer::run(std::chrono::milliseconds wait_delay) {
       inner_queue_cv.wait_for(l, wait_delay);
     }
     if (!inner_queue.empty()) {
-      auto item = std::move(inner_queue.front());
+      auto req = std::move(inner_queue.front());
       inner_queue.pop_front();
-      l.unlock();
 
+      l.unlock();
       // simulation operation by sleeping; then call function to
       // notify server of completion
       std::this_thread::sleep_for(op_time);
 
-      // send response
+      TestResponse resp(13, req->epoch);
+      sendResponse(req->client, resp);
 
       priority_queue.requestCompleted();
-
       l.lock(); // in prep for next iteration of loop
     } else {
       // since finishing and queue is empty, end thread
@@ -97,4 +99,8 @@ void TestServer::innerPost(std::unique_ptr<TestRequest> request) {
   Lock l(inner_queue_mtx);
   assert(!finishing);
   inner_queue.emplace_back(std::move(request));
+}
+
+
+void TestServer::sendResponse(int client, const TestResponse& resp) {
 }

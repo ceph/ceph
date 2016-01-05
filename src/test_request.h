@@ -38,4 +38,11 @@ struct TestResponse {
   {
     // empty
   }
+
+  TestResponse(const TestResponse& r) :
+    server(r.server),
+    epoch(r.epoch)
+  {
+    // empty
+  }
 }; // class TestResponse

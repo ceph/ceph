@@ -55,7 +55,7 @@ public:
 
   virtual ~TestClient();
 
-  void submitResponse(TestResponse&&);
+  void submitResponse(const TestResponse&);
 
   void waitForDone();
 

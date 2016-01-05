@@ -100,8 +100,8 @@ void TestClient::run_resp() {
 }
 
 
-void TestClient::submitResponse(TestResponse&& resp) {
+void TestClient::submitResponse(const TestResponse& resp) {
   Guard g(mtx_resp);
-  resp_queue.emplace_back(resp);
+  resp_queue.push_back(resp);
   cv_resp.notify_one();
 }

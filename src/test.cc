@@ -52,15 +52,25 @@ dmc::ClientInfo getClientInfo(int c) {
 }
 
 
+void send_response(TestClient** clients,
+		   int client_id,
+		   const TestResponse& resp) {
+  clients[client_id].submitResponse(resp);
+}
+
+
 int main(int argc, char* argv[]) {
   assert(COUNT(client_info) == COUNT(client_goals));
   const int client_count = COUNT(client_info);
 
-  auto client_info_f = std::function<dmc::ClientInfo(int)>(getClientInfo);
-
-  TestServer server(300, 7, client_info_f);
-
   TestClient** clients = new TestClient*[client_count];
+
+  auto client_info_f = std::function<dmc::ClientInfo(int)>(getClientInfo);
+  TestServer::ClientResponseFunc client_response_f =
+    std::bind(&send_response, clients, _1, _2);
+
+  TestServer server(300, 7, client_info_f, client_response_f);
+
   for (int i = 0; i < client_count; ++i) {
     clients[i] = new TestClient(i,
 				std::bind(&TestServer::post, &server, _1),

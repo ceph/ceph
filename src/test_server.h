@@ -27,7 +27,14 @@ class TestServer {
   typedef std::lock_guard<std::mutex>  Guard;
   typedef std::unique_ptr<TestRequest> QueueItem;
 
+public: 
+
+  typedef std::function<void(int,std::ref<TestResponse>)> ClientResponseFunc;
+
+protected:
+
   PriorityQueue<int,TestRequest> priority_queue;
+  ClientResponseFunc             clientResponseF;
   int                            iops;
   int                            thread_pool_size;
 
@@ -46,7 +53,8 @@ public:
   // TestServer(int _thread_pool_size);
   TestServer(int iops,
 	     int _thread_pool_size,
-	     const std::function<ClientInfo(int)>& _clientInfoF);
+	     const std::function<ClientInfo(int)>& _clientInfoF,
+	     const std::function<void(int,std::ref<TestResponse>)>& _clientResponseF);
 
   virtual ~TestServer();
 
@@ -60,4 +68,6 @@ protected:
   void innerPost(std::unique_ptr<TestRequest> request);
 	     
   void run(std::chrono::milliseconds wait_delay);
+
+  void sendResponse(int client, const TestResponse& resp);
 }; // class TestServer
