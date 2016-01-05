@@ -153,10 +153,6 @@ int RGWRemoteMetaLog::read_log_info(rgw_mdlog_info *log_info)
 
 int RGWRemoteMetaLog::init()
 {
-  CephContext *cct = store->ctx();
-  async_rados = new RGWAsyncRadosProcessor(store, cct->_conf->rgw_num_async_rados_threads);
-  async_rados->start();
-
   conn = store->rest_master_conn;
 
   int ret = http_manager.set_threaded();
@@ -174,10 +170,6 @@ void RGWRemoteMetaLog::finish()
 {
   going_down.set(1);
   stop();
-  if (async_rados) {
-    async_rados->stop();
-  }
-  delete async_rados;
 }
 
 int RGWRemoteMetaLog::list_shards(int num_shards)
