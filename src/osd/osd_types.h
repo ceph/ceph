@@ -3850,12 +3850,13 @@ struct ScrubMap {
     bool digest_present:1;
     bool omap_digest_present:1;
     bool read_error:1;
+    bool stat_error:1;
 
     object() :
       // Init invalid size so it won't match if we get a stat EIO error
       size(-1), omap_digest(0), digest(0), nlinks(0), 
       negative(false), digest_present(false), omap_digest_present(false), 
-      read_error(false) {}
+      read_error(false), stat_error(false) {}
 
     void encode(bufferlist& bl) const;
     void decode(bufferlist::iterator& bl);
