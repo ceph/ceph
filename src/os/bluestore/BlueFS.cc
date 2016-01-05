@@ -1020,7 +1020,7 @@ int BlueFS::_flush_range(FileWriter *h, uint64_t offset, uint64_t length)
       z.zero();
       t.append(z);
     }
-    bdev[p->bdev]->aio_write(p->offset + x_off, t, h->iocv[p->bdev], false);
+    bdev[p->bdev]->aio_write(p->offset + x_off, t, h->iocv[p->bdev], true);
     bloff += x_len;
     length -= x_len;
     ++p;
