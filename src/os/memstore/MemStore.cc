@@ -398,7 +398,7 @@ bool MemStore::collection_empty(coll_t cid)
   dout(10) << __func__ << " " << cid << dendl;
   CollectionRef c = get_collection(cid);
   if (!c)
-    return -ENOENT;
+    return false;
   RWLock::RLocker l(c->lock);
 
   return c->object_map.empty();
