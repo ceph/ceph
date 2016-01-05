@@ -55,7 +55,7 @@ static void io_complete(void *ctx, const struct nvme_completion *completion) {
   IOContext *ioc = (IOContext*)ctx;
   NVMEDevice *device = (NVMEDevice*)ioc->backend;
   if (ioc->priv) {
-    device->aio_callback(device->_callback_priv, ioc->priv);
+    device->aio_callback(device->aio_callback_priv, ioc->priv);
   }
 }
 
@@ -119,7 +119,7 @@ int NVMEDevice::open(string p)
       continue;
     }
 
-    if (sn_tag.compare(serial_number, 16)) {
+    if (sn_tag.compare(string(serial_number, 16))) {
       dout(10) << __func__ << " device serial number not match " << serial_number << dendl;
       continue;
     }
