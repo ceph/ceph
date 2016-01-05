@@ -364,6 +364,13 @@ void JournalMetadata::handle_watch_error(int err) {
   lderr(m_cct) << "journal watch error: " << cpp_strerror(err) << dendl;
   Mutex::Locker timer_locker(m_timer_lock);
   Mutex::Locker locker(m_lock);
+
+  // release old watch on error
+  if (m_watch_handle != 0) {
+    m_ioctx.unwatch2(m_watch_handle);
+    m_watch_handle = 0;
+  }
+
   if (m_initialized && err != -ENOENT) {
     schedule_watch_reset();
   }
