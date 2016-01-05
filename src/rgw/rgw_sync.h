@@ -109,10 +109,12 @@ class RGWRemoteMetaLog : public RGWCoroutinesManager {
   void init_sync_env(RGWMetaSyncEnv *env);
 
 public:
-  RGWRemoteMetaLog(RGWRados *_store, RGWMetaSyncStatusManager *_sm) : RGWCoroutinesManager(_store->ctx(), _store->get_cr_registry()), store(_store),
-                                       conn(NULL), async_rados(nullptr),
-                                       http_manager(store->ctx(), &completion_mgr),
-                                       status_manager(_sm), meta_sync_cr(NULL) {}
+  RGWRemoteMetaLog(RGWRados *_store, RGWAsyncRadosProcessor *async_rados,
+                   RGWMetaSyncStatusManager *_sm)
+    : RGWCoroutinesManager(_store->ctx(), _store->get_cr_registry()),
+      store(_store), conn(NULL), async_rados(async_rados),
+      http_manager(store->ctx(), &completion_mgr),
+      status_manager(_sm), meta_sync_cr(NULL) {}
 
   int init();
   void finish();
@@ -165,8 +167,9 @@ class RGWMetaSyncStatusManager {
   vector<string> clone_markers;
 
 public:
-  RGWMetaSyncStatusManager(RGWRados *_store) : store(_store), master_log(store, this), num_shards(0),
-                                               ts_to_shard_lock("ts_to_shard_lock") {}
+  RGWMetaSyncStatusManager(RGWRados *_store, RGWAsyncRadosProcessor *async_rados)
+    : store(_store), master_log(store, async_rados, this),
+      num_shards(0), ts_to_shard_lock("ts_to_shard_lock") {}
   int init();
   void finish();
 

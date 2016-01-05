@@ -156,11 +156,13 @@ class RGWRemoteDataLog : public RGWCoroutinesManager {
   bool initialized;
 
 public:
-  RGWRemoteDataLog(RGWRados *_store, RGWDataSyncStatusManager *_sm) : RGWCoroutinesManager(_store->ctx(), _store->get_cr_registry()), store(_store),
-                                       conn(NULL),
-                                       http_manager(store->ctx(), &completion_mgr),
-                                       status_manager(_sm), lock("RGWRemoteDataLog::lock"), data_sync_cr(NULL),
-                                       initialized(false) {}
+  RGWRemoteDataLog(RGWRados *_store, RGWAsyncRadosProcessor *async_rados,
+                   RGWDataSyncStatusManager *_sm)
+    : RGWCoroutinesManager(_store->ctx(), _store->get_cr_registry()),
+      store(_store), conn(NULL), async_rados(async_rados),
+      http_manager(store->ctx(), &completion_mgr),
+      status_manager(_sm), lock("RGWRemoteDataLog::lock"), data_sync_cr(NULL),
+      initialized(false) {}
 
   int init(const string& _source_zone, RGWRESTConn *_conn);
   void finish();
@@ -193,8 +195,10 @@ class RGWDataSyncStatusManager {
   int num_shards;
 
 public:
-  RGWDataSyncStatusManager(RGWRados *_store, const string& _source_zone) : store(_store), source_zone(_source_zone), conn(NULL),
-                                                                           source_log(store, this), num_shards(0) {}
+  RGWDataSyncStatusManager(RGWRados *_store, RGWAsyncRadosProcessor *async_rados,
+                           const string& _source_zone)
+    : store(_store), source_zone(_source_zone), conn(NULL),
+      source_log(store, async_rados, this), num_shards(0) {}
   int init();
 
   rgw_data_sync_status& get_sync_status() { return sync_status; }
