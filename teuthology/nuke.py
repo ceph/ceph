@@ -370,7 +370,7 @@ def synch_clocks(remotes):
 
 
 def stale_openstack(ctx):
-    targets = dict(map(lambda i: (i['Name'], i),
+    targets = dict(map(lambda i: (i['ID'], i),
                        OpenStack.list_instances()))
     nodes = list_locks(keyed_by_name=True, locked=True)
     stale_openstack_instances(ctx, targets, nodes)
@@ -387,11 +387,11 @@ OPENSTACK_DELAY = 30 * 60
 
 
 def stale_openstack_instances(ctx, instances, locked_nodes):
-    for (name, instance) in instances.iteritems():
-        i = OpenStackInstance(name)
+    for (instance_id, instance) in instances.iteritems():
+        i = OpenStackInstance(instance_id)
         if not i.exists():
             log.debug("stale-openstack: {instance} disappeared, ignored"
-                      .format(instance=name))
+                      .format(instance=instance_id))
             continue
         if (i.get_created() >
             config['max_job_time'] + OPENSTACK_DELAY):
@@ -457,11 +457,12 @@ def stale_openstack_volumes(ctx, volumes):
 
 
 def stale_openstack_nodes(ctx, instances, locked_nodes):
+    names = set([ i['Name'] for i in instances.values() ])
     for (name, node) in locked_nodes.iteritems():
         name = decanonicalize_hostname(name)
         if node['machine_type'] != 'openstack':
             continue
-        if (name not in instances and
+        if (name not in names and
                 locked_since_seconds(node) > OPENSTACK_DELAY):
             log.info("stale-openstack: unlocking node {name} unlocked"
                      " because it was created {created}"
