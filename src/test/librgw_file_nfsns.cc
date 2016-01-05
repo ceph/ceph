@@ -44,9 +44,6 @@ namespace {
 
   string bucket_name("nfsroot");
 
- struct rgw_file_handle *bmarker_fh;
-  bool do_marker1 = false;
-
   class obj_rec
   {
   public:
@@ -82,6 +79,21 @@ namespace {
   
   std::stack<obj_rec> obj_stack;
   std::deque<obj_rec> cleanup_queue;
+
+  bool do_marker1 = false;
+  string marker_dir("nfs_marker");
+  struct rgw_file_handle *bucket_fh = nullptr;
+  struct rgw_file_handle *marker_fh;
+  static constexpr int marker_nobjs = 5*1024;
+  std::deque<obj_rec> marker_objs;
+
+  using dirent_t = std::tuple<std::string, uint64_t>;
+  struct dirent_vec
+  {
+    std::vector<dirent_t> obj_names;
+    uint64_t count;
+    dirent_vec() : count(0) {}
+  };
 
   struct {
     int argc;
@@ -195,20 +207,85 @@ TEST(LibRGW, ENUMERATE1) {
 
 TEST(LibRGW, MARKER1_SETUP)
 {
+  /* "large" directory enumeration test.  this one deals only with
+   * file objects */
+
   if (do_marker1) {
     struct stat st;
-    struct rgw_file_handle *fh;
-    int ret = rgw_mkdir(fs, fs->root_fh, "nfs_marker", 755, &st, &fh);
-    ASSERT_EQ(ret, 0);
+
+    /* lookup nfsroot (bucket) */
     int ret = rgw_lookup(fs, fs->root_fh, bucket_name.c_str(), &bucket_fh,
-			0 /* flags */);
+			 RGW_LOOKUP_FLAG_NONE);
     ASSERT_EQ(ret, 0);
-    
+
+    ret = rgw_mkdir(fs, bucket_fh, marker_dir.c_str(), 755, &st, &marker_fh);
+    ASSERT_EQ(ret, 0);
+
+    for (int ix = 0; ix < marker_nobjs; ++ix) {
+      std::string object_name("f_");
+      object_name += to_string(ix);
+      obj_rec obj{object_name, nullptr, marker_fh, nullptr};
+      ret = rgw_lookup(fs, marker_fh, obj.name.c_str(), &obj.fh,
+		       RGW_LOOKUP_FLAG_CREATE);
+      ASSERT_EQ(ret, 0);
+      obj.rgw_fh = get_rgwfh(obj.fh);
+
+      size_t nbytes;
+      string data("data for ");
+      data += object_name;
+      int ret = rgw_write(fs, obj.fh, 0, data.length(), &nbytes,
+			  (void*) data.c_str());
+      ASSERT_EQ(ret, 0);
+      ASSERT_EQ(nbytes, data.length());
+      marker_objs.push_back(obj);
+    }
   }
+}
+
+extern "C" {
+  static bool r2_cb(const char* name, void *arg, uint64_t offset) {
+    dirent_vec& dvec =
+      *(static_cast<dirent_vec*>(arg));
+    lsubdout(cct, rgw, 10) << __func__
+			   << " bucket=" << bucket_name
+			   << " dir=" << marker_dir
+			   << " iv count=" << dvec.count
+			   << " called back name=" << name
+			   << dendl;
+    dvec.obj_names.push_back(dirent_t{name, offset});
+    return true; /* XXX */
+  }
+}
+
+TEST(LibRGW, MARKER1_READDIR)
+{
+  using std::get;
+
+  dirent_vec dvec;
+  uint64_t offset;
+  bool eof;
+
+  eof = false;
+  do {
+    int ret = rgw_readdir(fs, marker_fh, &offset, r2_cb, &dvec, &eof);
+    ASSERT_EQ(ret, 0);
+    ASSERT_EQ(offset, get<1>(dvec.obj_names.back())); // cookie check
+    ++dvec.count;
+  } while(!eof);
 }
 
 TEST(LibRGW, CLEANUP) {
   int rc;
+
+  if (do_marker1) {
+    for (auto& elt : marker_objs) {
+      cleanup_queue.push_back(elt);
+    }
+    marker_objs.clear();
+    cleanup_queue.push_back(
+      obj_rec{bucket_name, bucket_fh, fs->root_fh, get_rgwfh(fs->root_fh)});
+  }
+
   for (auto& elt : cleanup_queue) {
     if (elt.fh) {
       rc = rgw_fh_rele(fs, elt.fh, 0 /* flags */);
