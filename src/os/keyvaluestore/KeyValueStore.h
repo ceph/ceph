@@ -526,7 +526,7 @@ class KeyValueStore : public ObjectStore,
   int do_transactions(list<Transaction*> &tls, uint64_t op_seq) {
     return _do_transactions(tls, op_seq, 0);
   }
-  unsigned _do_transaction(Transaction& transaction,
+  void _do_transaction(Transaction& transaction,
                            BufferTransaction &bt,
                            ThreadPool::TPHandle *handle);
 
