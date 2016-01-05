@@ -675,7 +675,10 @@ class RGWAsyncRemoveObj : public RGWAsyncRadosRequest {
   RGWBucketInfo bucket_info;
 
   rgw_obj_key key;
+  string owner;
+  string owner_display_name;
   uint64_t versioned_epoch;
+  string marker_version_id;
 
   bool del_if_older;
   utime_t timestamp;
@@ -687,15 +690,24 @@ public:
                          const string& _source_zone,
                          RGWBucketInfo& _bucket_info,
                          const rgw_obj_key& _key,
+                         const string& _owner,
+                         const string& _owner_display_name,
                          uint64_t _versioned_epoch,
+                         bool _delete_marker,
                          bool _if_older,
                          utime_t& _timestamp) : RGWAsyncRadosRequest(cn), store(_store),
                                                       source_zone(_source_zone),
                                                       bucket_info(_bucket_info),
                                                       key(_key),
+                                                      owner(_owner),
+                                                      owner_display_name(_owner_display_name),
                                                       versioned_epoch(_versioned_epoch),
                                                       del_if_older(_if_older),
-                                                      timestamp(_timestamp) {}
+                                                      timestamp(_timestamp) {
+    if (_delete_marker) {
+      marker_version_id = key.instance;
+    }
+  }
 };
 
 class RGWRemoveObjCR : public RGWSimpleCoroutine {
@@ -708,6 +720,9 @@ class RGWRemoveObjCR : public RGWSimpleCoroutine {
 
   rgw_obj_key key;
   uint64_t versioned_epoch;
+  bool delete_marker;
+  string owner;
+  string owner_display_name;
 
   bool del_if_older;
   utime_t timestamp;
@@ -720,15 +735,27 @@ public:
                       RGWBucketInfo& _bucket_info,
                       const rgw_obj_key& _key,
                       uint64_t _versioned_epoch,
+                      string *_owner,
+                      string *_owner_display_name,
+                      bool _delete_marker,
                       utime_t *_timestamp) : RGWSimpleCoroutine(_store->ctx()), cct(_store->ctx()),
                                        async_rados(_async_rados), store(_store),
                                        source_zone(_source_zone),
                                        bucket_info(_bucket_info),
                                        key(_key),
-                                       versioned_epoch(_versioned_epoch) {
+                                       versioned_epoch(_versioned_epoch),
+                                       delete_marker(_delete_marker) {
     del_if_older = (_timestamp != NULL);
     if (_timestamp) {
       timestamp = *_timestamp;
+    }
+
+    if (_owner) {
+      owner = *_owner;
+    }
+
+    if (_owner_display_name) {
+      owner_display_name = *_owner_display_name;
     }
   }
 
@@ -738,7 +765,8 @@ public:
 
   int send_request() {
     req = new RGWAsyncRemoveObj(stack->create_completion_notifier(), store, source_zone, bucket_info,
-                                key, versioned_epoch, del_if_older, timestamp);
+                                key, owner, owner_display_name, versioned_epoch,
+                                delete_marker, del_if_older, timestamp);
     async_rados->queue(req);
     return 0;
   }
