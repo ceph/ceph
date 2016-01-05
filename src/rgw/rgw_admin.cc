@@ -4465,7 +4465,7 @@ next:
   }
   
   if (opt_cmd == OPT_MDLOG_FETCH) {
-    RGWMetaSyncStatusManager sync(store);
+    RGWMetaSyncStatusManager sync(store, store->get_async_rados());
 
     int ret = sync.init();
     if (ret < 0) {
@@ -4482,7 +4482,7 @@ next:
   }
 
   if (opt_cmd == OPT_METADATA_SYNC_STATUS) {
-    RGWMetaSyncStatusManager sync(store);
+    RGWMetaSyncStatusManager sync(store, store->get_async_rados());
 
     int ret = sync.init();
     if (ret < 0) {
@@ -4524,7 +4524,7 @@ next:
   }
 
   if (opt_cmd == OPT_METADATA_SYNC_INIT) {
-    RGWMetaSyncStatusManager sync(store);
+    RGWMetaSyncStatusManager sync(store, store->get_async_rados());
 
     int ret = sync.init();
     if (ret < 0) {
@@ -4540,7 +4540,7 @@ next:
 
 
   if (opt_cmd == OPT_METADATA_SYNC_RUN) {
-    RGWMetaSyncStatusManager sync(store);
+    RGWMetaSyncStatusManager sync(store, store->get_async_rados());
 
     int ret = sync.init();
     if (ret < 0) {
@@ -4560,7 +4560,7 @@ next:
       cerr << "ERROR: source zone not specified" << std::endl;
       return EINVAL;
     }
-    RGWDataSyncStatusManager sync(store, source_zone);
+    RGWDataSyncStatusManager sync(store, store->get_async_rados(), source_zone);
 
     int ret = sync.init();
     if (ret < 0) {
@@ -4605,7 +4605,7 @@ next:
       cerr << "ERROR: source zone not specified" << std::endl;
       return EINVAL;
     }
-    RGWDataSyncStatusManager sync(store, source_zone);
+    RGWDataSyncStatusManager sync(store, store->get_async_rados(), source_zone);
 
     int ret = sync.init();
     if (ret < 0) {
@@ -4625,7 +4625,7 @@ next:
       cerr << "ERROR: source zone not specified" << std::endl;
       return EINVAL;
     }
-    RGWDataSyncStatusManager sync(store, source_zone);
+    RGWDataSyncStatusManager sync(store, store->get_async_rados(), source_zone);
 
     int ret = sync.init();
     if (ret < 0) {

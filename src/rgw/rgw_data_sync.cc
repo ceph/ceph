@@ -371,18 +371,10 @@ int RGWRemoteDataLog::init(const string& _source_zone, RGWRESTConn *_conn)
   }
 
   source_zone = _source_zone;
-
-  CephContext *cct = store->ctx();
-  async_rados = new RGWAsyncRadosProcessor(store, cct->_conf->rgw_num_async_rados_threads);
-  async_rados->start();
-
   conn = _conn;
 
   int ret = http_manager.set_threaded();
   if (ret < 0) {
-    async_rados->stop();
-    delete async_rados;
-    async_rados = NULL;
     ldout(store->ctx(), 0) << "failed in http_manager.set_threaded() ret=" << ret << dendl;
     return ret;
   }
@@ -395,10 +387,6 @@ int RGWRemoteDataLog::init(const string& _source_zone, RGWRESTConn *_conn)
 void RGWRemoteDataLog::finish()
 {
   stop();
-  if (async_rados) {
-    async_rados->stop();
-  }
-  delete async_rados;
 }
 
 int RGWRemoteDataLog::get_shard_info(int shard_id)
