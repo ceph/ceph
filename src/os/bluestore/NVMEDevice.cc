@@ -21,6 +21,12 @@
 #include <fcntl.h>
 #include <unistd.h>
 
+#include <rte_config.h>
+#include <rte_cycles.h>
+#include <rte_mempool.h>
+#include <rte_malloc.h>
+#include <rte_lcore.h>
+
 #include "include/types.h"
 #include "include/compat.h"
 #include "common/errno.h"
@@ -75,12 +81,29 @@ NVMEDevice::NVMEDevice(aio_callback_t cb, void *cbpriv)
   zeros.zero();
 }
 
+static char *ealargs[] = {
+    "perf",
+    "-c 0x1", /* This must be the second parameter. It is overwritten by index in main(). */
+    "-n 4",
+};
+
 int NVMEDevice::open(string p)
 {
   int r = 0;
   dout(1) << __func__ << " path " << p << dendl;
 
   pci_device *pci_dev;
+
+  r = rte_eal_init(sizeof(ealargs) / sizeof(ealargs[0]), (char **)(void *)(uintptr_t)ealargs);
+  if (r < 0) {
+    derr << __func__ << " init dpdk failed" << dendl;
+    return r;
+  }
+
+  if (request_mempool == NULL) {
+    derr << __func__ << " could not initialize request mempool" << dendl;
+    return -1;
+  }
 
   pci_system_init();
 
@@ -101,12 +124,10 @@ int NVMEDevice::open(string p)
 
   string sn_tag = g_conf->bdev_nvme_serial_number;
   if (sn_tag.empty()) {
-    int r = -ENOENT;
+    r = -ENOENT;
     derr << __func__ << " empty serial number: " << cpp_strerror(r) << dendl;
     return r;
   }
-
-  unbindfromkernel = g_conf->bdev_nvme_unbind_from_kernel;
 
   char serial_number[128];
   while ((pci_dev = pci_device_next(iter)) != NULL) {
@@ -127,7 +148,7 @@ int NVMEDevice::open(string p)
     if (pci_device_has_kernel_driver(pci_dev)) {
       if (!pci_device_has_uio_driver(pci_dev)) {
         /*NVMe kernel driver case*/
-        if (unbindfromkernel) {
+        if (g_conf->bdev_nvme_unbind_from_kernel) {
           r =  pci_device_switch_to_uio_driver(pci_dev);
           if (r < 0) {
             derr << __func__ << " device " << pci_device_get_device_name(pci_dev) << " " << pci_dev->bus
@@ -174,12 +195,20 @@ int NVMEDevice::open(string p)
     if (num_ns > 1) {
       dout(0) << __func__ << " namespace count larger than 1, currently only use the first namespace" << dendl;
     }
-    nvme_namespace *ns = nvme_ctrlr_get_ns(ctrlr, 0);
+    ns = nvme_ctrlr_get_ns(ctrlr, 1);
+    if (!ns) {
+      derr << __func__ << " failed to get namespace at 1" << dendl;
+      return -1;
+    }
     block_size = nvme_ns_get_sector_size(ns);
     size = block_size * nvme_ns_get_num_sectors(ns);
     dout(1) << __func__ << " successfully attach nvme device at" << pci_device_get_device_name(pci_dev)
                         << " " << pci_dev->bus << ":" << pci_dev->dev << ":" << pci_dev->func << dendl;
     break;
+  }
+  if (pci_dev == NULL) {
+    derr << __func__ << " failed to found nvme serial number " << sn_tag << dend;
+    return -ENOENT;
   }
 
   pci_iterator_destroy(iter);
