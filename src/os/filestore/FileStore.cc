@@ -2081,20 +2081,17 @@ int FileStore::_do_transactions(
   uint64_t op_seq,
   ThreadPool::TPHandle *handle)
 {
-  int r = 0;
   int trans_num = 0;
 
   for (list<Transaction*>::iterator p = tls.begin();
        p != tls.end();
        ++p, trans_num++) {
-    r = _do_transaction(**p, op_seq, trans_num, handle);
-    if (r < 0)
-      break;
+    _do_transaction(**p, op_seq, trans_num, handle);
     if (handle)
       handle->reset_tp_timeout();
   }
 
-  return r;
+  return 0;
 }
 
 void FileStore::_set_global_replay_guard(coll_t cid,
@@ -2355,7 +2352,7 @@ int FileStore::_check_replay_guard(int fd, const SequencerPosition& spos)
   }
 }
 
-unsigned FileStore::_do_transaction(
+void FileStore::_do_transaction(
   Transaction& t, uint64_t op_seq, int trans_num,
   ThreadPool::TPHandle *handle)
 {
@@ -2875,8 +2872,6 @@ unsigned FileStore::_do_transaction(
   }
 
   _inject_failure();
-
-  return 0;  // FIXME count errors
 }
 
   /*********************************************/
