@@ -523,6 +523,10 @@ int RGWAsyncRemoveObj::_send_request()
   if (del_if_older) {
     del_op.params.unmod_since = timestamp;
   }
+  del_op.params.olh_epoch = versioned_epoch;
+  del_op.params.marker_version_id = marker_version_id;
+  del_op.params.obj_owner.set_id(owner);
+  del_op.params.obj_owner.set_name(owner_display_name);
 
   ret = del_op.delete_obj();
   if (ret < 0) {
