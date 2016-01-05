@@ -277,12 +277,7 @@ private:
       RWLock::RLocker snap_locker(m_ictx->snap_lock);
       if (m_ictx->object_map != nullptr) {
         bool copy_on_read = m_pending_requests.empty();
-        if (!m_ictx->exclusive_lock->is_lock_owner()) {
-          ldout(m_ictx->cct, 20) << "exclusive lock not held for copyup request"
-                                 << dendl;
-          assert(copy_on_read);
-          return true;
-        }
+        assert(m_ictx->exclusive_lock->is_lock_owner());
 
         RWLock::WLocker object_map_locker(m_ictx->object_map_lock);
         if (copy_on_read &&
