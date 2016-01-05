@@ -90,15 +90,15 @@ static char *ealargs[] = {
 void NVMEDevice::init()
 {
   int r = rte_eal_init(sizeof(ealargs) / sizeof(ealargs[0]), (char **)(void *)(uintptr_t)ealargs);
-  if (r < 0) {
-    derr << __func__ << " init dpdk failed" << dendl;
+  if (r < 0)
     assert(0);
-  }
 
-  if (request_mempool == NULL) {
-    derr << __func__ << " could not initialize request mempool" << dendl;
+	request_mempool = rte_mempool_create("nvme_request", 8192,
+                                       nvme_request_size(), 128, 0,
+                                       NULL, NULL, NULL, NULL,
+                                       SOCKET_ID_ANY, 0);
+  if (request_mempool == NULL)
     assert(0);
-  }
 }
 
 int NVMEDevice::open(string p)
@@ -213,7 +213,7 @@ int NVMEDevice::open(string p)
     break;
   }
   if (pci_dev == NULL) {
-    derr << __func__ << " failed to found nvme serial number " << sn_tag << dend;
+    derr << __func__ << " failed to found nvme serial number " << sn_tag << dendl;
     return -ENOENT;
   }
 
@@ -223,7 +223,6 @@ int NVMEDevice::open(string p)
           << " block_size " << block_size << " (" << pretty_si_t(block_size)
           << "B)" << dendl;
 
-  name = pci_device_get_device_name(pci_dev);
   return 0;
 }
 
