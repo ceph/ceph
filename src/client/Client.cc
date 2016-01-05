@@ -1570,7 +1570,7 @@ int Client::make_request(MetaRequest *request,
     request->resend_mds = use_mds;
 
   while (1) {
-    if (request->aborted)
+    if (request->aborted())
       break;
 
     // set up wait cond
@@ -1607,7 +1607,7 @@ int Client::make_request(MetaRequest *request,
 	wait_on_context_list(session->waiting_for_open);
         // Abort requests on REJECT from MDS
         if (rejected_by_mds.count(mds)) {
-          request->aborted = true;
+          request->abort(-EPERM);
           break;
         }
 	continue;
@@ -1637,12 +1637,12 @@ int Client::make_request(MetaRequest *request,
   }
 
   if (!request->reply) {
-    assert(request->aborted);
+    assert(request->aborted());
     assert(!request->got_unsafe);
     request->item.remove_myself();
     unregister_request(request);
     put_request(request); // ours
-    return -ETIMEDOUT;
+    return request->get_abort_code();
   }
 
   // got it!
@@ -5301,7 +5301,7 @@ void Client::tick()
   if (!mounted && !mds_requests.empty()) {
     MetaRequest *req = mds_requests.begin()->second;
     if (req->op_stamp + cct->_conf->client_mount_timeout < now) {
-      req->aborted = true;
+      req->abort(-ETIMEDOUT);
       if (req->caller_cond) {
 	req->kick = true;
 	req->caller_cond->Signal();
