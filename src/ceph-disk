@@ -593,7 +593,7 @@ def list_partitions_device(dev):
     Return a list of partitions on the given device name
     """
     partitions = []
-    basename = os.path.basename(dev)
+    basename = get_dev_name(dev)
     for name in os.listdir(block_path(dev)):
         if name.startswith(basename):
             partitions.append(name)
@@ -614,7 +614,7 @@ def get_partition_base(dev):
     # find the base
     for basename in os.listdir('/sys/block'):
         if os.path.exists(os.path.join('/sys/block', basename, name)):
-            return '/dev/' + basename
+            return get_dev_path(basename)
     raise Error('no parent device for partition', dev)
 
 def is_partition_mpath(dev):
@@ -2769,6 +2769,19 @@ def _deallocate_osd_id(cluster, osd_id):
                 ],
             )
 
+def destroy_lookup_device(args, predicate, description):
+    devices = list_devices()
+    for device in devices:
+        for partition in device.get('partitions', []):
+            if partition['dmcrypt']:
+                dmcrypt_path = dmcrypt_map(partition['path'],
+                                           args.dmcrypt_key_dir)
+                list_dev_osd(dmcrypt_path, {}, partition)
+                dmcrypt_unmap(partition['uuid'])
+            if predicate(partition):
+                return partition
+    raise Error('found no device matching ', description)
+
 def main_destroy(args):
     osd_id = args.destroy_by_id
     path = args.path
@@ -2781,63 +2794,15 @@ def main_destroy(args):
             raise Error(path + " must be a partition device")
         path = os.path.realpath(path)
 
-    devices = list_devices([])
-    for device in devices:
-        if 'partitions' in device:
-            for dev_part in device.get('partitions'):
-                """
-                re-map the unmapped device for check device information
-                we need more overhead if user pass the osd_id
+    if path:
+        target_dev = destroy_lookup_device(
+            args, lambda x: x.get('path') == path,
+            path)
+    elif osd_id:
+        target_dev = destroy_lookup_device(
+            args, lambda x: x.get('whoami') == osd_id,
+            'osd id ' + str(osd_id))
 
-                the reason is we must re-map the dmcrypt map that we can
-                confirm the osd_id match with whoami
-                """
-                if path and 'path' in dev_part and \
-                   dev_part['path'] != path:
-                    continue
-                elif osd_id and 'whoami' in dev_part and \
-                     dev_part['whoami'] != osd_id:
-                    continue
-                elif path and dev_part['path'] == path and \
-                   not dev_part['dmcrypt']:
-                    target_dev = dev_part
-                    break
-                elif osd_id and 'whoami' in dev_part and \
-                     dev_part['whoami'] == osd_id and not dev_part['dmcrypt']:
-                    target_dev = dev_part
-                    break
-                elif dev_part['dmcrypt'] and \
-                     not dev_part['dmcrypt']['holders']:
-                    rawdev = dev_part['path']
-                    ptype = dev_part['ptype']
-                    if ptype in [DMCRYPT_OSD_UUID]:
-                        luks = False
-                        cryptsetup_parameters = ['--key-size', '256']
-                    elif ptype in [DMCRYPT_LUKS_OSD_UUID]:
-                        luks = True
-                        cryptsetup_parameters = []
-                    else:
-                        raise Error('Cannot identify the device partiton type!!!')
-                    part_uuid = dev_part['uuid']
-                    dmcrypt_key_path = get_dmcrypt_key_path(part_uuid, dmcrypt_key_dir, luks)
-                    dev_path = dmcrypt_map(
-                            rawdev=rawdev,
-                            keypath=dmcrypt_key_path,
-                            _uuid=part_uuid,
-                            cryptsetup_parameters=cryptsetup_parameters,
-                            luks=luks,
-                            format_dev=False,
-                            )
-                    devices = list_devices([rawdev])
-                    for dev in devices:
-                        if (path and 'path' in dev and dev['path'] == path) or \
-                           (osd_id and 'whoami' in dev and dev['whoami'] == osd_id):
-                            dmcrypt = True
-                            target_dev = dev
-                            break
-                    dmcrypt_unmap(part_uuid)
-    if not target_dev:
-        raise Error('Cannot find any match device!!')
     osd_id = target_dev['whoami']
     dev_path = target_dev['path']
     journal_part_uuid = target_dev['journal_uuid']
@@ -3154,7 +3119,8 @@ def list_format_dev_plain(dev, devices=[], prefix=''):
                           DMCRYPT_LUKS_JOURNAL_UUID):
         dmcrypt = dev['dmcrypt']
         if dmcrypt['holders'] and len(dmcrypt['holders']) == 1:
-            desc = ['ceph journal (dmcrypt %s /dev/%s)' % (dmcrypt['type'], dmcrypt['holders'][0])]
+            holder = get_dev_path(dmcrypt['holders'][0])
+            desc = ['ceph journal (dmcrypt %s %s)' % (dmcrypt['type'], holder)]
         else:
             desc = ['ceph journal (dmcrypt %s)' % dmcrypt['type']]
         if dev.get('journal_for'):
@@ -3209,14 +3175,14 @@ def list_dev(dev, uuid_map, journal_map):
         info['dmcrypt']['holders'] = holders
         info['dmcrypt']['type'] = 'plain'
         if len(holders) == 1:
-            list_dev_osd('/dev/' + holders[0], uuid_map, info)
+            list_dev_osd(get_dev_path(holders[0]), uuid_map, info)
     elif ptype == DMCRYPT_LUKS_OSD_UUID:
         holders = is_held(dev)
         info['type'] = 'data'
         info['dmcrypt']['holders'] = holders
         info['dmcrypt']['type'] = 'LUKS'
         if len(holders) == 1:
-            list_dev_osd('/dev/' + holders[0], uuid_map, info)
+            list_dev_osd(get_dev_path(holders[0]), uuid_map, info)
     elif ptype in (JOURNAL_UUID, MPATH_JOURNAL_UUID):
         info['type'] = 'journal'
         if ptype == MPATH_JOURNAL_UUID:
@@ -3274,7 +3240,7 @@ def list_devices():
                     holders = is_held(dev)
                     if len(holders) != 1:
                         continue
-                    dev_to_mount = '/dev/' + holders[0]
+                    dev_to_mount = get_dev_path(holders[0])
                 else:
                     dev_to_mount = dev
 
