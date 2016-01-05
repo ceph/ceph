@@ -17,6 +17,7 @@
 #ifndef CEPH_OS_BLUESTORE_NVMEDEVICE
 #define CEPH_OS_BLUESTORE_NVMEDEVICE
 
+#include <queue>
 #include <pciaccess.h>
 
 // since _Static_assert introduced in c11
@@ -33,7 +34,28 @@ extern "C" {
 }
 #endif
 
+#include "include/atomic.h"
+#include "common/Mutex.h"
 #include "BlockDevice.h"
+
+enum class IOCommand {
+  READ_COMMAND,
+  WRITE_COMMAND
+};
+
+class NVMEDevice;
+
+struct Task {
+  NVMEDevice *device;
+  IOContext *ctx;
+  IOCommand command;
+  uint64_t offset, len;
+  void *buf;
+  union {
+    Task *next;
+    int64_t read_code;
+  };
+};
 
 class NVMEDevice : public BlockDevice {
   /**
@@ -48,7 +70,23 @@ class NVMEDevice : public BlockDevice {
   uint64_t size;
   uint64_t block_size;
 
+  bool aio_stop;
   bufferptr zeros;
+
+  Mutex queue_lock;
+  Cond queue_cond;
+  std::queue<Task*> task_queue;
+
+  struct AioCompletionThread : public Thread {
+    NVMEDevice *dev;
+    AioCompletionThread(NVMEDevice *b) : dev(b) {}
+    void *entry() {
+      dev->_aio_thread();
+      return NULL;
+    }
+  } aio_thread;
+
+  void _aio_thread();
 
   static void init();
 
