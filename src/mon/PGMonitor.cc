@@ -1275,8 +1275,10 @@ void PGMonitor::_mark_pg_stale(pg_t pgid, const pg_stat_t& cur_stat)
   } else {
     stat = &q->second;
   }
-  stat->state |= PG_STATE_STALE;
-  stat->last_unstale = ceph_clock_now(g_ceph_context);
+  if (stat->acting_primary == cur_stat.acting_primary) {
+    stat->state |= PG_STATE_STALE;  
+    stat->last_unstale = ceph_clock_now(g_ceph_context);
+  }
 }
 
 bool PGMonitor::check_down_pgs()
