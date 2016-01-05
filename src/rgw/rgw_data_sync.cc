@@ -1588,6 +1588,9 @@ struct bucket_entry_owner {
   string id;
   string display_name;
 
+  bucket_entry_owner() {}
+  bucket_entry_owner(const string& _id, const string& _display_name) : id(_id), display_name(_display_name) {}
+
   void decode_json(JSONObj *obj) {
     JSONDecoder::decode_json("ID", id, obj);
     JSONDecoder::decode_json("DisplayName", display_name, obj);
@@ -1879,6 +1882,7 @@ class RGWBucketSyncSingleEntryCR : public RGWCoroutine {
 
   rgw_obj_key key;
   uint64_t versioned_epoch;
+  bucket_entry_owner owner;
   utime_t timestamp;
   RGWModifyOp op;
   RGWPendingState op_state;
@@ -1894,18 +1898,21 @@ public:
                              const string& _source_zone, RGWBucketInfo *_bucket_info, int _shard_id,
                              const rgw_obj_key& _key, uint64_t _versioned_epoch,
                              utime_t& _timestamp,
+                             const bucket_entry_owner& _owner,
                              RGWModifyOp _op, RGWPendingState _op_state,
 		             const T& _entry_marker, RGWSyncShardMarkerTrack<T, K> *_marker_tracker) : RGWCoroutine(_store->ctx()), store(_store),
 						      async_rados(_async_rados),
 						      source_zone(_source_zone),
                                                       bucket_info(_bucket_info), shard_id(_shard_id),
                                                       key(_key), versioned_epoch(_versioned_epoch),
+                                                      owner(_owner),
                                                       timestamp(_timestamp), op(_op),
                                                       op_state(_op_state),
                                                       entry_marker(_entry_marker),
                                                       marker_tracker(_marker_tracker),
                                                       sync_status(0) {
-    set_description() << "bucket sync single entry (source_zone=" << source_zone << ") b=" << bucket_info->bucket << ":" << shard_id <<"/" << key << "[" << versioned_epoch << "] log_entry=" << entry_marker;
+    set_description() << "bucket sync single entry (source_zone=" << source_zone << ") b=" << bucket_info->bucket << ":" << shard_id <<"/" << key << "[" << versioned_epoch << "] log_entry=" << entry_marker << " op=" << (int)op << " op_state=" << (int)op_state;
+    ldout(store->ctx(), 20) << "bucket sync single entry (source_zone=" << source_zone << ") b=" << bucket_info->bucket << ":" << shard_id <<"/" << key << "[" << versioned_epoch << "] log_entry=" << entry_marker << " op=" << (int)op << " op_state=" << (int)op_state << dendl;
     set_status("init");
   }
 
@@ -1932,7 +1939,12 @@ public:
                                          key, versioned_epoch,
                                          true));
           } else if (op == CLS_RGW_OP_DEL) {
-            call(new RGWRemoveObjCR(async_rados, store, source_zone, *bucket_info, key, versioned_epoch, &timestamp));
+            set_status("removing obj");
+            call(new RGWRemoveObjCR(async_rados, store, source_zone, *bucket_info, key, versioned_epoch, NULL, NULL, false, &timestamp));
+          } else if (op == CLS_RGW_OP_LINK_OLH_DM) {
+            set_status("creating delete marker");
+            ldout(store->ctx(), 10) << "creating delete marker: obj: " << source_zone << "/" << bucket_info->bucket << "/" << key << "[" << versioned_epoch << "]" << dendl;
+            call(new RGWRemoveObjCR(async_rados, store, source_zone, *bucket_info, key, versioned_epoch, &owner.id, &owner.display_name, true, &timestamp));
           }
         }
       } while (marker_tracker->need_retry(key));
@@ -2066,7 +2078,8 @@ int RGWBucketShardFullSyncCR::operate()
 
           yield {
             spawn(new RGWBucketSyncSingleEntryCR<rgw_obj_key, rgw_obj_key>(store, async_rados, source_zone, bucket_info, shard_id,
-                                                                           entry->key, entry->versioned_epoch, entry->mtime, op, CLS_RGW_STATE_COMPLETE, entry->key, marker_tracker), false);
+                                                                           entry->key, entry->versioned_epoch, entry->mtime,
+                                                                           entry->owner, op, CLS_RGW_STATE_COMPLETE, entry->key, marker_tracker), false);
           }
         }
         while ((int)num_spawned() > spawn_window) {
@@ -2253,11 +2266,13 @@ int RGWBucketShardIncrementalSyncCR::operate()
             ldout(store->ctx(), 0) << "ERROR: cannot start syncing " << entry->id << ". Duplicate entry?" << dendl;
           } else {
             uint64_t versioned_epoch = 0;
+            bucket_entry_owner owner(entry->owner, entry->owner_display_name);
             if (entry->ver.pool < 0) {
               versioned_epoch = entry->ver.epoch;
             }
             spawn(new RGWBucketSyncSingleEntryCR<string, rgw_obj_key>(store, async_rados, source_zone, bucket_info, shard_id,
-                                                         key, versioned_epoch, entry->timestamp, entry->op, entry->state, entry->id, marker_tracker), false);
+                                                         key, versioned_epoch, entry->timestamp, owner, entry->op,
+                                                         entry->state, entry->id, marker_tracker), false);
           }
         // }
         while ((int)num_spawned() > spawn_window) {
