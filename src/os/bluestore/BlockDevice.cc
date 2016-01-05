@@ -404,6 +404,10 @@ int BlockDevice::aio_write(
       derr << __func__ << " pwritev error: " << cpp_strerror(r) << dendl;
       return r;
     }
+    if (buffered) {
+      // initiate IO (but do not wait)
+      ::sync_file_range(fd_buffered, off, len, SYNC_FILE_RANGE_WRITE);
+    }
   }
   return 0;
 }
