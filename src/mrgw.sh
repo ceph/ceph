@@ -15,7 +15,8 @@ run_root=$script_root/run/$name
 pidfile=$run_root/out/radosgw.${port}.pid
 
 asokfile=$run_root/out/radosgw.${port}.asok
+logfile=$run_root/out/radosgw.${port}.log
 
 $script_root/mstop.sh $name radosgw $port
 
-$script_root/mrun $name radosgw --rgw-frontends="civetweb port=$port" --pid-file=$pidfile --admin-socket=$asokfile "$@"
+$script_root/mrun $name radosgw --rgw-frontends="civetweb port=$port" --pid-file=$pidfile --admin-socket=$asokfile "$@" --log-file=$logfile
