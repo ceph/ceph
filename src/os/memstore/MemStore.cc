@@ -198,7 +198,9 @@ int MemStore::mkfs()
     if (r < 0)
       return r;
     dout(1) << __func__ << " new fsid " << fsid_str << dendl;
-  } else {
+  } else if (r < 0) {
+    return r;
+  } else {  
     dout(1) << __func__ << " had fsid " << fsid_str << dendl;
   }
 
