@@ -258,6 +258,8 @@ public:
     return nspace;
   }
 
+  bool parse(const string& s);
+
   void encode(bufferlist& bl) const;
   void decode(bufferlist::iterator& bl);
   void decode(json_spirit::Value& v);
@@ -414,6 +416,8 @@ public:
   void set_shard(shard_id_t s) {
     shard_id = s;
   }
+
+  bool parse(const string& s);
 
   // maximum sorted value.
   static ghobject_t get_max() {
