@@ -170,9 +170,15 @@ private:
 
     dout(20) << __func__ << ": " << *ctx << dendl;
 
-    if (ret > 0)
-      ret = 0;
-    ctx->reply.error = htonl(ret);
+    if (ret < 0) {
+      ctx->reply.error = htonl(-ret);
+    } else if (ret != static_cast<int>(ctx->request.len)) {
+      derr << __func__ << ": " << *ctx << ": unexpected return value: " << ret
+	   << " (" << ctx->request.len << " expected)" << dendl;
+      ctx->reply.error = htonl(EIO);
+    } else {
+      ctx->reply.error = htonl(0);
+    }
     ctx->server->io_finish(ctx);
 
     aio_completion->release();
