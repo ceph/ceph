@@ -53,12 +53,11 @@ static void io_complete(void *t, const struct nvme_completion *completion) {
     dout(20) << __func__ << " write op successfully, left " << left << dendl;
     if (!left) {
       ctx->backend_priv = nullptr;
+      if (ctx->priv)
+        task->device->aio_callback(task->device->aio_callback_priv, ctx->priv);
       if (ctx->num_waiting.read()) {
         Mutex::Locker l(ctx->lock);
         ctx->cond.Signal();
-      }
-      if (ctx->priv) {
-        task->device->aio_callback(task->device->aio_callback_priv, ctx->priv);
       }
     }
     rte_free(task->buf);
