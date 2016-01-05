@@ -462,7 +462,7 @@ public:
   int do_transactions(list<Transaction*> &tls, uint64_t op_seq) {
     return _do_transactions(tls, op_seq, 0);
   }
-  unsigned _do_transaction(
+  void _do_transaction(
     Transaction& t, uint64_t op_seq, int trans_num,
     ThreadPool::TPHandle *handle);
 
