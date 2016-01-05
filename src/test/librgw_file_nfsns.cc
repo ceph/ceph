@@ -42,7 +42,10 @@ namespace {
   struct rgw_fs *fs = nullptr;
   CephContext* cct = nullptr;
 
-  string bucket_name = "nfsroot";
+  string bucket_name("nfsroot");
+
+ struct rgw_file_handle *bmarker_fh;
+  bool do_marker1 = false;
 
   class obj_rec
   {
@@ -190,6 +193,20 @@ TEST(LibRGW, ENUMERATE1) {
   }
 }
 
+TEST(LibRGW, MARKER1_SETUP)
+{
+  if (do_marker1) {
+    struct stat st;
+    struct rgw_file_handle *fh;
+    int ret = rgw_mkdir(fs, fs->root_fh, "nfs_marker", 755, &st, &fh);
+    ASSERT_EQ(ret, 0);
+    int ret = rgw_lookup(fs, fs->root_fh, bucket_name.c_str(), &bucket_fh,
+			0 /* flags */);
+    ASSERT_EQ(ret, 0);
+    
+  }
+}
+
 TEST(LibRGW, CLEANUP) {
   int rc;
   for (auto& elt : cleanup_queue) {
@@ -245,6 +262,9 @@ int main(int argc, char *argv[])
     } else if (ceph_argparse_witharg(args, arg_iter, &val, "--bn",
 				     (char*) nullptr)) {
       bucket_name = val;
+    } else if (ceph_argparse_flag(args, arg_iter, "--marker1",
+					    (char*) nullptr)) {
+      do_marker1 = true;
     } else {
       ++arg_iter;
     }
