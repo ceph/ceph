@@ -281,9 +281,8 @@ class TestCephDisk(object):
         data_partition = c.get_osd_partition(osd_uuid)
         c.sh("ceph-disk --verbose deactivate " + data_partition['path'])
         c.wait_for_osd_down(osd_uuid)
-        c.sh("ceph-disk --verbose activate " + data_partition['path'] +
+        c.sh("ceph-disk --verbose activate-journal " + data_partition['journal_dev'] +
              " --reactivate" + " --dmcrypt")
-        # check again
         c.wait_for_osd_up(osd_uuid)
         c.check_osd_status(osd_uuid, have_journal)
         c.destroy_osd(osd_uuid)
