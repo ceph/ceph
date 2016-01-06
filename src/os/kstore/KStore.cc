@@ -754,6 +754,7 @@ int KStore::_write_fsid()
   }
   r = ::fsync(fsid_fd);
   if (r < 0) {
+    r = -errno;
     derr << __func__ << " fsid fsync failed: " << cpp_strerror(r) << dendl;
     return r;
   }
@@ -854,8 +855,6 @@ int KStore::_open_db(bool create)
 			  fn);
   if (!db) {
     derr << __func__ << " error creating db" << dendl;
-    delete db;
-    db = NULL;
     return -EIO;
   }
   string options;
@@ -3127,7 +3126,7 @@ int KStore::_truncate(TransContext *txc,
 
   RWLock::WLocker l(c->lock);
   OnodeRef o = c->get_onode(oid, false);
-  if (!o->exists) {
+  if (!o || !o->exists) {
     r = -ENOENT;
     goto out;
   }
@@ -3144,7 +3143,6 @@ int KStore::_do_remove(TransContext *txc,
 		       OnodeRef o)
 {
   string key;
-  o->exists = false;
 
   _do_truncate(txc, o, 0);
 
@@ -3411,10 +3409,6 @@ int KStore::_omap_rmkeys(TransContext *txc,
   if (!o->onode.omap_head) {
     r = 0;
     goto out;
-  }
-  if (!o->onode.omap_head) {
-    o->onode.omap_head = o->onode.nid;
-    txc->write_onode(o);
   }
   ::decode(num, p);
   while (num--) {
@@ -3695,7 +3689,6 @@ int KStore::_remove_collection(TransContext *txc, coll_t cid,
 {
   dout(15) << __func__ << " " << cid << dendl;
   int r;
-  bufferlist empty;
 
   {
     RWLock::WLocker l(coll_lock);
