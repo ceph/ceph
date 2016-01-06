@@ -320,15 +320,15 @@ namespace rgw {
 
     const std::string& object_name() const { return name; }
 
-    std::string full_object_name(uint8_t min_depth = 1) {
-      if (depth <= min_depth) {
+    std::string full_object_name(bool omit_bucket = false) {
+      if (depth <= 1) {
 	return "";
       }
       std::string path;
       std::vector<const std::string*> segments;
       int reserve = 0;
       RGWFileHandle* tfh = this;
-      while (tfh && !tfh->is_bucket()) {
+      while (tfh && !tfh->is_root() && !(tfh->is_bucket() && omit_bucket)) {
 	segments.push_back(&tfh->object_name());
 	reserve += (1 + tfh->object_name().length());
 	tfh = tfh->parent;
@@ -338,13 +338,25 @@ namespace rgw {
       for (auto& s : boost::adaptors::reverse(segments)) {
 	if (! first)
 	  path += "/";
-	else
+	else {
+	  if (!omit_bucket && (path.front() != '/')) // pretty-print
+	    path += "/";
 	  first = false;
+	}
 	path += *s;
       }
       return path;
     }
 
+    inline std::string relative_object_name() {
+      return full_object_name(false /* omit_bucket */);
+    }
+
+
+    inline std::string search_prefix() {
+      return full_object_name(true /* omit_bucket */);
+    }
+    
     inline std::string make_key_name(const char *name) {
       std::string key_name{full_object_name()};
       if (key_name.length() > 0)
@@ -922,7 +934,7 @@ public:
     // woo
     s->user = user;
 
-    prefix = rgw_fh->full_object_name();
+    prefix = rgw_fh->search_prefix();
     if (prefix.length() > 0)
       prefix += "/";
     delimiter = '/';
@@ -1574,7 +1586,7 @@ public:
     // woo
     s->user = user;
 
-    prefix = rgw_fh->full_object_name();
+    prefix = rgw_fh->search_prefix();
     if (prefix.length() > 0)
       prefix += "/";
     prefix += path;
