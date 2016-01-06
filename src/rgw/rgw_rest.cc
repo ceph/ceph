@@ -1203,13 +1203,13 @@ int RGWHandler_ObjStore::allocate_formatter(struct req_state *s, int default_typ
 
 int RGWHandler_ObjStore::validate_tenant_name(string const& t)
 {
-  struct tench {
-    static bool is_good(char ch) {
-      return isalnum(ch) || ch == '_';
-    }
-  };
-  std::string::const_iterator it = std::find_if(t.begin(), t.end(), tench::is_good);
-  return (it == t.end())? 0: -ERR_INVALID_BUCKET_NAME;
+  const char *p = t.c_str();
+  for (int i = 0; i < t.size(); i++) {
+    char ch = p[i];
+    if (!(isalnum(ch) || ch == '_'))
+      return -ERR_INVALID_TENANT_NAME;
+  }
+  return 0;
 }
 
 // This function enforces Amazon's spec for bucket names.
