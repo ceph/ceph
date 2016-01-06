@@ -41,7 +41,7 @@ namespace rgw {
     int stop();
   };
 
-  extern RGWLib librgw;
+  extern RGWLib rgwlib;
 
 /* request interface */
 
@@ -159,7 +159,7 @@ namespace rgw {
 
     RGWLibContinuedReq(CephContext* _cct, RGWUserInfo* _user)
       :  RGWLibRequest(_cct, _user), io_ctx(),
-	 rstate(_cct, &io_ctx.get_env(), _user), rados_ctx(librgw.get_store(),
+	 rstate(_cct, &io_ctx.get_env(), _user), rados_ctx(rgwlib.get_store(),
 							   &rstate)
       {
 	io_ctx.init(_cct);
