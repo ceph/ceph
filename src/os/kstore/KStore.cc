@@ -1599,6 +1599,7 @@ int KStore::fiemap(
   size_t len,
   bufferlist& bl)
 {
+  assert(len != 0);
   map<uint64_t, uint64_t> m;
   CollectionRef c = _get_collection(cid);
   if (!c)
@@ -1610,11 +1611,8 @@ int KStore::fiemap(
     return -ENOENT;
   }
 
-  if (offset == len && offset == 0)
-    len = o->onode.size;
-
   if (offset > o->onode.size)
-    return 0;
+    goto out;
 
   if (offset + len > o->onode.size) {
     len = o->onode.size - offset;
@@ -1624,7 +1622,7 @@ int KStore::fiemap(
 	   << o->onode.size << dendl;
 
 #warning write fiemap
-
+out:
   ::encode(m, bl);
   dout(20) << __func__ << " " << offset << "~" << len
 	   << " size = 0 (" << m << ")" << dendl;

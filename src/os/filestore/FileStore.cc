@@ -3104,6 +3104,7 @@ int FileStore::fiemap(coll_t cid, const ghobject_t& oid,
                     uint64_t offset, size_t len,
                     bufferlist& bl)
 {
+  assert(len != 0);
   tracepoint(objectstore, fiemap_enter, cid.c_str(), offset, len);
   _kludge_temp_object_collection(cid, oid);
 

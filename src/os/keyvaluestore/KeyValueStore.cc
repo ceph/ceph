@@ -1738,6 +1738,7 @@ int KeyValueStore::read(coll_t cid, const ghobject_t& oid, uint64_t offset,
 int KeyValueStore::fiemap(coll_t cid, const ghobject_t& oid,
                           uint64_t offset, size_t len, bufferlist& bl)
 {
+  assert(len != 0);
   dout(10) << __func__ << " " << cid << " " << oid << " " << offset << "~"
            << len << dendl;
   int r;
@@ -1750,18 +1751,36 @@ int KeyValueStore::fiemap(coll_t cid, const ghobject_t& oid,
     return r;
   }
 
+  map<uint64_t, uint64_t> m;
   vector<StripObjectMap::StripExtent> extents;
+  if (offset > header->max_size)
+    goto out; 
+
+  if (offset + len > header->max_size) {
+    len = header->max_size - offset;
+  }
+
   StripObjectMap::file_to_extents(offset, len, header->strip_size,
                                   extents);
-
-  map<uint64_t, uint64_t> m;
   for (vector<StripObjectMap::StripExtent>::iterator iter = extents.begin();
        iter != extents.end(); ++iter) {
+    uint64_t off, len;
     if (header->bits[iter->no]) {
-      uint64_t off = iter->no * header->strip_size + iter->offset;
-      m[off] = iter->len;
+      off = iter->no * header->strip_size + iter->offset;
+      len = iter->len;
+    } else {
+      continue;
     }
+    /* try to merge extents */
+    vector<StripObjectMap::StripExtent>::iterator next = iter;
+    while (++next != extents.end() && header->bits[next->no]
+      && off + len == next->no * header->strip_size + next->offset) {
+      len += next->len;
+      ++iter;
+    }
+    m[off] = len;
   }
+out:
   ::encode(m, bl);
   return 0;
 }
