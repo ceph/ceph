@@ -102,7 +102,8 @@ int rgw_read_user_buckets(RGWRados * store,
                           const string& end_marker,
                           uint64_t max,
                           bool need_stats,
-                          uint64_t default_amount)
+			  bool *is_truncated,
+			  uint64_t default_amount)
 {
   int ret;
   buckets.clear();
@@ -368,10 +369,12 @@ static void dump_mulipart_index_results(list<rgw_obj_key>& objs_to_unlink,
   f->close_section();
 }
 
-void check_bad_user_bucket_mapping(RGWRados *store, const rgw_user& user_id, bool fix)
+void check_bad_user_bucket_mapping(RGWRados *store, const rgw_user& user_id,
+				   bool fix)
 {
   RGWUserBuckets user_buckets;
   bool done;
+  bool is_truncated;
   string marker;
 
   CephContext *cct = store->ctx();
@@ -379,10 +382,12 @@ void check_bad_user_bucket_mapping(RGWRados *store, const rgw_user& user_id, boo
   size_t max_entries = cct->_conf->rgw_list_buckets_max_chunk;
 
   do {
-    int ret = rgw_read_user_buckets(store, user_id, user_buckets,
-                                    marker, string(), max_entries, false);
+    int ret = rgw_read_user_buckets(store, user_id, user_buckets, marker,
+				    string(), max_entries, false,
+				    &is_truncated);
     if (ret < 0) {
-      ldout(store->ctx(), 0) << "failed to read user buckets: " << cpp_strerror(-ret) << dendl;
+      ldout(store->ctx(), 0) << "failed to read user buckets: "
+			     << cpp_strerror(-ret) << dendl;
       return;
     }
 
@@ -1137,10 +1142,12 @@ int RGWBucketAdminOp::info(RGWRados *store, RGWBucketAdminOpState& op_state,
     RGWUserBuckets buckets;
     string marker;
     bool done;
+    bool is_truncated;
 
     do {
-      ret = rgw_read_user_buckets(store, user_id, buckets,
-                                  marker, string(), max_entries, false);
+      ret = rgw_read_user_buckets(store, op_state.get_user_id(), buckets,
+				  marker, string(), max_entries, false,
+				  &is_truncated);
       if (ret < 0)
         return ret;
 
