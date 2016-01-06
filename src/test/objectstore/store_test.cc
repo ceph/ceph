@@ -248,6 +248,49 @@ TEST_P(StoreTest, FiemapEmpty) {
   }
 }
 
+TEST_P(StoreTest, FiemapHoles) {
+  ObjectStore::Sequencer osr("test");
+  coll_t cid;
+  int r = 0;
+  ghobject_t oid(hobject_t(sobject_t("fiemap_object", CEPH_NOSNAP)));
+  bufferlist bl;
+  bl.append("foo");
+  {
+    ObjectStore::Transaction t;
+    t.create_collection(cid, 0);
+    t.touch(cid, oid);
+    t.write(cid, oid, 0, 3, bl);
+    t.write(cid, oid, 1048576, 3, bl);
+    t.write(cid, oid, 4194304, 3, bl);
+    r = store->apply_transaction(&osr, t);
+    ASSERT_EQ(r, 0);
+  }
+  {
+    bufferlist bl;
+    store->fiemap(cid, oid, 0, 0, bl);
+    map<uint64_t,uint64_t> m, e;
+    bufferlist::iterator p = bl.begin();
+    ::decode(m, p);
+    cout << " got " << m << std::endl;
+    ASSERT_TRUE(!m.empty());
+    ASSERT_GE(m[0], 3);
+    ASSERT_TRUE((m.size() == 1 &&
+		 m[0] > 4194304u) ||
+		(m.size() == 3 &&
+		 m.count(0) &&
+		 m.count(1048576) &&
+		 m.count(4194304)));
+  }
+  {
+    ObjectStore::Transaction t;
+    t.remove(cid, oid);
+    t.remove_collection(cid);
+    cerr << "remove collection" << std::endl;
+    r = store->apply_transaction(&osr, t);
+    ASSERT_EQ(r, 0);
+  }
+}
+
 TEST_P(StoreTest, SimpleMetaColTest) {
   ObjectStore::Sequencer osr("test");
   coll_t cid;
