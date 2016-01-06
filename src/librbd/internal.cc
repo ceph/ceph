@@ -1400,8 +1400,6 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
 
     if (!order)
       order = cct->_conf->rbd_default_order;
-    if (!order)
-      order = RBD_DEFAULT_OBJ_ORDER;
 
     if (order > 25 || order < 12) {
       lderr(cct) << "order must be in the range [12, 25]" << dendl;
