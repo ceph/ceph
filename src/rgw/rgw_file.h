@@ -372,6 +372,7 @@ namespace rgw {
       directory* d = get<directory>(&variant_type);
       if (d) {
 	unique_lock guard(mtx);
+	// XXXX check for failure (dup key)
 	d->marker_cache.insert(
 	  marker_cache_t::value_type(off, marker.data()));
 	/* 90% of directories hold <= 32 entries (Yifan Wang, CMU),
@@ -868,7 +869,7 @@ public:
     return 0;
   }
 
-  bool eof() { return ssize_t(ix) < RGWListBuckets::limit; }
+  bool eof() { return ix == 0; }
 
 }; /* RGWListBucketsRequest */
 
@@ -1017,7 +1018,7 @@ public:
     send_response();
   }
 
-  bool eof() { return ssize_t(ix) < RGWListBucket::max; }
+  bool eof() { return ix == 0; }
 
 }; /* RGWReaddirRequest */
 
