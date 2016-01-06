@@ -2453,7 +2453,7 @@ int BlueStore::fiemap(
   size_t len,
   bufferlist& bl)
 {
-  map<uint64_t, uint64_t> m;
+  interval_set<uint64_t> m;
   CollectionRef c = _get_collection(cid);
   if (!c)
     return -ENOENT;
@@ -2463,6 +2463,7 @@ int BlueStore::fiemap(
   if (!o || !o->exists) {
     return -ENOENT;
   }
+  _dump_onode(o);
 
   if (offset == len && offset == 0)
     len = o->onode.size;
@@ -2491,8 +2492,8 @@ int BlueStore::fiemap(
   if (op != o->onode.overlay_map.begin()) {
     --op;
   }
-  uint64_t start = offset;
   while (len > 0) {
+    dout(20) << __func__ << " offset " << offset << dendl;
     if (op != oend && op->first + op->second.length < offset) {
       ++op;
       continue;
@@ -2505,8 +2506,8 @@ int BlueStore::fiemap(
     // overlay?
     if (op != oend && op->first <= offset) {
       uint64_t x_len = MIN(op->first + op->second.length - offset, len);
-      //m[offset] = x_len;
       dout(30) << __func__ << " overlay " << offset << "~" << x_len << dendl;
+      m.insert(offset, x_len);
       len -= x_len;
       offset += x_len;
       ++op;
@@ -2525,26 +2526,21 @@ int BlueStore::fiemap(
       uint64_t x_off = offset - bp->first;
       x_len = MIN(x_len, bp->second.length - x_off);
       dout(30) << __func__ << " extent " << offset << "~" << x_len << dendl;
+      m.insert(offset, x_len);
       len -= x_len;
       offset += x_len;
       if (x_off + x_len == bp->second.length)
 	++bp;
       continue;
     }
-    if (offset - start) {
-      // we are seeing a hole, time to add an entry to fiemap.
-      m[start] = offset - start;
-      dout(20) << __func__ << " out " << start << "~" << m[start] << dendl;
+    if (bp != bend &&
+	bp->first > offset &&
+	bp->first - offset < x_len) {
+      x_len = bp->first - offset;
     }
     offset += x_len;
-    start = offset;
     len -= x_len;
     continue;
-  }
-  // add tailing
-  if (offset - start != 0) {
-    m[start] = offset - start;
-    dout(20) << __func__ << " out " << start << "~" << m[start] << dendl;
   }
 
   ::encode(m, bl);
