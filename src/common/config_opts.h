@@ -837,7 +837,7 @@ OPTION(bdev_debug_inflight_ios, OPT_BOOL, false)
 OPTION(bdev_inject_crash, OPT_INT, 0)  // if N>0, then ~ 1/N IOs will complete before we crash on flush.
 OPTION(bdev_aio, OPT_BOOL, true)
 OPTION(bdev_aio_poll_ms, OPT_INT, 250)  // milliseconds
-OPTION(bdev_aio_max_queue_depth, OPT_INT, 4096)
+OPTION(bdev_aio_max_queue_depth, OPT_INT, 32)
 
 OPTION(bluefs_alloc_size, OPT_U64, 1048576)
 OPTION(bluefs_max_prefetch, OPT_U64, 1048576)
