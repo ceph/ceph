@@ -55,7 +55,7 @@ dmc::ClientInfo getClientInfo(int c) {
 void send_response(TestClient** clients,
 		   int client_id,
 		   const TestResponse& resp) {
-  clients[client_id].submitResponse(resp);
+  clients[client_id]->submitResponse(resp);
 }
 
 

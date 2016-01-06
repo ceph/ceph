@@ -29,7 +29,7 @@ class TestServer {
 
 public: 
 
-  typedef std::function<void(int,std::ref<TestResponse>)> ClientResponseFunc;
+  typedef std::function<void(int,const TestResponse&)> ClientResponseFunc;
 
 protected:
 
@@ -54,7 +54,7 @@ public:
   TestServer(int iops,
 	     int _thread_pool_size,
 	     const std::function<ClientInfo(int)>& _clientInfoF,
-	     const std::function<void(int,std::ref<TestResponse>)>& _clientResponseF);
+	     const ClientResponseFunc& _clientResponseF);
 
   virtual ~TestServer();
 
