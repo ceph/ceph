@@ -205,7 +205,7 @@ TEST(LibRGW, ENUMERATE1) {
   }
 }
 
-TEST(LibRGW, MARKER1_SETUP)
+TEST(LibRGW, MARKER1_SETUP_BUCKET)
 {
   /* "large" directory enumeration test.  this one deals only with
    * file objects */
@@ -220,6 +220,17 @@ TEST(LibRGW, MARKER1_SETUP)
 
     ret = rgw_mkdir(fs, bucket_fh, marker_dir.c_str(), 755, &st, &marker_fh);
     ASSERT_EQ(ret, 0);
+  }
+}
+
+TEST(LibRGW, MARKER1_SETUP_OBJECTS)
+{
+  /* "large" directory enumeration test.  this one deals only with
+   * file objects */
+
+  if (do_marker1) {
+    struct stat st;
+    int ret;
 
     for (int ix = 0; ix < marker_nobjs; ++ix) {
       std::string object_name("f_");
