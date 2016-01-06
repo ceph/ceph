@@ -1935,8 +1935,10 @@ int BlueStore::fsck()
   if (bluefs) {
     used_blocks.insert(bluefs_extents);
     r = bluefs->fsck();
-    if (r < 0)
+    if (r < 0) {
+      coll_map.clear();
       goto out_alloc;
+    }
     if (r > 0)
       errors += r;
   }
