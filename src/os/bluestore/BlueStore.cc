@@ -374,7 +374,7 @@ static int get_key_object(const string& key, ghobject_t *oid)
     ++p;
     r = decode_escaped(p, &oid->hobj.oid.name);
     if (r < 0)
-      return -8;
+      return -7;
     p += r + 1;
   } else if (*p == '<' || *p == '>') {
     // key + name
@@ -391,15 +391,15 @@ static int get_key_object(const string& key, ghobject_t *oid)
     oid->hobj.set_key(okey);
   } else {
     // malformed
-    return -7;
+    return -10;
   }
 
   p = _key_decode_u64(p, &oid->hobj.snap.val);
   if (!p)
-    return -10;
+    return -11;
   p = _key_decode_u64(p, &oid->generation);
   if (!p)
-    return -11;
+    return -12;
   return 0;
 }
 
