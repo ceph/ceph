@@ -1116,6 +1116,8 @@ int BlueStore::_open_db(bool create)
   assert(!db);
   char fn[PATH_MAX];
   snprintf(fn, sizeof(fn), "%s/db", path.c_str());
+  string options;
+  stringstream err;
 
   string kv_backend;
   if (create) {
@@ -1165,11 +1167,19 @@ int BlueStore::_open_db(bool create)
 
     snprintf(bfn, sizeof(bfn), "%s/block.db", path.c_str());
     if (::stat(bfn, &st) == 0) {
-      bluefs->add_block_device(id, bfn);
-      int r = _check_or_set_bdev_label(bfn, bluefs->get_block_device_size(id),
-				       "bluefs db", create);
-      if (r < 0)
-	return r;
+      r = bluefs->add_block_device(id, bfn);
+      if (r < 0) {
+        derr << __func__ << " add block device(" << bfn << ") returned: " 
+             << cpp_strerror(r) << dendl;
+        goto free_bluefs;
+      }
+      r = _check_or_set_bdev_label(bfn, bluefs->get_block_device_size(id),
+        "bluefs db", create);
+      if (r < 0) {
+        derr << __func__ << " check block device(" << bfn << ") label returned: " 
+             << cpp_strerror(r) << dendl;
+        goto free_bluefs;
+      }
       if (create) {
 	bluefs->add_block_extent(
 	  id, BLUEFS_START,
@@ -1179,7 +1189,12 @@ int BlueStore::_open_db(bool create)
     }
 
     snprintf(bfn, sizeof(bfn), "%s/block", path.c_str());
-    bluefs->add_block_device(id, bfn);
+    r = bluefs->add_block_device(id, bfn);
+    if (r < 0) {
+      derr << __func__ << " add block device(" << bfn << ") returned: " 
+           << cpp_strerror(r) << dendl;
+      goto free_bluefs;
+    }
     if (create) {
       // note: we might waste a 4k block here if block.db is used, but it's
       // simpler.
@@ -1205,11 +1220,19 @@ int BlueStore::_open_db(bool create)
 
     snprintf(bfn, sizeof(bfn), "%s/block.wal", path.c_str());
     if (::stat(bfn, &st) == 0) {
-      bluefs->add_block_device(id, bfn);
-      int r = _check_or_set_bdev_label(bfn, bluefs->get_block_device_size(id),
-				       "bluefs wal", create);
-      if (r < 0)
-	return r;
+      r = bluefs->add_block_device(id, bfn);
+      if (r < 0) {
+        derr << __func__ << " add block device(" << bfn << ") returned: " 
+	     << cpp_strerror(r) << dendl;
+        goto free_bluefs;			
+      }
+      r = _check_or_set_bdev_label(bfn, bluefs->get_block_device_size(id),
+        "bluefs wal", create);
+      if (r < 0) {
+        derr << __func__ << " check block device(" << bfn << ") label returned: " 
+	     << cpp_strerror(r) << dendl;
+        goto free_bluefs;
+      }
       if (create) {
 	bluefs->add_block_extent(
 	  id, BDEV_LABEL_BLOCK_SIZE,
@@ -1223,11 +1246,10 @@ int BlueStore::_open_db(bool create)
     if (create) {
       bluefs->mkfs(fsid);
     }
-    int r = bluefs->mount();
+    r = bluefs->mount();
     if (r < 0) {
       derr << __func__ << " failed bluefs mount: " << cpp_strerror(r) << dendl;
-      delete bluefs;
-      return r;
+      goto free_bluefs;
     }
     if (g_conf->bluestore_bluefs_env_mirror) {
       rocksdb::Env *a = new BlueRocksEnv(bluefs);
@@ -1285,25 +1307,31 @@ int BlueStore::_open_db(bool create)
 			  static_cast<void*>(env));
   if (!db) {
     derr << __func__ << " error creating db" << dendl;
-    bluefs->umount();
-    delete bluefs;
-    delete db;
-    db = NULL;
+    if (bluefs) {
+      bluefs->umount();
+      delete bluefs;
+      bluefs = NULL;
+    }
+    // delete env manually here since we can't depend on db to do this under this case
+    delete env;
+    env = NULL;
     return -EIO;
   }
-  string options;
+  
   if (kv_backend == "rocksdb")
     options = g_conf->bluestore_rocksdb_options;
   db->init(options);
-  stringstream err;
   if (create)
     r = db->create_and_open(err);
   else
     r = db->open(err);
   if (r) {
     derr << __func__ << " erroring opening db: " << err.str() << dendl;
-    bluefs->umount();
-    delete bluefs;
+    if (bluefs) {
+      bluefs->umount();
+      delete bluefs;
+      bluefs = NULL;
+    }
     delete db;
     db = NULL;
     return -EIO;
@@ -1311,6 +1339,12 @@ int BlueStore::_open_db(bool create)
   dout(1) << __func__ << " opened " << kv_backend
 	  << " path " << fn << " options " << options << dendl;
   return 0;
+
+free_bluefs:
+  assert(bluefs);
+  delete bluefs;
+  bluefs = NULL;
+  return r;
 }
 
 void BlueStore::_close_db()
