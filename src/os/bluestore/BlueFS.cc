@@ -421,7 +421,7 @@ int BlueFS::_replay()
 	  dout(20) << __func__ << " " << pos << ":  op_jump_seq "
 		   << next_seq << dendl;
 	  assert(next_seq >= log_seq);
-	  log_seq = next_seq;
+	  log_seq = next_seq - 1; // we will increment it below
 	}
 	break;
 
