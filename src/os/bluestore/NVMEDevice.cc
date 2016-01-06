@@ -63,10 +63,18 @@ static void io_complete(void *t, const struct nvme_completion *completion) {
     }
     rte_free(task->buf);
     rte_mempool_put(task_pool, task);
-  } else {
-    assert(task->command == IOCommand::READ_COMMAND);
+  } else if (task->command == IOCommand::READ_COMMAND) {
     ctx->num_reading.dec();
     dout(20) << __func__ << " read op successfully" << dendl;
+    if (nvme_completion_is_error(completion))
+      task->return_code = -1; // FIXME
+    else
+      task->return_code = 0;
+    Mutex::Locker l(ctx->lock);
+    ctx->cond.Signal();
+  } else {
+    assert(task->command == IOCommand::FLUSH_COMMAND);
+    dout(20) << __func__ << " flush op successfully" << dendl;
     if (nvme_completion_is_error(completion))
       task->return_code = -1; // FIXME
     else
@@ -130,6 +138,7 @@ int SharedDriverData::_scan_nvme_device(const string &sn_tag, nvme_controller **
   pci_device_iterator *iter = pci_id_match_iterator_create(&match);
 
   char serial_number[128];
+  const struct nvme_controller_data	*cdata;
   while ((pci_dev = pci_device_next(iter)) != NULL) {
     dout(10) << __func__ << " found device at "<< pci_dev->bus << ":" << pci_dev->dev << ":"
              << pci_dev->func << " vendor:0x" << pci_dev->vendor_id << " device:0x" << pci_dev->device_id
@@ -144,11 +153,6 @@ int SharedDriverData::_scan_nvme_device(const string &sn_tag, nvme_controller **
       dout(10) << __func__ << " device serial number not match " << serial_number << dendl;
       continue;
     }
-
-
-    pci_device_probe(pci_dev);
-
-
     break;
   }
   if (pci_dev == NULL) {
@@ -156,6 +160,7 @@ int SharedDriverData::_scan_nvme_device(const string &sn_tag, nvme_controller **
     return -ENOENT;
   }
 
+  pci_device_probe(pci_dev);
   *name = pci_device_get_device_name(pci_dev) ? pci_device_get_device_name(pci_dev) : "Unknown";
   if (pci_device_has_kernel_driver(pci_dev)) {
     if (!pci_device_has_uio_driver(pci_dev)) {
@@ -386,6 +391,18 @@ void NVMEDevice::_aio_thread()
           }
           break;
         }
+        case IOCommand::FLUSH_COMMAND:
+        {
+          dout(20) << __func__ << " flush command issueed " << dendl;
+          r = nvme_ns_cmd_flush(ns, io_complete, t);
+          if (r < 0) {
+            derr << __func__ << " failed to flush" << dendl;
+            t->return_code = r;
+            Mutex::Locker l(t->ctx->lock);
+            t->ctx->cond.Signal();
+          }
+          break;
+        }
       }
     }
 
@@ -398,6 +415,33 @@ void NVMEDevice::_aio_thread()
 int NVMEDevice::flush()
 {
   dout(10) << __func__ << " start" << dendl;
+  Task *t;
+  int r = rte_mempool_get(task_pool, (void **)&t);
+  if (r < 0) {
+    derr << __func__ << " task_pool rte_mempool_get failed" << dendl;
+    return r;
+  }
+
+  IOContext ioc(nullptr);
+  t->buf = nullptr;
+  t->ctx = &ioc;
+  t->command = IOCommand::FLUSH_COMMAND;
+  t->offset = 0;
+  t->len = 0;
+  t->device = this;
+  t->return_code = 1;
+  t->next = t->prev = nullptr;
+  {
+    Mutex::Locker l(queue_lock);
+    task_queue.push(t);
+  }
+  {
+    Mutex::Locker l(ioc.lock);
+    while (t->return_code > 0)
+      ioc.cond.Wait(ioc.lock);
+  }
+  r = t->return_code;
+  rte_mempool_put(task_pool, t);
   return 0;
 }
 
@@ -450,6 +494,7 @@ int NVMEDevice::aio_write(
   t->offset = off;
   t->len = len;
   t->device = this;
+  t->return_code = 0;
   Task *prev = static_cast<Task*>(ioc->backend_priv);
   t->prev = prev;
   if (prev)
@@ -519,7 +564,7 @@ int NVMEDevice::read(uint64_t off, uint64_t len, bufferlist *pbl,
   t->len = len;
   t->device = this;
   t->return_code = 1;
-  assert(!ioc->backend_priv);
+  t->next = t->prev = nullptr;
   ioc->num_reading.inc();;
   {
     Mutex::Locker l(queue_lock);
