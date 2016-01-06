@@ -40,7 +40,8 @@ extern "C" {
 
 enum class IOCommand {
   READ_COMMAND,
-  WRITE_COMMAND
+  WRITE_COMMAND,
+  FLUSH_COMMAND
 };
 
 class NVMEDevice;
