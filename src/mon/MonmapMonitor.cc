@@ -465,6 +465,7 @@ bool MonmapMonitor::prepare_command(MonOpRequestRef op)
     entity_addr_t addr = pending_map.get_addr(name);
     pending_map.remove(name);
     pending_map.last_changed = ceph_clock_now(g_ceph_context);
+    mon->extra_probe_peers.erase(addr);
     ss << "removing mon." << name << " at " << addr
        << ", there will be " << pending_map.size() << " monitors" ;
     propose = true;

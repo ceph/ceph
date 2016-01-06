@@ -956,7 +956,7 @@ void Monitor::bootstrap()
   }
 
   // singleton monitor?
-  if (monmap->size() == 1 && rank == 0) {
+  if (monmap->size() == 1 && rank == 0 && extra_probe_peers.empty()) {
     win_standalone_election();
     return;
   }
