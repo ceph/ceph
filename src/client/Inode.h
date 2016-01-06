@@ -295,7 +295,7 @@ struct Inode {
   ceph_lock_state_t *fcntl_locks;
   ceph_lock_state_t *flock_locks;
 
-  xlist<MetaRequest*> unsafe_dir_ops;
+  xlist<MetaRequest*> unsafe_ops;
 
   Inode(Client *c, vinodeno_t vino, ceph_file_layout *newlayout)
     : client(c), ino(vino.ino), snapid(vino.snapid), faked_ino(0),
