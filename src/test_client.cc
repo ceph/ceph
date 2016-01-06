@@ -1,4 +1,4 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 /*
  * Copyright (C) 2015 Red Hat Inc.
@@ -6,11 +6,15 @@
 
 
 #include <chrono>
+#include <iostream>
 
 #include "test_client.h"
 
 
 using namespace std::placeholders;
+
+
+static const bool info = false;
 
 
 TestClient::TestClient(int _id,
@@ -79,22 +83,29 @@ void TestClient::run_resp() {
       cv_resp.wait_for(g, delay);
     }
     if (!resp_queue.empty()) {
+      if (info) std::cout << "resp->" << id << std::endl;
       resp_queue.pop_front();
       --outstanding_ops;
       cv_req.notify_one();
     }
   }
 
+  std::cout << "client " << id << " finishing " <<
+    outstanding_ops.load() << " ops." << std::endl;
+
   while(outstanding_ops.load() > 0) {
     while(resp_queue.empty() && outstanding_ops.load() > 0) {
       cv_resp.wait_for(g, delay);
     }
     if (!resp_queue.empty()) {
+      if (info) std::cout << "resp->" << id << std::endl;
       resp_queue.pop_front();
       --outstanding_ops;
       // not needed since all requests completed cv_req.notify_one();
     }
   }
+
+  std::cout << "client " << id << " finished." << std::endl;
 
   // all responses received, thread ends
 }

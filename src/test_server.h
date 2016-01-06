@@ -1,4 +1,4 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 /*
  * Copyright (C) 2015 Red Hat Inc.
@@ -27,18 +27,17 @@ class TestServer {
   typedef std::lock_guard<std::mutex>  Guard;
   typedef std::unique_ptr<TestRequest> QueueItem;
 
-public: 
+public:
 
   typedef std::function<void(int,const TestResponse&)> ClientResponseFunc;
 
 protected:
 
   PriorityQueue<int,TestRequest> priority_queue;
-  ClientResponseFunc             clientResponseF;
+  ClientResponseFunc             client_resp_f;
   int                            iops;
   int                            thread_pool_size;
 
-  // int                            active_threads;
   bool                           finishing;
   std::chrono::microseconds      op_time;
 
@@ -53,8 +52,8 @@ public:
   // TestServer(int _thread_pool_size);
   TestServer(int iops,
 	     int _thread_pool_size,
-	     const std::function<ClientInfo(int)>& _clientInfoF,
-	     const ClientResponseFunc& _clientResponseF);
+	     const std::function<ClientInfo(int)>& _client_info_f,
+	     const ClientResponseFunc& _client_resp_f);
 
   virtual ~TestServer();
 
@@ -66,8 +65,10 @@ public:
 protected:
 
   void innerPost(std::unique_ptr<TestRequest> request);
-	     
+
   void run(std::chrono::milliseconds wait_delay);
 
-  void sendResponse(int client, const TestResponse& resp);
+  inline void sendResponse(int client, const TestResponse& resp) {
+    client_resp_f(client, resp);
+  }
 }; // class TestServer

@@ -1,5 +1,6 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
+
 /*
  * Copyright (C) 2015 Red Hat Inc.
  */
@@ -44,7 +45,7 @@ class TestClient {
   std::mutex               mtx_resp;
   std::condition_variable  cv_resp;
   std::thread              thd_resp;
-    
+
 public:
 
   TestClient(int _id,
@@ -56,8 +57,6 @@ public:
   virtual ~TestClient();
 
   void submitResponse(const TestResponse&);
-
-  void waitForDone();
 
 protected:
 

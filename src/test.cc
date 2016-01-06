@@ -1,4 +1,4 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 /*
  * Copyright (C) 2015 Red Hat Inc.
@@ -42,11 +42,6 @@ static int client_goals[] = {150, 150, 150, 150}; // in IOPS
 
 
 dmc::ClientInfo getClientInfo(int c) {
-  {
-    Guard g(cout_mtx);
-    std::cout << "getClientInfo called" << std::endl;
-  }
-
   assert(c < COUNT(client_info));
   return client_info[c];
 }
