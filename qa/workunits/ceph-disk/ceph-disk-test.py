@@ -157,6 +157,7 @@ class CephDisk:
                 if partition['dmcrypt']:
                     holder = partition['dmcrypt']['holders'][0]
                     self.sh("cryptsetup close $(cat /sys/block/" + holder + "/dm/name) || true")
+                    self.sh("cryptsetup close $(cat /sys/block/" + holder + "/dm/name) || true")
         except:
             pass
         try:
@@ -165,6 +166,7 @@ class CephDisk:
                 self.sh("umount '" + partition['mount'] + "' || true")
             if partition['dmcrypt']:
                 holder = partition['dmcrypt']['holders'][0]
+                self.sh("cryptsetup close $(cat /sys/block/" + holder + "/dm/name) || true")
                 self.sh("cryptsetup close $(cat /sys/block/" + holder + "/dm/name) || true")
         except:
             pass
