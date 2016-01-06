@@ -243,9 +243,8 @@ endif(WITH_REENTRANT_STRSIGNAL)
 
 set(HAVE_LIBROCKSDB 1)
 
-# -lbz2 and -lz link into kv
+# -lz link into kv
 find_package(ZLIB REQUIRED)
-find_package(BZip2 REQUIRED)
 
 #option for LTTng
 option(WITH_LTTNG "LTTng tracing is enabled" ON)
