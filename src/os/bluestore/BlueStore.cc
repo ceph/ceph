@@ -6125,7 +6125,6 @@ int BlueStore::_remove_collection(TransContext *txc, coll_t cid,
 {
   dout(15) << __func__ << " " << cid << dendl;
   int r;
-  bufferlist empty;
 
   {
     RWLock::WLocker l(coll_lock);
