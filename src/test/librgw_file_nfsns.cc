@@ -229,7 +229,6 @@ TEST(LibRGW, MARKER1_SETUP_OBJECTS)
    * file objects */
 
   if (do_marker1) {
-    struct stat st;
     int ret;
 
     for (int ix = 0; ix < marker_nobjs; ++ix) {
