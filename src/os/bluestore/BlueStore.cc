@@ -1577,7 +1577,7 @@ int BlueStore::_setup_block_symlink_or_file(
       int fd = ::openat(path_fd, name.c_str(), O_CREAT|O_RDWR, 0644);
       if (fd < 0) {
 	int r = -errno;
-	derr << __func__ << " faile to create " << name << " file: "
+	derr << __func__ << " failed to create " << name << " file: "
 	     << cpp_strerror(r) << dendl;
 	return r;
       }
