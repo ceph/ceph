@@ -164,11 +164,12 @@ struct rgw_cls_link_olh_op {
   uint64_t olh_epoch;
   bool log_op;
   uint16_t bilog_flags;
+  time_t unmod_since; /* only create delete marker if newer then this */
 
   rgw_cls_link_olh_op() : delete_marker(false), olh_epoch(0), log_op(false), bilog_flags(0) {}
 
   void encode(bufferlist& bl) const {
-    ENCODE_START(1, 1, bl);
+    ENCODE_START(2, 1, bl);
     ::encode(key, bl);
     ::encode(olh_tag, bl);
     ::encode(delete_marker, bl);
@@ -177,11 +178,12 @@ struct rgw_cls_link_olh_op {
     ::encode(olh_epoch, bl);
     ::encode(log_op, bl);
     ::encode(bilog_flags, bl);
+    ::encode(unmod_since, bl);
     ENCODE_FINISH(bl);
   }
 
   void decode(bufferlist::iterator& bl) {
-    DECODE_START(1, bl);
+    DECODE_START(2, bl);
     ::decode(key, bl);
     ::decode(olh_tag, bl);
     ::decode(delete_marker, bl);
@@ -190,6 +192,9 @@ struct rgw_cls_link_olh_op {
     ::decode(olh_epoch, bl);
     ::decode(log_op, bl);
     ::decode(bilog_flags, bl);
+    if (struct_v >= 2) {
+      ::decode(unmod_since, bl);
+    }
     DECODE_FINISH(bl);
   }
 

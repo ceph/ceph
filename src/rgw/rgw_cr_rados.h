@@ -677,6 +677,7 @@ class RGWAsyncRemoveObj : public RGWAsyncRadosRequest {
   rgw_obj_key key;
   string owner;
   string owner_display_name;
+  bool versioned;
   uint64_t versioned_epoch;
   string marker_version_id;
 
@@ -692,6 +693,7 @@ public:
                          const rgw_obj_key& _key,
                          const string& _owner,
                          const string& _owner_display_name,
+                         bool _versioned,
                          uint64_t _versioned_epoch,
                          bool _delete_marker,
                          bool _if_older,
@@ -701,6 +703,7 @@ public:
                                                       key(_key),
                                                       owner(_owner),
                                                       owner_display_name(_owner_display_name),
+                                                      versioned(_versioned),
                                                       versioned_epoch(_versioned_epoch),
                                                       del_if_older(_if_older),
                                                       timestamp(_timestamp) {
@@ -719,6 +722,7 @@ class RGWRemoveObjCR : public RGWSimpleCoroutine {
   RGWBucketInfo bucket_info;
 
   rgw_obj_key key;
+  bool versioned;
   uint64_t versioned_epoch;
   bool delete_marker;
   string owner;
@@ -734,6 +738,7 @@ public:
                       const string& _source_zone,
                       RGWBucketInfo& _bucket_info,
                       const rgw_obj_key& _key,
+                      bool _versioned,
                       uint64_t _versioned_epoch,
                       string *_owner,
                       string *_owner_display_name,
@@ -743,6 +748,7 @@ public:
                                        source_zone(_source_zone),
                                        bucket_info(_bucket_info),
                                        key(_key),
+                                       versioned(_versioned),
                                        versioned_epoch(_versioned_epoch),
                                        delete_marker(_delete_marker) {
     del_if_older = (_timestamp != NULL);
@@ -765,7 +771,7 @@ public:
 
   int send_request() {
     req = new RGWAsyncRemoveObj(stack->create_completion_notifier(), store, source_zone, bucket_info,
-                                key, owner, owner_display_name, versioned_epoch,
+                                key, owner, owner_display_name, versioned, versioned_epoch,
                                 delete_marker, del_if_older, timestamp);
     async_rados->queue(req);
     return 0;
