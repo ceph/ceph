@@ -214,7 +214,7 @@ int SharedDriverData::try_get(const string &sn_tag, nvme_controller **c, string 
 {
   Mutex::Locker l(lock);
   int r = 0;
-  if (init) {
+  if (!init) {
     r = rte_eal_init(sizeof(ealargs) / sizeof(ealargs[0]), (char **)(void *)(uintptr_t)ealargs);
     if (r < 0) {
       derr << __func__ << " failed to do rte_eal_init" << dendl;
