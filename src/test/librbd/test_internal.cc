@@ -755,3 +755,62 @@ TEST_F(TestInternal, ImageOptions) {
 
   librbd::image_options_destroy(opts2);
 }
+
+TEST_F(TestInternal, WriteFullCopyup) {
+  REQUIRE_FEATURE(RBD_FEATURE_LAYERING);
+
+  librbd::ImageCtx *ictx;
+  ASSERT_EQ(0, open_image(m_image_name, &ictx));
+
+  librbd::NoOpProgressContext no_op;
+  ASSERT_EQ(0, librbd::resize(ictx, 1 << ictx->order, no_op));
+
+  bufferlist bl;
+  bl.append(std::string(1 << ictx->order, '1'));
+  ASSERT_EQ(bl.length(),
+            ictx->aio_work_queue->write(0, bl.length(), bl.c_str(), 0));
+  ASSERT_EQ(0, librbd::flush(ictx));
+
+  ASSERT_EQ(0, create_snapshot("snap1", true));
+
+  std::string clone_name = get_temp_image_name();
+  int order = ictx->order;
+  ASSERT_EQ(0, librbd::clone(m_ioctx, m_image_name.c_str(), "snap1", m_ioctx,
+                             clone_name.c_str(), ictx->features, &order, 0, 0));
+
+  TestInternal *parent = this;
+  librbd::ImageCtx *ictx2 = NULL;
+  BOOST_SCOPE_EXIT( (&m_ioctx) (clone_name) (parent) (&ictx2) ) {
+    if (ictx2 != NULL) {
+      librbd::snap_remove(ictx2, "snap1");
+      parent->close_image(ictx2);
+    }
+
+    librbd::NoOpProgressContext remove_no_op;
+    ASSERT_EQ(0, librbd::remove(m_ioctx, clone_name.c_str(), remove_no_op));
+  } BOOST_SCOPE_EXIT_END;
+
+  ASSERT_EQ(0, open_image(clone_name, &ictx2));
+  ASSERT_EQ(0, librbd::snap_create(ictx2, "snap1"));
+
+  bufferlist write_full_bl;
+  write_full_bl.append(std::string(1 << ictx2->order, '2'));
+  ASSERT_EQ(write_full_bl.length(),
+            ictx2->aio_work_queue->write(0, write_full_bl.length(),
+            write_full_bl.c_str(), 0));
+
+  ASSERT_EQ(0, librbd::flatten(ictx2, no_op));
+
+  bufferptr read_ptr(bl.length());
+  bufferlist read_bl;
+  read_bl.push_back(read_ptr);
+
+  ASSERT_EQ(read_bl.length(), ictx2->aio_work_queue->read(0, read_bl.length(),
+                                                          read_bl.c_str(), 0));
+  ASSERT_TRUE(write_full_bl.contents_equal(read_bl));
+
+  ASSERT_EQ(0, librbd::snap_set(ictx2, "snap1"));
+  ASSERT_EQ(read_bl.length(), ictx2->aio_work_queue->read(0, read_bl.length(),
+                                                          read_bl.c_str(), 0));
+  ASSERT_TRUE(bl.contents_equal(read_bl));
+}
