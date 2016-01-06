@@ -79,6 +79,7 @@ public:
     if (store) {
       store->umount();
       rm_r("store_test_temp_dir");
+      rm_r("store_test_temp_journal");
     }
   }
 };
