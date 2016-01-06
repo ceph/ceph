@@ -274,7 +274,7 @@ LIBKV += -llz4
 endif
 endif # WITH_SLIBROCKSDB
 LIBKV += -lz -lleveldb -lsnappy
-LIBOS += $(LIBOS_TYPES) $(LIBKV)
+LIBOS += $(LIBOS_TYPES) $(LIBKV) $(LIBFUSE_LIBS)
 
 LIBMON += $(LIBMON_TYPES)
 

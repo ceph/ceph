@@ -26,6 +26,7 @@
 
 #include "os/ObjectStore.h"
 #include "os/filestore/FileJournal.h"
+#include "os/FuseStore.h"
 
 #include "osd/PGLog.h"
 #include "osd/OSD.h"
@@ -2207,7 +2208,7 @@ int mydump_journal(Formatter *f, string journalpath, bool m_journal_dio)
 
 int main(int argc, char **argv)
 {
-  string dpath, jpath, pgidstr, op, file, object, objcmd, arg1, arg2, type, format;
+  string dpath, jpath, pgidstr, op, file, mountpoint, object, objcmd, arg1, arg2, type, format;
   spg_t pgid;
   unsigned epoch = 0;
   ghobject_t ghobj;
@@ -2228,12 +2229,14 @@ int main(int argc, char **argv)
     ("pgid", po::value<string>(&pgidstr),
      "PG id, mandatory for info, log, remove, export, rm-past-intervals, mark-complete")
     ("op", po::value<string>(&op),
-     "Arg is one of [info, log, remove, fsck, export, import, list, fix-lost, list-pgs, rm-past-intervals, dump-journal, dump-super, meta-list, "
+     "Arg is one of [info, log, remove, fsck, fuse, export, import, list, fix-lost, list-pgs, rm-past-intervals, dump-journal, dump-super, meta-list, "
 	 "get-osdmap, set-osdmap, get-inc-osdmap, set-inc-osdmap, mark-complete]")
     ("epoch", po::value<unsigned>(&epoch),
      "epoch# for get-osdmap and get-inc-osdmap, the current epoch in use if not specified")
     ("file", po::value<string>(&file),
      "path of file to export, import, get-osdmap, set-osdmap, get-inc-osdmap or set-inc-osdmap")
+    ("mountpoint", po::value<string>(&mountpoint),
+     "fuse mountpoint")
     ("format", po::value<string>(&format)->default_value("json-pretty"),
      "Output format which may be json, json-pretty, xml, xml-pretty")
     ("debug", "Enable diagnostic output to stderr")
@@ -2342,13 +2345,19 @@ int main(int argc, char **argv)
     usage(desc);
     myexit(1);
   }
-  if (op != "list" && op != "fsck" && vm.count("op") && vm.count("object")) {
+  if (op != "list" && op != "fsck" &&
+      vm.count("op") && vm.count("object")) {
     cerr << "Can't specify both --op and object command syntax" << std::endl;
     usage(desc);
     myexit(1);
   }
   if (op != "list" && vm.count("object") && !vm.count("objcmd")) {
     cerr << "Invalid syntax, missing command" << std::endl;
+    usage(desc);
+    myexit(1);
+  }
+  if (op == "fuse" && mountpoint.length() == 0) {
+    cerr << "Missing fuse mountpoint" << std::endl;
     usage(desc);
     myexit(1);
   }
@@ -2493,6 +2502,17 @@ int main(int argc, char **argv)
       cerr << "Mount failed with '" << cpp_strerror(ret) << "'" << std::endl;
     }
     myexit(1);
+  }
+
+  if (op == "fuse") {
+    FuseStore fuse(fs, mountpoint);
+    cout << "mounting fuse at " << mountpoint << " ..." << std::endl;
+    int r = fuse.main();
+    if (r < 0) {
+      cerr << "failed to mount fuse: " << cpp_strerror(r) << std::endl;
+      myexit(1);
+    }
+    myexit(0);
   }
 
   vector<coll_t> ls;

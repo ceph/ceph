@@ -461,7 +461,7 @@ add_executable(ceph-objectstore-tool
   tools/RadosDump.cc
   $<TARGET_OBJECTS:common_util_obj>
   $<TARGET_OBJECTS:heap_profiler_objs>)
-target_link_libraries(ceph-objectstore-tool tcmalloc osd os global ${Boost_PROGRAM_OPTIONS_LIBRARY} dl)
+target_link_libraries(ceph-objectstore-tool tcmalloc osd os global ${Boost_PROGRAM_OPTIONS_LIBRARY} fuse dl)
 install(TARGETS ceph-objectstore-tool DESTINATION bin)
 
 
@@ -625,6 +625,7 @@ if(${HAVE_XFS})
     os/fs/XFS.cc)
 endif(${HAVE_XFS})
 set(libos_srcs
+  os/FuseStore.cc
   os/ObjectStore.cc
   os/Transaction.cc
   os/filestore/chain_xattr.cc
