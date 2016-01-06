@@ -1881,6 +1881,7 @@ class RGWBucketSyncSingleEntryCR : public RGWCoroutine {
   int shard_id;
 
   rgw_obj_key key;
+  bool versioned;
   uint64_t versioned_epoch;
   bucket_entry_owner owner;
   utime_t timestamp;
@@ -1896,7 +1897,7 @@ class RGWBucketSyncSingleEntryCR : public RGWCoroutine {
 public:
   RGWBucketSyncSingleEntryCR(RGWRados *_store, RGWAsyncRadosProcessor *_async_rados,
                              const string& _source_zone, RGWBucketInfo *_bucket_info, int _shard_id,
-                             const rgw_obj_key& _key, uint64_t _versioned_epoch,
+                             const rgw_obj_key& _key, bool _versioned, uint64_t _versioned_epoch,
                              utime_t& _timestamp,
                              const bucket_entry_owner& _owner,
                              RGWModifyOp _op, RGWPendingState _op_state,
@@ -1904,7 +1905,7 @@ public:
 						      async_rados(_async_rados),
 						      source_zone(_source_zone),
                                                       bucket_info(_bucket_info), shard_id(_shard_id),
-                                                      key(_key), versioned_epoch(_versioned_epoch),
+                                                      key(_key), versioned(_versioned), versioned_epoch(_versioned_epoch),
                                                       owner(_owner),
                                                       timestamp(_timestamp), op(_op),
                                                       op_state(_op_state),
@@ -1940,11 +1941,11 @@ public:
                                          true));
           } else if (op == CLS_RGW_OP_DEL) {
             set_status("removing obj");
-            call(new RGWRemoveObjCR(async_rados, store, source_zone, *bucket_info, key, versioned_epoch, NULL, NULL, false, &timestamp));
+            call(new RGWRemoveObjCR(async_rados, store, source_zone, *bucket_info, key, versioned, versioned_epoch, NULL, NULL, false, &timestamp));
           } else if (op == CLS_RGW_OP_LINK_OLH_DM) {
             set_status("creating delete marker");
             ldout(store->ctx(), 10) << "creating delete marker: obj: " << source_zone << "/" << bucket_info->bucket << "/" << key << "[" << versioned_epoch << "]" << dendl;
-            call(new RGWRemoveObjCR(async_rados, store, source_zone, *bucket_info, key, versioned_epoch, &owner.id, &owner.display_name, true, &timestamp));
+            call(new RGWRemoveObjCR(async_rados, store, source_zone, *bucket_info, key, versioned, versioned_epoch, &owner.id, &owner.display_name, true, &timestamp));
           }
         }
       } while (marker_tracker->need_retry(key));
@@ -2078,7 +2079,9 @@ int RGWBucketShardFullSyncCR::operate()
 
           yield {
             spawn(new RGWBucketSyncSingleEntryCR<rgw_obj_key, rgw_obj_key>(store, async_rados, source_zone, bucket_info, shard_id,
-                                                                           entry->key, entry->versioned_epoch, entry->mtime,
+                                                                           entry->key,
+                                                                           false, /* versioned, only matters for object removal */
+                                                                           entry->versioned_epoch, entry->mtime,
                                                                            entry->owner, op, CLS_RGW_STATE_COMPLETE, entry->key, marker_tracker), false);
           }
         }
@@ -2271,7 +2274,7 @@ int RGWBucketShardIncrementalSyncCR::operate()
               versioned_epoch = entry->ver.epoch;
             }
             spawn(new RGWBucketSyncSingleEntryCR<string, rgw_obj_key>(store, async_rados, source_zone, bucket_info, shard_id,
-                                                         key, versioned_epoch, entry->timestamp, owner, entry->op,
+                                                         key, entry->is_versioned(), versioned_epoch, entry->timestamp, owner, entry->op,
                                                          entry->state, entry->id, marker_tracker), false);
           }
         // }

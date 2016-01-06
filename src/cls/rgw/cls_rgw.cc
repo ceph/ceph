@@ -1183,6 +1183,9 @@ public:
     return 0;
   }
 
+  time_t mtime() {
+    return instance_entry.meta.mtime;
+  }
 };
 
 
@@ -1384,6 +1387,12 @@ static int rgw_bucket_link_olh(cls_method_context_t hctx, bufferlist *in, buffer
   }
   if (ret < 0) {
     return ret;
+  }
+
+  if (existed && op.unmod_since > 0) {
+    if (obj.mtime() >= op.unmod_since) {
+      return 0; /* no need to set error, we just return 0 and avoid writing to the bi log */
+    }
   }
 
   bool removing;

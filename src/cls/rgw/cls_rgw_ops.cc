@@ -175,6 +175,7 @@ void rgw_cls_link_olh_op::dump(Formatter *f) const
   ::encode_json("olh_epoch", olh_epoch, f);
   ::encode_json("log_op", log_op, f);
   ::encode_json("bilog_flags", (uint32_t)bilog_flags, f);
+  ::encode_json("unmod_since", unmod_since, f);
 }
 
 void rgw_cls_unlink_instance_op::generate_test_instances(list<rgw_cls_unlink_instance_op*>& o)
