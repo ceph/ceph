@@ -941,6 +941,7 @@ public:
         set_sleeping(true);
         yield;
       }
+      set_status("lease acquired");
       set_marker_tracker(new RGWDataSyncShardMarkerTrack(store, http_manager, async_rados,
                                                          status_oid,
                                                          sync_marker));
