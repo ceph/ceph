@@ -161,6 +161,7 @@ using ceph::crypto::MD5;
 #define ERR_INVALID_SECRET_KEY   2034
 #define ERR_INVALID_KEY_TYPE     2035
 #define ERR_INVALID_CAP          2036
+#define ERR_INVALID_TENANT_NAME  2037
 #define ERR_USER_SUSPENDED       2100
 #define ERR_INTERNAL_ERROR       2200
 #define ERR_NOT_IMPLEMENTED      2201
@@ -1034,6 +1035,12 @@ inline ostream& operator<<(ostream& out, const rgw_obj_key &o) {
   }
 }
 
+struct req_init_state {
+  /* Keeps [[tenant]:]bucket until we parse the token. */
+  string url_bucket;
+  string src_bucket;
+};
+
 /** Store all the state necessary to complete and respond to an HTTP request*/
 struct req_state {
    CephContext *cct;
@@ -1057,7 +1064,7 @@ struct req_state {
    uint32_t perm_mask;
    utime_t header_time;
 
-   /* Set once when req_state is initialized and not violated thereafter */
+   /* Set once when url_bucket is parsed and not violated thereafter. */
    string bucket_tenant;
    string bucket_name;
 
@@ -1106,6 +1113,7 @@ struct req_state {
    string trans_id;
 
    req_info info;
+   req_init_state init_state;
 
    req_state(CephContext *_cct, class RGWEnv *e);
    ~req_state();
