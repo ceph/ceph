@@ -321,9 +321,6 @@ namespace rgw {
     const std::string& object_name() const { return name; }
 
     std::string full_object_name(bool omit_bucket = false) {
-      if (depth <= 1) {
-	return "";
-      }
       std::string path;
       std::vector<const std::string*> segments;
       int reserve = 0;
