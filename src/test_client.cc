@@ -27,6 +27,7 @@ TestClient::TestClient(int _id,
   ops_to_run(_ops_to_run),
   iops_goal(_iops_goal),
   outstanding_ops_allowed(_outstanding_ops_allowed),
+  op_times(ops_to_run),
   outstanding_ops(0),
   requests_complete(false)
 {
@@ -36,8 +37,13 @@ TestClient::TestClient(int _id,
 
 
 TestClient::~TestClient() {
-  thd_req.join();
-  thd_resp.join();
+  waitUntilDone();
+}
+
+
+void TestClient::waitUntilDone() {
+  if (thd_req.joinable()) thd_req.join();
+  if (thd_resp.joinable()) thd_resp.join();
 }
 
 
@@ -48,6 +54,9 @@ void TestClient::run_req() {
 #endif
   std::chrono::microseconds delay(int(0.5 + 1000000.0 / iops_goal));
   auto now = std::chrono::high_resolution_clock::now();
+
+  std::cout << "client " << id << " about to run " << ops_to_run <<
+    " ops." << std::endl;
 
   Guard guard(mtx_req);
   for (int i = 0; i < ops_to_run; ++i) {
@@ -73,16 +82,18 @@ void TestClient::run_req() {
 
 
 void TestClient::run_resp() {
-
   std::chrono::milliseconds delay(1000);
 
   Guard g(mtx_resp);
+
+  int op = 0;
 
   while(!requests_complete.load()) {
     while(resp_queue.empty() && !requests_complete.load()) {
       cv_resp.wait_for(g, delay);
     }
     if (!resp_queue.empty()) {
+      op_times[op++] = now();
       if (info) std::cout << "resp->" << id << std::endl;
       resp_queue.pop_front();
       --outstanding_ops;
@@ -98,6 +109,7 @@ void TestClient::run_resp() {
       cv_resp.wait_for(g, delay);
     }
     if (!resp_queue.empty()) {
+      op_times[op++] = now();
       if (info) std::cout << "resp->" << id << std::endl;
       resp_queue.pop_front();
       --outstanding_ops;

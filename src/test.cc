@@ -55,6 +55,8 @@ void send_response(TestClient** clients,
 
 
 int main(int argc, char* argv[]) {
+  const int goal_secs_to_run = 15;
+  
   assert(COUNT(client_info) == COUNT(client_goals));
   const int client_count = COUNT(client_info);
 
@@ -69,14 +71,27 @@ int main(int argc, char* argv[]) {
   for (int i = 0; i < client_count; ++i) {
     clients[i] = new TestClient(i,
 				std::bind(&TestServer::post, &server, _1),
-				client_goals[i] * 60,
+				client_goals[i] * goal_secs_to_run,
 				client_goals[i],
 				4);
   }
 
   // clients are now running
 
-  // wait for all clients to finish
+  for (int i = 0; i < client_count; ++i) {
+    clients[i]->waitUntilDone();
+  }
+
+  // all clients are done
+  for (int i = 0; i < client_count; ++i) {
+    auto start = clients[i]->getOpTimes().front().time_since_epoch().count();
+    auto end = clients[i]->getOpTimes().back().time_since_epoch().count();
+    std::cout << "client " << i << ": " << start << ", " << end <<
+      ", " << end - start << std::endl;
+  }
+
+  // clean up
+
   for (int i = 0; i < client_count; ++i) {
     delete clients[i];
   }

@@ -13,6 +13,8 @@
 #include <mutex>
 #include <condition_variable>
 #include <thread>
+#include <chrono>
+#include <vector>
 
 #include "crimson/queue.h"
 
@@ -27,11 +29,23 @@ class TestClient {
 
   typedef std::unique_lock<std::mutex> Guard;
 
+public:
+
+  typedef std::chrono::time_point<std::chrono::system_clock> TimePoint;
+
+  // typedef std::deque<TimePoint>                              OpTiming;
+
+  static TimePoint now() { return std::chrono::system_clock::now(); }
+
+protected:
+
   int id;
   SubmitFunc submit_f;
   int ops_to_run;
   int iops_goal; // per second
   int outstanding_ops_allowed;
+
+  std::vector<TimePoint>   op_times;
 
   std::atomic_ulong        outstanding_ops;
   std::atomic_bool         requests_complete;
@@ -57,6 +71,10 @@ public:
   virtual ~TestClient();
 
   void submitResponse(const TestResponse&);
+
+  const std::vector<TimePoint>& getOpTimes() const { return op_times; }
+
+  void waitUntilDone();
 
 protected:
 
