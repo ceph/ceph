@@ -195,18 +195,6 @@ private:
                               &m_copyup_data, 0);
   }
 
-  void CopyupRequest::queue_send()
-  {
-    // TODO: once the ObjectCacher allows reentrant read requests, the finisher
-    // should be eliminated
-    ldout(m_ictx->cct, 20) << __func__ << " " << this
-			   << ": oid " << m_oid << " "
-			   << ", extents " << m_image_extents << dendl;
-    FunctionContext *ctx = new FunctionContext(
-      boost::bind(&CopyupRequest::send, this));
-    m_ictx->copyup_finisher->queue(ctx);
-  }
-
   void CopyupRequest::complete(int r)
   {
     if (should_complete(r)) {
