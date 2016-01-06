@@ -68,9 +68,9 @@ static void io_complete(void *t, const struct nvme_completion *completion) {
     ctx->num_reading.dec();
     dout(20) << __func__ << " read op successfully" << dendl;
     if (nvme_completion_is_error(completion))
-      task->read_code = -1; // FIXME
+      task->return_code = -1; // FIXME
     else
-      task->read_code = 0;
+      task->return_code = 0;
     Mutex::Locker l(ctx->lock);
     ctx->cond.Signal();
   }
@@ -367,7 +367,7 @@ void NVMEDevice::_aio_thread()
               derr << __func__ << " failed to do write command" << dendl;
               assert(0);
             }
-            t = t->next;
+            t = t->prev;
           }
           break;
         }
@@ -380,7 +380,7 @@ void NVMEDevice::_aio_thread()
           if (r < 0) {
             derr << __func__ << " failed to read" << dendl;
             t->ctx->num_reading.dec();
-            t->read_code = r;
+            t->return_code = r;
             Mutex::Locker l(t->ctx->lock);
             t->ctx->cond.Signal();
           }
@@ -450,12 +450,11 @@ int NVMEDevice::aio_write(
   t->offset = off;
   t->len = len;
   t->device = this;
-  if (ioc->backend_priv) {
-    Task *prev = static_cast<Task*>(ioc->backend_priv);
+  Task *prev = static_cast<Task*>(ioc->backend_priv);
+  t->prev = prev;
+  if (prev)
     prev->next = t;
-  } else {
-    ioc->backend_priv = t;
-  }
+  ioc->backend_priv = t;
   t->next = nullptr;
   ioc->num_pending.inc();
 
@@ -519,7 +518,7 @@ int NVMEDevice::read(uint64_t off, uint64_t len, bufferlist *pbl,
   t->offset = off;
   t->len = len;
   t->device = this;
-  t->read_code = 1;
+  t->return_code = 1;
   assert(!ioc->backend_priv);
   ioc->num_reading.inc();;
   {
@@ -529,13 +528,13 @@ int NVMEDevice::read(uint64_t off, uint64_t len, bufferlist *pbl,
 
   {
     Mutex::Locker l(ioc->lock);
-    while (t->read_code > 0)
+    while (t->return_code > 0)
       ioc->cond.Wait(ioc->lock);
   }
   memcpy(p.c_str(), t->buf, len);
   pbl->clear();
   pbl->push_back(p);
-  r = t->read_code;
+  r = t->return_code;
   rte_free(t->buf);
 
  out:

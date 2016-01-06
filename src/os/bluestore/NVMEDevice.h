@@ -51,10 +51,8 @@ struct Task {
   IOCommand command;
   uint64_t offset, len;
   void *buf;
-  union {
-    Task *next;
-    int64_t read_code;
-  };
+  Task *next, *prev;
+  int64_t return_code;
 };
 
 class NVMEDevice : public BlockDevice {
