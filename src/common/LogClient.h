@@ -1,4 +1,4 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 /*
  * Ceph - scalable distributed file system
@@ -7,9 +7,9 @@
  *
  * This is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public
- * License version 2.1, as published by the Free Software 
+ * License version 2.1, as published by the Free Software
  * Foundation.  See file COPYING.
- * 
+ *
  */
 
 #ifndef CEPH_LOGCLIENT_H
@@ -145,7 +145,7 @@ public:
   bool must_log_to_monitors() { return log_to_monitors; }
 
   bool do_log_to_graylog() {
-    return graylog;
+    return (graylog != nullptr);
   }
 
   typedef shared_ptr<LogChannel> Ref;
@@ -227,7 +227,7 @@ public:
   void shutdown() {
     channels.clear();
   }
-  
+
   version_t queue(LogEntry &entry);
 
 private:
