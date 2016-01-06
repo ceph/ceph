@@ -2632,8 +2632,13 @@ public:
 
     int ret = store->list_raw_objects(store->zone.user_uid_pool, no_filter,
                                       max, info->ctx, unfiltered_keys, truncated);
-    if (ret < 0)
-      return ret;
+    if (ret < 0 && ret != -ENOENT)
+      return ret;		        
+    if (ret == -ENOENT) {
+      if (truncated)
+        *truncated = false;
+      return -ENOENT;
+    }
 
     // now filter out the buckets entries
     list<string>::iterator iter;
