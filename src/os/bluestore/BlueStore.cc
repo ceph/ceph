@@ -1780,7 +1780,7 @@ int BlueStore::mount()
   if (bluefs) {
     r = _reconcile_bluefs_freespace();
     if (r < 0)
-      goto out_alloc;
+      goto out_coll;
   }
 
   finisher.start();
@@ -1799,6 +1799,8 @@ int BlueStore::mount()
   wal_tp.stop();
   finisher.wait_for_empty();
   finisher.stop();
+out_coll:
+  coll_map.clear();
  out_alloc:
   _close_alloc();
  out_db:
