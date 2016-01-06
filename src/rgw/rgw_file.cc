@@ -264,7 +264,7 @@ namespace rgw {
 
     if (! f->write_req) {
       /* start */
-      std::string object_name = full_object_name();
+      std::string object_name = relative_object_name();
       f->write_req =
 	new RGWWriteRequest(fs->get_context(), fs->get_user(), this,
 			    bucket_name(), object_name);
@@ -662,7 +662,7 @@ int rgw_mkdir(struct rgw_fs *rgw_fs,
     buffer::list bl;
     fhr = fs->lookup_fh(parent, name, RGWFileHandle::FLAG_PSEUDO);
     rgw_fh = get<0>(fhr);
-    string dir_name = rgw_fh->full_object_name() + "/";
+    string dir_name = rgw_fh->relative_object_name() + "/";
     RGWPutObjRequest req(cct, fs->get_user(), rgw_fh->bucket_name(),
 			 dir_name, bl);
     rc = librgw.get_fe()->execute_req(&req);
@@ -725,7 +725,7 @@ int rgw_unlink(struct rgw_fs *rgw_fs, struct rgw_file_handle *parent_fh,
     if (! rc)  {
       /* rgw_fh ref+ */
       RGWFileHandle* rgw_fh = get_rgwfh(fh);
-      std::string oname = rgw_fh->full_object_name();
+      std::string oname = rgw_fh->relative_object_name();
       RGWDeleteObjRequest req(cct, fs->get_user(), parent->bucket_name(),
 			      oname);
       rc = librgw.get_fe()->execute_req(&req);
@@ -1115,7 +1115,7 @@ int rgw_readv(struct rgw_fs *rgw_fs,
 			    static_cast<char*>(vio->vio_base)));
   }
 
-  std::string oname = rgw_fh->full_object_name();
+  std::string oname = rgw_fh->relative_object_name();
   RGWPutObjRequest req(cct, fs->get_user(), rgw_fh->bucket_name(),
 		       oname, bl);
 
