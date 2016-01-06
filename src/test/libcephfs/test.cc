@@ -270,17 +270,8 @@ TEST(LibCephFS, DirLs) {
   ASSERT_TRUE(result != NULL);
   ASSERT_STREQ(result->d_name, "..");
 
-  std::vector<std::pair<char *, int> > entries;
-  // check readdir and capture stream order for future tests
-  for(i = 0; i < r; ++i) {
-
-    result = ceph_readdir(cmount, ls_dir);
-    ASSERT_TRUE(result != NULL);
-
-    int size;
-    sscanf(result->d_name, "dirf%d", &size);
-    entries.push_back(std::pair<char*,int>(strdup(result->d_name), size));
-  }
+  for(i = 0; i < r; ++i)
+    ASSERT_TRUE(ceph_readdir(cmount, ls_dir) != NULL);
 
   ASSERT_TRUE(ceph_readdir(cmount, ls_dir) == NULL);
 
@@ -293,16 +284,6 @@ TEST(LibCephFS, DirLs) {
   result = ceph_readdir(cmount, ls_dir);
   ASSERT_TRUE(result != NULL);
   ASSERT_STREQ(result->d_name, "..");
-
-  // check telldir
-  for(i = 0; i < r-1; ++i) {
-    int r = ceph_telldir(cmount, ls_dir);
-    ASSERT_GT(r, -1);
-    ceph_seekdir(cmount, ls_dir, r);
-    result = ceph_readdir(cmount, ls_dir);
-    ASSERT_TRUE(result != NULL);
-    ASSERT_STREQ(result->d_name, entries[i].first);
-  }
 
   ceph_rewinddir(cmount, ls_dir);
 
@@ -319,23 +300,30 @@ TEST(LibCephFS, DirLs) {
   getdents_entries = (struct dirent *)malloc(r * sizeof(*getdents_entries));
 
   int count = 0;
+  std::set<std::string> found;
   while (count < r) {
     int len = ceph_getdents(cmount, ls_dir, (char *)getdents_entries, r * sizeof(*getdents_entries));
     ASSERT_GT(len, 0);
     ASSERT_TRUE((len % sizeof(*getdents_entries)) == 0);
     int n = len / sizeof(*getdents_entries);
+    int j;
     if (count == 0) {
       ASSERT_STREQ(getdents_entries[0].d_name, ".");
       ASSERT_STREQ(getdents_entries[1].d_name, "..");
+      j = 2;
+      count += n - 2;
+    } else {
+      j = 0;
+      count += n;
     }
-    int j;
-    i = count;
-    for(j = 2; j < n; ++i, ++j) {
-      ASSERT_STREQ(getdents_entries[j].d_name, entries[i].first);
+    for(; j < n; ++i, ++j) {
+      const char *name = getdents_entries[j].d_name;
+      ASSERT_TRUE(found.count(name) == 0);
+      found.insert(name);
     }
-    count += n;
   }
 
+  ASSERT_EQ(count, r);
   free(getdents_entries);
 
   // test readdir_r
@@ -348,10 +336,12 @@ TEST(LibCephFS, DirLs) {
   ASSERT_TRUE(result != NULL);
   ASSERT_STREQ(result->d_name, "..");
 
+  found.clear();
   for(i = 0; i < r; ++i) {
     struct dirent rdent;
     ASSERT_EQ(ceph_readdir_r(cmount, ls_dir, &rdent), 1);
-    ASSERT_STREQ(rdent.d_name, entries[i].first);
+    ASSERT_TRUE(found.count(rdent.d_name) ==  0);
+    found.insert(rdent.d_name);
   }
 
   // test readdirplus
@@ -364,13 +354,18 @@ TEST(LibCephFS, DirLs) {
   ASSERT_TRUE(result != NULL);
   ASSERT_STREQ(result->d_name, "..");
 
+  found.clear();
   for(i = 0; i < r; ++i) {
     struct dirent rdent;
     struct stat st;
     int stmask;
     ASSERT_EQ(ceph_readdirplus_r(cmount, ls_dir, &rdent, &st, &stmask), 1);
-    ASSERT_STREQ(rdent.d_name, entries[i].first);
-    ASSERT_EQ(st.st_size, entries[i].second);
+    const char *name = rdent.d_name;
+    ASSERT_TRUE(found.count(name) == 0);
+    found.insert(name);
+    int size;
+    sscanf(name, "dirf%d", &size);
+    ASSERT_EQ(st.st_size, size);
     ASSERT_EQ(st.st_ino, rdent.d_ino);
     //ASSERT_EQ(st.st_mode, (mode_t)0666);
   }
