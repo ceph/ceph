@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 2.8.11)
+cmake_minimum_required(VERSION 3.3.0)
 
 project(Ceph)
 set(VERSION "0.90")
