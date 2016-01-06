@@ -496,14 +496,21 @@ int BlockDevice::read_buffered(uint64_t off, uint64_t len, char *buf)
   assert(off < size);
   assert(off + len <= size);
 
-  int r = ::pread(fd_buffered, buf, len, off);
-  if (r < 0) {
-    r = -errno;
-    goto out;
+  int r = 0;
+  char *t = buf;
+  uint64_t left = len;
+  while (left > 0) {
+    r = ::pread(fd_buffered, t, left, off);
+    if (r < 0) {
+      r = -errno;
+      goto out;
+    }
+    off += r;
+    t += r;
+    left -= r;
   }
-  assert(r == len);
 
-  dout(40) << "data: ";
+  dout(40) << __func__ << " data: ";
   bufferlist bl;
   bl.append(buf, len);
   bl.hexdump(*_dout);
