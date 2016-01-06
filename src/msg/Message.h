@@ -294,8 +294,7 @@ protected:
   virtual ~Message() {
     if (byte_throttler)
       byte_throttler->put(payload.length() + middle.length() + data.length());
-    if (msg_throttler)
-      msg_throttler->put();
+    release_message_throttle();
     /* call completion hooks (if any) */
     if (completion_hook)
       completion_hook->complete(0);
@@ -344,6 +343,11 @@ public:
       byte_throttler->put(data.length());
     data.clear();
     clear_buffers(); // let subclass drop buffers as well
+  }
+  void release_message_throttle() {
+    if (msg_throttler)
+      msg_throttler->put();
+    msg_throttler = 0; // nullptr
   }
 
   bool empty_payload() { return payload.length() == 0; }
