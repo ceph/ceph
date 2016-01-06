@@ -91,7 +91,7 @@ namespace {
   struct dirent_vec
   {
     std::vector<dirent_t> obj_names;
-    uint64_t count;
+    uint32_t count;
     dirent_vec() : count(0) {}
   };
 
@@ -259,19 +259,28 @@ extern "C" {
 
 TEST(LibRGW, MARKER1_READDIR)
 {
-  using std::get;
+  if (do_marker1) {
+    using std::get;
 
-  dirent_vec dvec;
-  uint64_t offset;
-  bool eof;
+    dirent_vec dvec;
+    uint64_t offset;
+    bool eof = false;
 
-  eof = false;
-  do {
-    int ret = rgw_readdir(fs, marker_fh, &offset, r2_cb, &dvec, &eof);
-    ASSERT_EQ(ret, 0);
-    ASSERT_EQ(offset, get<1>(dvec.obj_names.back())); // cookie check
-    ++dvec.count;
-  } while(!eof);
+    /* because RGWReaddirRequest::default_max is 1000 (XXX make
+     * configurable?) and marker_nobjs is 5*1024, the number
+     * of required rgw_readdir operations N should be
+     * marker_nobjs/1000 < N < marker_nobjs/1000+1, i.e., 6 when
+     * marker_nobjs==5*1024 */
+    uint32_t max_iterations = marker_nobjs/1000+1;
+
+    do {
+      ASSERT_TRUE(dvec.count <= max_iterations);
+      int ret = rgw_readdir(fs, marker_fh, &offset, r2_cb, &dvec, &eof);
+      ASSERT_EQ(ret, 0);
+      ASSERT_EQ(offset, get<1>(dvec.obj_names.back())); // cookie check
+      ++dvec.count;
+    } while(!eof);
+  }
 }
 
 TEST(LibRGW, CLEANUP) {
