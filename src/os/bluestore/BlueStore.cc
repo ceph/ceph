@@ -2203,6 +2203,10 @@ int BlueStore::fsck()
  out_path:
   _close_path();
 
+  // fatal errors take precedence
+  if (r < 0)
+    return r;
+
   dout(1) << __func__ << " finish with " << errors << " errors" << dendl;
   return errors;
 }
