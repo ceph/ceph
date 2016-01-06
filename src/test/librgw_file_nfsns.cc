@@ -225,11 +225,16 @@ TEST(LibRGW, MARKER1_SETUP)
       std::string object_name("f_");
       object_name += to_string(ix);
       obj_rec obj{object_name, nullptr, marker_fh, nullptr};
+      // lookup object--all operations are by handle
       ret = rgw_lookup(fs, marker_fh, obj.name.c_str(), &obj.fh,
 		       RGW_LOOKUP_FLAG_CREATE);
       ASSERT_EQ(ret, 0);
       obj.rgw_fh = get_rgwfh(obj.fh);
-
+      // open object--open transaction
+      ret = rgw_open(fs, obj.fh, 0 /* flags */);
+      ASSERT_EQ(ret, 0);
+      ASSERT_TRUE(obj.rgw_fh->is_open());
+      // unstable write data
       size_t nbytes;
       string data("data for ");
       data += object_name;
@@ -237,6 +242,10 @@ TEST(LibRGW, MARKER1_SETUP)
 			  (void*) data.c_str());
       ASSERT_EQ(ret, 0);
       ASSERT_EQ(nbytes, data.length());
+      // commit transaction (write on close)
+      ret = rgw_close(fs, obj.fh, 0 /* flags */);
+      ASSERT_EQ(ret, 0);
+      // save for cleanup
       marker_objs.push_back(obj);
     }
   }
@@ -280,6 +289,8 @@ TEST(LibRGW, MARKER1_READDIR)
       ASSERT_EQ(offset, get<1>(dvec.obj_names.back())); // cookie check
       ++dvec.count;
     } while(!eof);
+    std::cout << "Read " << dvec.obj_names.size() << " objects in "
+	      << marker_dir.c_str() << std::endl;
   }
 }
 
