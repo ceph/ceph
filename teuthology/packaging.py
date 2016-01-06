@@ -6,6 +6,8 @@ import requests
 from cStringIO import StringIO
 
 from .config import config
+from .contextutil import safe_while
+from .exceptions import VersionNotFoundError
 
 log = logging.getLogger(__name__)
 
@@ -422,6 +424,21 @@ def _get_config_value_for_remote(ctx, remote, config, key):
     return config.get(key)
 
 
+def _get_response(url, wait=False, sleep=15, tries=10):
+    with safe_while(sleep=sleep, tries=tries, _raise=False) as proceed:
+        while proceed():
+            resp = requests.get(url)
+            if resp.ok or not wait:
+                break
+
+            log.info(
+                'Package not there yet (got HTTP code %s), waiting...',
+                resp.status_code,
+            )
+
+    return resp
+
+
 class GitbuilderProject(object):
     """
     Represents a project that is built by gitbuilder.
@@ -687,29 +704,27 @@ class GitbuilderProject(object):
         """
         url = "{0}/version".format(self.base_url)
         log.info("Looking for package version: {0}".format(url))
-        resp = requests.get(url)
-        version = None
+        # will loop and retry until a 200 is returned or the retry
+        # limits are reached
+        resp = _get_response(url, wait=self.job_config.get("wait_for_package", False))
+
         if not resp.ok:
-            log.info(
-                'Package not there yet (got HTTP code %s), waiting...',
-                resp.status_code,
-            )
-        else:
-            version = resp.text.strip()
-            if self.pkg_type == "rpm" and self.project == "ceph":
-                # TODO: move this parsing into a different function for
-                # easier testing
-                # FIXME: 'version' as retreived from the repo is actually the
-                # RPM version PLUS *part* of the release. Example:
-                # Right now, ceph master is given the following version in the
-                # repo file: v0.67-rc3.164.gd5aa3a9 - whereas in reality the RPM
-                # version is 0.61.7 and the release is 37.g1243c97.el6 (centos6).
-                # Point being, I have to mangle a little here.
-                if version[0] == 'v':
-                    version = version[1:]
-                if '-' in version:
-                    version = version.split('-')[0]
-            log.info("Found version: {0}".format(version))
+            raise VersionNotFoundError(url)
+        version = resp.text.strip()
+        if self.pkg_type == "rpm" and self.project == "ceph":
+            # TODO: move this parsing into a different function for
+            # easier testing
+            # FIXME: 'version' as retreived from the repo is actually the
+            # RPM version PLUS *part* of the release. Example:
+            # Right now, ceph master is given the following version in the
+            # repo file: v0.67-rc3.164.gd5aa3a9 - whereas in reality the RPM
+            # version is 0.61.7 and the release is 37.g1243c97.el6 (centos6).
+            # Point being, I have to mangle a little here.
+            if version[0] == 'v':
+                version = version[1:]
+            if '-' in version:
+                version = version.split('-')[0]
+        log.info("Found version: {0}".format(version))
         return version
 
     def _get_package_sha1(self):
