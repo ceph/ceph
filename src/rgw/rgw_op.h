@@ -319,6 +319,7 @@ protected:
   uint64_t buckets_size;
   uint64_t buckets_size_rounded;
   map<string, bufferlist> attrs;
+  bool is_truncated;
 
 public:
   RGWListBuckets() : sent_data(false) {

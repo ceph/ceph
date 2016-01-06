@@ -1276,7 +1276,7 @@ void RGWListBuckets::execute()
 
     op_ret = rgw_read_user_buckets(store, s->user->user_id, buckets,
 				   marker, end_marker, read_count,
-				   should_get_stats(), 0);
+				   should_get_stats(), &is_truncated);
     if (op_ret < 0) {
       /* hmm.. something wrong here.. the user was authenticated, so it
          should exist */
@@ -1328,13 +1328,14 @@ void RGWStatAccount::execute()
 {
   string marker;
   bool done;
+  bool is_truncated;
   uint64_t max_buckets = s->cct->_conf->rgw_list_buckets_max_chunk;
 
   do {
     RGWUserBuckets buckets;
 
-    op_ret = rgw_read_user_buckets(store, s->user->user_id, buckets,
-				   marker, string(), max_buckets, false);
+    op_ret = rgw_read_user_buckets(store, s->user->user_id, buckets, marker,
+				   string(), max_buckets, true, &is_truncated);
     if (op_ret < 0) {
       /* hmm.. something wrong here.. the user was authenticated, so it
          should exist */
@@ -1616,9 +1617,10 @@ int RGWCreateBucket::verify_permission()
   if (s->user->max_buckets) {
     RGWUserBuckets buckets;
     string marker;
+    bool is_truncated;
     op_ret = rgw_read_user_buckets(store, s->user->user_id, buckets,
 				   marker, string(), s->user->max_buckets,
-				   false);
+				   false, &is_truncated);
     if (op_ret < 0)
       return op_ret;
 
