@@ -306,6 +306,7 @@ protected:
   void handle_client_session(MClientSession *m);
   void send_reconnect(MetaSession *s);
   void resend_unsafe_requests(MetaSession *s);
+  void wait_unsafe_requests();
 
   // mds requests
   ceph_tid_t last_tid;
