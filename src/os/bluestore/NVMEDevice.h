@@ -90,6 +90,7 @@ class NVMEDevice : public BlockDevice {
   static void init();
 
  public:
+  atomic_t inflight_ops;
   aio_callback_t aio_callback;
   void *aio_callback_priv;
 

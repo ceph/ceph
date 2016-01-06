@@ -21,6 +21,9 @@
 #include <fcntl.h>
 #include <unistd.h>
 #include <map>
+#ifdef HAVE_SSE
+#include <xmmintrin.h>
+#endif
 
 #include <rte_config.h>
 #include <rte_cycles.h>
@@ -46,6 +49,7 @@ rte_mempool *task_pool = nullptr;
 static void io_complete(void *t, const struct nvme_completion *completion) {
   Task *task = static_cast<Task*>(t);
   IOContext *ctx = task->ctx;
+  task->device->inflight_ops.dec();
   if (task->command == IOCommand::WRITE_COMMAND) {
     auto left = ctx->num_running.dec();
     assert(!nvme_completion_is_error(completion));
@@ -138,7 +142,6 @@ int SharedDriverData::_scan_nvme_device(const string &sn_tag, nvme_controller **
   pci_device_iterator *iter = pci_id_match_iterator_create(&match);
 
   char serial_number[128];
-  const struct nvme_controller_data	*cdata;
   while ((pci_dev = pci_device_next(iter)) != NULL) {
     dout(10) << __func__ << " found device at "<< pci_dev->bus << ":" << pci_dev->dev << ":"
              << pci_dev->func << " vendor:0x" << pci_dev->vendor_id << " device:0x" << pci_dev->device_id
@@ -286,6 +289,7 @@ NVMEDevice::NVMEDevice(aio_callback_t cb, void *cbpriv)
       aio_stop(false),
       queue_lock("NVMEDevice::queue_lock"),
       aio_thread(this),
+      inflight_ops(0),
       aio_callback(cb),
       aio_callback_priv(cbpriv)
 {
@@ -376,6 +380,7 @@ void NVMEDevice::_aio_thread()
               derr << __func__ << " failed to do write command" << dendl;
               assert(0);
             }
+            inflight_ops.inc();
             t = t->prev;
           }
           break;
@@ -393,6 +398,7 @@ void NVMEDevice::_aio_thread()
             Mutex::Locker l(t->ctx->lock);
             t->ctx->cond.Signal();
           }
+          inflight_ops.inc();
           break;
         }
         case IOCommand::FLUSH_COMMAND:
@@ -405,9 +411,17 @@ void NVMEDevice::_aio_thread()
             Mutex::Locker l(t->ctx->lock);
             t->ctx->cond.Signal();
           }
+          inflight_ops.inc();
           break;
         }
       }
+    } else if (!inflight_ops.read()) {
+      dout(20) << __func__ << " idle, have a pause" << dendl;
+#ifdef HAVE_SSE
+      _mm_pause();
+#else
+      usleep(10);
+#endif
     }
 
     nvme_ctrlr_process_io_completions(ctrlr, max);
