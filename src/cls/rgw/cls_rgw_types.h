@@ -528,6 +528,10 @@ struct rgw_bi_log_entry {
   void dump(Formatter *f) const;
   void decode_json(JSONObj *obj);
   static void generate_test_instances(list<rgw_bi_log_entry*>& o);
+  
+  bool is_versioned() {
+    return ((bilog_flags & RGW_BILOG_FLAG_VERSIONED_OP) != 0);
+  }
 };
 WRITE_CLASS_ENCODER(rgw_bi_log_entry)
 
