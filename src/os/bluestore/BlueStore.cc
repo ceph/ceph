@@ -5851,10 +5851,6 @@ int BlueStore::_omap_rmkeys(TransContext *txc,
     r = 0;
     goto out;
   }
-  if (!o->onode.omap_head) {
-    o->onode.omap_head = o->onode.nid;
-    txc->write_onode(o);
-  }
   ::decode(num, p);
   while (num--) {
     string key;
