@@ -1940,8 +1940,11 @@ public:
             call(new RGWFetchRemoteObjCR(async_rados, store, source_zone, *bucket_info,
                                          key, versioned_epoch,
                                          true));
-          } else if (op == CLS_RGW_OP_DEL) {
+          } else if (op == CLS_RGW_OP_DEL || op == CLS_RGW_OP_UNLINK_INSTANCE) {
             set_status("removing obj");
+            if (op == CLS_RGW_OP_UNLINK_INSTANCE) {
+              versioned = true;
+            }
             call(new RGWRemoveObjCR(async_rados, store, source_zone, *bucket_info, key, versioned, versioned_epoch, NULL, NULL, false, &timestamp));
           } else if (op == CLS_RGW_OP_LINK_OLH_DM) {
             set_status("creating delete marker");
