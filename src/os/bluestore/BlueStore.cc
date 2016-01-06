@@ -874,18 +874,19 @@ int BlueStore::_read_bdev_label(string path, bluestore_bdev_label_t *label)
   dout(10) << __func__ << dendl;
   int fd = ::open(path.c_str(), O_RDONLY);
   if (fd < 0) {
-    fd = errno;
+    fd = -errno;
     derr << __func__ << " failed to open " << path << ": " << cpp_strerror(fd)
 	 << dendl;
     return fd;
   }
   bufferlist bl;
   int r = bl.read_fd(fd, BDEV_LABEL_BLOCK_SIZE);
+  VOID_TEMP_FAILURE_RETRY(::close(fd));
   if (r < 0) {
     derr << __func__ << " failed to read from " << path
 	 << ": " << cpp_strerror(r) << dendl;
+    return r;
   }
-  VOID_TEMP_FAILURE_RETRY(::close(fd));
 
   uint32_t crc, expected_crc;
   bufferlist::iterator p = bl.begin();
