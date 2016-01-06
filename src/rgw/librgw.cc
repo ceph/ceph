@@ -62,7 +62,7 @@ namespace rgw {
 
   static std::mutex librgw_mtx;
 
-  RGWLib librgw; /* XXX initialize? */
+  RGWLib rgwlib;
 
   class C_InitTimeout : public Context {
   public:
@@ -476,7 +476,7 @@ namespace rgw {
     int port = 80;
     RGWProcessEnv env = { store, &rest, olog, port };
 
-    fec = new RGWFrontendConfig("librgw");
+    fec = new RGWFrontendConfig("rgwlib");
     fe = new RGWLibFrontend(env, fec);
 
     fe->init();
@@ -531,7 +531,7 @@ namespace rgw {
 
   int RGWLibRequest::read_permissions(RGWOp* op) {
     int ret =
-      rgw_build_bucket_policies(librgw.get_store(), get_state());
+      rgw_build_bucket_policies(rgwlib.get_store(), get_state());
     if (ret < 0) {
       ldout(get_state()->cct, 10) << "read_permissions on "
 				  << get_state()->bucket << ":"
@@ -564,19 +564,9 @@ namespace rgw {
     return 0;
   } /* RGWHandler_Lib::authorize */
 
-/* global RGW library object */
-  static RGWLib rgwlib;
-
 } /* namespace rgw */
 
 extern "C" {
-
-int librgw_init()
-{
-  using namespace rgw;
-
-  return rgwlib.init();
-}
 
 int librgw_create(librgw_t* rgw, int argc, char **argv)
 {
@@ -587,7 +577,7 @@ int librgw_create(librgw_t* rgw, int argc, char **argv)
     if (! g_ceph_context) {
       vector<const char*> args;
       argv_to_vec(argc, const_cast<const char**>(argv), args);
-      librgw.init(args);
+      rgwlib.init(args);
     }
   }
 
@@ -687,9 +677,7 @@ void librgw_shutdown(librgw_t rgw)
   using namespace rgw;
 
   CephContext* cct = static_cast<CephContext*>(rgw);
-#if 0
   rgwlib.stop();
-#endif
   cct->put();
 }
 
