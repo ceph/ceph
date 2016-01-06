@@ -22,9 +22,6 @@ typedef void* librgw_t;
 int librgw_create(librgw_t *rgw, int argc, char **argv);
 void librgw_shutdown(librgw_t rgw);
 
-int librgw_init();
-int librgw_stop();
-
 #ifdef __cplusplus
 }
 #endif
