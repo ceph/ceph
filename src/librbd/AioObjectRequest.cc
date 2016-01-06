@@ -262,7 +262,7 @@ namespace librbd {
       CopyupRequest *new_req = new CopyupRequest(m_ictx, m_oid, m_object_no,
     					         m_parent_extents);
       m_ictx->copyup_list[m_object_no] = new_req;
-      new_req->queue_send();
+      new_req->send();
     }
   }
 
