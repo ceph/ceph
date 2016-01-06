@@ -44,6 +44,7 @@
 #include "common/io_priority.h"
 
 #include "os/ObjectStore.h"
+#include "os/FuseStore.h"
 
 #include "ReplicatedPG.h"
 
@@ -1549,6 +1550,7 @@ OSD::OSD(CephContext *cct_, ObjectStore *store_,
   logger(NULL),
   recoverystate_perf(NULL),
   store(store_),
+  fuse_store(NULL),
   log_client(cct, client_messenger, &mc->monmap, LogClient::NO_FLAGS),
   clog(log_client.create_channel()),
   whoami(id),
@@ -1810,6 +1812,45 @@ public:
 
 };
 
+int OSD::enable_disable_fuse(bool stop)
+{
+  int r;
+  string mntpath = g_conf->osd_data + "/fuse";
+  if (fuse_store && (stop || !g_conf->osd_objectstore_fuse)) {
+    dout(1) << __func__ << " disabling" << dendl;
+    fuse_store->stop();
+    delete fuse_store;
+    fuse_store = NULL;
+    r = ::rmdir(mntpath.c_str());
+    if (r < 0)
+      r = -errno;
+    if (r < 0) {
+      derr << __func__ << " failed to rmdir " << mntpath << dendl;
+      return r;
+    }
+  }
+  if (!fuse_store && g_conf->osd_objectstore_fuse) {
+    dout(1) << __func__ << " enabling" << dendl;
+    r = ::mkdir(mntpath.c_str(), 0700);
+    if (r < 0)
+      r = -errno;
+    if (r < 0 && r != -EEXIST) {
+      derr << __func__ << " unable to create " << mntpath << ": "
+	   << cpp_strerror(r) << dendl;
+      return r;
+    }
+    fuse_store = new FuseStore(store, mntpath);
+    r = fuse_store->start();
+    if (r < 0) {
+      derr << __func__ << " unable to start fuse: " << cpp_strerror(r) << dendl;
+      delete fuse_store;
+      fuse_store = NULL;
+      return r;
+    }
+  }
+  return 0;
+}
+
 int OSD::init()
 {
   CompatSet initial, diff;
@@ -1831,6 +1872,8 @@ int OSD::init()
     derr << "OSD:init: unable to mount object store" << dendl;
     return r;
   }
+
+  enable_disable_fuse(false);
 
   dout(2) << "boot" << dendl;
 
@@ -2022,8 +2065,10 @@ monout:
   monc->shutdown();
 
 out:
+  enable_disable_fuse(true);
   store->umount();
   delete store;
+  store = NULL;
   return r;
 }
 
@@ -2455,6 +2500,7 @@ int OSD::shutdown()
   }
 
   dout(10) << "syncing store" << dendl;
+  enable_disable_fuse(true);
   store->umount();
   delete store;
   store = 0;
@@ -8568,6 +8614,7 @@ const char** OSD::get_tracked_conf_keys() const
     "clog_to_syslog",
     "clog_to_syslog_facility",
     "clog_to_syslog_level",
+    "osd_objectstore_fuse",
     NULL
   };
   return KEYS;
@@ -8611,6 +8658,11 @@ void OSD::handle_conf_change(const struct md_config_t *conf,
       changed.count("clog_to_syslog_level") ||
       changed.count("clog_to_syslog_facility")) {
     update_log_config();
+  }
+  if (changed.count("osd_objectstore_fuse")) {
+    if (store) {
+      enable_disable_fuse(false);
+    }
   }
 
   check_config();
