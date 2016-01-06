@@ -35,6 +35,7 @@ import errno
 from unittest import suite
 import unittest
 from teuthology.orchestra.run import Raw, quote
+from teuthology.config import config as teuth_config
 
 import logging
 
@@ -691,12 +692,12 @@ def exec_test():
         def only(self, requested):
             return self.__class__(rolename=requested)
 
+    teuth_config['test_path'] = test_dir
+
     class LocalContext(object):
         def __init__(self):
             self.config = {}
-            self.teuthology_config = {
-                'test_path': test_dir
-            }
+            self.teuthology_config = teuth_config
             self.cluster = LocalCluster()
 
         def __del__(self):
