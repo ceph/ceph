@@ -435,8 +435,6 @@ int BlockDevice::aio_zero(
   assert(off < size);
   assert(off + len <= size);
 
-#warning fix discard (aio?)
-  //return fs->zero(fd, off, len);
   bufferlist bl;
   while (len > 0) {
     bufferlist t;

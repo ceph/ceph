@@ -785,7 +785,6 @@ void BlueFS::_maybe_compact_log()
 
 void BlueFS::_compact_log()
 {
-#warning smarter _compact_log
   // FIXME: we currently hold the lock while writing out the compacted log,
   // which may mean a latency spike.  we could drop the lock while writing out
   // the big compacted log, while continuing to log at the end of the old log
