@@ -1443,8 +1443,7 @@ int BlueStore::_balance_bluefs_freespace(vector<bluestore_extent_t> *extents)
     }
   }
 
-// reclaim?
-#warning reclaim freespace from bluefs?
+  // FIXME: reclaim from bluefs?
 
   return ret;
 }
@@ -4281,7 +4280,6 @@ int BlueStore::_do_write_overlays(TransContext *txc,
     return 0;
 
   assert(0 == "this is all broken");
-#warning overlays are broken
 
   uint64_t min_alloc_size = g_conf->bluestore_min_alloc_size;
 
@@ -4345,7 +4343,6 @@ int BlueStore::_do_write_overlays(TransContext *txc,
 			   &cow_rmw_head, &cow_rmw_tail);
       if (r < 0)
 	return r;
-#warning fixme rmw cow?
       bp = o->onode.find_extent(offset);
       if (bp->second.has_flag(bluestore_extent_t::FLAG_UNWRITTEN)) {
 	dout(10) << __func__ << " zero new allocation " << bp->second << dendl;
