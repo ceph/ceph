@@ -25,6 +25,7 @@
 #include "common/Mutex.h"
 #include "common/Cond.h"
 #include "common/errno.h"
+#include "include/encoding.h"
 #include "include/stringify.h"
 #include <boost/scoped_ptr.hpp>
 #include <boost/random/mersenne_twister.hpp>
@@ -3170,6 +3171,140 @@ TEST_P(StoreTest, SetAllocHint) {
   }
   {
     ObjectStore::Transaction t;
+    t.remove_collection(cid);
+    r = store->apply_transaction(&osr, t);
+    ASSERT_EQ(r, 0);
+  }
+}
+
+
+TEST_P(StoreTest, Fiemap) {
+  ObjectStore::Sequencer osr("test");
+  uint64_t poolid = 77;
+  coll_t cid(spg_t(pg_t(0, poolid),shard_id_t::NO_SHARD));
+  ghobject_t oid( 
+    hobject_t(
+      "test_fiemap",
+      "",
+      CEPH_NOSNAP,
+      0,
+      poolid,
+      ""),
+    ghobject_t::NO_GEN,
+    shard_id_t::NO_SHARD);
+  map<uint64_t, uint64_t> src;
+  src.insert(pair<uint64_t, uint64_t>(8192, 8192));
+  src.insert(pair<uint64_t, uint64_t>(32768, 8192));
+  bufferlist data_bl;
+  bufferptr data_bp(8192);
+  data_bp.zero();
+  data_bl.append(data_bp);
+  int r;
+  if (GetParam() == string("kstore")) {
+    // skip kstore semantic currently
+    return;
+  }
+  {
+    ObjectStore::Transaction t;
+    t.create_collection(cid, 0);
+    t.touch(cid, oid);
+    r = store->apply_transaction(&osr, t);
+    ASSERT_EQ(r, 0);
+  }
+  {
+    ObjectStore::Transaction t;
+    for (map<uint64_t, uint64_t>::iterator i = src.begin(); i != src.end(); ++i)
+      t.write(cid, oid, i->first, i->second, data_bl, 0);
+    r = store->apply_transaction(&osr, t);
+    ASSERT_EQ(r, 0);
+  }
+  {
+    ObjectStore::Transaction t;
+    bufferlist dest_bl;
+    bufferlist::iterator iter;
+    map<uint64_t, uint64_t> dest;
+    map<uint64_t, uint64_t> expect;
+
+    // offset = 36864, length = 8192 --> fiemap [] empty, out of boundary case
+    dest.clear();
+    expect.clear();
+    dest_bl.clear();
+    r = store->fiemap(cid, oid, src.rbegin()->first + src.rbegin()->second, 8192, dest_bl);
+    ASSERT_EQ(r, 0);
+    iter = dest_bl.begin();
+    ::decode(dest, iter);
+    ASSERT_EQ(expect, dest);
+
+    // offset = 4096, length = 4096 --> fiemap [] empty, out of boundary case
+    dest.clear();
+    expect.clear();
+    dest_bl.clear();
+    r = store->fiemap(cid, oid, 0, 8192, dest_bl);
+    ASSERT_EQ(r, 0);
+    iter = dest_bl.begin();
+    ::decode(dest, iter);
+    if (GetParam() == string("filestore") ||
+        GetParam() == string("keyvaluestore")) {
+      ASSERT_EQ(expect, dest);
+    }
+    if (GetParam() == string("bluestore")) {
+      if (g_ceph_context->_conf->bluestore_overlay_max > 2 && 
+          g_ceph_context->_conf->bluestore_overlay_max_length >= 8192) {
+        ASSERT_EQ(expect, dest);
+      } else {
+        expect.insert(pair<uint64_t, uint64_t>(0, 8192));
+        ASSERT_EQ(expect, dest);
+      }
+    }
+    if (GetParam() == string("memstore"))
+    {
+      expect.insert(pair<uint64_t, uint64_t>(0, 8192));
+      ASSERT_EQ(expect, dest);
+    }
+
+    // offset = 8192, length = 8192 --> fiemap [(8192, 8192)], case for single chunk
+    dest.clear();
+    expect.clear();
+    dest_bl.clear();
+    r = store->fiemap(cid, oid, src.begin()->first, src.begin()->second, dest_bl);
+    ASSERT_EQ(r, 0);
+    iter = dest_bl.begin();
+    ::decode(dest, iter);
+    expect.insert(src.begin(), ++(src.begin()));
+    ASSERT_EQ(expect, dest);
+
+    // offset = 0, length = src.rbegin()->first + src.rbegin()->second --> fiemap [(8192, 8192), (32768, 8192)], whole ranges
+    dest.clear();
+    expect.clear();
+    dest_bl.clear();
+    r = store->fiemap(cid, oid, 0, src.rbegin()->first + src.rbegin()->second, dest_bl);
+    ASSERT_EQ(r, 0);
+    iter = dest_bl.begin();
+    ::decode(dest, iter);
+    if (GetParam() == string("filestore") ||
+        GetParam() == string("keyvaluestore")) {
+      expect.insert(src.begin(), src.end());
+      ASSERT_EQ(expect, dest); 
+    }
+    if (GetParam() == string("bluestore")) {
+      if (g_ceph_context->_conf->bluestore_overlay_max > 2 && 
+          g_ceph_context->_conf->bluestore_overlay_max_length >= 8192) {
+        expect.insert(src.begin(), src.end());
+        ASSERT_EQ(expect, dest);
+      } else {
+        expect.insert(pair<uint64_t, uint64_t>(0, src.rbegin()->first + src.rbegin()->second));
+        ASSERT_EQ(expect, dest);
+      }
+    }
+    if (GetParam() == string("memstore"))
+    {
+      expect.insert(pair<uint64_t, uint64_t>(0, src.rbegin()->first + src.rbegin()->second));
+      ASSERT_EQ(expect, dest);
+    } 
+  }
+  {
+    ObjectStore::Transaction t;
+    t.remove(cid, oid);
     t.remove_collection(cid);
     r = store->apply_transaction(&osr, t);
     ASSERT_EQ(r, 0);
