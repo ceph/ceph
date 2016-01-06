@@ -5550,8 +5550,12 @@ int BlueStore::_setattrs(TransContext *txc,
     goto out;
   }
   for (map<string,bufferptr>::const_iterator p = aset.begin();
-       p != aset.end(); ++p)
-    o->onode.attrs[p->first] = p->second;
+       p != aset.end(); ++p) {
+    if (p->second.is_partial())
+      o->onode.attrs[p->first] = bufferptr(p->second.c_str(), p->second.length());
+    else
+      o->onode.attrs[p->first] = p->second;
+  }
   txc->write_onode(o);
   r = 0;
 
