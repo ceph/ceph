@@ -1088,17 +1088,17 @@ def dmcrypt_unmap(
     """
     Removes the dmcrypt device with the given UUID.
     """
-    args = [
-        'cryptsetup',
-        'remove',
-        _uuid
-    ]
-
-    try:
-        command_check_call(args)
-
-    except subprocess.CalledProcessError as e:
-        raise Error('unable to unmap device', _uuid, e)
+    retries = 0
+    while True:
+        try:
+            command_check_call(['cryptsetup', 'remove', _uuid])
+            break
+        except subprocess.CalledProcessError as e:
+            if retries == 10:
+                raise Error('unable to unmap device', _uuid, e)
+            else:
+                time.sleep(0.5 + retries * 1.0)
+                retries += 1
 
 
 def mount(
