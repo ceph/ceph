@@ -20,6 +20,7 @@
 #include <sys/stat.h>
 #include <fcntl.h>
 #include <unistd.h>
+#include <map>
 
 #include <rte_config.h>
 #include <rte_cycles.h>
@@ -39,8 +40,8 @@
 #undef dout_prefix
 #define dout_prefix *_dout << "bdev "
 
-struct rte_mempool *request_mempool;
-static struct rte_mempool *task_pool;
+rte_mempool *request_mempool = nullptr;
+rte_mempool *task_pool = nullptr;
 
 static void io_complete(void *t, const struct nvme_completion *completion) {
   Task *task = static_cast<Task*>(t);
@@ -75,60 +76,47 @@ static void io_complete(void *t, const struct nvme_completion *completion) {
   }
 }
 
-// ----------------
-#undef dout_prefix
-#define dout_prefix *_dout << "bdev(" << name << ") "
-
-NVMEDevice::NVMEDevice(aio_callback_t cb, void *cbpriv)
-    : ctrlr(nullptr),
-      ns(nullptr),
-      aio_stop(false),
-      queue_lock("NVMEDevice::queue_lock"),
-      aio_thread(this),
-      aio_callback(cb),
-      aio_callback_priv(cbpriv)
-{
-  zeros = buffer::create_page_aligned(1048576);
-  zeros.zero();
-}
-
 static char *ealargs[] = {
     "ceph-osd",
     "-c 0x1", /* This must be the second parameter. It is overwritten by index in main(). */
     "-n 4",
 };
 
-void NVMEDevice::init()
+class SharedDriverData {
+  std::map<string, std::pair<nvme_controller*, int> > controllers;
+  bool init = false;
+  Mutex lock;
+
+  int _scan_nvme_device(const string &sn_tag, nvme_controller **c, string *name);
+
+ public:
+  SharedDriverData(): lock("NVMEDevice::SharedDriverData::lock") {}
+  int try_get(const string &sn_tag, nvme_controller **c, string *name);
+  void release(nvme_controller *c);
+};
+
+static SharedDriverData driver_data;
+
+int SharedDriverData::_scan_nvme_device(const string &sn_tag, nvme_controller **c, string *name)
 {
-  int r = rte_eal_init(sizeof(ealargs) / sizeof(ealargs[0]), (char **)(void *)(uintptr_t)ealargs);
-  if (r < 0)
-    assert(0);
-
-	request_mempool = rte_mempool_create("nvme_request", 8192,
-                                       nvme_request_size(), 128, 0,
-                                       NULL, NULL, NULL, NULL,
-                                       SOCKET_ID_ANY, 0);
-  if (request_mempool == NULL)
-    assert(0);
-
- 	task_pool = rte_mempool_create(
-      "task_pool", 8192, sizeof(Task),
-      64, 0, NULL, NULL, NULL, NULL,
-      SOCKET_ID_ANY, 0);
-  if (request_mempool == NULL)
-    assert(0);
-}
-
-int NVMEDevice::open(string p)
-{
-  static Initialize _(NVMEDevice::init);
-
   int r = 0;
-  dout(1) << __func__ << " path " << p << dendl;
+  dout(1) << __func__ << " serial number " << sn_tag << dendl;
+
+  assert(c);
+  if (sn_tag.empty()) {
+    r = -ENOENT;
+    derr << __func__ << " empty serial number: " << cpp_strerror(r) << dendl;
+    return r;
+  }
+
+  auto ctr_it = controllers.find(sn_tag);
+  if (ctr_it != controllers.end()) {
+    ctr_it->second.second++;
+    *c = ctr_it->second.first;
+    return 0;
+  }
 
   pci_device *pci_dev;
-
-  pci_system_init();
 
   // Search for matching devices
   pci_id_match match;
@@ -140,17 +128,6 @@ int NVMEDevice::open(string p)
   match.device_class_mask = 0xFFFFFF;
 
   pci_device_iterator *iter = pci_id_match_iterator_create(&match);
-
-  nvme_retry_count = g_conf->bdev_nvme_retry_count;
-  if (nvme_retry_count < 0)
-    nvme_retry_count = NVME_DEFAULT_RETRY_COUNT;
-
-  string sn_tag = g_conf->bdev_nvme_serial_number;
-  if (sn_tag.empty()) {
-    r = -ENOENT;
-    derr << __func__ << " empty serial number: " << cpp_strerror(r) << dendl;
-    return r;
-  }
 
   char serial_number[128];
   while ((pci_dev = pci_device_next(iter)) != NULL) {
@@ -168,66 +145,10 @@ int NVMEDevice::open(string p)
       continue;
     }
 
-    name = pci_device_get_device_name(pci_dev) ? pci_device_get_device_name(pci_dev) : "Unknown";
-    if (pci_device_has_kernel_driver(pci_dev)) {
-      if (!pci_device_has_uio_driver(pci_dev)) {
-        /*NVMe kernel driver case*/
-        if (g_conf->bdev_nvme_unbind_from_kernel) {
-          r =  pci_device_switch_to_uio_driver(pci_dev);
-          if (r < 0) {
-            derr << __func__ << " device " << name << " " << pci_dev->bus
-                 << ":" << pci_dev->dev << ":" << pci_dev->func
-                 << " switch to uio driver failed" << dendl;
-            return r;
-          }
-        } else {
-          derr << __func__ << " device has kernel nvme driver attached, exiting..." << dendl;
-          r = -EBUSY;
-          return r;
-        }
-      }
-    } else {
-      r =  pci_device_bind_uio_driver(pci_dev, PCI_UIO_DRIVER);
-      if (r < 0) {
-        derr << __func__ << " device " << name << " " << pci_dev->bus
-             << ":" << pci_dev->dev << ":" << pci_dev->func
-             << " bind to uio driver failed" << dendl;
-        return r;
-      }
-    }
-
-    /* Claim the device in case conflict with other ids process */
-    r =  pci_device_claim(pci_dev);
-    if (r < 0) {
-      derr << __func__ << " device " << name << " " << pci_dev->bus
-           << ":" << pci_dev->dev << ":" << pci_dev->func
-           << " claim failed" << dendl;
-      return r;
-    }
 
     pci_device_probe(pci_dev);
 
-    ctrlr = nvme_attach(pci_dev);
-    if (!ctrlr) {
-      derr << __func__ << " device attach nvme failed" << dendl;
-      r = -1;
-      return r;
-    }
 
-    int num_ns = nvme_ctrlr_get_num_ns(ctrlr);
-    assert(num_ns >= 1);
-    if (num_ns > 1) {
-      dout(0) << __func__ << " namespace count larger than 1, currently only use the first namespace" << dendl;
-    }
-    ns = nvme_ctrlr_get_ns(ctrlr, 1);
-    if (!ns) {
-      derr << __func__ << " failed to get namespace at 1" << dendl;
-      return -1;
-    }
-    block_size = nvme_ns_get_sector_size(ns);
-    size = block_size * nvme_ns_get_num_sectors(ns);
-    dout(1) << __func__ << " successfully attach nvme device at" << pci_device_get_device_name(pci_dev)
-                        << " " << pci_dev->bus << ":" << pci_dev->dev << ":" << pci_dev->func << dendl;
     break;
   }
   if (pci_dev == NULL) {
@@ -235,8 +156,158 @@ int NVMEDevice::open(string p)
     return -ENOENT;
   }
 
+  *name = pci_device_get_device_name(pci_dev) ? pci_device_get_device_name(pci_dev) : "Unknown";
+  if (pci_device_has_kernel_driver(pci_dev)) {
+    if (!pci_device_has_uio_driver(pci_dev)) {
+      /*NVMe kernel driver case*/
+      if (g_conf->bdev_nvme_unbind_from_kernel) {
+        r =  pci_device_switch_to_uio_driver(pci_dev);
+        if (r < 0) {
+          derr << __func__ << " device " << *name << " " << pci_dev->bus
+               << ":" << pci_dev->dev << ":" << pci_dev->func
+               << " switch to uio driver failed" << dendl;
+          return r;
+        }
+      } else {
+        derr << __func__ << " device has kernel nvme driver attached, exiting..." << dendl;
+        r = -EBUSY;
+        return r;
+      }
+    }
+  } else {
+    r =  pci_device_bind_uio_driver(pci_dev, PCI_UIO_DRIVER);
+    if (r < 0) {
+      derr << __func__ << " device " << *name << " " << pci_dev->bus
+           << ":" << pci_dev->dev << ":" << pci_dev->func
+           << " bind to uio driver failed" << dendl;
+      return r;
+    }
+  }
+
+  /* Claim the device in case conflict with other ids process */
+  r =  pci_device_claim(pci_dev);
+  if (r < 0) {
+    derr << __func__ << " device " << *name << " " << pci_dev->bus
+         << ":" << pci_dev->dev << ":" << pci_dev->func
+         << " claim failed" << dendl;
+    return r;
+  }
+
+  *c = nvme_attach(pci_dev);
+  if (!*c) {
+    derr << __func__ << " device attach nvme failed" << dendl;
+    r = -1;
+    return r;
+  }
+
+  controllers[sn_tag] = make_pair(*c, 1);
+
   pci_iterator_destroy(iter);
 
+  dout(1) << __func__ << " successfully attach nvme device at" << *name
+          << " " << pci_dev->bus << ":" << pci_dev->dev << ":" << pci_dev->func << dendl;
+
+  return 0;
+}
+
+int SharedDriverData::try_get(const string &sn_tag, nvme_controller **c, string *name)
+{
+  Mutex::Locker l(lock);
+  int r = 0;
+  if (init) {
+    r = rte_eal_init(sizeof(ealargs) / sizeof(ealargs[0]), (char **)(void *)(uintptr_t)ealargs);
+    if (r < 0) {
+      derr << __func__ << " failed to do rte_eal_init" << dendl;
+      return r;
+    }
+
+	  request_mempool = rte_mempool_create("nvme_request", 8192,
+                                         nvme_request_size(), 128, 0,
+                                         NULL, NULL, NULL, NULL,
+                                         SOCKET_ID_ANY, 0);
+    if (request_mempool == NULL) {
+      derr << __func__ << " failed to create memory pool for nvme requests" << dendl;
+      return -ENOMEM;
+    }
+
+ 	  task_pool = rte_mempool_create(
+        "task_pool", 8192, sizeof(Task),
+        64, 0, NULL, NULL, NULL, NULL,
+        SOCKET_ID_ANY, 0);
+    if (task_pool == NULL) {
+      derr << __func__ << " failed to create memory pool for nvme requests" << dendl;
+      return -ENOMEM;
+    }
+
+    pci_system_init();
+    init = true;
+  }
+  return _scan_nvme_device(sn_tag, c, name);
+}
+
+void SharedDriverData::release(nvme_controller *c)
+{
+  dout(1) << __func__ << " " << c << dendl;
+
+  Mutex::Locker l(lock);
+  auto it = controllers.begin();
+  for (; it != controllers.end(); ++it) {
+    if (c == it->second.first)
+      break;
+  }
+  if (it == controllers.end()) {
+    derr << __func__ << " not found registered nvme controller " << c << dendl;
+    assert(0);
+  }
+
+  if (--it->second.second == 0) {
+    dout(1) << __func__ << " detach device " << c << dendl;
+    nvme_detach(c);
+    controllers.erase(it);
+  }
+}
+
+// ----------------
+#undef dout_prefix
+#define dout_prefix *_dout << "bdev(" << name << ") "
+
+NVMEDevice::NVMEDevice(aio_callback_t cb, void *cbpriv)
+    : ctrlr(nullptr),
+      ns(nullptr),
+      aio_stop(false),
+      queue_lock("NVMEDevice::queue_lock"),
+      aio_thread(this),
+      aio_callback(cb),
+      aio_callback_priv(cbpriv)
+{
+  zeros = buffer::create_page_aligned(1048576);
+  zeros.zero();
+}
+
+
+int NVMEDevice::open(string p)
+{
+  int r = 0;
+  dout(1) << __func__ << " path " << p << dendl;
+
+  r = driver_data.try_get(g_conf->bdev_nvme_serial_number, &ctrlr, &name);
+  if (r < 0) {
+    derr << __func__ << " failed to get nvme deivce with sn " << g_conf->bdev_nvme_serial_number << dendl;
+    return r;
+  }
+
+  int num_ns = nvme_ctrlr_get_num_ns(ctrlr);
+  assert(num_ns >= 1);
+  if (num_ns > 1) {
+    dout(0) << __func__ << " namespace count larger than 1, currently only use the first namespace" << dendl;
+  }
+  ns = nvme_ctrlr_get_ns(ctrlr, 1);
+  if (!ns) {
+    derr << __func__ << " failed to get namespace at 1" << dendl;
+    return -1;
+  }
+  block_size = nvme_ns_get_sector_size(ns);
+  size = block_size * nvme_ns_get_num_sectors(ns);
   aio_thread.create();
 
   dout(1) << __func__ << " size " << size << " (" << pretty_si_t(size) << "B)"
@@ -254,6 +325,8 @@ void NVMEDevice::close()
   aio_thread.join();
   aio_stop = false;
   name.clear();
+  driver_data.release(ctrlr);
+  ctrlr = nullptr;
 }
 
 void NVMEDevice::_aio_thread()
