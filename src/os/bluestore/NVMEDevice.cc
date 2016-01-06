@@ -245,6 +245,10 @@ int SharedDriverData::try_get(const string &sn_tag, nvme_controller **c, string 
     }
 
     pci_system_init();
+    nvme_retry_count = g_conf->bdev_nvme_retry_count;
+	  if (nvme_retry_count < 0)
+		  nvme_retry_count = NVME_DEFAULT_RETRY_COUNT;
+
     init = true;
   }
   return _scan_nvme_device(sn_tag, c, name);
