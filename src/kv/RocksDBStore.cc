@@ -402,12 +402,13 @@ int RocksDBStore::get(
     const string &key,
     bufferlist *out)
 {
+  assert(out && (out->length() == 0));
   utime_t start = ceph_clock_now(g_ceph_context);
   int r = 0;
   KeyValueDB::Iterator it = get_iterator(prefix);
   it->lower_bound(key);
   if (it->valid() && it->key() == key) {
-    *out = it->value();
+    out->append(it->value_as_ptr());
   } else {
     r = -ENOENT;
   }
@@ -625,6 +626,13 @@ bufferlist RocksDBStore::RocksDBWholeSpaceIteratorImpl::value()
 {
   return to_bufferlist(dbiter->value());
 }
+
+bufferptr RocksDBStore::RocksDBWholeSpaceIteratorImpl::value_as_ptr()
+{
+  rocksdb::Slice val = dbiter->value();
+  return bufferptr(val.data(), val.size());
+}
+
 int RocksDBStore::RocksDBWholeSpaceIteratorImpl::status()
 {
   return dbiter->status().ok() ? 0 : -1;
@@ -636,7 +644,6 @@ string RocksDBStore::past_prefix(const string &prefix)
   limit.push_back(1);
   return limit;
 }
-
 
 RocksDBStore::WholeSpaceIterator RocksDBStore::_get_iterator()
 {
