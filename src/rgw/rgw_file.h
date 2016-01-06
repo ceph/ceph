@@ -869,7 +869,12 @@ public:
     return 0;
   }
 
-  bool eof() { return ix == 0; }
+  bool eof() {
+    std::cout << "READDIR offset: " << *offset
+	      << " is_truncated: " << is_truncated
+	      << std::endl;
+    return !is_truncated;
+  }
 
 }; /* RGWListBucketsRequest */
 
@@ -1018,7 +1023,13 @@ public:
     send_response();
   }
 
-  bool eof() { return ix == 0; }
+  bool eof() {
+    std::cout << "READDIR offset: " << *offset
+	      << " next marker: " << next_marker
+	      << " is_truncated: " << is_truncated
+	      << std::endl;
+    return !is_truncated;
+  }
 
 }; /* RGWReaddirRequest */
 
