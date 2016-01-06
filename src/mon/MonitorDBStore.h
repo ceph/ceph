@@ -507,12 +507,8 @@ class MonitorDBStore
   }
 
   int get(const string& prefix, const string& key, bufferlist& bl) {
-    bufferlist outbl;
-    int r = db->get(prefix, key, &outbl);
-    if (!r) {
-      bl.append(outbl);
-    }
-    return r;
+    assert(bl.length() == 0);
+    return db->get(prefix, key, &bl);
   }
 
   int get(const string& prefix, const version_t ver, bufferlist& bl) {
