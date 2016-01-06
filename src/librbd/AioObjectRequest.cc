@@ -549,7 +549,7 @@ namespace librbd {
 			   << m_object_off << "~" << m_object_len
                            << " object exist " << m_object_exist
 			   << " write_full " << write_full << dendl;
-    if (write_full) {
+    if (write_full && !has_parent()) {
       send_write_op(false);
     } else {
       AbstractAioObjectWrite::send_write();
