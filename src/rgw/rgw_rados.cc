@@ -3448,11 +3448,10 @@ int RGWRados::init_zg_from_period(bool *initialized)
   for (iter = current_period.get_map().zonegroups.begin();
        iter != current_period.get_map().zonegroups.end(); ++iter){
     const RGWZoneGroup& zg = iter->second;
-    add_new_connection_to_map(zonegroup_conn_map, zg, new RGWRESTConn(cct, this, zonegroup.get_id(), zonegroup.endpoints));
+    add_new_connection_to_map(zonegroup_conn_map, zg, new RGWRESTConn(cct, this, zg.get_id(), zg.endpoints));
     if (!current_period.get_master_zonegroup().empty() &&
         zg.get_id() == current_period.get_master_zonegroup()) {
       rest_master_conn = new RGWRESTConn(cct, this, zg.get_id(), zg.endpoints);
-      break;
     }
   }
 
