@@ -772,7 +772,7 @@ void ObjectCacher::bh_read_finish(int64_t poolid, sobject_t oid,
 	 * the waiters will be retried and get -ENOENT immediately, so
 	 * it's safe to clean up the unneeded bh's now. Since we know
 	 * it's safe to remove them now, do so, so they aren't hanging
-	 *around waiting for more -ENOENTs from rados while the cache
+	 * around waiting for more -ENOENTs from rados while the cache
 	 * is being shut down.
 	 *
 	 * Only do this when all the bhs are rx or clean, to match the
