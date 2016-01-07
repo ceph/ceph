@@ -28,9 +28,11 @@ TEST(CommonIPAddr, TestNotFound)
   const struct sockaddr *result;
 
   one.ifa_next = &two;
+  one.ifa_name = (char *)"em1";
   one.ifa_addr = (struct sockaddr*)&a_one;
 
   two.ifa_next = NULL;
+  two.ifa_name = (char *)"em2";
   two.ifa_addr = (struct sockaddr*)&a_two;
 
   ipv4(&a_one, "10.11.12.13");
@@ -50,9 +52,11 @@ TEST(CommonIPAddr, TestV4_Simple)
   const struct sockaddr *result;
 
   one.ifa_next = &two;
+  one.ifa_name = (char *)"em1";
   one.ifa_addr = (struct sockaddr*)&a_one;
 
   two.ifa_next = NULL;
+  two.ifa_name = (char *)"em2";
   two.ifa_addr = (struct sockaddr*)&a_two;
 
   ipv4(&a_one, "10.11.12.13");
@@ -72,9 +76,11 @@ TEST(CommonIPAddr, TestV4_Prefix25)
   const struct sockaddr *result;
 
   one.ifa_next = &two;
+  one.ifa_name = (char *)"em1";
   one.ifa_addr = (struct sockaddr*)&a_one;
 
   two.ifa_next = NULL;
+  two.ifa_name = (char *)"em2";
   two.ifa_addr = (struct sockaddr*)&a_two;
 
   ipv4(&a_one, "10.11.12.13");
@@ -94,9 +100,11 @@ TEST(CommonIPAddr, TestV4_Prefix16)
   const struct sockaddr *result;
 
   one.ifa_next = &two;
+  one.ifa_name = (char *)"em1";
   one.ifa_addr = (struct sockaddr*)&a_one;
 
   two.ifa_next = NULL;
+  two.ifa_name = (char *)"em2";
   two.ifa_addr = (struct sockaddr*)&a_two;
 
   ipv4(&a_one, "10.1.1.2");
@@ -115,6 +123,7 @@ TEST(CommonIPAddr, TestV4_PrefixTooLong)
   const struct sockaddr *result;
 
   one.ifa_next = NULL;
+  one.ifa_name = (char *)"em1";
   one.ifa_addr = (struct sockaddr*)&a_one;
 
   ipv4(&a_one, "10.11.12.13");
@@ -133,9 +142,11 @@ TEST(CommonIPAddr, TestV4_PrefixZero)
   const struct sockaddr *result;
 
   one.ifa_next = &two;
+  one.ifa_name = (char *)"em1";
   one.ifa_addr = (struct sockaddr*)&a_one;
 
   two.ifa_next = NULL;
+  two.ifa_name = (char *)"em2";
   two.ifa_addr = (struct sockaddr*)&a_two;
 
   ipv6(&a_one, "2001:1234:5678:900F::cdef");
@@ -155,9 +166,11 @@ TEST(CommonIPAddr, TestV6_Simple)
   const struct sockaddr *result;
 
   one.ifa_next = &two;
+  one.ifa_name = (char *)"em1";
   one.ifa_addr = (struct sockaddr*)&a_one;
 
   two.ifa_next = NULL;
+  two.ifa_name = (char *)"em2";
   two.ifa_addr = (struct sockaddr*)&a_two;
 
   ipv4(&a_one, "10.11.12.13");
@@ -177,9 +190,11 @@ TEST(CommonIPAddr, TestV6_Prefix57)
   const struct sockaddr *result;
 
   one.ifa_next = &two;
+  one.ifa_name = (char *)"em1";
   one.ifa_addr = (struct sockaddr*)&a_one;
 
   two.ifa_next = NULL;
+  two.ifa_name = (char *)"em2";
   two.ifa_addr = (struct sockaddr*)&a_two;
 
   ipv6(&a_one, "2001:1234:5678:900F::cdef");
@@ -198,6 +213,7 @@ TEST(CommonIPAddr, TestV6_PrefixTooLong)
   const struct sockaddr *result;
 
   one.ifa_next = NULL;
+  one.ifa_name = (char *)"em1";
   one.ifa_addr = (struct sockaddr*)&a_one;
 
   ipv6(&a_one, "2001:1234:5678:900F::cdef");
@@ -216,9 +232,11 @@ TEST(CommonIPAddr, TestV6_PrefixZero)
   const struct sockaddr *result;
 
   one.ifa_next = &two;
+  one.ifa_name = (char *)"em1";
   one.ifa_addr = (struct sockaddr*)&a_one;
 
   two.ifa_next = NULL;
+  two.ifa_name = (char *)"em2";
   two.ifa_addr = (struct sockaddr*)&a_two;
 
   ipv4(&a_one, "10.2.3.4");
