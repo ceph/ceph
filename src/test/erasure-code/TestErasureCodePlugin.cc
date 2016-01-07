@@ -82,7 +82,7 @@ TEST_F(ErasureCodePluginRegistryTest, all)
 				   g_conf->erasure_code_dir,
 				   profile, &erasure_code, &cerr));
   EXPECT_FALSE(erasure_code);
-  EXPECT_EQ(-EXDEV, instance.factory("missing_version",
+  EXPECT_EQ(-ENOENT, instance.factory("missing_version",
 				     g_conf->erasure_code_dir,
 				     profile,
 				     &erasure_code, &cerr));
