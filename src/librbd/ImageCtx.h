@@ -130,7 +130,6 @@ namespace librbd {
     Readahead readahead;
     uint64_t total_bytes_read;
 
-    Finisher *copyup_finisher;
     std::map<uint64_t, CopyupRequest*> copyup_list;
 
     xlist<AsyncOperation*> async_ops;
@@ -267,8 +266,6 @@ namespace librbd {
 
     void cancel_async_requests();
     void cancel_async_requests(Context *on_finish);
-
-    void flush_copyup(Context *on_finish);
 
     void apply_metadata_confs();
 
