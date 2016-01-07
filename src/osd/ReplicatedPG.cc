@@ -1697,6 +1697,7 @@ void ReplicatedPG::do_op(OpRequestRef& op)
         return;
     }
 
+    //IsReadablePredicate,如果主本没有是不能读的
     // missing object?
     if (is_unreadable_object(head))
     {

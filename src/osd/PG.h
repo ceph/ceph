@@ -338,7 +338,9 @@ public:
 
     class MissingLoc
     {
+        //需要恢复的对象
         map<hobject_t, pg_missing_t::item, hobject_t::BitwiseComparator> needs_recovery_map;
+		//这是有所需版本对象的位置
         map<hobject_t, set<pg_shard_t>, hobject_t::BitwiseComparator > missing_loc;
         set<pg_shard_t> missing_loc_sources;
         PG *pg;

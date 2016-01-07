@@ -479,6 +479,8 @@ bool PG::MissingLoc::readable_with_acting(
         if (acting.count(*i))
             have_acting.insert(*i);
     }
+	//当前节点在having列表中，则返回true
+	//have.count(whoami);
     return (*is_readable)(have_acting);
 }
 
