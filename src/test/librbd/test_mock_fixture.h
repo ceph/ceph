@@ -24,7 +24,8 @@ ACTION_P(CopyInBufferlist, str) {
 }
 
 ACTION_P2(CompleteContext, r, wq) {
-  ContextWQ *context_wq = reinterpret_cast<ContextWQ *>(wq);
+  // WjW Static <> reinterped
+  ContextWQ *context_wq = static_cast<ContextWQ *>(wq);
   if (context_wq != NULL) {
     context_wq->queue(arg0, r);
   } else {
