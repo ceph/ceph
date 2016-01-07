@@ -65,6 +65,8 @@ class RGWReadDataSyncStatusCoroutine : public RGWSimpleRadosReadCR<rgw_data_sync
 
   rgw_data_sync_status *sync_status;
 
+  list<RGWCoroutinesStack *> crs;
+
 public:
   RGWReadDataSyncStatusCoroutine(RGWAsyncRadosProcessor *_async_rados, RGWRados *_store,
 		      RGWObjectCtx& _obj_ctx, const string& _source_zone,
@@ -76,6 +78,11 @@ public:
                                                                             obj_ctx(_obj_ctx), source_zone(_source_zone),
 									    sync_status(_status) {}
 
+  ~RGWReadDataSyncStatusCoroutine() {
+    for (auto cr : crs) {
+      cr->put();
+    }
+  }
   int handle_data(rgw_data_sync_info& data);
 };
 
@@ -87,8 +94,9 @@ int RGWReadDataSyncStatusCoroutine::handle_data(rgw_data_sync_info& data)
 
   map<uint32_t, rgw_data_sync_marker>& markers = sync_status->sync_markers;
   for (int i = 0; i < (int)data.num_shards; i++) {
-    spawn(new RGWSimpleRadosReadCR<rgw_data_sync_marker>(async_rados, store, obj_ctx, store->get_zone_params().log_pool,
-				                    RGWDataSyncStatusManager::shard_obj_name(source_zone, i), &markers[i]), true);
+    RGWCoroutinesStack *cr = spawn(new RGWSimpleRadosReadCR<rgw_data_sync_marker>(async_rados, store, obj_ctx, store->get_zone_params().log_pool,
+                                                    RGWDataSyncStatusManager::shard_obj_name(source_zone, i), &markers[i]), true);
+    crs.push_back(cr);
   }
   return 0;
 }
@@ -115,6 +123,12 @@ public:
                                                       shard_info(_shard_info) {
   }
 
+  ~RGWReadRemoteDataLogShardInfoCR() {
+    if (http_op) {
+      http_op->put();
+    }
+  }
+
   int operate() {
     reenter(this) {
       yield {
@@ -135,7 +149,6 @@ public:
         if (ret < 0) {
           ldout(store->ctx(), 0) << "ERROR: failed to read from " << p << dendl;
           log_error() << "failed to send http operation: " << http_op->to_str() << " ret=" << ret << std::endl;
-          http_op->put();
           return set_cr_error(ret);
         }
 
@@ -193,6 +206,9 @@ public:
                                                       pmarker(_pmarker),
                                                       entries(_entries),
                                                       truncated(_truncated) {
+    if (http_op) {
+      http_op->put();
+    }
   }
 
   int operate() {
@@ -216,7 +232,6 @@ public:
         if (ret < 0) {
           ldout(store->ctx(), 0) << "ERROR: failed to read from " << p << dendl;
           log_error() << "failed to send http operation: " << http_op->to_str() << " ret=" << ret << std::endl;
-          http_op->put();
           return set_cr_error(ret);
         }
 
