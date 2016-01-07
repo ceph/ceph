@@ -84,16 +84,23 @@ protected:
 
 
   // -- replay --
+  Mutex replay_recovery_mutex;
+  Cond replay_recovery_cond;
+
   class ReplayThread : public Thread {
     MDLog *log;
   public:
     ReplayThread(MDLog *l) : log(l) {}
     void* entry() {
+      detach();
       log->_replay_thread();
+      Mutex::Locker l(log->replay_recovery_mutex);
+      log->replay_done = true;
+      log->replay_recovery_cond.Signal();
       return 0;
     }
   } replay_thread;
-  bool already_replayed;
+  bool replay_done;
 
   friend class ReplayThread;
   friend class C_MDL_Replay;
@@ -111,10 +118,15 @@ protected:
     void set_completion(MDSInternalContextBase *c) {completion = c;}
     RecoveryThread(MDLog *l) : log(l), completion(NULL) {}
     void* entry() {
+      detach();
       log->_recovery_thread(completion);
+      Mutex::Locker l(log->replay_recovery_mutex);
+      log->recovery_done = true;
+      log->replay_recovery_cond.Signal();
       return 0;
     }
   } recovery_thread;
+  bool recovery_done;
   void _recovery_thread(MDSInternalContextBase *completion);
   void _reformat_journal(JournalPointer const &jp, Journaler *old_journal, MDSInternalContextBase *completion);
 
@@ -189,9 +201,11 @@ public:
                       safe_pos(0),
                       journaler(0),
                       logger(0),
+                      replay_recovery_mutex("MDLog::replay_recovery_mutex"),
                       replay_thread(this),
-                      already_replayed(false),
+                      replay_done(false),
                       recovery_thread(this),
+		      recovery_done(false),
                       event_seq(0), expiring_events(0), expired_events(0),
                       submit_mutex("MDLog::submit_mutex"),
                       submit_thread(this),

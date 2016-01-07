@@ -176,10 +176,13 @@ void MDLog::open(MDSInternalContextBase *c)
 {
   dout(5) << "open discovering log bounds" << dendl;
 
+  submit_thread.create();
+
+  Mutex::Locker l(replay_recovery_mutex);
+  recovery_done = false;
   recovery_thread.set_completion(c);
   recovery_thread.create();
 
-  submit_thread.create();
   // either append() or replay() will follow.
 }
 
@@ -215,6 +218,8 @@ void MDLog::reopen(MDSInternalContextBase *c)
   delete journaler;
   journaler = NULL;
 
+  Mutex::Locker l(replay_recovery_mutex);
+  recovery_done = false;
   recovery_thread.set_completion(new C_ReopenComplete(this, c));
   recovery_thread.create();
 }
@@ -494,15 +499,15 @@ void MDLog::shutdown()
   }
 
   if (replay_thread.is_started() && !replay_thread.am_self()) {
-    mds->mds_lock.Unlock();
-    replay_thread.join();
-    mds->mds_lock.Lock();
+    Mutex::Locker l(replay_recovery_mutex);
+    while (!replay_done)
+      replay_recovery_cond.Wait(replay_recovery_mutex);
   }
 
   if (recovery_thread.is_started() && !recovery_thread.am_self()) {
-    mds->mds_lock.Unlock();
-    recovery_thread.join();
-    mds->mds_lock.Lock();
+    Mutex::Locker l(replay_recovery_mutex);
+    while (!recovery_done)
+      replay_recovery_cond.Wait(replay_recovery_mutex);
   }
 }
 
@@ -839,8 +844,9 @@ void MDLog::replay(MDSInternalContextBase *c)
   dout(10) << "replay start, from " << journaler->get_read_pos()
 	   << " to " << journaler->get_write_pos() << dendl;
 
-  assert(num_events == 0 || already_replayed);
-  already_replayed = true;
+  Mutex::Locker l(replay_recovery_mutex);
+  assert(num_events == 0 || replay_done);
+  replay_done = false;
 
   replay_thread.create();
 }
