@@ -246,13 +246,15 @@ namespace buffer CEPH_BUFFER_API {
   };
 
 
+  typedef std::list<ptr> ptrlist;
+
   /*
    * list - the useful bit!
    */
 
   class CEPH_BUFFER_API list {
     // my private bits
-    std::list<ptr> _buffers;
+    ptrlist _buffers;
     unsigned _len;
     unsigned _memcopy_count; //the total of memcopy using rebuild().
     ptr append_buffer;  // where i put small appends.
@@ -264,11 +266,11 @@ namespace buffer CEPH_BUFFER_API {
 					const list,
 					list>::type bl_t;
       typedef typename std::conditional<is_const,
-					const std::list<ptr>,
-					std::list<ptr> >::type list_t;
+					const ptrlist,
+					ptrlist >::type list_t;
       typedef typename std::conditional<is_const,
-					typename std::list<ptr>::const_iterator,
-					typename std::list<ptr>::iterator>::type list_iter_t;
+					typename ptrlist::const_iterator,
+					typename ptrlist::iterator>::type list_iter_t;
       bl_t* bl;
       list_t* ls;  // meh.. just here to avoid an extra pointer dereference..
       unsigned off; // in bl
@@ -373,13 +375,13 @@ namespace buffer CEPH_BUFFER_API {
     }
 
     unsigned get_memcopy_count() const {return _memcopy_count; }
-    const std::list<ptr>& buffers() const { return _buffers; }
+    const ptrlist& buffers() const { return _buffers; }
     void swap(list& other);
     unsigned length() const {
 #if 0
       // DEBUG: verify _len
       unsigned len = 0;
-      for (std::list<ptr>::const_iterator it = _buffers.begin();
+      for (ptrlist::const_iterator it = _buffers.begin();
 	   it != _buffers.end();
 	   it++) {
 	len += (*it).length();
@@ -449,7 +451,7 @@ namespace buffer CEPH_BUFFER_API {
 
     // clone non-shareable buffers (make shareable)
     void make_shareable() {
-      std::list<buffer::ptr>::iterator pb;
+      ptrlist::iterator pb;
       for (pb = _buffers.begin(); pb != _buffers.end(); ++pb) {
         (void) pb->make_shareable();
       }
@@ -460,7 +462,7 @@ namespace buffer CEPH_BUFFER_API {
     {
       if (this != &bl) {
         clear();
-        std::list<buffer::ptr>::const_iterator pb;
+        ptrlist::const_iterator pb;
         for (pb = bl._buffers.begin(); pb != bl._buffers.end(); ++pb) {
           push_back(*pb);
         }
