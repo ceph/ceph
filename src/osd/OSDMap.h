@@ -767,6 +767,15 @@ public:
       return group[group.size()-1];
     return -1;  // we fail!
   }
+  bool is_acting_osd_shard(pg_t pg, int osd, shard_id_t shard) const {
+    vector<int> acting;
+    int nrep = pg_to_acting_osds(pg, acting);
+    if (shard == shard_id_t::NO_SHARD)
+      return calc_pg_role(osd, acting, nrep) >= 0;
+    if (shard >= (int)acting.size())
+      return false;
+    return acting[shard] == osd;
+  }
 
 
   /* what replica # is a given osd? 0 primary, -1 for none. */
