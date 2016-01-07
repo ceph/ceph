@@ -798,7 +798,14 @@ public:
 			void* _cb_arg, uint64_t* _offset)
     : RGWLibRequest(_cct, _user), rgw_fh(_rgw_fh), offset(_offset),
       cb_arg(_cb_arg), rcb(_rcb), ix(0) {
-    RGWListBuckets::marker = rgw_fh->find_marker(*offset);
+    const std::string& sm = rgw_fh->find_marker(*offset);
+    if (sm.size() > 0) {
+      RGWListBuckets::marker =
+	rgw_fh->relative_object_name();
+      if (marker.back() != '/')
+	marker += "/";
+      marker += sm;
+    }
     magic = 71;
     op = this;
   }
@@ -882,8 +889,8 @@ public:
   read directory content (bucket objects)
 */
 
-class RGWReaddirRequest : public RGWLibRequest,
-			  public RGWListBucket /* RGWOp */
+  class RGWReaddirRequest : public RGWLibRequest,
+			    public RGWListBucket /* RGWOp */
 {
 public:
   RGWFileHandle* rgw_fh;
@@ -897,7 +904,15 @@ public:
 		    void* _cb_arg, uint64_t* _offset)
     : RGWLibRequest(_cct, _user), rgw_fh(_rgw_fh), offset(_offset),
       cb_arg(_cb_arg), rcb(_rcb), ix(0) {
-    RGWListBucket::marker = {rgw_fh->find_marker(*offset), ""};
+    const std::string& sm{rgw_fh->find_marker(*offset)};
+    if (sm.size() > 0) {
+      RGWListBucket::marker = {rgw_fh->relative_object_name(), ""};
+      if (marker.name.back() != '/')
+	marker.name += "/";
+      marker.name += sm;
+    }
+    std::cout << __func__ << " offset: " << *offset
+	      <<  " marker: " << marker << std::endl;
     default_max = 1000; // XXX was being omitted
     magic = 72;
     op = this;
